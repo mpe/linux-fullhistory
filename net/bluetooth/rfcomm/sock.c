@@ -287,9 +287,12 @@ static struct sock *rfcomm_sock_alloc(struct socket *sock, int proto, int prio)
 	struct rfcomm_dlc *d;
 	struct sock *sk;
 
-	sk = bt_sock_alloc(sock, BTPROTO_RFCOMM, sizeof(struct rfcomm_pinfo), prio);
+	sk = sk_alloc(PF_BLUETOOTH, prio, sizeof(struct rfcomm_pinfo), NULL);
 	if (!sk)
 		return NULL;
+
+	sock_init_data(sock, sk);
+	INIT_LIST_HEAD(&bt_sk(sk)->accept_q);
 
 	sk_set_owner(sk, THIS_MODULE);
 
@@ -298,6 +301,7 @@ static struct sock *rfcomm_sock_alloc(struct socket *sock, int proto, int prio)
 		sk_free(sk);
 		return NULL;
 	}
+
 	d->data_ready   = rfcomm_sk_data_ready;
 	d->state_change = rfcomm_sk_state_change;
 
@@ -310,8 +314,10 @@ static struct sock *rfcomm_sock_alloc(struct socket *sock, int proto, int prio)
 	sk->sk_sndbuf   = RFCOMM_MAX_CREDITS * RFCOMM_DEFAULT_MTU * 10;
 	sk->sk_rcvbuf   = RFCOMM_MAX_CREDITS * RFCOMM_DEFAULT_MTU * 10;
 
+	sock_reset_flag(sk, SOCK_ZAPPED);
+
 	sk->sk_protocol = proto;
-	sk->sk_state    = BT_OPEN;
+	sk->sk_state	= BT_OPEN;
 
 	bt_sock_link(&rfcomm_sk_list, sk);
 
