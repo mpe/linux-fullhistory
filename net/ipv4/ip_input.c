@@ -257,7 +257,7 @@ int ip_local_deliver(struct sk_buff *skb)
         {
 		int ret = ip_fw_demasquerade(&skb);
 		if (ret < 0) {
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			return 0;
 		}
 
@@ -267,7 +267,7 @@ int ip_local_deliver(struct sk_buff *skb)
 			dst_release(skb->dst);
 			skb->dst = NULL;
 			if (ip_route_input(skb, iph->daddr, iph->saddr, iph->tos, skb->dev)) {
-				kfree_skb(skb, FREE_WRITE);
+				kfree_skb(skb);
 				return 0;
 			}
 			return skb->dst->input(skb);
@@ -312,7 +312,7 @@ int ip_local_deliver(struct sk_buff *skb)
 						if(ipsec_sk_policy(raw_sk,skb1))	
 							raw_rcv(raw_sk, skb1);
 						else
-							kfree_skb(skb1, FREE_WRITE);
+							kfree_skb(skb1);
 					}
 				}
 				raw_sk = sknext;
@@ -375,12 +375,12 @@ int ip_local_deliver(struct sk_buff *skb)
 		if(ipsec_sk_policy(raw_sk, skb))
 			raw_rcv(raw_sk, skb);
 		else
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 	}
 	else if (!flag)		/* Free and report errors */
 	{
 		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PROT_UNREACH, 0);	
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 	}
 
 	return(0);
@@ -503,7 +503,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 inhdr_error:
 	ip_statistics.IpInHdrErrors++;
 drop:
-        kfree_skb(skb, FREE_WRITE);
+        kfree_skb(skb);
         return(0);
 }
 

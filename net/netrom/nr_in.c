@@ -74,7 +74,7 @@ static int nr_queue_rx_frame(struct sock *sk, struct sk_buff *skb, int more)
 
 		while ((skbo = skb_dequeue(&sk->protinfo.nr->frag_queue)) != NULL) {
 			memcpy(skb_put(skbn, skbo->len), skbo->data, skbo->len);
-			kfree_skb(skbo, FREE_READ);
+			kfree_skb(skbo);
 		}
 
 		sk->protinfo.nr->fraglen = 0;		
@@ -246,7 +246,7 @@ static int nr_state3_machine(struct sock *sk, struct sk_buff *skb, int frametype
 					} else if (nr_in_rx_window(sk, ns)) {
 						skb_queue_tail(&temp_queue, skbn);
 					} else {
-						kfree_skb(skbn, FREE_READ);
+						kfree_skb(skbn);
 					}
 				}
 				while ((skbn = skb_dequeue(&temp_queue)) != NULL) {

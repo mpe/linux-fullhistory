@@ -169,7 +169,7 @@ void rose_link_rx_restart(struct sk_buff *skb, struct rose_neigh *neigh, unsigne
 	if (neigh->restarted) {
 		while ((skbn = skb_dequeue(&neigh->queue)) != NULL)
 			if (!rose_send_frame(skbn, neigh))
-				kfree_skb(skbn, FREE_WRITE);
+				kfree_skb(skbn);
 	}
 }
 
@@ -199,7 +199,7 @@ void rose_transmit_restart_request(struct rose_neigh *neigh)
 	*dptr++ = 0;
 
 	if (!rose_send_frame(skb, neigh))
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 }
 
 /*
@@ -226,7 +226,7 @@ void rose_transmit_restart_confirmation(struct rose_neigh *neigh)
 	*dptr++ = ROSE_RESTART_CONFIRMATION;
 
 	if (!rose_send_frame(skb, neigh))
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 }
 
 /*
@@ -254,7 +254,7 @@ void rose_transmit_diagnostic(struct rose_neigh *neigh, unsigned char diag)
 	*dptr++ = diag;
 
 	if (!rose_send_frame(skb, neigh))
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 }
 
 /*
@@ -284,7 +284,7 @@ void rose_transmit_clear_request(struct rose_neigh *neigh, unsigned int lci, uns
 	*dptr++ = diagnostic;
 
 	if (!rose_send_frame(skb, neigh))
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 }
 
 void rose_transmit_link(struct sk_buff *skb, struct rose_neigh *neigh)
@@ -292,7 +292,7 @@ void rose_transmit_link(struct sk_buff *skb, struct rose_neigh *neigh)
 	unsigned char *dptr;
 
 	if (call_fw_firewall(PF_ROSE, skb->dev, skb->data, NULL, &skb) != FW_ACCEPT) {
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return;
 	}
 
@@ -304,7 +304,7 @@ void rose_transmit_link(struct sk_buff *skb, struct rose_neigh *neigh)
 
 	if (neigh->restarted) {
 		if (!rose_send_frame(skb, neigh))
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 	} else {
 		skb_queue_tail(&neigh->queue, skb);
 

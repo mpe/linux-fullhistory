@@ -3,7 +3,7 @@
  * vendor-specific code for SCSI CD-ROM's goes here.
  *
  * This is needed becauce most of the new features (multisession and
- * the like) are to new to be included into the SCSI-II standard (to
+ * the like) are too new to be included into the SCSI-II standard (to
  * be exact: there is'nt anything in my draft copy).
  *
  * Aug 1997: Ha! Got a SCSI-3 cdrom spec across my fingers. SCSI-3 does
@@ -83,7 +83,13 @@ sr_vendor_init(int minor)
 		if (!strncmp (model,"CD-ROM DRIVE:25", 15)  ||
 		    !strncmp (model,"CD-ROM DRIVE:36", 15)  ||
 		    !strncmp (model,"CD-ROM DRIVE:83", 15)  ||
-		    !strncmp (model,"CD-ROM DRIVE:84 ",16))
+		    !strncmp (model,"CD-ROM DRIVE:84 ",16)
+#if 0
+		        /* my NEC 3x returns the read-raw data if a read-raw
+		           is followed by a read for the same sector - aeb */
+		    || !strncmp (model,"CD-ROM DRIVE:500",16)
+#endif
+		   )
 			/* these can't handle multisession, may hang */
 			scsi_CDs[minor].cdi.mask |= CDC_MULTI_SESSION;
 
@@ -145,10 +151,10 @@ sr_set_blocklength(int minor, int blocklength)
 
 int sr_cd_check(struct cdrom_device_info *cdi)
 {
-	unsigned long   sector,min,sec,frame;
+	unsigned long   sector;
 	unsigned char   *buffer;     /* the buffer for the ioctl */
 	unsigned char   cmd[12];     /* the scsi-command */
-	int             rc,is_xa,no_multi,minor;
+	int             rc,no_multi,minor;
 
 	minor = MINOR(cdi->dev);
 	if (scsi_CDs[minor].cdi.mask & CDC_MULTI_SESSION)
@@ -158,7 +164,6 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 	if(!buffer) return -ENOMEM;
 	
 	sector   = 0;         /* the multisession sector offset goes here  */
-	is_xa    = 0;         /* flag: the CD uses XA-Sectors              */
 	no_multi = 0;         /* flag: the drive can't handle multisession */
 	rc       = 0;
     
@@ -188,7 +193,8 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 		break;
 		
 #ifdef CONFIG_BLK_DEV_SR_VENDOR
-	case VENDOR_NEC:
+	case VENDOR_NEC: {
+		unsigned long min,sec,frame;
 		memset(cmd,0,12);
 		cmd[0] = 0xde;
 		cmd[1] = (scsi_CDs[minor].device->lun << 5) | 0x03;
@@ -207,8 +213,11 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 		frame  = BCD_TO_BIN(buffer[17]);
 		sector = min*CD_SECS*CD_FRAMES + sec*CD_FRAMES + frame;
 		break;
+	}
 
-	case VENDOR_TOSHIBA:
+	case VENDOR_TOSHIBA: {
+		unsigned long min,sec,frame;
+
 		/* we request some disc information (is it a XA-CD ?,
 		 * where starts the last session ?) */
 		memset(cmd,0,12);
@@ -230,6 +239,7 @@ int sr_cd_check(struct cdrom_device_info *cdi)
 		if (sector)
 			sector -= CD_MSF_OFFSET;
 		break;
+	}
 
 	case VENDOR_WRITER:
 		memset(cmd,0,12);

@@ -1279,7 +1279,7 @@ static void vortex_tx_timeout(struct device *dev)
 		if (vp->tx_skbuff[entry]) {
 			if (vortex_debug > 0)
 				printk(" %d\n", entry);
-			dev_kfree_skb(vp->tx_skbuff[entry], FREE_WRITE);
+			dev_kfree_skb(vp->tx_skbuff[entry]);
 			vp->tx_skbuff[entry] = 0;
 			vp->stats.tx_dropped++;
 		}
@@ -1340,7 +1340,7 @@ vortex_start_xmit(struct sk_buff *skb, struct device *dev)
 	} else {
 		/* ... and the packet rounded to a doubleword. */
 		outsl(ioaddr + TX_FIFO, skb->data, (skb->len + 3) >> 2);
-		dev_kfree_skb (skb, FREE_WRITE);
+		dev_kfree_skb (skb);
 		if (inw(ioaddr + TxFree) > 1536) {
 			dev->tbusy = 0;
 		} else
@@ -1350,7 +1350,7 @@ vortex_start_xmit(struct sk_buff *skb, struct device *dev)
 #else
 	/* ... and the packet rounded to a doubleword. */
 	outsl(ioaddr + TX_FIFO, skb->data, (skb->len + 3) >> 2);
-	dev_kfree_skb (skb, FREE_WRITE);
+	dev_kfree_skb (skb);
 	if (inw(ioaddr + TxFree) > 1536) {
 		dev->tbusy = 0;
 	} else
@@ -1527,7 +1527,7 @@ static void vortex_interrupt IRQ(int irq, void *dev_id, struct pt_regs *regs)
 					virt_to_bus(&lp->tx_ring[entry]))
 					break;			/* It still hasn't been processed. */
 				if (lp->tx_skbuff[entry]) {
-					dev_kfree_skb(lp->tx_skbuff[entry], FREE_WRITE);
+					dev_kfree_skb(lp->tx_skbuff[entry]);
 					lp->tx_skbuff[entry] = 0;
 				}
 				/* lp->stats.tx_packets++;  Counted below. */
@@ -1545,7 +1545,7 @@ static void vortex_interrupt IRQ(int irq, void *dev_id, struct pt_regs *regs)
 		if (status & DMADone) {
 			outw(0x1000, ioaddr + Wn7_MasterStatus); /* Ack the event. */
 			dev->tbusy = 0;
-			dev_kfree_skb (lp->tx_skb, FREE_WRITE); /* Release the transfered buffer */
+			dev_kfree_skb (lp->tx_skb); /* Release the transfered buffer */
 			mark_bh(NET_BH);
 		}
 #endif
@@ -1854,7 +1854,7 @@ vortex_close(struct device *dev)
 #if LINUX_VERSION_CODE < 0x20100
 				vp->rx_skbuff[i]->free = 1;
 #endif
-				dev_kfree_skb (vp->rx_skbuff[i], FREE_WRITE);
+				dev_kfree_skb (vp->rx_skbuff[i]);
 				vp->rx_skbuff[i] = 0;
 			}
 	}
@@ -1862,7 +1862,7 @@ vortex_close(struct device *dev)
 		outl(0, ioaddr + DownListPtr);
 		for (i = 0; i < TX_RING_SIZE; i++)
 			if (vp->tx_skbuff[i]) {
-				dev_kfree_skb(vp->tx_skbuff[i], FREE_WRITE);
+				dev_kfree_skb(vp->tx_skbuff[i]);
 				vp->tx_skbuff[i] = 0;
 			}
 	}

@@ -148,7 +148,7 @@ ReleaseWin(struct Layer2 *l2)
 		if (l2->windowar[i]) {
 			cnt++;
 			SET_SKB_FREE(l2->windowar[i]);
-			dev_kfree_skb(l2->windowar[i], FREE_WRITE);
+			dev_kfree_skb(l2->windowar[i]);
 			l2->windowar[i] = NULL;
 		}
 	}
@@ -172,7 +172,7 @@ discard_i_queue(struct PStack *st)
 
 	while ((skb = skb_dequeue(&st->l2.i_queue))) {
 		SET_SKB_FREE(skb);
-		dev_kfree_skb(skb, FREE_READ);
+		dev_kfree_skb(skb);
 	}
 }
 
@@ -248,7 +248,7 @@ setva(struct PStack *st, int nr)
 		while (l2->va != nr) {
 			l2->va = (l2->va + 1) % (l2->extended ? 128 : 8);
 			SET_SKB_FREE(l2->windowar[l2->sow]);
-			dev_kfree_skb(l2->windowar[l2->sow], FREE_WRITE);
+			dev_kfree_skb(l2->windowar[l2->sow]);
 			l2->windowar[l2->sow] = NULL;
 			l2->sow = (l2->sow + 1) % l2->window;
 			if (st->l4.l2writewakeup)
@@ -369,7 +369,7 @@ l2_got_SABMX(struct FsmInst *fi, int event, void *arg)
 	skb_pull(skb, l2addrsize(&(st->l2)));
 	PollFlag = *skb->data & 0x10;
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 
 	if (ST_L2_4 != state)
 		if (st->l2.vs != st->l2.va) {
@@ -414,7 +414,7 @@ l2_got_disconn(struct FsmInst *fi, int event, void *arg)
 	skb_pull(skb, l2addrsize(&(st->l2)));
 	PollFlag = *skb->data & 0x10;
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 
 	FsmChangeState(fi, ST_L2_4);
 
@@ -440,7 +440,7 @@ l2_got_st4_disc(struct FsmInst *fi, int event, void *arg)
 	skb_pull(skb, l2addrsize(&(st->l2)));
 	PollFlag = *skb->data & 0x10;
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 
 	if (!((chanp->impair == 1) && (st->l2.laptype == LAPB)))
 		send_uframe(st, DM | (PollFlag ? 0x10 : 0x0), RSP);
@@ -457,7 +457,7 @@ l2_got_ua_establish(struct FsmInst *fi, int event, void *arg)
 	skb_pull(skb, l2addrsize(&(st->l2)));
 	f = *skb->data & 0x10;
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 	if (f) {
 		st->l2.vs = 0;
 		st->l2.va = 0;
@@ -484,7 +484,7 @@ l2_got_ua_disconn(struct FsmInst *fi, int event, void *arg)
 	skb_pull(skb, l2addrsize(&(st->l2)));
 	f = *skb->data & 0x10;
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 	if (f) {
 		FsmDelTimer(&st->l2.t200_timer, 6);
 		FsmChangeState(fi, ST_L2_4);
@@ -560,7 +560,7 @@ l2_got_st7_RR(struct FsmInst *fi, int event, void *arg)
 		seq = (skb->data[0] >> 5) & 0x7;
 	}
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 
 	if (!((chanp->impair == 4) && (st->l2.laptype == LAPB)))
 		if ((!rsp) && PollFlag)
@@ -649,7 +649,7 @@ icommandreceived(struct FsmInst *fi, int event, void *arg, int *nr)
 		/* n(s)!=v(r) */
 		wasok = 0;
 		SET_SKB_FREE(skb);
-		dev_kfree_skb(skb, FREE_READ);
+		dev_kfree_skb(skb);
 		if (st->l2.rejexp) {
 			if (p)
 				if (!((chanp->impair == 3) && (st->l2.laptype == LAPB)))
@@ -779,7 +779,7 @@ l2_got_st7_rej(struct FsmInst *fi, int event, void *arg)
 		seq = (skb->data[0] >> 5) & 0x7;
 	}
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 
 	if ((!rsp) && PollFlag)
 		enquiry_response(st, RR, PollFlag);
@@ -866,7 +866,7 @@ l2_pull_iqueue(struct FsmInst *fi, int event, void *arg)
 		printk(KERN_WARNING "isdnl2 try overwrite ack queue entry %d\n",
 		       p1);
 		SET_SKB_FREE(l2->windowar[p1]);
-		dev_kfree_skb(l2->windowar[p1], FREE_WRITE);
+		dev_kfree_skb(l2->windowar[p1]);
 	}
 	l2->windowar[p1] = skb_clone(skb, GFP_ATOMIC);
 
@@ -944,7 +944,7 @@ l2_got_st8_rr_rej(struct FsmInst *fi, int event, void *arg)
 		seq = (skb->data[0] >> 5) & 0x7;
 	}
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 
 	if (rsp && PollFlag) {
 		if (legalnr(st, seq)) {
@@ -1019,7 +1019,7 @@ l2_got_FRMR(struct FsmInst *fi, int event, void *arg)
 		l2m_debug(&st->l2.l2m, tmp);
 	}
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 }
 
 static void
@@ -1193,7 +1193,7 @@ isdnl2_l1l2(struct PStack *st, int pr, void *arg)
 
 			if (ret) {
 				SET_SKB_FREE(skb);
-				dev_kfree_skb(skb, FREE_READ);
+				dev_kfree_skb(skb);
 			}
 			break;
 		case (PH_PULL_ACK):
@@ -1209,13 +1209,13 @@ isdnl2_l3l2(struct PStack *st, int pr, void *arg)
 		case (DL_DATA):
 			if (FsmEvent(&st->l2.l2m, EV_L2_DL_DATA, arg)) {
 				SET_SKB_FREE(((struct sk_buff *) arg));
-				dev_kfree_skb((struct sk_buff *) arg, FREE_READ);
+				dev_kfree_skb((struct sk_buff *) arg);
 			}
 			break;
 		case (DL_UNIT_DATA):
 			if (FsmEvent(&st->l2.l2m, EV_L2_DL_UNIT_DATA, arg)) {
 				SET_SKB_FREE(((struct sk_buff *) arg));
-				dev_kfree_skb((struct sk_buff *) arg, FREE_READ);
+				dev_kfree_skb((struct sk_buff *) arg);
 			}
 			break;
 	}

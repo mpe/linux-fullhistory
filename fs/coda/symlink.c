@@ -94,7 +94,7 @@ static struct dentry *coda_follow_link(struct dentry *de,
 	char mem[CFS_MAXPATHLEN];
 	char *path;
 ENTRY;
-	CDEBUG(D_INODE, "(%x/%ld)\n", inode->i_dev, inode->i_ino);
+	CDEBUG(D_INODE, "(%s/%ld)\n", kdevname(inode->i_dev), inode->i_ino);
 	
 	cnp = ITOC(inode);
 	CHECK_CNODE(cnp);

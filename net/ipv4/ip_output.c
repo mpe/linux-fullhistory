@@ -270,7 +270,7 @@ int ip_mc_output(struct sk_buff *skb)
 		/* Multicasts with ttl 0 must not go beyond the host */
 
 		if (skb->nh.iph->ttl == 0) {
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			return 0;
 		}
 	}
@@ -390,7 +390,7 @@ void ip_queue_xmit(struct sk_buff *skb)
 		 * and if (uh...) TCP had segments queued on this route...
 		 */
 		skb2 = skb_realloc_headroom(skb, (dev->hard_header_len+15)&~15);
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		if (skb2 == NULL)
 			return;
 		skb = skb2;
@@ -432,7 +432,7 @@ fragment:
 	return;
 
 drop:
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 }
 
 /*
@@ -539,7 +539,7 @@ int ip_build_xmit(struct sock *sk,
 #ifdef CONFIG_NET_SECURITY
 		if ((fw_res=call_out_firewall(PF_SECURITY, NULL, NULL, (void *) 5, &skb))<FW_ACCEPT)
 		{
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			if (fw_res != FW_QUEUE)
 				return -EPERM;
 			else
@@ -549,7 +549,7 @@ int ip_build_xmit(struct sock *sk,
 
 		if (err)
 		{
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			return err;
 		}
 
@@ -716,7 +716,7 @@ int ip_build_xmit(struct sock *sk,
 #endif		
 		if (err)
  		{
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			dev_unlock_list();
 			return err;
  		}
@@ -789,7 +789,7 @@ void ip_fragment(struct sk_buff *skb, int (*output)(struct sk_buff*))
 
 	if (mtu<8) {
 		ip_statistics.IpFragFails++;
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return;
 	}
 
@@ -830,7 +830,7 @@ void ip_fragment(struct sk_buff *skb, int (*output)(struct sk_buff*))
 		if ((skb2 = alloc_skb(len+hlen+dev->hard_header_len+15,GFP_ATOMIC)) == NULL) {
 			NETDEBUG(printk(KERN_INFO "IP: frag: no memory for new fragment!\n"));
 			ip_statistics.IpFragFails++;
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			return;
 		}
 
@@ -903,7 +903,7 @@ void ip_fragment(struct sk_buff *skb, int (*output)(struct sk_buff*))
 
 		output(skb2);
 	}
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 	ip_statistics.IpFragOKs++;
 }
 

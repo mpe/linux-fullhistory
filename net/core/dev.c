@@ -332,7 +332,7 @@ static int
 default_rebuild_header(struct sk_buff *skb)
 {
 	printk(KERN_DEBUG "%s: default_rebuild_header called -- BUG!\n", skb->dev ? skb->dev->name : "NULL!!!");
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 	return 1;
 }
 
@@ -595,7 +595,7 @@ int dev_queue_xmit(struct sk_buff *skb)
 	}
 	end_bh_atomic();
 
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 
 #ifdef CONFIG_NET_PROFILE
 	NET_PROFILE_LEAVE(dev_queue_xmit);
@@ -706,7 +706,7 @@ void netif_rx(struct sk_buff *skb)
 				return;
 			}
 			atomic_inc(&netdev_rx_dropped);
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			return;
 		}
 #ifdef CONFIG_NET_HW_FLOWCONTROL
@@ -721,7 +721,7 @@ void netif_rx(struct sk_buff *skb)
 	}
 	netdev_dropping = 1;
 	atomic_inc(&netdev_rx_dropped);
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 }
 
 #ifdef CONFIG_BRIDGE
@@ -818,9 +818,9 @@ void net_bh(void)
 
 #ifdef CONFIG_CPU_IS_SLOW
 		if (ave_busy > 128*16) {
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			while ((skb = skb_dequeue(&backlog)) != NULL)
-				kfree_skb(skb, FREE_WRITE);
+				kfree_skb(skb);
 			break;
 		}
 #endif
@@ -864,7 +864,7 @@ void net_bh(void)
 
 		if (skb->mac.raw < skb->head || skb->mac.raw > skb->data) {
 			printk(KERN_CRIT "%s: wrong mac.raw ptr, proto=%04x\n", skb->dev->name, skb->protocol);
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			continue;
 		}
 
@@ -926,7 +926,7 @@ void net_bh(void)
 		 */
 	 
 		else {
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 		}
   	}	/* End of queue loop */
   	

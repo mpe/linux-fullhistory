@@ -79,7 +79,7 @@ void nr_output(struct sock *sk, struct sk_buff *skb)
 			skb_queue_tail(&sk->write_queue, skbn); /* Throw it on the queue */
 		}
 
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 	} else {
 		skb_queue_tail(&sk->write_queue, skb);		/* Throw it on the queue */
 	}
@@ -216,7 +216,7 @@ void nr_transmit_buffer(struct sock *sk, struct sk_buff *skb)
 	*dptr++ = sysctl_netrom_network_ttl_initialiser;
 
 	if (!nr_route_frame(skb, NULL)) {
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		nr_disconnect(sk, ENETUNREACH);
 	}
 }

@@ -254,7 +254,7 @@ void rtmsg_ifinfo(int type, struct device *dev)
 		return;
 
 	if (rtnetlink_fill_ifinfo(skb, dev, type, 0, 0) < 0) {
-		kfree_skb(skb, 0);
+		kfree_skb(skb);
 		return;
 	}
 	NETLINK_CB(skb).dst_groups = RTMGRP_LINK;
@@ -454,10 +454,10 @@ static void rtnetlink_rcv(struct sock *sk, int len)
 			if (skb->len)
 				skb_queue_head(&sk->receive_queue, skb);
 			else
-				kfree_skb(skb, FREE_READ);
+				kfree_skb(skb);
 			break;
 		}
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 	}
 
 	rtnl_shunlock();

@@ -803,7 +803,7 @@ void mac_process(void)
 		    memcpy(msp->cur_mbuf.ptr - 3, el->skb->data, 
 			   ROUND4(el->skb->len));
 		    mac_queue_frame((struct mac_buf *)&msp->cur_mbuf);
-		    dev_kfree_skb(el->skb, FREE_WRITE);
+		    dev_kfree_skb(el->skb);
 		    kfree_s(el, sizeof(*el));
 		    continue;
 		}
@@ -1096,7 +1096,7 @@ void mac_dma_complete(void)
 	printk("mac_dma_complete(): Calling mac_queue_frame\n");
 #endif
 	mac_queue_frame((struct mac_buf *)&msp->cur_mbuf);
-	dev_kfree_skb(msp->cur_macq->skb, FREE_WRITE);
+	dev_kfree_skb(msp->cur_macq->skb);
 	kfree_s((struct mac_buf *)msp->cur_macq, sizeof(*(msp->cur_macq)));
 	msp->cur_macq = NULL;
 #if MAC_DEBUG

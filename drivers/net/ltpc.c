@@ -951,7 +951,7 @@ static int ltpc_xmit(struct sk_buff *skb, struct device *dev)
 	stats->tx_packets++;
 	stats->tx_bytes+=skb->len;
 
-	dev_kfree_skb(skb, FREE_WRITE);
+	dev_kfree_skb(skb);
 	return 0;
 }
 

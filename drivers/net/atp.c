@@ -467,7 +467,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 		write_reg_high(ioaddr, IMR, ISRh_RxErr);
 	}
 
-	dev_kfree_skb (skb, FREE_WRITE);
+	dev_kfree_skb (skb);
 
 	return 0;
 }

@@ -446,18 +446,18 @@ void hdlcdrv_transmitter(struct device *dev, struct hdlcdrv_state *s)
 			}
 			if (skb->data[0] != 0) {
 				do_kiss_params(s, skb->data, skb->len);
-				dev_kfree_skb(skb, FREE_WRITE);
+				dev_kfree_skb(skb);
 				break;
 			}
 			pkt_len = skb->len-1; /* strip KISS byte */
 			if (pkt_len >= HDLCDRV_MAXFLEN || pkt_len < 2) {
 				s->hdlctx.tx_state = 0;
 				s->hdlctx.numflags = 1;
-				dev_kfree_skb(skb, FREE_WRITE);
+				dev_kfree_skb(skb);
 				break;
 			}
 			memcpy(s->hdlctx.buffer, skb->data+1, pkt_len);
-			dev_kfree_skb(skb, FREE_WRITE);
+			dev_kfree_skb(skb);
 			s->hdlctx.bp = s->hdlctx.buffer;
 			append_crc_ccitt(s->hdlctx.buffer, pkt_len);
 			s->hdlctx.len = pkt_len+2; /* the appended CRC */
@@ -681,7 +681,7 @@ static int hdlcdrv_close(struct device *dev)
 		i = s->ops->close(dev);
         /* Free any buffers left in the hardware transmit queue */
         while ((skb = skb_dequeue(&s->send_queue)))
-			dev_kfree_skb(skb, FREE_WRITE);
+			dev_kfree_skb(skb);
 	return i;
 }
 

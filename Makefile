@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 85
+SUBLEVEL = 86
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/)
 
@@ -12,9 +12,6 @@ ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/)
 # NOTE! SMP is experimental. See the file Documentation/SMP.txt
 #
 SMP = 1
-#
-# SMP profiling options
-# SMP_PROF = 1
 
 .EXPORT_ALL_VARIABLES:
 
@@ -97,11 +94,6 @@ endif
 ifdef SMP
 CFLAGS += -D__SMP__
 AFLAGS += -D__SMP__
-
-ifdef SMP_PROF
-CFLAGS += -D__SMP_PROF__
-AFLAGS += -D__SMP_PROF__
-endif
 endif
 
 #

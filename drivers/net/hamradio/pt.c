@@ -967,7 +967,7 @@ static int pt_close(struct device *dev)
 
 	/* Free any buffers left in the hardware transmit queue */
 	while ((ptr = skb_dequeue(&lp->sndq)) != NULL)
-		kfree_skb(ptr, FREE_WRITE);
+		kfree_skb(ptr);
 
 	restore_flags(flags);
 
@@ -1185,7 +1185,7 @@ static void pt_txisr(struct pt_local *lp)
 	        /* stuffing a char satisfies interrupt condition */
 	    } else {
 	        /* No more to send */
-	        kfree_skb(lp->sndbuf, FREE_WRITE);
+	        kfree_skb(lp->sndbuf);
 	        lp->sndbuf = NULL;
 	        if ((rdscc(lp->cardbase, cmd, R0) & TxEOM))
 	        {
@@ -1540,7 +1540,7 @@ static void pt_exisr(struct pt_local *lp)
 #ifdef PT_DEBUG
 	printk(KERN_DEBUG "PT: exisr(): unexpected underrun detected.\n");
 #endif
-        kfree_skb(lp->sndbuf, FREE_WRITE);
+        kfree_skb(lp->sndbuf);
         lp->sndbuf = NULL;
         if (!lp->dmachan)
         {

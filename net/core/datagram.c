@@ -153,7 +153,7 @@ no_packet:
 
 void skb_free_datagram(struct sock * sk, struct sk_buff *skb)
 {
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	release_sock(sk);
 }
 

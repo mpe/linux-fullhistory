@@ -189,7 +189,7 @@ enqueue:
 			return 1;
 		}
 drop:
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return 0;
 	}
 	if (q->qave >= q->qth_max) {
@@ -231,7 +231,7 @@ red_reset(struct Qdisc* sch)
 
 	while((skb=skb_dequeue(&sch->q))!=NULL) {
 		q->qbytes -= skb->len;
-		kfree_skb(skb,FREE_WRITE);
+		kfree_skb(skb);
 	}
 	if (q->qbytes) {
 		printk("red_reset: qbytes=%lu\n", q->qbytes);

@@ -131,8 +131,8 @@ static struct super_block * coda_read_super(struct super_block *sb,
 	    goto error;
 	} 
 
-	printk("coda_read_super: rootinode is %ld dev %d\n", 
-	       root->i_ino, root->i_dev);
+	printk("coda_read_super: rootinode is %ld dev %s\n", 
+	       root->i_ino, kdevname(root->i_dev));
 	sbi->sbi_root = root;
 	sb->s_root = d_alloc_root(root, NULL);
 	unlock_super(sb);
@@ -351,7 +351,7 @@ static int coda_get_psdev(void *data, struct inode **res_dev)
 
         if (MINOR(psdev->i_rdev) >= MAX_CODADEVS) { 
 		printk("minor %d not an allocated Coda PSDEV\n", 
-		       psdev->i_rdev);
+		       MINOR(psdev->i_rdev));
 		return 1;
         }
 

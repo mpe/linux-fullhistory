@@ -368,7 +368,7 @@ void ax25_send_to_raw(struct sock *sk, struct sk_buff *skb, int proto)
 				return;
 
 			if (sock_queue_rcv_skb(sk, copy) != 0)
-				kfree_skb(copy, FREE_READ);
+				kfree_skb(copy);
 		}
 
 		sk = sk->next;
@@ -418,7 +418,7 @@ void ax25_destroy_socket(ax25_cb *ax25)	/* Not static as it's used by the timer 
 				skb->sk->protinfo.ax25->state = AX25_STATE_0;
 			}
 
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 		}
 	}
 
@@ -1241,7 +1241,7 @@ static int ax25_accept(struct socket *sock, struct socket *newsock, int flags)
 
 	/* Now attach up the new socket */
 	skb->sk = NULL;
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	sk->ack_backlog--;
 	newsock->sk = newsk;
 
@@ -1385,7 +1385,7 @@ static int ax25_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct
 	if (sk->type == SOCK_SEQPACKET) {
 		/* Connected mode sockets go via the LAPB machine */
 		if (sk->state != TCP_ESTABLISHED) {
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			return -ENOTCONN;
 		}
 

@@ -408,12 +408,12 @@ plip_bh_timeout_error(struct device *dev, struct net_local *nl,
 	}
 	rcv->state = PLIP_PK_DONE;
 	if (rcv->skb) {
-		kfree_skb(rcv->skb, FREE_READ);
+		kfree_skb(rcv->skb);
 		rcv->skb = NULL;
 	}
 	snd->state = PLIP_PK_DONE;
 	if (snd->skb) {
-		dev_kfree_skb(snd->skb, FREE_WRITE);
+		dev_kfree_skb(snd->skb);
 		snd->skb = NULL;
 	}
 	spin_unlock_irq(&nl->lock);
@@ -742,7 +742,7 @@ plip_send_packet(struct device *dev, struct net_local *nl,
 			      &snd->nibble, snd->checksum))
 			return TIMEOUT;
 
-		dev_kfree_skb(snd->skb, FREE_WRITE);
+		dev_kfree_skb(snd->skb);
 		nl->enet_stats.tx_packets++;
 		snd->state = PLIP_PK_DONE;
 
@@ -1011,12 +1011,12 @@ plip_close(struct device *dev)
 
 	snd->state = PLIP_PK_DONE;
 	if (snd->skb) {
-		dev_kfree_skb(snd->skb, FREE_WRITE);
+		dev_kfree_skb(snd->skb);
 		snd->skb = NULL;
 	}
 	rcv->state = PLIP_PK_DONE;
 	if (rcv->skb) {
-		kfree_skb(rcv->skb, FREE_READ);
+		kfree_skb(rcv->skb);
 		rcv->skb = NULL;
 	}
 

@@ -61,7 +61,7 @@
 #include <asm/atomic.h>
 
 #ifdef CONFIG_MD_BOOT
-extern dev_t name_to_dev_t(char *line) __init;
+extern kdev_t name_to_kdev_t(char *line) __init;
 #endif
 
 static struct hd_struct md_hd_struct[MAX_MD_DEV];
@@ -1196,7 +1196,7 @@ __initfunc(void md_setup(char *str,int *ints))
 __initfunc(void do_md_setup(char *str,int *ints))
 {
 	int minor, pers, factor, fault;
-	dev_t dev;
+	kdev_t dev;
 	int i=1;
 
 	if(ints[0] < 4) {
@@ -1254,9 +1254,9 @@ __initfunc(void do_md_setup(char *str,int *ints))
    
 	  pers=pers | factor | (fault << FAULT_SHIFT);   
    
-	  while( str && (dev = name_to_dev_t(str))) {
+	  while( str && (dev = name_to_kdev_t(str))) {
 	    do_md_add (minor, dev);
-	    if(str = strchr (str, ','))
+	    if((str = strchr (str, ',')) != NULL)
 	      str++;
 	  }
 

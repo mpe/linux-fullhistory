@@ -85,7 +85,7 @@ void netbeui_heard_name(struct device *dev, struct sk_buff *skb)
 			nb_complete(nb,skb);
 		}
 	}
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	return 0;
 }
 
@@ -139,7 +139,7 @@ void netbeui_name_defence(struct dev *dev, struct sk_buff *skb)
 			}		
 		}
 	}
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 }
 
 void netbeui_name_query(struct dev *dev, struct sk_buff *skb)
@@ -158,6 +158,6 @@ void netbeui_name_query(struct dev *dev, struct sk_buff *skb)
 			dev_queue_xmit(nskb);
 		}
 	}
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 }
 

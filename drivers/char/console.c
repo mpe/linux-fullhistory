@@ -1420,6 +1420,12 @@ static int do_con_write(struct tty_struct * tty, int from_user,
                                 /* If we got -4 (not found) then see if we have
                                    defined a replacement character (U+FFFD) */
                                 tc = conv_uni_to_pc(0xfffd);
+
+				/* One reason for the -4 can be that we just
+				   did a clear_unimap();
+				   try at least to show something. */
+				if (tc == -4)
+				     tc = c;
                         } else if ( tc == -3 ) {
                                 /* Bad hash table -- hope for the best */
                                 tc = c;

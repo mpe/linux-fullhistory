@@ -537,7 +537,7 @@ static int eexp_xmit(struct sk_buff *buf, struct device *dev)
 
 	        eexp_hw_tx_pio(dev,data,length);
 	}
-	dev_kfree_skb(buf, FREE_WRITE);
+	dev_kfree_skb(buf);
 	outb(SIRQ_en|irqrmap[dev->irq],dev->base_addr+SET_IRQ);
 	return 0;
 }

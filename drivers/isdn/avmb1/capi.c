@@ -144,7 +144,7 @@ static ssize_t capi_read(struct file *file,
 	copied = skb->len;
 
 
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 
 	return copied;
 }
@@ -169,7 +169,7 @@ static ssize_t capi_write(struct file *file,
 	skb = alloc_skb(count, GFP_USER);
 
 	if ((retval = copy_from_user(skb_put(skb, count), buf, count))) {
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 		return retval;
 	}
 	cmd = CAPIMSG_COMMAND(skb->data);
@@ -178,11 +178,11 @@ static ssize_t capi_write(struct file *file,
 	if (cmd == CAPI_DATA_B3 && subcmd == CAPI_REQ) {
 		__u16 dlen = CAPIMSG_DATALEN(skb->data);
 		if (mlen + dlen != count) {
-			dev_kfree_skb(skb, FREE_WRITE);
+			dev_kfree_skb(skb);
 			return -EINVAL;
 		}
 	} else if (mlen != count) {
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 		return -EINVAL;
 	}
 	CAPIMSG_SETAPPID(skb->data, cdev->applid);
@@ -190,7 +190,7 @@ static ssize_t capi_write(struct file *file,
 	cdev->errcode = (*capifuncs->capi_put_message) (cdev->applid, skb);
 
 	if (cdev->errcode) {
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 		return -EIO;
 	}
 	return count;
@@ -416,7 +416,7 @@ capi_release(struct inode *inode, struct file *file)
 		cdev->applid = 0;
 
 		while ((skb = skb_dequeue(&cdev->recv_queue)) != 0)
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 	}
 	cdev->is_open = 0;
 

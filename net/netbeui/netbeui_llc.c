@@ -163,7 +163,7 @@ static void netbeui_event(llcptr llc)
 	/* We ignore TST, XID, FRMR stuff */
 	/* FIXME: We need to free frames here once I fix the callback! */
 	if(llc->inc_skb)
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 }
 
 /*

@@ -456,7 +456,7 @@ void B1_send_message(unsigned short port, struct sk_buff *skb)
 		B1_put_slice(port, skb->data, len);
 		restore_flags(flags);
 	}
-	dev_kfree_skb(skb, FREE_WRITE);
+	dev_kfree_skb(skb);
 }
 
 /*

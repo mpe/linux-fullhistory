@@ -583,28 +583,6 @@ affs_link(struct dentry *old_dentry, struct inode *dir, struct dentry *dentry)
 	return error;
 }
 
-/* This is copied from the ext2 fs. No need to reinvent the wheel. */
-
-static int
-subdir(struct dentry * new_dentry, struct dentry * old_dentry)
-{
-	int result;
-
-	result = 0;
-	for (;;) {
-		if (new_dentry != old_dentry) {
-			struct dentry * parent = new_dentry->d_parent;
-			if (parent == new_dentry)
-				break;
-			new_dentry = parent;
-			continue;
-		}
-		result = 1;
-		break;
-	}
-	return result;
-}
-
 int
 affs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	    struct inode *new_dir, struct dentry *new_dentry)
@@ -652,7 +630,7 @@ affs_rename(struct inode *old_dir, struct dentry *old_dentry,
 		if (!S_ISDIR(old_inode->i_mode))
 			goto end_rename;
 		retval = -EINVAL;
-		if (subdir(new_dentry,old_dentry))
+		if (is_subdir(new_dentry,old_dentry))
 			goto end_rename;
 		retval = -ENOTEMPTY;
 		if (!empty_dir(new_bh,AFFS_I2HSIZE(new_inode)))
@@ -666,7 +644,7 @@ affs_rename(struct inode *old_dir, struct dentry *old_dentry,
 		if (new_inode && !S_ISDIR(new_inode->i_mode))
 			goto end_rename;
 		retval = -EINVAL;
-		if (subdir(new_dentry,old_dentry))
+		if (is_subdir(new_dentry,old_dentry))
 			goto end_rename;
 		if (affs_parent_ino(old_inode) != old_dir->i_ino)
 			goto end_rename;

@@ -818,7 +818,7 @@ static int depca_start_xmit(struct sk_buff *skb, struct device *dev)
 					outw(INEA | TDMD, DEPCA_DATA);
 
 					dev->trans_start = jiffies;
-					dev_kfree_skb(skb, FREE_WRITE);
+					dev_kfree_skb(skb);
 				}
 				if (TX_BUFFS_AVAIL) {
 					dev->tbusy = 0;

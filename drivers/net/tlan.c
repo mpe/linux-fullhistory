@@ -663,7 +663,7 @@ int TLan_StartTx( struct sk_buff *skb, struct device *dev )
 
 	if ( ! priv->phyOnline ) {
 		TLAN_DBG( TLAN_DEBUG_TX, "TLAN TRANSMIT:  %s PHY is not ready\n", dev->name );
-		dev_kfree_skb( skb, FREE_WRITE );
+		dev_kfree_skb( skb );
 		return 0;
 	}
 
@@ -710,7 +710,7 @@ int TLan_StartTx( struct sk_buff *skb, struct device *dev )
 	if ( priv->txTail >= TLAN_NUM_TX_LISTS )
 		priv->txTail = 0;
 
-	dev_kfree_skb( skb, FREE_WRITE );
+	dev_kfree_skb( skb );
 		
 	dev->trans_start = jiffies;
 	return 0;

@@ -110,7 +110,7 @@ l3dss1_release_cmpl(struct PStack *st, u_char pr, void *arg)
 		cause = *p & 0x7f;
 	}
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 	StopAllL3Timer(st);
 	st->pa->cause = cause;
 	newl3state(st, 0);
@@ -238,7 +238,7 @@ l3dss1_call_proc(struct PStack *st, u_char pr, void *arg)
 	} else if (st->l3.debug & L3_DEB_WARN)
 		l3_debug(st, "setup answer without bchannel");
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 	newl3state(st, 3);
 	L3AddTimer(&st->l3.timer, st->l3.t310, CC_T310);
 	st->l3.l3l4(st, CC_PROCEEDING_IND, NULL);
@@ -259,7 +259,7 @@ l3dss1_setup_ack(struct PStack *st, u_char pr, void *arg)
 	} else if (st->l3.debug & L3_DEB_WARN)
 		l3_debug(st, "setup answer without bchannel");
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 	newl3state(st, 2);
 	L3AddTimer(&st->l3.timer, st->l3.t304, CC_T304);
 	st->l3.l3l4(st, CC_MORE_INFO, NULL);
@@ -282,7 +282,7 @@ l3dss1_disconnect(struct PStack *st, u_char pr, void *arg)
 		cause = *p & 0x7f;
 	}
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 	newl3state(st, 12);
 	st->pa->cause = cause;
 	st->l3.l3l4(st, CC_DISCONNECT_IND, NULL);
@@ -294,7 +294,7 @@ l3dss1_connect(struct PStack *st, u_char pr, void *arg)
 	struct sk_buff *skb = arg;
 
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 	L3DelTimer(&st->l3.timer);	/* T310 */
 	newl3state(st, 10);
 	st->l3.l3l4(st, CC_SETUP_CNF, NULL);
@@ -306,7 +306,7 @@ l3dss1_alerting(struct PStack *st, u_char pr, void *arg)
 	struct sk_buff *skb = arg;
 
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 	L3DelTimer(&st->l3.timer);	/* T304 */
 	newl3state(st, 4);
 	st->l3.l3l4(st, CC_ALERTING_IND, NULL);
@@ -394,7 +394,7 @@ l3dss1_setup(struct PStack *st, u_char pr, void *arg)
 		st->pa->setup.screen = 0;
 	}
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 
 	if (bcfound) {
 		if ((st->pa->setup.si1 != 7) && (st->l3.debug & L3_DEB_WARN)) {
@@ -431,7 +431,7 @@ l3dss1_connect_ack(struct PStack *st, u_char pr, void *arg)
 	struct sk_buff *skb = arg;
 
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 	newl3state(st, 10);
 	L3DelTimer(&st->l3.timer);
 	st->l3.l3l4(st, CC_SETUP_COMPLETE_IND, NULL);
@@ -510,7 +510,7 @@ l3dss1_release(struct PStack *st, u_char pr, void *arg)
 		cause = *p & 0x7f;
 	}
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 	StopAllL3Timer(st);
 	st->pa->cause = cause;
 	newl3state(st, 0);
@@ -535,7 +535,7 @@ l3dss1_status_enq(struct PStack *st, u_char pr, void *arg)
 	struct sk_buff *skb = arg;
 
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 
 	MsgHead(p, st->l3.callref, MT_STATUS);
 
@@ -727,7 +727,7 @@ dss1up(struct PStack *st, int pr, void *arg)
 			l3_debug(st, tmp);
 		}
 		SET_SKB_FREE(skb);
-		dev_kfree_skb(skb, FREE_READ);
+		dev_kfree_skb(skb);
 		return;
 	}
 	mt = skb->data[skb->data[1] + 2];
@@ -737,7 +737,7 @@ dss1up(struct PStack *st, int pr, void *arg)
 			break;
 	if (i == datasllen) {
 		SET_SKB_FREE(skb);
-		dev_kfree_skb(skb, FREE_READ);
+		dev_kfree_skb(skb);
 		if (st->l3.debug & L3_DEB_STATE) {
 			sprintf(tmp, "dss1up%sstate %d mt %x unhandled",
 				(pr == DL_DATA) ? " " : "(broadcast) ",

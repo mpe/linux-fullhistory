@@ -190,7 +190,7 @@ static int shaper_qframe(struct shaper *shaper, struct sk_buff *skb)
  			if(ptr->shapelatency > SHAPER_LATENCY)
  			{
  				skb_unlink(ptr);
- 				dev_kfree_skb(ptr, FREE_WRITE);
+ 				dev_kfree_skb(ptr);
  			}
  			ptr=tmp;
  		}
@@ -225,7 +225,7 @@ static int shaper_qframe(struct shaper *shaper, struct sk_buff *skb)
 		 *	Queue over time. Spill packet.
 		 */
 		if(skb->shapeclock-jiffies > SHAPER_LATENCY)
-			dev_kfree_skb(skb, FREE_WRITE);
+			dev_kfree_skb(skb);
 		else
 			skb_queue_tail(&shaper->sendq, skb);
 	}
@@ -235,7 +235,7 @@ static int shaper_qframe(struct shaper *shaper, struct sk_buff *skb)
  	if(skb_queue_len(&shaper->sendq)>SHAPER_QLEN)
  	{
  		ptr=skb_dequeue(&shaper->sendq);
- 		dev_kfree_skb(ptr, FREE_WRITE);
+ 		dev_kfree_skb(ptr);
  	}
  	shaper_unlock(shaper);
  	shaper_kick(shaper);
@@ -261,7 +261,7 @@ static void shaper_queue_xmit(struct shaper *shaper, struct sk_buff *skb)
 		dev_queue_xmit(newskb);
 		if(sh_debug)
 			printk("Kicked new frame out.\n");
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 	}
 }
 
@@ -368,7 +368,7 @@ static void shaper_flush(struct shaper *shaper)
 {
 	struct sk_buff *skb;
 	while((skb=skb_dequeue(&shaper->sendq))!=NULL)
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 }
 
 /*

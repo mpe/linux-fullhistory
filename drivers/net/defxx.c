@@ -3209,7 +3209,7 @@ int dfx_xmt_queue_pkt(
 			dev->name, skb->len);
 		bp->xmt_length_errors++;		/* bump error counter */
 		mark_bh(NET_BH);
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 		return(0);				/* return "success" */
 	}
 	/*
@@ -3231,7 +3231,7 @@ int dfx_xmt_queue_pkt(
 		else
 			{
 			bp->xmt_discards++;					/* bump error counter */
-			dev_kfree_skb(skb, FREE_WRITE);		/* free sk_buff now */
+			dev_kfree_skb(skb);		/* free sk_buff now */
 			return(0);							/* return "success" */
 			}
 		}
@@ -3381,7 +3381,7 @@ void dfx_xmt_done(
 
 		/* Return skb to operating system */
 
-		dev_kfree_skb(p_xmt_drv_descr->p_skb, FREE_WRITE);
+		dev_kfree_skb(p_xmt_drv_descr->p_skb);
 
 		/* Increment transmit counters */
 
@@ -3458,7 +3458,7 @@ void dfx_xmt_flush(
 
 		/* Return skb to operating system */
 
-		dev_kfree_skb(p_xmt_drv_descr->p_skb, FREE_WRITE);
+		dev_kfree_skb(p_xmt_drv_descr->p_skb);
 
 		/* Increment transmit error counter */
 

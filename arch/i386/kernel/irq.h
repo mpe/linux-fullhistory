@@ -18,6 +18,7 @@ void ack_APIC_irq (void);
 void setup_IO_APIC (void);
 void init_IO_APIC_traps(void);
 int IO_APIC_get_PCI_irq_vector (int bus, int slot, int fn);
+void make_8259A_irq (unsigned int irq);
 
 #ifdef __SMP__
  extern unsigned int io_apic_irqs;
@@ -34,6 +35,7 @@ enum mp_bustype {
 	MP_BUS_PCI
 };
 extern int mp_bus_id_to_type [MAX_MP_BUSSES];
+extern int mp_bus_id_to_pci_bus [MAX_MP_BUSSES];
 extern char ioapic_OEM_ID [16];
 extern char ioapic_Product_ID [16];
 

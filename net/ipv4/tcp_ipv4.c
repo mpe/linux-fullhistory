@@ -629,7 +629,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		 */
 		sk->daddr = 0;
 		sk->saddr = sk->rcv_saddr = 0;
-		kfree_skb(buff, FREE_WRITE);
+		kfree_skb(buff);
 		release_sock(sk);
 		return(-ENETUNREACH);
 	}
@@ -1057,7 +1057,7 @@ static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 
 	if(ip_build_pkt(skb, sk, req->af.v4_req.loc_addr,
 			req->af.v4_req.rmt_addr, req->af.v4_req.opt) < 0) {
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return;
 	}
 	
@@ -1538,7 +1538,7 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 reset:
 	tcp_v4_send_reset(skb);
 discard:
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	/* Be careful here. If this function gets more complicated and
 	 * gcc suffers from register pressure on the x86, sk (in %ebx) 
 	 * might be destroyed here. This current version compiles correctly,
@@ -1615,7 +1615,7 @@ no_tcp_socket:
 
 discard_it:
 	/* Discard frame. */
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
   	return 0;
 }
 
@@ -1814,11 +1814,11 @@ static int tcp_v4_destroy_sock(struct sock *sk)
 
 	/* Cleanup up the write buffer. */
   	while((skb = skb_dequeue(&sk->write_queue)) != NULL)
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 
 	/* Cleans up our, hopefuly empty, out_of_order_queue. */
   	while((skb = skb_dequeue(&sk->out_of_order_queue)) != NULL)
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 
 	return 0;
 }

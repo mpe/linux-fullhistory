@@ -365,21 +365,33 @@ setup_sigcontext(struct sigcontext *sc, struct _fpstate *fpstate,
 	/* non-iBCS2 extensions.. */
 	__put_user(mask, &sc->oldmask);
 	__put_user(current->tss.cr2, &sc->cr2);
-}	
+}
+
+/*
+ * Determine which stack to use..
+ */
+static inline unsigned long sigstack_esp(struct k_sigaction *ka, struct pt_regs * regs)
+{
+	unsigned long esp;
+
+	/* Default to using normal stack */
+	esp = regs->esp;
+
+	/* This is the legacy signal stack switching. */
+	if ((regs->xss & 0xffff) != __USER_DS &&
+	    !(ka->sa.sa_flags & SA_RESTORER) &&
+	    ka->sa.sa_restorer)
+		esp = (unsigned long) ka->sa.sa_restorer;
+
+	return esp;
+}
 
 static void setup_frame(int sig, struct k_sigaction *ka,
 			sigset_t *set, struct pt_regs * regs)
 {
 	struct sigframe *frame;
 
-	frame = (struct sigframe *)((regs->esp - sizeof(*frame)) & -8);
-
-	/* XXX: Check here if we need to switch stacks.. */
-
-	/* This is legacy signal stack switching.  */
-	if ((regs->xss & 0xffff) != __USER_DS
-	    && !(ka->sa.sa_flags & SA_RESTORER) && ka->sa.sa_restorer)
-		frame = (struct sigframe *) ka->sa.sa_restorer;
+	frame = (struct sigframe *)((sigstack_esp(ka, regs) - sizeof(*frame)) & -8);
 
 	if (!access_ok(VERIFY_WRITE, frame, sizeof(*frame)))
 		goto segv_and_exit;
@@ -441,14 +453,7 @@ static void setup_rt_frame(int sig, struct k_sigaction *ka, siginfo_t *info,
 {
 	struct rt_sigframe *frame;
 
-	frame = (struct rt_sigframe *)((regs->esp - sizeof(*frame)) & -8);
-
-	/* XXX: Check here if we need to switch stacks.. */
-
-	/* This is legacy signal stack switching.  */
-	if ((regs->xss & 0xffff) != __USER_DS
-	    && !(ka->sa.sa_flags & SA_RESTORER) && ka->sa.sa_restorer)
-		frame = (struct rt_sigframe *) ka->sa.sa_restorer;
+	frame = (struct rt_sigframe *)((sigstack_esp(ka, regs) - sizeof(*frame)) & -8);
 
 	if (!access_ok(VERIFY_WRITE, frame, sizeof(*frame)))
 		goto segv_and_exit;

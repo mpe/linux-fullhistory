@@ -121,7 +121,7 @@ static int ip6_dstopt_unknown(struct sk_buff *skb, struct ipv6_tlvtype *hdr)
 				    ICMPV6_UNK_OPTION, pos, skb->dev);
 	};
 	
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	return 0;
 }
 
@@ -183,7 +183,7 @@ int ipv6_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	int pkt_len;
 
 	if (skb->pkt_type == PACKET_OTHERHOST) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -204,7 +204,7 @@ int ipv6_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	return 0;
 err:
 	ipv6_statistics.Ip6InHdrErrors++;
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	return 0;
 }
 
@@ -358,7 +358,7 @@ st_loop:
 		offset = nhptr - (u8*) hdr;
 		icmpv6_send(skb, ICMPV6_PARAMPROB, ICMPV6_UNK_NEXTHDR,
 			    offset, skb->dev);
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 	}
 
 	return 0;
@@ -407,7 +407,7 @@ int ip6_mc_input(struct sk_buff *skb)
 	}
 
 	if (discard)
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 
 	return 0;
 }

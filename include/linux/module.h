@@ -94,6 +94,7 @@ struct module_info
 #define MOD_AUTOCLEAN		4
 #define MOD_VISITED  		8
 #define MOD_USED_ONCE		16
+#define MOD_JUST_FREED		32
 
 /* Values for query_module's which.  */
 

@@ -407,7 +407,7 @@ i596_cleanup_cmd(struct i596_private *lp)
 		struct tx_cmd *tx_cmd = (struct tx_cmd *) ptr;
 		struct sk_buff *skb = ((struct sk_buff *)(tx_cmd->tbd->data)) -1;
 
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 
 		lp->stats.tx_errors++;
 		lp->stats.tx_aborted_errors++;
@@ -615,7 +615,7 @@ i596_start_xmit(struct sk_buff *skb, struct device *dev)
 	    printk ("%s: i596_xmit Memory squeeze, dropping packet.\n", dev->name);
 	    lp->stats.tx_dropped++;
 
-	    dev_kfree_skb(skb, FREE_WRITE);
+	    dev_kfree_skb(skb);
 	}
 	else
 	{
@@ -790,7 +790,7 @@ i596_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		    struct tx_cmd *tx_cmd = (struct tx_cmd *) ptr;
 		    struct sk_buff *skb = ((struct sk_buff *)(tx_cmd->tbd->data)) -1;
 
-		    dev_kfree_skb(skb, FREE_WRITE);
+		    dev_kfree_skb(skb);
 
 		    if ((ptr->status) & STAT_OK)
 		    {

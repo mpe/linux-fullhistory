@@ -730,7 +730,7 @@ lance_purge_tx_ring(struct device *dev)
 
 	for (i = 0; i < TX_RING_SIZE; i++) {
 		if (lp->tx_skbuff[i]) {
-			dev_kfree_skb(lp->tx_skbuff[i],FREE_WRITE);
+			dev_kfree_skb(lp->tx_skbuff[i]);
 			lp->tx_skbuff[i] = NULL;
 		}
 	}
@@ -870,7 +870,7 @@ static int lance_start_xmit(struct sk_buff *skb, struct device *dev)
 		memcpy(&lp->tx_bounce_buffs[entry], skb->data, skb->len);
 		lp->tx_ring[entry].base =
 			((u32)virt_to_bus((lp->tx_bounce_buffs + entry)) & 0xffffff) | 0x83000000;
-		dev_kfree_skb (skb, FREE_WRITE);
+		dev_kfree_skb (skb);
 	} else {
 		lp->tx_skbuff[entry] = skb;
 		lp->tx_ring[entry].base = ((u32)virt_to_bus(skb->data) & 0xffffff) | 0x83000000;
@@ -969,7 +969,7 @@ lance_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 				/* We must free the original skb if it's not a data-only copy
 				   in the bounce buffer. */
 				if (lp->tx_skbuff[entry]) {
-					dev_kfree_skb(lp->tx_skbuff[entry],FREE_WRITE);
+					dev_kfree_skb(lp->tx_skbuff[entry]);
 					lp->tx_skbuff[entry] = 0;
 				}
 				dirty_tx++;

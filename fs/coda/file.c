@@ -264,7 +264,7 @@ int coda_inode_grab(dev_t dev, ino_t ino, struct inode **ind)
 {
         struct super_block *sbptr;
 
-        sbptr = get_super(dev);
+        sbptr = get_super(to_kdev_t(dev));
 
         if ( !sbptr ) {
                 printk("coda_inode_grab: coda_find_super returns NULL.\n");

@@ -500,7 +500,7 @@ static int hydra_start_xmit(struct sk_buff *skb, struct device *dev)
 	/* clear the unused space */
 	for(; len1<len; len1++)
 		(u16)*(priv->hydra_base + (priv->tx_page_start<<8) + len1) = 0;
-	dev_kfree_skb(skb, FREE_WRITE);
+	dev_kfree_skb(skb);
 
 	priv->stats.tx_packets++;
 

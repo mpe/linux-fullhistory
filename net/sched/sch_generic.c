@@ -98,7 +98,7 @@ struct Qdisc *qdisc_lookup(int handle)
 static int
 noop_enqueue(struct sk_buff *skb, struct Qdisc * qdisc)
 {
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 	return 0;
 }
 
@@ -139,7 +139,7 @@ pfifo_fast_enqueue(struct sk_buff *skb, struct Qdisc* qdisc)
 		return 1;
 	}
 	qdisc->dropped++;
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 	return 0;
 }
 
@@ -213,7 +213,7 @@ default_requeue(struct sk_buff *skb, struct Qdisc* qdisc)
 {
 	if (net_ratelimit())
 		printk(KERN_DEBUG "%s deferred output. It is buggy.\n", skb->dev->name);
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 	return 0;
 }
 
@@ -414,7 +414,7 @@ int qdisc_restart(struct device *dev)
 		}
 
 		printk(KERN_DEBUG "%s: it is impossible!!!\n", dev->name);
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 	}
 	return q->q.qlen;
 }

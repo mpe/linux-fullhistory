@@ -85,7 +85,7 @@ static int ax25_rx_fragment(ax25_cb *ax25, struct sk_buff *skb)
 				if (ax25->fragno == 0) {
 					if ((skbn = alloc_skb(AX25_MAX_HEADER_LEN + ax25->fraglen, GFP_ATOMIC)) == NULL) {
 						while ((skbo = skb_dequeue(&ax25->frag_queue)) != NULL)
-							kfree_skb(skbo, FREE_READ);
+							kfree_skb(skbo);
 						return 1;
 					}
 
@@ -97,13 +97,13 @@ static int ax25_rx_fragment(ax25_cb *ax25, struct sk_buff *skb)
 					/* Copy data from the fragments */
 					while ((skbo = skb_dequeue(&ax25->frag_queue)) != NULL) {
 						memcpy(skb_put(skbn, skbo->len), skbo->data, skbo->len);
-						kfree_skb(skbo, FREE_READ);
+						kfree_skb(skbo);
 					}
 
 					ax25->fraglen = 0;
 
 					if (ax25_rx_iframe(ax25, skbn) == 0)
-						kfree_skb(skbn, FREE_READ);
+						kfree_skb(skbn);
 				}
 
 				return 1;
@@ -113,7 +113,7 @@ static int ax25_rx_fragment(ax25_cb *ax25, struct sk_buff *skb)
 		/* First fragment received */
 		if (*skb->data & AX25_SEG_FIRST) {
 			while ((skbo = skb_dequeue(&ax25->frag_queue)) != NULL)
-				kfree_skb(skbo, FREE_READ);
+				kfree_skb(skbo);
 			ax25->fragno = *skb->data & AX25_SEG_REM;
 			skb_pull(skb, 1);		/* skip fragno */
 			ax25->fraglen = skb->len;
@@ -149,7 +149,7 @@ int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb)
 		 */
 		struct sk_buff *skbn = skb_copy(skb, GFP_ATOMIC);
 		if (skbn != NULL) {
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			skb = skbn;
 		}
 
@@ -234,12 +234,12 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 	skb->h.raw = skb->data;
 
 	if ((ax25_dev = ax25_dev_ax25dev(dev)) == NULL) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
 	if (call_in_firewall(PF_AX25, skb->dev, skb->h.raw, NULL, &skb) != FW_ACCEPT) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -248,7 +248,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 	 */
 
 	if (ax25_addr_parse(skb->data, skb->len, &src, &dest, &dp, &type, &dama) == NULL) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -279,7 +279,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 			ax25_send_to_raw(raw, skb, skb->data[1]);
 
 		if (!mine && ax25cmp(&dest, (ax25_address *)dev->broadcast) != 0) {
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			return 0;
 		}
 
@@ -308,22 +308,22 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 				/* Now find a suitable dgram socket */
 				if ((sk = ax25_find_socket(&dest, &src, SOCK_DGRAM)) != NULL) {
 					if (atomic_read(&sk->rmem_alloc) >= sk->rcvbuf) {
-						kfree_skb(skb, FREE_READ);
+						kfree_skb(skb);
 					} else {
 						/*
 						 *	Remove the control and PID.
 						 */
 						skb_pull(skb, 2);
 						if (sock_queue_rcv_skb(sk, skb) != 0)
-							kfree_skb(skb, FREE_READ);
+							kfree_skb(skb);
 					}
 				} else {
-					kfree_skb(skb, FREE_READ);
+					kfree_skb(skb);
 				}
 				break;
 
 			default:
-				kfree_skb(skb, FREE_READ);	/* Will scan SOCK_AX25 RAW sockets */
+				kfree_skb(skb);	/* Will scan SOCK_AX25 RAW sockets */
 				break;
 		}
 
@@ -336,7 +336,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 	 *	silently ignore them. For now we stay quiet.
 	 */
 	if (ax25_dev->values[AX25_VALUES_CONMODE] == 0) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -353,7 +353,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 		 *	do no further work
 		 */
 		if (ax25_process_rx_frame(ax25, skb, type, dama) == 0)
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 
 		return 0;
 	}
@@ -370,7 +370,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 		if ((*skb->data & ~AX25_PF) != AX25_DM && mine)
 			ax25_return_dm(dev, &src, &dest, &dp);
 
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -384,7 +384,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 	if (sk != NULL) {
 		if (sk->ack_backlog == sk->max_ack_backlog || (make = ax25_make_new(sk, ax25_dev)) == NULL) {
 			if (mine) ax25_return_dm(dev, &src, &dest, &dp);
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			return 0;
 		}
 
@@ -399,13 +399,13 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 		sk->ack_backlog++;
 	} else {
 		if (!mine) {
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			return 0;
 		}
 
 		if ((ax25 = ax25_create_cb()) == NULL) {
 			ax25_return_dm(dev, &src, &dest, &dp);
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			return 0;
 		}
 
@@ -419,7 +419,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 	 *	Sort out any digipeated paths.
 	 */
 	if (dp.ndigi != 0 && ax25->digipeat == NULL && (ax25->digipeat = kmalloc(sizeof(ax25_digi), GFP_ATOMIC)) == NULL) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		ax25_destroy_socket(ax25);
 		return 0;
 	}
@@ -461,7 +461,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 		if (!sk->dead)
 			sk->data_ready(sk, skb->len);
 	} else {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 	}
 
 	return 0;
@@ -475,7 +475,7 @@ int ax25_kiss_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *p
 	skb->sk = NULL;		/* Initially we don't know who it's for */
 
 	if ((*skb->data & 0x0F) != 0) {
-		kfree_skb(skb, FREE_READ);	/* Not a KISS data frame */
+		kfree_skb(skb);	/* Not a KISS data frame */
 		return 0;
 	}
 

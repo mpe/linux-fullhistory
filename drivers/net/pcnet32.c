@@ -477,7 +477,7 @@ pcnet32_purge_tx_ring(struct device *dev)
 
 	for (i = 0; i < TX_RING_SIZE; i++) {
 		if (lp->tx_skbuff[i]) {
-			dev_kfree_skb(lp->tx_skbuff[i],FREE_WRITE);
+			dev_kfree_skb(lp->tx_skbuff[i]);
 			lp->tx_skbuff[i] = NULL;
 		}
 	}
@@ -707,7 +707,7 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
 				/* We must free the original skb */
 				if (lp->tx_skbuff[entry]) {
-					dev_kfree_skb(lp->tx_skbuff[entry],FREE_WRITE);
+					dev_kfree_skb(lp->tx_skbuff[entry]);
 					lp->tx_skbuff[entry] = 0;
 				}
 				dirty_tx++;

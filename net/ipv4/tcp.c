@@ -492,6 +492,8 @@ void tcp_time_wait(struct sock *sk)
 
 /*
  *	Walk down the receive queue counting readable data.
+ *
+ *	Must be called with the socket lock held.
  */
 
 static int tcp_readable(struct sock *sk)
@@ -500,14 +502,11 @@ static int tcp_readable(struct sock *sk)
 	unsigned long amount;
 	struct sk_buff *skb;
 	int sum;
-	unsigned long flags;
 
 	SOCK_DEBUG(sk, "tcp_readable: %p - ",sk);
 
-	save_flags(flags);
-	cli();
-	if (sk == NULL || (skb = skb_peek(&sk->receive_queue)) == NULL) {
-		restore_flags(flags);
+	skb = skb_peek(&sk->receive_queue);
+	if (skb == NULL) {
 		SOCK_DEBUG(sk, "empty\n");
 	  	return(0);
 	}
@@ -560,7 +559,6 @@ static int tcp_readable(struct sock *sk)
 		skb = skb->next;
 	} while(skb != (struct sk_buff *)&sk->receive_queue);
 
-	restore_flags(flags);
 	SOCK_DEBUG(sk, "got %lu bytes.\n",amount);
 	return(amount);
 }
@@ -672,12 +670,18 @@ int tcp_ioctl(struct sock *sk, int cmd, unsigned long arg)
  */
 static void wait_for_tcp_connect(struct sock * sk)
 {
+	struct task_struct *tsk = current;
+	struct wait_queue wait = { tsk, NULL };
+
+	tsk->state = TASK_INTERRUPTIBLE;
+	add_wait_queue(sk->sleep, &wait);
 	release_sock(sk);
-	cli();
-	if (((1 << sk->state) & ~(TCPF_ESTABLISHED|TCPF_CLOSE_WAIT)) &&
-	    sk->err == 0)
-		interruptible_sleep_on(sk->sleep);
-	sti();
+
+	if (((1 << sk->state) & ~(TCPF_ESTABLISHED|TCPF_CLOSE_WAIT)) && sk->err == 0)
+		schedule();
+
+	tsk->state = TASK_RUNNING;
+	remove_wait_queue(sk->sleep, &wait);
 	lock_sock(sk);
 }
 
@@ -904,7 +908,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 			 */
 			tmp = tp->af_specific->build_net_header(sk, skb);
 			if (tmp < 0) {
-				kfree_skb(skb, FREE_WRITE);
+				kfree_skb(skb);
 				if (copied)
 					return(copied);
 				return(tmp);
@@ -1042,7 +1046,7 @@ static inline void tcp_eat_skb(struct sock *sk, struct sk_buff * skb)
 	sk->tp_pinfo.af_tcp.delayed_acks++;
 
 	__skb_unlink(skb, &sk->receive_queue);
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 }
 
 
@@ -1431,7 +1435,7 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 	 *  reader process may not have drained the data yet!
 	 */
 	while((skb=skb_dequeue(&sk->receive_queue))!=NULL)
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 
 	/*  Timeout is not the same thing - however the code likes
 	 *  to send both the same way (sigh).
@@ -1440,17 +1444,25 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 		tcp_send_fin(sk);
 
 	if (timeout) {
-		cli();
+		struct task_struct *tsk = current;
+		struct wait_queue wait = { tsk, NULL };
+
+		tsk->state = TASK_INTERRUPTIBLE;
+		tsk->timeout = timeout;
+		add_wait_queue(sk->sleep, &wait);
 		release_sock(sk);
-		current->timeout = timeout;
-		while(closing(sk) && current->timeout) {
-			interruptible_sleep_on(sk->sleep);
-			if (signal_pending(current))
+
+		while (closing(sk)) {
+			schedule();
+			if (signal_pending(tsk) || !tsk->timeout)
 				break;
 		}
-		current->timeout=0;
+
+		tsk->timeout=0;
+		tsk->state = TASK_RUNNING;
+		remove_wait_queue(sk->sleep, &wait);
+		
 		lock_sock(sk);
-		sti();
 	}
 
 	/* Now that the socket is dead, if we are in the FIN_WAIT2 state

@@ -492,7 +492,7 @@ void udp_err(struct sk_buff *skb, unsigned char *dp, int len)
 	if (sk->ip_recverr && !sk->sock_readers) {
 		struct sk_buff *skb2 = skb_clone(skb, GFP_ATOMIC);
 		if (skb2 && sock_queue_err_skb(sk, skb2))
-			kfree_skb(skb2, FREE_READ);
+			kfree_skb(skb2);
 	}
   	
 	switch (type) {
@@ -971,7 +971,7 @@ static int udp_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 	 
 	if(!ipsec_sk_policy(sk,skb))
 	{	
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return(0);
 	}
 	 
@@ -983,7 +983,7 @@ static int udp_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 		udp_statistics.UdpInErrors++;
 		ip_statistics.IpInDiscards++;
 		ip_statistics.IpInDelivers--;
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return -1;
 	}
 	udp_statistics.UdpInDatagrams++;
@@ -1031,7 +1031,7 @@ static int udp_v4_mcast_deliver(struct sk_buff *skb, struct udphdr *uh,
 	}
 	SOCKHASH_UNLOCK();
 	if(!given)
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 	return 0;
 }
 
@@ -1094,7 +1094,7 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
 	if (ulen > len || len < sizeof(*uh) || ulen < sizeof(*uh)) {
 		NETDEBUG(printk(KERN_DEBUG "UDP: short packet: %d/%d\n", ulen, len));
 		udp_statistics.UdpInErrors++;
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return(0);
 	}
 
@@ -1113,7 +1113,7 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
 		       ntohl(daddr),ntohs(uh->dest),
 		       ulen));
 		udp_statistics.UdpInErrors++;
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return(0);
 	}
 
@@ -1149,7 +1149,7 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
 		 * Hmm.  We got an UDP broadcast to a port to which we
 		 * don't wanna listen.  Ignore it.
 		 */
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return(0);
   	}
 	udp_deliver(sk, skb);

@@ -471,7 +471,7 @@ de600_start_xmit(struct sk_buff *skb, struct device *dev)
 		skb->sk->prot->rspace = de600_rspace; /* Ugh! */
 #endif
 
-	dev_kfree_skb (skb, FREE_WRITE);
+	dev_kfree_skb (skb);
 
 	return 0;
 }

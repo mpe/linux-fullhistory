@@ -15,6 +15,7 @@
  *		David S. Miller :	Begin massive cleanup...
  *		Andi Kleen	:	Add sysctls.
  *		xxxx		:	Overlapfrag bug.
+ *		Ultima          :       ip_expire() kernel panic.
  */
 
 #include <linux/types.h>
@@ -78,10 +79,10 @@ atomic_t ip_frag_mem = ATOMIC_INIT(0);		/* Memory used for fragments */
 char *in_ntoa(__u32 in);
 
 /* Memory Tracking Functions. */
-extern __inline__ void frag_kfree_skb(struct sk_buff *skb, int type)
+extern __inline__ void frag_kfree_skb(struct sk_buff *skb)
 {
 	atomic_sub(skb->truesize, &ip_frag_mem);
-	kfree_skb(skb,type);
+	kfree_skb(skb);
 }
 
 extern __inline__ void frag_kfree_s(void *ptr, int len)
@@ -175,7 +176,7 @@ static void ip_free(struct ipq *qp)
 	while (fp) {
 		struct ipfrag *xp = fp->next;
 
-		frag_kfree_skb(fp->skb,FREE_READ);
+		frag_kfree_skb(fp->skb);
 		frag_kfree_s(fp, sizeof(struct ipfrag));
 		fp = xp;
 	}
@@ -192,6 +193,15 @@ static void ip_expire(unsigned long arg)
 {
 	struct ipq *qp = (struct ipq *) arg;
 
+  	if(!qp->fragments)
+        {	
+#ifdef IP_EXPIRE_DEBUG
+	  	printk("warning: possible ip-expire attack\n");
+#endif
+		ip_free(qp);
+		return;
+  	}
+  
 	/* Send an ICMP "Fragment Reassembly Timeout" message. */
 	ip_statistics.IpReasmTimeout++;
 	ip_statistics.IpReasmFails++;   
@@ -344,7 +354,7 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 			NETDEBUG(printk(KERN_ERR "Invalid fragment list: "
 					"Fragment over size.\n"));
 			ip_free(qp);
-			kfree_skb(skb,FREE_WRITE);
+			kfree_skb(skb);
 			ip_statistics.IpReasmFails++;
 			return NULL;
 		}
@@ -427,7 +437,7 @@ struct sk_buff *ip_defrag(struct sk_buff *skb)
 	} else {
 		/* If we failed to create it, then discard the frame. */
 		if ((qp = ip_create(skb, iph)) == NULL) {
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			ip_statistics.IpReasmFails++;
 			return NULL;
 		}
@@ -437,7 +447,7 @@ struct sk_buff *ip_defrag(struct sk_buff *skb)
 	if(ntohs(iph->tot_len)+(int)offset>65535) {
 		if (net_ratelimit())
 			printk(KERN_INFO "Oversized packet received from %d.%d.%d.%d\n", NIPQUAD(iph->saddr));
-		frag_kfree_skb(skb, FREE_READ);
+		frag_kfree_skb(skb);
 		ip_statistics.IpReasmFails++;
 		return NULL;
 	}	
@@ -501,7 +511,7 @@ struct sk_buff *ip_defrag(struct sk_buff *skb)
 			/* We have killed the original next frame. */
 			next = tfp;
 
-			frag_kfree_skb(tmp->skb,FREE_READ);
+			frag_kfree_skb(tmp->skb);
 			frag_kfree_s(tmp, sizeof(struct ipfrag));
 		}
 	}
@@ -512,7 +522,7 @@ struct sk_buff *ip_defrag(struct sk_buff *skb)
 
 	/* No memory to save the fragment - so throw the lot. */
 	if (!tfp) {
-		frag_kfree_skb(skb, FREE_READ);
+		frag_kfree_skb(skb);
 		return NULL;
 	}
 	tfp->prev = prev;

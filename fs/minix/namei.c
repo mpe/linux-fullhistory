@@ -599,24 +599,6 @@ int minix_link(struct dentry * old_dentry, struct inode * dir,
 	return 0;
 }
 
-static int subdir(struct dentry * new_dentry, struct dentry * old_dentry)
-{
-	int result = 0;
-
-	for (;;) {
-		if (new_dentry != old_dentry) {
-			struct dentry * parent = new_dentry->d_parent;
-			if (parent == new_dentry)
-				break;
-			new_dentry = parent;
-			continue;
-		}
-		result = 1;
-		break;
-	}
-	return result;
-}
-
 #define PARENT_INO(buffer) \
 (((struct minix_dir_entry *) ((buffer)+info->s_dirsize))->inode)
 
@@ -679,7 +661,7 @@ start_up:
 		if (!S_ISDIR(old_inode->i_mode))
 			goto end_rename;
 		retval = -EINVAL;
-		if (subdir(new_dentry, old_dentry))
+		if (is_subdir(new_dentry, old_dentry))
 			goto end_rename;
 		retval = -ENOTEMPTY;
 		if (!empty_dir(new_inode))
@@ -698,7 +680,7 @@ start_up:
 		if (new_inode && !S_ISDIR(new_inode->i_mode))
 			goto end_rename;
 		retval = -EINVAL;
-		if (subdir(new_dentry, old_dentry))
+		if (is_subdir(new_dentry, old_dentry))
 			goto end_rename;
 		retval = -EIO;
 		dir_bh = minix_bread(old_inode,0,0);

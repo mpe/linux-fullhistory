@@ -629,17 +629,11 @@ static int ext2_update_inode(struct inode * inode, int do_sync)
 
 void ext2_write_inode (struct inode * inode)
 {
-#if 0
-	printk("ext2_write(%04x:%06d)...", inode->i_dev, inode->i_ino);
-#endif
 	ext2_update_inode (inode, 0);
 }
 
 int ext2_sync_inode (struct inode *inode)
 {
-#if 0
-	printk("ext2_sync(%04x:%06d)...", inode->i_dev, inode->i_ino);
-#endif
 	return ext2_update_inode (inode, 1);
 }
 

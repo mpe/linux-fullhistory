@@ -493,7 +493,7 @@ static int el16_send_packet(struct sk_buff *skb, struct device *dev)
 		outb(0x84, ioaddr + MISC_CTRL);
 	}
 
-	dev_kfree_skb (skb, FREE_WRITE);
+	dev_kfree_skb (skb);
 
 	/* You might need to clean up and record Tx statistics here. */
 

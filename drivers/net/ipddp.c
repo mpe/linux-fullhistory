@@ -170,7 +170,7 @@ static int ipddp_xmit(struct sk_buff *skb, struct device *dev)
         ((struct net_device_stats *) dev->priv)->tx_bytes+=skb->len;
 
         if(aarp_send_ddp(skb->dev, skb, at, NULL) < 0)
-                dev_kfree_skb(skb,FREE_WRITE);
+                dev_kfree_skb(skb);
 
         return 0;
 }

@@ -776,7 +776,7 @@ frame_done:
 
 	++privN->stats.tx_packets;
 
-	dev_kfree_skb (skb, FREE_WRITE);
+	dev_kfree_skb (skb);
 	return (0);
 
 no_resources:

@@ -500,6 +500,8 @@ void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 
 				if (!arp_bind_neighbour(&rt->u.dst) ||
 				    !(rt->u.dst.neighbour->nud_state&NUD_VALID)) {
+					if (rt->u.dst.neighbour)
+						neigh_event_send(rt->u.dst.neighbour, NULL);
 					ip_rt_put(rt);
 					rt_free(rt);
 					break;
@@ -599,7 +601,7 @@ static int ip_error(struct sk_buff *skb)
 	switch (rt->u.dst.error) {
 	case EINVAL:
 	default:
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	case EHOSTUNREACH:
 		code = ICMP_HOST_UNREACH;
@@ -615,7 +617,7 @@ static int ip_error(struct sk_buff *skb)
 		icmp_send(skb, ICMP_DEST_UNREACH, code, 0);
 		rt->last_error = jiffies;
 	}
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	return 0;
 } 
 
@@ -701,7 +703,7 @@ static int ip_rt_bug(struct sk_buff *skb)
 {
 	printk(KERN_DEBUG "ip_rt_bug: %08x -> %08x, %s\n", skb->nh.iph->saddr,
 	       skb->nh.iph->daddr, skb->dev ? skb->dev->name : "?");
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 	return 0;
 }
 
@@ -1415,7 +1417,7 @@ int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh, void *arg)
 				      rta->rta_oif ? *rta->rta_oif : 0);
 	}
 	if (err) {
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return err;
 	}
 
@@ -1478,7 +1480,7 @@ int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr* nlh, void *arg)
 
 nlmsg_failure:
 rtattr_failure:
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 	return -EMSGSIZE;
 }
 

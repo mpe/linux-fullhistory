@@ -655,7 +655,7 @@ static int ariadne_start_xmit(struct sk_buff *skb, struct device *dev)
 
     priv->tx_ring[entry]->TMD1 = (priv->tx_ring[entry]->TMD1&0xff00)|TF_OWN|TF_STP|TF_ENP;
 
-    dev_kfree_skb(skb, FREE_WRITE);
+    dev_kfree_skb(skb);
 
     priv->cur_tx++;
     if ((priv->cur_tx >= TX_RING_SIZE) && (priv->dirty_tx >= TX_RING_SIZE)) {

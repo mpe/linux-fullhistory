@@ -685,7 +685,7 @@ void dump_tk_script(struct kconfig *scfg)
   int menu_maxlines = 0;
   struct kconfig * cfg;
   struct kconfig * cfg1 = NULL;
-  char * menulabel;
+  char * menulabel = "tkgen error";
 
   /*
    * Start by assigning menu numbers, and submenu numbers.

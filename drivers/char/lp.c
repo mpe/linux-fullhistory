@@ -305,6 +305,7 @@ static inline int lp_write_buf(unsigned int minor, const char *buf, int count)
 					}
 					current->timeout = jiffies + LP_TIMEOUT_INTERRUPT;
 					interruptible_sleep_on(&lp->dev->wait_q);
+					disable_irq(lp->dev->port->irq);
 					w_ctr(minor, LP_PSELECP | LP_PINITP);
 					sti();
 					if (lp_check_status(minor))
@@ -663,7 +664,7 @@ __initfunc(void lp_setup(char *str, int *ints))
 	} else if (!strcmp(str, "auto")) {
 		parport[0] = LP_PARPORT_AUTO;
 	} else if (!strcmp(str, "none")) {
-		parport_ptr++;
+		parport[parport_ptr++] = LP_PARPORT_NONE;
 	} else if (!strcmp(str, "reset")) {
 		reset = 1;
 	} else {
@@ -701,6 +702,7 @@ int lp_register(int nr, struct parport *port)
 int lp_init(void)
 {
 	unsigned int count = 0;
+	unsigned int i;
 	struct parport *port;
 
 	switch (parport[0])
@@ -722,15 +724,17 @@ int lp_init(void)
 		}
 		break;
 
+	case LP_PARPORT_NONE:
 	default:
-		for (count = 0; count < LP_NO; count++) {
-			if (parport[count] != LP_PARPORT_UNSPEC) {
+		for (i = 0; i < LP_NO; i++) {
+			if (parport[i] >= 0) {
 				char buffer[16];
-				sprintf(buffer, "parport%d", parport[count]);
+				sprintf(buffer, "parport%d", parport[i]);
 				for (port = parport_enumerate(); port; 
 				     port = port->next) {
 					if (!strcmp(port->name, buffer)) {
-						(void) lp_register(count, port);
+						(void) lp_register(i, port);
+						count++;
 						break;
 					}
 				}

@@ -573,7 +573,7 @@ static int smc_wait_to_send_packet( struct sk_buff * skb, struct device * dev )
 		printk(CARDNAME": Far too big packet error. \n");
 		/* freeing the packet is a good thing here... but should
 		 . any packets of this size get down here?   */
-		dev_kfree_skb (skb, FREE_WRITE);
+		dev_kfree_skb (skb);
 		lp->saved_skb = NULL;
 		/* this IS an error, but, i don't want the skb saved */
 		return 0;
@@ -725,7 +725,7 @@ static void smc_hardware_send_packet( struct device * dev )
 	PRINTK2((CARDNAME": Sent packet of length %d \n",length));
 
 	lp->saved_skb = NULL;
-	dev_kfree_skb (skb, FREE_WRITE);
+	dev_kfree_skb (skb);
 
 	dev->trans_start = jiffies;
 
@@ -1246,7 +1246,7 @@ static int smc_send_packet(struct sk_buff *skb, struct device *dev)
 	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
 	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
 		printk(KERN_WARNING CARDNAME": Transmitter access conflict.\n");
-		dev_kfree_skb (skb, FREE_WRITE);
+		dev_kfree_skb (skb);
 	} else {
 		/* Well, I want to send the packet.. but I don't know
 		   if I can send it right now...  */

@@ -578,7 +578,7 @@ static int do_source(char * filename)
   char buffer[1024];
   int  offset;
   int old_lineno;
-  char * old_file;
+  char * old_file = 0;		/* superfluous, just for gcc */
   char * pnt;
   FILE * infile;
 

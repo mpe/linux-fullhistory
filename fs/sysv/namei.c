@@ -47,7 +47,7 @@ static int sysv_match(int len, const char * name, struct sysv_dir_entry * de)
 	/* "" means "." ---> so paths like "/usr/lib//libc.a" work */
 	if (!len && (de->name[0]=='.') && (de->name[1]=='\0'))
 		return 1;
-	return namecompare(len,SYSV_NAMELEN,name,de->name);
+	return namecompare(len, SYSV_NAMELEN, name, de->name);
 }
 
 /*
@@ -78,7 +78,7 @@ static struct buffer_head * sysv_find_entry(struct inode * dir,
 	pos = block = offset = 0;
 	while (pos < dir->i_size) {
 		if (!bh) {
-			bh = sysv_file_bread(dir,block,0);
+			bh = sysv_file_bread(dir, block, 0);
 			if (!bh) {
 				/* offset = 0; */ block++;
 				pos += sb->sv_block_size;
@@ -117,7 +117,7 @@ int sysv_lookup(struct inode * dir, struct dentry * dentry)
 	if (bh) {
 		int ino = de->inode;
 		brelse(bh);
-		inode = iget(dir->i_sb,ino);
+		inode = iget(dir->i_sb, ino);
 	
 		if (!inode) 
 			return -EACCES;
@@ -163,7 +163,7 @@ static int sysv_add_entry(struct inode * dir,
 	pos = block = offset = 0;
 	while (1) {
 		if (!bh) {
-			bh = sysv_file_bread(dir,block,1);
+			bh = sysv_file_bread(dir, block, 1);
 			if (!bh)
 				return -ENOSPC;
 		}
@@ -214,7 +214,7 @@ int sysv_create(struct inode * dir, struct dentry * dentry, int mode)
 	inode->i_op = &sysv_file_inode_operations;
 	inode->i_mode = mode;
 	mark_inode_dirty(inode);
-	error = sysv_add_entry(dir,dentry->d_name.name,
+	error = sysv_add_entry(dir, dentry->d_name.name,
 			       dentry->d_name.len, &bh, &de);
 	if (error) {
 		inode->i_nlink--;
@@ -238,8 +238,8 @@ int sysv_mknod(struct inode * dir, struct dentry * dentry, int mode, int rdev)
 
 	if (!dir)
 		return -ENOENT;
-	bh = sysv_find_entry(dir,dentry->d_name.name,
-			     dentry->d_name.len,&de);
+	bh = sysv_find_entry(dir, dentry->d_name.name,
+			     dentry->d_name.len, &de);
 	if (bh) {
 		brelse(bh);
 		return -EEXIST;
@@ -268,7 +268,8 @@ int sysv_mknod(struct inode * dir, struct dentry * dentry, int mode, int rdev)
 	if (S_ISBLK(mode) || S_ISCHR(mode))
 		inode->i_rdev = to_kdev_t(rdev);
 	mark_inode_dirty(inode);
-	error = sysv_add_entry(dir, dentry->d_name.name, dentry->d_name.len, &bh, &de);
+	error = sysv_add_entry(dir, dentry->d_name.name, 
+			       dentry->d_name.len, &bh, &de);
 	if (error) {
 		inode->i_nlink--;
 		mark_inode_dirty(inode);
@@ -359,7 +360,7 @@ static int empty_dir(struct inode * inode)
 		goto bad_dir;
 	if (inode->i_size < pos)
 		goto bad_dir;
-	bh = sysv_file_bread(inode,0,0);
+	bh = sysv_file_bread(inode, 0, 0);
 	if (!bh)
 		goto bad_dir;
 	de = (struct sysv_dir_entry *) (bh->b_data + 0*SYSV_DIRSIZE);
@@ -371,7 +372,7 @@ static int empty_dir(struct inode * inode)
 	sb = inode->i_sb;
 	while (pos < inode->i_size) {
 		if (!bh) {
-			bh = sysv_file_bread(inode,block,0);
+			bh = sysv_file_bread(inode, block, 0);
 			if (!bh) {
 				/* offset = 0; */ block++;
 				pos += sb->sv_block_size;
@@ -441,7 +442,7 @@ int sysv_rmdir(struct inode * dir, struct dentry * dentry)
 		goto end_rmdir;
 	}
 	if (inode->i_nlink != 2)
-		printk("empty directory has nlink!=2 (%d)\n",inode->i_nlink);
+		printk("empty directory has nlink!=2 (%d)\n", inode->i_nlink);
 	de->inode = 0;
 	mark_buffer_dirty(bh, 1);
 	inode->i_nlink=0;
@@ -491,8 +492,7 @@ repeat:
 	}
 	if (!inode->i_nlink) {
 		printk("Deleting nonexistent file (%s:%lu), %d\n",
-		        kdevname(inode->i_dev),
-		       inode->i_ino, inode->i_nlink);
+		        kdevname(inode->i_dev), inode->i_ino, inode->i_nlink);
 		inode->i_nlink=1;
 	}
 	de->inode = 0;
@@ -526,7 +526,7 @@ int sysv_symlink(struct inode * dir, struct dentry * dentry,
 
 	inode->i_mode = S_IFLNK | 0777;
 	inode->i_op = &sysv_symlink_inode_operations;
-	name_block = sysv_file_bread(inode,0,1);
+	name_block = sysv_file_bread(inode, 0, 1);
 	if (!name_block) {
 		inode->i_nlink--;
 		mark_inode_dirty(inode);
@@ -603,25 +603,6 @@ int sysv_link(struct dentry * old_dentry, struct inode * dir,
 	return 0;
 }
 
-/* return 1 if `new' is a subdir of `old' on the same device */
-static int subdir(struct dentry * new_dentry, struct dentry * old_dentry)
-{
-	int result = 0;
-	
-        for (;;) {
-                if (new_dentry != old_dentry) {
-                        struct dentry * parent = new_dentry->d_parent;
-                        if (parent == new_dentry)
-                                break;
-                        new_dentry = parent;
-                        continue;
-                }
-                result = 1;
-                break;
-        }
-        return result;
-}
-
 #define PARENT_INO(buffer) \
 (((struct sysv_dir_entry *) ((buffer) + 1*SYSV_DIRSIZE))->inode)
 
@@ -653,20 +634,20 @@ try_again:
 start_up:
 	old_inode = new_inode = NULL;
 	old_bh = new_bh = dir_bh = NULL;
-	old_bh = sysv_find_entry(old_dir,old_dentry->d_name.name,
-				old_dentry->d_name.len,&old_de);
+	old_bh = sysv_find_entry(old_dir, old_dentry->d_name.name,
+				old_dentry->d_name.len, &old_de);
 	retval = -ENOENT;
 	if (!old_bh)
 		goto end_rename;
-	old_inode = old_dentry->d_inode;/* don't cross mnt-points */
+	old_inode = old_dentry->d_inode;	/* don't cross mnt-points */
 	retval = -EPERM;
 	if ((old_dir->i_mode & S_ISVTX) && 
 	    current->fsuid != old_inode->i_uid &&
 	    current->fsuid != old_dir->i_uid && !fsuser())
 		goto end_rename;
 	new_inode = new_dentry->d_inode;
-	new_bh = sysv_find_entry(new_dir,new_dentry->d_name.name,
-				new_dentry->d_name.len,&new_de);
+	new_bh = sysv_find_entry(new_dir, new_dentry->d_name.name,
+				new_dentry->d_name.len, &new_de);
 	if (new_bh) {
 		if (!new_inode) {
 			brelse(new_bh);
@@ -682,7 +663,7 @@ start_up:
 		if (!S_ISDIR(old_inode->i_mode))
 			goto end_rename;
 		retval = -EINVAL;
-		if (subdir(new_dentry, old_dentry))
+		if (is_subdir(new_dentry, old_dentry))
 			goto end_rename;
 		retval = -ENOTEMPTY;
 		if (!empty_dir(new_inode))
@@ -701,10 +682,10 @@ start_up:
 		if (new_inode && !S_ISDIR(new_inode->i_mode))
 			goto end_rename;
 		retval = -EINVAL;
-		if (subdir(new_dentry, old_dentry))
+		if (is_subdir(new_dentry, old_dentry))
 			goto end_rename;
 		retval = -EIO;
-		dir_bh = sysv_file_bread(old_inode,0,0);
+		dir_bh = sysv_file_bread(old_inode, 0, 0);
 		if (!dir_bh)
 			goto end_rename;
 		if (PARENT_INO(dir_bh->b_data) != old_dir->i_ino)
@@ -714,8 +695,8 @@ start_up:
 			goto end_rename;
 	}
 	if (!new_bh) {
-		retval = sysv_add_entry(new_dir,new_dentry->d_name.name,
-					new_dentry->d_name.len,&new_bh,&new_de);
+		retval = sysv_add_entry(new_dir, new_dentry->d_name.name,
+					new_dentry->d_name.len, &new_bh, &new_de);
 		if (retval)
 			goto end_rename;
 	}

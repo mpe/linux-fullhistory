@@ -3,7 +3,7 @@
 /*
  *	istallion.c  -- stallion intelligent multiport serial driver.
  *
- *	Copyright (C) 1996-1997  Stallion Technologies (support@stallion.oz.au).
+ *	Copyright (C) 1996-1998  Stallion Technologies (support@stallion.oz.au).
  *	Copyright (C) 1994-1996  Greg Ungerer (gerg@stallion.oz.au).
  *
  *	This code is loosely based on the Linux serial driver, written by
@@ -170,7 +170,7 @@ static int	stli_nrbrds = sizeof(stli_brdconf) / sizeof(stlconf_t);
  */
 static char	*stli_drvtitle = "Stallion Intelligent Multiport Serial Driver";
 static char	*stli_drvname = "istallion";
-static char	*stli_drvversion = "5.4.1";
+static char	*stli_drvversion = "5.4.3";
 static char	*stli_serialname = "ttyE";
 static char	*stli_calloutname = "cue";
 
@@ -498,8 +498,8 @@ int		stli_eisaprobe = STLI_EISAPROBE;
 /*
  *	Define macros to extract a brd or port number from a minor number.
  */
-#define	MKDEV2BRD(min)		(((min) & 0xc0) >> 6)
-#define	MKDEV2PORT(min)		((min) & 0x3f)
+#define	MINOR2BRD(min)		(((min) & 0xc0) >> 6)
+#define	MINOR2PORT(min)		((min) & 0x3f)
 
 /*
  *	Define a baud rate table that converts termios baud rate selector
@@ -749,12 +749,8 @@ void cleanup_module()
 		}
 
 		iounmap(brdp->membase);
-		if ((brdp->brdtype == BRD_ECP) ||
-		    (brdp->brdtype == BRD_ECPE) ||
-		    (brdp->brdtype == BRD_ECPMC))
-			release_region(brdp->iobase, ECP_IOSIZE);
-		else
-			release_region(brdp->iobase, ONB_IOSIZE);
+		if (brdp->iosize > 0)
+			release_region(brdp->iobase, brdp->iosize);
 		kfree_s(brdp, sizeof(stlibrd_t));
 		stli_brds[i] = (stlibrd_t *) NULL;
 	}
@@ -790,7 +786,7 @@ static int stli_open(struct tty_struct *tty, struct file *filp)
 #endif
 
 	minordev = MINOR(tty->device);
-	brdnr = MKDEV2BRD(minordev);
+	brdnr = MINOR2BRD(minordev);
 	if (brdnr >= stli_nrbrds)
 		return(-ENODEV);
 	brdp = stli_brds[brdnr];
@@ -798,7 +794,7 @@ static int stli_open(struct tty_struct *tty, struct file *filp)
 		return(-ENODEV);
 	if ((brdp->state & BST_STARTED) == 0)
 		return(-ENODEV);
-	portnr = MKDEV2PORT(minordev);
+	portnr = MINOR2PORT(minordev);
 	if ((portnr < 0) || (portnr > brdp->nrports))
 		return(-ENODEV);
 
@@ -3688,7 +3684,8 @@ static inline int stli_initecp(stlibrd_t *brdp)
 	if ((brdp->iobase == 0) || (brdp->memaddr == 0))
 		return(-ENODEV);
 
-	if (check_region(brdp->iobase, ECP_IOSIZE))
+	brdp->iosize = ECP_IOSIZE;
+	if (check_region(brdp->iobase, brdp->iosize))
 		printk("STALLION: Warning, unit %d I/O address %x conflicts "
 			"with another device\n", brdp->brdnr, brdp->iobase);
 
@@ -3797,7 +3794,7 @@ static inline int stli_initecp(stlibrd_t *brdp)
 		brdp->nrpanels++;
 	}
 
-	request_region(brdp->iobase, ECP_IOSIZE, name);
+	request_region(brdp->iobase, brdp->iosize, name);
 	brdp->state |= BST_FOUND;
 	return(0);
 }
@@ -3826,7 +3823,8 @@ static inline int stli_initonb(stlibrd_t *brdp)
 	if ((brdp->iobase == 0) || (brdp->memaddr == 0))
 		return(-ENODEV);
 
-	if (check_region(brdp->iobase, ONB_IOSIZE))
+	brdp->iosize = ONB_IOSIZE;
+	if (check_region(brdp->iobase, brdp->iosize))
 		printk("STALLION: Warning, unit %d I/O address %x conflicts "
 			"with another device\n", brdp->brdnr, brdp->iobase);
 
@@ -3954,7 +3952,7 @@ static inline int stli_initonb(stlibrd_t *brdp)
 	}
 	brdp->panels[0] = brdp->nrports;
 
-	request_region(brdp->iobase, ONB_IOSIZE, name);
+	request_region(brdp->iobase, brdp->iosize, name);
 	brdp->state |= BST_FOUND;
 	return(0);
 }

@@ -51,7 +51,7 @@ static struct neigh_table *neigh_tables;
 
 static int neigh_blackhole(struct sk_buff *skb)
 {
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 	return -ENETDOWN;
 }
 
@@ -526,7 +526,7 @@ int __neigh_event_send(struct neighbour *neigh, struct sk_buff *skb)
 			if (neigh->tbl == NULL) {
 				NEIGH_PRINTK2("neigh %p used after death.\n", neigh);
 				if (skb)
-					kfree_skb(skb, FREE_WRITE);
+					kfree_skb(skb);
 				end_bh_atomic();
 				return 1;
 			}
@@ -540,7 +540,7 @@ int __neigh_event_send(struct neighbour *neigh, struct sk_buff *skb)
 			} else {
 				neigh->nud_state = NUD_FAILED;
 				if (skb)
-					kfree_skb(skb, FREE_WRITE);
+					kfree_skb(skb);
 				end_bh_atomic();
 				return 1;
 			}
@@ -551,7 +551,7 @@ int __neigh_event_send(struct neighbour *neigh, struct sk_buff *skb)
 					struct sk_buff *buff;
 					buff = neigh->arp_queue.prev;
 					__skb_unlink(buff, &neigh->arp_queue);
-					kfree_skb(buff, FREE_WRITE);
+					kfree_skb(buff);
 				}
 				__skb_queue_head(&neigh->arp_queue, skb);
 			}
@@ -759,14 +759,14 @@ int neigh_resolve_output(struct sk_buff *skb)
 		}
 		if (dev->hard_header(skb, dev, ntohs(skb->protocol), neigh->ha, NULL, skb->len) >= 0)
 			return neigh->ops->queue_xmit(skb);
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return -EINVAL;
 	}
 	return 0;
 
 discard:
 	NEIGH_PRINTK1("neigh_resolve_output: dst=%p neigh=%p\n", dst, dst ? dst->neighbour : NULL);
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 	return -EINVAL;
 }
 
@@ -782,7 +782,7 @@ int neigh_connected_output(struct sk_buff *skb)
 
 	if (dev->hard_header(skb, dev, ntohs(skb->protocol), neigh->ha, NULL, skb->len) >= 0)
 		return neigh->ops->queue_xmit(skb);
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 	return -EINVAL;
 }
 
@@ -803,7 +803,7 @@ static void neigh_proxy_process(unsigned long arg)
 			if (tbl->proxy_redo)
 				tbl->proxy_redo(back);
 			else
-				kfree_skb(back, FREE_WRITE);
+				kfree_skb(back);
 		} else if (!sched_next || tdif < sched_next)
 			sched_next = tdif;
 	}
@@ -821,7 +821,7 @@ void pneigh_enqueue(struct neigh_table *tbl, struct neigh_parms *p,
 	long sched_next = net_random()%p->proxy_delay;
 
 	if (tbl->proxy_queue.qlen > p->proxy_qlen) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return;
 	}
 	skb->stamp.tv_sec = 0;

@@ -452,7 +452,7 @@ eol:
 error:
 	if (skb) {
 		icmp_send(skb, ICMP_PARAMETERPROB, 0, pp_ptr-iph);
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 	}
 	return -EINVAL;
 }

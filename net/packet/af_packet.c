@@ -220,7 +220,7 @@ static int packet_rcv_spkt(struct sk_buff *skb, struct device *dev,  struct pack
 	 */
 
 	if (skb->pkt_type == PACKET_LOOPBACK) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -241,7 +241,7 @@ static int packet_rcv_spkt(struct sk_buff *skb, struct device *dev,  struct pack
 
 	if (sock_queue_rcv_skb(sk,skb)<0)
 	{
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -362,7 +362,7 @@ static int packet_sendmsg_spkt(struct socket *sock, struct msghdr *msg, int len,
 
 	if (err) 
 	{
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return err;
 	}
 
@@ -384,7 +384,7 @@ static int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_ty
 	sk = (struct sock *) pt->data;
 
 	if (skb->pkt_type == PACKET_LOOPBACK) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -423,7 +423,7 @@ static int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_ty
 
 	if (sock_queue_rcv_skb(sk,skb)<0)
 	{
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 	return(0);
@@ -488,7 +488,7 @@ static int packet_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 				     saddr ? saddr->sll_addr : NULL,
 				     NULL, len) < 0
 		    && sock->type == SOCK_DGRAM) {
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			dev_unlock_list();
 			return -EINVAL;
 		}
@@ -516,7 +516,7 @@ static int packet_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	}
 
 	if (err) {
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return err;
 	}
 
@@ -585,7 +585,7 @@ static int packet_release(struct socket *sock, struct socket *peersock)
 	/* Purge queues */
 
 	while ((skb=skb_dequeue(&sk->receive_queue))!=NULL)
-		kfree_skb(skb,FREE_READ);
+		kfree_skb(skb);
 
 	if (atomic_read(&sk->rmem_alloc) || atomic_read(&sk->wmem_alloc)) {
 		sk->timer.data=(unsigned long)sk;

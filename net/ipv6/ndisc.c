@@ -320,7 +320,7 @@ void ndisc_send_na(struct device *dev, struct neighbour *neigh,
 	}
 
 	if (ndisc_build_ll_hdr(skb, dev, daddr, neigh, len) == 0) {
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return;
 	}
 
@@ -384,7 +384,7 @@ void ndisc_send_ns(struct device *dev, struct neighbour *neigh,
 	}
 
 	if (ndisc_build_ll_hdr(skb, dev, daddr, neigh, len) == 0) {
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return;
 	}
 
@@ -434,7 +434,7 @@ void ndisc_send_rs(struct device *dev, struct in6_addr *saddr,
 	}
 
 	if (ndisc_build_ll_hdr(skb, dev, daddr, NULL, len) == 0) {
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return;
 	}
 
@@ -489,7 +489,7 @@ static void ndisc_error_report(struct neighbour *neigh, struct sk_buff *skb)
 	 *	 destination unreachable"
 	 */
 	icmpv6_send(skb, ICMPV6_DEST_UNREACH, ICMPV6_ADDR_UNREACH, 0, skb->dev);
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 }
 
 static void ndisc_solicit(struct neighbour *neigh, struct sk_buff *skb)
@@ -831,7 +831,7 @@ void ndisc_send_redirect(struct sk_buff *skb, struct neighbour *neigh,
 	hlen = 0;
 
 	if (ndisc_build_ll_hdr(buff, dev, &skb->nh.ipv6h->saddr, NULL, len) == 0) {
-		kfree_skb(buff, FREE_WRITE);
+		kfree_skb(buff);
 		return;
 	}
 	
@@ -909,7 +909,7 @@ static void pndisc_redo(struct sk_buff *skb)
 {
 	ndisc_rcv(skb, skb->dev, &skb->nh.ipv6h->saddr, &skb->nh.ipv6h->daddr,
 		  NULL, skb->len);
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 }
 
 int ndisc_rcv(struct sk_buff *skb, struct device *dev,

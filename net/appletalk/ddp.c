@@ -1258,7 +1258,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 	/* Size check */
 	if(skb->len < sizeof(*ddp))
 	{
-		kfree_skb(skb,FREE_READ);
+		kfree_skb(skb);
 		return (0);
 	}
 
@@ -1289,7 +1289,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 	 */
 	if(skb->len < sizeof(*ddp))
 	{
-		kfree_skb(skb,FREE_READ);
+		kfree_skb(skb);
 		return (0);
 	}
 
@@ -1300,13 +1300,13 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 	if(ddp->deh_sum && atalk_checksum(ddp, ddp->deh_len) != ddp->deh_sum)
 	{
 		/* Not a valid appletalk frame - dustbin time */
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return (0);
 	}
 
 	if(call_in_firewall(AF_APPLETALK, skb->dev, ddp, NULL,&skb)!=FW_ACCEPT)
 	{
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return (0);
 	}
 
@@ -1331,7 +1331,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 		 */
 		if (skb->pkt_type != PACKET_HOST || ddp->deh_dnet == 0)
 		{
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			return (0);
 		}
 
@@ -1340,7 +1340,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 		 */
 		if(call_fw_firewall(AF_APPLETALK, skb->dev, ddp, NULL, &skb) != FW_ACCEPT)
 		{
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			return (0);
 		}
 
@@ -1351,7 +1351,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 		rt = atrtr_find(&ta);
 		if(rt == NULL || ddp->deh_hops == DDP_MAXHOPS)
 		{
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			return (0);
 		}
 		ddp->deh_hops++;
@@ -1389,7 +1389,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 			/* 22 bytes - 12 ether, 2 len, 3 802.2 5 snap */
 			skb = skb_realloc_headroom(skb, 32);
 		else
-			skb = skb_unshare(skb, GFP_ATOMIC, FREE_READ);
+			skb = skb_unshare(skb, GFP_ATOMIC);
 		
 		/*
 		 * If the buffer didn't vanish into the lack of
@@ -1398,7 +1398,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 		if(skb)
 		{
 			if(aarp_send_ddp(rt->dev, skb, &ta, NULL) == -1)
-				kfree_skb(skb, FREE_READ);
+				kfree_skb(skb);
 		}
 
 		return (0);
@@ -1416,7 +1416,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 	
 	if(sock == NULL)	/* But not one of our sockets */
 	{
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return (0);
 	}
 
@@ -1461,7 +1461,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 	if(sock_queue_rcv_skb(sock, skb) < 0)
 	{
 		skb->sk = NULL;
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 	}
 
 	return (0);
@@ -1489,7 +1489,7 @@ static int ltalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 		ap = atalk_find_dev_addr(dev);
 		if(ap == NULL || skb->len < sizeof(struct ddpshdr))
 		{
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			return (0);
 		}
 
@@ -1650,7 +1650,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	err = memcpy_fromiovec(skb_put(skb,len), msg->msg_iov, len);
 	if(err)
 	{
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return (-EFAULT);
 	}
 
@@ -1661,7 +1661,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 
 	if(call_out_firewall(AF_APPLETALK, skb->dev, ddp, NULL, &skb) != FW_ACCEPT)
 	{
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return (-EPERM);
 	}
 
@@ -1679,7 +1679,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 				loopback = 1;
 				SOCK_DEBUG(sk, "SK %p: send out(copy).\n", sk);
 				if(aarp_send_ddp(dev, skb2, &usat->sat_addr, NULL) == -1)
-					kfree_skb(skb2, FREE_WRITE);
+					kfree_skb(skb2);
 				/* else queued/sent above in the aarp queue */
 			}
 		}
@@ -1707,7 +1707,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		}
 
 		if(aarp_send_ddp(dev, skb, &usat->sat_addr, NULL) == -1)
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 		/* else queued/sent above in the aarp queue */
 	}
 	SOCK_DEBUG(sk, "SK %p: Done write (%d).\n", sk, len);

@@ -242,7 +242,7 @@ int bif_rx(struct sk_buff *skb)
 
 	if (bif_device == NULL) {
 		printk("bif: bif_device is NULL in bif_rx\n");
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 		return 0;
 	}
 	skb->dev = bif_device;

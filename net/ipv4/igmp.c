@@ -300,7 +300,7 @@ int igmp_rcv(struct sk_buff *skb, unsigned short len)
 
 	if (len < sizeof(struct igmphdr) || ip_compute_csum((void *)ih, len)
 	    || in_dev==NULL) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 	
@@ -328,7 +328,7 @@ int igmp_rcv(struct sk_buff *skb, unsigned short len)
 	default:
 		NETDEBUG(printk(KERN_DEBUG "New IGMP type=%d, why we do not know about it?\n", ih->type));
 	}
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	return 0;
 }
 

@@ -4,7 +4,7 @@ dep_tristate 'SCSI disk support' CONFIG_BLK_DEV_SD $CONFIG_SCSI
 dep_tristate 'SCSI tape support' CONFIG_CHR_DEV_ST $CONFIG_SCSI
 dep_tristate 'SCSI CD-ROM support' CONFIG_BLK_DEV_SR $CONFIG_SCSI
 if [ "$CONFIG_BLK_DEV_SR" != "n" ]; then
-  bool '  Enable vendor-specific extentions (for SCSI CDROM)' CONFIG_BLK_DEV_SR_VENDOR
+  bool '  Enable vendor-specific extensions (for SCSI CDROM)' CONFIG_BLK_DEV_SR_VENDOR
 fi
 dep_tristate 'SCSI generic support' CONFIG_CHR_DEV_SG $CONFIG_SCSI
 
@@ -84,8 +84,8 @@ if [ "$CONFIG_PCI" = "y" -a "$CONFIG_SCSI_NCR53C7xx" != "y" ]; then
   fi
 fi
 if [ "$CONFIG_MCA" = "y" ]; then
-  bool 'IBMMCA SCSI support' CONFIG_SCSI_IBMMCA
-  if [ "$CONFIG_SCSI_IBMMCA" = "y" ]; then
+  dep_tristate 'IBMMCA SCSI support' CONFIG_SCSI_IBMMCA $CONFIG_SCSI
+  if [ "$CONFIG_SCSI_IBMMCA" != "n" ]; then
      bool '  Standard SCSI-order' CONFIG_IBMMCA_SCSI_ORDER_STANDARD
      bool '  Reset SCSI-devices at boottime' CONFIG_IBMMCA_SCSI_DEV_RESET
   fi

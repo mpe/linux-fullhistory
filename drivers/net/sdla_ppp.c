@@ -697,7 +697,7 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 #ifdef CONFIG_SANGOMA_MANAGER
 	if(sangoma_ppp_manager(skb,card))
 	{
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 		return 0;
 	}
 #endif
@@ -732,7 +732,7 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 
 		}
 
-    		dev_kfree_skb(skb, FREE_WRITE);
+    		dev_kfree_skb(skb);
 		++ppp_priv_area->if_send_critical_non_ISR;
 		
 		save_flags(host_cpu_flags);
@@ -786,7 +786,7 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 	
 tx_done:	
 	if (!retry){
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 	}
 
 	card->wandev.critical = 0;
@@ -1280,21 +1280,21 @@ static void rx_intr (sdla_t* card)
 				process_udp_driver_call(
 					UDP_PKT_FRM_NETWORK, card, skb,
 					dev, ppp_priv_area);
-                                 dev_kfree_skb(skb, FREE_READ);
+                                 dev_kfree_skb(skb);
 
 			} else if (udp_type == UDP_PTPIPE_TYPE){
 				++ppp_priv_area->rx_intr_PTPIPE_request;
 				err = process_udp_mgmt_pkt(
 					UDP_PKT_FRM_NETWORK, card, 
 					skb, dev, ppp_priv_area);
-				dev_kfree_skb(skb, FREE_READ);
+				dev_kfree_skb(skb);
 			} else
 #endif
 				if (handle_IPXWAN(skb->data,card->devname, card->wandev.enable_IPX, card->wandev.network_number, skb->protocol)) {
 				
 				if( card->wandev.enable_IPX) {
 					ppp_send(card, skb->data, skb->len, ETH_P_IPX);
-                        		dev_kfree_skb(skb, FREE_READ);
+                        		dev_kfree_skb(skb);
 
 				} else {
 					++card->wandev.stats.rx_dropped;

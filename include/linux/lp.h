@@ -8,9 +8,10 @@
  */
 
 /* Magic numbers for defining port-device mappings */
+#define LP_PARPORT_UNSPEC -4
 #define LP_PARPORT_AUTO -3
 #define LP_PARPORT_OFF -2
-#define LP_PARPORT_UNSPEC -1
+#define LP_PARPORT_NONE -1
 
 /*
  * Per POSIX guidelines, this module reserves the LP and lp prefixes

@@ -931,14 +931,14 @@ static inline void happy_meal_clean_rings(struct happy_meal *hp)
 
 	for(i = 0; i < RX_RING_SIZE; i++) {
 		if(hp->rx_skbs[i] != NULL) {
-			dev_kfree_skb(hp->rx_skbs[i], FREE_READ);
+			dev_kfree_skb(hp->rx_skbs[i]);
 			hp->rx_skbs[i] = NULL;
 		}
 	}
 
 	for(i = 0; i < TX_RING_SIZE; i++) {
 		if(hp->tx_skbs[i] != NULL) {
-			dev_kfree_skb(hp->tx_skbs[i], FREE_WRITE);
+			dev_kfree_skb(hp->tx_skbs[i]);
 			hp->tx_skbs[i] = NULL;
 		}
 	}
@@ -1612,7 +1612,7 @@ static inline void happy_meal_tx(struct happy_meal *hp)
 			mmu_sync_dma(kva_to_hva(hp, skb->data),
 				     skb->len, hp->happy_sbus_dev->my_bus);
 #endif
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 
 		hp->net_stats.tx_packets++;
 		elem = NEXT_TX(elem);
@@ -1644,7 +1644,7 @@ static inline void pci_happy_meal_tx(struct happy_meal *hp)
 		hp->tx_skbs[elem] = NULL;
 		hp->net_stats.tx_bytes+=skb->len;
 		
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 
 		hp->net_stats.tx_packets++;
 		elem = NEXT_TX(elem);
@@ -2330,7 +2330,7 @@ static int sun4c_happy_meal_start_xmit(struct sk_buff *skb, struct device *dev)
 	dev->trans_start = jiffies;
 	hp->etxregs->tx_pnding = ETX_TP_DMAWAKEUP;
 
-	dev_kfree_skb(skb, FREE_WRITE);
+	dev_kfree_skb(skb);
 
 	if(TX_BUFFS_AVAIL(hp))
 		dev->tbusy = 0;

@@ -842,7 +842,7 @@ void sklist_destroy_socket(struct sock **list,struct sock *sk)
 
 	while((skb=skb_dequeue(&sk->receive_queue))!=NULL)
 	{
-		kfree_skb(skb,FREE_READ);
+		kfree_skb(skb);
 	}
 
 	if(atomic_read(&sk->wmem_alloc) == 0 &&

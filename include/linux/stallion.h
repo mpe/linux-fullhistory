@@ -3,7 +3,7 @@
 /*
  *	stallion.h  -- stallion multiport serial driver.
  *
- *	Copyright (C) 1996-1997  Stallion Technologies (support@stallion.oz.au).
+ *	Copyright (C) 1996-1998  Stallion Technologies (support@stallion.oz.au).
  *	Copyright (C) 1994-1996  Greg Ungerer (gerg@stallion.oz.au).
  *
  *	This program is free software; you can redistribute it and/or modify

@@ -125,9 +125,6 @@ extern int max_files, nr_files, nr_free_files;
 #define IS_NOATIME(inode) ((inode)->i_flags & MS_NOATIME)
 #define IS_NODIRATIME(inode) ((inode)->i_flags & MS_NODIRATIME)
 
-extern void update_atime (struct inode *inode);
-#define UPDATE_ATIME(inode) update_atime (inode)
-
 /* the read-only stuff doesn't really belong here, but any other place is
    probably as bad and I don't want to create yet another include file. */
 
@@ -152,6 +149,9 @@ extern void update_atime (struct inode *inode);
 #include <asm/semaphore.h>
 #include <asm/byteorder.h>
 #include <asm/bitops.h>
+
+extern void update_atime (struct inode *inode);
+#define UPDATE_ATIME(inode) update_atime (inode)
 
 extern void buffer_init(void);
 extern void inode_init(void);
@@ -612,6 +612,7 @@ struct super_operations {
 	void (*write_super) (struct super_block *);
 	int (*statfs) (struct super_block *, struct statfs *, int);
 	int (*remount_fs) (struct super_block *, int *, char *);
+	void (*clear_inode) (struct inode *);
 };
 
 struct dquot_operations {

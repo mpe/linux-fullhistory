@@ -323,7 +323,7 @@ void x25_destroy_socket(struct sock *sk)	/* Not static as it's used by the timer
 			skb->sk->protinfo.x25->state = X25_STATE_0;
 		}
 
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 	}
 
 	if (atomic_read(&sk->wmem_alloc) != 0 || atomic_read(&sk->rmem_alloc) != 0) {
@@ -718,7 +718,7 @@ static int x25_accept(struct socket *sock, struct socket *newsock, int flags)
 
 	/* Now attach up the new socket */
 	skb->sk = NULL;
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	sk->ack_backlog--;
 	newsock->sk = newsk;
 
@@ -952,7 +952,7 @@ static int x25_sendmsg(struct socket *sock, struct msghdr *msg, int len, struct 
 	SOCK_DEBUG(sk, "x25_sendmsg: Transmitting buffer\n");
 
 	if (sk->state != TCP_ESTABLISHED) {
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return -ENOTCONN;
 	}
 

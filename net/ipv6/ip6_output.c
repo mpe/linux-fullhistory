@@ -60,7 +60,7 @@ int ip6_output(struct sk_buff *skb)
 		return dst->neighbour->output(skb);
 
 	printk(KERN_DEBUG "khm\n");
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 	return -EINVAL;
 }
 
@@ -341,7 +341,7 @@ static int ip6_frag_xmit(struct sock *sk, inet_getfrag_t getfrag,
 				      nfrags * frag_len, frag_len);
 
 			if (err) {
-				kfree_skb(skb, FREE_WRITE);
+				kfree_skb(skb);
 				break;
 			}
 
@@ -351,7 +351,7 @@ static int ip6_frag_xmit(struct sock *sk, inet_getfrag_t getfrag,
 	}
 
 	if (err) {
-		kfree_skb(last_skb, FREE_WRITE);
+		kfree_skb(last_skb);
 		return -EFAULT;
 	}
 
@@ -490,7 +490,7 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 			dst->output(skb);
 		} else {
 			err = -EFAULT;
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 		}
 	} else {
 		if (sk->ip_hdrincl)
@@ -529,7 +529,7 @@ int ip6_forward(struct sk_buff *skb)
 	int size;
 	
 	if (ipv6_config.forwarding == 0) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return -EINVAL;
 	}
 
@@ -548,7 +548,7 @@ int ip6_forward(struct sk_buff *skb)
 		icmpv6_send(skb, ICMPV6_TIME_EXCEED, ICMPV6_EXC_HOPLIMIT,
 			    0, skb->dev);
 
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return -ETIMEDOUT;
 	}
 
@@ -577,14 +577,14 @@ int ip6_forward(struct sk_buff *skb)
 
 	if (size > dst->pmtu) {
 		icmpv6_send(skb, ICMPV6_PKT_TOOBIG, 0, dst->pmtu, skb->dev);
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return -EMSGSIZE;
 	}
 
 	if (skb_headroom(skb) < dst->dev->hard_header_len || skb_cloned(skb)) {
 		struct sk_buff *skb2;
 		skb2 = skb_realloc_headroom(skb, (dst->dev->hard_header_len + 15)&~15);
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		skb = skb2;
 	}
 

@@ -149,13 +149,13 @@ int ip_forward(struct sk_buff *skb)
 		if (skb_headroom(skb) < dev2->hard_header_len || skb_cloned(skb)) {
 			struct sk_buff *skb2;
 			skb2 = skb_realloc_headroom(skb, (dev2->hard_header_len + 15)&~15);
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			if (skb2 == NULL)
 				return -1;
 			skb = skb2;
 		}
 		if (ip_do_nat(skb)) {
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			return -1;
 		}
 	}
@@ -180,7 +180,7 @@ int ip_forward(struct sk_buff *skb)
 				maddr = inet_select_addr(dev2, rt->rt_gateway, RT_SCOPE_UNIVERSE);
 				fw_res = ip_fw_masq_icmp(&skb, maddr);
 			        if (fw_res < 0) {
-					kfree_skb(skb, FREE_READ);
+					kfree_skb(skb);
 					return -1;
 				}
 
@@ -205,7 +205,7 @@ int ip_forward(struct sk_buff *skb)
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0);
 			/* fall thru */
 		default:
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			return -1;
 		}
 #endif
@@ -230,7 +230,7 @@ skip_call_fw_firewall:
 			maddr = inet_select_addr(dev2, rt->rt_gateway, RT_SCOPE_UNIVERSE);
 
 			if (ip_fw_masquerade(&skb, maddr) < 0) {
-				kfree_skb(skb, FREE_READ);
+				kfree_skb(skb);
 				return -1;
 			} else {
 				/*
@@ -245,7 +245,7 @@ skip_call_fw_firewall:
 	if (skb_headroom(skb) < dev2->hard_header_len || skb_cloned(skb)) {
 		struct sk_buff *skb2;
 		skb2 = skb_realloc_headroom(skb, (dev2->hard_header_len + 15)&~15);
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 
 		if (skb2 == NULL) {
 			NETDEBUG(printk(KERN_ERR "\nIP: No memory available for IP forward\n"));
@@ -261,7 +261,7 @@ skip_call_fw_firewall:
 		   masquerading is only supported via forward rules */
 		if (fw_res == FW_REJECT)
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0);
-		kfree_skb(skb,FREE_WRITE);
+		kfree_skb(skb);
 		return -1;
 	}
 #endif
@@ -305,6 +305,6 @@ too_many_hops:
         /* Tell the sender its packet died... */
         icmp_send(skb, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0);
 drop:
-	kfree_skb(skb,FREE_WRITE);
+	kfree_skb(skb);
 	return -1;
 }

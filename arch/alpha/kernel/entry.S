@@ -10,7 +10,7 @@
 #define rti	.long PAL_rti
 #define SIGCHLD	20
 
-#define NR_SYSCALLS 360
+#define NR_SYSCALLS 370
 #define osf_vfork sys_fork
 
 /*
@@ -529,7 +529,7 @@ entSys:
 	lda	$4,NR_SYSCALLS($31)
 	stq	$16,SP_OFF+24($30)
 	lda	$5,sys_call_table
-	lda	$27,alpha_ni_syscall
+	lda	$27,sys_ni_syscall
 	cmpult	$0,$4,$4
 	ldq	$3,TASK_FLAGS($8)
 	stq	$17,SP_OFF+32($30)
@@ -854,7 +854,7 @@ sys_call_table:
 	.quad alpha_ni_syscall
 	.quad alpha_ni_syscall			/* 110 */
 	.quad sys_sigsuspend
-	.quad alpha_ni_syscall
+	.quad sys_ni_syscall
 	.quad sys_recvmsg
 	.quad sys_sendmsg
 	.quad alpha_ni_syscall			/* 115 */
@@ -1081,7 +1081,7 @@ sys_call_table:
 	.quad sys_sched_get_priority_max	/* 335 */
 	.quad sys_sched_get_priority_min
 	.quad sys_sched_rr_get_interval
-	.quad alpha_ni_syscall /* sys_afs_syscall */
+	.quad sys_ni_syscall			/* sys_afs_syscall */
 	.quad sys_newuname
 	.quad sys_nanosleep			/* 340 */
 	.quad sys_mremap
@@ -1101,8 +1101,15 @@ sys_call_table:
 	.quad sys_rt_sigtimedwait		/* 355 */
 	.quad sys_rt_sigqueueinfo
 	.quad sys_rt_sigsuspend
-	.quad alpha_ni_syscall
-	.quad alpha_ni_syscall
-	.quad alpha_ni_syscall
-	.quad alpha_ni_syscall
-	.quad alpha_ni_syscall			/* 360 */
+	.quad sys_select
+	.quad sys_gettimeofday
+	.quad sys_settimeofday			/* 360 */
+	.quad sys_getitimer
+	.quad sys_setitimer
+	.quad sys_utimes
+	.quad sys_getrusage
+	.quad sys_wait4				/* 365 */
+	.quad sys_ni_syscall
+	.quad sys_ni_syscall
+	.quad sys_ni_syscall
+	.quad sys_ni_syscall			/* 369 */

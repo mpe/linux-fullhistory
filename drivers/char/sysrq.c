@@ -171,9 +171,9 @@ static int is_local_disk(kdev_t dev)	    /* Guess if the device is a local hard 
 
 static void go_sync(kdev_t dev, int remount_flag)
 {
-	printk(KERN_INFO "%sing device %04x ... ",
+	printk(KERN_INFO "%sing device %s ... ",
 	       remount_flag ? "Remount" : "Sync",
-	       dev);
+	       kdevname(dev));
 
 	if (remount_flag) {				    /* Remount R/O */
 		struct super_block *sb = get_super(dev);

@@ -420,7 +420,7 @@ static int ax_xmit(struct sk_buff *skb, struct device *dev)
 		if (tmp_ax != NULL)
 			ax_lock(tmp_ax);
 		ax_encaps(ax, skb->data, skb->len);
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 	}
 
 	return 0;

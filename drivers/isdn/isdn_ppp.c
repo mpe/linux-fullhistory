@@ -881,7 +881,7 @@ isdn_ppp_write(int min, struct file *file, const char *buf, int count)
 			}
 			if ((cnt = isdn_writebuf_skb_stub(lp->isdn_device, lp->isdn_channel, skb)) != count) {
 				if (lp->sav_skb) {
-					dev_kfree_skb(lp->sav_skb, FREE_WRITE);
+					dev_kfree_skb(lp->sav_skb);
 					printk(KERN_INFO "isdn_ppp_write: freeing sav_skb (%d,%d)!\n", cnt, count);
 				} else
 					printk(KERN_INFO "isdn_ppp_write: Can't write PPP frame to LL (%d,%d)!\n", cnt, count);
@@ -955,7 +955,7 @@ isdn_ppp_receive(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff *sk
 		skb_pull(skb, 2);
 	else if (is->pppcfg & SC_REJ_COMP_AC) {
 		SET_SKB_FREE(skb);
-		dev_kfree_skb(skb, 0 /* FREE_READ */ );
+		dev_kfree_skb(skb);
 		return;         /* discard it silently */
 	}
 #ifdef CONFIG_ISDN_MPP
@@ -1065,7 +1065,7 @@ isdn_ppp_receive(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff *sk
 					net_dev->ib.modify = 0;
 					printk(KERN_WARNING "ippp/MPPP: Bad! Can't alloc sq node!\n");
 					SET_SKB_FREE(skb);
-					dev_kfree_skb(skb, 0 /* FREE_READ */ );
+					dev_kfree_skb(skb);
 					return;	/* discard */
 				}
 				q->skb = skb;
@@ -1144,7 +1144,7 @@ isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff
 				printk(KERN_WARNING "isdn_ppp: received illegal VJC_UNCOMP frame!\n");
 				net_dev->local.stats.rx_dropped++;
 				SET_SKB_FREE(skb);
-				dev_kfree_skb(skb, 0 /* FREE_READ */ );
+				dev_kfree_skb(skb);
 				return;
 			}
 #endif
@@ -1169,7 +1169,7 @@ isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff
 				if (!skb) {
 					printk(KERN_WARNING "%s: Memory squeeze, dropping packet.\n", dev->name);
 					net_dev->local.stats.rx_dropped++;
-					dev_kfree_skb(skb_old, 0 /* FREE_READ */ );
+					dev_kfree_skb(skb_old);
 					return;
 				}
 				skb->dev = dev;
@@ -1178,10 +1178,10 @@ isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff
 				skb->mac.raw = skb->data;
 				pkt_len = slhc_uncompress(ippp_table[net_dev->local.ppp_slot]->slcomp,
 						skb->data, skb_old->len);
-				dev_kfree_skb(skb_old, 0 /* FREE_READ */ );
+				dev_kfree_skb(skb_old);
 				if (pkt_len < 0) {
 					SET_SKB_FREE(skb);
-					dev_kfree_skb(skb, 0 /* FREE_READ */ );
+					dev_kfree_skb(skb);
 					lp->stats.rx_dropped++;
 					return;
 				}
@@ -1192,14 +1192,14 @@ isdn_ppp_push_higher(isdn_net_dev * net_dev, isdn_net_local * lp, struct sk_buff
 			printk(KERN_INFO "isdn: Ooopsa .. VJ-Compression support not compiled into isdn driver.\n");
 			lp->stats.rx_dropped++;
 			SET_SKB_FREE(skb);
-			dev_kfree_skb(skb, 0 /* FREE_READ */ );
+			dev_kfree_skb(skb);
 			return;
 #endif
 			break;
 		default:
 			isdn_ppp_fill_rq(skb->data, skb->len, proto, lp->ppp_slot);	/* push data to pppd device */
 			SET_SKB_FREE(skb);
-			dev_kfree_skb(skb, 0 /* FREE_READ */ );
+			dev_kfree_skb(skb);
 			return;
 	}
 
@@ -1273,7 +1273,7 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *dev)
 			proto = PPP_IPX;	/* untested */
 			break;
 		default:
-			dev_kfree_skb(skb, FREE_WRITE);
+			dev_kfree_skb(skb);
 			printk(KERN_ERR "isdn_ppp: skipped frame with unsupported protocoll: %#x.\n", skb->protocol);
 			return 0;
 	}
@@ -1320,10 +1320,10 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *dev)
 			if (buf != skb->data) {	/* copied to new buffer ??? (btw: WHY must slhc copy it?? *sigh*)  */
 				if (new_skb->data != buf)
 					printk(KERN_ERR "isdn_ppp: FATAL error after slhc_compress!!\n");
-				dev_kfree_skb(skb, FREE_WRITE);
+				dev_kfree_skb(skb);
 				skb = new_skb;
 			} else {
-				dev_kfree_skb(new_skb, 0 /* FREE_WRITE */ );
+				dev_kfree_skb(new_skb);
 			}
 
 			skb_trim(skb, pktlen);
@@ -1389,7 +1389,7 @@ isdn_ppp_xmit(struct sk_buff *skb, struct device *dev)
 	if (isdn_net_send_skb(dev, lp, skb)) {
 		if (lp->sav_skb) {	/* whole sav_skb processing with disabled IRQs ?? */
 			printk(KERN_ERR "%s: whoops .. there is another stored skb!\n", dev->name);
-			dev_kfree_skb(skb, FREE_WRITE);
+			dev_kfree_skb(skb);
 		} else
 			lp->sav_skb = skb;
 	}
@@ -1408,7 +1408,7 @@ isdn_ppp_free_sqqueue(isdn_net_dev * p)
 		struct sqqueue *qn = q->next;
 		if (q->skb) {
 			SET_SKB_FREE(q->skb);
-			dev_kfree_skb(q->skb, 0 /* FREE_READ */ );
+			dev_kfree_skb(q->skb);
 		}
 		kfree(q);
 		q = qn;
@@ -1425,7 +1425,7 @@ isdn_ppp_free_mpqueue(isdn_net_dev * p)
 	while (q) {
 		struct mpqueue *ql = q->next;
 		SET_SKB_FREE(q->skb);
-		dev_kfree_skb(q->skb, 0 /* FREE_READ */ );
+		dev_kfree_skb(q->skb);
 		kfree(q);
 		q = ql;
 	}
@@ -1600,7 +1600,7 @@ isdn_ppp_fill_mpqueue(isdn_net_dev * dev, struct sk_buff **skb, int BEbyte, long
 		while (q) {
 			struct mpqueue *ql = q->next;
 			SET_SKB_FREE(q->skb);
-			dev_kfree_skb(q->skb, 0 /* FREE_READ */ );
+			dev_kfree_skb(q->skb);
 			kfree(q);
 			q = ql;
 		}
@@ -1613,7 +1613,7 @@ isdn_ppp_fill_mpqueue(isdn_net_dev * dev, struct sk_buff **skb, int BEbyte, long
 		memcpy((*skb)->data + cnt, q->skb->data, q->skb->len);
 		cnt += q->skb->len;
 		SET_SKB_FREE(q->skb);
-		dev_kfree_skb(q->skb, 0 /* FREE_READ */ );
+		dev_kfree_skb(q->skb);
 		kfree(q);
 		q = ql;
 	}
@@ -1672,7 +1672,7 @@ isdn_ppp_cleanup_mpqueue(isdn_net_dev * dev, long min_sqno)
 				while (q) {
 					ql = q->last;
 					SET_SKB_FREE(q->skb);
-					dev_kfree_skb(q->skb, 0 /* FREE_READ */ );
+					dev_kfree_skb(q->skb);
 					kfree(q);
 #ifdef CONFIG_ISDN_PPP_VJ
 					toss = 1;

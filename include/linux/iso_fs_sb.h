@@ -13,7 +13,6 @@ struct isofs_sb_info {
 	
 	unsigned char s_high_sierra; /* A simple flag */
 	unsigned char s_mapping;
-	unsigned char s_conversion;
 	unsigned char s_rock;
 	unsigned char s_joliet_level;
 	unsigned char s_utf8;

@@ -216,7 +216,7 @@ static struct cdrom_device_info mcd_info = {
   &mcd_dops,                    /* device operations */
   NULL,                         /* link */
   NULL,                         /* handle */
-  MKDEV(MAJOR_NR,0),            /* dev */
+  0,		                /* dev */
   0,                            /* mask */
   2,                            /* maximum speed */
   1,                            /* number of discs */
@@ -243,15 +243,14 @@ __initfunc(void mcd_setup(char *str, int *ints))
 
 static int mcd_media_changed(struct cdrom_device_info * cdi, int disc_nr)
 {
-   int retval, target;
+   int retval;
 
 
 #if 1	 /* the below is not reliable */
    return 0;
 #endif  
-   target = cdi->dev;
 
-   if (target > 0) {
+   if (cdi->dev) {
       printk("mcd: Mitsumi CD-ROM request error: invalid device.\n");
       return 0;
    }
@@ -1231,17 +1230,20 @@ __initfunc(int mcd_init(void))
 
         if (result[1] == 'D') 
 	{
-	sprintf(msg, " mcd: Mitsumi Double Speed CD-ROM at port=0x%x, irq=%d\n", mcd_port, mcd_irq);
-	MCMD_DATA_READ = MCMD_2X_READ;
-	mcd_info.speed = 2;
-        mcdDouble = 1; /* Added flag to drop to 1x speed if too many errors */
-        }
-        else {
-        sprintf(msg, " mcd: Mitsumi Single Speed CD-ROM at port=0x%x, irq=%d\n", mcd_port, mcd_irq);
-	mcd_info.speed = 2;
+		sprintf(msg, " mcd: Mitsumi Double Speed CD-ROM at port=0x%x,"
+			     " irq=%d\n", mcd_port, mcd_irq);
+		MCMD_DATA_READ = MCMD_2X_READ;
+
+		mcd_info.speed = 2;
+		/* Added flag to drop to 1x speed if too many errors */
+		mcdDouble = 1;
+        } else {
+		sprintf(msg, " mcd: Mitsumi Single Speed CD-ROM at port=0x%x,"
+			     " irq=%d\n", mcd_port, mcd_irq);
+		mcd_info.speed = 2;
 	}
 
-	request_region(mcd_port, 4,"mcd");
+	request_region(mcd_port, 4, "mcd");
 
 	outb(MCMD_CONFIG_DRIVE, MCDPORT(0));
 	outb(0x02,MCDPORT(0));
@@ -1255,6 +1257,8 @@ __initfunc(int mcd_init(void))
 
 	mcd_invalidate_buffers();
 	mcdPresent = 1;
+
+	mcd_info.dev = MKDEV(MAJOR_NR,0);
 
         if (register_cdrom(&mcd_info) != 0) {
               printk("Cannot register Mitsumi CD-ROM!\n");

@@ -581,7 +581,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, __u16 *redirport, struct ip_
 				skb_put(skb,len);
 				memcpy(skb->data,ip,len);
 				if(netlink_post(NETLINK_FIREWALL, skb))
-					kfree_skb(skb, FREE_WRITE);
+					kfree_skb(skb);
 			}
 		}
 #endif		

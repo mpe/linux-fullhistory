@@ -3282,7 +3282,7 @@ static struct cdrom_device_info scd_info = {
   &scd_dops,                  /* device operations */
   NULL,                       /* link */
   NULL,                       /* handle */
-  MKDEV(MAJOR_NR,0),          /* dev */
+  0,			      /* dev */
   0,                          /* mask */
   2,                          /* maximum speed */
   1,                          /* number of discs */
@@ -3549,6 +3549,7 @@ cdu31a_init(void))
       init_timer(&cdu31a_abort_timer);
       cdu31a_abort_timer.function = handle_abort_timeout;
 
+      scd_info.dev = MKDEV(MAJOR_NR,0);
       scd_info.mask = deficiency;
       strncpy(scd_info.name, "cdu31a", sizeof(scd_info.name));
 

@@ -135,7 +135,7 @@ no_l3_proto(struct PStack *st, int pr, void *arg)
 	l3_debug(st, "no protocol");
 	if (skb) {
 		SET_SKB_FREE(skb);
-		dev_kfree_skb(skb, FREE_READ);
+		dev_kfree_skb(skb);
 	}
 }
 

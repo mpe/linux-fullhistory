@@ -233,7 +233,7 @@ tei_handler(struct PStack *st,
 			} else
 				mdl_unit_data_ind(st, (bp[1] << 8) | bp[2], bp[3], bp[4] >> 1);
 			SET_SKB_FREE(skb);
-			dev_kfree_skb(skb, FREE_READ);
+			dev_kfree_skb(skb);
 			break;
 		default:
 			break;

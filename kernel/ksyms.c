@@ -324,8 +324,7 @@ EXPORT_SYMBOL(request_region);
 EXPORT_SYMBOL(release_region);
 
 /* process management */
-EXPORT_SYMBOL(wake_up);
-EXPORT_SYMBOL(wake_up_interruptible);
+EXPORT_SYMBOL(__wake_up);
 EXPORT_SYMBOL(sleep_on);
 EXPORT_SYMBOL(interruptible_sleep_on);
 EXPORT_SYMBOL(schedule);

@@ -23,9 +23,6 @@
 #define HAVE_ALLOC_SKB		/* For the drivers to know */
 #define HAVE_ALIGNABLE_SKB	/* Ditto 8)		   */
 
-#define FREE_READ	1
-#define FREE_WRITE	0
-
 #define CHECKSUM_NONE 0
 #define CHECKSUM_HW 1
 #define CHECKSUM_UNNECESSARY 2
@@ -141,9 +138,6 @@ struct sk_buff
 
 #include <asm/system.h>
 
-#if 0
-extern void			print_skb(struct sk_buff *);
-#endif
 extern void			__kfree_skb(struct sk_buff *skb);
 extern void			skb_queue_head_init(struct sk_buff_head *list);
 extern void			skb_queue_head(struct sk_buff_head *list,struct sk_buff *buf);
@@ -160,7 +154,7 @@ extern void			kfree_skbmem(struct sk_buff *skb);
 extern struct sk_buff *		skb_clone(struct sk_buff *skb, int priority);
 extern struct sk_buff *		skb_copy(struct sk_buff *skb, int priority);
 extern struct sk_buff *		skb_realloc_headroom(struct sk_buff *skb, int newheadroom);
-#define dev_kfree_skb(a, b)	kfree_skb((a), (b))
+#define dev_kfree_skb(a)	kfree_skb(a)
 extern unsigned char *		skb_put(struct sk_buff *skb, unsigned int len);
 extern unsigned char *		skb_push(struct sk_buff *skb, unsigned int len);
 extern unsigned char *		skb_pull(struct sk_buff *skb, unsigned int len);
@@ -174,7 +168,7 @@ extern __inline__ int skb_queue_empty(struct sk_buff_head *list)
 	return (list->next == (struct sk_buff *) list);
 }
 
-extern __inline__ void kfree_skb(struct sk_buff *skb, int rw)
+extern __inline__ void kfree_skb(struct sk_buff *skb)
 {
 	if (atomic_dec_and_test(&skb->users))
 		__kfree_skb(skb);
@@ -197,13 +191,13 @@ extern __inline__ int skb_shared(struct sk_buff *skb)
  *	a packet thats being forwarded.
  */
  
-extern __inline__ struct sk_buff *skb_unshare(struct sk_buff *skb, int pri, int dir)
+extern __inline__ struct sk_buff *skb_unshare(struct sk_buff *skb, int pri)
 {
 	struct sk_buff *nskb;
 	if(!skb_cloned(skb))
 		return skb;
 	nskb=skb_copy(skb, pri);
-	kfree_skb(skb, dir);	/* Free our shared copy */
+	kfree_skb(skb);		/* Free our shared copy */
 	return nskb;
 }
 
@@ -530,7 +524,7 @@ extern __inline__ void skb_queue_purge(struct sk_buff_head *list)
 {
 	struct sk_buff *skb;
 	while ((skb=skb_dequeue(list))!=NULL)
-		kfree_skb(skb,0);
+		kfree_skb(skb);
 }
 
 extern __inline__ struct sk_buff *dev_alloc_skb(unsigned int length)

@@ -223,7 +223,7 @@ static int bpq_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *
 	dev = bpq_get_ax25_dev(dev);
 
 	if (dev == NULL || dev->start == 0) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -236,7 +236,7 @@ static int bpq_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *
 
 	if (!(bpq->acpt_addr[0] & 0x01) && memcmp(eth->h_source, bpq->acpt_addr, ETH_ALEN)) {
 		printk(KERN_DEBUG "bpqether: wrong dest %s\n", bpq_print_ethaddr(eth->h_source));
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -277,7 +277,7 @@ static int bpq_xmit(struct sk_buff *skb, struct device *dev)
 	 */
 	if (!dev->start) {
 		bpq_check_devices(dev);
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return -ENODEV;
 	}
 
@@ -291,14 +291,14 @@ static int bpq_xmit(struct sk_buff *skb, struct device *dev)
 	if (skb_headroom(skb) < AX25_BPQ_HEADER_LEN) {	/* Ough! */
 		if ((newskb = skb_realloc_headroom(skb, AX25_BPQ_HEADER_LEN)) == NULL) {
 			printk(KERN_WARNING "bpqether: out of memory\n");
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			return -ENOMEM;
 		}
 
 		if (skb->sk != NULL)
 			skb_set_owner_w(newskb, skb->sk);
 
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		skb = newskb;
 	}
 
@@ -313,7 +313,7 @@ static int bpq_xmit(struct sk_buff *skb, struct device *dev)
 
 	if ((dev = bpq_get_ether_dev(dev)) == NULL) {
 		bpq->stats.tx_dropped++;
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return -ENODEV;
 	}
 

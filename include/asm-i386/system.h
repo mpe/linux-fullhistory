@@ -11,13 +11,18 @@
  *   3 - kernel data segment
  *   4 - user code segment
  *   5 - user data segment
- * ...
- *   8 - TSS #0
- *   9 - LDT #0
- *  10 - TSS #1
- *  11 - LDT #1
+ *   6 - not used
+ *   7 - not used
+ *   8 - APM BIOS support
+ *   9 - APM BIOS support
+ *  10 - APM BIOS support
+ *  11 - APM BIOS support
+ *  12 - TSS #0
+ *  13 - LDT #0
+ *  14 - TSS #1
+ *  15 - LDT #1
  */
-#define FIRST_TSS_ENTRY 8
+#define FIRST_TSS_ENTRY 12
 #define FIRST_LDT_ENTRY (FIRST_TSS_ENTRY+1)
 #define _TSS(n) ((((unsigned long) n)<<4)+(FIRST_TSS_ENTRY<<3))
 #define _LDT(n) ((((unsigned long) n)<<4)+(FIRST_LDT_ENTRY<<3))

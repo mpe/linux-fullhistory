@@ -191,10 +191,12 @@ int find_irq_entry(int pin)
 {
 	int i;
 
-	for (i=mp_irq_entries-1; i>=0; i--) {
-		if (mp_irqs[i].mpc_dstirq == pin)
+	for (i=0; i<mp_irq_entries; i++)
+		if ( (mp_irqs[i].mpc_irqtype == 0x00) &&
+			(mp_irqs[i].mpc_dstirq == pin))
+
 			return i;
-	}
+
 	return -1;
 }
 
@@ -397,16 +399,40 @@ int IO_APIC_get_PCI_irq_vector (int bus, int slot, int pci_pin)
 	for (i=0; i<mp_irq_entries; i++) {
 		int lbus = mp_irqs[i].mpc_srcbus;
 
-		if (IO_APIC_IRQ(i) &&
+		if (IO_APIC_IRQ(mp_irqs[i].mpc_dstirq) &&
 		    (mp_bus_id_to_type[lbus] == MP_BUS_PCI) &&
 		    !mp_irqs[i].mpc_irqtype &&
-		    (bus == mp_irqs[i].mpc_srcbus) &&
-		    (slot == (mp_irqs[i].mpc_srcbusirq >> 2)) &&
+		    (bus == mp_bus_id_to_pci_bus[mp_irqs[i].mpc_srcbus]) &&
+		    (slot == ((mp_irqs[i].mpc_srcbusirq >> 2) & 0x1f)) &&
 		    (pci_pin == (mp_irqs[i].mpc_srcbusirq & 3)))
 
 			return mp_irqs[i].mpc_dstirq;
 	}
 	return -1;
+}
+
+/*
+ * There is a nasty bug in some older SMP boards, their mptable lies
+ * about the timer IRQ. We do the following to work around the situation:
+ *
+ *	- timer IRQ defaults to IO-APIC IRQ
+ *	- if this function detects that timer IRQs are defunct, then we fall
+ *	  back to ISA timer IRQs
+ */
+static int timer_irq_works (void)
+{
+	unsigned int t1=jiffies;
+	unsigned long flags;
+
+	save_flags(flags);
+	sti();
+
+	udelay(100*1000);
+
+	if (jiffies-t1>1)
+		return 1;
+
+	return 0;
 }
 
 void print_IO_APIC (void)
@@ -506,6 +532,8 @@ struct ioapic_list_entry {
 struct ioapic_list_entry ioapic_whitelist [] = {
 
 	{ "INTEL   "	, 	"PR440FX     "	},
+	{ "INTEL   "	,	"82440FX     "	},
+	{ "AIR     "	,	"KDI         "	},
 	{ 0		,	0		}
 };
 
@@ -527,7 +555,15 @@ static int in_ioapic_list (struct ioapic_list_entry * table)
 
 static int ioapic_whitelisted (void)
 {
+/*
+ * Right now, whitelist everything to see whether the new parsing
+ * routines really do work for everybody..
+ */
+#if 1
+	return 1;
+#else
 	return in_ioapic_list(ioapic_whitelist);
+#endif
 }
 
 static int ioapic_blacklisted (void)
@@ -579,7 +615,7 @@ void setup_IO_APIC (void)
 		pirqs_enabled)
 	{
 		printk("ENABLING IO-APIC IRQs\n");
-		io_apic_irqs = ~((1<<0)|(1<<2)|(1<<13));
+		io_apic_irqs = ~((1<<2)|(1<<13));
 	} else {
 		if (ioapic_blacklisted())
 			printk(" blacklisted board, DISABLING IO-APIC IRQs\n");
@@ -592,6 +628,14 @@ void setup_IO_APIC (void)
 
 	init_IO_APIC_traps();
 	setup_IO_APIC_irqs ();
+
+	if (!timer_irq_works ()) {
+		make_8259A_irq(0);
+		if (!timer_irq_works ())
+			panic("IO-APIC + timer doesnt work!");
+		printk("..MP-BIOS bug: i8254 timer not connected to IO-APIC\n");
+		printk("..falling back to 8259A-based timer interrupt\n");
+	}
 
 	printk("nr of MP irq sources: %d.\n", mp_irq_entries);
 	printk("nr of IOAPIC registers: %d.\n", nr_ioapic_registers);

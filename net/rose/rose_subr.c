@@ -47,10 +47,10 @@ void rose_clear_queues(struct sock *sk)
 	struct sk_buff *skb;
 
 	while ((skb = skb_dequeue(&sk->write_queue)) != NULL)
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 
 	while ((skb = skb_dequeue(&sk->protinfo.rose->ack_queue)) != NULL)
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 }
 
 /*
@@ -68,7 +68,7 @@ void rose_frames_acked(struct sock *sk, unsigned short nr)
 	if (sk->protinfo.rose->va != nr) {
 		while (skb_peek(&sk->protinfo.rose->ack_queue) != NULL && sk->protinfo.rose->va != nr) {
 			skb = skb_dequeue(&sk->protinfo.rose->ack_queue);
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			sk->protinfo.rose->va = (sk->protinfo.rose->va + 1) % ROSE_MODULUS;
 		}
 	}
@@ -206,7 +206,7 @@ void rose_write_internal(struct sock *sk, int frametype)
 
 		default:
 			printk(KERN_ERR "ROSE: rose_write_internal - invalid frametype %02X\n", frametype);
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			return;
 	}
 

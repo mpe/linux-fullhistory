@@ -194,7 +194,7 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 	outb_p(ENISR_ALL, e8390_base + EN0_IMR);
 	enable_irq(dev->irq);
 	ei_local->stat.tx_errors++;
-	dev_kfree_skb(skb, FREE_WRITE);
+	dev_kfree_skb(skb);
 	return 0;
     }
     ei_local->irqlock = 1;
@@ -279,7 +279,7 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
     outb_p(ENISR_ALL, e8390_base + EN0_IMR);
     enable_irq(dev->irq);
 
-    dev_kfree_skb (skb, FREE_WRITE);
+    dev_kfree_skb (skb);
     ei_local->stat.tx_bytes += send_length;
     
     return 0;

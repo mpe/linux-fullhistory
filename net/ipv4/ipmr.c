@@ -135,7 +135,7 @@ static struct device * reg_dev;
 static int reg_vif_xmit(struct sk_buff *skb, struct device *dev)
 {
 	ipmr_cache_report(skb, reg_vif_num, IGMPMSG_WHOLEPKT);
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 	return 0;
 }
 
@@ -320,7 +320,7 @@ static void ipmr_cache_delete(struct mfc_cache *cache)
 				netlink_unicast(rtnl, skb, NETLINK_CB(skb).pid, MSG_DONTWAIT);
 			} else
 #endif
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 		}
 	}
 	kfree_s(cache,sizeof(cache));
@@ -504,7 +504,7 @@ static int ipmr_cache_report(struct sk_buff *pkt, vifi_t vifi, int assert)
 	if ((ret=sock_queue_rcv_skb(mroute_socket,skb))<0) {
 		if (net_ratelimit())
 			printk(KERN_WARNING "mroute: pending queue full, dropping entries.\n");
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 	}
 
 	return ret;
@@ -523,7 +523,7 @@ static int ipmr_cache_unresolved(struct mfc_cache *cache, vifi_t vifi, struct sk
 		 */
 		if(cache_resolve_queue_len>=10 || (cache=ipmr_cache_alloc(GFP_ATOMIC))==NULL)
 		{
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			return -ENOBUFS;
 		}
 		/*
@@ -556,7 +556,7 @@ static int ipmr_cache_unresolved(struct mfc_cache *cache, vifi_t vifi, struct sk
 			 */
 			if (ipmr_cache_report(skb, vifi, IGMPMSG_NOCACHE)<0) {
 				ipmr_cache_delete(cache);
-				kfree_skb(skb, FREE_WRITE);
+				kfree_skb(skb);
 				return -ENOBUFS;
 			}
 		}
@@ -566,7 +566,7 @@ static int ipmr_cache_unresolved(struct mfc_cache *cache, vifi_t vifi, struct sk
 	 */
 	if(cache->mfc_queuelen>3)
 	{
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return -ENOBUFS;
 	}
 	cache->mfc_queuelen++;
@@ -1176,7 +1176,7 @@ int ip_mr_forward(struct sk_buff *skb, struct mfc_cache *cache, int local)
 
 dont_forward:
 	if (!local)
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 	return 0;
 }
 
@@ -1234,7 +1234,7 @@ int ip_mr_input(struct sk_buff *skb)
 			ipmr_cache_unresolved(cache, vif, skb);
 			return -EAGAIN;
 		}
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -1247,7 +1247,7 @@ int ip_mr_input(struct sk_buff *skb)
 dont_forward:
 	if (local)
 		return ip_local_deliver(skb);
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	return 0;
 }
 
@@ -1265,7 +1265,7 @@ int pim_rcv_v1(struct sk_buff * skb, unsigned short len)
 	    len < sizeof(*pim) + sizeof(*encap) ||
 	    pim->group != PIM_V1_VERSION || pim->code != PIM_V1_REGISTER ||
 	    reg_dev == NULL) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
                 return -EINVAL;
         }
 
@@ -1279,7 +1279,7 @@ int pim_rcv_v1(struct sk_buff * skb, unsigned short len)
 	if (!MULTICAST(encap->daddr) ||
 	    ntohs(encap->tot_len) == 0 ||
 	    ntohs(encap->tot_len) + sizeof(*pim) > len) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return -EINVAL;
 	}
 	skb->mac.raw = skb->nh.raw;
@@ -1310,7 +1310,7 @@ int pim_rcv(struct sk_buff * skb, unsigned short len)
 	    (pim->flags&PIM_NULL_REGISTER) ||
 	    reg_dev == NULL ||
 	    ip_compute_csum((void *)pim, len)) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
                 return -EINVAL;
         }
 
@@ -1319,7 +1319,7 @@ int pim_rcv(struct sk_buff * skb, unsigned short len)
 	if (!MULTICAST(encap->daddr) ||
 	    ntohs(encap->tot_len) == 0 ||
 	    ntohs(encap->tot_len) + sizeof(*pim) > len) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return -EINVAL;
 	}
 	skb->mac.raw = skb->nh.raw;

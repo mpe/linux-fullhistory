@@ -570,7 +570,7 @@ static int sgiseeq_start_xmit(struct sk_buff *skb, struct device *dev)
 		hregs->tx_ctrl = HPC3_ETXCTRL_ACTIVE;
 	}
 	dev->trans_start = jiffies;
-	dev_kfree_skb(skb, FREE_WRITE);
+	dev_kfree_skb(skb);
 
 	if(TX_BUFFS_AVAIL(sp))
 		dev->tbusy = 0;

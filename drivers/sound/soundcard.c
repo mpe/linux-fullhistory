@@ -899,8 +899,8 @@ void cleanup_module(void)
 	}
 #endif
 	sound_unload_drivers();
-
 	free_all_irqs();	/* If something was left allocated by accident */
+	sequencer_unload();
 
 	for (i = 0; i < 8; i++)
 	{
@@ -1057,11 +1057,10 @@ void sound_stop_timer(void)
 
 static int dma_buffsize = DSP_BUFFSIZE;
 
-int
-sound_alloc_dmap(int dev, struct dma_buffparms *dmap, int chan)
+int sound_alloc_dmap(int dev, struct dma_buffparms *dmap, int chan)
 {
-	char           *start_addr, *end_addr;
-	int             i, dma_pagesize;
+	char *start_addr, *end_addr;
+	int i, dma_pagesize;
 
 	dmap->mapping_flags &= ~DMA_MAP_MAPPED;
 
@@ -1141,8 +1140,8 @@ sound_alloc_dmap(int dev, struct dma_buffparms *dmap, int chan)
 
 void sound_free_dmap(int dev, struct dma_buffparms *dmap, int chan)
 {
-	int             sz, size, i;
-	unsigned long   start_addr, end_addr;
+	int sz, size, i;
+	unsigned long start_addr, end_addr;
 
 	if (dmap->raw_buf == NULL)
 		return;
@@ -1150,9 +1149,7 @@ void sound_free_dmap(int dev, struct dma_buffparms *dmap, int chan)
 	if (dmap->mapping_flags & DMA_MAP_MAPPED)
 		return;		/* Don't free mmapped buffer. Will use it next time */
 
-	for (sz = 0, size = PAGE_SIZE;
-	     size < dmap->buffsize;
-	     sz++, size <<= 1);
+	for (sz = 0, size = PAGE_SIZE; size < dmap->buffsize; sz++, size <<= 1);
 
 	start_addr = (unsigned long) dmap->raw_buf;
 	end_addr = start_addr + dmap->buffsize;

@@ -432,7 +432,6 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	unsigned long elf_entry, interp_load_addr = 0;
 	int status;
 	unsigned long start_code, end_code, end_data;
-	unsigned long elf_stack;
 	char passed_fileno[6];
 
 	ibcs2_interpreter = 0;
@@ -484,7 +483,6 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 
 	file = current->files->fd[elf_exec_fileno];
 
-	elf_stack = ~0UL;
 	elf_interpreter = NULL;
 	start_code = ~0UL;
 	end_code = 0;
@@ -620,12 +618,13 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	current->mm->mmap = NULL;
 	elf_entry = (unsigned long) elf_ex.e_entry;
 
+	/* Do this immediately, since STACK_TOP as used in setup_arg_pages
+	   may depend on the personality.  */
+	SET_PERSONALITY(elf_ex, ibcs2_interpreter);
+
 	/* Do this so that we can load the interpreter, if need be.  We will
 	   change some of these later */
 	current->mm->rss = 0;
-#ifdef ELF_FLAGS_INIT
-	ELF_FLAGS_INIT;
-#endif
 	bprm->p = setup_arg_pages(bprm->p, bprm);
 	current->mm->start_stack = bprm->p;
 
@@ -665,11 +664,6 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 					elf_prot, elf_flags,
 					(elf_ppnt->p_offset -
 					 ELF_PAGEOFFSET(elf_ppnt->p_vaddr)));
-
-#ifdef LOW_ELF_STACK
-			if (error < elf_stack)
-				elf_stack = error-1;
-#endif
 
 			if (!load_addr_set) {
 				load_addr_set = 1;
@@ -722,8 +716,8 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 
 	kfree(elf_phdata);
 
-	if (interpreter_type != INTERPRETER_AOUT) sys_close(elf_exec_fileno);
-	SET_PERSONALITY(ibcs2_interpreter);
+	if (interpreter_type != INTERPRETER_AOUT)
+		sys_close(elf_exec_fileno);
 
 	if (current->exec_domain && current->exec_domain->module)
 		__MOD_DEC_USE_COUNT(current->exec_domain->module);
@@ -738,9 +732,6 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 
 #ifndef VM_STACK_FLAGS
 	current->executable = dget(bprm->dentry);
-#endif
-#ifdef LOW_ELF_STACK
-	current->start_stack = bprm->p = elf_stack;
 #endif
 	current->suid = current->euid = current->fsuid = bprm->e_uid;
 	current->sgid = current->egid = current->fsgid = bprm->e_gid;

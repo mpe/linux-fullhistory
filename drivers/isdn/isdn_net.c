@@ -303,11 +303,11 @@ isdn_net_unbind_channel(isdn_net_local * lp)
 	save_flags(flags);
 	cli();
 	if (lp->first_skb) {
-		dev_kfree_skb(lp->first_skb, FREE_WRITE);
+		dev_kfree_skb(lp->first_skb);
 		lp->first_skb = NULL;
 	}
 	if (lp->sav_skb) {
-		dev_kfree_skb(lp->sav_skb, FREE_WRITE);
+		dev_kfree_skb(lp->sav_skb);
 		lp->sav_skb = NULL;
 	}
 #ifdef DEV_NUMBUFFS
@@ -452,11 +452,11 @@ isdn_net_stat_callback(int idx, int cmd)
 				if ((!lp->dialstate) && (lp->flags & ISDN_NET_CONNECTED)) {
 					lp->flags &= ~ISDN_NET_CONNECTED;
 					if (lp->first_skb) {
-						dev_kfree_skb(lp->first_skb, FREE_WRITE);
+						dev_kfree_skb(lp->first_skb);
 						lp->first_skb = NULL;
 					}
 					if (lp->sav_skb) {
-						dev_kfree_skb(lp->sav_skb, FREE_WRITE);
+						dev_kfree_skb(lp->sav_skb);
 						lp->sav_skb = NULL;
 					}
 					isdn_free_channel(lp->isdn_device, lp->isdn_channel,
@@ -912,7 +912,7 @@ isdn_net_send_skb(struct device *ndev, isdn_net_local * lp,
 	}
 	if (ret < 0) {
 		SET_SKB_FREE(skb);
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 		lp->stats.tx_errors++;
 		clear_bit(0, (void *) &(ndev->tbusy));
 		return 0;
@@ -1043,7 +1043,7 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 #else
 					isdn_net_unreachable(ndev, skb,
 							   "No channel");
-					dev_kfree_skb(skb, FREE_WRITE);
+					dev_kfree_skb(skb);
 					ndev->tbusy = 0;
 					return 0;
 #endif
@@ -1059,7 +1059,7 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 				if (lp->p_encap == ISDN_NET_ENCAP_SYNCPPP) {
 					/* no 'first_skb' handling for syncPPP */
 					if (isdn_ppp_bind(lp) < 0) {
-						dev_kfree_skb(skb, FREE_WRITE);
+						dev_kfree_skb(skb);
 						isdn_net_unbind_channel(lp);
 						restore_flags(flags);
 						return 0;	/* STN (skb to nirvana) ;) */
@@ -1074,7 +1074,7 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 				 */
 				if (lp->first_skb) {
 					printk(KERN_WARNING "isdn_net_start_xmit: First skb already set!\n");
-					dev_kfree_skb(lp->first_skb, FREE_WRITE);
+					dev_kfree_skb(lp->first_skb);
 					lp->first_skb = NULL;
 				}
 				lp->first_skb = skb;
@@ -1086,7 +1086,7 @@ isdn_net_start_xmit(struct sk_buff *skb, struct device *ndev)
 			} else {
 				isdn_net_unreachable(ndev, skb,
 						     "No phone number");
-				dev_kfree_skb(skb, FREE_WRITE);
+				dev_kfree_skb(skb);
 				ndev->tbusy = 0;
 				return 0;
 			}
@@ -1272,7 +1272,7 @@ isdn_net_receive(struct device *ndev, struct sk_buff *skb)
 		default:
 			printk(KERN_WARNING "%s: unknown encapsulation, dropping\n",
 			       lp->name);
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			return;
 	}
 	netif_rx(skb);
@@ -2610,7 +2610,7 @@ dev_purge_queues(struct device *dev)
 	for (i = 0; i < DEV_NUMBUFFS; i++) {
 		struct sk_buff *skb;
 		while ((skb = skb_dequeue(&dev->buffs[i])))
-			dev_kfree_skb(skb, FREE_WRITE);
+			dev_kfree_skb(skb);
 	}
 
 }

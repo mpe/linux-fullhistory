@@ -22,10 +22,8 @@ typedef unsigned short	apm_event_t;
 
 #ifdef __KERNEL__
 
-#include <linux/tasks.h>	/* for NR_TASKS */
-#include <linux/sched.h>	/* for _TSS */
-
-#define APM_CS		_TSS(NR_TASKS)
+#define APM_40		0x40
+#define APM_CS		(APM_40 + 8)
 #define APM_CS_16	(APM_CS + 8)
 #define APM_DS		(APM_CS_16 + 8)
 

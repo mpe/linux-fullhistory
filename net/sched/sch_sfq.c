@@ -174,7 +174,7 @@ static __inline__ void sfq_drop(struct sfq_sched_data *q)
 		sfq_index x = q->dep[d].next;
 		skb = q->qs[x].prev;
 		__skb_unlink(skb, &q->qs[x]);
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		sfq_dec(q, x);
 /*
 		sch->q.qlen--;
@@ -189,7 +189,7 @@ static __inline__ void sfq_drop(struct sfq_sched_data *q)
 	q->allot[q->next[d]] += q->quantum;
 	skb = q->qs[d].prev;
 	__skb_unlink(skb, &q->qs[d]);
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 	sfq_dec(q, d);
 /*
 	sch->q.qlen--;
@@ -271,7 +271,7 @@ sfq_reset(struct Qdisc* sch)
 	struct sk_buff *skb;
 
 	while ((skb = sfq_dequeue(sch)) != NULL)
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 }
 
 

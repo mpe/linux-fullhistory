@@ -96,7 +96,7 @@ static void aarp_expire(struct aarp_entry *a)
 	struct sk_buff *skb;
 	
 	while((skb=skb_dequeue(&a->packet_queue))!=NULL)
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 	kfree_s(a,sizeof(*a));
 }
 
@@ -663,7 +663,7 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 	 
 	if(dev->type!=ARPHRD_ETHER)
 	{
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 	
@@ -673,7 +673,7 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 	 
 	if(!skb_pull(skb,sizeof(*ea)))
 	{
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -686,7 +686,7 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 	if(ea->function<AARP_REQUEST || ea->function > AARP_PROBE || ea->hw_len != ETH_ALEN || ea->pa_len != AARP_PA_ALEN ||
 		ea->pa_src_zero != 0 || ea->pa_dst_zero != 0)
 	{
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 	
@@ -717,7 +717,7 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 	if(ifa==NULL)
 	{
 		restore_flags(flags);
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 1;		
 	}
 	if(ifa->status&ATIF_PROBE)
@@ -730,7 +730,7 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 			 
 			ifa->status|=ATIF_PROBE_FAIL;
 			restore_flags(flags);
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			return 1;		
 		}
 	}				 
@@ -789,7 +789,7 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 			break;
 	}
 	restore_flags(flags);
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	return 1;		
 }
 

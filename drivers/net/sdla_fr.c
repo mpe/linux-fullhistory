@@ -965,7 +965,7 @@ static int if_send(struct sk_buff *skb, struct device *dev)
 		printk(KERN_INFO "%s: if_send() hit critical section!\n",
 		       card->devname);
 #endif
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 		return 0;
 	}
     	disable_irq(card->hw.irq);
@@ -1020,7 +1020,7 @@ static int if_send(struct sk_buff *skb, struct device *dev)
 
 		++chan->if_send_critical_non_ISR;
 		++chan->ifstats.tx_dropped;
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 		save_flags(host_cpu_flags);
 		cli();
                 if ((!(--card->irq_dis_if_send_count)) &&
@@ -1112,7 +1112,7 @@ static int if_send(struct sk_buff *skb, struct device *dev)
 	}
 
 	if (!retry)
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 
 	card->wandev.critical = 0;
 	save_flags(host_cpu_flags);
@@ -1447,7 +1447,7 @@ static void fr502_rx_intr(sdla_t * card)
 	buf = skb_pull(skb, 1);	/* remove hardware header */
 	if (!wan_type_trans(skb, dev)) {
 		/* can't decapsulate packet */
-		dev_kfree_skb(skb, FREE_READ);
+		dev_kfree_skb(skb);
 		++chan->ifstats.rx_errors;
 		++card->wandev.stats.rx_errors;
 	} else {
@@ -1564,7 +1564,7 @@ static void fr508_rx_intr(sdla_t * card)
 					if (!wan_type_trans(skb, dev)) 
 					{
 						/* can't decapsulate packet */
-						dev_kfree_skb(skb, FREE_READ);
+						dev_kfree_skb(skb);
 						++chan->rx_intr_bfr_not_passed_to_stack;
  						++chan->ifstats.rx_errors;
 		                        	++card->wandev.stats.rx_errors;

@@ -3,7 +3,7 @@
 /*
  *	stallion.c  -- stallion multiport serial driver.
  *
- *	Copyright (C) 1996-1997  Stallion Technologies (support@stallion.oz.au).
+ *	Copyright (C) 1996-1998  Stallion Technologies (support@stallion.oz.au).
  *	Copyright (C) 1994-1996  Greg Ungerer (gerg@stallion.oz.au).
  *
  *	This code is loosely based on the Linux serial driver, written by
@@ -143,7 +143,7 @@ static int	stl_nrbrds = sizeof(stl_brdconf) / sizeof(stlconf_t);
  */
 static char	*stl_drvtitle = "Stallion Multiport Serial Driver";
 static char	*stl_drvname = "stallion";
-static char	*stl_drvversion = "5.4.1";
+static char	*stl_drvversion = "5.4.3";
 static char	*stl_serialname = "ttyE";
 static char	*stl_calloutname = "cue";
 
@@ -338,6 +338,8 @@ static unsigned char	stl_vecmap[] = {
 
 /*****************************************************************************/
 
+#ifdef CONFIG_PCI
+
 /*
  *	Define the Stallion PCI vendor and device IDs.
  */
@@ -372,13 +374,15 @@ static stlpcibrd_t	stl_pcibrds[] = {
 
 static int	stl_nrpcibrds = sizeof(stl_pcibrds) / sizeof(stlpcibrd_t);
 
+#endif
+
 /*****************************************************************************/
 
 /*
  *	Define macros to extract a brd/port number from a minor number.
  */
-#define	MKDEV2BRD(min)		(((min) & 0xc0) >> 6)
-#define	MKDEV2PORT(min)		((min) & 0x3f)
+#define	MINOR2BRD(min)		(((min) & 0xc0) >> 6)
+#define	MINOR2PORT(min)		((min) & 0x3f)
 
 /*
  *	Define a baud rate table that converts termios baud rate selector
@@ -796,13 +800,13 @@ static int stl_open(struct tty_struct *tty, struct file *filp)
 #endif
 
 	minordev = MINOR(tty->device);
-	brdnr = MKDEV2BRD(minordev);
+	brdnr = MINOR2BRD(minordev);
 	if (brdnr >= stl_nrbrds)
 		return(-ENODEV);
 	brdp = stl_brds[brdnr];
 	if (brdp == (stlbrd_t *) NULL)
 		return(-ENODEV);
-	minordev = MKDEV2PORT(minordev);
+	minordev = MINOR2PORT(minordev);
 	for (portnr = -1, panelnr = 0; (panelnr < STL_MAXPANELS); panelnr++) {
 		if (brdp->panels[panelnr] == (stlpanel_t *) NULL)
 			break;

@@ -225,6 +225,8 @@ void clear_inode(struct inode *inode)
 	wait_on_inode(inode);
 	if (IS_WRITABLE(inode) && inode->i_sb && inode->i_sb->dq_op)
 		inode->i_sb->dq_op->drop(inode);
+	if (inode->i_sb && inode->i_sb->s_op && inode->i_sb->s_op->clear_inode)
+		inode->i_sb->s_op->clear_inode(inode);
 
 	inode->i_state = 0;
 }

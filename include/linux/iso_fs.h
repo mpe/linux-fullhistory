@@ -163,10 +163,6 @@ struct iso_directory_record {
 #define ISOFS_ZONE_BITS(INODE)   ((INODE)->i_sb->u.isofs_sb.s_log_zone_size)
 
 #define ISOFS_SUPER_MAGIC 0x9660
-#define ISOFS_FILE_UNKNOWN 0
-#define ISOFS_FILE_TEXT 1
-#define ISOFS_FILE_BINARY 2
-#define ISOFS_FILE_TEXT_M 3
 
 #ifdef __KERNEL__
 extern int isonum_711(char *);

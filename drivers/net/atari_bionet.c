@@ -465,7 +465,7 @@ bionet_send_packet(struct sk_buff *skb, struct device *dev) {
 		lp->stats.tx_packets++;
 		lp->stats.tx_bytes+=length;
 	}
-	dev_kfree_skb(skb, FREE_WRITE);
+	dev_kfree_skb(skb);
 
 	return 0;
 }

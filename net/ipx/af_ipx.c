@@ -210,7 +210,7 @@ static void ipx_destroy_socket(struct sock *sk)
 
 	ipx_remove_socket(sk);
 	while((skb=skb_dequeue(&sk->receive_queue))!=NULL) {
-		kfree_skb(skb,FREE_READ);
+		kfree_skb(skb);
 	}
 
 	sk_free(sk);
@@ -378,11 +378,7 @@ static int ipxitf_def_skb_handler(struct sock *sock, struct sk_buff *skb)
 
 	if((retval = sock_queue_rcv_skb(sock, skb))<0)
 	{
-		/*
-		 * skb->sk is NULL here, so FREE_WRITE does not hurt
-		 * the sending socket.
-	 	 */
-		kfree_skb(skb,FREE_WRITE);
+		kfree_skb(skb);
 	}
 	return retval;
 }
@@ -439,10 +435,9 @@ static int ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int c
 	if (copy == 0)
 	{
 		/* skb was solely for us, and we did not make a copy,
-		 * so free it. FREE_WRITE does not hurt, because
-		 * skb->sk is NULL here.
+		 * so free it.
 		 */
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 	}
 	return 0;
 }
@@ -494,7 +489,7 @@ static int ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int c
 	if (sock1 == NULL && sock2 == NULL)
 	{
 		if (!copy)
-			kfree_skb(skb,FREE_WRITE);
+			kfree_skb(skb);
 		return 0;
 	}
 
@@ -563,7 +558,7 @@ static struct sk_buff *ipxitf_adjust_skbuff(ipx_interface *intrfc, struct sk_buf
 		skb2->h.raw=skb_put(skb2,skb->len);
 		memcpy(skb2->h.raw, skb->h.raw, skb->len);
 	}
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 	return NULL;
 }
 
@@ -636,15 +631,7 @@ static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 
 	if (!send_to_wire)
 	{
-		/*
-		 *	We do a FREE_WRITE here because this indicates how
-		 *	to treat the socket with which the packet is
-	 	 *	associated.  If this packet is associated with a
-		 *	socket at all, it must be the originator of the
-		 *	packet.   Routed packets will have no socket associated
-		 *	with them.
-		 */
-		kfree_skb(skb,FREE_WRITE);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -708,7 +695,7 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 
 	if (call_in_firewall(PF_IPX, skb->dev, ipx, NULL, &skb)!=FW_ACCEPT)
 	{
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -801,20 +788,20 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 		 */
 		if (call_fw_firewall(PF_IPX, skb->dev, ipx, NULL, &skb)!=FW_ACCEPT)
 		{
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			return 0;
 		}
 
 		/* We only route point-to-point packets. */
 		if (skb->pkt_type == PACKET_HOST)
 		{
-			skb=skb_unshare(skb, GFP_ATOMIC, FREE_READ);
+			skb=skb_unshare(skb, GFP_ATOMIC);
 			if(skb)
 				return ipxrtr_route_skb(skb);
 			else
 				return 0;
 		}
-		kfree_skb(skb,FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -826,7 +813,7 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 	}
 
 	/* we couldn't pawn it off so unload it */
-	kfree_skb(skb,FREE_READ);
+	kfree_skb(skb);
 	return 0;
 }
 
@@ -1381,7 +1368,7 @@ static int ipxrtr_route_packet(struct sock *sk, struct sockaddr_ipx *usipx, stru
 	err = memcpy_fromiovec(skb_put(skb,len),iov,len);
 	if (err) 
 	{
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return -EFAULT; 
 	}	
 
@@ -1396,7 +1383,7 @@ static int ipxrtr_route_packet(struct sock *sk, struct sockaddr_ipx *usipx, stru
 
 	if(call_out_firewall(PF_IPX, skb->dev, ipx, NULL, &skb)!=FW_ACCEPT)
 	{
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return -EPERM;
 	}
 	
@@ -1414,7 +1401,7 @@ static int ipxrtr_route_skb(struct sk_buff *skb)
 	if (r == NULL)
 	{
 		/* no known route */
-		kfree_skb(skb,FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 	i = r->ir_intrfc;
@@ -2039,7 +2026,7 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	
 	/* Too small? */
 	if(ntohs(ipx->ipx_pktsize)<sizeof(struct ipxhdr)) {
-		kfree_skb(skb,FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 	
@@ -2047,7 +2034,7 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	{
 		if(ipx_set_checksum(ipx, ntohs(ipx->ipx_pktsize))!=ipx->ipx_checksum)
 		{
-			kfree_skb(skb,FREE_READ);
+			kfree_skb(skb);
 			return 0;
 		}
 	}
@@ -2064,7 +2051,7 @@ int ipx_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
 		if (intrfc == NULL) {
 			/* Not one of ours */
-			kfree_skb(skb,FREE_READ);
+			kfree_skb(skb);
 			return 0;
 		}
 	}

@@ -333,12 +333,12 @@ static int mace_close(struct device *dev)
     /* free some skb's */
     for (i = 0; i < N_RX_RING; ++i) {
 	if (mp->rx_bufs[i] != 0) {
-	    dev_kfree_skb(mp->rx_bufs[i], FREE_READ);
+	    dev_kfree_skb(mp->rx_bufs[i]);
 	    mp->rx_bufs[i] = 0;
 	}
     }
     for (i = mp->tx_empty; i != mp->tx_fill; ) {
-	dev_kfree_skb(mp->tx_bufs[i], FREE_WRITE);
+	dev_kfree_skb(mp->tx_bufs[i]);
 	if (++i >= N_TX_RING)
 	    i = 0;
     }
@@ -601,7 +601,7 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		++mp->stats.tx_aborted_errors;
 	} else
 	    ++mp->stats.tx_packets;
-	dev_kfree_skb(mp->tx_bufs[i], FREE_WRITE);
+	dev_kfree_skb(mp->tx_bufs[i]);
 	--mp->tx_active;
 	if (++i >= N_TX_RING)
 	    i = 0;
@@ -680,7 +680,7 @@ static void mace_tx_timeout(unsigned long data)
     if (mp->tx_bad_runt) {
 	mp->tx_bad_runt = 0;
     } else if (i != mp->tx_fill) {
-	dev_kfree_skb(mp->tx_bufs[i], FREE_WRITE);
+	dev_kfree_skb(mp->tx_bufs[i]);
 	if (++i >= N_TX_RING)
 	    i = 0;
 	mp->tx_empty = i;

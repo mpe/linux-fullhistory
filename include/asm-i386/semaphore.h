@@ -21,6 +21,7 @@
 
 #include <asm/system.h>
 #include <asm/atomic.h>
+#include <asm/spinlock.h>
 
 struct semaphore {
 	atomic_t count;
@@ -37,6 +38,8 @@ asmlinkage void __up_wakeup(void /* special register calling convention */);
 
 extern void __down(struct semaphore * sem);
 extern void __up(struct semaphore * sem);
+
+extern spinlock_t semaphore_wake_lock;
 
 #define sema_init(sem, val)	atomic_set(&((sem)->count), (val))
 
@@ -55,10 +58,9 @@ static inline void wake_one_more(struct semaphore * sem)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&semaphore_wake_lock, flags);
 	sem->waking++;
-	restore_flags(flags);
+	spin_unlock_irqrestore(&semaphore_wake_lock, flags);
 }
 
 static inline int waking_non_zero(struct semaphore *sem)
@@ -66,13 +68,12 @@ static inline int waking_non_zero(struct semaphore *sem)
 	unsigned long flags;
 	int ret = 0;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&semaphore_wake_lock, flags);
 	if (sem->waking > 0) {
 		sem->waking--;
 		ret = 1;
 	}
-	restore_flags(flags);
+	spin_unlock_irqrestore(&semaphore_wake_lock, flags);
 	return ret;
 }
 

@@ -1895,7 +1895,7 @@ static void tulip_interrupt IRQ(int irq, void *dev_instance, struct pt_regs *reg
 				}
 
 				/* Free the original skb. */
-				dev_kfree_skb(lp->tx_skbuff[entry], FREE_WRITE);
+				dev_kfree_skb(lp->tx_skbuff[entry]);
 				lp->tx_skbuff[entry] = 0;
 			}
 
@@ -2309,12 +2309,12 @@ tulip_close(struct device *dev)
 #if LINUX_VERSION_CODE < 0x20100
 			skb->free = 1;
 #endif
-			dev_kfree_skb(skb, FREE_WRITE);
+			dev_kfree_skb(skb);
 		}
 	}
 	for (i = 0; i < TX_RING_SIZE; i++) {
 		if (tp->tx_skbuff[i])
-			dev_kfree_skb(tp->tx_skbuff[i], FREE_WRITE);
+			dev_kfree_skb(tp->tx_skbuff[i]);
 		tp->tx_skbuff[i] = 0;
 	}
 

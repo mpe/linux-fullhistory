@@ -548,7 +548,7 @@ static int el3_start_xmit(struct sk_buff *skb, struct device *dev)
 			outw(SetTxThreshold + 1536, ioaddr + EL3_CMD);
 	}
 
-	dev_kfree_skb (skb, FREE_WRITE);
+	dev_kfree_skb (skb);
 
 	/* Clear the Tx status stack. */
 	{

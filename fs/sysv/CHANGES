@@ -10,7 +10,11 @@ Fri Jan 23 1998   Krzysztof G. Baranowski <kgb@manjak.knm.org.pl>
 
 Tue Jan 27 1998   Krzysztof G. Baranowski <kgb@manjak.knm.org.pl>
         *    inode.c: added 2048-byte block support to SystemV FS.
-		      Merged detected_bs[512,1024,2048] into one function:
+		      Merged detected_bs[512,1024,2048]() into one function:
 		      void detected_bs (u_char type, struct super_block *sb).
 		      Thanks to Andrzej Krzysztofowicz <ankry@mif.pg.gda.pl>
 		      for the patch.
+
+Wed Feb  4 1998   Krzysztof G. Baranowski <kgb@manjak.knm.org.pl>
+	*    namei.c: removed static subdir(); is_subdir() from dcache.c
+		      is used instead. Cosmetic changes.

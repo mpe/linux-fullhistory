@@ -144,7 +144,6 @@ static inline void move_last_runqueue(struct task_struct * p)
 	prev->next_run = p;
 }
 
-#ifdef __SMP__
 /*
  * The tasklist_lock protects the linked list of processes.
  *
@@ -158,8 +157,7 @@ static inline void move_last_runqueue(struct task_struct * p)
  */
 rwlock_t tasklist_lock = RW_LOCK_UNLOCKED;
 spinlock_t scheduler_lock = SPIN_LOCK_UNLOCKED;
-static spinlock_t runqueue_lock = SPIN_LOCK_UNLOCKED;
-#endif
+spinlock_t runqueue_lock = SPIN_LOCK_UNLOCKED;
 
 /*
  * Wake up a process. Put it on the run-queue if it's not
@@ -315,7 +313,7 @@ static inline void internal_add_timer(struct timer_list *timer)
 	}
 }
 
-static spinlock_t timerlist_lock = SPIN_LOCK_UNLOCKED;
+spinlock_t timerlist_lock = SPIN_LOCK_UNLOCKED;
 
 void add_timer(struct timer_list *timer)
 {
@@ -509,7 +507,7 @@ rwlock_t waitqueue_lock = RW_LOCK_UNLOCKED;
  * have to protect against interrupts), as the actual removal from the
  * queue is handled by the process itself.
  */
-void wake_up(struct wait_queue **q)
+void __wake_up(struct wait_queue **q, unsigned int mode)
 {
 	struct wait_queue *next;
 
@@ -521,27 +519,7 @@ void wake_up(struct wait_queue **q)
 		while (next != head) {
 			struct task_struct *p = next->task;
 			next = next->next;
-			if ((p->state == TASK_UNINTERRUPTIBLE) ||
-			    (p->state == TASK_INTERRUPTIBLE))
-				wake_up_process(p);
-		}
-	}
-	read_unlock(&waitqueue_lock);
-}
-
-void wake_up_interruptible(struct wait_queue **q)
-{
-	struct wait_queue *next;
-
-	read_lock(&waitqueue_lock);
-	if (q && (next = *q)) {
-		struct wait_queue *head;
-
-		head = WAIT_QUEUE_HEAD(q);
-		while (next != head) {
-			struct task_struct *p = next->task;
-			next = next->next;
-			if (p->state == TASK_INTERRUPTIBLE)
+			if (p->state & mode)
 				wake_up_process(p);
 		}
 	}

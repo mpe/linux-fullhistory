@@ -54,7 +54,7 @@ static int x25_receive_data(struct sk_buff *skb, struct x25_neigh *neigh)
 	unsigned int lci;
 
 	if (call_in_firewall(PF_X25, skb->dev, skb->data, NULL, &skb) != FW_ACCEPT) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -90,7 +90,7 @@ static int x25_receive_data(struct sk_buff *skb, struct x25_neigh *neigh)
 /*
 	x25_transmit_clear_request(neigh, lci, 0x0D);
 */
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 
 	return 0;
 }
@@ -106,7 +106,7 @@ int x25_lapb_receive_frame(struct sk_buff *skb, struct device *dev, struct packe
 	 */
 	if ((neigh = x25_get_neigh(dev)) == NULL) {
 		printk(KERN_DEBUG "X.25: unknown neighbour - %s\n", dev->name);
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -117,20 +117,20 @@ int x25_lapb_receive_frame(struct sk_buff *skb, struct device *dev, struct packe
 
 		case 0x01:
 			x25_link_established(neigh);
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			return 0;
 
 		case 0x02:
 			x25_link_terminated(neigh);
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			return 0;
 
 		case 0x03:
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			return 0;
 
 		default:
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			return 0;
 	}
 }
@@ -146,7 +146,7 @@ int x25_llc_receive_frame(struct sk_buff *skb, struct device *dev, struct packet
 	 */
 	if ((neigh = x25_get_neigh(dev)) == NULL) {
 		printk(KERN_DEBUG "X.25: unknown_neighbour - %s\n", dev->name);
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -223,11 +223,11 @@ void x25_send_frame(struct sk_buff *skb, struct x25_neigh *neigh)
 
 #if defined(CONFIG_LLC) || defined(CONFIG_LLC_MODULE)
 		case ARPHRD_ETHER:
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			return;
 #endif
 		default:
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			return;
 	}
 

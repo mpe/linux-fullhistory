@@ -114,7 +114,7 @@ static void lapb_state0_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 			break;
 	}
 
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 }
 
 /*
@@ -206,7 +206,7 @@ static void lapb_state1_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 			break;
 	}
 
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 }
 
 /*
@@ -278,7 +278,7 @@ static void lapb_state2_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 			break;
 	}
 
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 }
 
 /*
@@ -523,7 +523,7 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 	}
 
 	if (!queued)
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 }
 
 /*
@@ -595,7 +595,7 @@ static void lapb_state4_machine(lapb_cb *lapb, struct sk_buff *skb, struct lapb_
 			break;
 	}
 
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 }
 
 /*

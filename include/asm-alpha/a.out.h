@@ -90,7 +90,8 @@ struct exec
 
 #ifdef __KERNEL__
 
-#define STACK_TOP (0x00120000000UL)
+#define STACK_TOP \
+  ((current->personality==PER_LINUX_32BIT) ? (0x80000000) : (0x00120000000UL))
 
 #endif
 

@@ -155,7 +155,7 @@ void raw_err (struct sock *sk, struct sk_buff *skb)
 	if (sk->ip_recverr && !sk->sock_readers) {
 		struct sk_buff *skb2 = skb_clone(skb, GFP_ATOMIC);
 		if (skb2 && sock_queue_err_skb(sk, skb2))
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 	}
 
 	if (type == ICMP_DEST_UNREACH && code == ICMP_FRAG_NEEDED) {
@@ -173,7 +173,7 @@ static int raw_rcv_skb(struct sock * sk, struct sk_buff * skb)
 	if (__sock_queue_rcv_skb(sk,skb)<0)
 	{
 		ip_statistics.IpInDiscards++;
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return -1;
 	}
 

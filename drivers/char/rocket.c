@@ -224,7 +224,7 @@ static struct semaphore tmp_buf_sem = MUTEX;
 static void rp_start(struct tty_struct *tty);
 
 static inline int rocket_paranoia_check(struct r_port *info,
-					dev_t device, const char *routine)
+					kdev_t device, const char *routine)
 {
 #ifdef ROCKET_PARANOIA_CHECK
 	static const char *badmagic =

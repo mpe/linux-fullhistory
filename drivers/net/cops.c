@@ -747,7 +747,7 @@ static void cops_rx(struct device *dev)
         {
                 printk(KERN_NOTICE "%s: Bad packet length of %d bytes.\n", dev->name, pkt_len);
                 lp->stats.tx_errors++;
-                kfree_skb(skb, FREE_READ);
+                kfree_skb(skb);
                 return;
         }
 
@@ -755,7 +755,7 @@ static void cops_rx(struct device *dev)
         if(rsp_type == LAP_INIT_RSP)
         {
                 lp->node_acquire = skb->data[0];        /* Nodeid taken from received packet. */
-                kfree_skb(skb, FREE_READ);
+                kfree_skb(skb);
                 return;
         }
 
@@ -764,7 +764,7 @@ static void cops_rx(struct device *dev)
         {
                 printk("%s: Bad packet type %d.\n", dev->name, rsp_type);
                 lp->stats.tx_errors++;
-                kfree_skb(skb, FREE_READ);
+                kfree_skb(skb);
                 return;
         }
 
@@ -856,7 +856,7 @@ static int cops_send_packet(struct sk_buff *skb, struct device *dev)
 		dev->trans_start = jiffies;
 	}
 
-	dev_kfree_skb (skb, FREE_WRITE);
+	dev_kfree_skb (skb);
 	dev->tbusy = 0;
 
         return 0;

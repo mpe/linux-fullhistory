@@ -75,9 +75,9 @@ extern int last_pid;
 #define TASK_RUNNING		0
 #define TASK_INTERRUPTIBLE	1
 #define TASK_UNINTERRUPTIBLE	2
-#define TASK_ZOMBIE		3
-#define TASK_STOPPED		4
-#define TASK_SWAPPING		5
+#define TASK_ZOMBIE		4
+#define TASK_STOPPED		8
+#define TASK_SWAPPING		16
 
 /*
  * Scheduling policies
@@ -448,11 +448,13 @@ extern int securelevel;	/* system security level */
 
 #define CURRENT_TIME (xtime.tv_sec)
 
+extern void FASTCALL(__wake_up(struct wait_queue ** p, unsigned int mode));
 extern void FASTCALL(sleep_on(struct wait_queue ** p));
 extern void FASTCALL(interruptible_sleep_on(struct wait_queue ** p));
-extern void FASTCALL(wake_up(struct wait_queue ** p));
-extern void FASTCALL(wake_up_interruptible(struct wait_queue ** p));
 extern void FASTCALL(wake_up_process(struct task_struct * tsk));
+
+#define wake_up(x)			__wake_up((x),TASK_UNINTERRUPTIBLE | TASK_INTERRUPTIBLE)
+#define wake_up_interruptible(x)	__wake_up((x),TASK_INTERRUPTIBLE)
 
 extern int in_group_p(gid_t grp);
 

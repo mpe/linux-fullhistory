@@ -886,7 +886,7 @@ arc90xx_inthandler(struct device *dev)
 	      if (out->skb)
 		{
 		  lp->stats.tx_bytes += out->skb->len;
-		  dev_kfree_skb(out->skb,FREE_WRITE);
+		  dev_kfree_skb(out->skb);
 		}
 	      out->skb=NULL;
 

@@ -16,8 +16,7 @@
  * aeb@cwi.nl - efter Friedas begravelse - 950211
  *
  * machek@k332.feld.cvut.cz - modified not to send characters to wrong console
- *	 - fixed some fatal of-by-one bugs (0-- no longer == -1 -> looping and looping and looping...)
- *	 - making it working with multiple monitor patches
+ *	 - fixed some fatal off-by-one bugs (0-- no longer == -1 -> looping and looping and looping...)
  *	 - making it shorter - scr_readw are macros which expand in PRETTY long code
  */
 
@@ -76,24 +75,22 @@ vcs_size(struct inode *inode)
 
 static long long vcs_lseek(struct file *file, long long offset, int orig)
 {
-	int size;
-	size = vcs_size(file->f_dentry->d_inode);
+	int size = vcs_size(file->f_dentry->d_inode);
 
 	switch (orig) {
-		case 0:
-			file->f_pos = offset;
-			break;
-		case 1:
-			file->f_pos += offset;
-			break;
-		case 2:
-			file->f_pos = size + offset;
-			break;
 		default:
 			return -EINVAL;
+		case 2:
+			offset += size;
+			break;
+		case 1:
+			offset += file->f_pos;
+		case 0:
+			break;
 	}
-	if (file->f_pos < 0 || file->f_pos > size)
-		{ file->f_pos = 0; return -EINVAL; }
+	if (offset < 0 || offset > size)
+		return -EINVAL;
+	file->f_pos = offset;
 	return file->f_pos;
 }
 

@@ -106,7 +106,7 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 		printk(KERN_DEBUG "tcp_send_skb: bad skb "
 		       "(skb = %p, data = %p, th = %p, len = %u)\n",
 		       skb, skb->data, th, skb->len);
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return;
 	}
 
@@ -118,7 +118,7 @@ void tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 		/* If it's got a syn or fin discard. */
 		if(!th->syn && !th->fin) {
 			printk(KERN_DEBUG "tcp_send_skb: attempt to queue a bogon.\n");
-			kfree_skb(skb,FREE_WRITE);
+			kfree_skb(skb);
 			return;
 		}
 	}
@@ -205,7 +205,7 @@ static int tcp_fragment(struct sock *sk, struct sk_buff *skb, u32 len)
 	/* Put headers on the new packet. */
 	tmp = tp->af_specific->build_net_header(sk, buff);
 	if (tmp < 0) {
-		kfree_skb(buff, FREE_WRITE);
+		kfree_skb(buff);
 		return -1;
 	}
 		
@@ -263,7 +263,7 @@ static void tcp_wrxmit_prob(struct sock *sk, struct sk_buff *skb)
 	update_send_head(sk);
 
 	skb_unlink(skb);	
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 
 	if (!sk->dead)
 		sk->write_space(sk);
@@ -597,7 +597,7 @@ static int tcp_retrans_try_collapse(struct sock *sk, struct sk_buff *skb)
 		th1->fin = 1;
 
 	/* ... and off you go. */
-	kfree_skb(buff, FREE_WRITE);
+	kfree_skb(buff);
 	tp->packets_out--;
 
 	/* Header checksum will be set by the retransmit procedure
@@ -759,7 +759,7 @@ void tcp_send_fin(struct sock *sk)
   		/* FIXME: We must not throw this out. Eventually we must
                  * put a FIN into the queue, otherwise it never gets queued.
   		 */
-		kfree_skb(buff, FREE_WRITE);
+		kfree_skb(buff);
 		sk->write_seq++;
 		t = del_timer(&sk->timer);
 		if (t)
@@ -829,7 +829,7 @@ int tcp_send_synack(struct sock *sk)
 
 	tmp = tp->af_specific->build_net_header(sk, skb);
 	if (tmp < 0) {
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return tmp;
 	}
 
@@ -950,7 +950,7 @@ void tcp_send_ack(struct sock *sk)
 	/* Put in the IP header and routing stuff. */
 	tmp = tp->af_specific->build_net_header(sk, buff);
 	if (tmp < 0) {
-		kfree_skb(buff, FREE_WRITE);
+		kfree_skb(buff);
 		return;
 	}
 
@@ -1043,7 +1043,7 @@ void tcp_write_wakeup(struct sock *sk)
 		/* Put in the IP header and routing stuff. */
 		tmp = tp->af_specific->build_net_header(sk, buff);
 		if (tmp < 0) {
-			kfree_skb(buff, FREE_WRITE);
+			kfree_skb(buff);
 			return;
 		}
 

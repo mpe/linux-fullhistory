@@ -79,10 +79,10 @@ static int loopback_xmit(struct sk_buff *skb, struct device *dev)
 	  	struct sk_buff *skb2=skb;
 	  	skb=skb_clone(skb, GFP_ATOMIC);		/* Clone the buffer */
 	  	if(skb==NULL) {
-			kfree_skb(skb2, FREE_WRITE);
+			kfree_skb(skb2);
 			return 0;
 		}
-	  	kfree_skb(skb2, FREE_WRITE);
+	  	kfree_skb(skb2);
 	}
 	else
 		skb_orphan(skb);

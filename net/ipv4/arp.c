@@ -295,7 +295,7 @@ static int arp_constructor(struct neighbour *neigh)
 static void arp_error_report(struct neighbour *neigh, struct sk_buff *skb)
 {
 	icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0);
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 }
 
 static void arp_solicit(struct neighbour *neigh, struct sk_buff *skb)
@@ -363,7 +363,7 @@ int arp_find(unsigned char *haddr, struct sk_buff *skb)
 
 	if (!skb->dst) {
 		printk(KERN_DEBUG "arp_find is called with dst==NULL\n");
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return 1;
 	}
 
@@ -384,7 +384,7 @@ int arp_find(unsigned char *haddr, struct sk_buff *skb)
 			return 0;
 		}
 	} else
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 	neigh_release(n);
 	end_bh_atomic();
 	return 1;
@@ -673,7 +673,7 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	}
 
 out:
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	return 0;
 }
 

@@ -61,36 +61,49 @@ static int selected_console = 0;
  */
 __initfunc(void console_setup(char *str, int *ints))
 {
-	char *s;
-	int i;
 	struct console_cmdline *c;
+	char name[sizeof(c->name)];
+	char *s, *options;
+	int i, idx;
 
-	for(i = 0; i < MAX_CMDLINECONSOLES && console_cmdline[i].name[0]; i++)
-		;
-	if (i == MAX_CMDLINECONSOLES)
-		return;
-	c = &console_cmdline[i];
-	selected_console = 1;
-
+	/*
+	 *	Decode str into name, index, options.
+	 */
 	if (str[0] >= '0' && str[0] <= '9') {
-		strcpy(c->name, "ttyS");
-		strncpy(c->name + 4, str, sizeof(c->name) - 5);
+		strcpy(name, "ttyS");
+		strncpy(name + 4, str, sizeof(name) - 5);
 	} else
-		strncpy(c->name, str, sizeof(c->name) - 1);
-	if ((c->options = strchr(str, ',')) != NULL)
-		*(c->options++) = 0;
+		strncpy(name, str, sizeof(name) - 1);
+	name[sizeof(name) - 1] = 0;
+	if ((options = strchr(str, ',')) != NULL)
+		*(options++) = 0;
 #ifdef __sparc__
 	if (!strcmp(str, "ttya"))
-		strcpy(c->name, "ttyS0");
+		strcpy(name, "ttyS0");
 	if (!strcmp(str, "ttyb"))
-		strcpy(c->name, "ttyS1");
+		strcpy(name, "ttyS1");
 #endif
-
-	for(s = c->name; *s; s++)
+	for(s = name; *s; s++)
 		if (*s >= '0' && *s <= '9')
 			break;
-	c->index = simple_strtoul(s, NULL, 10);
+	idx = simple_strtoul(s, NULL, 10);
 	*s = 0;
+
+	/*
+	 *	See if this tty is not yet registered, and
+	 *	if we have a slot free.
+	 */
+	for(i = 0; i < MAX_CMDLINECONSOLES && console_cmdline[i].name[0]; i++)
+		if (strcmp(console_cmdline[i].name, name) == 0 &&
+			  console_cmdline[i].index == idx)
+				return;
+	if (i == MAX_CMDLINECONSOLES)
+		return;
+	selected_console = 1;
+	c = &console_cmdline[i];
+	memcpy(c->name, name, sizeof(c->name));
+	c->options = options;
+	c->index = idx;
 }
 
 

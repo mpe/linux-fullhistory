@@ -286,14 +286,14 @@ static void unix_destroy_socket(unix_socket *sk)
 		{
 			unix_socket *osk=skb->sk;
 			osk->state=TCP_CLOSE;
-			kfree_skb(skb, FREE_WRITE);	/* Now surplus - free the skb first before the socket */
+			kfree_skb(skb);			/* Now surplus - free the skb first before the socket */
 			osk->state_change(osk);		/* So the connect wakes and cleans up (if any) */
 			/* osk will be destroyed when it gets to close or the timer fires */			
 		}
 		else
 		{
 			/* passed fds are erased in the kfree_skb hook */
-			kfree_skb(skb,FREE_WRITE);
+			kfree_skb(skb);
 		}
 	}
 	
@@ -695,7 +695,7 @@ static int unix_stream_connect1(struct socket *sock, struct msghdr *msg,
 		other=unix_find_other(sunaddr, addr_len, sk->type, hash, &err);
 		if(other==NULL)
 		{
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			return err;
 		}
 		other->ack_backlog++;
@@ -819,7 +819,7 @@ static int unix_accept(struct socket *sock, struct socket *newsock, int flags)
 		{
 			tsk=skb->sk;
 			tsk->state_change(tsk);
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			continue;
 		}
 		break;
@@ -838,7 +838,7 @@ static int unix_accept(struct socket *sock, struct socket *newsock, int flags)
 	unix_lock(newsk);		/* Swap lock over */
 	unix_unlock(sk);		/* Locked to child socket not master */
 	unix_lock(tsk);			/* Back lock */
-	kfree_skb(skb, FREE_WRITE);	/* The buffer is just used as a tag */
+	kfree_skb(skb);			/* The buffer is just used as a tag */
 	tsk->state_change(tsk);		/* Wake up any sleeping connect */
 	sock_wake_async(tsk->socket, 0);
 	return 0;
@@ -958,7 +958,7 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		unix_peer(sk)=NULL;
 		other = NULL;
 		if (sunaddr == NULL) {
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			return -ECONNRESET;
 		}
 	}
@@ -968,13 +968,13 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		
 		if (other==NULL)
 		{
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			return err;
 		}
 		if (!unix_may_send(sk, other))
 		{
 			unix_unlock(other);
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			return -EINVAL;
 		}
 	}
@@ -1080,7 +1080,7 @@ static int unix_stream_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 
 		if (other->dead || (sk->shutdown & SEND_SHUTDOWN))
 		{
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			if(sent)
 				return sent;
 			send_sig(SIGPIPE,current,0);
@@ -1280,7 +1280,7 @@ static int unix_stream_recvmsg(struct socket *sock, struct msghdr *msg, int size
 				break;
 			}
 
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 
 			if (scm->fp)
 				break;

@@ -2821,7 +2821,7 @@ wavelan_packet_xmit(struct sk_buff *	skb,
       wv_packet_write(dev, skb->data, skb->len);
     }
 
-  dev_kfree_skb(skb, FREE_WRITE);
+  dev_kfree_skb(skb);
 
 #ifdef DEBUG_TX_TRACE
   printk(KERN_DEBUG "%s: <-wavelan_packet_xmit()\n", dev->name);

@@ -47,16 +47,16 @@ void nr_clear_queues(struct sock *sk)
 	struct sk_buff *skb;
 
 	while ((skb = skb_dequeue(&sk->write_queue)) != NULL)
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 
 	while ((skb = skb_dequeue(&sk->protinfo.nr->ack_queue)) != NULL)
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 
 	while ((skb = skb_dequeue(&sk->protinfo.nr->reseq_queue)) != NULL)
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 
 	while ((skb = skb_dequeue(&sk->protinfo.nr->frag_queue)) != NULL)
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 }
 
 /*
@@ -74,7 +74,7 @@ void nr_frames_acked(struct sock *sk, unsigned short nr)
 	if (sk->protinfo.nr->va != nr) {
 		while (skb_peek(&sk->protinfo.nr->ack_queue) != NULL && sk->protinfo.nr->va != nr) {
 		        skb = skb_dequeue(&sk->protinfo.nr->ack_queue);
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			sk->protinfo.nr->va = (sk->protinfo.nr->va + 1) % NR_MODULUS;
 		}
 	}
@@ -266,7 +266,7 @@ void nr_transmit_dm(struct sk_buff *skb)
 	*dptr++ = 0;
 
 	if (!nr_route_frame(skbn, NULL))
-		kfree_skb(skbn, FREE_WRITE);
+		kfree_skb(skbn);
 }
 
 void nr_disconnect(struct sock *sk, int reason)

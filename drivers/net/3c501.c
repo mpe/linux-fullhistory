@@ -470,7 +470,7 @@ load_it_again_sam:
 
 	if (el_debug > 2)
 		printk(" queued xmit.\n");
-	dev_kfree_skb (skb, FREE_WRITE);
+	dev_kfree_skb (skb);
 	return 0;
 }
 

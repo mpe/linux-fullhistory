@@ -1721,7 +1721,7 @@ de4x5_tx(struct device *dev)
 
 	    /* Free the buffer. */
 	    if (lp->tx_skb[entry] != NULL) {
-		dev_kfree_skb(lp->tx_skb[entry], FREE_WRITE);
+		dev_kfree_skb(lp->tx_skb[entry]);
 		lp->tx_skb[entry] = NULL;
 	    }
 	}
@@ -3594,7 +3594,7 @@ de4x5_free_rx_buffs(struct device *dev)
 
     for (i=0; i<lp->rxRingSize; i++) {
 	if ((u_long) lp->rx_skb[i] > 1) {
-	    dev_kfree_skb(lp->rx_skb[i], FREE_WRITE);
+	    dev_kfree_skb(lp->rx_skb[i]);
 	}
 	lp->rx_ring[i].status = 0;
 	lp->rx_skb[i] = (struct sk_buff *)1;    /* Dummy entry */
@@ -3611,7 +3611,7 @@ de4x5_free_tx_buffs(struct device *dev)
 
     for (i=0; i<lp->txRingSize; i++) {
 	if (lp->tx_skb[i]) {
-	    dev_kfree_skb(lp->tx_skb[i], FREE_WRITE);
+	    dev_kfree_skb(lp->tx_skb[i]);
 	    lp->tx_skb[i] = NULL;
 	}
 	lp->tx_ring[i].status = 0;
@@ -3619,7 +3619,7 @@ de4x5_free_tx_buffs(struct device *dev)
 
     /* Unload the locally queued packets */
     while (lp->cache.skb) {
-	dev_kfree_skb(de4x5_get_cache(dev), FREE_WRITE);
+	dev_kfree_skb(de4x5_get_cache(dev));
     }
 
     return;

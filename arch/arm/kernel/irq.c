@@ -35,10 +35,6 @@
 #include <asm/irq-no.h>
 #include <asm/arch/irq.h>
 
-#ifdef __SMP_PROF__
-extern volatile unsigned long smp_local_timer_ticks[1+NR_CPUS];
-#endif
-
 unsigned int local_irq_count[NR_CPUS];
 #ifdef __SMP__
 atomic_t __arm_bh_counter;

@@ -166,7 +166,7 @@ extern __inline__ int ip_finish_output(struct sk_buff *skb)
 		return dst->neighbour->output(skb);
 
 	printk(KERN_DEBUG "khm\n");
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 	return -EINVAL;
 }
 

@@ -27,7 +27,8 @@
  *
  * All registers are 8 bits wide and read/write.  If your hardware differs
  * only in register addresses (eg because your registers are on 32-bit
- * word boundaries) then you can alter the constants below to accomodate this.
+ * word boundaries) then you can alter the constants in parport_pc.h to
+ * accomodate this.
  */
 
 #include <linux/stddef.h>

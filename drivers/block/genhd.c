@@ -280,7 +280,7 @@ solaris_x86_partition(struct gendisk *hd, kdev_t dev, long offset) {
 	for(i=0; i<SOLARIS_X86_NUMSLICE; i++) {
 		s = &v->v_slice[i];
 
-		if (s->s_tag == 0)
+		if (s->s_size == 0)
 			continue;
 		printk(" [s%d]", i);
 		/* solaris partitions are relative to current MS-DOS

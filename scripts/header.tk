@@ -237,7 +237,7 @@ proc write_tristate { file1 file2 varname variable dep } {
 		then { puts $file1 "$varname=y"; \
 		       puts $file2 "#define $varname 1" } \
 	else { \
-	    error "Attempting to write value for variable that is not configured ($varname)." \
+	    puts stdout "ERROR - Attempting to write value for unconfigured variable ($varname)." \
 	}
 }
 
@@ -281,7 +281,21 @@ proc option_name {w mnum line text helpidx} {
 	pack $w.x$line.l -side right -fill both -expand on
 }
 
-proc toggle_switch {w mnum line text variable} {
+proc toggle_switch2 {w mnum line text variable} {
+	frame $w.x$line -relief sunken
+	radiobutton $w.x$line.y -text "y" -variable $variable -value 1 \
+		-relief groove -width 2 -command "update_menu$mnum .menu$mnum"
+	radiobutton $w.x$line.m -text "-"  -variable $variable -value 2 \
+		-relief groove -width 2 -command "update_menu$mnum .menu$mnum"
+	radiobutton $w.x$line.n -text "n"  -variable $variable -value 0 \
+		-relief groove -width 2 -command "update_menu$mnum .menu$mnum"
+		
+	option_name $w $mnum $line $text $variable
+		
+	pack $w.x$line.n $w.x$line.m $w.x$line.y -side right -fill y
+}
+
+proc toggle_switch3 {w mnum line text variable} {
 	frame $w.x$line -relief sunken
 	radiobutton $w.x$line.y -text "y" -variable $variable -value 1 \
 		-relief groove -width 2 -command "update_menu$mnum .menu$mnum"
@@ -296,13 +310,13 @@ proc toggle_switch {w mnum line text variable} {
 }
 
 proc bool {w mnum line text variable} {
-	toggle_switch $w $mnum $line $text $variable
+	toggle_switch2 $w $mnum $line $text $variable
 	$w.x$line.m configure -state disabled
 	pack $w.x$line -anchor w -fill both -expand on
 }
 
 proc tristate {w mnum line text variable } {
-	toggle_switch $w $mnum $line $text $variable
+	toggle_switch3 $w $mnum $line $text $variable
 	pack $w.x$line -anchor w -fill both -expand on
 }
 
@@ -336,7 +350,7 @@ proc minimenu { w mnum line text variable helpidx } {
 	frame $w.x$line
 	menubutton $w.x$line.x -textvariable $variable -menu \
 		$w.x$line.x.menu -relief raised \
-		-width 15 -anchor w
+		-anchor w
 	option_name $w $mnum $line $text $helpidx
 	pack $w.x$line.x -anchor w -side right -fill y
 	pack $w.x$line -anchor w -fill both -expand on

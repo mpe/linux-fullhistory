@@ -52,6 +52,8 @@
 
 #include "irq.h"
 
+spinlock_t semaphore_wake_lock = SPIN_LOCK_UNLOCKED;
+
 extern unsigned long start_kernel, _etext;
 extern void update_one_process( struct task_struct *p,
 				unsigned long ticks, unsigned long user,
@@ -148,6 +150,8 @@ const char lk_lockmsg[] = "lock from interrupt context at %p\n";
 int mp_bus_id_to_type [MAX_MP_BUSSES] = { -1, };
 extern int mp_irq_entries;
 extern struct mpc_config_intsrc mp_irqs [MAX_IRQ_SOURCES];
+int mp_bus_id_to_pci_bus [MAX_MP_BUSSES] = { -1, };
+int mp_current_pci_id = 0;
 
 /* #define SMP_DEBUG */
 
@@ -336,9 +340,13 @@ __initfunc(static int smp_read_mpc(struct mp_config_table *mpc))
 					mp_bus_id_to_type[m->mpc_busid] =
 						MP_BUS_ISA;
 				else
-				if (strncmp(m->mpc_bustype,"PCI",3) == 0)
+				if (strncmp(m->mpc_bustype,"PCI",3) == 0) {
 					mp_bus_id_to_type[m->mpc_busid] =
 						MP_BUS_PCI;
+					mp_bus_id_to_pci_bus[m->mpc_busid] =
+						mp_current_pci_id;
+					mp_current_pci_id++;
+				}
 				mpt+=sizeof(*m);
 				count+=sizeof(*m);
 				break;

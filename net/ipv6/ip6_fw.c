@@ -266,14 +266,14 @@ int ip6_fw_reject(struct sk_buff *skb)
 	 *	send it via netlink, as (rule, skb)
 	 */
 
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	return 0;
 }
 
 int ip6_fw_discard(struct sk_buff *skb)
 {
 	printk(KERN_DEBUG "ip6_fw: BUG fw_reject called\n");
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	return 0;
 }
 

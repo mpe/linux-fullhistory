@@ -636,7 +636,7 @@ arcnet_send_packet_bad(struct sk_buff *skb, struct device *dev)
 
       if (lp->outgoing.skb)
 	{
-	  dev_kfree_skb(lp->outgoing.skb,FREE_WRITE);
+	  dev_kfree_skb(lp->outgoing.skb);
 	  lp->stats.tx_dropped++;
 	}
       lp->outgoing.skb=NULL;
@@ -748,7 +748,7 @@ arcnetA_send_packet(struct sk_buff *skb, struct device *dev)
 
       /* done right away */
       lp->stats.tx_bytes += out->skb->len;
-      dev_kfree_skb(out->skb,FREE_WRITE);
+      dev_kfree_skb(out->skb);
       out->skb=NULL;
 
       if (arcnet_go_tx(dev,1))
@@ -797,7 +797,7 @@ arcnetA_send_packet(struct sk_buff *skb, struct device *dev)
 	  if (out->skb)
 	    {
 	      lp->stats.tx_bytes += skb->len;
-	      dev_kfree_skb(out->skb,FREE_WRITE);
+	      dev_kfree_skb(out->skb);
 	    }
 	  out->skb=NULL;
 	}
@@ -1101,7 +1101,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
 		 in->sequence,arcsoft->split_flag,
 		 arcsoft->sequence);
 	  lp->aborted_seq=arcsoft->sequence;
-	  kfree_skb(in->skb,FREE_WRITE);
+	  kfree_skb(in->skb);
 	  lp->stats.rx_errors++;
 	  lp->stats.rx_missed_errors++;
 	  in->skb=NULL;
@@ -1198,7 +1198,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
 	  BUGMSG(D_EXTRA,"wrong seq number (saddr=%d, expected=%d, seq=%d, splitflag=%d)\n",
 		 saddr,in->sequence,arcsoft->sequence,
 		 arcsoft->split_flag);
-	  kfree_skb(in->skb,FREE_WRITE);
+	  kfree_skb(in->skb);
 	  in->skb=NULL;
 	  lp->stats.rx_errors++;
 	  lp->stats.rx_missed_errors++;
@@ -1216,7 +1216,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
 		     arcsoft->sequence);
 	      lp->stats.rx_errors++;
 	      lp->stats.rx_missed_errors++;
-	      kfree_skb(in->skb,FREE_WRITE);
+	      kfree_skb(in->skb);
 	    }
 
 	  in->sequence=arcsoft->sequence;
@@ -1288,7 +1288,7 @@ arcnetA_rx(struct device *dev,u_char *buf,
 		     in->sequence,arcsoft->split_flag,
 		     arcsoft->sequence);
 	      lp->aborted_seq=arcsoft->sequence;
-	      kfree_skb(in->skb,FREE_WRITE);
+	      kfree_skb(in->skb);
 	      in->skb=NULL;
 	      lp->stats.rx_errors++;
 	      lp->stats.rx_missed_errors++;
@@ -1434,7 +1434,9 @@ static int arcnetA_rebuild_header(struct sk_buff *skb)
   struct ClientData *head = (struct ClientData *)skb->data;
   struct device *dev=skb->dev;
   struct arcnet_local *lp=(struct arcnet_local *)(dev->priv);
+#ifdef CONFIG_INET
   int status;
+#endif
 
   /*
    * Only ARP and IP are currently supported
@@ -1583,7 +1585,7 @@ arcnetE_send_packet(struct sk_buff *skb, struct device *dev)
 	     length);
       BUGMSG(D_NORMAL,"transmit aborted.\n");
 
-      dev_kfree_skb(skb,FREE_WRITE);
+      dev_kfree_skb(skb);
       lp->intx--;
       return 0;
     }
@@ -1613,7 +1615,7 @@ arcnetE_send_packet(struct sk_buff *skb, struct device *dev)
   (*lp->prepare_tx)(dev, &proto, 1, skb->data, length-1, daddr, 0,
 			   offset);
 
-  dev_kfree_skb(skb,FREE_WRITE);
+  dev_kfree_skb(skb);
 
   if (arcnet_go_tx(dev,1))
     {
@@ -1740,7 +1742,7 @@ arcnetS_send_packet(struct sk_buff *skb, struct device *dev)
 			hdr->daddr,0,0);
 
       /* done right away */
-      dev_kfree_skb(skb,FREE_WRITE);
+      dev_kfree_skb(skb);
 
       if (arcnet_go_tx(dev,1))
 	{
@@ -1752,7 +1754,7 @@ arcnetS_send_packet(struct sk_buff *skb, struct device *dev)
     {
       BUGMSG(D_NORMAL,"packet too long (length=%d)\n",
 	     length);
-      dev_kfree_skb(skb,FREE_WRITE);
+      dev_kfree_skb(skb);
       lp->stats.tx_dropped++;
       arcnet_tx_done(lp->adev, lp);
     }

@@ -803,6 +803,15 @@ int sr_dev_ioctl(struct cdrom_device_info *cdi,
 
     RO_IOCTLS(cdi->dev,arg);
 
+    case BLKFLSBUF:
+	if(!suser())
+		return -EACCES;
+	if(!(cdi->dev))
+		return -EINVAL;
+	fsync_dev(cdi->dev);
+	invalidate_buffers(cdi->dev);
+	return 0;
+
     default:
 	return scsi_ioctl(scsi_CDs[target].device,cmd,(void *) arg);
     }

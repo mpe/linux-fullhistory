@@ -136,11 +136,11 @@ static int ethertap_start_xmit(struct sk_buff *skb, struct device *dev)
 	if(tmp)
 	{
 		if(netlink_post(dev->base_addr, tmp)<0)
-			kfree_skb(tmp, FREE_WRITE);
+			kfree_skb(tmp);
 		lp->stats.tx_bytes+=skb->len;
 		lp->stats.tx_packets++;
 	}
-	dev_kfree_skb (skb, FREE_WRITE);
+	dev_kfree_skb (skb);
 	return 0;
 }
 
@@ -160,7 +160,7 @@ static int ethertap_rx(int id, struct sk_buff *skb)
 	if(dev==NULL)
 	{
 		printk("ethertap: bad unit!\n");
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return -ENXIO;
 	}
 	lp = (struct net_local *)dev->priv;

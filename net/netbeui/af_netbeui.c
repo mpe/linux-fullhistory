@@ -414,7 +414,7 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 	err = memcpy_fromiovec(skb_put(skb,len),msg->msg_iov,len);
 	if (err)
 	{
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return -EFAULT;
 	}
 
@@ -422,14 +422,14 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 
 	if(call_out_firewall(AF_NETBEUI, skb->dev, nbp, NULL)!=FW_ACCEPT)
 	{
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return -EPERM;
 	}
 
 #endif
 
 	if(nb_send_low(dev,skb,&usat->sat_addr, NULL)==-1)
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 	SOCK_DEBUG(sk, "SK %p: Done write (%d).\n", sk, len);
 	return len;
 }

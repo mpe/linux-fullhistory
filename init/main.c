@@ -426,7 +426,7 @@ static struct dev_name_struct {
 	{ NULL, 0 }
 };
 
-__initfunc(dev_t name_to_dev_t(char *line))
+__initfunc(kdev_t name_to_kdev_t(char *line))
 {
 	int base = 0;
 	if (strncmp(line,"/dev/",5) == 0) {
@@ -447,7 +447,7 @@ __initfunc(dev_t name_to_dev_t(char *line))
 
 __initfunc(static void root_dev_setup(char *line, int *num))
 {
-	ROOT_DEV = name_to_dev_t(line);
+	ROOT_DEV = name_to_kdev_t(line);
 }
 
 /*
@@ -1002,10 +1002,10 @@ __initfunc(asmlinkage void start_kernel(void))
 	memory_start = paging_init(memory_start,memory_end);
 	trap_init();
 	init_IRQ();
-	memory_start = console_init(memory_start,memory_end);
 	sched_init();
 	time_init();
 	parse_options(command_line);
+	memory_start = console_init(memory_start,memory_end);
 #ifdef CONFIG_MODULES
 	init_modules();
 #endif
@@ -1165,14 +1165,16 @@ static int init(void * unused)
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	root_mountflags = real_root_mountflags;
-	if (mount_initrd && ROOT_DEV != real_root_dev && ROOT_DEV == MKDEV(RAMDISK_MAJOR,0)) {
+	if (mount_initrd && ROOT_DEV != real_root_dev
+	    && MAJOR(ROOT_DEV) == RAMDISK_MAJOR && MINOR(ROOT_DEV) == 0) {
 		int error;
 		int i, pid;
 
 		pid = kernel_thread(do_linuxrc, "/linuxrc", SIGCHLD);
 		if (pid>0)
 			while (pid != wait(&i));
-		if (real_root_dev != MKDEV(RAMDISK_MAJOR, 0)) {
+		if (MAJOR(real_root_dev) != RAMDISK_MAJOR
+		     || MINOR(real_root_dev) != 0) {
 			error = change_root(real_root_dev,"/initrd");
 			if (error)
 				printk(KERN_ERR "Change root to /initrd: "

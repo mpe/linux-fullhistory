@@ -56,6 +56,7 @@ int sequencer_ioctl (int dev, struct fileinfo *file,
 int sequencer_select(int dev, struct fileinfo *file, int sel_type, poll_table * wait);
 
 void sequencer_init (void);
+void sequencer_unload (void);
 void sequencer_timer(unsigned long dummy);
 int note_to_freq(int note_num);
 unsigned long compute_finetune(unsigned long base_freq, int bend, int range,

@@ -499,7 +499,7 @@ int icmpv6_rcv(struct sk_buff *skb, struct device *dev,
 	};
 
 discard_it:
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	return 0;
 }
 

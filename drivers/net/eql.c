@@ -387,7 +387,7 @@ static int eql_slave_xmit(struct sk_buff *skb, struct device *dev)
 		 */
 
 		eql->stats->tx_dropped++;
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 	}	  
 	return 0;
 }

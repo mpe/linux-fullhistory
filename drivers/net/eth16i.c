@@ -977,7 +977,7 @@ static int eth16i_tx(struct sk_buff *skb, struct device *dev)
 		/* Turn TX interrupts back on */
 		/* outb(TX_INTR_DONE | TX_INTR_16_COL, ioaddr + TX_INTR_REG); */
 	}
-	dev_kfree_skb(skb, FREE_WRITE);
+	dev_kfree_skb(skb);
 
 	return 0;
 }

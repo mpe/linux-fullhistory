@@ -518,7 +518,7 @@ sl_xmit(struct sk_buff *skb, struct device *dev)
 		sl_lock(sl);
 		sl->tx_bytes+=skb->len;
 		sl_encaps(sl, skb->data, skb->len);
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 	}
 	return 0;
 }

@@ -1574,7 +1574,7 @@ static int strip_xmit(struct sk_buff *skb, struct device *dev)
 
     strip_send(strip_info, skb);
 
-    if (skb) dev_kfree_skb(skb, FREE_WRITE);
+    if (skb) dev_kfree_skb(skb);
     return(0);
 }
 
@@ -1630,11 +1630,9 @@ static int strip_header(struct sk_buff *skb, struct device *dev,
 
 static int strip_rebuild_header(struct sk_buff *skb)
 {
+#ifdef CONFIG_INET
     STRIP_Header *header = (STRIP_Header *)skb->data;
 
-    /*printk(KERN_INFO "%s: strip_rebuild_header\n", skb->dev->name);*/
-
-#ifdef CONFIG_INET
     /* Arp find returns zero if if knows the address, */
     /* or if it doesn't know the address it sends an ARP packet and returns non-zero */
     return arp_find(header->dst_addr.c, skb)? 1 : 0;

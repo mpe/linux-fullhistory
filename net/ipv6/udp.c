@@ -402,7 +402,7 @@ static inline int udpv6_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 		ipv6_statistics.Ip6InDiscards++;
 		ipv6_statistics.Ip6InDelivers--;
 		skb->sk = NULL;
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return 0;
 	}
 	udp_stats_in6.UdpInDatagrams++;
@@ -467,13 +467,13 @@ static void udpv6_mcast_deliver(struct udphdr *uh,
 			struct sk_buff *buff = skb_clone(skb, GFP_ATOMIC);
 			if(sock_queue_rcv_skb(sk, buff) < 0) {
 				buff->sk = NULL;
-				kfree_skb(buff, FREE_READ);
+				kfree_skb(buff);
 			}
 		}
 	}
 	if(!sk || sock_queue_rcv_skb(sk, skb) < 0) {
 		skb->sk = NULL;
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 	}
 }
 
@@ -500,7 +500,7 @@ int udpv6_rcv(struct sk_buff *skb, struct device *dev,
 	if (ulen > len || len < sizeof(*uh)) {
 		printk(KERN_DEBUG "UDP: short packet: %d/%d\n", ulen, len);
 		udp_stats_in6.UdpInErrors++;
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return(0);
 	}
 
@@ -543,7 +543,7 @@ int udpv6_rcv(struct sk_buff *skb, struct device *dev,
 
 		icmpv6_send(skb, ICMPV6_DEST_UNREACH, ICMPV6_PORT_UNREACH, 0, dev);
 		
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return(0);
 	}
 
@@ -558,7 +558,7 @@ int udpv6_rcv(struct sk_buff *skb, struct device *dev,
 
 discard:
 	udp_stats_in6.UdpInErrors++;
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	return(0);	
 }
 

@@ -64,12 +64,12 @@ static int x25_queue_rx_frame(struct sock *sk, struct sk_buff *skb, int more)
 
 		skbo = skb_dequeue(&sk->protinfo.x25->fragment_queue);
 		memcpy(skb_put(skbn, skbo->len), skbo->data, skbo->len);
-		kfree_skb(skbo, FREE_READ);
+		kfree_skb(skbo);
 
 		while ((skbo = skb_dequeue(&sk->protinfo.x25->fragment_queue)) != NULL) {
 			skb_pull(skbo, (sk->protinfo.x25->neighbour->extended) ? X25_EXT_MIN_LEN : X25_STD_MIN_LEN);
 			memcpy(skb_put(skbn, skbo->len), skbo->data, skbo->len);
-			kfree_skb(skbo, FREE_READ);
+			kfree_skb(skbo);
 		}
 
 		sk->protinfo.x25->fraglen = 0;		

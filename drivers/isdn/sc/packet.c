@@ -100,7 +100,7 @@ int sndpkt(int devId, int channel, struct sk_buff *data)
 			adapter[card]->channel[channel].num_sendbufs ? 0 :
 			adapter[card]->channel[channel].next_sendbuf;
 			pr_debug("%s: Packet sent successfully\n", adapter[card]->devicename);
-		dev_kfree_skb(data, FREE_WRITE);
+		dev_kfree_skb(data);
 		indicate_status(card,ISDN_STAT_BSENT,channel,NULL);
 	}
 	return data->len;

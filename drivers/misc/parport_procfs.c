@@ -3,6 +3,7 @@
  * Authors: David Campbell <campbell@torque.net>
  *          Tim Waugh <tim@cyberelk.demon.co.uk>
  *          Philip Blundell <philb@gnu.org>
+ *          Andrea Arcangeli <arcangeli@mbox.queen.it>
  *
  * based on work by Grant Guenther <grant@torque.net>
  *              and Philip Blundell
@@ -13,6 +14,7 @@
 #include <asm/ptrace.h>
 #include <asm/io.h>
 #include <asm/dma.h>
+#include <asm/irq.h>
 
 #include <linux/delay.h>
 #include <linux/errno.h>
@@ -30,7 +32,7 @@ extern void parport_null_intr_func(int irq, void *dev_id, struct pt_regs *regs);
 static int irq_write_proc(struct file *file, const char *buffer,
 					  unsigned long count, void *data)
 {
-	int newirq;
+	unsigned int newirq, oldirq;
 	struct parport *pp = (struct parport *)data;
 	
 	if (count > 5 )  /* more than 4 digits + \n for a irq 0x?? 0?? ??  */
@@ -49,32 +51,34 @@ static int irq_write_proc(struct file *file, const char *buffer,
 		}
 	}
 
+	if (newirq >= NR_IRQS)
+		return -EOVERFLOW;
+
 	if (pp->irq != PARPORT_IRQ_NONE && !(pp->flags & PARPORT_FLAG_COMA)) {
-		if (pp->cad->irq_func)
+		if (pp->cad != NULL && pp->cad->irq_func != NULL)
 			free_irq(pp->irq, pp->cad->private);
 		else
 			free_irq(pp->irq, NULL);
 	}
 
+	oldirq = pp->irq;
 	pp->irq = newirq;
 
 	if (pp->irq != PARPORT_IRQ_NONE && !(pp->flags & PARPORT_FLAG_COMA)) { 
-		struct pardevice *pd = pp->cad;
+		struct pardevice *cad = pp->cad;
 
-		if (pd == NULL) {
-			pd = pp->devices;
-			if (pd != NULL) 
-				request_irq(pp->irq, pd->irq_func ? 
-					    pd->irq_func :
-					    parport_null_intr_func,
-					    SA_INTERRUPT, pd->name,
-					    pd->private);
-		} else {
-			request_irq(pp->irq, pd->irq_func ? pd->irq_func :
-				    parport_null_intr_func,
+		if (cad == NULL)
+			request_irq(pp->irq, parport_null_intr_func,
 				    SA_INTERRUPT, pp->name, NULL);
-		}
+		else
+			request_irq(pp->irq, cad->irq_func ? cad->irq_func :
+				    parport_null_intr_func, SA_INTERRUPT,
+				    cad->name, cad->private);
 	}
+
+	if (oldirq != PARPORT_IRQ_NONE && newirq == PARPORT_IRQ_NONE &&
+	    pp->cad != NULL && pp->cad->irq_func != NULL)
+		pp->cad->irq_func(pp->irq, pp->cad->private, NULL);
 
 	return count;
 }

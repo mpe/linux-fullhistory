@@ -847,7 +847,7 @@ static int ewrk3_queue_pkt(struct sk_buff *skb, struct device *dev)
 					}
 
 					dev->trans_start = jiffies;
-					dev_kfree_skb(skb, FREE_WRITE);
+					dev_kfree_skb(skb);
 
 				} else {	/* return unused page to the free memory queue */
 					outb(page, EWRK3_FMQ);

@@ -2,10 +2,10 @@
 Stallion Multiport Serial Driver Readme
 ---------------------------------------
 
-Copyright (C) 1994-1997,  Stallion Technologies (support@stallion.com).
+Copyright (C) 1994-1998,  Stallion Technologies (support@stallion.com).
 
-Version:   5.4.1
-Date:      19DEC97
+Version:   5.4.3
+Date:      04FEB98
 
 
 
@@ -20,7 +20,7 @@ the true Stallion intelligent multiport boards - EasyConnection 8/64
 If you are using any of the Stallion intelligent multiport boards (Brumby,
 ONboard, EasyConnection 8/64 (ISA or EISA)) with Linux you will need to
 get the driver utility package. This package is available at most of the
-Linux archive sites (and on CD's that contain these archives). The file
+Linux archive sites (and on CD-ROMs that contain these archives). The file
 will be called stallion-X.X.X.tar.gz where X.X.X will be the version
 number. In particular this package contains the board embedded executable
 images that are required for these boards. It also contains the downloader
@@ -31,12 +31,12 @@ the latest version of the driver utility package. Other sites that usually
 have the latest version are tsx-11.mit.edu, sunsite.unc.edu and their
 mirrors.
 
-ftp.stallion.com:/drivers/ata5/Linux/stallion-5.4.0.tar.gz
-tsx-11.mit.edu:/pub/linux/BETA/serial/stallion/stallion-5.4.0.tar.gz
-sunsite.unc.edu:/pub/Linux/kernel/patches/serial/stallion-5.4.0.tar.gz
+ftp.stallion.com:/drivers/ata5/Linux/stallion-5.4.2.tar.gz
+tsx-11.mit.edu:/pub/linux/packages/stallion/stallion-5.4.2.tar.gz
+sunsite.unc.edu:/pub/Linux/kernel/patches/serial/stallion-5.4.2.tar.gz
 
 As of the printing of this document the latest version of the driver
-utility package is 5.4.0. If a later version is now available then you
+utility package is 5.4.2. If a later version is now available then you
 should use the latest version.
 
 If you are using the EasyIO, EasyConnection 8/32 or EasyConnection 8/64-PCI

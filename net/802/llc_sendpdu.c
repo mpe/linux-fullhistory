@@ -344,7 +344,7 @@ int llc_free_acknowledged_skbs(llcptr lp, unsigned char pdu_ack)
 		fr = (frameptr) (pp->data + lp->dev->hard_header_len);
 		ns_save = fr->i_hdr.ns;
 
-		kfree_skb(pp, FREE_WRITE);
+		kfree_skb(pp);
 		ack_count++;
 
 		if (ns_save == ack) 

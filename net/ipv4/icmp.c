@@ -1007,7 +1007,7 @@ int icmp_rcv(struct sk_buff *skb, unsigned short len)
 	(icmp_pointers[icmph->type].handler)(icmph, skb, len);
 
 drop:
-	kfree_skb(skb, FREE_READ); 
+	kfree_skb(skb);
 	return 0;
 error:
 	icmp_statistics.IcmpInErrors++;

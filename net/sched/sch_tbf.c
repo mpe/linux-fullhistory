@@ -118,7 +118,7 @@ tbf_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 
 	__skb_unlink(skb, &sch->q);
 	q->bytes -= skb->len;
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 	return 0;
 }
 
@@ -187,7 +187,7 @@ tbf_reset(struct Qdisc* sch)
 	struct sk_buff *skb;
 
 	while ((skb = __skb_dequeue(&sch->q)) != NULL)
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 	q->bytes = 0;
 	PSCHED_GET_TIME(q->t_c);
 	q->tokens = q->depth;

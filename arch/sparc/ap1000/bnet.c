@@ -584,7 +584,7 @@ static void bif_intr_runqueue(void)
 		if (q->req.type == REQ_IP) {
 			struct sk_buff *skb = (struct sk_buff *)q->data;
 			write_bif(skb->data,q->data_size,1,1);       
-			dev_kfree_skb(skb, FREE_WRITE);
+			dev_kfree_skb(skb);
 		} else {
 			write_bif(q->data,q->data_size,1,1);
 			if (!(q->flags & BIF_NOCOPY))
@@ -718,7 +718,7 @@ int bif_send_ip(int cid, struct sk_buff *skb)
 	q = (struct bif_queue *)kmalloc(sizeof(*q), GFP_ATOMIC);
 	if (!q) {
 		/* yikes! */
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 		return(-ENOMEM);
 	}
 	
@@ -1021,7 +1021,7 @@ static void bif_dma_complete(void)
 	}
 	
 	if (skb_out) {
-		dev_kfree_skb(skb_out, FREE_WRITE);
+		dev_kfree_skb(skb_out);
 		skb_out = NULL;
 	}
 	

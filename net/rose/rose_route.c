@@ -184,7 +184,7 @@ static void rose_remove_neigh(struct rose_neigh *rose_neigh)
 	rose_stop_t0timer(rose_neigh);
 
 	while ((skb = skb_dequeue(&rose_neigh->queue)) != NULL)
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 
 	save_flags(flags); cli();
 
@@ -534,7 +534,7 @@ static void rose_del_route_by_neigh(struct rose_neigh *rose_neigh)
 	rose_start_ftimer(rose_neigh);
 
 	while ((skb = skb_dequeue(&rose_neigh->queue)) != NULL)
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 
 	rose_route = rose_route_list;
 

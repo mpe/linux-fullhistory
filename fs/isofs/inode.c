@@ -79,7 +79,6 @@ struct iso9660_options{
   char cruft;
   char unhide;
   unsigned char check;
-  unsigned char conversion;
   unsigned int blocksize;
   mode_t mode;
   gid_t gid;
@@ -98,7 +97,6 @@ static int parse_options(char *options, struct iso9660_options * popt)
 	popt->cruft = 'n';
 	popt->unhide = 'n';
 	popt->check = 's';		/* default: strict */
-	popt->conversion = 'b';		/* default: no conversion */
 	popt->blocksize = 1024;
 	popt->mode = S_IRUGO | S_IXUGO; /* r-x for all.  The disc could
 					   be shared with DOS machines so
@@ -166,12 +164,14 @@ static int parse_options(char *options, struct iso9660_options * popt)
 			else return 0;
 		}
 		else if (!strcmp(this_char,"conv") && value) {
-			if (value[0] && !value[1] && strchr("btma",*value))
-				popt->conversion = *value;
-			else if (!strcmp(value,"binary")) popt->conversion = 'b';
-			else if (!strcmp(value,"text")) popt->conversion = 't';
-			else if (!strcmp(value,"mtext")) popt->conversion = 'm';
-			else if (!strcmp(value,"auto")) popt->conversion = 'a';
+			/* no conversion is done anymore;
+			   we still accept the same mount options,
+			   but ignore them */
+			if (value[0] && !value[1] && strchr("btma",*value)) ;
+			else if (!strcmp(value,"binary")) ;
+			else if (!strcmp(value,"text")) ;
+			else if (!strcmp(value,"mtext")) ;
+			else if (!strcmp(value,"auto")) ;
 			else return 0;
 		}
 		else if (value &&
@@ -254,17 +254,17 @@ static unsigned int isofs_get_last_session(kdev_t dev)
 	  printk("isofs.inode: XA disk: %s\n", ms_info.xa_flag ? "yes":"no");
 	  printk("isofs.inode: vol_desc_start = %d\n", ms_info.addr.lba);
 	}
-#endif 0
+#endif
       if (i==0)
 #if WE_OBEY_THE_WRITTEN_STANDARDS
         if (ms_info.xa_flag) /* necessary for a valid ms_info.addr */
-#endif WE_OBEY_THE_WRITTEN_STANDARDS
+#endif
           vol_desc_start=ms_info.addr.lba;
     }
   return vol_desc_start;
 }
 
-struct super_block *isofs_read_super(struct super_block *s,void *data,
+struct super_block *isofs_read_super(struct super_block *s, void *data,
 				     int silent)
 {
 	struct buffer_head	      * bh = NULL;
@@ -301,7 +301,6 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	printk("check = %c\n", opt.check);
 	printk("cruft = %c\n", opt.cruft);
 	printk("unhide = %c\n", opt.unhide);
-	printk("conversion = %c\n", opt.conversion);
 	printk("blocksize = %d\n", opt.blocksize);
 	printk("gid = %d\n", opt.gid);
 	printk("uid = %d\n", opt.uid);
@@ -571,7 +570,6 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	s->u.isofs_sb.s_mapping = opt.map;
 	s->u.isofs_sb.s_rock = (opt.rock == 'y' ? 2 : 0);
 	s->u.isofs_sb.s_name_check = opt.check;
-	s->u.isofs_sb.s_conversion = opt.conversion;
 	s->u.isofs_sb.s_cruft = opt.cruft;
 	s->u.isofs_sb.s_unhide = opt.unhide;
 	s->u.isofs_sb.s_uid = opt.uid;
@@ -798,21 +796,6 @@ void isofs_read_inode(struct inode * inode)
 	inode->u.isofs_i.i_first_extent = (isonum_733 (raw_inode->extent) +
 					   isonum_711 (raw_inode->ext_attr_length))
 	  << inode -> i_sb -> u.isofs_sb.s_log_zone_size;
-
-	switch (inode->i_sb->u.isofs_sb.s_conversion){
-	case 'a':
-	  inode->u.isofs_i.i_file_format = ISOFS_FILE_UNKNOWN; /* File type */
-	  break;
-	case 'b':
-	  inode->u.isofs_i.i_file_format = ISOFS_FILE_BINARY; /* File type */
-	  break;
-	case 't':
-	  inode->u.isofs_i.i_file_format = ISOFS_FILE_TEXT; /* File type */
-	  break;
-	case 'm':
-	  inode->u.isofs_i.i_file_format = ISOFS_FILE_TEXT_M; /* File type */
-	  break;
-	}
 
 /* Now test for possible Rock Ridge extensions which will override some of
    these numbers in the inode structure. */

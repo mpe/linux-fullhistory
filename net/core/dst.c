@@ -66,13 +66,13 @@ static void dst_run_gc(unsigned long dummy)
 
 static int dst_discard(struct sk_buff *skb)
 {
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	return 0;
 }
 
 static int dst_blackhole(struct sk_buff *skb)
 {
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 	return 0;
 }
 

@@ -230,7 +230,7 @@ static void dlci_receive(struct sk_buff *skb, struct device *dev)
 		dlp->stats.rx_packets++;
 	}
 	else
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 }
 
 static int dlci_transmit(struct sk_buff *skb, struct device *dev)
@@ -275,7 +275,7 @@ static int dlci_transmit(struct sk_buff *skb, struct device *dev)
 		/* experience suggest a slightly more conservative approach */
 
 		if (!ret)
-			dev_kfree_skb(skb, FREE_WRITE);
+			dev_kfree_skb(skb);
 
 		dev->tbusy = 0;
 	}

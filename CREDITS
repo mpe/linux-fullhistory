@@ -420,11 +420,11 @@ S: S-143 32 VARBY
 S: Sweden
 
 N: Paal-Kristian Engstad
-E: engstad@funcom.com
+E: engstad@intermetrics.com
 D: Kernel smbfs (to mount WfW, NT and OS/2 network drives.)
-S: Oscars gt. 35
-S: N-0258 OSLO
-S: Norway
+S: 17101 Springdale Street #225
+S: Huntington Beach, California 92649
+S: USA
 
 N: Doug Evans
 E: dje@cygnus.com
@@ -1594,7 +1594,7 @@ E: torvalds@transmeta.com
 W: http://www.cs.helsinki.fi/~torvalds/
 P: 1024/A86B35C5 96 54 50 29 EC 11 44 7A  BE 67 3C 24 03 13 62 C8
 D: Original kernel hacker
-S: 3665 Benton Street #36
+S: 1050 Woodduck Avenue
 S: Santa Clara, California 95051
 S: USA
 

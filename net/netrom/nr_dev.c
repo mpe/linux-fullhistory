@@ -123,7 +123,7 @@ static int nr_rebuild_header(struct sk_buff *skb)
 	if (arp_find(bp + 7, skb)) {
 #if 0
 		/* BUGGGG! If arp_find returned 1, skb does not exist. --ANK*/
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 #endif
 		return 1;
 	}
@@ -138,17 +138,17 @@ static int nr_rebuild_header(struct sk_buff *skb)
 	bp[6] |= AX25_SSSID_SPARE;
 
 	if ((skbn = skb_clone(skb, GFP_ATOMIC)) == NULL) {
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return 1;
 	}
 
 	if (skb->sk != NULL)
 		skb_set_owner_w(skbn, skb->sk);
 
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 
 	if (!nr_route_frame(skbn, NULL)) {
-		kfree_skb(skbn, FREE_WRITE);
+		kfree_skb(skbn);
 		stats->tx_errors++;
 	}
 
@@ -219,7 +219,7 @@ static int nr_xmit(struct sk_buff *skb, struct device *dev)
 
 	sti();
 
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 
 	stats->tx_errors++;
 

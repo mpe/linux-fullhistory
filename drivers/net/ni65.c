@@ -306,7 +306,7 @@ static int ni65_close(struct device *dev)
 		for(i=0;i<TMDNUM;i++)
 		{
 			if(p->tmd_skb[i]) {
-				dev_kfree_skb(p->tmd_skb[i],FREE_WRITE);
+				dev_kfree_skb(p->tmd_skb[i]);
 				p->tmd_skb[i] = NULL;
 			}
 		}
@@ -548,7 +548,7 @@ static void *ni65_alloc_mem(struct device *dev,char *what,int size,int type)
 	if( (u32) virt_to_bus(ptr+size) > 0x1000000) {
 		printk("%s: unable to allocate %s memory in lower 16MB!\n",dev->name,what);
 		if(type)
-			kfree_skb(skb,FREE_WRITE);
+			kfree_skb(skb);
 		else
 			kfree(ptr);
 		return NULL;
@@ -623,7 +623,7 @@ static void ni65_free_buffer(struct priv *p)
 			kfree(p->tmdbounce[i]);
 #ifdef XMT_VIA_SKB
 		if(p->tmd_skb[i])
-			dev_kfree_skb(p->tmd_skb[i],FREE_WRITE);
+			dev_kfree_skb(p->tmd_skb[i]);
 #endif
 	}
 
@@ -631,7 +631,7 @@ static void ni65_free_buffer(struct priv *p)
 	{
 #ifdef RCV_VIA_SKB
 		if(p->recv_skb[i])
-			dev_kfree_skb(p->recv_skb[i],FREE_WRITE);
+			dev_kfree_skb(p->recv_skb[i]);
 #else
 		if(p->recvbounce[i])
 			kfree(p->recvbounce[i]);
@@ -741,7 +741,7 @@ static int ni65_lance_reinit(struct device *dev)
 		 struct tmd *tmdp = p->tmdhead + i;
 #ifdef XMT_VIA_SKB
 		 if(p->tmd_skb[i]) {
-			 dev_kfree_skb(p->tmd_skb[i],FREE_WRITE);
+			 dev_kfree_skb(p->tmd_skb[i]);
 			 p->tmd_skb[i] = NULL;
 		 }
 #endif
@@ -955,7 +955,7 @@ static void ni65_xmit_intr(struct device *dev,int csr0)
 
 #ifdef XMT_VIA_SKB
 		if(p->tmd_skb[p->tmdlast]) {
-			 dev_kfree_skb(p->tmd_skb[p->tmdlast],FREE_WRITE);
+			 dev_kfree_skb(p->tmd_skb[p->tmdlast]);
 			 p->tmd_skb[p->tmdlast] = NULL;
 		}
 #endif
@@ -1104,7 +1104,7 @@ static int ni65_send_packet(struct sk_buff *skb, struct device *dev)
 
 			memcpy((char *) p->tmdbounce[p->tmdbouncenum] ,(char *)skb->data,
 							 (skb->len > T_BUF_SIZE) ? T_BUF_SIZE : skb->len);
-			dev_kfree_skb (skb, FREE_WRITE);
+			dev_kfree_skb (skb);
 
 			save_flags(flags);
 			cli();

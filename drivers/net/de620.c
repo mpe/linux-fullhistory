@@ -580,7 +580,7 @@ de620_start_xmit(struct sk_buff *skb, struct device *dev)
 
 	restore_flags(flags); /* interrupts maybe back on */
 
-	dev_kfree_skb (skb, FREE_WRITE);
+	dev_kfree_skb (skb);
 
 	return 0;
 }

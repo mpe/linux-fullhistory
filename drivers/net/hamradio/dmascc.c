@@ -800,7 +800,7 @@ static int scc_send_packet(struct sk_buff *skb, struct device *dev)
   /* Block a timer-based transmit from overlapping */
   if (test_and_set_bit(0, (void *) &priv->tx_sem) != 0) {
     atomic_inc((void *) &priv->stats.tx_dropped);
-    dev_kfree_skb(skb, FREE_WRITE);
+    dev_kfree_skb(skb);
     return 0;
   }
 
@@ -836,7 +836,7 @@ static int scc_send_packet(struct sk_buff *skb, struct device *dev)
 
   restore_flags(flags);
 
-  dev_kfree_skb(skb, FREE_WRITE);
+  dev_kfree_skb(skb);
 
   priv->tx_sem = 0;
   return 0;

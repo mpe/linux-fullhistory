@@ -47,7 +47,7 @@ bfifo_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 		q->qbytes += skb->len;
 		return 0;
 	}
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 	return 1;
 }
 
@@ -71,7 +71,7 @@ bfifo_reset(struct Qdisc* sch)
 
 	while((skb=skb_dequeue(&sch->q)) != NULL) {
 		q->qbytes -= skb->len;
-		kfree_skb(skb,FREE_WRITE);
+		kfree_skb(skb);
 	}
 	if (q->qbytes) {
 		printk("fifo_reset: qbytes=%d\n", q->qbytes);
@@ -88,7 +88,7 @@ pfifo_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 		skb_queue_tail(&sch->q, skb);
 		return 0;
 	}
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 	return 1;
 }
 
@@ -104,7 +104,7 @@ pfifo_reset(struct Qdisc* sch)
 	struct sk_buff *skb;
 
 	while((skb=skb_dequeue(&sch->q))!=NULL)
-		kfree_skb(skb,FREE_WRITE);
+		kfree_skb(skb);
 }
 
 

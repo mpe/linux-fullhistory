@@ -680,7 +680,7 @@ static int pt_detect( void )
 	return -1;
 }
 
-#define DEVICE_NR(x)	(x % 128)
+#define DEVICE_NR(dev)	(MINOR(dev) % 128)
 
 static int pt_open (struct inode *inode, struct file *file)
 
@@ -711,7 +711,8 @@ static int pt_open (struct inode *inode, struct file *file)
 		return -EROFS;
 		}
 
-	if (!(inode->i_rdev & 128)) PT.flags |= PT_REWIND;
+	if (!(MINOR(inode->i_rdev) & 128))
+		PT.flags |= PT_REWIND;
 
 	PT.bufptr = kmalloc(PT_BUFSIZE,GFP_KERNEL);
 	if (PT.bufptr == NULL) {
@@ -726,18 +727,19 @@ static int pt_open (struct inode *inode, struct file *file)
 
 static int pt_ioctl(struct inode *inode,struct file *file,
                     unsigned int cmd, unsigned long arg)
-
-{       int unit;
+{
+	int unit;
 	struct mtop mtop;
 
-
-        if ((!inode) || (!inode->i_rdev)) return -EINVAL;
+        if (!inode || !inode->i_rdev)
+		return -EINVAL;
         unit = DEVICE_NR(inode->i_rdev);
-        if (unit >= PT_UNITS) return -EINVAL;
-        if (!PT.present) return -ENODEV;
+        if (unit >= PT_UNITS)
+		return -EINVAL;
+        if (!PT.present)
+		return -ENODEV;
 
         switch (cmd) {
-
 	    case MTIOCTOP:	
 		if (copy_from_user((char *)&mtop, (char *)arg, 
 			           sizeof(struct mtop))) return -EFAULT;
@@ -763,8 +765,8 @@ static int pt_ioctl(struct inode *inode,struct file *file,
 
 
 static int pt_release (struct inode *inode, struct file *file)
-
-{       int	unit = DEVICE_NR(inode->i_rdev);
+{
+        int	unit = DEVICE_NR(inode->i_rdev);
 
         if ((unit >= PT_UNITS) || (PT.access <= 0)) 
                 return -EINVAL;
@@ -786,8 +788,8 @@ static int pt_release (struct inode *inode, struct file *file)
 
 static ssize_t pt_read(struct file * filp, char * buf, 
                        size_t count, loff_t *ppos)
-
-{  	struct 	inode *ino = filp->f_dentry->d_inode;
+{
+  	struct 	inode *ino = filp->f_dentry->d_inode;
 	int	unit = DEVICE_NR(ino->i_rdev);
 	char	rd_cmd[12] = {ATAPI_READ_6,1,0,0,0,0,0,0,0,0,0,0};
 	int	k, n, r, p, s, t, b;
@@ -870,8 +872,8 @@ static ssize_t pt_read(struct file * filp, char * buf,
 
 static ssize_t pt_write(struct file * filp, const char * buf, 
                         size_t count, loff_t *ppos)
-
-{       struct inode *ino = filp->f_dentry->d_inode;
+{
+        struct inode *ino = filp->f_dentry->d_inode;
         int unit = DEVICE_NR(ino->i_rdev);
         char    wr_cmd[12] = {ATAPI_WRITE_6,1,0,0,0,0,0,0,0,0,0,0};
         int     k, n, r, p, s, t, b;

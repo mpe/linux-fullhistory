@@ -673,6 +673,8 @@
 #include "sd.h"
 #include "advansys.h"
 
+#include <linux/bios32.h>
+
 /*
  * If Linux eventually defines a DID_UNDERRUN, the constant here can be
  * removed. The current value of zero for DID_UNDERRUN results in underrun
@@ -7612,74 +7614,8 @@ asc_get_cfg_byte(PCI_DATA *pciData)
 )
 {
     uchar tmp;
-    ulong address;
-    ulong lbus = pciData->bus, lslot = pciData->slot, lfunc = pciData->func;
-    uchar t2CFA, t2CF8;
-    ulong t1CF8, t1CFC;
 
-    ASC_DBG1(4, "asc_get_cfg_byte: type: %d\n", pciData->type);
-
-    /*
-     * Check type of configuration mechanism.
-     */
-    if (pciData->type == 2) {
-        /*
-         * Save registers to be restored later.
-         */
-        t2CFA = inp(0xCFA);    /* save PCI bus register */
-        t2CF8 = inp(0xCF8);    /* save config space enable register */
-
-        /*
-         * Write the bus and enable registers.
-         */
-        /* set for type 1 cycle, if needed */
-        outp(0xCFA, pciData->bus);
-        /* set the function number */
-        outp(0xCF8, 0x10 | (pciData->func << 1));
-
-        /*
-         * Read configuration space type 2 locations.
-         */
-        tmp = inp(0xC000 | ((pciData->slot << 8) + pciData->offset));
-
-        /*
-         * Restore registers.
-         */
-        outp(0xCF8, t2CF8);    /* restore the enable register */
-        outp(0xCFA, t2CFA);    /* restore PCI bus register */
-    } else {
-        /*
-         * Type 1 or 3 configuration mechanism.
-         *
-         * Save CONFIG_ADDRESS and CONFIG_DATA register values.
-         */
-        t1CF8 = inpl(0xCF8);
-        t1CFC = inpl(0xCFC);
-
-        /*
-         * enable <31>, bus = <23:16>, slot = <15:11>, func = <10:8>,
-         * reg = <7:2>
-         */
-        address = (ulong) ((lbus << 16) | (lslot << 11) |
-            (lfunc << 8) | (pciData->offset & 0xFC) | 0x80000000L);
-
-        /*
-         * Write out address to CONFIG_ADDRESS.
-         */
-        outpl(0xCF8, address);
-
-        /*
-         * Read in word from CONFIG_DATA.
-         */
-        tmp = (uchar) ((inpl(0xCFC) >> ((pciData->offset & 3) * 8)) & 0xFF);
-
-        /*
-         * Restore registers.
-         */
-        outpl(0xCF8, t1CF8);
-        outpl(0xCFC, t1CFC);
-    }
-    ASC_DBG1(4, "asc_get_cfg_byte: config data: %x\n", tmp);
+    pcibios_read_config_byte(pciData->bus, pciData->slot * 8 + pciData->func, pciData->offset, &tmp);
     return tmp;
 }
 

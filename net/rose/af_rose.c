@@ -378,7 +378,7 @@ void rose_destroy_socket(struct sock *sk)	/* Not static as it's used by the time
 			skb->sk->protinfo.rose->state = ROSE_STATE_0;
 		}
 
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 	}
 
 	if (atomic_read(&sk->wmem_alloc) != 0 || atomic_read(&sk->rmem_alloc) != 0) {
@@ -851,7 +851,7 @@ static int rose_accept(struct socket *sock, struct socket *newsock, int flags)
 
 	/* Now attach up the new socket */
 	skb->sk = NULL;
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	sk->ack_backlog--;
 	newsock->sk = newsk;
 
@@ -1064,7 +1064,7 @@ static int rose_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	SOCK_DEBUG(sk, "ROSE: Transmitting buffer\n");
 	
 	if (sk->state != TCP_ESTABLISHED) {
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return -ENOTCONN;
 	}
 

@@ -225,7 +225,7 @@ void x25_transmit_clear_request(struct x25_neigh *neigh, unsigned int lci, unsig
 void x25_transmit_link(struct sk_buff *skb, struct x25_neigh *neigh)
 {
 	if (call_fw_firewall(PF_X25, skb->dev, skb->data, NULL, &skb) != FW_ACCEPT) {
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return;
 	}
 
@@ -304,7 +304,7 @@ static void x25_remove_neigh(struct x25_neigh *x25_neigh)
 	struct sk_buff *skb;
 
 	while ((skb = skb_dequeue(&x25_neigh->queue)) != NULL)
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 
 	x25_stop_t20timer(x25_neigh);
 

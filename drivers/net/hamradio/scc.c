@@ -324,12 +324,12 @@ extern __inline__ void scc_discard_buffers(struct scc_channel *scc)
 	
 	if (scc->tx_buff != NULL)
 	{
-		dev_kfree_skb(scc->tx_buff, FREE_WRITE);
+		dev_kfree_skb(scc->tx_buff);
 		scc->tx_buff = NULL;
 	}
 	
 	while (skb_queue_len(&scc->tx_queue))
-		dev_kfree_skb(skb_dequeue(&scc->tx_queue), FREE_WRITE);
+		dev_kfree_skb(skb_dequeue(&scc->tx_queue));
 
 	restore_flags(flags);
 }
@@ -372,7 +372,7 @@ extern __inline__ void flush_rx_FIFO(struct scc_channel *scc)
 	if(scc->rx_buff != NULL)		/* did we receive something? */
 	{
 		scc->stat.rxerrs++;  /* then count it as an error */
-		kfree_skb(scc->rx_buff, FREE_READ);
+		kfree_skb(scc->rx_buff);
 		scc->rx_buff = NULL;
 	}
 }
@@ -406,7 +406,7 @@ extern __inline__ void scc_txint(struct scc_channel *scc)
 		
 		if (skb->len == 0)		/* Paranoia... */
 		{
-			dev_kfree_skb(skb, FREE_WRITE);
+			dev_kfree_skb(skb);
 			scc->tx_buff = NULL;
 			scc_tx_done(scc);
 			Outb(scc->ctrl, RES_Tx_P);
@@ -432,7 +432,7 @@ extern __inline__ void scc_txint(struct scc_channel *scc)
 	{
 		Outb(scc->ctrl, RES_Tx_P);	/* reset pending int */
 		cl(scc, R10, ABUNDER);		/* send CRC */
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 		scc->tx_buff = NULL;
 		scc->stat.tx_state = TXS_NEWFRAME; /* next frame... */
 		return;
@@ -513,7 +513,7 @@ extern __inline__ void scc_exint(struct scc_channel *scc)
 
 		if (scc->tx_buff != NULL)
 		{
-			dev_kfree_skb(scc->tx_buff, FREE_WRITE);
+			dev_kfree_skb(scc->tx_buff);
 			scc->tx_buff = NULL;
 		}
 		
@@ -563,7 +563,7 @@ extern __inline__ void scc_rxint(struct scc_channel *scc)
 #ifdef notdef
 		printk(KERN_DEBUG "z8530drv: oops, scc_rxint() received huge frame...\n");
 #endif
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		scc->rx_buff = NULL;
 		Inb(scc->data);
 		or(scc, R3, ENT_HM);
@@ -593,7 +593,7 @@ extern __inline__ void scc_spint(struct scc_channel *scc)
 		or(scc,R3,ENT_HM);               /* enter hunt mode for next flag */
 		
 		if (skb != NULL) 
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 		scc->rx_buff = NULL;
 	}
 
@@ -609,7 +609,7 @@ extern __inline__ void scc_spint(struct scc_channel *scc)
 			scc->rx_buff = NULL;
 			scc->stat.rxframes++;
 		} else {				/* a bad frame */
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			scc->rx_buff = NULL;
 			scc->stat.rxerrs++;
 		}
@@ -1671,7 +1671,7 @@ static void scc_net_rx(struct scc_channel *scc, struct sk_buff *skb)
 {
 	if (skb->len == 0)
 	{
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return;
 	}
 		
@@ -1695,14 +1695,14 @@ static int scc_net_tx(struct sk_buff *skb, struct device *dev)
 	
 	if (scc == NULL || scc->magic != SCC_MAGIC || dev->tbusy)
 	{
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 		return 0;
 	}
 
 	if (skb->len > scc->stat.bufsize || skb->len < 2)
 	{
 		scc->dev_stat.tx_dropped++;	/* bogus frame */
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 		return 0;
 	}
 	
@@ -1715,7 +1715,7 @@ static int scc_net_tx(struct sk_buff *skb, struct device *dev)
 	if (kisscmd)
 	{
 		scc_set_param(scc, kisscmd, *skb->data);
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 		return 0;
 	}
 
@@ -1726,7 +1726,7 @@ static int scc_net_tx(struct sk_buff *skb, struct device *dev)
 	{
 		struct sk_buff *skb_del;
 		skb_del = __skb_dequeue(&scc->tx_queue);
-		dev_kfree_skb(skb_del, FREE_WRITE);
+		dev_kfree_skb(skb_del);
 	}
 	__skb_queue_tail(&scc->tx_queue, skb);
 

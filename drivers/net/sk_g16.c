@@ -1251,7 +1251,7 @@ static int SK_send_packet(struct sk_buff *skb, struct device *dev)
 	   dev->tbusy = 0;
 	}
     }
-    dev_kfree_skb(skb, FREE_WRITE);
+    dev_kfree_skb(skb);
     return 0;  
 } /* End of SK_send_packet */
 

@@ -759,7 +759,7 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 			
 			return dev->tbusy;
 		}
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 		
 		save_flags(host_cpu_flags);
                 cli();
@@ -832,7 +832,7 @@ static int if_send (struct sk_buff* skb, struct device* dev)
 tx_done:
 	if (!dev->tbusy)
 	{
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 	}
 	card->wandev.critical = 0;
 	save_flags(host_cpu_flags);
@@ -1000,7 +1000,7 @@ static void rx_intr (sdla_t* card)
 	if (skb_tailroom(skb) < len)
 	{
 		/* No room for the packet. Call off the whole thing! */
-		dev_kfree_skb(skb, FREE_READ);
+		dev_kfree_skb(skb);
 		chan->rx_skb = NULL;
 		if (qdm & 0x01) chan->drop_sequence = 1;
 
@@ -1023,7 +1023,7 @@ static void rx_intr (sdla_t* card)
 	if (!skb->protocol && !wan_type_trans(skb, dev))
 	{
 		/* can't decapsulate packet */
-		dev_kfree_skb(skb, FREE_READ);
+		dev_kfree_skb(skb);
 		++chan->ifstats.rx_errors;
 	}
 	else
@@ -1038,7 +1038,7 @@ static void rx_intr (sdla_t* card)
 				}
 				else
 				{
-					dev_kfree_skb(skb, FREE_WRITE);
+					dev_kfree_skb(skb);
 				}
 			}
 			else
@@ -1211,7 +1211,7 @@ static void poll_active (sdla_t* card)
 		{
 			chan->tx_skb = NULL;
 			dev->tbusy = 0;
-			dev_kfree_skb(skb, FREE_WRITE);
+			dev_kfree_skb(skb);
 		}
 
 		/* If SVC has been idle long enough, close virtual circuit */

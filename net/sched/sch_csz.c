@@ -459,7 +459,7 @@ csz_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 
 	this = &q->flow[flow_id];
 	if (this->q.qlen >= this->max_bytes || this->L_tab == NULL) {
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -711,12 +711,12 @@ csz_reset(struct Qdisc* sch)
 
 	for (i=0; i<4; i++)
 		while ((skb=skb_dequeue(&q->other[i])) != NULL)
-			kfree_skb(skb, 0);
+			kfree_skb(skb);
 
 	for (i=0; i<CSZ_MAX_GUARANTEED; i++) {
 		struct csz_flow *this = q->flow + i;
 		while ((skb = skb_dequeue(&this->q)) != NULL)
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 		this->snext = this->sprev =
 		this->fnext = this->fprev = (struct csz_head*)this;
 		this->start = this->finish = 0;

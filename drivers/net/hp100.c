@@ -1474,7 +1474,7 @@ static void hp100_clean_txring(struct device *dev)
 		       hp100_inb(TX_PDL),
 		       donecount);
 #endif
-		dev_kfree_skb(lp->txrhead->skb, FREE_WRITE);
+		dev_kfree_skb(lp->txrhead->skb);
 		lp->txrhead->skb = (void *) NULL;
 		lp->txrhead = lp->txrhead->next;
 		lp->txrcommit--;
@@ -1599,7 +1599,7 @@ static int hp100_start_xmit(struct sk_buff *skb, struct device *dev)
 	dev->trans_start = jiffies;
 	hp100_ints_on();
 
-	dev_kfree_skb(skb, FREE_WRITE);
+	dev_kfree_skb(skb);
 
 #ifdef HP100_DEBUG_TX
 	printk("hp100_start_xmit: end\n");
@@ -1815,7 +1815,7 @@ static void hp100_rx_bm(struct device *dev)
 			printk("hp100: rx_bm: Received bad packet (length=%d)\n", pkt_len);
 #endif
 			if (ptr->skb != NULL)
-				dev_kfree_skb(ptr->skb, FREE_READ);
+				dev_kfree_skb(ptr->skb);
 			lp->stats.rx_errors++;
 		}
 

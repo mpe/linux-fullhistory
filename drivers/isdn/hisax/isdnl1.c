@@ -453,7 +453,7 @@ process_rcv(struct IsdnCardState *sp)
 				stptr = stptr->next;
 			}
 			SET_SKB_FREE(skb);
-			dev_kfree_skb(skb, FREE_READ);
+			dev_kfree_skb(skb);
 		} else {
 			found = 0;
 			while (stptr != NULL)
@@ -478,7 +478,7 @@ process_rcv(struct IsdnCardState *sp)
 					dlogframe(sp, skb->data + 4, skb->len - 4, tmp);
 				}
 				SET_SKB_FREE(skb);
-				dev_kfree_skb(skb, FREE_READ);
+				dev_kfree_skb(skb);
 			}
 		}
 
@@ -714,7 +714,7 @@ HiSax_l2l1discardq(struct PStack *st, int pr,
 
 	while ((skb = skb_dequeue(&sp->sq))) {
 		SET_SKB_FREE(skb);
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 	}
 }
 
@@ -798,15 +798,15 @@ close_hscxstate(struct HscxState *hs)
 		}
 		while ((skb = skb_dequeue(&hs->rqueue))) {
 			SET_SKB_FREE(skb);
-			dev_kfree_skb(skb, FREE_READ);
+			dev_kfree_skb(skb);
 		}
 		while ((skb = skb_dequeue(&hs->squeue))) {
 			SET_SKB_FREE(skb);
-			dev_kfree_skb(skb, FREE_WRITE);
+			dev_kfree_skb(skb);
 		}
 		if (hs->tx_skb) {
 			SET_SKB_FREE(hs->tx_skb);
-			dev_kfree_skb(hs->tx_skb, FREE_WRITE);
+			dev_kfree_skb(hs->tx_skb);
 			hs->tx_skb = NULL;
 		}
 	}
@@ -828,15 +828,15 @@ closecard(int cardnr)
 	}
 	while ((skb = skb_dequeue(&csta->rq))) {
 		SET_SKB_FREE(skb);
-		dev_kfree_skb(skb, FREE_READ);
+		dev_kfree_skb(skb);
 	}
 	while ((skb = skb_dequeue(&csta->sq))) {
 		SET_SKB_FREE(skb);
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 	}
 	if (csta->tx_skb) {
 		SET_SKB_FREE(csta->tx_skb);
-		dev_kfree_skb(csta->tx_skb, FREE_WRITE);
+		dev_kfree_skb(csta->tx_skb);
 		csta->tx_skb = NULL;
 	}
 	switch (csta->typ) {
@@ -1219,7 +1219,7 @@ hscx_l2l1discardq(struct PStack *st, int pr, void *heldby,
 
 	while ((skb = skb_dequeue(&hsp->squeue))) {
 		SET_SKB_FREE(skb);
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 	}
 }
 

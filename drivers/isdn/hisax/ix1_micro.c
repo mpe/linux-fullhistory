@@ -363,7 +363,7 @@ hscx_interrupt(struct IsdnCardState *sp, u_char val, u_char hscx)
 				return;
 			} else {
 				SET_SKB_FREE(hsp->tx_skb);
-				dev_kfree_skb(hsp->tx_skb, FREE_WRITE);
+				dev_kfree_skb(hsp->tx_skb);
 				hsp->count = 0;
 				if (hsp->st->l4.l1writewakeup)
 					hsp->st->l4.l1writewakeup(hsp->st);
@@ -526,7 +526,7 @@ isac_interrupt(struct IsdnCardState *sp, u_char val)
 				goto afterXPR;
 			} else {
 				SET_SKB_FREE(sp->tx_skb);
-				dev_kfree_skb(sp->tx_skb, FREE_WRITE);
+				dev_kfree_skb(sp->tx_skb);
 				sp->tx_cnt = 0;
 				sp->tx_skb = NULL;
 			}

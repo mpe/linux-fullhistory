@@ -116,14 +116,14 @@ static inline void qe_clean_rings(struct sunqe *qep)
 
 	for(i = 0; i < RX_RING_SIZE; i++) {
 		if(qep->rx_skbs[i] != NULL) {
-			dev_kfree_skb(qep->rx_skbs[i], FREE_READ);
+			dev_kfree_skb(qep->rx_skbs[i]);
 			qep->rx_skbs[i] = NULL;
 		}
 	}
 
 	for(i = 0; i < TX_RING_SIZE; i++) {
 		if(qep->tx_skbs[i] != NULL) {
-			dev_kfree_skb(qep->tx_skbs[i], FREE_WRITE);
+			dev_kfree_skb(qep->tx_skbs[i]);
 			qep->tx_skbs[i] = NULL;
 		}
 	}
@@ -451,7 +451,7 @@ static inline void qe_tx(struct sunqe *qep)
 		mmu_sync_dma(((u32)((unsigned long)skb->data)),
 			     skb->len, qep->qe_sbusdev->my_bus);
 #endif
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 
 		qep->net_stats.tx_packets++;
 		elem = NEXT_TX(elem);
@@ -804,7 +804,7 @@ static int sun4c_qe_start_xmit(struct sk_buff *skb, struct device *dev)
 
 	qep->net_stats.tx_bytes+=skb->len;
 	
-	dev_kfree_skb(skb, FREE_WRITE);
+	dev_kfree_skb(skb);
 
 	if(SUN4C_TX_BUFFS_AVAIL(qep))
 		dev->tbusy = 0;

@@ -228,7 +228,7 @@ static int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 	if (rarp->ar_hln != dev->addr_len || dev->type != ntohs(rarp->ar_hrd) 
 		|| dev->flags&IFF_NOARP || !in_dev || !in_dev->ifa_list)
 	{
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -237,7 +237,7 @@ static int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
  */
 	if (rarp->ar_op != htons(ARPOP_RREQUEST))
 	{
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -255,7 +255,7 @@ static int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 		/*
 		 *	This packet is not for us. Remove it. 
 		 */
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
   
@@ -287,7 +287,7 @@ static int rarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 			dev->dev_addr, sha);
 	}
 
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	return 0;
 }
 

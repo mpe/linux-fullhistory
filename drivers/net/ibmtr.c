@@ -790,7 +790,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 						      DPRINTK("error on xmit_dir_frame request: %02X\n",
 							      xmit_ret_code);
 						      if (ti->current_skb) {
-							      dev_kfree_skb(ti->current_skb, FREE_WRITE);
+							      dev_kfree_skb(ti->current_skb);
 							      ti->current_skb=NULL;
 						      }
 						      dev->tbusy=0;
@@ -807,7 +807,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 						      DPRINTK("error on xmit_ui_frame request: %02X\n",
 							      xmit_ret_code);
 						      if (ti->current_skb) {
-							      dev_kfree_skb(ti->current_skb, FREE_WRITE);
+							      dev_kfree_skb(ti->current_skb);
 							      ti->current_skb=NULL;
 						      }
 						      dev->tbusy=0;
@@ -1305,7 +1305,7 @@ static void tr_tx(struct device *dev)
 
 	writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 	dev->tbusy=0;
-	dev_kfree_skb(ti->current_skb,FREE_WRITE);
+	dev_kfree_skb(ti->current_skb);
 	ti->current_skb=NULL;
 	mark_bh(NET_BH);
 	if (ti->readlog_pending) ibmtr_readlog(dev);

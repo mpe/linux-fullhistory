@@ -56,6 +56,9 @@ EXPORT_SYMBOL(_readl);
 EXPORT_SYMBOL(_writeb);
 EXPORT_SYMBOL(_writew);
 EXPORT_SYMBOL(_writel);
+EXPORT_SYMBOL(_memcpy_fromio);
+EXPORT_SYMBOL(_memcpy_toio);
+EXPORT_SYMBOL(_memset_io);
 EXPORT_SYMBOL(insb);
 EXPORT_SYMBOL(insw);
 EXPORT_SYMBOL(insl);
@@ -101,9 +104,11 @@ EXPORT_SYMBOL(sys_wait4);
 
 /* Networking helper routines. */
 EXPORT_SYMBOL(csum_tcpudp_magic);
-EXPORT_SYMBOL(ip_fast_csum);
 EXPORT_SYMBOL(ip_compute_csum);
+EXPORT_SYMBOL(ip_fast_csum);
 EXPORT_SYMBOL(csum_partial_copy);
+EXPORT_SYMBOL(csum_partial_copy_from_user);
+EXPORT_SYMBOL(csum_ipv6_magic);
 
 /*
  * The following are specially called from the uaccess assembly stubs.

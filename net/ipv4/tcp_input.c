@@ -763,7 +763,7 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack, __u32 *seq,
 
 		skb_unlink(skb);
 		
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 	}
 
 	if (acked) {
@@ -1067,7 +1067,7 @@ static void tcp_ofo_queue(struct sock *sk)
 		if (!after(skb->end_seq, tp->rcv_nxt)) {
 			SOCK_DEBUG(sk, "ofo packet was already received \n");
 			skb_unlink(skb);
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 			continue;
 		}
 		SOCK_DEBUG(sk, "ofo requeuing : rcv_next %X seq %X - %X\n",
@@ -1106,7 +1106,7 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 		SOCK_DEBUG(sk, "retransmit received: seq %X\n", skb->seq);
 
 		tp->delayed_acks = MAX_DELAY_ACK;
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return;
 	}
 
@@ -1135,7 +1135,7 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 			if (skb->seq == skb1->seq && skb->len >= skb1->len) {
  				skb_append(skb1, skb);
  				skb_unlink(skb1);
- 				kfree_skb(skb1, FREE_READ);
+ 				kfree_skb(skb1);
 				break;
 			}
 			
@@ -1345,7 +1345,7 @@ static void prune_queue(struct sock *sk)
 	 * useful packets (crossing fingers).
 	 */
 	while ((skb = skb_dequeue_tail(&sk->out_of_order_queue))) { 
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		if (atomic_read(&sk->rmem_alloc) <= sk->rcvbuf)
 			return;
 	}
@@ -1362,7 +1362,7 @@ static void prune_queue(struct sock *sk)
 		}
 		skb_unlink(skb);
 		tp->rcv_nxt = skb->seq;
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		if (atomic_read(&sk->rmem_alloc) <= sk->rcvbuf) 
 			break;
 	}
@@ -1420,7 +1420,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 			/* Bulk data transfer: sender */
 			if (len == th->doff*4) {
 				tcp_ack(sk, th, skb->seq, skb->ack_seq, len); 
-				kfree_skb(skb, FREE_READ); 
+				kfree_skb(skb); 
 				tcp_data_snd_check(sk);
 				return 0;
 			} else { /* Header too small */
@@ -1504,7 +1504,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 
 	if (!queued) {
 	discard:
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 	}
 
 	return 0;
@@ -1929,7 +1929,7 @@ step6:
 
 	if (!queued) { 
 discard:
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 	}
 	return 0;
 }

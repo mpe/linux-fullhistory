@@ -43,10 +43,10 @@ void lapb_clear_queues(lapb_cb *lapb)
 	struct sk_buff *skb;
 
 	while ((skb = skb_dequeue(&lapb->write_queue)) != NULL)
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 
 	while ((skb = skb_dequeue(&lapb->ack_queue)) != NULL)
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 }
 
 /*
@@ -67,7 +67,7 @@ void lapb_frames_acked(lapb_cb *lapb, unsigned short nr)
 	if (lapb->va != nr) {
 		while (skb_peek(&lapb->ack_queue) != NULL && lapb->va != nr) {
 		        skb = skb_dequeue(&lapb->ack_queue);
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			lapb->va = (lapb->va + 1) % modulus;
 		}
 	}

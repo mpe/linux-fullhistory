@@ -1169,7 +1169,7 @@ static void handle_data(_cmsg * cmsg, struct sk_buff *skb)
 		printk(KERN_ERR "capidrv: %s: ncci 0x%x not found\n",
 		       capi_cmd2str(cmsg->Command, cmsg->Subcommand),
 		       cmsg->adr.adrNCCI);
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return;
 	}
 	(void) skb_pull(skb, CAPIMSG_LEN(skb->data));
@@ -1194,7 +1194,7 @@ static void capidrv_signal(__u16 applid, __u32 dummy)
 			handle_data(&s_cmsg, skb);
 			continue;
 		}
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		if ((s_cmsg.adr.adrController & 0xffffff00) == 0)
 			handle_controller(&s_cmsg);
 		else if ((s_cmsg.adr.adrPLCI & 0xffff0000) == 0)
@@ -1517,10 +1517,10 @@ static int if_sendbuf(int id, int channel, struct sk_buff *skb)
 		errcode = (*capifuncs->capi_put_message) (global.appid, nskb);
 		switch (errcode) {
 		case CAPI_NOERROR:
-			dev_kfree_skb(skb, FREE_WRITE);
+			dev_kfree_skb(skb);
 			return len;
 		case CAPI_SENDQUEUEFULL:
-			dev_kfree_skb(nskb, FREE_WRITE);
+			dev_kfree_skb(nskb);
 			return 0;
 		default:
 			return -1;

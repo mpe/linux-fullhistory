@@ -870,7 +870,7 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 	/* Kick the lance: transmit now */
 	ll->rdp = LE_C0_INEA | LE_C0_TDMD;
 	dev->trans_start = jiffies;
-	dev_kfree_skb (skb, FREE_WRITE);
+	dev_kfree_skb (skb);
     
 	if (TX_BUFFS_AVAIL)
 		dev->tbusy = 0;

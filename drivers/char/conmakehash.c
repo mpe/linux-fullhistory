@@ -283,7 +283,7 @@ u8 dfont_unicount[%d] = \n\
 	}
       printf("0x%04x", unitable[fp0][nent++]);
       if ( i == nuni-1 )
-         printf("\n};");
+         printf("\n};\n");
        else if ( i % 8 == 7 )
          printf(",\n\t");
        else

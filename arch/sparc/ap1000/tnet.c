@@ -596,11 +596,10 @@ void tnet_send_ip(int cid,struct sk_buff *skb)
 		int *info = (int *)skb->data; /* re-use the header */
 		info[0] = (int)data;
 		info[1] = size;
-		info[2] = tnet_add_completion(free_skb,(int)skb,(int)FREE_WRITE);
+		info[2] = tnet_add_completion(free_skb, (int)skb, 0);
 		tnet_send(cid,TNET_IP,info,sizeof(int)*3,0,0);
 	} else {
-		flag = tnet_add_completion(free_skb,
-					   (int)skb,(int)FREE_WRITE);
+		flag = tnet_add_completion(free_skb, (int)skb, 0);
 		tnet_send(cid,TNET_IP_SMALL,data,size,0,flag);
 		tnet_stats.small_packets_sent++;
 	}

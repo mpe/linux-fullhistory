@@ -98,7 +98,7 @@ void x25_output(struct sock *sk, struct sk_buff *skb)
 			skb_queue_tail(&sk->write_queue, skbn);
 		}
 		
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 	} else {
 		skb_queue_tail(&sk->write_queue, skb);
 	}

@@ -140,14 +140,14 @@ int ax25_rebuild_header(struct sk_buff *skb)
 			 *	gets fixed.
 			 */
 			if ((ourskb = skb_copy(skb, GFP_ATOMIC)) == NULL) {
-				kfree_skb(skb, FREE_WRITE);
+				kfree_skb(skb);
 				return 1;
 			}
 
 			if (skb->sk != NULL)
 				skb_set_owner_w(ourskb, skb->sk);
 
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 
 			skb_pull(ourskb, AX25_HEADER_LEN - 1);	/* Keep PID */
 
@@ -169,7 +169,7 @@ int ax25_rebuild_header(struct sk_buff *skb)
 
 	if (route->digipeat != NULL) {
 		if ((ourskb = ax25_rt_build_path(skb, src, dst, route->digipeat)) == NULL) {
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			return 1;
 		}
 

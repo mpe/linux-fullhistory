@@ -77,7 +77,7 @@ int ipv6_routing_header(struct sk_buff **skb_ptr, struct device *dev,
 			pos += 1;
 
 		icmpv6_send(skb, ICMPV6_PARAMETER_PROB, 0, pos, dev);
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;	
 	}
 
@@ -94,7 +94,7 @@ int ipv6_routing_header(struct sk_buff **skb_ptr, struct device *dev,
 		pos += 3;
 
 		icmpv6_send(skb, ICMPV6_PARAMETER_PROB, 0, pos, dev);
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -107,7 +107,7 @@ int ipv6_routing_header(struct sk_buff **skb_ptr, struct device *dev,
 	addr_type = ipv6_addr_type(addr);
 
 	if (addr_type == IPV6_ADDR_MULTICAST) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 

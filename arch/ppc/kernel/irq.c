@@ -224,10 +224,6 @@ int get_irq_list(char *buf)
 		}
 		len += sprintf(buf+len, "\n");
 	}
-#ifdef __SMP_PROF__
-	len+=sprintf(buf+len, "IPI: %8lu received\n",
-		ipi_count);
-#endif
 	len += sprintf(buf+len, "99: %10u   spurious or short\n",
 		       spurious_interrupts);
 	return len;

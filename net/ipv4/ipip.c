@@ -384,7 +384,7 @@ void ipip_err(struct sk_buff *skb, unsigned char *dp, int len)
 
 	/* Try to guess incoming interface */
 	if (ip_route_output(&rt, eiph->saddr, 0, RT_TOS(eiph->tos), 0)) {
-		kfree_skb(skb2, FREE_WRITE);
+		kfree_skb(skb2);
 		return;
 	}
 	skb2->dev = rt->u.dst.dev;
@@ -396,14 +396,14 @@ void ipip_err(struct sk_buff *skb, unsigned char *dp, int len)
 		if (ip_route_output(&rt, eiph->daddr, eiph->saddr, eiph->tos, 0) ||
 		    rt->u.dst.dev->type != ARPHRD_IPGRE) {
 			ip_rt_put(rt);
-			kfree_skb(skb2, FREE_WRITE);
+			kfree_skb(skb2);
 			return;
 		}
 	} else {
 		ip_rt_put(rt);
 		if (ip_route_input(skb2, eiph->daddr, eiph->saddr, eiph->tos, skb2->dev) ||
 		    skb2->dst->dev->type != ARPHRD_IPGRE) {
-			kfree_skb(skb2, FREE_WRITE);
+			kfree_skb(skb2);
 			return;
 		}
 	}
@@ -411,7 +411,7 @@ void ipip_err(struct sk_buff *skb, unsigned char *dp, int len)
 	/* change mtu on this route */
 	if (type == ICMP_DEST_UNREACH && code == ICMP_FRAG_NEEDED) {
 		if (rel_info > skb2->dst->pmtu) {
-			kfree_skb(skb2, FREE_WRITE);
+			kfree_skb(skb2);
 			return;
 		}
 		skb2->dst->pmtu = rel_info;
@@ -425,7 +425,7 @@ void ipip_err(struct sk_buff *skb, unsigned char *dp, int len)
 	}
 
 	icmp_send(skb2, rel_type, rel_code, rel_info);
-	kfree_skb(skb2, FREE_WRITE);
+	kfree_skb(skb2);
 	return;
 #endif
 }
@@ -454,7 +454,7 @@ int ipip_rcv(struct sk_buff *skb, unsigned short len)
 	}
 
 	icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PROT_UNREACH, 0);
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	return 0;
 }
 
@@ -548,11 +548,11 @@ static int ipip_tunnel_xmit(struct sk_buff *skb, struct device *dev)
 		if (!new_skb) {
 			ip_rt_put(rt);
   			stats->tx_dropped++;
-			dev_kfree_skb(skb, FREE_WRITE);
+			dev_kfree_skb(skb);
 			tunnel->recursion--;
 			return 0;
 		}
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 		skb = new_skb;
 	}
 
@@ -591,7 +591,7 @@ tx_error_icmp:
 	icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0);
 tx_error:
 	stats->tx_errors++;
-	dev_kfree_skb(skb, FREE_WRITE);
+	dev_kfree_skb(skb);
 	tunnel->recursion--;
 	return 0;
 }

@@ -408,7 +408,7 @@ static void a_exint(struct pi_local *lp)
     }
     switch (lp->tstate) {
     case ACTIVE:
-	kfree_skb(lp->sndbuf, FREE_WRITE);
+	kfree_skb(lp->sndbuf);
 	lp->sndbuf = NULL;
 	lp->tstate = FLAGOUT;
 	tdelay(lp, lp->squeldelay);
@@ -726,7 +726,7 @@ static void b_txint(struct pi_local *lp)
 	    /* stuffing a char satisfies Interrupt condition */
 	} else {
 	    /* No more to send */
-	    kfree_skb(lp->sndbuf, FREE_WRITE);
+	    kfree_skb(lp->sndbuf);
 	    lp->sndbuf = NULL;
 	    if ((rdscc(lp->cardbase, cmd, R0) & 0x40)) {
 		/* Did we underrun? */
@@ -778,7 +778,7 @@ static void b_exint(struct pi_local *lp)
 
     switch (lp->tstate) {
     case ACTIVE:		/* Unexpected underrun */
-	kfree_skb(lp->sndbuf, FREE_WRITE);
+	kfree_skb(lp->sndbuf);
 	lp->sndbuf = NULL;
 	wrtscc(lp->cardbase, cmd, R0, SEND_ABORT);
 	lp->tstate = FLAGOUT;
@@ -1553,7 +1553,7 @@ static int pi_close(struct device *dev)
 
     /* Free any buffers left in the hardware transmit queue */
     while ((ptr = skb_dequeue(&lp->sndq)) != NULL)
-	kfree_skb(ptr, FREE_WRITE);
+	kfree_skb(ptr);
 
     restore_flags(flags);
 

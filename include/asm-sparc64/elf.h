@@ -25,10 +25,6 @@ typedef unsigned long elf_fpregset_t;
 #define ELF_DATA		ELFDATA2MSB
 #endif
 
-#ifndef ELF_FLAGS_INIT
-#define ELF_FLAGS_INIT current->tss.flags &= ~SPARC_FLAG_32BIT
-#endif
-
 /*
  * This is used to ensure we don't load something for the wrong architecture.
  */
@@ -63,8 +59,13 @@ typedef unsigned long elf_fpregset_t;
 #define ELF_PLATFORM	(NULL)
 
 #ifdef __KERNEL__
-#define SET_PERSONALITY(ibcs2)					\
+#define SET_PERSONALITY(ex, ibcs2)				\
 do {								\
+	if ((ex).e_ident[EI_CLASS] == ELFCLASS32)		\
+		current->tss.flags |= SPARC_FLAG_32BIT;		\
+	else							\
+		current->tss.flags &= ~SPARC_FLAG_32BIT;	\
+								\
 	if (ibcs2)						\
 		current->personality = PER_SVR4;		\
 	else if (current->personality != PER_LINUX32)		\

@@ -277,7 +277,7 @@ isdn_free_queue(struct sk_buff_head *queue)
 	cli();
 	if (skb_queue_len(queue))
 		while ((skb = skb_dequeue(queue)))
-			isdn_trash_skb(skb, FREE_READ);
+			isdn_trash_skb(skb);
 	restore_flags(flags);
 }
 
@@ -374,7 +374,7 @@ isdn_receive_skb_callback(int di, int channel, struct sk_buff *skb)
 	int i;
 
 	if ((i = isdn_dc2minor(di, channel)) == -1) {
-		isdn_trash_skb(skb, FREE_READ);
+		isdn_trash_skb(skb);
 		return;
 	}
 	/* Update statistics */
@@ -389,7 +389,7 @@ isdn_receive_skb_callback(int di, int channel, struct sk_buff *skb)
 			return;
 		wake_up_interruptible(&dev->drv[di]->rcv_waitq[channel]);
 	} else
-		isdn_trash_skb(skb, FREE_READ);
+		isdn_trash_skb(skb);
 }
 
 void
@@ -752,7 +752,7 @@ isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, int user
 			ISDN_AUDIO_SKB_LOCK(skb) = 0;
 #endif
 			skb = skb_dequeue(&dev->drv[di]->rpqueue[channel]);
-			isdn_trash_skb(skb, FREE_READ);
+			isdn_trash_skb(skb);
 		} else {
 			/* Not yet emptied this buff, so it
 			 * must stay in the queue, for further calls
@@ -1892,7 +1892,7 @@ isdn_writebuf_stub(int drvidx, int chan, const u_char * buf, int len,
 		ret = dev->drv[drvidx]->interface->writebuf_skb(drvidx,
 							      chan, skb);
 		if (ret <= 0)
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 	}
 	if (ret > 0)
 		dev->obytes[isdn_dc2minor(drvidx, chan)] += ret;
@@ -1919,7 +1919,7 @@ isdn_writebuf_skb_stub(int drvidx, int chan, struct sk_buff *skb)
 	else {
 		if ((ret = dev->drv[drvidx]->interface->
 		  writebuf(drvidx, chan, skb->data, skb->len, 0)) == len)
-			dev_kfree_skb(skb, FREE_WRITE);
+			dev_kfree_skb(skb);
 	}
 	if (ret > 0)
 		dev->obytes[isdn_dc2minor(drvidx, chan)] += len;

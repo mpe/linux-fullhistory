@@ -350,7 +350,7 @@ ic_rarp_recv(struct sk_buff *skb, struct device *dev, struct packet_type *pt))
 
 	/* And throw the packet out... */
 drop:
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	return 0;
 }
 

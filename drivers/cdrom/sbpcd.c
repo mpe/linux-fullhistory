@@ -5417,7 +5417,7 @@ static struct cdrom_device_info sbpcd_info = {
   &sbpcd_dops,                /* device operations */
   NULL,                       /* link */
   NULL,                       /* handle */
-  MKDEV(MAJOR_NR,0),          /* dev */
+  0,		              /* dev */
   0,                          /* mask */
   2,                          /* maximum speed */
   1,                          /* number of discs */

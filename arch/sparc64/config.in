@@ -138,7 +138,7 @@ if [ "$CONFIG_SCSI" != "n" ]; then
 	dep_tristate 'SCSI tape support' CONFIG_CHR_DEV_ST $CONFIG_SCSI
 	dep_tristate 'SCSI CDROM support' CONFIG_BLK_DEV_SR $CONFIG_SCSI
 	if [ "$CONFIG_BLK_DEV_SR" != "n" ]; then
-	  bool '  Enable vendor-specific extentions (for SCSI CDROM)' CONFIG_BLK_DEV_SR_VENDOR
+	  bool '  Enable vendor-specific extensions (for SCSI CDROM)' CONFIG_BLK_DEV_SR_VENDOR
 	fi
 	dep_tristate 'SCSI generic support' CONFIG_CHR_DEV_SG $CONFIG_SCSI
 

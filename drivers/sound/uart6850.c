@@ -22,35 +22,35 @@
 #include "soundmodule.h"
 #if defined(CONFIG_UART6850) && defined(CONFIG_MIDI) || defined(MODULE)
 
-static int      uart6850_base = 0x330;
+static int uart6850_base = 0x330;
 
-static int     *uart6850_osp;
+static int *uart6850_osp;
 
 #define	DATAPORT   (uart6850_base)
 #define	COMDPORT   (uart6850_base+1)
 #define	STATPORT   (uart6850_base+1)
 
-static int
-uart6850_status(void)
+static int uart6850_status(void)
 {
 	return inb(STATPORT);
 }
+
 #define input_avail()		(uart6850_status()&INPUT_AVAIL)
 #define output_ready()		(uart6850_status()&OUTPUT_READY)
-static void
-uart6850_cmd(unsigned char cmd)
+
+static void uart6850_cmd(unsigned char cmd)
 {
-	outb((cmd), COMDPORT);
+	outb(cmd, COMDPORT);
 }
-static int
-uart6850_read(void)
+
+static int uart6850_read(void)
 {
 	return inb(DATAPORT);
 }
-static void
-uart6850_write(unsigned char byte)
+
+static void uart6850_write(unsigned char byte)
 {
-	outb((byte), DATAPORT);
+	outb(byte, DATAPORT);
 }
 
 #define	OUTPUT_READY	0x02	/* Mask for data ready Bit */
@@ -59,58 +59,58 @@ uart6850_write(unsigned char byte)
 #define	UART_RESET	0x95
 #define	UART_MODE_ON	0x03
 
-static int      uart6850_opened = 0;
-static int      uart6850_irq;
-static int      uart6850_detected = 0;
-static int      my_dev;
+static int uart6850_opened = 0;
+static int uart6850_irq;
+static int uart6850_detected = 0;
+static int my_dev;
 
-static int      reset_uart6850(void);
-static void     (*midi_input_intr) (int dev, unsigned char data);
-static void     poll_uart6850(unsigned long dummy);
+static int reset_uart6850(void);
+static void (*midi_input_intr) (int dev, unsigned char data);
+static void poll_uart6850(unsigned long dummy);
 
 
-static struct timer_list uart6850_timer =
-{NULL, NULL, 0, 0, poll_uart6850};
+static struct timer_list uart6850_timer = {
+	NULL, NULL, 0, 0, poll_uart6850
+};
 
-static void
-uart6850_input_loop(void)
+static void uart6850_input_loop(void)
 {
-	int             count;
+	int count = 10;
 
-	count = 10;
-
-	while (count)		/*
-				 * Not timed out
-				 */
+	while (count)
+	{
+		/*
+		 * Not timed out
+		 */
 		if (input_avail())
-		  {
-			  unsigned char   c = uart6850_read();
-
-			  count = 100;
-
-			  if (uart6850_opened & OPEN_READ)
-				  midi_input_intr(my_dev, c);
-		} else
+		{
+			unsigned char c = uart6850_read();
+			count = 100;
+			if (uart6850_opened & OPEN_READ)
+				midi_input_intr(my_dev, c);
+		}
+		else
+		{
 			while (!input_avail() && count)
 				count--;
+		}
+	}
 }
 
-void
-m6850intr(int irq, void *dev_id, struct pt_regs *dummy)
+void m6850intr(int irq, void *dev_id, struct pt_regs *dummy)
 {
 	if (input_avail())
 		uart6850_input_loop();
 }
 
 /*
- * It looks like there is no input interrupts in the UART mode. Let's try
- * polling.
+ *	It looks like there is no input interrupts in the UART mode. Let's try
+ *	polling.
  */
 
-static void
-poll_uart6850(unsigned long dummy)
+static void poll_uart6850(unsigned long dummy)
 {
-	unsigned long   flags;
+	unsigned long flags;
 
 	if (!(uart6850_opened & OPEN_READ))
 		return;		/* Device has been closed */
@@ -121,34 +121,30 @@ poll_uart6850(unsigned long dummy)
 	if (input_avail())
 		uart6850_input_loop();
 
-
-	{
-		uart6850_timer.expires = (1) + jiffies;
-		add_timer(&uart6850_timer);
-	};			/*
-				   * Come back later
-				 */
+	uart6850_timer.expires = 1 + jiffies;
+	add_timer(&uart6850_timer);
+	
+	/*
+	 *	Come back later
+	 */
 
 	restore_flags(flags);
 }
 
-static int
-uart6850_open(int dev, int mode,
+static int uart6850_open(int dev, int mode,
 	      void            (*input) (int dev, unsigned char data),
 	      void            (*output) (int dev)
 )
 {
 	if (uart6850_opened)
-	  {
-		  printk("Midi6850: Midi busy\n");
+	{
+/*		  printk("Midi6850: Midi busy\n");*/
 		  return -EBUSY;
-	  };
+	};
 
 	MOD_INC_USE_COUNT;
 	uart6850_cmd(UART_RESET);
-
 	uart6850_input_loop();
-
 	midi_input_intr = input;
 	uart6850_opened = mode;
 	poll_uart6850(0);	/*
@@ -158,22 +154,18 @@ uart6850_open(int dev, int mode,
 	return 0;
 }
 
-static void
-uart6850_close(int dev)
+static void uart6850_close(int dev)
 {
 	uart6850_cmd(UART_MODE_ON);
-
-	del_timer(&uart6850_timer);;
+	del_timer(&uart6850_timer);
 	uart6850_opened = 0;
-
 	MOD_DEC_USE_COUNT;
 }
 
-static int
-uart6850_out(int dev, unsigned char midi_byte)
+static int uart6850_out(int dev, unsigned char midi_byte)
 {
-	int             timeout;
-	unsigned long   flags;
+	int timeout;
+	unsigned long flags;
 
 	/*
 	 * Test for input since pending input seems to block the output.
@@ -195,41 +187,35 @@ uart6850_out(int dev, unsigned char midi_byte)
 	for (timeout = 30000; timeout > 0 && !output_ready(); timeout--);	/*
 										 * Wait
 										 */
-
 	if (!output_ready())
-	  {
-		  printk("Midi6850: Timeout\n");
-		  return 0;
-	  }
+	{
+		printk(KERN_WARNING "Midi6850: Timeout\n");
+		return 0;
+	}
 	uart6850_write(midi_byte);
 	return 1;
 }
 
-static int
-uart6850_command(int dev, unsigned char *midi_byte)
+static int uart6850_command(int dev, unsigned char *midi_byte)
 {
 	return 1;
 }
 
-static int
-uart6850_start_read(int dev)
+static int uart6850_start_read(int dev)
 {
 	return 0;
 }
 
-static int
-uart6850_end_read(int dev)
+static int uart6850_end_read(int dev)
 {
 	return 0;
 }
 
-static void
-uart6850_kick(int dev)
+static void uart6850_kick(int dev)
 {
 }
 
-static int
-uart6850_buffer_status(int dev)
+static int uart6850_buffer_status(int dev)
 {
 	return 0;		/*
 				 * No data in buffers
@@ -257,26 +243,25 @@ static struct midi_operations uart6850_operations =
 };
 
 
-void
-attach_uart6850(struct address_info *hw_config)
+void attach_uart6850(struct address_info *hw_config)
 {
-	int             ok, timeout;
+	int ok, timeout;
 	unsigned long   flags;
 
 	if ((my_dev = sound_alloc_mididev()) == -1)
-	  {
-		  printk(KERN_INFO "uart6850: Too many midi devices detected\n");
-		  return;
-	  }
+	{
+		printk(KERN_INFO "uart6850: Too many midi devices detected\n");
+		return;
+	}
 	uart6850_base = hw_config->io_base;
 	uart6850_osp = hw_config->osp;
 	uart6850_irq = hw_config->irq;
 
 	if (!uart6850_detected)
-	  {
-		  sound_unload_mididev(my_dev);
-		  return;
-	  }
+	{
+		sound_unload_mididev(my_dev);
+		return;
+	}
 	save_flags(flags);
 	cli();
 
@@ -284,9 +269,7 @@ attach_uart6850(struct address_info *hw_config)
 										 * Wait
 										 */
 	uart6850_cmd(UART_MODE_ON);
-
 	ok = 1;
-
 	restore_flags(flags);
 
 	conf_printf("6850 Midi Interface", hw_config);
@@ -297,8 +280,7 @@ attach_uart6850(struct address_info *hw_config)
 	sequencer_init();
 }
 
-static int
-reset_uart6850(void)
+static int reset_uart6850(void)
 {
 	uart6850_read();
 	return 1;		/*
@@ -307,10 +289,9 @@ reset_uart6850(void)
 }
 
 
-int
-probe_uart6850(struct address_info *hw_config)
+int probe_uart6850(struct address_info *hw_config)
 {
-	int             ok = 0;
+	int ok = 0;
 
 	uart6850_osp = hw_config->osp;
 	uart6850_base = hw_config->io_base;
@@ -320,13 +301,11 @@ probe_uart6850(struct address_info *hw_config)
 		return 0;
 
 	ok = reset_uart6850();
-
 	uart6850_detected = ok;
 	return ok;
 }
 
-void
-unload_uart6850(struct address_info *hw_config)
+void unload_uart6850(struct address_info *hw_config)
 {
 	snd_release_irq(hw_config->irq);
 	sound_unload_mididev(hw_config->slots[4]);
@@ -335,19 +314,21 @@ unload_uart6850(struct address_info *hw_config)
 
 #ifdef MODULE
 
-int             io = -1;
-int             irq = -1;
+int io = -1;
+int irq = -1;
+
+MODULE_PARM(io,"i");
+MODULE_PARM(irq,"i");
 
 struct address_info cfg;
 
-int 
-init_module(void)
+int init_module(void)
 {
 	if (io == -1 || irq == -1)
-	  {
-		  printk("uart6850: irq and io must be set.\n");
-		  return -EINVAL;
-	  }
+	{
+		printk(KERN_INFO "uart6850: irq and io must be set.\n");
+		return -EINVAL;
+	}
 	cfg.io_base = io;
 	cfg.irq = irq;
 
@@ -358,8 +339,7 @@ init_module(void)
 	return 0;
 }
 
-void 
-cleanup_module(void)
+void cleanup_module(void)
 {
 	unload_uart6850(&cfg);
 	SOUND_LOCK_END;

@@ -2892,7 +2892,7 @@ ppp_dev_xmit (sk_buff *skb, struct device *dev)
  * Avoid timing problem should tty hangup while data is queued to be sent
  */
 	if (!ppp->inuse) {
-		dev_kfree_skb (skb, FREE_WRITE);
+		dev_kfree_skb (skb);
 		return 0;
 	}
 /*
@@ -2903,7 +2903,7 @@ ppp_dev_xmit (sk_buff *skb, struct device *dev)
 			printk (KERN_ERR
 				"ppp_dev_xmit: %s not connected to a TTY!\n",
 				dev->name);
-		dev_kfree_skb (skb, FREE_WRITE);
+		dev_kfree_skb (skb);
 		return 0;
 	}
 /*
@@ -2916,7 +2916,7 @@ ppp_dev_xmit (sk_buff *skb, struct device *dev)
 		if (ppp->flags & SC_DEBUG)
 			printk (KERN_CRIT "ppp_dev_xmit: %s Null skb data\n",
 				dev->name);
-		dev_kfree_skb (skb, FREE_WRITE);
+		dev_kfree_skb (skb);
 		return 0;
 	}
 /*
@@ -2957,7 +2957,7 @@ ppp_dev_xmit (sk_buff *skb, struct device *dev)
 		break;
 
 	default: /* All others have no support at this time. */
-		dev_kfree_skb (skb, FREE_WRITE);
+		dev_kfree_skb (skb);
 		return 0;
 	}
 /*
@@ -2965,12 +2965,12 @@ ppp_dev_xmit (sk_buff *skb, struct device *dev)
  */
 	if (answer == 0) {
 		/* packet queued OK */
-		dev_kfree_skb (skb, FREE_WRITE);
+		dev_kfree_skb (skb);
 	} else {
 		ppp->wbuf->locked = 0;
 		if (answer < 0) {
 			/* packet should be dropped */
-			dev_kfree_skb (skb, FREE_WRITE);
+			dev_kfree_skb (skb);
 			answer = 0;
 		} else {
 			/* packet should be queued for later */

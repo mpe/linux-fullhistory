@@ -1,5 +1,5 @@
-#ifndef __ASMaxp_ELF_H
-#define __ASMaxp_ELF_H
+#ifndef __ASM_ALPHA_ELF_H
+#define __ASM_ALPHA_ELF_H
 
 /*
  * ELF register definitions..
@@ -39,7 +39,7 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
    the loader.  We need to make sure that it is out of the way of the program
    that it will "exec", and that there is sufficient room for the brk.  */
 
-#define ELF_ET_DYN_BASE		(2 * TASK_SIZE / 3)
+#define ELF_ET_DYN_BASE		(TASK_UNMAPPED_BASE + 0x1000000)
 
 /* $0 is set by ld.so to a pointer to a function which might be 
    registered using atexit.  This provides a mean for the dynamic
@@ -126,8 +126,10 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
 })
 
 #ifdef __KERNEL__
-#define SET_PERSONALITY(ibcs2) \
-	current->personality = (ibcs2 ? PER_SVR4 : PER_LINUX)
+#define SET_PERSONALITY(EX, IBCS2)				\
+	current->personality =					\
+	  ((EX).e_flags & EF_ALPHA_32BIT			\
+	   ? PER_LINUX_32BIT : (IBCS2) ? PER_SVR4 : PER_LINUX)
 #endif
 
 #endif

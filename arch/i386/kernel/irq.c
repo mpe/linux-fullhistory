@@ -719,6 +719,14 @@ void enable_irq(unsigned int irq)
 	irq_handles[irq]->enable(irq);
 }
 
+void make_8259A_irq (unsigned int irq)
+{
+	io_apic_irqs &= ~(1<<irq);
+	irq_handles[irq] = &i8259A_irq_type;
+	disable_irq(irq);
+	enable_irq(irq);
+}
+
 /*
  * Careful! The 8259A is a fragile beast, it pretty
  * much _has_ to be done exactly like this (mask it

@@ -294,7 +294,7 @@ static struct cdrom_device_info mcdx_info = {
   &mcdx_dops,                    /* device operations */
   NULL,                         /* link */
   NULL,                         /* handle */
-  MKDEV(MAJOR_NR,0),            /* dev */
+  0,		                /* dev */
   0,                            /* mask */
   2,                            /* maximum speed */
   1,                            /* number of discs */
@@ -1024,10 +1024,166 @@ void cleanup_module(void)
 
 /* Support functions ************************************************/
 
+__initfunc(int mcdx_init_drive(int drive))
+{
+	struct s_version version;
+	struct s_drive_stuff* stuffp;
+	int size = sizeof(*stuffp);
+	char msg[80];
+
+	mcdx_blocksizes[drive] = 0;
+
+	xtrace(INIT, "init() try drive %d\n", drive);
+
+	xtrace(INIT, "kmalloc space for stuffpt's\n");
+	xtrace(MALLOC, "init() malloc %d bytes\n", size);
+	if (!(stuffp = kmalloc(size, GFP_KERNEL))) {
+		xwarn("init() malloc failed\n");
+		return 1;
+	}
+
+	xtrace(INIT, "init() got %d bytes for drive stuff @ %p\n",
+	       sizeof(*stuffp), stuffp);
+
+	/* set default values */
+	memset(stuffp, 0, sizeof(*stuffp));
+
+	stuffp->present = 0;	/* this should be 0 already */
+	stuffp->toc = NULL;	/* this should be NULL already */
+
+	/* setup our irq and i/o addresses */
+	stuffp->irq = irq(mcdx_drive_map[drive]);
+	stuffp->wreg_data = stuffp->rreg_data = port(mcdx_drive_map[drive]);
+	stuffp->wreg_reset = stuffp->rreg_status = stuffp->wreg_data + 1;
+	stuffp->wreg_hcon = stuffp->wreg_reset + 1;
+	stuffp->wreg_chn = stuffp->wreg_hcon + 1;
+
+	/* check if i/o addresses are available */
+	if (check_region((unsigned int) stuffp->wreg_data, MCDX_IO_SIZE)) {
+		xwarn("0x%3p,%d: Init failed. "
+		      "I/O ports (0x%3p..0x%3p) already in use.\n",
+		      stuffp->wreg_data, stuffp->irq,
+		      stuffp->wreg_data,
+		      stuffp->wreg_data + MCDX_IO_SIZE - 1);
+		xtrace(MALLOC, "init() free stuffp @ %p\n", stuffp);
+		kfree(stuffp);
+		xtrace(INIT, "init() continue at next drive\n");
+		return 0; /* next drive */
+	}
+
+	xtrace(INIT, "init() i/o port is available at 0x%3p\n",
+	       stuffp->wreg_data);
+	xtrace(INIT, "init() hardware reset\n");
+	mcdx_reset(stuffp, HARD, 1);
+
+	xtrace(INIT, "init() get version\n");
+	if (-1 == mcdx_requestversion(stuffp, &version, 4)) {
+		/* failed, next drive */
+		xwarn("%s=0x%3p,%d: Init failed. Can't get version.\n",
+		      MCDX,
+		      stuffp->wreg_data, stuffp->irq);
+		xtrace(MALLOC, "init() free stuffp @ %p\n", stuffp);
+		kfree(stuffp);
+		xtrace(INIT, "init() continue at next drive\n");
+		return 0;
+	}
+
+	switch (version.code) {
+	case 'D':
+                stuffp->readcmd = READ2X;
+                stuffp->present = DOUBLE | DOOR | MULTI;
+                break;
+	case 'F':
+                stuffp->readcmd = READ1X;
+                stuffp->present = SINGLE | DOOR | MULTI;
+                break;
+	case 'M':
+                stuffp->readcmd = READ1X;
+                stuffp->present = SINGLE;
+                break;
+	default:
+                stuffp->present = 0; break;
+	}
+
+        stuffp->playcmd = READ1X;
+
+	if (!stuffp->present) {
+		xwarn("%s=0x%3p,%d: Init failed. No Mitsumi CD-ROM?.\n",
+		      MCDX, stuffp->wreg_data, stuffp->irq);
+		kfree(stuffp);
+		return 0; /* next drive */
+	}
+
+	xtrace(INIT, "init() register blkdev\n");
+	if (register_blkdev(MAJOR_NR, "mcdx", &cdrom_fops) != 0) {
+		xwarn("%s=0x%3p,%d: Init failed. Can't get major %d.\n",
+		      MCDX,
+		      stuffp->wreg_data, stuffp->irq, MAJOR_NR);
+		kfree(stuffp);
+		return 1;
+	}
+
+	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
+	read_ahead[MAJOR_NR] = READ_AHEAD;
+	blksize_size[MAJOR_NR] = mcdx_blocksizes;
+
+	xtrace(INIT, "init() subscribe irq and i/o\n");
+	mcdx_irq_map[stuffp->irq] = stuffp;
+	if (request_irq(stuffp->irq, mcdx_intr, SA_INTERRUPT, "mcdx", NULL)) {
+		xwarn("%s=0x%3p,%d: Init failed. Can't get irq (%d).\n",
+		      MCDX,
+		      stuffp->wreg_data, stuffp->irq, stuffp->irq);
+		stuffp->irq = 0;
+		kfree(stuffp);
+		return 0;
+	}
+	request_region((unsigned int) stuffp->wreg_data,
+		       MCDX_IO_SIZE,
+		       "mcdx");
+
+	xtrace(INIT, "init() get garbage\n");
+	{
+		int i;
+		mcdx_delay(stuffp, HZ/2);
+		for (i = 100; i; i--)
+			(void) inb((unsigned int) stuffp->rreg_status);
+	}
+
+
+#if WE_KNOW_WHY
+	/* irq 11 -> channel register */
+	outb(0x50, (unsigned int) stuffp->wreg_chn);
+#endif
+
+	xtrace(INIT, "init() set non dma but irq mode\n");
+	mcdx_config(stuffp, 1);
+
+	stuffp->minor = drive;
+
+	sprintf(msg, " mcdx: Mitsumi CD-ROM installed at 0x%3p, irq %d."
+		" (Firmware version %c %x)\n", 
+		stuffp->wreg_data, stuffp->irq, version.code,
+		version.ver);
+	mcdx_stuffp[drive] = stuffp;
+	xtrace(INIT, "init() mcdx_stuffp[%d] = %p\n", drive, stuffp);
+	mcdx_info.dev = MKDEV(MAJOR_NR,0);
+        if (register_cdrom(&mcdx_info) != 0) {
+		printk("Cannot register Mitsumi CD-ROM!\n");
+		release_region((unsigned long) stuffp->wreg_data,
+			       MCDX_IO_SIZE);
+		free_irq(stuffp->irq, NULL);
+		kfree(stuffp);
+		if (unregister_blkdev(MAJOR_NR, "mcdx") != 0)
+        		xwarn("cleanup() unregister_blkdev() failed\n");
+		return 2;
+        }
+        printk(msg);
+	return 0;
+}
+
 __initfunc(int mcdx_init(void))
 {
 	int drive;
-	char msg[80];
 #ifdef MODULE
 	xwarn("Version 2.14(hs) for " UTS_RELEASE "\n");
 #else
@@ -1042,156 +1198,12 @@ __initfunc(int mcdx_init(void))
 
 	/* do the initialisation */
 	for (drive = 0; drive < MCDX_NDRIVES; drive++) {
-		struct s_version version;
-		struct s_drive_stuff* stuffp;
-        int size;
-
-		mcdx_blocksizes[drive] = 0;
-
-        size = sizeof(*stuffp);
-
-		xtrace(INIT, "init() try drive %d\n", drive);
-
-        xtrace(INIT, "kmalloc space for stuffpt's\n");
-		xtrace(MALLOC, "init() malloc %d bytes\n", size);
-		if (!(stuffp = kmalloc(size, GFP_KERNEL))) {
-			xwarn("init() malloc failed\n");
+		switch(mcdx_init_drive(drive)) {
+		case 2:
+			return -EIO;
+		case 1:
 			break;
 		}
-
-		xtrace(INIT, "init() got %d bytes for drive stuff @ %p\n", sizeof(*stuffp), stuffp);
-
-		/* set default values */
-		memset(stuffp, 0, sizeof(*stuffp));
-
-		stuffp->present = 0;		/* this should be 0 already */
-		stuffp->toc = NULL;			/* this should be NULL already */
-
-		/* setup our irq and i/o addresses */
-		stuffp->irq = irq(mcdx_drive_map[drive]);
-		stuffp->wreg_data = stuffp->rreg_data = port(mcdx_drive_map[drive]);
-		stuffp->wreg_reset = stuffp->rreg_status = stuffp->wreg_data + 1;
-		stuffp->wreg_hcon = stuffp->wreg_reset + 1;
-		stuffp->wreg_chn = stuffp->wreg_hcon + 1;
-
-		/* check if i/o addresses are available */
-		if (0 != check_region((unsigned int) stuffp->wreg_data, MCDX_IO_SIZE)) {
-            xwarn("0x%3p,%d: "
-                    "Init failed. I/O ports (0x%3p..0x%3p) already in use.\n",
-                    stuffp->wreg_data, stuffp->irq,
-                    stuffp->wreg_data,
-                    stuffp->wreg_data + MCDX_IO_SIZE - 1);
-			xtrace(MALLOC, "init() free stuffp @ %p\n", stuffp);
-            kfree(stuffp);
-			xtrace(INIT, "init() continue at next drive\n");
-			continue; /* next drive */
-		}
-
-		xtrace(INIT, "init() i/o port is available at 0x%3p\n", stuffp->wreg_data);
-
-		xtrace(INIT, "init() hardware reset\n");
-		mcdx_reset(stuffp, HARD, 1);
-
-		xtrace(INIT, "init() get version\n");
-		if (-1 == mcdx_requestversion(stuffp, &version, 4)) {
-			/* failed, next drive */
-            xwarn("%s=0x%3p,%d: Init failed. Can't get version.\n",
-                    MCDX,
-                    stuffp->wreg_data, stuffp->irq);
-			xtrace(MALLOC, "init() free stuffp @ %p\n", stuffp);
-            kfree(stuffp);
-			xtrace(INIT, "init() continue at next drive\n");
-			continue;
-		}
-
-		switch (version.code) {
-		case 'D':
-                stuffp->readcmd = READ2X;
-                stuffp->present = DOUBLE | DOOR | MULTI;
-                break;
-		case 'F':
-                stuffp->readcmd = READ1X;
-                stuffp->present = SINGLE | DOOR | MULTI;
-                break;
-		case 'M':
-                stuffp->readcmd = READ1X;
-                stuffp->present = SINGLE;
-                break;
-		default:
-                stuffp->present = 0; break;
-		}
-
-        stuffp->playcmd = READ1X;
-
-
-		if (!stuffp->present) {
-            xwarn("%s=0x%3p,%d: Init failed. No Mitsumi CD-ROM?.\n",
-                    MCDX, stuffp->wreg_data, stuffp->irq);
-			kfree(stuffp);
-			continue; /* next drive */
-		}
-
-		xtrace(INIT, "init() register blkdev\n");
-		if (register_blkdev(MAJOR_NR, "mcdx", &cdrom_fops) != 0) {
-            xwarn("%s=0x%3p,%d: Init failed. Can't get major %d.\n",
-                    MCDX,
-                    stuffp->wreg_data, stuffp->irq, MAJOR_NR);
-			kfree(stuffp);
-			continue; /* next drive */
-		}
-
-		blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
-		read_ahead[MAJOR_NR] = READ_AHEAD;
-
-		blksize_size[MAJOR_NR] = mcdx_blocksizes;
-
-		xtrace(INIT, "init() subscribe irq and i/o\n");
-		mcdx_irq_map[stuffp->irq] = stuffp;
-		if (request_irq(stuffp->irq, mcdx_intr, SA_INTERRUPT, "mcdx", NULL)) {
-            xwarn("%s=0x%3p,%d: Init failed. Can't get irq (%d).\n",
-                    MCDX,
-                    stuffp->wreg_data, stuffp->irq, stuffp->irq);
-			stuffp->irq = 0;
-			kfree(stuffp);
-			continue;
-		}
-		request_region((unsigned int) stuffp->wreg_data,
-                MCDX_IO_SIZE,
-                "mcdx");
-
-		xtrace(INIT, "init() get garbage\n");
-		{
-			int i;
-			mcdx_delay(stuffp, HZ/2);
-			for (i = 100; i; i--) (void) inb((unsigned int) stuffp->rreg_status);
-		}
-
-
-#if WE_KNOW_WHY
-			outb(0x50, (unsigned int) stuffp->wreg_chn);	/* irq 11 -> channel register */
-#endif
-
-		xtrace(INIT, "init() set non dma but irq mode\n");
-		mcdx_config(stuffp, 1);
-
-		stuffp->minor = drive;
-
-		sprintf(msg, " mcdx: Mitsumi CD-ROM installed at 0x%3p, irq %d."
-			   " (Firmware version %c %x)\n", 
-			   stuffp->wreg_data, stuffp->irq, version.code,
-               version.ver);
-		mcdx_stuffp[drive] = stuffp;
-		xtrace(INIT, "init() mcdx_stuffp[%d] = %p\n", drive, stuffp);
-        if (register_cdrom(&mcdx_info) != 0) {
-              printk("Cannot register Mitsumi CD-ROM!\n");
-        	  release_region((unsigned long) stuffp->wreg_data, MCDX_IO_SIZE);
-        	  free_irq(stuffp->irq, NULL);
-              kfree(stuffp);
-              if (unregister_blkdev(MAJOR_NR, "mcdx") != 0)
-        		xwarn("cleanup() unregister_blkdev() failed\n");
-			  return -EIO;
-        }
-        printk(msg);
 	}
 	return 0;
 }

@@ -596,7 +596,7 @@ isdn_audio_eval_dtmf(modem_info * info)
 			if (skb_headroom(skb) < sizeof(isdn_audio_skb)) {
 				printk(KERN_WARNING
 				       "isdn_audio: insufficient skb_headroom, dropping\n");
-				kfree_skb(skb, FREE_READ);
+				kfree_skb(skb);
 				return;
 			}
 			ISDN_AUDIO_SKB_DLECOUNT(skb) = 0;
@@ -613,7 +613,7 @@ isdn_audio_eval_dtmf(modem_info * info)
 				isdn_timer_ctrl(ISDN_TIMER_MODEMREAD, 1);
 			wake_up_interruptible(&dev->drv[di]->rcv_waitq[ch]);
 		} else
-			kfree_skb(skb, FREE_READ);
+			kfree_skb(skb);
 		s->last = what;
 	}
 }

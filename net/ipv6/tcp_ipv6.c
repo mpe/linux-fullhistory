@@ -685,7 +685,7 @@ static void tcp_v6_send_synack(struct sock *sk, struct open_request *req)
 
 	dst = ip6_route_output(sk, &fl);
 	if (dst->error) {
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		dst_release(dst);
 		return;
 	}
@@ -1247,7 +1247,7 @@ discard_it:
 	 *	Discard frame
 	 */
 
-	kfree_skb(skb, FREE_READ);
+	kfree_skb(skb);
 	return 0;
 }
 
@@ -1454,14 +1454,14 @@ static int tcp_v6_destroy_sock(struct sock *sk)
 	 */
 
   	while((skb = skb_dequeue(&sk->write_queue)) != NULL)
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 
 	/*
 	 *  Cleans up our, hopefuly empty, out_of_order_queue
 	 */
 
   	while((skb = skb_dequeue(&sk->out_of_order_queue)) != NULL)
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 
 	/*
 	 *	Release destination entry

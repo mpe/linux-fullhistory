@@ -110,7 +110,7 @@ __initfunc(int dummy_init(struct device *dev))
 static int dummy_xmit(struct sk_buff *skb, struct device *dev)
 {
 	struct net_device_stats *stats;
-	dev_kfree_skb(skb, FREE_WRITE);
+	dev_kfree_skb(skb);
 
 	stats = (struct net_device_stats *)dev->priv;
 	stats->tx_packets++;

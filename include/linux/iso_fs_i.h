@@ -6,7 +6,6 @@
  */
 struct iso_inode_info {
 	unsigned int i_first_extent;
-	unsigned char i_file_format;
 };
 
 #endif

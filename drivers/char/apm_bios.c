@@ -26,6 +26,7 @@
  * April 1996, Stephen Rothwell (Stephen.Rothwell@canb.auug.org.au)
  *    Version 1.0 and 1.1
  * May 1996, Version 1.2
+ * Feb 1998, Version 1.3
  *
  * History:
  *    0.6b: first version in official kernel, Linux 1.3.46
@@ -44,6 +45,7 @@
  *	   levels to the printk calls. APM is not defined for SMP machines.
  *         The new replacment for it is, but Linux doesn't yet support this.
  *         Alan Cox Linux 2.1.55
+ *    1.3: Set up a valid data descriptor 0x40 for buggy BIOS's
  *
  * Reference:
  *
@@ -162,8 +164,8 @@ extern unsigned long get_cmos_time(void);
 #define APM_NOINTS
 
 /*
- * Define to make the APM BIOS calls zero all data segment registers (do
- * that if an incorrect BIOS implementation will cause a kernel panic if it
+ * Define to make the APM BIOS calls zero all data segment registers (so
+ * that an incorrect BIOS implementation will cause a kernel panic if it
  * tries to write to arbitrary memory).
  */
 #define APM_ZERO_SEGS
@@ -340,7 +342,7 @@ static struct apm_bios_struct *	user_list = NULL;
 
 static struct timer_list	apm_timer;
 
-static char			driver_version[] = "1.2";/* no spaces */
+static char			driver_version[] = "1.3";	/* no spaces */
 
 #ifdef APM_DEBUG
 static char *	apm_event_name[] = {
@@ -1111,6 +1113,16 @@ __initfunc(void apm_bios_init(void))
 		printk(" cseg len %x, dseg len %x",
 		       apm_bios_info.cseg_len, apm_bios_info.dseg_len);
 	printk("\n");
+
+	/*
+	 * Set up a segment that references the real mode segment 0x40
+	 * that extends up to the end of page zero (that we have reserved).
+	 * This is for buggy BIOS's that refer to (real mode) segment 0x40
+	 * even though they are called in protected mode.
+	 */
+	set_base(gdt[APM_40 >> 3],
+		 0xc0000000 + ((unsigned long)0x40 << 4));
+	set_limit(gdt[APM_40 >> 3], 4096 - (0x40 << 4));
 
 	apm_bios_entry.offset = apm_bios_info.offset;
 	apm_bios_entry.segment = APM_CS;

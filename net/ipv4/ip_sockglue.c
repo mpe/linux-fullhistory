@@ -351,7 +351,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 				struct sk_buff *skb;
 				/* Drain queued errors */
 				while((skb=skb_dequeue(&sk->error_queue))!=NULL)
-					kfree_skb(skb, FREE_READ);
+					kfree_skb(skb);
 			}
 			sk->ip_recverr = val?1:0;
 			release_sock(sk);

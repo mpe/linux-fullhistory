@@ -276,7 +276,7 @@ isdn_tty_try_read(modem_info * info, struct sk_buff *skb)
 						tty->flip.flag_buf_ptr[len - 1] = 0xff;
 					queue_task(&tty->flip.tqueue, &tq_timer);
 					SET_SKB_FREE(skb);
-					kfree_skb(skb, FREE_READ);
+					kfree_skb(skb);
 					return 1;
 				}
 			}
@@ -372,7 +372,7 @@ isdn_tty_rcv_skb(int i, int di, int channel, struct sk_buff *skb)
 		) {
 		/* If Modem not listening, drop data */
 		SET_SKB_FREE(skb);
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 1;
 	}
 	if (info->emu.mdmreg[13] & 2)
@@ -384,7 +384,7 @@ isdn_tty_rcv_skb(int i, int di, int channel, struct sk_buff *skb)
 		printk(KERN_WARNING
 		       "isdn_audio: insufficient skb_headroom, dropping\n");
 		SET_SKB_FREE(skb);
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 1;
 	}
 	ISDN_AUDIO_SKB_DLECOUNT(skb) = 0;
@@ -456,13 +456,13 @@ isdn_tty_cleanup_xmit(modem_info * info)
 	if (skb_queue_len(&info->xmit_queue))
 		while ((skb = skb_dequeue(&info->xmit_queue))) {
 			SET_SKB_FREE(skb);
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 		}
 #ifdef CONFIG_ISDN_AUDIO
 	if (skb_queue_len(&info->dtmf_queue))
 		while ((skb = skb_dequeue(&info->dtmf_queue))) {
 			SET_SKB_FREE(skb);
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 		}
 #endif
 	restore_flags(flags);
@@ -493,7 +493,7 @@ isdn_tty_tint(modem_info * info)
 	if (slen < 0) {
 		/* Error: no channel, already shutdown, or wrong parameter */
 		SET_SKB_FREE(skb);
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 		return;
 	}
 	if (slen)

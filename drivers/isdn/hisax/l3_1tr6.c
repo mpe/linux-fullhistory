@@ -209,7 +209,7 @@ l3_1tr6_setup(struct PStack *st, u_char pr, void *arg)
 			st->pa->spv = 1;
 	}
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 
 	/* Signal all services, linklevel takes care of Service-Indicator */
 	if (bcfound) {
@@ -238,7 +238,7 @@ l3_1tr6_setup_ack(struct PStack *st, u_char pr, void *arg)
 	} else if (st->l3.debug & L3_DEB_WARN)
 		l3_debug(st, "setup answer without bchannel");
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 	L3AddTimer(&st->l3.timer, st->l3.t304, CC_T304);
 	st->l3.l3l4(st, CC_MORE_INFO, NULL);
 }
@@ -256,7 +256,7 @@ l3_1tr6_call_sent(struct PStack *st, u_char pr, void *arg)
 	} else if (st->l3.debug & L3_DEB_WARN)
 		l3_debug(st, "setup answer without bchannel");
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 	L3AddTimer(&st->l3.timer, st->l3.t310, CC_T310);
 	newl3state(st, 3);
 	st->l3.l3l4(st, CC_PROCEEDING_IND, NULL);
@@ -268,7 +268,7 @@ l3_1tr6_alert(struct PStack *st, u_char pr, void *arg)
 	struct sk_buff *skb = arg;
 
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 	L3DelTimer(&st->l3.timer);	/* T304 */
 	newl3state(st, 4);
 	st->l3.l3l4(st, CC_ALERTING_IND, NULL);
@@ -300,7 +300,7 @@ l3_1tr6_info(struct PStack *st, u_char pr, void *arg)
 	} else if (st->l3.debug & L3_DEB_CHARGE)
 		l3_debug(st, "charging info not found");
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 
 }
 
@@ -310,7 +310,7 @@ l3_1tr6_info_s2(struct PStack *st, u_char pr, void *arg)
 	struct sk_buff *skb = arg;
 
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 }
 
 static void
@@ -321,7 +321,7 @@ l3_1tr6_connect(struct PStack *st, u_char pr, void *arg)
 	L3DelTimer(&st->l3.timer);	/* T310 */
 	newl3state(st, 10);
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 	st->pa->chargeinfo = 0;
 	st->l3.l3l4(st, CC_SETUP_CNF, NULL);
 }
@@ -347,7 +347,7 @@ l3_1tr6_rel(struct PStack *st, u_char pr, void *arg)
 	} else
 		st->pa->cause = -1;
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 	StopAllL3Timer(st);
 	newl3state(st, 0);
 	l3_1TR6_message(st, MT_N1_REL_ACK, PROTO_DIS_N1);
@@ -360,7 +360,7 @@ l3_1tr6_rel_ack(struct PStack *st, u_char pr, void *arg)
 	struct sk_buff *skb = arg;
 
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 	StopAllL3Timer(st);
 	newl3state(st, 0);
 	st->pa->cause = -1;
@@ -413,7 +413,7 @@ l3_1tr6_disc(struct PStack *st, u_char pr, void *arg)
 		st->pa->cause = -1;
 	}
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 	newl3state(st, 12);
 	st->l3.l3l4(st, CC_DISCONNECT_IND, NULL);
 }
@@ -425,7 +425,7 @@ l3_1tr6_connect_ack(struct PStack *st, u_char pr, void *arg)
 	struct sk_buff *skb = arg;
 
 	SET_SKB_FREE(skb);
-	dev_kfree_skb(skb, FREE_READ);
+	dev_kfree_skb(skb);
 	newl3state(st, 10);
 	st->pa->chargeinfo = 0;
 	L3DelTimer(&st->l3.timer);
@@ -706,13 +706,13 @@ up1tr6(struct PStack *st, int pr, void *arg)
 			l3_debug(st, tmp);
 		}
 		SET_SKB_FREE(skb);
-		dev_kfree_skb(skb, FREE_READ);
+		dev_kfree_skb(skb);
 		return;
 	}
 	mt = skb->data[skb->data[1] + 2];
 	if (skb->data[0] == PROTO_DIS_N0) {
 		SET_SKB_FREE(skb);
-		dev_kfree_skb(skb, FREE_READ);
+		dev_kfree_skb(skb);
 		if (st->l3.debug & L3_DEB_STATE) {
 			sprintf(tmp, "up1tr6%s N0 state %d mt %x unhandled",
 				(pr == DL_DATA) ? " " : "(broadcast) ",
@@ -726,7 +726,7 @@ up1tr6(struct PStack *st, int pr, void *arg)
 				break;
 		if (i == datastln1_len) {
 			SET_SKB_FREE(skb);
-			dev_kfree_skb(skb, FREE_READ);
+			dev_kfree_skb(skb);
 			if (st->l3.debug & L3_DEB_STATE) {
 				sprintf(tmp, "up1tr6%sstate %d mt %x unhandled",
 				  (pr == DL_DATA) ? " " : "(broadcast) ",

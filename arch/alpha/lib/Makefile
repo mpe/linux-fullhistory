@@ -6,15 +6,8 @@ OBJS  = __divqu.o __remqu.o __divlu.o __remlu.o memset.o memcpy.o io.o \
 	checksum.o csum_partial_copy.o strlen.o \
 	strcat.o strcpy.o strncat.o strncpy.o stxcpy.o stxncpy.o \
 	strchr.o strrchr.o \
-	copy_user.o clear_user.o strncpy_from_user.o strlen_user.o
-
-ifeq ($(CONFIG_IPV6),y)
-  OBJS += csum_ipv6_magic.o
-else
-  ifeq ($(CONFIG_IPV6),m)
-    OBJS += csum_ipv6_magic.o
-  endif
-endif
+	copy_user.o clear_user.o strncpy_from_user.o strlen_user.o \
+	csum_ipv6_magic.o
 
 lib.a: $(OBJS)
 	$(AR) rcs lib.a $(OBJS)

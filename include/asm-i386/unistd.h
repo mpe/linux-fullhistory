@@ -21,7 +21,7 @@
 #define __NR_time		 13
 #define __NR_mknod		 14
 #define __NR_chmod		 15
-#define __NR_chown		 16
+#define __NR_lchown		 16
 #define __NR_break		 17
 #define __NR_oldstat		 18
 #define __NR_lseek		 19
@@ -187,7 +187,7 @@
 #define __NR_rt_sigsuspend	179
 #define __NR_pread		180
 #define __NR_pwrite		181
-#define __NR_lchown		182
+#define __NR_chown		182
 
 /* user-visible error numbers are in the range -1 - -122: see <asm-i386/errno.h> */
 

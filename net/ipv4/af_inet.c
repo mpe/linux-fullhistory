@@ -150,16 +150,16 @@ static __inline__ void kill_sk_queues(struct sock *sk)
 		 */
 		if (skb->sk != NULL && skb->sk != sk)
 			skb->sk->prot->close(skb->sk, 0);
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 	}
 
 	/* Next, the error queue. */
 	while((skb = skb_dequeue(&sk->error_queue)) != NULL)
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 
   	/* Now the backlog. */
   	while((skb=skb_dequeue(&sk->back_log)) != NULL)
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 }
 
 static __inline__ void kill_sk_now(struct sock *sk)

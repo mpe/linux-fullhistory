@@ -569,7 +569,7 @@ static struct sk_buff * skb_replace(struct sk_buff *skb, int pri, char *o_buf, i
                  * preferably inplace
                  */
 
-                kfree_skb(skb, FREE_WRITE);
+                kfree_skb(skb);
         }
         return n_skb;
 }

@@ -64,16 +64,16 @@ void ax25_clear_queues(ax25_cb *ax25)
 	struct sk_buff *skb;
 
 	while ((skb = skb_dequeue(&ax25->write_queue)) != NULL)
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 
 	while ((skb = skb_dequeue(&ax25->ack_queue)) != NULL)
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 
 	while ((skb = skb_dequeue(&ax25->reseq_queue)) != NULL)
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 
 	while ((skb = skb_dequeue(&ax25->frag_queue)) != NULL)
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 }
 
 /*
@@ -91,7 +91,7 @@ void ax25_frames_acked(ax25_cb *ax25, unsigned short nr)
 	if (ax25->va != nr) {
 		while (skb_peek(&ax25->ack_queue) != NULL && ax25->va != nr) {
 		        skb = skb_dequeue(&ax25->ack_queue);
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			ax25->va = (ax25->va + 1) % ax25->modulus;
 		}
 	}

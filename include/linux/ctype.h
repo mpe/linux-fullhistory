@@ -2,7 +2,7 @@
 #define _LINUX_CTYPE_H
 
 /*
- * NOTE! This ctype does not handle EOF like the standarc C
+ * NOTE! This ctype does not handle EOF like the standard C
  * library is required to.
  */
 

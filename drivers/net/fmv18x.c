@@ -388,7 +388,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 		/* Re-enable interrupts */
 		outw(0x8182, ioaddr + TX_INTR);
 	}
-	dev_kfree_skb (skb, FREE_WRITE);
+	dev_kfree_skb (skb);
 
 	return 0;
 }

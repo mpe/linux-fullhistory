@@ -112,7 +112,7 @@ static void fq_free(struct frag_queue *fq)
 	struct ipv6_frag *fp, *back;
 
 	for(fp = fq->fragments; fp; ) {
-		kfree_skb(fp->skb, FREE_READ);		
+		kfree_skb(fp->skb);		
 		back = fp;
 		fp=fp->next;
 		kfree(back);
@@ -159,7 +159,7 @@ static void create_frag_entry(struct sk_buff *skb, struct device *dev,
 					   GFP_ATOMIC);
 
 	if (fq == NULL) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return;
 	}
 
@@ -201,7 +201,7 @@ static void reasm_queue(struct frag_queue *fq, struct sk_buff *skb,
 					   GFP_ATOMIC);
 
 	if (nfp == NULL) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return;
 	}
 
@@ -230,7 +230,7 @@ static void reasm_queue(struct frag_queue *fq, struct sk_buff *skb,
 		}
 
 		/* duplicate. discard it. */
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		kfree(nfp);
 		return;
 	}
@@ -308,7 +308,7 @@ static int reasm_frag_1(struct frag_queue *fq, struct sk_buff **skb_in)
 		struct ipv6_frag *back;
 
 		memcpy(skb_put(skb, fp->len), (__u8*)(fp->fhdr + 1), fp->len);
-		kfree_skb(fp->skb, FREE_READ);
+		kfree_skb(fp->skb);
 		back = fp;
 		fp=fp->next;
 		kfree(back);

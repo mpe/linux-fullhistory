@@ -194,7 +194,7 @@ void ax25_output(ax25_cb *ax25, int paclen, struct sk_buff *skb)
 			skb_queue_tail(&ax25->write_queue, skbn); /* Throw it on the queue */
 		}
 
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 	} else {
 		skb_queue_tail(&ax25->write_queue, skb);	  /* Throw it on the queue */
 	}
@@ -347,14 +347,14 @@ void ax25_transmit_buffer(ax25_cb *ax25, struct sk_buff *skb, int type)
 	if (skb_headroom(skb) < headroom) {
 		if ((skbn = skb_realloc_headroom(skb, headroom)) == NULL) {
 			printk(KERN_CRIT "AX.25: ax25_transmit_buffer - out of memory\n");
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			return;
 		}
 
 		if (skb->sk != NULL)
 			skb_set_owner_w(skbn, skb->sk);
 
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		skb = skbn;
 	}
 
@@ -376,7 +376,7 @@ void ax25_queue_xmit(struct sk_buff *skb)
 	unsigned char *ptr;
 
 	if (call_out_firewall(PF_AX25, skb->dev, skb->data, NULL, &skb) != FW_ACCEPT) {
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return;
 	}
 

@@ -374,7 +374,7 @@ static int net_send_packet(struct sk_buff *skb, struct device *dev)
 		hardware_send_packet(ioaddr, buf, length);
 		dev->trans_start = jiffies;
 	}
-	dev_kfree_skb (skb, FREE_WRITE);
+	dev_kfree_skb (skb);
 
 	/* You might need to clean up and record Tx statistics here. */
 	if (inw(ioaddr) == /*RU*/81)

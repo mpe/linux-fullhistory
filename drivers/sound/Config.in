@@ -138,6 +138,7 @@ fi
 dep_tristate 'FM synthesizer (YM3812/OPL-3) support' CONFIG_YM3812 $CONFIG_SOUND
 dep_tristate 'Loopback MIDI device support' CONFIG_VMIDI $CONFIG_SOUND
 
+dep_tristate '6850 UART support' CONFIG_UART6850 $CONFIG_SOUND
 if [ "$CONFIG_UART6850" = "y" ]; then
     hex 'I/O base for UART 6850 MIDI port (Unknown)' U6850_BASE 0
     int 'UART6850 IRQ (Unknown)' U6850_IRQ -1

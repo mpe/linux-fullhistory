@@ -366,7 +366,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_time)
 	.long SYMBOL_NAME(sys_mknod)
 	.long SYMBOL_NAME(sys_chmod)		/* 15 */
-	.long SYMBOL_NAME(sys_chown)
+	.long SYMBOL_NAME(sys_lchown)
 	.long SYMBOL_NAME(sys_ni_syscall)				/* old break syscall holder */
 	.long SYMBOL_NAME(sys_stat)
 	.long SYMBOL_NAME(sys_lseek)
@@ -532,7 +532,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_rt_sigsuspend)
 	.long SYMBOL_NAME(sys_pread)		/* 180 */
 	.long SYMBOL_NAME(sys_pwrite)
-	.long SYMBOL_NAME(sys_lchown);
+	.long SYMBOL_NAME(sys_chown)
 	
 	.rept NR_syscalls-182
 		.long SYMBOL_NAME(sys_ni_syscall)

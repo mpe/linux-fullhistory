@@ -95,7 +95,7 @@ static int ps2esdi_release(struct inode *inode, struct file *file);
 static int ps2esdi_ioctl(struct inode *inode, struct file *file,
 			 u_int cmd, u_long arg);
 
-static int ps2esdi_reread_partitions(int dev);
+static int ps2esdi_reread_partitions(kdev_t dev);
 
 static int ps2esdi_read_status_words(int num_words, int max_words, u_short * buffer);
 
@@ -1060,7 +1060,7 @@ static int ps2esdi_release(struct inode *inode, struct file *file)
 	int dev = DEVICE_NR(inode->i_rdev);
 
 	if (dev < ps2esdi_drives) {
-		sync_dev(dev);
+		sync_dev(inode->i_rdev);
 		access_count[dev]--;
 	}
 	return 0;
@@ -1126,7 +1126,7 @@ static int ps2esdi_ioctl(struct inode *inode,
 
 
 
-static int ps2esdi_reread_partitions(int dev)
+static int ps2esdi_reread_partitions(kdev_t dev)
 {
 	int target = DEVICE_NR(dev);
 	int start = target << ps2esdi_gendisk.minor_shift;

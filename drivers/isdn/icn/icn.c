@@ -207,7 +207,7 @@ icn_free_queue(icn_card * card, int channel)
 	struct sk_buff *skb;
 
 	while ((skb = skb_dequeue(queue)))
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 	card->sndcount[channel] = 0;
 }
 
@@ -471,7 +471,7 @@ icn_pollbchan_send(int channel, icn_card * card)
 			sbnext; /* switch to next buffer        */
 			icn_maprelease_channel(card, mch & 2);
 			if (!skb->len) {
-				dev_kfree_skb(skb, FREE_WRITE);
+				dev_kfree_skb(skb);
 				cmd.command = ISDN_STAT_BSENT;
 				cmd.driver = card->myid;
 				cmd.arg = channel;
@@ -828,7 +828,7 @@ icn_sendbuf(int channel, struct sk_buff *skb, icn_card * card)
 		nskb = skb_clone(skb, GFP_ATOMIC);
 		if (nskb) {
 			skb_queue_tail(&card->spqueue[channel], nskb);
-			dev_kfree_skb(skb, FREE_WRITE);
+			dev_kfree_skb(skb);
 		} else
 			len = 0;
 		card->sndcount[channel] += len;

@@ -1,9 +1,5 @@
 Mount options that are the same as for msdos and vfat partitions.
 
-  conv=binary   Data is returned exactly as is, with CRLF's.  [default]
-  conv=text     (Carriage return, line feed) is replaced with newline.
-  conv=mtext    (Carriage return, line feed) is returned as is (?).
-  conv=auto     Chooses, file by file, conv=binary or conv=text (by guessing)
   gid=nnn	All files in the partition will be in group nnn.
   uid=nnn	All files in the partition will be owned by user id nnn.
   umask=nnn	The permission mask (see umask(1)) for the partition.

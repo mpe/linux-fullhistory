@@ -404,7 +404,7 @@ static int sonic_send_packet(struct sk_buff *skb, struct device *dev)
      */
     if ((laddr = vdma_alloc(PHYSADDR(skb->data),skb->len)) == ~0UL) {
 	printk("%s: no VDMA entry for transmit available.\n",dev->name);
-	dev_kfree_skb(skb,FREE_WRITE);
+	dev_kfree_skb(skb);
 	dev->tbusy = 0;
 	return 1;
     }
@@ -506,7 +506,7 @@ sonic_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
 	    /* We must free the original skb */
 	    if (lp->tx_skb[entry]) {
-		dev_kfree_skb(lp->tx_skb[entry],FREE_WRITE);
+		dev_kfree_skb(lp->tx_skb[entry]);
 		lp->tx_skb[entry] = 0;
 	    }
 	    /* and the VDMA address */

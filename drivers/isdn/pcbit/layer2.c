@@ -106,13 +106,13 @@ pcbit_l2_write(struct pcbit_dev *dev, ulong msg, ushort refnum,
 	unsigned long flags;
 
 	if (dev->l2_state != L2_RUNNING && dev->l2_state != L2_LOADING) {
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 		return -1;
 	}
 	if ((frame = (struct frame_buf *) kmalloc(sizeof(struct frame_buf),
 						  GFP_ATOMIC)) == NULL) {
 		printk(KERN_WARNING "pcbit_2_write: kmalloc failed\n");
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 		return -1;
 	}
 	frame->msg = msg;
@@ -287,7 +287,7 @@ pcbit_transmit(struct pcbit_dev *dev)
 
 			if (frame->skb != NULL) {
 				/* free frame */
-				dev_kfree_skb(frame->skb, FREE_WRITE);
+				dev_kfree_skb(frame->skb);
 			}
 			kfree(frame);
 		}
@@ -382,7 +382,7 @@ pcbit_receive(struct pcbit_dev *dev)
 			/* discard previous queued frame */
 			if (dev->read_frame->skb) {
 				SET_SKB_FREE(dev->read_frame->skb);
-				kfree_skb(dev->read_frame->skb, FREE_READ);
+				kfree_skb(dev->read_frame->skb);
 			}
 			kfree(dev->read_frame);
 			dev->read_frame = NULL;
@@ -650,7 +650,7 @@ pcbit_l2_err_recover(unsigned long data)
 	if (dev->read_frame) {
 		if (dev->read_frame->skb) {
 			SET_SKB_FREE(dev->read_frame->skb);
-			kfree_skb(dev->read_frame->skb, FREE_READ);
+			kfree_skb(dev->read_frame->skb);
 		}
 		kfree(dev->read_frame);
 		dev->read_frame = NULL;
@@ -661,7 +661,7 @@ pcbit_l2_err_recover(unsigned long data)
 		dev->write_queue = dev->write_queue->next;
 
 		if (frame->skb) {
-			dev_kfree_skb(frame->skb, FREE_WRITE);
+			dev_kfree_skb(frame->skb);
 		}
 		kfree(frame);
 #else

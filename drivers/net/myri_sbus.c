@@ -244,7 +244,7 @@ static void myri_clean_rings(struct myri_eth *mp)
 	rq->tail = rq->head = 0;
 	for(i = 0; i < (RX_RING_SIZE+1); i++) {
 		if(mp->rx_skbs[i] != NULL) {
-			dev_kfree_skb(mp->rx_skbs[i], FREE_READ);
+			dev_kfree_skb(mp->rx_skbs[i]);
 			mp->rx_skbs[i] = NULL;
 		}
 	}
@@ -252,7 +252,7 @@ static void myri_clean_rings(struct myri_eth *mp)
 	mp->tx_old = sq->tail = sq->head = 0;
 	for(i = 0; i < TX_RING_SIZE; i++) {
 		if(mp->tx_skbs[i] != NULL) {
-			dev_kfree_skb(mp->tx_skbs[i], FREE_WRITE);
+			dev_kfree_skb(mp->tx_skbs[i]);
 			mp->tx_skbs[i] = NULL;
 		}
 	}
@@ -337,7 +337,7 @@ static inline void myri_tx(struct myri_eth *mp, struct device *dev)
 		struct sk_buff *skb = mp->tx_skbs[entry];
 
 		DTX(("SKB[%d] ", entry));
-		dev_kfree_skb(skb, FREE_WRITE);
+		dev_kfree_skb(skb);
 		mp->tx_skbs[entry] = NULL;
 		mp->enet_stats.tx_packets++;
 

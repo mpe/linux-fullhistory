@@ -1248,7 +1248,7 @@ static struct cdrom_device_info cm206_info = {
   &cm206_dops,                  /* device operations */
   NULL,				/* link */
   NULL,				/* handle (not used by cm206) */
-  MKDEV(MAJOR_NR,0),		/* dev */
+  0,				/* dev */
   0,				/* mask */
   2,				/* maximum speed */
   1,				/* number of discs */
@@ -1386,6 +1386,7 @@ __initfunc(int cm206_init(void))
     cleanup(3);
     return -EIO;
   }
+  cm206_info.dev = MKDEV(MAJOR_NR,0);
   if (register_cdrom(&cm206_info) != 0) {
     printk(KERN_INFO "Cannot register for cdrom %d!\n", MAJOR_NR);
     cleanup(3);

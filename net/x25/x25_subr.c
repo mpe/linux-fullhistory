@@ -48,19 +48,19 @@ void x25_clear_queues(struct sock *sk)
 	struct sk_buff *skb;
 
 	while ((skb = skb_dequeue(&sk->write_queue)) != NULL)
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 
 	while ((skb = skb_dequeue(&sk->protinfo.x25->ack_queue)) != NULL)
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 
 	while ((skb = skb_dequeue(&sk->protinfo.x25->interrupt_in_queue)) != NULL)
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 
 	while ((skb = skb_dequeue(&sk->protinfo.x25->interrupt_out_queue)) != NULL)
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 
 	while ((skb = skb_dequeue(&sk->protinfo.x25->fragment_queue)) != NULL)
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 }
 
 
@@ -82,7 +82,7 @@ void x25_frames_acked(struct sock *sk, unsigned short nr)
 	if (sk->protinfo.x25->va != nr) {
 		while (skb_peek(&sk->protinfo.x25->ack_queue) != NULL && sk->protinfo.x25->va != nr) {
 			skb = skb_dequeue(&sk->protinfo.x25->ack_queue);
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			sk->protinfo.x25->va = (sk->protinfo.x25->va + 1) % modulus;
 		}
 	}

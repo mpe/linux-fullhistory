@@ -395,7 +395,7 @@ static int znet_send_packet(struct sk_buff *skb, struct device *dev)
 		if (znet_debug > 4)
 		  printk(KERN_DEBUG "%s: Transmitter queued, length %d.\n", dev->name, length);
 	}
-	dev_kfree_skb(skb, FREE_WRITE); 
+	dev_kfree_skb(skb); 
 	return 0;
 }
 

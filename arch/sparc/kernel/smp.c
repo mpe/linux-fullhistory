@@ -66,16 +66,6 @@ volatile int cpu_logical_map[NR_CPUS];
 struct klock_info klock_info = { KLOCK_CLEAR, 0 };
 
 volatile unsigned long ipi_count;
-#ifdef __SMP_PROF__
-volatile unsigned long smp_spins[NR_CPUS]={0};
-volatile unsigned long smp_spins_syscall[NR_CPUS]={0};
-volatile unsigned long smp_spins_syscall_cur[NR_CPUS]={0};
-volatile unsigned long smp_spins_sys_idle[NR_CPUS]={0};
-volatile unsigned long smp_idle_count[1+NR_CPUS]={0,};
-#endif
-#if defined (__SMP_PROF__)
-volatile unsigned long smp_idle_map=0;
-#endif
 
 volatile int smp_process_available=0;
 
@@ -605,8 +595,6 @@ static inline void sparc_do_profile(unsigned long pc)
 
 #endif
 
-volatile unsigned long smp_local_timer_ticks[1+NR_CPUS]={0,};
-
 unsigned int prof_multiplier[NR_CPUS];
 unsigned int prof_counter[NR_CPUS];
 
@@ -645,9 +633,6 @@ void smp_percpu_timer_interrupt(struct pt_regs *regs)
 		}
 		prof_counter[cpu] = prof_multiplier[cpu];
 	}
-#ifdef __SMP_PROF__
-	smp_local_timer_ticks[cpu]++;
-#endif
 }
 
 extern unsigned int lvl14_resolution;

@@ -158,7 +158,7 @@ void lapb_transmit_buffer(lapb_cb *lapb, struct sk_buff *skb, int type)
 #endif
 
 	if (!lapb_data_transmit(lapb, skb))
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 }
 
 void lapb_establish_data_link(lapb_cb *lapb)

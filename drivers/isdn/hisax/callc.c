@@ -1600,7 +1600,7 @@ lldata_handler(struct PStack *st, int pr, void *arg)
 				chanp->sp->iif.rcvcallb_skb(chanp->sp->myid, chanp->chan, skb);
 			else {
 				SET_SKB_FREE(skb);
-				dev_kfree_skb(skb, FREE_READ);
+				dev_kfree_skb(skb);
 			}
 			break;
 		default:
@@ -1622,7 +1622,7 @@ lltrans_handler(struct PStack *st, int pr, void *arg)
 				chanp->sp->iif.rcvcallb_skb(chanp->sp->myid, chanp->chan, skb);
 			else {
 				SET_SKB_FREE(skb);
-				dev_kfree_skb(skb, FREE_READ);
+				dev_kfree_skb(skb);
 			}
 			break;
 		default:
@@ -1966,7 +1966,7 @@ HiSax_writebuf_skb(int id, int chan, struct sk_buff *skb)
 				csta->hs[chanp->hscx].tx_cnt += len;
 				chanp->ds.l2.l2l1(&chanp->ds, PH_DATA, nskb);
 			}
-			dev_kfree_skb(skb, FREE_WRITE);
+			dev_kfree_skb(skb);
 		} else
 			len = 0;
 		restore_flags(flags);

@@ -165,7 +165,7 @@ static int lapbeth_rcv(struct sk_buff *skb, struct device *dev, struct packet_ty
 	dev = lapbeth_get_x25_dev(dev);
 
 	if (dev == NULL || dev->start == 0) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		return 0;
 	}
 
@@ -179,7 +179,7 @@ static int lapbeth_rcv(struct sk_buff *skb, struct device *dev, struct packet_ty
 	skb_trim(skb, len);	/* Set the length of the data */
 
 	if ((err = lapb_data_received(lapbeth, skb)) != LAPB_OK) {
-		kfree_skb(skb, FREE_READ);
+		kfree_skb(skb);
 		printk(KERN_DEBUG "lapbether: lapb_data_received err - %d\n", err);
 	}
 
@@ -218,7 +218,7 @@ static int lapbeth_xmit(struct sk_buff *skb, struct device *dev)
 	 */
 	if (!dev->start) {
 		lapbeth_check_devices(dev);
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return -ENODEV;
 	}
 
@@ -228,15 +228,15 @@ static int lapbeth_xmit(struct sk_buff *skb, struct device *dev)
 		case 0x01:
 			if ((err = lapb_connect_request(lapbeth)) != LAPB_OK)
 				printk(KERN_ERR "lapbeth: lapb_connect_request error - %d\n", err);
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			return 0;
 		case 0x02:
 			if ((err = lapb_disconnect_request(lapbeth)) != LAPB_OK)
 				printk(KERN_ERR "lapbeth: lapb_disconnect_request err - %d\n", err);
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			return 0;
 		default:
-			kfree_skb(skb, FREE_WRITE);
+			kfree_skb(skb);
 			return 0;
 	}
 
@@ -244,7 +244,7 @@ static int lapbeth_xmit(struct sk_buff *skb, struct device *dev)
 
 	if ((err = lapb_data_request(lapbeth, skb)) != LAPB_OK) {
 		printk(KERN_ERR "lapbeth: lapb_data_request error - %d\n", err);
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 		return -ENOMEM;
 	}
 

@@ -910,7 +910,7 @@ static int rt6_msgrcv(int unit, struct sk_buff *skb)
 
 out:
 	rtnl_unlock();
-	kfree_skb(skb, FREE_READ);	
+	kfree_skb(skb);	
 	return count;
 }
 
@@ -926,7 +926,7 @@ static void rt6_sndrtmsg(struct in6_rtmsg *rtmsg)
 	       sizeof(struct in6_rtmsg));
 	
 	if (netlink_post(NETLINK_ROUTE6, skb))
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 }
 
 void rt6_sndmsg(int type, struct in6_addr *dst, struct in6_addr *src,
@@ -966,7 +966,7 @@ void rt6_sndmsg(int type, struct in6_addr *dst, struct in6_addr *src,
 	msg->rtmsg_flags = flags;
 
 	if (netlink_post(NETLINK_ROUTE6, skb))
-		kfree_skb(skb, FREE_WRITE);
+		kfree_skb(skb);
 }
 #endif /* CONFIG_IPV6_NETLINK */
 
@@ -1336,7 +1336,7 @@ int ipv6_route_ioctl(unsigned int cmd, void *arg)
 int ip6_pkt_discard(struct sk_buff *skb)
 {	
 	ipv6_statistics.Ip6OutNoRoutes++;
-	kfree_skb(skb, FREE_WRITE);
+	kfree_skb(skb);
 	return 0;
 }
 

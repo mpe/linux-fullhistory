@@ -1154,7 +1154,7 @@ elmc_send_packet(struct sk_buff *skb, struct device *dev)
       elmc_attn586();
       dev->trans_start = jiffies;
       if(!i) {
-        dev_kfree_skb(skb,FREE_WRITE);
+        dev_kfree_skb(skb);
 	  }
       WAIT_4_SCB_CMD();
       if( (p->scb->status & CU_ACTIVE)) /* test it, because CU sometimes doesn't start immediately */
@@ -1179,7 +1179,7 @@ elmc_send_packet(struct sk_buff *skb, struct device *dev)
     p->nop_cmds[p->nop_point]->cmd_link = make16((p->xmit_cmds[0]));
     dev->trans_start = jiffies;
     p->nop_point = next_nop;
-    dev_kfree_skb(skb,FREE_WRITE);
+    dev_kfree_skb(skb);
 #  endif
 #else
     p->xmit_buffs[p->xmit_count]->size = TBD_LAST | len;
@@ -1201,7 +1201,7 @@ elmc_send_packet(struct sk_buff *skb, struct device *dev)
       dev->tbusy = 0;
     }
     sti();
-    dev_kfree_skb(skb,FREE_WRITE);
+    dev_kfree_skb(skb);
 #endif
   }
   return 0;
