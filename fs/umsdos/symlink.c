@@ -39,7 +39,8 @@ static int umsdos_readlink_x (
 	int ret;
 	loff_t loffs = 0;
 	struct file filp;
-	
+
+        fill_new_filp (&filp, NULL);
 	
 	ret = dentry->d_inode->i_size;
 	

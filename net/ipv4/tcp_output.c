@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.63 1998/03/13 14:15:55 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.65 1998/03/15 12:07:03 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -291,7 +291,8 @@ void tcp_write_xmit(struct sock *sk)
 			size = skb->len - (((unsigned char*)th) - skb->data);
 		}
 
-		tp->last_ack_sent = th->ack_seq = htonl(tp->rcv_nxt);
+		tp->last_ack_sent = tp->rcv_nxt;
+		th->ack_seq = htonl(tp->rcv_nxt);
 		th->window = rcv_wnd;
 		tcp_update_options((__u32 *)(th + 1),tp);
 
@@ -673,6 +674,41 @@ update_write_seq:
 	 * this FIN as being legitimate.
 	 */
 	tp->write_seq++;
+}
+
+/* We get here when a process closes a file descriptor (either due to
+ * an explicit close() or as a byproduct of exit()'ing) and there
+ * was unread data in the receive queue.  This behavior is recommended
+ * by draft-ietf-tcpimpl-prob-03.txt section 3.10.  -DaveM
+ */
+void tcp_send_active_reset(struct sock *sk)
+{
+	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
+	struct sk_buff *skb;
+	struct tcphdr *th;
+
+again:
+	/* NOTE: No TCP options attached and we never retransmit this. */
+	skb = sock_wmalloc(sk, (BASE_ACK_SIZE + sizeof(*th)), 1, GFP_KERNEL);
+	if(skb == NULL)
+		goto again;
+	skb->csum = 0;
+	if(tp->af_specific->build_net_header(sk, skb) < 0) {
+		kfree_skb(skb);
+	} else {
+		th = (struct tcphdr *) skb_put(skb, sizeof(*th));
+		memcpy(th, &(sk->dummy_th), sizeof(*th));
+		th->seq = htonl(tp->write_seq);
+		th->rst = 1;
+		th->doff = sizeof(*th) / 4;
+		tp->last_ack_sent = tp->rcv_nxt;
+		th->ack_seq = htonl(tp->rcv_nxt);
+		th->window = htons(tcp_select_window(sk));
+		tp->af_specific->send_check(sk, th, sizeof(*th), skb);
+		tp->af_specific->queue_xmit(skb);
+		tcp_statistics.TcpOutSegs++;
+		tcp_statistics.TcpOutRsts++;
+	}
 }
 
 /* WARNING: This routine must only be called when we have already sent

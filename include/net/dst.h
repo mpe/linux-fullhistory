@@ -120,7 +120,7 @@ extern void dst_destroy(struct dst_entry * dst);
 extern __inline__
 void dst_free(struct dst_entry * dst)
 {
-	if (dst->obsolete > 0)
+	if (dst->obsolete > 1)
 		return;
 	if (!atomic_read(&dst->use)) {
 		dst_destroy(dst);

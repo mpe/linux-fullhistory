@@ -330,9 +330,9 @@ __initfunc(unsigned long free_area_init(unsigned long start_mem, unsigned long e
 	i = (end_mem - PAGE_OFFSET) >> (PAGE_SHIFT+7);
 	if (i < 48)
 		i = 48;
-	min_free_pages = i;
-	free_pages_low = i + (i>>1);
-	free_pages_high = i + i;
+	freepages.min = i;
+	freepages.low = i + (i>>1);
+	freepages.high = i + i;
 	mem_map = (mem_map_t *) LONG_ALIGN(start_mem);
 	p = mem_map + MAP_NR(end_mem);
 	start_mem = LONG_ALIGN((unsigned long) p);

@@ -39,6 +39,7 @@ static int umsdos_waitcreate(struct inode *dir)
   }
   return ret;
 }
+
 /*
 	Wait for any lookup process to finish
 */
@@ -48,6 +49,7 @@ static void umsdos_waitlookup (struct inode *dir)
     sleep_on(&dir->u.umsdos_i.u.dir_info.p);
   }
 }
+
 /*
 	Lock all other process out of this directory.
 */
@@ -90,6 +92,7 @@ void umsdos_lockcreate (struct inode *dir)
   dir->u.umsdos_i.u.dir_info.pid = current->pid;
   umsdos_waitlookup (dir);
 }
+
 /*
 	Lock all other process out of those two directories.
 */
@@ -115,6 +118,7 @@ static void umsdos_lockcreate2 (struct inode *dir1, struct inode *dir2)
   umsdos_waitlookup(dir1);
   umsdos_waitlookup(dir2);
 }
+
 /*
 	Wait until creation is finish in this directory.
 */
@@ -157,6 +161,7 @@ void umsdos_startlookup (struct inode *dir){}
 static void umsdos_unlockcreate (struct inode *dir){}
 void umsdos_endlookup (struct inode *dir){}
 #endif
+
 static int umsdos_nevercreat(
 			     struct inode *dir,
 			     struct dentry *dentry,
@@ -210,7 +215,11 @@ static int umsdos_create_any (
      /* file */
 {
     
-  int ret = umsdos_nevercreat(dir,dentry,-EEXIST);
+  int ret;
+  
+  Printk (("umsdos_create_any /mn/: create %.*s in dir=%lu - nevercreat=/", (int) dentry->d_name.len, dentry->d_name.name, dir->i_ino));
+  ret = umsdos_nevercreat(dir,dentry,-EEXIST);
+  Printk (("%d/\n", ret));
   if (ret == 0){
     struct umsdos_info info;
     ret = umsdos_parse(dentry->d_name.name,dentry->d_name.len,&info);
@@ -237,8 +246,8 @@ static int umsdos_create_any (
 	if (ret == 0){
 	  struct inode *inode = dentry->d_inode;
 	  umsdos_lookup_patch (dir,inode,&info.entry,info.f_pos);
-	  Printk (("inode %p[%d] ",inode,inode->i_count));
-	  Printk (("Creation OK: [%lu] %.*s %d pos %ld\n", dir->i_ino,
+	  Printk (("inode %p[%lu], count=%d ",inode, inode->i_ino, inode->i_count));
+	  Printk (("Creation OK: [dir %lu] %.*s pid=%d pos %ld\n", dir->i_ino,
 		   info.fake.len, info.fake.fname, current->pid, info.f_pos));
 	}else{
 	  /* #Specification: create / file exist in DOS
@@ -276,9 +285,10 @@ static int umsdos_create_any (
       umsdos_unlockcreate(dir);
     }
   }
-  d_add(dentry,dir);
+  /* d_add(dentry,dir); /mn/ FIXME: msdos_create already did this for short name ! */
   return ret;
 }
+
 /*
 	Initialise the new_entry from the old for a rename operation.
 	(Only useful for umsdos_rename_f() below).
@@ -425,6 +435,7 @@ static int umsdos_rename_f(
   Printk (("\n"));
   return ret;
 }
+
 /*
 	Setup un Symbolic link or a (pseudo) hard link
 	Return a negative error code or 0 if ok.
@@ -456,11 +467,13 @@ static int umsdos_symlink_x(
   if (ret == 0){
     int len = strlen(symname);
     struct file filp;
-    filp.f_pos = 0;
+    loff_t myofs=0;
+    fill_new_filp (&filp, dentry);
+
     /* Make the inode acceptable to MSDOS FIXME */
     Printk ((KERN_ERR "umsdos_symlink_x: FIXME /mn/ Here goes the crash.. known wrong code...\n"));
-    ret = umsdos_file_write_kmem (dentry->d_inode, &filp,symname,ret,NULL);	/* FIXME /mn/: dentry->d_inode->i_ino is totaly wrong, just put in to compile the beast...
- PTW dentry->d_inode is "less incorrect" 										 */
+    Printk ((KERN_WARNING "   symname=%s ; dentry name=%.*s (ino=%lu)\n", symname, (int) dentry->d_name.len, dentry->d_name.name, dentry->d_inode->i_ino));
+    ret = umsdos_file_write_kmem_real (&filp, symname, len, &myofs);
     /* dput(dentry); ?? where did this come from FIXME */
     if (ret >= 0){
       if (ret != len){
@@ -480,6 +493,7 @@ static int umsdos_symlink_x(
   Printk (("\n"));
   return ret;
 }
+
 /*
   Setup un Symbolic link.
   Return a negative error code or 0 if ok.
@@ -492,6 +506,7 @@ int UMSDOS_symlink(
 {
   return umsdos_symlink_x (dir,dentry,symname,S_IFLNK|0777,0);
 }
+
 /*
   Add a link to an inode in a directory
 */
@@ -671,6 +686,9 @@ int UMSDOS_link (
   Printk (("umsdos_link %d\n",ret));
   return ret;
 }
+
+
+
 /*
   Add a new file into the alternate directory.
   The file is added to the real MSDOS directory. If successful, it
@@ -680,13 +698,16 @@ int UMSDOS_link (
 */
 int UMSDOS_create (
 		   struct inode *dir,
-		   struct dentry *dentry, /* Length of the name */
+		   struct dentry *dentry,
 		   int mode		  /* Permission bit + file type ??? */
 		   )	/* Will hold the inode of the newly created */
 							/* file */
 {
   return umsdos_create_any (dir,dentry,mode,0,0);
 }
+
+
+
 /*
 	Add a sub-directory in a directory
 */
@@ -735,7 +756,7 @@ int UMSDOS_mkdir(
 	  ret = compat_umsdos_real_lookup (dir,info.fake.fname,
 					   info.fake.len,&subdir);
 	  if (ret == 0){
-	    struct inode *result;
+/*	    struct inode *result;	FIXME /mn/ hmmm what is this supposed to be ? */
 	    struct dentry *tdentry;
 	    tdentry = creat_dentry (UMSDOS_EMD_FILE, UMSDOS_EMD_NAMELEN, NULL);
 
@@ -753,9 +774,10 @@ int UMSDOS_mkdir(
     }
   }
   Printk (("umsdos_mkdir %d\n",ret));
-  dput (dentry);
+/*  dput (dentry); FIXME /mn/ */
   return ret;
 }
+
 /*
 	Add a new device special file into a directory.
 */
@@ -779,8 +801,9 @@ int UMSDOS_mknod(
      for ordinary files was causing major trouble with hard link
      in particular and other parts of the kernel I guess.
   */
+
   int ret = umsdos_create_any (dir,dentry,mode,rdev,0);
-  dput(dentry);
+/*  dput(dentry); /mn/ FIXME! */
   return ret;
 }
 
@@ -952,13 +975,20 @@ int UMSDOS_unlink (
 	struct inode * dir,
 	struct dentry *dentry)
 {
-  int ret = umsdos_nevercreat(dir,dentry,-EPERM);
+  int ret;
+  Printk ((" *** UMSDOS_unlink entering /mn/ *** \n"));
+
+  ret = umsdos_nevercreat(dir,dentry,-EPERM);
+  
+  Printk (("UMSDOS_unlink /mn/: nevercreat=%d\n", ret));
+  
   if (ret == 0){
     struct umsdos_info info;
     ret = umsdos_parse (dentry->d_name.name,dentry->d_name.len,&info);
     if (ret == 0){
       umsdos_lockcreate(dir);
       ret = umsdos_findentry(dir,&info,1);
+      Printk (("UMSDOS_unlink: findentry returned %d\n", ret));
       if (ret == 0){
 	Printk (("UMSDOS_unlink %.*s ",info.fake.len,info.fake.fname));
 				/* check sticky bit */

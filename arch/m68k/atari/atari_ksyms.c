@@ -1,4 +1,6 @@
 #include <linux/module.h>
+#include <linux/pci.h>
+
 #include <asm/ptrace.h>
 #include <asm/traps.h>
 #include <asm/atarihw.h>
@@ -40,3 +42,7 @@ EXPORT_SYMBOL(ikbd_mouse_rel_pos);
 EXPORT_SYMBOL(ikbd_mouse_disable);
 
 EXPORT_SYMBOL(atari_microwire_cmd);
+
+#if CONFIG_PCI
+EXPORT_SYMBOL(pci_devices);
+#endif

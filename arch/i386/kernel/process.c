@@ -480,7 +480,6 @@ void release_thread(struct task_struct *dead_task)
 int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	struct task_struct * p, struct pt_regs * regs)
 {
-	int i;
 	struct pt_regs * childregs;
 
 	p->tss.tr = _TSS(nr);

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.59 1998/03/13 08:02:20 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.60 1998/03/15 02:59:32 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -475,14 +475,19 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 
 	release_sock(sk);
 
-	buff = sock_wmalloc(sk, MAX_SYN_SIZE, 0, GFP_KERNEL);	
-
-	if (buff == NULL) 
+	buff = sock_wmalloc(sk, (MAX_SYN_SIZE + sizeof(struct sk_buff)),
+			    0, GFP_KERNEL);
+	if (buff == NULL) {
+		/* FIXME: Free route references etc??? */
 		return(-ENOMEM);
+	}
 
 	lock_sock(sk);
 
 	tcp_v6_build_header(sk, buff);
+
+	tp->tcp_header_len = sizeof(struct tcphdr) +
+		(sysctl_tcp_timestamps ? TCPOLEN_TSTAMP_ALIGNED : 0);
 
 	/* build the tcp header */
 	th = (struct tcphdr *) skb_put(buff,sizeof(struct tcphdr));
@@ -498,7 +503,7 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 
 
 	sk->mtu = dst->pmtu;
-	sk->mss = sk->mtu - sizeof(struct ipv6hdr) - sizeof(struct tcphdr);
+	sk->mss = (sk->mtu - sizeof(struct ipv6hdr) - tp->tcp_header_len);
 
         if (sk->mss < 1) {
                 printk(KERN_DEBUG "intial ipv6 sk->mss below 1\n");
@@ -542,12 +547,12 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 	tp->packets_out++;
 	buff->when = jiffies;
 	skb1 = skb_clone(buff, GFP_KERNEL);
-	skb_set_owner_w(skb1, sk);
-
-	tcp_v6_xmit(skb1);
+	if(skb1 != NULL) {
+		skb_set_owner_w(skb1, sk);
+		tcp_v6_xmit(skb1);
+	}
 
 	/* Timer for repeating the SYN until an answer  */
-
 	tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
 	tcp_statistics.TcpActiveOpens++;
 	tcp_statistics.TcpOutSegs++;
@@ -660,11 +665,14 @@ void tcp_v6_err(int type, int code, unsigned char *header, __u32 info,
 			ip6_dst_store(sk, dst);
 		}
 
-		if (sk->dst_cache->error)
+		if (sk->dst_cache->error) {
 			sk->err_soft = sk->dst_cache->error;
-		else
+		} else {
+			/* FIXME: Reset sk->mss, taking into account TCP option
+			 *        bytes for timestamps. -DaveM
+			 */
 			sk->mtu = sk->dst_cache->pmtu;
-
+		}
 		if (sk->sock_readers) { /* remove later */
 			printk(KERN_DEBUG "tcp_v6_err: pmtu disc: socket locked.\n");
 			return;
@@ -777,11 +785,10 @@ static void tcp_v6_send_synack(struct sock *sk, struct open_request *req)
 	 * match what happens under IPV4. Figure out the right thing to do.
 	 */
         req->mss = min(sk->mss, req->mss);
-
-        if (req->mss < 1) {
-                printk(KERN_DEBUG "initial req->mss below 1\n");
-                req->mss = 1;
-        }
+	if(sk->user_mss)
+		req->mss = min(req->mss, sk->user_mss);
+	if(req->tstamp_ok == 0)
+		req->mss += TCPOLEN_TSTAMP_ALIGNED;
 
 	if (req->rcv_wnd == 0) {
 		__u8 rcv_wscale;
@@ -872,9 +879,11 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
 	tp.tstamp_ok = tp.wscale_ok = tp.snd_wscale = 0;
 	tp.in_mss = 536;
 	tcp_parse_options(skb->h.th,&tp,0);
-	if (tp.saw_tstamp)
-                req->ts_recent = tp.rcv_tsval;
         req->mss = tp.in_mss;
+	if (tp.saw_tstamp) {
+		req->mss -= TCPOLEN_TSTAMP_ALIGNED;
+                req->ts_recent = tp.rcv_tsval;
+	}
         req->tstamp_ok = tp.tstamp_ok;
         req->snd_wscale = tp.snd_wscale;
         req->wscale_ok = tp.wscale_ok;
@@ -993,8 +1002,8 @@ static struct sock * tcp_v6_syn_recv_sock(struct sock *sk, struct sk_buff *skb,
         if (newtp->tstamp_ok) {
 		newtp->ts_recent = req->ts_recent;
 		newtp->ts_recent_stamp = jiffies;
-		newtp->tcp_header_len = sizeof(struct tcphdr) + 12;	/* FIXME: define constant! */
-		newsk->dummy_th.doff += 3;
+		newtp->tcp_header_len = sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED;
+		newsk->dummy_th.doff += (TCPOLEN_TSTAMP_ALIGNED >> 2);
         } else {
                 newtp->tcp_header_len = sizeof(struct tcphdr);
         }
@@ -1391,6 +1400,9 @@ static struct tcp_func ipv6_mapped = {
 	sizeof(struct sockaddr_in6)
 };
 
+/* NOTE: A lot of things set to zero explicitly by call to
+ *       sk_alloc() so need not be done here.
+ */
 static int tcp_v6_init_sock(struct sock *sk)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
@@ -1398,41 +1410,24 @@ static int tcp_v6_init_sock(struct sock *sk)
 	skb_queue_head_init(&tp->out_of_order_queue);
 	tcp_init_xmit_timers(sk);
 
-	tp->srtt  = 0;
 	tp->rto  = TCP_TIMEOUT_INIT;		/*TCP_WRITE_TIME*/
 	tp->mdev = TCP_TIMEOUT_INIT;
-
-	tp->ato = 0;
-	
-	/* FIXME: right thing? */
-	tp->rcv_wnd = 0;
 	tp->in_mss = 536;
-	/* tp->rcv_wnd = 8192; */
-	tp->tstamp_ok = 0;
-	tp->wscale_ok = 0;
-	tp->snd_wscale = 0;
-	tp->saw_tstamp = 0;
-	tp->syn_backlog = 0;
 
-	/* start with only sending one packet at a time. */
+	/* See draft-stevens-tcpca-spec-01 for discussion of the
+	 * initialization of these values.
+	 */
 	tp->snd_cwnd = 1;
 	tp->snd_ssthresh = 0x7fffffff;
 
-
-
 	sk->priority = 1;
 	sk->state = TCP_CLOSE;
-
 	sk->max_ack_backlog = SOMAXCONN;
-
 	sk->mtu = 576;
 	sk->mss = 536;
-
 	sk->dummy_th.doff = sizeof(sk->dummy_th)/4;
 
-	/*
-	 *	Speed up by setting some standard state for the dummy_th.
-	 */
+	/* Speed up by setting some standard state for the dummy_th. */
   	sk->dummy_th.ack=1;
   	sk->dummy_th.doff=sizeof(struct tcphdr)>>2;
 

@@ -552,6 +552,7 @@ extern void tcp_send_probe0(struct sock *);
 extern void tcp_send_partial(struct sock *);
 extern void tcp_write_wakeup(struct sock *);
 extern void tcp_send_fin(struct sock *sk);
+extern void tcp_send_active_reset(struct sock *sk);
 extern int  tcp_send_synack(struct sock *);
 extern void tcp_send_skb(struct sock *, struct sk_buff *, int force_queue);
 extern void tcp_send_ack(struct sock *sk);
@@ -804,9 +805,19 @@ extern __inline__ int tcp_syn_build_options(struct sk_buff *skb, int mss, int ts
 	unsigned char *optr = skb_put(skb,count);
 	__u32 *ptr = (__u32 *)optr;
 
-	/*
-	 * We always get an MSS option.
+	/* We always get an MSS option.
+	 * The option bytes which will be seen in normal data
+	 * packets should timestamps be used, must be in the MSS
+	 * advertised.  But we subtract them from sk->mss so
+	 * that calculations in tcp_sendmsg are simpler etc.
+	 * So account for this fact here if necessary.  If we
+	 * don't do this correctly, as a receiver we won't
+	 * recognize data packets as being full sized when we
+	 * should, and thus we won't abide by the delayed ACK
+	 * rules correctly.
 	 */
+	if(ts)
+		mss += TCPOLEN_TSTAMP_ALIGNED;
 	*ptr++ = htonl((TCPOPT_MSS << 24) | (TCPOLEN_MSS << 16) | mss);
 	if (ts) {
 		*ptr++ = __constant_htonl((TCPOPT_NOP << 24) | (TCPOPT_NOP << 16) |

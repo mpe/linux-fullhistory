@@ -224,10 +224,8 @@ a. Drive is not detected during booting.
    - If the autoprobing is not finding your drive, you can tell the
      driver to assume that one exists by using a lilo option of the
      form `hdX=cdrom', where X is the drive letter corresponding to
-     where your drive is installed (see section 2). This is required
-     for CDROM drives such as the Pioneer DR-A24X, which do not properly
-     identify themselves as ATAPI CDROM drives.  Note that if you
-     do this and you see a boot message like
+     where your drive is installed.  Note that if you do this and you 
+     see a boot message like
 
        hdX: ATAPI cdrom (?)
 
@@ -281,7 +279,16 @@ b. Timeout/IRQ errors.
     there are hardware problems with the interrupt setup; they
     apparently don't use interrupts.
 
-
+  - If you own a Pioneer DR-A24X, you _will_ get nasty error messages 
+    on boot such as "irq timeout: status=0x50 { DriveReady SeekComplete }"
+    The Pioneer DR-A24X cdrom drives are fairly popular these days.
+    Unfortunatly, these drives seem to become very confused when we perform
+    the standard Linux ATA disk drive probe. If you own one of these drives,
+    you can bypass the ATA probing which confuses these cdrom drives, by 
+    adding `append="hdX=noprobe hdX=cdrom"' to your lilo.conf file and runing 
+    lilo (again where X is the drive letter corresponding to where your drive 
+    is installed.)
+    
 c. System hangups.
 
   - If the system locks up when you try to access the cdrom, the most

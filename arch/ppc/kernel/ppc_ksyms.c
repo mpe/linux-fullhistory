@@ -6,6 +6,7 @@
 #include <linux/string.h>
 #include <linux/bios32.h>
 #include <linux/interrupt.h>
+#include <linux/pci.h>
 
 #include <asm/semaphore.h>
 #include <asm/processor.h>
@@ -147,3 +148,7 @@ EXPORT_SYMBOL(get_property);
 EXPORT_SYMBOL(pci_io_base);
 EXPORT_SYMBOL(pci_device_loc);
 EXPORT_SYMBOL(note_scsi_host);
+
+#if CONFIG_PCI
+EXPORT_SYMBOL(pci_devices);
+#endif

@@ -40,39 +40,6 @@ __initfunc(void msg_init (void))
 	return;
 }
 
-/*
- * If the send queue is full, try to free any old messages.
- * These are most probably unwanted, since no one has picked them up...
- */
-#define MSG_FLUSH_TIME 10 /* seconds */
-static void flush_msg(struct msqid_ds *msq)
-{
-	struct msg *nmsg;
-	unsigned long flags;
-	int flushed = 0;
-
-	save_flags(flags);
-	cli();
-
-	/* messages were put on the queue in time order */
-	while ( (nmsg = msq->msg_first) &&
-		((CURRENT_TIME - nmsg->msg_stime) > MSG_FLUSH_TIME)) {
-		msgbytes -= nmsg->msg_ts; 
-		msghdrs--; 
-		msq->msg_cbytes -= nmsg->msg_ts;
-		msq->msg_qnum--;
-		msq->msg_first = nmsg->msg_next;
-		++flushed;
-		kfree(nmsg);
-	}
-
-	if (msq->msg_qnum == 0)
-		msq->msg_first = msq->msg_last = NULL;
-	restore_flags(flags);
-	if (flushed)
-		printk(KERN_WARNING "flushed %d old SYSVIPC messages", flushed);
-}
-
 static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg)
 {
 	int id, err;

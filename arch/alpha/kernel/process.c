@@ -39,6 +39,7 @@
 #include <asm/io.h>
 #include <asm/pgtable.h>
 #include <asm/hwrpb.h>
+#include <asm/fpu.h>
 
 /*
  * Initial task structure. Make this a per-architecture thing,
@@ -50,7 +51,7 @@
 unsigned long init_user_stack[1024] = { STACK_MAGIC, };
 static struct vm_area_struct init_mmap = INIT_MMAP;
 static struct fs_struct init_fs = INIT_FS;
-static struct files * init_fd_array[NR_OPEN] = { NULL, };
+static struct file * init_fd_array[NR_OPEN] = { NULL, };
 static struct files_struct init_files = INIT_FILES;
 static struct signal_struct init_signals = INIT_SIGNALS;
 struct mm_struct init_mm = INIT_MM;
@@ -199,6 +200,10 @@ void exit_thread(void)
 
 void flush_thread(void)
 {
+	/* Arrange for each exec'ed process to start off with a 
+	   clean slate wrt the fpu.  */
+	current->tss.flags &= ~IEEE_SW_MASK;
+	wrfpcr(FPCR_DYN_NORMAL);
 }
 
 void release_thread(struct task_struct *dead_task)

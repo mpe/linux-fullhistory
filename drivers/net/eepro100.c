@@ -1348,7 +1348,7 @@ speedo_rx(struct device *dev)
 #if (LINUX_VERSION_CODE >= VERSION(1,3,44))
 			if (! rx_in_place) {
 				skb_reserve(skb, 2);	/* 16 byte align the data fields */
-#if defined(__i386)   &&  notyet
+#if defined(__i386__)   &&  notyet
 				/* Packet is in one chunk -- we can copy + cksum. */
 				eth_io_copy_and_sum(skb, bus_to_virt(sp->rx_ringp[entry]->rx_buf_addr),
 									pkt_len, 0);

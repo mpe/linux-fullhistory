@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.81 1998/03/14 06:09:54 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.84 1998/03/15 03:23:20 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -77,6 +77,7 @@ int sysctl_tcp_cong_avoidance;
 int sysctl_tcp_hoe_retransmits;
 int sysctl_tcp_syncookies = SYNC_INIT; 
 int sysctl_tcp_stdurg;
+int sysctl_tcp_rfc1337;
 
 static tcp_sys_cong_ctl_t tcp_sys_cong_ctl_f = &tcp_cong_avoid_vanj;
 
@@ -451,9 +452,8 @@ static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
 				 * not indicate a packet left the system.
 				 * We can test this by just checking
 				 * if ack changed from snd_una, since
-				 * the only way to get here without changing
-				 * advancing from snd_una is if this was a
-				 * window update.
+				 * the only way to get here without advancing
+				 * from snd_una is if this was a window update.
 				 */
 				if (ack != tp->snd_una && before(ack,tp->high_seq)) {
                                 	tcp_do_retransmit(sk, 0);
@@ -599,13 +599,6 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack, __u32 *seq,
 	int acked = 0;
 
 	while((skb=skb_peek(&sk->write_queue)) && (skb != tp->send_head)) {
-#ifdef TCP_DEBUG
-		/* Check for a bug. */
-		if (skb->next != (struct sk_buff*) &sk->write_queue &&
-		    after(skb->end_seq, skb->next->seq))
-			printk(KERN_DEBUG "INET: tcp_input.c: *** "
-			       "bug send_list out of order.\n");
-#endif								
 		/* If our packet is before the ack sequence we can
 		 * discard it as it's confirmed to have arrived the 
 		 * other end.
@@ -613,11 +606,15 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack, __u32 *seq,
 		if (after(skb->end_seq, ack))
 			break;
 
-#if 0
-		SOCK_DEBUG(sk, "removing seg %x-%x from retransmit queue\n",
-			   skb->seq, skb->end_seq);
-#endif
-		acked = FLAG_DATA_ACKED;
+		/* Initial outgoing SYN's get put onto the write_queue
+		 * just like anything else we transmit.  It is not
+		 * true data, and if we misinform our callers that
+		 * this ACK acks real data, we will erroneously exit
+		 * connection startup slow start one packet too
+		 * quickly.  This is severely frowned upon behavior.
+		 */
+		if(!skb->h.th->syn)
+			acked = FLAG_DATA_ACKED;
 		
 		/* FIXME: packet counting may break if we have to
 		 * do packet "repackaging" for stacks that don't
@@ -918,7 +915,8 @@ int tcp_timewait_state_process(struct tcp_tw_bucket *tw, struct sk_buff *skb,
 		 * Oh well... nobody has a sufficient solution to this
 		 * protocol bug yet.
 		 */
-		tcp_timewait_kill((unsigned long)tw);
+		if(sysctl_tcp_rfc1337 == 0)
+			tcp_timewait_kill((unsigned long)tw);
 
 		if(!th->rst)
 			return 1; /* toss a reset back */
@@ -1725,9 +1723,6 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 			/* Can't be earlier, doff would be wrong. */
 			tcp_send_ack(sk);
 
-			if (tp->in_mss)
-				sk->mss = min(sk->mss, tp->in_mss);
-
 			/* Check for the case where we tried to advertise
 			 * a window including timestamp options, but did not
 			 * end up using them for this connection.
@@ -1735,6 +1730,21 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 			if((tp->tstamp_ok == 0) && sysctl_tcp_timestamps)
 				sk->mss += TCPOLEN_TSTAMP_ALIGNED;
 			
+			/* Now limit it if the other end negotiated a smaller
+			 * value.
+			 */
+			if (tp->in_mss) {
+				int real_mss = tp->in_mss;
+
+				/* We store MSS locally with the timestamp bytes
+				 * subtracted, TCP's advertise it with them
+				 * included.  Account for this fact.
+				 */
+				if(tp->tstamp_ok)
+					real_mss -= TCPOLEN_TSTAMP_ALIGNED;
+				sk->mss = min(sk->mss, real_mss);
+			}
+
 			sk->dummy_th.dest = th->source;
 			tp->copied_seq = tp->rcv_nxt;
 

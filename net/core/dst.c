@@ -101,7 +101,7 @@ void * dst_alloc(int size, struct dst_ops * ops)
 void __dst_free(struct dst_entry * dst)
 {
 	start_bh_atomic();
-	dst->obsolete = 1;
+	dst->obsolete = 2;
 	dst->next = dst_garbage_list;
 	dst_garbage_list = dst;
 	if (dst_gc_timer_inc > DST_GC_INC) {

@@ -5,7 +5,7 @@
  *
  *		Dumb Network Address Translation.
  *
- * Version:	$Id: ip_nat_dumb.c,v 1.2 1997/10/10 22:41:05 davem Exp $
+ * Version:	$Id: ip_nat_dumb.c,v 1.3 1998/03/15 03:31:44 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -14,6 +14,9 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
+ * Fixes:
+ *		Rani Assaf	:	A zero checksum is a special case
+ *					only in UDP
  *
  * NOTE:	It is just working model of real NAT.
  */
@@ -49,7 +52,6 @@ ip_do_nat(struct sk_buff *skb)
 	u32 odaddr = iph->daddr;
 	u32 osaddr = iph->saddr;
 	u16	check;
-	u16	*cksum = NULL;
 
 	IPCB(skb)->flags |= IPSKB_TRANSLATED;
 
@@ -62,17 +64,23 @@ ip_do_nat(struct sk_buff *skb)
 	/* If it is the first fragment, rewrite protocol headers */
 
 	if (!(iph->frag_off & htons(IP_OFFSET))) {
-		/* Only plain TCP/UDP headers rewriting is implemented :-( */
-		if (iph->protocol == IPPROTO_TCP)
-			cksum = (u16*)&((struct tcphdr*)(((char*)iph) + iph->ihl*4))->check;
-		else if (iph->protocol == IPPROTO_UDP)
-			cksum = (u16*)&((struct udphdr*)(((char*)iph) + iph->ihl*4))->check;
-		if (cksum && (check = *cksum) != 0) {
-			check = csum_tcpudp_magic(iph->saddr, iph->daddr, 0, 0, ~check);
-			check = csum_tcpudp_magic(~osaddr, ~odaddr, 0, 0, ~check);
-			if (!check)
-				check = 0xFFFF;
-			*cksum = check;
+		u16	*cksum;
+
+		switch(iph->protocol) {
+		case IPPROTO_TCP:
+			cksum  = (u16*)&((struct tcphdr*)(((char*)iph) + iph->ihl*4))->check;
+			check  = csum_tcpudp_magic(iph->saddr, iph->daddr, 0, 0, ~(*cksum));
+			*cksum = csum_tcpudp_magic(~osaddr, ~odaddr, 0, 0, ~check);
+			break;
+		case IPPROTO_UDP:
+			cksum  = (u16*)&((struct udphdr*)(((char*)iph) + iph->ihl*4))->check;
+			if ((check = *cksum) != 0) {
+				check = csum_tcpudp_magic(iph->saddr, iph->daddr, 0, 0, ~check);
+				check = csum_tcpudp_magic(~osaddr, ~odaddr, 0, 0, ~check);
+				*cksum = check ? : 0xFFFF;
+			}
+		default:
+			break;
 		}
 	}
 	return 0;

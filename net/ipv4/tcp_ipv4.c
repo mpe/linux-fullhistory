@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.106 1998/03/13 14:15:54 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.109 1998/03/15 07:24:15 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -213,16 +213,17 @@ go_like_smoke:
 unsigned short tcp_good_socknum(void)
 {
 	struct tcp_bind_bucket *tb;
-	int remaining = sysctl_local_port_range[1] - sysctl_local_port_range[0];
+	int low = sysctl_local_port_range[0];
+	int high = sysctl_local_port_range[1];
+	int remaining = high - low;
 	int rover;
 
 	SOCKHASH_LOCK();
 	rover = tcp_port_rover;
 	do {
 		rover += 1;
-		if(rover < sysctl_local_port_range[0] ||
-		   rover > sysctl_local_port_range[1])
-			rover = sysctl_local_port_range[0];
+		if((rover < low) || (rover > high))
+			rover = low;
 		tb = tcp_bound_hash[tcp_bhashfn(rover)];
 		for( ; tb; tb = tb->next) {
 			if(tb->port == rover)
@@ -1072,6 +1073,10 @@ static void tcp_v4_send_synack(struct sock *sk, struct open_request *req)
 	mss = (skb->dst->pmtu - sizeof(struct iphdr) - sizeof(struct tcphdr));
 	if (sk->user_mss)
 		mss = min(mss, sk->user_mss);
+	if(req->tstamp_ok)
+		mss -= TCPOLEN_TSTAMP_ALIGNED;
+	else
+		req->mss += TCPOLEN_TSTAMP_ALIGNED;
 
 	/* tcp_syn_build_options will do an skb_put() to obtain the TCP
 	 * options bytes below.
@@ -1238,9 +1243,11 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb, void *ptr,
  	tp.tstamp_ok = tp.wscale_ok = tp.snd_wscale = 0;
 	tp.in_mss = 536;
 	tcp_parse_options(th,&tp,want_cookie);
-	if (tp.saw_tstamp)
-		req->ts_recent = tp.rcv_tsval;
 	req->mss = tp.in_mss;
+	if (tp.saw_tstamp) {
+		req->mss -= TCPOLEN_TSTAMP_ALIGNED;
+		req->ts_recent = tp.rcv_tsval;
+	}
 	req->tstamp_ok = tp.tstamp_ok;
 	req->snd_wscale = tp.snd_wscale;
 	req->wscale_ok = tp.wscale_ok;
@@ -1802,6 +1809,9 @@ struct tcp_func ipv4_specific = {
 	sizeof(struct sockaddr_in)
 };
 
+/* NOTE: A lot of things set to zero explicitly by call to
+ *       sk_alloc() so need not be done here.
+ */
 static int tcp_v4_init_sock(struct sock *sk)
 {
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
@@ -1809,23 +1819,11 @@ static int tcp_v4_init_sock(struct sock *sk)
 	skb_queue_head_init(&tp->out_of_order_queue);
 	tcp_init_xmit_timers(sk);
 
-	tp->srtt  = 0;
 	tp->rto  = TCP_TIMEOUT_INIT;		/*TCP_WRITE_TIME*/
 	tp->mdev = TCP_TIMEOUT_INIT;
-
-	tp->ato = 0;
-
-	/* FIXME: tie this to sk->rcvbuf? (May be unnecessary) */
-	/* tp->rcv_wnd = 8192; */
-	tp->tstamp_ok = 0;
-	tp->wscale_ok = 0;
 	tp->in_mss = 536;
-	tp->snd_wscale = 0;
-	tp->saw_tstamp = 0;
-	tp->syn_backlog = 0;
 
-	/*
-	 * See draft-stevens-tcpca-spec-01 for discussion of the
+	/* See draft-stevens-tcpca-spec-01 for discussion of the
 	 * initialization of these values.
 	 */
 	tp->snd_cwnd = 1;
@@ -1833,9 +1831,7 @@ static int tcp_v4_init_sock(struct sock *sk)
 
 	sk->priority = 1;
 	sk->state = TCP_CLOSE;
-
 	sk->max_ack_backlog = SOMAXCONN;
-
 	sk->mtu = 576;
 	sk->mss = 536;
 

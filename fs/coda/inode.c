@@ -4,7 +4,7 @@
  * Copryright (C) 1996 Peter J. Braam <braam@maths.ox.ac.uk> and 
  * Michael Callahan <callahan@maths.ox.ac.uk> 
  * 
- * Rewritten for Linux 2.1.?? Peter Braam <braam@cs.cmu.edu>
+ * Rewritten for Linux 2.1.  Peter Braam <braam@cs.cmu.edu>
  * Copyright (C) Carnegie Mellon University
  */
 
@@ -81,7 +81,6 @@ static struct super_block * coda_read_super(struct super_block *sb,
         ViceFid fid;
 	kdev_t dev = sb->s_dev;
         int error;
-	char str[50];
 
 	ENTRY;
         MOD_INC_USE_COUNT; 
@@ -180,10 +179,10 @@ static void coda_put_super(struct super_block *sb)
 /* all filling in of inodes postponed until lookup */
 static void coda_read_inode(struct inode *inode)
 {
-	struct coda_inode_info *cnp;
+	struct coda_inode_info *cii;
 	ENTRY;
-	cnp = ITOC(inode);
-	cnp->c_magic = 0;
+	cii = ITOC(inode);
+	cii->c_magic = 0;
 	return;
 }
 
@@ -200,32 +199,32 @@ static void coda_put_inode(struct inode *in)
 
 static void coda_delete_inode(struct inode *inode)
 {
-        struct coda_inode_info *cnp;
+        struct coda_inode_info *cii;
         struct inode *open_inode;
 
         ENTRY;
         CDEBUG(D_SUPER, " inode->ino: %ld, count: %d\n", 
 	       inode->i_ino, inode->i_count);        
 
-        cnp = ITOC(inode);
-	if ( inode->i_ino == CTL_INO || cnp->c_magic != CODA_CNODE_MAGIC ) {
+        cii = ITOC(inode);
+	if ( inode->i_ino == CTL_INO || cii->c_magic != CODA_CNODE_MAGIC ) {
 	        clear_inode(inode);
 		return;
 	}
 
 
-	if ( coda_fid_is_volroot(&cnp->c_fid) )
-		list_del(&cnp->c_volrootlist);
+	if ( coda_fid_is_volroot(&cii->c_fid) )
+		list_del(&cii->c_volrootlist);
 
-        open_inode = cnp->c_ovp;
+        open_inode = cii->c_ovp;
         if ( open_inode ) {
                 CDEBUG(D_SUPER, "DELINO cached file: ino %ld count %d.\n",  
 		       open_inode->i_ino,  open_inode->i_count);
-                cnp->c_ovp = NULL;
+                cii->c_ovp = NULL;
                 iput(open_inode);
         }
 	
-	coda_cache_clear_cnp(cnp);
+	coda_cache_clear_inode(inode);
 
 	inode->u.generic_ip = NULL;
         clear_inode(inode);
@@ -235,24 +234,24 @@ static void coda_delete_inode(struct inode *inode)
 static int  coda_notify_change(struct dentry *de, struct iattr *iattr)
 {
 	struct inode *inode = de->d_inode;
-        struct coda_inode_info *cnp;
+        struct coda_inode_info *cii;
         struct coda_vattr vattr;
         int error;
 	
 	ENTRY;
         memset(&vattr, 0, sizeof(vattr)); 
-        cnp = ITOC(inode);
-        CHECK_CNODE(cnp);
+        cii = ITOC(inode);
+        CHECK_CNODE(cii);
 
         coda_iattr_to_vattr(iattr, &vattr);
         vattr.va_type = C_VNON; /* cannot set type */
 	CDEBUG(D_SUPER, "vattr.va_mode %o\n", vattr.va_mode);
 
-        error = venus_setattr(inode->i_sb, &cnp->c_fid, &vattr);
+        error = venus_setattr(inode->i_sb, &cii->c_fid, &vattr);
 
         if ( !error ) {
 	        coda_vattr_to_iattr(inode, &vattr); 
-		coda_cache_clear_cnp(cnp);
+		coda_cache_clear_inode(inode);
         }
 	CDEBUG(D_SUPER, "inode.i_mode %o, error %d\n", 
 	       inode->i_mode, error);

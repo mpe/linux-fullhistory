@@ -1240,7 +1240,7 @@ struct neigh_sysctl_table
          &proc_dointvec},
 	 {0}},
 
-	{{1, "default", NULL, 0, 0555, NULL},{0}},
+	{{NET_PROTO_CONF_DEFAULT, "default", NULL, 0, 0555, NULL},{0}},
 	{{0, "neigh", NULL, 0, 0555, NULL},{0}},
 	{{0, NULL, NULL, 0, 0555, NULL},{0}},
 	{{CTL_NET, "net", NULL, 0, 0555, NULL},{0}}
@@ -1255,10 +1255,11 @@ int neigh_sysctl_register(struct device *dev, struct neigh_parms *p,
 	if (t == NULL)
 		return -ENOBUFS;
 	memcpy(t, &neigh_sysctl_template, sizeof(*t));
+	t->neigh_vars[0].data = &p->mcast_probes;
 	t->neigh_vars[1].data = &p->ucast_probes;
 	t->neigh_vars[2].data = &p->app_probes;
 	t->neigh_vars[3].data = &p->retrans_time;
-	t->neigh_vars[4].data = &p->reachable_time;
+	t->neigh_vars[4].data = &p->base_reachable_time;
 	t->neigh_vars[5].data = &p->delay_probe_time;
 	t->neigh_vars[6].data = &p->gc_staletime;
 	t->neigh_vars[7].data = &p->queue_len;
@@ -1268,7 +1269,7 @@ int neigh_sysctl_register(struct device *dev, struct neigh_parms *p,
 	t->neigh_vars[11].data = &p->locktime;
 	if (dev) {
 		t->neigh_dev[0].procname = dev->name;
-		t->neigh_dev[0].ctl_name = dev->ifindex+1;
+		t->neigh_dev[0].ctl_name = dev->ifindex;
 		memset(&t->neigh_vars[12], 0, sizeof(ctl_table));
 	} else {
 		t->neigh_vars[12].data = (&p->locktime) + 1;

@@ -9448,7 +9448,7 @@ static int ncr53c8xx_pci_init(Scsi_Host_Template *tpnt,
 	/*
 	 * Try to fix up PCI config according to wished features.
 	 */
-#if defined(__i386) && !defined(MODULE)
+#if defined(__i386__) && !defined(MODULE)
 	if ((driver_setup.pci_fix_up & 1) &&
 	    (chip->features & FE_CLSE) && cache_line_size == 0) {
 #if LINUX_VERSION_CODE < LinuxVersionCode(2,1,75)

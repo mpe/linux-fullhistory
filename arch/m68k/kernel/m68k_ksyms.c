@@ -7,6 +7,7 @@
 #include <linux/elfcore.h>
 #include <linux/in6.h>
 #include <linux/interrupt.h>
+#include <linux/pci.h>
 
 #include <asm/setup.h>
 #include <asm/machdep.h>
@@ -58,3 +59,7 @@ EXPORT_SYMBOL_NOVERS(memcmp);
 EXPORT_SYMBOL_NOVERS(__down_failed);
 EXPORT_SYMBOL_NOVERS(__down_failed_interruptible);
 EXPORT_SYMBOL_NOVERS(__up_wakeup);
+
+#if CONFIG_PCI
+EXPORT_SYMBOL(pci_devices);
+#endif

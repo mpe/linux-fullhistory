@@ -26,7 +26,6 @@
  *    (If you are using a cd changer, you may get errors in the kernel
  *     logs that are completly expected.  Don't complain to me about this,
  *     unless you have a patch to fix it.  I am working on it...)
- * -Implement ide_cdrom_select_speed using the generic cdrom interface
  * -Fix ide_cdrom_reset so that it works (it does nothing right now)
  * -Query the drive to find what features are available before trying to
  *   use them (like trying to close the tray in drives that can't).
@@ -189,10 +188,19 @@
  *                         malloc'ed but never free'd when closing the device.
  *                     -- Cleaned up the global namespace a bit by making more
  *                         functions static that should already have been.
+ * 4.11  Mar 12, 1998  -- Added support for the CDROM_SELECT_SPEED ioctl
+ *                         based on a patch for 2.0.33 by Jelle Foks 
+ *                         <jelle@scintilla.utwente.nl>, a patch for 2.0.33
+ *                         by Toni Giorgino <toni@pcape2.pi.infn.it>, the SCSI
+ *                         version, and my own efforts.  -erik
+ *                     -- Fixed a stupid bug which egcs was kind enough to
+ *                         inform me of where "Illegal mode for this track"
+ *                         was never returned due to a comparison on data
+ *                         types of limited range.
  *
  *************************************************************************/
 
-#define IDECD_VERSION "4.10"
+#define IDECD_VERSION "4.11"
 
 #include <linux/module.h>
 #include <linux/types.h>
@@ -271,8 +279,7 @@ void cdrom_analyze_sense_data (ide_drive_t *drive,
 
 		printk ("  Error code: 0x%02x\n", reqbuf->error_code);
 
-		if (reqbuf->sense_key >= 0 &&
-		    reqbuf->sense_key < ARY_LEN (sense_key_texts))
+		if ( reqbuf->sense_key < ARY_LEN (sense_key_texts))
 			s = sense_key_texts[reqbuf->sense_key];
 		else
 			s = "(bad sense key)";
@@ -285,7 +292,7 @@ void cdrom_analyze_sense_data (ide_drive_t *drive,
 			s = buf;
 		} else {
 			int lo, hi;
-			int key = (reqbuf->asc << 8);
+			unsigned short key = (reqbuf->asc << 8);
 			if ( ! (reqbuf->ascq >= 0x80 && reqbuf->ascq <= 0xdd) )
 				key |= reqbuf->ascq;
 
@@ -496,7 +503,7 @@ static int cdrom_decode_status (ide_drive_t *drive, int good_stat,
 			} else if (sense_key == UNIT_ATTENTION) {
 				/* Check for media change. */
 				cdrom_saw_media_change (drive);
-				printk ("%s: media changed\n", drive->name);
+				/*printk("%s: media changed\n",drive->name);*/
 				return 0;
 			} else {
 				/* Otherwise, print an error. */
@@ -1518,7 +1525,6 @@ cdrom_startstop (ide_drive_t *drive, int startflag,
 	return cdrom_queue_packet_command (drive, &pc);
 }
 
-
 static int
 cdrom_read_capacity (ide_drive_t *drive, unsigned *capacity,
 		     struct atapi_request_sense *reqbuf)
@@ -1721,7 +1727,6 @@ cdrom_mode_sense (ide_drive_t *drive, int pageno, int modeflag,
 	return cdrom_queue_packet_command (drive, &pc);
 }
 
-
 static int
 cdrom_mode_select (ide_drive_t *drive, int pageno, char *buf, int buflen,
 		   struct atapi_request_sense *reqbuf)
@@ -1741,6 +1746,43 @@ cdrom_mode_select (ide_drive_t *drive, int pageno, char *buf, int buflen,
 	return cdrom_queue_packet_command (drive, &pc);
 }
 
+
+/* Note that this takes speed in kbytes/second, so don't try requesting
+   silly speeds like 2 here. Common speeds include:
+     176 kbytes/second  --  1x
+     353 kbytes/second  --  2x
+     387 kbytes/second  --  2.2x
+     528 kbytes/second  --  3x
+     706 kbytes/second  --  4x
+     1400 kbytes/second --  8x
+     2800 kbytes/second --  16x
+   ATAPI drives are free to select the speed you request or any slower
+   rate :-( Requesting too fast a speed will _not_ produce an error. */
+static int
+cdrom_select_speed (ide_drive_t *drive, int speed,
+                   struct atapi_request_sense *reqbuf)
+{
+	struct packet_command pc;
+	memset (&pc, 0, sizeof (pc));
+	pc.sense_data = reqbuf;
+
+	if (speed < 1)
+	    speed = 0xffff; /* set to max */
+	else
+	    speed *= 177;   /* Nx to kbytes/s */
+
+	pc.c[0] = SET_CD_SPEED;
+	/* Read Drive speed in kbytes/second MSB */
+	pc.c[2] = (speed >> 8) & 0xff;	
+	/* Read Drive speed in kbytes/second LSB */
+	pc.c[3] = speed & 0xff;
+	/* Write Drive speed in kbytes/second MSB */
+	//pc.c[4] = (speed >> 8) & 0xff;	
+	/* Write Drive speed in kbytes/second LSB */
+	//pc.c[5] = speed & 0xff;
+
+	return cdrom_queue_packet_command (drive, &pc);
+}
 
 static int
 cdrom_play_lba_range_1 (ide_drive_t *drive, int lba_start, int lba_end,
@@ -2429,6 +2471,44 @@ int ide_cdrom_lock_door (struct cdrom_device_info *cdi, int lock)
 	return cdrom_lockdoor (drive, lock, NULL);
 }
 
+static
+int ide_cdrom_select_speed (struct cdrom_device_info *cdi, int speed)
+{
+        int stat, attempts = 3;
+        struct {
+                char pad[8];
+                struct atapi_capabilities_page cap;
+        } buf;
+	ide_drive_t *drive = (ide_drive_t*) cdi->handle;
+	struct atapi_request_sense reqbuf;
+	stat=cdrom_select_speed (drive, speed, &reqbuf);
+	if (stat<0)
+		return stat;
+
+	/* Now that that is done, update the speed fields */
+        do {    /* we seem to get stat=0x01,err=0x00 the first time (??) */
+                if (attempts-- <= 0)
+                        return 0;
+                stat = cdrom_mode_sense (drive, PAGE_CAPABILITIES, 0,
+                                        (char *)&buf, sizeof (buf), NULL);
+        } while (stat);
+
+        /* The ACER/AOpen 24X cdrom has the speed fields byte-swapped */
+        if (drive->id && !drive->id->model[0] && !strncmp(drive->id->fw_rev, "241N", 4)) {
+                CDROM_STATE_FLAGS (drive)->current_speed  = 
+			(((unsigned int)buf.cap.curspeed) + (176/2)) / 176;
+                CDROM_CONFIG_FLAGS (drive)->max_speed = 
+			(((unsigned int)buf.cap.maxspeed) + (176/2)) / 176;
+        } else {
+                CDROM_STATE_FLAGS (drive)->current_speed  = 
+			(ntohs(buf.cap.curspeed) + (176/2)) / 176;
+                CDROM_CONFIG_FLAGS (drive)->max_speed = 
+			(ntohs(buf.cap.maxspeed) + (176/2)) / 176;
+        }
+        cdi->speed = CDROM_STATE_FLAGS (drive)->current_speed;
+        return 0;
+}
+
 
 static
 int ide_cdrom_select_disc (struct cdrom_device_info *cdi, int slot)
@@ -2668,14 +2748,14 @@ struct cdrom_device_ops ide_cdrom_dops = {
 	ide_cdrom_check_media_change_real, /* media_changed */
 	ide_cdrom_tray_move,    /* tray_move */
 	ide_cdrom_lock_door,    /* lock_door */
-	NULL, /* select_speed */
+	ide_cdrom_select_speed, /* select_speed */
 	ide_cdrom_select_disc, /* select_disc */
 	ide_cdrom_get_last_session, /* get_last_session */
 	ide_cdrom_get_mcn, /* get_mcn */
 	ide_cdrom_reset, /* reset */
 	ide_cdrom_audio_ioctl, /* audio_ioctl */
 	ide_cdrom_dev_ioctl,   /* dev_ioctl */
-	CDC_CLOSE_TRAY | CDC_OPEN_TRAY | CDC_LOCK
+	CDC_CLOSE_TRAY | CDC_OPEN_TRAY | CDC_LOCK | CDC_SELECT_SPEED
 	| CDC_SELECT_DISC | CDC_MULTI_SESSION | CDC_MCN
 	| CDC_MEDIA_CHANGED | CDC_PLAY_AUDIO | CDC_RESET 
 	| CDC_IOCTLS | CDC_DRIVE_STATUS,  /* capability */
@@ -2691,7 +2771,7 @@ static int ide_cdrom_register (ide_drive_t *drive, int nslots)
 	devinfo->dev = MKDEV (HWIF(drive)->major, minor);
 	devinfo->ops = &ide_cdrom_dops;
 	devinfo->mask = 0;
-	*(int *)&devinfo->speed = CDROM_CONFIG_FLAGS (drive)->max_speed;
+	*(int *)&devinfo->speed = CDROM_STATE_FLAGS (drive)->current_speed;
 	*(int *)&devinfo->capacity = nslots;
 	devinfo->handle = (void *) drive;
 	strcpy(devinfo->name, drive->name);
@@ -2750,11 +2830,15 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 
 	/* The ACER/AOpen 24X cdrom has the speed fields byte-swapped */
 	if (drive->id && !drive->id->model[0] && !strncmp(drive->id->fw_rev, "241N", 4)) {
-		CDROM_STATE_FLAGS (drive)->current_speed  = (((unsigned int)buf.cap.curspeed) + (176/2)) / 176;
-		CDROM_CONFIG_FLAGS (drive)->max_speed = (((unsigned int)buf.cap.maxspeed) + (176/2)) / 176;
+		CDROM_STATE_FLAGS (drive)->current_speed  = 
+			(((unsigned int)buf.cap.curspeed) + (176/2)) / 176;
+		CDROM_CONFIG_FLAGS (drive)->max_speed = 
+			(((unsigned int)buf.cap.maxspeed) + (176/2)) / 176;
 	} else {
-		CDROM_STATE_FLAGS (drive)->current_speed  = (ntohs(buf.cap.curspeed) + (176/2)) / 176;
-		CDROM_CONFIG_FLAGS (drive)->max_speed = (ntohs(buf.cap.maxspeed) + (176/2)) / 176;
+		CDROM_STATE_FLAGS (drive)->current_speed  = 
+			(ntohs(buf.cap.curspeed) + (176/2)) / 176;
+		CDROM_CONFIG_FLAGS (drive)->max_speed = 
+			(ntohs(buf.cap.maxspeed) + (176/2)) / 176;
 	}
 
         printk ("%s: ATAPI %dX CDROM", 

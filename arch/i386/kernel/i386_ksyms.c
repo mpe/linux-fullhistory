@@ -8,6 +8,7 @@
 #include <linux/in6.h>
 #include <linux/interrupt.h>
 #include <linux/smp_lock.h>
+#include <linux/pci.h>
 
 #include <asm/semaphore.h>
 #include <asm/processor.h>
@@ -97,3 +98,6 @@ EXPORT_SYMBOL(mca_isenabled);
 EXPORT_SYMBOL(mca_isadapter);
 #endif
 
+#if CONFIG_PCI
+EXPORT_SYMBOL(pci_devices);
+#endif

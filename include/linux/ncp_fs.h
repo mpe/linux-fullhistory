@@ -83,8 +83,15 @@ struct ncp_privatedata_ioctl
 };
 
 #define	NCP_IOC_NCPREQUEST		_IOR('n', 1, struct ncp_ioctl_request)
-#define	NCP_IOC_GETMOUNTUID		_IOW('n', 2, uid_t)
-#define NCP_IOC_GETMOUNTUID_INT		_IOW('n', 2, unsigned int)
+#define	NCP_IOC_GETMOUNTUID		_IOW('n', 2, __kernel_uid_t)
+
+#if 1
+#ifdef __KERNEL__
+/* remove after ncpfs-2.0.13 gets released or at the beginning of kernel-2.1. codefreeze */
+#define	NCP_IOC_GETMOUNTUID_INT		_IOW('n', 2, unsigned int)
+#endif
+#endif
+
 #define NCP_IOC_CONN_LOGGED_IN          _IO('n', 3)
 
 #define NCP_GET_FS_INFO_VERSION (1)

@@ -13,6 +13,7 @@
 #include <linux/socket.h>
 #include <linux/in.h>
 #include <linux/in6.h>
+#include <linux/pci.h>
 
 #include <asm/io.h>
 #include <asm/hwrpb.h>
@@ -146,3 +147,7 @@ EXPORT_SYMBOL_NOVERS(__remq);
 EXPORT_SYMBOL_NOVERS(__remqu);
 EXPORT_SYMBOL_NOVERS(memcpy);
 EXPORT_SYMBOL_NOVERS(memset);
+
+#if CONFIG_PCI
+EXPORT_SYMBOL(pci_devices);
+#endif

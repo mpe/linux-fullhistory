@@ -15,6 +15,7 @@
 #include <linux/string.h>
 #include <linux/interrupt.h>
 #include <linux/in6.h>
+#include <linux/pci.h>
 
 #include <asm/oplib.h>
 #include <asm/delay.h>
@@ -271,3 +272,7 @@ EXPORT_SYMBOL_DOT(mul);
 EXPORT_SYMBOL_DOT(umul);
 EXPORT_SYMBOL_DOT(div);
 EXPORT_SYMBOL_DOT(udiv);
+
+#if CONFIG_PCI
+EXPORT_SYMBOL(pci_devices);
+#endif

@@ -4,6 +4,7 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/mman.h>
+#include <linux/pci.h>
 
 #include <asm/ecard.h>
 #include <asm/io.h>
@@ -176,3 +177,7 @@ EXPORT_SYMBOL(change_bit);
 EXPORT_SYMBOL(test_and_change_bit);
 EXPORT_SYMBOL(find_first_zero_bit);
 EXPORT_SYMBOL(find_next_zero_bit);
+
+#if CONFIG_PCI
+EXPORT_SYMBOL(pci_devices);
+#endif

@@ -51,11 +51,9 @@ struct ncp_server {
 	int ncp_reply_size;
 
 	struct ncp_inode_info root;
-#if 0
-	char root_path;		/* '\0' */
-#else
 	struct dentry* root_dentry;
-#endif
+
+	int root_setuped;
 
 /* info for packet signing */
 	int sign_wanted;        /* 1=Server needs signed packets */

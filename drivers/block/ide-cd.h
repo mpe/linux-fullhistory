@@ -71,7 +71,7 @@
 #define MODE_SENSE_10           0x5a
 #define MODE_SELECT_10          0x55
 #define READ_CD                 0xbe
-
+#define SET_CD_SPEED            0xbb
 #define LOAD_UNLOAD             0xa6
 #define MECHANISM_STATUS        0xbd
 
@@ -431,7 +431,7 @@ char *sense_key_texts[16] = {
    with additions from Tables 141 and 142 of the ATAPI 2.6 draft standard. */
 
 struct {
-	short asc_ascq;
+	unsigned short asc_ascq;
 	char *text;
 } sense_data_texts[] = {
 	{ 0x0000, "No additional sense information" },

@@ -14,6 +14,7 @@
 #include <linux/string.h>
 #include <linux/msdos_fs.h>
 #include <linux/umsdos_fs.h>
+#include <linux/dcache.h>
 
 #include <asm/uaccess.h>
 
@@ -21,6 +22,29 @@
 
 #define PRINTK(x)
 #define Printk(x) printk x
+
+/*
+ * makes empty filp
+ *
+ */
+ 
+void fill_new_filp (struct file *filp, struct dentry *dentry)
+{
+    Printk (("/mn/ fill_new_filp: filling empty filp at %p\n", filp));
+    if (dentry) 
+      Printk (("     dentry=%.*s\n", (int) dentry->d_name.len, dentry->d_name.name));
+    else
+      Printk (("     dentry is NULL ! you must fill it later...\n"));
+
+    memset (filp, 0, sizeof (struct file));
+
+    filp->f_pos = 0;
+    filp->f_reada = 1;
+    filp->f_flags = O_RDWR;
+    filp->f_dentry = dentry;
+    filp->f_op = &umsdos_file_operations;        /* /mn/ - we have to fill it with SOMETHING */
+} 
+
 
 /*
  * makes dentry. for name name with length len. /mn/
@@ -34,17 +58,47 @@ struct dentry *creat_dentry (const char *name, const int len, struct inode *inod
     struct qstr qname;
     
     if (inode)
-      Printk (("/mn/ creat_dentry: creating dentry with inode=%lu for %.*s\n", inode->i_ino, len, name));
+      Printk ((KERN_DEBUG "/mn/ creat_dentry: creating dentry with inode=%lu for %.*s\n", inode->i_ino, len, name));
     else
-      Printk (("/mn/ creat_dentry: creating empty dentry for %.*s\n", len, name));
+      Printk ((KERN_DEBUG "/mn/ creat_dentry: creating empty dentry for %.*s\n", len, name));
 
     qname.name = name;
     qname.len = len;
     qname.hash = 0;
 
     ret = d_alloc (parent,&qname);	/* create new dentry */
-    ret->d_inode = inode;
+    ret->d_inode = NULL;
+
+    if (inode) d_add (ret, inode);
+      
+/*    ret->d_inode = inode; /mn/ FIXME this was old, replaced by d_add, delete this ! */
     return ret;
+}
+
+/*
+ * removes temporary dentry created by creat_dentry
+ *
+ */
+ 
+void kill_dentry (struct dentry *dentry)
+{
+    if (dentry) {
+      Printk (("/mn/ kill_dentry: kill_dentry %.*s :", (int) dentry->d_name.len, dentry->d_name.name));
+      if (dentry->d_inode) 
+        Printk (("inode=%lu\n", dentry->d_inode->i_ino));
+      else
+        Printk (("inode is NULL\n"));
+
+      /* FIXME: is this ok ?! /mn/ */
+      /* d_invalidate (dentry); */
+      /*dput (dentry);*/
+    } else {
+      Printk (("/mn/ kill_dentry: dentry is NULL ?!\n"));
+    }
+
+    
+    Printk ((KERN_DEBUG "/mn/ kill_dentry: exiting...\n"));
+    return;
 }
 
 
@@ -126,23 +180,24 @@ ssize_t umsdos_file_read_kmem (struct inode *emd_dir,
 
 
 /*
-	Write to a file from kernel space
-*/
-ssize_t umsdos_file_write_kmem (struct inode *emd_dir,
-				struct file *filp,
+ *	Write to file from kernel space. 
+ *	Does the real job, assumes all structures are initialized !
+ */
+	
+
+ssize_t umsdos_file_write_kmem_real (struct file *filp,
 				const char *buf,
 				size_t  count,
-				loff_t *offs
-				)
+				loff_t *offs)
 {
-	int ret;
+	ssize_t ret;
 	mm_segment_t old_fs = get_fs();
-	struct dentry *old_dentry;
 	
-	Printk ((KERN_ERR " STARTED WRITE_KMEM /mn/\n"));
+	set_fs (KERNEL_DS);
 
         Printk ((KERN_ERR "umsdos_file_write_kmem /mn/: Checkin: filp=%p, buf=%p, size=%d, offs=%p\n", filp, buf, count, offs));
-        Printk ((KERN_ERR "  using emd=%ld\n", emd_dir->i_ino));
+        Printk ((KERN_ERR "  struct dentry=%p\n", filp->f_dentry));
+        Printk ((KERN_ERR "  struct inode=%p\n", filp->f_dentry->d_inode));
         Printk ((KERN_ERR "  inode=%lu, i_size=%lu\n", filp->f_dentry->d_inode->i_ino, filp->f_dentry->d_inode->i_size));
         Printk ((KERN_ERR "  ofs=%ld\n",(unsigned long) *offs));
         Printk ((KERN_ERR "  f_pos=%Lu\n", filp->f_pos));
@@ -152,21 +207,47 @@ ssize_t umsdos_file_write_kmem (struct inode *emd_dir,
         Printk ((KERN_ERR "  f_owner=%d\n", filp->f_owner.uid));
         Printk ((KERN_ERR "  f_version=%ld\n", filp->f_version));
         Printk ((KERN_ERR "  f_reada=%ld, f_ramax=%ld, f_raend=%ld, f_ralen=%ld, f_rawin=%ld\n", filp->f_reada, filp->f_ramax, filp->f_raend, filp->f_ralen, filp->f_rawin));
-	
-	set_fs (KERNEL_DS);
-	old_dentry=filp->f_dentry;	/* save it */
-	filp->f_dentry = creat_dentry (UMSDOS_EMD_FILE, UMSDOS_EMD_NAMELEN, emd_dir);
-	*offs = filp->f_pos;
 
 	ret = fat_file_write (filp, buf, count, offs);
 	PRINTK ((KERN_ERR "fat_file_write returned with %ld!\n", ret));
 
-	filp->f_pos = *offs;
-	filp->f_dentry=old_dentry;
-
 	set_fs (old_fs);
 	return ret;
 }
+
+
+/*
+ *	Write to a file from kernel space
+ */
+ 
+ssize_t umsdos_file_write_kmem (struct inode *emd_dir,
+				struct file *filp,
+				const char *buf,
+				size_t  count,
+				loff_t *offs
+				)
+{
+	int ret;
+	struct dentry *old_dentry;
+
+	
+	Printk ((KERN_ERR " STARTED WRITE_KMEM /mn/\n"));
+        Printk ((KERN_ERR "  using emd=%ld\n", emd_dir->i_ino));
+
+	old_dentry=filp->f_dentry;	/* save it */
+	filp->f_dentry = creat_dentry (UMSDOS_EMD_FILE, UMSDOS_EMD_NAMELEN, emd_dir);
+
+	*offs = filp->f_pos;	/* FIXME, in read_kmem also: offs is not used so why pass it ?!!! /mn/ */
+
+        ret=umsdos_file_write_kmem_real (filp, buf, count, offs);
+
+	filp->f_pos = *offs;
+	filp->f_dentry=old_dentry;
+
+	return ret;
+}
+
+
 
 
 /*
@@ -201,7 +282,7 @@ ssize_t umsdos_emd_dir_write (struct inode *emd_dir,
 #endif	
 	
 	if (offs) myofs=*offs;	/* if offs is not NULL, read it */
-	Printk (("umsdos_emd_dir_write /mn/: calling write_kmem with %p, %p, %p, %ld, %Ld\n", emd_dir, filp, buf, count, myofs));
+	Printk (("umsdos_emd_dir_write /mn/: calling write_kmem with %p, %p, %p, %d, %Ld\n", emd_dir, filp, buf, count, myofs));
 	written = umsdos_file_write_kmem (emd_dir, filp, buf, count, &myofs);
 	Printk (("umsdos_emd_dir_write /mn/: write_kmem returned\n"));
 	if (offs) *offs=myofs;	/* if offs is not NULL, store myofs there */
@@ -216,6 +297,12 @@ ssize_t umsdos_emd_dir_write (struct inode *emd_dir,
 	d->rdev = le16_to_cpu (d->rdev);
 	d->mode = le16_to_cpu (d->mode);
 #endif	
+
+#ifdef 1
+	if (written != count) Printk ((KERN_ERR "umsdos_emd_dir_write: ERROR: written (%d) != count (%d)\n", written, count));
+#endif
+
+
 	return written != count ? -EIO : 0;
 }
 
@@ -409,7 +496,9 @@ int umsdos_writeentry (
 	struct file filp;
 	struct umsdos_dirent *entry = &info->entry;
 	struct umsdos_dirent entry0;
-	
+
+        fill_new_filp (&filp, NULL);
+
 	Printk (("umsdos_writeentry /mn/: entering...\n"));
 	emd_dentry=creat_dentry ("wremd_mn", 8, emd_dir);
 	
@@ -444,7 +533,7 @@ int umsdos_writeentry (
        	filp.f_op = &umsdos_file_operations;	/* /mn/ - we have to fill it with dummy values so we won't segfault */
        	
 	ret = umsdos_emd_dir_write (emd_dir, &filp, (char*)entry, info->recsize, NULL);
-	Printk (("emd_dir_write returned !\n"));
+	Printk (("emd_dir_write returned with %d!\n", ret));
 	if (ret != 0){
 		printk ("UMSDOS: problem with EMD file. Can't write\n");
 	}else{
@@ -452,7 +541,7 @@ int umsdos_writeentry (
 		/* dir->i_dirt = 1; FIXME iput/dput ??? */
 	}
 
-	Printk (("umsdos_writeentry /mn/: returning...\n"));
+	Printk (("umsdos_writeentry /mn/: returning %d...\n", ret));
 	return ret;
 }
 
@@ -541,10 +630,13 @@ static int umsdos_find (
 		record, multiple contiguous record are allocated.
 	*/
 	int ret = -ENOENT;
-	/* FIXME  -- /mn/ fixed ? */
-	struct inode *emd_dir = umsdos_emd_dir_lookup (dir, 1);
+	struct inode *emd_dir;
+	struct umsdos_dirent *entry = &info->entry;
+	
+	Printk (("umsdos_find: locating %.*s in dir %lu\n", entry->name_len, entry->name, dir->i_ino));
+	
+	emd_dir = umsdos_emd_dir_lookup (dir, 1);
 	if (emd_dir != NULL){
-		struct umsdos_dirent *entry = &info->entry;
 		int recsize = info->recsize;
 		struct {
 			off_t posok;	/* Position available to store the entry */
@@ -560,11 +652,7 @@ static int umsdos_find (
 
 		dentry = creat_dentry ("umsfind-mn", 10, emd_dir);
 	
-		buf.filp.f_pos = 0;
-		buf.filp.f_reada = 1;
-		buf.filp.f_flags = O_RDONLY;
-		buf.filp.f_dentry = dentry;
-        	buf.filp.f_op = &umsdos_file_operations;	/* /mn/ - we have to fill it with dummy values so we won't segfault */
+		fill_new_filp (&buf.filp, dentry);
 
 		buf.pos = 0;
 		buf.size = 0;
@@ -631,6 +719,8 @@ static int umsdos_find (
 		umsdos_manglename(info);
 	}
 	*pt_emd_dir = emd_dir;
+	
+	Printk (("umsdos_find: returning %d\n", ret));
 	return ret;
 }
 
@@ -651,7 +741,7 @@ int umsdos_newentry (
 		ret = -EEXIST;
 	}else if (ret == -ENOENT){
 		ret = umsdos_writeentry(dir,emd_dir,info,0);
-		Printk (("umsdos_newentry EDM ret = %d\n",ret));
+		Printk (("umsdos_newentry EMD ret = %d\n",ret));
 	}
 	iput (emd_dir);
 	return ret;
@@ -729,6 +819,8 @@ int umsdos_isempty (struct inode *dir)
 	/* If the EMD file does not exist, it is certainly empty :-) */
 	if (emd_dir != NULL){
 		struct file filp;
+                fill_new_filp (&filp, NULL);
+
 		/* Find an empty slot */
 		memset (&filp, 0, sizeof (filp));
 
@@ -779,6 +871,7 @@ int umsdos_findentry (
 		}
 	}
 	iput (emd_dir);
+	Printk (("umsdos_findentry: returning %d\n", ret));
 	return ret;
 }
 

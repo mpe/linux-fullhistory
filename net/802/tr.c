@@ -532,4 +532,3 @@ __initfunc(void rif_init(struct net_proto *unused))
 	proc_net_register(&tr_rif_proc);
 #endif
 }
-}

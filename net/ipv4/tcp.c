@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.94 1998/03/13 14:15:52 davem Exp $
+ * Version:	$Id: tcp.c,v 1.96 1998/03/16 02:25:55 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1044,7 +1044,8 @@ static void cleanup_rbuf(struct sock *sk, int copied)
   	/* We send an ACK if we can now advertise a non-zero window
 	 * which has been raised "significantly".
   	 */
-	if(copied >= tcp_receive_window(&sk->tp_pinfo.af_tcp))
+	if((copied > 0) &&
+	   (copied >= tcp_receive_window(&sk->tp_pinfo.af_tcp)))
 		tcp_read_wakeup(sk);
 }
 
@@ -1372,6 +1373,7 @@ static inline int closing(struct sock * sk)
 void tcp_close(struct sock *sk, unsigned long timeout)
 {
 	struct sk_buff *skb;
+	int data_was_unread = 0;
 
 	/* We need to grab some memory, and put together a FIN,
 	 * and then put it into the queue to be sent.
@@ -1396,14 +1398,30 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 	 *  descriptor close, not protocol-sourced closes, because the
 	 *  reader process may not have drained the data yet!
 	 */
-	while((skb=skb_dequeue(&sk->receive_queue))!=NULL)
+	while((skb=skb_dequeue(&sk->receive_queue))!=NULL) {
+		data_was_unread++;
 		kfree_skb(skb);
+	}
 
-	/*  Timeout is not the same thing - however the code likes
-	 *  to send both the same way (sigh).
+	/* As outlined in draft-ietf-tcpimpl-prob-03.txt, section
+	 * 3.10, we send a RST here because data was lost.  To
+	 * witness the awful effects of the old behavior of always
+	 * doing a FIN, run an older 2.1.x kernel or 2.0.x, start
+	 * a bulk GET in an FTP client, suspend the process, wait
+	 * for the client to advertise a zero window, then kill -9
+	 * the FTP client, wheee...  Note: timeout is always zero
+	 * in such a case.
 	 */
-	if (tcp_close_state(sk,1))
+	if(data_was_unread != 0) {
+		/* Unread data was tossed, zap the connection. */
+		tcp_set_state(sk, TCP_CLOSE);
+		tcp_send_active_reset(sk);
+	} else if (tcp_close_state(sk,1)) {
+		/* We FIN if the application ate all the data before
+		 * zapping the connection.
+		 */
 		tcp_send_fin(sk);
+	}
 
 	if (timeout) {
 		struct task_struct *tsk = current;

@@ -301,6 +301,7 @@ extern int hfs_mac2seven(char *, const struct hfs_name *);
 extern int hfs_mac2eight(char *, const struct hfs_name *);
 extern int hfs_mac2alpha(char *, const struct hfs_name *);
 extern int hfs_mac2triv(char *, const struct hfs_name *);
+extern void hfs_tolower(unsigned char *, int);
 
 #define	HFS_I(X)	(&((X)->u.hfs_i))
 #define	HFS_SB(X)	(&((X)->u.hfs_sb))

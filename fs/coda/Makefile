@@ -3,7 +3,7 @@
 #
 
 O_TARGET := coda.o
-O_OBJS   := psdev.o cache.o cnode.o super.o dir.o file.o upcall.o coda_linux.o\
+O_OBJS   := psdev.o cache.o cnode.o inode.o dir.o file.o upcall.o coda_linux.o\
             symlink.o pioctl.o sysctl.o
 M_OBJS   := $(O_TARGET)
 

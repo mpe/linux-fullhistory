@@ -636,7 +636,7 @@ static struct device *tulip_probe1(struct device *dev, int ioaddr, int irq,
 		for (i = 0; i < 5; i++)
 			dev->dev_addr[i] = last_phys_addr[i];
 		dev->dev_addr[i] = last_phys_addr[i] + 1;
-#if defined(__i386)		/* This BIOS bug doesn't exist on Alphas. */
+#if defined(__i386__)		/* This BIOS bug doesn't exist on Alphas. */
 		irq = last_irq;
 #endif
 	}
@@ -1094,7 +1094,7 @@ tulip_open(struct device *dev)
 	outl(0x00200000 | 0xE000, ioaddr + CSR0);
 #elif defined(__powerpc__)
 	outl(0x00200080 | 0x8000, ioaddr + CSR0);
-#elif defined(__i386)
+#elif defined(__i386__)
 #if defined(MODULE)
 	/* When a module we don't have 'x86' to check. */
 	outl(0x00200000 | 0x4800, ioaddr + CSR0);

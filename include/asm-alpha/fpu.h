@@ -37,21 +37,21 @@
  * compatibly.  The corresponding definitions are in
  * /usr/include/machine/fpu.h under OSF/1.
  */
-#define IEEE_TRAP_ENABLE_INV	(1<<1)	/* invalid op */
-#define IEEE_TRAP_ENABLE_DZE	(1<<2)	/* division by zero */
-#define IEEE_TRAP_ENABLE_OVF	(1<<3)	/* overflow */
-#define IEEE_TRAP_ENABLE_UNF	(1<<4)	/* underflow */
-#define IEEE_TRAP_ENABLE_INE	(1<<5)	/* inexact */
+#define IEEE_TRAP_ENABLE_INV	(1UL<<1)	/* invalid op */
+#define IEEE_TRAP_ENABLE_DZE	(1UL<<2)	/* division by zero */
+#define IEEE_TRAP_ENABLE_OVF	(1UL<<3)	/* overflow */
+#define IEEE_TRAP_ENABLE_UNF	(1UL<<4)	/* underflow */
+#define IEEE_TRAP_ENABLE_INE	(1UL<<5)	/* inexact */
 #define IEEE_TRAP_ENABLE_MASK	(IEEE_TRAP_ENABLE_INV | IEEE_TRAP_ENABLE_DZE |\
 				 IEEE_TRAP_ENABLE_OVF | IEEE_TRAP_ENABLE_UNF |\
 				 IEEE_TRAP_ENABLE_INE)
 
 /* status bits coming from fpcr: */
-#define IEEE_STATUS_INV		(1<<17)
-#define IEEE_STATUS_DZE		(1<<18)
-#define IEEE_STATUS_OVF		(1<<19)
-#define IEEE_STATUS_UNF		(1<<20)
-#define IEEE_STATUS_INE		(1<<21)
+#define IEEE_STATUS_INV		(1UL<<17)
+#define IEEE_STATUS_DZE		(1UL<<18)
+#define IEEE_STATUS_OVF		(1UL<<19)
+#define IEEE_STATUS_UNF		(1UL<<20)
+#define IEEE_STATUS_INE		(1UL<<21)
 
 #define IEEE_STATUS_MASK	(IEEE_STATUS_INV | IEEE_STATUS_DZE |	\
 				 IEEE_STATUS_OVF | IEEE_STATUS_UNF |	\
@@ -64,7 +64,7 @@
 #define IEEE_INHERIT    (1UL<<63)	/* inherit on thread create? */
 
 /*
- * Convert the spftware IEEE trap enable and status bits into the
+ * Convert the software IEEE trap enable and status bits into the
  * hardware fpcr format.
  */
 

@@ -31,7 +31,7 @@ extern struct inode *pseudo_root;
    uses. It's easier to do once than hack all the other instances. Probably safer as well
 */   
 
-int compat_umsdos_real_lookup(struct inode *dir,const char *name,int len, struct inode **inode)
+int compat_umsdos_real_lookup (struct inode *dir,const char *name,int len, struct inode **inode)
 {
   int rv;
   struct dentry *dentry;
@@ -39,6 +39,7 @@ int compat_umsdos_real_lookup(struct inode *dir,const char *name,int len, struct
   dentry = creat_dentry (name, len, NULL);
   rv = umsdos_real_lookup(dir,dentry);
   if (inode) *inode = dentry->d_inode;
+  kill_dentry (dentry);
   
   return rv;
 }    
@@ -458,6 +459,7 @@ void umsdos_lookup_patch (
     if (inode->u.umsdos_i.i_emd_owner==0) printk (KERN_WARNING "emd_owner still 0 ???\n");
   }
 }
+
 struct UMSDOS_DIRENT_K{
   off_t f_pos; /* will hold the offset of the entry in EMD */
   ino_t ino;
@@ -533,6 +535,9 @@ int umsdos_inode2entry (
       /* This is a DOS directory */
       struct UMSDOS_DIR_SEARCH bufk;
       struct file filp;
+      
+      fill_new_filp (&filp, NULL);
+            
       Printk ((KERN_ERR "umsdos_inode2entry emddir==NULL: WARNING: Known filp problem. segfaulting :) /mn/\n"));
       filp.f_reada = 1;
       filp.f_pos = 0;
@@ -548,6 +553,8 @@ int umsdos_inode2entry (
     }else{
       /* skip . and .. see umsdos_readdir_x() */
       struct file filp;
+      fill_new_filp (&filp, NULL);
+      
       filp.f_reada = 1;
       filp.f_pos = UMSDOS_SPECIAL_DIRFPOS;
       Printk ((KERN_ERR "umsdos_inode2entry skip./..: WARNING: Known filp problem. segfaulting :) /mn/\n"));
@@ -855,6 +862,9 @@ int umsdos_hlink2inode (struct inode *hlink, struct inode **result)
   }else{
     struct file filp;
     loff_t offs = 0;
+
+    fill_new_filp (&filp, NULL);
+      
 
     dentry_src = creat_dentry ("hlink-mn", 8, hlink);
 

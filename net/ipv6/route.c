@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: route.c,v 1.24 1998/03/08 20:52:50 davem Exp $
+ *	$Id: route.c,v 1.25 1998/03/15 03:31:47 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -709,7 +709,7 @@ struct rt6_info *ip6_route_add(struct in6_rtmsg *rtmsg, int *err)
 	if (rt == NULL) {
 		RDBG(("dalloc fails, "));
 		*err = -ENOMEM;
-		goto out;
+		return NULL;
 	}
 
 	rt->u.dst.obsolete = -1;
@@ -751,7 +751,7 @@ struct rt6_info *ip6_route_add(struct in6_rtmsg *rtmsg, int *err)
 		dev = dev_get("lo");
 		rt->u.dst.output = ip6_pkt_discard;
 		rt->u.dst.input = ip6_pkt_discard;
-		rt->u.dst.error = -EHOSTUNREACH;
+		rt->u.dst.error = -ENETUNREACH;
 		rt->rt6i_flags = RTF_REJECT|RTF_NONEXTHOP;
 		rt->rt6i_metric = rtmsg->rtmsg_metric;
 		rt->rt6i_dev = dev;
@@ -788,7 +788,7 @@ struct rt6_info *ip6_route_add(struct in6_rtmsg *rtmsg, int *err)
 			}
 			dev = grt->rt6i_dev;
 		}
-		if (dev == NULL) {
+		if (dev == NULL || (dev->flags&IFF_LOOPBACK)) {
 			*err = -EINVAL;
 			goto out;
 		}
@@ -1688,7 +1688,8 @@ static int inet6_rtm_to_rtmsg(struct rtmsg *r, struct rtattr **rta,
 	rtmsg->rtmsg_dst_len = r->rtm_dst_len;
 	rtmsg->rtmsg_src_len = r->rtm_src_len;
 	rtmsg->rtmsg_flags = RTF_UP;
-	rtmsg->rtmsg_metric = IP6_RT_PRIO_USER;
+	if (r->rtm_type == RTN_UNREACHABLE)
+		rtmsg->rtmsg_flags |= RTF_REJECT;
 
 	if (rta[RTA_GATEWAY-1]) {
 		if (rta[RTA_GATEWAY-1]->rta_len != RTA_LENGTH(16))

@@ -43,6 +43,7 @@ static const char *version =
 #include <linux/init.h>
 #include <asm/system.h>
 #include <asm/bitops.h>
+#include <asm/delay.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <linux/errno.h>

@@ -15,6 +15,7 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 #include <linux/in6.h>
+#include <linux/pci.h>
 
 #include <asm/checksum.h>
 #include <asm/dma.h>
@@ -96,4 +97,8 @@ EXPORT_SYMBOL(force_sig);
 EXPORT_SYMBOL(__compute_return_epc);
 EXPORT_SYMBOL(register_fpe);
 EXPORT_SYMBOL(unregister_fpe);
+#endif
+
+#if CONFIG_PCI
+EXPORT_SYMBOL(pci_devices);
 #endif

@@ -1,7 +1,7 @@
 /*
  * sysctl_net_ipv4.c: sysctl interface to net IPV4 subsystem.
  *
- * $Id: sysctl_net_ipv4.c,v 1.27 1998/03/12 00:03:31 davem Exp $
+ * $Id: sysctl_net_ipv4.c,v 1.28 1998/03/15 03:23:21 davem Exp $
  *
  * Begun April 1, 1996, Mike Shaver.
  * Added /proc/sys/net/ipv4 directory entry (empty =) ). [MS]
@@ -55,7 +55,8 @@ extern int sysctl_tcp_retries2;
 extern int sysctl_tcp_fin_timeout;
 extern int sysctl_tcp_syncookies;
 extern int sysctl_tcp_syn_retries;
-extern int sysctl_tcp_stdurg; 
+extern int sysctl_tcp_stdurg;
+extern int sysctl_tcp_rfc1337;
 extern int sysctl_tcp_syn_taildrop; 
 extern int sysctl_max_syn_backlog; 
 
@@ -153,6 +154,8 @@ ctl_table ipv4_table[] = {
 	 &sysctl_tcp_syncookies, sizeof(int), 0644, NULL, &proc_dointvec},
 #endif
 	{NET_TCP_STDURG, "tcp_stdurg", &sysctl_tcp_stdurg,
+	 sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_TCP_RFC1337, "tcp_rfc1337", &sysctl_tcp_rfc1337,
 	 sizeof(int), 0644, NULL, &proc_dointvec},
 	{NET_TCP_SYN_TAILDROP, "tcp_syn_taildrop", &sysctl_tcp_syn_taildrop,
 	 sizeof(int), 0644, NULL, &proc_dointvec},

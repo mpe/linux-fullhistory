@@ -1,9 +1,6 @@
 /* check.c 23/01/95 03.38.30 */
 void check_page_tables (void);
 /* dir.c 22/06/95 00.22.12 */
-struct dentry *creat_dentry (const char *name,
-			     const int len,
-			     struct inode *inode);
 int compat_msdos_create(struct inode *dir,
 			const char *name,
 			int len,
@@ -30,6 +27,16 @@ int UMSDOS_lookup(struct inode *dir,struct dentry *dentry);
 	 
 int umsdos_hlink2inode (struct inode *hlink, struct inode **result);
 /* emd.c 22/06/95 00.22.04 */
+void fill_new_filp (struct file *filp, struct dentry *dentry);
+void kill_dentry (struct dentry *dentry);
+struct dentry *creat_dentry (const char *name,
+			     const int len,
+			     struct inode *inode);
+ssize_t umsdos_file_write_kmem_real (struct file *filp,
+				const char *buf,
+				size_t  count,
+				loff_t *offs);
+
 ssize_t umsdos_file_read_kmem (struct inode *emd_dir,
 	 struct file *filp,
 	 char *buf,

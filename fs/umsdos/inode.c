@@ -105,7 +105,7 @@ void umsdos_setup_dir_inode (struct inode *inode)
       inode->i_op = &umsdos_dir_inode_operations;
     }
     
-    iput (emd_dir);
+/*    iput (emd_dir); FIXME /mn/ ! */
   }
 }
 
@@ -119,9 +119,10 @@ void umsdos_set_dirinfo(
 			off_t f_pos)
 {
     struct inode *emd_owner;
-    /* FIXME, I don't have a clue on this one */
-    Printk ((KERN_WARNING "umsdos_set_dirinfo: /mn/ FIXME: no clue\n"));
+    /* FIXME, I don't have a clue on this one - /mn/ hmmm ? ok ? */
+/*    Printk ((KERN_WARNING "umsdos_set_dirinfo: /mn/ FIXME: no clue. inode=%lu dir=%lu\n", inode->i_ino, dir->i_ino));*/
     emd_owner = umsdos_emd_dir_lookup(dir,1);
+    Printk (("umsdos_set_dirinfo: emd_owner is %lu for dir %lu\n", emd_owner->i_ino, dir->i_ino));
     inode->u.umsdos_i.i_dir_owner = dir->i_ino;
     inode->u.umsdos_i.i_emd_owner = emd_owner->i_ino;
     iput (emd_owner);
@@ -317,10 +318,10 @@ void UMSDOS_write_inode(struct inode *inode)
 	/* FIXME inode->i_dirt = 0; */
 }
 
-int UMSDOS_notify_change(struct dentry *dentry, struct iattr *attr)
+
+int internal_notify_change(struct inode *inode, struct iattr *attr)
 {
   int ret = 0;
-  struct inode *inode = dentry->d_inode;
   
   Printk ((KERN_ERR "UMSDOS_notify_change: /mn/ completly untested\n"));
   
@@ -362,10 +363,15 @@ int UMSDOS_notify_change(struct dentry *dentry, struct iattr *attr)
       }else{
 	struct file filp;
 	struct umsdos_dirent entry;
+	struct dentry *emd_dentry;
 	loff_t offs;
-	offs = 0;
+	
+	emd_dentry = creat_dentry ("notify_emd", 10, emd_owner);
+	fill_new_filp (&filp, emd_dentry);
+	
 	filp.f_pos = inode->u.umsdos_i.pos;
 	filp.f_reada = 0;
+	offs = filp.f_pos;	/* FIXME: /mn/ is this ok ? */
 	Printk (("pos = %Lu ", filp.f_pos));
 	/* Read only the start of the entry since we don't touch */
 	/* the name */
@@ -386,7 +392,7 @@ int UMSDOS_notify_change(struct dentry *dentry, struct iattr *attr)
 	  
 	  entry.nlink = inode->i_nlink;
 	  filp.f_pos = inode->u.umsdos_i.pos;
-	  offs = 0; /* FIXME */
+	  offs = filp.f_pos;	/* FIXME: /mn/ is this ok ? */
 	  ret = umsdos_emd_dir_write (emd_owner, &filp, (char*)&entry, UMSDOS_REC_SIZE, &offs);
 	  
 	  Printk (("notify pos %lu ret %d nlink %d "
@@ -406,6 +412,15 @@ int UMSDOS_notify_change(struct dentry *dentry, struct iattr *attr)
     inode_setattr(inode, attr);
   return ret;
 }
+
+
+int UMSDOS_notify_change(struct dentry *dentry, struct iattr *attr)
+{
+  return internal_notify_change (dentry->d_inode, attr);
+}
+
+
+
 
 /* #Specification: function name / convention
    A simple convention for function name has been used in
@@ -457,7 +472,7 @@ struct super_block *UMSDOS_read_super(
     PRINTK ((KERN_DEBUG "UMSDOS /mn/: sb = %p\n",sb));
     res = msdos_read_super(sb,data,silent);
     PRINTK ((KERN_DEBUG "UMSDOS /mn/: res = %p\n",res));
-    printk (KERN_INFO "UMSDOS dentry-WIP-Beta 0.82-1 (compatibility level %d.%d, fast msdos)\n", UMSDOS_VERSION, UMSDOS_RELEASE);
+    printk (KERN_INFO "UMSDOS dentry-WIP-Beta 0.82-2 (compatibility level %d.%d, fast msdos)\n", UMSDOS_VERSION, UMSDOS_RELEASE);
 	  
     if (res == NULL) { MOD_DEC_USE_COUNT; return NULL; }
 
@@ -504,7 +519,7 @@ struct super_block *UMSDOS_read_super(
 	 The word "linux" is hardcoded in /usr/include/linux/umsdos_fs.h
 	 in the macro UMSDOS_PSDROOT_NAME.
       */
-      struct dentry *root, *etc, *etc_rc, *init, *sbin; /* FIXME */
+      struct dentry *root, *etc, *etc_rc, *init, *sbin;
 
       root = creat_dentry (UMSDOS_PSDROOT_NAME, strlen(UMSDOS_PSDROOT_NAME), NULL);
       sbin = creat_dentry ("sbin", 4, NULL);

@@ -275,8 +275,8 @@ M:	oe1kib@oe1xtu.ampr.org
 L:	linux-hams@vger.rutgers.edu
 S:	Maintained
 
-HP100: Driver for HP 10/100 Mbit/s Network Adapter Series
-P:	Jarsolav Kysela
+HP100:	Driver for HP 10/100 Mbit/s Voice Grade Network Adapter Series
+P:	Jaroslav Kysela
 M:	perex@jcu.cz
 S:	Maintained
 

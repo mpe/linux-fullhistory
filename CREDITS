@@ -1420,6 +1420,15 @@ S: 6, rue Augustin Thierry
 S: 75019 Paris
 S: France
 
+N: Rik van Riel
+E: H.H.vanRiel@fys.ruu.nl
+W: http://www.fys.ruu.nl/~riel/
+D: Maintainer of the mm-patches page (see www.linuxhq.com)
+D: Documentation/sysctl/*, kswapd fixes, random kernel hacker
+S: Vorenkampsweg 1
+S: NL-9488 TG  Zeijerveld
+S: The Netherlands
+
 N: William E. Roadcap
 E: roadcapw@cfw.com
 W: http://www.cfw.com/~roadcapw

@@ -155,9 +155,9 @@ static inline void move_last_runqueue(struct task_struct * p)
  * The run-queue lock locks the parts that actually access
  * and change the run-queues, and have to be interrupt-safe.
  */
-rwlock_t tasklist_lock = RW_LOCK_UNLOCKED;
-spinlock_t scheduler_lock = SPIN_LOCK_UNLOCKED;
-spinlock_t runqueue_lock = SPIN_LOCK_UNLOCKED;
+spinlock_t scheduler_lock = SPIN_LOCK_UNLOCKED;	/* should be aquired first */
+spinlock_t runqueue_lock = SPIN_LOCK_UNLOCKED;  /* second */
+rwlock_t tasklist_lock = RW_LOCK_UNLOCKED;	/* third */
 
 /*
  * Wake up a process. Put it on the run-queue if it's not
@@ -1272,50 +1272,70 @@ static int setscheduler(pid_t pid, int policy,
 {
 	struct sched_param lp;
 	struct task_struct *p;
+	int retval;
 
+	retval = -EINVAL;
 	if (!param || pid < 0)
-		return -EINVAL;
+		goto out_nounlock;
 
+	retval = -EFAULT;
 	if (copy_from_user(&lp, param, sizeof(struct sched_param)))
-		return -EFAULT;
+		goto out_nounlock;
 
+	/*
+	 * We play safe to avoid deadlocks.
+	 */
+	spin_lock_irq(&scheduler_lock);
+	spin_lock(&runqueue_lock);
 	read_lock(&tasklist_lock);
+
 	p = find_process_by_pid(pid);
-	read_unlock(&tasklist_lock);	/* FIXME!!! */
+
+	retval = -ESRCH;
 	if (!p)
-		return -ESRCH;
+		goto out_unlock;
 			
 	if (policy < 0)
 		policy = p->policy;
-	else if (policy != SCHED_FIFO && policy != SCHED_RR &&
-		 policy != SCHED_OTHER)
-		return -EINVAL;
+	else {
+		retval = -EINVAL;
+		if (policy != SCHED_FIFO && policy != SCHED_RR &&
+				policy != SCHED_OTHER)
+			goto out_unlock;
+	}
 	
 	/*
 	 * Valid priorities for SCHED_FIFO and SCHED_RR are 1..99, valid
 	 * priority for SCHED_OTHER is 0.
 	 */
+	retval = -EINVAL;
 	if (lp.sched_priority < 0 || lp.sched_priority > 99)
-		return -EINVAL;
+		goto out_unlock;
 	if ((policy == SCHED_OTHER) != (lp.sched_priority == 0))
-		return -EINVAL;
+		goto out_unlock;
 
+	retval = -EPERM;
 	if ((policy == SCHED_FIFO || policy == SCHED_RR) && !suser())
-		return -EPERM;
+		goto out_unlock;
 	if ((current->euid != p->euid) && (current->euid != p->uid) &&
 	    !suser())
-		return -EPERM;
+		goto out_unlock;
 
+	retval = 0;
 	p->policy = policy;
 	p->rt_priority = lp.sched_priority;
-	spin_lock(&scheduler_lock);
-	spin_lock_irq(&runqueue_lock);
 	if (p->next_run)
 		move_last_runqueue(p);
-	spin_unlock_irq(&runqueue_lock);
-	spin_unlock(&scheduler_lock);
+
 	need_resched = 1;
-	return 0;
+
+out_unlock:
+	read_unlock(&tasklist_lock);
+	spin_unlock(&runqueue_lock);
+	spin_unlock_irq(&scheduler_lock);
+
+out_nounlock:
+	return retval;
 }
 
 asmlinkage int sys_sched_setscheduler(pid_t pid, int policy, 
@@ -1332,35 +1352,57 @@ asmlinkage int sys_sched_setparam(pid_t pid, struct sched_param *param)
 asmlinkage int sys_sched_getscheduler(pid_t pid)
 {
 	struct task_struct *p;
+	int retval;
 
+	retval = -EINVAL;
 	if (pid < 0)
-		return -EINVAL;
+		goto out_nounlock;
 
 	read_lock(&tasklist_lock);
+
+	retval = -ESRCH;
 	p = find_process_by_pid(pid);
-	read_unlock(&tasklist_lock);	/* FIXME!!! */
 	if (!p)
-		return -ESRCH;
+		goto out_unlock;
 			
-	return p->policy;
+	retval = p->policy;
+
+out_unlock:
+	read_unlock(&tasklist_lock);
+
+out_nounlock:
+	return retval;
 }
 
 asmlinkage int sys_sched_getparam(pid_t pid, struct sched_param *param)
 {
 	struct task_struct *p;
 	struct sched_param lp;
+	int retval;
 
+	retval = -EINVAL;
 	if (!param || pid < 0)
-		return -EINVAL;
+		goto out_nounlock;
 
 	read_lock(&tasklist_lock);
 	p = find_process_by_pid(pid);
-	read_unlock(&tasklist_lock);	/* FIXME!!! */
+	retval = -ESRCH;
 	if (!p)
-		return -ESRCH;
-
+		goto out_unlock;
 	lp.sched_priority = p->rt_priority;
-	return copy_to_user(param, &lp, sizeof(struct sched_param)) ? -EFAULT : 0;
+	read_unlock(&tasklist_lock);
+
+	/*
+	 * This one might sleep, we cannot do it with a spinlock held ...
+	 */
+	retval = copy_to_user(param, &lp, sizeof(*param)) ? -EFAULT : 0;
+
+out_nounlock:
+	return retval;
+
+out_unlock:
+	read_unlock(&tasklist_lock);
+	return retval;
 }
 
 asmlinkage int sys_sched_yield(void)

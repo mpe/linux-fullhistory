@@ -32,7 +32,7 @@ http://cyberbuzz.gatech.edu/kaboom/linux/ as well.
    Also, don't forget http://www.linuxhq.com/ for all your Linux kernel
 needs.
 
-Last updated: February 16. 1998
+Last updated: March 16. 1998
 Current Author: Chris Ricker (kaboom@gatech.edu).
 
 Current Minimal Requirements
@@ -45,11 +45,11 @@ running, the suggested command should tell you.
 - Kernel modules	 modutils-2.1.85         ; insmod -V
 - Gnu C 		 2.7.2.3                 ; gcc --version
 - Binutils		 2.8.1.0.1               ; ld -v
-- Linux C Library	 5.4.38                  ; ls -l /lib/libc.so.*
+- Linux C Library	 5.4.44                  ; ls -l /lib/libc.so.*
 - Dynamic Linker (ld.so) 1.9.5                   ; ldd -v
 - Linux C++ Library	 2.7.2.8                 ; ls -l /usr/lib/libg++.so.*
 - Procps		 1.2.5                   ; ps --version
-- Procinfo               0.11                    ; procinfo -v
+- Procinfo               0.13                    ; procinfo -v
 - Mount                  2.7l                    ; mount --version
 - Net-tools              1.41                    ; hostname -V
 - Loadlin                1.6a
@@ -58,7 +58,7 @@ running, the suggested command should tell you.
 - NFS                    0.4.21                  ; showmount --version
 - Bash                   1.14.7                  ; bash -version
 - Ncpfs                  2.1.1                   ; ncpmount -v
-- Pcmcia-cs              2.9.12
+- Pcmcia-cs              3.0.0
 - PPP                    2.3.3                   ; pppd -v
 
 Upgrade notes
@@ -72,6 +72,10 @@ for increased hardware compatibility.  If you want a warm reboot and
 know it works on your hardware, add a "reboot=warm" command line option
 in Lilo.  A small number of machines need "reboot=bios" to reboot via
 the BIOS.
+
+   Also, please remember that cua* devices are now obsolete.  Switch to
+the corresponding ttyS* device instead (e.g., cua0 -> ttyS0, cua1 ->
+ttyS1, etc.).
 
 Libc
 ====
@@ -108,6 +112,12 @@ Modules
 
    You need to upgrade to modutils-2.1.85 for kernels 2.1.85 and later.
 This version will also work with 2.0.x kernels.
+
+   As of 2.1.90-pre1, kerneld has been replaced by a kernel thread,
+kmod.  See Documentation/kmod.txt for more information.  The main
+user-level change this requires is modification to your init scripts to
+check for the absence of /proc/sys/kernel/modprobe before starting
+kerneld.
 
 Binutils
 ========
@@ -266,12 +276,12 @@ ftp://sunsite.unc.edu/pub/Linux/GCC/release.gcc-2.7.2.3
 Linux C Library
 ===============
 
-The 5.4.38 release:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/libc-5.4.38.bin.tar.gz
-ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.4.38.bin.tar.gz
+The 5.4.44 release:
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/libc-5.4.44.bin.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/libc-5.4.44.bin.tar.gz
 Installation notes for 5.4.38:
-ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.libc-5.4.38
-ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.4.38
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.libc-5.4.44
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.libc-5.4.44
 
 Linux C++ Library
 =================
@@ -308,7 +318,7 @@ Procinfo utilities
 ==================
 
 The 0.11 release:
-ftp://ftp.cistron.nl/pub/people/svm/procinfo-0.11.tar.gz
+ftp://ftp.cistron.nl/pub/people/svm/procinfo-0.13.tar.gz
 
 RPM utilities
 =============
@@ -391,8 +401,8 @@ ftp://sunsite.unc.edu/pub/Linux/system/Filesystems/ncpfs/ncpfs-2.1.1.tgz
 Pcmcia-cs
 =========
 
-The 1.9.12 release:
-ftp://hyper.stanford.edu/pub/pcmcia/pcmcia-cs-2.9.12.tar.gz
+The 3.0.0 release:
+ftp://hyper.stanford.edu/pub/pcmcia/pcmcia-cs-3.0.0.tar.gz
 
 PPP
 ===
@@ -415,11 +425,12 @@ distribution), most of these are available in RPM format.  Check around
 your favorite Red Hat mirror site before installing the non-RPM
 version.  Remember, you might need to use the -force option to get the
 upgrade to install.  ftp://ftp.redhat.com/pub/contrib/ will have almost
-everything you need.
+everything you need, as does RedHat 5.0.
 
    Those of you running Debian (or a different distribution that
 supports .deb packages) can look in the "unstable" and
-"project/experimental" directories of your favorite Debian mirror.
+"project/experimental" directories of your favorite Debian mirror.  The
+Debian 2.0 release should have most packages you need as well.
 
    For others, David Bourgin has put together a package of everything
 necessary to quickly and easily upgrade to 2.1.x.  See

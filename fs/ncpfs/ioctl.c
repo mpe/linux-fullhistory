@@ -32,6 +32,22 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 	struct ncp_ioctl_request request;
 	struct ncp_fs_info info;
 
+#ifdef NCP_IOC_GETMOUNTUID_INT
+	/* remove after ncpfs-2.0.13/2.2.0 gets released */
+	if ((NCP_IOC_GETMOUNTUID != NCP_IOC_GETMOUNTUID_INT) &&
+             (cmd == NCP_IOC_GETMOUNTUID_INT)) {
+		int tmp = server->m.mounted_uid;
+
+		if (   (permission(inode, MAY_READ) != 0)
+		    && (current->uid != server->m.mounted_uid))
+		{
+			return -EACCES;
+		}
+		if (put_user(tmp, (unsigned int*) arg)) return -EFAULT;
+		return 0;
+	}
+#endif	/* NCP_IOC_GETMOUNTUID_INT */
+
 	switch (cmd) {
 	case NCP_IOC_NCPREQUEST:
 
@@ -80,6 +96,8 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 		    && (current->uid != server->m.mounted_uid)) {
 			return -EACCES;
 		}
+		if (server->root_setuped) return -EBUSY;
+		server->root_setuped = 1;
 		return ncp_conn_logged_in(server);
 
 	case NCP_IOC_GET_FS_INFO:
@@ -121,19 +139,6 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 		put_user(server->m.mounted_uid, (uid_t *) arg);
 		return 0;
 
-	case NCP_IOC_GETMOUNTUID_INT:
-		if (   (permission(inode, MAY_READ) != 0)
-		    && (current->uid != server->m.mounted_uid))
-		{
-			return -EACCES;
-		}
-
-		{
-			unsigned int tmp=server->m.mounted_uid;
-			if (put_user(tmp, (unsigned long*) arg)) return -EFAULT;
-		}
-		return 0;
-
 #ifdef CONFIG_NCPFS_MOUNT_SUBDIR
 	case NCP_IOC_GETROOT:
 		{
@@ -168,6 +173,7 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 			{
 				return -EACCES;
 			}
+			if (server->root_setuped) return -EBUSY;
 			if (copy_from_user(&sr,
 					   (struct ncp_setroot_ioctl*)arg, 
 					   sizeof(sr))) return -EFAULT;
@@ -184,6 +190,7 @@ int ncp_ioctl(struct inode *inode, struct file *filp,
 				}
 			}
 			dentry = server->root_dentry;
+			server->root_setuped = 1;
 			if (dentry) {
 				struct inode* inode = dentry->d_inode;
 				
