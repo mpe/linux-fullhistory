@@ -1,4 +1,4 @@
-/* $Id: init.c,v 1.9 1996/12/18 06:46:55 tridge Exp $
+/* $Id: init.c,v 1.11 1997/03/18 17:58:24 jj Exp $
  * init.c:  Initialize internal variables used by the PROM
  *          library functions.
  *
@@ -18,6 +18,8 @@ unsigned int prom_rev, prom_prev;
 
 /* The root node of the prom device tree. */
 int prom_root_node;
+
+int prom_stdin, prom_stdout;
 
 /* Pointer to the device tree operations structure. */
 struct linux_nodeops *prom_nodeops;
@@ -49,11 +51,6 @@ __initfunc(void prom_init(struct linux_romvec *rp))
 	case 3:
 		prom_vers = PROM_V3;
 		break;
-	case 4:
-		prom_vers = PROM_P1275;
-		prom_printf("PROMLIB: Sun IEEE Prom not supported yet\n");
-		prom_halt();
-		break;
 	case 42: /* why not :-) */
 		prom_vers = PROM_AP1000;
 		break;
@@ -77,6 +74,11 @@ __initfunc(void prom_init(struct linux_romvec *rp))
 	   (((unsigned long) prom_nodeops) == -1))
 		prom_halt();
 
+	if(prom_vers == PROM_V2 || prom_vers == PROM_V3) {
+		prom_stdout = *romvec->pv_v2bootargs.fd_stdout;
+		prom_stdin  = *romvec->pv_v2bootargs.fd_stdin;
+	}
+	
 	prom_meminit();
 
 	prom_ranges_init();

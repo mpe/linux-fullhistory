@@ -1,4 +1,4 @@
-/* $Id: init.c,v 1.4 1997/03/04 16:27:09 jj Exp $
+/* $Id: init.c,v 1.6 1997/03/11 17:37:11 jj Exp $
  * init.c:  Initialize internal variables used by the PROM
  *          library functions.
  *
@@ -55,17 +55,22 @@ __initfunc(void prom_init(void *cif_handler, void *cif_stack))
 		prom_halt();
 		
 	prom_getstring (node, "version", buffer, sizeof (buffer));
-	if (strncmp (buffer, "OPB ", 4) || buffer[5] != '.' || buffer[7] != '.') {
-		prom_printf ("Strange OPB version.\n");
+	
+	prom_printf ("\n");
+	
+	if (strncmp (buffer, "OBP ", 4) || buffer[5] != '.' || buffer[7] != '.') {
+		prom_printf ("Strange OBP version `%s'.\n", buffer);
 		prom_halt ();
 	}
-	/* Version field is expected to be 'OPB x.y.z date...' */
+	/* Version field is expected to be 'OBP x.y.z date...' */
 	
 	prom_rev = buffer[6] - '0';
 	prom_prev = ((buffer[4] - '0') << 16) | 
 		    ((buffer[6] - '0') << 8) |
 		    (buffer[8] - '0');
 		    
+	prom_printf ("PROMLIB: Sun IEEE Boot Prom %s\n", buffer + 4);
+	
 	prom_meminit();
 
 	prom_ranges_init();

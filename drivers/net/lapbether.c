@@ -280,7 +280,7 @@ static void lapbeth_data_transmit(void *token, struct sk_buff *skb)
 
 	dev->hard_header(skb, dev, ETH_P_DEC, bcast_addr, NULL, 0);
 
-	dev->hard_start_xmit(skb, dev);
+	dev_queue_xmit(skb);
 }
 
 static void lapbeth_connected(void *token, int reason)

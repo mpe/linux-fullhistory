@@ -66,6 +66,7 @@ extern __inline__ void nlmsg_ack(struct nlmsg_ctl* ctl, unsigned long seq,
 #define NETLINK_ARPD		8
 #define NETLINK_IPSEC		10	/* IPSEC */
 #define NETLINK_ROUTE6		11	/* af_inet6 route comm channel */
+#define NETLINK_IP6_FW		13
 /* Wouldn't this suffice instead of the confusion at the top of
    this file?  i.e. 3 is firewall or ppp... */
 /* #define MAX_LINKS		16 */

@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.12 1997/03/02 06:14:44 davem Exp $
+ *	$Id: af_inet6.c,v 1.16 1997/03/18 18:24:26 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -35,34 +35,35 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 
+#include <linux/inet.h>
+#include <linux/netdevice.h>
+#include <linux/icmpv6.h>
+
+#include <net/ip.h>
+#include <net/ipv6.h>
+#include <net/udp.h>
+#include <net/tcp.h>
+#include <net/sit.h>
+#include <net/protocol.h>
+#include <net/inet_common.h>
+#include <net/transp_v6.h>
+#include <net/ip6_route.h>
+#include <net/addrconf.h>
+
 #include <asm/uaccess.h>
 #include <asm/system.h>
 
-#include <linux/inet.h>
-#include <linux/netdevice.h>
-#include <net/ip.h>
-#include <net/ipv6.h>
-#include <net/protocol.h>
-#include <net/arp.h>
-#include <net/rarp.h>
-#include <net/route.h>
-#include <net/tcp.h>
-#include <net/udp.h>
-#include <linux/skbuff.h>
-#include <net/sock.h>
-#include <net/raw.h>
-#include <net/icmp.h>
-#include <linux/icmpv6.h>
-#include <net/inet_common.h>
-#include <net/transp_v6.h>
-#include <net/ndisc.h>
-#include <net/ipv6_route.h>
-#include <net/sit.h>
-#include <linux/ip_fw.h>
-#include <net/addrconf.h>
-
 extern struct proto_ops inet6_stream_ops;
 extern struct proto_ops inet6_dgram_ops;
+
+/* IPv6 procfs goodies... */
+
+#ifdef CONFIG_PROC_FS
+extern int raw6_get_info(char *, char **, off_t, int, int);
+extern int tcp6_get_info(char *, char **, off_t, int, int);
+extern int udp6_get_info(char *, char **, off_t, int, int);
+extern int afinet6_get_info(char *, char **, off_t, int, int);
+#endif
 
 static int inet6_create(struct socket *sock, int protocol)
 {
@@ -101,32 +102,31 @@ static int inet6_create(struct socket *sock, int protocol)
 		goto free_and_badtype;
 	}
 	
-	sock_init_data(sock,sk);
-	sk->zapped=0;
+	sock_init_data(sock, sk);
 
-	sk->family = AF_INET6;
-	sk->protocol = protocol;
+	sk->zapped		= 0;
+	sk->family		= AF_INET6;
+	sk->protocol		= protocol;
 
-	sk->prot = prot;
-	sk->backlog_rcv = prot->backlog_rcv;
+	sk->prot		= prot;
+	sk->backlog_rcv		= prot->backlog_rcv;
 
-	sk->timer.data = (unsigned long)sk;
-	sk->timer.function = &net_timer;
-	init_timer(&sk->timer);
+	sk->timer.data		= (unsigned long)sk;
+	sk->timer.function	= &net_timer;
 
-	sk->net_pinfo.af_inet6.hop_limit  = ipv6_hop_limit;
+	sk->net_pinfo.af_inet6.hop_limit  = ipv6_config.hop_limit;
 	sk->net_pinfo.af_inet6.mcast_hops = IPV6_DEFAULT_MCASTHOPS;
 	sk->net_pinfo.af_inet6.mc_loop	  = 1;
 
 	/* Init the ipv4 part of the socket since we can have sockets
 	 * using v6 API for ipv4.
 	 */
-	sk->ip_ttl=64;
+	sk->ip_ttl	= 64;
 
-	sk->ip_mc_loop=1;
-	sk->ip_mc_ttl=1;
-	sk->ip_mc_index=0;
-	sk->ip_mc_list=NULL;
+	sk->ip_mc_loop	= 1;
+	sk->ip_mc_ttl	= 1;
+	sk->ip_mc_index	= 0;
+	sk->ip_mc_list	= NULL;
 
 	if (sk->type==SOCK_RAW && protocol==IPPROTO_RAW)
 		sk->ip_hdrincl=1;
@@ -429,7 +429,32 @@ struct net_proto_family inet6_family_ops = {
 	inet6_create
 };
 
-
+#ifdef CONFIG_PROC_FS
+static struct proc_dir_entry proc_net_raw6 = {
+	PROC_NET_RAW6, 4, "raw6",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	raw6_get_info
+};
+static struct proc_dir_entry proc_net_tcp6 = {
+	PROC_NET_TCP6, 4, "tcp6",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	tcp6_get_info
+};
+static struct proc_dir_entry proc_net_udp6 = {
+	PROC_NET_RAW6, 4, "udp6",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	udp6_get_info
+};
+static struct proc_dir_entry proc_net_sockstat6 = {
+	PROC_NET_SOCKSTAT6, 9, "sockstat6",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_net_inode_operations,
+	afinet6_get_info
+};
+#endif	/* CONFIG_PROC_FS */
 
 #ifdef MODULE
 int init_module(void)
@@ -439,12 +464,16 @@ void inet6_proto_init(struct net_proto *pro)
 {
 	struct sk_buff *dummy_skb;
 
-	printk(KERN_INFO "IPv6 v0.1 for NET3.037\n");
+	printk(KERN_INFO "IPv6 v0.2 for NET3.037\n");
 
 	if (sizeof(struct ipv6_options) > sizeof(dummy_skb->cb))
 	{
 		printk(KERN_CRIT "inet6_proto_init: size fault\n");
+#ifdef MODULE
 		return -EINVAL;
+#else
+		return;
+#endif
 	}
 
   	(void) sock_register(&inet6_family_ops);
@@ -459,7 +488,6 @@ void inet6_proto_init(struct net_proto *pro)
 	ipv6_init();
 
 	icmpv6_init(&inet6_family_ops);
-	ndisc_init(&inet6_family_ops);
 
         addrconf_init();
  
@@ -472,6 +500,14 @@ void inet6_proto_init(struct net_proto *pro)
 
 	tcpv6_init();
 
+	/* Create /proc/foo6 entries. */
+#ifdef CONFIG_PROC_FS
+	proc_net_register(&proc_net_raw6);
+	proc_net_register(&proc_net_tcp6);
+	proc_net_register(&proc_net_udp6);
+	proc_net_register(&proc_net_sockstat6);
+#endif
+
 #ifdef MODULE
 	return 0;
 #endif
@@ -483,6 +519,11 @@ void cleanup_module(void)
 	sit_cleanup();
 	ipv6_cleanup();
 	sock_unregister(AF_INET6);
-}
+#ifdef CONFIG_PROC_FS
+	proc_net_unregister(proc_net_raw6.low_ino);
+	proc_net_unregister(proc_net_tcp6.low_ino);
+	proc_net_unregister(proc_net_udp6.low_ino);
+	proc_net_unregister(proc_net_sockstat6.low_ino);
 #endif
-
+}
+#endif	/* MODULE */

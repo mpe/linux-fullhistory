@@ -1,28 +1,34 @@
 /*
- *  linux/drivers/block/triton.c	Version 1.20  Jan 27, 1997
+ *  linux/drivers/block/triton.c	Version 2.00  March 9, 1997
  *
  *  Copyright (c) 1995-1997  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License
  */
 
 /*
- * This module provides support for the Bus Master IDE DMA function
- * of the Intel PCI Triton I/II chipsets (i82371FB or i82371SB).
+ * This module provides support for the bus-master IDE DMA function
+ * of the Intel PCI Triton chipset families, which use the PIIX (i82371FB,
+ * for the 430 FX chipset), and the enhanced PIIX3 (i82371SB for the 430 HX/VX
+ * and 440 chipsets).
  *
- * Pretty much the same code will work for the OPTi "Viper" chipset.
- * Look for DMA support for this in linux kernel 2.1.xx, when it appears.
+ * "PIIX" stands for "PCI ISA IDE Xcellerator".
  *
- * Up to four drives may be enabled for DMA, and the Triton chipset will
- * (hopefully) arbitrate the PCI bus among them.  Note that the i82371 chip
+ * Pretty much the same code could work for other IDE PCI bus-mastering chipsets.
+ * Look for DMA support for this someday in the not too distant future.
+ *
+ * DMA is supported for all IDE devices (disk drives, cdroms, tapes, floppies).
+ *
+ * Up to four drives may be enabled for DMA, and the PIIX/PIIX3 chips
+ * will arbitrate the PCI bus among them.  Note that the PIIX/PIIX3
  * provides a single "line buffer" for the BM IDE function, so performance of
  * multiple (two) drives doing DMA simultaneously will suffer somewhat,
  * as they contest for that resource bottleneck.  This is handled transparently
- * inside the i82371 chip.
+ * inside the PIIX/PIIX3.
  *
  * By default, DMA support is prepared for use, but is currently enabled only
- * for drives which support multi-word DMA mode2 (mword2), or which are
+ * for drives which support DMA mode2 (multi/single word), or which are
  * recognized as "good" (see table below).  Drives with only mode0 or mode1
- * (single or multi) DMA should also work with this chipset/driver (eg. MC2112A)
+ * (multi/single word) DMA should also work with this chipset/driver (eg. MC2112A)
  * but are not enabled by default.  Use "hdparm -i" to view modes supported
  * by a given drive.
  *
@@ -39,55 +45,11 @@
  * the "hdparm -X" feature.  There is seldom a need to do this, as drives
  * normally power-up with their "best" PIO/DMA modes enabled.
  *
- * Testing was done with an ASUS P55TP4XE/100 system and the following drives:
+ * Testing has been done with a rather extensive number of drives,
+ * with Quantum & Western Digital models generally outperforming the pack,
+ * and Fujitsu & Conner (and some Seagate which are really Conner) drives
+ * showing more lackluster throughput.
  *
- *   Quantum Fireball 1080A (1Gig w/83kB buffer), DMA mode2, PIO mode4.
- *	- DMA mode2 works well (7.4MB/sec), despite the tiny on-drive buffer.
- *	- This drive also does PIO mode4, at about the same speed as DMA mode2.
- *	  An awesome drive for the price!
- *
- *   Fujitsu M1606TA (1Gig w/256kB buffer), DMA mode2, PIO mode4.
- *	- DMA mode2 gives horrible performance (1.6MB/sec), despite the good
- *	  size of the on-drive buffer and a boasted 10ms average access time.
- *	- PIO mode4 was better, but peaked at a mere 4.5MB/sec.
- *
- *   Micropolis MC2112A (1Gig w/508kB buffer), drive pre-dates EIDE and ATA2.
- *	- DMA works fine (2.2MB/sec), probably due to the large on-drive buffer.
- *	- This older drive can also be tweaked for fastPIO (3.7MB/sec) by using
- *	  maximum clock settings (5,4) and setting all flags except prefetch.
- *
- *   Western Digital AC31000H (1Gig w/128kB buffer), DMA mode1, PIO mode3.
- *	- DMA does not work reliably.  The drive appears to be somewhat tardy
- *	  in deasserting DMARQ at the end of a sector.  This is evident in
- *	  the observation that WRITEs work most of the time, depending on
- *	  cache-buffer occupancy, but multi-sector reads seldom work.
- *
- * Testing was done with a Gigabyte GA-586 ATE system and the following drive:
- * (Uwe Bonnes - bon@elektron.ikp.physik.th-darmstadt.de)
- *
- *   Western Digital AC31600H (1.6Gig w/128kB buffer), DMA mode2, PIO mode4.
- *	- much better than its 1Gig cousin, this drive is reported to work
- *	  very well with DMA (7.3MB/sec).
- *
- * Other drives:
- *
- *   Maxtor 7540AV (515Meg w/32kB buffer), DMA modes mword0/sword2, PIO mode3.
- *	- a budget drive, with budget performance, around 3MB/sec.
- *
- *   Western Digital AC2850F (814Meg w/64kB buffer), DMA mode1, PIO mode3.
- *	- another "caviar" drive, similar to the AC31000, except that this one
- *	  worked with DMA in at least one system.  Throughput is about 3.8MB/sec
- *	  for both DMA and PIO.
- *
- *   Conner CFS850A (812Meg w/64kB buffer), DMA mode2, PIO mode4.
- *	- like most Conner models, this drive proves that even a fast interface
- *	  cannot improve slow media.  Both DMA and PIO peak around 3.5MB/sec.
- *
- *   Maxtor 71260AT (1204Meg w/256kB buffer), DMA mword0/sword2, PIO mode3.
- *	- works with DMA, on some systems (but not always on others, eg. Dell),
- *	giving 3-4MB/sec performance, about the same as mode3.
- *
- * If you have any drive models to add, email your results to:  mlord@pobox.com
  * Keep an eye on /var/adm/messages for "DMA disabled" messages.
  *
  * Some people have reported trouble with Intel Zappa motherboards.
@@ -98,7 +60,7 @@
  * Thanks to "Christopher J. Reimer" <reimer@doe.carleton.ca> for fixing the
  * problem with some (all?) ACER motherboards/BIOSs.
  *
- * And, yes, Intel Zappa boards really *do* use the Triton IDE ports.
+ * And, yes, Intel Zappa boards really *do* use both PIIX IDE ports.
  */
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -115,17 +77,17 @@
 #include <asm/dma.h>
 
 #include "ide.h"
+#include "ide_modes.h"
 
-#undef DISPLAY_TRITON_TIMINGS	/* define this to display timings */
+#define DISPLAY_PIIX_TIMINGS	/* define this to display timings */
 
 /*
  * good_dma_drives() lists the model names (from "hdparm -i")
- * of drives which do not support mword2 DMA but which are
+ * of drives which do not support mode2 DMA but which are
  * known to work fine with this interface under Linux.
  */
 const char *good_dma_drives[] = {"Micropolis 2112A",
 				 "CONNER CTMA 4000",
-				 "CONNER CTT8000-A",
 				 NULL};
 
 /*
@@ -151,6 +113,37 @@ const char *good_dma_drives[] = {"Micropolis 2112A",
  * Interface to access piix registers
  */
 static unsigned int piix_key;
+
+#define PIIX_FLAGS_FAST_PIO	1
+#define PIIX_FLAGS_USE_IORDY	2
+#define PIIX_FLAGS_PREFETCH	4
+#define PIIX_FLAGS_FAST_DMA	8
+
+typedef struct {
+	unsigned d0_flags	:4;
+	unsigned d1_flags	:4;
+	unsigned recovery	:2;
+	unsigned reserved	:2;
+	unsigned sample		:2;
+	unsigned sidetim_enabled:1;
+	unsigned ports_enabled	:1;
+} piix_timing_t;
+
+typedef struct {
+	unsigned pri_recovery	:2;
+	unsigned pri_sample	:2;
+	unsigned sec_recovery	:2;
+	unsigned sec_sample	:2;
+} piix_sidetim_t;
+
+
+/*
+ * We currently can handle only one PIIX chip here
+ */
+static piix_pci_bus = 0;
+static piix_pci_fn  = 0;
+
+static int config_drive_for_dma (ide_drive_t *);
 
 /*
  * dma_intr() is the handler for disk read/write DMA interrupts
@@ -240,31 +233,8 @@ static int build_dmatable (ide_drive_t *drive)
 	return 1;	/* let the PIO routines handle this weirdness */
 }
 
-static int config_drive_for_dma (ide_drive_t *drive)
-{
-	const char **list;
-
-	struct hd_driveid *id = drive->id;
-	if (id && (id->capability & 1)) {
-		/* Enable DMA on any drive that supports mword2 DMA */
-		if ((id->field_valid & 2) && (id->dma_mword & 0x404) == 0x404) {
-			drive->using_dma = 1;
-			return 0;		/* DMA enabled */
-		}
-		/* Consult the list of known "good" drives */
-		list = good_dma_drives;
-		while (*list) {
-			if (!strcmp(*list++,id->model)) {
-				drive->using_dma = 1;
-				return 0;	/* DMA enabled */
-			}
-		}
-	}
-	return 1;	/* DMA not enabled */
-}
-
 /*
- * triton_dmaproc() initiates/aborts DMA read/write operations on a drive.
+ * piix_dmaproc() initiates/aborts DMA read/write operations on a drive.
  *
  * The caller is assumed to have selected the drive and programmed the drive's
  * sector address using CHS or LBA.  All that remains is to prepare for DMA
@@ -278,12 +248,40 @@ static int config_drive_for_dma (ide_drive_t *drive)
  * Returns 1 if DMA read/write could not be started, in which case
  * the caller should revert to PIO for the current request.
  */
-static int triton_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
+static int piix_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 {
 	unsigned long dma_base = HWIF(drive)->dma_base;
 	unsigned int reading = (1 << 3);
+	piix_timing_t timing;
+	unsigned short reg;
+	byte dflags;
 
 	switch (func) {
+		case ide_dma_off:
+			printk("%s: DMA disabled\n", drive->name);
+		case ide_dma_on:
+			drive->using_dma = (func == ide_dma_on);
+			reg = (HWIF(drive)->io_ports[IDE_DATA_OFFSET] == 0x170) ? 0x42 : 0x40;
+			if (pcibios_read_config_word(piix_pci_bus, piix_pci_fn, reg, (short *)&timing)) {
+				printk("%s: pcibios read failed\n", HWIF(drive)->name);
+				return 1;
+			}
+			dflags = drive->select.b.unit ? timing.d1_flags : timing.d0_flags;
+			if (dflags & PIIX_FLAGS_FAST_PIO) {
+				if (func == ide_dma_on && drive->media == ide_disk)
+					dflags |= PIIX_FLAGS_FAST_DMA;
+				else
+					dflags &= ~PIIX_FLAGS_FAST_DMA;
+				if (drive->select.b.unit == 0)
+					timing.d0_flags = dflags;
+				else
+					timing.d1_flags = dflags;
+				if (pcibios_write_config_word(piix_pci_bus, piix_pci_fn, reg, *(short *)&timing)) {
+					printk("%s: pcibios write failed\n", HWIF(drive)->name);
+					return 1;
+				}
+			}
+			return 0;
 		case ide_dma_abort:
 			outb(inb(dma_base)&~1, dma_base);	/* stop DMA */
 			return 0;
@@ -305,7 +303,7 @@ static int triton_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 			outb(inb(dma_base)|1, dma_base);	/* begin DMA */
 			return 0;
 		default:
-			printk("triton_dmaproc: unsupported func: %d\n", func);
+			printk("piix_dmaproc: unsupported func: %d\n", func);
 			return 1;
 	}
 	if (build_dmatable (drive))
@@ -321,31 +319,42 @@ static int triton_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 	return 0;
 }
 
-#ifdef DISPLAY_TRITON_TIMINGS
-/*
- * print_triton_drive_flags() displays the currently programmed options
- * in the i82371 (Triton) for a given drive.
- *
- *	If fastDMA  is "no", then slow ISA timings are used for DMA data xfers.
- *	If fastPIO  is "no", then slow ISA timings are used for PIO data xfers.
- *	If IORDY    is "no", then IORDY is assumed to always be asserted.
- *	If PreFetch is "no", then data pre-fetch/post are not used.
- *
- * When "fastPIO" and/or "fastDMA" are "yes", then faster PCI timings and
- * back-to-back 16-bit data transfers are enabled, using the sample_CLKs
- * and recovery_CLKs (PCI clock cycles) timing parameters for that interface.
- */
-static void print_triton_drive_flags (unsigned int unit, byte flags)
+static int config_drive_for_dma (ide_drive_t *drive)
 {
-	printk("         %s ", unit ? "slave :" : "master:");
-	printk( "fastDMA=%s",	(flags&9)	? "on " : "off");
-	printk(" PreFetch=%s",	(flags&4)	? "on " : "off");
-	printk(" IORDY=%s",	(flags&2)	? "on " : "off");
-	printk(" fastPIO=%s\n",	((flags&9)==1)	? "on " : "off");
-}
-#endif /* DISPLAY_TRITON_TIMINGS */
+	const char **list;
 
-static void init_triton_dma (ide_hwif_t *hwif, unsigned short base)
+	struct hd_driveid *id = drive->id;
+	if (id && (id->capability & 1)) {
+		/* Enable DMA on any drive that supports mode2 (multi/single word) DMA */
+		if (id->field_valid & 2)
+			if  ((id->dma_mword & 0x404) == 0x404 || (id->dma_1word & 0x404) == 0x404)
+				return piix_dmaproc(ide_dma_on, drive);
+		/* Consult the list of known "good" drives */
+		list = good_dma_drives;
+		while (*list) {
+			if (!strcmp(*list++,id->model))
+				return piix_dmaproc(ide_dma_on, drive);
+		}
+	}
+	return piix_dmaproc(ide_dma_off, drive);
+}
+
+#ifdef DISPLAY_PIIX_TIMINGS
+/*
+ * print_piix_drive_flags() displays the currently programmed options
+ * in the PIIX/PIIX3 for a given drive.
+ */
+static void print_piix_drive_flags (const char *unit, byte dflags)
+{
+	printk("         %s ", unit);
+	printk( "fastDMA=%s",	(dflags & PIIX_FLAGS_FAST_PIO)	? "yes" : "no ");
+	printk(" PreFetch=%s",	(dflags & PIIX_FLAGS_PREFETCH)	? "on " : "off");
+	printk(" IORDY=%s",	(dflags & PIIX_FLAGS_USE_IORDY)	? "on " : "off");
+	printk(" fastPIO=%s\n",	((dflags & (PIIX_FLAGS_FAST_PIO|PIIX_FLAGS_FAST_DMA)) == PIIX_FLAGS_FAST_PIO) ? "on " : "off");
+}
+#endif /* DISPLAY_PIIX_TIMINGS */
+
+static void init_piix_dma (ide_hwif_t *hwif, unsigned short base)
 {
 	static unsigned long dmatable = 0;
 
@@ -367,7 +376,7 @@ static void init_triton_dma (ide_hwif_t *hwif, unsigned short base)
 			hwif->dmatable = (unsigned long *) dmatable;
 			dmatable += (PRD_ENTRIES * PRD_BYTES);
 			outl(virt_to_bus(hwif->dmatable), base + 4);
-			hwif->dmaproc  = &triton_dmaproc;
+			hwif->dmaproc  = &piix_dmaproc;
 		}
 	}
 	printk("\n");
@@ -429,10 +438,16 @@ void ide_init_triton (byte bus, byte fn)
 {
 	int rc = 0, h;
 	int dma_enabled = 0;
-	unsigned short pcicmd;
-	unsigned int bmiba, timings;
+	unsigned short pcicmd, devid;
+	unsigned int bmiba;
+	const char *chipset = "ide";
+	piix_timing_t timings[2];
 
-	printk("ide: i82371 PIIX (Triton) on PCI bus %d function %d\n", bus, fn);
+	if (pcibios_read_config_word(piix_pci_bus, piix_pci_fn, 0x02, &devid))
+		goto quit;
+	chipset = (devid == PCI_DEVICE_ID_INTEL_82371SB_1) ? "PIIX3" : "PIIX";
+
+	printk("%s: bus-master IDE device on PCI bus %d function %d\n", chipset, bus, fn);
 
 	/*
 	 * See if IDE ports are enabled
@@ -440,21 +455,26 @@ void ide_init_triton (byte bus, byte fn)
 	if ((rc = pcibios_read_config_word(bus, fn, 0x04, &pcicmd)))
 		goto quit;
 	if ((pcicmd & 1) == 0)  {
-		printk("ide: ports are not enabled (BIOS)\n");
+		printk("%s: IDE ports are not enabled (BIOS)\n", chipset);
 		goto quit;
 	}
-	if ((rc = pcibios_read_config_dword(bus, fn, 0x40, &timings)))
+	if ((rc = pcibios_read_config_word(bus, fn, 0x40, (short *)&timings[0])))
 		goto quit;
-	if (!(timings & 0x80008000)) {
-		printk("ide: neither port is enabled\n");
+	if ((rc = pcibios_read_config_word(bus, fn, 0x42, (short *)&timings[1])))
+		goto quit;
+	if ((!timings[0].ports_enabled) || (!timings[1].ports_enabled)) {
+		printk("%s: neither IDE port is enabled\n", chipset);
 		goto quit;
 	}
+
+	piix_pci_bus = bus;
+	piix_pci_fn  = fn;
 
 	/*
 	 * See if Bus-Mastered DMA is enabled
 	 */
 	if ((pcicmd & 4) == 0) {
-		printk("ide: BM-DMA feature is not enabled (BIOS)\n");
+		printk("%s: bus-master DMA feature is not enabled (BIOS)\n", chipset);
 	} else {
 		/*
 		 * Get the bmiba base address
@@ -466,10 +486,10 @@ void ide_init_triton (byte bus, byte fn)
 			dma_enabled = 1;
 		} else {
 			unsigned short base;
-		        printk("ide: BM-DMA base register is invalid (0x%04x, PnP BIOS problem)\n", bmiba);
+		        printk("%s: bus-master base address is invalid (0x%04x, BIOS problem)\n", chipset, bmiba);
 			base = find_free_region(16);
 		        if (base) {
-				printk("ide: bypassing BIOS; setting BMIBA to 0x%04x\n", base);
+				printk("%s: bypassing BIOS; setting bus-master base address to 0x%04x\n", chipset, base);
 				piix_key = 0x80000000 + (fn * 0x100);
 				put_piix_reg(0x04,get_piix_reg(0x04)&~5);
 				put_piix_reg(0x20,(get_piix_reg(0x20)&0xFFFF000F)|base|1);
@@ -478,8 +498,10 @@ void ide_init_triton (byte bus, byte fn)
 				if (bmiba == base && (get_piix_reg(0x04) & 5) == 5)
 					dma_enabled = 1;
 				else
-					printk("ide: no such luck; DMA disabled\n");
+					printk("%s: operation failed\n", chipset);
 			}
+			if (!dma_enabled)
+				printk("%s: DMA is disabled (BIOS)\n", chipset);
 		}
 	}
 
@@ -487,56 +509,51 @@ void ide_init_triton (byte bus, byte fn)
 	 * Save the dma_base port addr for each interface
 	 */
 	for (h = 0; h < MAX_HWIFS; ++h) {
-#ifdef DISPLAY_TRITON_TIMINGS
-		byte s_clks, r_clks;
-		unsigned short devid;
-#endif /* DISPLAY_TRITON_TIMINGS */
+		unsigned int pri_sec;
+		piix_timing_t timing;
 		ide_hwif_t *hwif = &ide_hwifs[h];
-		unsigned short time;
-		if (hwif->io_ports[IDE_DATA_OFFSET] == 0x1f0) {
-			time = timings & 0xffff;
-			if ((time & 0x8000) == 0)	/* interface enabled? */
-				continue;
-			hwif->chipset = ide_triton;
-			if (dma_enabled)
-				init_triton_dma(hwif, bmiba);
-		} else if (hwif->io_ports[IDE_DATA_OFFSET] == 0x170) {
-			time = timings >> 16;
-			if ((time & 0x8000) == 0)	/* interface enabled? */
-				continue;
-			hwif->chipset = ide_triton;
-			if (dma_enabled)
-				init_triton_dma(hwif, bmiba + 8);
-		} else
-			continue;
-#ifdef DISPLAY_TRITON_TIMINGS
-		s_clks = ((~time >> 12) & 3) + 2;
-		r_clks = ((~time >>  8) & 3) + 1;
-		printk("    %s timing: (0x%04x) sample_CLKs=%d, recovery_CLKs=%d\n",
-		 hwif->name, time, s_clks, r_clks);
-		if ((time & 0x40) && !pcibios_read_config_word(bus, fn, 0x02, &devid)
-		 && devid == PCI_DEVICE_ID_INTEL_82371SB_1)
-		{
-			byte stime;
-			if (pcibios_read_config_byte(bus, fn, 0x44, &stime)) {
-				if (hwif->io_ports[IDE_DATA_OFFSET] == 0x1f0) {
-					s_clks = ~stime >> 6;
-					r_clks = ~stime >> 4;
-				} else {
-					s_clks = ~stime >> 2;
-					r_clks = ~stime;
-				}
-				s_clks = (s_clks & 3) + 2;
-				r_clks = (r_clks & 3) + 1;
-				printk("                   slave: sample_CLKs=%d, recovery_CLKs=%d\n",
-		 			s_clks, r_clks);
-			}
+		switch (hwif->io_ports[IDE_DATA_OFFSET]) {
+			case 0x1f0:	pri_sec = 0; break;
+			case 0x170:	pri_sec = 1; break;
+			default:	continue;
 		}
-		print_triton_drive_flags (0, time & 0xf);
-		print_triton_drive_flags (1, (time >> 4) & 0xf);
-#endif /* DISPLAY_TRITON_TIMINGS */
+		timing = timings[pri_sec];
+		if (!timing.ports_enabled)	/* interface disabled? */
+			continue;
+		hwif->chipset = ide_triton;
+		if (dma_enabled)
+			init_piix_dma(hwif, bmiba + (pri_sec ? 8 : 0));
+#ifdef DISPLAY_PIIX_TIMINGS
+		/*
+		 * Display drive timings/modes
+		 */
+		{
+			const char *slave;
+			piix_sidetim_t sidetim;
+			byte sample   = 5 - timing.sample;
+			byte recovery = 4 - timing.recovery;
+			if (devid == PCI_DEVICE_ID_INTEL_82371SB_1
+			 && timing.sidetim_enabled
+			 && !pcibios_read_config_byte(piix_pci_bus, piix_pci_fn, 0x44, (byte *) &sidetim))
+				slave = "";		/* PIIX3 */
+			else
+				slave = "/slave";	/* PIIX, or PIIX3 in compatibility mode */
+			printk("    %s master%s: sample_CLKs=%d, recovery_CLKs=%d\n", hwif->name, slave, sample, recovery);
+			print_piix_drive_flags ("master:", timing.d0_flags);
+			if (!*slave) {
+				if (pri_sec == 0) {
+					sample   = 5 - sidetim.pri_sample;
+					recovery = 4 - sidetim.pri_recovery;
+				} else {
+					sample   = 5 - sidetim.sec_sample;
+					recovery = 4 - sidetim.sec_recovery;
+				}
+				printk("         slave : sample_CLKs=%d, recovery_CLKs=%d\n", sample, recovery);
+			}
+			print_piix_drive_flags ("slave :", timing.d1_flags);
+		}
+#endif /* DISPLAY_PIIX_TIMINGS */
 	}
 
-quit: if (rc) printk("ide: pcibios access failed - %s\n", pcibios_strerror(rc));
+quit: if (rc) printk("%s: pcibios access failed - %s\n", chipset, pcibios_strerror(rc));
 }
-

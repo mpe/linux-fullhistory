@@ -21,7 +21,8 @@ static int min_t3[] = {0},		max_t3[] = {3600 * AX25_SLOWHZ};
 static int min_idle[] = {0},		max_idle[] = {65535 * AX25_SLOWHZ};
 static int min_n2[] = {1},		max_n2[] = {31};
 static int min_paclen[] = {1},		max_paclen[] = {512};
-static int min_proto[] = {0},		max_proto[] = {2};
+static int min_proto[] = {0},		max_proto[] = {3};
+static int min_ds_timeout[] = {0},	max_ds_timeout[] = {65535 * AX25_SLOWHZ};
 
 static struct ctl_table_header *ax25_table_header;
 
@@ -91,6 +92,10 @@ static const ctl_table ax25_param_table[] = {
 	 NULL, sizeof(int), 0644, NULL,
 	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
 	 &min_proto, &max_proto},
+	{NET_AX25_DAMA_SLAVE_TIMEOUT, "dama_slave_timeout",
+	 NULL, sizeof(int), 0644, NULL,
+	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
+	 &min_ds_timeout, &max_ds_timeout},
 	{0}	/* that's all, folks! */
 };
 
@@ -117,6 +122,16 @@ void ax25_register_sysctl(void)
 		ax25_table[n].proc_handler = NULL;
 
 		memcpy(ax25_dev->systable, ax25_param_table, sizeof(ax25_dev->systable));
+		
+#ifndef CONFIG_AX25_DAMA_SLAVE
+		/* 
+		 * We do not wish to have a representation of this parameter
+		 * in /proc/sys/ when configured *not* to include the
+		 * AX.25 DAMA slave code, do we?
+		 */
+
+		ax25_dev->systable[AX25_VALUES_DS_TIMEOUT].procname = NULL;
+#endif
 
 		ax25_dev->systable[AX25_MAX_VALUES].ctl_name = 0;	/* just in case... */
 

@@ -1,4 +1,4 @@
-/* myri_sbus.h: Defines for MyriCOM Gigabit Ethernet SBUS card driver.
+/* myri_sbus.h: Defines for MyriCOM MyriNET SBUS card driver.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  */

@@ -3,6 +3,8 @@
 
 /* Dinky, good for nothing, just barely irq safe, Sparc semaphores. */
 
+#ifdef __KERNEL__
+
 #include <asm/atomic.h>
 
 struct semaphore {
@@ -40,5 +42,7 @@ extern inline void up(struct semaphore * sem)
 	if (atomic_inc_return(&sem->count) <= 0)
 		__up(sem);
 }	
+
+#endif /* __KERNEL__ */
 
 #endif /* !(_SPARC_SEMAPHORE_H) */

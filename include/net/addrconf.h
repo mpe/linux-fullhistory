@@ -38,9 +38,11 @@ struct prefix_info {
 #include <linux/netdevice.h>
 #include <net/if_inet6.h>
 
-extern struct inet6_ifaddr	*inet6_addr_lst[16];
-extern struct ipv6_mc_list	*inet6_mcast_lst[16];
-extern struct inet6_dev		*inet6_dev_lst;
+#define IN6_ADDR_HSIZE		16
+
+extern struct inet6_ifaddr	*inet6_addr_lst[IN6_ADDR_HSIZE];
+extern struct ifmcaddr6		*inet6_mcast_lst[IN6_ADDR_HSIZE];
+extern struct inet6_dev		*inet6_dev_lst[IN6_ADDR_HSIZE];
 
 extern void			addrconf_init(void);
 extern void			addrconf_cleanup(void);
@@ -51,10 +53,9 @@ extern int		        addrconf_notify(struct notifier_block *this,
 
 extern int			addrconf_add_ifaddr(void *arg);
 extern int			addrconf_set_dstaddr(void *arg);
-extern int			addrconf_get_ifindex(void *arg);
 
 extern struct inet6_ifaddr *	ipv6_chk_addr(struct in6_addr *addr);
-extern struct inet6_ifaddr *	ipv6_get_saddr(struct rt6_info *rt, 
+extern struct inet6_ifaddr *	ipv6_get_saddr(struct dst_entry *dst, 
 					       struct in6_addr *daddr);
 extern struct inet6_ifaddr *	ipv6_get_lladdr(struct device *dev);
 
@@ -80,7 +81,6 @@ extern int			ipv6_chk_mcast_addr(struct device *dev,
 extern void			addrconf_prefix_rcv(struct device *dev,
 						    u8 *opt, int len);
 
-extern struct inet6_dev *	ipv6_dev_by_index(int index);
 extern struct inet6_dev *	ipv6_get_idev(struct device *dev);
 
 extern void			addrconf_forwarding_on(void);
@@ -103,6 +103,11 @@ static __inline__ u8 ipv6_addr_hash(struct in6_addr *addr)
 	tmp ^= (tmp >> 8);
 
 	return ((tmp ^ (tmp >> 4)) & 0x0f);
+}
+
+static __inline__ int ipv6_devindex_hash(int ifindex)
+{
+	return ifindex & (IN6_ADDR_HSIZE - 1);
 }
 
 /*

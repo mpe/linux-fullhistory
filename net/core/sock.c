@@ -114,6 +114,7 @@
 #include <net/sock.h>
 #include <net/raw.h>
 #include <net/icmp.h>
+#include <linux/ipsec.h>
 
 #define min(a,b)	((a)<(b)?(a):(b))
 
@@ -131,7 +132,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 	int err;
 	struct linger ling;
 	int ret = 0;
-
+	
 	/*
 	 *	Options without arguments
 	 */
@@ -145,8 +146,13 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 	}
 #endif	
 		
-  	if(optlen<sizeof(int))
+  	if(optlen<sizeof(int)) {
+#if 1 /* DaveM Debugging */
+		printk("sock_setsockopt: optlen is %d, going on anyways.\n", optlen);
+#else
   		return(-EINVAL);
+#endif
+	}
   	
 	err = get_user(val, (int *)optval);
 	if (err)
@@ -178,12 +184,19 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			sk->broadcast=valbool;
 			break;
 		case SO_SNDBUF:
-			if(val > SK_WMEM_MAX*2)
-				val = SK_WMEM_MAX*2;
-			if(val < 256)
-				val = 256;
+			/*
+			 *	The spec isnt clear if ENOBUFS or EINVAL
+			 *	is best
+			 */
+			 
+			if(val > SK_WMEM_MAX*2 || val < 2048)
+				return -EINVAL;
+			/*
+			 *	Once this is all 32bit values we can
+			 *	drop this check.
+			 */
 			if(val > 65535)
-				val = 65535;
+				return -EINVAL;
 			sk->sndbuf = val;
 			/*
 			 *	Wake up sending tasks if we
@@ -193,12 +206,11 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			break;
 
 		case SO_RCVBUF:
-			if(val > SK_RMEM_MAX*2)
-			 	val = SK_RMEM_MAX*2;
-			if(val < 256)
-				val = 256;
+			if(val > SK_RMEM_MAX*2 || val < 256)
+				return -EINVAL;
+			/* Can go soon: FIXME */
 			if(val > 65535)
-				val = 65535;
+				return -EINVAL;
 			sk->rcvbuf = val;
 			break;
 
@@ -253,7 +265,50 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 		case SO_PASSCRED:
 			sock->passcred = valbool;
 			break;
-
+			
+			
+#ifdef CONFIG_NET_SECURITY			
+		/*
+		 *	FIXME: make these error things that are not
+		 *	available!
+		 */
+		 
+		case SO_SECURITY_AUTHENTICATION:
+			if(val<=IPSEC_LEVEL_DEFAULT)
+			{
+				sk->authentication=val;
+				return 0;
+			}
+			if(net_families[sock->ops->family]->authentication)
+				sk->authentication=val;
+			else
+				return -EINVAL;
+			break;
+			
+		case SO_SECURITY_ENCRYPTION_TRANSPORT:
+			if(val<=IPSEC_LEVEL_DEFAULT)
+			{
+				sk->encryption=val;
+				return 0;
+			}
+			if(net_families[sock->ops->family]->encryption)
+				sk->encryption = val;
+			else
+				return -EINVAL;
+			break;
+			
+		case SO_SECURITY_ENCRYPTION_NETWORK:
+			if(val<=IPSEC_LEVEL_DEFAULT)
+			{
+				sk->encrypt_net=val;
+				return 0;
+			}
+			if(net_families[sock->ops->family]->encrypt_net)
+				sk->encrypt_net = val;
+			else
+				return -EINVAL;
+			break;
+#endif
 		/* We implement the SO_SNDLOWAT etc to
 		   not be settable (1003.1g 5.3) */
 		default:
@@ -368,6 +423,19 @@ int sock_getsockopt(struct socket *sock, int level, int optname,
 			if(copy_to_user((void*)optval, &sk->peercred, len))
 				return -EFAULT;
 			return 0;
+			
+		case SO_SECURITY_AUTHENTICATION:
+			val = sk->authentication;
+			break;
+			
+		case SO_SECURITY_ENCRYPTION_TRANSPORT:
+			val = sk->encryption;
+			break;
+			
+		case SO_SECURITY_ENCRYPTION_NETWORK:
+			val = sk->encrypt_net;
+			break;
+			
 		default:
 			return(-ENOPROTOOPT);
 	}

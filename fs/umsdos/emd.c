@@ -64,8 +64,31 @@ long umsdos_emd_dir_write (struct inode *emd_dir,
 	unsigned long count)
 {
 	int written;
+#ifdef __BIG_ENDIAN
+	struct umsdos_dirent *d = (struct umsdos_dirent *)buf;
+#endif
 	filp->f_flags = 0;
+#ifdef __BIG_ENDIAN	
+	d->nlink = cpu_to_le16 (d->nlink);
+	d->uid = cpu_to_le16 (d->uid);
+	d->gid = cpu_to_le16 (d->gid);
+	d->atime = cpu_to_le32 (d->atime);
+	d->mtime = cpu_to_le32 (d->mtime);
+	d->ctime = cpu_to_le32 (d->ctime);
+	d->rdev = cpu_to_le16 (d->rdev);
+	d->mode = cpu_to_le16 (d->mode);
+#endif	
 	written = umsdos_file_write_kmem (emd_dir,filp,buf,count);
+#ifdef __BIG_ENDIAN	
+	d->nlink = le16_to_cpu (d->nlink);
+	d->uid = le16_to_cpu (d->uid);
+	d->gid = le16_to_cpu (d->gid);
+	d->atime = le32_to_cpu (d->atime);
+	d->mtime = le32_to_cpu (d->mtime);
+	d->ctime = le32_to_cpu (d->ctime);
+	d->rdev = le16_to_cpu (d->rdev);
+	d->mode = le16_to_cpu (d->mode);
+#endif	
 	return written != count ? -EIO : 0;
 }
 /*
@@ -80,6 +103,9 @@ long umsdos_emd_dir_read (struct inode *emd_dir,
 {
 	long int ret = 0;
 	int sizeread;
+#ifdef __BIG_ENDIAN
+	struct umsdos_dirent *d = (struct umsdos_dirent *)buf;
+#endif
 	filp->f_flags = 0;
 	sizeread = umsdos_file_read_kmem (emd_dir,filp,buf,count);
 	if (sizeread != count){
@@ -87,6 +113,16 @@ long umsdos_emd_dir_read (struct inode *emd_dir,
 			,filp->f_pos,sizeread,count);
 		ret = -EIO;
 	}
+#ifdef __BIG_ENDIAN	
+	d->nlink = le16_to_cpu (d->nlink);
+	d->uid = le16_to_cpu (d->uid);
+	d->gid = le16_to_cpu (d->gid);
+	d->atime = le32_to_cpu (d->atime);
+	d->mtime = le32_to_cpu (d->mtime);
+	d->ctime = le32_to_cpu (d->ctime);
+	d->rdev = le16_to_cpu (d->rdev);
+	d->mode = le16_to_cpu (d->mode);
+#endif	
 	return ret;
 
 }

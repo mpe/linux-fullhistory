@@ -66,18 +66,13 @@ struct rtentry
 #define RTF_THROW	0x2000		/* Go to next class		*/
 #define RTF_NOPMTUDISC  0x4000		/* Do not send packets with DF	*/
 
-/* Bad idea. IPv6 should not use broken IPv4 interface */
-
-#define RTF_ADDRCONF	0x0800		/* announced on link prefix	  */
-#define RTF_INVALID	0x1000
-#define RTF_DCACHE	0x2000
-#define RTF_DEFAULT	0x4000		/* Route is a default route	  */
-#define RTF_NEXTHOP	0x8000		/* Non gateway route with nexthop */
-
-
-#define RTF_MAGIC	0x10000		/* Route added/deleted authomatically,
+#define RTF_MAGIC	0x8000		/* Route added/deleted authomatically,
 					 * when interface changes its state.
 					 */
+
+/*
+ *	<linux/ipv6_route.h> uses RTF values >= 64k
+ */
 
 #define RTCF_VALVE	0x00200000
 #define RTCF_MASQ	0x00400000

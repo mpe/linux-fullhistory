@@ -1,7 +1,8 @@
-/* $Id: head.h,v 1.4 1997/02/25 20:00:32 jj Exp $ */
+/* $Id: head.h,v 1.7 1997/03/18 18:00:36 jj Exp $ */
 #ifndef _SPARC64_HEAD_H
 #define _SPARC64_HEAD_H
 
+#define KERNBASE    0xfffff80000000000
 #define BOOT_KERNEL b sparc64_boot; nop; nop; nop; nop; nop; nop; nop;
 
 #define CLEAN_WINDOW							\
@@ -14,29 +15,38 @@
 	nop;		nop;		nop;		nop;
 
 #define TRAP(routine)					\
-	b	etrap;					\
+	ba,pt	%xcc, etrap;				\
 	 rd	%pc, %g7;				\
 	call	routine;				\
 	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0;	\
-	b	rtrap;					\
-	 subcc	%g0, %o0, %g0;				\
+	ba,pt	%xcc, rtrap;				\
+	 nop;						\
 	nop;						\
 	nop;
 
 #define TRAP_ARG(routine, arg)				\
-	b	etrap;					\
+	ba,pt	%xcc, etrap;				\
 	 rd	%pc, %g7;				\
 	add	%sp, STACK_BIAS + REGWIN_SZ, %o0;	\
 	call	routine;				\
 	 mov	arg, %o1;				\
-	b	rtrap;					\
-	 subcc	%g0, %o0, %g0;				\
+	ba,pt	%xcc, rtrap;				\
+	 nop;						\
 	nop;
+	
+#define SYSCALL_TRAP(routine, systbl)			\
+	ba,pt	%xcc, etrap;				\
+	 rd	%pc, %g7;				\
+	sethi	%hi(systbl), %l7;			\
+	call	routine;				\
+	 or	%l7, %lo(systbl), %l7;			\
+	nop; nop; nop;
+	
 
+#define SUNOS_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall, sunos_sys_table)
+#define	LINUX_32BIT_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall, sys_call_table32)
+#define LINUX_64BIT_SYSCALL_TRAP SYSCALL_TRAP(linux_sparc_syscall, sys_call_table64)
 /* FIXME: Write these actually */	
-#define SUNOS_SYSCALL_TRAP TRAP(sunos_syscall)
-#define	LINUX_32BIT_SYSCALL_TRAP TRAP(linux32_syscall)
-#define LINUX_64BIT_SYSCALL_TRAP TRAP(linux64_syscall)
 #define NETBSD_SYSCALL_TRAP TRAP(netbsd_syscall)
 #define SOLARIS_SYSCALL_TRAP TRAP(solaris_syscall)
 #define BREAKPOINT_TRAP TRAP(breakpoint_trap)

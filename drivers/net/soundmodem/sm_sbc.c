@@ -456,6 +456,7 @@ static int sbc_ioctl(struct device *dev, struct sm_state *sm, struct ifreq *ifr,
 		i = 0;
 		bi.data.mix.sample_rate = sm->mode_rx->srate;
 		bi.data.mix.bit_rate = sm->hdrv.par.bitrate;
+		bi.data.mix.mixer_type = SM_MIXER_INVALID;
 		switch (SCSTATE->revhi) {
 		case 2:
 			bi.data.mix.mixer_type = SM_MIXER_CT1335;

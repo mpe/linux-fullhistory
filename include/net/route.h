@@ -100,7 +100,7 @@ struct rtable
 /*
  *	Flags not visible at user level.
  */
-#define RTF_INTERNAL	0xFFFF0000
+#define RTF_INTERNAL	0xFFFF8000	/* to get RTF_MAGIC as well... */
 
 /*
  *	Flags saved in FIB.

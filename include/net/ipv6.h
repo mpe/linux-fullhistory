@@ -4,7 +4,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: ipv6.h,v 1.19 1996/09/24 17:04:20 roque Exp $
+ *	$Id: ipv6.h,v 1.5 1997/03/18 18:24:10 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -17,6 +17,7 @@
 
 #include <linux/ipv6.h>
 #include <net/ndisc.h>
+#include <net/flow.h>
 
 /*
  *	NextHeader field of IPv6 header
@@ -86,8 +87,29 @@ struct frag_hdr {
 
 extern struct ipv6_mib	ipv6_statistics;
 
-extern int		ipv6_forwarding;	/* host/router switch */
-extern int		ipv6_hop_limit;		/* default hop limit */
+struct ipv6_config {
+	int		forwarding;
+	int		hop_limit;
+	int		accept_ra;
+	int		accept_redirects;
+	
+	int		nd_max_mcast_solicit;
+	int		nd_max_ucast_solicit;
+	int		nd_retrans_time;
+	int		nd_base_reachable_time;
+	int		nd_delay_probe_time;
+
+	int		autoconf;
+	int		dad_transmits;
+	int		rtr_solicits;
+	int		rtr_solicit_interval;
+	int		rtr_solicit_delay;
+
+	int		rt_cache_timeout;
+	int		rt_gc_period;
+};
+
+extern struct ipv6_config ipv6_config;
 
 struct ipv6_frag {
 	__u16			offset;
@@ -141,6 +163,11 @@ typedef int		(*inet_getfrag_t) (const void *data,
 
 extern int		ipv6_addr_type(struct in6_addr *addr);
 
+extern __inline__ int ipv6_addr_scope(struct in6_addr *addr)
+{
+	return ipv6_addr_type(addr) & IPV6_ADDR_SCOPE_MASK;
+}
+
 extern __inline__ int ipv6_addr_cmp(struct in6_addr *a1, struct in6_addr *a2)
 {
 	return memcmp((void *) a1, (void *) a2, sizeof(struct in6_addr));
@@ -169,53 +196,17 @@ extern __inline__ int ipv6_addr_any(struct in6_addr *a)
 		 a->s6_addr32[2] | a->s6_addr32[3] ) == 0); 
 }
 
+extern __inline__ int gfp_any(void)
+{
+	int pri = GFP_KERNEL;
+	if (intr_count)
+		pri = GFP_ATOMIC;
+	return pri;
+}
+
 /*
  *	Prototypes exported by ipv6
  */
-
-#if 0
-extern int			ipv6_build_header(struct sk_buff *skb,
-						  struct device *dev,
-						  struct in6_addr *saddr_in, 
-						  struct in6_addr *daddr_in,
-						  int proto, int len, 
-						  struct ipv6_pinfo *np);
-#endif
-
-extern void			ipv6_redo_mac_hdr(struct sk_buff *skb,
-						  struct neighbour *neigh,
-						  int len);
-
-extern int			ipv6_bld_hdr_2(struct sock *sk,
-					       struct sk_buff *skb,
-					       struct device *dev,
-					       struct neighbour *neigh,
-					       struct in6_addr *saddr,
-					       struct in6_addr *daddr,
-					       int proto, int len);
-
-extern int			ipv6_xmit(struct sock *sk,
-					  struct sk_buff *skb,
-					  struct in6_addr *saddr,
-					  struct in6_addr *daddr,
-					  struct ipv6_options *opt,
-					  int proto);
-
-extern void			ipv6_queue_xmit(struct sock *sk,
-						struct device *dev,
-						struct sk_buff *skb,
-						int free);
-
-extern int			ipv6_build_xmit(struct sock *sk,
-						inet_getfrag_t getfrag,
-						const void * data,
-						struct in6_addr * daddr,
-						unsigned short int length,
-						struct in6_addr * saddr,
-						struct device *dev,
-						struct ipv6_options *opt,
-						int proto, int hlimit,
-						int noblock);
 
 /*
  *	rcv function (called from netdevice level)
@@ -225,16 +216,41 @@ extern int			ipv6_rcv(struct sk_buff *skb,
 					 struct device *dev, 
 					 struct packet_type *pt);
 
-extern void			ipv6_forward(struct sk_buff *skb,
-					     struct device *dev,
-					     int flags);
+/*
+ *	upper-layer output functions
+ */
+extern int			ip6_xmit(struct sock *sk,
+					 struct sk_buff *skb,
+					 struct flowi *fl,
+					 struct ipv6_options *opt);
 
-#define IP6_FW_SRCRT	0x1
-#define	IP6_FW_STRICT	0x2
+extern int			ip6_nd_hdr(struct sock *sk,
+					   struct sk_buff *skb,
+					   struct device *dev,
+					   struct in6_addr *saddr,
+					   struct in6_addr *daddr,
+					   int proto, int len);
+
+extern int			ip6_build_xmit(struct sock *sk,
+					       inet_getfrag_t getfrag,
+					       const void *data,
+					       struct flowi *fl,
+					       unsigned short length,
+					       struct ipv6_options *opt,
+					       int hlimit, int flags);
+
+/*
+ *	skb processing functions
+ */
+
+extern int			ip6_forward(struct sk_buff *skb);
+extern int			ip6_input(struct sk_buff *skb);
+extern int			ip6_mc_input(struct sk_buff *skb);
 
 /*
  *	Extension header (options) processing
  */
+
 extern int			ipv6opt_bld_rthdr(struct sk_buff *skb,
 						  struct ipv6_options *opt,
 						  struct in6_addr *addr,
@@ -254,27 +270,6 @@ extern int			ipv6opt_srt_tosin(struct ipv6_options *opt,
 
 extern void			ipv6opt_free(struct ipv6_options *opt);
 
-
-/*
- *	socket lookup (af_inet6.c)
- */
-
-extern struct sock *		inet6_get_sock(struct proto *prot, 
-					       struct in6_addr *loc_addr, 
-					       struct in6_addr *rmt_addr,
-					       unsigned short loc_port,
-					       unsigned short rmt_port);
-
-extern struct sock *		inet6_get_sock_raw(struct sock *sk, 
-						   unsigned short num,
-						   struct in6_addr *loc_addr, 
-						   struct in6_addr *rmt_addr);
-
-extern struct sock *		inet6_get_sock_mcast(struct sock *sk, 
-						     unsigned short num,
-						     unsigned short rmt_port,
-						     struct in6_addr *loc_addr, 
-						     struct in6_addr *rmt_addr);
 
 /*
  *	socket options (ipv6_sockglue.c)

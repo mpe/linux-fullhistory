@@ -149,9 +149,6 @@ extern int openprom_init(void);
 #ifdef CONFIG_SUN_MOSTEK_RTC
 extern int rtc_init(void);
 #endif
-#ifdef CONFIG_SPARCAUDIO
-extern int sparcaudio_init(void);
-#endif
 
 __initfunc(static unsigned long 
 sbus_do_child_siblings(unsigned long memory_start, int start_node,
@@ -338,9 +335,6 @@ sbus_init(unsigned long memory_start, unsigned long memory_end))
 #endif
 #ifdef CONFIG_SUN_MOSTEK_RTC
 	rtc_init();
-#endif
-#ifdef CONFIG_SPARCAUDIO
-	sparcaudio_init();
 #endif
 #ifdef CONFIG_SUN_BPP
 	bpp_init();

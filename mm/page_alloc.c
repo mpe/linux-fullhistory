@@ -201,6 +201,7 @@ unsigned long __get_free_pages(int priority, unsigned long order, int dma)
 
 	if (order >= NR_MEM_LISTS)
 		return 0;
+#if 0
 	if (intr_count && priority != GFP_ATOMIC) {
 		static int count = 0;
 		if (++count < 5) {
@@ -209,6 +210,7 @@ unsigned long __get_free_pages(int priority, unsigned long order, int dma)
 			priority = GFP_ATOMIC;
 		}
 	}
+#endif
 	reserved_pages = 5;
 	if (priority != GFP_NFS)
 		reserved_pages = min_free_pages;

@@ -520,12 +520,27 @@ static struct wait_queue *vt_activate_queue = NULL;
 
 /*
  * Sleeps until a vt is activated, or the task is interrupted. Returns
- * 0 if activation, -1 if interrupted.
+ * 0 if activation, -EINTR if interrupted.
  */
-int vt_waitactive(void)
+int vt_waitactive(int vt)
 {
-	interruptible_sleep_on(&vt_activate_queue);
-	return (current->signal & ~current->blocked) ? -1 : 0;
+	int retval;
+	struct wait_queue wait = { current, NULL };
+
+	add_wait_queue(&vt_activate_queue, &wait);
+	for (;;) {
+		current->state = TASK_INTERRUPTIBLE;
+		retval = 0;
+		if (vt == fg_console)
+			break;
+		retval = -EINTR;
+		if (current->signal & ~current->blocked)
+			break;
+		schedule();
+	}
+	remove_wait_queue(&vt_activate_queue, &wait);
+	current->state = TASK_RUNNING;
+	return retval;
 }
 
 #define vt_wake_waitactive() wake_up(&vt_activate_queue)
@@ -1210,7 +1225,7 @@ static void release_dev(struct file * filp)
 	 * Make sure that the tty's task queue isn't activated.  If it
 	 * is, take it out of the linked list.
 	 */
-	cli();
+	spin_lock_irq(&tqueue_lock);
 	if (tty->flip.tqueue.sync) {
 		struct tq_struct *tq, *prev;
 
@@ -1224,7 +1239,7 @@ static void release_dev(struct file * filp)
 			}
 		}
 	}
-	sti();
+	spin_unlock_irq(&tqueue_lock);
 	tty->magic = 0;
 	(*tty->driver.refcount)--;
 	free_page((unsigned long) tty);

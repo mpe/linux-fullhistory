@@ -32,4 +32,9 @@
 #define SO_RCVTIMEO	18
 #define SO_SNDTIMEO	19
 
+/* Security levels - as per NRL IPv6 - don't actually do anything */
+#define SO_SECURITY_AUTHENTICATION		20
+#define SO_SECURITY_ENCRYPTION_TRANSPORT	21
+#define SO_SECURITY_ENCRYPTION_NETWORK		22
+
 #endif /* _ASM_SOCKET_H */

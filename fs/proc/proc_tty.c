@@ -11,7 +11,6 @@
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #include <linux/tty.h>
-#include <linux/config.h>
 #include <asm/bitops.h>
 
 extern struct tty_driver *tty_drivers;	/* linked list of tty drivers */

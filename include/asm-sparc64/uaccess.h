@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.6 1997/03/03 16:51:54 jj Exp $ */
+/* $Id: uaccess.h,v 1.8 1997/03/14 21:05:33 jj Exp $ */
 #ifndef _ASM_UACCESS_H
 #define _ASM_UACCESS_H
 
@@ -36,7 +36,7 @@
  */
 #define __user_ok(addr,size) ((addr) < PAGE_OFFSET)
 #define __kernel_ok (get_fs() == KERNEL_DS)
-#define __access_ok(addr,size) (__user_ok((addr) & get_fs(),(size)))
+#define __access_ok(addr,size) (__user_ok(((unsigned long)(addr)) & get_fs(),(size)))
 #define access_ok(type,addr,size) __access_ok((unsigned long)(addr),(size))
 
 extern inline int verify_area(int type, const void * addr, unsigned long size)
@@ -312,8 +312,8 @@ if (copy_to_user(to,from,n)) \
 })
 
 #define __copy_to_user(to,from,n)		\
-	__copy_user((unsigned long)(to),	\
-		    (unsigned long)(from), n)
+	__copy_user((void *)(to),	\
+		    (void *)(from), n)
 
 #define __copy_to_user_ret(to,from,n,retval) ({ \
 if (__copy_to_user(to,from,n)) \
@@ -335,20 +335,36 @@ if (copy_from_user(to,from,n)) \
 })
 
 #define __copy_from_user(to,from,n)		\
-	__copy_user((unsigned long)(to),	\
-		    (unsigned long)(from), n)
+	__copy_user((void *)(to),	\
+		    (void *)(from), n)
 
 #define __copy_from_user_ret(to,from,n,retval) ({ \
 if (__copy_from_user(to,from,n)) \
 	return retval; \
 })
 
-extern int __clear_user(unsigned long addr, int size);
+extern __inline__ __kernel_size_t __clear_user(void *addr, __kernel_size_t size)
+{
+  __kernel_size_t ret;
+  __asm__ __volatile__ ("
+	.section __ex_table,#alloc
+	.align 4
+	.word 1f,3
+	.previous
+1:
+	mov %2, %%o1
+	call __bzero
+	 mov %1, %%o0
+	mov %%o0, %0
+	" : "=r" (ret) : "r" (addr), "r" (size) :
+	"o0", "o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3", "g5", "g7");
+  return ret;
+}
 
 #define clear_user(addr,n) ({ \
-unsigned long __clear_addr = (unsigned long) (addr); \
-int __clear_size = (int) (n); \
-int __clear_res; \
+void *__clear_addr = (void *) (addr); \
+__kernel_size_t __clear_size = (__kernel_size_t) (n); \
+__kernel_size_t __clear_res; \
 if(__clear_size && __access_ok(__clear_addr, __clear_size)) { \
 __clear_res = __clear_user(__clear_addr, __clear_size); \
 } else __clear_res = __clear_size; \

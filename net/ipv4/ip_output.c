@@ -65,6 +65,7 @@
 #include <linux/firewall.h>
 #include <linux/mroute.h>
 #include <net/netlink.h>
+#include <linux/ipsec.h>
 
 static void __inline__ ip_ll_header_reserve(struct sk_buff *skb)
 {
@@ -356,11 +357,27 @@ void ip_queue_xmit(struct sk_buff *skb)
 	iph->tot_len = htons(tot_len);
 	iph->id = htons(ip_id_count++);
 
-#ifdef CONFIG_FIREWALL
-	if (call_out_firewall(PF_INET, dev, iph, NULL) < FW_ACCEPT) {
+	if (call_out_firewall(PF_INET, dev, iph, NULL,&skb) < FW_ACCEPT) {
 		kfree_skb(skb, FREE_WRITE);
 		return;
 	}
+	
+#ifdef CONFIG_NET_SECURITY	
+	/*
+	 *	Add an IP checksum (must do this before SECurity because
+	 *	of possible tunneling)
+	 */
+
+	ip_send_check(iph);
+
+	if (call_out_firewall(PF_SECURITY, NULL, NULL, (void *) 4, &skb)<FW_ACCEPT)
+	{
+		kfree_skb(skb, FREE_WRITE);
+		return;
+	}
+	
+	iph = skb->nh.iph;
+	/* don't update tot_len, as the dev->mtu is already decreased */	
 #endif
 
 	if (skb_headroom(skb) < dev->hard_header_len && dev->hard_header) {
@@ -458,7 +475,9 @@ int ip_build_xmit(struct sock *sk,
 	struct ip_options *opt = ipc->opt;
 	struct device *dev = rt->u.dst.dev;
 	int df = htons(IP_DF);
-	
+#ifdef CONFIG_NET_SECURITY
+	int fw_res;
+#endif	
 
 	if (sk->ip_pmtudisc == IP_PMTUDISC_DONT ||
 	    (sk->ip_pmtudisc == IP_PMTUDISC_WANT &&
@@ -517,9 +536,17 @@ int ip_build_xmit(struct sock *sk,
 		if (err)
 			err = -EFAULT;
 
-#ifdef CONFIG_FIREWALL
-		if(!err && call_out_firewall(PF_INET, skb->dev, iph, NULL) < FW_ACCEPT)
+		if(!err && call_out_firewall(PF_INET, skb->dev, iph, NULL, &skb) < FW_ACCEPT)
 			err = -EPERM;
+#ifdef CONFIG_NET_SECURITY
+		if ((fw_res=call_out_firewall(PF_SECURITY, NULL, NULL, (void *) 5, &skb))<FW_ACCEPT)
+		{
+			kfree_skb(skb, FREE_WRITE);
+			if (fw_res != FW_QUEUE)
+				return -EPERM;
+			else
+				return 0;
+		}
 #endif
 
 		if (err)
@@ -679,9 +706,14 @@ int ip_build_xmit(struct sock *sk,
 		 *	Account for the fragment.
 		 */
 		 
-#ifdef CONFIG_FIREWALL
-		if(!err && !offset && call_out_firewall(PF_INET, skb->dev, iph, NULL) < FW_ACCEPT)
+		if(!err && !offset && call_out_firewall(PF_INET, skb->dev, iph, NULL, &skb) < FW_ACCEPT)
 			err = -EPERM;
+#ifdef CONFIG_NET_SECURITY
+		if ((fw_res=call_out_firewall(PF_SECURITY, NULL, NULL, (void *) 6, &skb))<FW_ACCEPT)
+		{
+			if (fw_res != FW_QUEUE)
+				err= -EPERM;
+		}
 #endif		
 		if (err)
  		{

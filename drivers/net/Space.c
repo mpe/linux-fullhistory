@@ -52,6 +52,7 @@ extern int express_probe(struct device *);
 extern int eepro_probe(struct device *);
 extern int el3_probe(struct device *);
 extern int at1500_probe(struct device *);
+extern int pcnet32_probe(struct device *);
 extern int at1700_probe(struct device *);
 extern int fmv18x_probe(struct device *);
 extern int eth16i_probe(struct device *);
@@ -153,6 +154,9 @@ static int ethif_probe(struct device *dev)
 #ifdef CONFIG_CS89x0
  	&& cs89x0_probe(dev)
 #endif
+#ifdef CONFIG_PCNET32
+	&& pcnet32_probe(dev)
+#endif	
 #ifdef CONFIG_AT1700
 	&& at1700_probe(dev)
 #endif

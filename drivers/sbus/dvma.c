@@ -8,24 +8,19 @@
 #include <linux/init.h>
 
 #include <asm/oplib.h>
-#include <asm/contregs.h>
-#include <asm/sysen.h>
 #include <asm/delay.h>
-#include <asm/machines.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <asm/sbus.h>
-#include <asm/vac-ops.h>
-#include <asm/vaddrs.h>
 
 struct Linux_SBus_DMA *dma_chain;
 
 /* Print out the current values in the DMA control registers */
-void
+static __inline__ void
 dump_dma_regs(struct sparc_dma_registers *dregs)
 {
 	printk("DMA CONTROL<%08lx>  ADDR<%08lx> CNT<%08lx> TEST<%08lx>\n",
-	       dregs->cond_reg,
+	       (unsigned long) dregs->cond_reg,
 	       (unsigned long) dregs->st_addr,
 	       (unsigned long) dregs->cnt,
 	       (unsigned long) dregs->dma_test);

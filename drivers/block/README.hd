@@ -1,8 +1,0 @@
-This hard disk driver (hd.c) includes support for IDE Multiple Mode
-and IRQ-unmasking during I/O (both disabled by default), as well as
-support for drives where the BIOS reports "more than 16 heads".
-
-The hdparm.c program for controlling various features is now packaged
-separately.  Look for it on your favorite linux FTP site.
-
--mlord@pobox.com

@@ -1162,7 +1162,7 @@ random_write(struct inode * inode, struct file * file,
 		p += bytes;
 		ret += bytes;
 		
-		i = (c+sizeof(__u32)-1) / sizeof(__u32);
+		i = (bytes+sizeof(__u32)-1) / sizeof(__u32);
 		while (i--)
 			add_entropy_word(&random_state, buf[i]);
 	}

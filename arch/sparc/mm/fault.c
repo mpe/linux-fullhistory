@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.89 1997/03/04 16:26:46 jj Exp $
+/* $Id: fault.c,v 1.91 1997/03/18 17:56:00 jj Exp $
  * fault.c:  Page fault handlers for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -35,8 +35,6 @@
 
 extern struct sparc_phys_banks sp_banks[SPARC_PHYS_BANKS];
 extern int prom_node_root;
-
-extern void die_if_kernel(char *,struct pt_regs *);
 
 struct linux_romvec *romvec;
 
@@ -134,7 +132,10 @@ asmlinkage void sparc_lvl15_nmi(struct pt_regs *regs, unsigned long serr,
 	prom_halt();
 }
 
-void unhandled_fault(unsigned long address, struct task_struct *tsk,
+static void unhandled_fault(unsigned long, struct task_struct *,
+		struct pt_regs *) __attribute__ ((noreturn));
+
+static void unhandled_fault(unsigned long address, struct task_struct *tsk,
                      struct pt_regs *regs)
 {
 	if((unsigned long) address < PAGE_SIZE) {
@@ -165,10 +166,10 @@ asmlinkage int lookup_fault(unsigned long pc, unsigned long ret_pc,
 	case 3: return 3;
 	/* store will be handled by fixup, load will bump out */
 	/* for _to_ macros */
-	case 1: insn = (unsigned *)pc; if ((insn >> 21) & 1) return 1; break;
+	case 1: insn = (unsigned)pc; if ((insn >> 21) & 1) return 1; break;
 	/* load will be handled by fixup, store will bump out */
 	/* for _from_ macros */
-	case 2: insn = (unsigned *)pc; 
+	case 2: insn = (unsigned)pc; 
 		if (!((insn >> 21) & 1) || ((insn>>19)&0x3f) == 15) return 2; 
 		break; 
 	default: break;

@@ -91,11 +91,6 @@ asmlinkage int sys_stime(int * tptr)
 		return -EPERM;
 	if (get_user(value, tptr))
 		return -EFAULT;
-	/*
-	 *	SMP: We need to lock out everything for the time update
-	 *	the new cli/sti semantics will let us drop this lock soon.
-	 */
-	lock_kernel();
 	cli();
 	xtime.tv_sec = value;
 	xtime.tv_usec = 0;
@@ -103,7 +98,6 @@ asmlinkage int sys_stime(int * tptr)
 	time_maxerror = MAXPHASE;
 	time_esterror = MAXPHASE;
 	sti();
-	unlock_kernel();
 	return 0;
 }
 
@@ -111,23 +105,17 @@ asmlinkage int sys_stime(int * tptr)
 
 asmlinkage int sys_gettimeofday(struct timeval *tv, struct timezone *tz)
 {
-	int err = -EFAULT;
-
-	lock_kernel();
 	if (tv) {
 		struct timeval ktv;
 		do_gettimeofday(&ktv);
 		if (copy_to_user(tv, &ktv, sizeof(ktv)))
-			goto out;
+			return -EFAULT;
 	}
 	if (tz) {
 		if (copy_to_user(tz, &sys_tz, sizeof(sys_tz)))
-			goto out;
+			return -EFAULT;
 	}
-	err = 0;
-out:
-	unlock_kernel();
-	return err;
+	return 0;
 }
 
 /*

@@ -97,7 +97,7 @@ static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent
 /*
  * The following are not needed for the non-m68k ports
  */
-static __inline__ int ide_ack_intr (ide_ioreg_t base_port, ide_ioreg_t irq_port)
+static __inline__ int ide_ack_intr (ide_ioreg_t status_port, ide_ioreg_t irq_port)
 {
 	return(1);
 }

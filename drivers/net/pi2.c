@@ -111,7 +111,7 @@
 #include <linux/skbuff.h>
 #include <linux/timer.h>
 #include <linux/if_arp.h>
-#include "pi2.h"
+#include <linux/pi2.h>
 #include "z8530.h"
 #include <net/ax25.h>
 

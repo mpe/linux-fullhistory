@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-floppy.c	Version 0.4 - ALPHA	Jan  26, 1997
+ * linux/drivers/block/ide-floppy.c	Version 0.5 - ALPHA	Feb  21, 1997
  *
  * Copyright (C) 1996, 1997 Gadi Oxman <gadio@netvision.net.il>
  */
@@ -17,6 +17,10 @@
  * Ver 0.2   Oct 31 96   Minor changes.
  * Ver 0.3   Dec  2 96   Fixed error recovery bug.
  * Ver 0.4   Jan 26 97   Add support for the HDIO_GETGEO ioctl.
+ * Ver 0.5   Feb 21 97   Add partitions support.
+ *                       Use the minimum of the LBA and CHS capacities.
+ *                       Avoid hwgroup->rq == NULL on the last irq.
+ *                       Fix potential null dereferencing with DEBUG_LOG.
  */
 
 #include <linux/config.h>
@@ -481,18 +485,8 @@ static void idefloppy_input_buffers (ide_drive_t *drive, idefloppy_pc_t *pc, uns
 	struct request *rq = pc->rq;
 	struct buffer_head *bh = rq->bh;
 	int count;
-	
+
 	while (bcount) {
-#if IDEFLOPPY_DEBUG_BUGS
-		if (bh == NULL) {
-			printk (KERN_ERR "%s: bh == NULL in idefloppy_input_buffers, bcount == %d\n", drive->name, bcount);
-			idefloppy_discard_data (drive, bcount);
-			return;
-		}
-#endif /* IDEFLOPPY_DEBUG_BUGS */
-		count = IDEFLOPPY_MIN (bh->b_size - pc->b_count, bcount);
-		atapi_input_bytes (drive, bh->b_data + pc->b_count, count);
-		bcount -= count; pc->b_count += count;
 		if (pc->b_count == bh->b_size) {
 			rq->sector += rq->current_nr_sectors;
 			rq->nr_sectors -= rq->current_nr_sectors;
@@ -500,6 +494,14 @@ static void idefloppy_input_buffers (ide_drive_t *drive, idefloppy_pc_t *pc, uns
 			if ((bh = rq->bh) != NULL)
 				pc->b_count = 0;
 		}
+		if (bh == NULL) {
+			printk (KERN_ERR "%s: bh == NULL in idefloppy_input_buffers, bcount == %d\n", drive->name, bcount);
+			idefloppy_discard_data (drive, bcount);
+			return;
+		}
+		count = IDEFLOPPY_MIN (bh->b_size - pc->b_count, bcount);
+		atapi_input_bytes (drive, bh->b_data + pc->b_count, count);
+		bcount -= count; pc->b_count += count;
 	}
 }
 
@@ -510,16 +512,6 @@ static void idefloppy_output_buffers (ide_drive_t *drive, idefloppy_pc_t *pc, un
 	int count;
 	
 	while (bcount) {
-#if IDEFLOPPY_DEBUG_BUGS
-		if (bh == NULL) {
-			printk (KERN_ERR "%s: bh == NULL in idefloppy_output_buffers, bcount == %d\n", drive->name, bcount);
-			idefloppy_write_zeros (drive, bcount);
-			return;
-		}
-#endif /* IDEFLOPPY_DEBUG_BUGS */
-		count = IDEFLOPPY_MIN (pc->b_count, bcount);
-		atapi_output_bytes (drive, pc->b_data, count);
-		bcount -= count; pc->b_data += count; pc->b_count -= count;
 		if (!pc->b_count) {
 			rq->sector += rq->current_nr_sectors;
 			rq->nr_sectors -= rq->current_nr_sectors;
@@ -529,6 +521,14 @@ static void idefloppy_output_buffers (ide_drive_t *drive, idefloppy_pc_t *pc, un
 				pc->b_count = bh->b_size;
 			}
 		}
+		if (bh == NULL) {
+			printk (KERN_ERR "%s: bh == NULL in idefloppy_output_buffers, bcount == %d\n", drive->name, bcount);
+			idefloppy_write_zeros (drive, bcount);
+			return;
+		}
+		count = IDEFLOPPY_MIN (pc->b_count, bcount);
+		atapi_output_bytes (drive, pc->b_data, count);
+		bcount -= count; pc->b_data += count; pc->b_count -= count;
 	}
 }
 
@@ -584,7 +584,10 @@ static void idefloppy_analyze_error (ide_drive_t *drive,idefloppy_request_sense_
 
 	floppy->sense_key = result->sense_key; floppy->asc = result->asc; floppy->ascq = result->ascq;
 #if IDEFLOPPY_DEBUG_LOG
-	printk (KERN_INFO "ide-floppy: pc = %x, sense key = %x, asc = %x, ascq = %x\n",floppy->failed_pc->c[0],result->sense_key,result->asc,result->ascq);
+	if (floppy->failed_pc)
+		printk (KERN_INFO "ide-floppy: pc = %x, sense key = %x, asc = %x, ascq = %x\n",floppy->failed_pc->c[0],result->sense_key,result->asc,result->ascq);
+	else
+		printk (KERN_INFO "ide-floppy: sense key = %x, asc = %x, ascq = %x\n",result->sense_key,result->asc,result->ascq);
 #endif /* IDEFLOPPY_DEBUG_LOG */
 }
 
@@ -726,7 +729,7 @@ static void idefloppy_pc_intr (ide_drive_t *drive)
 	if (clear_bit (PC_DMA_IN_PROGRESS, &pc->flags)) {
 		printk (KERN_ERR "ide-floppy: The floppy wants to issue more interrupts in DMA mode\n");
 		printk (KERN_ERR "ide-floppy: DMA disabled, reverting to PIO\n");
-		drive->using_dma=0;
+		HWIF(drive)->dmaproc(ide_dma_off, drive);
 		ide_do_reset (drive);
 		return;
 	}
@@ -841,7 +844,7 @@ static void idefloppy_issue_pc (ide_drive_t *drive, idefloppy_pc_t *pc)
 #ifdef CONFIG_BLK_DEV_TRITON
 	if (clear_bit (PC_DMA_ERROR, &pc->flags)) {
 		printk (KERN_WARNING "ide-floppy: DMA disabled, reverting to PIO\n");
-		drive->using_dma=0;
+		HWIF(drive)->dmaproc(ide_dma_off, drive);
 	}
 	if (test_bit (PC_DMA_RECOMMENDED, &pc->flags) && drive->using_dma)
 		dma_ok=!HWIF(drive)->dmaproc(test_bit (PC_WRITING, &pc->flags) ? ide_dma_write : ide_dma_read, drive);
@@ -875,6 +878,7 @@ static void idefloppy_rw_callback (ide_drive_t *drive)
 	printk (KERN_INFO "ide-floppy: Reached idefloppy_rw_callback\n");
 #endif /* IDEFLOPPY_DEBUG_LOG */
 
+	idefloppy_end_request(1, HWGROUP(drive));
 	return;
 }
 
@@ -930,9 +934,9 @@ static void idefloppy_create_start_stop_cmd (idefloppy_pc_t *pc, int start)
 	pc->c[4] = start;
 }
 
-static void idefloppy_create_rw_cmd (idefloppy_floppy_t *floppy, idefloppy_pc_t *pc, struct request *rq)
+static void idefloppy_create_rw_cmd (idefloppy_floppy_t *floppy, idefloppy_pc_t *pc, struct request *rq, unsigned long sector)
 {
-	int block = rq->sector / floppy->bs_factor;
+	int block = sector / floppy->bs_factor;
 	int blocks = rq->nr_sectors / floppy->bs_factor;
 	
 #if IDEFLOPPY_DEBUG_LOG
@@ -991,7 +995,7 @@ static void idefloppy_do_request (ide_drive_t *drive, struct request *rq, unsign
 				return;
 			}
 			pc = idefloppy_next_pc_storage (drive);
-			idefloppy_create_rw_cmd (floppy, pc, rq);
+			idefloppy_create_rw_cmd (floppy, pc, rq, block);
 			break;
 		case IDEFLOPPY_PC_RQ:
 			pc = (idefloppy_pc_t *) rq->buffer;
@@ -1029,7 +1033,7 @@ static int idefloppy_get_flexible_disk_page (ide_drive_t *drive)
 	idefloppy_pc_t pc;
 	idefloppy_mode_parameter_header_t *header;
 	idefloppy_flexible_disk_page_t *page;
-	int capacity;
+	int capacity, lba_capacity;
 
 	idefloppy_create_mode_sense_cmd (&pc, IDEFLOPPY_FLEXIBLE_DISK_PAGE, MODE_SENSE_CURRENT);
 	if (idefloppy_queue_pc_tail (drive,&pc)) {
@@ -1044,17 +1048,21 @@ static int idefloppy_get_flexible_disk_page (ide_drive_t *drive)
 	page->cyls = ntohs (page->cyls);
 	page->rpm = ntohs (page->rpm);
 	capacity = page->cyls * page->heads * page->sectors * page->sector_size;
-	if (memcmp (page, &floppy->flexible_disk_page, sizeof (idefloppy_flexible_disk_page_t))) {
+	if (memcmp (page, &floppy->flexible_disk_page, sizeof (idefloppy_flexible_disk_page_t)))
 		printk (KERN_INFO "%s: %dkB, %d/%d/%d CHS, %d kBps, %d sector size, %d rpm\n",
 			drive->name, capacity / 1024, page->cyls, page->heads, page->sectors,
 			page->transfer_rate / 8, page->sector_size, page->rpm);
-		floppy->flexible_disk_page = *page;
-		drive->bios_cyl = page->cyls;
-		drive->bios_head = page->heads;
-		drive->bios_sect = page->sectors;
-		if (capacity != floppy->blocks * floppy->block_size)
-			printk (KERN_NOTICE "%s: The drive reports both %d and %d bytes as its capacity\n",
-				drive->name, capacity, floppy->blocks * floppy->block_size);
+
+	floppy->flexible_disk_page = *page;
+	drive->bios_cyl = page->cyls;
+	drive->bios_head = page->heads;
+	drive->bios_sect = page->sectors;
+	lba_capacity = floppy->blocks * floppy->block_size;
+	if (capacity != lba_capacity) {
+		printk (KERN_NOTICE "%s: The drive reports both %d and %d bytes as its capacity\n",
+			drive->name, capacity, lba_capacity);
+		capacity = IDEFLOPPY_MIN(capacity, lba_capacity);
+		floppy->blocks = floppy->block_size ? capacity / floppy->block_size : 0;
 	}
 	return 0;
 }
@@ -1071,6 +1079,11 @@ static int idefloppy_get_capacity (ide_drive_t *drive)
 	idefloppy_capacity_descriptor_t *descriptor;
 	int i, descriptors, rc = 1, blocks, length;
 	
+	drive->bios_cyl = 0;
+	drive->bios_head = drive->bios_sect = 0;
+	floppy->blocks = floppy->bs_factor = 0;
+	drive->part[0].nr_sects = 0;
+
 	idefloppy_create_read_capacity_cmd (&pc);
 	if (idefloppy_queue_pc_tail (drive, &pc)) {
 		printk (KERN_ERR "ide-floppy: Can't get floppy parameters\n");
@@ -1083,10 +1096,9 @@ static int idefloppy_get_capacity (ide_drive_t *drive)
 		blocks = descriptor->blocks = ntohl (descriptor->blocks);
 		length = descriptor->length = ntohs (descriptor->length);
 		if (!i && descriptor->dc == CAPACITY_CURRENT) {
-			if (memcmp (descriptor, &floppy->capacity, sizeof (idefloppy_capacity_descriptor_t))) {
+			if (memcmp (descriptor, &floppy->capacity, sizeof (idefloppy_capacity_descriptor_t)))
 				printk (KERN_INFO "%s: %dkB, %d blocks, %d sector size\n", drive->name, blocks * length / 1024, blocks, length);
-				floppy->capacity = *descriptor;
-			}
+			floppy->capacity = *descriptor;
 			if (!length || length % 512)
 				printk (KERN_ERR "%s: %d bytes block size not supported\n", drive->name, length);
 			else {
@@ -1094,9 +1106,6 @@ static int idefloppy_get_capacity (ide_drive_t *drive)
 				floppy->block_size = length;
 				if ((floppy->bs_factor = length / 512) != 1)
 					printk (KERN_NOTICE "%s: warning: non 512 bytes block size not fully supported\n", drive->name);
-				drive->part[0].nr_sects = blocks * floppy->bs_factor;
-				if (length > BLOCK_SIZE)
-					blksize_size[HWIF(drive)->major][drive->select.b.unit << PARTN_BITS] = length;
 				rc = 0;
 			}
 		}
@@ -1106,6 +1115,7 @@ static int idefloppy_get_capacity (ide_drive_t *drive)
 #endif /* IDEFLOPPY_DEBUG_INFO */
 	}
 	(void) idefloppy_get_flexible_disk_page (drive);
+	drive->part[0].nr_sects = floppy->blocks * floppy->bs_factor;
 	return rc;
 }
 
@@ -1183,7 +1193,7 @@ static unsigned long idefloppy_capacity (ide_drive_t *drive)
 	idefloppy_floppy_t *floppy = drive->driver_data;
 	unsigned long capacity = floppy->blocks * floppy->bs_factor;
 
-	return capacity ? capacity : 0x7fffffff;
+	return capacity;
 }
 
 /*

@@ -93,6 +93,7 @@
  *			Frederic(F1OAT)		Support for pseudo-digipeating.
  *			Jonathan(G4KLX)		Support for packet forwarding.
  *	AX.25 036	Jonathan(G4KLX)		Major restructuring.
+ *			Joerg(DL1BKE)		Fixed DAMA Slave.
  */
 
 #include <linux/config.h>
@@ -461,8 +462,12 @@ static int ax25_ctl_ioctl(const unsigned int cmd, void *arg)
 		case AX25_KILL:
 			ax25_clear_queues(ax25);
 			ax25_send_control(ax25, AX25_DISC, AX25_POLLON, AX25_COMMAND);
-
 			ax25->state = AX25_STATE_0;
+#ifdef CONFIG_AX25_DAMA_SLAVE
+			if (ax25_dev->dama.slave && ax25->ax25_dev->values[AX25_VALUES_PROTOCOL] == AX25_PROTO_DAMA_SLAVE)
+				ax25_dama_off(ax25);
+#endif
+
 			if (ax25->sk != NULL) {
 				ax25->sk->state     = TCP_CLOSE;
 				ax25->sk->err       = ENETRESET;
@@ -472,10 +477,6 @@ static int ax25_ctl_ioctl(const unsigned int cmd, void *arg)
 				ax25->sk->dead  = 1;
 			}
 
-#ifdef CONFIG_AX25_DAMA_SLAVE
-			if (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL] == AX25_PROTO_DAMA_SLAVE)
-				ax25_dama_off(ax25);
-#endif
 			ax25_set_timer(ax25);
 	  		break;
 
@@ -634,14 +635,13 @@ static int ax25_setsockopt(struct socket *sock, int level, int optname, char *op
 	if (level != SOL_AX25)
 		return -ENOPROTOOPT;
 
-	if(optlen<sizeof(int))
+	if (optlen < sizeof(int))
 		return -EINVAL;
-		
-	if(get_user(opt, (int *)optval))
+
+	if (get_user(opt, (int *)optval))
 		return -EFAULT;
 
-	switch (optname) 
-	{
+	switch (optname) {
 		case AX25_WINDOW:
 			if (sk->protinfo.ax25->modulus == AX25_MODULUS) {
 				if (opt < 1 || opt > 7)
@@ -716,13 +716,12 @@ static int ax25_getsockopt(struct socket *sock, int level, int optname, char *op
 {
 	struct sock *sk = sock->sk;
 	int val = 0;
-	int err;
 	int len;
 
 	if (level != SOL_AX25)
 		return -ENOPROTOOPT;
 
-	if(get_user(len,optlen))
+	if (get_user(len, optlen))
 		return -EFAULT;
 
 	switch (optname) {
@@ -774,11 +773,14 @@ static int ax25_getsockopt(struct socket *sock, int level, int optname, char *op
 			return -ENOPROTOOPT;
 	}
 
-	len=min(len,sizeof(int));
-	if(put_user(len, optlen))
+	len = min(len, sizeof(int));
+
+	if (put_user(len, optlen))
 		return -EFAULT;
-	if(copy_to_user(optval, &val, len))
+
+	if (copy_to_user(optval, &val, len))
 		return -EFAULT;
+
 	return 0;
 }
 
@@ -976,13 +978,14 @@ static int ax25_release(struct socket *sock, struct socket *peer)
 				ax25_clear_queues(sk->protinfo.ax25);
 				sk->protinfo.ax25->n2count = 0;
 				switch (sk->protinfo.ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
-					case AX25_PROTO_STD:
+					case AX25_PROTO_STD_SIMPLEX:
+					case AX25_PROTO_STD_DUPLEX:
 						ax25_send_control(sk->protinfo.ax25, AX25_DISC, AX25_POLLON, AX25_COMMAND);
 						sk->protinfo.ax25->t3timer = 0;
 						break;
 #ifdef AX25_CONFIG_DAMA_SLAVE
 					case AX25_PROTO_DAMA_SLAVE:
-						sk->protinfo.ax25->t3timer = sk->protinfo.ax25->t3;	/* DAMA slave timeout */
+						sk->protinfo.ax25->t3timer = 0;
 						break;
 #endif
 				}
@@ -1168,12 +1171,17 @@ static int ax25_connect(struct socket *sock, struct sockaddr *uaddr, int addr_le
 	sk->state          = TCP_SYN_SENT;
 
 	switch (sk->protinfo.ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
-		case AX25_PROTO_STD:
+		case AX25_PROTO_STD_SIMPLEX:
+		case AX25_PROTO_STD_DUPLEX:
 			ax25_std_establish_data_link(sk->protinfo.ax25);
 			break;
+
 #ifdef CONFIG_AX25_DAMA_SLAVE
 		case AX25_PROTO_DAMA_SLAVE:
-			ax25_ds_establish_data_link(sk->protinfo.ax25);
+			if (sk->protinfo.ax25->ax25_dev->dama.slave)
+				ax25_ds_establish_data_link(sk->protinfo.ax25);
+			else
+				ax25_std_establish_data_link(sk->protinfo.ax25);
 			break;
 #endif
 	}

@@ -99,7 +99,9 @@ extern __inline__ int notifier_call_chain(struct notifier_block **n, unsigned lo
 #define NETDEV_CHANGEADDR	0x0008
 
 #define SYS_DOWN	0x0001	/* Notify of system down */
+#define SYS_RESTART	SYS_DOWN
 #define SYS_HALT	0x0002	/* Notify of system halt */
+#define SYS_POWER_OFF	0x0003	/* Notify of system power off */
 
 /*
  *	Publically visible notifier objects

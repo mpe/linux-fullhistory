@@ -27,30 +27,28 @@
 
 static int
 _recvfrom(struct socket *sock, unsigned char *ubuf, int size,
-	  int noblock, unsigned flags, struct sockaddr_in *sa)
+	  int noblock, unsigned flags)
 {
 	struct iovec iov;
 	struct msghdr msg;
 	struct scm_cookie scm;
 
-	memset(&scm, 0, sizeof(scm));
-	
-	iov.iov_base = ubuf;
-	iov.iov_len = size;
-
-	msg.msg_name = (void *) sa;
+	msg.msg_name = NULL;
 	msg.msg_namelen = 0;
-	if (sa)
-		msg.msg_namelen = sizeof(struct sockaddr_in);
-	msg.msg_control = NULL;
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
-
+	msg.msg_control = NULL;
+	iov.iov_base = ubuf;
+	iov.iov_len = size;
+	
 	if (noblock) {
 		flags |= MSG_DONTWAIT;
 	}
-
-	return sock->ops->recvmsg(sock, &msg, size, flags, &scm);
+	memset(&scm, 0,sizeof(scm));
+	size=sock->ops->recvmsg(sock, &msg, size, flags, &scm);
+	if(size>=0)
+		scm_recv(sock,&msg,&scm,flags);
+	return size;
 }
 
 static int
@@ -61,27 +59,26 @@ _send(struct socket *sock, const void *buff, int len,
 	struct msghdr msg;
 	struct scm_cookie scm;
 	int err;
-	
-
-	iov.iov_base = (void *) buff;
-	iov.iov_len = len;
 
 	msg.msg_name = NULL;
 	msg.msg_namelen = 0;
-	msg.msg_control = NULL;
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
+	msg.msg_control = NULL;
+	msg.msg_controllen = 0;
+	
+	iov.iov_base = (void *)buff;
+	iov.iov_len = len;
+	
 
-	if (noblock) {
+	if (noblock) 
 		flags |= MSG_DONTWAIT;
-	}
 
 	msg.msg_flags = flags;
 
 	err = scm_send(sock, &msg, &scm);
         if (err < 0)
                 return err;
-	
 	err = sock->ops->sendmsg(sock, &msg, len, &scm);
 	scm_destroy(&scm);
 	return err;
@@ -101,14 +98,12 @@ smb_data_callback(struct sock *sk, int len)
 		fs = get_fs();
 		set_fs(get_ds());
 
-		result = _recvfrom(sock, (void *) peek_buf, 1, 1,
-				   MSG_PEEK, NULL);
+		result = _recvfrom(sock, (void *) peek_buf, 1, 1, MSG_PEEK);
 
 		while ((result != -EAGAIN) && (peek_buf[0] == 0x85))
 		{
 			/* got SESSION KEEP ALIVE */
-			result = _recvfrom(sock, (void *) peek_buf,
-					   4, 1, 0, NULL);
+			result = _recvfrom(sock, (void *) peek_buf, 4, 1, 0);
 
 			DDPRINTK("smb_data_callback:"
 				 " got SESSION KEEP ALIVE\n");
@@ -118,7 +113,7 @@ smb_data_callback(struct sock *sk, int len)
 				break;
 			}
 			result = _recvfrom(sock, (void *) peek_buf,
-					   1, 1, MSG_PEEK, NULL);
+					   1, 1, MSG_PEEK);
 		}
 		set_fs(fs);
 
@@ -265,7 +260,7 @@ smb_receive_raw(struct socket *sock, unsigned char *target, int length)
 	{
 		result = _recvfrom(sock,
 				   (void *) (target + already_read),
-				   length - already_read, 0, 0, NULL);
+				   length - already_read, 0, 0);
 
 		if (result == 0)
 		{
@@ -665,6 +660,15 @@ smb_send_trans2(struct smb_server *server, __u16 trans2_command,
 	*p++ = 'D';		/* this was added because OS/2 does it */
 	*p++ = ' ';
 
+
+	msg.msg_name = NULL;
+	msg.msg_namelen = 0;
+	msg.msg_control = NULL;
+	msg.msg_controllen = 0;
+	msg.msg_iov = iov;
+	msg.msg_iovlen = 4;
+	msg.msg_flags = 0;
+	
 	iov[0].iov_base = (void *) server->packet;
 	iov[0].iov_len = oparam;
 	iov[1].iov_base = (param == NULL) ? padding : param;
@@ -673,12 +677,6 @@ smb_send_trans2(struct smb_server *server, __u16 trans2_command,
 	iov[2].iov_len = odata - oparam - lparam;
 	iov[3].iov_base = (data == NULL) ? padding : data;
 	iov[3].iov_len = ldata;
-
-	msg.msg_name = NULL;
-	msg.msg_namelen = 0;
-	msg.msg_control = NULL;
-	msg.msg_iov = iov;
-	msg.msg_iovlen = 4;
 
 	err = scm_send(sock, &msg, &scm);
         if (err < 0)

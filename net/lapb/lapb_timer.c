@@ -53,7 +53,7 @@ void lapb_set_timer(lapb_cb *lapb)
 
 	lapb->timer.data     = (unsigned long)lapb;
 	lapb->timer.function = &lapb_timer;
-	lapb->timer.expires  = jiffies + 10;
+	lapb->timer.expires  = jiffies + (HZ / 10);
 
 	add_timer(&lapb->timer);
 }

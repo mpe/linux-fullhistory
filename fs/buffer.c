@@ -1,4 +1,3 @@
-extern void allow_interrupts(void);
 /*
  *  linux/fs/buffer.c
  *
@@ -626,7 +625,6 @@ static void refill_freelist(int size)
 	}
 
 repeat:
-	allow_interrupts();
 	/* OK, we cannot grow the buffer cache, now try to get some
 	   from the lru list */
 
@@ -708,7 +706,6 @@ struct buffer_head * getblk(kdev_t dev, int block, int size)
 	   now so as to ensure that there are still clean buffers available
 	   for user processes to use (and dirty) */
 repeat:
-	allow_interrupts();
 	bh = get_hash_table(dev, block, size);
 	if (bh) {
 		if (!buffer_dirty(bh)) {
@@ -721,7 +718,6 @@ repeat:
 	}
 
 	while(!free_list[isize]) {
-		allow_interrupts();
 		refill_freelist(size);
 	}
 	
@@ -1516,7 +1512,6 @@ asmlinkage int sync_old_buffers(void)
 		ndirty = 0;
 		nwritten = 0;
 	repeat:
-		allow_interrupts();
 	
 		bh = lru_list[nlist];
 		if(bh) 
@@ -1659,7 +1654,6 @@ int bdflush(void * unused)
 			 ndirty = 0;
 			 refilled = 0;
 		 repeat:
-		 	allow_interrupts();
 		 	
 			 bh = lru_list[nlist];
 			 if(bh) 

@@ -686,12 +686,10 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	struct device *dev;
 	unsigned char *dptr;
 
-#ifdef CONFIG_FIREWALL
-	if (ax25 != NULL && call_in_firewall(PF_NETROM, skb->dev, skb->data, NULL) != FW_ACCEPT)
+	if (ax25 != NULL && call_in_firewall(PF_NETROM, skb->dev, skb->data, NULL, &skb) != FW_ACCEPT)
 		return 0;
-	if (ax25 == NULL && call_out_firewall(PF_NETROM, skb->dev, skb->data, NULL) != FW_ACCEPT)
+	if (ax25 == NULL && call_out_firewall(PF_NETROM, skb->dev, skb->data, NULL, &skb) != FW_ACCEPT)
 		return 0;
-#endif
 
 	nr_src  = (ax25_address *)(skb->data + 0);
 	nr_dest = (ax25_address *)(skb->data + 7);
@@ -722,10 +720,8 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 	if ((dev = nr_dev_first()) == NULL)
 		return 0;
 
-#ifdef CONFIG_FIREWALL
-	if (ax25 != NULL && call_fw_firewall(PF_NETROM, skb->dev, skb->data, NULL) != FW_ACCEPT)
+	if (ax25 != NULL && call_fw_firewall(PF_NETROM, skb->dev, skb->data, NULL, &skb) != FW_ACCEPT)
 		return 0;
-#endif
 
 	dptr  = skb_push(skb, 1);
 	*dptr = AX25_P_NETROM;

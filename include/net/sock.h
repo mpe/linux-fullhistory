@@ -152,9 +152,9 @@ struct ipv6_pinfo
 				mc_loop:1,
                                 unused:2;
 
-	/* device for outgoing mcast packets */
+	/* device for outgoing packets */
 
-	struct device		*mc_if;
+	struct device		*oif;
 
 	struct ipv6_mc_socklist	*ipv6_mc_list;
 	/* 
@@ -164,8 +164,8 @@ struct ipv6_pinfo
 	 * (ex. PMTU)
 	 */
 	
-	struct dest_entry	*dest;
-	__u32			dc_sernum;
+	struct dst_entry	*dst;
+	__u32			dst_cookie;
 
 	struct ipv6_options	*opt;
 };
@@ -317,7 +317,7 @@ struct sock
 	__u32			syn_seq;
 	__u32			urg_seq;
 	__u32			urg_data;
-	int			users;			/* user count */
+	int			sock_readers;		/* user count */
 
 	unsigned char		delayed_acks,
 				dup_acks;
@@ -328,7 +328,6 @@ struct sock
 	volatile char		dead,
 				urginline,
 				intr,
-				blog,
 				done,
 				reuse,
 				keepopen,
@@ -343,14 +342,15 @@ struct sock
 	unsigned long	        lingertime;
 	int			proc;
 
-	struct sock             **hashtable;
-	int			hashent;
 	struct sock		*next;
+	struct sock		**pprev;
+	struct sock		*bind_next;
+	struct sock		**bind_pprev;
 	struct sock		*prev;
+	int			hashent;
 	struct sock		*pair;
 
 	struct sk_buff		* send_head;
-	struct sk_buff		* send_tail;
 
 	struct sk_buff_head	back_log;
 	struct sk_buff		*partial;
@@ -426,7 +426,10 @@ struct sock
 	unsigned short		type;
 	unsigned char		localroute;	/* Route locally only */
 	struct ucred		peercred;
-  
+	/* What the user has tried to set with the security API */
+	short			authentication;
+	short			encryption;  
+	short			encrypt_net;
 /*
  *	This is where all the private (optional) areas that don't
  *	overlap will eventually live. 
@@ -510,19 +513,6 @@ struct sock
   	int			(*backlog_rcv) (struct sock *sk,
 						struct sk_buff *skb);  
 };
-
-#if 0
-/*
- *	Inet protocol options
- */
-struct inet_options {
-	__u8				version;
-	union {
-		struct options		opt_v4;
-		struct ipv6_options	opt_v6;
-	} u;
-};
-#endif
 
 /*
  *	IP protocol blocks we attach to sockets.
@@ -665,14 +655,27 @@ static inline void lock_sock(struct sock *sk)
 #if 0
 /* debugging code: the test isn't even 100% correct, but it can catch bugs */
 /* Note that a double lock is ok in theory - it's just _usually_ a bug */
-	if (sk->users) {
+	if (sk->sock_readers) {
 		__label__ here;
 		printk("double lock on socket at %p\n", &&here);
 here:
 	}
 #endif
-	sk->users++;
+#ifdef __SMP__
+	/*
+	 * This is a very broken bottom half synchronization mechanism.
+	 * You don't want to know..
+	 */
+	{ unsigned long flags;
+	save_flags(flags);
+	cli();
+	sk->sock_readers++;
+	restore_flags(flags);
+	}
+#else
+	sk->sock_readers++;
 	barrier();
+#endif
 }
 
 static inline void release_sock(struct sock *sk)
@@ -680,14 +683,14 @@ static inline void release_sock(struct sock *sk)
 	barrier();
 #if 0
 /* debugging code: remove me when ok */
-	if (sk->users == 0) {
+	if (sk->sock_readers == 0) {
 		__label__ here;
-		sk->users = 1;
+		sk->sock_readers = 1;
 		printk("trying to unlock unlocked socket at %p\n", &&here);
 here:
 	}
 #endif
-	if ((sk->users = sk->users-1) == 0)
+	if ((sk->sock_readers = sk->sock_readers-1) == 0)
 		__release_sock(sk);
 }
 
@@ -738,6 +741,7 @@ extern struct sk_buff 		*sock_alloc_send_skb(struct sock *sk,
 						     unsigned long fallback,
 						     int noblock,
 						     int *errcode);
+
 extern int 			sock_no_fcntl(struct socket *, unsigned int, unsigned long);
 extern int			sock_no_getsockopt(struct socket *, int , int,
 						   char *, int *);

@@ -1,17 +1,17 @@
-/* $Id: byteorder.h,v 1.2 1996/12/26 13:25:23 davem Exp $ */
+/* $Id: byteorder.h,v 1.3 1997/03/14 21:05:31 jj Exp $ */
 #ifndef _SPARC64_BYTEORDER_H
 #define _SPARC64_BYTEORDER_H
 
-extern __inline__ unsigned long int ntohl(unsigned long int x) { return x; }
-extern __inline__ unsigned short int ntohs(unsigned short int x) { return x; }
-extern __inline__ unsigned long int htonl(unsigned long int x) { return x; }
-extern __inline__ unsigned short int htons(unsigned short int x) { return x; }
+#define ntohl(x) (x)
+#define ntohs(x) (x)
+#define htonl(x) (x)
+#define htons(x) (x)
 
 /* Some programs depend upon these being around. */
-extern __inline__ unsigned long int __constant_ntohl(unsigned long int x) { return x; }
-extern __inline__ unsigned short int __constant_ntohs(unsigned short int x) { return x; }
-extern __inline__ unsigned long int __constant_htonl(unsigned long int x) { return x; }
-extern __inline__ unsigned short int __constant_htons(unsigned short int x) { return x; }
+#define __constant_ntohl(x) (x)
+#define __constant_ntohs(x) (x)
+#define __constant_htonl(x) (x)
+#define __constant_htons(x) (x)
 
 #ifndef __BIG_ENDIAN
 #define __BIG_ENDIAN 4321

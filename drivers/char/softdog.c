@@ -33,6 +33,7 @@
 #include <linux/mm.h>
 #include <linux/miscdevice.h>
 #include <linux/watchdog.h>
+#include <linux/reboot.h>
 #include <asm/uaccess.h>
 
 #define WATCHDOG_MINOR	130
@@ -54,12 +55,11 @@ static int timer_alive = 0;
  
 static void watchdog_fire(unsigned long data)
 {
-	extern void hard_reset_now(void);
 #ifdef ONLY_TESTING
 		printk(KERN_CRIT "SOFTDOG: Would Reboot.\n");
 #else
 	printk(KERN_CRIT "SOFTDOG: Initiating system reboot.\n");
-	hard_reset_now();
+	machine_restart(NULL);
 	printk("WATCHDOG: Reboot didn't ?????\n");
 #endif
 }

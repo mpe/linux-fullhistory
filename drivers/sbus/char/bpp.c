@@ -10,37 +10,38 @@
  */
 
 
-# include  <linux/kernel.h>
-# include  <linux/module.h>
-# include  <linux/version.h>
-# include  <linux/fs.h>
-# include  <linux/errno.h>
-# include  <linux/sched.h>
-# include  <linux/timer.h>
-# include  <linux/ioport.h>
+#include <linux/kernel.h>
+#include <linux/module.h>
+#include <linux/version.h>
+#include <linux/fs.h>
+#include <linux/errno.h>
+#include <linux/sched.h>
+#include <linux/timer.h>
+#include <linux/ioport.h>
+#include <linux/major.h>
 
-# include  <asm/uaccess.h>
+#include  <asm/uaccess.h>
 
-# if defined(__i386__)
-# include  <asm/io.h>
-# include  <asm/system.h>
-# include  <asm/segment.h>
-# endif
+#if defined(__i386__)
+# include <asm/io.h>
+# include <asm/system.h>
+# include <asm/segment.h>
+#endif
 
-# if defined(__sparc__)
+#if defined(__sparc__)
 # include <linux/delay.h>         /* udelay() */
 
 # include <asm/oplib.h>           /* OpenProm Library */
 # include <asm/sbus.h>            /* struct linux_sbus *SBus_chain */
 # include <asm/io.h>              /* sparc_alloc_io() */
-# endif
+#endif
 
-# include <asm/bpp.h>
+#include <asm/bpp.h>
 
 #define BPP_PROBE_CODE 0x55
 #define BPP_DELAY 100
 
-static const unsigned  BPP_MAJOR = 32;
+static const unsigned  BPP_MAJOR = LP_MAJOR;
 static const char* dev_name = "bpp";
 
 /* When switching from compatability to a mode where I can read, try
@@ -324,7 +325,7 @@ static void bpp_wake_up(unsigned long val)
 
 static void snooze(unsigned long snooze_time, unsigned minor)
 {
-      instances[minor].timer_list.expires = snooze_time+1;
+      instances[minor].timer_list.expires = jiffies + snooze_time + 1;
       instances[minor].timer_list.data    = minor;
       add_timer(&instances[minor].timer_list);
       sleep_on (&instances[minor].wait_queue);
@@ -457,7 +458,7 @@ static int terminate(unsigned minor)
 /*
  * Allow only one process to open the device at a time.
  */
-static int open(struct inode *inode, struct file *f)
+static int bpp_open(struct inode *inode, struct file *f)
 {
       unsigned minor = MINOR(inode->i_rdev);
       if (minor >= BPP_NO) return -ENODEV;
@@ -475,7 +476,7 @@ static int open(struct inode *inode, struct file *f)
  * mode as this is a reasonable place to clean up from messes made by
  * ioctls, or other mayhem.
  */
-static void release(struct inode *inode, struct file *f)
+static void bpp_release(struct inode *inode, struct file *f)
 {
       unsigned minor = MINOR(inode->i_rdev);
       instances[minor].opened = 0;
@@ -629,7 +630,7 @@ static long read_ecp(unsigned minor, char *c, unsigned long cnt)
       return cnt - remaining;
 }
 
-static long read(struct inode *inode, struct file *f,
+static long bpp_read(struct inode *inode, struct file *f,
 		 char *c, unsigned long cnt)
 {
       long rc;
@@ -779,7 +780,7 @@ static long write_ecp(unsigned minor, const char *c, unsigned long cnt)
  * that. Otherwise, terminate and do my writing in compat mode. This
  * is the safest course as any device can handle it.
  */
-static long write(struct inode *inode, struct file *f,
+static long bpp_write(struct inode *inode, struct file *f,
 		  const char *c, unsigned long cnt)
 {
       long errno = 0;
@@ -804,7 +805,7 @@ static long write(struct inode *inode, struct file *f,
       return errno;
 }
 
-static int ioctl(struct inode *inode, struct file *f, unsigned int cmd,
+static int bpp_ioctl(struct inode *inode, struct file *f, unsigned int cmd,
 		 unsigned long arg)
 {
       int errno = 0;
@@ -856,19 +857,15 @@ static int ioctl(struct inode *inode, struct file *f, unsigned int cmd,
 }
 
 static struct file_operations bpp_fops = {
-      0,
-      read, /* read */
-      write, /* write */
-      0,
-      0,
-      ioctl,
-      0, /* mmap */
-      open,
-      release,
-      0,
-      0,
-      0,
-      0
+	NULL,		/* bpp_lseek */
+	bpp_read,
+	bpp_write,
+	NULL,		/* bpp_readdir */
+	NULL,		/* bpp_select */
+	bpp_ioctl,
+	NULL,		/* bpp_mmap */
+	bpp_open,
+	bpp_release,
 };
 
 #if defined(__i386__)

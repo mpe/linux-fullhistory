@@ -1380,6 +1380,8 @@ de4x5_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		   dev->name, sts);
 	    return;
 	}
+if (sts & (STS_AIS | STS_UNF | STS_SE | STS_LNF | STS_RWT | STS_RU | STS_TJT))
+	printk("STS=%08x\n",sts);
     }
 
     /* Load the TX ring with any locally stored packets */
@@ -1563,7 +1565,10 @@ de4x5_txur(struct device *dev)
 	if ((omr & OMR_TR) < OMR_TR) {
 	    omr += 0x4000;
 	} else {
-	    omr |= OMR_SF;
+	    if (omr & OMR_TTM)
+		omr &= ~OMR_TTM;
+	    else
+		omr |= OMR_SF;
 	}
 	outl(omr | OMR_ST | OMR_SR, DE4X5_OMR);
     }

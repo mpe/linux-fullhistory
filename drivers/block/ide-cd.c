@@ -395,14 +395,6 @@ static void cdrom_end_request (int uptodate, ide_drive_t *drive)
 {
 	struct request *rq = HWGROUP(drive)->rq;
 
-	/* The code in blk.h can screw us up on error recovery if the block
-	   size is larger than 1k.  Fix that up here. */
-	if (!uptodate && rq->bh != 0) {
-		int adj = rq->current_nr_sectors - 1;
-		rq->current_nr_sectors -= adj;
-		rq->sector += adj;
-	}
-
 	if (rq->cmd == REQUEST_SENSE_COMMAND && uptodate) {
 		struct packet_command *pc = (struct packet_command *)
 			                      rq->buffer;
@@ -737,10 +729,8 @@ static void cdrom_read_intr (ide_drive_t *drive)
 	/* Check for errors. */
 	if (dma) {
 		info->dma = 0;
-		if ((dma_error = HWIF(drive)->dmaproc(ide_dma_status_bad, drive))) {
-			printk ("%s: disabled DMA\n", drive->name);
-			drive->using_dma = 0;
-		}
+		if ((dma_error = HWIF(drive)->dmaproc(ide_dma_status_bad, drive)))
+			HWIF(drive)->dmaproc(ide_dma_off, drive);
 		(void) (HWIF(drive)->dmaproc(ide_dma_abort, drive));
 	}
 

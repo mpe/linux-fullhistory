@@ -91,8 +91,8 @@ struct nd_neigh {
 };
 
 struct nd_msg {
-        struct icmpv6hdr icmph;
-        struct in6_addr target;
+        struct icmp6hdr	icmph;
+        struct in6_addr	target;
         struct {
                 __u8	opt_type;
                 __u8	opt_len;
@@ -101,7 +101,7 @@ struct nd_msg {
 };
 
 struct ra_msg {
-        struct icmpv6hdr	icmph;
+        struct icmp6hdr		icmph;
 	__u32			reachable_time;
 	__u32			retrans_timer;
 };
@@ -147,12 +147,9 @@ extern void			ndisc_send_rs(struct device *dev,
 					      struct in6_addr *saddr,
 					      struct in6_addr *daddr);
 
-extern int			(*ndisc_eth_hook) (unsigned char *,
-						   struct device *,
-						   struct sk_buff *);
 extern int			ndisc_eth_resolv(unsigned char *,
-						struct device *,
 						struct sk_buff *);
+
 extern void			ndisc_forwarding_on(void);
 extern void			ndisc_forwarding_off(void);
 
@@ -163,7 +160,20 @@ extern void			ndisc_send_redirect(struct sk_buff *skb,
 struct rt6_info *		dflt_rt_lookup(void);
 
 extern unsigned long	nd_rand_seed;
-extern int		ipv6_random(void);
+extern unsigned long	ipv6_random(void);
+
+/*
+ *	IGMP
+ */
+extern void			igmp6_init(struct net_proto_family *ops);
+
+extern int			igmp6_event_query(struct sk_buff *skb,
+						  struct icmp6hdr *hdr,
+						  int len);
+
+extern int			igmp6_event_report(struct sk_buff *skb,
+						   struct icmp6hdr *hdr,
+						   int len);
 
 #endif /* __KERNEL__ */
 

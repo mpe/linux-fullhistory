@@ -29,7 +29,6 @@
 #include <linux/in.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
-#include <linux/firewall.h>
 #include <linux/if_arp.h>
 #include <linux/mroute.h>
 

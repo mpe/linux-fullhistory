@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.1 1997/03/03 16:51:45 jj Exp $
+/* $Id: sparc64_ksyms.c,v 1.3 1997/03/18 17:59:10 jj Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -74,24 +74,25 @@ EXPORT_SYMBOL(klock_info);
 #endif
 EXPORT_SYMBOL_PRIVATE(_lock_kernel);
 EXPORT_SYMBOL_PRIVATE(_unlock_kernel);
-EXPORT_SYMBOL(page_offset);
-EXPORT_SYMBOL(stack_top);
 
 EXPORT_SYMBOL(mstk48t02_regs);
 EXPORT_SYMBOL(request_fast_irq);
 EXPORT_SYMBOL(sparc_alloc_io);
 EXPORT_SYMBOL(sparc_free_io);
+#if 0
 EXPORT_SYMBOL(io_remap_page_range);
-EXPORT_SYMBOL(mmu_v2p);
 EXPORT_SYMBOL(mmu_unlockarea);
 EXPORT_SYMBOL(mmu_lockarea);
 EXPORT_SYMBOL(mmu_get_scsi_sgl);
 EXPORT_SYMBOL(mmu_get_scsi_one);
 EXPORT_SYMBOL(mmu_release_scsi_sgl);
 EXPORT_SYMBOL(mmu_release_scsi_one);
+#endif
 EXPORT_SYMBOL(sparc_dvma_malloc);
+#if 0
 EXPORT_SYMBOL(sun4c_unmapioaddr);
 EXPORT_SYMBOL(srmmu_unmapioaddr);
+#endif
 #if CONFIG_SBUS
 EXPORT_SYMBOL(SBus_chain);
 EXPORT_SYMBOL(dma_chain);
@@ -119,14 +120,12 @@ EXPORT_SYMBOL(prom_getproperty);
 EXPORT_SYMBOL(prom_node_has_property);
 EXPORT_SYMBOL(prom_setprop);
 EXPORT_SYMBOL(prom_getbootargs);
-EXPORT_SYMBOL(prom_apply_obio_ranges);
 EXPORT_SYMBOL(prom_getname);
 EXPORT_SYMBOL(prom_feval);
 EXPORT_SYMBOL(prom_getstring);
 EXPORT_SYMBOL(prom_apply_sbus_ranges);
 EXPORT_SYMBOL(prom_getint);
 EXPORT_SYMBOL(prom_getintdefault);
-EXPORT_SYMBOL(romvec);
 EXPORT_SYMBOL(__prom_getchild);
 EXPORT_SYMBOL(__prom_getsibling);
 
@@ -176,4 +175,3 @@ EXPORT_SYMBOL_NOVERS(memcmp);
 EXPORT_SYMBOL_NOVERS(memcpy);
 EXPORT_SYMBOL_NOVERS(memset);
 EXPORT_SYMBOL_NOVERS(memmove);
-EXPORT_SYMBOL_NOVERS(__ashrdi3);

@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.1 1996/12/28 18:39:36 davem Exp $
+/* $Id: systbls.S,v 1.2 1997/03/18 17:59:03 jj Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -14,309 +14,207 @@
 
 	/* First, the 32-bit Linux native syscall table. */
 
-	.globl C_LABEL(sys_call_table32)
-C_LABEL(sys_call_table32):
-/*0*/	.xword C_LABEL(sys_setup), C_LABEL(sys_exit), C_LABEL(sys_fork)
-	.xword C_LABEL(sys_read), C_LABEL(sys_write)
-/*5*/	.xword C_LABEL(sys_open), C_LABEL(sys_close), C_LABEL(sys_wait4)
-	.xword C_LABEL(sys_creat), C_LABEL(sys_link)
-/*10*/  .xword C_LABEL(sys_unlink), C_LABEL(sunos_execv), C_LABEL(sys_chdir)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_mknod)
-/*15*/	.xword C_LABEL(sys_chmod), C_LABEL(sys_chown), C_LABEL(sparc_brk)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_lseek)
-/*20*/	.xword C_LABEL(sys_getpid), C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_setuid), C_LABEL(sys_getuid)
-/*25*/	.xword C_LABEL(sys_time), C_LABEL(sys_ptrace), C_LABEL(sys_alarm)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_pause)
-/*30*/	.xword C_LABEL(sys_utime), C_LABEL(sys_stty), C_LABEL(sys_gtty)
-	.xword C_LABEL(sys_access), C_LABEL(sys_nice), C_LABEL(sys_ftime)
-	.xword C_LABEL(sys_sync), C_LABEL(sys_kill), C_LABEL(sys_newstat)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_newlstat), C_LABEL(sys_dup)
-	.xword C_LABEL(sys_pipe), C_LABEL(sys_times), C_LABEL(sys_profil)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_setgid), C_LABEL(sys_getgid)
-	.xword C_LABEL(sys_signal), C_LABEL(sys_geteuid)
-/*50*/	.xword C_LABEL(sys_getegid), C_LABEL(sys_acct), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_ioctl), C_LABEL(sys_reboot)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_symlink), C_LABEL(sys_readlink)
-	.xword C_LABEL(sys_execve), C_LABEL(sys_umask), C_LABEL(sys_chroot)
-	.xword C_LABEL(sys_newfstat), C_LABEL(sys_nis_syscall), C_LABEL(sys_getpagesize)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_vfork), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_mmap), C_LABEL(sys_nis_syscall), C_LABEL(sys_munmap)
-	.xword C_LABEL(sys_mprotect), C_LABEL(sys_nis_syscall), C_LABEL(sys_vhangup)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall), C_LABEL(sys_getgroups)
-	.xword C_LABEL(sys_setgroups), C_LABEL(sys_getpgrp), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_setitimer), C_LABEL(sys_nis_syscall), C_LABEL(sys_swapon)
-	.xword C_LABEL(sys_getitimer), C_LABEL(sys_nis_syscall), C_LABEL(sys_sethostname)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_dup2), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_fcntl), C_LABEL(sys_select), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_fsync), C_LABEL(sys_setpriority), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-/*100*/	.xword C_LABEL(sys_getpriority), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_gettimeofday), C_LABEL(sys_getrusage)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall), C_LABEL(sys_readv)
-	.xword C_LABEL(sys_writev), C_LABEL(sys_settimeofday), C_LABEL(sys_fchown)
-	.xword C_LABEL(sys_fchmod), C_LABEL(sys_nis_syscall), C_LABEL(sys_setreuid)
-	.xword C_LABEL(sys_setregid), C_LABEL(sys_rename), C_LABEL(sys_truncate)
-	.xword C_LABEL(sys_ftruncate), C_LABEL(sys_flock), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_mkdir), C_LABEL(sys_rmdir), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall), C_LABEL(sys_getrlimit)
-	.xword C_LABEL(sys_setrlimit), C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-/*150*/	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_statfs), C_LABEL(sys_fstatfs)
-	.xword C_LABEL(sys_umount), C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_setdomainname)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_quotactl), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_mount), C_LABEL(sys_ustat), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_getdents), C_LABEL(sys_setsid)
-	.xword C_LABEL(sys_fchdir), C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_sigpending), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_setpgid), C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_newuname), C_LABEL(sys_init_module)
-	.xword C_LABEL(sys_personality), C_LABEL(sys_prof), C_LABEL(sys_break)
-	.xword C_LABEL(sys_lock), C_LABEL(sys_mpx), C_LABEL(sys_ulimit)
-	.xword C_LABEL(sys_getppid), C_LABEL(sparc_sigaction), C_LABEL(sys_sgetmask)
-/*200*/	.xword C_LABEL(sys_ssetmask), C_LABEL(sys_sigsuspend), C_LABEL(sys_newlstat)
-	.xword C_LABEL(sys_uselib), C_LABEL(old_readdir), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_socketcall), C_LABEL(sys_syslog), C_LABEL(sys_olduname)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_idle), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_waitpid), C_LABEL(sys_swapoff), C_LABEL(sys_sysinfo)
-	.xword C_LABEL(sys_ipc), C_LABEL(sys_sigreturn), C_LABEL(sys_clone)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_adjtimex), C_LABEL(sys_sigprocmask)
-	.xword C_LABEL(sys_create_module), C_LABEL(sys_delete_module)
-	.xword C_LABEL(sys_get_kernel_syms), C_LABEL(sys_getpgid), C_LABEL(sys_bdflush)
-	.xword C_LABEL(sys_sysfs), C_LABEL(sys_nis_syscall), C_LABEL(sys_setfsuid)
-	.xword C_LABEL(sys_setfsgid), C_LABEL(sys_llseek), C_LABEL(sys_time)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_stime), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_llseek)
-	/* "We are the Knights of the Forest of Ni!!" */
-	.xword C_LABEL(sys_mlock), C_LABEL(sys_munlock), C_LABEL(sys_mlockall)
-	.xword C_LABEL(sys_munlockall), C_LABEL(sys_sched_setparam)
-	.xword C_LABEL(sys_sched_getparam), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_sched_get_priority_max), C_LABEL(sys_sched_get_priority_min)
-	.xword C_LABEL(sys_sched_rr_get_interval), C_LABEL(sys_nanosleep)
-/*250*/	.xword C_LABEL(sys_mremap)
-	.xword C_LABEL(sys_sysctl)
-	.xword C_LABEL(sys_getsid), C_LABEL(sys_fdatasync), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_aplib), C_LABEL(sys_nis_syscall)
+	.globl sys_call_table32
+sys_call_table32:
+/*0*/	.xword sys_setup, sys_exit, sys_fork, sys_read, sys_write
+/*5*/	.xword sys_open, sys_close, sys_wait4, sys_creat, sys_link
+/*10*/  .xword sys_unlink, sunos_execv, sys_chdir, sys_nis_syscall, sys_mknod
+/*15*/	.xword sys_chmod, sys_chown, sparc_brk, sys_nis_syscall, sys_lseek
+/*20*/	.xword sys_getpid, sys_nis_syscall, sys_nis_syscall, sys_setuid, sys_getuid
+/*25*/	.xword sys_time, sys_ptrace, sys_alarm, sys_nis_syscall, sys_pause
+/*30*/	.xword sys_utime, sys_stty, sys_gtty, sys_access, sys_nice
+	.xword sys_ftime, sys_sync, sys_kill, sys_newstat, sys_nis_syscall
+/*40*/	.xword sys_newlstat, sys_dup, sys_pipe, sys_times, sys_profil
+	.xword sys_nis_syscall, sys_setgid, sys_getgid, sys_signal, sys_geteuid
+/*50*/	.xword sys_getegid, sys_acct, sys_nis_syscall, sys_nis_syscall, sys_ioctl
+	.xword sys_reboot, sys_nis_syscall, sys_symlink, sys_readlink, sys_execve
+/*60*/	.xword sys_umask, sys_chroot, sys_newfstat, sys_nis_syscall, sys_getpagesize
+	.xword sys_nis_syscall, sys_vfork, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+/*70*/	.xword sys_nis_syscall, sys_mmap, sys_nis_syscall, sys_munmap, sys_mprotect
+	.xword sys_nis_syscall, sys_vhangup, sys_nis_syscall, sys_nis_syscall, sys_getgroups
+/*80*/	.xword sys_setgroups, sys_getpgrp, sys_nis_syscall, sys_setitimer, sys_nis_syscall
+	.xword sys_swapon, sys_getitimer, sys_nis_syscall, sys_sethostname, sys_nis_syscall
+/*90*/	.xword sys_dup2, sys_nis_syscall, sys_fcntl, sys_select, sys_nis_syscall
+	.xword sys_fsync, sys_setpriority, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+/*100*/	.xword sys_getpriority, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+/*110*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+	.xword sys_nis_syscall, sys_gettimeofday, sys_getrusage, sys_nis_syscall, sys_nis_syscall
+/*120*/	.xword sys_readv, sys_writev, sys_settimeofday, sys_fchown, sys_fchmod
+	.xword sys_nis_syscall, sys_setreuid, sys_setregid, sys_rename, sys_truncate
+/*130*/	.xword sys_ftruncate, sys_flock, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+	.xword sys_nis_syscall, sys_mkdir, sys_rmdir, sys_nis_syscall, sys_nis_syscall
+/*140*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_getrlimit
+	.xword sys_setrlimit, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+/*150*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+	.xword sys_nis_syscall, sys_nis_syscall, sys_statfs, sys_fstatfs, sys_umount
+/*160*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_setdomainname, sys_nis_syscall
+	.xword sys_quotactl, sys_nis_syscall, sys_mount, sys_ustat, sys_nis_syscall
+/*170*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_getdents
+	.xword sys_setsid, sys_fchdir, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+/*180*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_sigpending, sys_nis_syscall
+	.xword sys_setpgid, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_newuname
+/*190*/	.xword sys_init_module, sys_personality, sys_prof, sys_break, sys_lock
+	.xword sys_mpx, sys_ulimit, sys_getppid, sparc_sigaction, sys_sgetmask
+/*200*/	.xword sys_ssetmask, sys_sigsuspend, sys_newlstat, sys_uselib, old_readdir
+	.xword sys_nis_syscall, sys_socketcall, sys_syslog, sys_olduname, sys_nis_syscall
+/*210*/	.xword sys_idle, sys_nis_syscall, sys_waitpid, sys_swapoff, sys_sysinfo
+	.xword sys_ipc, sys_sigreturn, sys_clone, sys_nis_syscall, sys_adjtimex
+/*220*/	.xword sys_sigprocmask, sys_create_module, sys_delete_module, sys_get_kernel_syms, sys_getpgid
+	.xword sys_bdflush, sys_sysfs, sys_nis_syscall, sys_setfsuid, sys_setfsgid
+/*230*/	.xword sys_llseek, sys_time, sys_nis_syscall, sys_stime, sys_nis_syscall
+	.xword sys_nis_syscall, sys_llseek, sys_mlock, sys_munlock, sys_mlockall
+/*240*/	.xword sys_munlockall, sys_sched_setparam, sys_sched_getparam, sys_nis_syscall, sys_nis_syscall
+	.xword sys_nis_syscall, sys_sched_get_priority_max, sys_sched_get_priority_min, sys_sched_rr_get_interval, sys_nanosleep
+/*250*/	.xword sys_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys_nis_syscall
+	.xword sys_aplib, sys_nis_syscall
 
 	/* Now the 64-bit native Linux syscall table. */
 
-	.globl C_LABEL(sys_call_table64)
-C_LABEL(sys_call_table64):
-/*0*/	.xword C_LABEL(sys_setup), C_LABEL(sys_exit), C_LABEL(sys_fork)
-	.xword C_LABEL(sys_read), C_LABEL(sys_write)
-/*5*/	.xword C_LABEL(sys_open), C_LABEL(sys_close), C_LABEL(sys_wait4)
-	.xword C_LABEL(sys_creat), C_LABEL(sys_link)
-/*10*/  .xword C_LABEL(sys_unlink), C_LABEL(sunos_execv), C_LABEL(sys_chdir)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_mknod)
-/*15*/	.xword C_LABEL(sys_chmod), C_LABEL(sys_chown), C_LABEL(sparc_brk)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_lseek)
-/*20*/	.xword C_LABEL(sys_getpid), C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_setuid), C_LABEL(sys_getuid)
-/*25*/	.xword C_LABEL(sys_time), C_LABEL(sys_ptrace), C_LABEL(sys_alarm)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_pause)
-/*30*/	.xword C_LABEL(sys_utime), C_LABEL(sys_stty), C_LABEL(sys_gtty)
-	.xword C_LABEL(sys_access), C_LABEL(sys_nice), C_LABEL(sys_ftime)
-	.xword C_LABEL(sys_sync), C_LABEL(sys_kill), C_LABEL(sys_newstat)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_newlstat), C_LABEL(sys_dup)
-	.xword C_LABEL(sys_pipe), C_LABEL(sys_times), C_LABEL(sys_profil)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_setgid), C_LABEL(sys_getgid)
-	.xword C_LABEL(sys_signal), C_LABEL(sys_geteuid)
-/*50*/	.xword C_LABEL(sys_getegid), C_LABEL(sys_acct), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_ioctl), C_LABEL(sys_reboot)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_symlink), C_LABEL(sys_readlink)
-	.xword C_LABEL(sys_execve), C_LABEL(sys_umask), C_LABEL(sys_chroot)
-	.xword C_LABEL(sys_newfstat), C_LABEL(sys_nis_syscall), C_LABEL(sys_getpagesize)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_vfork), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_mmap), C_LABEL(sys_nis_syscall), C_LABEL(sys_munmap)
-	.xword C_LABEL(sys_mprotect), C_LABEL(sys_nis_syscall), C_LABEL(sys_vhangup)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall), C_LABEL(sys_getgroups)
-	.xword C_LABEL(sys_setgroups), C_LABEL(sys_getpgrp), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_setitimer), C_LABEL(sys_nis_syscall), C_LABEL(sys_swapon)
-	.xword C_LABEL(sys_getitimer), C_LABEL(sys_nis_syscall), C_LABEL(sys_sethostname)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_dup2), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_fcntl), C_LABEL(sys_select), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_fsync), C_LABEL(sys_setpriority), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-/*100*/	.xword C_LABEL(sys_getpriority), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_gettimeofday), C_LABEL(sys_getrusage)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall), C_LABEL(sys_readv)
-	.xword C_LABEL(sys_writev), C_LABEL(sys_settimeofday), C_LABEL(sys_fchown)
-	.xword C_LABEL(sys_fchmod), C_LABEL(sys_nis_syscall), C_LABEL(sys_setreuid)
-	.xword C_LABEL(sys_setregid), C_LABEL(sys_rename), C_LABEL(sys_truncate)
-	.xword C_LABEL(sys_ftruncate), C_LABEL(sys_flock), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_mkdir), C_LABEL(sys_rmdir), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall), C_LABEL(sys_getrlimit)
-	.xword C_LABEL(sys_setrlimit), C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-/*150*/	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_statfs), C_LABEL(sys_fstatfs)
-	.xword C_LABEL(sys_umount), C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_setdomainname)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_quotactl), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_mount), C_LABEL(sys_ustat), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_getdents), C_LABEL(sys_setsid)
-	.xword C_LABEL(sys_fchdir), C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_sigpending), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_setpgid), C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_newuname), C_LABEL(sys_init_module)
-	.xword C_LABEL(sys_personality), C_LABEL(sys_prof), C_LABEL(sys_break)
-	.xword C_LABEL(sys_lock), C_LABEL(sys_mpx), C_LABEL(sys_ulimit)
-	.xword C_LABEL(sys_getppid), C_LABEL(sparc_sigaction), C_LABEL(sys_sgetmask)
-/*200*/	.xword C_LABEL(sys_ssetmask), C_LABEL(sys_sigsuspend), C_LABEL(sys_newlstat)
-	.xword C_LABEL(sys_uselib), C_LABEL(old_readdir), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_socketcall), C_LABEL(sys_syslog), C_LABEL(sys_olduname)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_idle), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_waitpid), C_LABEL(sys_swapoff), C_LABEL(sys_sysinfo)
-	.xword C_LABEL(sys_ipc), C_LABEL(sys_sigreturn), C_LABEL(sys_clone)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_adjtimex), C_LABEL(sys_sigprocmask)
-	.xword C_LABEL(sys_create_module), C_LABEL(sys_delete_module)
-	.xword C_LABEL(sys_get_kernel_syms), C_LABEL(sys_getpgid), C_LABEL(sys_bdflush)
-	.xword C_LABEL(sys_sysfs), C_LABEL(sys_nis_syscall), C_LABEL(sys_setfsuid)
-	.xword C_LABEL(sys_setfsgid), C_LABEL(sys_llseek), C_LABEL(sys_time)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_stime), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_llseek)
-	/* "We are the Knights of the Forest of Ni!!" */
-	.xword C_LABEL(sys_mlock), C_LABEL(sys_munlock), C_LABEL(sys_mlockall)
-	.xword C_LABEL(sys_munlockall), C_LABEL(sys_sched_setparam)
-	.xword C_LABEL(sys_sched_getparam), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_sched_get_priority_max), C_LABEL(sys_sched_get_priority_min)
-	.xword C_LABEL(sys_sched_rr_get_interval), C_LABEL(sys_nanosleep)
-/*250*/	.xword C_LABEL(sys_mremap)
-	.xword C_LABEL(sys_sysctl)
-	.xword C_LABEL(sys_getsid), C_LABEL(sys_fdatasync), C_LABEL(sys_nis_syscall)
-	.xword C_LABEL(sys_aplib), C_LABEL(sys_nis_syscall)
+	.globl sys_call_table64
+sys_call_table64:
+/*0*/	.xword sys_setup, sys_exit, sys_fork, sys_read, sys_write
+/*5*/	.xword sys_open, sys_close, sys_wait4, sys_creat, sys_link
+/*10*/  .xword sys_unlink, sunos_execv, sys_chdir, sys_nis_syscall, sys_mknod
+/*15*/	.xword sys_chmod, sys_chown, sparc_brk, sys_nis_syscall, sys_lseek
+/*20*/	.xword sys_getpid, sys_nis_syscall, sys_nis_syscall, sys_setuid, sys_getuid
+/*25*/	.xword sys_time, sys_ptrace, sys_alarm, sys_nis_syscall, sys_pause
+/*30*/	.xword sys_utime, sys_stty, sys_gtty, sys_access, sys_nice
+	.xword sys_ftime, sys_sync, sys_kill, sys_newstat, sys_nis_syscall
+/*40*/	.xword sys_newlstat, sys_dup, sys_pipe, sys_times, sys_profil
+	.xword sys_nis_syscall, sys_setgid, sys_getgid, sys_signal, sys_geteuid
+/*50*/	.xword sys_getegid, sys_acct, sys_nis_syscall, sys_nis_syscall, sys_ioctl
+	.xword sys_reboot, sys_nis_syscall, sys_symlink, sys_readlink, sys_execve
+/*60*/	.xword sys_umask, sys_chroot, sys_newfstat, sys_nis_syscall, sys_getpagesize
+	.xword sys_nis_syscall, sys_vfork, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+/*70*/	.xword sys_nis_syscall, sys_mmap, sys_nis_syscall, sys_munmap, sys_mprotect
+	.xword sys_nis_syscall, sys_vhangup, sys_nis_syscall, sys_nis_syscall, sys_getgroups
+/*80*/	.xword sys_setgroups, sys_getpgrp, sys_nis_syscall, sys_setitimer, sys_nis_syscall
+	.xword sys_swapon, sys_getitimer, sys_nis_syscall, sys_sethostname, sys_nis_syscall
+/*90*/	.xword sys_dup2, sys_nis_syscall, sys_fcntl, sys_select, sys_nis_syscall
+	.xword sys_fsync, sys_setpriority, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+/*100*/	.xword sys_getpriority, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+/*110*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+	.xword sys_nis_syscall, sys_gettimeofday, sys_getrusage, sys_nis_syscall, sys_nis_syscall
+/*120*/	.xword sys_readv, sys_writev, sys_settimeofday, sys_fchown, sys_fchmod
+	.xword sys_nis_syscall, sys_setreuid, sys_setregid, sys_rename, sys_truncate
+/*130*/	.xword sys_ftruncate, sys_flock, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+	.xword sys_nis_syscall, sys_mkdir, sys_rmdir, sys_nis_syscall, sys_nis_syscall
+/*140*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_getrlimit
+	.xword sys_setrlimit, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+/*150*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+	.xword sys_nis_syscall, sys_nis_syscall, sys_statfs, sys_fstatfs, sys_umount
+/*160*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_setdomainname, sys_nis_syscall
+	.xword sys_quotactl, sys_nis_syscall, sys_mount, sys_ustat, sys_nis_syscall
+/*170*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_getdents
+	.xword sys_setsid, sys_fchdir, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
+/*180*/	.xword sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_sigpending, sys_nis_syscall
+	.xword sys_setpgid, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_newuname
+/*190*/	.xword sys_init_module, sys_personality, sys_prof, sys_break, sys_lock
+	.xword sys_mpx, sys_ulimit, sys_getppid, sparc_sigaction, sys_sgetmask
+/*200*/	.xword sys_ssetmask, sys_sigsuspend, sys_newlstat, sys_uselib, old_readdir
+	.xword sys_nis_syscall, sys_socketcall, sys_syslog, sys_olduname, sys_nis_syscall
+/*210*/	.xword sys_idle, sys_nis_syscall, sys_waitpid, sys_swapoff, sys_sysinfo
+	.xword sys_ipc, sys_sigreturn, sys_clone, sys_nis_syscall, sys_adjtimex
+/*220*/	.xword sys_sigprocmask, sys_create_module, sys_delete_module, sys_get_kernel_syms, sys_getpgid
+	.xword sys_bdflush, sys_sysfs, sys_nis_syscall, sys_setfsuid, sys_setfsgid
+/*230*/	.xword sys_llseek, sys_time, sys_nis_syscall, sys_stime, sys_nis_syscall
+	.xword sys_nis_syscall, sys_llseek, sys_mlock, sys_munlock, sys_mlockall
+/*240*/	.xword sys_munlockall, sys_sched_setparam, sys_sched_getparam, sys_nis_syscall, sys_nis_syscall
+	.xword sys_nis_syscall, sys_sched_get_priority_max, sys_sched_get_priority_min, sys_sched_rr_get_interval, sys_nanosleep
+/*250*/	.xword sys_mremap, sys_sysctl, sys_getsid, sys_fdatasync, sys_nis_syscall
+	.xword sys_aplib, sys_nis_syscall
 
 	/* Now the 32-bit SunOS syscall table. */
 
 	.align 4
-	.globl C_LABEL(sunos_sys_table)
-C_LABEL(sunos_sys_table):
-/*0*/	.xword C_LABEL(sunos_indir), C_LABEL(sys_exit), C_LABEL(sys_fork)
-	.xword C_LABEL(sunos_read), C_LABEL(sunos_write), C_LABEL(sunos_open)
-	.xword C_LABEL(sys_close), C_LABEL(sunos_wait4), C_LABEL(sys_creat)
-	.xword C_LABEL(sys_link), C_LABEL(sys_unlink), C_LABEL(sunos_execv)
-	.xword C_LABEL(sys_chdir), C_LABEL(sunos_nosys), C_LABEL(sys_mknod)
-	.xword C_LABEL(sys_chmod), C_LABEL(sys_chown), C_LABEL(sunos_brk)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sys_lseek), C_LABEL(sunos_getpid)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_getuid), C_LABEL(sunos_nosys), C_LABEL(sys_ptrace)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sys_access), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sys_sync), C_LABEL(sys_kill), C_LABEL(sys_newstat)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sys_newlstat), C_LABEL(sys_dup)
-	.xword C_LABEL(sys_pipe), C_LABEL(sunos_nosys), C_LABEL(sys_profil)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_getgid)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-/*50*/	.xword C_LABEL(sunos_nosys), C_LABEL(sys_acct), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_mctl), C_LABEL(sunos_ioctl), C_LABEL(sys_reboot)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sys_symlink), C_LABEL(sys_readlink)
-	.xword C_LABEL(sys_execve), C_LABEL(sys_umask), C_LABEL(sys_chroot)
-	.xword C_LABEL(sys_newfstat), C_LABEL(sunos_nosys), C_LABEL(sys_getpagesize)
-	.xword C_LABEL(sys_msync), C_LABEL(sys_vfork), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_sbrk), C_LABEL(sunos_sstk)
-	.xword C_LABEL(sunos_mmap), C_LABEL(sunos_vadvise), C_LABEL(sys_munmap)
-	.xword C_LABEL(sys_mprotect), C_LABEL(sunos_madvise), C_LABEL(sys_vhangup)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_mincore), C_LABEL(sys_getgroups)
-	.xword C_LABEL(sys_setgroups), C_LABEL(sys_getpgrp), C_LABEL(sunos_setpgrp)
-	.xword C_LABEL(sys_setitimer), C_LABEL(sunos_nosys), C_LABEL(sys_swapon)
-	.xword C_LABEL(sys_getitimer), C_LABEL(sys_gethostname), C_LABEL(sys_sethostname)
-	.xword C_LABEL(sunos_getdtablesize), C_LABEL(sys_dup2), C_LABEL(sunos_nop)
-	.xword C_LABEL(sys_fcntl), C_LABEL(sunos_select), C_LABEL(sunos_nop)
-	.xword C_LABEL(sys_fsync), C_LABEL(sys_setpriority), C_LABEL(sys_socket)
-	.xword C_LABEL(sys_connect), C_LABEL(sunos_accept)
-/*100*/	.xword C_LABEL(sys_getpriority), C_LABEL(sunos_send), C_LABEL(sunos_recv)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sys_bind), C_LABEL(sunos_setsockopt)
-	.xword C_LABEL(sys_listen), C_LABEL(sunos_nosys), C_LABEL(sunos_sigaction)
-	.xword C_LABEL(sunos_sigblock), C_LABEL(sunos_sigsetmask), C_LABEL(sys_sigpause)
-	.xword C_LABEL(sys_sigstack), C_LABEL(sys_recvmsg), C_LABEL(sys_sendmsg)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sys_gettimeofday), C_LABEL(sys_getrusage)
-	.xword C_LABEL(sunos_getsockopt), C_LABEL(sunos_nosys), C_LABEL(sunos_readv)
-	.xword C_LABEL(sunos_writev), C_LABEL(sys_settimeofday), C_LABEL(sys_fchown)
-	.xword C_LABEL(sys_fchmod), C_LABEL(sys_recvfrom), C_LABEL(sys_setreuid)
-	.xword C_LABEL(sys_setregid), C_LABEL(sys_rename), C_LABEL(sys_truncate)
-	.xword C_LABEL(sys_ftruncate), C_LABEL(sys_flock), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sys_sendto), C_LABEL(sys_shutdown), C_LABEL(sys_socketpair)
-	.xword C_LABEL(sys_mkdir), C_LABEL(sys_rmdir), C_LABEL(sys_utimes)
-	.xword C_LABEL(sys_sigreturn), C_LABEL(sunos_nosys), C_LABEL(sys_getpeername)
-	.xword C_LABEL(sunos_gethostid), C_LABEL(sunos_nosys), C_LABEL(sys_getrlimit)
-	.xword C_LABEL(sys_setrlimit), C_LABEL(sunos_killpg), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-/*150*/	.xword C_LABEL(sys_getsockname), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_poll), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_getdirentries), C_LABEL(sys_statfs), C_LABEL(sys_fstatfs)
-	.xword C_LABEL(sys_umount), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_getdomainname), C_LABEL(sys_setdomainname)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sys_quotactl), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_mount), C_LABEL(sys_ustat), C_LABEL(sunos_semsys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_shmsys), C_LABEL(sunos_audit)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_getdents), C_LABEL(sys_setsid)
-	.xword C_LABEL(sys_fchdir), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sys_sigpending), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sys_setpgid), C_LABEL(sunos_pathconf), C_LABEL(sunos_fpathconf)
-	.xword C_LABEL(sunos_sysconf), C_LABEL(sunos_uname), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-/*200*/	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-/*250*/	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sunos_nosys)
-	.xword C_LABEL(sunos_nosys), C_LABEL(sunos_nosys), C_LABEL(sys_aplib)
+	.globl sunos_sys_table
+sunos_sys_table:
+/*0*/	.xword sunos_indir, sys_exit, sys_fork
+	.xword sunos_read, sunos_write, sunos_open
+	.xword sys_close, sunos_wait4, sys_creat
+	.xword sys_link, sys_unlink, sunos_execv
+	.xword sys_chdir, sunos_nosys, sys_mknod
+	.xword sys_chmod, sys_chown, sunos_brk
+	.xword sunos_nosys, sys_lseek, sunos_getpid
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_getuid, sunos_nosys, sys_ptrace
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sys_access, sunos_nosys, sunos_nosys
+	.xword sys_sync, sys_kill, sys_newstat
+	.xword sunos_nosys, sys_newlstat, sys_dup
+	.xword sys_pipe, sunos_nosys, sys_profil
+	.xword sunos_nosys, sunos_nosys, sunos_getgid
+	.xword sunos_nosys, sunos_nosys
+/*50*/	.xword sunos_nosys, sys_acct, sunos_nosys
+	.xword sunos_mctl, sunos_ioctl, sys_reboot
+	.xword sunos_nosys, sys_symlink, sys_readlink
+	.xword sys_execve, sys_umask, sys_chroot
+	.xword sys_newfstat, sunos_nosys, sys_getpagesize
+	.xword sys_msync, sys_vfork, sunos_nosys
+	.xword sunos_nosys, sunos_sbrk, sunos_sstk
+	.xword sunos_mmap, sunos_vadvise, sys_munmap
+	.xword sys_mprotect, sunos_madvise, sys_vhangup
+	.xword sunos_nosys, sunos_mincore, sys_getgroups
+	.xword sys_setgroups, sys_getpgrp, sunos_setpgrp
+	.xword sys_setitimer, sunos_nosys, sys_swapon
+	.xword sys_getitimer, sys_gethostname, sys_sethostname
+	.xword sunos_getdtablesize, sys_dup2, sunos_nop
+	.xword sys_fcntl, sunos_select, sunos_nop
+	.xword sys_fsync, sys_setpriority, sys_socket
+	.xword sys_connect, sunos_accept
+/*100*/	.xword sys_getpriority, sunos_send, sunos_recv
+	.xword sunos_nosys, sys_bind, sunos_setsockopt
+	.xword sys_listen, sunos_nosys, sunos_sigaction
+	.xword sunos_sigblock, sunos_sigsetmask, sys_sigpause
+	.xword sys_sigstack, sys_recvmsg, sys_sendmsg
+	.xword sunos_nosys, sys_gettimeofday, sys_getrusage
+	.xword sunos_getsockopt, sunos_nosys, sunos_readv
+	.xword sunos_writev, sys_settimeofday, sys_fchown
+	.xword sys_fchmod, sys_recvfrom, sys_setreuid
+	.xword sys_setregid, sys_rename, sys_truncate
+	.xword sys_ftruncate, sys_flock, sunos_nosys
+	.xword sys_sendto, sys_shutdown, sys_socketpair
+	.xword sys_mkdir, sys_rmdir, sys_utimes
+	.xword sys_sigreturn, sunos_nosys, sys_getpeername
+	.xword sunos_gethostid, sunos_nosys, sys_getrlimit
+	.xword sys_setrlimit, sunos_killpg, sunos_nosys
+	.xword sunos_nosys, sunos_nosys
+/*150*/	.xword sys_getsockname, sunos_nosys, sunos_nosys
+	.xword sunos_poll, sunos_nosys, sunos_nosys
+	.xword sunos_getdirentries, sys_statfs, sys_fstatfs
+	.xword sys_umount, sunos_nosys, sunos_nosys
+	.xword sunos_getdomainname, sys_setdomainname
+	.xword sunos_nosys, sys_quotactl, sunos_nosys
+	.xword sunos_mount, sys_ustat, sunos_semsys
+	.xword sunos_nosys, sunos_shmsys, sunos_audit
+	.xword sunos_nosys, sunos_getdents, sys_setsid
+	.xword sys_fchdir, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sys_sigpending, sunos_nosys
+	.xword sys_setpgid, sunos_pathconf, sunos_fpathconf
+	.xword sunos_sysconf, sunos_uname, sunos_nosys
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+/*200*/	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sunos_nosys
+/*250*/	.xword sunos_nosys, sunos_nosys, sunos_nosys
+	.xword sunos_nosys, sunos_nosys, sys_aplib

@@ -266,7 +266,8 @@ typedef struct ide_drive_s {
 typedef enum {	ide_dma_read = 0,	ide_dma_write = 1,
 		ide_dma_abort = 2,	ide_dma_check = 3,
 		ide_dma_status_bad = 4,	ide_dma_transferred = 5,
-		ide_dma_begin = 6 }
+		ide_dma_begin = 6,	ide_dma_on = 7,
+		ide_dma_off = 8 }
 	ide_dma_action_t;
 
 typedef int (ide_dmaproc_t)(ide_dma_action_t, ide_drive_t *);
@@ -583,6 +584,7 @@ void ide_init_subdrivers (void);
 extern struct file_operations ide_fops[];
 #endif
 
+#ifdef _IDE_C
 #ifdef CONFIG_BLK_DEV_IDEDISK
 int idedisk_init (void);
 #endif /* CONFIG_BLK_DEV_IDEDISK */
@@ -598,6 +600,7 @@ int idefloppy_init (void);
 #ifdef CONFIG_BLK_DEV_IDESCSI
 int idescsi_init (void);
 #endif /* CONFIG_BLK_DEV_IDESCSI */
+#endif /* _IDE_C */
 
 int ide_register_module (ide_module_t *module);
 void ide_unregister_module (ide_module_t *module);

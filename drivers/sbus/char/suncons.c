@@ -1,4 +1,4 @@
-/* $Id: suncons.c,v 1.50 1997/02/26 08:55:22 ecd Exp $
+/* $Id: suncons.c,v 1.53 1997/03/15 07:47:50 davem Exp $
  *
  * suncons.c: Sun SparcStation console support.
  *
@@ -758,26 +758,16 @@ console_restore_palette (void)
 	        (*fb_restore_palette) (&fbinfo[0]);
 }
 
-/* This routine should be moved to srmmu.c */
-static __inline__ uint
-srmmu_get_pte (unsigned long addr)
-{
-	register unsigned long entry;
-
-	__asm__ __volatile__("\n\tlda [%1] %2,%0\n\t" :
-			     "=r" (entry):
-			     "r" ((addr & 0xfffff000) | 0x400), "i" (ASI_M_FLUSH_PROBE));
-	return entry;
-}
-
-uint
-get_phys (uint addr)
+unsigned int
+get_phys (unsigned int addr)
 {
 	switch (sparc_cpu_model){
 	case sun4c:
 		return sun4c_get_pte (addr) << PAGE_SHIFT;
 	case sun4m:
 		return ((srmmu_get_pte (addr) & 0xffffff00) << 4);
+	case sun4u:
+		/* FIXME: */ return 0;
 	default:
 		panic ("get_phys called for unsupported cpu model\n");
 		return 0;
@@ -785,13 +775,15 @@ get_phys (uint addr)
 }
 
 int
-get_iospace (uint addr)
+get_iospace (unsigned int addr)
 {
 	switch (sparc_cpu_model){
 	case sun4c:
 		return -1; /* Don't check iospace on sun4c */
 	case sun4m:
 		return (srmmu_get_pte (addr) >> 28);
+	case sun4u:
+		/* FIXME: */ return 0;
 	default:
 		panic ("get_iospace called for unsupported cpu model\n");
 		return -1;
@@ -927,7 +919,7 @@ __initfunc(static void
 #endif
 #ifdef SUN_FB_BWTWO
 	case FBTYPE_SUN2BW:
-		bwtwo_setup (&fbinfo [n], n, base, io);
+		bwtwo_setup (&fbinfo [n], n, base, io, sbdp);
 		break;
 #endif
 #ifdef SUN_FB_CGFOURTEEN
@@ -1082,13 +1074,13 @@ __initfunc(static int sparc_console_probe(void))
 			default_node = prom_pathtoinode(console_fb_path);
 			if (default_node) {
 				prom_printf ("Using %s for console\n", console_fb_path);
-				prom_console_node = prom_inst2pkg(*romvec->pv_v2bootargs.fd_stdout);
+				prom_console_node = prom_inst2pkg(prom_stdout);
 				if (prom_console_node == default_node)
 					prom_console_node = 0;
 			}
 		}
 		if (!default_node)
-			default_node = prom_inst2pkg(*romvec->pv_v2bootargs.fd_stdout);
+			default_node = prom_inst2pkg(prom_stdout);
 		propl = prom_getproperty(default_node, "device_type",
 					 prop, sizeof (prop));
 		if (propl < 0) {

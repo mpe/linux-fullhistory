@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.6 1996/12/26 15:36:49 davem Exp $
+/* $Id: bitops.h,v 1.7 1997/03/14 21:05:38 jj Exp $
  * bitops.h: Bit string operations on the V9.
  *
  * Copyright 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -154,18 +154,18 @@ extern __inline__ int set_le_bit(int nr,void * addr)
 	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
 
 	__asm__ __volatile__("
-	lduwa		[%2] %5, %0
+	lduwa		[%2] %6, %0
 1:
 	andcc		%0, %4, %3
 	bne,pn		%%icc, 2f
 	 xor		%0, %4, %1
-	casa 		[%2] %5, %0, %1
+	casa 		[%2] %6, %0, %1
 	cmp		%0, %1
 	bne,a,pn	%%icc, 1b
-	 lduwa		[%2] %5, %0
+	 lduwa		[%2] %6, %0
 2:
 "	: "=&r" (temp0), "=&r" (temp1), "=r" (m), "=&r" (oldbit)
-	: "ir" (1UL << (nr & 31)), "r" (m), "i" (ASI_PL));
+	: "ir" (1UL << (nr & 31)), "2" (m), "i" (ASI_PL));
 	return oldbit != 0;
 }
 
@@ -176,18 +176,18 @@ extern __inline__ int clear_le_bit(int nr, void * addr)
 	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
 
 	__asm__ __volatile__("
-	lduwa		[%2] %5, %0
+	lduwa		[%2] %6, %0
 1:
 	andcc		%0, %4, %3
 	be,pn		%%icc, 2f
 	 xor		%0, %4, %1
-	casa 		[%2] %5, %0, %1
+	casa 		[%2] %6, %0, %1
 	cmp		%0, %1
 	bne,a,pn	%%icc, 1b
-	 lduwa		[%2] %5, %0
+	 lduwa		[%2] %6, %0
 2:
 "	: "=&r" (temp0), "=&r" (temp1), "=r" (m), "=&r" (oldbit)
-	: "ir" (1UL << (nr & 31)), "r" (m), "i" (ASI_PL));
+	: "ir" (1UL << (nr & 31)), "2" (m), "i" (ASI_PL));
 	return oldbit != 0;
 }
 

@@ -15,10 +15,8 @@
 
 #ifdef __SMP__
 #define LOCK_PREFIX "lock ; "
-#define SMPVOL volatile
 #else
 #define LOCK_PREFIX ""
-#define SMPVOL
 #endif
 
 /*
@@ -28,7 +26,7 @@ struct __dummy { unsigned long a[100]; };
 #define ADDR (*(struct __dummy *) addr)
 #define CONST_ADDR (*(const struct __dummy *) addr)
 
-extern __inline__ int set_bit(int nr, SMPVOL void * addr)
+extern __inline__ int set_bit(int nr, volatile void * addr)
 {
 	int oldbit;
 
@@ -39,7 +37,7 @@ extern __inline__ int set_bit(int nr, SMPVOL void * addr)
 	return oldbit;
 }
 
-extern __inline__ int clear_bit(int nr, SMPVOL void * addr)
+extern __inline__ int clear_bit(int nr, volatile void * addr)
 {
 	int oldbit;
 
@@ -50,7 +48,7 @@ extern __inline__ int clear_bit(int nr, SMPVOL void * addr)
 	return oldbit;
 }
 
-extern __inline__ int change_bit(int nr, SMPVOL void * addr)
+extern __inline__ int change_bit(int nr, volatile void * addr)
 {
 	int oldbit;
 
@@ -64,10 +62,26 @@ extern __inline__ int change_bit(int nr, SMPVOL void * addr)
 /*
  * This routine doesn't need to be atomic.
  */
-extern __inline__ int test_bit(int nr, const SMPVOL void * addr)
+extern __inline__ int __constant_test_bit(int nr, const volatile void * addr)
 {
-	return ((1UL << (nr & 31)) & (((const unsigned int *) addr)[nr >> 5])) != 0;
+	return ((1UL << (nr & 31)) & (((const volatile unsigned int *) addr)[nr >> 5])) != 0;
 }
+
+extern __inline__ int __test_bit(int nr, volatile void * addr)
+{
+	int oldbit;
+
+	__asm__ __volatile__(
+		"btl %2,%1\n\tsbbl %0,%0"
+		:"=r" (oldbit)
+		:"m" (ADDR),"ir" (nr));
+	return oldbit;
+}
+
+#define test_bit(nr,addr) \
+(__builtin_constant_p(nr) ? \
+ __constant_test_bit((nr),(addr)) : \
+ __test_bit((nr),(addr)))
 
 /*
  * Find-bit routines..

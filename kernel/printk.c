@@ -174,8 +174,8 @@ asmlinkage int printk(const char *fmt, ...)
 	static signed char msg_level = -1;
 	long flags;
 
-	save_flags(flags);
-	cli();
+	__save_flags(flags);
+	__cli();
 	va_start(args, fmt);
 	i = vsprintf(buf + 3, fmt, args); /* hopefully i < sizeof(buf)-4 */
 	buf_end = buf + 3 + i;
@@ -218,7 +218,7 @@ asmlinkage int printk(const char *fmt, ...)
 		if (*p == '\n')
 			msg_level = -1;
 	}
-	restore_flags(flags);
+	__restore_flags(flags);
 	wake_up_interruptible(&log_wait);
 	return i;
 }

@@ -41,7 +41,7 @@ static void dst_run_gc(unsigned long dummy)
 	del_timer(&dst_gc_timer);
 	dstp = &dst_garbage_list;
 	while ((dst = *dstp) != NULL) {
-		if (dst->refcnt) {
+		if (dst->use) {
 			dstp = &dst->next;
 			delayed++;
 			continue;

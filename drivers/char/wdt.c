@@ -42,6 +42,7 @@
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <linux/notifier.h>
+#include <linux/reboot.h>
 
 static int wdt_is_open=0;
 
@@ -145,7 +146,7 @@ void wdt_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		printk(KERN_CRIT "Would Reboot.\n");
 #else		
 		printk(KERN_CRIT "Initiating system reboot.\n");
-		hard_reset_now();
+		machine_restart(NULL);
 #endif		
 #else
 		printk(KERN_CRIT "Reset in 5ms.\n");

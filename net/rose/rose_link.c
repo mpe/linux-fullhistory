@@ -56,7 +56,7 @@ void rose_link_set_timer(struct rose_neigh *neigh)
 
 	neigh->timer.data     = (unsigned long)neigh;
 	neigh->timer.function = &rose_link_timer;
-	neigh->timer.expires  = jiffies + 10;
+	neigh->timer.expires  = jiffies + (HZ / 10);
 
 	add_timer(&neigh->timer);
 }
@@ -278,10 +278,8 @@ void rose_transmit_link(struct sk_buff *skb, struct rose_neigh *neigh)
 {
 	unsigned char *dptr;
 
-#ifdef CONFIG_FIREWALL
-	if (call_fw_firewall(PF_ROSE, skb->dev, skb->data, NULL) != FW_ACCEPT)
+	if (call_fw_firewall(PF_ROSE, skb->dev, skb->data, NULL,&skb) != FW_ACCEPT)
 		return;
-#endif
 
 	if (!rose_link_up(neigh))
 		neigh->restarted = 0;

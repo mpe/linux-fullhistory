@@ -4,7 +4,6 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
 
-#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -23,10 +22,8 @@
 #include <linux/tty.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
-#if defined(CONFIG_APM) && defined(CONFIG_APM_POWER_OFF)
-#include <linux/apm_bios.h>
-#endif
 #include <linux/notifier.h>
+#include <linux/reboot.h>
 
 #include <asm/uaccess.h>
 #include <asm/io.h>
@@ -37,12 +34,26 @@
 
 int C_A_D = 1;
 
+
 /*
- *	List of functions to call at shutdown. This is used to stop any
- *	idling DMA operations and the like. 
+ *	Notifier list for kernel code which wants to be called
+ *	at shutdown. This is used to stop any idling DMA operations
+ *	and the like. 
  */
- 
-struct notifier_block *boot_notifier_list=NULL;
+
+struct notifier_block *reboot_notifier_list = NULL;
+
+int register_reboot_notifier(struct notifier_block * nb)
+{
+	return notifier_chain_register(&reboot_notifier_list, nb);
+}
+
+int unregister_reboot_notifier(struct notifier_block * nb)
+{
+	return notifier_chain_unregister(&reboot_notifier_list, nb);
+}
+
+
 
 extern void adjust_clock(void);
 
@@ -189,10 +200,6 @@ asmlinkage int sys_prof(void)
 
 #endif
 
-extern void hard_reset_now(void);
-#ifdef __sparc__
-extern void halt_now(void);
-#endif
 extern asmlinkage int sys_kill(int, int);
 
 /*
@@ -202,42 +209,69 @@ extern asmlinkage int sys_kill(int, int);
  * You can also set the meaning of the ctrl-alt-del-key here.
  *
  * reboot doesn't sync: do that yourself before calling this.
+ *
  */
-asmlinkage int sys_reboot(int magic, int magic_too, int flag)
+asmlinkage int sys_reboot(int magic1, int magic2, int cmd, void * arg)
 {
+	char buffer[256];
+
+	/* We only trust the superuser with rebooting the system. */
 	if (!suser())
 		return -EPERM;
-	if (magic != 0xfee1dead || 
-	    (magic_too != 672274793 && magic_too != 85072278))
+
+	/* For safety, we require "magic" arguments. */
+	if (magic1 != LINUX_REBOOT_MAGIC1 ||
+	    (magic2 != LINUX_REBOOT_MAGIC2 && magic2 != LINUX_REBOOT_MAGIC2A))
 		return -EINVAL;
 
+	lock_kernel();
+	switch (cmd) {
+	case LINUX_REBOOT_CMD_RESTART:
+		notifier_call_chain(&reboot_notifier_list, SYS_RESTART, NULL);
+		printk(KERN_EMERG "Restarting system.\n");
+		machine_restart(NULL);
+		break;
 
-	if (flag == 0x01234567)
-	{
-		/* SMP: We need to lock during the shutdown still */
-		lock_kernel();
-		notifier_call_chain(&boot_notifier_list, SYS_DOWN, NULL);
-		hard_reset_now();
-	}
-	else if (flag == 0x89ABCDEF)
+	case LINUX_REBOOT_CMD_CAD_ON:
 		C_A_D = 1;
-	else if (!flag)
+		break;
+
+	case LINUX_REBOOT_CMD_CAD_OFF:
 		C_A_D = 0;
-	else if (flag == 0xCDEF0123) {
-		/* SMP: We need to lock during the shutdown still */
-		lock_kernel();
-		printk(KERN_EMERG "System halted\n");
-#ifdef __sparc__
-		halt_now();
-#endif	
-		sys_kill(-1, SIGKILL);
-#if defined(CONFIG_APM) && defined(CONFIG_APM_POWER_OFF)
-		apm_set_power_state(APM_STATE_OFF);
-#endif
-		notifier_call_chain(&boot_notifier_list, SYS_HALT, NULL);
+		break;
+
+	case LINUX_REBOOT_CMD_HALT:
+		notifier_call_chain(&reboot_notifier_list, SYS_HALT, NULL);
+		printk(KERN_EMERG "System halted.\n");
+		machine_halt();
 		do_exit(0);
-	} else
+		break;
+
+	case LINUX_REBOOT_CMD_POWER_OFF:
+		notifier_call_chain(&reboot_notifier_list, SYS_POWER_OFF, NULL);
+		printk(KERN_EMERG "Power down.\n");
+		machine_power_off();
+		do_exit(0);
+		break;
+
+	case LINUX_REBOOT_CMD_RESTART2:
+		if (strncpy_from_user(&buffer[0], (char *)arg, sizeof(buffer) - 1) < 0) {
+			unlock_kernel();
+			return -EFAULT;
+		}
+		buffer[sizeof(buffer) - 1] = '\0';
+
+		notifier_call_chain(&reboot_notifier_list, SYS_RESTART, buffer);
+		printk(KERN_EMERG "Restarting system with command '%s'.\n", buffer);
+		machine_restart(buffer);
+		break;
+
+	default:
+		unlock_kernel();
 		return -EINVAL;
+		break;
+	};
+	unlock_kernel();
 	return 0;
 }
 
@@ -248,12 +282,10 @@ asmlinkage int sys_reboot(int magic, int magic_too, int flag)
  */
 void ctrl_alt_del(void)
 {
-	if (C_A_D)
-	{
-		notifier_call_chain(&boot_notifier_list, SYS_DOWN, NULL);
-		hard_reset_now();
-	}
-	else
+	if (C_A_D) {
+		notifier_call_chain(&reboot_notifier_list, SYS_RESTART, NULL);
+		machine_restart(NULL);
+	} else
 		kill_proc(1, SIGINT, 1);
 }
 	

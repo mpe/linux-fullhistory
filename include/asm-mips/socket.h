@@ -55,4 +55,9 @@
 					/* other similar things on the	*/
 					/* user level.			*/
 
+/* Security levels - as per NRL IPv6 - don't actually do anything */
+#define SO_SECURITY_AUTHENTICATION		22
+#define SO_SECURITY_ENCRYPTION_TRANSPORT	23
+#define SO_SECURITY_ENCRYPTION_NETWORK		24
+
 #endif /* __ASM_MIPS_SOCKET_H */

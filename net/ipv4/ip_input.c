@@ -155,6 +155,7 @@
 #include <linux/mroute.h>
 #include <net/netlink.h>
 #include <linux/net_alias.h>
+#include <linux/ipsec.h>
 
 /*
  *	SNMP management statistics
@@ -266,7 +267,12 @@ int ip_local_deliver(struct sk_buff *skb)
 				else
 					break;	/* One pending raw socket left */
 				if(skb1)
-					raw_rcv(raw_sk, skb1);
+				{
+					if(ipsec_sk_policy(raw_sk,skb1))	
+						raw_rcv(raw_sk, skb1);
+					else
+						kfree_skb(skb1, FREE_WRITE);
+				}
 				raw_sk = sknext;
 			} while(raw_sk!=NULL);
 				
@@ -323,7 +329,12 @@ int ip_local_deliver(struct sk_buff *skb)
 	 */
 
 	if(raw_sk!=NULL)	/* Shift to last raw user */
-		raw_rcv(raw_sk, skb);
+	{
+		if(ipsec_sk_policy(raw_sk, skb))
+			raw_rcv(raw_sk, skb);
+		else
+			kfree_skb(skb, FREE_WRITE);
+	}
 	else if (!flag)		/* Free and report errors */
 	{
 		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PROT_UNREACH, 0);	
@@ -434,7 +445,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		int fwres;
 		u16 rport;
 
-		if ((fwres=call_in_firewall(PF_INET, skb->dev, iph, &rport))<FW_ACCEPT) {
+		if ((fwres=call_in_firewall(PF_INET, skb->dev, iph, &rport, &skb))<FW_ACCEPT) {
 			if (fwres==FW_REJECT)
 				icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0);
 			goto drop;

@@ -29,6 +29,10 @@
 #include <linux/unistd.h>
 #include <linux/delay.h>
 #include <linux/smp.h>
+#include <linux/reboot.h>
+#if defined(CONFIG_APM) && defined(CONFIG_APM_POWER_OFF)
+#include <linux/apm_bios.h>
+#endif
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -122,6 +126,7 @@ asmlinkage int sys_idle(void)
 			if (hlt_works_ok && !hlt_counter && !need_resched)
 		        	__asm__("hlt");
 		}
+		run_task_queue(&tq_scheduler);
 		if (need_resched) 
 			start_idle = 0;
 		schedule();
@@ -135,30 +140,6 @@ out:
 #else
 
 /*
- *	In the SMP world we hlt outside of kernel syscall rather than within
- *	so as to get the right locking semantics.
- */
- 
-asmlinkage int sys_idle(void)
-{
-	int ret = -EPERM;
-
-	lock_kernel();
-	if(current->pid != 0)
-		goto out;
-#ifdef __SMP_PROF__
-	smp_spins_sys_idle[smp_processor_id()]+=
-	  smp_spins_syscall_cur[smp_processor_id()];
-#endif
-	current->counter= -100;
-	schedule();
-	ret = 0;
-out:
-	unlock_kernel();
-	return ret;
-}
-
-/*
  *	This is being executed in task 0 'user space'.
  */
 
@@ -168,30 +149,15 @@ int cpu_idle(void *unused)
 	{
 		if(cpu_data[smp_processor_id()].hlt_works_ok && !hlt_counter && !need_resched)
 			__asm("hlt");
-                if(0==(read_smp_counter(&smp_process_available))) 
-                	continue;
-                while(0x80000000 & smp_process_available)
-			;
-	        cli();
-                while(set_bit(31,&smp_process_available))
-                	while(test_bit(31,&smp_process_available))
-                {
-                	/*
-                	 *	Oops.. This is kind of important in some cases...
-                	 */
-                	if(clear_bit(smp_processor_id(), &smp_invalidate_needed))
-                		local_flush_tlb();
-                }
-                if (0==(read_smp_counter(&smp_process_available))) {
-                        clear_bit(31,&smp_process_available);
-                        sti();
-                        continue;
-                }
-                smp_process_available--;
-                clear_bit(31,&smp_process_available);
-                sti();
-		idle();
+		run_task_queue(&tq_scheduler);
+		schedule();
 	}
+}
+
+asmlinkage int sys_idle(void)
+{
+	cpu_idle(NULL);
+	return 0;
 }
 
 #endif
@@ -297,11 +263,13 @@ static inline void kb_wait(void)
 			break;
 }
 
-void hard_reset_now (void)
+void machine_restart(char * __unused)
 {
 
 	if(!reboot_thru_bios) {
+#if 0
 		sti();
+#endif
 		/* rebooting needs to touch the page at absolute addr 0 */
 		*((unsigned short *)__va(0x472)) = reboot_mode;
 		for (;;) {
@@ -398,6 +366,18 @@ void hard_reset_now (void)
 				:
 				: "i" ((void *) (0x1000 - sizeof (real_mode_switch))));
 }
+
+void machine_halt(void)
+{
+}
+
+void machine_power_off(void)
+{
+#if defined(CONFIG_APM) && defined(CONFIG_APM_POWER_OFF)
+	apm_set_power_state(APM_STATE_OFF);
+#endif
+}
+
 
 void show_regs(struct pt_regs * regs)
 {

@@ -260,7 +260,7 @@ static inline int DRIVE(kdev_t x) {
  * current disk size is unknown.
  * [Now it is rather a minimum]
  */
-#define MAX_DISK_SIZE 2 /* 3984*/
+#define MAX_DISK_SIZE 4 /* 3984*/
 
 #define K_64	0x10000		/* 64KB */
 
@@ -681,7 +681,7 @@ static int disk_change(int drive)
 				DPRINT("Disk type is undefined after "
 				       "disk change\n");
 			current_type[drive] = NULL;
-			floppy_sizes[TOMINOR(current_drive)] = MAX_DISK_SIZE;
+			floppy_sizes[TOMINOR(drive)] = MAX_DISK_SIZE;
 		}
 
 		/*USETF(FD_DISK_NEWCHANGE);*/
@@ -905,7 +905,7 @@ static struct tq_struct floppy_tq =
 static void schedule_bh( void (*handler)(void*) )
 {
 	floppy_tq.routine = (void *)(void *) handler;
-	queue_task_irq(&floppy_tq, &tq_immediate);
+	queue_task(&floppy_tq, &tq_immediate);
 	mark_bh(IMMEDIATE_BH);
 }
 
@@ -1042,7 +1042,7 @@ static void setup_DMA(void)
 	floppy_disable_hlt();
 }
 
-void show_floppy(void);
+static void show_floppy(void);
 
 /* waits until the fdc becomes ready */
 static int wait_til_ready(void)
@@ -1631,7 +1631,7 @@ static void print_result(char *message, int inr)
 	printk("\n");
 }
 
-/* interrupt handler */
+/* interrupt handler. Note that this can be called externally on the Sparc */
 void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	void (*handler)(void) = DEVICE_INTR;
@@ -1734,7 +1734,7 @@ static void reset_fdc(void)
 	}
 }
 
-void show_floppy(void)
+static void show_floppy(void)
 {
 	int i;
 
@@ -3152,7 +3152,7 @@ static inline int set_geometry(unsigned int cmd, struct floppy_struct *g,
 }
 
 /* handle obsolete ioctl's */
-int ioctl_table[]= {
+static int ioctl_table[]= {
 	FDCLRPRM,
 	FDSETPRM,
 	FDDEFPRM,
@@ -3800,7 +3800,7 @@ static char get_fdc_version(void)
 
 /* lilo configuration */
 
-void floppy_set_flags(int *ints,int param, int param2)
+static void floppy_set_flags(int *ints,int param, int param2)
 {
 	int i;
 

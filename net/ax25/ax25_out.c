@@ -94,12 +94,17 @@ int ax25_send_frame(struct sk_buff *skb, int paclen, ax25_address *src, ax25_add
 	}
 
 	switch (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
-		case AX25_PROTO_STD:
+		case AX25_PROTO_STD_SIMPLEX:
+		case AX25_PROTO_STD_DUPLEX:
 			ax25_std_establish_data_link(ax25);
 			break;
-#ifdef AX25_CONFIG_DAMA_SLAVE
+
+#ifdef CONFIG_AX25_DAMA_SLAVE
 		case AX25_PROTO_DAMA_SLAVE:
-			ax25_ds_establish_data_link(ax25);
+			if (ax25_dev->dama.slave)
+				ax25_ds_establish_data_link(ax25);
+			else
+				ax25_std_establish_data_link(ax25);
 			break;
 #endif
 	}
@@ -192,7 +197,8 @@ void ax25_output(ax25_cb *ax25, int paclen, struct sk_buff *skb)
 		skb_queue_tail(&ax25->write_queue, skb);	  /* Throw it on the queue */
 	}
 
-	if (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL] == AX25_PROTO_STD) {
+	if (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL] == AX25_PROTO_STD_SIMPLEX ||
+	    ax25->ax25_dev->values[AX25_VALUES_PROTOCOL] == AX25_PROTO_STD_DUPLEX) {
 		if (ax25->state == AX25_STATE_3 || ax25->state == AX25_STATE_4)
 			ax25_kick(ax25);
 	}
@@ -274,9 +280,11 @@ void ax25_kick(ax25_cb *ax25)
 			 * in DAMA mode.
 			 */
 			switch (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
-				case AX25_PROTO_STD:
+				case AX25_PROTO_STD_SIMPLEX:
+				case AX25_PROTO_STD_DUPLEX:
 					ax25_send_iframe(ax25, skbn, (last) ? AX25_POLLON : AX25_POLLOFF);
 					break;
+
 #ifdef CONFIG_AX25_DAMA_SLAVE
 				case AX25_PROTO_DAMA_SLAVE:
 					ax25_send_iframe(ax25, skbn, AX25_POLLOFF);
@@ -343,12 +351,10 @@ void ax25_queue_xmit(struct sk_buff *skb)
 {
 	unsigned char *ptr;
 
-#ifdef CONFIG_FIREWALL
-	if (call_out_firewall(PF_AX25, skb->dev, skb->data, NULL) != FW_ACCEPT) {
+	if (call_out_firewall(PF_AX25, skb->dev, skb->data, NULL, &skb) != FW_ACCEPT) {
 		dev_kfree_skb(skb, FREE_WRITE);
 		return;
 	}
-#endif
 
 	skb->protocol = htons(ETH_P_AX25);
 	skb->dev      = ax25_fwd_dev(skb->dev);

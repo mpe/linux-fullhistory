@@ -1,4 +1,4 @@
-/* $Id: pgtsrmmu.h,v 1.25 1996/12/18 06:56:07 tridge Exp $
+/* $Id: pgtsrmmu.h,v 1.28 1997/03/15 07:47:52 davem Exp $
  * pgtsrmmu.h:  SRMMU page table defines and code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -86,6 +86,8 @@
 #define SRMMU_CTX_REG            0x00000200
 #define SRMMU_FAULT_STATUS       0x00000300
 #define SRMMU_FAULT_ADDR         0x00000400
+
+#ifndef __ASSEMBLY__
 
 /* Accessing the MMU control register. */
 extern __inline__ unsigned int srmmu_get_mmureg(void)
@@ -219,7 +221,20 @@ extern __inline__ unsigned long srmmu_hwprobe(unsigned long vaddr)
 	return retval;
 }
 
+extern __inline__ int
+srmmu_get_pte (unsigned long addr)
+{
+	register unsigned long entry;
+        
+	__asm__ __volatile__("\n\tlda [%1] %2,%0\n\t" :
+				"=r" (entry):
+				"r" ((addr & 0xfffff000) | 0x400), "i" (ASI_M_FLUSH_PROBE));
+	return entry;
+}
+
 extern unsigned long (*srmmu_read_physical)(unsigned long paddr);
 extern void (*srmmu_write_physical)(unsigned long paddr, unsigned long word);
+
+#endif /* !(__ASSEMBLY__) */
 
 #endif /* !(_SPARC_PGTSRMMU_H) */

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	@(#)tcp_input.c	1.0.16	05/25/93
+ * Version:	$Id: tcp_input.c,v 1.39 1997/03/17 04:49:35 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -36,14 +36,14 @@
  *		Eric Schenk	:	Yet another double ACK bug.
  *		Eric Schenk	:	Delayed ACK bug fixes.
  *		Eric Schenk	:	Floyd style fast retrans war avoidance.
+ *		David S. Miller	:	Don't allow zero congestion window.
  */
 
 #include <linux/config.h>
 #include <linux/mm.h>
 #include <linux/sysctl.h>
 #include <net/tcp.h>
-
-
+#include <linux/ipsec.h>
 
 typedef void			(*tcp_sys_cong_ctl_t)(struct sock *sk,
 						      u32 seq, u32 ack,
@@ -159,34 +159,37 @@ extern __inline__ void tcp_rtt_estimator(struct tcp_opt *tp, __u32 mrtt)
 
 	tp->backoff = 0;
 }
- 
+
+static int __tcp_sequence(struct tcp_opt *tp, u32 seq, u32 end_seq)
+{
+	u32 end_window;
+
+	end_window = tp->rcv_wup + tp->rcv_wnd;
+
+	if (tp->rcv_wnd)
+	{
+		if (!before(seq, tp->rcv_nxt) && before(seq, end_window))
+			return 1;
+
+		if ((end_seq - seq) && after(end_seq, tp->rcv_nxt) &&
+		    !after(end_seq, end_window))
+			return 1;
+	}
+
+	return 0;
+}
 
 /*
  *	This functions checks to see if the tcp header is actually acceptable. 
  */
  
-extern __inline__ int tcp_sequence(struct tcp_opt *tp, u32 seq, u32 seg_nxt)
+extern __inline__ int tcp_sequence(struct tcp_opt *tp, u32 seq, u32 end_seq)
 {
-	u32 end_window = tp->rcv_wup + tp->rcv_wnd;
-	u32 end_seq = seg_nxt;
-
-	/*
-	 *	When the window is open (most common case)
-	 *	we want to accept segments if they have yet unseen data
-	 *	or in the case of a dataless segment if seg.seq == rcv.nxt
-	 *	this means:
-	 *
-	 *	if (seq == end_seq)
-	 *		end_seq >= rcv.nxt
-	 *	else
-	 *		end_seq >  rcv.nxt
-	 */
-
-	if (seq == end_seq)
-		end_seq++;
-
-	return ((before(seq, end_window) && after(end_seq, tp->rcv_nxt)) ||
-		(seq == end_window && seq == end_seq));
+	if (seq == tp->rcv_nxt)
+	{
+		return (tp->rcv_wnd || (end_seq == seq));
+	}
+	return __tcp_sequence(tp, seq, end_seq);
 }
 
 /*
@@ -253,9 +256,9 @@ int tcp_parse_options(struct tcphdr *th)
 	unsigned char *ptr;
 	int length=(th->doff*4)-sizeof(struct tcphdr);
 	int mss = 0;
-    
+
 	ptr = (unsigned char *)(th + 1);
-  
+
 	while(length>0)
 	{
 	  	int opcode=*ptr++;
@@ -295,7 +298,7 @@ int tcp_parse_options(struct tcphdr *th)
  *  See draft-stevens-tcpca-spec-01 for documentation.
  */
 
-static void tcp_fast_retrans(struct sock *sk, u32 seq, u32 ack, int not_dup)
+static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
 {
 	struct tcp_opt *tp=&(sk->tp_pinfo.af_tcp);
 
@@ -318,7 +321,7 @@ static void tcp_fast_retrans(struct sock *sk, u32 seq, u32 ack, int not_dup)
 		 * than two segments. Retransmit the missing segment.
 		 */
 
-		if (tp->high_seq == 0 || after(seq, tp->high_seq))
+		if (tp->high_seq == 0 || after(ack, tp->high_seq))
 		{
 			sk->dup_acks++;
 
@@ -354,7 +357,7 @@ static void tcp_fast_retrans(struct sock *sk, u32 seq, u32 ack, int not_dup)
 		if (sk->dup_acks >= 3)
 		{
 			tp->retrans_head = NULL;
-			sk->cong_window = sk->ssthresh;
+			sk->cong_window = max(sk->ssthresh, 1);
 			sk->retransmits = 0;
 		}
 		sk->dup_acks = 0;
@@ -374,28 +377,27 @@ static void tcp_fast_retrans(struct sock *sk, u32 seq, u32 ack, int not_dup)
 static void tcp_cong_avoid_vegas(struct sock *sk, u32 seq, u32 ack,
 				 u32 seq_rtt)
 {
+	struct tcp_opt * tp;
+	unsigned int actual, expected;
+	unsigned int inv_rtt, inv_basertt, inv_basebd;
+	u32 snt_bytes;
+
 	/*
 	 *	From:
 	 *      TCP Vegas: New Techniques for Congestion 
 	 *	Detection and Avoidance.
-	 *              
+	 *
 	 *
 	 *	Warning: This code is a scratch implementation taken
 	 *	from the paper only. The code they distribute seams
 	 *	to have improved several things over the initial spec.
 	 */
 
-	struct tcp_opt * tp;
-	unsigned int Actual, Expected;
-	unsigned int inv_rtt, inv_basertt; 
-	u32 snt_bytes;
-	
-
 	tp = &(sk->tp_pinfo.af_tcp);
 
 	if (!seq_rtt)
 		seq_rtt = 1;
-	
+
 	if (tp->basertt)
 		tp->basertt = min(seq_rtt, tp->basertt);
 	else
@@ -403,18 +405,21 @@ static void tcp_cong_avoid_vegas(struct sock *sk, u32 seq, u32 ack,
 
 	/*
 	 * 
-	 *	Actual	 = throughput for this segment.
-	 *	Expected = number_of_bytes in transit / BaseRTT
+	 *	actual	 = throughput for this segment.
+	 *	expected = number_of_bytes in transit / BaseRTT
 	 * 
 	 */
 
-	snt_bytes = (ack - seq) << SHIFT_FACTOR;
-	inv_rtt = (1 << SHIFT_FACTOR) / seq_rtt;
-       
-	Actual =  snt_bytes * inv_rtt;
+	snt_bytes = ack - seq;
 
+	inv_rtt = (1 << SHIFT_FACTOR) / seq_rtt;
 	inv_basertt = (1 << SHIFT_FACTOR) / tp->basertt;
-	Expected = ((tp->snd_nxt - tp->snd_una) << SHIFT_FACTOR) * inv_basertt;
+
+	actual =  snt_bytes * inv_rtt;
+
+	expected = (tp->snd_nxt - tp->snd_una) * inv_basertt;
+
+	inv_basebd = sk->mss * inv_basertt;
 
 	/*
 	 *      Slow Start
@@ -422,17 +427,14 @@ static void tcp_cong_avoid_vegas(struct sock *sk, u32 seq, u32 ack,
 	
 	if (sk->cong_window < sk->ssthresh &&
 	    (seq == tp->snd_nxt ||
-	      (((Expected - Actual) <=
-		((TCP_VEGAS_GAMMA << SHIFT_FACTOR) * sk->mss * inv_basertt))
-	       )
-	     ))
+	     (expected - actual <= TCP_VEGAS_GAMMA * inv_basebd)))
 	{
 		/*
 		 * "Vegas allows exponential growth only every other
 		 *  RTT"
 		 */
 			
-		if (!(sk->cong_count++))
+		if (sk->cong_count++)
 		{
 			sk->cong_window++;
 			sk->cong_count = 0;
@@ -443,9 +445,8 @@ static void tcp_cong_avoid_vegas(struct sock *sk, u32 seq, u32 ack,
 		/*
 		 *      Congestion Avoidance
 		 */
-			
-		if (Expected - Actual <=
-		    ((TCP_VEGAS_ALPHA << SHIFT_FACTOR) * sk->mss * inv_basertt))
+
+		if (expected - actual <= TCP_VEGAS_ALPHA * inv_basebd)
 		{
 			/* Increase Linearly */
 				
@@ -455,18 +456,17 @@ static void tcp_cong_avoid_vegas(struct sock *sk, u32 seq, u32 ack,
 				sk->cong_count = 0;
 			}
 		}
-			
-		if (Expected - Actual >=
-		    ((TCP_VEGAS_BETA << SHIFT_FACTOR) * sk->mss * inv_basertt))
+
+		if (expected - actual >= TCP_VEGAS_BETA * inv_basebd)
 		{
 			/* Decrease Linearly */
-				
+
 			if (sk->cong_count++ >= sk->cong_window)
 			{
 				sk->cong_window--;
 				sk->cong_count = 0;
 			}
-			
+
 			/* Never less than 2 segments */
 			if (sk->cong_window < 2)
 				sk->cong_window = 2;
@@ -523,7 +523,7 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack, __u32 *seq,
 	struct sk_buff *skb;
 	unsigned long now = jiffies;
 	int acked = 0;
-	
+
 	while((skb=skb_peek(&sk->write_queue)) && (skb != tp->send_head))
 	{
 
@@ -545,16 +545,18 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack, __u32 *seq,
 		 
 		if (after(skb->end_seq, ack))
 			break;
-		
-		SOCK_DEBUG(sk, "removing seg %x-%x from retransmit queue\n", skb->seq, skb->end_seq);
+
+		SOCK_DEBUG(sk, "removing seg %x-%x from retransmit queue\n",
+			   skb->seq, skb->end_seq);
+
 		acked = FLAG_DATA_ACKED;
 		
 		atomic_dec(&sk->packets_out);
 
 		*seq = skb->seq;
 		*seq_rtt = now - skb->when;
-				
-		skb_unlink(skb);		
+
+		skb_unlink(skb);
 		
 		kfree_skb(skb, FREE_WRITE);
 	}
@@ -565,7 +567,7 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack, __u32 *seq,
 		if (!sk->dead)
 			sk->write_space(sk);
 	}
-	
+
 	return acked;
 }
 
@@ -616,7 +618,7 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 	if(sk->zapped)
 		return(1);	/* Dead, can't ack any more so why bother */
 
-	if (tp->pending == TIME_KEEPOPEN) 
+	if (tp->pending == TIME_KEEPOPEN)
 	{
 	  	tp->probes_out = 0;
 	}
@@ -754,19 +756,22 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 	}
 	else
 		tcp_clear_xmit_timer(sk, TIME_RETRANS);
-	
-	tcp_fast_retrans(sk, ack_seq, ack, (flag & (FLAG_DATA|FLAG_WIN_UPDATE)));
+
+
+	tcp_fast_retrans(sk, ack, (flag & (FLAG_DATA|FLAG_WIN_UPDATE)));
 
 	/*
 	 *	Remember the highest ack received.
 	 */
-	 
+
 	tp->snd_una = ack;
+
 	return 1;
 
 uninteresting_ack:
 
-	SOCK_DEBUG(sk, "Ack ignored %u %u\n",ack,tp->snd_nxt);
+	SOCK_DEBUG(sk, "Ack ignored %u %u\n", ack, tp->snd_nxt);
+
 	return 0;
 }
 
@@ -888,10 +893,11 @@ static void  tcp_ofo_queue(struct sock *sk)
 			SOCK_DEBUG(sk, "ofo packet was allready received \n");
 			skb_unlink(skb);
 			kfree_skb(skb, FREE_READ);
-			
+
 			continue;
 		}
-		SOCK_DEBUG(sk, "ofo requeuing : rcv_next %X seq %X - %X\n", tp->rcv_nxt, skb->seq, skb->end_seq);
+		SOCK_DEBUG(sk, "ofo requeuing : rcv_next %X seq %X - %X\n",
+			   tp->rcv_nxt, skb->seq, skb->end_seq);
 
 		skb_unlink(skb);
 		 
@@ -946,6 +952,7 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 		 * force an imediate ack
 		 */
 		SOCK_DEBUG(sk, "retransmit received: seq %X\n", skb->seq);
+
 		sk->delayed_acks = MAX_DELAY_ACK;
 		kfree_skb(skb, FREE_READ);
 
@@ -959,7 +966,9 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 		 * Partial packet
 		 * seq < rcv_next < end_seq
 		 */
-		SOCK_DEBUG(sk, "partial packet: rcv_next %X seq %X - %X\n", tp->rcv_nxt, skb->seq, skb->end_seq);
+		SOCK_DEBUG(sk, "partial packet: rcv_next %X seq %X - %X\n",
+			   tp->rcv_nxt, skb->seq, skb->end_seq);
+
 		skb_queue_tail(&sk->receive_queue, skb);
 
 		tp->rcv_nxt = skb->end_seq;
@@ -986,7 +995,8 @@ static void tcp_data_queue(struct sock *sk, struct sk_buff *skb)
 
 	tp->pred_flags = 0;
 
-	SOCK_DEBUG(sk, "out of order segment: rcv_next %X seq %X - %X\n", tp->rcv_nxt, skb->seq, skb->end_seq);
+	SOCK_DEBUG(sk, "out of order segment: rcv_next %X seq %X - %X\n",
+		   tp->rcv_nxt, skb->seq, skb->end_seq);
 
 	if (skb_peek(&sk->out_of_order_queue) == NULL) {
 		skb_queue_head(&sk->out_of_order_queue,skb);
@@ -1064,16 +1074,16 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk, unsigned int len)
 	}
 
 	sk->delayed_acks++;
-	
+
 	/*
 	 *	Now tell the user we may have some data. 
 	 */
-	 
-	if (!sk->dead) 
+
+	if (!sk->dead)
 	{
 		SOCK_DEBUG(sk, "Data wakeup.\n");
 		sk->data_ready(sk,0);
-	} 
+	}
 	return(1);
 }
 
@@ -1314,10 +1324,9 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 		{
 			if (after(skb->seq, tp->rcv_nxt))
 			{
-				printk(KERN_DEBUG "->seq:%d end:%d "
-				       "wup:%d wnd:%d\n",
-				       skb->seq, skb->end_seq, 
-				       tp->rcv_wup, tp->rcv_wnd);
+				SOCK_DEBUG(sk, "seq:%d end:%d wup:%d wnd:%d\n",
+					   skb->seq, skb->end_seq,
+					   tp->rcv_wup, tp->rcv_wnd);
 			}
 			tcp_send_ack(sk);
 			kfree_skb(skb, FREE_READ);
@@ -1327,6 +1336,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 
 	if(th->syn && skb->seq != sk->syn_seq)
 	{
+		printk(KERN_DEBUG "syn in established state\n");
 		tcp_reset(sk, skb);
 		kfree_skb(skb, FREE_READ);
 		return 1;
@@ -1586,7 +1596,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 
 			sk = tp->af_specific->get_sock(skb, th);
 
-			if (sk == NULL)
+			if (sk == NULL || !ipsec_sk_policy(sk,skb))
 				goto discard;
 
 			skb_set_owner_r(skb, sk);

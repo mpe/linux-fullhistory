@@ -67,22 +67,15 @@ __asm__("str %%ax\n\t" \
 	 */
 
 #define switch_to(prev,next) do { \
-	cli();\
 	if(prev->flags&PF_USEDFPU) \
 	{ \
 		__asm__ __volatile__("fnsave %0":"=m" (prev->tss.i387.hard)); \
 		__asm__ __volatile__("fwait"); \
 		prev->flags&=~PF_USEDFPU;	 \
 	} \
-__asm__("pushl %%edx\n\t" \
-	"movl "SYMBOL_NAME_STR(apic_reg)",%%edx\n\t" \
-	"movl 0x20(%%edx), %%edx\n\t" \
-	"shrl $22,%%edx\n\t" \
-	"and  $0x3C,%%edx\n\t" \
-	"movl %%ecx,"SYMBOL_NAME_STR(current_set)"(,%%edx)\n\t" \
-	"popl %%edx\n\t" \
-	"ljmp %0\n\t" \
-	"sti\n\t" \
+	prev->processor = NO_PROC_ID; \
+	current_set[this_cpu] = next; \
+__asm__("ljmp %0\n\t" \
 	: /* no output */ \
 	:"m" (*(((char *)&next->tss.tr)-4)), \
 	 "c" (next)); \
@@ -220,16 +213,35 @@ static inline unsigned long __xchg(unsigned long x, void * ptr, int size)
 }
 
 #define mb()  __asm__ __volatile__ (""   : : :"memory")
-#define sti() __asm__ __volatile__ ("sti": : :"memory")
-#define cli() __asm__ __volatile__ ("cli": : :"memory")
 
-#define save_flags(x) \
+/* interrupt control.. */
+#define __sti() __asm__ __volatile__ ("sti": : :"memory")
+#define __cli() __asm__ __volatile__ ("cli": : :"memory")
+#define __save_flags(x) \
 __asm__ __volatile__("pushfl ; popl %0":"=g" (x): /* no input */ :"memory")
-
-#define restore_flags(x) \
+#define __restore_flags(x) \
 __asm__ __volatile__("pushl %0 ; popfl": /* no output */ :"g" (x):"memory")
 
-#define iret() __asm__ __volatile__ ("iret": : :"memory")
+
+#ifdef __SMP__
+
+extern void __global_cli(void);
+extern void __global_sti(void);
+extern unsigned long __global_save_flags(void);
+extern void __global_restore_flags(unsigned long);
+#define cli() __global_cli()
+#define sti() __global_sti()
+#define save_flags(x) ((x)=__global_save_flags())
+#define restore_flags(x) __global_restore_flags(x)
+
+#else
+
+#define cli() __cli()
+#define sti() __sti()
+#define save_flags(x) __save_flags(x)
+#define restore_flags(x) __restore_flags(x)
+
+#endif
 
 #define _set_gate(gate_addr,type,dpl,addr) \
 __asm__ __volatile__ ("movw %%dx,%%ax\n\t" \

@@ -81,8 +81,6 @@ static void modulator_1200(struct sm_state *sm, unsigned char *buf, int buflen)
  */
 
 
-
-
 #if defined (CONFIG_SOUNDMODEM__AFSK1200_FP) && (defined(CONFIG_M586) || defined(CONFIG_M686))
 
 
@@ -143,10 +141,10 @@ static inline int do_filter_1200(struct demod_state_afsk12 *st, unsigned char ne
 	memmove(st->filt.f+1, st->filt.f,sizeof(st->filt.f) - sizeof(st->filt.f[0]));
 	st->filt.f[0] = (((int)newval)-0x80);
 
-	sum = convolution8(st->filt.f, afsk12_tx_lo_i);
-	sum += convolution8(st->filt.f, afsk12_tx_lo_q);
-	sum -= convolution8(st->filt.f, afsk12_tx_hi_i);
-	sum -= convolution8(st->filt.f, afsk12_tx_hi_q);
+	sum = convolution8(st->filt.f, afsk12_tx_lo_i_f);
+	sum += convolution8(st->filt.f, afsk12_tx_lo_q_f);
+	sum -= convolution8(st->filt.f, afsk12_tx_hi_i_f);
+	sum -= convolution8(st->filt.f, afsk12_tx_hi_q_f);
 	return sum;
 }
 

@@ -53,12 +53,10 @@ static int x25_receive_data(struct sk_buff *skb, struct x25_neigh *neigh)
 	unsigned short frametype;
 	unsigned int lci;
 
-#ifdef CONFIG_FIREWALL
-	if (call_in_firewall(PF_X25, skb->dev, skb->data, NULL) != FW_ACCEPT) {
+	if (call_in_firewall(PF_X25, skb->dev, skb->data, NULL, &skb) != FW_ACCEPT) {
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
-#endif
 
 	frametype = skb->data[2];
         lci = ((skb->data[0] << 8) & 0xF00) + ((skb->data[1] << 0) & 0x0FF);

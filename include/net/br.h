@@ -208,84 +208,19 @@ struct br_cf {
 #define BRCMD_DISABLE_PROT_STATS 14
 #define BRCMD_ZERO_PROT_STATS	15
 
-/* prototypes of all bridging functions... */
+/* prototypes of exported bridging functions... */
 
-void transmit_config(int port_no);
-int root_bridge(void);
-int supersedes_port_info(int port_no, Config_bpdu *config);
-void record_config_information(int port_no, Config_bpdu *config);
-void record_config_timeout_values(Config_bpdu *config);
-void config_bpdu_generation(void);
-int designated_port(int port_no);
-void reply(int port_no);
-void transmit_tcn(void);
-void configuration_update(void);
-void root_selection(void);
-void designated_port_selection(void);
-void become_designated_port(int port_no);
-void port_state_selection(void);
-void make_forwarding(int port_no);
-void topology_change_detection(void);
-void topology_change_acknowledged(void);
-void acknowledge_topology_change(int port_no);
-void make_blocking(int port_no);
-void set_port_state(int port_no, int state);
-void received_config_bpdu(int port_no, Config_bpdu *config);
-void received_tcn_bpdu(int port_no, Tcn_bpdu *tcn);
-void hello_timer_expiry(void);
-void message_age_timer_expiry(int port_no);
-void forward_delay_timer_expiry(int port_no);
-int designated_for_some_port(void);
-void tcn_timer_expiry(void);
-void topology_change_timer_expiry(void);
-void hold_timer_expiry(int port_no);
 void br_init(void);
-void br_init_port(int port_no);
-void enable_port(int port_no);
-void disable_port(int port_no);
-void set_bridge_priority(bridge_id_t *new_bridge_id);
-void set_port_priority(int port_no, unsigned short new_port_id);
-void set_path_cost(int port_no, unsigned short path_cost);
-void start_hello_timer(void);
-void stop_hello_timer(void);
-int hello_timer_expired(void);
-void start_tcn_timer(void);
-void stop_tcn_timer(void);
-int tcn_timer_expired(void);
-void start_topology_change_timer(void);
-void stop_topology_change_timer(void);
-int topology_change_timer_expired(void);
-void start_message_age_timer(int port_no, unsigned short message_age);
-void stop_message_age_timer(int port_no);
-int message_age_timer_expired(int port_no);
-void start_forward_delay_timer(int port_no);
-void stop_forward_delay_timer(int port_no);
-int forward_delay_timer_expired(int port_no);
-void start_hold_timer(int port_no);
-void stop_hold_timer(int port_no);
-int hold_timer_expired(int port_no);
-
-struct fdb *br_avl_find_addr(unsigned char addr[6]);
-int br_avl_insert (struct fdb * new_node);
-int br_avl_remove (struct fdb * node_to_delete);
-
-int send_tcn_bpdu(int port_no, Tcn_bpdu *bpdu);
-int send_config_bpdu(int port_no, Config_bpdu *config_bpdu);
-int find_port(struct device *dev);
-int br_flood(struct sk_buff *skb, int port);
-int br_drop(struct sk_buff *skb);
-int br_learn(struct sk_buff *skb, int port);	/* 3.8 */
-
 int br_receive_frame(struct sk_buff *skb);	/* 3.5 */
 int br_tx_frame(struct sk_buff *skb);
 int br_ioctl(unsigned int cmd, void *arg);
-
 int br_protocol_ok(unsigned short protocol);
 
-void free_fdb(struct fdb *);
-struct fdb *get_fdb(void);
+struct fdb *br_avl_find_addr(unsigned char addr[6]);
+int br_avl_insert (struct fdb * new_node);
 
 /* externs */
 
 extern struct br_stat br_stats;
+
 

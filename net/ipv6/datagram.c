@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: datagram.c,v 1.3 1996/10/11 16:03:05 roque Exp $
+ *	$Id: datagram.c,v 1.8 1997/03/18 18:24:28 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -23,18 +23,15 @@
 
 #include <net/ipv6.h>
 #include <net/ndisc.h>
-#include <net/ipv6_route.h>
 #include <net/addrconf.h>
 #include <net/transp_v6.h>
-
 
 int datagram_recv_ctl(struct sock *sk, struct msghdr *msg, struct sk_buff *skb)
 {
 	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
 	struct ipv6_options *opt = (struct ipv6_options *) skb->cb;
 	
-	if (np->rxinfo)
-	{
+	if (np->rxinfo) {
 		struct in6_pktinfo src_info;
 
 		src_info.ipi6_ifindex = skb->dev->ifindex;
@@ -42,14 +39,12 @@ int datagram_recv_ctl(struct sock *sk, struct msghdr *msg, struct sk_buff *skb)
 		put_cmsg(msg, SOL_IPV6, IPV6_RXINFO, sizeof(src_info), &src_info);
 	}
 
-	if (np->rxhlim)
-	{
+	if (np->rxhlim) {
 		int hlim = skb->nh.ipv6h->hop_limit;
 		put_cmsg(msg, SOL_IPV6, IPV6_HOPLIMIT, sizeof(hlim), &hlim);
 	}
 
-	if (opt->srcrt)
-	{
+	if (opt->srcrt) {
 		int hdrlen = sizeof(struct rt0_hdr) + (opt->srcrt->hdrlen << 3);
 
 		put_cmsg(msg, SOL_IPV6, IPV6_RXSRCRT, hdrlen, opt->srcrt);
@@ -61,17 +56,14 @@ int datagram_send_ctl(struct msghdr *msg, struct device **src_dev,
 		      struct in6_addr **src_addr, struct ipv6_options *opt, 
 		      int *hlimit)
 {
-	struct inet6_dev *in6_dev = NULL;
 	struct in6_pktinfo *src_info;
 	struct cmsghdr *cmsg;
 	struct ipv6_rt_hdr *rthdr;
 	int len;
 	int err = 0;
 
-	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg))
-	{
-		if (cmsg->cmsg_level != SOL_IPV6)
-		{
+	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg)) {
+		if (cmsg->cmsg_level != SOL_IPV6) {
 			printk(KERN_DEBUG "cmsg_level %d\n", cmsg->cmsg_level);
 			continue;
 		}
@@ -80,34 +72,25 @@ int datagram_send_ctl(struct msghdr *msg, struct device **src_dev,
 
 		case IPV6_TXINFO:
 			if (cmsg->cmsg_len < (sizeof(struct cmsghdr) +
-					      sizeof(struct in6_pktinfo)))
-			{
+					      sizeof(struct in6_pktinfo))) {
 				err = -EINVAL;
 				goto exit_f;
 			}
 
 			src_info = (struct in6_pktinfo *) cmsg->cmsg_data;
 			
-			if (src_info->ipi6_ifindex)
-			{
-				in6_dev = ipv6_dev_by_index(src_info->ipi6_ifindex);
-				if (in6_dev == NULL)
-				{
-					err = -ENODEV;
-					goto exit_f;
-				}
+			if (src_info->ipi6_ifindex) {
+				int index = src_info->ipi6_ifindex;
 
-				*src_dev = in6_dev->dev;
+				*src_dev = dev_get_by_index(index);
 			}
 			
-			if (!ipv6_addr_any(&src_info->ipi6_addr))
-			{
+			if (!ipv6_addr_any(&src_info->ipi6_addr)) {
 				struct inet6_ifaddr *ifp;
 
 				ifp = ipv6_chk_addr(&src_info->ipi6_addr);
 
-				if ( ifp == NULL)
-				{
+				if (ifp == NULL) {
 					err = -EINVAL;
 					goto exit_f;
 				}
@@ -124,8 +107,7 @@ int datagram_send_ctl(struct msghdr *msg, struct device **src_dev,
 			len -= sizeof(struct cmsghdr);
 
 			/* validate option length */
-			if (len < sizeof(struct ipv6_rt_hdr))
-			{
+			if (len < sizeof(struct ipv6_rt_hdr)) {
 				err = -EINVAL;
 				goto exit_f;
 			}
@@ -135,21 +117,18 @@ int datagram_send_ctl(struct msghdr *msg, struct device **src_dev,
 			/*
 			 *	TYPE 0
 			 */
-			if (rthdr->type)
-			{
+			if (rthdr->type) {
 				err = -EINVAL;
 				goto exit_f;
 			}
 
-			if (((rthdr->hdrlen + 1) << 3) < len)
-			{	
+			if (((rthdr->hdrlen + 1) << 3) < len) {
 				err = -EINVAL;
 				goto exit_f;
 			}
 
 			/* segments left must also match */
-			if ((rthdr->hdrlen >> 1) != rthdr->segments_left)
-			{
+			if ((rthdr->hdrlen >> 1) != rthdr->segments_left) {
 				err = -EINVAL;
 				goto exit_f;
 			}
@@ -160,27 +139,26 @@ int datagram_send_ctl(struct msghdr *msg, struct device **src_dev,
 			break;
 			
 		case IPV6_HOPLIMIT:
-			
+
 			len = cmsg->cmsg_len;
 			len -= sizeof(struct cmsghdr);
 			
-			if (len < sizeof(int))
-			{
+			if (len < sizeof(int)) {
 				err = -EINVAL;
 				goto exit_f;
 			}
 
 			*hlimit = *((int *) cmsg->cmsg_data);
 			break;
-			
+
 		default:
 			printk(KERN_DEBUG "invalid cmsg type: %d\n",
 			       cmsg->cmsg_type);
 			err = -EINVAL;
 			break;
-		}
+		};
 	}
 
-  exit_f:
+exit_f:
 	return err;
 }

@@ -86,12 +86,6 @@ struct sk_buff
 	  	unsigned char 	*raw;
 	} mac;
 
-#if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
-	/*
-	 *	Generic "neighbour" information
-	 */
-	struct neighbour *nexthop;
-#endif		
 	struct  dst_entry *dst;
 	char    	cb[32];
 
@@ -117,6 +111,7 @@ struct sk_buff
 #define PACKET_NDISC		17		/* Outgoing NDISC packet			*/
 	atomic_t	users;			/* User count - see datagram.c,tcp.c 		*/
 	unsigned short	protocol;		/* Packet protocol from driver. 		*/
+	unsigned short	security;		/* Security level of packet			*/
 	unsigned int	truesize;		/* Buffer size 					*/
 
 	atomic_t	count;			/* reference count				*/

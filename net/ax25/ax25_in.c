@@ -37,6 +37,7 @@
  *					Modularisation changes.
  *	AX.25 035	Hans(PE1AYX)	Fixed interface to IP layer.
  *	AX.25 036	Jonathan(G4KLX)	Move DAMA code into own file.
+ *			Joerg(DL1BKE)	Fixed DAMA Slave.
  */
 
 #include <linux/config.h>
@@ -158,6 +159,16 @@ int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb)
 
 #ifdef CONFIG_INET
 	if (pid == AX25_P_IP) {
+		/* working around a TCP bug to keep additional listeners 
+		 * happy. TCP re-uses the buffer and destroys the original
+		 * content.
+		 */
+		struct sk_buff *skbn = skb_copy(skb, GFP_ATOMIC);
+		if (skbn != NULL) {
+			kfree_skb(skb, FREE_READ);
+			skb = skbn;
+		}
+
 		skb_pull(skb, 1);	/* Remove PID */
 		skb->h.raw    = skb->data;
 		skb->nh.raw   = skb->data;
@@ -190,7 +201,7 @@ int ax25_rx_iframe(ax25_cb *ax25, struct sk_buff *skb)
 /*
  *	Higher level upcall for a LAPB frame
  */
-static int ax25_process_rx_frame(ax25_cb *ax25, struct sk_buff *skb, int type)
+static int ax25_process_rx_frame(ax25_cb *ax25, struct sk_buff *skb, int type, int dama)
 {
 	int queued = 0;
 
@@ -200,12 +211,17 @@ static int ax25_process_rx_frame(ax25_cb *ax25, struct sk_buff *skb, int type)
 	del_timer(&ax25->timer);
 
 	switch (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
-		case AX25_PROTO_STD:
+		case AX25_PROTO_STD_SIMPLEX:
+		case AX25_PROTO_STD_DUPLEX:
 			queued = ax25_std_frame_in(ax25, skb, type);
 			break;
+
 #ifdef CONFIG_AX25_DAMA_SLAVE
 		case AX25_PROTO_DAMA_SLAVE:
-			queued = ax25_ds_frame_in(ax25, skb, type);
+			if (dama || ax25->ax25_dev->dama.slave)
+				queued = ax25_ds_frame_in(ax25, skb, type);
+			else
+				queued = ax25_std_frame_in(ax25, skb, type);
 			break;
 #endif
 	}
@@ -240,12 +256,10 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 		return 0;
 	}
 
-#ifdef CONFIG_FIREWALL
-	if (call_in_firewall(PF_AX25, skb->dev, skb->h.raw, NULL) != FW_ACCEPT) {
+	if (call_in_firewall(PF_AX25, skb->dev, skb->h.raw, NULL,&skb) != FW_ACCEPT) {
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
-#endif
 
 	/*
 	 *	Parse the address header.
@@ -356,7 +370,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 		 *	free it immediately. This routine itself wakes the user context layers so we
 		 *	do no further work
 		 */
-		if (ax25_process_rx_frame(ax25, skb, type) == 0)
+		if (ax25_process_rx_frame(ax25, skb, type, dama) == 0)
 			kfree_skb(skb, FREE_READ);
 
 		return 0;
@@ -450,7 +464,7 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 	ax25_send_control(ax25, AX25_UA, AX25_POLLON, AX25_RESPONSE);
 
 #ifdef CONFIG_AX25_DAMA_SLAVE
-	if (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL] == AX25_PROTO_DAMA_SLAVE)
+	if (dama && ax25->ax25_dev->values[AX25_VALUES_PROTOCOL] == AX25_PROTO_DAMA_SLAVE)
 		ax25_dama_on(ax25);
 #endif
 

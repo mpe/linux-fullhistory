@@ -1780,7 +1780,7 @@ static void idetape_pc_intr (ide_drive_t *drive)
 	if (clear_bit (PC_DMA_IN_PROGRESS, &pc->flags)) {
 		printk (KERN_ERR "ide-tape: The tape wants to issue more interrupts in DMA mode\n");
 		printk (KERN_ERR "ide-tape: DMA disabled, reverting to PIO\n");
-		drive->using_dma=0;
+		HWIF(drive)->dmaproc(ide_dma_off, drive);
 		ide_do_reset (drive);
 		return;
 	}
@@ -1918,7 +1918,7 @@ static void idetape_issue_packet_command (ide_drive_t *drive, idetape_pc_t *pc)
 #ifdef CONFIG_BLK_DEV_TRITON
 	if (clear_bit (PC_DMA_ERROR, &pc->flags)) {
 		printk (KERN_WARNING "ide-tape: DMA disabled, reverting to PIO\n");
-		drive->using_dma=0;
+		HWIF(drive)->dmaproc(ide_dma_off, drive);
 	}
 	if (test_bit (PC_DMA_RECOMMENDED, &pc->flags) && drive->using_dma)
 		dma_ok=!HWIF(drive)->dmaproc(test_bit (PC_WRITING, &pc->flags) ? ide_dma_write : ide_dma_read, drive);

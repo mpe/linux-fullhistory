@@ -230,30 +230,6 @@ int sysctl_arp_max_pings = ARP_MAX_PINGS;
 
 int sysctl_arp_dead_res_time = ARP_DEAD_RES_TIME;
 
-/*
- *	This structure defines the ARP mapping cache.
- */
-
-struct arp_table
-{
-	union {
-		struct dst_entry	dst;
-		struct arp_table	*next;
-	} u;
-	unsigned long			last_updated;		/* For expiry 			*/
-	unsigned int			flags;			/* Control status 		*/
-	u32				ip;
-	u32				mask;			/* netmask - used for generalised proxy arps (tridge) 		*/
-	int				hatype;
-	unsigned char			ha[MAX_ADDR_LEN];	/* Hardware address		*/
-
-	/*
-	 *	The following entries are only used for unresolved hw addresses.
-	 */
-	struct timer_list		timer;			/* expire timer 		*/
-	int				retries;		/* remaining retries	 	*/
-	struct sk_buff_head		skb;			/* list of queued packets 	*/
-};
 
 #if RT_CACHE_DEBUG >= 1
 #define ASSERT_BH() if (!intr_count) printk(KERN_CRIT __FUNCTION__ " called from SPL=0\n");
@@ -261,28 +237,17 @@ struct arp_table
 #define ASSERT_BH()
 #endif
 
+static void arp_neigh_destroy(struct neighbour *neigh);
+
 /*
- *	Interface to generic destionation cache.
+ *	Interface to generic neighbour cache.
  */
 
-static void arp_dst_destroy(struct dst_entry * dst);
-static struct dst_entry * arp_dst_check(struct dst_entry * dst)
-{
-	return dst;
-}
-
-static struct dst_entry * arp_dst_reroute(struct dst_entry * dst)
-{
-	return dst;
-}
-
-
-struct dst_ops arp_dst_ops =
-{
-	AF_UNSPEC,
-	arp_dst_check,
-	arp_dst_reroute,
-	arp_dst_destroy
+struct neigh_ops arp_neigh_ops = {
+	AF_INET,
+	NULL,
+	arp_find,
+	arp_neigh_destroy
 };
 
 
@@ -342,17 +307,17 @@ static __inline__ void arp_update_hhs(struct arp_table * entry)
 {
 	struct hh_cache *hh;
 	void (*update)(struct hh_cache*, struct device*, unsigned char*) =
-		entry->u.dst.dev->header_cache_update;
+		entry->u.neigh.dev->header_cache_update;
 
 #if RT_CACHE_DEBUG >= 1
-	if (!update && entry->u.dst.hh)
+	if (!update && entry->u.neigh.hh)
 	{
-		printk(KERN_DEBUG "arp_update_hhs: no update callback for %s\n", entry->u.dst.dev->name);
+		printk(KERN_DEBUG "arp_update_hhs: no update callback for %s\n", entry->u.neigh.dev->name);
 		return;
 	}
 #endif
-	for (hh=entry->u.dst.hh; hh; hh=hh->hh_next)
-		update(hh, entry->u.dst.dev, entry->ha);
+	for (hh=entry->u.neigh.hh; hh; hh=hh->hh_next)
+		update(hh, entry->u.neigh.dev, entry->u.neigh.ha);
 }
 
 /*
@@ -363,7 +328,7 @@ static __inline__ void arp_invalidate_hhs(struct arp_table * entry)
 {
 	struct hh_cache *hh;
 
-	for (hh=entry->u.dst.hh; hh; hh=hh->hh_next)
+	for (hh=entry->u.neigh.hh; hh; hh=hh->hh_next)
 		hh->hh_uptodate = 0;
 }
 
@@ -378,7 +343,7 @@ static void arp_purge_send_q(struct arp_table *entry)
 	ASSERT_BH();
 
 	/* Release the list of `skb' pointers. */
-	while ((skb = skb_dequeue(&entry->skb)) != NULL)
+	while ((skb = skb_dequeue(&entry->u.neigh.arp_queue)) != NULL)
 		kfree_skb(skb, FREE_WRITE);
 	return;
 }
@@ -399,13 +364,13 @@ static void __inline__ arp_free(struct arp_table **entryp)
 	arp_purge_send_q(entry);
 	arp_invalidate_hhs(entry);
 
-	dst_free(&entry->u.dst);
+	neigh_destroy(&entry->u.neigh);
 }
 
 
-static void arp_dst_destroy(struct dst_entry * dst)
+static void arp_neigh_destroy(struct neighbour *neigh)
 {
-	struct arp_table *entry = (struct arp_table*)dst;
+	struct arp_table *entry = (struct arp_table*)neigh;
 	struct hh_cache *hh, *next;
 
 	ASSERT_BH();
@@ -413,8 +378,8 @@ static void arp_dst_destroy(struct dst_entry * dst)
 	del_timer(&entry->timer);
 	arp_purge_send_q(entry);
 
-	hh = entry->u.dst.hh;
-	entry->u.dst.hh = NULL;
+	hh = entry->u.neigh.hh;
+	entry->u.neigh.hh = NULL;
 
 	for ( ; hh; hh = next)
 	{
@@ -459,7 +424,7 @@ static void arpd_send(int req, u32 addr, struct device * dev, char *ha,
 	arpreq->stamp = arpd_stamp;
 	arpreq->updated = updated;
 	if (ha)
-		memcpy(arpreq->ha, ha, sizeof(arpreq->ha));
+		memcpy(arpreq->u.neigh.ha, ha, sizeof(arpreq->u.neigh.ha));
 
 	retval = netlink_post(NETLINK_ARPD, skb);
 	if (retval)
@@ -538,7 +503,7 @@ static int arpd_callback(int minor, struct sk_buff *skb)
 	else
 	{
 		start_bh_atomic();
-		arp_update(retreq->ip, retreq->ha, dev, retreq->updated, 0);
+		arp_update(retreq->ip, retreq->u.neigh.ha, dev, retreq->updated, 0);
 		end_bh_atomic();
 	}
 
@@ -576,7 +541,7 @@ static int arp_force_expire(void)
 	unsigned long now = jiffies;
 	int result = 0;
 
-	static int last_index;
+	static last_index;
 
 	if (last_index >= ARP_TABLE_SIZE)
 		last_index = 0;
@@ -589,8 +554,8 @@ static int arp_force_expire(void)
 		{
 			if (!(entry->flags & ATF_PERM))
 			{
-				if (!entry->u.dst.refcnt &&
-				    now - entry->u.dst.lastuse > sysctl_arp_timeout)
+				if (!entry->u.neigh.refcnt &&
+				    now - entry->u.neigh.lastused > sysctl_arp_timeout)
 				{
 #if RT_CACHE_DEBUG >= 2
 					printk("arp_force_expire: %08x expired\n", entry->ip);
@@ -601,11 +566,11 @@ static int arp_force_expire(void)
 						goto done;
 					continue;
 				}
-				if (!entry->u.dst.refcnt &&
-				    entry->u.dst.lastuse < oldest_used)
+				if (!entry->u.neigh.refcnt &&
+				    entry->u.neigh.lastused < oldest_used)
 				{
 					oldest_entry = pentry;
-					oldest_used = entry->u.dst.lastuse;
+					oldest_used = entry->u.neigh.lastused;
 				}
 			}
 			pentry = &entry->u.next;
@@ -637,7 +602,7 @@ static void arp_unres_expire(void)
 			    (entry->retries < sysctl_arp_max_tries ||
 			     entry->timer.expires - now <
 			     sysctl_arp_res_time - sysctl_arp_res_time/32)) {
-				if (!entry->u.dst.refcnt) {
+				if (!entry->u.neigh.refcnt) {
 #if RT_CACHE_DEBUG >= 2
 					printk("arp_unres_expire: %08x discarded\n", entry->ip);
 #endif
@@ -688,8 +653,8 @@ static void arp_check_expire(unsigned long dummy)
 				continue;
 			}
 
-			if (!entry->u.dst.refcnt &&
-			    now - entry->u.dst.lastuse > sysctl_arp_timeout)
+			if (!entry->u.neigh.refcnt &&
+			    now - entry->u.neigh.lastused > sysctl_arp_timeout)
 			{
 #if RT_CACHE_DEBUG >= 2
 				printk("arp_expire: %08x expired\n", entry->ip);
@@ -700,13 +665,13 @@ static void arp_check_expire(unsigned long dummy)
 			if (entry->last_updated &&
 			    now - entry->last_updated > sysctl_arp_confirm_interval)
 			{
-				struct device * dev = entry->u.dst.dev;
+				struct device * dev = entry->u.neigh.dev;
 				entry->retries = sysctl_arp_max_tries+sysctl_arp_max_pings;
 				del_timer(&entry->timer);
 				entry->timer.expires = jiffies + ARP_CONFIRM_TIMEOUT;
 				add_timer(&entry->timer);
 				arp_send(ARPOP_REQUEST, ETH_P_ARP, entry->ip,
-					 dev, dev->pa_addr, entry->ha,
+					 dev, dev->pa_addr, entry->u.neigh.ha,
 					 dev->dev_addr, NULL);
 #if RT_CACHE_DEBUG >= 2
 				printk("arp_expire: %08x requires confirmation\n", entry->ip);
@@ -750,7 +715,7 @@ static void arp_expire_request (unsigned long arg)
 
 	if (entry->last_updated && --entry->retries > 0)
 	{
-		struct device *dev = entry->u.dst.dev;
+		struct device *dev = entry->u.neigh.dev;
 
 #if RT_CACHE_DEBUG >= 2
 		printk("arp_expire_request: %08x timed out\n", entry->ip);
@@ -759,7 +724,7 @@ static void arp_expire_request (unsigned long arg)
 		entry->timer.expires = jiffies + sysctl_arp_res_time;
 		add_timer(&entry->timer);
 		arp_send(ARPOP_REQUEST, ETH_P_ARP, entry->ip, dev, dev->pa_addr,
-			 entry->retries > sysctl_arp_max_tries ? entry->ha : NULL,
+			 entry->retries > sysctl_arp_max_tries ? entry->u.neigh.ha : NULL,
 			 dev->dev_addr, NULL);
 		return;
 	}
@@ -770,7 +735,7 @@ static void arp_expire_request (unsigned long arg)
 
 	arp_purge_send_q(entry);
 
-	if (entry->u.dst.refcnt)
+	if (entry->u.neigh.refcnt)
 	{
 		/*
 		 *	The host is dead, but someone refers to it.
@@ -780,7 +745,7 @@ static void arp_expire_request (unsigned long arg)
 		 *	to ARP_DEAD_RES_TIME.
 		 */
 
-		struct device *dev = entry->u.dst.dev;
+		struct device *dev = entry->u.neigh.dev;
 #if RT_CACHE_DEBUG >= 2
 		printk("arp_expire_request: %08x is dead\n", entry->ip);
 #endif
@@ -842,7 +807,9 @@ static struct arp_table * arp_alloc(int how)
 		}
 	}
 
-	entry = (struct arp_table *)dst_alloc(sizeof(struct arp_table), &arp_dst_ops);
+	entry = (struct arp_table *)neigh_alloc(sizeof(struct arp_table),
+						&arp_neigh_ops);
+	entry->u.neigh.refcnt = 1;
 
 	if (entry != NULL)
 	{
@@ -854,7 +821,6 @@ static struct arp_table * arp_alloc(int how)
 		entry->timer.function = arp_expire_request;
 		entry->timer.data = (unsigned long)entry;
 		entry->last_updated = jiffies;
-		skb_queue_head_init(&entry->skb);
 	}
 	return entry;
 }
@@ -887,7 +853,7 @@ int arp_device_event(struct notifier_block *this, unsigned long event, void *ptr
 
 		while ((entry = *pentry) != NULL)
 		{
-			if (entry->u.dst.dev != dev)
+			if (entry->u.neigh.dev != dev)
 			{
 				pentry = &entry->u.next;
 				continue;
@@ -912,7 +878,7 @@ static void arp_send_q(struct arp_table *entry)
 
 	ASSERT_BH();
 
-	while((skb = skb_dequeue(&entry->skb)) != NULL)	{
+	while((skb = skb_dequeue(&entry->u.neigh.arp_queue)) != NULL) {
 		dev_queue_xmit(skb);
 	}
 }
@@ -934,7 +900,7 @@ arp_update (u32 sip, char *sha, struct device * dev,
 	hash = HASH(sip);
 
 	for (entry=arp_tables[hash]; entry; entry = entry->u.next)
-		if (entry->ip == sip && entry->u.dst.dev == dev)
+		if (entry->ip == sip && entry->u.neigh.dev == dev)
 			break;
 
 	if (entry)
@@ -946,9 +912,9 @@ arp_update (u32 sip, char *sha, struct device * dev,
 		{
 			del_timer(&entry->timer);
 			entry->last_updated = updated;
-			if (memcmp(entry->ha, sha, dev->addr_len) != 0)
+			if (memcmp(entry->u.neigh.ha, sha, dev->addr_len) != 0)
 			{
-				memcpy(entry->ha, sha, dev->addr_len);
+				memcpy(entry->u.neigh.ha, sha, dev->addr_len);
 				if (entry->flags & ATF_COM)
 					arp_update_hhs(entry);
 			}
@@ -982,14 +948,14 @@ arp_update (u32 sip, char *sha, struct device * dev,
 
 	entry->ip = sip;
 	entry->flags = ATF_COM;
-	memcpy(entry->ha, sha, dev->addr_len);
-	entry->u.dst.dev = dev;
+	memcpy(entry->u.neigh.ha, sha, dev->addr_len);
+	entry->u.neigh.dev = dev;
 	entry->hatype = dev->type;
 	entry->last_updated = updated;
 
 	entry->u.next = arp_tables[hash];
 	arp_tables[hash] = entry;
-	dst_release(&entry->u.dst);
+	neigh_release(&entry->u.neigh);
 	return 0;
 }
 
@@ -1000,7 +966,7 @@ static __inline__ struct arp_table *arp_lookup(u32 paddr, struct device * dev)
 	struct arp_table *entry;
 
 	for (entry = arp_tables[HASH(paddr)]; entry != NULL; entry = entry->u.next)
-		if (entry->ip == paddr && entry->u.dst.dev == dev)
+		if (entry->ip == paddr && entry->u.neigh.dev == dev)
 			return entry;
 	return NULL;
 }
@@ -1043,7 +1009,7 @@ static int arp_set_predefined(int addr_hint, unsigned char * haddr, u32 paddr, s
 
 static void arp_start_resolution(struct arp_table *entry)
 {
-	struct device * dev = entry->u.dst.dev;
+	struct device * dev = entry->u.neigh.dev;
 
 	del_timer(&entry->timer);
 	entry->timer.expires = jiffies + sysctl_arp_res_time;
@@ -1072,17 +1038,17 @@ struct arp_table * arp_new_entry(u32 paddr, struct device *dev, struct sk_buff *
 	if (entry != NULL)
 	{
 		entry->ip = paddr;
-		entry->u.dst.dev = dev;
+		entry->u.neigh.dev = dev;
 		entry->hatype = dev->type;
 
 		if (skb != NULL)
-			skb_queue_tail(&entry->skb, skb);
+			skb_queue_tail(&entry->u.neigh.arp_queue, skb);
 
 		atomic_inc(&arp_unres_size);
 		entry->u.next = arp_tables[hash];
 		arp_tables[hash] = entry;
 		arp_start_resolution(entry);
-		dst_release(&entry->u.dst);
+		neigh_release(&entry->u.neigh);
 	}
 	return entry;
 }
@@ -1125,8 +1091,8 @@ int arp_find(unsigned char *haddr, struct sk_buff *skb)
 	{
 		if (entry->flags & ATF_COM)
 		{
-			entry->u.dst.lastuse = jiffies;
-			memcpy(haddr, entry->ha, dev->addr_len);
+			entry->u.neigh.lastused = jiffies;
+			memcpy(haddr, entry->u.neigh.ha, dev->addr_len);
 			if (skb)
 				skb->arp = 1;
 			end_bh_atomic();
@@ -1142,8 +1108,8 @@ int arp_find(unsigned char *haddr, struct sk_buff *skb)
 		{
 			if (entry->last_updated)
 			{
-				if (entry->skb.qlen < ARP_MAX_UNRES_PACKETS)
-					skb_queue_tail(&entry->skb, skb);
+				if (entry->u.neigh.arp_queue.qlen < ARP_MAX_UNRES_PACKETS)
+					skb_queue_tail(&entry->u.neigh.arp_queue, skb);
 				else
 					kfree_skb(skb, FREE_WRITE);
 			}
@@ -1171,7 +1137,7 @@ int arp_find(unsigned char *haddr, struct sk_buff *skb)
 }
 
 int arp_find_1(unsigned char *haddr, struct dst_entry *dst,
-	       struct dst_entry *neigh)
+	       struct neighbour *neigh)
 {
 	struct rtable *rt = (struct rtable*)dst;
 	struct device *dev = dst->dev;
@@ -1218,8 +1184,8 @@ int arp_find_1(unsigned char *haddr, struct dst_entry *dst,
 
 	if (entry->flags & ATF_COM)
 	{
-		entry->u.dst.lastuse = jiffies;
-		memcpy(haddr, entry->ha, dev->addr_len);
+		entry->u.neigh.lastused = jiffies;
+		memcpy(haddr, entry->u.neigh.ha, dev->addr_len);
 		end_bh_atomic();
 		return 1;
 	}
@@ -1229,7 +1195,7 @@ int arp_find_1(unsigned char *haddr, struct dst_entry *dst,
 }
 
 
-struct dst_entry* arp_find_neighbour(struct dst_entry *dst, int resolve)
+struct neighbour* arp_find_neighbour(struct dst_entry *dst, int resolve)
 {
 	struct rtable *rt = (struct rtable*)dst;
 	struct device *dev = rt->u.dst.dev;
@@ -1255,10 +1221,10 @@ struct dst_entry* arp_find_neighbour(struct dst_entry *dst, int resolve)
 
 	if (entry != NULL) 	/* It exists */
 	{
-		atomic_inc(&entry->u.dst.refcnt);
+		atomic_inc(&entry->u.neigh.refcnt);
 		end_bh_atomic();
-		entry->u.dst.lastuse = jiffies;
-		return (struct dst_entry*)entry;
+		entry->u.neigh.lastused = jiffies;
+		return (struct neighbour*)entry;
 	}
 
 	if (!resolve)
@@ -1267,11 +1233,11 @@ struct dst_entry* arp_find_neighbour(struct dst_entry *dst, int resolve)
 	entry = arp_new_entry(paddr, dev, NULL);
 
 	if (entry)
-		atomic_inc(&entry->u.dst.refcnt);
+		atomic_inc(&entry->u.neigh.refcnt);
 
 	end_bh_atomic();
 
-	return (struct dst_entry*)entry;
+	return (struct neighbour*)entry;
 }
 
 /*
@@ -1526,14 +1492,14 @@ int arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 
 		for (entry = arp_proxy_list; entry; entry = entry->u.next) {
 			if (!((entry->ip^tip)&entry->mask) &&
-			    ((!entry->u.dst.dev &&
+			    ((!entry->u.neigh.dev &&
 			      (!(entry->flags & ATF_COM) || entry->hatype == dev->type))
-			     || entry->u.dst.dev == dev) )
+			     || entry->u.neigh.dev == dev) )
 				break;
 		}
 
 		if (entry && !(entry->flags & ATF_DONTPUB)) {
-			char *ha = (entry->flags & ATF_COM) ? entry->ha : dev->dev_addr;
+			char *ha = (entry->flags & ATF_COM) ? entry->u.neigh.ha : dev->dev_addr;
 
 			if (rt->rt_flags&(RTF_LOCAL|RTF_NAT) ||
 			    (!(rt->rt_flags&RTCF_DOREDIRECT) &&
@@ -1651,7 +1617,7 @@ int arp_req_set(struct arpreq *r, struct device * dev)
 	while ((entry = *entryp) != NULL && entry->mask == mask &&
 	       entry->ip == ip)
 	{
-		if (!entry->u.dst.dev || entry->u.dst.dev == dev)
+		if (!entry->u.neigh.dev || entry->u.neigh.dev == dev)
 			break;
 		entryp = &entry->u.next;
 	}
@@ -1659,7 +1625,7 @@ int arp_req_set(struct arpreq *r, struct device * dev)
 	while ((entry = *entryp) != NULL)
 	{
 		if (entry->ip != ip || entry->mask != mask ||
-		    entry->u.dst.dev != dev)
+		    entry->u.neigh.dev != dev)
 		{
 			entry = NULL;
 			break;
@@ -1672,7 +1638,7 @@ int arp_req_set(struct arpreq *r, struct device * dev)
 	}
 
 	if (entry)
-		atomic_inc(&entry->u.dst.refcnt);
+		atomic_inc(&entry->u.neigh.refcnt);
 	else
 	{
 		entry = arp_alloc(r->arp_flags&ATF_PUBL ? 0 : 1);
@@ -1682,7 +1648,7 @@ int arp_req_set(struct arpreq *r, struct device * dev)
 			return -ENOMEM;
 		}
 		entry->ip = ip;
-		entry->u.dst.dev = dev;
+		entry->u.neigh.dev = dev;
 		entry->mask = mask;
 
 		if (dev)
@@ -1709,24 +1675,24 @@ int arp_req_set(struct arpreq *r, struct device * dev)
 		ha = r->arp_ha.sa_data;
 
 	if (ha)
-		memcpy(entry->ha, ha, dev ? dev->addr_len : MAX_ADDR_LEN);
+		memcpy(entry->u.neigh.ha, ha, dev ? dev->addr_len : MAX_ADDR_LEN);
 	else
-		memset(entry->ha, 0, MAX_ADDR_LEN);
+		memset(entry->u.neigh.ha, 0, MAX_ADDR_LEN);
 
-	entry->last_updated = entry->u.dst.lastuse = jiffies;
+	entry->last_updated = entry->u.neigh.lastused = jiffies;
 	
 	if (!(entry->flags & ATF_PUBL))
 	{
 		if (entry->flags & ATF_COM)
 		{
-			arpd_update(entry->ip, entry->u.dst.dev, ha);
+			arpd_update(entry->ip, entry->u.neigh.dev, ha);
 			arp_update_hhs(entry);
 		}
 		else
 			arp_start_resolution(entry);
 	}
 
-	dst_release(&entry->u.dst);
+	neigh_release(&entry->u.neigh);
 	end_bh_atomic();
 	return 0;
 }
@@ -1761,14 +1727,14 @@ static int arp_req_get(struct arpreq *r, struct device *dev)
 		if (entry->ip == si->sin_addr.s_addr &&
 		    (!(r->arp_flags&ATF_NETMASK) || entry->mask == mask) &&
 		    ( (r->arp_flags&ATF_PUBL) ?
-		      (entry->u.dst.dev == dev && entry->hatype == r->arp_ha.sa_family)
-		     : (entry->u.dst.dev == dev || !dev)))
+		      (entry->u.neigh.dev == dev && entry->hatype == r->arp_ha.sa_family)
+		     : (entry->u.neigh.dev == dev || !dev)))
 		{
-			if (entry->u.dst.dev)
+			if (entry->u.neigh.dev)
 			{
-				memcpy(r->arp_ha.sa_data, entry->ha, entry->u.dst.dev->addr_len);
-				r->arp_ha.sa_family = entry->u.dst.dev->type;
-				strncpy(r->arp_dev, entry->u.dst.dev->name, sizeof(r->arp_dev));
+				memcpy(r->arp_ha.sa_data, entry->u.neigh.ha, entry->u.neigh.dev->addr_len);
+				r->arp_ha.sa_family = entry->u.neigh.dev->type;
+				strncpy(r->arp_dev, entry->u.neigh.dev->name, sizeof(r->arp_dev));
 			}
 			else
 			{
@@ -1811,10 +1777,10 @@ int arp_req_delete(struct arpreq *r, struct device * dev)
 	{
 		if (entry->ip == si->sin_addr.s_addr
 		    && (!(r->arp_flags&ATF_NETMASK) || entry->mask == mask)
-		    && (entry->u.dst.dev == dev || (!(r->arp_flags&ATF_PUBL) && !dev))
+		    && (entry->u.neigh.dev == dev || (!(r->arp_flags&ATF_PUBL) && !dev))
 		    && (!(r->arp_flags&ATF_MAGIC) || r->arp_flags == entry->flags))
 		{
-			if (!entry->u.dst.refcnt)
+			if (!entry->u.neigh.refcnt)
 			{
 				arp_free(entryp);
 				retval = 0;
@@ -1971,21 +1937,21 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 #if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #if defined(CONFIG_NETROM) || defined(CONFIG_NETROM_MODULE)
 			if (entry->hatype == ARPHRD_AX25 || entry->hatype == ARPHRD_NETROM)
-			     strcpy(hbuffer,ax2asc((ax25_address *)entry->ha));
+			     strcpy(hbuffer,ax2asc((ax25_address *)entry->u.neigh.ha));
 			else {
 #else
 			if(entry->hatype==ARPHRD_AX25)
-			     strcpy(hbuffer,ax2asc((ax25_address *)entry->ha));
+			     strcpy(hbuffer,ax2asc((ax25_address *)entry->u.neigh.ha));
 			else {
 #endif
 #endif
 				
-			if (entry->u.dst.dev)
+			if (entry->u.neigh.dev)
 			{
-				for(k=0,j=0;k<HBUFFERLEN-3 && j<entry->u.dst.dev->addr_len;j++)
+				for(k=0,j=0;k<HBUFFERLEN-3 && j<entry->u.neigh.dev->addr_len;j++)
 				{
-					hbuffer[k++]=hexbuf[ (entry->ha[j]>>4)&15 ];
-					hbuffer[k++]=hexbuf[  entry->ha[j]&15     ];
+					hbuffer[k++]=hexbuf[ (entry->u.neigh.ha[j]>>4)&15 ];
+					hbuffer[k++]=hexbuf[  entry->u.neigh.ha[j]&15     ];
 					hbuffer[k++]=':';
 				}
 				hbuffer[--k]=0;
@@ -2008,16 +1974,16 @@ int arp_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 				 "     %-17s %s\n",
 				 entry->mask==DEF_ARP_NETMASK ?
 				 "*" : in_ntoa(entry->mask),
-					entry->u.dst.dev ? entry->u.dst.dev->name : "*");
+					entry->u.neigh.dev ? entry->u.neigh.dev->name : "*");
 #else
 			size += sprintf(buffer+len+size,
 				 "     %-17s %s\t%d\t%d\t%1d\n",
 				 entry->mask==DEF_ARP_NETMASK ?
 				 "*" : in_ntoa(entry->mask),
-				 entry->u.dst.dev ? entry->u.dst.dev->name : "*", 
-				 entry->u.dst.refcnt,
-				 entry->u.dst.hh ? entry->u.dst.hh->hh_refcnt : -1,
-				 entry->u.dst.hh ? entry->u.dst.hh->hh_uptodate : 0);
+				 entry->u.neigh.dev ? entry->u.neigh.dev->name : "*", 
+				 entry->u.neigh.refcnt,
+				 entry->u.neigh.hh ? entry->u.neigh.hh->hh_refcnt : -1,
+				 entry->u.neigh.hh ? entry->u.neigh.hh->hh_uptodate : 0);
 #endif
 	
 			len += size;

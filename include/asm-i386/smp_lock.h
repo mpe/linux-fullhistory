@@ -3,32 +3,57 @@
 
 #ifndef __SMP__
 
-#define lock_kernel()		do { } while(0)
-#define unlock_kernel()		do { } while(0)
-
-typedef struct { } spinlock_t;
-#define SPIN_LOCK_UNLOCKED
-
-#define spin_lock_init(lock)	do { } while(0)
-#define spin_lock(lock)		do { } while(0)
-#define spin_trylock(lock)	do { } while(0)
-#define spin_unlock(lock)	do { } while(0)
-
-#define spin_lock_cli(lock)		\
-({	unsigned long flags;		\
-	save_flags(flags); cli();	\
-	return flags;			\
-})
-
-#define spin_unlock_restore(lock, flags)	restore_flags(flags)
+#define lock_kernel()				do { } while(0)
+#define unlock_kernel()				do { } while(0)
+#define release_kernel_lock(task, cpu, depth)	((depth) = 1)
+#define reaquire_kernel_lock(task, cpu, depth)	do { } while(0)
 
 #else
-#include <asm/pgtable.h>
+
+#include <asm/hardirq.h>
+
+/* Release global kernel lock and global interrupt lock */
+#define release_kernel_lock(task, cpu, depth) \
+do { \
+	if ((depth = (task)->lock_depth) != 0) { \
+		__cli(); \
+		(task)->lock_depth = 0; \
+		active_kernel_processor = NO_PROC_ID; \
+		clear_bit(0,&kernel_flag); \
+	} \
+	release_irqlock(cpu); \
+	__sti(); \
+} while (0)
+
+/* Re-aquire the kernel lock */
+#define reaquire_kernel_lock(task, cpu, depth) \
+do { if (depth) __asm__ __volatile__( \
+	"cli\n\t" \
+	"movl $0f,%%eax\n\t" \
+	"jmp __lock_kernel\n" \
+	"0:\t" \
+	"movl %2,%0\n\t" \
+	"sti" \
+	: "=m" (task->lock_depth) \
+	: "d" (cpu), "c" (depth) \
+	: "ax"); \
+} while (0)
+	
 
 /* Locking the kernel */
 extern __inline__ void lock_kernel(void)
 {
 	int cpu = smp_processor_id();
+
+	if (local_irq_count[cpu]) {
+		__label__ l1;
+l1:		printk("lock from interrupt context at %p\n", &&l1);
+	}
+	if (cpu == global_irq_holder) {
+		__label__ l2;
+l2:		printk("Ugh at %p\n", &&l2);
+		sti();
+	}
 
 	__asm__ __volatile__("
 	pushfl
@@ -61,92 +86,6 @@ extern __inline__ void unlock_kernel(void)
 	: "m" (current->lock_depth), "i" (NO_PROC_ID)
 	: "ax", "memory");
 }
-
-/* Simple spin lock operations.  There are two variants, one clears IRQ's
- * on the local processor, one does not.
- *
- * We make no fairness assumptions. They have a cost.
- *
- *	NOT YET TESTED!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
- */
-
-typedef unsigned char spinlock_t;
-
-/* Arse backwards is faster for us on Intel (trylock is a clock faster) */
-
-#define SPIN_LOCK_UNLOCKED	1
-
-extern __inline__ void __spinlock_waitfor(spinlock_t *lock)
-{
-	int cpu=smp_processor_id();
-	do
-	{
-		/* Spin reading and let the MESI cache do the right stuff
-		   without us thrashing the bus */
-		while(lock)
-		{
-			/*
-			 *	Not a race, the interrupt will pick up
-			 *	the exiting case that looks suspicious.
-			 *	(The test_bit is not locked so won't
-			 *	 thrash the bus either).
-			 */
-			if(test_bit(cpu,&smp_invalidate_needed))
-			{
-				local_flush_tlb();
-				clear_bit(cpu,&smp_invalidate_needed);
-			}
-		}
-	}
-	while(clear_bit(0,lock));
-}
-
-extern __inline__ void spin_lock_init(spinlock_t *lock)
-{
-	*lock = 1;	/* We assume init does not need to be itself SMP safe */
-}
-
-extern __inline__ void spin_lock(spinlock_t *lock)
-{
-	/* Returns the old value. If we get 1 then we got the lock */
-	if(clear_bit(0,lock))
-	{
-		__spinlock_waitfor(lock);
-	}
-}
-
-extern __inline__ int spin_trylock(spinlock_t *lock)
-{
-	return clear_bit(0,lock);
-}
-
-extern __inline__ void spin_unlock(spinlock_t *lock)
-{
-	set_bit(0,lock);
-}
-
-/* These variants clear interrupts and return save_flags() style flags
- * to the caller when acquiring a lock.  To release the lock you must
- * pass the lock pointer as well as the flags returned from the acquisition
- * routine when releasing the lock.
- */
-extern __inline__ unsigned long spin_lock_cli(spinlock_t *lock)
-{
-	unsigned long flags;
-	save_flags(flags);
-	cli();
-	if(clear_bit(0,lock))
-		__spinlock_waitfor(lock);
-	return flags;
-}
-
-extern __inline__ void spin_unlock_restore(spinlock_t *lock, unsigned long flags)
-{
-	set_bit(0,lock);	/* Locked operation to keep it serialized with
-				   the popfl */
-	restore_flags(flags);
-}
-
 
 #endif /* __SMP__ */
 

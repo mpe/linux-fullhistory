@@ -54,7 +54,7 @@ void x25_set_timer(struct sock *sk)
 
 	sk->timer.data     = (unsigned long)sk;
 	sk->timer.function = &x25_timer;
-	sk->timer.expires  = jiffies + 100;
+	sk->timer.expires  = jiffies + (HZ / 1);
 
 	add_timer(&sk->timer);
 }

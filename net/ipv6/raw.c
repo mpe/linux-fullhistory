@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/raw.c
  *
- *	$Id: raw.c,v 1.8 1997/02/28 09:56:34 davem Exp $
+ *	$Id: raw.c,v 1.11 1997/03/18 18:24:46 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -29,13 +29,10 @@
 #include <net/sock.h>
 #include <net/snmp.h>
 
-#include <net/ip.h>
-#include <net/udp.h>
-
 #include <net/ipv6.h>
 #include <net/ndisc.h>
 #include <net/protocol.h>
-#include <net/ipv6_route.h>
+#include <net/ip6_route.h>
 #include <net/addrconf.h>
 #include <net/transp_v6.h>
 
@@ -189,15 +186,12 @@ void rawv6_err(struct sock *sk, int type, int code, unsigned char *buff,
 {
 	if (sk == NULL) 
 		return;
-
 }
 
 static inline int rawv6_rcv_skb(struct sock * sk, struct sk_buff * skb)
 {
 	/* Charge it to the socket. */
-	
-	if (sock_queue_rcv_skb(sk,skb)<0)
-	{
+	if (sock_queue_rcv_skb(sk,skb)<0) {
 		/* ip_statistics.IpInDiscards++; */
 		kfree_skb(skb, FREE_READ);
 		return 0;
@@ -211,7 +205,7 @@ static inline int rawv6_rcv_skb(struct sock * sk, struct sk_buff * skb)
  *	This is next to useless... 
  *	if we demultiplex in network layer we don't need the extra call
  *	just to queue the skb... 
- *	maybe we could have the network decide uppon an hint if it 
+ *	maybe we could have the network decide uppon a hint if it 
  *	should call raw_rcv for demultiplexing
  */
 int rawv6_rcv(struct sk_buff *skb, struct device *dev,
@@ -222,22 +216,10 @@ int rawv6_rcv(struct sk_buff *skb, struct device *dev,
 
 	sk = skb->sk;
 
-#if 1
-/*
- *	It was wrong for IPv4. It breaks NRL too [ANK]
- *	Actually i think this is the option that  does make more 
- *	sense with IPv6 nested headers. [Pedro]
- */
-
 	if (sk->ip_hdrincl)
-	{
 		skb->h.raw = skb->nh.raw;
-	}
-#else
-        skb->h.raw = skb->nh.raw;
-#endif
 
-	if (sk->users) {
+	if (sk->sock_readers) {
 		__skb_queue_tail(&sk->back_log, skb);
 		return 0;
 	}
@@ -283,8 +265,7 @@ int rawv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 		return err;
 
 	/* Copy the address. */
-	if (sin6) 
-	{
+	if (sin6) {
 		sin6->sin6_family = AF_INET6;
 		memcpy(&sin6->sin6_addr, &skb->nh.ipv6h->saddr, 
 		       sizeof(struct in6_addr));
@@ -329,8 +310,7 @@ static int rawv6_frag_cksum(const void *data, struct in6_addr *addr,
 	hdr->cksum = csum_partial_copy_fromiovecend(buff, hdr->iov, offset, 
 						    len, hdr->cksum);
 	
-	if (offset == 0)
-	{
+	if (offset == 0) {
 		struct sock *sk;
 		struct raw6_opt *opt;
 		struct in6_addr *daddr;
@@ -339,26 +319,19 @@ static int rawv6_frag_cksum(const void *data, struct in6_addr *addr,
 		opt = &sk->tp_pinfo.tp_raw;
 
 		if (hdr->daddr)
-		{
 			daddr = hdr->daddr;
-		}
 		else
-		{
 			daddr = addr + 1;
-		}
 		
 		hdr->cksum = csum_ipv6_magic(addr, daddr, hdr->len,
 					     hdr->proto, hdr->cksum);
 		
-		if (opt->offset < len)
-		{
+		if (opt->offset < len) {
 			__u16 *csum;
 
 			csum = (__u16 *) (buff + opt->offset);
 			*csum = hdr->cksum;
-		}
-		else
-		{
+		} else {
 			/* 
 			 *  FIXME 
 			 *  signal an error to user via sk->err
@@ -378,11 +351,12 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	struct ipv6_options *opt = NULL;
 	struct device *dev = NULL;
 	struct in6_addr *saddr = NULL;
+	struct flowi fl;
 	int addr_len = msg->msg_namelen;
 	struct in6_addr *daddr;
 	struct raw6_opt *raw_opt;
+	int hlimit = -1;
 	u16 proto;
-	int hlimit = 0;
 	int err;
 	
 
@@ -396,8 +370,7 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	 *	Get and verify the address. 
 	 */
 
-	if (sin6) 
-	{
+	if (sin6) {
 		if (addr_len < sizeof(struct sockaddr_in6)) 
 			return(-EINVAL);
 
@@ -415,14 +388,11 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 
 		daddr = &sin6->sin6_addr;
 		
-		if (np->dest && ipv6_addr_cmp(daddr, &np->daddr))
-		{
-			ipv6_dst_unlock(np->dest);
-			np->dest = NULL;
+		if (np->dst && ipv6_addr_cmp(daddr, &np->daddr)) {
+			dst_release(np->dst);
+			np->dst = NULL;
 		}		
-	}
-	else 
-	{
+	} else {
 		if (sk->state != TCP_ESTABLISHED) 
 			return(-EINVAL);
 		
@@ -430,8 +400,7 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		daddr = &(sk->net_pinfo.af_inet6.daddr);
 	}
 
-	if (ipv6_addr_any(daddr))
-	{
+	if (ipv6_addr_any(daddr)) {
 		/* 
 		 * unspecfied destination address 
 		 * treated as error... is this correct ?
@@ -445,14 +414,12 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	if (len + (sk->ip_hdrincl ? 0 : sizeof(struct ipv6hdr)) > 65535)
 		return -EMSGSIZE;
 
-	if (msg->msg_controllen)
-	{
+	if (msg->msg_controllen) {
 		opt = &opt_space;
 		memset(opt, 0, sizeof(struct ipv6_options));
 
 		err = datagram_send_ctl(msg, &dev, &saddr, opt, &hlimit);
-		if (err < 0)
-		{
+		if (err < 0) {
 			printk(KERN_DEBUG "invalid msg_control\n");
 			return err;
 		}		
@@ -460,9 +427,14 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 
 	raw_opt = &sk->tp_pinfo.tp_raw;
 
+	fl.proto = proto;
+	fl.nl_u.ip6_u.daddr = daddr;
+	fl.nl_u.ip6_u.saddr = saddr;
+	fl.dev = dev;
+	fl.uli_u.icmpt.type = 0;
+	fl.uli_u.icmpt.code = 0;
 	
-	if (raw_opt->checksum)
-	{
+	if (raw_opt->checksum) {
 		struct rawv6_fakehdr hdr;
 		
 		hdr.iov = msg->msg_iov;
@@ -472,23 +444,15 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		hdr.proto = proto;
 
 		if (opt && opt->srcrt)
-		{
 			hdr.daddr = daddr;
-		}
 		else
-		{
 			hdr.daddr = NULL;
-		}
 
-		err = ipv6_build_xmit(sk, rawv6_frag_cksum, &hdr, daddr, len,
-				      saddr, dev, opt, proto, hlimit,
-				      msg->msg_flags&MSG_DONTWAIT);
-	}
-	else
-	{
-		err = ipv6_build_xmit(sk, rawv6_getfrag, msg->msg_iov, daddr,
-				      len, saddr, dev, opt, proto, hlimit,
-				      msg->msg_flags&MSG_DONTWAIT);
+		err = ip6_build_xmit(sk, rawv6_frag_cksum, &hdr, &fl, len,
+				     opt, hlimit, msg->msg_flags);
+	} else {
+		err = ip6_build_xmit(sk, rawv6_getfrag, msg->msg_iov, &fl, len,
+				     opt, hlimit, msg->msg_flags);
 	}
 
 	return err<0?err:len;
@@ -520,8 +484,7 @@ static int rawv6_setsockopt(struct sock *sk, int level, int optname,
 	struct raw6_opt *opt = &sk->tp_pinfo.tp_raw;
 	int val, err;
 
-	switch(level)
-	{
+	switch(level) {
 		case SOL_RAW:
 			break;
 
@@ -536,7 +499,7 @@ static int rawv6_setsockopt(struct sock *sk, int level, int optname,
 		default:
 			return ipv6_setsockopt(sk, level, optname, optval,
 					       optlen);
-	}
+	};
 
   	if (optval == NULL)
   		return(-EINVAL);
@@ -545,15 +508,11 @@ static int rawv6_setsockopt(struct sock *sk, int level, int optname,
   	if(err)
   		return err;
 
-	switch (optname)
-	{
+	switch (optname) {
 		case IPV6_CHECKSUM:
-			if (val < 0)
-			{
+			if (val < 0) {
 				opt->checksum = 0;
-			}
-			else
-			{
+			} else {
 				opt->checksum = 1;
 				opt->offset = val;
 			}
@@ -572,11 +531,10 @@ static void rawv6_close(struct sock *sk, unsigned long timeout)
 
 	sk->state = TCP_CLOSE;
 
-	if (np->dest)
-	{
-		ipv6_dst_unlock(np->dest);
-	}
+	if (np->dst)
+		dst_release(np->dst);
 
+	ipv6_sock_mc_close(sk);
 	destroy_sock(sk);
 }
 
@@ -616,10 +574,3 @@ struct proto rawv6_prot = {
 	0,				/* inuse */
 	0				/* highestinuse */
 };
-
-/*
- * Local variables:
- *  compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -fno-strength-reduce -pipe -m486 -DCPU=486 -DMODULE -DMODVERSIONS -include /usr/src/linux/include/linux/modversions.h  -c -o rawv6.o rawv6.c"
- *  c-file-style: "Linux"
- * End:
- */

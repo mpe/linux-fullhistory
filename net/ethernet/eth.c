@@ -57,18 +57,9 @@
 #include <net/sock.h>
 #include <net/ipv6.h>
 
-#if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
-#include <linux/in6.h>
-#include <net/ndisc.h>
-#endif
 
 #include <asm/checksum.h>
 
-
-#if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
-int (*ndisc_eth_hook) (unsigned char *, struct device *, 
-		       struct sk_buff *) = NULL;
-#endif
 
 void eth_setup(char *str, int *ints)
 {
@@ -156,36 +147,26 @@ int eth_rebuild_header(struct sk_buff *skb)
 {
 	struct ethhdr *eth = (struct ethhdr *)skb->data;
 	struct device *dev = skb->dev;
+ 	struct neighbour *neigh = NULL;
 
 	/*
 	 *	Only ARP/IP and NDISC/IPv6 are currently supported
 	 */
 	
+ 	if (skb->dst)
+ 		neigh = skb->dst->neighbour;
+ 
+ 	if (neigh)
+ 		return neigh->ops->resolve(eth->h_dest, skb);
+ 
 	switch (eth->h_proto)
 	{
 #ifdef CONFIG_INET
 	case __constant_htons(ETH_P_IP):
-
-		/*
-		 *	Try to get ARP to resolve the header.
-		 */
-
-		return arp_find(eth->h_dest, skb) ? 1 : 0;
-		break;
-#endif
-
-#if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
-	case __constant_htons(ETH_P_IPV6):
-#ifdef CONFIG_IPV6
-		return (ndisc_eth_resolv(eth->h_dest, dev, skb));
-#else
-		if (ndisc_eth_hook)
-			return (ndisc_eth_hook(eth->h_dest, dev, skb));
-#endif
-		break;
+ 		return arp_find(eth->h_dest, skb);
 #endif	
 	default:
-		printk(KERN_DEBUG 
+		printk(KERN_DEBUG
 		       "%s: unable to resolve type %X addresses.\n", 
 		       dev->name, (int)eth->h_proto);
 		
@@ -252,7 +233,8 @@ unsigned short eth_type_trans(struct sk_buff *skb, struct device *dev)
 	return htons(ETH_P_802_2);
 }
 
-int eth_header_cache(struct dst_entry *dst, struct dst_entry *neigh, struct hh_cache *hh)
+int eth_header_cache(struct dst_entry *dst, struct neighbour *neigh,
+		     struct hh_cache *hh)
 {
 	unsigned short type = hh->hh_type;
 	struct ethhdr *eth = (struct ethhdr*)hh->hh_data;

@@ -6,6 +6,7 @@
  
 #ifndef _AX25_H
 #define _AX25_H 
+#include <linux/config.h>
 #include <linux/ax25.h>
 
 #define AX25_SLOWHZ			10	/* Run timing at 1/10 second - gives us better resolution for 56kbit links */
@@ -113,9 +114,12 @@ enum {
 #define AX25_MODULUS 		8	/*  Standard AX.25 modulus */
 #define	AX25_EMODULUS		128	/*  Extended AX.25 modulus */
 
-#define	AX25_PROTO_STD		0
-#define	AX25_PROTO_DAMA_SLAVE	1
-#define	AX25_PROTO_DAMA_MASTER	2
+enum {
+	AX25_PROTO_STD_SIMPLEX,
+	AX25_PROTO_STD_DUPLEX,
+	AX25_PROTO_DAMA_SLAVE,
+	AX25_PROTO_DAMA_MASTER
+};
 
 enum {
 	AX25_VALUES_IPDEFMODE,	/* 0=DG 1=VC */
@@ -131,6 +135,7 @@ enum {
 	AX25_VALUES_N2,		/* Default N2 value */
 	AX25_VALUES_PACLEN,	/* AX.25 MTU */
 	AX25_VALUES_PROTOCOL,	/* Std AX.25, DAMA Slave, DAMA Master */
+	AX25_VALUES_DS_TIMEOUT,	/* DAMA Slave timeout */
 	AX25_MAX_VALUES		/* THIS MUST REMAIN THE LAST ENTRY OF THIS LIST */
 };
 
@@ -146,7 +151,8 @@ enum {
 #define	AX25_DEF_N2		10			/* N2=10 */
 #define AX25_DEF_IDLE		(20 * 60 * AX25_SLOWHZ)	/* Idle=20 mins */		
 #define AX25_DEF_PACLEN		256			/* Paclen=256 */
-#define	AX25_DEF_PROTOCOL	AX25_PROTO_STD		/* Standard AX.25 */
+#define	AX25_DEF_PROTOCOL	AX25_PROTO_STD_SIMPLEX	/* Standard AX.25 */
+#define AX25_DEF_DS_TIMEOUT	(3 * 60 * AX25_SLOWHZ)  /* DAMA timeout 3 minutes */
 
 typedef struct ax25_uid_assoc {
 	struct ax25_uid_assoc	*next;
@@ -169,6 +175,12 @@ typedef struct ax25_route {
 	char			ip_mode;
 } ax25_route;
 
+typedef struct {
+	char			slave;			/* slave_mode?   */
+	struct timer_list	slave_timer;		/* timeout timer */
+	unsigned short		slave_timeout;		/* when? */
+} ax25_dama_info;
+
 #ifndef _LINUX_SYSCTL_H
 #include <linux/sysctl.h>
 #endif
@@ -179,6 +191,9 @@ typedef struct ax25_dev {
 	struct device		*forward;
 	struct ctl_table	systable[AX25_MAX_VALUES+1];
 	int			values[AX25_MAX_VALUES];
+#if defined(CONFIG_AX25_DAMA_SLAVE) || defined(CONFIG_AX25_DAMA_MASTER)
+	ax25_dama_info		dama;
+#endif
 } ax25_dev;
 
 typedef struct ax25_cb {
@@ -191,6 +206,9 @@ typedef struct ax25_cb {
 	unsigned short		vs, vr, va;
 	unsigned char		condition, backoff;
 	unsigned char		n2, n2count;
+#ifdef CONFIG_AX25_DAMA_SLAVE
+	unsigned char		dama_slave;
+#endif
 	unsigned short		t1, t2, t3, idle, rtt;
 	unsigned short		t1timer, t2timer, t3timer, idletimer;
 	unsigned short		paclen;
@@ -247,10 +265,14 @@ extern int  ax25_ds_frame_in(ax25_cb *, struct sk_buff *, int);
 extern void ax25_ds_nr_error_recovery(ax25_cb *);
 extern void ax25_ds_enquiry_response(ax25_cb *);
 extern void ax25_ds_establish_data_link(ax25_cb *);
+extern void ax25_dev_dama_on(ax25_dev *);
+extern void ax25_dev_dama_off(ax25_dev *);
 extern void ax25_dama_on(ax25_cb *);
 extern void ax25_dama_off(ax25_cb *);
 
 /* ax25_ds_timer.c */
+extern void ax25_ds_set_timer(ax25_dev *);
+extern void ax25_ds_del_timer(ax25_dev *);
 extern void ax25_ds_timer(ax25_cb *);
 extern void ax25_ds_t1_timeout(ax25_cb *);
 

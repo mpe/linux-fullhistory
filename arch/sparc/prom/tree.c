@@ -1,4 +1,4 @@
-/* $Id: tree.c,v 1.15 1997/01/31 00:17:04 tdyas Exp $
+/* $Id: tree.c,v 1.16 1997/03/19 14:53:16 davem Exp $
  * tree.c: Basic device tree traversal/scanning for the Linux
  *         prom library.
  *
@@ -257,6 +257,33 @@ char * prom_nextprop(int node, char *oprop)
 	restore_current();
 	restore_flags(flags);
 	return ret;
+}
+
+int prom_finddevice(char *name)
+{
+	int topnd = prom_getchild(prom_root_node);
+	int srch;
+
+	if(name[0] == '/')
+		name++;
+	if(sparc_cpu_model == sun4d) {
+		if(!strcmp(name, "sbus"))
+			name = "sbi";
+		if((srch = prom_searchsiblings(topnd, "io-unit")) == 0 ||
+		   (srch = prom_getchild(srch)) == 0 ||
+		   (srch = prom_searchsiblings(srch, name)) == 0) {
+			prom_printf("%s prom node not found.\n", name);
+			prom_halt();
+		}
+	} else if((srch = prom_searchsiblings(topnd, name)) == 0) {
+		if((srch = prom_searchsiblings(topnd, "iommu")) == 0 ||
+		   (srch = prom_getchild(srch)) == 0 ||
+		   (srch = prom_searchsiblings(srch, name)) == 0) {
+			prom_printf("Cannot find node %s\n", name);
+			prom_halt();
+		}
+	}
+	return srch;
 }
 
 int prom_node_has_property(int node, char *prop)

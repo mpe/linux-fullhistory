@@ -27,6 +27,7 @@
 #include <linux/stat.h>
 #include <linux/mman.h>
 #include <linux/elfcore.h>
+#include <linux/reboot.h>
 
 #include <asm/reg.h>
 #include <asm/uaccess.h>
@@ -63,7 +64,7 @@ out:
 	return ret;
 }
 
-void hard_reset_now(void)
+void machine_restart(char * __unused)
 {
 #if defined(CONFIG_ALPHA_SRM) && defined(CONFIG_ALPHA_ALCOR)
 	/* who said DEC engineer's have no sense of humor? ;-)) */
@@ -71,6 +72,14 @@ void hard_reset_now(void)
 	mb();
 #endif
 	halt();
+}
+
+void machine_halt(void)
+{
+}
+
+void machine_power_off(void)
+{
 }
 
 void show_regs(struct pt_regs * regs)

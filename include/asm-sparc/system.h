@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.51 1997/01/25 01:33:05 davem Exp $ */
+/* $Id: system.h,v 1.53 1997/03/19 14:53:43 davem Exp $ */
 #ifndef __SPARC_SYSTEM_H
 #define __SPARC_SYSTEM_H
 
@@ -10,6 +10,7 @@
 #include <asm/page.h>
 #include <asm/oplib.h>
 #include <asm/psr.h>
+#include <asm/ptrace.h>
 #endif
 
 #define EMPTY_PGT       (&empty_bad_page)
@@ -264,6 +265,8 @@ static __inline__ unsigned long __xchg(unsigned long x, __volatile__ void * ptr,
 	__xchg_called_with_bad_pointer();
 	return x;
 }
+
+extern void die_if_kernel(char *str, struct pt_regs *regs) __attribute__ ((noreturn));
 
 #endif /* __ASSEMBLY__ */
 

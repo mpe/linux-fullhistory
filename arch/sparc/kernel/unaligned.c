@@ -1,4 +1,4 @@
-/* $Id: unaligned.c,v 1.15 1997/01/16 14:14:42 davem Exp $
+/* $Id: unaligned.c,v 1.16 1997/03/18 17:53:44 jj Exp $
  * unaligned.c: Unaligned load/store trap handling with special
  *              cases for the kernel to do them more quickly.
  *
@@ -18,8 +18,6 @@
 #include <linux/smp_lock.h>
 
 /* #define DEBUG_MNA */
-
-extern void die_if_kernel(char *, struct pt_regs *);
 
 enum direction {
 	load,    /* ld, ldd, ldh, ldsh */

@@ -16,6 +16,7 @@ struct irqaction {
 };
 
 extern atomic_t intr_count;
+extern volatile unsigned char bh_running;
 
 extern int bh_mask_count[32];
 extern unsigned long bh_active;
@@ -76,8 +77,9 @@ extern inline void enable_bh(int nr)
  */
 extern inline void start_bh_atomic(void)
 {
+	cli();
 	atomic_inc(&intr_count);
-	barrier();
+	sti();
 }
 
 extern inline void end_bh_atomic(void)

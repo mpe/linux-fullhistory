@@ -18,12 +18,12 @@
  * <hayes@netplumbing.com>
  */
 
-struct fdb fdb_head;
-struct fdb *fhp = &fdb_head;
-struct fdb **fhpp = &fhp;
+static struct fdb fdb_head;
+static struct fdb *fhp = &fdb_head;
+static struct fdb **fhpp = &fhp;
 static int fdb_inited = 0;
 
-int addr_cmp(unsigned char *a1, unsigned char *a2);
+static int addr_cmp(unsigned char *a1, unsigned char *a2);
 
 /*
  * fdb_head is the AVL tree corresponding to fdb
@@ -50,7 +50,7 @@ int addr_cmp(unsigned char *a1, unsigned char *a2);
  *    foreach node in tree->fdb_avl_right: node->fdb_avl_key >= tree->fdb_avl_key.
  */
 
-int
+static int
 fdb_init(void)
 {
 	fdb_head.fdb_avl_height = 0;
@@ -60,8 +60,7 @@ fdb_init(void)
 	return(0);
 }
 
-struct fdb *
-br_avl_find_addr(unsigned char addr[6])
+struct fdb *br_avl_find_addr(unsigned char addr[6])
 {
 	struct fdb * result = NULL;
 	struct fdb * tree;
@@ -109,14 +108,15 @@ br_avl_find_addr(unsigned char addr[6])
 	}
 }
 
+
+#if (0)
 /*
  * Rebalance a tree.
  * After inserting or deleting a node of a tree we have a sequence of subtrees
  * nodes[0]..nodes[k-1] such that
  * nodes[0] is the root and nodes[i+1] = nodes[i]->{fdb_avl_left|fdb_avl_right}.
  */
-static void 
-br_avl_rebalance (struct fdb *** nodeplaces_ptr, int count)
+static void br_avl_rebalance (struct fdb *** nodeplaces_ptr, int count)
 {
 	if (!fdb_inited)
 		fdb_init();
@@ -196,10 +196,10 @@ br_avl_rebalance (struct fdb *** nodeplaces_ptr, int count)
 	printk_avl(&fdb_head);
 #endif /* DEBUG_AVL */
 }
+#endif /* (0) */
 
 /* Insert a node into a tree. */
-int 
-br_avl_insert (struct fdb * new_node)
+int br_avl_insert (struct fdb * new_node)
 {
 	struct fdb ** nodeplace = fhpp;
 	struct fdb ** stack[avl_maxheight];
@@ -248,9 +248,10 @@ br_avl_insert (struct fdb * new_node)
 	return(1);
 }
 
+
+#if (0)
 /* Removes a node out of a tree. */
-int
-br_avl_remove (struct fdb * node_to_delete)
+static int br_avl_remove (struct fdb * node_to_delete)
 {
 	struct fdb ** nodeplace = fhpp;
 	struct fdb ** stack[avl_maxheight];
@@ -301,6 +302,7 @@ br_avl_remove (struct fdb * node_to_delete)
 	br_avl_rebalance(stack_ptr,stack_count);
 	return(0);
 }
+#endif /* (0) */
 
 #ifdef DEBUG_AVL
 
@@ -388,8 +390,7 @@ static void avl_checkorder (struct fdb * tree)
 #endif /* (0) */
 #endif /* DEBUG_AVL */
 
-int
-addr_cmp(unsigned char a1[], unsigned char a2[])
+static int addr_cmp(unsigned char a1[], unsigned char a2[])
 {
 	int i;
 

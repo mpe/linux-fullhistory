@@ -562,7 +562,7 @@ struct sk_buff *ip_defrag(struct sk_buff *skb)
 			else
 				qp->fragments = tmp->next;
 
-			if (tfp->next != NULL)
+			if (tmp->next != NULL)
 				tmp->next->prev = tmp->prev;
 			
 			next=tfp;	/* We have killed the original next frame */

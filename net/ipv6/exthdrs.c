@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: exthdrs.c,v 1.7 1996/09/12 18:44:18 roque Exp $
+ *	$Id: exthdrs.c,v 1.4 1997/03/18 18:24:29 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -31,13 +31,13 @@
 #include <net/transp_v6.h>
 #include <net/rawv6.h>
 #include <net/ndisc.h>
-#include <net/ipv6_route.h>
+#include <net/ip6_route.h>
 #include <net/addrconf.h>
 
 /*
  *	inbound
  */
-
+#if 0
 int ipv6_routing_header(struct sk_buff **skb_ptr, struct device *dev,
 			__u8 *nhptr, struct ipv6_options *opt)
 {
@@ -53,8 +53,7 @@ int ipv6_routing_header(struct sk_buff **skb_ptr, struct device *dev,
 	struct ipv6_rt_hdr *hdr = (struct ipv6_rt_hdr *) skb->h.raw;
 	struct rt0_hdr *rthdr;
 
-	if (hdr->segments_left == 0)
-	{
+	if (hdr->segments_left == 0) {
 		struct ipv6_options *opt;
 
 		opt = (struct ipv6_options *) skb->cb;
@@ -65,8 +64,7 @@ int ipv6_routing_header(struct sk_buff **skb_ptr, struct device *dev,
 	}
 
 	if (hdr->type != IPV6_SRCRT_TYPE_0 || hdr->hdrlen & 0x01 ||
-	    hdr->hdrlen > 46)
-	{
+	    hdr->hdrlen > 46) {
                 /* 
 		 *	Discard 
 		 */
@@ -90,8 +88,7 @@ int ipv6_routing_header(struct sk_buff **skb_ptr, struct device *dev,
 
 	n = hdr->hdrlen >> 1;
 
-	if (hdr->segments_left > n)
-	{
+	if (hdr->segments_left > n) {
 		pos = (__u8 *) hdr - (__u8 *) skb->nh.ipv6h + 2;
 
 		pos += 3;
@@ -109,8 +106,7 @@ int ipv6_routing_header(struct sk_buff **skb_ptr, struct device *dev,
 
 	addr_type = ipv6_addr_type(addr);
 
-	if (addr_type == IPV6_ADDR_MULTICAST)
-	{
+	if (addr_type == IPV6_ADDR_MULTICAST) {
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
@@ -126,9 +122,7 @@ int ipv6_routing_header(struct sk_buff **skb_ptr, struct device *dev,
 	bit_map = ntohl(rthdr->bitmap);
 
 	if ((bit_map & (1 << i)) == IPV6_SRCRT_STRICT)
-	{
 		strict = 1;
-	}
 
 	ipv6_forward(skb, dev, (strict ? IP6_FW_STRICT : 0) | IP6_FW_SRCRT);
 
@@ -154,10 +148,8 @@ int ipv6opt_bld_rthdr(struct sk_buff *skb, struct ipv6_options *opt,
 	hops = ihdr->rt_hdr.hdrlen >> 1;
 	
 	if (hops > 1)
-	{
 		memcpy(phdr->addr, ihdr->addr + 1,
 		       (hops - 1) * sizeof(struct in6_addr));
-	}
 
 	ipv6_addr_copy(phdr->addr + (hops - 1), addr);
 	
@@ -165,9 +157,4 @@ int ipv6opt_bld_rthdr(struct sk_buff *skb, struct ipv6_options *opt,
 
 	return NEXTHDR_ROUTING;
 }
-
-/*
- * Local variables:
- * c-file-style: "Linux"
- * End:
- */
+#endif

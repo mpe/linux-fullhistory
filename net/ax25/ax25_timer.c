@@ -22,6 +22,8 @@
  *	AX.25 033	Jonathan(G4KLX)	Modularisation functions.
  *	AX.25 035	Frederic(F1OAT)	Support for pseudo-digipeating.
  *	AX.25 036	Jonathan(G4KLX)	Split Standard and DAMA code into seperate files.
+ *			Joerg(DL1BKE)	Fixed DAMA Slave. We are *required* to start with
+ *					standard AX.25 mode.
  */
 
 #include <linux/config.h>
@@ -62,7 +64,7 @@ void ax25_set_timer(ax25_cb *ax25)
 
 	ax25->timer.data     = (unsigned long)ax25;
 	ax25->timer.function = &ax25_timer;
-	ax25->timer.expires  = jiffies + 10;
+	ax25->timer.expires  = jiffies + (HZ / 10);
 
 	add_timer(&ax25->timer);
 }
@@ -78,12 +80,17 @@ static void ax25_timer(unsigned long param)
 	ax25_cb *ax25 = (ax25_cb *)param;
 
 	switch (ax25->ax25_dev->values[AX25_VALUES_PROTOCOL]) {
-		case AX25_PROTO_STD:
+		case AX25_PROTO_STD_SIMPLEX:
+		case AX25_PROTO_STD_DUPLEX:
 			ax25_std_timer(ax25);
 			break;
+
 #ifdef CONFIG_AX25_DAMA_SLAVE
 		case AX25_PROTO_DAMA_SLAVE:
-			ax25_ds_timer(ax25);
+			if (ax25->ax25_dev->dama.slave)
+				ax25_ds_timer(ax25);
+			else
+				ax25_std_timer(ax25);
 			break;
 #endif
 	}

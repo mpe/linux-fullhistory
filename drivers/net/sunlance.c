@@ -1,4 +1,4 @@
-/* $Id: sunlance.c,v 1.55 1997/02/07 09:41:07 ecd Exp $
+/* $Id: sunlance.c,v 1.56 1997/03/14 21:04:45 jj Exp $
  * lance.c: Linux/Sparc/Lance driver
  *
  *	Written 1995, 1996 by Miguel de Icaza
@@ -255,7 +255,7 @@ int sparc_lance_debug = 2;
  * zero on the lebuffer PIO area. -davem
  */
 
-#define LANCE_ADDR(x) ((int)(x) & ~0xff000000)
+#define LANCE_ADDR(x) ((long)(x) & ~0xff000000)
 
 #ifdef MODULE
 static struct lance_private *root_lance_dev = NULL;

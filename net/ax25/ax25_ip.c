@@ -123,7 +123,7 @@ int ax25_rebuild_header(struct sk_buff *skb)
 		mode = ax25_ip_mode_get((ax25_address *)(bp + 1), dev);
 		if (mode == 'V' || (mode == ' ' && ax25_dev->values[AX25_VALUES_IPDEFMODE])) {
 			/*
-			 *	We clone the buffer and release the original thereby
+			 *	We copy the buffer and release the original thereby
 			 *	keeping it straight
 			 *
 			 *	Note: we report 1 back so the caller will
@@ -131,8 +131,13 @@ int ax25_rebuild_header(struct sk_buff *skb)
 			 *	We don't want that to happen. (It won't be upset
 			 *	as we have pulled the frame from the queue by
 			 *	freeing it).
+			 *
+			 *	NB: TCP modifies buffers that are still
+			 *	on a device queue, thus we use skb_copy()
+			 *      instead of using skb_clone() unless this
+			 *	gets fixed.
 			 */
-			if ((ourskb = skb_clone(skb, GFP_ATOMIC)) == NULL) {
+			if ((ourskb = skb_copy(skb, GFP_ATOMIC)) == NULL) {
 				dev_kfree_skb(skb, FREE_WRITE);
 				return 1;
 			}

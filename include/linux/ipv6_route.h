@@ -13,24 +13,26 @@
 #ifndef _LINUX_IPV6_ROUTE_H
 #define _LINUX_IPV6_ROUTE_H
 
-#define RTI_DEVRT	0x00010000	/* route lookup, dev must match	*/
-#define RTI_ALLONLINK	0x00020000	/* all destinations on link	*/
-#define RTI_DCACHE	RTF_DCACHE	/* rt6_info is a dcache entry	*/
-#define RTI_INVALID	RTF_INVALID	/* invalid route/dcache entry	*/
 
-#define RTI_DYNAMIC	RTF_DYNAMIC	/* rt6_info created dynamicly	*/
-#define RTI_GATEWAY	RTF_GATEWAY
-#define RTI_DYNMOD	RTF_MODIFIED	/* more specific route may exist*/
+#define RTF_DEFAULT	0x00010000	/* default - learned via ND	*/
+#define RTF_ALLONLINK	0x00020000	/* fallback, no routers on link	*/
+#define RTF_ADDRCONF	0x00040000	/* addrconf route - RA		*/
 
-#define DCF_PMTU	RTF_MSS		/* dest cache has valid PMTU	*/
-#define DCF_INVALID	RTF_INVALID
+#define RTF_LINKRT	0x00100000	/* link specific - device match	*/
+#define RTF_NONEXTHOP	0x00200000	/* route with no nexthop	*/
+
+#define RTF_CACHE	0x01000000	/* cache entry			*/
+#define RTF_FLOW	0x02000000	/* flow significant route	*/
+#define RTF_POLICY	0x04000000	/* policy route			*/
 
 struct in6_rtmsg {
 	struct in6_addr		rtmsg_dst;
+	struct in6_addr		rtmsg_src;
 	struct in6_addr		rtmsg_gateway;
 	__u32			rtmsg_type;
-	__u16			rtmsg_prefixlen;
-	__u16			rtmsg_metric;
+	__u16			rtmsg_dst_len;
+	__u16			rtmsg_src_len;
+	__u32			rtmsg_metric;
 	unsigned long		rtmsg_info;
         __u32			rtmsg_flags;
 	int			rtmsg_ifindex;

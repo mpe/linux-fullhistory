@@ -23,6 +23,8 @@
 #include <asm/irq.h>
 #include <asm/bitops.h>
 #include <asm/atomic.h>
+#include <asm/hardirq.h>
+#include <asm/softirq.h>
 
 atomic_t intr_count = 0;
 
@@ -48,36 +50,28 @@ void (*bh_base[32])(void);
 static inline void run_bottom_halves(void)
 {
 	unsigned long active;
-	unsigned long mask, left;
 	void (**bh)(void);
 
-	cli();
-	active = bh_active & bh_mask;
-	bh_active &= ~active;
-	sti();
+	active = get_active_bhs();
+	clear_active_bhs(active);
 	bh = bh_base;
-	for (mask = 1, left = ~0 ; left & active ; bh++,mask += mask,left += left) {
-		if (mask & active) {
+	do {
+		if (active & 1)
 			(*bh)();
-		}
-	}
+		bh++;
+		active >>= 1;
+	} while (active);
 }
 
-/*
- * We really shouldn't need to get the kernel lock here,
- * but we do it the easy way for now (the scheduler gets
- * upset if somebody messes with intr_count without having
- * the kernel lock).
- *
- * Get rid of the kernel lock here at the same time we
- * make interrupt handling sane. 
- */
 asmlinkage void do_bottom_half(void)
 {
-	lock_kernel();
-	atomic_inc(&intr_count);
-	if (intr_count == 1)
-		run_bottom_halves();
-	atomic_dec(&intr_count);
-	unlock_kernel();
+	int cpu = smp_processor_id();
+
+	if (hardirq_trylock(cpu)) {
+		if (softirq_trylock()) {
+			run_bottom_halves();
+			softirq_endlock();
+		}
+		hardirq_endlock(cpu);
+	}
 }

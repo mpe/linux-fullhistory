@@ -80,9 +80,10 @@ static int misc_read_proc(char *buf, char **start, off_t offset,
 	struct miscdevice *p;
 
 	len=0;
-	for (p = misc_list.next; p != &misc_list; p = p->next)
+	for (p = misc_list.next; p != &misc_list && len < 4000; p = p->next)
 		len += sprintf(buf+len, "%3i %s\n",p->minor, p->name ?: "");
-	return len;
+	*start = buf + offset;
+	return len > offset ? len - offset : 0;
 }
 
 #endif /* PROC_FS */

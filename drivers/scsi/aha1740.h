@@ -17,23 +17,23 @@
 #define MINEISA 1   /* I don't have an EISA Spec to know these ranges, so I */
 #define MAXEISA 8   /* Just took my machine's specifications.  Adjust to fit.*/
 		    /* I just saw an ad, and bumped this from 6 to 8 */
-#define	SLOTBASE(x)	((x << 12)+ 0xc80 )
-#define	BASE		(base)
+#define	SLOTBASE(x)	((x << 12) + 0xc80)
+#define SLOTSIZE	0x5c
 
 /* EISA configuration registers & values */
-#define	HID0	(base + 0x0)
-#define	HID1	(base + 0x1)
-#define HID2	(base + 0x2)
-#define	HID3	(base + 0x3)
-#define	EBCNTRL	(base + 0x4)
-#define	PORTADR	(base + 0x40)
-#define BIOSADR (base + 0x41)
-#define INTDEF	(base + 0x42)
-#define SCSIDEF (base + 0x43)
-#define BUSDEF	(base + 0x44)
-#define	RESV0	(base + 0x45)
-#define RESV1	(base + 0x46)
-#define	RESV2	(base + 0x47)
+#define	HID0(base)	(base + 0x0)
+#define	HID1(base)	(base + 0x1)
+#define HID2(base)	(base + 0x2)
+#define	HID3(base)	(base + 0x3)
+#define	EBCNTRL(base)	(base + 0x4)
+#define	PORTADR(base)	(base + 0x40)
+#define BIOSADR(base)	(base + 0x41)
+#define INTDEF(base)	(base + 0x42)
+#define SCSIDEF(base)	(base + 0x43)
+#define BUSDEF(base)	(base + 0x44)
+#define	RESV0(base)	(base + 0x45)
+#define RESV1(base)	(base + 0x46)
+#define	RESV2(base)	(base + 0x47)
 
 #define	HID_MFG	"ADP"
 #define	HID_PRD 0
@@ -41,13 +41,13 @@
 #define EBCNTRL_VALUE 1
 #define PORTADDR_ENH 0x80
 /* READ */
-#define	G2INTST	(BASE + 0x56)
-#define G2STAT	(BASE + 0x57)
-#define	MBOXIN0	(BASE + 0x58)
-#define	MBOXIN1	(BASE + 0x59)
-#define	MBOXIN2	(BASE + 0x5a)
-#define	MBOXIN3	(BASE + 0x5b)
-#define G2STAT2	(BASE + 0x5c)
+#define	G2INTST(base)	(base + 0x56)
+#define G2STAT(base)	(base + 0x57)
+#define	MBOXIN0(base)	(base + 0x58)
+#define	MBOXIN1(base)	(base + 0x59)
+#define	MBOXIN2(base)	(base + 0x5a)
+#define	MBOXIN3(base)	(base + 0x5b)
+#define G2STAT2(base)	(base + 0x5c)
 
 #define G2INTST_MASK		0xf0	/* isolate the status */
 #define	G2INTST_CCBGOOD		0x10	/* CCB Completed */
@@ -65,12 +65,12 @@
 #define G2STAT2_READY	0	/* Host Ready Bit */
 
 /* WRITE (and ReadBack) */
-#define	MBOXOUT0	(BASE + 0x50)
-#define	MBOXOUT1	(BASE + 0x51)
-#define	MBOXOUT2	(BASE + 0x52)
-#define	MBOXOUT3	(BASE + 0x53)
-#define	ATTN		(BASE + 0x54)
-#define G2CNTRL		(BASE + 0x55)
+#define	MBOXOUT0(base)	(base + 0x50)
+#define	MBOXOUT1(base)	(base + 0x51)
+#define	MBOXOUT2(base)	(base + 0x52)
+#define	MBOXOUT3(base)	(base + 0x53)
+#define	ATTN(base)	(base + 0x54)
+#define G2CNTRL(base)	(base + 0x55)
 
 #define	ATTN_IMMED	0x10	/* Immediate Command */
 #define	ATTN_START	0x40	/* Start CCB */
@@ -159,18 +159,22 @@ int aha1740_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int aha1740_abort(Scsi_Cmnd *);
 int aha1740_reset(Scsi_Cmnd *, unsigned int);
 int aha1740_biosparam(Disk *, kdev_t, int*);
+int aha1740_proc_info(char *buffer, char **start, off_t offset,
+                               int length, int hostno, int inout);
 
 #define AHA1740_ECBS 32
 #define AHA1740_SCATTER 16
+#define AHA1740_CMDLUN 1
 
 #ifndef NULL
-#define NULL 0
+	#define NULL 0
 #endif
 
+extern struct proc_dir_entry proc_scsi_aha1740;
 
 #define AHA1740 {NULL,	NULL,				\
-                   NULL,                                \
-		   NULL,		                \
+                   &proc_scsi_aha1740,			\
+		   aha1740_proc_info,	                \
 		   "Adaptec 174x (EISA)",		\
 		   aha1740_detect,			\
 		   NULL,				\
@@ -184,10 +188,9 @@ int aha1740_biosparam(Disk *, kdev_t, int*);
 		   AHA1740_ECBS, 			\
 		   7, 					\
 		   AHA1740_SCATTER, 			\
-		   1, 					\
+		   AHA1740_CMDLUN, 			\
 		   0, 					\
 		   0, 					\
 		   ENABLE_CLUSTERING}
 
 #endif
-

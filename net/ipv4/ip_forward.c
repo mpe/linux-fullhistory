@@ -71,6 +71,7 @@ int ip_forward(struct sk_buff *skb)
 	struct iphdr *iph;	/* Our header */
 	struct rtable *rt;	/* Route we use */
 	struct ip_options * opt	= &(IPCB(skb)->opt);
+	unsigned short mtu;
 #if defined(CONFIG_FIREWALL) || defined(CONFIG_IP_MASQUERADE)
 	int fw_res = 0;
 #endif
@@ -118,7 +119,12 @@ int ip_forward(struct sk_buff *skb)
 
 	skb->priority = rt->u.dst.priority;
 	dev2 = rt->u.dst.dev;
+	mtu = dev2->mtu;
 
+#ifdef CONFIG_NET_SECURITY
+	call_fw_firewall(PF_SECURITY, dev2, NULL, &mtu, NULL);
+#endif	
+	
 	/*
 	 *	In IP you never have to forward a frame on the interface that it 
 	 *	arrived upon. We now generate an ICMP HOST REDIRECT giving the route
@@ -133,9 +139,9 @@ int ip_forward(struct sk_buff *skb)
 	 */
 
 	if (dev2->flags & IFF_UP) {
-		if (skb->len > dev2->mtu && (ntohs(iph->frag_off) & IP_DF)) {
+		if (skb->len > mtu && (ntohs(iph->frag_off) & IP_DF)) {
 			ip_statistics.IpFragFails++;
-			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, htonl(dev2->mtu));
+			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, htonl(mtu));
 			kfree_skb(skb, FREE_WRITE);
 			return -1;
 		}
@@ -175,7 +181,7 @@ int ip_forward(struct sk_buff *skb)
 				goto skip_call_fw_firewall;
 #endif
 #ifdef CONFIG_FIREWALL
-		fw_res=call_fw_firewall(PF_INET, dev2, iph, NULL);
+		fw_res=call_fw_firewall(PF_INET, dev2, iph, NULL, &skb);
 		switch (fw_res) {
 		case FW_ACCEPT:
 		case FW_MASQUERADE:
@@ -220,7 +226,7 @@ skip_call_fw_firewall:
 		}
 
 #ifdef CONFIG_FIREWALL
-		if ((fw_res = call_out_firewall(PF_INET, dev2, iph, NULL)) < FW_ACCEPT) {
+		if ((fw_res = call_out_firewall(PF_INET, dev2, iph, NULL,&skb)) < FW_ACCEPT) {
 			/* FW_ACCEPT and FW_MASQUERADE are treated equal:
 			   masquerading is only supported via forward rules */
 			if (fw_res == FW_REJECT)

@@ -325,7 +325,9 @@ static int bpq_xmit(struct sk_buff *skb, struct device *dev)
 	skb->dev = dev;
 	dev->hard_header(skb, dev, ETH_P_BPQ, bpq->dest_addr, NULL, 0);
 
-	return dev->hard_start_xmit(skb, dev);
+	dev_queue_xmit(skb);
+
+	return 0;
 }
 
 /*

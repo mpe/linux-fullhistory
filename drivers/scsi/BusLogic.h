@@ -1346,7 +1346,8 @@ typedef struct BusLogic_HostAdapter
   unsigned char ActiveCommands[BusLogic_MaxTargetDevices];
   unsigned int CommandsSinceReset[BusLogic_MaxTargetDevices];
   unsigned long LastSequencePoint[BusLogic_MaxTargetDevices];
-  unsigned long LastResetTime[BusLogic_MaxTargetDevices];
+  unsigned long LastResetAttempted[BusLogic_MaxTargetDevices];
+  unsigned long LastResetCompleted[BusLogic_MaxTargetDevices];
   BusLogic_OutgoingMailbox_T *FirstOutgoingMailbox;
   BusLogic_OutgoingMailbox_T *LastOutgoingMailbox;
   BusLogic_OutgoingMailbox_T *NextOutgoingMailbox;
@@ -1604,7 +1605,20 @@ static inline void BusLogic_IncrementSizeBucket(BusLogic_CommandSizeBuckets_T
 
 #undef CONFIG_SCSI_OMIT_FLASHPOINT
 #define CONFIG_SCSI_OMIT_FLASHPOINT
+
 #define BusLogic_InitializeProbeInfoListISA BusLogic_InitializeProbeInfoList
+
+#endif
+
+
+/*
+  FlashPoint support is only available for the Intel x86 Architecture.
+*/
+
+#ifndef __i386__
+
+#undef CONFIG_SCSI_OMIT_FLASHPOINT
+#define CONFIG_SCSI_OMIT_FLASHPOINT
 
 #endif
 

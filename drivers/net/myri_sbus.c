@@ -1,4 +1,4 @@
-/* myri_sbus.h: MyriCOM Gigabit Ethernet SBUS card driver.
+/* myri_sbus.h: MyriCOM MyriNET SBUS card driver.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  */
@@ -42,11 +42,6 @@ static char *version =
 #include <net/arp.h>
 #include <net/sock.h>
 #include <net/ipv6.h>
-
-#if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
-#include <linux/in6.h>
-#include <net/ndisc.h>
-#endif
 
 #include <asm/checksum.h>
 
@@ -707,6 +702,7 @@ static int myri_rebuild_header(struct sk_buff *skb)
 	unsigned char *pad = (unsigned char *)skb->data;
 	struct ethhdr *eth = (struct ethhdr *)(pad + MYRI_PAD_LEN);
 	struct device *dev = skb->dev;
+ 	struct neighbour *neigh = NULL;
 
 #ifdef DEBUG_HEADER
 	DHDR(("myri_rebuild_header: pad[%02x,%02x] ", pad[0], pad[1]));
@@ -721,29 +717,19 @@ static int myri_rebuild_header(struct sk_buff *skb)
 	 *	Only ARP/IP and NDISC/IPv6 are currently supported
 	 */
 	
+ 	if (skb->dst)
+ 		neigh = skb->dst->neighbour;
+ 
+ 	if (neigh)
+ 		return neigh->ops->resolve(eth->h_dest, skb);
+ 
 	switch (eth->h_proto)
 	{
 #ifdef CONFIG_INET
 	case __constant_htons(ETH_P_IP):
-
-		/*
-		 *	Try to get ARP to resolve the header.
-		 */
-
-		return arp_find(eth->h_dest, skb) ? 1 : 0;
-		break;
+ 		return arp_find(eth->h_dest, skb);
 #endif
 
-#if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
-	case __constant_htons(ETH_P_IPV6):
-#ifdef CONFIG_IPV6
-		return (ndisc_eth_resolv(eth->h_dest, dev, skb));
-#else
-		if (ndisc_eth_hook)
-			return (ndisc_eth_hook(eth->h_dest, dev, skb));
-#endif
-		break;
-#endif	
 	default:
 		printk(KERN_DEBUG 
 		       "%s: unable to resolve type %X addresses.\n", 
@@ -757,7 +743,7 @@ static int myri_rebuild_header(struct sk_buff *skb)
 	return 0;	
 }
 
-int myri_header_cache(struct dst_entry *dst, struct dst_entry *neigh,
+int myri_header_cache(struct dst_entry *dst, struct neighbour *neigh,
 		       struct hh_cache *hh)
 {
 	unsigned short type = hh->hh_type;
@@ -920,7 +906,7 @@ static int myri_ether_init(struct device *dev, struct linux_sbus_device *sdev, i
 	if(version_printed++ == 0)
 		printk(version);
 
-	printk("%s: MyriCOM Gigabit Ethernet ", dev->name);
+	printk("%s: MyriCOM MyriNET Ethernet ", dev->name);
 	dev->base_addr = (long) sdev;
 
 	mp = (struct myri_eth *) dev->priv;
@@ -1112,6 +1098,7 @@ static int myri_ether_init(struct device *dev, struct linux_sbus_device *sdev, i
 	myri_load_lanai(mp);
 
 #ifdef MODULE
+	dev->ifindex = dev_new_index();
 	mp->next_module = root_myri_dev;
 	root_myri_dev = mp;
 #endif
@@ -1135,7 +1122,7 @@ int myri_sbus_probe(struct device *dev)
 			if(!strcmp(sdev->prom_name, "MYRICOM,mlanai") ||
 			   !strcmp(sdev->prom_name, "myri")) {
 				cards++;
-				DET(("Found myricom gigabit as %s\n", sdev->prom_name));
+				DET(("Found myricom myrinet as %s\n", sdev->prom_name));
 				if((v = myri_ether_init(dev, sdev, (cards - 1))))
 					return v;
 			}

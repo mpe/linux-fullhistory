@@ -1,10 +1,10 @@
 	   BusLogic MultiMaster and FlashPoint SCSI Driver for Linux
 
-			  Version 2.0.7 for Linux 2.0
+			  Version 2.0.8 for Linux 2.0
 
 			      PRODUCTION RELEASE
 
-			       23 February 1997
+				 17 March 1997
 
 			       Leonard N. Zubkoff
 			       Dandelion Digital
@@ -319,17 +319,17 @@ file "BusLogic.c".  The following examples may be useful as a starting point:
   "BusLogic=MultiMasterFirst"
 
     By default, if both FlashPoint and PCI MultiMaster Host Adapters are
-    present, this driver will probe for PCI MultiMaster Host Adapters first
-    unless the BIOS primary disk is not controlled by the first PCI MultiMaster
-    Host Adapter, in which case FlashPoint Host Adapters will be probed first.
+    present, this driver will probe for FlashPoint Host Adapters first unless
+    the BIOS primary disk is controlled by the first PCI MultiMaster Host
+    Adapter, in which case MultiMaster Host Adapters will be probed first.
     This option forces MultiMaster Host Adapters to be probed first.
 
   "BusLogic=FlashPointFirst"
 
     By default, if both FlashPoint and PCI MultiMaster Host Adapters are
-    present, this driver will probe for PCI MultiMaster Host Adapters first
-    unless the BIOS primary disk is not controlled by the first PCI MultiMaster
-    Host Adapter, in which case FlashPoint Host Adapters will be probed first.
+    present, this driver will probe for FlashPoint Host Adapters first unless
+    the BIOS primary disk is controlled by the first PCI MultiMaster Host
+    Adapter, in which case MultiMaster Host Adapters will be probed first.
     This option forces FlashPoint Host Adapters to be probed first.
 
   "BusLogic=0x330"
@@ -380,7 +380,7 @@ To install the new BusLogic SCSI driver, you may use the following commands,
 replacing "/usr/src" with wherever you keep your Linux kernel source tree:
 
   cd /usr/src
-  tar -xvzf BusLogic-2.0.7.tar.gz
+  tar -xvzf BusLogic-2.0.8.tar.gz
   mv README.* LICENSE.* BusLogic.[ch] FlashPoint.c linux/drivers/scsi
   patch -p < BusLogic.patch
   cd linux

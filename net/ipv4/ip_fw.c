@@ -1196,17 +1196,17 @@ static int ip_fw_fwd_procinfo(char *buffer, char **start, off_t offset,
  *	Interface to the generic firewall chains.
  */
  
-int ipfw_input_check(struct firewall_ops *this, int pf, struct device *dev, void *phdr, void *arg)
+int ipfw_input_check(struct firewall_ops *this, int pf, struct device *dev, void *phdr, void *arg, struct sk_buff **pskb)
 {
 	return ip_fw_chk(phdr, dev, arg, ip_fw_in_chain, ip_fw_in_policy, IP_FW_MODE_FW);
 }
 
-int ipfw_output_check(struct firewall_ops *this, int pf, struct device *dev, void *phdr, void *arg)
+int ipfw_output_check(struct firewall_ops *this, int pf, struct device *dev, void *phdr, void *arg, struct sk_buff **pskb)
 {
 	return ip_fw_chk(phdr, dev, arg, ip_fw_out_chain, ip_fw_out_policy, IP_FW_MODE_FW);
 }
 
-int ipfw_forward_check(struct firewall_ops *this, int pf, struct device *dev, void *phdr, void *arg)
+int ipfw_forward_check(struct firewall_ops *this, int pf, struct device *dev, void *phdr, void *arg, struct sk_buff **pskb)
 {
 	return ip_fw_chk(phdr, dev, arg, ip_fw_fwd_chain, ip_fw_fwd_policy, IP_FW_MODE_FW);
 }

@@ -14,6 +14,7 @@
 #include <linux/kernel.h>
 #include <linux/socket.h>
 #include <linux/sched.h>
+#include <linux/netdevice.h>
 #include <net/neighbour.h>
 
 
@@ -44,11 +45,11 @@ void neigh_table_init(struct neigh_table *tbl, struct neigh_ops *ops, int size)
 	memset(tbl->hash_buckets, 0, bmemlen);
 }
 
-struct neighbour *neigh_alloc(int size, int priority)
+struct neighbour *neigh_alloc(int size, struct neigh_ops *ops)
 {
 	struct neighbour *neigh;
 	
-	neigh = kmalloc(size, priority);
+	neigh = kmalloc(size, GFP_ATOMIC);
 	if (neigh == NULL)
 	{
 		return NULL;
@@ -57,7 +58,7 @@ struct neighbour *neigh_alloc(int size, int priority)
 	memset(neigh, 0, size);
 	
 	skb_queue_head_init(&neigh->arp_queue);
-
+	neigh->ops = ops;
 	return neigh;
 }
 
@@ -96,7 +97,6 @@ void neigh_table_ins(struct neigh_table *tbl, struct neighbour *neigh)
 	hash_val = tbl->neigh_ops->hash(neigh->primary_key) % tbl->tbl_size;
 	
 	neigh->tbl = tbl;
-	neigh->ops = tbl->neigh_ops;
 	
 	head = &tbl->hash_buckets[hash_val];
 	
@@ -143,7 +143,7 @@ struct neighbour * neigh_lookup(struct neigh_table *tbl, void *pkey,
 					return neigh;
 			}
 			neigh = neigh->next;
-			
+
 		} while (neigh != head);
 	}
 
@@ -156,8 +156,6 @@ struct neighbour * neigh_lookup(struct neigh_table *tbl, void *pkey,
  */
 void neigh_destroy(struct neighbour *neigh)
 {	
-	unsigned long flags;
-
 	if (neigh->tbl)
 	{
 		printk(KERN_DEBUG "neigh_destroy: neighbour still in table. "
@@ -171,10 +169,6 @@ void neigh_destroy(struct neighbour *neigh)
 
 	neigh_purge_send_q(neigh);
 
-	save_flags(flags);
-	cli();
-	restore_flags(flags);
-	
 	kfree(neigh);
 }
 
@@ -185,14 +179,14 @@ void neigh_unlink(struct neighbour *neigh)
 	unsigned int hash_val;
 	struct neighbour *next, *prev;
 	
-	tbl = neigh->tbl;	
+	tbl = neigh->tbl;
 	neigh->tbl = NULL;
-	
+
 	hash_val = neigh->ops->hash(neigh->primary_key) % tbl->tbl_size;
 
 	head = &tbl->hash_buckets[hash_val];
 	tbl->tbl_entries--;
-	
+
 	next = neigh->next;
 	if (neigh == (*head))
 	{
@@ -220,21 +214,21 @@ void ntbl_walk_table(struct neigh_table *tbl, ntbl_examine_t func,
 		     unsigned long filter, int max, void *args)
 {
 	int i;
-	
+
 	if (max == 0)
 		max = tbl->tbl_size;
-	
+
 	for (i=0; i < max; i++)
 	{
 		struct neighbour **head;
 		struct neighbour *entry;
-		
+
 		head = &tbl->hash_buckets[i];
 		entry = *head;
 
 		if (!entry)
 			continue;
-		
+
 		do {
 			if (entry->flags & (~filter))
 			{
@@ -247,10 +241,10 @@ void ntbl_walk_table(struct neigh_table *tbl, ntbl_examine_t func,
 
 					curp = entry;
 					entry = curp->next;
-					
+
 					neigh_unlink(curp);
 					neigh_destroy(curp);
-					
+
 					if ((*head) == NULL)
 						break;
 					continue;

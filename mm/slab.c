@@ -478,7 +478,7 @@ kmem_cache_create(const char *name, unsigned long size, unsigned long align,
 		printk(KERN_ERR "%sNULL ptr\n", func_nm);
 		return NULL;
 	}
-	if (intr_count) {
+	if (0 && intr_count) {
 		printk(KERN_ERR "%sCalled during int - %s\n", func_nm, name);
 		return NULL;
 	}
@@ -743,7 +743,7 @@ kmem_cache_destroy(kmem_cache_t *cachep)
 		goto err_end;
 	}
 
-	if (intr_count) {
+	if (0 && intr_count) {
 		printk(KERN_ERR "kmem_dest: Called during int - %s\n", cachep->c_name);
 err_end:
 		return 1;
@@ -809,7 +809,7 @@ kmem_cache_shrink(kmem_cache_t *cachep, int wait)
 		goto end;
 	}
 
-	if (intr_count) {
+	if (0 && intr_count) {
 		printk(KERN_ERR "kmem_shrink: Called during int - %s\n", cachep->c_name);
 		goto end;
 	}
@@ -951,7 +951,7 @@ kmem_cache_grow(kmem_cache_t *cachep, unsigned long flags)
 	 * in kmem_cache_alloc().  If a caller is slightly mis-behaving,
 	 * will eventually be caught here (where it matters)
 	 */
-	if (intr_count && (flags & SLAB_LEVEL_MASK) != SLAB_ATOMIC) {
+	if (0 && intr_count && (flags & SLAB_LEVEL_MASK) != SLAB_ATOMIC) {
 		static int count = 0;
 		if (count < 8) {
 			printk(KERN_ERR "kmem_grow: Called nonatomically from "

@@ -231,7 +231,6 @@ out:
 
 asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 {
-	lock_kernel();
 #ifdef CONFIG_SMP_NMI_INVAL
 	smp_flush_tlb_rcv();
 #else
@@ -241,7 +240,6 @@ asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 	printk("power saving mode enabled.\n");
 #endif	
 #endif
-	unlock_kernel();
 }
 
 asmlinkage void do_debug(struct pt_regs * regs, long error_code)
@@ -305,18 +303,14 @@ out:
 
 asmlinkage void do_coprocessor_error(struct pt_regs * regs, long error_code)
 {
-	lock_kernel();
 	ignore_irq13 = 1;
 	math_error();
-	unlock_kernel();
 }
 
 asmlinkage void do_spurious_interrupt_bug(struct pt_regs * regs,
 					  long error_code)
 {
-	lock_kernel();
 	printk("Ignoring P6 Local APIC Spurious Interrupt Bug...\n");
-	unlock_kernel();
 }
 
 /*
@@ -328,7 +322,6 @@ asmlinkage void do_spurious_interrupt_bug(struct pt_regs * regs,
  */
 asmlinkage void math_state_restore(void)
 {
-	lock_kernel();
 	__asm__ __volatile__("clts");		/* Allow maths ops (or we recurse) */
 
 /*
@@ -341,7 +334,7 @@ asmlinkage void math_state_restore(void)
  */
 #ifndef __SMP__
 	if (last_task_used_math == current)
-		goto out;
+		return;
 	if (last_task_used_math)
 		__asm__("fnsave %0":"=m" (last_task_used_math->tss.i387));
 	else
@@ -360,10 +353,6 @@ asmlinkage void math_state_restore(void)
 		current->used_math = 1;
 	}
 	current->flags|=PF_USEDFPU;		/* So we fnsave on switch_to() */
-#ifndef __SMP__
-out:
-#endif
-	unlock_kernel();
 }
 
 #ifndef CONFIG_MATH_EMULATION

@@ -36,6 +36,7 @@ extern struct net_proto_family inet_family_ops;
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
 #include <linux/in6.h>
 #include <net/ndisc.h>
+#include <net/dst.h>
 #include <net/transp_v6.h>
 #endif
 
@@ -121,6 +122,11 @@ EXPORT_SYMBOL(neigh_lookup);
 EXPORT_SYMBOL(ntbl_walk_table);
 EXPORT_SYMBOL(neigh_tbl_run_bh);
 
+/*	dst_entry	*/
+EXPORT_SYMBOL(dst_alloc);
+EXPORT_SYMBOL(__dst_free);
+EXPORT_SYMBOL(dst_total);
+
 /* Needed by smbfs.o */
 EXPORT_SYMBOL(__scm_destroy);
 EXPORT_SYMBOL(__scm_send);
@@ -135,6 +141,10 @@ EXPORT_SYMBOL(destroy_EII_client);
 #ifdef CONFIG_ATALK_MODULE
 EXPORT_SYMBOL(sklist_destroy_socket);
 EXPORT_SYMBOL(sklist_insert_socket);
+#endif
+
+#ifdef CONFIG_SMB_FS_MODULE
+EXPORT_SYMBOL(scm_detach_fds);
 #endif
 
 #ifdef CONFIG_INET
@@ -182,7 +192,6 @@ EXPORT_SYMBOL(destroy_sock);
 EXPORT_SYMBOL(ip_queue_xmit);
 EXPORT_SYMBOL(csum_partial);
 EXPORT_SYMBOL(dev_lockct);
-EXPORT_SYMBOL(ndisc_eth_hook);
 EXPORT_SYMBOL(memcpy_fromiovecend);
 EXPORT_SYMBOL(csum_partial_copy_fromiovecend);
 EXPORT_SYMBOL(__release_sock);
@@ -218,7 +227,7 @@ EXPORT_SYMBOL(tcp_v4_rebuild_header);
 EXPORT_SYMBOL(tcp_v4_send_check);
 EXPORT_SYMBOL(tcp_v4_conn_request);
 EXPORT_SYMBOL(tcp_v4_syn_recv_sock);
-EXPORT_SYMBOL(tcp_v4_backlog_rcv);
+EXPORT_SYMBOL(tcp_v4_do_rcv);
 EXPORT_SYMBOL(tcp_v4_connect);
 EXPORT_SYMBOL(__ip_chk_addr);
 EXPORT_SYMBOL(net_reset_timer);
@@ -277,6 +286,7 @@ EXPORT_SYMBOL(register_netdev);
 EXPORT_SYMBOL(unregister_netdev);
 EXPORT_SYMBOL(ether_setup);
 EXPORT_SYMBOL(dev_new_index);
+EXPORT_SYMBOL(dev_get_by_index);
 EXPORT_SYMBOL(eth_type_trans);
 EXPORT_SYMBOL(eth_copy_and_sum);
 EXPORT_SYMBOL(alloc_skb);

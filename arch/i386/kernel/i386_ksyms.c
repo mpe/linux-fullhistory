@@ -5,10 +5,12 @@
 #include <linux/elfcore.h>
 #include <linux/mca.h>
 #include <linux/sched.h>
+#include <linux/in6.h>
 
 #include <asm/semaphore.h>
 #include <asm/processor.h>
 #include <asm/uaccess.h>
+#include <asm/checksum.h>
 #include <asm/io.h>
 
 extern void dump_thread(struct pt_regs *, struct user *);
@@ -25,7 +27,11 @@ EXPORT_SYMBOL(dump_fpu);
 EXPORT_SYMBOL(ioremap);
 EXPORT_SYMBOL(iounmap);
 EXPORT_SYMBOL_NOVERS(__down_failed);
+EXPORT_SYMBOL_NOVERS(__down_failed_interruptible);
 EXPORT_SYMBOL_NOVERS(__up_wakeup);
+
+/* Networking helper routines. */
+EXPORT_SYMBOL(csum_partial_copy);
 
 #ifdef __SMP__
 EXPORT_SYMBOL(apic_reg);	/* Needed internally for the I386 inlines */

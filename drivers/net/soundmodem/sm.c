@@ -37,6 +37,7 @@
  *   0.1  21.09.96  Started
  *        18.10.96  Changed to new user space access routines (copy_{to,from}_user)
  *   0.4  21.01.97  Separately compileable soundcard/modem modules
+ *   0.5  03.03.97  fixed LPT probing (check_lpt result was interpreted the wrong way round)
  */
 
 /*****************************************************************************/
@@ -101,13 +102,13 @@ extern inline int copy_to_user(void *to, const void *from, unsigned long n)
 
 /* --------------------------------------------------------------------- */
 
-static const char sm_drvname[] = "soundmodem";
+const char sm_drvname[] = "soundmodem";
 static const char sm_drvinfo[] = KERN_INFO "soundmodem: (C) 1996 Thomas Sailer, HB9JNX/AE4WA\n"
-KERN_INFO "soundmodem: version 0.4 compiled " __TIME__ " " __DATE__ "\n";
+KERN_INFO "soundmodem: version 0.5 compiled " __TIME__ " " __DATE__ "\n";
 
 /* --------------------------------------------------------------------- */
 
-static const struct modem_tx_info *sm_modem_tx_table[] = {
+const struct modem_tx_info *sm_modem_tx_table[] = {
 #ifdef CONFIG_SOUNDMODEM_AFSK1200
 	&sm_afsk1200_tx,
 #endif /* CONFIG_SOUNDMODEM_AFSK1200 */
@@ -130,7 +131,7 @@ static const struct modem_tx_info *sm_modem_tx_table[] = {
 	NULL
 };
 
-static const struct modem_rx_info *sm_modem_rx_table[] = {
+const struct modem_rx_info *sm_modem_rx_table[] = {
 #ifdef CONFIG_SOUNDMODEM_AFSK1200
 	&sm_afsk1200_rx,
 #endif /* CONFIG_SOUNDMODEM_AFSK1200 */
@@ -227,6 +228,11 @@ static struct {
 /* --------------------------------------------------------------------- */
 /*
  * ===================== port checking routines ========================
+ */
+
+/*
+ * returns 0 if ok and != 0 on error;
+ * the same behaviour as par96_check_lpt in baycom.c
  */
 
 static int check_lpt(unsigned int iobase)
@@ -367,7 +373,7 @@ static void sm_output_open(struct sm_state *sm)
 	}
 	if (sm->hdrv.ptt_out.pariobase > 0 &&
 	    sm->hdrv.ptt_out.pariobase <= 0x1000-LPT_EXTENT &&
-	    check_lpt(sm->hdrv.ptt_out.pariobase)) {
+	    !check_lpt(sm->hdrv.ptt_out.pariobase)) {
 		sm->hdrv.ptt_out.flags |= SP_PAR;
 		request_region(sm->hdrv.ptt_out.pariobase, LPT_EXTENT, "sm par ptt");
 	}

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	@(#)tcp_input.c	1.0.16	05/25/93
+ * Version:	$Id: tcp_output.c,v 1.31 1997/03/16 07:03:07 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -103,13 +103,13 @@ int tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 	/*
 	 *	length of packet (not counting length of pre-tcp headers) 
 	 */
-	 
+
 	size = skb->len - ((unsigned char *) th - skb->data);
 
 	/*
-	 *	Sanity check it.. 
+	 *	Sanity check it..
 	 */
-	 
+
 	if (size < sizeof(struct tcphdr) || size > skb->len) 
 	{
 		printk("tcp_send_skb: bad skb (skb = %p, data = %p, th = %p, len = %u)\n",
@@ -122,8 +122,8 @@ int tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 	 *	If we have queued a header size packet.. (these crash a few
 	 *	tcp stacks if ack is not set)
 	 */
-	 
-	if (size == sizeof(struct tcphdr)) 
+
+	if (size == sizeof(struct tcphdr))
 	{
 		/* 
                  * If it's got a syn or fin discard
@@ -136,35 +136,15 @@ int tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 		}
 	}
 
-
 	/*
 	 *	Actual processing.
 	 */
-	 
-	tcp_statistics.TcpOutSegs++;  
 	skb->seq = ntohl(th->seq);
 	skb->end_seq = skb->seq + size - 4*th->doff;
 
-	
-	if (tp->send_head || !tcp_snd_test(sk, skb))
-	{
-		/* 
-		 * Remember where we must start sending
-		 */
+	skb_queue_tail(&sk->write_queue, skb);
 
-		if (tp->send_head == NULL)
-			tp->send_head = skb;
-
-		skb_queue_tail(&sk->write_queue, skb);
-
-		if (sk->packets_out == 0 && !tp->pending)
-		{
-			tp->pending = TIME_PROBE0;
-			tcp_reset_xmit_timer(sk, TIME_PROBE0, tp->rto);
-		}
-
-	}
-	else
+	if (tp->send_head == NULL && tcp_snd_test(sk, skb))
 	{
 		struct sk_buff * buff;
 
@@ -172,28 +152,47 @@ int tcp_send_skb(struct sock *sk, struct sk_buff *skb)
 		 *	This is going straight out
 		 */
 
-		skb_queue_tail(&sk->write_queue, skb);
-
-		clear_delayed_acks(sk);
-		 
 		th->ack_seq = htonl(tp->rcv_nxt);
 		th->window = htons(tcp_select_window(sk));
 
 		tp->af_specific->send_check(sk, th, size, skb);
 
-		tp->snd_nxt = skb->end_seq;
+		buff = skb_clone(skb, GFP_KERNEL);
+
+		if (buff == NULL)
+		{
+			goto queue;
+		}
 		
+		clear_delayed_acks(sk);
+		skb_set_owner_w(buff, sk);
+
+		tp->snd_nxt = skb->end_seq;
 		atomic_inc(&sk->packets_out);
 
 		skb->when = jiffies;
-		
-		buff = skb_clone(skb, GFP_ATOMIC);
-		skb_set_owner_w(buff, sk);
 
+		tcp_statistics.TcpOutSegs++;
 		tp->af_specific->queue_xmit(buff);
 
 		if (!tcp_timer_is_set(sk, TIME_RETRANS))
 			tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
+
+		return 0;
+	}
+
+queue:
+	/* 
+	 *	Remember where we must start sending
+	 */
+
+	if (tp->send_head == NULL)
+		tp->send_head = skb;
+
+	if (sk->packets_out == 0 && !tp->pending)
+	{
+		tp->pending = TIME_PROBE0;
+		tcp_reset_xmit_timer(sk, TIME_PROBE0, tp->rto);
 	}
 
 	return 0;
@@ -327,9 +326,9 @@ static int tcp_wrxmit_frag(struct sock *sk, struct sk_buff *skb, int size)
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 	
-	printk(KERN_DEBUG "tcp_write_xmit: frag needed size=%d mss=%d\n", 
-	       size, sk->mss);
-				
+	SOCK_DEBUG(sk, "tcp_write_xmit: frag needed size=%d mss=%d\n",
+		   size, sk->mss);
+
 	if (tcp_fragment(sk, skb, sk->mss))
 	{
 		/* !tcp_frament Failed! */
@@ -358,13 +357,13 @@ static int tcp_wrxmit_frag(struct sock *sk, struct sk_buff *skb, int size)
 void tcp_write_xmit(struct sock *sk)
 {
 	struct sk_buff *skb;
-	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;	
+	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 	u16 rcv_wnd;
 	int sent_pkts = 0;
 
 	/*
 	 *	The bytes will have to remain here. In time closedown will
-	 *	empty the write queue and all will be happy 
+	 *	empty the write queue and all will be happy
 	 */
 
 	if(sk->zapped)
@@ -379,10 +378,8 @@ void tcp_write_xmit(struct sock *sk)
 	 *	c) not retransmiting [Nagle]
 	 */
 
-	lock_sock(sk);
-
 	rcv_wnd = htons(tcp_select_window(sk));
-	
+
 	while((skb = tp->send_head) && tcp_snd_test(sk, skb))
 	{
 		struct tcphdr *th;
@@ -392,33 +389,25 @@ void tcp_write_xmit(struct sock *sk)
 		IS_SKB(skb);
 
 		/*
-		 *	See if we really need to send the packet. 
+		 *	See if we really need to send the packet.
+		 *	(debugging code)
 		 */
-		 
-		if (!after(skb->end_seq, tp->snd_una)) 
+
+		if (!after(skb->end_seq, tp->snd_una))
 		{
 			tcp_wrxmit_prob(sk, skb);
 			continue;
 		} 
 
 
-		/* 
-		 * Advance the send_head
-		 * This one is going out.
+		/*
+		 *	Put in the ack seq and window at this point rather
+		 *	than earlier, in order to keep them monotonic.
+		 *	We really want to avoid taking back window allocations.
+		 *	That's legal, but RFC1122 says it's frowned on.
+		 *	Ack and window will in general have changed since
+		 *	this packet was put on the write queue.
 		 */
-
-		update_send_head(sk);
-
-		atomic_inc(&sk->packets_out);
-
-
-/*
- * put in the ack seq and window at this point rather than earlier,
- * in order to keep them monotonic.  We really want to avoid taking
- * back window allocations.  That's legal, but RFC1122 says it's frowned on.
- * Ack and window will in general have changed since this packet was put
- * on the write queue.
- */
 
 		th = skb->h.th;
 		size = skb->len - (((unsigned char *) th) - skb->data);
@@ -438,27 +427,36 @@ void tcp_write_xmit(struct sock *sk)
 		if (before(skb->end_seq, tp->snd_nxt))
 			printk(KERN_DEBUG "tcp_write_xmit:"
 			       " sending already sent seq\n");
-#endif		
+#endif
+
+		buff = skb_clone(skb, GFP_ATOMIC);
+
+		if (buff == NULL)
+			break;
+
+		/*
+		 *	Advance the send_head. This one is going out.
+		 */
+
+		update_send_head(sk);
+		clear_delayed_acks(sk);
+
+		atomic_inc(&sk->packets_out);
+		skb_set_owner_w(buff, sk);
 
 		tp->snd_nxt = skb->end_seq;
 
 		skb->when = jiffies;
-		clear_delayed_acks(sk);
-
-		buff = skb_clone(skb, GFP_ATOMIC);
-		skb_set_owner_w(buff, sk);
 
 		sent_pkts = 1;
 		tp->af_specific->queue_xmit(buff);
 
 	}
-	
+
 	if (sent_pkts && !tcp_timer_is_set(sk, TIME_RETRANS))
 	{
 		tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
 	}
-
-	release_sock(sk);
 }
 
 
@@ -639,8 +637,6 @@ void tcp_do_retransmit(struct sock *sk, int all)
 	int ct=0;
 	struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 
-	lock_sock(sk);
-
 	if (tp->retrans_head == NULL)
 		tp->retrans_head = skb_peek(&sk->write_queue);
 
@@ -651,7 +647,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 	{
 		struct sk_buff *buff;
 		struct tcphdr *th;
-		int tcp_size;			
+		int tcp_size;
 		int size;
 
 		IS_SKB(skb);
@@ -696,6 +692,7 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		}
 
 		SOCK_DEBUG(sk, "retransmit sending\n");
+
 		/*
 		 *	update ack and window
 		 */
@@ -707,7 +704,11 @@ void tcp_do_retransmit(struct sock *sk, int all)
 		tp->af_specific->send_check(sk, th, size, skb);
 
 		skb->when = jiffies;
+
 		buff = skb_clone(skb, GFP_ATOMIC);
+
+		if (buff == NULL)
+			break;
 		skb_set_owner_w(buff, sk);
 
 		clear_delayed_acks(sk);
@@ -749,8 +750,6 @@ void tcp_do_retransmit(struct sock *sk, int all)
 			tp->retrans_head = NULL;
 		}
 	}
-
-	release_sock(sk);
 }
 
 /*
@@ -825,7 +824,7 @@ void tcp_send_fin(struct sock *sk)
 	tp->af_specific->send_check(sk, t1, sizeof(*t1), buff);
 
 	/*
-	 * The fin can only be transmited after the data.
+	 *	The fin can only be transmited after the data.
  	 */
  	
 	skb_queue_tail(&sk->write_queue, buff);
@@ -839,9 +838,12 @@ void tcp_send_fin(struct sock *sk)
 		buff->when = jiffies;
 
 		skb1 = skb_clone(buff, GFP_KERNEL);
-		skb_set_owner_w(skb1, sk);
 
-		tp->af_specific->queue_xmit(skb1);
+		if (skb1)
+		{
+			skb_set_owner_w(skb1, sk);
+			tp->af_specific->queue_xmit(skb1);
+		}
 
                 if (!tcp_timer_is_set(sk, TIME_RETRANS))
 			tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
@@ -901,20 +903,21 @@ int tcp_send_synack(struct sock *sk)
 	tp->af_specific->send_check(sk, th, sizeof(*th)+4, skb);
 
 	skb_queue_tail(&sk->write_queue, skb);
-
-	atomic_inc(&sk->packets_out);
 	
-	skb->when = jiffies;
 	buff = skb_clone(skb, GFP_ATOMIC);
 
-	skb_set_owner_w(buff, sk);
+	if (buff)
+	{
+		skb_set_owner_w(buff, sk);
 
-	tp->af_specific->queue_xmit(buff);
+		atomic_inc(&sk->packets_out);
+		skb->when = jiffies;
 
-	tcp_reset_xmit_timer(sk, TIME_RETRANS, TCP_TIMEOUT_INIT);
+		tp->af_specific->queue_xmit(buff);
+		tcp_statistics.TcpOutSegs++;
 
-	tcp_statistics.TcpOutSegs++;
-
+		tcp_reset_xmit_timer(sk, TIME_RETRANS, TCP_TIMEOUT_INIT);
+	}
 	return 0;
 }
 
@@ -1029,8 +1032,11 @@ void tcp_send_ack(struct sock *sk)
 
 	tp->af_specific->send_check(sk, th, sizeof(struct tcphdr), buff);
 
-	SOCK_DEBUG(sk, "\rtcp_send_ack: seq %x ack %x\n", tp->snd_nxt, tp->rcv_nxt);
+	SOCK_DEBUG(sk, "\rtcp_send_ack: seq %x ack %x\n",
+		   tp->snd_nxt, tp->rcv_nxt);
+
 	tp->af_specific->queue_xmit(buff);
+
   	tcp_statistics.TcpOutSegs++;
 }
 
@@ -1096,7 +1102,10 @@ void tcp_write_wakeup(struct sock *sk)
 					    skb);
 
 		buff = skb_clone(skb, GFP_ATOMIC);
-
+		if (buff == NULL)
+		{
+			return;
+		}
 		skb_set_owner_w(buff, sk);
 		atomic_inc(&sk->packets_out);
 
@@ -1122,10 +1131,10 @@ void tcp_write_wakeup(struct sock *sk)
 		/*
 		 *	Put in the IP header and routing stuff. 
 		 */
-		 
+
 		tmp = tp->af_specific->build_net_header(sk, buff);
 
-		if (tmp < 0) 
+		if (tmp < 0)
 		{
 			kfree_skb(buff, FREE_WRITE);
 			return;
@@ -1143,9 +1152,9 @@ void tcp_write_wakeup(struct sock *sk)
 /*		t1->fin = 0;	-- We are sending a 'previous' sequence, and 0 bytes of data - thus no FIN bit */
 		t1->ack_seq = htonl(tp->rcv_nxt);
 		t1->window = htons(tcp_select_window(sk));
-		
+
 		tp->af_specific->send_check(sk, t1, sizeof(*t1), buff);
-	}		
+	}
 
 	/*
 	 *	Send it.

@@ -31,6 +31,7 @@
 #include <linux/types.h>
 #include <linux/socket.h>
 #include <linux/in.h>
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
@@ -45,26 +46,83 @@
 #include <asm/system.h>
 #include <net/br.h>
 
+static void transmit_config(int port_no);
+static int root_bridge(void);
+static int supersedes_port_info(int port_no, Config_bpdu *config);
+static void record_config_information(int port_no, Config_bpdu *config);
+static void record_config_timeout_values(Config_bpdu *config);
+static void config_bpdu_generation(void);
+static int designated_port(int port_no);
+static void reply(int port_no);
+static void transmit_tcn(void);
+static void configuration_update(void);
+static void root_selection(void);
+static void designated_port_selection(void);
+static void become_designated_port(int port_no);
+static void port_state_selection(void);
+static void make_forwarding(int port_no);
+static void topology_change_detection(void);
+static void topology_change_acknowledged(void);
+static void acknowledge_topology_change(int port_no);
+static void make_blocking(int port_no);
+static void set_port_state(int port_no, int state);
+static void received_config_bpdu(int port_no, Config_bpdu *config);
+static void received_tcn_bpdu(int port_no, Tcn_bpdu *tcn);
+static void hello_timer_expiry(void);
+static void message_age_timer_expiry(int port_no);
+static void forward_delay_timer_expiry(int port_no);
+static int designated_for_some_port(void);
+static void tcn_timer_expiry(void);
+static void topology_change_timer_expiry(void);
+static void hold_timer_expiry(int port_no);
+static void br_init_port(int port_no);
+static void enable_port(int port_no);
+static void disable_port(int port_no);
+static void set_bridge_priority(bridge_id_t *new_bridge_id);
+static void set_port_priority(int port_no, unsigned short new_port_id);
+static void set_path_cost(int port_no, unsigned short path_cost);
+static void start_hello_timer(void);
+static void stop_hello_timer(void);
+static int hello_timer_expired(void);
+static void start_tcn_timer(void);
+static void stop_tcn_timer(void);
+static int tcn_timer_expired(void);
+static void start_topology_change_timer(void);
+static void stop_topology_change_timer(void);
+static int topology_change_timer_expired(void);
+static void start_message_age_timer(int port_no, unsigned short message_age);
+static void stop_message_age_timer(int port_no);
+static int message_age_timer_expired(int port_no);
+static void start_forward_delay_timer(int port_no);
+static void stop_forward_delay_timer(int port_no);
+static int forward_delay_timer_expired(int port_no);
+static void start_hold_timer(int port_no);
+static void stop_hold_timer(int port_no);
+static int hold_timer_expired(int port_no);
 static int br_device_event(struct notifier_block *dnot, unsigned long event, void *ptr);
 static void br_tick(unsigned long arg);
-int br_forward(struct sk_buff *skb, int port);	/* 3.7 */
-int br_port_cost(struct device *dev);	/* 4.10.2 */
-void br_bpdu(struct sk_buff *skb); /* consumes skb */
-int br_tx_frame(struct sk_buff *skb);
-int br_cmp(unsigned int *a, unsigned int *b);
+static int br_forward(struct sk_buff *skb, int port);	/* 3.7 */
+static int br_port_cost(struct device *dev);	/* 4.10.2 */
+static void br_bpdu(struct sk_buff *skb); /* consumes skb */
+static int br_cmp(unsigned int *a, unsigned int *b);
+static int send_tcn_bpdu(int port_no, Tcn_bpdu *bpdu);
+static int send_config_bpdu(int port_no, Config_bpdu *config_bpdu);
+static int find_port(struct device *dev);
+static int br_flood(struct sk_buff *skb, int port);
+static int br_drop(struct sk_buff *skb);
+static int br_learn(struct sk_buff *skb, int port);	/* 3.8 */
 
-unsigned char bridge_ula[ETH_ALEN] = { 0x01, 0x80, 0xc2, 0x00, 0x00, 0x00 };
-
-Bridge_data     bridge_info;			  /* (4.5.3)	 */
+static unsigned char bridge_ula[ETH_ALEN] = { 0x01, 0x80, 0xc2, 0x00, 0x00, 0x00 };
+static Bridge_data     bridge_info;			  /* (4.5.3)	 */
 Port_data       port_info[All_ports];		  /* (4.5.5)	 */
 Config_bpdu     config_bpdu[All_ports];
 Tcn_bpdu        tcn_bpdu[All_ports];
-Timer           hello_timer;			  /* (4.5.4.1)	 */
-Timer           tcn_timer;			  /* (4.5.4.2)	 */
-Timer           topology_change_timer;		  /* (4.5.4.3)	 */
-Timer           message_age_timer[All_ports];	  /* (4.5.6.1)	 */
-Timer           forward_delay_timer[All_ports];	  /* (4.5.6.2)	 */
-Timer           hold_timer[All_ports];		  /* (4.5.6.3)	 */
+static Timer    hello_timer;			  /* (4.5.4.1)	 */
+static Timer    tcn_timer;			  /* (4.5.4.2)	 */
+static Timer    topology_change_timer;		  /* (4.5.4.3)	 */
+static Timer    message_age_timer[All_ports];	  /* (4.5.6.1)	 */
+static Timer    forward_delay_timer[All_ports];	  /* (4.5.6.2)	 */
+static Timer    hold_timer[All_ports];		  /* (4.5.6.3)	 */
 
 /* entries timeout after this many seconds */
 unsigned int fdb_aging_time = FDB_TIMEOUT; 
@@ -118,7 +176,7 @@ int br_protocol_ok(unsigned short protocol)
 
 /* Add a protocol to be handled opposite to the standard policy of the bridge */
 
-int br_add_exempt_protocol(unsigned short p)
+static int br_add_exempt_protocol(unsigned short p)
 {
 	unsigned x;
 	if (p == 0) return -EINVAL;
@@ -134,7 +192,7 @@ int br_add_exempt_protocol(unsigned short p)
 }
 
 /* Valid Policies are 0=No Protocols bridged 1=Bridge all protocols */
-int br_set_policy(int policy)
+static int br_set_policy(int policy)
 {
 	if (policy>1) return -EINVAL;
 	br_stats.policy=policy;
@@ -155,7 +213,7 @@ int br_set_policy(int policy)
  * 802.1d bridging protocol.
  */
 
-void transmit_config(int port_no)			  /* (4.6.1)	 */
+static void transmit_config(int port_no)	  /* (4.6.1)	 */
 {
 	if (hold_timer[port_no].active) {	  /* (4.6.1.3.1)	 */
 		port_info[port_no].config_pending = TRUE;	/* (4.6.1.3.1)	 */
@@ -198,13 +256,13 @@ void transmit_config(int port_no)			  /* (4.6.1)	 */
 	}
 }
 
-int root_bridge(void)
+static int root_bridge(void)
 {
 	return (br_cmp(bridge_info.designated_root.BRIDGE_ID,
 		 bridge_info.bridge_id.BRIDGE_ID)?FALSE:TRUE);
 }
 
-int supersedes_port_info(int port_no, Config_bpdu *config)	  /* (4.6.2.2)	 */
+static int supersedes_port_info(int port_no, Config_bpdu *config)	  /* (4.6.2.2)	 */
 {
 	return (
 		(br_cmp(config->root_id.BRIDGE_ID,
@@ -241,7 +299,7 @@ int supersedes_port_info(int port_no, Config_bpdu *config)	  /* (4.6.2.2)	 */
 		);
 }
 
-void record_config_information(int port_no, Config_bpdu *config)	  /* (4.6.2)	 */
+static void record_config_information(int port_no, Config_bpdu *config)	  /* (4.6.2)	 */
 {
 	port_info[port_no].designated_root = config->root_id;	/* (4.6.2.3.1)   */
 	port_info[port_no].designated_cost = config->root_path_cost;
@@ -250,7 +308,7 @@ void record_config_information(int port_no, Config_bpdu *config)	  /* (4.6.2)	 *
 	start_message_age_timer(port_no, config->message_age);	/* (4.6.2.3.2)   */
 }
 
-void record_config_timeout_values(Config_bpdu *config)		  /* (4.6.3)	 */
+static void record_config_timeout_values(Config_bpdu *config)		  /* (4.6.3)	 */
 {
 	bridge_info.max_age = config->max_age;	  /* (4.6.3.3)	 */
 	bridge_info.hello_time = config->hello_time;
@@ -259,7 +317,7 @@ void record_config_timeout_values(Config_bpdu *config)		  /* (4.6.3)	 */
 		bridge_info.top_change = 1;
 }
 
-void config_bpdu_generation(void)
+static void config_bpdu_generation(void)
 {						  /* (4.6.4)	 */
 	int             port_no;
 	for (port_no = One; port_no <= No_of_ports; port_no++) {	/* (4.6.4.3) */
@@ -272,7 +330,7 @@ void config_bpdu_generation(void)
 	}
 }
 
-int designated_port(int port_no)
+static int designated_port(int port_no)
 {
 	return ((br_cmp(port_info[port_no].designated_bridge.BRIDGE_ID,
 		 bridge_info.bridge_id.BRIDGE_ID) == 0
@@ -284,12 +342,12 @@ int designated_port(int port_no)
 		);
 }
 
-void reply(int port_no)					  /* (4.6.5)	 */
+static void reply(int port_no)					  /* (4.6.5)	 */
 {
 	transmit_config(port_no);		  /* (4.6.5.3)	 */
 }
 
-void transmit_tcn(void)
+static void transmit_tcn(void)
 {						  /* (4.6.6)	 */
 	int             port_no;
 
@@ -298,7 +356,7 @@ void transmit_tcn(void)
 	send_tcn_bpdu(port_no, &tcn_bpdu[bridge_info.root_port]);	/* (4.6.6.3)     */
 }
 
-void configuration_update(void)	/* (4.6.7) */
+static void configuration_update(void)	/* (4.6.7) */
 {
 	root_selection();			  /* (4.6.7.3.1)	 */
 	/* (4.6.8.2)	 */
@@ -306,7 +364,7 @@ void configuration_update(void)	/* (4.6.7) */
 	/* (4.6.9.2)	 */
 }
 
-void root_selection(void)
+static void root_selection(void)
 {						  /* (4.6.8) */
 	int             root_port;
 	int             port_no;
@@ -386,7 +444,7 @@ void root_selection(void)
 	}
 }
 
-void designated_port_selection(void)
+static void designated_port_selection(void)
 {						  /* (4.6.9)	 */
 	int             port_no;
 
@@ -423,7 +481,7 @@ void designated_port_selection(void)
 	}
 }
 
-void become_designated_port(int port_no)
+static void become_designated_port(int port_no)
 {						  /* (4.6.10)	 */
 
 	/* (4.6.10.3.1) */
@@ -436,7 +494,7 @@ void become_designated_port(int port_no)
 	port_info[port_no].designated_port = port_info[port_no].port_id;
 }
 
-void port_state_selection(void)
+static void port_state_selection(void)
 {						  /* (4.6.11) */
 	int             port_no;
 	for (port_no = One; port_no <= No_of_ports; port_no++) {
@@ -456,7 +514,7 @@ void port_state_selection(void)
 
 }
 
-void make_forwarding(int port_no)
+static void make_forwarding(int port_no)
 {						  /* (4.6.12) */
 	if (port_info[port_no].state == Blocking) {	/* (4.6.12.3) */
 		set_port_state(port_no, Listening);	/* (4.6.12.3.1) */
@@ -464,7 +522,7 @@ void make_forwarding(int port_no)
 	}
 }
 
-void topology_change_detection(void)
+static void topology_change_detection(void)
 {						  /* (4.6.14)       */
 	if (root_bridge()) {			  /* (4.6.14.3.1)   */
 		bridge_info.top_change = 1;
@@ -476,19 +534,19 @@ void topology_change_detection(void)
 	bridge_info.top_change = 1;
 }
 
-void topology_change_acknowledged(void)
+static void topology_change_acknowledged(void)
 {						  /* (4.6.15) */
 	bridge_info.top_change_detected = 0;
 	stop_tcn_timer();			  /* (4.6.15.3.2) */
 }
 
-void acknowledge_topology_change(int port_no)
+static void acknowledge_topology_change(int port_no)
 {						  /* (4.6.16) */
 	port_info[port_no].top_change_ack = 1;
 	transmit_config(port_no);		  /* (4.6.16.3.2) */
 }
 
-void make_blocking(int port_no)				  /* (4.6.13)	 */
+static void make_blocking(int port_no)				  /* (4.6.13)	 */
 {
 
 	if ((port_info[port_no].state != Disabled)
@@ -508,12 +566,12 @@ void make_blocking(int port_no)				  /* (4.6.13)	 */
 	}
 }
 
-void set_port_state(int port_no, int state)
+static void set_port_state(int port_no, int state)
 {
 	port_info[port_no].state = state;
 }
 
-void received_config_bpdu(int port_no, Config_bpdu *config)		  /* (4.7.1)	 */
+static void received_config_bpdu(int port_no, Config_bpdu *config)		  /* (4.7.1)	 */
 {
 	int         root;
 
@@ -550,7 +608,7 @@ void received_config_bpdu(int port_no, Config_bpdu *config)		  /* (4.7.1)	 */
 	}
 }
 
-void received_tcn_bpdu(int port_no, Tcn_bpdu *tcn)			  /* (4.7.2)	 */
+static void received_tcn_bpdu(int port_no, Tcn_bpdu *tcn)			  /* (4.7.2)	 */
 {
 	if (port_info[port_no].state != Disabled) {
 		if (designated_port(port_no)) {
@@ -561,13 +619,13 @@ void received_tcn_bpdu(int port_no, Tcn_bpdu *tcn)			  /* (4.7.2)	 */
 	}
 }
 
-void hello_timer_expiry(void)
+static void hello_timer_expiry(void)
 {						  /* (4.7.3)	 */
 	config_bpdu_generation();		  /* (4.6.4.2.2)	 */
 	start_hello_timer();
 }
 
-void message_age_timer_expiry(int port_no)		  /* (4.7.4)	 */
+static void message_age_timer_expiry(int port_no) /* (4.7.4)	 */
 {
 	int         root;
 	root = root_bridge();
@@ -592,7 +650,7 @@ void message_age_timer_expiry(int port_no)		  /* (4.7.4)	 */
 	}
 }
 
-void forward_delay_timer_expiry(int port_no)		  /* (4.7.5)	 */
+static void forward_delay_timer_expiry(int port_no)	/* (4.7.5)	 */
 {
 	if (port_info[port_no].state == Listening) {	/* (4.7.5.1)	 */
 		set_port_state(port_no, Learning);	/* (4.7.5.1.1)	 */
@@ -606,7 +664,7 @@ void forward_delay_timer_expiry(int port_no)		  /* (4.7.5)	 */
 	}
 }
 
-int designated_for_some_port(void)
+static int designated_for_some_port(void)
 {
 	int             port_no;
 
@@ -621,20 +679,20 @@ int designated_for_some_port(void)
 	return (FALSE);
 }
 
-void tcn_timer_expiry(void)
+static void tcn_timer_expiry(void)
 {						  /* (4.7.6)	 */
 	transmit_tcn();				  /* (4.7.6.1)	 */
 	start_tcn_timer();			  /* (4.7.6.2)	 */
 }
 
-void topology_change_timer_expiry(void)
+static void topology_change_timer_expiry(void)
 {						  /* (4.7.7)	 */
 	bridge_info.top_change_detected = 0;
 	bridge_info.top_change = 0;
 	  /* (4.7.7.2)	 */
 }
 
-void hold_timer_expiry(int port_no)			  /* (4.7.8)	 */
+static void hold_timer_expiry(int port_no)	  /* (4.7.8)	 */
 {
 	if (port_info[port_no].config_pending) {
 		transmit_config(port_no);	  /* (4.7.8.1)	 */
@@ -682,7 +740,7 @@ void br_init(void)
 	/*start_hello_timer();*/
 }
 
-void br_init_port(int port_no)
+static void br_init_port(int port_no)
 {
 	become_designated_port(port_no);	  /* (4.8.1.4.1) */
 	set_port_state(port_no, Blocking);	  /* (4.8.1.4.2)    */
@@ -693,13 +751,13 @@ void br_init_port(int port_no)
 	stop_hold_timer(port_no);		  /* (4.8.1.4.7)	 */
 }
 
-void enable_port(int port_no)				  /* (4.8.2)	 */
+static void enable_port(int port_no)				  /* (4.8.2)	 */
 {
 	br_init_port(port_no);
 	port_state_selection();			  /* (4.8.2.7)	 */
 }						  /* */
 
-void disable_port(int port_no)				  /* (4.8.3)	 */
+static void disable_port(int port_no)				  /* (4.8.3)	 */
 {
 	int         root;
 
@@ -724,7 +782,8 @@ void disable_port(int port_no)				  /* (4.8.3)	 */
 }
 
 
-void set_bridge_priority(bridge_id_t *new_bridge_id)		  /* (4.8.4)	 */
+static void set_bridge_priority(bridge_id_t *new_bridge_id)
+                                 		  /* (4.8.4)	 */
 {
 
 	int         root;
@@ -750,7 +809,8 @@ void set_bridge_priority(bridge_id_t *new_bridge_id)		  /* (4.8.4)	 */
 	}
 }
 
-void set_port_priority(int port_no, unsigned short new_port_id)		  /* (4.8.5)	 */
+static void set_port_priority(int port_no, unsigned short new_port_id)
+                                  		  /* (4.8.5)	 */
 {
 	if (designated_port(port_no)) {		  /* (4.8.5.2)	 */
 		port_info[port_no].designated_port = new_port_id;
@@ -770,7 +830,8 @@ void set_port_priority(int port_no, unsigned short new_port_id)		  /* (4.8.5)	 *
 	}
 }
 
-void set_path_cost(int port_no, unsigned short path_cost)		  /* (4.8.6)	 */
+static void set_path_cost(int port_no, unsigned short path_cost)
+                                                  /* (4.8.6)	 */
 {
 	port_info[port_no].path_cost = path_cost; /* (4.8.6.1)	 */
 	configuration_update();			  /* (4.8.6.2)	 */
@@ -807,18 +868,18 @@ static void br_tick(unsigned long arg)
 	add_timer(&tl);
 }
 
-void start_hello_timer(void)
+static void start_hello_timer(void)
 {
 	hello_timer.value = 0;
 	hello_timer.active = TRUE;
 }
 
-void stop_hello_timer(void)
+static void stop_hello_timer(void)
 {
 	hello_timer.active = FALSE;
 }
 
-int hello_timer_expired(void)
+static int hello_timer_expired(void)
 {
 	if (hello_timer.active && (++hello_timer.value >= bridge_info.hello_time)) {
 		hello_timer.active = FALSE;
@@ -827,18 +888,18 @@ int hello_timer_expired(void)
 	return (FALSE);
 }
 
-void start_tcn_timer(void)
+static void start_tcn_timer(void)
 {
 	tcn_timer.value = 0;
 	tcn_timer.active = TRUE;
 }
 
-void stop_tcn_timer(void)
+static void stop_tcn_timer(void)
 {
 	tcn_timer.active = FALSE;
 }
 
-int tcn_timer_expired(void)
+static int tcn_timer_expired(void)
 {
 	if (tcn_timer.active && (++tcn_timer.value >=
 				 bridge_info.bridge_hello_time)) {
@@ -849,18 +910,18 @@ int tcn_timer_expired(void)
 
 }
 
-void start_topology_change_timer(void)
+static void start_topology_change_timer(void)
 {
 	topology_change_timer.value = 0;
 	topology_change_timer.active = TRUE;
 }
 
-void stop_topology_change_timer(void)
+static void stop_topology_change_timer(void)
 {
 	topology_change_timer.active = FALSE;
 }
 
-int topology_change_timer_expired(void)
+static int topology_change_timer_expired(void)
 {
 	if (topology_change_timer.active
 			&& (++topology_change_timer.value
@@ -872,18 +933,18 @@ int topology_change_timer_expired(void)
 	return (FALSE);
 }
 
-void start_message_age_timer(int port_no, unsigned short message_age)
+static void start_message_age_timer(int port_no, unsigned short message_age)
 {
 	message_age_timer[port_no].value = message_age;
 	message_age_timer[port_no].active = TRUE;
 }
 
-void stop_message_age_timer(int port_no)
+static void stop_message_age_timer(int port_no)
 {
 	message_age_timer[port_no].active = FALSE;
 }
 
-int message_age_timer_expired(int port_no)
+static int message_age_timer_expired(int port_no)
 {
 	if (message_age_timer[port_no].active &&
 	      (++message_age_timer[port_no].value >= bridge_info.max_age)) {
@@ -893,18 +954,18 @@ int message_age_timer_expired(int port_no)
 	return (FALSE);
 }
 
-void start_forward_delay_timer(int port_no)
+static void start_forward_delay_timer(int port_no)
 {
 	forward_delay_timer[port_no].value = 0;
 	forward_delay_timer[port_no].active = TRUE;
 }
 
-void stop_forward_delay_timer(int port_no)
+static void stop_forward_delay_timer(int port_no)
 {
 	forward_delay_timer[port_no].active = FALSE;
 }
 
-int forward_delay_timer_expired(int port_no)
+static int forward_delay_timer_expired(int port_no)
 {
 		if (forward_delay_timer[port_no].active &&
 				(++forward_delay_timer[port_no].value >= bridge_info.forward_delay)) {
@@ -914,19 +975,18 @@ int forward_delay_timer_expired(int port_no)
 		return (FALSE);
 }
 
-void start_hold_timer(int port_no)
+static void start_hold_timer(int port_no)
 {
 	hold_timer[port_no].value = 0;
 	hold_timer[port_no].active = TRUE;
 }
 
-void stop_hold_timer(int port_no)
+static void stop_hold_timer(int port_no)
 {
 	hold_timer[port_no].active = FALSE;
 }
 
-
-int hold_timer_expired(int port_no)
+static int hold_timer_expired(int port_no)
 {
 	if (hold_timer[port_no].active &&
 		   (++hold_timer[port_no].value >= bridge_info.hold_time)) {
@@ -937,7 +997,7 @@ int hold_timer_expired(int port_no)
 
 }
 
-int send_config_bpdu(int port_no, Config_bpdu *config_bpdu)
+static int send_config_bpdu(int port_no, Config_bpdu *config_bpdu)
 {
 struct sk_buff *skb;
 struct device *dev = port_info[port_no].dev;
@@ -996,7 +1056,7 @@ struct ethhdr *eth;
 	return(0);
 }
 
-int send_tcn_bpdu(int port_no, Tcn_bpdu *bpdu)
+static int send_tcn_bpdu(int port_no, Tcn_bpdu *bpdu)
 {
 struct sk_buff *skb;
 struct device *dev = port_info[port_no].dev;
@@ -1281,7 +1341,7 @@ int br_tx_frame(struct sk_buff *skb)	/* 3.5 */
  * state or lack of resources...
  */
 
-int br_learn(struct sk_buff *skb, int port)	/* 3.8 */
+static int br_learn(struct sk_buff *skb, int port)	/* 3.8 */
 {
 	struct fdb *f;
 
@@ -1330,7 +1390,7 @@ int br_learn(struct sk_buff *skb, int port)	/* 3.8 */
  * this routine always consumes the frame
  */
 
-int br_drop(struct sk_buff *skb)
+static int br_drop(struct sk_buff *skb)
 {
 	kfree_skb(skb, 0);
 	return(1);
@@ -1340,7 +1400,7 @@ int br_drop(struct sk_buff *skb)
  * this routine always consumes the frame
  */
 
-int br_dev_drop(struct sk_buff *skb)
+static int br_dev_drop(struct sk_buff *skb)
 {
 	dev_kfree_skb(skb, 0);
 	return(1);
@@ -1355,7 +1415,7 @@ int br_dev_drop(struct sk_buff *skb)
  * if not...
  */
 
-int br_forward(struct sk_buff *skb, int port)	/* 3.7 */
+static int br_forward(struct sk_buff *skb, int port)	/* 3.7 */
 {
 	struct fdb *f;
 	
@@ -1438,7 +1498,7 @@ int br_forward(struct sk_buff *skb, int port)	/* 3.7 */
  * consumes the original frame.
  */
 	
-int br_flood(struct sk_buff *skb, int port)
+static int br_flood(struct sk_buff *skb, int port)
 {
 	int i;
 	struct sk_buff *nskb;
@@ -1469,7 +1529,7 @@ int br_flood(struct sk_buff *skb, int port)
 	return(0);
 }
 
-int find_port(struct device *dev)
+static int find_port(struct device *dev)
 {
 	int i;
 
@@ -1480,7 +1540,7 @@ int find_port(struct device *dev)
 	return(0);
 }
 
-int br_port_cost(struct device *dev)	/* 4.10.2 */
+static int br_port_cost(struct device *dev)	/* 4.10.2 */
 {
 	if (strncmp(dev->name, "eth", 3) == 0)	/* ethernet */
 		return(100);
@@ -1495,7 +1555,7 @@ int br_port_cost(struct device *dev)	/* 4.10.2 */
  * this routine always consumes the skb 
  */
 
-void br_bpdu(struct sk_buff *skb) /* consumes skb */
+static void br_bpdu(struct sk_buff *skb) /* consumes skb */
 {
 	Tcn_bpdu *bpdu;
 	int port;
@@ -1624,7 +1684,7 @@ int br_ioctl(unsigned int cmd, void *arg)
 	return 0;
 }
 
-int br_cmp(unsigned int *a, unsigned int *b)
+static int br_cmp(unsigned int *a, unsigned int *b)
 {
 	int i;	
 	for (i=0; i<2; i++) 
@@ -1638,4 +1698,3 @@ int br_cmp(unsigned int *a, unsigned int *b)
 	}
 	return(0);
 }
-

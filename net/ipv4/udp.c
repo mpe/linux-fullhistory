@@ -111,6 +111,7 @@
 #include <net/icmp.h>
 #include <net/route.h>
 #include <net/checksum.h>
+#include <linux/ipsec.h>
 
 /*
  *	Snmp MIB for the UDP layer
@@ -123,21 +124,28 @@ struct sock *udp_hash[UDP_HTABLE_SIZE];
 static int udp_v4_verify_bind(struct sock *sk, unsigned short snum)
 {
 	struct sock *sk2;
-	int retval = 0;
+	int retval = 0, sk_reuse = sk->reuse;
 
 	SOCKHASH_LOCK();
 	for(sk2 = udp_hash[snum & (UDP_HTABLE_SIZE - 1)]; sk2 != NULL; sk2 = sk2->next) {
 		if((sk2->num == snum) && (sk2 != sk)) {
+			unsigned char state = sk2->state;
+			int sk2_reuse = sk2->reuse;
+
 			if(!sk2->rcv_saddr || !sk->rcv_saddr) {
-				if(sk->reuse && sk->reuse && (sk2->state != TCP_LISTEN))
-					continue;
-				retval = 1;
-				break;
-			}
-			if((sk2->rcv_saddr == sk->rcv_saddr) &&
-			   (!sk->reuse || !sk2->reuse || (sk2->state == TCP_LISTEN))) {
-				retval = 1;
-				break;
+				if((!sk2_reuse)			||
+				   (!sk_reuse)			||
+				   (state == TCP_LISTEN)) {
+					retval = 1;
+					break;
+				}
+			} else if(sk2->rcv_saddr == sk->rcv_saddr) {
+				if((!sk_reuse)			||
+				   (!sk2_reuse)			||
+				   (state == TCP_LISTEN)) {
+					retval = 1;
+					break;
+				}
 			}
 		}
 	}
@@ -431,7 +439,7 @@ void udp_err(struct sk_buff *skb, unsigned char *dp)
 	if (sk == NULL)
 	  	return;	/* No socket for error */
 
-	if (sk->ip_recverr && !sk->users) {
+	if (sk->ip_recverr && !sk->sock_readers) {
 		struct sk_buff *skb2 = skb_clone(skb, GFP_ATOMIC);
 		if (skb2 && sock_queue_err_skb(sk, skb2))
 			kfree_skb(skb2, FREE_READ);
@@ -929,6 +937,16 @@ static void udp_close(struct sock *sk, unsigned long timeout)
 static int udp_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 {
 	/*
+	 *	Check the security clearance
+	 */
+	 
+	if(!ipsec_sk_policy(sk,skb))
+	{	
+		kfree_skb(skb, FREE_WRITE);
+		return(0);
+	}
+	 
+	/*
 	 *	Charge it to the socket, dropping if the queue is full.
 	 */
 
@@ -946,7 +964,7 @@ static int udp_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 
 static inline void udp_deliver(struct sock *sk, struct sk_buff *skb)
 {
-	if (sk->users) {
+	if (sk->sock_readers) {
 		__skb_queue_tail(&sk->back_log, skb);
 		return;
 	}

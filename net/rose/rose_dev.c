@@ -145,9 +145,10 @@ static int rose_set_mac_address(struct device *dev, void *addr)
 
 static int rose_open(struct device *dev)
 {
-	MOD_INC_USE_COUNT;
 	dev->tbusy = 0;
 	dev->start = 1;
+
+	MOD_INC_USE_COUNT;
 
 	ax25_listen_register((ax25_address *)dev->dev_addr, NULL);
 
@@ -156,9 +157,10 @@ static int rose_open(struct device *dev)
 
 static int rose_close(struct device *dev)
 {
-	MOD_DEC_USE_COUNT;
 	dev->tbusy = 1;
 	dev->start = 0;
+
+	MOD_DEC_USE_COUNT;
 
 	ax25_listen_release((ax25_address *)dev->dev_addr, NULL);
 

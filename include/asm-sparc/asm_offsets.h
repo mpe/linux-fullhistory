@@ -149,20 +149,20 @@
 #define AOFF_task_ldt	0x000001d8
 #define ASIZ_task_ldt	0x00000004
 #define AOFF_task_tss	0x000001e0
-#define ASIZ_task_tss	0x000003a0
-#define AOFF_task_fs	0x00000580
+#define ASIZ_task_tss	0x00000390
+#define AOFF_task_fs	0x00000570
 #define ASIZ_task_fs	0x00000004
-#define AOFF_task_files	0x00000584
+#define AOFF_task_files	0x00000574
 #define ASIZ_task_files	0x00000004
-#define AOFF_task_mm	0x00000588
+#define AOFF_task_mm	0x00000578
 #define ASIZ_task_mm	0x00000004
-#define AOFF_task_sig	0x0000058c
+#define AOFF_task_sig	0x0000057c
 #define ASIZ_task_sig	0x00000004
-#define AOFF_task_processor	0x00000590
+#define AOFF_task_processor	0x00000580
 #define ASIZ_task_processor	0x00000004
-#define AOFF_task_last_processor	0x00000594
+#define AOFF_task_last_processor	0x00000584
 #define ASIZ_task_last_processor	0x00000004
-#define AOFF_task_lock_depth	0x00000598
+#define AOFF_task_lock_depth	0x00000588
 #define ASIZ_task_lock_depth	0x00000004
 #define AOFF_mm_count	0x00000000
 #define ASIZ_mm_count	0x00000004
@@ -246,13 +246,11 @@
 #define ASIZ_thread_sstk_info	0x00000008
 #define AOFF_thread_flags	0x00000360
 #define ASIZ_thread_flags	0x00000004
-#define AOFF_thread_ex	0x00000368
-#define ASIZ_thread_ex	0x00000010
-#define AOFF_thread_current_ds	0x00000378
+#define AOFF_thread_current_ds	0x00000364
 #define ASIZ_thread_current_ds	0x00000004
-#define AOFF_thread_core_exec	0x0000037c
+#define AOFF_thread_core_exec	0x00000368
 #define ASIZ_thread_core_exec	0x00000020
-#define AOFF_thread_new_signal	0x0000039c
+#define AOFF_thread_new_signal	0x00000388
 #define ASIZ_thread_new_signal	0x00000004
 
 #endif /* __ASM_OFFSETS_H__ */

@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.8 1997/03/04 16:27:33 jj Exp $
+/* $Id: processor.h,v 1.10 1997/03/14 21:05:39 jj Exp $
  * include/asm-sparc64/processor.h
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -59,7 +59,7 @@ struct thread_struct {
 	struct reg_window reg_window[NSWINS] __attribute__ ((aligned (16)));
 	unsigned long rwbuf_stkptrs[NSWINS] __attribute__ ((aligned (8)));
 	unsigned long w_saved;
-
+	
 	/* Arch-specific task state flags, see below. */
 	unsigned long flags;
 
@@ -69,6 +69,9 @@ struct thread_struct {
 
 	struct sigstack sstk_info;
 	int current_ds, new_signal;
+	
+	struct pt_regs *kregs;
+	
 	struct exec core_exec;     /* just what it says. */
 };
 
@@ -90,7 +93,7 @@ struct thread_struct {
 /* FPU status, FPU qdepth, FPU queue */ 				\
    0,          0,          { { 0, 0, }, }, 				\
 /* user_globals */ 							\
-   { 0, 0, 0, 0, 0, 0, 0, 0, 0 }, 					\
+   { 0, 0, 0, 0, 0, 0, 0, 0 }, 						\
 /* ksp, kpc */ 								\
    0,   0, 								\
 /* reg_window */							\
@@ -105,8 +108,8 @@ struct thread_struct {
    0,           0,							\
 /* ex,     sstk_info, current_ds, */					\
    { 0, 0, }, USER_DS,							\
-/* new_signal */							\
-  0,									\
+/* new_signal, kregs */							\
+  0,           0,							\
 /* core_exec */								\
 { 0, },									\
 }

@@ -1,7 +1,8 @@
-/* $Id: floppy.h,v 1.1 1996/11/20 15:31:07 davem Exp $
+/* $Id: floppy.h,v 1.2 1997/03/14 21:05:25 jj Exp $
  * asm-sparc64/floppy.h: Sparc specific parts of the Floppy driver.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
 #ifndef __ASM_SPARC64_FLOPPY_H
@@ -11,9 +12,9 @@
 #include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/idprom.h>
-#include <asm/machines.h>
 #include <asm/oplib.h>
 #include <asm/auxio.h>
+#include <asm/sbus.h>
 #include <asm/irq.h>
 
 /* References:
@@ -278,43 +279,24 @@ static struct linux_prom_registers fd_regs[2];
 static int sun_floppy_init(void)
 {
 	char state[128];
-	int tnode, fd_node, num_regs;
+	int fd_node, num_regs;
+	struct linux_sbus *bus;
+	struct linux_sbus_device *sdev;
 
 	use_virtual_dma = 1;
 	
 	FLOPPY_IRQ = 11;
-	/* Forget it if we aren't on a machine that could possibly
-	 * ever have a floppy drive.
-	 */
-	if((sparc_cpu_model != sun4c && sparc_cpu_model != sun4m) ||
-	   ((idprom->id_machtype == (SM_SUN4C | SM_4C_SLC)) ||
-	    (idprom->id_machtype == (SM_SUN4C | SM_4C_ELC)))) {
-		/* We certainly don't have a floppy controller. */
-		goto no_sun_fdc;
+	for_all_sbusdev (sdev, bus) {
+		if (!strcmp(sdev->prom_name, "SUNW,fdtwo")) 
+			break;
 	}
-	/* Well, try to find one. */
-	tnode = prom_getchild(prom_root_node);
-	fd_node = prom_searchsiblings(tnode, "obio");
-	if(fd_node != 0) {
-		tnode = prom_getchild(fd_node);
-		fd_node = prom_searchsiblings(tnode, "SUNW,fdtwo");
-	} else {
-		fd_node = prom_searchsiblings(tnode, "fd");
-	}
-	if(fd_node == 0) {
-		goto no_sun_fdc;
-	}
-
-	/* The sun4m lets us know if the controller is actually usable. */
-	if(sparc_cpu_model == sun4m) {
-		prom_getproperty(fd_node, "status", state, sizeof(state));
-		if(!strcmp(state, "disabled")) {
-			goto no_sun_fdc;
-		}
-	}
+	if (!bus) return -1;
+	fd_node = sdev->prom_node;
+	prom_getproperty(fd_node, "status", state, sizeof(state));
+	if(!strcmp(state, "disabled")) return -1;
 	num_regs = prom_getproperty(fd_node, "reg", (char *) fd_regs, sizeof(fd_regs));
 	num_regs = (num_regs / sizeof(fd_regs[0]));
-	prom_apply_obio_ranges(fd_regs, num_regs);
+	prom_apply_sbus_ranges(sdev->my_bus, fd_regs, num_regs, sdev);
 	sun_fdc = (struct sun_flpy_controller *) sparc_alloc_io(fd_regs[0].phys_addr,
 								0x0,
 								fd_regs[0].reg_size,
@@ -324,26 +306,16 @@ static int sun_floppy_init(void)
 	/* Last minute sanity check... */
 	if(sun_fdc->status_82072 == 0xff) {
 		sun_fdc = NULL;
-		goto no_sun_fdc;
+		return -1;
 	}
 
-        if(sparc_cpu_model == sun4c) {
-                sun_fdops.fd_inb = sun_82072_fd_inb;
-                sun_fdops.fd_outb = sun_82072_fd_outb;
-                fdc_status = &sun_fdc->status_82072;
-                /* printk("AUXIO @0x%p\n", auxio_register); */ /* P3 */
-        } else {
-                sun_fdops.fd_inb = sun_82077_fd_inb;
-                sun_fdops.fd_outb = sun_82077_fd_outb;
-                fdc_status = &sun_fdc->status_82077;
-                /* printk("DOR @0x%p\n", &sun_fdc->dor_82077); */ /* P3 */
-	}
+        sun_fdops.fd_inb = sun_82077_fd_inb;
+        sun_fdops.fd_outb = sun_82077_fd_outb;
+        fdc_status = &sun_fdc->status_82077;
+        /* printk("DOR @0x%p\n", &sun_fdc->dor_82077); */ /* P3 */
 
 	/* Success... */
 	return (int) sun_fdc;
-
-no_sun_fdc:
-	return -1;
 }
 
 static int sparc_eject(void)

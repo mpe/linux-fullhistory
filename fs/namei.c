@@ -652,7 +652,10 @@ static int do_rmdir(const char * name)
 	}
 	if (dir->i_sb && dir->i_sb->dq_op)
 		dir->i_sb->dq_op->initialize(dir, -1);
-	return dir->i_op->rmdir(dir,basename,namelen);
+	down(&dir->i_sem);
+	error = dir->i_op->rmdir(dir,basename,namelen);
+	up(&dir->i_sem);
+	return error;
 }
 
 asmlinkage int sys_rmdir(const char * pathname)
@@ -705,7 +708,10 @@ static int do_unlink(const char * name)
 	}
 	if (dir->i_sb && dir->i_sb->dq_op)
 		dir->i_sb->dq_op->initialize(dir, -1);
-	return dir->i_op->unlink(dir,basename,namelen);
+	down(&dir->i_sem);
+	error = dir->i_op->unlink(dir,basename,namelen);
+	up(&dir->i_sem);
+	return error;
 }
 
 asmlinkage int sys_unlink(const char * pathname)

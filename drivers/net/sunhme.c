@@ -2190,6 +2190,7 @@ static int happy_meal_ether_init(struct device *dev, struct linux_sbus_device *s
 	/* We are home free at this point, link us in to the happy
 	 * module device list.
 	 */
+	dev->ifindex = dev_new_index();
 	hp->next_module = root_happy_dev;
 	root_happy_dev = hp;
 #endif

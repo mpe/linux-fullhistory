@@ -162,11 +162,13 @@ tx_full and tbusy flags.
 
 /*
  * Changes:
- *	Thomas Bogendoerfer (tsbogend@bigbug.franken.de):
+ *	Thomas Bogendoerfer (tsbogend@alpha.franken.de):
  *	- added support for Linux/Alpha, but removed most of it, because
  *        it worked only for the PCI chip. 
  *      - added hook for the 32bit lance driver
  *      - added PCnetPCI II (79C970A) to chip table
+ *      - made 32bit driver standalone
+ *      - changed setting of autoselect bit
  *
  *	Paul Gortmaker (gpg109@rsphy1.anu.edu.au):
  *	- hopefully fix above so Linux/Alpha can use ISA cards too.
@@ -245,6 +247,7 @@ struct lance_private {
 #define LANCE_MUST_REINIT_RING  0x00000004
 #define LANCE_MUST_UNRESET      0x00000008
 #define LANCE_HAS_MISSED_FRAME  0x00000010
+#define PCNET32_POSSIBLE        0x00000020
 
 /* A mapping from the chip ID number to the part number and features.
    These are from the datasheets -- in real life the '970 version
@@ -264,15 +267,15 @@ static struct lance_chip_type {
 			LANCE_HAS_MISSED_FRAME},
 	{0x2420, "PCnet/PCI 79C970",		/* 79C970 or 79C974 PCnet-SCSI, PCI. */
 		LANCE_ENABLE_AUTOSELECT + LANCE_MUST_REINIT_RING +
-			LANCE_HAS_MISSED_FRAME},
+			LANCE_HAS_MISSED_FRAME + PCNET32_POSSIBLE},
 	/* Bug: the PCnet/PCI actually uses the PCnet/VLB ID number, so just call
 		it the PCnet32. */
 	{0x2430, "PCnet32",					/* 79C965 PCnet for VL bus. */
 		LANCE_ENABLE_AUTOSELECT + LANCE_MUST_REINIT_RING +
-			LANCE_HAS_MISSED_FRAME},
+			LANCE_HAS_MISSED_FRAME + PCNET32_POSSIBLE},
         {0x2621, "PCnet/PCI-II 79C970A",        /* 79C970A PCInetPCI II. */
                 LANCE_ENABLE_AUTOSELECT + LANCE_MUST_REINIT_RING +
-                        LANCE_HAS_MISSED_FRAME},
+                        LANCE_HAS_MISSED_FRAME + PCNET32_POSSIBLE},
 	{0x0, 	 "PCnet (unknown)",
 		LANCE_ENABLE_AUTOSELECT + LANCE_MUST_REINIT_RING +
 			LANCE_HAS_MISSED_FRAME},
@@ -312,7 +315,7 @@ int lance_init(void)
 	if (virt_to_bus(high_memory) <= 16*1024*1024)
 		lance_need_isa_bounce_buffers = 0;
 
-#if defined(CONFIG_PCI)
+#if defined(CONFIG_PCI) && !defined(CONFIG_PCNET32)
     if (pcibios_present()) {
 	    int pci_index;
 		if (lance_debug > 1)
@@ -427,6 +430,15 @@ void lance_probe1(int ioaddr)
 				break;
 		}
 	}
+    
+#ifdef CONFIG_PCNET32
+        /*
+	 * if pcnet32 is configured and the chip is capable of 32bit mode
+	 * leave the card alone
+	 */
+        if (chip_table[lance_version].flags & PCNET32_POSSIBLE)
+          return;
+#endif    
 
 	dev = init_etherdev(0, 0);
 	dev->open = lance_open_fail;
@@ -441,15 +453,6 @@ void lance_probe1(int ioaddr)
 	dev->base_addr = ioaddr;
 	request_region(ioaddr, LANCE_TOTAL_SIZE, chip_table[lance_version].name);
 
-#ifdef CONFIG_LANCE32
-        /* look if it's a PCI or VLB chip */
-        if (lance_version == PCNET_PCI || lance_version == PCNET_VLB || lance_version == PCNET_PCI_II) {
-	    extern void lance32_probe1 (struct device *dev, const char *chipname, int pci_irq_line);
-	    
-	    lance32_probe1 (dev, chipname, pci_irq_line);
-	    return;
-	}
-#endif    
 	/* Make certain the data structures used by the LANCE are aligned and DMAble. */
 	lp = (struct lance_private *)(((unsigned long)kmalloc(sizeof(*lp)+7,
 										   GFP_DMA | GFP_KERNEL)+7) & ~7);
@@ -606,7 +609,8 @@ void lance_probe1(int ioaddr)
 		/* Turn on auto-select of media (10baseT or BNC) so that the user
 		   can watch the LEDs even if the board isn't opened. */
 		outw(0x0002, ioaddr+LANCE_ADDR);
-		outw(0x0002, ioaddr+LANCE_BUS_IF);
+		/* set autoselect and clean xmausel */
+		outw(inw(ioaddr+LANCE_BUS_IF) & 0xfffe | 0x0002, ioaddr+LANCE_BUS_IF);
 	}
 
 	if (lance_debug > 0  &&  did_version++ == 0)
@@ -663,7 +667,8 @@ lance_open(struct device *dev)
 	if (chip_table[lp->chip_version].flags & LANCE_ENABLE_AUTOSELECT) {
 		/* This is 79C960-specific: Turn on auto-select of media (AUI, BNC). */
 		outw(0x0002, ioaddr+LANCE_ADDR);
-		outw(0x0002, ioaddr+LANCE_BUS_IF);
+		/* set autoselect and clean xmausel */
+		outw(inw(ioaddr+LANCE_BUS_IF) & 0xfffe | 0x0002, ioaddr+LANCE_BUS_IF);
 	}
 
 	if (lance_debug > 1)

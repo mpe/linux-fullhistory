@@ -1,4 +1,4 @@
-/* $Id: socket.h,v 1.1 1996/12/26 14:22:39 davem Exp $ */
+/* $Id: socket.h,v 1.2 1997/03/17 04:50:55 davem Exp $ */
 #ifndef _ASM_SOCKET_H
 #define _ASM_SOCKET_H
 
@@ -34,5 +34,10 @@
 /* Linux specific, keep the same. */
 #define SO_NO_CHECK	0x000b
 #define SO_PRIORITY	0x000c
+
+/* Security levels - as per NRL IPv6 - don't actually do anything */
+#define SO_SECURITY_AUTHENTICATION		0x000d
+#define SO_SECURITY_ENCRYPTION_TRANSPORT	0x000e
+#define SO_SECURITY_ENCRYPTION_NETWORK		0x000f
 
 #endif /* _ASM_SOCKET_H */

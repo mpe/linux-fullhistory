@@ -1,4 +1,4 @@
-/* $Id: ioport.c,v 1.1 1996/12/28 18:39:39 davem Exp $
+/* $Id: ioport.c,v 1.2 1997/03/18 17:59:31 jj Exp $
  * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995,1996 David S. Miller (davem@caip.rutgers.edu)
@@ -29,21 +29,21 @@ unsigned long sparc_iobase_vaddr = IOBASE_VADDR;
  * to use your own mapping, but in practice this should not be used.
  *
  * Input:
- *  address: the obio address to map
+ *  address: Physical address to map
  *  virtual: if non zero, specifies a fixed virtual address where
  *           the mapping should take place.
  *  len:     the length of the mapping
- *  bus_type: The bus on which this io area sits.
+ *  bus_type: Optional high word of physical address.
  *
  * Returns:
  *  The virtual address where the mapping actually took place.
  */
 
 void *sparc_alloc_io (void *address, void *virtual, int len, char *name,
-		      int bus_type, int rdonly)
+		      unsigned bus_type, int rdonly)
 {
 	unsigned long vaddr, base_address;
-	unsigned long addr = (unsigned long) address;
+	unsigned long addr = ((unsigned long) address) + (((unsigned long) bus_type) << 32);
 	unsigned long offset = (addr & (~PAGE_MASK));
 
 	if (virtual) {
@@ -74,7 +74,7 @@ void *sparc_alloc_io (void *address, void *virtual, int len, char *name,
 	base_address = vaddr;
 	/* Do the actual mapping */
 	for (; len > 0; len -= PAGE_SIZE) {
-		mapioaddr(addr, vaddr, bus_type, rdonly);
+		mapioaddr(addr, vaddr, rdonly);
 		vaddr += PAGE_SIZE;
 		addr += PAGE_SIZE;
 	}

@@ -23,7 +23,7 @@ else
     fi
     if [ "$CONFIG_PCI" = "y" ]; then
       bool '   RZ1000 chipset bugfix/support' CONFIG_BLK_DEV_RZ1000
-      bool '   Intel 82371 PIIX (Triton I/II) DMA support' CONFIG_BLK_DEV_TRITON
+      bool '   Intel PIIX/PIIX3 (Triton 430FX/HX/VX, 440FX) DMA support' CONFIG_BLK_DEV_TRITON
     fi
     bool '   Other IDE chipset support' CONFIG_IDE_CHIPSETS
     if [ "$CONFIG_IDE_CHIPSETS" = "y" ]; then

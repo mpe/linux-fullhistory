@@ -714,18 +714,15 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 	struct ipxhdr	*ipx = skb->nh.ipxh;
 	ipx_interface	*i;
 
-#ifdef CONFIG_FIREWALL
 	/*
 	 *	We firewall first, ask questions later.
 	 */
 
-	if (call_in_firewall(PF_IPX, skb->dev, ipx, NULL)!=FW_ACCEPT)
+	if (call_in_firewall(PF_IPX, skb->dev, ipx, NULL, &skb)!=FW_ACCEPT)
 	{
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
-
-#endif
 
 	/* See if we should update our network number */
 	if ((intrfc->if_netnum == 0L) &&
@@ -818,16 +815,15 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 					printk( "IPX: Forward PPROP onto net num %08x\n", (unsigned int) htonl(ifcs->if_netnum) );
 #endif
 					skb2 = skb_clone(skb, GFP_ATOMIC);
-#ifdef CONFIG_FIREWALL
+
 					/*
 					 *	See if we are allowed to firewall forward
 					 */
-					if (call_fw_firewall(PF_IPX, skb2->dev, ipx, NULL)!=FW_ACCEPT)
+					if (call_fw_firewall(PF_IPX, skb2->dev, ipx, NULL, &skb)!=FW_ACCEPT)
 					{
 						kfree_skb(skb, FREE_READ);
 						return 0;
 					}
-#endif
 					ipxrtr_route_skb(skb2);
 				}
 #ifdef DEBUG_IPX_PPROP_ROUTING
@@ -851,16 +847,15 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 
 	if (intrfc->if_netnum != ipx->ipx_dest.net)
 	{
-#ifdef CONFIG_FIREWALL
 		/*
 		 *	See if we are allowed to firewall forward
 		 */
-		if (call_fw_firewall(PF_IPX, skb->dev, ipx, NULL)!=FW_ACCEPT)
+		if (call_fw_firewall(PF_IPX, skb->dev, ipx, NULL, &skb)!=FW_ACCEPT)
 		{
 			kfree_skb(skb, FREE_READ);
 			return 0;
 		}
-#endif
+
 		/* We only route point-to-point packets. */
 		if (skb->pkt_type == PACKET_HOST)
 		{
@@ -1451,13 +1446,11 @@ static int ipxrtr_route_packet(struct sock *sk, struct sockaddr_ipx *usipx, stru
 	else
 		ipx->ipx_checksum=ipx_set_checksum(ipx, len+sizeof(struct ipxhdr));
 
-#ifdef CONFIG_FIREWALL	
-	if(call_out_firewall(PF_IPX, skb->dev, ipx, NULL)!=FW_ACCEPT)
+	if(call_out_firewall(PF_IPX, skb->dev, ipx, NULL, &skb)!=FW_ACCEPT)
 	{
 		kfree_skb(skb, FREE_WRITE);
 		return -EPERM;
 	}
-#endif
 	
 	return ipxitf_send(intrfc, skb, (rt && rt->ir_routed) ? 
 				rt->ir_router_node : ipx->ipx_dest.node);

@@ -130,7 +130,7 @@ static struct file_operations socket_file_ops = {
  *	The protocol list. Each protocol is registered in here.
  */
 
-static struct net_proto_family *net_families[NPROTO];
+struct net_proto_family *net_families[NPROTO];
 
 /*
  *	Statistics counters of the socket lists
@@ -272,6 +272,7 @@ struct socket *sock_alloc(void)
 	inode->i_gid = current->gid;
 
 	sock->inode = inode;
+	init_waitqueue(&sock->wait);
 	sock->fasync_list = NULL;
 	sock->state = SS_UNCONNECTED;
 	sock->flags = 0;

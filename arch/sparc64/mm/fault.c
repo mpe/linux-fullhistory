@@ -1,24 +1,39 @@
-/* $Id: fault.c,v 1.3 1997/03/04 16:27:02 jj Exp $
+/* $Id: fault.c,v 1.4 1997/03/11 17:37:07 jj Exp $
  * arch/sparc64/mm/fault.c: Page fault handlers for the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
+#include <asm/head.h>
+
+#include <linux/string.h>
+#include <linux/types.h>
+#include <linux/ptrace.h>
+#include <linux/mman.h>
+#include <linux/signal.h>
+#include <linux/mm.h>
+#include <linux/smp_lock.h>
+
+#include <asm/page.h>
+#include <asm/pgtable.h>
+#include <asm/openprom.h>
+#include <asm/oplib.h>
+#include <asm/uaccess.h>
+
 #define ELEMENTS(arr) (sizeof (arr)/sizeof (arr[0]))
 
 extern struct sparc_phys_banks sp_banks[SPARC_PHYS_BANKS];
-extern int prom_node_root;
 
 /* Nice, simple, prom library does all the sweating for us. ;) */
-unsigned int prom_probe_memory (void)
+unsigned long prom_probe_memory (void)
 {
-	register struct linux_mlist_v0 *mlist;
-	register unsigned int bytes, base_paddr, tally;
+	register struct linux_mlist_p1275 *mlist;
+	register unsigned long bytes, base_paddr, tally;
 	register int i;
 
 	i = 0;
-	mlist= *prom_meminfo()->v0_available;
+	mlist = *prom_meminfo()->p1275_available;
 	bytes = tally = mlist->num_bytes;
 	base_paddr = (unsigned int) mlist->start_adr;
   
@@ -40,7 +55,7 @@ unsigned int prom_probe_memory (void)
 			break;
 		}
     
-		sp_banks[i].base_addr = (unsigned int) mlist->start_adr;
+		sp_banks[i].base_addr = (unsigned long) mlist->start_adr;
 		sp_banks[i].num_bytes = mlist->num_bytes;
 	}
 
@@ -60,10 +75,10 @@ unsigned int prom_probe_memory (void)
 /* Traverse the memory lists in the prom to see how much physical we
  * have.
  */
-unsigned int
+unsigned long
 probe_memory(void)
 {
-	unsigned int total;
+	unsigned long total;
 
 	total = prom_probe_memory();
 
@@ -102,17 +117,17 @@ asmlinkage int lookup_fault(unsigned long pc, unsigned long ret_pc,
 	case 3: return 3;
 	/* store will be handled by fixup, load will bump out */
 	/* for _to_ macros */
-	case 1: insn = (unsigned *)pc; if ((insn >> 21) & 1) return 1; break;
+	case 1: insn = *(unsigned *)pc; if ((insn >> 21) & 1) return 1; break;
 	/* load will be handled by fixup, store will bump out */
 	/* for _from_ macros */
-	case 2: insn = (unsigned *)pc; 
+	case 2: insn = *(unsigned *)pc; 
 		if (!((insn >> 21) & 1) || ((insn>>19)&0x3f) == 15) return 2; 
 		break; 
 	default: break;
 	}
 	memset (&regs, 0, sizeof (regs));
-	regs.pc = pc;
-	regs.npc = pc + 4;
+	regs.tpc = pc;
+	regs.tnpc = pc + 4;
 	/* FIXME: Should set up regs->tstate? */
 	unhandled_fault (address, current, &regs);
 	/* Not reached */
@@ -125,7 +140,7 @@ asmlinkage void do_sparc64_fault(struct pt_regs *regs, int text_fault, int write
 	struct vm_area_struct *vma;
 	struct task_struct *tsk = current;
 	struct mm_struct *mm = tsk->mm;
-	unsigned int fixup;
+	unsigned long fixup;
 	unsigned long g2;
 	int from_user = !(regs->tstate & TSTATE_PRIV);
 
@@ -165,20 +180,16 @@ bad_area:
 	/* Is this in ex_table? */
 	
 	g2 = regs->u_regs[UREG_G2];
-	if (!from_user && (fixup = search_exception_table (regs->pc, &g2))) {
-		printk("Exception: PC<%016lx> faddr<%016lx>\n", regs->pc, address);
+	if (!from_user && (fixup = search_exception_table (regs->tpc, &g2))) {
+		printk("Exception: PC<%016lx> faddr<%016lx>\n", regs->tpc, address);
 		printk("EX_TABLE: insn<%016lx> fixup<%016lx> g2<%016lx>\n",
-			regs->pc, fixup, g2);
-		regs->pc = fixup;
-		regs->npc = regs->pc + 4;
+			regs->tpc, fixup, g2);
+		regs->tpc = fixup;
+		regs->tnpc = regs->tpc + 4;
 		regs->u_regs[UREG_G2] = g2;
 		goto out;
 	}
 	if(from_user) {
-#if 0
-		printk("Fault whee %s [%d]: segfaults at %08lx pc=%08lx\n",
-		       tsk->comm, tsk->pid, address, regs->pc);
-#endif
 		tsk->tss.sig_address = address;
 		tsk->tss.sig_desc = SUBSIG_NOMAPPING;
 		send_sig(SIGSEGV, tsk, 1);

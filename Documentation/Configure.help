@@ -20,14 +20,18 @@
 # via ftp (user: anonymous) from sunsite.unc.edu in the directory
 # /pub/Linux/docs/HOWTO. 
 #
-# Format of this file: description<nl>variable<nl>helptext<nl><nl>. 
-# If the question being documented is of type "choice", we list
-# only the first occurring config variable. The help texts
-# must not contain empty lines. No variable should occur twice; if it
-# does, only the first occurrence will be used by Configure. The lines
-# in a help text should be indented two positions. Lines starting with
-# `#' are ignored. To be nice to menuconfig, limit your lines to 70
-# characters. Use emacs' kfill.el to edit this file or you lose.
+# Format of this file: description<nl>variable<nl>helptext<nl><nl>.
+# If the question being documented is of type "choice", we list only
+# the first occurring config variable. The help texts must not contain
+# empty lines. Order of the help texts does not matter, however, no
+# variable should be documented twice: if it is, only the first
+# occurrence will be used by Configure. It is not absolutely necessary
+# that the one-line descriptions of the variables used here are
+# exactly the same as the ones in the corresponding Config.in
+# scripts. The lines in a help text should be indented two
+# positions. Lines starting with `#' are ignored. To be nice to
+# menuconfig, limit your lines to 70 characters. Use emacs' kfill.el
+# to edit this file or you lose.
 #
 # If you add a help text to this file, please try to be as gentle as
 # possible. Don't use unexplained acronyms and generally write for the
@@ -187,8 +191,10 @@ CONFIG_BLK_DEV_IDEDISK
   old harddisk driver instead, say Y.  If you want to compile this
   driver as a module ( = code which can be inserted in and removed
   from the running kernel whenever you want), say M here and read
-  Documentation/modules.txt. The module will be called ide-disk.o. If
-  unsure, say Y.
+  Documentation/modules.txt. The module will be called ide-disk.o. Do
+  not compile this driver as a module if your root filesystem (the one
+  containing the directory /) is located on the IDE disk. If unsure,
+  say Y.
 
 Include IDE/ATAPI CDROM support
 CONFIG_BLK_DEV_IDECD
@@ -287,10 +293,10 @@ CONFIG_BLK_DEV_TRITON
   and includes the Intel Triton I/II IDE interface chipset (i82371FB
   or i82371SB), you will want to enable this option to allow use of
   bus-mastering DMA data transfers. Read the comments at the beginning
-  of drivers/block/triton.c.  You can get the latest version of the
-  hdparm utility via ftp (user: anonymous) from
-  sunsite.unc.edu/pub/Linux/kernel/patches/diskdrives/; it is used to
-  tune your harddisk. It is safe to say Y to this question.
+  of drivers/block/triton.c and Documentation/ide.txt.  You can get
+  the latest version of the hdparm utility via ftp (user: anonymous)
+  from sunsite.unc.edu/pub/Linux/kernel/patches/diskdrives/; it is
+  used to tune your harddisk. It is safe to say Y to this question.
 
 Other IDE chipset support
 CONFIG_IDE_CHIPSETS
@@ -527,6 +533,12 @@ CONFIG_FIREWALL
   proxy server). Chances are that you should use this on every machine
   being run as a router and not on any regular host. If unsure, say N.
 
+Socket Security API Support (EXPERIMENTAL)
+CONFIG_NET_SECURITY
+  Enable use of the socket security API. Note that Linux does not include
+  any security protocols currently and that this option only really supports
+  security on IPv4 links at the moment.
+
 Sun floppy controller support
 CONFIG_BLK_DEV_SUNFD
   This is support for floppy drives on Sun Sparc workstations. Say Y
@@ -600,14 +612,22 @@ CONFIG_SERIAL_NONSTANDARD
   Say Y here if you have any non-standard serial boards --- boards
   which aren't supported using the standard "dumb" serial driver.
   This includes intelligent serial boards such as Cyclades,
-  Digiboards, etc.
+  Digiboards, etc. These are usually used for systems that need many
+  serial ports because they serve many terminals or dial-in
+  connections.  Note that the answer to this question won't directly
+  affect the kernel: saying N will just cause this configure script to
+  skip all the questions about non-standard serial boards. Most people
+  can say N here.
 
 Extended dumb serial driver options
 CONFIG_SERIAL_EXTENDED  
   If you wish to use any non-standard features of the standard "dumb"
   driver, say Y here.  This includes HUB6 support, shared serial
   interrupts, special multiport support, support for more than the
-  four COM 1/2/3/4 boards, etc.
+  four COM 1/2/3/4 boards, etc.  Note that the answer to this question
+  won't directly affect the kernel: saying N will just cause this
+  configure script to skip all the questions about serial driver
+  options. If unsure, say N.
 
 Support more than 4 serial ports
 CONFIG_SERIAL_MANY_PORTS
@@ -670,8 +690,9 @@ MCA support
 CONFIG_MCA
   MicroChannel Architecture is found in some IBM PS/2 machines and
   laptops. It is a bus system similar to PCI or ISA.  See
-  Documentation/mca.txt before attempting to build an MCA bus kernel.
-  Note that this is still experimental code.
+  Documentation/mca.txt (and especially the web page given there)
+  before attempting to build an MCA bus kernel.  Note that this is
+  still experimental code.
 
 System V IPC
 CONFIG_SYSVIPC
@@ -941,13 +962,12 @@ IP: accounting
 CONFIG_IP_ACCT
   This keeps track of your IP network traffic and produces some
   statistics. Usually, you only want to say Y here if your box will be
-  a router or a firewall for some local network, in which case you
-  naturally should have said Y to IP forwarding/gatewaying resp. IP
-  firewalling. The data is accessible with "cat /proc/net/ip_acct", so
-  you want to say Y to the /proc filesystem below, if you say Y
-  here. To specify what exactly should be recorded, you need the tool
-  ipfwadm (available via ftp (user: anonymous) from
-  ftp.xos.nl/pub/linux/ipfwadm/).
+  a router or a firewall for some local network. For the latter, you
+  need to say Y to IP firewalling. The data is accessible with "cat
+  /proc/net/ip_acct", so you want to say Y to the /proc filesystem
+  below, if you say Y here. To specify what exactly should be
+  recorded, you need the tool ipfwadm (available via ftp (user:
+  anonymous) from ftp.xos.nl/pub/linux/ipfwadm/).
 
 IP: tunneling
 CONFIG_NET_IPIP
@@ -962,9 +982,9 @@ CONFIG_NET_IPIP
   http://anchor.cs.binghamton.edu/~mobileip/LJ/index.html). Saying Y
   to this option will produce two modules ( = code which can be
   inserted in and removed from the running kernel whenever you want),
-  one encapsulator and one decapsulator. The module will be called
+  one encapsulator called tunnel.o and one decapsulator called
   ipip.o. You can read details in drivers/net/README.tunnel. Most
-  people can say N.
+  people won't need this and can say N.
   
 IP: firewall packet logging
 CONFIG_IP_FIREWALL_VERBOSE
@@ -1259,7 +1279,7 @@ IP-over-DDP support
 CONFIG_IPDDP
   This allows IP networking for users who only have Appletalk
   networking available.  This feature is experimental. Please see
-  http://www.maths.unm.edu/~bradford/ltpc.html
+  http://www.maths.unm.edu/~bradford/ltpc.html for support software.
 
 LocalTalk PC card support
 CONFIG_LTPC
@@ -1443,7 +1463,10 @@ CONFIG_SCSI
   available as a module ( = code which can be inserted in and removed
   from the running kernel whenever you want). The module will be
   called scsi_mod.o. If you want to compile it as a module, say M here
-  and read Documentation/modules.txt and Documentation/scsi.txt.
+  and read Documentation/modules.txt and
+  Documentation/scsi.txt. However, do not compile this as a module if
+  your root filesystem (the one containing the directory /) is located
+  on a SCSI disk.
 
 SCSI disk support
 CONFIG_BLK_DEV_SD
@@ -1455,7 +1478,10 @@ CONFIG_BLK_DEV_SD
   be inserted in and removed from the running kernel whenever you
   want). The module will be called sd_mod.o. If you want to compile it
   as a module, say M here and read Documentation/modules.txt and
-  Documentation/scsi.txt.
+  Documentation/scsi.txt. Do not compile this driver as a module if
+  your root filesystem (the one containing the directory /) is located
+  on a SCSI disk. In this case, do not compile the driver for your
+  SCSI host adapter (below) as a module either.
   
 SCSI tape support
 CONFIG_CHR_DEV_ST
@@ -1572,28 +1598,36 @@ CONFIG_SCSI_AIC7XXX
   drivers/scsi/README.aic7xxx and in the SCSI-HOWTO, available via ftp
   (user: anonymous) at sunsite.unc.edu:/pub/Linux/docs/HOWTO. If it
   doesn't work out of the box, you may have to change some settings in
-  drivers/scsi/aic7xxx.h.  If you want to compile this as a module ( =
-  code which can be inserted in and removed from the running kernel
-  whenever you want), say M here and read
-  Documentation/modules.txt. The module will be called aic7xxx.o.
+  drivers/scsi/aic7xxx.h. It has been reported that the "wide
+  negotiation" on these cards is not quite working and should be
+  disabled. Note that the AHA2920 SCSI host adapter is *not* supported
+  by this driver; choose "Future Domain 16xx SCSI support" instead. If
+  you want to compile this driver a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. The module will be
+  called aic7xxx.o.
 
 BusLogic SCSI support
 CONFIG_SCSI_BUSLOGIC
-  This is support for BusLogic MultiMaster and FlashPoint SCSI Host Adapters.
-  Consult the SCSI-HOWTO, available via anonymous ftp from sunsite.unc.edu in
-  /pub/Linux/docs/HOWTO, and the files README.BusLogic and README.FlashPoint in
-  drivers/scsi for more information.  If this driver does not work correctly
-  without modification, please contact the author, Leonard N. Zubkoff, by email
-  to lnz@dandelion.com.  You can also build this driver as a module ( = code
-  which can be inserted in and removed from the running kernel whenever you
-  want), but only a single instance may be loaded.  If you want to compile it
-  as a module, say M here and read Documentation/modules.txt.
+  This is support for BusLogic MultiMaster and FlashPoint SCSI Host
+  Adapters.  Consult the SCSI-HOWTO, available via anonymous ftp from
+  sunsite.unc.edu in /pub/Linux/docs/HOWTO, and the files
+  README.BusLogic and README.FlashPoint in drivers/scsi for more
+  information.  If this driver does not work correctly without
+  modification, please contact the author, Leonard N. Zubkoff, by
+  email to lnz@dandelion.com.  You can also build this driver as a
+  module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), but only a single instance may be
+  loaded.  If you want to compile it as a module, say M here and read
+  Documentation/modules.txt. The module will be called BusLogic.o.
 
 Omit BusLogic SCSI FlashPoint support
 CONFIG_SCSI_OMIT_FLASHPOINT
-  This option allows you to omit the FlashPoint support from the BusLogic
-  SCSI driver.  The FlashPoint SCCB Manager code is substantial, so users of
-  MultiMaster Host Adapters may wish to omit it.
+  This option allows you to omit the FlashPoint support from the
+  BusLogic SCSI driver.  The FlashPoint SCCB Manager code is
+  substantial, so users of MultiMaster Host Adapters may wish to omit
+  it.
+
 
 DTC3180/3280 SCSI support
 CONFIG_SCSI_DTC3280
@@ -1661,7 +1695,7 @@ CONFIG_SCSI_U14_34F_MAX_TAGS
   given SCSI device. Go with the default unless you know what you're
   doing. Minimum is 2 and maximum is 8.
 
-Future Domain 16xx SCSI support
+Future Domain 16xx SCSI/AHA 2920 support
 CONFIG_SCSI_FUTURE_DOMAIN
   This is support for Future Domain's 16-bit SCSI host adapters
   (TMC-1660/1680, TMC-1650/1670, TMC-3260, TMC-1610M/MER/MEX) and
@@ -1826,13 +1860,31 @@ CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT
   This option must be set to N if your system has at least one 53C8XX based  
   scsi board with a vendor-specific BIOS (example: Tekram DC-390/U/W/F).
 
+assume boards are SYMBIOS compatible
+CONFIG_SCSI_NCR53C8XX_SYMBIOS_COMPAT
+  This option allows you to enable some features depending on GPIO
+  wiring.  These General Purpose Input/Output pins can be used for
+  vendor specific features or implementation of the standard SYMBIOS
+  features.  Genuine SYMBIOS boards use GPIO0 in output for controller
+  LED and GPIO3 bit as a flag indicating singled-ended/differential
+  interface.
+  If all the boards of your system are genuine SYMBIOS boards or use
+  BIOS and drivers from SYMBIOS, you would want to enable this option,
+  obviously at your own risks.
+  The driver behaves correctly on my system with this option enabled.
+  (SDMS 4.0 + Promise SCSI ULTRA 875 rev 0x3 + ASUS SC200 810A rev
+  0x12).  This option must be set to N if your system has at least one
+  53C8XX based scsi board with a vendor-specific BIOS (example: Tekram
+  DC-390/U/W/F).  If unsure, say N.
+
 IBMMCA SCSI support
 CONFIG_SCSI_IBMMCA
   If your computer sports an MCA bus system architecture (IBM PS/2)
-  with an SCSI harddrive, say Y here. This driver is also available as
-  a module ( = code which can be inserted in and removed from the
-  running kernel whenever you want). The module will be called
-  ibmmca.o. If you want to compile it as a module, say M here and read
+  with an SCSI harddrive, say Y here. Please read
+  Documentation/mca.txt. This driver is also available as a module ( =
+  code which can be inserted in and removed from the running kernel
+  whenever you want). The module will be called ibmmca.o. If you want
+  to compile it as a module, say M here and read
   Documentation/modules.txt.
 
 Always IN2000 SCSI support
@@ -2273,12 +2325,33 @@ CONFIG_SOUNDMODEM_AFSK1200
   compatible to popular modems using TCM3105 or AM7911. The demodulator
   requires about 12% of the CPU power of a Pentium 75 CPU per channel.
 
+Soundmodem 1200 baud AFSK using floating point
+CONFIG_SOUNDMODEM_AFSK1200_FP
+  This option enables floating point calculations to be used for the
+  AFSK1200 baud modem. The Intel Pentium is a perverted chip because
+  integer multiplications are, although easier to implement in silicon,
+  an order of magnitude slower than floating point calculations.
+  Enabling this option uses a highly optimized assembler routine for
+  correlations, modeled after the one published by Phil Karn, KA9Q.
+  This reduces the computing power needed on Intel Pentium chips to
+  about 50%. On the other hand, Pentium clones with faster integer
+  multiply and slower floating point multiply will probably take
+  longer with this option turned on. As a rule of thumb, enable it for
+  Intel Pentium and Pentium Pro processors, and disable it for
+  anything else.
+  I (sailer@ife.ee.ethz.ch) am very interested in figures. If you are
+  willing to give me a feedback, please compile the driver once with
+  this option enabled and once with it disabled, and send me the cycle
+  counter numbers obtained with both compilations, and your exact
+  chip. The cycle counter numbers can be obtained with a recent
+  sethdlc utility.
+
 Soundcard modem support for 4800 baud HAPN-1 modulation
 CONFIG_SOUNDMODEM_HAPN4800
-  This option enables the soundmodem driver 4800 baud HAPN-1 compatible
-  modem. This modulation seems to be widely used 'down under' and in
-  the netherlands. Here, nobody uses it, so I could not test if it works.
-  It is compatible to itself, however :-)
+  This option enables the soundmodem driver 4800 baud HAPN-1
+  compatible modem. This modulation seems to be widely used 'down
+  under' and in the Netherlands. Here, nobody uses it, so I could not
+  test if it works.  It is compatible to itself, however :-)
 
 Soundcard modem support for 9600 baud FSK G3RUH modulation
 CONFIG_SOUNDMODEM_FSK9600
@@ -2293,20 +2366,22 @@ Soundcard modem support using floating point arithmetic
 CONFIG_SOUNDMODEM_FLOAT
   This option enables floating point calculations to be used for the
   AFSK1200 baud modem. The Intel Pentium is a perverted chip because
-  integer multiplications are, altough easier to implement in silicon,
+  integer multiplications are, although easier to implement in silicon,
   an order of a magnitude slower than floating point calculations.
   Enabling this option uses a highly optimized assembler routine for
-  correlations, modelled after the one published by Phil Karn, KA9Q.
-  This reduces the computing power needed on Intel Pentium chips to about
-  50%. On the other hand, Pentium clones with faster integer multiply and
-  slower floating point multiply will probably take longer with this
-  option turned on. As a rule of thumb, enable it for Intel Pentium and
-  Pentium Pro processors, and disable it for anything else.
+  correlations, modeled after the one published by Phil Karn, KA9Q.
+  This reduces the computing power needed on Intel Pentium chips to
+  about 50%. On the other hand, Pentium clones with faster integer
+  multiply and slower floating point multiply will probably take
+  longer with this option turned on. As a rule of thumb, enable it for
+  Intel Pentium and Pentium Pro processors, and disable it for
+  anything else.
   I (sailer@ife.ee.ethz.ch) am very interested in figures. If you are
-  willing to give me a feedback, please compile the driver once with this
-  option enabled and once with it disabled, and send me the cycle counter
-  numbers obtained with both compilations, and your exact chip. The cycle
-  counter numbers can be optained by a recent sethdlc utility.
+  willing to give me a feedback, please compile the driver once with
+  this option enabled and once with it disabled, and send me the cycle
+  counter numbers obtained with both compilations, and your exact
+  chip. The cycle counter numbers can be obtained by a recent sethdlc
+  utility.
 
 Serial port KISS driver for AX.25
 CONFIG_MKISS
@@ -2429,18 +2504,19 @@ CONFIG_WAN_ROUTER
   achievable with commonly used asynchronous modem connections.
   Usually, a quite expensive external device called `WAN router' is
   needed to connect to a WAN.
-      As an alternative, WAN routing can be built into the Linux kernel. 
-  With relatively inexpensive WAN interface cards available on the
-  market, a perfectly usable router can be built for less than half the
-  price of an external router.  If you have one of those cards (with
-  appropriate WAN Link Driver) and wish to use your Linux box as a WAN
-  router, you may say 'Y' to this option.  You will also need a
-  wan-tools package available via FTP (user: anonymous) from
+      As an alternative, WAN routing can be built into the Linux
+  kernel.  With relatively inexpensive WAN interface cards available
+  on the market, a perfectly usable router can be built for less than
+  half the price of an external router.  If you have one of those
+  cards (with appropriate WAN Link Driver) and wish to use your Linux
+  box as a WAN router, you may say 'Y' to this option.  You will also
+  need a wan-tools package available via FTP (user: anonymous) from
   ftp.sangoma.com.  Read Documentation/networking/wan-router.txt for
   more information.
       WAN routing is always built as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
-  For general information about modules read Documentation/modules.txt.
+  The module will be called wanrouter.o.  For general information
+  about modules read Documentation/modules.txt.
 
 WAN Drivers
 CONFIG_WAN_DRIVERS
@@ -2457,35 +2533,39 @@ CONFIG_VENDOR_SANGOMA
   is a family of intelligent multiprotocol WAN adapters with data
   transfer rates up to T1 (1.544 Mbps).  They are also known as
   Synchronous Data Link Adapters (SDLA) and designated S502E(A), S503
-  or S508.  If you have one of these cards, say 'Y' to this option.
-      WANPIPE driver is always built as a module ( = code which can be
-  inserted in and removed from the running kernel whenever you want).
-  For general information about modules read Documentation/modules.txt.
+  or S508. These cards support the X.25, Frame Relay, and PPP
+  protocols. If you have one or more of these cards, say 'Y' to this
+  option.  The next questions will ask you about the protocols you
+  want the driver to support. The driver will be compiled as a module
+  ( = code which can be inserted in and removed from the running
+  kernel whenever you want).  The module will be called wanpipe.o.
+  For general information about modules read
+  Documentation/modules.txt.
 
 Maximum number of cards
 CONFIG_WANPIPE_CARDS
       Enter number of WANPIPE adapters installed in your machine.  The
-  driver can support up to 8 cards.  You may enter more that you
+  driver can support up to 8 cards.  You may enter more than you
   actually have if you plan to add more cards in the future without
   re-compiling the driver, but remember that in this case you'll waste
   some kernel memory (about 1K per card).
 
 WANPIPE X.25 support
 CONFIG_WANPIPE_X25
-      Say 'Y' to this option, if you are planning to connect WANPIPE
+      Say 'Y' to this option, if you are planning to connect a WANPIPE
   card to an X.25 network.  If you say 'N', the X.25 support will not
   be included in the driver (saves about 16K of kernel memory).
 
 WANPIPE Frame Relay support
 CONFIG_WANPIPE_FR
-      Say 'Y' to this option, if you are planning to connect WANPIPE
+      Say 'Y' to this option, if you are planning to connect a WANPIPE
   card to a frame relay network.  If you say 'N', the frame relay
   support will not be included in the driver (saves about 16K of
   kernel memory).
 
 WANPIPE PPP support
 CONFIG_WANPIPE_PPP
-      Say 'Y' to this option, if you are planning to connect WANPIPE
+      Say 'Y' to this option, if you are planning to connect a WANPIPE
   card to a leased line using Point-to-Point protocol (PPP).  If you
   say 'N', the PPP support will not be included in the driver (saves
   about 16K of kernel memory).
@@ -2494,7 +2574,11 @@ Sun LANCE Ethernet support
 CONFIG_SUN_LANCE
   This is support for lance ethernet cards on Sun workstations such as
   the Sparcstation IPC (any Sparc with a network interface 'le0' under
-  SunOS basically).
+  SunOS basically). This driver is also available as a module ( = code
+  which can be inserted in and removed from the running kernel
+  whenever you want). The module will be called lance.o. If you want
+  to compile it as a module, say M here and read
+  Documentation/modules.txt.
 
 Sun Intel Ethernet support
 CONFIG_SUN_INTEL
@@ -2768,16 +2852,17 @@ CONFIG_E2100
 
 CS89x0 support
 CONFIG_CS89x0
-  Support for CS89x0 chipset based ethernet cards. 
-  If you have a network (ethernet) card of this type, say Y and read
-  the Ethernet-HOWTO, available via ftp (user: anonymous) in
+  Support for CS89x0 chipset based ethernet cards.  If you have a
+  network (ethernet) card of this type, say Y and read the
+  Ethernet-HOWTO, available via ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO as well as
-  drivers/net/depca.c.  If you want to compile this as a module ( =
-  code which can be inserted in and removed from the running kernel
-  whenever you want), say M here and read Documentation/modules.txt as
-  well as Documentation/networking/net-modules.txt. If you plan to use
-  more than one network card under linux, read the
-  Multiple-Ethernet-mini-HOWTO, available from
+  Documentation/networking/cs89x0.txt.  If you want to compile this as
+  a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want), say M here and read
+  Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. The module will be called
+  cs89x.o. If you plan to use more than one network card under linux,
+  read the Multiple-Ethernet-mini-HOWTO, available from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
 
 DEPCA support
@@ -3065,7 +3150,7 @@ CONFIG_APRICOT
   linux, read the Multiple-Ethernet-mini-HOWTO, available from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
 
-DE425, DE434, DE435 support
+Generic DECchip & DIGITAL EtherWORKS PCI/EISA
 CONFIG_DE4X5
   This is support for the DIGITAL series of PCI/EISA ethernet
   cards. These include the DE425, DE434, DE435, DE450 and DE500
@@ -3088,9 +3173,9 @@ CONFIG_DEC_ELCP
   cards and also works with cards based on the DECchip
   21040/21041/21140 (Tulip series) chips. Some LinkSys PCI cards are
   of this type. (If your card is NOT SMC EtherPower 10/100 PCI
-  (smc9332dst), you can also try the driver from "DE425, DE434, DE435
-  support", above.) However, most people with a network card of this
-  type will say Y here. Do read the Ethernet-HOWTO, available via ftp
+  (smc9332dst), you can also try the driver for "Generic DECchip"
+  cards, above. However, most people with a network card of this type
+  will say Y here.) Do read the Ethernet-HOWTO, available via ftp
   (user: anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. More
   specific information is contained in
   Documentation/networking/tulip.txt. This driver is also available as
@@ -3914,7 +3999,7 @@ Stallion EasyIO or EC8/32 support
 CONFIG_STALLION
   If you have an EasyIO or EasyConnection 8/32 multiport Stallion
   card, then this is for you; say Y. Make sure to read
-  drivers/char/README.stallion. If you want to compile this as a
+  Documentation/stallion.txt. If you want to compile this as a
   module ( = code which can be inserted in and removed from the
   running kernel whenever you want), say M here and read
   Documentation/modules.txt. The module will be called stallion.o.
@@ -3923,7 +4008,7 @@ Stallion EC8/64, ONboard, Brumby support
 CONFIG_ISTALLION
   If you have an EasyConnection 8/64, ONboard, Brumby or Stallion
   serial multiport card, say Y here. Make sure to read
-  drivers/char/README.stallion. To compile it as a module ( = code
+  Documentation/stallion.txt. To compile it as a module ( = code
   which can be inserted in and removed from the running kernel
   whenever you want), say M here and read
   Documentation/modules.txt. The module will be called istallion.o.
@@ -4134,14 +4219,14 @@ CONFIG_APM
   things to try when experiencing seemingly random, "weird" problems:
    1) passing the "no-hlt" option to the kernel 
    2) passing the "no-387" option to the kernel 
-   3) passing the "mem=4M" option to the kernel (thereby disabling 
+   3) passing the "floppy=nodma" option to the kernel
+   4) passing the "mem=4M" option to the kernel (thereby disabling 
       all but the first 4M of RAM)
-   4) Reading the sig11 FAQ at http://www.bitwizard.nl/sig11/
-   5) disabling the cache from your BIOS settings
-   6) installing a better fan
-   7) exchanging RAM chips 
-   8) exchanging the motherboard.
-
+   5) reading the sig11 FAQ at http://www.bitwizard.nl/sig11/
+   6) disabling the cache from your BIOS settings
+   7) installing a better fan
+   8) exchanging RAM chips 
+   9) exchanging the motherboard.
 
 Ignore USER SUSPEND
 CONFIG_APM_IGNORE_USER_SUSPEND
@@ -4279,9 +4364,9 @@ CONFIG_RTC
   /proc/rtc and its behaviour is set by various ioctls on
   /dev/rtc. People running SMP (= multiprocessor) versions of Linux
   should say Y here to read and set the RTC clock in a SMP compatible
-  fashion. If you think you have a use for such a device (such as
-  periodic data sampling), then say Y here, and go read the file
-  Documentation/rtc.txt for details.
+  fashion. (They should also read Documentation/smp.) If you think you
+  have a use for such a device (such as periodic data sampling), then
+  say Y here, and go read the file Documentation/rtc.txt for details.
 
 Sound card support
 CONFIG_SOUND
@@ -4537,8 +4622,8 @@ CONFIG_ISDN_AUDIO
   (mgetty+sendfax by gert@greenie.muc.de with an extension, available
   with the ISDN utility package for example), you will be able to use
   your Linux box as an ISDN-answering machine. Of course, this must be
-  supported by the lowlevel driver also. Currently, the Teles and HiSax
-  drivers are the only voice-supporting drivers. See
+  supported by the lowlevel driver also. Currently, the Teles and
+  HiSax drivers are the only voice-supporting drivers. See
   Documentation/isdn/README.audio for more information.
 
 ICN 2B and 4B support
@@ -4560,7 +4645,7 @@ CONFIG_ISDN_DRV_TELES
   and many compatibles.
   There is a new, heavily improved driver called HiSax which can be
   enabled in the next section. This driver will be removed soon. Please
-  use this driver only if you cannot get the HiSax driver working.
+  use this driver only if you cannot get the HiSax driver to work.
   By default, the driver is configured to support a 16.0-type using
   EDSS1-protocol. See Documentation/isdn/README on how to configure
   it using 16.3, a different D-channel protocol, or non-standard
@@ -4569,13 +4654,15 @@ CONFIG_ISDN_DRV_TELES
 HiSax SiemensChipSet driver support
 CONFIG_ISDN_DRV_HISAX
   This is an alternative driver supporting the Siemens chipset on
-  various ISDN-cards (like AVM A1, Elsa ISDN cards, Teles S0-16.0, 
-  Teles S0-16.3, Teles S0-8, Teles/Creatix PnP, ITK micro ix1 and 
-  many compatibles). It's a complete rewrite of the original Teles 
-  driver.  So you either say M or Y here and N in the above Teles 
-  section.
-  See Documentation/isdn/README.HiSax for further informations on
-  using this driver.
+  various ISDN-cards (like AVM A1, Elsa ISDN cards, Teles S0-16.0,
+  Teles S0-16.3, Teles S0-8, Teles/Creatix PnP, ITK micro ix1 and many
+  compatibles). It's a complete rewrite of the original Teles driver.
+  So you either say M or Y here and N in the above Teles section. If
+  you want to compile this as a module ( = code which can be inserted
+  in and removed from the running kernel whenever you want), say M
+  here and read Documentation/modules.txt. The module will be called
+  hisax.o.  See Documentation/isdn/README.HiSax for further
+  informations on using this driver.
 
 HiSax Support for Teles 16.0/8.0
 CONFIG_HISAX_16_0
@@ -4617,14 +4704,14 @@ CONFIG_HISAX_IX1MICROR2
 
 HiSax Support for EURO/DSS1
 CONFIG_HISAX_EURO
-  You should choose your D-channel protocol your local
+  You should choose the D-channel protocol your local
   telephone service provider uses here by saying Y or N.
   NOTE: This is mutually exclusive with HiSax Support for
-  german 1TR6 if you have only one ISDN card installed.
+  German 1TR6 if you have only one ISDN card installed.
 
-HiSax Support for german 1TR6
+HiSax Support for German 1TR6
 CONFIG_HISAX_1TR6
-  You should choose your D-channel protocol your local
+  You should choose the D-channel protocol your local
   telephone service provider uses here by saying Y or N.
   NOTE: This is mutually exclusive with HiSax Support for
   EURO/DSS1 if you have only one ISDN card installed.
@@ -4643,10 +4730,12 @@ CONFIG_ISDN_DRV_PCBIT
 
 Spellcaster support (EXPERIMENTAL)
 CONFIG_ISDN_DRV_SC
-  This enables support for the Spellcaster BRI boards. This driver
-  currently builds in a modularized version only.
-  See Documentation/isdn/README.sc and http://www.spellcast.com
-  for more information.
+  This enables support for the Spellcaster BRI ISDN boards. This
+  driver currently builds only in a modularized version ( = code which
+  can be inserted in and removed from the running kernel whenever you
+  want, details in Documentation/modules.txt); the module will be
+  called sc.o.  See Documentation/isdn/README.sc and
+  http://www.spellcast.com for more information.
 
 Support for AP1000 multicomputer
 CONFIG_AP1000
@@ -5122,7 +5211,7 @@ CONFIG_MSDOS_PARTITION
 # LocalWords:  wdt hdb hdc bugfix SiS vlb Acculogic CSA DTC dtc Holtek ht QDI
 # LocalWords:  QD qd UMC umc ALI ali lena fnet fr homepage azstarnet axplinux
 # LocalWords:  Avanti XL AlphaStations Jensen DECpc AXPpci UDB Cabriolet MCA RC
-# LocalWords:  AlphaPC uwaterloo cpbeaure mca AOUT OUTput PPro sipx gwdg lo nwe
+# LocalWords:  AlphaPC mca AOUT OUTput PPro sipx gwdg lo nwe FourPort Boca unm
 # LocalWords:  Keepalive linefill RELCOM keepalive analogue CDR conf CDI INIT
 # LocalWords:  OPTi isp irq noisp VFAT vfat NTFS losetup dmsdosfs dosfs ISDN MP
 # LocalWords:  NOWAYOUT behaviour dialin isdn callback BTX Teles ICN EDSS Cisco
@@ -5177,5 +5266,10 @@ CONFIG_MSDOS_PARTITION
 # LocalWords:  ibmmca lapbether mkiss dlci sdla fmv eepro eexpress ni hp ne es
 # LocalWords:  ibmtr isofs ROMFS romfs pcxx cyclades istallion psaux msbusmouse
 # LocalWords:  atixlmouse sbin softdog pcwd USS Lite ACI miroSOUND PCM miroPCM
-# LocalWords:  microcontroller miro Voxware downloading teles acsi slm gvp
-# LocalWords:  atari ariadne amigamouse atarimouse builtin
+# LocalWords:  microcontroller miro Voxware downloading teles acsi slm gvp ltpc
+# LocalWords:  atari ariadne amigamouse atarimouse builtin IPDDP maths bradford
+# LocalWords:  LocalTalk AppleTalk Farallon PhoneNet Zubkoff lnz SCCB HAPN WANs
+# LocalWords:  wanrouter WANPIPE multiprotocol Mbps wanpipe EtherWORKS nodma SC
+# LocalWords:  smp HiSax SiemensChipSet Siemens AVM Elsa ITK hisax PCC MICROR
+# LocalWords:  Mircolink EURO DSS Spellcaster BRI sc spellcast Digiboards GPIO
+# LocalWords:  SYMBIOS COMPAT SDMS rev ASUS Tekram

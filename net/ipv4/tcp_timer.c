@@ -255,7 +255,7 @@ void tcp_probe_timer(unsigned long data) {
 		return;
 	}
 	
-	if (sk->users) 
+	if (sk->sock_readers) 
 	{
 		/* 
 		 * Try again in second 
@@ -401,6 +401,8 @@ void tcp_retransmit_timer(unsigned long data)
 		return;
 	}
 
+	lock_sock(sk);
+
 	/*
 	 * Clear delay ack timer
 	 */
@@ -412,16 +414,15 @@ void tcp_retransmit_timer(unsigned long data)
 	 */
 
 	tp->retrans_head = NULL;
-	
 
 	if (sk->retransmits == 0)
 	{
-		/* 
-		 * remember window where we lost 
+		/*
+		 * remember window where we lost
 		 * "one half of the current window but at least 2 segments"
 		 */
-		
-		sk->ssthresh = max(sk->cong_window >> 1, 2); 
+
+		sk->ssthresh = max(sk->cong_window >> 1, 2);
 		sk->cong_count = 0;
 		sk->cong_window = 1;
 	}
@@ -452,6 +453,8 @@ void tcp_retransmit_timer(unsigned long data)
 	tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
 
 	tcp_write_timeout(sk);
+
+	release_sock(sk);
 }
 
 /*
@@ -472,7 +475,7 @@ static void tcp_syn_recv_timer(unsigned long data)
 			struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 			
 			/* TCP_LISTEN is implied. */
-			if (!sk->users && tp->syn_wait_queue) {
+			if (!sk->sock_readers && tp->syn_wait_queue) {
 				struct open_request *req;
 
 				req = tp->syn_wait_queue;

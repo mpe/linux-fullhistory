@@ -1,4 +1,4 @@
-/* $Id: console.c,v 1.4 1997/03/04 16:27:07 jj Exp $
+/* $Id: console.c,v 1.6 1997/03/18 17:59:59 jj Exp $
  * console.c: Routines that deal with sending and receiving IO
  *            to/from the current console device using the PROM.
  *
@@ -43,7 +43,7 @@ prom_nbputchar(char c)
 	outc = c;
 	if (p1275_cmd("write", P1275_ARG(1,P1275_ARG_IN_BUF)|
 			       P1275_INOUT(3,1),
-			       prom_stdin, &outc, P1275_SIZE(1)) == 1)
+			       prom_stdout, &outc, P1275_SIZE(1)) == 1)
 		return 0;
 	else
 		return -1;
@@ -62,8 +62,16 @@ prom_getchar(void)
 void
 prom_putchar(char c)
 {
-	while(prom_nbputchar(c) == -1) ;
+	prom_nbputchar(c);
 	return;
+}
+
+void
+prom_puts(char *s, int len)
+{
+	p1275_cmd("write", P1275_ARG(1,P1275_ARG_IN_BUF)|
+			   P1275_INOUT(3,1),
+			   prom_stdout, s, P1275_SIZE(len));
 }
 
 /* Query for input device type */

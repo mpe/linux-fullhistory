@@ -151,7 +151,7 @@ void raw_err (struct sock *sk, struct sk_buff *skb)
 	int type = skb->h.icmph->type;
 	int code = skb->h.icmph->code;
 
-	if (sk->ip_recverr && !sk->users) {
+	if (sk->ip_recverr && !sk->sock_readers) {
 		struct sk_buff *skb2 = skb_clone(skb, GFP_ATOMIC);
 		if (skb2 && sock_queue_err_skb(sk, skb2))
 			kfree_skb(skb, FREE_READ);
@@ -193,7 +193,7 @@ int raw_rcv(struct sock *sk, struct sk_buff *skb)
 	
 	skb->h.raw = skb->nh.raw;
 
-	if (sk->users) {
+	if (sk->sock_readers) {
 		__skb_queue_tail(&sk->back_log, skb);
 		return 0;
 	}

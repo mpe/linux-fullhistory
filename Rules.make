@@ -82,8 +82,7 @@ endif
 # This make dependencies quickly
 #
 fastdep: dummy
-	if [ -n "$(wildcard *.[chS])" ]; then \
-	$(TOPDIR)/scripts/mkdep *.[chS] > .depend; fi
+	$(TOPDIR)/scripts/mkdep *.[chS] > .depend
 ifdef ALL_SUB_DIRS
 	set -e; for i in $(ALL_SUB_DIRS); do $(MAKE) -C $$i fastdep; done
 endif

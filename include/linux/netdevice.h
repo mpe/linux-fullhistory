@@ -69,6 +69,8 @@
 #define IFF_IP_MASK_OK	2
 #define IFF_IP_BRD_OK	4
 
+struct neighbour;
+
 /*
  *	We tag multicasts with these structures.
  */
@@ -264,7 +266,7 @@ struct device
 					      struct ifmap *map);
 #define HAVE_HEADER_CACHE
 	int			(*hard_header_cache)(struct dst_entry *dst,
-						     struct dst_entry *neigh,
+						     struct neighbour *neigh,
 						     struct hh_cache *hh);
 	void			(*header_cache_update)(struct hh_cache *hh,
 						       struct device *dev,

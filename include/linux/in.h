@@ -33,7 +33,6 @@ enum {
   IPPROTO_IDP = 22,		/* XNS IDP protocol			*/
 
   IPPROTO_IPV6	 = 41,		/* IPv6-in-IPv4 tunnelling		*/
-  IPPROTO_ICMPV6 = 58,		/* ICMPv6				*/
 
   IPPROTO_RAW	 = 255,		/* Raw IP packets			*/
   IPPROTO_MAX

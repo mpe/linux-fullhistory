@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.1 1996/12/26 14:22:43 davem Exp $ */
+/* $Id: unistd.h,v 1.2 1997/03/18 18:00:26 jj Exp $ */
 #ifndef _SPARC64_UNISTD_H
 #define _SPARC64_UNISTD_H
 
@@ -277,12 +277,10 @@
 type name(void) \
 { \
 long __res; \
-__asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
-		      "t 0x10\n\t" \
-		      "bcc 1f\n\t" \
-		      "or %%g0, %%o0, %0\n\t" \
+__asm__ __volatile__ ("mov %0, %%g1\n\t" \
+		      "t 0x11\n\t" \
 		      "sub %%g0, %%o0, %0\n\t" \
-		      "1:\n\t" \
+		      "movcc %%xcc, %%o0, %0\n\t" \
 		      : "=r" (__res)\
 		      : "0" (__NR_##name) \
 		      : "g1", "o0"); \
@@ -296,13 +294,11 @@ return -1; \
 type name(type1 arg1) \
 { \
 long __res; \
-__asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
-		      "or %%g0, %1, %%o0\n\t" \
-		      "t 0x10\n\t" \
-		      "bcc 1f\n\t" \
-		      "or %%g0, %%o0, %0\n\t" \
+__asm__ __volatile__ ("mov %0, %%g1\n\t" \
+		      "mov %1, %%o0\n\t" \
+		      "t 0x11\n\t" \
 		      "sub %%g0, %%o0, %0\n\t" \
-		      "1:\n\t" \
+		      "movcc %%xcc, %%o0, %0\n\t" \
 		      : "=r" (__res), "=r" ((long)(arg1)) \
 		      : "0" (__NR_##name),"1" ((long)(arg1)) \
 		      : "g1", "o0"); \
@@ -316,14 +312,12 @@ return -1; \
 type name(type1 arg1,type2 arg2) \
 { \
 long __res; \
-__asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
-		      "or %%g0, %1, %%o0\n\t" \
-		      "or %%g0, %2, %%o1\n\t" \
-		      "t 0x10\n\t" \
-		      "bcc 1f\n\t" \
-		      "or %%g0, %%o0, %0\n\t" \
+__asm__ __volatile__ ("mov %0, %%g1\n\t" \
+		      "mov %1, %%o0\n\t" \
+		      "mov %2, %%o1\n\t" \
+		      "t 0x11\n\t" \
 		      "sub %%g0, %%o0, %0\n\t" \
-		      "1:\n\t" \
+		      "movcc %%xcc, %%o0, %0\n\t" \
 		      : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)) \
 		      : "0" (__NR_##name),"1" ((long)(arg1)),"2" ((long)(arg2)) \
 		      : "g1", "o0", "o1"); \
@@ -337,15 +331,13 @@ return -1; \
 type name(type1 arg1,type2 arg2,type3 arg3) \
 { \
 long __res; \
-__asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
-		      "or %%g0, %1, %%o0\n\t" \
-		      "or %%g0, %2, %%o1\n\t" \
-		      "or %%g0, %3, %%o2\n\t" \
-		      "t 0x10\n\t" \
-		      "bcc 1f\n\t" \
-		      "or %%g0, %%o0, %0\n\t" \
+__asm__ __volatile__ ("mov %0, %%g1\n\t" \
+		      "mov %1, %%o0\n\t" \
+		      "mov %2, %%o1\n\t" \
+		      "mov %3, %%o2\n\t" \
+		      "t 0x11\n\t" \
 		      "sub %%g0, %%o0, %0\n\t" \
-		      "1:\n\t" \
+		      "movcc %%xcc, %%o0, %0\n\t" \
 		      : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)), \
 		        "=r" ((long)(arg3)) \
 		      : "0" (__NR_##name), "1" ((long)(arg1)), "2" ((long)(arg2)), \
@@ -361,16 +353,14 @@ return -1; \
 type name (type1 arg1, type2 arg2, type3 arg3, type4 arg4) \
 { \
 long __res; \
-__asm__ __volatile__ ("or %%g0, %0, %%g1\n\t" \
-		      "or %%g0, %1, %%o0\n\t" \
-		      "or %%g0, %2, %%o1\n\t" \
-		      "or %%g0, %3, %%o2\n\t" \
-		      "or %%g0, %4, %%o3\n\t" \
-		      "t 0x10\n\t" \
-		      "bcc 1f\n\t" \
-		      "or %%g0, %%o0, %0\n\t" \
+__asm__ __volatile__ ("mov %0, %%g1\n\t" \
+		      "mov %1, %%o0\n\t" \
+		      "mov %2, %%o1\n\t" \
+		      "mov %3, %%o2\n\t" \
+		      "mov %4, %%o3\n\t" \
+		      "t 0x11\n\t" \
 		      "sub %%g0,%%o0, %0\n\t" \
-		      "1:\n\t" \
+		      "movcc %%xcc, %%o0, %0\n\t" \
 		      : "=r" (__res), "=r" ((long)(arg1)), "=r" ((long)(arg2)), \
 		        "=r" ((long)(arg3)), "=r" ((long)(arg4)) \
 		      : "0" (__NR_##name),"1" ((long)(arg1)),"2" ((long)(arg2)), \
@@ -388,17 +378,15 @@ type name (type1 arg1,type2 arg2,type3 arg3,type4 arg4,type5 arg5) \
 { \
       long __res; \
 \
-__asm__ __volatile__ ("or %%g0, %1, %%o0\n\t" \
-		      "or %%g0, %2, %%o1\n\t" \
-		      "or %%g0, %3, %%o2\n\t" \
-		      "or %%g0, %4, %%o3\n\t" \
-		      "or %%g0, %5, %%o4\n\t" \
-		      "or %%g0, %6, %%g1\n\t" \
-		      "t 0x10\n\t" \
-		      "bcc 1f\n\t" \
-		      "or %%g0, %%o0, %0\n\t" \
+__asm__ __volatile__ ("mov %1, %%o0\n\t" \
+		      "mov %2, %%o1\n\t" \
+		      "mov %3, %%o2\n\t" \
+		      "mov %4, %%o3\n\t" \
+		      "mov %5, %%o4\n\t" \
+		      "mov %6, %%g1\n\t" \
+		      "t 0x11\n\t" \
 		      "sub %%g0, %%o0, %0\n\t" \
-		      "1:\n\t" \
+		      "movcc %%xcc, %%o0, %0\n\t" \
 		      : "=r" (__res) \
 		      : "r" ((long)(arg1)),"r" ((long)(arg2)), \
 		        "r" ((long)(arg3)),"r" ((long)(arg4)),"r" ((long)(arg5)), \
@@ -461,16 +449,15 @@ static __inline__ pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned lo
 			   "mov %1, %%g1\n\t"
 			   "mov %2, %%o0\n\t"    /* Clone flags. */
 			   "mov 0, %%o1\n\t"     /* usp arg == 0 */
-			   "t 0x10\n\t"          /* Linux/Sparc clone(). */
-			   "cmp %%o1, 0\n\t"
-			   "be 1f\n\t"           /* The parent, just return. */
-			   " nop\n\t"            /* Delay slot. */
+			   "t 0x11\n\t"          /* Linux/Sparc clone(). */
+			   "brz,a,pn %%o1, 1f\n\t"           /* The parent, just return. */
+			   " mov %%o0, %0\n\t"
 			   "jmpl %%g2, %%o7\n\t" /* Call the function. */
 			   " mov %%g3, %%o0\n\t" /* Get back the arg in delay. */
 			   "mov %3, %%g1\n\t"
-			   "t 0x10\n\t"          /* Linux/Sparc exit(). */
+			   "t 0x11\n\t"          /* Linux/Sparc exit(). */
 			   /* Notreached by child. */
-			   "1: mov %%o0, %0\n\t" :
+			   "1:" :
 			   "=r" (retval) :
 			   "i" (__NR_clone), "r" (flags | CLONE_VM),
 			   "i" (__NR_exit),  "r" (fn), "r" (arg) :

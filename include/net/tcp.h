@@ -23,10 +23,10 @@
 #include <net/checksum.h>
 
 /* This is for all connections with a full identity, no wildcards. */
-#define TCP_HTABLE_SIZE		128
+#define TCP_HTABLE_SIZE		256
 
 /* This is for listening sockets, thus all sockets which possess wildcards. */
-#define TCP_LHTABLE_SIZE	16	/* Yes, really, this is all you need. */
+#define TCP_LHTABLE_SIZE	32	/* Yes, really, this is all you need. */
 
 /* This is for all sockets, to keep track of the local port allocations. */
 #define TCP_BHTABLE_SIZE	64
@@ -71,23 +71,19 @@ static __inline__ int tcp_sk_listen_hashfn(struct sock *sk)
 static __inline__ void tcp_sk_bindify(struct sock *sk)
 {
 	int hashent = tcp_sk_bhashfn(sk);
+	struct sock **htable = &tcp_bound_hash[hashent];
 
-	sk->prev = tcp_bound_hash[hashent];
-	tcp_bound_hash[hashent] = sk;
+	if((sk->bind_next = *htable) != NULL)
+		(*htable)->bind_pprev = &sk->bind_next;
+	*htable = sk;
+	sk->bind_pprev = htable;
 }
 
 static __inline__ void tcp_sk_unbindify(struct sock *sk)
 {
-	int hashent = tcp_sk_bhashfn(sk);
-	struct sock **htable = &tcp_bound_hash[hashent];
-
-	while(*htable) {
-		if(*htable == sk) {
-			*htable = sk->prev;
-			break;
-		}
-		htable = &((*htable)->prev);
-	}
+	if(sk->bind_next)
+		sk->bind_next->bind_pprev = sk->bind_pprev;
+	*(sk->bind_pprev) = sk->bind_next;
 }
 
 #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
@@ -315,7 +311,7 @@ extern int			tcp_v4_rcv(struct sk_buff *skb,
 
 extern int			tcp_do_sendmsg(struct sock *sk, 
 					       int iovlen, struct iovec *iov,
-					       int len, int flags);
+					       int flags);
 
 extern int			tcp_ioctl(struct sock *sk, 
 					  int cmd, 
@@ -371,8 +367,9 @@ extern struct sock *		tcp_v4_syn_recv_sock(struct sock *sk,
 						     struct sk_buff *skb,
 						     struct open_request *req);
 
-extern int			tcp_v4_backlog_rcv(struct sock *sk,
-						   struct sk_buff *skb);
+extern int			tcp_v4_do_rcv(struct sock *sk,
+					      struct sk_buff *skb);
+
 extern int			tcp_v4_connect(struct sock *sk,
 					       struct sockaddr *uaddr,
 					       int addr_len);

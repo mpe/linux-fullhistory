@@ -1,10 +1,21 @@
-/*  $Id: init.c,v 1.2 1997/01/02 14:14:42 jj Exp $
+/*  $Id: init.c,v 1.4 1997/03/18 17:59:48 jj Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
+ *  Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
+ 
+#include <linux/string.h>
+#include <linux/init.h>
+#include <linux/blk.h>
+#include <linux/swap.h>
+
+#include <asm/system.h>
+#include <asm/page.h>
+#include <asm/pgtable.h>
 
 extern void show_net_buffers(void);
+extern unsigned long device_scan(unsigned long);
 
 struct sparc_phys_banks sp_banks[SPARC_PHYS_BANKS];
 
@@ -21,10 +32,10 @@ struct sparc_phys_banks sp_banks[SPARC_PHYS_BANKS];
  * ZERO_PAGE is a special page that is used for zero-initialized
  * data and COW.
  */
-pte_t *__bad_pagetable(void)
+pmd_t *__bad_pagetable(void)
 {
 	memset((void *) EMPTY_PGT, 0, PAGE_SIZE);
-	return (pte_t *) EMPTY_PGT;
+	return (pmd_t *) EMPTY_PGT;
 }
 
 pte_t __bad_page(void)
@@ -67,7 +78,8 @@ __initfunc(unsigned long sparc_context_init(unsigned long start_mem, int numctx)
 
 	ctx_list_pool = (struct ctx_list *) start_mem;
 	start_mem += (numctx * sizeof(struct ctx_list));
-	for(ctx = 0; ctx < numctx; ctx++) {
+	/* Context 0 is reserved for PROM and uaccess stuff */
+	for(ctx = 1; ctx < numctx; ctx++) {
 		struct ctx_list *clist;
 
 		clist = (ctx_list_pool + ctx);
@@ -76,7 +88,7 @@ __initfunc(unsigned long sparc_context_init(unsigned long start_mem, int numctx)
 	}
 	ctx_free.next = ctx_free.prev = &ctx_free;
 	ctx_used.next = ctx_used.prev = &ctx_used;
-	for(ctx = 0; ctx < numctx; ctx++)
+	for(ctx = 1; ctx < numctx; ctx++)
 		add_to_free_ctxlist(ctx_list_pool + ctx);
 	return start_mem;
 }
@@ -86,6 +98,7 @@ __initfunc(unsigned long sparc_context_init(unsigned long start_mem, int numctx)
 __initfunc(unsigned long 
 paging_init(unsigned long start_mem, unsigned long end_mem))
 {
+	return device_scan (start_mem);
 }
 
 extern int min_free_pages;
@@ -182,7 +195,7 @@ void free_initmem (void)
 		mem_map[MAP_NR(addr)].count = 1;
 		free_page(addr);
 	}
-	printk ("Freeing unused kernel memory: %dk freed\n", (&__init_end - &__init_begin) >> 10);
+	printk ("Freeing unused kernel memory: %dk freed\n", (unsigned)((&__init_end - &__init_begin) >> 10));
 }
 
 void si_meminfo(struct sysinfo *val)

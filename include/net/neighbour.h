@@ -12,8 +12,6 @@
 
 #include <asm/atomic.h>
 #include <linux/skbuff.h>
-#include <linux/interrupt.h>
-#include <linux/netdevice.h>
 
 /*
  *	flags
@@ -30,6 +28,7 @@ struct neighbour {
 	unsigned long		lastused;
 	unsigned long		flags;
 	unsigned char		ha[MAX_ADDR_LEN];
+	struct hh_cache		*hh;
 	atomic_t		refcnt;
 	struct neigh_ops	*ops;
 	struct sk_buff_head	arp_queue;
@@ -40,12 +39,11 @@ struct neigh_ops {
 	int			family;
 	unsigned int		(*hash)(void *primary_key);
 	int			(*resolve)(unsigned char *h_dest,
-					   struct device *dev,
 					   struct sk_buff *skb);
 	void			(*destructor)(struct neighbour *);
 };
 
-extern struct neighbour		*neigh_alloc(int size, int priority);
+extern struct neighbour		*neigh_alloc(int size, struct neigh_ops *);
 
 /*
  *	Neighbour references
@@ -63,7 +61,7 @@ extern struct neighbour		*neigh_alloc(int size, int priority);
  */
 
 
-static __inline__ void neighbour_unlock(struct neighbour *neigh)
+static __inline__ void neigh_release(struct neighbour *neigh)
 {
 	if (atomic_dec_and_test(&neigh->refcnt))
 		neigh->lastused = jiffies;
@@ -111,6 +109,8 @@ extern void			neigh_unlink(struct neighbour *neigh);
 extern struct neighbour *	neigh_lookup(struct neigh_table *tbl,
 					     void *pkey, int key_len,
 					     struct device *dev);
+
+extern void			neigh_destroy(struct neighbour *neigh);
 
 static __inline__ void neigh_insert(struct neigh_table *tbl,
 				    struct neighbour *neigh)

@@ -47,7 +47,6 @@
 #include <linux/skbuff.h>
 
 #include <net/ip.h>
-#include <net/ipv6.h>
 #include <net/protocol.h>
 #include <net/dst.h>
 #include <net/tcp.h>
@@ -607,7 +606,7 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
 	int len;
 	unsigned char *bptr;
 
-	if (intr_count && priority!=GFP_ATOMIC) 
+	if (0 && intr_count && priority!=GFP_ATOMIC) 
 	{
 		static int count = 0;
 		if (++count < 5) {
@@ -663,6 +662,7 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
 	skb->truesize=size;
 	skb->stamp.tv_sec=0;	/* No idea about time */
 	skb->ip_summed = 0;
+	skb->security = 0;	/* By default packets are insecure */
 	skb->dst = NULL;
 	skb->destructor = NULL;
 	memset(skb->cb, 0, sizeof(skb->cb));
@@ -799,9 +799,6 @@ struct sk_buff *skb_copy(struct sk_buff *skb, int priority)
 	n->h.raw=skb->h.raw+offset;
 	n->nh.raw=skb->nh.raw+offset;
 	n->mac.raw=skb->mac.raw+offset;
-#if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
-	n->nexthop = skb->nexthop;
-#endif
 	n->seq=skb->seq;
 	n->end_seq=skb->end_seq;
 	n->ack_seq=skb->ack_seq;
@@ -813,9 +810,8 @@ struct sk_buff *skb_copy(struct sk_buff *skb, int priority)
 	n->users=1;
 	n->pkt_type=skb->pkt_type;
 	n->stamp=skb->stamp;
-	n->arp=skb->arp;
 	n->destructor = NULL;
-	
+	n->security=skb->security;
 	IS_SKB(n);
 	return n;
 }
@@ -859,9 +855,6 @@ struct sk_buff *skb_realloc_headroom(struct sk_buff *skb, int newheadroom)
 	n->nh.raw=skb->nh.raw+offset;
 	n->mac.raw=skb->mac.raw+offset;
 	memcpy(n->cb, skb->cb, sizeof(skb->cb));
-#if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
- 	n->nexthop = skb->nexthop;
-#endif
 	n->seq=skb->seq;
  	n->end_seq=skb->end_seq;
 	n->ack_seq=skb->ack_seq;
@@ -873,7 +866,8 @@ struct sk_buff *skb_realloc_headroom(struct sk_buff *skb, int newheadroom)
 	n->pkt_type=skb->pkt_type;
 	n->stamp=skb->stamp;
 	n->destructor = NULL;
- 	
+	n->security=skb->security;
+
 	IS_SKB(n);
 	return n;
 }

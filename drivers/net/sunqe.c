@@ -1116,6 +1116,8 @@ static int qec_ether_init(struct device *dev, struct linux_sbus_device *sdev)
 	/* We are home free at this point, link the qe's into
 	 * the master list for later module unloading.
 	 */
+	for(i = 0; i < 4; i++)
+		qe_devs[i]->ifindex = dev_new_index();
 	qecp->next_module = root_qec_dev;
 	root_qec_dev = qecp;
 #endif

@@ -24,7 +24,7 @@ static char *version = "3c59x.c:v0.25 5/17/96 becker@cesdis.gsfc.nasa.gov\n";
    Tx process.  Bus master transfers are always disabled by default, but
    iff this is set they may be turned on using 'options'. */
 #define VORTEX_BUS_MASTER
-
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/kernel.h>
@@ -78,9 +78,9 @@ struct netdev_entry tc59x_drv =
 #endif
 
 #ifdef VORTEX_DEBUG
-int vortex_debug = VORTEX_DEBUG;
+static int vortex_debug = VORTEX_DEBUG;
 #else
-int vortex_debug = 1;
+static int vortex_debug = 1;
 #endif
 
 #ifdef CONFIG_PCI

@@ -83,6 +83,8 @@ void ax25_dev_device_up(struct device *dev)
 
 	ax25_unregister_sysctl();
 
+	memset(ax25_dev, 0x00, sizeof(*ax25_dev));
+
 	ax25_dev->dev     = dev;
 	ax25_dev->forward = NULL;
 
@@ -98,7 +100,12 @@ void ax25_dev_device_up(struct device *dev)
 	ax25_dev->values[AX25_VALUES_IDLE]	= AX25_DEF_IDLE;
 	ax25_dev->values[AX25_VALUES_N2]        = AX25_DEF_N2;
 	ax25_dev->values[AX25_VALUES_PACLEN]	= AX25_DEF_PACLEN;
+#ifdef CONFIG_AX25_DAMA_SLAVE
+	ax25_dev->values[AX25_VALUES_PROTOCOL]	= AX25_PROTO_DAMA_SLAVE;
+#else
 	ax25_dev->values[AX25_VALUES_PROTOCOL]  = AX25_DEF_PROTOCOL;
+#endif
+	ax25_dev->values[AX25_VALUES_DS_TIMEOUT]= AX25_DEF_DS_TIMEOUT;
 
 	save_flags(flags); cli();
 	ax25_dev->next = ax25_dev_list;
@@ -119,6 +126,10 @@ void ax25_dev_device_down(struct device *dev)
 	ax25_unregister_sysctl();
 
 	save_flags(flags); cli();
+
+#ifdef CONFIG_AX25_DAMA_SLAVE
+	ax25_ds_del_timer(ax25_dev);
+#endif
 
 	/*
 	 *	Remove any packet forwarding that points to this device.

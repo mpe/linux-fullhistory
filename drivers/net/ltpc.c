@@ -316,9 +316,9 @@ static int wait_timeout(struct device *dev, int c)
 	int i;
 	int timeout;
 
-	/* ten second or so total */
+	/* twenty second or so total */
 
-	for(i=0;i<10000;i++) {
+	for(i=0;i<20000;i++) {
 		if ( c != inb_p(dev->base_addr+6) ) return 0;
 		for(timeout=loops_per_sec/1000; timeout > 0; timeout--) ;
 	}

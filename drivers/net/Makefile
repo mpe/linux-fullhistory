@@ -255,15 +255,16 @@ ifeq ($(CONFIG_AT1500),y)
 L_OBJS += lance.o
 endif
 
-ifeq ($(CONFIG_DEFXX),y)
-L_OBJS += defxx.o
-endif
-
 ifeq ($(CONFIG_LANCE),y)
 L_OBJS += lance.o
-  ifeq ($(CONFIG_LANCE32),y)
-  L_OBJS += lance32.o
-  endif
+endif
+
+ifeq ($(CONFIG_PCNET32),y)
+L_OBJS += pcnet32.o
+endif
+
+ifeq ($(CONFIG_DEFXX),y)
+L_OBJS += defxx.o
 endif
 
 ifeq ($(CONFIG_SUNLANCE),y)

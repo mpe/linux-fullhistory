@@ -1,4 +1,4 @@
-/* $Id: oplib.h,v 1.4 1997/02/25 20:00:34 jj Exp $
+/* $Id: oplib.h,v 1.6 1997/03/18 18:01:30 jj Exp $
  * oplib.h:  Describes the interface and available routines in the
  *           Linux Prom library.
  *
@@ -28,6 +28,9 @@ extern unsigned int prom_rev, prom_prev;
  * initialization is complete.
  */
 extern int prom_root_node;
+
+/* PROM stdin and stdout */
+extern int prom_stdin, prom_stdout;
 
 /* /chosen node of the prom device tree, this stays constant after
  * initialization is complete.
@@ -107,7 +110,7 @@ extern void prom_cmdline(void);
 /* Enter the prom, with no chance of continuation for the stand-alone
  * which calls this.
  */
-extern void prom_halt(void);
+extern void prom_halt(void) __attribute__ ((noreturn));
 
 /* Set the PROM 'sync' callback function to the passed function pointer.
  * When the user gives the 'sync' command at the prom prompt while the
@@ -189,6 +192,16 @@ extern int prom_idlecpu(int cpunode);
 extern int prom_restartcpu(int cpunode);
 
 /* PROM device tree traversal functions... */
+
+#ifdef PROMLIB_INTERNAL
+
+/* Internal version of prom_getchild. */
+extern int __prom_getchild(int parent_node);
+
+/* Internal version of prom_getsibling. */
+extern int __prom_getsibling(int node);
+
+#endif
 
 /* Get the child node of the given node, or zero if no child exists. */
 extern int prom_getchild(int parent_node);

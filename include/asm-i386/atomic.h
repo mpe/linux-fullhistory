@@ -21,7 +21,7 @@
 
 typedef int atomic_t;
 
-static __inline__ void atomic_add(atomic_t i, atomic_t *v)
+static __inline__ void atomic_add(atomic_t i, volatile atomic_t *v)
 {
 	__asm__ __volatile__(
 		LOCK "addl %1,%0"
@@ -29,7 +29,7 @@ static __inline__ void atomic_add(atomic_t i, atomic_t *v)
 		:"ir" (i), "m" (__atomic_fool_gcc(v)));
 }
 
-static __inline__ void atomic_sub(atomic_t i, atomic_t *v)
+static __inline__ void atomic_sub(atomic_t i, volatile atomic_t *v)
 {
 	__asm__ __volatile__(
 		LOCK "subl %1,%0"
@@ -37,7 +37,7 @@ static __inline__ void atomic_sub(atomic_t i, atomic_t *v)
 		:"ir" (i), "m" (__atomic_fool_gcc(v)));
 }
 
-static __inline__ void atomic_inc(atomic_t *v)
+static __inline__ void atomic_inc(volatile atomic_t *v)
 {
 	__asm__ __volatile__(
 		LOCK "incl %0"
@@ -45,7 +45,7 @@ static __inline__ void atomic_inc(atomic_t *v)
 		:"m" (__atomic_fool_gcc(v)));
 }
 
-static __inline__ void atomic_dec(atomic_t *v)
+static __inline__ void atomic_dec(volatile atomic_t *v)
 {
 	__asm__ __volatile__(
 		LOCK "decl %0"
@@ -53,7 +53,7 @@ static __inline__ void atomic_dec(atomic_t *v)
 		:"m" (__atomic_fool_gcc(v)));
 }
 
-static __inline__ int atomic_dec_and_test(atomic_t *v)
+static __inline__ int atomic_dec_and_test(volatile atomic_t *v)
 {
 	unsigned char c;
 
@@ -63,5 +63,14 @@ static __inline__ int atomic_dec_and_test(atomic_t *v)
 		:"m" (__atomic_fool_gcc(v)));
 	return c != 0;
 }
+
+/* These are x86-specific, used by some header files */
+#define atomic_clear_mask(mask, addr) \
+__asm__ __volatile__(LOCK "andl %0,%1" \
+: : "r" (~(mask)),"m" (__atomic_fool_gcc(addr)) : "memory")
+
+#define atomic_set_mask(mask, addr) \
+__asm__ __volatile__(LOCK "orl %0,%1" \
+: : "r" (mask),"m" (__atomic_fool_gcc(addr)) : "memory")
 
 #endif

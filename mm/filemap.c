@@ -753,7 +753,7 @@ page_read_error:
 	filp->f_reada = 1;
 	if (page_cache)
 		free_page(page_cache);
-	if (!IS_RDONLY(inode)) {
+	if (DO_UPDATE_ATIME(inode)) {
 		inode->i_atime = CURRENT_TIME;
 		inode->i_dirt = 1;
 	}
@@ -1188,7 +1188,7 @@ int generic_file_mmap(struct inode * inode, struct file * file, struct vm_area_s
 		return -EACCES;
 	if (!inode->i_op || !inode->i_op->readpage)
 		return -ENOEXEC;
-	if (!IS_RDONLY(inode)) {
+	if (DO_UPDATE_ATIME(inode)) {
 		inode->i_atime = CURRENT_TIME;
 		inode->i_dirt = 1;
 	}

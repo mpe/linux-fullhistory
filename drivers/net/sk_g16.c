@@ -16,6 +16,8 @@
  * Description    : Schneider & Koch G16 Ethernet Device Driver for
  *                  Linux Kernel >= 1.1.22
  * Update History :
+ *                  Paul Gortmaker, 03/97: Fix for v2.1.x to use read{b,w}
+ *                  write{b,w} and memcpy -> memcpy_{to,from}io
  *
 -*/
 
@@ -64,6 +66,7 @@ static const char *rcsid = "$Id: sk_g16.c,v 1.1 1994/06/30 16:25:15 root Exp $";
 #include <linux/interrupt.h>
 #include <linux/malloc.h>
 #include <linux/string.h> 
+#include <linux/delay.h>
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/bitops.h> 
@@ -754,7 +757,7 @@ int SK_probe(struct device *dev, short ioaddr)
     /* Read in station address */
     for (i = 0, j = 0; i < ETH_ALEN; i++, j+=2)
     {
-	dev->dev_addr[i] = board->rom[j];          
+	dev->dev_addr[i] = readb(board->rom+j);          
     }
 
     /* Check for manufacturer code */
@@ -1253,8 +1256,7 @@ static int SK_send_packet(struct sk_buff *skb, struct device *dev)
 
 	/* Copy data into dual ported ram */
 
-	memcpy((char *) (tmdp->u.buffer & 0x00ffffff), (char *)skb->data,
-	       skb->len);
+	memcpy_toio((tmdp->u.buffer & 0x00ffffff), skb->data, skb->len);
 
 	tmdp->blen = -len;            /* set length to transmit */
 
@@ -1598,8 +1600,7 @@ static void SK_rxintr(struct device *dev)
 	     * ignore status fields) 
 	     */
 
-	    memcpy(skb_put(skb,len), (unsigned char *) (rmdp->u.buffer & 0x00ffffff),
-		   len);
+	    memcpy_fromio(skb_put(skb,len), (rmdp->u.buffer & 0x00ffffff), len);
 
 
 	    /* 
@@ -1775,7 +1776,7 @@ unsigned int SK_rom_addr(void)
     int rom_found = 0;
     unsigned int rom_location[] = SK_BOOT_ROM_LOCATIONS;
     unsigned char rom_id[] = SK_BOOT_ROM_ID;
-    unsigned char *test_byte;
+    unsigned char test_byte;
 
     /* Autodetect Boot_ROM */
     PRINTK(("## %s: Autodetection of Boot_ROM\n", SK_NAME));
@@ -1788,10 +1789,10 @@ unsigned int SK_rom_addr(void)
 	rom_found = 1; 
 	for (j = 0; j < 6; j++)
 	{
-	    test_byte = (unsigned char *) (rom_location[i]+j);
+	    test_byte = readb(rom_location[i]+j);
 	    PRINTK((" %02x ", *test_byte));
 
-	    if(!(*test_byte == rom_id[j]))
+	    if(test_byte != rom_id[j])
 	    {
 		rom_found = 0;
 	    } 
@@ -1842,12 +1843,9 @@ unsigned int SK_rom_addr(void)
 
 void SK_reset_board(void)
 {
-    int i;
-
-    SK_PORT = 0x00;           /* Reset active */
-    for (i = 0; i < 10 ; i++) /* Delay min 5ms */
-	;
-    SK_PORT = SK_RESET;       /* Set back to normal operation */
+    writeb(0x00, SK_PORT);       /* Reset active */
+    udelay(5000);                /* Delay min 5ms */
+    writeb(SK_RESET, SK_PORT);   /* Set back to normal operation */
 
 } /* End of SK_reset_board() */
 
@@ -1870,12 +1868,12 @@ void SK_reset_board(void)
 
 void SK_set_RAP(int reg_number)
 {
-    SK_IOREG = reg_number;
-    SK_PORT  = SK_RESET | SK_RAP | SK_WREG;
-    SK_IOCOM = SK_DOIO;
+    writew(reg_number, SK_IOREG);
+    writeb(SK_RESET | SK_RAP | SK_WREG, SK_PORT);
+    writeb(SK_DOIO, SK_IOCOM);
 
-    while (SK_PORT & SK_IORUN) 
-	;
+    while (readb(SK_PORT) & SK_IORUN) 
+	barrier();
 } /* End of SK_set_RAP() */
 
 
@@ -1898,12 +1896,12 @@ int SK_read_reg(int reg_number)
 {
     SK_set_RAP(reg_number);
 
-    SK_PORT  = SK_RESET | SK_RDATA | SK_RREG;
-    SK_IOCOM = SK_DOIO;
+    writeb(SK_RESET | SK_RDATA | SK_RREG, SK_PORT);
+    writeb(SK_DOIO, SK_IOCOM);
 
-    while (SK_PORT & SK_IORUN)
-	;
-    return (SK_IOREG);
+    while (readb(SK_PORT) & SK_IORUN)
+	barrier();
+    return (readw(SK_IOREG));
 
 } /* End of SK_read_reg() */
 
@@ -1927,13 +1925,13 @@ int SK_read_reg(int reg_number)
 
 int SK_rread_reg(void)
 {
-    SK_PORT  = SK_RESET | SK_RDATA | SK_RREG;
+    writeb(SK_RESET | SK_RDATA | SK_RREG, SK_PORT);
 
-    SK_IOCOM = SK_DOIO;
+    writeb(SK_DOIO, SK_IOCOM);
 
-    while (SK_PORT & SK_IORUN)
-	;
-    return (SK_IOREG);
+    while (readb(SK_PORT) & SK_IORUN)
+	barrier();
+    return (readw(SK_IOREG));
 
 } /* End of SK_rread_reg() */
 
@@ -1961,12 +1959,12 @@ void SK_write_reg(int reg_number, int value)
 {
     SK_set_RAP(reg_number);
 
-    SK_IOREG = value;
-    SK_PORT  = SK_RESET | SK_RDATA | SK_WREG;
-    SK_IOCOM = SK_DOIO;
+    writew(value, SK_IOREG);
+    writeb(SK_RESET | SK_RDATA | SK_WREG, SK_PORT);
+    writeb(SK_DOIO, SK_IOCOM);
 
-    while (SK_PORT & SK_IORUN)
-	;
+    while (readb(SK_PORT) & SK_IORUN)
+	barrier();
 } /* End of SK_write_reg */
 
 

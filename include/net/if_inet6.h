@@ -59,14 +59,17 @@ struct ipv6_mc_socklist {
 	struct ipv6_mc_socklist *next;
 };
 
-struct ipv6_mc_list {
-	struct in6_addr		addr;
+#define MAF_TIMER_RUNNING	0x01
+#define MAF_LAST_REPORTER	0x02
+
+struct ifmcaddr6 {
+	struct in6_addr		mca_addr;
 	struct device		*dev;
-	struct ipv6_mc_list	*next;
-	struct ipv6_mc_list	*if_next;
-	struct timer_list	timer;
-        int			tm_running;
-        atomic_t		users;	
+	struct ifmcaddr6	*next;
+	struct ifmcaddr6	*if_next;
+	struct timer_list	mca_timer;
+	unsigned long		mca_flags;
+	atomic_t		mca_users;	
 };
 
 #define	IFA_HOST	IPV6_ADDR_LOOPBACK
@@ -81,9 +84,8 @@ struct inet6_dev
 	struct device		*dev;
 
 	struct inet6_ifaddr	*addr_list;
-	struct ipv6_mc_list	*mc_list;
+	struct ifmcaddr6	*mc_list;
 
-	__u32			if_index;
 	__u32			if_flags;
 	__u32			router:1,
 				unused:31;

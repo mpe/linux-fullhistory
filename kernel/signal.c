@@ -170,40 +170,24 @@ asmlinkage int sys_sigaction(int signum, const struct sigaction * action,
 	struct sigaction * oldaction)
 {
 	struct sigaction new_sa, *p;
-	int ret = -EINVAL;
 
-	lock_kernel();
 	if (signum<1 || signum>32)
-		goto out;
+		return -EINVAL;
 	p = signum - 1 + current->sig->action;
 	if (action) {
-		ret = verify_area(VERIFY_READ, action, sizeof(*action));
-		if (ret)
-			goto out;
-		ret = -EINVAL;
-		if (signum==SIGKILL || signum==SIGSTOP)
-			goto out;
-		ret = -EFAULT;
 		if (copy_from_user(&new_sa, action, sizeof(struct sigaction)))
-			goto out;
-		if (new_sa.sa_handler != SIG_DFL && new_sa.sa_handler != SIG_IGN) {
-			ret = verify_area(VERIFY_READ, new_sa.sa_handler, 1);
-			if (ret)
-				goto out;
-		}
+			return -EFAULT;
+		if (signum==SIGKILL || signum==SIGSTOP)
+			return -EINVAL;
 	}
-	ret = -EFAULT;
 	if (oldaction) {
 		if (copy_to_user(oldaction, p, sizeof(struct sigaction)))
-			goto out;	
+			return -EFAULT;
 	}
 	if (action) {
 		*p = new_sa;
 		check_pending(signum);
 	}
-	ret = 0;
-out:
-	unlock_kernel();
-	return ret;
+	return 0;
 }
 #endif

@@ -31,6 +31,7 @@
  *        18.10.96  Changed to new user space access routines 
  *                  (copy_{to,from}_user)
  *   0.2  21.11.96  various small changes
+ *   0.3  03.03.97  fixed (hopefully) IP not working with ax.25 as a module
  */
 
 /*****************************************************************************/
@@ -50,10 +51,10 @@
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/hdlcdrv.h>
-#ifdef CONFIG_AX25
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 /* prototypes for ax25_encapsulate and ax25_rebuild_header */
 #include <net/ax25.h> 
-#endif /* CONFIG_AX25 */
+#endif /* CONFIG_AX25 || CONFIG_AX25_MODULE */
 
 /* make genksyms happy */
 #include <linux/ip.h>
@@ -745,7 +746,19 @@ static int hdlcdrv_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 		bi.data.cs.ptt = hdlcdrv_ptt(s);
 		bi.data.cs.dcd = s->hdlcrx.dcd;
 		bi.data.cs.ptt_keyed = s->ptt_keyed;
-		bi.data.cs.stats = s->stats;
+		bi.data.cs.tx_packets = s->stats.tx_packets;
+		bi.data.cs.tx_errors = s->stats.tx_errors;
+		bi.data.cs.rx_packets = s->stats.rx_packets;
+		bi.data.cs.rx_errors = s->stats.rx_errors;
+		break;		
+
+	case HDLCDRVCTL_OLDGETSTAT:
+		bi.data.ocs.ptt = hdlcdrv_ptt(s);
+		bi.data.ocs.dcd = s->hdlcrx.dcd;
+		bi.data.ocs.ptt_keyed = s->ptt_keyed;
+#if LINUX_VERSION_CODE < 0x20100
+		bi.data.ocs.stats = s->stats;
+#endif
 		break;		
 
 	case HDLCDRVCTL_CALIBRATE:
@@ -858,13 +871,13 @@ static int hdlcdrv_probe(struct device *dev)
 
 	skb_queue_head_init(&s->send_queue);
 	
-#ifdef CONFIG_AX25
+#if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 	dev->hard_header = ax25_encapsulate;
 	dev->rebuild_header = ax25_rebuild_header;
-#else /* CONFIG_AX25 */
+#else /* CONFIG_AX25 || CONFIG_AX25_MODULE */
 	dev->hard_header = NULL;
 	dev->rebuild_header = NULL;
-#endif /* CONFIG_AX25 */
+#endif /* CONFIG_AX25 || CONFIG_AX25_MODULE */
 	dev->set_mac_address = hdlcdrv_set_mac_address;
 	
 	dev->type = ARPHRD_AX25;           /* AF_AX25 device */
@@ -989,8 +1002,7 @@ MODULE_DESCRIPTION("Packet Radio network interface HDLC encoder/decoder");
 int init_module(void)
 {
 	printk(KERN_INFO "hdlcdrv: (C) 1996 Thomas Sailer HB9JNX/AE4WA\n");
-	printk(KERN_INFO "hdlcdrv: version 0.2 compiled %s %s\n", 
-	       __TIME__, __DATE__);
+	printk(KERN_INFO "hdlcdrv: version 0.3 compiled " __TIME__ " " __DATE__ "\n");
 #if LINUX_VERSION_CODE < 0x20115
         register_symtab(&hdlcdrv_syms);
 #endif

@@ -440,15 +440,19 @@ static void end_request(int uptodate) {
 	struct request *req = CURRENT;
 #endif /* IDE_DRIVER */
 	struct buffer_head * bh;
+	int nsect;
 
 	req->errors = 0;
 	if (!uptodate) {
 		printk("end_request: I/O error, dev %s, sector %lu\n",
 			kdevname(req->rq_dev), req->sector);
-		req->nr_sectors--;
-		req->nr_sectors &= ~SECTOR_MASK;
-		req->sector += (BLOCK_SIZE / 512);
-		req->sector &= ~SECTOR_MASK;		
+		if ((bh = req->bh) != NULL) {
+			nsect = bh->b_size >> 9;
+			req->nr_sectors--;
+			req->nr_sectors &= ~(nsect - 1);
+			req->sector += nsect;
+			req->sector &= ~(nsect - 1);
+		}
 	}
 
 	if ((bh = req->bh) != NULL) {

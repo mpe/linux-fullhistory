@@ -14,9 +14,9 @@
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/smp.h>
+#include <linux/reboot.h>
 
 asmlinkage void sys_sync(void);	/* it's really int */
-extern void hard_reset_now(void);
 extern void do_unblank_screen(void);
 extern int C_A_D;
 
@@ -62,7 +62,7 @@ NORET_TYPE void panic(const char * fmt, ...)
 		 *	choosing not too. It might crash, be corrupt or do
 		 *	more harm than good for other reasons.
 		 */
-		hard_reset_now();
+		machine_restart(NULL);
 	}
 #ifdef __sparc__
 	printk("Press L1-A to return to the boot prom\n");

@@ -458,7 +458,7 @@ static _INLINE_ void rs_sched_event(struct async_struct *info,
 				  int event)
 {
 	info->event |= 1 << event;
-	queue_task_irq_off(&info->tqueue, &tq_serial);
+	queue_task(&info->tqueue, &tq_serial);
 	mark_bh(SERIAL_BH);
 }
 
@@ -540,7 +540,7 @@ static _INLINE_ void receive_chars(struct async_struct *info,
 	ignore_char:
 		*status = serial_inp(info, UART_LSR);
 	} while (*status & UART_LSR_DR);
-	queue_task_irq_off(&tty->flip.tqueue, &tq_timer);
+	queue_task(&tty->flip.tqueue, &tq_timer);
 }
 
 static _INLINE_ void transmit_chars(struct async_struct *info, int *intr_done)
@@ -625,7 +625,7 @@ static _INLINE_ void check_modem_status(struct async_struct *info)
 #ifdef SERIAL_DEBUG_OPEN
 			printk("scheduling hangup...");
 #endif
-			queue_task_irq_off(&info->tqueue_hangup,
+			queue_task(&info->tqueue_hangup,
 					   &tq_scheduler);
 		}
 	}

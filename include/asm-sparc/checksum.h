@@ -1,4 +1,4 @@
-/* $Id: checksum.h,v 1.25 1997/02/19 15:51:19 jj Exp $ */
+/* $Id: checksum.h,v 1.26 1997/03/14 07:54:47 davem Exp $ */
 #ifndef __SPARC_CHECKSUM_H
 #define __SPARC_CHECKSUM_H
 
@@ -45,6 +45,8 @@ extern unsigned int csum_partial(unsigned char * buff, int len, unsigned int sum
 #define csum_partial_copy_fromuser(s, d, l, w)  \
                          csum_partial_copy((char *) (s), (d), (l), (w))
   
+extern unsigned int __csum_partial_copy_sparc_generic (const char *, char *);
+
 extern __inline__ unsigned int 
 csum_partial_copy_nocheck (const char *src, char *dst, int len, 
 			   unsigned int sum)

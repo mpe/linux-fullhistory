@@ -418,19 +418,18 @@ static int nr_setsockopt(struct socket *sock, int level, int optname,
 	char *optval, int optlen)
 {
 	struct sock *sk = sock->sk;
-	int err, opt;
+	int opt;
 
 	if (level != SOL_NETROM)
 		return -ENOPROTOOPT;
 
-	if(optlen<sizeof(int))
+	if (optlen < sizeof(int))
 		return -EINVAL;
-		
-	if(get_user(opt, (int *)optval))
+
+	if (get_user(opt, (int *)optval))
 		return -EFAULT;
 
-	switch (optname) 
-	{
+	switch (optname) {
 		case NETROM_T1:
 			if (opt < 1)
 				return -EINVAL;
@@ -480,7 +479,7 @@ static int nr_getsockopt(struct socket *sock, int level, int optname,
 	if (level != SOL_NETROM)
 		return -ENOPROTOOPT;
 	
-	if(get_user(len,optlen))
+	if (get_user(len, optlen))
 		return -EFAULT;
 
 	switch (optname) {
@@ -512,11 +511,14 @@ static int nr_getsockopt(struct socket *sock, int level, int optname,
 			return -ENOPROTOOPT;
 	}
 
-	len=min(len,sizeof(int));
-	if(put_user(len, optlen))
+	len = min(len, sizeof(int));
+
+	if (put_user(len, optlen))
 		return -EFAULT;
-	if(copy_to_user(optval,&val,len))
+
+	if (copy_to_user(optval, &val, len))
 		return -EFAULT;
+
 	return 0;
 }
 

@@ -179,7 +179,19 @@ typedef struct {
 #define	R_SPARC_JMP_SLOT	21
 #define	R_SPARC_RELATIVE	22
 #define	R_SPARC_UA32		23
-#define	R_SPARC_NUM		24
+#define R_SPARC_PLT32		24
+#define R_SPARC_HIPLT22		25
+#define R_SPARC_LOPLT10		26
+#define R_SPARC_PCPLT32		27
+#define R_SPARC_PCPLT22		28
+#define R_SPARC_PCPLT10		29
+#define R_SPARC_10		30
+#define R_SPARC_11		31
+#define R_SPARC_WDISP16		40
+#define R_SPARC_WDISP19		41
+#define R_SPARC_7		43
+#define R_SPARC_5		44
+#define R_SPARC_6		45
 
 /*
  * 68k ELF relocation types

@@ -33,6 +33,7 @@
 #include <asm/irq.h>
 #include <asm/bitops.h>
 #include <asm/smp.h>
+#include <asm/pgtable.h>
 
 #define CR0_NE 32
 
@@ -126,15 +127,14 @@ BUILD_IRQ(SECOND,9,0x02)
 BUILD_IRQ(SECOND,10,0x04)
 BUILD_IRQ(SECOND,11,0x08)
 BUILD_IRQ(SECOND,12,0x10)
-#ifdef __SMP__
-BUILD_MSGIRQ(SECOND,13,0x20)
-#else
 BUILD_IRQ(SECOND,13,0x20)
-#endif
 BUILD_IRQ(SECOND,14,0x40)
 BUILD_IRQ(SECOND,15,0x80)
+
 #ifdef __SMP__
-BUILD_RESCHEDIRQ(16)
+BUILD_SMP_INTERRUPT(reschedule_interrupt)
+BUILD_SMP_INTERRUPT(invalidate_interrupt)
+BUILD_SMP_INTERRUPT(stop_cpu_interrupt)
 #endif
 
 /*
@@ -146,9 +146,6 @@ static void (*interrupt[17])(void) = {
 	IRQ4_interrupt, IRQ5_interrupt, IRQ6_interrupt, IRQ7_interrupt,
 	IRQ8_interrupt, IRQ9_interrupt, IRQ10_interrupt, IRQ11_interrupt,
 	IRQ12_interrupt, IRQ13_interrupt, IRQ14_interrupt, IRQ15_interrupt	
-#ifdef __SMP__	
-	,IRQ16_interrupt
-#endif
 };
 
 static void (*fast_interrupt[16])(void) = {
@@ -179,15 +176,6 @@ static void (*bad_interrupt[16])(void) = {
 
 static void no_action(int cpl, void *dev_id, struct pt_regs *regs) { }
 
-#ifdef __SMP__
-
-/*
- * On SMP boards, irq13 is used for interprocessor interrupts (IPI's).
- */
-static struct irqaction irq13 = { smp_message_irq, SA_INTERRUPT, 0, "IPI", NULL, NULL };
-
-#else
-
 /*
  * Note that on a 486, we don't want to do a SIGFPE on an irq13
  * as the irq is unreliable, and exception 16 works correctly
@@ -210,8 +198,6 @@ static void math_error_irq(int cpl, void *dev_id, struct pt_regs *regs)
 }
 
 static struct irqaction irq13 = { math_error_irq, 0, 0, "math error", NULL, NULL };
-
-#endif
 
 /*
  * IRQ2 is cascade interrupt to second interrupt controller
@@ -335,6 +321,174 @@ int get_smp_prof_list(char *buf) {
 #endif 
 
 
+/*
+ * Global interrupt locks for SMP. Allow interrupts to come in on any
+ * CPU, yet make cli/sti act globally to protect critical regions..
+ */
+#ifdef __SMP__
+unsigned char global_irq_holder = NO_PROC_ID;
+unsigned volatile int global_irq_lock;
+unsigned volatile int global_irq_count;
+unsigned int local_irq_count[NR_CPUS];
+
+#define irq_active(cpu) \
+	(global_irq_count != local_irq_count[cpu])
+
+#define INIT_STUCK 10000000
+
+#define STUCK(x) \
+if (!--stuck) {printk(#x " stuck at %08lx, waiting for %08lx\n", where, previous); stuck = INIT_STUCK;}
+
+/*
+ * "global_cli()" is a special case, in that it can hold the
+ * interrupts disabled for a longish time, and also because
+ * we may be doing TLB invalidates when holding the global
+ * IRQ lock for historical reasons. Thus we may need to check
+ * SMP invalidate events specially by hand here (but not in
+ * any normal spinlocks)
+ */
+static inline void check_smp_invalidate(int cpu)
+{
+	if (test_bit(cpu, &smp_invalidate_needed)) {
+		clear_bit(cpu, &smp_invalidate_needed);
+		local_flush_tlb();
+	}
+}
+
+static inline void get_irqlock(int cpu, unsigned long where)
+{
+static unsigned long previous;
+	int local_count;
+	int stuck = INIT_STUCK;
+
+	if (set_bit(0,&global_irq_lock)) {
+		/* do we already hold the lock? */
+		if ((unsigned char) cpu == global_irq_holder)
+			return;
+		/* Uhhuh.. Somebody else got it. Wait.. */
+		do {
+			do {
+				STUCK(irqlock1);
+				check_smp_invalidate(cpu);
+			} while (test_bit(0,&global_irq_lock));
+		} while (set_bit(0,&global_irq_lock));		
+	}
+	/*
+	 * Ok, we got the lock bit.
+	 * But that's actually just the easy part.. Now
+	 * we need to make sure that nobody else is running
+	 * in an interrupt context. 
+	 */
+	local_count = local_irq_count[cpu];
+
+	/* Are we the only one in an interrupt context? */
+	while (local_count != global_irq_count) {
+		/*
+		 * No such luck. Now we need to release the lock,
+		 * _and_ release our interrupt context, because
+		 * otherwise we'd have dead-locks and live-locks
+		 * and other fun things.
+		 */
+		atomic_sub(local_count, &global_irq_count);
+		global_irq_lock = 0;
+
+		/*
+		 * Wait for everybody else to go away and release
+		 * their things before trying to get the lock again.
+		 */
+		for (;;) {
+			STUCK(irqlock2);
+			check_smp_invalidate(cpu);
+			if (global_irq_count)
+				continue;
+			if (global_irq_lock)
+				continue;
+			if (!set_bit(0,&global_irq_lock))
+				break;
+		}
+		atomic_add(local_count, &global_irq_count);
+	}
+
+	/*
+	 * Finally.
+	 */
+	global_irq_holder = cpu;
+	previous = where;
+}
+
+void __global_cli(void)
+{
+	int cpu = smp_processor_id();
+	unsigned long where;
+
+	__asm__("movl 12(%%esp),%0":"=r" (where));
+	__cli();
+	get_irqlock(cpu, where);
+}
+
+void __global_sti(void)
+{
+	release_irqlock(smp_processor_id());
+	__sti();
+}
+
+unsigned long __global_save_flags(void)
+{
+	return global_irq_holder == (unsigned char) smp_processor_id();
+}
+
+void __global_restore_flags(unsigned long flags)
+{
+	switch (flags) {
+	case 0:
+		__global_sti();
+		break;
+	case 1:
+		__global_cli();
+		break;
+	default:
+		printk("global_restore_flags: %08lx (%08lx)\n",
+			flags, (&flags)[-1]);
+	}
+}
+
+#undef INIT_STUCK
+#define INIT_STUCK 200000000
+
+#undef STUCK
+#define STUCK \
+if (!--stuck) {printk("irq_enter stuck (irq=%d, cpu=%d, global=%d)\n",irq,cpu,global_irq_holder); stuck = INIT_STUCK;}
+
+static inline void irq_enter(int cpu, int irq)
+{
+	int stuck = INIT_STUCK;
+
+	hardirq_enter(cpu);
+	while (test_bit(0,&global_irq_lock)) {
+		if ((unsigned char) cpu == global_irq_holder) {
+			printk("BAD! Local interrupts enabled, global disabled\n");
+			break;
+		}
+		STUCK;
+		/* nothing */;
+	}
+	atomic_inc(&intr_count);
+}
+
+static inline void irq_exit(int cpu, int irq)
+{
+	__cli();
+	atomic_dec(&intr_count);
+	hardirq_exit(cpu);
+	release_irqlock(cpu);
+}
+
+#else
+
+#define irq_enter(cpu, irq)	do { } while (0)
+#define irq_exit(cpu, irq)	do { } while (0)
+
+#endif
 
 /*
  * do_IRQ handles IRQ's that have been installed without the
@@ -345,20 +499,16 @@ int get_smp_prof_list(char *buf) {
  */
 asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 {
-	struct irqaction * action = *(irq + irq_action);
-	int do_random = 0;
+	struct irqaction * action;
+	int do_random, cpu = smp_processor_id();
 
-	lock_kernel();
-	atomic_inc(&intr_count);
-#ifdef __SMP__
-	if(smp_threads_ready && active_kernel_processor!=smp_processor_id())
-		panic("IRQ %d: active processor set wrongly(%d not %d).\n", irq, active_kernel_processor, smp_processor_id());
-#endif
-
+	irq_enter(cpu, irq);
 	kstat.interrupts[irq]++;
-#ifdef __SMP_PROF__
-	int_count[smp_processor_id()][irq]++;
-#endif
+
+	/* slow interrupts run with interrupts enabled */
+	__sti();
+	action = *(irq + irq_action);
+	do_random = 0;
 	while (action) {
 		do_random |= action->flags;
 		action->handler(irq, action->dev_id, regs);
@@ -366,8 +516,7 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 	}
 	if (do_random & SA_SAMPLE_RANDOM)
 		add_interrupt_randomness(irq);
-	atomic_dec(&intr_count);
-	unlock_kernel();
+	irq_exit(cpu, irq);
 }
 
 /*
@@ -377,21 +526,13 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
  */
 asmlinkage void do_fast_IRQ(int irq)
 {
-	struct irqaction * action = *(irq + irq_action);
-	int do_random = 0;
-	
-	lock_kernel();
-	intr_count++;
-#ifdef __SMP__
-	/* IRQ 13 is allowed - that's a flush tlb */
-	if(smp_threads_ready && active_kernel_processor!=smp_processor_id() && irq!=13)
-		panic("fast_IRQ %d: active processor set wrongly(%d not %d).\n", irq, active_kernel_processor, smp_processor_id());
-#endif
+	struct irqaction * action;
+	int do_random, cpu = smp_processor_id();
 
+	irq_enter(cpu, irq);
 	kstat.interrupts[irq]++;
-#ifdef __SMP_PROF__
-	int_count[smp_processor_id()][irq]++;
-#endif
+	action = *(irq + irq_action);
+	do_random = 0;
 	while (action) {
 		do_random |= action->flags;
 		action->handler(irq, action->dev_id, NULL);
@@ -399,8 +540,7 @@ asmlinkage void do_fast_IRQ(int irq)
 	}
 	if (do_random & SA_SAMPLE_RANDOM)
 		add_interrupt_randomness(irq);
-	intr_count--;
-	unlock_kernel();
+	irq_exit(cpu, irq);
 }
 
 int setup_x86_irq(int irq, struct irqaction * new)
@@ -561,7 +701,9 @@ void init_IRQ(void)
 	/* This bit is a hack because we don't send timer messages to all processors yet */
 	/* It has to be here .. it doesn't work if you put it down the bottom - assembler explodes 8) */
 #ifdef __SMP__	
-	set_intr_gate(0x20+i, interrupt[i]);	/* IRQ '16' - IPI for rescheduling */
+	set_intr_gate(0x20+i, reschedule_interrupt);	/* IRQ '16' - IPI for rescheduling */
+	set_intr_gate(0x21+i, invalidate_interrupt);	/* IRQ '17' - IPI for invalidation */
+	set_intr_gate(0x22+i, stop_cpu_interrupt);	/* IRQ '18' - IPI for CPU halt */
 #endif	
 	request_region(0x20,0x20,"pic1");
 	request_region(0xa0,0x20,"pic2");

@@ -16,6 +16,10 @@ M_OBJS   := $(O_TARGET)
 
 OX_OBJS  += af_ax25.o
 
+ifeq ($(CONFIG_AX25_DAMA_SLAVE),y)
+O_OBJS += ax25_ds_in.o ax25_ds_subr.o ax25_ds_timer.o
+endif
+
 include $(TOPDIR)/Rules.make
 
 tar:

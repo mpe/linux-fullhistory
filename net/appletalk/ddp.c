@@ -410,14 +410,11 @@ static struct at_addr *atalk_find_primary(void)
 
 static struct atalk_iface *atalk_find_anynet(int node, struct device *dev)
 {
-	struct atalk_iface *iface;
-	for(iface=atalk_iface_list;iface!=NULL;iface=iface->next)
-	{
-		if ( iface->dev != dev || ( iface->status & ATIF_PROBE ))
-			continue;
-		if ( node == ATADDR_BCAST || iface->address.s_node == node )
-			return iface;
-	}
+	struct atalk_iface *iface=dev->atalk_ptr;
+	if (iface==NULL || ( iface->status & ATIF_PROBE ))
+		return NULL;
+	if ( node == ATADDR_BCAST || iface->address.s_node == node || node == ATADDR_ANYNODE)
+		return iface;
 	return NULL;
 }
 
@@ -1184,7 +1181,8 @@ static int atalk_getname(struct socket *sock, struct sockaddr *uaddr,
 #define SIOCDELIPDDPRT SIOCDEVPRIVATE+1
 #define SIOCFINDIPDDPRT SIOCDEVPRIVATE+2
 
-struct ipddp_route {
+struct ipddp_route 
+{
 	struct device *dev;		/* Carrier device */
 	__u32 ip;			/* IP address */
 	struct at_addr at;		/* Gateway appletalk address */
@@ -1215,6 +1213,7 @@ int ipddp_xmit(struct sk_buff *skb, struct device *dev)
 	skb_pull(skb,4);
 	
 	((struct net_device_stats *) dev->priv)->tx_packets++;
+	((struct net_device_stats *) dev->priv)->tx_bytes+=skb->len;
 
 	/* printk("ipddp_xmit called with headroom %d\n",skb_headroom(skb)); */
 
@@ -1226,7 +1225,7 @@ int ipddp_xmit(struct sk_buff *skb, struct device *dev)
 
 struct net_device_stats *ipddp_get_stats(struct device *dev)
 {
-	return (struct enet_statistics *) dev->priv;
+	return (struct net_device_stats *) dev->priv;
 }
 
 int ipddp_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
@@ -1443,15 +1442,11 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 		return(0);
 	}
 
-#ifdef CONFIG_FIREWALL
-
-	if(call_in_firewall(AF_APPLETALK, skb->dev, ddp, NULL)!=FW_ACCEPT)
+	if(call_in_firewall(AF_APPLETALK, skb->dev, ddp, NULL,&skb)!=FW_ACCEPT)
 	{
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
-
-#endif
 
 	/* Check the packet is aimed at us */
 
@@ -1474,17 +1469,16 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 			return(0);
 		}
 
-#ifdef CONFIG_FIREWALL
 		/*
 		 *	Check firewall allows this routing
 		 */
 
-		if(call_fw_firewall(AF_APPLETALK, skb->dev, ddp, NULL)!=FW_ACCEPT)
+		if(call_fw_firewall(AF_APPLETALK, skb->dev, ddp, NULL, &skb)!=FW_ACCEPT)
 		{
 			kfree_skb(skb, FREE_READ);
 			return(0);
 		}
-#endif
+
 		ta.s_net=ddp->deh_dnet;
 		ta.s_node=ddp->deh_dnode;
 
@@ -1546,9 +1540,10 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 	 *	Check if IP-over-DDP
 	 */
 
-	if(skb->data[12]==22) {
-		struct enet_statistics *estats = 
-			(struct enet_statistics *) dev_ipddp.priv;
+	if(skb->data[12]==22) 
+	{
+		struct net_device_stats *estats = 
+			(struct net_device_stats *) dev_ipddp.priv;
 		skb->protocol=htons(ETH_P_IP);
 		skb_pull(skb,13);
 		skb->dev=&dev_ipddp;
@@ -1558,6 +1553,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 	 *		ntohs(skb->h.iph->tot_len),skb->len);
 	 */
 		estats->rx_packets++;
+		estats->rx_bytes+=skb->len+13;
 		netif_rx(skb);
 		return 0;
 	}
@@ -1762,15 +1758,11 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	else
 		ddp->deh_sum=atalk_checksum(ddp, len+sizeof(*ddp));
 
-#ifdef CONFIG_FIREWALL
-
-	if(call_out_firewall(AF_APPLETALK, skb->dev, ddp, NULL)!=FW_ACCEPT)
+	if(call_out_firewall(AF_APPLETALK, skb->dev, ddp, NULL, &skb)!=FW_ACCEPT)
 	{
 		kfree_skb(skb, FREE_WRITE);
 		return -EPERM;
 	}
-
-#endif
 
 	/*
 	 *	Loopback broadcast packets to non gateway targets (ie routes

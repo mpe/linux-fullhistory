@@ -7,6 +7,7 @@
 #ifndef _HDLCDRV_H
 #define _HDLCDRV_H
 
+#include <linux/version.h>
 #include <linux/sockios.h>
 #include <linux/version.h>
 #if LINUX_VERSION_CODE < 0x20119
@@ -38,15 +39,23 @@ struct hdlcdrv_channel_params {
 	               /* this just makes them send even if DCD is on */
 };	
 
-struct hdlcdrv_channel_state {
-	int ptt;
-	int dcd;
-	int ptt_keyed;
-#if LINUX_VERSION_CODE < 0x20119
-	struct enet_statistics stats;
-#else
-	struct net_device_stats stats;
+struct hdlcdrv_old_channel_state {
+  	int ptt;
+  	int dcd;
+  	int ptt_keyed;
+#if LINUX_VERSION_CODE < 0x20100
+  	struct enet_statistics stats;
 #endif
+};
+
+struct hdlcdrv_channel_state {
+ 	int ptt;
+ 	int dcd;
+ 	int ptt_keyed;
+ 	unsigned long tx_packets;
+ 	unsigned long tx_errors;
+ 	unsigned long rx_packets;
+ 	unsigned long rx_errors;
 };
 
 struct hdlcdrv_ioctl {
@@ -55,6 +64,7 @@ struct hdlcdrv_ioctl {
 		struct hdlcdrv_params mp;
 		struct hdlcdrv_channel_params cp;
 		struct hdlcdrv_channel_state cs;
+		struct hdlcdrv_old_channel_state ocs;
 		unsigned int calibrate;
 		unsigned char bits;
 		char modename[128];
@@ -72,8 +82,9 @@ struct hdlcdrv_ioctl {
 #define HDLCDRVCTL_MODEMPARMASK      2  /* not handled by hdlcdrv */
 #define HDLCDRVCTL_GETCHANNELPAR    10
 #define HDLCDRVCTL_SETCHANNELPAR    11
-#define HDLCDRVCTL_GETSTAT          20
+#define HDLCDRVCTL_OLDGETSTAT       20
 #define HDLCDRVCTL_CALIBRATE        21
+#define HDLCDRVCTL_GETSTAT          22
 
 /*
  * these are mainly for debugging purposes

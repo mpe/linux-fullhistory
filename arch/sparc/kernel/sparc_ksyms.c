@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.47 1997/03/03 16:51:41 jj Exp $
+/* $Id: sparc_ksyms.c,v 1.49 1997/03/15 07:47:45 davem Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -11,6 +11,7 @@
 #include <linux/module.h>
 #include <linux/types.h>
 #include <linux/string.h>
+#include <linux/in6.h>
 
 #include <asm/oplib.h>
 #include <asm/delay.h>
@@ -27,6 +28,7 @@
 #include <asm/ptrace.h>
 #include <asm/user.h>
 #include <asm/uaccess.h>
+#include <asm/checksum.h>
 #ifdef CONFIG_SBUS
 #include <asm/sbus.h>
 #include <asm/dma.h>
@@ -52,7 +54,6 @@ extern void *__memscan_zero(void *, size_t);
 extern void *__memscan_generic(void *, int, size_t);
 extern int __memcmp(const void *, const void *, __kernel_size_t);
 extern int __strncmp(const char *, const char *, __kernel_size_t);
-extern unsigned int __csum_partial_copy_sparc_generic (const char *, char *);
 
 extern void bcopy (const char *, char *, int);
 extern int __ashrdi3(int, int);
@@ -183,11 +184,13 @@ EXPORT_SYMBOL(__memcmp);
 EXPORT_SYMBOL(__strncmp);
 EXPORT_SYMBOL(__memmove);
 
-EXPORT_SYMBOL(__csum_partial_copy_sparc_generic);
-
 /* Moving data to/from userspace. */
 EXPORT_SYMBOL(__copy_user);
 EXPORT_SYMBOL(__strncpy_from_user);
+
+/* Networking helper routines. */
+/* XXX This is NOVERS because C_LABEL_STR doesn't get the version number. -DaveM */
+EXPORT_SYMBOL_NOVERS(__csum_partial_copy_sparc_generic);
 
 /* No version information on this, heavily used in inline asm,
  * and will always be 'void __ret_efault(void)'.

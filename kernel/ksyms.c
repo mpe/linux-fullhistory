@@ -40,6 +40,7 @@
 #include <linux/minix_fs.h>
 #include <linux/ext2_fs.h>
 #include <linux/random.h>
+#include <linux/reboot.h>
 #include <linux/mount.h>
 #include <linux/pagemap.h>
 #include <linux/sysctl.h>
@@ -80,8 +81,6 @@ extern void *sys_call_table;
 extern int sys_tz;
 extern int request_dma(unsigned int dmanr, char * deviceID);
 extern void free_dma(unsigned int dmanr);
-
-extern void hard_reset_now(void);
 
 #ifdef MODVERSIONS
 const struct module_symbol __export_Using_Versions
@@ -302,7 +301,11 @@ EXPORT_SYMBOL(kdevname);
 EXPORT_SYMBOL(simple_strtoul);
 EXPORT_SYMBOL(system_utsname);
 EXPORT_SYMBOL(sys_call_table);
-EXPORT_SYMBOL(hard_reset_now);
+EXPORT_SYMBOL(machine_restart);
+EXPORT_SYMBOL(machine_halt);
+EXPORT_SYMBOL(machine_power_off);
+EXPORT_SYMBOL(register_reboot_notifier);
+EXPORT_SYMBOL(unregister_reboot_notifier);
 EXPORT_SYMBOL(_ctype);
 EXPORT_SYMBOL(secure_tcp_sequence_number);
 

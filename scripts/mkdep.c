@@ -244,7 +244,8 @@ static void do_depend(void)
 	struct stat st;
 
 	if (fd < 0) {
-		perror("mkdep: open");
+		if (errno != ENOENT)
+			perror(filename);
 		return;
 	}
 	fstat(fd, &st);

@@ -38,6 +38,7 @@
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/mmu_context.h>
+#include <asm/spinlock.h>
 
 #include <linux/timex.h>
 
@@ -125,7 +126,7 @@ static inline void add_to_runqueue(struct task_struct * p)
 	(p->prev_run = init_task.prev_run)->next_run = p;
 	p->next_run = &init_task;
 	init_task.prev_run = p;
-#ifdef __SMP__
+#if 0 /* def __SMP__ */
 	/* this is safe only if called with cli()*/
 	inc_smp_counter(&smp_process_available);
 	if ((0!=p->pid) && smp_threads_ready)
@@ -186,6 +187,18 @@ static inline void move_last_runqueue(struct task_struct * p)
 }
 
 /*
+ * The scheduler lock is protecting against multiple entry
+ * into the scheduling code, and doesn't need to worry
+ * about interrupts (because interrupts cannot call the
+ * scheduler).
+ *
+ * The run-queue lock locks the parts that actually access
+ * and change the run-queues, and have to be interrupt-safe.
+ */
+spinlock_t scheduler_lock = SPIN_LOCK_UNLOCKED;
+static spinlock_t runqueue_lock = SPIN_LOCK_UNLOCKED;
+
+/*
  * Wake up a process. Put it on the run-queue if it's not
  * already there.  The "current" process is always on the
  * run-queue (except when the actual re-schedule is in
@@ -197,12 +210,11 @@ inline void wake_up_process(struct task_struct * p)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&runqueue_lock, flags);
 	p->state = TASK_RUNNING;
 	if (!p->next_run)
 		add_to_runqueue(p);
-	restore_flags(flags);
+	spin_unlock_irqrestore(&runqueue_lock, flags);
 }
 
 static void process_timeout(unsigned long __data)
@@ -229,17 +241,6 @@ static void process_timeout(unsigned long __data)
 static inline int goodness(struct task_struct * p, struct task_struct * prev, int this_cpu)
 {
 	int weight;
-
-#ifdef __SMP__	
-	/* We are not permitted to run a task someone else is running */
-	if (p->processor != NO_PROC_ID)
-		return -1000;
-#ifdef PAST_2_0		
-	/* This process is locked to a processor group */
-	if (p->processor_mask && !(p->processor_mask & (1<<this_cpu))
-		return -1000;
-#endif		
-#endif
 
 	/*
 	 * Realtime process, select the first one on the
@@ -274,24 +275,17 @@ static inline int goodness(struct task_struct * p, struct task_struct * prev, in
 	return weight;
 }
 
-void allow_interrupts(void)
-{
-#if defined(__SMP__) && defined(__i386__)
-/* UGH UGH UGH. Damn broken IRQ handling test-fix for x86.. */
-	int this_cpu=smp_processor_id();
-	int lock_depth = current_set[this_cpu]->lock_depth;
-	if (lock_depth) {
-		cli();
-		current_set[this_cpu]->lock_depth = 0;
-		active_kernel_processor = NO_PROC_ID;
-		__asm__ __volatile__("lock ; btrl    $0, kernel_flag");
-		sti();
-		/* interrupts should work here */
-		lock_kernel();
-		current_set[this_cpu]->lock_depth += lock_depth-1;
-	}
+#ifdef __SMP__
+
+#define idle_task (task[cpu_number_map[this_cpu]])
+#define can_schedule(p)	((p)->processor == NO_PROC_ID)
+
+#else
+
+#define idle_task (&init_task)
+#define can_schedule(p) (1)
+
 #endif
-}		
 
 /*
  *  'schedule()' is the scheduler function. It's a very simple and nice
@@ -305,31 +299,28 @@ void allow_interrupts(void)
  */
 asmlinkage void schedule(void)
 {
-	int c;
-	struct task_struct * p;
+	static int need_recalculate = 0;
+	int lock_depth;
 	struct task_struct * prev, * next;
-	unsigned long timeout = 0;
-	int this_cpu=smp_processor_id();
+	unsigned long timeout;
+	int this_cpu;
 
-/* check alarm, wake up any interruptible tasks that have got a signal */
-	allow_interrupts();
-	lock_kernel();
-	if (intr_count)
-		goto scheduling_in_interrupt;
-
+	need_resched = 0;
+	this_cpu = smp_processor_id();
+	prev = current;
+	release_kernel_lock(prev, this_cpu, lock_depth);
 	if (bh_active & bh_mask)
 		do_bottom_half();
 
-	run_task_queue(&tq_scheduler);
+	spin_lock(&scheduler_lock);
+	spin_lock_irq(&runqueue_lock);
 
-	need_resched = 0;
-	prev = current;
-	cli();
 	/* move an exhausted RR process to be last.. */
 	if (!prev->counter && prev->policy == SCHED_RR) {
 		prev->counter = prev->priority;
 		move_last_runqueue(prev);
 	}
+	timeout = 0;
 	switch (prev->state) {
 		case TASK_INTERRUPTIBLE:
 			if (prev->signal & ~prev->blocked)
@@ -346,54 +337,44 @@ asmlinkage void schedule(void)
 			del_from_runqueue(prev);
 		case TASK_RUNNING:
 	}
-	p = init_task.next_run;
-	sti();
+	{
+		struct task_struct * p = init_task.next_run;
+		/*
+		 * This is subtle.
+		 * Note how we can enable interrupts here, even
+		 * though interrupts can add processes to the run-
+		 * queue. This is because any new processes will
+		 * be added to the front of the queue, so "p" above
+		 * is a safe starting point.
+		 * run-queue deletion and re-ordering is protected by
+		 * the scheduler lock
+		 */
+		spin_unlock_irq(&runqueue_lock);
 	
-#ifdef __SMP__
-	/*
-	 *	This is safe as we do not permit re-entry of schedule()
-	 */
-	prev->processor = NO_PROC_ID;
-#define idle_task (task[cpu_number_map[this_cpu]])
-#else
-#define idle_task (&init_task)
-#endif	
-
 /*
  * Note! there may appear new tasks on the run-queue during this, as
  * interrupts are enabled. However, they will be put on front of the
  * list, so our list starting at "p" is essentially fixed.
  */
 /* this is the scheduler proper: */
-	c = -1000;
-	next = idle_task;
-	while (p != &init_task) {
-		int weight = goodness(p, prev, this_cpu);
-		if (weight > c)
-			c = weight, next = p;
-		p = p->next_run;
+		{
+			int c = -1000;
+			next = idle_task;
+			while (p != &init_task) {
+				if (can_schedule(p)) {
+					int weight = goodness(p, prev, this_cpu);
+					if (weight > c)
+						c = weight, next = p;
+				}
+				p = p->next_run;
+			}
+			need_recalculate = !c;
+		}
 	}
 
-	/* if all runnable processes have "counter == 0", re-calculate counters */
-	if (!c) {
-		for_each_task(p)
-			p->counter = (p->counter >> 1) + p->priority;
-	}
-#ifdef __SMP__
-	/*
-	 *	Allocate process to CPU
-	 */
-	 
-	 next->processor = this_cpu;
-	 next->last_processor = this_cpu;
-#endif	 
-#ifdef __SMP_PROF__ 
-	/* mark processor running an idle thread */
-	if (0==next->pid)
-		set_bit(this_cpu,&smp_idle_map);
-	else
-		clear_bit(this_cpu,&smp_idle_map);
-#endif
+	next->processor = this_cpu;
+	next->last_processor = this_cpu;
+
 	if (prev != next) {
 		struct timer_list timer;
 
@@ -407,16 +388,22 @@ asmlinkage void schedule(void)
 		}
 		get_mmu_context(next);
 		switch_to(prev,next);
+
 		if (timeout)
 			del_timer(&timer);
 	}
-	goto out;
+	spin_unlock(&scheduler_lock);
 
-scheduling_in_interrupt:
-	printk("Aiee: scheduling in interrupt %p\n",
-		__builtin_return_address(0));
-out:
-	unlock_kernel();
+	if (lock_depth) {
+		reaquire_kernel_lock(prev, smp_processor_id(), lock_depth);
+
+		/* Do we need to re-calculate counters? */
+		if (need_recalculate) {
+			struct task_struct *p;
+			for_each_task(p)
+				p->counter = (p->counter >> 1) + p->priority;
+		}
+	}
 }
 
 #ifndef __alpha__
@@ -436,67 +423,68 @@ asmlinkage int sys_pause(void)
 
 #endif
 
+spinlock_t waitqueue_lock;
+
 /*
  * wake_up doesn't wake up stopped processes - they have to be awakened
  * with signals or similar.
- *
- * Note that this doesn't need cli-sti pairs: interrupts may not change
- * the wait-queue structures directly, but only call wake_up() to wake
- * a process. The process itself must remove the queue once it has woken.
  */
 void wake_up(struct wait_queue **q)
 {
+	unsigned long flags;
 	struct wait_queue *next;
 	struct wait_queue *head;
 
-	if (!q || !(next = *q))
-		return;
-	head = WAIT_QUEUE_HEAD(q);
-	while (next != head) {
-		struct task_struct *p = next->task;
-		next = next->next;
-		if (p != NULL) {
-			if ((p->state == TASK_UNINTERRUPTIBLE) ||
-			    (p->state == TASK_INTERRUPTIBLE))
-				wake_up_process(p);
+	spin_lock_irqsave(&waitqueue_lock, flags);
+	if (q && (next = *q)) {
+		head = WAIT_QUEUE_HEAD(q);
+		while (next != head) {
+			struct task_struct *p = next->task;
+			next = next->next;
+			if (p != NULL) {
+				if ((p->state == TASK_UNINTERRUPTIBLE) ||
+				    (p->state == TASK_INTERRUPTIBLE))
+					wake_up_process(p);
+			}
+			if (next)
+				continue;
+			printk("wait_queue is bad (eip = %p)\n",
+				__builtin_return_address(0));
+			printk("        q = %p\n",q);
+			printk("       *q = %p\n",*q);
+			break;
 		}
-		if (!next)
-			goto bad;
 	}
-	return;
-bad:
-	printk("wait_queue is bad (eip = %p)\n",
-		__builtin_return_address(0));
-	printk("        q = %p\n",q);
-	printk("       *q = %p\n",*q);
+	spin_unlock_irqrestore(&waitqueue_lock, flags);
 }
 
 void wake_up_interruptible(struct wait_queue **q)
 {
+	unsigned long flags;
 	struct wait_queue *next;
 	struct wait_queue *head;
 
-	if (!q || !(next = *q))
-		return;
-	head = WAIT_QUEUE_HEAD(q);
-	while (next != head) {
-		struct task_struct *p = next->task;
-		next = next->next;
-		if (p != NULL) {
-			if (p->state == TASK_INTERRUPTIBLE)
-				wake_up_process(p);
+	spin_lock_irqsave(&waitqueue_lock, flags);
+	if (q && (next = *q)) {
+		head = WAIT_QUEUE_HEAD(q);
+		while (next != head) {
+			struct task_struct *p = next->task;
+			next = next->next;
+			if (p != NULL) {
+				if (p->state == TASK_INTERRUPTIBLE)
+					wake_up_process(p);
+			}
+			if (next)
+				continue;
+			printk("wait_queue is bad (eip = %p)\n",
+				__builtin_return_address(0));
+			printk("        q = %p\n",q);
+			printk("       *q = %p\n",*q);
+			break;
 		}
-		if (!next)
-			goto bad;
 	}
-	return;
-bad:
-	printk("wait_queue is bad (eip = %p)\n",
-		__builtin_return_address(0));
-	printk("        q = %p\n",q);
-	printk("       *q = %p\n",*q);
+	spin_unlock_irqrestore(&waitqueue_lock, flags);
 }
-
 
 /*
  * Semaphores are implemented using a two-way counter:
@@ -635,14 +623,14 @@ static inline void __sleep_on(struct wait_queue **p, int state)
 	if (current == task[0])
 		panic("task[0] trying to sleep");
 	current->state = state;
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&waitqueue_lock, flags);
 	__add_wait_queue(p, &wait);
+	spin_unlock(&waitqueue_lock);
 	sti();
 	schedule();
-	cli();
+	spin_lock_irq(&waitqueue_lock);
 	__remove_wait_queue(p, &wait);
-	restore_flags(flags);
+	spin_unlock_irqrestore(&waitqueue_lock, flags);
 }
 
 void interruptible_sleep_on(struct wait_queue **p)
@@ -718,8 +706,10 @@ static inline void internal_add_timer(struct timer_list *timer)
 	} else if (idx < 1 << (TVR_BITS + 3 * TVN_BITS)) {
 		int i = (expires >> (TVR_BITS + 2 * TVN_BITS)) & TVN_MASK;
 		insert_timer(timer, tv4.vec, i);
-	} else if ((idx + 1UL) == 0UL) {
-		/* can happen if you add a timer with expires == jiffies */
+	} else if (expires < timer_jiffies) {
+		/* can happen if you add a timer with expires == jiffies,
+		 * or you set a timer to go off in the past
+		 */
 		insert_timer(timer, tv1.vec, tv1.index);
 	} else if (idx < 0xffffffffUL) {
 		int i = (expires >> (TVR_BITS + 3 * TVN_BITS)) & TVN_MASK;
@@ -730,11 +720,13 @@ static inline void internal_add_timer(struct timer_list *timer)
 	}
 }
 
+static spinlock_t timerlist_lock = SPIN_LOCK_UNLOCKED;
+
 void add_timer(struct timer_list *timer)
 {
 	unsigned long flags;
-	save_flags(flags);
-	cli();
+
+	spin_lock_irqsave(&timerlist_lock, flags);
 #if SLOW_BUT_DEBUGGING_TIMERS
         if (timer->next || timer->prev) {
                 printk("add_timer() called with non-zero list from %p\n",
@@ -746,7 +738,7 @@ void add_timer(struct timer_list *timer)
 #if SLOW_BUT_DEBUGGING_TIMERS
 out:
 #endif
-	restore_flags(flags);
+	spin_unlock_irqrestore(&timerlist_lock, flags);
 }
 
 static inline int detach_timer(struct timer_list *timer)
@@ -770,11 +762,11 @@ int del_timer(struct timer_list * timer)
 {
 	int ret;
 	unsigned long flags;
-	save_flags(flags);
-	cli();
+
+	spin_lock_irqsave(&timerlist_lock, flags);
 	ret = detach_timer(timer);
 	timer->next = timer->prev = 0;
-	restore_flags(flags);
+	spin_unlock_irqrestore(&timerlist_lock, flags);
 	return ret;
 }
 
@@ -798,7 +790,7 @@ static inline void cascade_timers(struct timer_vec *tv)
 
 static inline void run_timer_list(void)
 {
-	cli();
+	spin_lock_irq(&timerlist_lock);
 	while ((long)(jiffies - timer_jiffies) >= 0) {
 		struct timer_list *timer;
 		if (!tv1.index) {
@@ -812,14 +804,14 @@ static inline void run_timer_list(void)
 			unsigned long data = timer->data;
 			detach_timer(timer);
 			timer->next = timer->prev = NULL;
-			sti();
+			spin_unlock_irq(&timerlist_lock);
 			fn(data);
-			cli();
+			spin_lock_irq(&timerlist_lock);
 		}
 		++timer_jiffies; 
 		tv1.index = (tv1.index + 1) & TVR_MASK;
 	}
-	sti();
+	spin_unlock_irq(&timerlist_lock);
 }
 
 
@@ -840,6 +832,8 @@ static inline void run_old_timers(void)
 		sti();
 	}
 }
+
+spinlock_t tqueue_lock;
 
 void tqueue_bh(void)
 {
@@ -1484,12 +1478,13 @@ static int setscheduler(pid_t pid, int policy,
 
 	p->policy = policy;
 	p->rt_priority = lp.sched_priority;
-	cli();
+	spin_lock(&scheduler_lock);
+	spin_lock_irq(&runqueue_lock);
 	if (p->next_run)
 		move_last_runqueue(p);
-	sti();
-	schedule();
-
+	spin_unlock_irq(&runqueue_lock);
+	spin_unlock(&scheduler_lock);
+	need_resched = 1;
 	return 0;
 }
 
@@ -1558,11 +1553,12 @@ out:
 
 asmlinkage int sys_sched_yield(void)
 {
-	lock_kernel();
-	cli();
+	spin_unlock(&scheduler_lock);
+	spin_lock_irq(&runqueue_lock);
 	move_last_runqueue(current);
-	sti();
-	unlock_kernel();
+	spin_unlock_irq(&runqueue_lock);
+	spin_lock(&scheduler_lock);
+	need_resched = 1;
 	return 0;
 }
 
@@ -1570,7 +1566,6 @@ asmlinkage int sys_sched_get_priority_max(int policy)
 {
 	int ret = -EINVAL;
 
-	lock_kernel();
 	switch (policy) {
 	case SCHED_FIFO:
 	case SCHED_RR:
@@ -1580,7 +1575,6 @@ asmlinkage int sys_sched_get_priority_max(int policy)
 		ret = 0;
 		break;
 	}
-	unlock_kernel();
 	return ret;
 }
 
@@ -1588,7 +1582,6 @@ asmlinkage int sys_sched_get_priority_min(int policy)
 {
 	int ret = -EINVAL;
 
-	lock_kernel();
 	switch (policy) {
 	case SCHED_FIFO:
 	case SCHED_RR:
@@ -1597,23 +1590,18 @@ asmlinkage int sys_sched_get_priority_min(int policy)
 	case SCHED_OTHER:
 		ret = 0;
 	}
-	unlock_kernel();
 	return ret;
 }
 
 asmlinkage int sys_sched_rr_get_interval(pid_t pid, struct timespec *interval)
 {
 	struct timespec t;
-	int ret;
 
-	lock_kernel();
 	t.tv_sec = 0;
-	t.tv_nsec = 0;            /* <-- Linus, please fill correct value in here */
-	ret = -ENOSYS; goto out;  /* and then delete this line. Thanks!           */
-	ret = copy_to_user(interval, &t, sizeof(struct timespec)) ? -EFAULT : 0;
-out:
-	unlock_kernel();
-	return ret;
+	t.tv_nsec = 150000;
+	if (copy_to_user(interval, &t, sizeof(struct timespec)))
+		return -EFAULT;
+	return 0;
 }
 
 /*

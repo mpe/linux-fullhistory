@@ -79,7 +79,7 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
  *	a memory timer destroy. Instead of playing with timers we just
  *	concede defeat and cli().
  */
-	start_bh_atomic();
+	SOCKHASH_LOCK();
 	sp = pro->sklist_next;
 	while(sp != (struct sock *)pro) {
 		pos += 128;
@@ -128,7 +128,7 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 		sp = sp->sklist_next;
 		i++;
 	}
-	end_bh_atomic();
+	SOCKHASH_UNLOCK();
 
 	begin = len - (pos - offset);
 	*start = buffer + begin;
@@ -138,24 +138,20 @@ get__netinfo(struct proto *pro, char *buffer, int format, char **start, off_t of
 	return len;
 } 
 
-
 int tcp_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	return get__netinfo(&tcp_prot, buffer,0, start, offset, length);
 }
-
 
 int udp_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	return get__netinfo(&udp_prot, buffer,1, start, offset, length);
 }
 
-
 int raw_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	return get__netinfo(&raw_prot, buffer,1, start, offset, length);
 }
-
 
 /*
  *	Report socket allocation statistics [mea@utu.fi]

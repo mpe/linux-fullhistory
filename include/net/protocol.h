@@ -34,34 +34,36 @@
 
 
 /* This is used to register protocols. */
-struct inet_protocol {
-  int			(*handler)(struct sk_buff *skb, unsigned short len);
-  void			(*err_handler)(struct sk_buff *skb, unsigned char *dp);
-  struct inet_protocol *next;
-  unsigned char		protocol;
-  unsigned char		copy:1;
-  void			*data;
-  const char		*name;
+struct inet_protocol 
+{
+	int			(*handler)(struct sk_buff *skb, unsigned short len);
+	void			(*err_handler)(struct sk_buff *skb, unsigned char *dp);
+	struct inet_protocol	*next;
+	unsigned char		protocol;
+	unsigned char		copy:1;
+	void			*data;
+	const char		*name;
 };
 
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
-struct inet6_protocol {
-  int			(*handler)(struct sk_buff *skb, struct device *dev,
-				   struct in6_addr *saddr,
-				   struct in6_addr *daddr,
-				   struct ipv6_options *opt, 
-				   unsigned short len,
-				   int redo, struct inet6_protocol *protocol);
+struct inet6_protocol 
+{
+	int	(*handler)(struct sk_buff *skb, struct device *dev,
+			struct in6_addr *saddr,
+			struct in6_addr *daddr,
+			struct ipv6_options *opt, 
+			unsigned short len,
+			int redo, struct inet6_protocol *protocol);
 
-  void			(*err_handler)(int type, int code, unsigned char *buff,
-				       __u32 info, struct in6_addr *saddr,
-				       struct in6_addr *daddr,
-				       struct inet6_protocol *protocol);
-  struct inet6_protocol *next;
-  unsigned char		protocol;
-  unsigned char		copy:1;
-  void			*data;
-  const char		*name;
+	void	(*err_handler)(int type, int code, unsigned char *buff,
+			__u32 info, struct in6_addr *saddr,
+			struct in6_addr *daddr,
+			struct inet6_protocol *protocol);
+	struct inet6_protocol *next;
+	unsigned char	protocol;
+	unsigned char	copy:1;
+	void		*data;
+	const char	*name;
 };
 #endif
 
@@ -73,12 +75,12 @@ extern struct inet6_protocol *inet6_protocol_base;
 extern struct inet6_protocol *inet6_protos[MAX_INET_PROTOS];
 #endif
 
-extern void		inet_add_protocol(struct inet_protocol *prot);
-extern int		inet_del_protocol(struct inet_protocol *prot);
+extern void	inet_add_protocol(struct inet_protocol *prot);
+extern int	inet_del_protocol(struct inet_protocol *prot);
 
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
-extern void		inet6_add_protocol(struct inet6_protocol *prot);
-extern int		inet6_del_protocol(struct inet6_protocol *prot);
+extern void	inet6_add_protocol(struct inet6_protocol *prot);
+extern int	inet6_del_protocol(struct inet6_protocol *prot);
 #endif
 
 #endif	/* _PROTOCOL_H */

@@ -1,3 +1,20 @@
+/*
+ * INET		An implementation of the TCP/IP protocol suite for the LINUX
+ *		operating system.  INET is implemented using the  BSD Socket
+ *		interface as the means of communication with the user level.
+ *
+ *		AF_INET6 protocol dispatch tables.
+ *
+ * Version:	$Id: protocol.c,v 1.5 1997/03/18 18:24:44 davem Exp $
+ *
+ * Authors:	Pedro Roque	<roque@di.fc.ul.pt>
+ *
+ *		This program is free software; you can redistribute it and/or
+ *		modify it under the terms of the GNU General Public License
+ *		as published by the Free Software Foundation; either version
+ *		2 of the License, or (at your option) any later version.
+ */
+
 #include <linux/errno.h>
 #include <linux/types.h>
 #include <linux/socket.h>
@@ -27,8 +44,7 @@ struct inet6_protocol *inet6_get_protocol(unsigned char prot)
 	struct inet6_protocol *p;
 
 	hash = prot & (MAX_INET_PROTOS - 1);
-	for (p = inet6_protos[hash] ; p != NULL; p=p->next) 
-	{
+	for (p = inet6_protos[hash] ; p != NULL; p=p->next) {
 		if (p->protocol == prot) 
 			return((struct inet6_protocol *) p);
 	}
@@ -41,7 +57,7 @@ void inet6_add_protocol(struct inet6_protocol *prot)
 	struct inet6_protocol *p2;
 
 	hash = prot->protocol & (MAX_INET_PROTOS - 1);
-	prot ->next = inet6_protos[hash];
+	prot->next = inet6_protos[hash];
 	inet6_protos[hash] = prot;
 	prot->copy = 0;
 
@@ -50,10 +66,8 @@ void inet6_add_protocol(struct inet6_protocol *prot)
 	 */
 	 
 	p2 = (struct inet6_protocol *) prot->next;
-	while(p2 != NULL) 
-	{
-		if (p2->protocol == prot->protocol) 
-		{
+	while(p2 != NULL) {
+		if (p2->protocol == prot->protocol) {
 			prot->copy = 1;
 			break;
 		}
@@ -72,22 +86,19 @@ int inet6_del_protocol(struct inet6_protocol *prot)
 	unsigned char hash;
 
 	hash = prot->protocol & (MAX_INET_PROTOS - 1);
-	if (prot == inet6_protos[hash]) 
-	{
+	if (prot == inet6_protos[hash]) {
 		inet6_protos[hash] = (struct inet6_protocol *) inet6_protos[hash]->next;
 		return(0);
 	}
 
 	p = (struct inet6_protocol *) inet6_protos[hash];
-	while(p != NULL) 
-	{
+	while(p != NULL) {
 		/*
 		 * We have to worry if the protocol being deleted is
 		 * the last one on the list, then we may need to reset
 		 * someone's copied bit.
 		 */
-		if (p->next != NULL && p->next == prot) 
-		{
+		if (p->next != NULL && p->next == prot) {
 			/*
 			 * if we are the last one with this protocol and
 			 * there is a previous one, reset its copy bit.
@@ -104,9 +115,3 @@ int inet6_del_protocol(struct inet6_protocol *prot)
 	}
 	return(-1);
 }
-
-/*
- * Local variables:
- *  compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -fno-strength-reduce -pipe -m486 -DCPU=486 -DMODULE -DMODVERSIONS -include /usr/src/linux/include/linux/modversions.h  -c -o protocol.o protocol.c"
- * End:
- */

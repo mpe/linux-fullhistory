@@ -1,4 +1,4 @@
-/* $Id: mp.c,v 1.6 1996/09/19 20:27:25 davem Exp $
+/* $Id: mp.c,v 1.7 1997/03/18 17:58:23 jj Exp $
  * mp.c:  OpenBoot Prom Multiprocessor support routines.  Don't call
  *        these on a UP or else you will halt and catch fire. ;)
  *
@@ -32,7 +32,6 @@ prom_startcpu(int cpunode, struct linux_prom_registers *ctable_reg, int ctx, cha
 		ret = -1;
 		break;
 	case PROM_V3:
-	case PROM_P1275:
 		ret = (*(romvec->v3_cpustart))(cpunode, (int) ctable_reg, ctx, pc);
 		break;
 	};
@@ -62,7 +61,6 @@ prom_stopcpu(int cpunode)
 		ret = -1;
 		break;
 	case PROM_V3:
-	case PROM_P1275:
 		ret = (*(romvec->v3_cpustop))(cpunode);
 		break;
 	};
@@ -92,7 +90,6 @@ prom_idlecpu(int cpunode)
 		ret = -1;
 		break;
 	case PROM_V3:
-	case PROM_P1275:
 		ret = (*(romvec->v3_cpuidle))(cpunode);
 		break;
 	};
@@ -122,7 +119,6 @@ prom_restartcpu(int cpunode)
 		ret = -1;
 		break;
 	case PROM_V3:
-	case PROM_P1275:
 		ret = (*(romvec->v3_cpuresume))(cpunode);
 		break;
 	};

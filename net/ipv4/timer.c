@@ -92,7 +92,7 @@ void net_timer (unsigned long data)
 	 * only process if socket is not in use
 	 */
 
-	if (sk->users)
+	if (sk->sock_readers)
 	{
 		sk->timer.expires = jiffies+HZ;
 		add_timer(&sk->timer);

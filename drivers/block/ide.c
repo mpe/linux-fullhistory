@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 6.01  Jan  26, 1997
+ *  linux/drivers/block/ide.c	Version 6.02  Mar  11, 1997
  *
  *  Copyright (C) 1994-1997  Linus Torvalds & authors (see below)
  */
@@ -278,6 +278,8 @@
  *			don't flush leftover data for ATAPI devices
  * Version 6.01		clear hwgroup->active while the hwgroup sleeps
  *			support HDIO_GETGEO for floppies
+ * Version 6.02		fix ide_ack_intr() call
+ *			check partition table on floppies
  *
  *  Some additional driver compile-time options are in ide.h
  *
@@ -632,7 +634,8 @@ void ide_geninit (struct gendisk *gd)
 		ide_drive_t *drive = &hwif->drives[unit];
 
 		drive->part[0].nr_sects = current_capacity(drive);
-		if (!drive->present || drive->media != ide_disk || drive->driver == NULL)
+		if (!drive->present || (drive->media != ide_disk && drive->media != ide_floppy) ||
+		    drive->driver == NULL || !drive->part[0].nr_sects)
 			drive->part[0].start_sect = -1; /* skip partition check */
 	}
 }
@@ -722,10 +725,8 @@ static void pre_reset (ide_drive_t *drive)
 	if (!drive->keep_settings) {
 		drive->unmask = 0;
 		drive->io_32bit = 0;
-		if (drive->using_dma) {
-			drive->using_dma = 0;
-			printk("%s: disabled DMA\n", drive->name);
-		}
+		if (drive->using_dma)
+			HWIF(drive)->dmaproc(ide_dma_off, drive);
 	}
 	if (drive->driver != NULL)
 		DRIVER(drive)->pre_reset(drive);
@@ -1449,7 +1450,7 @@ void ide_intr (int irq, void *dev_id, struct pt_regs *regs)
 	ide_hwgroup_t *hwgroup = dev_id;
 	ide_handler_t *handler;
 
-	if (!ide_ack_intr (hwgroup->hwif->io_ports[IDE_DATA_OFFSET],
+	if (!ide_ack_intr (hwgroup->hwif->io_ports[IDE_STATUS_OFFSET],
 			   hwgroup->hwif->io_ports[IDE_IRQ_OFFSET]))
 		return;
 
@@ -1620,7 +1621,8 @@ int ide_revalidate_disk(kdev_t i_rdev)
 	};
 
 	drive->part[0].nr_sects = current_capacity(drive);
-	if (drive->media != ide_disk || drive->driver == NULL)
+	if ((drive->media != ide_disk && drive->media != ide_floppy) ||
+	     drive->driver == NULL || !drive->part[0].nr_sects)
 		drive->part[0].start_sect = -1;
 	resetup_one_dev(HWIF(drive)->gd, drive->select.b.unit);
 
@@ -1969,7 +1971,10 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 						restore_flags(flags);
 						return -EPERM;
 					}
-					drive->using_dma = arg;
+					if (HWIF(drive)->dmaproc(arg ? ide_dma_on : ide_dma_off, drive)) {
+						restore_flags(flags);
+						return -EIO;
+					}
 					break;
 				case HDIO_SET_KEEPSETTINGS:
 					drive->keep_settings = arg;

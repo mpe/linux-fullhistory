@@ -410,14 +410,15 @@ extern inline void __add_wait_queue(struct wait_queue ** p, struct wait_queue * 
 	wait->next = next;
 }
 
+extern spinlock_t waitqueue_lock;
+
 extern inline void add_wait_queue(struct wait_queue ** p, struct wait_queue * wait)
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&waitqueue_lock, flags);
 	__add_wait_queue(p, wait);
-	restore_flags(flags);
+	spin_unlock_irqrestore(&waitqueue_lock, flags);
 }
 
 extern inline void __remove_wait_queue(struct wait_queue ** p, struct wait_queue * wait)
@@ -438,10 +439,9 @@ extern inline void remove_wait_queue(struct wait_queue ** p, struct wait_queue *
 {
 	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave(&waitqueue_lock, flags);
 	__remove_wait_queue(p, wait);
-	restore_flags(flags);
+	spin_unlock_irqrestore(&waitqueue_lock, flags); 
 }
 
 extern inline void poll_wait(struct wait_queue ** wait_address, poll_table * p)

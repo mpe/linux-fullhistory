@@ -1,4 +1,4 @@
-/* $Id: dma.h,v 1.22 1996/10/17 05:29:01 davem Exp $
+/* $Id: dma.h,v 1.23 1997/03/14 21:05:20 jj Exp $
  * include/asm-sparc/dma.h
  *
  * Copyright 1995 (C) David S. Miller (davem@caip.rutgers.edu)
@@ -74,7 +74,6 @@ extern struct Linux_SBus_DMA *dma_chain;
 #define DMA_ISESC1(dma)      ((dma)->revision == dvmaesc1)
 
 /* Main routines in dma.c */
-extern void dump_dma_regs(struct sparc_dma_registers *);
 extern unsigned long dvma_init(struct linux_sbus *, unsigned long);
 
 /* Fields in the cond_reg register */

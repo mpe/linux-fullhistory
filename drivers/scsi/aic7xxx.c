@@ -79,7 +79,7 @@
  */
 #define VIRT_TO_BUS(a) (unsigned int)virt_to_bus((void *)(a))
 
-struct proc_dir_entry proc_scsi_aic7xxx = {
+static struct proc_dir_entry proc_scsi_aic7xxx = {
     PROC_SCSI_AIC7XXX, 7, "aic7xxx",
     S_IFDIR | S_IRUGO | S_IXUGO, 2
 };
@@ -1089,7 +1089,7 @@ aic7xxx_delay(int seconds)
  *   Return a string containing just the RCS version number from either
  *   an Id or Revision RCS clause.
  *-F*************************************************************************/
-const char *
+static const char *
 rcs_version(const char *version_info)
 {
   static char buf[10];

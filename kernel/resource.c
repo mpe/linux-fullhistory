@@ -69,7 +69,7 @@ static resource_entry_t *find_gap(resource_entry_t *root,
 /*
  * Call this from the device driver to register the ioport region.
  */
-void request_region(unsigned int from, unsigned int num, const char *name)
+void request_region(unsigned long from, unsigned long num, const char *name)
 {
 	resource_entry_t *p;
 	int i;
@@ -95,7 +95,7 @@ void request_region(unsigned int from, unsigned int num, const char *name)
 /* 
  * Call this when the device driver is unloaded
  */
-void release_region(unsigned int from, unsigned int num)
+void release_region(unsigned long from, unsigned long num)
 {
 	resource_entry_t *p, *q;
 
@@ -114,7 +114,7 @@ void release_region(unsigned int from, unsigned int num)
 /*
  * Call this to check the ioport region before probing
  */
-int check_region(unsigned int from, unsigned int num)
+int check_region(unsigned long from, unsigned long num)
 {
 	return (find_gap(&iolist, from, num) == NULL) ? -EBUSY : 0;
 }
@@ -123,10 +123,10 @@ int check_region(unsigned int from, unsigned int num)
 /*
  * This is for architectures with MMU-managed ports (sparc).
  */
-unsigned int occupy_region(unsigned int base, unsigned int end,
-			unsigned int num, unsigned int align, const char *name)
+unsigned int occupy_region(unsigned long base, unsigned long end,
+			unsigned long num, unsigned int align, const char *name)
 {
-	unsigned int from = 0, till;
+	unsigned long from = 0, till;
 	unsigned long flags;
 	int i;
 	resource_entry_t *p;		/* Scanning ptr */

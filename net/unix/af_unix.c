@@ -115,17 +115,17 @@ extern __inline__ int unix_may_send(unix_socket *sk, unix_socket *osk)
 
 extern __inline__ void unix_lock(unix_socket *sk)
 {
-	sk->users++;
+	sk->sock_readers++;
 }
 
 extern __inline__ int unix_unlock(unix_socket *sk)
 {
-	return sk->users--;
+	return sk->sock_readers--;
 }
 
 extern __inline__ int unix_locked(unix_socket *sk)
 {
-	return sk->users;
+	return sk->sock_readers;
 }
 
 extern __inline__ void unix_release_addr(struct unix_address *addr)
@@ -348,7 +348,7 @@ static int unix_create(struct socket *sock, int protocol)
 	
 	sk->protinfo.af_unix.family=AF_UNIX;
 	sk->protinfo.af_unix.inode=NULL;
-	sk->users=1;				/* Us */
+	sk->sock_readers=1;				/* Us */
 	sk->protinfo.af_unix.readsem=MUTEX;	/* single task reading lock */
 	sk->mtu=4096;
 	sk->protinfo.af_unix.list=&unix_sockets_unbound;
@@ -1303,6 +1303,8 @@ static int unix_shutdown(struct socket *sock, int mode)
 {
 	struct sock *sk = sock->sk;
 	unix_socket *other=unix_peer(sk);
+	
+	mode++;
 
 	if (mode&SEND_SHUTDOWN)
 	{
@@ -1382,7 +1384,7 @@ static int unix_read_proc(char *buffer, char **start, off_t offset,
 	{
 		len+=sprintf(buffer+len,"%p: %08X %08X %08lX %04X %02X %5ld",
 			s,
-			s->users,
+			s->sock_readers,
 			0,
 			s->socket ? s->socket->flags : 0,
 			s->type,

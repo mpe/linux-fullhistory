@@ -93,8 +93,9 @@ static struct timer_list rt_flush_timer =
  */
 
 static void ipv4_dst_destroy(struct dst_entry * dst);
-static struct dst_entry * ipv4_dst_check(struct dst_entry * dst);
-static struct dst_entry * ipv4_dst_reroute(struct dst_entry * dst);
+static struct dst_entry * ipv4_dst_check(struct dst_entry * dst, u32);
+static struct dst_entry * ipv4_dst_reroute(struct dst_entry * dst,
+					   struct sk_buff *);
 
 
 struct dst_ops ipv4_dst_ops =
@@ -212,7 +213,7 @@ void ip_rt_check_expire()
 			 * Cleanup aged off entries.
 			 */
 
-			if (!rth->u.dst.refcnt && now - rth->u.dst.lastuse > RT_CACHE_TIMEOUT) {
+			if (!rth->u.dst.use && now - rth->u.dst.lastuse > RT_CACHE_TIMEOUT) {
 				*rthp = rth_next;
 				atomic_dec(&rt_cache_size);
 #if RT_CACHE_DEBUG >= 2
@@ -337,7 +338,7 @@ static void rt_garbage_collect(void)
 		if (!rt_hash_table[i])
 			continue;
 		for (rthp=&rt_hash_table[i]; (rth=*rthp); rthp=&rth->u.rt_next)	{
-			if (rth->u.dst.refcnt || now - rth->u.dst.lastuse > expire)
+			if (rth->u.dst.use || now - rth->u.dst.lastuse > expire)
 				continue;
 			atomic_dec(&rt_cache_size);
 			*rthp = rth->u.rt_next;
@@ -357,7 +358,7 @@ static void rt_garbage_collect(void)
 
 static int rt_ll_bind(struct rtable *rt)
 {
-	struct dst_entry *neigh;
+	struct neighbour *neigh;
 	struct hh_cache	*hh = NULL;
 
 	if (rt->u.dst.dev && rt->u.dst.dev->hard_header_cache) {
@@ -754,12 +755,13 @@ static void ipv4_dst_destroy(struct dst_entry * dst)
 	}
 }
 
-static struct dst_entry * ipv4_dst_check(struct dst_entry * dst)
+static struct dst_entry * ipv4_dst_check(struct dst_entry * dst, u32 cookie)
 {
 	return NULL;
 }
 
-static struct dst_entry * ipv4_dst_reroute(struct dst_entry * dst)
+static struct dst_entry * ipv4_dst_reroute(struct dst_entry * dst,
+					   struct sk_buff *skb)
 {
 	return NULL;
 }

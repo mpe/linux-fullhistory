@@ -175,7 +175,9 @@ static int nr_open(struct device *dev)
 {
 	dev->tbusy = 0;
 	dev->start = 1;
+
 	MOD_INC_USE_COUNT;
+
 	ax25_listen_register((ax25_address *)dev->dev_addr, NULL);
 
 	return 0;
@@ -185,8 +187,11 @@ static int nr_close(struct device *dev)
 {
 	dev->tbusy = 1;
 	dev->start = 0;
+
 	ax25_listen_release((ax25_address *)dev->dev_addr, NULL);
+
 	MOD_DEC_USE_COUNT;
+
 	return 0;
 }
 

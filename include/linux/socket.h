@@ -147,6 +147,7 @@ struct ucred
 #define AF_ROSE		11	/* Amateur Radio X.25 PLP	*/
 #define AF_DECNET	12	/* Reserved for DECnet project	*/
 #define AF_NETBEUI	13	/* Reserved for 802.2LLC project*/
+#define AF_SECURITY	14	/* Security callback pseudo AF */
 #define AF_MAX		32	/* For now.. */
 
 /* Protocol families, same as address families. */
@@ -165,6 +166,7 @@ struct ucred
 #define PF_ROSE		AF_ROSE
 #define PF_DECNET	AF_DECNET
 #define PF_NETBEUI	AF_NETBEUI
+#define PF_SECURITY	AF_SECURITY
 
 #define PF_MAX		AF_MAX
 

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	@(#)tcp.c	1.0.16	05/25/93
+ * Version:	$Id: tcp.c,v 1.50 1997/03/16 03:25:59 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -196,6 +196,8 @@
  *					improvement.
  *	Stefan Magdalinski	:	adjusted tcp_readable() to fix FIONREAD
  *	Willy Konynenberg	:	Transparent proxying support.
+ *		Keith Owens	:	Do proper meging with partial SKB's in
+ *					tcp_do_sendmsg to avoid burstiness.
  *					
  * To Fix:
  *		Fast path the code. Two things here - fix the window calculation
@@ -525,6 +527,7 @@ static int tcp_readable(struct sock *sk)
 	unsigned long flags;
 
 	SOCK_DEBUG(sk, "tcp_readable: %p - ",sk);
+
 	save_flags(flags);
 	cli();
 	if (sk == NULL || (skb = skb_peek(&sk->receive_queue)) == NULL)
@@ -772,11 +775,11 @@ static int tcp_append_tail(struct sock *sk, struct sk_buff *skb, u8 *from,
 
 	copy = min(sk->mss - tcp_size, skb_tailroom(skb));
 	copy = min(copy, seglen);
-	
+
 	tcp_size += copy;
-	
+
 	fault = copy_from_user(skb->tail, from, copy);
-	
+
 	if (fault)
 	{
 		return -1;
@@ -796,8 +799,7 @@ static int tcp_append_tail(struct sock *sk, struct sk_buff *skb, u8 *from,
  *	and starts the transmit system.
  */
 
-int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
-		   int len, int flags)
+int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 {
 	int err = 0;
 	int copied  = 0;
@@ -808,16 +810,14 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 	 */
 	while (sk->state != TCP_ESTABLISHED && sk->state != TCP_CLOSE_WAIT)
 	{
-		
 		if (copied)
 			return copied;
-		
-		if (sk->err) 
+
+		if (sk->err)
 			return sock_error(sk);
-		
+
 		if (sk->state != TCP_SYN_SENT && sk->state != TCP_SYN_RECV)
 		{
-			printk("tcp_do_sendmsg1: EPIPE dude...\n");
 			if (sk->keepopen)
 				send_sig(SIGPIPE, current, 0);
 			return -EPIPE;
@@ -831,22 +831,21 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 		
 		wait_for_tcp_connect(sk);
 	}
-	
-	
+
 	/*
 	 *	Ok commence sending
 	 */
-	
+
 	while(--iovlen >= 0)
 	{
 		int seglen=iov->iov_len;
 		unsigned char * from=iov->iov_base;
-		u32 actual_win;
 
 		iov++;
 
-		while(seglen > 0) 
+		while(seglen > 0)
 		{
+			unsigned int actual_win;
 			int copy;
 			int tmp;
 			struct sk_buff *skb;
@@ -870,7 +869,6 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 			{
 				if (copied)
 					return copied;
-				printk("tcp_do_sendmsg2: SEND_SHUTDOWN, EPIPE...\n");
 				send_sig(SIGPIPE,current,0);
 				return -EPIPE;
 			}
@@ -885,11 +883,11 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 				int tcp_size;
 
 				/* Tail */
-				
+
 				skb = sk->write_queue.prev;
-				tcp_size = skb->tail - 
+				tcp_size = skb->tail -
 					(unsigned char *)(skb->h.th + 1);
-					
+
 				/*
 				 * This window_seq test is somewhat dangerous
 				 * If the remote does SWS avoidance we should
@@ -901,7 +899,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 
 				if (skb->end > skb->tail &&
 				    sk->mss - tcp_size > 0 &&
-				    skb->end_seq < tp->snd_una + tp->snd_wnd) 
+				    tp->snd_nxt < skb->end_seq) 
 				{
 					int tcopy;
 					
@@ -912,12 +910,11 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 					{
 						return -EFAULT;
 					}
-					
+
 					from += tcopy;
 					copied += tcopy;
-					len -= tcopy;
 					seglen -= tcopy;
-					
+
 					/*
 					 *	FIXME: if we're nagling we
 					 *	should send here.
@@ -944,7 +941,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 			actual_win = tp->snd_wnd - (tp->snd_nxt - tp->snd_una);
 
 			if (copy > actual_win &&
-			    (((long) actual_win) >= (sk->max_window >> 1))
+			    (((int) actual_win) >= (sk->max_window >> 1))
 			    && actual_win)
 			{
 				copy = actual_win;
@@ -974,12 +971,12 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 			}
 
 			skb = sock_wmalloc(sk, tmp, 0, GFP_KERNEL);
-	
+
 			/*
-			 *	If we didn't get any memory, we need to sleep. 
+			 *	If we didn't get any memory, we need to sleep.
 			 */
-	
-			if (skb == NULL) 
+
+			if (skb == NULL)
 			{
 				sk->socket->flags |= SO_NOSPACE;
 				if (flags&MSG_DONTWAIT)
@@ -1037,13 +1034,16 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 
 			skb->csum = csum_partial_copy_from_user(from,
 					skb_put(skb, copy), copy, 0, &err);
-		
+
 			from += copy;
 			copied += copy;
-			len -= copy;
+
 			sk->write_seq += copy;
 		
 			tcp_send_skb(sk, skb);
+
+			release_sock(sk);
+			lock_sock(sk);
 		}
 	}
 
@@ -1181,14 +1181,14 @@ static void cleanup_rbuf(struct sock *sk)
 			break;
 		tcp_eat_skb(sk, skb);
 	}
-       
+
 	SOCK_DEBUG(sk, "sk->rspace = %lu\n", sock_rspace(sk));
-	
+
   	/*
-  	 *  We send a ACK if the sender is blocked
-  	 *  else let tcp_data deal with the acking policy.
+  	 *	We send a ACK if the sender is blocked
+  	 *	else let tcp_data deal with the acking policy.
   	 */
-  
+
 	if (sk->delayed_acks)
 	{
 		struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
@@ -1464,7 +1464,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 					       msg->msg_name);       
 	}
 	if(addr_len)
-		*addr_len= tp->af_specific->sockaddr_len;
+		*addr_len = tp->af_specific->sockaddr_len;
 
 	remove_wait_queue(sk->sleep, &wait);
 	current->state = TASK_RUNNING;

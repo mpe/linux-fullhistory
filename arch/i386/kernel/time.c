@@ -388,7 +388,7 @@ static inline void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	   basically because we don't yet share IRQ's around. This message is
 	   rigged to be safe on the 386 - basically it's a hack, so don't look
 	   closely for now.. */
-	/*smp_message_pass(MSG_ALL_BUT_SELF, MSG_RESCHEDULE, 0L, 0); */
+	smp_message_pass(MSG_ALL_BUT_SELF, MSG_RESCHEDULE, 0L, 0);
 	    
 #ifdef CONFIG_MCA
 	if( MCA_bus ) {

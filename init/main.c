@@ -22,6 +22,7 @@
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/fs.h>
+#include <linux/proc_fs.h>
 #include <linux/ctype.h>
 #include <linux/delay.h>
 #include <linux/utsname.h>
@@ -887,7 +888,9 @@ asmlinkage void start_kernel(void)
 	}
 #endif
 	mem_init(memory_start,memory_end);
+#ifdef CONFIG_PROC_FS
 	proc_root_init();
+#endif
 	kmem_cache_sizes_init();
 	vma_init();
 	buffer_init();

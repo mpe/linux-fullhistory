@@ -44,6 +44,8 @@
 #include <asm/smp.h>
 #include <asm/io.h>
 
+extern unsigned long start_kernel, _etext;
+
 /*
  *	Some notes on processor bugs:
  *
@@ -122,9 +124,6 @@ unsigned long apic_retval;				/* Just debugging the assembler.. 			*/
 unsigned char *kernel_stacks[NR_CPUS];			/* Kernel stack pointers for CPU's (debugging)		*/
 
 static volatile unsigned char smp_cpu_in_msg[NR_CPUS];	/* True if this processor is sending an IPI		*/
-static volatile unsigned long smp_msg_data;		/* IPI data pointer					*/
-static volatile int smp_src_cpu;			/* IPI sender processor					*/
-static volatile int smp_msg_id;				/* Message being sent					*/
 
 volatile unsigned long kernel_flag=0;			/* Kernel spinlock 					*/
 volatile unsigned char active_kernel_processor = NO_PROC_ID;	/* Processor holding kernel spinlock		*/
@@ -491,6 +490,7 @@ int smp_scan_config(unsigned long base, unsigned long length)
 				 */
 				nlong = boot_cpu_id<<24;	/* Dummy 'self' for bootup */
 				cpu_logical_map[0] = boot_cpu_id;
+				global_irq_holder = boot_cpu_id;
 
 				printk("Processors: %d\n", num_processors);
 				/*
@@ -1051,7 +1051,6 @@ void smp_boot_cpus(void)
 	SMP_PRINTK(("Boot done.\n"));
 }
 
-
 /*
  *	A non wait message cannot pass data or cpu source info. This current setup
  *	is only safe because the kernel lock owner is the only person who can send a message.
@@ -1070,9 +1069,8 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	unsigned long cfg;
 	unsigned long target_map;
 	int p=smp_processor_id();
-	int irq=0x2d;								/* IRQ 13 */
+	int irq;
 	int ct=0;
-	static volatile int message_cpu = NO_PROC_ID;
 
 	/*
 	 *	During boot up send no messages
@@ -1087,11 +1085,24 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	 *	message at this time. The reschedule cannot wait
 	 *	but is not critical.
 	 */
-	
-	if(msg==MSG_RESCHEDULE)							/* Reschedules we do via trap 0x30 */
-	{
-		irq=0x30;
-		if(smp_cpu_in_msg[p])
+
+	switch (msg) {
+		case MSG_RESCHEDULE:	
+			irq = 0x30;
+			if (smp_cpu_in_msg[p])
+				return;
+			break;
+
+		case MSG_INVALIDATE_TLB:
+			irq = 0x31;
+			break;
+
+		case MSG_STOP_CPU:
+			irq = 0x32;
+			break;
+
+		default:
+			printk("Unknown SMP message %d\n", msg);
 			return;
 	}
 
@@ -1103,30 +1114,11 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	 *	I got to notice this bug...
 	 */
 	 
-	if(message_cpu!=NO_PROC_ID && msg!=MSG_STOP_CPU && msg!=MSG_RESCHEDULE)
-	{
-		panic("CPU #%d: Message pass %d but pass in progress by %d of %d\n",
-			smp_processor_id(),msg,message_cpu, smp_msg_id);
-	}
-
-	message_cpu=smp_processor_id();
-	
 	/*
 	 *	We are busy
 	 */
 	 	
 	smp_cpu_in_msg[p]++;
-	
-	/*
-	 *	Reschedule is currently special
-	 */
-	 
-	if(msg!=MSG_RESCHEDULE)
-	{
-		smp_src_cpu=p;
-		smp_msg_id=msg;
-		smp_msg_data=data;
-	}
 	
 /*	printk("SMP message pass #%d to %d of %d\n",
 		p, msg, target);*/
@@ -1150,7 +1142,7 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	 */
 	 
 	if(ct==1000)
-		printk("CPU #%d: previous IPI still not cleared after 10mS", smp_processor_id());
+		printk("CPU #%d: previous IPI still not cleared after 10mS", p);
 		
 	/*
 	 *	Program the APIC to deliver the IPI
@@ -1171,7 +1163,7 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	{
 		cfg|=APIC_DEST_ALLBUT;
 		target_map=cpu_present_map;
-		cpu_callin_map[0]=(1<<smp_src_cpu);
+		cpu_callin_map[0]=(1<<p);
 	}
 	else if(target==MSG_ALL)
 	{
@@ -1197,11 +1189,30 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	 
 	switch(wait)
 	{
+		int stuck;
 		case 1:
-			while(cpu_callin_map[0]!=target_map);		/* Spin on the pass		*/
+			stuck = 50000000;
+			while(cpu_callin_map[0]!=target_map) {
+				--stuck;
+				if (!stuck) {
+					printk("stuck on target_map IPI wait\n");
+					break;
+				}
+			}
 			break;
 		case 2:
-			while(smp_invalidate_needed);			/* Wait for invalidate map to clear */
+			stuck = 50000000;
+			/* Wait for invalidate map to clear */
+			while (smp_invalidate_needed) {
+				/* Take care of "crossing" invalidates */
+				if (test_bit(p, &smp_invalidate_needed))
+					clear_bit(p, &smp_invalidate_needed);
+				--stuck;
+				if (!stuck) {
+					printk("stuck on smp_invalidate_needed IPI wait\n");
+					break;
+				}
+			}
 			break;
 	}
 	
@@ -1210,7 +1221,6 @@ void smp_message_pass(int target, int msg, unsigned long data, int wait)
 	 */
 	 
 	smp_cpu_in_msg[p]--;
-	message_cpu=NO_PROC_ID;
 }
 
 /*
@@ -1233,15 +1243,15 @@ void smp_flush_tlb(void)
 	 *	bus locked or.
 	 */
 	
-	smp_invalidate_needed=cpu_present_map&~(1<<smp_processor_id());
+	smp_invalidate_needed=cpu_present_map;
 	
 	/*
 	 *	Processors spinning on the lock will see this IRQ late. The smp_invalidate_needed map will
 	 *	ensure they don't do a spurious flush tlb or miss one.
 	 */
 	 
-	save_flags(flags);
-	cli();
+	__save_flags(flags);
+	__cli();
 	smp_message_pass(MSG_ALL_BUT_SELF, MSG_INVALIDATE_TLB, 0L, 2);
 	
 	/*
@@ -1250,7 +1260,7 @@ void smp_flush_tlb(void)
 	 
 	local_flush_tlb();
 	
-	restore_flags(flags);
+	__restore_flags(flags);
 	
 	/*
 	 *	Completed.
@@ -1262,69 +1272,34 @@ void smp_flush_tlb(void)
 /*	
  *	Reschedule call back
  */
-
-void smp_reschedule_irq(int cpl, struct pt_regs *regs)
+asmlinkage void smp_reschedule_interrupt(void)
 {
-	lock_kernel();
-	intr_count++;
-	if(smp_processor_id()!=active_kernel_processor)
-		panic("SMP Reschedule on CPU #%d, but #%d is active.\n",
-			smp_processor_id(), active_kernel_processor);
-
 	need_resched=1;
 
 	/* Clear the IPI */
 	apic_read(APIC_SPIV);		/* Dummy read */
 	apic_write(APIC_EOI, 0);	/* Docs say use 0 for future compatibility */
+}
 
-	intr_count--;
-	unlock_kernel();
+/*
+ * Invalidate call-back
+ */
+asmlinkage void smp_invalidate_interrupt(void)
+{
+	if (clear_bit(smp_processor_id(), &smp_invalidate_needed))
+		local_flush_tlb();
+
+	/* Clear the IPI */
+	apic_read(APIC_SPIV);		/* Dummy read */
+	apic_write(APIC_EOI, 0);	/* Docs say use 0 for future compatibility */
 }	
 
 /*
- *	Message call back.
+ *	CPU halt call-back
  */
- 
-void smp_message_irq(int cpl, void *dev_id, struct pt_regs *regs)
+asmlinkage void smp_stop_cpu_interrupt(void)
 {
-	int i=smp_processor_id();
-/*	static int n=0;
-	if(n++<NR_CPUS)
-		printk("IPI %d->%d(%d,%ld)\n",smp_src_cpu,i,smp_msg_id,smp_msg_data);*/
-	switch(smp_msg_id)
-	{
-		case 0:	/* IRQ 13 testing - boring */
-			return;
-			
-		/*
-		 *	A TLB flush is needed.
-		 */
-		 
-		case MSG_INVALIDATE_TLB:
-			if(clear_bit(i,(unsigned long *)&smp_invalidate_needed))
-				local_flush_tlb();
-			set_bit(i, (unsigned long *)&cpu_callin_map[0]);
-		/*	cpu_callin_map[0]|=1<<smp_processor_id();*/
-			break;
-			
-		/*
-		 *	Halt other CPU's for a panic or reboot
-		 */
-		case MSG_STOP_CPU:
-			while(1)
-			{
-				if(cpu_data[smp_processor_id()].hlt_works_ok)
-					__asm__("hlt");
-			}
-		default:
-			printk("CPU #%d sent invalid cross CPU message to CPU #%d: %X(%lX).\n",
-				smp_src_cpu,smp_processor_id(),smp_msg_id,smp_msg_data);
-			break;
-	}
-	/*
-	 *	Clear the IPI, so we can receive future IPI's
-	 */
-	 
-	apic_read(APIC_SPIV);		/* Dummy read */
-	apic_write(APIC_EOI, 0);	/* Docs say use 0 for future compatibility */
+	if (cpu_data[smp_processor_id()].hlt_works_ok)
+		for(;;) __asm__("hlt");
+	for  (;;) ;
 }

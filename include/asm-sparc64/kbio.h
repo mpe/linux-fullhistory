@@ -1,4 +1,3 @@
-/* $Id: kbio.h,v 1.1 1996/12/02 00:06:41 davem Exp $ */
 #ifndef __LINUX_KBIO_H
 #define __LINUX_KBIO_H
 
@@ -32,6 +31,18 @@ enum {
 
 /* Get keyboard leds */
 #define KIOCGLED    _IOR('k', 15, unsigned char)
+
+/* Used by KIOC[GS]RATE */
+struct kbd_rate {
+	unsigned char delay;	/* Delay in Hz before first repeat.	*/
+	unsigned char rate;	/* In characters per second (0..50).	*/
+};
+
+/* Set keyboard rate */
+#define KIOCSRATE   _IOW('k', 40, struct kbd_rate)
+
+/* Get keyboard rate */
+#define KIOCGRATE   _IOW('k', 41, struct kbd_rate)
 
 /* Top bit records if the key is up or down */
 #define KBD_UP      0x80

@@ -1,4 +1,4 @@
-/* $Id: oplib.h,v 1.13 1997/01/31 00:16:52 tdyas Exp $
+/* $Id: oplib.h,v 1.15 1997/03/18 18:00:18 jj Exp $
  * oplib.h:  Describes the interface and available routines in the
  *           Linux Prom library.
  *
@@ -30,6 +30,9 @@ extern unsigned int prom_rev, prom_prev;
  * initialization is complete.
  */
 extern int prom_root_node;
+
+/* PROM stdin and stdout */
+extern int prom_stdin, prom_stdout;
 
 /* Pointer to prom structure containing the device tree traversal
  * and usage utility functions.  Only prom-lib should use these,
@@ -108,7 +111,7 @@ extern void prom_cmdline(void);
 /* Enter the prom, with no chance of continuation for the stand-alone
  * which calls this.
  */
-extern void prom_halt(void);
+extern void prom_halt(void) __attribute__ ((noreturn));
 
 /* Set the PROM 'sync' callback function to the passed function pointer.
  * When the user gives the 'sync' command at the prom prompt while the

@@ -100,7 +100,7 @@
 #include "sd.h"
 #include <scsi/scsi_ioctl.h>
 
-struct proc_dir_entry proc_scsi_seagate =
+static struct proc_dir_entry proc_scsi_seagate =
 {
   PROC_SCSI_SEAGATE, 7, "seagate",
   S_IFDIR | S_IRUGO | S_IXUGO, 2

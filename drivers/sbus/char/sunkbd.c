@@ -96,6 +96,8 @@ static struct tty_struct **ttytab;
 static struct kbd_struct * kbd = kbd_table;
 static struct tty_struct * tty = NULL;
 static int compose_led_on = 0;
+static int kbd_delay_ticks = HZ / 5;
+static int kbd_rate_ticks = HZ / 20;
 
 extern void compute_shiftstate(void);
 
@@ -393,8 +395,10 @@ keyboard_timer (unsigned long ignored)
 	/* Auto repeat: send regs = 0 to indicate autorepeat */
 	sunkbd_inchar (last_keycode, 0, 0);
 	del_timer (&auto_repeat_timer);
-	auto_repeat_timer.expires = jiffies + HZ/20;
-	add_timer (&auto_repeat_timer);
+	if (kbd_rate_ticks) {
+		auto_repeat_timer.expires = jiffies + kbd_rate_ticks;
+		add_timer (&auto_repeat_timer);
+	}
 	restore_flags(flags);
 }
 
@@ -470,8 +474,11 @@ void sunkbd_inchar(unsigned char ch, unsigned char status, struct pt_regs *regs)
 		clear_bit(keycode, key_down);
 	} else {
 		if (!norepeat_keys[keycode]) {
-			auto_repeat_timer.expires = jiffies+HZ/5;
-			add_timer (&auto_repeat_timer);
+			if (kbd_rate_ticks) {
+				auto_repeat_timer.expires =
+						jiffies + kbd_delay_ticks;
+				add_timer (&auto_repeat_timer);
+			}
 		}
 		rep = set_bit(keycode, key_down);
 	}
@@ -1177,6 +1184,7 @@ int kbd_init(void)
 static Firm_event kbd_queue [KBD_QSIZE];
 static int kbd_head, kbd_tail;
 char kbd_opened;
+static int kbd_active = 0;
 static struct wait_queue *kbd_wait;
 static struct fasync_struct *kb_fasync;
 
@@ -1311,6 +1319,41 @@ kbd_ioctl (struct inode *i, struct file *f, unsigned int cmd, unsigned long arg)
 	case KIOCGLED:
 		put_user_ret(vcleds_to_sunkbd(getleds()), (unsigned char *) arg, -EFAULT);
 		break;
+	case KIOCGRATE:
+	{
+		struct kbd_rate rate;
+
+		rate.delay = kbd_delay_ticks;
+		if (kbd_rate_ticks)
+			rate.rate = HZ / kbd_rate_ticks;
+		else
+			rate.rate = 0;
+
+		copy_to_user_ret((struct kbd_rate *)arg, &rate,
+				 sizeof(struct kbd_rate), -EFAULT);
+
+		return 0;
+	}
+	case KIOCSRATE:
+	{
+		struct kbd_rate rate;
+
+		if (verify_area(VERIFY_READ, (void *)arg,
+				sizeof(struct kbd_rate)))
+			return -EFAULT;
+		copy_from_user(&rate, (struct kbd_rate *)arg,
+			       sizeof(struct kbd_rate));
+
+		if (rate.rate > 50)
+			return -EINVAL;
+		if (rate.rate == 0)
+			kbd_rate_ticks = 0;
+		else
+			kbd_rate_ticks = HZ / rate.rate;
+		kbd_delay_ticks = rate.delay;
+
+		return 0;
+	}
 	case FIONREAD:		/* return number of bytes in kbd queue */
 	{
 		int count;
@@ -1329,8 +1372,11 @@ kbd_ioctl (struct inode *i, struct file *f, unsigned int cmd, unsigned long arg)
 static int
 kbd_open (struct inode *i, struct file *f)
 {
+	kbd_active++;
+
 	if (kbd_opened)
 		return 0;
+
 	kbd_opened = fg_console + 1;
 	kbd_head = kbd_tail = 0;
 	return 0;
@@ -1339,8 +1385,12 @@ kbd_open (struct inode *i, struct file *f)
 static void
 kbd_close (struct inode *i, struct file *f)
 {
+	if (--kbd_active)
+		return;
+
 	if (kbd_redirected)
 		kbd_table [kbd_opened-1].kbdmode = VC_XLATE;
+
 	kbd_redirected = 0;
 	kbd_opened = 0;
 

@@ -1,9 +1,37 @@
-/* $Id: system.h,v 1.4 1996/12/28 18:39:56 davem Exp $ */
+/* $Id: system.h,v 1.7 1997/03/18 18:02:41 jj Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
 #include <asm/ptrace.h>
 #include <asm/processor.h>
+
+#define NCPUS	4	/* No SMP yet */
+
+#define EMPTY_PGT       (&empty_bad_page)
+#define EMPTY_PGE       (&empty_bad_page_table)
+
+#ifndef __ASSEMBLY__
+/*
+ * Sparc (general) CPU types
+ */
+enum sparc_cpu {
+  sun4        = 0x00,
+  sun4c       = 0x01,
+  sun4m       = 0x02,
+  sun4d       = 0x03,
+  sun4e       = 0x04,
+  sun4u       = 0x05, /* V8 ploos ploos */
+  sun_unknown = 0x06,
+  ap1000      = 0x07, /* almost a sun4m */
+};
+                  
+#define sparc_cpu_model sun4u
+                  
+
+extern unsigned long empty_bad_page;
+extern unsigned long empty_bad_page_table;
+extern unsigned long empty_zero_page;
+#endif
 
 #define setipl(__new_ipl) \
 	__asm__ __volatile__("wrpr	%0, %%pil"  : : "r" (__new_ipl) : "memory")
@@ -111,6 +139,8 @@ static __inline__ unsigned long __xchg(unsigned long x, __volatile__ void * ptr,
 	__xchg_called_with_bad_pointer();
 	return x;
 }
+
+extern void die_if_kernel(char *str, struct pt_regs *regs) __attribute__ ((noreturn));
 
 #endif /* !(__ASSEMBLY__) */
 

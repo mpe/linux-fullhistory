@@ -833,6 +833,7 @@ int mkiss_init_ctrl_dev(void)
 	/* Fill in our line protocol discipline, and register it */
 	memset(&ax_ldisc, 0, sizeof(ax_ldisc));
 	ax_ldisc.magic  = TTY_LDISC_MAGIC;
+	ax_ldisc.name   = "mkiss";
 	ax_ldisc.flags  = 0;
 	ax_ldisc.open   = ax25_open;
 	ax_ldisc.close  = ax25_close;

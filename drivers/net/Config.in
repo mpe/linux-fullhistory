@@ -30,9 +30,6 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
     tristate '3c590 series (592/595/597) "Vortex" support' CONFIG_VORTEX
   fi
   bool 'AMD LANCE and PCnet (AT1500 and NE2100) support' CONFIG_LANCE
-  if [ "$CONFIG_LANCE" = "y" ]; then
-    bool 'AMD PCInet32 (VLB and PCI) support' CONFIG_LANCE32
-  fi  
   bool 'Western Digital/SMC cards' CONFIG_NET_VENDOR_SMC
   if [ "$CONFIG_NET_VENDOR_SMC" = "y" ]; then
     tristate 'WD80*3 support' CONFIG_WD80x3
@@ -72,9 +69,11 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
   fi
   bool 'EISA, VLB, PCI and on board controllers' CONFIG_NET_EISA
   if [ "$CONFIG_NET_EISA" = "y" ]; then
+    bool 'AMD PCnet32 (VLB and PCI) support' CONFIG_PCNET32
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
       tristate 'Ansel Communications EISA 3200 support (EXPERIMENTAL)' CONFIG_AC3200
     fi
+    
     tristate 'Apricot Xen-II on board ethernet' CONFIG_APRICOT
     tristate 'CS89x0 support' CONFIG_CS89x0
     tristate 'Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5

@@ -81,9 +81,11 @@ EXPORT_SYMBOL(wrusp);
 EXPORT_SYMBOL(__kernel_thread);
 EXPORT_SYMBOL(start_thread);
 
+/* Networking helper routines. */
 EXPORT_SYMBOL(csum_tcpudp_magic);
 EXPORT_SYMBOL(ip_fast_csum);
 EXPORT_SYMBOL(ip_compute_csum);
+EXPORT_SYMBOL(csum_partial_copy);
 
 /*
  * The following are specially called from the uaccess assembly stubs.

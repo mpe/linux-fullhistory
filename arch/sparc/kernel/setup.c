@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.81 1997/01/29 10:32:55 davem Exp $
+/*  $Id: setup.c,v 1.82 1997/03/08 08:27:04 ecd Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -115,6 +115,7 @@ unsigned int boot_flags;
 extern char *console_fb_path;
 static int console_fb = 0;
 #endif
+static unsigned long memory_size = 0;
 
 void kernel_enter_debugger(void)
 {
@@ -215,8 +216,23 @@ __initfunc(static void boot_flags_init(char *commands))
 					console_fb = 1;
 					console_fb_path = commands;
 				}
-			}
+			} else
 #endif
+			if (!strncmp(commands, "mem=", 4)) {
+				/*
+				 * "mem=XXX[kKmM] overrides the PROM-reported
+				 * memory size.
+				 */
+				memory_size = simple_strtoul(commands + 4,
+							     &commands, 0);
+				if (*commands == 'K' || *commands == 'k') {
+					memory_size <<= 10;
+					commands++;
+				} else if (*commands=='M' || *commands=='m') {
+					memory_size <<= 20;
+					commands++;
+				}
+			}
 			while (*commands && *commands != ' ')
 				commands++;
 		}
@@ -337,15 +353,35 @@ __initfunc(void setup_arch(char **cmdline_p,
 	*memory_start_p = (((unsigned long) &end));
 
 	if(!packed) {
-		for(i=0; sp_banks[i].num_bytes != 0; i++)
+		for(i=0; sp_banks[i].num_bytes != 0; i++) {
 			end_of_phys_memory = sp_banks[i].base_addr +
-				sp_banks[i].num_bytes;
+					     sp_banks[i].num_bytes;
+			if (memory_size) {
+				if (end_of_phys_memory > memory_size) {
+					sp_banks[i].num_bytes -=
+					    (end_of_phys_memory - memory_size);
+					end_of_phys_memory = memory_size;
+					sp_banks[++i].base_addr = 0xdeadbeef;
+					sp_banks[i].num_bytes = 0;
+				}
+			}
+		}
 	} else {
 		unsigned int sum = 0;
 
-		for(i = 0; sp_banks[i].num_bytes != 0; i++)
+		for(i = 0; sp_banks[i].num_bytes != 0; i++) {
 			sum += sp_banks[i].num_bytes;
-
+			if (memory_size) {
+				if (sum > memory_size) {
+					sp_banks[i].num_bytes -=
+							(sum - memory_size);
+					sum = memory_size;
+					sp_banks[++i].base_addr = 0xdeadbeef;
+					sp_banks[i].num_bytes = 0;
+					break;
+				}
+			}
+		}
 		end_of_phys_memory = sum;
 	}
 

@@ -153,12 +153,8 @@ ENTRY(lcall7)
 	ALIGN
 	.globl	ret_from_smpfork
 ret_from_smpfork:
-	GET_CURRENT(%ebx)
-	movl	$NO_PROC_ID, SYMBOL_NAME(active_kernel_processor)
-	lock
-	btrl	$0, SYMBOL_NAME(kernel_flag)
-	sti
-	jmp	9f
+	btrl	$0, SYMBOL_NAME(scheduler_lock)
+	jmp	ret_from_sys_call
 #endif /* __SMP__ */
 
 	ALIGN
@@ -187,13 +183,7 @@ ENTRY(system_call)
 ret_from_intr:
 ret_from_sys_call:
 	GET_CURRENT(%ebx)
-	cmpl $0,SYMBOL_NAME(intr_count)
-#ifdef __SMP__
-	jne 2f
-#else
-	jne 1f
-#endif
-9:	movl SYMBOL_NAME(bh_mask),%eax
+	movl SYMBOL_NAME(bh_mask),%eax
 	andl SYMBOL_NAME(bh_active),%eax
 	jne handle_bottom_half
 2:	movl EFLAGS(%esp),%eax		# mix EFLAGS and CS

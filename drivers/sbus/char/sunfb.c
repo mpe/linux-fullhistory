@@ -1,4 +1,4 @@
-/* $Id: sunfb.c,v 1.20 1997/01/26 07:13:40 davem Exp $
+/* $Id: sunfb.c,v 1.21 1997/03/14 21:04:53 jj Exp $
  * sunfb.c: Sun generic frame buffer support.
  *
  * Copyright (C) 1995, 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -32,7 +32,6 @@
 #include <asm/sbus.h>
 #include <asm/fbio.h>
 #include <asm/io.h>
-#include <asm/pgtsun4c.h>	/* for the sun4c_nocache */
 
 #include "../../char/kbd_kern.h"
 #include "../../char/vt_kern.h"

@@ -1,4 +1,4 @@
-/* $Id: etrap.S,v 1.4 1997/03/04 16:26:58 jj Exp $
+/* $Id: etrap.S,v 1.5 1997/03/13 08:24:01 jj Exp $
  * etrap.S: Preparing for entry into the kernel on Sparc V9.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -18,16 +18,17 @@ etrap:
 	rdpr	%tstate, %g1
 	be,pn	%xcc, 1f		/* What happens more often? etrap when already in priv or from userland? */
 	 sllx	%g6, 32, %g6
+	/* Just when going from userland to privileged mode, we have to change this stuff. */
 	sll	%g2, 3, %g2
 	wrpr	%g2, %wstate
+	rdpr	%canrestore, %g5
+	wrpr	%g0, 0, %canrestore
+	wrpr	%g5, 0, %otherwin
 1:
 	sethi	%hi(current_set), %g4
 	or	%g4, %lo(current_set), %g4
 	rdpr	%tpc, %g2
-	rdpr	%canrestore, %g5
 	rdpr	%tnpc, %g3
-	wrpr	%g5, 0, %otherwin
-	wrpr	%g0, 0, %canrestore
 	ldx	[%g6 + %g4], %g6
 #ifdef __SMP__
 /* FIXME: Fix the above insn for SMP */

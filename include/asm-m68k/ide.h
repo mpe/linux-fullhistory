@@ -362,7 +362,7 @@ static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent
 
 #endif /* CONFIG_ATARI */
 
-static __inline__ int ide_ack_intr (ide_ioreg_t base_port, ide_ioreg_t irq_port)
+static __inline__ int ide_ack_intr (ide_ioreg_t status_port, ide_ioreg_t irq_port)
 {
 #ifdef CONFIG_AMIGA
 	if (MACH_IS_AMIGA) {
@@ -371,7 +371,7 @@ static __inline__ int ide_ack_intr (ide_ioreg_t base_port, ide_ioreg_t irq_port)
 		if (!(ch & 0x80))
 			return(0);
 		if (AMIGAHW_PRESENT(A1200_IDE)) {
-			(void) inb(base_port);
+			(void) inb(status_port);
 			outb(0x7c | (ch & 0x03), irq_port);
 		}
 	}

@@ -142,8 +142,8 @@ S: Trinity College
 S: Cambridge, UK. CB2 1TQ
 
 N: Thomas Bogendoerfer
-E: tsbogend@bigbug.franken.de
-D: Lance32 driver
+E: tsbogend@alpha.franken.de
+D: PCnet32 driver
 D: strace for Linux/Alpha
 S: Baumgartenweg 5
 S: 91452 Wilhermsdorf

@@ -1,4 +1,4 @@
-/* $Id: devops.c,v 1.6 1996/10/12 12:37:38 davem Exp $
+/* $Id: devops.c,v 1.7 1997/03/18 17:58:19 jj Exp $
  * devops.c:  Device operations using the PROM.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -27,7 +27,6 @@ prom_devopen(char *dstr)
 		break;
 	case PROM_V2:
 	case PROM_V3:
-	case PROM_P1275:
 		handle = (*(romvec->pv_v2devops.v2_dev_open))(dstr);
 		break;
         case PROM_AP1000:
@@ -55,7 +54,6 @@ prom_devclose(int dhandle)
 		break;
 	case PROM_V2:
 	case PROM_V3:
-	case PROM_P1275:
 		(*(romvec->pv_v2devops.v2_dev_close))(dhandle);
 		break;
         case PROM_AP1000:
@@ -82,7 +80,6 @@ prom_seek(int dhandle, unsigned int seekhi, unsigned int seeklo)
 		break;
 	case PROM_V2:
 	case PROM_V3:
-	case PROM_P1275:
 		(*(romvec->pv_v2devops.v2_dev_seek))(dhandle, seekhi, seeklo);
 		break;
         case PROM_AP1000:

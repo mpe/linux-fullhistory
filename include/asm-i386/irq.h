@@ -143,58 +143,17 @@ extern void enable_irq(unsigned int);
 #ifdef __SMP__
 
 /*
- *	Message pass must be a fast IRQ..
+ *	SMP has a few special interrupts for IPI messages
  */
 
-#define BUILD_MSGIRQ(chip,nr,mask) \
-asmlinkage void IRQ_NAME(nr); \
-asmlinkage void FAST_IRQ_NAME(nr); \
-asmlinkage void BAD_IRQ_NAME(nr); \
+#define BUILD_SMP_INTERRUPT(x) \
+asmlinkage void x(void); \
 __asm__( \
 "\n"__ALIGN_STR"\n" \
-SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
-	"pushl $-"#nr"-2\n\t" \
+SYMBOL_NAME_STR(x) ":\n\t" \
+	"pushl $-1\n\t" \
 	SAVE_ALL \
-	ACK_##chip(mask,(nr&7)) \
-	"sti\n\t" \
-	"movl %esp,%eax\n\t" \
-	"pushl %eax\n\t" \
-	"pushl $" #nr "\n\t" \
-	"call "SYMBOL_NAME_STR(do_IRQ)"\n\t" \
-	"addl $8,%esp\n\t" \
-	"cli\n\t" \
-	UNBLK_##chip(mask) \
-	"jmp ret_from_intr\n" \
-"\n"__ALIGN_STR"\n" \
-SYMBOL_NAME_STR(fast_IRQ) #nr "_interrupt:\n\t" \
-	SAVE_MOST \
-	ACK_##chip(mask,(nr&7)) \
-	"pushl $" #nr "\n\t" \
-	"call "SYMBOL_NAME_STR(do_fast_IRQ)"\n\t" \
-	"addl $4,%esp\n\t" \
-	"cli\n\t" \
-	UNBLK_##chip(mask) \
-	RESTORE_MOST \
-"\n"__ALIGN_STR"\n" \
-SYMBOL_NAME_STR(bad_IRQ) #nr "_interrupt:\n\t" \
-	SAVE_MOST \
-	ACK_##chip(mask,(nr&7)) \
-	RESTORE_MOST);
-
-#define BUILD_RESCHEDIRQ(nr) \
-asmlinkage void IRQ_NAME(nr); \
-__asm__( \
-"\n"__ALIGN_STR"\n" \
-SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
-	"pushl $-"#nr"-2\n\t" \
-	SAVE_ALL \
-	"sti\n\t" \
-	"movl %esp,%eax\n\t" \
-	"pushl %eax\n\t" \
-	"pushl $" #nr "\n\t" \
-	"call "SYMBOL_NAME_STR(smp_reschedule_irq)"\n\t" \
-	"addl $8,%esp\n\t" \
-	"cli\n\t" \
+	"call "SYMBOL_NAME_STR(smp_##x)"\n\t" \
 	"jmp ret_from_intr\n");
 
 #endif /* __SMP__ */
@@ -209,13 +168,11 @@ SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
 	"pushl $-"#nr"-2\n\t" \
 	SAVE_ALL \
 	ACK_##chip(mask,(nr&7)) \
-	"sti\n\t" \
 	"movl %esp,%eax\n\t" \
 	"pushl %eax\n\t" \
 	"pushl $" #nr "\n\t" \
 	"call "SYMBOL_NAME_STR(do_IRQ)"\n\t" \
 	"addl $8,%esp\n\t" \
-	"cli\n\t" \
 	UNBLK_##chip(mask) \
 	"jmp ret_from_intr\n" \
 "\n"__ALIGN_STR"\n" \
@@ -225,7 +182,6 @@ SYMBOL_NAME_STR(fast_IRQ) #nr "_interrupt:\n\t" \
 	"pushl $" #nr "\n\t" \
 	"call "SYMBOL_NAME_STR(do_fast_IRQ)"\n\t" \
 	"addl $4,%esp\n\t" \
-	"cli\n\t" \
 	UNBLK_##chip(mask) \
 	RESTORE_MOST \
 "\n"__ALIGN_STR"\n" \
@@ -251,7 +207,6 @@ SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
 	"pushl $" #nr "\n\t" \
 	"call "SYMBOL_NAME_STR(do_IRQ)"\n\t" \
 	"addl $8,%esp\n\t" \
-	"cli\n\t" \
 	UNBLK_##chip(mask) \
 	"jmp ret_from_intr\n");
 

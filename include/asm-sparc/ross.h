@@ -1,4 +1,4 @@
-/* $Id: ross.h,v 1.11 1996/08/29 09:48:40 davem Exp $
+/* $Id: ross.h,v 1.12 1997/03/10 09:16:57 davem Exp $
  * ross.h: Ross module specific definitions and defines.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -93,6 +93,8 @@
 #define HYPERSPARC_ICCR_FTD     0x00000002
 #define HYPERSPARC_ICCR_ICE     0x00000001
 
+#ifndef __ASSEMBLY__
+
 extern __inline__ unsigned int get_ross_icr(void)
 {
 	unsigned int icreg;
@@ -170,5 +172,7 @@ extern __inline__ void hyper_flush_cache_page(unsigned long page)
 		page += vac_line_size;
 	}
 }
+
+#endif /* !(__ASSEMBLY__) */
 
 #endif /* !(_SPARC_ROSS_H) */

@@ -14,7 +14,6 @@
 #include <linux/sched.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
-#include <linux/config.h>
 #include <asm/bitops.h>
 
 static long proc_file_read(struct inode * inode, struct file * file,

@@ -5,6 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
+ *	$Id: sit.c,v 1.13 1997/03/18 18:24:50 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -30,7 +31,6 @@
 #include <net/protocol.h>
 #include <net/transp_v6.h>
 #include <net/ndisc.h>
-#include <net/ipv6_route.h>
 #include <net/addrconf.h>
 #include <net/ip.h>
 #include <net/udp.h>
@@ -57,7 +57,7 @@ static void 			sit_err(struct sk_buff *skb, unsigned char *dp);
 static int			sit_open(struct device *dev);
 static int			sit_close(struct device *dev);
 
-static struct enet_statistics *	sit_get_stats(struct device *dev);
+static struct net_device_stats *sit_get_stats(struct device *dev);
 
 extern void	udp_err(struct sk_buff *, unsigned char *);
 
@@ -118,10 +118,8 @@ static struct sit_mtu_info * sit_mtu_lookup(__u32 addr)
 
 	hash = sit_addr_hash(addr);
 
-	for(iter = sit_mtu_cache[hash]; iter; iter=iter->next)
-	{
-		if (iter->addr == addr)
-		{
+	for(iter = sit_mtu_cache[hash]; iter; iter=iter->next) {
+		if (iter->addr == addr) {
 			iter->tstamp = jiffies;
 			break;
 		}
@@ -131,8 +129,7 @@ static struct sit_mtu_info * sit_mtu_lookup(__u32 addr)
 	 *	run garbage collector
 	 */
 
-	if (jiffies - sit_gc_last_run > SIT_GC_FREQUENCY)
-	{
+	if (jiffies - sit_gc_last_run > SIT_GC_FREQUENCY) {
 		sit_mtu_cache_gc();
 		sit_gc_last_run = jiffies;
 	}
@@ -146,26 +143,19 @@ static void sit_mtu_cache_gc(void)
 	unsigned long now = jiffies;
 	int i;
 
-	for (i=0; i < SIT_NUM_BUCKETS; i++)
-	{
+	for (i=0; i < SIT_NUM_BUCKETS; i++) {
 		back = NULL;
-		for (iter = sit_mtu_cache[i]; iter;)
-		{
-			if (now - iter->tstamp > SIT_GC_TIMEOUT)
-			{
+		for (iter = sit_mtu_cache[i]; iter;) {
+			if (now - iter->tstamp > SIT_GC_TIMEOUT) {
 				struct sit_mtu_info *old;
 
 				old = iter;
 				iter = iter->next;
 
 				if (back)
-				{
 					back->next = iter;
-				}
 				else
-				{
 					sit_mtu_cache[i] = iter;
-				}
 
 				kfree(old);
 				continue;
@@ -186,12 +176,12 @@ static int sit_init_dev(struct device *dev)
 	dev->hard_start_xmit	= sit_xmit;
 	dev->get_stats		= sit_get_stats;
 
-	dev->priv = kmalloc(sizeof(struct enet_statistics), GFP_KERNEL);
+	dev->priv = kmalloc(sizeof(struct net_device_stats), GFP_KERNEL);
 
 	if (dev->priv == NULL)
 		return -ENOMEM;
 
-	memset(dev->priv, 0, sizeof(struct enet_statistics));
+	memset(dev->priv, 0, sizeof(struct net_device_stats));
 
 
 	for (i = 0; i < DEV_NUMBUFFS; i++)
@@ -230,12 +220,12 @@ static int sit_init_vif(struct device *dev)
 	int i;
 
 	dev->flags = IFF_NOARP|IFF_POINTOPOINT|IFF_MULTICAST;
-	dev->priv = kmalloc(sizeof(struct enet_statistics), GFP_KERNEL);
+	dev->priv = kmalloc(sizeof(struct net_device_stats), GFP_KERNEL);
 
 	if (dev->priv == NULL)
 		return -ENOMEM;
 
-	memset(dev->priv, 0, sizeof(struct enet_statistics));
+	memset(dev->priv, 0, sizeof(struct net_device_stats));
 
 	for (i = 0; i < DEV_NUMBUFFS; i++)
 		skb_queue_head_init(&dev->buffs[i]);
@@ -253,7 +243,6 @@ static int sit_close(struct device *dev)
 	return 0;
 }
 
-
 int sit_init(void)
 {
 	int i;
@@ -261,9 +250,7 @@ int sit_init(void)
 	/* register device */
 
 	if (register_netdev(&sit_device) != 0)
-	{
 		return -EIO;
-	}
 
 	inet_add_protocol(&sit_protocol);
 
@@ -314,9 +301,8 @@ struct device *sit_add_tunnel(__u32 dstaddr)
 void sit_cleanup(void)
 {
 	struct sit_vif *vif;
-	
-	for (vif = vif_list; vif;)
-	{
+
+	for (vif = vif_list; vif;) {
 		struct device *dev = vif->dev;
 		struct sit_vif *cur;
 
@@ -335,8 +321,6 @@ void sit_cleanup(void)
 	
 }
 
-
-
 /*
  *	receive IPv4 ICMP messages
  */
@@ -347,8 +331,7 @@ static void sit_err(struct sk_buff *skb, unsigned char *dp)
 	int type = skb->h.icmph->type;
 	int code = skb->h.icmph->code;
 
-	if (type == ICMP_DEST_UNREACH && code == ICMP_FRAG_NEEDED)
-	{
+	if (type == ICMP_DEST_UNREACH && code == ICMP_FRAG_NEEDED) {
 		struct sit_mtu_info *minfo;
 		unsigned short info = skb->h.icmph->un.frag.mtu - sizeof(struct iphdr);
 
@@ -356,8 +339,8 @@ static void sit_err(struct sk_buff *skb, unsigned char *dp)
 
 		printk(KERN_DEBUG "sit: %08lx pmtu = %ul\n", ntohl(iph->saddr),
 		       info);
-		if (minfo == NULL)
-		{
+
+		if (minfo == NULL) {
 			minfo = kmalloc(sizeof(struct sit_mtu_info),
 					GFP_ATOMIC);
 
@@ -367,9 +350,7 @@ static void sit_err(struct sk_buff *skb, unsigned char *dp)
 			start_bh_atomic();
 			sit_cache_insert(iph->daddr, info);
 			end_bh_atomic();
-		}
-		else
-		{
+		} else {
 			minfo->mtu = info;
 		}
 	}
@@ -377,7 +358,7 @@ static void sit_err(struct sk_buff *skb, unsigned char *dp)
 
 static int sit_rcv(struct sk_buff *skb, unsigned short len)
 {
-	struct enet_statistics *stats;
+	struct net_device_stats *stats;
 	struct device *dev = NULL;
 	struct sit_vif *vif;	
 	__u32  saddr = skb->nh.iph->saddr;
@@ -386,24 +367,21 @@ static int sit_rcv(struct sk_buff *skb, unsigned short len)
 
 	skb->protocol = __constant_htons(ETH_P_IPV6);
 
-	for (vif = vif_list; vif; vif = vif->next)
-	{
-		if (saddr == vif->dev->pa_dstaddr)
-		{
+	for (vif = vif_list; vif; vif = vif->next) {
+		if (saddr == vif->dev->pa_dstaddr) {
 			dev = vif->dev;
 			break;
 		}
 	}
 
 	if (dev == NULL)
-	{
 		dev = &sit_device;
-	}
 
 	skb->dev = dev;
 	skb->ip_summed = CHECKSUM_NONE;
 
-	stats = (struct enet_statistics *)dev->priv;
+	stats = (struct net_device_stats *)dev->priv;
+	stats->rx_bytes += len;
 	stats->rx_packets++;
 
 	ipv6_rcv(skb, dev, NULL);
@@ -412,7 +390,7 @@ static int sit_rcv(struct sk_buff *skb, unsigned short len)
 
 static int sit_xmit(struct sk_buff *skb, struct device *dev)
 {
-	struct enet_statistics *stats;
+	struct net_device_stats *stats;
 	struct sit_mtu_info *minfo;
 	struct in6_addr *addr6;	
 	struct rtable *rt;
@@ -427,16 +405,16 @@ static int sit_xmit(struct sk_buff *skb, struct device *dev)
 	 *	Make sure we are not busy (check lock variable) 
 	 */
 
-	stats = (struct enet_statistics *)dev->priv;
+	stats = (struct net_device_stats *)dev->priv;
 
 	daddr = dev->pa_dstaddr;
-	if (daddr == 0)
-	{
-		struct nd_neigh *neigh;
+	if (daddr == 0) {
+		struct nd_neigh *neigh = NULL;
 
-		neigh = (struct nd_neigh *) skb->nexthop;
-		if (neigh == NULL)
-		{
+		if (skb->dst)
+			neigh = (struct nd_neigh *) skb->dst->neighbour;
+
+		if (neigh == NULL) {
 			printk(KERN_DEBUG "sit: nexthop == NULL\n");
 			goto on_error;
 		}
@@ -444,14 +422,12 @@ static int sit_xmit(struct sk_buff *skb, struct device *dev)
 		addr6 = &neigh->ndn_addr;
 		addr_type = ipv6_addr_type(addr6);
 
-		if (addr_type == IPV6_ADDR_ANY)
-		{
+		if (addr_type == IPV6_ADDR_ANY) {
 			addr6 = &skb->nh.ipv6h->daddr;
 			addr_type = ipv6_addr_type(addr6);
 		}
 
-		if ((addr_type & IPV6_ADDR_COMPATv4) == 0)
-		{
+		if ((addr_type & IPV6_ADDR_COMPATv4) == 0) {
 			printk(KERN_DEBUG "sit_xmit: non v4 address\n");
 			goto on_error;
 		}
@@ -475,8 +451,7 @@ static int sit_xmit(struct sk_buff *skb, struct device *dev)
 #endif
 		mtu = rt->u.dst.pmtu;
 
-	if (mtu > 576 && skb->tail - (skb->data + sizeof(struct ipv6hdr)) > mtu)
-	{
+	if (mtu > 576 && skb->tail - (skb->data + sizeof(struct ipv6hdr)) > mtu) {
 		icmpv6_send(skb, ICMPV6_PKT_TOOBIG, 0, mtu, dev);
 		ip_rt_put(rt);
 		goto on_error;
@@ -522,25 +497,18 @@ static int sit_xmit(struct sk_buff *skb, struct device *dev)
 
 	ip_send(skb);
 
+	stats->tx_bytes += skb->len;
 	stats->tx_packets++;
 
 	return 0;
 
-  on_error:
+on_error:
 	dev_kfree_skb(skb, FREE_WRITE);
 	stats->tx_errors++;
 	return 0;	
 }
 
-static struct enet_statistics *sit_get_stats(struct device *dev)
+static struct net_device_stats *sit_get_stats(struct device *dev)
 {
-	return((struct enet_statistics*) dev->priv);
+	return((struct net_device_stats *) dev->priv);
 }
-
-
-/*
- * Local variables:
- *  compile-command: "gcc -D__KERNEL__ -I/usr/src/linux/include -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -fno-strength-reduce -pipe -m486 -DCPU=486 -DMODULE -DMODVERSIONS -include /usr/src/linux/include/linux/modversions.h  -c -o sit.o sit.c"
- * c-file-style: "Linux"
- * End:
- */

@@ -108,16 +108,24 @@ struct proto_ops {
   int   (*recvmsg)	(struct socket *sock, struct msghdr *m, int total_len, int flags, struct scm_cookie *scm);
 };
 
-struct net_proto_family {
+struct net_proto_family 
+{
 	int	family;
 	int	(*create)(struct socket *sock, int protocol);
+	/* These are counters for the number of different methods of
+	   each we support */
+	short	authentication;
+	short	encryption;
+	short	encrypt_net;
 };
 
-struct net_proto {
+struct net_proto 
+{
 	const char *name;		/* Protocol name */
 	void (*init_func)(struct net_proto *);	/* Bootstrap */
 };
 
+extern struct net_proto_family *net_families[];
 extern int	sock_wake_async(struct socket *sk, int how);
 extern int	sock_register(struct net_proto_family *fam);
 extern int	sock_unregister(int family);

@@ -8,12 +8,17 @@ if [ "$CONFIG_NETLINK" = "y" ]; then
   bool 'Routing messages' CONFIG_RTNETLINK
 fi
 bool 'Network firewalls' CONFIG_FIREWALL
+if [ "$CONFIG_FIREWALL" = "y" ]; then
+  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+    bool 'Socket Security API Support (EXPERIMENTAL)' CONFIG_NET_SECURITY
+  fi
+fi
 bool 'Network aliasing'  CONFIG_NET_ALIAS
 bool 'TCP/IP networking' CONFIG_INET
 if [ "$CONFIG_INET" = "y" ]; then
   source net/ipv4/Config.in
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    tristate 'The IPv6 protocol' CONFIG_IPV6
+    tristate 'The IPv6 protocol (EXPERIMENTAL)' CONFIG_IPV6
   fi
 fi
 
@@ -31,7 +36,7 @@ if [ "$CONFIG_ATALK" != "n" ]; then
 fi
 tristate 'Amateur Radio AX.25 Level 2' CONFIG_AX25
 if [ "$CONFIG_AX25" != "n" ]; then
-# bool 'AX.25 DAMA Slave support' CONFIG_AX25_DAMA_SLAVE
+  bool 'AX.25 DAMA Slave support' CONFIG_AX25_DAMA_SLAVE
 # bool 'AX.25 DAMA Master support' CONFIG_AX25_DAMA_MASTER
   dep_tristate 'Amateur Radio NET/ROM' CONFIG_NETROM $CONFIG_AX25
   dep_tristate 'Amateur Radio X.25 PLP (Rose)' CONFIG_ROSE $CONFIG_AX25
@@ -40,7 +45,10 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'CCITT X.25 Packet Layer (EXPERIMENTAL)' CONFIG_X25
   tristate 'LAPB Data Link Driver (EXPERIMENTAL)' CONFIG_LAPB
   bool 'Bridging (EXPERIMENTAL)' CONFIG_BRIDGE
-  bool '802.2 LLC (VERY EXPERIMENTAL)' CONFIG_LLC
+  bool '802.2 LLC (EXPERIMENTAL)' CONFIG_LLC
+#  if [ "$CONFIG_LLC" = "y" ]; then
+#   bool 'Netbeui (EXPERIMENTAL)' CONFIG_NETBEUI
+#  fi
   tristate 'WAN router' CONFIG_WAN_ROUTER
 fi
 endmenu

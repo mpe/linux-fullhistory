@@ -3,21 +3,22 @@
 
 #include <asm/byteorder.h>
 
-struct icmpv6hdr {
+struct icmp6hdr {
 
-	__u8		type;
-	__u8		code;
-	__u16		checksum;
+	__u8		icmp6_type;
+	__u8		icmp6_code;
+	__u16		icmp6_cksum;
 
 
 	union {
+		__u32			un_data32[1];
+		__u16			un_data16[2];
+		__u8			un_data8[4];
+
 		struct icmpv6_echo {
 			__u16		identifier;
 			__u16		sequence;
 		} u_echo;
-		__u32			pointer;
-		__u32			mtu;
-		__u32			unused;
 
                 struct icmpv6_nd_advt {
 #if defined(__LITTLE_ENDIAN_BITFIELD)
@@ -53,34 +54,37 @@ struct icmpv6hdr {
 			__u16		rt_lifetime;
                 } u_nd_ra;
 
-	} u;
+	} icmp6_dataun;
 
-#define icmp6_identifier	u.u_echo.identifier
-#define icmp6_sequence		u.u_echo.sequence
-#define icmp6_pointer		u.pointer
-#define icmp6_mtu		u.mtu
-#define icmp6_unused		u.unused
-#define icmp6_router		u.u_nd_advt.router
-#define icmp6_solicited		u.u_nd_advt.solicited
-#define icmp6_override		u.u_nd_advt.override
-#define icmp6_ndiscreserved	u.u_nd_advt.reserved
-#define icmp6_hop_limit		u.u_nd_ra.hop_limit
-#define icmp6_addrconf_managed	u.u_nd_ra.managed
-#define icmp6_addrconf_other	u.u_nd_ra.other
-#define icmp6_rt_lifetime	u.u_nd_ra.rt_lifetime
+#define icmp6_identifier	icmp6_dataun.u_echo.identifier
+#define icmp6_sequence		icmp6_dataun.u_echo.sequence
+#define icmp6_pointer		icmp6_dataun.un_data32[0]
+#define icmp6_mtu		icmp6_dataun.un_data32[0]
+#define icmp6_unused		icmp6_dataun.un_data32[0]
+#define icmp6_maxdelay		icmp6_dataun.un_data16[0]
+#define icmp6_router		icmp6_dataun.u_nd_advt.router
+#define icmp6_solicited		icmp6_dataun.u_nd_advt.solicited
+#define icmp6_override		icmp6_dataun.u_nd_advt.override
+#define icmp6_ndiscreserved	icmp6_dataun.u_nd_advt.reserved
+#define icmp6_hop_limit		icmp6_dataun.u_nd_ra.hop_limit
+#define icmp6_addrconf_managed	icmp6_dataun.u_nd_ra.managed
+#define icmp6_addrconf_other	icmp6_dataun.u_nd_ra.other
+#define icmp6_rt_lifetime	icmp6_dataun.u_nd_ra.rt_lifetime
 };
 
 
 #define ICMPV6_DEST_UNREACH		1
 #define ICMPV6_PKT_TOOBIG		2
-#define ICMPV6_TIME_EXCEEDED		3
-#define ICMPV6_PARAMETER_PROB		4
+#define ICMPV6_TIME_EXCEED		3
+#define ICMPV6_PARAMPROB		4
+
+#define ICMPV6_INFOMSG_MASK		0x80
 
 #define ICMPV6_ECHO_REQUEST		128
 #define ICMPV6_ECHO_REPLY		129
-#define ICMPV6_MEMBERSHIP_QUERY		130
-#define ICMPV6_MEMBERSHIP_REPORT       	131
-#define ICMPV6_MEMBERSHIP_REDUCTION    	132
+#define ICMPV6_MGM_QUERY		130
+#define ICMPV6_MGM_REPORT       	131
+#define ICMPV6_MGM_REDUCTION    	132
 
 /*
  *	Codes for Destination Unreachable

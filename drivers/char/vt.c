@@ -58,7 +58,7 @@ extern int getkeycode(unsigned int scancode);
 extern int setkeycode(unsigned int scancode, unsigned int keycode);
 extern void compute_shiftstate(void);
 extern void complete_change_console(unsigned int new_console);
-extern int vt_waitactive(void);
+extern int vt_waitactive(int vt);
 extern void do_blank_screen(int nopowersave);
 
 extern unsigned int keymap_count;
@@ -807,13 +807,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 			return -EPERM;
 		if (arg == 0 || arg > MAX_NR_CONSOLES)
 			return -ENXIO;
-		arg--;
-		while (fg_console != arg)
-		{
-			if (vt_waitactive() < 0)
-				return -EINTR;
-		}
-		return 0;
+		return vt_waitactive(arg-1);
 
 	/*
 	 * If a vt is under process control, the kernel will not switch to it

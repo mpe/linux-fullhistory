@@ -266,6 +266,14 @@ L:	linux-net@vger.rutgers.edu
 W:	http://www.uk.linux.org/NetNews.html
 S:	Maintained
 
+NETWORKING [IPv4/IPv6]:
+P:	David S. Miller
+M:	davem@caip.rutgers.edu
+P:	Eric Schenk
+M:	Eric.Schenk@dna.lth.se
+L:	netdev@roxanne.nuclecu.unam.mx
+S:	Maintained
+
 PPP PROTOCOL DRIVERS AND COMPRESSORS
 P:	Al Longyear
 M:	longyear@pobox.com
@@ -304,8 +312,8 @@ L:	linux-smp@vger.rutgers.edu
 S:	Maintained
 
 SPARC:
-P:	Eddie C. Dost
-M:	ecd@skynet.be
+P:	David S. Miller
+M:	davem@caip.rutgers.edu
 L:	sparclinux@vger.rutgers.edu
 S:	Maintained
 
@@ -369,9 +377,9 @@ P:	Jens Maurer
 M:	jmaurer@cck.uni-kl.de
 S:	Maintained
 
-LANCE AND LANCE32 NETWORK DRIVER
+PCNET32 NETWORK DRIVER
 P:	Thomas Bogendoerfer
-M:	tsbogend@bigbug.franken.de
+M:	tsbogend@alpha.franken.de
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
 

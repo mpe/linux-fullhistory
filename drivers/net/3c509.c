@@ -53,9 +53,9 @@ static char *version = "3c509.c:1.07 6/15/95 becker@cesdis.gsfc.nasa.gov\n";
 #include <asm/io.h>
 
 #ifdef EL3_DEBUG
-int el3_debug = EL3_DEBUG;
+static int el3_debug = EL3_DEBUG;
 #else
-int el3_debug = 2;
+static int el3_debug = 2;
 #endif
 
 /* To minimize the size of the driver source I only define operating

@@ -1,4 +1,3 @@
-extern void allow_interrupts(void);
 /*
  * linux/drivers/char/keyboard.c
  *
@@ -1081,7 +1080,6 @@ static int send_data(unsigned char data)
 		reply_expected = 1;
 		outb_p(data, 0x60);
 		for(i=0; i<0x200000; i++) {
-			allow_interrupts();
 			inb_p(0x64);		/* just as a delay */
 			if (acknowledge)
 				return 1;

@@ -5,12 +5,14 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
+ *	$Id: addrconf.c,v 1.15 1997/03/18 18:24:23 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
  *      as published by the Free Software Foundation; either version
  *      2 of the License, or (at your option) any later version.
  */
+
 /*
  *	Changes:
  *
@@ -36,27 +38,35 @@
 #include <net/ipv6.h>
 #include <net/protocol.h>
 #include <net/ndisc.h>
-#include <net/ipv6_route.h>
+#include <net/ip6_route.h>
 #include <net/addrconf.h>
 #include <net/sit.h>
 
 #include <asm/uaccess.h>
 
-#define HASH_SIZE		16
+/* Set to 3 to get tracing... */
+#define ACONF_DEBUG 2
+
+#if ACONF_DEBUG >= 3
+#define ADBG(x) printk x
+#else
+#define ADBG(x)
+#endif
+
 /*
  *	Configured unicast address list
  */
-struct inet6_ifaddr		*inet6_addr_lst[HASH_SIZE];
+struct inet6_ifaddr		*inet6_addr_lst[IN6_ADDR_HSIZE];
 
 /*
  *	Hash list of configured multicast addresses
  */
-struct ipv6_mc_list		*inet6_mcast_lst[HASH_SIZE];
+struct ifmcaddr6		*inet6_mcast_lst[IN6_ADDR_HSIZE];
 
 /*
  *	AF_INET6 device list
  */
-struct inet6_dev		*inet6_dev_lst;
+struct inet6_dev		*inet6_dev_lst[IN6_ADDR_HSIZE];
 
 atomic_t			addr_list_lock = 0;
 
@@ -67,15 +77,11 @@ static struct timer_list addr_chk_timer = {
 	0, 0, addrconf_verify
 };
 
-
-int DupAddrDetectTransmits = 1;
-
-/*
- *	/proc/sys switch for autoconf (enabled by default)
- */
-int addrconf_sys_autoconf  = 1;
+static int addrconf_ifdown(struct device *dev);
 
 static void addrconf_dad_start(struct inet6_ifaddr *ifp);
+static void addrconf_dad_timer(unsigned long data);
+static void addrconf_dad_completed(struct inet6_ifaddr *ifp);
 static void addrconf_rs_timer(unsigned long data);
 
 int ipv6_addr_type(struct in6_addr *addr)
@@ -89,58 +95,41 @@ int ipv6_addr_type(struct in6_addr *addr)
 	 * 0x4/3
 	 */
 
-	if ((st & __constant_htonl(0xE0000000)) == 
-	    __constant_htonl(0x40000000))
-	{
+	if ((st & __constant_htonl(0xE0000000)) == __constant_htonl(0x40000000))
 		return IPV6_ADDR_UNICAST;
-	}
 
-	if ((st & __constant_htonl(0xFF000000)) == 
-	    __constant_htonl(0xFF000000))
-	{
+	if ((st & __constant_htonl(0xFF000000)) == __constant_htonl(0xFF000000)) {
 		int type = IPV6_ADDR_MULTICAST;
 
-		switch((st >> 16) & 0x0f)
-		{
-			case 0x01:
+		switch((st & __constant_htonl(0x00FF0000))) {
+			case __constant_htonl(0x00010000):
 				type |= IPV6_ADDR_LOOPBACK;
 				break;
-			case 0x02:
+
+			case __constant_htonl(0x00020000):
 				type |= IPV6_ADDR_LINKLOCAL;
 				break;
-			case 0x05:
+
+			case __constant_htonl(0x00050000):
 				type |= IPV6_ADDR_SITELOCAL;
 				break;
-		}
+		};
 		return type;
 	}
 	
-	if ((st & __constant_htonl(0xFFC00000)) == 
-	    __constant_htonl(0xFE800000))
-	{
+	if ((st & __constant_htonl(0xFFC00000)) == __constant_htonl(0xFE800000))
 		return (IPV6_ADDR_LINKLOCAL | IPV6_ADDR_UNICAST);
-	}
 
-	if ((st & __constant_htonl(0xFFC00000)) == 
-	    __constant_htonl(0xFEC00000))
-	{
+	if ((st & __constant_htonl(0xFFC00000)) == __constant_htonl(0xFEC00000))
 		return (IPV6_ADDR_SITELOCAL | IPV6_ADDR_UNICAST);
-	}
 
-	if ((addr->s6_addr32[0] | addr->s6_addr32[1]) == 0)
-	{
-		if (addr->s6_addr32[2] == 0)
-		{
+	if ((addr->s6_addr32[0] | addr->s6_addr32[1]) == 0) {
+		if (addr->s6_addr32[2] == 0) {
 			if (addr->in6_u.u6_addr32[3] == 0)
-			{
 				return IPV6_ADDR_ANY;
-			}
 
 			if (addr->s6_addr32[3] == __constant_htonl(0x00000001))
-			{
-				return (IPV6_ADDR_LOOPBACK | 
-					IPV6_ADDR_UNICAST);
-			}
+				return (IPV6_ADDR_LOOPBACK | IPV6_ADDR_UNICAST);
 
 			return (IPV6_ADDR_COMPATv4 | IPV6_ADDR_UNICAST);
 		}
@@ -152,81 +141,64 @@ int ipv6_addr_type(struct in6_addr *addr)
 	return IPV6_ADDR_RESERVED;
 }
 
-struct inet6_dev * ipv6_add_dev(struct device *dev)
+static struct inet6_dev * ipv6_add_dev(struct device *dev)
 {
-	struct inet6_dev *dev6;
+	struct inet6_dev *ndev, **bptr, *iter;
+	int hash;
 
-	/*
-	 *	called by netdev notifier from a syscall
-	 */
-	dev6 = (struct inet6_dev *) kmalloc(sizeof(struct inet6_dev), 
-					    GFP_ATOMIC);
+	ndev = kmalloc(sizeof(struct inet6_dev), gfp_any());
 
-	if (dev6 == NULL)
-		return NULL;
+	if (ndev) {
+		memset(ndev, 0, sizeof(struct inet6_dev));
 
-	memset(dev6, 0, sizeof(struct inet6_dev));
-	dev6->dev = dev;
-	dev6->if_index = dev->ifindex;
+		ndev->dev = dev;
+		hash = ipv6_devindex_hash(dev->ifindex);
+		bptr = &inet6_dev_lst[hash];
+		iter = *bptr;
 
-	/*
-	 *	insert at head.
-	 */
+		for (; iter; iter = iter->next)
+			bptr = &iter->next;
 
-	dev6->next = inet6_dev_lst;
-	inet6_dev_lst = dev6;
-
-	return dev6;
-}
-
-struct inet6_dev * ipv6_dev_by_index(int index)
-{
-	struct inet6_dev *in6_dev;
-
-	for (in6_dev = inet6_dev_lst; in6_dev; in6_dev = in6_dev->next)
-	{
-		if (in6_dev->if_index == index)
-			return in6_dev;
+		*bptr = ndev;
 	}
-
-	return NULL;
+	return ndev;
 }
 
 void addrconf_forwarding_on(void)
 {
-	struct inet6_dev *in6_dev;
-	struct in6_addr maddr;
+	struct inet6_dev *idev;
+	int i;
 
-	for (in6_dev = inet6_dev_lst; in6_dev; in6_dev = in6_dev->next)
-	{
-		printk(KERN_DEBUG "dev %s\n", in6_dev->dev->name);
+	for (i = 0; i < IN6_ADDR_HSIZE; i++) {
+		for (idev = inet6_dev_lst[i]; idev; idev = idev->next) {
+#if ACONF_DEBUG >= 2
+			printk(KERN_DEBUG "dev %s\n", idev->dev->name);
+#endif
 
-		if (in6_dev->dev->type == ARPHRD_ETHER)
-		{
-			printk(KERN_DEBUG "joining all-routers\n");
-			in6_dev->router = 1;
-			ipv6_addr_all_routers(&maddr);
-			ipv6_dev_mc_inc(in6_dev->dev, &maddr);		
+			if (idev->dev->type == ARPHRD_ETHER) {
+				struct in6_addr maddr;
+
+#if ACONF_DEBUG >= 2
+				printk(KERN_DEBUG "joining all-routers\n");
+#endif
+				idev->router = 1;
+				ipv6_addr_all_routers(&maddr);
+				ipv6_dev_mc_inc(idev->dev, &maddr);
+			}
 		}
-	}
-
-	if (last_resort_rt && (last_resort_rt->rt_flags & RTI_ALLONLINK))
-	{
-		rt_release(last_resort_rt);
-		last_resort_rt = NULL;
 	}
 }
 
 struct inet6_dev * ipv6_get_idev(struct device *dev)
 {
-	struct inet6_dev *in6_dev;
+	struct inet6_dev *idev;
+	int hash;
 
-	for (in6_dev = inet6_dev_lst; in6_dev; in6_dev = in6_dev->next)
-	{
-		if (in6_dev->dev == dev)
-		{
-			return in6_dev;
-		}
+	hash = ipv6_devindex_hash(dev->ifindex);
+
+	for (idev = inet6_dev_lst[hash]; idev; idev = idev->next) {
+		if (idev->dev == dev)
+			return idev;
 	}
 	return NULL;
 }
@@ -234,45 +206,34 @@ struct inet6_dev * ipv6_get_idev(struct device *dev)
 struct inet6_ifaddr * ipv6_add_addr(struct inet6_dev *idev, 
 				    struct in6_addr *addr, int scope)
 {
-	struct inet6_ifaddr * ifaddr;
+	struct inet6_ifaddr *ifa;
 	int hash;
-	unsigned long flags;
 
-	save_flags(flags);
-	cli();
+	ifa = kmalloc(sizeof(struct inet6_ifaddr), gfp_any());
 
-	ifaddr = (struct inet6_ifaddr *) kmalloc(sizeof(struct inet6_ifaddr), 
-						 GFP_ATOMIC);
-
-	if (ifaddr == NULL)
-	{
-		printk(KERN_DEBUG "ipv6_add_addr: malloc failed\n");
-		restore_flags(flags);
+	if (ifa == NULL) {
+		ADBG(("ipv6_add_addr: malloc failed\n"));
 		return NULL;
 	}
 
-	memset(ifaddr, 0, sizeof(struct inet6_ifaddr));
-	memcpy(&ifaddr->addr, addr, sizeof(struct in6_addr));
+	memset(ifa, 0, sizeof(struct inet6_ifaddr));
+	memcpy(&ifa->addr, addr, sizeof(struct in6_addr));
 
-	ifaddr->scope = scope;
-	ifaddr->idev = idev;
-	
+	init_timer(&ifa->timer);
+	ifa->scope = scope;
+	ifa->idev = idev;
 
-	/* add to list */
-
+	/* Add to list. */
 	hash = ipv6_addr_hash(addr);
 
-	ifaddr->lst_next = inet6_addr_lst[hash];
-	inet6_addr_lst[hash] = ifaddr;
+	ifa->lst_next = inet6_addr_lst[hash];
+	inet6_addr_lst[hash] = ifa;
 
+	/* Add to inet6_dev unicast addr list. */
+	ifa->if_next = idev->addr_list;
+	idev->addr_list = ifa;
 
-	/* add to inet6_dev unicast addr list */
-	ifaddr->if_next = idev->addr_list;
-	idev->addr_list = ifaddr;
-
-	restore_flags(flags);
-	return ifaddr;
-	
+	return ifa;
 }
 
 void ipv6_del_addr(struct inet6_ifaddr *ifp)
@@ -280,8 +241,7 @@ void ipv6_del_addr(struct inet6_ifaddr *ifp)
 	struct inet6_ifaddr *iter, **back;
 	int hash;
 
-	if (addr_list_lock)
-	{
+	if (addr_list_lock) {
 		ifp->flags |= ADDR_INVALID;
 		return;
 	}
@@ -291,10 +251,8 @@ void ipv6_del_addr(struct inet6_ifaddr *ifp)
 	iter = inet6_addr_lst[hash];
 	back = &inet6_addr_lst[hash];
 
-	for (; iter; iter = iter->lst_next)
-	{
-		if (iter == ifp)
-		{
+	for (; iter; iter = iter->lst_next) {
+		if (iter == ifp) {
 			*back = ifp->lst_next;
 			ifp->lst_next = NULL;
 			break;
@@ -305,10 +263,8 @@ void ipv6_del_addr(struct inet6_ifaddr *ifp)
 	iter = ifp->idev->addr_list;
 	back = &ifp->idev->addr_list;
 
-	for (; iter; iter = iter->if_next)
-	{
-		if (iter == ifp)
-		{
+	for (; iter; iter = iter->if_next) {
+		if (iter == ifp) {
 			*back = ifp->if_next;
 			ifp->if_next = NULL;
 			break;
@@ -327,30 +283,26 @@ void ipv6_del_addr(struct inet6_ifaddr *ifp)
  *		an address of the attached interface 
  *	iii)	don't use deprecated addresses
  *
- *	at the moment i believe only iii) is missing.
+ *	at the moment I believe only iii) is missing.
  */
-struct inet6_ifaddr * ipv6_get_saddr(struct rt6_info *rt, struct in6_addr *daddr)
+struct inet6_ifaddr * ipv6_get_saddr(struct dst_entry *dst,
+				     struct in6_addr *daddr)
 {
 	int scope;
-	struct inet6_ifaddr * ifp = NULL;
-	struct inet6_dev    * i6dev;
-	struct inet6_ifaddr * match = NULL;
+	struct inet6_ifaddr *ifp = NULL;
+	struct inet6_ifaddr *match = NULL;
 	struct device *dev = NULL;
+	struct rt6_info *rt;
 	int i;
 
+	rt = (struct rt6_info *) dst;
 	if (rt)
-	{
-		dev = rt->rt_dev;
-	}
+		dev = rt->rt6i_dev;
 	
 	atomic_inc(&addr_list_lock);
 
-	scope = ipv6_addr_type(daddr);
-
-	scope &= IPV6_ADDR_SCOPE_MASK;
-
-	if (rt && (rt->rt_flags & RTI_ALLONLINK))
-	{
+	scope = ipv6_addr_scope(daddr);
+	if (rt && (rt->rt6i_flags & RTF_ALLONLINK)) {
 		/*
 		 *	route for the "all destinations on link" rule
 		 *	when no routers are present
@@ -363,30 +315,23 @@ struct inet6_ifaddr * ipv6_get_saddr(struct rt6_info *rt, struct in6_addr *daddr
 	 *	search dev and walk through dev addresses
 	 */
 
-	if (dev)
-	{
-		if (dev->flags & IFF_LOOPBACK)
-		{
-			scope = IFA_HOST;
-		}
+	if (dev) {
+		struct inet6_dev *idev;
+		int hash;
 
-		for (i6dev = inet6_dev_lst; i6dev; i6dev=i6dev->next)
-		{
-			if (i6dev->dev == dev)
-			{
-				for (ifp=i6dev->addr_list; ifp; 
-				     ifp=ifp->if_next)
-				{
-					if (ifp->scope == scope)
-					{
+		if (dev->flags & IFF_LOOPBACK)
+			scope = IFA_HOST;
+
+		hash = ipv6_devindex_hash(dev->ifindex);
+		for (idev = inet6_dev_lst[hash]; idev; idev=idev->next) {
+			if (idev->dev == dev) {
+				for (ifp=idev->addr_list; ifp; ifp=ifp->if_next) {
+					if (ifp->scope == scope) {
 						if (!(ifp->flags & ADDR_STATUS))
-						{
 							goto out;
-						}
+
 						if (!(ifp->flags & ADDR_INVALID))
-						{
 							match = ifp;
-						}
 					}
 				}
 				break;
@@ -395,37 +340,27 @@ struct inet6_ifaddr * ipv6_get_saddr(struct rt6_info *rt, struct in6_addr *daddr
 	}
 
 	if (scope == IFA_LINK)
-	{
 		goto out;
-	}
 
 	/*
 	 *	dev == NULL or search failed for specified dev
 	 */
 
-	for (i=0; i < HASH_SIZE; i++)
-	{
-		for (ifp=inet6_addr_lst[i]; ifp; ifp=ifp->lst_next)
-		{
-			if (ifp->scope == scope)
-			{
+	for (i=0; i < IN6_ADDR_HSIZE; i++) {
+		for (ifp=inet6_addr_lst[i]; ifp; ifp=ifp->lst_next) {
+			if (ifp->scope == scope) {
 				if (!(ifp->flags & ADDR_STATUS))
-				{
 					goto out;
-				}
+
 				if (!(ifp->flags & ADDR_INVALID))
-				{
 					match = ifp;
-				}
 			}
 		}
 	}
 
-  out:
+out:
 	if (ifp == NULL && match)
-	{
 		ifp = match;
-	}
 	atomic_dec(&addr_list_lock);
 	return ifp;
 }
@@ -433,14 +368,14 @@ struct inet6_ifaddr * ipv6_get_saddr(struct rt6_info *rt, struct in6_addr *daddr
 struct inet6_ifaddr * ipv6_get_lladdr(struct device *dev)
 {
 	struct inet6_ifaddr *ifp;
-	struct inet6_dev *i6dev;
+	struct inet6_dev *idev;
+	int hash;
 
-	for (i6dev = inet6_dev_lst; i6dev; i6dev=i6dev->next)
-	{
-		if (i6dev->dev == dev)
-		{
-			for (ifp=i6dev->addr_list; ifp; ifp=ifp->if_next)
-			{
+	hash = ipv6_devindex_hash(dev->ifindex);
+
+	for (idev = inet6_dev_lst[hash]; idev; idev=idev->next) {
+		if (idev->dev == dev) {
+			for (ifp=idev->addr_list; ifp; ifp=ifp->if_next) {
 				if (ifp->scope == IFA_LINK)
 					return ifp;
 			}
@@ -464,152 +399,13 @@ struct inet6_ifaddr * ipv6_chk_addr(struct in6_addr *addr)
 	atomic_inc(&addr_list_lock);
 
 	hash = ipv6_addr_hash(addr);
-
-	for(ifp = inet6_addr_lst[hash]; ifp; ifp=ifp->lst_next)
-	{
+	for(ifp = inet6_addr_lst[hash]; ifp; ifp=ifp->lst_next) {
 		if (ipv6_addr_cmp(&ifp->addr, addr) == 0)
-		{
 			break;
-		}
 	}
 
 	atomic_dec(&addr_list_lock);
 	return ifp;	
-}
-
-static void sit_route_add(struct inet6_dev *idev)
-{
-	struct in6_rtmsg rtmsg;
-	struct device *dev = idev->dev;
-	int err;
-
-	rtmsg.rtmsg_type = RTMSG_NEWROUTE;
-
-	memset(&rtmsg.rtmsg_dst, 0, sizeof(struct in6_addr));
-	memset(&rtmsg.rtmsg_gateway, 0, sizeof(struct in6_addr));
-
-	if (dev->pa_dstaddr == 0)
-	{
-		/* prefix length - 96 bytes "::d.d.d.d" */
-		rtmsg.rtmsg_prefixlen = 96;
-		rtmsg.rtmsg_metric = 1;
-		rtmsg.rtmsg_flags = RTF_NEXTHOP|RTF_UP;
-	}
-	else
-	{
-		rtmsg.rtmsg_prefixlen = 10;
-		rtmsg.rtmsg_dst.s6_addr32[0] = __constant_htonl(0xfe800000);
-		rtmsg.rtmsg_dst.s6_addr32[3] = dev->pa_dstaddr;
-		rtmsg.rtmsg_metric = 1;
-		rtmsg.rtmsg_flags = RTF_NEXTHOP|RTF_UP;
-	}
-
-	rtmsg.rtmsg_ifindex = idev->if_index; 
-
-	err = ipv6_route_add(&rtmsg);
-
-	if (err)
-	{
-		printk(KERN_DEBUG "sit_route_add: error in route_add\n");
-	}
-}
-
-static void init_loopback(struct device *dev)
-{
-	struct in6_addr addr;
-	struct inet6_dev  *idev;
-	struct inet6_ifaddr * ifp;
-	struct in6_rtmsg rtmsg;
-	int err;
-
-	/* ::1 */
-
-	memset(&addr, 0, sizeof(struct in6_addr));
-	addr.s6_addr[15] = 1;
-
-	idev = ipv6_add_dev(dev);
-
-	if (idev == NULL)
-	{
-		printk(KERN_DEBUG "init loopback: add_dev failed\n");
-		return;
-	}
-
-	ifp = ipv6_add_addr(idev, &addr, IFA_HOST);
-
-	if (ifp == NULL)
-	{
-		printk(KERN_DEBUG "init_loopback: add_addr failed\n");
-		return;
-	}
-
-	ifp->flags |= ADDR_PERMANENT;
-
-	memcpy(&rtmsg.rtmsg_dst, &addr, sizeof(struct in6_addr));
-	memset(&rtmsg.rtmsg_gateway, 0, sizeof(struct in6_addr));
-
-	rtmsg.rtmsg_prefixlen = 128;
-	rtmsg.rtmsg_metric = 1;
-	rtmsg.rtmsg_ifindex = idev->if_index;
-
-	rtmsg.rtmsg_flags = RTF_NEXTHOP|RTF_HOST|RTF_UP;
-
-	err = ipv6_route_add(&rtmsg);
-
-	if (err)
-	{
-		printk(KERN_DEBUG "init_loopback: error in route_add\n");
-	}
-
-	/* add route for ::127.0.0.1 */
-}
-
-static void addrconf_eth_config(struct device *dev)
-{
-	struct in6_addr addr;
-	struct in6_addr maddr;
-	struct inet6_ifaddr * ifp;
-	struct inet6_dev    * idev;
-
-	memset(&addr, 0, sizeof(struct in6_addr));
-
-	/* generate link local address*/
-	addr.s6_addr[0] = 0xFE;
-	addr.s6_addr[1] = 0x80;
-
-	memcpy(addr.s6_addr + (sizeof(struct in6_addr) - dev->addr_len), 
-	       dev->dev_addr, dev->addr_len);
-
-	idev = ipv6_add_dev(dev);
-			
-	if (idev == NULL)
-		return;
-	
-	ifp = ipv6_add_addr(idev, &addr, IFA_LINK);
-			
-	if (ifp == NULL)
-		return;
-
-	ifp->flags |= (DAD_INCOMPLETE | ADDR_PERMANENT);
-	ifp->prefix_len = 10;
-
-	/* join to all nodes multicast group */
-	ipv6_addr_all_nodes(&maddr);
-	ipv6_dev_mc_inc(dev, &maddr);
-	
-	if (ipv6_forwarding)
-	{
-		idev->router = 1;
-		ipv6_addr_all_routers(&maddr);
-		ipv6_dev_mc_inc(dev, &maddr);		
-	}
-
-	/* join to solicited addr multicast group */
-	addrconf_addr_solict_mult(&addr, &maddr);
-	ipv6_dev_mc_inc(dev, &maddr);
-			
-	/* start dad */
-	addrconf_dad_start(ifp);
 }
 
 void addrconf_prefix_rcv(struct device *dev, u8 *opt, int len)
@@ -623,9 +419,8 @@ void addrconf_prefix_rcv(struct device *dev, u8 *opt, int len)
 
 	pinfo = (struct prefix_info *) opt;
 	
-	if (len < sizeof(struct prefix_info))
-	{
-		printk(KERN_DEBUG "addrconf: prefix option too short\n");
+	if (len < sizeof(struct prefix_info)) {
+		ADBG(("addrconf: prefix option too short\n"));
 		return;
 	}
 	
@@ -636,17 +431,13 @@ void addrconf_prefix_rcv(struct device *dev, u8 *opt, int len)
 	addr_type = ipv6_addr_type(&pinfo->prefix);
 
 	if (addr_type & IPV6_ADDR_LINKLOCAL)
-	{
 		return;
-	}
 
 	valid_lft = ntohl(pinfo->valid);
 	prefered_lft = ntohl(pinfo->prefered);
 
-	if (prefered_lft > valid_lft)
-	{
-		printk(KERN_WARNING
-		       "addrconf: prefix option has invalid lifetime\n");
+	if (prefered_lft > valid_lft) {
+		printk(KERN_WARNING "addrconf: prefix option has invalid lifetime\n");
 		return;
 	}
 
@@ -655,11 +446,7 @@ void addrconf_prefix_rcv(struct device *dev, u8 *opt, int len)
 	 *	delete it
 	 */
 
-	if (last_resort_rt && (last_resort_rt->rt_flags & RTI_ALLONLINK))
-	{
-		rt_release(last_resort_rt);
-		last_resort_rt = NULL;
-	}
+	rt6_purge_dflt_routers(RTF_ALLONLINK);
 
 	/*
 	 *	Two things going on here:
@@ -669,178 +456,86 @@ void addrconf_prefix_rcv(struct device *dev, u8 *opt, int len)
 
 	rt_expires = jiffies + valid_lft * HZ;
 	if (rt_expires < jiffies)
-	{
 		rt_expires = ~0;
-	}
 
-	rt = fibv6_lookup(&pinfo->prefix, dev, RTI_DYNAMIC|RTI_GATEWAY);
-		
-	if (rt)
-	{
-		if (pinfo->onlink == 0 || valid_lft == 0)
-		{
-			/*
-			 *	delete route
-			 */
-			fib6_del_rt(rt);
+	rt = rt6_lookup(&pinfo->prefix, NULL, dev, RTF_LINKRT);
+
+	if (rt && ((rt->rt6i_flags & (RTF_GATEWAY | RTF_DEFAULT)) == 0)) {
+		if (pinfo->onlink == 0 || valid_lft == 0) {
+			ip6_del_rt(rt);
 			rt = NULL;
+		} else {
+			rt->rt6i_expires = rt_expires;
 		}
-		else
-		{
-			rt->rt_expires = rt_expires;
-		}
-	}
-	else if (pinfo->onlink && valid_lft)
-	{
+	} else if (pinfo->onlink && valid_lft) {
 		struct in6_rtmsg rtmsg;
-		struct inet6_dev *idev;
+		int err;
+
+		memset(&rtmsg, 0, sizeof(rtmsg));
 		
 		printk(KERN_DEBUG "adding on link route\n");
+
 		ipv6_addr_copy(&rtmsg.rtmsg_dst, &pinfo->prefix);
-		memset(&rtmsg.rtmsg_gateway, 0, sizeof(struct in6_addr));
+		rtmsg.rtmsg_dst_len	= pinfo->prefix_len;
+		rtmsg.rtmsg_metric	= IP6_RT_PRIO_ADDRCONF;
+		rtmsg.rtmsg_ifindex	= dev->ifindex;
+		rtmsg.rtmsg_flags	= RTF_UP | RTF_ADDRCONF;
+		rtmsg.rtmsg_info	= rt_expires;
 
-		rtmsg.rtmsg_prefixlen = pinfo->prefix_len;
-		rtmsg.rtmsg_metric = 1;
-		
-		if ((idev = ipv6_get_idev(dev)))
-		{
-			rtmsg.rtmsg_ifindex = idev->if_index;
-		}
-		rtmsg.rtmsg_flags = RTF_UP | RTF_ADDRCONF;
-		rtmsg.rtmsg_info = rt_expires;
-
-		ipv6_route_add(&rtmsg);
+		ip6_route_add(&rtmsg, &err);
 	}
 
-	if (pinfo->autoconf && addrconf_sys_autoconf)
-	{
+	if (pinfo->autoconf && ipv6_config.autoconf) {
 		struct inet6_ifaddr * ifp;
 		struct in6_addr addr;
 		int plen;
 
 		plen = pinfo->prefix_len >> 3;
 
-		if (plen + dev->addr_len == sizeof(struct in6_addr))
-		{
+		if (plen + dev->addr_len == sizeof(struct in6_addr)) {
 			memcpy(&addr, &pinfo->prefix, plen);
 			memcpy(addr.s6_addr + plen, dev->dev_addr,
 			       dev->addr_len);
-		}
-		else
-		{
-			printk(KERN_DEBUG
-			       "addrconf: prefix_len invalid\n");
+		} else {
+			ADBG(("addrconf: prefix_len invalid\n"));
 			return;
 		}
 
 		ifp = ipv6_chk_addr(&addr);
 
-		if (ifp == NULL && valid_lft)
-		{
-			/* create */
-
-			struct inet6_dev *in6_dev;
-
-			in6_dev = ipv6_get_idev(dev);
+		if (ifp == NULL && valid_lft) {
+			struct inet6_dev *in6_dev = ipv6_get_idev(dev);
 
 			if (in6_dev == NULL)
-			{
-				printk(KERN_DEBUG
-				       "addrconf: device not configured\n");
-			}
+				ADBG(("addrconf: device not configured\n"));
 			
 			ifp = ipv6_add_addr(in6_dev, &addr,
 					    addr_type & IPV6_ADDR_SCOPE_MASK);
 
-			if (dev->flags & IFF_MULTICAST)
-			{
+			if (dev->flags & IFF_MULTICAST) {
 				struct in6_addr maddr;
 
-				/* join to solicited addr multicast group */
+				/* Join to solicited addr multicast group. */
 				addrconf_addr_solict_mult(&addr, &maddr);
 				ipv6_dev_mc_inc(dev, &maddr);
 			}
 
-			ifp->flags |= DAD_INCOMPLETE;
 			ifp->prefix_len = pinfo->prefix_len;
 
 			addrconf_dad_start(ifp);
-			
 		}
 
-		if (ifp && valid_lft == 0)
-		{
+		if (ifp && valid_lft == 0) {
 			ipv6_del_addr(ifp);
 			ifp = NULL;
 		}
 
-		if (ifp)
-		{
+		if (ifp) {
 			ifp->valid_lft = valid_lft;
 			ifp->prefered_lft = prefered_lft;
 			ifp->tstamp = jiffies;
 		}
 	}
-
-}
-
-static int addrconf_ifdown(struct device *dev)
-{
-	struct inet6_dev *idev, **bidev;
-	struct inet6_ifaddr *ifa, **bifa;
-	int i;
-
-	start_bh_atomic();
-
-	bidev = &inet6_dev_lst;
-
-	for (idev = inet6_dev_lst; idev; idev = idev->next)
-	{
-		if (idev->dev == dev)
-		{
-			*bidev = idev->next;
-			break;
-		}
-		bidev = &idev;
-	}
-
-	if (idev == NULL)
-	{
-		printk(KERN_DEBUG "addrconf_ifdown: device not found\n");
-		end_bh_atomic();
-		return -ENODEV;
-	}
-	
-	/*
-	 *	FIXME: clear multicast group membership
-	 */
-
-	/*
-	 *	clean addr_list
-	 */
-
-	for (i=0; i<16; i++)
-	{
-		bifa = &inet6_addr_lst[i];
-		
-		for (ifa=inet6_addr_lst[i]; ifa; )
-		{
-			if (ifa->idev == idev)
-			{
-				*bifa = ifa->lst_next;
-				del_timer(&ifa->timer);
-				kfree(ifa);
-				ifa = *bifa;
-				continue;
-			}
-			bifa = &ifa;
-			ifa = ifa->lst_next;
-		}
-	}
-
-	kfree(idev);
-	end_bh_atomic();
-	return 0;
 }
 
 /*
@@ -851,41 +546,31 @@ static int addrconf_ifdown(struct device *dev)
 int addrconf_set_dstaddr(void *arg)
 {
 	struct in6_ifreq ireq;
-	struct inet6_dev *idev;
 	struct device *dev;
 	int err = -EINVAL;
 
-	if (copy_from_user(&ireq, arg, sizeof(struct in6_ifreq)))
-	{
+	if (copy_from_user(&ireq, arg, sizeof(struct in6_ifreq))) {
 		err = -EFAULT;
 		goto err_exit;
 	}
 
-	idev = ipv6_dev_by_index(ireq.ifr6_ifindex);
+	dev = dev_get_by_index(ireq.ifr6_ifindex);
 
-	if (idev == NULL)
-	{
+	if (dev == NULL) {
 		err = -ENODEV;
 		goto err_exit;
 	}
 
-	dev = idev->dev;
-
-	if (dev->type == ARPHRD_SIT)
-	{
+	if (dev->type == ARPHRD_SIT) {
 		struct device *dev;
 		
 		if (!(ipv6_addr_type(&ireq.ifr6_addr) & IPV6_ADDR_COMPATv4))
-		{
 			return -EADDRNOTAVAIL;
-		}
 		
 		dev = sit_add_tunnel(ireq.ifr6_addr.s6_addr32[3]);
 		
 		if (dev == NULL)
-		{
 			err = -ENODEV;
-		}
 		else
 			err = 0;
 	}
@@ -899,56 +584,116 @@ err_exit:
  */
 int addrconf_add_ifaddr(void *arg)
 {
-	struct inet6_dev *in6_dev;
+	struct inet6_dev *idev;
 	struct in6_ifreq ireq;
 	struct inet6_ifaddr *ifp;
 	struct device *dev;
-	int addr_type;
-	int err;
+	int scope;
 	
 	if (!suser())
 		return -EPERM;
 	
-	err = copy_from_user(&ireq, arg, sizeof(struct in6_ifreq));
-	if (err)
+	if(copy_from_user(&ireq, arg, sizeof(struct in6_ifreq)))
 		return -EFAULT;
 
-	in6_dev = ipv6_dev_by_index(ireq.ifr6_ifindex);
-
-	if (in6_dev == NULL)
+	if((dev = dev_get_by_index(ireq.ifr6_ifindex)) == NULL)
 		return -EINVAL;
 
-	dev = in6_dev->dev;
-	
-	addr_type  = ipv6_addr_type(&ireq.ifr6_addr);
-	addr_type &= IPV6_ADDR_SCOPE_MASK;
-	
-	ifp = ipv6_add_addr(in6_dev, &ireq.ifr6_addr, addr_type);
+	if ((idev = ipv6_get_idev(dev)) == NULL)
+		return -EINVAL;
 
-	if (ifp == NULL)
+	scope = ipv6_addr_scope(&ireq.ifr6_addr);
+
+	if((ifp = ipv6_add_addr(idev, &ireq.ifr6_addr, scope)) == NULL)
 		return -ENOMEM;
 
 	ifp->prefix_len = 128;
 
-	if (dev->flags & IFF_MULTICAST)
-	{
+	if (dev->flags & IFF_MULTICAST) {
 		struct in6_addr maddr;
 
-		/* join to solicited addr multicast group */
+		/* Join to solicited addr multicast group. */
 		addrconf_addr_solict_mult(&ireq.ifr6_addr, &maddr);
 		ipv6_dev_mc_inc(dev, &maddr);
 	}
-
 
 	ifp->prefix_len = ireq.ifr6_prefixlen;
 	ifp->flags |= ADDR_PERMANENT;
 
 	if (!(dev->flags & (IFF_NOARP|IFF_LOOPBACK)))
-	{
-		ifp->flags |= DAD_INCOMPLETE;
 		addrconf_dad_start(ifp);
-	}
+	else
+		ip6_rt_addr_add(&ifp->addr, dev);
+
 	return 0;
+}
+
+static void sit_route_add(struct device *dev)
+{
+	struct in6_rtmsg rtmsg;
+	struct rt6_info *rt;
+	int err;
+
+	ADBG(("sit_route_add(%s): ", dev->name));
+	memset(&rtmsg, 0, sizeof(rtmsg));
+
+	rtmsg.rtmsg_type			= RTMSG_NEWROUTE;
+	rtmsg.rtmsg_metric			= IP6_RT_PRIO_ADDRCONF;
+
+	if (dev->pa_dstaddr == 0) {
+		ADBG(("pa_dstaddr=0, "));
+		/* prefix length - 96 bytes "::d.d.d.d" */
+		rtmsg.rtmsg_dst_len		= 96;
+		rtmsg.rtmsg_flags		= RTF_NONEXTHOP|RTF_UP;
+	} else {
+		ADBG(("pa_dstaddr=%08x, ", dev->pa_dstaddr));
+		rtmsg.rtmsg_dst_len 		= 10;
+		rtmsg.rtmsg_dst.s6_addr32[0]	= __constant_htonl(0xfe800000);
+		rtmsg.rtmsg_dst.s6_addr32[3]	= dev->pa_dstaddr;
+		rtmsg.rtmsg_gateway.s6_addr32[3]= dev->pa_dstaddr;
+		rtmsg.rtmsg_flags		= RTF_UP;
+	}
+
+	rtmsg.rtmsg_ifindex 			= dev->ifindex; 
+	ADBG(("doing ip6_route_add()\n"));
+	rt = ip6_route_add(&rtmsg, &err);
+	
+	if (err) {
+#if ACONF_DEBUG >= 1
+		printk(KERN_DEBUG "sit_route_add: error %d in route_add\n", err);
+#endif
+	}
+
+	ADBG(("sit_route_add(cont): "));
+	if (dev->pa_dstaddr) {
+		struct rt6_info *mrt;
+
+		ADBG(("pa_dstaddr != 0, "));
+		rt->rt6i_nexthop = ndisc_get_neigh(dev, &rtmsg.rtmsg_gateway);
+		if (rt->rt6i_nexthop == NULL) {
+			ADBG(("can't get neighbour\n"));
+			printk(KERN_DEBUG "sit_route: get_neigh failed\n");
+		}
+
+		/*
+		 *	Add multicast route.
+		 */
+		ADBG(("add MULT, "));
+		ipv6_addr_set(&rtmsg.rtmsg_dst, __constant_htonl(0xFF000000), 0, 0, 0);
+
+		rtmsg.rtmsg_dst_len = 8;
+		rtmsg.rtmsg_flags = RTF_UP;
+		rtmsg.rtmsg_metric = IP6_RT_PRIO_ADDRCONF;
+
+		memset(&rtmsg.rtmsg_gateway, 0, sizeof(struct in6_addr));
+		ADBG(("doing ip6_route_add()\n"));
+		mrt = ip6_route_add(&rtmsg, &err);
+
+		if (mrt)
+			mrt->rt6i_nexthop = ndisc_get_neigh(dev, &rtmsg.rtmsg_dst);
+	} else {
+		ADBG(("pa_dstaddr==0\n"));
+	}
 }
 
 static void sit_add_v4_addrs(struct inet6_dev *idev)
@@ -960,26 +705,20 @@ static void sit_add_v4_addrs(struct inet6_dev *idev)
 
 	memset(&addr, 0, sizeof(struct in6_addr));
 
-	if (idev->dev->pa_dstaddr)
-	{
+	if (idev->dev->pa_dstaddr) {
 		addr.s6_addr32[0] = __constant_htonl(0xfe800000);
 		scope = IFA_LINK;
-	}
-	else
-	{
+	} else {
 		scope = IPV6_ADDR_COMPATv4;
 	}
 
-        for (dev = dev_base; dev != NULL; dev = dev->next) 
-        {
-		if (dev->family == AF_INET && (dev->flags & IFF_UP))
-		{
+        for (dev = dev_base; dev != NULL; dev = dev->next) {
+		if (dev->family == AF_INET && (dev->flags & IFF_UP)) {
 			int flag = scope;
 			
 			addr.s6_addr32[3] = dev->pa_addr;
 
-			if (dev->flags & IFF_LOOPBACK)
-			{
+			if (dev->flags & IFF_LOOPBACK) {
 				if (idev->dev->pa_dstaddr)
 					continue;
 				
@@ -987,13 +726,92 @@ static void sit_add_v4_addrs(struct inet6_dev *idev)
 			}
 
 			ifp = ipv6_add_addr(idev, &addr, flag);
-			
+
 			if (ifp == NULL)
 				continue;
 
 			ifp->flags |= ADDR_PERMANENT;
+			ip6_rt_addr_add(&ifp->addr, dev);
 		}
         }
+}
+
+static void init_loopback(struct device *dev)
+{
+	struct in6_addr addr;
+	struct inet6_dev  *idev;
+	struct inet6_ifaddr * ifp;
+	int err;
+
+	/* ::1 */
+
+	memset(&addr, 0, sizeof(struct in6_addr));
+	addr.s6_addr[15] = 1;
+
+	idev = ipv6_add_dev(dev);
+
+	if (idev == NULL) {
+		printk(KERN_DEBUG "init loopback: add_dev failed\n");
+		return;
+	}
+
+	ifp = ipv6_add_addr(idev, &addr, IFA_HOST);
+
+	if (ifp == NULL) {
+		printk(KERN_DEBUG "init_loopback: add_addr failed\n");
+		return;
+	}
+
+	ifp->flags |= ADDR_PERMANENT;
+
+	err = ip6_rt_addr_add(&addr, dev);
+	if (err)
+		printk(KERN_DEBUG "init_loopback: error in route_add\n");
+}
+
+static void addrconf_eth_config(struct device *dev)
+{
+	struct in6_addr addr;
+	struct in6_addr maddr;
+	struct inet6_ifaddr * ifp;
+	struct inet6_dev    * idev;
+
+	memset(&addr, 0, sizeof(struct in6_addr));
+
+	/* Generate link local address. */
+	addr.s6_addr[0] = 0xFE;
+	addr.s6_addr[1] = 0x80;
+
+	memcpy(addr.s6_addr + (sizeof(struct in6_addr) - dev->addr_len), 
+	       dev->dev_addr, dev->addr_len);
+
+	idev = ipv6_add_dev(dev);
+	if (idev == NULL)
+		return;
+	
+	ifp = ipv6_add_addr(idev, &addr, IFA_LINK);
+	if (ifp == NULL)
+		return;
+
+	ifp->flags = ADDR_PERMANENT;
+	ifp->prefix_len = 10;
+
+	/* Join to all nodes multicast group. */
+	ipv6_addr_all_nodes(&maddr);
+	ipv6_dev_mc_inc(dev, &maddr);
+
+	if (ipv6_config.forwarding) {
+		idev->router = 1;
+		ipv6_addr_all_routers(&maddr);
+		ipv6_dev_mc_inc(dev, &maddr);
+	}
+
+	/* Join to solicited addr multicast group. */
+	addrconf_addr_solict_mult(&addr, &maddr);
+	ipv6_dev_mc_inc(dev, &maddr);
+
+	/* Start duplicate address detection. */
+	addrconf_dad_start(ifp);
 }
 
 int addrconf_notify(struct notifier_block *this, unsigned long event, 
@@ -1026,7 +844,7 @@ int addrconf_notify(struct notifier_block *this, unsigned long event,
 			 *  route.
 			 */
 
-			sit_route_add(idev);
+			sit_route_add(dev);
 			break;
 
 		case ARPHRD_LOOPBACK:
@@ -1034,12 +852,12 @@ int addrconf_notify(struct notifier_block *this, unsigned long event,
 			break;
 
 		case ARPHRD_ETHER:
-
 			printk(KERN_DEBUG "Configuring eth interface\n");
 			addrconf_eth_config(dev);
 			break;
-		}
-		rt6_sndmsg(RTMSG_NEWDEVICE, NULL, NULL, 0, dev, 0, 0);
+		};
+
+		rt6_sndmsg(RTMSG_NEWDEVICE, NULL, NULL, NULL, dev, 0, 0, 0, 0);
 		break;
 
 	case NETDEV_DOWN:
@@ -1047,27 +865,218 @@ int addrconf_notify(struct notifier_block *this, unsigned long event,
 		 *	Remove all addresses from this interface
 		 *	and take the interface out of the list.
 		 */
-		if (addrconf_ifdown(dev) == 0)
-		{
+		if (addrconf_ifdown(dev) == 0) {
+#if 0
 			rt6_ifdown(dev);
-			rt6_sndmsg(RTMSG_DELDEVICE, NULL, NULL, 0, dev, 0, 0);
+#endif
+			rt6_sndmsg(RTMSG_DELDEVICE, NULL, NULL, NULL, dev, 0, 0, 0, 0);
 		}
 
 		break;
-	}
+	};
 	
 	return NOTIFY_OK;
 }
 
+
+static int addrconf_ifdown(struct device *dev)
+{
+	struct inet6_dev *idev, **bidev;
+	struct inet6_ifaddr *ifa, **bifa;
+	int i, hash;
+
+	start_bh_atomic();
+
+	hash = ipv6_devindex_hash(dev->ifindex);
+	bidev = &inet6_dev_lst[hash];
+
+	for (idev = inet6_dev_lst[hash]; idev; idev = idev->next) {
+		if (idev->dev == dev) {
+			*bidev = idev->next;
+			break;
+		}
+		bidev = &idev->next;
+	}
+
+	if (idev == NULL) {
+		printk(KERN_DEBUG "addrconf_ifdown: device not found\n");
+		end_bh_atomic();
+		return -ENODEV;
+	}
+
+	/*
+	 *	FIXME: clear multicast group membership
+	 */
+
+	/*
+	 *	clean addr_list
+	 */
+
+	for (i=0; i<16; i++) {
+		bifa = &inet6_addr_lst[i];
+
+		for (ifa=inet6_addr_lst[i]; ifa; ) {
+			if (ifa->idev == idev) {
+				*bifa = ifa->lst_next;
+				del_timer(&ifa->timer);
+				kfree(ifa);
+				ifa = *bifa;
+				continue;
+			}
+			ifa = ifa->lst_next;
+			bifa = &ifa->lst_next;
+		}
+	}
+
+	kfree(idev);
+	end_bh_atomic();
+	return 0;
+}
+
+static void addrconf_rs_timer(unsigned long data)
+{
+	struct inet6_ifaddr *ifp;
+
+	ifp = (struct inet6_ifaddr *) data;
+
+	if (ipv6_config.forwarding)
+		return;
+
+	if (ifp->idev->if_flags & IF_RA_RCVD) {
+		/*
+		 *	Announcement received after solicitation
+		 *	was sent
+		 */
+		return;
+	}
+
+	if (ifp->probes++ <= ipv6_config.rtr_solicits) {
+		struct in6_addr all_routers;
+
+		ipv6_addr_set(&all_routers,
+			      __constant_htonl(0xff020000U), 0, 0,
+			      __constant_htonl(0x2U));
+
+		ndisc_send_rs(ifp->idev->dev, &ifp->addr,
+			      &all_routers);
+		
+		ifp->timer.function = addrconf_rs_timer;
+		ifp->timer.expires = (jiffies + 
+				      ipv6_config.rtr_solicit_interval);
+		add_timer(&ifp->timer);
+	} else {
+		struct in6_rtmsg rtmsg;
+		int err;
+
+#if ACONF_DEBUG >= 2
+		printk(KERN_DEBUG "%s: no IPv6 routers present\n",
+		       ifp->idev->dev->name);
+#endif
+
+		memset(&rtmsg, 0, sizeof(struct in6_rtmsg));
+		rtmsg.rtmsg_type = RTMSG_NEWROUTE;
+		rtmsg.rtmsg_metric = IP6_RT_PRIO_ADDRCONF;
+		rtmsg.rtmsg_flags = (RTF_ALLONLINK | RTF_ADDRCONF | 
+				     RTF_DEFAULT | RTF_UP);
+
+		rtmsg.rtmsg_ifindex = ifp->idev->dev->ifindex;
+
+		ip6_route_add(&rtmsg, &err);
+	}
+}
+
+/*
+ *	Duplicate Address Detection
+ */
+static void addrconf_dad_start(struct inet6_ifaddr *ifp)
+{
+	static int rand_seed = 1;
+	struct device *dev;
+	unsigned long rand_num;
+
+	dev = ifp->idev->dev;
+
+	if (dev->flags & IFF_MULTICAST) {
+		struct in6_rtmsg rtmsg;
+		struct rt6_info *mrt;
+		int err;
+
+		memset(&rtmsg, 0, sizeof(rtmsg));
+		ipv6_addr_set(&rtmsg.rtmsg_dst,
+			      __constant_htonl(0xFF000000), 0, 0, 0);
+
+		rtmsg.rtmsg_dst_len = 8;
+		rtmsg.rtmsg_metric = IP6_RT_PRIO_ADDRCONF;
+		rtmsg.rtmsg_ifindex = dev->ifindex;
+
+		rtmsg.rtmsg_flags = RTF_UP;
+
+		mrt = ip6_route_add(&rtmsg, &err);
+
+		if (err)
+			printk(KERN_DEBUG "dad_start: mcast route add failed\n");
+		else
+			mrt->rt6i_nexthop = ndisc_get_neigh(dev, &rtmsg.rtmsg_dst);
+	}
+
+	if (rand_seed) {
+		rand_seed = 0;
+		nd_rand_seed = ifp->addr.s6_addr32[3];
+	}
+
+	init_timer(&ifp->timer);
+
+	ifp->probes = ipv6_config.dad_transmits;
+	ifp->flags |= DAD_INCOMPLETE;
+
+	rand_num = ipv6_random() % ipv6_config.rtr_solicit_delay;
+
+	ifp->timer.function = addrconf_dad_timer;
+	ifp->timer.data = (unsigned long) ifp;
+	ifp->timer.expires = jiffies + rand_num;
+
+	add_timer(&ifp->timer);
+}
+
+static void addrconf_dad_timer(unsigned long data)
+{
+	struct inet6_ifaddr *ifp;
+	struct in6_addr unspec;
+	struct in6_addr mcaddr;
+
+	ifp = (struct inet6_ifaddr *) data;
+
+	if (ifp->probes == 0) {
+		/*
+		 * DAD was successful
+		 */
+
+		ifp->flags &= ~DAD_INCOMPLETE;
+		addrconf_dad_completed(ifp);
+		return;
+	}
+
+	ifp->probes--;
+
+	/* send a neighbour solicitation for our addr */
+	memset(&unspec, 0, sizeof(unspec));
+	addrconf_addr_solict_mult(&ifp->addr, &mcaddr);
+
+	ndisc_send_ns(ifp->idev->dev, NULL, &ifp->addr, &mcaddr, &unspec);
+
+	ifp->timer.expires = jiffies + ipv6_config.rtr_solicit_interval;
+	add_timer(&ifp->timer);
+}
+
 static void addrconf_dad_completed(struct inet6_ifaddr *ifp)
 {
-	struct in6_rtmsg rtmsg;
 	struct device *dev;
 	int err;
 
+	dev = ifp->idev->dev;
 
-	if (ipv6_addr_type(&ifp->addr) & IPV6_ADDR_LINKLOCAL)
-	{
+	if (ipv6_addr_type(&ifp->addr) & IPV6_ADDR_LINKLOCAL) {
+		struct in6_rtmsg rtmsg;
 		struct in6_addr all_routers;
 
 		/*
@@ -1075,26 +1084,22 @@ static void addrconf_dad_completed(struct inet6_ifaddr *ifp)
 		 *	2) send a (delayed) router solicitation
 		 */
 
+		memset(&rtmsg, 0, sizeof(rtmsg));
+		
 		memcpy(&rtmsg.rtmsg_dst, &ifp->addr, sizeof(struct in6_addr));
-		memset(&rtmsg.rtmsg_gateway, 0, sizeof(struct in6_addr));
 
-		dev = ifp->idev->dev;
-
-		rtmsg.rtmsg_prefixlen = ifp->prefix_len;
-		rtmsg.rtmsg_metric = 1;
-		rtmsg.rtmsg_ifindex = ifp->idev->if_index;
+		rtmsg.rtmsg_dst_len = ifp->prefix_len;
+		rtmsg.rtmsg_metric = IP6_RT_PRIO_ADDRCONF;
+		rtmsg.rtmsg_ifindex = dev->ifindex;
 
 		rtmsg.rtmsg_flags = RTF_UP;
 
-		err = ipv6_route_add(&rtmsg);
+		ip6_route_add(&rtmsg, &err);
 		
 		if (err)
-		{
 			printk(KERN_DEBUG "dad_complete: error in route_add\n");
-		}
 
-		if (ipv6_forwarding == 0)
-		{
+		if (ipv6_config.forwarding == 0) {
 			ipv6_addr_set(&all_routers,
 				      __constant_htonl(0xff020000U), 0, 0,
 				      __constant_htonl(0x2U));
@@ -1109,128 +1114,21 @@ static void addrconf_dad_completed(struct inet6_ifaddr *ifp)
 
 			ifp->probes = 1;
 			ifp->timer.function = addrconf_rs_timer;
-			ifp->timer.expires = (jiffies + 
-					      RTR_SOLICITATION_INTERVAL);
+			ifp->timer.expires = (jiffies +
+					      ipv6_config.rtr_solicit_interval);
 			ifp->idev->if_flags |= IF_RS_SENT;
 			add_timer(&ifp->timer);
 		}
 	}
-
-}
-
-static void addrconf_dad_timer(unsigned long data)
-{
-	struct inet6_ifaddr *ifp;
-	struct in6_addr unspec;
-	struct in6_addr mcaddr;
-
-	ifp = (struct inet6_ifaddr *) data;
-
-	if (--ifp->probes == 0)
-	{
-		/*
-		 * DAD was successful
-		 */
-
-		ifp->flags &= ~DAD_INCOMPLETE;
-		addrconf_dad_completed(ifp);
-		return;
-	}
-
-	/* send a neighbour solicitation for our addr */
-	memset(&unspec, 0, sizeof(unspec));
-	addrconf_addr_solict_mult(&ifp->addr, &mcaddr);
-
-	ndisc_send_ns(ifp->idev->dev, NULL, &ifp->addr, &mcaddr, &unspec);
-
-	ifp->timer.expires = jiffies + RETRANS_TIMER;
-	add_timer(&ifp->timer);
-}
-
-static void addrconf_rs_timer(unsigned long data)
-{
-	struct inet6_ifaddr *ifp;
-
-	ifp = (struct inet6_ifaddr *) data;
-
-	if (ipv6_forwarding)
-		return;
-
-	if (ifp->idev->if_flags & IF_RA_RCVD)
-	{
-		/*
-		 *	Announcement received after solicitation
-		 *	was sent
-		 */
-		return;
-	}
-
-	if (ifp->probes++ <= MAX_RTR_SOLICITATIONS)
-	{
-		struct in6_addr all_routers;
-
-		ipv6_addr_set(&all_routers,
-			      __constant_htonl(0xff020000U), 0, 0,
-			      __constant_htonl(0x2U));
-
-		ndisc_send_rs(ifp->idev->dev, &ifp->addr,
-			      &all_routers);
 	
-		
-		ifp->timer.function = addrconf_rs_timer;
-		ifp->timer.expires = jiffies + RTR_SOLICITATION_INTERVAL;
-		add_timer(&ifp->timer);
-	}
-	else
-	{
-		printk(KERN_DEBUG "%s: no IPv6 routers present\n",
-		       ifp->idev->dev->name);
+	/*
+	 *	configure the address for reception
+	 */
 
-		if (!default_rt_list && !last_resort_rt)
-		{
-			struct rt6_info *rt;
-
-			/*
-			 *	create a last resort route with all
-			 *	destinations on link
-			 */
-			rt = kmalloc(sizeof(struct rt6_info), GFP_ATOMIC);
-
-			if (rt)
-			{
-				memset(rt, 0, sizeof(struct rt6_info));
-				rt->rt_dev = ifp->idev->dev;
-				rt->rt_ref = 1;
-				rt->rt_flags = (RTI_ALLONLINK | RTF_UP);
-				last_resort_rt = rt;
-			}
-		}
-	}
+	ip6_rt_addr_add(&ifp->addr, dev);
 }
 
-static void addrconf_dad_start(struct inet6_ifaddr *ifp)
-{
-	static int rand_seed = 1;
-	int rand_num;
-
-	if (rand_seed)
-	{
-		rand_seed = 0;
-		nd_rand_seed = ifp->addr.s6_addr32[3];
-	}
-
-	init_timer(&ifp->timer);
-	ifp->probes = DupAddrDetectTransmits;
-
-	rand_num = ipv6_random() % MAX_RTR_SOLICITATION_DELAY;
-
-	ifp->timer.function = addrconf_dad_timer;
-	ifp->timer.data = (unsigned long) ifp;
-	ifp->timer.expires = jiffies + rand_num;
-
-	add_timer(&ifp->timer);
-}
-
+#ifdef CONFIG_PROC_FS
 static int iface_proc_info(char *buffer, char **start, off_t offset,
 			   int length, int dummy)
 {
@@ -1238,13 +1136,11 @@ static int iface_proc_info(char *buffer, char **start, off_t offset,
 	int i;
 	int len = 0;
 
-	for (i=0; i < HASH_SIZE; i++)
-		for (ifp=inet6_addr_lst[i]; ifp; ifp=ifp->lst_next)
-		{
+	for (i=0; i < IN6_ADDR_HSIZE; i++)
+		for (ifp=inet6_addr_lst[i]; ifp; ifp=ifp->lst_next) {
 			int j;
 
-			for (j=0; j<16; j++)
-			{
+			for (j=0; j<16; j++) {
 				sprintf(buffer + len, "%02x",
 					ifp->addr.s6_addr[j]);
 				len += 2;
@@ -1252,7 +1148,7 @@ static int iface_proc_info(char *buffer, char **start, off_t offset,
 
 			len += sprintf(buffer + len,
 				       " %02x %02x %02x %02x %8s\n",
-				       ifp->idev->if_index,
+				       ifp->idev->dev->ifindex,
 				       ifp->prefix_len,
 				       ifp->scope,
 				       ifp->flags,
@@ -1275,7 +1171,7 @@ struct proc_dir_entry iface_proc_entry =
         0, NULL,
         &iface_proc_info
 };
-
+#endif	/* CONFIG_PROC_FS */
 
 /*
  *	Periodic address status verification
@@ -1287,29 +1183,23 @@ void addrconf_verify(unsigned long foo)
 	unsigned long now = jiffies;
 	int i;
 
-	for (i=0; i < HASH_SIZE; i++)
-	{
-		for (ifp=inet6_addr_lst[i]; ifp;)
-		{
-			if (!(ifp->flags & ADDR_PERMANENT))
-			{
+	for (i=0; i < IN6_ADDR_HSIZE; i++) {
+		for (ifp=inet6_addr_lst[i]; ifp;) {
+			if (!(ifp->flags & ADDR_PERMANENT)) {
 				struct inet6_ifaddr *bp;
 				unsigned long age;
 
 				age = (now - ifp->tstamp) / HZ;
 
 				if (age > ifp->prefered_lft)
-				{
 					ifp->flags |= ADDR_DEPRECATED;
-				}
 
 				bp = ifp;
 				ifp=ifp->lst_next;
 				
 				if (age > bp->valid_lft)
-				{
 					ipv6_del_addr(bp);
-				}
+
 				continue;
 			}
 			ifp=ifp->lst_next;
@@ -1320,18 +1210,25 @@ void addrconf_verify(unsigned long foo)
 	add_timer(&addr_chk_timer);	
 }
 
+/*
+ *	Init / cleanup code
+ */
+
 void addrconf_init()
 {
 	struct device *dev;
 
-	/* init addr hash list */	  
-	memset(inet6_addr_lst, 0, 16 * sizeof(struct inet6_ifaddr *));
+	/*
+	 *	init address and device hash lists
+	 */
 
-	memset(inet6_mcast_lst,   0, 16 * sizeof(struct ipv6_mc_list *));
+	memset(inet6_addr_lst, 0, IN6_ADDR_HSIZE * sizeof(struct inet6_ifaddr *));
 
-	inet6_dev_lst = NULL;
+	memset(inet6_mcast_lst, 0, IN6_ADDR_HSIZE * sizeof(struct ifmcaddr6 *));
 
-	/* 
+	memset(inet6_dev_lst, 0, IN6_ADDR_HSIZE * sizeof(struct inet6_dev *));
+
+	/*
 	 *	Init loopback device
 	 */
 
@@ -1350,16 +1247,19 @@ void addrconf_init()
 	if (dev && (dev->flags & IFF_UP))
 		addrconf_eth_config(dev);
 	
-	proc_register(&proc_net, &iface_proc_entry);
+#ifdef CONFIG_PROC_FS
+	proc_net_register(&iface_proc_entry);
+#endif
 	
 	addr_chk_timer.expires = jiffies + ADDR_CHECK_FREQUENCY;
 	add_timer(&addr_chk_timer);
 }
 
+#ifdef MODULE
 void addrconf_cleanup(void)
 {
-	struct inet6_dev *idev, *bidev;
-	struct inet6_ifaddr *ifa, *bifa;
+ 	struct inet6_dev *idev;
+ 	struct inet6_ifaddr *ifa;
 	int i;
 
 	del_timer(&addr_chk_timer);
@@ -1368,26 +1268,32 @@ void addrconf_cleanup(void)
 	 *	clean dev list.
 	 */
 
-	for (idev = inet6_dev_lst; idev; )
-	{
-		bidev = idev;
-		idev = idev->next;
-		kfree(bidev);
+	for (i=0; i < IN6_ADDR_HSIZE; i++) {
+		for (idev = inet6_dev_lst[i]; idev; ) {
+			struct inet6_dev *back;
+
+			back = idev;
+			idev = idev->next;
+			kfree(back);
+		}
 	}
 
 	/*
 	 *	clean addr_list
 	 */
 
-	for (i=0; i<16; i++)
-	{
-		for (ifa=inet6_addr_lst[i]; ifa; )
-		{
+	for (i=0; i < IN6_ADDR_HSIZE; i++) {
+		for (ifa=inet6_addr_lst[i]; ifa; ) {
+			struct inet6_ifaddr *bifa;
+
 			bifa = ifa;
 			ifa = ifa->lst_next;
 			kfree(bifa);
 		}
 	}
 
-	proc_unregister(&proc_net, iface_proc_entry.low_ino);
+#ifdef CONFIG_PROC_FS
+	proc_net_unregister(iface_proc_entry.low_ino);
+#endif
 }
+#endif	/* MODULE */

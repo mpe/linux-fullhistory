@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.10 1997/03/03 16:51:54 jj Exp $
+/* $Id: pgtable.h,v 1.13 1997/03/13 16:25:05 jj Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -83,17 +83,20 @@
 #define __DIRTY_BITS	(_PAGE_MODIFIED | _PAGE_WRITE | _PAGE_W)
 #define __ACCESS_BITS	(_PAGE_ACCESSED | _PAGE_READ | _PAGE_R)
 
+/* David: Please FIXME these. I just define them somehow to get it compile. jj */
+#define PAGE_NONE	__pgprot (_PAGE_VALID | _PAGE_CACHE | _PAGE_P | _PAGE_G | __ACCESS_BITS)
+#define PAGE_SHARED	__pgprot (_PAGE_VALID | _PAGE_CACHE | _PAGE_G | __ACCESS_BITS | _PAGE_W | _PAGE_WRITE)
+#define PAGE_COPY	__pgprot (_PAGE_VALID | _PAGE_CACHE | __ACCESS_BITS)
+#define PAGE_READONLY	__pgprot (_PAGE_VALID | _PAGE_CACHE | __ACCESS_BITS)
+#define PAGE_KERNEL	__pgprot (_PAGE_VALID | _PAGE_CACHE | _PAGE_P | __ACCESS_BITS | __DIRTY_BITS)
+#define PAGE_INVALID	__pgprot (0)
+
 #define _PFN_MASK	_PAGE_PADDR
 
 #define _PAGE_CHG_MASK	(_PFN_MASK | _PAGE_MODIFIED | _PAGE_ACCESSED)
 
-#define PAGE_NONE	__pgprot(_PAGE_PRESENT | _PAGE_CACHE)
-#define PAGE_SHARED	__pgprot(_PAGE_PRESENT | __ACCESS_BITS | \
-				 _PAGE_WRITE | _PAGE_CACHE)
-#define PAGE_COPY	__pgprot(_PAGE_PRESENT | __ACCESS_BITS | _PAGE_CACHE)
-#define PAGE_READONLY	__pgprot(_PAGE_PRESENT | __ACCESS_BITS | _PAGE_CACHE)
-#define PAGE_KERNEL	__pgprot(_PAGE_PRESENT | _PAGE_VALID | _PAGE_W| \
-				 _PAGE_CACHE | _PAGE_P | _PAGE_G)
+/* FIXME: Define this correctly to io page protection. Has to include side effects. */
+#define pg_iobits (_PAGE_VALID | _PAGE_P | __ACCESS_BITS | _PAGE_E)
 
 #define __P000	PAGE_NONE
 #define __P001	PAGE_READONLY
@@ -373,13 +376,13 @@ extern inline void SET_PAGE_DIR(struct task_struct *tsk, pgd_t *pgdir)
 	paddr = ((unsigned long) pgdir) - PAGE_OFFSET;
 
 	if(tsk->mm == current->mm) {
-		__asm__ __volatile__("
-			rdpr		%%pstate, %%g1
-			wrpr		%%g1, %2, %%pstate
+		__asm__ __volatile__ ("
+			rdpr		%%pstate, %%o4
+			wrpr		%%o4, %1, %%pstate
 			mov		%0, %%g7
-			wrpr		%%g1, 0x0, %%pstate
+			wrpr		%%o4, 0x0, %%pstate
 		" : : "r" (paddr), "i" (PSTATE_MG|PSTATE_IE)
-		  : "g1", "g2");
+		  : "o4");
 	}
 }
 
@@ -575,9 +578,42 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
 extern inline pte_t mk_swap_pte(unsigned long type, unsigned long offset)
 { pte_t pte; pte_val(pte) = (type) | (offset << 8); return pte; }
 
+extern inline pte_t mk_pte_io(unsigned long page, pgprot_t prot, int space)
+/* FIXME. How is space added to the address??? */
+{ pte_t pte; pte_val(pte) = (page) | pgprot_val(prot); return pte; }
+
+
 #define SWP_TYPE(entry)		(((entry) & 0xff))
 #define SWP_OFFSET(entry)	((entry) >> 8)
 #define SWP_ENTRY(type,offset)	pte_val(mk_swap_pte((type),(offset)))
+
+struct ctx_list {
+	struct ctx_list *next;
+	struct ctx_list *prev;
+	unsigned int ctx_number;
+	struct mm_struct *ctx_mm;
+};
+
+extern struct ctx_list *ctx_list_pool;  /* Dynamically allocated */
+extern struct ctx_list ctx_free;        /* Head of free list */
+extern struct ctx_list ctx_used;        /* Head of used contexts list */
+
+#define NO_CONTEXT     -1
+
+extern __inline__ void remove_from_ctx_list(struct ctx_list *entry)
+{
+	entry->next->prev = entry->prev;
+	entry->prev->next = entry->next;
+}
+
+extern __inline__ void add_to_ctx_list(struct ctx_list *head, struct ctx_list *entry)
+{
+	entry->next = head;
+	(entry->prev = head->prev)->next = entry;
+	head->prev = entry;
+}
+#define add_to_free_ctxlist(entry) add_to_ctx_list(&ctx_free, entry)
+#define add_to_used_ctxlist(entry) add_to_ctx_list(&ctx_used, entry)
 
 #endif /* !(__ASSEMBLY__) */
 

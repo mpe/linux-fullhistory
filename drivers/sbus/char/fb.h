@@ -1,4 +1,4 @@
-/* $Id: fb.h,v 1.21 1997/02/02 02:12:43 ecd Exp $
+/* $Id: fb.h,v 1.23 1997/03/12 23:25:16 ecd Exp $
  * fb.h: contains the definitions of the structures that various sun
  *       frame buffer can use to do console driver stuff.
  *
@@ -77,7 +77,7 @@ struct bwtwo_info {
 };
 
 struct cg3_info {
-	struct bt_regs *bt;	/* brooktree (color) registers */
+	struct cg3_regs *regs;	/* brooktree (color) registers, and more */
 	int cgrdi;		/* 1 if this is a cgRDI */
 };
 
@@ -200,7 +200,8 @@ extern unsigned long sun_cg_postsetup(fbinfo_t *, unsigned long);
 extern void cg3_setup (fbinfo_t *, int, uint, int, struct linux_sbus_device *);
 extern void cg6_setup (fbinfo_t *, int, uint, int);
 extern void cg14_setup (fbinfo_t *, int, int, uint, int);
-extern void bwtwo_setup (fbinfo_t *, int, uint, int);
+extern void bwtwo_setup (fbinfo_t *, int, uint, int,
+			 struct linux_sbus_device *);
 extern void leo_setup (fbinfo_t *, int, uint, int);
 extern void tcx_setup (fbinfo_t *, int, int, uint, struct linux_sbus_device *);
 

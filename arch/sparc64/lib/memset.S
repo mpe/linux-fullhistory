@@ -54,7 +54,7 @@
 	.text
 	.align 4
 
-	.globl	__bzero, __memset, 
+	.globl	__bzero, __memset
 	.globl	memset, __memset_start, __memset_end
 __memset_start:
 __memset:

@@ -1,4 +1,4 @@
-/* $Id: memory.c,v 1.9 1996/11/13 05:10:09 davem Exp $
+/* $Id: memory.c,v 1.10 1997/03/18 17:58:27 jj Exp $
  * memory.c: Prom routine for acquiring various bits of information
  *           about RAM on the machine, both virtual and physical.
  *
@@ -107,7 +107,6 @@ __initfunc(void prom_meminit(void))
 		break;
 	case PROM_V2:
 	case PROM_V3:
-	case PROM_P1275:
 		/* Grrr, have to traverse the prom device tree ;( */
 		node = prom_getchild(prom_root_node);
 		node = prom_searchsiblings(node, "memory");

@@ -9,7 +9,8 @@ appletalk		alan@lxorguk.ukuu.org.uk and netatalk@umich.edu
 ax25			jsn@cs.nott.ac.uk
 core			alan@lxorguk.ukuu.org.uk
 ethernet		alan@lxorguk.ukuu.org.uk
-ipv4			alan@lxorguk.ukuu.org.uk
+ipv4			davem@caip.rutgers.edu,Eric.Schenk@dna.lth.se
+ipv6			davem@caip.rutgers.edu,Eric.Schenk@dna.lth.se
 ipx			alan@lxorguk.ukuu.org.uk,greg@caldera.com
 lapb			jsn@cs.nott.ac.uk
 netrom			jsn@cs.nott.ac.uk

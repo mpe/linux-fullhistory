@@ -27,8 +27,8 @@
 */
 
 
-#define BusLogic_DriverVersion		"2.0.7"
-#define BusLogic_DriverDate		"23 February 1997"
+#define BusLogic_DriverVersion		"2.0.8"
+#define BusLogic_DriverDate		"17 March 1997"
 
 
 #include <linux/module.h>
@@ -1086,9 +1086,9 @@ static int BusLogic_InitializeFlashPointProbeInfo(void)
   interrogating the PCI Configuration Space on PCI machines as well as from the
   list of standard BusLogic MultiMaster ISA I/O Addresses.  By default, if both
   FlashPoint and PCI MultiMaster Host Adapters are present, this driver will
-  probe for PCI MultiMaster Host Adapters first unless the BIOS primary disk is
-  not controlled by the first PCI MultiMaster Host Adapter, in which case
-  FlashPoint Host Adapters will be probed first.  The Kernel Command Line 
+  probe for FlashPoint Host Adapters first unless the BIOS primary disk is
+  controlled by the first PCI MultiMaster Host Adapter, in which case
+  MultiMaster Host Adapters will be probed first.  The Kernel Command Line
   options "MultiMasterFirst" and "FlashPointFirst" can be used to force a
   particular probe order.
 */
@@ -1118,11 +1118,12 @@ static void BusLogic_InitializeProbeInfoList(void)
 	}
       else
 	{
-	  int PCIMultiMasterCount = BusLogic_InitializeMultiMasterProbeInfo();
 	  int FlashPointCount = BusLogic_InitializeFlashPointProbeInfo();
-	  if (PCIMultiMasterCount > 0 && FlashPointCount > 0)
+	  int PCIMultiMasterCount = BusLogic_InitializeMultiMasterProbeInfo();
+	  if (FlashPointCount > 0 && PCIMultiMasterCount > 0)
 	    {
-	      BusLogic_ProbeInfo_T *ProbeInfo = &BusLogic_ProbeInfoList[0];
+	      BusLogic_ProbeInfo_T *ProbeInfo =
+		&BusLogic_ProbeInfoList[FlashPointCount];
 	      BusLogic_HostAdapter_T HostAdapterPrototype;
 	      BusLogic_HostAdapter_T *HostAdapter = &HostAdapterPrototype;
 	      BusLogic_FetchHostAdapterLocalRAMRequest_T
@@ -1142,27 +1143,26 @@ static void BusLogic_InitializeProbeInfoList(void)
 			       &Drive0MapByte, sizeof(Drive0MapByte));
 	      /*
 		If the Map Byte for BIOS Drive 0 indicates that BIOS Drive 0
-		is not controlled by this PCI MultiMaster Host Adapter, then
-		reverse the probe order so that FlashPoint Host Adapters are
-		probed before MultiMaster Host Adapters.
+		is controlled by this PCI MultiMaster Host Adapter, then
+		reverse the probe order so that MultiMaster Host Adapters are
+		probed before FlashPoint Host Adapters.
 	      */
-	      if (Drive0MapByte.DiskGeometry ==
+	      if (Drive0MapByte.DiskGeometry !=
 		  BusLogic_BIOS_Disk_Not_Installed)
 		{
 		  BusLogic_ProbeInfo_T
 		    SavedProbeInfo[BusLogic_MaxHostAdapters];
 		  int MultiMasterCount =
 		    BusLogic_ProbeInfoCount - FlashPointCount;
-		  memcpy(&SavedProbeInfo[0],
-			 &BusLogic_ProbeInfoList[0],
-			 BusLogic_ProbeInfoCount
-			 * sizeof(BusLogic_ProbeInfo_T));
+		  memcpy(SavedProbeInfo,
+			 BusLogic_ProbeInfoList,
+			 sizeof(BusLogic_ProbeInfoList));
 		  memcpy(&BusLogic_ProbeInfoList[0],
-			 &SavedProbeInfo[MultiMasterCount],
-			 FlashPointCount * sizeof(BusLogic_ProbeInfo_T));
-		  memcpy(&BusLogic_ProbeInfoList[FlashPointCount],
-			 &SavedProbeInfo[0],
+			 &SavedProbeInfo[FlashPointCount],
 			 MultiMasterCount * sizeof(BusLogic_ProbeInfo_T));
+		  memcpy(&BusLogic_ProbeInfoList[MultiMasterCount],
+			 &SavedProbeInfo[0],
+			 FlashPointCount * sizeof(BusLogic_ProbeInfo_T));
 		}
 	    }
 	}
@@ -1223,9 +1223,14 @@ static boolean BusLogic_ProbeHostAdapter(BusLogic_HostAdapter_T *HostAdapter)
 	    FlashPointInfo->Present))
 	{
 	  scsi_init_free((char *) FlashPointInfo, sizeof(FlashPoint_Info_T));
-	  if (BusLogic_GlobalOptions.Bits.TraceProbe)
-	    BusLogic_Notice("BusLogic_Probe(0x%X): FlashPoint Not Found\n",
-			    HostAdapter, HostAdapter->IO_Address);
+	  BusLogic_Error("BusLogic: FlashPoint Host Adapter detected at "
+			 "PCI Bus %d Device %d\n", HostAdapter,
+			 HostAdapter->Bus, HostAdapter->Device);
+	  BusLogic_Error("BusLogic: I/O Address 0x%X PCI Address 0x%X, "
+			 "but FlashPoint\n", HostAdapter,
+			 HostAdapter->IO_Address, HostAdapter->PCI_Address);
+	  BusLogic_Error("BusLogic: Probe Function failed to validate it.\n",
+			 HostAdapter);
 	  return false;
 	}
       HostAdapter->FlashPointInfo = FlashPointInfo;
@@ -3006,6 +3011,7 @@ static void BusLogic_ProcessCompletedCCBs(void)
 			  .BusDeviceResetsCompleted);
 	  HostAdapter->CommandsSinceReset[TargetID] = 0;
 	  HostAdapter->TaggedQueuingActive[TargetID] = false;
+	  HostAdapter->LastResetCompleted[TargetID] = jiffies;
 	  /*
 	    Place CCB back on the Host Adapter's free list.
 	  */
@@ -3325,9 +3331,13 @@ int BusLogic_QueueCommand(SCSI_Command_T *Command,
       int Segment;
       CCB->Opcode = BusLogic_InitiatorCCB_ScatterGather;
       CCB->DataLength = SegmentCount * sizeof(BusLogic_ScatterGatherSegment_T);
+#ifndef CONFIG_SCSI_OMIT_FLASHPOINT
       if (BusLogic_MultiMasterHostAdapterP(HostAdapter))
 	CCB->DataPointer = Virtual_to_Bus(CCB->ScatterGatherList);
       else CCB->DataPointer = (BusLogic_BusAddress_T) CCB->ScatterGatherList;
+#else
+      CCB->DataPointer = Virtual_to_Bus(CCB->ScatterGatherList);
+#endif
       for (Segment = 0; Segment < SegmentCount; Segment++)
 	{
 	  CCB->ScatterGatherList[Segment].SegmentByteCount =
@@ -3739,7 +3749,10 @@ static int BusLogic_ResetHostAdapter(BusLogic_HostAdapter_T *HostAdapter,
 	  }
       }
   for (TargetID = 0; TargetID < HostAdapter->MaxTargetDevices; TargetID++)
-    HostAdapter->LastResetTime[TargetID] = jiffies;
+    {
+      HostAdapter->LastResetAttempted[TargetID] = jiffies;
+      HostAdapter->LastResetCompleted[TargetID] = jiffies;
+    }
   Result = SCSI_RESET_SUCCESS | SCSI_RESET_HOST_RESET;
   /*
     Release exclusive access to Host Adapter.
@@ -3907,7 +3920,7 @@ static int BusLogic_SendBusDeviceReset(BusLogic_HostAdapter_T *HostAdapter,
   BusLogic_IncrementErrorCounter(
     &HostAdapter->TargetDeviceStatistics[TargetID].BusDeviceResetsAttempted);
   HostAdapter->BusDeviceResetPendingCCB[TargetID] = CCB;
-  HostAdapter->LastResetTime[TargetID] = jiffies;
+  HostAdapter->LastResetAttempted[TargetID] = jiffies;
   for (XCCB = HostAdapter->All_CCBs; XCCB != NULL; XCCB = XCCB->NextAll)
     if (XCCB->Status == BusLogic_CCB_Active && XCCB->TargetID == TargetID)
       XCCB->Status = BusLogic_CCB_Reset;
@@ -3955,7 +3968,7 @@ int BusLogic_ResetCommand(SCSI_Command_T *Command, unsigned int ResetFlags)
     the system was initialized if no prior resets have occurred.
   */
   if (HostAdapter->TaggedQueuingActive[TargetID] &&
-      jiffies - HostAdapter->LastResetTime[TargetID] < 10*60*HZ)
+      jiffies - HostAdapter->LastResetCompleted[TargetID] < 10*60*HZ)
     {
       HostAdapter->TaggedQueuingPermitted &= ~(1 << TargetID);
       HostAdapter->TaggedQueuingActive[TargetID] = false;
@@ -3980,7 +3993,7 @@ int BusLogic_ResetCommand(SCSI_Command_T *Command, unsigned int ResetFlags)
 	clear the error condition.
       */
       if (HostAdapter->CommandSuccessfulFlag[TargetID] ||
-	  jiffies - HostAdapter->LastResetTime[TargetID] < HZ/10)
+	  jiffies - HostAdapter->LastResetAttempted[TargetID] < HZ/10)
 	{
 	  HostAdapter->CommandSuccessfulFlag[TargetID] = false;
 	  return BusLogic_SendBusDeviceReset(HostAdapter, Command, ResetFlags);
@@ -4428,19 +4441,19 @@ static void BusLogic_Message(BusLogic_MessageLevel_T MessageLevel,
 
   MultiMasterFirst	By default, if both FlashPoint and PCI MultiMaster
 			Host Adapters are present, this driver will probe for
-			PCI MultiMaster Host Adapters first unless the BIOS
-			primary disk is not controlled by the first PCI
-			MultiMaster Host Adapter, in which case FlashPoint
-			Host Adapters will be probed first.  This option
-			forces MultiMaster Host Adapters to be probed first.
+			FlashPoint Host Adapters first unless the BIOS primary
+			disk is controlled by the first PCI MultiMaster Host
+			Adapter, in which case MultiMaster Host Adapters will
+			be probed first.  This option forces MultiMaster Host
+			Adapters to be probed first.
 
   FlashPointFirst	By default, if both FlashPoint and PCI MultiMaster
 			Host Adapters are present, this driver will probe for
-			PCI MultiMaster Host Adapters first unless the BIOS
-			primary disk is not controlled by the first PCI
-			MultiMaster Host Adapter, in which case FlashPoint
-			Host Adapters will be probed first.  This option
-			forces FlashPoint Host Adapters to be probed first.
+			FlashPoint Host Adapters first unless the BIOS primary
+			disk is controlled by the first PCI MultiMaster Host
+			Adapter, in which case MultiMaster Host Adapters will
+			be probed first.  This option forces FlashPoint Host
+			Adapters to be probed first.
 
   Debug			Sets all the tracing bits in BusLogic_GlobalOptions.
 

@@ -55,7 +55,7 @@ void rose_set_timer(struct sock *sk)
 
 	sk->timer.data     = (unsigned long)sk;
 	sk->timer.function = &rose_timer;
-	sk->timer.expires  = jiffies + 10;
+	sk->timer.expires  = jiffies + (HZ / 10);
 
 	add_timer(&sk->timer);
 }

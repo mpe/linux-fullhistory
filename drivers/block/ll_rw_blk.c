@@ -124,7 +124,7 @@ static inline void plug_device(struct blk_dev_struct * dev)
 	if (dev->current_request)
 		return;
 	dev->current_request = &dev->plug;
-	queue_task_irq_off(&dev->plug_tq, &tq_disk);
+	queue_task(&dev->plug_tq, &tq_disk);
 }
 
 /*

@@ -10,7 +10,10 @@
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
 
-#ifdef __SMP__
+#ifndef __SMP__
+#define lock_kernel()           do { } while(0)
+#define unlock_kernel()         do { } while(0)
+#else
 
 extern __inline__ __volatile__ unsigned char ldstub(volatile unsigned char *lock)
 {

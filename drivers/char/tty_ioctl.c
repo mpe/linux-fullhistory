@@ -157,16 +157,12 @@ static int set_termios(struct tty_struct * tty, unsigned long arg, int opt)
 		return retval;
 
 	if (opt & TERMIOS_TERMIO) {
-		retval = verify_area(VERIFY_READ, (void *) arg, sizeof(struct termio));
-		if (retval)
-			return retval;
 		memcpy(&tmp_termios, tty->termios, sizeof(struct termios));
-		user_termio_to_kernel_termios(&tmp_termios, (struct termio *) arg);
+		if (user_termio_to_kernel_termios(&tmp_termios, (struct termio *) arg))
+			return -EFAULT;
 	} else {
-		retval = user_termios_to_kernel_termios
-			(&tmp_termios, (struct termios *) arg);
-		if (retval)
-			return retval;
+		if (user_termios_to_kernel_termios(&tmp_termios, (struct termios *) arg))
+			return -EFAULT;
 	}
 
 	if ((opt & TERMIOS_FLUSH) && tty->ldisc.flush_buffer)
@@ -184,12 +180,8 @@ static int set_termios(struct tty_struct * tty, unsigned long arg, int opt)
 
 static int get_termio(struct tty_struct * tty, struct termio * termio)
 {
-	int i;
-
-	i = verify_area(VERIFY_WRITE, termio, sizeof (struct termio));
-	if (i)
-		return i;
-	kernel_termios_to_user_termio(termio, tty->termios);
+	if (kernel_termios_to_user_termio(termio, tty->termios))
+		return -EFAULT;
 	return 0;
 }
 
@@ -411,9 +403,9 @@ int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 			return set_ltchars(real_tty, (struct ltchars *) arg);
 #endif
 		case TCGETS:
-			return kernel_termios_to_user_termios
-				((struct termios *)arg,
-				 real_tty->termios);
+			if (kernel_termios_to_user_termios((struct termios *)arg, real_tty->termios))
+				return -EFAULT;
+			return 0;
 		case TCSETSF:
 			opt |= TERMIOS_FLUSH;
 		case TCSETSW:
@@ -488,15 +480,17 @@ int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 				retval = inq_canon(tty);
 			return put_user(retval, (unsigned int *) arg);
 		case TIOCGLCKTRMIOS:
-			return kernel_termios_to_user_termios
-				((struct termios *)arg,
-				 real_tty->termios_locked);
+			if (kernel_termios_to_user_termios((struct termios *)arg, real_tty->termios_locked))
+				return -EFAULT;
+			return 0;
+
 		case TIOCSLCKTRMIOS:
 			if (!suser())
 				return -EPERM;
-			return user_termios_to_kernel_termios
-				(real_tty->termios_locked,
-				 (struct termios *) arg);
+			if (user_termios_to_kernel_termios(real_tty->termios_locked, (struct termios *) arg))
+				return -EFAULT;
+			return 0;
+
 		case TIOCPKT:
 		{
 			int pktmode;

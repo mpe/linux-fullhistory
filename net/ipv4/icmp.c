@@ -687,6 +687,16 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 	unsigned char *dp;
 	struct sock *raw_sk;
 	
+	/*
+	 *	Incomplete header ?
+	 */
+	 
+	if(skb->len<sizeof(struct iphdr)+8)
+	{
+		kfree_skb(skb, FREE_READ);
+		return;
+	}
+	
 	iph = (struct iphdr *) (icmph + 1);
 	dp = (unsigned char*)iph;
 	
@@ -733,15 +743,32 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 	 *	RFC 1122: 3.2.2.1 MUST pass ICMP unreach messages to the transport layer.
 	 *	RFC 1122: 3.2.2.2 MUST pass ICMP time expired messages to transport layer.
 	 */
+	 
+	/*
+	 *	Check the other end isnt violating RFC 1122. Some routers send
+	 *	bogus responses to broadcast frames. If you see this message
+	 *	first check your netmask matches at both ends, if it does then
+	 *	get the other vendor to fix their kit.
+	 */
+	 
+	if(__ip_chk_addr(iph->daddr)==IS_BROADCAST)
+	{
+		printk("%s sent an invalid ICMP error to a broadcast.\n",
+			in_ntoa(iph->daddr));
+		kfree_skb(skb, FREE_READ);
+	}
 
-	/* Deliver ICMP message to raw sockets. Pretty useless feature?
+	/*
+	 *	Deliver ICMP message to raw sockets. Pretty useless feature?
 	 */
 
 	/* Note: See raw.c and net/raw.h, RAWV4_HTABLE_SIZE==MAX_INET_PROTOS */
 	hash = iph->protocol & (MAX_INET_PROTOS - 1);
-	if ((raw_sk = raw_v4_htable[hash]) != NULL) {
+	if ((raw_sk = raw_v4_htable[hash]) != NULL) 
+	{
 		raw_sk = raw_v4_lookup(raw_sk, iph->protocol, iph->saddr, iph->daddr);
-		while (raw_sk) {
+		while (raw_sk) 
+		{
 			raw_err(raw_sk, skb);
 			raw_sk = raw_v4_lookup(raw_sk->next, iph->protocol,
 					       iph->saddr, iph->daddr);
@@ -750,8 +777,6 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 
 	/*
 	 *	This can't change while we are doing it. 
-	 *
-	 *	FIXME: Deliver to appropriate raw sockets too.
 	 */
 
 	ipprot = (struct inet_protocol *) inet_protos[hash];
