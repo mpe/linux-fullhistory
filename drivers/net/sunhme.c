@@ -1,4 +1,4 @@
-/* $Id: sunhme.c,v 1.96 2000/06/09 07:35:27 davem Exp $
+/* $Id: sunhme.c,v 1.97 2000/09/05 23:12:36 davem Exp $
  * sunhme.c: Sparc HME/BigMac 10/100baseT half/full duplex auto switching,
  *           auto carrier detecting ethernet driver.  Also known as the
  *           "Happy Meal Ethernet" found on SunSwift SBUS cards.
@@ -2759,7 +2759,7 @@ static int __init happy_meal_pci_init(struct net_device *dev, struct pci_dev *pd
 	}		
 
 	hpreg_base = pci_resource_start(pdev, 0);
-	if ((pdev->resource[0].flags & IORESOURCE_IO) != 0) {
+	if ((pci_resource_flags(pdev, 0) & IORESOURCE_IO) != 0) {
 		printk(KERN_ERR "happymeal(PCI): Cannot find proper PCI device base address.\n");
 		return -ENODEV;
 	}
@@ -2887,22 +2887,17 @@ static int __init happy_meal_sbus_probe(struct net_device *dev)
 #ifdef CONFIG_PCI
 static int __init happy_meal_pci_probe(struct net_device *dev)
 {
+	struct pci_dev *pdev = NULL;
 	int cards = 0;
 
-	if (pci_present()) {
-		struct pci_dev *pdev;
-
-		pdev = pci_find_device(PCI_VENDOR_ID_SUN,
-				       PCI_DEVICE_ID_SUN_HAPPYMEAL, 0);
-		while (pdev != NULL) {
-			if (cards)
-				dev = NULL;
-			cards++;
-			happy_meal_pci_init(dev, pdev);
-			pdev = pci_find_device(PCI_VENDOR_ID_SUN,
-					       PCI_DEVICE_ID_SUN_HAPPYMEAL,
-					       pdev);
-		}
+	while ((pdev = pci_find_device(PCI_VENDOR_ID_SUN,
+				       PCI_DEVICE_ID_SUN_HAPPYMEAL, pdev)) != NULL) {
+		if (pci_enable_device(pdev))
+			continue;
+		if (cards)
+			dev = NULL;
+		cards++;
+		happy_meal_pci_init(dev, pdev);
 	}
 	return cards;
 }

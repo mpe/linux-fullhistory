@@ -10,6 +10,7 @@
 
 #ifdef CONFIG_SMP
 
+#include <linux/kernel.h>
 #include <asm/smp.h>
 
 /*

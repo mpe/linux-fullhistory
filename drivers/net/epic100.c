@@ -33,6 +33,10 @@
 	LK1.1.4 (jgarzik):
 	* Merge becker test version 1.09 (5/29/2000)
 
+	LK1.1.5 (jgarzik):
+	* Fix locking
+	* Limit 83c175 probe to ethernet-class PCI devices
+
 */
 
 /* These identify the driver base version and may not be removed. */
@@ -41,7 +45,7 @@ static const char version[] =
 static const char version2[] =
 "  http://www.scyld.com/network/epic100.html\n";
 static const char version3[] =
-" (unofficial 2.4.x kernel port, version 1.1.4, August 10, 2000)\n";
+" (unofficial 2.4.x kernel port, version 1.1.5, September 7, 2000)\n";
 
 /* The user-configurable values.
    These may be modified when a driver module is loaded.*/
@@ -489,13 +493,11 @@ static int __devinit epic_init_one (struct pci_dev *pdev,
 
 	return 0;
 
-err_out_iounmap:
 #ifndef USE_IO_OPS
-	iounmap ((void*) ioaddr);
 err_out_free_mmio:
-#endif
 	release_mem_region (pci_resource_start (pdev, 1),
 			    pci_resource_len (pdev, 1));
+#endif
 err_out_free_pio:
 	release_region (pci_resource_start (pdev, 0),
 			pci_resource_len (pdev, 0));

@@ -10,7 +10,7 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * $Id: intrep.c,v 1.39 2000/08/09 13:23:36 dwmw2 Exp $
+ * $Id: intrep.c,v 1.69 2000/08/24 09:35:47 dwmw2 Exp $
  *
  * Ported to Linux 2.3.x and MTD:
  * Copyright (C) 2000  Alexander Larsson (alex@cendio.se), Cendio Systems AB
@@ -191,12 +191,13 @@ flash_safe_read(struct mtd_info *mtd, loff_t from,
 		u_char *buf, size_t count)
 {
 	size_t retlen;
+	int res;
 
-	MTD_READ(mtd, from, count, &retlen, buf);
+	res = MTD_READ(mtd, from, count, &retlen, buf);
 	if (retlen != count) {
-		printk("Didn't read all bytes in flash_safe_read()\n");
+		printk("Didn't read all bytes in flash_safe_read(). Returned %d\n", res);
 	}
-	return retlen;
+	return res?res:retlen;
 }
 
 
@@ -205,10 +206,11 @@ flash_read_u32(struct mtd_info *mtd, loff_t from)
 {
 	size_t retlen;
 	__u32 ret;
+	int res;
 
-	MTD_READ(mtd, from, 4, &retlen, (unsigned char *)&ret);
+	res = MTD_READ(mtd, from, 4, &retlen, (unsigned char *)&ret);
 	if (retlen != 4) {
-		printk("Didn't read all bytes in flash_read_u32()\n");
+		printk("Didn't read all bytes in flash_read_u32(). Returned %d\n", res);
 		return 0;
 	}
 
@@ -221,10 +223,11 @@ flash_read_u8(struct mtd_info *mtd, loff_t from)
 {
 	size_t retlen;
 	__u8 ret;
+	int res;
 
-	MTD_READ(mtd, from, 1, &retlen, &ret);
+	res = MTD_READ(mtd, from, 1, &retlen, &ret);
 	if (retlen != 1) {
-		printk("Didn't read a byte in flash_read_u8()\n");
+		printk("Didn't read a byte in flash_read_u8(). Returned %d\n", res);
 		return 0;
 	}
 
@@ -237,12 +240,13 @@ flash_safe_write(struct mtd_info *mtd, loff_t to,
 		 const u_char *buf, size_t count)
 {
 	size_t retlen;
+	int res;
 
-	MTD_WRITE(mtd, to, count, &retlen, buf);
+	res = MTD_WRITE(mtd, to, count, &retlen, buf);
 	if (retlen != count) {
-		printk("Didn't write all bytes in flash_safe_write()\n");
+		printk("Didn't write all bytes in flash_safe_write(). Returned %d\n", res);
 	}
-	return retlen;
+	return res?res:retlen;
 }
 
 
@@ -306,7 +310,8 @@ flash_erase_region(struct mtd_info *mtd, loff_t start,
 	erase->len = size;
 	erase->priv = (u_long)&wait_q;
 
-	set_current_state(TASK_INTERRUPTIBLE);
+	/* FIXME: Use TASK_INTERRUPTIBLE and deal with being interrupted */
+	set_current_state(TASK_UNINTERRUPTIBLE);
 	add_wait_queue(&wait_q, &wait);
 
 	if (MTD_ERASE(mtd, erase) < 0) {
@@ -321,7 +326,6 @@ flash_erase_region(struct mtd_info *mtd, loff_t start,
 	}
 
 	schedule(); /* Wait for flash to finish. */
-	/* FIXME: We could have been interrupted here. We don't deal with it */
 	remove_wait_queue(&wait_q, &wait);
 
 	kfree(erase);
@@ -369,15 +373,14 @@ jffs_checksum_flash(struct mtd_info *mtd, loff_t start, int size)
 	D3(printk("checksum result: 0x%08x\n", sum));
 	return sum;
 }
-
 static __inline__ void jffs_fm_write_lock(struct jffs_fmcontrol *fmc)
 {
-	down(&fmc->wlock);
+  //	down(&fmc->wlock);
 }
 
 static __inline__ void jffs_fm_write_unlock(struct jffs_fmcontrol *fmc)
 {
-	up(&fmc->wlock);
+  //	up(&fmc->wlock);
 }
 
 
@@ -421,6 +424,7 @@ jffs_create_control(kdev_t dev)
 	}
 	DJM(no_jffs_control++);
 	c->root = 0;
+	c->gc_task = 0;
 	c->hash_len = JFFS_HASH_SIZE;
 	s = sizeof(struct list_head) * c->hash_len;
 	if (!(c->hash = (struct list_head *)kmalloc(s, GFP_KERNEL))) {
@@ -640,6 +644,16 @@ jffs_scan_flash(struct jffs_control *c)
 			   a single kernel thread will fix the original problem.
 			*/
 			if ((__u32) pos % fmc->sector_size) {
+				/* If there was free space in previous 
+				   sectors, don't mark that dirty too - 
+				   only from the beginning of this sector
+				   (or from start) 
+				*/
+				if (start < (pos & ~(fmc->sector_size-1))) {
+					D1(printk("Reducing start to 0x%x from 0x%x\n", pos & ~(fmc->sector_size-1), start));
+					start = pos & ~(fmc->sector_size-1);
+				}
+				D1(printk("Dirty space: 0x%x for 0x%x bytes\n", start, (pos - start)));
 				jffs_fmalloced(fmc, (__u32) start,
 					       (__u32) (pos - start), 0);
 			}
@@ -672,6 +686,7 @@ jffs_scan_flash(struct jffs_control *c)
 				  "hexdump(pos = 0x%lx, len = 128):\n",
 				  (long)pos));
 			D1(jffs_hexdump(fmc->mtd, pos, 128));
+		cont_dirty:
 			for (pos += 4; pos < end; pos += 4) {
 				switch (flash_read_u32(fmc->mtd, pos)) {
 				case JFFS_MAGIC_BITMASK:
@@ -679,6 +694,46 @@ jffs_scan_flash(struct jffs_control *c)
 						       (__u32) (pos - start),
 						       0);
 					goto cont_scan;
+				case JFFS_EMPTY_BITMASK:
+					/* First, mark as dirty the region
+					   which really does contain crap. */
+					jffs_fmalloced(fmc, (__u32) start,
+						       (__u32) (pos - start),
+						       0);
+
+					/* Then, scan the region which looks free.
+					   Depending on how large it is, we may
+					   mark it dirty too.
+					*/
+					start = pos;
+					for (; pos < end ; pos += 4) {
+						switch (flash_read_u32(fmc->mtd, pos)) {
+						case JFFS_MAGIC_BITMASK:
+							if (pos - start < fmc->max_chunk_size) {
+								/* Not much free space. Mark it dirty. */
+								jffs_fmalloced(fmc, (__u32)start,
+									       (__u32)pos-start, 0);
+							}
+							goto cont_scan;
+
+						case JFFS_EMPTY_BITMASK:
+							/* More empty space */
+							continue;
+				
+						default: 
+							/* i.e. more dirt */
+							if (pos - start < fmc->max_chunk_size) {
+								/* There wasn't much before the dirt
+								   started again. Just mark it all dirty
+								*/
+								goto cont_dirty;
+							}
+							/* There was quite a lot of free space. Leave it
+							   free.
+							*/
+							goto cont_scan;
+						}
+					}
 				default:
 					break;
 				}
@@ -734,6 +789,8 @@ jffs_scan_flash(struct jffs_control *c)
 		/* Check the raw inode read so far.  Start with the
 		   maximum length of the filename.  */
 		if (raw_inode.nsize > JFFS_MAX_NAME_LEN) {
+			printk(KERN_WARNING "jffs_scan_flash: Found a "
+			       "JFFS node with name too large\n");
 			goto bad_inode;
 		}
 
@@ -748,6 +805,9 @@ jffs_scan_flash(struct jffs_control *c)
 		/* The node's data segment should not exceed a
 		   certain length.  */
 		if (raw_inode.dsize > fmc->max_chunk_size) {
+			printk(KERN_WARNING "jffs_scan_flash: Found a "
+			       "JFFS node with dsize (0x%x) > max_chunk_size (0x%x)\n",
+			       raw_inode.dsize, fmc->max_chunk_size);
 			goto bad_inode;
 		}
 
@@ -895,9 +955,9 @@ jffs_insert_node(struct jffs_control *c, struct jffs_file *f,
 	int insert_into_tree = 0;
 
 	D2(printk("jffs_insert_node(): ino = %u, version = %u, "
-		  "name = \"%s\"\n",
+		  "name = \"%s\", deleted = %d\n",
 		  raw_inode->ino, raw_inode->version,
-		  ((name && *name) ? name : "")));
+		  ((name && *name) ? name : ""), raw_inode->deleted));
 
 	/* If there doesn't exist an associated jffs_file, then
 	   create, initialize and insert one into the file system.  */
@@ -908,7 +968,6 @@ jffs_insert_node(struct jffs_control *c, struct jffs_file *f,
 		jffs_insert_file_into_hash(f);
 		insert_into_tree = 1;
 	}
-
 	node->ino = raw_inode->ino;
 	node->version = raw_inode->version;
 	node->data_size = raw_inode->dsize;
@@ -1345,18 +1404,30 @@ jffs_write_dummy_node(struct jffs_control *c, struct jffs_fm *dirty_fm)
 int
 jffs_write_node(struct jffs_control *c, struct jffs_node *node,
 		struct jffs_raw_inode *raw_inode,
-		const char *name, const unsigned char *data)
+		const char *name, const unsigned char *data,
+		int recoverable,
+		struct jffs_file *f)
 {
 	struct jffs_fmcontrol *fmc = c->fmc;
 	struct jffs_fm *fm = NULL;
 	__u32 pos;
 	int err;
+	__u32 slack = 0;
+
 	__u32 total_name_size = raw_inode->nsize
 				+ JFFS_GET_PAD_BYTES(raw_inode->nsize);
 	__u32 total_data_size = raw_inode->dsize
 				+ JFFS_GET_PAD_BYTES(raw_inode->dsize);
 	__u32 total_size = sizeof(struct jffs_raw_inode)
 			   + total_name_size + total_data_size;
+	
+	/* If this node isn't something that will eventually let
+	   GC free even more space, then don't allow it unless
+	   there's at least max_chunk_size space still available
+	*/
+	if (!recoverable)
+		slack = fmc->max_chunk_size;
+		
 
 	/* Fire the retrorockets and shoot the fruiton torpedoes, sir!  */
 
@@ -1371,13 +1442,21 @@ jffs_write_node(struct jffs_control *c, struct jffs_node *node,
 	});
 
 	D1(printk("jffs_write_node(): filename = \"%s\", ino = %u, "
-		  "version = %u, total_size = %u\n",
+		  "total_size = %u\n",
 		  (name ? name : ""), raw_inode->ino,
-		  raw_inode->version, total_size));
+		  total_size));
 
 	jffs_fm_write_lock(fmc);
 
 	while (!fm) {
+
+		/* Deadlocks suck. */
+		while(fmc->free_size < fmc->min_free_size + total_size + slack) {
+			jffs_fm_write_unlock(fmc);
+			if (!JFFS_ENOUGH_SPACE(c, total_size + slack))
+				return -ENOSPC;
+			jffs_fm_write_lock(fmc);
+		}
 
 		/* First try to allocate some flash memory.  */
 		err = jffs_fmalloc(fmc, total_size, node, &fm);
@@ -1430,6 +1509,15 @@ jffs_write_node(struct jffs_control *c, struct jffs_node *node,
 	});
 
 	pos = node->fm->offset;
+
+	/* Increment the version number here. We can't let the caller
+	   set it beforehand, because we might have had to do GC on a node
+	   of this file - and we'd end up reusing version numbers.
+	*/
+	if (f) {
+		raw_inode->version = f->highest_version + 1;
+		D1(printk (KERN_NOTICE "jffs_write_node(): setting version of %s to %d\n", f->name, raw_inode->version));
+	}
 
 	/* Compute the checksum for the data and name chunks.  */
 	raw_inode->dchksum = jffs_checksum(data, raw_inode->dsize);
@@ -1496,8 +1584,9 @@ jffs_write_node(struct jffs_control *c, struct jffs_node *node,
    shouldn't be read again.  'max_size' is how much space there is in
    the buffer.  */
 static int
-jffs_get_node_data(struct jffs_file *f, struct jffs_node *node, char *buf,
-		   __u32 node_offset, __u32 max_size, kdev_t dev)
+jffs_get_node_data(struct jffs_file *f, struct jffs_node *node, 
+		   unsigned char *buf,__u32 node_offset, __u32 max_size,
+		   kdev_t dev)
 {
 	struct jffs_fmcontrol *fmc = f->c->fmc;
 	__u32 pos = node->fm->offset + node->fm_offset + node_offset;
@@ -1521,14 +1610,15 @@ jffs_get_node_data(struct jffs_file *f, struct jffs_node *node, char *buf,
 /* Read data from the file's nodes.  Write the data to the buffer
    'buf'.  'read_offset' tells how much data we should skip.  */
 int
-jffs_read_data(struct jffs_file *f, char *buf, __u32 read_offset, __u32 size)
+jffs_read_data(struct jffs_file *f, unsigned char *buf, __u32 read_offset,
+	       __u32 size)
 {
 	struct jffs_node *node;
 	__u32 read_data = 0; /* Total amount of read data.  */
 	__u32 node_offset = 0;
 	__u32 pos = 0; /* Number of bytes traversed.  */
 
-	D1(printk("jffs_read_data(): file = \"%s\", read_offset = %d, "
+	D2(printk("jffs_read_data(): file = \"%s\", read_offset = %d, "
 		  "size = %u\n",
 		  (f->name ? f->name : ""), read_offset, size));
 
@@ -1842,7 +1932,21 @@ jffs_delete_data(struct jffs_file *f, struct jffs_node *node)
 		n = n->range_next;
 	}
 
-	f->size -= node->removed_size;
+	if (node->removed_size > (f->size - node->data_offset)) {
+		/* It's possible that the removed_size is in fact
+		 * greater than the amount of data we actually thought
+		 * were present in the first place - some of the nodes 
+		 * which this node originally obsoleted may already have
+		 * been deleted from the flash by subsequent garbage 
+		 * collection.
+		 *
+		 * If this is the case, don't let f->size go negative.
+		 * Bad things would happen :)
+		 */
+		f->size = node->data_offset;
+	} else {
+		f->size -= node->removed_size;
+	}
 	D3(printk("jffs_delete_data(): f->size = %d\n", f->size));
 	return 0;
 } /* jffs_delete_data()  */
@@ -1881,7 +1985,7 @@ jffs_insert_data(struct jffs_file *f, struct jffs_node *node)
 		/* Find the correct place for the insertion and then insert
 		   the node.  */
 		for (n = f->range_head; n; n = n->range_next) {
-			D1(printk("Cool stuff's happening!\n"));
+			D2(printk("Cool stuff's happening!\n"));
 
 			if (n->data_offset == node->data_offset) {
 				node->range_prev = n->range_prev;
@@ -2223,7 +2327,7 @@ jffs_rewrite_data(struct jffs_file *f, struct jffs_node *node, int size)
 	int err;
 
 	D1(printk("***jffs_rewrite_data(): node: %u, name: \"%s\", size: %u\n",
-		  f->ino, (f->name ? f->name : ""), size));
+		  f->ino, (f->name ? f->name : "(null)"), size));
 
 	/* Create and initialize the new node.  */
 	if (!(new_node = (struct jffs_node *)
@@ -2235,8 +2339,8 @@ jffs_rewrite_data(struct jffs_file *f, struct jffs_node *node, int size)
 	DJM(no_jffs_node++);
 	new_node->data_offset = node->data_offset;
 	new_node->removed_size = size;
-	total_name_size = f->nsize + JFFS_GET_PAD_BYTES(f->nsize);
-	total_data_size = size + JFFS_GET_PAD_BYTES(size);
+	total_name_size = JFFS_PAD(f->nsize);
+	total_data_size = JFFS_PAD(size);
 	total_size = sizeof(struct jffs_raw_inode)
 		     + total_name_size + total_data_size;
 	new_node->fm_offset = sizeof(struct jffs_raw_inode)
@@ -2252,30 +2356,23 @@ jffs_rewrite_data(struct jffs_file *f, struct jffs_node *node, int size)
 		return err;
 	}
 	else if (!fm->nodes) {
-		/* The jffs_fm struct that we got is not good enough.  */
+		/* The jffs_fm struct that we got is not big enough.  */
+		/* This should never happen, because we deal with this case
+		   in jffs_garbage_collect_next().*/
+		printk(KERN_WARNING "jffs_rewrite_data(): Allocated node is too small (%d bytes of %d)\n", fm->size, total_size);
 		if ((err = jffs_write_dummy_node(c, fm)) < 0) {
-			DJM(no_jffs_fm--);
-			jffs_fm_write_unlock(fmc);
 			D(printk("jffs_rewrite_data(): "
 				 "jffs_write_dummy_node() Failed!\n"));
-			kfree(fm);
-			return err;
+		} else {
+			err = -ENOSPC;
 		}
-		/* Get a new one.  */
-		if ((err = jffs_fmalloc(fmc, total_size, node, &fm)) < 0) {
-			jffs_fm_write_unlock(fmc);
-			D(printk("jffs_rewrite_data(): Second "
-				 "jffs_fmalloc(0x%p, %u) failed!\n",
-				 fmc, total_size));
-			return err;
-		}
+		DJM(no_jffs_fm--);
+		jffs_fm_write_unlock(fmc);
+		kfree(fm);
+		
+		return err;
 	}
 	new_node->fm = fm;
-
-	ASSERT(if (new_node->fm->nodes == 0) {
-		printk(KERN_ERR "jffs_rewrite_data(): "
-		       "new_node->fm->nodes == 0\n");
-	});
 
 	/* Initialize the raw inode.  */
 	raw_inode.magic = JFFS_MAGIC_BITMASK;
@@ -2418,10 +2515,11 @@ jffs_garbage_collect_next(struct jffs_control *c)
 	struct jffs_fmcontrol *fmc = c->fmc;
 	struct jffs_node *node;
 	struct jffs_file *f;
-	int size;
+	int size, err = 0;
 	int data_size;
 	int total_name_size;
-	int free_size = fmc->flash_size	- (fmc->used_size + fmc->dirty_size);
+	__u32 extra_available;
+	__u32 space_needed;
 	__u32 free_chunk_size1 = jffs_free_size1(fmc);
 	D2(__u32 free_chunk_size2 = jffs_free_size2(fmc));
 
@@ -2430,47 +2528,64 @@ jffs_garbage_collect_next(struct jffs_control *c)
 	ASSERT(if (!node) {
 		printk(KERN_ERR "JFFS: jffs_garbage_collect_next: "
 		       "No oldest node found!\n");
-		return -1;
+                err = -1;
+                goto jffs_garbage_collect_next_end;
+		
+
 	});
 
 	/* Find its corresponding file too.  */
 	f = jffs_find_file(c, node->ino);
-	ASSERT(if (!f) {
-		printk(KERN_ERR "JFFS: jffs_garbage_collect_next: "
-		       "No file to garbage collect! "
-		       "(ino = 0x%08x)\n", node->ino);
-		return -1;
-	});
+
+	if (!f) {
+	  printk (KERN_ERR "JFFS: jffs_garbage_collect_next: "
+                  "No file to garbage collect! "
+		  "(ino = 0x%08x)\n", node->ino);
+          /* FIXME: Free the offending node and recover. */
+          err = -1;
+          goto jffs_garbage_collect_next_end;
+	}
+
+	/* We always write out the name. Theoretically, we don't need
+	   to, but for now it's easier - because otherwise we'd have
+	   to keep track of how many times the current name exists on
+	   the flash and make sure it never reaches zero.
+
+	   The current approach means that would be possible to cause
+	   the GC to end up eating its tail by writing lots of nodes
+	   with no name for it to garbage-collect. Hence the change in
+	   inode.c to write names with _every_ node.
+
+	   It sucks, but it _should_ work.
+	*/
+	total_name_size = JFFS_PAD(f->nsize);
 
 	D1(printk("jffs_garbage_collect_next(): \"%s\", "
-		  "ino: %u, version: %u\n",
-		  (f->name ? f->name : ""), node->ino, node->version));
+		  "ino: %u, version: %u, location 0x%x, dsize %u\n",
+		  (f->name ? f->name : ""), node->ino, node->version, 
+		  node->fm->offset, node->data_size));
 
-	/* Compute how much we want to rewrite at the moment.  */
+	/* Compute how many data it's possible to rewrite at the moment.  */
 	data_size = f->size - node->data_offset;
-	total_name_size = f->nsize + JFFS_GET_PAD_BYTES(f->nsize);
+
+	/* And from that, the total size of the chunk we want to write */
 	size = sizeof(struct jffs_raw_inode) + total_name_size
 	       + data_size + JFFS_GET_PAD_BYTES(data_size);
 
-	D2(printk("  total_name_size: %u\n", total_name_size));
-	D2(printk("  data_size: %u\n", data_size));
-	D2(printk("  size: %u\n", size));
-	D2(printk("  f->nsize: %u\n", f->nsize));
-	D2(printk("  f->size: %u\n", f->size));
-	D2(printk("  node->data_offset: %u\n", node->data_offset));
-	D2(printk("  free_chunk_size1: %u\n", free_chunk_size1));
-	D2(printk("  free_chunk_size2: %u\n", free_chunk_size2));
-	D2(printk("  node->fm->offset: 0x%08x\n", node->fm->offset));
-
+	/* If that's more than max_chunk_size, reduce it accordingly */
 	if (size > fmc->max_chunk_size) {
 		size = fmc->max_chunk_size;
 		data_size = size - sizeof(struct jffs_raw_inode)
 			    - total_name_size;
 	}
+
+	/* If we're asking to take up more space than free_chunk_size1
+	   but we _could_ fit in it, shrink accordingly.
+	*/
 	if (size > free_chunk_size1) {
 
 		if (free_chunk_size1 <
-		    (sizeof(struct jffs_raw_inode) + f->nsize + BLOCK_SIZE)) {
+		    (sizeof(struct jffs_raw_inode) + total_name_size + BLOCK_SIZE)){
 			/* The space left is too small to be of any
 			   use really.  */
 			struct jffs_fm *dirty_fm
@@ -2482,32 +2597,81 @@ jffs_garbage_collect_next(struct jffs_control *c)
 				       "jffs_garbage_collect_next: "
 				       "Failed to allocate `dirty' "
 				       "flash memory!\n");
-				return -1;
+				err = -1;
+                                goto jffs_garbage_collect_next_end;
 			}
+			D1(printk("Dirtying end of flash - too small\n"));
 			jffs_write_dummy_node(c, dirty_fm);
+                        err = 0;
 			goto jffs_garbage_collect_next_end;
 		}
+		D1(printk("Reducing size of new node from %d to %d to avoid "
+			  " exceeding free_chunk_size1\n",
+			  size, free_chunk_size1));
 
 		size = free_chunk_size1;
 		data_size = size - sizeof(struct jffs_raw_inode)
 			    - total_name_size;
 	}
 
-	D2(printk("  size: %u (again)\n", size));
 
-	if (free_size - size < fmc->sector_size) {
-		/* Just rewrite that node (or even less).  */
-		jffs_rewrite_data(f, node,
-				  jffs_min(node->data_size, data_size));
-	}
-	else {
-		size -= (sizeof(struct jffs_raw_inode) + f->nsize);
-		jffs_rewrite_data(f, node, data_size);
+	/* Calculate the amount of space needed to hold the nodes
+	   which are remaining in the tail */
+	space_needed = fmc->min_free_size - (node->fm->offset % fmc->sector_size);
+
+	/* From that, calculate how much 'extra' space we can use to
+	   increase the size of the node we're writing from the size
+	   of the node we're obsoleting
+	*/
+	if (space_needed > fmc->free_size) {
+		/* If we've gone below min_free_size for some reason,
+		   don't fuck up. This is why we have 
+		   min_free_size > sector_size. Whinge about it though,
+		   just so I can convince myself my maths is right.
+		*/
+		D1(printk(KERN_WARNING "jffs_garbage_collect_next(): "
+			  "space_needed %d exceeded free_size %d\n",
+			  space_needed, fmc->free_size));
+		extra_available = 0;
+	} else {
+		extra_available = fmc->free_size - space_needed;
 	}
 
+	/* Check that we don't use up any more 'extra' space than
+	   what's available */
+	if (size > JFFS_PAD(node->data_size) + total_name_size + 
+	    sizeof(struct jffs_raw_inode) + extra_available) {
+		D1(printk("Reducing size of new node from %d to %ld to avoid "
+		       "catching our tail\n", size, 
+			  JFFS_PAD(node->data_size) + JFFS_PAD(node->name_size) + 
+			  sizeof(struct jffs_raw_inode) + extra_available));
+		D1(printk("space_needed = %d, extra_available = %d\n", 
+			  space_needed, extra_available));
+
+		size = JFFS_PAD(node->data_size) + total_name_size + 
+		  sizeof(struct jffs_raw_inode) + extra_available;
+		data_size = size - sizeof(struct jffs_raw_inode)
+			- total_name_size;
+	};
+
+	D2(printk("  total_name_size: %u\n", total_name_size));
+	D2(printk("  data_size: %u\n", data_size));
+	D2(printk("  size: %u\n", size));
+	D2(printk("  f->nsize: %u\n", f->nsize));
+	D2(printk("  f->size: %u\n", f->size));
+	D2(printk("  node->data_offset: %u\n", node->data_offset));
+	D2(printk("  free_chunk_size1: %u\n", free_chunk_size1));
+	D2(printk("  free_chunk_size2: %u\n", free_chunk_size2));
+	D2(printk("  node->fm->offset: 0x%08x\n", node->fm->offset));
+
+	if ((err = jffs_rewrite_data(f, node, data_size))) {
+		printk(KERN_WARNING "jffs_rewrite_data() failed: %d\n", err);
+		return err;
+	}
+	  
 jffs_garbage_collect_next_end:
 	D3(printk("jffs_garbage_collect_next: Leaving...\n"));
-	return 0;
+	return err;
 } /* jffs_garbage_collect_next */
 
 
@@ -2683,75 +2847,75 @@ jffs_try_to_erase(struct jffs_control *c)
    for exemple).  Of course there is a limit on how intelligent this garbage
    collection can be.  */
 
+
 int
 jffs_garbage_collect_now(struct jffs_control *c)
 {
 	struct jffs_fmcontrol *fmc = c->fmc;
-	long erased_total = 0;
-	long erased;
+	long erased = 0;
 	int result = 0;
 	D1(int i = 1);
-	D2(printk("***jffs_garbage_collect_now(): fmc->dirty_size = %u\n",
-		  fmc->dirty_size));
+	D2(printk("***jffs_garbage_collect_now(): fmc->dirty_size = %u, fmc->free_size = 0x%x\n, fcs1=0x%x, fcs2=0x%x",
+		  fmc->dirty_size, fmc->free_size, jffs_free_size1(fmc), jffs_free_size2(fmc)));
 	D2(jffs_print_fmcontrol(fmc));
 
-	down(&fmc->gclock);
+	//	down(&fmc->gclock);
 
 	/* If it is possible to garbage collect, do so.  */
-
-	if (fmc->dirty_size >= fmc->sector_size) {
-
+	
+	while (erased == 0) {
 		D1(printk("***jffs_garbage_collect_now(): round #%u, "
-			 "fmc->dirty_size = %u\n", i++, fmc->dirty_size));
+			  "fmc->dirty_size = %u\n", i++, fmc->dirty_size));
 		D2(jffs_print_fmcontrol(fmc));
 
-		/* At least one sector should be able to free now.  */
 		if ((erased = jffs_try_to_erase(c)) < 0) {
 			printk(KERN_WARNING "JFFS: Error in "
 			       "garbage collector.\n");
 			result = erased;
 			goto gc_end;
 		}
-		else if (erased == 0) {
-			__u32 free_size = fmc->flash_size
-					  - (fmc->used_size
-					     + fmc->dirty_size);
+		if (erased)
+			break;
+		
+		if (fmc->free_size == 0) {
+			/* Argh */
+			printk(KERN_ERR "jffs_garbage_collect_now(): free_size == 0. This is BAD.\n");
+			result = -ENOSPC;
+			break;
+		}
 
-			if (free_size > 0) {
-				/* Let's dare to make a garbage collect.  */
-				if ((result = jffs_garbage_collect_next(c))
-				    < 0) {
-					printk(KERN_ERR "JFFS: Something "
-					       "has gone seriously wrong "
-					       "with a garbage collect.\n");
-					goto gc_end;
-				}
-			}
-			else {
-				/* What should we do here?  */
-				D(printk("   jffs_garbage_collect_now(): "
-					 "erased: %ld, free_size: %u\n",
-					 erased, free_size));
-				result = -1;
-				goto gc_end;
-			}
+		if (fmc->dirty_size < fmc->sector_size) {
+			/* Actually, we _may_ have been able to free some, 
+			 * if there are many overlapping nodes which aren't
+			 * actually marked dirty because they still have
+			 * some valid data in each.
+			 */
+			result = -ENOSPC;
+			break;
+		}
+
+		/* Let's dare to make a garbage collect.  */
+		if ((result = jffs_garbage_collect_next(c)) < 0) {
+			printk(KERN_ERR "JFFS: Something "
+			       "has gone seriously wrong "
+			       "with a garbage collect.\n");
+			goto gc_end;
 		}
 
 		D1(printk("   jffs_garbage_collect_now(): erased: %ld\n", erased));
-		erased_total += erased;
 		DJM(jffs_print_memory_allocation_statistics());
 	}
-
+	
 gc_end:
-	up(&fmc->gclock);
+	//	up(&fmc->gclock);
 
 	D3(printk("   jffs_garbage_collect_now(): Leaving...\n"));
-	D1(if (erased_total) {
-		printk("erased_total = %ld\n", erased_total);
+	D1(if (erased) {
+		printk("jffs_g_c_now(): erased = %ld\n", erased);
 		jffs_print_fmcontrol(fmc);
 	});
 
-	if (!erased_total && !result)
+	if (!erased && !result)
 		return -ENOSPC;
 
 	return result;
@@ -2766,17 +2930,15 @@ gc_end:
 */
 static inline int thread_should_wake (struct jffs_control *c)
 {
-	__u32 nfree = c->fmc->flash_size - c->fmc->used_size - c->fmc->dirty_size;
-
 	D1(printk (KERN_NOTICE "thread_should_wake(): free=%d, dirty=%d, blocksize=%d.\n",
-		   nfree, c->fmc->dirty_size, c->fmc->sector_size));
+		   c->fmc->free_size, c->fmc->dirty_size, c->fmc->sector_size));
 
 	/* If there's not enough dirty space to free a block, there's no point. */
 	if (c->fmc->dirty_size < c->fmc->sector_size)
 		return 0;
 
 	/* If there are fewer free bytes than the threshold, GC */
-	if (nfree < c->gc_minfree_threshold)
+	if (c->fmc->dirty_size < c->gc_minfree_threshold)
 		return 1;
 
 	/* If there are more dirty bytes than the threshold, GC */
@@ -2807,7 +2969,6 @@ jffs_garbage_collect_thread(void *ptr)
 {
         struct jffs_control *c = (struct jffs_control *) ptr;
 	struct jffs_fmcontrol *fmc = c->fmc;
-	long erased_total = 0;
 	long erased;
 	int result = 0;
 	D1(int i = 1);
@@ -2821,7 +2982,7 @@ jffs_garbage_collect_thread(void *ptr)
 	current->pgrp = 1;
 	init_MUTEX_LOCKED(&c->gc_thread_sem); /* barrier */ 
 	spin_lock_irq(&current->sigmask_lock);
-	siginitsetinv (&current->blocked, sigmask(SIGHUP) | sigmask(SIGQUIT) | sigmask(SIGSTOP) | sigmask(SIGCONT));
+	siginitsetinv (&current->blocked, sigmask(SIGHUP) | sigmask(SIGKILL) | sigmask(SIGSTOP) | sigmask(SIGCONT));
 	recalc_sigpending(current);
 	spin_unlock_irq(&current->sigmask_lock);
 	strcpy(current->comm, "jffs_gcd");
@@ -2829,6 +2990,7 @@ jffs_garbage_collect_thread(void *ptr)
 	D1(printk (KERN_NOTICE "jffs_garbage_collect_thread(): Starting infinite loop.\n"));
 
 	for (;;) {
+
 		/* See if we need to start gc.  If we don't, go to sleep.
 		   
 		   Current implementation is a BAD THING(tm).  If we try 
@@ -2836,7 +2998,7 @@ jffs_garbage_collect_thread(void *ptr)
 		   for this thread to exit.  We need to arrange to send it a
 		   sig before the umount process sleeps.
 		*/
-		
+
 		if (!thread_should_wake(c))
 			set_current_state (TASK_INTERRUPTIBLE);
 		
@@ -2844,7 +3006,7 @@ jffs_garbage_collect_thread(void *ptr)
 				       on immediately - we're a low priority 
 				       background task. */
 
-		/* Put_super will send a SIGQUIT and then wait on the sem. 
+		/* Put_super will send a SIGKILL and then wait on the sem. 
 		 */
 		while (signal_pending(current)) {
 			siginfo_t info;
@@ -2861,8 +3023,8 @@ jffs_garbage_collect_thread(void *ptr)
 				schedule();
 				break;
 
-			case SIGQUIT:
-				D1(printk("jffs_garbage_collect_thread(): SIGQUIT received.\n"));
+			case SIGKILL:
+				D1(printk("jffs_garbage_collect_thread(): SIGKILL received.\n"));
 				c->gc_task = NULL;
 				up(&c->gc_thread_sem);
 				unlock_kernel();
@@ -2872,69 +3034,44 @@ jffs_garbage_collect_thread(void *ptr)
 
 
 		D1(printk (KERN_NOTICE "jffs_garbage_collect_thread(): collecting.\n"));
-//		printk (KERN_NOTICE "free=%d, dirty=%d, blocksize=%ld.\n", count_free_bytes(c), count_dirty_bytes(c), c->sb->s_blocksize);
 
-		D2(printk("***jffs_garbage_collect_thread(): fmc->dirty_size = %u\n",
-			  fmc->dirty_size));
-		D2(jffs_print_fmcontrol(fmc));
-		
 		if (fmc->dirty_size < fmc->sector_size) {
-			printk(KERN_WARNING "jffs_garbage_collect_thread with insufficient dirty space (0x%x)\n", fmc->dirty_size);
+			D1(printk(KERN_WARNING "jffs_garbage_collect_thread with insufficient dirty space (0x%x)\n", fmc->dirty_size));
 			continue;
 		}
 
-		down(&c->fmc->gclock);
-			
+		D3(printk (KERN_NOTICE "g_c_thread(): down biglock\n"));
+		down(&fmc->biglock);
+		
 		D1(printk("***jffs_garbage_collect_thread(): round #%u, "
 			  "fmc->dirty_size = %u\n", i++, fmc->dirty_size));
 		D2(jffs_print_fmcontrol(fmc));
-		
-		/* At least one sector should be able to free now.  */
+
 		if ((erased = jffs_try_to_erase(c)) < 0) {
 			printk(KERN_WARNING "JFFS: Error in "
-			       "garbage collector.\n");
-			result = erased;
+			       "garbage collector: %ld.\n", erased);
+		}
+
+		if (erased)
+			goto gc_end;
+
+		if (fmc->free_size == 0) {
+			/* Argh. Might as well commit suicide. */
+			printk(KERN_ERR "jffs_garbage_collect_thread(): free_size == 0. This is BAD.\n");
+			send_sig(SIGQUIT, c->gc_task, 1);
+			// panic()
 			goto gc_end;
 		}
-		else if (erased == 0) {
-			__u32 free_size = fmc->flash_size
-				- (fmc->used_size
-				   + fmc->dirty_size);
-			
-			if (free_size > 0) {
-				/* Let's dare to make a garbage collect.  */
-				if ((result = jffs_garbage_collect_next(c))
-				    < 0) {
-					printk(KERN_ERR "JFFS: Something "
-					       "has gone seriously wrong "
-					       "with a garbage collect.\n");
-					goto gc_end;
-				}
-			}
-			else {
-				/* What should we do here?  */
-				D(printk("   jffs_garbage_collect(): "
-					 "erased: %ld, free_size: %u\n",
-					 erased, free_size));
-				result = -1;
-				goto gc_end;
-			}
+		
+		/* Let's dare to make a garbage collect.  */
+		if ((result = jffs_garbage_collect_next(c)) < 0) {
+			printk(KERN_ERR "JFFS: Something "
+			       "has gone seriously wrong "
+			       "with a garbage collect: %d\n", result);
 		}
-
-		D1(printk("   jffs_garbage_collect(): erased: %ld\n", erased));
-		erased_total += erased;
-		DJM(jffs_print_memory_allocation_statistics());
-	
 		
 	gc_end:
-		up(&c->fmc->gclock);
-		
-		D3(printk("   jffs_garbage_collect(): Leaving...\n"));
-		D1(if (erased_total) {
-			printk("erased_total = %ld\n", erased_total);
-			jffs_print_fmcontrol(fmc);
-		});
-	
+		D3(printk (KERN_NOTICE "g_c_thread(): up biglock\n"));
+		up(&fmc->biglock);
 	} /* for (;;) */
 } /* jffs_garbage_collect_thread() */
-

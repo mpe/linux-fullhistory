@@ -71,7 +71,8 @@ static inline int spin_trylock(spinlock_t *lock)
 	__asm__ __volatile__(
 		"xchgb %b0,%1"
 		:"=q" (oldval), "=m" (__dummy_lock(lock))
-		:"0" (0));
+		:"0" (0)
+		:"memory");
 	return oldval > 0;
 }
 
@@ -87,7 +88,8 @@ printk("eip: %p\n", &&here);
 #endif
 	__asm__ __volatile__(
 		spin_lock_string
-		:"=m" (__dummy_lock(lock)));
+		:"=m" (__dummy_lock(lock))
+		: :"memory");
 }
 
 extern inline void spin_unlock(spinlock_t *lock)
@@ -100,7 +102,8 @@ extern inline void spin_unlock(spinlock_t *lock)
 #endif
 	__asm__ __volatile__(
 		spin_unlock_string
-		:"=m" (__dummy_lock(lock)));
+		:"=m" (__dummy_lock(lock))
+		: :"memory");
 }
 
 /*

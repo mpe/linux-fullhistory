@@ -16,30 +16,13 @@
 #include <linux/smp_lock.h>
 #include <linux/module.h>
 
-/* CHECKME: this stuff looks rather bogus */
 asmlinkage int
 do_solaris_syscall (struct pt_regs *regs)
 {
-	int ret;
-
-	lock_kernel();
-	set_personality(PER_SVR4);
-
-	if (current->exec_domain && current->exec_domain->handler){
-		current->exec_domain->handler (0, regs);
-
-		/* What is going on here?  Why do we do this? */
-
-		/* XXX current->exec_domain->use_count = 0; XXX */
-
-		ret = regs->u_regs [UREG_I0];
-	} else {
-		printk ("No solaris handler\n");
-		send_sig (SIGSEGV, current, 1);
-		ret = 0;
-	}
-	unlock_kernel();
-	return ret;
+	static int cnt = 0;
+	if (++cnt < 10) printk ("No solaris handler\n");
+	force_sig(SIGSEGV, current);
+	return 0;
 }
 
 #ifndef CONFIG_SUNOS_EMUL
@@ -48,9 +31,7 @@ do_sunos_syscall (struct pt_regs *regs)
 {
 	static int cnt = 0;
 	if (++cnt < 10) printk ("SunOS binary emulation not compiled in\n");
-	lock_kernel();
 	force_sig (SIGSEGV, current);
-	unlock_kernel();
 	return 0;
 }
 #endif

@@ -94,12 +94,13 @@ struct ip_rt_acct
 
 extern struct ip_rt_acct *ip_rt_acct;
 
+struct in_device;
 extern void		ip_rt_init(void);
 extern void		ip_rt_redirect(u32 old_gw, u32 dst, u32 new_gw,
 				       u32 src, u8 tos, struct net_device *dev);
 extern void		ip_rt_advice(struct rtable **rp, int advice);
 extern void		rt_cache_flush(int how);
-extern int		ip_route_output(struct rtable **, u32 dst, u32 src, u32 tos, int oif);
+extern int		ip_route_output_key(struct rtable **, const struct rt_key *key);
 extern int		ip_route_input(struct sk_buff*, u32 dst, u32 src, u8 tos, struct net_device *devin);
 extern unsigned short	ip_rt_frag_needed(struct iphdr *iph, unsigned short new_mtu);
 extern void		ip_rt_update_pmtu(struct dst_entry *dst, unsigned mtu);
@@ -110,6 +111,15 @@ extern void		ip_rt_multicast_event(struct in_device *);
 extern int		ip_rt_ioctl(unsigned int cmd, void *arg);
 extern void		ip_rt_get_source(u8 *src, struct rtable *rt);
 extern int		ip_rt_dump(struct sk_buff *skb,  struct netlink_callback *cb);
+
+/* Deprecated: use ip_route_output_key directly */
+extern __inline__ int ip_route_output(struct rtable **rp,
+				      u32 daddr, u32 saddr, u32 tos, int oif)
+{
+	struct rt_key key = { dst:daddr, src:saddr, oif:oif, tos:tos };
+
+	return ip_route_output_key(rp, &key);
+}
 
 
 extern __inline__ void ip_rt_put(struct rtable * rt)

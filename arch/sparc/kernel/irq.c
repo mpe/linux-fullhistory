@@ -1,4 +1,4 @@
-/*  $Id: irq.c,v 1.107 2000/08/26 02:42:28 anton Exp $
+/*  $Id: irq.c,v 1.109 2000/08/31 10:00:39 anton Exp $
  *  arch/sparc/kernel/irq.c:  Interrupt request handling routines. On the
  *                            Sparc the IRQ's are basically 'cast in stone'
  *                            and you are supposed to probe the prom's device
@@ -197,7 +197,7 @@ void free_irq(unsigned int irq, void *dev_id)
 
 #ifdef CONFIG_SMP
 
-/* Who has global_irq_lock. */
+/* Who has the global irq brlock */
 unsigned char global_irq_holder = NO_PROC_ID;
 
 void smp_show_backtrace_all_cpus(void);
@@ -329,7 +329,8 @@ void __global_sti(void)
  */
 unsigned long __global_save_flags(void)
 {
-	unsigned long flags, local_enabled, retval;
+	unsigned long flags, retval;
+	unsigned long local_enabled = 0;
 
 	__save_flags(flags);
 

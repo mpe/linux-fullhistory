@@ -227,7 +227,7 @@ void __init paging_init(void)
 			zones_size[ZONE_DMA] = max_dma - start_pfn;
 			zones_size[ZONE_NORMAL] = low - max_dma;
 		}
-		free_area_init_node(0, 0, zones_size, __MEMORY_START, 0);
+		free_area_init_node(0, 0, 0, zones_size, __MEMORY_START, 0);
  	}
 }
 

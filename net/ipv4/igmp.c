@@ -8,7 +8,7 @@
  *	the older version didn't come out right using gcc 2.5.8, the newer one
  *	seems to fall out with gcc 2.6.2.
  *
- *	Version: $Id: igmp.c,v 1.40 2000/07/26 01:04:16 davem Exp $
+ *	Version: $Id: igmp.c,v 1.41 2000/08/31 23:39:12 davem Exp $
  *
  *	Authors:
  *		Alan Cox <Alan.Cox@linux.org>
@@ -184,7 +184,10 @@ static void igmp_mod_timer(struct ip_mc_list *im, int max_delay)
 
 #define IGMP_SIZE (sizeof(struct igmphdr)+sizeof(struct iphdr)+4)
 
-static inline int igmp_send_report2(struct sk_buff *skb)
+/* Don't just hand NF_HOOK skb->dst->output, in case netfilter hook
+   changes route */
+static inline int
+output_maybe_reroute(struct sk_buff *skb)
 {
 	return skb->dst->output(skb);
 }
@@ -247,7 +250,7 @@ static int igmp_send_report(struct net_device *dev, u32 group, int type)
 	ih->csum=ip_compute_csum((void *)ih, sizeof(struct igmphdr));
 
 	return NF_HOOK(PF_INET, NF_IP_LOCAL_OUT, skb, NULL, rt->u.dst.dev,
-		       igmp_send_report2);
+		       output_maybe_reroute);
 }
 
 

@@ -342,7 +342,8 @@ ncp_d_validate(struct dentry *dentry)
 		goto bad_addr;
 	if ((dent_addr & ~align_mask) != dent_addr)
 		goto bad_align;
-	if (!kern_addr_valid(dent_addr))
+	if ((!kern_addr_valid(dent_addr)) || (!kern_addr_valid(dent_addr -1 +
+						sizeof(struct dentry))))
 		goto bad_addr;
 	/*
 	 * Looks safe enough to dereference ...

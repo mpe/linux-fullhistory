@@ -5,6 +5,11 @@
  */
 #include <linux/module.h>
 #include <linux/netfilter_ipv4/ip_tables.h>
+#include <linux/netdevice.h>
+#include <linux/skbuff.h>
+#include <net/sock.h>
+#include <net/route.h>
+#include <linux/ip.h>
 
 #define MANGLE_VALID_HOOKS ((1 << NF_IP_PRE_ROUTING) | (1 << NF_IP_LOCAL_OUT))
 
@@ -86,6 +91,34 @@ ipt_hook(unsigned int hook,
 	return ipt_do_table(pskb, hook, in, out, &packet_mangler, NULL);
 }
 
+/* FIXME: change in oif may mean change in hh_len.  Check and realloc
+   --RR */
+static int
+route_me_harder(struct sk_buff *skb)
+{
+	struct iphdr *iph = skb->nh.iph;
+	struct rtable *rt;
+	struct rt_key key = { dst:iph->daddr,
+			      src:iph->saddr,
+			      oif:skb->sk ? skb->sk->bound_dev_if : 0,
+			      tos:RT_TOS(iph->tos)|RTO_CONN,
+#ifdef CONFIG_IP_ROUTE_FWMARK
+			      fwmark:skb->nfmark
+#endif
+			    };
+
+	if (ip_route_output_key(&rt, &key) != 0) {
+		printk("route_me_harder: No more route.\n");
+		return -EINVAL;
+	}
+
+	/* Drop old route. */
+	dst_release(skb->dst);
+
+	skb->dst = &rt->u.dst;
+	return 0;
+}
+
 static unsigned int
 ipt_local_out_hook(unsigned int hook,
 		   struct sk_buff **pskb,
@@ -93,6 +126,11 @@ ipt_local_out_hook(unsigned int hook,
 		   const struct net_device *out,
 		   int (*okfn)(struct sk_buff *))
 {
+	unsigned int ret;
+	u_int8_t tos;
+	u_int32_t saddr, daddr;
+	unsigned long nfmark;
+
 	/* root is playing with raw sockets. */
 	if ((*pskb)->len < sizeof(struct iphdr)
 	    || (*pskb)->nh.iph->ihl * 4 < sizeof(struct iphdr)) {
@@ -101,7 +139,22 @@ ipt_local_out_hook(unsigned int hook,
 		return NF_ACCEPT;
 	}
 
-	return ipt_do_table(pskb, hook, in, out, &packet_mangler, NULL);
+	/* Save things which could affect route */
+	nfmark = (*pskb)->nfmark;
+	saddr = (*pskb)->nh.iph->saddr;
+	daddr = (*pskb)->nh.iph->daddr;
+	tos = (*pskb)->nh.iph->tos;
+
+	ret = ipt_do_table(pskb, hook, in, out, &packet_mangler, NULL);
+	/* Reroute for ANY change. */
+	if (ret != NF_DROP && ret != NF_STOLEN
+	    && ((*pskb)->nh.iph->saddr != saddr
+		|| (*pskb)->nh.iph->daddr != daddr
+		|| (*pskb)->nfmark != nfmark
+		|| (*pskb)->nh.iph->tos != tos))
+		return route_me_harder(*pskb) == 0 ? ret : NF_DROP;
+
+	return ret;
 }
 
 static struct nf_hook_ops ipt_ops[]

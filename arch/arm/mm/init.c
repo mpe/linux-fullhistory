@@ -528,7 +528,7 @@ void __init paging_init(struct meminfo *mi)
 			zhole_size[0] -= mi->bank[i].size >> PAGE_SHIFT;
 		}
 
-		free_area_init_node(node, pgdat, zone_size,
+		free_area_init_node(node, pgdat, 0, zone_size,
 				bdata->node_boot_start, zhole_size);
 	}
 

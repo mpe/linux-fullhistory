@@ -484,16 +484,12 @@ static size_t parport_uss720_write_compat(struct parport *pp, const void *buffer
 
 void parport_uss720_inc_use_count(void)
 {
-#ifdef MODULE
 	MOD_INC_USE_COUNT;
-#endif
 }
 
 void parport_uss720_dec_use_count(void)
 {
-#ifdef MODULE
 	MOD_DEC_USE_COUNT;
-#endif
 }
 
 /* --------------------------------------------------------------------- */

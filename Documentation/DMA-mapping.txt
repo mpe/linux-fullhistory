@@ -345,13 +345,13 @@ to use the pci_dma_sync_*() interfaces.
 			 * the DMA transfer with the CPU first
 			 * so that we see updated contents.
 			 */
-			pci_dma_sync_single(cp->pdev, cp->rx_buf, cp->rx_len,
+			pci_dma_sync_single(cp->pdev, cp->rx_dma, cp->rx_len,
 					    PCI_DMA_FROMDEVICE);
 
 			/* Now it is safe to examine the buffer. */
 			hp = (struct my_card_header *) cp->rx_buf;
 			if (header_is_ok(hp)) {
-				pci_unmap_single(cp->pdev, cp->rx_buf, cp->rx_len,
+				pci_unmap_single(cp->pdev, cp->rx_dma, cp->rx_len,
 						 PCI_DMA_FROMDEVICE);
 				pass_to_upper_layers(cp->rx_buf);
 				make_and_setup_new_rx_buf(cp);

@@ -18,8 +18,6 @@ typedef struct { int counter; } atomic_t;
 #endif
 
 #ifdef __KERNEL__
-#include <asm/system.h>
-#include <asm/psr.h>
 
 #ifndef CONFIG_SMP
 

@@ -1,4 +1,4 @@
-/* $Id: dbri.c,v 1.19 2000/02/18 13:49:42 davem Exp $
+/* $Id: dbri.c,v 1.21 2000/08/31 23:44:17 davem Exp $
  * drivers/sbus/audio/dbri.c
  *
  * Copyright (C) 1997 Rudolf Koenig (rfkoenig@immd4.informatik.uni-erlangen.de)
@@ -226,7 +226,7 @@ static void dbri_detach(struct dbri *dbri)
         free_irq(dbri->irq, dbri);
         sbus_iounmap(dbri->regs, dbri->regs_size);
         sbus_free_consistent(dbri->sdev, sizeof(struct dbri_dma),
-                             dbri->dma, dbri->dma_dvma);
+                             (void *)dbri->dma, dbri->dma_dvma);
         kfree(dbri);
 }
 
@@ -2079,7 +2079,9 @@ void dbri_liu_activate(int dev, int priority)
 void dbri_liu_deactivate(int dev)
 {
        struct dbri *dbri;
+#if 0
        u32 tmp;
+#endif
 
        if (dev >= num_drivers)
                return;
@@ -2228,7 +2230,6 @@ static int dbri_attach(struct sparcaudio_driver *drv,
 {
 	struct dbri *dbri;
 	struct linux_prom_irqs irq;
-        __u32 dma_dvma;
 	int err;
 
 	if (sdev->prom_name[9] < 'e') {
@@ -2265,7 +2266,7 @@ static int dbri_attach(struct sparcaudio_driver *drv,
 	if (!dbri->regs) {
 		printk(KERN_ERR "DBRI: could not allocate registers\n");
                 sbus_free_consistent(sdev, sizeof(struct dbri_dma),
-                                     dbri->dma, dbri->dma_dvma);
+                                     (void *)dbri->dma, dbri->dma_dvma);
 		kfree(drv->private);
 		return -EIO;
 	}
@@ -2279,7 +2280,7 @@ static int dbri_attach(struct sparcaudio_driver *drv,
 		printk(KERN_ERR "DBRI: Can't get irq %d\n", dbri->irq);
                 sbus_iounmap(dbri->regs, dbri->regs_size);
                 sbus_free_consistent(sdev, sizeof(struct dbri_dma),
-                                     dbri->dma, dbri->dma_dvma);
+                                     (void *)dbri->dma, dbri->dma_dvma);
 		kfree(drv->private);
 		return err;
 	}

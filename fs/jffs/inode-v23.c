@@ -10,7 +10,7 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * $Id: inode-v23.c,v 1.34 2000/08/10 08:58:00 dwmw2 Exp $
+ * $Id: inode-v23.c,v 1.43 2000/08/22 08:00:22 dwmw2 Exp $
  *
  *
  * Ported to Linux 2.3.x and MTD:
@@ -151,10 +151,9 @@ jffs_put_super(struct super_block *sb)
 
 	D2(printk("jffs_put_super()\n"));
 
-	D1(printk (KERN_NOTICE "jffs_put_super(): Telling gc thread to die.\n"));
 	if (c->gc_task) {
-		send_sig(SIGQUIT, c->gc_task, 1);
-		send_sig(SIGCONT, c->gc_task, 1);
+		D1(printk (KERN_NOTICE "jffs_put_super(): Telling gc thread to die.\n"));
+		send_sig(SIGKILL, c->gc_task, 1);
 	}
 	down (&c->gc_thread_sem);
 
@@ -179,54 +178,56 @@ jffs_setattr(struct dentry *dentry, struct iattr *iattr)
 	struct jffs_fmcontrol *fmc;
 	struct jffs_file *f;
 	struct jffs_node *new_node;
-	char *name = 0;
 	int update_all;
 	int res;
+	int recoverable = 0;
 
-	f = (struct jffs_file *)inode->u.generic_ip;
+	if ((res = inode_change_ok(inode, iattr)))
+		return res;
+
+	c = (struct jffs_control *)inode->i_sb->u.generic_sbp;
+	fmc = c->fmc;
+
+	D3(printk (KERN_NOTICE "notify_change(): down biglock\n"));
+	down(&fmc->biglock);
+
+	f = jffs_find_file(c, inode->i_ino);
+
 	ASSERT(if (!f) {
 		printk("jffs_setattr(): Invalid inode number: %lu\n",
 		       inode->i_ino);
-		return -1;
+		D3(printk (KERN_NOTICE "notify_change(): up biglock\n"));
+		up(&fmc->biglock);
+		return -EINVAL;
 	});
 
 	D1(printk("***jffs_setattr(): file: \"%s\", ino: %u\n",
 		  f->name, f->ino));
 
-	c = f->c;
-	fmc = c->fmc;
 	update_all = iattr->ia_valid & ATTR_FORCE;
 
-	if (!JFFS_ENOUGH_SPACE(c)) {
-		if ( (update_all || iattr->ia_valid & ATTR_SIZE)
-		     && (iattr->ia_size < f->size) ) {
-			/* See this case where someone is trying to
-			   shrink the size of a file as an exception.
-			   Accept it.  */
-			/* TODO: Might just shrink it a bit?
-			   check f->size - ia_size */
-		} else {
-			D1(printk("jffs_setattr(): Free size = %u\n",
-				  jffs_free_size1(fmc)
-				  + jffs_free_size2(fmc)));
-			D(printk(KERN_NOTICE "JFFS: No space left on "
-				 "device\n"));
-			return -ENOSPC;
-		}
-	}
+	if ( (update_all || iattr->ia_valid & ATTR_SIZE)
+	     && (iattr->ia_size + 128 < f->size) ) {
+		/* We're shrinking the file by more than 128 bytes.
+		   We'll be able to GC and recover this space, so
+		   allow it to go into the reserved space. */
+		recoverable = 1;
+        }
 
 	if (!(new_node = (struct jffs_node *)
 			 kmalloc(sizeof(struct jffs_node), GFP_KERNEL))) {
 		D(printk("jffs_setattr(): Allocation failed!\n"));
+		D3(printk (KERN_NOTICE "notify_change(): up biglock\n"));
+		up(&fmc->biglock);
 		return -ENOMEM;
 	}
+
 	DJM(no_jffs_node++);
 	new_node->data_offset = 0;
 	new_node->removed_size = 0;
 	raw_inode.magic = JFFS_MAGIC_BITMASK;
 	raw_inode.ino = f->ino;
 	raw_inode.pino = f->pino;
-	raw_inode.version = f->highest_version + 1;
 	raw_inode.mode = f->mode;
 	raw_inode.uid = f->uid;
 	raw_inode.gid = f->gid;
@@ -237,7 +238,7 @@ jffs_setattr(struct dentry *dentry, struct iattr *iattr)
 	raw_inode.offset = 0;
 	raw_inode.rsize = 0;
 	raw_inode.dsize = 0;
-	raw_inode.nsize = 0;
+	raw_inode.nsize = f->nsize;
 	raw_inode.nlink = f->nlink;
 	raw_inode.spare = 0;
 	raw_inode.rename = 0;
@@ -278,12 +279,8 @@ jffs_setattr(struct dentry *dentry, struct iattr *iattr)
 		new_node->data_offset = iattr->ia_size;
 		new_node->removed_size = len;
 		inode->i_size = iattr->ia_size;
+		inode->i_blocks = (inode->i_size + 511) >> 9;
 
-		/* If we truncate a file we want to add the name.  If we
-		   always do that, we could perhaps free more space on
-		   the flash (and besides it doesn't hurt).  */
-		name = f->name;
-		raw_inode.nsize = f->nsize;
 		if (len) {
 			invalidate_inode_pages(inode);
 		}
@@ -304,17 +301,20 @@ jffs_setattr(struct dentry *dentry, struct iattr *iattr)
 	}
 
 	/* Write this node to the flash.  */
-	if ((res = jffs_write_node(c, new_node, &raw_inode, name, 0)) < 0) {
+	if ((res = jffs_write_node(c, new_node, &raw_inode, f->name, 0, recoverable, f)) < 0) {
 		D(printk("jffs_notify_change(): The write failed!\n"));
 		kfree(new_node);
 		DJM(no_jffs_node--);
+		D3(printk (KERN_NOTICE "n_c(): up biglock\n"));
+		up(&c->fmc->biglock);
 		return res;
 	}
 
 	jffs_insert_node(c, f, &raw_inode, 0, new_node);
 
 	mark_inode_dirty(inode);
-
+	D3(printk (KERN_NOTICE "n_c(): up biglock\n"));
+	up(&c->fmc->biglock);
 	return 0;
 } /* jffs_notify_change()  */
 
@@ -403,7 +403,7 @@ jffs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	__u32 rename_data = 0;
 
 	D2(printk("***jffs_rename()\n"));
-
+	
 	D(printk("jffs_rename(): old_dir: 0x%p, old name: 0x%p, "
 		 "new_dir: 0x%p, new name: 0x%p\n",
 		 old_dir, old_dentry->d_name.name,
@@ -413,17 +413,9 @@ jffs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	ASSERT(if (!c) {
 		printk(KERN_ERR "jffs_rename(): The old_dir inode "
 		       "didn't have a reference to a jffs_file struct\n");
-		return -1;
+		return -EIO;
 	});
 
-	if (!JFFS_ENOUGH_SPACE(c)) {
-		D1(printk("jffs_rename(): Free size = %u\n",
-			  jffs_free_size1(c->fmc) + jffs_free_size2(c->fmc)));
-		D(printk(KERN_NOTICE "JFFS: No space left on device\n"));
-		return -ENOSPC;
-	}
-
-	/* Find the old directory.  */
 	result = -ENOTDIR;
 	if (!(old_dir_f = (struct jffs_file *)old_dir->u.generic_ip)) {
 		D(printk("jffs_rename(): Old dir invalid.\n"));
@@ -443,7 +435,8 @@ jffs_rename(struct inode *old_dir, struct dentry *old_dentry,
 		D(printk("jffs_rename(): New dir invalid.\n"));
 		goto jffs_rename_end;
 	}
-
+	D3(printk (KERN_NOTICE "rename(): down biglock\n"));
+	down(&c->fmc->biglock);
 	/* Create a node and initialize as much as needed.  */
 	result = -ENOMEM;
 	if (!(node = (struct jffs_node *) kmalloc(sizeof(struct jffs_node),
@@ -459,7 +452,7 @@ jffs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	raw_inode.magic = JFFS_MAGIC_BITMASK;
 	raw_inode.ino = f->ino;
 	raw_inode.pino = new_dir_f->ino;
-	raw_inode.version = f->highest_version + 1;
+/*  	raw_inode.version = f->highest_version + 1; */
 	raw_inode.mode = f->mode;
 	raw_inode.uid = current->fsuid;
 	raw_inode.gid = current->fsgid;
@@ -491,7 +484,7 @@ jffs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	/* Write the new node to the flash memory.  */
 	if ((result = jffs_write_node(c, node, &raw_inode,
 				      new_dentry->d_name.name,
-				      (unsigned char*)&rename_data)) < 0) {
+				      (unsigned char*)&rename_data, 0, f)) < 0) {
 		D(printk("jffs_rename(): Failed to write node to flash.\n"));
 		kfree(node);
 		DJM(no_jffs_node--);
@@ -501,14 +494,14 @@ jffs_rename(struct inode *old_dir, struct dentry *old_dentry,
 
 	if (raw_inode.rename) {
 		/* The file with the same name must be deleted.  */
-	        down(&c->fmc->gclock);
+		//FIXME deadlock	        down(&c->fmc->gclock);
 		if ((result = jffs_remove(new_dir, new_dentry,
 					  del_f->mode)) < 0) {
 			/* This is really bad.  */
 			printk(KERN_ERR "JFFS: An error occurred in "
 			       "rename().\n");
 		}
-		up(&c->fmc->gclock);
+		//		up(&c->fmc->gclock);
 	}
 
 	if (old_dir_f != new_dir_f) {
@@ -539,6 +532,8 @@ jffs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	}
 
 jffs_rename_end:
+	D3(printk (KERN_NOTICE "rename(): up biglock\n"));
+	up(&c->fmc->biglock);
 	return result;
 } /* jffs_rename()  */
 
@@ -551,13 +546,18 @@ jffs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	struct jffs_file *f;
 	struct dentry *dentry = filp->f_dentry;
 	struct inode *inode = dentry->d_inode;
+	struct jffs_control *c = (struct jffs_control *)inode->i_sb->u.generic_sbp;
 	int j;
 	int ddino;
+	D3(printk (KERN_NOTICE "readdir(): down biglock\n"));
+	down(&c->fmc->biglock);
 
 	D2(printk("jffs_readdir(): inode: 0x%p, filp: 0x%p\n", inode, filp));
 	if (filp->f_pos == 0) {
 		D3(printk("jffs_readdir(): \".\" %lu\n", inode->i_ino));
 		if (filldir(dirent, ".", 1, filp->f_pos, inode->i_ino, DT_DIR) < 0) {
+		  D3(printk (KERN_NOTICE "readdir(): up biglock\n"));
+			up(&c->fmc->biglock);
 			return 0;
 		}
 		filp->f_pos = 1;
@@ -571,8 +571,11 @@ jffs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 				 inode->u.generic_ip)->pino;
 		}
 		D3(printk("jffs_readdir(): \"..\" %u\n", ddino));
-		if (filldir(dirent, "..", 2, filp->f_pos, ddino, DT_DIR) < 0)
+		if (filldir(dirent, "..", 2, filp->f_pos, ddino, DT_DIR) < 0) {
+		  D3(printk (KERN_NOTICE "readdir(): up biglock\n"));
+			up(&c->fmc->biglock);
 			return 0;
+		}
 		filp->f_pos++;
 	}
 	f = ((struct jffs_file *)inode->u.generic_ip)->children;
@@ -583,11 +586,15 @@ jffs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		D3(printk("jffs_readdir(): \"%s\" ino: %u\n",
 			  (f->name ? f->name : ""), f->ino));
 		if (filldir(dirent, f->name, f->nsize,
-			    filp->f_pos , f->ino, DT_UNKNOWN) < 0)
+			    filp->f_pos , f->ino, DT_UNKNOWN) < 0) {
+		        D3(printk (KERN_NOTICE "readdir(): up biglock\n"));
+			up(&c->fmc->biglock);
 			return 0;
+		}
 		filp->f_pos++;
 	}
-
+	D3(printk (KERN_NOTICE "readdir(): up biglock\n"));
+	up(&c->fmc->biglock);
 	return filp->f_pos;
 } /* jffs_readdir()  */
 
@@ -599,6 +606,7 @@ jffs_lookup(struct inode *dir, struct dentry *dentry)
 {
 	struct jffs_file *d;
 	struct jffs_file *f;
+	struct jffs_control *c = (struct jffs_control *)dir->i_sb->u.generic_sbp;
 	int len;
 	int r = 0;
 	const char *name;
@@ -615,6 +623,9 @@ jffs_lookup(struct inode *dir, struct dentry *dentry)
 		kfree(s);
 	});
 
+	D3(printk (KERN_NOTICE "lookup(): down biglock\n"));
+	down(&c->fmc->biglock);
+
 	r = -ENAMETOOLONG;
 	if (len > JFFS_MAX_NAME_LEN) {
 		goto jffs_lookup_end;
@@ -628,21 +639,39 @@ jffs_lookup(struct inode *dir, struct dentry *dentry)
 	}
 
 	/* Get the corresponding inode to the file.  */
+
+	/* iget calls jffs_read_inode, so we need to drop the biglock
+           before calling iget.  Unfortunately, the GC has a tendency
+           to sneak in here, because iget sometimes calls schedule (). 
+         */
+
 	if ((len == 1) && (name[0] == '.')) {
+                D3(printk (KERN_NOTICE "lookup(): up biglock\n"));
+		up(&c->fmc->biglock);
 		if (!(inode = iget(dir->i_sb, d->ino))) {
 			D(printk("jffs_lookup(): . iget() ==> NULL\n"));
-			goto jffs_lookup_end;
+			goto jffs_lookup_end_no_biglock;
 		}
+		D3(printk (KERN_NOTICE "lookup(): down biglock\n"));
+		down(&c->fmc->biglock);
 	} else if ((len == 2) && (name[0] == '.') && (name[1] == '.')) {
-		if (!(inode = iget(dir->i_sb, d->pino))) {
+	        D3(printk (KERN_NOTICE "lookup(): up biglock\n"));
+		up(&c->fmc->biglock);
+ 		if (!(inode = iget(dir->i_sb, d->pino))) {
 			D(printk("jffs_lookup(): .. iget() ==> NULL\n"));
-			goto jffs_lookup_end;
+			goto jffs_lookup_end_no_biglock;
 		}
+		D3(printk (KERN_NOTICE "lookup(): down biglock\n"));
+		down(&c->fmc->biglock);
 	} else if ((f = jffs_find_child(d, name, len))) {
+	        D3(printk (KERN_NOTICE "lookup(): up biglock\n"));
+		up(&c->fmc->biglock);
 		if (!(inode = iget(dir->i_sb, f->ino))) {
 			D(printk("jffs_lookup(): iget() ==> NULL\n"));
-			goto jffs_lookup_end;
+			goto jffs_lookup_end_no_biglock;
 		}
+		D3(printk (KERN_NOTICE "lookup(): down biglock\n"));
+		down(&c->fmc->biglock);
 	} else {
 		D3(printk("jffs_lookup(): Couldn't find the file. "
 			  "f = 0x%p, name = \"%s\", d = 0x%p, d->ino = %u\n",
@@ -651,9 +680,15 @@ jffs_lookup(struct inode *dir, struct dentry *dentry)
 	}
 
 	d_add(dentry, inode);
+	D3(printk (KERN_NOTICE "lookup(): up biglock\n"));
+	up(&c->fmc->biglock);
 	return NULL;
 
 jffs_lookup_end:
+	D3(printk (KERN_NOTICE "lookup(): up biglock\n"));
+	up(&c->fmc->biglock);
+
+jffs_lookup_end_no_biglock:
 	return ERR_PTR(r);
 } /* jffs_lookup()  */
 
@@ -667,6 +702,7 @@ jffs_readpage(struct file *file, struct page *page)
 	int result = -EIO;
 	struct inode *inode = (struct inode*)page->mapping->host;
 	struct jffs_file *f = (struct jffs_file *)inode->u.generic_ip;
+	struct jffs_control *c = (struct jffs_control *)inode->i_sb->u.generic_sbp;
 	int r;
 	loff_t offset;
 
@@ -678,6 +714,9 @@ jffs_readpage(struct file *file, struct page *page)
 	buf = page_address(page);
 	ClearPageUptodate(page);
 	ClearPageError(page);
+
+	D3(printk (KERN_NOTICE "readpage(): down biglock\n"));
+	down(&c->fmc->biglock);
 
 	offset = page->index << PAGE_CACHE_SHIFT;
 	if (offset < inode->i_size) {
@@ -697,6 +736,10 @@ jffs_readpage(struct file *file, struct page *page)
 			       "read %d bytes.\n", read_len, r);
 		});
 	}
+
+	D3(printk (KERN_NOTICE "readpage(): up biglock\n"));
+	up(&c->fmc->biglock);
+	
 	if (result) {
 		memset(buf, 0, PAGE_SIZE);
 	        SetPageError(page);
@@ -737,22 +780,16 @@ jffs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	});
 
 	dir_f = (struct jffs_file *)dir->u.generic_ip;
+
 	ASSERT(if (!dir_f) {
 		printk(KERN_ERR "jffs_mkdir(): No reference to a "
 		       "jffs_file struct in inode.\n");
-		result = -1;
-		goto jffs_mkdir_end;
+		return -EIO;
 	});
 
 	c = dir_f->c;
-
-	if (!JFFS_ENOUGH_SPACE(c)) {
-		D1(printk("jffs_mkdir(): Free size = %u\n",
-			  jffs_free_size1(c->fmc) + jffs_free_size2(c->fmc)));
-		D(printk(KERN_NOTICE "JFFS: No space left on device\n"));
-		result = -ENOSPC;
-		goto jffs_mkdir_end;
-	}
+	D3(printk (KERN_NOTICE "mkdir(): down biglock\n"));
+	down(&c->fmc->biglock);
 
 	dir_mode = S_IFDIR | (mode & (S_IRWXUGO|S_ISVTX)
 			      & ~current->fs->umask);
@@ -794,7 +831,7 @@ jffs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 
 	/* Write the new node to the flash.  */
 	if ((result = jffs_write_node(c, node, &raw_inode,
-				      dentry->d_name.name, 0)) < 0) {
+				      dentry->d_name.name, 0, 0, NULL)) < 0) {
 		D(printk("jffs_mkdir(): jffs_write_node() failed.\n"));
 		kfree(node);
 		DJM(no_jffs_node--);
@@ -821,6 +858,8 @@ jffs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 
 	result = 0;
 jffs_mkdir_end:
+	D3(printk (KERN_NOTICE "mkdir(): up biglock\n"));
+	up(&c->fmc->biglock);
 	return result;
 } /* jffs_mkdir()  */
 
@@ -829,8 +868,15 @@ jffs_mkdir_end:
 static int
 jffs_rmdir(struct inode *dir, struct dentry *dentry)
 {
+	struct jffs_control *c = (struct jffs_control *)dir->i_sb->u.generic_sbp;
+	int ret;
 	D3(printk("***jffs_rmdir()\n"));
-	return jffs_remove(dir, dentry, S_IFDIR);
+	D3(printk (KERN_NOTICE "rmdir(): down biglock\n"));
+	down(&c->fmc->biglock);
+	ret = jffs_remove(dir, dentry, S_IFDIR);
+	D3(printk (KERN_NOTICE "rmdir(): up biglock\n"));
+	up(&c->fmc->biglock);
+	return ret;
 }
 
 
@@ -838,8 +884,16 @@ jffs_rmdir(struct inode *dir, struct dentry *dentry)
 static int
 jffs_unlink(struct inode *dir, struct dentry *dentry)
 {
+	struct jffs_control *c = (struct jffs_control *)dir->i_sb->u.generic_sbp;
+	int ret; 
+
 	D3(printk("***jffs_unlink()\n"));
-	return jffs_remove(dir, dentry, 0);
+	D3(printk (KERN_NOTICE "unlink(): down biglock\n"));
+	down(&c->fmc->biglock);
+	ret = jffs_remove(dir, dentry, 0);
+	D3(printk (KERN_NOTICE "unlink(): up biglock\n"));
+	up(&c->fmc->biglock);
+	return ret;
 }
 
 
@@ -862,7 +916,7 @@ jffs_remove(struct inode *dir, struct dentry *dentry, int type)
 		char *_name = (char *) kmalloc(len + 1, GFP_KERNEL);
 		memcpy(_name, name, len);
 		_name[len] = '\0';
-		printk("***jffs_remove(): file = \"%s\"\n", _name);
+		printk("***jffs_remove(): file = \"%s\", ino = %ld\n", _name, dentry->d_inode->i_ino);
 		kfree(_name);
 	});
 
@@ -916,7 +970,7 @@ jffs_remove(struct inode *dir, struct dentry *dentry, int type)
 	raw_inode.magic = JFFS_MAGIC_BITMASK;
 	raw_inode.ino = del_f->ino;
 	raw_inode.pino = del_f->pino;
-	raw_inode.version = del_f->highest_version + 1;
+/*  	raw_inode.version = del_f->highest_version + 1; */
 	raw_inode.mode = del_f->mode;
 	raw_inode.uid = current->fsuid;
 	raw_inode.gid = current->fsgid;
@@ -933,7 +987,7 @@ jffs_remove(struct inode *dir, struct dentry *dentry, int type)
 	raw_inode.deleted = 1;
 
 	/* Write the new node to the flash memory.  */
-	if (jffs_write_node(c, del_node, &raw_inode, 0, 0) < 0) {
+	if (jffs_write_node(c, del_node, &raw_inode, 0, 0, 1, del_f) < 0) {
 		kfree(del_node);
 		DJM(no_jffs_node--);
 		result = -EIO;
@@ -979,13 +1033,8 @@ jffs_mknod(struct inode *dir, struct dentry *dentry, int mode, int rdev)
 	dir_f = (struct jffs_file *)dir->u.generic_ip;
 	c = dir_f->c;
 
-	if (!JFFS_ENOUGH_SPACE(c)) {
-		D1(printk("jffs_mknod(): Free size = %u\n",
-			  jffs_free_size1(c->fmc) + jffs_free_size2(c->fmc)));
-		D(printk(KERN_NOTICE "JFFS: No space left on device\n"));
-		result = -ENOSPC;
-		goto jffs_mknod_end;
-	}
+	D3(printk (KERN_NOTICE "mknod(): down biglock\n"));
+	down(&c->fmc->biglock);
 
 	/* Create and initialize a new node.  */
 	if (!(node = (struct jffs_node *) kmalloc(sizeof(struct jffs_node),
@@ -1021,7 +1070,7 @@ jffs_mknod(struct inode *dir, struct dentry *dentry, int mode, int rdev)
 
 	/* Write the new node to the flash.  */
 	if ((err = jffs_write_node(c, node, &raw_inode, dentry->d_name.name,
-				  (unsigned char *)&dev)) < 0) {
+				  (unsigned char *)&dev, 0, NULL)) < 0) {
 		D(printk("jffs_mknod(): jffs_write_node() failed.\n"));
 		result = err;
 		goto jffs_mknod_err;
@@ -1053,6 +1102,8 @@ jffs_mknod_err:
 	}
 
 jffs_mknod_end:
+	D3(printk (KERN_NOTICE "mknod(): up biglock\n"));
+	up(&c->fmc->biglock);
 	return result;
 } /* jffs_mknod()  */
 
@@ -1088,17 +1139,10 @@ jffs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 	ASSERT(if (!dir_f) {
 		printk(KERN_ERR "jffs_symlink(): No reference to a "
 		       "jffs_file struct in inode.\n");
-		return -1;
+		return -EIO;
 	});
 
 	c = dir_f->c;
-
-	if (!JFFS_ENOUGH_SPACE(c)) {
-		D1(printk("jffs_symlink(): Free size = %u\n",
-			  jffs_free_size1(c->fmc) + jffs_free_size2(c->fmc)));
-		D(printk(KERN_NOTICE "JFFS: No space left on device\n"));
-		return -ENOSPC;
-	}
 
 	/* Create a node and initialize it as much as needed.  */
 	if (!(node = (struct jffs_node *) kmalloc(sizeof(struct jffs_node),
@@ -1106,6 +1150,9 @@ jffs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 		D(printk("jffs_symlink(): Allocation failed: node = NULL\n"));
 		return -ENOMEM;
 	}
+	D3(printk (KERN_NOTICE "symlink(): down biglock\n"));
+	down(&c->fmc->biglock);
+
 	DJM(no_jffs_node++);
 	node->data_offset = 0;
 	node->removed_size = 0;
@@ -1132,30 +1179,32 @@ jffs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 
 	/* Write the new node to the flash.  */
 	if ((err = jffs_write_node(c, node, &raw_inode, dentry->d_name.name,
-				   (const unsigned char *)symname)) < 0) {
+				   (const unsigned char *)symname, 0, NULL)) < 0) {
 		D(printk("jffs_symlink(): jffs_write_node() failed.\n"));
 		kfree(node);
 		DJM(no_jffs_node--);
-		return err;
+		goto jffs_symlink_end;
 	}
 
 	/* Insert the new node into the file system.  */
 	if ((err = jffs_insert_node(c, 0, &raw_inode, dentry->d_name.name,
 				    node)) < 0) {
-		return err;
+		goto jffs_symlink_end;
 	}
 
 	inode = jffs_new_inode(dir, &raw_inode, &err);
 	if (inode == NULL) {
-		return err;
+		goto jffs_symlink_end;
 	}
-
+	err = 0;
 	inode->i_op = &page_symlink_inode_operations;
 	inode->i_mapping->a_ops = &jffs_address_operations;
 
 	d_instantiate(dentry, inode);
-
-	return 0;
+ jffs_symlink_end:
+	D3(printk (KERN_NOTICE "symlink(): up biglock\n"));
+	up(&c->fmc->biglock);
+	return err;
 } /* jffs_symlink()  */
 
 
@@ -1191,17 +1240,10 @@ jffs_create(struct inode *dir, struct dentry *dentry, int mode)
 	ASSERT(if (!dir_f) {
 		printk(KERN_ERR "jffs_create(): No reference to a "
 		       "jffs_file struct in inode.\n");
-		return -1;
+		return -EIO;
 	});
 
 	c = dir_f->c;
-
-	if (!JFFS_ENOUGH_SPACE(c)) {
-		D1(printk("jffs_create(): Free size = %u\n",
-			  jffs_free_size1(c->fmc) + jffs_free_size2(c->fmc)));
-		D(printk(KERN_NOTICE "JFFS: No space left on device\n"));
-		return -ENOSPC;
-	}
 
 	/* Create a node and initialize as much as needed.  */
 	if (!(node = (struct jffs_node *) kmalloc(sizeof(struct jffs_node),
@@ -1209,6 +1251,9 @@ jffs_create(struct inode *dir, struct dentry *dentry, int mode)
 		D(printk("jffs_create(): Allocation failed: node == 0\n"));
 		return -ENOMEM;
 	}
+	D3(printk (KERN_NOTICE "create(): down biglock\n"));
+	down(&c->fmc->biglock);
+
 	DJM(no_jffs_node++);
 	node->data_offset = 0;
 	node->removed_size = 0;
@@ -1235,33 +1280,35 @@ jffs_create(struct inode *dir, struct dentry *dentry, int mode)
 
 	/* Write the new node to the flash.  */
 	if ((err = jffs_write_node(c, node, &raw_inode,
-				   dentry->d_name.name, 0)) < 0) {
+				   dentry->d_name.name, 0, 0, NULL)) < 0) {
 		D(printk("jffs_create(): jffs_write_node() failed.\n"));
 		kfree(node);
 		DJM(no_jffs_node--);
-		return err;
+		goto jffs_create_end;
 	}
 
 	/* Insert the new node into the file system.  */
 	if ((err = jffs_insert_node(c, 0, &raw_inode, dentry->d_name.name,
 				    node)) < 0) {
-		return err;
+		goto jffs_create_end;
 	}
 
 	/* Initialize an inode.  */
 	inode = jffs_new_inode(dir, &raw_inode, &err);
 	if (inode == NULL) {
-		return err;
+		goto jffs_create_end;
 	}
-
+	err = 0;
 	inode->i_op = &jffs_file_inode_operations;
 	inode->i_fop = &jffs_file_operations;
 	inode->i_mapping->a_ops = &jffs_address_operations;
 	inode->i_mapping->nrpages = 0;
 
 	d_instantiate(dentry, inode);
-
-	return 0;
+ jffs_create_end:
+	D3(printk (KERN_NOTICE "create(): up biglock\n"));
+	up(&c->fmc->biglock);
+	return err;
 } /* jffs_create()  */
 
 
@@ -1277,7 +1324,9 @@ jffs_file_write(struct file *filp, const char *buf, size_t count,
 	struct dentry *dentry = filp->f_dentry;
 	struct inode *inode = dentry->d_inode;
 	unsigned char *vbuf;
-	int written = 0;
+	int recoverable = 0;
+	size_t written = 0;
+	__u32 thiscount = count;
 	loff_t pos;
 	int err;
 
@@ -1287,147 +1336,176 @@ jffs_file_write(struct file *filp, const char *buf, size_t count,
 		  "filp: 0x%p, buf: 0x%p, count: %d\n",
 		  inode, inode->i_ino, filp, buf, count));
 
-	down(&inode->i_sem);
-
-	pos = *ppos;
-	err = -EINVAL;
-	if (pos < 0)
-		goto out;
-
 	err = filp->f_error;
 	if (err) {
 		filp->f_error = 0;
-		goto out;
+		return err;
 	}
+
+	down(&inode->i_sem);
 
 	if (inode->i_sb->s_flags & MS_RDONLY) {
 		D(printk("jffs_file_write(): MS_RDONLY\n"));
-		err = -ENOSPC;
-		goto out;
+		err = -EROFS;
+		goto out_isem;
 	}
+
+	err = -EINVAL;
 
 	if (!S_ISREG(inode->i_mode)) {
 		D(printk("jffs_file_write(): inode->i_mode == 0x%08x\n",
 			 inode->i_mode));
-		err = -EINVAL;
-		goto out;
+		goto out_isem;
 	}
 
 	if (!(f = (struct jffs_file *)inode->u.generic_ip)) {
 		D(printk("jffs_file_write(): inode->u.generic_ip = 0x%p\n",
 			 inode->u.generic_ip));
-		err = -EINVAL;
-		goto out;
+		goto out_isem;
 	}
 
 	c = f->c;
 
-	if (!JFFS_ENOUGH_SPACE(c)) {
-		D1(printk("jffs_file_write(): Free size = %u\n",
-			  jffs_free_size1(c->fmc) + jffs_free_size2(c->fmc)));
-		D(printk(KERN_NOTICE "JFFS: No space left on device\n"));
-		err = -ENOSPC;
-		goto out;
-	}
-
 	if (filp->f_flags & O_APPEND)
 		pos = inode->i_size;
+	else
+		pos = *ppos;
+	
+	if (pos < 0) {
+		goto out_isem;
+	}
+	
+	thiscount = jffs_min(c->fmc->max_chunk_size - sizeof(struct jffs_raw_inode), count);
 
-
-	if (!(vbuf = kmalloc(count, GFP_KERNEL))) {
+	if (!(vbuf = kmalloc(thiscount, GFP_KERNEL))) {
 		D(printk("jffs_file_write(): failed to allocate bounce buffer. Fix me to use page cache\n"));
 		err = -ENOMEM;
-		goto out;
+		goto out_isem;
 	}
 
-	/* FIXME: This is entirely gratuitous use of bounce buffers.
-	   Get a clue and use the page cache. 
-	   /me wanders off to get a crash course on Linux VFS
-	   dwmw2
-	*/
-	if (copy_from_user(vbuf, buf, count)) {
-		kfree(vbuf);
-		return -EFAULT;
-	}
+	D3(printk (KERN_NOTICE "file_write(): down biglock\n"));
+	down(&c->fmc->biglock);
+
+	/* Urgh. POSIX says we can do short writes if we feel like it. 
+	 * In practice, we can't. Nothing will cope. So we loop until
+	 * we're done.
+	 *
+	 * <_Anarchy_> posix and reality are not interconnected on this issue
+	 */
+	while (count) {
+
+		/* FIXME: This is entirely gratuitous use of bounce buffers.
+		   Get a clue and use the page cache. 
+		   /me wanders off to get a crash course on Linux VFS
+		   dwmw2
+		*/
+		if (copy_from_user(vbuf, buf, thiscount)) {
+			err = -EFAULT;
+			goto out;
+		}
 		
+		/* Things are going to be written so we could allocate and
+		   initialize the necessary data structures now.  */
+		if (!(node = (struct jffs_node *) kmalloc(sizeof(struct jffs_node),
+							  GFP_KERNEL))) {
+			D(printk("jffs_file_write(): node == 0\n"));
+			err = -ENOMEM;
+			goto out;
+		}
+		DJM(no_jffs_node++);
+		
+		node->data_offset = pos;
+		node->removed_size = 0;
+		
+		/* Initialize the raw inode.  */
+		raw_inode.magic = JFFS_MAGIC_BITMASK;
+		raw_inode.ino = f->ino;
+		raw_inode.pino = f->pino;
 
-	/* Things are going to be written so we could allocate and
-	   initialize the necessary data structures now.  */
-	if (!(node = (struct jffs_node *) kmalloc(sizeof(struct jffs_node),
-						  GFP_KERNEL))) {
-		D(printk("jffs_file_write(): node == 0\n"));
-		err = -ENOMEM;
-		kfree(vbuf);
-		goto out;
+		raw_inode.mode = f->mode;
+		
+		raw_inode.uid = f->uid;
+		raw_inode.gid = f->gid;
+		raw_inode.atime = CURRENT_TIME;
+		raw_inode.mtime = raw_inode.atime;
+		raw_inode.ctime = f->ctime;
+		raw_inode.offset = pos;
+		raw_inode.dsize = thiscount;
+		raw_inode.rsize = 0;
+		raw_inode.nsize = f->nsize;
+		raw_inode.nlink = f->nlink;
+		raw_inode.spare = 0;
+		raw_inode.rename = 0;
+		raw_inode.deleted = 0;
+		
+		if (pos < f->size) {
+			node->removed_size = raw_inode.rsize = jffs_min(thiscount, f->size - pos);
+			
+			/* If this node is going entirely over the top of old data, 
+			   we can allow it to go into the reserved space, because 
+			   we can that GC can reclaim the space later.
+			*/
+			if (pos + thiscount < f->size) {
+				/* If all the data we're overwriting are _real_,
+				   not just holes, then:
+				   recoverable = 1;
+				*/
+			}
+		}
+		
+		/* Write the new node to the flash.  */
+		/* NOTE: We would be quite happy if jffs_write_node() wrote a 
+		   smaller node than we were expecting. There's no need for it 
+		   to waste the space at the end of the flash just because it's 
+		   a little smaller than what we asked for. But that's a whole
+		   new can of worms which I'm not going to open this week. dwmw2.
+		*/
+		if ((err = jffs_write_node(c, node, &raw_inode, f->name,
+					   (const unsigned char *)vbuf,
+					   recoverable, f)) < 0) {
+			D(printk("jffs_file_write(): jffs_write_node() failed.\n"));
+			kfree(node);
+			DJM(no_jffs_node--);
+			goto out;
+		}
+
+		written += err;
+		buf += err;
+		count -= err;
+		pos += err;
+
+		/* Insert the new node into the file system.  */
+		if ((err = jffs_insert_node(c, f, &raw_inode, 0, node)) < 0) {
+			goto out;
+		}
+
+		D3(printk("jffs_file_write(): new f_pos %ld.\n", (long)pos));
+
+		thiscount = jffs_min(c->fmc->max_chunk_size - sizeof(struct jffs_raw_inode), count);
 	}
-	DJM(no_jffs_node++);
-	node->data_offset = pos;
-	node->removed_size = 0;
-
-	/* Initialize the raw inode.  */
-	raw_inode.magic = JFFS_MAGIC_BITMASK;
-	raw_inode.ino = f->ino;
-	raw_inode.pino = f->pino;
-	raw_inode.version = f->highest_version + 1;
-	raw_inode.mode = f->mode;
-
-	raw_inode.uid = f->uid;
-	raw_inode.gid = f->gid;
-	/*
-	raw_inode.uid = current->fsuid;
-	raw_inode.gid = current->fsgid;
-	*/
-	raw_inode.atime = CURRENT_TIME;
-	raw_inode.mtime = raw_inode.atime;
-	raw_inode.ctime = f->ctime;
-	raw_inode.offset = pos;
-	raw_inode.dsize = count;
-	raw_inode.rsize = 0;
-	raw_inode.nsize = 0;
-	raw_inode.nlink = f->nlink;
-	raw_inode.spare = 0;
-	raw_inode.rename = 0;
-	raw_inode.deleted = 0;
-
-	if (pos < f->size) {
-		node->removed_size = raw_inode.rsize = jffs_min(count, f->size - pos);
-	}
-
-	/* Write the new node to the flash.  */
-	if ((written = jffs_write_node(c, node, &raw_inode, 0,
-				       (const unsigned char *)vbuf)) < 0) {
-		D(printk("jffs_file_write(): jffs_write_node() failed.\n"));
-		kfree(node);
-		kfree(vbuf);
-		DJM(no_jffs_node--);
-		err = written;
-		goto out;
-	}
-
-	kfree(vbuf);
-
-	/* Insert the new node into the file system.  */
-	if ((err = jffs_insert_node(c, f, &raw_inode, 0, node)) < 0) {
-		goto out;
-	}
-
-	pos += written;
+ out:
+	D3(printk (KERN_NOTICE "file_write(): up biglock\n"));
+	up(&c->fmc->biglock);
 	*ppos = pos;
-
-	D3(printk("jffs_file_write(): new f_pos %ld.\n", (long)pos));
+	kfree(vbuf);
 
 	/* Fix things in the real inode.  */
 	if (pos > inode->i_size) {
 		inode->i_size = pos;
+		inode->i_blocks = (inode->i_size + 511) >> 9;
 	}
 	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
 	mark_inode_dirty(inode);
 	invalidate_inode_pages(inode);
 
-	err = written;
-out:
+ out_isem:
 	up(&inode->i_sem);
-	return err;
+	
+	/* What if there was an error, _and_ we've written some data. */
+	if (written)
+		return written;
+	else
+		return err;
 } /* jffs_file_write()  */
 
 
@@ -1437,6 +1515,7 @@ jffs_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 	   unsigned long arg)
 {
 	struct jffs_control *c;
+	int ret = 0;
 
 	D2(printk("***jffs_ioctl(): cmd = 0x%08x, arg = 0x%08lx\n",
 		  cmd, arg));
@@ -1446,6 +1525,8 @@ jffs_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 		       "(cmd = 0x%08x)\n", cmd);
 		return -EIO;
 	}
+	D3(printk (KERN_NOTICE "ioctl(): down biglock\n"));
+	down(&c->fmc->biglock);
 
 	switch (cmd) {
 	case JFFS_PRINT_HASH:
@@ -1464,7 +1545,8 @@ jffs_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 				       sizeof(struct jffs_flash_status))) {
 				D(printk("jffs_ioctl(): Bad arg in "
 					 "JFFS_GET_STATUS ioctl!\n"));
-				return -EFAULT;
+				ret = -EFAULT;
+				break;
 			}
 			fst.size = fmc->flash_size;
 			fst.used = fmc->used_size;
@@ -1478,15 +1560,16 @@ jffs_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 			if (copy_to_user((struct jffs_flash_status *)arg,
 					 &fst,
 					 sizeof(struct jffs_flash_status))) {
-			  return -EFAULT;
+			  ret = -EFAULT;
 			}
 		}
 		break;
 	default:
-		return -ENOTTY;
+		ret = -ENOTTY;
 	}
-
-	return 0;
+	D3(printk (KERN_NOTICE "ioctl(): up biglock\n"));
+	up(&c->fmc->biglock);
+	return ret;
 } /* jffs_ioctl()  */
 
 
@@ -1555,9 +1638,13 @@ jffs_read_inode(struct inode *inode)
 		return;
 	}
 	c = (struct jffs_control *)inode->i_sb->u.generic_sbp;
+	D3(printk (KERN_NOTICE "read_inode(): down biglock\n"));
+	down(&c->fmc->biglock);
 	if (!(f = jffs_find_file(c, inode->i_ino))) {
 		D(printk("jffs_read_inode(): No such inode (%lu).\n",
 			 inode->i_ino));
+		D3(printk (KERN_NOTICE "read_inode(): up biglock\n"));
+		up(&c->fmc->biglock);
 		return;
 	}
 	inode->u.generic_ip = (void *)f;
@@ -1592,6 +1679,8 @@ jffs_read_inode(struct inode *inode)
 		jffs_read_data(f, (char *)&rdev, 0, sizeof(kdev_t));
 		init_special_inode(inode, inode->i_mode, kdev_t_to_nr(rdev));
 	}
+	D3(printk (KERN_NOTICE "read_inode(): up biglock\n"));
+	up(&c->fmc->biglock);
 }
 
 
@@ -1603,6 +1692,7 @@ jffs_delete_inode(struct inode *inode)
 
 	lock_kernel();
 	inode->i_size = 0;
+	inode->i_blocks = 0;
 	clear_inode(inode);
 	unlock_kernel();
 }

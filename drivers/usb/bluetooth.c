@@ -6,6 +6,9 @@
  *
  * USB Bluetooth driver, based on the Bluetooth Spec version 1.0B
  *
+ * (08/06/2000) Version 0.5 gkh
+ *	Fixed problem of not resubmitting the bulk read urb if there is
+ *	an error in the callback.  Ericsson devices seem to need this.
  *
  * (07/11/2000) Version 0.4 gkh
  *	Fixed bug in disconnect for when we call tty_hangup
@@ -796,17 +799,17 @@ static void bluetooth_read_bulk_callback (struct urb *urb)
 
 	if (!bluetooth) {
 		dbg(__FUNCTION__ " - bad bluetooth pointer, exiting");
-		return;
+		goto exit;
 	}
 
 	if (urb->status) {
 		dbg(__FUNCTION__ " - nonzero read bulk status received: %d", urb->status);
-		return;
+		goto exit;
 	}
 
 	if (!count) {
 		dbg(__FUNCTION__ " - zero length read bulk");
-		return;
+		goto exit;
 	}
 
 #ifdef DEBUG
@@ -832,9 +835,7 @@ static void bluetooth_read_bulk_callback (struct urb *urb)
 	if (bluetooth->bulk_packet_pos + count > ACL_BUFFER_SIZE) {
 		err(__FUNCTION__ " - exceeded ACL_BUFFER_SIZE");
 		bluetooth->bulk_packet_pos = 0;
-		if (usb_submit_urb(urb))
-			dbg(__FUNCTION__ " - failed resubmitting read urb");
-		return;
+		goto exit;
 	}
 
 	memcpy (&bluetooth->bulk_buffer[bluetooth->bulk_packet_pos],
@@ -845,17 +846,13 @@ static void bluetooth_read_bulk_callback (struct urb *urb)
 	if (bluetooth->bulk_packet_pos >= ACL_HDR_SIZE) {
 		packet_size = CHAR2INT16(bluetooth->bulk_buffer[4],bluetooth->bulk_buffer[3]);
 	} else {
-		if (usb_submit_urb(urb))
-			dbg(__FUNCTION__ " - failed resubmitting read urb");
-		return;
+		goto exit;
 	}
 
 	if (packet_size + ACL_HDR_SIZE < bluetooth->bulk_packet_pos) {
 		err(__FUNCTION__ " - packet was too long");
 		bluetooth->bulk_packet_pos = 0;
-		if (usb_submit_urb(urb))
-			dbg(__FUNCTION__ " - failed resubmitting read urb");
-		return;
+		goto exit;
 	}
 
 	if (packet_size + ACL_HDR_SIZE == bluetooth->bulk_packet_pos) {
@@ -865,6 +862,7 @@ static void bluetooth_read_bulk_callback (struct urb *urb)
 		bluetooth->bulk_packet_pos = 0;
 	}	
 
+exit:
 	if (usb_submit_urb(urb))
 		dbg(__FUNCTION__ " - failed resubmitting read urb");
 

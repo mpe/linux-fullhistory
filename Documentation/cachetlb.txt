@@ -47,7 +47,7 @@ changes occur:
 
 	This interface is used to handle whole address space
 	page table operations such as what happens during
-	fork, exit, and exec.
+	fork, and exec.
 
 3) void flush_tlb_range(struct mm_struct *mm,
 			unsigned long start, unsigned long end)
@@ -272,7 +272,7 @@ Here is the new interface:
 	for example, uses this technique.
 
 	The "address" parameter tells the virtual address where the
-	user has this page mapped.
+	user will ultimately this page mapped.
 
 	If D-cache aliasing is not an issue, these two routines may
 	simply call memcpy/memset directly and do nothing more.

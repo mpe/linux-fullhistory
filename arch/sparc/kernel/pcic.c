@@ -1,4 +1,4 @@
-/* $Id: pcic.c,v 1.16 2000/07/11 01:38:57 davem Exp $
+/* $Id: pcic.c,v 1.17 2000/09/05 06:49:44 anton Exp $
  * pcic.c: Sparc/PCI controller support
  *
  * Copyright (C) 1998 V. Roganov and G. Raiko
@@ -940,7 +940,6 @@ asmlinkage int sys_pciconfig_read(unsigned long bus,
 	if(!suser())
 		return -EPERM;
 
-	lock_kernel();
 	switch(len) {
 	case 1:
 		pcibios_read_config_byte(bus, dfn, off, &ubyte);
@@ -959,7 +958,6 @@ asmlinkage int sys_pciconfig_read(unsigned long bus,
 		err = -EINVAL;
 		break;
 	};
-	unlock_kernel();
 
 	return err;
 }

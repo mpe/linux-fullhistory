@@ -21,12 +21,12 @@ pg_data_t contig_page_data = { bdata: &contig_bootmem_data };
  * at a considerably higher value than 0. Examples are Super-H, ARM, m68k.
  * Should be invoked with paramters (0, 0, unsigned long *[], start_paddr).
  */
-void __init free_area_init_node(int nid, pg_data_t *pgdat, 
+void __init free_area_init_node(int nid, pg_data_t *pgdat, struct page *pmap,
 	unsigned long *zones_size, unsigned long zone_start_paddr, 
 	unsigned long *zholes_size)
 {
 	free_area_init_core(0, NODE_DATA(0), &mem_map, zones_size, 
-						zone_start_paddr, zholes_size);
+				zone_start_paddr, zholes_size, pmap);
 }
 
 #endif /* !CONFIG_DISCONTIGMEM */
@@ -55,7 +55,7 @@ void show_free_areas_node(int nid)
 /*
  * Nodes can be initialized parallely, in no particular order.
  */
-void __init free_area_init_node(int nid, pg_data_t *pgdat, 
+void __init free_area_init_node(int nid, pg_data_t *pgdat, struct page *pmap,
 	unsigned long *zones_size, unsigned long zone_start_paddr, 
 	unsigned long *zholes_size)
 {
@@ -66,7 +66,7 @@ void __init free_area_init_node(int nid, pg_data_t *pgdat,
 		mem_map = (mem_map_t *)PAGE_OFFSET;
 
 	free_area_init_core(nid, pgdat, &discard, zones_size, zone_start_paddr,
-						zholes_size);
+					zholes_size, pmap);
 	pgdat->node_id = nid;
 
 	/*

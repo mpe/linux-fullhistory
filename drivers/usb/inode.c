@@ -48,6 +48,7 @@ static LIST_HEAD(superlist);
 struct special {
 	const char *name;
 	struct file_operations *fops;
+	struct inode *inode;
 	struct list_head inodes;
 };
 
@@ -572,6 +573,7 @@ struct super_block *usbdevfs_read_super(struct super_block *s, void *data, int s
 		inode->i_uid = listuid;
 		inode->i_gid = listgid;
 		inode->i_mode = listmode | S_IFREG;
+		special[i].inode = inode;
 		list_add_tail(&inode->u.usbdev_i.slist, &s->u.usbdevfs_sb.ilist);
 		list_add_tail(&inode->u.usbdev_i.dlist, &special[i].inodes);
 	}
@@ -598,6 +600,17 @@ static DECLARE_FSTYPE(usbdevice_fs_type, "usbdevfs", usbdevfs_read_super, 0);
 
 /* --------------------------------------------------------------------- */
 
+static void update_special_inodes (void)
+{
+	int i;
+	for (i = 0; i < NRSPECIAL; i++) {
+		struct inode *inode = special[i].inode;
+		if (inode)
+			inode->i_atime = inode->i_mtime = inode->i_ctime = CURRENT_TIME;
+	}
+}
+
+
 void usbdevfs_add_bus(struct usb_bus *bus)
 {
 	struct list_head *slist;
@@ -605,6 +618,7 @@ void usbdevfs_add_bus(struct usb_bus *bus)
 	lock_kernel();
 	for (slist = superlist.next; slist != &superlist; slist = slist->next)
 		new_bus_inode(bus, list_entry(slist, struct super_block, u.usbdevfs_sb.slist));
+	update_special_inodes();
 	unlock_kernel();
 	usbdevfs_conn_disc_event();
 }
@@ -614,6 +628,7 @@ void usbdevfs_remove_bus(struct usb_bus *bus)
 	lock_kernel();
 	while (!list_empty(&bus->inodes))
 		free_inode(list_entry(bus->inodes.next, struct inode, u.usbdev_i.dlist));
+	update_special_inodes();
 	unlock_kernel();
 	usbdevfs_conn_disc_event();
 }
@@ -625,6 +640,7 @@ void usbdevfs_add_device(struct usb_device *dev)
 	lock_kernel();
 	for (slist = superlist.next; slist != &superlist; slist = slist->next)
 		new_dev_inode(dev, list_entry(slist, struct super_block, u.usbdevfs_sb.slist));
+	update_special_inodes();
 	unlock_kernel();
 	usbdevfs_conn_disc_event();
 }
@@ -652,6 +668,8 @@ void usbdevfs_remove_device(struct usb_device *dev)
 			send_sig_info(ds->discsignr, &sinfo, ds->disctask);
 		}
 	}
+
+	update_special_inodes();
 	unlock_kernel();
 	usbdevfs_conn_disc_event();
 }

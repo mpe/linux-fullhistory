@@ -43,6 +43,7 @@
 #include <linux/errno.h>
 #include <linux/cdrom.h>
 #include <linux/interrupt.h>
+#include <linux/init.h>
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/uaccess.h>

@@ -376,7 +376,7 @@ extern int pgt_cache_water[2];
 extern int check_pgt_cache(void);
 
 extern void free_area_init(unsigned long * zones_size);
-extern void free_area_init_node(int nid, pg_data_t *pgdat, 
+extern void free_area_init_node(int nid, pg_data_t *pgdat, struct page *pmap,
 	unsigned long * zones_size, unsigned long zone_start_paddr, 
 	unsigned long *zholes_size);
 extern void mem_init(void);

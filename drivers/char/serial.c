@@ -4560,6 +4560,9 @@ static struct pci_board pci_boards[] __initdata = {
 	{	PCI_VENDOR_ID_ROCKWELL, 0x1004,
 		0x1048, 0x1500, 
 		SPCI_FL_BASE1, 1, 115200 },
+	{	PCI_VENDOR_ID_SGI, PCI_DEVICE_ID_SGI_IOC3,
+		0xFF00, 0, SPCI_FL_BASE0 | SPCI_FL_IRQRESOURCE,
+		1, 458333, 0, 0, 0, 0x20178 },
 #if CONFIG_DDB5074
 	/*
 	 * NEC Vrc-5074 (Nile 4) builtin UART.
@@ -5280,12 +5283,6 @@ int register_serial(struct serial_struct *req)
 		if ((rs_table[i].port == port) &&
 		    (rs_table[i].iomem_base == req->iomem_base))
 			break;
-	}
-	if (i == NR_PORTS) {
-		for (i = 4; i < NR_PORTS; i++)
-			if ((rs_table[i].type == PORT_UNKNOWN) &&
-			    (rs_table[i].count == 0))
-				break;
 	}
 	if (i == NR_PORTS) {
 		for (i = 0; i < NR_PORTS; i++)

@@ -10,7 +10,7 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * $Id: jffs_fm.c,v 1.14 2000/08/09 14:26:35 dwmw2 Exp $
+ * $Id: jffs_fm.c,v 1.18 2000/08/21 10:41:45 dwmw2 Exp $
  *
  * Ported to Linux 2.3.x and MTD:
  * Copyright (C) 2000  Alexander Larsson (alex@cendio.se), Cendio Systems AB
@@ -57,17 +57,26 @@ jffs_build_begin(struct jffs_control *c, kdev_t dev)
 
 	fmc->used_size = 0;
 	fmc->dirty_size = 0;
+	fmc->free_size = mtd->size;
 	fmc->sector_size = mtd->erasesize;
 	fmc->max_chunk_size = fmc->sector_size >> 1;
-	fmc->min_free_size = (fmc->sector_size << 1) - fmc->max_chunk_size;
+	/* min_free_size:
+	   1 sector, obviously.
+	   + 1 x max_chunk_size, for when a nodes overlaps the end of a sector
+	   + 1 x max_chunk_size again, which ought to be enough to handle 
+		   the case where a rename causes a name to grow, and GC has
+		   to write out larger nodes than the ones it's obsoleting.
+		   We should fix it so it doesn't have to write the name
+		   _every_ time. Later.
+	*/
+	fmc->min_free_size = fmc->sector_size << 1;
 	fmc->mtd = mtd;
-	init_MUTEX(&fmc->gclock);
 	fmc->c = c;
 	fmc->head = 0;
 	fmc->tail = 0;
 	fmc->head_extra = 0;
 	fmc->tail_extra = 0;
-	init_MUTEX(&fmc->wlock);
+	init_MUTEX(&fmc->biglock);
 	return fmc;
 }
 
@@ -203,6 +212,11 @@ jffs_fmalloc(struct jffs_fmcontrol *fmc, __u32 size, struct jffs_node *node,
 
 	free_chunk_size1 = jffs_free_size1(fmc);
 	free_chunk_size2 = jffs_free_size2(fmc);
+	if (free_chunk_size1 + free_chunk_size2 != fmc->free_size) {
+		printk(KERN_WARNING "Free size accounting screwed\n");
+		printk(KERN_WARNING "free_chunk_size1 == 0x%x, free_chunk_size2 == 0x%x, fmc->free_size == 0x%x\n", free_chunk_size1, free_chunk_size2, fmc->free_size);
+	}
+
 	D3(printk("jffs_fmalloc(): free_chunk_size1 = %u, "
 		  "free_chunk_size2 = %u\n",
 		  free_chunk_size1, free_chunk_size2));
@@ -240,6 +254,7 @@ jffs_fmalloc(struct jffs_fmcontrol *fmc, __u32 size, struct jffs_node *node,
 			fm->offset = fmc->flash_start;
 		}
 		fm->size = size;
+		fmc->free_size -= size;
 		fmc->used_size += size;
 	}
 	else if (size > free_chunk_size2) {
@@ -253,6 +268,7 @@ jffs_fmalloc(struct jffs_fmcontrol *fmc, __u32 size, struct jffs_node *node,
 		fm->offset = fmc->tail->offset + fmc->tail->size;
 		fm->size = free_chunk_size1;
 		fm->nodes = 0;
+		fmc->free_size -= fm->size;
 		fmc->dirty_size += fm->size; /* Changed by simonk. This seemingly fixes a 
 						bug that caused infinite garbage collection.
 						It previously set fmc->dirty_size to size (which is the
@@ -380,10 +396,12 @@ jffs_fmalloced(struct jffs_fmcontrol *fmc, __u32 offset, __u32 size,
 		fm->nodes->node = node;
 		fm->nodes->next = 0;
 		fmc->used_size += size;
+		fmc->free_size -= size;
 	}
 	else {
 		/* If there is no node, then this is just a chunk of dirt.  */
 		fmc->dirty_size += size;
+		fmc->free_size -= size;
 	}
 
 	if (fmc->head_extra) {
@@ -505,6 +523,7 @@ jffs_sync_erase(struct jffs_fmcontrol *fmc, int erased_size)
 	});
 
 	fmc->dirty_size -= erased_size;
+	fmc->free_size += erased_size;
 
 	for (fm = fmc->head; fm && (erased_size > 0);) {
 		if (erased_size >= fm->size) {
@@ -701,6 +720,7 @@ jffs_print_fmcontrol(struct jffs_fmcontrol *fmc)
 	D(printk("        %u, /* flash_size  */\n", fmc->flash_size));
 	D(printk("        %u, /* used_size  */\n", fmc->used_size));
 	D(printk("        %u, /* dirty_size  */\n", fmc->dirty_size));
+	D(printk("        %u, /* free_size  */\n", fmc->free_size));
 	D(printk("        %u, /* sector_size  */\n", fmc->sector_size));
 	D(printk("        %u, /* min_free_size  */\n", fmc->min_free_size));
 	D(printk("        %u, /* max_chunk_size  */\n", fmc->max_chunk_size));

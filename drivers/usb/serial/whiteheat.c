@@ -130,9 +130,9 @@ static inline void set_break	(struct usb_serial_port *port, unsigned char brk);
  *****************************************************************************/
 static void command_port_write_callback (struct urb *urb)
 {
-	unsigned char *data = urb->transfer_buffer;
 #ifdef DEBUG
 	int i;
+	unsigned char *data = urb->transfer_buffer;
 #endif
 
 	dbg (__FUNCTION__);

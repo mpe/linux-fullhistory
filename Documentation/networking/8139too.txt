@@ -188,6 +188,15 @@ User-mode (or maybe optional /proc) diagnostics program.
 
 Change History
 --------------
+Version 0.9.8 - September 7, 2000
+
+* Propagate request_irq error value (andrew morton)
+* Correct potential oops bug in PCI DMA unmap code
+* Fix bugs related to counting/discounting of 32-bit CRC in each Rx packet
+* Fix 16/32-bit bug in interrupt status check
+* Timer cleanups (andrew morton)
+
+
 Version 0.9.7 - June 11, 2000
 
 * Fix support for older chips (RTL8139 early chips should now work again)

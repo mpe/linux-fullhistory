@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.92 2000/08/26 02:42:28 anton Exp $
+/* $Id: irq.c,v 1.93 2000/08/31 10:00:39 anton Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997  David S. Miller  (davem@caip.rutgers.edu)
@@ -550,7 +550,7 @@ out:
 
 #ifdef CONFIG_SMP
 
-/* Who has global_irq_lock. */
+/* Who has the global irq brlock */
 unsigned char global_irq_holder = NO_PROC_ID;
 
 static void show(char * str)

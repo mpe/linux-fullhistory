@@ -19,7 +19,8 @@ ifeq ($(ARCH),sparc64)
 
 ifeq ($(CONFIG_PCI),y)
 
-O_OBJS += su.o pcikbd.o
+OX_OBJS += su.o
+O_OBJS += pcikbd.o
 
 ifeq ($(CONFIG_SAB82532),y)
 O_OBJS += sab82532.o
@@ -58,7 +59,8 @@ endif
 else # !eq($(ARCH),sparc64)
 
 ifeq ($(CONFIG_PCI),y)
-O_OBJS += su.o pcikbd.o
+OX_OBJS += su.o
+O_OBJS += pcikbd.o
 endif
 
 endif # !eq($(ARCH),sparc64)

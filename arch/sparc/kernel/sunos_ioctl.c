@@ -1,4 +1,4 @@
-/* $Id: sunos_ioctl.c,v 1.33 1999/07/28 12:59:03 anton Exp $
+/* $Id: sunos_ioctl.c,v 1.34 2000/09/03 14:10:56 anton Exp $
  * sunos_ioctl.c: The Linux Operating system: SunOS ioctl compatibility.
  * 
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -39,7 +39,6 @@ asmlinkage int sunos_ioctl (int fd, unsigned long cmd, unsigned long arg)
 {
 	int ret = -EBADF;
 
-	lock_kernel();
 	if (fd >= SUNOS_NR_OPEN || !fcheck(fd))
 		goto out;
 
@@ -227,7 +226,6 @@ asmlinkage int sunos_ioctl (int fd, unsigned long cmd, unsigned long arg)
 	/* so stupid... */
 	ret = (ret == -EINVAL ? -EOPNOTSUPP : ret);
 out:
-	unlock_kernel();
 	return ret;
 }
 

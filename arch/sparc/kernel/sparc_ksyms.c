@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.103 2000/08/26 02:42:28 anton Exp $
+/* $Id: sparc_ksyms.c,v 1.104 2000/09/06 05:43:00 anton Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -141,6 +141,11 @@ EXPORT_SYMBOL(__global_cli);
 EXPORT_SYMBOL(__global_sti);
 EXPORT_SYMBOL(__global_save_flags);
 EXPORT_SYMBOL(__global_restore_flags);
+
+/* Misc SMP information */
+EXPORT_SYMBOL(smp_num_cpus);
+EXPORT_SYMBOL(__cpu_number_map);
+EXPORT_SYMBOL(__cpu_logical_map);
 #endif
 
 EXPORT_SYMBOL(udelay);

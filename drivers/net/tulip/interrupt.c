@@ -314,12 +314,11 @@ void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 			oi++;
 		}
 		if (csr5 & TimerInt) {
-#if 0
+
 			if (tulip_debug > 2)
 				printk(KERN_ERR "%s: Re-enabling interrupts, %8.8x.\n",
 					   dev->name, csr5);
 			outl(tulip_tbl[tp->chip_id].valid_intrs, ioaddr + CSR7);
-#endif
 			tp->ttimer = 0;
 			oi++;
 		}
@@ -327,14 +326,19 @@ void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 			if (tulip_debug > 1)
 				printk(KERN_WARNING "%s: Too much work during an interrupt, "
 					   "csr5=0x%8.8x. (%lu) (%d,%d,%d)\n", dev->name, csr5, tp->nir, tx, rx, oi);
-			/* Acknowledge all interrupt sources. */
-#if 0
-			/* Clear all interrupting sources, set timer to re-enable. */
-			outl(((~csr5) & 0x0001ebef) | NormalIntr | AbnormalIntr | TimerInt,
-				 ioaddr + CSR7);
-			outl(12, ioaddr + CSR11);
-			tp->ttimer = 1;
-#endif
+
+                       /* Acknowledge all interrupt sources. */
+                        outl(0x8001ffff, ioaddr + CSR5);
+                        if (tp->flags & HAS_INTR_MITIGATION) {
+                     /* Josip Loncaric at ICASE did extensive experimentation 
+			to develop a good interrupt mitigation setting.*/
+                                outl(0x8b240000, ioaddr + CSR11);
+                        } else {
+                          /* Mask all interrupting sources, set timer to 
+				re-enable. */
+                                outl(((~csr5) & 0x0001ebef) | AbnormalIntr | TimerInt, ioaddr + CSR7);
+                                outl(0x0012, ioaddr + CSR11);
+                        }
 			break;
 		}
 	} while (work_count-- > 0);
@@ -366,4 +370,3 @@ void tulip_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 			   dev->name, inl(ioaddr + CSR5));
 
 }
-

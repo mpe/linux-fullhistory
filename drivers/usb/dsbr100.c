@@ -33,6 +33,10 @@
 
  History:
 
+ Version 0.24:
+ 	Markus: Hope I got these silly VIDEO_TUNER_LOW issues finally
+	right.  Some minor cleanup, improved standalone compilation
+
  Version 0.23:
  	Markus: Sign extension bug fixed by declaring transfer_buffer unsigned
 
@@ -135,11 +139,11 @@ static int dsbr100_stop(usb_dsbr100 *radio)
 
 static int dsbr100_setfreq(usb_dsbr100 *radio, int freq)
 {
-	freq = (freq*80)/16+856;
+	freq = (freq/16*80)/1000+856;
 	if (usb_control_msg(radio->dev, usb_rcvctrlpipe(radio->dev, 0),
-		0x01, 0xC0, (freq&0xff00)>>8, freq&0xff, 
-		radio->transfer_buffer, 8, 300)<0
-	 || usb_control_msg(radio->dev, usb_rcvctrlpipe(radio->dev, 0),
+		0x01, 0xC0, (freq>>8)&0x00ff, freq&0xff, 
+		radio->transfer_buffer, 8, 300)<0 ||
+	    usb_control_msg(radio->dev, usb_rcvctrlpipe(radio->dev, 0),
 		0x00, 0xC0, 0x96, 0xB7, radio->transfer_buffer, 8, 300)<0 ||
 	    usb_control_msg(radio->dev, usb_rcvctrlpipe(radio->dev, 0),
 		0x00, 0xC0, 0x00, 0x24, radio->transfer_buffer, 8, 300)<0) {
@@ -172,7 +176,7 @@ static void *usb_dsbr100_probe(struct usb_device *dev, unsigned int ifnum)
 	usb_dsbr100_radio.priv = radio;
 	radio->dev = dev;
 	radio->ifnum = ifnum;
-	radio->curfreq = 1454;
+	radio->curfreq = 1454000;
 	return (void*)radio;
 }
 
@@ -218,8 +222,8 @@ static int usb_dsbr100_ioctl(struct video_device *dev, unsigned int cmd,
 				return -EFAULT;
 			if(v.tuner)	/* Only 1 tuner */ 
 				return -EINVAL;
-			v.rangelow = 87*16;
-			v.rangehigh = 108*16;
+			v.rangelow = 87*16000;
+			v.rangehigh = 108*16000;
 			v.flags = VIDEO_TUNER_LOW;
 			v.mode = VIDEO_MODE_AUTO;
 			v.signal = radio->stereo*0x7000;

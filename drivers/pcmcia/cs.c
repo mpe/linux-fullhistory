@@ -303,7 +303,7 @@ static int proc_read_clients(char *buf, char **start, off_t pos,
     
 ======================================================================*/
 
-static void setup_socket(socket_info_t *);
+static int setup_socket(socket_info_t *);
 static void shutdown_socket(socket_info_t *);
 static void reset_socket(socket_info_t *);
 static void unreset_socket(socket_info_t *);
@@ -490,9 +490,12 @@ static void shutdown_socket(socket_info_t *s)
     free_regions(&s->c_region);
 } /* shutdown_socket */
 
-static void setup_socket(socket_info_t *s)
+/*
+ * Return zero if we think the card isn't actually present
+ */
+static int setup_socket(socket_info_t *s)
 {
-	int val;
+	int val, ret;
 	int setup_timeout = 100;
 
 	/* Wait for "not pending" */
@@ -506,7 +509,8 @@ static void setup_socket(socket_info_t *s)
 		}
 		printk(KERN_NOTICE "cs: socket %p voltage interrogation"
 			" timed out\n", s);
-		return;
+		ret = 0;
+		goto out;
 	}
 
 	if (val & SS_DETECT) {
@@ -531,8 +535,13 @@ static void setup_socket(socket_info_t *s)
 		set_socket(s, &s->socket);
 		msleep(vcc_settle);
 		reset_socket(s);
-	} else
+		ret = 1;
+	} else {
 		DEBUG(0, "cs: setup_socket(%p): no card!\n", s);
+		ret = 0;
+	}
+out:
+	return ret;
 } /* setup_socket */
 
 /*======================================================================
@@ -569,7 +578,7 @@ static void unreset_socket(socket_info_t *s)
 		get_socket_status(s, &val);
 		if (val & SS_READY)
 			break;
-		DEBUG(2, "cs: socket %ld not ready yet\n", i);
+		DEBUG(2, "cs: socket %d not ready yet\n", s->sock);
 		if (--setup_timeout) {
 			msleep(unreset_check);
 			continue;
@@ -673,7 +682,8 @@ static void parse_events(void *info, u_int events)
 		msleep(resume_delay);
 	    else
 		msleep(setup_delay);
-	    setup_socket(s);
+	    if (setup_socket(s) == 0)
+		s->state &= ~SOCKET_SETUP_PENDING;
 	}
     }
     if (events & SS_BATDEAD)
@@ -1415,7 +1425,8 @@ int pcmcia_register_client(client_handle_t *handle, client_reg_t *req)
 	if ((status & SS_DETECT) &&
 	    !(s->state & SOCKET_SETUP_PENDING)) {
 	    s->state |= SOCKET_SETUP_PENDING;
-	    setup_socket(s);
+	    if (setup_socket(s) == 0)
+		    s->state &= ~SOCKET_SETUP_PENDING;
 	}
     }
 
@@ -2106,9 +2117,7 @@ int pcmcia_insert_card(client_handle_t handle, client_req_t *req)
 	s->state |= SOCKET_SETUP_PENDING;
 	spin_unlock_irqrestore(&s->lock, flags);
 	get_socket_status(s, &status);
-	if (status & SS_DETECT)
-	    setup_socket(s);
-	else {
+	if ((status & SS_DETECT) == 0 || (setup_socket(s) == 0)) {
 	    s->state &= ~SOCKET_SETUP_PENDING;
 	    return CS_NO_CARD;
 	}

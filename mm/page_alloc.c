@@ -532,9 +532,9 @@ static inline void build_zonelists(pg_data_t *pgdat)
  */
 void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 	unsigned long *zones_size, unsigned long zone_start_paddr, 
-	unsigned long *zholes_size)
+	unsigned long *zholes_size, struct page *lmem_map)
 {
-	struct page *p, *lmem_map;
+	struct page *p;
 	unsigned long i, j;
 	unsigned long map_size;
 	unsigned long totalpages, offset, realtotalpages;
@@ -580,9 +580,11 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 	 * boundary, so that MAP_NR works.
 	 */
 	map_size = (totalpages + 1)*sizeof(struct page);
-	lmem_map = (struct page *) alloc_bootmem_node(nid, map_size);
-	lmem_map = (struct page *)(PAGE_OFFSET + 
+	if (lmem_map == (struct page *)0) {
+		lmem_map = (struct page *) alloc_bootmem_node(nid, map_size);
+		lmem_map = (struct page *)(PAGE_OFFSET + 
 			MAP_ALIGN((unsigned long)lmem_map - PAGE_OFFSET));
+	}
 	*gmap = pgdat->node_mem_map = lmem_map;
 	pgdat->node_size = totalpages;
 	pgdat->node_start_paddr = zone_start_paddr;
@@ -664,7 +666,7 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 
 void __init free_area_init(unsigned long *zones_size)
 {
-	free_area_init_core(0, NODE_DATA(0), &mem_map, zones_size, 0, 0);
+	free_area_init_core(0, NODE_DATA(0), &mem_map, zones_size, 0, 0, 0);
 }
 
 static int __init setup_mem_frac(char *str)

@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.91 2000/08/09 23:10:19 anton Exp $
+/*  $Id: init.c,v 1.93 2000/08/31 11:40:55 anton Exp $
  *  linux/arch/sparc/mm/init.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -89,8 +89,6 @@ pgprot_t kmap_prot;
 
 void __init kmap_init(void)
 {
-	unsigned long pteval;
-
 	/* cache the first kmap pte */
 	kmap_pte = kmap_get_fixed_pte(FIX_KMAP_BEGIN);
 	kmap_prot = __pgprot(SRMMU_ET_PTE | SRMMU_PRIV | SRMMU_CACHE);
@@ -583,6 +581,6 @@ void flush_page_to_ram(struct page *page)
 {
 	unsigned long vaddr;
 	vaddr = kmap(page);
-	__flush_page_to_ram(page_address(page));
+	__flush_page_to_ram((unsigned long)page_address(page));
 	kunmap(page);
 }

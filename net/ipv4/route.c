@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.89 2000/08/09 11:59:04 davem Exp $
+ * Version:	$Id: route.c,v 1.90 2000/08/31 23:39:12 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1610,7 +1610,7 @@ int ip_route_input(struct sk_buff *skb, u32 daddr, u32 saddr,
  * Major route resolver routine.
  */
 
-int ip_route_output_slow(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int oif)
+int ip_route_output_slow(struct rtable **rp, const struct rt_key *oldkey)
 {
 	struct rt_key key;
 	struct fib_result res;
@@ -1620,25 +1620,31 @@ int ip_route_output_slow(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int 
 	unsigned hash;
 	int free_res = 0;
 	int err;
+	u32 tos;
 
-	tos &= IPTOS_RT_MASK|RTO_ONLINK;
-	key.dst = daddr;
-	key.src = saddr;
+	tos = oldkey->tos & (IPTOS_RT_MASK|RTO_ONLINK);
+	key.dst = oldkey->dst;
+	key.src = oldkey->src;
 	key.tos = tos&IPTOS_RT_MASK;
 	key.iif = loopback_dev.ifindex;
-	key.oif = oif;
+	key.oif = oldkey->oif;
+#ifdef CONFIG_IP_ROUTE_FWMARK
+	key.fwmark = oldkey->fwmark;
+#endif
 	key.scope = (tos&RTO_ONLINK) ? RT_SCOPE_LINK : RT_SCOPE_UNIVERSE;
 	res.fi = NULL;
 #ifdef CONFIG_IP_MULTIPLE_TABLES
 	res.r = NULL;
 #endif
 
-	if (saddr) {
-		if (MULTICAST(saddr) || BADCLASS(saddr) || ZERONET(saddr))
+	if (oldkey->src) {
+		if (MULTICAST(oldkey->src)
+		    || BADCLASS(oldkey->src)
+		    || ZERONET(oldkey->src))
 			return -EINVAL;
 
 		/* It is equivalent to inet_addr_type(saddr) == RTN_LOCAL */
-		dev_out = ip_dev_find(saddr);
+		dev_out = ip_dev_find(oldkey->src);
 		if (dev_out == NULL)
 			return -EINVAL;
 
@@ -1650,8 +1656,8 @@ int ip_route_output_slow(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int 
 		      of another iface. --ANK
 		 */
 
-		if (oif == 0 &&
-			(MULTICAST(daddr) || daddr == 0xFFFFFFFF)) {
+		if (oldkey->oif == 0
+		    && (MULTICAST(oldkey->dst) || oldkey->dst == 0xFFFFFFFF)) {
 			/* Special hack: user can direct multicasts
 			   and limited broadcast via necessary interface
 			   without fiddling with IP_MULTICAST_IF or IP_PKTINFO.
@@ -1674,8 +1680,8 @@ int ip_route_output_slow(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int 
 			dev_put(dev_out);
 		dev_out = NULL;
 	}
-	if (oif) {
-		dev_out = dev_get_by_index(oif);
+	if (oldkey->oif) {
+		dev_out = dev_get_by_index(oldkey->oif);
 		if (dev_out == NULL)
 			return -ENODEV;
 		if (__in_dev_get(dev_out) == NULL) {
@@ -1683,15 +1689,15 @@ int ip_route_output_slow(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int 
 			return -ENODEV;	/* Wrong error code */
 		}
 
-		if (LOCAL_MCAST(daddr) || daddr == 0xFFFFFFFF) {
+		if (LOCAL_MCAST(oldkey->dst) || oldkey->dst == 0xFFFFFFFF) {
 			if (!key.src)
 				key.src = inet_select_addr(dev_out, 0, RT_SCOPE_LINK);
 			goto make_route;
 		}
 		if (!key.src) {
-			if (MULTICAST(daddr))
+			if (MULTICAST(oldkey->dst))
 				key.src = inet_select_addr(dev_out, 0, key.scope);
-			else if (!daddr)
+			else if (!oldkey->dst)
 				key.src = inet_select_addr(dev_out, 0, RT_SCOPE_HOST);
 		}
 	}
@@ -1712,7 +1718,7 @@ int ip_route_output_slow(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int 
 
 	if (fib_lookup(&key, &res)) {
 		res.fi = NULL;
-		if (oif) {
+		if (oldkey->oif) {
 			/* Apparently, routing tables are wrong. Assume,
 			   that the destination is on link.
 
@@ -1800,7 +1806,7 @@ make_route:
 	} else if (res.type == RTN_MULTICAST) {
 		flags |= RTCF_MULTICAST|RTCF_LOCAL;
 		read_lock(&inetdev_lock);
-		if (!__in_dev_get(dev_out) || !ip_check_mc(__in_dev_get(dev_out), daddr))
+		if (!__in_dev_get(dev_out) || !ip_check_mc(__in_dev_get(dev_out), oldkey->dst))
 			flags &= ~RTCF_LOCAL;
 		read_unlock(&inetdev_lock);
 		/* If multicast route do not exist use
@@ -1819,18 +1825,21 @@ make_route:
 
 	atomic_set(&rth->u.dst.__refcnt, 1);
 	rth->u.dst.flags= DST_HOST;
-	rth->key.dst	= daddr;
+	rth->key.dst	= oldkey->dst;
 	rth->key.tos	= tos;
-	rth->key.src	= saddr;
+	rth->key.src	= oldkey->src;
 	rth->key.iif	= 0;
-	rth->key.oif	= oif;
+	rth->key.oif	= oldkey->oif;
+#ifdef CONFIG_IP_ROUTE_FWMARK
+	rth->key.fwmark	= oldkey->fwmark;
+#endif
 	rth->rt_dst	= key.dst;
 	rth->rt_src	= key.src;
 #ifdef CONFIG_IP_ROUTE_NAT
 	rth->rt_dst_map	= key.dst;
 	rth->rt_src_map	= key.src;
 #endif
-	rth->rt_iif	= oif ? : dev_out->ifindex;
+	rth->rt_iif	= oldkey->oif ? : dev_out->ifindex;
 	rth->u.dst.dev	= dev_out;
 	dev_hold(dev_out);
 	rth->rt_gateway = key.dst;
@@ -1850,7 +1859,7 @@ make_route:
 		if (res.type == RTN_MULTICAST) {
 			struct in_device *in_dev = in_dev_get(dev_out);
 			if (in_dev) {
-				if (IN_DEV_MFORWARD(in_dev) && !LOCAL_MCAST(daddr)) {
+				if (IN_DEV_MFORWARD(in_dev) && !LOCAL_MCAST(oldkey->dst)) {
 					rth->u.dst.input = ip_mr_input;
 					rth->u.dst.output = ip_mc_output;
 				}
@@ -1864,7 +1873,7 @@ make_route:
 
 	rth->rt_flags = flags;
 
-	hash = rt_hash_code(daddr, saddr^(oif<<5), tos);
+	hash = rt_hash_code(oldkey->dst, oldkey->src^(oldkey->oif<<5), tos);
 	err = rt_intern_hash(hash, rth, rp);
 done:
 	if (free_res)
@@ -1881,21 +1890,24 @@ e_nobufs:
 	goto done;
 }
 
-int ip_route_output(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int oif)
+int ip_route_output_key(struct rtable **rp, const struct rt_key *key)
 {
 	unsigned hash;
 	struct rtable *rth;
 
-	hash = rt_hash_code(daddr, saddr^(oif<<5), tos);
+	hash = rt_hash_code(key->dst, key->src^(key->oif<<5), key->tos);
 
 	read_lock_bh(&rt_hash_table[hash].lock);
 	for (rth=rt_hash_table[hash].chain; rth; rth=rth->u.rt_next) {
-		if (rth->key.dst == daddr &&
-		    rth->key.src == saddr &&
+		if (rth->key.dst == key->dst &&
+		    rth->key.src == key->src &&
 		    rth->key.iif == 0 &&
-		    rth->key.oif == oif &&
-		    !((rth->key.tos^tos)&(IPTOS_RT_MASK|RTO_ONLINK)) &&
-		    ((tos&RTO_TPROXY) || !(rth->rt_flags&RTCF_TPROXY))
+		    rth->key.oif == key->oif &&
+#ifdef CONFIG_IP_ROUTE_FWMARK
+		    rth->key.fwmark == key->fwmark &&
+#endif
+		    !((rth->key.tos^key->tos)&(IPTOS_RT_MASK|RTO_ONLINK)) &&
+		    ((key->tos&RTO_TPROXY) || !(rth->rt_flags&RTCF_TPROXY))
 		) {
 			rth->u.dst.lastuse = jiffies;
 			dst_hold(&rth->u.dst);
@@ -1907,8 +1919,8 @@ int ip_route_output(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int oif)
 	}
 	read_unlock_bh(&rt_hash_table[hash].lock);
 
-	return ip_route_output_slow(rp, daddr, saddr, tos, oif);
-}
+	return ip_route_output_slow(rp, key);
+}	
 
 #ifdef CONFIG_RTNETLINK
 

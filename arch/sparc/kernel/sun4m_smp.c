@@ -405,6 +405,9 @@ void smp4m_cross_call(smpfunc_t func, unsigned long arg1, unsigned long arg2,
 			}
 		}
 
+		/* First, run local copy. */
+		func(arg1, arg2, arg3, arg4, arg5);  
+
 		{
 			register int i;
 
@@ -422,6 +425,8 @@ void smp4m_cross_call(smpfunc_t func, unsigned long arg1, unsigned long arg2,
 		}
 
 		spin_unlock_irqrestore(&cross_call_lock, flags);
+	} else {
+		func(arg1, arg2, arg3, arg4, arg5); /* Just need to run local copy. */
 	}
 }
 

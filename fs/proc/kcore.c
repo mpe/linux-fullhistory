@@ -4,8 +4,9 @@
  *	Modelled on fs/exec.c:aout_core_dump()
  *	Jeremy Fitzhardinge <jeremy@sw.oz.au>
  *	ELF version written by David Howells <David.Howells@nexor.co.uk>
- *	Modified and incorporated into 2.3.x by Tigran Aivazian <tigran@sco.com>
- *	Support to dump vmalloc'd areas (ELF only), Tigran Aivazian <tigran@sco.com>
+ *	Modified and incorporated into 2.3.x by Tigran Aivazian <tigran@veritas.com>
+ *	Support to dump vmalloc'd areas (ELF only), Tigran Aivazian <tigran@veritas.com>
+ *	Safe accesses to vmalloc/direct-mapped discontiguous areas, Kanoj Sarcar <kanoj@sgi.com>
  */
 
 #include <linux/config.h>
@@ -112,18 +113,17 @@ extern char saved_command_line[];
 
 static size_t get_kcore_size(int *num_vma, size_t *elf_buflen)
 {
-	size_t try, size = 0;
+	size_t try, size;
 	struct vm_struct *m;
 
 	*num_vma = 0;
+	size = ((size_t)high_memory - PAGE_OFFSET + PAGE_SIZE);
 	if (!vmlist) {
 		*elf_buflen = PAGE_SIZE;
-		return ((size_t)high_memory - PAGE_OFFSET + PAGE_SIZE);
+		return (size);
 	}
 
 	for (m=vmlist; m; m=m->next) {
-		if (m->flags & VM_IOREMAP) /* don't dump ioremap'd stuff! (TA) */
-			continue;
 		try = (size_t)m->addr + m->size;
 		if (try > size)
 			size = try;
@@ -315,6 +315,7 @@ static ssize_t read_kcore(struct file *file, char *buffer, size_t buflen, loff_t
 	size_t size, tsz;
 	size_t elf_buflen;
 	int num_vma;
+	unsigned long start;
 
 	read_lock(&vmlist_lock);
 	proc_root_kcore->size = size = get_kcore_size(&num_vma, &elf_buflen);
@@ -380,11 +381,77 @@ static ssize_t read_kcore(struct file *file, char *buffer, size_t buflen, loff_t
 	}
 #endif
 	/* fill the remainder of the buffer from kernel VM space */
-	if (copy_to_user(buffer, __va(*fpos - elf_buflen), buflen))
-		return -EFAULT;
+	start = (unsigned long)__va(*fpos - elf_buflen);
+	if ((tsz = (PAGE_SIZE - (start & ~PAGE_MASK))) > buflen)
+		tsz = buflen;
+		
+	while (buflen) {
+		if ((start >= VMALLOC_START) && (start < VMALLOC_END)) {
+			char * elf_buf;
+			struct vm_struct *m;
+			unsigned long curstart = start;
+			unsigned long cursize = tsz;
 
-	acc += buflen;
-	*fpos += buflen;
+			elf_buf = kmalloc(tsz, GFP_KERNEL);
+			if (!elf_buf)
+				return -ENOMEM;
+			memset(elf_buf, 0, tsz);
+
+			read_lock(&vmlist_lock);
+			for (m=vmlist; m && cursize; m=m->next) {
+				unsigned long vmstart;
+				unsigned long vmsize;
+				unsigned long msize = m->size - PAGE_SIZE;
+
+				if (((unsigned long)m->addr + msize) < 
+								curstart)
+					continue;
+				if ((unsigned long)m->addr > (curstart + 
+								cursize))
+					break;
+				vmstart = (curstart < (unsigned long)m->addr ? 
+					(unsigned long)m->addr : curstart);
+				if (((unsigned long)m->addr + msize) > 
+							(curstart + cursize))
+					vmsize = curstart + cursize - vmstart;
+				else
+					vmsize = (unsigned long)m->addr + 
+							msize - vmstart;
+				curstart = vmstart + vmsize;
+				cursize -= vmsize;
+				/* don't dump ioremap'd stuff! (TA) */
+				if (m->flags & VM_IOREMAP)
+					continue;
+				memcpy(elf_buf + (vmstart - start),
+					(char *)vmstart, vmsize);
+			}
+			read_unlock(&vmlist_lock);
+			if (copy_to_user(buffer, elf_buf, tsz)) {
+				kfree(elf_buf);
+				return -EFAULT;
+			}
+			kfree(elf_buf);
+		} else if ((start > PAGE_OFFSET) && (start < 
+						(unsigned long)high_memory)) {
+			if (kern_addr_valid(start)) {
+				if (copy_to_user(buffer, (char *)start, tsz))
+					return -EFAULT;
+			} else {
+				if (clear_user(buffer, tsz))
+					return -EFAULT;
+			}
+		} else {
+			if (clear_user(buffer, tsz))
+				return -EFAULT;
+		}
+		buflen -= tsz;
+		*fpos += tsz;
+		buffer += tsz;
+		acc += tsz;
+		start += tsz;
+		tsz = (buflen > PAGE_SIZE ? PAGE_SIZE : buflen);
+	}
+
 	return acc;
 }
 #endif /* CONFIG_KCORE_AOUT */

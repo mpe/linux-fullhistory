@@ -24,6 +24,7 @@
 #include <linux/module.h>
 #include <linux/pci.h>
 #include <linux/kernel.h>
+#include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/ioport.h>
 #include <linux/sched.h>
@@ -2425,7 +2426,7 @@ static int handle_pm_event(struct pm_dev *dev, pm_request_t rqst, void *data)
 	return 0;
 }
 
-int uhci_init(void)
+static int __init uhci_init(void)
 {
 	int retval;
 	struct pci_dev *dev;
@@ -2531,19 +2532,15 @@ void uhci_cleanup(void)
 		printk(KERN_INFO "uhci: not all TD's were freed\n");
 }
 
-#ifdef MODULE
-int init_module(void)
-{
-	return uhci_init();
-}
-
-void cleanup_module(void)
+static void __exit uhci_exit(void)
 {
 	pm_unregister_all(handle_pm_event);
 	uhci_cleanup();
 }
 
+module_init(uhci_init);
+module_exit(uhci_exit);
+
 MODULE_AUTHOR("Linus Torvalds, Johannes Erdfelt, Randy Dunlap, Georg Acher, Deti Fliegl, Thomas Sailer, Roman Weissgaerber");
 MODULE_DESCRIPTION("USB Universal Host Controller Interface driver");
-#endif //MODULE
 

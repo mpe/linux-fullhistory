@@ -142,6 +142,13 @@ tulip_core.c	- Driver core (a.k.a. where "everything else" goes)
 
 Version history
 ===============
+0.9.10 (September 6, 2000):
+* Simple interrupt mitigation (via jamal)
+* More PCI ids
+
+0.9.9 (August 11, 2000):
+* More PCI ids
+
 0.9.8 (July 13, 2000):
 * Correct signed/unsigned comparison for dummy frame index
 * Remove outdated references to struct enet_statistics

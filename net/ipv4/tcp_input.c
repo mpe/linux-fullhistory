@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.198 2000/08/15 20:15:23 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.199 2000/09/06 23:30:29 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -73,7 +73,11 @@ int sysctl_tcp_window_scaling = 1;
 int sysctl_tcp_sack = 1;
 int sysctl_tcp_fack = 1;
 int sysctl_tcp_reordering = TCP_FASTRETRANS_THRESH;
+#ifdef CONFIG_INET_ECN
 int sysctl_tcp_ecn = 1;
+#else
+int sysctl_tcp_ecn = 0;
+#endif
 int sysctl_tcp_dsack = 1;
 int sysctl_tcp_app_win = 31;
 int sysctl_tcp_adv_win_scale = 2;

@@ -2375,7 +2375,7 @@ static struct pmu_sleep_notifier ohci_sleep_notifier = {
 
 /*-------------------------------------------------------------------------*/
 
-int __init ohci_hcd_init (void) 
+static int __init ohci_hcd_init (void) 
 {
 	int ret = pci_module_init (&ohci_pci_driver);
 
@@ -2386,11 +2386,10 @@ int __init ohci_hcd_init (void)
 	return ret;
 }
 
-#ifdef MODULE
 
 /*-------------------------------------------------------------------------*/
 
-void __exit ohci_hcd_cleanup (void) 
+static void __exit ohci_hcd_cleanup (void) 
 {	
 #ifdef CONFIG_PMAC_PBOOK
 	pmu_unregister_sleep_notifier (&ohci_sleep_notifier);
@@ -2401,7 +2400,6 @@ void __exit ohci_hcd_cleanup (void)
 module_init (ohci_hcd_init);
 module_exit (ohci_hcd_cleanup);
 
-#endif /* MODULE */
 
 
 MODULE_AUTHOR ("Roman Weissgaerber <weissg@vienna.at>");

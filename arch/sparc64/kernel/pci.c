@@ -1,4 +1,4 @@
-/* $Id: pci.c,v 1.16 2000/03/01 02:53:33 davem Exp $
+/* $Id: pci.c,v 1.17 2000/09/05 06:49:44 anton Exp $
  * pci.c: UltraSparc PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@redhat.com)
@@ -274,7 +274,6 @@ asmlinkage int sys_pciconfig_read(unsigned long bus,
 		goto out;
 	}
 
-	lock_kernel();
 	switch(len) {
 	case 1:
 		pci_read_config_byte(dev, off, &byte);
@@ -293,7 +292,6 @@ asmlinkage int sys_pciconfig_read(unsigned long bus,
 		err = -EINVAL;
 		break;
 	};
-	unlock_kernel();
 out:
 	return err;
 }

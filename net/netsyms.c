@@ -212,7 +212,7 @@ EXPORT_SYMBOL(br_ioctl_hook);
 EXPORT_SYMBOL(inetdev_lock);
 EXPORT_SYMBOL(inet_add_protocol);
 EXPORT_SYMBOL(inet_del_protocol);
-EXPORT_SYMBOL(ip_route_output);
+EXPORT_SYMBOL(ip_route_output_key);
 EXPORT_SYMBOL(ip_route_input);
 EXPORT_SYMBOL(icmp_send);
 EXPORT_SYMBOL(icmp_reply);
@@ -364,7 +364,6 @@ EXPORT_SYMBOL(tcp_cwnd_application_limited);
 EXPORT_SYMBOL(xrlim_allow);
 
 EXPORT_SYMBOL(tcp_write_xmit);
-EXPORT_SYMBOL(dev_loopback_xmit);
 
 EXPORT_SYMBOL(tcp_v4_remember_stamp); 
 

@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.84 2000/08/25 02:15:47 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.85 2000/08/31 23:39:12 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -107,42 +107,11 @@ static int ip_dev_loopback_xmit(struct sk_buff *newskb)
 	return 0;
 }
 
-#ifdef CONFIG_NETFILTER
-/* To preserve the cute illusion that a locally-generated packet can
-   be mangled before routing, we actually reroute if a hook altered
-   the packet. -RR */
-static int route_me_harder(struct sk_buff *skb)
-{
-	struct iphdr *iph = skb->nh.iph;
-	struct rtable *rt;
-
-	if (ip_route_output(&rt, iph->daddr, iph->saddr,
-			    RT_TOS(iph->tos) | RTO_CONN,
-			    skb->sk ? skb->sk->bound_dev_if : 0)) {
-		printk("route_me_harder: No more route.\n");
-		return -EINVAL;
-	}
-
-	/* Drop old route. */
-	dst_release(skb->dst);
-
-	skb->dst = &rt->u.dst;
-	return 0;
-}
-#endif
-
-/* Do route recalc if netfilter changes skb. */
+/* Don't just hand NF_HOOK skb->dst->output, in case netfilter hook
+   changes route */
 static inline int
 output_maybe_reroute(struct sk_buff *skb)
 {
-#ifdef CONFIG_NETFILTER
-	if (skb->nfcache & NFC_ALTERED) {
-		if (route_me_harder(skb) != 0) {
-			kfree_skb(skb);
-			return -EINVAL;
-		}
-	}
-#endif
 	return skb->dst->output(skb);
 }
 
@@ -311,25 +280,6 @@ static inline int ip_queue_xmit2(struct sk_buff *skb)
 	struct rtable *rt = (struct rtable *)skb->dst;
 	struct net_device *dev;
 	struct iphdr *iph = skb->nh.iph;
-
-#ifdef CONFIG_NETFILTER
-	/* BLUE-PEN-FOR-ALEXEY.  I don't understand; you mean I can't
-           hold the route as I pass the packet to userspace? -- RR
-
-	   You may hold it, if you really hold it. F.e. if netfilter
-	   does not destroy handed skb with skb->dst attached, it
-	   will be held. When it was stored in info->arg, then
-	   it was not held apparently. Now (without second arg) it is evident,
-	   that it is clean.				   --ANK
-	 */
-	if (rt==NULL || (skb->nfcache & NFC_ALTERED)) {
-		if (route_me_harder(skb) != 0) {
-			kfree_skb(skb);
-			return -EHOSTUNREACH;
-		}
-		rt = (struct rtable *)skb->dst;
-	}
-#endif
 
 	dev = rt->u.dst.dev;
 

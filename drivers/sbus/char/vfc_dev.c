@@ -42,6 +42,7 @@
 #include "vfc.h"
 #include <asm/vfc_ioctls.h>
 
+static struct file_operations vfc_fops;
 static devfs_handle_t devfs_handle = NULL;  /*  For the directory  */
 struct vfc_dev **vfc_dev_lst;
 static char vfcstr[]="vfc";

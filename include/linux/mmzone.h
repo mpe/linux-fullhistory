@@ -99,9 +99,11 @@ extern pg_data_t *pgdat_list;
  * The following two are not meant for general usage. They are here as
  * prototypes for the discontig memory code.
  */
+struct page;
 extern void show_free_areas_core(int);
 extern void free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
-  unsigned long *zones_size, unsigned long paddr, unsigned long *zholes_size);
+  unsigned long *zones_size, unsigned long paddr, unsigned long *zholes_size,
+  struct page *pmap);
 
 #ifndef CONFIG_DISCONTIGMEM
 

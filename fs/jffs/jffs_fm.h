@@ -10,7 +10,7 @@
  * the Free Software Foundation; either version 2 of the License, or
  * (at your option) any later version.
  *
- * $Id: jffs_fm.h,v 1.7 2000/08/08 09:10:39 dwmw2 Exp $
+ * $Id: jffs_fm.h,v 1.10 2000/08/17 15:42:44 dwmw2 Exp $
  *
  * Ported to Linux 2.3.x and MTD:
  * Copyright (C) 2000  Alexander Larsson (alex@cendio.se), Cendio Systems AB
@@ -62,7 +62,7 @@
 #define JFFS_GET_PAD_BYTES(size) ((JFFS_ALIGN_SIZE                     \
 				  - ((__u32)(size) % JFFS_ALIGN_SIZE)) \
 				  % JFFS_ALIGN_SIZE)
-
+#define JFFS_PAD(size) ( (size + (JFFS_ALIGN_SIZE-1)) & ~(JFFS_ALIGN_SIZE-1) )
 struct jffs_node_ref
 {
 	struct jffs_node *node;
@@ -86,18 +86,18 @@ struct jffs_fmcontrol
 	__u32 flash_size;
 	__u32 used_size;
 	__u32 dirty_size;
+	__u32 free_size;
 	__u32 sector_size;
 	__u32 min_free_size;  /* The minimum free space needed to be able
 				 to perform garbage collections.  */
 	__u32 max_chunk_size; /* The maximum size of a chunk of data.  */
 	struct mtd_info *mtd;
-	struct semaphore gclock;
 	struct jffs_control *c;
 	struct jffs_fm *head;
 	struct jffs_fm *tail;
 	struct jffs_fm *head_extra;
 	struct jffs_fm *tail_extra;
-	struct semaphore wlock;  
+	struct semaphore biglock;
 };
 
 /* Notice the two members head_extra and tail_extra in the jffs_control

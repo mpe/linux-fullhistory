@@ -54,17 +54,6 @@ static int __init usb_init(void)
 	usbdevfs_init();
 	usb_hub_init();
 
-#ifndef CONFIG_USB_MODULE
-#ifdef CONFIG_USB_UHCI
-	uhci_init();
-#endif
-#ifdef CONFIG_USB_UHCI_ALT
-	uhci_init();
-#endif
-#ifdef CONFIG_USB_OHCI
-	ohci_hcd_init(); 
-#endif
-#endif
 	return 0;
 }
 

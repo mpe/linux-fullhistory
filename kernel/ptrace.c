@@ -44,8 +44,12 @@ repeat:
 	if (write && (!pte_write(*pgtable) || !pte_dirty(*pgtable)))
 		goto fault_in_page;
 	page = pte_page(*pgtable);
-	if ((!VALID_PAGE(page)) || PageReserved(page))
-		return 0;
+
+	/* ZERO_PAGE is special: reads from it are ok even though it's marked reserved */
+	if (page != ZERO_PAGE(addr) || write) {
+		if ((!VALID_PAGE(page)) || PageReserved(page))
+			return 0;
+	}
 	flush_cache_page(vma, addr);
 
 	if (write) {

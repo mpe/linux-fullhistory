@@ -1,4 +1,4 @@
-/* $Id: su.c,v 1.38 2000/04/22 00:45:16 davem Exp $
+/* $Id: su.c,v 1.41 2000/09/04 19:41:27 ecd Exp $
  * su.c: Small serial driver for keyboard/mouse interface on sparc32/PCI
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -1851,7 +1851,6 @@ su_wait_until_sent(struct tty_struct *tty, int timeout)
 		if (timeout && time_after(jiffies, orig_jiffies + timeout))
 			break;
 	}
-	current->state = TASK_RUNNING;
 #ifdef SERIAL_DEBUG_RS_WAIT_UNTIL_SENT
 	printk("lsr = %d (jiff=%lu)...done\n", lsr, jiffies);
 #endif
@@ -2002,7 +2001,6 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 #endif
 		schedule();
 	}
-	current->state = TASK_RUNNING;
 	remove_wait_queue(&info->open_wait, &wait);
 	if (extra_count)
 		info->count++;
@@ -2125,14 +2123,12 @@ line_info(char *buf, struct su_struct *info)
 	int		ret;
 	unsigned long	flags;
 
-	ret = sprintf(buf, "%d: uart:%s port:%X irq:%s",
-		      info->line, uart_config[info->type].name, 
-		      (int)info->port, __irq_itoa(info->irq));
+	if (info->port == 0 || info->type == PORT_UNKNOWN)
+		return 0;
 
-	if (info->port == 0 || info->type == PORT_UNKNOWN) {
-		ret += sprintf(buf+ret, "\n");
-		return ret;
-	}
+	ret = sprintf(buf, "%u: uart:%s port:%lX irq:%s",
+		      info->line, uart_config[info->type].name, 
+		      (unsigned long)info->port, __irq_itoa(info->irq));
 
 	/*
 	 * Figure out the current RS-232 lines
@@ -2158,24 +2154,24 @@ line_info(char *buf, struct su_struct *info)
 		strcat(stat_buf, "|RI");
 
 	if (info->quot) {
-		ret += sprintf(buf+ret, " baud:%d",
+		ret += sprintf(buf+ret, " baud:%u",
 			       info->baud_base / info->quot);
 	}
 
-	ret += sprintf(buf+ret, " tx:%d rx:%d",
-		      info->icount.tx, info->icount.rx);
+	ret += sprintf(buf+ret, " tx:%u rx:%u",
+		       info->icount.tx, info->icount.rx);
 
 	if (info->icount.frame)
-		ret += sprintf(buf+ret, " fe:%d", info->icount.frame);
+		ret += sprintf(buf+ret, " fe:%u", info->icount.frame);
 
 	if (info->icount.parity)
-		ret += sprintf(buf+ret, " pe:%d", info->icount.parity);
+		ret += sprintf(buf+ret, " pe:%u", info->icount.parity);
 
 	if (info->icount.brk)
-		ret += sprintf(buf+ret, " brk:%d", info->icount.brk);	
+		ret += sprintf(buf+ret, " brk:%u", info->icount.brk);	
 
 	if (info->icount.overrun)
-		ret += sprintf(buf+ret, " oe:%d", info->icount.overrun);
+		ret += sprintf(buf+ret, " oe:%u", info->icount.overrun);
 
 	/*
 	 * Last thing is the RS-232 status lines
@@ -2223,7 +2219,7 @@ done:
  */
 static __inline__ void __init show_su_version(void)
 {
-	char *revision = "$Revision: 1.38 $";
+	char *revision = "$Revision: 1.41 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -2425,6 +2421,7 @@ ebus_done:
  * numbers start, we always are probed for first.
  */
 int su_num_ports = 0;
+EXPORT_SYMBOL(su_num_ports);
 
 /*
  * The serial driver boot-time initialization code!
@@ -2442,7 +2439,11 @@ int __init su_serial_init(void)
 	memset(&serial_driver, 0, sizeof(struct tty_driver));
 	serial_driver.magic = TTY_DRIVER_MAGIC;
 	serial_driver.driver_name = "su";
-	serial_driver.name = "ttys/%d";
+#ifdef CONFIG_DEVFS_FS
+	serial_driver.name = "tts/%d";
+#else
+	serial_driver.name = "ttyS";
+#endif
 	serial_driver.major = TTY_MAJOR;
 	serial_driver.minor_start = 64;
 	serial_driver.num = NR_PORTS;
@@ -2482,7 +2483,11 @@ int __init su_serial_init(void)
 	 * major number and the subtype code.
 	 */
 	callout_driver = serial_driver;
+#ifdef CONFIG_DEVFS_FS
 	callout_driver.name = "cua/%d";
+#else
+	callout_driver.name = "cua";
+#endif
 	callout_driver.major = TTYAUX_MAJOR;
 	callout_driver.subtype = SERIAL_TYPE_CALLOUT;
 	callout_driver.read_proc = 0;
@@ -2598,6 +2603,17 @@ void __init su_probe_any(struct su_probe_scan *t, int sunode)
 				t->msx = t->devices;
 				info->port_type = SU_PORT_MS;
 			} else {
+#ifdef __sparc_v9__
+				/*
+				 * Do not attempt to use the truncated
+				 * keyboard/mouse ports as serial ports
+				 * on Ultras with PC keyboard attached.
+				 */
+				if (prom_getbool(sunode, "mouse"))
+					continue;
+				if (prom_getbool(sunode, "keyboard"))
+					continue;
+#endif
 				info->port_type = SU_PORT_PORT;
 			}
 			info->is_console = 0;

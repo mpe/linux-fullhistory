@@ -868,25 +868,6 @@ void dev_queue_xmit_nit(struct sk_buff *skb, struct net_device *dev)
 	br_read_unlock(BR_NETPROTO_LOCK);
 }
 
-/*
- *	Fast path for loopback frames.
- */
- 
-void dev_loopback_xmit(struct sk_buff *skb)
-{
-	struct sk_buff *newskb=skb_clone(skb, GFP_ATOMIC);
-	if (newskb==NULL)
-		return;
-
-	newskb->mac.raw = newskb->data;
-	skb_pull(newskb, newskb->nh.raw - newskb->data);
-	newskb->pkt_type = PACKET_LOOPBACK;
-	newskb->ip_summed = CHECKSUM_UNNECESSARY;
-	if (newskb->dst==NULL)
-		printk(KERN_DEBUG "BUG: packet without dst looped back 1\n");
-	netif_rx(newskb);
-}
-
 /**
  *	dev_queue_xmit - transmit a buffer
  *	@skb: buffer to transmit

@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.151 2000/07/11 23:22:17 davem Exp $
+/*  $Id: process.c,v 1.153 2000/09/06 00:45:01 davem Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -234,7 +234,6 @@ void show_backtrace(void)
 void smp_show_backtrace_all_cpus(void)
 {
 	xc0((smpfunc_t) show_backtrace);
-	show_backtrace();
 }
 #endif
 

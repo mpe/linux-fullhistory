@@ -1201,6 +1201,7 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	int acc_mode;
 	struct dentry *dentry;
 	char   name[SHM_FMT_LEN+1];
+	void *user_addr;
 
 	if (!shm_sb || (shmid % SEQ_MULTIPLIER) == zero_id)
 		return -EINVAL;
@@ -1254,13 +1255,12 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	if (IS_ERR (file))
 		goto bad_file1;
 	down(&current->mm->mmap_sem);
-	*raddr = do_mmap (file, addr, file->f_dentry->d_inode->i_size,
-			  prot, flags, 0);
+	user_addr = (void *) do_mmap (file, addr, file->f_dentry->d_inode->i_size, prot, flags, 0);
 	up(&current->mm->mmap_sem);
-	if (IS_ERR(*raddr))
-		err = PTR_ERR(*raddr);
-	else
-		err = 0;
+	*raddr = (unsigned long) user_addr;
+	err = 0;
+	if (IS_ERR(user_addr))
+		err = PTR_ERR(user_addr);
 	fput (file);
 	return err;
 

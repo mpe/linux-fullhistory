@@ -21,7 +21,7 @@
 #undef request_region
 #define release_region(X, Y)	do { } while(0)
 #define check_region(X, Y)	(0)
-#define request_region(X, Y, Z)	do { } while(0)
+#define request_region(X, Y, Z)	(1)
 
 /* References:
  * 1) Netbsd Sun floppy driver.

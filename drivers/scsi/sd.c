@@ -19,6 +19,9 @@
  *       scsi disks using eight major numbers.
  *
  *       Modified by Richard Gooch rgooch@atnf.csiro.au to support devfs.
+ *	
+ *	 Modified by Torben Mathiasen tmm@image.dk
+ *       Resource allocation fixes in sd_init and cleanups.
  */
 
 #include <linux/config.h>
@@ -1039,16 +1042,24 @@ static int sd_init()
 	if (rscsi_disks)
 		return 0;
 
-	rscsi_disks = (Scsi_Disk *)
-	    kmalloc(sd_template.dev_max * sizeof(Scsi_Disk), GFP_ATOMIC);
+	rscsi_disks = kmalloc(sd_template.dev_max * sizeof(Scsi_Disk), GFP_ATOMIC);
+	if (!rscsi_disks)
+		goto cleanup_devfs;
 	memset(rscsi_disks, 0, sd_template.dev_max * sizeof(Scsi_Disk));
 
 	/* for every (necessary) major: */
-	sd_sizes = (int *) kmalloc((sd_template.dev_max << 4) * sizeof(int), GFP_ATOMIC);
+	sd_sizes = kmalloc((sd_template.dev_max << 4) * sizeof(int), GFP_ATOMIC);
+	if (!sd_sizes)
+		goto cleanup_disks;
 	memset(sd_sizes, 0, (sd_template.dev_max << 4) * sizeof(int));
 
-	sd_blocksizes = (int *) kmalloc((sd_template.dev_max << 4) * sizeof(int), GFP_ATOMIC);
-	sd_hardsizes = (int *) kmalloc((sd_template.dev_max << 4) * sizeof(int), GFP_ATOMIC);
+	sd_blocksizes = kmalloc((sd_template.dev_max << 4) * sizeof(int), GFP_ATOMIC);
+	if (!sd_blocksizes)
+		goto cleanup_sizes;
+	
+	sd_hardsizes = kmalloc((sd_template.dev_max << 4) * sizeof(int), GFP_ATOMIC);
+	if (!sd_hardsizes)
+		goto cleanup_blocksizes;
 
 	for (i = 0; i < sd_template.dev_max << 4; i++) {
 		sd_blocksizes[i] = 1024;
@@ -1059,22 +1070,29 @@ static int sd_init()
 		blksize_size[SD_MAJOR(i)] = sd_blocksizes + i * (SCSI_DISKS_PER_MAJOR << 4);
 		hardsect_size[SD_MAJOR(i)] = sd_hardsizes + i * (SCSI_DISKS_PER_MAJOR << 4);
 	}
-	sd = (struct hd_struct *) kmalloc((sd_template.dev_max << 4) *
+	sd = kmalloc((sd_template.dev_max << 4) *
 					  sizeof(struct hd_struct),
 					  GFP_ATOMIC);
+	if (!sd)
+		goto cleanup_sd;
 	memset(sd, 0, (sd_template.dev_max << 4) * sizeof(struct hd_struct));
 
 	if (N_USED_SD_MAJORS > 1)
-		sd_gendisks = (struct gendisk *)
-		    kmalloc(N_USED_SD_MAJORS * sizeof(struct gendisk), GFP_ATOMIC);
+		sd_gendisks = kmalloc(N_USED_SD_MAJORS * sizeof(struct gendisk), GFP_ATOMIC);
+		if (!sd_gendisks)
+			goto cleanup_sd_gendisks;
 	for (i = 0; i < N_USED_SD_MAJORS; i++) {
 		sd_gendisks[i] = sd_gendisk;
 		sd_gendisks[i].de_arr = kmalloc (SCSI_DISKS_PER_MAJOR * sizeof *sd_gendisks[i].de_arr,
                                                  GFP_ATOMIC);
+		if (!sd_gendisks[i].de_arr)
+			goto cleanup_gendisks_de_arr;
                 memset (sd_gendisks[i].de_arr, 0,
                         SCSI_DISKS_PER_MAJOR * sizeof *sd_gendisks[i].de_arr);
 		sd_gendisks[i].flags = kmalloc (SCSI_DISKS_PER_MAJOR * sizeof *sd_gendisks[i].flags,
                                                 GFP_ATOMIC);
+		if (!sd_gendisks[i].flags)
+			goto cleanup_gendisks_flags;
                 memset (sd_gendisks[i].flags, 0,
                         SCSI_DISKS_PER_MAJOR * sizeof *sd_gendisks[i].flags);
 		sd_gendisks[i].major = SD_MAJOR(i);
@@ -1091,6 +1109,31 @@ static int sd_init()
 
 	LAST_SD_GENDISK.next = NULL;
 	return 0;
+
+cleanup_gendisks_flags:
+	kfree(sd_gendisks[i].de_arr);
+cleanup_gendisks_de_arr:
+	while (--i >= 0 ) {
+		kfree(sd_gendisks[i].de_arr);
+		kfree(sd_gendisks[i].flags);
+	}
+	kfree(sd_gendisks);
+cleanup_sd_gendisks:
+	kfree(sd);
+cleanup_sd:
+	kfree(sd_hardsizes);
+cleanup_blocksizes:
+	kfree(sd_blocksizes);
+cleanup_sizes:
+	kfree(sd_sizes);
+cleanup_disks:
+	kfree(rscsi_disks);
+cleanup_devfs:
+	for (i = 0; i < N_USED_SD_MAJORS; i++) {
+		devfs_unregister_blkdev(SD_MAJOR(i), "sd");
+	}
+	sd_registered--;
+	return 1;
 }
 
 
@@ -1292,14 +1335,12 @@ static void sd_detach(Scsi_Device * SDp)
 	return;
 }
 
-#ifdef MODULE
-
-int init_module(void)
+int init_sd(void)
 {
-	sd_template.module = &__this_module;
+	sd_template.module = THIS_MODULE;
 	return scsi_register_module(MODULE_SCSI_DEV, &sd_template);
 }
-void cleanup_module(void)
+void exit_sd(void)
 {
 	struct gendisk **prev_sdgd_link;
 	struct gendisk *sdgd;
@@ -1313,10 +1354,10 @@ void cleanup_module(void)
 
 	sd_registered--;
 	if (rscsi_disks != NULL) {
-		kfree((char *) rscsi_disks);
-		kfree((char *) sd_sizes);
-		kfree((char *) sd_blocksizes);
-		kfree((char *) sd_hardsizes);
+		kfree(rscsi_disks);
+		kfree(sd_sizes);
+		kfree(sd_blocksizes);
+		kfree(sd_hardsizes);
 		kfree((char *) sd);
 
 		/*
@@ -1346,23 +1387,6 @@ void cleanup_module(void)
 	if (sd_gendisks != &sd_gendisk)
 		kfree(sd_gendisks);
 }
-#endif				/* MODULE */
 
-/*
- * Overrides for Emacs so that we almost follow Linus's tabbing style.
- * Emacs will notice this stuff at the end of the file and automatically
- * adjust the settings for this buffer only.  This must remain at the end
- * of the file.
- * ---------------------------------------------------------------------------
- * Local variables:
- * c-indent-level: 4
- * c-brace-imaginary-offset: 0
- * c-brace-offset: -4
- * c-argdecl-indent: 4
- * c-label-offset: -4
- * c-continued-statement-offset: 4
- * c-continued-brace-offset: 0
- * indent-tabs-mode: nil
- * tab-width: 8
- * End:
- */
+module_init(init_sd);
+module_exit(exit_sd);

@@ -79,6 +79,7 @@ struct mpc_config_bus
 	unsigned char mpc_bustype[6] __attribute((packed));
 };
 
+/* List of Bus Type string values, Intel MP Spec. */
 #define BUSTYPE_EISA	"EISA"
 #define BUSTYPE_ISA	"ISA"
 #define BUSTYPE_INTERN	"INTERN"	/* Internal BUS */
@@ -86,6 +87,17 @@ struct mpc_config_bus
 #define BUSTYPE_VL	"VL"		/* Local bus */
 #define BUSTYPE_PCI	"PCI"
 #define BUSTYPE_PCMCIA	"PCMCIA"
+#define BUSTYPE_CBUS	"CBUS"
+#define BUSTYPE_CBUSII	"CBUSII"
+#define BUSTYPE_FUTURE	"FUTURE"
+#define BUSTYPE_MBI	"MBI"
+#define BUSTYPE_MBII	"MBII"
+#define BUSTYPE_MPI	"MPI"
+#define BUSTYPE_MPSA	"MPSA"
+#define BUSTYPE_NUBUS	"NUBUS"
+#define BUSTYPE_TC	"TC"
+#define BUSTYPE_VME	"VME"
+#define BUSTYPE_XPRESS	"XPRESS"
 
 struct mpc_config_ioapic
 {
@@ -147,7 +159,7 @@ struct mpc_config_lintsrc
 #define MAX_IRQ_SOURCES 128
 #define MAX_MP_BUSSES 32
 enum mp_bustype {
-	MP_BUS_ISA,
+	MP_BUS_ISA = 1,
 	MP_BUS_EISA,
 	MP_BUS_PCI,
 	MP_BUS_MCA

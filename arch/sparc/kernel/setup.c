@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.118 2000/05/09 17:40:13 davem Exp $
+/*  $Id: setup.c,v 1.119 2000/08/31 10:24:17 anton Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -80,12 +80,7 @@ void prom_sync_me(void)
 {
 	unsigned long prom_tbr, flags;
 
-#ifdef CONFIG_SMP
-	global_irq_holder = NO_PROC_ID;
-	*((unsigned char *)&global_irq_lock) = 0;
-	*((unsigned char *)&global_bh_lock) = 0;
-#endif
-	__save_and_cli(flags);
+	save_and_cli(flags);
 	__asm__ __volatile__("rd %%tbr, %0\n\t" : "=r" (prom_tbr));
 	__asm__ __volatile__("wr %0, 0x0, %%tbr\n\t"
 			     "nop\n\t"
@@ -99,9 +94,9 @@ void prom_sync_me(void)
 	prom_printf("PROM SYNC COMMAND...\n");
 	show_free_areas();
 	if(current->pid != 0) {
-		__sti();
+		sti();
 		sys_sync();
-		__cli();
+		cli();
 	}
 	prom_printf("Returning to prom\n");
 
@@ -109,7 +104,7 @@ void prom_sync_me(void)
 			     "nop\n\t"
 			     "nop\n\t"
 			     "nop\n\t" : : "r" (prom_tbr));
-	__restore_flags(flags);
+	restore_flags(flags);
 
 	return;
 }

@@ -2822,7 +2822,7 @@ _static int __init start_uhci (struct pci_dev *dev)
 	return -1;
 }
 
-int __init uhci_init (void)
+static int __init uhci_init (void)
 {
 	int retval = -ENODEV;
 	struct pci_dev *dev = NULL;
@@ -2879,7 +2879,7 @@ int __init uhci_init (void)
 	return retval;
 }
 
-void __exit uhci_cleanup (void)
+static void __exit uhci_cleanup (void)
 {
 	uhci_t *s;
 	while ((s = devs)) {
@@ -2895,18 +2895,15 @@ void __exit uhci_cleanup (void)
 #endif
 }
 
-#ifdef MODULE
-int init_module (void)
-{
-	return uhci_init ();
-}
-
-void cleanup_module (void)
+static void __exit uhci_exit (void)
 {
 	pm_unregister_all (handle_pm_event);
 	uhci_cleanup ();
 }
 
+module_init(uhci_init);
+module_exit(uhci_exit);
+
 MODULE_AUTHOR("Georg Acher, Deti Fliegl, Thomas Sailer, Roman Weissgaerber");
 MODULE_DESCRIPTION("USB Universal Host Controller Interface driver");
-#endif //MODULE
+

@@ -37,6 +37,13 @@
  *		Removed ->release(). Removed exclusive open and status bitmap.
  *		Added microcode_rwsem to serialize read()/write()/ioctl().
  *		Removed global kernel lock usage.
+ *	1.07	07 Sep 2000, Tigran Aivazian <tigran@veritas.com>
+ *		Write 0 to 0x8B msr and then cpuid before reading revision,
+ *		so that it works even if there were no update done by the
+ *		BIOS. Otherwise, reading from 0x8B gives junk (which happened
+ *		to be 0 on my machine which is why it worked even when I
+ *		disabled update by the BIOS)
+ *		Thanks to Eric W. Biederman <ebiederman@lnxi.com> for the fix.
  */
 
 #include <linux/init.h>
@@ -51,7 +58,7 @@
 #include <asm/uaccess.h>
 #include <asm/processor.h>
 
-#define MICROCODE_VERSION 	"1.06"
+#define MICROCODE_VERSION 	"1.07"
 
 MODULE_DESCRIPTION("Intel CPU (P6) microcode update driver");
 MODULE_AUTHOR("Tigran Aivazian <tigran@veritas.com>");
@@ -188,7 +195,8 @@ static void do_update_one(void *unused)
 		    microcode[i].ldrver == 1 && microcode[i].hdrver == 1) {
 
 			found=1;
-
+			wrmsr(0x8B, 0, 0);
+			__asm__ __volatile__ ("cpuid" : : : "ax", "bx", "cx", "dx");
 			rdmsr(0x8B, val[0], rev);
 			if (microcode[i].rev <= rev) {
 				printk(KERN_ERR 
