@@ -538,7 +538,7 @@ int kswapd(void *unused)
 		do {
 			if (!do_try_to_free_page(0))
 				break;
-			if (nr_free_pages > 2*freepages.high)
+			if (nr_free_pages > freepages.high + SWAP_CLUSTER_MAX)
 				break;
 		} while (time_before_eq(jiffies,end_time));
 	}
@@ -621,8 +621,6 @@ void swap_tick(void)
 		 * priority.
 		 */
 		want_wakeup = 0;
-		if (buffer_over_max() || pgcache_over_max())
-			want_wakeup = 1;
 		pages = nr_free_pages;
 		if (pages < freepages.high)
 			want_wakeup = 1;

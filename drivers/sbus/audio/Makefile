@@ -45,11 +45,11 @@ endif
 
 ifeq ($(CONFIG_SPARCAUDIO_DBRI),y)
 SBUS_AUDIO=y
-O_OBJS += dbri.o
+OX_OBJS += dbri.o
 else
   ifeq ($(CONFIG_SPARCAUDIO_DBRI),m)
   SBUS_AUDIO_MODULE=y
-  M_OBJS += dbri.o
+  MX_OBJS += dbri.o
   endif
 endif
 

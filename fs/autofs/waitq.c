@@ -18,7 +18,7 @@
 
 /* We make this a static variable rather than a part of the superblock; it
    is better if we don't reassign numbers easily even across filesystems */
-static int autofs_next_wait_queue = 1;
+static autofs_wqt_t autofs_next_wait_queue = 1;
 
 /* These are the signals we allow interrupting a pending mount */
 #define SHUTDOWN_SIGS	(sigmask(SIGKILL) | sigmask(SIGINT) | sigmask(SIGQUIT))
@@ -168,7 +168,7 @@ int autofs_wait(struct autofs_sb_info *sbi, struct qstr * name)
 }
 
 
-int autofs_wait_release(struct autofs_sb_info *sbi, unsigned long wait_queue_token, int status)
+int autofs_wait_release(struct autofs_sb_info *sbi, autofs_wqt_t wait_queue_token, int status)
 {
 	struct autofs_wait_queue *wq, **wql;
 

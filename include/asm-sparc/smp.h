@@ -150,11 +150,12 @@ extern __inline__ int hard_smp_processor_id(void)
 #else
 extern __inline__ int hard_smp_processor_id(void)
 {
-	int cpuid __asm__ ("g2");
+	int cpuid;
 	
 	__asm__ __volatile__("mov %%o7, %%g1\n\t"
 			     "call ___f___smp_processor_id\n\t"
-			     " nop\n\t" : "=r"(cpuid) : : "g1");
+			     " nop\n\t"
+			     "mov %%g2, %0\n\t" : "=r"(cpuid) : : "g1", "g2");
 	return cpuid;
 }
 #endif

@@ -1,7 +1,7 @@
-/* $Id: misc.c,v 1.12 1998/06/16 04:37:08 davem Exp $
+/* $Id: misc.c,v 1.13 1998/10/28 08:11:58 jj Exp $
  * misc.c: Miscelaneous syscall emulation for Solaris
  *
- * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
 #include <linux/module.h> 
@@ -11,6 +11,9 @@
 #include <linux/limits.h>
 #include <linux/mm.h>
 #include <linux/smp.h>
+#include <linux/mman.h>
+#include <linux/file.h>
+#include <linux/timex.h>
 
 #include <asm/uaccess.h>
 #include <asm/string.h>
@@ -43,16 +46,86 @@ int solaris_err_table[] = {
 /* 120 */ 22, 22, 88, 86, 85, 22, 22,
 };
 
+#define SOLARIS_NR_OPEN	256
+
+static u32 do_solaris_mmap(u32 addr, u32 len, u32 prot, u32 flags, u32 fd, u64 off)
+{
+	struct file *file = NULL;
+	unsigned long retval, ret_type;
+
+	lock_kernel();
+	current->personality |= PER_SVR4;
+	if (flags & MAP_NORESERVE) {
+		static int cnt = 0;
+		
+		if (cnt < 5) {
+			printk("%s:  unimplemented Solaris MAP_NORESERVE mmap() flag\n",
+			       current->comm);
+			cnt++;
+		}
+		flags &= ~MAP_NORESERVE;
+	}
+	retval = -EBADF;
+	if(!(flags & MAP_ANONYMOUS)) {
+		if(fd >= SOLARIS_NR_OPEN)
+			goto out;
+ 		file = fget(fd);
+		if (!file)
+			goto out;
+		if (file->f_dentry && file->f_dentry->d_inode) {
+			struct inode * inode = file->f_dentry->d_inode;
+			if(MAJOR(inode->i_rdev) == MEM_MAJOR &&
+			   MINOR(inode->i_rdev) == 5) {
+				flags |= MAP_ANONYMOUS;
+				fput(file);
+				file = NULL;
+			}
+		}
+	}
+
+	retval = -ENOMEM;
+	if(!(flags & MAP_FIXED) && !addr) {
+		unsigned long attempt = get_unmapped_area(addr, len);
+		if(!attempt || (attempt >= 0xf0000000UL))
+			goto out_putf;
+		addr = (u32) attempt;
+	}
+	if(!(flags & MAP_FIXED))
+		addr = 0;
+	ret_type = flags & _MAP_NEW;
+	flags &= ~_MAP_NEW;
+
+	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
+	retval = do_mmap(file,
+			 (unsigned long) addr, (unsigned long) len,
+			 (unsigned long) prot, (unsigned long) flags, off);
+	if(!ret_type)
+		retval = ((retval < 0xf0000000) ? 0 : retval);
+out_putf:
+	if (file)
+		fput(file);
+out:
+	unlock_kernel();
+	return (u32) retval;
+}
+
 asmlinkage u32 solaris_mmap(u32 addr, u32 len, u32 prot, u32 flags, u32 fd, u32 off)
 {
-	u32 (*sunos_mmap)(u32,u32,u32,u32,u32,u32) = 
-		(u32 (*)(u32,u32,u32,u32,u32,u32))SUNOS(71);
-	u32 ret;
+	return do_solaris_mmap(addr, len, prot, flags, fd, (u64) off);
+}
+
+asmlinkage u32 solaris_mmap64(struct pt_regs *regs, u32 len, u32 prot, u32 flags, u32 fd, u32 offhi)
+{
+	u32 offlo;
 	
-	ret = sunos_mmap(addr,len,prot,flags,fd,off);
-	/* sunos_mmap sets personality to PER_BSD */
-	current->personality = PER_SVR4;
-	return ret;
+	if (regs->u_regs[UREG_G1]) {
+		if (get_user (offlo, (u32 *)(long)((u32)regs->u_regs[UREG_I6] + 0x5c)))
+			return -EFAULT;
+	} else {
+		if (get_user (offlo, (u32 *)(long)((u32)regs->u_regs[UREG_I6] + 0x60)))
+			return -EFAULT;
+	}
+	return do_solaris_mmap((u32)regs->u_regs[UREG_I0], len, prot, flags, fd, (((u64)offhi)<<32)|offlo);
 }
 
 asmlinkage int solaris_brk(u32 brk)
@@ -326,6 +399,18 @@ asmlinkage int solaris_sysconf(int id)
 	}
 }
 
+asmlinkage int solaris_setreuid(s32 ruid, s32 euid)
+{
+	int (*sys_setreuid)(uid_t, uid_t) = (int (*)(uid_t, uid_t))SYS(setreuid);
+	return sys_setreuid(ruid, euid);
+}
+
+asmlinkage int solaris_setregid(s32 rgid, s32 egid)
+{
+	int (*sys_setregid)(gid_t, gid_t) = (int (*)(gid_t, gid_t))SYS(setregid);
+	return sys_setregid(rgid, egid);
+}
+
 asmlinkage int solaris_procids(int cmd, s32 pid, s32 pgid)
 {
 	int ret;
@@ -376,6 +461,257 @@ asmlinkage int solaris_gettimeofday(u32 tim)
 		(int (*)(struct timeval *, struct timezone *))SYS(gettimeofday);
 		
 	return sys_gettimeofday((struct timeval *)(u64)tim, NULL);
+}
+
+#define RLIM_SOL_INFINITY32	0x7fffffff
+#define RLIM_SOL_SAVED_MAX32	0x7ffffffe
+#define RLIM_SOL_SAVED_CUR32	0x7ffffffd
+#define RLIM_SOL_INFINITY	((u64)-3)
+#define RLIM_SOL_SAVED_MAX	((u64)-2)
+#define RLIM_SOL_SAVED_CUR	((u64)-1)
+#define RESOURCE32(x) ((x > RLIM_INFINITY32) ? RLIM_INFINITY32 : x)
+#define RLIMIT_SOL_NOFILE	5
+#define RLIMIT_SOL_VMEM		6
+
+struct rlimit32 {
+	s32	rlim_cur;
+	s32	rlim_max;
+};
+
+asmlinkage int solaris_getrlimit(unsigned int resource, struct rlimit32 *rlim)
+{
+	struct rlimit r;
+	int ret;
+	mm_segment_t old_fs = get_fs ();
+	int (*sys_getrlimit)(unsigned int, struct rlimit *) =
+		(int (*)(unsigned int, struct rlimit *))SYS(getrlimit);
+
+	if (resource > RLIMIT_SOL_VMEM)
+		return -EINVAL;	
+	switch (resource) {
+	case RLIMIT_SOL_NOFILE: resource = RLIMIT_NOFILE; break;
+	case RLIMIT_SOL_VMEM: resource = RLIMIT_AS; break;
+	default: break;
+	}
+	set_fs (KERNEL_DS);
+	ret = sys_getrlimit(resource, &r);
+	set_fs (old_fs);
+	if (!ret) {
+		if (r.rlim_cur == RLIM_INFINITY)
+			r.rlim_cur = RLIM_SOL_INFINITY32;
+		else if ((u64)r.rlim_cur > RLIM_SOL_INFINITY32)
+			r.rlim_cur = RLIM_SOL_SAVED_CUR32;
+		if (r.rlim_max == RLIM_INFINITY)
+			r.rlim_max = RLIM_SOL_INFINITY32;
+		else if ((u64)r.rlim_max > RLIM_SOL_INFINITY32)
+			r.rlim_max = RLIM_SOL_SAVED_MAX32;
+		ret = put_user (r.rlim_cur, &rlim->rlim_cur);
+		ret |= __put_user (r.rlim_max, &rlim->rlim_max);
+	}
+	return ret;
+}
+
+asmlinkage int solaris_setrlimit(unsigned int resource, struct rlimit32 *rlim)
+{
+	struct rlimit r, rold;
+	int ret;
+	mm_segment_t old_fs = get_fs ();
+	int (*sys_getrlimit)(unsigned int, struct rlimit *) =
+		(int (*)(unsigned int, struct rlimit *))SYS(getrlimit);
+	int (*sys_setrlimit)(unsigned int, struct rlimit *) =
+		(int (*)(unsigned int, struct rlimit *))SYS(setrlimit);
+
+	if (resource > RLIMIT_SOL_VMEM)
+		return -EINVAL;	
+	switch (resource) {
+	case RLIMIT_SOL_NOFILE: resource = RLIMIT_NOFILE; break;
+	case RLIMIT_SOL_VMEM: resource = RLIMIT_AS; break;
+	default: break;
+	}
+	if (get_user (r.rlim_cur, &rlim->rlim_cur) ||
+	    __get_user (r.rlim_max, &rlim->rlim_max))
+		return -EFAULT;
+	set_fs (KERNEL_DS);
+	ret = sys_getrlimit(resource, &rold);
+	if (!ret) {
+		if (r.rlim_cur == RLIM_SOL_INFINITY32)
+			r.rlim_cur = RLIM_INFINITY;
+		else if (r.rlim_cur == RLIM_SOL_SAVED_CUR32)
+			r.rlim_cur = rold.rlim_cur;
+		else if (r.rlim_cur == RLIM_SOL_SAVED_MAX32)
+			r.rlim_cur = rold.rlim_max;
+		if (r.rlim_max == RLIM_SOL_INFINITY32)
+			r.rlim_max = RLIM_INFINITY;
+		else if (r.rlim_max == RLIM_SOL_SAVED_CUR32)
+			r.rlim_max = rold.rlim_cur;
+		else if (r.rlim_max == RLIM_SOL_SAVED_MAX32)
+			r.rlim_max = rold.rlim_max;
+		ret = sys_setrlimit(resource, &r);
+	}
+	set_fs (old_fs);
+	return ret;
+}
+
+asmlinkage int solaris_getrlimit64(unsigned int resource, struct rlimit *rlim)
+{
+	struct rlimit r;
+	int ret;
+	mm_segment_t old_fs = get_fs ();
+	int (*sys_getrlimit)(unsigned int, struct rlimit *) =
+		(int (*)(unsigned int, struct rlimit *))SYS(getrlimit);
+
+	if (resource > RLIMIT_SOL_VMEM)
+		return -EINVAL;	
+	switch (resource) {
+	case RLIMIT_SOL_NOFILE: resource = RLIMIT_NOFILE; break;
+	case RLIMIT_SOL_VMEM: resource = RLIMIT_AS; break;
+	default: break;
+	}
+	set_fs (KERNEL_DS);
+	ret = sys_getrlimit(resource, &r);
+	set_fs (old_fs);
+	if (!ret) {
+		if (r.rlim_cur == RLIM_INFINITY)
+			r.rlim_cur = RLIM_SOL_INFINITY;
+		if (r.rlim_max == RLIM_INFINITY)
+			r.rlim_max = RLIM_SOL_INFINITY;
+		ret = put_user (r.rlim_cur, &rlim->rlim_cur);
+		ret |= __put_user (r.rlim_max, &rlim->rlim_max);
+	}
+	return ret;
+}
+
+asmlinkage int solaris_setrlimit64(unsigned int resource, struct rlimit *rlim)
+{
+	struct rlimit r, rold;
+	int ret;
+	mm_segment_t old_fs = get_fs ();
+	int (*sys_getrlimit)(unsigned int, struct rlimit *) =
+		(int (*)(unsigned int, struct rlimit *))SYS(getrlimit);
+	int (*sys_setrlimit)(unsigned int, struct rlimit *) =
+		(int (*)(unsigned int, struct rlimit *))SYS(setrlimit);
+
+	if (resource > RLIMIT_SOL_VMEM)
+		return -EINVAL;	
+	switch (resource) {
+	case RLIMIT_SOL_NOFILE: resource = RLIMIT_NOFILE; break;
+	case RLIMIT_SOL_VMEM: resource = RLIMIT_AS; break;
+	default: break;
+	}
+	if (get_user (r.rlim_cur, &rlim->rlim_cur) ||
+	    __get_user (r.rlim_max, &rlim->rlim_max))
+		return -EFAULT;
+	set_fs (KERNEL_DS);
+	ret = sys_getrlimit(resource, &rold);
+	if (!ret) {
+		if (r.rlim_cur == RLIM_SOL_INFINITY)
+			r.rlim_cur = RLIM_INFINITY;
+		else if (r.rlim_cur == RLIM_SOL_SAVED_CUR)
+			r.rlim_cur = rold.rlim_cur;
+		else if (r.rlim_cur == RLIM_SOL_SAVED_MAX)
+			r.rlim_cur = rold.rlim_max;
+		if (r.rlim_max == RLIM_SOL_INFINITY)
+			r.rlim_max = RLIM_INFINITY;
+		else if (r.rlim_max == RLIM_SOL_SAVED_CUR)
+			r.rlim_max = rold.rlim_cur;
+		else if (r.rlim_max == RLIM_SOL_SAVED_MAX)
+			r.rlim_max = rold.rlim_max;
+		ret = sys_setrlimit(resource, &r);
+	}
+	set_fs (old_fs);
+	return ret;
+}
+
+struct timeval32 {
+	int tv_sec, tv_usec;
+};
+
+struct sol_ntptimeval {
+	struct timeval32 time;
+	s32 maxerror;
+	s32 esterror;
+};
+
+struct sol_timex {
+	u32 modes;
+	s32 offset;
+	s32 freq;
+	s32 maxerror;
+	s32 esterror;
+	s32 status;
+	s32 constant;
+	s32 precision;
+	s32 tolerance;
+	s32 ppsfreq;
+	s32 jitter;
+	s32 shift;
+	s32 stabil;
+	s32 jitcnt;
+	s32 calcnt;
+	s32 errcnt;
+	s32 stbcnt;
+};
+
+asmlinkage int solaris_ntp_gettime(struct sol_ntptimeval *ntp)
+{
+	int (*sys_adjtimex)(struct timex *) =
+		(int (*)(struct timex *))SYS(adjtimex);
+	struct timex t;
+	int ret;
+	mm_segment_t old_fs = get_fs();
+	
+	set_fs(KERNEL_DS);
+	t.modes = 0;
+	ret = sys_adjtimex(&t);
+	set_fs(old_fs);
+	if (ret < 0)
+		return ret;
+	ret = put_user (t.time.tv_sec, &ntp->time.tv_sec);
+	ret |= __put_user (t.time.tv_usec, &ntp->time.tv_usec);
+	ret |= __put_user (t.maxerror, &ntp->maxerror);
+	ret |= __put_user (t.esterror, &ntp->esterror);
+	return ret;	                        
+}
+
+asmlinkage int solaris_ntp_adjtime(struct sol_timex *txp)
+{
+	int (*sys_adjtimex)(struct timex *) =
+		(int (*)(struct timex *))SYS(adjtimex);
+	struct timex t;
+	int ret, err;
+	mm_segment_t old_fs = get_fs();
+
+	ret = get_user (t.modes, &txp->modes);
+	ret |= __get_user (t.offset, &txp->offset);
+	ret |= __get_user (t.freq, &txp->freq);
+	ret |= __get_user (t.maxerror, &txp->maxerror);
+	ret |= __get_user (t.esterror, &txp->esterror);
+	ret |= __get_user (t.status, &txp->status);
+	ret |= __get_user (t.constant, &txp->constant);
+	set_fs(KERNEL_DS);
+	ret = sys_adjtimex(&t);
+	set_fs(old_fs);
+	if (ret < 0)
+		return ret;
+	err = put_user (t.offset, &txp->offset);
+	err |= __put_user (t.freq, &txp->freq);
+	err |= __put_user (t.maxerror, &txp->maxerror);
+	err |= __put_user (t.esterror, &txp->esterror);
+	err |= __put_user (t.status, &txp->status);
+	err |= __put_user (t.constant, &txp->constant);
+	err |= __put_user (t.precision, &txp->precision);
+	err |= __put_user (t.tolerance, &txp->tolerance);
+	err |= __put_user (t.ppsfreq, &txp->ppsfreq);
+	err |= __put_user (t.jitter, &txp->jitter);
+	err |= __put_user (t.shift, &txp->shift);
+	err |= __put_user (t.stabil, &txp->stabil);
+	err |= __put_user (t.jitcnt, &txp->jitcnt);
+	err |= __put_user (t.calcnt, &txp->calcnt);
+	err |= __put_user (t.errcnt, &txp->errcnt);
+	err |= __put_user (t.stbcnt, &txp->stbcnt);
+	if (err)
+		return -EFAULT;
+	return ret;
 }
 
 asmlinkage int do_sol_unimplemented(struct pt_regs *regs)

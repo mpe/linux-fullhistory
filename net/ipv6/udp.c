@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.36 1998/10/03 09:38:54 davem Exp $
+ *	$Id: udp.c,v 1.37 1998/11/08 11:17:10 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -308,7 +308,7 @@ ipv4_connected:
 	return(0);
 }
 
-static void udpv6_close(struct sock *sk, unsigned long timeout)
+static void udpv6_close(struct sock *sk, long timeout)
 {
 	/* See for explanation: raw_close in ipv4/raw.c */
 	sk->state = TCP_CLOSE;

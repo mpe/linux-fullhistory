@@ -117,7 +117,7 @@ struct lp_stats {
 
 struct lp_struct {
 	struct pardevice *dev;
-	int flags;
+	unsigned long flags;
 	unsigned int chars;
 	unsigned int time;
 	unsigned int wait;

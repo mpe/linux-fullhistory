@@ -1,5 +1,5 @@
-/*
- * linux/include/asm-i386/namei.h
+/* 
+ * linux/include/asm-arm/namei.h
  *
  * Included from linux/fs/namei.c
  */
@@ -12,7 +12,7 @@
  * Look at asm-sparc/namei.h for details.
  */
 
-#define __prefix_namei(retrieve_mode, name, base, buf, res_dir, res_inode, \
-		       last_name, last_entry, last_error) 1
+#define __prefix_lookup_dentry(name, lookup_flags) \
+        do {} while (0)
 
 #endif /* __ASMARM_NAMEI_H */

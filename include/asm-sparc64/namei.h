@@ -1,4 +1,4 @@
-/* $Id: namei.h,v 1.12 1998/03/13 17:38:13 jj Exp $
+/* $Id: namei.h,v 1.13 1998/10/28 08:13:49 jj Exp $
  * linux/include/asm-sparc64/namei.h
  *
  * Routines to handle famous /usr/gnemul/s*.
@@ -29,7 +29,9 @@ __sparc64_lookup_dentry(const char *name, int lookup_flags)
 		return NULL;
 	}
 
-	base = lookup_dentry (emul, dget (current->fs->root), (LOOKUP_FOLLOW | LOOKUP_DIRECTORY | LOOKUP_SLASHOK));
+	base = lookup_dentry (emul, 
+			      dget (current->fs->root), 
+			      (LOOKUP_FOLLOW | LOOKUP_DIRECTORY | LOOKUP_SLASHOK));
 			
 	if (IS_ERR (base)) return NULL;
 	

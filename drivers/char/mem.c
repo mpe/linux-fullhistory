@@ -53,6 +53,9 @@ extern void prom_con_init(void);
 #ifdef CONFIG_MDA_CONSOLE
 extern void mda_console_init(void);
 #endif
+#if defined(CONFIG_PPC) || defined(CONFIG_MAC)
+extern void adbdev_init(void);
+#endif
 
 static ssize_t do_write_mem(struct file * file, void *p, unsigned long realp,
 			    const char * buf, size_t count, loff_t *ppos)
@@ -509,9 +512,11 @@ static int memory_open(struct inode * inode, struct file * filp)
 		case 3:
 			filp->f_op = &null_fops;
 			break;
+#ifndef CONFIG_PPC
 		case 4:
 			filp->f_op = &port_fops;
 			break;
+#endif
 		case 5:
 			filp->f_op = &zero_fops;
 			break;
@@ -595,6 +600,9 @@ __initfunc(int chr_dev_init(void))
 #endif
 #ifdef CONFIG_VIDEO_BT848
 	i2c_init();
+#endif
+#if defined(CONFIG_PPC) || defined(CONFIG_MAC)
+	adbdev_init();
 #endif
 #ifdef CONFIG_VIDEO_DEV
 	videodev_init();

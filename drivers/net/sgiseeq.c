@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: sgiseeq.c,v 1.5 1998/05/01 01:35:40 ralf Exp $
+ * $Id: sgiseeq.c,v 1.6 1998/10/14 17:29:44 ralf Exp $
  */
 
 #include <linux/kernel.h>
@@ -88,7 +88,7 @@ struct sgiseeq_init_block { /* Note the name ;-) */
 	/* Ptrs to the descriptors in KSEG1 uncached space. */
 	struct sgiseeq_rx_desc *rx_desc;
 	struct sgiseeq_tx_desc *tx_desc;
-	unsigned long _padding[14]; /* Pad out to largest cache line size. */
+	unsigned long _padding[30]; /* Pad out to largest cache line size. */
 
 	struct sgiseeq_rx_desc rxvector[SEEQ_RX_BUFFERS];
 	struct sgiseeq_tx_desc txvector[SEEQ_TX_BUFFERS];

@@ -34,8 +34,8 @@ typedef unsigned char spinlock_t;
  * irq-safe write-lock, but readers can get non-irqsafe
  * read-locks.
  */
-typedef struct { } rwlock_t;
-#define RW_LOCK_UNLOCKED { }
+typedef unsigned long rwlock_t;
+#define RW_LOCK_UNLOCKED (rwlock_t) { 0 }
 
 #define read_lock(lock)		do { } while(0)
 #define read_unlock(lock)	do { } while(0)
@@ -186,7 +186,7 @@ typedef struct {
 	unsigned char lock;
 	unsigned int owner_pc, owner_cpu;
 } spinlock_t;
-#define SPIN_LOCK_UNLOCKED { 0, 0, NO_PROC_ID }
+#define SPIN_LOCK_UNLOCKED (spinlock_t) { 0, 0, NO_PROC_ID }
 #define spin_lock_init(__lock)	\
 do {	(__lock)->lock = 0; \
 	(__lock)->owner_pc = 0; \
@@ -322,7 +322,7 @@ typedef struct {
 	unsigned int writer_pc, writer_cpu;
 	unsigned int reader_pc[4];
 } rwlock_t;
-#define RW_LOCK_UNLOCKED	{ 0, 0, NO_PROC_ID, { 0, 0, 0, 0 } }
+#define RW_LOCK_UNLOCKED	(rwlock_t) { 0, 0, NO_PROC_ID, { 0, 0, 0, 0 } }
 
 extern void _do_read_lock(rwlock_t *rw, char *str);
 extern void _do_read_unlock(rwlock_t *rw, char *str);

@@ -838,7 +838,7 @@ static struct kernel_param cooked_params[] __initdata = {
 #ifdef CONFIG_MD_BOOT
 	{ "md=", md_setup},
 #endif
-#ifdef CONFIG_MACMOUSE
+#ifdef CONFIG_ADBMOUSE
 	{ "adb_buttons=", adb_mouse_setup },
 #endif
 #ifdef CONFIG_LTPC
@@ -1246,7 +1246,7 @@ static void __init do_basic_setup(void)
 #ifdef CONFIG_SBUS
 	sbus_init();
 #endif
-#if defined(CONFIG_PMAC) || defined(CONFIG_CHRP)
+#if defined(CONFIG_PPC)
 	powermac_init();
 #endif
 #ifdef CONFIG_MCA

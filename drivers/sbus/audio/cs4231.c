@@ -1008,7 +1008,7 @@ static void cs4231_playintr(struct sparcaudio_driver *drv)
     cs4231_chip->playlen = cs4231_chip->output_size;
 
   if (cs4231_chip->output_dma_handle) {
-      mmu_release_scsi_one((char *)cs4231_chip->output_dma_handle, 
+      mmu_release_scsi_one((u32)((unsigned long)cs4231_chip->output_dma_handle),
                            4096, drv->dev->my_bus);
       cs4231_chip->output_dma_handle = 0;
   }
@@ -1018,10 +1018,11 @@ static void cs4231_playintr(struct sparcaudio_driver *drv)
   }
 
   if (cs4231_chip->output_ptr && cs4231_chip->output_size > 0) {
-      cs4231_chip->output_next_dma_handle = 
-          mmu_get_scsi_one((char *) cs4231_chip->output_ptr, 4096, 
-                           drv->dev->my_bus);
-      cs4231_chip->regs->dmapnva = cs4231_chip->output_next_dma_handle;
+      cs4231_chip->output_next_dma_handle = (u32 *)(unsigned long)
+          mmu_get_scsi_one((char *) cs4231_chip->output_ptr,
+                           4096, drv->dev->my_bus);
+      cs4231_chip->regs->dmapnva = (u32) (unsigned long)
+              cs4231_chip->output_next_dma_handle;
       cs4231_chip->regs->dmapnc = cs4231_chip->output_size;
       cs4231_chip->output_size = 0;
       cs4231_chip->output_ptr = NULL;
@@ -1064,7 +1065,7 @@ static int cs4231_recintr(struct sparcaudio_driver *drv)
     cs4231_disable_rec(drv);    
   }
   if (cs4231_chip->input_ptr) {
-    cs4231_chip->regs->dmacnva = (__u32) cs4231_chip->input_ptr;
+    cs4231_chip->regs->dmacnva = (__u32) ((unsigned long)cs4231_chip->input_ptr);
     cs4231_chip->regs->dmacnc = cs4231_chip->input_size;
     cs4231_chip->input_ptr = NULL;
     cs4231_chip->input_size = 0;
@@ -1108,12 +1109,12 @@ static void cs4231_stop_output(struct sparcaudio_driver *drv)
   cs4231_chip->output_ptr = NULL;
   cs4231_chip->output_size = 0;
   if (cs4231_chip->output_dma_handle) {
-      mmu_release_scsi_one((char *)cs4231_chip->output_dma_handle,
+      mmu_release_scsi_one((u32)((unsigned long)cs4231_chip->output_dma_handle),
                            4096, drv->dev->my_bus);
       cs4231_chip->output_dma_handle = 0;
   }
   if (cs4231_chip->output_next_dma_handle) {
-      mmu_release_scsi_one((char *)cs4231_chip->output_next_dma_handle,
+      mmu_release_scsi_one((u32)((unsigned long)cs4231_chip->output_next_dma_handle),
                            4096, drv->dev->my_bus);
       cs4231_chip->output_next_dma_handle = 0;
   }

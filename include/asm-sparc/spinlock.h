@@ -34,8 +34,8 @@ typedef unsigned char spinlock_t;
  * irq-safe write-lock, but readers can get non-irqsafe
  * read-locks.
  */
-typedef struct { } rwlock_t;
-#define RW_LOCK_UNLOCKED { }
+typedef struct { volatile unsigned int lock; } rwlock_t;
+#define RW_LOCK_UNLOCKED (rwlock_t) { 0 }
 
 #define read_lock(lock)		do { } while(0)
 #define read_unlock(lock)	do { } while(0)
@@ -65,7 +65,7 @@ struct _spinlock_debug {
 };
 typedef struct _spinlock_debug spinlock_t;
 
-#define SPIN_LOCK_UNLOCKED	{ 0, 0 }
+#define SPIN_LOCK_UNLOCKED	(spinlock_t) { 0, 0 }
 #define spin_lock_init(lp)	do { (lp)->owner_pc = 0; (lp)->lock = 0; } while(0)
 #define spin_unlock_wait(lp)	do { barrier(); } while(*(volatile unsigned char *)(&(lp)->lock))
 
@@ -90,7 +90,7 @@ struct _rwlock_debug {
 };
 typedef struct _rwlock_debug rwlock_t;
 
-#define RW_LOCK_UNLOCKED { 0, 0, {0} }
+#define RW_LOCK_UNLOCKED (rwlock_t) { 0, 0, {0} }
 
 extern void _do_read_lock(rwlock_t *rw, char *str);
 extern void _do_read_unlock(rwlock_t *rw, char *str);
@@ -260,7 +260,7 @@ extern __inline__ void spin_unlock_irqrestore(spinlock_t *lock, unsigned long fl
  */
 typedef struct { volatile unsigned int lock; } rwlock_t;
 
-#define RW_LOCK_UNLOCKED { 0 }
+#define RW_LOCK_UNLOCKED (rwlock_t) { 0 }
 
 /* Sort of like atomic_t's on Sparc, but even more clever.
  *

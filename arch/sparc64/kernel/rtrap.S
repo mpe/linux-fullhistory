@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.44 1998/10/21 22:27:22 davem Exp $
+/* $Id: rtrap.S,v 1.45 1998/11/09 15:33:29 davem Exp $
  * rtrap.S: Preparing for return from trap on Sparc V9.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -172,7 +172,13 @@ check_user_wins:
 		wrpr			%l7, PSTATE_IE, %pstate
 		call			update_perfctrs
 		 nop
-		ba,a,pt			%xcc, check_user_wins
+		wrpr			%l7, 0x0, %pstate
+		lduh			[%g6 + AOFF_task_tss + AOFF_thread_w_saved], %o2
+		brz,pt			%o2, 1f
+		 sethi			%hi(TSTATE_PEF), %l6
+		wrpr			%l7, PSTATE_IE, %pstate
+		call			fault_in_user_windows
+		 add			%sp, STACK_BIAS + REGWIN_SZ, %o0
 
 1:
 		andcc			%l1, %l6, %g0

@@ -1,4 +1,4 @@
-/* $Id: envctrl.c,v 1.8 1998/08/26 10:29:40 davem Exp $
+/* $Id: envctrl.c,v 1.9 1998/11/06 07:38:20 ecd Exp $
  * envctrl.c: Temperature and Fan monitoring on Machines providing it.
  *
  * Copyright (C) 1998  Eddie C. Dost  (ecd@skynet.be)
@@ -115,10 +115,7 @@ i2c_read(unsigned char dev, char *buffer, int len, int user)
 	unsigned char dummy;
 	unsigned char stat;
 	int error = -ENODEV;
-	int count = -1;
-
-	if (len == 0)
-		return 0;
+	int count = 0;
 
 	i2c->data = (dev << 1) | I2C_READ;
 
@@ -134,21 +131,26 @@ i2c_read(unsigned char dev, char *buffer, int len, int user)
 
 		if (stat & STATUS_LRB)
 			goto stop;
-		error = 0;
-		if (count == (len - 2))
-			goto final;
 
-		if (++count > 0) {
+		error = 0;
+		if (len == 0) {
+			count--;
+			break;
+		}
+
+		if (count == (len - 1))
+			break;
+
+		if (count++ > 0) {
 			error = PUT_DATA(&i2c->data, buffer++, user);
 			if (error)
-				goto final;
+				break;
 		} else
 			dummy = i2c->data;
 	} while (1);
 
-final:
 	i2c->csr = CONTROL_ES0;
-	if (!error && (++count > 0))
+	if (!error && (count++ > 0))
 		error = PUT_DATA(&i2c->data, buffer++, user);
 	else
 		dummy = i2c->data;
@@ -159,14 +161,14 @@ final:
 
 stop:
 	i2c->csr = CONTROL_PIN | CONTROL_ES0 | CONTROL_STO | CONTROL_ACK;
-	if (!error && (++count > 0))
+	if (!error && (count++ > 0))
 		error = PUT_DATA(&i2c->data, buffer++, user);
 	else
 		dummy = i2c->data;
 
 	if (error)
 		return error;
-	return count;
+	return count - 1;
 }
 
 static int
@@ -189,19 +191,19 @@ i2c_write(unsigned char dev, const char *buffer, int len, int user)
 			udelay(1);
 
 		if (stat & STATUS_LRB)
-			goto stop;
+			break;
+
 		error = count;
 		if (count == len)
-			goto stop;
+			break;
 
 		error = GET_DATA(&i2c->data, buffer++, user);
 		if (error)
-			goto stop;
+			break;
 
 		count++;
 	} while (1);
 
-stop:
 	i2c->csr = CONTROL_PIN | CONTROL_ES0 | CONTROL_STO | CONTROL_ACK;
 	return error;
 }
@@ -212,7 +214,7 @@ __initfunc(static int i2c_scan_bus(void))
 	int count = 0;
 
 	for (dev = 1; dev < 128; dev++) {
-		if (i2c_write(dev, 0, 0, 0) == 0) {
+		if (i2c_read(dev, 0, 0, 0) == 0) {
 #ifdef DEBUG_BUS_SCAN
 			int i;
 			for (i = 0; i < NR_DEVMAP; i++)
@@ -224,7 +226,11 @@ __initfunc(static int i2c_scan_bus(void))
 			count++;
 		}
 	}
-	return count ? 0 : -ENODEV;
+	if (!count) {
+		printk("%s: no devices found\n", __FUNCTION__);
+		return -ENODEV;
+	}
+	return 0;
 }
 
 static loff_t
@@ -317,6 +323,7 @@ __initfunc(int envctrl_init(void))
 #ifdef CONFIG_PCI
 	struct linux_ebus *ebus;
 	struct linux_ebus_device *edev = 0;
+	int err;
 
 	for_each_ebus(ebus) {
 		for_each_ebusdev(edev, ebus) {
@@ -327,8 +334,10 @@ __initfunc(int envctrl_init(void))
 		}
 	}
 ebus_done:
-	if (!edev)
+	if (!edev) {
+		printk("%s: ebus device not found\n", __FUNCTION__);
 		return -ENODEV;
+	}
 
 	if (check_region(edev->base_address[0], sizeof(*i2c))) {
 		printk("%s: Can't get region %lx, %d\n",
@@ -353,7 +362,10 @@ ebus_done:
 		release_region((unsigned long)i2c, sizeof(*i2c));
 	}
 
-	return i2c_scan_bus();
+	err = i2c_scan_bus();
+	if (err)
+		release_region((unsigned long)i2c, sizeof(*i2c));
+	return err;
 #else
 	return -ENODEV;
 #endif

@@ -48,7 +48,7 @@ else
         fi
       fi
       if [ "$CONFIG_PPC" = "y" ]; then
-          bool '   WInbond SL82c105 support' CONFIG_BLK_DEV_SL82C105
+          bool '   Winbond SL82c105 support' CONFIG_BLK_DEV_SL82C105
       fi
     fi
     if [ "$CONFIG_PMAC" = "y" ]; then

@@ -7,6 +7,7 @@
 
 #include <asm/page.h>
 #include <asm/spinlock.h>
+#include <asm/pgtable.h>
 
 /* The io-unit handles all virtual to physical address translations
  * that occur between the SBUS and physical memory.  Access by
@@ -49,5 +50,9 @@ struct iounit_struct {
 #define IOUNIT_BMAP2_END	IOUNIT_BMAP2_START + (IOUNIT_DMA_SIZE >> (PAGE_SHIFT + 2))
 #define IOUNIT_BMAPM_START	IOUNIT_BMAP2_END
 #define IOUNIT_BMAPM_END	((IOUNIT_DMA_SIZE - IOUNIT_DVMA_SIZE) >> PAGE_SHIFT)
+
+extern __u32 iounit_map_dma_init(struct linux_sbus *, int);
+#define iounit_map_dma_finish(sbus, addr, len) mmu_release_scsi_one(addr, len, sbus)
+extern __u32 iounit_map_dma_page(__u32, void *, struct linux_sbus *);
 
 #endif /* !(_SPARC_IO_UNIT_H) */

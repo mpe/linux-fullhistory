@@ -338,6 +338,7 @@ struct dentry * lookup_dentry(const char * name, struct dentry * base, unsigned 
 		do {
 			name++;
 		} while (*name == '/');
+		__prefix_lookup_dentry(name, lookup_flags);
 		base = dget(current->fs->root);
 	} else if (!base) {
 		base = dget(current->fs->pwd);

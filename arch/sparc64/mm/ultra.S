@@ -1,4 +1,4 @@
-/* $Id: ultra.S,v 1.29 1998/10/22 03:05:51 davem Exp $
+/* $Id: ultra.S,v 1.31 1998/11/07 06:39:21 davem Exp $
  * ultra.S: Don't expand these all over the place...
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -62,35 +62,37 @@ __flush_tlb_range_constant_time: /* %o0=ctx, %o1=start, %o3=end */
 	and		%o4, 0x3ff, %o5
 	cmp		%o5, %o0
 	bne,pt		%icc, 2f
-	 andn		%o4, 0x3ff, %o4
-/*IC6*/	cmp		%o4, %o1
+/*IC6*/	 andn		%o4, 0x3ff, %o4
+	cmp		%o4, %o1
 	blu,pt		%xcc, 2f
 	 cmp		%o4, %o3
 	blu,pn		%xcc, 4f
 2:	 ldxa		[%g2] ASI_DTLB_TAG_READ, %o4
 	and		%o4, 0x3ff, %o5
 	cmp		%o5, %o0
-	andn		%o4, 0x3ff, %o4
-/*IC7*/	bne,pt		%icc, 3f
+/*IC7*/	andn		%o4, 0x3ff, %o4
+	bne,pt		%icc, 3f
 	 cmp		%o4, %o1
 	blu,pt		%xcc, 3f
 	 cmp		%o4, %o3
 	blu,pn		%xcc, 5f
 	 nop
 3:	brnz,pt		%g2, 1b
-	 sub		%g2, (1 << 3), %g2
-/*IC8*/	retl
+/*IC8*/	 sub		%g2, (1 << 3), %g2
+	retl
 	 wrpr		%g1, 0x0, %pstate
 4:	stxa		%g0, [%g3] ASI_IMMU
 	stxa		%g0, [%g2] ASI_ITLB_DATA_ACCESS
 	ba,pt		%xcc, 2b
 	 flush		%g6
 5:	stxa		%g0, [%g3] ASI_DMMU
-	stxa		%g0, [%g2] ASI_DTLB_DATA_ACCESS
+/*IC9*/	stxa		%g0, [%g2] ASI_DTLB_DATA_ACCESS
 	ba,pt		%xcc, 3b
 	 flush		%g6
+
+	.align		32
 __flush_tlb_mm_slow:
-/*IC9*/	rdpr		%pstate, %g1
+/*IC10*/rdpr		%pstate, %g1
 	wrpr		%g1, PSTATE_IE, %pstate
 	stxa		%o0, [%o1] ASI_DMMU
 	stxa		%g0, [%g3] ASI_DMMU_DEMAP
@@ -98,21 +100,25 @@ __flush_tlb_mm_slow:
 	flush		%g6
 	stxa		%g2, [%o1] ASI_DMMU
 	flush		%g6
-/*IC10*/retl
+/*IC11*/retl
 	 wrpr		%g1, 0, %pstate
+
+	.align		32
 __flush_tlb_page_slow:
-	rdpr		%pstate, %g1
+/*IC12*/rdpr		%pstate, %g1
 	wrpr		%g1, PSTATE_IE, %pstate
 	stxa		%o0, [%o2] ASI_DMMU
 	stxa		%g0, [%g3] ASI_DMMU_DEMAP
 	stxa		%g0, [%g3] ASI_IMMU_DEMAP
 	flush		%g6
-/*IC11*/stxa		%g2, [%o2] ASI_DMMU
+	stxa		%g2, [%o2] ASI_DMMU
 	flush		%g6
-	retl
+/*IC13*/retl
 	 wrpr		%g1, 0, %pstate
+
+	.align		32
 __flush_tlb_range_pbp_slow:
-	rdpr		%pstate, %g1
+/*IC13*/rdpr		%pstate, %g1
 	wrpr		%g1, PSTATE_IE, %pstate
 	stxa		%o0, [%o2] ASI_DMMU
 2:	stxa		%g0, [%g5 + %o5] ASI_DMMU_DEMAP
@@ -120,7 +126,7 @@ __flush_tlb_range_pbp_slow:
 	brnz,pt		%o5, 2b
 	 sub		%o5, %o4, %o5
 	flush		%g6
-/*IC13*/stxa		%g2, [%o2] ASI_DMMU
+/*IC14*/stxa		%g2, [%o2] ASI_DMMU
 	flush		%g6
 	retl
 	 wrpr		%g1, 0x0, %pstate
@@ -128,24 +134,26 @@ __flush_tlb_range_pbp_slow:
 	.align		32
 	.globl		flush_icache_page
 flush_icache_page:	/* %o0 = phys_page */
-	sethi		%hi(1 << 13), %o2	! I-cache valid/set bit
+	sethi		%hi(1 << 13), %o2	! IC_set bit
+	mov		1, %g1
 	srlx		%o0, 5, %o0		! phys-addr comparitor
-	clr		%o1			! I-cache address
+	clr		%o1			! IC_addr
+	sllx		%g1, 36, %g1
+	sub		%g1, 1, %g2
+	andn		%g2, 0xff, %g2		! IC_tag mask
+	nop
+
 1:	ldda		[%o1] ASI_IC_TAG, %o4
-	andcc		%o5, %o2, %g0
-	be,pn		%xcc, 2f
-	 andn		%o5, %o2, %o5
+	and		%o5, %g2, %o5
+	cmp		%o5, %o0
+	be,pn		%xcc, iflush1
+	 nop
+2:	ldda		[%o1 + %o2] ASI_IC_TAG, %o4
+	and		%o5, %g2, %o5
 	cmp		%o5, %o0
 
-	be,pn		%xcc, iflush1
-2:	 ldda		[%o1 + %o2] ASI_IC_TAG, %o4
-4:	andcc		%o5, %o2, %g0
-	be,pn		%xcc, 3f
-	 andn		%o5, %o2, %o5
-	cmp		%o5, %o0
 	be,pn		%xcc, iflush2
 	 nop
-
 3:	add		%o1, 0x20, %o1
 	cmp		%o1, %o2
 	bne,pt		%xcc, 1b
@@ -153,11 +161,11 @@ flush_icache_page:	/* %o0 = phys_page */
 	retl
 	 nop
 iflush1:stxa		%g0, [%o1] ASI_IC_TAG
-	membar		#Sync
-	ba,a,pt		%xcc, 4b
+	ba,pt		%xcc, 2b
+	 flush		%g6
 iflush2:stxa		%g0, [%o1 + %o2] ASI_IC_TAG
-	membar		#Sync
-	ba,a,pt		%xcc, 3b
+	ba,pt		%xcc, 3b
+	 flush		%g6
 
 #ifdef __SMP__
 	/* These are all called by the slaves of a cross call, at

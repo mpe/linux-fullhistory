@@ -559,6 +559,7 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_sendfile)
 	.long SYMBOL_NAME(sys_ni_syscall)		/* streams1 */
 	.long SYMBOL_NAME(sys_ni_syscall)		/* streams2 */
+	.long SYMBOL_NAME(sys_mrecow)		/* 190 */
 
 	/*
 	 * NOTE!! This doesn' thave to be exact - we just have
@@ -566,6 +567,6 @@ ENTRY(sys_call_table)
 	 * entries. Don't panic if you notice that this hasn't
 	 * been shrunk every time we add a new system call.
 	 */
-	.rept NR_syscalls-189
+	.rept NR_syscalls-190
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr

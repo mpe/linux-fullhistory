@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/raw.c
  *
- *	$Id: raw.c,v 1.22 1998/10/03 09:38:40 davem Exp $
+ *	$Id: raw.c,v 1.23 1998/11/08 11:17:09 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -597,7 +597,7 @@ static int rawv6_getsockopt(struct sock *sk, int level, int optname,
 }
 
 
-static void rawv6_close(struct sock *sk, unsigned long timeout)
+static void rawv6_close(struct sock *sk, long timeout)
 {
 	/* See for explanation: raw_close in ipv4/raw.c */
 	sk->state = TCP_CLOSE;

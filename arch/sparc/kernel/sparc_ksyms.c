@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.72 1998/10/22 15:15:08 ecd Exp $
+/* $Id: sparc_ksyms.c,v 1.73 1998/11/06 13:49:54 jj Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -41,6 +41,7 @@
 #endif
 #include <asm/a.out.h>
 #include <asm/spinlock.h>
+#include <asm/io-unit.h>
 
 struct poll {
 	int fd;
@@ -157,6 +158,8 @@ EXPORT_SYMBOL(request_fast_irq);
 EXPORT_SYMBOL(sparc_alloc_io);
 EXPORT_SYMBOL(sparc_free_io);
 EXPORT_SYMBOL(io_remap_page_range);
+EXPORT_SYMBOL(iounit_map_dma_init);
+EXPORT_SYMBOL(iounit_map_dma_page);
 
 /* Btfixup stuff cannot have versions, it would be complicated too much */
 #ifndef __SMP__

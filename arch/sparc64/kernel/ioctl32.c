@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.53 1998/10/26 08:01:01 jj Exp $
+/* $Id: ioctl32.c,v 1.54 1998/11/11 17:09:04 jj Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -34,6 +34,7 @@
 #include <linux/tty.h>
 #include <linux/vt_kern.h>
 #include <linux/fb.h>
+#include <linux/ext2_fs.h>
 
 #include <scsi/scsi.h>
 /* Ugly hack. */
@@ -62,6 +63,12 @@
 		 : "0" (__x));		\
 	__ret;				\
 })
+
+/* Aiee. Someone does not find a difference between int and long */
+#define EXT2_IOC32_GETFLAGS               _IOR('f', 1, int)
+#define EXT2_IOC32_SETFLAGS               _IOW('f', 2, int)
+#define EXT2_IOC32_GETVERSION             _IOR('v', 1, int)
+#define EXT2_IOC32_SETVERSION             _IOW('v', 2, int)
 
 extern asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg);
 
@@ -93,6 +100,18 @@ static int rw_long(unsigned int fd, unsigned int cmd, unsigned long arg)
 	if (!err && put_user(val, (u32 *)arg))
 		return -EFAULT;
 	return err;
+}
+
+static int do_ext2_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
+{
+	/* These are just misnamed, they actually get/put from/to user an int */
+	switch (cmd) {
+	case EXT2_IOC32_GETFLAGS: cmd = EXT2_IOC_GETFLAGS; break;
+	case EXT2_IOC32_SETFLAGS: cmd = EXT2_IOC_SETFLAGS; break;
+	case EXT2_IOC32_GETVERSION: cmd = EXT2_IOC_GETVERSION; break;
+	case EXT2_IOC32_SETVERSION: cmd = EXT2_IOC_SETVERSION; break;
+	}
+	return sys_ioctl(fd, cmd, arg);
 }
  
 struct timeval32 {
@@ -1551,6 +1570,13 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 		error = do_kdfontop_ioctl(filp, (struct console_font_op32 *)arg);
 		goto out;
 		
+	case EXT2_IOC32_GETFLAGS:
+	case EXT2_IOC32_SETFLAGS:
+	case EXT2_IOC32_GETVERSION:
+	case EXT2_IOC32_SETVERSION:
+		error = do_ext2_ioctl(fd, cmd, arg);
+		goto out;
+		
 	/* List here exlicitly which ioctl's are known to have
 	 * compatable types passed or none at all...
 	 */
@@ -1865,7 +1891,7 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	case AUTOFS_IOC_CATATONIC:
 	case AUTOFS_IOC_PROTOVER:
 	case AUTOFS_IOC_EXPIRE:
-
+	
 		error = sys_ioctl (fd, cmd, arg);
 		goto out;
 

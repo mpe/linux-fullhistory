@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.130 1998/11/07 14:36:10 davem Exp $
+ * Version:	$Id: tcp.c,v 1.132 1998/11/08 13:21:14 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -541,17 +541,8 @@ static unsigned int tcp_listen_poll(struct sock *sk, poll_table *wait)
 /*
  *	Compute minimal free write space needed to queue new packets. 
  */
-static inline int tcp_min_write_space(struct sock *sk, struct tcp_opt *tp)
-{
-	int space;
-#if 1 /* This needs benchmarking and real world tests */
-	space = max(tp->mss_cache + 128, MIN_WRITE_SPACE);
-#else /* 2.0 way */
-	/* More than half of the socket queue free? */
-	space = atomic_read(&sk->wmem_alloc) / 2;
-#endif
-	return space;
-}
+#define tcp_min_write_space(__sk) \
+	(atomic_read(&(__sk)->wmem_alloc) / 2)
 
 /*
  *	Wait for a TCP event.
@@ -599,7 +590,7 @@ unsigned int tcp_poll(struct file * file, struct socket *sock, poll_table *wait)
 			mask |= POLLIN | POLLRDNORM;
 
 		if (!(sk->shutdown & SEND_SHUTDOWN)) {
-			if (sock_wspace(sk) >= tcp_min_write_space(sk, tp)) {
+			if (sock_wspace(sk) >= tcp_min_write_space(sk)) {
 				mask |= POLLOUT | POLLWRNORM;
 			} else {  /* send SIGIO later */
 				sk->socket->flags |= SO_NOSPACE;
@@ -623,7 +614,7 @@ void tcp_write_space(struct sock *sk)
 
 	wake_up_interruptible(sk->sleep);
 	if (sock_wspace(sk) >=
-	    tcp_min_write_space(sk, &(sk->tp_pinfo.af_tcp)))
+	    tcp_min_write_space(sk))
 		sock_wake_async(sk->socket, 2);
 }
 

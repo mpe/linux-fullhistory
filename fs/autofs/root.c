@@ -503,9 +503,9 @@ static int autofs_root_ioctl(struct inode *inode, struct file *filp,
 	
 	switch(cmd) {
 	case AUTOFS_IOC_READY:	/* Wait queue: go ahead and retry */
-		return autofs_wait_release(sbi,arg,0);
+		return autofs_wait_release(sbi,(autofs_wqt_t)arg,0);
 	case AUTOFS_IOC_FAIL:	/* Wait queue: fail with ENOENT */
-		return autofs_wait_release(sbi,arg,-ENOENT);
+		return autofs_wait_release(sbi,(autofs_wqt_t)arg,-ENOENT);
 	case AUTOFS_IOC_CATATONIC: /* Enter catatonic mode (daemon shutdown) */
 		autofs_catatonic_mode(sbi);
 		return 0;

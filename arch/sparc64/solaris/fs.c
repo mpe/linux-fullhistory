@@ -1,7 +1,7 @@
-/* $Id: fs.c,v 1.10 1998/05/09 06:15:45 davem Exp $
+/* $Id: fs.c,v 1.11 1998/10/28 08:12:04 jj Exp $
  * fs.c: fs related syscall emulation for Solaris
  *
- * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
 #include <linux/types.h>
@@ -55,9 +55,52 @@ struct sol_stat {
 	s32		st_pad4[8];     /* expansion area */
 };
 
+struct sol_stat64 {
+	u32		st_dev;
+	s32		st_pad1[3];     /* network id */
+	u64		st_ino;
+	u32		st_mode;
+	u32		st_nlink;
+	u32		st_uid;
+	u32		st_gid;
+	u32		st_rdev;
+	s32		st_pad2[2];
+	s64		st_size;
+	timestruct_t	st_atime;
+	timestruct_t	st_mtime;
+	timestruct_t	st_ctime;
+	s64		st_blksize;
+	s32		st_blocks;
+	char		st_fstype[16];
+	s32		st_pad4[4];     /* expansion area */
+};
+
 #define UFSMAGIC (((unsigned)'u'<<24)||((unsigned)'f'<<16)||((unsigned)'s'<<8))
 
 static inline int putstat(struct sol_stat *ubuf, struct stat *kbuf)
+{
+	if (put_user (R4_DEV(kbuf->st_dev), &ubuf->st_dev)	||
+	    __put_user (kbuf->st_ino, &ubuf->st_ino)		||
+	    __put_user (kbuf->st_mode, &ubuf->st_mode)		||
+	    __put_user (kbuf->st_nlink, &ubuf->st_nlink)	||
+	    __put_user (kbuf->st_uid, &ubuf->st_uid)		||
+	    __put_user (kbuf->st_gid, &ubuf->st_gid)		||
+	    __put_user (R4_DEV(kbuf->st_rdev), &ubuf->st_rdev)	||
+	    __put_user (kbuf->st_size, &ubuf->st_size)		||
+	    __put_user (kbuf->st_atime, &ubuf->st_atime.tv_sec)	||
+	    __put_user (0, &ubuf->st_atime.tv_nsec)		||
+	    __put_user (kbuf->st_mtime, &ubuf->st_mtime.tv_sec)	||
+	    __put_user (0, &ubuf->st_mtime.tv_nsec)		||
+	    __put_user (kbuf->st_ctime, &ubuf->st_ctime.tv_sec)	||
+	    __put_user (0, &ubuf->st_ctime.tv_nsec)		||
+	    __put_user (kbuf->st_blksize, &ubuf->st_blksize)	||
+	    __put_user (kbuf->st_blocks, &ubuf->st_blocks)	||
+	    __put_user (UFSMAGIC, (unsigned *)ubuf->st_fstype))
+		return -EFAULT;
+	return 0;
+}
+
+static inline int putstat64(struct sol_stat64 *ubuf, struct stat *kbuf)
 {
 	if (put_user (R4_DEV(kbuf->st_dev), &ubuf->st_dev)	||
 	    __put_user (kbuf->st_ino, &ubuf->st_ino)		||
@@ -108,6 +151,28 @@ asmlinkage int solaris_xstat(int vers, u32 filename, u32 statbuf)
 	return solaris_stat(filename, statbuf);
 }
 
+asmlinkage int solaris_stat64(u32 filename, u32 statbuf)
+{
+	int ret;
+	struct stat s;
+	char *filenam;
+	mm_segment_t old_fs = get_fs();
+	int (*sys_newstat)(char *,struct stat *) = 
+		(int (*)(char *,struct stat *))SYS(stat);
+	
+	filenam = getname32 (filename);
+	ret = PTR_ERR(filenam);
+	if (!IS_ERR(filenam)) {
+		set_fs (KERNEL_DS);
+		ret = sys_newstat(filenam, &s);
+		set_fs (old_fs);
+		putname32 (filenam);
+		if (putstat64 ((struct sol_stat64 *)A(statbuf), &s))
+			return -EFAULT;
+	}
+	return ret;
+}
+
 asmlinkage int solaris_lstat(u32 filename, u32 statbuf)
 {
 	int ret;
@@ -135,6 +200,28 @@ asmlinkage int solaris_lxstat(int vers, u32 filename, u32 statbuf)
 	return solaris_lstat(filename, statbuf);
 }
 
+asmlinkage int solaris_lstat64(u32 filename, u32 statbuf)
+{
+	int ret;
+	struct stat s;
+	char *filenam;
+	mm_segment_t old_fs = get_fs();
+	int (*sys_newlstat)(char *,struct stat *) = 
+		(int (*)(char *,struct stat *))SYS(lstat);
+	
+	filenam = getname32 (filename);
+	ret = PTR_ERR(filenam);
+	if (!IS_ERR(filenam)) {
+		set_fs (KERNEL_DS);
+		ret = sys_newlstat(filenam, &s);
+		set_fs (old_fs);
+		putname32 (filenam);
+		if (putstat64 ((struct sol_stat64 *)A(statbuf), &s))
+			return -EFAULT;
+	}
+	return ret;
+}
+
 asmlinkage int solaris_fstat(unsigned int fd, u32 statbuf)
 {
 	int ret;
@@ -156,6 +243,22 @@ asmlinkage int solaris_fxstat(int vers, u32 fd, u32 statbuf)
 	return solaris_fstat(fd, statbuf);
 }
 
+asmlinkage int solaris_fstat64(unsigned int fd, u32 statbuf)
+{
+	int ret;
+	struct stat s;
+	mm_segment_t old_fs = get_fs();
+	int (*sys_newfstat)(unsigned,struct stat *) = 
+		(int (*)(unsigned,struct stat *))SYS(fstat);
+	
+	set_fs (KERNEL_DS);
+	ret = sys_newfstat(fd, &s);
+	set_fs (old_fs);
+	if (putstat64 ((struct sol_stat64 *)A(statbuf), &s))
+		return -EFAULT;
+	return ret;
+}
+
 asmlinkage int solaris_mknod(u32 path, u32 mode, s32 dev)
 {
 	int (*sys_mknod)(const char *,int,dev_t) = 
@@ -170,6 +273,14 @@ asmlinkage int solaris_mknod(u32 path, u32 mode, s32 dev)
 asmlinkage int solaris_xmknod(int vers, u32 path, u32 mode, s32 dev)
 {
 	return solaris_mknod(path, mode, dev);
+}
+
+asmlinkage int solaris_getdents64(unsigned int fd, void *dirent, unsigned int count)
+{
+	int (*sys_getdents)(unsigned int, void *, unsigned int) =
+		(int (*)(unsigned int, void *, unsigned int))SYS(getdents);
+		
+	return sys_getdents(fd, dirent, count);
 }
 
 /* This statfs thingie probably will go in the near future, but... */
@@ -276,12 +387,66 @@ struct sol_statvfs {
 	u32	f_filler[16];
 };
 
+struct sol_statvfs64 {
+	u32	f_bsize;
+	u32	f_frsize;
+	u64	f_blocks;
+	u64	f_bfree;
+	u64	f_bavail;
+	u64	f_files;
+	u64	f_ffree;
+	u64	f_favail;
+	u32	f_fsid;
+	char	f_basetype[16];
+	u32	f_flag;
+	u32	f_namemax;
+	char	f_fstr[32];
+	u32	f_filler[16];
+};
+
 static int report_statvfs(struct inode *inode, u32 buf)
 {
 	struct statfs s;
 	mm_segment_t old_fs = get_fs();
 	int error;
 	struct sol_statvfs *ss = (struct sol_statvfs *)A(buf);
+			
+	set_fs (KERNEL_DS);
+	error = inode->i_sb->s_op->statfs(inode->i_sb, &s, sizeof(struct statfs));
+	set_fs (old_fs);
+	if (!error) {
+		const char *p = inode->i_sb->s_type->name;
+		int i = 0;
+		int j = strlen (p);
+		
+		if (j > 15) j = 15;
+		if (IS_RDONLY(inode)) i = 1;
+		if (IS_NOSUID(inode)) i |= 2;
+		if (put_user (s.f_bsize, &ss->f_bsize)		||
+		    __put_user (0, &ss->f_frsize)		||
+		    __put_user (s.f_blocks, &ss->f_blocks)	||
+		    __put_user (s.f_bfree, &ss->f_bfree)	||
+		    __put_user (s.f_bavail, &ss->f_bavail)	||
+		    __put_user (s.f_files, &ss->f_files)	||
+		    __put_user (s.f_ffree, &ss->f_ffree)	||
+		    __put_user (s.f_ffree, &ss->f_favail)	||
+		    __put_user (R4_DEV(inode->i_sb->s_dev), &ss->f_fsid) ||
+		    __copy_to_user (ss->f_basetype,p,j)		||
+		    __put_user (0, (char *)&ss->f_basetype[j])	||
+		    __put_user (s.f_namelen, &ss->f_namemax)	||
+		    __put_user (i, &ss->f_flag)			||		    
+		    __clear_user (&ss->f_fstr, 32))
+			return -EFAULT;
+	}
+	return error;
+}
+
+static int report_statvfs64(struct inode *inode, u32 buf)
+{
+	struct statfs s;
+	mm_segment_t old_fs = get_fs();
+	int error;
+	struct sol_statvfs64 *ss = (struct sol_statvfs64 *)A(buf);
 			
 	set_fs (KERNEL_DS);
 	error = inode->i_sb->s_op->statfs(inode->i_sb, &s, sizeof(struct statfs));
@@ -362,12 +527,62 @@ out:
 	return error;
 }
 
+asmlinkage int solaris_statvfs64(u32 path, u32 buf)
+{
+	struct dentry * dentry;
+	int error;
+
+	lock_kernel();
+	dentry = namei((const char *)A(path));
+	error = PTR_ERR(dentry);
+	if (!IS_ERR(dentry)) {
+		struct inode * inode = dentry->d_inode;
+
+		error = -ENOSYS;
+		if (inode->i_sb->s_op->statfs)
+			error = report_statvfs64(inode, buf);
+		dput(dentry);
+	}
+	unlock_kernel();
+	return error;
+}
+
+asmlinkage int solaris_fstatvfs64(unsigned int fd, u32 buf)
+{
+	struct inode * inode;
+	struct dentry * dentry;
+	struct file * file;
+	int error;
+
+	lock_kernel();
+	error = -EBADF;
+	file = fget(fd);
+	if (!file)
+		goto out;
+
+	if (!(dentry = file->f_dentry))
+		error = -ENOENT;
+	else if (!(inode = dentry->d_inode))
+		error = -ENOENT;
+	else if (!inode->i_sb)
+		error = -ENODEV;
+	else if (!inode->i_sb->s_op->statfs)
+		error = -ENOSYS;
+	else
+		error = report_statvfs64(inode, buf);
+	fput(file);
+out:
+	unlock_kernel();
+	return error;
+}
+
 asmlinkage int solaris_open(u32 filename, int flags, u32 mode)
 {
 	int (*sys_open)(const char *,int,int) = 
 		(int (*)(const char *,int,int))SYS(open);
 	int fl = flags & 0xf;
-	
+
+/*	if (flags & 0x2000) - allow LFS			*/
 	if (flags & 0x8050) fl |= O_SYNC;
 	if (flags & 0x80) fl |= O_NONBLOCK;
 	if (flags & 0x100) fl |= O_CREAT;
@@ -558,78 +773,20 @@ asmlinkage int solaris_facl(unsigned int fd, int cmd, int nentries, u32 aclbufp)
 	return -ENOSYS;
 }
 
-asmlinkage int solaris_pread(int fd, u32 buf, u32 nbyte, s32 offset)
+asmlinkage int solaris_pread(unsigned int fd, char *buf, u32 count, u32 pos)
 {
-	off_t temp;
-	int retval;
-	struct file * file;
-	long (*sys_read)(unsigned int, char *, unsigned long) =
-		(long (*)(unsigned int, char *, unsigned long))SYS(read);
-	long (*sys_lseek)(unsigned int, off_t, unsigned int) =
-		(long (*)(unsigned int, off_t, unsigned int))SYS(lseek);
-	
-	lock_kernel();
-	retval = -EBADF;
-	file = fget(fd);
-	if (!file)
-		goto bad;
-
-	temp = file->f_pos;
-	if (temp != offset) {
-		retval = sys_lseek(fd, offset, 0);
-		if (retval < 0)
-			goto out_putf;
-	}
-	retval = sys_read(fd, (char *)A(buf), nbyte);
-	if (file->f_pos != temp) {
-		if (!retval)
-			retval = sys_lseek(fd, temp, 0);
-		else
-			sys_lseek(fd, temp, 0);
-	}
-
-out_putf:
-	fput(file);
-bad:
-	unlock_kernel();
-	return retval;
+	ssize_t (*sys_pread)(unsigned int, char *, size_t, loff_t) =
+		(ssize_t (*)(unsigned int, char *, size_t, loff_t))SYS(pread);
+		
+	return sys_pread(fd, buf, count, (loff_t)pos);
 }
 
-asmlinkage int solaris_pwrite(int fd, u32 buf, u32 nbyte, s32 offset)
+asmlinkage int solaris_pwrite(unsigned int fd, char *buf, u32 count, u32 pos)
 {
-	off_t temp;
-	int retval;
-	struct file * file;
-	long (*sys_write)(unsigned int, char *, unsigned long) =
-		(long (*)(unsigned int, char *, unsigned long))SYS(read);
-	long (*sys_lseek)(unsigned int, off_t, unsigned int) =
-		(long (*)(unsigned int, off_t, unsigned int))SYS(lseek);
-	
-	lock_kernel();
-	retval = -EBADF;
-        file = fget(fd);
-	if (!file)
-		goto bad;
-
-	temp = file->f_pos;
-	if (temp != offset) {
-		retval = sys_lseek(fd, offset, 0);
-		if (retval < 0)
-			goto out_putf;
-	}
-	retval = sys_write(fd, (char *)A(buf), nbyte);
-	if (file->f_pos != temp) {
-		if (!retval)
-			retval = sys_lseek(fd, temp, 0);
-		else
-			sys_lseek(fd, temp, 0);
-	}
-
-out_putf:
-	fput(file);
-bad:
-	unlock_kernel();
-	return retval;
+	ssize_t (*sys_pwrite)(unsigned int, char *, size_t, loff_t) =
+		(ssize_t (*)(unsigned int, char *, size_t, loff_t))SYS(pwrite);
+		
+	return sys_pwrite(fd, buf, count, (loff_t)pos);
 }
 
 /* POSIX.1 names */

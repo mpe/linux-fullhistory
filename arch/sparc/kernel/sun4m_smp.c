@@ -143,10 +143,6 @@ __initfunc(void smp4m_boot_cpus(void))
 
 	printk("Entering SMP Mode...\n");
 
-	smp_penguin_ctable.which_io = 0;
-	smp_penguin_ctable.phys_addr = (unsigned int) srmmu_ctx_table_phys;
-	smp_penguin_ctable.reg_size = 0;
-
 	for (i = 0; i < NR_CPUS; i++)
 		cpu_offset[i] = (char *)&cpu_data[i] - (char *)&cpu_data;
 
@@ -189,6 +185,15 @@ __initfunc(void smp4m_boot_cpus(void))
 			/* See trampoline.S for details... */
 			entry += ((i-1) * 3);
 
+			/*
+			 * Initialize the contexts table
+			 * Since the call to prom_startcpu() trashes the structure,
+			 * we need to re-initialize it for each cpu
+			 */
+			smp_penguin_ctable.which_io = 0;
+			smp_penguin_ctable.phys_addr = (unsigned int) srmmu_ctx_table_phys;
+			smp_penguin_ctable.reg_size = 0;
+
 			/* whirrr, whirrr, whirrrrrrrrr... */
 			printk("Starting CPU %d at %p\n", i, entry);
 			mid_xlate[i] = (linux_cpus[i].mid & ~8);
@@ -197,10 +202,10 @@ __initfunc(void smp4m_boot_cpus(void))
 				      &smp_penguin_ctable, 0, (char *)entry);
 
 			/* wheee... it's going... */
-			for(timeout = 0; timeout < 5000000; timeout++) {
+			for(timeout = 0; timeout < 10000; timeout++) {
 				if(cpu_callin_map[i])
 					break;
-				udelay(100);
+				udelay(200);
 			}
 			if(cpu_callin_map[i]) {
 				/* Another "Red Snapper". */

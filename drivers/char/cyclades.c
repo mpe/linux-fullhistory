@@ -1,7 +1,7 @@
 #define BLOCKMOVE
 #define	Z_WAKE
 static char rcsid[] =
-"$Revision: 2.2.1.7 $$Date: 1998/09/03 12:07:28 $";
+"$Revision: 2.2.1.8 $$Date: 1998/11/13 12:46:20 $";
 
 /*
  *  linux/drivers/char/cyclades.c
@@ -31,6 +31,10 @@ static char rcsid[] =
  *   void cleanup_module(void);
  *
  * $Log: cyclades.c,v $
+ * Revision 2.2.1.8  1998/11/13 12:46:20 ivan
+ * cy_close function now resets (correctly) the tty->closing flag;
+ * JIFFIES_DIFF macro fixed.
+ *
  * Revision 2.2.1.7  1998/09/03 12:07:28 ivan
  * Fixed bug in cy_close function, which was not informing HW of
  * which port should have the reception disabled before doing so;
@@ -612,7 +616,7 @@ static unsigned long cy_get_user(unsigned long *addr)
 
 #define STD_COM_FLAGS (0)
 
-#define	JIFFIES_DIFF(n, j)	((n) - (j))
+#define	JIFFIES_DIFF(n, j)	((j) - (n))
 
 static DECLARE_TASK_QUEUE(tq_cyclades);
 
@@ -2730,6 +2734,7 @@ cy_close(struct tty_struct * tty, struct file * filp)
         tty->driver.flush_buffer(tty);
     if (tty->ldisc.flush_buffer)
         tty->ldisc.flush_buffer(tty);
+    tty->closing = 0;
     info->event = 0;
     info->tty = 0;
     if (info->blocked_open) {

@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.25 1998/10/19 21:52:26 davem Exp $
+/* $Id: fault.c,v 1.26 1998/11/08 11:14:03 davem Exp $
  * arch/sparc64/mm/fault.c: Page fault handlers for the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -155,7 +155,8 @@ good_area:
 			goto bad_area;
 	}
 	current->mm->segments = (void *) (address & PAGE_SIZE);
-	handle_mm_fault(current, vma, address, write);
+	if (!handle_mm_fault(current, vma, address, write))
+		goto do_sigbus;
 	up(&mm->mmap_sem);
 	return;
 	/*
@@ -165,6 +166,7 @@ good_area:
 bad_area:
 	up(&mm->mmap_sem);
 
+do_kernel_fault:
 	{
 		unsigned long g2 = regs->u_regs[UREG_G2];
 
@@ -204,4 +206,13 @@ bad_area:
 		}
 		unhandled_fault (address, current, regs);
 	}
+	return;
+
+do_sigbus:
+	up(&mm->mmap_sem);
+	current->tss.sig_address = address;
+	current->tss.sig_desc = SUBSIG_MISCERROR;
+	force_sig(SIGBUS, current);
+	if (regs->tstate & TSTATE_PRIV)
+		goto do_kernel_fault;
 }

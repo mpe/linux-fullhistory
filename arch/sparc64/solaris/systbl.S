@@ -1,7 +1,7 @@
-/* $Id: systbl.S,v 1.6 1998/03/26 08:46:08 jj Exp $
+/* $Id: systbl.S,v 1.7 1998/10/28 08:11:49 jj Exp $
  * systbl.S: System call entry point table for Solaris compatibility.
  *
- * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
  */
 
@@ -156,8 +156,8 @@ solaris_sys_table:
 	.word solaris_fxstat		/* fxstat	ddx	125	*/
 	.word solaris_xmknod		/* xmknod	dsox	126	*/
 	.word solaris_unimplemented	/* syslocal	d	127	*/
-	.word solaris_unimplemented	/* setrlimit		128	*/
-	.word solaris_unimplemented	/* getrlimit		129	*/
+	.word solaris_setrlimit		/* setrlimit	dp	128	*/
+	.word solaris_getrlimit		/* getrlimit	dp	129	*/
 	.word CHAIN(chown)		/* lchown	sdd	130	*/
 	.word solaris_unimplemented	/* memcntl		131	*/
 	.word solaris_getpmsg		/* getpmsg	dxxxx	132	*/
@@ -230,8 +230,8 @@ solaris_sys_table:
 	.word CHAIN(nanosleep)		/* nanosleep	dd	199	*/
 	.word solaris_facl		/* facl		dddp	200	*/
 	.word solaris_unimplemented	/* 			201	*/
-	.word solaris_unimplemented	/* 			202	*/
-	.word solaris_unimplemented	/* 			203	*/
+	.word solaris_setreuid		/* setreuid	dd	202	*/
+	.word solaris_setregid		/* setregid	dd	203	*/
 	.word solaris_unimplemented	/* 			204	*/
 	.word solaris_unimplemented	/* 			205	*/
 	.word solaris_unimplemented	/* 			206	*/
@@ -241,43 +241,43 @@ solaris_sys_table:
 	.word solaris_unimplemented	/* 			210	*/
 	.word solaris_unimplemented	/* 			211	*/
 	.word solaris_unimplemented	/* 			212	*/
-	.word solaris_unimplemented	/* 			213	*/
-	.word solaris_unimplemented	/* 			214	*/
-	.word solaris_unimplemented	/* 			215	*/
-	.word solaris_unimplemented	/* 			216	*/
-	.word solaris_unimplemented	/* 			217	*/
-	.word solaris_unimplemented	/* 			218	*/
-	.word solaris_unimplemented	/* 			219	*/
-	.word solaris_unimplemented	/* 			220	*/
-	.word solaris_unimplemented	/* 			221	*/
-	.word solaris_unimplemented	/* 			222	*/
-	.word solaris_unimplemented	/* 			223	*/
-	.word solaris_unimplemented	/* 			224	*/
-	.word solaris_unimplemented	/* 			225	*/
+	.word solaris_getdents64	/* getdents64	dpd	213	*/
+	.word REGS(solaris_mmap64)	/* mmap64	xxxxdX	214	*/
+	.word solaris_stat64		/* stat64	sP	215	*/
+	.word solaris_lstat64		/* lstat64	sP	216	*/
+	.word solaris_fstat64		/* fstat64	dP	217	*/
+	.word solaris_statvfs64		/* statvfs64	sP	218	*/
+	.word solaris_fstatvfs64	/* fstatvfs64	dP	219	*/
+	.word solaris_setrlimit64	/* setrlimit64	dP	220	*/
+	.word solaris_getrlimit64	/* getrlimit64	dP	221	*/
+	.word CHAIN(pread)		/* pread64	dpdD	222	*/
+	.word CHAIN(pwrite)		/* pwrite64	dpdD	223	*/
+	.word CHAIN(creat)		/* creat64	so	224	*/
+	.word solaris_open		/* open64	soo	225	*/
 	.word solaris_unimplemented	/* 			226	*/
 	.word solaris_unimplemented	/* 			227	*/
 	.word solaris_unimplemented	/* 			228	*/
 	.word solaris_unimplemented	/* 			229	*/
-	.word solaris_unimplemented	/* 			230	*/
-	.word solaris_unimplemented	/* 			231	*/
-	.word solaris_unimplemented	/* 			232	*/
-	.word solaris_unimplemented	/* 			233	*/
-	.word solaris_unimplemented	/* 			234	*/
-	.word solaris_unimplemented	/* 			235	*/
-	.word solaris_unimplemented	/* 			236	*/
-	.word solaris_unimplemented	/* 			237	*/
-	.word solaris_unimplemented	/* 			238	*/
-	.word solaris_unimplemented	/* 			239	*/
-	.word solaris_unimplemented	/* 			240	*/
-	.word solaris_unimplemented	/* 			241	*/
-	.word solaris_unimplemented	/* 			242	*/
-	.word solaris_unimplemented	/* 			243	*/
-	.word solaris_unimplemented	/* 			244	*/
-	.word solaris_unimplemented	/* 			245	*/
-	.word solaris_unimplemented	/* 			246	*/
+	.word solaris_socket		/* socket	ddd	230	*/
+	.word solaris_socketpair	/* socketpair	dddp	231	*/
+	.word solaris_bind		/* bind		dpd	232	*/
+	.word solaris_listen		/* listen	dd	233	*/
+	.word solaris_accept		/* accept	dpp	234	*/
+	.word solaris_connect		/* connect	dpd	235	*/
+	.word solaris_shutdown		/* shutdown	dd	236	*/
+	.word solaris_recv		/* recv		dpdd	237	*/
+	.word solaris_recvfrom		/* recvfrom	dpddpp	238	*/
+	.word solaris_recvmsg		/* recvmsg	dpd	239	*/
+	.word solaris_send		/* send		dpdd	240	*/
+	.word solaris_sendmsg		/* sendmsg	dpd	241	*/
+	.word solaris_sendto		/* sendto	dpddpd	242	*/
+	.word solaris_getpeername	/* getpeername	dpp	243	*/
+	.word solaris_getsockname	/* getsockname	dpp	244	*/
+	.word solaris_getsockopt	/* getsockopt	dddpp	245	*/
+	.word solaris_setsockopt	/* setsockopt	dddpp	246	*/
 	.word solaris_unimplemented	/* 			247	*/
-	.word solaris_unimplemented	/* 			248	*/
-	.word solaris_unimplemented	/* 			249	*/
+	.word solaris_ntp_gettime	/* ntp_gettime	p	248	*/
+	.word solaris_ntp_adjtime	/* ntp_adjtime	p	249	*/
 	.word solaris_unimplemented	/* 			250	*/
 	.word solaris_unimplemented	/* 			251	*/
 	.word solaris_unimplemented	/* 			252	*/

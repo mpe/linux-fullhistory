@@ -1,4 +1,4 @@
-/* $Id: namei.h,v 1.1 1996/12/13 14:48:23 jj Exp $
+/* $Id: namei.h,v 1.1 1996/12/13 14:48:21 jj Exp $
  * linux/include/asm-alpha/namei.h
  *
  * Included from linux/fs/namei.c
@@ -12,7 +12,7 @@
  * Look at asm-sparc/namei.h for details.
  */
 
-#define __prefix_namei(retrieve_mode, name, base, buf, res_dir, res_inode, \
-		       last_name, last_entry, last_error) 1
+#define __prefix_lookup_dentry(name, lookup_flags) \
+        do {} while (0)
 
 #endif /* __ALPHA_NAMEI_H */

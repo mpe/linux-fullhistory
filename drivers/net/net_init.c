@@ -41,6 +41,7 @@
 #include <linux/if_arp.h>
 #include <linux/if_ltalk.h>
 #include <linux/rtnetlink.h>
+#include <net/neighbour.h>
 
 /* The network devices currently exist only in the socket namespace, so these
    entries are unused.  The only ones that make sense are
@@ -219,6 +220,21 @@ struct device *init_hippi_dev(struct device *dev, int sizeof_priv)
 	hippi_setup(tmp_dev);
 	return tmp_dev;
 }
+
+static int hippi_neigh_setup_dev(struct device *dev, struct neigh_parms *p)
+{
+	/* Never send broadcast/multicast ARP messages */
+	p->mcast_probes = 0;
+ 
+	/* In IPv6 unicast probes are valid even on NBMA,
+	* because they are encapsulated in normal IPv6 protocol.
+	* Should be a generic flag. 
+	*/
+	if (p->tbl->family != AF_INET6)
+		p->ucast_probes = 0;
+	return 0;
+}
+
 #endif
 
 void ether_setup(struct device *dev)
@@ -304,6 +320,7 @@ void hippi_setup(struct device *dev)
 	dev->hard_header_parse		= NULL;
 	dev->hard_header_cache		= NULL;
 	dev->header_cache_update	= NULL;
+	dev->neigh_setup 		= hippi_neigh_setup_dev; 
 
 	/*
 	 * We don't support HIPPI `ARP' for the time being, and probably
@@ -317,12 +334,13 @@ void hippi_setup(struct device *dev)
 	dev->tx_queue_len	= 25 /* 5 */;
 	memset(dev->broadcast, 0xFF, HIPPI_ALEN);
 
-	/* New-style flags. */
-	dev->flags	= IFF_NODYNARP; /*
-					 * HIPPI doesn't support
-					 * broadcast+multicast and we only
-					 * use static ARP tables.
-					 */
+
+	/*
+	 * HIPPI doesn't support broadcast+multicast and we only use
+	 * static ARP tables. ARP is disabled by hippi_neigh_setup_dev. 
+	 */
+	dev->flags = 0; 
+
 	dev_init_buffers(dev);
 }
 #endif

@@ -31,7 +31,7 @@ static unsigned int ns87415_count = 0, ns87415_control[MAX_HWIFS] = { 0 };
 static void ns87415_prepare_drive (ide_drive_t *drive, unsigned int use_dma)
 {
 	ide_hwif_t *hwif = HWIF(drive);
-	unsigned int bit, new, *old = (unsigned int *) hwif->select_data;
+	unsigned int bit, other, new, *old = (unsigned int *) hwif->select_data;
 	struct pci_dev *dev = hwif->pci_dev;
 	unsigned long flags;
 
@@ -39,24 +39,20 @@ static void ns87415_prepare_drive (ide_drive_t *drive, unsigned int use_dma)
 	__cli();		/* local CPU only */
 	new = *old;
 
-	/* adjust IRQ enable bit */
+	/* Adjust IRQ enable bit */
 	bit = 1 << (8 + hwif->channel);
 	new = drive->present ? (new & ~bit) : (new | bit);
 
-	/* select PIO or DMA */
-	bit = 1 << (20 + drive->select.b.unit + (hwif->channel << 1));
-	new = use_dma ? (new | bit) : (new & ~bit);
+	/* Select PIO or DMA, DMA may only be selected for one drive/channel. */
+	bit   = 1 << (20 + drive->select.b.unit       + (hwif->channel << 1));
+	other = 1 << (20 + (1 - drive->select.b.unit) + (hwif->channel << 1));
+	new = use_dma ? ((new & ~other) | bit) : (new & ~bit);
 
 	if (new != *old) {
-		if (use_dma) {
-			bit = (1 << (5 + drive->select.b.unit));
-			outb((inb(hwif->dma_base+2) & 0x60) | bit,
-			     hwif->dma_base+2);
-		}
-
 		*old = new;
 		(void) pci_write_config_dword(dev, 0x40, new);
 	}
+
 	__restore_flags(flags);	/* local CPU only */
 }
 
@@ -94,6 +90,10 @@ __initfunc(void ide_init_ns87415 (ide_hwif_t *hwif))
 	struct pci_dev *dev = hwif->pci_dev;
 	unsigned int ctrl, using_inta;
 	byte progif;
+#ifdef __sparc_v9__
+	int timeout;
+	byte stat;
+#endif
 
 	/*
 	 * We cannot probe for IRQ: both ports share common IRQ on INTA.
@@ -126,22 +126,6 @@ __initfunc(void ide_init_ns87415 (ide_hwif_t *hwif))
 		pci_write_config_byte(dev, 0x55, 0xee);
 
 #ifdef __sparc_v9__
-{
-		int	timeout;
-		byte	stat;
-		/*
-		 * Put reasonable values in the timing registers
-		 * for DMA2 mode performance.
-		 */
-		pci_write_config_byte(dev, 0x44, 0xfe);
-		pci_write_config_byte(dev, 0x45, 0xfe);
-		pci_write_config_byte(dev, 0x48, 0xfe);
-		pci_write_config_byte(dev, 0x49, 0xfe);
-		pci_write_config_byte(dev, 0x4c, 0xfe);
-		pci_write_config_byte(dev, 0x4d, 0xfe);
-		pci_write_config_byte(dev, 0x50, 0xfe);
-		pci_write_config_byte(dev, 0x51, 0xfe);
-
 		/*
 		 * XXX: Reset the device, if we don't it will not respond
 		 *      to SELECT_DRIVE() properly during first probe_hwif().
@@ -156,9 +140,11 @@ __initfunc(void ide_init_ns87415 (ide_hwif_t *hwif))
                 	if (stat == 0xff)
                         	break;
         	} while ((stat & BUSY_STAT) && --timeout);
-}
 #endif
 	}
+
+	outb(0x60, hwif->dma_base + 2);
+
 	if (!using_inta)
 		hwif->irq = hwif->channel ? 15 : 14;	/* legacy mode */
 	else if (!hwif->irq && hwif->mate && hwif->mate->irq)

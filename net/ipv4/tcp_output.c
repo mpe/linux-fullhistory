@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.96 1998/11/07 10:54:40 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.97 1998/11/08 13:21:27 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -729,9 +729,9 @@ void tcp_send_active_reset(struct sock *sk)
 	struct sk_buff *skb;
 
 	/* NOTE: No TCP options attached and we never retransmit this. */
-	do {
-		skb = alloc_skb(MAX_HEADER + sk->prot->max_header, GFP_KERNEL);
-	} while(skb == NULL);
+	skb = alloc_skb(MAX_HEADER + sk->prot->max_header, GFP_KERNEL);
+	if (!skb)
+		return;
 
 	/* Reserve space for headers and prepare control bits. */
 	skb_reserve(skb, MAX_HEADER + sk->prot->max_header);

@@ -33,6 +33,17 @@ struct dbri_mem {
 	__u32	status;
 };
 
+struct dbri_channel {
+        struct dbri_mem td;
+        struct dbri_mem rd;
+        unsigned int recvSDP;
+        unsigned int xmitSDP;
+        void (*output_callback)(void *, int);
+        void *output_callback_arg;
+        void (*input_callback)(void *, int, unsigned int);
+        void *input_callback_arg;
+};
+
 #include "cs4215.h"
 
 /* This structure holds the information for both chips (DBRI & CS4215) */
@@ -49,6 +60,15 @@ struct dbri {
  
   struct wait_queue *wait, *int_wait;		/* Where to sleep if busy */
   struct audio_info perchip_info;
+
+  /* Track ISDN LIU and notify changes */
+  int liu_state;
+  void (*liu_callback)(void *);
+  void *liu_callback_arg;
+
+  /* Callback routines and descriptors for ISDN channels */
+  struct dbri_channel D;
+  struct dbri_channel B[2];
 };
 
 
@@ -109,7 +129,7 @@ struct dbri {
 
 
 /* Special bits for some commands */
-#define D_PIPE(v)	(v<<0)	/* Pipe Nr: 0-15 long, 16-21 short */
+#define D_PIPE(v)	((v)<<0)	/* Pipe Nr: 0-15 long, 16-21 short */
 
 /* Setup Data Pipe */
 /* IRM */
@@ -139,8 +159,8 @@ struct dbri {
 #define D_DTS_VO	(1<<16) /* Valid Output Time-Slot Descriptor */
 #define D_DTS_INS	(1<<15) /* Insert Time Slot */
 #define D_DTS_DEL	(0<<15) /* Delete Time Slot */
-#define D_DTS_PRVIN(v)	(v<<10) /* Previous In Pipe */
-#define D_DTS_PRVOUT(v)	(v<<5)  /* Previous Out Pipe */
+#define D_DTS_PRVIN(v)	((v)<<10) /* Previous In Pipe */
+#define D_DTS_PRVOUT(v)	((v)<<5)  /* Previous Out Pipe */
 
 /* Time Slot defines */
 #define D_TS_LEN(v)	(v<<24)	/* Number of bits in this time slot */
@@ -150,8 +170,8 @@ struct dbri {
 #define D_TS_MONITOR	(2<<10)	/* Monitor pipe */
 #define D_TS_NONCONTIG	(3<<10) /* Non contiguous mode */
 #define D_TS_ANCHOR	(7<<10) /* Starting short pipes */
-#define D_TS_MON(v)	(v<<5)	/* Monitor Pipe */
-#define D_TS_NEXT(v)	(v<<0)	/* Pipe Nr: 0-15 long, 16-21 short */
+#define D_TS_MON(v)	((v)<<5)	/* Monitor Pipe */
+#define D_TS_NEXT(v)	((v)<<0)	/* Pipe Nr: 0-15 long, 16-21 short */
 
 /* Concentration Highway Interface Modes */
 #define D_CHI_CHICM(v)	(v<<16)	/* Clock mode */
@@ -276,17 +296,19 @@ struct dbri {
 #define DBRI_TD_UNR	(1<<3)	/* Underrun: transmitter is out of data */
 #define DBRI_TD_ABT	(1<<2)	/* Abort: frame aborted */
 #define DBRI_TD_TBC	(1<<0)	/* Transmit buffer Complete */
+#define DBRI_TD_STATUS(v)	((v)&0xff)	/* Transmit status */
 
 /* Receive descriptor defines */
 #define DBRI_RD_F	(1<<31)	/* End of Frame */
 #define DBRI_RD_C	(1<<30)	/* Completed buffer */
 #define DBRI_RD_B	(1<<15)	/* Final interrupt */
 #define DBRI_RD_M	(1<<14)	/* Marker interrupt */
-#define DBRI_RD_CNT(v)	(v<<16)	/* Number of valid bytes in the buffer */
 #define DBRI_RD_BCNT(v)	v	/* Buffer size */
 #define DBRI_RD_CRC	(1<<7)	/* 0: CRC is correct */
 #define DBRI_RD_BBC	(1<<6)	/* 1: Bad Byte recieved */
 #define DBRI_RD_ABT	(1<<5)	/* Abort: frame aborted */
 #define DBRI_RD_OVRN	(1<<3)	/* Overrun: data lost */
+#define DBRI_RD_STATUS(v)	((v)&0xff)	/* Receive status */
+#define DBRI_RD_CNT(v)	((v>>16)&0x1fff)	/* Number of valid bytes in the buffer */
 
 #endif /* _DBRI_H_ */

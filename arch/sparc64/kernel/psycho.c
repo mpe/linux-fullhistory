@@ -1,4 +1,4 @@
-/* $Id: psycho.c,v 1.65 1998/10/20 14:41:28 ecd Exp $
+/* $Id: psycho.c,v 1.66 1998/11/02 22:27:45 davem Exp $
  * psycho.c: Ultra/AX U2P PCI controller support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caipfs.rutgers.edu)
@@ -1406,9 +1406,9 @@ __initfunc(static void fixup_regs(struct pci_dev *pdev,
 	dprintf("REG_FIXUP[%04x,%04x]: ", pdev->vendor, pdev->device);
 	for(preg = 0; preg < 6; preg++) {
 		if(pdev->base_address[preg] != 0)
-			prom_printf("%d[%016lx] ", preg, pdev->base_address[preg]);
+			dprintf("%d[%016lx] ", preg, pdev->base_address[preg]);
 	}
-	prom_printf("\n");
+	dprintf("\n");
 #endif
 }
 
@@ -1930,8 +1930,8 @@ static inline int
 out_of_range(struct linux_pbm_info *pbm, unsigned char bus, unsigned char devfn)
 {
 	return ((pbm->parent == 0) ||
-		((pbm == &pbm->parent->pbm_B) && (bus == pbm->pci_first_busno) && PCI_SLOT(devfn) > 4) ||
-		((pbm == &pbm->parent->pbm_A) && (bus == pbm->pci_first_busno) && PCI_SLOT(devfn) > 6) ||
+		((pbm == &pbm->parent->pbm_B) && (bus == pbm->pci_first_busno) && PCI_SLOT(devfn) > 8) ||
+		((pbm == &pbm->parent->pbm_A) && (bus == pbm->pci_first_busno) && PCI_SLOT(devfn) > 8) ||
 		(pci_probe_enable == 0));
 }
 

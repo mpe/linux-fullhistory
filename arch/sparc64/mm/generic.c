@@ -1,4 +1,4 @@
-/* $Id: generic.c,v 1.2 1997/07/01 09:11:42 jj Exp $
+/* $Id: generic.c,v 1.3 1998/10/27 23:28:07 davem Exp $
  * generic.c: Generic Sparc mm routines that are not dependent upon
  *            MMU type but are Sparc specific.
  *
@@ -41,10 +41,11 @@ static inline void forget_pte(pte_t page)
 		unsigned long addr = pte_page(page);
 		if (MAP_NR(addr) >= max_mapnr || PageReserved(mem_map+MAP_NR(addr)))
 			return;
-		free_page(addr);
-		if (current->mm->rss <= 0)
-			return;
-		current->mm->rss--;
+		/* 
+		 * free_page() used to be able to clear swap cache
+		 * entries.  We may now have to do it manually.  
+		 */
+		free_page_and_swap_cache(addr);
 		return;
 	}
 	swap_free(pte_val(page));

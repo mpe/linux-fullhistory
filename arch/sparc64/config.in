@@ -224,7 +224,10 @@ if [ "$CONFIG_NET" = "y" ]; then
 		tristate 'MyriCOM Gigabit Ethernet support' CONFIG_MYRI_SBUS
 		if [ "$CONFIG_PCI" = "y" ]; then
 			tristate 'Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
-			tristate '3c590/3c900 series (592/595/597) "Vortex/Boomerang" support' CONFIG_VORTEX
+# Turned off until updated 3c59x.c driver
+# gets approved by Linus...  --DAVEM
+#
+#			tristate '3c590/3c900 series (592/595/597) "Vortex/Boomerang" support' CONFIG_VORTEX
 		fi
 #		bool 'FDDI driver support' CONFIG_FDDI
 #		if [ "$CONFIG_FDDI" = "y" ]; then

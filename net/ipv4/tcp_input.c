@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.136 1998/11/07 14:36:18 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.140 1998/11/12 06:45:15 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -262,7 +262,7 @@ extern __inline__ int tcp_sequence(struct tcp_opt *tp, u32 seq, u32 end_seq)
 }
 
 /* When we get a reset we do this. */
-static void tcp_reset(struct sock *sk, struct sk_buff *skb)
+static void tcp_reset(struct sock *sk)
 {
 	sk->zapped = 1;
 
@@ -277,7 +277,7 @@ static void tcp_reset(struct sock *sk, struct sk_buff *skb)
 		default:
 			sk->err = ECONNRESET;
 	};
-	tcp_set_state(sk,TCP_CLOSE);
+	tcp_set_state(sk, TCP_CLOSE);
 	sk->shutdown = SHUTDOWN_MASK;
 	if (!sk->dead) 
 		sk->state_change(sk);
@@ -483,33 +483,36 @@ static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
 		if (tp->high_seq == 0 || after(ack, tp->high_seq)) {
 			tp->dup_acks++;
 			if ((tp->fackets_out > 3) || (tp->dup_acks == 3)) {
-                                tp->snd_ssthresh = max(tp->snd_cwnd >> 1, 2);
+                                tp->snd_ssthresh =
+					max(min(tp->snd_wnd, tp->snd_cwnd) >> 1, 2);
                                 tp->snd_cwnd = (tp->snd_ssthresh + 3);
 				tp->high_seq = tp->snd_nxt;
 				if(!tp->fackets_out)
-					tcp_retransmit_skb(sk, skb_peek(&sk->write_queue));
+					tcp_retransmit_skb(sk,
+							   skb_peek(&sk->write_queue));
 				else
 					tcp_fack_retransmit(sk);
                                 tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
 			}
-		}
-
-                /* 2. Each time another duplicate ACK arrives, increment 
-                 * cwnd by the segment size. [...] Transmit a packet...
-                 *
-                 * Packet transmission will be done on normal flow processing
-                 * since we're not in "retransmit mode".  We do not use duplicate
-		 * ACKs to artificially inflate the congestion window when
-		 * doing FACK.
-                 */
-                if (tp->dup_acks > 3) {
+		} else if (++tp->dup_acks > 3) {
+			/* 2. Each time another duplicate ACK arrives, increment 
+			 * cwnd by the segment size. [...] Transmit a packet...
+			 *
+			 * Packet transmission will be done on normal flow processing
+			 * since we're not in "retransmit mode".  We do not use
+			 * duplicate ACKs to artificially inflate the congestion
+			 * window when doing FACK.
+			 */
 			if(!tp->fackets_out) {
 				tp->snd_cwnd++;
 			} else {
-				/* Fill any further holes which may have appeared.
-				 * We may want to change this to run every further
-				 * multiple-of-3 dup ack increments, to be more robust
-				 * against out-of-order packet delivery.  -DaveM
+				/* Fill any further holes which may have
+				 * appeared.
+				 *
+				 * We may want to change this to run every
+				 * further multiple-of-3 dup ack increments,
+				 * to be more robust against out-of-order
+				 * packet delivery.  -DaveM
 				 */
 				tcp_fack_retransmit(sk);
 			}
@@ -552,7 +555,8 @@ static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
 				 * from snd_una is if this was a window update.
 				 */
 				if (ack != tp->snd_una && before(ack, tp->high_seq)) {
-                                	tcp_retransmit_skb(sk, skb_peek(&sk->write_queue));
+                                	tcp_retransmit_skb(sk,
+							   skb_peek(&sk->write_queue));
                                 	tcp_reset_xmit_timer(sk, TIME_RETRANS, tp->rto);
 				}
 			} else {
@@ -568,7 +572,7 @@ static void tcp_fast_retrans(struct sock *sk, u32 ack, int not_dup)
 /* This is Jacobson's slow start and congestion avoidance. 
  * SIGCOMM '88, p. 328.
  */
-static void tcp_cong_avoid(struct tcp_opt *tp)
+static __inline__ void tcp_cong_avoid(struct tcp_opt *tp)
 {
         if (tp->snd_cwnd <= tp->snd_ssthresh) {
                 /* In "safe" area, increase. */
@@ -656,6 +660,33 @@ static void tcp_ack_probe(struct sock *sk, __u32 ack)
 	}
 }
  
+/* Should we open up the congestion window? */
+static __inline__ int should_advance_cwnd(struct tcp_opt *tp, int flag)
+{
+	/* Data must have been acked. */
+	if ((flag & FLAG_DATA_ACKED) == 0)
+		return 0;
+
+	/* Some of the data acked was retransmitted somehow? */
+	if ((flag & FLAG_RETRANS_DATA_ACKED) != 0) {
+		/* We advance in all cases except during
+		 * non-FACK fast retransmit/recovery.
+		 */
+		if (tp->fackets_out != 0 ||
+		    tp->retransmits != 0)
+			return 1;
+
+		/* Non-FACK fast retransmit does it's own
+		 * congestion window management, don't get
+		 * in the way.
+		 */
+		return 0;
+	}
+
+	/* New non-retransmitted data acked, always advance.  */
+	return 1;
+}
+
 /* Read draft-ietf-tcplw-high-performance before mucking
  * with this code. (Superceeds RFC1323)
  */
@@ -691,8 +722,10 @@ static void tcp_ack_saw_tstamp(struct sock *sk, struct tcp_opt *tp,
 		}
 	} else {
 		tcp_set_rto(tp);
-		tcp_cong_avoid(tp);
 	}
+	if (should_advance_cwnd(tp, flag))
+		tcp_cong_avoid(tp);
+
 	/* NOTE: safe here so long as cong_ctl doesn't use rto */
 	tcp_bound_rto(tp);
 }
@@ -810,9 +843,10 @@ static int tcp_ack(struct sock *sk, struct tcphdr *th,
 					tcp_set_rto(tp);
 					tcp_bound_rto(tp);
 				}
-				tcp_cong_avoid(tp);
 			}
 		}
+		if (should_advance_cwnd(tp, flag))
+			tcp_cong_avoid(tp);
 	}
 
 	if (tp->packets_out) {
@@ -1814,12 +1848,12 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 	if(th->syn && TCP_SKB_CB(skb)->seq != tp->syn_seq) {
 		SOCK_DEBUG(sk, "syn in established state\n");
 		tcp_statistics.TcpInErrs++;
-		tcp_reset(sk, skb);
+		tcp_reset(sk);
 		return 1;
 	}
 	
 	if(th->rst) {
-		tcp_reset(sk,skb);
+		tcp_reset(sk);
 		goto discard;
 	}
 
@@ -1998,7 +2032,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 			}
 
 			if(th->rst) {
-				tcp_reset(sk,skb);
+				tcp_reset(sk);
 				goto discard;
 			}
 
@@ -2127,7 +2161,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 
 	/* step 2: check RST bit */
 	if(th->rst) {
-		tcp_reset(sk,skb);
+		tcp_reset(sk);
 		goto discard;
 	}
 
@@ -2150,7 +2184,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 	 */
 
 	if (th->syn && TCP_SKB_CB(skb)->seq != tp->syn_seq) {
-		tcp_reset(sk, skb);
+		tcp_reset(sk);
 		return 1;
 	}
 
@@ -2230,7 +2264,7 @@ step6:
 		 */
 		if ((sk->shutdown & RCV_SHUTDOWN) && sk->dead) {
 			if (after(TCP_SKB_CB(skb)->end_seq - th->fin, tp->rcv_nxt)) {
-				tcp_reset(sk, skb);
+				tcp_reset(sk);
 				return 1;
 			}
 		}

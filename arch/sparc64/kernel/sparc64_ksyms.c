@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.48 1998/10/20 03:09:08 jj Exp $
+/* $Id: sparc64_ksyms.c,v 1.49 1998/10/28 08:11:28 jj Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -257,6 +257,9 @@ EXPORT_SYMBOL(svr4_setcontext);
 EXPORT_SYMBOL(prom_cpu_nodes);
 EXPORT_SYMBOL(sys_ioctl);
 EXPORT_SYMBOL(sys32_ioctl);
+EXPORT_SYMBOL(get_unmapped_area);
+EXPORT_SYMBOL(move_addr_to_kernel);
+EXPORT_SYMBOL(move_addr_to_user);
 #endif
 
 /* Special internal versions of library functions. */

@@ -1,4 +1,4 @@
-/* $Id: zs.c,v 1.31 1998/10/07 11:35:29 jj Exp $
+/* $Id: zs.c,v 1.32 1998/11/08 11:15:29 davem Exp $
  * zs.c: Zilog serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -1806,7 +1806,7 @@ int zs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	char *revision = "$Revision: 1.31 $";
+	char *revision = "$Revision: 1.32 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');

@@ -1432,7 +1432,6 @@ do_sync_known:
 			   (SDptr->type != TYPE_ROM ||
 			    strncmp(SDptr->vendor, "TOSHIBA", 7))) {
 				build_wide_nego_msg(esp, 16);
-				esp->config3[SCptr->target] |= ESP_CONFIG3_EWIDE;
 				SDptr->wide = 1;
 				esp->wnip = 1;
 				goto after_nego_msg_built;

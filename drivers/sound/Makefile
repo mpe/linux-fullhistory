@@ -41,19 +41,7 @@ obj-		:=
 # Each configuration option enables a list of files.
 
 obj-$(CONFIG_SOUND)		+= soundcore.o
-
-ifeq ($(ARCH),m68k)
-
 obj-$(CONFIG_DMASOUND)		+= dmasound.o
-
-else
-
-ifeq ($(CONFIG_PMAC),y)
-
-obj-$(CONFIG_DMASOUND)		+= dmasound.o
-
-else
-
 obj-$(CONFIG_SOUND_OSS)		+= sound.o
 obj-$(CONFIG_SOUND_ADLIB)	+= adlib_card.o opl3.o
 obj-$(CONFIG_SOUND_CS4232)	+= cs4232.o ad1848.o 
@@ -89,9 +77,6 @@ obj-$(CONFIG_SOUND_WAVEFRONT)   += wavefront.o
 obj-$(CONFIG_SOUND_ES1370)	+= es1370.o
 obj-$(CONFIG_SOUND_ES1371)	+= es1371.o
 obj-$(CONFIG_SOUND_SONICVIBES)	+= sonicvibes.o
-
-endif
-endif
 
 # Declare multi-part drivers.
 

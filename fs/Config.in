@@ -48,7 +48,7 @@ if [ "$CONFIG_INET" = "y" ]; then
     bool 'SMB Win95 bug work-around' CONFIG_SMB_WIN95
   fi
 fi
-if [ "$CONFIG_IPX" != "n" ]; then
+if [ "$CONFIG_IPX" != "n" -o "$CONFIG_INET" != "n" ]; then
   tristate 'NCP filesystem support (to mount NetWare volumes)' CONFIG_NCP_FS
   if [ "$CONFIG_NCP_FS" != "n" ]; then
     source fs/ncpfs/Config.in

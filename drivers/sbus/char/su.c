@@ -1,4 +1,4 @@
-/* $Id: su.c,v 1.12 1998/10/25 04:24:52 ecd Exp $
+/* $Id: su.c,v 1.16 1998/11/14 23:02:54 ecd Exp $
  * su.c: Small serial driver for keyboard/mouse interface on sparc32/PCI
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -37,7 +37,7 @@ do {									\
 	printk("(%s): [%x] refc=%d, serc=%d, ttyc=%d -> %s\n",		\
 	       kdevname(tty->device), (info->flags), serial_refcount,	\
 	       info->count,tty->count,s);				\
-} while (0);
+} while (0)
 #else
 #define DBG_CNT(s)
 #endif
@@ -146,7 +146,7 @@ struct su_struct {
 };
 
 static char *serial_name = "PCIO serial driver";
-static char *serial_version = "1.1";
+static char serial_version[16];
 
 static DECLARE_TASK_QUEUE(tq_serial);
 
@@ -251,10 +251,10 @@ su_outb(struct su_struct *info, unsigned long offset, int value)
 	/*
 	 * MrCoffee has weird schematics: IRQ4 & P10(?) pins of SuperIO are
 	 * connected with a gate then go to SlavIO. When IRQ4 goes tristated
-	 * gate gives logical one. Since we use level triggered interrupts
+	 * gate outputs a logical one. Since we use level triggered interrupts
 	 * we have lockup and watchdog reset. We cannot mask IRQ because
-	 * keyboard shares IRQ with us (Bob Smelik: I would not hire you).
-	 * P3: Assure that OUT2 never goes down.
+	 * keyboard shares IRQ with us (Word has it as Bob Smelik's design).
+	 * This problem is similar to what Alpha people suffer, see serial.c.
 	 */
 	if (offset == UART_MCR) value |= UART_MCR_OUT2;
 	*(volatile unsigned char *)(info->port + offset) = value;
@@ -386,14 +386,13 @@ receive_serial_chars(struct su_struct *info, int *status, struct pt_regs *regs)
 	icount = &info->icount;
 	do {
 		ch = serial_inp(info, UART_RX);
-
 		if (tty->flip.count >= TTY_FLIPBUF_SIZE)
 			break;
 		*tty->flip.char_buf_ptr = ch;
 		icount->rx++;
 
 #ifdef SERIAL_DEBUG_INTR
-		printk("DR%02x:%02x...", ch, *status);
+		printk("D%02x:%02x.", ch, *status);
 #endif
 		*tty->flip.flag_buf_ptr = 0;
 		if (*status & (UART_LSR_BI | UART_LSR_PE |
@@ -417,8 +416,12 @@ receive_serial_chars(struct su_struct *info, int *status, struct pt_regs *regs)
 			 * should be ignored.
 			 */
 			if (*status & info->ignore_status_mask) {
-				if (++ignored > 100)
+				if (++ignored > 100) {
+#ifdef SERIAL_DEBUG_INTR
+					printk("ign100..");
+#endif
 					break;
+				}
 				goto ignore_char;
 			}
 			*status &= info->read_status_mask;
@@ -454,6 +457,9 @@ receive_serial_chars(struct su_struct *info, int *status, struct pt_regs *regs)
 	ignore_char:
 		*status = serial_inp(info, UART_LSR);
 	} while (*status & UART_LSR_DR);
+#ifdef SERIAL_DEBUG_INTR
+	printk("E%02x.R%d", *status, tty->flip.count);
+#endif
 	tty_flip_buffer_push(tty);
 }
 
@@ -490,7 +496,7 @@ transmit_chars(struct su_struct *info, int *intr_done)
 		su_sched_event(info, RS_EVENT_WRITE_WAKEUP);
 
 #ifdef SERIAL_DEBUG_INTR
-	printk("THRE...");
+	printk("T%d...", info->xmit_cnt);
 #endif
 	if (intr_done)
 		*intr_done = 0;
@@ -580,7 +586,7 @@ su_kbd_ms_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	unsigned char status;
 
 #ifdef SERIAL_DEBUG_INTR
-	printk("su_interrupt(%s)...", __irq_itoa(irq));
+	printk("su_kbd_ms_interrupt(%s)...", __irq_itoa(irq));
 #endif
 	if (!info)
 		return;
@@ -611,12 +617,16 @@ su_serial_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	int pass_counter = 0;
 
 #ifdef SERIAL_DEBUG_INTR
-	printk("su_interrupt(%s)...", __irq_itoa(irq));
+	printk("su_serial_interrupt(%s)...", __irq_itoa(irq));
 #endif
 	info = (struct su_struct *)dev_id;
-	if (!info || !info->tty)
+	if (!info || !info->tty) {
+#ifdef SERIAL_DEBUG_INTR
+		printk("strain\n");
+#endif
 		return;
-	
+	}
+
 	do {
 		status = serial_inp(info, UART_LSR);
 #ifdef SERIAL_DEBUG_INTR
@@ -629,8 +639,8 @@ su_serial_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 			transmit_chars(info, 0);
 
 		if (pass_counter++ > RS_ISR_PASS_LIMIT) {
-#if 0
-			printk("rs loop break\n");
+#ifdef SERIAL_DEBUG_INTR
+			printk("rs loop break");
 #endif
 			break; 	/* Prevent infinite loops */
 		}
@@ -658,18 +668,16 @@ su_serial_interrupt(int irq, void *dev_id, struct pt_regs * regs)
  * interrupt driver proper are done; the interrupt driver schedules
  * them using su_sched_event(), and they get done here.
  */
-static void
-do_serial_bh(void)
+static void do_serial_bh(void)
 {
 	run_task_queue(&tq_serial);
 }
 
-static void
-do_softint(void *private_)
+static void do_softint(void *private_)
 {
 	struct su_struct	*info = (struct su_struct *) private_;
 	struct tty_struct	*tty;
-	
+
 	tty = info->tty;
 	if (!tty)
 		return;
@@ -724,7 +732,8 @@ startup(struct su_struct *info)
 	cli();
 
 #ifdef SERIAL_DEBUG_OPEN
-	printk("starting up ttys%d (irq %d)...", info->line, state->irq);
+	printk("starting up ttys%d (irq %s)...", info->line,
+	       __irq_itoa(info->irq));
 #endif
 
 	if (uart_config[info->type].flags & UART_STARTECH) {
@@ -1269,12 +1278,13 @@ static void
 su_flush_buffer(struct tty_struct *tty)
 {
 	struct su_struct *info = (struct su_struct *)tty->driver_data;
+	unsigned long flags;
 
 	if (serial_paranoia_check(info, tty->device, "su_flush_buffer"))
 		return;
-	cli();
+	save_flags(flags); cli();
 	info->xmit_cnt = info->xmit_head = info->xmit_tail = 0;
-	sti();
+	restore_flags(flags);
 	wake_up_interruptible(&tty->write_wait);
 	if ((tty->flags & (1 << TTY_DO_WRITE_WAKEUP)) &&
 	    tty->ldisc.write_wakeup)
@@ -1313,41 +1323,43 @@ static void
 su_throttle(struct tty_struct * tty)
 {
 	struct su_struct *info = (struct su_struct *)tty->driver_data;
+	unsigned long flags;
 #ifdef SERIAL_DEBUG_THROTTLE
 	char	buf[64];
-	
+
 	printk("throttle %s: %d....\n", tty_name(tty, buf),
 	       tty->ldisc.chars_in_buffer(tty));
 #endif
 
 	if (serial_paranoia_check(info, tty->device, "su_throttle"))
 		return;
-	
+
 	if (I_IXOFF(tty))
 		su_send_xchar(tty, STOP_CHAR(tty));
 
 	if (tty->termios->c_cflag & CRTSCTS)
 		info->MCR &= ~UART_MCR_RTS;
 
-	cli();
+	save_flags(flags); cli();
 	serial_out(info, UART_MCR, info->MCR);
-	sti();
+	restore_flags(flags);
 }
 
 static void
 su_unthrottle(struct tty_struct * tty)
 {
 	struct su_struct *info = (struct su_struct *)tty->driver_data;
+	unsigned long flags;
 #ifdef SERIAL_DEBUG_THROTTLE
 	char	buf[64];
-	
+
 	printk("unthrottle %s: %d....\n", tty_name(tty, buf),
 	       tty->ldisc.chars_in_buffer(tty));
 #endif
 
 	if (serial_paranoia_check(info, tty->device, "su_unthrottle"))
 		return;
-	
+
 	if (I_IXOFF(tty)) {
 		if (info->x_char)
 			info->x_char = 0;
@@ -1356,9 +1368,9 @@ su_unthrottle(struct tty_struct * tty)
 	}
 	if (tty->termios->c_cflag & CRTSCTS)
 		info->MCR |= UART_MCR_RTS;
-	cli();
+	save_flags(flags); cli();
 	serial_out(info, UART_MCR, info->MCR);
-	sti();
+	restore_flags(flags);
 }
 
 /*
@@ -1382,10 +1394,11 @@ get_lsr_info(struct su_struct * info, unsigned int *value)
 {
 	unsigned char status;
 	unsigned int result;
+	unsigned long flags;
 
-	cli();
+	save_flags(flags); cli();
 	status = serial_in(info, UART_LSR);
-	sti();
+	restore_flags(flags);
 	result = ((status & UART_LSR_TEMT) ? TIOCSER_TEMT : 0);
 	return put_user(result,value);
 }
@@ -1396,11 +1409,12 @@ get_modem_info(struct su_struct * info, unsigned int *value)
 {
 	unsigned char control, status;
 	unsigned int result;
+	unsigned long flags;
 
 	control = info->MCR;
-	cli();
+	save_flags(flags); cli();
 	status = serial_in(info, UART_MSR);
-	sti();
+	restore_flags(flags);
 	result =  ((control & UART_MCR_RTS) ? TIOCM_RTS : 0)
 		| ((control & UART_MCR_DTR) ? TIOCM_DTR : 0)
 #ifdef TIOCM_OUT1
@@ -1419,6 +1433,7 @@ set_modem_info(struct su_struct * info, unsigned int cmd, unsigned int *value)
 {
 	int error;
 	unsigned int arg;
+	unsigned long flags;
 
 	error = get_user(arg, value);
 	if (error)
@@ -1465,9 +1480,9 @@ set_modem_info(struct su_struct * info, unsigned int cmd, unsigned int *value)
 	default:
 		return -EINVAL;
 	}
-	cli();
+	save_flags(flags); cli();
 	serial_out(info, UART_MCR, info->MCR);
-	sti();
+	restore_flags(flags);
 	return 0;
 }
 
@@ -1589,13 +1604,14 @@ su_ioctl(struct tty_struct *tty, struct file * file,
 		default:
 			return -ENOIOCTLCMD;
 		}
-	/* return 0; */ /* Trigger warnings is fall through by a chance. */
+	/* return 0; */ /* Trigger warnings if fall through by a chance. */
 }
 
 static void
 su_set_termios(struct tty_struct *tty, struct termios *old_termios)
 {
 	struct su_struct *info = (struct su_struct *)tty->driver_data;
+	unsigned long flags;
 
 	if (   (tty->termios->c_cflag == old_termios->c_cflag)
 	    && (   RELEVANT_IFLAG(tty->termios->c_iflag) 
@@ -1608,11 +1624,11 @@ su_set_termios(struct tty_struct *tty, struct termios *old_termios)
 	if ((old_termios->c_cflag & CBAUD) &&
 	    !(tty->termios->c_cflag & CBAUD)) {
 		info->MCR &= ~(UART_MCR_DTR|UART_MCR_RTS);
-		cli();
+		save_flags(flags); cli();
 		serial_out(info, UART_MCR, info->MCR);
-		sti();
+		restore_flags(flags);
 	}
-	
+
 	/* Handle transition away from B0 status */
 	if (!(old_termios->c_cflag & CBAUD) &&
 	    (tty->termios->c_cflag & CBAUD)) {
@@ -1621,9 +1637,9 @@ su_set_termios(struct tty_struct *tty, struct termios *old_termios)
 		    !test_bit(TTY_THROTTLED, &tty->flags)) {
 			info->MCR |= UART_MCR_RTS;
 		}
-		cli();
+		save_flags(flags); cli();
 		serial_out(info, UART_MCR, info->MCR);
-		sti();
+		restore_flags(flags);
 	}
 	
 	/* Handle turning off CRTSCTS */
@@ -1771,6 +1787,9 @@ su_wait_until_sent(struct tty_struct *tty, int timeout)
 	if (info->type == PORT_UNKNOWN)
 		return;
 
+	if (info->xmit_fifo_size == 0)
+		return; /* Just in case ... */
+
 	orig_jiffies = jiffies;
 	/*
 	 * Set the check interval to be 1/5 of the estimated time to
@@ -1838,8 +1857,9 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 		struct su_struct *info)
 {
 	struct wait_queue wait = { current, NULL };
-	int		retval;
-	int		do_clocal = 0;
+	int		  retval;
+	int		  do_clocal = 0, extra_count = 0;
+	unsigned long	  flags;
 
 	/*
 	 * If the device is in the middle of being closed, then block
@@ -1909,19 +1929,21 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 	printk("block_til_ready before block: ttys%d, count = %d\n",
 	       info->line, info->count);
 #endif
-	cli();
-	if (!tty_hung_up_p(filp)) 
+	save_flags(flags); cli();
+	if (!tty_hung_up_p(filp)) {
+		extra_count = 1;
 		info->count--;
-	sti();
+	}
+	restore_flags(flags);
 	info->blocked_open++;
 	while (1) {
-		cli();
+		save_flags(flags); cli();
 		if (!(info->flags & ASYNC_CALLOUT_ACTIVE) &&
 		    (tty->termios->c_cflag & CBAUD))
 			serial_out(info, UART_MCR,
 				   serial_inp(info, UART_MCR) |
 				   (UART_MCR_DTR | UART_MCR_RTS));
-		sti();
+		restore_flags(flags);
 		current->state = TASK_INTERRUPTIBLE;
 		if (tty_hung_up_p(filp) ||
 		    !(info->flags & ASYNC_INITIALIZED)) {
@@ -1952,7 +1974,7 @@ block_til_ready(struct tty_struct *tty, struct file * filp,
 	}
 	current->state = TASK_RUNNING;
 	remove_wait_queue(&info->open_wait, &wait);
-	if (!tty_hung_up_p(filp))
+	if (extra_count)
 		info->count++;
 	info->blocked_open--;
 #ifdef SERIAL_DEBUG_OPEN
@@ -1982,16 +2004,19 @@ su_open(struct tty_struct *tty, struct file * filp)
 	if ((line < 0) || (line >= NR_PORTS))
 		return -ENODEV;
 	info = su_table + line;
-	if (serial_paranoia_check(info, tty->device, "su_open"))
-		return -ENODEV;
 	info->count++;
+	tty->driver_data = info;
+	info->tty = tty;
+
+	if (serial_paranoia_check(info, tty->device, "su_open")) {
+		info->count--;
+		return -ENODEV;
+	}
 
 #ifdef SERIAL_DEBUG_OPEN
 	printk("su_open %s%d, count = %d\n", tty->driver.name, info->line,
 	       info->count);
 #endif
-	tty->driver_data = info;
-	info->tty = tty;
 	info->tty->low_latency = (info->flags & ASYNC_LOW_LATENCY) ? 1 : 0;
 
 	if (!tmp_buf) {
@@ -2066,8 +2091,9 @@ su_open(struct tty_struct *tty, struct file * filp)
 static __inline__ int
 line_info(char *buf, struct su_struct *info)
 {
-	char	stat_buf[30], control, status;
-	int	ret;
+	char		stat_buf[30], control, status;
+	int		ret;
+	unsigned long	flags;
 
 	ret = sprintf(buf, "%d: uart:%s port:%X irq:%s",
 		      info->line, uart_config[info->type].name, 
@@ -2081,10 +2107,10 @@ line_info(char *buf, struct su_struct *info)
 	/*
 	 * Figure out the current RS-232 lines
 	 */
-	cli();
+	save_flags(flags); cli();
 	status = serial_in(info, UART_MSR);
 	control = info ? info->MCR : serial_in(info, UART_MCR);
-	sti();
+	restore_flags(flags);
 
 	stat_buf[0] = 0;
 	stat_buf[1] = 0;
@@ -2165,9 +2191,15 @@ done:
  * number, and identifies which options were configured into this
  * driver.
  */
-static __inline__
-void show_su_version(void)
+__initfunc(static __inline__ void show_su_version(void))
 {
+	char *revision = "$Revision: 1.16 $";
+	char *version, *p;
+
+	version = strchr(revision, ' ');
+	strcpy(serial_version, ++version);
+	p = strchr(serial_version, ' ');
+	*p = '\0';
  	printk(KERN_INFO "%s version %s\n", serial_name, serial_version);
 }
 
@@ -2249,23 +2281,21 @@ ebus_done:
 	 * 0x80 is a non-existent port; which should be safe since
 	 * include/asm/io.h also makes this assumption.
 	 */
-	scratch = serial_in(info, UART_IER);
-	su_outb(info, UART_IER, 0);
-	scratch2 = serial_in(info, UART_IER);
-	su_outb(info, UART_IER, scratch);
+	scratch = serial_inp(info, UART_IER);
+	serial_outp(info, UART_IER, 0);
+	scratch2 = serial_inp(info, UART_IER);
+	serial_outp(info, UART_IER, scratch);
 	if (scratch2) {
 		restore_flags(flags);
 		return;		/* We failed; there's nothing here */
 	}
 
-#if 0 /* P3 You will never beleive but SuperIO fails this test in MrCoffee. */
-	scratch = serial_in(info, UART_MCR);
-	su_outb(info, UART_MCR, UART_MCR_LOOP | scratch);
-	scratch2 = serial_in(info, UART_MSR);
-	su_outb(info, UART_MCR, UART_MCR_LOOP | 0x0A);
-	status1 = serial_in(info, UART_MSR) & 0xF0;
-	su_outb(info, UART_MCR, scratch);
-	su_outb(info, UART_MSR, scratch2);
+#if 0 /* P3: This does not work on MrCoffee. OUT2 is 0x80 - should work... */
+	scratch = serial_inp(info, UART_MCR);
+	serial_outp(info, UART_MCR, UART_MCR_LOOP | scratch);
+	serial_outp(info, UART_MCR, UART_MCR_LOOP | 0x0A);
+	status1 = serial_inp(info, UART_MSR) & 0xF0;
+	serial_outp(info, UART_MCR, scratch);
 	if (status1 != 0x90) {
 		restore_flags(flags);
 		return;
@@ -2273,10 +2303,10 @@ ebus_done:
 #endif
 
 	scratch2 = serial_in(info, UART_LCR);
-	su_outb(info, UART_LCR, 0xBF);	/* set up for StarTech test */
-	su_outb(info, UART_EFR, 0);	/* EFR is the same as FCR */
-	su_outb(info, UART_LCR, 0);
-	su_outb(info, UART_FCR, UART_FCR_ENABLE_FIFO);
+	serial_outp(info, UART_LCR, 0xBF);	/* set up for StarTech test */
+	serial_outp(info, UART_EFR, 0);		/* EFR is the same as FCR */
+	serial_outp(info, UART_LCR, 0);
+	serial_outp(info, UART_FCR, UART_FCR_ENABLE_FIFO);
 	scratch = serial_in(info, UART_IIR) >> 6;
 	switch (scratch) {
 		case 0:
@@ -2294,38 +2324,38 @@ ebus_done:
 	}
 	if (info->type == PORT_16550A) {
 		/* Check for Startech UART's */
-		su_outb(info, UART_LCR, scratch2 | UART_LCR_DLAB);
-		if (su_inb(info, UART_EFR) == 0) {
+		serial_outp(info, UART_LCR, scratch2 | UART_LCR_DLAB);
+		if (serial_in(info, UART_EFR) == 0) {
 			info->type = PORT_16650;
 		} else {
-			su_outb(info, UART_LCR, 0xBF);
-			if (su_inb(info, UART_EFR) == 0)
+			serial_outp(info, UART_LCR, 0xBF);
+			if (serial_in(info, UART_EFR) == 0)
 				info->type = PORT_16650V2;
 		}
 	}
 	if (info->type == PORT_16550A) {
 		/* Check for TI 16750 */
-		su_outb(info, UART_LCR, scratch2 | UART_LCR_DLAB);
-		su_outb(info, UART_FCR,
+		serial_outp(info, UART_LCR, scratch2 | UART_LCR_DLAB);
+		serial_outp(info, UART_FCR,
 			    UART_FCR_ENABLE_FIFO | UART_FCR7_64BYTE);
-		scratch = su_inb(info, UART_IIR) >> 5;
+		scratch = serial_in(info, UART_IIR) >> 5;
 		if (scratch == 7) {
-			su_outb(info, UART_LCR, 0);
-			su_outb(info, UART_FCR, UART_FCR_ENABLE_FIFO);
-			scratch = su_inb(info, UART_IIR) >> 5;
+			serial_outp(info, UART_LCR, 0);
+			serial_outp(info, UART_FCR, UART_FCR_ENABLE_FIFO);
+			scratch = serial_in(info, UART_IIR) >> 5;
 			if (scratch == 6)
 				info->type = PORT_16750;
 		}
-		su_outb(info, UART_FCR, UART_FCR_ENABLE_FIFO);
+		serial_outp(info, UART_FCR, UART_FCR_ENABLE_FIFO);
 	}
-	su_outb(info, UART_LCR, scratch2);
+	serial_outp(info, UART_LCR, scratch2);
 	if (info->type == PORT_16450) {
-		scratch = su_inb(info, UART_SCR);
-		su_outb(info, UART_SCR, 0xa5);
-		status1 = su_inb(info, UART_SCR);
-		su_outb(info, UART_SCR, 0x5a);
-		status2 = su_inb(info, UART_SCR);
-		su_outb(info, UART_SCR, scratch);
+		scratch = serial_in(info, UART_SCR);
+		serial_outp(info, UART_SCR, 0xa5);
+		status1 = serial_in(info, UART_SCR);
+		serial_outp(info, UART_SCR, 0x5a);
+		status2 = serial_in(info, UART_SCR);
+		serial_outp(info, UART_SCR, scratch);
 
 		if ((status1 != 0xa5) || (status2 != 0x5a))
 			info->type = PORT_8250;
@@ -2349,9 +2379,10 @@ ebus_done:
 	/*
 	 * Reset the UART.
 	 */
-	su_outb(info, UART_MCR, 0x00);
-	su_outb(info, UART_FCR, (UART_FCR_CLEAR_RCVR | UART_FCR_CLEAR_XMIT));
-	su_inb(info, UART_RX);
+	serial_outp(info, UART_MCR, 0x00);
+	serial_outp(info, UART_FCR, (UART_FCR_CLEAR_RCVR|UART_FCR_CLEAR_XMIT));
+	(void)serial_in(info, UART_RX);
+	serial_outp(info, UART_IER, 0x00);
 
 	restore_flags(flags);
 }

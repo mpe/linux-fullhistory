@@ -176,9 +176,6 @@ static inline int shrink_one_page(struct page *page, int gfp_mask)
 				touch_page(page);
 				break;
 			}
-			age_page(page);
-			if (page->age)
-				break;
 			if (pgcache_under_min())
 				break;
 			remove_inode_page(page);

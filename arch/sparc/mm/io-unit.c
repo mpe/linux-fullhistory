@@ -1,4 +1,4 @@
-/* $Id: io-unit.c,v 1.11 1998/04/13 07:26:37 davem Exp $
+/* $Id: io-unit.c,v 1.13 1998/11/08 11:13:57 davem Exp $
  * io-unit.c:  IO-UNIT specific routines for memory management.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek    (jj@sunsite.mff.cuni.cz)
@@ -230,4 +230,52 @@ __initfunc(void ld_mmu_iounit(void))
 #ifdef CONFIG_SBUS
 	BTFIXUPSET_CALL(mmu_map_dma_area, iounit_map_dma_area, BTFIXUPCALL_NORM);
 #endif
+}
+
+__u32 iounit_map_dma_init(struct linux_sbus *sbus, int size)
+{
+	int i, j, k, npages;
+	unsigned long rotor, scan, limit;
+	unsigned long flags;
+	__u32 ret;
+	struct iounit_struct *iounit = (struct iounit_struct *)sbus->iommu;
+
+        npages = (size + (PAGE_SIZE-1)) >> PAGE_SHIFT;
+	i = 0x0213;
+	spin_lock_irqsave(&iounit->lock, flags);
+next:	j = (i & 15);
+	rotor = iounit->rotor[j - 1];
+	limit = iounit->limit[j];
+	scan = rotor;
+nexti:	scan = find_next_zero_bit(iounit->bmap, limit, scan);
+	if (scan + npages > limit) {
+		if (limit != rotor) {
+			limit = rotor;
+			scan = iounit->limit[j - 1];
+			goto nexti;
+		}
+		i >>= 4;
+		if (!(i & 15))
+			panic("iounit_map_dma_init: Couldn't find free iopte slots for %d bytes\n", size);
+		goto next;
+	}
+	for (k = 1, scan++; k < npages; k++)
+		if (test_bit(scan++, iounit->bmap))
+			goto nexti;
+	iounit->rotor[j - 1] = (scan < limit) ? scan : iounit->limit[j - 1];
+	scan -= npages;
+	ret = IOUNIT_DMA_BASE + (scan << PAGE_SHIFT);
+	for (k = 0; k < npages; k++, scan++)
+		set_bit(scan, iounit->bmap);
+	spin_unlock_irqrestore(&iounit->lock, flags);
+	return ret;
+}
+
+__u32 iounit_map_dma_page(__u32 vaddr, void *addr, struct linux_sbus *sbus)
+{
+	int scan = (vaddr - IOUNIT_DMA_BASE) >> PAGE_SHIFT;
+	struct iounit_struct *iounit = (struct iounit_struct *)sbus->iommu;
+	
+	iounit->page_table[scan] = MKIOPTE(mmu_v2p(((unsigned long)addr) & PAGE_MASK));
+	return vaddr + (((unsigned long)addr) & ~PAGE_MASK);
 }

@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.98 1998/10/26 20:01:11 davem Exp $
+/* $Id: sys_sparc32.c,v 1.100 1998/11/08 11:14:00 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -1110,10 +1110,11 @@ asmlinkage int sys32_select(int n, u32 *inp, u32 *outp, u32 *exp, u32 tvp_x)
 {
 	fd_set_buffer *fds;
 	struct timeval32 *tvp = (struct timeval32 *)AA(tvp_x);
-	unsigned long timeout, nn;
+	unsigned long nn;
+	long timeout;
 	int ret;
 
-	timeout = ~0UL;
+	timeout = MAX_SCHEDULE_TIMEOUT;
 	if (tvp) {
 		time_t sec, usec;
 
@@ -1124,8 +1125,6 @@ asmlinkage int sys32_select(int n, u32 *inp, u32 *outp, u32 *exp, u32 tvp_x)
 
 		timeout = (usec + 1000000/HZ - 1) / (1000000/HZ);
 		timeout += sec * HZ;
-		if (timeout)
-			timeout += jiffies + 1;
 	}
 
 	ret = -ENOMEM;
@@ -1147,12 +1146,11 @@ asmlinkage int sys32_select(int n, u32 *inp, u32 *outp, u32 *exp, u32 tvp_x)
 	zero_fd_set(n, fds->res_out);
 	zero_fd_set(n, fds->res_ex);
 
-	ret = do_select(n, fds, timeout);
+	ret = do_select(n, fds, &timeout);
 
 	if (tvp && !(current->personality & STICKY_TIMEOUTS)) {
-		unsigned long timeout = current->timeout - jiffies - 1;
 		time_t sec = 0, usec = 0;
-		if ((long) timeout > 0) {
+		if (timeout) {
 			sec = timeout / HZ;
 			usec = timeout % HZ;
 			usec *= (1000000/HZ);
@@ -1160,7 +1158,6 @@ asmlinkage int sys32_select(int n, u32 *inp, u32 *outp, u32 *exp, u32 tvp_x)
 		put_user(sec, &tvp->tv_sec);
 		put_user(usec, &tvp->tv_usec);
 	}
-	current->timeout = 0;
 
 	if (ret < 0)
 		goto out;
@@ -3533,15 +3530,15 @@ extern asmlinkage ssize_t sys_pwrite(unsigned int fd, const char * buf,
 typedef __kernel_ssize_t32 ssize_t32;
 
 asmlinkage ssize_t32 sys32_pread(unsigned int fd, char *ubuf,
-				 __kernel_size_t32 count, u32 pos)
+				 __kernel_size_t32 count, u32 poshi, u32 poslo)
 {
-	return sys_pread(fd, ubuf, count, pos);
+	return sys_pread(fd, ubuf, count, ((loff_t)AA(poshi) << 32) | AA(poslo));
 }
 
 asmlinkage ssize_t32 sys32_pwrite(unsigned int fd, char *ubuf,
-				  __kernel_size_t32 count, u32 pos)
+				  __kernel_size_t32 count, u32 poshi, u32 poslo)
 {
-	return sys_pwrite(fd, ubuf, count, pos);
+	return sys_pwrite(fd, ubuf, count, ((loff_t)AA(poshi) << 32) | AA(poslo));
 }
 
 

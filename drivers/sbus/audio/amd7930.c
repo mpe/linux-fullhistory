@@ -13,6 +13,74 @@
  *
  * Thanks to the AMD engineer who was able to get us the AMD79C30
  * databook which has all the programming information and gain tables.
+ *
+ * Advanced Micro Devices' Am79C30A is an ISDN/audio chip used in the
+ * SparcStation 1+.  The chip provides microphone and speaker interfaces
+ * which provide mono-channel audio at 8K samples per second via either
+ * 8-bit A-law or 8-bit mu-law encoding.  Also, the chip features an
+ * ISDN BRI Line Interface Unit (LIU), I.430 S/T physical interface,
+ * which performs basic D channel LAPD processing and provides raw
+ * B channel data.  The digital audio channel, the two ISDN B channels,
+ * and two 64 Kbps channels to the microprocessor are all interconnected
+ * via a multiplexer.
+ *
+ * This driver interfaces to the Linux HiSax ISDN driver, which performs
+ * all high-level Q.921 and Q.931 ISDN functions.  The file is not
+ * itself a hardware driver; rather it uses functions exported by
+ * the AMD7930 driver in the sparcaudio subsystem (drivers/sbus/audio),
+ * allowing the chip to be simultaneously used for both audio and ISDN data.
+ * The hardware driver does _no_ buffering, but provides several callbacks
+ * which are called during interrupt service and should therefore run quickly.
+ *
+ * D channel transmission is performed by passing the hardware driver the
+ * address and size of an skb's data area, then waiting for a callback
+ * to signal successful transmission of the packet.  A task is then
+ * queued to notify the HiSax driver that another packet may be transmitted.
+ *
+ * D channel reception is quite simple, mainly because of:
+ *   1) the slow speed of the D channel - 16 kbps, and
+ *   2) the presence of an 8- or 32-byte (depending on chip version) FIFO
+ *      to buffer the D channel data on the chip
+ * Worst case scenario of back-to-back packets with the 8 byte buffer
+ * at 16 kbps yields an service time of 4 ms - long enough to preclude
+ * the need for fancy buffering.  We queue a background task that copies
+ * data out of the receive buffer into an skb, and the hardware driver
+ * simply does nothing until we're done with the receive buffer and
+ * reset it for a new packet.
+ *
+ * B channel processing is more complex, because of:
+ *   1) the faster speed - 64 kbps,
+ *   2) the lack of any on-chip buffering (it interrupts for every byte), and
+ *   3) the lack of any chip support for HDLC encapsulation
+ *
+ * The HiSax driver can put each B channel into one of three modes -
+ * L1_MODE_NULL (channel disabled), L1_MODE_TRANS (transparent data relay),
+ * and L1_MODE_HDLC (HDLC encapsulation by low-level driver).
+ * L1_MODE_HDLC is the most common, used for almost all "pure" digital
+ * data sessions.  L1_MODE_TRANS is used for ISDN audio.
+ *
+ * HDLC B channel transmission is performed via a large buffer into
+ * which the skb is copied while performing HDLC bit-stuffing.  A CRC
+ * is computed and attached to the end of the buffer, which is then
+ * passed to the low-level routines for raw transmission.  Once
+ * transmission is complete, the hardware driver is set to enter HDLC
+ * idle by successive transmission of mark (all 1) bytes, waiting for
+ * the ISDN driver to prepare another packet for transmission and
+ * deliver it.
+ *
+ * HDLC B channel reception is performed via an X-byte ring buffer
+ * divided into N sections of X/N bytes each.  Defaults: X=256 bytes, N=4.
+ * As the hardware driver notifies us that each section is full, we
+ * hand it the next section and schedule a background task to peruse
+ * the received section, bit-by-bit, with an HDLC decoder.  As
+ * packets are detected, they are copied into a large buffer while
+ * decoding HDLC bit-stuffing.  The ending CRC is verified, and if
+ * it is correct, we alloc a new skb of the correct length (which we
+ * now know), copy the packet into it, and hand it to the upper layers.
+ * Optimization: for large packets, we hand the buffer (which also
+ * happens to be an skb) directly to the upper layer after an skb_trim,
+ * and alloc a new large buffer for future packets, thus avoiding a copy.
+ * Then we return to HDLC processing; state is saved between calls.
  */
 
 #include <linux/module.h>
@@ -31,6 +99,10 @@
 
 #include <asm/audioio.h>
 #include "amd7930.h"
+
+#include "../../isdn/hisax/hisax.h"
+#include "../../isdn/hisax/isdnl1.h"
+#include "../../isdn/hisax/foreign.h"
 
 #define MAX_DRIVERS 1
 
@@ -295,9 +367,6 @@ static void amd7930_update_map(struct sparcaudio_driver *drv)
  * This code needs to be removed if anything other than HISAX uses the ISDN
  * driver, since D.output_callback_arg is assumed to be a certain struct ptr
  */
-
-#include "../../isdn/hisax/hisax.h"
-#include "../../isdn/hisax/isdnl1.h"
 
 #ifdef L2FRAME_DEBUG
 
@@ -910,7 +979,7 @@ static int amd7930_get_monitor_volume(struct sparcaudio_driver *drv)
  */
 
 
-int amd7930_get_irqnum(int dev)
+static int amd7930_get_irqnum(int dev)
 {
 	struct amd7930_info *info;
 
@@ -923,7 +992,7 @@ int amd7930_get_irqnum(int dev)
 	return info->irq;
 }
 
-int amd7930_get_liu_state(int dev)
+static int amd7930_get_liu_state(int dev)
 {
 	struct amd7930_info *info;
 
@@ -936,7 +1005,7 @@ int amd7930_get_liu_state(int dev)
 	return info->liu_state;
 }
 
-void amd7930_liu_init(int dev, void (*callback)(), void *callback_arg)
+static void amd7930_liu_init(int dev, void (*callback)(), void *callback_arg)
 {
 	struct amd7930_info *info;
 	register unsigned long flags;
@@ -971,7 +1040,7 @@ void amd7930_liu_init(int dev, void (*callback)(), void *callback_arg)
 	restore_flags(flags);
 }
 
-void amd7930_liu_activate(int dev, int priority)
+static void amd7930_liu_activate(int dev, int priority)
 {
 	struct amd7930_info *info;
 	register unsigned long flags;
@@ -1003,7 +1072,7 @@ void amd7930_liu_activate(int dev, int priority)
 	restore_flags(flags);
 }
 
-void amd7930_liu_deactivate(int dev)
+static void amd7930_liu_deactivate(int dev)
 {
 	struct amd7930_info *info;
 	register unsigned long flags;
@@ -1024,8 +1093,8 @@ void amd7930_liu_deactivate(int dev)
 	restore_flags(flags);
 }
 
-void amd7930_dxmit(int dev, __u8 *buffer, unsigned int count,
-		   void (*callback)(void *, int), void *callback_arg)
+static void amd7930_dxmit(int dev, __u8 *buffer, unsigned int count,
+                          void (*callback)(void *, int), void *callback_arg)
 {
 	struct amd7930_info *info;
 	register unsigned long flags;
@@ -1069,9 +1138,9 @@ void amd7930_dxmit(int dev, __u8 *buffer, unsigned int count,
 	restore_flags(flags);
 }
 
-void amd7930_drecv(int dev, __u8 *buffer, unsigned int size,
-		   void (*callback)(void *, int, unsigned int),
-		   void *callback_arg)
+static void amd7930_drecv(int dev, __u8 *buffer, unsigned int size,
+                          void (*callback)(void *, int, unsigned int),
+                          void *callback_arg)
 {
 	struct amd7930_info *info;
 	register unsigned long flags;
@@ -1115,7 +1184,8 @@ void amd7930_drecv(int dev, __u8 *buffer, unsigned int size,
 	restore_flags(flags);
 }
 
-int amd7930_bopen(int dev, int chan, u_char xmit_idle_char)
+static int amd7930_bopen(int dev, unsigned int chan,
+                         int mode, u_char xmit_idle_char)
 {
 	struct amd7930_info *info;
 	register unsigned long flags;
@@ -1123,6 +1193,10 @@ int amd7930_bopen(int dev, int chan, u_char xmit_idle_char)
 	if (dev > num_drivers || chan<0 || chan>1) {
 		return -1;
 	}
+
+        if (mode == L1_MODE_HDLC) {
+                return -1;
+        }
 
 	info = (struct amd7930_info *) drivers[dev].private;
 
@@ -1167,7 +1241,7 @@ int amd7930_bopen(int dev, int chan, u_char xmit_idle_char)
 	return 0;
 }
 
-void amd7930_bclose(int dev, int chan)
+static void amd7930_bclose(int dev, unsigned int chan)
 {
 	struct amd7930_info *info;
 	register unsigned long flags;
@@ -1202,8 +1276,9 @@ void amd7930_bclose(int dev, int chan)
 	restore_flags(flags);
 }
 
-void amd7930_bxmit(int dev, int chan, __u8 * buffer, unsigned long count,
-		   void (*callback)(void *), void *callback_arg)
+static void amd7930_bxmit(int dev, unsigned int chan,
+                          __u8 * buffer, unsigned long count,
+                          void (*callback)(void *, int), void *callback_arg)
 {
 	struct amd7930_info *info;
 	struct amd7930_channel *Bchan;
@@ -1228,8 +1303,10 @@ void amd7930_bxmit(int dev, int chan, __u8 * buffer, unsigned long count,
 	}
 }
 
-void amd7930_brecv(int dev, int chan, __u8 * buffer, unsigned long size,
-		   void (*callback)(void *), void *callback_arg)
+static void amd7930_brecv(int dev, unsigned int chan,
+                          __u8 * buffer, unsigned long size,
+                          void (*callback)(void *, int, unsigned int),
+                          void *callback_arg)
 {
 	struct amd7930_info *info;
 	struct amd7930_channel *Bchan;
@@ -1254,17 +1331,20 @@ void amd7930_brecv(int dev, int chan, __u8 * buffer, unsigned long size,
 	}
 }
 
-EXPORT_SYMBOL(amd7930_get_irqnum);
-EXPORT_SYMBOL(amd7930_get_liu_state);
-EXPORT_SYMBOL(amd7930_liu_init);
-EXPORT_SYMBOL(amd7930_liu_activate);
-EXPORT_SYMBOL(amd7930_liu_deactivate);
-EXPORT_SYMBOL(amd7930_dxmit);
-EXPORT_SYMBOL(amd7930_drecv);
-EXPORT_SYMBOL(amd7930_bopen);
-EXPORT_SYMBOL(amd7930_bclose);
-EXPORT_SYMBOL(amd7930_bxmit);
-EXPORT_SYMBOL(amd7930_brecv);
+struct foreign_interface amd7930_foreign_interface = {
+        amd7930_get_irqnum,
+        amd7930_get_liu_state,
+        amd7930_liu_init,
+        amd7930_liu_activate,
+        amd7930_liu_deactivate,
+        amd7930_dxmit,
+        amd7930_drecv,
+        amd7930_bopen,
+        amd7930_bclose,
+        amd7930_bxmit,
+        amd7930_brecv
+};
+EXPORT_SYMBOL(amd7930_foreign_interface);
 
 
 /*

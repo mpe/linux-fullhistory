@@ -66,9 +66,9 @@ struct autofs_dirhash {
 };
 
 struct autofs_wait_queue {
-	unsigned long wait_queue_token;
 	struct wait_queue *queue;
 	struct autofs_wait_queue *next;
+	autofs_wqt_t wait_queue_token;
 	/* We use the following to see what we are waiting for */
 	int hash;
 	int len;
@@ -79,8 +79,8 @@ struct autofs_wait_queue {
 };
 
 struct autofs_symlink {
-	int len;
 	char *data;
+	int len;
 	time_t mtime;
 };
 
@@ -146,7 +146,7 @@ struct super_block *autofs_read_super(struct super_block *, void *,int);
 /* Queue management functions */
 
 int autofs_wait(struct autofs_sb_info *,struct qstr *);
-int autofs_wait_release(struct autofs_sb_info *,unsigned long,int);
+int autofs_wait_release(struct autofs_sb_info *,autofs_wqt_t,int);
 void autofs_catatonic_mode(struct autofs_sb_info *);
 
 #ifdef DEBUG

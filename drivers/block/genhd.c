@@ -61,6 +61,10 @@ extern int blk_dev_init(void);
 extern int scsi_dev_init(void);
 extern int net_dev_init(void);
 
+#ifdef CONFIG_PPC
+extern void note_bootable_part(kdev_t dev, int part);
+#endif
+
 /*
  * disk_name() is used by genhd.c and md.c.
  * It formats the devicename of the indicated disk
@@ -862,7 +866,7 @@ static int mac_partition(struct gendisk *hd, kdev_t dev, unsigned long fsec)
 	int blk, blocks_in_map;
 	int dev_bsize, dev_pos, pos;
 	unsigned secsize;
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
 	int first_bootable = 1;
 #endif
 	struct mac_partition *part;
@@ -916,18 +920,18 @@ static int mac_partition(struct gendisk *hd, kdev_t dev, unsigned long fsec)
 			fsec + be32_to_cpu(part->start_block) * (secsize/512),
 			be32_to_cpu(part->block_count) * (secsize/512));
 
-#ifdef CONFIG_PMAC
+#ifdef CONFIG_PPC
 		/*
 		 * If this is the first bootable partition, tell the
 		 * setup code, in case it wants to make this the root.
 		 */
-		if (first_bootable
+		if ( (_machine == _MACH_Pmac) && first_bootable
 		    && (be32_to_cpu(part->status) & MAC_STATUS_BOOTABLE)
 		    && strcasecmp(part->processor, "powerpc") == 0) {
 			note_bootable_part(dev, blk);
 			first_bootable = 0;
 		}
-#endif /* CONFIG_PMAC */
+#endif /* CONFIG_PPC */
 
 		++current_minor;
 	}

@@ -15,26 +15,6 @@
 
 #include <linux/types.h>
 
-/* Exported ISDN functions */
-
-int amd7930_get_irqnum(int dev);
-int amd7930_get_liu_state(int dev);
-void amd7930_liu_init(int dev, void (*callback)(), void *callback_arg);
-void amd7930_liu_activate(int dev, int priority);
-void amd7930_liu_deactivate(int dev);
-void amd7930_dxmit(int dev, __u8 *buffer, unsigned int count,
-		   void (*callback)(void *, int), void *callback_arg);
-void amd7930_drecv(int dev, __u8 *buffer, unsigned int size,
-		   void (*callback)(void *, int, unsigned int),
-		   void *callback_arg);
-int amd7930_bopen(int dev, int chan, u_char xmit_idle_char);
-void amd7930_bclose(int dev, int chan);
-void amd7930_bxmit(int dev, int chan, __u8 * buffer, unsigned long count,
-		   void (*callback)(void *), void *callback_arg);
-void amd7930_brecv(int dev, int chan, __u8 * buffer, unsigned long size,
-		   void (*callback)(void *), void *callback_arg);
-
-
 /* Register interface presented to the CPU by the amd7930. */
 struct amd7930
 {

@@ -38,6 +38,9 @@ static char *version =
 #include <asm/system.h>
 #include <asm/pgtable.h>
 #include <asm/irq.h>
+#ifndef __sparc_v9__
+#include <asm/io-unit.h>
+#endif
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -1061,14 +1064,23 @@ static void happy_meal_init_rings(struct happy_meal *hp, int from_irq)
 					 (RXFLAG_OWN |
 					  ((RX_BUF_ALLOC_SIZE-RX_OFFSET)<<16)),
 					 (u32)virt_to_bus((volatile void *)skb->data));
-		} else {
+		} else
 #endif
+#ifndef __sparc_v9__
+		if (sparc_cpu_model == sun4d) {
+			__u32 va = (__u32)hp->sun4d_buffers + i * PAGE_SIZE;
+
+			hb->happy_meal_rxd[i].rx_addr =
+				iounit_map_dma_page(va, skb->data, hp->happy_sbus_dev->my_bus);
+			hb->happy_meal_rxd[i].rx_flags =
+				(RXFLAG_OWN | ((RX_BUF_ALLOC_SIZE - RX_OFFSET) << 16));
+		} else
+#endif
+		{
 			hb->happy_meal_rxd[i].rx_addr = (u32)((unsigned long) skb->data);
 			hb->happy_meal_rxd[i].rx_flags =
 				(RXFLAG_OWN | ((RX_BUF_ALLOC_SIZE - RX_OFFSET) << 16));
-#ifdef CONFIG_PCI
 		}
-#endif
 		skb_reserve(skb, RX_OFFSET);
 	}
 
@@ -1078,6 +1090,7 @@ static void happy_meal_init_rings(struct happy_meal *hp, int from_irq)
 	HMD(("done\n"));
 }
 
+#ifndef __sparc_v9__
 static void sun4c_happy_meal_init_rings(struct happy_meal *hp)
 {
 	struct hmeal_init_block *hb = hp->happy_block;
@@ -1099,6 +1112,7 @@ static void sun4c_happy_meal_init_rings(struct happy_meal *hp)
 		hb->happy_meal_txd[i].tx_flags = 0;
 	HMD(("done\n"));
 }
+#endif
 
 static void happy_meal_begin_auto_negotiation(struct happy_meal *hp,
 					      struct hmeal_tcvregs *tregs)
@@ -1234,9 +1248,11 @@ static int happy_meal_init(struct happy_meal *hp, int from_irq)
 
 	/* Alloc and reset the tx/rx descriptor chains. */
 	HMD(("happy_meal_init: to happy_meal_init_rings\n"));
+#ifndef __sparc_v9__	
 	if(sparc_cpu_model == sun4c)
 		sun4c_happy_meal_init_rings(hp);
 	else
+#endif	
 		happy_meal_init_rings(hp, from_irq);
 
 	/* Shut up the MIF. */
@@ -1681,7 +1697,6 @@ static inline void pci_happy_meal_tx(struct happy_meal *hp)
 				     : "=r" (flags)
 				     : "r" (&this->tx_flags), "i" (ASI_PL));
 #else
-		flush_cache_all();
 		flags = flip_dword(this->tx_flags);
 #endif
 		if(flags & TXFLAG_OWN)
@@ -1700,6 +1715,7 @@ static inline void pci_happy_meal_tx(struct happy_meal *hp)
 }
 #endif
 
+#ifndef __sparc_v9__
 static inline void sun4c_happy_meal_tx(struct happy_meal *hp)
 {
 	struct happy_meal_txd *txbase = &hp->happy_block->happy_meal_txd[0];
@@ -1721,6 +1737,7 @@ static inline void sun4c_happy_meal_tx(struct happy_meal *hp)
 	hp->tx_old = elem;
 	TXD((">"));
 }
+#endif
 
 #ifdef RXDEBUG
 #define RXD(x) printk x
@@ -1855,7 +1872,6 @@ static inline void pci_happy_meal_rx(struct happy_meal *hp, struct device *dev,
 			     : "=r" (flags)
 			     : "r" (&this->rx_flags), "i" (ASI_PL));
 #else
-	flush_cache_all();
 	flags = flip_dword(this->rx_flags); /* FIXME */
 #endif
 	while(!(flags & RXFLAG_OWN)) {
@@ -1949,7 +1965,6 @@ static inline void pci_happy_meal_rx(struct happy_meal *hp, struct device *dev,
 				     : "=r" (flags)
 				     : "r" (&this->rx_flags), "i" (ASI_PL));
 #else
-		flush_cache_all();
 		flags = flip_dword(this->rx_flags); /* FIXME */
 #endif
 	}
@@ -1960,6 +1975,7 @@ static inline void pci_happy_meal_rx(struct happy_meal *hp, struct device *dev,
 }
 #endif
 
+#ifndef __sparc_v9__
 static inline void sun4c_happy_meal_rx(struct happy_meal *hp, struct device *dev,
 				       struct hmeal_gregs *gregs)
 {
@@ -2022,6 +2038,115 @@ static inline void sun4c_happy_meal_rx(struct happy_meal *hp, struct device *dev
 		printk("%s: Memory squeeze, deferring packet.\n", hp->dev->name);
 	RXD((">"));
 }
+
+static inline void sun4d_happy_meal_rx(struct happy_meal *hp, struct device *dev,
+				       struct hmeal_gregs *gregs)
+{
+	struct happy_meal_rxd *rxbase = &hp->happy_block->happy_meal_rxd[0];
+	struct happy_meal_rxd *this;
+	int elem = hp->rx_new, drops = 0;
+	__u32 va;
+
+	RXD(("RX<"));
+	this = &rxbase[elem];
+	while(!(this->rx_flags & RXFLAG_OWN)) {
+		struct sk_buff *skb;
+		unsigned int flags = this->rx_flags;
+		int len = flags >> 16;
+		u16 csum = flags & RXFLAG_CSUM;
+
+		RXD(("[%d ", elem));
+
+		/* Check for errors. */
+		if((len < ETH_ZLEN) || (flags & RXFLAG_OVERFLOW)) {
+			RXD(("ERR(%08x)]", flags));
+			hp->net_stats.rx_errors++;
+			if(len < ETH_ZLEN)
+				hp->net_stats.rx_length_errors++;
+			if(len & (RXFLAG_OVERFLOW >> 16)) {
+				hp->net_stats.rx_over_errors++;
+				hp->net_stats.rx_fifo_errors++;
+			}
+
+			/* Return it to the Happy meal. */
+	drop_it:
+			hp->net_stats.rx_dropped++;
+			va = (__u32)hp->sun4d_buffers + elem * PAGE_SIZE;
+			this->rx_addr = iounit_map_dma_page(va, hp->rx_skbs[elem]->data,
+							    hp->happy_sbus_dev->my_bus);
+			this->rx_flags =
+				(RXFLAG_OWN | ((RX_BUF_ALLOC_SIZE - RX_OFFSET) << 16));
+			goto next;
+		}
+		skb = hp->rx_skbs[elem];
+		if(len > RX_COPY_THRESHOLD) {
+			struct sk_buff *new_skb;
+
+			/* Now refill the entry, if we can. */
+			new_skb = happy_meal_alloc_skb(RX_BUF_ALLOC_SIZE, GFP_ATOMIC);
+			if(!new_skb) {
+				drops++;
+				goto drop_it;
+			}
+
+			hp->rx_skbs[elem] = new_skb;
+			new_skb->dev = dev;
+			skb_put(new_skb, (ETH_FRAME_LEN + RX_OFFSET));
+			va = (__u32)hp->sun4d_buffers + elem * PAGE_SIZE;
+			rxbase[elem].rx_addr = iounit_map_dma_page(va, new_skb->data,
+								hp->happy_sbus_dev->my_bus);
+
+			skb_reserve(new_skb, RX_OFFSET);
+			rxbase[elem].rx_flags =
+				(RXFLAG_OWN | ((RX_BUF_ALLOC_SIZE - RX_OFFSET) << 16));
+
+			/* Trim the original skb for the netif. */
+			skb_trim(skb, len);
+		} else {
+			struct sk_buff *copy_skb = dev_alloc_skb(len+2);
+
+			if(!copy_skb) {
+				drops++;
+				goto drop_it;
+			}
+
+			copy_skb->dev = dev;
+			skb_reserve(copy_skb, 2);
+			skb_put(copy_skb, len);
+			memcpy(copy_skb->data, skb->data, len);
+
+			/* Reuse original ring buffer. */
+			va = (__u32)hp->sun4d_buffers + elem * PAGE_SIZE;
+			rxbase[elem].rx_addr = iounit_map_dma_page(va, skb->data,
+								hp->happy_sbus_dev->my_bus);
+			rxbase[elem].rx_flags =
+				(RXFLAG_OWN | ((RX_BUF_ALLOC_SIZE - RX_OFFSET) << 16));
+
+			skb = copy_skb;
+		}
+
+		/* This card is _fucking_ hot... */
+		if(!(csum ^ 0xffff))
+			skb->ip_summed = CHECKSUM_UNNECESSARY;
+		else
+			skb->ip_summed = CHECKSUM_NONE;
+
+		RXD(("len=%d csum=%4x]", len, csum));
+		skb->protocol = eth_type_trans(skb, dev);
+		netif_rx(skb);
+
+		hp->net_stats.rx_packets++;
+		hp->net_stats.rx_bytes+=len;
+	next:
+		elem = NEXT_RX(elem);
+		this = &rxbase[elem];
+	}
+	hp->rx_new = elem;
+	if(drops)
+		printk("%s: Memory squeeze, deferring packet.\n", hp->dev->name);
+	RXD((">"));
+}
+#endif
 
 static void happy_meal_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
@@ -2157,6 +2282,50 @@ static void sun4c_happy_meal_interrupt(int irq, void *dev_id, struct pt_regs *re
 	dev->interrupt = 0;
 	HMD(("done\n"));
 }
+
+static void sun4d_happy_meal_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+{
+	struct device *dev            = (struct device *) dev_id;
+	struct happy_meal *hp         = (struct happy_meal *) dev->priv;
+	struct hmeal_gregs *gregs     = hp->gregs;
+	struct hmeal_tcvregs *tregs   = hp->tcvregs;
+	unsigned int happy_status    = hme_read32(hp, &gregs->stat);
+
+	HMD(("happy_meal_interrupt: status=%08x ", happy_status));
+
+	dev->interrupt = 1;
+
+	if(happy_status & GREG_STAT_ERRORS) {
+		HMD(("ERRORS "));
+		if(happy_meal_is_not_so_happy(hp, gregs, /* un- */ happy_status)) {
+			dev->interrupt = 0;
+			return;
+		}
+	}
+
+	if(happy_status & GREG_STAT_MIFIRQ) {
+		HMD(("MIFIRQ "));
+		happy_meal_mif_interrupt(hp, gregs, tregs);
+	}
+
+	if(happy_status & GREG_STAT_TXALL) {
+		HMD(("TXALL "));
+		happy_meal_tx(hp);
+	}
+
+	if(happy_status & GREG_STAT_RXTOHOST) {
+		HMD(("RXTOHOST "));
+		sun4d_happy_meal_rx(hp, dev, gregs);
+	}
+
+	if(dev->tbusy && (TX_BUFFS_AVAIL(hp) >= 0)) {
+		hp->dev->tbusy = 0;
+		mark_bh(NET_BH);
+	}
+
+	dev->interrupt = 0;
+	HMD(("done\n"));
+}
 #endif
 
 static int happy_meal_open(struct device *dev)
@@ -2171,6 +2340,14 @@ static int happy_meal_open(struct device *dev)
 			       SA_SHIRQ, "HAPPY MEAL", (void *) dev)) {
 			HMD(("EAGAIN\n"));
 			printk("happy meal: Can't order irq %d to go.\n", dev->irq);
+			return -EAGAIN;
+		}
+	} else if (sparc_cpu_model == sun4d) {
+		if(request_irq(dev->irq, &sun4d_happy_meal_interrupt,
+			       SA_SHIRQ, "HAPPY MEAL", (void *) dev)) {
+			HMD(("EAGAIN\n"));
+			printk("happy_meal(SBUS): Can't order irq %s to go.\n",
+			       __irq_itoa(dev->irq));
 			return -EAGAIN;
 		}
 	} else
@@ -2327,6 +2504,7 @@ static int pci_happy_meal_start_xmit(struct sk_buff *skb, struct device *dev)
 }
 #endif
 
+#ifndef __sparc_v9__
 static int sun4c_happy_meal_start_xmit(struct sk_buff *skb, struct device *dev)
 {
 	struct happy_meal *hp = (struct happy_meal *) dev->priv;
@@ -2382,6 +2560,59 @@ static int sun4c_happy_meal_start_xmit(struct sk_buff *skb, struct device *dev)
 
 	return 0;
 }
+
+static int sun4d_happy_meal_start_xmit(struct sk_buff *skb, struct device *dev)
+{
+	struct happy_meal *hp = (struct happy_meal *) dev->priv;
+	int len, entry;
+	__u32 va;
+
+	if(test_and_set_bit(0, (void *) &dev->tbusy) != 0) {
+		int tickssofar = jiffies - dev->trans_start;
+	    
+		if (tickssofar >= 40) {
+			printk ("%s: transmit timed out, resetting\n", dev->name);
+			hp->net_stats.tx_errors++;
+			tx_dump_log();
+			printk ("%s: Happy Status %08x TX[%08x:%08x]\n", dev->name,
+				hme_read32(hp, &hp->gregs->stat),
+				hme_read32(hp, &hp->etxregs->cfg),
+				hme_read32(hp, &hp->bigmacregs->tx_cfg));
+			happy_meal_init(hp, 0);
+			dev->tbusy = 0;
+			dev->trans_start = jiffies;
+		} else
+			tx_add_log(hp, TXLOG_ACTION_TXMIT|TXLOG_ACTION_TBUSY, 0);
+		return 1;
+	}
+
+	if(!TX_BUFFS_AVAIL(hp)) {
+		tx_add_log(hp, TXLOG_ACTION_TXMIT|TXLOG_ACTION_NBUFS, 0);
+		return 1;
+	}
+	len = skb->len;
+	entry = hp->tx_new;
+
+	SXD(("SX<l[%d]e[%d]>", len, entry));
+	hp->tx_skbs[entry] = skb;
+	va = (__u32)hp->sun4d_buffers + (RX_RING_SIZE + entry) * PAGE_SIZE;
+	hp->happy_block->happy_meal_txd[entry].tx_addr = 
+		iounit_map_dma_page(va, skb->data, hp->happy_sbus_dev->my_bus);
+	hp->happy_block->happy_meal_txd[entry].tx_flags =
+		(TXFLAG_OWN | TXFLAG_SOP | TXFLAG_EOP | (len & TXFLAG_SIZE));
+	hp->tx_new = NEXT_TX(entry);
+
+	/* Get it going. */
+	dev->trans_start = jiffies;
+	hme_write32(hp, &hp->etxregs->tx_pnding, ETX_TP_DMAWAKEUP);
+
+	if(TX_BUFFS_AVAIL(hp))
+		dev->tbusy = 0;
+
+	tx_add_log(hp, TXLOG_ACTION_TXMIT, 0);
+	return 0;
+}
+#endif
 
 static struct net_device_stats *happy_meal_get_stats(struct device *dev)
 {
@@ -2561,11 +2792,17 @@ static inline int happy_meal_ether_init(struct device *dev, struct linux_sbus_de
 		sparc_dvma_malloc(PAGE_SIZE, "Happy Meal Init Block",
 				  &hp->hblock_dvma);
 
+#ifndef __sparc_v9__
 	if(sparc_cpu_model == sun4c)
 		hp->sun4c_buffers = (struct hmeal_buffers *)
 		    sparc_dvma_malloc(sizeof(struct hmeal_buffers), "Happy Meal Bufs",
 				      &hp->s4c_buf_dvma);
+	else if (sparc_cpu_model == sun4d)
+		hp->sun4d_buffers = (struct hmeal_buffers *)
+		    iounit_map_dma_init(hp->happy_sbus_dev->my_bus,
+		    			(RX_RING_SIZE + TX_RING_SIZE) * PAGE_SIZE);
 	else
+#endif
 		hp->sun4c_buffers = 0;
 
 	/* Force check of the link first time we are brought up. */
@@ -2583,9 +2820,13 @@ static inline int happy_meal_ether_init(struct device *dev, struct linux_sbus_de
 	hp->dev = dev;
 	dev->open = &happy_meal_open;
 	dev->stop = &happy_meal_close;
+#ifndef __sparc_v9__	
 	if(sparc_cpu_model == sun4c)
 		dev->hard_start_xmit = &sun4c_happy_meal_start_xmit;
+	else if (sparc_cpu_model == sun4d)
+		dev->hard_start_xmit = &sun4d_happy_meal_start_xmit;
 	else
+#endif
 		dev->hard_start_xmit = &happy_meal_start_xmit;
 	dev->get_stats = &happy_meal_get_stats;
 	dev->set_multicast_list = &happy_meal_set_multicast;
@@ -2684,6 +2925,11 @@ __initfunc(int happy_meal_pci_init(struct device *dev, struct pci_dev *pdev))
 	}
 
 	hp->hblock_dvma = (u32) virt_to_bus(hp->happy_block);
+#ifndef __sparc_v9__
+	/* This case we currently need to use 'sparc_alloc_io' */
+	hp->happy_block = sparc_alloc_io (hp->hblock_dvma, NULL, 
+					  PAGE_SIZE, "sunhme", 0, 0);
+#endif
 	hp->sun4c_buffers = 0;
 
 	hp->linkcheck = 0;
@@ -2796,6 +3042,11 @@ cleanup_module(void)
 		sparc_free_io(hp->erxregs, sizeof(struct hmeal_erxregs));
 		sparc_free_io(hp->bigmacregs, sizeof(struct hmeal_bigmacregs));
 		sparc_free_io(hp->tcvregs, sizeof(struct hmeal_tcvregs));
+#ifndef __sparc_v9__
+		if (sparc_cpu_model == sun4d)
+			iounit_map_dma_finish(hp->happy_sbus_dev->my_bus,
+					      (__u32)hp->sun4d_buffers, (RX_RING_SIZE + TX_RING_SIZE) * PAGE_SIZE);
+#endif		
 		unregister_netdev(hp->dev);
 		kfree(hp->dev);
 		root_happy_dev = sunshine;

@@ -636,7 +636,7 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 		p->max	       = swap_header->info.last_page;
 
 		if (p->max >= 0x7fffffffL/PAGE_SIZE ||
-		    (void *) &swap_header->info.badpages[swap_header->info.nr_badpages-1] >= (void *) swap_header->magic.magic) {
+		    (void *) &swap_header->info.badpages[(int) swap_header->info.nr_badpages-1] >= (void *) swap_header->magic.magic) {
 			error = -EINVAL;
 			goto bad_swap;
 		}

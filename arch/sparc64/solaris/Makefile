@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 O_TARGET := solaris.o
-O_OBJS   := entry64.o fs.o misc.o signal.o systbl.o ioctl.o ipc.o socksys.o timod.o
+O_OBJS   := entry64.o fs.o misc.o signal.o systbl.o socket.o ioctl.o ipc.o socksys.o timod.o
 ifeq ($(CONFIG_SOLARIS_EMUL),m)
 M_OBJS   := $(O_TARGET)
 CPPFLAGS = $(MODFLAGS)

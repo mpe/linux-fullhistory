@@ -224,11 +224,11 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_MACMOUSE),y)
-L_OBJS += macmouse.o
+ifeq ($(CONFIG_ADBMOUSE),y)
+L_OBJS += adbmouse.o
 else
-  ifeq ($(CONFIG_MACMOUSE),m)
-    M_OBJS += macmouse.o
+  ifeq ($(CONFIG_ADBMOUSE),m)
+    M_OBJS += adbmouse.o
   endif
 endif
 

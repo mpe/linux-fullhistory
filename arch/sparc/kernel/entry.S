@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.152 1998/07/29 16:32:24 jj Exp $
+/* $Id: entry.S,v 1.153 1998/11/11 15:12:33 jj Exp $
  * arch/sparc/kernel/entry.S:  Sparc trap low-level entry points.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -313,7 +313,8 @@ real_irq_continue:
 patch_handler_irq:
 	call	C_LABEL(handler_irq)
 	 add	%sp, REGWIN_SZ, %o1	! pt_regs ptr
-	wr	%l0, PSR_ET, %psr
+	or	%l0, PSR_PIL, %g2	! restore PIL after handler_irq
+	wr	%g2, PSR_ET, %psr	! keep ET up
 	WRITE_PAUSE
 
 	RESTORE_ALL

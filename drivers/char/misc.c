@@ -64,14 +64,12 @@ static struct miscdevice misc_list = { 0, "head", NULL, &misc_list, &misc_list }
 #define DYNAMIC_MINORS 64 /* like dynamic majors */
 static unsigned char misc_minors[DYNAMIC_MINORS / 8];
 
-extern int adbdev_init(void);
 extern int bus_mouse_init(void);
 extern int qpmouse_init(void);
 extern int ms_bus_mouse_init(void);
 extern int atixl_busmouse_init(void);
 extern int amiga_mouse_init(void);
 extern int atari_mouse_init(void);
-extern int mac_mouse_init(void);
 extern int sun_mouse_init(void);
 extern int adb_mouse_init(void);
 extern void watchdog_init(void);
@@ -196,9 +194,6 @@ int __init misc_init(void)
 	if (proc_misc)
 		proc_misc->read_proc = misc_read_proc;
 #endif /* PROC_FS */
-#ifdef CONFIG_MAC
-	adbdev_init();
-#endif
 #ifdef CONFIG_BUSMOUSE
 	bus_mouse_init();
 #endif
@@ -217,13 +212,10 @@ int __init misc_init(void)
 #ifdef CONFIG_ATARIMOUSE
 	atari_mouse_init();
 #endif
-#ifdef CONFIG_MACMOUSE
-	mac_mouse_init();
-#endif
 #ifdef CONFIG_SUN_MOUSE
 	sun_mouse_init();
 #endif
-#ifdef CONFIG_MACMOUSE
+#ifdef CONFIG_ADBMOUSE
 	adb_mouse_init();
 #endif
 #ifdef CONFIG_PC110_PAD

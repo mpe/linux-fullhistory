@@ -1,4 +1,4 @@
-/* $Id: pcikbd.c,v 1.23 1998/10/07 11:35:24 jj Exp $
+/* $Id: pcikbd.c,v 1.24 1998/11/08 11:15:24 davem Exp $
  * pcikbd.c: Ultra/AX PC keyboard support.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -691,7 +691,7 @@ static int poll_aux_status(void)
 		    == AUX_STAT_OBF)
 			pcimouse_inb(pcimouse_iobase + KBD_DATA_REG);
 		current->state = TASK_INTERRUPTIBLE;
-		schedule_timeout((5*HZ + 99)/100);
+		schedule_timeout((5*HZ + 99) / 100);
 		retries++;
 	}
 	return (retries < MAX_RETRIES);
