@@ -2,6 +2,7 @@
  *  Copyright (c) by Jaroslav Kysela <perex@suse.cz>
  *                   Creative Labs, Inc.
  *  Routines for control of EMU10K1 chips / PCM routines
+ *  Multichannel PCM support Copyright (c) Lee Revell <rlrevell@joe-job.com>
  *
  *  BUGS:
  *    --

@@ -3,6 +3,7 @@
  *                   Takashi Iwai <tiwai@suse.de>
  *                   Creative Labs, Inc.
  *  Routines for control of EMU10K1 chips / mixer routines
+ *  Multichannel PCM support Copyright (c) Lee Revell <rlrevell@joe-job.com>
  *
  *  BUGS:
  *    --
