@@ -32,15 +32,17 @@ static	u_char	irq_to_siureg[] = {
 	0, 0, 0, 0, 0, 0, 0, 0
 };
 
+/* bit numbers do not match the docs, these are precomputed so the bit for
+ * a given irq is (1 << irq_to_siubit[irq]) */
 static	u_char	irq_to_siubit[] = {
-	31, 16, 17, 18, 19, 20, 21, 22,
-	23, 24, 25, 26, 27, 28, 29, 30,
-	29, 30, 16, 17, 18, 19, 20, 21,
-	22, 23, 24, 25, 26, 27, 28, 31,
-	 0,  1,  2,  3,  4,  5,  6,  7,
-	 8,  9, 10, 11, 12, 13, 14, 15,
-	15, 14, 13, 12, 11, 10,  9,  8,
-	 7,  6,  5,  4,  3,  2,  1,  0
+	 0, 15, 14, 13, 12, 11, 10,  9,
+	 8,  7,  6,  5,  4,  3,  2,  1,
+	 2,  1, 15, 14, 13, 12, 11, 10,
+	 9,  8,  7,  6,  5,  4,  3,  0,
+	31, 30, 29, 28, 27, 26, 25, 24,
+	23, 22, 21, 20, 19, 18, 17, 16,
+	16, 17, 18, 19, 20, 21, 22, 23,
+	24, 25, 26, 27, 28, 29, 30, 31,
 };
 
 static void cpm2_mask_irq(unsigned int irq_nr)
@@ -54,7 +56,7 @@ static void cpm2_mask_irq(unsigned int irq_nr)
 	word = irq_to_siureg[irq_nr];
 
 	simr = &(cpm2_immr->im_intctl.ic_simrh);
-	ppc_cached_irq_mask[word] &= ~(1 << (31 - bit));
+	ppc_cached_irq_mask[word] &= ~(1 << bit);
 	simr[word] = ppc_cached_irq_mask[word];
 }
 
@@ -69,7 +71,7 @@ static void cpm2_unmask_irq(unsigned int irq_nr)
 	word = irq_to_siureg[irq_nr];
 
 	simr = &(cpm2_immr->im_intctl.ic_simrh);
-	ppc_cached_irq_mask[word] |= (1 << (31 - bit));
+	ppc_cached_irq_mask[word] |= 1 << bit;
 	simr[word] = ppc_cached_irq_mask[word];
 }
 
@@ -85,9 +87,9 @@ static void cpm2_mask_and_ack(unsigned int irq_nr)
 
 	simr = &(cpm2_immr->im_intctl.ic_simrh);
 	sipnr = &(cpm2_immr->im_intctl.ic_sipnrh);
-	ppc_cached_irq_mask[word] &= ~(1 << (31 - bit));
+	ppc_cached_irq_mask[word] &= ~(1 << bit);
 	simr[word] = ppc_cached_irq_mask[word];
-	sipnr[word] = 1 << (31 - bit);
+	sipnr[word] = 1 << bit;
 }
 
 static void cpm2_end_irq(unsigned int irq_nr)
@@ -103,7 +105,7 @@ static void cpm2_end_irq(unsigned int irq_nr)
 		word = irq_to_siureg[irq_nr];
 
 		simr = &(cpm2_immr->im_intctl.ic_simrh);
-		ppc_cached_irq_mask[word] |= (1 << (31 - bit));
+		ppc_cached_irq_mask[word] |= 1 << bit;
 		simr[word] = ppc_cached_irq_mask[word];
 	}
 }
