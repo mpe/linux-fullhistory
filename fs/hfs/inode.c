@@ -171,14 +171,16 @@ struct inode *hfs_new_inode(struct inode *dir, struct qstr *name, int mode)
 	HFS_I(inode)->flags = 0;
 	HFS_I(inode)->rsrc_inode = NULL;
 	HFS_I(inode)->fs_blocks = 0;
-	if (S_ISDIR(inode->i_mode)) {
+	if (S_ISDIR(mode)) {
 		inode->i_size = 2;
 		HFS_SB(sb)->folder_count++;
 		if (dir->i_ino == HFS_ROOT_CNID)
 			HFS_SB(sb)->root_dirs++;
 		inode->i_op = &hfs_dir_inode_operations;
 		inode->i_fop = &hfs_dir_operations;
-	} else if (S_ISREG(inode->i_mode)) {
+		inode->i_mode |= S_IRWXUGO;
+		inode->i_mode &= ~HFS_SB(inode->i_sb)->s_dir_umask;
+	} else if (S_ISREG(mode)) {
 		HFS_I(inode)->clump_blocks = HFS_SB(sb)->clumpablks;
 		HFS_SB(sb)->file_count++;
 		if (dir->i_ino == HFS_ROOT_CNID)
@@ -186,6 +188,10 @@ struct inode *hfs_new_inode(struct inode *dir, struct qstr *name, int mode)
 		inode->i_op = &hfs_file_inode_operations;
 		inode->i_fop = &hfs_file_operations;
 		inode->i_mapping->a_ops = &hfs_aops;
+		inode->i_mode |= S_IRUGO|S_IXUGO;
+		if (mode & S_IWUSR)
+			inode->i_mode |= S_IWUGO;
+		inode->i_mode &= ~HFS_SB(inode->i_sb)->s_file_umask;
 		HFS_I(inode)->phys_size = 0;
 		HFS_I(inode)->alloc_blocks = 0;
 		HFS_I(inode)->first_blocks = 0;
@@ -314,7 +320,7 @@ static int hfs_read_inode(struct inode *inode, void *data)
 		inode->i_mode = S_IRUGO | S_IXUGO;
 		if (!(rec->file.Flags & HFS_FIL_LOCK))
 			inode->i_mode |= S_IWUGO;
-		inode->i_mode &= hsb->s_file_umask;
+		inode->i_mode &= ~hsb->s_file_umask;
 		inode->i_mode |= S_IFREG;
 		inode->i_ctime = inode->i_atime = inode->i_mtime =
 				hfs_m_to_utime(rec->file.MdDat);
@@ -326,7 +332,7 @@ static int hfs_read_inode(struct inode *inode, void *data)
 		inode->i_ino = be32_to_cpu(rec->dir.DirID);
 		inode->i_size = be16_to_cpu(rec->dir.Val) + 2;
 		HFS_I(inode)->fs_blocks = 0;
-		inode->i_mode = S_IFDIR | (S_IRWXUGO & hsb->s_dir_umask);
+		inode->i_mode = S_IFDIR | (S_IRWXUGO & ~hsb->s_dir_umask);
 		inode->i_ctime = inode->i_atime = inode->i_mtime =
 				hfs_m_to_utime(rec->dir.MdDat);
 		inode->i_op = &hfs_dir_inode_operations;
