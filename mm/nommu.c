@@ -396,6 +396,7 @@ unsigned long do_mmap_pgoff(struct file *file,
 	unsigned int vm_flags;
 	void *result;
 	int ret, membacked;
+	unsigned long reqprot = prot;
 
 	/* do the simple checks first */
 	if (flags & MAP_FIXED || addr) {
@@ -506,7 +507,7 @@ unsigned long do_mmap_pgoff(struct file *file,
 	}
 
 	/* allow the security API to have its say */
-	ret = security_file_mmap(file, prot, flags);
+	ret = security_file_mmap(file, reqprot, prot, flags);
 	if (ret)
 		return ret;
 
@@ -1063,3 +1064,7 @@ int __vm_enough_memory(long pages, int cap_sys_admin)
 	return -ENOMEM;
 }
 
+int in_gate_area_no_task(unsigned long addr)
+{
+	return 0;
+}
