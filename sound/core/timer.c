@@ -1141,6 +1141,8 @@ static void snd_timer_user_ccallback(snd_timer_instance_t *timeri,
 	spin_lock(&tu->qlock);
 	snd_timer_user_append_to_tqueue(tu, &r1);
 	spin_unlock(&tu->qlock);
+	kill_fasync(&tu->fasync, SIGIO, POLL_IN);
+	wake_up(&tu->qchange_sleep);
 }
 
 static void snd_timer_user_tinterrupt(snd_timer_instance_t *timeri,
