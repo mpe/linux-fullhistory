@@ -7,6 +7,7 @@
 #include <linux/sched.h>
 #include <linux/in6.h>
 #include <linux/interrupt.h>
+#include <linux/smp_lock.h>
 
 #include <asm/semaphore.h>
 #include <asm/processor.h>
@@ -49,6 +50,7 @@ EXPORT_SYMBOL_NOVERS(kernel_flag);
 EXPORT_SYMBOL_NOVERS(active_kernel_processor);
 EXPORT_SYMBOL(smp_invalidate_needed);
 EXPORT_SYMBOL_NOVERS(__lock_kernel);
+EXPORT_SYMBOL(lk_lockmsg);
 
 /* Global SMP irq stuff */
 EXPORT_SYMBOL(synchronize_irq);

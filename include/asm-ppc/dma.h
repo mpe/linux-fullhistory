@@ -23,6 +23,12 @@
 #ifndef _ASM_DMA_H
 #define _ASM_DMA_H
 
+#define MAX_DMA_CHANNELS	8
+
+/* The maximum address that we can perform a DMA transfer to on this platform */
+/* Doesn't really apply... */
+#define MAX_DMA_ADDRESS      0xFFFFFFFF
+
 #ifdef CONFIG_PREP
 #include <asm/io.h>		/* need byte IO */
 
@@ -83,11 +89,8 @@
  *
  */
 
-#define MAX_DMA_CHANNELS	8
-
-/* The maximum address that we can perform a DMA transfer to on this platform */
-/* Doesn't really apply... */
-#define MAX_DMA_ADDRESS      0xFFFFFFFF
+#define POWERSTACK_SND_DMA 6
+#define POWERSTACK_SND_DMA2 7
 
 /* 8237 DMA controllers */
 #define IO_DMA1_BASE	0x00	/* 8 bit slave DMA, channels 0..3 */
@@ -149,6 +152,9 @@
 #define DMA_HI_PAGE_5              0x48B
 #define DMA_HI_PAGE_6              0x489
 #define DMA_HI_PAGE_7              0x48A
+
+#define DMA1_EXT_REG               0x40B
+#define DMA2_EXT_REG               0x4D6
 
 #define DMA_MODE_READ	0x44	/* I/O to memory, no autoinit, increment, single mode */
 #define DMA_MODE_WRITE	0x48	/* memory to I/O, no autoinit, increment, single mode */
@@ -214,9 +220,11 @@ static __inline__ void set_dma_page(unsigned int dmanr, int pagenr)
 	switch(dmanr) {
 		case 0:
 			dma_outb(pagenr, DMA_LO_PAGE_0);
+                        dma_outb(pagenr>>8, DMA_HI_PAGE_0);
 			break;
 		case 1:
 			dma_outb(pagenr, DMA_LO_PAGE_1);
+                        dma_outb(pagenr>>8, DMA_HI_PAGE_1);
 			break;
 		case 2:
 			dma_outb(pagenr, DMA_LO_PAGE_2);
@@ -225,15 +233,24 @@ static __inline__ void set_dma_page(unsigned int dmanr, int pagenr)
 		case 3:
 			dma_outb(pagenr, DMA_LO_PAGE_3);
 			break;
-		case 5:
+	        case 5:
 			dma_outb(pagenr & 0xfe, DMA_LO_PAGE_5);
+                        dma_outb(pagenr>>8, DMA_HI_PAGE_5);
 			break;
 		case 6:
-			dma_outb(pagenr & 0xfe, DMA_LO_PAGE_6);
+		        if (POWERSTACK_SND_DMA == 6 || POWERSTACK_SND_DMA2 == 6)
+				dma_outb(pagenr, DMA_LO_PAGE_6);
+			else
+				dma_outb(pagenr & 0xfe, DMA_LO_PAGE_6);
+			dma_outb(pagenr>>8, DMA_HI_PAGE_6);
 			break;
 		case 7:
-			dma_outb(pagenr & 0xfe, DMA_LO_PAGE_7);
-			break;
+			if (POWERSTACK_SND_DMA == 7 || POWERSTACK_SND_DMA2 == 7)
+				dma_outb(pagenr, DMA_LO_PAGE_7);
+			else
+				dma_outb(pagenr & 0xfe, DMA_LO_PAGE_7);
+			dma_outb(pagenr>>8, DMA_HI_PAGE_7);
+		  break;
 	}
 }
 
@@ -247,8 +264,14 @@ static __inline__ void set_dma_addr(unsigned int dmanr, unsigned int phys)
 	    dma_outb( phys & 0xff, ((dmanr&3)<<1) + IO_DMA1_BASE );
             dma_outb( (phys>>8) & 0xff, ((dmanr&3)<<1) + IO_DMA1_BASE );
 	}  else  {
+	  if (dmanr == POWERSTACK_SND_DMA || dmanr == POWERSTACK_SND_DMA2) {
+	    dma_outb( phys  & 0xff, ((dmanr&3)<<2) + IO_DMA2_BASE );
+	    dma_outb( (phys>>8)  & 0xff, ((dmanr&3)<<2) + IO_DMA2_BASE );
+	    dma_outb( (dmanr&3), DMA2_EXT_REG);
+	  } else {
 	    dma_outb( (phys>>1) & 0xff, ((dmanr&3)<<2) + IO_DMA2_BASE );
 	    dma_outb( (phys>>9) & 0xff, ((dmanr&3)<<2) + IO_DMA2_BASE );
+	  }
 	}
 	set_dma_page(dmanr, phys>>16);
 }
@@ -269,8 +292,13 @@ static __inline__ void set_dma_count(unsigned int dmanr, unsigned int count)
 	    dma_outb( count & 0xff, ((dmanr&3)<<1) + 1 + IO_DMA1_BASE );
 	    dma_outb( (count>>8) & 0xff, ((dmanr&3)<<1) + 1 + IO_DMA1_BASE );
         } else {
+	  if (dmanr == POWERSTACK_SND_DMA || dmanr == POWERSTACK_SND_DMA2) {
+	    dma_outb( count & 0xff, ((dmanr&3)<<2) + 2 + IO_DMA2_BASE );
+	    dma_outb( (count>>8) & 0xff, ((dmanr&3)<<2) + 2 + IO_DMA2_BASE );
+	  } else {
 	    dma_outb( (count>>1) & 0xff, ((dmanr&3)<<2) + 2 + IO_DMA2_BASE );
 	    dma_outb( (count>>9) & 0xff, ((dmanr&3)<<2) + 2 + IO_DMA2_BASE );
+	  }
         }
 }
 
@@ -297,10 +325,14 @@ static __inline__ int get_dma_residue(unsigned int dmanr)
 	return (dmanr<=3)? count : (count<<1);
 }
 
+#else /* CONFIG_PREP */
+
+#define DMA_MODE_READ	1
+#define DMA_MODE_WRITE	2
+
+#endif /* CONFIG_PREP */
 
 /* These are in kernel/dma.c: */
 extern void free_dma(unsigned int dmanr);	/* release it again */
-
-#endif /* CONFIG_PREP */
 
 #endif /* _ASM_DMA_H */

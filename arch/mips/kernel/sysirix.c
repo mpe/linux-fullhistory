@@ -1,4 +1,4 @@
-/* $Id: sysirix.c,v 1.3 1997/07/20 15:32:25 ralf Exp $
+/* $Id: sysirix.c,v 1.4 1997/08/08 18:12:35 miguel Exp $
  * sysirix.c: IRIX system call emulation.
  *
  * Copyright (C) 1996 David S. Miller
@@ -751,6 +751,8 @@ asmlinkage int irix_fstatfs(unsigned int fd, struct irix_statfs *buf)
 	}
 	error = 0;
 
+dput_and_out:
+	dput(dentry);
 out:
 	unlock_kernel();
 	return error;
@@ -1514,6 +1516,8 @@ asmlinkage int irix_fstatvfs(int fd, struct irix_statvfs *buf)
 
 	error = 0;
 
+dput_and_out:
+	dput(dentry);
 out:
 	unlock_kernel();
 	return error;
@@ -1877,6 +1881,8 @@ asmlinkage int irix_fstatvfs64(int fd, struct irix_statvfs *buf)
 
 	error = 0;
 
+dput_and_out:
+	dput(dentry);
 out:
 	unlock_kernel();
 	return error;

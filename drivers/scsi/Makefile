@@ -273,6 +273,22 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_MESH),y)
+L_OBJS += mesh.o
+else
+  ifeq ($(CONFIG_SCSI_MESH),m)
+  M_OBJS += mesh.o
+  endif
+endif
+
+ifeq ($(CONFIG_SCSI_MAC53C94),y)
+L_OBJS += mac53c94.o
+else
+  ifeq ($(CONFIG_SCSI_MAC53C94),m)
+  M_OBJS += mac53c94.o
+  endif
+endif
+
 ifeq ($(CONFIG_SCSI_DEBUG),y)
 L_OBJS += scsi_debug.o
 else

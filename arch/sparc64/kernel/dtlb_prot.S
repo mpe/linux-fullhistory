@@ -1,4 +1,4 @@
-/* $Id: dtlb_prot.S,v 1.12 1997/05/18 10:04:43 davem Exp $
+/* $Id: dtlb_prot.S,v 1.14 1997/08/03 09:07:00 davem Exp $
  * dtlb_prot.S:	Data TLB protection code, this is included directly
  *              into the trap table.
  *
@@ -36,17 +36,17 @@
 				/* ICACHE line 3 */
   /*0x40*/	add		%g2, 7, %g5				! Compute mask
   /*0x44*/	andn		%g4, %g5, %g4				! Mask page
-  /*0x48*/	or		%g4, 0x10, %g4				! 2ndary Context
-  /*0x4c*/	stxa		%g0, [%g4] ASI_DMMU_DEMAP		! TLB flush page
-  /*0x50*/	membar		#Sync					! Synchronize
-  /*0x54*/	stxa		%g3, [%g1] ASI_PHYS_USE_EC		! Update sw PTE
-  /*0x58*/	stxa		%g3, [%g0] ASI_DTLB_DATA_IN		! TLB load
-  /*0x5c*/	retry							! Trap return
+  /*0x48*/	mov		TLB_SFSR, %g5				! read SFSR
+  /*0x4c*/	ldxa		[%g5] ASI_DMMU, %g5			! from DMMU for
+  /*0x50*/	and		%g5, 0x10, %g5				! context bit
+  /*0x54*/	or		%g4, %g5, %g4				! for prot trap
+1:/*0x58*/	stxa		%g0, [%g4] ASI_DMMU_DEMAP		! TLB flush page
+  /*0x5c*/	membar		#Sync					! Synchronize
 
 				/* ICACHE line 4 */
-  /*0x60*/	nop
-  /*0x64*/	nop
-  /*0x68*/	nop
+  /*0x60*/	stxa		%g3, [%g1] ASI_PHYS_USE_EC		! Update sw PTE
+  /*0x64*/	stxa		%g3, [%g0] ASI_DTLB_DATA_IN		! TLB load
+  /*0x68*/	retry							! Trap return
   /*0x6c*/	nop
   /*0x70*/	nop
   /*0x74*/	nop

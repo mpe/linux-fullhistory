@@ -1,12 +1,10 @@
-/* $Id: system.h,v 1.29 1997/07/24 16:48:32 davem Exp $ */
+/* $Id: system.h,v 1.35 1997/08/07 03:53:00 davem Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
 #include <asm/ptrace.h>
 #include <asm/processor.h>
 #include <asm/asm_offsets.h>
-
-#define NCPUS	4	/* No SMP yet */
 
 #ifndef __ASSEMBLY__
 /*
@@ -103,7 +101,7 @@ extern void __global_restore_flags(unsigned long flags);
 
 #define membar(type)	__asm__ __volatile__ ("membar " type : : : "memory");
 
-#define flushi(addr)	__asm__ __volatile__ ("flush %0" : : "r" (addr))
+#define flushi(addr)	__asm__ __volatile__ ("flush %0" : : "r" (addr) : "memory")
 
 #define flushw_all()	__asm__ __volatile__("flushw")
 
@@ -131,6 +129,16 @@ extern __inline__ void flushw_user(void)
 	 * I do not clobber it, when in fact I do.  Please,
 	 * when modifying this code inspect output of sched.s very
 	 * carefully to make sure things still work.  -DaveM
+	 *
+	 * SMP NOTE: At first glance it looks like there is a tiny
+	 *           race window here at the end.  The possible problem
+	 *           would be if a tlbcachesync MONDO vector got delivered
+	 *           to us right before we set the final %g6 thread reg
+	 *           value.  But that is impossible since only the holder
+	 *           of scheduler_lock can send a tlbcachesync MONDO and
+	 *           by definition we hold it right now.  Normal tlb
+	 *           flush xcalls can come in, but those are safe and do
+	 *           not reference %g6.
 	 */
 #define switch_to(prev, next)							\
 do {	__label__ switch_continue;						\
@@ -142,7 +150,6 @@ do {	__label__ switch_continue;						\
 	"rdpr	%%pstate, %%g2\n\t"						\
 	"wrpr	%%g2, 0x3, %%pstate\n\t"					\
 	"flushw\n\t"								\
-/*XXX*/	"wr	%%g0, 0, %%fprs\n\t"						\
 	"stx	%%i6, [%%sp + 2047 + 0x70]\n\t"					\
 	"stx	%%i7, [%%sp + 2047 + 0x78]\n\t"					\
 	"rdpr	%%wstate, %%o5\n\t"						\
@@ -151,6 +158,7 @@ do {	__label__ switch_continue;						\
 	"rdpr	%%cwp, %%o5\n\t"						\
 	"stx	%%o7, [%%g6 + %4]\n\t"						\
 	"st	%%o5, [%%g6 + %5]\n\t"						\
+	"membar #Sync\n\t"							\
 	"mov	%0, %%g6\n\t"							\
 	"ld	[%0 + %5], %%g1\n\t"						\
 	"wrpr	%%g1, %%cwp\n\t"						\
@@ -176,30 +184,35 @@ do {	__label__ switch_continue;						\
 	  "o0", "o1", "o2", "o3", "o4", "o5");					\
 switch_continue: } while(0)
 
-/* Unlike the hybrid v7/v8 kernel, we can assume swap exists under V9. */
-extern __inline__ unsigned long xchg_u32(__volatile__ unsigned int *m, unsigned int val)
+extern __inline__ unsigned long xchg32(__volatile__ unsigned int *m, unsigned int val)
 {
-	__asm__ __volatile__("swap	[%2], %0"
-			     : "=&r" (val)
-			     : "0" (val), "r" (m));
+	__asm__ __volatile__("
+	mov		%0, %%g5
+1:	lduw		[%2], %%g7
+	cas		[%2], %%g7, %0
+	cmp		%%g7, %0
+	bne,a,pn	%%icc, 1b
+	 mov		%%g5, %0
+	membar		#StoreLoad | #StoreStore
+"	: "=&r" (val)
+	: "0" (val), "r" (m)
+	: "g5", "g7", "cc", "memory");
 	return val;
 }
 
-/* Bolix, must use casx for 64-bit values. */
-extern __inline__ unsigned long xchg_u64(__volatile__ unsigned long *m,
-					 unsigned long val)
+extern __inline__ unsigned long xchg64(__volatile__ unsigned long *m, unsigned long val)
 {
-	unsigned long temp;
 	__asm__ __volatile__("
-	mov		%0, %%g1
-1:	ldx		[%3], %1
-	casx		[%3], %1, %0
-	cmp		%1, %0
+	mov		%0, %%g5
+1:	ldx		[%2], %%g7
+	casx		[%2], %%g7, %0
+	cmp		%%g7, %0
 	bne,a,pn	%%xcc, 1b
-	 mov		%%g1, %0
-"	: "=&r" (val), "=&r" (temp)
+	 mov		%%g5, %0
+	membar		#StoreLoad | #StoreStore
+"	: "=&r" (val)
 	: "0" (val), "r" (m)
-	: "g1", "cc");
+	: "g5", "g7", "cc", "memory");
 	return val;
 }
 
@@ -213,9 +226,9 @@ static __inline__ unsigned long __xchg(unsigned long x, __volatile__ void * ptr,
 {
 	switch (size) {
 	case 4:
-		return xchg_u32(ptr, x);
+		return xchg32(ptr, x);
 	case 8:
-		return xchg_u64(ptr, x);
+		return xchg64(ptr, x);
 	};
 	__xchg_called_with_bad_pointer();
 	return x;

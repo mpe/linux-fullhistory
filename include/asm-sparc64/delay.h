@@ -1,4 +1,4 @@
-/* $Id: delay.h,v 1.5 1997/06/18 12:36:23 jj Exp $
+/* $Id: delay.h,v 1.6 1997/07/29 21:11:22 davem Exp $
  * delay.h: Linux delay routines on the V9.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu).
@@ -7,7 +7,9 @@
 #ifndef __SPARC64_DELAY_H
 #define __SPARC64_DELAY_H
 
-extern unsigned long loops_per_sec;
+#ifdef __SMP__
+#include <asm/smp.h>
+#endif 
 
 extern __inline__ void __delay(unsigned long loops)
 {
@@ -23,7 +25,7 @@ extern __inline__ void __delay(unsigned long loops)
 	: "cc");
 }
 
-extern __inline__ void udelay(unsigned long usecs)
+extern __inline__ void __udelay(unsigned long usecs, unsigned long lps)
 {
 	usecs *= 0x00000000000010c6UL;		/* 2**32 / 1000000 */
 
@@ -31,10 +33,18 @@ extern __inline__ void udelay(unsigned long usecs)
 	mulx	%1, %2, %0
 	srlx	%0, 32, %0
 "	: "=r" (usecs)
-	: "r" (usecs), "r" (loops_per_sec));
+	: "r" (usecs), "r" (lps));
 
 	__delay(usecs);
 }
+
+#ifdef __SMP__
+#define __udelay_val cpu_data[smp_processor_id()].udelay_val
+#else
+#define __udelay_val loops_per_sec
+#endif
+
+#define udelay(usecs) __udelay((usecs),__udelay_val)
 
 extern __inline__ unsigned long muldiv(unsigned long a, unsigned long b, unsigned long c)
 {

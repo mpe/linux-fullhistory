@@ -586,11 +586,9 @@ S: 34131 Kassel
 S: Germany
 
 N: Richard Henderson
-E: rth@tamu.edu
+E: richard@gnu.ai.mit.edu
+E: rth@cygnus.com
 D: Alpha/ELF, gcc, binutils, and glibc
-S: 304 E. North Ave.
-S: Bryan, Texas  77801-3431
-S: USA
 
 N: Sebastian Hetze
 E: she@lunetix.de
@@ -929,6 +927,13 @@ S: Australian National University
 S: Canberra  ACT  0200
 S: AUSTRALIA
 
+N: Pavel Machek
+E: pavel@atrey.karlin.mff.cuni.cz
+D: Softcursor for vga, hypertech cdrom support, vcsa bugfix
+S: Volkova 1131
+S: 198 00 Praha 9
+S: Czech Republic
+
 N: James B. MacLean
 E: macleajb@ednet.ns.ca
 W: http://www.ednet.ns.ca/~macleajb/dosemu.html
@@ -1156,7 +1161,7 @@ E: orc@pell.chi.il.us
 D: improved memory detection code.
 
 N: Avery Pennarun
-E: apenwarr@foxnet.net
+E: apenwarr@bond.net
 D: ARCnet driver
 D: "make xconfig" improvements
 D: Various minor hacking
@@ -1654,6 +1659,14 @@ D: Written kmalloc/kfree
 S: Oosterstraat 23
 S: 2611 TT Delft
 S: The Netherlands
+
+N: David Woodhouse
+E: dwmw2@cam.ac.uk
+D: Extensive ARCnet rewrite
+D: ARCnet COM20020, COM90xx IO-MAP drivers
+S: Robinson College, Grange Road
+S: Cambridge. CB3 9AN
+S: England
 
 N: Frank Xia
 E: qx@math.columbia.edu

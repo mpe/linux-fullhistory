@@ -1,4 +1,4 @@
-/* $Id: openprom.h,v 1.4 1997/03/24 06:42:08 davem Exp $ */
+/* $Id: openprom.h,v 1.5 1997/08/15 06:44:51 davem Exp $ */
 #ifndef __SPARC64_OPENPROM_H
 #define __SPARC64_OPENPROM_H
 
@@ -208,6 +208,28 @@ struct linux_prom_ranges {
 	unsigned int ot_parent_space;
 	unsigned int ot_parent_base;		/* CPU looks from here */
 	unsigned int or_size;
+};
+
+/* Ranges and reg properties are a bit different for PCI. */
+struct linux_prom_pci_registers {
+	unsigned int phys_hi;
+	unsigned int phys_mid;
+	unsigned int phys_lo;
+
+	unsigned int size_hi;
+	unsigned int size_lo;
+};
+
+struct linux_prom_pci_ranges {
+	unsigned int child_phys_hi;	/* Only certain bits are encoded here. */
+	unsigned int child_phys_mid;
+	unsigned int child_phys_lo;
+
+	unsigned int parent_phys_hi;
+	unsigned int parent_phys_lo;
+
+	unsigned int size_hi;
+	unsigned int size_lo;
 };
 
 #endif /* !(__ASSEMBLY__) */

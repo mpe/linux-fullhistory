@@ -44,13 +44,13 @@ static inline int waking_non_zero(struct semaphore *sem)
 	__asm__ __volatile__(
 		"1:	lwarx %1,0,%2\n"
 		"	cmpwi 0,%1,0\n"
-		"	addi %1,%1,-1\n"
+		"	addic %1,%1,-1\n"
 		"	ble- 2f\n"
 		"	stwcx. %1,0,%2\n"
 		"	bne- 1b\n"
-		"	mr %0,%1\n"
+		"	li %0,1\n"
 		"2:"
-		: "=r" (ret), "=r" (tmp)
+		: "=r" (ret), "=&r" (tmp)
 		: "r" (&sem->waking), "0" (0)
 		: "cr0", "memory");
 

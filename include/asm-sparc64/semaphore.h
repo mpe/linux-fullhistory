@@ -38,20 +38,28 @@ extern void __up(struct semaphore * sem);
 
 extern __inline__ void down(struct semaphore * sem)
 {
-	if (atomic_dec_return(&sem->count) < 0)
+	int result;
+
+	result = atomic_dec_return(&sem->count);
+	membar("#StoreLoad | #StoreStore");
+	if (result < 0)
 		__down(sem);
 }
 
 extern __inline__ int down_interruptible(struct semaphore *sem)
 {
-	int ret = 0;
-	if (atomic_dec_return(&sem->count) < 0)
+	int result, ret = 0;
+
+	result = atomic_dec_return(&sem->count);
+	membar("#StoreLoad | #StoreStore");
+	if (result < 0)
 		ret = __down_interruptible(sem);
 	return ret;
 }
 
 extern __inline__ void up(struct semaphore * sem)
 {
+	membar("#StoreStore | #LoadStore");
 	if (atomic_inc_return(&sem->count) <= 0)
 		__up(sem);
 }	

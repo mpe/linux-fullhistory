@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.20 1997/07/14 03:10:28 davem Exp $
+/*  $Id: signal.c,v 1.22 1997/08/05 19:19:36 davem Exp $
  *  arch/sparc64/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -54,12 +54,12 @@ asmlinkage void sparc64_set_context(struct pt_regs *regs)
 	if(tp->w_saved						||
 	   (((unsigned long)ucp) & (sizeof(unsigned long)-1))	||
 	   (!__access_ok((unsigned long)ucp, sizeof(*ucp))))
-		do_exit(SIGSEGV);
+		goto do_sigsegv;
 	grp = &ucp->uc_mcontext.mc_gregs;
 	__get_user(pc, &((*grp)[MC_PC]));
 	__get_user(npc, &((*grp)[MC_NPC]));
 	if((pc | npc) & 3)
-		do_exit(SIGSEGV);
+		goto do_sigsegv;
 	if(regs->u_regs[UREG_I1]) {
 		__get_user(current->blocked, &ucp->uc_sigmask);
 		current->blocked &= _BLOCKABLE;
@@ -100,6 +100,10 @@ asmlinkage void sparc64_set_context(struct pt_regs *regs)
 		__get_user(fpregs[33], &(ucp->uc_mcontext.mc_fpregs.mcfpu_gsr));
 		regs->fprs = FPRS_FEF;
 	}
+	return;
+do_sigsegv:
+	lock_kernel();
+	do_exit(SIGSEGV);
 }
 
 asmlinkage void sparc64_get_context(struct pt_regs *regs)
@@ -113,7 +117,7 @@ asmlinkage void sparc64_get_context(struct pt_regs *regs)
 
 	synchronize_user_stack();
 	if(tp->w_saved || clear_user(ucp, sizeof(*ucp)))
-		do_exit(SIGSEGV);
+		goto do_sigsegv;
 	mcp = &ucp->uc_mcontext;
 	grp = &mcp->mc_gregs;
 
@@ -156,6 +160,10 @@ asmlinkage void sparc64_get_context(struct pt_regs *regs)
 		__put_user(fpregs[33], &(mcp->mc_fpregs.mcfpu_gsr));
 		__put_user(FPRS_FEF, &(mcp->mc_fpregs.mcfpu_fprs));
 	}
+	return;
+do_sigsegv:
+	lock_kernel();
+	do_exit(SIGSEGV);
 }
 
 /* 
@@ -452,7 +460,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs,
 		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
 			current->exit_code = signr;
 			current->state = TASK_STOPPED;
-			notify_parent(current);
+			notify_parent(current, SIGCHLD);
 			schedule();
 			if (!(signr = current->exit_code))
 				continue;
@@ -498,7 +506,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs,
 				current->exit_code = signr;
 				if(!(current->p_pptr->sig->action[SIGCHLD-1].sa_flags &
 				     SA_NOCLDSTOP))
-					notify_parent(current);
+					notify_parent(current, SIGCHLD);
 				schedule();
 				continue;
 

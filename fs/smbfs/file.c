@@ -126,8 +126,8 @@ smb_file_read(struct inode *inode, struct file *file, char *buf, unsigned long c
 
 	if (!IS_RDONLY(inode))
 		inode->i_atime = CURRENT_TIME;
-	inode->i_dirt = 1;
-
+	mark_inode_dirty(inode);
+	
 	DPRINTK("smb_file_read: exit %s\n", SMB_FINFO(inode)->name);
 
 	return already_read;
@@ -196,8 +196,8 @@ smb_file_write(struct inode *inode, struct file *file, const char *buf,
 	}
 
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
-	inode->i_dirt = 1;
-
+	mark_inode_dirty(inode);
+	
 	file->f_pos = pos;
 
 	if (pos > inode->i_size)

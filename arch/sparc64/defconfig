@@ -29,6 +29,7 @@ CONFIG_SUN_KEYBOARD=y
 CONFIG_SUN_CONSOLE=y
 CONFIG_SUN_AUXIO=y
 CONFIG_SUN_IO=y
+CONFIG_PCI=y
 
 #
 # SBUS Frame Buffer support
@@ -49,6 +50,7 @@ SUN_FB_CREATOR=y
 #
 CONFIG_SUN_OPENPROMIO=m
 CONFIG_SUN_MOSTEK_RTC=y
+# CONFIG_SAB82532 is not set
 # CONFIG_SUN_BPP is not set
 # CONFIG_SUN_VIDEOPIX is not set
 CONFIG_SUN_OPENPROMFS=m
@@ -85,6 +87,7 @@ CONFIG_INET=y
 # CONFIG_IP_ROUTER is not set
 # CONFIG_NET_IPIP is not set
 # CONFIG_SYN_COOKIES is not set
+# CONFIG_XTP is not set
 
 #
 # (it is safe to leave these untouched)
@@ -187,6 +190,7 @@ CONFIG_AMIGA_PARTITION=y
 CONFIG_UFS_FS=m
 CONFIG_BSD_DISKLABEL=y
 CONFIG_SMD_DISKLABEL=y
+# CONFIG_MAC_PARTITION is not set
 
 #
 # Kernel hacking

@@ -7,6 +7,7 @@
 
 #include <asm/page.h>
 #include <asm/sysio.h>
+#include <asm/spinlock.h>
 
 /* The iommu handles all virtual to physical address translations
  * that occur between the SYSIO and physical memory.  Access by
@@ -43,8 +44,12 @@
 #define IOPTE_WRITE         0x0000000000000002 /* Writeable                        */
 
 struct iommu_struct {
-	struct sysio_regs *sysio_regs;
-	iopte_t *page_table;
+	struct sysio_regs	*sysio_regs;
+	unsigned int		*sbuf_flushflag_va;
+	unsigned long		sbuf_flushflag_pa;
+	spinlock_t		iommu_lock;
+
+	iopte_t			*page_table;
 
 	/* For convenience */
 	unsigned long start; /* First managed virtual address */

@@ -21,6 +21,7 @@
  * bootup setup stuff..
  */
 
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -35,31 +36,35 @@
 #include <linux/string.h>
 #include <linux/delay.h>
 #include <linux/ioport.h>
+#include <linux/major.h>
 #include <asm/prom.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
 #include <asm/io.h>
 #include <asm/ide.h>
+#include <asm/pci-bridge.h>
+#include "time.h"
+
+/*
+ * A magic address and value to put into it on machines with the
+ * "ohare" I/O controller.  This makes the IDE CD work on Starmaxes.
+ * Contributed by Harry Eaton.
+ */
+#define OMAGICPLACE	((volatile unsigned *) 0xf3000038)
+#define OMAGICCONT	0xbeff7a
 
 extern int root_mountflags;
 
 extern char command_line[];
-char saved_command_line[256];
+extern char saved_command_line[256];
 
-unsigned char aux_device_present;	/* XXX */
-unsigned char kbd_read_mask;
 unsigned char drive_info;
 
 #define DEFAULT_ROOT_DEVICE 0x0801	/* sda1 - slightly silly choice */
 
 extern unsigned long find_available_memory(void);
 
-unsigned long bios32_init(unsigned long memory_start, unsigned long memory_end)
-{
-	return memory_start;
-}
-
-void setup_arch(char **cmdline_p,
+void pmac_setup_arch(char **cmdline_p,
 	unsigned long * memory_start_p, unsigned long * memory_end_p)
 {
 	extern unsigned long *end_of_DRAM;
@@ -84,6 +89,8 @@ void setup_arch(char **cmdline_p,
 		if (fp != 0) {
 			switch (_get_PVR() >> 16) {
 			case 4:		/* 604 */
+			case 9:		/* 604e */
+			case 20:	/* 620 */
 				loops_per_sec = *fp;
 				break;
 			default:	/* 601, 603, etc. */
@@ -102,13 +109,19 @@ int boot_part;
 kdev_t boot_dev;
 
 unsigned long
-pmac_find_devices(unsigned long mem_start, unsigned long mem_end)
+powermac_init(unsigned long mem_start, unsigned long mem_end)
 {
-	struct device_node *chosen_np;
+	struct device_node *chosen_np, *ohare_np;
 
-	nvram_init();
+	mem_start = pmac_find_bridges(mem_start, mem_end);
+	ohare_np = find_devices("ohare");
+	if (ohare_np != NULL) {
+		printk(KERN_INFO "Twiddling the magic ohare bits\n");
+		out_le32(OMAGICPLACE, OMAGICCONT);
+	}
+	pmac_nvram_init();
 	via_cuda_init();
-	read_rtc_time();
+	pmac_read_rtc_time();
 	pmac_find_display();
 	bootpath = NULL;
 	chosen_np = find_devices("chosen");
@@ -147,7 +160,7 @@ note_scsi_host(struct device_node *node, void *host)
 	}
 }
 
-void find_scsi_boot()
+void find_boot_device(void)
 {
 	int dev;
 
@@ -156,10 +169,28 @@ void find_scsi_boot()
 	ROOT_DEV = to_kdev_t(DEFAULT_ROOT_DEVICE);
 	if (boot_host == NULL)
 		return;
+#ifdef CONFIG_SCSI
 	dev = sd_find_target(boot_host, boot_target);
 	if (dev == 0)
 		return;
 	boot_dev = to_kdev_t(dev + boot_part);
+#endif
+	/* XXX should cope with booting from IDE also */
+}
+
+void note_bootable_part(kdev_t dev, int part)
+{
+	static int found_boot = 0;
+
+	if (!found_boot) {
+		find_boot_device();
+		found_boot = 1;
+	}
+	if (dev == boot_dev) {
+		ROOT_DEV = MKDEV(MAJOR(dev), MINOR(dev) + part);
+		boot_dev = NODEV;
+		printk(" (root)");
+	}
 }
 
 void ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq)
@@ -186,41 +217,18 @@ void ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 	if (np->n_intrs == 0) {
 		printk("ide: no intrs for device %s, using 13\n",
 		       np->full_name);
-		np->intrs[0] = 13;
+		*irq = 13;
+	} else {
+		*irq = np->intrs[0];
 	}
 	base = (unsigned long) ioremap(np->addrs[0].address, 0x200);
 	for (i = 0; i < 8; ++i)
 		*p++ = base + i * 0x10;
 	*p = base + 0x160;
-	*irq = np->intrs[0];
-}
-
-int sys_ioperm(unsigned long from, unsigned long num, int on)
-{
-	return -EIO;
-}
-
-#if 0
-extern char builtin_ramdisk_image;
-extern long builtin_ramdisk_size;
-#endif
-
-void
-builtin_ramdisk_init(void)
-{
-#if 0
-	if ((ROOT_DEV == to_kdev_t(DEFAULT_ROOT_DEVICE)) && (builtin_ramdisk_size != 0))
-	{
-		rd_preloaded_init(&builtin_ramdisk_image, builtin_ramdisk_size);
-	} else
-#endif
-	{  /* Not ramdisk - assume root needs to be mounted read only */
-		root_mountflags |= MS_RDONLY;
-	}
 }
 
 int
-get_cpuinfo(char *buffer)
+pmac_get_cpuinfo(char *buffer)
 {
 	int pvr = _get_PVR();
 	char *model;
@@ -251,10 +259,13 @@ get_cpuinfo(char *buffer)
 	case 7:
 		model = "603ev";
 		break;
+	case 9:
+		model = "604e";
+		break;
 	default:
 		model = "unknown";
 		break;
 	}
 	return l + sprintf(buffer+l, "PowerPC %s rev %d.%d\n", model,
-			   (pvr & 0xff) >> 8, pvr & 0xff);
+			   (pvr & 0xff00) >> 8, pvr & 0xff);
 }

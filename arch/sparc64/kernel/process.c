@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.31 1997/07/24 12:15:05 davem Exp $
+/*  $Id: process.c,v 1.29 1997/07/17 02:20:40 davem Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -27,17 +27,20 @@
 #include <linux/a.out.h>
 #include <linux/config.h>
 #include <linux/reboot.h>
+#include <linux/delay.h>
 
 #include <asm/oplib.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
-#include <asm/delay.h>
 #include <asm/processor.h>
 #include <asm/pstate.h>
 #include <asm/elf.h>
 #include <asm/fpumacro.h>
+
+#define PGTCACHE_HIGH_WATER		50
+#define PGTCACHE_LOW_WATER		25
 
 #ifndef __SMP__
 
@@ -53,6 +56,16 @@ asmlinkage int sys_idle(void)
 	current->priority = -100;
 	current->counter = -100;
 	for (;;) {
+		if(pgtable_cache_size > PGTCACHE_LOW_WATER) {
+			do {
+				if(pgd_quicklist)
+					free_page((unsigned long) get_pgd_fast());
+				if(pmd_quicklist)
+					free_page((unsigned long) get_pmd_fast());
+				if(pte_quicklist)
+					free_page((unsigned long) get_pte_fast());
+			} while(pgtable_cache_size > PGTCACHE_HIGH_WATER);
+		}
 		run_task_queue(&tq_scheduler);
 		schedule();
 	}
@@ -68,13 +81,26 @@ asmlinkage int cpu_idle(void)
 {
 	current->priority = -100;
 	while(1) {
+		if(pgtable_cache_size > PGTCACHE_LOW_WATER) {
+			do {
+				if(pgd_quicklist)
+					free_page((unsigned long) get_pgd_fast());
+				if(pmd_quicklist)
+					free_page((unsigned long) get_pmd_fast());
+				if(pte_quicklist)
+					free_page((unsigned long) get_pte_fast());
+			} while(pgtable_cache_size > PGTCACHE_HIGH_WATER);
+		}
 		if(tq_scheduler) {
 			lock_kernel();
 			run_task_queue(&tq_scheduler);
 			unlock_kernel();
 		}
+		barrier();
 		current->counter = -100;
-		schedule();
+		if(resched_needed())
+			schedule();
+		barrier();
 	}
 }
 
@@ -251,8 +277,20 @@ void show_stackframe32(struct sparc_stackf32 *sf)
 	} while ((size -= sizeof(unsigned)));
 }
 
-void show_regs(struct pt_regs * regs)
+#ifdef __SMP__
+static spinlock_t regdump_lock = SPIN_LOCK_UNLOCKED;
+#endif
+
+void __show_regs(struct pt_regs * regs)
 {
+#ifdef __SMP__
+	unsigned long flags;
+
+	spin_lock_irqsave(&regdump_lock, flags);
+	printk("CPU[%d]: local_irq_count[%ld] global_irq_count[%d]\n",
+	       smp_processor_id(), local_irq_count,
+	       atomic_read(&global_irq_count));
+#endif
         printk("TSTATE: %016lx TPC: %016lx TNPC: %016lx Y: %08x\n", regs->tstate,
 	       regs->tpc, regs->tnpc, regs->y);
 	printk("g0: %016lx g1: %016lx g2: %016lx g3: %016lx\n",
@@ -268,6 +306,21 @@ void show_regs(struct pt_regs * regs)
 	       regs->u_regs[12], regs->u_regs[13], regs->u_regs[14],
 	       regs->u_regs[15]);
 	show_regwindow(regs);
+#ifdef __SMP__
+	spin_unlock_irqrestore(&regdump_lock, flags);
+#endif
+}
+
+void show_regs(struct pt_regs *regs)
+{
+	__show_regs(regs);
+#ifdef __SMP__
+	{
+		extern void smp_report_regs(void);
+
+		smp_report_regs();
+	}
+#endif
 }
 
 void show_regs32(struct pt_regs32 *regs)
@@ -337,12 +390,16 @@ void flush_thread(void)
 	/* Now, this task is no longer a kernel thread. */
 	current->tss.current_ds = USER_DS;
 	if(current->tss.flags & SPARC_FLAG_KTHREAD) {
+		extern spinlock_t scheduler_lock;
+
 		current->tss.flags &= ~SPARC_FLAG_KTHREAD;
 
 		/* exec_mmap() set context to NO_CONTEXT, here is
 		 * where we grab a new one.
 		 */
+		spin_lock(&scheduler_lock);
 		get_mmu_context(current);
+		spin_unlock(&scheduler_lock);
 	}
 	current->tss.ctx = current->mm->context & 0x1fff;
 	spitfire_set_secondary_context (current->tss.ctx);
@@ -437,10 +494,14 @@ void fault_in_user_windows(struct pt_regs *regs)
 			struct reg_window *rwin = &tp->reg_window[window];
 
 			if(copy_to_user((char *)sp, rwin, winsize))
-				do_exit(SIGILL);
+				goto barf;
 		} while(window--);
 	}
 	current->tss.w_saved = 0;
+	return;
+barf:
+	lock_kernel();
+	do_exit(SIGILL);
 }
 
 /* Copy a Sparc thread.  The fork() return value conventions
@@ -483,7 +544,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 	p->tss.kpc = ((unsigned long) ret_from_syscall) - 0x8;
 #endif
 	p->tss.kregs = (struct pt_regs *)(child_trap_frame+sizeof(struct reg_window));
-	p->tss.cwp = regs->u_regs[UREG_G0];
+	p->tss.cwp = (regs->tstate + 1) & TSTATE_CWP;
 	if(regs->tstate & TSTATE_PRIV) {
 		p->tss.kregs->u_regs[UREG_FP] = p->tss.ksp;
 		p->tss.flags |= SPARC_FLAG_KTHREAD;

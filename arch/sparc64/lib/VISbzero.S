@@ -1,4 +1,4 @@
-/* $Id: VISbzero.S,v 1.4 1997/06/28 17:21:21 jj Exp $
+/* $Id: VISbzero.S,v 1.6 1997/08/08 08:34:00 jj Exp $
  * VISbzero.S: High speed clear operations utilizing the UltraSparc
  *        Visual Instruction Set.
  *
@@ -147,7 +147,7 @@ bzero:
 #else
 	 wr		%g0, ASI_BLK_P, %asi
 #endif
-	membar		#StoreStore | #LoadStore
+	membar		#StoreLoad | #StoreStore | #LoadStore
 	fzero		%f0
 	andcc		%o3, 0xc0, %o2
 	and		%o1, 0x3f, %o1
@@ -181,15 +181,23 @@ bzero:
 	wr		%g0, 0, %fprs
 	wr		%g7, 0x0, %asi
 #endif
-	membar		#Sync
+	membar		#StoreLoad | #StoreStore
 9:	andcc		%o1, 0xf8, %o2
 	be,pn		%xcc, 13f
 	 andcc		%o1, 7, %o1
+#ifdef __KERNEL__
+14:	sethi		%hi(13f), %o4
+	srl		%o2, 1, %o3
+	sub		%o4, %o3, %o4
+	jmpl		%o4 + %lo(13f), %g0
+	 add		%o0, %o2, %o0
+#else
 14:	rd		%pc, %o4
 	srl		%o2, 1, %o3
 	sub		%o4, %o3, %o4
 	jmpl		%o4 + (13f - 14b), %g0
 	 add		%o0, %o2, %o0
+#endif
 12:	ZERO_BLOCKS(%o0, 0xc8, %g0)
 	ZERO_BLOCKS(%o0, 0x88, %g0)
 	ZERO_BLOCKS(%o0, 0x48, %g0)

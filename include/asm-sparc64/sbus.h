@@ -1,4 +1,4 @@
-/* $Id: sbus.h,v 1.3 1997/03/21 17:57:24 jj Exp $
+/* $Id: sbus.h,v 1.5 1997/08/12 04:13:16 ecd Exp $
  * sbus.h:  Defines for the Sun SBus.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -87,9 +87,7 @@ extern struct linux_sbus *SBus_chain;
         for((device) = (bus)->devices; (device); (device)=(device)->next)
         
 #define for_all_sbusdev(device, bus) \
-	for((bus) = SBus_chain, (device) = (bus)->devices; (bus); (device)=((device)->next ? (device)->next : ((bus) = (bus)->next, (bus) ? (bus)->devices : 0)))
-
-/* XXX This is promlib stuff, what is it doing here? XXX */
+	for((bus) = SBus_chain, ((device) = (bus) ? (bus)->devices : 0); (bus); (device)=((device)->next ? (device)->next : ((bus) = (bus)->next, (bus) ? (bus)->devices : 0)))
 
 /* Apply promlib probed SBUS ranges to registers. */
 extern void prom_apply_sbus_ranges(struct linux_sbus *sbus, 

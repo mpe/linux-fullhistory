@@ -5,7 +5,7 @@
  *
  *		MIPS specific IP/TCP/UDP checksumming routines
  *
- * Authors:	Ralf Baechle, <ralf@waldorf-gmbh.de>
+ * Authors:	Ralf Baechle, <ralf@gnu.ai.mit.edu>
  *		Lots of code moved from tcp.c and ip.c; see those files
  *		for more names.
  *
@@ -14,7 +14,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
- * $Id: checksum.c,v 1.4 1997/07/03 09:43:16 ralf Exp $
+ * $Id: checksum.c,v 1.5 1997/08/08 18:12:51 miguel Exp $
  */
 #include <net/checksum.h>
 #include <linux/types.h>

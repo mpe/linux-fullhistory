@@ -1,4 +1,4 @@
-/* $Id: dtlb_miss.S,v 1.12 1997/06/26 12:47:08 jj Exp $
+/* $Id: dtlb_miss.S,v 1.13 1997/08/14 19:27:15 davem Exp $
  * dtlb_miss.S:	Data TLB miss code, this is included directly
  *              into the trap table.
  *
@@ -62,7 +62,7 @@
   /*0x40*/	sllx		%g1, 22, %g5			! This is now physical page + PAGE_OFFSET
   /*0x44*/	brgez,pn	%g5, 4f				! If >= 0, then walk down page tables
   /*0x48*/	 sethi		%uhi(KERN_HIGHBITS), %g1	! Construct PTE ^ PAGE_OFFSET
-  /*0x4c*/	andcc		%g3, 0x80, %g0			! Slick trick...
+  /*0x4c*/	andcc		%g3, 0x400, %g0			! Slick trick...
   /*0x50*/	sllx		%g1, 32, %g1			! Move high bits up
   /*0x54*/	or		%g1, (KERN_LOWBITS), %g1	! Assume not IO
   /*0x58*/	bne,a,pn	%icc, 5f			! Is it an IO page?

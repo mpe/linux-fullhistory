@@ -29,7 +29,6 @@ extern void set_context(int context);
 do { 								\
 	struct mm_struct *mm = (tsk)->mm;			\
 	if (mm->context == NO_CONTEXT) {			\
-	        int i; \
 		if (next_mmu_context == LAST_CONTEXT)		\
 			mmu_context_overflow();			\
 		mm->context = MUNGE_CONTEXT(++next_mmu_context);\

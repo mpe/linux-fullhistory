@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.149 1997/07/20 05:59:34 davem Exp $
+/* $Id: srmmu.c,v 1.150 1997/07/25 23:06:17 davem Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -2601,7 +2601,7 @@ __initfunc(static void init_swift(void))
 }
 
 /* turbosparc.S */
-extern void turbosparc_flush_cache_all();
+extern void turbosparc_flush_cache_all(void);
 extern void turbosparc_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr);
 
 static void poke_turbosparc(void)

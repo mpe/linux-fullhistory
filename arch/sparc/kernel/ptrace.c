@@ -886,7 +886,7 @@ asmlinkage void syscall_trace(void)
 	current->exit_code = SIGTRAP;
 	current->state = TASK_STOPPED;
 	current->tss.flags ^= MAGIC_CONSTANT;
-	notify_parent(current);
+	notify_parent(current, SIGCHLD);
 	schedule();
 	/*
 	 * this isn't the same as continuing with a signal, but it will do

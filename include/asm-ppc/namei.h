@@ -1,11 +1,12 @@
-/* $Id: namei.h,v 1.1 1997/07/25 09:28:40 cort Exp $
- * linux/include/asm-i386/namei.h
+/* $Id: namei.h,v 1.2 1997/07/31 07:10:55 paulus Exp $
+ * linux/include/asm-ppc/namei.h
+ * Adapted from linux/include/asm-alpha/namei.h
  *
  * Included from linux/fs/namei.c
  */
 
-#ifndef __I386_NAMEI_H
-#define __I386_NAMEI_H
+#ifndef __PPC_NAMEI_H
+#define __PPC_NAMEI_H
 
 /* These dummy routines maybe changed to something useful
  * for /usr/gnemul/ emulation stuff.
@@ -18,4 +19,4 @@
 #define translate_open_namei(pathname, flag, mode, res_inode, base) \
 	do { } while (0)
 
-#endif /* __I386_NAMEI_H */
+#endif /* __PPC_NAMEI_H */

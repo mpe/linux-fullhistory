@@ -171,8 +171,11 @@ repeat:
 		goto repeat;
 	}
 /* this is a hack for non-kernel-mapped video buffers and similar */
-	if (MAP_NR(page) < max_mapnr)
-		*(unsigned long *) (page + (addr & ~PAGE_MASK)) = data;
+	if (MAP_NR(page) < max_mapnr) {
+		unsigned long phys_addr = page + (addr & ~PAGE_MASK);
+		*(unsigned long *) phys_addr = data;
+		flush_icache_range(phys_addr, phys_addr+4);
+	}
 /* we're bypassing pagetables, so we have to set the dirty bit ourselves */
 /* this should also re-instate whatever read-only mode there was before */
 	set_pte(pgtable, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
@@ -364,7 +367,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		case PTRACE_PEEKUSR: {
 			unsigned long tmp;
 			
-			if ((addr & 3) || addr < 0 || addr >= sizeof(struct user)) {
+			if ((addr & 3) || addr < 0 || addr > (PT_FPSCR << 2)) {
 				ret = -EIO;
 				goto out;
 			}
@@ -378,13 +381,11 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			if (addr < PT_FPR0) {
 				tmp = get_reg(child, addr);
 			}
-#if 1
-			else if (addr >= PT_FPR0 && addr < PT_FPR0 + 64) {
+			else if (addr >= PT_FPR0 && addr <= PT_FPSCR) {
 				if (last_task_used_math == child)
 					giveup_fpu();
 				tmp = ((long *)child->tss.fpr)[addr - PT_FPR0];
 			}
-#endif
 			else
 				ret = -EIO;
 			if (!ret)
@@ -400,7 +401,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 
 		case PTRACE_POKEUSR: /* write the word at location addr in the USER area */
 			ret = -EIO;
-			if ((addr & 3) || addr < 0 || addr >= sizeof(struct user))
+			if ((addr & 3) || addr < 0 || addr >= ((PT_FPR0 + 64) << 2))
 				goto out;
 
 			addr = addr >> 2; /* temporary hack. */
@@ -508,7 +509,7 @@ asmlinkage void syscall_trace(void)
 		goto out;
 	current->exit_code = SIGTRAP;
 	current->state = TASK_STOPPED;
-	notify_parent(current);
+	notify_parent(current, SIGCHLD);
 	schedule();
 	/*
 	 * this isn't the same as continuing with a signal, but it will do

@@ -1,4 +1,4 @@
-/* $Id: blockops.S,v 1.10 1997/06/24 17:29:10 jj Exp $
+/* $Id: blockops.S,v 1.11 1997/07/29 09:35:36 davem Exp $
  * arch/sparc64/lib/blockops.S: UltraSparc block zero optimized routines.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -15,7 +15,7 @@ __bfill64:		/* %o0 = buf, %o1= ptr to pattern */
 	wr		%g0, FPRS_FEF, %fprs		! FPU	Group
 	ldd		[%o1], %f48			! Load	Group
 	wr		%g0, ASI_BLK_P, %asi		! LSU	Group
-	membar		#StoreStore | #LoadStore	! LSU	Group
+	membar		#StoreLoad | #StoreStore | #LoadStore	! LSU	Group
 	mov		32, %g2				! IEU0	Group
 
 	/* Cannot perform real arithmatic on the pattern, that can
@@ -36,7 +36,7 @@ __bfill64:		/* %o0 = buf, %o1= ptr to pattern */
 	subcc		%g2, 1, %g2			! IEU1	Group
 	bne,pt		%icc, 1b			! CTI
 	 add		%o0, 0x100, %o0			! IEU0
-	membar		#Sync				! LSU	Group
+	membar		#StoreLoad | #StoreStore	! LSU	Group
 
 	jmpl		%o7 + 0x8, %g0			! CTI	Group brk forced
 	 wr		%g0, 0, %fprs			! FPU	Group
@@ -56,7 +56,7 @@ __bzero_1page:
 	faddd		%f0, %f2, %f12			! FPA	Group
 	fmuld		%f0, %f2, %f14			! FPM
 	wr		%g0, ASI_BLK_P, %asi		! LSU	Group
-	membar		#StoreStore | #LoadStore	! LSU	Group
+	membar		#StoreLoad | #StoreStore | #LoadStore	! LSU	Group
 1:	stda		%f0, [%o0 + 0x00] %asi		! Store	Group
 	stda		%f0, [%o0 + 0x40] %asi		! Store	Group
 	stda		%f0, [%o0 + 0x80] %asi		! Store	Group
@@ -65,6 +65,6 @@ __bzero_1page:
 	subcc		%g1, 1, %g1			! IEU1
 	bne,pt		%icc, 1b			! CTI
 	 add		%o0, 0x100, %o0			! IEU0	Group
-	membar		#Sync				! LSU	Group
+	membar		#StoreLoad | #StoreStore	! LSU	Group
 	jmpl		%o7 + 0x8, %g0			! CTI	Group brk forced
 	 wr		%g0, 0, %fprs			! FPU	Group

@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: r4xx0.c,v 1.4 1997/06/30 15:52:53 ralf Exp $
+ * $Id: r4xx0.c,v 1.5 1997/08/08 18:13:07 miguel Exp $
  */
 #include <linux/config.h>
 
@@ -1856,7 +1856,7 @@ static inline void r4k_flush_tlb_all(void)
 	set_entrylo1(0);
 	BARRIER;
 
-	entry = 0;
+	entry = get_wired();
 
 	/* Blast 'em all away. */
 	while(entry < NTLB_ENTRIES) {
@@ -1943,7 +1943,7 @@ static void r4k_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
 		int oldpid, newpid, idx;
 
 #ifdef DEBUG_TLB
-		printk("[tlbpage<%d,%08lx>]", vma->vm_mm->context, page);
+               printk("[tlbpage<%d,%08lx>]", vma->vm_mm->context, page);
 #endif
 		newpid = (vma->vm_mm->context & 0xff);
 		page &= (PAGE_MASK << 1);
@@ -2121,6 +2121,37 @@ static void r4k_show_regs(struct pt_regs * regs)
 	/* Saved cp0 registers. */
 	printk("epc   : %08lx\nStatus: %08lx\nCause : %08lx\n",
 	       regs->cp0_epc, regs->cp0_status, regs->cp0_cause);
+}
+			
+static void r4k_add_wired_entry(unsigned long entrylo0, unsigned long entrylo1,
+				      unsigned long entryhi, unsigned long pagemask)
+{
+        unsigned long flags;
+        unsigned long wired;
+        unsigned long old_pagemask;
+        unsigned long old_ctx;
+
+        save_and_cli(flags);
+        /* Save old context and create impossible VPN2 value */
+        old_ctx = (get_entryhi() & 0xff);
+        old_pagemask = get_pagemask();
+        wired = get_wired();
+        set_wired (wired + 1);
+        set_index (wired);
+        BARRIER;    
+        set_pagemask (pagemask);
+        set_entryhi(entryhi);
+        set_entrylo0(entrylo0);
+        set_entrylo1(entrylo1);
+        BARRIER;    
+        tlb_write_indexed();
+        BARRIER;    
+    
+        set_entryhi(old_ctx);
+        BARRIER;    
+        set_pagemask (old_pagemask);
+        flush_tlb_all();    
+        restore_flags(flags);
 }
 
 /* Detect and size the various r4k caches. */
@@ -2567,6 +2598,8 @@ try_again:
 	update_mmu_cache = r4k_update_mmu_cache;
 
 	show_regs = r4k_show_regs;
+    
+        add_wired_entry = r4k_add_wired_entry;
 
 	flush_cache_all();
 	write_32bit_cp0_register(CP0_WIRED, 0);

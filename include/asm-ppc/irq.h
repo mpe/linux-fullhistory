@@ -3,11 +3,7 @@
 
 #include <linux/config.h>
 
-#ifdef CONFIG_PMAC
-#define NR_IRQS	32
-#else
-#define NR_IRQS	16
-#endif
+#define NR_IRQS 32
 
 extern void disable_irq(unsigned int);
 extern void enable_irq(unsigned int);

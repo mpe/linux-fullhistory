@@ -27,7 +27,7 @@ static unsigned long
 smb_file_mmap_nopage(struct vm_area_struct *area,
 		     unsigned long address, int no_share)
 {
-	struct inode *inode = area->vm_inode;
+	struct inode *inode = area->vm_dentry->d_inode;
 	unsigned long page;
 	unsigned int clear;
 	unsigned long tmp;
@@ -117,7 +117,7 @@ smb_mmap(struct inode *inode, struct file *file, struct vm_area_struct *vma)
 	if (!IS_RDONLY(inode))
 	{
 		inode->i_atime = CURRENT_TIME;
-		inode->i_dirt = 1;
+		mark_inode_dirty(inode);
 	}
 
 	vma->vm_dentry = dget(file->f_dentry);

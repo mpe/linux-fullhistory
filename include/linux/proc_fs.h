@@ -51,7 +51,8 @@ enum root_directory_inos {
 	PROC_HARDWARE,
 	PROC_SLABINFO,
 	PROC_PARPORT,
-	PROC_OMIRR /* whether enabled or not */
+	PROC_OMIRR, /* whether enabled or not */
+	PROC_PPC_HTAB
 };
 
 enum pid_directory_inos {
@@ -181,6 +182,8 @@ enum scsi_directory_inos {
 	PROC_SCSI_GVP11,
 	PROC_SCSI_ATARI,
 	PROC_SCSI_IDESCSI,
+	PROC_SCSI_MESH,
+	PROC_SCSI_53C94,
 	PROC_SCSI_SCSI_DEBUG,	
 	PROC_SCSI_NOT_PRESENT,
 	PROC_SCSI_FILE,                        /* I'm assuming here that we */
@@ -362,6 +365,7 @@ extern struct inode_operations proc_fd_inode_operations;
 extern struct inode_operations proc_ringbuf_inode_operations;
 #endif
 extern struct inode_operations proc_omirr_inode_operations;
+extern struct inode_operations proc_ppc_htab_inode_operations;
 
 #endif
 
@@ -378,3 +382,8 @@ void remove_proc_entry(const char *name, struct proc_dir_entry *parent);
 extern void proc_tty_init(void);
 extern void proc_tty_register_driver(struct tty_driver *driver);
 extern void proc_tty_unregister_driver(struct tty_driver *driver);
+
+/*
+ * proc_devtree.c
+ */
+extern void proc_device_tree_init(void);

@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.2 1997/07/05 09:52:34 davem Exp $
+/* $Id: sys_sparc.c,v 1.3 1997/07/29 09:35:10 davem Exp $
  * linux/arch/sparc64/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -220,46 +220,36 @@ asmlinkage int
 sparc_sigaction (int signum, const struct sigaction *action, struct sigaction *oldaction)
 {
 	struct sigaction new_sa, *p;
-	int err = -EINVAL;
 
-	lock_kernel();
 	if(signum < 0) {
 		current->tss.new_signal = 1;
 		signum = -signum;
 	}
-
 	if (signum<1 || signum>32)
-		goto out;
+		return -EINVAL;
 	p = signum - 1 + current->sig->action;
 	if (action) {
-		err = -EINVAL;
 		if (signum==SIGKILL || signum==SIGSTOP)
-			goto out;
-		err = -EFAULT;
+			return -EINVAL;
 		if(copy_from_user(&new_sa, action, sizeof(struct sigaction)))
-			goto out;	
+			return -EFAULT;
 		if (new_sa.sa_handler != SIG_DFL && new_sa.sa_handler != SIG_IGN) {
-			err = verify_area(VERIFY_READ, new_sa.sa_handler, 1);
+			int err = verify_area(VERIFY_READ, new_sa.sa_handler, 1);
 			if (err)
-				goto out;
+				return err;
 		}
 	}
-
 	if (oldaction) {
-		err = -EFAULT;
 		if (copy_to_user(oldaction, p, sizeof(struct sigaction)))
-			goto out;	
+			return -EFAULT;
 	}
-
 	if (action) {
+		spin_lock_irq(&current->sig->siglock);
 		*p = new_sa;
 		check_pending(signum);
+		spin_unlock_irq(&current->sig->siglock);
 	}
-
-	err = 0;
-out:
-	unlock_kernel();
-	return err;
+	return 0;
 }
 
 /* only AP+ systems have sys_aplib */

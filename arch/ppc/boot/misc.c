@@ -8,13 +8,23 @@
  * puts by Nick Holloway 1993
  *
  * Adapted for PowerPC by Gary Thomas
+ * Updated and modified by Cort Dougan (cort@cs.nmt.edu)
  */
 
 #include "gzip.h"
 #include "lzw.h"
 #include "asm/residual.h"
+#include <elf.h>
 
 RESIDUAL hold_residual;
+unsigned long initrd_start = 0, initrd_end = 0;
+char *zimage_start;
+int zimage_size;
+extern char input_data[];
+extern int input_len;
+void cksum_text(void);
+void verify_data(unsigned long load_addr);
+
 void dump_buf(unsigned char *p, int s);
 #define EOF -1
 
@@ -26,8 +36,7 @@ unsigned outcnt;
 unsigned insize;
 unsigned inptr;
 
-extern char input_data[];
-extern int input_len;
+char cmd_line[256];
 
 int input_ptr;
 
@@ -56,6 +65,9 @@ int lines, cols;
 int orig_x, orig_y;
 
 void puts(const char *);
+void putc(const char c);
+void puthex(unsigned long val);
+void _bcopy(char *src, char *dst, int len);
 
 void *malloc(int size)
 {
@@ -77,7 +89,7 @@ void *malloc(int size)
 	 */
           
 	if (free_mem_ptr < (long)&end) {
-		if (free_mem_ptr > (long)&input_data[input_ptr])
+		if (free_mem_ptr > (long)&zimage_start[input_ptr])
 			error("\nOut of memory\n");
 
 		return p;
@@ -87,7 +99,7 @@ void *malloc(int size)
 #endif	
 	return p;
 	puts("large kernel, low 1M tight...");
-	free_mem_ptr = (long)input_data;
+	free_mem_ptr = (long)zimage_start;
 	}
 }
 
@@ -113,6 +125,53 @@ static void scroll()
 	memcpy ( vidmem, vidmem + cols * 2, ( lines - 1 ) * cols * 2 );
 	for ( i = ( lines - 1 ) * cols * 2; i < lines * cols * 2; i += 2 )
 		vidmem[i] = ' ';
+}
+#if 0
+tstc(void)
+{
+	return (CRT_tstc() );
+}
+
+getc(void)
+{
+	while (1) {
+		if (CRT_tstc()) return (CRT_getc());
+	}
+}
+#endif
+void 
+putc(const char c)
+{
+	int x,y;
+
+	x = orig_x;
+	y = orig_y;
+
+	if ( c == '\n' ) {
+		x = 0;
+		if ( ++y >= lines ) {
+			scroll();
+			y--;
+		}
+	} else if (c == '\b') {
+		if (x > 0) {
+			x--;
+		}
+	} else {
+		vidmem [ ( x + cols * y ) * 2 ] = c; 
+		if ( ++x >= cols ) {
+			x = 0;
+			if ( ++y >= lines ) {
+				scroll();
+				y--;
+			}
+		}
+	}
+
+	cursor(x, y);
+
+	orig_x = x;
+	orig_y = y;
 }
 
 void puts(const char *s)
@@ -229,10 +288,10 @@ puts("*");
     insize = 0;
     do {
 	len = INBUFSIZ-insize;
-	if (len > (input_len-input_ptr+1)) len=input_len-input_ptr+1;
+	if (len > (zimage_size-input_ptr+1)) len=zimage_size-input_ptr+1;
         if (len == 0 || len == EOF) break;
 
-        for (i=0;i<len;i++) inbuf[insize+i] = input_data[input_ptr+i];
+        for (i=0;i<len;i++) inbuf[insize+i] = zimage_start[input_ptr+i];
 	insize += len;
 	input_ptr += len;
     } while (insize < INBUFSIZ);
@@ -313,7 +372,14 @@ void error(char *x)
 unsigned long
 decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, RESIDUAL *residual)
 {
-  unsigned long TotalMemory;
+  int timer;
+  char *cp, ch;
+  Elf32_Ehdr *eh;
+  Elf32_Shdr *sh, *strtab_shdr;
+  char *strtab;
+  unsigned long i;
+
+  
   output_data = (char *)0x0;	/* Points to 0 */
   lines = 25;
   cols = 80;
@@ -339,33 +405,102 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
   clear_bufs();
   makecrc();
 
-  puts("Loaded at ");  puthex(load_addr);  puts(", ");  puthex(num_words);  puts(" words");
-  puts(", cksum = ");  puthex(cksum);  puts("\n");
+  puts("Loaded at: ");  puthex(load_addr); puts(" ");  puthex(num_words+load_addr);
+  puts("\n");
+  /*puts("Relocated to start: ");  puthex(start); puts(" ");
+  puthex(num_words+start);
+  puts("\n");*/
+  puts("Cksum: ");  puthex(cksum);  puts("\n");
   if (residual) {
-    _bcopy(residual, &hold_residual, sizeof(hold_residual));
-    puts("Residual data at ");  puthex(residual);  puts("\n");
-    show_residual_data(residual);
-    TotalMemory = residual->TotalMemory;
-  } else {
-    TotalMemory = 0x01000000;
+    _bcopy((char *)residual, (char *)&hold_residual, sizeof(hold_residual));
+    puts("Residual data at: ");  puthex((unsigned long)residual); puts(" ");
+    puthex((unsigned long)(residual->ResidualLength + residual));  puts("\n");
   }
 
+  /*
+   * Take care of initrd if we have one
+   */
+  /*
+   * the _actual_ load addr is 64k (elf hdr size) lower but the
+   * firmware gives us the starting exec point not the load ptr
+   * -- Cort
+   */
+  eh = (Elf32_Ehdr *)(load_addr - 65536);
+  sh = (Elf32_Shdr *)((unsigned long)eh + eh->e_shoff );
+  /*puts("Entry point: "); puthex(eh->e_entry); puts("\n");*/
+  
+  /* find string table */
+  for ( i = 0 ; i <= eh->e_shnum ; i++,sh++)
+  {
+	  /*puts("Section: "); puthex(i);
+	  puts(" type: "); puthex(sh->sh_type);
+	  puts(" offset: "); puthex(sh->sh_offset);
+	  puts("\n");*/
+
+	  if ( sh->sh_type == SHT_STRTAB )
+	  {
+		  strtab_shdr = sh;
+		  strtab = (char *)(sh->sh_offset + (unsigned long)eh);
+		  /*puts("Found strtab at: "); puthex((unsigned long)strtab);
+		  puts("\n");*/
+		  break;
+	  }
+  }  
+
+  /* find the initrd and image sections */
+  if ( strtab_shdr )
+  {
+	  sh = (Elf32_Shdr *)((unsigned long)eh + eh->e_shoff );
+	  for ( i = 0 ; i <= eh->e_shnum ; i++,sh++)
+	  {
+		  if ( !memcmp("initrd", (char *)(strtab+sh->sh_name), 6 ) )
+		  {
+			  initrd_start = (unsigned long)eh + sh->sh_offset;
+			  initrd_end =  initrd_start + sh->sh_size;
+			  puts("Found initrd at: "); puthex(initrd_start);
+			  puts(" "); puthex(initrd_end);
+			  puts("\n");
+		  }
+		  if ( !memcmp("image", (char *)(strtab+sh->sh_name), 5 ) )
+		  {
+			  zimage_start = (char *)((unsigned long)eh + sh->sh_offset);
+			  zimage_size =  sh->sh_size;
+			  puts("Found zimage at: "); puthex((unsigned long)zimage_start);
+			  puts(" "); puthex((unsigned long)(zimage_size+zimage_start));
+			  puts("\n");
+		  }
+	  }
+  }
+  else
+  {
+	  puts("Couldn't find string table for boot image!\n");
+  }
+  
+  /* relocate initrd */
+  if ( initrd_start )
+  {
+	  memcpy ((void *)0x00D00000,(void *)initrd_start,
+		  initrd_end - initrd_start );
+	  initrd_end = 0x00D00000 + initrd_end - initrd_start;
+	  initrd_start = 0x00D00000;
+	  puts("Moved initrd to: "); puthex(initrd_start);
+	  puts(" "); puthex(initrd_end); puts("\n");
+  }
+
+  /* make the moto firmware print something */
+  
   puts("Uncompressing Linux...");
-
   method = get_method(0);
-
   work(0, 0);
-
   puts("done.\n");
+  
   puts("Now booting the kernel\n");
-  /*return (TotalMemory);*/              /* Later this can be a pointer to saved residual data */
-  return &hold_residual;
+  return (unsigned long)&hold_residual;
 }
 
 show_residual_data(RESIDUAL *res)
 {
   puts("Residual data: ");  puthex(res->ResidualLength);  puts(" bytes\n");
-  puts("Total memory: ");  puthex(res->TotalMemory);  puts("\n");
 #if 0
   puts("Residual structure = ");  puthex(sizeof(*res));  puts(" bytes\n");
   dump_buf(&hold_residual, 32);
@@ -407,14 +542,14 @@ cksum_data()
 {
   unsigned int *ptr, len, cksum, cnt;
   cksum = cnt = 0;
-  ptr = input_data;
+  ptr = (unsigned int *)zimage_start;
   puts("Checksums: ");
-  for (len = 0;  len < input_len;  len += 4) {
+  for (len = 0;  len < zimage_size;  len += 4) {
     cksum ^= *ptr++;
     if (len && ((len & 0x0FFF) == 0)) {
       if (cnt == 0) {
 	puts("\n  [");
-	puthex(ptr-1);
+	puthex((unsigned long)ptr-1);
 	puts("] ");
       }
       puthex(cksum);
@@ -429,7 +564,7 @@ cksum_data()
   puts("Data cksum = ");  puthex(cksum);  puts("\n");
 }
 
-cksum_text()
+void cksum_text(void)
 {
   extern int start, etext;
   unsigned int *ptr, len, text_len, cksum, cnt;
@@ -442,7 +577,7 @@ cksum_text()
     if (len && ((len & 0x0FFF) == 0)) {
       if (cnt == 0) {
 	puts("\n  [");
-	puthex(ptr-1);
+	puthex((unsigned long)ptr-1);
 	puts("] ");
       }
       puthex(cksum);
@@ -457,24 +592,24 @@ cksum_text()
   puts("TEXT cksum = ");  puthex(cksum);  puts("\n");
 }
 
-verify_data(unsigned long load_addr)
+void verify_data(unsigned long load_addr)
 {
   extern int start, etext;
   unsigned int *orig_ptr, *copy_ptr, len, errors;
   errors = 0;
-  copy_ptr = input_data;
-  orig_ptr = (unsigned int *)(load_addr + ((unsigned int)input_data - (unsigned int)&start));
-  for (len = 0;  len < input_len;  len += 4) {
+  copy_ptr = (unsigned int *)zimage_start;
+  orig_ptr = (unsigned int *)(load_addr + ((unsigned int)zimage_start - (unsigned int)&start));
+  for (len = 0;  len < zimage_size;  len += 4) {
     if (*copy_ptr++ != *orig_ptr++) {
       errors++;
     }    
   }
-  copy_ptr = input_data;
-  orig_ptr = (unsigned int *)(load_addr + ((unsigned int)input_data - (unsigned int)&start));
-  for (len = 0;  len < input_len;  len += 4) {
+  copy_ptr = (unsigned int *)zimage_start;
+  orig_ptr = (unsigned int *)(load_addr + ((unsigned int)zimage_start - (unsigned int)&start));
+  for (len = 0;  len < zimage_size;  len += 4) {
     if (*copy_ptr++ != *orig_ptr++) {
-      dump_buf(copy_ptr-1, 128);
-      dump_buf(orig_ptr-1, 128);
+      dump_buf((unsigned char *) (copy_ptr-1), 128);
+      dump_buf((unsigned char *) (orig_ptr-1), 128);
       puts("Total errors = ");  puthex(errors*4);  puts("\n");
       while (1) ;
     }    
@@ -486,9 +621,9 @@ test_data(unsigned long load_addr)
   extern int start, etext;
   unsigned int *orig_ptr, *copy_ptr, len, errors;
   errors = 0;
-  copy_ptr = input_data;
-  orig_ptr = (unsigned int *)(load_addr + ((unsigned int)input_data - (unsigned int)&start));
-  for (len = 0;  len < input_len;  len += 4) {
+  copy_ptr = (unsigned int *)zimage_start;
+  orig_ptr = (unsigned int *)(load_addr + ((unsigned int)zimage_start - (unsigned int)&start));
+  for (len = 0;  len < zimage_size;  len += 4) {
     if (*copy_ptr++ != *orig_ptr++) {
       errors++;
     }    
@@ -532,7 +667,7 @@ void dump_buf(unsigned char *p, int s)
    }
    while (s > 0)
    {
-      puthex(p);  puts(": ");
+      puthex((unsigned long)p);  puts(": ");
       for (i = 0;  i < 16;  i++)
       {
          if (i < s)

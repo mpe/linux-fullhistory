@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.51 1997/07/24 12:15:04 davem Exp $
+/* $Id: entry.S,v 1.61 1997/08/15 06:44:16 davem Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -50,41 +50,39 @@ sparc64_dtlb_prot_catch:
 
 	bgu,a,pn	%icc, winfix_trampoline
 	 rdpr		%tpc, %g3
+	sethi		%hi(109f), %g7
 	ba,pt		%xcc, etrap
-	 rd		%pc, %g7
+109:	 or		%g7, %lo(109b), %g7
 	b,pt		%xcc, 1f
 	 mov		1, %o2
+	.align		32
 sparc64_dtlb_refbit_catch:
 	srlx		%g5, 9, %g4
 	and		%g4, ((_PAGE_PRESENT | _PAGE_READ) >> 9), %g4
-
 	cmp		%g4, ((_PAGE_PRESENT | _PAGE_READ) >> 9)
 	be,a,pt		%xcc, 2f
 	 mov		1, %g4
 	wr		%g0, ASI_DMMU, %asi
 	rdpr		%pstate, %g1
 	wrpr		%g1, PSTATE_AG|PSTATE_MG, %pstate
+
 	rdpr		%tl, %g3
 	ldxa		[%g0 + TLB_TAG_ACCESS] %asi, %g5
-
 	cmp		%g3, 1
 	bgu,pn		%icc, winfix_trampoline
 	 rdpr		%tpc, %g3
+	sethi		%hi(109f), %g7
 	b,pt		%xcc, etrap
-	 rd		%pc, %g7
+109:	 or		%g7, %lo(109b), %g7
+
 	clr		%o2
 1:	srlx		%l5, PAGE_SHIFT, %o1
 	add		%sp, STACK_BIAS + REGWIN_SZ, %o0
-
 	call		do_sparc64_fault
 	 sllx		%o1, PAGE_SHIFT, %o1
 	b,pt		%xcc, rtrap
 	 clr		%l6
-	nop
-	nop
-	nop
-	nop
-
+	.align		32
 sparc64_itlb_refbit_catch:
 	srlx		%g5, 9, %g4
 	and		%g4, ((_PAGE_PRESENT | _PAGE_READ) >> 9), %g4
@@ -95,17 +93,21 @@ sparc64_itlb_refbit_catch:
 	wrpr		%g1, PSTATE_AG|PSTATE_MG, %pstate
 	rdpr		%tpc, %g5
 
+	sethi		%hi(109f), %g7
 	b,pt		%xcc, etrap
-	 rd		%pc, %g7
+109:	 or		%g7, %lo(109b), %g7
 	b,pt		%xcc, 1b
 	 clr		%o2
+
+	.align		32
 2:	sllx		%g4, 63, %g4				! _PAGE_VALID
 	or		%g5, _PAGE_ACCESSED, %g5
 	or		%g5, %g4, %g5
 	stxa		%g5, [%g3 + %g1] ASI_PHYS_USE_EC	! store new PTE
-
 	stxa		%g5, [%g0] ASI_DTLB_DATA_IN		! TLB load
 	retry
+
+	.align		32
 3:	sllx		%g4, 63, %g4				! _PAGE_VALID
 	or		%g5, _PAGE_ACCESSED, %g5
 	or		%g5, %g4, %g5
@@ -172,6 +174,7 @@ fpload_fromkstk:
 	or		%g2, %lo((((PAGE_SIZE<<1)-((64*4)+(2*8))) & ~(64 - 1))), %g2
 	add		%g6, %g2, %g2
 	mov		SECONDARY_CONTEXT, %g3
+	ldxa		[%g3] ASI_DMMU, %g7
 	stxa		%g0, [%g3] ASI_DMMU
 	flush		%g2
 	wr		%g0, ASI_BLK_S, %asi	! grrr, where is ASI_BLK_NUCLEUS 8-(
@@ -182,9 +185,12 @@ fpload_fromkstk:
 	ldda		[%g2 + 0x080] %asi, %f32
 	ldda		[%g2 + 0x0c0] %asi, %f48
 	ldx		[%g2 + 0x100], %fsr
-	ldx		[%g2 + 0x108], %g2
+	ldx		[%g2 + 0x108], %g4
 	membar		#Sync
-	wr		%g2, 0, %gsr
+	wr		%g4, 0, %gsr
+
+	stxa		%g7, [%g3] ASI_DMMU
+	flush		%g2
 fpdis_exit:
 	rdpr		%tstate, %g3
 	sethi		%hi(TSTATE_PEF), %g4
@@ -192,10 +198,7 @@ fpdis_exit:
 	wrpr		%g3, %tstate
 	retry
 
-#ifdef __SMP__
-	/* Note check out head.h, this code isn't even used for UP,
-	 * for SMP things will be different.  In particular the data
-	 * registers for cross calls will be:
+	/* The registers for cross calls will be:
 	 *
 	 * DATA 0: [low 32-bits]  Address of function to call, jmp to this
 	 *         [high 32-bits] MMU Context Argument 0, place in %g5
@@ -205,11 +208,17 @@ fpdis_exit:
 	 * With this method we can do most of the cross-call tlb/cache
 	 * flushing very quickly.
 	 */
+	.data
+	.align  8
+	.globl	ivec_spurious_cookie
+ivec_spurious_cookie:	.xword	0
+
+	.text
 	.align	32
-	.globl	do_ivec, do_ivec_return
+	.globl	do_ivec
 do_ivec:
-	ldxa		[%g0] ASI_INTR_RECEIVE, %g1
-	andcc		%g1, 0x20, %g0
+	ldxa		[%g0] ASI_INTR_RECEIVE, %g5
+	andcc		%g5, 0x20, %g0
 	be,pn		%xcc, do_ivec_return
 	 mov		0x40, %g2
 
@@ -230,32 +239,35 @@ do_ivec:
 	 * which is completely harmless.
 	 */
 	wr		%g2, 0x0, %set_softint
-
 do_ivec_return:
-	/* Acknowledge the UPA */
 	stxa		%g0, [%g0] ASI_INTR_RECEIVE
 	membar		#Sync
 	retry
 do_ivec_xcall:
 	srlx		%g3, 32, %g5
 	add		%g2, 0x10, %g2
-	sra		%g3, 0, %g3
+	srl		%g3, 0, %g3
 	ldxa		[%g2] ASI_UDB_INTR_R, %g6
 	add		%g2, 0x10, %g2
+	ldxa		[%g2] ASI_UDB_INTR_R, %g7
+	stxa		%g0, [%g0] ASI_INTR_RECEIVE
 	jmpl		%g3, %g0
-	 ldxa		[%g2] ASI_UDB_INTR_R, %g7
+	 membar		#Sync
 do_ivec_spurious:
+	srl		%g3, 3, %g3
+	sethi		%hi(ivec_spurious_cookie), %g2
+	stx		%g3, [%g2 + %lo(ivec_spurious_cookie)]
 	stxa		%g0, [%g0] ASI_INTR_RECEIVE
 	membar		#Sync
-	rdpr		%pstate, %g1
-	wrpr		%g1, PSTATE_IG | PSTATE_AG, %pstate
+	rdpr		%pstate, %g5
+	wrpr		%g5, PSTATE_IG | PSTATE_AG, %pstate
+	sethi		%hi(109f), %g7
 	ba,pt		%xcc, etrap
-	 rd		%pc, %g7
+109:	 or		%g7, %lo(109b), %g7
 	call		report_spurious_ivec
 	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0
 	ba,pt		%xcc, rtrap
 	 clr		%l6
-#endif /* __SMP__ */
 
 	.globl		getcc, setcc
 getcc:
@@ -359,8 +371,9 @@ floppy_overrun:
 floppy_dosoftint:
 	rdpr		%pil, %g2
 	wrpr		%g0, 15, %pil
+	sethi		%hi(109f), %g7
 	b,pt		%xcc, etrap_irq
-	 rd		%pc, %g7
+109:	 or		%g7, %lo(109b), %g7
 
 	mov		11, %o0
 	mov		0, %o1
@@ -386,8 +399,9 @@ do_mna:
 	cmp		%g3, 1
 	bgu,a,pn	%icc, winfix_mna
 	 rdpr		%tpc, %g3
+	sethi		%hi(109f), %g7
 	ba,pt		%xcc, etrap
-	 rd		%pc, %g7
+109:	 or		%g7, %lo(109b), %g7
 	call		mem_address_unaligned
 	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0
 	ba,pt		%xcc, rtrap
@@ -573,14 +587,8 @@ sys_fork:
 sys_vfork:	mov		SIGCHLD, %o0
 		clr		%o1
 sys_clone:	mov		%o7, %l5
-/*???*/		save		%sp, -REGWIN_SZ, %sp
-		flushw
-/*???*/		restore		%g0, %g0, %g0
-		rdpr		%cwp, %o4
 		add		%sp, STACK_BIAS + REGWIN_SZ, %o2
-
 		movrz		%o1, %fp, %o1
-		stx		%o4, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_G0]
 		call		do_fork
 		 mov		%l5, %o7
 #ifdef __SMP__
@@ -611,9 +619,9 @@ linux_sparc_syscall:
 	cmp		%g1, NR_SYSCALLS			! IEU1	Group
 	bgeu,pn		%xcc, linux_sparc_ni_syscall		! CTI
 	 mov		%i0, %o0				! IEU0
-	sll		%g1, 3, %l4				! IEU0	Group
+	sll		%g1, 2, %l4				! IEU0	Group
 	mov		%i1, %o1				! IEU1
-	ldx		[%l7 + %l4], %l7			! Load
+	lduw		[%l7 + %l4], %l7			! Load
 syscall_is_too_hard:
 	mov		%i2, %o2				! IEU0	Group
 	ldx		[%curptr + AOFF_task_flags], %l5	! Load

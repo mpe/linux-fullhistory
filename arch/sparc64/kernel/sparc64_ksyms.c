@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.11 1997/07/14 23:58:20 davem Exp $
+/* $Id: sparc64_ksyms.c,v 1.17 1997/08/10 01:51:01 davem Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -49,13 +49,18 @@ extern void *__memscan_zero(void *, size_t);
 extern void *__memscan_generic(void *, int, size_t);
 extern int __memcmp(const void *, const void *, __kernel_size_t);
 extern int __strncmp(const char *, const char *, __kernel_size_t);
-extern unsigned int __csum_partial_copy_sparc_generic (const char *, char *);
+extern unsigned int csum_partial_copy_sparc64(const char *src, char *dst,
+					      int len, unsigned int sum);
 extern char saved_command_line[];
 
 extern void bcopy (const char *, char *, int);
 extern int __ashrdi3(int, int);
 
 extern void dump_thread(struct pt_regs *, struct user *);
+
+#ifdef __SMP__
+extern spinlock_t scheduler_lock;
+#endif
 
 /* One thing to note is that the way the symbols of the mul/div
  * support routines are named is a mess, they all start with
@@ -70,7 +75,17 @@ __attribute__((section("__ksymtab"))) =				\
 
 /* used by various drivers */
 #ifdef __SMP__
+EXPORT_SYMBOL(scheduler_lock);
+EXPORT_SYMBOL(global_bh_lock);
 EXPORT_SYMBOL(klock_info);
+EXPORT_SYMBOL(global_irq_holder);
+EXPORT_SYMBOL(synchronize_irq);
+EXPORT_SYMBOL(cpu_data);
+EXPORT_SYMBOL_PRIVATE(global_cli);
+EXPORT_SYMBOL_PRIVATE(global_sti);
+EXPORT_SYMBOL_PRIVATE(global_restore_flags);
+#else
+EXPORT_SYMBOL(local_irq_count);
 #endif
 EXPORT_SYMBOL_PRIVATE(_lock_kernel);
 EXPORT_SYMBOL_PRIVATE(_unlock_kernel);
@@ -81,12 +96,13 @@ EXPORT_SYMBOL(mstk48t02_regs);
 EXPORT_SYMBOL(request_fast_irq);
 EXPORT_SYMBOL(sparc_alloc_io);
 EXPORT_SYMBOL(sparc_free_io);
-EXPORT_SYMBOL(local_irq_count);
 EXPORT_SYMBOL(__sparc64_bh_counter);
 EXPORT_SYMBOL(sparc_ultra_unmapioaddr);
 EXPORT_SYMBOL(mmu_get_scsi_sgl);
 EXPORT_SYMBOL(mmu_get_scsi_one);
 EXPORT_SYMBOL(sparc_dvma_malloc);
+EXPORT_SYMBOL(mmu_release_scsi_one);
+EXPORT_SYMBOL(mmu_release_scsi_sgl);
 #if CONFIG_SBUS
 EXPORT_SYMBOL(SBus_chain);
 EXPORT_SYMBOL(dma_chain);
@@ -150,7 +166,7 @@ EXPORT_SYMBOL(__memcmp);
 EXPORT_SYMBOL(__strncmp);
 EXPORT_SYMBOL(__memmove);
 
-EXPORT_SYMBOL(__csum_partial_copy_sparc_generic);
+EXPORT_SYMBOL(csum_partial_copy_sparc64);
 
 /* Moving data to/from userspace. */
 EXPORT_SYMBOL(__copy_to_user);

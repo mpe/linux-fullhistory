@@ -87,7 +87,7 @@ volatile int smp_process_available=0;
 #define SMP_PRINTK(x)
 #endif
 
-static volatile int smp_commenced = 0;
+volatile int smp_commenced = 0;
 
 static char smp_buf[512];
 
@@ -558,7 +558,7 @@ void smp_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr)
 /* Reschedule call back. */
 void smp_reschedule_irq(void)
 {
-	need_resched=1;
+	resched_force();
 }
 
 /* Running cross calls. */
@@ -623,7 +623,7 @@ void smp_percpu_timer_interrupt(struct pt_regs *regs)
 
 			if(--current->counter < 0) {
 				current->counter = 0;
-				need_resched = 1;
+				resched_force();
 			}
 
 			spin_lock(&ticker_lock);

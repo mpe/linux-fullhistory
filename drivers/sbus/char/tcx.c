@@ -1,4 +1,4 @@
-/* $Id: tcx.c,v 1.18 1997/07/22 06:14:09 davem Exp $
+/* $Id: tcx.c,v 1.17 1997/07/17 02:21:50 davem Exp $
  * tcx.c: SUNW,tcx 24/8bit frame buffer driver
  *
  * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)

@@ -65,7 +65,7 @@ asmlinkage int sys_idle(void)
 	current->priority = -100;
 	current->counter = -100;
 	for (;;){
-		if (!need_resched)
+		if (!resched_needed())
 #if defined(CONFIG_ATARI) && !defined(CONFIG_AMIGA) && !defined(CONFIG_MAC)
 			/* block out HSYNC on the atari (falcon) */
 			__asm__("stop #0x2200" : : : "cc");

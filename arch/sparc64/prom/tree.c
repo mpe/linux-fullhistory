@@ -1,4 +1,4 @@
-/* $Id: tree.c,v 1.5 1997/03/24 17:44:01 jj Exp $
+/* $Id: tree.c,v 1.6 1997/08/12 16:32:48 davem Exp $
  * tree.c: Basic device tree traversal/scanning for the Linux
  *         prom library.
  *
@@ -26,7 +26,7 @@ __prom_getchild(int node)
 __inline__ int
 prom_getchild(int node)
 {
-	long cnode;
+	int cnode;
 
 	if(node == -1) return 0;
 	cnode = __prom_getchild(node);
@@ -37,7 +37,7 @@ prom_getchild(int node)
 __inline__ int
 prom_getparent(int node)
 {
-	long cnode;
+	int cnode;
 
 	if(node == -1) return 0;
 	cnode = p1275_cmd ("parent", P1275_INOUT(1, 1), node);
@@ -57,12 +57,12 @@ __prom_getsibling(int node)
 __inline__ int
 prom_getsibling(int node)
 {
-	long sibnode;
+	int sibnode;
 
 	if(node == -1) return 0;
 	sibnode = __prom_getsibling(node);
 	if(sibnode == -1) return 0;
-	return (int)sibnode;
+	return sibnode;
 }
 
 /* Return the length in bytes of property 'prop' at node 'node'.

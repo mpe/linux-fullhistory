@@ -561,9 +561,6 @@ static int nfs_unlink(struct inode *dir, struct dentry *dentry)
 static int nfs_symlink(struct inode *dir, struct dentry *dentry, const char *symname)
 {
 	struct nfs_sattr sattr;
-	struct nfs_fattr fattr;
-	struct nfs_fh fhandle;
-	struct inode * inode;
 	int error;
 
 	dfprintk(VFS, "NFS: symlink(%x/%ld, %s, %s)\n",
@@ -590,12 +587,16 @@ static int nfs_symlink(struct inode *dir, struct dentry *dentry, const char *sym
 	if (error)
 		return error;
 
-	inode = nfs_fhget(dir->i_sb, &fhandle, &fattr);
-	if (!inode)
-		return -EACCES;
-
 	nfs_invalidate_dircache(dir);
-	d_instantiate(dentry, inode);
+	/*  this looks _funny_ doesn't it? But: nfs_proc_symlynk()
+	 *  only fills in sattr, not fattr. Thus nfs_fhget() cannot be
+	 *  called, it would be pointless, without a valid fattr
+	 *  argument. Other possibility: call nfs_proc_lookup()
+	 *  HERE. But why? If somebody wants to reference this
+	 *  symlink, the cached_lookup() will fail, and
+	 *  nfs_proc_symlink() will be called anyway.
+	 */
+	d_drop(dentry);
 	return 0;
 }
 

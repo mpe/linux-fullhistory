@@ -67,7 +67,6 @@ extern unsigned char aux_device_present, kbd_read_mask;
 #include <asm/irq.h>
 #ifdef __SMP__
 #include <linux/smp.h>
-#include <linux/smp_lock.h>
 #endif
 
 extern char *get_options(char *str, int *ints);
@@ -282,7 +281,6 @@ EXPORT_SYMBOL(timer_table);
 /* Various random spinlocks we want to export */
 EXPORT_SYMBOL(tqueue_lock);
 EXPORT_SYMBOL(waitqueue_lock);
-EXPORT_SYMBOL(lk_lockmsg);
 #endif
 
 /* autoirq from  drivers/net/auto_irq.c */

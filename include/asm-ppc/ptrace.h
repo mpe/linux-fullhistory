@@ -2,63 +2,52 @@
 #define _PPC_PTRACE_H
 
 /*
+ * This struct defines the way the registers are stored on the
+ * kernel stack during a system call or other kernel entry.
+ *
  * this should only contain volatile regs
  * since we can keep non-volatile in the tss
  * should set this up when only volatiles are saved
  * by intr code.
  *
- * I can't find any reference to the above comment (from Gary Thomas)
- * about _underhead/_overhead in the sys V abi for the ppc
- * dated july 25, 1994.
+ * Since this is going on the stack, *CARE MUST BE TAKEN* to insure
+ * that the overall structure is a multiple of 16 bytes in length.
  *
- * the stack must be kept to a size that is a multiple of 16
- * so this includes the stack frame overhead 
- * -- Cort.
+ * Note that the offsets of the fields in this struct correspond with
+ * the PT_* values below.  This simplifies arch/ppc/kernel/ptrace.c.
  */
-
-/*
- * GCC sometimes accesses words at negative offsets from the stack
- * pointer, although the SysV ABI says it shouldn't.  To cope with
- * this, we leave this much untouched space on the stack on exception
- * entry.
- */
-#define STACK_FRAME_OVERHEAD 16
-#define STACK_UNDERHEAD	64
 
 #ifndef __ASSEMBLY__
 struct pt_regs {
 	unsigned long gpr[32];
-	unsigned long nip;	
-	unsigned long msr;	
-	unsigned long ctr;	
-	unsigned long link;	
-	unsigned long ccr;	
-	unsigned long xer;	
+	unsigned long nip;
+	unsigned long msr;
+	unsigned long orig_gpr3; /* Used for restarting system calls */
+	unsigned long ctr;
+	unsigned long link;
+	unsigned long xer;
+	unsigned long ccr;
+	unsigned long mq;	/* 601 only (not used at present) */
+	unsigned long trap;	/* Reason for being here */
 	unsigned long dar;	/* Fault registers */
 	unsigned long dsisr;
-#if 0  
-	unsigned long srr1;
-	unsigned long srr0;
-	unsigned long hash1, hash2;
-	unsigned long imiss, dmiss;
-	unsigned long icmp, dcmp;
-#endif  
-	unsigned long orig_gpr3; /* Used for restarting system calls */
-	unsigned long result;	/* Result of a system call */
-	unsigned long trap;	/* Reason for being here */
-	unsigned long marker;	/* Should have DEADDEAD */
+	unsigned long result;   /* Result of a system call */
 };
+#endif
 
+#define STACK_FRAME_OVERHEAD	16	/* size of minimum stack frame */
+
+/* Size of stack frame allocated when calling signal handler. */
+#define __SIGNAL_FRAMESIZE	64
 
 #define instruction_pointer(regs) ((regs)->nip)
 #define user_mode(regs) ((regs)->msr & 0x4000)
-#ifdef KERNEL
-extern void show_regs(struct pt_regs *);
-#endif
 
-/* should include and generate these in ppc_defs.h -- Cort */
-/* Offsets used by 'ptrace' system call interface */
-/* Note: these should correspond to gpr[x]        */
+/*
+ * Offsets used by 'ptrace' system call interface.
+ * These can't be changed without breaking binary compatibility
+ * with MkLinux, etc.
+ */
 #define PT_R0	0
 #define PT_R1	1
 #define PT_R2	2
@@ -94,14 +83,18 @@ extern void show_regs(struct pt_regs *);
 
 #define PT_NIP	32
 #define PT_MSR	33
+#ifdef __KERNEL__
 #define PT_ORIG_R3 34
+#endif
 #define PT_CTR	35
 #define PT_LNK	36
 #define PT_XER	37
 #define PT_CCR	38
+#define PT_MQ	39
 
-#define PT_FPR0	48
-#endif /* __ASSEMBLY__ */
+#define PT_FPR0	48	/* each FP reg occupies 2 slots in this space */
+#define PT_FPR31 (PT_FPR0 + 2*31)
+#define PT_FPSCR (PT_FPR0 + 2*32 + 1)
 
-#endif /* _PPC_PTRACE_H */
+#endif
 

@@ -609,10 +609,6 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		unsigned long tmp;
 		int res;
 
-#if 0
-		/* XXX Find out what is really going on. */
-		flush_cache_all();
-#endif
 		/* Non-word alignment _not_ allowed on Sparc. */
 		if (current->tss.flags & SPARC_FLAG_32BIT) {
 			unsigned int x;
@@ -1055,7 +1051,7 @@ asmlinkage void syscall_trace(void)
 	current->exit_code = SIGTRAP;
 	current->state = TASK_STOPPED;
 	current->tss.flags ^= MAGIC_CONSTANT;
-	notify_parent(current);
+	notify_parent(current, SIGCHLD);
 	schedule();
 	/*
 	 * this isn't the same as continuing with a signal, but it will do
@@ -1067,9 +1063,9 @@ asmlinkage void syscall_trace(void)
 		current->pid, current->exit_code);
 #endif
 	if (current->exit_code) {
-		/* spin_lock_irq(&current->sigmask_lock); */
+		spin_lock_irq(&current->sigmask_lock);
 		current->signal |= (1 << (current->exit_code - 1));
-		/* spin_unlock_irq(&current->sigmask_lock); */
+		spin_unlock_irq(&current->sigmask_lock);
 	}
 
 	current->exit_code = 0;

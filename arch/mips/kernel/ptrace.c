@@ -488,7 +488,7 @@ asmlinkage void syscall_trace(void)
 		return;
 	current->exit_code = SIGTRAP;
 	current->state = TASK_STOPPED;
-	notify_parent(current);
+	notify_parent(current, SIGCHLD);
 	schedule();
 	/*
 	 * this isn't the same as continuing with a signal, but it will do

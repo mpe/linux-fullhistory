@@ -595,11 +595,11 @@ nobitmap:
 
 	s->s_dev       = dev;
 	s->s_op        = &affs_sops;
-	s->s_mounted   = iget(s,root_block);
+	s->s_root      = d_alloc_root(iget(s,root_block),NULL);
 	s->s_dirt      = 1;
 	unlock_super(s);
 
-	if (!(s->s_mounted)) {
+	if (!(s->s_root)) {
 		s->s_dev = 0;
 		printk(KERN_ERR "AFFS: get root inode failed\n");
 		MOD_DEC_USE_COUNT;
@@ -609,9 +609,9 @@ nobitmap:
 	/* create data zones if the fs is mounted r/w */
 
 	if (!(s->s_flags & MS_RDONLY)) {
-		ROOT_END(s->u.affs_sb.s_root_bh->b_data,s->s_mounted)->bm_flag = 0;
+		ROOT_END(s->u.affs_sb.s_root_bh->b_data,s->s_root->d_inode)->bm_flag = 0;
 		secs_to_datestamp(CURRENT_TIME,&ROOT_END(s->u.affs_sb.s_root_bh->b_data,
-				  s->s_mounted)->disk_altered);
+				  s->s_root->d_inode)->disk_altered);
 		affs_fix_checksum(s->s_blocksize,s->u.affs_sb.s_root_bh->b_data,5);
 		mark_buffer_dirty(s->u.affs_sb.s_root_bh,1);
 		affs_make_zones(s);
@@ -803,7 +803,6 @@ affs_write_inode(struct inode *inode)
 
 	pr_debug("AFFS: write_inode(%lu)\n",inode->i_ino);
 
-	inode->i_dirt = 0;
 	if (!inode->i_nlink)
 		return;
 	if (!(bh = bread(inode->i_dev,inode->i_ino,AFFS_I2BSIZE(inode)))) {
@@ -909,7 +908,7 @@ affs_new_inode(const struct inode *dir)
 	inode->i_dev     = sb->s_dev;
 	inode->i_uid     = current->fsuid;
 	inode->i_gid     = current->fsgid;
-	inode->i_dirt    = 1;
+	mark_inode_dirty(inode);
 	inode->i_ino     = block;
 	inode->i_op      = NULL;
 	inode->i_blocks  = 0;
@@ -1012,7 +1011,7 @@ affs_add_entry(struct inode *dir, struct inode *link, struct inode *inode,
 		FILE_END(link_bh->b_data,link)->link_chain   = ntohl(inode->i_ino);
 		affs_fix_checksum(AFFS_I2BSIZE(link),link_bh->b_data,5);
 		link->i_version = ++event;
-		link->i_dirt    = 1;
+		mark_inode_dirty(link);
 		mark_buffer_dirty(link_bh,1);
 	}
 	affs_fix_checksum(AFFS_I2BSIZE(inode),inode_bh->b_data,5);
@@ -1021,8 +1020,8 @@ affs_add_entry(struct inode *dir, struct inode *link, struct inode *inode,
 	dir->i_mtime   = dir->i_atime = dir->i_ctime = CURRENT_TIME;
 	unlock_super(inode->i_sb);
 
-	dir->i_dirt    = 1;
-	inode->i_dirt  = 1;
+	mark_inode_dirty(dir);
+	mark_inode_dirty(inode);
 	mark_buffer_dirty(dir_bh,1);
 	mark_buffer_dirty(inode_bh,1);
 

@@ -74,6 +74,8 @@ extern struct screen_info screen_info;
 
 #define VIDEO_TYPE_SUN          0x50    /* Sun frame buffer. */
 
+#define VIDEO_TYPE_PMAC		0x60	/* PowerMacintosh frame buffer. */
+
 /*
  * This character is the same as _POSIX_VDISABLE: it cannot be used as
  * a c_cc[] character, but indicates that a particular special character

@@ -165,7 +165,7 @@ struct super_block *
 	}
 	if ((data->ncp_fd >= NR_OPEN)
 	    || ((ncp_filp = current->files->fd[data->ncp_fd]) == NULL)
-	    || (!S_ISSOCK(ncp_filp->f_inode->i_mode))) {
+	    || (!S_ISSOCK(ncp_filp->f_dentry->d_inode->i_mode))) {
 		printk("ncp_read_super: invalid ncp socket\n");
 		sb->s_dev = 0;
 		return NULL;
@@ -234,8 +234,8 @@ struct super_block *
 
 	ncp_init_root(server);
 
-	if (!(sb->s_mounted = iget(sb, ncp_info_ino(server,
-						    &(server->root))))) {
+        if (!(sb->s_root = d_alloc_root(iget(sb,ncp_info_ino(server,
+						    &(server->root))),NULL))) {
 		sb->s_dev = 0;
 		printk("ncp_read_super: get root inode failed\n");
 		goto disconnect;

@@ -97,6 +97,9 @@ extern int ddv_init(void);
 #ifdef CONFIG_AMIGA_Z2RAM
 extern int z2_init(void);
 #endif
+#ifdef CONFIG_MAC_FLOPPY
+extern int swim3_init(void);
+#endif
 
 extern void set_device_ro(kdev_t dev,int flag);
 void add_blkdev_randomness(int major);

@@ -1,4 +1,4 @@
-/* $Id: atomic.h,v 1.15 1997/07/03 09:18:09 davem Exp $
+/* $Id: atomic.h,v 1.18 1997/08/07 03:38:31 davem Exp $
  * atomic.h: Thankfully the V9 is at least reasonable for this
  *           stuff.
  *
@@ -23,29 +23,29 @@ typedef struct { int counter; } atomic_t;
 extern __inline__ void atomic_add(int i, atomic_t *v)
 {
 	__asm__ __volatile__("
-1:	lduw		[%1], %%g1
-	add		%%g1, %0, %%g2
-	cas		[%1], %%g1, %%g2
-	sub		%%g1, %%g2, %%g1
-	brnz,pn		%%g1, 1b
+1:	lduw		[%1], %%g5
+	add		%%g5, %0, %%g7
+	cas		[%1], %%g5, %%g7
+	sub		%%g5, %%g7, %%g5
+	brnz,pn		%%g5, 1b
 	 nop"
 	: /* No outputs */
 	: "HIr" (i), "r" (__atomic_fool_gcc(v))
-	: "g1", "g2");
+	: "g5", "g7", "memory");
 }
 
 extern __inline__ void atomic_sub(int i, atomic_t *v)
 {
 	__asm__ __volatile__("
-1:	lduw		[%1], %%g1
-	sub		%%g1, %0, %%g2
-	cas		[%1], %%g1, %%g2
-	sub		%%g1, %%g2, %%g1
-	brnz,pn		%%g1, 1b
+1:	lduw		[%1], %%g5
+	sub		%%g5, %0, %%g7
+	cas		[%1], %%g5, %%g7
+	sub		%%g5, %%g7, %%g5
+	brnz,pn		%%g5, 1b
 	 nop"
 	: /* No outputs */
 	: "HIr" (i), "r" (__atomic_fool_gcc(v))
-	: "g1", "g2");
+	: "g5", "g7", "memory");
 }
 
 /* Same as above, but return the result value. */
@@ -53,15 +53,15 @@ extern __inline__ int atomic_add_return(int i, atomic_t *v)
 {
 	unsigned long oldval;
 	__asm__ __volatile__("
-1:	lduw		[%2], %%g1
-	add		%%g1, %1, %%g2
-	cas		[%2], %%g1, %%g2
-	sub		%%g1, %%g2, %%g1
-	brnz,pn		%%g1, 1b
-	 add		%%g2, %1, %0"
+1:	lduw		[%2], %%g5
+	add		%%g5, %1, %%g7
+	cas		[%2], %%g5, %%g7
+	sub		%%g5, %%g7, %%g5
+	brnz,pn		%%g5, 1b
+	 add		%%g7, %1, %0"
 	: "=&r" (oldval)
 	: "HIr" (i), "r" (__atomic_fool_gcc(v))
-	: "g1", "g2");
+	: "g5", "g7", "memory");
 	return (int)oldval;
 }
 
@@ -69,15 +69,15 @@ extern __inline__ int atomic_sub_return(int i, atomic_t *v)
 {
 	unsigned long oldval;
 	__asm__ __volatile__("
-1:	lduw		[%2], %%g1
-	sub		%%g1, %1, %%g2
-	cas		[%2], %%g1, %%g2
-	sub		%%g1, %%g2, %%g1
-	brnz,pn		%%g1, 1b
-	 sub		%%g2, %1, %0"
+1:	lduw		[%2], %%g5
+	sub		%%g5, %1, %%g7
+	cas		[%2], %%g5, %%g7
+	sub		%%g5, %%g7, %%g5
+	brnz,pn		%%g5, 1b
+	 sub		%%g7, %1, %0"
 	: "=&r" (oldval)
 	: "HIr" (i), "r" (__atomic_fool_gcc(v))
-	: "g1", "g2");
+	: "g5", "g7", "memory");
 	return (int)oldval;
 }
 

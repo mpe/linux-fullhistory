@@ -1,4 +1,4 @@
-/* $Id: VIScopy.S,v 1.9 1997/07/13 18:23:39 davem Exp $
+/* $Id: VIScopy.S,v 1.11 1997/08/08 08:34:02 jj Exp $
  * VIScopy.S: High speed copy operations utilizing the UltraSparc
  *            Visual Instruction Set.
  *
@@ -303,7 +303,7 @@ copy_page:	wr		%g0, FPRS_FEF, %fprs		! FPU	Group
 		sethi		%hi(8192), %o2			! IEU0	Group
 		mov		ASI_BLK_P, asi_src		! IEU1
 		b,pt		%xcc, dest_is_64byte_aligned	! CTI
-		 mov		ASI_BLK_COMMIT_P, asi_dest	! IEU0	Group
+		 mov		ASI_BLK_P, asi_dest		! IEU0	Group
 
 		.align			32
 		.globl			__copy_from_user
@@ -446,6 +446,13 @@ dest_is_64byte_aligned:
 	EXVIS1(LDBLK		[%o1 + 0x40] ASIBLK, %f16)	! LSU	Group
 	sub			%g7, 0x80, %g7			! IEU0
 	EXVIS(LDBLK		[%o1 + 0x80] ASIBLK, %f32)	! LSU	Group
+#ifdef __KERNEL__
+vispc:	sll			%g2, 9, %g2			! IEU0	Group
+	sethi			%hi(vis00), %g5			! IEU1
+	or			%g5, %lo(vis00), %g5		! IEU0	Group
+	jmpl			%g5 + %g2, %g0			! CTI	Group brk forced
+	 addcc			%o1, 0xc0, %o1			! IEU1	Group
+#else
 								! Clk1	Group 8-(
 								! Clk2	Group 8-(
 								! Clk3	Group 8-(
@@ -455,6 +462,7 @@ vispc:	rd			%pc, %g5			! PDU	Group 8-(
 	sll			%g2, 9, %g2			! IEU0
 	jmpl			%g5 + %g2, %g0			! CTI	Group brk forced
 	 addcc			%o1, 0xc0, %o1			! IEU1	Group
+#endif
 	.align			512		/* OK, here comes the fun part... */
 vis00:FREG_FROB(f0, f2, f4, f6, f8, f10,f12,f14,f16) LOOP_CHUNK1(o1, o0, g7, vis01)
       FREG_FROB(f16,f18,f20,f22,f24,f26,f28,f30,f32) LOOP_CHUNK2(o1, o0, g7, vis02)
@@ -721,20 +729,21 @@ __memcpy_16plus:
 3:	andcc		%o2, 0x70, %g7				! IEU1	Group
 41:	be,pn		%xcc, 80f				! CTI
 	 andcc		%o2, 8, %g0				! IEU1	Group
-								! Clk1 8-(
-								! Clk2 8-(
-								! Clk3 8-(
-								! Clk4 8-(
-79:	rd		%pc, %o5				! PDU	Group
 #ifdef __KERNEL__
+79:	sethi		%hi(80f), %o5				! IEU0
 	sll		%g7, 1, %g5				! IEU0	Group
 	add		%o1, %g7, %o1				! IEU1
 	srl		%g7, 1, %g2				! IEU0  Group
 	sub		%o5, %g5, %o5				! IEU1
 	sub		%o5, %g2, %o5				! IEU0  Group
-	jmpl		%o5 + %lo(80f - 79b), %g0		! CTI	Group brk forced
+	jmpl		%o5 + %lo(80f), %g0			! CTI	Group brk forced
 	 add		%o0, %g7, %o0				! IEU0	Group
 #else
+								! Clk1 8-(
+								! Clk2 8-(
+								! Clk3 8-(
+								! Clk4 8-(
+79:	rd		%pc, %o5				! PDU	Group
 	sll		%g7, 1, %g5				! IEU0	Group
 	add		%o1, %g7, %o1				! IEU1
 	sub		%o5, %g5, %o5				! IEU0  Group
@@ -814,19 +823,20 @@ normal_retl:
 	andcc		%o2, 0x70, %g7				! IEU1
 	be,pn		%xcc, 84f				! CTI
 	 andcc		%o2, 8, %g0				! IEU1	Group
+#ifdef __KERNEL__
+83:	srl		%g7, 1, %g5				! IEU0
+	sethi		%hi(84f), %o5				! IEU0	Group
+	add		%g7, %g5, %g5				! IEU1
+	add		%o1, %g7, %o1				! IEU0	Group
+	sub		%o5, %g5, %o5				! IEU1
+	jmpl		%o5 + %lo(84f), %g0			! CTI	Group brk forced
+	 add		%o0, %g7, %o0				! IEU0	Group
+#else
 								! Clk1 8-(
 								! Clk2 8-(
 								! Clk3 8-(
 								! Clk4 8-(
 83:	rd		%pc, %o5				! PDU	Group
-#ifdef __KERNEL__
-	srl		%g7, 1, %g5				! IEU0	Group
-	add		%g7, %g5, %g5				! IEU0	Group
-	add		%o1, %g7, %o1				! IEU1
-	sub		%o5, %g5, %o5				! IEU0	Group
-	jmpl		%o5 + %lo(84f - 83b), %g0		! CTI	Group brk forced
-	 add		%o0, %g7, %o0				! IEU0	Group
-#else
 	add		%o1, %g7, %o1				! IEU0	Group
 	sub		%o5, %g7, %o5				! IEU1
 	jmpl		%o5 + %lo(84f - 83b), %g0		! CTI	Group brk forced

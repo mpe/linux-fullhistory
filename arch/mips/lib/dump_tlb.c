@@ -16,12 +16,27 @@
 #include <asm/page.h>
 #include <asm/pgtable.h>
 
+static char *region_map [] = {
+	"u", "s", "k", "!"
+};
+
+static char *cache_map [] = {
+	"c/nc/wt/nwa,",
+	"c/nc/wt/wa, ",
+	"uncached,   ",
+	"c/nc/wb,    "
+	"unknown,    ",
+	"unknown,    ",
+	"unknown,    ",
+	"unknown,    "
+};
+
 void
 dump_tlb(int first, int last)
 {
 	int	i;
 	int	wired;
-	unsigned int pagemask;
+	unsigned int pagemask, c0, c1, r;
 	unsigned long long entryhi, entrylo0, entrylo1;
 
 	wired = read_32bit_cp0_register(CP0_WIRED);
@@ -48,14 +63,25 @@ dump_tlb(int first, int last)
 			/*
 			 * Only print entries in use
 			 */
-			printk("\nIndex: %2d  %08x", i, pagemask);
+			printk("\nIndex: %2d pgmask=%08x ", i, pagemask);
 
-			printk("  %08x %08x", (unsigned int)(entryhi >> 32),
-			                      (unsigned int) entryhi);
-			printk("  %08x %08x", (unsigned int)(entrylo0 >> 32),
-			                      (unsigned int) entrylo0);
-			printk("  %08x %08x", (unsigned int)(entrylo1 >> 32),
-			                      (unsigned int) entrylo1);
+			r  = entryhi >> 62;
+			c0 = (entrylo0 >> 3) & 7;
+			c1 = (entrylo1 >> 3) & 7;
+
+			printk("%s vpn2=%08x "
+			       "[pfn=%06x c=%d d=%d v=%d g=%d]"
+			       "[pfn=%06x c=%d d=%d v=%d g=%d]",
+			       region_map [r], (entryhi >> 13) & 0xffffffff,
+			       (entrylo0 >> 6) & 0xffffff, c0,
+			       (entrylo0 & 4) ? 1 : 0,
+			       (entrylo0 & 2) ? 1 : 0,
+			       (entrylo0 & 1),
+			       (entrylo1 >> 6) & 0xffffff, c1,
+			       (entrylo1 & 4) ? 1 : 0,
+			       (entrylo1 & 2) ? 1 : 0,
+			       (entrylo1 & 1));
+			       
 		}
 	}
 	printk("\n");

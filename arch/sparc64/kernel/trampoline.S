@@ -1,4 +1,4 @@
-/* $Id: trampoline.S,v 1.1 1997/07/24 14:47:53 davem Exp $
+/* $Id: trampoline.S,v 1.2 1997/07/28 02:57:32 davem Exp $
  * trampoline.S: Jump start slave processors on sparc64.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -13,16 +13,28 @@
 #include <asm/spitfire.h>
 #include <asm/asm_offsets.h>
 
+	.data
+	.align		8
+	.globl		smp_trampoline
+smp_trampoline:		.skip	0x300
+
 	.text
-	.globl		sparc64_cpu_startup
+	.align		8
+	.globl		sparc64_cpu_startup, sparc64_cpu_startup_end
 sparc64_cpu_startup:
 	flushw
 	mov	(LSU_CONTROL_IC | LSU_CONTROL_DC | LSU_CONTROL_IM | LSU_CONTROL_DM), %g1
 	stxa	%g1, [%g0] ASI_LSU_CONTROL
+	membar	#Sync
 	wrpr	%g0, (PSTATE_PRIV | PSTATE_PEF | PSTATE_IE), %pstate
 	wrpr	%g0, 15, %pil
 
-	mov	%o0, %g6
+	sethi	%uhi(PAGE_OFFSET), %g4
+	sllx	%g4, 32, %g4
+
+	/* XXX Buggy PROM... */
+	srl	%o0, 0, %g6
+	add	%g6, %g4, %g6
 
 	sethi	%uhi(_PAGE_VALID | _PAGE_SZ4MB), %g5
 	sllx	%g5, 32, %g5
@@ -33,9 +45,8 @@ sparc64_cpu_startup:
 	sllx	%g3, 32, %g3
 	sethi	%hi(_PAGE_PADDR), %g7
 	or	%g7, %lo(_PAGE_PADDR), %g7
-	or	%g3, %g7, %g7
+	or	%g3, %g7, %g3
 
-	/* Find TLB entry we are executing out of. */
 	clr	%l0
 	set	0x1fff, %l2
 	rd	%pc, %l3
@@ -69,7 +80,7 @@ sparc64_cpu_startup:
 	andn	%g1, %l2, %g1
 	cmp	%g1, %g3
 	blu,pn	%xcc, 2f
-	cmp	%g1, %g7
+	 cmp	%g1, %g7
 	bgeu,pn	%xcc, 2f
 	 nop
 	stxa	%g0, [%l7] ASI_IMMU
@@ -109,7 +120,7 @@ sparc64_cpu_startup:
 	stxa	%g3, [%l7] ASI_IMMU
 	stxa	%g5, [%g7] ASI_ITLB_DATA_ACCESS
 	membar	#Sync
-	flush	%g6
+	flush	%g3
 	membar	#Sync
 	b,pt	%xcc, 1f
 	 nop
@@ -124,9 +135,6 @@ bounce:
 	mov	SECONDARY_CONTEXT, %g7
 	stxa	%g0, [%g7] ASI_DMMU
 	membar	#Sync
-
-	sethi	%uhi(PAGE_OFFSET), %g4
-	sllx	%g4, 32, %g4
 
 	mov	TLB_TAG_ACCESS, %g2
 	stxa	%g3, [%g2] ASI_IMMU
@@ -143,7 +151,7 @@ bounce:
 	stxa	%g1, [%g7] ASI_DTLB_DATA_ACCESS
 	membar	#Sync
 
-	flush	%g6
+	flush	%g3
 	membar	#Sync
 
 	mov	1, %g5
@@ -184,7 +192,6 @@ bounce:
 	stxa	%o5, [%o4] ASI_IMMU
 	membar	#Sync
 
-	wrpr	%g0, 0, %pil
 	or	%o1, PSTATE_IE, %o1
 	wrpr	%o1, 0, %pstate
 
@@ -195,3 +202,6 @@ bounce:
 	call	cpu_panic
 	 nop
 1:	b,a,pt	%xcc, 1b
+
+	.align		8
+sparc64_cpu_startup_end:

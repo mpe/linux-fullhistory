@@ -205,10 +205,10 @@ affs_unlink(struct inode *dir, const char *name, int len)
 		goto unlink_done;
 
 	inode->i_nlink=0;
-	inode->i_dirt=1;
+	mark_inode_dirty(inode);
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	dir->i_version = ++event;
-	dir->i_dirt=1;
+	mark_inode_dirty(dir);
 unlink_done:
 	affs_brelse(bh);
 	iput(inode);
@@ -244,7 +244,7 @@ affs_create(struct inode *dir, const char *name, int len, int mode, struct inode
 	if (error) {
 		iput(dir);
 		inode->i_nlink = 0;
-		inode->i_dirt  = 1;
+		mark_inode_dirty(inode);
 		iput(inode);
 		return -ENOSPC;
 	}
@@ -286,7 +286,7 @@ affs_mkdir(struct inode *dir, const char *name, int len, int mode)
 	if (error) {
 		iput(dir);
 		inode->i_nlink = 0;
-		inode->i_dirt  = 1;
+		mark_inode_dirty(inode);
 		iput(inode);
 		return error;
 	}
@@ -356,10 +356,10 @@ affs_rmdir(struct inode *dir, const char *name, int len)
 		goto rmdir_done;
 
 	inode->i_nlink=0;
-	inode->i_dirt=1;
+	mark_inode_dirty(inode);
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	dir->i_version = ++event;
-	dir->i_dirt=1;
+	mark_inode_dirty(dir);
 rmdir_done:
 	iput(dir);
 	iput(inode);
@@ -392,7 +392,7 @@ affs_symlink(struct inode *dir, const char *name, int len, const char *symname)
 	if (!bh) {
 		iput(dir);
 		inode->i_nlink = 0;
-		inode->i_dirt  = 1;
+		mark_inode_dirty(inode);
 		iput(inode);
 		return -EIO;
 	}
@@ -426,7 +426,7 @@ affs_symlink(struct inode *dir, const char *name, int len, const char *symname)
 	*p = 0;
 	mark_buffer_dirty(bh,1);
 	affs_brelse(bh);
-	inode->i_dirt = 1;
+	mark_inode_dirty(inode);
 	bh = affs_find_entry(dir,name,len,&tmp);
 	if (bh) {
 		inode->i_nlink = 0;
@@ -438,7 +438,7 @@ affs_symlink(struct inode *dir, const char *name, int len, const char *symname)
 	i = affs_add_entry(dir,NULL,inode,name,len,ST_SOFTLINK);
 	if (i) {
 		inode->i_nlink = 0;
-		inode->i_dirt  = 1;
+		mark_inode_dirty(inode);
 		iput(inode);
 		affs_brelse(bh);
 		iput(dir);
@@ -497,7 +497,7 @@ affs_link(struct inode *oldinode, struct inode *dir, const char *name, int len)
 		error = affs_add_entry(dir,oldinode,inode,name,len,ST_LINKFILE);
 	if (error) {
 		inode->i_nlink = 0;
-		inode->i_dirt  = 1;
+		mark_inode_dirty(inode);
 	}
 	iput(dir);
 	iput(inode);
@@ -616,9 +616,9 @@ start_up:
 			goto retry;
 		mark_buffer_dirty(new_bh,1);
 		new_dir->i_version = ++event;
-		new_dir->i_dirt    = 1;
+		mark_inode_dirty(new_dir);
 		new_inode->i_nlink = 0;
-		new_inode->i_dirt  = 1;
+		mark_inode_dirty(new_inode);
 	}
 	retval = affs_fix_hash_pred(old_dir,affs_hash_name(old_name,old_len,AFFS_I2FSTYPE(old_dir),
 				    AFFS_I2HSIZE(old_dir)) + 6,old_ino,
@@ -632,8 +632,8 @@ start_up:
 	new_dir->i_ctime   = new_dir->i_mtime = old_dir->i_ctime = old_dir->i_mtime = CURRENT_TIME;
 	new_dir->i_version = ++event;
 	old_dir->i_version = ++event;
-	new_dir->i_dirt    = 1;
-	old_dir->i_dirt    = 1;
+	mark_inode_dirty(new_dir);
+	mark_inode_dirty(old_dir);
 	mark_buffer_dirty(old_bh,1);
 	
 end_rename:
@@ -704,7 +704,7 @@ affs_fixup(struct buffer_head *bh, struct inode *inode)
 			ofinode->i_size              = inode->i_size;
 			ofinode->i_uid               = inode->i_uid;
 			ofinode->i_gid               = inode->i_gid;
-			ofinode->i_dirt              = 1;
+			mark_inode_dirty(ofinode);
 			link_key                     = ofinode->i_ino;
 
 			/* Let all remaining links point to the new file */
@@ -722,7 +722,7 @@ affs_fixup(struct buffer_head *bh, struct inode *inode)
 							   "Inode %d in link chain is not a link",
 							   key);
 					ofinode->u.affs_i.i_original = link_key;
-					ofinode->i_dirt              = 1;
+					mark_inode_dirty(ofinode);
 					FILE_END(nbh->b_data,inode)->original = htonl(link_key);
 				} else
 					affs_error(inode->i_sb,"fixup","Cannot read block %d",key);

@@ -24,6 +24,7 @@
 #include <linux/wait.h>
 #include <linux/ptrace.h>
 #include <linux/unistd.h>
+#include <linux/elf.h>
 #include <asm/uaccess.h>
 
 #define _S(nr) (1<<((nr)-1))
@@ -35,6 +36,10 @@
 
 #define PAUSE_AFTER_SIGNAL
 #undef  PAUSE_AFTER_SIGNAL
+
+#ifndef MIN
+#define MIN(a,b) (((a) < (b)) ? (a) : (b))
+#endif
 
 asmlinkage int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options);
 
@@ -71,32 +76,52 @@ printk("Task: %x[%d] - SIGSUSPEND at %x, Mask: %x\n", current, current->pid, reg
 	}
 }
 
+/* 
+ * These are the flags in the MSR that the user is allowed to change
+ * by modifying the saved value of the MSR on the stack.  SE and BE
+ * should not be in this list since gdb may want to change these.  I.e,
+ * you should be able to step out of a signal handler to see what
+ * instruction executes next after the signal handler completes.
+ * Alternately, if you stepped into a signal handler, you should be
+ * able to continue 'til the next breakpoint from within the signal
+ * handler, even if the handler returns.
+ */
+#define MSR_USERCHANGE	(MSR_FE0 | MSR_FE1)
+
 /*
  * This sets regs->esp even though we don't actually use sigstacks yet..
  */
 asmlinkage int sys_sigreturn(struct pt_regs *regs)
 {
-	struct sigcontext_struct *sc;
-	struct pt_regs *int_regs;
-	int signo, ret;
+	struct sigcontext_struct *sc, sigctx;
+	int ret;
+	elf_gregset_t saved_regs;  /* an array of ELF_NGREG unsigned longs */
 
-#if 1 	
-	if (verify_area(VERIFY_READ, (void *) regs->gpr[1], sizeof(sc))
-	    || (regs->gpr[1] >= KERNELBASE))
+	sc = (struct sigcontext_struct *)(regs->gpr[1] + __SIGNAL_FRAMESIZE);
+	if (copy_from_user(&sigctx, sc, sizeof(sigctx)))
 		goto badframe;
-#endif	
-	sc = (struct sigcontext_struct *)(regs->gpr[1]+STACK_FRAME_OVERHEAD);
-	get_user(current->blocked, &sc->oldmask);
-	current->blocked &= _BLOCKABLE;
-	get_user(int_regs, &sc->regs);
-	get_user(signo, &sc->signal);
+	current->blocked = sigctx.oldmask & _BLOCKABLE;
 	sc++;			/* Pop signal 'context' */
 #ifdef DEBUG_SIGNALS
-printk("Sig return - Regs: %x, sc: %x, sig: %d\n", int_regs, sc, signo);
+	printk("Sig return - Regs: %p, sc: %p, sig: %d\n", sigctx.regs, sc,
+	       sigctx.signal);
 #endif
-	if (sc == (struct sigcontext_struct *)(int_regs)) {
-		/* Last stacked signal */
-		memcpy(regs, int_regs, sizeof(*regs));
+	if (sc == (struct sigcontext_struct *)(sigctx.regs)) {
+		/* Last stacked signal - restore registers */
+		if (last_task_used_math == current)
+			giveup_fpu();
+		if (copy_from_user(saved_regs, sigctx.regs, sizeof(saved_regs)))
+			goto badframe;
+		saved_regs[PT_MSR] = (regs->msr & ~MSR_USERCHANGE)
+			| (saved_regs[PT_MSR] & MSR_USERCHANGE);
+		memcpy(regs, saved_regs, 
+		       MIN(sizeof(elf_gregset_t),sizeof(struct pt_regs)));
+
+		if (copy_from_user(current->tss.fpr,
+				   (unsigned long *)sigctx.regs + ELF_NGREG,
+				   ELF_NFPREG * sizeof(double)))
+			goto badframe;
+
 		if (regs->trap == 0x0C00 /* System Call! */ &&
 		    ((int)regs->result == -ERESTARTNOHAND ||
 		     (int)regs->result == -ERESTARTSYS ||
@@ -106,15 +131,17 @@ printk("Sig return - Regs: %x, sc: %x, sig: %d\n", int_regs, sc, signo);
 			regs->result = 0;
 		}
 		ret = regs->result;
+
 	} else {
 		/* More signals to go */
-		regs->gpr[1] = (unsigned long)sc - STACK_FRAME_OVERHEAD;
-		get_user(regs->gpr[3], &sc->signal);
-		get_user(int_regs, (struct pt_regs **) &sc->regs);
-		regs->gpr[4] = (unsigned long) int_regs;
-		regs->link = (unsigned long) (int_regs+1);
-		get_user(regs->nip, &sc->handler);
-		ret = regs->gpr[3];
+		regs->gpr[1] = (unsigned long)sc - __SIGNAL_FRAMESIZE;
+		if (copy_from_user(&sigctx, sc, sizeof(sigctx)))
+			goto badframe;
+		regs->gpr[3] = ret = sigctx.signal;
+		regs->gpr[4] = (unsigned long) sigctx.regs;
+		regs->link = regs->gpr[4] + ELF_NGREG * sizeof(unsigned long)
+			+ ELF_NFPREG * sizeof(double);
+		regs->nip = sigctx.handler;
 	}
 	return ret;
 
@@ -142,6 +169,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 	unsigned long *frame = NULL;
 	unsigned long *trampoline;
 	unsigned long *regs_ptr;
+	double *fpregs_ptr;
 	unsigned long nip = 0;
 	unsigned long signr;
 	struct sigcontext_struct *sc;
@@ -164,7 +192,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
 			current->exit_code = signr;
 			current->state = TASK_STOPPED;
-			notify_parent(current);
+			notify_parent(current, SIGCHLD);
 			schedule();
 			if (!(signr = current->exit_code))
 				continue;
@@ -204,7 +232,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 				current->exit_code = signr;
 				if (!(current->p_pptr->sig->action[SIGCHLD-1].sa_flags &
 						SA_NOCLDSTOP))
-					notify_parent(current);
+					notify_parent(current, SIGCHLD);
 				schedule();
 				continue;
 
@@ -257,18 +285,33 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 	nip = regs->nip;
 	frame = (unsigned long *) regs->gpr[1];
 
-	/* Build trampoline code on stack */
-	frame -= 2;
+	/*
+	 * Build trampoline code on stack, and save gp and fp regs.
+	 * The 56 word hole is because programs using the rs6000/xcoff
+	 * style calling sequence can save up to 19 gp regs and 18 fp regs
+	 * on the stack before decrementing sp.
+	 */
+	frame -= 2 + 56;
 	trampoline = frame;
-	/* verify stack is valid for writing regs struct */
-	if (verify_area(VERIFY_WRITE,(void *)frame, sizeof(long)*2+sizeof(*regs))
-	    || ((unsigned long) frame >= KERNELBASE ))
-		goto badframe;
-	put_user(0x38007777UL, trampoline);      /* li r0,0x7777 */
-	put_user(0x44000002UL, trampoline+1);    /* sc           */
-	frame -= sizeof(*regs) / sizeof(long);
+	frame -= ELF_NFPREG * sizeof(double) / sizeof(unsigned long);
+	fpregs_ptr = (double *) frame;
+	frame -= ELF_NGREG;
 	regs_ptr = frame;
-	copy_to_user(regs_ptr, regs, sizeof(*regs));
+	/* verify stack is valid for writing to */
+	if (verify_area(VERIFY_WRITE, frame,
+			(ELF_NGREG + 2) * sizeof(long)
+			+ ELF_NFPREG * sizeof(double)))
+		goto badframe;
+	if (last_task_used_math == current)
+		giveup_fpu();
+	if (__copy_to_user(regs_ptr, regs, 
+	                   MIN(sizeof(elf_gregset_t),sizeof(struct pt_regs)))
+	    || __copy_to_user(fpregs_ptr, current->tss.fpr,
+			      ELF_NFPREG * sizeof(double))
+	    || __put_user(0x38007777UL, trampoline)	/* li r0,0x7777 */
+	    || __put_user(0x44000002UL, trampoline+1))	/* sc           */
+		goto badframe;
+
 	signr = 1;
 	sa = current->sig->action;
 
@@ -279,24 +322,29 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 			continue;
 
 		frame -= sizeof(struct sigcontext_struct) / sizeof(long);
-		if (verify_area(VERIFY_WRITE,(void *)frame,
-				sizeof(struct sigcontext_struct)/sizeof(long)))
+		if (verify_area(VERIFY_WRITE, frame,
+				sizeof(struct sigcontext_struct)))
 			goto badframe;
 		sc = (struct sigcontext_struct *)frame;
 		nip = (unsigned long) sa->sa_handler;
 		if (sa->sa_flags & SA_ONESHOT)
 			sa->sa_handler = NULL;
-		put_user(nip, &sc->handler);
-		put_user(oldmask, &sc->oldmask); /* was current->blocked */
-		put_user(regs_ptr, &sc->regs);
-		put_user(signr, &sc->signal);
+		if (__put_user(nip, &sc->handler)
+		    || __put_user(oldmask, &sc->oldmask)
+		    || __put_user(regs_ptr, &sc->regs)
+		    || __put_user(signr, &sc->signal))
+			goto badframe;
 		current->blocked |= sa->sa_mask;
 		regs->gpr[3] = signr;
-		regs->gpr[4] = (unsigned long)regs_ptr;
+		regs->gpr[4] = (unsigned long) regs_ptr;
 	}
+
+	frame -= __SIGNAL_FRAMESIZE / sizeof(unsigned long);
+	if (put_user(regs->gpr[1], frame))
+		goto badframe;
 	regs->link = (unsigned long)trampoline;
 	regs->nip = nip;
-	regs->gpr[1] = (unsigned long)sc - STACK_FRAME_OVERHEAD;
+	regs->gpr[1] = (unsigned long) frame;
 
 	/* The DATA cache must be flushed here to insure coherency */
 	/* between the DATA & INSTRUCTION caches.  Since we just */
@@ -305,8 +353,8 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 	/* cache for new data, we have to force the data to go on to */
 	/* memory and flush the instruction cache to force it to look */
 	/* there.  The following function performs this magic */
-	store_cache_range((unsigned long) trampoline,
-			  (unsigned long) (trampoline + 2));
+	flush_icache_range((unsigned long) trampoline,
+			   (unsigned long) (trampoline + 2));
 	return 1;
 
 badframe:

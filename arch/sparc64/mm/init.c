@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.40 1997/07/24 16:48:27 davem Exp $
+/*  $Id: init.c,v 1.54 1997/08/15 06:44:23 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -36,6 +36,18 @@ unsigned long tlb_context_cache = CTX_FIRST_VERSION;
 
 /* References to section boundaries */
 extern char __init_begin, __init_end, etext, __bss_start;
+
+extern void __bfill64(void *, unsigned long *);
+
+static __inline__ void __init_pmd(pmd_t *pmdp)
+{
+	__bfill64((void *)pmdp, &null_pte_table);
+}
+
+static __inline__ void __init_pgd(pgd_t *pgdp)
+{
+	__bfill64((void *)pgdp, &null_pmd_table);
+}
 
 /*
  * BAD_PAGE is the page that is used for page faults when linux
@@ -103,47 +115,71 @@ void show_mem(void)
 
 /* IOMMU support, the ideas are right, the code should be cleaned a bit still... */
 
-/* XXX Also, play with the streaming buffers at some point, both
- * XXX Fusion and Sunfire both have them aparently... -DaveM
- */
-
 /* This keeps track of pages used in sparc_alloc_dvma() invocations. */
 static unsigned long dvma_map_pages[0x10000000 >> 16] = { 0, };
 static unsigned long dvma_pages_current_offset = 0;
 static int dvma_pages_current_index = 0;
+
+/* #define E3000_DEBUG */
 
 __initfunc(unsigned long iommu_init(int iommu_node, unsigned long memory_start,
 				    unsigned long memory_end, struct linux_sbus *sbus))
 {
 	struct iommu_struct *iommu;
 	struct sysio_regs *sregs;
-	struct linux_prom_registers rprop[2];
+	struct linux_prom64_registers rprop;
 	unsigned long impl, vers;
 	unsigned long control, tsbbase;
 	unsigned long *iopte;
+	u32 rlow, rhigh;
 	int err, i;
 
-	err = prom_getproperty(iommu_node, "reg", (char *)rprop,
+#ifdef E3000_DEBUG
+	prom_printf("\niommu_init: [%x:%016lx:%016lx:%p] ",
+		    iommu_node, memory_start, memory_end, sbus);
+#endif
+	err = prom_getproperty(iommu_node, "reg", (char *)&rprop,
 			       sizeof(rprop));
 	if(err == -1) {
 		prom_printf("iommu_init: Cannot map SYSIO control registers.\n");
 		prom_halt();
 	}
-	sregs = (struct sysio_regs *) sparc_alloc_io(rprop[0].phys_addr,
-						     (void *)0,
+	rlow  = (rprop.phys_addr & 0xffffffff);
+	rhigh = (rprop.phys_addr >> 32);
+#ifdef E3000_DEBUG
+	prom_printf("rlow[%08x] rhigh[%08x] ", rlow, rhigh);
+#endif
+	sregs = (struct sysio_regs *) sparc_alloc_io(rlow, (void *)0,
 						     sizeof(struct sysio_regs),
-						     "SYSIO Regs",
-						     rprop[0].which_io, 0x0);
+						     "SYSIO Regs", rhigh, 0x0);
+#ifdef E3000_DEBUG
+	prom_printf("sregs[%p]\n");
+#endif
+	if(!sregs) {
+		prom_printf("iommu_init: Fatal error, sysio regs not mapped\n");
+		prom_halt();
+	}
 
 	memory_start = (memory_start + 7) & ~7;
 	iommu = (struct iommu_struct *) memory_start;
 	memory_start += sizeof(struct iommu_struct);
+
+#ifdef E3000_DEBUG
+	prom_printf("iommu_init: iommu[%p] ", iommu);
+#endif
+
+	spin_lock_init(&iommu->iommu_lock);
 	iommu->sysio_regs = sregs;
 	sbus->iommu = iommu;
 
 	control = sregs->iommu_control;
 	impl = (control & IOMMU_CTRL_IMPL) >> 60;
 	vers = (control & IOMMU_CTRL_VERS) >> 56;
+#ifdef E3000_DEBUG
+	prom_printf("sreg_control[%08x]\n", control);
+	prom_printf("IOMMU: IMPL[%x] VERS[%x] SYSIO mapped at %016lx\n",
+		    (unsigned int) impl, (unsigned int)vers, (unsigned long) sregs);
+#endif
 	printk("IOMMU: IMPL[%x] VERS[%x] SYSIO mapped at %016lx\n",
 	       (unsigned int) impl, (unsigned int)vers, (unsigned long) sregs);
 	
@@ -168,7 +204,8 @@ __initfunc(unsigned long iommu_init(int iommu_node, unsigned long memory_start,
 
 	/* Setup aliased mappings... */
 	for(i = 0; i < (65536 - 4096); i++) {
-		*iopte  = (IOPTE_VALID | IOPTE_64K | IOPTE_CACHE | IOPTE_WRITE);
+		*iopte  = (IOPTE_VALID | IOPTE_64K | IOPTE_STBUF |
+			   IOPTE_CACHE | IOPTE_WRITE);
 		*iopte |= (i << 16);
 		iopte++;
 	}
@@ -177,15 +214,47 @@ __initfunc(unsigned long iommu_init(int iommu_node, unsigned long memory_start,
 	for( ; i < 65536; i++)
 		*iopte++ = 0;
 
+#ifdef E3000_DEBUG
+	prom_printf("IOMMU: pte's mapped, enabling IOMMU... ");
+#endif
 	sregs->iommu_tsbbase = __pa(tsbbase);
 	sregs->iommu_control = control;
+
+#ifdef E3000_DEBUG
+	prom_printf("done\n");
+#endif
+	/* Get the streaming buffer going. */
+	control = sregs->sbuf_control;
+	impl = (control & SYSIO_SBUFCTRL_IMPL) >> 60;
+	vers = (control & SYSIO_SBUFCTRL_REV) >> 56;
+#ifdef E3000_DEBUG
+	prom_printf("IOMMU: enabling streaming buffer, control[%08x]... ",
+		    control);
+#endif
+	printk("IOMMU: Streaming Buffer IMPL[%x] REV[%x] ",
+	       (unsigned int)impl, (unsigned int)vers);
+	printk("FlushFLAG[%p,%016lx] ... ",
+	       (iommu->sbuf_flushflag_va = (unsigned int *)memory_start),
+	       (iommu->sbuf_flushflag_pa = __pa(memory_start)));
+	*(iommu->sbuf_flushflag_va) = 0;
+	memory_start += sizeof(unsigned long); /* yes, unsigned long, for alignment */
+
+	sregs->sbuf_control = (control | SYSIO_SBUFCTRL_SB_EN);
+
+#ifdef E3000_DEBUG
+	prom_printf("done, returning %016lx\n", memory_start);
+#endif
+	printk("ENABLED\n");
+
+	/* Finally enable DVMA arbitration for all devices, just in case. */
+	sregs->sbus_control |= SYSIO_SBCNTRL_AEN;
 
 	return memory_start;
 }
 
-void mmu_map_dma_area(unsigned long addr, int len, __u32 *dvma_addr)
+void mmu_map_dma_area(unsigned long addr, int len, __u32 *dvma_addr,
+		      struct linux_sbus *sbus)
 {
-	struct iommu_struct *iommu = SBus_chain->iommu; /* GROSS ME OUT! */
 	pgd_t *pgdp;
 	pmd_t *pmdp;
 	pte_t *ptep;
@@ -193,6 +262,7 @@ void mmu_map_dma_area(unsigned long addr, int len, __u32 *dvma_addr)
 	/* Find out if we need to grab some pages. */
 	if(!dvma_map_pages[dvma_pages_current_index] ||
 	   ((dvma_pages_current_offset + len) > (1 << 16))) {
+		struct linux_sbus *sbus;
 		unsigned long *iopte;
 		unsigned long newpages = __get_free_pages(GFP_KERNEL, 3, 0);
 		int i;
@@ -212,9 +282,16 @@ void mmu_map_dma_area(unsigned long addr, int len, __u32 *dvma_addr)
 
 		/* Stick it in the IOMMU. */
 		i = (65536 - 4096) + i;
-		iopte = (unsigned long *)(iommu->page_table + i);
-		*iopte  = (IOPTE_VALID | IOPTE_64K | IOPTE_CACHE | IOPTE_WRITE);
-		*iopte |= __pa(newpages);
+		for_each_sbus(sbus) {
+			struct iommu_struct *iommu = sbus->iommu;
+			unsigned long flags;
+
+			spin_lock_irqsave(&iommu->iommu_lock, flags);
+			iopte = (unsigned long *)(iommu->page_table + i);
+			*iopte  = (IOPTE_VALID | IOPTE_64K | IOPTE_CACHE | IOPTE_WRITE);
+			*iopte |= __pa(newpages);
+			spin_unlock_irqrestore(&iommu->iommu_lock, flags);
+		}
 	}
 
 	/* Get this out of the way. */
@@ -258,6 +335,33 @@ __u32 mmu_get_scsi_one(char *vaddr, unsigned long len, struct linux_sbus *sbus)
         return (__u32)0;
 }
 
+void mmu_release_scsi_one(u32 vaddr, unsigned long len, struct linux_sbus *sbus)
+{
+	struct iommu_struct *iommu = sbus->iommu;
+	struct sysio_regs *sregs = iommu->sysio_regs;
+	unsigned long start = (unsigned long) vaddr;
+	unsigned long end = PAGE_ALIGN(start + len);
+	unsigned long flags;
+	unsigned int *sync_word;
+
+	start &= PAGE_MASK;
+
+	spin_lock_irqsave(&iommu->iommu_lock, flags);
+
+	while(start < end) {
+		sregs->sbuf_pflush = start;
+		start += PAGE_SIZE;
+	}
+	sync_word = iommu->sbuf_flushflag_va;
+	sregs->sbuf_fsync = iommu->sbuf_flushflag_pa;
+	membar("#StoreLoad | #MemIssue");
+	while((*sync_word & 0x1) == 0)
+		membar("#LoadLoad");
+	*sync_word = 0;
+
+	spin_unlock_irqrestore(&iommu->iommu_lock, flags);
+}
+
 void mmu_get_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus)
 {
 	while(sz >= 0) {
@@ -271,6 +375,36 @@ void mmu_get_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus)
 		}
 		sz--;
 	}
+}
+
+void mmu_release_scsi_sgl(struct mmu_sglist *sg, int sz, struct linux_sbus *sbus)
+{
+	struct iommu_struct *iommu = sbus->iommu;
+	struct sysio_regs *sregs = iommu->sysio_regs;
+	unsigned long flags;
+	unsigned int *sync_word;
+
+	spin_lock_irqsave(&iommu->iommu_lock, flags);
+
+	while(sz >= 0) {
+		unsigned long start = sg[sz].dvma_addr;
+		unsigned long end = PAGE_ALIGN(start + sg[sz].len);
+
+		start &= PAGE_MASK;
+		while(start < end) {
+			sregs->sbuf_pflush = start;
+			start += PAGE_SIZE;
+		}
+		sz--;
+	}
+	sync_word = iommu->sbuf_flushflag_va;
+	sregs->sbuf_fsync = iommu->sbuf_flushflag_pa;
+	membar("#StoreLoad | #MemIssue");
+	while((*sync_word & 0x1) == 0)
+		membar("#LoadLoad");
+	*sync_word = 0;
+
+	spin_unlock_irqrestore(&iommu->iommu_lock, flags);
 }
 
 static char sfmmuinfo[512];
@@ -340,7 +474,7 @@ int prom_itlb_ent, prom_dtlb_ent;
 unsigned long prom_itlb_tag, prom_itlb_data;
 unsigned long prom_dtlb_tag, prom_dtlb_data;
 
-static inline void inherit_locked_prom_mappings(void)
+void inherit_locked_prom_mappings(int save_p)
 {
 	int i;
 	int dtlb_seen = 0;
@@ -367,9 +501,12 @@ static inline void inherit_locked_prom_mappings(void)
 		data = spitfire_get_dtlb_data(i);
 		if(!dtlb_seen && (data & _PAGE_L)) {
 			unsigned long tag = spitfire_get_dtlb_tag(i);
-			prom_dtlb_ent = i;
-			prom_dtlb_tag = tag;
-			prom_dtlb_data = data;
+
+			if(save_p) {
+				prom_dtlb_ent = i;
+				prom_dtlb_tag = tag;
+				prom_dtlb_data = data;
+			}
 			__asm__ __volatile__("stxa %%g0, [%0] %1"
 					     : : "r" (TLB_TAG_ACCESS), "i" (ASI_DMMU));
 			membar("#Sync");
@@ -390,9 +527,12 @@ static inline void inherit_locked_prom_mappings(void)
 		data = spitfire_get_itlb_data(i);
 		if(!itlb_seen && (data & _PAGE_L)) {
 			unsigned long tag = spitfire_get_itlb_tag(i);
-			prom_itlb_ent = i;
-			prom_itlb_tag = tag;
-			prom_itlb_data = data;
+
+			if(save_p) {
+				prom_itlb_ent = i;
+				prom_itlb_tag = tag;
+				prom_itlb_data = data;
+			}
 			__asm__ __volatile__("stxa %%g0, [%0] %1"
 					     : : "r" (TLB_TAG_ACCESS), "i" (ASI_IMMU));
 			membar("#Sync");
@@ -443,10 +583,14 @@ void __flush_cache_all(void)
 /* If not locked, zap it. */
 void __flush_tlb_all(void)
 {
-	unsigned long flags;
+	unsigned long pstate;
 	int i;
 
-	save_flags(flags); cli();
+	__asm__ __volatile__("rdpr	%%pstate, %0\n\t"
+			     "wrpr	%0, %1, %%pstate\n\t"
+			     "flushw"
+			     : "=r" (pstate)
+			     : "i" (PSTATE_IE));
 	for(i = 0; i < 64; i++) {
 		if(!(spitfire_get_dtlb_data(i) & _PAGE_L)) {
 			__asm__ __volatile__("stxa %%g0, [%0] %1"
@@ -465,19 +609,67 @@ void __flush_tlb_all(void)
 			membar("#Sync");
 		}
 	}
-	restore_flags(flags);
+	__asm__ __volatile__("wrpr	%0, 0, %%pstate"
+			     : : "r" (pstate));
 }
 
-void get_new_mmu_context(struct mm_struct *mm, unsigned long ctx)
+/* We are always protected by scheduler_lock under SMP. */
+void get_new_mmu_context(struct mm_struct *mm, unsigned long *ctx)
 {
-	if((ctx & ~(CTX_VERSION_MASK)) == 0) {
-		flush_tlb_all();
-		ctx = (ctx & CTX_VERSION_MASK) + CTX_FIRST_VERSION;
-		if(ctx == 1)
-			ctx = CTX_FIRST_VERSION;
+	unsigned int new_ctx = *ctx;
+
+	if((new_ctx & ~(CTX_VERSION_MASK)) == 0) {
+		new_ctx += CTX_FIRST_VERSION;
+		if(new_ctx == 1)
+			new_ctx = CTX_FIRST_VERSION;
+		*ctx = new_ctx;
+		DO_LOCAL_FLUSH(smp_processor_id());
 	}
-	tlb_context_cache = ctx + 1;
-	mm->context = ctx;
+	mm->context = new_ctx;
+	mm->cpu_vm_mask = 0;	/* Callers sets it properly. */
+	(*ctx)++;
+}
+
+#ifndef __SMP__
+unsigned long *pgd_quicklist = NULL;
+unsigned long *pmd_quicklist = NULL;
+unsigned long *pte_quicklist = NULL;
+unsigned long pgtable_cache_size = 0;
+#endif
+
+pgd_t *get_pgd_slow(void)
+{
+	pgd_t *pgd;
+
+	pgd = (pgd_t *) __get_free_page(GFP_KERNEL);
+	if(pgd)
+		__init_pgd(pgd);
+	return pgd;
+}
+
+pmd_t *get_pmd_slow(pgd_t *pgd, unsigned long offset)
+{
+	pmd_t *pmd;
+
+	pmd = (pmd_t *) __get_free_page(GFP_KERNEL);
+	if(pmd) {
+		__init_pmd(pmd);
+		pgd_set(pgd, pmd);
+		return pmd + offset;
+	}
+	return NULL;
+}
+
+pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
+{
+	pte_t *pte;
+
+	pte = (pte_t *) get_free_page(GFP_KERNEL);
+	if(pte) {
+		pmd_set(pmd, pte);
+		return pte + offset;
+	}
+	return NULL;
 }
 
 __initfunc(static void
@@ -595,7 +787,7 @@ paging_init(unsigned long start_mem, unsigned long end_mem))
 	 */
 	pt  = phys_base | _PAGE_VALID | _PAGE_SZ4MB;
 	pt |= _PAGE_CP | _PAGE_CV | _PAGE_P | _PAGE_L | _PAGE_W;
-	save_flags(flags); cli();
+	__save_and_cli(flags);
 	__asm__ __volatile__("
 	stxa	%1, [%0] %3
 	stxa	%2, [%5] %4
@@ -608,15 +800,18 @@ paging_init(unsigned long start_mem, unsigned long end_mem))
 	: "r" (TLB_TAG_ACCESS), "r" (alias_base), "r" (pt),
 	  "i" (ASI_DMMU), "i" (ASI_DTLB_DATA_ACCESS), "r" (61 << 3)
 	: "memory");
-	restore_flags(flags);
+	__restore_flags(flags);
 	
 	/* Now set kernel pgd to upper alias so physical page computations
 	 * work.
 	 */
 	init_mm.pgd += ((shift) / (sizeof(pgd_t *)));
 
-	null_pmd_table = __pa(((unsigned long)&empty_null_pmd_table) + shift);
-	null_pte_table = __pa(((unsigned long)&empty_null_pte_table) + shift);
+	/* The funny offsets are to make page table operations much quicker and
+	 * requite less state, see pgtable.h for gory details.
+	 */
+	null_pmd_table=__pa(((unsigned long)&empty_null_pmd_table)+shift);
+	null_pte_table=__pa(((unsigned long)&empty_null_pte_table)+shift);
 
 	pmdp = (pmd_t *) &empty_null_pmd_table;
 	for(i = 0; i < 1024; i++)
@@ -658,7 +853,7 @@ paging_init(unsigned long start_mem, unsigned long end_mem))
 	flushi((long)&empty_zero_page);
 	membar("#Sync");
 
-	inherit_locked_prom_mappings();
+	inherit_locked_prom_mappings(1);
 	
 	flush_tlb_all();
 	

@@ -1,4 +1,4 @@
-/* $Id: ultra.S,v 1.9 1997/07/24 12:15:08 davem Exp $
+/* $Id: ultra.S,v 1.18 1997/08/08 08:34:23 jj Exp $
  * ultra.S: Don't expand these all over the place...
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -13,28 +13,26 @@
 	.align		32
 	.globl		__flush_tlb_mm, __flush_tlb_range, __flush_tlb_page
 __flush_tlb_mm:		/* %o0 == (mm->context & 0x1fff) */
-	rdpr		%otherwin, %g1
-	brz,pt		%g1, 1f
-	 mov		%o7, %g3
-	call		__flushw_user
-	 clr		%g2
-1:	rdpr		%pil, %g1
-9:	mov		SECONDARY_CONTEXT, %g7
-	wrpr		%g0, 15, %pil
-
-	ldxa		[%g7] ASI_DMMU, %g2
+	mov		SECONDARY_CONTEXT, %g7
+9:	ldxa		[%g7] ASI_DMMU, %g2
 	cmp		%g2, %o0
-	be,pt		%icc, 1f
+	bne,pn		%icc, 1f
 	 mov		0x50, %g3
-	stxa		%o0, [%g7] ASI_DMMU
-1:	stxa		%g0, [%g3] ASI_DMMU_DEMAP
-	be,pt		%icc, 1f
-	 stxa		%g0, [%g3] ASI_IMMU_DEMAP
-
-	stxa		%g2, [%g7] ASI_DMMU
-1:	wrpr		%g1, 0x0, %pil
+	stxa		%g0, [%g3] ASI_DMMU_DEMAP
+	stxa		%g0, [%g3] ASI_IMMU_DEMAP
 	retl
 	 flush		%g6
+1:	rdpr		%pstate, %g1
+	wrpr		%g1, PSTATE_IE, %pstate
+	stxa		%o0, [%g7] ASI_DMMU
+	stxa		%g0, [%g3] ASI_DMMU_DEMAP
+	stxa		%g0, [%g3] ASI_IMMU_DEMAP
+	flush		%g6
+	stxa		%g2, [%g7] ASI_DMMU
+	flush		%g6
+	retl
+	 wrpr		%g1, 0, %pstate
+	nop
 __flush_tlb_range:	/* %o0 == (mm->context & 0x1fff), %o1 == start, %o2 == end */
 	sethi		%hi(8192 - 1), %g5
 	or		%g5, %lo(8192 - 1), %g5
@@ -43,19 +41,13 @@ __flush_tlb_range:	/* %o0 == (mm->context & 0x1fff), %o1 == start, %o2 == end */
 
 	sub		%o2, %o1, %o3
 	add		%g5, 1, %g5
-	orcc		%o1, 0x50, %o1
+	orcc		%o1, 0x10, %o1
 	srlx		%o3, 13, %o4
-	rdpr		%otherwin, %g1
-	brz,pt		%g1, 1f
-	 mov		%o7, %g3
-	call		__flushw_user
-
-	 clr		%g2
-1:	cmp		%o4, 96
+	cmp		%o4, 96
 	bgu,pn		%icc, 9b
-	 rdpr		%pil, %g1
-	mov		SECONDARY_CONTEXT, %g7
-	wrpr		%g0, 15, %pil
+	 mov		SECONDARY_CONTEXT, %g7
+	rdpr		%pstate, %g1
+	wrpr		%g1, PSTATE_IE, %pstate
 	ldxa		[%g7] ASI_DMMU, %g2
 	cmp		%g2, %o0
 
@@ -66,37 +58,37 @@ __flush_tlb_range:	/* %o0 == (mm->context & 0x1fff), %o1 == start, %o2 == end */
 	stxa		%g0, [%o1 + %o3] ASI_IMMU_DEMAP
 	brnz,pt		%o3, 1b
 	 sub		%o3, %g5, %o3
-	nop
+	flush		%g6
 
-	be,pt		%icc, 1f
-	 wrpr		%g1, 0x0, %pil
+	be,a,pt		%icc, 1f
+	 nop
 	stxa		%g2, [%g7] ASI_DMMU
-1:	retl
-	 flush		%g6
+1:	flush		%g6
+	wrpr		%g1, 0, %pstate
+	retl
+	 nop
 
 	.align		32
 __flush_tlb_page:	/* %o0 == (mm->context & 0x1fff), %o1 == page & PAGE_MASK */
-	rdpr		%otherwin, %g1
-	brz,pt		%g1, 1f
-	 mov		%o7, %g3
-	call		__flushw_user
-	 clr		%g2
-1:	rdpr		%pil, %g1
 	mov		SECONDARY_CONTEXT, %g7
-	wrpr		%g0, 15, %pil
-
 	ldxa		[%g7] ASI_DMMU, %g2
 	cmp		%g2, %o0
 	be,pt		%icc, 1f
 	 or		%o1, 0x10, %g3
-	stxa		%o0, [%g7] ASI_DMMU
-1:	stxa		%g0, [%g3] ASI_DMMU_DEMAP
-	be,pt		%icc, 1f
-	 stxa		%g0, [%g3] ASI_IMMU_DEMAP
-	stxa		%g2, [%g7] ASI_DMMU
-1:	wrpr		%g1, 0x0, %pil
+	stxa		%g0, [%g3] ASI_DMMU_DEMAP
+	stxa		%g0, [%g3] ASI_IMMU_DEMAP
 	retl
 	 flush		%g6
+1:	rdpr		%pstate, %g1
+	wrpr		%g1, PSTATE_IE, %pstate
+	stxa		%o0, [%g7] ASI_DMMU
+	stxa		%g0, [%g3] ASI_DMMU_DEMAP
+	stxa		%g0, [%g3] ASI_IMMU_DEMAP
+	flush		%g6
+	stxa		%g2, [%g7] ASI_DMMU
+	flush		%g6
+	retl
+	 wrpr		%g1, 0, %pstate
 
 #ifdef __SMP__
 	/* These are all called by the slaves of a cross call, at
@@ -111,50 +103,29 @@ __flush_tlb_page:	/* %o0 == (mm->context & 0x1fff), %o1 == page & PAGE_MASK */
 	 *   %g2	scratch 1
 	 *   %g3	scratch 2
 	 *   %g4	scratch 3
-	 *
-	 * NOTE: We do not acknowledge the UPA until we are done
-	 *       with the service.  This is what tells the master
-	 *       that he can consider the effects of the flush
-	 *       "complete" on this cpu.
 	 */
 	.align		32
-	.globl		xcall_flush_tlb_page
+	.globl		xcall_flush_tlb_page, xcall_flush_tlb_mm, xcall_flush_tlb_range
 xcall_flush_tlb_page:
 	mov		SECONDARY_CONTEXT, %g2
-	nop
+	or		%g6, 0x10, %g4
 	ldxa		[%g2] ASI_DMMU, %g3
-	cmp		%g3, %g5
-	be,pt		%icc, 1f
-	 or		%g6, 0x10, %g4
 	stxa		%g5, [%g2] ASI_DMMU
-1:	stxa		%g0, [%g4] ASI_DMMU_DEMAP
-
-	be,pt		%icc, 1f
-	 stxa		%g0, [%g4] ASI_IMMU_DEMAP
+	stxa		%g0, [%g4] ASI_DMMU_DEMAP
+	stxa		%g0, [%g4] ASI_IMMU_DEMAP
 	stxa		%g3, [%g2] ASI_DMMU
-1:	b,pt		%xcc, do_ivec_return
-	 flush		%g1
+	retry
 
-	.align		32
-	.globl		xcall_flush_tlb_mm
 xcall_flush_tlb_mm:
 	mov		SECONDARY_CONTEXT, %g2
-	nop
+	mov		0x50, %g4
 	ldxa		[%g2] ASI_DMMU, %g3
-	cmp		%g3, %g5
-	be,pt		%icc, 1f
-	 mov		0x50, %g4
 	stxa		%g5, [%g2] ASI_DMMU
-1:	stxa		%g0, [%g4] ASI_DMMU_DEMAP
-
-	be,pt		%icc, 1f
-	 stxa		%g0, [%g4] ASI_IMMU_DEMAP
+	stxa		%g0, [%g4] ASI_DMMU_DEMAP
+	stxa		%g0, [%g4] ASI_IMMU_DEMAP
 	stxa		%g3, [%g2] ASI_DMMU
-1:	b,pt		%xcc, do_ivec_return
-	 flush		%g1
+	retry
 
-	.align		32
-	.globl		xcall_flush_tlb_range
 xcall_flush_tlb_range:
 	sethi		%hi(8192 - 1), %g2
 	or		%g2, %lo(8192 - 1), %g2
@@ -162,26 +133,54 @@ xcall_flush_tlb_range:
 	andn		%g7, %g2, %g7
 	sub		%g7, %g6, %g3
 	add		%g2, 1, %g2
-	orcc		%g6, 0x50, %g6
+	orcc		%g6, 0x10, %g6
 	srlx		%g3, 13, %g4
 
 	cmp		%g4, 96
 	bgu,pn		%icc, xcall_flush_tlb_mm
 	 mov		SECONDARY_CONTEXT, %g4
 	ldxa		[%g4] ASI_DMMU, %g7
-	cmp		%g7, %g5
-	be,pt		%icc, 1f
-	 sub		%g3, %g2, %g3
+	sub		%g3, %g2, %g3
 	stxa		%g5, [%g4] ASI_DMMU
+	nop
+	nop
 
 1:	stxa		%g0, [%g6 + %g3] ASI_DMMU_DEMAP
 	stxa		%g0, [%g6 + %g3] ASI_IMMU_DEMAP
 	brnz,pt		%g3, 1b
 	 sub		%g3, %g2, %g3
-	bne,a,pn	%icc, 1f
-	 stxa		%g7, [%g4] ASI_DMMU
-1:	b,pt		%xcc, do_ivec_return
-	 flush		%g1	
+	stxa		%g7, [%g4] ASI_DMMU
+	retry
+	nop
+	nop
+
+	.globl		xcall_report_regs
+xcall_report_regs:
+	rdpr		%pstate, %g2
+	wrpr		%g2, PSTATE_IG | PSTATE_AG, %pstate
+	rdpr		%pil, %g2
+	wrpr		%g0, 15, %pil
+	sethi		%hi(109f), %g7
+	b,pt		%xcc, etrap_irq
+109:	 or		%g7, %lo(109b), %g7
+	call		__show_regs
+	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0
+	b,pt		%xcc, rtrap
+	 clr		%l6
+
+	.globl		xcall_capture
+xcall_capture:
+	rdpr		%pstate, %g2
+	wrpr		%g2, PSTATE_IG | PSTATE_AG, %pstate
+	rdpr		%pil, %g2
+	wrpr		%g0, 15, %pil
+	sethi		%hi(109f), %g7
+	b,pt		%xcc, etrap_irq
+109:	 or		%g7, %lo(109b), %g7
+	call		smp_penguin_jailcell
+	 nop
+	b,pt		%xcc, rtrap
+	 clr		%l6
 
 	/* These two are not performance critical... */
 	.globl		xcall_flush_tlb_all
@@ -209,8 +208,8 @@ xcall_flush_tlb_all:
 	cmp		%g2, 63
 	ble,pt		%icc, 1b
 	 sll		%g2, 3, %g3
-	b,pt		%xcc, do_ivec_return
-	 flush		%g1
+	flush		%g1
+	retry
 
 	.globl		xcall_flush_cache_all
 xcall_flush_cache_all:
@@ -222,6 +221,6 @@ xcall_flush_cache_all:
 	cmp		%g3, %g2
 	bleu,pt		%xcc, 1b
 	 nop
-	b,pt		%xcc, do_ivec_return
-	 flush		%g1
+	flush		%g1
+	retry
 #endif /* __SMP__ */

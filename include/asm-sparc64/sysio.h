@@ -1,4 +1,4 @@
-/* $Id: sysio.h,v 1.2 1997/04/03 12:26:45 davem Exp $
+/* $Id: sysio.h,v 1.6 1997/08/15 06:44:53 davem Exp $
  * sysio.h: UltraSparc sun5 specific SBUS definitions.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -49,7 +49,7 @@ struct sysio_regs {
 		 *	slot 5) MACIO
 		 *	slot 6) SLAVIO
 		 *
-		 * On Sunfire/Wildfire enterprise boxen these upper slots
+		 * On Sunfire/Starfire/Wildfire enterprise boxen these upper slots
 		 * are unused.
 		 */
 /*0x2020*/	u64	sbus_s0cfg;	/* SBUS Slot 0 Config			*/
@@ -72,83 +72,83 @@ struct sysio_regs {
 		/* SBUS/IOMMU Streaming Buffer Registers */
 /*0x2800*/	u64	sbuf_control;	/* StrBuffer Control			*/
 /*0x2808*/	u64	sbuf_pflush;	/* StrBuffer Page Flush			*/
-/*0x2810*/	u64	sbus_fsync;	/* StrBuffer Flush Synchronization Reg	*/
+/*0x2810*/	u64	sbuf_fsync;	/* StrBuffer Flush Synchronization Reg	*/
 
 		u64	__pad4[0x7d];
 
 		/* Interrupt mapping/control registers */
-/*0x2c00*/	u32	imap_slot0, _uim0;	/* SBUS Slot 0 Int Mapping	*/
-/*0x2c08*/	u32	imap_slot1, _uim1;	/* SBUS Slot 1 Int Mapping	*/
-/*0x2c10*/	u32	imap_slot2, _uim2;	/* SBUS Slot 2 Int Mapping	*/
-/*0x2c18*/	u32	imap_slot3, _uim3;	/* SBUS Slot 3 Int Mapping	*/
+/*0x2c00*/	u32	_uim0, imap_slot0;	/* SBUS Slot 0 Int Mapping	*/
+/*0x2c08*/	u32	_uim1, imap_slot1;	/* SBUS Slot 1 Int Mapping	*/
+/*0x2c10*/	u32	_uim2, imap_slot2;	/* SBUS Slot 2 Int Mapping	*/
+/*0x2c18*/	u32	_uim3, imap_slot3;	/* SBUS Slot 3 Int Mapping	*/
 
 		/* Interrupt Retry Timer. */
-/*0x2c20*/	u32	irq_retry,  _irpad;
+/*0x2c20*/	u32	_irpad, irq_retry;
 
 		u64	__pad5[0x7b];
 
 		/* The following are only used on Fusion/Electron/Pulsar
-		 * desktop systems, they mean nothing on Sunfire/Wildfire
+		 * desktop systems, they mean nothing on Sunfire/Starfire/Wildfire
 		 */
-/*0x3000*/	u32	imap_scsi,  _uis;	/* SCSI Int Mapping		*/
-/*0x3008*/	u32	imap_eth,   _uie;	/* Ethernet Int Mapping		*/
-/*0x3010*/	u32	imap_bpp,   _uip;	/* Parallel Port Int Mapping	*/
-/*0x3018*/	u32	imap_audio, _uia;	/* Audio Int Mapping		*/
-/*0x3020*/	u32	imap_pfail, _uipf;	/* Power Fail Int Mapping	*/
-/*0x3028*/	u32	imap_kms,   _uik;	/* Kbd/Mouse/Serial Int Mapping	*/
-/*0x3030*/	u32	imap_flpy,  _uif;	/* Floppy Int Mapping		*/
-/*0x3038*/	u32	imap_shw,   _uishw;	/* Spare HW Int Mapping		*/
-/*0x3040*/	u32	imap_kbd,   _uikbd;	/* Kbd Only Int Mapping		*/
-/*0x3048*/	u32	imap_ms,    _uims;	/* Mouse Only Int Mapping	*/
-/*0x3050*/	u32	imap_ser,   _uiser;	/* Serial Only Int Mapping	*/
+/*0x3000*/	u32	_uis, imap_scsi;	/* SCSI Int Mapping		*/
+/*0x3008*/	u32	_uie, imap_eth;		/* Ethernet Int Mapping		*/
+/*0x3010*/	u32	_uip, imap_bpp;		/* Parallel Port Int Mapping	*/
+/*0x3018*/	u32	_uia, imap_audio;	/* Audio Int Mapping		*/
+/*0x3020*/	u32	_uipf, imap_pfail;	/* Power Fail Int Mapping	*/
+/*0x3028*/	u32	_uik, imap_kms;		/* Kbd/Mouse/Serial Int Mapping	*/
+/*0x3030*/	u32	_uif, imap_flpy;	/* Floppy Int Mapping		*/
+/*0x3038*/	u32	_uishw, imap_shw;	/* Spare HW Int Mapping		*/
+/*0x3040*/	u32	_uikbd, imap_kbd;	/* Kbd Only Int Mapping		*/
+/*0x3048*/	u32	_uims, imap_ms;		/* Mouse Only Int Mapping	*/
+/*0x3050*/	u32	_uiser, imap_ser;	/* Serial Only Int Mapping	*/
 /*0x3058*/	u64	_imap_unused;
-/*0x3060*/	u32	imap_tim0,  _uit0;	/* Timer 0 Int Mapping		*/
-/*0x3068*/	u32	imap_tim1,  _uit1;	/* Timer 1 Int Mapping		*/
-/*0x3070*/	u32	imap_ue,    _uiue;	/* UE Int Mapping		*/
-/*0x3078*/	u32	imap_ce,    _uice;	/* CE Int Mapping		*/
-/*0x3080*/	u32	imap_sberr, _uisbe;	/* SBUS Err Int Mapping		*/
-/*0x3088*/	u32	imap_pmgmt, _uipm;	/* Power Mgmt Int Mapping	*/
-/*0x3090*/	u32	imap_gfx,   _uigfx;	/* OB Graphics Int Mapping	*/
-/*0x3098*/	u32	imap_eupa,  _uieupa;	/* UPA Expansion Int Mapping	*/
+/*0x3060*/	u32	_uit0, imap_tim0;	/* Timer 0 Int Mapping		*/
+/*0x3068*/	u32	_uit1, imap_tim1;	/* Timer 1 Int Mapping		*/
+/*0x3070*/	u32	_uiue, imap_ue;		/* UE Int Mapping		*/
+/*0x3078*/	u32	_uice, imap_ce;		/* CE Int Mapping		*/
+/*0x3080*/	u32	_uisbe, imap_sberr;	/* SBUS Err Int Mapping		*/
+/*0x3088*/	u32	_uipm, imap_pmgmt;	/* Power Mgmt Int Mapping	*/
+/*0x3090*/	u32	_uigfx, imap_gfx;	/* OB Graphics Int Mapping	*/
+/*0x3098*/	u32	_uieupa, imap_eupa;	/* UPA Expansion Int Mapping	*/
 
 		u64	__pad6[0x6c];
 
 		/* Interrupt Clear Registers */
-/*0x3400*/	u64	iclr_unused0;
-/*0x3408*/	u32	iclr_slot0, _ucs0;
+/*0x3400*/	u32	__ucu0, iclr_unused0;
+/*0x3408*/	u32	_ucs0, iclr_slot0;
 		u64	__pad7[0x7];
-/*0x3448*/	u32	iclr_slot1, _ucs1;
+/*0x3448*/	u32	_ucs1, iclr_slot1;
 		u64	__pad8[0x7];
-/*0x3488*/	u32	iclr_slot2, _ucs2;
+/*0x3488*/	u32	_ucs2, iclr_slot2;
 		u64	__pad9[0x7];
-/*0x34c8*/	u32	iclr_slot3, _ucs3;
+/*0x34c8*/	u32	_ucs3, iclr_slot3;
 		u64	__pad10[0x66];
-/*0x3800*/	u32	iclr_scsi,  _ucscsi;
-/*0x3808*/	u32	iclr_eth,   _uceth;
-/*0x3810*/	u32	iclr_bpp,   _ucbpp;
-/*0x3818*/	u32	iclr_audio, _ucaudio;
-/*0x3820*/	u32	iclr_pfail, _ucpfail;
-/*0x3828*/	u32	iclr_kms,   _uckms;
-/*0x3830*/	u32	iclr_flpt,  _ucflpy;
-/*0x3838*/	u32	iclr_shw,   _ucshw;
-/*0x3840*/	u32	iclr_kbd,   _uckbd;
-/*0x3848*/	u32	iclr_ms,    _ucms;
-/*0x3850*/	u32	iclr_ser,   _ucser;
+/*0x3800*/	u32	_ucscsi, iclr_scsi;
+/*0x3808*/	u32	_uceth, iclr_eth;
+/*0x3810*/	u32	_ucbpp, iclr_bpp;
+/*0x3818*/	u32	_ucaudio, iclr_audio;
+/*0x3820*/	u32	_ucpfail, iclr_pfail;
+/*0x3828*/	u32	_uckms, iclr_kms;
+/*0x3830*/	u32	_ucflpy, iclr_flpt;
+/*0x3838*/	u32	_ucshw, iclr_shw;
+/*0x3840*/	u32	_uckbd, iclr_kbd;
+/*0x3848*/	u32	_ucms, iclr_ms;
+/*0x3850*/	u32	_ucser, iclr_ser;
 /*0x3858*/	u64	iclr_unused1;
-/*0x3860*/	u32	iclr_tim0,  _uctim0;
-/*0x3868*/	u32	iclr_tim1,  _uctim1;
-/*0x3870*/	u32	iclr_ue,    _ucue;
-/*0x3878*/	u32	iclr_ce,    _ucce;
-/*0x3880*/	u32	iclr_serr,  _ucserr;
-/*0x3888*/	u32	iclr_pmgmt, _ucpmgmt;
+/*0x3860*/	u32	_uctim0, iclr_tim0;
+/*0x3868*/	u32	_uctim1, iclr_tim1;
+/*0x3870*/	u32	_ucue, iclr_ue;
+/*0x3878*/	u32	_ucce, iclr_ce;
+/*0x3880*/	u32	_ucserr, iclr_serr;
+/*0x3888*/	u32	_ucpmgmt, iclr_pmgmt;
 
 		u64	__pad11[0x6e];
 
 		/* Counters/Timers */
-/*0x3c00*/	u32	tim0_cnt, _tim0_u0;
-/*0x3c08*/	u32	tim0_lim, _tim0_u1;
-/*0x3c10*/	u32	tim1_cnt, _tim1_u0;
-/*0x3c18*/	u32	tim1_lim, _tim1_u1;
+/*0x3c00*/	u64	tim0_cnt;
+/*0x3c08*/	u64	tim0_lim;
+/*0x3c10*/	u64	tim1_cnt;
+/*0x3c18*/	u64	tim1_lim;
 
 		u64	__pad12[0x7c];
 
@@ -169,11 +169,13 @@ struct sysio_regs {
 /*0x4580*/	u64	iommu_tag[16];	/* IOMMU TLB Tag Diagnostic Access	*/
 /*0x4600*/	u64	iommu_data[32];	/* IOMMU TLB Data RAM Diagnostic Access	*/
 
+		u64	__pad15[0x20];
+
 		/* Interrupt State Diagnostics */
 /*0x4800*/	u64	sbus_istate;
 /*0x4808*/	u64	obio_istate;
 
-		u64	__pad15[0xfe];
+		u64	__pad16[0xfe];
 
 		/* Streaming Buffer Diagnostic Area */
 /*0x5000*/	u64	sbuf_data[128];	/* StrBuffer Data Ram Diagnostic	*/

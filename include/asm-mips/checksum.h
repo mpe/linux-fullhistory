@@ -5,7 +5,9 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995 by Ralf Baechle
+ * Copyright (C) 1995, 1996, 1997 by Ralf Baechle
+ *
+ * $Id: checksum.h,v 1.5 1997/08/08 20:22:28 miguel Exp $
  */
 #ifndef __ASM_MIPS_CHECKSUM_H
 #define __ASM_MIPS_CHECKSUM_H

@@ -1,4 +1,4 @@
-/* $Id: irix5sys.h,v 1.1 1997/06/06 09:32:29 ralf Exp $
+/* $Id: irix5sys.h,v 1.2 1997/08/08 18:12:17 miguel Exp $
  * irix5sys.h: 32-bit IRIX5 ABI system call table.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)

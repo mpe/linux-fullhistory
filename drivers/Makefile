@@ -9,7 +9,7 @@
 
 SUB_DIRS     := block char net misc #streams
 MOD_SUB_DIRS := $(SUB_DIRS) sbus
-ALL_SUB_DIRS := $(SUB_DIRS) pci scsi sbus sound cdrom isdn pnp
+ALL_SUB_DIRS := $(SUB_DIRS) pci scsi sbus sound cdrom isdn pnp macintosh
 
 ifdef CONFIG_PCI
 SUB_DIRS += pci
@@ -17,6 +17,11 @@ endif
 
 ifdef CONFIG_SBUS
 SUB_DIRS += sbus
+endif
+
+ifdef CONFIG_PPC
+SUB_DIRS += macintosh
+MOD_SUB_DIRS += macintosh
 endif
 
 # If CONFIG_SCSI is set, the core of scsi support will be added to the kernel,

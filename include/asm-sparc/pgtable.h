@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.62 1997/06/27 14:55:00 jj Exp $ */
+/* $Id: pgtable.h,v 1.63 1997/08/13 04:44:15 paulus Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -298,6 +298,7 @@ extern void (*flush_cache_mm)(struct mm_struct *);
 extern void (*flush_cache_range)(struct mm_struct *, unsigned long start,
 				 unsigned long end);
 extern void (*flush_cache_page)(struct vm_area_struct *, unsigned long address);
+#define flush_icache_range(start, end)		do { } while (0)
 
 extern void (*flush_tlb_all)(void);
 extern void (*flush_tlb_mm)(struct mm_struct *);

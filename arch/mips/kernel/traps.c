@@ -196,6 +196,8 @@ static void default_be_board_handler(struct pt_regs *regs)
 	/*
 	 * Assume it would be too dangerous to continue ...
 	 */
+	printk ("BE HANDLER\n");
+	show_regs (regs);
 	force_sig(SIGBUS, current);
 }
 

@@ -1,4 +1,4 @@
-/* $Id: etrap.S,v 1.30 1997/06/30 10:31:37 jj Exp $
+/* $Id: etrap.S,v 1.34 1997/08/08 08:33:40 jj Exp $
  * etrap.S: Preparing for entry into the kernel on Sparc V9.
  *
  * Copyright (C) 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -15,6 +15,11 @@
 #define		FPUREG_SZ		((64 * 4) + (2 * 8))
 #define		TASK_REGOFF		((((PAGE_SIZE<<1)-FPUREG_SZ)&~(64-1)) - \
 					 TRACEREG_SZ-REGWIN_SZ)
+
+/*
+ * On entry, %g7 is return address - 0x4.
+ * %g4 and %g5 will be preserved %l4 and %l5 respectively.
+ */
 
 		.text
 		.align			32
@@ -111,18 +116,23 @@ etrap_save_fpu:	and			%g3, FPRS_FEF, %g3
 		membar			#Sync
 
 		sub			%g2, (TRACEREG_SZ + REGWIN_SZ), %g2
-2:		b,pt			%xcc, etrap_after_fpu
+2:		bne,pn			%xcc, etrap_after_fpu
 		 wr			%g0, 0, %fprs
-3:		/* Because Ultra lacks ASI_BLK_NUCLEUS a hack has to take place. */
-		mov			SECONDARY_CONTEXT, %g3
+		ld			[%g6 + AOFF_task_tss + AOFF_thread_ctx], %g3
+		wr			%g0, ASI_DMMU, %asi
+		nop
+		stxa			%g3, [%g0 + SECONDARY_CONTEXT] %asi
+		flush			%g2
+
+		b,pt			%xcc, etrap_after_fpu
+		 nop
+3:		mov			SECONDARY_CONTEXT, %g3
 		stxa			%g0, [%g3] ASI_DMMU
 		flush			%g2
 		wr			%g0, ASI_BLK_S, %asi
-		nop
-
 		b,pt			%xcc, 1b
 		 mov			FPRS_FEF, %g3
-		nop
+
 etraptl1:	rdpr			%tstate, %g1
 		sub			%sp, REGWIN_SZ + TRACEREG_SZ - STACK_BIAS, %g2
 		ba,pt			%xcc, etrap_maybe_fpu

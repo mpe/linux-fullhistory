@@ -45,13 +45,13 @@ unsigned video_res_x;
 /* 
  * Various defines for the G364
  */
-#define G364_MEM_BASE   0xe0800000
-#define G364_PORT_BASE  0xe0200000
-#define ID_REG 		0xe0200000  	/* Read only */
-#define BOOT_REG 	0xe0280000
-#define TIMING_REG 	0xe0280108 	/* to 0x080170 - DON'T TOUCH! */
-#define MASK_REG 	0xe0280200
-#define CTLA_REG 	0xe0280300
+#define G364_MEM_BASE   0xe4400000
+#define G364_PORT_BASE  0xe4000000
+#define ID_REG 		0xe4000000  	/* Read only */
+#define BOOT_REG 	0xe4080000
+#define TIMING_REG 	0xe4080108 	/* to 0x080170 - DON'T TOUCH! */
+#define MASK_REG 	0xe4080200
+#define CTLA_REG 	0xe4080300
 #define CURS_TOGGLE 	0x800000
 #define BIT_PER_PIX	0x700000	/* bits 22 to 20 of Control A */
 #define DELAY_SAMPLE    0x080000
@@ -72,14 +72,14 @@ unsigned video_res_x;
 #define INTL_STAND	0x000004
 #define SCRN_FORM	0x000002
 #define ENABLE_VTG	0x000001	
-#define TOP_REG 	0xe0280400
-#define CURS_PAL_REG 	0xe0280508 	/* to 0x080518 */
-#define CHKSUM_REG 	0xe0280600 	/* to 0x080610 - unused */
-#define CURS_POS_REG 	0xe0280638
-#define CLR_PAL_REG 	0xe0280800	/* to 0x080ff8 */
-#define CURS_PAT_REG 	0xe0281000	/* to 0x081ff8 */
-#define MON_ID_REG 	0xe0300000 	/* unused */
-#define RESET_REG 	0xe0380000  	/* Write only */
+#define TOP_REG 	0xe4080400
+#define CURS_PAL_REG 	0xe4080508 	/* to 0x080518 */
+#define CHKSUM_REG 	0xe4080600 	/* to 0x080610 - unused */
+#define CURS_POS_REG 	0xe4080638
+#define CLR_PAL_REG 	0xe4080800	/* to 0x080ff8 */
+#define CURS_PAT_REG 	0xe4081000	/* to 0x081ff8 */
+#define MON_ID_REG 	0xe4100000 	/* unused */
+#define RESET_REG 	0xe4180000  	/* Write only */
 
 /*
  * built-in font management constants

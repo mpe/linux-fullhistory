@@ -94,6 +94,7 @@ memset:
 8:	stbu	r4,1(r6)
 	bdnz	8b
 	blr
+
 	.globl	bcopy
 bcopy:
 	mr	r6,r3
@@ -189,7 +190,7 @@ backwards_memcpy:
 	.globl	memcmp
 memcmp:
 	cmpwi	0,r5,0
-	blelr
+	ble-	2f
 	mtctr	r5
 	addi	r6,r3,-1
 	addi	r4,r4,-1
@@ -198,6 +199,22 @@ memcmp:
 	subf.	r3,r0,r3
 	bdnzt	2,1b
 	blr
+2:	li	r3,0
+	blr
+
+	.global	memchr
+memchr:
+	cmpwi	0,r5,0
+	ble-	2f
+	mtctr	r5
+	addi	r3,r3,-1
+1:	lbzu	r0,1(r3)
+	cmpw	0,r0,r4
+	bdnzf	2,1b
+	beqlr
+2:	li	r3,0
+	blr
+
 	.globl	__copy_tofrom_user
 __copy_tofrom_user:
 	rlwinm.	r7,r5,32-3,3,31		/* r0 = r5 >> 3 */

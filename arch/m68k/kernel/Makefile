@@ -13,7 +13,7 @@
 all: kernel.o head.o
 O_TARGET := kernel.o
 O_OBJS := entry.o process.o traps.o ints.o signal.o ptrace.o \
-	  setup.o bios32.o sys_m68k.o time.o
+	  setup.o sys_m68k.o time.o
 ifdef CONFIG_VT
 O_OBJS += console.o
 endif

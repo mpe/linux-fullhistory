@@ -5,7 +5,7 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995, 1996 by Ralf Baechle
+ * Copyright (C) 1995, 1996, 1997 by Ralf Baechle
  */
 #include <linux/delay.h>
 #include <linux/linkage.h>
@@ -15,6 +15,7 @@
 #include <asm/vector.h>
 #include <asm/jazz.h>
 #include <asm/jazzdma.h>
+#include <asm/keyboard.h>
 #include <asm/pgtable.h>
 #include <asm/mc146818rtc.h>
 
@@ -146,3 +147,35 @@ struct feature jazz_feature = {
 	rtc_read_data,
 	rtc_write_data
 };
+
+static volatile keyboard_hardware *jazz_kh = (keyboard_hardware *)JAZZ_KEYBOARD_ADDRESS;
+
+static unsigned char jazz_read_input(void)
+{
+	return jazz_kh->data;
+}
+
+static void jazz_write_output(unsigned char val)
+{
+	jazz_kh->data = val;
+}
+
+static void jazz_write_command(unsigned char val)
+{
+	jazz_kh->command = val;
+}
+
+static unsigned char jazz_read_status(void)
+{
+	return jazz_kh->command;
+}
+
+void jazz_keyboard_setup(void)
+{
+	kbd_read_input = jazz_read_input;
+	kbd_write_output = jazz_write_output;
+	kbd_write_command = jazz_write_command;
+	kbd_read_status = jazz_read_status;
+	request_region(0x60, 16, "keyboard");
+        r4030_write_reg16(JAZZ_IO_IRQ_ENABLE, r4030_read_reg16(JAZZ_IO_IRQ_ENABLE) | JAZZ_IE_KEYBOARD);
+}

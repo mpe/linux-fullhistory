@@ -1,4 +1,4 @@
-/* $Id: irixsig.c,v 1.2 1997/06/13 10:11:22 ralf Exp $
+/* $Id: irixsig.c,v 1.4 1997/08/08 18:12:21 miguel Exp $
  * irixsig.c: WHEEE, IRIX signals!  YOW, am I compatable or what?!?!
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
@@ -142,7 +142,7 @@ asmlinkage int do_irix_signal(unsigned long oldmask, struct pt_regs * regs)
 		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
 			current->exit_code = signr;
 			current->state = TASK_STOPPED;
-			notify_parent(current);
+			notify_parent(current, SIGCHLD);
 			schedule();
 			if (!(signr = current->exit_code))
 				continue;
@@ -180,7 +180,7 @@ asmlinkage int do_irix_signal(unsigned long oldmask, struct pt_regs * regs)
 				current->exit_code = signr;
 				if (!(current->p_pptr->sig->action[SIGCHLD-1].sa_flags & 
 						SA_NOCLDSTOP))
-					notify_parent(current);
+					notify_parent(current, SIGCHLD);
 				schedule();
 				continue;
 
@@ -593,7 +593,6 @@ out:
 #define P_ALL    7
 
 extern int getrusage(struct task_struct *, int, struct rusage *);
-extern void release(struct task_struct * p);
 
 #define W_EXITED     1
 #define W_TRAPPED    2
@@ -680,7 +679,7 @@ repeat:
 					REMOVE_LINKS(p);
 					p->p_pptr = p->p_opptr;
 					SET_LINKS(p);
-					notify_parent(p);
+					notify_parent(p, SIGCHLD);
 				} else
 					release(p);
 				goto end_waitsys;

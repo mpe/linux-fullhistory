@@ -61,8 +61,8 @@ static int nfs_readlink(struct inode *inode, char *buffer, int buflen)
 		copy_to_user(buffer, res, len);
 		put_user('\0', buffer + len);
 		error = len;
+		kfree(mem);
 	}
-	kfree(mem);
 	return error;
 }
 
@@ -81,7 +81,6 @@ static struct dentry * nfs_follow_link(struct inode * inode, struct dentry *base
 
 	if (error) {
 		dput(base);
-		kfree(mem);
 		return ERR_PTR(error);
 	}
 	path = kmalloc(len + 1, GFP_KERNEL);

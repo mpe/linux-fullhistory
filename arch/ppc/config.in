@@ -1,8 +1,12 @@
-#
+# $Id: config.in,v 1.16 1997/08/11 08:37:49 cort Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
 mainmenu_name "Linux/PowerPC Kernel Configuration"
+
+mainmenu_option next_comment
+comment 'Platform support'
+define_bool CONFIG_PPC y
 
 if [ "`uname`" != "Linux" ]; then
   define_bool CONFIG_CROSSCOMPILE y
@@ -12,25 +16,28 @@ fi
 
 bool 'Build PowerMac Kernel (not PReP)?' CONFIG_PMAC
 bool 'Build PReP Kernel (not PowerMac)?' CONFIG_PREP
-bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
-bool 'Used Harddrive LED on IBM 83x workstations as heartbeat?' CONFIG_HEARTBEAT
-bool 'Used PowerPC specific powersaving?' CONFIG_POWERSAVING
+
 choice 'Processor type' \
 	"Common		CONFIG_MCOMMON \
 	 601		CONFIG_M601	\
 	 603		CONFIG_M603	\
 	 604		CONFIG_M604" Common
+endmenu
 
+mainmenu_option next_comment
+comment 'General setup'
+
+bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
 bool 'Enable loadable module support' CONFIG_MODULES
 if [ "$CONFIG_MODULES" = "y" ]; then
   bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
   bool 'Kernel daemon support (e.g. autoload of modules)' CONFIG_KERNELD
 fi
 
-
-mainmenu_option next_comment
 define_bool CONFIG_PCI y
-bool 'PCI bridge optimization (experimental)' CONFIG_PCI_OPTIMIZE
+if [ "$CONFIG_PREP" = "y" ]; then
+  bool 'PCI bridge optimization' CONFIG_PCI_OPTIMIZE
+fi
 bool 'Networking support' CONFIG_NET
 bool 'Sysctl support' CONFIG_SYSCTL
 bool 'System V IPC' CONFIG_SYSVIPC
@@ -41,6 +48,22 @@ define_bool CONFIG_KERNEL_ELF y
 tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 tristate 'Kernel support for JAVA binaries' CONFIG_BINFMT_JAVA
 
+if [ "$CONFIG_PMAC" = "y" ]; then
+  define_bool CONFIG_PMAC_CONSOLE y
+  define_bool CONFIG_MAC_KEYBOARD y
+  define_bool CONFIG_MAC_FLOPPY	y
+  bool 'Support for Open Firmware device tree in /proc' CONFIG_PROC_DEVICETREE
+  bool 'Include xmon kernel debugger' CONFIG_XMON
+fi
+
+if [ "$CONFIG_PMAC_CONSOLE" = "y" ]; then
+  bool 'Support for ATI Mach64 display cards' CONFIG_ATY_VIDEO
+  bool 'Support for IMS Twin Turbo display card' CONFIG_IMSTT_VIDEO
+else
+  define_bool CONFIG_VGA_CONSOLE y
+fi
+
+endmenu
 
 source drivers/pnp/Config.in
 source drivers/block/Config.in
@@ -83,6 +106,7 @@ fi
 endmenu
 
 source fs/Config.in
+
 source drivers/char/Config.in
 
 mainmenu_option next_comment
@@ -93,12 +117,12 @@ if [ "$CONFIG_SOUND" != "n" ]; then
 fi
 endmenu
 
-mainmenu_option next_comment
+#mainmenu_option next_comment
 #comment 'Kernel hacking'
 #bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC
 #bool 'Kernel profiling support' CONFIG_PROFILE
 #if [ "$CONFIG_PROFILE" = "y" ]; then
 #  int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
 #fi
-endmenu
+#endmenu
 

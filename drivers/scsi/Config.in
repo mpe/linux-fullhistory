@@ -108,4 +108,9 @@ dep_tristate 'UltraStor 14F/34F support' CONFIG_SCSI_U14_34F $CONFIG_SCSI
   fi
 dep_tristate 'UltraStor SCSI support' CONFIG_SCSI_ULTRASTOR $CONFIG_SCSI
 #dep_tristate 'SCSI debugging host adapter' CONFIG_SCSI_DEBUG $CONFIG_SCSI
+dep_tristate 'MESH (Power Mac internal SCSI) support' CONFIG_SCSI_MESH $CONFIG_SCSI
+if [ "$CONFIG_SCSI_MESH" != "n" ]; then
+  int '  maximum synchronous transfer rate (MB/s) (0 = async)' CONFIG_SCSI_MESH_SYNC_RATE 5
+fi
+dep_tristate '53C94 (Power Mac external SCSI) support' CONFIG_SCSI_MAC53C94 $CONFIG_SCSI
 endmenu

@@ -24,4 +24,8 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_PROC_DEVICETREE),y)
+O_OBJS += proc_devtree.o
+endif
+
 include $(TOPDIR)/Rules.make

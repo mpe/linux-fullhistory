@@ -2039,7 +2039,7 @@ __initfunc(void ip_fib_init(void))
 		fib_class_get_info
 	});
 	proc_net_register(&(struct proc_dir_entry) {
-		PROC_NET_RTRULES, 8, "rt_local",
+		PROC_NET_RTLOCAL, 8, "rt_local",
 		S_IFREG | S_IRUGO, 1, 0, 0,
 		0, &proc_net_inode_operations,
 		fib_local_get_info

@@ -1,6 +1,6 @@
-/* $Id: firehose.h,v 1.1 1997/04/11 02:38:47 davem Exp $
+/* $Id: firehose.h,v 1.2 1997/08/08 04:26:31 davem Exp $
  * firehose.h: Defines for the Fire Hose Controller (FHC) found
- *             on Sunfire/Wildfire systems.
+ *             on Sunfire/Starfire/Wildfire systems.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
  */
@@ -33,38 +33,38 @@ struct fhc_internal_regs {
  * for the FHC, thus we have the following few structs...
  */
 struct fhc_ign_reg {
-/*0x2000*/	u64	fhc_ign;	/* FHC Interrupt Group Number		*/
+/*0x2000*/	u64	fhc_ign;		/* FHC Interrupt Group Number	*/
 };
 
 struct fhc_fanfail_regs {
-/*0x4000*/	u64	fhc_ff_imap;	/* FHC FanFail Interrupt Map		*/
-		u64	_unused1;
-/*0x4010*/	u64	fhc_ff_istate;	/* FHC FanFail Interrupt State		*/
+/*0x4000*/	u32	_pad0, fhc_ff_imap;	/* FHC FanFail Interrupt Map	*/
+		u64	_pad1;
+/*0x4010*/	u32	_pad2, fhc_ff_iclr;	/* FHC FanFail Interrupt Clear	*/
 };
 
 struct fhc_system_regs {
-/*0x6000*/	u64	fhc_sys_imap;	/* FHC System Interrupt Map		*/
-		u64	_unused1;
-/*0x6010*/	u64	fhc_sys_istate;	/* FHC System Interrupt State		*/
+/*0x6000*/	u32	_pad0, fhc_sys_imap;	/* FHC System Interrupt Map	*/
+		u64	_pad1;
+/*0x6010*/	u32	_pad2, fhc_sys_iclr;	/* FHC System Interrupt Clear	*/
 };
 
 struct fhc_uart_regs {
-/*0x8000*/	u64	fhc_uart_imap;	/* FHC UART Interrupt Map		*/
-		u64	_unused1;
-/*0x8010*/	u64	fhc_uart_istate;/* FHC UART Interrupt State		*/
+/*0x8000*/	u32	_pad0, fhc_uart_imap;	/* FHC UART Interrupt Map	*/
+		u64	_pad1;
+/*0x8010*/	u32	_pad2, fhc_uart_iclr;	/* FHC UART Interrupt Clear	*/
 };
 
 struct fhc_tod_regs {
-/*0xa000*/	u64	fhc_tod_imap;	/* FHC TOD Interrupt Map		*/
-		u64	_unused1;
-/*0xa010*/	u64	fhc_tod_istate;	/* FHC TOD Interrupt State		*/
+/*0xa000*/	u32	_pad0, fhc_tod_imap;	/* FHC TOD Interrupt Map	*/
+		u64	_pad1;
+/*0xa010*/	u32	_pad2, fhc_tod_iclr;	/* FHC TOD Interrupt Clear	*/
 };
 
 /* All of the above. */
 struct fhc_regs {
 	struct fhc_internal_regs	*pregs;
 	struct fhc_ign_reg		*ireg;
-	struct fhc_fanfil_regs		*ffregs;
+	struct fhc_fanfail_regs		*ffregs;
 	struct fhc_system_regs		*sregs;
 	struct fhc_uart_regs		*uregs;
 	struct fhc_tod_regs		*tregs;

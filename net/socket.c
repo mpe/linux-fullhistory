@@ -648,28 +648,25 @@ int sock_create(int family, int type, int protocol, struct socket **res)
 
 asmlinkage int sys_socket(int family, int type, int protocol)
 {
-	int fd, err;
+	int retval;
 	struct socket *sock;
 
 	lock_kernel();
 
-	if ((err = sock_create(family, type, protocol, &sock)) < 0)
+	retval = sock_create(family, type, protocol, &sock);
+	if (retval < 0)
 		goto out;
 
-	if ((fd = get_fd(sock->inode)) < 0) 
-	{
+	retval = get_fd(sock->inode);
+	if (retval < 0) {
 		sock_release(sock);
-		err = -EINVAL;
-	}
-	else
-	{
-		sock->file = current->files->fd[fd];
-		err = fd;
+		goto out;
 	}
 
+	sock->file = current->files->fd[retval];
 out:
 	unlock_kernel();
-	return err;
+	return retval;
 }
 
 /*

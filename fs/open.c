@@ -53,9 +53,6 @@ asmlinkage int sys_fstatfs(unsigned int fd, struct statfs * buf)
 	int error;
 
 	lock_kernel();
-	error = verify_area(VERIFY_WRITE, buf, sizeof(struct statfs));
-	if (error)
-		goto out;
 	if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 		error = -EBADF;
 	else if (!(dentry = file->f_dentry))
@@ -67,8 +64,7 @@ asmlinkage int sys_fstatfs(unsigned int fd, struct statfs * buf)
 	else if (!inode->i_sb->s_op->statfs)
 		error = -ENOSYS;
 	else
-		inode->i_sb->s_op->statfs(inode->i_sb, buf, sizeof(struct statfs));
-out:
+		error = inode->i_sb->s_op->statfs(inode->i_sb, buf, sizeof(struct statfs));
 	unlock_kernel();
 	return error;
 }

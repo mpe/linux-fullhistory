@@ -34,7 +34,7 @@
 static struct list_head dentry_hashtable[D_HASHSIZE];
 static LIST_HEAD(dentry_unused);
 
-void d_free(struct dentry *dentry)
+static inline void d_free(struct dentry *dentry)
 {
 	kfree(dentry->d_name.name);
 	kfree(dentry);
@@ -165,10 +165,10 @@ struct dentry * d_alloc(struct dentry * parent, const struct qstr *name)
 	memcpy(str, name->name, name->len);
 	str[name->len] = 0;
 
-	dentry->d_count = 0;
+	dentry->d_count = 1;
 	dentry->d_flags = 0;
 	dentry->d_inode = NULL;
-	dentry->d_parent = parent;
+	dentry->d_parent = dget(parent);
 	dentry->d_mounts = dentry;
 	dentry->d_covers = dentry;
 	INIT_LIST_HEAD(&dentry->d_hash);
@@ -207,7 +207,6 @@ struct dentry * d_alloc_root(struct inode * root_inode, struct dentry *old_root)
 	if (root_inode) {
 		res = d_alloc(NULL, &(const struct qstr) { "/", 1, 0 });
 		res->d_parent = res;
-		res->d_count = 1;
 		d_instantiate(res, root_inode);
 	}
 	return res;
@@ -238,13 +237,13 @@ static inline struct dentry * __dlookup(struct list_head *head, struct dentry * 
 		if (parent->d_op && parent->d_op->d_compare) {
 			if (parent->d_op->d_compare(parent, &dentry->d_name, name))
 				continue;
-			return dentry;
+		} else {
+			if (dentry->d_name.len != len)
+				continue;
+			if (memcmp(dentry->d_name.name, str, len))
+				continue;
 		}
-		if (dentry->d_name.len != len)
-			continue;
-		if (memcmp(dentry->d_name.name, str, len))
-			continue;
-		return dentry;
+		return dget(dentry->d_mounts);
 	}
 	return NULL;
 }
@@ -329,7 +328,7 @@ void d_delete(struct dentry * dentry)
 
 void d_add(struct dentry * entry, struct inode * inode)
 {
-	struct dentry * parent = dget(entry->d_parent);
+	struct dentry * parent = entry->d_parent;
 
 	list_add(&entry->d_hash, d_hash(parent, entry->d_name.hash));
 	d_instantiate(entry, inode);

@@ -252,7 +252,7 @@ static __inline__ unsigned long __xchg(unsigned long x, volatile void * ptr, int
 	return x;
 }
 
-extern unsigned long IRQ_vectors[16];
+extern unsigned long IRQ_vectors[32];
 extern unsigned long exception_handlers[32];
 
 #define set_int_vector(n,addr) \

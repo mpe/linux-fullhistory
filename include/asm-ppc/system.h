@@ -1,40 +1,67 @@
 #ifndef __PPC_SYSTEM_H
 #define __PPC_SYSTEM_H
 
-#include <linux/delay.h>
+#include <linux/kdev_t.h>
+#include <asm/processor.h>
 
 #define mb()  __asm__ __volatile__ ("sync" : : : "memory")
 
 #define __save_flags(flags)	({\
 	__asm__ __volatile__ ("mfmsr %0" : "=r" ((flags)) : : "memory"); })
-/* using Paul's in misc.S now -- Cort */
-extern void __restore_flags(unsigned long flags);
+extern __inline__ void __restore_flags(unsigned long flags)
+{
+        extern unsigned lost_interrupts;
+	extern void do_lost_interrupts(unsigned long);
 
+        if ((flags & MSR_EE) && lost_interrupts != 0) {
+                do_lost_interrupts(flags);
+        } else {
+                __asm__ __volatile__ ("sync; mtmsr %0; isync"
+                              : : "r" (flags) : "memory");
+        }
+}
+
+
+#if 0
 /*
-  #define __sti() _soft_sti(void)
-  #define __cli() _soft_cli(void)
+ * Gcc bug prevents us from using this inline func so for now
+ * it lives in misc.S
  */
+void __inline__ __restore_flags(unsigned long flags)
+{
+	extern unsigned lost_interrupts;
+	__asm__ __volatile__ (
+		"andi.	0,%0,%2 \n\t"
+		"beq	2f \n\t"
+		"cmpi	0,%1,0 \n\t"
+		"bne	do_lost_interrupts \n\t"
+		"2:	sync \n\t"
+		"mtmsr	%0 \n\t"
+		"isync \n\t"
+		: 
+		: "r" (flags), "r"(lost_interrupts), "i" (1<<15)/*MSR_EE*/
+		: "0", "cc");
+}
+#endif
+
 extern void __sti(void);
 extern void __cli(void);
-
-extern void _hard_sti(void);
-extern void _hard_cli(void);
-extern void _soft_sti(void);
-extern void _soft_cli(void);
 extern int _disable_interrupts(void);
 extern void _enable_interrupts(int);
 
+extern void print_backtrace(unsigned long *);
+extern void show_regs(struct pt_regs * regs);
 extern void flush_instruction_cache(void);
 extern void hard_reset_now(void);
 extern void poweroff_now(void);
-extern void find_scsi_boot(void);
+/*extern void note_bootable_part(kdev_t, int);*/
 extern int sd_find_target(void *, int);
 extern int _get_PVR(void);
 extern void via_cuda_init(void);
+extern void pmac_nvram_init(void);
 extern void read_rtc_time(void);
 extern void pmac_find_display(void);
 extern void giveup_fpu(void);
-extern void store_cache_range(unsigned long, unsigned long);
 extern void cvt_fd(float *from, double *to);
 extern void cvt_df(double *from, float *to);
 

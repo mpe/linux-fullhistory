@@ -45,14 +45,13 @@
 
 #define TOPHYS(x)	(x - KERNELBASE)
 
-
 /* this is a very kludgey way of loading up the BATs on the
    prep system.  I'll kill this horrible macro and write
    something clean when I have a chance -- Cort
  */	
 #define LOAD_BATS(RA,RB) \
 	mfspr	RA,PVR		; \
-	srwi	r5,r5,16	; \
+	srwi	RA,RA,16	; \
 	cmpi	0,RA,1		; \
 	beq	199f		; \
 	/* load bats for 60x */	; \
@@ -132,21 +131,10 @@
 	mtspr	DBAT3L,RB	; \
 200:
 	
-
-
-	
 	.text
 	.globl	_stext
 _stext:
 
-#ifdef CONFIG_PREP	
-	. = 0x100
-_GLOBAL(HardReset)
-	b	_start
-
-#endif /* CONFIG_PREP */
-
-#ifdef CONFIG_PMAC
 /*
  * _start is defined this way because the XCOFF loader in the OpenFirmware
  * on the powermac expects the entry point to be a procedure descriptor.
@@ -156,7 +144,7 @@ _GLOBAL(HardReset)
 _start:
 	.long	TOPHYS(__start),0,0
 
-/*
+/* PMAC
  * Enter here with the kernel text, data and bss loaded starting at
  * 0, running with virtual == physical mapping.
  * r5 points to the prom entry point (the client interface handler
@@ -165,41 +153,81 @@ _start:
  * pointer (r1) points to just below the end of the half-meg region
  * from 0x380000 - 0x400000, which is mapped in already.
  */
+/* PREP
+ * This is jumped to on prep systems right after the kernel is relocated
+ * to its proper place in memory by the boot loader.  The expected layout
+ * of the regs is:	
+ *   r3: ptr to residual data
+ *   r4: initrd_start or if no initrd then 0
+ *   r5: initrd_end - unused if r4 is 0
+ *   r6: Start of command line string
+ *   r7: End of command line string
+ *
+ * This just gets a minimal mmu environment setup so we can call
+ * start_here() to do the real work.
+ * -- Cort	
+ */
+	
 	.globl	__start
 __start:
 
 /*
- * Use the first pair of BAT registers to map the 1st 8MB
+ * Use the first pair of BAT registers to map the 1st 16MB
  * of RAM to KERNELBASE.
  */
 	mfspr	r9,PVR
 	rlwinm	r9,r9,16,16,31		/* r9 = 1 for 601, 4 for 604 */
 	cmpi	0,r9,1
-	lis	r7,KERNELBASE@h
+	lis	r11,KERNELBASE@h
 	bne	4f
-	ori	r7,r7,4			/* set up BAT registers for 601 */
+	ori	r11,r11,4		/* set up BAT registers for 601 */
 	li	r8,0x7f
+	oris	r9,r11,0x800000@h	/* set up BAT reg for 2nd 8M */
+	oris	r10,r8,0x800000@h	/* set up BAT reg for 2nd 8M */
+	mtspr	IBAT1U,r9
+	mtspr	IBAT1L,r10
 	b	5f
-4:	ori	r7,r7,0xff		/* set up BAT registers for 604 */
+4:	ori	r11,r11,0x1ff		/* set up BAT registers for 604 */
 	li	r8,2
-	mtspr	DBAT0U,r7
+	mtspr	DBAT0U,r11
 	mtspr	DBAT0L,r8
-5:	mtspr	IBAT0U,r7
+5:	mtspr	IBAT0U,r11
 	mtspr	IBAT0L,r8
 	isync
 
+#if 0	
 /*
  * Now we have the 1st 8M of RAM mapped at KERNELBASE, so we can
  * refer to addresses of data items, procedures, etc. normally.
  */
-	lis	r7,start_here@ha	/* jump up to our copy at KERNELBASE */
-	addi	r7,r7,start_here@l
-	mtlr	r7
+	lis	r10,start_here@ha	/* jump up to our copy at KERNELBASE */
+	addi	r10,r10,start_here@l
+	mtlr	r10
 	blr
-#endif /* CONFIG_PMAC */
+#endif
+/*
+ * we now have the 1st 16M of ram mapped with the bats.
+ * prep needs the mmu to be turned on here, but pmac already has it on.
+ * this shouldn't bother the pmac since it just gets turned on again
+ * as we jump to our code at KERNELBASE. -- Cort
+ */
+	mfmsr	r0
+	ori	r0,r0,MSR_DR|MSR_IR
+	mtspr	SRR1,r0
+	lis	r0,start_here@h
+	ori	r0,r0,start_here@l
+	mtspr	SRR0,r0
+	SYNC
+	rfi				/* enables MMU */
+		
 
-
-
+/*
+ * GCC sometimes accesses words at negative offsets from the stack
+ * pointer, although the SysV ABI says it shouldn't.  To cope with
+ * this, we leave this much untouched space on the stack on exception
+ * entry.
+ */
+#define STACK_UNDERHEAD	64
 	
 /*
  * Macros for storing registers into and loading registers from
@@ -286,10 +314,8 @@ label:						\
 	.long	hdlr;				\
 	.long	int_return
 
-#ifndef CONFIG_PREP
 /* System reset */
 	STD_EXCEPTION(0x100, Reset, UnknownException)
-#endif /* ndef CONFIG_PREP */
 
 /* Machine check */
 	STD_EXCEPTION(0x200, MachineCheck, MachineCheckException)
@@ -319,7 +345,7 @@ DataAccess:
 
 /* Instruction access exception */
 	. = 0x400
-InstructionAccess:	
+InstructionAccess:
 	EXCEPTION_PROLOG
 	andis.	r0,r23,0x4000		/* no pte found? */
 	beq	1f			/* if so, try to put a PTE */
@@ -338,7 +364,7 @@ InstructionAccess:
 	.long	int_return
 
 /* External interrupt */
-	STD_EXCEPTION(0x500, HardwareInterrupt, handle_IRQ)
+	STD_EXCEPTION(0x500, HardwareInterrupt, do_IRQ)
 
 /* Alignment exception */
 	. = 0x600
@@ -376,21 +402,7 @@ FPUnavailable:
 	.long	KernelFP
 	.long	int_return
 
-/* Decrementer */
-#ifdef CONFIG_PREP
-/* - ignored for now... */
-_ORG(0x0900)
-	mtspr	SPRG0,r1
-	lis	r1,0x7FFF
-	ori	r1,r1,0xFFFF
-	mtspr	DEC,r1
-	mfspr	r1,SPRG0
-	rfi
-#endif /* CONFIG_PREP */
-#ifdef CONFIG_PMAC
 	STD_EXCEPTION(0x900, Decrementer, timer_interrupt)
-#endif /* CONFIG_PMAC */
-
 	STD_EXCEPTION(0xa00, Trap_0a, UnknownException)
 	STD_EXCEPTION(0xb00, Trap_0b, UnknownException)
 
@@ -596,11 +608,6 @@ transfer_to_handler:
 	andi.	r23,r23,MSR_PR
 	mfspr	r23,SPRG3		/* if from user, fix up tss */
 	beq	2f
-#ifdef CONFIG_PMAC	
-	lwz	r24,GPR1(r21)
-	stw	r22,LAST_PC(r23)
-	stw	r24,USER_STACK(r23)
-#endif /* CONFIG_PMAC */
 	addi	r24,r1,STACK_FRAME_OVERHEAD
 	stw	r24,PT_REGS(r23)
 2:	addi	r2,r23,-TSS		/* set r2 to current */
@@ -630,7 +637,7 @@ load_up_fpu:
 	REST_32FPRS(0, r5)
 
 /* use last_task_used_math instead of fpu_tss */
-	lis	r3,last_task_used_math@h/*a*/
+	lis	r3,last_task_used_math@ha
 	addis	r3,r3,-KERNELBASE@h
 	subi	r4,r5,TSS
 	addis	r4,r4,KERNELBASE@h
@@ -654,7 +661,7 @@ load_up_fpu:
 	REST_GPR(20, r21)
 	REST_2GPRS(22, r21)
 	lwz	r21,GPR21(r21)
- 	SYNC
+	SYNC
 	rfi
 
 /*
@@ -682,14 +689,15 @@ Hash_msk = (((1 << Hash_bits) - 1) * 64)
 	.globl	hash_page
 hash_page:
 	/* Get PTE (linux-style) and check access */
-	lwz	r5,PG_TABLES(r5)	/* task's page tables */
-	lis	r2,-KERNELBASE@h
-	add	r5,r5,r2		/* convert to phys addr */
+	lwz	r5,MM-TSS(r5)		
+	addis	r5,r5,-KERNELBASE@h	/* get physical current->mm */
+	lwz	r5,PGD(r5)		/* get current->mm->pgd */	
+	addis	r5,r5,-KERNELBASE@h	/* convert to phys addr */
 	rlwimi	r5,r3,12,20,29		/* insert top 10 bits of address */
 	lwz	r5,0(r5)		/* get pmd entry */
 	rlwinm.	r5,r5,0,0,19		/* extract address of pte page */
 	beqlr-				/* return if no mapping */
-	add	r2,r5,r2
+	addis	r2,r5,-KERNELBASE@h
 	rlwimi	r2,r3,22,20,29		/* insert next 10 bits of address */
 	lwz	r6,0(r2)		/* get linux-style pte */
 	ori	r4,r4,1			/* set _PAGE_PRESENT bit in access */
@@ -819,58 +827,64 @@ start_here:
 	rlwinm	r9,r9,16,16,31
 	cmpi	0,r9,1
 	beq	4f			/* not needed for 601 */
-	mfspr	r7,HID0
-	andi.	r0,r7,HID0_DCE
-	ori	r7,r7,HID0_ICE|HID0_DCE
-	ori	r8,r7,HID0_ICFI
+	mfspr	r11,HID0
+	andi.	r0,r11,HID0_DCE
+	ori	r11,r11,HID0_ICE|HID0_DCE
+	ori	r8,r11,HID0_ICFI
 	bne	3f			/* don't invalidate the D-cache */
 	ori	r8,r8,HID0_DCI		/* unless it wasn't enabled */
-3:	sync
+3:
+	/* I haven't tested this yet so it's off now - Cort */
+	/* turn on dpm for 603 */
+	cmpi	0,r9,3
+	bne	10f
+	oris	r11,r11,HID0_DPM@h
+10:	
+	sync
 	mtspr	HID0,r8			/* enable and invalidate caches */
 	sync
-	mtspr	HID0,r7			/* enable caches */
+	mtspr	HID0,r11		/* enable caches */
 	sync
 	isync
 	cmpi	0,r9,4			/* check for 604 */
 	cmpi	1,r9,9			/* or 604e */
 	cror	2,2,6
 	bne	4f
-	ori	r7,r7,HID0_SIED|HID0_BHTE /* for 604[e], enable */
-	mtspr	HID0,r7			/* superscalar exec & br history tbl */
+	ori	r11,r11,HID0_SIED|HID0_BHTE /* for 604[e], enable */
+	mtspr	HID0,r11		/* superscalar exec & br history tbl */
 4:
 	/* ptr to current */
 	lis	r2,init_task_union@h
 	ori	r2,r2,init_task_union@l
 	/* ptr to phys current tss */
-	addis	r3,r2,-KERNELBASE@h
-	addi	r3,r3,TSS	/* init task's TSS */
-	mtspr	SPRG3,r3
+	addis	r11,r2,-KERNELBASE@h
+	addi	r11,r11,TSS	/* init task's TSS */
+	mtspr	SPRG3,r11
 	/* stack */
 	addi	r1,r2,TASK_UNION_SIZE
 	li	r0,0
 	stwu	r0,-STACK_FRAME_OVERHEAD(r1)
 
 	/* Clear out the BSS */
-	lis	r7,_end@ha
-	addi	r7,r7,_end@l
+	lis	r11,_end@ha
+	addi	r11,r11,_end@l
 	lis	r8,__bss_start@ha
 	addi	r8,r8,__bss_start@l
-	subf	r7,r8,r7
-	addi	r7,r7,3
-	rlwinm.	r7,r7,30,2,31
+	subf	r11,r8,r11
+	addi	r11,r11,3
+	rlwinm.	r11,r11,30,2,31
 	beq	2f
 	addi	r8,r8,-4
-	mtctr	r7
+	mtctr	r11
 	li	r0,0
 3:	stwu	r0,4(r8)
 	bdnz	3b
 2:
 /*
- * Initialize the prom stuff (powermacs only) and the MMU.
+ * Initialize the prom stuff and the MMU.
  */
-#ifdef CONFIG_PMAC
+	bl	identify_machine
 	bl	prom_init
-#endif /* CONFIG_PMAC */
 	bl	MMU_init
 
 /*
@@ -889,11 +903,6 @@ start_here:
 	rfi
 /* Load up the kernel context */
 2:
-#ifdef CONFIG_PREP
-	/* reload the bats now that MMU_init() has setup them up -- Cort */
-	LOAD_BATS(r3,r0)
-#endif
-
 	SYNC			/* Force all PTE updates to finish */
 	tlbia			/* Clear all TLB entries */
 	mtspr	SDR1,r6
@@ -905,8 +914,19 @@ start_here:
 	addi	r3,r3,1		/* increment VSID */
 	addis	r4,r4,0x1000	/* address of next segment */
 	bdnz	3b
-#ifdef CONFIG_PMAC
-	li	r0,0		/* zot the BATs */
+
+	lis	r3,_machine@ha
+	addis	r3,r3,-KERNELBASE@h
+	lwz	r0,_machine@l(r3)
+	cmpi	0,r0,_MACH_Pmac
+	beq	99f
+	
+/* on prep reload the bats now that MMU_init() has setup them up -- Cort */
+	LOAD_BATS(r3,r14)
+	b	100f
+	
+/* on pmac clear the bats out */	
+99:	li	r0,0		/* zot the BATs */
 #if 1
 	mtspr	IBAT0U,r0
 	mtspr	IBAT0L,r0
@@ -925,7 +945,7 @@ start_here:
 	mtspr	IBAT3L,r0
 	mtspr	DBAT3U,r0
 	mtspr	DBAT3L,r0
-#endif
+100:	
 /* Now turn on the MMU for real! */
 	li	r4,MSR_KERNEL
 	lis	r3,start_kernel@h
@@ -934,61 +954,6 @@ start_here:
 	mtspr	SRR1,r4
 	rfi			/* enable MMU and jump to start_kernel */
 
-#ifdef CONFIG_PREP
-/*
- * This is jumped to on prep systems right after the kernel is relocated
- * to its proper place in memory by the boot loader.  The expected layout
- * of the regs is:	
- *   R3: End of image
- *   R4: Start of image - 0x400
- *   R11: Start of command line string
- *   R12: End of command line string
- *
- * This just gets a minimal mmu environment setup so we can call
- * start_here() to do the real work.
- * -- Cort	
- */
-	.globl __start
-__start:	
-	.globl _start
-_start:	
-	lis	r7,0xF000		/* To mask upper 4 bits */
-/* save pointer to residual data */
-	lis	r1,resptr@h
-	ori	r1,r1,resptr@l
-	addis	r1,r1,-KERNELBASE@h
-	stw	r3,0(r1)
-/* save argument string */
-	li	r0,0		/* Null terminate string */
-	stb	r0,0(r12)
-	lis	r1,cmd_line@h
-	ori	r1,r1,cmd_line@l
-	addis	r1,r1,-KERNELBASE@h
-	subi	r1,r1,1
-	subi	r11,r11,1
-00:	lbzu	r0,1(r11)
-	cmpi	0,r0,0
-	stbu	r0,1(r1)
-	bne	00b
-/* setup the msr with sane values */
-	li	r0,MSR_
-	mtmsr	r0
-/* turn on the mmu with bats covering kernel enough to get started */
-	LOAD_BATS(r3,r0)
-	mfmsr	r3
-	ori	r3,r3,MSR_DR|MSR_IR
-	mtspr	SRR1,r3
-	lis	r3,10f@h
-	ori	r3,r3,10f@l
-	mtspr	SRR0,r3
-	SYNC
-	rfi				/* enables MMU */
-10:	lis	r7,start_here@ha	/* jump up to our copy at KERNELBASE */
-	addi	r7,r7,start_here@l
-	mtlr	r7
-	blr
-#endif /* CONFIG_PREP */
-	
 /*
  * FP unavailable trap from kernel - print a message, but let
  * the task use FP in the kernel until it returns to user mode.
@@ -1022,30 +987,22 @@ giveup_fpu_unmapped:
 giveup_fpu:
 	li	r6,0
 1:
-	addis	r3,r6,last_task_used_math@h/*a*/
+	addis	r3,r6,last_task_used_math@ha
 	lwz	r4,last_task_used_math@l(r3)
-#if 0		
-	addis	r3,r6,fpu_tss@ha
-	lwz	r4,fpu_tss@l(r3)
-#endif	
 	mfmsr	r5
 	ori	r5,r5,MSR_FP
 	SYNC
 	mtmsr	r5			/* enable use of fpu now */
 	SYNC
 	cmpi	0,r4,0
+	beqlr-				/* if no previous owner, done */
 	add	r4,r4,r6
-	beqlr				/* if no previous owner, done */
 	addi	r4,r4,TSS	        /* want TSS of last_task_used_math */
 	li	r5,0
 	stw	r5,last_task_used_math@l(r3)
-#if 0	
-	stw	r5,fpu_tss@l(r3)
-#endif
 	SAVE_32FPRS(0, r4)
 	mffs	fr0
 	stfd	fr0,TSS_FPSCR-4(r4)
-	lwz	r5,PT_REGS(r4)
 	lwz	r5,PT_REGS(r4)
 	add	r5,r5,r6
 	lwz	r3,_MSR-STACK_FRAME_OVERHEAD(r5)
@@ -1268,7 +1225,7 @@ int_return:
 	cmpi	0,r4,0
 	beq+	1f
 	addi	r3,r1,STACK_FRAME_OVERHEAD
-	bl	handle_IRQ
+	bl	do_IRQ
 	b	3b
 1:	lis	r4,bh_mask@ha
 	lwz	r4,bh_mask@l(r4)
@@ -1341,7 +1298,7 @@ _GLOBAL(fake_interrupt)
 	li	r0,0x0fac
 	stw	r0,TRAP(r1)
 	addi	r3,r1,STACK_FRAME_OVERHEAD
-	bl	handle_IRQ
+	bl	do_IRQ
 	addi	r1,r1,INT_FRAME_SIZE+STACK_UNDERHEAD
 	lwz	r0,4(r1)
 	mtlr	r0
@@ -1384,11 +1341,11 @@ _GLOBAL(flush_instruction_cache)
  * and invalidate the corresponding instruction cache blocks.
  * This is a no-op on the 601.
  *
- * store_cache_range(unsigned long start, unsigned long stop)
+ * flush_icache_range(unsigned long start, unsigned long stop)
  */
 CACHE_LINE_SIZE = 32
 LG_CACHE_LINE_SIZE = 5
-_GLOBAL(store_cache_range)
+_GLOBAL(flush_icache_range)
 	mfspr	r5,PVR
 	rlwinm	r5,r5,16,16,31
 	cmpi	0,r5,1
@@ -1521,7 +1478,6 @@ _GLOBAL(flush_hash_page)
 _GLOBAL(__main)
 	blr
 
-#ifdef CONFIG_PMAC
 /*
  * These exception handlers are used when we have called a prom
  * routine after we have taken over the exception vectors and MMU.
@@ -1716,7 +1672,6 @@ enter_prom:
 	lwz	r31,28(r1)
 	lwz	r1,0(r1)
 	blr
-#endif
 
 /*
  * We put a few things here that have to be page-aligned.
@@ -1726,7 +1681,6 @@ enter_prom:
 	.data
 	.globl	sdata
 sdata:
-	.space	2*4096
 	.globl	empty_zero_page
 empty_zero_page:
 	.space	4096
@@ -1735,7 +1689,6 @@ empty_zero_page:
 swapper_pg_dir:
 	.space	4096	
 
-#ifdef CONFIG_PREP
 /*
  * This space gets a copy of optional info passed to us by the bootstrap
  * Used to pass parameters into the kernel like root=/dev/sda1, etc.
@@ -1743,5 +1696,4 @@ swapper_pg_dir:
 	.globl	cmd_line
 cmd_line:
 	.space	512
-#endif /* CONFIG_PREP */
 

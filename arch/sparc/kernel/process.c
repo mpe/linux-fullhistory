@@ -105,6 +105,8 @@ out:
 /* This is being executed in task 0 'user space'. */
 int cpu_idle(void *unused)
 {
+	extern volatile int smp_commenced;
+
 	current->priority = -100;
 	while(1) {
 		/*
@@ -118,7 +120,8 @@ int cpu_idle(void *unused)
 		}
 		/* endless idle loop with no priority at all */
 		current->counter = -100;
-		schedule();
+		if(!smp_commenced || resched_needed())
+			schedule();
 	}
 }
 

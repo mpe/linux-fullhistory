@@ -441,7 +441,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs *regs)
 					regs->pc -= 2;
 				}
 			}
-			notify_parent(current);
+			notify_parent(current, SIGCHLD);
 			schedule();
 			if (!(signr = current->exit_code)) {
 			discard_frame:
@@ -489,7 +489,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs *regs)
 				current->exit_code = signr;
 				if (!(current->p_pptr->sig->action[SIGCHLD-1].sa_flags &
 				      SA_NOCLDSTOP))
-					notify_parent(current);
+					notify_parent(current, SIGCHLD);
 				schedule();
 				continue;
 

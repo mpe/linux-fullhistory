@@ -6,6 +6,8 @@
  * for more details.
  *
  * Copyright (C) 1996, 1997 by Ralf Baechle
+ *
+ * $Id: setup.c,v 1.2 1997/08/08 18:11:59 miguel Exp $
  */
 #include <linux/config.h>
 #include <linux/init.h>
@@ -102,6 +104,7 @@ __initfunc(void deskstation_setup(void))
 #endif
 	}
 	fd_cacheflush = deskstation_fd_cacheflush;
+	keyboard_setup = dtc_keyboard_setup;
 	request_region(0x00,0x20,"dma1");
 	request_region(0x40,0x20,"timer");
 	request_region(0x70,0x10,"rtc");

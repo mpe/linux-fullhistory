@@ -1007,12 +1007,13 @@ static void sr_detach(Scsi_Device * SDp)
     for(cpnt = scsi_CDs, i=0; i<sr_template.dev_max; i++, cpnt++)
 	if(cpnt->device == SDp) {
 	    kdev_t devi = MKDEV(MAJOR_NR, i);
+	    struct super_block * sb = get_super(devi);
 
 	    /*
 	     * Since the cdrom is read-only, no need to sync the device.
 	     * We should be kind to our buffer cache, however.
 	     */
-	    invalidate_inodes(devi);
+	    if (sb) invalidate_inodes(sb);
 	    invalidate_buffers(devi);
 
 	    /*

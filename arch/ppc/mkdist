@@ -1,9 +1,13 @@
 #!/bin/bash
 
-N=`basename $PWD`
-V=`echo $N | sed 's/linux-//'`
+V=`egrep ^VERSION Makefile | awk '{print $3}'`
+P=`egrep ^PATCHLEVEL Makefile | awk '{print $3}'`
+S=`egrep ^SUBLEVEL Makefile | awk '{print $3}'`
 date=`date +'%y%m%d'`
-mkdir -p ../dist
-mv zImage ../dist/zImage-$V-$date
-mv System.map ../dist/System.map-$V-$date
+
+echo zImage-$V.$P.$S-$date
+echo System.map-$V.$P.$S-$date
+
+rcp zImage charon:ppc/dist/kernel-images/zImage-$V.$P.$S-$date
+rcp System.map charon:ppc/dist/kernel-images/System.map-$V.$P.$S-$date
 

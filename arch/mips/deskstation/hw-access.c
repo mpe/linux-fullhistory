@@ -5,10 +5,13 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1996 by Ralf Baechle
+ * Copyright (C) 1996, 1997 by Ralf Baechle
+ *
+ * $Id: hw-access.c,v 1.2 1997/08/08 18:11:57 miguel Exp $
  */
 #include <linux/config.h>
 #include <linux/delay.h>
+#include <linux/kbdcntrlr.h>
 #include <linux/kernel.h>
 #include <linux/linkage.h>
 #include <linux/types.h>
@@ -194,3 +197,32 @@ struct feature deskstation_rpc44_feature = {
 	rtc_write_data
 };
 #endif
+
+static unsigned char dtc_read_input(void)
+{
+	return inb(KBD_DATA_REG);
+}
+
+static void dtc_write_output(unsigned char val)
+{
+	outb(val, KBD_DATA_REG);
+}
+
+static void dtc_write_command(unsigned char val)
+{
+	outb(val, KBD_CNTL_REG);
+}
+
+static unsigned char dtc_read_status(void)
+{
+	return inb(KBD_STATUS_REG);
+}
+
+static void dtc_rm200_keyboard_setup(void)
+{
+	kbd_read_input = dtc_read_input;
+	kbd_write_output = dtc_write_output;
+	kbd_write_command = dtc_write_command;
+	kbd_read_status = dtc_read_status;
+	request_region(0x60, 16, "keyboard");
+}

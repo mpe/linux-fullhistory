@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: r2300.c,v 1.2 1997/06/30 15:52:51 ralf Exp $
+ * $Id: r2300.c,v 1.3 1997/08/08 18:13:06 miguel Exp $
  */
 
 #include <linux/kernel.h>
@@ -245,6 +245,14 @@ static void r2300_show_regs(struct pt_regs * regs)
 	       (unsigned int) regs->cp0_cause);
 }
 
+static void r2300_add_wired_entry(unsigned long entrylo0, unsigned long entrylo1,
+				  unsigned long entryhi, unsigned long pagemask)
+{
+        /*
+	 * FIXME, to be done
+	 */
+}
+
 void ld_mmu_r2300(void)
 {
 	clear_page = r2300_clear_page;
@@ -267,6 +275,8 @@ void ld_mmu_r2300(void)
 	update_mmu_cache = r2300_update_mmu_cache;
 
 	show_regs = r2300_show_regs;
+    
+        add_wired_entry = r2300_add_wired_entry;
 
 	flush_tlb_all();
 }

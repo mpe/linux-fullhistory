@@ -4,7 +4,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *  Copyright (C) 1994, 1995, 1996  Ralf Baechle
  *
- * $Id: signal.c,v 1.7 1997/06/25 19:25:08 ralf Exp $
+ * $Id: signal.c,v 1.8 1997/08/08 18:12:30 miguel Exp $
  */
 #include <linux/config.h>
 #include <linux/sched.h>
@@ -292,7 +292,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
 			current->exit_code = signr;
 			current->state = TASK_STOPPED;
-			notify_parent(current);
+			notify_parent(current, SIGCHLD);
 			schedule();
 			if (!(signr = current->exit_code))
 				continue;
@@ -332,7 +332,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 				current->exit_code = signr;
 				if (!(current->p_pptr->sig->action[SIGCHLD-1].sa_flags & 
 						SA_NOCLDSTOP))
-					notify_parent(current);
+					notify_parent(current, SIGCHLD);
 				schedule();
 				continue;
 

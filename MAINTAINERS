@@ -95,6 +95,13 @@ M:	phil@tazenda.demon.co.uk
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
 
+NI5010 NETWORK DRIVER
+P:     Jan-Pascal van Best and Andreas Mohr
+M:     jvbest@qv3pluto.leidenuniv.nl (Best)
+M:     100.30936@germany.net (Mohr)
+L:     linux-net@vger.rutgers.edu
+S:     Maintained
+
 TLAN NETWORK DRIVER
 P:	James Banks
 M:	james.banks@caldera.com
@@ -259,9 +266,8 @@ L:	linux-m68k@phil.uni-sb.de
 S:	Maintained
 
 MODULE SUPPORT [GENERAL], KERNELD
-P:	Bjorn Ekwall
-M:	bj0rn@blox.se
-W:	http://www.pi.se/blox/modules/
+P:	Richard Henderson
+M:	richard@gnu.ai.mit.edu
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 

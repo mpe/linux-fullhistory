@@ -28,6 +28,7 @@ do {							\
 		__cli();				\
 		(task)->lock_depth = 0;			\
 		klock_info.akp = NO_PROC_ID;		\
+		membar("#LoadStore | #StoreStore");	\
 		klock_info.kernel_flag = 0;		\
 	}						\
 	release_irqlock(cpu);				\
@@ -45,7 +46,7 @@ do {										\
 				     " mov	%1, %%g2"			\
 				     : /* No outputs. */			\
 				     : "r" (klip), "r" (depth)			\
-				     : "g2", "g3", "g5", "g7", "memory", "cc");	\
+				     : "g2", "g3", "g5", "memory", "cc");	\
 	}									\
 } while(0)
 
@@ -63,9 +64,9 @@ extern __inline__ void lock_kernel(void)
 	__asm__ __volatile__("
 	mov	%%o7, %%g5
 	call	___lock_kernel
-	 ld	[%%g6 + %0], %%g2
+	 lduw	[%%g6 + %0], %%g2
 "	: : "i" (AOFF_task_lock_depth), "r" (klip)
-	: "g2", "g3", "g5", "g7", "memory", "cc");
+	: "g2", "g3", "g5", "memory", "cc");
 }
 
 /* Release kernel global lock. */
@@ -76,7 +77,7 @@ extern __inline__ void unlock_kernel(void)
 	__asm__ __volatile__("
 	mov	%%o7, %%g5
 	call	___unlock_kernel
-	 ld	[%%g6 + %0], %%g2
+	 lduw	[%%g6 + %0], %%g2
 "	: : "i" (AOFF_task_lock_depth), "r" (klip)
 	: "g2", "g3", "g5", "memory", "cc");
 }

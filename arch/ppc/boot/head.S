@@ -13,17 +13,6 @@
 start:
 	bl	start_
 start_:
-/* TEMP - No residual data on BeBox (yet) */
-#if 0	
-#define IS_BE_BOX	0x42654278	/* 'BeBx' */
-	lis	r2,IS_BE_BOX>>16
-	ori	r2,r2,IS_BE_BOX&0xFFFF
-	cmp	0,r30,r2
-	bne	notBeBox
-	li	r3,0
-#endif	
-notBeBox:
-/* TEMP */
 	mr	r11,r3		/* Save pointer to residual data */
 	mfmsr	r3		/* Turn off interrupts */
 	li	r4,0
@@ -48,7 +37,9 @@ notBeBox:
 	mtlr	r21
 	mtctr	r22
 	bctr			/* Jump to code */
-/* Relocate code to final resting spot */
+/* 
+ * no matter where we're loaded, move ourselves to -Ttext address
+ */
 relocate:
 	mflr	r3		/* Compute code bias */
 	subi	r3,r3,4
@@ -98,13 +89,26 @@ start_ldr:
 	mr	r5,r6			/* Checksum */
 	mr	r6,r11			/* Residual data */
 	bl	decompress_kernel
-	/*mr	r29,r3*/			/* R3 = TotalMemory */
-	/*lis	r28,hold_residual@h
-	ori	r28,r28,hold_residual@l*/
+	
 	/* changed to use r3 (as firmware does) for kernel
 	   as ptr to residual -- Cort*/
-	li	r5,0x100		/* Kernel code starts here */
-	mtlr	r5
+	lis	r6,cmd_line@h
+	ori	r6,r6,cmd_line@l
+	subi	r7,r7,1
+00:	lbzu	r2,1(r12)
+	cmpi	0,r2,0
+	bne	00b
+
+	/* r4,r5 have initrd_start, size */
+	lis	r2,initrd_start@h
+	ori	r2,r2,initrd_start@l
+	lwz	r4,0(r2)
+	lis	r2,initrd_end@h
+	ori	r2,r2,initrd_end@l
+	lwz	r5,0(r2)
+		
+	li	r9,0x00c		/* Kernel code starts here */
+	mtlr	r9
 	blr	
 hang:
 	b	hang	
@@ -141,6 +145,45 @@ _put_HID0:
 	mtspr	HID0,r3
 	blr
 
+/*
+ * Delay for a number of microseconds
+ * -- Use the BUS timer (assumes 66MHz)
+ */
+	.globl	udelay
+udelay:		
+	mfspr	r4,PVR
+	srwi	r4,r4,16
+	cmpi	0,r4,1		/* 601 ? */
+	bne	.udelay_not_601
+00:	li	r0,86	/* Instructions / microsecond? */
+	mtctr	r0
+10:	addi	r0,r0,0 /* NOP */
+	bdnz	10b
+	subic.	r3,r3,1
+	bne	00b
+	blr
+
+.udelay_not_601:		
+	mulli	r4,r3,1000	/* nanoseconds */
+	addi	r4,r4,59
+	li	r5,60
+	divw	r4,r4,r5	/* BUS ticks */
+1:	mftbu	r5
+	mftb	r6
+	mftbu	r7
+	cmp	0,r5,r7
+	bne	1b		/* Get [synced] base time */
+	addc	r9,r6,r4	/* Compute end time */
+	addze	r8,r5
+2:	mftbu	r5
+	cmp	0,r5,r8
+	blt	2b
+	bgt	3f
+	mftb	r6
+	cmp	0,r6,r9
+	blt	2b
+3:	blr		
+	
 /*
  * This space [buffer] is used to forceably flush the data cache when
  * running in copyback mode.  This is necessary IFF the data cache could

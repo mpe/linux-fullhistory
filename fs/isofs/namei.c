@@ -63,12 +63,14 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 {
 	unsigned long bufsize = ISOFS_BUFFER_SIZE(dir);
 	unsigned char bufbits = ISOFS_BUFFER_BITS(dir);
-	unsigned int block, i, f_pos, offset, inode_number;
+	unsigned int block, i, f_pos, offset, 
+		inode_number = 0; /* shut gcc up */
 	struct buffer_head * bh;
 	unsigned int old_offset;
 	int dlen, rrflag, match;
 	char * dpnt;
-	struct iso_directory_record * de;
+	struct iso_directory_record * de = NULL; /* shut gcc up */
+	char de_not_in_buf = 0;	  /* true if de is in kmalloc'd memory */
 	char c;
 
 	*ino = 0;
@@ -84,17 +86,36 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 	if (!block || !(bh = bread(dir->i_dev,block,bufsize))) return NULL;
   
 	while (f_pos < dir->i_size) {
-		de = (struct iso_directory_record *) (bh->b_data + offset);
-		inode_number = (block << bufbits) + (offset & (bufsize - 1));
 
-		/* If byte is zero, this is the end of file, or time to move to
-		   the next sector. Usually 2048 byte boundaries. */
+		/* if de is in kmalloc'd memory, do not point to the
+                   next de, instead we will move to the next sector */
+		if(!de_not_in_buf) {
+			de = (struct iso_directory_record *) 
+				(bh->b_data + offset);
+			inode_number = (block << bufbits) 
+				+ (offset & (bufsize - 1));
+		}
+
+		/* If byte is zero, or we had to fetch this de past
+		   the end of the buffer, this is the end of file, or
+		   time to move to the next sector. Usually 2048 byte
+		   boundaries. */
 		
-		if (*((unsigned char *) de) == 0) {
+		if (*((unsigned char *) de) == 0 || de_not_in_buf) {
+			if(de_not_in_buf) {
+				/* james@bpgc.com: Since we slopped
+                                   past the end of the last buffer, we
+                                   must start some way into the new
+                                   one */
+				de_not_in_buf = 0;
+				kfree(de);
+				offset -= bufsize;
+			}
+			else 
+				offset = 0;
 			brelse(bh);
-			offset = 0;
 			f_pos = ((f_pos & ~(ISOFS_BLOCK_SIZE - 1))
-				 + ISOFS_BLOCK_SIZE);
+				 + ISOFS_BLOCK_SIZE) + offset;
 
 			if( f_pos >= dir->i_size )
 			  {
@@ -111,11 +132,28 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 		offset += *((unsigned char *) de);
 		f_pos += *((unsigned char *) de);
 
-		/* Handle case where the directory entry spans two blocks.
-		   Usually 1024 byte boundaries */
+		/* james@bpgc.com: new code to handle case where the
+		   directory entry spans two blocks.  Usually 1024
+		   byte boundaries */
 		if (offset >= bufsize) {
-			printk("Directory entry extends past end of iso9660 block\n");
-	 		return 0;
+			struct buffer_head *bh_next;
+
+			/* james@bpgc.com: read the next block, and
+                           copy the split de into a newly kmalloc'd
+                           buffer */
+			block = isofs_bmap(dir,f_pos>>bufbits);
+			if (!block || 
+			    !(bh_next = bread(dir->i_dev,block,bufsize)))
+				return NULL;
+			
+			de = (struct iso_directory_record *)
+				kmalloc(offset - old_offset, GFP_KERNEL);
+			memcpy((char *)de, bh->b_data + old_offset, 
+			       bufsize - old_offset);
+			memcpy((char *)de + bufsize - old_offset,
+			       bh_next->b_data, offset - bufsize);
+			brelse(bh_next);
+			de_not_in_buf = 1;
 		}
 		
 		dlen = de->name_len[0];
@@ -161,11 +199,15 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 					   find_rock_ridge_relocation(de,dir));
 			}
 			*ino = inode_number;
+			if(de_not_in_buf) 
+				kfree(de);
 			return bh;
 		}
 	}
  out:
 	brelse(bh);
+	if(de_not_in_buf) 
+		kfree(de);
 	return NULL;
 }
 

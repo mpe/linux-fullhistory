@@ -13,29 +13,30 @@
 # Copyright (C) 1994, 1995, 1996 by Ralf Baechle
 # DECStation modifications by Paul M. Antoine, 1996
 #
-# $Id: Makefile,v 1.7 1997/06/30 15:52:03 ralf Exp $
+# $Id: Makefile,v 1.8 1997/08/08 18:11:35 miguel Exp $
 #
 
 #
 # Select the object file format to substitute into the linker script.
 #
 ifdef CONFIG_CPU_LITTLE_ENDIAN
-CROSS_COMPILE = mipsel-linux-
+CROSS_COMPILE	= mipsel-linux-
 ifdef CONFIG_MIPS_ECOFF
-oformat               = ecoff-littlemips
+oformat		= ecoff-littlemips
 else
-oformat               = elf32-littlemips
+oformat		= elf32-littlemips
 endif
 else
-CROSS_COMPILE = mips-linux-
+CROSS_COMPILE	= mips-linux-
 ifdef CONFIG_MIPS_ECOFF
-oformat               = ecoff-bigmips
+oformat		= ecoff-bigmips
 else
-oformat               = elf32-bigmips
+oformat		= elf32-bigmips
 endif
 endif
 
 LINKFLAGS	= -static -N
+MODFLAGS	+= -mlong-calls
 
 #
 # The new ELF GCC uses -G0 -mabicalls -fpic as default.  We don't need PIC

@@ -27,6 +27,9 @@ if [ "$CONFIG_MIPS_MAGNUM_4000" = "y" -o \
 fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   bool 'Support for SGI workstations' CONFIG_SGI
+  if [ "$CONFIG_SGI" = "y" ]; then
+     bool 'Support for SGI graphic devices' CONFIG_SGI_GRAPHICS
+  fi
 fi
 bool 'Support for SNI RM200 PCI' CONFIG_SNI_RM200_PCI
 if [ "$CONFIG_DESKSTATION_RPC44" = "y" -o \
@@ -69,6 +72,7 @@ else
 fi
 if [ "$CONFIG_CPU_LITTLE_ENDIAN" = "n" ]; then
   define_bool CONFIG_BINFMT_IRIX y
+  define_bool CONFIG_FORWARD_KEYBOARD y
 fi
 define_bool CONFIG_BINFMT_ELF y
 define_bool CONFIG_BINFMT_AOUT n
@@ -93,12 +97,7 @@ if [ "$CONFIG_MODULES" = "y" ]; then
   bool 'Kernel daemon support (e.g. autoload of modules)' CONFIG_KERNELD
 fi
 
-#
-# All SGI block devices are SCSI based AFAIK. -davem
-#
-if [ "$CONFIG_SGI" != "y" ]; then
-  source drivers/block/Config.in
-fi
+source drivers/block/Config.in
 
 if [ "$CONFIG_NET" = "y" ]; then
   source net/Config.in
@@ -215,3 +214,5 @@ if [ "$CONFIG_PROFILE" = "y" ]; then
   int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
 fi
 endmenu
+
+define_bool CONFIG_VGA_CONSOLE y

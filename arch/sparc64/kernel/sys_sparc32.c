@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.44 1997/07/20 09:18:47 davem Exp $
+/* $Id: sys_sparc32.c,v 1.43 1997/07/17 02:20:45 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -87,10 +87,11 @@ static unsigned long name_page_cache32 = 0;
 
 void putname32(char * name)
 {
-	if (name_page_cache32 == 0)
-		name_page_cache32 = (unsigned long) name;
-	else
-		free_page((unsigned long) name);
+	unsigned long page;
+
+	page = xchg(&name_page_cache32, ((unsigned long)name));
+	if(page)
+		free_page(page);
 }
 
 int getname32(u32 filename, char **result)
@@ -98,8 +99,7 @@ int getname32(u32 filename, char **result)
 	unsigned long page;
 	int retval;
 
-	page = name_page_cache32;
-	name_page_cache32 = 0;
+	page = xchg(&name_page_cache32, NULL);
 	if (!page) {
 		page = __get_free_page(GFP_KERNEL);
 		if (!page)
@@ -1010,7 +1010,7 @@ asmlinkage int sys32_select(int n, u32 inp, u32 outp, u32 exp, u32 tvp)
 	lock_kernel ();
 	p = (char *)__get_free_page (GFP_KERNEL);
 	if (!p)
-		goto out;
+		goto out_nofree;
 
 	q = (u32 *)p;
 	Inp = (u32 *)A(inp);
@@ -1079,6 +1079,7 @@ asmlinkage int sys32_select(int n, u32 inp, u32 outp, u32 exp, u32 tvp)
 	}
 out:
 	free_page ((unsigned long)p);
+out_nofree:
 	unlock_kernel();
 	return ret;
 }
@@ -2110,54 +2111,45 @@ asmlinkage int sparc32_sigaction (int signum, u32 action, u32 oldaction)
 {
 	struct sigaction32 new_sa, old_sa;
 	struct sigaction *p;
-	int err = -EINVAL;
 
-	lock_kernel();
 	if(signum < 0) {
 		current->tss.new_signal = 1;
 		signum = -signum;
 	}
-
 	if (signum<1 || signum>32)
-		goto out;
+		return -EINVAL;
 	p = signum - 1 + current->sig->action;
 	if (action) {
-		err = -EINVAL;
 		if (signum==SIGKILL || signum==SIGSTOP)
-			goto out;
-		err = -EFAULT;
+			return -EINVAL;
 		if(copy_from_user(&new_sa, A(action), sizeof(struct sigaction32)))
-			goto out;
+			return -EFAULT;
 		if (((__sighandler_t)A(new_sa.sa_handler)) != SIG_DFL && 
 		    ((__sighandler_t)A(new_sa.sa_handler)) != SIG_IGN) {
-			err = verify_area(VERIFY_READ, (__sighandler_t)A(new_sa.sa_handler), 1);
+			int err = verify_area(VERIFY_READ,
+					      (__sighandler_t)A(new_sa.sa_handler), 1);
 			if (err)
-				goto out;
+				return err;
 		}
 	}
-
 	if (oldaction) {
-		err = -EFAULT;
 		old_sa.sa_handler = (unsigned)(u64)(p->sa_handler);
 		old_sa.sa_mask = (sigset_t32)(p->sa_mask);
 		old_sa.sa_flags = (unsigned)(p->sa_flags);
 		old_sa.sa_restorer = (unsigned)(u64)(p->sa_restorer);
 		if (copy_to_user(A(oldaction), &old_sa, sizeof(struct sigaction32)))
-			goto out;	
+			return -EFAULT;
 	}
-
 	if (action) {
+		spin_lock_irq(&current->sig->siglock);
 		p->sa_handler = (__sighandler_t)A(new_sa.sa_handler);
 		p->sa_mask = (sigset_t)(new_sa.sa_mask);
 		p->sa_flags = new_sa.sa_flags;
 		p->sa_restorer = (void (*)(void))A(new_sa.sa_restorer);
 		check_pending(signum);
+		spin_unlock_irq(&current->sig->siglock);
 	}
-
-	err = 0;
-out:
-	unlock_kernel();
-	return err;
+	return 0;
 }
 
 /*
@@ -2298,7 +2290,7 @@ asmlinkage int sparc32_execve(struct pt_regs *regs)
                 base = 1;
 
 	lock_kernel();
-        filename = getname((char *)(unsigned long)(u32)regs->u_regs[base + UREG_I0]);
+        filename = getname((char *)A((u32)regs->u_regs[base + UREG_I0]));
 	error = PTR_ERR(filename);
         if(IS_ERR(filename))
                 goto out;
@@ -2720,9 +2712,7 @@ static int nfs_getfh32_res_trans(union nfsctl_res *kres, union nfsctl_res32 *res
 	return 0;
 }
 
-extern asmlinkage int sys_nfsservctl(int cmd,
-				     struct nfsctl_arg *arg,
-				     union nfsctl_res *resp);
+extern asmlinkage int sys_nfsservctl(int cmd, void *arg, void *resp);
 
 int asmlinkage sys32_nfsservctl(int cmd, u32 u_argp, u32 u_resp)
 {

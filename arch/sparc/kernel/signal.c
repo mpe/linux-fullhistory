@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.74 1997/05/15 19:57:09 davem Exp $
+/*  $Id: signal.c,v 1.75 1997/08/05 19:19:26 davem Exp $
  *  linux/arch/sparc/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -722,7 +722,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs,
 			/* This happens to be SMP safe so no need to
 			 * grab master kernel lock even in this case.
 			 */
-			notify_parent(current);
+			notify_parent(current, SIGCHLD);
 			schedule();
 			if (!(signr = current->exit_code))
 				continue;
@@ -773,7 +773,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs,
 				/* notify_parent() is SMP safe */
 				if(!(current->p_pptr->sig->action[SIGCHLD-1].sa_flags &
 				     SA_NOCLDSTOP))
-					notify_parent(current);
+					notify_parent(current, SIGCHLD);
 				schedule();
 				continue;
 

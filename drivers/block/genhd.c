@@ -672,6 +672,132 @@ rdb_done:
 }
 #endif /* CONFIG_AMIGA_PARTITION */
 
+#ifdef CONFIG_MAC_PARTITION
+#include <linux/ctype.h>
+
+/*
+ * Code to understand MacOS partition tables.
+ */
+
+#define MAC_PARTITION_MAGIC	0x504d
+
+/* type field value for A/UX or other Unix partitions */
+#define APPLE_AUX_TYPE	"Apple_UNIX_SVR2"
+
+struct mac_partition {
+	__u16	signature;	/* expected to be MAC_PARTITION_MAGIC */
+	__u16	res1;
+	__u32	map_count;	/* # blocks in partition map */
+	__u32	start_block;	/* absolute starting block # of partition */
+	__u32	block_count;	/* number of blocks in partition */
+	char	name[32];	/* partition name */
+	char	type[32];	/* string type description */
+	__u32	data_start;	/* rel block # of first data block */
+	__u32	data_count;	/* number of data blocks */
+	__u32	status;		/* partition status bits */
+	__u32	boot_start;
+	__u32	boot_size;
+	__u32	boot_load;
+	__u32	boot_load2;
+	__u32	boot_entry;
+	__u32	boot_entry2;
+	__u32	boot_cksum;
+	char	processor[16];	/* identifies ISA of boot */
+	/* there is more stuff after this that we don't need */
+};
+
+#define MAC_STATUS_BOOTABLE	8	/* partition is bootable */
+
+#define MAC_DRIVER_MAGIC	0x4552
+
+/* Driver descriptor structure, in block 0 */
+struct mac_driver_desc {
+	__u16	signature;	/* expected to be MAC_DRIVER_MAGIC */
+	__u16	block_size;
+	__u32	block_count;
+    /* ... more stuff */
+};
+
+static int mac_partition(struct gendisk *hd, kdev_t dev, unsigned long fsec)
+{
+	struct buffer_head *bh;
+	int blk, blocks_in_map;
+	int dev_bsize, dev_pos, pos;
+	unsigned secsize;
+	int first_bootable = 1;
+	struct mac_partition *part;
+	struct mac_driver_desc *md;
+
+	dev_bsize = get_ptable_blocksize(dev);
+	dev_pos = 0;
+	/* Get 0th block and look at the first partition map entry. */
+	if ((bh = bread(dev, 0, dev_bsize)) == 0) {
+	    printk("%s: error reading partition table\n",
+		   kdevname(dev));
+	    return -1;
+	}
+	md = (struct mac_driver_desc *) bh->b_data;
+	if (be16_to_cpu(md->signature) != MAC_DRIVER_MAGIC) {
+		brelse(bh);
+		return 0;
+	}
+	secsize = be16_to_cpu(md->block_size);
+	if (secsize >= dev_bsize) {
+		brelse(bh);
+		dev_pos = secsize;
+		if ((bh = bread(dev, secsize/dev_bsize, dev_bsize)) == 0) {
+			printk("%s: error reading partition table\n",
+			       kdevname(dev));
+			return -1;
+		}
+	}
+	part = (struct mac_partition *) (bh->b_data + secsize - dev_pos);
+	if (be16_to_cpu(part->signature) != MAC_PARTITION_MAGIC) {
+		brelse(bh);
+		return 0;		/* not a MacOS disk */
+	}
+	blocks_in_map = be32_to_cpu(part->map_count);
+	for (blk = 1; blk <= blocks_in_map; ++blk) {
+		pos = blk * secsize;
+		if (pos >= dev_pos + dev_bsize) {
+			brelse(bh);
+			dev_pos = pos;
+			if ((bh = bread(dev, pos/dev_bsize, dev_bsize)) == 0) {
+				printk("%s: error reading partition table\n",
+				       kdevname(dev));
+				return -1;
+			}
+		}
+		part = (struct mac_partition *) (bh->b_data + pos - dev_pos);
+		if (be16_to_cpu(part->signature) != MAC_PARTITION_MAGIC)
+			break;
+		blocks_in_map = be32_to_cpu(part->map_count);
+		add_partition(hd, current_minor,
+			fsec + be32_to_cpu(part->start_block) * (secsize/512),
+			be32_to_cpu(part->block_count) * (secsize/512));
+
+#ifdef CONFIG_PMAC
+		/*
+		 * If this is the first bootable partition, tell the
+		 * setup code, in case it wants to make this the root.
+		 */
+		if (first_bootable
+		    && (be32_to_cpu(part->status) & MAC_STATUS_BOOTABLE)
+		    && strcasecmp(part->processor, "powerpc") == 0) {
+			note_bootable_part(dev, blk);
+			first_bootable = 0;
+		}
+#endif /* CONFIG_PMAC */
+
+		++current_minor;
+	}
+	brelse(bh);
+	printk("\n");
+	return 1;
+}
+
+#endif /* CONFIG_MAC_PARTITION */
+
 #ifdef CONFIG_ATARI_PARTITION
 #include <asm/atari_rootsec.h>
 
@@ -846,6 +972,10 @@ static void check_partition(struct gendisk *hd, kdev_t dev)
 #endif
 #ifdef CONFIG_ATARI_PARTITION
 	if(atari_partition(hd, dev, first_sector))
+		return;
+#endif
+#ifdef CONFIG_MAC_PARTITION
+	if (mac_partition(hd, dev, first_sector))
 		return;
 #endif
 	printk(" unknown partition table\n");

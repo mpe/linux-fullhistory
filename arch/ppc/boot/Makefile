@@ -22,14 +22,15 @@
 	$(CC) -D__ASSEMBLY__ -traditional -c -o $*.o $<
 
 
-ZLINKFLAGS = -T ../ld.script -Ttext 0x00800000
+ZLINKFLAGS = -T ../vmlinux.lds -Ttext 0x00800000
 GZIP_FLAGS = -v9
 
 SYSTEM = $(TOPDIR)/vmlinux
-
-OBJECTS = head.o inflate.o unzip.o misc.o vreset.o
-
+OBJECTS = head.o inflate.o unzip.o misc.o vreset.o #kbd.o
 CFLAGS = -O2 -DSTDC_HEADERS -I$(TOPDIR)/include
+OBJCOPY = objcopy
+OBJCOPY_ARGS = -O elf32-powerpc
+
 
 all:	$(TOPDIR)/zImage
 
@@ -39,41 +40,40 @@ mkprep : mkprep.c
 find_name : find_name.c
 	$(HOSTCC) $(CFLAGSINC) -o find_name find_name.c
 
-mk_type41: mk_type41.c
-	$(HOSTCC) $(CFLAGSINC) -o mk_type41 mk_type41.c
-
-piggyback: piggyback.c
-	$(HOSTCC) $(CFLAGS) -o piggyback piggyback.c
-
 floppy: $(TOPDIR)/vmlinux zImage 
 	dd if=$(TOPDIR)/zImage of=/dev/fd0H1440 bs=64b
 
-netboot : $(TOPDIR)/vmlinux mkprep
-	mkprep $(TOPDIR)/vmlinux $(TOPDIR)/netboot
+floppy.initrd: $(TOPDIR)/vmlinux zImage 
+	dd if=$(TOPDIR)/zImage.initrd of=/dev/fd0H1440 bs=64b
 
-znetboot : zvmlinux mkprep
-	mkprep zvmlinux $(TOPDIR)/znetboot
-	cp $(TOPDIR)/znetboot /usr/local/tftpboot/vmlinux
+znetboot : zImage mkprep
+	cp $(TOPDIR)/zImage /usr/local/tftpboot/vmlinux
 
-rcpboot : znetboot
-	rcp $(TOPDIR)/znetboot charon:/usr/tftpboot/vmlinux
+znetboot.initrd : zImage.initrd mkprep
+	cp $(TOPDIR)/zImage.initrd /usr/local/tftpboot/vmlinux
 
 zImage: zvmlinux mkprep
 	mkprep -pbp zvmlinux $(TOPDIR)/zImage
 
-install: zImage
-	dd if=$(TOPDIR)/zImage of=/dev/sda4
-	ln -s /dev/sda4 $(INSTALL_PATH)/vmlinuz
-	cp $(TOPDIR)/System.map $(INSTALL_PATH)/	
+zImage.initrd: zvmlinux.initrd mkprep
+	mkprep -pbp zvmlinux.initrd $(TOPDIR)/zImage.initrd
 
-zvmlinux: $(OBJECTS) $(SYSTEM) mkprep  find_name
-	mkprep $(TOPDIR)/vmlinux -|gzip ${GZIP_FLAGS}|mkprep -asm - -|$(AS) -o piggy.o
-	$(LD) $(ZLINKFLAGS) -o zvmlinux $(OBJECTS) piggy.o
-	rm -f piggy.o
+zvmlinux: $(OBJECTS) $(SYSTEM) mkprep  find_name vmlinux.gz
+	$(LD) $(ZLINKFLAGS) -o zvmlinux.tmp $(OBJECTS)
+	$(OBJCOPY) $(OBJCOPY_ARGS) --add-section=image=vmlinux.gz \
+		zvmlinux.tmp $@
+	rm zvmlinux.tmp
+
+vmlinux.gz: $(TOPDIR)/vmlinux
+	dd bs=64k skip=1 if=$(TOPDIR)/vmlinux | gzip -vf9 - > vmlinux.gz
+
+zvmlinux.initrd: zvmlinux
+	$(OBJCOPY) $(OBJCOPY_ARGS) --add-section=initrd=ramdisk.image.gz \
+		zvmlinux $@
 
 clean:
-	rm -f piggyback zvmlinux mk_type41 mkprep mkboot find_name
-	rm -f $(TOPDIR)/{zImage,znetboot,netboot}
+	rm -f vmlinux* znetboot* zImage* zvmlinux* mkprep find_name
+	rm -f $(TOPDIR)/{zImage*,znetboot*,zvmlinux*,vmlinux*}
 
 fastdep:
 	$(TOPDIR)/scripts/mkdep *.[Sch] > .depend

@@ -311,5 +311,7 @@ typedef struct _RESIDUAL {
   unsigned char DevicePnPHeap[2*MAX_DEVICES*AVE_PNP_SIZE];
   } RESIDUAL;
 
+
+extern RESIDUAL res;
 #endif  /* ndef _RESIDUAL_ */
 

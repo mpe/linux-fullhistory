@@ -1,38 +1,11 @@
-.c.s:
-	$(CC) $(CFLAGS) -S $<
-.s.o:
-	$(AS) $(ASFLAGS) -o $*.o $<
-.c.o:
-	$(CC) $(CFLAGS) -c $<
-.S.s:
-	$(CPP) $(CFLAGS) -D__ASSEMBLY__ $< -o $*.s
+#
+# Makefile for ppc-specific library files..
+#
+
 .S.o:
-	$(CPP) $(CFLAGS) -D__ASSEMBLY__ $< -o $*.s
-	$(AS) $(ASFLAGS) -o $*.o $*.s
-	rm $*.s
+	$(CC) -D__ASSEMBLY__ -c $< -o $*.o
 
-HOST_CC = gcc
+O_TARGET = lib.o
+O_OBJS  = checksum.o string.o strcase.o
 
-L_TARGET = lib.o
-L_OBJS  = checksum.o cksum_support.o string.o
-
-${L_TARGET}: $(L_OBJS)
-	$(LD) -r -o ${L_TARGET} $(L_OBJS)
-
-
-fastdep:
-	$(TOPDIR)/scripts/mkdep *.[Sch] > .depend
-
-dep:
-	$(CPP) -M *.S *.c > .depend
-
-modules: 
-
-dummy:
-
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
+include $(TOPDIR)/Rules.make

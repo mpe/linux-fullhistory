@@ -514,3 +514,18 @@ int vdma_get_residue(int channel)
   
     return residual;
 }
+
+/*
+ * Get DMA channel enable register
+ */
+int vdma_get_enable(int channel)
+{
+    int enable;
+    
+    enable = r4030_read_reg32(JAZZ_R4030_CHNL_ENABLE+(channel<<5));
+    
+    if (vdma_debug)
+	printk("vdma_get_enable: channel %d: enable=%d\n",channel,enable);
+    
+    return enable;
+}

@@ -5,7 +5,6 @@
 #include <asm/page.h>
 #include <asm/byteorder.h>
 
-#ifdef CONFIG_PREP
 /* from the Carolina Technical Spec -- Cort */
 #define IBM_ACORN 0x82A
 #define SIO_CONFIG_RA	0x398
@@ -17,68 +16,49 @@
 #define IBM_L2_INVALIDATE 0x814
 #define IBM_SYS_CTL       0x81c
 
+extern unsigned long io_base;
 #define SLOW_DOWN_IO
 
-#ifndef PCI_DRAM_OFFSET
-#define PCI_DRAM_OFFSET  0x80000000
-#endif
+#define _IO_BASE io_base
+#undef PCI_DRAM_OFFSET
+#define PCI_DRAM_OFFSET  _IO_BASE
 
 #define readb(addr) (*(volatile unsigned char *) (addr))
-#define readw(addr) (*(volatile unsigned short *) (addr))
-#define readl(addr) (*(volatile unsigned int *) (addr))
+#define readw(addr) ld_le16((volatile unsigned short *)(addr))
+#define readl(addr) ld_le32(addr)
 #define writeb(b,addr) ((*(volatile unsigned char *) (addr)) = (b))
-#define writew(b,addr) ((*(volatile unsigned short *) (addr)) = (b))
-#define writel(b,addr) ((*(volatile unsigned int *) (addr)) = (b))
+#define writew(b,addr) st_le16((volatile unsigned short *)(addr),(b))
+#define writel(b,addr) st_le32((addr),(b))
 
-void outsl(int port, long *ptr, int len);
+#define insb(port, buf, ns)	_insb((unsigned char *)((port)+_IO_BASE), (buf), (ns))
+#define outsb(port, buf, ns)	_outsb((unsigned char *)((port)+_IO_BASE), (buf), (ns))
+#define insw(port, buf, ns)	_insw((unsigned short *)((port)+_IO_BASE), (buf), (ns))
+#define outsw(port, buf, ns)	_outsw((unsigned short *)((port)+_IO_BASE), (buf), (ns))
+#define insl(port, buf, nl)	_insl((unsigned long *)((port)+_IO_BASE), (buf), (nl))
+#define outsl(port, buf, nl)	_outsl((unsigned long *)((port)+_IO_BASE), (buf), (nl))
 
-__inline__ unsigned char outb(unsigned char val, int port);
-__inline__ unsigned short outw(unsigned short val, int port);
-__inline__ unsigned long outl(unsigned long val, int port);
-__inline__ unsigned char inb(int port);
-__inline__ unsigned short inw(int port);
-__inline__ unsigned long inl(int port);
+#define inb(port)		in_8((unsigned char *)((port)+_IO_BASE))
+#define outb(val, port)		out_8((unsigned char *)((port)+_IO_BASE), (val))
+#define inw(port)		in_le16((unsigned short *)((port)+_IO_BASE))
+#define outw(val, port)		out_le16((unsigned short *)((port)+_IO_BASE), (val))
+#define inl(port)		in_le32((unsigned *)((port)+_IO_BASE))
+#define outl(val, port)		out_le32((unsigned *)((port)+_IO_BASE), (val))
 
-#define inb_p inb
-#define inw_p inw
-#define inl_p inl
-#define outb_p outb
-#define outw_p outw
-#define outl_p outl
+#define inb_p(port)		in_8((unsigned char *)((port)+_IO_BASE))
+#define outb_p(val, port)	out_8((unsigned char *)((port)+_IO_BASE), (val))
+#define inw_p(port)		in_le16((unsigned short *)((port)+_IO_BASE))
+#define outw_p(val, port)	out_le16((unsigned short *)((port)+_IO_BASE), (val))
+#define inl_p(port)		in_le32(((unsigned *)port))
+#define outl_p(val, port)	out_le32((unsigned *)((port)+_IO_BASE), (val))
 
-#endif /* CONFIG_PREP */
+extern void _insb(volatile unsigned char *port, void *buf, int ns);
+extern void _outsb(volatile unsigned char *port, const void *buf, int ns);
+extern void _insw(volatile unsigned short *port, void *buf, int ns);
+extern void _outsw(volatile unsigned short *port, const void *buf, int ns);
+extern void _insl(volatile unsigned long *port, void *buf, int nl);
+extern void _outsl(volatile unsigned long *port, const void *buf, int nl);
 
-#ifdef CONFIG_PMAC
-/*
- * Read and write the non-volatile RAM.
- */
-extern int nvram_readb(int addr);
-extern void nvram_writeb(int addr, int val);
-
-#ifndef PCI_DRAM_OFFSET
-#define PCI_DRAM_OFFSET  0
-#endif
-
-#define inb(port)		in_8((unsigned char *)(port))
-#define outb(val, port)		out_8((unsigned char *)(port), (val))
-#define inw(port)		in_le16((unsigned short *)(port))
-#define outw(val, port)		out_le16((unsigned short *)(port), (val))
-#define inl(port)		in_le32((unsigned long *)(port))
-#define outl(val, port)		out_le32((unsigned long *)(port), (val))
-
-#define inb_p(port)		in_8((unsigned char *)(port))
-#define outb_p(val, port)	out_8((unsigned char *)(port), (val))
-#define inw_p(port)		in_le16((unsigned short *)(port))
-#define outw_p(val, port)	out_le16((unsigned short *)(port), (val))
-#define inl_p(port)		in_le32(((unsigned long *)port))
-#define outl_p(val, port)	out_le32((unsigned long *)(port), (val))
-
-#define insw(port, buf, ns)	_insw((unsigned short *)(port), (buf), (ns))
-#define outsw(port, buf, ns)	_outsw((unsigned short *)(port), (buf), (ns))
-#define insl(port, buf, nl)	_insl((unsigned long *)(port), (buf), (nl))
-#define outsl(port, buf, nl)	_outsl((unsigned long *)(port), (buf), (nl))
-#endif /* CONFIG_PMAC */
-
+#ifdef __KERNEL__
 /*
  * The PCI bus is inherently Little-Endian.  The PowerPC is being
  * run Big-Endian.  Thus all values which cross the [PCI] barrier
@@ -88,14 +68,16 @@ extern void nvram_writeb(int addr, int val);
  */
 extern inline unsigned long virt_to_bus(volatile void * address)
 {
-        if (address == (void *)0) return 0;
-        return ((unsigned long)((long)address - KERNELBASE + PCI_DRAM_OFFSET));
+        if (address == (void *)0)
+		return 0;
+        return (unsigned long)address - KERNELBASE + PCI_DRAM_OFFSET;
 }
 
 extern inline void * bus_to_virt(unsigned long address)
 {
-        if (address == 0) return 0;
-        return ((void *)(address - PCI_DRAM_OFFSET + KERNELBASE));
+        if (address == 0)
+		return 0;
+        return (void *)(address - PCI_DRAM_OFFSET + KERNELBASE);
 }
 
 /*
@@ -105,29 +87,20 @@ extern inline void * bus_to_virt(unsigned long address)
 extern void *ioremap(unsigned long address, unsigned long size);
 
 /*
- * Change virtual addresses to physical addresses and vv.
- * These are trivial on the 1:1 Linux/i386 mapping (but if we ever
- * make the kernel segment mapped at 0, we need to do translation
- * on the i386 as well)
+ * Change virtual addresses to physical addresses and vv, for
+ * addresses in the area where the kernel has the RAM mapped.
  */
 extern inline unsigned long virt_to_phys(volatile void * address)
 {
-	return (unsigned long) address;
+	return (unsigned long) address - KERNELBASE;
 }
 
 extern inline void * phys_to_virt(unsigned long address)
 {
-	return (void *) address;
+	return (void *) (address + KERNELBASE);
 }
 
-#define _IO_BASE ((unsigned long)0x80000000)
-
-/*
- * These are much more useful le/be io functions from Paul
- * than leXX_to_cpu() style functions since the ppc has
- * load/store byte reverse instructions
- *  -- Cort
- */
+#endif /* __KERNEL__ */
 
 /*
  * Enforce In-order Execution of I/O:

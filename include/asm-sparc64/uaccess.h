@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.20 1997/07/13 18:23:45 davem Exp $ */
+/* $Id: uaccess.h,v 1.21 1997/07/31 07:37:25 davem Exp $ */
 #ifndef _ASM_UACCESS_H
 #define _ASM_UACCESS_H
 
@@ -30,8 +30,11 @@
 
 #define get_fs() (current->tss.current_ds)
 #define get_ds() (KERNEL_DS)
+
+extern spinlock_t scheduler_lock;
+
 #define set_fs(val)				\
-do {						\
+do {	spin_lock(&scheduler_lock);		\
 	current->tss.current_ds = (val);	\
 	if ((val) == KERNEL_DS) {		\
 		flushw_user ();			\
@@ -41,6 +44,7 @@ do {						\
 	}					\
 	spitfire_set_secondary_context(current->tss.ctx); \
 	__asm__ __volatile__("flush %g6");	\
+	spin_unlock(&scheduler_lock);		\
 } while(0)
 
 #define __user_ok(addr,size) 1

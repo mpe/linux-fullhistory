@@ -71,7 +71,7 @@ extern __inline__ void mips_dma_mem_free(unsigned long addr, unsigned long size)
 {       
 #ifdef CONFIG_MIPS_JAZZ
         if (mips_machgroup == MACH_GROUP_JAZZ)
-		vdma_free(PHYSADDR(addr));
+		vdma_free(vdma_phys2log(PHYSADDR(addr)));
 #endif
 	free_pages(addr, __get_order(size));	
 }

@@ -7,10 +7,10 @@
 #define RLIMIT_STACK	3		/* max stack size */
 #define RLIMIT_CORE	4		/* max core file size */
 #define RLIMIT_RSS	5		/* max resident set size */
-#define RLIMIT_NOFILE	6		/* max number of open files */
-#define RLIMIT_AS	7		/* address space limit(?) */
-#define RLIMIT_NPROC	8		/* max number of processes */
-#define RLIMIT_MEMLOCK	9		/* max locked-in-memory address space */
+#define RLIMIT_NPROC	6		/* max number of processes */
+#define RLIMIT_NOFILE	7		/* max number of open files */
+#define RLIMIT_MEMLOCK	8		/* max locked-in-memory address space */
+#define RLIMIT_AS	9		/* address space limit(?) */
 
 #define RLIM_NLIMITS	10
 
@@ -24,10 +24,10 @@
     {_STK_LIM, _STK_LIM},			/* RLIMIT_STACK */	\
     {       0, LONG_MAX},			/* RLIMIT_CORE */	\
     {LONG_MAX, LONG_MAX},			/* RLIMIT_RSS */	\
-    { NR_OPEN,  NR_OPEN},			/* RLIMIT_NOFILE */	\
-    {LONG_MAX, LONG_MAX},			/* RLIMIT_AS */		\
     {MAX_TASKS_PER_USER, MAX_TASKS_PER_USER},	/* RLIMIT_NPROC */	\
+    { NR_OPEN,  NR_OPEN},			/* RLIMIT_NOFILE */	\
     {LONG_MAX, LONG_MAX},			/* RLIMIT_MEMLOCK */	\
+    {LONG_MAX, LONG_MAX},			/* RLIMIT_AS */		\
 }
 
 #endif /* __KERNEL__ */

@@ -1,7 +1,7 @@
-/* $Id: bitops.h,v 1.19 1997/07/08 10:17:37 davem Exp $
+/* $Id: bitops.h,v 1.22 1997/08/07 02:54:04 davem Exp $
  * bitops.h: Bit string operations on the V9.
  *
- * Copyright 1996 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
  */
 
 #ifndef _SPARC64_BITOPS_H
@@ -21,84 +21,117 @@
 
 extern __inline__ unsigned long test_and_set_bit(unsigned long nr, void *addr)
 {
-	unsigned long oldbit;
-	unsigned long temp0, temp1;
 	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
+	unsigned long oldbit;
 
 	__asm__ __volatile__("
-	ldx		[%4], %0
-1:
-	andcc		%0, %3, %2
+1:	ldx		[%2], %%g7
+	andcc		%%g7, %1, %0
 	bne,pn		%%xcc, 2f
-	 xor		%0, %3, %1
-	casx 		[%4], %0, %1
-	cmp		%0, %1
-	bne,a,pn	%%xcc, 1b
-	 ldx		[%4], %0
+	 xor		%%g7, %1, %%g5
+	casx 		[%2], %%g7, %%g5
+	cmp		%%g7, %%g5
+	bne,pn		%%xcc, 1b
+	 nop
 2:
-"	: "=&r" (temp0), "=&r" (temp1), "=&r" (oldbit)
+"	: "=&r" (oldbit)
 	: "HIr" (1UL << (nr & 63)), "r" (m)
-	: "cc");
+	: "g5", "g7", "cc", "memory");
 	return oldbit != 0;
 }
 
 extern __inline__ void set_bit(unsigned long nr, void *addr)
 {
-	(void) test_and_set_bit(nr, addr);
+	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
+
+	__asm__ __volatile__("
+1:	ldx		[%1], %%g7
+	andcc		%%g7, %0, %%g0
+	bne,pn		%%xcc, 2f
+	 xor		%%g7, %0, %%g5
+	casx 		[%1], %%g7, %%g5
+	cmp		%%g7, %%g5
+	bne,pn		%%xcc, 1b
+	 nop
+2:
+"	: /* no outputs */
+	: "HIr" (1UL << (nr & 63)), "r" (m)
+	: "g5", "g7", "cc", "memory");
 }
 
 extern __inline__ unsigned long test_and_clear_bit(unsigned long nr, void *addr)
 {
-	unsigned long oldbit;
-	unsigned long temp0, temp1;
 	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
+	unsigned long oldbit;
 
 	__asm__ __volatile__("
-	ldx		[%4], %0
-1:
-	andcc		%0, %3, %2
+1:	ldx		[%2], %%g7
+	andcc		%%g7, %1, %0
 	be,pn		%%xcc, 2f
-	 xor		%0, %3, %1
-	casx 		[%4], %0, %1
-	cmp		%0, %1
-	bne,a,pn	%%xcc, 1b
-	 ldx		[%4], %0
+	 xor		%%g7, %1, %%g5
+	casx 		[%2], %%g7, %%g5
+	cmp		%%g7, %%g5
+	bne,pn		%%xcc, 1b
+	 nop
 2:
-"	: "=&r" (temp0), "=&r" (temp1), "=&r" (oldbit)
+"	: "=&r" (oldbit)
 	: "HIr" (1UL << (nr & 63)), "r" (m)
-	: "cc");
+	: "g5", "g7", "cc", "memory");
 	return oldbit != 0;
 }
 
 extern __inline__ void clear_bit(unsigned long nr, void *addr)
 {
-	(void) test_and_clear_bit(nr, addr);
+	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
+
+	__asm__ __volatile__("
+1:	ldx		[%1], %%g7
+	andcc		%%g7, %0, %%g0
+	be,pn		%%xcc, 2f
+	 xor		%%g7, %0, %%g5
+	casx 		[%1], %%g7, %%g5
+	cmp		%%g7, %%g5
+	bne,pn		%%xcc, 1b
+	 nop
+2:
+"	: /* no outputs */
+	: "HIr" (1UL << (nr & 63)), "r" (m)
+	: "g5", "g7", "cc", "memory");
 }
 
 extern __inline__ unsigned long test_and_change_bit(unsigned long nr, void *addr)
 {
-	unsigned long oldbit;
-	unsigned long temp0, temp1;
 	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
+	unsigned long oldbit;
 
 	__asm__ __volatile__("
-	ldx		[%4], %0
-1:
-	and		%0, %3, %2
-	xor		%0, %3, %1
-	casx 		[%4], %0, %1
-	cmp		%0, %1
-	bne,a,pn	%%xcc, 1b
-	 ldx		[%4], %0
-"	: "=&r" (temp0), "=&r" (temp1), "=&r" (oldbit)
+1:	ldx		[%2], %%g7
+	and		%%g7, %1, %0
+	xor		%%g7, %1, %%g5
+	casx 		[%2], %%g7, %%g5
+	cmp		%%g7, %%g5
+	bne,pn		%%xcc, 1b
+	 nop
+"	: "=&r" (oldbit)
 	: "HIr" (1UL << (nr & 63)), "r" (m)
-	: "cc");
+	: "g5", "g7", "cc", "memory");
 	return oldbit != 0;
 }
 
 extern __inline__ void change_bit(unsigned long nr, void *addr)
 {
-	(void) test_and_change_bit(nr, addr);
+	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
+
+	__asm__ __volatile__("
+1:	ldx		[%1], %%g7
+	xor		%%g7, %0, %%g5
+	casx 		[%1], %%g7, %%g5
+	cmp		%%g7, %%g5
+	bne,pn		%%xcc, 1b
+	 nop
+"	: /* no outputs */
+	: "HIr" (1UL << (nr & 63)), "r" (m)
+	: "g5", "g7", "cc", "memory");
 }
 
 extern __inline__ unsigned long test_bit(int nr, __const__ void *addr)
@@ -201,47 +234,43 @@ found_middle:
  */
 extern __inline__ int set_le_bit(int nr,void * addr)
 {
-	unsigned long oldbit;
-	unsigned long temp0, temp1;
 	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
+	unsigned long oldbit;
 
 	__asm__ __volatile__("
-	lduwa		[%4] %5, %0
-1:
-	andcc		%0, %3, %2
+1:	lduwa		[%2] %3, %%g7
+	andcc		%%g7, %1, %0
 	bne,pn		%%icc, 2f
-	 xor		%0, %3, %1
-	casa 		[%4] %5, %0, %1
-	cmp		%0, %1
-	bne,a,pn	%%icc, 1b
-	 lduwa		[%4] %5, %0
+	 xor		%%g7, %1, %%g5
+	casa 		[%2] %3, %%g7, %%g5
+	cmp		%%g7, %%g5
+	bne,pn		%%icc, 1b
+	 nop
 2:
-"	: "=&r" (temp0), "=&r" (temp1), "=&r" (oldbit)
+"	: "=&r" (oldbit)
 	: "HIr" (1UL << (nr & 31)), "r" (m), "i" (ASI_PL)
-	: "cc");
+	: "g5", "g7", "cc", "memory");
 	return oldbit != 0;
 }
 
 extern __inline__ int clear_le_bit(int nr, void * addr)
 {
-	unsigned long oldbit;
-	unsigned long temp0, temp1;
 	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
+	unsigned long oldbit;
 
 	__asm__ __volatile__("
-	lduwa		[%4] %5, %0
-1:
-	andcc		%0, %3, %2
+1:	lduwa		[%2] %3, %%g7
+	andcc		%%g7, %1, %0
 	be,pn		%%icc, 2f
-	 xor		%0, %3, %1
-	casa 		[%4] %5, %0, %1
-	cmp		%0, %1
-	bne,a,pn	%%icc, 1b
-	 lduwa		[%4] %5, %0
+	 xor		%%g7, %1, %%g5
+	casa 		[%2] %3, %%g7, %%g5
+	cmp		%%g7, %%g5
+	bne,pn		%%icc, 1b
+	 nop
 2:
-"	: "=&r" (temp0), "=&r" (temp1), "=&r" (oldbit)
+"	: "=&r" (oldbit)
 	: "HIr" (1UL << (nr & 31)), "r" (m), "i" (ASI_PL)
-	: "cc");
+	: "g5", "g7", "cc", "memory");
 	return oldbit != 0;
 }
 

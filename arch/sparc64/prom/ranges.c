@@ -1,15 +1,21 @@
-/* $Id: ranges.c,v 1.3 1997/03/21 12:33:36 jj Exp $
+/* $Id: ranges.c,v 1.7 1997/08/15 06:44:29 davem Exp $
  * ranges.c: Handle ranges in newer proms for obio/sbus.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
+#include <linux/config.h>
 #include <linux/init.h>
 #include <asm/openprom.h>
 #include <asm/oplib.h>
 #include <asm/sbus.h>
+#include <asm/fhc.h>
 #include <asm/system.h>
+#ifdef CONFIG_PCI
+#include <asm/pbm.h>
+#include <asm/ebus.h>
+#endif
 
 struct linux_prom_ranges promlib_obio_ranges[PROMREG_MAX];
 int num_obio_ranges;
@@ -62,6 +68,35 @@ void prom_apply_sbus_ranges(struct linux_sbus *sbus, struct linux_prom_registers
 	}
 }
 
+/* Apply probed fhc ranges to registers passed, if no ranges return. */
+void prom_apply_fhc_ranges(struct linux_fhc *fhc,
+			   struct linux_prom_registers *regs,
+			   int nregs)
+{
+	if(fhc->num_fhc_ranges)
+		prom_adjust_regs(regs, nregs, fhc->fhc_ranges,
+				 fhc->num_fhc_ranges);
+}
+
+/* Apply probed central ranges to registers passed, if no ranges return. */
+void prom_apply_central_ranges(struct linux_central *central,
+			       struct linux_prom_registers *regs, int nregs)
+{
+	if(central->num_central_ranges)
+		prom_adjust_regs(regs, nregs, central->central_ranges,
+				 central->num_central_ranges);
+}
+
+#ifdef CONFIG_PCI
+void prom_apply_ebus_ranges(struct linux_ebus *ebus,
+			    struct linux_prom_registers *regs, int nregs)
+{
+	if (ebus->num_ebus_ranges)
+		prom_adjust_regs(regs, nregs, ebus->ebus_ranges,
+				 ebus->num_ebus_ranges);
+}
+#endif
+
 __initfunc(void prom_ranges_init(void))
 {
 }
@@ -77,6 +112,74 @@ __initfunc(void prom_sbus_ranges_init(int iommund, struct linux_sbus *sbus))
 	if (success != -1)
 		sbus->num_sbus_ranges = (success/sizeof(struct linux_prom_ranges));
 }
+
+__initfunc(void prom_central_ranges_init(int cnode, struct linux_central *central))
+{
+	int success;
+	
+	central->num_central_ranges = 0;
+	success = prom_getproperty(central->prom_node, "ranges",
+				   (char *) central->central_ranges,
+				   sizeof (central->central_ranges));
+	if (success != -1)
+		central->num_central_ranges = (success/sizeof(struct linux_prom_ranges));
+}
+
+__initfunc(void prom_fhc_ranges_init(int fnode, struct linux_fhc *fhc))
+{
+	int success;
+	
+	fhc->num_fhc_ranges = 0;
+	success = prom_getproperty(fhc->prom_node, "ranges",
+				   (char *) fhc->fhc_ranges,
+				   sizeof (fhc->fhc_ranges));
+	if (success != -1)
+		fhc->num_fhc_ranges = (success/sizeof(struct linux_prom_ranges));
+}
+
+#ifdef CONFIG_PCI
+__initfunc(void prom_ebus_ranges_init(struct linux_ebus *ebus))
+{
+	struct ebus_range {
+		unsigned int	cld_space;
+		unsigned int	cld_base;
+		unsigned int	prn_space;
+		unsigned int	prn_base_hi;
+		unsigned int	prn_base_lo;
+		unsigned int	size;
+	} ranges[PROMREG_MAX];
+	int i, success;
+
+	ebus->num_ebus_ranges = 0;
+	success = prom_getproperty(ebus->prom_node, "ranges",
+				   (char *)ranges, sizeof (ranges));
+	if (success != -1)
+		ebus->num_ebus_ranges = (success/sizeof(struct ebus_range));
+
+	for (i = 0; i < ebus->num_ebus_ranges; i++) {
+		ebus->ebus_ranges[i].ot_child_space = ranges[i].cld_space;
+		ebus->ebus_ranges[i].ot_child_base = ranges[i].cld_base;
+		ebus->ebus_ranges[i].ot_parent_space =
+				ranges[i].prn_space & 0x0f000000;
+		if (ranges[i].prn_base_hi)
+			prom_printf("WARNING: %s: ot_parent_base high lost\n");
+		ebus->ebus_ranges[i].ot_parent_base = ranges[i].prn_base_lo;
+		ebus->ebus_ranges[i].or_size = ranges[i].size;
+	}
+}
+
+__initfunc(void prom_pbm_ranges_init(int pnode, struct linux_pbm_info *pbm))
+{
+	int success;
+
+	pbm->num_pbm_ranges = 0;
+	success = prom_getproperty(pbm->prom_node, "ranges",
+				   (char *)&pbm->pbm_ranges,
+				   sizeof(pbm->pbm_ranges));
+	if(success != -1)
+		pbm->num_pbm_ranges = (success/sizeof(struct linux_prom_pci_ranges));
+}
+#endif
 
 void
 prom_apply_generic_ranges (int node, int parent, struct linux_prom_registers *regs, int nregs)

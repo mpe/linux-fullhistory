@@ -22,6 +22,10 @@ MOD_LIST_NAME := BLOCK_MODULES
 LX_OBJS :=
 MX_OBJS :=
 
+ifeq ($(CONFIG_MAC_FLOPPY),y)
+L_OBJS += swim3.o
+endif
+
 ifeq ($(CONFIG_BLK_DEV_FD),y)
 L_OBJS += floppy.o
 else

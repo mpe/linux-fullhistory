@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.5 1997/07/23 11:32:06 davem Exp $
+/* $Id: time.c,v 1.9 1997/08/12 04:12:40 ecd Exp $
  * time.c: UltraSparc timer and TOD clock support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -8,6 +8,7 @@
  * Copyright (C) 1996 Thomas K. Dyas (tdyas@eden.rutgers.edu)
  */
 
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -23,6 +24,10 @@
 #include <asm/timer.h>
 #include <asm/irq.h>
 #include <asm/io.h>
+#include <asm/sbus.h>
+#include <asm/fhc.h>
+#include <asm/pbm.h>
+#include <asm/ebus.h>
 
 struct mostek48t02 *mstk48t02_regs = 0;
 struct mostek48t08 *mstk48t08_regs = 0;
@@ -155,33 +160,55 @@ static int has_low_battery(void)
 
 
 /* Probe for the real time clock chip. */
-__initfunc(static void clock_probe(void))
+__initfunc(static void set_system_time(void))
+{
+	unsigned int year, mon, day, hour, min, sec;
+	struct mostek48t02 *mregs;
+
+	do_get_fast_time = do_gettimeofday;
+
+	mregs = mstk48t02_regs;
+	if(!mregs) {
+		prom_printf("Something wrong, clock regs not mapped yet.\n");
+		prom_halt();
+	}		
+
+	mregs->creg |= MSTK_CREG_READ;
+	sec = MSTK_REG_SEC(mregs);
+	min = MSTK_REG_MIN(mregs);
+	hour = MSTK_REG_HOUR(mregs);
+	day = MSTK_REG_DOM(mregs);
+	mon = MSTK_REG_MONTH(mregs);
+	year = MSTK_CVT_YEAR( MSTK_REG_YEAR(mregs) );
+	xtime.tv_sec = mktime(year, mon, day, hour, min, sec);
+	xtime.tv_usec = 0;
+	mregs->creg &= ~MSTK_CREG_READ;
+}
+
+__initfunc(void clock_probe(void))
 {
 	struct linux_prom_registers clk_reg[2];
 	char model[128];
-	int node, sbusnd, err;
+	int node, busnd = -1, err;
 
-	/* XXX HACK HACK HACK, delete me soon */
-	struct linux_prom_ranges XXX_sbus_ranges[PROMREG_MAX];
-	int XXX_sbus_nranges;
+	if(central_bus != NULL) {
+		busnd = central_bus->child->prom_node;
+	}
+#ifdef CONFIG_PCI
+	else if (ebus_chain != NULL) {
+		busnd = ebus_chain->prom_node;
+	}
+#endif
+	else {
+		busnd = SBus_chain->prom_node;
+	}
 
-	node = prom_getchild(prom_root_node);
-	sbusnd = prom_searchsiblings(node, "sbus");
-	node = prom_getchild(sbusnd);
-
-	if(node == 0 || node == -1) {
-		prom_printf("clock_probe: Serious problem can't find sbus PROM node.\n");
+	if(busnd == -1) {
+		prom_printf("clock_probe: problem, cannot find bus to search.\n");
 		prom_halt();
 	}
 
-	/* XXX FIX ME */
-	err = prom_getproperty(sbusnd, "ranges", (char *) XXX_sbus_ranges,
-			       sizeof(XXX_sbus_ranges));
-	if(err == -1) {
-		prom_printf("clock_probe: Cannot get XXX sbus ranges\n");
-		prom_halt();
-	}
-	XXX_sbus_nranges = (err / sizeof(struct linux_prom_ranges));
+	node = prom_getchild(busnd);
 
 	while(1) {
 		prom_getstring(node, "model", model, sizeof(model));
@@ -199,12 +226,34 @@ __initfunc(static void clock_probe(void))
 		err = prom_getproperty(node, "reg", (char *)clk_reg,
 				       sizeof(clk_reg));
 		if(err == -1) {
-			prom_printf("clock_probe: Cannot make Mostek\n");
+			prom_printf("clock_probe: Cannot get Mostek reg property\n");
 			prom_halt();
 		}
 
-		/* XXX fix me badly */
-		prom_adjust_regs(clk_reg, 1, XXX_sbus_ranges, XXX_sbus_nranges);
+		if(central_bus) {
+			prom_apply_fhc_ranges(central_bus->child, clk_reg, 1);
+			prom_apply_central_ranges(central_bus, clk_reg, 1);
+		}
+#ifdef CONFIG_PCI
+		else if (ebus_chain) {
+			struct linux_ebus_device *edev;
+
+			for_each_ebusdev(edev, ebus_chain)
+				if (edev->prom_node == node)
+					break;
+			if (!edev) {
+				prom_printf("%s: Mostek not probed by EBUS\n");
+				prom_halt();
+			}
+
+			clk_reg[0] = edev->regs[0];
+		}
+#endif
+		else {
+			prom_adjust_regs(clk_reg, 1,
+					 SBus_chain->sbus_ranges,
+					 SBus_chain->num_sbus_ranges);
+		}
 
 		if(model[5] == '0' && model[6] == '2') {
 			mstk48t02_regs = (struct mostek48t02 *)
@@ -234,6 +283,8 @@ __initfunc(static void clock_probe(void))
 	/* Kick start the clock if it is completely stopped. */
 	if (mstk48t02_regs->sec & MSTK_STOP)
 		kick_start_clock();
+
+	set_system_time();
 }
 
 #ifndef BCD_TO_BIN
@@ -246,29 +297,10 @@ __initfunc(static void clock_probe(void))
 
 __initfunc(void time_init(void))
 {
-	unsigned int year, mon, day, hour, min, sec;
-	struct mostek48t02 *mregs;
-
-	do_get_fast_time = do_gettimeofday;
-
-	clock_probe();
-
-	mregs = mstk48t02_regs;
-	if(!mregs) {
-		prom_printf("Something wrong, clock regs not mapped yet.\n");
-		prom_halt();
-	}		
-
-	mregs->creg |= MSTK_CREG_READ;
-	sec = MSTK_REG_SEC(mregs);
-	min = MSTK_REG_MIN(mregs);
-	hour = MSTK_REG_HOUR(mregs);
-	day = MSTK_REG_DOM(mregs);
-	mon = MSTK_REG_MONTH(mregs);
-	year = MSTK_CVT_YEAR( MSTK_REG_YEAR(mregs) );
-	xtime.tv_sec = mktime(year, mon, day, hour, min, sec);
-	xtime.tv_usec = 0;
-	mregs->creg &= ~MSTK_CREG_READ;
+	/* clock_probe() is now done at end of sbus_init on sparc64
+	 * so that both sbus and fhc bus information is probed and
+	 * available.
+	 */
 }
 
 extern void init_timers(void (*func)(int, void *, struct pt_regs *));
@@ -307,8 +339,11 @@ void do_gettimeofday(struct timeval *tv)
 	sethi	%hi(xtime), %g2
 	ldx	[%o1 + %lo(linux_timers)], %g3
 1:	ldd	[%g2 + %lo(xtime)], %o4
+	membar	#LoadLoad | #MemIssue
 	ldx	[%g3], %o1
+	membar	#LoadLoad | #MemIssue
 	ldd	[%g2 + %lo(xtime)], %o2
+	membar	#LoadLoad
 	xor	%o4, %o2, %o2
 	xor	%o5, %o3, %o3
 	orcc	%o2, %o3, %g0

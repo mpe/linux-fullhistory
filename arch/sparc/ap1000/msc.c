@@ -338,7 +338,7 @@ static inline void qbmful_interrupt(void)
 #endif
 		MSC_OUT(MSC_INTR, AP_SET_INTR_MASK << MSC_INTR_QBMFUL_SH);
 		intr_mask |= (AP_INTR_REQ << MSC_INTR_QBMFUL_SH);
-		need_resched = 1;
+		resched_force();
 		block_parallel_tasks = 1;
 		mark_bh(TQUEUE_BH);
 	}

@@ -1,13 +1,13 @@
 /*
  *  arch/ppc/kernel/irq.c
  *
- *  Power Macintosh version
- *    Copyright (C) 1996 Paul Mackerras (paulus@cs.anu.edu.au)
- *
  *  Derived from arch/i386/kernel/irq.c
  *    Copyright (C) 1992 Linus Torvalds
  *  Adapted from arch/i386 by Gary Thomas
- *  Modified by Cort Dougan (cort@cs.nmt.edu) 
+ *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
+ *  Updated and modified by Cort Dougan (cort@cs.nmt.edu)
+ *  Adapted for Power Macintosh by Paul Mackerras
+ *    Copyright (C) 1996 Paul Mackerras (paulus@cs.anu.edu.au)
  *
  * This file contains the code used by various IRQ handling routines:
  * asking for different IRQ's should be done through these routines
@@ -15,11 +15,7 @@
  * shouldn't result in any weird surprises, and installing new handlers
  * should be easier.
  */
-	
-/*
- * IRQ's are in fact implemented a bit like signal handlers for the kernel.
- * Naturally it's not a 1:1 relation, but there are similarities.
- */
+
 
 #include <linux/ptrace.h>
 #include <linux/errno.h>
@@ -30,20 +26,15 @@
 #include <linux/interrupt.h>
 #include <linux/timex.h>
 #include <linux/config.h>
+#include <linux/init.h>
+#include <linux/malloc.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/bitops.h>
 
-#define IRQ_FLAG	((unsigned *)0xf3000020)
-#define IRQ_ENABLE	((unsigned *)0xf3000024)
-#define IRQ_ACK		((unsigned *)0xf3000028)
-#define IRQ_LEVEL	((unsigned *)0xf300002c)
-
-#define KEYBOARD_IRQ	20	/* irq number for command-power interrupt */
-
-#undef SHOW_IRQ 1
+#undef SHOW_IRQ
 
 unsigned lost_interrupts = 0;
 
@@ -51,100 +42,114 @@ unsigned int local_irq_count[NR_CPUS];
 static struct irqaction irq_action[32];
 
 /*
- * This contains the irq mask for both irq controllers
+ * These are set to the appropriate functions by init_IRQ()
  */
-static unsigned int cached_irq_mask = 0xffff;
+void (*mask_and_ack_irq)(int irq_nr);
+void (*set_irq_mask)(int irq_nr);
 
-#define cached_21	(((char *)(&cached_irq_mask))[0])
-#define cached_A1	(((char *)(&cached_irq_mask))[1])
-
-
+static unsigned int cached_irq_mask = 0xffffffff;
+#define cached_21	(((char *)(&cached_irq_mask))[3])
+#define cached_A1	(((char *)(&cached_irq_mask))[2])
+static void no_action(int cpl, void *dev_id, struct pt_regs *regs) { }
 int __ppc_bh_counter;
 
-void *null_handler(int,void *,struct pt_regs *);
+/* prep */
+#define PREP_IRQ_MASK	(((unsigned int)cached_A1)<<8) | (unsigned int)cached_21
+extern unsigned long route_pci_interrupts(void);
 
-/*
- * disable and enable intrs in software.  This is used
- * from the non-realtime parts of Linux to disable interrupts.
- * The realtime part disables/enables intrs in the hardware.
- * -- Cort
- */
-unsigned long soft_intr_enable = 1;
-void _soft_cli(void)
+/* pmac */
+#define IRQ_FLAG	((unsigned *)0xf3000020)
+#define IRQ_ENABLE	((unsigned *)0xf3000024)
+#define IRQ_ACK		((unsigned *)0xf3000028)
+#define IRQ_LEVEL	((unsigned *)0xf300002c)
+#define KEYBOARD_IRQ	20	/* irq number for command-power interrupt */
+#define PMAC_IRQ_MASK	(~ld_le32(IRQ_ENABLE))
+
+void prep_mask_and_ack_irq(int irq_nr)
 {
-	soft_intr_enable = 0;
+	spin_lock(&irq_controller_lock);
+	cached_irq_mask |= 1 << irq_nr;
+	if (irq_nr > 7) {
+		inb(0xA1);	/* DUMMY */
+		outb(cached_A1,0xA1);
+		outb(0x62,0x20);	/* Specific EOI to cascade */
+		/*outb(0x20,0xA0);*/
+		outb(0x60|(irq_nr-8), 0xA0); /* specific eoi */
+	} else {
+		inb(0x21);	/* DUMMY */
+		outb(cached_21,0x21);
+		/*outb(0x20,0x20);*/
+		outb(0x60|irq_nr,0x20); /* specific eoi */
+		  
+	}
+	spin_unlock(&irq_controller_lock);
 }
 
-void _soft_sti(void)
+void pmac_mask_and_ack_irq(int irq_nr)
 {
-	soft_intr_enable = 1;
-	if ( lost_interrupts )
-	{
-		printk("lost_interrupts from _soft_sti() %x\n",lost_interrupts);
-		fake_interrupt();
+	spin_lock(&irq_controller_lock);
+	cached_irq_mask |= 1 << irq_nr;
+	out_le32(IRQ_ENABLE, ld_le32(IRQ_ENABLE) & ~(1 << irq_nr));
+	out_le32(IRQ_ACK, 1U << irq_nr);
+	spin_unlock(&irq_controller_lock);
+}
+
+void prep_set_irq_mask(int irq_nr)
+{
+	if (irq_nr > 7) {
+		outb(cached_A1,0xA1);
+	} else {
+		outb(cached_21,0x21);
 	}
 }
 
-void *
-null_handler(int a, void *b, struct pt_regs *regs)
+void pmac_set_irq_mask(int irq_nr)
 {
-	/*printk("irq.c: null_handler() called.  Should not have happened.\n");*/
-}
-
-void
-disable_irq(unsigned int irq_nr)
-{
-	int s = _disable_interrupts();
-	unsigned char mask;
-
-#ifdef CONFIG_PMAC
-	out_le32(IRQ_ENABLE, ld_le32(IRQ_ENABLE) & ~(1 << irq_nr));
-#else /* CONFIG_PMAC */
-	mask = 1 << (irq_nr & 7);
-	if (irq_nr < 8)
-	{
-		cached_21 |= mask;
-		outb(cached_21,0x21);
-	} else
-	{
-		cached_A1 |= mask;
-		outb(cached_A1,0xA1);
-	}	
-#endif	/* CONFIG_PMAC */
-	_enable_interrupts(s);
-}
-
-void
-enable_irq(unsigned int irq_nr)
-{
-	int s = _disable_interrupts();
-#ifdef CONFIG_PMAC
-	unsigned bit = 1U << irq_nr;
-	
-	out_le32(IRQ_ENABLE, ld_le32(IRQ_ENABLE) & ~(1 << irq_nr));
-	out_le32(IRQ_ENABLE, ld_le32(IRQ_ENABLE) | bit);
-
+	/* this could be being enabled or disabled - so use cached_irq_mask */
+	out_le32(IRQ_ENABLE, ~cached_irq_mask /* enable all unmasked */ );
 	/*
 	 * Unfortunately, setting the bit in the enable register
 	 * when the device interrupt is already on *doesn't* set
 	 * the bit in the flag register or request another interrupt.
 	 */
-	if ((ld_le32(IRQ_LEVEL) & bit) && !(ld_le32(IRQ_FLAG) & bit))
-		lost_interrupts |= bit;
-#else /* CONFIG_PMAC */
-	if (irq_nr < 8) {
-		cached_21 &= ~(1 << (irq_nr & 7));
-		outb(cached_21,0x21);
-	} else
-	{
-		cached_A1 &= ~(1 << (irq_nr-8 & 7));
-		outb(cached_A1,0xA1);
-	}	
-#endif	/* CONFIG_PMAC */
-
-	_enable_interrupts(s);
+	if ((ld_le32(IRQ_LEVEL) & (1UL<<irq_nr)) && !(ld_le32(IRQ_FLAG) & (1UL<<irq_nr)))
+		lost_interrupts |= (1UL<<irq_nr);
 }
 
+/*
+ * These have to be protected by the spinlock
+ * before being called.
+ */
+static inline void mask_irq(unsigned int irq_nr)
+{
+	cached_irq_mask |= 1 << irq_nr;
+	set_irq_mask(irq_nr);
+}
+
+static inline void unmask_irq(unsigned int irq_nr)
+{
+	cached_irq_mask &= ~(1 << irq_nr);
+	set_irq_mask(irq_nr);
+}
+
+void disable_irq(unsigned int irq_nr)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&irq_controller_lock, flags);
+	mask_irq(irq_nr);
+	spin_unlock_irqrestore(&irq_controller_lock, flags);
+	synchronize_irq();
+}
+
+void enable_irq(unsigned int irq_nr)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&irq_controller_lock, flags);
+	unmask_irq(irq_nr);
+	spin_unlock_irqrestore(&irq_controller_lock, flags);
+}
 
 int get_irq_list(char *buf)
 {
@@ -153,7 +158,7 @@ int get_irq_list(char *buf)
 
 	for (i = 0 ; i < NR_IRQS ; i++) {
 		action = irq_action + i;
-		if (!action || !action->handler) 
+		if (!action || !action->handler)
 			continue;
 		len += sprintf(buf+len, "%2d: %10u   %s",
 			i, kstat.interrupts[i], action->name);
@@ -162,152 +167,99 @@ int get_irq_list(char *buf)
 		}
 		len += sprintf(buf+len, "\n");
 	}
-/*
- *	Linus - should you add NMI counts here ?????
- */
 #ifdef __SMP_PROF__
 	len+=sprintf(buf+len, "IPI: %8lu received\n",
 		ipi_count);
-#endif		
+#endif
 	return len;
 }
 
-asmlinkage void handle_IRQ(struct pt_regs *regs)
+asmlinkage void do_IRQ(struct pt_regs *regs)
 {
 	int irq;
-	unsigned bits;
+	unsigned long bits;
 	struct irqaction *action;
 	int cpu = smp_processor_id();
+	int status;
 
 	hardirq_enter(cpu);
 
-#ifdef CONFIG_PMAC 
-	bits = ld_le32(IRQ_FLAG) | lost_interrupts;
-	lost_interrupts = 0;
-	
-	for (irq = NR_IRQS; irq >= 0; --irq)
-		if (bits & (1U << irq))
-			break;
-#else /* CONFIG_PMAC */
+	if ( _machine == _MACH_Pmac )
+	{
+		bits = ld_le32(IRQ_FLAG) | lost_interrupts;
+		lost_interrupts = 0;
+	}
+	else /* prep */
+	{
 #if 1
-	if ( lost_interrupts )
-	{
-		irq = ffz(~lost_interrupts);
-		lost_interrupts &= ~irq;
-		goto retry;
-	}
-	outb(0x0C, 0x20);
-	irq = inb(0x20) & 7;
-	if (irq == 2)
-	{
-retry_cascade:		
-		outb(0x0C, 0xA0);
-		irq = inb(0xA0);
-		/* if no intr left */
-		if ( !(irq & 128 ) )
-			goto out;
-		irq = (irq&7) + 8;
-	}
-retry:
+		outb(0x0C, 0x20);
+		irq = inb(0x20) & 7;
+		if (irq == 2)
+		{
+retry_cascade:
+			outb(0x0C, 0xA0);
+			irq = inb(0xA0);
+			/* if no intr left */
+			if ( !(irq & 128 ) )
+				goto out;
+			irq = (irq&7) + 8;
+		}
+		bits = 1UL << irq;
 #else
-	/* get the irr from the intr controller */
-	outb(0x0A, 0x20);
-	bits = inb(0x20);
-	/* handle cascade */
-	if ( bits  ) 
-	{
-		bits &= 4;
-		outb(0x0A, 0xA0);
-		bits = inb(0xA0)<<8;
+		/*
+		 * get the isr from the intr controller since
+		 * the bit in the irr has been cleared
+		 */
+		outb(0x0a, 0x20);
+		bits = inb(0x20)&0xff;
+		/* handle cascade */
+		if ( bits & 4 )
+		{
+			bits &= ~4UL;
+			outb(0x0a, 0xA0);
+			bits |= inb(0xA0)<<8;
+		}
+		/* ignore masked irqs */
+		bits &= ~cached_irq_mask;
+#endif
 	}
-	/* get lost interrupts */
-	bits |= lost_interrupts;
-	/* save intrs that are masked out */
-	lost_interrupts = bits & cached_irq_mask;
-	/* get rid of intrs being masked */
-	bits &= ~cached_irq_mask;
-        /* non-specifc eoi */
-	outb(0x20,0x20);
-	if ( bits & 0xff00 )
-		outb(0x20,0xA0);
 	
-	printk("bits %04X lost %04X mask %04x\n",
-	       bits, lost_interrupts,cached_irq_mask);
-	
-	for (irq = NR_IRQS; irq >= 0; --irq)
+	for (irq = NR_IRQS - 1; irq >= 0; --irq)
 		if (bits & (1U << irq))
 			break;
-#endif
-#endif	/* CONFIG_PMAC */
-	
+
 	if (irq < 0) {
-		printk("Bogus interrupt from PC = %lx, irq %d\n",regs->nip,irq);
+		printk("Bogus interrupt from PC = %lx\n", regs->nip);
 		goto out;
 	}
 
-#ifdef CONFIG_PMAC 
-	out_le32(IRQ_ACK, 1U << irq);
-#else /* CONFIG_PMAC */
-        /* mask out the irq while handling it */	
-	disable_irq(irq); 
-	/*
-	 * send eoi to interrupt controller right away or lower
-	 * priority intrs would be ignored even if with intrs enabled
-	 */
-	if (irq > 7)
-	{
-		outb(0xE0|(irq-8), 0xA0);
-		outb(0xE2, 0x20);
-	} else
-	{
-		outb(0xE0|irq, 0x20);
-	}
-#endif /* !CONFIG_PMAC */
+	mask_and_ack_irq(irq);
 
-	/*
-	 * now that we've acked the irq, if intrs are disabled in software
-	 * we're in the real-time system and non-rt linux has disabled them
-	 * so we just queue it up and return -- Cort
-	 */
-	if ( ! soft_intr_enable ) 
-	{
-		lost_interrupts |= 1UL << irq;
-		/* can't printk - kernel expects intrs off! */
-		/*printk("irq %d while intrs soft disabled\n", irq);*/
-		goto out;
-	}
-	
-	action = irq + irq_action;
+	status = 0;
+	action = irq_action + irq;
 	kstat.interrupts[irq]++;
-	if (action->handler) {
+	if ( action )
+	{
+		if (!(action->flags & SA_INTERRUPT))
+			__sti();
+		status |= action->flags;
 		action->handler(irq, action->dev_id, regs);
-		_disable_interrupts(); /* in case the handler turned them on */
+		/*if (status & SA_SAMPLE_RANDOM)
+			add_interrupt_randomness(irq);*/
+		__cli(); /* in case the handler turned them on */
+		spin_lock(&irq_controller_lock);
+		unmask_irq(irq);
+		spin_unlock(&irq_controller_lock);
 	} else {
 		disable_irq( irq );
 	}
-#ifdef CONFIG_PREP
-	/* re-enable if the interrupt was good and isn't one-shot */
-	if ( action->handler && !(action->flags & SA_ONESHOT) )
-		enable_irq(irq);
-	/* make sure we don't miss any cascade intrs due to eoi-ing irq 2 */
-	if ( irq > 7 )
-		goto retry_cascade;
-#endif
 	
-	hardirq_exit(cpu);
-	/*
-	 * This should be conditional: we should really get
-	 * a return code from the irq handler to tell us
-	 * whether the handler wants us to do software bottom
-	 * half handling or not..
-	 */
-	if (1)
-		if (bh_active & bh_mask)
-			do_bottom_half();
-        return;
+	/* make sure we don't miss any cascade intrs due to eoi-ing irq 2 */
+	if ( (_machine != _MACH_Pmac)/*prep*/ && (irq > 7) )
+		goto retry_cascade;
+	/* do_bottom_half is called if necessary from int_return in head.S */
 out:
 	hardirq_exit(cpu);
-
 }
 
 int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
@@ -315,13 +267,13 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 {
 	struct irqaction * action;
 	unsigned long flags;
-	
-#ifdef SHOW_IRQ	
+
+#ifdef SHOW_IRQ
 	printk("request_irq(): irq %d handler %08x name %s dev_id %04x\n",
 	       irq,handler,devname,dev_id);
 #endif /* SHOW_IRQ */
-	
-	if (irq > NR_IRQS)
+
+	if (irq >= NR_IRQS)
 		return -EINVAL;
 	action = irq + irq_action;
 	if (action->handler)
@@ -339,17 +291,16 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 	restore_flags(flags);
 	return 0;
 }
-		
 void free_irq(unsigned int irq, void *dev_id)
 {
 	struct irqaction * action = irq + irq_action;
 	unsigned long flags;
 
-#ifdef SHOW_IRQ	
+#ifdef SHOW_IRQ
 	printk("free_irq(): irq %d dev_id %04x\n", irq, dev_id);
 #endif /* SHOW_IRQ */
-	
-	if (irq > NR_IRQS) {
+
+	if (irq >= NR_IRQS) {
 		printk("Trying to free IRQ%d\n",irq);
 		return;
 	}
@@ -370,114 +321,85 @@ void free_irq(unsigned int irq, void *dev_id)
 
 unsigned long probe_irq_on (void)
 {
-	unsigned int i, irqs = 0, irqmask;
-	unsigned long delay;
-
-	/* first, snaffle up any unassigned irqs */
-	for (i = 15; i > 0; i--) {
-		if (!request_irq(i, null_handler, SA_ONESHOT, "probe", NULL)) {
-			enable_irq(i);
-			irqs |= (1 << i);
-		}
-	}
-
-	/* wait for spurious interrupts to mask themselves out again */
-	for (delay = jiffies + 2; delay > jiffies; );	/* min 10ms delay */
-
-	/* now filter out any obviously spurious interrupts */
-	irqmask = (((unsigned int)cached_A1)<<8) | (unsigned int)cached_21;
-	for (i = 15; i > 0; i--) {
-		if (irqs & (1 << i) & irqmask) {
-			irqs ^= (1 << i);
-			free_irq(i, NULL);
-		}
-	}
-#ifdef DEBUG
-	printk("probe_irq_on:  irqs=0x%04x irqmask=0x%04x\n", irqs, irqmask);
-#endif
-	return irqs;
+	return 0;
 }
 
 int probe_irq_off (unsigned long irqs)
 {
-	unsigned int i, irqmask;
-
-	irqmask = (((unsigned int)cached_A1)<<8) | (unsigned int)cached_21;
-	for (i = 15; i > 0; i--) {
-		if (irqs & (1 << i)) {
-			free_irq(i, NULL);
-		}
-	}
-#ifdef SHOW_IRQ
-	printk("probe_irq_off: irqs=0x%04x irqmask=0x%04x\n", irqs, irqmask);
-#endif
-	irqs &= irqmask;
-	if (!irqs)
-		return 0;
-	i = ffz(~irqs);
-	if (irqs != (irqs & (1 << i)))
-		i = -i;
-	return i;
+	return 0;
 }
 
-void init_IRQ(void)
+__initfunc(void init_IRQ(void))
 {
-#ifdef CONFIG_PMAC  
 	extern void xmon_irq(int, void *, struct pt_regs *);
 
-	*IRQ_ENABLE = 0;
-	request_irq(KEYBOARD_IRQ, xmon_irq, 0, "NMI", 0);
-#else /* CONFIG_PMAC */
-	/* Initialize interrupt controllers */
-	outb(0x11, 0x20); /* Start init sequence */
-	outb(0x40, 0x21); /* Vector base */
-#if 1
-	outb(0x04, 0x21); /* edge tiggered, Cascade (slave) on IRQ2 */
-#else
-	outb(0x0C, 0x21); /* level triggered, Cascade (slave) on IRQ2 */
-#endif	
-	
-	outb(0x01, 0x21); /* Select 8086 mode */
-	outb(0xFF, 0x21); /* Mask all */
+	if ( _machine == _MACH_Pmac )
+	{
+		mask_and_ack_irq = pmac_mask_and_ack_irq;
+		set_irq_mask = pmac_set_irq_mask;
+		
+		*IRQ_ENABLE = 0;
+#ifdef CONFIG_XMON
+		request_irq(KEYBOARD_IRQ, xmon_irq, 0, "NMI", 0);
+#endif	/* CONFIG_XMON */
+	}
+	else /* prep */
+	{
+		mask_and_ack_irq = prep_mask_and_ack_irq;
+		set_irq_mask = prep_set_irq_mask;
+		
+		/* init master interrupt controller */
+		outb(0x11, 0x20); /* Start init sequence */
+		outb(0x40, 0x21); /* Vector base */
+		/*outb(0x04, 0x21);*/ /* edge tiggered, Cascade (slave) on IRQ2 */
+		outb(0x0C, 0x21); /* level triggered, Cascade (slave) on IRQ2 */
+		outb(0x01, 0x21); /* Select 8086 mode */
+		outb(0xFF, 0x21); /* Mask all */
 
-	outb(0x11, 0xA0); /* Start init sequence */
-	outb(0x48, 0xA1); /* Vector base */
-#if 1
-	outb(0x02, 0xA1); /* edge triggered, Cascade (slave) on IRQ2 */
-#else
-	outb(0x0A, 0x21); /* level triggered, Cascade (slave) on IRQ2 */
-#endif
-	outb(0x01, 0xA1); /* Select 8086 mode */
-	outb(0xFF, 0xA1); /* Mask all */
+		/* init slave interrupt controller */
+		outb(0x11, 0xA0); /* Start init sequence */
+		outb(0x48, 0xA1); /* Vector base */
+		/*outb(0x02, 0xA1);*/ /* edge triggered, Cascade (slave) on IRQ2 */
+		outb(0x0A, 0x21); /* level triggered, Cascade (slave) on IRQ2 */
+		outb(0x01, 0xA1); /* Select 8086 mode */
+		outb(0xFF, 0xA1); /* Mask all */
 
-	/*
-	 * Program level mode for irq's that 'can' be level triggered.
-	 * This does not effect irq's 0,1,2 and 8 since they must be
-	 * edge triggered. This is not the PIC controller.  The default
-	 * here is for edge trigger mode.  -- Cort
-	 */
-#if 0	
-	outb(0xf8, 0x4d0); /* level triggered */
-	outb(0xff, 0x4d1);
-#endif
-#if 0	
-	outb(0x00, 0x4D0); /* All edge triggered */
-	outb(0xCF, 0x4D1); /* Trigger mode */
-#endif
-	outb(cached_A1, 0xA1);
-	outb(cached_21, 0x21);
-	if (request_irq(2, null_handler, SA_INTERRUPT, "cascade", NULL))
-		printk("Unable to get IRQ2 for cascade\n");
-	enable_irq(2);  /* Enable cascade interrupt */
-	
-#define TIMER0_COUNT 0x40
-#define TIMER_CONTROL 0x43
-	/* set timer to periodic mode */
-	outb_p(0x34,TIMER_CONTROL);		/* binary, mode 2, LSB/MSB, ch 0 */
-	/* set the clock to ~100 Hz */
-	outb_p(LATCH & 0xff , TIMER0_COUNT);	/* LSB */
-	outb(LATCH >> 8 , TIMER0_COUNT);	/* MSB */
+		/*
+		 * According to the Carolina spec from ibm irq's 0,1,2, and 8
+		 * must be edge triggered.  Also, the pci intrs must be level
+		 * triggered and _only_ isa intrs can be level sensitive
+		 * which are 3-7,9-12,14-15. 13 is special - it can be level.
+		 *
+		 * power on default is 0's in both regs - all edge.
+		 *
+		 * These edge/level control regs allow edge/level status
+		 * to be decided on a irq basis instead of on a PIC basis.
+		 * It's still pretty ugly.
+		 * - Cort
+		 */
+		{
+			unsigned char irq_mode1 = 0, irq_mode2 = 0;
+			irq_mode1 = 0; /* to get rid of compiler warnings */
+			/*
+			 * On Carolina, irq 15 and 13 must be level (scsi/ide/net).
+			 */
+			if ( _machine == _MACH_IBM )
+				irq_mode2 |= 0xa0;
+			/*
+			 * Sound on the Powerstack reportedly needs to be edge triggered
+			 */
+			if ( _machine == _MACH_Motorola )
+			{}
 
-	route_pci_interrupts();
-#endif	/* CONFIG_PMAC */
+			/*outb( irq_mode1 , 0x4d0 );
+			  outb( irq_mode2 , 0x4d1 );*/
+		}
+		outb(cached_A1, 0xA1);
+		outb(cached_21, 0x21);
+		if (request_irq(2, no_action, SA_INTERRUPT, "cascade", NULL) != 0)
+			panic("Could not allocate cascade IRQ!");
+		enable_irq(2);  /* Enable cascade interrupt */
+
+		route_pci_interrupts();
+	}
 }

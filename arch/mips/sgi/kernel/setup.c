@@ -1,7 +1,9 @@
-/* $Id: setup.c,v 1.2 1997/06/30 15:26:24 ralf Exp $
+/*
  * setup.c: SGI specific setup, including init of the feature struct.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
+ *
+ * $Id: setup.c,v 1.3 1997/08/08 18:13:22 miguel Exp $
  */
 #ifndef __GOGOGO__
 #error "... about to fuckup your Indy?"
@@ -9,6 +11,8 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 
+#include <asm/addrspace.h>
+#include <asm/keyboard.h>
 #include <asm/reboot.h>
 #include <asm/vector.h>
 #include <asm/sgialib.h>
@@ -25,6 +29,36 @@ extern void sgi_machine_power_off(void);
 
 struct feature sgi_feature = {
 };
+
+static volatile struct hpc_keyb *sgi_kh = (struct hpc_keyb *) (KSEG1 + 0x1fbd9800 + 64);
+
+static unsigned char sgi_read_input(void)
+{
+	return sgi_kh->data;
+}
+
+static void sgi_write_output(unsigned char val)
+{
+	sgi_kh->data = val;
+}
+
+static void sgi_write_command(unsigned char val)
+{
+	sgi_kh->command = val;
+}
+
+static unsigned char sgi_read_status(void)
+{
+	return sgi_kh->command;
+}
+
+static void sgi_keyboard_setup(void)
+{
+	kbd_read_input = sgi_read_input;
+	kbd_write_output = sgi_write_output;
+	kbd_write_command = sgi_write_command;
+	kbd_read_status = sgi_read_status;
+}
 
 static void sgi_irq_setup(void)
 {
@@ -52,6 +86,7 @@ void sgi_setup(void)
 
 	irq_setup = sgi_irq_setup;
 	feature = &sgi_feature;
+	keyboard_setup = sgi_keyboard_setup;
 
 	_machine_restart = sgi_machine_restart;
 	_machine_halt = sgi_machine_halt;

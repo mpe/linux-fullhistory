@@ -128,7 +128,7 @@ smb_catch_keepalive(struct smb_server *server)
 
 	if ((server == NULL)
 	    || ((file = server->sock_file) == NULL)
-	    || ((inode = file->f_inode) == NULL)
+	    || ((inode = file->f_dentry->d_inode) == NULL)
 	    || (!S_ISSOCK(inode->i_mode)))
 	{
 		printk("smb_catch_keepalive: did not get valid server!\n");
@@ -175,7 +175,7 @@ smb_dont_catch_keepalive(struct smb_server *server)
 
 	if ((server == NULL)
 	    || ((file = server->sock_file) == NULL)
-	    || ((inode = file->f_inode) == NULL)
+	    || ((inode = file->f_dentry->d_inode) == NULL)
 	    || (!S_ISSOCK(inode->i_mode)))
 	{
 		printk("smb_dont_catch_keepalive: "
@@ -322,7 +322,7 @@ server_sock(struct smb_server *server)
 		return NULL;
 	if ((file = server->sock_file) == NULL)
 		return NULL;
-	if ((inode = file->f_inode) == NULL)
+	if ((inode = file->f_dentry->d_inode) == NULL)
 		return NULL;
 	return &(inode->u.socket_i);
 }

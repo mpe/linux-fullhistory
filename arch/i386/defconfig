@@ -148,6 +148,8 @@ CONFIG_SCSI_OMIT_FLASHPOINT=y
 # CONFIG_SCSI_T128 is not set
 # CONFIG_SCSI_U14_34F is not set
 # CONFIG_SCSI_ULTRASTOR is not set
+# CONFIG_SCSI_MESH is not set
+# CONFIG_SCSI_MAC53C94 is not set
 
 #
 # Network device support
@@ -214,6 +216,7 @@ CONFIG_ISO9660_FS=y
 # CONFIG_ROMFS_FS is not set
 CONFIG_AUTOFS_FS=y
 # CONFIG_UFS_FS is not set
+# CONFIG_MAC_PARTITION is not set
 
 #
 # Character devices

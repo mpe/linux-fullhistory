@@ -548,6 +548,13 @@ static struct proc_dir_entry proc_root_omirr = {
 	0, &proc_omirr_inode_operations
 };
 #endif
+#ifdef __powerpc__
+static struct proc_dir_entry proc_root_ppc_htab = {
+	PROC_PPC_HTAB, 8, "ppc_htab",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_ppc_htab_inode_operations
+};
+#endif
 
 void proc_root_init(void)
 {
@@ -619,6 +626,12 @@ void proc_root_init(void)
 	}
 
 	proc_tty_init();
+#ifdef __powerpc__
+	proc_register(&proc_root, &proc_root_ppc_htab);
+#endif
+#ifdef CONFIG_PROC_DEVICETREE
+	proc_device_tree_init();
+#endif
 }
 
 /*

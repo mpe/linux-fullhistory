@@ -629,7 +629,7 @@ affs_file_write(struct inode *inode, struct file *filp, const char *buf, unsigne
 		inode->i_size = pos;
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
 	filp->f_pos    = pos;
-	inode->i_dirt  = 1;
+	mark_inode_dirty(inode);
 	iput(ino);
 	return written;
 }
@@ -717,7 +717,7 @@ affs_file_write_ofs(struct inode *inode, struct file *filp, const char *buf, uns
 		inode->i_size = pos;
 	filp->f_pos = pos;
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
-	inode->i_dirt  = 1;
+	mark_inode_dirty(inode);
 	iput(ino);
 	return written;
 }

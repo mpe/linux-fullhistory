@@ -186,6 +186,14 @@
 #include "ide-scsi.h"
 #endif
 
+#ifdef CONFIG_SCSI_MESH
+#include "mesh.h"
+#endif
+
+#ifdef CONFIG_SCSI_MAC53C94
+#include "mac53c94.h"
+#endif
+
 #ifdef CONFIG_SCSI_DEBUG
 #include "scsi_debug.h"
 #endif
@@ -338,6 +346,12 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_BLK_DEV_IDESCSI
     IDESCSI,
+#endif
+#ifdef CONFIG_SCSI_MESH
+    SCSI_MESH,
+#endif
+#ifdef CONFIG_SCSI_MAC53C94
+    SCSI_MAC53C94,
 #endif
 #ifdef CONFIG_SCSI_DEBUG
     SCSI_DEBUG,

@@ -64,6 +64,7 @@ _GLOBAL(_hard_sti)
 	mtmsr	r3		/* Update machine state */
 	blr
 
+#if 0
 /*
  * Restore 'flags'
  *	__restore_flags(long val)
@@ -79,11 +80,13 @@ _GLOBAL(__restore_flags)
 	mtmsr	r3
 	isync
 	blr
-
+#endif
+	
 /*
  * We were about to enable interrupts but we have to simulate
  * some interrupts that were lost by enable_irq first.
  */
+	.globl do_lost_interrupts
 do_lost_interrupts:
 	stwu	r1,-16(r1)
 	mflr	r0
@@ -243,7 +246,6 @@ _GLOBAL(_outsl)
 	bdnz	00b
 	blr	
 
-#ifdef CONFIG_PMAC
 _GLOBAL(ide_insw)
 	mtctr	r5
 	subi	r4,r4,2
@@ -259,7 +261,6 @@ _GLOBAL(ide_outsw)
 	sthx	r5,0,r3	
 	bdnz	00b
 	blr	
-#endif
 
 /*
  * Extended precision shifts
@@ -298,7 +299,7 @@ _GLOBAL(abs)
 _GLOBAL(_get_SP)
 	mr	r3,r1		/* Close enough */
 	blr
-	
+
 _GLOBAL(_get_PVR)
 	mfspr	r3,PVR
 	blr
@@ -308,6 +309,7 @@ cvt_fd:
 	lfs	0,0(r3)
 	stfd	0,0(r4)
 	blr
+
 /*
  * Fetch the current SR register
  *   get_SR(int index)
@@ -317,7 +319,6 @@ _GLOBAL(get_SR)
 	mr	r3,r4
 	blr
 
-	
 _GLOBAL(cvt_df)
 cvt_df:
 	lfd	0,0(r3)

@@ -1,22 +1,25 @@
 #ifndef _PPC_PGTABLE_H
 #define _PPC_PGTABLE_H
 
-#include <linux/config.h>
-#include <asm/page.h>
-#include <asm/mmu.h>
+#include <linux/mm.h>
 
 extern void flush_tlb_all(void);
 extern void flush_tlb_mm(struct mm_struct *mm);
 extern void flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr);
 extern void flush_tlb_range(struct mm_struct *mm, unsigned long start,
 			    unsigned long end);
-extern void flush_tlb(void);
 
-/* Caches aren't brain-dead on the ppc. */
-#define flush_cache_all()			
-#define flush_cache_mm(mm)			
-#define flush_cache_range(mm, start, end)	
-#define flush_cache_page(vma, vmaddr)		
+/*
+ * No cache flushing is required when address mappings are
+ * changed, because the caches on PowerPCs are physically
+ * addressed.
+ */
+#define flush_cache_all()		do { } while (0)
+#define flush_cache_mm(mm)		do { } while (0)
+#define flush_cache_range(mm, a, b)	do { } while (0)
+#define flush_cache_page(vma, p)	do { } while (0)
+extern void flush_icache_range(unsigned long, unsigned long);
+
 /*
  * For the page specified, write modified lines in the data cache
  * out to memory, and invalidate lines in the instruction cache.
@@ -24,6 +27,20 @@ extern void flush_tlb(void);
 extern void flush_page_to_ram(unsigned long);
 
 extern unsigned long va_to_phys(unsigned long address);
+
+/*
+ * The PowerPC MMU uses a hash table containing PTEs, together with
+ * a set of 16 segment registers (on 32-bit implementations), to define
+ * the virtual to physical address mapping.
+ *
+ * We use the hash table as an extended TLB, i.e. a cache of currently
+ * active mappings.  We maintain a two-level page table tree, much like
+ * that used by the i386, for the sake of the Linux memory management code.
+ * Low-level assembler code in head.S (procedure hash_page) is responsible
+ * for extracting ptes from the tree and putting them into the hash table
+ * when necessary, and updating the accessed and modified bits in the
+ * page table tree.
+ */
 
 /* PMD_SHIFT determines the size of the area mapped by the second-level page tables */
 #define PMD_SHIFT	22
@@ -133,9 +150,7 @@ extern unsigned long empty_zero_page[1024];
 
 /* to set the page-dir */
 /* tsk is a task_struct and pgdir is a pte_t */
-#define SET_PAGE_DIR(tsk,pgdir) ({ \
-	((tsk)->tss.pg_tables = (unsigned long *)(pgdir)); \
-})
+#define SET_PAGE_DIR(tsk,pgdir) 
 
 extern inline int pte_none(pte_t pte)		{ return !pte_val(pte); }
 extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & _PAGE_PRESENT; }
@@ -146,7 +161,7 @@ extern inline int pmd_bad(pmd_t pmd)		{ return (pmd_val(pmd) & ~PAGE_MASK) != 0;
 extern inline int pmd_present(pmd_t pmd)	{ return (pmd_val(pmd) & PAGE_MASK) != 0; }
 extern inline void pmd_clear(pmd_t * pmdp)	{ pmd_val(*pmdp) = 0; }
 
-     
+
 /*
  * The "pgd_xxx()" functions here are trivial for a folded two-level
  * setup: the pgd is never bad, and a pmd always exists (as it's folded
@@ -370,13 +385,27 @@ extern pgd_t swapper_pg_dir[1024];
  * as entries are faulted into the hash table by the low-level
  * data/instruction access exception handlers.
  */
-#define update_mmu_cache(vma,address,pte) while(0){}
+#define update_mmu_cache(vma, addr, pte)	do { } while (0)
 
+/*
+ * When flushing the tlb entry for a page, we also need to flush the
+ * hash table entry.  flush_hash_page is assembler (for speed) in head.S.
+ */
+extern void flush_hash_segments(unsigned low_vsid, unsigned high_vsid);
+extern void flush_hash_page(unsigned context, unsigned long va);
+
+extern inline void
+flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr)
+{
+	if (vmaddr < TASK_SIZE)
+		flush_hash_page(vma->vm_mm->context, vmaddr);
+}
 
 #define SWP_TYPE(entry) (((entry) >> 1) & 0x7f)
 #define SWP_OFFSET(entry) ((entry) >> 8)
 #define SWP_ENTRY(type,offset) (((type) << 1) | ((offset) << 8))
 
+#define module_map      vmalloc
+#define module_unmap    vfree
 
-
-#endif /* _PPC_PAGE_H */
+#endif /* _PPC_PGTABLE_H */

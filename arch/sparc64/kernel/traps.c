@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.29 1997/07/05 09:52:38 davem Exp $
+/* $Id: traps.c,v 1.31 1997/08/11 14:35:33 davem Exp $
  * arch/sparc64/kernel/traps.c
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -25,6 +25,7 @@
 #include <asm/unistd.h>
 #include <asm/uaccess.h>
 #include <asm/fpumacro.h>
+#include <asm/lsu.h>
 
 /* #define SYSCALL_TRACING */
 /* #define VERBOSE_SYSCALL_TRACING */
@@ -194,8 +195,55 @@ void data_access_exception (struct pt_regs *regs)
 	send_sig(SIGSEGV, current, 1);
 }
 
+#ifdef CONFIG_PCI
+/* This is really pathetic... */
+/* #define DEBUG_PCI_POKES */
+extern volatile int pci_poke_in_progress;
+extern volatile int pci_poke_faulted;
+#endif
+
 void do_dae(struct pt_regs *regs)
 {
+#ifdef CONFIG_PCI
+#ifdef DEBUG_PCI_POKES
+	prom_printf(" (POKE ");
+#endif
+	if(pci_poke_in_progress) {
+		unsigned long va;
+#ifdef DEBUG_PCI_POKES
+		prom_printf("tpc[%016lx] tnpc[%016lx] ",
+			    regs->tpc, regs->tnpc);
+#endif
+		pci_poke_faulted = 1;
+		regs->tnpc = regs->tpc + 4;
+
+
+#ifdef DEBUG_PCI_POKES
+		prom_printf("PCI) ");
+		/* prom_halt(); */
+#endif
+		/* Re-enable I/D caches, Ultra turned them off. */
+		for(va =  0; va < (PAGE_SIZE << 1); va += 32) {
+			spitfire_put_icache_tag(va, 0x0);
+			spitfire_put_dcache_tag(va, 0x0);
+		}
+		__asm__ __volatile__("flush %%g6\n\t"
+				     "membar #Sync\n\t"
+				     "stxa %0, [%%g0] %1\n\t"
+				     "membar #Sync"
+				     : /* no outputs */
+				     : "r" (LSU_CONTROL_IC | LSU_CONTROL_DC |
+					    LSU_CONTROL_IM | LSU_CONTROL_DM),
+				       "i" (ASI_LSU_CONTROL)
+				     : "memory");
+		return;
+	}
+#ifdef DEBUG_PCI_POKES
+	prom_printf("USER) ");
+	prom_printf("tpc[%016lx] tnpc[%016lx]\n");
+	prom_halt();
+#endif
+#endif
 	send_sig(SIGSEGV, current, 1);
 }
 
@@ -215,11 +263,9 @@ void do_fpe_common(struct pt_regs *regs)
 		regs->tpc = regs->tnpc;
 		regs->tnpc += 4;
 	} else {
-		lock_kernel();
 		current->tss.sig_address = regs->tpc;
 		current->tss.sig_desc = SUBSIG_FPERROR;
 		send_sig(SIGFPE, current, 1);
-		unlock_kernel();
 	}
 }
 
@@ -288,6 +334,7 @@ void die_if_kernel(char *str, struct pt_regs *regs)
 	}
 	printk("Instruction DUMP:");
 	instruction_dump ((unsigned int *) regs->tpc);
+	lock_kernel(); /* Or else! */
 	if(regs->tstate & TSTATE_PRIV)
 		do_exit(SIGKILL);
 	do_exit(SIGSEGV);
@@ -298,13 +345,11 @@ void do_illegal_instruction(struct pt_regs *regs)
 	unsigned long pc = regs->tpc;
 	unsigned long tstate = regs->tstate;
 
-	lock_kernel();
 	if(tstate & TSTATE_PRIV)
 		die_if_kernel("Kernel illegal instruction", regs);
 	current->tss.sig_address = pc;
 	current->tss.sig_desc = SUBSIG_ILLINST;
 	send_sig(SIGILL, current, 1);
-	unlock_kernel();
 }
 
 void mem_address_unaligned(struct pt_regs *regs)
@@ -333,19 +378,16 @@ void do_privact(struct pt_regs *regs)
 	current->tss.sig_address = regs->tpc;
 	current->tss.sig_desc = SUBSIG_PRIVINST;
 	send_sig(SIGILL, current, 1);
-	unlock_kernel();
 }
 
 void do_priv_instruction(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 			 unsigned long tstate)
 {
-	lock_kernel();
 	if(tstate & TSTATE_PRIV)
 		die_if_kernel("Penguin instruction from Penguin mode??!?!", regs);
 	current->tss.sig_address = pc;
 	current->tss.sig_desc = SUBSIG_PRIVINST;
 	send_sig(SIGILL, current, 1);
-	unlock_kernel();
 }
 
 /* XXX User may want to be allowed to do this. XXX */
@@ -353,7 +395,6 @@ void do_priv_instruction(struct pt_regs *regs, unsigned long pc, unsigned long n
 void do_memaccess_unaligned(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 			    unsigned long tstate)
 {
-	lock_kernel();
 	if(regs->tstate & TSTATE_PRIV) {
 		printk("KERNEL MNA at pc %016lx npc %016lx called by %016lx\n", pc, npc,
 		       regs->u_regs[UREG_RETPC]);
@@ -363,15 +404,12 @@ void do_memaccess_unaligned(struct pt_regs *regs, unsigned long pc, unsigned lon
 	current->tss.sig_address = pc;
 	current->tss.sig_desc = SUBSIG_PRIVINST;
 	send_sig(SIGBUS, current, 1);
-	unlock_kernel();
 }
 
 void handle_hw_divzero(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 		       unsigned long psr)
 {
-	lock_kernel();
 	send_sig(SIGILL, current, 1);
-	unlock_kernel();
 }
 
 /* Trap level 1 stuff or other traps we should never see... */

@@ -15,6 +15,7 @@
 #include <linux/timex.h>
 #include <linux/pci.h>
 #include <asm/bootinfo.h>
+#include <asm/keyboard.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/processor.h>
@@ -36,6 +37,7 @@ static struct irqaction irq2  = { no_action, 0, 0, "cascade", NULL, NULL};
 extern asmlinkage void sni_rm200_pci_handle_int(void);
 extern asmlinkage void sni_fd_cacheflush(const void *addr, size_t size);
 extern struct feature sni_rm200_pci_feature;
+extern void sni_rm200_keyboard_setup(void);
 
 extern void sni_machine_restart(char *command);
 extern void sni_machine_halt(void);
@@ -127,6 +129,7 @@ __initfunc(void sni_rm200_pci_setup(void))
 	fd_cacheflush = sni_fd_cacheflush;	// Will go away
 	feature = &sni_rm200_pci_feature;
 	port_base = SNI_PORT_BASE;
+	keyboard_setup = sni_rm200_keyboard_setup;
 
 	/*
 	 * Setup (E)ISA I/O memory access stuff

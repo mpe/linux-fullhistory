@@ -1,4 +1,4 @@
-/* $Id: mmu_context.h,v 1.17 1997/07/13 19:13:39 davem Exp $ */
+/* $Id: mmu_context.h,v 1.19 1997/08/07 02:54:08 davem Exp $ */
 #ifndef __SPARC64_MMU_CONTEXT_H
 #define __SPARC64_MMU_CONTEXT_H
 
@@ -11,20 +11,33 @@
 
 #ifndef __ASSEMBLY__
 
-#define destroy_context(mm)	do { } while(0)
-
 extern unsigned long tlb_context_cache;
 
 #define CTX_VERSION_SHIFT	PAGE_SHIFT
 #define CTX_VERSION_MASK	((~0UL) << CTX_VERSION_SHIFT)
 #define CTX_FIRST_VERSION	((1UL << CTX_VERSION_SHIFT) + 1UL)
 
-extern void get_new_mmu_context(struct mm_struct *mm, unsigned long ctx);
+extern void get_new_mmu_context(struct mm_struct *mm, unsigned long *ctx);
 
-/* Initialize the context related info for a new mm_struct
+/* Initialize/destroy the context related info for a new mm_struct
  * instance.
  */
-#define init_new_context(mm)	get_new_mmu_context((mm), tlb_context_cache)
+#define init_new_context(mm)	((mm)->context = NO_CONTEXT)
+#define destroy_context(mm)	((mm)->context = NO_CONTEXT)
+
+#ifdef __SMP__
+#define LOCAL_FLUSH_PENDING(cpu)	\
+	((cpu_data[(cpu)].last_tlbversion_seen ^ tlb_context_cache) & CTX_VERSION_MASK)
+#define DO_LOCAL_FLUSH(cpu)		do { __flush_tlb_all();				\
+					     cpu_data[cpu].last_tlbversion_seen =	\
+					     tlb_context_cache & CTX_VERSION_MASK;	\
+					} while(0)
+#else
+#define LOCAL_FLUSH_PENDING(cpu)	0
+#define DO_LOCAL_FLUSH(cpu)		do { __flush_tlb_all(); } while(0)
+#endif
+
+extern void __flush_tlb_all(void);
 
 extern __inline__ void get_mmu_context(struct task_struct *tsk)
 {
@@ -32,11 +45,13 @@ extern __inline__ void get_mmu_context(struct task_struct *tsk)
 	struct mm_struct *mm = tsk->mm;
 
 	flushw_user();
+	if(LOCAL_FLUSH_PENDING(current->processor))
+		DO_LOCAL_FLUSH(current->processor);
 	if(!(tsk->tss.flags & SPARC_FLAG_KTHREAD)	&&
 	   !(tsk->flags & PF_EXITING)) {
 		unsigned long ctx = tlb_context_cache;
 		if((mm->context ^ ctx) & CTX_VERSION_MASK)
-			get_new_mmu_context(mm, ctx);
+			get_new_mmu_context(mm, &tlb_context_cache);
 
 		/* Don't worry, set_fs() will restore it... */
 		tsk->tss.ctx = (tsk->tss.current_ds ?

@@ -6,7 +6,7 @@ CFLAGS := $(CFLAGS) -ansi
 
 OBJS  = blockops.o locks.o strlen.o strncmp.o \
 	memscan.o strncpy_from_user.o strlen_user.o memcmp.o checksum.o \
-	VIScopy.o VISbzero.o VISmemset.o VIScsum.o
+	VIScopy.o VISbzero.o VISmemset.o VIScsum.o VIScsumcopy.o
 
 lib.a: $(OBJS)
 	$(AR) rcs lib.a $(OBJS)

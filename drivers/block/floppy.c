@@ -3969,6 +3969,10 @@ __initfunc(int floppy_init(void))
 	}
 
 	fdc_state[0].address = FDC1;
+	if (fdc_state[0].address == -1) {
+		unregister_blkdev(MAJOR_NR,"fd");
+		return -ENODEV;
+	}
 #if N_FDC > 1
 	fdc_state[1].address = FDC2;
 #endif

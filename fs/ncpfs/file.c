@@ -130,8 +130,8 @@ static long ncp_file_read(struct inode *inode, struct file *file, char *buf, uns
 	if (!IS_RDONLY(inode)) {
 		inode->i_atime = CURRENT_TIME;
 	}
-	inode->i_dirt = 1;
-
+	mark_inode_dirty(inode);
+	
 	DPRINTK("ncp_file_read: exit %s\n", NCP_ISTRUCT(inode)->entryName);
 
 	return already_read;
@@ -192,8 +192,8 @@ static long ncp_file_write(struct inode *inode, struct file *file, const char *b
 	}
 
 	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
-	inode->i_dirt = 1;
-
+	mark_inode_dirty(inode);
+	
 	file->f_pos = pos;
 
 	if (pos > inode->i_size) {

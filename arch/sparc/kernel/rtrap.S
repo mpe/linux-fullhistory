@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.46 1997/04/01 02:21:48 davem Exp $
+/* $Id: rtrap.S,v 1.47 1997/08/10 04:49:24 davem Exp $
  * rtrap.S: Return from Sparc trap low-level code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -65,12 +65,14 @@ C_LABEL(ret_trap_lockless_ipi):
 
 	wr	%t_psr, 0x0, %psr
 	b	ret_trap_kernel
-	 nop
+	 mov	1, %o0
 
 1:
+	ld	[%curptr + AOFF_task_processor], %o1
 	ld	[%twin_tmp1 + %lo(C_LABEL(need_resched))], %g2
+	sll	%o0, %o1, %o0
 
-	cmp	%g2, 0
+	andcc	%g2, %o0, %g0
 	be	signal_p
 	 nop
 

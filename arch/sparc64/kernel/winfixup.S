@@ -1,4 +1,4 @@
-/* $Id: winfixup.S,v 1.16 1997/07/13 20:02:42 davem Exp $
+/* $Id: winfixup.S,v 1.19 1997/08/08 08:33:37 jj Exp $
  *
  * winfixup.S: Handle cases where user stack pointer is found to be bogus.
  *
@@ -143,8 +143,9 @@ spill_fixup:
 	retry
 window_scheisse_from_user_common:
 	wrpr		%g1, %cwp
+	sethi		%hi(109f), %g7
 	ba,pt		%xcc, etrap
-	 rd		%pc, %g7
+109:	 or		%g7, %lo(109b), %g7
 window_scheisse_merge:
 	srlx		%l5, PAGE_SHIFT, %o1
 
@@ -244,8 +245,9 @@ spill_fixup_mna:
 	retry
 window_mna_from_user_common:
 	wrpr		%g1, %cwp
+	sethi		%hi(109f), %g7
 	ba,pt		%xcc, etrap
-	 rd		%pc, %g7
+109:	 or		%g7, %lo(109b), %g7
 window_mna_merge:
 	call		mem_address_unaligned
 	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0

@@ -159,6 +159,8 @@ extern inline void flush_pages_to_ram (unsigned long address, int n)
     }
 }
 
+#define flush_icache_range(start, end)		do { } while (0)
+
 /*
  * flush all user-space atc entries.
  */

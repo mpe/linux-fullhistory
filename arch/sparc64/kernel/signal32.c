@@ -1,4 +1,4 @@
-/*  $Id: signal32.c,v 1.26 1997/07/14 03:10:31 davem Exp $
+/*  $Id: signal32.c,v 1.28 1997/08/05 19:19:40 davem Exp $
  *  arch/sparc64/kernel/signal32.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -555,6 +555,7 @@ svr4_getcontext32(svr4_ucontext_t *uc, struct pt_regs *regs)
 	synchronize_user_stack();
 	if (current->tss.w_saved){
 		printk ("Uh oh, w_saved is not zero (%ld)\n", current->tss.w_saved);
+		lock_kernel();
 		do_exit (SIGSEGV);
 	}
 	if(clear_user(uc, sizeof (*uc)))
@@ -718,7 +719,7 @@ asmlinkage int do_signal32(unsigned long oldmask, struct pt_regs * regs,
 		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
 			current->exit_code = signr;
 			current->state = TASK_STOPPED;
-			notify_parent(current);
+			notify_parent(current, SIGCHLD);
 			schedule();
 			if (!(signr = current->exit_code))
 				continue;
@@ -764,7 +765,7 @@ asmlinkage int do_signal32(unsigned long oldmask, struct pt_regs * regs,
 				current->exit_code = signr;
 				if(!(current->p_pptr->sig->action[SIGCHLD-1].sa_flags &
 				     SA_NOCLDSTOP))
-					notify_parent(current);
+					notify_parent(current, SIGCHLD);
 				schedule();
 				continue;
 

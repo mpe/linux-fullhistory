@@ -19,6 +19,7 @@
 #include <asm/uaccess.h>
 
 static int isofs_readlink(struct inode *, char *, int);
+static struct dentry * isofs_follow_link(struct inode * inode, struct dentry *base);
 
 /*
  * symlinks can't do much...
@@ -35,6 +36,7 @@ struct inode_operations isofs_symlink_inode_operations = {
 	NULL,			/* mknod */
 	NULL,			/* rename */
 	isofs_readlink,		/* readlink */
+	isofs_follow_link,	/* follow_link */
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
@@ -51,7 +53,6 @@ static int isofs_readlink(struct inode * inode, char * buffer, int buflen)
 		buflen = 1023;
 	pnt = get_rock_ridge_symlink(inode);
 
-	iput(inode);
 	if (!pnt)
 		return 0;
 
@@ -62,4 +63,21 @@ static int isofs_readlink(struct inode * inode, char * buffer, int buflen)
 		i = -EFAULT; 	
 	kfree(pnt);
 	return i;
+}
+
+static struct dentry * isofs_follow_link(struct inode * inode, struct dentry *base)
+{
+	char * pnt;
+
+	pnt = get_rock_ridge_symlink(inode);
+
+	if(!pnt) {
+		dput(base);
+		return ERR_PTR(-ELOOP);
+	}
+
+	base = lookup_dentry(pnt, base, 1);
+
+	kfree(pnt);
+	return base;
 }

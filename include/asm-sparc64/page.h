@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.14 1997/06/26 22:32:03 davem Exp $ */
+/* $Id: page.h,v 1.15 1997/08/09 04:56:54 davem Exp $ */
 
 #ifndef _SPARC64_PAGE_H
 #define _SPARC64_PAGE_H
@@ -82,13 +82,11 @@ typedef unsigned long iopgprot_t;
 
 #endif /* (STRICT_MM_TYPECHECKS) */
 
-#endif /* !(__ASSEMBLY__) */
+#define TASK_UNMAPPED_BASE	((current->tss.flags & SPARC_FLAG_32BIT) ? \
+				 (0x0000000070000000UL) : \
+				 (0x0000030000000000UL))
 
-#ifndef __ASSEMBLY__
-#define TASK_UNMAPPED_BASE	0x0000000070000000UL
-#else
-#define TASK_UNMAPPED_BASE	0x0000000070000000
-#endif
+#endif /* !(__ASSEMBLY__) */
 
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)	(((addr)+PAGE_SIZE-1)&PAGE_MASK)

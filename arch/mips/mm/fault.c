@@ -117,7 +117,8 @@ bad_area:
 	 * terminate things with extreme prejudice.
 	 */
 	printk(KERN_ALERT "Unable to handle kernel paging request at virtual "
-	       "address %08lx, epc == %08lx\n", address, regs->cp0_epc);
+	       "address %08lx, epc == %08lx, ra == %08lx\n",
+	       address, regs->cp0_epc, regs->regs[31]);
 	die_if_kernel("Oops", regs, writeaccess);
 	do_exit(SIGKILL);
 out:

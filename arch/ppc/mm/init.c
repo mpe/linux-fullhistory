@@ -31,54 +31,48 @@
 #include <linux/mm.h>
 #include <linux/swap.h>
 #include <linux/stddef.h>
-#ifdef CONFIG_PMAC
 #include <asm/prom.h>
-#endif
 #include <asm/io.h>
 #include <asm/mmu_context.h>
 #include <asm/pgtable.h>
 #include <asm/mmu.h>
-#ifdef CONFIG_PREP
 #include <asm/residual.h>
+#ifdef CONFIG_BLK_DEV_INITRD
+#include <linux/blk.h>		/* for initrd_* */
 #endif
 
+int prom_trashed;
 int next_mmu_context;
-extern pgd_t swapper_pg_dir[];
-extern char _start[], _end[];
-extern char etext[], _stext[];
-/* References to section boundaries */
-extern char __init_begin, __init_end;
-
-extern void die_if_kernel(char *,struct pt_regs *,long);
-extern void show_net_buffers(void);
-extern unsigned long *find_end_of_memory(void);
-
-#undef MAP_RAM_WITH_SEGREGS 1
-
-#ifdef CONFIG_PMAC
-void *find_mem_piece(unsigned, unsigned);
-static void mapin_ram(void);
-static void inherit_prom_translations(void);
-#endif
-#ifdef CONFIG_PREP
-inline void MMU_invalidate_page(struct mm_struct *mm, unsigned long va);
-int inline MMU_hash_page(struct task_struct *,unsigned long,pte *);     
-#endif
-
-static void hash_init(void);
-static void *MMU_get_page(void);
-void map_page(struct thread_struct *, unsigned long va,
-		     unsigned long pa, int flags);
-
+unsigned long _SDR1;
 PTE *Hash, *Hash_end;
 unsigned long Hash_size, Hash_mask;
 unsigned long *end_of_DRAM;
 int mem_init_done;
+extern pgd_t swapper_pg_dir[];
+extern char _start[], _end[];
+extern char etext[], _stext[];
+extern char __init_begin, __init_end;
+extern RESIDUAL res;
 
-#ifdef CONFIG_PREP
-#ifdef HASHSTATS
-extern unsigned long evicts;
-#endif /* HASHSTATS */
+
+void *find_mem_piece(unsigned, unsigned);
+static void mapin_ram(void);
+static void inherit_prom_translations(void);
+static void hash_init(void);
+static void *MMU_get_page(void);
+void map_page(struct task_struct *, unsigned long va,
+		     unsigned long pa, int flags);
+extern void die_if_kernel(char *,struct pt_regs *,long);
+extern void show_net_buffers(void);
+extern unsigned long *find_end_of_memory(void);
+
+/*
+ * this tells the prep system to map all of ram with the segregs
+ * instead of the bats.  I'd like to get this to apply to the
+ * pmac as well then have everything use the bats -- Cort
+ */
+#undef MAP_RAM_WITH_SEGREGS 1 
+
 /*
  * these are used to setup the initial page tables
  * They can waste up to an entire page since the
@@ -88,8 +82,6 @@ extern unsigned long evicts;
 unsigned int probingmem = 0;
 unsigned int mmu_pages_count = 0;
 char mmu_pages[(MAX_MMU_PAGES+1)*PAGE_SIZE];
-unsigned long _TotalMemory;
-#endif /* CONFIG_PREP */
 
 /*
  * BAD_PAGE is the page that is used for page faults when linux
@@ -120,7 +112,6 @@ pte_t __bad_page(void)
 	return pte_mkdirty(mk_pte(empty_bad_page, PAGE_SHARED));
 }
 
-#ifdef CONFIG_PMAC
 #define MAX_MEM_REGIONS	32
 phandle memory_pkg;
 
@@ -128,7 +119,6 @@ struct mem_pieces {
 	int n_regions;
 	struct reg_property regions[MAX_MEM_REGIONS];
 };
-
 struct mem_pieces phys_mem;
 struct mem_pieces phys_avail;
 struct mem_pieces prom_mem;
@@ -138,7 +128,6 @@ static void remove_mem_piece(struct mem_pieces *, unsigned, unsigned, int);
 static void print_mem_pieces(struct mem_pieces *);
 
 unsigned long avail_start;
-int prom_trashed;
 
 /*
  * Read in a property describing some pieces of memory.
@@ -272,7 +261,7 @@ find_mem_piece(unsigned size, unsigned align)
  * Our text, data, bss use something over 1MB, starting at 0.
  * Open Firmware may be using 1MB at the 4MB point.
  */
-unsigned long *find_end_of_memory(void)
+unsigned long *pmac_find_end_of_memory(void)
 {
 	unsigned long a, total;
 	unsigned long h, kstart, ksize;
@@ -353,6 +342,9 @@ unsigned long find_available_memory(void)
 	int i;
 	unsigned long a, free;
 	unsigned long start, end;
+	
+	if ( _machine != _MACH_Pmac )
+		return 0;
 
 	free = 0;
 	for (i = 0; i < phys_avail.n_regions - 1; ++i) {
@@ -366,7 +358,6 @@ unsigned long find_available_memory(void)
 	avail_start = (unsigned long) __va(a);
 	return avail_start;
 }
-#endif /* CONFIG_PMAC */
 
 void show_mem(void)
 {
@@ -399,14 +390,21 @@ void show_mem(void)
 	       "Ctx", "Ctx<<4", "Last Sys", "pc", "task");
 	for_each_task(p)
 	{	
-		printk("%-8.8s %3d %3d %8d %8d %8d %c%08x %08x",
+		printk("%-8.8s %3d %3d %8ld %8ld %8ld %c%08lx %08lx ",
 		       p->comm,p->pid,
 		       p->mm->count,p->mm->context,
 		       p->mm->context<<4, p->tss.last_syscall,
 		       user_mode(p->tss.regs) ? 'u' : 'k', p->tss.regs->nip,
-		       p);
+		       (ulong)p);
 		if ( p == current )
-			printk(" current");
+			printk("current");
+		if ( p == last_task_used_math )
+		{
+			if ( p == current )
+				printk(",");
+			printk("last math");
+		}
+
 		printk("\n");
 	}
 }
@@ -434,76 +432,68 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 void mem_init(unsigned long start_mem, unsigned long end_mem)
 {
 	unsigned long addr;
-#ifdef CONFIG_PMAC
 	int i;
-	unsigned long lim;
-#endif
+	unsigned long a, lim;
 	int codepages = 0;
 	int datapages = 0;
 	int initpages = 0;
 
 	end_mem &= PAGE_MASK;
 	high_memory = (void *) end_mem;
-	num_physpages = max_mapnr = MAP_NR(high_memory);
-	
-	/* clear the zero-page */
-	memset(empty_zero_page, 0, PAGE_SIZE);
-	
+	max_mapnr = MAP_NR(high_memory);
+	num_physpages = max_mapnr;	/* RAM is assumed contiguous */
+
 	/* mark usable pages in the mem_map[] */
 	start_mem = PAGE_ALIGN(start_mem);
-	
-#ifdef CONFIG_PMAC
-	remove_mem_piece(&phys_avail, __pa(avail_start),
-			 start_mem - avail_start, 1);
 
-	for (a = KERNELBASE ; a < end_mem; a += PAGE_SIZE)
-		set_bit(PG_reserved, &mem_map[MAP_NR(a)].flags);
-
-	for (i = 0; i < phys_avail.n_regions; ++i) {
-		a = (unsigned long) __va(phys_avail.regions[i].address);
-		lim = a + phys_avail.regions[i].size;
-		a = PAGE_ALIGN(a);
-		for (; a < lim; a += PAGE_SIZE) {
-			clear_bit(PG_reserved, &mem_map[MAP_NR(a)].flags);
-			mem_map[MAP_NR(a)].count = 1;
-			free_page(a);
-		}
-	}
-	phys_avail.n_regions = 0;
-
-	/* free the prom's memory */
-	for (i = 0; i < prom_mem.n_regions; ++i) {
-		a = (unsigned long) __va(prom_mem.regions[i].address);
-		lim = a + prom_mem.regions[i].size;
-		a = PAGE_ALIGN(a);
-		for (; a < lim; a += PAGE_SIZE) {
-			clear_bit(PG_reserved, &mem_map[MAP_NR(a)].flags);
-			mem_map[MAP_NR(a)].count = 1;
-			free_page(a);
-		}
-	}
-	prom_trashed = 1;
-#endif /* CONFIG_PMAC */
-
-#ifdef CONFIG_PREP
-	/* mark mem used by kernel as reserved, mark other unreserved */
-	for (addr = PAGE_OFFSET ; addr < end_mem; addr += PAGE_SIZE)
+	if ( _machine == _MACH_Pmac )
 	{
-		/* skip hash table gap */
-		if ( (addr > (ulong)_end) && (addr < (ulong)Hash))
-			continue;
-		if ( addr < (ulong) /*Hash_end*/ start_mem )
+		remove_mem_piece(&phys_avail, __pa(avail_start),
+				 start_mem - avail_start, 1);
+		
+		for (addr = KERNELBASE ; addr < end_mem; addr += PAGE_SIZE)
 			set_bit(PG_reserved, &mem_map[MAP_NR(addr)].flags);
-		else
-			clear_bit(PG_reserved, &mem_map[MAP_NR(addr)].flags);
+		
+		for (i = 0; i < phys_avail.n_regions; ++i) {
+			a = (unsigned long) __va(phys_avail.regions[i].address);
+			lim = a + phys_avail.regions[i].size;
+			a = PAGE_ALIGN(a);
+			for (; a < lim; a += PAGE_SIZE)
+				clear_bit(PG_reserved, &mem_map[MAP_NR(a)].flags);
+		}
+		phys_avail.n_regions = 0;
+		
+		/* free the prom's memory */
+		for (i = 0; i < prom_mem.n_regions; ++i) {
+			a = (unsigned long) __va(prom_mem.regions[i].address);
+			lim = a + prom_mem.regions[i].size;
+			a = PAGE_ALIGN(a);
+			for (; a < lim; a += PAGE_SIZE)
+				clear_bit(PG_reserved, &mem_map[MAP_NR(a)].flags);
+		}
+		prom_trashed = 1;
+	}
+	else /* prep */
+	{
+		/* mark mem used by kernel as reserved, mark other unreserved */
+		for (addr = PAGE_OFFSET ; addr < end_mem; addr += PAGE_SIZE)
+		{
+			/* skip hash table gap */
+			if ( (addr > (ulong)_end) && (addr < (ulong)Hash))
+				continue;
+			if ( addr < (ulong) /*Hash_end*/ start_mem )
+				set_bit(PG_reserved, &mem_map[MAP_NR(addr)].flags);
+			else
+				clear_bit(PG_reserved, &mem_map[MAP_NR(addr)].flags);
+		}
 	}
 
 	for (addr = PAGE_OFFSET; addr < end_mem; addr += PAGE_SIZE) {
-		if(PageReserved(mem_map + MAP_NR(addr))) {
+		if (PageReserved(mem_map + MAP_NR(addr))) {
 			if (addr < (ulong) etext)
 				codepages++;
-			/*else if((addr >= (unsigned long)&__init_begin && addr < (unsigned long)&__init_end))
-                                initpages++;*/
+			else if((addr >= (unsigned long)&__init_begin && addr < (unsigned long)&__init_end))
+                                initpages++;
                         else if (addr < (ulong) start_mem)
 				datapages++;
 			continue;
@@ -515,9 +505,8 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 #endif /* CONFIG_BLK_DEV_INITRD */
 			free_page(addr);
 	}
-	
-#endif /* CONFIG_PREP */
-        printk("Memory: %luk available (%dk kernel code, %dk data, %dk init) [%08lx,%08lx]\n",
+
+        printk("Memory: %luk available (%dk kernel code, %dk data, %dk init) [%08x,%08lx]\n",
 	       (unsigned long) nr_free_pages << (PAGE_SHIFT-10),
 	       codepages << (PAGE_SHIFT-10),
 	       datapages << (PAGE_SHIFT-10), 
@@ -534,7 +523,6 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
  */
 void free_initmem(void)
 {
-	unsigned long addr;
 	unsigned long a;
 	unsigned long num_freed_pages = 0;
 
@@ -548,16 +536,14 @@ void free_initmem(void)
 		num_freed_pages++;
 	}
 
-#if 0
-	addr = (unsigned long)(&__init_begin);
-	for (; addr < (unsigned long)(&__init_end); addr += PAGE_SIZE) {
-		num_freed_pages++;
-		mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);
-		mem_map[MAP_NR(addr)].count = 1;
-		free_page(addr);
+	a = (unsigned long)(&__init_begin);
+	for (; a < (unsigned long)(&__init_end); a += PAGE_SIZE) {
+		mem_map[MAP_NR(a)].flags &= ~(1 << PG_reserved);
+		atomic_set(&mem_map[MAP_NR(a)].count, 1);
+		free_page(a);
 	}
-#endif	
-	printk ("Freeing unused kernel memory: %dk freed\n",
+
+	printk ("Freeing unused kernel memory: %ldk freed\n",
 		(num_freed_pages * PAGE_SIZE) >> 10);
 }
 
@@ -576,18 +562,12 @@ void si_meminfo(struct sysinfo *val)
 		val->totalram++;
 		if (!atomic_read(&mem_map[i].count))
 			continue;
-		val->sharedram += atomic_read(&mem_map[i].count)-1;
+		val->sharedram += atomic_read(&mem_map[i].count) - 1;
 	}
 	val->totalram <<= PAGE_SHIFT;
 	val->sharedram <<= PAGE_SHIFT;
 	return;
 }
-
-/* Kernel MMU setup & lowest level hardware support */
-
-unsigned long _SDR1;		/* Hardware SDR1 image */
-
-#ifdef CONFIG_PREP
 
 BAT BAT0 =
 {
@@ -635,7 +615,11 @@ BAT BAT2 =
     0x00000000>>17,		/* brpn */
     0,			/* w */
     0,			/* i */
+#ifdef __SMP__    
     1,			/* m */
+#else    
+    0,			/* m */
+#endif    
     0,			/* g */
     BPP_RW			/* pp */
   }
@@ -724,61 +708,41 @@ P601_BAT BAT3_601 =
  * this will likely stay seperate from the pmac.
  * -- Cort
  */
-unsigned long *find_end_of_memory(void)
+unsigned long *prep_find_end_of_memory(void)
 {
-	extern RESIDUAL res;
-	extern unsigned long resptr;
-	int i, p;
+	int i;
 	unsigned long h;
-
-	/* copy residual data */
-	if ( resptr )
-		memcpy( &res, (void *)(resptr+KERNELBASE), sizeof(RESIDUAL) );
-	else
-		/* clearing bss probably clears this but... */
-		memset( &res, sizeof(RESIDUAL), 0 );
-	_TotalMemory = res.TotalMemory;
-	
-	/* this really has nothing to do with the mmu_init() but is
-	   necessary for early setup -- Cort */
-	if (!strncmp(res.VitalProductData.PrintableModel,"IBM",3))
-	{
-		_machine = _MACH_IBM;
-	}
-	else
-		_machine = _MACH_Motorola;
-  
 	/* setup the hash table */
-	if (_TotalMemory == 0 )
+	if (res.TotalMemory == 0 )
 	{
 		/*
 		 * I need a way to probe the amount of memory if the residual
 		 * data doesn't contain it. -- Cort
 		 */
 		printk("Ramsize from residual data was 0 -- Probing for value\n");
-		_TotalMemory = 0x03000000;
-		printk("Ramsize default to be %dM\n", _TotalMemory>>20);
+		res.TotalMemory = 0x03000000;
+		printk("Ramsize default to be %ldM\n", res.TotalMemory>>20);
 	}
 	
 #if 0
 	/* linux has trouble with > 64M ram -- Cort */
-	if ( _TotalMemory > 0x04000000 /* 64M */ )
+	if ( res.TotalMemory > 0x04000000 /* 64M */ )
 	{
 		printk("Only using first 64M of ram.\n");
-		_TotalMemory = 0x04000000;
+		res.TotalMemory = 0x04000000;
 	}
 #endif	
 	
 	/* setup the bat2 mapping to cover physical ram */
 	BAT2.batu.bl = 0x1; /* 256k mapping */
-	for ( h = 256*1024 /* 256k */ ; (h <= _TotalMemory) && (h <= 256*1024*1024);
+	for ( h = 256*1024 /* 256k */ ; (h <= res.TotalMemory) && (h <= 256*1024*1024);
 	      h *= 2 )
 		BAT2.batu.bl = (BAT2.batu.bl << 1) | BAT2.batu.bl;
 	/*
 	 * Allow 64k of hash table for every 16MB of memory,
 	 * up to a maximum of 2MB.
 	 */
-	for (h = 64<<10; h < _TotalMemory / 256 && h < 2<<20; h *= 2)
+	for (h = 64<<10; h < res.TotalMemory / 256 && h < 2<<20; h *= 2)
 		;
 	Hash_size = h;
 	Hash_mask = (h >> 6) - 1;
@@ -799,11 +763,11 @@ unsigned long *find_end_of_memory(void)
 	if ( _get_PVR() == 1 )
 	{
 		/* map in rest of ram with seg regs */
-		if ( _TotalMemory > 0x01000000 /* 16M */)
+		if ( res.TotalMemory > 0x01000000 /* 16M */)
 		{
 			for (i = KERNELBASE+0x01000000;
-			     i < KERNELBASE+_TotalMemory;  i += PAGE_SIZE)
-				map_page(&init_task.tss, i, __pa(i),
+			     i < KERNELBASE+res.TotalMemory;  i += PAGE_SIZE)
+				map_page(&init_task, i, __pa(i),
 					 _PAGE_PRESENT| _PAGE_RW|_PAGE_DIRTY|_PAGE_ACCESSED);
 		}
 	}
@@ -815,25 +779,23 @@ unsigned long *find_end_of_memory(void)
 	memset(&BAT2_601, sizeof(BAT2), 0); /* in case we're on a 601 */
 	memset(&BAT3_601, sizeof(BAT2), 0);
 	/* map all of ram for kernel with segregs */
-	for (i = KERNELBASE;  i < KERNELBASE+_TotalMemory;  i += PAGE_SIZE)
+	for (i = KERNELBASE;  i < KERNELBASE+res.TotalMemory;  i += PAGE_SIZE)
 	{
 		if ( i < (unsigned long)etext )
-			map_page(&init_task.tss, i, __pa(i),
+			map_page(&init_task, i, __pa(i),
 				 _PAGE_PRESENT/*| _PAGE_RW*/|_PAGE_DIRTY|_PAGE_ACCESSED);
 		else
-			map_page(&init_task.tss, i, __pa(i),
+			map_page(&init_task, i, __pa(i),
 				 _PAGE_PRESENT| _PAGE_RW|_PAGE_DIRTY|_PAGE_ACCESSED);
 	}
 #endif /* MAP_RAM_WITH_SEGREGS */
 	
 	printk("Total memory = %ldMB; using %ldkB for hash table (at %p)\n",
-	       _TotalMemory >> 20, Hash_size >> 10, Hash);
-	return ((unsigned long *)_TotalMemory);
+	       res.TotalMemory >> 20, Hash_size >> 10, Hash);
+	return ((unsigned long *)res.TotalMemory);
 }
-#endif /* CONFIG_PREP */
 
 
-#ifdef CONFIG_PMAC
 /*
  * Map in all of physical memory starting at KERNELBASE.
  */
@@ -854,7 +816,10 @@ static void mapin_ram()
 	    f = _PAGE_PRESENT | _PAGE_ACCESSED;
 	    if ((char *) v < _stext || (char *) v >= etext)
 		f |= _PAGE_RW | _PAGE_DIRTY | _PAGE_HWWRITE;
-	    map_page(&init_task.tss, v, p, f);
+	    else
+		/* On the powerpc, no user access forces R/W kernel access */
+		f |= _PAGE_USER;
+	    map_page(&init_task, v, p, f);
 	    v += PAGE_SIZE;
 	    p += PAGE_SIZE;
 	}
@@ -889,7 +854,7 @@ static void inherit_prom_translations()
 
 	for (tp = prom_translations, i = 0; i < n_translations; ++i, ++tp) {
 		/* ignore stuff mapped down low */
-		if (tp->virt < 0x10000000)
+		if (tp->virt < 0x10000000 && tp->phys < 0x10000000)
 			continue;
 		/* map PPC mmu flags to linux mm flags */
 		f = (tp->flags & (_PAGE_NO_CACHE | _PAGE_WRITETHRU
@@ -900,13 +865,12 @@ static void inherit_prom_translations()
 		p = tp->phys;
 		n = tp->size;
 		for (; n != 0; n -= PAGE_SIZE) {
-			map_page(&init_task.tss, v, p, f);
+			map_page(&init_task, v, p, f);
 			v += PAGE_SIZE;
 			p += PAGE_SIZE;
 		}
 	}
 }
-#endif
 
 /*
  * Initialize the hash table and patch the instructions in head.S.
@@ -943,8 +907,8 @@ static void hash_init(void)
 	 * out from the data cache and invalidated in the instruction
 	 * cache, on those machines with split caches.
 	 */
-	store_cache_range((unsigned long) hash_page_patch_A,
-			  (unsigned long) (hash_page_patch_C + 1));
+	flush_icache_range((unsigned long) hash_page_patch_A,
+			   (unsigned long) (hash_page_patch_C + 1));
 }
 
 
@@ -958,71 +922,74 @@ static void hash_init(void)
 void
 MMU_init(void)
 {
-        end_of_DRAM = find_end_of_memory();
+	if ( _machine == _MACH_Pmac )
+		end_of_DRAM = pmac_find_end_of_memory();
+	else /* prep */
+		end_of_DRAM = prep_find_end_of_memory();
+		
         hash_init();
         _SDR1 = __pa(Hash) | (Hash_mask >> 10);
-#ifdef CONFIG_PMAC
-        /* Force initial page tables */
-	/* this done by INIT_TSS in processor.h on prep -- Cort */
-        init_task.tss.pg_tables = (unsigned long *)swapper_pg_dir;
 
-	/* Map in all of RAM starting at KERNELBASE */
-	mapin_ram();
-	/* Copy mappings from the prom */
-	inherit_prom_translations();
-#endif /* CONFIG_PMAC */
+	if ( _machine == _MACH_Pmac )
+	{
+		/* Map in all of RAM starting at KERNELBASE */
+		mapin_ram();
+		/* Copy mappings from the prom */
+		inherit_prom_translations();
+	}
 }
 
 static void *
 MMU_get_page()
 {
-  void *p;
-  
-  if (mem_init_done) {
-    p = (void *) __get_free_page(GFP_KERNEL);
-    if (p == 0)
-      panic("couldn't get a page in MMU_get_page");
-  } else {
-#ifdef CONFIG_PREP
-    mmu_pages_count++;
-    if ( mmu_pages_count > MAX_MMU_PAGES )
-      printk("out of mmu pages!\n");
-    p = (pte *)(PAGE_ALIGN((unsigned long)mmu_pages)+
-		(mmu_pages_count+PAGE_SIZE));
-#endif
-#ifdef CONFIG_PMAC
-    p = find_mem_piece(PAGE_SIZE, PAGE_SIZE);
-#endif
-  }
-  memset(p, 0, PAGE_SIZE);
-  return p;
+	void *p;
+
+	if (mem_init_done) {
+		p = (void *) __get_free_page(GFP_KERNEL);
+		if (p == 0)
+			panic("couldn't get a page in MMU_get_page");
+	} else {
+		if ( is_prep )
+		{
+			mmu_pages_count++;
+			if ( mmu_pages_count > MAX_MMU_PAGES )
+				printk("out of mmu pages!\n");
+			p = (pte *)(PAGE_ALIGN((unsigned long)mmu_pages)+
+				    (mmu_pages_count+PAGE_SIZE));
+		}
+		else /* pmac */
+		{
+			p = find_mem_piece(PAGE_SIZE, PAGE_SIZE);
+		}
+	}
+	memset(p, 0, PAGE_SIZE);
+	return p;
 }
 
-#ifdef CONFIG_PMAC
 void *
 ioremap(unsigned long addr, unsigned long size)
 {
 	unsigned long p, end = addr + size;
 
 	for (p = addr & PAGE_MASK; p < end; p += PAGE_SIZE)
-		map_page(&init_task.tss, p, p, pgprot_val(PAGE_KERNEL_CI) | _PAGE_GUARDED);
+		map_page(&init_task, p, p, pgprot_val(PAGE_KERNEL_CI) | _PAGE_GUARDED);
 	return (void *) addr;
 }
-#endif
 
 void
-map_page(struct thread_struct *tss, unsigned long va,
+map_page(struct task_struct *tsk, unsigned long va,
 	 unsigned long pa, int flags)
 {
 	pmd_t *pd;
 	pte_t *pg;
+	
 
-	if (tss->pg_tables == NULL) {
+	if (tsk->mm->pgd == NULL) {
 		/* Allocate upper level page map */
-		tss->pg_tables = (unsigned long *) MMU_get_page();
+		tsk->mm->pgd = (pgd_t *) MMU_get_page();
 	}
 	/* Use upper 10 bits of VA to index the first level map */
-	pd = (pmd_t *) (tss->pg_tables + (va >> PGDIR_SHIFT));
+	pd = (pmd_t *) (tsk->mm->pgd + (va >> PGDIR_SHIFT));
 	if (pmd_none(*pd)) {
 		/* Need to allocate second-level table */
 		pg = (pte_t *) MMU_get_page();
@@ -1084,26 +1051,6 @@ flush_tlb_mm(struct mm_struct *mm)
 	}
 }
 
-
-void
-flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr)
-{
-	unsigned vsid;
-	
-	if ( vmaddr < TASK_SIZE) {
-		/*vsid = (vma->vm_mm->context << 4) | (vmaddr >> 28);*/
-		flush_hash_page(vma->vm_mm->context/*vsid*/, vmaddr);
-		/* this is needed on prep at the moment -- don't know why
-		   -- Cort*/
-		MMU_invalidate_page(vma->vm_mm,vmaddr);
-	}
-	else
-	{
-		/*printk("flush_tlb_page() vmaddr > TASK_SIZE %08x\n", vmaddr);*/
-	}
-}
-
-
 /* for each page addr in the range, call MMU_invalidate_page()
    if the range is very large and the hash table is small it might be faster to
    do a search of the hash table and just invalidate pages that are in the range
@@ -1113,15 +1060,10 @@ flush_tlb_page(struct vm_area_struct *vma, unsigned long vmaddr)
 void
 flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end)
 {
-        start &= PAGE_MASK;
+	start &= PAGE_MASK;
 	for (; start < end && start < TASK_SIZE; start += PAGE_SIZE)
 	{
-		/*flush_hash_page(VSID_FROM_CONTEXT( start>>28, mm->context),
-				start );*/
 		flush_hash_page(mm->context, start);
-		/* this is needed on prep at the moment -- don't know why
-		   -- Cort*/
-		MMU_invalidate_page(mm,start);
 	}
 }
 
@@ -1135,78 +1077,17 @@ void
 mmu_context_overflow(void)
 {
 	struct task_struct *tsk;
-	int nr;
 
-	printk(KERN_INFO "mmu_context_overflow\n");
-	for (nr = 0; nr < NR_TASKS; ++nr) {
-		tsk = task[nr];
-		if (tsk && tsk->mm)
+	printk(KERN_DEBUG "mmu_context_overflow\n");
+	read_lock(&tasklist_lock);
+ 	for_each_task(tsk) {
+		if (tsk->mm)
 			tsk->mm->context = NO_CONTEXT;
 	}
+	read_unlock(&tasklist_lock);
 	flush_hash_segments(0x10, 0xffffff);
-	_tlbia();
 	next_mmu_context = 0;
-}
-
-#ifdef CONFIG_PREP
-/*
- * it's not a simple matter to get rid of these and switch to the
- * ones paul is using. it will take some time and thought  -- Cort
- */
-inline void MMU_invalidate_page(struct mm_struct *mm, unsigned long va)
-{
-	int hash, page_index, segment, i, h, _h, api, vsid, perms;
-	PTE *_pte, *slot;
-	int flags = 0;
-	page_index = ((int)va & 0x0FFFF000) >> 12;
-	segment = (unsigned int)va >> 28;
-	api = page_index >> 10;
-	vsid = VSID_FROM_CONTEXT(segment,mm->context);
-	for (_h = 0;  _h < 2;  _h++)
-	{
-		hash = page_index ^ vsid;		
-		if (_h)
-		{
-			hash = ~hash;  /* Secondary hash uses ones-complement */
-		}
-		hash &= 0x3FF | (Hash_mask /*<< 10*/);
-		hash *= 8;  /* Eight entries / hash bucket */
-		_pte = &Hash[hash];
-		for (i = 0;  i < 8;  i++, _pte++)
-		{
-			if (_pte->v && _pte->vsid == vsid && _pte->h == _h && _pte->api == api)
-			{ /* Found it! */
-				_tlbie(va); /* Clear TLB */
-				if (_pte->r) flags |= _PAGE_ACCESSED;
-				if (_pte->c) flags |= _PAGE_DIRTY;
-				_pte->v = 0;
-				return /*(flags)*/;
-			}
-		}
-	}
-	_tlbie(va);
-	return /*(flags)*/;
-}
-#endif
-
-#include <asm/mmu.h>
-void print_mm_info(void)
-{
-	struct _SEGREG s;
-	long a;
-	struct _BATU bu;
-	struct _BATL bl;
-	unsigned long i;
-
-	for ( i = 0x70000000 ; i <= 0x90000000 ; i+= 0x10000000 )
-	{
-		a = get_SR(i);
-		memcpy(&s,&a,4);
-		printk("sr %2d t:%1d ks:%d kp:%d n:%d vsid:%x  %x\n",
-		       i>>28, s.t, s.ks, s.kp, s.n, s.vsid, a);
-	}
-
-	asm("mfspr %0,532; mfspr %1, 533\n" : "=r" (bu), "=r" (bl));
-	printk("bat2 bepi: %0x vs: %1x vp: %1x wimg: %x%x%x%x pp: %1x\n",
-       	       bu.bepi<<17, bu.vs, bu.vp, bl.w, bl.i, bl.m, bl.g, bl.pp);
+	/* make sure current always has a context */
+	current->mm->context = MUNGE_CONTEXT(++next_mmu_context);
+	set_context(current->mm->context);
 }

@@ -1,4 +1,4 @@
-/* $Id: p1275.c,v 1.11 1997/07/24 12:15:11 davem Exp $
+/* $Id: p1275.c,v 1.12 1997/07/26 18:39:01 davem Exp $
  * p1275.c: Sun IEEE 1275 PROM low level interface routines
  *
  * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -64,7 +64,7 @@ long p1275_cmd (char *service, long fmt, ...)
 	long ctx = 0;
 	
 	p = p1275buf.prom_buffer;
-	save_and_cli(flags);
+	__save_and_cli(flags);
 	ctx = spitfire_get_primary_context ();
 	if (ctx) {
 		flushw_user ();
@@ -149,7 +149,7 @@ long p1275_cmd (char *service, long fmt, ...)
 	
 	if (ctx)
 		spitfire_set_primary_context (ctx);
-	restore_flags(flags);
+	__restore_flags(flags);
 	return x;
 }
 

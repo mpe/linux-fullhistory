@@ -125,6 +125,7 @@ struct termios {
 #define  B57600   00020
 #define  B115200  00021
 #define  B230400  00022
+#define  B460800  00023
 
 #define CSIZE	00001400
 #define   CS5	00000000

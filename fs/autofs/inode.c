@@ -141,6 +141,9 @@ static int parse_options(char *options, int *pipefd, uid_t *uid, gid_t *gid, pid
 struct super_block *autofs_read_super(struct super_block *s, void *data,
 				      int silent)
 {
+	struct inode * root_inode;
+	struct dentry * root;
+	struct file * pipe;
 	int pipefd;
 	struct autofs_sb_info *sbi;
 	int minproto, maxproto;
@@ -148,12 +151,13 @@ struct super_block *autofs_read_super(struct super_block *s, void *data,
 	MOD_INC_USE_COUNT;
 
 	lock_super(s);
+	/* Super block already completed? */
+	if (s->s_root)
+		goto out_unlock;
+
 	sbi = (struct autofs_sb_info *) kmalloc(sizeof(struct autofs_sb_info), GFP_KERNEL);
-	if ( !sbi ) {
-		s->s_dev = 0;
-		MOD_DEC_USE_COUNT;
-		return NULL;
-	}
+	if ( !sbi )
+		goto fail_unlock;
 	DPRINTK(("autofs: starting up, sbi = %p\n",sbi));
 
 	s->u.generic_sbp = sbi;
@@ -169,50 +173,112 @@ struct super_block *autofs_read_super(struct super_block *s, void *data,
 	s->s_blocksize_bits = 10;
 	s->s_magic = AUTOFS_SUPER_MAGIC;
 	s->s_op = &autofs_sops;
-	unlock_super(s);
-	s->s_root = d_alloc_root(iget(s, AUTOFS_ROOT_INO), NULL);
-	if (!s->s_root) {
-		printk("autofs: get root inode failed\n");
-		kfree(sbi);
-		s->s_dev = 0;
-		MOD_DEC_USE_COUNT;
-		return NULL;
-	}
+	s->s_root = NULL;
+	unlock_super(s); /* shouldn't we keep it locked a while longer? */
 
-	if ( parse_options(data,&pipefd,&s->s_root->d_inode->i_uid,&s->s_root->d_inode->i_gid,&sbi->oz_pgrp,&minproto,&maxproto) ) {
+	/*
+	 * Get the root inode and dentry, but defer checking for errors.
+	 */
+	root_inode = iget(s, AUTOFS_ROOT_INO);
+	root = d_alloc_root(root_inode, NULL);
+	pipe = NULL;
+
+	/*
+	 * Check whether somebody else completed the super block.
+	 */
+	if (s->s_root)
+		goto out_dput;
+
+	if (!root)
+		goto fail_iput;
+
+	/* Can this call block? */
+	if ( parse_options(data,&pipefd,&root_inode->i_uid,&root_inode->i_gid,&sbi->oz_pgrp,&minproto,&maxproto) ) {
 		printk("autofs: called with bogus options\n");
-		dput(s->s_root);
-		kfree(sbi);
-		s->s_dev = 0;
-		MOD_DEC_USE_COUNT;
-		return NULL;
+		goto fail_dput;
 	}
 
-	if ( minproto > AUTOFS_PROTO_VERSION || maxproto < AUTOFS_PROTO_VERSION ) {
+	/* Couldn't this be tested earlier? */
+	if ( minproto > AUTOFS_PROTO_VERSION || 
+	     maxproto < AUTOFS_PROTO_VERSION ) {
 		printk("autofs: kernel does not match daemon version\n");
-		dput(s->s_root);
-		kfree(sbi);
-		s->s_dev = 0;
-		MOD_DEC_USE_COUNT;
-		return NULL;
+		goto fail_dput;
 	}
 
 	DPRINTK(("autofs: pipe fd = %d, pgrp = %u\n", pipefd, sbi->oz_pgrp));
-	sbi->pipe = fget(pipefd);
-	if ( !sbi->pipe || !sbi->pipe->f_op || !sbi->pipe->f_op->write ) {
-		if ( sbi->pipe ) {
-			fput(sbi->pipe);
-			printk("autofs: pipe file descriptor does not contain proper ops\n");
-		} else {
-			printk("autofs: could not open pipe file descriptor\n");
-		}
-		dput(s->s_root);
-		kfree(sbi);
-		s->s_dev = 0;
-		MOD_DEC_USE_COUNT;
-		return NULL;
+	pipe = fget(pipefd);
+	/*
+	 * Check whether somebody else completed the super block.
+	 */
+	if (s->s_root)
+		goto out_fput;
+	
+	if ( !pipe ) {
+		printk("autofs: could not open pipe file descriptor\n");
+		goto fail_dput;
 	}
+	if ( !pipe->f_op || !pipe->f_op->write )
+		goto fail_fput;
+	sbi->pipe = pipe;
+
+	/*
+	 * Success! Install the root dentry now to indicate completion.
+	 */
+	s->s_root = root;
 	return s;
+
+	/*
+	 * Success ... somebody else completed the super block for us. 
+	 */ 
+out_unlock:
+	unlock_super(s);
+	goto out_dec;
+out_fput:
+	if (pipe)
+		fput(pipe);
+out_dput:
+	if (root)
+		dput(root);
+	else
+		iput(root_inode);
+out_dec:
+	MOD_DEC_USE_COUNT;
+	return s;
+	
+	/*
+	 * Failure ... clear the s_dev slot and clean up.
+	 */
+fail_fput:
+	printk("autofs: pipe file descriptor does not contain proper ops\n");
+	/*
+	 * fput() can block, so we clear the super block first.
+	 */
+	s->s_dev = 0;
+	fput(pipe);
+	/* fall through */
+fail_dput:
+	/*
+	 * dput() can block, so we clear the super block first.
+	 */
+	s->s_dev = 0;
+	dput(root);
+	goto fail_free;
+fail_iput:
+	printk("autofs: get root dentry failed\n");
+	/*
+	 * iput() can block, so we clear the super block first.
+	 */
+	s->s_dev = 0;
+	iput(root_inode);
+fail_free:
+	kfree(sbi);
+	goto fail_dec;
+fail_unlock:
+	unlock_super(s);
+fail_dec:
+	s->s_dev = 0;
+	MOD_DEC_USE_COUNT;
+	return NULL;
 }
 
 static int autofs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)

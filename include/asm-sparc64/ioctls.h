@@ -1,4 +1,4 @@
-/* $Id: ioctls.h,v 1.4 1997/06/23 07:26:03 davem Exp $ */
+/* $Id: ioctls.h,v 1.5 1997/08/12 04:13:13 ecd Exp $ */
 #ifndef _ASM_SPARC64_IOCTLS_H
 #define _ASM_SPARC64_IOCTLS_H
 
@@ -105,6 +105,8 @@
 #define TIOCSERGETLSR   0x5459 /* Get line status register */
 #define TIOCSERGETMULTI 0x545A /* Get multiport config  */
 #define TIOCSERSETMULTI 0x545B /* Set multiport config */
+#define TIOCMIWAIT	0x545C /* Wait for change on serial input line(s) */
+#define TIOCGICOUNT	0x545D /* Read serial port inline interrupt counts */
 
 /* Kernel definitions */
 #ifdef __KERNEL__

@@ -16,6 +16,7 @@
  *  - flush_cache_page(mm, vmaddr) flushes a single page
  *  - flush_cache_range(mm, start, end) flushes a range of pages
  *  - flush_page_to_ram(page) write back kernel page to ram
+ *
  */
 extern void (*flush_cache_all)(void);
 extern void (*flush_cache_mm)(struct mm_struct *mm);
@@ -24,6 +25,7 @@ extern void (*flush_cache_range)(struct mm_struct *mm, unsigned long start,
 extern void (*flush_cache_page)(struct vm_area_struct *vma, unsigned long page);
 extern void (*flush_cache_sigtramp)(unsigned long addr);
 extern void (*flush_page_to_ram)(unsigned long page);
+#define flush_icache_range(start, end)		do { } while (0)
 
 /* TLB flushing:
  *
@@ -37,6 +39,13 @@ extern void (*flush_tlb_mm)(struct mm_struct *mm);
 extern void (*flush_tlb_range)(struct mm_struct *mm, unsigned long start,
 			       unsigned long end);
 extern void (*flush_tlb_page)(struct vm_area_struct *vma, unsigned long page);
+
+/*
+ * - add_wired_entry() add a fixed TLB entry, and move wired register
+ */
+extern void (*add_wired_entry)(unsigned long entrylo0, unsigned long entrylo1,
+			       unsigned long entryhi, unsigned long pagemask);
+
 
 /* Basically we have the same two-level (which is the logical three level
  * Linux page table layout folded) page tables as the i386.  Some day
@@ -108,21 +117,25 @@ extern void (*flush_tlb_page)(struct vm_area_struct *vma, unsigned long page);
 #define _CACHE_CACHABLE_ACCELERATED (7<<9)  /* R10000 only             */
 #define _CACHE_MASK                 (7<<9)
 
-#define __READABLE	(_PAGE_READ|_PAGE_SILENT_READ|_PAGE_ACCESSED)
-#define __WRITEABLE	(_PAGE_WRITE|_PAGE_SILENT_WRITE|_PAGE_MODIFIED)
+#define __READABLE	(_PAGE_READ | _PAGE_SILENT_READ | _PAGE_ACCESSED)
+#define __WRITEABLE	(_PAGE_WRITE | _PAGE_SILENT_WRITE | _PAGE_MODIFIED)
 
 #define _PAGE_CHG_MASK  (PAGE_MASK | __READABLE | __WRITEABLE | _CACHE_MASK)
 
 #define PAGE_NONE	__pgprot(_PAGE_PRESENT | _PAGE_ACCESSED | \
                         _CACHE_CACHABLE_NONCOHERENT)
 #define PAGE_SHARED     __pgprot(_PAGE_PRESENT | _PAGE_READ | _PAGE_WRITE | \
-			_PAGE_ACCESSED | _CACHE_CACHABLE_NONCOHERENT)
+			_CACHE_CACHABLE_NONCOHERENT)
 #define PAGE_COPY       __pgprot(_PAGE_PRESENT | _PAGE_READ | \
 			_CACHE_CACHABLE_NONCOHERENT)
 #define PAGE_READONLY   __pgprot(_PAGE_PRESENT | _PAGE_READ | \
 			_CACHE_CACHABLE_NONCOHERENT)
 #define PAGE_KERNEL	__pgprot(_PAGE_PRESENT | __READABLE | __WRITEABLE | \
 			_CACHE_CACHABLE_NONCOHERENT)
+#define PAGE_USERIO     __pgprot(_PAGE_PRESENT | _PAGE_READ | _PAGE_WRITE | \
+			_CACHE_UNCACHED)
+#define PAGE_KERNEL_UNCACHED __pgprot(_PAGE_PRESENT | __READABLE | __WRITEABLE | \
+			_CACHE_UNCACHED)
 
 /*
  * MIPS can't do page protection for execute, and considers that the same like
@@ -217,7 +230,7 @@ extern inline int pte_present(pte_t pte) { return pte_val(pte) & _PAGE_PRESENT; 
  */
 extern inline void set_pte(pte_t *ptep, pte_t pteval)
 {
-        *ptep = pteval;
+	*ptep = pteval;
 }
 
 extern inline void pte_clear(pte_t *ptep)
@@ -230,7 +243,7 @@ extern inline void pte_clear(pte_t *ptep)
  */
 extern inline int pmd_none(pmd_t pmd)
 {
-	return pmd_val(pmd) == ((unsigned long) invalid_pte_table);
+	return pmd_val(pmd) == (unsigned long) invalid_pte_table;
 }
 
 extern inline int pmd_bad(pmd_t pmd)
@@ -288,7 +301,7 @@ extern inline pte_t pte_mkclean(pte_t pte)
 
 extern inline pte_t pte_mkold(pte_t pte)
 {
-	pte_val(pte) &= ~(_PAGE_ACCESSED|_PAGE_SILENT_READ|_PAGE_SILENT_WRITE);
+	pte_val(pte) &= ~(_PAGE_ACCESSED|_PAGE_SILENT_READ);
 	return pte;
 }
 
@@ -319,12 +332,8 @@ extern inline pte_t pte_mkdirty(pte_t pte)
 extern inline pte_t pte_mkyoung(pte_t pte)
 {
 	pte_val(pte) |= _PAGE_ACCESSED;
-	if (pte_val(pte) & _PAGE_READ) {
+	if (pte_val(pte) & _PAGE_READ)
 		pte_val(pte) |= _PAGE_SILENT_READ;
-		if ((pte_val(pte) & (_PAGE_WRITE|_PAGE_MODIFIED)) ==
-		    (_PAGE_WRITE|_PAGE_MODIFIED))
-			pte_val(pte) |= _PAGE_SILENT_WRITE;
-	}
 	return pte;
 }
 
@@ -541,7 +550,7 @@ extern inline unsigned long get_pagemask(void)
 		".set noreorder\n\t"
 		".set mips3\n\t"
 		"mfc0 %0, $5\n\t"
-		".set mips2\n\t"
+		".set mips0\n\t"
 		".set reorder"
 		: "=r" (val));
 	return val;
@@ -553,7 +562,7 @@ extern inline void set_pagemask(unsigned long val)
 		".set noreorder\n\t"
 		".set mips3\n\t"
 		"mtc0 %0, $5\n\t"
-		".set mips2\n\t"
+		".set mips0\n\t"
 		".set reorder"
 		: : "r" (val));
 }
@@ -567,7 +576,7 @@ extern inline unsigned long get_entrylo0(void)
 		".set noreorder\n\t"
 		".set mips3\n\t"
 		"mfc0 %0, $2\n\t"
-		".set mips2\n\t"
+		".set mips0\n\t"
 		".set reorder"
 		: "=r" (val));
 	return val;
@@ -579,7 +588,7 @@ extern inline void set_entrylo0(unsigned long val)
 		".set noreorder\n\t"
 		".set mips3\n\t"
 		"mtc0 %0, $2\n\t"
-		".set mips2\n\t"
+		".set mips0\n\t"
 		".set reorder"
 		: : "r" (val));
 }
@@ -592,7 +601,7 @@ extern inline unsigned long get_entrylo1(void)
 		".set noreorder\n\t"
 		".set mips3\n\t"
 		"mfc0 %0, $3\n\t"
-		".set mips2\n\t"
+		".set mips0\n\t"
 		".set reorder" : "=r" (val));
 
 	return val;
@@ -604,7 +613,7 @@ extern inline void set_entrylo1(unsigned long val)
 		".set noreorder\n\t"
 		".set mips3\n\t"
 		"mtc0 %0, $3\n\t"
-		".set mips2\n\t"
+		".set mips0\n\t"
 		".set reorder"
 		: : "r" (val));
 }
@@ -618,7 +627,7 @@ extern inline unsigned long get_entryhi(void)
 		".set noreorder\n\t"
 		".set mips3\n\t"
 		"mfc0 %0, $10\n\t"
-		".set mips2\n\t"
+		".set mips0\n\t"
 		".set reorder"
 		: "=r" (val));
 
@@ -631,7 +640,7 @@ extern inline void set_entryhi(unsigned long val)
 		".set noreorder\n\t"
 		".set mips3\n\t"
 		"mtc0 %0, $10\n\t"
-		".set mips2\n\t"
+		".set mips0\n\t"
 		".set reorder"
 		: : "r" (val));
 }
@@ -645,7 +654,7 @@ extern inline unsigned long get_index(void)
 		".set noreorder\n\t"
 		".set mips3\n\t"
 		"mfc0 %0, $0\n\t"
-		".set mips2\n\t"
+		".set mips0\n\t"
 		".set reorder"
 		: "=r" (val));
 	return val;
@@ -657,7 +666,7 @@ extern inline void set_index(unsigned long val)
 		".set noreorder\n\t"
 		".set mips3\n\t"
 		"mtc0 %0, $0\n\t"
-		".set mips2\n\t"
+		".set mips0\n\t"
 		".set reorder\n\t"
 		: : "r" (val));
 }
@@ -671,7 +680,7 @@ extern inline unsigned long get_wired(void)
 		".set noreorder\n\t"
 		".set mips3\n\t"
 		"mfc0 %0, $6\n\t"
-		".set mips2\n\t"
+		".set mips0\n\t"
 		".set reorder\n\t"
 		: "=r" (val));
 	return val;
@@ -683,7 +692,7 @@ extern inline void set_wired(unsigned long val)
 		"\n\t.set noreorder\n\t"
 		".set mips3\n\t"
 		"mtc0 %0, $6\n\t"
-		".set mips2\n\t"
+		".set mips0\n\t"
 		".set reorder"
 		: : "r" (val));
 }
@@ -697,7 +706,7 @@ extern inline unsigned long get_taglo(void)
 		".set noreorder\n\t"
 		".set mips3\n\t"
 		"mfc0 %0, $28\n\t"
-		".set mips2\n\t"
+		".set mips0\n\t"
 		".set reorder"
 		: "=r" (val));
 	return val;
@@ -709,7 +718,7 @@ extern inline void set_taglo(unsigned long val)
 		".set noreorder\n\t"
 		".set mips3\n\t"
 		"mtc0 %0, $28\n\t"
-		".set mips2\n\t"
+		".set mips0\n\t"
 		".set reorder"
 		: : "r" (val));
 }
@@ -722,7 +731,7 @@ extern inline unsigned long get_taghi(void)
 		".set noreorder\n\t"
 		".set mips3\n\t"
 		"mfc0 %0, $29\n\t"
-		".set mips2\n\t"
+		".set mips0\n\t"
 		".set reorder"
 		: "=r" (val));
 	return val;
@@ -734,7 +743,7 @@ extern inline void set_taghi(unsigned long val)
 		".set noreorder\n\t"
 		".set mips3\n\t"
 		"mtc0 %0, $29\n\t"
-		".set mips2\n\t"
+		".set mips0\n\t"
 		".set reorder"
 		: : "r" (val));
 }
@@ -748,7 +757,7 @@ extern inline unsigned long get_context(void)
 		".set noreorder\n\t"
 		".set mips3\n\t"
 		"mfc0 %0, $4\n\t"
-		".set mips2\n\t"
+		".set mips0\n\t"
 		".set reorder"
 		: "=r" (val));
 
@@ -761,14 +770,11 @@ extern inline void set_context(unsigned long val)
 		".set noreorder\n\t"
 		".set mips3\n\t"
 		"mtc0 %0, $4\n\t"
-		".set mips2\n\t"
+		".set mips0\n\t"
 		".set reorder"
 		: : "r" (val));
 }
 
 #endif /* !defined (__LANGUAGE_ASSEMBLY__) */
-
-#define module_map      vmalloc
-#define module_unmap    vfree
 
 #endif /* __ASM_MIPS_PGTABLE_H */

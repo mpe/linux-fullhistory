@@ -455,7 +455,8 @@ static inline int aplib_poll(unsigned counter)
 
 	while (counter == aplib->rbuf_flag1 + aplib->rbuf_flag2) {
 		tnet_check_completion();
-		if (need_resched) break;
+		if (resched_needed())
+			break;
 		if (current->signal & ~current->blocked) break;
 	}
 	return 0;

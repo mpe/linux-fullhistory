@@ -17,13 +17,14 @@ struct prom_cpuinfo linux_cpus[NR_CPUS];
 int linux_num_cpus = 0;
 
 extern void cpu_probe(void);
+extern unsigned long central_probe(unsigned long);
 
 __initfunc(unsigned long
 device_scan(unsigned long mem_start))
 {
 	char node_str[128];
 	int nd, prom_node_cpu, thismid;
-	int cpu_nds[NCPUS];  /* One node for each cpu */
+	int cpu_nds[NR_CPUS];  /* One node for each cpu */
 	int cpu_ctr = 0;
 
 	prom_getstring(prom_root_node, "device_type", node_str, sizeof(node_str));
@@ -43,11 +44,14 @@ device_scan(unsigned long mem_start))
 			if(strcmp(node_str, "cpu") == 0) {
 				cpu_nds[cpu_ctr] = scan;
 				linux_cpus[cpu_ctr].prom_node = scan;
-				prom_getproperty(scan, "mid", (char *) &thismid, sizeof(thismid));
+				prom_getproperty(scan, "upa-portid",
+						 (char *) &thismid, sizeof(thismid));
 				linux_cpus[cpu_ctr].mid = thismid;
 				prom_printf("Found CPU %d <node=%08x,mid=%d>\n",
 					    cpu_ctr, (unsigned) scan,
 					    thismid);
+				printk("Found CPU %d <node=%08x,mid=%d>\n",
+				       cpu_ctr, (unsigned) scan, thismid);
 				cpu_ctr++;
 			}
 		};
@@ -62,5 +66,5 @@ device_scan(unsigned long mem_start))
 	linux_num_cpus = cpu_ctr;
 
 	cpu_probe();
-	return mem_start;
+	return central_probe(mem_start);
 }

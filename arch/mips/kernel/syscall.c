@@ -88,7 +88,7 @@ asmlinkage int sys_idle(void)
 		 *        possible.  Should help alot for battery powered
 		 *        R4200/4300i systems.
 		 */
-		if (wait_available && !need_resched)
+		if (wait_available && !resched_needed())
 			__asm__(".set\tmips3\n\t"
 				"wait\n\t"
 				".set\tmips0\n\t");

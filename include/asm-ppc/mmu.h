@@ -144,7 +144,7 @@ typedef struct _MMU_context
       pte	**pmap;		/* Two-level page-map structure */
    } MMU_context;
 
-/* Used to set up SDR register */
+/* Used to set up SDR1 register */
 #define HASH_TABLE_SIZE_64K	0x00010000
 #define HASH_TABLE_SIZE_128K	0x00020000
 #define HASH_TABLE_SIZE_256K	0x00040000
@@ -159,5 +159,13 @@ typedef struct _MMU_context
 #define HASH_TABLE_MASK_1M	0x00F   
 #define HASH_TABLE_MASK_2M	0x01F   
 #define HASH_TABLE_MASK_4M	0x03F   
+
+/* invalidate a TLB entry */
+extern inline void _tlbie(unsigned long va)
+{
+	asm volatile ("tlbie %0" : : "r"(va));
+}
+
+extern void _tlbia(void);		/* invalidate all TLB entries */
 
 #endif

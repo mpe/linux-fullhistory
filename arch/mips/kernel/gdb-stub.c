@@ -12,7 +12,7 @@
  *
  *  Copyright (C) 1995 Andreas Busse
  *
- * $Id: gdb-stub.c,v 1.4 1997/06/30 15:52:25 ralf Exp $
+ * $Id: gdb-stub.c,v 1.5 1997/08/08 18:12:15 miguel Exp $
  */
 
 /*
@@ -67,12 +67,14 @@
  */
 
 #include <linux/string.h>
-#include <linux/signal.h>
 #include <linux/kernel.h>
+#include <linux/signal.h>
+#include <linux/sched.h>
+#include <linux/mm.h>
 
 #include <asm/asm.h>
 #include <asm/mipsregs.h>
-#include <asm/cachectl.h>
+#include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/gdb-stub.h>
 
@@ -98,13 +100,11 @@ extern void adel(void);
 
 static void getpacket(char *buffer);
 static void putpacket(char *buffer);
-static void set_mem_fault_trap(int enable);
 static int computeSignal(int tt);
 static int hex(unsigned char ch);
 static int hexToInt(char **ptr, int *intValue);
 static unsigned char *mem2hex(char *mem, char *buf, int count, int may_fault);
 void handle_exception(struct gdb_regs *regs);
-static void show_gdbregs(struct gdb_regs *regs);
 
 /*
  * BUFMAX defines the maximum number of characters in inbound/outbound buffers
@@ -241,6 +241,21 @@ static void putpacket(char *buffer)
  */
 static volatile int mem_err = 0;
 
+
+#if 0
+static void set_mem_fault_trap(int enable)
+{
+  mem_err = 0;
+
+#if 0
+  if (enable)
+    exceptionHandler(9, fltr_set_mem_err);
+  else
+    exceptionHandler(9, trap_low);
+#endif  
+}
+#endif /* dead code */
+
 /*
  * Convert the memory pointed to by mem into hex, placing result in buf.
  * Return a pointer to the last char put in buf (null), in case of mem fault,
@@ -362,19 +377,6 @@ extern void fltr_set_mem_err(void)
   /* FIXME: Needs to be written... */
 }
 
-
-static void set_mem_fault_trap(int enable)
-{
-  mem_err = 0;
-
-#if 0
-  if (enable)
-    exceptionHandler(9, fltr_set_mem_err);
-  else
-    exceptionHandler(9, trap_low);
-#endif  
-}
-
 /*
  * Convert the MIPS hardware trap type code to a unix signal number.
  */
@@ -414,6 +416,38 @@ static int hexToInt(char **ptr, int *intValue)
 
 	return (numChars);
 }
+
+
+#if 0
+/*
+ * Print registers (on target console)
+ * Used only to debug the stub...
+ */
+void show_gdbregs(struct gdb_regs * regs)
+{
+	/*
+	 * Saved main processor registers
+	 */
+	printk("$0 : %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+	       regs->reg0, regs->reg1, regs->reg2, regs->reg3,
+               regs->reg4, regs->reg5, regs->reg6, regs->reg7);
+	printk("$8 : %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+	       regs->reg8, regs->reg9, regs->reg10, regs->reg11,
+               regs->reg12, regs->reg13, regs->reg14, regs->reg15);
+	printk("$16: %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+	       regs->reg16, regs->reg17, regs->reg18, regs->reg19,
+               regs->reg20, regs->reg21, regs->reg22, regs->reg23);
+	printk("$24: %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
+	       regs->reg24, regs->reg25, regs->reg26, regs->reg27,
+	       regs->reg28, regs->reg29, regs->reg30, regs->reg31);
+
+	/*
+	 * Saved cp0 registers
+	 */
+	printk("epc  : %08lx\nStatus: %08lx\nCause : %08lx\n",
+	       regs->cp0_epc, regs->cp0_status, regs->cp0_cause);
+}
+#endif /* dead code */
 
 /*
  * This function does all command processing for interfacing to gdb.  It
@@ -725,33 +759,4 @@ void adel(void)
 			la	$8,0x80000001
 			lw	$9,0($8)
 	");
-}
-
-/*
- * Print registers (on target console)
- * Used only to debug the stub...
- */
-void show_gdbregs(struct gdb_regs * regs)
-{
-	/*
-	 * Saved main processor registers
-	 */
-	printk("$0 : %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-	       regs->reg0, regs->reg1, regs->reg2, regs->reg3,
-               regs->reg4, regs->reg5, regs->reg6, regs->reg7);
-	printk("$8 : %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-	       regs->reg8, regs->reg9, regs->reg10, regs->reg11,
-               regs->reg12, regs->reg13, regs->reg14, regs->reg15);
-	printk("$16: %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-	       regs->reg16, regs->reg17, regs->reg18, regs->reg19,
-               regs->reg20, regs->reg21, regs->reg22, regs->reg23);
-	printk("$24: %08lx %08lx %08lx %08lx %08lx %08lx %08lx %08lx\n",
-	       regs->reg24, regs->reg25, regs->reg26, regs->reg27,
-	       regs->reg28, regs->reg29, regs->reg30, regs->reg31);
-
-	/*
-	 * Saved cp0 registers
-	 */
-	printk("epc  : %08lx\nStatus: %08lx\nCause : %08lx\n",
-	       regs->cp0_epc, regs->cp0_status, regs->cp0_cause);
 }

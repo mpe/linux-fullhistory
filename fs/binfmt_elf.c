@@ -115,15 +115,17 @@ create_elf_tables(char *p, int argc, int envc,
 
 	/*
 	 * Force 16 byte _final_ alignment here for generality.
+	 * Leave an extra 16 bytes free so that on the PowerPC we
+	 * can move the aux table up to start on a 16-byte boundary.
 	 */
-	sp = (elf_addr_t *) (~15UL & (unsigned long) p);
+	sp = (elf_addr_t *) ((~15UL & (unsigned long) p) - 16UL);
 	csp = sp;
 	csp -= exec ? DLINFO_ITEMS*2 : 2;
 	csp -= envc+1;
 	csp -= argc+1;
 	csp -= (!ibcs ? 3 : 1);	/* argc itself */
 	if ((unsigned long)csp & 15UL) {
-		sp -= (16UL - ((unsigned long)csp & 15UL)) / sizeof(*sp);
+		sp -= ((unsigned long)csp & 15UL) / sizeof(*sp);
 	}
 
 	/*

@@ -131,17 +131,18 @@ int main(int argc, char *argv[])
   argptr++;
 
   /* skip elf header in input file */
-  lseek(in_fd, elfhdr_size, SEEK_SET);
+  if ( !prep )
+	  lseek(in_fd, elfhdr_size, SEEK_SET);
   
   /* write prep partition if necessary */
   if ( prep )
-    write_prep_partition( in_fd, out_fd );
+	  write_prep_partition( in_fd, out_fd );
 
   /* write input image to bootimage */
   if ( asmoutput )
-    write_asm_data( in_fd, out_fd );
+	  write_asm_data( in_fd, out_fd );
   else
-    copy_image(in_fd, out_fd);
+	  copy_image(in_fd, out_fd);
   
   return 0;
 }
@@ -161,28 +162,11 @@ void write_prep_partition(int in, int out)
   }
   
   bzero( block, sizeof block );
-
  
-  /* set entry point and boot image size */
-  *entry = cpu_to_le32(0x400);
-  /* need use size - elfheader? */
+  /* set entry point and boot image size skipping over elf header */
+  *entry = cpu_to_le32(0x400+65536);
   *length = cpu_to_le32(info.st_size+0x400);
 
-  /*
-   * Writes the "boot record", which contains the partition table, to the
-   * diskette, followed by the dummy PC boot block and load image descriptor
-   * block.  It returns the number of bytes it has written to the load
-   * image.
-   *
-   * The boot record is the first block of the diskette and identifies the
-   * "PReP" partition.  The "PReP" partition contains the "load image" starting
-   * at offset zero within the partition.  The first block of the load image is
-   * a dummy PC boot block.  The second block is the "load image descriptor"
-   * which contains the size of the load image and the entry point into the
-   * image.  The actual boot image starts at offset 1024 bytes (third sector)
-   * in the partition.
-   */
-  
   /* sets magic number for msdos partition (used by linux) */
   block[510] = 0x55;
   block[511] = 0xAA;
@@ -220,7 +204,7 @@ void write_prep_partition(int in, int out)
   /* This has to be 0 on the PowerStack? */   
   pe->beginning_sector  = cpu_to_le32(0);
 #endif    
-/*pe->number_of_sectors = cpu_to_le32(2*18*80-1);*/
+  pe->number_of_sectors = cpu_to_le32(2*18*80-1);
 
   write( out, block, sizeof(block) );
   write( out, entry, sizeof(*entry) );

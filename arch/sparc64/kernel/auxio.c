@@ -3,15 +3,20 @@
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
  */
 
+#include <linux/config.h>
 #include <linux/stddef.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/smp.h>
 #include <linux/init.h>
+#include <linux/delay.h>
+
 #include <asm/oplib.h>
 #include <asm/io.h>
 #include <asm/auxio.h>
 #include <asm/sbus.h>
+#include <asm/ebus.h>
+#include <asm/fhc.h>
 
 /* Probe and map in the Auxiliary I/O register */
 unsigned char *auxio_register;
@@ -31,9 +36,32 @@ __initfunc(void auxio_probe(void))
         }
 
 	if (!sdev) {
+#ifdef CONFIG_PCI
+		struct linux_ebus *ebus;
+		struct linux_ebus_device *edev = 0;
+
+		for_all_ebusdev(edev, ebus)
+			if (!strcmp(edev->prom_name, "auxio"))
+				break;
+
+		if (edev) {
+			auxio_register = (unsigned char *)
+				sparc_alloc_io(edev->regs[0].phys_addr, 0,
+					       edev->regs[0].reg_size,
+					       "auxiliaryIO",
+					       edev->regs[0].which_io, 0x0);
+			*(auxio_register) = 0x01;
+			return;
+		}
+#endif
+		if(central_bus) {
+			auxio_register = NULL;
+			return;
+		}
 		prom_printf("Cannot find auxio node, cannot continue...\n");
 		prom_halt();
 	}
+
 	prom_getproperty(sdev->prom_node, "reg", (char *) auxregs, sizeof(auxregs));
 	prom_apply_sbus_ranges(sdev->my_bus, auxregs, 0x1, sdev);
 	/* Map the register both read and write */

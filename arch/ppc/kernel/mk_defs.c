@@ -29,7 +29,6 @@
 void
 main(void)
 {
-	/*DEFINE(KERNELBASE, KERNELBASE);*/
 	DEFINE(STATE, offsetof(struct task_struct, state));
 	DEFINE(NEXT_TASK, offsetof(struct task_struct, next_task));
 	DEFINE(COUNTER, offsetof(struct task_struct, counter));
@@ -37,54 +36,20 @@ main(void)
 	DEFINE(SIGNAL, offsetof(struct task_struct, signal));
 	DEFINE(TSS, offsetof(struct task_struct, tss));
 	DEFINE(KSP, offsetof(struct thread_struct, ksp));
-	DEFINE(PG_TABLES, offsetof(struct thread_struct, pg_tables));
-#ifdef CONFIG_PMAC	
-	DEFINE(LAST_PC, offsetof(struct thread_struct, last_pc));
-	DEFINE(USER_STACK, offsetof(struct thread_struct, user_stack));
-#endif	
+	/*DEFINE(PG_TABLES, offsetof(struct thread_struct, pg_tables));*/
+	DEFINE(MM, offsetof(struct task_struct, mm));
+	DEFINE(PGD, offsetof(struct mm_struct, pgd));
 	DEFINE(LAST_SYSCALL, offsetof(struct thread_struct, last_syscall));
 	DEFINE(PT_REGS, offsetof(struct thread_struct, regs));
 	DEFINE(PF_TRACESYS, PF_TRACESYS);
 	DEFINE(TASK_FLAGS, offsetof(struct task_struct, flags));
 	DEFINE(TSS_FPR0, offsetof(struct thread_struct, fpr[0]));
-#if 0
-	DEFINE(TSS_FPR1, offsetof(struct thread_struct, fpr[1]));
-	DEFINE(TSS_FPR2, offsetof(struct thread_struct, fpr[2]));
-	DEFINE(TSS_FPR3, offsetof(struct thread_struct, fpr[3]));
-	DEFINE(TSS_FPR4, offsetof(struct thread_struct, fpr[4]));
-	DEFINE(TSS_FPR5, offsetof(struct thread_struct, fpr[5]));
-	DEFINE(TSS_FPR6, offsetof(struct thread_struct, fpr[6]));
-	DEFINE(TSS_FPR7, offsetof(struct thread_struct, fpr[7]));
-	DEFINE(TSS_FPR8, offsetof(struct thread_struct, fpr[8]));
-	DEFINE(TSS_FPR9, offsetof(struct thread_struct, fpr[9]));
-	DEFINE(TSS_FPR10, offsetof(struct thread_struct, fpr[10]));
-	DEFINE(TSS_FPR11, offsetof(struct thread_struct, fpr[11]));
-	DEFINE(TSS_FPR12, offsetof(struct thread_struct, fpr[12]));
-	DEFINE(TSS_FPR13, offsetof(struct thread_struct, fpr[13]));
-	DEFINE(TSS_FPR14, offsetof(struct thread_struct, fpr[14]));
-	DEFINE(TSS_FPR15, offsetof(struct thread_struct, fpr[15]));
-	DEFINE(TSS_FPR16, offsetof(struct thread_struct, fpr[16]));
-	DEFINE(TSS_FPR17, offsetof(struct thread_struct, fpr[17]));
-	DEFINE(TSS_FPR18, offsetof(struct thread_struct, fpr[18]));
-	DEFINE(TSS_FPR19, offsetof(struct thread_struct, fpr[19]));
-	DEFINE(TSS_FPR20, offsetof(struct thread_struct, fpr[20]));
-	DEFINE(TSS_FPR21, offsetof(struct thread_struct, fpr[21]));
-	DEFINE(TSS_FPR22, offsetof(struct thread_struct, fpr[22]));
-	DEFINE(TSS_FPR23, offsetof(struct thread_struct, fpr[23]));
-	DEFINE(TSS_FPR24, offsetof(struct thread_struct, fpr[24]));
-	DEFINE(TSS_FPR25, offsetof(struct thread_struct, fpr[25]));
-	DEFINE(TSS_FPR26, offsetof(struct thread_struct, fpr[26]));
-	DEFINE(TSS_FPR27, offsetof(struct thread_struct, fpr[27]));
-	DEFINE(TSS_FPR28, offsetof(struct thread_struct, fpr[28]));
-	DEFINE(TSS_FPR29, offsetof(struct thread_struct, fpr[29]));
-	DEFINE(TSS_FPR30, offsetof(struct thread_struct, fpr[30]));
-	DEFINE(TSS_FPR31, offsetof(struct thread_struct, fpr[31]));
-#endif
 	DEFINE(TSS_FPSCR, offsetof(struct thread_struct, fpscr));
 	/* Interrupt register frame */
 	DEFINE(TASK_UNION_SIZE, sizeof(union task_union));
 	DEFINE(STACK_FRAME_OVERHEAD, STACK_FRAME_OVERHEAD);
 	DEFINE(INT_FRAME_SIZE, STACK_FRAME_OVERHEAD + sizeof(struct pt_regs));
+	/* in fact we only use gpr0 - gpr9 and gpr20 - gpr23 */
 	DEFINE(GPR0, STACK_FRAME_OVERHEAD+offsetof(struct pt_regs, gpr[0]));
 	DEFINE(GPR1, STACK_FRAME_OVERHEAD+offsetof(struct pt_regs, gpr[1]));
 	DEFINE(GPR2, STACK_FRAME_OVERHEAD+offsetof(struct pt_regs, gpr[2]));

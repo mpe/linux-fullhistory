@@ -8,16 +8,20 @@
 
 #include <linux/tasks.h>
 
-extern unsigned int local_irq_count[NR_CPUS];
-#define in_interrupt()	(local_irq_count[smp_processor_id()] != 0)
+#ifndef __SMP__
+extern unsigned int local_irq_count;
+#else
+#define local_irq_count		(cpu_data[smp_processor_id()].irq_count)
+#endif
+#define in_interrupt()		(local_irq_count != 0)
 
 #ifndef __SMP__
 
-#define hardirq_trylock(cpu)	(local_irq_count[cpu] == 0)
+#define hardirq_trylock(cpu)	(local_irq_count == 0)
 #define hardirq_endlock(cpu)	do { } while(0)
 
-#define hardirq_enter(cpu)	(local_irq_count[cpu]++)
-#define hardirq_exit(cpu)	(local_irq_count[cpu]--)
+#define hardirq_enter(cpu)	(local_irq_count++)
+#define hardirq_exit(cpu)	(local_irq_count--)
 
 #define synchronize_irq()	do { } while(0)
 
@@ -43,14 +47,16 @@ static inline void release_irqlock(int cpu)
 
 static inline void hardirq_enter(int cpu)
 {
-	++local_irq_count[cpu];
+	++cpu_data[cpu].irq_count;
 	atomic_inc(&global_irq_count);
+	membar("#StoreLoad | #StoreStore");
 }
 
 static inline void hardirq_exit(int cpu)
 {
+	membar("#StoreStore | #LoadStore");
 	atomic_dec(&global_irq_count);
-	--local_irq_count[cpu];
+	--cpu_data[cpu].irq_count;
 }
 
 static inline int hardirq_trylock(int cpu)
@@ -58,13 +64,14 @@ static inline int hardirq_trylock(int cpu)
 	unsigned long flags;
 
 	__save_and_cli(flags);
-	if(atomic_add_return(1, &global_irq_count) != 1 ||
-	   *(((unsigned char *)(&global_irq_lock)))) {
+	atomic_inc(&global_irq_count);
+	if(atomic_read(&global_irq_count) != 1 ||
+	   (*(((unsigned char *)(&global_irq_lock)))) != 0) {
 		atomic_dec(&global_irq_count);
 		__restore_flags(flags);
 		return 0;
 	}
-	++local_irq_count[cpu];
+	++cpu_data[cpu].irq_count;
 	return 1;
 }
 

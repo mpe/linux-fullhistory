@@ -228,7 +228,7 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 		sb->s_dev = 0;
 		return NULL;
 	}
-	if (!S_ISSOCK(filp->f_inode->i_mode))
+	if (!S_ISSOCK(filp->f_dentry->d_inode->i_mode))
 	{
 		printk("smb_read_super: not a socket!\n");
 		sb->s_dev = 0;
@@ -305,7 +305,8 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 	}
 	smb_init_root_dirent(server, &(server->root.finfo));
 
-	if (!(sb->s_mounted = iget(sb, smb_info_ino(&(server->root)))))
+	if (!(sb->s_root = d_alloc_root(iget(sb, 
+	                                smb_info_ino(&(server->root))),NULL)))
 	{
 		sb->s_dev = 0;
 		printk("smb_read_super: get root inode failed\n");

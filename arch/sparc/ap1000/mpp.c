@@ -28,7 +28,7 @@ static int last_task = 0;
 void mpp_schedule(struct cap_request *req)
 {
 	mpp_current_task = req->data[0];
-	need_resched = 1;
+	resched_force();
 	mark_bh(TQUEUE_BH);
 }
 

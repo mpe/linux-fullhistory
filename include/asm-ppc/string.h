@@ -12,16 +12,7 @@
 #define __HAVE_ARCH_MEMMOVE
 #define __HAVE_ARCH_MEMCMP
 #define __HAVE_ARCH_MEMCHR
-/*#define bzero(addr,size) memset((addr),(int)(0),(size))*/
-extern inline void * memchr(const void * cs,int c,size_t count)
-{
-	unsigned long i = 0;
-	while ( count != i )
-	{
-		if ( (char)c == *(char *)(cs + i) )
-			return (void *)(cs + i);
-		i--;
-	}
-	return NULL;
-}
+
+extern int strcasecmp(const char *, const char *);
+
 #endif

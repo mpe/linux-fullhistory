@@ -1,4 +1,4 @@
-/* $Id: loadmmu.c,v 1.1 1997/06/06 09:34:51 ralf Exp $
+/* $Id: loadmmu.c,v 1.2 1997/08/08 18:13:05 miguel Exp $
  * loadmmu.c: Setup cpu/cache specific function ptrs at boot time.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
@@ -41,6 +41,10 @@ void (*update_mmu_cache)(struct vm_area_struct * vma,
 			 unsigned long address, pte_t pte);
 
 void (*show_regs)(struct pt_regs *);
+
+void (*add_wired_entry)(unsigned long entrylo0, unsigned long entrylo1,
+			unsigned long entryhi, unsigned long pagemask);
+
 asmlinkage void (*resume)(void *tsk);
 
 extern void ld_mmu_r2300(void);

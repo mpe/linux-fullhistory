@@ -21,6 +21,7 @@ void vdma_set_mode(int channel, int mode);
 void vdma_set_addr(int channel, long addr);
 void vdma_set_count(int channel, int count);
 int vdma_get_residue(int channel);
+int vdma_get_enable(int channel);
 
 /*
  * some definitions used by the driver functions

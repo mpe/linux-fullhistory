@@ -107,7 +107,7 @@ extern __inline__ ide_ioreg_t ide_default_io_base(int index)
 	return index;
 }
 
-extern void ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
+void ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq);
 
 typedef union {
 	unsigned all			: 8;	/* all of the bits together */

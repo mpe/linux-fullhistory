@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.43 1997/07/07 03:05:25 davem Exp $
+/* $Id: head.S,v 1.46 1997/08/08 08:33:30 jj Exp $
  * head.S: Initial boot code for the Sparc64 port of Linux.
  *
  * Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -21,6 +21,7 @@
 #include <asm/processor.h>
 #include <asm/lsu.h>
 #include <asm/head.h>
+#include <asm/ttable.h>
 	
 /* This section from from _start to sparc64_boot_end should fit into
  * 0x0000.0000.0040.4000 to 0x0000.0000.0040.8000 and will be sharing space
@@ -88,6 +89,28 @@ sparc64_boot:
 	 * (PSTATE_PRIV | PSTATE_PEF | PSTATE_IE) in %pstate.
          */
 	wrpr    %g0, (PSTATE_PRIV|PSTATE_PEF|PSTATE_IE), %pstate
+
+#ifdef __SMP__
+	/* Ugly but necessary... */
+	sethi	%hi(KERNBASE), %g7
+	sethi	%hi(sparc64_cpu_startup), %g5
+	or	%g5, %lo(sparc64_cpu_startup), %g5
+	sub	%g5, %g7, %g5
+	sethi	%hi(sparc64_cpu_startup_end), %g6
+	or	%g6, %lo(sparc64_cpu_startup_end), %g6
+	sub	%g6, %g7, %g6
+	sethi	%hi(smp_trampoline), %g3
+	or	%g3, %lo(smp_trampoline), %g3
+	sub	%g3, %g7, %g3
+1:	ldx	[%g5], %g1
+	stx	%g1, [%g3]
+	membar	#StoreStore
+	flush	%g3
+	add	%g5, 8, %g5
+	cmp	%g5, %g6
+	blu,pt	%xcc, 1b
+	 add	%g3, 8, %g3
+#endif
 
 create_mappings:
 	/* %g5 holds the tlb data */
@@ -340,7 +363,7 @@ setup_tba:
 	mov	0x40, %g2			/* INTR data 0 register */
 
 	/* Ok, we're done setting up all the state our trap mechanims needs,
-	 * now get back into normal globals and let the PROM know what it up.
+	 * now get back into normal globals and let the PROM know what is up.
 	 */
 	wrpr	%g0, %g0, %wstate
 	wrpr	%o1, PSTATE_IE, %pstate
@@ -374,6 +397,7 @@ bootup_kernel_stack:
 ! 0x0000000000408000
 
 #include "ttable.S"
+#include "systbls.S"
 #include "etrap.S"
 #include "rtrap.S"
 #include "winfixup.S"

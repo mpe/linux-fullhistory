@@ -1,4 +1,4 @@
-/* $Id: checksum.h,v 1.9 1997/06/26 04:05:17 davem Exp $ */
+/* $Id: checksum.h,v 1.10 1997/08/09 18:09:03 jj Exp $ */
 #ifndef __SPARC64_CHECKSUM_H
 #define __SPARC64_CHECKSUM_H
 
@@ -42,47 +42,25 @@ extern unsigned int csum_partial(unsigned char * buff, int len, unsigned int sum
 			csum_partial_copy_nocheck(src,dst,len,sum)
 #define csum_partial_copy_fromuser(s, d, l, w)  \
 			csum_partial_copy_from_user((char *) (s), (d), (l), (w), NULL)
+
+extern unsigned int csum_partial_copy_sparc64(const char *src, char *dst, int len, unsigned int sum);
 			
 extern __inline__ unsigned int 
 csum_partial_copy_nocheck (const char *src, char *dst, int len, 
 			   unsigned int sum)
 {
-	register unsigned long ret asm("o0") = (unsigned long)src;
-	register char *d asm("o1") = dst;
-	register unsigned long l asm("g1") = len;
-
-	__asm__ __volatile__ ("
-		wr	%%g0, %5, %%asi
-		call __csum_partial_copy_sparc_generic
-		 mov %4, %%g7
-		srl	%%o0, 0, %%o0
-	" : "=r" (ret) : "0" (ret), "r" (d), "r" (l), "r" (sum), "i" (ASI_P) :
-	"o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3", "g5", "g7");
-	return (unsigned int)ret;
+	__asm__ __volatile__ ("wr	%%g0, %0, %%asi" : : "i" (ASI_P));
+	return csum_partial_copy_sparc64(src, dst, len, sum);
 }
 
 extern __inline__ unsigned int 
 csum_partial_copy_from_user(const char *src, char *dst, int len, 
 			    unsigned int sum, int *err)
 {
-	register unsigned long ret asm("o0") = (unsigned long)src;
-	register char *d asm("o1") = dst;
-	register unsigned long l asm("g1") = len;
-	register unsigned long s asm("g7") = sum;
-
-	__asm__ __volatile__ ("
-	.section __ex_table,#alloc
-	.align 8
-	.xword 1f,2
-	.previous
-	wr	%%g0, %6, %%asi
-1:
-	call __csum_partial_copy_sparc_generic
-	 stx %5, [%%sp + 0x7ff + 128]
-	srl	%%o0, 0, %%o0
-	" : "=r" (ret) : "0" (ret), "r" (d), "r" (l), "r" (s), "r" (err), "i" (ASI_S) :
-	"o1", "o2", "o3", "o4", "o5", "o7", "g1", "g2", "g3", "g5", "g7");
-	return (unsigned int)ret;
+	__asm__ __volatile__ ("wr	%%g0, %0, %%asi
+			       stx	%1, [%%sp + 0x7ff + 128]
+			      " : : "i" (ASI_S), "r" (err));
+	return csum_partial_copy_sparc64(src, dst, len, sum);
 }
 
 #if 0
