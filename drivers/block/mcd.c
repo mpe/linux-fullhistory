@@ -28,6 +28,8 @@
 		   (stud11@cc4.kuleuven.ac.be)
         0.3.2 bug fixes to the ioclts and merged with ALPHA0.99-pl12
 		   (Jon Tombs <jon@robots.ox.ac.uk>)
+        0.3.3 Added more #defines and mcd_setup()
+   		   (Jon Tombs <jon@gtex02.us.es>)
 */
 
 
@@ -38,6 +40,7 @@
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/cdrom.h>
+#include <linux/ioport.h>
 
 /* #define REALLY_SLOW_IO  */
 #include <asm/system.h>
@@ -46,7 +49,6 @@
 
 #define MAJOR_NR MITSUMI_CDROM_MAJOR
 #include "blk.h"
-
 #include <linux/mcd.h>
 
 #if 0
@@ -56,7 +58,9 @@ static int mcd_sizes[] = { 0 };
 static int mcdPresent = 0;
 
 static char mcd_buf[2048];	/* buffer for block size conversion */
-static int mcd_bn = -1;
+static int   mcd_bn   = -1;
+static short mcd_port = MCD_BASE_ADDR;
+static int   mcd_irq  = MCD_INTR_NR;
 
 static int McdTimeout, McdTries;
 static struct wait_queue *mcd_waitq = NULL;
@@ -88,6 +92,15 @@ static int GetDiskInfo(void);
 static int GetToc(void);
 static int getValue(unsigned char *result);
 
+
+void mcd_setup(char *str, int *ints)
+{
+   if (ints[0] > 0)
+      mcd_port = ints[1];
+   if (ints[0] > 1)      
+      mcd_irq  = ints[2];
+}
+
  
 int
 check_mcd_media_change(int full_dev, int flag)
@@ -95,10 +108,13 @@ check_mcd_media_change(int full_dev, int flag)
    int retval, target;
 
 
+#if 1	 /* the below is not reliable */
+   return 0;
+#endif  
    target = MINOR(full_dev);
 
    if (target > 0) {
-      printk("Mitsumi CD-ROM request error: invalid device.\n");
+      printk("mcd: Mitsumi CD-ROM request error: invalid device.\n");
       return 0;
    }
 
@@ -122,10 +138,11 @@ statusCmd(void)
 {
 	int st, retry;
 
-	for (retry = 0; retry < 3; retry++)
+	for (retry = 0; retry < MCD_RETRY_ATTEMPTS; retry++)
 	{
+
 		outb(MCMD_GET_STATUS, MCDPORT(0));	/* send get-status cmd */
-		st = getMcdStatus(100);
+		st = getMcdStatus(MCD_STATUS_DELAY);
 		if (st != -1)
 			break;
 	}
@@ -143,10 +160,10 @@ mcdPlay(struct mcd_Play_msf *arg)
 {
 	int retry, st;
 
-	for (retry = 0; retry < 3; retry++)
+	for (retry = 0; retry < MCD_RETRY_ATTEMPTS; retry++)
 	{
 		sendMcdCmd(MCMD_PLAY_READ, arg);
-		st = getMcdStatus(200);
+		st = getMcdStatus(2 * MCD_STATUS_DELAY);
 		if (st != -1)
 			break;
 	}
@@ -207,7 +224,7 @@ mcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 
 	case CDROMSTOP:      /* Spin down the drive */
 		outb(MCMD_STOP, MCDPORT(0));
-		i = getMcdStatus(100);
+		i = getMcdStatus(MCD_STATUS_DELAY);
 
 		/* should we do anything if it fails? */
 
@@ -219,7 +236,7 @@ mcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 			return -EINVAL;
 
 		outb(MCMD_STOP, MCDPORT(0));
-		i = getMcdStatus(100);
+		i = getMcdStatus(MCD_STATUS_DELAY);
 
 		if (GetQChannelInfo(&qInfo) < 0)
 		{
@@ -291,7 +308,7 @@ printk("play: %02x:%02x.%02x to %02x:%02x.%02x\n",
 
 		if (audioStatus == CDROM_AUDIO_PLAY) {
 		  outb(MCMD_STOP, MCDPORT(0));
-		  i = getMcdStatus(100);
+		  i = getMcdStatus(MCD_STATUS_DELAY);
 		  audioStatus = CDROM_AUDIO_NO_STATUS;
 		}
 
@@ -439,7 +456,7 @@ printk("VOL %d %d\n", volctrl.channel0 & 0xFF, volctrl.channel1 & 0xFF);
 		outb(volctrl.channel1, MCDPORT(0));
 		outb(1, MCDPORT(0));
 
-		i = getMcdStatus(100);
+		i = getMcdStatus(MCD_STATUS_DELAY);
 		if (i < 0)
 			return -EIO;
 
@@ -454,7 +471,7 @@ printk("VOL %d %d\n", volctrl.channel0 & 0xFF, volctrl.channel1 & 0xFF);
 		}
 
 		outb(0xF8, MCDPORT(0));
-		i = getMcdStatus(100);
+		i = getMcdStatus(MCD_STATUS_DELAY);
 		printk("F8 -> %02X\n", i & 0xFF);
 #endif
 		return 0;
@@ -547,7 +564,7 @@ repeat:
 		goto repeat;
 	}
 
-	McdTries = 3;
+	McdTries = MCD_RETRY_ATTEMPTS;
 	mcd_start();
 }
 
@@ -561,7 +578,7 @@ mcd_start()
 {
 	if (McdTries == 0)
 	{
-		printk("mcd: read failed after 3 tries\n");
+		printk("mcd: read failed after %d tries\n", MCD_RETRY_ATTEMPTS);
 		end_request(0);
 		SET_TIMER(do_mcd_request, 1);	/* wait a bit, try again */
 		return;
@@ -569,7 +586,7 @@ mcd_start()
 
 	McdTries--;
 	outb(0x40, MCDPORT(0));		/* get status */
-	McdTimeout = 100;
+	McdTimeout = MCD_STATUS_DELAY;
 	SET_TIMER(mcd_status, 1);
 }
 
@@ -796,10 +813,17 @@ mcd_init(unsigned long mem_start, unsigned long mem_end)
 
 	if (register_blkdev(MAJOR_NR, "mcd", &mcd_fops) != 0)
 	{
-		printk("Unable to get major %d for Mitsumi CD-ROM\n", MAJOR_NR);
+		printk("mcd: Unable to get major %d for Mitsumi CD-ROM\n",
+		       MAJOR_NR);
 		return mem_start;
 	}
 
+        if (check_region(mcd_port, 4)) {
+	  printk("mcd: Init failed, I/O port (%X) already in use\n",
+		 mcd_port);
+	  return mem_start;
+	}
+	  
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	read_ahead[MAJOR_NR] = 4;
 
@@ -815,7 +839,8 @@ mcd_init(unsigned long mem_start, unsigned long mem_end)
 			break;
 
 	if (count >= 1000000) {
-		printk("mitsumi init failed...\n");
+		printk("mcd: Init failed. No mcd device at 0x%x irq %d\n",
+		     mcd_port, mcd_irq);
 		return mem_start;
 	}
 	count = inb(MCDPORT(0));		/* pick up the status */
@@ -823,11 +848,14 @@ mcd_init(unsigned long mem_start, unsigned long mem_end)
 	outb(MCMD_GET_VERSION,MCDPORT(0));
 	for(count=0;count<3;count++)
 		if(getValue(result+count)) {
-			printk("mitsumi get version failed...\n");
+			printk("mcd: mitsumi get version failed at 0x%d\n",
+			       mcd_port);
 			return mem_start;
 		}	
 					
-	printk("Mitsumi version : %02X %c %x\n",result[0],result[1],result[2]);
+	printk("mcd: Mitsumi version : %02X %c %x\n",
+	       result[0],result[1],result[2]);
+
 
 	mcdVersion=result[2];
 
@@ -838,12 +866,13 @@ mcd_init(unsigned long mem_start, unsigned long mem_end)
 
 	if (irqaction(MCD_INTR_NR,  &mcd_sigaction))
 	{
-		printk("Unable to get IRQ%d for Mitsumi CD-ROM\n", MCD_INTR_NR);
+		printk("mcd: Unable to get IRQ%d for Mitsumi CD-ROM\n", MCD_INTR_NR);
 		return mem_start;
 	}
-
+	snarf_region(mcd_port, 4);
 	mcdPresent = 1;
-	printk("Mitsumi CD-ROM Drive present\n");
+	printk("mcd: Mitsumi CD-ROM Drive present at addr %x, irq %d\n",
+	       mcd_port, mcd_irq);
 	return mem_start;
 }
 
@@ -1018,14 +1047,14 @@ GetQChannelInfo(struct mcd_Toc *qp)
 	unsigned char notUsed;
 	int retry;
 
-	for (retry = 0; retry < 3; retry++)
+	for (retry = 0; retry < MCD_RETRY_ATTEMPTS; retry++)
 	{
 		outb(MCMD_GET_Q_CHANNEL, MCDPORT(0));
-		if (getMcdStatus(100) != -1)
+		if (getMcdStatus(MCD_STATUS_DELAY) != -1)
 			break;
 	}
 
-	if (retry >= 3)
+	if (retry >= MCD_RETRY_ATTEMPTS)
 		return -1;
 
 	if (getValue(&qp -> ctrl_addr) < 0) return -1;
@@ -1073,14 +1102,14 @@ GetDiskInfo()
 {
 	int retry;
 
-	for (retry = 0; retry < 3; retry++)
+	for (retry = 0; retry < MCD_RETRY_ATTEMPTS; retry++)
 	{
 		outb(MCMD_GET_DISK_INFO, MCDPORT(0));
-		if (getMcdStatus(100) != -1)
+		if (getMcdStatus(MCD_STATUS_DELAY) != -1)
 			break;
 	}
 
-	if (retry >= 3)
+	if (retry >= MCD_RETRY_ATTEMPTS)
 		return -1;
 
 	if (getValue(&DiskInfo.first) < 0) return -1;
@@ -1129,25 +1158,25 @@ GetToc()
 
 	i = DiskInfo.last + 3;
 
-	for (retry = 0; retry < 3; retry++)
+	for (retry = 0; retry < MCD_RETRY_ATTEMPTS; retry++)
 	{
 		outb(MCMD_STOP, MCDPORT(0));
-		if (getMcdStatus(100) != -1)
+		if (getMcdStatus(MCD_STATUS_DELAY) != -1)
 			break;
 	}
 
-	if (retry >= 3)
+	if (retry >= MCD_RETRY_ATTEMPTS)
 		return -1;
 
-	for (retry = 0; retry < 3; retry++)
+	for (retry = 0; retry < MCD_RETRY_ATTEMPTS; retry++)
 	{
 		outb(MCMD_SET_MODE, MCDPORT(0));
 		outb(0x05, MCDPORT(0));			/* mode: toc */
-		if (getMcdStatus(100) != -1)
+		if (getMcdStatus(MCD_STATUS_DELAY) != -1)
 			break;
 	}
 
-	if (retry >= 3)
+	if (retry >= MCD_RETRY_ATTEMPTS)
 		return -1;
 
 	for (limit = 300; limit > 0; limit--)
@@ -1169,11 +1198,11 @@ GetToc()
 
 	Toc[DiskInfo.last + 1].diskTime = DiskInfo.diskLength;
 
-	for (retry = 0; retry < 3; retry++)
+	for (retry = 0; retry < MCD_RETRY_ATTEMPTS; retry++)
 	{
                 outb(MCMD_SET_MODE, MCDPORT(0));
                 outb(0x01, MCDPORT(0));
-                if (getMcdStatus(100) != -1)
+                if (getMcdStatus(MCD_STATUS_DELAY) != -1)
                         break;
 	}
 

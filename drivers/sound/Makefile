@@ -5,7 +5,8 @@
 #
 #
 
-VERSION		= 2.0
+VERSION		= 2.2b
+TARGET_OS	= linux
 USRINCDIR	= /usr/include
 
 .c.s:
@@ -15,10 +16,10 @@ USRINCDIR	= /usr/include
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 
-OBJS   = soundcard.o dsp.o audio.o dmabuf.o sb_dsp.o dev_table.o \
+OBJS   = soundcard.o audio.o dmabuf.o sb_dsp.o dev_table.o \
 	 opl3.o sequencer.o midibuf.o sb_card.o pas2_card.o adlib_card.o \
 	 pas2_pcm.o pas2_mixer.o pas2_midi.o gus_card.o gus_wave.o mpu401.o \
-	 gus_midi.o gus_vol.o patmgr.o
+	 gus_midi.o gus_vol.o patmgr.o sb_mixer.o sb16_dsp.o sb_midi.o
 
 all:	local.h sound.a
 
@@ -27,11 +28,16 @@ sound.a: $(OBJS)
 	$(AR) rcs sound.a $(OBJS)
 	sync
 
+clean:
+	rm -f core core.* *.o *.a tmp_make *~ x z *%
+	rm -f configure Makefile sound_stub.c
+	for i in *.c;do rm -f `basename $$i .c`.s;done
+
 indent:
 	for n in *.c;do echo indent $$n;indent $$n;done
 
 local.h:
-	rm -f configure
+	$(MAKE) clean
 	$(MAKE) config
 	$(MAKE) dep
 
@@ -42,9 +48,6 @@ config: configure
 	@echo \#define SOUND_CONFIG_BY \"`whoami`\" >> local.h
 	@echo \#define SOUND_CONFIG_HOST \"`hostname`\" >> local.h
 	@echo \#define SOUND_CONFIG_DOMAIN \"`domainname`\" >> local.h
-
-clrconf:
-	rm -f local.h .depend os.h soundcard.c
 
 configure: configure.c
 	$(HOSTCC) -o configure configure.c

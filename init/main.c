@@ -84,11 +84,13 @@ extern void hd_setup(char *str, int *ints);
 extern void bmouse_setup(char *str, int *ints);
 extern void eth_setup(char *str, int *ints);
 extern void xd_setup(char *str, int *ints);
+extern void mcd_setup(char *str, int *ints);
 extern void st0x_setup(char *str, int *ints);
 extern void tmc8xx_setup(char *str, int *ints);
 extern void t128_setup(char *str, int *ints);
 extern void generic_NCR5380_setup(char *str, int *intr);
 extern void aha152x_setup(char *str, int *ints);
+extern void sound_setup(char *str, int *ints);
 
 #ifdef CONFIG_SYSVIPC
 extern void ipc_init(void);
@@ -189,6 +191,12 @@ struct {
 #endif
 #ifdef CONFIG_BLK_DEV_XD
 	{ "xd=", xd_setup },
+#endif
+#ifdef CONFIG_MCD
+	{ "mcd=", mcd_setup },
+#endif
+#ifdef CONFIG_SOUND
+	{ "sound=", sound_setup },
 #endif
 	{ 0, 0 }
 };
@@ -366,11 +374,11 @@ asmlinkage void start_kernel(void)
 	memory_start = kmalloc_init(memory_start,memory_end);
 	memory_start = chr_dev_init(memory_start,memory_end);
 	memory_start = blk_dev_init(memory_start,memory_end);
+	sti();
+	calibrate_delay();
 #ifdef CONFIG_INET
 	memory_start = net_dev_init(memory_start,memory_end);
 #endif
-	sti();
-	calibrate_delay();
 #ifdef CONFIG_SCSI
 	memory_start = scsi_dev_init(memory_start,memory_end);
 #endif

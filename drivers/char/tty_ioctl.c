@@ -260,9 +260,6 @@ static int get_termio(struct tty_struct * tty, struct termio * termio)
 	return 0;
 }
 
-/*
- * This only works as the 386 is low-byte-first
- */
 static int set_termio(struct tty_struct * tty, struct termio * termio,
 			int channel)
 {
@@ -270,18 +267,18 @@ static int set_termio(struct tty_struct * tty, struct termio * termio,
 	struct termio tmp_termio;
 	struct termios old_termios = *tty->termios;
 
+#define SET_LOW_BITS(x,y)	((x) = (0xffff0000 & (x)) | (y))
+
 	i = check_change(tty, channel);
 	if (i)
 		return i;
-	for (i=0 ; i< (sizeof (*termio)) ; i++)
-		((char *)&tmp_termio)[i]=get_fs_byte(i+(char *)termio);
+	memcpy_fromfs(&tmp_termio, termio, sizeof(*termio));
 
-	*(unsigned short *)&tty->termios->c_iflag = tmp_termio.c_iflag;
-	*(unsigned short *)&tty->termios->c_oflag = tmp_termio.c_oflag;
-	*(unsigned short *)&tty->termios->c_cflag = tmp_termio.c_cflag;
-	*(unsigned short *)&tty->termios->c_lflag = tmp_termio.c_lflag;
-	for(i=0 ; i < NCC ; i++)
-		tty->termios->c_cc[i] = tmp_termio.c_cc[i];
+	SET_LOW_BITS(tty->termios->c_iflag, tmp_termio.c_iflag);
+	SET_LOW_BITS(tty->termios->c_oflag, tmp_termio.c_oflag);
+	SET_LOW_BITS(tty->termios->c_cflag, tmp_termio.c_cflag);
+	SET_LOW_BITS(tty->termios->c_lflag, tmp_termio.c_lflag);
+	memcpy(tty->termios->c_cc, tmp_termio.c_cc, NCC);
 
 	/* see if packet mode change of state */
 

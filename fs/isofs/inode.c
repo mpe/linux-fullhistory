@@ -392,7 +392,7 @@ void isofs_read_inode(struct inode * inode)
 	};
 	
 	if (isonum_723 (raw_inode->volume_sequence_number) != 1) {
-		panic("Multi volume CD somehow got mounted.\n");
+		printk("Multi volume CD somehow got mounted.\n");
 	};
 
 	if (raw_inode->interleave[0]) {

@@ -175,6 +175,10 @@ asmlinkage void math_emulate(long arg)
 
 #endif /* CONFIG_MATH_EMULATION */
 
+static unsigned long itimer_ticks = 0;
+static unsigned long itimer_next = ~0;
+static unsigned long lost_ticks = 0;
+
 /*
  *  'schedule()' is the scheduler function. It's a very simple and nice
  * scheduler: it's not perfect, but certainly works for most things.
@@ -192,15 +196,36 @@ asmlinkage void schedule(void)
 	int c;
 	struct task_struct * p;
 	struct task_struct * next;
+	unsigned long ticks;
 
 /* check alarm, wake up any interruptible tasks that have got a signal */
 
+	cli();
+	ticks = itimer_ticks;
+	itimer_ticks = 0;
+	itimer_next = ~0;
 	sti();
 	need_resched = 0;
 	p = &init_task;
 	for (;;) {
 		if ((p = p->next_task) == &init_task)
 			goto confuse_gcc1;
+		if (ticks && p->it_real_value) {
+			if (p->it_real_value <= ticks) {
+				send_sig(SIGALRM, p, 1);
+				if (!p->it_real_incr) {
+					p->it_real_value = 0;
+					goto end_itimer;
+				}
+				do {
+					p->it_real_value += p->it_real_incr;
+				} while (p->it_real_value <= ticks);
+			}
+			p->it_real_value -= ticks;
+			if (p->it_real_value < itimer_next)
+				itimer_next = p->it_real_value;
+		}
+end_itimer:
 		if (p->state != TASK_INTERRUPTIBLE)
 			continue;
 		if (p->signal & ~p->blocked) {
@@ -503,8 +528,6 @@ static void second_overflow(void)
 	    last_rtc_update = xtime.tv_sec;
 }
 
-static int lost_ticks = 0;
-
 /*
  * disregard lost ticks for now.. We don't care enough.
  */
@@ -532,7 +555,6 @@ static void do_timer(struct pt_regs * regs)
 {
 	unsigned long mask;
 	struct timer_struct *tp = timer_table+0;
-	struct task_struct * task_p;
 
 	long ltemp;
 
@@ -609,16 +631,6 @@ static void do_timer(struct pt_regs * regs)
 		current->counter=0;
 		need_resched = 1;
 	}
-	/* Update ITIMER_REAL for every task */
-	for_each_task(task_p) {
-		if (!task_p->it_real_value)
-			continue;
-		if (--task_p->it_real_value)
-			continue;
-		send_sig(SIGALRM,task_p,1);
-		task_p->it_real_value = task_p->it_real_incr;
-		need_resched = 1;
-	}
 	/* Update ITIMER_PROF for the current task */
 	if (current->it_prof_value && !(--current->it_prof_value)) {
 		current->it_prof_value = current->it_prof_incr;
@@ -636,6 +648,9 @@ static void do_timer(struct pt_regs * regs)
 		sti();
 	}
 	cli();
+	itimer_ticks++;
+	if (itimer_ticks > itimer_next)
+		need_resched = 1;
 	if (next_timer) {
 		if (next_timer->expires) {
 			next_timer->expires--;

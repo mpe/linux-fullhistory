@@ -105,7 +105,8 @@ DEFINE_WAIT_QUEUE (dram_sleeper, dram_sleep_flag);
 /*
  * Variables and buffers for PCM output
  */
-#define MAX_PCM_BUFFERS		32	/* Don't change */
+#define MAX_PCM_BUFFERS		(32*MAX_REALTIME_FACTOR) /* Don't change */
+
 static int      pcm_bsize,	/* Current blocksize */
                 pcm_nblk,	/* Current # of blocks */
                 pcm_banksize;	/* # bytes allocated for channels */
@@ -667,9 +668,6 @@ gus_initialize (void)
    * 
    * The GUS supports two IRQs and two DMAs.
    * 
-   * If GUS_MIDI_IRQ is defined and if it's != GUS_IRQ, separate Midi IRQ is set
-   * up. Otherwise the same IRQ is shared by the both devices.
-   * 
    * Just one DMA channel is used. This prevents simultaneous ADC and DAC.
    * Adding this support requires significant changes to the dmabuf.c, dsp.c
    * and audio.c also.
@@ -680,21 +678,7 @@ gus_initialize (void)
   if (!tmp)
     printk ("Warning! GUS IRQ not selected\n");
   irq_image |= tmp;
-
-  if (GUS_MIDI_IRQ != gus_irq)
-    {				/* The midi irq was defined and != wave irq */
-      tmp = gus_irq_map[GUS_MIDI_IRQ];
-      tmp <<= 3;
-
-      if (!tmp)
-	printk ("Warning! GUS Midi IRQ not selected\n");
-      else
-	gus_set_midi_irq (GUS_MIDI_IRQ);
-
-      irq_image |= tmp;
-    }
-  else
-    irq_image |= 0x40;		/* Combine IRQ1 (GF1) and IRQ2 (Midi) */
+  irq_image |= 0x40;		/* Combine IRQ1 (GF1) and IRQ2 (Midi) */
 
   dma_image = 0x40;		/* Combine DMA1 (DRAM) and IRQ2 (ADC) */
   tmp = gus_dma_map[gus_dma];
@@ -1325,14 +1309,14 @@ guswave_load_patch (int dev, int format, snd_rw_buf * addr,
 
   if (count < patch.len)
     {
-      printk ("GUS Warning: Patch record too short (%d<%d)\n",
+      printk ("GUS Warning: Patch record too short (%d<%lu)\n",
 	      count, patch.len);
       patch.len = count;
     }
 
   if (patch.len <= 0 || patch.len > gus_mem_size)
     {
-      printk ("GUS: Invalid sample length %d\n", patch.len);
+      printk ("GUS: Invalid sample length %lu\n", patch.len);
       return RET_ERROR (EINVAL);
     }
 
@@ -1362,7 +1346,7 @@ guswave_load_patch (int dev, int format, snd_rw_buf * addr,
        */
       if (patch.len >= GUS_BANK_SIZE)
 	{
-	  printk ("GUS: Sample (16 bit) too long %d\n", patch.len);
+	  printk ("GUS: Sample (16 bit) too long %lu\n", patch.len);
 	  return RET_ERROR (ENOSPC);
 	}
 
@@ -1424,7 +1408,7 @@ guswave_load_patch (int dev, int format, snd_rw_buf * addr,
 	  blk_size = blk_end - target;
 	}
 
-#ifdef GUS_NO_DMA
+#if defined(GUS_NO_DMA) || defined(GUS_PATCH_NO_DMA)
       /*
        * For some reason the DMA is not possible. We have to use PIO.
        */
@@ -1435,6 +1419,10 @@ guswave_load_patch (int dev, int format, snd_rw_buf * addr,
 	for (i = 0; i < blk_size; i++)
 	  {
 	    GET_BYTE_FROM_USER (data, addr, sizeof_patch + i);
+	    if (patch.mode & WAVE_UNSIGNED)
+
+	       if (!(patch.mode & WAVE_16_BITS) || (i & 0x01))
+	       	  data ^= 0x80;			/* Convert to signed */
 	    gus_poke (target + i, data);
 	  }
       }
@@ -1717,6 +1705,7 @@ gus_sampling_ioctl (int dev, unsigned int cmd, unsigned int arg, int local)
       break;
 
     case SOUND_PCM_WRITE_CHANNELS:
+      if (local) return gus_sampling_set_channels(arg);
       return IOCTL_OUT (arg, gus_sampling_set_channels (IOCTL_IN (arg)));
       break;
 
@@ -1774,9 +1763,6 @@ gus_sampling_open (int dev, int mode)
   reset_sample_memory ();
   gus_select_max_voices (14);
 
-  gus_sampling_set_bits (8);
-  gus_sampling_set_channels (1);
-  gus_sampling_set_speed (DSP_DEFAULT_SPEED);
   pcm_active = 0;
 
   return 0;
@@ -1987,7 +1973,8 @@ gus_transfer_output_block (int dev, unsigned long buf,
 }
 
 static void
-gus_sampling_output_block (int dev, unsigned long buf, int total_count, int intrflag)
+gus_sampling_output_block (int dev, unsigned long buf, int total_count, 
+			   int intrflag, int restart_dma)
 {
   pcm_current_buf = buf;
   pcm_current_count = total_count;
@@ -1997,7 +1984,8 @@ gus_sampling_output_block (int dev, unsigned long buf, int total_count, int intr
 }
 
 static void
-gus_sampling_start_input (int dev, unsigned long buf, int count, int intrflag)
+gus_sampling_start_input (int dev, unsigned long buf, int count, 
+			  int intrflag, int restart_dma)
 {
   unsigned long   flags;
   unsigned char   mode;
@@ -2329,7 +2317,7 @@ static struct synth_operations guswave_operations =
 long
 gus_wave_init (long mem_start, int irq, int dma)
 {
-  printk (" <Gravis UltraSound %dk>", gus_mem_size / 1024);
+  printk (" <Gravis UltraSound %luk>", gus_mem_size / 1024);
 
   if (irq < 0 || irq > 15)
     {
@@ -2426,7 +2414,7 @@ do_loop_irq (int voice)
 
 	if (orig_qlen == pcm_nblk)
 	  {
-	    DMAbuf_outputintr (gus_devnum);
+	    DMAbuf_outputintr (gus_devnum, 0);
 	  }
       }
       break;
@@ -2530,7 +2518,7 @@ guswave_dma_irq (void)
       case GUS_DEV_PCM_DONE:
 	if (pcm_qlen < pcm_nblk)
 	  {
-	    DMAbuf_outputintr (gus_devnum);
+	    DMAbuf_outputintr (gus_devnum, pcm_qlen == 0);
 	  }
 	break;
 

@@ -35,7 +35,7 @@
 
 #if !defined(EXCLUDE_MPU401) && !defined(EXCLUDE_MIDI)
 
-#define	DATAPORT   (mpu401_base)/* MPU-401 Data I/O Port on IBM */
+#define	DATAPORT   (mpu401_base)	/* MPU-401 Data I/O Port on IBM */
 #define	COMDPORT   (mpu401_base+1)	/* MPU-401 Command Port on IBM */
 #define	STATPORT   (mpu401_base+1)	/* MPU-401 Status Port on IBM */
 
@@ -100,8 +100,7 @@ poll_mpu401 (unsigned long dummy)
 {
   unsigned long   flags;
 
-  static struct timer_list mpu401_timer =
-  {NULL, 0, 0, poll_mpu401};
+  DEFINE_TIMER(mpu401_timer, poll_mpu401);
 
   if (!(mpu401_opened & OPEN_READ))
     return;			/* No longer required */
@@ -111,42 +110,9 @@ poll_mpu401 (unsigned long dummy)
   if (input_avail ())
     mpu401_input_loop ();
 
-  mpu401_timer.expires = 1;
-  add_timer (&mpu401_timer);	/* Come back later */
+  ACTIVATE_TIMER(mpu401_timer, poll_mpu401, 1); /* Come back later */
 
   RESTORE_INTR (flags);
-}
-
-static int
-set_mpu401_irq (int interrupt_level)
-{
-  int             retcode;
-
-#ifdef linux
-  struct sigaction sa;
-
-  sa.sa_handler = mpuintr;
-
-#ifdef SND_SA_INTERRUPT
-  sa.sa_flags = SA_INTERRUPT;
-#else
-  sa.sa_flags = 0;
-#endif
-
-  sa.sa_mask = 0;
-  sa.sa_restorer = NULL;
-
-  retcode = irqaction (interrupt_level, &sa);
-
-  if (retcode < 0)
-    {
-      printk ("MPU-401: IRQ%d already in use\n", interrupt_level);
-    }
-
-#else
-  /* #  error Unimplemented for this OS	 */
-#endif
-  return retcode;
 }
 
 static int
@@ -247,7 +213,7 @@ mpu401_buffer_status (int dev)
 
 static struct midi_operations mpu401_operations =
 {
-  {"MPU-401", 0},
+  {"MPU-401", 0, 0, SNDCARD_MPU401},
   mpu401_open,
   mpu401_close,
   mpu401_ioctl,
@@ -299,7 +265,7 @@ reset_mpu401 (void)
   int             ok, timeout, n;
 
   /*
-   * Send the RESET command. Try twice if no success at the first time.
+   * Send the RESET command. Try again if no success at the first time.
    */
 
   ok = 0;
@@ -341,7 +307,7 @@ probe_mpu401 (struct address_info *hw_config)
   mpu401_base = hw_config->io_base;
   mpu401_irq = hw_config->irq;
 
-  if (set_mpu401_irq (mpu401_irq) < 0)
+  if (snd_set_irq_handler (mpu401_irq, mpuintr) < 0)
     return 0;
 
   ok = reset_mpu401 ();

@@ -22,14 +22,19 @@
  */
 
 /* *** change this to set the I/O port address */
-#define MCDPORT(x)		(0x320 + (x))
+#define MCD_BASE_ADDR	        0x300
 
 /* *** change this to set the interrupt number */
 #define MCD_INTR_NR		11
 
+/* Increase this if you get lots of timeouts */
+#define MCD_STATUS_DELAY	100
 
+/* number of times to retry a command before giving up */
+#define MCD_RETRY_ATTEMPTS      3
 
-
+/* port access macro */
+#define MCDPORT(x)		(mcd_port + (x))
 
 /* status bits */
 

@@ -37,76 +37,12 @@ void            gusintr (int);
 
 int             gus_base, gus_irq, gus_dma;
 
-static int
-set_gus_irq (int interrupt_level)
-{
-  int             retcode;
-
-#ifdef linux
-  struct sigaction sa;
-
-  sa.sa_handler = gusintr;
-
-#ifdef SND_SA_INTERRUPT
-  sa.sa_flags = SA_INTERRUPT;
-#else
-  sa.sa_flags = 0;
-#endif
-
-  sa.sa_mask = 0;
-  sa.sa_restorer = NULL;
-
-  retcode = irqaction (interrupt_level, &sa);
-
-  if (retcode < 0)
-    {
-      printk ("GUS: IRQ%d already in use\n", interrupt_level);
-    }
-
-#else
-  /* #  error Unimplemented for this OS	 */
-#endif
-  return retcode;
-}
-
-int
-gus_set_midi_irq (int interrupt_level)
-{
-  int             retcode;
-
-#ifdef linux
-  struct sigaction sa;
-
-  sa.sa_handler = gus_midi_interrupt;
-
-#ifdef SND_SA_INTERRUPT
-  sa.sa_flags = SA_INTERRUPT;
-#else
-  sa.sa_flags = 0;
-#endif
-
-  sa.sa_mask = 0;
-  sa.sa_restorer = NULL;
-
-  retcode = irqaction (interrupt_level, &sa);
-
-  if (retcode < 0)
-    {
-      printk ("GUS: IRQ%d already in use\n", interrupt_level);
-    }
-
-#else
-  /* #  error Unimplemented for this OS	 */
-#endif
-  return retcode;
-}
-
 long
 attach_gus_card (long mem_start, struct address_info *hw_config)
 {
   int             io_addr;
 
-  set_gus_irq (hw_config->irq);
+  snd_set_irq_handler (hw_config->irq, gusintr);
 
   if (gus_wave_detect (hw_config->io_base))	/* Try first the default */
     {

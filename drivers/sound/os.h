@@ -87,7 +87,7 @@ struct snd_wait {
 #define DO_SLEEP(q, f, time_limit)	\
 	{ unsigned long tl;\
 	  if (time_limit) tl = current->timeout = jiffies + (time_limit); \
-	     else tl = 0; \
+	     else tl = 0xffffffff; \
 	  f.mode = WK_SLEEP;interruptible_sleep_on(&q); \
 	  if (!(f.mode & WK_WAKEUP)) \
 	   { \
@@ -127,6 +127,24 @@ struct snd_wait {
 */
 #define KERNEL_MALLOC(nbytes)	kmalloc(nbytes, GFP_KERNEL)
 #define KERNEL_FREE(addr)	kfree(addr)
+
+/*
+ * The macro DEFINE_TIMER defines variables for the ACTIVATE_TIMER if
+ * required. The name is the variable/name to be used and the proc is
+ * the procedure to be called when the timer expires.
+ */
+
+#define DEFINE_TIMER(name, proc) \
+  static struct timer_list name = \
+  {NULL, 0, 0, proc}
+
+/*
+ * The ACTIVATE_TIMER requests system to call 'proc' after 'time' ticks.
+ */
+
+#define ACTIVATE_TIMER(name, proc, time) \
+  {name.expires = time; \
+  add_timer (&name);}
 
 #define INB	inb
 #define OUTB	outb

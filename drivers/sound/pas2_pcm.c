@@ -200,12 +200,6 @@ pas_pcm_open (int dev, int mode)
 
   TRACE (printk ("pas2_pcm.c: static int pas_pcm_open(int mode = %X)\n", mode));
 
-  if (mode != OPEN_READ && mode != OPEN_WRITE)
-    {
-      printk ("PAS2: Attempt to open PCM device for simultaneous read and write");
-      return RET_ERROR (EINVAL);
-    }
-
   if ((err = pas_set_intr (PAS_PCM_INTRBITS)) < 0)
     return err;
 
@@ -216,10 +210,6 @@ pas_pcm_open (int dev, int mode)
     }
 
   pcm_count = 0;
-
-  pcm_set_bits (8);
-  pcm_set_channels (1);
-  pcm_set_speed (DSP_DEFAULT_SPEED);
 
   return 0;
 }
@@ -242,7 +232,8 @@ pas_pcm_close (int dev)
 }
 
 static void
-pas_pcm_output_block (int dev, unsigned long buf, int count, int intrflag)
+pas_pcm_output_block (int dev, unsigned long buf, int count, 
+		      int intrflag, int restart_dma)
 {
   unsigned long   flags, cnt;
 
@@ -251,7 +242,6 @@ pas_pcm_output_block (int dev, unsigned long buf, int count, int intrflag)
   cnt = count;
   if (sound_dsp_dmachan[dev] > 3)
     cnt >>= 1;
-  cnt--;
 
   if (sound_dma_automode[dev] &&
       intrflag &&
@@ -263,11 +253,11 @@ pas_pcm_output_block (int dev, unsigned long buf, int count, int intrflag)
   pas_write (pas_read (PCM_CONTROL) & ~P_C_PCM_ENABLE,
 	     PCM_CONTROL);
 
-  DMAbuf_start_dma (dev, buf, count, DMA_MODE_WRITE);
+  if (restart_dma) 
+     DMAbuf_start_dma (dev, buf, count, DMA_MODE_WRITE);
 
   if (sound_dsp_dmachan[dev] > 3)
     count >>= 1;
-  count--;
 
   if (count != pcm_count)
     {
@@ -288,7 +278,8 @@ pas_pcm_output_block (int dev, unsigned long buf, int count, int intrflag)
 }
 
 static void
-pas_pcm_start_input (int dev, unsigned long buf, int count, int intrflag)
+pas_pcm_start_input (int dev, unsigned long buf, int count, 
+		     int intrflag, int restart_dma)
 {
   unsigned long   flags;
   int             cnt;
@@ -298,7 +289,6 @@ pas_pcm_start_input (int dev, unsigned long buf, int count, int intrflag)
   cnt = count;
   if (sound_dsp_dmachan[dev] > 3)
     cnt >>= 1;
-  cnt--;
 
   if (sound_dma_automode[my_devnum] &&
       intrflag &&
@@ -307,12 +297,11 @@ pas_pcm_start_input (int dev, unsigned long buf, int count, int intrflag)
 
   DISABLE_INTR (flags);
 
-  DMAbuf_start_dma (dev, buf, count, DMA_MODE_READ);
+  if (restart_dma)
+     DMAbuf_start_dma (dev, buf, count, DMA_MODE_READ);
 
   if (sound_dsp_dmachan[dev] > 3)
     count >>= 1;
-
-  count--;
 
   if (count != pcm_count)
     {
@@ -374,6 +363,7 @@ pas_pcm_init (long mem_start, struct address_info *hw_config)
     {
       dsp_devs[my_devnum = num_dspdevs++] = &pas_pcm_operations;
       sound_dsp_dmachan[my_devnum] = hw_config->dma;
+#ifndef PAS_NO_AUTODMA
       if (hw_config->dma > 3)
 	{
 	  sound_buffcounts[my_devnum] = 1;
@@ -386,6 +376,11 @@ pas_pcm_init (long mem_start, struct address_info *hw_config)
 	  sound_buffsizes[my_devnum] = DSP_BUFFSIZE;
 	  sound_dma_automode[my_devnum] = 1;
 	}
+#else
+	  sound_buffcounts[my_devnum] = 2;
+	  sound_buffsizes[my_devnum] = DSP_BUFFSIZE;
+	  sound_dma_automode[my_devnum] = 0;
+#endif
     }
   else
     printk ("PAS2: Too many PCM devices available\n");
@@ -413,7 +408,7 @@ pas_pcm_interrupt (unsigned char status, int cause)
 	{
 
 	case PCM_DAC:
-	  DMAbuf_outputintr (my_devnum);
+	  DMAbuf_outputintr (my_devnum, 1);
 	  break;
 
 	case PCM_ADC:

@@ -52,7 +52,7 @@ __asm__ ("movl %0,%%fs:%1": /* no outputs */ :"ir" (val),"m" (*addr));
 
 #define put_fs_long(x,addr) put_user_long((x),(int *)(addr))
 
-static inline void memcpy_tofs(void * to, const void * from, unsigned long n)
+static inline void __generic_memcpy_tofs(void * to, const void * from, unsigned long n)
 {
 __asm__("cld\n\t"
 	"push %%es\n\t"
@@ -72,7 +72,55 @@ __asm__("cld\n\t"
 	:"cx","di","si");
 }
 
-static inline void memcpy_fromfs(void * to, const void * from, unsigned long n)
+static inline void __constant_memcpy_tofs(void * to, const void * from, unsigned long n)
+{
+	switch (n) {
+		case 0:
+			return;
+		case 1:
+			put_user_byte(*(const char *) from, (char *) to);
+			return;
+		case 2:
+			put_user_word(*(const short *) from, (short *) to);
+			return;
+		case 3:
+			put_user_word(*(const short *) from, (short *) to);
+			put_user_byte(*(2+(const char *) from), 2+(char *) to);
+			return;
+		case 4:
+			put_user_long(*(const int *) from, (int *) to);
+			return;
+	}
+#define COMMON(x) \
+__asm__("cld\n\t" \
+	"push %%es\n\t" \
+	"push %%fs\n\t" \
+	"pop %%es\n\t" \
+	"rep ; movsl\n\t" \
+	x \
+	"pop %%es" \
+	: /* no outputs */ \
+	:"c" (n/4),"D" ((long) to),"S" ((long) from) \
+	:"cx","di","si")
+
+	switch (n % 4) {
+		case 0:
+			COMMON("");
+			return;
+		case 1:
+			COMMON("movsb\n\t");
+			return;
+		case 2:
+			COMMON("movsw\n\t");
+			return;
+		case 3:
+			COMMON("movsw\n\tmovsb\n\t");
+			return;
+	}
+#undef COMMON
+}
+
+static inline void __generic_memcpy_fromfs(void * to, const void * from, unsigned long n)
 {
 __asm__("cld\n\t"
 	"testb $1,%%cl\n\t"
@@ -85,8 +133,62 @@ __asm__("cld\n\t"
 	"rep ; fs ; movsl"
 	: /* no outputs */
 	:"c" (n),"D" ((long) to),"S" ((long) from)
-	:"cx","di","si");
+	:"cx","di","si","memory");
 }
+
+static inline void __constant_memcpy_fromfs(void * to, const void * from, unsigned long n)
+{
+	switch (n) {
+		case 0:
+			return;
+		case 1:
+			*(char *)to = get_user_byte((const char *) from);
+			return;
+		case 2:
+			*(short *)to = get_user_word((const short *) from);
+			return;
+		case 3:
+			*(short *) to = get_user_word((const short *) from);
+			*(char *) to = get_user_byte(2+(const char *) from);
+			return;
+		case 4:
+			*(int *) to = get_user_long((const int *) from);
+			return;
+	}
+#define COMMON(x) \
+__asm__("cld\n\t" \
+	"rep ; fs ; movsl\n\t" \
+	x \
+	: /* no outputs */ \
+	:"c" (n/4),"D" ((long) to),"S" ((long) from) \
+	:"cx","di","si","memory")
+
+	switch (n % 4) {
+		case 0:
+			COMMON("");
+			return;
+		case 1:
+			COMMON("fs ; movsb");
+			return;
+		case 2:
+			COMMON("fs ; movsw");
+			return;
+		case 3:
+			COMMON("fs ; movsw\n\tfs ; movsb");
+			return;
+	}
+#undef COMMON
+}
+
+#define memcpy_fromfs(to, from, n) \
+(__builtin_constant_p(n) ? \
+ __constant_memcpy_fromfs((to),(from),(n)) : \
+ __generic_memcpy_fromfs((to),(from),(n)))
+
+#define memcpy_tofs(to, from, n) \
+(__builtin_constant_p(n) ? \
+ __constant_memcpy_tofs((to),(from),(n)) : \
+ __generic_memcpy_tofs((to),(from),(n)))
 
 /*
  * Someone who knows GNU asm better than I should double check the followig.

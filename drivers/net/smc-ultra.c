@@ -14,7 +14,7 @@
 */
 
 static char *version =
-    "smc-ultra.c:v0.03 11/21/93 Donald Becker (becker@super.org)\n";
+    "smc-ultra.c:v0.04 11/30/93 Donald Becker (becker@super.org)\n";
 
 #include <linux/config.h>
 #include <linux/kernel.h>
@@ -70,7 +70,7 @@ int ultra_probe(struct device *dev)
     for (port = &ports[0]; *port; port++) {
 	if (check_region(*port, 32))
 	    continue;
-	if ((inb(*port + 7) & 0xF0) == 0x20
+	if ((inb(*port + 7) & 0xF0) == 0x20     /* Check chip ID nibble. */
 	    && ultraprobe1(*port, dev) == 0)
 	    return 0;
     }
@@ -85,12 +85,8 @@ int ultraprobe1(int ioaddr, struct device *dev)
   int checksum = 0;
   char *model_name;
   int num_pages;
-  unsigned char reg1, eeprom_irq = 0;
+  unsigned char eeprom_irq = 0;
 
-  /* Second probe check: at most one bit can be set in register 1. */
-  reg1 = inb(ioaddr + 1);
-  if (reg1 & (reg1 - 1))
-      return ENODEV;
 
   /* Select the station address register set. */
   outb(0x7f & inb(ioaddr + 4), ioaddr + 4);

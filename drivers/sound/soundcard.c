@@ -1,3 +1,4 @@
+
 /*
  * linux/kernel/chr_drv/sound/soundcard.c
  * 
@@ -43,7 +44,6 @@ extern long     seq_time;
 
 static int      in_use = 0;	/* Total # of open device files (excluding
 				 * minor 0) */
-
 static int      soundcards_installed = 0;	/* Number of installed
 						 * soundcards */
 static int      soundcard_configured = 0;
@@ -106,17 +106,28 @@ init_status (void)
 
   for (i = 0; i < (num_sound_drivers - 1); i++)
     {
-      sprintf (tmp_buf, "Type %d: %s ",
+      if (!supported_drivers[i].enabled) 
+      if (!put_status ("("))
+	return;
+
+      sprintf (tmp_buf, "Type %02x: %s",
 	       supported_drivers[i].card_type,
 	       supported_drivers[i].name);
       if (!put_status (tmp_buf))
 	return;
 
-      sprintf (tmp_buf, " at 0x%03x irq %d drq %d\n",
+      sprintf (tmp_buf, " at 0x%03x irq %d drq %d",
 	       supported_drivers[i].config.io_base,
 	       supported_drivers[i].config.irq,
 	       supported_drivers[i].config.dma);
       if (!put_status (tmp_buf))
+	return;
+
+      if (!supported_drivers[i].enabled) 
+      if (!put_status (")"))
+	return;
+
+      if (!put_status ("\n"))
 	return;
     }
 
@@ -210,13 +221,10 @@ sound_read (struct inode *inode, struct file *file, char *buf, int count)
       return read_status (buf, count);
       break;
 
-    case SND_DEV_AUDIO:
-      return audio_read (dev, &files[dev], buf, count);
-      break;
-
     case SND_DEV_DSP:
     case SND_DEV_DSP16:
-      return dsp_read (dev, &files[dev], buf, count);
+    case SND_DEV_AUDIO:
+      return audio_read (dev, &files[dev], buf, count);
       break;
 
     case SND_DEV_SEQ:
@@ -252,13 +260,10 @@ sound_write (struct inode *inode, struct file *file, char *buf, int count)
       return sequencer_write (dev, &files[dev], buf, count);
       break;
 
-    case SND_DEV_AUDIO:
-      return audio_write (dev, &files[dev], buf, count);
-      break;
-
     case SND_DEV_DSP:
     case SND_DEV_DSP16:
-      return dsp_write (dev, &files[dev], buf, count);
+    case SND_DEV_AUDIO:
+      return audio_write (dev, &files[dev], buf, count);
       break;
 
     default:
@@ -338,18 +343,10 @@ sound_open (struct inode *inode, struct file *file)
       break;
 #endif
 
+    case SND_DEV_DSP:
+    case SND_DEV_DSP16:
     case SND_DEV_AUDIO:
       if ((retval = audio_open (dev, &files[dev])) < 0)
-	return retval;
-      break;
-
-    case SND_DEV_DSP:
-      if ((retval = dsp_open (dev, &files[dev], 8)) < 0)
-	return retval;
-      break;
-
-    case SND_DEV_DSP16:
-      if ((retval = dsp_open (dev, &files[dev], 16)) < 0)
 	return retval;
       break;
 
@@ -396,13 +393,10 @@ sound_release (struct inode *inode, struct file *file)
       break;
 #endif
 
-    case SND_DEV_AUDIO:
-      audio_release (dev, &files[dev]);
-      break;
-
     case SND_DEV_DSP:
     case SND_DEV_DSP16:
-      dsp_release (dev, &files[dev]);
+    case SND_DEV_AUDIO:
+      audio_release (dev, &files[dev]);
       break;
 
     default:
@@ -442,13 +436,10 @@ sound_ioctl (struct inode *inode, struct file *file,
       return sequencer_ioctl (dev, &files[dev], cmd, arg);
       break;
 
-    case SND_DEV_AUDIO:
-      return audio_ioctl (dev, &files[dev], cmd, arg);
-      break;
-
     case SND_DEV_DSP:
     case SND_DEV_DSP16:
-      return dsp_ioctl (dev, &files[dev], cmd, arg);
+    case SND_DEV_AUDIO:
+      return audio_ioctl (dev, &files[dev], cmd, arg);
       break;
 
 #ifndef EXCLUDE_MPU401
@@ -520,7 +511,6 @@ soundcard_init (long mem_start)
     {
       mem_start = DMAbuf_init (mem_start);
       mem_start = audio_init (mem_start);
-      mem_start = dsp_init (mem_start);
     }
 
 #ifndef EXCLUDE_MPU401
@@ -548,9 +538,44 @@ tenmicrosec (void)
     inb (0x80);
 }
 
+int
+snd_set_irq_handler (int interrupt_level, void(*hndlr)(int))
+{
+  int             retcode;
+
+  struct sigaction sa;
+
+  sa.sa_handler = hndlr;
+
+#ifdef SND_SA_INTERRUPT
+  sa.sa_flags = SA_INTERRUPT;
+#else
+  sa.sa_flags = 0;
+#endif
+
+  sa.sa_mask = 0;
+  sa.sa_restorer = NULL;
+
+  retcode = irqaction (interrupt_level, &sa);
+
+  if (retcode < 0)
+    {
+      printk ("Sound: IRQ%d already in use\n", interrupt_level);
+    }
+
+  return retcode;
+}
+
+void
+snd_release_irq(int vect)
+{
+	free_irq(vect);
+}
+
 void
 request_sound_timer (int count)
 {
+#ifndef EXCLUDE_SEQUENCER
   if (count < 0)
     count = jiffies + (-count);
   else
@@ -558,13 +583,16 @@ request_sound_timer (int count)
   timer_table[SOUND_TIMER].fn = sequencer_timer;
   timer_table[SOUND_TIMER].expires = count;
   timer_active |= 1 << SOUND_TIMER;
+#endif
 }
 
 void
 sound_stop_timer (void)
 {
+#ifndef EXCLUDE_SEQUENCER
   timer_table[SOUND_TIMER].expires = 0;
   timer_active &= ~(1 << SOUND_TIMER);
+#endif
 }
 
 #ifndef EXCLUDE_AUDIO

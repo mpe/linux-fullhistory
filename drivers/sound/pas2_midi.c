@@ -212,7 +212,7 @@ pas_buffer_status (int dev)
 
 static struct midi_operations pas_midi_operations =
 {
-  {"Pro Audio Spectrum", 0},
+  {"Pro Audio Spectrum", 0, 0, SNDCARD_PAS},
   pas_midi_open,
   pas_midi_close,
   pas_midi_ioctl,

@@ -32,8 +32,6 @@
  *			and not portable.
  */
 
-#include "soundcard.h"
-
 /*
  *	Private events for Gravis Ultrasound (GUS)
  *

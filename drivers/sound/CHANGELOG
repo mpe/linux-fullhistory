@@ -1,0 +1,26 @@
+Changelog for version 2.2b
+-------------------------
+
+Since 2.2
+- Minor polishing.
+- Interpreting of boot time arguments (sound=) for Linux.
+
+Since 2.1
+- Preliminary support for SB16. 
+  - The SB16 mixer is supported in it's native mode.
+  - Digitized voice capability up to 44.1 kHz/8 bit/mono
+    (16 bit and stereo support coming in the next release).
+- Fixed some bugs in the digitized voice driver for PAS16.
+- Proper initialization of the SB emulation of latest PAS16 models.
+
+- Significantly improved /dev/dsp and /dev/audio support.
+  - Now supports half duplex mode. It's now possible to record and
+    playback without closing and reopening the device.
+  - It's possible to use smaller buffers than earlier. There is a new
+    ioctl(fd, SNDCTL_DSP_SUBDIVIDE, &n) where n should be 1, 2 or 4.
+    This call instructs the driver to use smaller buffers. The default
+    buffer size (0.5 to 1.0 seconds) is divided by n. Should be called
+    immediately after opening the device.
+
+Since 2.0
+Just cosmetic changes. 

@@ -1126,6 +1126,8 @@ ip_forward(struct sk_buff *skb, struct device *dev, int is_frag)
   } else raddr = iph->daddr;
   dev2 = rt->rt_dev;
 
+  if (dev == dev2)
+	return;
   /*
    * We now allocate a new buffer, and copy the datagram into it.
    * If the indicated interface is up and running, kick it.
