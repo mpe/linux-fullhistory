@@ -64,6 +64,10 @@ static void acq_ping(void)
 
 static ssize_t acq_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
+	/*  Can't seek (pwrite) on this device  */
+	if (ppos != &file->f_pos)
+		return -ESPIPE;
+
 	if(count)
 	{
 		acq_ping();

@@ -28,6 +28,7 @@
 #include <linux/stat.h>
 #include <linux/mman.h>
 #include <linux/shm.h>
+#include <linux/poll.h>
 
 #include <asm/fpu.h>
 #include <asm/io.h>
@@ -167,6 +168,9 @@ out:
 	return error;
 }
 
+#undef ROUND_UP
+#undef NAME_OFFSET
+
 /*
  * Alpha syscall convention has no problem returning negative
  * values:
@@ -202,24 +206,24 @@ asmlinkage unsigned long sys_madvise(void)
 /*
  * No need to acquire the kernel lock, we're local..
  */
-asmlinkage unsigned long sys_getxuid(int a0, int a1, int a2, int a3, int a4, int a5,
-				     struct pt_regs regs)
+asmlinkage unsigned long sys_getxuid(int a0, int a1, int a2, int a3, int a4,
+				     int a5, struct pt_regs regs)
 {
 	struct task_struct * tsk = current;
 	(&regs)->r20 = tsk->euid;
 	return tsk->uid;
 }
 
-asmlinkage unsigned long sys_getxgid(int a0, int a1, int a2, int a3, int a4, int a5,
-				     struct pt_regs regs)
+asmlinkage unsigned long sys_getxgid(int a0, int a1, int a2, int a3, int a4,
+				     int a5, struct pt_regs regs)
 {
 	struct task_struct * tsk = current;
 	(&regs)->r20 = tsk->egid;
 	return tsk->gid;
 }
 
-asmlinkage unsigned long sys_getxpid(int a0, int a1, int a2, int a3, int a4, int a5,
-				     struct pt_regs regs)
+asmlinkage unsigned long sys_getxpid(int a0, int a1, int a2, int a3, int a4,
+				     int a5, struct pt_regs regs)
 {
 	struct task_struct *tsk = current;
 
@@ -522,47 +526,6 @@ asmlinkage int osf_umount(char *path, int flag)
 	ret = sys_umount(path);
 	unlock_kernel();
 	return ret;
-}
-
-/*
- * I don't know what the parameters are: the first one
- * seems to be a timeval pointer, and I suspect the second
- * one is the time remaining.. Ho humm.. No documentation.
- */
-asmlinkage int osf_usleep_thread(struct timeval *sleep, struct timeval *remain)
-{
-	struct timeval tmp;
-	unsigned long ticks;
-	int retval;
-
-	lock_kernel();
-	retval = verify_area(VERIFY_READ, sleep, sizeof(*sleep));
-	if (retval)
-		goto out;
-	if (remain && (retval = verify_area(VERIFY_WRITE, remain, sizeof(*remain))))
-		goto out;
-	copy_from_user(&tmp, sleep, sizeof(*sleep));
-	ticks = tmp.tv_usec;
-	ticks = (ticks + (1000000 / HZ) - 1) / (1000000 / HZ);
-	ticks += tmp.tv_sec * HZ;
-	current->timeout = ticks + jiffies;
-	current->state = TASK_INTERRUPTIBLE;
-	schedule();
-	retval = 0;
-	if (!remain)
-		goto out;
-	ticks = jiffies;
-	if (ticks < current->timeout)
-		ticks = current->timeout - ticks;
-	else
-		ticks = 0;
-	current->timeout = 0;
-	tmp.tv_sec = ticks / HZ;
-	tmp.tv_usec = ticks % HZ;
-	copy_to_user(remain, &tmp, sizeof(*remain));
-out:
-	unlock_kernel();
-	return retval;
 }
 
 asmlinkage int osf_utsname(char *name)
@@ -955,4 +918,359 @@ asmlinkage unsigned long osf_setsysinfo(unsigned long op, void *buffer,
 	}
 
 	return -EOPNOTSUPP;
+}
+
+/* Translations due to the fact that OSF's time_t is an int.  Which
+   affects all sorts of things, like timeval and itimerval.  */
+
+extern struct timezone sys_tz;
+extern int do_sys_settimeofday(struct timeval *tv, struct timezone *tz);
+extern int do_getitimer(int which, struct itimerval *value);
+extern int do_setitimer(int which, struct itimerval *, struct itimerval *);
+asmlinkage int sys_utimes(char *, struct timeval *);
+extern int sys_wait4(pid_t, int *, int, struct rusage *);
+
+struct timeval32
+{
+    int tv_sec, tv_usec;
+};
+
+struct itimerval32
+{
+    struct timeval32 it_interval;
+    struct timeval32 it_value;
+};
+
+static inline long get_tv32(struct timeval *o, struct timeval32 *i)
+{
+	return (!access_ok(VERIFY_READ, i, sizeof(*i)) ||
+		(__get_user(o->tv_sec, &i->tv_sec) |
+		 __get_user(o->tv_usec, &i->tv_usec)));
+}
+
+static inline long put_tv32(struct timeval32 *o, struct timeval *i)
+{
+	return (!access_ok(VERIFY_WRITE, o, sizeof(*o)) ||
+		(__put_user(i->tv_sec, &o->tv_sec) |
+		 __put_user(i->tv_usec, &o->tv_usec)));
+}
+
+static inline long get_it32(struct itimerval *o, struct itimerval32 *i)
+{
+	return (!access_ok(VERIFY_READ, i, sizeof(*i)) ||
+		(__get_user(o->it_interval.tv_sec, &i->it_interval.tv_sec) |
+		 __get_user(o->it_interval.tv_usec, &i->it_interval.tv_usec) |
+		 __get_user(o->it_value.tv_sec, &i->it_value.tv_sec) |
+		 __get_user(o->it_value.tv_usec, &i->it_value.tv_usec)));
+}
+
+static inline long put_it32(struct itimerval32 *o, struct itimerval *i)
+{
+	return (!access_ok(VERIFY_WRITE, i, sizeof(*i)) ||
+		(__put_user(i->it_interval.tv_sec, &o->it_interval.tv_sec) |
+		 __put_user(i->it_interval.tv_usec, &o->it_interval.tv_usec) |
+		 __put_user(i->it_value.tv_sec, &o->it_value.tv_sec) |
+		 __put_user(i->it_value.tv_usec, &o->it_value.tv_usec)));
+}
+
+asmlinkage int osf_gettimeofday(struct timeval32 *tv, struct timezone *tz)
+{
+	if (tv) {
+		struct timeval ktv;
+		do_gettimeofday(&ktv);
+		if (put_tv32(tv, &ktv))
+			return -EFAULT;
+	}
+	if (tz) {
+		if (copy_to_user(tz, &sys_tz, sizeof(sys_tz)))
+			return -EFAULT;
+	}
+	return 0;
+}
+
+asmlinkage int osf_settimeofday(struct timeval32 *tv, struct timezone *tz)
+{
+	struct timeval ktv;
+	struct timezone ktz;
+
+ 	if (tv) {
+		if (get_tv32(&ktv, tv))
+			return -EFAULT;
+	}
+	if (tz) {
+		if (copy_from_user(&ktz, tz, sizeof(*tz)))
+			return -EFAULT;
+	}
+
+	return do_sys_settimeofday(tv ? &ktv : NULL, tz ? &ktz : NULL);
+}
+
+asmlinkage int osf_getitimer(int which, struct itimerval32 *it)
+{
+	struct itimerval kit;
+	int error;
+
+	error = do_getitimer(which, &kit);
+	if (!error && put_it32(it, &kit))
+		error = -EFAULT;
+
+	return error;
+}
+
+asmlinkage int osf_setitimer(int which, struct itimerval32 *in,
+			     struct itimerval32 *out)
+{
+	struct itimerval kin, kout;
+	int error;
+
+	if (in) {
+		if (get_it32(&kin, in))
+			return -EFAULT;
+	} else
+		memset(&kin, 0, sizeof(kin));
+
+	error = do_setitimer(which, &kin, out ? &kout : NULL);
+	if (error || !out)
+		return error;
+
+	if (put_it32(out, &kout))
+		return -EFAULT;
+
+	return 0;
+
+}
+
+asmlinkage int osf_utimes(const char *filename, struct timeval32 *tvs)
+{
+	char *kfilename;
+	struct timeval ktvs[2];
+	mm_segment_t old_fs;
+	int ret;
+
+	kfilename = getname(filename);
+	if (IS_ERR(kfilename))
+		return PTR_ERR(kfilename);
+
+	if (tvs) {
+		if (get_tv32(&ktvs[0], &tvs[0]) ||
+		    get_tv32(&ktvs[1], &tvs[1]))
+			return -EFAULT;
+	}
+
+	old_fs = get_fs();
+	set_fs(KERNEL_DS);
+	ret = sys_utimes(kfilename, tvs ? ktvs : 0);
+	set_fs(old_fs);
+
+	putname(kfilename);
+
+	return ret;
+}
+
+asmlinkage int
+osf_select(int n, fd_set *inp, fd_set *outp, fd_set *exp,
+	   struct timeval32 *tvp)
+{
+	fd_set_buffer *fds;
+	unsigned long timeout;
+	int ret;
+
+	timeout = ~0UL;
+	if (tvp) {
+		time_t sec, usec;
+
+		if ((ret = verify_area(VERIFY_READ, tvp, sizeof(*tvp)))
+		    || (ret = __get_user(sec, &tvp->tv_sec))
+		    || (ret = __get_user(usec, &tvp->tv_usec)))
+			goto out_nofds;
+
+		timeout = (usec + 1000000/HZ - 1) / (1000000/HZ);
+		timeout += sec * HZ;
+		if (timeout)
+			timeout += jiffies + 1;
+	}
+
+	ret = -ENOMEM;
+	fds = (fd_set_buffer *) __get_free_page(GFP_KERNEL);
+	if (!fds)
+		goto out_nofds;
+	ret = -EINVAL;
+	if (n < 0)
+		goto out;
+	if (n > KFDS_NR)
+		n = KFDS_NR;
+	if ((ret = get_fd_set(n, inp->fds_bits, fds->in)) ||
+	    (ret = get_fd_set(n, outp->fds_bits, fds->out)) ||
+	    (ret = get_fd_set(n, exp->fds_bits, fds->ex)))
+		goto out;
+	zero_fd_set(n, fds->res_in);
+	zero_fd_set(n, fds->res_out);
+	zero_fd_set(n, fds->res_ex);
+
+	ret = do_select(n, fds, timeout);
+
+	/* OSF does not copy back the remaining time.  */
+
+	if (ret < 0)
+		goto out;
+	if (!ret) {
+		ret = -ERESTARTNOHAND;
+		if (signal_pending(current))
+			goto out;
+		ret = 0;
+	}
+
+	set_fd_set(n, inp->fds_bits, fds->res_in);
+	set_fd_set(n, outp->fds_bits, fds->res_out);
+	set_fd_set(n, exp->fds_bits, fds->res_ex);
+
+out:
+	free_page((unsigned long) fds);
+out_nofds:
+	return ret;
+}
+
+struct rusage32 {
+	struct timeval32 ru_utime;	/* user time used */
+	struct timeval32 ru_stime;	/* system time used */
+	long	ru_maxrss;		/* maximum resident set size */
+	long	ru_ixrss;		/* integral shared memory size */
+	long	ru_idrss;		/* integral unshared data size */
+	long	ru_isrss;		/* integral unshared stack size */
+	long	ru_minflt;		/* page reclaims */
+	long	ru_majflt;		/* page faults */
+	long	ru_nswap;		/* swaps */
+	long	ru_inblock;		/* block input operations */
+	long	ru_oublock;		/* block output operations */
+	long	ru_msgsnd;		/* messages sent */
+	long	ru_msgrcv;		/* messages received */
+	long	ru_nsignals;		/* signals received */
+	long	ru_nvcsw;		/* voluntary context switches */
+	long	ru_nivcsw;		/* involuntary " */
+};
+
+asmlinkage int osf_getrusage(int who, struct rusage32 *ru)
+{
+	struct rusage32 r;
+
+	if (who != RUSAGE_SELF && who != RUSAGE_CHILDREN)
+		return -EINVAL;
+
+	memset(&r, 0, sizeof(r));
+	switch (who) {
+	case RUSAGE_SELF:
+		r.ru_utime.tv_sec = CT_TO_SECS(current->times.tms_utime);
+		r.ru_utime.tv_usec = CT_TO_USECS(current->times.tms_utime);
+		r.ru_stime.tv_sec = CT_TO_SECS(current->times.tms_stime);
+		r.ru_stime.tv_usec = CT_TO_USECS(current->times.tms_stime);
+		r.ru_minflt = current->min_flt;
+		r.ru_majflt = current->maj_flt;
+		r.ru_nswap = current->nswap;
+		break;
+	case RUSAGE_CHILDREN:
+		r.ru_utime.tv_sec = CT_TO_SECS(current->times.tms_cutime);
+		r.ru_utime.tv_usec = CT_TO_USECS(current->times.tms_cutime);
+		r.ru_stime.tv_sec = CT_TO_SECS(current->times.tms_cstime);
+		r.ru_stime.tv_usec = CT_TO_USECS(current->times.tms_cstime);
+		r.ru_minflt = current->cmin_flt;
+		r.ru_majflt = current->cmaj_flt;
+		r.ru_nswap = current->cnswap;
+		break;
+	default:
+		r.ru_utime.tv_sec = CT_TO_SECS(current->times.tms_utime +
+					       current->times.tms_cutime);
+		r.ru_utime.tv_usec = CT_TO_USECS(current->times.tms_utime +
+						 current->times.tms_cutime);
+		r.ru_stime.tv_sec = CT_TO_SECS(current->times.tms_stime +
+					       current->times.tms_cstime);
+		r.ru_stime.tv_usec = CT_TO_USECS(current->times.tms_stime +
+						 current->times.tms_cstime);
+		r.ru_minflt = current->min_flt + current->cmin_flt;
+		r.ru_majflt = current->maj_flt + current->cmaj_flt;
+		r.ru_nswap = current->nswap + current->cnswap;
+		break;
+	}
+
+	return copy_to_user(ru, &r, sizeof(r)) ? -EFAULT : 0;
+}
+
+asmlinkage int osf_wait4(pid_t pid, int *ustatus, int options,
+			 struct rusage32 *ur)
+{
+	if (!ur) {
+		return sys_wait4(pid, ustatus, options, NULL);
+	} else {
+		struct rusage r;
+		int ret, status;
+		mm_segment_t old_fs = get_fs();
+		
+		set_fs (KERNEL_DS);
+		ret = sys_wait4(pid, &status, options, &r);
+		set_fs (old_fs);
+
+		if (!access_ok(VERIFY_WRITE, ur, sizeof(*ur)))
+			return -EFAULT;
+		__put_user(r.ru_utime.tv_sec, &ur->ru_utime.tv_sec);
+		__put_user(r.ru_utime.tv_usec, &ur->ru_utime.tv_usec);
+		__put_user(r.ru_stime.tv_sec, &ur->ru_stime.tv_sec);
+		__put_user(r.ru_stime.tv_usec, &ur->ru_stime.tv_usec);
+		__put_user(r.ru_maxrss, &ur->ru_maxrss);
+		__put_user(r.ru_ixrss, &ur->ru_ixrss);
+		__put_user(r.ru_idrss, &ur->ru_idrss);
+		__put_user(r.ru_isrss, &ur->ru_isrss);
+		__put_user(r.ru_minflt, &ur->ru_minflt);
+		__put_user(r.ru_majflt, &ur->ru_majflt);
+		__put_user(r.ru_nswap, &ur->ru_nswap);
+		__put_user(r.ru_inblock, &ur->ru_inblock);
+		__put_user(r.ru_oublock, &ur->ru_oublock);
+		__put_user(r.ru_msgsnd, &ur->ru_msgsnd);
+		__put_user(r.ru_msgrcv, &ur->ru_msgrcv);
+		__put_user(r.ru_nsignals, &ur->ru_nsignals);
+		__put_user(r.ru_nvcsw, &ur->ru_nvcsw);
+		if (__put_user(r.ru_nivcsw, &ur->ru_nivcsw))
+			return -EFAULT;
+
+		if (ustatus && put_user(status, ustatus))
+			return -EFAULT;
+		return ret;
+	}
+}
+
+/*
+ * I don't know what the parameters are: the first one
+ * seems to be a timeval pointer, and I suspect the second
+ * one is the time remaining.. Ho humm.. No documentation.
+ */
+asmlinkage int osf_usleep_thread(struct timeval *sleep, struct timeval *remain)
+{
+	struct timeval tmp;
+	unsigned long ticks;
+
+	if (get_tv32(&tmp, sleep))
+		goto fault;
+
+	ticks = tmp.tv_usec;
+	ticks = (ticks + (1000000 / HZ) - 1) / (1000000 / HZ);
+	ticks += tmp.tv_sec * HZ;
+	current->timeout = ticks + jiffies;
+	current->state = TASK_INTERRUPTIBLE;
+
+	schedule();
+
+	if (remain) {
+		ticks = jiffies;
+		if (ticks < current->timeout)
+			ticks = current->timeout - ticks;
+		else
+			ticks = 0;
+		current->timeout = 0;
+		tmp.tv_sec = ticks / HZ;
+		tmp.tv_usec = ticks % HZ;
+		if (put_tv32(remain, &tmp))
+			goto fault;
+	}
+	
+	return 0;
+fault:
+	return -EFAULT;
 }

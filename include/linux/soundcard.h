@@ -599,6 +599,7 @@ typedef struct buffmem_desc {
 #define SNDCTL_DSP_MAPOUTBUF		_SIOR ('P', 20, buffmem_desc)
 #define SNDCTL_DSP_SETSYNCRO		_SIO  ('P', 21)
 #define SNDCTL_DSP_SETDUPLEX		_SIO  ('P', 22)
+#define SNDCTL_DSP_GETODELAY		_SIOR ('P', 23, int)
 
 /*
  * Application's profile defines the way how playback underrun situations should be handled.

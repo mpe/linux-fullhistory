@@ -162,8 +162,7 @@ __initfunc(int con_is_present(void))
 	 *	Find out if there is a graphics card present.
 	 *	Are there smarter methods around?
 	 */
-	p = (unsigned short *)(((ORIG_VIDEO_MODE == 7) ? 0xb0000 : 0xb8000) +
-			       + VGA_OFFSET);
+	p = (unsigned short *) video_mem_base;
 	saved = scr_readw(p);
 	scr_writew(0xAA55, p);
 	if (scr_readw(p) != 0xAA55) {

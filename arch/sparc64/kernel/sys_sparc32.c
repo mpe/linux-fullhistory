@@ -38,9 +38,9 @@
 #include <linux/nfsd/xdr.h>
 #include <linux/nfsd/syscall.h>
 #include <linux/module.h>
+#include <linux/poll.h>
 
 #include <asm/types.h>
-#include <asm/poll.h>
 #include <asm/ipc.h>
 #include <asm/uaccess.h>
 #include <asm/fpumacro.h>
@@ -1075,104 +1075,139 @@ out:
 
 /* end of readdir & getdents */
 
-extern asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp,
-				 fd_set *exp, struct timeval *tvp);
+/*
+ * Ooo, nasty.  We need here to frob 32-bit unsigned longs to
+ * 64-bit unsigned longs.
+ */
 
-asmlinkage int sys32_select(int n, u32 inp, u32 outp, u32 exp, u32 tvp)
+static inline int
+get_fd_set32(unsigned long n, unsigned long *fdset, u32 ufdset_x)
 {
-	struct timeval kern_tv, *ktvp;
-	unsigned long old_fs;
-	char *p;
-	u32 *q, *Inp, *Outp, *Exp;
-	int i, ret = -EINVAL, nn;
-	
-	if (n < 0 || n > PAGE_SIZE*2)
-		return -EINVAL;
+	u32 *ufdset = (u32 *)A(ufdset_x);
 
-	lock_kernel ();
-	p = (char *)__get_free_page (GFP_KERNEL);
-	if (!p)
-		goto out_nofree;
+	if (ufdset) {
+		unsigned long odd;
 
-	q = (u32 *)p;
-	Inp = (u32 *)A(inp);
-	Outp = (u32 *)A(outp);
-	Exp = (u32 *)A(exp);
+		if (verify_area(VERIFY_WRITE, ufdset, nn*sizeof(u32)))
+			return -EFAULT;
 
-	ret = -EFAULT;
-
-	nn = (n + (8 * sizeof(long)) - 1) / (8 * sizeof(long));
-	if (inp && verify_area(VERIFY_WRITE, Inp, nn*sizeof(long)))
-		goto out;
-	if (outp && verify_area(VERIFY_WRITE, Outp, nn*sizeof(long)))
-		goto out;
-	if (exp && verify_area(VERIFY_WRITE, Exp, nn*sizeof(long)))
-		goto out;
-	for (i = 0; i < nn; i++, Inp += 2, Outp += 2, Exp += 2, q += 2) {
-		if(inp && (__get_user (q[1], Inp) || __get_user (q[0], Inp+1)))
-			goto out;
-		if(outp && (__get_user (q[1+(PAGE_SIZE/4/sizeof(u32))], Outp) ||
-			    __get_user (q[(PAGE_SIZE/4/sizeof(u32))], Outp+1)))
-			goto out;
-		if(exp && (__get_user (q[1+(PAGE_SIZE/2/sizeof(u32))], Exp) ||
-			   __get_user (q[(PAGE_SIZE/2/sizeof(u32))], Exp+1)))
-			goto out;
+		odd = n & 1UL;
+		n &= ~1UL;
+		while (n) {
+			unsigned long h, l;
+			__get_user(l, ufdset);
+			__get_user(h, ufdset+1);
+			ufdset += 2;
+			*fdset++ = h << 32 | l;
+			n -= 2;
+		}
+		if (odd)
+			__get_user(*fdset, ufdset);
+	} else {
+		/* Tricky, must clear full unsigned long in the kernel
+		   fdset at the end, this makes sure that actually
+		   happens.  */
+		memset(fdset, 0, ((n + 1) & ~1)*sizeof(u32));
 	}
 
-	ktvp = NULL;
-	if(tvp) {
-		if (get_tv32(&kern_tv, (struct timeval32 *)A(tvp)))
-			goto out;
-		ktvp = &kern_tv;
+	return 0;
+}
+
+static inline void
+set_fd_set32(unsigned long n, u32 ufdset_x, unsigned long *fdset)
+{
+	unsigned long odd;
+	u32 *ufdset = (u32 *)A(ufdset_x);
+
+	if (!ufdset)
+		return;
+
+	odd = n & 1UL;
+	n &= ~1UL;
+	while (n) {
+		unsigned long h, l;
+		l = *fdset++;
+		h = l >> 32;
+		__put_user(l, ufdset);
+		__put_user(h, ufdset+1);
+		ufdset += 2;
+		n -= 2;
+	}
+	if (odd)
+		__put_user(*fdset, ufdset);
+}
+
+asmlinkage int sys32_select(int n, u32 inp, u32 outp, u32 exp, u32 tvp_x)
+{
+	fd_set_buffer *fds;
+	struct timeval32 *tvp = (struct timeval32 *)A(tvp_x);
+	unsigned long timeout, nn;
+	int ret;
+
+	timeout = ~0UL;
+	if (tvp) {
+		time_t sec, usec;
+
+		if ((ret = verify_area(VERIFY_READ, tvp, sizeof(*tvp)))
+		    || (ret = __get_user(sec, &tvp->tv_sec))
+		    || (ret = __get_user(usec, &tvp->tv_usec)))
+			goto out_nofds;
+
+		timeout = (usec + 1000000/HZ - 1) / (1000000/HZ);
+		timeout += sec * HZ;
+		if (timeout)
+			timeout += jiffies + 1;
 	}
 
-	old_fs = get_fs ();
-	set_fs (KERNEL_DS);
-	q = (u32 *) p;
-	ret = sys_select(n,
-			 inp ? (fd_set *)&q[0] : (fd_set *)0,
-			 outp ? (fd_set *)&q[PAGE_SIZE/4/sizeof(u32)] : (fd_set *)0,
-			 exp ? (fd_set *)&q[PAGE_SIZE/2/sizeof(u32)] : (fd_set *)0,
-			 ktvp);
-	set_fs (old_fs);
-
-	if(tvp && !(current->personality & STICKY_TIMEOUTS)) {
-		if (put_tv32((struct timeval32 *)A(tvp), &kern_tv)) {
-			ret = -EFAULT;
-			goto out;
-		}
-	}
-
-	q = (u32 *)p;
-	Inp = (u32 *)A(inp);
-	Outp = (u32 *)A(outp);
-	Exp = (u32 *)A(exp);
-
-	if(ret < 0)
+	ret = -ENOMEM;
+	fds = (fd_set_buffer *) __get_free_page(GFP_KERNEL);
+	if (!fds)
+		goto out_nofds;
+	ret = -EINVAL;
+	if (n < 0)
 		goto out;
+	if (n > KFDS_NR)
+		n = KFDS_NR;
+ 
+	nn = (n + 8*sizeof(u32) - 1) / (8*sizeof(u32));
+	if ((ret = get_fd_set32(nn, fds->in, inp)) ||
+	    (ret = get_fd_set32(nn, fds->out, outp)) ||
+	    (ret = get_fd_set32(nn, fds->ex, exp)))
+		goto out;
+	zero_fd_set(n, fds->res_in);
+	zero_fd_set(n, fds->res_out);
+	zero_fd_set(n, fds->res_ex);
 
-	for (i = 0;
-	     i < nn;
-	     i++, Inp += 2, Outp += 2, Exp += 2, q += 2) {
-		if(inp && (__put_user (q[1], Inp) || __put_user (q[0], Inp+1))) {
-			ret = -EFAULT;
-			goto out;
+	ret = do_select(n, fds, timeout);
+
+	if (tvp && !(current->personality & STICKY_TIMEOUTS)) {
+		unsigned long timeout = current->timeout - jiffies - 1;
+		time_t sec = 0, usec = 0;
+		if ((long) timeout > 0) {
+			sec = timeout / HZ;
+			usec = timeout % HZ;
+			usec *= (1000000/HZ);
 		}
-		if(outp && (__put_user (q[1+(PAGE_SIZE/4/sizeof(u32))], Outp) ||
-			    __put_user (q[(PAGE_SIZE/4/sizeof(u32))], Outp+1))) {
-			ret = -EFAULT;
-			goto out;
-		}
-		if(exp && (__put_user (q[1+(PAGE_SIZE/2/sizeof(u32))], Exp) ||
-			   __put_user (q[(PAGE_SIZE/2/sizeof(u32))], Exp+1))) {
-		    	ret = -EFAULT;
-			goto out;
-		}
+		put_user(sec, &tvp->tv_sec);
+		put_user(usec, &tvp->tv_usec);
 	}
+
+	if (ret < 0)
+		goto out;
+	if (!ret) {
+		ret = -ERESTARTNOHAND;
+		if (current->signal & ~current->blocked)
+			goto out;
+		ret = 0;
+	}
+
+	set_fd_set32(nn, inp, fds->res_in);
+	set_fd_set32(nn, outp, fds->res_out);
+	set_fd_set32(nn, exp, fds->res_ex);
+
 out:
-	free_page ((unsigned long)p);
-out_nofree:
-	unlock_kernel();
+	free_page ((unsigned long)fds);
+out_nofds:
 	return ret;
 }
 

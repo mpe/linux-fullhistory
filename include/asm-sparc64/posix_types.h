@@ -26,6 +26,9 @@ typedef int                    __kernel_daddr_t;
 typedef long                   __kernel_off_t;
 typedef char *                 __kernel_caddr_t;
 
+/* Note this piece of asymmetry from the v9 ABI.  */
+typedef int		       __kernel_suseconds_t;
+
 #ifdef __GNUC__
 typedef long long              __kernel_loff_t;
 #endif

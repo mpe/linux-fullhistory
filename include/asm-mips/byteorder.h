@@ -4,9 +4,9 @@
 #include <asm/types.h>
 
 #if defined (__MIPSEB__)
-#  include <linux/byteorder_big_endian.h>
+#  include <linux/byteorder/big_endian.h>
 #elif defined (__MIPSEL__)
-#  include <linux/byteorder_little_endian.h>
+#  include <linux/byteorder/little_endian.h>
 #else
 #  error What's that? MIPS, but neither MIPSEB, nor MIPSEL???
 #endif

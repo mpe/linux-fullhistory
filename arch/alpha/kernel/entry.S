@@ -727,7 +727,7 @@ sys_call_table:
 	.quad sys_write
 	.quad alpha_ni_syscall			/* 5 */
 	.quad sys_close
-	.quad sys_wait4
+	.quad osf_wait4
 	.quad alpha_ni_syscall
 	.quad sys_link
 	.quad sys_unlink			/* 10 */
@@ -804,17 +804,17 @@ sys_call_table:
 	.quad sys_setgroups			/* 80 */
 	.quad alpha_ni_syscall
 	.quad sys_setpgid
-	.quad sys_setitimer
+	.quad osf_setitimer
 	.quad alpha_ni_syscall
 	.quad alpha_ni_syscall			/* 85 */
-	.quad sys_getitimer
+	.quad osf_getitimer
 	.quad sys_gethostname
 	.quad sys_sethostname
 	.quad sys_getdtablesize
 	.quad sys_dup2				/* 90 */
 	.quad sys_newfstat
 	.quad sys_fcntl
-	.quad sys_select
+	.quad osf_select
 	.quad sys_poll
 	.quad sys_fsync				/* 95 */
 	.quad sys_setpriority
@@ -837,13 +837,13 @@ sys_call_table:
 	.quad sys_recvmsg
 	.quad sys_sendmsg
 	.quad alpha_ni_syscall			/* 115 */
-	.quad sys_gettimeofday
-	.quad sys_getrusage
+	.quad osf_gettimeofday
+	.quad osf_getrusage
 	.quad sys_getsockopt
 	.quad alpha_ni_syscall
 	.quad sys_readv				/* 120 */
 	.quad sys_writev
-	.quad sys_settimeofday
+	.quad osf_settimeofday
 	.quad sys_fchown
 	.quad sys_fchmod
 	.quad sys_recvfrom			/* 125 */
@@ -859,7 +859,7 @@ sys_call_table:
 	.quad sys_socketpair			/* 135 */
 	.quad sys_mkdir
 	.quad sys_rmdir
-	.quad sys_utimes
+	.quad osf_utimes
 	.quad alpha_ni_syscall
 	.quad alpha_ni_syscall			/* 140 */
 	.quad sys_getpeername

@@ -129,7 +129,7 @@
 #include <linux/version.h>
 #include <linux/isdn.h>
 #if (LINUX_VERSION_CODE >= 0x020117)
-#include <asm/poll.h>
+#include <linux/poll.h>
 #endif
 #include "isdn_common.h"
 #include "isdn_ppp.h"

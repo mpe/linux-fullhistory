@@ -41,6 +41,6 @@ static __inline__ __u64 ___arch__swab64p(__u64 *addr) {
 
 #define __BYTEORDER_HAS_U64__
 
-#include <linux/byteorder_big_endian.h>
+#include <linux/byteorder/big_endian.h>
 
 #endif /* _SPARC64_BYTEORDER_H */

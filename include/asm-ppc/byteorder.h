@@ -61,15 +61,15 @@ static __inline__ __const__ __u32 ___arch__swab32(__u32 value)
 #endif /* 0 */
 
 /* The same, but returns converted value from the location pointer by addr. */
-#define __arch_swab16p(addr) ld_le16(addr)
-#define __arch_swab32p(addr) ld_le32(addr)
+#define __arch__swab16p(addr) ld_le16(addr)
+#define __arch__swab32p(addr) ld_le32(addr)
 
 /* The same, but do the conversion in situ, ie. put the value back to addr. */
-#define __arch_swab16s(addr) st_le16(addr,*addr)
-#define __arch_swab32s(addr) st_le32(addr,*addr)
+#define __arch__swab16s(addr) st_le16(addr,*addr)
+#define __arch__swab32s(addr) st_le32(addr,*addr)
 
 #endif /* __GNUC__ */
 
-#include <linux/byteorder_big_endian.h>
+#include <linux/byteorder/big_endian.h>
 
 #endif /* _PPC_BYTEORDER_H */

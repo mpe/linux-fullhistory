@@ -2,11 +2,12 @@
 #define _LINUX_TIME_H
 
 #include <asm/param.h>
+#include <linux/types.h>
 
 #ifndef _STRUCT_TIMESPEC
 #define _STRUCT_TIMESPEC
 struct timespec {
-	long	tv_sec;		/* seconds */
+	time_t	tv_sec;		/* seconds */
 	long	tv_nsec;	/* nanoseconds */
 };
 #endif /* _STRUCT_TIMESPEC */
@@ -36,8 +37,8 @@ jiffies_to_timespec(unsigned long jiffies, struct timespec *value)
 }
  
 struct timeval {
-	int	tv_sec;		/* seconds */
-	int	tv_usec;	/* microseconds */
+	time_t		tv_sec;		/* seconds */
+	suseconds_t	tv_usec;	/* microseconds */
 };
 
 struct timezone {

@@ -1,7 +1,7 @@
 		       LINUX ALLOCATED DEVICES
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		    Last revised: November 9, 1997
+		    Last revised: December 4, 1997
 
 This list is the Linux Device List, the official registry of allocated
 device numbers and /dev directory nodes for the Linux operating
@@ -191,13 +191,14 @@ Your cooperation is appreciated.
 
   5 char	Alternate TTY devices
 		  0 = /dev/tty		Current TTY device
-		  1			Reserved for console device
+		  1 = /dev/console	System console
 		 64 = /dev/cua0		Callout device corresponding to ttyS0
 		      ...
 		127 = /dev/cua63	Callout device corresponding to ttyS63
 
-		Minor number 1 is reserved for a kernel-managed
-		/dev/console in a future version of Linux.
+		(5,1) is /dev/console starting with Linux 2.1.71.  See
+		the section on terminal devices for more information
+		on /dev/console.
 
   6 char	Parallel printer devices
 		  0 = /dev/lp0		First parallel printer (0x3bc)
@@ -315,6 +316,7 @@ Your cooperation is appreciated.
 		149 = /dev/input/mouse	Linux/SGI Irix emulation mouse
 		150 = /dev/input/keyboard Linux/SGI Irix emulation keyboard
 		151 = /dev/led		Front panel LEDs
+		152 = /dev/radio	Radio card (type?)
 
  11 char	Raw keyboard device
 		  0 = /dev/kbd		Raw keyboard device
@@ -515,22 +517,22 @@ Your cooperation is appreciated.
 		  5 = /dev/nqft1	Unit 1, no rewind-on-close
 		  6 = /dev/nqft2	Unit 2, no rewind-on-close
 		  7 = /dev/nqft3	Unit 3, no rewind-on-close
-		  16 = /dev/zqft0	Unit 0, rewind-on-close, compression
-		  17 = /dev/zqft1	Unit 1, rewind-on-close, compression
-		  18 = /dev/zqft2	Unit 2, rewind-on-close, compression
-		  19 = /dev/zqft3	Unit 3, rewind-on-close, compression
-		  20 = /dev/nzqft0	Unit 0, no-rewind, compression
-		  21 = /dev/nzqft1	Unit 1, no-rewind, compression
-		  22 = /dev/nzqft2	Unit 2, no-rewind, compression
-		  23 = /dev/nzqft3	Unit 3, no-rewind, compression
-		  32 = /dev/rawft0	Unit 0, rewind-on-close, no file marks
-		  33 = /dev/rawft1	Unit 1, rewind-on-close, no file marks
-		  34 = /dev/rawft2	Unit 2, rewind-on-close, no file marks
-		  35 = /dev/rawft3	Unit 3, rewind-on-close, no file marks
-		  36 = /dev/zqft0	Unit 0, no-rewind, no file marks
-		  37 = /dev/zqft1	Unit 1, no-rewind, no file marks
-		  38 = /dev/zqft2	Unit 2, no-rewind, no file marks
-		  39 = /dev/zqft3	Unit 3, no-rewind, no file marks
+		 16 = /dev/zqft0	Unit 0, rewind-on-close, compression
+		 17 = /dev/zqft1	Unit 1, rewind-on-close, compression
+		 18 = /dev/zqft2	Unit 2, rewind-on-close, compression
+		 19 = /dev/zqt3		Unit 3, rewind-on-close, compression
+		 20 = /dev/nzqft0	Unit 0, no rewind-on-close, compression
+		 21 = /dev/nzqft1	Unit 1, no rewind-on-close, compression
+		 22 = /dev/nzqft2	Unit 2, no rewind-on-close, compression
+		 23 = /dev/nzqft3	Unit 3, no rewind-on-close, compression
+		 32 = /dev/rawqft0	Unit 0, rewind-on-close, no file marks
+		 33 = /dev/rawqft1	Unit 1, rewind-on-close, no file marks
+		 34 = /dev/rawqft2	Unit 2, rewind-on-close, no file marks
+		 35 = /dev/rawqft3	Unit 3, rewind-on-close, no file marks
+		 32 = /dev/nrawqft0	Unit 0, no rewind-on-close, no file marks
+		 33 = /dev/nrawqft1	Unit 1, no rewind-on-close, no file marks
+		 34 = /dev/nrawqft2	Unit 2, no rewind-on-close, no file marks
+		 35 = /dev/nrawqft3	Unit 3, no rewind-on-close, no file marks
     block	Third Matsushita (Panasonic/SoundBlaster) CD-ROM
 		  0 = /dev/sbpcd8	Panasonic CD-ROM controller 2 unit 0
 		  1 = /dev/sbpcd9	Panasonic CD-ROM controller 2 unit 1
@@ -1153,7 +1155,6 @@ It is recommended that these links exist on all systems:
 
 /dev/core	/proc/kcore	symbolic	Backward compatibility
 /dev/ramdisk	ram0		symbolic	Backward compatibility
-/dev/rft0	qft0		symbolic	Backward compatibility
 /dev/ftape	qft0		symbolic	Backward compatibility
 /dev/scd?	sr?		hard		Alternate SCSI CD-ROM name
 
@@ -1228,9 +1229,10 @@ for this purpose.
 
 The console device, /dev/console, is the device to which system
 messages should be sent, and on which logins should be permitted in
-single-user mode.  /dev/console should be a symbolic link to either
-/dev/tty0, a specific virtual console such as /dev/tty1, or to a
-serial port primary (tty*, not cu*) device, depending on the
+single-user mode.  Starting with Linux 2.1.71, /dev/console is managed
+by the kernel; for previous versions it should be a symbolic link to
+either /dev/tty0, a specific virtual console such as /dev/tty1, or to
+a serial port primary (tty*, not cu*) device, depending on the
 configuration of the system.
 
 	Serial ports

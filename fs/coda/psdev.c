@@ -31,10 +31,10 @@
 #include <linux/proc_fs.h>
 #include <linux/vmalloc.h>
 #include <linux/fs.h>
+#include <linux/poll.h>
 #include <asm/io.h>
 #include <asm/segment.h>
 #include <asm/system.h>
-#include <asm/poll.h>
 #include <asm/uaccess.h>
 
 #include <linux/coda.h>

@@ -32,6 +32,7 @@
 #include <asm/dma.h>
 #include <linux/ioport.h>
 #include <linux/soundmodem.h>
+#include <linux/delay.h>
 #include "sm.h"
 #include "smdma.h"
 
@@ -144,8 +145,7 @@ static int inline reset_dsp(struct device *dev)
 	int i;
 
 	outb(1, DSP_RESET(dev->base_addr));
-	for (i = 0; i < 0x100; i++)
-		SLOW_DOWN_IO;
+	udelay(300);
 	outb(0, DSP_RESET(dev->base_addr));
 	for (i = 0; i < 0xffff; i++)
 		if (inb(DSP_DATA_AVAIL(dev->base_addr)) & 0x80)

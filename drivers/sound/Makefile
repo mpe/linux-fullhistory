@@ -35,7 +35,7 @@ else
 
 ifeq (.defines,$(wildcard .defines))
 include .defines
-include .objects
+#include .objects
 endif
 
 TARGET_OS=linux
@@ -66,25 +66,20 @@ ifeq ($(CONFIG_MIDI),y)
   LX_OBJS += midi_synth.o
 endif
 
-ifeq ($(CONFIG_MIDI),y)
-  L_OBJS += midibuf.o
-  LX_OBJS += midi_synth.o
-endif
-
 #ifeq ($(CONFIG_AUDIO),y)
 #L_OBJS += dmabuf.o
 #endif
 
 ifeq ($(CONFIG_YM3812),y)
-LX_OBJS += opl3.o
+LX_OBJS += adlib_card.o opl3.o
 else
   ifeq ($(CONFIG_YM3812),m)
-  MX_OBJS += opl3.o
+  MX_OBJS += adlib_card.o opl3.o
   endif
 endif
 
 ifeq ($(CONFIG_PAS),y)
-L_OBJS += pas2_card.c pas2_midi.c pas2_mixer.c pas2_pcm.c
+L_OBJS += pas2.o
 else
   ifeq ($(CONFIG_PAS),m)
   M_OBJS += pas2.o
@@ -92,7 +87,7 @@ else
 endif
 
 ifeq ($(CONFIG_GUS),y)
-L_OBJS += gus_card.c gus_midi.c gus_vol.c gus_wave.c ics2101.c
+L_OBJS += gus.o
 else
   ifeq ($(CONFIG_GUS),m)
   M_OBJS += gus.o
@@ -105,7 +100,8 @@ LX_OBJS += sb_card.o uart401.o
 else
   ifeq ($(CONFIG_SB),m)
   M_OBJS += sb.o
-  MX_OBJS += sb_card.o uart401.o
+  MX_OBJS += uart401.o
+  MIX_OBJS += sb_card.o
   endif
 endif
 
@@ -130,6 +126,14 @@ LX_OBJS += mpu401.o
 else
   ifeq ($(CONFIG_MPU401),m)
   MX_OBJS += mpu401.o
+  else
+    ifeq ($(CONFIG_MPU_EMU),y)
+    LX_OBJS += mpu401.o
+    else
+      ifeq ($(CONFIG_MPU_EMU),m)
+      MX_OBJS += mpu401.o
+      endif
+    endif
   endif
 endif
 
@@ -205,6 +209,16 @@ else
    endif
 endif
 
+ifeq ($(CONFIG_OPL3SA1),y)
+L_OBJS += opl3sa.o
+LX_OBJS += ad1848.o
+else
+  ifeq ($(CONFIG_OPL3SA1),m)
+  M_OBJS += opl3sa.o
+  MX_OBJS += ad1848.o
+  endif
+endif
+
 include $(TOPDIR)/Rules.make
 
 softoss2.o:	softoss.o softoss_rs.o
@@ -247,5 +261,14 @@ setup:
 	@echo Compiling Sound Driver v $(VERSION) for Linux
 
 mkscript:
+
+config: configure
+	@$(MAKE) setup
+	@./configure > local.h
+	@echo \#define SOUND_CONFIG_DATE \"`date`\" >> local.h
+	@echo \#define SOUND_CONFIG_BY \"`whoami`\" >> local.h
+#	@echo \#define SOUND_CONFIG_HOST \"`hostname`\" >> local.h 2>/dev/null
+#	@echo \#define SOUND_CONFIG_DOMAIN \"`hostname -d`\" >> local.h 2>/dev/null
+	@echo \#define SOUND_UNAME_A \"`uname -a`\" >> local.h
 
 endif

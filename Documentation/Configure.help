@@ -1494,9 +1494,9 @@ CONFIG_SKB_LARGE
   a second or   satellite links this option will make no difference to
   performance.
 
-BSD Unix domain sockets
+Unix domain sockets
 CONFIG_UNIX
-  Y if you want BSD Unix domain sockets.  Unless you are working on an
+  Y if you want Unix domain sockets.  Unless you are working on an
   embedded system or somthing, you probably want to say Y.  If you try
   building this as a module and you are running kerneld, you need to make
   sure and add 'alias net-pf-1 unix' to your /etc/conf.module file.
@@ -2795,6 +2795,28 @@ CONFIG_SCC
   running kernel whenever you want), say M here and read
   Documentation/modules.txt. The module will be called scc.o.
 
+High-speed (DMA) SCC driver for AX.25
+CONFIG_DMASCC
+  This is a driver for high-speed SCC boards, i.e. those supporting
+  DMA on one port. Currently, only Ottawa PI/PI2 boards (see
+  http://hydra.carleton.ca/info/pi2.html) and Gracilis PackeTwin
+  boards (see http://www.paccomm.com/) are supported and detected
+  automatically. Multiple boards are operated simultaneously. If
+  you compile this driver as a module, it will be called dmascc.o.
+  If you don't give any parameter to the driver, all possible I/O
+  addresses are probed. This could irritate other devices that are
+  currently not in use. You may specify the list of addresses to be
+  probed by "dmascc=addr1,addr2,..." (when compiled into the kernel
+  image) or "io=addr1,addr2,..." (when loaded as a module).
+  The network interfaces will be called dmascc0 and dmascc1 for the
+  board detected first, dmascc2 and dmascc3 for the second one, and
+  so on. Before you configure each interface with ifconfig, you MUST
+  set certain parameters, such as channel access timing, clock mode,
+  and DMA channel. This is accomplished with a small utility program
+  called dmascc_cfg, which is part of the ax25-utils package.
+  Alternatively, you may download the utility from
+  http://www.oevsv.at/~oe1kib/Linux.html.
+
 BAYCOM picpar and par96 driver for AX.25
 CONFIG_BAYCOM_PAR
   This is a driver for Baycom style simple amateur radio
@@ -3582,36 +3604,6 @@ CONFIG_NI65
   ni65.o. If you plan to use more than one network card under linux,
   read the Multiple-Ethernet-mini-HOWTO, available from
   sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
-
-Ottawa PI and PI/2 support
-CONFIG_PI
-  This is a driver for the Ottawa Amateur Radio Club PI and PI2 cards,
-  which are commonly used to send internet traffic over amateur radio.
-  More information about these cards is on the WWW at
-  http://hydra.carleton.ca/info/pi2.html (To browse the WWW, you need
-  to have access to a machine on the Internet that has a program like
-  lynx or netscape). If you have one of these cards, you can say Y
-  here and should read the HAM-HOWTO, available via ftp (user:
-  anonymous) in sunsite.unc.edu:/pub/Linux/docs/HOWTO. Also, you
-  should have said Y to "AX.25 support" above, because AX.25 is the
-  protocol used for digital traffic over radio links. If you want to
-  compile this as a module ( = code which can be inserted in and
-  removed from the running kernel whenever you want), say M here and
-  read Documentation/modules.txt. The module will be called pi2.o.
-
-Gracilis PackeTwin support
-CONFIG_PT
-  This is a card used mainly by amateur radio operators for packet
-  radio.  You should have already said Y to "AX.25 support" as this
-  card uses that protocol.  More information about this driver can be
-  found in the file drivers/net/README.pt.  NOTE: The card is capable
-  of DMA and full duplex but neither of these have been coded in the
-  driver as yet.  This driver is also available as a module ( = code
-  which can be inserted in and removed from the running kernel
-  whenever you want). If you want to compile it as a module, say M
-  here and read Documentation/modules.txt as well as
-  Documentation/networking/net-modules.txt. The module will be called
-  pt.o.
 
 AT&T WaveLAN & DEC RoamAbout DS support
 CONFIG_WAVELAN

@@ -1573,12 +1573,11 @@ int unregister_netdevice(struct device *dev)
  *
  */
 extern int lance_init(void);
-extern int pi_init(void);
 extern int bpq_init(void);
 extern int scc_init(void);
 extern void sdla_setup(void);
 extern void dlci_setup(void);
-extern int pt_init(void);
+extern int dmascc_init(void);
 extern int sm_init(void);
 extern int baycom_ser_fdx_init(void);
 extern int baycom_ser_hdx_init(void);
@@ -1635,15 +1634,12 @@ __initfunc(int net_dev_init(void))
 #if defined(CONFIG_LANCE)
 	lance_init();
 #endif
-#if defined(CONFIG_PI)
-	pi_init();
-#endif	
 #if defined(CONFIG_SCC)
 	scc_init();
 #endif
-#if defined(CONFIG_PT)
-	pt_init();
-#endif
+#if defined(CONFIG_DMASCC)
+	dmascc_init();
+#endif	
 #if defined(CONFIG_BPQETHER)
 	bpq_init();
 #endif

@@ -4,7 +4,7 @@ Configuring version 3.8 (for Linux) with some most common soundcards
 This document describes configuring soundcards with freeware version of
 Open Sound Systems (OSS/Free). Information about the commercial version
 (OSS/Linux) and it's configuration is available from 
-http://www.4front-tech.com/linux.html. Information presented here is
+http://www.opensound.com/linux.html. Information presented here is
 not valid for OSS/Linux. 
 
 If you are unsure about how to configure OSS/Free
@@ -15,7 +15,7 @@ you can use the information included in soundon.log when configuring OSS/Free.
 
 IMPORTANT!	This document covers only cards that were "known" when
 		this driver version was released. Please look at
-		http://www.4front-tech.com/ossfree for info about
+		http://www.opensound.com/ossfree for info about
 		cards introduced recently.
 
 		The following covers mainly the "old" configuration
@@ -115,7 +115,7 @@ ancestors which are covered by this document.
 Cards that are not (fully) supported by this driver
 ===================================================
 
-See http://www.4front-tech.com/ossfree for information about soundcards 
+See http://www.opensound.com/ossfree for information about soundcards 
 to be supported in future. 
 
 
@@ -174,7 +174,7 @@ support for PnP cards. There are bugs in setting DMA channels in earlier
 versions of isapnptools so at least version 1.6 is required with soundcards.
 
 Yet another way to use PnP cards is to use (commercial) OSS/Linux drivers.
-See http://www.4front-tech.com/linux.html for more info. This is the way
+See http://www.opensound.com/linux.html for more info. This is the way
 you probably like to do it if you don't waste hours of time in recompiling
 kernel and the required tools.
 
@@ -1231,7 +1231,7 @@ distributed driver (diffs) for the card.
 Writing a driver for a new card is not possible if there are no 
 programming information available about the card. If you don't
 find your new card from this file, look from the home page 
-(http://www.4front-tech.com/ossfree). Then please contact
+(http://www.opensound.com/ossfree). Then please contact
 manufacturer of the card and ask if they have (or are willing to)
 released technical details of the card. Do this before contacting me. I
 can only answer 'no' if there are no programming information available.
@@ -1252,7 +1252,7 @@ of this driver (see http://www.4Front-tech.com/oss.html for more info).
 There are some common audio chipsets that are not supported yet. For example
 Sierra Aria and IBM Mwave. It's possible that these architectures
 get some support in future but I can't make any promises. Just look
-at the home page (http://www.4front-tech.com/ossfree/new_cards.html)
+at the home page (http://www.opensound.com/ossfree/new_cards.html)
 for latest info.
 
 Information about unsupported soundcards and chipsets is welcome as well
@@ -1261,10 +1261,10 @@ as free copies of soundcards, SDKs and operating systems.
 If you have any corrections and/or comments, please contact me.
 
 Hannu Savolainen
-hannu@4front-tech.com
+hannu@opensound.com
 
-Personal home page:	   http://personal.eunet.fi/pp/voxware/hannu.html
-www home page of OSS/Free: http://www.4front-tech.com/ossfree
+Personal home page:	   http://www.compusonic.fi/~hannu
+www home page of OSS/Free: http://www.opensound.com/ossfree
 
 www home page of commercial OSS
-(Open Sound System) drivers: http://www.4front-tech.com/oss.html
+(Open Sound System) drivers: http://www.opensound.com/oss.html

@@ -2,7 +2,7 @@ OSS/Free version 3.8 release notes
 ----------------------------------
 
 Most up to date information about this driver is available from 
-http://www.4front-tech.com/ossfree.
+http://www.opensound.com/ossfree.
 
 
 
@@ -11,7 +11,7 @@ sites). It gives instructions about using sound with Linux. It's bit out of
 date but still very useful. Information about bug fixes and such things
 is available from the web page (see above).
 
-Please check http://www.4front-tech.com/pguide for more info about programming
+Please check http://www.opensound.com/pguide for more info about programming
 with OSS API.
 
    ====================================================
@@ -20,7 +20,7 @@ with OSS API.
 
 Packages "snd-util-3.8.tar.gz" and "snd-data-0.1.tar.Z"
 contain useful utilities to be used with this driver.
-See http://www.4front-tech.com/ossfree/getting.html for
+See http://www.opensound.com/ossfree/getting.html for
 download instructions.
 
 If you are looking for the installation instructions, please
@@ -31,7 +31,7 @@ Supported soundcards
 
 See Readme.cards.
 
-Please check http://www.4front-tech.com/ossfree if you don't find
+Please check http://www.opensound.com/ossfree if you don't find
 your soundcard there.
 
 Contributors
@@ -86,7 +86,7 @@ changed or what you have planned to do. Also ensure you are using the
 very latest (development) version of OSS/Free since the change may already be
 implemented there. In general it's major waste of time to try to improve
 several months old version. Information about the latest version can be found
-from http://www.4front-tech.com/ossfree. In general there is no point in
+from http://www.opensound.com/ossfree. In general there is no point in
 sending me patches relative to production kernels.
 
 Sponsors etc.
@@ -123,7 +123,7 @@ If you have some problems
 =========================
 
 Read the sound HOWTO (sunsite.unc.edu:/pub/Linux/docs/...?).
-Also look at the home page (http://www.4front-tech.com/ossfree). It may
+Also look at the home page (http://www.opensound.com/ossfree). It may
 contain info about some recent bug fixes.
 
 It's likely that you have some problems when trying to use the sound driver
@@ -177,8 +177,8 @@ Best regards,
 Hannu
 
 Hannu Savolainen
-hannu@4front-tech.com	
-(Please check http://www.4front-tech.com/ossfree before mailing me).
+hannu@opensound.com	
+(Please check http://www.opensound.com/ossfree before mailing me).
 
 Snail mail:	Hannu Savolainen
 		Hiekkalaiturintie 3 A 8

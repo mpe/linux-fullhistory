@@ -281,22 +281,19 @@ void machine_restart(char * __unused)
 {
 
 	if(!reboot_thru_bios) {
-#if 0
-		sti();
-#endif
 		/* rebooting needs to touch the page at absolute addr 0 */
 		*((unsigned short *)__va(0x472)) = reboot_mode;
 		for (;;) {
 			int i;
 			for (i=0; i<100; i++) {
-				int j;
 				kb_wait();
-				for(j = 0; j < 100000 ; j++)
-					/* nothing */;
+				udelay(10);
 				outb(0xfe,0x64);         /* pulse reset low */
 				udelay(10);
 			}
-			__asm__ __volatile__("\tlidt %0": "=m" (no_idt));
+			/* That didn't work - force a triple fault.. */
+			__asm__ __volatile__("lidt %0": :"m" (no_idt));
+			__asm__ __volatile__("int3");
 		}
 	}
 

@@ -24,6 +24,10 @@
 # 070497 Bernhard Kaindl (bkaindl@netway.at) - get default values for
 # new bool, tristate and dep_tristate parameters from the defconfig file.
 # new configuration parameters are marked with '(NEW)' as in make config.
+# 180697 Bernhard Kaindl (bkaindl@netway.at) - added the needed support
+# for string options. They are handled like the int and hex options.
+# 081297 Pavel Machek (pavel@atrey.karlin.mff.cuni.cz) - better error 
+# handling
 #----------------------------------------------------------------------------
 
 
@@ -179,7 +183,7 @@ function int () {
 }
 
 #
-# Add a menu item which will call our local int function.
+# Add a menu item which will call our local hex function.
 # 
 function hex () {
 	eval $2=\${$2:-"$3"} x=\${$2##*[x,X]}
@@ -187,6 +191,17 @@ function hex () {
 	echo -ne "'$2' '($x) $1' " >>MCmenu
 
 	echo -e "function $2 () { l_hex '$1' '$2' '$3' '$x' ;}" >>MCradiolists
+}
+
+#
+# Add a menu item which will call our local string function.
+# 
+function string () {
+	eval $2=\${$2:-"$3"} x=\$$2
+
+	echo -ne "'$2' '     $1: \"$x\"' " >>MCmenu
+
+	echo -e "function $2 () { l_string '$1' '$2' '$3' '$x' ;}" >>MCradiolists
 }
 
 #
@@ -482,6 +497,34 @@ function l_hex () {
 }
 
 #
+# Create a dialog for entering a string into a kernel option.
+#
+function l_string () {
+	while true
+	do
+		if $DIALOG --title "$1" \
+			--backtitle "$backtitle" \
+			--inputbox "$inputbox_instructions_string" \
+			10 75 "$4" 2>MCdialog.out
+		then
+			answer="`cat MCdialog.out`"
+			answer="${answer:-$3}"
+
+			#
+			# Someone may add a nice check for the entered
+			# string here...
+			#
+			eval $2=\"$answer\"
+
+			break
+		fi
+
+		help "$2" "$1"
+	done
+}
+
+
+#
 # Handle a one-of-many choice list.
 #
 function l_choice () {
@@ -540,12 +583,18 @@ function l_choice () {
 	done
 }
 
+#
+# Call awk, and watch for error codes, etc.
+#
+function callawk () {
+awk "$1" || echo "Awk died with error code $?. Giving up." || exit 1
+}
 
 #
 # A faster awk based recursive parser. (I hope)
 #
 function parser1 () {
-awk '
+callawk '
 BEGIN {
 	menu_no = 0
 	comment_is_option = 0
@@ -598,7 +647,7 @@ function parser(ifile,menu) {
 # Secondary parser for single menu mode.
 #
 function parser2 () {
-awk '
+callawk '
 BEGIN {
 	parser("'$CONFIG_IN'","MCmenu0")
 }
@@ -657,9 +706,9 @@ function parse_config_files () {
 	#
 	for i in MCmenu*
 	do
+		echo -n "."
 		source ./$i
 	done
-
 	rm -f MCmenu*
 }
 
@@ -681,7 +730,6 @@ function activate_menu () {
 		then
 			clear
 			cat <<EOM
-
 Menuconfig has encountered a possible error in one of the kernel's
 configuration files and is unable to continue.
 
@@ -733,7 +781,6 @@ EOM
 			stty sane
 			clear
 			cat <<EOM
-
 There seems to be a problem with the lxdialog companion utility which is
 built prior to running Menuconfig.  Usually this is an indicator that you
 have upgraded/downgraded your ncurses libraries and did not remove the 
@@ -906,8 +953,8 @@ function load_config_file () {
 # Just what it says.
 #
 save_configuration () {
-	${DIALOG} --backtitle "$backtitle" \
-		  --infobox "Saving your kernel configuration..."  3 40
+        echo
+	echo -n "Saving your kernel configuration."
 
 	#
 	# Macro for setting the newval varible. get's default from defconfig
@@ -961,6 +1008,12 @@ save_configuration () {
 		eval x=\${$2:-"$3"}
 		echo "$2=$x" 			 >>$CONFIG
 		echo "#define $2 0x${x##*[x,X]}" >>$CONFIG_H
+	}
+
+	function string () {
+		eval x=\${$2:-"$3"}
+		echo "$2=\"$x\"" 			 >>$CONFIG
+		echo "#define $2 \"$x\""	>>$CONFIG_H
 	}
 
 	function define_bool () {
@@ -1051,6 +1104,8 @@ save_configuration () {
 		fi
 	}
 
+	echo -n "."
+
 	DEF_CONFIG="${1:-.config}"
 	DEF_CONFIG_H="include/linux/autoconf.h"
 
@@ -1067,7 +1122,8 @@ save_configuration () {
 	echo "#define AUTOCONF_INCLUDED" >> $CONFIG_H
 
 	MAKE=:	#To prevent sound Makefile from running.
-	
+
+	echo -n "."
 	if . $CONFIG_IN >>.menuconfig.log 2>&1
 	then
 		if [ "$DEF_CONFIG" = ".config" ]
@@ -1080,6 +1136,7 @@ save_configuration () {
 			     "_$CONFIG_PSS"    != "_y" -a\
 			     "_$CONFIG_SMWAVE" != "_y"   ]
 			then
+				echo -n ", sound..."
 				make -C drivers/sound kernelconfig >>.menuconfig.log 2>&1
 			fi
 
@@ -1164,6 +1221,10 @@ inputbox_instructions_hex="\
 Please enter a hexadecimal value. \
 Use the <TAB> key to move from the input field to the buttons below it."
 
+inputbox_instructions_string="\
+Please enter a string value. \
+Use the <TAB> key to move from the input field to the buttons below it."
+
 DIALOG="./scripts/lxdialog/lxdialog"
 
 kernel_version="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}"
@@ -1188,22 +1249,17 @@ fi
 
 if [ -f $DEFAULTS ]
 then
-  echo "#"
-  echo "# Using defaults found in" $DEFAULTS
-  echo "#"
+  echo "Using defaults found in" $DEFAULTS
   load_config_file $DEFAULTS
 else
-  echo "#"
-  echo "# No defaults found"
-  echo "#"
+  echo "No defaults found"
 fi
 
 
 # Fresh new log.
 >.menuconfig.log
 
-$DIALOG	--backtitle "$backtitle" \
-	--infobox "Preparing configuration scripts..." 3 40
+echo -n "Preparing configuration scripts: version" 
 
 #
 # Check kernel version of previous menuconfig build.
@@ -1222,6 +1278,7 @@ fi
 
 if [ "$rebuildsound" ]
 then
+	echo -n ", sound"
 	# Activate the Linux compatible sound configuration.
 	# This may not work for all sound cards.  (See sound docs)
 	#
@@ -1231,13 +1288,28 @@ then
 fi
 
 # Load the functions used by the config.in files.
+echo -n ", functions"
 load_functions
+
+if [ ! -e $CONFIG_IN ]
+then
+	echo "Your main config.in file ($CONFIG_IN) does not exist"
+	exit 1
+fi
+
+if [ ! -x $DIALOG ]
+then
+	echo "Your lxdialog utility does not exist"
+	exit 1
+fi
 
 #
 # Read config.in files and parse them into one shell function per menu.
 #
+echo -n ", parsing"
 parse_config_files $CONFIG_IN
 
+echo "done."
 #
 # Start the ball rolling from the top.
 #
@@ -1253,25 +1325,12 @@ cleanup1
 #
 if $DIALOG --backtitle "$backtitle" \
 	   --yesno "Do you wish to save your new kernel configuration?" 5 60
-	   
 then
 	save_configuration
-
-	clear
-	cat <<EOM
-
-
-The linux kernel is now hopefully configured for your setup.
-Check the top-level Makefile for additional configuration,
-and do a 'make dep ; make clean' if you want to be sure all
-the files are correctly re-made.
-
-EOM
+	echo
+	echo The linux kernel is now configured for your setup.
 else
-	clear
-	echo -e "Your kernel configuration changes were NOT saved.\n"
+    	echo 
+	echo Your kernel configuration changes were NOT saved.
 fi
-
-
 exit 0
-

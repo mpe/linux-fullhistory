@@ -50,8 +50,12 @@
 int securelevel = 0;			/* system security level */
 
 long tick = (1000000 + HZ/2) / HZ;	/* timer interrupt period */
-volatile struct timeval xtime __attribute__ ((aligned (8)));	/* The current time */
-int tickadj = 500/HZ;			/* microsecs */
+
+/* The current time */
+volatile struct timeval xtime __attribute__ ((aligned (16)));
+
+/* Don't completely fail for HZ > 500.  */
+int tickadj = 500/HZ ? : 1;		/* microsecs */
 
 DECLARE_TASK_QUEUE(tq_timer);
 DECLARE_TASK_QUEUE(tq_immediate);
@@ -80,7 +84,7 @@ long time_adjust_step = 0;
 int need_resched = 0;
 unsigned long event = 0;
 
-extern int _setitimer(int, struct itimerval *, struct itimerval *);
+extern int do_setitimer(int, struct itimerval *, struct itimerval *);
 unsigned int * prof_buffer = NULL;
 unsigned long prof_len = 0;
 unsigned long prof_shift = 0;
@@ -1114,7 +1118,7 @@ asmlinkage unsigned int sys_alarm(unsigned int seconds)
 	it_new.it_interval.tv_sec = it_new.it_interval.tv_usec = 0;
 	it_new.it_value.tv_sec = seconds;
 	it_new.it_value.tv_usec = 0;
-	_setitimer(ITIMER_REAL, &it_new, &it_old);
+	do_setitimer(ITIMER_REAL, &it_new, &it_old);
 	oldalarm = it_old.it_value.tv_sec;
 	/* ehhh.. We can't return 0 if we have an alarm pending.. */
 	/* And we'd better return too much than too little anyway */
@@ -1508,7 +1512,7 @@ static void show_task(int nr,struct task_struct * p)
 
 		render_sigset_t(&p->signal, s);
 		render_sigset_t(&p->blocked, b);
-		printk("\tsig: %d %s %s :", signal_pending(p), s, b);
+		printk("   sig: %d %s %s :", signal_pending(p), s, b);
 		for (q = p->sigqueue; q ; q = q->next)
 			printk(" %d", q->info.si_signo);
 		printk(" X\n");

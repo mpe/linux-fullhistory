@@ -75,6 +75,7 @@ osf_sigprocmask(int how, unsigned long newmask, long a2, long a3,
 		if (_NSIG_WORDS > 1 && sign > 0)
 			sigemptyset(&current->blocked);
 		current->blocked.sig[0] = newmask;
+		recalc_sigpending(current);
 		spin_unlock_irq(&current->sigmask_lock);
 
 		(&regs)->r0 = 0;		/* special no error return */
@@ -570,20 +571,22 @@ asmlinkage int
 do_signal(sigset_t *oldset, struct pt_regs * regs, struct switch_stack * sw,
 	  unsigned long r0, unsigned long r19)
 {
-	sigset_t _oldset;
-	siginfo_t info;
-	unsigned long signr, single_stepping, core = 0;
-	struct k_sigaction *ka;
+	unsigned long single_stepping = ptrace_cancel_bpt(current);
 
-	single_stepping = ptrace_cancel_bpt(current);
+	if (!oldset)
+		oldset = &current->blocked;
 
-	spin_lock_irq(&current->sigmask_lock);
-	if (!oldset) {
-		_oldset = current->blocked;
-		oldset = &_oldset;
-	}
-	while ((signr = dequeue_signal(&current->blocked, &info)) != 0) {
+	while (1) {
+		unsigned long signr;
+		struct k_sigaction *ka;
+		siginfo_t info;
+
+		spin_lock_irq(&current->sigmask_lock);
+		signr = dequeue_signal(&current->blocked, &info);
 		spin_unlock_irq(&current->sigmask_lock);
+
+		if (!signr)
+			break;
 
 		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {
 			/* Let the debugger run.  */
@@ -595,12 +598,12 @@ do_signal(sigset_t *oldset, struct pt_regs * regs, struct switch_stack * sw,
 
 			/* We're back.  Did the debugger cancel the sig?  */
 			if (!(signr = current->exit_code))
-				goto skip_signal;
+				continue;
 			current->exit_code = 0;
 
 			/* The debugger continued.  Ignore SIGSTOP.  */
 			if (signr == SIGSTOP)
-				goto skip_signal;
+				continue;
 
 			/* Update the siginfo structure.  Is this good?  */
 			if (signr != info.si_signo) {
@@ -614,23 +617,34 @@ do_signal(sigset_t *oldset, struct pt_regs * regs, struct switch_stack * sw,
 			/* If the (new) signal is now blocked, requeue it.  */
 			if (sigismember(&current->blocked, signr)) {
 				send_sig_info(signr, &info, current);
-				goto skip_signal;
+				continue;
 			}
 		}
 
 		ka = &current->sig->action[signr-1];
+		if (ka->sa.sa_handler == SIG_IGN) {
+			if (signr != SIGCHLD)
+				continue;
+			/* Check for SIGCHLD: it's special.  */
+			while (sys_wait4(-1, NULL, WNOHANG, NULL) > 0)
+				/* nothing */;
+			continue;
+		}
+
 		if (ka->sa.sa_handler == SIG_DFL) {
+			int exit_code = signr & 0x7f;
+
 			/* Init gets no signals it doesn't want.  */
 			if (current->pid == 1)
-				goto skip_signal;
+				continue;
 
 			switch (signr) {
 			case SIGCONT: case SIGCHLD: case SIGWINCH:
-				goto skip_signal;
+				continue;
 
 			case SIGTSTP: case SIGTTIN: case SIGTTOU:
 				if (is_orphaned_pgrp(current->pgrp))
-					goto skip_signal;
+					continue;
 				/* FALLTHRU */
 
 			case SIGSTOP:
@@ -641,15 +655,15 @@ do_signal(sigset_t *oldset, struct pt_regs * regs, struct switch_stack * sw,
 					notify_parent(current, SIGCHLD);
 				schedule();
 				single_stepping |= ptrace_cancel_bpt(current);
-				break;
+				continue;
 
 			case SIGQUIT: case SIGILL: case SIGTRAP:
 			case SIGABRT: case SIGFPE: case SIGSEGV:
 				lock_kernel();
 				if (current->binfmt
 				    && current->binfmt->core_dump
-				    &&current->binfmt->core_dump(signr, regs))
-					core = 0x80;
+				    && current->binfmt->core_dump(signr, regs))
+					exit_code |= 0x80;
 				unlock_kernel();
 				/* FALLTHRU */
 
@@ -657,26 +671,19 @@ do_signal(sigset_t *oldset, struct pt_regs * regs, struct switch_stack * sw,
 				lock_kernel();
 				sigaddset(&current->signal, signr);
 				current->flags |= PF_SIGNALED;
-				do_exit((signr & 0x7f) | core);
+				do_exit(exit_code);
+				/* NOTREACHED */
 			}
-		} else if (ka->sa.sa_handler == SIG_IGN) {
-			if (signr == SIGCHLD) {
-				/* Check for SIGCHLD: it's special.  */
-				while (sys_wait4(-1, NULL, WNOHANG, NULL) > 0)
-					/* nothing */;
-			}
-		} else {
-			/* Whee!  Actually deliver the signal.  */
-			if (r0) syscall_restart(r0, r19, regs, ka);
-			handle_signal(signr, ka, &info, oldset, regs, sw);
-			if (single_stepping) 
-				ptrace_set_bpt(current); /* re-set bpt */
-			return 1;
+			continue;
 		}
-	skip_signal:
-		spin_lock_irq(&current->sigmask_lock);
+
+		/* Whee!  Actually deliver the signal.  */
+		if (r0) syscall_restart(r0, r19, regs, ka);
+		handle_signal(signr, ka, &info, oldset, regs, sw);
+		if (single_stepping) 
+			ptrace_set_bpt(current); /* re-set bpt */
+		return 1;
 	}
-	spin_unlock_irq(&current->sigmask_lock);
 
 	if (r0 &&
 	    (regs->r0 == ERESTARTNOHAND ||

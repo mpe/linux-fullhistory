@@ -669,8 +669,8 @@ asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 		goto out;
 	case IPC_SET:
 		err = -EPERM;
-		if (!suser() && current->euid != ipcp->cuid && 
-		    current->euid != ipcp->uid)
+		if (current->euid != ipcp->cuid && 
+		    current->euid != ipcp->uid && !suser())
 			goto out;
 		if (tbuf.msg_qbytes > MSGMNB && !suser())
 			goto out;
@@ -684,8 +684,8 @@ asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 		goto out;
 	case IPC_RMID:
 		err = -EPERM;
-		if (!suser() && current->euid != ipcp->cuid && 
-		    current->euid != ipcp->uid)
+		if (current->euid != ipcp->cuid && 
+		    current->euid != ipcp->uid && !suser())
 			goto out;
 		/*
 		 * There is only one kerneld message queue,

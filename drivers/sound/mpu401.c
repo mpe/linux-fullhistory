@@ -1844,14 +1844,5 @@ void cleanup_module(void)
 	SOUND_LOCK_END;
 }
 
-#else
-
-void
-export_mpu401_syms(void)
-{
-	register_symtab(&mpu401_syms);
-}
-
-
 #endif
 #endif

@@ -24,10 +24,10 @@
 #include <linux/malloc.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/poll.h>
 
 #include <asm/uaccess.h>
 #include <asm/system.h>
-#include <asm/poll.h>
 
 #define ROUND_UP(x,y) (((x)+(y)-1)/(y))
 #define DEFAULT_POLLMASK (POLLIN | POLLOUT | POLLRDNORM | POLLWRNORM)
@@ -39,9 +39,10 @@
  * understand what I'm doing here, then you understand how the linux
  * sleep/wakeup mechanism works.
  *
- * Two very simple procedures, poll_wait() and free_wait() make all the work.
- * poll_wait() is an inline-function defined in <linux/sched.h>, as all select/poll
- * functions have to call it to add an entry to the poll table.
+ * Two very simple procedures, poll_wait() and free_wait() make all the
+ * work.  poll_wait() is an inline-function defined in <linux/sched.h>,
+ * as all select/poll functions have to call it to add an entry to the
+ * poll table.
  */
 
 /*
@@ -60,26 +61,6 @@ static void free_wait(poll_table * p)
 		remove_wait_queue(entry->wait_address,&entry->wait);
 	}
 }
-
-/*
- * For the kernel fd_set we use a fixed set-size for allocation purposes.
- * This set-size doesn't necessarily bear any relation to the size the user
- * uses, but should preferably obviously be larger than any possible user
- * size (NR_OPEN bits).
- *
- * We need 6 bitmaps (in/out/ex for both incoming and outgoing), and we
- * allocate one page for all the bitmaps. Thus we have 8*PAGE_SIZE bits,
- * to be divided by 6. And we'd better make sure we round to a full
- * long-word (in fact, we'll round to 64 bytes).
- */
-#define KFDS_64BLOCK ((PAGE_SIZE/(6*64))*64)
-#define KFDS_NR (KFDS_64BLOCK*8 > NR_OPEN ? NR_OPEN : KFDS_64BLOCK*8)
-typedef unsigned long kernel_fd_set[KFDS_NR/(8*sizeof(unsigned long))];
-
-typedef struct {
-	kernel_fd_set in, out, ex;
-	kernel_fd_set res_in, res_out, res_ex;
-} fd_set_buffer;
 
 #define __IN(in)	(in)
 #define __OUT(in)	(in + sizeof(kernel_fd_set)/sizeof(unsigned long))
@@ -141,10 +122,27 @@ get_max:
 #define POLLOUT_SET (POLLWRBAND | POLLWRNORM | POLLOUT | POLLERR)
 #define POLLEX_SET (POLLPRI)
 
-static int do_select(int n, fd_set_buffer *fds, poll_table *wait)
+int do_select(int n, fd_set_buffer *fds, unsigned long timeout)
 {
+	poll_table wait_table, *wait;
 	int retval;
 	int i;
+
+	lock_kernel();
+
+	wait = NULL;
+	current->timeout = timeout;
+	if (timeout) {
+		struct poll_table_entry *entry = (struct poll_table_entry *)
+			__get_free_page(GFP_KERNEL);
+		if (!entry) {
+			retval = -ENOMEM;
+			goto out_nowait;
+		}
+		wait_table.nr = 0;
+		wait_table.entry = entry;
+		wait = &wait_table;
+	}
 
 	retval = max_select_fd(n, fds);
 	if (retval < 0)
@@ -154,33 +152,36 @@ static int do_select(int n, fd_set_buffer *fds, poll_table *wait)
 	for (;;) {
 		struct file ** fd = current->files->fd;
 		current->state = TASK_INTERRUPTIBLE;
-		for (i = 0 ; i < n ; i++,fd++) {
+		for (i = 0 ; i < n ; i++, fd++) {
 			unsigned long bit = BIT(i);
 			unsigned long *in = MEM(i,fds->in);
+			unsigned long mask;
+			struct file *file;
 
-			if (bit & BITS(in)) {
-				struct file * file = *fd;
-				unsigned int mask = POLLNVAL;
-				if (file) {
-					mask = DEFAULT_POLLMASK;
-					if (file->f_op && file->f_op->poll)
-						mask = file->f_op->poll(file, wait);
-				}
-				if ((mask & POLLIN_SET) && ISSET(bit, __IN(in))) {
-					SET(bit, __RES_IN(in));
-					retval++;
-					wait = NULL;
-				}
-				if ((mask & POLLOUT_SET) && ISSET(bit, __OUT(in))) {
-					SET(bit, __RES_OUT(in));
-					retval++;
-					wait = NULL;
-				}
-				if ((mask & POLLEX_SET) && ISSET(bit, __EX(in))) {
-					SET(bit, __RES_EX(in));
-					retval++;
-					wait = NULL;
-				}
+			if (!(bit & BITS(in)))
+				continue;
+
+			file = *fd;
+			mask = POLLNVAL;
+			if (file) {
+				mask = DEFAULT_POLLMASK;
+				if (file->f_op && file->f_op->poll)
+					mask = file->f_op->poll(file, wait);
+			}
+			if ((mask & POLLIN_SET) && ISSET(bit, __IN(in))) {
+				SET(bit, __RES_IN(in));
+				retval++;
+				wait = NULL;
+			}
+			if ((mask & POLLOUT_SET) && ISSET(bit, __OUT(in))) {
+				SET(bit, __RES_OUT(in));
+				retval++;
+				wait = NULL;
+			}
+			if ((mask & POLLEX_SET) && ISSET(bit, __EX(in))) {
+				SET(bit, __RES_EX(in));
+				retval++;
+				wait = NULL;
 			}
 		}
 		wait = NULL;
@@ -189,81 +190,17 @@ static int do_select(int n, fd_set_buffer *fds, poll_table *wait)
 		schedule();
 	}
 	current->state = TASK_RUNNING;
+
 out:
+	if (timeout) {
+		free_wait(&wait_table);
+		free_page((unsigned long) wait_table.entry);
+	}
+out_nowait:
+	current->timeout = 0;
+	unlock_kernel();
 	return retval;
 }
-
-/*
- * We do a VERIFY_WRITE here even though we are only reading this time:
- * we'll write to it eventually..
- *
- * Use "unsigned long" accesses to let user-mode fd_set's be long-aligned.
- */
-static int __get_fd_set(unsigned long nr, unsigned long * fs_pointer, unsigned long * fdset)
-{
-	/* round up nr to nearest "unsigned long" */
-	nr = (nr + 8*sizeof(unsigned long)-1) / (8*sizeof(unsigned long));
-	if (fs_pointer) {
-		int error = verify_area(VERIFY_WRITE,fs_pointer,
-					nr*sizeof(unsigned long));
-		if (!error) {
-			while (nr) {
-				__get_user(*fdset, fs_pointer);
-				nr--;
-				fs_pointer++;
-				fdset++;
-			}
-		}
-		return error;
-	}
-	while (nr) {
-		*fdset = 0;
-		nr--;
-		fdset++;
-	}
-	return 0;
-}
-
-static void __set_fd_set(long nr, unsigned long * fs_pointer, unsigned long * fdset)
-{
-	if (!fs_pointer)
-		return;
-	while (nr >= 0) {
-		__put_user(*fdset, fs_pointer);
-		nr -= 8 * sizeof(unsigned long);
-		fdset++;
-		fs_pointer++;
-	}
-}
-
-/* We can do long accesses here, kernel fdsets are always long-aligned */
-static inline void __zero_fd_set(long nr, unsigned long * fdset)
-{
-	while (nr >= 0) {
-		*fdset = 0;
-		nr -= 8 * sizeof(unsigned long);
-		fdset++;
-	}
-}		
-
-/*
- * Note a few subtleties: we use "long" for the dummy, not int, and we do a
- * subtract by 1 on the nr of file descriptors. The former is better for
- * machines with long > int, and the latter allows us to test the bit count
- * against "zero or positive", which can mostly be just a sign bit test..
- *
- * Unfortunately this scheme falls apart on big endian machines where
- * sizeof(long) > sizeof(int) (ie. V9 Sparc). -DaveM
- */
-
-#define get_fd_set(nr,fsp,fdp) \
-__get_fd_set(nr, (unsigned long *) (fsp), (unsigned long *) (fdp))
-
-#define set_fd_set(nr,fsp,fdp) \
-__set_fd_set((nr)-1, (unsigned long *) (fsp), (unsigned long *) (fdp))
-
-#define zero_fd_set(nr,fdp) \
-__zero_fd_set((nr)-1, (unsigned long *) (fdp))
 
 /*
  * We can actually return ERESTARTSYS instead of EINTR, but I'd
@@ -273,64 +210,50 @@ __zero_fd_set((nr)-1, (unsigned long *) (fdp))
  * Update: ERESTARTSYS breaks at least the xview clock binary, so
  * I'm trying ERESTARTNOHAND which restart only when you want to.
  */
-asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
+asmlinkage int
+sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 {
-	int error;
 	fd_set_buffer *fds;
 	unsigned long timeout;
-	poll_table wait_table, *wait;
+	int ret;
 
-	lock_kernel();
 	timeout = ~0UL;
 	if (tvp) {
-		error = -EFAULT;
-		if (!access_ok(VERIFY_WRITE, tvp, sizeof(*tvp)))
-			goto out_nowait;
-		error = __get_user(timeout, &tvp->tv_usec);
-		if (error)
-			goto out_nowait;
-		timeout = ROUND_UP(timeout,(1000000/HZ));
-		{
-			unsigned long tmp;
-			error = __get_user(tmp, &tvp->tv_sec);
-			if (error)
-				goto out_nowait;
-			timeout += tmp * (unsigned long) HZ;
-		}
+		time_t sec, usec;
+
+		if ((ret = verify_area(VERIFY_READ, tvp, sizeof(*tvp)))
+		    || (ret = __get_user(sec, &tvp->tv_sec))
+		    || (ret = __get_user(usec, &tvp->tv_usec)))
+			goto out_nofds;
+
+		timeout = ROUND_UP(usec, 1000000/HZ);
+		timeout += sec * (unsigned long) HZ;
 		if (timeout)
 			timeout += jiffies + 1;
 	}
-	error = -ENOMEM;
-	wait = NULL;
-	current->timeout = timeout;
-	if (timeout) {
-		struct poll_table_entry *entry;
 
-		entry = (struct poll_table_entry *) __get_free_page(GFP_KERNEL);
-		if (!entry)
-			goto out_nowait;
-		wait_table.nr = 0;
-		wait_table.entry = entry;
-		wait = &wait_table;
-	}
+	ret = -ENOMEM;
 	fds = (fd_set_buffer *) __get_free_page(GFP_KERNEL);
 	if (!fds)
 		goto out_nofds;
-	error = -EINVAL;
+	ret = -EINVAL;
 	if (n < 0)
 		goto out;
 	if (n > KFDS_NR)
 		n = KFDS_NR;
-	if ((error = get_fd_set(n, inp, &fds->in)) ||
-	    (error = get_fd_set(n, outp, &fds->out)) ||
-	    (error = get_fd_set(n, exp, &fds->ex))) goto out;
-	zero_fd_set(n, &fds->res_in);
-	zero_fd_set(n, &fds->res_out);
-	zero_fd_set(n, &fds->res_ex);
-	error = do_select(n, fds, wait);
+	if ((ret = get_fd_set(n, inp, fds->in)) ||
+	    (ret = get_fd_set(n, outp, fds->out)) ||
+	    (ret = get_fd_set(n, exp, fds->ex)))
+		goto out;
+	zero_fd_set(n, fds->res_in);
+	zero_fd_set(n, fds->res_out);
+	zero_fd_set(n, fds->res_ex);
+
+	ret = do_select(n, fds, timeout);
+
 	if (tvp && !(current->personality & STICKY_TIMEOUTS)) {
 		unsigned long timeout = current->timeout - jiffies - 1;
-		unsigned long sec = 0, usec = 0;
+		time_t sec = 0, usec = 0;
 		if ((long) timeout > 0) {
 			sec = timeout / HZ;
 			usec = timeout % HZ;
@@ -340,27 +263,24 @@ asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct 
 		put_user(usec, &tvp->tv_usec);
 	}
 	current->timeout = 0;
-	if (error < 0)
+
+	if (ret < 0)
 		goto out;
-	if (!error) {
-		error = -ERESTARTNOHAND;
+	if (!ret) {
+		ret = -ERESTARTNOHAND;
 		if (signal_pending(current))
 			goto out;
-		error = 0;
+		ret = 0;
 	}
-	set_fd_set(n, inp, &fds->res_in);
-	set_fd_set(n, outp, &fds->res_out);
-	set_fd_set(n, exp, &fds->res_ex);
+
+	set_fd_set(n, inp, fds->res_in);
+	set_fd_set(n, outp, fds->res_out);
+	set_fd_set(n, exp, fds->res_ex);
+
 out:
 	free_page((unsigned long) fds);
 out_nofds:
-	if (wait) {
-		free_wait(&wait_table);
-		free_page((unsigned long) wait->entry);
-	}
-out_nowait:
-	unlock_kernel();
-	return error;
+	return ret;
 }
 
 static int do_poll(unsigned int nfds, struct pollfd *fds, poll_table *wait)

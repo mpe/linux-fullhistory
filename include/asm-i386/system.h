@@ -21,8 +21,8 @@
 #define FIRST_LDT_ENTRY (FIRST_TSS_ENTRY+1)
 #define _TSS(n) ((((unsigned long) n)<<4)+(FIRST_TSS_ENTRY<<3))
 #define _LDT(n) ((((unsigned long) n)<<4)+(FIRST_LDT_ENTRY<<3))
-#define load_TR(n) __asm__("ltr %%ax": /* no output */ :"a" (_TSS(n)))
-#define load_ldt(n) __asm__("lldt %%ax": /* no output */ :"a" (_LDT(n)))
+#define load_TR(n) __asm__ __volatile__("ltr %%ax": /* no output */ :"a" (_TSS(n)))
+#define load_ldt(n) __asm__ __volatile__("lldt %%ax": /* no output */ :"a" (_LDT(n)))
 #define store_TR(n) \
 __asm__("str %%ax\n\t" \
 	"subl %2,%%eax\n\t" \
@@ -33,11 +33,9 @@ __asm__("str %%ax\n\t" \
 /* This special macro can be used to load a debugging register */
 
 #define loaddebug(tsk,register) \
-		__asm__("movl %0,%%edx\n\t" \
-			"movl %%edx,%%db" #register "\n\t" \
+		__asm__("movl %0,%%db" #register  \
 			: /* no output */ \
-			:"m" (tsk->debugreg[register]) \
-			:"dx");
+			:"r" (tsk->debugreg[register]))
 
 
 /*

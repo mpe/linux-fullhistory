@@ -45,7 +45,7 @@ static void jiffiestotv(unsigned long jiffies, struct timeval *value)
 	value->tv_sec = jiffies / HZ;
 }
 
-static int _getitimer(int which, struct itimerval *value)
+int do_getitimer(int which, struct itimerval *value)
 {
 	register unsigned long val, interval;
 
@@ -86,10 +86,10 @@ asmlinkage int sys_getitimer(int which, struct itimerval *value)
 	struct itimerval get_buffer;
 
 	if (value) {
-		error = _getitimer(which, &get_buffer);
-		if (!error)
-			error =	copy_to_user(value, &get_buffer, sizeof(get_buffer))
-				? -EFAULT : 0;
+		error = do_getitimer(which, &get_buffer);
+		if (!error &&
+		    copy_to_user(value, &get_buffer, sizeof(get_buffer)))
+			error = -EFAULT;
 	}
 	return error;
 }
@@ -111,14 +111,14 @@ void it_real_fn(unsigned long __data)
 	}
 }
 
-int _setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
+int do_setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
 {
 	register unsigned long i, j;
 	int k;
 
 	i = tvtojiffies(&value->it_interval);
 	j = tvtojiffies(&value->it_value);
-	if (ovalue && (k = _getitimer(which, ovalue)) < 0)
+	if (ovalue && (k = do_getitimer(which, ovalue)) < 0)
 		return k;
 	switch (which) {
 		case ITIMER_REAL:
@@ -155,7 +155,8 @@ int _setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
 /* SMP: Again, only we play with our itimers, and signals are SMP safe
  *      now so that is not an issue at all anymore.
  */
-asmlinkage int sys_setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
+asmlinkage int sys_setitimer(int which, struct itimerval *value,
+			     struct itimerval *ovalue)
 {
 	struct itimerval set_buffer, get_buffer;
 	int error;
@@ -168,7 +169,7 @@ asmlinkage int sys_setitimer(int which, struct itimerval *value, struct itimerva
 	} else
 		memset((char *) &set_buffer, 0, sizeof(set_buffer));
 
-	error = _setitimer(which, &set_buffer, ovalue ? &get_buffer : 0);
+	error = do_setitimer(which, &set_buffer, ovalue ? &get_buffer : 0);
 	if (error || !ovalue)
 		return error;
 

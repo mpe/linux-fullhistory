@@ -31,6 +31,7 @@
 #include <linux/netdevice.h>
 #include <linux/errno.h>
 #include <linux/init.h>
+#include <linux/netlink.h>
 
 #define	NEXT_DEV	NULL
 

@@ -498,15 +498,15 @@ midi_synth_load_patch(int dev, int format, const char *addr,
 		return 0;
 
 	if (format != SYSEX_PATCH)
-	  {
-		  printk("MIDI Error: Invalid patch format (key) 0x%x\n", format);
+	{
+/*		  printk("MIDI Error: Invalid patch format (key) 0x%x\n", format);*/
 		  return -EINVAL;
-	  }
+	}
 	if (count < hdr_size)
-	  {
-		  printk("MIDI Error: Patch header too short\n");
-		  return -EINVAL;
-	  }
+	{
+/*		printk("MIDI Error: Patch header too short\n");*/
+		return -EINVAL;
+	}
 	count -= hdr_size;
 
 	/*
@@ -514,74 +514,73 @@ midi_synth_load_patch(int dev, int format, const char *addr,
 	 * been transferred already.
 	 */
 
-	copy_from_user(&((char *) &sysex)[offs], &(addr)[offs], hdr_size - offs);
-
-	if (count < sysex.len)
-	  {
-		  printk("MIDI Warning: Sysex record too short (%d<%d)\n", count, (int) sysex.len);
-		  sysex.len = count;
-	  }
-	left = sysex.len;
-	src_offs = 0;
+	if(copy_from_user(&((char *) &sysex)[offs], &(addr)[offs], hdr_size - offs))
+		return -EFAULT;
+ 
+ 	if (count < sysex.len)
+	{
+/*		printk(KERN_WARNING "MIDI Warning: Sysex record too short (%d<%d)\n", count, (int) sysex.len);*/
+		sysex.len = count;
+	}
+  	left = sysex.len;
+  	src_offs = 0;
 
 	sysex_sleep_flag.opts = WK_NONE;
 
 	for (i = 0; i < left && !signal_pending(current); i++)
-	  {
-		  unsigned char   data;
+	{
+		unsigned char   data;
 
-		  get_user(*(unsigned char *) &data, (unsigned char *) &((addr)[hdr_size + i]));
+		get_user(*(unsigned char *) &data, (unsigned char *) &((addr)[hdr_size + i]));
 
-		  eox_seen = (i > 0 && data & 0x80);	/* End of sysex */
+		eox_seen = (i > 0 && data & 0x80);	/* End of sysex */
 
-		  if (eox_seen && data != 0xf7)
-			  data = 0xf7;
+		if (eox_seen && data != 0xf7)
+			data = 0xf7;
 
-		  if (i == 0)
-		    {
-			    if (data != 0xf0)
-			      {
-				      printk("Error: Sysex start missing\n");
-				      return -EINVAL;
-			      }
-		    }
-		  while (!midi_devs[orig_dev]->outputc(orig_dev, (unsigned char) (data & 0xff)) &&
-			 !signal_pending(current))
+		if (i == 0)
+		{
+			if (data != 0xf0)
+			{
+				printk(KERN_WARNING "midi_synth: Sysex start missing\n");
+				return -EINVAL;
+			}
+		}
+		while (!midi_devs[orig_dev]->outputc(orig_dev, (unsigned char) (data & 0xff)) &&
+			!signal_pending(current))
 
-		    {
-			    unsigned long   tlimit;
+		{
+			unsigned long   tlimit;
 
-			    if (1)
-				    current->timeout = tlimit = jiffies + (1);
-			    else
-				    tlimit = (unsigned long) -1;
-			    sysex_sleep_flag.opts = WK_SLEEP;
-			    interruptible_sleep_on(&sysex_sleeper);
-			    if (!(sysex_sleep_flag.opts & WK_WAKEUP))
-			      {
-				      if (jiffies >= tlimit)
-					      sysex_sleep_flag.opts |= WK_TIMEOUT;
-			      }
-			    sysex_sleep_flag.opts &= ~WK_SLEEP;
-		    };		/* Wait for timeout */
+			if (1)
+				current->timeout = tlimit = jiffies + (1);
+			else
+				tlimit = (unsigned long) -1;
+			sysex_sleep_flag.opts = WK_SLEEP;
+			interruptible_sleep_on(&sysex_sleeper);
+			if (!(sysex_sleep_flag.opts & WK_WAKEUP))
+			{
+				if (jiffies >= tlimit)
+					sysex_sleep_flag.opts |= WK_TIMEOUT;
+			}
+			sysex_sleep_flag.opts &= ~WK_SLEEP;
+		};		/* Wait for timeout */
 
-		  if (!first_byte && data & 0x80)
-			  return 0;
-		  first_byte = 0;
-	  }
+		if (!first_byte && data & 0x80)
+			return 0;
+		first_byte = 0;
+	}
 
 	if (!eox_seen)
 		midi_outc(orig_dev, 0xf7);
 	return 0;
 }
-
-void
-midi_synth_panning(int dev, int channel, int pressure)
+  
+void midi_synth_panning(int dev, int channel, int pressure)
 {
 }
-
-void
-midi_synth_aftertouch(int dev, int channel, int pressure)
+  
+void midi_synth_aftertouch(int dev, int channel, int pressure)
 {
 	int             orig_dev = synth_devs[dev]->midi_dev;
 	int             msg, chn;

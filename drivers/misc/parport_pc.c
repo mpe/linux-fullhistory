@@ -141,7 +141,7 @@ static void pc_enable_irq(struct parport *p)
 static void pc_release_resources(struct parport *p)
 {
 	if (p->irq != PARPORT_IRQ_NONE)
-		free_irq(p->irq, p);
+		free_irq(p->irq, NULL);
 	release_region(p->base, p->size);
 	if (p->modes & PARPORT_MODE_PCECR)
 		release_region(p->base+0x400, 3);
@@ -151,7 +151,7 @@ static int pc_claim_resources(struct parport *p)
 {
 	/* FIXME check that resources are free */
 	if (p->irq != PARPORT_IRQ_NONE)
-		request_irq(p->irq, pc_null_intr_func, 0, p->name, p);
+		request_irq(p->irq, pc_null_intr_func, 0, p->name, NULL);
 	request_region(p->base, p->size, p->name);
 	if (p->modes & PARPORT_MODE_PCECR)
 		request_region(p->base+0x400, 3, p->name);

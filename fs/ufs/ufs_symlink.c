@@ -6,7 +6,7 @@
  * Laboratory for Computer Science Research Computing Facility
  * Rutgers, The State University of New Jersey
  *
- * Ported to 2.1.62 by Francois-Rene Rideau <rideau@issy.cnet.fr> 19971109
+ * Ported to 2.1.62 by Francois-Rene Rideau <rideau@ens.fr> 19971109
  *
  */
 

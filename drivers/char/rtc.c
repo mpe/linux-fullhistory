@@ -52,11 +52,11 @@
 #include <linux/fcntl.h>
 #include <linux/mc146818rtc.h>
 #include <linux/init.h>
+#include <linux/poll.h>
 
 #include <asm/io.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
-#include <asm/poll.h>
 
 /* Adjust starting epoch if ARC console time is being used */
 #ifdef CONFIG_RTC_ARC

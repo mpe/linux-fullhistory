@@ -240,24 +240,24 @@ nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	int		access, err;
 
 	access = wflag? MAY_WRITE : MAY_READ;
-	if ((err = fh_verify(rqstp, fhp, type, access)) != 0)
+	err = fh_verify(rqstp, fhp, type, access);
+	if (err)
 		goto out;
 
 	dentry = fhp->fh_dentry;
 	inode = dentry->d_inode;
 
 	/* Disallow access to files with the append-only bit set or
-	 * with mandatory locking enabled */
+	 * with mandatory locking enabled
+	 */
 	err = nfserr_perm;
 	if (IS_APPEND(inode) || IS_ISMNDLK(inode))
 		goto out;
 	if (!inode->i_op || !inode->i_op->default_file_ops)
 		goto out;
 
-	if (wflag && (err = get_write_access(inode)) != 0) {
-		err = nfserrno(-err);
-		goto out;
-	}
+	if (wflag && (err = get_write_access(inode)) != 0)
+		goto out_nfserr;
 
 	memset(filp, 0, sizeof(*filp));
 	filp->f_op    = inode->i_op->default_file_ops;
@@ -267,7 +267,7 @@ nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	filp->f_dentry = dentry;
 
 	err = 0;
-	if (filp->f_op->open) {
+	if (filp->f_op && filp->f_op->open) {
 		err = filp->f_op->open(inode, filp);
 		if (err) {
 			if (wflag)
@@ -277,9 +277,11 @@ nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 			 * is really on callers stack frame. -DaveM
 			 */
 			filp->f_count--;
-			err = nfserrno(-err);
 		}
 	}
+out_nfserr:
+	if (err)
+		err = nfserrno(-err);
 out:
 	return err;
 }
@@ -633,14 +635,16 @@ nfsd_truncate(struct svc_rqst *rqstp, struct svc_fh *fhp, unsigned long size)
 	struct iattr	newattrs;
 	int		err;
 
-	if ((err = fh_verify(rqstp, fhp, S_IFREG, MAY_WRITE|MAY_TRUNC)) != 0)
-		return err;
+	err = fh_verify(rqstp, fhp, S_IFREG, MAY_WRITE | MAY_TRUNC);
+	if (err)
+		goto out;
 
 	dentry = fhp->fh_dentry;
 	inode = dentry->d_inode;
 
-	if ((err = get_write_access(inode)) != 0)
-		goto out;
+	err = get_write_access(inode);
+	if (err)
+		goto out_nfserr;
 
 	/* Things look sane, lock and do it. */
 	fh_lock(fhp);
@@ -654,8 +658,11 @@ nfsd_truncate(struct svc_rqst *rqstp, struct svc_fh *fhp, unsigned long size)
 	}
 	put_write_access(inode);
 	fh_unlock(fhp);
+out_nfserr:
+	if (err)
+		err = nfserrno(-err);
 out:
-	return (err ? nfserrno(-err) : 0);
+	return err;
 }
 
 /*
@@ -671,7 +678,8 @@ nfsd_readlink(struct svc_rqst *rqstp, struct svc_fh *fhp, char *buf, int *lenp)
 	mm_segment_t	oldfs;
 	int		err;
 
-	if ((err = fh_verify(rqstp, fhp, S_IFLNK, MAY_READ)) != 0)
+	err = fh_verify(rqstp, fhp, S_IFLNK, MAY_READ);
+	if (err)
 		goto out;
 
 	dentry = fhp->fh_dentry;
@@ -715,7 +723,8 @@ nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (!flen || !plen)
 		goto out;
 
-	if ((err = fh_verify(rqstp, fhp, S_IFDIR, MAY_CREATE)) != 0)
+	err = fh_verify(rqstp, fhp, S_IFDIR, MAY_CREATE);
+	if (err)
 		goto out;
 	dentry = fhp->fh_dentry;
 
@@ -762,17 +771,20 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 	struct inode	*dirp, *dest;
 	int		err;
 
-	if ((err = fh_verify(rqstp, ffhp, S_IFDIR, MAY_CREATE) != 0) ||
-	    (err = fh_verify(rqstp, tfhp, S_IFREG, MAY_NOP)) != 0)
-		return err;
+	err = fh_verify(rqstp, ffhp, S_IFDIR, MAY_CREATE);
+	if (err)
+		goto out;
+	err = fh_verify(rqstp, tfhp, S_IFREG, MAY_NOP);
+	if (err)
+		goto out;
 
 	ddir = ffhp->fh_dentry;
 	dirp = ddir->d_inode;
 
-	dnew = lookup_dentry(fname, dget(ddir), 1);
+	dnew = lookup_dentry(fname, dget(ddir), 0);
 	err = PTR_ERR(dnew);
 	if (IS_ERR(dnew))
-		return nfserrno(-err);
+		goto out_nfserr;
 
 	err = -EEXIST;
 	if (dnew->d_inode)
@@ -805,7 +817,11 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 	}
 dput_and_out:
 	dput(dnew);
-	return (err ? nfserrno(-err) : 0);
+out_nfserr:
+	if (err)
+		err = nfserrno(-err);
+out:
+	return err;
 }
 
 /* More "hidden treasure" from the generic VFS. -DaveM */
@@ -836,9 +852,12 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	struct inode	*fdir, *tdir;
 	int		err;
 
-	if ((err = fh_verify(rqstp, ffhp, S_IFDIR, MAY_REMOVE) != 0)
-	 || (err = fh_verify(rqstp, tfhp, S_IFDIR, MAY_CREATE)) != 0)
-		return err;
+	err = fh_verify(rqstp, ffhp, S_IFDIR, MAY_REMOVE);
+	if (err)
+		goto out;
+	err = fh_verify(rqstp, tfhp, S_IFDIR, MAY_CREATE);
+	if (err)
+		goto out;
 
 	fdentry = ffhp->fh_dentry;
 	fdir = fdentry->d_inode;
@@ -846,18 +865,19 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	tdentry = tfhp->fh_dentry;
 	tdir = tdentry->d_inode;
 
+	/* N.B. We shouldn't need this ... dentry layer handles it */
 	if (!flen || (fname[0] == '.' && 
 	    (flen == 1 || (flen == 2 && fname[1] == '.'))) ||
 	    !tlen || (tname[0] == '.' && 
 	    (tlen == 1 || (tlen == 2 && tname[1] == '.'))))
 		return nfserr_perm;
 
-	odentry = lookup_dentry(fname, dget(fdentry), 1);
+	odentry = lookup_dentry(fname, dget(fdentry), 0);
 	err = PTR_ERR(odentry);
 	if (IS_ERR(odentry))
 		goto out_no_unlock;
 
-	ndentry = lookup_dentry(tname, dget(tdentry), 1);
+	ndentry = lookup_dentry(tname, dget(tdentry), 0);
 	err = PTR_ERR(ndentry);
 	if (IS_ERR(ndentry))
 		goto out_dput_old;
@@ -883,7 +903,10 @@ out_unlock:
 out_dput_old:
 	dput(odentry);
 out_no_unlock:
-	return (err ? nfserrno(-err) : 0);
+	if (err)
+		err = nfserrno(-err);
+out:
+	return err;
 }
 
 /*
@@ -898,10 +921,13 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	struct inode	*dirp;
 	int		err;
 
+	/* N.B. We shouldn't need this test ... handled by dentry layer */
+	err = nfserr_acces;
 	if (!flen || isdotent(fname, flen))
-		return nfserr_acces;
-	if ((err = fh_verify(rqstp, fhp, S_IFDIR, MAY_REMOVE)) != 0)
-		return err;
+		goto out;
+	err = fh_verify(rqstp, fhp, S_IFDIR, MAY_REMOVE);
+	if (err)
+		goto out;
 
 	dentry = fhp->fh_dentry;
 	dirp = dentry->d_inode;
@@ -909,7 +935,7 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	rdentry = lookup_dentry(fname, dget(dentry), 0);
 	err = PTR_ERR(rdentry);
 	if (IS_ERR(rdentry))
-		goto out;
+		goto out_nfserr;
 
 	fh_lock(fhp);
 	if (type == S_IFDIR) {
@@ -926,8 +952,12 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	dput(rdentry);
 	if (!err && EX_ISSYNC(fhp->fh_export))
 		write_inode_now(dirp);
+
+out_nfserr:
+	if (err)
+		err = nfserrno(-err);
 out:
-	return (err ? nfserrno(-err) : 0);
+	return err;
 }
 
 /*

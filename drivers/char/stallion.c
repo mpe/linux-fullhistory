@@ -101,11 +101,34 @@ typedef struct {
 	int		irqtype;
 } stlconf_t;
 
+/*static stlconf_t	stl_brdconf[] = {
+	{ BRD_EASYIO, 0x2a0, 0, 0, 10, 0 },
+};*/
+
+#ifdef MODULE
+static char *brdtype[STL_MAXBRDS] = {"\0", };
+static int io[STL_MAXBRDS] = { 0, };
+static int secio[STL_MAXBRDS] = { 0, };
+static int irq[STL_MAXBRDS] = { 0, };
+
+MODULE_PARM(brdtype, "1-" __MODULE_STRING(STL_MAXBRDS) "s");
+MODULE_PARM(io, "1-" __MODULE_STRING(STL_MAXBRDS) "i");
+MODULE_PARM(secio, "1-" __MODULE_STRING(STL_MAXBRDS) "i");
+MODULE_PARM(irq, "1-" __MODULE_STRING(STL_MAXBRDS) "i");
+
+static stlconf_t	stl_brdconf[STL_MAXBRDS];
+static int	stl_nrbrds = 0;
+
+#else
 static stlconf_t	stl_brdconf[] = {
 	{ BRD_EASYIO, 0x2a0, 0, 0, 10, 0 },
+	{ BRD_EASYIO, 0x2a8, 0, 0, 10, 0 },
+	{ BRD_EASYIO, 0x2b0, 0, 0, 10, 0 },
+	{ BRD_ECH, 0x2a0, 0x240, 0, 10, 0 },
 };
 
 static int	stl_nrbrds = sizeof(stl_brdconf) / sizeof(stlconf_t);
+#endif
 
 /*****************************************************************************/
 
@@ -616,9 +639,22 @@ static struct file_operations	stl_fsiomem = {
  *	Loadable module initialization stuff.
  */
 
+struct board_type_elem
+{
+	int type_id;
+	char *name;
+};
+
+struct board_type_elem board_types[] = {
+	{ BRD_EASYIO, "easyio" },
+	{ BRD_ECH, "ech" },
+	{ BRD_ECHMC, "echmc" },
+	{ BRD_ECHPCI, "echpci" } };
+
 int init_module()
 {
 	unsigned long	flags;
+	int i, j, num_board_types;
 
 #if DEBUG
 	printk("init_module()\n");
@@ -626,6 +662,25 @@ int init_module()
 
 	save_flags(flags);
 	cli();
+
+	num_board_types = sizeof(board_types) / sizeof(struct board_type_elem);
+	for (i = 0; (i < STL_MAXBRDS && io[i]); i++)
+	{
+		stl_brdconf[stl_nrbrds].brdtype = 0;
+		for (j = 0; j < num_board_types; j++)
+			if(strcmp(board_types[j].name, brdtype[i]) == 0)
+				stl_brdconf[stl_nrbrds].brdtype = board_types[j].type_id;
+		if(stl_brdconf[stl_nrbrds].brdtype != 0)
+		{
+			stl_brdconf[stl_nrbrds].ioaddr1 = io[i];
+			stl_brdconf[stl_nrbrds].ioaddr2 = secio[i];
+			stl_brdconf[stl_nrbrds].memaddr = 0;
+			stl_brdconf[stl_nrbrds].irq = irq[i];
+			stl_brdconf[stl_nrbrds].irqtype = 0;
+			stl_nrbrds++;
+		}
+	}
+
 	stl_init();
 	restore_flags(flags);
 
@@ -823,7 +878,10 @@ static int stl_open(struct tty_struct *tty, struct file *filp)
 				return(-EBUSY);
 		} else {
 			if ((rc = stl_waitcarrier(portp, filp)) != 0)
+			{
+				MOD_INC_USE_COUNT;
 				return(rc);
+			}
 		}
 		portp->flags |= ASYNC_NORMAL_ACTIVE;
 	}
@@ -838,6 +896,7 @@ static int stl_open(struct tty_struct *tty, struct file *filp)
 
 	portp->session = current->session;
 	portp->pgrp = current->pgrp;
+	MOD_INC_USE_COUNT;
 	return(0);
 }
 
@@ -925,6 +984,7 @@ static void stl_close(struct tty_struct *tty, struct file *filp)
 		restore_flags(flags);
 		return;
 	}
+	MOD_DEC_USE_COUNT;
 	if (portp->refcount-- > 1) {
 		restore_flags(flags);
 		return;
@@ -2237,10 +2297,12 @@ static inline int stl_initbrds()
 	printk("stl_initbrds()\n");
 #endif
 
+#ifndef MODULE
 	if (stl_nrbrds > STL_MAXBRDS) {
 		printk("STALLION: too many boards in configuration table, truncating to %d\n", STL_MAXBRDS);
 		stl_nrbrds = STL_MAXBRDS;
 	}
+#endif
 
 /*
  *	Firstly scan the list of static boards configured. Allocate

@@ -12,8 +12,8 @@
 #include <linux/termios.h>
 #include <linux/mm.h>
 #include <linux/file.h>
+#include <linux/poll.h>
 
-#include <asm/poll.h>
 #include <asm/uaccess.h>
 
 /*

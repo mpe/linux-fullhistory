@@ -151,25 +151,17 @@ inline static void warp_clock(void)
  * as soon as possible, so that the clock can be set right. Otherwise,
  * various programs will get confused when the clock gets warped.
  */
-asmlinkage int sys_settimeofday(struct timeval *tv, struct timezone *tz)
+
+int do_sys_settimeofday(struct timeval *tv, struct timezone *tz)
 {
-	static int	firsttime = 1;
-	struct timeval	new_tv;
-	struct timezone new_tz;
+	static int firsttime = 1;
 
 	if (!suser())
 		return -EPERM;
 		
-	if (tv) {
-		if (copy_from_user(&new_tv, tv, sizeof(*tv)))
-			return -EFAULT;
-	}
 	if (tz) {
-		if (copy_from_user(&new_tz, tz, sizeof(*tz)))
-			return -EFAULT;
-
 		/* SMP safe, global irq locking makes it work. */
-		sys_tz = new_tz;
+		sys_tz = *tz;
 		if (firsttime) {
 			firsttime = 0;
 			if (!tv)
@@ -181,9 +173,26 @@ asmlinkage int sys_settimeofday(struct timeval *tv, struct timezone *tz)
 		/* SMP safe, again the code in arch/foo/time.c should
 		 * globally block out interrupts when it runs.
 		 */
-		do_settimeofday(&new_tv);
+		do_settimeofday(tv);
 	}
 	return 0;
+}
+
+asmlinkage int sys_settimeofday(struct timeval *tv, struct timezone *tz)
+{
+	struct timeval	new_tv;
+	struct timezone new_tz;
+
+	if (tv) {
+		if (copy_from_user(&new_tv, tv, sizeof(*tv)))
+			return -EFAULT;
+	}
+	if (tz) {
+		if (copy_from_user(&new_tz, tz, sizeof(*tz)))
+			return -EFAULT;
+	}
+
+	return do_sys_settimeofday(tv ? &new_tv : NULL, tz ? &new_tz : NULL);
 }
 
 long pps_offset = 0;		/* pps time offset (us) */

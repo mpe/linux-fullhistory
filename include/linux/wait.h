@@ -28,18 +28,6 @@ static inline int waitqueue_active(struct wait_queue **q)
 	return head && head != WAIT_QUEUE_HEAD(q);
 }
 
-struct poll_table_entry {
-	struct wait_queue wait;
-	struct wait_queue ** wait_address;
-};
-
-typedef struct poll_table_struct {
-	unsigned int nr;
-	struct poll_table_entry * entry;
-} poll_table;
-
-#define __MAX_POLL_TABLE_ENTRIES (PAGE_SIZE / sizeof (struct poll_table_entry))
-
 #endif /* __KERNEL__ */
 
 #endif

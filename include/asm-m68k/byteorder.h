@@ -19,6 +19,6 @@ static __inline__ __const__ __u32 ___arch__swab32(__u32 val)
 #  define __SWAB_64_THRU_32__
 #endif
 
-#include <linux/byteorder_big_endian.h>
+#include <linux/byteorder/big_endian.h>
 
 #endif /* _M68K_BYTEORDER_H */

@@ -3522,8 +3522,9 @@ static kdev_t serial_console_device(struct console *c)
  *	Setup initial baud/bits/parity. We do two things here:
  *	- construct a cflag setting for the first rs_open()
  *	- initialize the serial port
+ *	Return non-zero if we didn't find a serial port.
  */
-__initfunc(static void serial_console_setup(struct console *co, char *options))
+__initfunc(static int serial_console_setup(struct console *co, char *options))
 {
 	struct serial_state *ser;
 	unsigned cval;
@@ -3619,6 +3620,12 @@ __initfunc(static void serial_console_setup(struct console *co, char *options))
 	outb(quot >> 8, ser->port + UART_DLM);		/* MS of divisor */
 	outb(cval, ser->port + UART_LCR);		/* reset DLAB */
 
+	/*
+	 *	If we read 0xff from the LSR, there is no UART here.
+	 */
+	if (inb(ser->port + UART_LSR) == 0xff)
+		return -1;
+	return 0;
 }
 
 static struct console sercons = {

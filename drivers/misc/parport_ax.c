@@ -171,7 +171,7 @@ ax_release_resources(struct parport *p)
 {
 	if (p->irq != PARPORT_IRQ_NONE) {
 		ax_disable_irq(p);
-		free_irq(p->irq, p);
+		free_irq(p->irq, NULL);
 	}
 	release_region(p->base, p->size);
 	if (p->modes & PARPORT_MODE_PCECR)
@@ -185,7 +185,7 @@ ax_claim_resources(struct parport *p)
 {
 	/* FIXME check that resources are free */
 	if (p->irq != PARPORT_IRQ_NONE) {
-		request_irq(p->irq, ax_null_intr_func, 0, p->name, p);
+		request_irq(p->irq, ax_null_intr_func, 0, p->name, NULL);
 		ax_enable_irq(p);
 	}
 	request_region(p->base, p->size, p->name);

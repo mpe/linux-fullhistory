@@ -115,6 +115,10 @@ static void softdog_ping(void)
 
 static ssize_t softdog_write(struct file *file, const char *data, size_t len, loff_t *ppos)
 {
+	/*  Can't seek (pwrite) on this device  */
+	if (ppos != &file->f_pos)
+		return -ESPIPE;
+
 	/*
 	 *	Refresh the timer.
 	 */

@@ -6,6 +6,7 @@
 /* Avoid too many header ordering problems.  */
 struct siginfo;
 
+#ifdef __KERNEL__
 /* Digital Unix defines 64 signals.  Most things should be clean enough
    to redefine this at will, if care is taken to make libc match.  */
 
@@ -18,6 +19,15 @@ typedef unsigned long old_sigset_t;		/* at least 32 bits */
 typedef struct {
 	unsigned long sig[_NSIG_WORDS];
 } sigset_t;
+
+#else
+/* Here we must cater to libcs that poke about in kernel headers.  */
+
+#define NSIG		32
+typedef unsigned long sigset_t;
+
+#endif /* __KERNEL__ */
+
 
 /*
  * Linux/AXP has different signal numbers that Linux/i386: I'm trying
@@ -114,6 +124,7 @@ typedef void (*__sighandler_t)(int);
 #define SIG_IGN	((__sighandler_t)1)	/* ignore signal */
 #define SIG_ERR	((__sighandler_t)-1)	/* error return from signal */
 
+#ifdef __KERNEL__
 struct osf_sigaction {
 	__sighandler_t	sa_handler;
 	old_sigset_t	sa_mask;
@@ -130,6 +141,15 @@ struct k_sigaction {
 	struct sigaction sa;
 	void (*ka_restorer)(void);
 };
+#else
+/* Here we must cater to libcs that poke about in kernel headers.  */
+
+struct sigaction {
+	__sighandler_t	sa_handler;
+	sigset_t	sa_mask;
+	int		sa_flags;
+};
+#endif /* __KERNEL__ */
 
 typedef struct sigaltstack {
 	void *ss_sp;

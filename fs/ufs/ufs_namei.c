@@ -7,7 +7,7 @@
  * Rutgers, The State University of New Jersey
  *
  * Clean swab support by Francois-Rene Rideau <rideau@ens.fr> 19970406
- * Ported to 2.1.62 by Francois-Rene Rideau <rideau@issy.cnet.fr> 19971109
+ * Ported to 2.1.62 by Francois-Rene Rideau <rideau@ens.fr> 19971109
  *
  */
 

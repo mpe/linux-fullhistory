@@ -24,24 +24,25 @@
  * Global file hash table
  */
 #define FILE_NRHASH		32
-#define FILE_HASH(dhash)	((dhash) & FILE_NRHASH)
+#define FILE_HASH_BITS		5
 static struct nlm_file *	nlm_files[FILE_NRHASH];
 static struct semaphore		nlm_file_sema = MUTEX;
+
+static unsigned int file_hash(dev_t dev, ino_t ino)
+{
+	unsigned long tmp = (unsigned long) ino | (unsigned long) dev;
+	tmp = tmp + (tmp >> FILE_HASH_BITS) + (tmp >> FILE_HASH_BITS*2);
+	return tmp & (FILE_NRHASH - 1);
+}
 
 /*
  * Lookup file info. If it doesn't exist, create a file info struct
  * and open a (VFS) file for the given inode.
  *
- * The NFS filehandle must have been validated prior to this call,
- * as we assume that the dentry pointer is valid.
- *
  * FIXME:
  * Note that we open the file O_RDONLY even when creating write locks.
  * This is not quite right, but for now, we assume the client performs
  * the proper R/W checking.
- *
- * The dentry in the FH may not be validated .. can we call this with
- * the full svc_fh?
  */
 u32
 nlm_lookup_file(struct svc_rqst *rqstp, struct nlm_file **result,
@@ -49,40 +50,38 @@ nlm_lookup_file(struct svc_rqst *rqstp, struct nlm_file **result,
 {
 	struct nlm_file	*file;
 	struct knfs_fh	*fh = (struct knfs_fh *) f;
-	struct dentry	*dentry = fh->fh_dcookie;
-	unsigned int	hash = FILE_HASH(dentry->d_name.hash);
+	unsigned int	hash = file_hash(fh->fh_dev, fh->fh_ino);
 	u32		nfserr;
 
-	dprintk("lockd: nlm_file_lookup(%s/%s)\n",
-		dentry->d_parent->d_name.name, dentry->d_name.name);
+	dprintk("lockd: nlm_file_lookup(%s/%ld)\n",
+		kdevname(fh->fh_dev), fh->fh_ino);
 
 	/* Lock file table */
 	down(&nlm_file_sema);
 
 	for (file = nlm_files[hash]; file; file = file->f_next) {
-		if (file->f_handle.fh_dcookie == dentry
-		 && !memcmp(&file->f_handle, fh, sizeof(*fh)))
+		if (file->f_handle.fh_dcookie == fh->fh_dcookie &&
+		    !memcmp(&file->f_handle, fh, sizeof(*fh)))
 			goto found;
 	}
 
-	dprintk("lockd: creating file for %s/%s\n",
-		dentry->d_parent->d_name.name, dentry->d_name.name);
-	if (!(file = (struct nlm_file *) kmalloc(sizeof(*file), GFP_KERNEL))) {
-		up(&nlm_file_sema);
-		return nlm_lck_denied_nolocks;
-	}
+	dprintk("lockd: creating file for %s/%ld\n",
+		kdevname(fh->fh_dev), fh->fh_ino);
+	nfserr = nlm_lck_denied_nolocks;
+	file = (struct nlm_file *) kmalloc(sizeof(*file), GFP_KERNEL);
+	if (!file)
+		goto out_unlock;
 
 	memset(file, 0, sizeof(*file));
 	file->f_handle = *fh;
 	file->f_sema   = MUTEX;
 
 	/* Open the file. Note that this must not sleep for too long, else
-	 * we would lock up lockd:-) So no NFS re-exports, folks. */
+	 * we would lock up lockd:-) So no NFS re-exports, folks.
+	 */
 	if ((nfserr = nlmsvc_ops->fopen(rqstp, fh, &file->f_file)) != 0) {
 		dprintk("lockd: open failed (nfserr %ld)\n", ntohl(nfserr));
-		kfree(file);
-		up(&nlm_file_sema);
-		return nlm_lck_denied;
+		goto out_free;
 	}
 
 	file->f_next = nlm_files[hash];
@@ -91,9 +90,17 @@ nlm_lookup_file(struct svc_rqst *rqstp, struct nlm_file **result,
 found:
 	dprintk("lockd: found file %p (count %d)\n", file, file->f_count);
 	*result = file;
-	up(&nlm_file_sema);
 	file->f_count++;
-	return 0;
+	nfserr = 0;
+
+out_unlock:
+	up(&nlm_file_sema);
+	return nfserr;
+
+out_free:
+	kfree(file);
+	nfserr = nlm_lck_denied;
+	goto out_unlock;
 }
 
 /*
@@ -102,11 +109,12 @@ found:
 static inline void
 nlm_delete_file(struct nlm_file *file)
 {
-	struct dentry *dentry = file->f_file.f_dentry;
+	struct inode *inode = file->f_file.f_dentry->d_inode;
 	struct nlm_file	**fp, *f;
 
-	dprintk("lockd: closing file %p\n", dentry);
-	fp = nlm_files + FILE_HASH(dentry->d_name.hash);
+	dprintk("lockd: closing file %s/%ld\n",
+		kdevname(inode->i_dev), inode->i_ino);
+	fp = nlm_files + file_hash(inode->i_dev, inode->i_ino);
 	while ((f = *fp) != NULL) {
 		if (f == file) {
 			*fp = file->f_next;

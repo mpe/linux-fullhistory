@@ -13,6 +13,7 @@
 #include <linux/config.h>
 
 #define BE_CONSERVATIVE
+#define SAMPLE_ROUNDUP 0
 
 #include "sound_config.h"
 
@@ -896,7 +897,7 @@ find_output_space(int dev, char **buf, int *size)
 	active_offs += dmap->byte_counter;
 #endif
 
-	offs = (dmap->user_counter % dmap->bytes_in_use) & ~3;
+	offs = (dmap->user_counter % dmap->bytes_in_use) & ~SAMPLE_ROUNDUP;
 	if (offs < 0 || offs >= dmap->bytes_in_use)
 	  {
 		  printk("OSS: Got unexpected offs %ld. Giving up.\n", offs);
@@ -920,10 +921,10 @@ find_output_space(int dev, char **buf, int *size)
 	  {
 		  len = (maxfrags * dmap->fragment_size) - occupied_bytes;
 	  }
-	*size = len & ~3;
+	*size = len & ~SAMPLE_ROUNDUP;
 
 	restore_flags(flags);
-	return (len > 0);
+	return (*size > 0);
 }
 
 int

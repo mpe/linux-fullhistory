@@ -1,6 +1,11 @@
 /*
  * linux/ipc/util.c
  * Copyright (C) 1992 Krishna Balasubramanian
+ *
+ * Sep 1997 - Call suser() last after "normal" permission checks so we
+ *            get BSD style process accounting right.
+ *            Occurs in several places in the IPC code.
+ *            Chris Evans, <chris@ferret.lmh.ox.ac.uk>
  */
 
 #include <linux/config.h>
@@ -35,8 +40,6 @@ int ipcperms (struct ipc_perm *ipcp, short flag)
 {	/* flag will most probably be 0 or S_...UGO from <linux/stat.h> */
 	int requested_mode, granted_mode;
 
-	if (suser())
-		return 0;
 	requested_mode = (flag >> 6) | (flag >> 3) | flag;
 	granted_mode = ipcp->mode;
 	if (current->euid == ipcp->cuid || current->euid == ipcp->uid)
@@ -44,7 +47,7 @@ int ipcperms (struct ipc_perm *ipcp, short flag)
 	else if (in_group_p(ipcp->cgid) || in_group_p(ipcp->gid))
 		granted_mode >>= 3;
 	/* is there some bit set in requested_mode but not in granted_mode? */
-	if (requested_mode & ~granted_mode & 0007)
+	if ((requested_mode & ~granted_mode & 0007) && !suser())
 		return -1;
 	return 0;
 }

@@ -53,7 +53,7 @@ static int wdt_is_open=0;
  */
  
 static int io=0x240;
-static int irq=14;
+static int irq=11;
 
 #define WD_TIMO (100*60)		/* 1 minute */
 
@@ -171,6 +171,10 @@ static void wdt_ping(void)
 
 static ssize_t wdt_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 {
+	/*  Can't seek (pwrite) on this device  */
+	if (ppos != &file->f_pos)
+		return -ESPIPE;
+
 	if(count)
 	{
 		wdt_ping();
@@ -189,6 +193,10 @@ static ssize_t wdt_read(struct file *file, char *buf, size_t count, loff_t *ptr)
 	unsigned char cp;
 	int err;
 	
+	/*  Can't seek (pread) on this device  */
+	if (ptr != &file->f_pos)
+		return -ESPIPE;
+
 	switch(MINOR(file->f_dentry->d_inode->i_rdev))
 	{
 		case TEMP_MINOR:

@@ -346,8 +346,8 @@ asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		copy_to_user (buf, &tbuf, sizeof(*buf));
 		break;
 	case IPC_SET:
-		if (suser() || current->euid == shp->shm_perm.uid ||
-		    current->euid == shp->shm_perm.cuid) {
+		if (current->euid == shp->shm_perm.uid ||
+		    current->euid == shp->shm_perm.cuid || suser()) {
 			ipcp->uid = tbuf.shm_perm.uid;
 			ipcp->gid = tbuf.shm_perm.gid;
 			ipcp->mode = (ipcp->mode & ~S_IRWXUGO)
@@ -358,8 +358,8 @@ asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 		err = -EPERM;
 		goto out;
 	case IPC_RMID:
-		if (suser() || current->euid == shp->shm_perm.uid ||
-		    current->euid == shp->shm_perm.cuid) {
+		if (current->euid == shp->shm_perm.uid ||
+		    current->euid == shp->shm_perm.cuid || suser()) {
 			shp->shm_perm.mode |= SHM_DEST;
 			if (shp->shm_nattch <= 0)
 				killseg (id);

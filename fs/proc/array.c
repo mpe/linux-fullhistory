@@ -685,6 +685,7 @@ static inline char * task_sig(struct task_struct *p, char *buffer)
 
 	buffer += sprintf(buffer, "SigPnd:\t");
 	buffer = render_sigset_t(&p->signal, buffer);
+	*buffer++ = '\n';
 	buffer += sprintf(buffer, "SigBlk:\t");
 	buffer = render_sigset_t(&p->blocked, buffer);
 	*buffer++ = '\n';
@@ -692,6 +693,7 @@ static inline char * task_sig(struct task_struct *p, char *buffer)
 	collect_sigign_sigcatch(p, &ign, &catch);
 	buffer += sprintf(buffer, "SigIgn:\t");
 	buffer = render_sigset_t(&ign, buffer);
+	*buffer++ = '\n';
 	buffer += sprintf(buffer, "SigCat:\t");
 	buffer = render_sigset_t(&catch, buffer);
 	*buffer++ = '\n';

@@ -582,21 +582,23 @@ struct buffer_head *efind_buffer(kdev_t dev, int block, int size)
  */
 struct buffer_head * get_hash_table(kdev_t dev, int block, int size)
 {
+	struct buffer_head * bh;
 	for (;;) {
-		struct buffer_head * bh;
-
-		bh=find_buffer(dev,block,size);
+		bh = find_buffer(dev,block,size);
 		if (!bh)
-			return bh;
+			break;
 		bh->b_count++;
 		bh->b_lru_time = jiffies;
-		wait_on_buffer(bh);
+		if (!test_bit(BH_Lock, &bh->b_state)) 
+			break;
+		__wait_on_buffer(bh);
 		if (bh->b_dev == dev		&&
 		    bh->b_blocknr == block	&&
 		    bh->b_size == size)
-			return bh;
+			break;
 		bh->b_count--;
 	}
+	return bh;
 }
 
 unsigned int get_hardblocksize(kdev_t dev)
@@ -835,6 +837,8 @@ repeat:
 			if (!buffer_locked(bh))
 				continue;
 			if (buffer_dirty(bh) || buffer_protected(bh))
+				continue;
+			if (MAJOR(bh->b_dev) == LOOP_MAJOR)
 				continue;
 			/*
 			 * We've found an unused, locked, non-dirty buffer of

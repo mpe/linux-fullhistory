@@ -21,12 +21,14 @@
  * Francois-Rene Rideau <rideau@ens.fr>
  */
 
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/kernel.h>
 #include <linux/fs.h>
 #include <linux/ufs_fs.h>
 #include <linux/locks.h>
+#include <linux/init.h>
 #include <asm/uaccess.h>
 
 #include "ufs_swab.h"
@@ -54,8 +56,7 @@ static struct file_system_type ufs_fs_type = {
 	NULL
 };
 
-int
-init_ufs_fs(void)
+__initfunc(int init_ufs_fs(void))
 {
 	return(register_filesystem(&ufs_fs_type));
 }

@@ -452,8 +452,7 @@ unload_uart401(struct address_info *hw_config)
 	if (!devc->share_irq)
 		snd_release_irq(devc->irq);
 
-	/* Free device too !! - AC FIXME: CHECK THIS IS RIGHT */
-	if (devc)
+	if (!devc)
 		vfree(devc);
 	sound_unload_mididev(hw_config->slots[4]);
 }

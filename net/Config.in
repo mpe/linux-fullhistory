@@ -48,6 +48,7 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 #  fi
   tristate 'WAN router' CONFIG_WAN_ROUTER
   bool 'CPU is too slow to handle full bandwidth' CONFIG_CPU_IS_SLOW
+  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   bool 'QoS and/or fair queueing' CONFIG_NET_SCHED
   if [ "$CONFIG_NET_SCHED" = "y" ]; then
     tristate 'CBQ packet scheduler' CONFIG_NET_SCH_CBQ
@@ -58,6 +59,7 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
     tristate 'auxiliary TBF queue' CONFIG_NET_SCH_TBF
     tristate 'auxiliary FIFO queue' CONFIG_NET_SCH_PFIFO
     tristate 'auxiliary PRIO queue' CONFIG_NET_SCH_PRIO
+  fi
   fi
 fi
 endmenu

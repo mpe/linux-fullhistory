@@ -75,6 +75,7 @@
  *                                      protocol private data.
  *              Steve Whitehouse:       Added various other default routines
  *                                      common to several socket families.
+ *              Chris Evans     :       Call suser() check last on F_SETOWN
  *
  * To Fix:
  *
@@ -938,8 +939,9 @@ int sock_no_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			 * way to make sure that you can't send a sigurg to
 			 * another process.
 			 */
-			if (!suser() && current->pgrp != -arg &&
-				current->pid != arg) return(-EPERM);
+			if (current->pgrp != -arg &&
+				current->pid != arg &&
+				!suser()) return(-EPERM);
 			sk->proc = arg;
 			return(0);
 		case F_GETOWN:

@@ -4,7 +4,7 @@
 % pages to print... :-)  If you're actually putting this in print, you
 % may wish to change these.
 %
-% $Id: devices.tex,v 1.28 1997/11/12 23:59:41 davem Exp $
+% $Id: devices.tex,v 1.4 1997/12/05 01:34:21 hpa Exp $
 %
 \oddsidemargin=0in
 \textwidth=6.5in
@@ -50,7 +50,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@zytor.com$>$}
-\date{Last revised: November 9, 1997}
+\date{Last revised: December 4, 1997}
 \maketitle
 %
 \noindent
@@ -193,8 +193,11 @@ Your cooperation is appreciated.
 \major{44}{}{char }{isdn4linux virtual modem -- alternate devices}
 \major{  }{}{block}{Flash Translation Layer (FTL) filesystems}
 \major{45}{}{char }{isdn4linux ISDN BRI driver}
+\major{  }{}{block}{Reserved for parallel port IDE disk}
 \major{46}{}{char }{Comtrol Rocketport serial card}
+\major{  }{}{block}{Reserved for parallel port ATAPI CD-ROM}
 \major{47}{}{char }{Comtrol Rocketport serial card -- alternate devices}
+\major{  }{}{block}{Reserved for parallel port ATAPI disk}
 \major{48}{}{char }{SDL RISCom serial card}
 \major{49}{}{char }{SDL RISCom serial card -- alternate devices}
 \major{50}{}{char }{Reserved for GLINT}
@@ -240,7 +243,8 @@ Your cooperation is appreciated.
 \major{93}{}{char }{IBM Smart Capture Card frame grabber}
 \major{94}{}{char }{miroVIDEO DC10/30 capture/playback device}
 \major{95}{}{char }{IP Filter}
-\major{96}{--119}{}{Unallocated}
+\major{96}{}{char }{Reserved for parallel port ATAPI tape}
+\major{97}{--119}{}{Unallocated}
 \major{120}{--127}{}{Local/experimental use}
 \major{128}{--239}{}{Unallocated}
 \major{240}{--254}{}{Local/experimental use}
@@ -407,15 +411,15 @@ Linux.  To ensure proper operation, do not mix old and new PTY devices.
 \begin{devicelist}
 \major{ 5}{}{char }{Alternate TTY devices}
 	\minor{0}{/dev/tty}{Current TTY device}
-	\minor{1}{}{Reserved for console device}
+	\minor{1}{/dev/console}{System console}
 	\minor{64}{/dev/cua0}{Callout device corresponding to {\file ttyS0}}
 	\minordots
 	\minor{127}{/dev/cua63}{Callout device corresponding to {\file ttyS63}}
 \end{devicelist}
 
 \noindent
-Minor number 1 is reserved for a kernel-managed
-{\file /dev/console} in a future version of Linux.
+(5,1) is {\file /dev/console} starting with Linux 2.1.71.  See the
+section on terminal devices for more information on {\file /dev/console}.
 
 \begin{devicelist}
 \major{ 6}{}{char }{Parallel printer devices}
@@ -550,6 +554,7 @@ physical disks.
 	\minor{149}{/dev/input/mouse}{Linux/SGI Irix emulation mouse}
 	\minor{150}{/dev/input/keyboard}{Linux/SGI Irix emulation keyboard}
 	\minor{151}{/dev/led}{Front panel LEDs}
+	\minor{152}{/dev/radio}{Radio card (type?)}
 \end{devicelist}
 
 \begin{devicelist}
@@ -797,30 +802,30 @@ major number 3).
 
 \begin{devicelist}
 \major{27}{}{char }{QIC-117 tape}
-        \minor{0}{/dev/qft0}{Unit 0, rewind-on-close}
-        \minor{1}{/dev/qft1}{Unit 1, rewind-on-close}
-        \minor{2}{/dev/qft2}{Unit 2, rewind-on-close}
-        \minor{3}{/dev/qft3}{Unit 3, rewind-on-close}
-        \minor{4}{/dev/nqft0}{Unit 0, no rewind-on-close}
-        \minor{5}{/dev/nqft1}{Unit 1, no rewind-on-close}
-        \minor{6}{/dev/nqft2}{Unit 2, no rewind-on-close}
-        \minor{7}{/dev/nqft3}{Unit 3, no rewind-on-close}
-        \minor{16}{/dev/zqft0}{Unit 0, rewind-on-close, compression}
-        \minor{17}{/dev/zqft1}{Unit 1, rewind-on-close, compression}
-        \minor{18}{/dev/zqft2}{Unit 2, rewind-on-close, compression}
-        \minor{19}{/dev/zqft3}{Unit 3, rewind-on-close, compression}
-        \minor{20}{/dev/nzqft0}{Unit 0, no-rewind-on-close, compression}
-        \minor{21}{/dev/nzqft1}{Unit 1, no-rewind-on-close, compression}
-        \minor{22}{/dev/nzqft2}{Unit 2, no-rewind-on-close, compression}
-        \minor{23}{/dev/nzqft3}{Unit 3, no-rewind-on-close, compression}
-        \minor{32}{/dev/rawft0}{Unit 0, rewind-on-close, no file marks}
-        \minor{33}{/dev/rawft1}{Unit 1, rewind-on-close, no file marks}
-        \minor{34}{/dev/rawft2}{Unit 2, rewind-on-close, no file marks}
-        \minor{35}{/dev/rawft3}{Unit 3, rewind-on-close, no file marks}
-        \minor{36}{/dev/zqft0}{Unit 0, no-rewind-on-close, no file marks}
-        \minor{37}{/dev/zqft1}{Unit 1, no-rewind-on-close, no file marks}
-        \minor{38}{/dev/zqft2}{Unit 2, no-rewind-on-close, no file marks}
-        \minor{39}{/dev/zqft3}{Unit 3, no-rewind-on-close, no file marks}
+	\minor{0}{/dev/qft0}{Unit 0, rewind-on-close}
+	\minor{1}{/dev/qft1}{Unit 1, rewind-on-close}
+	\minor{2}{/dev/qft2}{Unit 2, rewind-on-close}
+	\minor{3}{/dev/qft3}{Unit 3, rewind-on-close}
+	\minor{4}{/dev/nqft0}{Unit 0, no rewind-on-close}
+	\minor{5}{/dev/nqft1}{Unit 1, no rewind-on-close}
+	\minor{6}{/dev/nqft2}{Unit 2, no rewind-on-close}
+	\minor{7}{/dev/nqft3}{Unit 3, no rewind-on-close}
+	\minor{16}{/dev/zqft0}{Unit 0, rewind-on-close, compression}
+	\minor{17}{/dev/zqft1}{Unit 1, rewind-on-close, compression}
+	\minor{18}{/dev/zqft2}{Unit 2, rewind-on-close, compression}
+	\minor{19}{/dev/zqft3}{Unit 3, rewind-on-close, compression}
+	\minor{20}{/dev/nzqft0}{Unit 0, no rewind-on-close, compression}
+	\minor{21}{/dev/nzqft1}{Unit 1, no rewind-on-close, compression}
+	\minor{22}{/dev/nzqft2}{Unit 2, no rewind-on-close, compression}
+	\minor{23}{/dev/nzqft3}{Unit 3, no rewind-on-close, compression}
+	\minor{32}{/dev/rawqft0}{Unit 0, rewind-on-close, no file marks}
+	\minor{33}{/dev/rawqft1}{Unit 1, rewind-on-close, no file marks}
+	\minor{34}{/dev/rawqft2}{Unit 2, rewind-on-close, no file marks}
+	\minor{35}{/dev/rawqft3}{Unit 3, rewind-on-close, no file marks}
+	\minor{36}{/dev/nrawqft0}{Unit 0, no rewind-on-close, no file marks}
+	\minor{37}{/dev/nrawqft1}{Unit 1, no rewind-on-close, no file marks}
+	\minor{38}{/dev/nrawqft2}{Unit 2, no rewind-on-close, no file marks}
+	\minor{39}{/dev/nrawqft3}{Unit 3, no rewind-on-close, no file marks}
 \\
 \major{  }{}{block}{Third Matsushita (Panasonic/SoundBlaster) CD-ROM}
 	\minor{0}{/dev/sbpcd8}{Panasonic CD-ROM controller 2 unit 0}
@@ -1629,8 +1634,7 @@ It is recommended that these links exist on all systems:
 \begin{nodelist}
 \link{/dev/core}{/proc/kcore}{symbolic}{Backward compatibility}
 \link{/dev/ramdisk}{ram0}{symbolic}{Backward compatibility}
-\link{/dev/rft0}{qft0}{symbolic}{Backward compatibility}
-\link{/dev/ftape}{rft0}{symbolic}{Backward compatibility}
+\link{/dev/ftape}{qft0}{symbolic}{Backward compatibility}
 \link{/dev/scd?}{sr?}{hard}{Alternate name for CD-ROMs}
 \link{/dev/fd?D*}{fd?u*}{hard}{Backward compatibility}
 \link{/dev/fd?H*}{fd?u*}{hard}{Backward compatibility}
@@ -1715,10 +1719,11 @@ purpose.
 
 The {\em console device\/}, {\file /dev/console}, is the device to
 which system messages should be sent, and on which logins should be
-permitted in single-user mode.  {\file /dev/console} should be a
-symbolic link to either {\file /dev/tty0}, a specific virtual console
-such as {\file /dev/tty1}, or to a serial port primary ({\file tty})
-device, depending on the configuration of the system.
+permitted in single-user mode.  Starting with Linux 2.1.71, {\file
+/dev/console} is managed by the kernel; for previous versions it
+should be a symbolic link to either {\file /dev/tty0}, a specific
+virtual console such as {\file /dev/tty1}, or to a serial port primary
+({\file tty}) device, depending on the configuration of the system.
 
 \subsection{Serial ports}
 

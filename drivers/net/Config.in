@@ -180,6 +180,7 @@ if [ "$CONFIG_WAN_ROUTER" != "n" ]; then
       bool '  WANPIPE Frame Relay support' CONFIG_WANPIPE_FR
       bool '  WANPIPE PPP support' CONFIG_WANPIPE_PPP
     fi
+    dep_tristate 'High-speed (DMA) SCC driver for AX.25' CONFIG_DMASCC $CONFIG_AX25
   fi
 fi
 #

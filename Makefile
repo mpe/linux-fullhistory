@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 71
+SUBLEVEL = 72
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/)
 
@@ -155,6 +155,10 @@ endif
 
 ifdef CONFIG_PNP
 DRIVERS := $(DRIVERS) drivers/pnp/pnp.a
+endif
+
+ifdef CONFIG_HAMRADIO
+DRIVERS := $(DRIVERS) drivers/net/hamradio/hamradio.a
 endif
 
 include arch/$(ARCH)/Makefile
@@ -363,8 +367,8 @@ distclean: mrproper
 	rm -f core `find . \( -name '*.orig' -o -name '*.rej' -o -name '*~' \
                 -o -name '*.bak' -o -name '#*#' -o -name '.*.orig' \
                 -o -name '.*.rej' -o -name '.SUMS' -o -size 0 \) -print` TAGS
-	rm -f drivers/sound/Config.in
-	cp drivers/sound/Config.std drivers/sound/Config.in
+#	rm -f drivers/sound/Config.in
+#	cp drivers/sound/Config.std drivers/sound/Config.in
 
 backup: mrproper
 	cd .. && tar cf - linux/ | gzip -9 > backup.gz

@@ -304,6 +304,9 @@ audio_read(int dev, struct fileinfo *file, char *buf, int count)
 			    if (dev_nblock[dev] && buf_no == -EAGAIN)
 				    return p;
 
+			    if (p > 0) 		/* Avoid throwing away data */
+				return p;	/* Return it instead */
+
 			    return buf_no;
 		    }
 		  if (l > c)
@@ -958,6 +961,34 @@ dma_ioctl(int dev, unsigned int cmd, caddr_t arg)
 		  }
 		  break;
 
+    case SNDCTL_DSP_GETODELAY:
+      {
+	int count;
+	unsigned long   flags;
+	struct dma_buffparms *dmap = dmap_out;
+
+	if (!(audio_devs[dev]->open_mode & OPEN_WRITE))
+	   return -EINVAL;
+	if (!(dmap->flags & DMA_ALLOC_DONE))
+	   return (*(int *) arg = 0);
+
+	save_flags (flags);
+	cli ();
+	/* Compute number of bytes that have been played */
+	count = DMAbuf_get_buffer_pointer (dev, dmap, DMODE_OUTPUT);
+	if (count < dmap->fragment_size && dmap->qhead != 0)
+	   count += dmap->bytes_in_use;	/* Pointer wrap not handled yet */
+	count += dmap->byte_counter;
+
+	/* Substract current count from the number of bytes written by app */
+	count = dmap->user_counter - count;
+	if (count < 0)
+           count = 0;
+	restore_flags (flags);
+
+	return (*(int *) arg = count);
+      }
+      break;
 
 	  case SNDCTL_DSP_POST:
 		  ;

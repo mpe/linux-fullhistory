@@ -47,6 +47,6 @@ static __inline__ __const__ __u16 ___arch__swab16(__u16 x)
 
 #define __BYTEORDER_HAS_U64__
 
-#include <linux/byteorder_little_endian.h>
+#include <linux/byteorder/little_endian.h>
 
 #endif /* _ALPHA_BYTEORDER_H */

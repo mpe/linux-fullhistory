@@ -1132,8 +1132,8 @@ ask_parameters(void)
 	ask_int_choice(B(OPT_CS4232), "CS4232_BASE",
 		       "CS4232 audio I/O base",
 		       FMT_HEX,
-		       0x530,
-		       "530, 604, E80 or F40");
+		       0x534,
+		       "534, 608, E84 or F44");
 
 	ask_int_choice(B(OPT_CS4232), "CS4232_IRQ",
 		       "CS4232 audio IRQ",

@@ -80,9 +80,9 @@ __initfunc(void console_setup(char *str, int *ints))
 	if ((c->options = strchr(str, ',')) != NULL)
 		*(c->options++) = 0;
 #ifdef __sparc__
-	if (strcmp(str, "ttya"))
+	if (!strcmp(str, "ttya"))
 		strcpy(c->name, "ttyS0");
-	if (strcmp(str, "ttyb"))
+	if (!strcmp(str, "ttyb"))
 		strcpy(c->name, "ttyS1");
 #endif
 
@@ -317,11 +317,13 @@ void register_console(struct console * console)
 	 *	that registers here.
 	 */
 	if (selected_console == 0) {
-		console->flags |= CON_ENABLED | CON_FIRST;
-		selected_console = 1;
-		if (console->setup)
-			console->setup(console, NULL);
+		if (console->setup == NULL ||
+		    console->setup(console, NULL) == 0) {
+			console->flags |= CON_ENABLED | CON_FIRST;
+			selected_console = 1;
+		}
 	}
+
 	/*
 	 *	See if this console matches one we selected on
 	 *	the command line.
@@ -332,14 +334,19 @@ void register_console(struct console * console)
 		if (console->index >= 0 &&
 		    console->index != console_cmdline[i].index)
 			continue;
+		if (console->index < 0) console->index = 0;
+		if (console->setup &&
+		    console->setup(console, console_cmdline[i].options) != 0)
+			break;
 		console->flags |= CON_ENABLED;
 		console->index = console_cmdline[i].index;
 		if (i == 0)
 			console->flags |= CON_FIRST;
-		if (console->setup)
-			console->setup(console, console_cmdline[i].options);
 		break;
 	}
+
+	if (!(console->flags & CON_ENABLED))
+		return;
 
 	/*
 	 *	Put this console in the list - keep the

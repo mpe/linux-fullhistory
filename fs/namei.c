@@ -737,10 +737,9 @@ static inline int do_mkdir(const char * pathname, int mode)
 		goto exit;
 
 	dir = lock_parent(dentry);
-
 	error = PTR_ERR(dir);
 	if (IS_ERR(dir))
-		goto exit;
+		goto exit_dput;
 
 	error = -EEXIST;
 	if (dentry->d_inode)
@@ -765,6 +764,7 @@ static inline int do_mkdir(const char * pathname, int mode)
 
 exit_lock:
 	unlock_dir(dir);
+exit_dput:
 	dput(dentry);
 exit:
 	return error;
@@ -798,10 +798,9 @@ static inline int do_rmdir(const char * name)
 		goto exit;
 
 	dir = lock_parent(dentry);
-
 	error = PTR_ERR(dir);
 	if (IS_ERR(dir))
-		goto exit;
+		goto exit_dput;
 
 	error = -ENOENT;
 	if (!dentry->d_inode)
@@ -838,6 +837,7 @@ static inline int do_rmdir(const char * name)
 
 exit_lock:
         unlock_dir(dir);
+exit_dput:
 	dput(dentry);
 exit:
 	return error;
@@ -871,10 +871,9 @@ static inline int do_unlink(const char * name)
 		goto exit;
 
 	dir = lock_parent(dentry);
-
 	error = PTR_ERR(dir);
 	if (IS_ERR(dir))
-		goto exit;
+		goto exit_dput;
 
 	error = -ENOENT;
 	if (!dentry->d_inode)
@@ -911,6 +910,7 @@ static inline int do_unlink(const char * name)
 
 exit_lock:
         unlock_dir(dir);
+exit_dput:
 	dput(dentry);
 exit:
 	return error;
@@ -945,10 +945,9 @@ static inline int do_symlink(const char * oldname, const char * newname)
 		goto exit;
 
 	dir = lock_parent(dentry);
-
 	error = PTR_ERR(dir);
 	if (IS_ERR(dir))
-		goto exit;
+		goto exit_dput;
 
 	error = -EEXIST;
 	if (dentry->d_inode)
@@ -972,6 +971,7 @@ static inline int do_symlink(const char * oldname, const char * newname)
 
 exit_lock:
 	unlock_dir(dir);
+exit_dput:
 	dput(dentry);
 exit:
 	return error;
@@ -1016,10 +1016,9 @@ static inline int do_link(const char * oldname, const char * newname)
 		goto exit_old;
 
 	dir = lock_parent(new_dentry);
-
 	error = PTR_ERR(dir);
 	if (IS_ERR(dir))
-		goto exit;
+		goto exit_new;
 
 	error = -ENOENT;
 	inode = old_dentry->d_inode;
@@ -1059,6 +1058,7 @@ static inline int do_link(const char * oldname, const char * newname)
 
 exit_lock:
 	unlock_dir(dir);
+exit_new:
 	dput(new_dentry);
 exit_old:
 	dput(old_dentry);

@@ -173,6 +173,12 @@ M:	jreuter@lykos.oche.de
 L:	linux-hams@vger.rutgers.edu
 S:	Maintained
 
+HIGH-SPEED SCC DRIVER FOR AX.25
+P:	Klaus Kudielka
+M:	oe1kib@oe1xtu.ampr.org
+L:	linux-hams@vger.rutgers.edu
+S:	Maintained
+
 BAYCOM/HDLCDRV/SOUNDMODEM DRIVERS FOR AX.25
 P:	Thomas Sailer
 M:	sailer@ife.ee.ethz.ch

@@ -329,7 +329,7 @@ static int eql_close(struct device *dev)
 
 static int eql_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 {  
-	if(!suser() && cmd!=EQL_GETMASTRCFG && cmd!=EQL_GETSLAVECFG)
+	if(cmd!=EQL_GETMASTRCFG && cmd!=EQL_GETSLAVECFG && !suser())
 	  	return -EPERM;
 	switch (cmd)
 	{

@@ -795,6 +795,18 @@ int             cddma = 3;
 int             opl4 = 0;
 int             joystick = 0;
 
+MODULE_PARM(io,"i");
+MODULE_PARM(dma,"i");
+MODULE_PARM(dma16,"i");
+MODULE_PARM(irq,"i");
+MODULE_PARM(cdtype,"i");
+MODULE_PARM(cdirq,"i");
+MODULE_PARM(cdport,"i");
+MODULE_PARM(cddma,"i");
+MODULE_PARM(opl4,"i");
+MODULE_PARM(joystick,"i");
+
+
 static int      found_mpu;
 
 

@@ -60,8 +60,13 @@ extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;
 extern int sysctl_tcp_syncookies;
 
-/* Define this to check TCP sequence numbers in ICMP packets. */
-#define ICMP_PARANOIA 1
+/* Check TCP sequence numbers in ICMP packets. */
+#define ICMP_PARANOIA 1 
+#ifndef ICMP_PARANOIA
+#define ICMP_MIN_LENGTH 4
+#else
+#define ICMP_MIN_LENGTH 8
+#endif
 
 static void tcp_v4_send_reset(struct sk_buff *skb);
 
@@ -772,9 +777,7 @@ static struct open_request *tcp_v4_search_req(struct tcp_opt *tp,
 /* 
  * This routine does path mtu discovery as defined in RFC1197.
  */
-static inline void do_pmtu_discovery(struct sock *sk,
-				    struct iphdr *ip,
-				    struct tcphdr *th)
+static inline void do_pmtu_discovery(struct sock *sk, struct iphdr *ip)
 {
 	int new_mtu; 
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
@@ -825,11 +828,13 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 	int type = skb->h.icmph->type;
 	int code = skb->h.icmph->code;
 	struct sock *sk;
-	__u32 seq; 
 	int opening;
+#ifdef ICMP_PARANOIA
+	__u32 seq;
+#endif
 
-	if (len < (iph->ihl << 2)+sizeof(struct tcphdr)) {
-		icmp_statistics.IcmpInErrors++;
+	if (len < (iph->ihl << 2) + ICMP_MIN_LENGTH) { 
+		icmp_statistics.IcmpInErrors++; 
 		return;
 	}
 
@@ -891,7 +896,7 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 		break; 
 	case ICMP_DEST_UNREACH:
 		if (code == ICMP_FRAG_NEEDED) { /* PMTU discovery (RFC1191) */
-			do_pmtu_discovery(sk, iph, th); 
+			do_pmtu_discovery(sk, iph); 
 			return; 
 		}
 		break; 

@@ -361,17 +361,14 @@ sv_bread (struct super_block *sb, kdev_t dev, unsigned int block)
  * Function prototypes
  */
 
-extern int sysv_lookup(struct inode * dir,const char * name, int len,
-	               struct inode ** result);
-extern int sysv_create(struct inode * dir,const char * name, int len, int mode,
-	struct inode ** result);
-extern int sysv_mkdir(struct inode * dir, const char * name, int len, int mode);
-extern int sysv_rmdir(struct inode * dir, const char * name, int len);
-extern int sysv_unlink(struct inode * dir, const char * name, int len);
-extern int sysv_symlink(struct inode * inode, const char * name, int len,
-	const char * symname);
-extern int sysv_link(struct inode * oldinode, struct inode * dir, const char * name, int len);
-extern int sysv_mknod(struct inode * dir, const char * name, int len, int mode, int rdev);
+extern int sysv_lookup(struct inode * dir, struct dentry * dentry);
+extern int sysv_create(struct inode * dir, struct dentry * dentry, int mode);
+extern int sysv_mkdir(struct inode * dir, struct dentry * dentry, int mode);
+extern int sysv_rmdir(struct inode * dir, struct dentry * dentry);
+extern int sysv_unlink(struct inode * dir, struct dentry * dentry);
+extern int sysv_symlink(struct inode * inode, struct dentry * dentry, const char * symname);
+extern int sysv_link(struct inode * oldinode, struct inode * dir, struct dentry * dentry);
+extern int sysv_mknod(struct inode * dir, struct dentry * dentry, int mode, int rdev);
 extern int sysv_rename(struct inode * old_dir, struct dentry * old_dentry,
 		       struct inode * new_dir, struct dentry * new_dentry);
 extern struct inode * sysv_new_inode(const struct inode * dir);

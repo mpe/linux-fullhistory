@@ -201,7 +201,7 @@
 #include <linux/module.h>
 #include <linux/version.h>
 #if (LINUX_VERSION_CODE >= 0x020117)
-#include <asm/poll.h>
+#include <linux/poll.h>
 #endif
 #include <linux/isdn.h>
 #include "isdn_common.h"

@@ -601,22 +601,6 @@ extern inline void remove_wait_queue(struct wait_queue ** p, struct wait_queue *
 	write_unlock_irqrestore(&waitqueue_lock, flags); 
 }
 
-extern inline void poll_wait(struct wait_queue ** wait_address, poll_table * p)
-{
-	struct poll_table_entry * entry;
-
-	if (!p || !wait_address)
-		return;
-	if (p->nr >= __MAX_POLL_TABLE_ENTRIES)
-		return;
- 	entry = p->entry + p->nr;
-	entry->wait_address = wait_address;
-	entry->wait.task = current;
-	entry->wait.next = NULL;
-	add_wait_queue(wait_address,&entry->wait);
-	p->nr++;
-}
-
 #define REMOVE_LINKS(p) do { unsigned long flags; \
 	write_lock_irqsave(&tasklist_lock, flags); \
 	(p)->next_task->prev_task = (p)->prev_task; \

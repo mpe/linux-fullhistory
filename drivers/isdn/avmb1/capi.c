@@ -47,8 +47,7 @@
 #include <linux/skbuff.h>
 #include <linux/capi.h>
 #include <linux/kernelcapi.h>
-
-#include <asm/poll.h>
+#include <linux/poll.h>
 
 #include "compat.h"
 #include "capiutil.h"

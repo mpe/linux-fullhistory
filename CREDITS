@@ -1342,6 +1342,14 @@ E: dl1bke@db0pra.ampr.org
 D: Generic Z8530 driver, AX.25 DAMA slave implementation
 D: Several AX.25 hacks
 
+N: Francois-Rene Rideau
+E: rideau@ens.fr
+W: http://www.eleves.ens.fr:8080/home/rideau/
+D: petty kernel janitor (byteorder, ufs)
+S: 6, rue Augustin Thierry
+S: 75019 Paris
+S: France
+
 N: William E. Roadcap
 E: roadcapw@cfw.com
 W: http://www.cfw.com/~roadcapw

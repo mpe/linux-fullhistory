@@ -16,6 +16,9 @@
 
 #define NFSDDBG_FACILITY		NFSDDBG_LOCKD
 
+/*
+ * Note: we hold the dentry use count while the file is open.
+ */
 static u32
 nlm_fopen(struct svc_rqst *rqstp, struct knfs_fh *f, struct file *filp)
 {
@@ -27,6 +30,8 @@ nlm_fopen(struct svc_rqst *rqstp, struct knfs_fh *f, struct file *filp)
 	fh.fh_dverified = 0;
 
 	nfserr = nfsd_open(rqstp, &fh, S_IFREG, 0, filp);
+	if (!nfserr)
+		dget(filp->f_dentry);
 	fh_put(&fh);
 	return nfserr;
 }
@@ -35,6 +40,7 @@ static void
 nlm_fclose(struct file *filp)
 {
 	nfsd_close(filp);
+	dput(filp->f_dentry);
 }
 
 struct nlmsvc_binding		nfsd_nlm_ops = {
