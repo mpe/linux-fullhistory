@@ -36,6 +36,7 @@ static inline int multipath_select_route(const struct flowi *flp,
 #ifdef CONFIG_IP_ROUTE_MULTIPATH_CACHED
 	struct ip_mp_alg_ops *ops = ip_mp_alg_table[rth->rt_multipath_alg];
 
+	/* mp_alg_select_route _MUST_ be implemented */
 	if (ops && (rth->u.dst.flags & DST_BALANCED)) {
 		ops->mp_alg_select_route(flp, rth, rp);
 		return 1;
@@ -52,7 +53,7 @@ static inline void multipath_flush(void)
 	for (i = IP_MP_ALG_NONE; i <= IP_MP_ALG_MAX; i++) {
 		struct ip_mp_alg_ops *ops = ip_mp_alg_table[i];
 
-		if (ops)
+		if (ops && ops->mp_alg_flush)
 			ops->mp_alg_flush();
 	}
 #endif
@@ -66,7 +67,7 @@ static inline void multipath_set_nhinfo(struct rtable *rth,
 #ifdef CONFIG_IP_ROUTE_MULTIPATH_CACHED
 	struct ip_mp_alg_ops *ops = ip_mp_alg_table[rth->rt_multipath_alg];
 
-	if (ops)
+	if (ops && ops->mp_alg_set_nhinfo)
 		ops->mp_alg_set_nhinfo(network, netmask, prefixlen, nh);
 #endif
 }
@@ -76,7 +77,8 @@ static inline void multipath_remove(struct rtable *rth)
 #ifdef CONFIG_IP_ROUTE_MULTIPATH_CACHED
 	struct ip_mp_alg_ops *ops = ip_mp_alg_table[rth->rt_multipath_alg];
 
-	if (ops && (rth->u.dst.flags & DST_BALANCED))
+	if (ops && ops->mp_alg_remove &&
+	    (rth->u.dst.flags & DST_BALANCED))
 		ops->mp_alg_remove(rth);
 #endif
 }

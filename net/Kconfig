@@ -45,15 +45,6 @@ config PACKET_MMAP
 
 	  If unsure, say N.
 
-config NETLINK_DEV
-	tristate "Netlink device emulation"
-	help
-	  This option will be removed soon. Any programs that want to use
-	  character special nodes like /dev/tap0 or /dev/route (all with major
-	  number 36) need this option, and need to be rewritten soon to use
-	  the real netlink socket.
-	  This is a backward compatibility option, choose Y for now.
-
 config UNIX
 	tristate "Unix domain sockets"
 	---help---
