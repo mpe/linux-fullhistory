@@ -520,7 +520,7 @@ static int nxt2002_init(struct dvb_frontend* fe)
 
 	if (!state->initialised) {
 		/* request the firmware, this will block until someone uploads it */
-		printk("nxt2002: Waiting for firmware upload...\n");
+		printk("nxt2002: Waiting for firmware upload (%s)...\n", NXT2002_DEFAULT_FIRMWARE);
 		ret = state->config->request_firmware(fe, &fw, NXT2002_DEFAULT_FIRMWARE);
 		printk("nxt2002: Waiting for firmware upload(2)...\n");
 		if (ret) {
@@ -534,6 +534,7 @@ static int nxt2002_init(struct dvb_frontend* fe)
 			release_firmware(fw);
 			return ret;
 		}
+		printk("nxt2002: firmware upload complete\n");
 
 		/* Put the micro into reset */
 		nxt2002_microcontroller_stop(state);

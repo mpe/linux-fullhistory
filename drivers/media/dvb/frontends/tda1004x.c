@@ -353,7 +353,7 @@ static int tda10045_fwupload(struct dvb_frontend* fe)
 	if (tda1004x_check_upload_ok(state, 0x2c) == 0) return 0;
 
 	/* request the firmware, this will block until someone uploads it */
-	printk("tda1004x: waiting for firmware upload...\n");
+	printk("tda1004x: waiting for firmware upload (%s)...\n", TDA10045_DEFAULT_FIRMWARE);
 	ret = state->config->request_firmware(fe, &fw, TDA10045_DEFAULT_FIRMWARE);
 	if (ret) {
 		printk("tda1004x: no firmware upload (timeout or file not found?)\n");
@@ -372,6 +372,7 @@ static int tda10045_fwupload(struct dvb_frontend* fe)
 	ret = tda1004x_do_upload(state, fw->data, fw->size, TDA10045H_FWPAGE, TDA10045H_CODE_IN);
 	if (ret)
 		return ret;
+	printk("tda1004x: firmware upload complete\n");
 
 	/* wait for DSP to initialise */
 	/* DSPREADY doesn't seem to work on the TDA10045H */
@@ -396,7 +397,7 @@ static int tda10046_fwupload(struct dvb_frontend* fe)
 	if (tda1004x_check_upload_ok(state, 0x20) == 0) return 0;
 
 	/* request the firmware, this will block until someone uploads it */
-	printk("tda1004x: waiting for firmware upload...\n");
+	printk("tda1004x: waiting for firmware upload (%s)...\n", TDA10046_DEFAULT_FIRMWARE);
 	ret = state->config->request_firmware(fe, &fw, TDA10046_DEFAULT_FIRMWARE);
 	if (ret) {
 		printk("tda1004x: no firmware upload (timeout or file not found?)\n");
@@ -414,6 +415,7 @@ static int tda10046_fwupload(struct dvb_frontend* fe)
 	ret = tda1004x_do_upload(state, fw->data, fw->size, TDA10046H_CODE_CPT, TDA10046H_CODE_IN);
 	if (ret)
 		return ret;
+	printk("tda1004x: firmware upload complete\n");
 
 	/* wait for DSP to initialise */
 	timeout = jiffies + HZ;
