@@ -264,14 +264,7 @@ static int sony_toc_read = 0;	/* Has the TOC been read for
 static struct s_sony_subcode last_sony_subcode;	/* Points to the last
 						   subcode address read */
 
-static volatile int sony_inuse = 0;	/* Is the drive in use?  Only one operation
-					   at a time allowed */
-
 static DECLARE_MUTEX(sony_sem);		/* Semaphore for drive hardware access */
-
-static struct task_struct *has_cd_task = NULL;	/* The task that is currently
-						   using the CDROM drive, or
-						   NULL if none. */
 
 static int is_double_speed = 0;	/* does the drive support double speed ? */
 
@@ -300,6 +293,7 @@ module_param(cdu31a_irq, int, 0);
 /* The interrupt handler will wake this queue up when it gets an
    interrupts. */
 DECLARE_WAIT_QUEUE_HEAD(cdu31a_irq_wait);
+static int irq_flag = 0;
 
 static int curr_control_reg = 0;	/* Current value of the control register */
 
@@ -376,17 +370,31 @@ static inline void disable_interrupts(void)
  */
 static inline void sony_sleep(void)
 {
-	unsigned long flags;
-
 	if (cdu31a_irq <= 0) {
 		yield();
 	} else {		/* Interrupt driven */
+		DEFINE_WAIT(w);
+		int first = 1;
 
-		save_flags(flags);
-		cli();
-		enable_interrupts();
-		interruptible_sleep_on(&cdu31a_irq_wait);
-		restore_flags(flags);
+		while (1) {
+			prepare_to_wait(&cdu31a_irq_wait, &w,
+					TASK_INTERRUPTIBLE);
+			if (first) {
+				enable_interrupts();
+				first = 0;
+			}
+
+			if (irq_flag != 0)
+				break;
+			if (!signal_pending(current)) {
+				schedule();
+				continue;
+			} else
+				disable_interrupts();
+			break;
+		}
+		finish_wait(&cdu31a_irq_wait, &w);
+		irq_flag = 0;
 	}
 }
 
@@ -530,11 +538,13 @@ static irqreturn_t cdu31a_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		/* If something was waiting, wake it up now. */
 		if (waitqueue_active(&cdu31a_irq_wait)) {
 			disable_interrupts();
-			wake_up(&cdu31a_irq_wait);
+			irq_flag = 1;
+			wake_up_interruptible(&cdu31a_irq_wait);
 		}
 	} else if (waitqueue_active(&cdu31a_irq_wait)) {
 		disable_interrupts();
-		wake_up(&cdu31a_irq_wait);
+		irq_flag = 1;
+		wake_up_interruptible(&cdu31a_irq_wait);
 	} else {
 		disable_interrupts();
 		printk(KERN_NOTICE PFX
