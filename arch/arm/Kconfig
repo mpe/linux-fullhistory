@@ -120,6 +120,7 @@ config ARCH_IOP3XX
 
 config ARCH_IXP4XX
 	bool "IXP4xx-based"
+	select DMABOUNCE
 
 config ARCH_IXP2000
 	bool "IXP2400/2800-based"
@@ -231,18 +232,13 @@ config TIMER_ACORN
 # SA1111 support
 config SA1111
 	bool
-	depends on ASSABET_NEPONSET || SA1100_ADSBITSY || SA1100_BADGE4 || SA1100_CONSUS || SA1100_GRAPHICSMASTER || SA1100_JORNADA720 || ARCH_LUBBOCK || SA1100_PFS168 || SA1100_PT_SYSTEM3 || SA1100_XP860
-	default y
+	select DMABOUNCE
 
 config SHARP_LOCOMO
 	bool
-	depends on SA1100_COLLIE || MACH_POODLE
-	default y
 
 config SHARP_SCOOP
 	bool
-	depends on PXA_SHARPSL || SA1100_COLLIE
-	default y
 
 config FORCE_MAX_ZONEORDER
 	int
@@ -251,8 +247,6 @@ config FORCE_MAX_ZONEORDER
 
 config DMABOUNCE
 	bool
-	depends on SA1111 || ARCH_IXP4XX
-	default y
 
 source arch/arm/mm/Kconfig
 
