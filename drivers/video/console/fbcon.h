@@ -18,6 +18,8 @@
 
 #include <asm/io.h>
 
+#define FBCON_FLAGS_INIT 1
+
    /*
     *    This is the interface between the low-level console driver and the
     *    low-level frame buffer device
@@ -69,6 +71,7 @@ struct fbcon_ops {
 	int    cursor_reset;
 	int    blank_state;
 	int    graphics;
+	int    flags;
 	char  *cursor_data;
 };
     /*

@@ -599,9 +599,10 @@ static void con2fb_init_display(struct vc_data *vc, struct fb_info *info,
 
 	ops->currcon = fg_console;
 
-	if (info->fbops->fb_set_par)
+	if (info->fbops->fb_set_par && !(ops->flags & FBCON_FLAGS_INIT))
 		info->fbops->fb_set_par(info);
 
+	ops->flags |= FBCON_FLAGS_INIT;
 	ops->graphics = 0;
 
 	if (vc)
@@ -900,6 +901,7 @@ static const char *fbcon_startup(void)
 static void fbcon_init(struct vc_data *vc, int init)
 {
 	struct fb_info *info = registered_fb[con2fb_map[vc->vc_num]];
+	struct fbcon_ops *ops;
 	struct vc_data **default_mode = vc->vc_display_fg;
 	struct vc_data *svc = *default_mode;
 	struct display *t, *p = &fb_display[vc->vc_num];
@@ -950,6 +952,8 @@ static void fbcon_init(struct vc_data *vc, int init)
 	new_cols = info->var.xres / vc->vc_font.width;
 	new_rows = info->var.yres / vc->vc_font.height;
 	vc_resize(vc, new_cols, new_rows);
+
+	ops = info->fbcon_par;
 	/*
 	 * We must always set the mode. The mode of the previous console
 	 * driver could be in the same resolution but we are using different
@@ -957,10 +961,14 @@ static void fbcon_init(struct vc_data *vc, int init)
 	 *
 	 * We need to do it in fbcon_init() to prevent screen corruption.
 	 */
-	if (CON_IS_VISIBLE(vc) && info->fbops->fb_set_par)
-		info->fbops->fb_set_par(info);
+	if (CON_IS_VISIBLE(vc)) {
+		if (info->fbops->fb_set_par &&
+		    !(ops->flags & FBCON_FLAGS_INIT))
+			info->fbops->fb_set_par(info);
+		ops->flags |= FBCON_FLAGS_INIT;
+	}
 
-	((struct fbcon_ops *) info->fbcon_par)->graphics = 0;
+	ops->graphics = 0;
 
 	if ((cap & FBINFO_HWACCEL_COPYAREA) &&
 	    !(cap & FBINFO_HWACCEL_DISABLED))
