@@ -325,13 +325,13 @@ unsigned hpfs_count_one_bitmap(struct super_block *, secno);
  * local time (HPFS) to GMT (Unix)
  */
 
-static inline time_t local_to_gmt(struct super_block *s, time_t t)
+static inline time_t local_to_gmt(struct super_block *s, time32_t t)
 {
 	extern struct timezone sys_tz;
 	return t + sys_tz.tz_minuteswest * 60 + hpfs_sb(s)->sb_timeshift;
 }
 
-static inline time_t gmt_to_local(struct super_block *s, time_t t)
+static inline time32_t gmt_to_local(struct super_block *s, time_t t)
 {
 	extern struct timezone sys_tz;
 	return t - sys_tz.tz_minuteswest * 60 - hpfs_sb(s)->sb_timeshift;
