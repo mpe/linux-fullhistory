@@ -14,13 +14,13 @@ extern inline void down(struct semaphore * sem)
 	@ atomic down operation
 	mov	r0, pc
 	orr	lr, r0, #0x08000000
-	and	r0, r0, #0x0c000003
 	teqp	lr, #0
 	ldr	lr, [%0]
+	and	r0, r0, #0x0c000003
 	subs	lr, lr, #1
 	str	lr, [%0]
-	mov	lr, pc, lsr #28
-	teqp	r0, lr, lsl #28
+	orrmi	r0, r0, #0x80000000	@ set N
+	teqp	r0, #0
 	movmi	r0, %0
 	blmi	" SYMBOL_NAME_STR(__down_failed)
 		:
@@ -39,14 +39,13 @@ extern inline int down_interruptible (struct semaphore * sem)
 	@ atomic down operation
 	mov	r0, pc
 	orr	lr, r0, #0x08000000
-	and	r0, r0, #0x0c000003
 	teqp	lr, #0
 	ldr	lr, [%1]
+	and	r0, r0, #0x0c000003
 	subs	lr, lr, #1
 	str	lr, [%1]
-	mov	lr, pc, lsr #28
 	orrmi	r0, r0, #0x80000000	@ set N
-	teqp	r0, lr, lsl #28
+	teqp	r0, #0
 	movmi	r0, %1
 	movpl	r0, #0
 	blmi	" SYMBOL_NAME_STR(__down_interruptible_failed) "
@@ -64,14 +63,13 @@ extern inline int down_trylock(struct semaphore * sem)
 	@ atomic down operation
 	mov	r0, pc
 	orr	lr, r0, #0x08000000
-	and	r0, r0, #0x0c000003
 	teqp	lr, #0
 	ldr	lr, [%1]
+	and	r0, r0, #0x0c000003
 	subs	lr, lr, #1
 	str	lr, [%1]
-	mov	lr, pc, lsr #28
 	orrmi	r0, r0, #0x80000000	@ set N
-	teqp	r0, lr, lsl #28
+	teqp	r0, #0
 	movmi	r0, %1
 	movpl	r0, #0
 	blmi	" SYMBOL_NAME_STR(__down_trylock_failed) "
@@ -94,14 +92,13 @@ extern inline void up(struct semaphore * sem)
 	@ atomic up operation
 	mov	r0, pc
 	orr	lr, r0, #0x08000000
-	and	r0, r0, #0x0c000003
 	teqp	lr, #0
 	ldr	lr, [%0]
+	and	r0, r0, #0x0c000003
 	adds	lr, lr, #1
 	str	lr, [%0]
-	mov	lr, pc, lsr #28
-	orrls	r0, r0, #0x80000000	@ set N
-	teqp	r0, lr, lsl #28
+	orrle	r0, r0, #0x80000000	@ set N
+	teqp	r0, #0
 	movmi	r0, %0
 	blmi	" SYMBOL_NAME_STR(__up_wakeup)
 		:

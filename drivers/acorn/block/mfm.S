@@ -1,43 +1,42 @@
-@ Read/Write DMA code for the ST506/MFM hard drive controllers on the A400
-@   motherboard on ST506 podules.
-@ (c) David Alan Gilbert (gilbertd@cs.man.ac.uk) 1996
+@ Read/Write DMA code for the ST506/MFM hard drive controllers on the A400 Acorn Archimedes
+@   motherboard and on ST506 expansion podules.
+@ (c) David Alan Gilbert (linux@treblig.org) 1996-1999
 
 #include <asm/assembler.h>
  
-_hdc63463_irqdata:
+hdc63463_irqdata:
 @ Controller base address
-  .global _hdc63463_baseaddress
-_hdc63463_baseaddress:
+  .global hdc63463_baseaddress
+hdc63463_baseaddress:
   .word 0
 
-  .global _hdc63463_irqpolladdress
-_hdc63463_irqpolladdress:
+  .global hdc63463_irqpolladdress
+hdc63463_irqpolladdress:
   .word 0
  
-  .global _hdc63463_irqpollmask
-_hdc63463_irqpollmask:
+  .global hdc63463_irqpollmask
+hdc63463_irqpollmask:
   .word 0
 
 @ where to read/write data  from the kernel data space
-  .global _hdc63463_dataptr
-_hdc63463_dataptr:
+  .global hdc63463_dataptr
+hdc63463_dataptr:
   .word 0
 
 @ Number of bytes left to transfer
-  .global _hdc63463_dataleft
-_hdc63463_dataleft:
+  .global hdc63463_dataleft
+hdc63463_dataleft:
   .word 0
 
 @ -------------------------------------------------------------------------
 @ hdc63463_writedma: DMA from host to controller
 @  internal reg usage: r0=hdc base address, r1=irq poll address, r2=poll mask
 @                      r3=data ptr, r4=data left, r5,r6=temporary
-  .global _hdc63463_writedma
-_hdc63463_writedma:
+  .global hdc63463_writedma
+hdc63463_writedma:
   stmfd sp!,{r4-r7}
-  adr r5,_hdc63463_irqdata
+  adr r5,hdc63463_irqdata
   ldmia r5,{r0,r1,r2,r3,r4}
-
 
 writedma_again:
 
@@ -89,12 +88,12 @@ writedma_loop:
 
   @ If we were too slow we had better go through again - DAG - took out with new interrupt routine
   @ sub r0,r0,#32+8
-  @ adr r2,_hdc63463_irqdata
+  @ adr r2,hdc63463_irqdata
   @ ldr r2,[r2,#8]
   @ b writedma_again
 
 writedma_end:
-  adr r5,_hdc63463_irqdata+12
+  adr r5,hdc63463_irqdata+12
   stmia r5,{r3,r4}
   ldmfd sp!,{r4-r7}
   RETINSTR(mov,pc,lr)
@@ -103,10 +102,10 @@ writedma_end:
 @ hdc63463_readdma: DMA from controller to host
 @  internal reg usage: r0=hdc base address, r1=irq poll address, r2=poll mask
 @                      r3=data ptr, r4=data left, r5,r6=temporary
-  .global _hdc63463_readdma
-_hdc63463_readdma:
+  .global hdc63463_readdma
+hdc63463_readdma:
   stmfd sp!,{r4-r7}
-  adr r5,_hdc63463_irqdata
+  adr r5,hdc63463_irqdata
   ldmia r5,{r0,r1,r2,r3,r4}
 
 readdma_again:
@@ -157,7 +156,7 @@ readdma_loop:
   @ b readdma_again
 
 readdma_end:
-  adr r5,_hdc63463_irqdata+12
+  adr r5,hdc63463_irqdata+12
   stmia r5,{r3,r4}
   ldmfd sp!,{r4-r7}
   RETINSTR(mov,pc,lr)

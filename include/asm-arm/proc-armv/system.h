@@ -121,6 +121,12 @@ extern unsigned long cr_alignment;	/* defined in entry-armv.S */
 	  : "memory");			\
 	} while (0)
 
+/* For spinlocks etc */
+#define local_irq_save(x)	__save_flags_cli(x)
+#define local_irq_restore(x)	__restore_flags(x)
+#define local_irq_disable()	__cli()
+#define local_irq_enable()	__sti()
+
 #ifdef __SMP__
 #error SMP not supported
 #else

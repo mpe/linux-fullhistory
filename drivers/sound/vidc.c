@@ -24,7 +24,7 @@ void vidc_update_filler(int format, int channels)
 #define TYPE(fmt,ch) (((fmt)<<2) | ((ch)&3))
 
 	fillertype = TYPE(format, channels);
-printk("filler type: %X\n", fillertype);
+
 	switch (fillertype)
 	{
 		default:
@@ -61,10 +61,13 @@ void attach_vidc(struct address_info *hw_config)
 
 	sprintf(name, "VIDC %d-bit sound", hw_config->card_subtype);
 	conf_printf(name, hw_config);
+	memset(dma_buf, 0, sizeof(dma_buf));
 
 	for (i = 0; i < 2; i++)
 	{
 		dma_buf[i] = get_free_page(GFP_KERNEL);
+		if (!dma_buf[i])
+			goto nomem;
 		dma_pbuf[i] = virt_to_phys(dma_buf[i]);
 	}
 
@@ -78,9 +81,16 @@ void attach_vidc(struct address_info *hw_config)
 		printk(KERN_ERR "VIDCsound: can't allocate DMA interrupt\n");
 		return;
 	}
+
 //	vidc_synth_init(hw_config);
 	vidc_audio_init(hw_config);
 	vidc_mixer_init(hw_config);
+	return;
+
+nomem:
+	for (i = 0; i < 2; i++)
+		free_page(dma_buf[i]);
+	printk(KERN_ERR "VIDCsound: can't allocate required buffers\n");
 }
 
 int probe_vidc(struct address_info *hw_config)

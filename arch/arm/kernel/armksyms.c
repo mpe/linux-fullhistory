@@ -6,19 +6,39 @@
 #include <linux/mman.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
+#include <linux/in6.h>
 
-#include <asm/ecard.h>
 #include <asm/elf.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 #include <asm/pgtable.h>
+#include <asm/semaphore.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
+#include <asm/checksum.h>
 
 extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(struct pt_regs *, struct user_fp_struct *);
 extern void inswb(unsigned int port, void *to, int len);
 extern void outswb(unsigned int port, const void *to, int len);
+
+extern unsigned int local_bh_count[NR_CPUS];
+extern unsigned int local_irq_count[NR_CPUS];
+
+extern void * __ioremap(unsigned long phys_addr, unsigned long size, unsigned long flags);
+extern void iounmap(void *addr);
+
+extern pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
+
+/*
+ * syscalls
+ */
+extern int sys_write(int, const char *, int);
+extern int sys_read(int, char *, int);
+extern int sys_lseek(int, off_t, int);
+extern int sys_open(const char *, int, int);
+extern int sys_exit(int);
+extern int sys_wait4(int, int *, int, struct rusage *);
 
 /*
  * libgcc functions - functions that are used internally by the
@@ -43,6 +63,8 @@ extern void __udivsi3(void);
 extern void __umoddi3(void);
 extern void __umodsi3(void);
 
+extern void ret_from_exception(void);
+extern void fpundefinstr(void);
 extern void fp_enter(void);
 #define EXPORT_SYMBOL_ALIAS(sym,orig) \
  const char __kstrtab_##sym##[] __attribute__((section(".kstrtab"))) = \
@@ -57,32 +79,46 @@ EXPORT_SYMBOL_ALIAS(kern_fp_enter,fp_enter);
 EXPORT_SYMBOL_ALIAS(fp_printk,printk);
 EXPORT_SYMBOL_ALIAS(fp_send_sig,send_sig);
 
+#ifdef CONFIG_CPU_26
+EXPORT_SYMBOL(fpundefinstr);
+EXPORT_SYMBOL(ret_from_exception);
+#endif
+
 	/* platform dependent support */
 EXPORT_SYMBOL(dump_thread);
 EXPORT_SYMBOL(dump_fpu);
 EXPORT_SYMBOL(udelay);
 EXPORT_SYMBOL(xchg_str);
-
-	/* expansion card support */
-#ifdef CONFIG_ARCH_ACORN
-EXPORT_SYMBOL(ecard_startfind);
-EXPORT_SYMBOL(ecard_find);
-EXPORT_SYMBOL(ecard_readchunk);
-EXPORT_SYMBOL(ecard_address);
+EXPORT_SYMBOL(local_bh_count);
+EXPORT_SYMBOL(local_irq_count);
+#ifdef CONFIG_CPU_32
+EXPORT_SYMBOL(__ioremap);
+EXPORT_SYMBOL(iounmap);
 #endif
+EXPORT_SYMBOL(kernel_thread);
 
 EXPORT_SYMBOL(enable_irq);
 EXPORT_SYMBOL(disable_irq);
 
 	/* processor dependencies */
 EXPORT_SYMBOL(processor);
-EXPORT_SYMBOL(machine_type);
+EXPORT_SYMBOL(__machine_arch_type);
+
+	/* networking */
+EXPORT_SYMBOL(csum_partial_copy);
+EXPORT_SYMBOL(__csum_ipv6_magic);
 
 	/* io */
-EXPORT_SYMBOL(outswb);
+EXPORT_SYMBOL(outsb);
 EXPORT_SYMBOL(outsw);
-EXPORT_SYMBOL(inswb);
+EXPORT_SYMBOL(outsl);
+EXPORT_SYMBOL(insb);
 EXPORT_SYMBOL(insw);
+EXPORT_SYMBOL(insl);
+
+EXPORT_SYMBOL(_memcpy_fromio);
+EXPORT_SYMBOL(_memcpy_toio);
+EXPORT_SYMBOL(_memset_io);
 
 	/* address translation */
 #ifndef __virt_to_phys__is_a_macro
@@ -98,7 +134,9 @@ EXPORT_SYMBOL(__virt_to_bus);
 EXPORT_SYMBOL(__bus_to_virt);
 #endif
 
+#ifndef CONFIG_NO_PGT_CACHE
 EXPORT_SYMBOL(quicklists);
+#endif
 EXPORT_SYMBOL(__bad_pmd);
 EXPORT_SYMBOL(__bad_pmd_kernel);
 
@@ -167,3 +205,17 @@ EXPORT_SYMBOL(find_next_zero_bit);
 EXPORT_SYMBOL(armidlist);
 EXPORT_SYMBOL(armidindex);
 EXPORT_SYMBOL(elf_platform);
+
+	/* syscalls */
+EXPORT_SYMBOL(sys_write);
+EXPORT_SYMBOL(sys_read);
+EXPORT_SYMBOL(sys_lseek);
+EXPORT_SYMBOL(sys_open);
+EXPORT_SYMBOL(sys_exit);
+EXPORT_SYMBOL(sys_wait4);
+
+	/* semaphores */
+EXPORT_SYMBOL_NOVERS(__down_failed);
+EXPORT_SYMBOL_NOVERS(__down_interruptible_failed);
+EXPORT_SYMBOL_NOVERS(__up_wakeup);
+

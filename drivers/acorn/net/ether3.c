@@ -33,11 +33,12 @@
  *				packet starts two bytes from the end of the
  *				buffer, it corrupts the receiver chain, and
  *				never updates the transmit status correctly.
- * TODO:
- *  When we detect a fatal error on the interface, we should restart it.
+ * 1.14	RMK	07/01/1998	Added initial code for ETHERB addressing.
+ * 1.15	RMK	30/04/1999	More fixes to the transmit routine for buggy
+ *				hardware.
  */
 
-static char *version = "ether3 ethernet driver (c) 1995-1998 R.M.King v1.13\n";
+static char *version = "ether3 ethernet driver (c) 1995-1999 R.M.King v1.15\n";
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -66,7 +67,7 @@ static char *version = "ether3 ethernet driver (c) 1995-1998 R.M.King v1.13\n";
 #include "ether3.h"
 
 static unsigned int net_debug = NET_DEBUG;
-static const card_ids ether3_cids[] = {
+static const card_ids __init ether3_cids[] = {
 	{ MANU_ANT2, PROD_ANT_ETHER3 },
 	{ MANU_ANT,  PROD_ANT_ETHER3 },
 	{ MANU_ANT,  PROD_ANT_ETHERB }, /* trial - will etherb work? */
@@ -77,9 +78,6 @@ static void ether3_setmulticastlist(struct device *dev);
 static int  ether3_rx(struct device *dev, struct dev_priv *priv, unsigned int maxcnt);
 static void ether3_tx(struct device *dev, struct dev_priv *priv);
 
-extern int inswb(int reg, void *buffer, int len);
-extern int outswb(int reg, void *buffer, int len);
-
 #define BUS_16		2
 #define BUS_8		1
 #define BUS_UNKNOWN	0
@@ -88,7 +86,7 @@ extern int outswb(int reg, void *buffer, int len);
  * I'm not sure what address we should default to if the internal one
  * is corrupted...
  */
-unsigned char def_eth_addr[6] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05};
+unsigned char def_eth_addr[6] = {0x00, 'L', 'i', 'n', 'u', 'x'};
 
 /* --------------------------------------------------------------------------- */
 
@@ -99,6 +97,8 @@ typedef enum {
 
 /*
  * ether3 read/write.  Slow things down a bit...
+ * The SEEQ8005 doesn't like us writing to it's registers
+ * too quickly.
  */
 #define ether3_outb(v,r)	{ outb((v),(r)); udelay(1); }
 #define ether3_outw(v,r)	{ outw((v),(r)); udelay(1); }
@@ -138,7 +138,7 @@ ether3_setbuffer(struct device *dev, buffer_rw_t read, int start)
  * write data to the buffer memory
  */
 #define ether3_writebuffer(dev,data,length)			\
-	outswb(REG_BUFWIN, (data), (length))
+	outsw(REG_BUFWIN, (data), (length) >> 1)
 
 #define ether3_writeword(dev,data)				\
 	outw((data), REG_BUFWIN)
@@ -153,7 +153,7 @@ ether3_setbuffer(struct device *dev, buffer_rw_t read, int start)
  * read data from the buffer memory
  */
 #define ether3_readbuffer(dev,data,length)			\
-	inswb(REG_BUFWIN, (data), (length))
+	insw(REG_BUFWIN, (data), (length) >> 1)
 
 #define ether3_readword(dev)					\
 	inw(REG_BUFWIN)
@@ -249,7 +249,7 @@ ether3_ramtest(struct device *dev, unsigned char byte))
 			}
 		} else {
 			if (bad != -1) {
-			    	if (bad != i - 1)
+				if (bad != i - 1)
 					printk(" - 0x%04X\n", i - 1);
 				printk("\n");
 				bad = -1;
@@ -335,7 +335,6 @@ ether3_init_for_open(struct device *dev)
 	for (i = 0; i < 6; i++)
 		ether3_outb(dev->dev_addr[i], REG_BUFWIN);
 
-	priv->tx_used	= 0;
 	priv->tx_head	= 0;
 	priv->tx_tail	= 0;
 	priv->regs.config2 |= CFG2_CTRLO;
@@ -471,6 +470,25 @@ failed:
 	return error;
 }
 
+__initfunc(static void
+ether3_get_dev(struct device *dev, struct expansion_card *ec))
+{
+	ecard_claim(ec);
+
+	dev->base_addr = ecard_address(ec, ECARD_MEMC, 0);
+	dev->irq = ec->irq;
+
+	if (ec->cid.manufacturer == MANU_ANT &&
+	    ec->cid.product == PROD_ANT_ETHERB) {
+		dev->base_addr += 0x200;
+	}
+
+	ec->irqaddr = (volatile unsigned char *)ioaddr(dev->base_addr);
+	ec->irqmask = 0xf0;
+
+	ether3_addr(dev->dev_addr, ec);
+}
+
 #ifndef MODULE
 __initfunc(int
 ether3_probe(struct device *dev))
@@ -485,12 +503,8 @@ ether3_probe(struct device *dev))
 	if ((ec = ecard_find(0, ether3_cids)) == NULL)
 		return ENODEV;
 
-	dev->base_addr = ecard_address(ec, ECARD_MEMC, 0);
-	dev->irq = ec->irq;
+	ether3_get_dev(dev, ec);
 
-	ecard_claim(ec);
-
-	ether3_addr(dev->dev_addr, ec);
 	return ether3_probe1(dev);
 }
 #endif
@@ -581,33 +595,6 @@ static void ether3_setmulticastlist(struct device *dev)
 }
 
 /*
- * Allocate memory in transmitter ring buffer.
- */
-static int
-ether3_alloc_tx(struct dev_priv *priv, int length, int alloc)
-{
-	int start, head, tail;
-
-	tail = priv->tx_tail;
-	start = priv->tx_head;
-	head = start + length + 4;
-
-	if (head >= TX_END) {
-		if (tail > priv->tx_head)
-			return -1;
-		head -= TX_END - TX_START;
-		if (tail < head)
-			return -1;
-	} else if (start < tail && tail < head)
-		return -1;
-
-	if (alloc)
-		priv->tx_head = head;
-
-	return start;
-}
-
-/*
  * Transmit a packet
  */
 static int
@@ -622,7 +609,7 @@ retry:
 		if (!test_and_set_bit(0, (void *)&dev->tbusy)) {
 			unsigned long flags;
 			unsigned int length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
-			int ptr;
+			unsigned int ptr, next_ptr;
 
 			length = (length + 1) & ~1;
 
@@ -633,23 +620,31 @@ retry:
 				return 0;
 			}
 
+			next_ptr = (priv->tx_head + 1) & 15;
+
 			save_flags_cli(flags);
 
-			ptr = ether3_alloc_tx(priv, length, 1);
-			if (ptr == -1)
+			if (priv->tx_tail == next_ptr) {
+				restore_flags(flags);
 				return 1;	/* unable to queue */
+			}
+
+			dev->trans_start = jiffies;
+			ptr		 = 0x600 * priv->tx_head;
+			priv->tx_head	 = next_ptr;
+			next_ptr	*= 0x600;
 
 #define TXHDR_FLAGS (TXHDR_TRANSMIT|TXHDR_CHAINCONTINUE|TXHDR_DATAFOLLOWS|TXHDR_ENSUCCESS)
 
-			ether3_setbuffer(dev, buffer_write, priv->tx_head);
+			ether3_setbuffer(dev, buffer_write, next_ptr);
 			ether3_writelong(dev, 0);
-
 			ether3_setbuffer(dev, buffer_write, ptr);
 			ether3_writelong(dev, 0);
 			ether3_writebuffer(dev, skb->data, length);
-
+			ether3_writeword(dev, htons(next_ptr));
+			ether3_writeword(dev, TXHDR_CHAINCONTINUE >> 16);
 			ether3_setbuffer(dev, buffer_write, ptr);
-			ether3_writeword(dev, htons(priv->tx_head));
+			ether3_writeword(dev, htons((ptr + length + 4)));
 			ether3_writeword(dev, TXHDR_FLAGS >> 16);
 			ether3_ledon(dev, priv);
 
@@ -658,10 +653,9 @@ retry:
 				ether3_outw(priv->regs.command | CMD_TXON, REG_COMMAND);
 			}
 
-			if (ether3_alloc_tx(priv, 2044, 0) != -1)
+			next_ptr = (priv->tx_head + 1) & 15;
+			if (priv->tx_tail != next_ptr)
 				dev->tbusy = 0;
-
-			dev->trans_start = jiffies;
 
 			restore_flags(flags);
 
@@ -689,7 +683,7 @@ retry:
 			ether3_inw(REG_STATUS), ether3_inw(REG_CONFIG1), ether3_inw(REG_CONFIG2));
 		printk(KERN_ERR "%s: { rpr=%04X rea=%04X tpr=%04X }\n", dev->name,
 			ether3_inw(REG_RECVPTR), ether3_inw(REG_RECVEND), ether3_inw(REG_TRANSMITPTR));
-		printk(KERN_ERR "%s: tx head=%04X tx tail=%04X\n", dev->name,
+		printk(KERN_ERR "%s: tx head=%X tx tail=%X\n", dev->name,
 			priv->tx_head, priv->tx_tail);
 		ether3_setbuffer(dev, buffer_read, priv->tx_tail);
 		printk(KERN_ERR "%s: packet status = %08X\n", dev->name, ether3_readlong(dev));
@@ -698,8 +692,9 @@ retry:
 		dev->tbusy = 0;
 		priv->regs.config2 |= CFG2_CTRLO;
 		priv->stats.tx_errors += 1;
-		ether3_outw(priv->regs.config2 , REG_CONFIG2);
+		ether3_outw(priv->regs.config2, REG_CONFIG2);
 		dev->trans_start = jiffies;
+		priv->tx_head = priv->tx_tail = 0;
 		goto retry;
 	}
 }
@@ -867,6 +862,7 @@ static void
 ether3_tx(struct device *dev, struct dev_priv *priv)
 {
 	unsigned int tx_tail = priv->tx_tail;
+	int max_work = 14;
 
 	do {
 	    	unsigned long status;
@@ -874,7 +870,7 @@ ether3_tx(struct device *dev, struct dev_priv *priv)
     		/*
 	    	 * Read the packet header
     		 */
-	    	ether3_setbuffer(dev, buffer_read, tx_tail);
+	    	ether3_setbuffer(dev, buffer_read, tx_tail * 0x600);
     		status = ether3_readlong(dev);
 
 		/*
@@ -895,95 +891,72 @@ ether3_tx(struct device *dev, struct dev_priv *priv)
 			if (status & TXSTAT_BABBLED) priv->stats.tx_fifo_errors ++;
 		}
 
-		tx_tail = htons(status & TX_NEXT);
-		if (tx_tail < TX_START || tx_tail >= TX_END) {
-			printk("%s: transmit error: next pointer = %04X\n", dev->name, tx_tail);
-			tx_tail = TX_START;
-			priv->tx_head = TX_START;
-			priv->tx_tail = TX_END;
-		}
-	} while (1);
+		tx_tail = (tx_tail + 1) & 15;
+	} while (--max_work);
 
 	if (priv->tx_tail != tx_tail) {
 		priv->tx_tail = tx_tail;
-		if (priv->tx_used <= MAX_TX_BUFFERED) {
-			dev->tbusy = 0;
-			mark_bh(NET_BH);	/* Inform upper layers. */
-		}
+		dev->tbusy = 0;
+		mark_bh(NET_BH);	/* Inform upper layers. */
 	}
 }
 
 #ifdef MODULE
 
-char ethernames[MAX_ECARDS][9];
-
-static struct device *my_ethers[MAX_ECARDS];
-static struct expansion_card *ec[MAX_ECARDS];
+static struct ether_dev {
+	struct expansion_card	*ec;
+	char			name[9];
+	struct device		dev;
+} ether_devs[MAX_ECARDS];
 
 int
 init_module(void)
 {
-	int i;
+	struct expansion_card *ec;
+	int i, ret = -ENODEV;
 
-	for(i = 0; i < MAX_ECARDS; i++) {
-		my_ethers[i] = NULL;
-		ec[i] = NULL;
-		strcpy(ethernames[i], "        ");
-	}
+	memset(ether_devs, 0, sizeof(ether_devs));
 
+	ecard_startfind ();
+	ec = ecard_find(0, ether3_cids);
 	i = 0;
 
-	ecard_startfind();
+	while (ec && i < MAX_ECARDS) {
+		ecard_claim(ec);
 
-	do {
-		if ((ec[i] = ecard_find(0, ether3_cids)) == NULL)
-			break;
+		ether_devs[i].ec	    = ec;
+		ether_devs[i].dev.init	    = ether3_probe1;
+		ether_devs[i].dev.name	    = ether_devs[i].name;
+		ether3_get_dev(&ether_devs[i].dev, ec);
 
-		my_ethers[i] = (struct device *)kmalloc(sizeof(struct device), GFP_KERNEL);
-		memset(my_ethers[i], 0, sizeof(struct device));
+		ret = register_netdev(&ether_devs[i].dev);
 
-		my_ethers[i]->irq = ec[i]->irq;
-		my_ethers[i]->base_addr= ecard_address(ec[i], ECARD_MEMC, 0);
-		my_ethers[i]->init = ether3_probe1;
-		my_ethers[i]->name = ethernames[i];
+		if (ret) {
+			ecard_release(ec);
+			ether_devs[i].ec = NULL;
+		} else
+			i += 1;
 
-		ether3_addr(my_ethers[i]->dev_addr, ec[i]);
-
-		ecard_claim(ec[i]);
-
-		if(register_netdev(my_ethers[i]) != 0) {
-			for (i = 0; i < 4; i++) {
-				if(my_ethers[i]) {
-					kfree(my_ethers[i]);
-					my_ethers[i] = NULL;
-				}
-				if(ec[i]) {
-					ecard_release(ec[i]);
-					ec[i] = NULL;
-				}
-			}
-			return -EIO;
-		}
-		i++;
+		ec = ecard_find(0, ether3_cids);
 	}
-	while(i < MAX_ECARDS);
 
-	return i != 0 ? 0 : -ENODEV;
+	return i != 0 ? 0 : ret;
 }
 
 void
 cleanup_module(void)
 {
 	int i;
+
 	for (i = 0; i < MAX_ECARDS; i++) {
-		if (my_ethers[i]) {
-		  	release_region(my_ethers[i]->base_addr, 128);
-			unregister_netdev(my_ethers[i]);
-			my_ethers[i] = NULL;
-		}
-		if (ec[i]) {
-			ecard_release(ec[i]);
-			ec[i] = NULL;
+		if (ether_devs[i].ec) {
+			unregister_netdev(&ether_devs[i].dev);
+
+			release_region(ether_devs[i].dev.base_addr, 128);
+
+			ecard_release(ether_devs[i].ec);
+
+			ether_devs[i].ec = NULL;
 		}
 	}
 }

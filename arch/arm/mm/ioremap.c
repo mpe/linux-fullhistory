@@ -115,19 +115,19 @@ void * __ioremap(unsigned long phys_addr, unsigned long size, unsigned long flag
 {
 	void * addr;
 	struct vm_struct * area;
-	unsigned long offset;
+	unsigned long offset, last_addr;
+
+	/* Don't allow wraparound or zero size */
+	last_addr = phys_addr + size - 1;
+	if (!size || last_addr < phys_addr)
+		return NULL;
 
 	/*
 	 * Mappings have to be page-aligned
 	 */
 	offset = phys_addr & ~PAGE_MASK;
-	size = PAGE_ALIGN(size + offset);
-
-	/*
-	 * Don't allow mappings that wrap..
-	 */
-	if (!size || size > phys_addr + size)
-		return NULL;
+	phys_addr &= PAGE_MASK;
+	size = PAGE_ALIGN(last_addr) - phys_addr;
 
 	/*
 	 * Ok, go for it..

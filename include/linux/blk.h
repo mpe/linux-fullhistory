@@ -342,6 +342,15 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
 
+#elif (MAJOR_NR == MFM_ACORN_MAJOR)
+
+#define DEVICE_NAME "mfm disk"
+#define DEVICE_INTR do_mfm
+#define DEVICE_REQUEST do_mfm_request
+#define DEVICE_NR(device) (MINOR(device) >> 6)
+#define DEVICE_ON(device)
+#define DEVICE_OFF(device)
+
 #elif (MAJOR_NR == NBD_MAJOR)
 
 #define DEVICE_NAME "nbd"

@@ -83,45 +83,25 @@ int msgqueue_msglength(MsgQueue_t *msgq)
 	int length = 0;
 
 	for (mq = msgq->qe; mq; mq = mq->next)
-		length += mq->length;
+		length += mq->msg.length;
 
 	return length;
 }
 
 /*
- * Function: char *msgqueue_getnextmsg(MsgQueue_t *msgq, int *length)
- * Purpose : return a message & its length
+ * Function: struct message *msgqueue_getmsg(MsgQueue_t *msgq, int msgno)
+ * Purpose : return a message
  * Params  : msgq   - queue to obtain message from
- *	     length - pointer to int for message length
+ *	   : msgno  - message number
  * Returns : pointer to message string, or NULL
  */
-char *msgqueue_getnextmsg(MsgQueue_t *msgq, int *length)
+struct message *msgqueue_getmsg(MsgQueue_t *msgq, int msgno)
 {
 	struct msgqueue_entry *mq;
 
-	if ((mq = msgq->qe) != NULL) {
-		msgq->qe = mq->next;
-		mqe_free(msgq, mq);
-		*length = mq->length;
-	}
+	for (mq = msgq->qe; mq && msgno; mq = mq->next, msgno--);
 
-	return mq ? mq->msg : NULL;
-}
-
-/*
- * Function: char *msgqueue_peeknextmsg(MsgQueue_t *msgq, int *length)
- * Purpose : return next message & length without removing it from the list
- * Params  : msgq   - queue to obtain message from
- *         : length - pointer to int for message length
- * Returns : pointer to message string, or NULL
- */
-char *msgqueue_peeknextmsg(MsgQueue_t *msgq, int *length)
-{
-	struct msgqueue_entry *mq = msgq->qe;
-
-	*length = mq ? mq->length : 0;
-
-	return mq ? mq->msg : NULL;
+	return mq ? &mq->msg : NULL;
 }
 
 /*
@@ -143,10 +123,11 @@ int msgqueue_addmsg(MsgQueue_t *msgq, int length, ...)
 
 		va_start(ap, length);
 		for (i = 0; i < length; i++)
-			mq->msg[i] = va_arg(ap, unsigned char);
+			mq->msg.msg[i] = va_arg(ap, unsigned char);
 		va_end(ap);
 
-		mq->length = length;
+		mq->msg.length = length;
+		mq->msg.fifo = 0;
 		mq->next = NULL;
 
 		mqp = &msgq->qe;
@@ -178,8 +159,7 @@ void msgqueue_flush(MsgQueue_t *msgq)
 EXPORT_SYMBOL(msgqueue_initialise);
 EXPORT_SYMBOL(msgqueue_free);
 EXPORT_SYMBOL(msgqueue_msglength);
-EXPORT_SYMBOL(msgqueue_getnextmsg);
-EXPORT_SYMBOL(msgqueue_peeknextmsg);
+EXPORT_SYMBOL(msgqueue_getmsg);
 EXPORT_SYMBOL(msgqueue_addmsg);
 EXPORT_SYMBOL(msgqueue_flush);
 

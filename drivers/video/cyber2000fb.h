@@ -13,19 +13,19 @@
 #define cyber2000_inw(reg)	(*(unsigned short *)&CyberRegs[reg])
 #define cyber2000_inl(reg)	(*(unsigned long *)&CyberRegs[reg])
 
-static inline void cyber2000_crtcw(int val, int reg)
+static inline void cyber2000_crtcw(int reg, int val)
 {
 	cyber2000_outb(reg, 0x3d4);
 	cyber2000_outb(val, 0x3d5);
 }
 
-static inline void cyber2000_grphw(int val, int reg)
+static inline void cyber2000_grphw(int reg, int val)
 {
 	cyber2000_outb(reg, 0x3ce);
 	cyber2000_outb(val, 0x3cf);
 }
 
-static inline void cyber2000_attrw(int val, int reg)
+static inline void cyber2000_attrw(int reg, int val)
 {
 	cyber2000_inb(0x3da);
 	cyber2000_outb(reg, 0x3c0);
@@ -33,7 +33,7 @@ static inline void cyber2000_attrw(int val, int reg)
 	cyber2000_outb(val, 0x3c0);
 }
 
-static inline void cyber2000_seqw(int val, int reg)
+static inline void cyber2000_seqw(int reg, int val)
 {
 	cyber2000_outb(reg, 0x3c4);
 	cyber2000_outb(val, 0x3c5);

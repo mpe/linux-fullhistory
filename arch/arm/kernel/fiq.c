@@ -2,6 +2,8 @@
  *  linux/arch/arm/kernel/fiq.c
  *
  *  Copyright (C) 1998 Russell King
+ *  Copyright (C) 1998, 1999 Phil Blundell
+ *
  *  FIQ support written by Philip Blundell <philb@gnu.org>, 1998.
  *
  *  FIQ support re-written by Russell King to be more generic
@@ -78,7 +80,7 @@ int fiq_def_op(void *ref, int relinquish)
 		unprotect_page_0();
 		*(unsigned long *)FIQ_VECTOR = no_fiq_insn;
 		protect_page_0();
-		__flush_entry_to_ram(FIQ_VECTOR);
+		flush_icache_range(FIQ_VECTOR, FIQ_VECTOR + 4);
 	}
 
 	return 0;
@@ -106,28 +108,77 @@ void set_fiq_handler(void *start, unsigned int length)
 	memcpy((void *)FIQ_VECTOR, start, length);
 
 	protect_page_0();
-#ifdef CONFIG_CPU_32
-	processor.u.armv3v4._flush_cache_area(FIQ_VECTOR, FIQ_VECTOR + length, 1);
-#endif
+	flush_icache_range(FIQ_VECTOR, FIQ_VECTOR + length);
 }
 
+/*
+ * Taking an interrupt in FIQ mode is death, so both these functions
+ * disable irqs for the duration. 
+ */
 void set_fiq_regs(struct pt_regs *regs)
 {
-	/* not yet -
-	 * this is temporary to get the floppy working
-	 * again on RiscPC.  It *will* become more
-	 * generic.
-	 */
-#ifdef CONFIG_ARCH_ACORN
-	extern void floppy_fiqsetup(unsigned long len, unsigned long addr,
-					     unsigned long port);
-	floppy_fiqsetup(regs->ARM_r9, regs->ARM_r10, regs->ARM_fp);
+	register unsigned long tmp, tmp2;
+	__asm__ volatile (
+#ifdef CONFIG_CPU_26
+	"mov	%0, pc
+	bic	%1, %0, #0x3
+	orr	%1, %1, #0x0c000001
+	teqp	%1, #0		@ select FIQ mode
+	mov	r0, r0
+	ldmia	%2, {r8 - r14}
+	teqp	%0, #0		@ return to SVC mode
+	mov	r0, r0"
 #endif
+#ifdef CONFIG_CPU_32
+	"mrs	%0, cpsr
+	bic	%1, %0, #0xf
+	orr	%1, %1, #0xc1
+	msr	cpsr, %1	@ select FIQ mode
+	mov	r0, r0
+	ldmia	%2, {r8 - r14}
+	msr	cpsr, %0	@ return to SVC mode
+	mov	r0, r0"
+#endif
+	: "=r" (tmp), "=r" (tmp2)
+	: "r" (&regs->ARM_r8)
+	/* These registers aren't modified by the above code in a way
+	   visible to the compiler, but we mark them as clobbers anyway
+	   so that GCC won't put any of the input or output operands in
+	   them.  */
+	: "r8", "r9", "r10", "r11", "r12", "r13", "r14");
 }
 
 void get_fiq_regs(struct pt_regs *regs)
 {
-	/* not yet */
+	register unsigned long tmp, tmp2;
+	__asm__ volatile (
+#ifdef CONFIG_CPU_26
+	"mov	%0, pc
+	bic	%1, %0, #0x3
+	orr	%1, %1, #0x0c000001
+	teqp	%1, #0		@ select FIQ mode
+	mov	r0, r0
+	stmia	%2, {r8 - r14}
+	teqp	%0, #0		@ return to SVC mode
+	mov	r0, r0"
+#endif
+#ifdef CONFIG_CPU_32
+	"mrs	%0, cpsr
+	bic	%1, %0, #0xf
+	orr	%1, %1, #0xc1
+	msr	cpsr, %1	@ select FIQ mode
+	mov	r0, r0
+	stmia	%2, {r8 - r14}
+	msr	cpsr, %0	@ return to SVC mode
+	mov	r0, r0"
+#endif
+	: "=r" (tmp), "=r" (tmp2)
+	: "r" (&regs->ARM_r8)
+	/* These registers aren't modified by the above code in a way
+	   visible to the compiler, but we mark them as clobbers anyway
+	   so that GCC won't put any of the input or output operands in
+	   them.  */
+	: "r8", "r9", "r10", "r11", "r12", "r13", "r14");
 }
 
 int claim_fiq(struct fiq_handler *f)

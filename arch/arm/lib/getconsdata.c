@@ -67,6 +67,23 @@ unsigned long PAGE_OLD = _PAGE_OLD;
 unsigned long PAGE_CLEAN = _PAGE_CLEAN;
 #endif
 
+#ifdef PTE_TYPE_SMALL
+unsigned long HPTE_TYPE_SMALL = PTE_TYPE_SMALL;
+unsigned long HPTE_AP_READ    = PTE_AP_READ;
+unsigned long HPTE_AP_WRITE   = PTE_AP_WRITE;
+#endif
+
+#ifdef L_PTE_PRESENT
+unsigned long LPTE_PRESENT    = L_PTE_PRESENT;
+unsigned long LPTE_YOUNG      = L_PTE_YOUNG;
+unsigned long LPTE_BUFFERABLE = L_PTE_BUFFERABLE;
+unsigned long LPTE_CACHEABLE  = L_PTE_CACHEABLE;
+unsigned long LPTE_USER       = L_PTE_USER;
+unsigned long LPTE_WRITE      = L_PTE_WRITE;
+unsigned long LPTE_EXEC       = L_PTE_EXEC;
+unsigned long LPTE_DIRTY      = L_PTE_DIRTY;
+#endif
+
 unsigned long KSWI_BASE = 0x900000;
 unsigned long KSWI_SYS_BASE = 0x9f0000;
 unsigned long SYS_ERROR0 = 0x9f0000;

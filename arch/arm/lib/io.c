@@ -18,7 +18,7 @@ void _memcpy_fromio(void * to, unsigned long from, unsigned long count)
  * Copy data from "real" memory space to IO memory space.
  * This needs to be optimized.
  */
-void _memcpy_toio(unsigned long to, void * from, unsigned long count)
+void _memcpy_toio(unsigned long to, const void * from, unsigned long count)
 {
 	while (count) {
 		count--;

@@ -4,6 +4,7 @@
  * (c) David Alan Gilbert 1995/1996
  */
 #include <linux/kernel.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 #include <asm/hardware.h>
@@ -40,7 +41,7 @@ void oldlatch_bupdate(unsigned char mask,unsigned char newdata)
 }
 #endif
 
-void oldlatch_init(void)
+void __init oldlatch_init(void)
 {
     printk("oldlatch: init\n");
 #ifdef LATCHAADDR

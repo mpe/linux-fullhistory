@@ -123,6 +123,7 @@
 #include <asm/dma.h>
 #include <asm/hardware.h>
 #include <asm/ecard.h>
+#include <asm/ioc.h>
 
 /*
  * This sort of stuff should be in a header file shared with ide.c, hd.c, xd.c etc
@@ -261,7 +262,9 @@ static struct cont {
 	void (*done) (int st);	/* done handler */
 } *cont = NULL;
 
+#if 0
 static struct tq_struct mfm_tq = {0, 0, (void (*)(void *)) NULL, 0};
+#endif
 
 int number_mfm_drives = 1;
 

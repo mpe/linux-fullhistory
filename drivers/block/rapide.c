@@ -12,10 +12,9 @@
 #include <linux/malloc.h>
 #include <linux/blkdev.h>
 #include <linux/errno.h>
-#include <asm/ecard.h>
-#include <asm/ide.h>
+#include <linux/ide.h>
 
-#include "../../block/ide.h"
+#include <asm/ecard.h>
 
 static const card_ids rapide_cids[] = {
 	{ MANU_YELLOWSTONE, PROD_YELLOWSTONE_RAPIDE32 },
@@ -28,14 +27,20 @@ static int result[MAX_ECARDS];
 static inline int rapide_register(struct expansion_card *ec)
 {
 	unsigned long port = ecard_address (ec, ECARD_MEMC, 0);
-	ide_ioregspec_t spec;
+	hw_regs_t hw;
 
-	spec.base = port;
-	spec.ctrl = port + 0x206;
-	spec.offset = 1 << 4;
-	spec.irq = ec->irq;
+	int i;
 
-	return ide_register_port(&spec);
+	memset(&hw, 0, sizeof(hw));
+
+	for (i = IDE_DATA_OFFSET; i <= IDE_STATUS_OFFSET; i++) {
+		hw.io_ports[i] = (ide_ioreg_t)port;
+		port += 1 << 4;
+	}
+	hw.io_ports[IDE_CONTROL_OFFSET] = port + 0x206;
+	hw.irq = ec->irq;
+
+	return ide_register_hw(&hw, NULL);
 }
 
 int rapide_init(void)

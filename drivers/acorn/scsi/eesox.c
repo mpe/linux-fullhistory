@@ -38,9 +38,6 @@
 #include "../../scsi/hosts.h"
 #include "eesox.h"
 
-#define NO_IRQ	255
-#define NO_DMA	255
-
 /* Configuration */
 #define EESOX_XTALFREQ		40
 #define EESOX_ASYNC_PERIOD	200
@@ -122,6 +119,8 @@ eesoxscsi_irqdisable(struct expansion_card *ec, int irqnr)
 static const expansioncard_ops_t eesoxscsi_ops = {
 	eesoxscsi_irqenable,
 	eesoxscsi_irqdisable,
+	NULL,
+	NULL,
 	NULL,
 	NULL
 };
@@ -379,6 +378,7 @@ eesoxscsi_detect(Scsi_Host_Template *tpnt)
 		info->info.ifcfg.sync_max_depth	= EESOX_SYNC_DEPTH;
 		info->info.ifcfg.cntl3		= CNTL3_BS8 | CNTL3_FASTSCSI | CNTL3_FASTCLK;
 		info->info.ifcfg.disconnect_ok	= 1;
+		info->info.ifcfg.wide_max_size	= 0;
 		info->info.dma.setup		= eesoxscsi_dma_setup;
 		info->info.dma.pseudo		= eesoxscsi_dma_pseudo;
 		info->info.dma.stop		= eesoxscsi_dma_stop;

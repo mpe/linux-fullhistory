@@ -21,7 +21,6 @@
 #include <linux/init.h>
 
 #include <asm/page.h>
-#include <asm/pgtable.h>
 #include <asm/irq.h>
 #include <asm/hardware.h>
 #include <asm/io.h>
@@ -201,6 +200,12 @@ void disable_dma (dmach_t channel)
 		printk (KERN_ERR "Trying to disable free DMA%d\n", channel);
 }
 
+void set_dma_speed(dmach_t channel, int cycle_ns)
+{
+	dma_chan[channel].speed =
+	   arch_set_dma_speed(channel, &dma_chan[channel], cycle_ns);
+}
+
 int get_dma_residue(dmach_t channel)
 {
 	return arch_get_dma_residue(channel, &dma_chan[channel]);
@@ -214,6 +219,7 @@ EXPORT_SYMBOL(set_dma_count);
 EXPORT_SYMBOL(set_dma_mode);
 EXPORT_SYMBOL(get_dma_residue);
 EXPORT_SYMBOL(set_dma_sg);
+EXPORT_SYMBOL(set_dma_speed);
 
 __initfunc(void init_dma(void))
 {

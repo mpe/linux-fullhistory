@@ -119,6 +119,10 @@ extern void set_dma_count(dmach_t channel, unsigned long count);
  */
 extern void set_dma_mode(dmach_t channel, dmamode_t mode);
 
+/* Set the transfer speed for this channel
+ */
+extern void set_dma_speed(dmach_t channel, int cycle_ns);
+
 /* Get DMA residue count. After a DMA transfer, this
  * should return zero. Reading this while a DMA transfer is
  * still in progress will return unpredictable results.

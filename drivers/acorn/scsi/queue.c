@@ -55,6 +55,7 @@ int queue_initialise (Queue_t *queue)
 			q->magic = QUEUE_MAGIC_FREE;
 			q->SCpnt = NULL;
 		}
+		q -= 1;
 		q->next = NULL;
 	}
 

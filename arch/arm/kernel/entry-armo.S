@@ -159,8 +159,8 @@ irq_prio_h:	.byte	 0, 8, 9, 8,10,10,10,10,11,11,11,11,10,10,10,10
 		.macro	restore_user_regs
 		ldmia	sp, {r0 - lr}^
 		mov	r0, r0
-		add	sp, sp, #15*4
-		ldr	lr, [sp], #8
+		ldr	lr, [sp, #15*4]
+		add	sp, sp, #15*4+8
 		movs	pc, lr
 		.endm
 
@@ -226,13 +226,6 @@ irq_prio_h:	.byte	 0, 8, 9, 8,10,10,10,10,11,11,11,11,10,10,10,10
 		str	r0, [sp, #S_OLD_R0]	;\
 		mov	fp, #0
 
-#define USER_RESTORE_ALL			\
-		ldmia	sp, {r0 - lr}^		;\
-		mov	r0, r0			;\
-		add	sp, sp, #15*4		;\
-		ldr	lr, [sp], #8		;\
-		movs	pc, lr
-
 #define SVC_RESTORE_ALL				\
 		ldmfd	sp, {r0 - pc}^
 		
@@ -253,7 +246,7 @@ _unexp_fiq:	ldr	sp, .LCfiq
 		mov	r0, r0
 		movs	pc, lr
 
-Lfiqmsg:	.ascii	"*** Unexpeced FIQ\n\0"
+Lfiqmsg:	.ascii	"*** Unexpected FIQ\n\0"
 		.align
 
 .LCfiq:		.word	__temp_fiq
@@ -315,14 +308,14 @@ fpe_not_present:
 		and	r4, r10, #255			@ get offset
 		and	r6, r10, #0x000f0000
 		tst	r10, #0x00800000		@ +/-
-		rsbeq	r4, r4, #0
 		ldr	r5, [sp, r6, lsr #14]		@ Load reg
+		rsbeq	r4, r4, #0
 		add	r5, r5, r4, lsl #2
 		str	r5, [sp, r6, lsr #14]		@ Save reg
 		b	ret_from_exception
 
-wfs_mask_data:	.word	0x0e200110			@ WFS
-		.word	0x0fff0fff
+wfs_mask_data:	.word	0x0e200110			@ WFS/RFS
+		.word	0x0fef0fff
 		.word	0x0d0d0100			@ LDF [sp]/STF [sp]
 		.word	0x0d0b0100			@ LDF [fp]/STF [fp]
 		.word	0x0f0f0f00
@@ -341,8 +334,7 @@ vector_prefetch:
 		save_user_regs
 		teqp	pc, #0x00000003		@ NOT a problem - doesnt change mode
 		mask_pc	r0, lr			@ Address of abort
-		mov	r1, #FAULT_CODE_PREFETCH|FAULT_CODE_USER @ Error code
-		mov	r2, sp			@ Tasks registers
+		mov	r1, sp			@ Tasks registers
 		bl	SYMBOL_NAME(do_PrefetchAbort)
 		teq	r0, #0			@ If non-zero, we believe this abort..
 		bne	ret_from_sys_call
@@ -451,6 +443,7 @@ vector_IRQ:	ldr	r13, .LCirq			@ I will leave this one in just in case...
 		adr	lr, 1b
 		orr	lr, lr, #0x08000003		@ Force SVC
 		bne	do_IRQ
+		mov	r4, #0
 		b	ret_with_reschedule
 
 		irq_prio_table
@@ -562,8 +555,8 @@ Ldata_ldrstr_numindex:
 		and	r0, r0, #15 << 2	@ Mask out reg.
 		teq	r0, #15 << 2
 		ldr	r0, [r3, r0]		@ Get register
-		biceq	r0, r0, #PCMASK
 		mov	r1, r4, lsl #20
+		biceq	r0, r0, #PCMASK
 		tst	r4, #1 << 23
 		addne	r0, r0, r1, lsr #20
 		subeq	r0, r0, r1, lsr #20
@@ -578,12 +571,12 @@ Ldata_ldrstr_regindex:
 		and	r0, r0, #15 << 2	@ Mask out reg.
 		teq	r0, #15 << 2
 		ldr	r0, [r3, r0]		@ Get register
-		biceq	r0, r0, #PCMASK
 		and	r7, r4, #15
+		biceq	r0, r0, #PCMASK
 		teq	r7, #15			@ Check for PC
 		ldr	r7, [r3, r7, lsl #2]	@ Get Rm
-		biceq	r7, r7, #PCMASK
 		and	r8, r4, #0x60		@ Get shift types
+		biceq	r7, r7, #PCMASK
 		mov	r9, r4, lsr #7		@ Get shift amount
 		and	r9, r9, #31
 		teq	r8, #0
@@ -645,8 +638,8 @@ Ldata_ldcstc_pre:
 		and	r0, r0, #15 << 2	@ Mask out reg.
 		teq	r0, #15 << 2
 		ldr	r0, [r3, r0]		@ Get register
-		biceq	r0, r0, #PCMASK
 		mov	r1, r4, lsl #24		@ Get offset
+		biceq	r0, r0, #PCMASK
 		tst	r4, #1 << 23
 		addne	r0, r0, r1, lsr #24
 		subeq	r0, r0, r1, lsr #24
@@ -656,9 +649,54 @@ Ldata_ldcstc_pre:
 #endif
 		b	SYMBOL_NAME(do_DataAbort)
 
+/*
+ *=============================================================================
+ *		Low-level interface code
+ *-----------------------------------------------------------------------------
+ *		Trap initialisation
+ *-----------------------------------------------------------------------------
+ *
+ * Note - FIQ code has changed.  The default is a couple of words in 0x1c, 0x20
+ * that call _unexp_fiq.  Nowever, we now copy the FIQ routine to 0x1c (removes
+ * some excess cycles).
+ *
+ * What we need to put into 0-0x1c are branches to branch to the kernel.
+ */
+
+		.section ".text.init",#alloc,#execinstr
+
+.Ljump_addresses:
+		swi	SYS_ERROR0
+		.word	vector_undefinstr	- 12
+		.word	vector_swi		- 16
+		.word	vector_prefetch		- 20
+		.word	vector_data		- 24
+		.word	vector_addrexcptn	- 28
+		.word	vector_IRQ		- 32
+		.word	_unexp_fiq		- 36
+		b	. + 8
+/*
+ * initialise the trap system
+ */
+ENTRY(trap_init)
+		stmfd	sp!, {r4 - r7, lr}
+		adr	r1, .Ljump_addresses
+		ldmia	r1, {r1 - r7, ip, lr}
+		orr	r2, lr, r2, lsr #2
+		orr	r3, lr, r3, lsr #2
+		orr	r4, lr, r4, lsr #2
+		orr	r5, lr, r5, lsr #2
+		orr	r6, lr, r6, lsr #2
+		orr	r7, lr, r7, lsr #2
+		orr	ip, lr, ip, lsr #2
+		mov	r0, #0
+		stmia	r0, {r1 - r7, ip}
+		ldmfd	sp!, {r4 - r7, pc}^
+
+		.text
+
 #include "entry-common.S"
 
-		.data
-
-__temp_irq:	.word	0				@ saved lr_irq
+		.bss
+__temp_irq:	.space	4				@ saved lr_irq
 __temp_fiq:	.space	128

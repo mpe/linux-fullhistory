@@ -11,10 +11,10 @@
 #include <linux/init.h>
 
 #include <asm/page.h>
-#include <asm/pgtable.h>
 #include <asm/dma.h>
 #include <asm/fiq.h>
 #include <asm/io.h>
+#include <asm/iomd.h>
 #include <asm/hardware.h>
 #include <asm/uaccess.h>
 
@@ -223,8 +223,9 @@ int arch_get_dma_residue(dmach_t channel, dma_t *dma)
 		break;
 
 	case DMA_VIRTUAL_FLOPPY: {
-		extern int floppy_fiqresidual(void);
-		residue = floppy_fiqresidual();
+		struct pt_regs regs;
+		get_fiq_regs(&regs);
+		return regs.ARM_r9;
 		}
 		break;
 	}
@@ -286,7 +287,6 @@ void arch_enable_dma(dmach_t channel, dma_t *dma)
 		set_fiq_handler(fiqhandler_start, fiqhandler_length);
 		set_fiq_regs(&regs);
 		enable_irq(dma->dma_irq);
-
 		}
 		break;
 
@@ -319,6 +319,46 @@ void arch_disable_dma(dmach_t channel, dma_t *dma)
 	}
 }
 
+int arch_set_dma_speed(dmach_t channel, dma_t *dma, int cycle)
+{
+	int tcr, speed;
+
+	if (cycle < 188)
+		speed = 3;
+	else if (cycle <= 250)
+		speed = 2;
+	else if (cycle < 438)
+		speed = 1;
+	else
+		speed = 0;
+
+	tcr = inb(IOMD_DMATCR);
+	speed &= 3;
+
+	switch (channel) {
+	case DMA_0:
+		tcr = (tcr & ~0x03) | speed;
+		break;
+
+	case DMA_1:
+		tcr = (tcr & ~0x0c) | (speed << 2);
+		break;
+
+	case DMA_2:
+		tcr = (tcr & ~0x30) | (speed << 4);
+		break;
+
+	case DMA_3:
+		tcr = (tcr & ~0xc0) | (speed << 6);
+		break;
+
+	default:
+		break;
+	}
+
+	outb(tcr, IOMD_DMATCR);
+}
+
 __initfunc(void arch_dma_init(dma_t *dma))
 {
 	outb(0, IOMD_IO0CR);
@@ -326,7 +366,7 @@ __initfunc(void arch_dma_init(dma_t *dma))
 	outb(0, IOMD_IO2CR);
 	outb(0, IOMD_IO3CR);
 
-//	outb(0xf0, IOMD_DMATCR);
+	outb(0xa0, IOMD_DMATCR);
 
 	dma[0].dma_base = ioaddr(IOMD_IO0CURA);
 	dma[0].dma_irq  = IRQ_DMA0;

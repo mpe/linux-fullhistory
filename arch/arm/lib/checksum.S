@@ -520,13 +520,13 @@ Ldst_aligned:	tst	r0, #3
 		LOADREGS(eqea,fp,{r4 - r8, fp, sp, pc})
 		ldr	r4, [r0], #4
 		tst	r2, #2
-		beq	Lexit
+		beq	Lexit_r4
 		adcs	r3, r3, r4, lsl #16
 		strb	r4, [r1], #1
 		mov	r4, r4, lsr #8
 		strb	r4, [r1], #1
 		mov	r4, r4, lsr #8
-		b	Lexit
+		b	Lexit_r4
 
 Ltoo_small:	teq	r2, #0
 		LOADREGS(eqea,fp,{r4 - r8, fp, sp, pc})
@@ -538,10 +538,12 @@ Ltoo_small:	teq	r2, #0
 		adds	r3, r3, ip
 		strb	ip, [r1], #1
 		strb	r8, [r1], #1
-Lexit:		tst	r2, #1
-Ltoo_small1:	ldrneb	ip, [r0], #1
-		strneb	ip, [r1], #1
-		adcnes	r3, r3, ip
+		tst	r2, #1
+Ltoo_small1:	ldrneb	r4, [r0], #1
+Lexit_r4:	tst	r2, #1
+		strneb	r4, [r1], #1
+		andne	r4, r4, #255
+		adcnes	r3, r3, r4
 		adcs	r0, r3, #0
 		LOADREGS(ea,fp,{r4 - r8, fp, sp, pc})
 
@@ -598,13 +600,13 @@ Lsrc_not_aligned:
 		adceq	r0, r3, #0
 		LOADREGS(eqea,fp,{r4 - r8, fp, sp, pc})
 		tst	r2, #2
-		beq	Lexit
+		beq	Lexit_r4
 		adcs	r3, r3, r4, lsl #16
 		strb	r4, [r1], #1
 		mov	r4, r4, lsr #8
 		strb	r4, [r1], #1
 		mov	r4, r4, lsr #8
-		b	Lexit
+		b	Lexit_r4
 
 Lsrc2_aligned:	mov	r4, r4, lsr #16
 		adds	r3, r3, #0
@@ -650,13 +652,13 @@ Lsrc2_aligned:	mov	r4, r4, lsr #16
 		adceq	r0, r3, #0
 		LOADREGS(eqea,fp,{r4 - r8, fp, sp, pc})
 		tst	r2, #2
-		beq	Lexit
+		beq	Lexit_r4
 		adcs	r3, r3, r4, lsl #16
 		strb	r4, [r1], #1
 		mov	r4, r4, lsr #8
 		strb	r4, [r1], #1
 		ldrb	r4, [r0], #1
-		b	Lexit
+		b	Lexit_r4
 
 Lsrc3_aligned:	mov	r4, r4, lsr #24
 		adds	r3, r3, #0
@@ -702,14 +704,14 @@ Lsrc3_aligned:	mov	r4, r4, lsr #24
 		adceq	r0, r3, #0
 		LOADREGS(eqea,fp,{r4 - r8, fp, sp, pc})
 		tst	r2, #2
-		beq	Lexit
+		beq	Lexit_r4
 		adcs	r3, r3, r4, lsl #16
 		strb	r4, [r1], #1
 		ldr	r4, [r0], #4
 		strb	r4, [r1], #1
 		adcs	r3, r3, r4, lsl #24
 		mov	r4, r4, lsr #8
-		b	Lexit
+		b	Lexit_r4
 
 ENTRY(__csum_ipv6_magic)
 		stmfd	sp!, {lr}

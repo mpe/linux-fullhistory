@@ -336,7 +336,7 @@ int invalidate_inodes(struct super_block * sb)
  *      dispose_list.
  */
 #define CAN_UNUSE(inode) \
-	(((inode)->i_count | (inode)->i_state) == 0)
+	(((inode)->i_count | (inode)->i_state | (inode)->i_nrpages) == 0)
 #define INODE(entry)	(list_entry(entry, struct inode, i_list))
 
 static int free_inodes(void)

@@ -24,9 +24,9 @@
  *  02-05-1998	RMK	Added extra checks in fas216_reset
  *  24-05-1998	RMK	Fixed synchronous transfers with period >= 200ns
  *  27-06-1998	RMK	Changed asm/delay.h to linux/delay.h
+ *  26-08-1998	RMK	Improved message support wrt MESSAGE_REJECT
  *
  * Todo:
- *  - tighten up the MESSAGE_REJECT support.
  *  - allow individual devices to enable sync xfers.
  */
 
@@ -57,7 +57,7 @@ MODULE_DESCRIPTION("Generic FAS216/NCR53C9x driver");
 
 #define VER_MAJOR	0
 #define VER_MINOR	0
-#define VER_PATCH	4
+#define VER_PATCH	5
 
 #define SCSI2_TAG
 
@@ -85,6 +85,8 @@ MODULE_DESCRIPTION("Generic FAS216/NCR53C9x driver");
  *  I was thinking that this was a good chip until I found this restriction ;(
  */
 #define SCSI2_SYNC
+
+#define SCSI2_WIDE
 
 #undef DEBUG_CONNECT
 #undef DEBUG_BUSSERVICE
@@ -132,8 +134,8 @@ static void fas216_dumpinfo(FAS216_Info *info)
 	printk("           SCp={ ptr=%p this_residual=%X buffer=%p buffers_residual=%X }\n",
 		info->scsi.SCp.ptr, info->scsi.SCp.this_residual,
 		info->scsi.SCp.buffer, info->scsi.SCp.buffers_residual);
-	printk("      msgs async_stp=%X last_message=%X disconnectable=%d aborting=%d }\n",
-		info->scsi.async_stp, info->scsi.last_message,
+	printk("      msgs async_stp=%X disconnectable=%d aborting=%d }\n",
+		info->scsi.async_stp,
 		info->scsi.disconnectable, info->scsi.aborting);
 	printk("    stats={ queues=%X removes=%X fins=%X reads=%X writes=%X miscs=%X\n"
 	       "            disconnects=%X aborts=%X resets=%X }\n",
@@ -144,10 +146,10 @@ static void fas216_dumpinfo(FAS216_Info *info)
 		info->ifcfg.clockrate, info->ifcfg.select_timeout,
 		info->ifcfg.asyncperiod, info->ifcfg.sync_max_depth);
 	for (i = 0; i < 8; i++) {
-		printk("    busyluns[%d]=%X dev[%d]={ disconnect_ok=%d stp=%X sof=%X negstate=%X }\n",
+		printk("    busyluns[%d]=%X dev[%d]={ disconnect_ok=%d stp=%X sof=%X sync_state=%X }\n",
 			i, info->busyluns[i], i,
 			info->device[i].disconnect_ok, info->device[i].stp,
-			info->device[i].sof, info->device[i].negstate);
+			info->device[i].sof, info->device[i].sync_state);
 	}
 	printk("    dma={ transfer_type=%X setup=%p pseudo=%p stop=%p }\n",
 		info->dma.transfer_type, info->dma.setup,
@@ -192,19 +194,19 @@ static const char *fas216_bus_phase(int stat)
 static const char *fas216_drv_phase(FAS216_Info *info)
 {
 	switch (info->scsi.phase) {
-	case PHASE_IDLE:	return "idle";
-	case PHASE_SELECTION:	return "selection";
-	case PHASE_MESSAGESENT:	return "message sent";
-	case PHASE_RECONNECTED:	return "reconnected";
-	case PHASE_DATAOUT:	return "data out";
-	case PHASE_DATAIN:	return "data in";
-	case PHASE_MSGOUT:	return "message out";
-	case PHASE_MSGIN:	return "message in";
-	case PHASE_AFTERMSGOUT:	return "after message out";
-	case PHASE_STATUS:	return "status";
-	case PHASE_DISCONNECT:	return "disconnect";
-	case PHASE_DONE:	return "done";
-	default:		return "???";
+	case PHASE_IDLE:		return "idle";
+	case PHASE_SELECTION:		return "selection";
+	case PHASE_COMMAND:		return "command";
+	case PHASE_RECONNECTED:		return "reconnected";
+	case PHASE_DATAOUT:		return "data out";
+	case PHASE_DATAIN:		return "data in";
+	case PHASE_MSGIN:		return "message in";
+	case PHASE_MSGIN_DISCONNECT:	return "disconnect";
+	case PHASE_MSGOUT_EXPECT:	return "expect message out";
+	case PHASE_MSGOUT:		return "message out";
+	case PHASE_STATUS:		return "status";
+	case PHASE_DONE:		return "done";
+	default:			return "???";
 	}
 }
 
@@ -262,6 +264,37 @@ static int fas216_clockrate(int clock)
 	return clock;
 }
 
+/* Function: unsigned short fas216_get_last_msg(FAS216_Info *info, int pos)
+ * Purpose : retrieve a last message from the list, using position in fifo
+ * Params  : info - interface to search
+ *         : pos  - current fifo position
+ */
+static inline unsigned short
+fas216_get_last_msg(FAS216_Info *info, int pos)
+{
+	unsigned short packed_msg = NOP;
+	struct message *msg;
+	int msgnr = 0;
+
+	while ((msg = msgqueue_getmsg(&info->scsi.msgs, msgnr++)) != NULL) {
+		if (pos >= msg->fifo)
+			break;
+	}
+
+	if (msg) {
+		if (msg->msg[0] == EXTENDED_MESSAGE)
+			packed_msg = EXTENDED_MESSAGE | msg->msg[2] << 8;
+		else
+			packed_msg = msg->msg[0];
+	}
+
+#ifdef DEBUG_MESSAGES
+	printk("Message: %04X found at position %02X\n",
+		packed_msg, pos);
+#endif
+	return packed_msg;
+}
+
 /* Function: int fas216_syncperiod(FAS216_Info *info, int ns)
  * Purpose : Calculate value to be loaded into the STP register
  *           for a given period in ns
@@ -303,6 +336,240 @@ fas216_set_sync(FAS216_Info *info, int target)
 		outb(info->scsi.cfg[2], REG_CNTL3(info));
 }
 
+/* Synchronous transfer support
+ *
+ * Note: The SCSI II r10 spec says (5.6.12):
+ *
+ *  (2)  Due to historical problems with early host adapters that could
+ *  not accept an SDTR message, some targets may not initiate synchronous
+ *  negotiation after a power cycle as required by this standard.  Host
+ *  adapters that support synchronous mode may avoid the ensuing failure
+ *  modes when the target is independently power cycled by initiating a
+ *  synchronous negotiation on each REQUEST SENSE and INQUIRY command.
+ *  This approach increases the SCSI bus overhead and is not recommended
+ *  for new implementations.  The correct method is to respond to an
+ *  SDTR message with a MESSAGE REJECT message if the either the
+ *  initiator or target devices does not support synchronous transfers
+ *  or does not want to negotiate for synchronous transfers at the time.
+ *  Using the correct method assures compatibility with wide data
+ *  transfers and future enhancements.
+ *
+ * We will always initiate a synchronous transfer negociation request on
+ * every INQUIRY or REQUEST SENSE message, unless the target itself has
+ * at some point performed a synchronous transfer negociation request, or
+ * we have synchronous transfers disabled for this device.
+ */
+
+/* Function: void fas216_handlesync(FAS216_Info *info, char *msg)
+ * Purpose : Handle a synchronous transfer message from the target
+ * Params  : info - state structure for interface
+ *         : msg  - message from target
+ */
+static void
+fas216_handlesync(FAS216_Info *info, char *msg)
+{
+	struct fas216_device *dev = &info->device[info->SCpnt->target];
+	enum { sync, async, none, reject } res = none;
+
+#ifdef SCSI2_SYNC
+	switch (msg[0]) {
+	case MESSAGE_REJECT:
+		/* Synchronous transfer request failed.
+		 * Note: SCSI II r10:
+		 *
+		 *  SCSI devices that are capable of synchronous
+		 *  data transfers shall not respond to an SDTR
+		 *  message with a MESSAGE REJECT message.
+		 *
+		 * Hence, if we get this condition, we disable
+		 * negociation for this device.
+		 */
+		if (dev->sync_state == neg_inprogress) {
+			dev->sync_state = neg_invalid;
+			res = async;
+		}
+		break;
+
+	case EXTENDED_MESSAGE:
+		switch (dev->sync_state) {
+		/* We don't accept synchronous transfer requests.
+		 * Respond with a MESSAGE_REJECT to prevent a
+		 * synchronous transfer agreement from being reached.
+		 */
+		case neg_invalid:
+			res = reject;
+			break;
+
+		/* We were not negociating a synchronous transfer,
+		 * but the device sent us a negociation request.
+		 * Honour the request by sending back a SDTR
+		 * message containing our capability, limited by
+		 * the targets capability.
+		 */
+		default:
+			outb(CMD_SETATN, REG_CMD(info));
+			if (msg[4] > info->ifcfg.sync_max_depth)
+				msg[4] = info->ifcfg.sync_max_depth;
+			if (msg[3] < 1000 / info->ifcfg.clockrate)
+				msg[3] = 1000 / info->ifcfg.clockrate;
+
+			msgqueue_flush(&info->scsi.msgs);
+			msgqueue_addmsg(&info->scsi.msgs, 5,
+					EXTENDED_MESSAGE, 3, EXTENDED_SDTR,
+					msg[3], msg[4]);
+			info->scsi.phase = PHASE_MSGOUT_EXPECT;
+
+			/* This is wrong.  The agreement is not in effect
+			 * until this message is accepted by the device
+			 */
+			dev->sync_state = neg_targcomplete;
+			res = sync;
+			break;
+
+		/* We initiated the synchronous transfer negociation,
+		 * and have successfully received a response from the
+		 * target.  The synchronous transfer agreement has been
+		 * reached.  Note: if the values returned are out of our
+		 * bounds, we must reject the message.
+		 */
+		case neg_inprogress:
+			res = reject;
+			if (msg[4] <= info->ifcfg.sync_max_depth &&
+			    msg[3] >= 1000 / info->ifcfg.clockrate) {
+				dev->sync_state = neg_complete;
+				res = sync;
+			}
+			break;
+		}
+	}
+#else
+	res = reject;
+#endif
+
+	switch (res) {
+	case sync:
+		dev->period = msg[3];
+		dev->sof    = msg[4];
+		dev->stp    = fas216_syncperiod(info, msg[3] * 4);
+		fas216_set_sync(info, info->SCpnt->target);
+		break;
+
+	case reject:
+		outb(CMD_SETATN, REG_CMD(info));
+		msgqueue_flush(&info->scsi.msgs);
+		msgqueue_addmsg(&info->scsi.msgs, 1, MESSAGE_REJECT);
+		info->scsi.phase = PHASE_MSGOUT_EXPECT;
+
+	case async:
+		dev->period = info->ifcfg.asyncperiod / 4;
+		dev->sof    = 0;
+		dev->stp    = info->scsi.async_stp;
+		fas216_set_sync(info, info->SCpnt->target);
+		break;
+
+	case none:
+		break;
+	}
+}
+
+/* Function: void fas216_handlewide(FAS216_Info *info, char *msg)
+ * Purpose : Handle a wide transfer message from the target
+ * Params  : info - state structure for interface
+ *         : msg  - message from target
+ */
+static void
+fas216_handlewide(FAS216_Info *info, char *msg)
+{
+	struct fas216_device *dev = &info->device[info->SCpnt->target];
+	enum { wide, bit8, none, reject } res = none;
+
+#ifdef SCSI2_WIDE
+	switch (msg[0]) {
+	case MESSAGE_REJECT:
+		/* Wide transfer request failed.
+		 * Note: SCSI II r10:
+		 *
+		 *  SCSI devices that are capable of wide
+		 *  data transfers shall not respond to a
+		 *  WDTR message with a MESSAGE REJECT message.
+		 *
+		 * Hence, if we get this condition, we never
+		 * reattempt negociation for this device.
+		 */
+		if (dev->wide_state == neg_inprogress) {
+			dev->wide_state = neg_invalid;
+			res = bit8;
+		}
+		break;
+
+	case EXTENDED_MESSAGE:
+		switch (dev->wide_state) {
+		/* We don't accept wide data transfer requests.
+		 * Respond with a MESSAGE REJECT to prevent a
+		 * wide data transfer agreement from being reached.
+		 */
+		case neg_invalid:
+			res = reject;
+			break;
+
+		/* We were not negociating a wide data transfer,
+		 * but the device sent is a negociation request.
+		 * Honour the request by sending back a WDTR
+		 * message containing our capability, limited by
+		 * the targets capability.
+		 */
+		default:
+			outb(CMD_SETATN, REG_CMD(info));
+			if (msg[3] > info->ifcfg.wide_max_size)
+				msg[3] = info->ifcfg.wide_max_size;
+
+			msgqueue_flush(&info->scsi.msgs);
+			msgqueue_addmsg(&info->scsi.msgs, 4,
+					EXTENDED_MESSAGE, 2, EXTENDED_WDTR,
+					msg[3]);
+			info->scsi.phase = PHASE_MSGOUT_EXPECT;
+			res = wide;
+			break;
+
+		/* We initiated the wide data transfer negociation,
+		 * and have successfully received a response from the
+		 * target.  The synchronous transfer agreement has been
+		 * reached.  Note: if the values returned are out of our
+		 * bounds, we must reject the message.
+		 */
+		case neg_inprogress:
+			res = reject;
+			if (msg[3] <= info->ifcfg.wide_max_size) {
+				dev->wide_state = neg_complete;
+				res = wide;
+			}
+			break;
+		}
+	}
+#else
+	res = reject;
+#endif
+
+	switch (res) {
+	case wide:
+		dev->wide_xfer = msg[3];
+		break;
+
+	case reject:
+		outb(CMD_SETATN, REG_CMD(info));
+		msgqueue_flush(&info->scsi.msgs);
+		msgqueue_addmsg(&info->scsi.msgs, 1, MESSAGE_REJECT);
+		info->scsi.phase = PHASE_MSGOUT_EXPECT;
+
+	case bit8:
+		dev->wide_xfer = 0;
+		break;
+
+	case none:
+		break;
+	}
+}
+
 /* Function: void fas216_updateptrs(FAS216_Info *info, int bytes_transferred)
  * Purpose : update data pointers after transfer suspended/paused
  * Params  : info              - interface's local pointer to update
@@ -338,6 +605,9 @@ fas216_updateptrs(FAS216_Info *info, int bytes_transferred)
 	residual -= bytes_transferred;
 	ptr += bytes_transferred;
 
+	if (residual == 0)
+		ptr = NULL;
+
 	info->scsi.SCp.ptr = ptr;
 	info->scsi.SCp.this_residual = residual;
 }
@@ -353,7 +623,7 @@ fas216_pio(FAS216_Info *info, fasdmadir_t direction)
 {
 	unsigned int residual;
 	char *ptr;
-	int correction;
+	int correction = 0;
 
 	fas216_checkmagic(info, "fas216_pio");
 
@@ -361,23 +631,24 @@ fas216_pio(FAS216_Info *info, fasdmadir_t direction)
 	ptr = info->scsi.SCp.ptr;
 
 	if (direction == DMA_OUT) {
-	    	while (residual > 0) {
-			if ((inb(REG_CFIS(info)) & CFIS_CF) < 8) {
+//	    	while (residual > 0) {
+//			if ((inb(REG_CFIS(info)) & CFIS_CF) < 8) {
 				outb(*ptr++, REG_FF(info));
 				residual -= 1;
-			} else if (inb(REG_STAT(info)) & STAT_INT)
-				break;
-		}
-		correction = inb(REG_CFIS(info)) & CFIS_CF;
+//			}
+//			if (inb(REG_STAT(info)) & STAT_INT)
+//				break;
+//		}
+//		correction = inb(REG_CFIS(info)) & CFIS_CF;
 	} else {
-	    	while (residual > 0) {
-			if ((inb(REG_CFIS(info)) & CFIS_CF) != 0) {
+//	    	while (residual > 0) {
+//			if ((inb(REG_CFIS(info)) & CFIS_CF) != 0) {
 				*ptr++ = inb(REG_FF(info));
 				residual -= 1;
-			} else if (inb(REG_STAT(info)) & STAT_INT)
-				break;
-		}
-		correction = 0;
+//			}
+//			if (inb(REG_STAT(info)) & STAT_INT)
+//				break;
+//		}
 	}
 
 	ptr -= correction;
@@ -549,10 +820,11 @@ fas216_disconnect_intr(FAS216_Info *info)
 
 	switch (info->scsi.phase) {
 	case PHASE_SELECTION:			/* while selecting - no target		*/
+	case PHASE_SELSTEPS:
 		fas216_done(info, DID_NO_CONNECT);
 		break;
 
-	case PHASE_DISCONNECT:			/* message in - disconnecting		*/
+	case PHASE_MSGIN_DISCONNECT:		/* message in - disconnecting		*/
 		outb(CMD_ENABLESEL, REG_CMD(info));
 		info->scsi.disconnectable = 1;
 		info->scsi.reconnected.tag = 0;
@@ -564,8 +836,8 @@ fas216_disconnect_intr(FAS216_Info *info)
 		fas216_done(info, DID_OK);
 		break;
 
-	case PHASE_AFTERMSGOUT:			/* message out - possible ABORT message	*/
-		if (info->scsi.last_message == ABORT) {
+	case PHASE_MSGOUT:			/* message out - possible ABORT message	*/
+		if (fas216_get_last_msg(info, info->scsi.msgin_fifo) == ABORT) {
 			info->scsi.aborting = 0;
 			fas216_done(info, DID_ABORT);
 			break;
@@ -592,14 +864,17 @@ fas216_reselected_intr(FAS216_Info *info)
 
 	fas216_checkmagic(info, "fas216_reselected_intr");
 
-	if (info->scsi.phase == PHASE_SELECTION && info->SCpnt) {
+	if ((info->scsi.phase == PHASE_SELECTION ||
+	     info->scsi.phase == PHASE_SELSTEPS) && info->SCpnt) {
 		Scsi_Cmnd *SCpnt = info->SCpnt;
 
 		info->origSCpnt = SCpnt;
 		info->SCpnt = NULL;
 
-		if (info->device[SCpnt->target].negstate == syncneg_sent)
-			info->device[SCpnt->target].negstate = syncneg_start;
+		if (info->device[SCpnt->target].wide_state == neg_inprogress)
+			info->device[SCpnt->target].wide_state = neg_wait;
+		if (info->device[SCpnt->target].sync_state == neg_inprogress)
+			info->device[SCpnt->target].sync_state = neg_wait;
 	}
 
 #ifdef DEBUG_CONNECT
@@ -607,15 +882,14 @@ fas216_reselected_intr(FAS216_Info *info)
 		fas216_target(info), info->scsi.phase);
 #endif
 
-	msgqueue_flush(&info->scsi.msgs);
-
 	if ((inb(REG_CFIS(info)) & CFIS_CF) != 2) {
 		printk(KERN_ERR "scsi%d.H: incorrect number of bytes after reselect\n",
 			info->host->host_no);
 		outb(CMD_SETATN, REG_CMD(info));
-		msgqueue_addmsg(&info->scsi.msgs, 1, MESSAGE_REJECT);
-		info->scsi.phase = PHASE_MSGOUT;
 		outb(CMD_MSGACCEPTED, REG_CMD(info));
+		msgqueue_flush(&info->scsi.msgs);
+		msgqueue_addmsg(&info->scsi.msgs, 1, INITIATOR_ERROR);
+		info->scsi.phase = PHASE_MSGOUT_EXPECT;
 		return;
 	}
 
@@ -636,13 +910,14 @@ fas216_reselected_intr(FAS216_Info *info)
 
 	if (!ok) {
 		/*
-		 * Something went wrong - abort the command on
-		 * the target.  Should this be INITIATOR_ERROR ?
+		 * Something went wrong - send an initiator error to
+		 * the target.
 		 */
 		outb(CMD_SETATN, REG_CMD(info));
-		msgqueue_addmsg(&info->scsi.msgs, 1, ABORT);
-		info->scsi.phase = PHASE_MSGOUT;
 		outb(CMD_MSGACCEPTED, REG_CMD(info));
+		msgqueue_flush(&info->scsi.msgs);
+		msgqueue_addmsg(&info->scsi.msgs, 1, INITIATOR_ERROR);
+		info->scsi.phase = PHASE_MSGOUT_EXPECT;
 		return;
 	}
 
@@ -672,17 +947,20 @@ fas216_reselected_intr(FAS216_Info *info)
 	if (!ok && queue_probetgtlun(&info->queues.disconnected, target, identify_msg))
 		ok = 1;
 
+	msgqueue_flush(&info->scsi.msgs);
 	if (ok) {
 		info->scsi.phase = PHASE_RECONNECTED;
 		outb(target, REG_SDID(info));
 	} else {
 		/*
-		 * Our command structure not found - abort the command on the target
-		 * Should this be INITIATOR_ERROR ?
+		 * Our command structure not found - abort the
+		 * command on the target.  Since we have no
+		 * record of this command, we can't send
+		 * an INITIATOR DETECTED ERROR message.
 		 */
 		outb(CMD_SETATN, REG_CMD(info));
 		msgqueue_addmsg(&info->scsi.msgs, 1, ABORT);
-		info->scsi.phase = PHASE_MSGOUT;
+		info->scsi.phase = PHASE_MSGOUT_EXPECT;
 	}
 	outb(CMD_MSGACCEPTED, REG_CMD(info));
 }
@@ -733,8 +1011,14 @@ fas216_finish_reconnect(FAS216_Info *info)
 	}
 	if (!info->SCpnt) {
 		outb(CMD_SETATN, REG_CMD(info));
-		msgqueue_addmsg(&info->scsi.msgs, 1, ABORT);
-		info->scsi.phase = PHASE_MSGOUT;
+		msgqueue_flush(&info->scsi.msgs);
+#if 0
+		if (info->scsi.reconnected.tag)
+			msgqueue_addmsg(&info->scsi.msgs, 2, ABORT_TAG, info->scsi.reconnected.tag);
+		else
+#endif
+			msgqueue_addmsg(&info->scsi.msgs, 1, ABORT);
+		info->scsi.phase = PHASE_MSGOUT_EXPECT;
 		info->scsi.aborting = 1;
 	} else {
 		/*
@@ -751,6 +1035,28 @@ fas216_finish_reconnect(FAS216_Info *info)
 #endif
 }
 
+static unsigned char fas216_get_msg_byte(FAS216_Info *info)
+{
+	int tout;
+
+	outb(CMD_MSGACCEPTED, REG_CMD(info));
+	for (tout = 1000000; tout; tout --)
+		if (inb(REG_STAT(info)) & STAT_INT)
+			break;
+
+	inb(REG_INST(info));
+
+	outb(CMD_TRANSFERINFO, REG_CMD(info));
+
+	for (tout = 1000000; tout; tout --)
+		if (inb(REG_STAT(info)) & STAT_INT)
+			break;
+
+	inb(REG_INST(info));
+
+	return inb(REG_FF(info));
+}
+
 /* Function: void fas216_message(FAS216_Info *info)
  * Purpose : handle a function done interrupt from FAS216 chip
  * Params  : info - interface which caused function done interrupt
@@ -765,34 +1071,10 @@ static void fas216_message(FAS216_Info *info)
 	message[0] = inb(REG_FF(info));
 
 	if (message[0] == EXTENDED_MESSAGE) {
-		int tout;
-		outb(CMD_MSGACCEPTED, REG_CMD(info));
-		for (tout = 1000000; tout; tout--)
-			if (inb(REG_STAT(info)) & STAT_INT)
-				break;
-		inb(REG_INST(info));
-		outb(CMD_TRANSFERINFO, REG_CMD(info));
-		for (tout = 1000000; tout; tout--)
-			if (inb(REG_STAT(info)) & STAT_INT)
-				break;
-		inb(REG_INST(info));
+		message[1] = fas216_get_msg_byte(info);
 
-		message[1] = inb(REG_FF(info));
-
-		for (msglen = 2; msglen < message[1] + 2; msglen++) {
-			outb(CMD_MSGACCEPTED, REG_CMD(info));
-			for (tout = 1000000; tout; tout--)
-				if (inb(REG_STAT(info)) & STAT_INT)
-					break;
-			inb(REG_INST(info));
-			outb(CMD_TRANSFERINFO, REG_CMD(info));
-			for (tout = 1000000; tout; tout--)
-				if (inb(REG_STAT(info)) & STAT_INT)
-					break;
-			inb(REG_INST(info));
-
-			message[msglen] = inb(REG_FF(info));
-		}
+		for (msglen = 2; msglen < message[1] + 2; msglen++)
+			message[msglen] = fas216_get_msg_byte(info);
 	}
 
 #ifdef DEBUG_MESSAGES
@@ -806,6 +1088,7 @@ static void fas216_message(FAS216_Info *info)
 		printk("\n");
 	}
 #endif
+
 	if (info->scsi.phase == PHASE_RECONNECTED) {
 		if (message[0] == SIMPLE_QUEUE_TAG)
 			info->scsi.reconnected.tag = message[1];
@@ -815,14 +1098,22 @@ static void fas216_message(FAS216_Info *info)
 
 	switch (message[0]) {
 	case COMMAND_COMPLETE:
-		printk("fas216: command complete with no status in MESSAGE_IN?\n");
+		printk(KERN_ERR "scsi%d.%c: command complete with no "
+			"status in MESSAGE_IN?\n",
+			info->host->host_no, fas216_target(info));
 		break;
 
 	case SAVE_POINTERS:
 		/*
 		 * Save current data pointer to SAVED data pointer
+		 * SCSI II standard says that we must not acknowledge
+		 * this until we have really saved pointers.
+		 * NOTE: we DO NOT save the command nor status pointers
+		 * as required by the SCSI II standard.  These always
+		 * point to the start of their respective areas.
 		 */
 		info->SCpnt->SCp = info->scsi.SCp;
+		info->SCpnt->SCp.sent_command = 0;
 #if defined (DEBUG_MESSAGES) || defined (DEBUG_CONNECT)
 		printk("scsi%d.%c: save data pointers: [%p, %X]\n",
 			info->host->host_no, fas216_target(info),
@@ -843,13 +1134,27 @@ static void fas216_message(FAS216_Info *info)
 		break;
 
 	case DISCONNECT:
-		info->scsi.phase = PHASE_DISCONNECT;
+		info->scsi.phase = PHASE_MSGIN_DISCONNECT;
 		break;
 
 	case MESSAGE_REJECT:
-		printk("scsi%d.%c: reject, last message %04X\n",
-			info->host->host_no, fas216_target(info),
-			info->scsi.last_message);
+		switch (fas216_get_last_msg(info, info->scsi.msgin_fifo)) {
+		case EXTENDED_MESSAGE | EXTENDED_SDTR << 8:
+			fas216_handlesync(info, message);
+			break;
+
+		case EXTENDED_MESSAGE | EXTENDED_WDTR << 8:
+			fas216_handlewide(info, message);
+			break;
+
+		default:
+			printk("scsi%d.%c: reject, last message %04X\n",
+				info->host->host_no, fas216_target(info),
+				fas216_get_last_msg(info, info->scsi.msgin_fifo));
+		}
+		break;
+
+	case NOP:
 		break;
 
 	case SIMPLE_QUEUE_TAG:
@@ -862,49 +1167,18 @@ static void fas216_message(FAS216_Info *info)
 	case EXTENDED_MESSAGE:
 		switch (message[2]) {
 		case EXTENDED_SDTR:	/* Sync transfer negociation request/reply */
-			switch (info->device[info->SCpnt->target].negstate) {
-			case syncneg_invalid:
-				msgqueue_flush(&info->scsi.msgs);
-				outb(CMD_SETATN, REG_CMD(info));
-				msgqueue_addmsg(&info->scsi.msgs, 1, MESSAGE_REJECT);
-				info->scsi.phase = PHASE_MSGOUT;
-				break;
-
-			default:
-				if (message[4] > info->ifcfg.sync_max_depth)
-					message[4] = info->ifcfg.sync_max_depth;
-				if (message[3] < 1000 / info->ifcfg.clockrate)
-					message[3] = 1000 / info->ifcfg.clockrate;
-
-				outb(CMD_SETATN, REG_CMD(info));
-				msgqueue_addmsg(&info->scsi.msgs, 5,
-						EXTENDED_MESSAGE, 3, EXTENDED_SDTR,
-						message[3], message[4]);
-				info->scsi.phase = PHASE_MSGOUT;
-			case syncneg_sent:
-				info->device[info->SCpnt->target].negstate = syncneg_complete;
-				info->device[info->SCpnt->target].period = message[3];
-				info->device[info->SCpnt->target].sof = message[4];
-				info->device[info->SCpnt->target].stp =
-					fas216_syncperiod(info, message[3] * 4);
-				printk(KERN_NOTICE "scsi%d.%c: using synchronous transfer, offset %d, %d ns\n",
-					info->host->host_no, fas216_target(info), message[4], message[3] * 4);
-				fas216_set_sync(info, info->SCpnt->target);
-				break;
-			}
+			fas216_handlesync(info, message);
 			break;
 
 		case EXTENDED_WDTR:	/* Wide transfer negociation request/reply */
-			/* We don't do wide transfers - reject message */
+			fas216_handlewide(info, message);
+			break;
+
 		default:
 			printk("scsi%d.%c: unrecognised extended message %02X, rejecting\n",
 				info->host->host_no, fas216_target(info),
 				message[2]);
-			msgqueue_flush(&info->scsi.msgs);
-			outb(CMD_SETATN, REG_CMD(info));
-			msgqueue_addmsg(&info->scsi.msgs, 1, MESSAGE_REJECT);
-			info->scsi.phase = PHASE_MSGOUT;
-			break;
+			goto reject_message;
 		}
 		break;
 
@@ -912,13 +1186,17 @@ static void fas216_message(FAS216_Info *info)
 		printk("scsi%d.%c: unrecognised message %02X, rejecting\n",
 			info->host->host_no, fas216_target(info),
 			message[0]);
-		msgqueue_flush(&info->scsi.msgs);
-		outb(CMD_SETATN, REG_CMD(info));
-		msgqueue_addmsg(&info->scsi.msgs, 1, MESSAGE_REJECT);
-		info->scsi.phase = PHASE_MSGOUT;
-		break;
+		goto reject_message;
 	}
 	outb(CMD_MSGACCEPTED, REG_CMD(info));
+	return;
+
+reject_message:
+	outb(CMD_SETATN, REG_CMD(info));
+	outb(CMD_MSGACCEPTED, REG_CMD(info));
+	msgqueue_flush(&info->scsi.msgs);
+	msgqueue_addmsg(&info->scsi.msgs, 1, MESSAGE_REJECT);
+	info->scsi.phase = PHASE_MSGOUT_EXPECT;
 }
 
 /* Function: void fas216_send_command(FAS216_Info *info)
@@ -935,201 +1213,46 @@ static void fas216_send_command(FAS216_Info *info)
 	outb(CMD_FLUSHFIFO, REG_CMD(info));
 
 	/* load command */
-	for (i = 0; i < info->SCpnt->cmd_len; i++)
+	for (i = info->scsi.SCp.sent_command; i < info->SCpnt->cmd_len; i++)
 		outb(info->SCpnt->cmnd[i], REG_FF(info));
 
 	outb(CMD_TRANSFERINFO, REG_CMD(info));
+
+	info->scsi.phase = PHASE_COMMAND;
 }
 
-/* Function: int fas216_busservice_selection(FAS216_Info *info, unsigned int stat)
- * Purpose : handle bus service in selection phase
- * Params  : info - interface which caused bus service
- * Returns : 0 if unable to service this interrupt
- */
-static int fas216_busservice_selection(FAS216_Info *info, unsigned int stat)
-{
-	fas216_checkmagic(info, "fas216_busservice_selection");
-
-	switch (stat & STAT_BUSMASK) {
-	case STAT_DATAOUT:	/* data out phase			*/
-		fas216_starttransfer(info, DMA_OUT, 1);
-		return 1;
-
-	case STAT_DATAIN:		/* data in phase		*/
-		fas216_starttransfer(info, DMA_IN, 0);
-		return 1;
-
-	case STAT_STATUS:		/* status phase			*/
-		info->scsi.phase = PHASE_STATUS;
-		outb(CMD_INITCMDCOMPLETE, REG_CMD(info));
-		return 1;
-
-	case STAT_MESGIN:		/* message in phase		*/
-		info->scsi.phase = PHASE_MSGIN;
-		outb(CMD_TRANSFERINFO, REG_CMD(info));
-		return 1;
-
-	case STAT_MESGOUT:{		/* message out phase		*/
-		char *msg;
-		int start = 1, msglen;
-
-		/* load message bytes, but don't forget to miss the first
-		 * byte!
-		 */
-		while ((msg = msgqueue_getnextmsg(&info->scsi.msgs, &msglen)) != NULL) {
-			int i;
-
-			for (i = start; i < msglen; i++)
-				outb(msg[i], REG_FF(info));
-			start = 0;
-		}
-		outb(CMD_TRANSFERINFO, REG_CMD(info));
-		info->scsi.phase = PHASE_MESSAGESENT;
-		return 1;
-	}
-	default:
-		return 0;
-	}
-}
-
-/* Function: int fas216_busservice_messagesent(FAS216_Info *info, unsigned int stat)
- * Purpose : handle bus service after the IDENTIFY message has been sent
- * Params  : info - interface which caused bus service
- * Returns : 0 if unable to service this interrupt
- */
-static int fas216_busservice_messagesent(FAS216_Info *info, unsigned int stat)
-{
-	fas216_checkmagic(info, "fas216_busservice_messagesent");
-
-	switch (stat & STAT_BUSMASK) {
-	case STAT_MESGIN:		/* message in phase		*/
-		info->scsi.phase = PHASE_MSGIN;
-		outb(CMD_FLUSHFIFO, REG_CMD(info));
-		outb(CMD_TRANSFERINFO, REG_CMD(info));
-		return 1;
-
-	case STAT_COMMAND:		/* command phase		*/
-		fas216_send_command(info);
-		return 1;
-
-	default:
-		return 0;
-	}
-}
-
-/* Function: int fas216_busservice_dataphase(FAS216_Info *info, unsigned int stat)
- * Purpose : handle bus service in a data in/out phase.
- * Params  : info - interface which caused bus service
- * Returns : 0 if unable to service this interrupt
- * Note    : We do not allow the device to change the data direction!
- */
-static int fas216_busservice_dataphase(FAS216_Info *info, unsigned int stat)
-{
-	fas216_checkmagic(info, "fas216_busservice_dataphase");
-
-	switch (stat & STAT_BUSMASK) {
-	case STAT_DATAIN:		/* continue data in phase	*/
-		if (info->scsi.phase == PHASE_DATAIN) {
-			fas216_starttransfer(info, DMA_IN, 0);
-			return 1;
-		} else
-			return 0;
-
-	case STAT_DATAOUT:		/* continue data out phase	*/
-		if (info->scsi.phase == PHASE_DATAOUT) {
-			fas216_starttransfer(info, DMA_OUT, 0);
-			return 1;
-		} else
-			return 0;
-
-	case STAT_STATUS:		/* status in phase		*/
-		fas216_stoptransfer(info);
-		info->scsi.phase = PHASE_STATUS;
-		outb(CMD_INITCMDCOMPLETE, REG_CMD(info));
-		return 1;
-
-	case STAT_MESGIN:		/* message in phase		*/
-		fas216_stoptransfer(info);
-		info->scsi.phase = PHASE_MSGIN;
-		outb(CMD_TRANSFERINFO, REG_CMD(info));
-		return 1;
-
-	default:
-		return 0;
-	}
-}
-
-/* Function: int fas216_busservice_reconnected(FAS216_Info *info, unsigned int stat)
- * Purpose : handle bus service in after a reconnection
- * Params  : info - interface which caused bus service
- * Returns : 0 if unable to service this interrupt
- * Note    : We do not allow the device to change the data direction!
- */
-static int fas216_busservice_reconnected(FAS216_Info *info, unsigned int stat)
-{
-	fas216_checkmagic(info, "fas216_busservice_reconnected");
-
-	switch (stat & STAT_BUSMASK) {
-	case STAT_MESGIN:
-		outb(CMD_TRANSFERINFO, REG_CMD(info));
-		return 1;
-
-	case STAT_STATUS:
-		fas216_finish_reconnect(info);
-		info->scsi.phase = PHASE_STATUS;
-		outb(CMD_INITCMDCOMPLETE, REG_CMD(info));
-		return 1;
-
-	case STAT_DATAOUT:		/* data out phase		*/
-		fas216_finish_reconnect(info);
-		fas216_starttransfer(info, DMA_OUT, 1);
-		return 1;
-
-	case STAT_DATAIN:		/* data in phase		*/
-		fas216_finish_reconnect(info);
-		fas216_starttransfer(info, DMA_IN, 0);
-		return 1;
-
-	default:
-		return 0;
-	}
-}
-
-/* Function: int fas216_busservice_messageout(FAS216_Info *info, unsigned int stat)
+/* Function: void fas216_send_messageout(FAS216_Info *info, int start)
  * Purpose : handle bus service to send a message
  * Params  : info - interface which caused bus service
- * Returns : 0 if unable to service this interrupt
  * Note    : We do not allow the device to change the data direction!
  */
-static int fas216_busservice_messageout(FAS216_Info *info, unsigned int stat)
+static void fas216_send_messageout(FAS216_Info *info, int start)
 {
-	fas216_checkmagic(info, "fas216_busservice_messageout");
+	unsigned int tot_msglen = msgqueue_msglength(&info->scsi.msgs);
 
-	if ((stat & STAT_BUSMASK) != STAT_MESGOUT) {
-		printk("scsi%d.%c: didn't manage MESSAGE OUT phase\n",
-		       info->host->host_no, fas216_target(info));
-		return 0;
-	} else {
-		unsigned int msglen = msgqueue_msglength(&info->scsi.msgs);
+	fas216_checkmagic(info, "fas216_send_messageout");
 
-		outb(CMD_FLUSHFIFO, REG_CMD(info));
+	outb(CMD_FLUSHFIFO, REG_CMD(info));
 
-		if (msglen == 0)
-			outb(NOP, REG_FF(info));
-		else {
-			char *msg;
+	if (tot_msglen) {
+		struct message *msg;
+		int msgnr = 0;
 
-			while ((msg = msgqueue_getnextmsg(&info->scsi.msgs, &msglen)) != NULL) {
-				int i;
+		while ((msg = msgqueue_getmsg(&info->scsi.msgs, msgnr++)) != NULL) {
+			int i;
 
-				for (i = 0; i < msglen; i++)
-					outb(msg[i], REG_FF(info));
-			}
+			for (i = start; i < msg->length; i++)
+				outb(msg->msg[i], REG_FF(info));
+
+			msg->fifo = tot_msglen - (inb(REG_CFIS(info)) & CFIS_CF);
+			start = 0;
 		}
-		outb(CMD_TRANSFERINFO, REG_CMD(info));
-		info->scsi.phase = PHASE_AFTERMSGOUT;
-		return 1;
-	}
+	} else
+		outb(NOP, REG_FF(info));
+
+	outb(CMD_TRANSFERINFO, REG_CMD(info));
+
+	info->scsi.phase = PHASE_MSGOUT;
 }
 
 /* Function: void fas216_busservice_intr(FAS216_Info *info, unsigned int stat, unsigned int ssr)
@@ -1151,91 +1274,150 @@ static void fas216_busservice_intr(FAS216_Info *info, unsigned int stat, unsigne
 	case IS_COMPLETE:			/* last action completed		*/
 		outb(CMD_NOP, REG_CMD(info));
 
-		switch (info->scsi.phase) {
-		case PHASE_SELECTION:		/* while selecting - selected target	*/
-			if (!fas216_busservice_selection(info, stat))
-				printk("scsi%d.%c: bus phase %s after connect?\n",
-					info->host->host_no, fas216_target(info),
-					fas216_bus_phase(stat));
-			break;
+#define STATE(st,ph) ((ph) << 3 | (st))
+		/* This table describes the legal SCSI state transitions,
+		 * as described by the SCSI II spec.
+		 */
+		switch (STATE(stat & STAT_BUSMASK, info->scsi.phase)) {
+							/* Reselmsgin   -> Data In	*/
+		case STATE(STAT_DATAIN, PHASE_RECONNECTED):
+			fas216_finish_reconnect(info);
+		case STATE(STAT_DATAIN, PHASE_SELSTEPS):/* Sel w/ steps -> Data In      */
+		case STATE(STAT_DATAIN, PHASE_DATAIN):  /* Data In      -> Data In      */
+		case STATE(STAT_DATAIN, PHASE_MSGOUT):  /* Message Out  -> Data In      */
+		case STATE(STAT_DATAIN, PHASE_COMMAND): /* Command      -> Data In      */
+		case STATE(STAT_DATAIN, PHASE_MSGIN):   /* Message In   -> Data In      */
+			fas216_starttransfer(info, DMA_IN, 0);
+			return;
 
-		case PHASE_MESSAGESENT:
-			if (!fas216_busservice_messagesent(info, stat))
-				printk("scsi%d.%c: bus phase %s after message sent?\n",
-					info->host->host_no, fas216_target(info),
-					fas216_bus_phase(stat));
-			break;
+		case STATE(STAT_DATAOUT, PHASE_DATAOUT):/* Data Out     -> Data Out     */
+			fas216_starttransfer(info, DMA_OUT, 0);
+			return;
 
-		case PHASE_DATAIN:		/* while transfering data in		*/
-		case PHASE_DATAOUT:		/* while transfering data out		*/
-			if (!fas216_busservice_dataphase(info, stat))
-				printk("scsi%d.%c: bus phase %s after %s?\n",
-					info->host->host_no, fas216_target(info),
-					fas216_bus_phase(stat), fas216_drv_phase(info));
-			break;
+							/* Reselmsgin   -> Data Out     */
+		case STATE(STAT_DATAOUT, PHASE_RECONNECTED):
+			fas216_finish_reconnect(info);
+		case STATE(STAT_DATAOUT, PHASE_SELSTEPS):/* Sel w/ steps-> Data Out     */
+		case STATE(STAT_DATAOUT, PHASE_MSGOUT): /* Message Out  -> Data Out     */
+		case STATE(STAT_DATAOUT, PHASE_COMMAND):/* Command      -> Data Out     */
+		case STATE(STAT_DATAOUT, PHASE_MSGIN):  /* Message In   -> Data Out     */
+			fas216_starttransfer(info, DMA_OUT, 1);
+			return;
 
-		case PHASE_RECONNECTED:		/* newly reconnected device		*/
-			/*
-			 * Command reconnected - if MESGIN, get message - it may be
-			 * the tag.  If not, get command out of the disconnected queue
+							/* Reselmsgin   -> Status       */
+		case STATE(STAT_STATUS, PHASE_RECONNECTED):
+			fas216_finish_reconnect(info);
+			goto status;
+		case STATE(STAT_STATUS, PHASE_DATAOUT): /* Data Out     -> Status       */
+		case STATE(STAT_STATUS, PHASE_DATAIN):  /* Data In      -> Status       */
+			fas216_stoptransfer(info);
+		case STATE(STAT_STATUS, PHASE_SELSTEPS):/* Sel w/ steps -> Status       */
+		case STATE(STAT_STATUS, PHASE_MSGOUT):  /* Message Out  -> Status       */
+		case STATE(STAT_STATUS, PHASE_COMMAND): /* Command      -> Status       */
+		case STATE(STAT_STATUS, PHASE_MSGIN):   /* Message In   -> Status       */
+		status:
+			outb(CMD_INITCMDCOMPLETE, REG_CMD(info));
+			info->scsi.phase = PHASE_STATUS;
+			return;
+
+		case STATE(STAT_MESGIN, PHASE_DATAOUT): /* Data Out     -> Message In   */
+		case STATE(STAT_MESGIN, PHASE_DATAIN):  /* Data In      -> Message In   */
+			fas216_stoptransfer(info);
+		case STATE(STAT_MESGIN, PHASE_SELSTEPS):/* Sel w/ steps -> Message In   */
+		case STATE(STAT_MESGIN, PHASE_MSGOUT):  /* Message Out  -> Message In   */
+			info->scsi.msgin_fifo = inb(REG_CFIS(info)) & CFIS_CF;
+			outb(CMD_TRANSFERINFO, REG_CMD(info));
+			info->scsi.phase = PHASE_MSGIN;
+			return;
+
+							/* Reselmsgin   -> Message In   */
+		case STATE(STAT_MESGIN, PHASE_RECONNECTED):
+		case STATE(STAT_MESGIN, PHASE_MSGIN):
+			info->scsi.msgin_fifo = inb(REG_CFIS(info)) & CFIS_CF;
+			outb(CMD_TRANSFERINFO, REG_CMD(info));
+			return;
+
+							/* Reselmsgin   -> Command      */
+		case STATE(STAT_COMMAND, PHASE_RECONNECTED):
+			fas216_finish_reconnect(info);
+		case STATE(STAT_COMMAND, PHASE_MSGOUT): /* Message Out  -> Command      */
+		case STATE(STAT_COMMAND, PHASE_MSGIN):  /* Message In   -> Command      */
+			fas216_send_command(info);
+			info->scsi.phase = PHASE_COMMAND;
+			return;
+							/* Selection    -> Message Out  */
+		case STATE(STAT_MESGOUT, PHASE_SELECTION):
+			fas216_send_messageout(info, 1);
+			return;
+							/* Any          -> Message Out  */
+		case STATE(STAT_MESGOUT, PHASE_MSGOUT_EXPECT):
+			fas216_send_messageout(info, 0);
+			return;
+
+		/* Error recovery rules.
+		 *   These either attempt to abort or retry the operation.
+		 * TODO: we need more of these
+		 */
+		case STATE(STAT_COMMAND, PHASE_COMMAND):/* Command      -> Command      */
+			/* error - we've sent out all the command bytes
+			 * we have.
+			 * NOTE: we need SAVE DATA POINTERS/RESTORE DATA POINTERS
+			 * to include the command bytes sent for this to work
+			 * correctly.
 			 */
-			if (!fas216_busservice_reconnected(info, stat))
-				printk("scsi%d.%c: bus phase %s after reconnect?\n",
-					info->host->host_no, fas216_target(info),
-					fas216_bus_phase(stat));
-			break;
+			printk(KERN_ERR "scsi%d.%c: "
+				"target trying to receive more command bytes\n",
+				info->host->host_no, fas216_target(info));
+			outb(CMD_SETATN, REG_CMD(info));
+			outb(15, REG_STCL(info));
+			outb(0, REG_STCM(info));
+			outb(0, REG_STCH(info));
+			outb(CMD_PADBYTES | CMD_WITHDMA, REG_CMD(info));
+			msgqueue_flush(&info->scsi.msgs);
+			msgqueue_addmsg(&info->scsi.msgs, 1, INITIATOR_ERROR);
+			info->scsi.phase = PHASE_MSGOUT_EXPECT;
+			return;
 
-		case PHASE_MSGIN:
-		case PHASE_AFTERMSGOUT:
-			switch (stat & STAT_BUSMASK) {
-			case STAT_MESGIN:
-				info->scsi.phase = PHASE_MSGIN;
-				outb(CMD_TRANSFERINFO, REG_CMD(info));
-				break;
+							/* Selection    -> Message Out  */
+		case STATE(STAT_MESGOUT, PHASE_SELSTEPS):
+		case STATE(STAT_MESGOUT, PHASE_MSGOUT): /* Message Out  -> Message Out  */
+			/* If we get another message out phase, this
+			 * usually means some parity error occurred.
+			 * Resend complete set of messages.  If we have
+			 * more than 1 byte to send, we need to assert
+			 * ATN again.
+			 */
+			if (msgqueue_msglength(&info->scsi.msgs) > 1)
+				outb(CMD_SETATN, REG_CMD(info));
 
-			case STAT_COMMAND:	/* command phase			*/
-				fas216_send_command(info);
-				info->scsi.phase = PHASE_SELECTION;
-				break;
+			fas216_send_messageout(info, 0);
+			return;
+		}
 
-			default:
-				printk("scsi%d.%c: bus phase %s after %s?\n",
-					info->host->host_no, fas216_target(info),
-					fas216_bus_phase(stat),
-					fas216_drv_phase(info));
-			}
-			break;
-
-		case PHASE_MSGOUT:
-			if (!fas216_busservice_messageout(info, stat))
-				printk("scsi%d.%c: bus phase %s instead of message out?\n",
-					info->host->host_no, fas216_target(info),
-					fas216_bus_phase(stat));
-			break;
-
-		case PHASE_DISCONNECT:
-			printk("scsi%d.%c: disconnect message received, but bus service %s?\n",
+		if (info->scsi.phase == PHASE_MSGIN_DISCONNECT) {
+			printk(KERN_ERR "scsi%d.%c: disconnect message received, but bus service %s?\n",
 				info->host->host_no, fas216_target(info),
 				fas216_bus_phase(stat));
+			msgqueue_flush(&info->scsi.msgs);
 			outb(CMD_SETATN, REG_CMD(info));
 			msgqueue_addmsg(&info->scsi.msgs, 1, INITIATOR_ERROR);
-			info->scsi.phase = PHASE_MSGOUT;
+			info->scsi.phase = PHASE_MSGOUT_EXPECT;
 			info->scsi.aborting = 1;
 			outb(CMD_TRANSFERINFO, REG_CMD(info));
-			break;
-
-		default:
-			printk("scsi%d.%c: internal phase %s for bus service?"
-				"  What do I do with this?\n",
-				info->host->host_no, fas216_target(info),
-				fas216_drv_phase(info));
+			return;
 		}
-		break;
+		printk(KERN_ERR "scsi%d.%c: bus phase %s after %s?\n",
+			info->host->host_no, fas216_target(info),
+			fas216_bus_phase(stat),
+			fas216_drv_phase(info));
+		print_debug_list();
+		return;
 
 	default:
 		printk("scsi%d.%c: bus service at step %d?\n",
 			info->host->host_no, fas216_target(info),
 			ssr & IS_BITS);
+		print_debug_list();
 	}
 }
 
@@ -1269,6 +1451,7 @@ static void fas216_funcdone_intr(FAS216_Info *info, unsigned int stat, unsigned 
 	case PHASE_MSGIN:			/* message in phase			*/
 	case PHASE_RECONNECTED:			/* reconnected command			*/
 		if ((stat & STAT_BUSMASK) == STAT_MESGIN) {
+			info->scsi.msgin_fifo = inb(REG_CFIS(info)) & CFIS_CF;
 			fas216_message(info);
 			break;
 		}
@@ -1300,10 +1483,11 @@ void fas216_intr(struct Scsi_Host *instance)
 
 	if (stat & STAT_INT) {
 		if (isr & INST_BUSRESET)
-			printk("scsi%d.H: fas216: bus reset detected\n", instance->host_no);
-		else if (isr & INST_ILLEGALCMD)
+			printk(KERN_DEBUG "scsi%d.H: bus reset detected\n", instance->host_no);
+		else if (isr & INST_ILLEGALCMD) {
 			printk(KERN_CRIT "scsi%d.H: illegal command given\n", instance->host_no);
-		else if (isr & INST_DISCONNECT)
+			fas216_dumpstate(info);
+		} else if (isr & INST_DISCONNECT)
 			fas216_disconnect_intr(info);
 		else if (isr & INST_RESELECTED)		/* reselected			*/
 			fas216_reselected_intr(info);
@@ -1327,7 +1511,7 @@ void fas216_intr(struct Scsi_Host *instance)
 static void fas216_kick(FAS216_Info *info)
 {
 	Scsi_Cmnd *SCpnt;
-	int i, msglen, from_queue = 0;
+	int tot_msglen, from_queue = 0;
 
 	fas216_checkmagic(info, "fas216_kick");
 
@@ -1380,7 +1564,8 @@ static void fas216_kick(FAS216_Info *info)
 
 	if (from_queue) {
 #ifdef SCSI2_TAG
-		if (SCpnt->device->tagged_queue && SCpnt->cmnd[0] != REQUEST_SENSE) {
+		if (SCpnt->device->tagged_queue && SCpnt->cmnd[0] != REQUEST_SENSE &&
+		    SCpnt->cmnd[0] != INQUIRY) {
 		    SCpnt->device->current_tag += 1;
 			if (SCpnt->device->current_tag == 0)
 			    SCpnt->device->current_tag = 1;
@@ -1409,6 +1594,7 @@ static void fas216_kick(FAS216_Info *info)
 
 	/* build outgoing message bytes */
 	msgqueue_flush(&info->scsi.msgs);
+
 	if (info->device[SCpnt->target].disconnect_ok)
 		msgqueue_addmsg(&info->scsi.msgs, 1, IDENTIFY(1, SCpnt->lun));
 	else
@@ -1418,15 +1604,29 @@ static void fas216_kick(FAS216_Info *info)
 	if (SCpnt->tag)
 		msgqueue_addmsg(&info->scsi.msgs, 2, SIMPLE_QUEUE_TAG, SCpnt->tag);
 
-	/* add synchronous negociation */
-	if (SCpnt->cmnd[0] == REQUEST_SENSE &&
-	    info->device[SCpnt->target].negstate == syncneg_start) {
-		info->device[SCpnt->target].negstate = syncneg_sent;
+#ifdef SCSI2_WIDE
+	if (info->device[SCpnt->target].wide_state == neg_wait) {
+		info->device[SCpnt->target].wide_state = neg_inprogress;
+		msgqueue_addmsg(&info->scsi.msgs, 4,
+				EXTENDED_MESSAGE, 2, EXTENDED_WDTR,
+				info->ifcfg.wide_max_size);
+	}
+#ifdef SCSI2_SYNC
+	else
+#endif
+#endif
+#ifdef SCSI2_SYNC
+	if ((info->device[SCpnt->target].sync_state == neg_wait ||
+	     info->device[SCpnt->target].sync_state == neg_complete) &&
+	    (SCpnt->cmnd[0] == REQUEST_SENSE ||
+	     SCpnt->cmnd[0] == INQUIRY)) {
+		info->device[SCpnt->target].sync_state = neg_inprogress;
 		msgqueue_addmsg(&info->scsi.msgs, 5,
 				EXTENDED_MESSAGE, 3, EXTENDED_SDTR,
 				1000 / info->ifcfg.clockrate,
 				info->ifcfg.sync_max_depth);
 	}
+#endif
 
 	/* following what the ESP driver says */
 	outb(0, REG_STCL(info));
@@ -1444,25 +1644,29 @@ static void fas216_kick(FAS216_Info *info)
 	/* synchronous transfers */
 	fas216_set_sync(info, SCpnt->target);
 
-	msglen = msgqueue_msglength(&info->scsi.msgs);
+	tot_msglen = msgqueue_msglength(&info->scsi.msgs);
 
-	if (msglen == 1 || msglen == 3) {
+	if (tot_msglen == 1 || tot_msglen == 3) {
 		/*
 		 * We have an easy message length to send...
 		 */
-		char *msg;
+		struct message *msg;
+		int msgnr = 0, i;
+
+		info->scsi.phase = PHASE_SELSTEPS;
 
 		/* load message bytes */
-		while ((msg = msgqueue_getnextmsg(&info->scsi.msgs, &msglen)) != NULL) {
-			for (i = 0; i < msglen; i++)
-				outb(msg[i], REG_FF(info));
+		while ((msg = msgqueue_getmsg(&info->scsi.msgs, msgnr++)) != NULL) {
+			for (i = 0; i < msg->length; i++)
+				outb(msg->msg[i], REG_FF(info));
+			msg->fifo = tot_msglen - (inb(REG_CFIS(info)) & CFIS_CF);
 		}
 
 		/* load command */
 		for (i = 0; i < SCpnt->cmd_len; i++)
 			outb(SCpnt->cmnd[i], REG_FF(info));
 
-		if (msglen == 1)
+		if (tot_msglen == 1)
 			outb(CMD_SELECTATN, REG_CMD(info));
 		else
 			outb(CMD_SELECTATN3, REG_CMD(info));
@@ -1471,17 +1675,11 @@ static void fas216_kick(FAS216_Info *info)
 		 * We have an unusual number of message bytes to send.
 		 *  Load first byte into fifo, and issue SELECT with ATN and
 		 *  stop steps.
-		 * Note: we only peek at t his message - we need the rest
-		 * later on!
 		 */
-		int thismsg;
-		char *msg = msgqueue_peeknextmsg(&info->scsi.msgs, &thismsg);
+		struct message *msg = msgqueue_getmsg(&info->scsi.msgs, 0);
 
-		if (!msg || thismsg < 1)
-			printk(KERN_CRIT "scsi%d.%c: no message to send, but %d bytes\n",
-				info->host->host_no, fas216_target(info), msglen);
-		else
-			outb(msg[0], REG_FF(info));
+		outb(msg->msg[0], REG_FF(info));
+		msg->fifo = 1;
 
 		outb(CMD_SELECTATNSTOP, REG_CMD(info));
 	}
@@ -1525,11 +1723,15 @@ static void fas216_done(FAS216_Info *info, unsigned int result)
 		/*
 		 * In theory, this should not happen, but just in case it does.
 		 */
-		if (info->scsi.SCp.ptr && result == DID_OK) {
+		if (info->scsi.SCp.ptr &&
+		    info->scsi.SCp.this_residual &&
+		    result == DID_OK) {
 			switch (SCpnt->cmnd[0]) {
 			case INQUIRY:
 			case START_STOP:
 			case READ_CAPACITY:
+			case TEST_UNIT_READY:
+			case MODE_SENSE:
 				break;
 
 			default:
@@ -1579,6 +1781,7 @@ static void fas216_done(FAS216_Info *info, unsigned int result)
 int fas216_queue_command(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
 {
 	FAS216_Info *info = (FAS216_Info *)SCpnt->host->hostdata;
+	unsigned long flags;
 
 	fas216_checkmagic(info, "fas216_queue_command");
 
@@ -1618,27 +1821,18 @@ int fas216_queue_command(Scsi_Cmnd *SCpnt, void (*done)(Scsi_Cmnd *))
 	info->stats.queues += 1;
 	SCpnt->tag = 0;
 
-	if (info->scsi.irq != NO_IRQ) {
-		unsigned long flags;
-
-		/* add command into execute queue and let it complete under
-		 * the drivers interrupts.
-		 */
-		if (!queue_add_cmd_ordered(&info->queues.issue, SCpnt)) {
-			SCpnt->result = DID_ERROR << 16;
-			done(SCpnt);
-		}
-		save_flags_cli(flags);
-		if (!info->SCpnt || info->scsi.disconnectable)
-			fas216_kick(info);
-		restore_flags(flags);
-	} else {
-		/* no interrupts to rely on - we'll have to handle the
-		 * command ourselves.  For now, we give up.
-		 */
+	/* add command into execute queue and let it complete under
+	 * whatever scheme we're using.
+	 */
+	if (!queue_add_cmd_ordered(&info->queues.issue, SCpnt)) {
 		SCpnt->result = DID_ERROR << 16;
 		done(SCpnt);
 	}
+	save_flags_cli(flags);
+	if (!info->SCpnt || info->scsi.disconnectable)
+		fas216_kick(info);
+	restore_flags(flags);
+
 	return 0;
 }
 
@@ -1672,15 +1866,28 @@ int fas216_command(Scsi_Cmnd *SCpnt)
 
 	/*
 	 * This wastes time, since we can't return until the command is
-	 * complete. We can't seep either since we may get re-entered!
+	 * complete. We can't sleep either since we may get re-entered!
 	 * However, we must re-enable interrupts, or else we'll be
 	 * waiting forever.
 	 */
 	save_flags(flags);
 	sti();
 
-	while (!info->internal_done)
-		barrier();
+	while (!info->internal_done) {
+		/*
+		 * If we don't have an IRQ, then we must
+		 * poll the card for it's interrupt, and
+		 * use that to call this driver's interrupt
+		 * routine.  That way, we keep the command
+		 * progressing.
+		 */
+		if (info->scsi.irq == NO_IRQ) {
+			sti();
+			while (!(inb(REG_STAT(info)) & STAT_INT));
+			cli();
+			fas216_intr(info->host);
+		}
+	}
 
 	restore_flags(flags);
 
@@ -1752,6 +1959,95 @@ int fas216_eh_host_reset(Scsi_Cmnd *SCpnt)
 	return FAILED;
 }
 
+enum res_abort { res_not_running, res_success, res_success_clear, res_snooze };
+
+/*
+ * Prototype: enum res_abort fas216_do_abort(FAS216_Info *info, Scsi_Cmnd *SCpnt)
+ * Purpose  : abort a command on this host
+ * Params   : SCpnt - command to abort
+ * Returns  : abort status
+ */
+static enum res_abort
+fas216_do_abort(FAS216_Info *info, Scsi_Cmnd *SCpnt)
+{
+	enum res_abort res = res_not_running;
+
+	if (queue_removecmd(&info->queues.issue, SCpnt)) {
+		/*
+		 * The command was on the issue queue, and has not been
+		 * issued yet.  We can remove the command from the queue,
+		 * and acknowledge the abort.  Neither the devices nor the
+		 * interface know about the command.
+		 */
+		printk("on issue queue ");
+
+		res = res_success;
+	} else if (queue_removecmd(&info->queues.disconnected, SCpnt)) {
+		/*
+		 * The command was on the disconnected queue.  Simply
+		 * acknowledge the abort condition, and when the target
+		 * reconnects, we will give it an ABORT message.  The
+		 * target should then disconnect, and we will clear
+		 * the busylun bit.
+		 */
+		printk("on disconnected queue ");
+
+		res = res_success;
+	} else if (info->SCpnt == SCpnt) {
+		unsigned long flags;
+
+		printk("executing ");
+
+		save_flags(flags);
+		cli();
+		switch (info->scsi.phase) {
+		/*
+		 * If the interface is idle, and the command is 'disconnectable',
+		 * then it is the same as on the disconnected queue.  We simply
+		 * remove all traces of the command.  When the target reconnects,
+		 * we will give it an ABORT message since the command could not
+		 * be found.  When the target finally disconnects, we will clear
+		 * the busylun bit.
+		 */
+		case PHASE_IDLE:
+			if (info->scsi.disconnectable) {
+				info->scsi.disconnectable = 0;
+				info->SCpnt = NULL;
+				res = res_success;
+			}
+			break;
+
+		/*
+		 * If the command has connected and done nothing futher,
+		 * simply force a disconnect.  We also need to clear the
+		 * busylun bit.
+		 */
+		case PHASE_SELECTION:
+//			info->SCpnt = NULL;
+//			res = res_success_clear;
+//			break;
+
+		default:
+			res = res_snooze;
+			break;
+		}
+		restore_flags(flags);
+	} else if (info->origSCpnt == SCpnt) {
+		/*
+		 * The command will be executed next, but a command
+		 * is currently using the interface.  This is similar to
+		 * being on the issue queue, except the busylun bit has
+		 * been set.
+		 */
+		info->origSCpnt = NULL;
+		printk("waiting for execution ");
+		res = res_success_clear;
+	} else
+		printk("unknown ");
+
+	return res;
+}
+
 /* Function: int fas216_abort(Scsi_Cmnd *SCpnt)
  * Purpose : abort a command if something horrible happens.
  * Params  : SCpnt - Command that is believed to be causing a problem.
@@ -1769,46 +2065,51 @@ int fas216_abort(Scsi_Cmnd *SCpnt)
 	print_debug_list();
 	fas216_dumpstate(info);
 	fas216_dumpinfo(info);
-	printk(KERN_WARNING "scsi%d: fas216_abort: ", info->host->host_no);
 
-	do {
-		/* If command is waiting in the issue queue, then we can
-		 * simply remove the command and return abort status
-		 */
-		if (queue_removecmd(&info->queues.issue, SCpnt)) {
-			SCpnt->result = DID_ABORT << 16;
-			SCpnt->scsi_done(SCpnt);
-			printk("command on issue queue");
-			result = SCSI_ABORT_SUCCESS;
-			break;
-		}
+	printk(KERN_WARNING "scsi%d: abort ", info->host->host_no);
 
-		/* If the command is on the disconencted queue, we need to
-		 * reconnect to the device
-		 */
-		if (queue_cmdonqueue(&info->queues.disconnected, SCpnt))
-			printk("command on disconnected queue");
+	switch (fas216_do_abort(info, SCpnt)) {
+	/*
+	 * We managed to find the command and cleared it out.
+	 * We do not expect the command to be executing on the
+	 * target, but we have set the busylun bit.
+	 */
+	case res_success_clear:
+		printk("clear ");
+		clear_bit(SCpnt->target * 8 + SCpnt->lun, info->busyluns);
 
-		/* If the command is connected, we need to flag that the
-		 * command needs to be aborted
-		 */
-		if (info->SCpnt == SCpnt)
-			printk("command executing");
+	/*
+	 * We found the command, and cleared it out.  Either
+	 * the command is still known to be executing on the
+	 * target, or the busylun bit is not set.
+	 */
+	case res_success:
+		printk("success\n");
+		SCpnt->result = DID_ABORT << 16;
+		SCpnt->scsi_done(SCpnt);
+		result = SCSI_ABORT_SUCCESS;
+		break;
 
-		/* If the command is pending for execution, then again
-		 * this is simple - we remove it and report abort status
-		 */
-		if (info->origSCpnt == SCpnt) {
-			info->origSCpnt = NULL;
-			SCpnt->result = DID_ABORT << 16;
-			SCpnt->scsi_done(SCpnt);
-			printk("command waiting for execution");
-			result = SCSI_ABORT_SUCCESS;
-			break;
-		}
-	} while (0);
+	/*
+	 * We did find the command, but unfortunately we couldn't
+	 * unhook it from ourselves.  Wait some more, and if it
+	 * still doesn't complete, reset the interface.
+	 */
+	case res_snooze:
+		printk("snooze\n");
+		result = SCSI_ABORT_SNOOZE;
+		break;
 
-	printk("\n");
+	/*
+	 * The command could not be found (either because it completed,
+	 * or it got dropped.
+	 */
+	default:
+	case res_not_running:
+		result = SCSI_ABORT_SNOOZE;
+		printk("not running\n");
+		break;
+	}
 
 	return result;
 }
@@ -1819,7 +2120,7 @@ int fas216_abort(Scsi_Cmnd *SCpnt)
  */
 static void fas216_reset_state(FAS216_Info *info)
 {
-	syncneg_t negstate;
+	neg_t sync_state, wide_state;
 	int i;
 
 	fas216_checkmagic(info, "fas216_reset_state");
@@ -1833,26 +2134,37 @@ static void fas216_reset_state(FAS216_Info *info)
 	info->scsi.reconnected.lun = 0;
 	info->scsi.reconnected.tag = 0;
 	info->scsi.disconnectable = 0;
-	info->scsi.last_message = 0;
 	info->scsi.aborting = 0;
 	info->scsi.phase = PHASE_IDLE;
-	info->scsi.async_stp = fas216_syncperiod(info, info->ifcfg.asyncperiod);
+	info->scsi.async_stp =
+			fas216_syncperiod(info, info->ifcfg.asyncperiod);
+
+	if (info->ifcfg.wide_max_size == 0)
+		wide_state = neg_invalid;
+	else
+#ifdef SCSI2_WIDE
+		wide_state = neg_wait;
+#else
+		wide_state = neg_invalid;
+#endif
 
 	if (info->host->dma_channel == NO_DMA || !info->dma.setup)
-		negstate = syncneg_invalid;
+		sync_state = neg_invalid;
 	else
 #ifdef SCSI2_SYNC
-		negstate = syncneg_start;
+		sync_state = neg_wait;
 #else
-		negstate = syncneg_invalid;
+		sync_state = neg_invalid;
 #endif
 
 	for (i = 0; i < 8; i++) {
-		info->device[i].disconnect_ok = info->ifcfg.disconnect_ok;
-		info->device[i].negstate = negstate;
-		info->device[i].period = info->ifcfg.asyncperiod / 4;
-		info->device[i].stp = info->scsi.async_stp;
-		info->device[i].sof = 0;
+		info->device[i].disconnect_ok	= info->ifcfg.disconnect_ok;
+		info->device[i].sync_state	= sync_state;
+		info->device[i].wide_state	= wide_state;
+		info->device[i].period		= info->ifcfg.asyncperiod / 4;
+		info->device[i].stp		= info->scsi.async_stp;
+		info->device[i].sof		= 0;
+		info->device[i].wide_xfer	= 0;
 	}
 }
 
@@ -1908,9 +2220,11 @@ int fas216_reset(Scsi_Cmnd *SCpnt, unsigned int reset_flags)
 	info->stats.resets += 1;
 
 	print_debug_list();
-	printk(KERN_WARNING "scsi%d: fas216_reset: ", info->host->host_no);
+	printk(KERN_WARNING "scsi%d: reset ", info->host->host_no);
 	if (SCpnt)
-		printk(" for target %d ", SCpnt->target);
+		printk("for target %d ", SCpnt->target);
+
+	printk("\n");
 
 	outb(info->scsi.cfg[3], REG_CNTL3(info));
 
@@ -1962,8 +2276,6 @@ int fas216_reset(Scsi_Cmnd *SCpnt, unsigned int reset_flags)
 		SCpnt->result = DID_RESET << 16;
 		SCpnt->scsi_done(SCpnt);
 	}
-
-	printk("\n");
 
 	return result | SCSI_RESET_SUCCESS;
 }
@@ -2083,6 +2395,49 @@ int fas216_release(struct Scsi_Host *instance)
 	return 0;
 }
 
+int fas216_print_stats(FAS216_Info *info, char *buffer)
+{
+	return sprintf(buffer,
+			"Queued commands: %-10u   Issued commands: %-10u\n"
+			"Done commands  : %-10u   Reads          : %-10u\n"
+			"Writes         : %-10u   Others         : %-10u\n"
+			"Disconnects    : %-10u   Aborts         : %-10u\n"
+			"Resets         : %-10u\n",
+			info->stats.queues,	 info->stats.removes,
+			info->stats.fins,	 info->stats.reads,
+			info->stats.writes,	 info->stats.miscs,
+			info->stats.disconnects, info->stats.aborts,
+			info->stats.resets);
+}
+
+int fas216_print_device(FAS216_Info *info, Scsi_Device *scd, char *buffer)
+{
+	struct fas216_device *dev = &info->device[scd->id];
+	int len = 0;
+	char *p;
+
+	proc_print_scsidevice(scd, buffer, &len, 0);
+	p = buffer + len;
+
+	p += sprintf(p, "  Extensions: ");
+
+	if (scd->tagged_supported)
+		p += sprintf(p, "TAG %sabled [%d] ",
+			     scd->tagged_queue ? "en" : "dis",
+			     scd->current_tag);
+
+	p += sprintf(p, "\n  Transfers : %d-bit ",
+		     8 << dev->wide_xfer);
+
+	if (dev->sof)
+		p += sprintf(p, "sync offset %d, %d ns\n",
+				dev->sof, dev->period * 4);
+	else
+		p += sprintf(p, "async\n");
+
+	return p - buffer;
+}
+
 EXPORT_SYMBOL(fas216_init);
 EXPORT_SYMBOL(fas216_abort);
 EXPORT_SYMBOL(fas216_reset);
@@ -2094,7 +2449,8 @@ EXPORT_SYMBOL(fas216_eh_abort);
 EXPORT_SYMBOL(fas216_eh_device_reset);
 EXPORT_SYMBOL(fas216_eh_bus_reset);
 EXPORT_SYMBOL(fas216_eh_host_reset);
-
+EXPORT_SYMBOL(fas216_print_stats);
+EXPORT_SYMBOL(fas216_print_device);
 
 #ifdef MODULE
 int init_module(void)

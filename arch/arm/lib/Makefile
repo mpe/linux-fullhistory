@@ -6,14 +6,14 @@
 
 L_TARGET := lib.a
 L_OBJS   := backtrace.o bitops.o checksum.o delay.o io.o memcpy.o \
-	    system.o string.o uaccess.o
+	    semaphore.o string.o system.o uaccess.o
 
 ifeq ($(PROCESSOR),armo)
   L_OBJS += uaccess-armo.o
 endif
 
 ifdef CONFIG_ARCH_ACORN
-  L_OBJS += loaders.o ll_char_wr.o io-acorn.o
+  L_OBJS += loaders.o io-acorn.o
   ifdef CONFIG_ARCH_A5K
     L_OBJS += floppydma.o
   endif
@@ -26,12 +26,8 @@ ifeq ($(MACHINE),ebsa110)
   L_OBJS += io-ebsa110.o
 endif
 
-ifeq ($(MACHINE),vnc)
-  L_OBJS += io-ebsa285.o
-endif
-
-ifeq ($(MACHINE),ebsa285)
-  L_OBJS += io-ebsa285.o
+ifeq ($(MACHINE),footbridge)
+  L_OBJS += io-footbridge.o
 endif
 
 include $(TOPDIR)/Rules.make
@@ -45,10 +41,4 @@ getconsdata.o: getconsdata.c
 checksum.o: constants.h
 
 %.o: %.S
-ifneq ($(CONFIG_BINUTILS_NEW),y)
-	$(CC) $(CFLAGS) -D__ASSEMBLY__ -E $< | tr ';$$' '\n#' > ..tmp.$<.s
-	$(CC) $(CFLAGS:-pipe=) -c -o $@ ..tmp.$<.s
-	$(RM) ..tmp.$<.s
-else
 	$(CC) $(CFLAGS) -D__ASSEMBLY__ -c -o $@ $<
-endif

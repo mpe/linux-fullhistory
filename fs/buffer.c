@@ -1753,13 +1753,6 @@ int try_to_free_buffers(struct page * page)
 		tmp = tmp->b_this_page;
 		if (!buffer_busy(p))
 			continue;
-{
-	static int count = 30;
-	if (count) {
-		count--;
-		printk("bh %p (%04x:%ld): count=%d, state=0x%04x\n", p, p->b_dev, p->b_blocknr, p->b_count, p->b_state);
-	}
-}
 
 		wakeup_bdflush(0);
 		return 0;

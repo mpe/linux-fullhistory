@@ -65,14 +65,14 @@ static inline unsigned long _page_hashfn(struct inode * inode, unsigned long off
 #define page_hash(inode,offset) (page_hash_table+_page_hashfn(inode,offset))
 
 extern struct page * __find_get_page (struct inode * inode,
-				unsigned long offset, struct page *page);
+				unsigned long offset, struct page **hash);
 #define find_get_page(inode, offset) \
-		__find_get_page(inode, offset, *page_hash(inode, offset))
+		__find_get_page(inode, offset, page_hash(inode, offset))
 extern struct page * __find_lock_page (struct inode * inode,
-				unsigned long offset, struct page *page);
+				unsigned long offset, struct page **hash);
 extern void lock_page(struct page *page);
 #define find_lock_page(inode, offset) \
-		__find_lock_page(inode, offset, *page_hash(inode, offset))
+		__find_lock_page(inode, offset, page_hash(inode, offset))
 
 extern void __add_page_to_hash_queue(struct page * page, struct page **p);
 
@@ -81,21 +81,6 @@ extern int add_to_page_cache_unique(struct page * page, struct inode * inode, un
 static inline void add_page_to_hash_queue(struct page * page, struct inode * inode, unsigned long offset)
 {
 	__add_page_to_hash_queue(page, page_hash(inode,offset));
-}
-
-static inline void remove_page_from_inode_queue(struct page * page)
-{
-	struct inode * inode = page->inode;
-
-	inode->i_nrpages--;
-	if (inode->i_pages == page)
-		inode->i_pages = page->next;
-	if (page->next)
-		page->next->prev = page->prev;
-	if (page->prev)
-		page->prev->next = page->next;
-	page->next = NULL;
-	page->prev = NULL;
 }
 
 static inline void add_page_to_inode_queue(struct inode * inode, struct page * page)

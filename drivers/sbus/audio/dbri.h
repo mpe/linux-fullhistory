@@ -46,13 +46,19 @@ struct dbri_dma {
   struct dbri_mem desc[DBRI_NO_DESCS];		/* Xmit/receive descriptors */
 };
 
+enum in_or_out { PIPEinput, PIPEoutput };
+
+enum direction { in, out };
+
 struct dbri_pipe {
         u32 sdp;				/* SDP command word */
+	enum direction direction;
         int nextpipe;				/* Next pipe in linked list */
+	int prevpipe;
         int cycle;				/* Offset of timeslot (bits) */
         int length;				/* Length of timeslot (bits) */
         int desc;				/* Index of active descriptor*/
-        __u32 *recv_fixed_ptr;			/* Ptr to receive fixed data */
+	volatile __u32 *recv_fixed_ptr;		/* Ptr to receive fixed data */
 };
 
 struct dbri_desc {
@@ -78,9 +84,14 @@ struct dbri {
   struct dbri_regs *regs;			/* dbri HW regs */
   int dbri_version;				/* 'e' and up is OK */
   int dbri_irqp;				/* intr queue pointer */
+  int wait_seen;
 
   struct dbri_pipe pipes[32];			/* DBRI's 32 data pipes */
   struct dbri_desc descs[DBRI_NO_DESCS];
+
+  int chi_in_pipe;
+  int chi_out_pipe;
+  int chi_bpf;
 
   struct cs4215 mm;				/* mmcodec special info */
 
@@ -190,7 +201,7 @@ struct dbri {
 /* Time Slot defines */
 #define D_TS_LEN(v)	((v)<<24)	/* Number of bits in this time slot */
 #define D_TS_CYCLE(v)	((v)<<14)	/* Bit Count at start of TS */
-#define D_TS_DI(v)	(1<<13)	/* Data Invert */
+#define D_TS_DI		(1<<13)	/* Data Invert */
 #define D_TS_1CHANNEL	(0<<10)	/* Single Channel / Normal mode */
 #define D_TS_MONITOR	(2<<10)	/* Monitor pipe */
 #define D_TS_NONCONTIG	(3<<10) /* Non contiguous mode */
@@ -218,8 +229,8 @@ struct dbri {
 #define D_NT_IFA	(1<<10)	/* Inhibit Final Activation */
 #define D_NT_ACT	(1<<9)	/* Activate Interface */
 #define D_NT_MFE	(1<<8)	/* Multiframe Enable */
-#define D_NT_RLB(v)	(1<<5)	/* Remote Loopback */
-#define D_NT_LLB(v)	(1<<2)	/* Local Loopback */
+#define D_NT_RLB(v)	((v)<<5)	/* Remote Loopback */
+#define D_NT_LLB(v)	((v)<<2)	/* Local Loopback */
 #define D_NT_FACT	(1<<1)	/* Force Activation */
 #define D_NT_ABV	(1<<0)	/* Activate Bipolar Violation */
 

@@ -2,16 +2,11 @@
 // def file for Rockwell RWA010 chip set, as installed in Corel NetWinder
 
 //registers
-#define	WA_BASE	0
-//x250
-
-#define CMDR	WA_BASE+0
-#define DATR	WA_BASE+2
-
-#define CTLR	WA_BASE+4
-#define	STATR	WA_BASE+5
-
-#define	IRQSTAT	WA_BASE+12
+#define CMDR	0
+#define DATR	2
+#define CTLR	4
+#define	STATR	5
+#define	IRQSTAT	12
 
 //bit defs
 //reg STATR

@@ -9,20 +9,21 @@
 # parent makes..
 #
 
-L_TARGET := acorn-char.a
-M_OBJS   :=
-L_OBJS   :=
+L_TARGET 	:= acorn-char.a
+M_OBJS   	:=
+L_OBJS   	:=
+
+L_OBJS_arc	:= keyb_arc.o
+L_OBJS_a5k	:= keyb_arc.o
+L_OBJS_rpc	:= keyb_ps2.o
 
 ifeq ($(MACHINE),rpc)
-  MOUSE_OBJS += mouse_rpc.o
-  L_OBJS += keyb_ps2.o
-endif
-
-ifeq ($(CONFIG_MOUSE),y)
-  LX_OBJS += $(MOUSE_OBJS)
-else
-  ifeq ($(CONFIG_MOUSE),m)
-    MX_OBJS += $(MOUSE_OBJS)
+  ifeq ($(CONFIG_MOUSE),y)
+    LX_OBJS += mouse_rpc.o
+  else
+    ifeq ($(CONFIG_MOUSE),m)
+      MX_OBJS += mouse_rpc.o
+    endif
   endif
 endif
 
@@ -41,5 +42,7 @@ else
     M_OBJS += serial-dualsp.o
   endif
 endif
+
+L_OBJS += $(L_OBJS_$(MACHINE))
 
 include $(TOPDIR)/Rules.make

@@ -11348,7 +11348,8 @@ Footbridge Mode
 CONFIG_HOST_FOOTBRIDGE
   The 21285 Footbridge chip can operate in either `host mode' or
   `add-in' mode.  Say Y if your 21285 is in host mode, and therefore
-  is the configuration master, otherwise say N.
+  is the configuration master, otherwise say N.  This must not be
+  set to 'Y' if the card is used in 'add-in' mode.
 
 MFM harddisk support
 CONFIG_BLK_DEV_MFM

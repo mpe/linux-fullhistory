@@ -66,7 +66,7 @@ static struct page *try_to_get_symlink_page(struct dentry *dentry, struct inode 
 
 	hash = page_hash(inode, 0);
 repeat:
-	page = __find_lock_page(inode, 0, *hash);
+	page = __find_lock_page(inode, 0, hash);
 	if (page) {
 		page_cache_free(page_cache);
 		goto unlock_out;

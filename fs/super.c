@@ -918,13 +918,6 @@ static int do_remount_sb(struct super_block *sb, int flags, char *data)
 	int retval;
 	struct vfsmount *vfsmnt;
 	
-	/*
-	 * Invalidate the inodes, as some mount options may be changed.
-	 * N.B. If we are changing media, we should check the return
-	 * from invalidate_inodes ... can't allow _any_ open files.
-	 */
-	invalidate_inodes(sb);
-
 	if (!(flags & MS_RDONLY) && sb->s_dev && is_read_only(sb->s_dev))
 		return -EACCES;
 		/*flags |= MS_RDONLY;*/
@@ -941,6 +934,14 @@ static int do_remount_sb(struct super_block *sb, int flags, char *data)
 	vfsmnt = lookup_vfsmnt(sb->s_dev);
 	if (vfsmnt)
 		vfsmnt->mnt_flags = sb->s_flags;
+
+	/*
+	 * Invalidate the inodes, as some mount options may be changed.
+	 * N.B. If we are changing media, we should check the return
+	 * from invalidate_inodes ... can't allow _any_ open files.
+	 */
+	invalidate_inodes(sb);
+
 	return 0;
 }
 

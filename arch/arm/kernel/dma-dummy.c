@@ -9,6 +9,10 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 
+#include <asm/spinlock.h>
+
+spinlock_t dma_spin_lock = SPIN_LOCK_UNLOCKED;
+
 int request_dma(int channel, const char *device_id)
 {
 	return -EINVAL;

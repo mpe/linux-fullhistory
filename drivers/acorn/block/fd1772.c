@@ -114,6 +114,8 @@
  *		  I wish I knew why that timer didn't work.....
  *
  *     16/11/96 - Fiddled and frigged for 2.0.18
+ *
+ * DAG 30/01/99 - Started frobbing for 2.2.1
  */
 
 #include <linux/sched.h>
@@ -136,14 +138,14 @@
 #include <asm/dma.h>
 #include <asm/hardware.h>
 #include <asm/io.h>
+#include <asm/ioc.h>
 #include <asm/irq.h>
-#include <asm/irq-no.h>
 #include <asm/pgtable.h>
 #include <asm/segment.h>
 
 #define MAJOR_NR FLOPPY_MAJOR
 #define FLOPPY_DMA 0
-#include "blk.h"
+#include <linux/blk.h>
 
 /* Note: FD_MAX_UNITS could be redefined to 2 for the Atari (with
  * little additional rework in this file). But I'm not yet sure if

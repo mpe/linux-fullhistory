@@ -10,21 +10,31 @@
 # License.  See the file "COPYING" in the main directory of this archive
 # for more details.
 #
-# Copyright (C) 1995, 1996 by Russell King
+# Copyright (C) 1995-1999 by Russell King
 
 CFLAGS_PROC		:=
 ASFLAGS_PROC		:=
 
-# All processors get `-mshort-load-bytes' for now, to work around alignment
-# problems.  This is more of a hack that just happens to work than a real fix
-# but it will do for now.
+# GCC 2.7 uses different options to later compilers; sort out which we have
+CONFIG_GCC_NEW		:= $(shell if $(CC) --version 2>&1 | grep '^2\.7' > /dev/null; then echo n; else echo y; fi)
+
+# Hack to get around RiscPC with StrongARM optimistaion
+# problem - force ARM710 optimisation for now.
+ifeq ($(CONFIG_GCC_NEW),y)
+  ifeq ($(CONFIG_ARCH_RPC),y)
+    ifeq ($(CONFIG_CPU_SA110),y)
+      CONFIG_CPU_SA110	:= n
+      CONFIG_CPU_ARM7	:= y
+    endif
+  endif
+endif
 
 ifeq ($(CONFIG_CPU_26),y)
   PROCESSOR		 = armo
   TEXTADDR		 = 0x02080000
   ZTEXTADDR		 = 0x01800000
   ZRELADDR		 = 0x02080000
-  ifeq ($(CONFIG_BINUTILS_NEW),y)
+  ifeq ($(CONFIG_GCC_NEW),y)
     CFLAGS_PROC		+= -mapcs-26 -mshort-load-bytes
     ifeq ($(CONFIG_CPU_ARM2),y)
       CFLAGS_PROC	+= -mcpu=arm2
@@ -49,7 +59,7 @@ endif
 ifeq ($(CONFIG_CPU_32),y)
   PROCESSOR		 = armv
   TEXTADDR		 = 0xC0008000
-  ifeq ($(CONFIG_BINUTILS_NEW),y)
+  ifeq ($(CONFIG_GCC_NEW),y)
     CFLAGS_PROC		+= -mapcs-32 -mshort-load-bytes
     ifeq ($(CONFIG_CPU_ARM6),y)
       CFLAGS_PROC	+= -mcpu=arm6
@@ -68,10 +78,11 @@ endif
 
 # Processor Architecture
 # CFLAGS_PROC - processor dependent CFLAGS
-# PROCESSOR - processor type
-# TEXTADDR - Uncompressed kernel link text address
-# ZTEXTADDR - Compressed kernel link text address
-# ZRELADDR - Compressed kernel relocating address (point at which uncompressed kernel is loaded).
+# PROCESSOR   - processor type
+# TEXTADDR    - Uncompressed kernel link text address
+# ZTEXTADDR   - Compressed kernel link text address
+# ZRELADDR    - Compressed kernel relocating address
+#	        (point at which uncompressed kernel is loaded).
 #
 
 COMPRESSED_HEAD	 = head.o
@@ -79,19 +90,16 @@ COMPRESSED_HEAD	 = head.o
 ifeq ($(CONFIG_ARCH_A5K),y)
 MACHINE		 = a5k
 ARCHDIR		 = arc
-COMPRESSED_EXTRA = $(TOPDIR)/arch/arm/lib/ll_char_wr.o
 endif
 
 ifeq ($(CONFIG_ARCH_ARC),y)
 MACHINE		 = arc
 ARCHDIR		 = arc
-COMPRESSED_EXTRA = $(TOPDIR)/arch/arm/lib/ll_char_wr.o
 endif
 
 ifeq ($(CONFIG_ARCH_RPC),y)
 MACHINE		 = rpc
 ARCHDIR		 = rpc
-COMPRESSED_EXTRA = $(TOPDIR)/arch/arm/lib/ll_char_wr.o
 ZTEXTADDR	 = 0x10008000
 ZRELADDR	 = 0x10008000
 endif
@@ -103,11 +111,15 @@ ZTEXTADDR	 = 0x00008000
 ZRELADDR	 = 0x00008000
 endif
 
-ifeq ($(CONFIG_ARCH_EBSA285),y)
-MACHINE		 = ebsa285
+ifeq ($(CONFIG_FOOTBRIDGE),y)
+MACHINE		 = footbridge
 ARCHDIR		 = ebsa285
 ZTEXTADDR	 = 0x00008000
 ZRELADDR	 = 0x00008000
+endif
+
+ifeq ($(CONFIG_ARCH_CO285),y)
+TEXTADDR	 = 0x60008000
 endif
 
 ifeq ($(CONFIG_ARCH_NEXUSPCI),y)
@@ -119,31 +131,13 @@ COMPRESSED_EXTRA = $(TOPDIR)/arch/arm/lib/ll_char_wr_scc.o
 COMPRESSED_HEAD	 = head-nexuspci.o
 endif
 
-ifeq ($(CONFIG_ARCH_VNC),y)
-TEXTADDR	 = 0xC000C000
-MACHINE		 = vnc
-ARCHDIR		 = vnc
-endif
-
-ifeq ($(CONFIG_ARCH_TBOX),y)
-MACHINE		 = tbox
-ARCHDIR		 = tbox
-ZTEXTADDR	 = 0x80008000
-ZRELDIR		 = 0x80008000
-endif
-
 PERL		 = perl
-ifeq ($(CONFIG_BINUTILS_NEW),y)
-LD		 = $(CROSS_COMPILE)ld -m elf32arm
-else
-LD		 = $(CROSS_COMPILE)ld -m elf_arm
-endif
+LD		 = $(CROSS_COMPILE)ld
 OBJCOPY		 = $(CROSS_COMPILE)objcopy -O binary -R .note -R .comment -S
 OBJDUMP		 = $(CROSS_COMPILE)objdump
 CPP		 = $(CC) -E
 ARCHCC		:= $(word 1,$(CC))
 GCCLIB		:= `$(CC) $(CFLAGS_PROC) --print-libgcc-file-name`
-#GCCARCH		:= -B/usr/bin/arm-linuxelf- 
 HOSTCFLAGS	:= $(CFLAGS:-fomit-frame-pointer=)
 ifeq ($(CONFIG_FRAME_POINTER),y)
 CFLAGS		:= $(CFLAGS:-fomit-frame-pointer=)
@@ -153,74 +147,39 @@ ASFLAGS		:= $(ASFLAGS_PROC) $(ASFLAGS)
 LINKFLAGS	 = -T $(TOPDIR)/arch/arm/vmlinux-$(PROCESSOR).lds -e stext -Ttext $(TEXTADDR)
 ZLINKFLAGS	 = -Ttext $(ZTEXTADDR)
 
-SUBDIRS		:= $(SUBDIRS:drivers=arch/arm/drivers) arch/arm/lib arch/arm/kernel arch/arm/mm
-HEAD		:= arch/arm/kernel/head-$(PROCESSOR).o arch/arm/kernel/init_task.o
+# If we're intending to debug the kernel, make sure it has line number
+# information.  This gets stripped out when building (z)Image so it doesn't
+# add anything to the footprint of the running kernel.
+ifeq ($(CONFIG_DEBUG_INFO),y)
+CFLAGS		+= -g
+endif
+
+HEAD		:= arch/arm/kernel/head-$(PROCESSOR).o \
+		   arch/arm/kernel/init_task.o
+SUBDIRS		:= arch/arm/special $(SUBDIRS) arch/arm/lib arch/arm/kernel \
+		   arch/arm/mm arch/arm/nwfpe
 CORE_FILES	:= arch/arm/kernel/kernel.o arch/arm/mm/mm.o $(CORE_FILES)
 LIBS		:= arch/arm/lib/lib.a $(LIBS) $(GCCLIB)
-
-BLOCK_DRIVERS	:= drivers/block/block.a
-CDROM_DRIVERS	:= drivers/cdrom/cdrom.a
-ifeq ($(CONFIG_FB),y)
-CHAR_DRIVERS	:= arch/arm/drivers/char1/char1.a drivers/char/char.a arch/arm/drivers/char1/char1.a
-else
-ifeq ($(CONFIG_VGA_CONSOLE),y)
-CHAR_DRIVERS	:= arch/arm/drivers/char1/char1.a drivers/char/char.a arch/arm/drivers/char1/char1.a
-else
-CHAR_DRIVERS	:= arch/arm/drivers/char/char.a
-endif
-endif
-MISC_DRIVERS	:= drivers/misc/misc.a
-NET_DRIVERS	:= drivers/net/net.a
-PARIDE_DRIVERS	:= drivers/block/paride/paride.a
-PCI_DRIVERS	:= drivers/pci/pci.a
-SCSI_DRIVERS	:= drivers/scsi/scsi.a
-SOUND_DRIVERS	:= drivers/sound/sound.a
-VIDEO_DRIVERS	:= drivers/video/video.a
-PNP_DRIVERS	:= drivers/pnp/pnp.a
+DRIVERS		+= arch/arm/special/special.a
 
 ifeq ($(CONFIG_ARCH_ACORN),y)
-BLOCK_DRIVERS	+= drivers/acorn/block/acorn-block.a
-CHAR_DRIVERS	+= drivers/acorn/char/acorn-char.a
-NET_DRIVERS	+= drivers/acorn/net/acorn-net.a drivers/net/net.a
-SCSI_DRIVERS	+= drivers/acorn/scsi/acorn-scsi.a
+SUBDIRS		+= drivers/acorn/block drivers/acorn/char drivers/acorn/net \
+		   drivers/acorn/scsi
+DRIVERS		+= drivers/acorn/block/acorn-block.a \
+		   drivers/acorn/char/acorn-char.a \
+		   drivers/acorn/net/acorn-net.a \
+		   drivers/acorn/scsi/acorn-scsi.a
 endif
 
-DRIVERS		:= $(BLOCK_DRIVERS) $(CHAR_DRIVERS) $(MISC_DRIVERS) $(NET_DRIVERS)
+ifeq ($(CONFIG_NWFPE),y)
+DRIVERS		+= arch/arm/nwfpe/math-emu.a
+endif
 
-ifeq ($(CONFIG_FB),y)
-DRIVERS		:= $(DRIVERS) $(VIDEO_DRIVERS)
-else
-ifeq ($(CONFIG_VGA_CONSOLE),y)
-DRIVERS		:= $(DRIVERS) $(VIDEO_DRIVERS)
-endif
-endif
-ifeq ($(CONFIG_SCSI),y)
-DRIVERS		:= $(DRIVERS) $(SCSI_DRIVERS)
-endif
-ifneq ($(CONFIG_CD_NO_IDESCSI)$(CONFIG_BLK_DEV_IDECD)$(CONFIG_BLK_DEV_SR),)
-DRIVERS		:= $(DRIVERS) $(CDROM_DRIVERS)
-endif
-ifdef CONFIG_PCI
-DRIVERS		:= $(DRIVERS) $(PCI_DRIVERS)
-endif
-ifeq ($(CONFIG_SOUND),y)
-DRIVERS		:= $(DRIVERS) $(SOUND_DRIVERS)
-endif
-ifeq ($(CONFIG_PARIDE),y)
-DRIVERS		:= $(DRIVERS) $(PARIDE_DRIVERS)
-endif
-ifdef CONFIG_PNP
-DRIVERS		:= $(DRIVERS) $(PNP_DRIVERS)
-endif
+MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
 
 symlinks::
 	$(RM) include/asm-arm/arch include/asm-arm/proc
 	(cd include/asm-arm; ln -sf arch-$(ARCHDIR) arch; ln -sf proc-$(PROCESSOR) proc)
-
-# Once we've finished integrating the sources, the @$(MAKE) will disappear
-archmrproper:
-	rm -f include/asm-arm/arch include/asm-arm/proc
-	@$(MAKE) -C arch/$(ARCH)/drivers mrproper
 
 arch/arm/kernel: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=arch/arm/kernel
@@ -231,25 +190,13 @@ arch/arm/mm: dummy
 arch/arm/lib: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=arch/arm/lib
 
-MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
+zImage zinstall Image install: vmlinux
+	@$(MAKEBOOT) $@
 
-zImage: vmlinux
-	@$(MAKEBOOT) zImage
-
-zinstall: vmlinux
-	@$(MAKEBOOT) zinstall
-
-Image: vmlinux
-	@$(MAKEBOOT) Image
-
-install: vmlinux
-	@$(MAKEBOOT) install
-
-# My testing targets (that short circuit a few dependencies)
-zImg:;	@$(MAKEBOOT) zImage
-Img:;	@$(MAKEBOOT) Image
-i:;	@$(MAKEBOOT) install
-zi:;	@$(MAKEBOOT) zinstall
+# Once we've finished integrating the sources, the @$(MAKE) will disappear
+archmrproper:
+	rm -f include/asm-arm/arch include/asm-arm/proc
+	@$(MAKE) -C arch/$(ARCH)/special mrproper
 
 archclean:
 	@$(MAKEBOOT) clean
@@ -257,4 +204,26 @@ archclean:
 
 archdep:
 	@$(MAKEBOOT) dep
-sed -e /^MACHINE..*=/s,= .*,= rpc,;/^PROCESSOR..*=/s,= .*,= armv, linux/arch/arm/Makefile.normal
+
+# My testing targets (that short circuit a few dependencies)
+zImg:;	@$(MAKEBOOT) zImage
+Img:;	@$(MAKEBOOT) Image
+i:;	@$(MAKEBOOT) install
+zi:;	@$(MAKEBOOT) zinstall
+
+a5k_config:
+	$(RM) arch/arm/defconfig
+	cp arch/arm/def-configs/a5k arch/arm/defconfig
+
+ebsa110_config:
+	$(RM) arch/arm/defconfig
+	cp arch/arm/def-configs/ebsa110 arch/arm/defconfig
+
+footbridge_config:
+	$(RM) arch/arm/defconfig
+	cp arch/arm/def-configs/footbridge arch/arm/defconfig
+
+rpc_config:
+	$(RM) arch/arm/defconfig
+	cp arch/arm/def-configs/rpc arch/arm/defconfig
+

@@ -35,7 +35,7 @@ extern unsigned int __machine_arch_type;
 
 /*
  * Sort out a definition for machine_arch_type
- * The rules basically are:
+ * The rules are:
  * 1. If one architecture is selected, then all machine_is_xxx()
  *    are constant.
  * 2. If two or more architectures are selected, then the selected
@@ -118,28 +118,16 @@ extern unsigned int __machine_arch_type;
 #define machine_arch_type	__machine_arch_type
 #endif
 
-/*
- * task_struct isn't always declared - forward-declare it here.
- */
-struct task_struct;
-
 #include <asm/proc-fns.h>
-
-extern void arm_malalignedptr(const char *, void *, volatile void *);
-extern void arm_invalidptr(const char *, int);
 
 #define xchg(ptr,x) \
 	((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))
 
 #define tas(ptr) (xchg((ptr),1))
 
-/*
- * switch_to(prev, next) should switch from task `prev' to `next'
- * `prev' will never be the same as `next'.
- *
- * `next' and `prev' should be struct task_struct, but it isn't always defined
- */
-#define switch_to(prev,next,last) do { last = processor._switch_to(prev,next); } while (0)
+extern void arm_malalignedptr(const char *, void *, volatile void *);
+extern void arm_invalidptr(const char *, int);
+extern asmlinkage void __backtrace(void);
 
 /*
  * Include processor dependent parts
@@ -152,7 +140,16 @@ extern void arm_invalidptr(const char *, int);
 #define wmb() mb()
 #define nop() __asm__ __volatile__("mov\tr0,r0\t@ nop\n\t");
 
-extern asmlinkage void __backtrace(void);
+/*
+ * switch_to(prev, next) should switch from task `prev' to `next'
+ * `prev' will never be the same as `next'.
+ * The `mb' is to tell GCC not to cache `current' across this call.
+ */
+#define switch_to(prev,next,last)			\
+	do {			 			\
+		last = processor._switch_to(prev,next);	\
+		mb();					\
+	} while (0)
 
 #endif
 

@@ -7,11 +7,13 @@
  *
  *  - Red - toggles state every 50 timer interrupts
  */
+#include <linux/module.h>
+
 #include <asm/hardware.h>
 #include <asm/leds.h>
 #include <asm/system.h>
 
-void leds_event(led_event_t ledevt)
+void ebsa110_leds_event(led_event_t ledevt)
 {
 	unsigned long flags;
 
@@ -28,3 +30,7 @@ void leds_event(led_event_t ledevt)
 
 	restore_flags(flags);
 }
+
+void (*leds_event)(led_event_t) = ebsa110_leds_event;
+
+EXPORT_SYMBOL(leds_event);

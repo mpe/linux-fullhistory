@@ -52,6 +52,8 @@ struct pt_regs {
 #define CC_Z_BIT	(1 << 30)
 #define CC_N_BIT	(1 << 31)
 
+#ifdef __KERNEL__
+
 #if 0 /* GCC/egcs should be able to optimise this, IMHO */
 #define user_mode(regs)	\
 	((((regs)->ARM_cpsr & MODE_MASK) == USR_MODE) || \
@@ -81,8 +83,8 @@ struct pt_regs {
  */
 static inline int valid_user_regs(struct pt_regs *regs)
 {
-	if ((regs->ARM_cpsr & 0xf) == 0 ||
-	    (regs->ARM_cpsr & (F_BIT|I_BIT)))
+	if ((regs->ARM_cpsr & 0xf) == 0 &&
+	    (regs->ARM_cpsr & (F_BIT|I_BIT)) == 0)
 		return 1;
 
 	/*
@@ -92,6 +94,8 @@ static inline int valid_user_regs(struct pt_regs *regs)
 
 	return 0;
 }
+
+#endif	/* __KERNEL__ */
 
 #endif
 

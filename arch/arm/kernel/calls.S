@@ -31,7 +31,7 @@
 		.long	SYMBOL_NAME(sys_lseek)
 /* 20 */	.long	SYMBOL_NAME(sys_getpid)
 		.long	SYMBOL_NAME(sys_mount_wrapper)
-		.long	SYMBOL_NAME(sys_umount)
+		.long	SYMBOL_NAME(sys_oldumount)
 		.long	SYMBOL_NAME(sys_setuid)
 		.long	SYMBOL_NAME(sys_getuid)
 /* 25 */	.long	SYMBOL_NAME(sys_stime)
@@ -61,7 +61,7 @@
 		.long	SYMBOL_NAME(sys_geteuid)
 /* 50 */	.long	SYMBOL_NAME(sys_getegid)
 		.long	SYMBOL_NAME(sys_acct)
-		.long	SYMBOL_NAME(sys_ni_syscall)		/* was sys_phys */
+		.long	SYMBOL_NAME(sys_umount)
 		.long	SYMBOL_NAME(sys_ni_syscall)		/* was sys_lock */
 		.long	SYMBOL_NAME(sys_ioctl)
 /* 55 */	.long	SYMBOL_NAME(sys_fcntl)
@@ -110,7 +110,7 @@
 		.long	SYMBOL_NAME(sys_ni_syscall)		/* was sys_profil */
 		.long	SYMBOL_NAME(sys_statfs)
 /* 100 */	.long	SYMBOL_NAME(sys_fstatfs)
-		.long	SYMBOL_NAME(sys_ni_syscall)		/* .long	_sys_ioperm */
+		.long	SYMBOL_NAME(sys_ni_syscall)
 		.long	SYMBOL_NAME(sys_socketcall)
 		.long	SYMBOL_NAME(sys_syslog)
 		.long	SYMBOL_NAME(sys_setitimer)
@@ -119,7 +119,7 @@
 		.long	SYMBOL_NAME(sys_newlstat)
 		.long	SYMBOL_NAME(sys_newfstat)
 		.long	SYMBOL_NAME(sys_uname)
-/* 110 */	.long	SYMBOL_NAME(sys_iopl)
+/* 110 */	.long	SYMBOL_NAME(sys_ni_syscall)
 		.long	SYMBOL_NAME(sys_vhangup)
 		.long	SYMBOL_NAME(sys_idle)
 		.long	SYMBOL_NAME(sys_syscall)		/* call a syscall */
@@ -196,6 +196,10 @@
 		.long	SYMBOL_NAME(sys_capget)
 /* 185 */	.long	SYMBOL_NAME(sys_capset)
 		.long	SYMBOL_NAME(sys_sigaltstack_wrapper)
+		.long	SYMBOL_NAME(sys_sendfile)
+		.long	SYMBOL_NAME(sys_ni_syscall)
+		.long	SYMBOL_NAME(sys_ni_syscall)
+/* 190 */	.long	SYMBOL_NAME(sys_vfork_wrapper)
 
 		.rept	NR_syscalls-186
 			.long	SYMBOL_NAME(sys_ni_syscall)

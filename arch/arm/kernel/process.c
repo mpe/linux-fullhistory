@@ -34,7 +34,6 @@
 #include <linux/init.h>
 
 #include <asm/uaccess.h>
-#include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/io.h>
 
@@ -55,46 +54,37 @@ void enable_hlt(void)
 }
 
 /*
- * The idle loop on an arm..
+ * The idle loop on an ARM...
  */
 asmlinkage int sys_idle(void)
 {
-	int ret = -EPERM;
-
-	lock_kernel();
 	if (current->pid != 0)
-		goto out;
+		return -EPERM;
+
 	/* endless idle loop with no priority at all */
-	current->priority = -100;
-	for (;;)
-	{
-		check_pgt_cache();
-#if 0 //def ARCH_IDLE_OK
-		if (!hlt_counter && !current->need_resched)
-			proc_idle ();
-#endif
-		run_task_queue(&tq_scheduler);
+	while (1) {
+		if (!current->need_resched && !hlt_counter)
+			proc_idle();
+		current->policy = SCHED_YIELD;
 		schedule();
+#ifndef CONFIG_NO_PGT_CACHE
+		check_pgt_cache();
+#endif
 	}
-	ret = 0;
-out:
-	unlock_kernel();
-	return ret;
 }
+
+static char reboot_mode = 'h';
 
 __initfunc(void reboot_setup(char *str, int *ints))
 {
+	reboot_mode = str[0];
 }
 
-/*
- * This routine reboots the machine by resetting the expansion cards via
- * their loaders, turning off the processor cache (if ARM3), copying the
- * first instruction of the ROM to 0, and executing it there.
- */
 void machine_restart(char * __unused)
 {
-	proc_hard_reset ();
-	arch_hard_reset ();
+	arch_reset(reboot_mode);
+	panic("Reboot failed\n");
+	while (1);
 }
 
 void machine_halt(void)
@@ -150,6 +140,67 @@ void show_regs(struct pt_regs * regs)
 }
 
 /*
+ * Task structure and kernel stack allocation.
+ *
+ * Taken from the i386 version.
+ */
+#ifdef CONFIG_CPU_32
+#define EXTRA_TASK_STRUCT	8
+static struct task_struct *task_struct_stack[EXTRA_TASK_STRUCT];
+static int task_struct_stack_ptr = -1;
+#endif
+
+struct task_struct *alloc_task_struct(void)
+{
+	struct task_struct *tsk;
+
+#ifndef EXTRA_TASK_STRUCT
+	tsk = ll_alloc_task_struct();
+#else
+	int index;
+
+	index = task_struct_stack_ptr;
+	if (index >= EXTRA_TASK_STRUCT/2)
+		goto use_cache;
+
+	tsk = ll_alloc_task_struct();
+
+	if (!tsk) {
+		index = task_struct_stack_ptr;
+
+		if (index >= 0) {
+use_cache:		tsk = task_struct_stack[index];
+			task_struct_stack_ptr = index - 1;
+		}
+	}
+#endif
+#ifdef CONFIG_SYSRQ
+	/* You need this if you want SYSRQ-T to give sensible stack
+	 * usage information
+	 */
+	if (tsk) {
+		char *p = (char *)tsk;
+		memzero(p+KERNEL_STACK_SIZE, KERNEL_STACK_SIZE);
+	}
+#endif
+
+	return tsk;
+}
+
+void free_task_struct(struct task_struct *p)
+{
+#ifdef EXTRA_TASK_STRUCT
+	int index = task_struct_stack_ptr + 1;
+
+	if (index < EXTRA_TASK_STRUCT) {
+		task_struct_stack[index] = p;
+		task_struct_stack_ptr = index;
+	} else
+#endif
+		ll_free_task_struct(p);
+}
+
+/*
  * Free current thread data structures etc..
  */
 void exit_thread(void)
@@ -179,9 +230,10 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	childregs = ((struct pt_regs *)((unsigned long)p + 8192)) - 1;
 	*childregs = *regs;
 	childregs->ARM_r0 = 0;
+	childregs->ARM_sp = esp;
 
 	save = ((struct context_save_struct *)(childregs)) - 1;
-	copy_thread_css(save);
+	init_thread_css(save);
 	p->tss.save = save;
 
 	return 0;
@@ -224,3 +276,29 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	dump->regs = *regs;
 	dump->u_fpvalid = dump_fpu (regs, &dump->u_fp);
 }
+
+/*
+ * This is the mechanism for creating a new kernel thread.
+ *
+ * NOTE! Only a kernel-only process(ie the swapper or direct descendants
+ * who haven't done an "execve()") should use this: it will work within
+ * a system call from a "real" process, but the process memory space will
+ * not be free'd until both the parent and the child have exited.
+ */
+pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
+{
+	extern int sys_exit(int) __attribute__((noreturn));
+	pid_t __ret;
+
+	__asm__ __volatile__(
+	"mov	r0, %1		@ kernel_thread sys_clone\n"
+"	mov	r1, #0\n"
+	__syscall(clone)"\n"
+"	mov	%0, r0"
+        : "=r" (__ret)
+        : "Ir" (flags | CLONE_VM) : "r0", "r1");
+	if (__ret == 0)
+		sys_exit((fn)(arg));
+	return __ret;
+}
+

@@ -14,29 +14,11 @@ L_OBJS   :=
 M_OBJS   :=
 MOD_LIST_NAME := ACORN_BLOCK_MODULES
 
-ifeq ($(CONFIG_ARCH_ARC),y)
-  ifeq ($(CONFIG_BLK_DEV_FD),y)
-    L_OBJS += fd1772.o fd1772dma.o
-  else
-    ifeq ($(CONFIG_BLK_DEV_FD),m)
-      M_OBJS += fd1772_mod.o
-    endif
-  endif
-endif
-
-ifeq ($(CONFIG_BLK_DEV_IDE_ICSIDE),y)
-  L_OBJS += ide-ics.o
+ifeq ($(CONFIG_BLK_DEV_FD1772),y)
+  L_OBJS += fd1772.o fd1772dma.o
 else
-  ifeq ($(CONFIG_BLK_DEV_IDE_ICSIDE),m)
-    M_OBJS += ide-ics.o
-  endif
-endif
-
-ifeq ($(CONFIG_BLK_DEV_IDE_RAPIDE),y)
-  L_OBJS += ide-rapide.o
-else
-  ifeq ($(CONFIG_BLK_DEV_IDE_RAPIDE),m)
-    M_OBJS += ide-rapide.o
+  ifeq ($(CONFIG_BLK_DEV_FD1772),m)
+    M_OBJS += fd1772_mod.o
   endif
 endif
 

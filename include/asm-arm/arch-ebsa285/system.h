@@ -20,16 +20,7 @@ extern __inline__ void arch_reset(char mode)
 		 mcr	p15, 0, ip, c7, c7	@ flush caches
 		 mov	pc, lr" : : : "cc");
 	} else {
-		if (machine_is_ebsa285() || machine_is_co285()) {
-			/* To reboot, we set up the 21285 watchdog and
-			 * enable it.  We then wait for it to timeout.
-			 */
-			*CSR_TIMER4_LOAD = 0x8000;
-			*CSR_TIMER4_CNTL = TIMER_CNTL_ENABLE |
-					   TIMER_CNTL_AUTORELOAD |
-					   TIMER_CNTL_DIV16;
-			*CSR_SA110_CNTL |= 1 << 13;
-		} else if (machine_is_netwinder()) {
+		if (machine_is_netwinder()) {
 			/* open up the SuperIO chip
 			 */
 			outb(0x87, 0x370);
@@ -48,6 +39,15 @@ extern __inline__ void arch_reset(char mode)
 			/* set a RED LED and toggle WD_TIMER for rebooting
 			 */
 			outb(0xc4, 0x338);
+		} else {
+			/* To reboot, we set up the 21285 watchdog and
+			 * enable it.  We then wait for it to timeout.
+			 */
+			*CSR_TIMER4_LOAD = 0x8000;
+			*CSR_TIMER4_CNTL = TIMER_CNTL_ENABLE |
+					   TIMER_CNTL_AUTORELOAD |
+					   TIMER_CNTL_DIV16;
+			*CSR_SA110_CNTL |= 1 << 13;
 		}
 	}
 }

@@ -1,0 +1,20 @@
+1998-11-23  Scott Bambrough  <scottb@corelcomputer.com>
+
+	* README.FPE - fix typo in description of lfm/sfm instructions
+	* NOTES - Added file to describe known bugs/problems 
+	* fpmodule.c - Changed version number to 0.94
+
+1998-11-20  Scott Bambrough  <scottb@corelcomputer.com>
+
+	* README.FPE - fix description of URD, NRM instructions
+	* TODO - remove URD, NRM instructions from TODO list
+	* single_cpdo.c - implement URD, NRM
+	* double_cpdo.c - implement URD, NRM
+	* extended_cpdo.c - implement URD, NRM
+
+1998-11-19  Scott Bambrough  <scottb@corelcomputer.com>
+
+	* ChangeLog - Added this file to track changes made.
+	* fpa11.c - added code to initialize register types to typeNone
+	* fpa11_cpdt.c - fixed bug in storeExtended (typeExtended changed to
+	  typeDouble in switch statement)

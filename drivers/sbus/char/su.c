@@ -1,4 +1,4 @@
-/* $Id: su.c,v 1.20 1999/06/03 15:02:40 davem Exp $
+/* $Id: su.c,v 1.21 1999/06/11 10:23:42 davem Exp $
  * su.c: Small serial driver for keyboard/mouse interface on sparc32/PCI
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -1133,9 +1133,9 @@ static void su_put_char_kbd(unsigned char c)
 	struct su_struct *info = su_table;
 	int lsr;
 
-	if (!info->port_type != SU_PORT_KBD)
+	if (info->port_type != SU_PORT_KBD)
 		++info;
-	if (!info->port_type != SU_PORT_KBD)
+	if (info->port_type != SU_PORT_KBD)
 		return;
 
 	do {
@@ -1151,9 +1151,9 @@ su_change_mouse_baud(int baud)
 {
 	struct su_struct *info = su_table;
 
-	if (!info->port_type != SU_PORT_MS)
+	if (info->port_type != SU_PORT_MS)
 		++info;
-	if (!info->port_type != SU_PORT_MS)
+	if (info->port_type != SU_PORT_MS)
 		return;
 
 	info->cflag &= ~(CBAUDEX | CBAUD);
@@ -2215,7 +2215,7 @@ done:
  */
 __initfunc(static __inline__ void show_su_version(void))
 {
-	char *revision = "$Revision: 1.20 $";
+	char *revision = "$Revision: 1.21 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');

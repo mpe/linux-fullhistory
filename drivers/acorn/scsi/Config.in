@@ -7,11 +7,12 @@ if [ "$CONFIG_SCSI_ACORNSCSI_3" != "n" ]; then
   bool '  Support SCSI 2 Synchronous Transfers' CONFIG_SCSI_ACORNSCSI_SYNC
 fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  dep_tristate 'ARXE SCSI support (Experimental)' CONFIG_SCSI_ARXESCSI $CONFIG_SCSI
   dep_tristate 'CumanaSCSI II support (Experimental)' CONFIG_SCSI_CUMANA_2 $CONFIG_SCSI
   dep_tristate 'EESOX support (Experimental)' CONFIG_SCSI_EESOXSCSI $CONFIG_SCSI
   dep_tristate 'PowerTec support (Experimental)' CONFIG_SCSI_POWERTECSCSI $CONFIG_SCSI
 
-  comment 'The following drives are not fully supported'
+  comment 'The following drivers are not fully supported'
 
   dep_tristate 'CumanaSCSI I support' CONFIG_SCSI_CUMANA_1 $CONFIG_SCSI
   if [ "$CONFIG_ARCH_ARC" = "y" -o "$CONFIG_ARCH_A5K" = "y" ]; then

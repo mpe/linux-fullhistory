@@ -291,6 +291,27 @@ typedef enum {					/* Data direction			*/
 #include "queue.h"
 #include "msgqueue.h"
 
+#define STATUS_BUFFER_SIZE	32
+/*
+ * This is used to dump the previous states of the SBIC
+ */
+struct status_entry {
+	unsigned long	when;
+	unsigned char	ssr;
+	unsigned char	ph;
+	unsigned char	irq;
+	unsigned char	unused;
+};
+
+#define ADD_STATUS(_q,_ssr,_ph,_irq) \
+({									\
+	host->status[(_q)][host->status_ptr[(_q)]].when = jiffies;	\
+	host->status[(_q)][host->status_ptr[(_q)]].ssr  = (_ssr);	\
+	host->status[(_q)][host->status_ptr[(_q)]].ph   = (_ph);	\
+	host->status[(_q)][host->status_ptr[(_q)]].irq  = (_irq);	\
+	host->status_ptr[(_q)] = (host->status_ptr[(_q)] + 1) & (STATUS_BUFFER_SIZE - 1); \
+})
+
 /*
  * AcornSCSI host specific data
  */
@@ -303,7 +324,7 @@ typedef struct acornscsi_hostdata {
     /* driver information */
     struct {
 	unsigned int	io_port;		/* base address of WD33C93		*/
-	unsigned char	irq;			/* interrupt				*/
+	unsigned int	irq;			/* interrupt				*/
 	phase_t		phase;			/* current phase			*/
 
 	struct {
@@ -361,6 +382,7 @@ typedef struct acornscsi_hostdata {
 	char		*xfer_ptr;		/* pointer to area			*/
 	unsigned char	xfer_required:1;	/* set if we need to transfer something	*/
 	unsigned char	xfer_setup:1;		/* set if DMA is setup			*/
+	unsigned char	xfer_done:1;		/* set if DMA reached end of BH list	*/
     } dma;
 
     /* card info */
@@ -370,6 +392,9 @@ typedef struct acornscsi_hostdata {
 	unsigned int	io_ram;			/* base address of RAM access		*/
 	unsigned char	page_reg;		/* current setting of page reg		*/
     } card;
+
+    unsigned char status_ptr[9];
+    struct status_entry status[9][STATUS_BUFFER_SIZE];
 } AS_Host;
 
 #endif /* ndef HOSTS_C */

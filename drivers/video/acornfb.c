@@ -254,7 +254,9 @@ acornfb_set_timing(struct fb_var_screeninfo *var)
 
 	bandwidth = var->pixclock * 8 / var->bits_per_pixel;
 	/* 25.175, 4bpp = 79.444ns per byte, 317.776ns per word: fifo = 2,6 */
-	if (bandwidth > 71750)
+	if (bandwidth > 143500)
+		vidc_ctl |= VIDC_CTRL_FIFO_3_7;
+	else if (bandwidth > 71750)
 		vidc_ctl |= VIDC_CTRL_FIFO_2_6;
 	else if (bandwidth > 35875)
 		vidc_ctl |= VIDC_CTRL_FIFO_1_5;

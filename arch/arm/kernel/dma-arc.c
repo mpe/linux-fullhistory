@@ -1,10 +1,11 @@
 /*
  * arch/arm/kernel/dma-arc.c
  *
- * Copyright (C) 1998 Dave Gilbert / Russell King
+ * Copyright (C) 1998-1999 Dave Gilbert / Russell King
  *
  * DMA functions specific to Archimedes architecture
  */
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/init.h>
 
@@ -14,7 +15,7 @@
 
 #include "dma.h"
 
-int arch_request_dma(dmach_t channel, dma_t *dma)
+int arch_request_dma(dmach_t channel, dma_t *dma, const char * dev_id)
 {
 	if (channel == DMA_VIRTUAL_FLOPPY0 ||
 	    channel == DMA_VIRTUAL_FLOPPY1)
@@ -25,16 +26,12 @@ int arch_request_dma(dmach_t channel, dma_t *dma)
 
 void arch_free_dma(dmach_t channel, dma_t *dma)
 {
-	if (channel != DMA_VIRTUAL_FLOPPY0 &&
-	    channel != DMA_VIRTUAL_FLOPPY1)
-		return 0;
-	else
-		return -EINVAL;
 }
 
 void arch_enable_dma(dmach_t channel, dma_t *dma)
 {
 	switch (channel) {
+#ifdef CONFIG_BLK_DEV_FD
 	case DMA_VIRTUAL_FLOPPY0: { /* Data DMA */
 		switch (dma->dma_mode) {
 		case DMA_MODE_READ: /* read */
@@ -96,7 +93,36 @@ void arch_enable_dma(dmach_t channel, dma_t *dma)
 		restore_flags(flags);
 	}
 	break;
+#endif
 	}
+}
+
+int arch_get_dma_residue(dmach_t channel, dma_t *dma)
+{
+  switch (channel) {
+#ifdef CONFIG_BLK_DEV_FD
+    case DMA_VIRTUAL_FLOPPY0: { /* Data DMA */
+        extern unsigned int fdc1772_bytestogo;
+
+        /* 10/1/1999 DAG - I presume its the number of bytes left? */
+        return fdc1772_bytestogo;
+      };
+      break;
+
+    case DMA_VIRTUAL_FLOPPY1: { /* Command completed */
+        /* 10/1/1999 DAG - Presume whether there is an outstanding command? */
+        extern unsigned int fdc1772_fdc_int_done;
+
+        return (fdc1772_fdc_int_done==0)?1:0; /* Explicit! If the int done is 0 then 1 int to go */
+      };
+      break;
+
+#endif
+
+    default:
+      printk("dma-arc.c:arch_get_dma_residue called with unknown/unconfigured DMA channel\n");
+      return 0;
+  };
 }
 
 void arch_disable_dma(dmach_t channel, dma_t *dma)
@@ -106,6 +132,11 @@ void arch_disable_dma(dmach_t channel, dma_t *dma)
 		printk("arch_disable_dma: invalid channel %d\n", channel);
 	else
 		disable_irq(dma->dma_irq);
+}
+
+int arch_set_dma_speed(dmach_t channel, dma_t *dma, int cycle_ns)
+{
+	return 0;
 }
 
 __initfunc(void arch_dma_init(dma_t *dma))

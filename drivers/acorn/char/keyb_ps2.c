@@ -25,6 +25,7 @@
 #include <asm/irq.h>
 #include <asm/hardware.h>
 #include <asm/io.h>
+#include <asm/iomd.h>
 #include <asm/system.h>
 
 extern void kbd_reset_kdown(void);
@@ -221,14 +222,7 @@ unsigned char ps2kbd_sysrq_xlate[] =
 };
 #endif
 
-int ps2kbd_translate(unsigned char scancode, unsigned char *keycode_p, char *uf_p)
-{
-	*uf_p = scancode & 0200;
-	*keycode_p = scancode & 0x7f;
-	return 1;
-}
-
-static void ps2kbd_key(unsigned int keycode, unsigned int up_flag)
+static inline void ps2kbd_key(unsigned int keycode, unsigned int up_flag)
 {
 	handle_scancode(keycode, !up_flag);
 }

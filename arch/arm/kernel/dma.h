@@ -15,6 +15,7 @@ typedef struct {
 	unsigned int	active:1;	/* Transfer active		*/
 	unsigned int	invalid:1;	/* Address/Count changed	*/
 	dmamode_t	dma_mode;	/* DMA mode			*/
+	int		speed;		/* DMA speed			*/
 
 	unsigned int	lock;		/* Device is allocated		*/
 	const char	*device_id;	/* Device name			*/
@@ -62,6 +63,15 @@ void arch_disable_dma(dmach_t channel, dma_t *dma);
  * Returns  : Number of bytes left to DMA
  */
 int arch_get_dma_residue(dmach_t channel, dma_t *dma);
+
+/* Prototype: int arch_set_dma_speed(channel, dma, cycle)
+ * Purpose  : Convert a cycle time to a register setting
+ * Params   : channel - DMA channel number
+ *          : dma     - DMA structure for channel
+ *          : cycle   - cycle time in NS
+ * Returns  : setting for 'dma->speed'
+ */
+int arch_set_dma_speed(dmach_t channel, dma_t *dma, int cycle);
 
 /* Prototype: void arch_dma_init(dma)
  * Purpose  : Initialise architecture specific DMA

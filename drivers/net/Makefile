@@ -143,14 +143,6 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_ETHERH),y)
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_ETHERH),m)
-  CONFIG_8390_MODULE = y
-  endif
-endif
-
 ifeq ($(CONFIG_WD80x3),y)
 L_OBJS += wd.o
 CONFIG_8390_BUILTIN = y
@@ -168,14 +160,6 @@ else
   ifeq ($(CONFIG_EL2),m)
   CONFIG_8390_MODULE = y
   M_OBJS += 3c503.o
-  endif
-endif
-
-ifeq ($(CONFIG_ETHERH),y)
-CONFIG_8390_BUILTIN = y
-else
-  ifeq ($(CONFIG_ETHERH),m)
-  CONFIG_8390_MODULE = y
   endif
 endif
 

@@ -9,6 +9,7 @@
 #include <linux/linkage.h>
 #include <asm/assembler.h>
 #include <asm/hardware.h>
+#include <asm/iomd.h>
 
 		.text
 

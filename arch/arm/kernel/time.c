@@ -129,27 +129,12 @@ void do_settimeofday(struct timeval *tv)
 	time_status |= STA_UNSYNC;
 	time_maxerror = NTP_PHASE_LIMIT;
 	time_esterror = NTP_PHASE_LIMIT;
-	sti ();
+	sti();
 }
-
-/*
- * timer_interrupt() needs to keep up the real-time clock,
- * as well as call the "do_timer()" routine every clocktick.
- */
-static void timer_interrupt(int irq, void *dev_id, struct pt_regs *regs)
-{
-	if (reset_timer ())
-		do_timer(regs);
-
-	update_rtc ();
-}
-
-static struct irqaction irqtimer = { timer_interrupt, 0, 0, "timer", NULL, NULL};
 
 __initfunc(void time_init(void))
 {
-	xtime.tv_sec = setup_timer();
 	xtime.tv_usec = 0;
 
-	setup_arm_irq(IRQ_TIMER, &irqtimer);
+	setup_timer();
 }

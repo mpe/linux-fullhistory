@@ -36,6 +36,7 @@ typedef unsigned long mm_segment_t;		/* domain register	*/
 
 #define NR_DEBUGS	5
 
+#include <asm/proc/ptrace.h>
 #include <asm/arch/processor.h>
 #include <asm/proc/processor.h>
 
@@ -86,6 +87,7 @@ extern __inline__ void init_thread_css(struct context_save_struct *save)
 }
 
 /* Forward declaration, a strange C thing */
+struct task_struct;
 struct mm_struct;
 
 /* Free all resources held by a thread. */

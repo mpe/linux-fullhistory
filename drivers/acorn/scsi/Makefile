@@ -24,6 +24,16 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_ARXESCSI),y)
+  L_OBJS += arxescsi.o
+  CONFIG_FAS216_BUILTIN=y
+else
+  ifeq ($(CONFIG_SCSI_ARXESCSI),m)
+    M_OBJS += arxescsi.o
+    CONFIG_FAS216_MODULE=y
+  endif
+endif
+
 ifeq ($(CONFIG_SCSI_CUMANA_1),y)
   L_OBJS += cumana_1.o
 else
@@ -34,12 +44,10 @@ endif
 
 ifeq ($(CONFIG_SCSI_CUMANA_2),y)
   L_OBJS += cumana_2.o
-  CONFIG_QUEUE_BUILTIN=y
   CONFIG_FAS216_BUILTIN=y
 else
   ifeq ($(CONFIG_SCSI_CUMANA_2),m)
     M_OBJS += cumana_2.o
-    CONFIG_QUEUE_MODULE=y
     CONFIG_FAS216_MODULE=y
   endif
 endif
@@ -62,25 +70,31 @@ endif
 
 ifeq ($(CONFIG_SCSI_POWERTECSCSI),y)
   L_OBJS += powertec.o
-  CONFIG_QUEUE_BUILTIN=y
   CONFIG_FAS216_BUILTIN=y
 else
   ifeq ($(CONFIG_SCSI_POWERTECSCSI),m)
     M_OBJS += powertec.o
-    CONFIG_QUEUE_MODULE=y
     CONFIG_FAS216_MODULE=y
   endif
 endif
 
 ifeq ($(CONFIG_SCSI_EESOXSCSI),y)
   L_OBJS += eesox.o
-  CONFIG_QUEUE_BUILTIN=y
   CONFIG_FAS216_BUILTIN=y
 else
   ifeq ($(CONFIG_SCSI_EESOXSCSI),m)
     M_OBJS += eesox.o
-    CONFIG_QUEUE_MODULE=y
     CONFIG_FAS216_MODULE=y
+  endif
+endif
+
+ifeq ($(CONFIG_FAS216_BUILTIN),y)
+  LX_OBJS += fas216.o
+  CONFIG_QUEUE_BUILTIN=y
+else
+  ifeq ($(CONFIG_FAS216_MODULE),y)
+    MX_OBJS += fas216.o
+    CONFIG_QUEUE_MODULE=y
   endif
 endif
 
@@ -89,14 +103,6 @@ ifeq ($(CONFIG_QUEUE_BUILTIN),y)
 else
   ifeq ($(CONFIG_QUEUE_MODULE),y)
     MX_OBJS += queue.o msgqueue.o
-  endif
-endif
-
-ifeq ($(CONFIG_FAS216_BUILTIN),y)
-  LX_OBJS += fas216.o
-else
-  ifeq ($(CONFIG_FAS216_MODULE),y)
-    MX_OBJS += fas216.o
   endif
 endif
 

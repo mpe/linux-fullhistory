@@ -7,20 +7,24 @@
  */
 
 #include <linux/delay.h>
+#include <linux/errno.h>
 
 #include <asm/system.h>
-#include <asm/io.h>
 #include <asm/hardware.h>
+#include <asm/io.h>
+#include <asm/ioc.h>
+
+#define FORCE_ONES	0xdc
 
 /*
  * if delay loop has been calibrated then us that,
  * else use IOC timer 1.
  */
-static void iic_delay (void)
+static void iic_delay(void)
 {
 	extern unsigned long loops_per_sec;
 	if (loops_per_sec != (1 << 12)) {
-		udelay(10);
+		udelay(100); /* was 10 */
 		return;
 	} else {
 		unsigned long flags;
@@ -30,7 +34,7 @@ static void iic_delay (void)
 		outb(255,  IOC_T1LTCHH);
 		outb(0,    IOC_T1GO);
 		outb(1<<6, IOC_IRQCLRA);			/* clear T1 irq */
-		outb(4,    IOC_T1LTCHL);
+		outb(10,   IOC_T1LTCHL); /* was 4 */
 		outb(0,    IOC_T1LTCHH);
 		outb(0,    IOC_T1GO);
 		while ((inb(IOC_IRQSTATA) & (1<<6)) == 0);
@@ -38,124 +42,207 @@ static void iic_delay (void)
 	}
 }
 
-static inline void iic_start (void)
+#define IIC_INIT()		dat = (inb(IOC_CONTROL) | FORCE_ONES) & ~3
+#define IIC_SET_DAT		outb(dat|=1, IOC_CONTROL);
+#define IIC_CLR_DAT		outb(dat&=~1, IOC_CONTROL);
+#define IIC_SET_CLK		outb(dat|=2, IOC_CONTROL);
+#define IIC_CLR_CLK		outb(dat&=~2, IOC_CONTROL);
+#define IIC_DELAY		iic_delay();
+#define IIC_READ_DATA()		(inb(IOC_CONTROL) & 1)
+
+static inline void iic_set_lines(int clk, int dat)
 {
-	unsigned char out;
+	int old;
 
-	out = inb(IOC_CONTROL) | 0xc2;
+	old = inb(IOC_CONTROL) | FORCE_ONES;
 
-	outb(out, IOC_CONTROL);
-	iic_delay();
+	old &= ~3;
 
-	outb(out ^ 1, IOC_CONTROL);
+	if (clk)
+		old |= 2;
+	if (dat)
+		old |= 1;
+
+	outb(old, IOC_CONTROL);
+
 	iic_delay();
 }
 
-static inline void iic_stop (void)
+static inline unsigned int iic_read_data(void)
 {
-	unsigned char out;
-
-	out = inb(IOC_CONTROL) | 0xc3;
-
-	iic_delay();
-	outb(out ^ 1, IOC_CONTROL);
-
-	iic_delay();
-	outb(out, IOC_CONTROL);
+	return inb(IOC_CONTROL) & 1;
 }
 
-static int iic_sendbyte (unsigned char b)
+/*
+ * C: ==~~_
+ * D: =~~__
+ */
+static inline void iic_start(void)
 {
-	unsigned char out, in;
-	int i;
+	unsigned int dat;
 
-	out = (inb(IOC_CONTROL) & 0xfc) | 0xc0;
+	IIC_INIT();
 
-	outb(out, IOC_CONTROL);
-	for (i = 7; i >= 0; i--) {
-		unsigned char c;
-		c = out | ((b & (1 << i)) ? 1 : 0);
+	IIC_SET_DAT
+	IIC_DELAY
+	IIC_SET_CLK
+	IIC_DELAY
 
-		outb(c, IOC_CONTROL);
-		iic_delay();
+	IIC_CLR_DAT
+	IIC_DELAY
+	IIC_CLR_CLK
+	IIC_DELAY
+}
 
-		outb(c | 2, IOC_CONTROL);
-		iic_delay();
+/*
+ * C: __~~
+ * D: =__~
+ */
+static inline void iic_stop(void)
+{
+	unsigned int dat;
 
-		outb(c, IOC_CONTROL);
+	IIC_INIT();
+
+	IIC_CLR_DAT
+	IIC_DELAY
+	IIC_SET_CLK
+	IIC_DELAY
+	IIC_SET_DAT
+	IIC_DELAY
+}
+
+/*
+ * C: __~_
+ * D: =___
+ */
+static inline void iic_acknowledge(void)
+{
+	unsigned int dat;
+
+	IIC_INIT();
+
+	IIC_CLR_DAT
+	IIC_DELAY
+	IIC_SET_CLK
+	IIC_DELAY
+	IIC_CLR_CLK
+	IIC_DELAY
+}
+
+/*
+ * C: __~_
+ * D: =~H~
+ */
+static inline int iic_is_acknowledged(void)
+{
+	unsigned int dat, ack_bit;
+
+	IIC_INIT();
+
+	IIC_SET_DAT
+	IIC_DELAY
+	IIC_SET_CLK
+	IIC_DELAY
+
+	ack_bit = IIC_READ_DATA();
+
+	IIC_CLR_CLK
+	IIC_DELAY
+
+	return ack_bit == 0;
+}
+
+/*
+ * C: _~__~__~__~__~__~__~__~_
+ * D: =DDXDDXDDXDDXDDXDDXDDXDD
+ */
+static void iic_sendbyte(unsigned int b)
+{
+	unsigned int dat, i;
+
+	IIC_INIT();
+
+	for (i = 0; i < 8; i++) {
+		if (b & 128)
+			IIC_SET_DAT
+		else
+			IIC_CLR_DAT
+		IIC_DELAY
+
+		IIC_SET_CLK
+		IIC_DELAY
+		IIC_CLR_CLK
+		IIC_DELAY
+
+		b <<= 1;
 	}
-	outb(out | 1, IOC_CONTROL);
-	iic_delay();
-
-	outb(out | 3, IOC_CONTROL);
-	iic_delay();
-
-	in = inb(IOC_CONTROL) & 1;
-
-	outb(out | 1, IOC_CONTROL);
-	iic_delay();
-
-	outb(out, IOC_CONTROL);
-	iic_delay();
-
-	if(in) {
-		printk("No acknowledge from RTC\n");
-		return 1;
-	} else
-		return 0;
 }
 
-static unsigned char iic_recvbyte (void)
+/*
+ * C: __~_~_~_~_~_~_~_~_
+ * D: =~HHHHHHHHHHHHHHHH
+ */
+static unsigned char iic_recvbyte(void)
 {
-	unsigned char out, in;
-	int i;
+	unsigned int dat, i, in;
 
-	out = (inb(IOC_CONTROL) & 0xfc) | 0xc0;
+	IIC_INIT();
 
-	outb(out, IOC_CONTROL);
+	IIC_SET_DAT
+	IIC_DELAY
+
 	in = 0;
-	for (i = 7; i >= 0; i--) {
-		outb(out | 1, IOC_CONTROL);
-		iic_delay();
-		outb(out | 3, IOC_CONTROL);
-		iic_delay();
-		in = (in << 1) | (inb(IOC_CONTROL) & 1);
-		outb(out | 1, IOC_CONTROL);
-		iic_delay();
+	for (i = 0; i < 8; i++) {
+		IIC_SET_CLK
+		IIC_DELAY
+
+		in = (in << 1) | IIC_READ_DATA();
+
+		IIC_CLR_CLK
+		IIC_DELAY
 	}
-	outb(out, IOC_CONTROL);
-	iic_delay();
-	outb(out | 2, IOC_CONTROL);
-	iic_delay();
 
 	return in;
 }
 
-void iic_control (unsigned char addr, unsigned char loc, unsigned char *buf, int len)
+int iic_control (unsigned char addr, unsigned char loc, unsigned char *buf, int len)
 {
-	iic_start();
+	int i, err = -EIO;
 
-	if (iic_sendbyte(addr & 0xfe))
+	iic_start();
+	iic_sendbyte(addr & 0xfe);
+	if (!iic_is_acknowledged())
 		goto error;
 
-	if (iic_sendbyte(loc))
+	iic_sendbyte(loc);
+	if (!iic_is_acknowledged())
 		goto error;
 
 	if (addr & 1) {
-		int i;
-
-		for (i = 0; i < len; i++)
-			if (iic_sendbyte (buf[i]))
-				break;
-	} else {
-		int i;
-
 		iic_stop();
 		iic_start();
 		iic_sendbyte(addr|1);
-		for (i = 0; i < len; i++)
-			buf[i] = iic_recvbyte ();
+		if (!iic_is_acknowledged())
+			goto error;
+
+		for (i = 0; i < len - 1; i++) {
+			buf[i] = iic_recvbyte();
+			iic_acknowledge();
+		}
+		buf[i] = iic_recvbyte();
+	} else {
+		for (i = 0; i < len; i++) {
+			iic_sendbyte(buf[i]);
+
+			if (!iic_is_acknowledged())
+				goto error;
+		}
 	}
+
+	err = 0;
 error:
 	iic_stop();
+
+	return err;
 }

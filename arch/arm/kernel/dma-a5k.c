@@ -12,7 +12,6 @@
 #include <asm/fiq.h>
 #include <asm/io.h>
 #include <asm/hardware.h>
-#include <asm/pgtable.h>
 
 #include "dma.h"
 
@@ -37,8 +36,9 @@ int arch_get_dma_residue(dmach_t channel, dma_t *dma)
 	if (channel != DMA_VIRTUAL_FLOPPY)
 		printk("arch_dma_count: invalid channel %d\n", channel);
 	else {
-		extern int floppy_fiqresidual(void);
-		return floppy_fiqresidual();
+		struct pt_regs regs;
+		get_fiq_regs(&regs);
+		return regs.ARM_r9;
 	}
 	return 0;
 }
@@ -48,6 +48,7 @@ void arch_enable_dma(dmach_t channel, dma_t *dma)
 	if (channel != DMA_VIRTUAL_FLOPPY)
 		printk("arch_enable_dma: invalid channel %d\n", channel);
 	else {
+		struct pt_regs regs;
 		void *fiqhandler_start;
 		unsigned int fiqhandler_length;
 		extern void floppy_fiqsetup(unsigned long len, unsigned long addr,
@@ -67,8 +68,10 @@ void arch_enable_dma(dmach_t channel, dma_t *dma)
 			return;
 		}
 		memcpy((void *)0x1c, fiqhandler_start, fiqhandler_length);
-		flush_page_to_ram(0);
-		floppy_fiqsetup(dma->buf.length, __bus_to_virt(dma->buf.address), (int)PCIO_FLOPPYDMABASE);
+		regs.ARM_r9 = dma->buf.length;
+		regs.ARM_r10 = __bus_to_virt(dma->buf.address);
+		regs.ARM_fp = (int)PCIO_FLOPPYDMABASE;
+		set_fiq_regs(&regs);
 		enable_irq(dma->dma_irq);
 	}
 }
@@ -81,6 +84,11 @@ void arch_disable_dma(dmach_t channel, dma_t *dma)
 		disable_irq(dma->dma_irq);
 		release_fiq(&fh);
 	}
+}
+
+int arch_set_dma_speed(dmach_t channel, dma_t *dma, int cycle_ns)
+{
+	return 0;
 }
 
 __initfunc(void arch_dma_init(dma_t *dma))

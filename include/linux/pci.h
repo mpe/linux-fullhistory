@@ -280,7 +280,7 @@
 /*
  * Vendor and card ID's: sort these numerically according to vendor
  * (and according to card ID within vendor). Send all updates to
- * <linux-pcisupport@cck.uni-kl.de>.
+ * <pci-ids@ucw.cz>.
  */
 #define PCI_VENDOR_ID_COMPAQ		0x0e11
 #define PCI_DEVICE_ID_COMPAQ_1280	0x3033
@@ -1253,6 +1253,8 @@ int pci_proc_detach_device(struct pci_dev *dev);
 struct pci_dev *pci_find_device (unsigned int vendor, unsigned int device, struct pci_dev *from);
 struct pci_dev *pci_find_class (unsigned int class, struct pci_dev *from);
 struct pci_dev *pci_find_slot (unsigned int bus, unsigned int devfn);
+
+#define PCI_ANY_ID (~0)
 
 #define pci_present pcibios_present
 int pci_read_config_byte(struct pci_dev *dev, u8 where, u8 *val);

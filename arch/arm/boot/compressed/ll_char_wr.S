@@ -12,7 +12,7 @@
 @ Regs: [] = corruptible
 @       {} = used
 @       () = do not use
-
+#define __ASSEMBLY__
 #include <linux/linkage.h>
 #include <asm/assembler.h>
 		.text
@@ -25,7 +25,7 @@
 
 LC0:		.word	SYMBOL_NAME(bytes_per_char_h)
 		.word	SYMBOL_NAME(video_size_row)
-		.word	SYMBOL_NAME(cmap_80)
+		.word	SYMBOL_NAME(acorndata_8x8)
 		.word	SYMBOL_NAME(con_charconvtable)
 
 ENTRY(ll_write_char)

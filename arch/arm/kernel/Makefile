@@ -9,31 +9,37 @@ HEAD_OBJ  = head-$(PROCESSOR).o
 ENTRY_OBJ = entry-$(PROCESSOR).o
 
 O_TARGET := kernel.o
-O_OBJS   := $(ENTRY_OBJ) ioport.o irq.o process.o ptrace.o setup.o \
+O_OBJS   := $(ENTRY_OBJ) irq.o process.o ptrace.o setup.o \
 	    signal.o sys_arm.o time.o traps.o
 
-DMA_OBJS_arc      = dma-arc.o
-DMA_OBJS_a5k      = dma-a5k.o
-DMA_OBJS_rpc      = dma-rpc.o
-DMA_OBJS_ebsa110  = dma-dummy.o
-DMA_OBJS_ebsa285  = dma-ebsa285.o
-DMA_OBJS_nexuspci =
-DMA_OBJS_vnc      = dma-vnc.o
+ifeq ($(CONFIG_ISA_DMA),y)
+  ISA_DMA_OBJS += dma-isa.o
+endif
 
-O_OBJS_arc        = ecard.o iic.o fiq.o oldlatches.o
-O_OBJS_a5k        = ecard.o iic.o fiq.o
-O_OBJS_rpc        = ecard.o iic.o fiq.o
-O_OBJS_ebsa110    = leds-ebsa110.o
-O_OBJS_ebsa285    = leds-ebsa285.o hw-ebsa285.o
-O_OBJS_nexuspci   =
-O_OBJS_vnc        = leds-ebsa285.o hw-vnc.o
+O_OBJS_arc        = dma-arc.o iic.o fiq.o oldlatches.o
+O_OBJS_a5k        = dma-a5k.o iic.o fiq.o
+O_OBJS_rpc        = dma-rpc.o iic.o fiq.o
+O_OBJS_ebsa110    = dma-dummy.o
+O_OBJS_footbridge = dma-footbridge.o $(ISA_DMA_OBJS)
+O_OBJS_nexuspci   = dma-dummy.o
+
+OX_OBJS_arc	  = dma.o
+OX_OBJS_a5k	  = dma.o
+OX_OBJS_rpc	  = dma.o
+OX_OBJS_ebsa110	  = 
+OX_OBJS_footbridge= dma.o hw-footbridge.o
+OX_OBJS_nexuspci  =
 
 all: lib kernel.o $(HEAD_OBJ) init_task.o
 
+O_OBJS += $(O_OBJS_$(MACHINE))
+
 ifeq ($(CONFIG_MODULES),y)
   OX_OBJS = armksyms.o
-else
-  O_OBJS += armksyms.o
+endif
+
+ifeq ($(CONFIG_ARCH_ACORN),y)
+  OX_OBJS += ecard.o
 endif
 
 ifeq ($(MACHINE),nexuspci)
@@ -46,17 +52,23 @@ else
   endif
 endif
 
-ifneq ($(DMA_OBJS_$(MACHINE)),)
-  OX_OBJS += dma.o
-  O_OBJS  += $(DMA_OBJS_$(MACHINE))
-  ifeq ($(CONFIG_ISA_DMA),y)
-    O_OBJS += dma-isa.o
-  endif
-else
-  O_OBJS += dma-dummy.o
+ifdef CONFIG_LEDS
+  OX_OBJS += leds-$(MACHINE).o
 endif
 
-O_OBJS += $(O_OBJS_$(MACHINE))
+ifeq ($(CONFIG_MODULES),y)
+  OX_OBJS += $(OX_OBJS_$(MACHINE))
+else
+  O_OBJS += $(OX_OBJS_$(MACHINE))
+endif
+
+ifeq ($(CONFIG_ARTHUR),y)
+  O_OBJS += arthur.o
+else
+  ifeq ($(CONFIG_ARTHUR),m)
+    M_OBJS += arthur.o
+  endif
+endif
 
 $(HEAD_OBJ): $(HEAD_OBJ:.o=.S)
 	$(CC) -D__ASSEMBLY__ -DTEXTADDR=$(TEXTADDR) -traditional -c $(HEAD_OBJ:.o=.S) -o $@
@@ -72,3 +84,7 @@ $(ENTRY_OBJ): ../lib/constants.h
 
 lib:
 	$(MAKE) -C ../lib constants.h
+
+# Spell out some dependencies that `make dep' doesn't spot
+entry-armv.o: calls.S
+entry-armo.o: calls.S

@@ -11,11 +11,10 @@
 struct cs4215 {
 	__u8	data[4];	/* Data mode: Time slots 5-8 */
 	__u8	ctrl[4];	/* Ctrl mode: Time slots 1-4 */
-	__volatile__ struct dbri_mem td;
-	__volatile__ struct dbri_mem rd;
 	__u8	onboard;
-	__u32	status;
-        __u32	version;
+	__u8	offset;		/* Bit offset from frame sync to time slot 1 */
+	volatile __u32	status;
+	volatile __u32	version;
 };
 
 

@@ -22,6 +22,22 @@
 		ldr	lr, [r0]			;\
 		orr	reg, reg, lr, lsl $16
 
+/*
+ * These make no sense on these machines.
+ * Print a warning message.
+ */
+ENTRY(insl)
+ENTRY(outsl)
+ENTRY(insb)
+ENTRY(outsb)
+		adr	r0, io_long_warning
+		mov	r1, lr
+		b	SYMBOL_NAME(printk)
+
+io_long_warning:
+		.ascii	"<4>ins?/outs? not implemented on this architecture\0"
+		.align
+
 @ Purpose: read a block of data from a hardware register to memory.
 @ Proto  : insw(int from_port, void *to, int len_in_words);
 @ Proto  : inswb(int from_port, void *to, int len_in_bytes);

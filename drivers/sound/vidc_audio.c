@@ -9,6 +9,7 @@
 #include <asm/hardware.h>
 #include <asm/io.h>
 #include <asm/system.h>
+#include <asm/iomd.h>
 
 #include "sound_config.h"
 #include "vidc.h"
@@ -42,7 +43,6 @@ int vidc_audio_set_volume(int newvol)
 
 static int vidc_audio_set_bits(int fmt)
 {
-printk("setting format: %d\n", fmt);
 	switch (fmt)
 	{
 		case AFMT_QUERY:
@@ -219,10 +219,11 @@ static void vidc_audio_output_block(int dev, unsigned long buf, int total_count,
 	if (!(adev->flags & DMA_ACTIVE))
 	{
 		unsigned long flags;
-printk("kicking output: %lX+%lX [%lX]\n", dma_start, dma_count, *(unsigned long *)dma_start);
 		save_flags_cli(flags);
+
 		vidc_sound_dma_irq(0, NULL, NULL);
 		outb(DMA_CR_E | 0x10, IOMD_SD0CR);
+
 		restore_flags(flags);
 	}
 }

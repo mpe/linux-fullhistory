@@ -114,6 +114,8 @@ static const expansioncard_ops_t powertecscsi_ops = {
 	powertecscsi_irqenable,
 	powertecscsi_irqdisable,
 	NULL,
+	NULL,
+	NULL,
 	NULL
 };
 
@@ -271,8 +273,9 @@ powertecscsi_detect(Scsi_Host_Template *tpnt)
 		info->info.ifcfg.select_timeout	= 255;
 		info->info.ifcfg.asyncperiod	= POWERTEC_ASYNC_PERIOD;
 		info->info.ifcfg.sync_max_depth	= POWERTEC_SYNC_DEPTH;
-		info->info.ifcfg.cntl3		= CNTL3_BS8 | CNTL3_FASTSCSI | CNTL3_FASTCLK;
+		info->info.ifcfg.cntl3		= /*CNTL3_BS8 |*/ CNTL3_FASTSCSI | CNTL3_FASTCLK;
 		info->info.ifcfg.disconnect_ok	= 1;
+		info->info.ifcfg.wide_max_size	= 0;
 		info->info.dma.setup		= powertecscsi_dma_setup;
 		info->info.dma.pseudo		= NULL;
 		info->info.dma.stop		= powertecscsi_dma_stop;
@@ -443,31 +446,12 @@ int powertecscsi_proc_info(char *buffer, char **start, off_t offset,
 			host->io_port, host->irq, host->dma_channel,
 			info->info.scsi.type, info->control.terms ? "on" : "off");
 
-	pos += sprintf(buffer+pos,
-			"Queued commands: %-10u   Issued commands: %-10u\n"
-			"Done commands  : %-10u   Reads          : %-10u\n"
-			"Writes         : %-10u   Others         : %-10u\n"
-			"Disconnects    : %-10u   Aborts         : %-10u\n"
-			"Resets         : %-10u\n",
-			info->info.stats.queues,      info->info.stats.removes,
-			info->info.stats.fins,        info->info.stats.reads,
-			info->info.stats.writes,      info->info.stats.miscs,
-			info->info.stats.disconnects, info->info.stats.aborts,
-			info->info.stats.resets);
+	pos += fas216_print_stats(&info->info, buffer + pos);
 
-	pos += sprintf (buffer+pos, "\nAttached devices:%s\n", host->host_queue ? "" : " none");
+	pos += sprintf (buffer+pos, "\nAttached devices:\n");
 
 	for (scd = host->host_queue; scd; scd = scd->next) {
-		int len;
-
-		proc_print_scsidevice (scd, buffer, &len, pos);
-		pos += len;
-		pos += sprintf (buffer+pos, "Extensions: ");
-		if (scd->tagged_supported)
-			pos += sprintf (buffer+pos, "TAG %sabled [%d] ",
-				    scd->tagged_queue ? "en" : "dis",
-				    scd->current_tag);
-		pos += sprintf (buffer+pos, "\n");
+		pos += fas216_print_device(&info->info, scd, buffer + pos);
 
 		if (pos + begin < offset) {
 			begin += pos;

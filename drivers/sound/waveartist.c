@@ -40,11 +40,19 @@
 #include <linux/delay.h>
 #include <linux/smp.h>
 
+#include <asm/dec21285.h>
 #include <asm/hardware.h>
 
 #include "soundmodule.h"
 #include "sound_config.h"
 #include "waveartist.h"
+
+#ifndef _ISA_DMA
+#define _ISA_DMA(x) (x)
+#endif
+#ifndef _ISA_IRQ
+#define _ISA_IRQ(x) (x)
+#endif
 
 #define	VNC_TIMER_PERIOD (HZ/4)	//check slider 4 times/sec
 
@@ -141,8 +149,269 @@ typedef struct wavnc_port_info {
 
 static int		 nr_waveartist_devs;
 static wavnc_info	 adev_info[MAX_AUDIO_DEV];
-static struct timer_list vnc_timer;
 
+static int waveartist_mixer_set(wavnc_info *devc, int whichDev, unsigned int level);
+
+/*
+ * Corel Netwinder specifics...
+ */
+static struct timer_list vnc_timer;
+extern spinlock_t gpio_lock;
+
+static void
+vnc_mute(wavnc_info *devc, int mute)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&gpio_lock, flags);
+	cpld_modify(CPLD_UNMUTE, mute ? 0 : CPLD_UNMUTE);
+	spin_unlock_irqrestore(&gpio_lock, flags);
+
+	devc->mute_state = mute;
+}
+
+static int
+vnc_volume_slider(wavnc_info *devc)
+{
+	static signed int old_slider_volume;
+	unsigned long flags;
+	signed int volume = 255;
+
+	*CSR_TIMER1_LOAD = 0x00ffffff;
+
+	save_flags(flags);
+	cli();
+
+	outb(0xFF, 0x201);
+	*CSR_TIMER1_CNTL = TIMER_CNTL_ENABLE | TIMER_CNTL_DIV1;
+
+	while (volume && (inb(0x201) & 0x01))
+		volume--;
+
+	*CSR_TIMER1_CNTL = 0;
+
+	restore_flags(flags);
+	
+	volume = 0x00ffffff - *CSR_TIMER1_VALUE;
+
+
+#ifndef REVERSE
+	volume = 150 - (volume >> 5);
+#else
+	volume = (volume >> 6) - 25;
+#endif
+
+	if (volume < 0)
+		volume = 0;
+
+	if (volume > 100)
+		volume = 100;
+
+	/*
+	 * slider quite often reads +-8, so debounce this random noise
+	 */
+	if ((volume - old_slider_volume) > 7 ||
+	    (old_slider_volume - volume) > 7) {
+		old_slider_volume = volume;
+
+		DEB(printk("Slider volume: %d.\n", old_slider_volume));
+	}
+
+	return old_slider_volume;
+}
+
+static int
+vnc_slider(wavnc_info *devc)
+{
+	signed int slider_volume;
+	unsigned int temp;
+
+	/*
+	 * read the "buttons" state.
+	 *  Bit 4 = handset present,
+	 *  Bit 5 = offhook
+	 */
+	// the state should be "querable" via a private IOCTL call
+	temp = inb(0x201) & 0x30;
+
+	if (!devc->handset_mute_sw &&
+	    (temp ^ devc->handset_state) & VNC_INTERNAL_MIC) {
+		devc->handset_state = temp;
+		devc->handset_mute_sw = 0;
+
+		vnc_mute(devc, (temp & VNC_INTERNAL_MIC) ? 1 : 0);
+	}
+
+	slider_volume = vnc_volume_slider(devc);
+
+	/*
+	 * If we're using software controlled volume, and
+	 * the slider moves by more than 20%, then we
+	 * switch back to slider controlled volume.
+	 */
+	if (devc->slider_vol > slider_volume) {
+		if (devc->slider_vol - slider_volume > 20)
+			devc->use_slider = 1;
+	} else {
+		if (slider_volume - devc->slider_vol > 20)
+			devc->use_slider = 1;
+	}
+
+	/*
+	 * use only left channel
+	 */
+	temp = levels[SOUND_MIXER_VOLUME] & 0xFF;
+
+	if (slider_volume != temp && devc->use_slider) {
+		devc->slider_vol = slider_volume;
+
+		waveartist_mixer_set(devc, SOUND_MIXER_VOLUME,
+			slider_volume | slider_volume << 8);
+
+		return 1;
+	}
+
+	return 0;
+}
+
+static void
+vnc_slider_tick(unsigned long data)
+{
+	int next_timeout;
+
+	if (vnc_slider(adev_info + data))
+		next_timeout = 5;	// mixer reported change
+	else
+		next_timeout = VNC_TIMER_PERIOD;
+
+	mod_timer(&vnc_timer, jiffies + next_timeout);
+}
+
+static int
+vnc_private_ioctl(int dev, unsigned int cmd, caddr_t arg)
+{
+	wavnc_info *devc = (wavnc_info *)audio_devs[dev]->devc;
+	int val, temp;
+
+	if (cmd == SOUND_MIXER_PRIVATE1) {
+		/*
+		 * Use this call to override the automatic handset
+		 * behaviour - ignore handset.
+		 *  bit 7 = total control over handset - do not
+		 *          to plug/unplug
+		 *  bit 4 = internal mic
+		 *  bit 0 = mute internal speaker
+		 */
+		if (get_user(val, (int *)arg))
+			return -EFAULT;
+
+		devc->handset_mute_sw = val;
+
+		temp = val & VNC_INTERNAL_SPKR;
+		if (devc->mute_state != temp)
+			vnc_mute(devc, temp);
+
+		devc->handset_state = val & VNC_INTERNAL_MIC;
+		waveartist_mixer_set(devc, SOUND_MIXER_RECSRC, SOUND_MASK_MIC);
+		return 0;
+	}
+#if 0
+	if (cmd == SOUND_MIXER_PRIVATE2) {
+#define VNC_SOUND_PAUSE         0x53    //to pause the DSP
+#define VNC_SOUND_RESUME        0x57    //to unpause the DSP
+		int             val;
+
+		val = *(int *) arg;
+
+		printk("MIXER_PRIVATE2: passed parameter = 0x%X.\n",val);
+
+		if (val == VNC_SOUND_PAUSE) {
+			wa_sendcmd(0x16);    //PAUSE the ADC
+		} else if (val == VNC_SOUND_RESUME) {
+			wa_sendcmd(0x18);    //RESUME the ADC
+		} else {
+			return -EINVAL;      //invalid parameters...
+		}
+		return 0;
+	}
+
+	if (cmd == SOUND_MIXER_PRIVATE3) {
+		long unsigned   flags;
+		int             mixer_reg[15];	//reg 14 is actually a command: read,write,reset
+
+		int             val;
+		int             i;
+
+		val = *(int *) arg;
+
+		if (verify_area(VERIFY_READ, (void *) val, sizeof(mixer_reg) == -EFAULT))
+			return (-EFAULT);
+
+		memcpy_fromfs(&mixer_reg, (void *) val, sizeof(mixer_reg));
+
+		if (mixer_reg[0x0E] == MIXER_PRIVATE3_RESET) { 	//reset command??
+			wavnc_mixer_reset(devc);
+			return (0);
+		} else if (mixer_reg[0x0E] == MIXER_PRIVATE3_WRITE) {	//write command??
+//			printk("WaveArtist Mixer: Private write command.\n");
+
+			wa_sendcmd(0x32);	//Pair1 - word 1 and 5
+			wa_sendcmd(mixer_reg[0]);
+			wa_sendcmd(mixer_reg[4]);
+
+			wa_sendcmd(0x32);	//Pair2 - word 2 and 6
+			wa_sendcmd(mixer_reg[1]);
+			wa_sendcmd(mixer_reg[5]);
+
+			wa_sendcmd(0x32);	//Pair3 - word 3 and 7
+			wa_sendcmd(mixer_reg[2]);
+			wa_sendcmd(mixer_reg[6]);
+
+			wa_sendcmd(0x32);	//Pair4 - word 4 and 8
+			wa_sendcmd(mixer_reg[3]);
+			wa_sendcmd(mixer_reg[7]);
+
+			wa_sendcmd(0x32);	//Pair5 - word 9 and 10
+			wa_sendcmd(mixer_reg[8]);
+			wa_sendcmd(mixer_reg[9]);
+
+			wa_sendcmd(0x0031);		//set left and right PCM
+			wa_sendcmd(mixer_reg[0x0A]);
+			wa_sendcmd(mixer_reg[0x0B]);
+
+			wa_sendcmd(0x0131);		//set left and right FM
+			wa_sendcmd(mixer_reg[0x0C]);
+			wa_sendcmd(mixer_reg[0x0D]);
+
+			return 0;
+		} else if (mixer_reg[0x0E] == MIXER_PRIVATE3_READ) {	//read command?
+//			printk("WaveArtist Mixer: Private read command.\n");
+
+			//first read all current values...
+			save_flags(flags);
+			cli();
+
+			for (i = 0; i < 14; i++) {
+				wa_sendcmd((i << 8) + 0x30);	// get ready for command nn30H
+
+				while (!(inb(STATR) & CMD_RF)) {
+				};	//wait for response ready...
+
+				mixer_reg[i] = inw(CMDR);
+			}
+			restore_flags(flags);
+
+			if (verify_area(VERIFY_WRITE, (void *) val, sizeof(mixer_reg) == -EFAULT))
+				return (-EFAULT);
+
+			memcpy_tofs((void *) val, &mixer_reg, sizeof(mixer_reg));
+			return 0;
+		} else
+			return -EINVAL;
+	}
+#endif
+	return -EINVAL;
+}
 
 static inline void
 waveartist_set_ctlr(struct address_info *hw, unsigned char clear, unsigned char set)
@@ -1368,138 +1637,12 @@ static int
 waveartist_mixer_ioctl(int dev, unsigned int cmd, caddr_t arg)
 {
 	wavnc_info *devc = (wavnc_info *)audio_devs[dev]->devc;
-#if 0
-	//use this call to override the automatic handset behaviour - ignore handset
-	//bit 0x80 = total control over handset - do not react to plug/unplug
-	//bit 0x10 = 1 == internal mic, otherwise handset mic
-	//bit 0x01 = 1 == mute internal speaker, otherwise unmute
 
-	if (cmd == SOUND_MIXER_PRIVATE1) {
-		int             val, temp;
+	if (cmd == SOUND_MIXER_PRIVATE1 ||
+	    cmd == SOUND_MIXER_PRIVATE2 ||
+	    cmd == SOUND_MIXER_PRIVATE3)
+		return vnc_private_ioctl(dev, cmd, arg);
 
-		val = *(int *) arg;
-
-//		printk("MIXER_PRIVATE1: passed parameter = 0x%X.\n",val);
-		return -EINVAL;		//check if parameter is logical...
-
-		devc->soft_mute_flag = val;
-
-		temp = val & VNC_INTERNAL_SPKR;
-		if (temp != devc->mute_state) {
-//			printk("MIXER_PRIVATE1: mute_mono(0x%X).\n",temp);
-			vnc_mute(devc, temp);
-		}
-
-//		temp = devc->handset_state;
-
-		// do not check if it is not already in
-		// the right setting, since we are
-		// laying about the current state...
-
-//		if ((val & VNC_INTERNAL_MIC) != temp) {
-			devc->handset_state = val & VNC_INTERNAL_MIC;
-//			printk("MIXER_PRIVATE1: mixer_set(0x%X).\n",devc->handset_state);
-			wa_mixer_set(devc, SOUND_MIXER_RECSRC, SOUND_MASK_MIC);
-//			devc->handset_state = temp;
-		}
-		return 0;
-	}
-#if 0
-	if (cmd == SOUND_MIXER_PRIVATE2) {
-#define VNC_SOUND_PAUSE         0x53    //to pause the DSP
-#define VNC_SOUND_RESUME        0x57    //to unpause the DSP
-		int             val;
-
-		val = *(int *) arg;
-
-		printk("MIXER_PRIVATE2: passed parameter = 0x%X.\n",val);
-
-		if (val == VNC_SOUND_PAUSE) {
-			wa_sendcmd(0x16);    //PAUSE the ADC
-		} else if (val == VNC_SOUND_RESUME) {
-			wa_sendcmd(0x18);    //RESUME the ADC
-		} else {
-			return -EINVAL;      //invalid parameters...
-		}
-		return 0;
-	}
-#endif
-
-	if (cmd == SOUND_MIXER_PRIVATE3) {
-		long unsigned   flags;
-		int             mixer_reg[15];	//reg 14 is actually a command: read,write,reset
-
-		int             val;
-		int             i;
-
-		val = *(int *) arg;
-
-		if (verify_area(VERIFY_READ, (void *) val, sizeof(mixer_reg) == -EFAULT))
-			return (-EFAULT);
-
-		memcpy_fromfs(&mixer_reg, (void *) val, sizeof(mixer_reg));
-
-		if (mixer_reg[0x0E] == MIXER_PRIVATE3_RESET) { 	//reset command??
-			wavnc_mixer_reset(devc);
-			return (0);
-		} else if (mixer_reg[0x0E] == MIXER_PRIVATE3_WRITE) {	//write command??
-//			printk("WaveArtist Mixer: Private write command.\n");
-
-			wa_sendcmd(0x32);	//Pair1 - word 1 and 5
-			wa_sendcmd(mixer_reg[0]);
-			wa_sendcmd(mixer_reg[4]);
-
-			wa_sendcmd(0x32);	//Pair2 - word 2 and 6
-			wa_sendcmd(mixer_reg[1]);
-			wa_sendcmd(mixer_reg[5]);
-
-			wa_sendcmd(0x32);	//Pair3 - word 3 and 7
-			wa_sendcmd(mixer_reg[2]);
-			wa_sendcmd(mixer_reg[6]);
-
-			wa_sendcmd(0x32);	//Pair4 - word 4 and 8
-			wa_sendcmd(mixer_reg[3]);
-			wa_sendcmd(mixer_reg[7]);
-
-			wa_sendcmd(0x32);	//Pair5 - word 9 and 10
-			wa_sendcmd(mixer_reg[8]);
-			wa_sendcmd(mixer_reg[9]);
-
-			wa_sendcmd(0x0031);		//set left and right PCM
-			wa_sendcmd(mixer_reg[0x0A]);
-			wa_sendcmd(mixer_reg[0x0B]);
-
-			wa_sendcmd(0x0131);		//set left and right FM
-			wa_sendcmd(mixer_reg[0x0C]);
-			wa_sendcmd(mixer_reg[0x0D]);
-
-			return 0;
-		} else if (mixer_reg[0x0E] == MIXER_PRIVATE3_READ) {	//read command?
-//			printk("WaveArtist Mixer: Private read command.\n");
-
-			//first read all current values...
-			save_flags(flags);
-			cli();
-
-			for (i = 0; i < 14; i++) {
-				wa_sendcmd((i << 8) + 0x30);	// get ready for command nn30H
-
-				while (!(inb(STATR) & CMD_RF)) {
-				};	//wait for response ready...
-
-				mixer_reg[i] = inw(CMDR);
-			}
-			restore_flags(flags);
-
-			if (verify_area(VERIFY_WRITE, (void *) val, sizeof(mixer_reg) == -EFAULT))
-				return (-EFAULT);
-
-			memcpy_tofs((void *) val, &mixer_reg, sizeof(mixer_reg));
-			return 0;
-		} else
-			return -EINVAL;
-	}
-#endif
 	if (((cmd >> 8) & 0xff) == 'M') {
 		if (_SIOC_DIR(cmd) & _SIOC_WRITE) {
 			int val;
@@ -1660,139 +1803,6 @@ nomem:
 	return -1;
 }
 
-/*
- * Corel Netwinder specifics...
- */
-static void
-vnc_mute(wavnc_info *devc, int mute)
-{
-	extern spinlock_t gpio_lock;
-	unsigned long flags;
-
-	spin_lock_irqsave(&gpio_lock, flags);
-	cpld_modify(CPLD_UNMUTE, mute ? 0 : CPLD_UNMUTE);
-	spin_unlock_irqrestore(&gpio_lock, flags);
-
-	devc->mute_state = mute;
-}
-
-static int
-vnc_volume_slider(wavnc_info *devc)
-{
-	static signed int old_slider_volume;
-	unsigned long flags;
-	signed int volume = 255;
-
-	*CSR_TIMER1_LOAD = 0x00ffffff;
-
-	save_flags(flags);
-	cli();
-
-	outb(0xFF, 0x201);
-	*CSR_TIMER1_CNTL = TIMER_CNTL_ENABLE | TIMER_CNTL_DIV1;
-
-	while (volume && (inb(0x201) & 0x01))
-		volume--;
-
-	*CSR_TIMER1_CNTL = 0;
-
-	restore_flags(flags);
-	
-	volume = 0x00ffffff - *CSR_TIMER1_VALUE;
-
-
-#ifndef REVERSE
-	volume = 150 - (volume >> 5);
-#else
-	volume = (volume >> 6) - 25;
-#endif
-
-	if (volume < 0)
-		volume = 0;
-
-	if (volume > 100)
-		volume = 100;
-
-	/*
-	 * slider quite often reads +-8, so debounce this random noise
-	 */
-	if ((volume - old_slider_volume) > 7 ||
-	    (old_slider_volume - volume) > 7) {
-		old_slider_volume = volume;
-
-		DEB(printk("Slider volume: %d.\n", old_slider_volume));
-	}
-
-	return old_slider_volume;
-}
-
-static int
-vnc_slider(wavnc_info *devc)
-{
-	signed int slider_volume;
-	unsigned int temp;
-
-	/*
-	 * read the "buttons" state.
-	 *  Bit 4 = handset present,
-	 *  Bit 5 = offhook
-	 */
-	// the state should be "querable" via a private IOCTL call
-	temp = inb(0x201) & 0x30;
-
-	if (!devc->handset_mute_sw &&
-	    (temp ^ devc->handset_state) & VNC_INTERNAL_MIC) {
-		devc->handset_state = temp;
-		devc->handset_mute_sw = 0;
-
-		vnc_mute(devc, (temp & VNC_INTERNAL_MIC) ? 1 : 0);
-	}
-
-	slider_volume = vnc_volume_slider(devc);
-
-	/*
-	 * If we're using software controlled volume, and
-	 * the slider moves by more than 20%, then we
-	 * switch back to slider controlled volume.
-	 */
-	if (devc->slider_vol > slider_volume) {
-		if (devc->slider_vol - slider_volume > 20)
-			devc->use_slider = 1;
-	} else {
-		if (slider_volume - devc->slider_vol > 20)
-			devc->use_slider = 1;
-	}
-
-	/*
-	 * use only left channel
-	 */
-	temp = levels[SOUND_MIXER_VOLUME] & 0xFF;
-
-	if (slider_volume != temp && devc->use_slider) {
-		devc->slider_vol = slider_volume;
-
-		waveartist_mixer_set(devc, SOUND_MIXER_VOLUME,
-			slider_volume | slider_volume << 8);
-
-		return 1;
-	}
-
-	return 0;
-}
-
-static void
-vnc_slider_tick(unsigned long data)
-{
-	int next_timeout;
-
-	if (vnc_slider(adev_info + data))
-		next_timeout = 5;	// mixer reported change
-	else
-		next_timeout = VNC_TIMER_PERIOD;
-
-	mod_timer(&vnc_timer, jiffies + next_timeout);
-}
-
 int
 probe_waveartist(struct address_info *hw_config)
 {
@@ -1808,12 +1818,12 @@ probe_waveartist(struct address_info *hw_config)
 		return 0;
 	}
 
-	if (hw_config->irq > 31 || hw_config->irq < 16) {
+	if (hw_config->irq > _ISA_IRQ(15) || hw_config->irq < _ISA_IRQ(0)) {
 		printk("WaveArtist: Bad IRQ %d\n", hw_config->irq);
 		return 0;
 	}
 
-	if (hw_config->dma != 3) {
+	if (hw_config->dma != _ISA_DMA(3)) {
 		printk("WaveArtist: Bad DMA %d\n", hw_config->dma);
 		return 0;
 	}

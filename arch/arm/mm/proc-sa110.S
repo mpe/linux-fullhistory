@@ -29,11 +29,11 @@ _sa110_flush_cache_all:					@ preserves r0
 		mov	r2, #1
 _sa110_flush_cache_all_r2:
 		ldr	r3, =Lclean_switch
+		ldr	ip, =FLUSH_BASE
 		ldr	r1, [r3]
 		ands	r1, r1, #1
 		eor	r1, r1, #1
 		str	r1, [r3]
-		ldr	ip, =FLUSH_BASE
 		addne	ip, ip, #32768
 		add	r1, ip, #16384			@ only necessary for 16k
 1:		ldr	r3, [ip], #32
@@ -226,12 +226,12 @@ _sa110_switch_to:
 		ldr	r2, [r0, #TSS_MEMMAP]		@ Get old page tables
 		str	sp, [r0, #TSS_SAVE]		@ Save sp_SVC
 		ldr	sp, [r1, #TSS_SAVE]		@ Get saved sp_SVC
-		ldr	r4, [r1, #TSK_ADDR_LIMIT]
-		teq	r4, #0
-		moveq	r4, #DOM_KERNELDOMAIN
-		movne	r4, #DOM_USERDOMAIN
-		mcr	p15, 0, r4, c3, c0		@ Set segment
+		ldr	r5, [r1, #TSK_ADDR_LIMIT]
 		ldr	r4, [r1, #TSS_MEMMAP]		@ Page table pointer
+		teq	r5, #0
+		moveq	r5, #DOM_KERNELDOMAIN
+		movne	r5, #DOM_USERDOMAIN
+		mcr	p15, 0, r5, c3, c0		@ Set segment
 /*
  * Flushing the cache is nightmarishly slow, so we take any excuse
  * to get out of it.  If the old page table is the same as the new,
@@ -288,7 +288,8 @@ _sa110_data_abort:
  */
 		.align	5
 _sa110_set_pmd:	str	r1, [r0]
-		mcr	p15, 0, r0, c7, c10, 1		@ clean D entry	 (drain is done by TLB fns)
+		mcr	p15, 0, r0, c7, c10, 1		@ clean D entry
+		mcr	p15, 0, r0, c7, c10, 4		@ drain WB (TLB bypasses WB)
 		mov	pc, lr
 
 /*
@@ -318,6 +319,7 @@ _sa110_set_pte:	str	r1, [r0], #-1024		@ linux version
 		str	r2, [r0]			@ hardware version
 		mov	r0, r0
 		mcr	p15, 0, r0, c7, c10, 1		@ clean D entry	 (drain is done by TLB fns)
+		mcr	p15, 0, r0, c7, c10, 4		@ drain WB (TLB bypasses WB)
 		mov	pc, lr
 
 /*

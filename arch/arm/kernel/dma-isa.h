@@ -23,3 +23,7 @@ void isa_enable_dma(int channel, dma_t *dma);
  */
 void isa_disable_dma(int channel, dma_t *dma);
 
+/*
+ * Initialise DMA
+ */
+int isa_init_dma(void);

@@ -333,7 +333,7 @@ extern __inline__ void setup_timer(void)
 		set_rtc_mmss = set_dummy_time;
 	}
 
-	if (machine_is_ebsa285()) {
+	if (machine_is_ebsa285() || machine_is_co285()) {
 		gettimeoffset = timer1_gettimeoffset;
 
 		*CSR_TIMER1_CLR  = 0;

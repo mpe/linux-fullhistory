@@ -1,4 +1,4 @@
-/* $Id: elf.h,v 1.18 1998/09/09 05:36:08 davem Exp $ */
+/* $Id: elf.h,v 1.19 1999/06/11 13:26:04 jj Exp $ */
 #ifndef __ASM_SPARC64_ELF_H
 #define __ASM_SPARC64_ELF_H
 
@@ -7,7 +7,9 @@
  */
 
 #include <asm/ptrace.h>
+#ifdef __KERNEL__
 #include <asm/processor.h>
+#endif
 
 /*
  * These are used to set parameters in the core dumps.

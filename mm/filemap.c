@@ -80,6 +80,41 @@ static void remove_page_from_hash_queue(struct page * page)
 	atomic_dec(&page_cache_size);
 }
 
+static void remove_page_from_inode_queue(struct page * page)
+{
+	struct inode * inode = page->inode;
+	struct page *prev, *next;
+
+	inode->i_nrpages--;
+	next = page->next;
+	prev = page->prev;
+	if (inode->i_pages == page)
+		inode->i_pages = next;
+	if (next)
+		next->prev = prev;
+	if (prev)
+		prev->next = next;
+	page->next = NULL;
+	page->prev = NULL;
+}
+
+/*
+ * Remove a page from the page cache and free it. Caller has to make
+ * sure the page is locked and that nobody else uses it - or that usage
+ * is safe.
+ */
+void remove_inode_page(struct page *page)
+{
+	if (!PageLocked(page))
+		PAGE_BUG(page);
+
+	spin_lock(&pagecache_lock);
+	remove_page_from_inode_queue(page);
+	remove_page_from_hash_queue(page);
+	page->inode = NULL;
+	spin_unlock(&pagecache_lock);
+}
+
 void invalidate_inode_pages(struct inode * inode)
 {
 	struct page ** p;
@@ -98,11 +133,8 @@ repeat:
 		}
 		if (page_count(page) != 2)
 			printk("hm, busy page invalidated? (not necesserily a bug)\n");
-		inode->i_nrpages--;
-		if ((*p = page->next) != NULL)
-			(*p)->prev = page->prev;
-		page->next = NULL;
-		page->prev = NULL;
+
+		remove_page_from_inode_queue(page);
 		remove_page_from_hash_queue(page);
 		page->inode = NULL;
 		UnlockPage(page);
@@ -131,13 +163,9 @@ repeat:
 		/* page wholly truncated - free it */
 		if (offset >= start) {
 			get_page(page);
-			if (TryLockPage(page)) {
-				spin_unlock(&pagecache_lock);
-				wait_on_page(page);
-				page_cache_release(page);
-				goto repeat;
-			}
 			spin_unlock(&pagecache_lock);
+
+			lock_page(page);
 
 			if (inode->i_op->flushpage)
 				inode->i_op->flushpage(inode, page, 0);
@@ -150,21 +178,7 @@ repeat:
 			 * page cache and creates a buffer-cache alias
 			 * to it causing all sorts of fun problems ...
 			 */
-			spin_lock(&pagecache_lock);
-			inode->i_nrpages--;
-			if ((*p = page->next) != NULL)
-				(*p)->prev = page->prev;
-			page->next = NULL;
-			page->prev = NULL;
-			remove_page_from_hash_queue(page);
-			page->inode = NULL;
-
-			if (page_count(page) == 1) {
-				spin_unlock(&pagecache_lock);
-				PAGE_BUG(page);
-			}
-
-			spin_unlock(&pagecache_lock);
+			remove_inode_page(page);
 
 			UnlockPage(page);
 			page_cache_release(page);
@@ -191,18 +205,9 @@ repeat:
 		if (offset < PAGE_CACHE_SIZE) {
 			unsigned long address;
 			get_page(page);
-			if (TryLockPage(page)) {
-				spin_unlock(&pagecache_lock);
-				wait_on_page(page);
-				page_cache_release(page);
-				goto repeat;
-			}
-			/*
-			 * It's worth dropping the write lock only at
-			 * this point. We are holding the page lock
-			 * so nobody can do anything bad to us.
-			 */
 			spin_unlock(&pagecache_lock);
+
+			lock_page(page);
 			partial = 1;
 
 			address = page_address(page);
@@ -220,23 +225,6 @@ repeat:
 			goto repeat;
 		}
 	}
-	spin_unlock(&pagecache_lock);
-}
-
-/*
- * Remove a page from the page cache and free it. Caller has to make
- * sure the page is locked and that nobody else uses it - or that usage
- * is safe.
- */
-void remove_inode_page(struct page *page)
-{
-	if (!PageLocked(page))
-		PAGE_BUG(page);
-
-	spin_lock(&pagecache_lock);
-	remove_page_from_inode_queue(page);
-	remove_page_from_hash_queue(page);
-	page->inode = NULL;
 	spin_unlock(&pagecache_lock);
 }
 
@@ -492,8 +480,9 @@ void lock_page(struct page *page)
  * hashed page atomically, waiting for it if it's locked.
  */
 struct page * __find_get_page (struct inode * inode,
-				unsigned long offset, struct page *page)
+				unsigned long offset, struct page **hash)
 {
+	struct page *page;
 
 	/*
 	 * We scan the hash list read-only. Addition to and removal from
@@ -501,7 +490,7 @@ struct page * __find_get_page (struct inode * inode,
 	 */
 repeat:
 	spin_lock(&pagecache_lock);
-	page = __find_page_nolock(inode, offset, page);
+	page = __find_page_nolock(inode, offset, *hash);
 	if (page)
 		get_page(page);
 	spin_unlock(&pagecache_lock);
@@ -540,10 +529,10 @@ repeat:
  * Get the lock to a page atomically.
  */
 struct page * __find_lock_page (struct inode * inode,
-				unsigned long offset, struct page *page)
+				unsigned long offset, struct page **hash)
 {
 	int locked;
-
+	struct page *page;
 
 	/*
 	 * We scan the hash list read-only. Addition to and removal from
@@ -551,7 +540,7 @@ struct page * __find_lock_page (struct inode * inode,
 	 */
 repeat:
 	spin_lock(&pagecache_lock);
-	page = __find_page_nolock(inode, offset, page);
+	page = __find_page_nolock(inode, offset, *hash);
 	locked = 0;
 	if (page) {
 		get_page(page);
@@ -1216,7 +1205,7 @@ static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long 
 	 */
 	hash = page_hash(inode, offset);
 retry_find:
-	page = __find_get_page(inode, offset, *hash);
+	page = __find_get_page(inode, offset, hash);
 	if (!page)
 		goto no_cached_page;
 
@@ -1287,7 +1276,7 @@ no_cached_page:
 	 * cache.. The page we just got may be useful if we
 	 * can't share, so don't get rid of it here.
 	 */
-	page = __find_get_page(inode, offset, *hash);
+	page = __find_get_page(inode, offset, hash);
 	if (page)
 		goto found_page;
 
@@ -1777,7 +1766,7 @@ generic_file_write(struct file *file, const char *buf,
 
 		hash = page_hash(inode, pgpos);
 repeat_find:
-		page = __find_lock_page(inode, pgpos, *hash);
+		page = __find_lock_page(inode, pgpos, hash);
 		if (!page) {
 			if (!page_cache) {
 				page_cache = page_cache_alloc();

@@ -121,7 +121,7 @@ static const struct res cyber2000_res[] = {
 		1600, 1200,
 		{
 			0xff, 0xc7, 0xc9, 0x9f, 0xcf, 0xa0, 0xfe, 0x10,
-			0x00, 0x40,
+ 			0x00, 0x40,
 			0xcf, 0x89, 0xaf, 0xc8, 0x00, 0xbc, 0xf1, 0xe3
 		},
 		0x1f,
@@ -154,54 +154,54 @@ static void cyber2000_init_hw(const struct res *res)
 	debug_printf("init vga hw for %dx%d\n", res->xres, res->yres);
 
 	cyber2000_outb(0xef, 0x3c2);
-	cyber2000_crtcw(0x0b, 0x11);
-	cyber2000_attrw(0x00, 0x11);
+	cyber2000_crtcw(0x11, 0x0b);
+	cyber2000_attrw(0x11, 0x00);
 
-	cyber2000_seqw(0x01, 0x00);
+	cyber2000_seqw(0x00, 0x01);
 	cyber2000_seqw(0x01, 0x01);
-	cyber2000_seqw(0x0f, 0x02);
-	cyber2000_seqw(0x00, 0x03);
-	cyber2000_seqw(0x0e, 0x04);
+	cyber2000_seqw(0x02, 0x0f);
 	cyber2000_seqw(0x03, 0x00);
+	cyber2000_seqw(0x04, 0x0e);
+	cyber2000_seqw(0x00, 0x03);
 
 	for (i = 0; i < sizeof(crtc_idx); i++)
-		cyber2000_crtcw(res->crtc_regs[i], crtc_idx[i]);
+		cyber2000_crtcw(crtc_idx[i], res->crtc_regs[i]);
 
 	for (i = 0x0a; i < 0x10; i++)
-		cyber2000_crtcw(0, i);
+		cyber2000_crtcw(i, 0);
 
-	cyber2000_crtcw(0xff, 0x18);
+	cyber2000_crtcw(0x18, 0xff);
 
 	cyber2000_grphw(0x00, 0x00);
-	cyber2000_grphw(0x00, 0x01);
-	cyber2000_grphw(0x00, 0x02);
-	cyber2000_grphw(0x00, 0x03);
-	cyber2000_grphw(0x00, 0x04);
-	cyber2000_grphw(0x60, 0x05);
-	cyber2000_grphw(0x05, 0x06);
-	cyber2000_grphw(0x0f, 0x07);
-	cyber2000_grphw(0xff, 0x08);
+	cyber2000_grphw(0x01, 0x00);
+	cyber2000_grphw(0x02, 0x00);
+	cyber2000_grphw(0x03, 0x00);
+	cyber2000_grphw(0x04, 0x00);
+	cyber2000_grphw(0x05, 0x60);
+	cyber2000_grphw(0x06, 0x05);
+	cyber2000_grphw(0x07, 0x0f);
+	cyber2000_grphw(0x08, 0xff);
 
 	for (i = 0; i < 16; i++)
 		cyber2000_attrw(i, i);
 
-	cyber2000_attrw(0x01, 0x10);
-	cyber2000_attrw(0x00, 0x11);
-	cyber2000_attrw(0x0f, 0x12);
-	cyber2000_attrw(0x00, 0x13);
-	cyber2000_attrw(0x00, 0x14);
+	cyber2000_attrw(0x10, 0x01);
+	cyber2000_attrw(0x11, 0x00);
+	cyber2000_attrw(0x12, 0x0f);
+	cyber2000_attrw(0x13, 0x00);
+	cyber2000_attrw(0x14, 0x00);
 
 	for (i = 0; i < sizeof(igs_regs); i += 2)
-		cyber2000_grphw(igs_regs[i+1], igs_regs[i]);
+		cyber2000_grphw(igs_regs[i], igs_regs[i+1]);
 
-	cyber2000_grphw(res->crtc_ofl, 0x11);
+	cyber2000_grphw(0x11, res->crtc_ofl);
 
 	for (i = 0; i < 4; i += 1)
-		cyber2000_grphw(res->clk_regs[i], 0xb0 + i);
+		cyber2000_grphw(0xb0 + i, res->clk_regs[i]);
 
-	cyber2000_grphw(0x01, 0x90);
-	cyber2000_grphw(0x80, 0xb9);
-	cyber2000_grphw(0x00, 0xb9);
+	cyber2000_grphw(0x90, 0x01);
+	cyber2000_grphw(0xb9, 0x80);
+	cyber2000_grphw(0xb9, 0x00);
 
 	cyber2000_outb(0x56, 0x3ce);
 	i = cyber2000_inb(0x3cf);
@@ -311,6 +311,7 @@ cyber2000_accel_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 	cyber2000_outw(height, 0xbf062);
 
 	switch (p->var.bits_per_pixel) {
+	case 15:
 	case 16:
 		bgx = ((u16 *)p->dispsw_data)[bgx];
 	case 8:
@@ -415,14 +416,27 @@ cyber2000_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 	current_par.palette[regno].blue  = blue;
 
 	switch (fb_display[current_par.currcon].var.bits_per_pixel) {
+#ifdef FBCON_HAS_CFB8
 	case 8:
 		cyber2000_outb(regno, 0x3c8);
 		cyber2000_outb(red,   0x3c9);
 		cyber2000_outb(green, 0x3c9);
 		cyber2000_outb(blue,  0x3c9);
 		break;
+#endif
 
 #ifdef FBCON_HAS_CFB16
+	case 15:
+		if (regno < 32) {
+			cyber2000_outb(regno << 3, 0x3c8);
+			cyber2000_outb(red, 0x3c9);
+			cyber2000_outb(green, 0x3c9);
+			cyber2000_outb(blue, 0x3c9);
+		}
+		if (regno < 16)
+			current_par.c_table.cfb16[regno] = regno | regno << 5 | regno << 10;
+		break;
+
 	case 16:
 		if (regno < 64) {
 			/* write green */
@@ -464,35 +478,122 @@ cyber2000_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 	return 0;
 }
 
-static int cyber2000fb_set_timing(struct fb_var_screeninfo *var)
+static void cyber2000fb_calculate_timing(unsigned char *v, struct fb_var_screeninfo *var)
 {
-	int width = var->xres_virtual;
-	int scr_pitch, fetchrow;
-	int i;
-	char b, col;
+	int Htotal, Hdispend, Hblankstart, Hblankend, Hsyncstart, Hsyncend;
+	int Vtotal, Vdispend, Vblankstart, Vblankend, Vsyncstart, Vsyncend;
+#define BIT(v,b1,m,b2) (((v >> b1) & m) << b2)
+
+	Hdispend    = var->xres;
+	Hsyncstart  = var->xres + var->right_margin;
+	Hsyncend    = var->xres + var->right_margin + var->hsync_len;
+	Htotal      = var->xres + var->right_margin + var->hsync_len + var->left_margin;
+
+	Hblankstart = var->xres;
+	Hblankend   = Htotal - 4*8;
+
+	Vdispend    = var->yres;
+	Vsyncstart  = var->yres + var->lower_margin;
+	Vsyncend    = var->yres + var->lower_margin + var->vsync_len;
+	Vtotal      = var->yres + var->lower_margin + var->vsync_len + var->upper_margin;
+
+	Vblankstart = var->yres + 7;
+	Vblankend   = Vtotal - 11;
+
+	Hdispend    >>= 3;
+	Hsyncstart  >>= 3;
+	Hsyncend    >>= 3;
+	Htotal      >>= 3;
+	Hblankstart >>= 3;
+	Hblankend   >>= 3;
+
+	Htotal      -= 5;
+	Hdispend    -= 1;
+	Vtotal	    -= 2;
+	Vdispend    -= 1;
+	Vblankstart -= 1;
+	Vblankend   -= 1;
+
+	v[0]  = Htotal;
+	v[1]  = Hdispend;
+	v[2]  = Hblankstart;
+	v[3]  = BIT(Hblankend,  0, 0x1f,  0) |
+		BIT(1,          0, 0x01,  7);
+	v[4]  = Hsyncstart;
+	v[5]  = BIT(Hsyncend,   0, 0x1f,  0) |
+	        BIT(Hblankend,  5, 0x01,  7);
+
+	v[6]  = Vtotal;
+	v[7]  = BIT(Vtotal,     8, 0x01,  0) |
+		BIT(Vdispend,   8, 0x01,  1) |
+		BIT(Vsyncstart, 8, 0x01,  2) |
+		BIT(Vblankstart,8, 0x01,  3) |
+		BIT(1,          0, 0x01,  4) |
+	        BIT(Vtotal,     9, 0x01,  5) |
+		BIT(Vdispend,   9, 0x01,  6) |
+		BIT(Vsyncstart, 9, 0x01,  7);
+	v[8]  = 0;
+	v[9]  = BIT(0,          0, 0x1f,  0) |
+	        BIT(Vblankstart,9, 0x01,  5) |
+		BIT(1,          0, 0x01,  6);
+	v[10] = Vsyncstart;
+	v[11] = BIT(Vsyncend,   0, 0x0f,  0) |
+		BIT(1,          0, 0x01,  7);
+	v[12] = Vdispend;
+	v[14] = 0;
+	v[15] = Vblankstart;
+	v[16] = Vblankend;
+	v[17] = 0xe3;
+
+	/* overflow - graphics reg 0x11 */
+	v[18] = BIT(Vtotal,     10, 0x01,  0) | /* guess */
+		BIT(Vdispend,   10, 0x01,  1) |
+		BIT(Vsyncstart, 10, 0x01,  2) | /* guess */
+		BIT(Vblankstart,10, 0x01,  3) | /* guess */
+		BIT(Hblankend,   6, 0x01,  4);  /* guess */
+}
+
+static void cyber2000fb_set_timing(struct fb_var_screeninfo *var)
+{
+	unsigned int width = var->xres_virtual;
+	unsigned int scr_pitch, fetchrow, i;
+	char b, graph_r77, crtc[32];
 
 	switch (var->bits_per_pixel) {
 	case 8:	/* PSEUDOCOLOUR, 256 */
 		b = 0;
-		col = 1;
-		scr_pitch = var->xres_virtual / 8;
+		graph_r77 = 1;
+		scr_pitch = width;
+		break;
+
+	case 15:/* DIRECTCOLOUR, 32k */
+		b = 1;
+		graph_r77 = 6;
+		scr_pitch = width * 2;
 		break;
 
 	case 16:/* DIRECTCOLOUR, 64k */
 		b = 1;
-		col = 2;
-		scr_pitch = var->xres_virtual / 8 * 2;
+		graph_r77 = 2;
+		scr_pitch = width * 2;
 		break;
+
 	case 24:/* TRUECOLOUR, 16m */
 		b = 2;
-		col = 4;
-		scr_pitch = var->xres_virtual / 8 * 3;
+		graph_r77 = 4;
 		width *= 3;
+		scr_pitch = width;
 		break;
 
 	default:
-		return 1;
+		return;
 	}
+
+	width -= 1;
+	scr_pitch >>= 3;
+	fetchrow = scr_pitch + 1;
+
+	cyber2000fb_calculate_timing(crtc, var);
 
 	for (i = 0; i < NUM_TOTAL_MODES; i++)
 		if (var->xres == cyber2000_res[i].xres &&
@@ -502,30 +603,41 @@ static int cyber2000fb_set_timing(struct fb_var_screeninfo *var)
 	if (i < NUM_TOTAL_MODES)
 		cyber2000_init_hw(cyber2000_res + i);
 
-	fetchrow = scr_pitch + 1;
+	crtc[13] = scr_pitch;
 
-	debug_printf("Setting regs: pitch=%X, fetchrow=%X, col=%X, b=%X\n",
-		     scr_pitch, fetchrow, col, b);
+	/*
+	 * reprogram the CRTC with the values we calculated
+	 * above.  This should be cleaned up once we're
+	 * confident that we're generating the correct
+	 * values.  Disable this if you're having problems,
+	 * and report the values obtained from the kernel
+	 * messages.
+	 */
+#if 1
+	cyber2000_crtcw(0x11, 0x0b);
+	for (i = 0; i < sizeof(crtc_idx); i++)
+		cyber2000_crtcw(crtc_idx[i], crtc[i]);
+#else
+	cyber2000_crtcw(0x13, crtc[13]);
+#endif
 
-	cyber2000_outb(0x13, 0x3d4);
-	cyber2000_outb(scr_pitch, 0x3d5);
-	cyber2000_outb(0x14, 0x3ce);
-	cyber2000_outb(fetchrow, 0x3cf);
-	cyber2000_outb(0x15, 0x3ce);
+	cyber2000_grphw(0x14, fetchrow);
 					/* FIXME: is this the right way round? */
-	cyber2000_outb(((fetchrow >> 4) & 0xf0) | ((scr_pitch >> 8) & 0x0f), 0x3cf);
-	cyber2000_outb(0x77, 0x3ce);
-	cyber2000_outb(col, 0x3cf);
+	cyber2000_grphw(0x15, ((fetchrow >> 4) & 0xf0) | ((scr_pitch >> 8) & 0x0f));
+	cyber2000_grphw(0x77, graph_r77);
+	cyber2000_grphw(0x33, 0x1c);
 
+	cyber2000_outw(width, 0xbf018);
+	cyber2000_outw(width, 0xbf218);
+	cyber2000_outb(b,     0xbf01c);
 
-	cyber2000_outb(0x33, 0x3ce);
-	cyber2000_outb(0x1c, 0x3cf);
-
-	cyber2000_outw(width - 1, 0xbf018);
-	cyber2000_outw(width - 1, 0xbf218);
-	cyber2000_outb(b, 0xbf01c);
-
-	return 0;
+{ int j;
+ printk(KERN_DEBUG);
+ for (j = 0; j < 19; j++) printk("%2d ", j); printk("\n"KERN_DEBUG);
+ for (j = 0; j < 19; j++) printk("%02X ", crtc[j]); printk("\n"KERN_DEBUG);
+ for (j = 0; j < 18; j++) printk("%02X ", cyber2000_res[i].crtc_regs[j]);
+ printk("%02X\n", cyber2000_res[i].crtc_ofl);
+}
 }
 
 static inline void
@@ -536,13 +648,10 @@ cyber2000fb_update_start(struct fb_var_screeninfo *var)
 
 	base = var->yoffset * var->xres_virtual + var->xoffset;
 
-	cyber2000_outb(0x0c, 0x3d4);
-	cyber2000_outb(base, 0x3d5);
-	cyber2000_outb(0x0d, 0x3d4);
-	cyber2000_outb(base >> 8, 0x3d5);
+	cyber2000_crtcw(0x0c, base);
+	cyber2000_crtcw(0x0d, base >> 8);
 	/* FIXME: need the upper bits of the start offset */
-/*	cyber2000_outb(0x??, 0x3d4);
-	cyber2000_outb(base >> 16, 0x3d5);*/
+/*	cyber2000_crtcw(0x??, base >> 16);*/
 #endif
 }
 
@@ -622,6 +731,7 @@ cyber2000fb_decode_var(struct fb_var_screeninfo *var, int con, int *visual)
 		break;
 #endif
 #ifdef FBCON_HAS_CFB16
+	case 15:
 	case 16:
 		*visual = FB_VISUAL_DIRECTCOLOR;
 		break;
@@ -737,6 +847,10 @@ cyber2000fb_set_var(struct fb_var_screeninfo *var, int con, struct fb_info *info
 	}
 
 	display->var = *var;
+	display->var.activate &= ~FB_ACTIVATE_ALL;
+
+	if (var->activate & FB_ACTIVATE_ALL)
+		global_disp.var = display->var;
 
 	display->screen_base	= (char *)current_par.screen_base;
 	display->visual		= visual;
@@ -744,8 +858,6 @@ cyber2000fb_set_var(struct fb_var_screeninfo *var, int con, struct fb_info *info
 	display->type_aux	= 0;
 	display->ypanstep	= 0;
 	display->ywrapstep	= 0;
-	display->line_length	=
-	display->next_line	= (var->xres_virtual * var->bits_per_pixel) / 8;
 	display->can_soft_blank = 1;
 	display->inverse	= 0;
 
@@ -754,18 +866,22 @@ cyber2000fb_set_var(struct fb_var_screeninfo *var, int con, struct fb_info *info
 	case 8:
 		dispsw = &fbcon_cfb8;
 		display->dispsw_data = NULL;
+		display->next_line = var->xres_virtual;
 		break;
 #endif
 #ifdef FBCON_HAS_CFB16
+	case 15:
 	case 16:
 		dispsw = &fbcon_cfb16;
 		display->dispsw_data = current_par.c_table.cfb16;
+		display->next_line = var->xres_virtual * 2;
 		break;
 #endif
 #ifdef FBCON_HAS_CFB24
 	case 24:
 		dispsw = &fbcon_cfb24;
 		display->dispsw_data = current_par.c_table.cfb24;
+		display->next_line = var->xres_virtual * 3;
 		break;
 #endif
 	default:
@@ -774,6 +890,8 @@ cyber2000fb_set_var(struct fb_var_screeninfo *var, int con, struct fb_info *info
 		dispsw = &fbcon_dummy;
 		break;
 	}
+
+	display->line_length = display->next_line;
 
 	if (display->var.accel_flags & FB_ACCELF_TEXT &&
 	    dispsw != &fbcon_dummy)
@@ -818,6 +936,7 @@ static int cyber2000fb_pan_display(struct fb_var_screeninfo *var, int con,
 		return -EINVAL;
 	if (y_bottom > fb_display[con].var.yres_virtual)
 		return -EINVAL;
+/*disabled until we can update the start address properly */
 return -EINVAL;
 
 	cyber2000fb_update_start(var);
@@ -947,12 +1066,26 @@ cyber2000fb_init_fbinfo(void))
 	init_var.yres			= DEFAULT_YRES;
 	init_var.bits_per_pixel		= DEFAULT_BPP;
 
+	/*
+	 * These parameters give
+	 * 640x480, hsync 31.5kHz, vsync 60Hz
+	 */
+	init_var.left_margin		= 56;
+	init_var.right_margin		= 16;
+	init_var.upper_margin		= 34;
+	init_var.lower_margin		= 9;
+	init_var.hsync_len		= 88;
+	init_var.vsync_len		= 2;
+	init_var.pixclock		= 39722;
+
 	init_var.red.msb_right		= 0;
 	init_var.green.msb_right	= 0;
 	init_var.blue.msb_right		= 0;
 
 	switch(init_var.bits_per_pixel) {
-	case 8:
+	default:
+		init_var.bits_per_pixel = 8;
+	case 8: /* PSEUDOCOLOUR */
 		init_var.bits_per_pixel	= 8;
 		init_var.red.offset	= 0;
 		init_var.red.length	= 8;
@@ -962,7 +1095,17 @@ cyber2000fb_init_fbinfo(void))
 		init_var.blue.length	= 8;
 		break;
 
-	case 16:
+	case 15: /* RGB555 */
+		init_var.bits_per_pixel = 15;
+		init_var.red.offset	= 10;
+		init_var.red.length	= 5;
+		init_var.green.offset	= 5;
+		init_var.green.length	= 5;
+		init_var.blue.offset	= 0;
+		init_var.blue.length	= 5;
+		break;
+
+	case 16: /* RGB565 */
 		init_var.bits_per_pixel = 16;
 		init_var.red.offset	= 11;
 		init_var.red.length	= 5;
@@ -972,7 +1115,7 @@ cyber2000fb_init_fbinfo(void))
 		init_var.blue.length	= 5;
 		break;
 
-	case 24:
+	case 24: /* RGB888 */
 		init_var.bits_per_pixel = 24;
 		init_var.red.offset	= 16;
 		init_var.red.length	= 8;

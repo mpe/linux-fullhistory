@@ -7,31 +7,57 @@
  */
 #include <linux/config.h>
 #include <linux/linkage.h>
-
-#ifndef CONFIG_ARCH_VNC
-#if (TEXTADDR & 0xffff) != 0x8000
-#error TEXTADDR must start at 0xXXXX8000
-#endif
-#else
-		.text
-		mov	r0, r0
-		mov	r0, r0
-		mov	r0, r0
-		mov	r0, r0
-		mov	r0, r0
-		mov	r0, r0
-		mov	r0, r0
-		mov	r0, r0
-		mov	r0, #0
-		mov	r1, #5
-#endif
-
-#define DEBUG
+#include <asm/hardware.h>
+#include <asm/dec21285.h>
 
 		.globl	SYMBOL_NAME(swapper_pg_dir)
 		.equ	SYMBOL_NAME(swapper_pg_dir),	TEXTADDR - 0x4000
 
-		.text
+		.section ".text.init",#alloc,#execinstr
+ENTRY(stext)
+ENTRY(_stext)
+
+#if (TEXTADDR & 0xffff) != 0x8000
+#error TEXTADDR must start at 0xXXXX8000
+#endif
+
+#ifdef CONFIG_ARCH_NETWINDER
+		mov	r0, r0
+		mov	r0, r0
+		mov	r0, r0
+		mov	r0, r0
+		mov	r0, r0
+		mov	r0, r0
+		mov	r0, r0
+		mov	r0, r0
+
+		adr	r2, 1f
+		ldmdb	r2, {r7, r8}
+		and	r3, r2, #0x0000c000
+		teq	r3, #0x00008000
+		beq	__entry
+		bic	r3, r2, #0xc000
+		orr	r3, r3, #0x8000
+		mov	r0, r3
+		mov	r4, #32
+		sub	r5, r8, r7
+		b	1f
+
+		.word	_stext
+		.word	_end
+
+1:		ldmia	r2!, {r6, r7, r8, r9}
+		stmia	r3!, {r6, r7, r8, r9}
+		subs	r4, r4, #16
+		bcs	1b
+		movs	r4, r5
+		mov	r5, #0
+		movne	pc, r0
+
+		mov	r0, #0
+		mov	r1, #5
+#endif
+
 /*
  * Entry point and restart point.  Entry *must* be called with r0 == 0,
  * MMU off.  Note! These should be unique!!! Please read Documentation/ARM-README
@@ -45,16 +71,15 @@
  *  r1 = 5 -> Corel Netwinder
  *  r1 = 6 -> CATS
  *  r1 = 7 -> tbox
+ *  r1 = 8 -> SA110/21285 as co-processor
  */
 
-ENTRY(stext)
-ENTRY(_stext)
 __entry:	teq	r0, #0					@ check for illegal entry...
 		bne	.Lerror					@ loop indefinitely
-		cmp	r1, #8					@ Unknown machine architecture
+		cmp	r1, #9					@ Unknown machine architecture
 		bge	.Lerror
-/* First thing to do is to get the page tables set up so that we can call the kernel
- * in the correct place.  This is relocatable code...
+/* First thing to do is to get the page tables set up so that we can call
+ * the kernel in the correct place.  This is relocatable code...
  * - Read processor ID register (CP#15, CR0).
  */
 		mrc	p15, 0, r9, c0, c0			@ get Processor ID
@@ -74,7 +99,7 @@ __entry:	teq	r0, #0					@ check for illegal entry...
 
 		adr	r4, .LCMachTypes
 		add	r4, r4, r1, lsl #4
-		ldmia	r4, {r4, r5, r6}
+		ldmia	r4, {r4, r5, r6, r7}
 /*
  * r4 = page dir in physical ram
  * r5 = physical address of start of RAM
@@ -99,26 +124,28 @@ __entry:	teq	r0, #0					@ check for illegal entry...
 		add	r3, r3, #1 << 20
 		str	r3, [r0], #4
 		add	r3, r3, #1 << 20
-#ifdef DEBUG
+#ifdef CONFIG_DEBUG_LL
 /* Map in IO space
  * This allows debug messages to be output via a serial
  * before/while paging_init.
  */
-		add	r0, r4, #0x3800
+		add	r0, r4, r7
 		orr	r3, r6, r8
 		add	r2, r0, #0x0800
 1:		str	r3, [r0], #4
 		add	r3, r3, #1 << 20
 		teq	r0, r2
 		bne	1b
-#ifdef CONFIG_ARCH_VNC
-		add	r0, r4, #0x3f00
-		add	r0, r0, #0x00f8
+#ifdef CONFIG_ARCH_NETWINDER
+		teq	r1, #5
+		bne	1f
+		add	r0, r4, #0x3fc0
 		mov	r3, #0x7c000000
 		orr	r3, r3, r8
 		str	r3, [r0], #4
 		add	r3, r3, #1 << 20
 		str	r3, [r0], #4
+1:
 #endif
 #endif
 #ifdef CONFIG_ARCH_RPC
@@ -168,49 +195,55 @@ __entry:	teq	r0, #0					@ check for illegal entry...
 .LCMachTypes:	.long	SYMBOL_NAME(swapper_pg_dir) - 0xc0000000	@ Address of page tables (physical)
 		.long	0					@ Address of RAM
 		.long	0xe0000000				@ I/O address
-		.long	0
+		.long	0x3800
 
 		@ Acorn RiscPC
 		.long	SYMBOL_NAME(swapper_pg_dir) - 0xc0000000 + 0x10000000
 		.long	0x10000000
 		.long	0x03000000
-		.long	0
+		.long	0x3800
 
 		@ EBSIT ???
 		.long	SYMBOL_NAME(swapper_pg_dir) - 0xc0000000
 		.long	0
 		.long	0xe0000000
-		.long	0
+		.long	0x3800
 
 		@ NexusPCI
 		.long	SYMBOL_NAME(swapper_pg_dir) - 0xc0000000 + 0x40000000
 		.long	0x40000000
 		.long	0x10000000
-		.long	0
+		.long	0x3800
 
 		@ DEC EBSA285
 		.long	SYMBOL_NAME(swapper_pg_dir) - 0xc0000000 @ Address of page tables (physical)
 		.long	0					@ Address of RAM
 		.long	0x24000000				@ I/O base address (0x42000000 -> 0xFE000000)
-		.long	0
+		.long	0x3800
 
 		@ Corel VNC
 		.long	SYMBOL_NAME(swapper_pg_dir) - 0xc0000000 @ Address of page tables (physical)
 		.long	0					@ Address of RAM
 		.long	0x24000000				@ I/O base address (0x42000000 -> 0xfe000000)
-		.long	0
+		.long	0x3800
 
 		@ CATS
 		.long	SYMBOL_NAME(swapper_pg_dir) - 0xc0000000 @ Address of page tables (physical)
 		.long	0					@ Address of RAM
 		.long	0x24000000				@ I/O base address (0x42000000 -> 0xfe000000)
-		.long	0
+		.long	0x3800
 
 		@ tbox
 		.long	SYMBOL_NAME(swapper_pg_dir) - 0xc0000000 + 0x80000000
 		.long	0x80000000				@ Address of RAM
 		.long	0x00400000				@ Uart
-		.long	0
+		.long	0x3800
+
+		@ DEC EBSA285 as co-processor
+		.long	0x4000					@ Address of page tables (physical)
+		.long	0					@ Address of RAM
+		.long	DC21285_ARMCSR_BASE			@ Physical I/O base address
+		.long	0x7cf00000 >> 18			@ Virtual I/O base address
 
 .LCProcTypes:	@ ARM6 / 610
 		.long	0x41560600
@@ -250,7 +283,11 @@ __entry:	teq	r0, #0					@ check for illegal entry...
 		mcr	p15, 0, r4, c2, c0			@ load page table pointer
 		mov	r0, #0x1f				@ Domains 0, 1 = client
 		mcr	p15, 0, r0, c3, c0			@ load domain access register
+#ifdef CONFIG_ALIGNMENT_TRAP
+		mov	r0, #0x3f				@ ....S..DPWCAM
+#else
 		mov	r0, #0x3d				@ ....S..DPWC.M
+#endif
 		orr	r0, r0, #0x100
 		mov	pc, lr
 
@@ -261,7 +298,11 @@ __entry:	teq	r0, #0					@ check for illegal entry...
 		mcr	p15, 0, r4, c2, c0			@ load page table pointer
 		mov	r0, #0x1f				@ Domains 0, 1 = client
 		mcr	p15, 0, r0, c3, c0			@ load domain access register
+#ifdef CONFIG_ALIGNMENT_TRAP
+		mov	r0, #0x7f				@ ....S.LDPWCAM
+#else
 		mov	r0, #0x7d				@ ....S.LDPWC.M
+#endif
 		orr	r0, r0, #0x100
 		mov	pc, lr
 
@@ -276,31 +317,37 @@ __entry:	teq	r0, #0					@ check for illegal entry...
 		mrc	p15, 0, r0, c1, c0			@ get control register v4
 		bic	r0, r0, #0x0e00
 		bic	r0, r0, #0x0002
+#ifdef CONFIG_ALIGNMENT_TRAP
+		orr	r0, r0, #0x003f				@ I...S..DPWCAM
+#else
 		orr	r0, r0, #0x003d				@ I...S..DPWC.M
+#endif
 		orr	r0, r0, #0x1100				@ v4 supports separate I cache
 		mov	pc, lr
-
-		.section ".text.init",#alloc,#execinstr
 
 .Lsa_fastclock:	mcr	p15, 0, r4, c15, c1, 2			@ Enable clock switching
 		mov	pc, lr
 
 .LC0:		.long	SYMBOL_NAME(__entry)
-		.long	SYMBOL_NAME(machine_type)
+		.long	SYMBOL_NAME(__machine_arch_type)
 		.long	SYMBOL_NAME(__bss_start)
 		.long	SYMBOL_NAME(processor_id)
 		.long	SYMBOL_NAME(_end)
+		.long	SYMBOL_NAME(cr_alignment)
 		.long	SYMBOL_NAME(init_task_union)+8192
 		.align
 
 .Lalready_done_mmap:
 		adr	r4, .LC0
-		ldmia	r4, {r3, r4, r5, r6, r8, sp}		@ Setup stack
+		ldmia	r4, {r3, r4, r5, r6, r7, r8, sp}	@ Setup stack
 		add	r10, r10, r3				@ Add base back in
 		mov	fp, #0
-1:		cmp	r5, r8					@ Clear BSS
+1:		cmp	r5, r7					@ Clear BSS
 		strcc	fp, [r5],#4
 		bcc	1b
+
+		bic	r2, r0, #2				@ Clear 'A' bit
+		stmia	r8, {r0, r2}				@ Save control register values
 
 		str	r1, [r4]				@ Save machine type
 		str	r9, [r6]				@ Save processor ID
@@ -310,10 +357,12 @@ __entry:	teq	r0, #0					@ check for illegal entry...
 		b	SYMBOL_NAME(start_kernel)
 
 		.text
-#ifdef DEBUG
+
+#ifdef CONFIG_DEBUG_LL
 /*
  * Some debugging routines (useful if you've got MM problems and
- * printk isn't working).  For DEBUGGING ONLY!!!
+ * printk isn't working).  For DEBUGGING ONLY!!!  Do not leave
+ * references to these in a production kernel!
  */
 #if defined(CONFIG_ARCH_RPC)
 		.macro	addruart,rx
@@ -362,46 +411,11 @@ __entry:	teq	r0, #0					@ check for illegal entry...
 		beq	1001b
 		.endm
 
-#elif defined(CONFIG_ARCH_EBSA285)
-		.macro	addruart,rx
-		mov	\rx, #0xfe000000
-		.endm
-
-		.macro	senduart,rd,rx
-		str	\rd, [\rx, #0x160]	@ UARTDR
-		.endm
-
-		.macro	busyuart,rd,rx
-1001:		ldr	\rd, [\rx, #0x178]	@ UARTFLG
-		tst	\rd, #1 << 3
-		bne	1001b
-		.endm
-
-		.macro	waituart,rd,rx
-		.endm
-
-#elif defined(CONFIG_ARCH_NEXUSPCI)
-		.macro	addruart,rx
-		ldr	\rx, =0xfff00000
-		.endm
-
-		.macro	senduart,rd,rx
-		str	\rd, [\rx, #0xc]
-		.endm
-
-		.macro	busyuart,rd,rx
-1001:		ldr	\rd, [\rx, #0x4]
-		tst	\rd, #1 << 0
-		bne	1001b
-		.endm
-
-		.macro	waituart,rd,rx
-		.endm
-
-#elif defined(CONFIG_ARCH_VNC)
+#elif defined(CONFIG_HOST_FOOTBRIDGE) || defined(CONFIG_ADDIN_FOOTBRIDGE)
+#ifndef CONFIG_DEBUG_DC21285_PORT
+	/* For NetWinder debugging */
 		.macro	addruart,rx
 		mov	\rx, #0xff000000
-		orr	\rx, \rx, #0x00e00000
 		orr	\rx, \rx, #0x000003f8
 		.endm
 
@@ -420,6 +434,48 @@ __entry:	teq	r0, #0					@ check for illegal entry...
 1001:		ldrb	\rd, [\rx, #0x6]
 		tst	\rd, #0x10
 		beq	1001b
+		.endm
+#else
+	/* For EBSA285 debugging */
+		.equ	dc21285_high, ARMCSR_BASE & 0xff000000
+		.equ	dc21285_low,  ARMCSR_BASE & 0x00ffffff
+
+		.macro	addruart,rx
+		mov	\rx, #dc21285_high
+		.if	dc21285_low
+		orr	\rx, \rx, #dc21285_low
+		.endif
+		.endm
+
+		.macro	senduart,rd,rx
+		str	\rd, [\rx, #0x160]	@ UARTDR
+		.endm
+
+		.macro	busyuart,rd,rx
+1001:		ldr	\rd, [\rx, #0x178]	@ UARTFLG
+		tst	\rd, #1 << 3
+		bne	1001b
+		.endm
+
+		.macro	waituart,rd,rx
+		.endm
+#endif
+#elif defined(CONFIG_ARCH_NEXUSPCI)
+		.macro	addruart,rx
+		ldr	\rx, =0xfff00000
+		.endm
+
+		.macro	senduart,rd,rx
+		str	\rd, [\rx, #0xc]
+		.endm
+
+		.macro	busyuart,rd,rx
+1001:		ldr	\rd, [\rx, #0x4]
+		tst	\rd, #1 << 0
+		bne	1001b
+		.endm
+
+		.macro	waituart,rd,rx
 		.endm
 #else
 #error Unknown architecture
@@ -475,8 +531,6 @@ ENTRY(printch)
 		mov	r1, r0
 		mov	r0, #0
 		b	1b
-
-		.ltorg
 
 		.bss
 hexbuf:		.space 16

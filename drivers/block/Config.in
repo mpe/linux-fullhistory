@@ -38,16 +38,16 @@ else
       bool '   RZ1000 chipset bugfix/support' CONFIG_BLK_DEV_RZ1000
       bool '   Generic PCI IDE chipset support' CONFIG_BLK_DEV_IDEPCI
       if [ "$CONFIG_BLK_DEV_IDEPCI" = "y" ]; then
-        bool '     Generic PCI bus-master DMA support' CONFIG_BLK_DEV_IDEDMA
+        bool '     Generic PCI bus-master DMA support' CONFIG_BLK_DEV_IDEDMA_PCI
+        if [ "$CONFIG_BLK_DEV_IDEDMA_PCI" = "y" ]; then
+          bool '     Use PCI DMA by default when available' CONFIG_IDEDMA_PCI_AUTO
+        fi
         bool '     Boot off-board chipsets first support' CONFIG_BLK_DEV_OFFBOARD
         bool '     AEC6210 chipset support' CONFIG_BLK_DEV_AEC6210
-        if [ "$CONFIG_BLK_DEV_IDEDMA" = "y" ]; then
-          bool '     Use DMA by default when available' CONFIG_IDEDMA_AUTO
-        fi
         if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
           bool '     OPTi 82C621 chipset enhanced support (EXPERIMENTAL)' CONFIG_BLK_DEV_OPTI621
           bool '     Intel PIIXn chipsets support (EXPERIMENTAL)' CONFIG_BLK_DEV_PIIX
-          if [ "$CONFIG_BLK_DEV_IDEDMA" = "y" ]; then
+          if [ "$CONFIG_BLK_DEV_IDEDMA_PCI" = "y" ]; then
             bool '     Tekram TRM290 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_TRM290
             bool '     NS87415 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_NS87415
             bool '     VIA82C586 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_VIA82C586
@@ -66,7 +66,7 @@ else
           fi
         fi
       fi
-      if [ "$CONFIG_PPC" = "y" ]; then
+      if [ "$CONFIG_PPC" = "y" -o "$CONFIG_ARM" = "y" ]; then
           bool '   Winbond SL82c105 support' CONFIG_BLK_DEV_SL82C105
       fi
     fi
@@ -75,10 +75,24 @@ else
         if [ "$CONFIG_BLK_DEV_IDE_PMAC" != "n" ]; then
           bool '     PowerMac IDE DMA support' CONFIG_BLK_DEV_IDEDMA_PMAC
           if [ "$CONFIG_BLK_DEV_IDEDMA_PMAC" = "y" ]; then
-            define_bool CONFIG_BLK_DEV_IDEDMA y
             bool '     Use DMA by default' CONFIG_PMAC_IDEDMA_AUTO
           fi
        fi
+    fi
+    if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
+        bool '   ICS IDE interface support' CONFIG_BLK_DEV_IDE_ICSIDE
+        if [ "$CONFIG_BLK_DEV_IDE_ICSIDE" = "y" ]; then
+          bool '     ICS DMA support' CONFIG_BLK_DEV_IDEDMA_ICS
+          if [ "$CONFIG_BLK_DEV_IDEDMA_ICS" = "y" ]; then
+            bool '     Use ICS DMA by default' CONFIG_IDEDMA_ICS_AUTO
+          fi
+        fi
+        bool '   RapIDE interface support' CONFIG_BLK_DEV_IDE_RAPIDE
+    fi
+    if [ "$CONFIG_BLK_DEV_IDEDMA_PCI" = "y" -o \
+         "$CONFIG_BLK_DEV_IDEDMA_PMAC" = "y" -o \
+         "$CONFIG_BLK_DEV_IDEDMA_ICS" = "y" ]; then
+      define_bool CONFIG_BLK_DEV_IDEDMA y
     fi
     bool '   Other IDE chipset support' CONFIG_IDE_CHIPSETS
     if [ "$CONFIG_IDE_CHIPSETS" = "y" ]; then
@@ -170,7 +184,8 @@ if [ "$CONFIG_BLK_DEV_CMD640" = "y" -o \
      "$CONFIG_BLK_DEV_IDE_PMAC" = "y" -o \
      "$CONFIG_BLK_DEV_CY82C693" = "y" -o \
      "$CONFIG_BLK_DEV_HPT343" = "y" -o \
-     "$CONFIG_BLK_DEV_PIIX" = "y" ]; then
+     "$CONFIG_BLK_DEV_PIIX" = "y" -o \
+     "$CONFIG_BLK_DEV_SL82C105" = "y" ]; then
   define_bool CONFIG_BLK_DEV_IDE_MODES y
 else
   define_bool CONFIG_BLK_DEV_IDE_MODES n

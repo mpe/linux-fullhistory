@@ -34,7 +34,7 @@
  * and that it is in the task area before calling this: this routine does
  * no checking.
  */
-static pte_t *get_page(struct task_struct * tsk,
+static pte_t *ptrace_get_page(struct task_struct * tsk,
 	struct vm_area_struct * vma, unsigned long addr, int write)
 {
 	pgd_t * pgdir;
@@ -121,7 +121,7 @@ static inline unsigned long get_long(struct task_struct * tsk,
 	pte_t * pgtable;
 	unsigned long page, retval;
 	
-	if (!(pgtable = get_page (tsk, vma, addr, 0))) return 0;
+	if (!(pgtable = ptrace_get_page (tsk, vma, addr, 0))) return 0;
 	page = pte_page(*pgtable);
 /* this is a hack for non-kernel-mapped video buffers and similar */
 	if (MAP_NR(page) >= max_mapnr)
@@ -138,7 +138,7 @@ static inline void put_long(struct task_struct * tsk, struct vm_area_struct * vm
 	pte_t *pgtable;
 	unsigned long page;
 
-	if (!(pgtable = get_page (tsk, vma, addr, 1))) return;
+	if (!(pgtable = ptrace_get_page (tsk, vma, addr, 1))) return;
 	page = pte_page(*pgtable);
 /* this is a hack for non-kernel-mapped video buffers and similar */
 	flush_cache_page(vma, addr);
@@ -166,7 +166,7 @@ static inline unsigned int get_int(struct task_struct * tsk,
 	unsigned long page;
 	unsigned int retval;
 	
-	if (!(pgtable = get_page (tsk, vma, addr, 0))) return 0;
+	if (!(pgtable = ptrace_get_page (tsk, vma, addr, 0))) return 0;
 	page = pte_page(*pgtable);
 /* this is a hack for non-kernel-mapped video buffers and similar */
 	if (MAP_NR(page) >= max_mapnr)
@@ -183,7 +183,7 @@ static inline void put_int(struct task_struct * tsk, struct vm_area_struct * vma
 	pte_t *pgtable;
 	unsigned long page;
 
-	if (!(pgtable = get_page (tsk, vma, addr, 1))) return;
+	if (!(pgtable = ptrace_get_page (tsk, vma, addr, 1))) return;
 	page = pte_page(*pgtable);
 /* this is a hack for non-kernel-mapped video buffers and similar */
 	flush_cache_page(vma, addr);
@@ -941,7 +941,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 				pt_error_return(regs, EIO);
 				goto flush_and_out;
 			}
-			pgtable = get_page (child, vma, src, 0);
+			pgtable = ptrace_get_page (child, vma, src, 0);
 			up(&child->mm->mmap_sem);
 			if (src & ~PAGE_MASK) {
 				curlen = PAGE_SIZE - (src & ~PAGE_MASK);
@@ -988,7 +988,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 				pt_error_return(regs, EIO);
 				goto flush_and_out;
 			}
-			pgtable = get_page (child, vma, dest, 1);
+			pgtable = ptrace_get_page (child, vma, dest, 1);
 			up(&child->mm->mmap_sem);
 			if (dest & ~PAGE_MASK) {
 				curlen = PAGE_SIZE - (dest & ~PAGE_MASK);

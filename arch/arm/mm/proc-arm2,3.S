@@ -202,15 +202,11 @@ _arm2_3_check_bugs:
 LC0:		.word	SYMBOL_NAME(page_nr)
 /*
  * Function: arm2_switch_to (struct task_struct *prev, struct task_struct *next)
- *
  * Params  : prev	Old task structure
  *	   : next	New task structure for process to run
- *
  * Returns : prev
- *
  * Purpose : Perform a task switch, saving the old processes state, and restoring
  *	     the new.
- *
  * Notes   : We don't fiddle with the FP registers here - we postpone this until
  *	     the new task actually uses FP.  This way, we don't swap FP for tasks
  *	     that do not require it.
@@ -316,15 +312,11 @@ _arm2_proc_init:
 _arm2_proc_fin:	movs	pc, lr
 /*
  * Function: arm3_switch_to (struct task_struct *prev, struct task_struct *next)
- *
  * Params  : prev	Old task structure
  *	   : next	New task structure for process to run
- *
  * Returns : prev
- *
  * Purpose : Perform a task switch, saving the old processes state, and restoring
  *	     the new.
- *
  * Notes   : We don't fiddle with the FP registers here - we postpone this until
  *	     the new task actually uses FP.  This way, we don't swap FP for tasks
  *	     that do not require it.

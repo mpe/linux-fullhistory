@@ -44,6 +44,8 @@ struct pt_regs {
 #define CC_Z_BIT	(1 << 30)
 #define CC_N_BIT	(1 << 31)
 
+#ifdef __KERNEL__
+
 #define processor_mode(regs) \
 	((regs)->ARM_pc & MODE_MASK)
 
@@ -70,11 +72,19 @@ struct pt_regs {
  */
 static inline int valid_user_regs(struct pt_regs *regs)
 {
-	if (!user_mode(regs) || regs->ARM_pc & (F_BIT | I_BIT))
+	if (user_mode(regs) &&
+	    (regs->ARM_pc & (F_BIT | I_BIT)) == 0)
 		return 1;
+
+	/*
+	 * force it to be something sensible
+	 */
+	regs->ARM_pc &= ~(MODE_MASK | F_BIT | I_BIT);
 
 	return 0;
 }
+
+#endif	/* __KERNEL__ */
 
 #endif
 

@@ -74,14 +74,14 @@ _arm6_7_switch_to:
 		str	sp, [r0, #TSS_SAVE]		@ Save sp_SVC
 		ldr	sp, [r1, #TSS_SAVE]		@ Get saved sp_SVC
 		ldr	r2, [r1, #TSK_ADDR_LIMIT]
+		ldr	r3, [r1, #TSS_MEMMAP]		@ Page table pointer
 		teq	r2, #0
 		moveq	r2, #DOM_KERNELDOMAIN
 		movne	r2, #DOM_USERDOMAIN
 		mcr	p15, 0, r2, c3, c0		@ Set domain reg
-		ldr	r2, [r1, #TSS_MEMMAP]		@ Page table pointer
 		mov	r1, #0
 		mcr	p15, 0, r1, c7, c0, 0		@ flush cache
-		mcr	p15, 0, r2, c2, c0, 0		@ update page table ptr
+		mcr	p15, 0, r3, c2, c0, 0		@ update page table ptr
 		mcr	p15, 0, r1, c5, c0, 0		@ flush TLBs
 		ldmfd	sp!, {ip}
 		msr	spsr, ip			@ Save tasks CPSR into SPSR for this return

@@ -335,7 +335,7 @@ static struct page *try_to_get_dirent_page(struct file *file, __u32 cookie, int 
 
 	hash = page_hash(inode, offset);
 repeat:
-	page = __find_lock_page(inode, offset, *hash);
+	page = __find_lock_page(inode, offset, hash);
 	if (page) {
 		page_cache_free(page_cache);
 		goto unlock_out;
@@ -433,7 +433,7 @@ static int nfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 		goto no_dirent_page;
 
 	hash = page_hash(inode, offset);
-	page = __find_get_page(inode, offset, *hash);
+	page = __find_get_page(inode, offset, hash);
 	if (!page)
 		goto no_dirent_page;
 	if (!Page_Uptodate(page))

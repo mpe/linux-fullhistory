@@ -19,7 +19,8 @@
  * Set up a hw structure for a specified data port, control port and IRQ.
  * This should follow whatever the default interface uses.
  */
-static __inline__ void ide_init_hwif_ports(hw_regs_t *hw, int data_port, int ctrl_port, int *irq)
+static __inline__ void
+ide_init_hwif_ports(hw_regs_t *hw, int data_port, int ctrl_port, int *irq)
 {
 	ide_ioreg_t reg = (ide_ioreg_t) data_port;
 	int i;

@@ -71,7 +71,7 @@ static char *version = "ether1 ethernet driver (c) 1995 Russell King v1.05\n";
 #define BUS_16 16
 #define BUS_8  8
 
-static const card_ids ether1_cids[] = {
+static const card_ids __init ether1_cids[] = {
 	{ MANU_ACORN, PROD_ACORN_ETHER1 },
 	{ 0xffff, 0xffff }
 };
@@ -128,7 +128,7 @@ ether1_inswb (unsigned int addr, void *data, unsigned int len)
 {
 	int used;
 
-	addr = IO_BASE + (addr << 2);
+	addr = ioaddr(addr);
 
 	__asm__ __volatile__(
 		"subs	%3, %3, #2
@@ -171,7 +171,7 @@ ether1_outswb (unsigned int addr, void *data, unsigned int len)
 {
 	int used;
 
-	addr = IO_BASE + (addr << 2);
+	addr = ioaddr(addr);
 
 	__asm__ __volatile__(
 		"subs	%3, %3, #2
@@ -659,12 +659,6 @@ ether1_probe1 (struct device *dev))
 	/* Fill in the fields of the device structure with ethernet values */
 	ether_setup (dev);
 
-#ifndef CLAIM_IRQ_AT_OPEN
-	if (request_irq (dev->irq, ether1_interrupt, 0, "ether1", dev)) {
-		kfree (dev->priv);
-		return -EAGAIN;
-	}
-#endif
 	return 0;
 }	
     
@@ -759,18 +753,16 @@ static int
 ether1_open (struct device *dev)
 {
 	struct ether1_priv *priv = (struct ether1_priv *)dev->priv;
-#ifdef CLAIM_IRQ_AT_OPEN
+
 	if (request_irq (dev->irq, ether1_interrupt, 0, "ether1", dev))
 		return -EAGAIN;
-#endif
+
 	MOD_INC_USE_COUNT;
 
 	memset (&priv->stats, 0, sizeof (struct enet_statistics));
 
 	if (ether1_init_for_open (dev)) {
-#ifdef CLAIM_IRQ_AT_OPEN
 		free_irq (dev->irq, dev);
-#endif
 		MOD_DEC_USE_COUNT;
 		return -EAGAIN;
 	}
@@ -1080,11 +1072,9 @@ ether1_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 static int
 ether1_close (struct device *dev)
 {
-#ifdef CLAIM_IRQ_AT_OPEN
-	free_irq (dev->irq, dev);
-#endif
-
 	ether1_reset (dev);
+
+	free_irq(dev->irq, dev);
 
 	dev->start = 0;
 	dev->tbusy = 0;
@@ -1117,56 +1107,46 @@ ether1_setmulticastlist (struct device *dev)
 
 #ifdef MODULE
 
-static char ethernames[MAX_ECARDS][9];
-static struct device *my_ethers[MAX_ECARDS];
-static struct expansion_card *ec[MAX_ECARDS];
+static struct ether_dev {
+	struct expansion_card	*ec;
+	char			name[9];
+	struct device		dev;
+} ether_devs[MAX_ECARDS];
 
 int
 init_module (void)
 {
-	int i;
+	struct expansion_card *ec;
+	int i, ret = -ENODEV;
 
-	for (i = 0; i < MAX_ECARDS; i++) {
-		my_ethers[i] = NULL;
-		ec[i] = NULL;
-		strcpy (ethernames[i], "        ");
-	}
-
-	i = 0;
+	memset(ether_devs, 0, sizeof(ether_devs));
 
 	ecard_startfind ();
+	ec = ecard_find(0, ether1_cids);
+	i = 0;
 
-	do {
-		if ((ec[i] = ecard_find(0, ether1_cids)) == NULL)
+	while (ec && i < MAX_ECARDS) {
+		ecard_claim(ec);
+
+		ether_devs[i].ec	    = ec;
+		ether_devs[i].dev.irq	    = ec->irq;
+		ether_devs[i].dev.base_addr = ecard_address(ec, ECARD_IOC, ECARD_FAST);
+		ether_devs[i].dev.init	    = ether1_probe;
+		ether_devs[i].dev.name	    = ether_devs[i].name;
+
+		ret = register_netdev(&ether_devs[i].dev);
+
+		if (ret) {
+			ecard_release(ec);
+			ether_devs[i].ec = NULL;
 			break;
-
-		my_ethers[i] = (struct device *)kmalloc (sizeof (struct device), GFP_KERNEL);
-		memset (my_ethers[i], 0, sizeof (struct device));
-
-		my_ethers[i]->irq = ec[i]->irq;
-		my_ethers[i]->base_addr = ecard_address (ec[i], ECARD_IOC, ECARD_FAST);
-		my_ethers[i]->init = ether1_probe;
-		my_ethers[i]->name = ethernames[i];
-
-		ecard_claim (ec[i]);
-
-		if (register_netdev (my_ethers[i]) != 0) {
-			for (i = 0; i < 4; i++) {
-				if (my_ethers[i]) {
-					kfree (my_ethers[i]);
-					my_ethers[i] = NULL;
-				}
-				if (ec[i]) {
-					ecard_release (ec[i]);
-					ec[i] = NULL;
-				}
-			}
-			return -EIO;
 		}
-		i++;
-	} while (i < MAX_ECARDS);
 
-	return i != 0 ? 0 : -ENODEV;
+		i += 1;
+		ec = ecard_find(0, ether1_cids);
+	}
+
+	return i != 0 ? 0 : ret;
 }
 
 void
@@ -1175,18 +1155,15 @@ cleanup_module (void)
 	int i;
 
 	for (i = 0; i < MAX_ECARDS; i++) {
-		if (my_ethers[i]) {
-			unregister_netdev (my_ethers[i]);
-			release_region (my_ethers[i]->base_addr, 16);
-			release_region (my_ethers[i]->base_addr + 0x800, 4096);
-#ifndef CLAIM_IRQ_AT_OPEN
-			free_irq (my_ethers[i]->irq, my_ethers[i]);
-#endif
-			my_ethers[i] = NULL;
-		}
-		if (ec[i]) {
-			ecard_release (ec[i]);
-			ec[i] = NULL;
+		if (ether_devs[i].ec) {
+			unregister_netdev(&ether_devs[i].dev);
+
+			release_region(ether_devs[i].dev.base_addr, 16);
+			release_region(ether_devs[i].dev.base_addr + 0x800, 4096);
+
+			ecard_release(ether_devs[i].ec);
+
+			ether_devs[i].ec = NULL;
 		}
 	}
 }

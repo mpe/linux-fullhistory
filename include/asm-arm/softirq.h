@@ -5,10 +5,18 @@
 #include <asm/hardirq.h>
 
 extern unsigned int local_bh_count[NR_CPUS];
-#define in_bh()			(local_bh_count[smp_processor_id()] != 0)
+
+#define cpu_bh_disable(cpu)	do { local_bh_count[(cpu)]++; barrier(); } while (0)
+#define cpu_bh_enable(cpu)	do { barrier(); local_bh_count[(cpu)]--; } while (0)
+
+#define cpu_bh_trylock(cpu)	(local_bh_count[(cpu)] ? 0 : (local_bh_count[(cpu)] = 1))
+#define cpu_bh_endlock(cpu)	(local_bh_count[(cpu)] = 0)
+
+#define local_bh_disable()	cpu_bh_disable(smp_processor_id())
+#define local_bh_enable()	cpu_bh_enable(smp_processor_id())
 
 #define get_active_bhs()	(bh_mask & bh_active)
-#define clear_active_bhs(x)	atomic_clear_mask((int)(x),&bh_active)
+#define clear_active_bhs(x)	atomic_clear_mask((x),&bh_active)
 
 extern inline void init_bh(int nr, void (*routine)(void))
 {
@@ -19,8 +27,9 @@ extern inline void init_bh(int nr, void (*routine)(void))
 
 extern inline void remove_bh(int nr)
 {
-	bh_base[nr] = NULL;
 	bh_mask &= ~(1 << nr);
+	mb();
+	bh_base[nr] = NULL;
 }
 
 extern inline void mark_bh(int nr)
@@ -34,20 +43,20 @@ extern inline void mark_bh(int nr)
 
 extern inline void start_bh_atomic(void)
 {
-	local_bh_count[smp_processor_id()]++;
+	local_bh_disable();
 	barrier();
 }
 
 extern inline void end_bh_atomic(void)
 {
 	barrier();
-	local_bh_count[smp_processor_id()]--;
+	local_bh_enable();
 }
 
 /* These are for the irq's testing the lock */
-#define softirq_trylock(cpu)	(in_bh() ? 0 : (local_bh_count[smp_processor_id()]=1))
-#define softirq_endlock(cpu)	(local_bh_count[smp_processor_id()] = 0)
-#define synchronize_bh()	do { } while (0)
+#define softirq_trylock(cpu)	(cpu_bh_trylock(cpu))
+#define softirq_endlock(cpu)	(cpu_bh_endlock(cpu))
+#define synchronize_bh()	barrier()
 
 #endif	/* SMP */
 

@@ -18,6 +18,10 @@
 
 #ifndef __ASSEMBLY__
 
+#define BUG() do { printk("kernel BUG at %s:%d!\n", __FILE__, __LINE__); *(int *)0=0; } while (0)
+#define PAGE_BUG(page) do { \
+				BUG(); } while (0)
+
 extern void clear_page(unsigned long page);
 extern void copy_page(unsigned long to, unsigned long from);
 

@@ -34,11 +34,11 @@
  */
 static inline long get_stack_long(struct task_struct *task, int offset)
 {
-	unsigned char *stack;
+	struct pt_regs *regs;
 
-	stack = (unsigned char *)((unsigned long)task + 8192 - sizeof(struct pt_regs));
-	stack += offset << 2;
-	return *(unsigned long *)stack;
+	regs = (struct pt_regs *)((unsigned long)task + 8192 - sizeof(struct pt_regs));
+
+	return regs->uregs[offset];
 }
 
 /*
@@ -50,11 +50,12 @@ static inline long get_stack_long(struct task_struct *task, int offset)
 static inline long put_stack_long(struct task_struct *task, int offset,
 	unsigned long data)
 {
-	unsigned char *stack;
+	struct pt_regs *regs;
 
-	stack = (unsigned char *)((unsigned long)task + 8192 - sizeof(struct pt_regs));
-	stack += offset << 2;
-	*(unsigned long *) stack = data;
+	regs = (struct pt_regs *)((unsigned long)task + 8192 - sizeof(struct pt_regs));
+
+	regs->uregs[offset] = data;
+
 	return 0;
 }
 
@@ -157,11 +158,16 @@ repeat:
 	
 	if (MAP_NR(page) < max_mapnr) {
 		page += addr & ~PAGE_MASK;
+
+		flush_cache_range(vma->vm_mm, addr, addr + sizeof(unsigned long));
+
 		*(unsigned long *)page = data;
-		__flush_entry_to_ram(page);
+
+		clean_cache_area(page, sizeof(unsigned long));
+
+		set_pte(pgtable, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
+		flush_tlb_page(vma, addr & PAGE_MASK);
 	}
-	set_pte(pgtable, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
-	flush_tlb();
 }
 
 /*
@@ -343,8 +349,7 @@ printk ("op2=r%02ldsh%dx%d", insn & 15, shift, type);
 printk ("=%08lX ", val);
 	return val;
 }
-#undef pc_pointer
-#define pc_pointer(x) ((x) & 0x03fffffc)
+
 int ptrace_set_bpt (struct task_struct *child)
 {
 	unsigned long insn, pc, alt;
@@ -651,7 +656,6 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 				return 0;
 			wake_up_process (child);
 			child->exit_code = SIGKILL;
-			ptrace_cancel_bpt (child);
 			/* make sure single-step breakpoint is gone. */
 			ptrace_cancel_bpt (child);
 			ret = 0;

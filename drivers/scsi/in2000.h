@@ -67,7 +67,7 @@
    orl %%ecx, %%ecx       \n \
    jz 1f                  \n \
    rep                    \n \
-   insw %%dx              \n \
+   insw (%%dx),%%es:(%%edi) \n \
 1: "                       \
    : "=D" (sp)                   /* output */   \
    : "d" (f), "D" (sp), "c" (i)  /* input */    \
@@ -79,7 +79,7 @@
    orl %%ecx, %%ecx       \n \
    jz 1f                  \n \
    rep                    \n \
-   outsw %%dx             \n \
+   outsw %%ds:(%%esi),(%%dx) \n \
 1: "                       \
    : "=S" (sp)                   /* output */   \
    : "d" (f), "S" (sp), "c" (i)  /* input */    \

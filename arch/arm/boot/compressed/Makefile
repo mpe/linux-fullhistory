@@ -11,10 +11,15 @@ HEAD	=$(COMPRESSED_HEAD)
 OBJS	=$(HEAD) misc.o $(COMPRESSED_EXTRA)
 CFLAGS	=-O2 -DSTDC_HEADERS $(CFLAGS_PROC)
 ARFLAGS =rc
+FONTC	=$(TOPDIR)/drivers/video/font_acorn_8x8.c
+
+ifeq ($(CONFIG_ARCH_ACORN),y)
+OBJS	+= ll_char_wr.o font.o
+endif
 
 all:		vmlinux
 
-vmlinux:	piggy.o $(OBJS)
+vmlinux:	$(OBJS) piggy.o
 		$(LD) $(ZLINKFLAGS) -o vmlinux $(OBJS) piggy.o
 
 $(HEAD): 	$(HEAD:.o=.S)
@@ -28,6 +33,9 @@ piggy.o:	$(SYSTEM)
 		echo "SECTIONS { .data : { input_len = .; LONG(input_data_end - input_data) input_data = .; *(.data) input_data_end = .; }}" > $$tmppiggy.lnk; \
 		$(LD) -r -o piggy.o -b binary $$tmppiggy.gz -b elf32-arm -T $$tmppiggy.lnk; \
 		rm -f $$tmppiggy $$tmppiggy.gz $$tmppiggy.lnk;
+
+font.o:		$(FONTC)
+		$(CC) -Dstatic= -c -o $@ $(FONTC)
 
 clean:;		rm -f vmlinux core
 

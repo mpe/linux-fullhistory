@@ -26,25 +26,14 @@ void __bad_pmd_kernel(pmd_t *pmd)
 	set_pmd(pmd, mk_kernel_pmd(BAD_PAGETABLE));
 }
 
-static void
-kernel_page_fault(unsigned long addr, int mode, struct pt_regs *regs,
-		  struct task_struct *tsk, struct mm_struct *mm)
+/*
+ * This is useful to dump out the page tables associated with
+ * 'addr' in mm 'mm'.
+ */
+void show_pte(struct mm_struct *mm, unsigned long addr)
 {
-	char *reason;
-	/*
-	 * Oops. The kernel tried to access some bad page. We'll have to
-	 * terminate things with extreme prejudice.
-	 */
 	pgd_t *pgd;
 
-	if (addr < PAGE_SIZE)
-		reason = "NULL pointer dereference";
-	else
-		reason = "paging request";
-
-	printk(KERN_ALERT "Unable to handle kernel %s at virtual address %08lx\n",
-		reason, addr);
-	printk(KERN_ALERT "memmap = %08lX, pgd = %p\n", tsk->tss.memmap, mm->pgd);
 	pgd = pgd_offset(mm, addr);
 	printk(KERN_ALERT "*pgd = %08lx", pgd_val(*pgd));
 
@@ -77,6 +66,27 @@ kernel_page_fault(unsigned long addr, int mode, struct pt_regs *regs,
 	} while(0);
 
 	printk("\n");
+}
+
+/*
+ * Oops. The kernel tried to access some bad page. We'll have to
+ * terminate things with extreme prejudice.
+ */
+static void
+kernel_page_fault(unsigned long addr, int mode, struct pt_regs *regs,
+		  struct task_struct *tsk, struct mm_struct *mm)
+{
+	char *reason;
+
+	if (addr < PAGE_SIZE)
+		reason = "NULL pointer dereference";
+	else
+		reason = "paging request";
+
+	printk(KERN_ALERT "Unable to handle kernel %s at virtual address %08lx\n",
+		reason, addr);
+	printk(KERN_ALERT "memmap = %08lX, pgd = %p\n", tsk->tss.memmap, mm->pgd);
+	show_pte(mm, addr);
 	die("Oops", regs, mode);
 
 	do_exit(SIGKILL);
