@@ -79,12 +79,6 @@ extern int last_pid;
 #define TASK_ZOMBIE		4
 #define TASK_STOPPED		8
 #define TASK_SWAPPING		16
-/*
- * 'exclusive' tasks are the ones that expect 'wake-one' behavior
- * on __wake_up(). They are special because __wake_up() removes
- * them from the waitqueue immediately, this way we have O(1) addition,
- * scheduling and removal from waitqueues, no matter how long they are.
- */
 #define TASK_EXCLUSIVE		32
 
 /*

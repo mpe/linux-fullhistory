@@ -102,7 +102,7 @@ struct mc32_local
 	u16 exec_pending;
 	u16 mc_reload_wait;	/* a multicast load request is pending */
 	atomic_t tx_count;		/* buffers left */
-	struct wait_queue *event;
+	wait_queue_head_t event;
 	struct sk_buff *tx_skb[TX_RING_MAX];	/* Transmit ring */
 	u16 tx_skb_top;
 	u16 tx_skb_end;
@@ -411,6 +411,7 @@ __initfunc(static int mc32_probe1(struct device *dev, int slot))
 	lp->rx_chain 		= lp->exec_box->data[10];
 	lp->tx_len 		= lp->exec_box->data[9];
 	lp->rx_len 		= lp->exec_box->data[11];
+	init_waitqueue_head(&lp->event);
 	
 	printk("%s: %d RX buffers, %d TX buffers. Base of 0x%08X.\n",
 		dev->name, lp->rx_len, lp->tx_len, lp->base);

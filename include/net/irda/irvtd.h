@@ -64,10 +64,10 @@ struct irvtd_cb {
 	int line;
 	int count;                /* open count */
 	int blocked_open;
-	struct wait_queue       *open_wait;
-	struct wait_queue       *close_wait;
-	struct wait_queue       *delta_msr_wait;
-	struct wait_queue       *tx_wait;
+	wait_queue_head_t       open_wait;
+	wait_queue_head_t       close_wait;
+	wait_queue_head_t       delta_msr_wait;
+	wait_queue_head_t       tx_wait;
 
 	struct timer_list       timer;
 

@@ -195,7 +195,7 @@ __initfunc(int ms_bus_mouse_init(void))
 	mouse.present = mouse.active = mouse.ready = 0;
 	mouse.buttons = 0x80;
 	mouse.dx = mouse.dy = 0;
-	mouse.wait = NULL;
+	init_waitqueue_head(&mouse.wait);
 
 	if (check_region(MS_MSE_CONTROL_PORT, 0x04))
 		return -ENODEV;

@@ -404,6 +404,8 @@ __initfunc(static int ibmtr_probe1(struct device *dev, int PIOaddr))
 #endif
 	ti->mmio= t_mmio;
 	ti->readlog_pending = 0;
+	init_waitqueue_head(&ti->wait_for_tok_int);
+	init_waitqueue_head(&ti->wait_for_reset);
 
 	dev->priv = ti;     /* this seems like the logical use of the
                          field ... let's try some empirical tests

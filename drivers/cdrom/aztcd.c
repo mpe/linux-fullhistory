@@ -303,7 +303,7 @@ static char  azt_init_end = 0;
 static char  azt_auto_eject = AZT_AUTO_EJECT;
 
 static int AztTimeout, AztTries;
-static struct wait_queue *azt_waitq = NULL; 
+static DECLARE_WAIT_QUEUE_HEAD(azt_waitq);
 static struct timer_list delay_timer = { NULL, NULL, 0, 0, NULL };
 
 static struct azt_DiskInfo DiskInfo;

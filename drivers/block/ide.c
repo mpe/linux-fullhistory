@@ -1696,6 +1696,7 @@ void ide_unregister (unsigned int index)
 	ide_hwgroup_t *hwgroup;
 	int irq_count = 0, unit, i;
 	unsigned long flags;
+	unsigned int p, minor;
 
 	if (index >= MAX_HWIFS)
 		return;
@@ -1714,6 +1715,24 @@ void ide_unregister (unsigned int index)
 			goto abort;
 	}
 	hwif->present = 0;
+	
+	/*
+	 * All clear?  Then blow away the buffer cache
+	 */
+	sti();
+	for (unit = 0; unit < MAX_DRIVES; ++unit) {
+		drive = &hwif->drives[unit];
+		minor = drive->select.b.unit << PARTN_BITS;
+		for (p = 0; p < (1<<PARTN_BITS); ++p) {
+			if (drive->part[p].nr_sects > 0) {
+				kdev_t devp = MKDEV(hwif->major, minor+p);
+				struct super_block * sb = get_super(devp);
+				if (sb) invalidate_inodes(sb);
+				invalidate_buffers (devp);
+			}
+		}
+	}
+	cli();
 	hwgroup = hwif->hwgroup;
 
 	/*

@@ -253,7 +253,7 @@ static inline int signal_pending(struct task_struct *p)
  * memory if large numbers of serial ports are open.
  */
 static unsigned char *tmp_buf = 0;
-static struct semaphore tmp_buf_sem = MUTEX;
+static DECLARE_MUTEX(tmp_buf_sem);
 
 static void rp_start(struct tty_struct *tty);
 
@@ -643,6 +643,8 @@ static void init_r_port(int board, int aiop, int chan)
 	info->close_delay = 50;
 	info->callout_termios =callout_driver.init_termios;
 	info->normal_termios = rocket_driver.init_termios;
+	init_waitqueue_head(&info->open_wait);
+	init_waitqueue_head(&info->close_wait);
 
 	info->intmask = RXF_TRIG | TXFIFO_MT | SRC_INT | DELTA_CD |
 		DELTA_CTS | DELTA_DSR;
@@ -807,7 +809,7 @@ static void configure_r_port(struct r_port *info)
 static int block_til_ready(struct tty_struct *tty, struct file * filp,
 			   struct r_port *info)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	int		retval;
 	int		do_clocal = 0, extra_count = 0;
 	unsigned long	flags;

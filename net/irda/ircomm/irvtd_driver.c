@@ -607,7 +607,7 @@ static int irvtd_block_til_ready(struct tty_struct *tty, struct file * filp,
 				 struct irvtd_cb *driver)
 {
 
- 	struct wait_queue wait = { current, NULL };
+ 	DECLARE_WAITQUEUE(wait,current);
 	int		retval = 0;
 	int		do_clocal = 0;
 
@@ -1930,6 +1930,10 @@ __initfunc(int irvtd_init(void))
 		irvtd[i]->line = i;
 		irvtd[i]->closing_wait = 10*HZ ;
 		irvtd[i]->close_delay = 5*HZ/10 ; 
+		init_waitqueue_head(&irvtd[i]->open_wait);
+		init_waitqueue_head(&irvtd[i]->close_wait);
+		init_waitqueue_head(&irvtd[i]->tx_wait);
+		init_waitqueue_head(&irvtd[i]->delta_msr_wait);
 	}
 
 	/* 

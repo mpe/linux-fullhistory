@@ -582,6 +582,7 @@ static struct shaper *shaper_alloc(struct device *dev)
 	init_timer(&sh->timer);
 	sh->timer.function=shaper_timer;
 	sh->timer.data=(unsigned long)sh;
+	init_waitqueue_head(&sh->wait_queue);
 	return sh;
 }
 

@@ -1578,9 +1578,20 @@ static struct open_request * wait_for_connect(struct sock * sk,
 	 * one process gets woken up, not the 'whole herd'.
 	 * Since we do not 'race & poll' for established sockets
 	 * anymore, the common case will execute the loop only once.
+	 *
+	 * Or rather, it _would_ execute only once if it wasn't for
+	 * some extraneous wakeups that currently happen.
+	 *
+	 * Subtle issue: "add_wait_queue_exclusive()" will be added
+	 * after any current non-exclusive waiters, and we know that
+	 * it will always _stay_ after any new non-exclusive waiters
+	 * because all non-exclusive waiters are added at the
+	 * beginning of the wait-queue. As such, it's ok to "drop"
+	 * our exclusiveness temporarily when we get woken up without
+	 * having to remove and re-insert us on the wait queue.
 	 */
+	add_wait_queue_exclusive(sk->sleep, &wait);
 	for (;;) {
-		add_wait_queue_exclusive(sk->sleep, &wait);
 		current->state = TASK_EXCLUSIVE | TASK_INTERRUPTIBLE;
 		release_sock(sk);
 		schedule();
@@ -1592,18 +1603,7 @@ static struct open_request * wait_for_connect(struct sock * sk,
 			break;
 	}
 	current->state = TASK_RUNNING;
-#if WAITQUEUE_DEBUG
-	/*
-	 * hm, gotta do something about 'mixed mode' waitqueues. Eg.
-	 * if we get a signal above then we are not removed from the
-	 * waitqueue... Maybe wake_up_process() could leave the
-	 * TASK_EXCLUSIVE flag intact if it was a true wake-one?
-	 */
-	if (wait.task_list.next) {
-		printk("<%08x>", wait.__waker);
-		remove_wait_queue(sk->sleep, &wait);
-	}
-#endif
+	remove_wait_queue(sk->sleep, &wait);
 	return req;
 }
 

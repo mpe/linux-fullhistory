@@ -1144,8 +1144,8 @@ struct r_port {
 	struct termios		normal_termios;
 	struct termios		callout_termios;
 	struct tq_struct	tqueue;
-	struct wait_queue	*open_wait;
-	struct wait_queue	*close_wait;
+	wait_queue_head_t	open_wait;
+	wait_queue_head_t	close_wait;
 };
 	
 #define RPORT_MAGIC 0x525001

@@ -16,7 +16,7 @@ struct hfs_name;
 
 typedef int (*hfs_namein_fn) (char *, const struct hfs_name *);
 typedef void (*hfs_nameout_fn) (struct hfs_name *, const char *, int);
-typedef void (*hfs_ifill_fn) (struct inode *, ino_t);
+typedef void (*hfs_ifill_fn) (struct inode *, ino_t, const int);
 
 /*
  * struct hfs_sb_info
@@ -30,6 +30,7 @@ struct hfs_sb_info {
 						   changing owner or mode? */
 	int			s_lowercase;	/* Map names to lowercase? */
 	int			s_afpd;		/* AFPD compatible mode? */
+	int                     s_version;      /* version info */
 	hfs_namein_fn		s_namein;	/* The function used to
 						   map Mac filenames to
 						   Linux filenames */

@@ -45,7 +45,7 @@
 
 static struct sock *nl_table[MAX_LINKS];
 static atomic_t nl_table_lock[MAX_LINKS];
-static struct wait_queue *nl_table_wait;
+static DECLARE_WAIT_QUEUE_HEAD(nl_table_wait);
 
 #ifdef NL_EMULATE_DEV
 static struct socket *netlink_kernel[MAX_LINKS];

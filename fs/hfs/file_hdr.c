@@ -30,6 +30,14 @@
 #include <linux/hfs_fs_i.h>
 #include <linux/hfs_fs.h>
 
+/* prodos types */
+#define PRODOSI_FTYPE_DIR   0x0F
+#define PRODOSI_FTYPE_TEXT  0x04
+#define PRODOSI_FTYPE_8BIT  0xFF
+#define PRODOSI_FTYPE_16BIT 0xB3
+
+#define PRODOSI_AUXTYPE_DIR 0x0200
+
 /*================ Forward declarations ================*/
 
 static hfs_rwret_t hdr_read(struct file *, char *, hfs_rwarg_t, loff_t *);
@@ -84,13 +92,14 @@ struct inode_operations hfs_hdr_inode_operations = {
 const struct hfs_hdr_layout hfs_dbl_fil_hdr_layout = {
 	__constant_htonl(HFS_DBL_MAGIC),	/* magic   */
 	__constant_htonl(HFS_HDR_VERSION_2),	/* version */
-	5,					/* entries */
+	6,					/* entries */
 	{					/* descr[] */
+		{HFS_HDR_FNAME, offsetof(struct hfs_dbl_hdr, real_name),   ~0},
 		{HFS_HDR_DATES, offsetof(struct hfs_dbl_hdr, create_time), 16},
 		{HFS_HDR_FINFO, offsetof(struct hfs_dbl_hdr, finderinfo),  32},
-		{HFS_HDR_MACI,  offsetof(struct hfs_dbl_hdr, fileinfo),    4},
-		{HFS_HDR_FNAME, offsetof(struct hfs_dbl_hdr, real_name),   ~0},
-		{HFS_HDR_RSRC,  HFS_DBL_HDR_LEN,                           ~0},
+		{HFS_HDR_MACI,  offsetof(struct hfs_dbl_hdr, fileinfo),     4},
+		{HFS_HDR_DID,   offsetof(struct hfs_dbl_hdr, cnid),         4},
+		{HFS_HDR_RSRC,  HFS_DBL_HDR_LEN,                           ~0}
 	},
 	{					/* order[] */
 		(struct hfs_hdr_descr *)&hfs_dbl_fil_hdr_layout.descr[0],
@@ -98,24 +107,55 @@ const struct hfs_hdr_layout hfs_dbl_fil_hdr_layout = {
 		(struct hfs_hdr_descr *)&hfs_dbl_fil_hdr_layout.descr[2],
 		(struct hfs_hdr_descr *)&hfs_dbl_fil_hdr_layout.descr[3],
 		(struct hfs_hdr_descr *)&hfs_dbl_fil_hdr_layout.descr[4],
+		(struct hfs_hdr_descr *)&hfs_dbl_fil_hdr_layout.descr[5]
 	}
 };
 
 const struct hfs_hdr_layout hfs_dbl_dir_hdr_layout = {
 	__constant_htonl(HFS_DBL_MAGIC),	/* magic   */
 	__constant_htonl(HFS_HDR_VERSION_2),	/* version */
-	4,					/* entries */
+	5,					/* entries */
 	{					/* descr[] */
+		{HFS_HDR_FNAME, offsetof(struct hfs_dbl_hdr, real_name),   ~0},
 		{HFS_HDR_DATES, offsetof(struct hfs_dbl_hdr, create_time), 16},
 		{HFS_HDR_FINFO, offsetof(struct hfs_dbl_hdr, finderinfo),  32},
-		{HFS_HDR_MACI,  offsetof(struct hfs_dbl_hdr, fileinfo),    4},
-		{HFS_HDR_FNAME, offsetof(struct hfs_dbl_hdr, real_name),   ~0},
+		{HFS_HDR_MACI,  offsetof(struct hfs_dbl_hdr, fileinfo),     4},
+		{HFS_HDR_DID,   offsetof(struct hfs_dbl_hdr, cnid),         4}
 	},
 	{					/* order[] */
 		(struct hfs_hdr_descr *)&hfs_dbl_dir_hdr_layout.descr[0],
 		(struct hfs_hdr_descr *)&hfs_dbl_dir_hdr_layout.descr[1],
 		(struct hfs_hdr_descr *)&hfs_dbl_dir_hdr_layout.descr[2],
 		(struct hfs_hdr_descr *)&hfs_dbl_dir_hdr_layout.descr[3],
+		(struct hfs_hdr_descr *)&hfs_dbl_dir_hdr_layout.descr[4]
+	}
+};
+
+const struct hfs_hdr_layout hfs_nat2_hdr_layout = {
+	__constant_htonl(HFS_DBL_MAGIC),	/* magic   */
+	__constant_htonl(HFS_HDR_VERSION_2),	/* version */
+	9,					/* entries */
+	{					/* descr[] */
+		{HFS_HDR_FNAME, offsetof(struct hfs_dbl_hdr, real_name),   ~0},
+		{HFS_HDR_COMNT, offsetof(struct hfs_dbl_hdr, comment),      0},
+		{HFS_HDR_DATES, offsetof(struct hfs_dbl_hdr, create_time), 16},
+		{HFS_HDR_FINFO, offsetof(struct hfs_dbl_hdr, finderinfo),  32},
+		{HFS_HDR_AFPI,  offsetof(struct hfs_dbl_hdr, fileinfo),     4},
+		{HFS_HDR_DID,   offsetof(struct hfs_dbl_hdr, cnid),         4},
+		{HFS_HDR_SNAME,  offsetof(struct hfs_dbl_hdr, short_name), ~0},
+		{HFS_HDR_PRODOSI,  offsetof(struct hfs_dbl_hdr, prodosi),   8},
+		{HFS_HDR_RSRC,  HFS_NAT_HDR_LEN,                           ~0}
+	},
+	{					/* order[] */
+		(struct hfs_hdr_descr *)&hfs_nat_hdr_layout.descr[0],
+		(struct hfs_hdr_descr *)&hfs_nat_hdr_layout.descr[1],
+		(struct hfs_hdr_descr *)&hfs_nat_hdr_layout.descr[2],
+		(struct hfs_hdr_descr *)&hfs_nat_hdr_layout.descr[3],
+		(struct hfs_hdr_descr *)&hfs_nat_hdr_layout.descr[4],
+		(struct hfs_hdr_descr *)&hfs_nat_hdr_layout.descr[5],
+		(struct hfs_hdr_descr *)&hfs_nat_hdr_layout.descr[6],
+		(struct hfs_hdr_descr *)&hfs_nat_hdr_layout.descr[7],
+		(struct hfs_hdr_descr *)&hfs_nat_hdr_layout.descr[8]
 	}
 };
 
@@ -124,18 +164,18 @@ const struct hfs_hdr_layout hfs_nat_hdr_layout = {
 	__constant_htonl(HFS_HDR_VERSION_1),	/* version */
 	5,					/* entries */
 	{					/* descr[] */
+		{HFS_HDR_FNAME, offsetof(struct hfs_dbl_hdr, real_name),   ~0},
+		{HFS_HDR_COMNT, offsetof(struct hfs_dbl_hdr, comment),      0},
+		{HFS_HDR_OLDI,  offsetof(struct hfs_dbl_hdr, create_time), 16},
+		{HFS_HDR_FINFO, offsetof(struct hfs_dbl_hdr, finderinfo),  32},
 		{HFS_HDR_RSRC,  HFS_NAT_HDR_LEN,                           ~0},
-		{HFS_HDR_FNAME, offsetof(struct hfs_nat_hdr, real_name),   ~0},
-		{HFS_HDR_COMNT, offsetof(struct hfs_nat_hdr, comment),     0},
-		{HFS_HDR_OLDI,  offsetof(struct hfs_nat_hdr, create_time), 16},
-		{HFS_HDR_FINFO, offsetof(struct hfs_nat_hdr, finderinfo),  32},
 	},
 	{					/* order[] */
+		(struct hfs_hdr_descr *)&hfs_nat_hdr_layout.descr[0],
 		(struct hfs_hdr_descr *)&hfs_nat_hdr_layout.descr[1],
 		(struct hfs_hdr_descr *)&hfs_nat_hdr_layout.descr[2],
 		(struct hfs_hdr_descr *)&hfs_nat_hdr_layout.descr[3],
-		(struct hfs_hdr_descr *)&hfs_nat_hdr_layout.descr[4],
-		(struct hfs_hdr_descr *)&hfs_nat_hdr_layout.descr[0],
+		(struct hfs_hdr_descr *)&hfs_nat_hdr_layout.descr[4]
 	}
 };
 
@@ -187,6 +227,7 @@ static int dlength(const struct hfs_hdr_descr *descr,
 			length = entry->key.CName.Len;
 			break;
 
+		case HFS_HDR_SNAME:
 		default:
 			length = 0;
 		}
@@ -456,6 +497,8 @@ static hfs_rwret_t hdr_read(struct file * filp, char * buf,
 		case HFS_HDR_DATES:
 			get_dates(entry, inode, (hfs_u32 *)tmp);
 			if (descr->id == HFS_HDR_DATES) {
+				/* XXX: access date. hfsplus actually
+                                   has this. */
 				memcpy(tmp + 12, tmp + 4, 4);
 			} else if ((entry->type == HFS_CDR_FIL) &&
 				   (entry->u.file.flags & HFS_FIL_LOCK)) {
@@ -472,6 +515,31 @@ static hfs_rwret_t hdr_read(struct file * filp, char * buf,
 			limit = 32;
 			break;
 
+		case HFS_HDR_AFPI:
+			/* XXX: this needs to do more mac->afp mappings */
+			hfs_put_ns(0, tmp);
+			if ((entry->type == HFS_CDR_FIL) &&
+			    (entry->u.file.flags & HFS_FIL_LOCK)) {
+				hfs_put_hs(HFS_AFP_RDONLY, tmp + 2);
+			} else {
+				hfs_put_ns(0, tmp + 2);
+			}
+			p = tmp;
+			limit = 4;
+		        break;
+
+		case HFS_HDR_PRODOSI:
+			/* XXX: this needs to do mac->prodos translations */
+			memset(tmp, 0, 8);
+#if 0
+			hfs_put_ns(0, tmp); /* access */
+			hfs_put_ns(0, tmp); /* type */
+			hfs_put_nl(0, tmp); /* aux type */
+#endif
+			p = tmp;
+			limit = 8;
+		        break;
+
 		case HFS_HDR_MACI:
 			hfs_put_ns(0, tmp);
 			if (entry->type == HFS_CDR_FIL) {
@@ -483,6 +551,32 @@ static hfs_rwret_t hdr_read(struct file * filp, char * buf,
 			limit = 4;
 			break;
 
+		case HFS_HDR_DID:
+		        /* if it's rootinfo, stick the next available did in
+			 * the did slot. */
+			limit = 4;
+			if (entry->cnid == htonl(HFS_ROOT_CNID)) {
+				struct hfs_mdb *mdb = entry->mdb;
+				const struct hfs_name *reserved = 
+				HFS_SB(mdb->sys_mdb)->s_reserved2;
+				
+				while (reserved->Len) {
+					if (hfs_streq(reserved->Name,
+						      reserved->Len,
+						      entry->key.CName.Name,
+						      entry->key.CName.Len)) {
+						hfs_put_hl(mdb->next_id, tmp);
+						p = tmp;
+						goto hfs_did_done;
+					}
+					reserved++;
+				}
+			}
+			p = (char *) &entry->cnid;
+hfs_did_done:
+			break;
+
+		case HFS_HDR_SNAME:
 		default:
 			limit = 0;
 		}
@@ -724,6 +818,30 @@ static hfs_rwret_t hdr_write(struct file *filp, const char *buf,
 			limit = 32;
 			break;
 
+		case HFS_HDR_AFPI:
+			hfs_put_ns(0, tmp);
+			if ((entry->type == HFS_CDR_FIL) &&
+			    (entry->u.file.flags & HFS_FIL_LOCK)) {
+				hfs_put_hs(HFS_AFP_RDONLY, tmp + 2);
+			} else {
+				hfs_put_ns(0, tmp + 2);
+			}			
+			p = tmp;
+			limit = 4;
+			break;
+
+		case HFS_HDR_PRODOSI:
+			/* XXX: this needs to do mac->prodos translations */
+			memset(tmp, 0, 8); 
+#if 0
+			hfs_put_ns(0, tmp); /* access */
+			hfs_put_ns(0, tmp); /* type */
+			hfs_put_nl(0, tmp); /* aux type */
+#endif
+			p = tmp;
+			limit = 8;
+		        break;
+
 		case HFS_HDR_MACI:
 			hfs_put_ns(0, tmp);
 			if (entry->type == HFS_CDR_FIL) {
@@ -736,6 +854,7 @@ static hfs_rwret_t hdr_write(struct file *filp, const char *buf,
 			break;
 
 		case HFS_HDR_FNAME:	/* Can't rename a file this way */
+		case HFS_HDR_DID:       /* can't specify a did this way */
 		default:
 			limit = 0;
 		}
@@ -826,6 +945,9 @@ static hfs_rwret_t hdr_write(struct file *filp, const char *buf,
 			break;
 
 		case HFS_HDR_FNAME:	/* Can't rename a file this way */
+		case HFS_HDR_DID:       /* Can't specify a did this way */
+		case HFS_HDR_PRODOSI:   /* not implemented yet */
+		case HFS_HDR_AFPI:      /* ditto */
 		default:
 			break;
 		}

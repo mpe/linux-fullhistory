@@ -48,7 +48,7 @@ static struct pc110pad_params current_params;
 
 
 /* driver/filesystem interface management */
-static struct wait_queue *queue;
+static wait_queue_head_t queue;
 static struct fasync_struct *asyncptr;
 static int active=0;	/* number of concurrent open()s */
 
@@ -656,6 +656,7 @@ int pc110pad_init(void)
 		return -EBUSY;
 	}
 	request_region(current_params.io, 4, "pc110pad");
+	init_waitqueue_head(&queue);
 	printk("PC110 digitizer pad at 0x%X, irq %d.\n",
 		current_params.io,current_params.irq);
 	misc_register(&pc110_pad);

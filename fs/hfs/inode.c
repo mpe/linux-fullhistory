@@ -262,7 +262,7 @@ struct inode *hfs_iget(struct hfs_cat_entry *entry, ino_t type,
 		HFS_I(inode)->entry = entry;
 		HFS_I(inode)->tz_secondswest = hfs_to_utc(0);
 
-		hsb->s_ifill(inode, type);
+		hsb->s_ifill(inode, type, hsb->s_version);
 		if (!hsb->s_afpd && (entry->type == HFS_CDR_FIL) &&
 		    (entry->u.file.flags & HFS_FIL_LOCK)) {
 			inode->i_mode &= ~S_IWUGO;
@@ -289,7 +289,7 @@ struct inode *hfs_iget(struct hfs_cat_entry *entry, ino_t type,
  * in other filesystems.  It is called by __hfs_iget() to fill in
  * the missing fields of an uninitialized inode under the CAP scheme.
  */
-void hfs_cap_ifill(struct inode * inode, ino_t type)
+void hfs_cap_ifill(struct inode * inode, ino_t type, const int version)
 {
 	struct hfs_cat_entry *entry = HFS_I(inode)->entry;
 
@@ -337,7 +337,7 @@ void hfs_cap_ifill(struct inode * inode, ino_t type)
  * the missing fields of an uninitialized inode under the AppleDouble
  * scheme.
  */
-void hfs_dbl_ifill(struct inode * inode, ino_t type)
+void hfs_dbl_ifill(struct inode * inode, ino_t type, const int version)
 {
 	struct hfs_cat_entry *entry = HFS_I(inode)->entry;
 
@@ -378,7 +378,7 @@ void hfs_dbl_ifill(struct inode * inode, ino_t type)
  * the missing fields of an uninitialized inode under the Netatalk
  * scheme.
  */
-void hfs_nat_ifill(struct inode * inode, ino_t type)
+void hfs_nat_ifill(struct inode * inode, ino_t type, const int version)
 {
 	struct hfs_cat_entry *entry = HFS_I(inode)->entry;
 
@@ -393,7 +393,8 @@ void hfs_nat_ifill(struct inode * inode, ino_t type)
 			inode->i_nlink = 1;
 		}
 		inode->i_op = &hfs_hdr_inode_operations;
-		HFS_I(inode)->default_layout = &hfs_nat_hdr_layout;
+		HFS_I(inode)->default_layout = (version == 2) ?
+			&hfs_nat2_hdr_layout : &hfs_nat_hdr_layout;
 	} else if (entry->type == HFS_CDR_FIL) {
 		init_file_inode(inode, HFS_FK_DATA);
 		inode->i_op = &hfs_file_inode_operations;

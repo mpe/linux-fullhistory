@@ -184,7 +184,7 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 	 * Do the command and wait for it to finish.
 	 */	
 	{
-	    struct semaphore sem = MUTEX_LOCKED;
+	    DECLARE_MUTEX_LOCKED(sem);
 	    scmd.request.rq_status = RQ_SCSI_BUSY;
 	    scmd.request.sem = &sem;
 	    scsi_do_cmd (&scmd, cmnd, buff + 0x144, 0x66,  
@@ -314,7 +314,7 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 	     * Do the command and wait for it to finish.
 	     */	
 	    {
-	        struct semaphore sem = MUTEX_LOCKED;
+	        DECLARE_MUTEX_LOCKED(sem);
 		scmd.request.rq_status = RQ_SCSI_BUSY;
 		scmd.request.sem = &sem;
 		scsi_do_cmd (&scmd, cmnd, buff2, 0x144,

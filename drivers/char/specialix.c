@@ -182,7 +182,7 @@ static struct tty_struct * specialix_table[SX_NBOARD * SX_NPORT] = { NULL, };
 static struct termios * specialix_termios[SX_NBOARD * SX_NPORT] = { NULL, };
 static struct termios * specialix_termios_locked[SX_NBOARD * SX_NPORT] = { NULL, };
 static unsigned char * tmp_buf = NULL;
-static struct semaphore tmp_buf_sem = MUTEX;
+static DECLARE_MUTEX(tmp_buf_sem);
 
 static unsigned long baud_table[] =  {
 	0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800,
@@ -1311,7 +1311,7 @@ static void sx_shutdown_port(struct specialix_board *bp, struct specialix_port *
 static int block_til_ready(struct tty_struct *tty, struct file * filp,
                            struct specialix_port *port)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait,  current);
 	struct specialix_board *bp = port_Board(port);
 	int    retval;
 	int    do_clocal = 0;
@@ -2248,6 +2248,8 @@ static int sx_init_drivers(void)
 		sx_port[i].tqueue_hangup.data = &sx_port[i];
 		sx_port[i].close_delay = 50 * HZ/100;
 		sx_port[i].closing_wait = 3000 * HZ/100;
+		init_waitqueue_head(&sx_port[i].open_wait);
+		init_waitqueue_head(&sx_port[i].close_wait);
 	}
 	
 	return 0;

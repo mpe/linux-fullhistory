@@ -612,7 +612,7 @@ static u_char xa_tail_buf[CD_XA_TAIL];
 static volatile u_char busy_data=0;
 static volatile u_char busy_audio=0; /* true semaphores would be safer */
 #endif OLD_BUSY
-static struct semaphore ioctl_read_sem = MUTEX;
+static DECLARE_MUTEX(ioctl_read_sem);
 static u_long timeout;
 static volatile u_char timed_out_delay=0;
 static volatile u_char timed_out_data=0;

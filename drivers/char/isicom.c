@@ -80,7 +80,7 @@ static void isicom_tx(unsigned long _data);
 static void isicom_start(struct tty_struct * tty);
 
 static unsigned char * tmp_buf = 0;
-static struct semaphore tmp_buf_sem = MUTEX;
+static DECLARE_MUTEX(tmp_buf_sem);
 
 /*   baud index mappings from linux defns to isi */
 
@@ -870,7 +870,7 @@ static int isicom_setup_port(struct isi_port * port)
 static int block_til_ready(struct tty_struct * tty, struct file * filp, struct isi_port * port) 
 {
 	int do_clocal = 0, retval;
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 
 	/* block if port is in the process of being closed */
 
@@ -1858,7 +1858,8 @@ static int isicom_init(void)
 		 	port->bh_tqueue.routine = isicom_bottomhalf;
 		 	port->bh_tqueue.data = port;
 		 	port->status = 0;
-		 				
+			init_waitqueue_head(&port->open_wait);	 				
+			init_waitqueue_head(&port->close_wait);
 			/*  . . .  */
  		}
 	} 

@@ -144,8 +144,8 @@ struct	isi_port {
 	long			pgrp;
 	struct isi_board	* card;
 	struct tty_struct 	* tty;
-	struct wait_queue	* close_wait;
-	struct wait_queue	* open_wait;
+	wait_queue_head_t	close_wait;
+	wait_queue_head_t	open_wait;
 	struct tq_struct	hangup_tq;
 	struct tq_struct	bh_tqueue;
 	unsigned char		* xmit_buf;

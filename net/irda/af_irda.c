@@ -48,7 +48,7 @@ extern int  irlap_driver_rcv(struct sk_buff *, struct device *,
 
 static struct proto_ops irda_proto_ops;
 static hashbin_t *cachelog = NULL;
-static struct wait_queue *discovery_wait; /* Wait for discovery */
+static DECLARE_WAIT_QUEUE_HEAD(discovery_wait); /* Wait for discovery */
 
 #define IRDA_MAX_HEADER (TTP_HEADER+LMP_HEADER+LAP_HEADER)
 

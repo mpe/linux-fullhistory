@@ -261,7 +261,7 @@ static Byte final_pos_msf[3] = {0, 0, 0};
 static int sony535_irq_used = CDU535_INTERRUPT;
 
 /* The interrupt handler will wake this queue up when it gets an interrupt. */
-static struct wait_queue *cdu535_irq_wait = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(cdu535_irq_wait);
 
 
 /*
@@ -318,7 +318,7 @@ static void
 cdu535_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	disable_interrupts();
-	if (cdu535_irq_wait != NULL)
+	if (wait_queue_active(&cdu535_irq_wait))
 		wake_up(&cdu535_irq_wait);
 	else
 		printk(CDU535_MESSAGE_NAME

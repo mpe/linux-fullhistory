@@ -46,7 +46,7 @@ extern char *irlpt_client_fsm_state[];
 extern char *irlpt_server_fsm_state[];
 extern char *irlpt_fsm_event[];
 
-extern struct wait_queue *lpt_wait;
+extern wait_queue_head_t lpt_wait;
 
 extern struct irlpt_cb *irlpt_find_handle(unsigned int minor);
 extern void irlpt_flow_control(struct sk_buff *skb);
@@ -161,9 +161,9 @@ struct irlpt_cb {
 	int irlap_data_size;	/* max frame size we can send */
 	int pkt_count;		/* how many packets are queued up */
 
-	struct wait_queue *read_wait;	/* wait queues */
-	struct wait_queue *write_wait;
-	struct wait_queue *ex_wait;
+	wait_queue_head_t read_wait;	/* wait queues */
+	wait_queue_head_t write_wait;
+	wait_queue_head_t ex_wait;
 
 	/* this is used to remove the printer when it's gone */
 	struct timer_list lpt_timer;

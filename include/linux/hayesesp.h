@@ -106,10 +106,10 @@ struct esp_struct {
 	struct tq_struct	tqueue_hangup;
 	struct termios		normal_termios;
 	struct termios		callout_termios;
-	struct wait_queue	*open_wait;
-	struct wait_queue	*close_wait;
-	struct wait_queue	*delta_msr_wait;
-	struct wait_queue	*break_wait;
+	wait_queue_head_t	open_wait;
+	wait_queue_head_t	close_wait;
+	wait_queue_head_t	delta_msr_wait;
+	wait_queue_head_t	break_wait;
 	struct async_icount	icount;	/* kernel counters for the 4 input interrupts */
 	struct hayes_esp_config config; /* port configuration */
 	struct esp_struct	*next_port; /* For the linked list */

@@ -83,8 +83,8 @@ struct riscom_port {
 	int			xmit_cnt;
 	struct termios          normal_termios;
 	struct termios		callout_termios;
-	struct wait_queue	*open_wait;
-	struct wait_queue	*close_wait;
+	wait_queue_head_t	open_wait;
+	wait_queue_head_t	close_wait;
 	struct tq_struct	tqueue;
 	struct tq_struct	tqueue_hangup;
 	short			wakeup_chars;

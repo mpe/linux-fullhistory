@@ -37,7 +37,7 @@ struct shaper
 	int (*hard_header_cache)(struct neighbour *neigh, struct hh_cache *hh);
 	void (*header_cache_update)(struct hh_cache *hh, struct device *dev, unsigned char *  haddr);
 	struct net_device_stats* (*get_stats)(struct device *dev);
-	struct wait_queue *wait_queue;
+	wait_queue_head_t  wait_queue;
 	struct timer_list timer;
 };
 

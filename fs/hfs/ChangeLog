@@ -1,3 +1,19 @@
+1999-04-12  a sun  <asun@hecate.darksunrising.blah>
+
+	* file_hdr.c (hdr_read): added rootinfo behaviour for DID header.
+
+1999-04-11  a sun  <asun@hecate.darksunrising.blah>
+
+	* super.c (parse_options): added s_version so that we can select
+	between different versions of the same layout.
+
+1999-04-05  a sun  <asun@hecate.darksunrising.blah>
+
+	* linux/hfs_fs.h: unified netatalk and appledouble header format. 
+	added in all of the AFP attribute bits.
+
+	* file_hdr.c: added netatalk appledouble v2 compatible headers. 
+
 1999-01-30  a sun  <asun@hecate.darksunrising.blah>
 
 	* catalog.c (hfs_cat_move): fixed corruption problem with

@@ -110,7 +110,7 @@ union bdflush_param{
 		int dummy3;    /* unused */
 	} b_un;
 	unsigned int data[N_PARAM];
-} bdf_prm = {{40, 500, 64, 256, 5, 30*HZ, 5*HZ, 1884, 2}};
+} bdf_prm = {{40, 2000, 64, 256, 5, 30*HZ, 5*HZ, 1884, 2}};
 
 /* These are the min and max parameter values that we will allow to be assigned */
 int bdflush_min[N_PARAM] = {  0,  10,    5,   25,  1,   1*HZ,   1*HZ, 1, 1};
@@ -1561,7 +1561,7 @@ struct task_struct *bdflush_tsk = 0;
 
 void wakeup_bdflush(int wait)
 {
-	if (current == bdflush_tsk)
+	if (current == bdflush_tsk || !bdflush_tsk)
 		return;
 	wake_up_process(bdflush_tsk);
 	if (wait) {

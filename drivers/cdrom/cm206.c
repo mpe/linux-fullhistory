@@ -262,8 +262,8 @@ struct cm206_struct {
   int openfiles;
   ush sector[READ_AHEAD*RAW_SECTOR_SIZE/2]; /* buffered cd-sector */
   int sector_first, sector_last; /* range of these sectors */
-  struct wait_queue * uart;	/* wait queues for interrupt */
-  struct wait_queue * data;
+  wait_queue_head_t uart;	/* wait queues for interrupt */
+  wait_queue_head_t data;
   struct timer_list timer;	/* time-out */
   char timed_out;
   signed char max_sectors;	/* number of sectors that fit in adapter mem */
@@ -360,7 +360,7 @@ static void cm206_interrupt(int sig, void *dev_id, struct pt_regs * regs)
     debug(("receiving #%d: 0x%x\n", cd->ur_w, cd->ur[cd->ur_w]));
     cd->ur_w++; cd->ur_w %= UR_SIZE;
     if (cd->ur_w == cd->ur_r) debug(("cd->ur overflow!\n"));
-    if (cd->uart && cd->background < 2) { 
+    if (waitqueue_active(&cd->uart) && cd->background < 2) { 
       del_timer(&cd->timer);
       wake_up_interruptible(&cd->uart);
     }
@@ -368,7 +368,7 @@ static void cm206_interrupt(int sig, void *dev_id, struct pt_regs * regs)
   /* data ready in fifo? */
   else if (cd->intr_ds & ds_data_ready) { 
     if (cd->background) ++cd->adapter_last;
-    if (cd->data && (cd->wait_back || !cd->background)) {
+    if (waitqueue_active(&cd->data) && (cd->wait_back || !cd->background)) {
       del_timer(&cd->timer);
       wake_up_interruptible(&cd->data);
     }
@@ -419,12 +419,12 @@ void cm206_timeout(unsigned long who)
 {
   cd->timed_out = 1;
   debug(("Timing out\n"));
-  wake_up_interruptible((struct wait_queue **) who);
+  wake_up_interruptible((wait_queue_head_t *)who);
 }
 
 /* This function returns 1 if a timeout occurred, 0 if an interrupt
    happened */
-int sleep_or_timeout(struct wait_queue ** wait, int timeout)
+int sleep_or_timeout(wait_queue_head_t *wait, int timeout)
 {
   cd->timed_out=0;
   cd->timer.data=(unsigned long) wait;
@@ -442,7 +442,7 @@ int sleep_or_timeout(struct wait_queue ** wait, int timeout)
 
 void cm206_delay(int nr_jiffies) 
 {
-  struct wait_queue * wait = NULL;
+  DECLARE_WAIT_QUEUE_HEAD(wait);
   sleep_or_timeout(&wait, nr_jiffies);
 }
 

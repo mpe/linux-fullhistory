@@ -241,11 +241,11 @@ struct mgsl_struct {
 	int			xmit_tail;
 	int			xmit_cnt;
 	
-	struct wait_queue	*open_wait;
-	struct wait_queue	*close_wait;
+	wait_queue_head_t	open_wait;
+	wait_queue_head_t	close_wait;
 	
-	struct wait_queue	*status_event_wait_q;
-	struct wait_queue	*event_wait_q;
+	wait_queue_head_t	status_event_wait_q;
+	wait_queue_head_t	event_wait_q;
 	struct timer_list	tx_timer;	/* HDLC transmit timeout timer */
 	struct mgsl_struct	*next_device;	/* device list link */
 	
@@ -904,7 +904,7 @@ void* mgsl_get_text_ptr() {return mgsl_get_text_ptr;}
  * memory if large numbers of serial ports are open.
  */
 static unsigned char *tmp_buf;
-static struct semaphore tmp_buf_sem = MUTEX;
+static DECLARE_MUTEX(tmp_buf_sem);
 
 static inline int mgsl_paranoia_check(struct mgsl_struct *info,
 					kdev_t device, const char *routine)
@@ -2724,7 +2724,7 @@ static int mgsl_wait_event(struct mgsl_struct * info, int mask)
 	
 	if (mask & (MgslEvent_ExitHuntMode + MgslEvent_IdleReceived)) {
 		spin_lock_irqsave(&info->irq_spinlock,flags);
-		if (!info->event_wait_q) {
+		if (!waitqueue_active(&info->event_wait_q)) {
 			/* disable enable exit hunt mode/idle rcvd IRQs */
 			regval = usc_InReg(info,RICR);
 			usc_OutReg(info, RICR, regval & 
@@ -3295,7 +3295,7 @@ static void mgsl_hangup(struct tty_struct *tty)
 static int block_til_ready(struct tty_struct *tty, struct file * filp,
 			   struct mgsl_struct *info)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	int		retval;
 	int		do_clocal = 0, extra_count = 0;
 	unsigned long	flags;
@@ -4152,6 +4152,10 @@ struct mgsl_struct* mgsl_allocate_device()
 		info->max_frame_size = 4096;
 		info->close_delay = 5*HZ/10;
 		info->closing_wait = 30*HZ;
+		init_waitqueue_head(&info->open_wait);
+		init_waitqueue_head(&info->close_wait);
+		init_waitqueue_head(&info->status_event_wait_q);
+		init_waitqueue_head(&info->event_wait_q);
 
 		memcpy(&info->params,&default_params,sizeof(MGSL_PARAMS));
 		info->idle_mode = HDLC_TXIDLE_FLAGS;		

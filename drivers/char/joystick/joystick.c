@@ -491,7 +491,7 @@ static ssize_t js_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 static int js_read(struct inode *inode, struct file *file, char *buf, int count)
 #endif
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	struct js_event *buff = (void *) buf;
 	struct js_list *curl;
 	struct js_dev *jd;
@@ -1081,7 +1081,7 @@ int js_register_device(struct js_port *port, int number, int axes, int buttons, 
 	curd->next = NULL;
 	curd->list = NULL;
 	curd->port = port;
-	curd->wait = NULL;
+	init_waitqueue_head(&curd->wait);
 	curd->open = open;
 	curd->close = close;
 

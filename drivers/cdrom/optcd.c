@@ -257,7 +257,7 @@ inline static int flag_low(int flag, unsigned long timeout)
 
 /* Timed waiting for status or data */
 static int sleep_timeout;	/* max # of ticks to sleep */
-static struct wait_queue *waitq = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(waitq);
 static struct timer_list delay_timer = {NULL, NULL, 0, 0, NULL};
 
 #define SET_TIMER(func, jifs) \

@@ -228,7 +228,7 @@ void hfs_bnode_lock(struct hfs_bnode_ref *bnr, int lock_type)
 			break;
 
 		case HFS_LOCK_NONE:
-			while (bn->lock || bn->wqueue) {
+			while (bn->lock || witqueue_active(&bn->wqueue)) {
 				hfs_sleep_on(&bn->rqueue);
 			}
 			++bn->count;
@@ -382,7 +382,7 @@ void hfs_bnode_relse(struct hfs_bnode_ref *bnr)
 	/* We update the lock state of the node if it is still in use
 	   or if it is "sticky" (such as the B-tree head and root).
 	   Otherwise we just delete it.	 */
-	if ((bn->count > 1) || (bn->rqueue) || (bn->sticky != HFS_NOT_STICKY)) {
+	if ((bn->count > 1) || (waitqueue_active(&bn->rqueue)) || (bn->sticky != HFS_NOT_STICKY)) {
 		hfs_bnode_lock(bnr, HFS_LOCK_NONE);
 	} else {
 		/* dirty buffer if we (might) have modified it */

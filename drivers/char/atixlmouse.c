@@ -67,7 +67,7 @@ static struct mouse_status {
 	int present;
 	int ready;
 	int active;
-	struct wait_queue *wait;
+	wait_queue_head_t wait;
 	struct fasync_struct *fasync;
 } mouse;
 
@@ -223,7 +223,7 @@ __initfunc(int atixl_busmouse_init(void))
 	mouse.ready = 0;
 	mouse.buttons = mouse.latch_buttons = 0;
 	mouse.dx = mouse.dy = 0;
-	mouse.wait = NULL;
+	init_waitqueue_head(&mouse.wait);
 	printk("Bus mouse detected and installed.\n");
 	misc_register(&atixl_mouse);
 	return 0;

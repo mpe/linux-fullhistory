@@ -115,7 +115,7 @@ static int sjcd_base = SJCD_BASE_ADDR;
 MODULE_PARM(sjcd_base, "i");
 #endif
 
-static struct wait_queue *sjcd_waitq = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(sjcd_waitq);
 
 /*
  * Data transfer.

@@ -162,7 +162,7 @@ static int   mcd_irq  = CONFIG_MCD_IRQ; /* must directly follow mcd_port */
 MODULE_PARM(mcd, "1-2i");
 
 static int McdTimeout, McdTries;
-static struct wait_queue *mcd_waitq = NULL;
+static DECLARE_WAIT_QUEUE_HEAD(mcd_waitq);
 
 static struct mcd_DiskInfo DiskInfo;
 static struct mcd_Toc Toc[MAX_TRACKS];

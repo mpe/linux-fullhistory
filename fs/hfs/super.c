@@ -183,6 +183,8 @@ static int parse_options(char *options, struct hfs_sb_info *hsb, int *part)
 	hsb->s_lowercase = 0;
 	hsb->s_quiet     = 0;
 	hsb->s_afpd      = 0;
+        /* default version. 0 just selects the defaults */
+	hsb->s_version   = 0; 
 	hsb->s_conv = 'b';
 	names = '?';
 	fork = '?';
@@ -197,7 +199,15 @@ static int parse_options(char *options, struct hfs_sb_info *hsb, int *part)
 			*value++ = 0;
 		}
 	/* Numeric-valued options */
-		if (!strcmp(this_char,"uid")) {
+		if (!strcmp(this_char, "version")) {
+			if (!value || !*value) {
+				return 0;
+			}
+			hsb->s_version = simple_strtoul(value,&value,0);
+			if (*value) {
+				return 0;
+			}
+		} else if (!strcmp(this_char,"uid")) {
 			if (!value || !*value) {
 				return 0;
 			}

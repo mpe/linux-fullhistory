@@ -647,7 +647,7 @@ static void update_dir(struct hfs_mdb *mdb, struct hfs_cat_entry *dir,
  */
 static inline void start_write(struct hfs_cat_entry *dir)
 {
-	if (dir->u.dir.readers || dir->u.dir.read_wait) {
+	if (dir->u.dir.readers || wait_queue_active(&dir->u.dir.read_wait)) {
 		hfs_sleep_on(&dir->u.dir.write_wait);
 	}
 	++dir->u.dir.writers;
@@ -658,7 +658,7 @@ static inline void start_write(struct hfs_cat_entry *dir)
  */
 static inline void start_read(struct hfs_cat_entry *dir)
 {
-	if (dir->u.dir.writers || dir->u.dir.write_wait) {
+	if (dir->u.dir.writers || wait_queue_active(&dir->u.dir.write_wait)) {
 		hfs_sleep_on(&dir->u.dir.read_wait);
 	}
 	++dir->u.dir.readers;

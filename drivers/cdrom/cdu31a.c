@@ -278,7 +278,7 @@ static struct s_sony_subcode last_sony_subcode; /* Points to the last
 static volatile int sony_inuse = 0;  /* Is the drive in use?  Only one operation
 					at a time allowed */
 
-static struct wait_queue * sony_wait = NULL;	/* Things waiting for the drive */
+static DECLARE_WAIT_QUEUE_HEAD(sony_wait);	/* Things waiting for the drive */
 
 static struct task_struct *has_cd_task = NULL;  /* The task that is currently
 						   using the CDROM drive, or
@@ -311,7 +311,7 @@ MODULE_PARM(cdu31a_irq, "i");
 
 /* The interrupt handler will wake this queue up when it gets an
    interrupts. */
-static struct wait_queue *cdu31a_irq_wait = NULL;
+DECLARE_WAIT_QUEUE_HEAD(cdu31a_irq_wait);
 
 static int curr_control_reg = 0; /* Current value of the control register */
 
@@ -577,13 +577,13 @@ cdu31a_interrupt(int irq, void *dev_id, struct pt_regs *regs)
       abort_read_started = 0;
 
       /* If something was waiting, wake it up now. */
-      if (cdu31a_irq_wait != NULL)
+      if (waitqueue_active(&cdu31a_irq_wait))
       {
          disable_interrupts();
          wake_up(&cdu31a_irq_wait);
       }
    }
-   else if (cdu31a_irq_wait != NULL)
+   else if (waitqueue_active(&cdu31a_irq_wait))
    {
       disable_interrupts();
       wake_up(&cdu31a_irq_wait);

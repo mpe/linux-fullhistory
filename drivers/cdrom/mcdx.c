@@ -150,9 +150,9 @@ struct s_version {
 
 struct s_drive_stuff {
 	/* waitqueues */
-    struct wait_queue *busyq;
-    struct wait_queue *lockq;
-    struct wait_queue *sleepq;
+    wait_queue_head_t busyq;
+    wait_queue_head_t lockq;
+    wait_queue_head_t sleepq;
 
  	/* flags */
     volatile int introk;	/* status of last irq operation */
@@ -1046,6 +1046,10 @@ __initfunc(int mcdx_init_drive(int drive))
 	stuffp->wreg_reset = stuffp->rreg_status = stuffp->wreg_data + 1;
 	stuffp->wreg_hcon = stuffp->wreg_reset + 1;
 	stuffp->wreg_chn = stuffp->wreg_hcon + 1;
+	
+	init_waitqueue_head(&stuffp->busyq);
+	init_waitqueue_head(&stuffp->lockq);
+	init_waitqueue_head(&stuffp->sleepq);
 
 	/* check if i/o addresses are available */
 	if (check_region((unsigned int) stuffp->wreg_data, MCDX_IO_SIZE)) {

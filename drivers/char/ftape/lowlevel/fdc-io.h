@@ -209,7 +209,7 @@ typedef struct {
  */
 extern volatile fdc_mode_enum fdc_mode;
 extern int fdc_setup_error;	/* outdated ??? */
-extern struct wait_queue *ftape_wait_intr;
+extern wait_queue_head_t ftape_wait_intr;
 extern int ftape_motor;		/* fdc motor line state */
 extern volatile int ftape_current_cylinder; /* track nr FDC thinks we're on */
 extern volatile __u8 fdc_head;	/* FDC head */

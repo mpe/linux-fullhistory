@@ -221,8 +221,8 @@ struct n_hdlc {
 	struct tty_struct *backup_tty;	/* TTY to use if tty gets closed */
 	
 	/* Queues for select() functionality */
-	struct wait_queue *read_wait;
-	struct wait_queue *write_wait;
+	wait_queue_head_t read_wait;
+	wait_queue_head_t write_wait;
 
 	int		tbusy;		/* reentrancy flag for tx wakeup code */
 	int		woke_up;
@@ -724,7 +724,7 @@ static rw_ret_t n_hdlc_tty_write (struct tty_struct *tty, struct file *file,
 {
 	struct n_hdlc *n_hdlc = tty2n_hdlc (tty);
 	int error = 0;
-	struct wait_queue wait = {current, NULL};
+	DECLARE_WAITQUEUE(wait, current);
 	N_HDLC_BUF *tbuf;
 
 	if (debuglevel >= DEBUG_LEVEL_INFO)	
@@ -1006,8 +1006,8 @@ static struct n_hdlc *n_hdlc_alloc (void)
 	n_hdlc->magic  = HDLC_MAGIC;
 
 	n_hdlc->flags  = 0;
-	n_hdlc->read_wait  = NULL;
-	n_hdlc->write_wait = NULL;
+	init_waitqueue_head(&n_hdlc->read_wait);
+	init_waitqueue_head(&n_hdlc->write_wait);
 	
 	return n_hdlc;
 	

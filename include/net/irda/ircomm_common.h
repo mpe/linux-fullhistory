@@ -201,8 +201,8 @@ struct ircomm_cb{
 				see Irlmp.c or somewhere :p)*/ 
 	int peer_cap;        /* capability of peer device */
 
-	struct wait_queue   *discovery_wait;
-	struct wait_queue   *ias_wait;
+	wait_queue_head_t   discovery_wait;
+	wait_queue_head_t   ias_wait;
 
 	/* statistics */
 	int                 tx_packets;

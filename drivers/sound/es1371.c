@@ -2751,7 +2751,7 @@ __initfunc(int init_es1371(void))
 		init_waitqueue_head(&s->open_wait);
 		init_waitqueue_head(&s->midi.iwait);
 		init_waitqueue_head(&s->midi.owait);
-		s->open_sem = MUTEX;
+		init_MUTEX(&s->open_sem);
 		s->magic = ES1371_MAGIC;
 		s->io = pcidev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
 		s->irq = pcidev->irq;

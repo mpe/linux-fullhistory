@@ -80,9 +80,24 @@
 #define HFS_FK_RSRC	0xFF
 
 /* bits in hfs_fil_entry.Flags */
-#define HFS_FIL_LOCK	0x01
-#define HFS_FIL_THD	0x02
-#define HFS_FIL_USED	0x80
+#define HFS_FIL_LOCK	0x01  /* locked */
+#define HFS_FIL_THD	0x02  /* file thread */
+#define HFS_FIL_DOPEN   0x04  /* data fork open */
+#define HFS_FIL_ROPEN   0x08  /* resource fork open */
+#define HFS_FIL_DIR     0x10  /* directory (always clear) */
+#define HFS_FIL_RSRV1   0x20  /* reserved */
+#define HFS_FIL_NOCOPY  0x40  /* copy-protected file */
+#define HFS_FIL_USED	0x80  /* open */
+
+/* bits in hfs_dir_entry.Flags. dirflags is 16 bits. */
+#define HFS_DIR_LOCK        0x01  /* locked */
+#define HFS_DIR_THD         0x02  /* directory thread */
+#define HFS_DIR_INEXPFOLDER 0x04  /* in a shared area */
+#define HFS_DIR_MOUNTED     0x08  /* mounted */
+#define HFS_DIR_DIR         0x10  /* directory (always set) */
+#define HFS_DIR_EXPFOLDER   0x20  /* share point */
+#define HFS_DIR_RSRV1       0x40  /* reserved */
+#define HFS_DIR_RSRV2       0x80  /* reserved */
 
 /* Access types used when requesting access to a B-node */
 #define HFS_LOCK_NONE	0x0000	/* Illegal */

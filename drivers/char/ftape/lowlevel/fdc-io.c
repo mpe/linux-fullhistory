@@ -54,7 +54,7 @@ int ftape_motor = 0;
 volatile int ftape_current_cylinder = -1;
 volatile fdc_mode_enum fdc_mode = fdc_idle;
 fdc_config_info fdc = {0};
-struct wait_queue *ftape_wait_intr = NULL;
+DECLARE_WAIT_QUEUE_HEAD(ftape_wait_intr);
 
 unsigned int ft_fdc_base       = CONFIG_FT_FDC_BASE;
 unsigned int ft_fdc_irq        = CONFIG_FT_FDC_IRQ;
@@ -385,7 +385,7 @@ int fdc_issue_command(const __u8 * out_data, int out_count,
  */
 int fdc_interrupt_wait(unsigned int time)
 {
-	struct wait_queue wait = {current, NULL};
+	DECLARE_WAITQUEUE(wait,current);
 	sigset_t old_sigmask;	
 	static int resetting = 0;
 	long timeout;

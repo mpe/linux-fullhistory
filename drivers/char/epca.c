@@ -1268,7 +1268,7 @@ static int block_til_ready(struct tty_struct *tty,
                            struct file *filp, struct channel *ch)
 { /* Begin block_til_ready */
 
-	struct wait_queue wait = {current, NULL};
+	DECLARE_WAITQUEUE(wait,current);
 	int	retval, do_clocal = 0;
 	unsigned long flags;
 
@@ -2236,8 +2236,8 @@ static void post_fep_init(unsigned int crd)
 		ch->blocked_open = 0;
 		ch->callout_termios = pc_callout.init_termios;
 		ch->normal_termios = pc_driver.init_termios;
-		ch->open_wait = 0;
-		ch->close_wait = 0;
+		init_waitqueue_head(&ch->open_wait);
+		init_waitqueue_head(&ch->close_wait);
 		ch->tmp_buf = kmalloc(ch->txbufsize,GFP_KERNEL);
 		if (!(ch->tmp_buf))
 		{

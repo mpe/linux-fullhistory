@@ -82,17 +82,22 @@
 #define HFS_SGL_DINF	HFS_ITYPE_1	/* %DirInfo for directory */
 
 /* IDs for elements of an AppleDouble or AppleSingle header */
-#define HFS_HDR_DATA	1
-#define HFS_HDR_RSRC	2
-#define HFS_HDR_FNAME	3
-#define HFS_HDR_COMNT	4
-#define HFS_HDR_BWICN	5
-#define HFS_HDR_CICON	6
-#define HFS_HDR_OLDI	7
-#define HFS_HDR_DATES	8
-#define HFS_HDR_FINFO	9
-#define HFS_HDR_MACI	10
-#define HFS_HDR_MAX	10
+#define HFS_HDR_DATA	1   /* data fork */
+#define HFS_HDR_RSRC	2   /* resource fork */
+#define HFS_HDR_FNAME	3   /* full (31-character) name */
+#define HFS_HDR_COMNT	4   /* comment */
+#define HFS_HDR_BWICN	5   /* b/w icon */
+#define HFS_HDR_CICON	6   /* color icon info */
+#define HFS_HDR_OLDI	7   /* old file info */
+#define HFS_HDR_DATES	8   /* file dates info */
+#define HFS_HDR_FINFO	9   /* Finder info */
+#define HFS_HDR_MACI	10  /* Macintosh info */
+#define HFS_HDR_PRODOSI 11  /* ProDOS info */
+#define HFS_HDR_MSDOSI  12  /* MSDOS info */
+#define HFS_HDR_SNAME   13  /* short name */
+#define HFS_HDR_AFPI    14  /* AFP file info */
+#define HFS_HDR_DID     15  /* directory id */
+#define HFS_HDR_MAX	16
 
 /*
  * There are three time systems.  All three are based on seconds since
@@ -136,26 +141,7 @@ struct hfs_hdr_layout {
 };
 
 /* 
- * Default header layout for Netatalk
- */
-struct hfs_nat_hdr {
-	hfs_lword_t	magic;
-	hfs_lword_t	version;
-	hfs_byte_t	homefs[16];
-	hfs_word_t	entries;
-	hfs_byte_t	descrs[60];
-	hfs_byte_t	real_name[255];	/* id=3 */
-	hfs_byte_t	comment[200];	/* id=4 XXX: not yet implemented */
-	hfs_lword_t	create_time;	/* \       */
-	hfs_lword_t	modify_time;	/*  |      */
-	hfs_lword_t	backup_time;	/*  | id=7 */
-	hfs_word_t	filler;		/*  |      */
-	hfs_word_t	attr;		/* /       */
-	hfs_byte_t	finderinfo[32]; /* id=9 */
-};
-
-/* 
- * Default header layout for AppleDouble
+ * Default header layout for Netatalk and AppleDouble
  */
 struct hfs_dbl_hdr {
 	hfs_lword_t	magic;
@@ -163,23 +149,37 @@ struct hfs_dbl_hdr {
 	hfs_byte_t	filler[16];
 	hfs_word_t	entries;
 	hfs_byte_t	descrs[12*HFS_HDR_MAX];
-	hfs_u32		create_time;	/* \	   */
-	hfs_u32		modify_time;	/*  | id=8 */
-	hfs_u32		backup_time;	/*  |	   */
-	hfs_u32		access_time;	/* /	   */
+	hfs_byte_t	real_name[255];	/* id=3 */
+	hfs_byte_t	comment[200];	/* id=4 XXX: not yet implemented */
+	hfs_u32		create_time;	/* \	          */
+	hfs_u32		modify_time;	/*  | id=8 (or 7) */
+	hfs_u32		backup_time;	/*  |	          */
+	hfs_u32         access_time;    /* /  (attributes with id=7) */
 	hfs_u8		finderinfo[32]; /* id=9 */
 	hfs_u32		fileinfo;	/* id=10 */
-	hfs_u8		real_name[32];	/* id=3 */
-	hfs_u8		comment[200];	/* id=4 XXX: not yet implemented */
+        hfs_u32         cnid;           /* id=15 */
+	hfs_u8          short_name[12]; /* id=13 */
+	hfs_u8          prodosi[8];     /* id=11 */
 };
+
 
 /* finder metadata for CAP */
 struct hfs_cap_info {
 	hfs_byte_t	fi_fndr[32];	/* Finder's info */
-	hfs_word_t	fi_attr;	/* AFP attributes */
-#define HFS_AFP_WRI		0x020	/* Write inhibit bit */
-#define HFS_AFP_RNI		0x080	/* Rename inhibit bit (AFP >= 2.0) */
-#define HFS_AFP_DEI		0x100	/* Delete inhibit bit (AFP >= 2.0) */
+	hfs_word_t	fi_attr;	/* AFP attributes (f=file/d=dir) */
+#define HFS_AFP_INV             0x001   /* Invisible bit (f/d) */
+#define HFS_AFP_EXPFOLDER       0x002   /* exported folder (d) */
+#define HFS_AFP_MULTI           0x002   /* Multiuser bit (f) */
+#define HFS_AFP_SYS             0x004   /* System bit (f/d) */
+#define HFS_AFP_DOPEN           0x008   /* data fork already open (f) */
+#define HFS_AFP_MOUNTED         0x008   /* mounted folder (d) */
+#define HFS_AFP_ROPEN           0x010   /* resource fork already open (f) */
+#define HFS_AFP_INEXPFOLDER     0x010   /* folder in shared area (d) */
+#define HFS_AFP_WRI		0x020	/* Write inhibit bit (readonly) (f) */
+#define HFS_AFP_BACKUP          0x040   /* backup needed bit (f/d)  */
+#define HFS_AFP_RNI		0x080	/* Rename inhibit bit (f/d) */
+#define HFS_AFP_DEI		0x100	/* Delete inhibit bit (f/d) */
+#define HFS_AFP_NOCOPY          0x400   /* Copy protect bit (f) */
 #define HFS_AFP_RDONLY	(	HFS_AFP_WRI|HFS_AFP_RNI|HFS_AFP_DEI)
 	hfs_byte_t	fi_magic1;	/* Magic number: */
 #define HFS_CAP_MAGIC1		0xFF
@@ -272,6 +272,7 @@ extern struct inode_operations hfs_hdr_inode_operations;
 extern const struct hfs_hdr_layout hfs_dbl_fil_hdr_layout;
 extern const struct hfs_hdr_layout hfs_dbl_dir_hdr_layout;
 extern const struct hfs_hdr_layout hfs_nat_hdr_layout;
+extern const struct hfs_hdr_layout hfs_nat2_hdr_layout;
 extern const struct hfs_hdr_layout hfs_sngl_hdr_layout;
 
 /* inode.c */
@@ -279,10 +280,10 @@ extern void hfs_put_inode(struct inode *);
 extern int hfs_notify_change(struct dentry *, struct iattr *);
 extern struct inode *hfs_iget(struct hfs_cat_entry *, ino_t, struct dentry *);
 
-extern void hfs_cap_ifill(struct inode *, ino_t);
-extern void hfs_dbl_ifill(struct inode *, ino_t);
-extern void hfs_nat_ifill(struct inode *, ino_t);
-extern void hfs_sngl_ifill(struct inode *, ino_t);
+extern void hfs_cap_ifill(struct inode *, ino_t, const int);
+extern void hfs_dbl_ifill(struct inode *, ino_t, const int);
+extern void hfs_nat_ifill(struct inode *, ino_t, const int);
+extern void hfs_sngl_ifill(struct inode *, ino_t, const int);
 
 /* super.c */
 extern struct super_block *hfs_read_super(struct super_block *,void *,int);

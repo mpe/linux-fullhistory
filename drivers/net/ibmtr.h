@@ -193,8 +193,8 @@ struct tok_info {
 	unsigned short maxmtu16;
 	/* Additions by David Morris       */
 	unsigned char do_tok_int;
-	struct wait_queue *wait_for_tok_int;
-	struct wait_queue *wait_for_reset;
+	wait_queue_head_t wait_for_tok_int;
+	wait_queue_head_t wait_for_reset;
 	unsigned char sram_base;
 	/* Additions by Peter De Schrijver */
 	unsigned char page_mask;          /* mask to select RAM page to Map*/

@@ -277,7 +277,7 @@ __initfunc(int bus_mouse_init(void))
 	mouse.buttons = 0x87;
 	mouse.dx = 0;
 	mouse.dy = 0;
-	mouse.wait = NULL;
+	init_waitqueue_head(&mouse.wait);
 	printk(KERN_INFO "Logitech bus mouse detected, using IRQ %d.\n",
 	       mouse_irq);
 	misc_register(&bus_mouse);

@@ -414,8 +414,13 @@ extern long loops_per_sec;
 #define P_PARITY   2
 
 /* possible irq range */
+#ifdef PCMCIA
+#define IRQ_MIN 0
+#define IRQ_MAX 16
+#else
 #define IRQ_MIN 9
 #define IRQ_MAX 12
+#endif
 #define IRQS    IRQ_MAX-IRQ_MIN+1
 
 enum {
@@ -746,7 +751,7 @@ int aha152x_checksetup(struct aha152x_setup *setup)
   if(!aha152x_porttest(setup->io_port))
     return 0;
   
-  if(setup->irq<IRQ_MIN && setup->irq>IRQ_MAX)
+  if((setup->irq<IRQ_MIN) || (setup->irq>IRQ_MAX))
     return 0;
   
   if((setup->scsiid < 0) || (setup->scsiid > 7))

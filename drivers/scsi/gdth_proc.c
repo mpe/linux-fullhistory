@@ -931,7 +931,7 @@ stop_output:
 static void gdth_do_cmd(Scsi_Cmnd *scp,gdth_cmd_str *gdtcmd,int timeout)
 {
     char cmnd[12];
-    struct semaphore sem = MUTEX_LOCKED;
+    DECLARE_MUTEX_LOCKED(sem);
 
     TRACE2(("gdth_do_cmd()\n"));
     memset(cmnd, 0, 12);

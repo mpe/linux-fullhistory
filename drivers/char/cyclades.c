@@ -697,7 +697,7 @@ static struct cyclades_card     *IRQ_cards[NR_IRQS];
  * allocated when the first cy_open occurs.
  */
 static unsigned char *tmp_buf;
-static struct semaphore tmp_buf_sem = MUTEX;
+DECLARE_MUTEX(tmp_buf_sem);
 
 /*
  * This is used to look up the divisor speeds and the timeouts
@@ -2246,7 +2246,7 @@ static int
 block_til_ready(struct tty_struct *tty, struct file * filp,
                            struct cyclades_port *info)
 {
-  struct wait_queue wait = { current, NULL };
+  DECLARE_WAITQUEUE(wait, current);
   struct cyclades_card *cinfo;
   unsigned long flags;
   int chip, channel,index;
@@ -5210,9 +5210,9 @@ cy_init(void))
 		                cy_callout_driver.init_termios;
                     info->normal_termios =
 		                cy_serial_driver.init_termios;
-                    info->open_wait = 0;
-                    info->close_wait = 0;
-                    info->shutdown_wait = 0;
+                    init_waitqueue_head(&info->open_wait);
+                    init_waitqueue_head(&info->close_wait);
+                    init_waitqueue_head(&info->shutdown_wait);
                     /* info->session */
                     /* info->pgrp */
                     info->read_status_mask = 0;
@@ -5279,9 +5279,9 @@ cy_init(void))
 		               cy_callout_driver.init_termios;
                     info->normal_termios =
 		               cy_serial_driver.init_termios;
-                    info->open_wait = 0;
-                    info->close_wait = 0;
-                    info->shutdown_wait = 0;
+                    init_waitqueue(&info->open_wait);
+                    init_waitqueue(&info->close_wait);
+                    init_waitqueue(&info->shutdown_wait);
                     /* info->session */
                     /* info->pgrp */
                     info->read_status_mask =

@@ -414,7 +414,8 @@ __initfunc(static int sktr_probe1(struct device *dev, int ioaddr))
 	if(tp == NULL)
 		return (-ENOMEM);
 	memset(tp, 0, sizeof(struct net_local));
-
+	init_waitqueue_head(&tp->wait_for_tok_int);
+	
 	dev->priv		= tp;
 	dev->init               = sktr_init_card;
         dev->open               = sktr_open;

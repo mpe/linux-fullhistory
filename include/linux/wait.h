@@ -27,7 +27,7 @@ extern int printk(const char *fmt, ...);
 } while (0)
 
 #define CHECK_MAGIC(x) if (x != (long)&(x)) \
-	{ printk("bad magic %lx (should be %lx), ", x, (long)&(x)); WQ_BUG(); }
+	{ printk("bad magic %lx (should be %lx), ", (long)x, (long)&(x)); WQ_BUG(); }
 
 #define CHECK_MAGIC_WQHEAD(x) do { \
 	if (x->__magic != (long)&(x->__magic)) { \

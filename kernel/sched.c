@@ -888,6 +888,7 @@ void __wake_up(wait_queue_head_t *q, unsigned int mode)
 #endif
 	tmp = head->next;
 	while (tmp != head) {
+		unsigned int state;
                 wait_queue_t *curr = list_entry(tmp, wait_queue_t, task_list);
 
 		tmp = tmp->next;
@@ -896,23 +897,15 @@ void __wake_up(wait_queue_head_t *q, unsigned int mode)
 		CHECK_MAGIC(curr->__magic);
 #endif
 		p = curr->task;
-		if (p->state & mode) {
-			if (p->state & TASK_EXCLUSIVE) {
-				__remove_wait_queue(q, curr);
-				wq_write_unlock_irqrestore(&q->lock, flags);
-
-				curr->task_list.next = NULL;
-				curr->__waker = 0;
-				wake_up_process(p);
-				goto out;
-			}
+		state = p->state;
+		if (state & mode) {
 #if WAITQUEUE_DEBUG
 			curr->__waker = (long)__builtin_return_address(0);
 #endif
 			wake_up_process(p);
+			if (state & TASK_EXCLUSIVE)
+				break;
 		}
-		if (p->state & TASK_EXCLUSIVE)
-			break;
 	}
 	wq_write_unlock_irqrestore(&q->lock, flags);
 out:

@@ -322,7 +322,7 @@ init_module(void)
 	init_MUTEX(&nlmsvc_sema);
 	nlmsvc_users = 0;
 	nlmsvc_pid = 0;
-	lockd_exit = NULL;
+	init_waitqueue_head(&lockd_exit);
 	nlmxdr_init();
 	return 0;
 }

@@ -127,7 +127,7 @@ unsigned long qic02_tape_debug = TPQD_DEFAULT_FLAGS;
 
 static volatile int ctlbits = 0;     /* control reg bits for tape interface */
 
-static struct wait_queue *qic02_tape_transfer = NULL; /* sync rw with interrupts */
+static wait_queue_t qic02_tape_transfer; /* sync rw with interrupts */
 
 static volatile struct mtget ioctl_status;	/* current generic status */
 
@@ -2936,6 +2936,7 @@ __initfunc(int qic02_tape_init(void))
 	return -ENODEV;
     }
 
+    init_waitqueue_head(&qic02_tape_transfer);
     /* prepare timer */
     TIMEROFF;
     timer_table[QIC02_TAPE_TIMER].expires = 0;

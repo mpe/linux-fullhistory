@@ -169,7 +169,7 @@ static struct termios *serial_termios_locked[NR_PORTS];
  * memory if large numbers of serial ports are open.
  */
 static unsigned char *tmp_buf = 0;
-static struct semaphore tmp_buf_sem = MUTEX;
+static DECLARE_MUTEX(tmp_buf_sem);
 
 static inline int serial_paranoia_check(struct esp_struct *info,
 					kdev_t device, const char *routine)
@@ -2224,7 +2224,7 @@ static void esp_hangup(struct tty_struct *tty)
 static int block_til_ready(struct tty_struct *tty, struct file * filp,
 			   struct esp_struct *info)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	int		retval;
 	int		do_clocal = 0;
 
@@ -2676,6 +2676,10 @@ __initfunc(int espserial_init(void))
 		info->config.flow_off = flow_off;
 		info->config.pio_threshold = pio_threshold;
 		info->next_port = ports;
+		init_waitqueue_head(&info->open_wait);
+		init_waitqueue_head(&info->close_wait);
+		init_waitqueue_head(&info->delta_msr_wait);
+		init_waitqueue_head(&info->break_wait);
 		ports = info;
 		printk(KERN_INFO "ttyP%d at 0x%04x (irq = %d) is an ESP ",
 			info->line, info->port, info->irq);

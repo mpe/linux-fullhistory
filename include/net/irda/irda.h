@@ -122,7 +122,7 @@ struct irda_sock {
 	int errno;
 
 	struct sock *sk;
-	struct wait_queue *ias_wait;       /* Wait for LM-IAS answer */
+	wait_queue_head_t ias_wait;       /* Wait for LM-IAS answer */
 
 	LOCAL_FLOW tx_flow;
 	LOCAL_FLOW rx_flow;

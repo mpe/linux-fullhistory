@@ -140,8 +140,8 @@ struct channel
 	struct tty_struct           *tty;
 	struct termios              normal_termios;
 	struct termios              callout_termios;
-	struct wait_queue           *open_wait;
-	struct wait_queue           *close_wait;
+	wait_queue_head_t           open_wait;
+	wait_queue_head_t           close_wait;
 	struct tq_struct            tqueue;
 	volatile struct global_data *mailbox;
 };

@@ -87,7 +87,7 @@ static struct tty_struct * riscom_table[RC_NBOARD * RC_NPORT] = { NULL, };
 static struct termios * riscom_termios[RC_NBOARD * RC_NPORT] = { NULL, };
 static struct termios * riscom_termios_locked[RC_NBOARD * RC_NPORT] = { NULL, };
 static unsigned char * tmp_buf = NULL;
-static struct semaphore tmp_buf_sem = MUTEX;
+static DECLARE_MUTEX(tmp_buf_sem);
 
 static unsigned long baud_table[] =  {
 	0, 50, 75, 110, 134, 150, 200, 300, 600, 1200, 1800, 2400, 4800,
@@ -946,7 +946,7 @@ static void rc_shutdown_port(struct riscom_board *bp, struct riscom_port *port)
 static int block_til_ready(struct tty_struct *tty, struct file * filp,
 			   struct riscom_port *port)
 {
-	struct wait_queue wait = { current, NULL };
+	DECLARE_WAITQUEUE(wait, current);
 	struct riscom_board *bp = port_Board(port);
 	int    retval;
 	int    do_clocal = 0;
@@ -1790,6 +1790,8 @@ static inline int rc_init_drivers(void)
 		rc_port[i].tqueue_hangup.data = &rc_port[i];
 		rc_port[i].close_delay = 50 * HZ/100;
 		rc_port[i].closing_wait = 3000 * HZ/100;
+		init_waitqueue_head(&rc_port[i].open_wait);
+		init_waitqueue_head(&rc_port[i].close_wait);
 	}
 	
 	return 0;
