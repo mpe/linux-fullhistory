@@ -1456,7 +1456,7 @@ void cpuset_init_current_mems_allowed(void)
  * Do not call this routine if in_interrupt().
  */
 
-void cpuset_update_current_mems_allowed()
+void cpuset_update_current_mems_allowed(void)
 {
 	struct cpuset *cs = current->cpuset;
 
