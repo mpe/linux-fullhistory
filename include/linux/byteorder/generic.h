@@ -55,7 +55,7 @@
  *	__constant_htons(__u16 x)
  *
  * Conversion of XX-bit integers (16- 32- or 64-)
- * between native cpu format and little/big endian format
+ * between native CPU format and little/big endian format
  * 64-bit stuff only defined for proper architectures
  *	cpu_to_[bl]eXX(__uXX x)
  *	[bl]eXX_to_cpu(__uXX x)

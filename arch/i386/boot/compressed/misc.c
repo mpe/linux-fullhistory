@@ -38,7 +38,7 @@ static unsigned inptr = 0;   /* index of next byte to be processed in inbuf */
 static unsigned outcnt = 0;  /* bytes in output buffer */
 
 /* gzip flag byte */
-#define ASCII_FLAG   0x01 /* bit 0 set: file probably ascii text */
+#define ASCII_FLAG   0x01 /* bit 0 set: file probably ASCII text */
 #define CONTINUATION 0x02 /* bit 1 set: continuation of multi-part gzip file */
 #define EXTRA_FIELD  0x04 /* bit 2 set: extra field present */
 #define ORIG_NAME    0x08 /* bit 3 set: original file name present */

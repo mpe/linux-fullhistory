@@ -188,8 +188,8 @@ static unsigned int pipe_poll(struct file * filp, poll_table * wait)
 
 #ifdef FIFO_SUNOS_BRAINDAMAGE
 /*
- * Arggh. Why does SunOS have to have different select() behaviour
- * for pipes and fifos? Hate-Hate-Hate. SunOS lacks POLLHUP..
+ * Argh!  Why does SunOS have to have different select() behaviour
+ * for pipes and FIFOs?  Hate, hate, hate!  SunOS lacks POLLHUP.
  */
 static unsigned int fifo_poll(struct file * filp, poll_table * wait)
 {
@@ -293,7 +293,7 @@ static int pipe_rdwr_open(struct inode * inode, struct file * filp)
 
 /*
  * The file_operations structs are not static because they
- * are also used in linux/fs/fifo.c to do operations on fifo's.
+ * are also used in linux/fs/fifo.c to do operations on FIFOs.
  */
 struct file_operations connecting_fifo_fops = {
 	pipe_lseek,

@@ -143,7 +143,7 @@ unsigned long occupy_region(unsigned long base, unsigned long end,
 		if (iotable[i].num == 0)
 			break;
 	if (i == IOTABLE_SIZE) {
-		/* Driver prints a warning typicaly. */
+		/* Driver prints a warning typically. */
 		return 0;
 	}
 

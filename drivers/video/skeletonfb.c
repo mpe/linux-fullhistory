@@ -298,7 +298,7 @@ __initfunc(unsigned long xxxfb_init(unsigned long mem_start))
     fbgen_do_set_var(var, 1, &fbinfo.gen);
     err = register_framebuffer(&fb_info.gen.info);
     if (err < 0)
-	return err;
+	return mem_start;
     fbgen_set_disp(-1, &fb_info.gen.info);
     fbgen_install_cmap(0, &fb_info.gen);
     printk("fb%d: %s frame buffer device\n", GET_FB_IDX(fb_info.node),
@@ -365,7 +365,7 @@ static int xxxfb_release(const struct fb_info *info)
 
 static struct fb_ops xxxfb_ops = {
     xxxfb_open, xxxfb_release, fbgen_get_fix, fbgen_get_var, fbgen_set_var,
-    fbgen_get_cmap, fbgen_set_cmap, fbgen_pan_display, NULL, fbgen_ioctl
+    fbgen_get_cmap, fbgen_set_cmap, fbgen_pan_display, fbgen_ioctl
 };
 
 

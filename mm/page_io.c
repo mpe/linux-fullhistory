@@ -142,7 +142,7 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 		if (swapf->i_op->bmap == NULL
 			&& swapf->i_op->smap != NULL){
 			/*
-				With MsDOS, we use msdos_smap which return
+				With MS-DOS, we use msdos_smap which return
 				a sector number (not a cluster or block number).
 				It is a patch to enable the UMSDOS project.
 				Other people are working on better solution.

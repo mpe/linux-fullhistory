@@ -53,7 +53,7 @@ struct buffer_head *fat_bread (
 				 * larger hardware sector size. This allows for higher
 				 * capacity.
 
-				 * Most of the time, the MsDOS file system that sit
+				 * Most of the time, the MS-DOS filesystem that sits
 				 * on this device is totally unaligned. It use logically
 				 * 512 bytes sector size, with logical sector starting
 				 * in the middle of a hardware block. The bad news is

@@ -96,10 +96,11 @@
 			        loosed interpretation of ATAPI standard
 				for clearing error status.
 				Eliminate sti();
+	1.02    GRG 1998.06.16  Eliminate an Ugh.
 
 */
 
-#define PT_VERSION      "1.01"
+#define PT_VERSION      "1.02"
 #define PT_MAJOR	96
 #define PT_NAME		"pt"
 #define PT_UNITS	4
@@ -322,31 +323,20 @@ void    cleanup_module(void);
 int     init_module(void)
 
 {       int     err;
-        long    flags;
-
-        save_flags(flags);
-        cli();
 
         err = pt_init();
 
-        restore_flags(flags);
         return err;
 }
 
 void    cleanup_module(void)
 
-{       long flags;
-	int unit;
-
-        save_flags(flags);
-        cli();
+{       int unit;
 
         unregister_chrdev(major,name);
 
 	for (unit=0;unit<PT_UNITS;unit++)
 	  if (PT.present) pi_release(PI);
-	
-        restore_flags(flags);
 }
 
 #endif

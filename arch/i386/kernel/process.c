@@ -261,7 +261,7 @@ real_mode_idt = { 0x3ff, 0 };
    something else should be done for other chips.
 
    More could be done here to set up the registers as if a CPU reset had
-   occurred; hopefully real BIOSes don't assume much. */
+   occurred; hopefully real BIOSs don't assume much. */
 
 static unsigned char real_mode_switch [] =
 {
@@ -546,7 +546,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 }
 
 /*
- * fill in the fpu structure for a core dump..
+ * fill in the FPU structure for a core dump.
  */
 int dump_fpu (struct pt_regs * regs, struct user_i387_struct* fpu)
 {

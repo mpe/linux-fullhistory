@@ -9,15 +9,15 @@ bool	 'Quota support' CONFIG_QUOTA
 tristate 'Minix fs support' CONFIG_MINIX_FS
 tristate 'Second extended fs support' CONFIG_EXT2_FS
 
-tristate 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS
+tristate 'ISO 9660 CDROM filesystem support' CONFIG_ISO9660_FS
 if [ "$CONFIG_ISO9660_FS" != "n" ]; then
-  bool 'Microsoft Joliet cdrom extensions' CONFIG_JOLIET
+  bool 'Microsoft Joliet CDROM extensions' CONFIG_JOLIET
 fi
 
 # msdos filesystems
 tristate 'DOS FAT fs support' CONFIG_FAT_FS
 dep_tristate 'MSDOS fs support' CONFIG_MSDOS_FS $CONFIG_FAT_FS
-dep_tristate 'umsdos: Unix like fs on top of std MSDOS FAT fs' CONFIG_UMSDOS_FS $CONFIG_MSDOS_FS
+dep_tristate 'UMSDOS: Unix-like filesystem on top of standard MSDOS filesystem' CONFIG_UMSDOS_FS $CONFIG_MSDOS_FS
 dep_tristate 'VFAT (Windows-95) fs support' CONFIG_VFAT_FS $CONFIG_FAT_FS
 
 bool '/proc filesystem support' CONFIG_PROC_FS
@@ -40,7 +40,7 @@ if [ "$CONFIG_INET" = "y" ]; then
     fi
   fi
   tristate 'Coda filesystem support (advanced network fs)' CONFIG_CODA_FS
-  tristate 'SMB filesystem support (to mount WfW shares etc..)' CONFIG_SMB_FS
+  tristate 'SMB filesystem support (to mount WfW shares etc.)' CONFIG_SMB_FS
   if [ "$CONFIG_SMB_FS" != "n" ]; then
     bool 'SMB Win95 bug work-around' CONFIG_SMB_WIN95
   fi
@@ -53,7 +53,7 @@ if [ "$CONFIG_IPX" != "n" ]; then
 fi
 tristate 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS
 
-tristate 'NTFS  filesystem support (read only)' CONFIG_NTFS_FS
+tristate 'NTFS filesystem support (read only)' CONFIG_NTFS_FS
 if [ "$CONFIG_NTFS_FS" != "n" -a "$CONFIG_EXPERIMENTAL" = "y" ]; then
   bool '   NTFS read-write support (experimental)' CONFIG_NTFS_RW
 fi
@@ -78,4 +78,3 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 fi
 bool 'Macintosh partition map support' CONFIG_MAC_PARTITION
 endmenu
-

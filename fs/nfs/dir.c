@@ -1106,7 +1106,7 @@ nfs_link(struct dentry *old_dentry, struct inode *dir, struct dentry *dentry)
 
 	/*
 	 * Drop the dentry in advance to force a new lookup.
-	 * Since nfs_proc_link doesn't return a filehandle,
+	 * Since nfs_proc_link doesn't return a file handle,
 	 * we can't use the existing dentry.
 	 */
 	d_drop(dentry);

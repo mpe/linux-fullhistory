@@ -11,7 +11,7 @@
 /*
    Inflate deflated (PKZIP's method 8 compressed) data.  The compression
    method searches for as much of the current string of bytes (up to a
-   length of 258) in the previous 32K bytes.  If it doesn't find any
+   length of 258) in the previous 32 K bytes.  If it doesn't find any
    matches (of at least length 3), it codes the next byte.  Otherwise, it
    codes the length of the matched string and its distance backwards from
    the current position.  There is a single Huffman code that codes both
@@ -28,7 +28,7 @@
    There are (currently) three kinds of inflate blocks: stored, fixed, and
    dynamic.  The compressor deals with some chunk of data at a time, and
    decides which method to use on a chunk-by-chunk basis.  A chunk might
-   typically be 32K or 64K.  If the chunk is uncompressible, then the
+   typically be 32 K or 64 K.  If the chunk is incompressible, then the
    "stored" method is used.  In this case, the bytes are simply stored as
    is, eight bits per byte, with none of the above coding.  The bytes are
    preceded by a count, since there is no longer an EOB code.
@@ -143,11 +143,11 @@ STATIC int inflate_block OF((int *));
 STATIC int inflate OF((void));
 
 
-/* The inflate algorithm uses a sliding 32K byte window on the uncompressed
+/* The inflate algorithm uses a sliding 32 K byte window on the uncompressed
    stream to find repeated byte strings.  This is implemented here as a
    circular buffer.  The index is updated simply by incrementing and then
-   and'ing with 0x7fff (32K-1). */
-/* It is left to other modules to supply the 32K area.  It is assumed
+   ANDing with 0x7fff (32K-1). */
+/* It is left to other modules to supply the 32 K area.  It is assumed
    to be usable as if it were declared "uch slide[32768];" or as just
    "uch *slide;" and then malloc'ed in the latter case.  The definition
    must be in unzip.h, included above. */
@@ -1044,7 +1044,7 @@ makecrc(void)
 }
 
 /* gzip flag byte */
-#define ASCII_FLAG   0x01 /* bit 0 set: file probably ascii text */
+#define ASCII_FLAG   0x01 /* bit 0 set: file probably ASCII text */
 #define CONTINUATION 0x02 /* bit 1 set: continuation of multi-part gzip file */
 #define EXTRA_FIELD  0x04 /* bit 2 set: extra field present */
 #define ORIG_NAME    0x08 /* bit 3 set: original file name present */

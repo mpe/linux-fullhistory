@@ -1715,9 +1715,9 @@ __u32 secure_tcp_sequence_number(__u32 saddr, __u32 daddr,
 
 	/*
 	 *	As close as possible to RFC 793, which
-	 *	suggests using a 250kHz clock.
-	 *	Further reading shows this assumes 2Mb/s networks.
-	 *	For 10Mb/s ethernet, a 1MHz clock is appropriate.
+	 *	suggests using a 250 kHz clock.
+	 *	Further reading shows this assumes 2 Mb/s networks.
+	 *	For 10 Mb/s Ethernet, a 1 MHz clock is appropriate.
 	 *	That's funny, Linux has one built in!  Use it!
 	 *	(Networks are faster now - should this be increased?)
 	 */

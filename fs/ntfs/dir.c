@@ -419,7 +419,7 @@ static int ntfs_descend(ntfs_iterate_s *walk, ntfs_u8 *start, ntfs_u8 *entry)
 	error=ntfs_getdir_record(walk,nextblock);
 	if(!error && walk->type==DIR_INSERT && 
 	   (walk->u.flags & ITERATE_SPLIT_DONE)){
-		/* split has occured. adjust entry, insert new_entry */
+		/* split has occurred. adjust entry, insert new_entry */
 		NTFS_PUTU32(entry+length-8,walk->newblock);
 		/* reset flags, as the current block might be split again */
 		walk->u.flags &= ~ITERATE_SPLIT_DONE;

@@ -13,10 +13,11 @@
 /* Changes:
 
         1.01    GRG 1998.05.06 init_proto, release_proto
+	1.02    GRG 1998.06.17 support older versions of EPIA
 
 */
 
-#define EPIA_VERSION      "1.01"
+#define EPIA_VERSION      "1.02"
 
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -123,7 +124,7 @@ static void epia_connect ( PIA *pi  )
 
 static void epia_disconnect ( PIA *pi )
 
-{       WR(0x84,0x10);
+{       /* WR(0x84,0x10); */
         w0(pi->saved_r0);
         w2(1); w2(4);
         w0(pi->saved_r0);
@@ -244,6 +245,7 @@ static int epia_test_proto( PIA *pi, char * scratch, int verbose )
                 WR(3,k^0x55);
                 if (RR(2) != (k^0xaa)) e[j]++;
                 }
+	    WR(2,1); WR(3,1);
             }
         epia_disconnect(pi);
 

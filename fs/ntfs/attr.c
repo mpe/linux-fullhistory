@@ -399,7 +399,7 @@ int ntfs_read_compressed(ntfs_inode *ino, ntfs_attribute *attr, int offset,
 	clustersize=ino->vol->clustersize;
 	/* starting cluster of potential chunk
 	   there are three situations:
-	   a) in a large uncompressable or sparse chunk, 
+	   a) in a large uncompressible or sparse chunk, 
 	   s_vcn is in the middle of a run
 	   b) s_vcn is right on a run border
 	   c) when several runs make a chunk, s_vcn is before the chunks

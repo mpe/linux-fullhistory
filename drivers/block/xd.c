@@ -240,7 +240,7 @@ __initfunc(static void xd_geninit (struct gendisk *ignored))
 
 	}
 	if (xd_drives) {
-		if (!request_irq(xd_irq,xd_interrupt_handler, 0, "XT harddisk", NULL)) {
+		if (!request_irq(xd_irq,xd_interrupt_handler, 0, "XT hard disk", NULL)) {
 			if (request_dma(xd_dma,"xd")) {
 				printk("xd: unable to get DMA%d\n",xd_dma);
 				free_irq(xd_irq, NULL);

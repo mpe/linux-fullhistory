@@ -20,7 +20,7 @@ struct bpq_ethaddr {
 /* 
  * For SIOCSBPQETHOPT - this is compatible with PI2/PacketTwin card drivers,
  * currently not implemented, though. If someone wants to hook a radio
- * to his ethernet card he may find this useful... ;-)
+ * to his Ethernet card he may find this useful. ;-)
  */
 
 #define SIOCGBPQETHPARAM	0x5000  /* get Level 1 parameters */

@@ -184,7 +184,7 @@ static ssize_t wdt_write(struct file *file, const char *buf, size_t count, loff_
 }
 
 /*
- *	Read reports the temperature in farenheit
+ *	Read reports the temperature in degrees Fahrenheit.
  */
  
 static ssize_t wdt_read(struct file *file, char *buf, size_t count, loff_t *ptr)

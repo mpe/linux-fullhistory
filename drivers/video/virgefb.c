@@ -90,6 +90,7 @@ struct virgefb_par {
    int xres;
    int yres;
    int bpp;
+   int accel;
 };
 
 static struct virgefb_par current_par;
@@ -163,49 +164,49 @@ static struct fb_videomode virgefb_predefined[] __initdata = {
 	"640x480-8", {		/* Cybervision 8 bpp */
 	    640, 480, 640, 480, 0, 0, 8, 0,
 	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, FB_ACCEL_NONE, VIRGE8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    0, 0, -1, -1, FB_ACCELF_TEXT, VIRGE8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
     }, {
 	"800x600-8", {		/* Cybervision 8 bpp */
 	    800, 600, 800, 600, 0, 0, 8, 0,
 	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, FB_ACCEL_NONE, VIRGE8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    0, 0, -1, -1, FB_ACCELF_TEXT, VIRGE8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
     }, {
 	"1024x768-8", {		/* Cybervision 8 bpp */
 	    1024, 768, 1024, 768, 0, 0, 8, 0,
 	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, FB_ACCEL_NONE, VIRGE8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    0, 0, -1, -1, FB_ACCELF_TEXT, VIRGE8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
     }, {
 	"1152x886-8", {		/* Cybervision 8 bpp */
 	    1152, 886, 1152, 886, 0, 0, 8, 0,
 	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, FB_ACCEL_NONE, VIRGE8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    0, 0, -1, -1, FB_ACCELF_TEXT, VIRGE8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
     }, {
 	"1280x1024-8", {	/* Cybervision 8 bpp */
 	    1280, 1024, 1280, 1024, 0, 0, 8, 0,
 	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, FB_ACCEL_NONE, VIRGE8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    0, 0, -1, -1, FB_ACCELF_TEXT, VIRGE8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
     }, {
 	"1600x1200-8", {	/* Cybervision 8 bpp */
 	    1600, 1200, 1600, 1200, 0, 0, 8, 0,
 	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, FB_ACCEL_NONE, VIRGE8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    0, 0, -1, -1, FB_ACCELF_TEXT, VIRGE8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
     }, {
 	"800x600-16", {		/* Cybervision 16 bpp */
 	    800, 600, 800, 600, 0, 0, 16, 0,
 	    {11, 5, 0}, {5, 6, 0}, {0, 5, 0}, {0, 0, 0},
-	    0, 0, -1, -1, FB_ACCEL_NONE, VIRGE16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    0, 0, -1, -1, 0, VIRGE16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
     }
@@ -370,12 +371,11 @@ static int Cyber_init(void)
 static int Cyber_encode_fix(struct fb_fix_screeninfo *fix,
 			    struct virgefb_par *par)
 {
-	int i;
-
+	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 	strcpy(fix->id, virgefb_name);
-	fix->smem_start = (caddr_t)CyberMem;
+	fix->smem_start = (char *)CyberMem;
 	fix->smem_len = CyberSize;
-	fix->mmio_start = (unsigned char *)CyberRegs;
+	fix->mmio_start = (char *)CyberRegs;
 	fix->mmio_len = 0x10000; /* TODO: verify this for the CV64/3D */
 
 	fix->type = FB_TYPE_PACKED_PIXELS;
@@ -389,10 +389,7 @@ static int Cyber_encode_fix(struct fb_fix_screeninfo *fix,
 	fix->ypanstep = 0;
 	fix->ywrapstep = 0;
 	fix->line_length = 0;
-
-	for (i = 0; i < arraysize(fix->reserved); i++)
-		fix->reserved[i] = 0;
-
+	fix->accel = FB_ACCEL_S3_VIRGE;
 	return(0);
 }
 
@@ -409,6 +406,10 @@ static int Cyber_decode_var(struct fb_var_screeninfo *var,
 	par->xres = var->xres;
 	par->yres = var->yres;
 	par->bpp = var->bits_per_pixel;
+	if (var->accel_flags & FB_ACCELF_TEXT)
+	    par->accel = FB_ACCELF_TEXT;
+	else
+	    par->accel = 0;
 #else
 	if (Cyberfb_Cyber8) {
 		par->xres = VIRGE8_WIDTH;
@@ -432,8 +433,7 @@ static int Cyber_decode_var(struct fb_var_screeninfo *var,
 static int Cyber_encode_var(struct fb_var_screeninfo *var,
 			    struct virgefb_par *par)
 {
-	int i;
-
+	memset(var, 0, sizeof(struct fb_var_screeninfo));
 	var->xres = par->xres;
 	var->yres = par->yres;
 	var->xres_virtual = par->xres;
@@ -470,7 +470,7 @@ static int Cyber_encode_var(struct fb_var_screeninfo *var,
 	var->height = -1;
 	var->width = -1;
 
-	var->accel = FB_ACCEL_S3VIRGE;
+	var->accel_flags = (par->accel && par->bpp == 8) ? FB_ACCELF_TEXT : 0;
 	DPRINTK("accel CV64/3D\n");
 
 	var->vmode = FB_VMODE_NONINTERLACED;
@@ -488,9 +488,6 @@ static int Cyber_encode_var(struct fb_var_screeninfo *var,
 	var->lower_margin = 12;
 	var->hsync_len = 112;
 	var->vsync_len = 2;
-
-	for (i = 0; i < arraysize(var->reserved); i++)
-		var->reserved[i] = 0;
 
 	return(0);
 }
@@ -841,7 +838,7 @@ static void virgefb_set_disp(int con, struct fb_info *info)
 	virgefb_get_fix(&fix, con, info);
 	if (con == -1)
 		con = 0;
-	display->screen_base = (u_char *)fix.smem_start;
+	display->screen_base = fix.smem_start;
 	display->visual = fix.visual;
 	display->type = fix.type;
 	display->type_aux = fix.type_aux;
@@ -852,7 +849,11 @@ static void virgefb_set_disp(int con, struct fb_info *info)
 	switch (display->var.bits_per_pixel) {
 #ifdef CONFIG_FBCON_CFB8
 	    case 8:
-		display->dispsw = &fbcon_virge8;
+		if (display->var.accel_flags & FB_ACCELF_TEXT) {
+		    display->dispsw = &fbcon_virge8;
+#warning FIXME: We should reinit the graphics engine here
+		} else
+		    display->dispsw = &fbcon_virge8;
 		break;
 #endif
 #ifdef CONFIG_FBCON_CFB16
@@ -874,7 +875,7 @@ static void virgefb_set_disp(int con, struct fb_info *info)
 static int virgefb_set_var(struct fb_var_screeninfo *var, int con,
 			   struct fb_info *info)
 {
-	int err, oldxres, oldyres, oldvxres, oldvyres, oldbpp;
+	int err, oldxres, oldyres, oldvxres, oldvyres, oldbpp, oldaccel;
 
 	if ((err = do_fb_set_var(var, con == currcon)))
 		return(err);
@@ -884,11 +885,13 @@ static int virgefb_set_var(struct fb_var_screeninfo *var, int con,
 		oldvxres = fb_display[con].var.xres_virtual;
 		oldvyres = fb_display[con].var.yres_virtual;
 		oldbpp = fb_display[con].var.bits_per_pixel;
+		oldaccel = fb_display[con].var.accel_flags;
 		fb_display[con].var = *var;
 		if (oldxres != var->xres || oldyres != var->yres ||
 		    oldvxres != var->xres_virtual ||
 		    oldvyres != var->yres_virtual ||
-		    oldbpp != var->bits_per_pixel) {
+		    oldbpp != var->bits_per_pixel ||
+		    oldaccel != var->accel_flags) {
 			virgefb_set_disp(con, info);
 			(*fb_info.changevar)(con);
 			fb_alloc_cmap(&fb_display[con].cmap, 0, 0);
@@ -969,7 +972,7 @@ static int virgefb_ioctl(struct inode *inode, struct file *file,
 static struct fb_ops virgefb_ops = {
 	virgefb_open, virgefb_release, virgefb_get_fix, virgefb_get_var,
 	virgefb_set_var, virgefb_get_cmap, virgefb_set_cmap,
-	virgefb_pan_display, NULL, virgefb_ioctl
+	virgefb_pan_display, virgefb_ioctl
 };
 
 
@@ -1030,7 +1033,7 @@ __initfunc(unsigned long virgefb_init(unsigned long mem_start))
 
 		CyberMem = ZTWO_VADDR(board_addr);
 		printk("CV3D detected running in Z2 mode ... not yet supported!\n");
-		return -ENODEV;
+		return mem_start;
 	}
 	else
 	{
@@ -1169,7 +1172,7 @@ static void fbcon_virge8_clear(struct vc_data *conp, struct display *p, int sy,
 
 static struct display_switch fbcon_virge8 = {
    fbcon_cfb8_setup, fbcon_virge8_bmove, fbcon_virge8_clear, fbcon_cfb8_putc,
-   fbcon_cfb8_putcs, fbcon_cfb8_revc
+   fbcon_cfb8_putcs, fbcon_cfb8_revc, NULL
 };
 #endif
 

@@ -6,7 +6,7 @@
  * There are:
  *
  *     i2c          the basic control module        (like scsi_mod)
- *     bus driver   a driver with a i2c bus         (hostadapter driver)
+ *     bus driver   a driver with a i2c bus         (host adapter driver)
  *     chip driver  a driver for a chip connected
  *                  to a i2c bus                    (cdrom/hd driver)
  *

@@ -554,7 +554,7 @@ struct el_t2_data_memory {
 
 
 /*
- * Sable other cpu error frame - sable pfms section 3.43
+ * Sable other CPU error frame - sable pfms section 3.43
  */
 struct el_t2_data_other_cpu {
 	short	      elco_cpuid;	/* CPU ID */
@@ -578,7 +578,7 @@ struct el_t2_data_other_cpu {
 };
 
 /*
- * Sable other cpu error frame - sable pfms section 3.44
+ * Sable other CPU error frame - sable pfms section 3.44
  */
 struct el_t2_data_t2{
         struct el_t2_frame_header elct_hdr;	/* ID$T2-FRAME */

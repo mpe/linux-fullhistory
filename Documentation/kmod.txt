@@ -34,8 +34,8 @@ myself).
 
 If kerneld worked, why replace it?
 
-- kerneld used sysv ipc, which can now be made into a module.  Besides,
-  sysv ipc is ugly and should therefore be avoided (well, certainly for
+- kerneld used SysV IPC, which can now be made into a module.  Besides,
+  SysV IPC is ugly and should therefore be avoided (well, certainly for
   kernel level stuff)
 
 - both kmod and kerneld end up doing the same thing (calling modprobe),
@@ -44,4 +44,4 @@ If kerneld worked, why replace it?
 - removing kerneld related stuff from ipc/msg.c made it 40% smaller
 
 - kmod reports errors through the normal kernel mechanisms, which avoids
-  the chicken and egg problem of kerneld and modular unix domain sockets
+  the chicken and egg problem of kerneld and modular Unix domain sockets

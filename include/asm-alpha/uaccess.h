@@ -161,7 +161,7 @@ struct __large_struct { unsigned long buf[100]; };
 		: "m"(__m(addr)), "1"(__gu_err))
 
 #ifdef __HAVE_CPU_BWX
-/* Those lucky bastards with ev56 and later cpus can do byte/word moves.  */
+/* Those lucky bastards with ev56 and later CPUs can do byte/word moves.  */
 
 #define __get_user_16(addr)				\
 	__asm__("1: ldwu %0,%2\n"			\
@@ -275,7 +275,7 @@ __asm__ __volatile__("1: stl %r2,%1\n"				\
 		: "m"(__m(addr)), "rJ"(x), "0"(__pu_err))
 
 #ifdef __HAVE_CPU_BWX
-/* Those lucky bastards with ev56 and later cpus can do byte/word moves.  */
+/* Those lucky bastards with ev56 and later CPUs can do byte/word moves.  */
 
 #define __put_user_16(x,addr)					\
 __asm__ __volatile__("1: stw %r2,%1\n"				\

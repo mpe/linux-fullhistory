@@ -9,15 +9,16 @@
  * as published by the Free Software Foundation; either version
  * 2 of the License, or (at your option) any later version.
  */
+
 #include <linux/module.h>
 
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/string.h>
-#include <linux/vc_ioctl.h>
 #include <linux/pci.h>
 #include <linux/nvram.h>
+#include <asm/vc_ioctl.h>
 #include <asm/prom.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
@@ -27,6 +28,7 @@
 #include <linux/vt_kern.h>
 #include "pmac-cons.h"
 #include "imstt.h"
+#include <linux/console_compat.h>
 
 
 enum { 

@@ -530,7 +530,7 @@ static struct kernel_param cooked_params[] __initdata = {
 	{ "noinitrd", no_initrd },
 #endif
 #endif
-#if defined (CONFIG_AMIGA) || defined (CONFIG_ATARI)
+#ifdef CONFIG_FB
 	{ "video=", video_setup },
 #endif
 	{ "panic=", panic_setup },

@@ -27,7 +27,7 @@
 #include <linux/selection.h>
 #include <linux/init.h>
 #ifdef CONFIG_FB_COMPAT_XPMAC
-#include <linux/vc_ioctl.h>
+#include <asm/vc_ioctl.h>
 #endif
 #include <asm/io.h>
 #include <asm/prom.h>
@@ -46,8 +46,6 @@ struct fb_info_offb {
     volatile unsigned char *cmap_adr;
     volatile unsigned char *cmap_data;
 };
-
-static struct fb_info_offb fb_info[FB_MAX];
 
 #ifdef __powerpc__
 #define mach_eieio()	eieio()
@@ -85,6 +83,7 @@ static int offb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 #ifdef CONFIG_FB_COMPAT_XPMAC
 int console_getmode(struct vc_mode *);
 int console_setmode(struct vc_mode *, int);
+int console_setcmap(int, unsigned char *, unsigned char *, unsigned char *);
 int console_powermode(int);
 struct fb_info *console_fb_info = NULL;
 int (*console_setmode_ptr)(struct vc_mode *, int) = NULL;
@@ -116,7 +115,7 @@ static void do_install_cmap(int con, struct fb_info *info);
 
 static struct fb_ops offb_ops = {
     offb_open, offb_release, offb_get_fix, offb_get_var, offb_set_var,
-    offb_get_cmap, offb_set_cmap, offb_pan_display, NULL, offb_ioctl
+    offb_get_cmap, offb_set_cmap, offb_pan_display, offb_ioctl
 };
 
 
@@ -282,9 +281,12 @@ extern unsigned long atyfb_of_init(unsigned long mem_start,
 static const char *aty_names[] = {
     "ATY,mach64", "ATY,XCLAIM", "ATY,264VT", "ATY,mach64ii", "ATY,264GT-B", 
     "ATY,mach64_3D_pcc", "ATY,XCLAIM3D", "ATY,XCLAIMVR", "ATY,RAGEII_M",
-    "ATY,XCLAIMVRPro", "ATY,mach64_3DU"
+    "ATY,XCLAIMVRPro", "ATY,mach64_3DU", "ATY,XCLAIM3DPro"
 };
 #endif /* CONFIG_FB_ATY */
+#ifdef CONFIG_FB_S3TRIO
+extern void s3triofb_init_of(unsigned long mem_start, struct device_node *dp);
+#endif /* CONFIG_FB_S3TRIO */
 
 
     /*
@@ -305,11 +307,6 @@ __initfunc(unsigned long offb_init(unsigned long mem_start))
 	if (!(dp = find_path_device(prom_display_paths[dpy])))
 	    continue;
 
-	info = &fb_info[dpy];
-	fix = &info->fix;
-	var = &info->var;
-	disp = &info->disp;
-
 	if (!ofonly) {
 #ifdef CONFIG_FB_ATY
 	    for (i = 0; i < sizeof(aty_names)/sizeof(*aty_names); i++)
@@ -320,7 +317,16 @@ __initfunc(unsigned long offb_init(unsigned long mem_start))
 		continue;
 	    }
 #endif /* CONFIG_FB_ATY */
+#ifdef CONFIG_FB_S3TRIO
+            if (s3triofb_init_of(dp))
+                continue;
+#endif /* CONFIG_FB_S3TRIO */
 	}
+
+	info = kmalloc(sizeof(struct fb_info_offb), GFP_ATOMIC);
+	fix = &info->fix;
+	var = &info->var;
+	disp = &info->disp;
 
 	strcpy(fix->id, "OFfb ");
 	strncat(fix->id, dp->name, sizeof(fix->id));
@@ -329,6 +335,7 @@ __initfunc(unsigned long offb_init(unsigned long mem_start))
 	if ((pp = (int *)get_property(dp, "depth", &len)) != NULL
 	    && len == sizeof(int) && *pp != 8) {
 	    printk("%s: can't use depth = %d\n", dp->full_name, *pp);
+	    kfree(info);
 	    continue;
 	}
 	if ((pp = (int *)get_property(dp, "width", &len)) != NULL
@@ -352,11 +359,12 @@ __initfunc(unsigned long offb_init(unsigned long mem_start))
 		    break;
 	    if (i >= dp->n_addrs) {
 		printk("no framebuffer address found for %s\n", dp->full_name);
+		kfree(info);
 		continue;
 	    }
 	    address = (u_long)dp->addrs[i].address;
 	}
-	fix->smem_start = ioremap(address, fix->smem_len);
+	fix->smem_start = (char *)address;
 	fix->type = FB_TYPE_PACKED_PIXELS;
 	fix->type_aux = 0;
 
@@ -379,7 +387,6 @@ __initfunc(unsigned long offb_init(unsigned long mem_start))
 	var->nonstd = 0;
 	var->activate = 0;
 	var->height = var->width = -1;
-	var->accel = FB_ACCEL_NONE;
 	var->pixclock = 10000;
 	var->left_margin = var->right_margin = 16;
 	var->upper_margin = var->lower_margin = 16;
@@ -390,8 +397,11 @@ __initfunc(unsigned long offb_init(unsigned long mem_start))
 	disp->var = *var;
 	disp->cmap.start = 0;
 	disp->cmap.len = 0;
-	disp->cmap.red = disp->cmap.green = disp->cmap.blue = disp->cmap.transp = NULL;
-	disp->screen_base = fix->smem_start;
+	disp->cmap.red = NULL;
+	disp->cmap.green = NULL;
+	disp->cmap.blue = NULL;
+	disp->cmap.transp = NULL;
+	disp->screen_base = ioremap(address, fix->smem_len);
 	disp->visual = fix->visual;
 	disp->type = fix->type;
 	disp->type_aux = fix->type_aux;
@@ -419,8 +429,10 @@ __initfunc(unsigned long offb_init(unsigned long mem_start))
 	info->info.blank = &offbcon_blank;
 
 	err = register_framebuffer(&info->info);
-	if (err < 0)
-	    continue;
+	if (err < 0) {
+	    kfree(info);
+	    return mem_start;
+	}
 
 	for (i = 0; i < 16; i++) {
 	    int j = color_table[i];
@@ -441,15 +453,15 @@ __initfunc(unsigned long offb_init(unsigned long mem_start))
 	    display_info.pitch = fix->line_length;
 	    display_info.mode = 0;
 	    strncpy(display_info.name, dp->name, sizeof(display_info.name));
-	    display_info.fb_address = iopa((unsigned long)fix->smem_start);
+	    display_info.fb_address = address;
 	    display_info.cmap_adr_address = 0;
 	    display_info.cmap_data_address = 0;
 	    display_info.disp_reg_address = 0;
 	    /* XXX kludge for ati */
 	    if (strncmp(dp->name, "ATY,", 4) == 0) {
-		    display_info.disp_reg_address = iopa(address + 0x7ffc00);
-		    display_info.cmap_adr_address = iopa(address + 0x7ffcc0);
-		    display_info.cmap_data_address = iopa(address + 0x7ffcc1);
+		    display_info.disp_reg_address = address + 0x7ffc00;
+		    display_info.cmap_adr_address = address + 0x7ffcc0;
+		    display_info.cmap_data_address = address + 0x7ffcc1;
 	    }
 	    console_fb_info = &info->info;
 	    console_set_cmap_ptr = offb_set_cmap;
@@ -593,6 +605,7 @@ static void do_install_cmap(int con, struct fb_info *info)
      *    - console_setmode() should fill in a struct fb_var_screeninfo (using
      *	    the MacOS video mode database) and simply call a decode_var()
      *	    function, so console_setmode_ptr is no longer needed.
+     *	    console_getmode() should convert in the other direction.
      *
      *    - instead of using the console_* stuff (filled in by the frame
      *      buffer), we should use the correct struct fb_info for the

@@ -431,7 +431,7 @@ proc wrapup {w }  {
 	catch {destroy $w}
 	toplevel $w -class Dialog
 	message $w.m -width 400 -aspect 300 -text \
-		"The linux kernel is now hopefully configured for your setup. Check the top-level Makefile for additional configuration, and do a 'make dep ; make clean' if you want to be sure all the files are correctly re-made."  -relief raised 
+		"The Linux kernel should now be configured for your setup. Check the top-level Makefile for additional configuration, and do a 'make dep ; make clean' if you want to be sure all the files are correctly re-made."  -relief raised 
 	label $w.bm -bitmap info
 	pack $w.bm $w.m -pady 10 -side top -padx 10
 	wm title $w "Kernel build instructions" 

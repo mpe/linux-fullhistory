@@ -23,7 +23,7 @@ will reboot from almost anything.
 
 A second temperature monitoring interface is available on the WDT501P cards
 and some Berkshire cards. This provides /dev/temperature. This is the machine 
-internal temperature in degrees farenheit. Each read returns a single byte 
+internal temperature in degrees Fahrenheit. Each read returns a single byte 
 giving the temperature.
 
 The third interface logs kernel messages on additional alert events.

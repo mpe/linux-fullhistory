@@ -141,7 +141,7 @@ struct ucred {
 #define AF_INET		2	/* Internet IP Protocol 	*/
 #define AF_AX25		3	/* Amateur Radio AX.25 		*/
 #define AF_IPX		4	/* Novell IPX 			*/
-#define AF_APPLETALK	5	/* Appletalk DDP 		*/
+#define AF_APPLETALK	5	/* AppleTalk DDP 		*/
 #define AF_NETROM	6	/* Amateur Radio NET/ROM 	*/
 #define AF_BRIDGE	7	/* Multiprotocol bridge 	*/
 #define AF_ATMPVC	8	/* ATM PVCs			*/

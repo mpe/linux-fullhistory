@@ -551,6 +551,9 @@ trif_probe(struct device *dev)
 #ifdef CONFIG_IBMTR
 	&& ibmtr_probe(dev)
 #endif
+#ifdef CONFIG_SKTR
+	&& sktr_probe(dev)
+#endif
 	&& 1 ) {
 	return 1;	/* -ENODEV or -EAGAIN would be more accurate. */
     }

@@ -99,7 +99,7 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
 }
 
 /* This yields a mask that user programs can use to figure out what
-   instruction set this cpu supports.  This is trivial on Alpha, 
+   instruction set this CPU supports.  This is trivial on Alpha, 
    but not so on other machines. */
 
 #define ELF_HWCAP							\

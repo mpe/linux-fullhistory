@@ -397,9 +397,8 @@ lier);
   return -EINVAL;
 }
 
-/* Only broken Intel needs this, thus it should not even be referenced
- * globally...
- */
+/* Only broken Intel needs this, thus it should not even be referenced globally.
+*/
 __initfunc(void initialize_secondary(void))
 {
 	printk("initialize_secondary: entry\n");
@@ -673,7 +672,7 @@ wrapper_local_flush_tlb_page(unsigned int this_cpu)
 static int
 unknown_ipi(unsigned int this_cpu)
 {
-	printk("unknown_ipi() on cpu %d:  ", this_cpu);
+	printk("unknown_ipi() on CPU %d:  ", this_cpu);
 	return 1;
 }
 
@@ -762,7 +761,7 @@ smp_message_pass(int target, int msg, unsigned long data, int wait)
 	send_ipi_message(CPU_STOP, cpu_present_map ^ (1 << me));
 	return;
 barf:
-	printk("Yeeee, trying to send SMP msg(%d) on cpu %d\n", msg, me);
+	printk("Yeeee, trying to send SMP msg(%d) on CPU %d\n", msg, me);
 	panic("Bogon SMP message pass.");
 }
 

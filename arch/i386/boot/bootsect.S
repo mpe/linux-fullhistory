@@ -413,7 +413,7 @@ print_digit:
 	rol	dx, #4		! rotate so that lowest 4 bits are used
 	mov	ax, #0xe0f	! ah = request, al = mask for nybble
 	and	al, dl
-	add	al, #0x90	! convert al to ascii hex (four instructions)
+	add	al, #0x90	! convert al to ASCII hex (four instructions)
 	daa
 	adc	al, #0x40
 	daa

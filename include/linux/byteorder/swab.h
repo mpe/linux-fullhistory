@@ -3,7 +3,7 @@
 
 /*
  * linux/byteorder/swab.h
- * Byteswapping, independently from cpu endianness
+ * Byte-swapping, independently from CPU endianness
  *	swabXX[ps]?(foo)
  *
  * Francois-Rene Rideau <rideau@ens.fr> 19971205

@@ -30,7 +30,7 @@
 static ssize_t minix_file_write(struct file *, const char *, size_t, loff_t *);
 
 /*
- * We have mostly NULL's here: the current defaults are ok for
+ * We have mostly NULLs here: the current defaults are OK for
  * the minix filesystem.
  */
 static struct file_operations minix_file_operations = {

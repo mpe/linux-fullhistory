@@ -18,6 +18,7 @@
 #include <linux/types.h>
 #include <linux/kdev_t.h>
 #include <linux/console.h>
+#include <linux/init.h>
 
 
     /*
@@ -43,8 +44,7 @@ static int txtcon_blank(int blank);
 static int txtcon_get_font(struct vc_data *conp, int *w, int *h, char *data);
 static int txtcon_set_font(struct vc_data *conp, int w, int h, char *data);
 static int txtcon_set_palette(struct vc_data *conp, unsigned char *table);
-static int txtcon_scrolldelta(int lines);
-static int txtcon_set_mode(struct vc_data *conp, int mode);
+static int txtcon_scrolldelta(struct vc_data *conp, int lines);
 
 
 static unsigned long txtcon_startup(unsigned long kmem_start,
@@ -141,12 +141,7 @@ static int txtcon_set_palette(struct vc_data *conp, unsigned char *table)
 }
 
 
-static int txtcon_scrolldelta(int lines)
-{
-    return -ENOSYS;
-}
-
-static int txtcon_set_mode(struct vc_data *conp, int mode)
+static int txtcon_scrolldelta(struct vc_data *conp, int lines)
 {
     return -ENOSYS;
 }
@@ -173,6 +168,5 @@ struct consw txt_con = {
     txtcon_get_font,
     txtcon_set_font,
     txtcon_set_palette,
-    txtcon_scrolldelta,
-    txtcon_set_mode
+    txtcon_scrolldelta
 };

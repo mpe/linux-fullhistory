@@ -1,9 +1,9 @@
 
-		The Linux/m68k Frame Buffer Device
-		----------------------------------
+			The Frame Buffer Device
+			-----------------------
 
 Maintained by Geert Uytterhoeven (Geert.Uytterhoeven@cs.kuleuven.ac.be)
-Last revised: January 24, 1998
+Last revised: June 10, 1998
 
 
 0. Introduction
@@ -152,9 +152,6 @@ buffer device. The current X server is part of the XFree86/XFree68 release
 
 To tune a video mode, you can use fbset or xvidtune. Note that xvidtune doesn't
 work 100% with XF68_FBDev: the reported clock values are always incorrect.
-
-There exists also an accelerated X server for the Cybervision 64 graphics
-board, but that's not discussed here.
 
 
 5. Video Mode Timings
@@ -315,7 +312,7 @@ applications, please refer to the following documentation:
 
 All necessary files can be found at
 
-    ftp://ftp.uni-erlangen.de/pub/Linux/680x0/
+    ftp://ftp.uni-erlangen.de/pub/Linux/LOCAL/680x0/
 
 and on its mirrors.
 

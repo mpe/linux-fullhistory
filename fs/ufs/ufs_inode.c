@@ -249,6 +249,8 @@ void ufs_read_inode(struct inode * inode)
 	        inode->i_op = &blkdev_inode_operations;
 	} else if (S_ISFIFO(inode->i_mode)) {
 	        init_fifo(inode);
+	} else if (S_ISSOCK(inode->i_mode)) {
+		/* nothing */
 	} else {
 	        printk("ufs_read_inode: unknown file type 0%o ino %lu dev %d/%d\n",
 	               inode->i_mode, inode->i_ino, MAJOR(inode->i_dev),

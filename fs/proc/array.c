@@ -29,7 +29,7 @@
  * Yves Arrouye      :  remove removal of trailing spaces in get_array.
  *			<Yves.Arrouye@marin.fdn.fr>
 
- * Jerome Forissier  :  added per-cpu time information to /proc/stat
+ * Jerome Forissier  :  added per-CPU time information to /proc/stat
  *                      and /proc/<pid>/cpu extension
  *                      <forissier@isia.cma.fr>
  *			- Incorporation and non-SMP safe operation
@@ -232,7 +232,7 @@ static int get_kstat(char * buffer)
 
 #ifdef __SMP__
 	len = sprintf(buffer,
-		"cpu  %u %u %u %lu\n",
+		"CPU  %u %u %u %lu\n",
 		kstat.cpu_user,
 		kstat.cpu_nice,
 		kstat.cpu_system,
@@ -842,7 +842,7 @@ static int get_stat(int pid, char * buffer)
 		tty_pgrp = -1;
 
 	/* scale priority and nice values from timeslices to -20..20 */
-	/* to make it look like a "normal" unix priority/nice value  */
+	/* to make it look like a "normal" Unix priority/nice value  */
 	priority = tsk->counter;
 	priority = 20 - (priority * 10 + DEF_PRIORITY / 2) / DEF_PRIORITY;
 	nice = tsk->priority;

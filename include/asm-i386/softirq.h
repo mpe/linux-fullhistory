@@ -50,7 +50,7 @@ static inline void end_bh_atomic(void)
 	atomic_dec(&global_bh_lock);
 }
 
-/* These are for the irq's testing the lock */
+/* These are for the IRQs testing the lock */
 static inline int softirq_trylock(int cpu)
 {
 	if (!test_and_set_bit(0,&global_bh_count)) {

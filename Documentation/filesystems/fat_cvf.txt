@@ -20,7 +20,7 @@ Compressed Volume Files in FAT partitions. Popular CVF software, for
 example, are Microsoft's Doublespace/Drivespace and Stac's Stacker.
 Using the CVF-FAT interface, it is possible to load a module that handles
 all the low-level disk access that has to do with on-the-fly compression
-and decompression. All other part of FAT filesystem access is still handled
+and decompression. Any other part of FAT filesystem access is still handled
 by the FAT, MSDOS or VFAT or even UMSDOS driver.
 
 CVF access works by redirecting certain low-level routines from the FAT
@@ -46,16 +46,16 @@ like compression and decompression silently.
   might be persuaded to implement it :). CVF-FAT is already prepared
   for using readpage.
   
-- DOSEMU users attention 
+- attention, DOSEmu users 
 
-  You may have to unmount all CVF partitions before running DOSEMU depending 
-  on your configuration. If DOSEMU is configured to use wholedisk or 
-  partition access (this is often the case to let DOSEMU access 
+  You may have to unmount all CVF partitions before running DOSEmu depending 
+  on your configuration. If DOSEmu is configured to use wholedisk or 
+  partition access (this is often the case to let DOSEmu access 
   compressed partitions) there's a risk of destroying your compressed 
   partitions or crashing your system because of confused drivers.
   
   Note that it is always safe to redirect the compressed partitions with 
-  lredir or emufs.sys. Refer to the DOSEMU documentation for details.
+  lredir or emufs.sys. Refer to the DOSEmu documentation for details.
 
 
 3. Mount options
@@ -88,7 +88,7 @@ driver's standard options:
 ------------------------------------------------------------------------------
 
 Assuming you want to write your own CVF module, you need to write a lot of
-interface funtions. Most of them are covered in the kernel documentation
+interface functions. Most of them are covered in the kernel documentation
 you can find on the net, and thus won't be described here. They have been
 marked with "[...]" :-) Take a look at include/linux/fat_cvf.h.
 
@@ -169,7 +169,7 @@ int register_cvf_format(struct cvf_format*cvf_format);
   call this function to introduce your CVF format to the FAT/CVF-FAT
   driver. This is usually done in init_module. Be sure to check the
   return value. Zero means success, everything else causes a kernel
-  message printed in the syslog describing the error that occured.
+  message printed in the syslog describing the error that occurred.
   Typical errors are:
     - a module with the same version id is already registered or 
     - too many CVF formats. Hack fs/fat/cvf.c if you need more.

@@ -42,7 +42,7 @@
 
   14.     In what ways can I write to HFS filesystems?
 
-  15.     Does the HFS filesystem work with 400k or 800k Macintosh
+  15.     Does the HFS filesystem work with 400 kB or 800 kB Macintosh
   diskettes?
 
   16.     How can I format an HFS filesystem?

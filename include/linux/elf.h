@@ -127,8 +127,8 @@ typedef __u64	Elf64_Word;
 #define AT_EUID   12	/* effective uid */
 #define AT_GID    13	/* real gid */
 #define AT_EGID   14	/* effective gid */
-#define AT_PLATFORM 15  /* string identifying cpu for optimizations */
-#define AT_HWCAP  16    /* arch dependent hints at cpu capabilities */
+#define AT_PLATFORM 15  /* string identifying CPU for optimizations */
+#define AT_HWCAP  16    /* arch dependent hints at CPU capabilities */
 
 typedef struct dynamic{
   Elf32_Sword d_tag;
@@ -206,7 +206,7 @@ typedef struct {
 
 /* Bits present in AT_HWCAP, primarily for Sparc32.  */
 
-#define HWCAP_SPARC_FLUSH       1       /* The cpu supports flush insn.  */
+#define HWCAP_SPARC_FLUSH       1    /* CPU supports flush instruction. */
 #define HWCAP_SPARC_STBAR       2
 #define HWCAP_SPARC_SWAP        4
 #define HWCAP_SPARC_MULDIV      8

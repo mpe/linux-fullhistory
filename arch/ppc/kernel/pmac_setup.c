@@ -38,9 +38,8 @@
 #include <linux/delay.h>
 #include <linux/ioport.h>
 #include <linux/major.h>
-#ifdef CONFIG_ABSTRACT_CONSOLE
+#include <linux/vt_kern.h>
 #include <linux/console.h>
-#endif
 #include <asm/prom.h>
 #include <asm/system.h>
 #include <asm/pgtable.h>
@@ -142,6 +141,12 @@ pmac_setup_arch(unsigned long *memory_start_p, unsigned long *memory_end_p))
 	/* Frame buffer device based console */
 	conswitchp = &fb_con;
 #endif
+#ifdef CONFIG_ABSCON_COMPAT
+	/* Console wrapper */
+	conswitchp = &compat_con;
+#endif
+
+	kd_mksound = pmac_mksound;
 }
 
 static volatile u32 *feature_addr;

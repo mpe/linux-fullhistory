@@ -131,7 +131,7 @@ code is:
           movl %esp,[%ebx]
 	  fld1
 The FPU instruction may be (usually will be) loaded into the pre-fetch
-queue of the cpu before the mov instruction is executed. If the
+queue of the CPU before the mov instruction is executed. If the
 destination of the 'movl' overlaps the FPU instruction then the bytes
 in the prefetch queue and memory will be inconsistent when the FPU
 instruction is executed. The emulator will be invoked but will not be
@@ -163,7 +163,7 @@ Speed.
 The speed of floating point computation with the emulator will depend
 upon instruction mix. Relative performance is best for the instructions
 which require most computation. The simple instructions are adversely
-affected by the fpu instruction trap overhead.
+affected by the FPU instruction trap overhead.
 
 
 Timing: Some simple timing tests have been made on the emulator functions.

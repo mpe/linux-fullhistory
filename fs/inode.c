@@ -596,9 +596,9 @@ add_new_inode:
 	}
 
 	/*
-	 * Uhhuh.. We need to expand. Note that "grow_inodes()" will
-	 * release the spinlock, but will return with the lock held
-	 * again if the allocation succeeded.
+	 * We need to expand. Note that "grow_inodes()" will
+	 * release the spinlock, but will return with the lock 
+	 * held again if the allocation succeeded.
 	 */
 	inode = grow_inodes();
 	if (inode) {

@@ -90,10 +90,11 @@
 				and loosen interpretation of ATAPI
 			        standard for clearing error status.
 				Use spinlocks. Eliminate sti().
+	1.03    GRG 1998.06.16  Eliminated an Ugh
 
 */
 
-#define	PCD_VERSION	"1.02"
+#define	PCD_VERSION	"1.03"
 #define PCD_MAJOR	46
 #define PCD_NAME	"pcd"
 #define PCD_UNITS	4
@@ -413,30 +414,20 @@ static int pcd_release (struct inode *inode, struct file *file)
 int	init_module(void)
 
 {	int	err;
-	long    flags;
-
-	save_flags(flags);
-	cli();
 
 	err = pcd_init();
 
-	restore_flags(flags);
 	return err;
 }
 
 void	cleanup_module(void)
 
-{	long flags;
-	int unit;
+{	int unit;
 
-	save_flags(flags);
-	cli();
 	unregister_blkdev(MAJOR_NR,name);
 	
         for (unit=0;unit<PCD_UNITS;unit++) 
            if (PCD.present) pi_release(PI);
-
-	restore_flags(flags);
 }
 
 #endif

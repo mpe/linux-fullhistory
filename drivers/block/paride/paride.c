@@ -502,6 +502,11 @@ void	paride_init( void )
           pt_init();
         };
 #endif
+#ifdef CONFIG_PARIDE_PG
+        { extern int pg_init(void);
+          pg_init();
+        };
+#endif
 }
 
 #endif

@@ -7,7 +7,7 @@
 
 	/* Caller does atomic increment on current->lock_depth,
 	 * if it was found to originally be zero then we get here,
-	 * %eax contains callers PC and %edx holds this cpu ID.
+	 * %eax contains caller's PC and %edx holds this CPU ID.
 	 */
 ENTRY(__lock_kernel)
 1:

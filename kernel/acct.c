@@ -257,7 +257,7 @@ int acct_process(long exitcode)
 
 	/*
 	 * First check to see if there is enough free_space to continue the process
-	 * accounting system. Check_free_space toggle's the acct_active flag so we
+	 * accounting system. Check_free_space toggles the acct_active flag so we
 	 * need to check that after check_free_space.
 	 */
 	check_free_space();

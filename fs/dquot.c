@@ -1,9 +1,9 @@
 /*
  * Implementation of the diskquota system for the LINUX operating
- * system. QUOTA is implemented using the BSD systemcall interface as
+ * system. QUOTA is implemented using the BSD system call interface as
  * the means of communication with the user level. Currently only the
- * ext2-filesystem has support for diskquotas. Other filesystems may
- * be added in future time. This file contains the generic routines
+ * ext2 filesystem has support for disk quotas. Other filesystems may
+ * be added in the future. This file contains the generic routines
  * called by the different filesystems on allocation of an inode or
  * block. These routines take care of the administration needed to
  * have a consistent diskquota tracking system. The ideas of both
@@ -713,7 +713,7 @@ static int check_bdq(struct dquot *dquot, short type, u_long blocks, uid_t initi
 
 /*
  * Initialize a dquot-struct with new quota info. This is used by the
- * systemcall interface functions.
+ * system call interface functions.
  */ 
 static int set_dqblk(kdev_t dev, int id, short type, int flags, struct dqblk *dqblk)
 {
@@ -970,7 +970,7 @@ int dquot_transfer(struct inode *inode, struct iattr *iattr, char direction, uid
 	short cnt, disc;
 
 	/*
-	 * Find out if this filesystems uses i_blocks.
+	 * Find out if this filesystem uses i_blocks.
 	 */
 	if (inode->i_blksize == 0)
 		blocks = isize_to_blocks(inode->i_size, BLOCK_SIZE);
@@ -1214,10 +1214,10 @@ int quota_on(kdev_t dev, short type, char *path)
 }
 
 /*
- * Ok this is the systemcall interface, this communicates with
- * the userlevel programs. Currently this only supports diskquota
- * calls. Maybe we need to add the process quotas etc in the future.
- * But we probably better use rlimits for that.
+ * This is the system call interface. This communicates with
+ * the user-level programs. Currently this only supports diskquota
+ * calls. Maybe we need to add the process quotas etc. in the future,
+ * but we probably should use rlimits for that.
  */
 asmlinkage int sys_quotactl(int cmd, const char *special, int id, caddr_t addr)
 {

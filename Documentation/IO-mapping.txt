@@ -1,8 +1,7 @@
-
-[ This is a mail-message in response to a query on IO mapping, thus the
+[ This is a mail message in response to a query on IO mapping, thus the
   strange format for a "document" ]
 
-The aha1542 is a bus-master device, and your patch makes the driver give the
+The AHA-1542 is a bus-master device, and your patch makes the driver give the
 controller the physical address of the buffers, which is correct on x86
 (because all bus master devices see the physical memory mappings directly). 
 
@@ -11,9 +10,9 @@ at memory addresses, and in this case we actually want the third, the
 so-called "bus address". 
 
 Essentially, the three ways of addressing memory are (this is "real memory",
-ie normal RAM, see later about other details): 
+that is, normal RAM--see later about other details): 
 
- - CPU untranslated. This is the "physical" address, ie physical address 
+ - CPU untranslated.  This is the "physical" address.  Physical address 
    0 is what the CPU sees when it drives zeroes on the memory bus.
 
  - CPU translated address. This is the "virtual" address, and is 
@@ -27,7 +26,7 @@ ie normal RAM, see later about other details):
    things any more complex than necessary, so you can assume that all 
    external hardware sees the memory the same way. 
 
-Now, on normal PC's the bus address is exactly the same as the physical
+Now, on normal PCs the bus address is exactly the same as the physical
 address, and things are very simple indeed. However, they are that simple
 because the memory and the devices share the same address space, and that is
 not generally necessarily true on other PCI/ISA setups. 
@@ -35,13 +34,13 @@ not generally necessarily true on other PCI/ISA setups.
 Now, just as an example, on the PReP (PowerPC Reference Platform), the 
 CPU sees a memory map something like this (this is from memory):
 
-	0-2GB	"real memory"
-	2GB-3GB	"system IO" (ie inb/out type accesses on x86)
-	3GB-4GB "IO memory" (ie shared memory over the IO bus)
+	0-2 GB		"real memory"
+	2 GB-3 GB	"system IO" (inb/out and similar accesses on x86)
+	3 GB-4 GB 	"IO memory" (shared memory over the IO bus)
 
 Now, that looks simple enough. However, when you look at the same thing from
 the viewpoint of the devices, you have the reverse, and the physical memory
-address 0 actually shows up as address 2GB for any IO master.
+address 0 actually shows up as address 2 GB for any IO master.
 
 So when the CPU wants any bus master to write to physical memory 0, it 
 has to give the master address 0x80000000 as the memory address.
@@ -53,7 +52,7 @@ PPC, you can end up with a setup like this:
  virtual address:	0xC0000000
  bus address:		0x80000000
 
-where all the addresses actually point to the same thing, it's just seen 
+where all the addresses actually point to the same thing.  It's just seen 
 through different translations..
 
 Similarly, on the Alpha, the normal translation is
@@ -119,7 +118,7 @@ be remapped (the memory management layer doesn't know about devices outside
 the CPU, so it shouldn't need to know about "bus addresses" etc). 
 
 NOTE NOTE NOTE! The above is only one part of the whole equation. The above
-only talks about "real memory", ie CPU memory, ie RAM. 
+only talks about "real memory", that is, CPU memory (RAM). 
 
 There is a completely different type of memory too, and that's the "shared
 memory" on the PCI or ISA bus. That's generally not RAM (although in the case
@@ -160,14 +159,14 @@ For such memory, you can do things like
 	iounmap(baseptr);
 
  - copying and clearing:
-	/* get the 6-byte ethernet address at ISA address E000:0040 */
+	/* get the 6-byte Ethernet address at ISA address E000:0040 */
 	memcpy_fromio(kernel_buffer, 0xE0040, 6);
 	/* write a packet to the driver */
 	memcpy_toio(0xE1000, skb->data, skb->len);
 	/* clear the frame buffer */
 	memset_io(0xA0000, 0, 0x10000);
 
-Ok, that just about covers the basics of accessing IO portably.  Questions?
+OK, that just about covers the basics of accessing IO portably.  Questions?
 Comments? You may think that all the above is overly complex, but one day you
 might find yourself with a 500 MHz Alpha in front of you, and then you'll be
 happy that your driver works ;)

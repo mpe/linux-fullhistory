@@ -1,5 +1,5 @@
 /*
- *	Appletalk networking structures
+ *	AppleTalk networking structures
  *
  *	The following are directly referenced from the University Of Michigan
  *	netatalk for compatibility reasons.
@@ -108,7 +108,7 @@ struct ddpshdr
 	/* And netatalk apps expect to stick the type in themselves */
 };
 
-/* Appletalk AARP headers */
+/* AppleTalk AARP headers */
 
 struct elapaarp
 {

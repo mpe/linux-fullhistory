@@ -187,7 +187,7 @@ void fbcon_cfb2_revc(struct display *p, int xx, int yy)
 
 struct display_switch fbcon_cfb2 = {
     fbcon_cfb2_setup, fbcon_cfb2_bmove, fbcon_cfb2_clear, fbcon_cfb2_putc,
-    fbcon_cfb2_putcs, fbcon_cfb2_revc
+    fbcon_cfb2_putcs, fbcon_cfb2_revc, NULL
 };
 
 

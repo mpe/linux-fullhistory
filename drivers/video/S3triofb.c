@@ -23,9 +23,8 @@
 
 */
 
-#include <linux/config.h>
-#include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/module.h>
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/mm.h>
@@ -36,11 +35,18 @@
 #include <linux/interrupt.h>
 #include <linux/fb.h>
 #include <linux/init.h>
+#include <linux/selection.h>
 #include <asm/io.h>
 #include <asm/prom.h>
+#include <asm/pci-bridge.h>
 #include <linux/pci.h>
+#ifdef CONFIG_FB_COMPAT_XPMAC
+#include <asm/vc_ioctl.h>
+#endif
 
+#include "fbcon.h"
 #include "fbcon-cfb8.h"
+#include "s3blit.h"
 
 
 #define mem_in8(addr)           in_8((void *)(addr))
@@ -60,7 +66,7 @@ static struct display disp;
 static struct fb_info fb_info;
 static struct { u_char red, green, blue, pad; } palette[256];
 static char s3trio_name[16] = "S3Trio ";
-
+static char *s3trio_base;
 
 static struct fb_fix_screeninfo fb_fix;
 static struct fb_var_screeninfo fb_var = { 0, };
@@ -69,8 +75,6 @@ static struct fb_var_screeninfo fb_var = { 0, };
     /*
      *  Interface used by the world
      */
-
-void of_video_setup(char *options, int *ints);
 
 static int s3trio_open(struct fb_info *info);
 static int s3trio_release(struct fb_info *info);
@@ -106,7 +110,9 @@ unsigned long s3trio_fb_init(unsigned long mem_start);
 static int s3triofbcon_switch(int con, struct fb_info *info);
 static int s3triofbcon_updatevar(int con, struct fb_info *info);
 static void s3triofbcon_blank(int blank, struct fb_info *info);
+#if 0
 static int s3triofbcon_setcmap(struct fb_cmap *cmap, int con);
+#endif
 
     /*
      *  Text console acceleration
@@ -138,12 +144,12 @@ static int s3trio_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
                          u_int *transp, struct fb_info *info);
 static int s3trio_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
                          u_int transp, struct fb_info *info);
-static void do_install_cmap(int con);
+static void do_install_cmap(int con, struct fb_info *info);
 
 
 static struct fb_ops s3trio_ops = {
     s3trio_open, s3trio_release, s3trio_get_fix, s3trio_get_var, s3trio_set_var,
-    s3trio_get_cmap, s3trio_set_cmap, s3trio_pan_display, NULL, s3trio_ioctl
+    s3trio_get_cmap, s3trio_set_cmap, s3trio_pan_display, s3trio_ioctl
 };
 
 
@@ -200,11 +206,16 @@ static int s3trio_set_var(struct fb_var_screeninfo *var, int con,
 			  struct fb_info *info)
 {
     if (var->xres > fb_var.xres || var->yres > fb_var.yres ||
-	var->xres_virtual > fb_var.xres_virtual ||
-	var->yres_virtual > fb_var.yres_virtual ||
-	var->bits_per_pixel > fb_var.bits_per_pixel ||
-	var->nonstd || var->vmode != FB_VMODE_NONINTERLACED)
+	var->bits_per_pixel > fb_var.bits_per_pixel )
+	/* || var->nonstd || var->vmode != FB_VMODE_NONINTERLACED) */
 	return -EINVAL;
+    if (var->xres_virtual > fb_var.xres_virtual) {
+	outw(IO_OUT16VAL((var->xres_virtual /8) & 0xff, 0x13), 0x3d4);
+	outw(IO_OUT16VAL(((var->xres_virtual /8 ) & 0x300) >> 3, 0x51), 0x3d4);
+	fb_var.xres_virtual = var->xres_virtual;
+	fb_fix.line_length = var->xres_virtual;
+    }
+    fb_var.yres_virtual = var->yres_virtual;
     memcpy(var, &fb_var, sizeof(fb_var));
     return 0;
 }
@@ -219,11 +230,24 @@ static int s3trio_set_var(struct fb_var_screeninfo *var, int con,
 static int s3trio_pan_display(struct fb_var_screeninfo *var, int con,
 			      struct fb_info *info)
 {
-    if (var->xoffset || var->yoffset)
+    unsigned int base;
+
+    if (var->xoffset > (var->xres_virtual - var->xres))
 	return -EINVAL;
-    else
-	return 0;
+    if (var->yoffset > (var->yres_virtual - var->yres))
+	return -EINVAL;
+
+    fb_var.xoffset = var->xoffset;
+    fb_var.yoffset = var->yoffset;
+
+    base = var->yoffset * fb_fix.line_length + var->xoffset;
+
+    outw(IO_OUT16VAL((base >> 8) & 0xff, 0x0c),0x03D4);
+    outw(IO_OUT16VAL(base  & 0xff, 0x0d),0x03D4);
+    outw(IO_OUT16VAL((base >> 16) & 0xf, 0x69),0x03D4);
+    return 0;
 }
+
 
     /*
      *  Get the Colormap
@@ -238,7 +262,7 @@ static int s3trio_get_cmap(struct fb_cmap *cmap, int kspc, int con,
     else if (fb_display[con].cmap.len) /* non default colormap? */
 	fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
     else
-	fb_copy_cmap(fb_default_cmap(fb_display[con].var.bits_per_pixel),
+	fb_copy_cmap(fb_default_cmap(1 << fb_display[con].var.bits_per_pixel),
 		     cmap, kspc ? 0 : 2);
     return 0;
 }
@@ -273,7 +297,18 @@ static int s3trio_ioctl(struct inode *inode, struct file *file, u_int cmd,
     return -EINVAL;
 }
 
-__initfunc(int s3trio_resetaccel(void)) {
+__initfunc(unsigned long s3triofb_init(unsigned long mem_start))
+{
+#ifdef __powerpc__
+    /* We don't want to be called like this. */
+    /* We rely on Open Firmware (offb) instead. */
+#else /* !__powerpc__ */
+    /* To be merged with cybervision */
+#endif /* !__powerpc__ */
+    return mem_start;
+}
+
+__initfunc(void s3trio_resetaccel(void)) {
 
 
 #define EC01_ENH_ENB    0x0005
@@ -314,18 +349,15 @@ __initfunc(int s3trio_resetaccel(void)) {
 	outw(0xffff,  0xaae8);       /* Enable all planes */
 	outw(0xffff, 0xaae8);       /* Enable all planes */
 	outw( MF_PIX_CONTROL | MFA_SRC_FOREGR_MIX,  0xbee8);
-
 }
 
-__initfunc(int s3trio_init(void)) {
+__initfunc(int s3trio_init(struct device_node *dp)) {
 
     u_char bus, dev;
     unsigned int t32;
     unsigned short cmd;
-    int i;
 
-	bus=0;
-	dev=(3<<3);
+	pci_device_loc(dp,&bus,&dev);
                 pcibios_read_config_dword(bus, dev, PCI_VENDOR_ID, &t32);
                 if(t32 == (PCI_DEVICE_ID_S3_TRIO << 16) + PCI_VENDOR_ID_S3) {
                         pcibios_read_config_dword(bus, dev, PCI_BASE_ADDRESS_0, &t32);
@@ -351,16 +383,16 @@ __initfunc(int s3trio_init(void)) {
 			outw(IO_OUT16VAL(0x48, 0x38),0x03D4);
 			outw(IO_OUT16VAL(0xA0, 0x39),0x03D4);
 			outb(0x33,0x3d4);
-			outw(IO_OUT16VAL( inb(0x3d5) & ~(0x2 |
-			 0x10 | 0x40) , 0x33),0x3d4);
+			outw(IO_OUT16VAL((inb(0x3d5) & ~(0x2 | 0x10 |  0x40)) |
+					  0x20, 0x33), 0x3d4);
 
-			outw(IO_OUT16VAL(0x6,0x8), 0x3c4);
+			outw(IO_OUT16VAL(0x6, 0x8), 0x3c4);
 
 			/* switch to MMIO only mode */
 
-			outb(0x58,0x3d4);
-			outw(IO_OUT16VAL(inb(0x3d5) | 3 | 0x10,0x58),0x3d4);
-			outw(IO_OUT16VAL(8,0x53),0x3d4);
+			outb(0x58, 0x3d4);
+			outw(IO_OUT16VAL(inb(0x3d5) | 3 | 0x10, 0x58), 0x3d4);
+			outw(IO_OUT16VAL(8, 0x53), 0x3d4);
 
 			/* switch off I/O accesses */
 
@@ -368,6 +400,7 @@ __initfunc(int s3trio_init(void)) {
 			pcibios_write_config_word(bus, dev, PCI_COMMAND,
 				        PCI_COMMAND_IO | PCI_COMMAND_MEMORY);
 #endif
+			return 1;
                 }
 
 	return 0;
@@ -379,17 +412,11 @@ __initfunc(int s3trio_init(void)) {
      *  We heavily rely on OF for the moment. This needs fixing.
      */
 
-__initfunc(unsigned long s3trio_fb_init(unsigned long mem_start))
+__initfunc(void s3triofb_init_of(struct device_node *dp))
 {
-    struct device_node *dp;
     int i, err, *pp, len;
-    unsigned *up, address;
+    unsigned long address;
     u_long *CursorBase;
-
-    if (!prom_display_paths[0])
-	return mem_start;
-    if (!(dp = find_path_device(prom_display_paths[0])))
-	return mem_start;
 
     strncat(s3trio_name, dp->name, sizeof(s3trio_name));
     s3trio_name[sizeof(s3trio_name)-1] = '\0';
@@ -398,19 +425,19 @@ __initfunc(unsigned long s3trio_fb_init(unsigned long mem_start))
     if((pp = (int *)get_property(dp, "vendor-id", &len)) != NULL
 	&& *pp!=PCI_VENDOR_ID_S3) {
 	printk("%s: can't find S3 Trio board\n", dp->full_name);
-	return mem_start;
+	return;
     }
 
     if((pp = (int *)get_property(dp, "device-id", &len)) != NULL
 	&& *pp!=PCI_DEVICE_ID_S3_TRIO) {
 	printk("%s: can't find S3 Trio board\n", dp->full_name);
-	return mem_start;
+	return;
     }
 
     if ((pp = (int *)get_property(dp, "depth", &len)) != NULL
 	&& len == sizeof(int) && *pp != 8) {
 	printk("%s: can't use depth = %d\n", dp->full_name, *pp);
-	return mem_start;
+	return;
     }
     if ((pp = (int *)get_property(dp, "width", &len)) != NULL
 	&& len == sizeof(int))
@@ -425,45 +452,51 @@ __initfunc(unsigned long s3trio_fb_init(unsigned long mem_start))
 	fb_fix.line_length = fb_var.xres_virtual;
     fb_fix.smem_len = fb_fix.line_length*fb_var.yres;
 
-    s3trio_init();
-    address=0xc6000000;
-    fb_fix.smem_start = ioremap(address,64*1024*1024);
+    s3trio_init(dp);
+    address = 0xc6000000;
+    s3trio_base = ioremap(address,64*1024*1024);
+    fb_fix.smem_start = (char *)address;
     fb_fix.type = FB_TYPE_PACKED_PIXELS;
     fb_fix.type_aux = 0;
+    fb_fix.accel = FB_ACCEL_S3_TRIO64;
+    fb_fix.mmio_start = (char *)address+0x1000000;
+    fb_fix.mmio_len = 0x1000000;
 
+    fb_fix.xpanstep = 1;
+    fb_fix.ypanstep = 1;
 
     s3trio_resetaccel();
 
-	mem_out8(0x30,fb_fix.smem_start+0x1008000 + 0x03D4);
-	mem_out8(0x2d,fb_fix.smem_start+0x1008000 + 0x03D4);
-	mem_out8(0x2e,fb_fix.smem_start+0x1008000 + 0x03D4);
+    mem_out8(0x30, s3trio_base+0x1008000 + 0x03D4);
+    mem_out8(0x2d, s3trio_base+0x1008000 + 0x03D4);
+    mem_out8(0x2e, s3trio_base+0x1008000 + 0x03D4);
 
-	mem_out8(0x50,fb_fix.smem_start+0x1008000 + 0x03D4);
+    mem_out8(0x50, s3trio_base+0x1008000 + 0x03D4);
 
     /* disable HW cursor */
 
-    mem_out8(0x39,fb_fix.smem_start+0x1008000 + 0x03D4);
-    mem_out8(0xa0,fb_fix.smem_start+0x1008000 + 0x03D5);
+    mem_out8(0x39, s3trio_base+0x1008000 + 0x03D4);
+    mem_out8(0xa0, s3trio_base+0x1008000 + 0x03D5);
 
-    mem_out8(0x45,fb_fix.smem_start+0x1008000 + 0x03D4);
-    mem_out8(0,fb_fix.smem_start+0x1008000 + 0x03D5);
+    mem_out8(0x45, s3trio_base+0x1008000 + 0x03D4);
+    mem_out8(0, s3trio_base+0x1008000 + 0x03D5);
 
-    mem_out8(0x4e,fb_fix.smem_start+0x1008000 + 0x03D4);
-    mem_out8(0,fb_fix.smem_start+0x1008000 + 0x03D5);
+    mem_out8(0x4e, s3trio_base+0x1008000 + 0x03D4);
+    mem_out8(0, s3trio_base+0x1008000 + 0x03D5);
 
-    mem_out8(0x4f,fb_fix.smem_start+0x1008000 + 0x03D4);
-    mem_out8(0,fb_fix.smem_start+0x1008000 + 0x03D5);
+    mem_out8(0x4f, s3trio_base+0x1008000 + 0x03D4);
+    mem_out8(0, s3trio_base+0x1008000 + 0x03D5);
 
     /* init HW cursor */
 
-    CursorBase=(u_long *)(fb_fix.smem_start + 2*1024*1024 - 0x400);
-	for (i=0; i < 8; i++) {
+    CursorBase = (u_long *)(s3trio_base + 2*1024*1024 - 0x400);
+	for (i = 0; i < 8; i++) {
 		*(CursorBase  +(i*4)) = 0xffffff00;
 		*(CursorBase+1+(i*4)) = 0xffff0000;
 		*(CursorBase+2+(i*4)) = 0xffff0000;
 		*(CursorBase+3+(i*4)) = 0xffff0000;
 	}
-	for (i=8; i < 64; i++) {
+	for (i = 8; i < 64; i++) {
 		*(CursorBase  +(i*4)) = 0xffff0000;
 		*(CursorBase+1+(i*4)) = 0xffff0000;
 		*(CursorBase+2+(i*4)) = 0xffff0000;
@@ -471,34 +504,43 @@ __initfunc(unsigned long s3trio_fb_init(unsigned long mem_start))
 	}
 
 
-    mem_out8(0x4c,fb_fix.smem_start+0x1008000 + 0x03D4);
-    mem_out8(((2*1024 - 1)&0xf00)>>8,fb_fix.smem_start+0x1008000 + 0x03D5);
+    mem_out8(0x4c, s3trio_base+0x1008000 + 0x03D4);
+    mem_out8(((2*1024 - 1)&0xf00)>>8, s3trio_base+0x1008000 + 0x03D5);
 
-    mem_out8(0x4d,fb_fix.smem_start+0x1008000 + 0x03D4);
-    mem_out8((2*1024 - 1) & 0xff,fb_fix.smem_start+0x1008000 + 0x03D5);
+    mem_out8(0x4d, s3trio_base+0x1008000 + 0x03D4);
+    mem_out8((2*1024 - 1) & 0xff, s3trio_base+0x1008000 + 0x03D5);
 
-    mem_out8(0x45,fb_fix.smem_start+0x1008000 + 0x03D4);
-	mem_in8(fb_fix.smem_start+0x1008000 + 0x03D4);
+    mem_out8(0x45, s3trio_base+0x1008000 + 0x03D4);
+    mem_in8(s3trio_base+0x1008000 + 0x03D4);
 
-    mem_out8(0x4a,fb_fix.smem_start+0x1008000 + 0x03D4);
-    mem_out8(0x80,fb_fix.smem_start+0x1008000 + 0x03D5);
-    mem_out8(0x80,fb_fix.smem_start+0x1008000 + 0x03D5);
-    mem_out8(0x80,fb_fix.smem_start+0x1008000 + 0x03D5);
+    mem_out8(0x4a, s3trio_base+0x1008000 + 0x03D4);
+    mem_out8(0x80, s3trio_base+0x1008000 + 0x03D5);
+    mem_out8(0x80, s3trio_base+0x1008000 + 0x03D5);
+    mem_out8(0x80, s3trio_base+0x1008000 + 0x03D5);
 
-    mem_out8(0x4b,fb_fix.smem_start+0x1008000 + 0x03D4);
-    mem_out8(0x00,fb_fix.smem_start+0x1008000 + 0x03D5);
-    mem_out8(0x00,fb_fix.smem_start+0x1008000 + 0x03D5);
-    mem_out8(0x00,fb_fix.smem_start+0x1008000 + 0x03D5);
+    mem_out8(0x4b, s3trio_base+0x1008000 + 0x03D4);
+    mem_out8(0x00, s3trio_base+0x1008000 + 0x03D5);
+    mem_out8(0x00, s3trio_base+0x1008000 + 0x03D5);
+    mem_out8(0x00, s3trio_base+0x1008000 + 0x03D5);
 
-    mem_out8(0x45,fb_fix.smem_start+0x1008000 + 0x03D4);
-    mem_out8(0,fb_fix.smem_start+0x1008000 + 0x03D5);
+    mem_out8(0x45, s3trio_base+0x1008000 + 0x03D4);
+    mem_out8(0, s3trio_base+0x1008000 + 0x03D5);
+
+    /* setup default color table */
+
+	for(i = 0; i < 16; i++) {
+		int j = color_table[i];
+		palette[i].red=default_red[j];
+		palette[i].green=default_grn[j];
+		palette[i].blue=default_blu[j];
+	}
 
     s3trio_setcolreg(255, 56, 100, 160, 0, NULL /* not used */);
     s3trio_setcolreg(254, 0, 0, 0, 0, NULL /* not used */);
-    memset((char *)fb_fix.smem_start,0,640*480);
+    memset((char *)s3trio_base, 0, 640*480);
 
 #if 0
-    Trio_RectFill(0,0,90,90,7,1);
+    Trio_RectFill(0, 0, 90, 90, 7, 1);
 #endif
 
     fb_fix.visual = FB_VISUAL_PSEUDOCOLOR ;
@@ -512,7 +554,8 @@ __initfunc(unsigned long s3trio_fb_init(unsigned long mem_start))
     fb_var.nonstd = 0;
     fb_var.activate = 0;
     fb_var.height = fb_var.width = -1;
-    fb_var.accel = 5;
+    fb_var.accel_flags = FB_ACCELF_TEXT;
+#warning FIXME: always obey fb_var.accel_flags
     fb_var.pixclock = 1;
     fb_var.left_margin = fb_var.right_margin = 0;
     fb_var.upper_margin = fb_var.lower_margin = 0;
@@ -524,7 +567,7 @@ __initfunc(unsigned long s3trio_fb_init(unsigned long mem_start))
     disp.cmap.start = 0;
     disp.cmap.len = 0;
     disp.cmap.red = disp.cmap.green = disp.cmap.blue = disp.cmap.transp = NULL;
-    disp.screen_base = fb_fix.smem_start;
+    disp.screen_base = s3trio_base;
     disp.visual = fb_fix.visual;
     disp.type = fb_fix.type;
     disp.type_aux = fb_fix.type_aux;
@@ -534,7 +577,10 @@ __initfunc(unsigned long s3trio_fb_init(unsigned long mem_start))
     disp.can_soft_blank = 1;
     disp.inverse = 0;
 #ifdef CONFIG_FBCON_CFB8
-    disp.dispsw = &fbcon_trio8;
+    if (fb_var.accel_flags & FB_ACCELF_TEXT)
+	disp.dispsw = &fbcon_trio8;
+    else
+	disp.dispsw = &fbcon_cfb8;
 #else
     disp.dispsw = NULL;
 #endif
@@ -577,12 +623,10 @@ __initfunc(unsigned long s3trio_fb_init(unsigned long mem_start))
 
     err = register_framebuffer(&fb_info);
     if (err < 0)
-	return mem_start;
+	return;
 
     printk("fb%d: S3 Trio frame buffer device on %s\n",
 	   GET_FB_IDX(fb_info.node), dp->full_name);
-
-    return mem_start;
 }
 
 
@@ -595,7 +639,7 @@ static int s3triofbcon_switch(int con, struct fb_info *info)
 
     currcon = con;
     /* Install new colormap */
-    do_install_cmap(con);
+    do_install_cmap(con,info);
     return 0;
 }
 
@@ -615,17 +659,23 @@ static int s3triofbcon_updatevar(int con, struct fb_info *info)
 
 static void s3triofbcon_blank(int blank, struct fb_info *info)
 {
-    /* Nothing */
+    unsigned char x;
+
+    mem_out8(0x1, s3trio_base+0x1008000 + 0x03c4);
+    x = mem_in8(s3trio_base+0x1008000 + 0x03c5);
+    mem_out8((x & (~0x20)) | (blank << 5), s3trio_base+0x1008000 + 0x03c5);
 }
 
     /*
      *  Set the colormap
      */
 
+#if 0
 static int s3triofbcon_setcmap(struct fb_cmap *cmap, int con)
 {
     return(s3trio_set_cmap(cmap, 1, con, &fb_info));
 }
+#endif
 
 
     /*
@@ -660,16 +710,16 @@ static int s3trio_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
     palette[regno].green = green;
     palette[regno].blue = blue;
 
-    mem_out8(regno,fb_fix.smem_start+0x1008000 + 0x3c8);
-    mem_out8((red & 0xff) >> 2,fb_fix.smem_start+0x1008000 + 0x3c9);
-    mem_out8((green & 0xff) >> 2,fb_fix.smem_start+0x1008000 + 0x3c9);
-    mem_out8((blue & 0xff) >> 2,fb_fix.smem_start+0x1008000 + 0x3c9);
+    mem_out8(regno,s3trio_base+0x1008000 + 0x3c8);
+    mem_out8((red & 0xff) >> 2,s3trio_base+0x1008000 + 0x3c9);
+    mem_out8((green & 0xff) >> 2,s3trio_base+0x1008000 + 0x3c9);
+    mem_out8((blue & 0xff) >> 2,s3trio_base+0x1008000 + 0x3c9);
 
     return 0;
 }
 
 
-static void do_install_cmap(int con)
+static void do_install_cmap(int con, struct fb_info *info)
 {
     if (con != currcon)
 	return;
@@ -689,6 +739,9 @@ static void do_install_cmap(int con)
 
 static int s3trio_console_setmode(struct vc_mode *mode, int doit)
 {
+#if 1
+    return -EINVAL;
+#else
     int err;
     struct fb_var_screeninfo var;
     struct s3trio_par par;
@@ -718,11 +771,12 @@ static int s3trio_console_setmode(struct vc_mode *mode, int doit)
     if (doit)
         s3trio_set_var(&var, currcon, 0);
     return 0;
+#endif
 }
 
 #endif /* CONFIG_FB_COMPAT_XPMAC */
 
-void s3trio_video_setup(char *options, int *ints) {
+void s3triofb_setup(char *options, int *ints) {
 
         return;
 
@@ -734,7 +788,7 @@ static void Trio_WaitQueue(u_short fifo) {
 
         do
         {
-		status = mem_in16(fb_fix.smem_start + 0x1000000 + 0x9AE8);
+		status = mem_in16(s3trio_base + 0x1000000 + 0x9AE8);
 	}  while (!(status & fifo));
 
 }
@@ -745,7 +799,7 @@ static void Trio_WaitBlit(void) {
 
         do
         {
-		status = mem_in16(fb_fix.smem_start + 0x1000000 + 0x9AE8);
+		status = mem_in16(s3trio_base + 0x1000000 + 0x9AE8);
 	}  while (status & 0x200);
 
 }
@@ -813,18 +867,18 @@ static void Trio_RectFill(u_short x, u_short y, u_short width, u_short height,
 
 static void Trio_MoveCursor(u_short x, u_short y) {
 
-	mem_out8(0x39, fb_fix.smem_start + 0x1008000 + 0x3d4);
-	mem_out8(0xa0, fb_fix.smem_start + 0x1008000 + 0x3d5);
+	mem_out8(0x39, s3trio_base + 0x1008000 + 0x3d4);
+	mem_out8(0xa0, s3trio_base + 0x1008000 + 0x3d5);
 
-	mem_out8(0x46, fb_fix.smem_start + 0x1008000 + 0x3d4);
-	mem_out8((x & 0x0700) >> 8, fb_fix.smem_start + 0x1008000 + 0x3d5);
-	mem_out8(0x47, fb_fix.smem_start + 0x1008000 + 0x3d4);
-	mem_out8(x & 0x00ff, fb_fix.smem_start + 0x1008000 + 0x3d5);
+	mem_out8(0x46, s3trio_base + 0x1008000 + 0x3d4);
+	mem_out8((x & 0x0700) >> 8, s3trio_base + 0x1008000 + 0x3d5);
+	mem_out8(0x47, s3trio_base + 0x1008000 + 0x3d4);
+	mem_out8(x & 0x00ff, s3trio_base + 0x1008000 + 0x3d5);
 
-	mem_out8(0x48, fb_fix.smem_start + 0x1008000 + 0x3d4);
-	mem_out8((y & 0x0700) >> 8, fb_fix.smem_start + 0x1008000 + 0x3d5);
-	mem_out8(0x49, fb_fix.smem_start + 0x1008000 + 0x3d4);
-	mem_out8(y & 0x00ff, fb_fix.smem_start + 0x1008000 + 0x3d5);
+	mem_out8(0x48, s3trio_base + 0x1008000 + 0x3d4);
+	mem_out8((y & 0x0700) >> 8, s3trio_base + 0x1008000 + 0x3d5);
+	mem_out8(0x49, s3trio_base + 0x1008000 + 0x3d4);
+	mem_out8(y & 0x00ff, s3trio_base + 0x1008000 + 0x3d5);
 
 }
 
@@ -880,6 +934,6 @@ static void fbcon_trio8_revc(struct display *p, int xx, int yy)
 
 static struct display_switch fbcon_trio8 = {
    fbcon_cfb8_setup, fbcon_trio8_bmove, fbcon_trio8_clear, fbcon_trio8_putc,
-   fbcon_trio8_putcs, fbcon_trio8_revc
+   fbcon_trio8_putcs, fbcon_trio8_revc, NULL
 };
 #endif

@@ -56,7 +56,7 @@ static struct fb_var_screeninfo vfb_default = {
     /* 640x480, 8 bpp */
     640, 480, 640, 480, 0, 0, 8, 0,
     {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-    0, 0, -1, -1, FB_ACCEL_NONE, 20000, 64, 64, 32, 32, 64, 2,
+    0, 0, -1, -1, 0, 20000, 64, 64, 32, 32, 64, 2,
     0, FB_VMODE_NONINTERLACED
 };
 
@@ -114,7 +114,7 @@ static void do_install_cmap(int con, struct fb_info *info);
 
 static struct fb_ops vfb_ops = {
     vfb_open, vfb_release, vfb_get_fix, vfb_get_var, vfb_set_var, vfb_get_cmap,
-    vfb_set_cmap, vfb_pan_display, NULL, vfb_ioctl
+    vfb_set_cmap, vfb_pan_display, vfb_ioctl
 };
 
 
@@ -250,7 +250,7 @@ static int vfb_set_var(struct fb_var_screeninfo *var, int con,
 	    struct fb_fix_screeninfo fix;
 
 	    vfb_encode_fix(&fix, var);
-	    display->screen_base = (u_char *)fix.smem_start;
+	    display->screen_base = (char *)videomemory;
 	    display->visual = fix.visual;
 	    display->type = fix.type;
 	    display->type_aux = fix.type_aux;
@@ -501,7 +501,7 @@ static void vfb_encode_fix(struct fb_fix_screeninfo *fix,
 {
     memset(fix, 0, sizeof(struct fb_fix_screeninfo));
     strcpy(fix->id, vfb_name);
-    fix->smem_start = (caddr_t)videomemory;
+    fix->smem_start = (char *)videomemory;
     fix->smem_len = videomemorysize;
     fix->type = FB_TYPE_PACKED_PIXELS;
     fix->type_aux = 0;

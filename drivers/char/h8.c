@@ -775,7 +775,7 @@ h8_cmd_done(h8_cmd_q_t *qp)
 
 	case H8_RD_SN:
 	case H8_RD_ENET_ADDR:
-	    printk("H8: Read ethernet addr - command done - address: %x - %x - %x - %x - %x - %x \n", 
+	    printk("H8: read Ethernet address: command done - address: %x - %x - %x - %x - %x - %x \n", 
 		   qp->rcvbuf[0], qp->rcvbuf[1], qp->rcvbuf[2],
 		   qp->rcvbuf[3], qp->rcvbuf[4], qp->rcvbuf[5]);
 	    QUEUE_ENTER(&h8_freeq, qp, link, h8_cmd_q_t *);
@@ -908,7 +908,7 @@ h8_cmd_done(h8_cmd_q_t *qp)
 }
 
 /*
- * Retrieve the current cpu temperature and case temperature.  Provides
+ * Retrieve the current CPU temperature and case temperature.  Provides
  * the feedback for the thermal control algorithm.  Synchcronized via 
  * sleep() for priority so that no other actions in the process will take
  * place before the data becomes available.
@@ -954,7 +954,7 @@ h8_get_max_temp(void)
 /*
  * Assigns an upper limit to the value of the H8 thermal interrupt.
  * As an example setting a value of 115 F here will cause the 
- * interrupt to trigger when the cpu temperature reaches 115 F.
+ * interrupt to trigger when the CPU temperature reaches 115 F.
  */
 static void
 h8_set_upper_therm_thold(int thold)
@@ -1072,7 +1072,7 @@ h8_monitor_thread(void * unused)
 
 		/*
 		 * If an external DC supply is removed or added make 
-		 * appropriate cpu speed adjustments.
+		 * appropriate CPU speed adjustments.
 		 */
                 if (h8_event_mask & H8_MANAGE_BATTERY) {
                           h8_run_level_3_manage(H8_RUN); 
@@ -1106,7 +1106,7 @@ h8_manage_therm(void)
 		h8_set_cpu_speed(h8_udamp); 
                 h8_clear_event_mask(H8_MANAGE_UTHERM);
                 h8_set_event_mask(H8_MANAGE_LTHERM);
-                /* Check again in 30 seconds for cpu temperature */
+                /* Check again in 30 seconds for CPU temperature */
                 h8_start_monitor_timer(H8_TIMEOUT_INTERVAL); 
         } else if (h8_event_mask & H8_MANAGE_LTHERM) {
 		/* See how cool the system has become as a result
@@ -1116,7 +1116,7 @@ h8_manage_therm(void)
                 if (curr_temp[0] < (h8_uthermal_threshold - h8_uthermal_window))
 		{
 			/* System cooling has progressed to a point
-			   that the cpu may be speeded up. */
+			   that the CPU may be sped up. */
                         h8_set_upper_therm_thold(h8_uthermal_threshold);
                         h8_set_cpu_speed(h8_ldamp); /* adjustable */ 
                         if(h8_debug & 0x10)
@@ -1144,7 +1144,7 @@ h8_set_cpu_speed(int speed_divisor)
 /*
  * global_rpb_counter is consumed by alpha_delay() in determining just
  * how much time to delay.  It is necessary that the number of microseconds
- * in DELAY(n) be kept consistent over a variety of cpu clock speeds.
+ * in DELAY(n) be kept consistent over a variety of CPU clock speeds.
  * To that end global_rpb_counter is here adjusted.
  */ 
         
@@ -1183,7 +1183,7 @@ h8_set_cpu_speed(int speed_divisor)
 }
 
 /*
- * Gets value stored in rpb representing cpu clock speed and adjusts this
+ * Gets value stored in rpb representing CPU clock speed and adjusts this
  * value based on the current clock speed divisor.
  */
 u_long

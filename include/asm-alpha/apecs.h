@@ -42,7 +42,7 @@
    we can't just use that here, because of header file looping... :-(
 
    Window 1 will be used for all DMA from the ISA bus; yes, that does
-   limit what memory an ISA floppy or soundcard or Ethernet can touch, but
+   limit what memory an ISA floppy or sound card or Ethernet can touch, but
    it's also a known limitation on other platforms as well. We use the
    same technique that is used on INTEL platforms with similar limitation:
    set MAX_DMA_ADDRESS and clear some pages' DMAable flags during mem_init().

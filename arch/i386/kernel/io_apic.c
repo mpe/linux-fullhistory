@@ -1,5 +1,5 @@
 /*
- *	Intel IO-APIC support for multi-pentium hosts.
+ *	Intel IO-APIC support for multi-Pentium hosts.
  *
  *	Copyright (C) 1997, 1998 Ingo Molnar, Hajnalka Szabo
  *
@@ -129,7 +129,7 @@ void io_apic_write (unsigned int reg, unsigned int value)
 }
 
 /*
- * Syncronize the IO-APIC and the CPU by doing
+ * Synchronize the IO-APIC and the CPU by doing
  * a dummy read from the IO-APIC
  */
 static inline void io_apic_sync(void)
@@ -206,7 +206,7 @@ void clear_IO_APIC_pin (unsigned int pin)
 
 
 /*
- * support for broken MP BIOSes, enables hand-redirection of PIRQ0-7 to
+ * support for broken MP BIOSs, enables hand-redirection of PIRQ0-7 to
  * specific CPU-side IRQs.
  */
 
@@ -243,7 +243,7 @@ __initfunc(void ioapic_pirq_setup(char *str, int *ints))
 }
 
 /*
- * Find the irq entry nr of a certain pin.
+ * Find the IRQ entry number of a certain pin.
  */
 __initfunc(static int find_irq_entry(int pin, int type))
 {
@@ -520,7 +520,7 @@ int IO_APIC_irq_trigger (int irq)
 			return (irq_trigger(idx));
 	}
 	/*
-	 * nonexistant IRQs are edge default
+	 * nonexistent IRQs are edge default
 	 */
 	return 0;
 }
@@ -634,16 +634,16 @@ void print_IO_APIC (void)
 	struct IO_APIC_reg_01 reg_01;
 	struct IO_APIC_reg_02 reg_02;
 
- 	printk("nr of MP irq sources: %d.\n", mp_irq_entries);
- 	printk("nr of IO-APIC registers: %d.\n", nr_ioapic_registers);
+ 	printk("number of MP IRQ sources: %d.\n", mp_irq_entries);
+ 	printk("number of IO-APIC registers: %d.\n", nr_ioapic_registers);
 
 	*(int *)&reg_00 = io_apic_read(0);
 	*(int *)&reg_01 = io_apic_read(1);
 	*(int *)&reg_02 = io_apic_read(2);
 
 	/*
-	 * We are a bit conservative about what we expect, we have to
-	 * know about every HW change ASAP ...
+	 * We are a bit conservative about what we expect.  We have to
+	 * know about every hardware change ASAP.
 	 */
 	printk("testing the IO APIC.......................\n");
 
@@ -723,7 +723,7 @@ __initfunc(static void init_sym_mode (void))
 		for (i=0; i<MAX_PIRQS; i++)
 			pirq_entries[i]=-1;
 
-	printk("enabling Symmetric IO mode ... ");
+	printk("enabling symmetric IO mode... ");
 
 	outb(0x70, 0x22);
 	outb(0x01, 0x23);
@@ -731,7 +731,7 @@ __initfunc(static void init_sym_mode (void))
 	printk("...done.\n");
 
 	/*
-	 * The number of IO-APIC irq-registers (== #pins):
+	 * The number of IO-APIC IRQ registers (== #pins):
 	 */
 	{
 		struct IO_APIC_reg_01 reg_01;
@@ -752,7 +752,7 @@ __initfunc(static void init_sym_mode (void))
  */
 void init_pic_mode (void)
 {
-	printk("disabling Symmetric IO mode ... ");
+	printk("disabling symmetric IO mode... ");
 		outb_p (0x70, 0x22);
 		outb_p (0x00, 0x23);
 	printk("...done.\n");
@@ -793,7 +793,7 @@ __initfunc(static int ioapic_whitelisted (void))
 {
 /*
  * Right now, whitelist everything to see whether the new parsing
- * routines really do work for everybody..
+ * routines really do work for everybody.
  */
 #if 1
 	return 1;
@@ -829,7 +829,7 @@ __initfunc(static void setup_ioapic_id (void))
 	 * Set the ID
 	 */
 	*(int *)&reg_00 = io_apic_read(0);
-	printk("... changing IO-APIC physical APIC ID to 2 ...\n");
+	printk("...changing IO-APIC physical APIC ID to 2...\n");
 	reg_00.ID = 0x2;
 	io_apic_write(0, *(int *)&reg_00);
 
@@ -938,7 +938,7 @@ static void disable_edge_ioapic_irq(unsigned int irq)
 }
 
 /*
- * Level triggered interrupts can just be masked
+ * Level triggered interrupts can just be masked.
  */
 static void enable_level_ioapic_irq(unsigned int irq)
 {
@@ -973,7 +973,7 @@ static void do_edge_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 	spin_lock(&irq_controller_lock);
 
 	/*
-	 * Edge triggered IRQs can be acked immediately
+	 * Edge triggered IRQs can be acknowledged immediately
 	 * and do not need to be masked.
 	 */
 	ack_APIC_irq();
@@ -981,8 +981,8 @@ static void do_edge_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 	desc->events = 1;
 
 	/*
-	 * If the irq is disabled for whatever reason, we cannot
-	 * use the action we have..
+	 * If the IRQ is disabled for whatever reason, we cannot
+	 * use the action we have.
 	 */
 	action = NULL;
 	if (!(desc->status & (IRQ_DISABLED | IRQ_INPROGRESS))) {
@@ -1002,7 +1002,7 @@ static void do_edge_ioapic_IRQ(unsigned int irq, int cpu, struct pt_regs * regs)
 
 	/*
 	 * Edge triggered interrupts need to remember
-	 * pending events..
+	 * pending events.
 	 */
 	for (;;) {
 		int pending;
@@ -1042,8 +1042,8 @@ static void do_level_ioapic_IRQ (unsigned int irq, int cpu,
 	desc->ipi = 0;
 
 	/*
-	 * If the irq is disabled for whatever reason, we must
-	 * not enter the irq action.
+	 * If the IRQ is disabled for whatever reason, we must
+	 * not enter the IRQ action.
 	 */
 	action = NULL;
 	if (!(desc->status & (IRQ_DISABLED | IRQ_INPROGRESS))) {
@@ -1073,7 +1073,7 @@ static void do_level_ioapic_IRQ (unsigned int irq, int cpu,
 
 /*
  * Level and edge triggered IO-APIC interrupts need different handling,
- * so we use two separate irq descriptors. edge triggered IRQs can be
+ * so we use two separate IRQ descriptors. Edge triggered IRQs can be
  * handled with the level-triggered descriptor, but that one has slightly
  * more overhead. Level-triggered interrupts cannot be handled with the
  * edge-triggered handler, without risking IRQ storms and other ugly
@@ -1103,10 +1103,10 @@ void init_IO_APIC_traps(void)
 	 * As the interrupt level is determined by taking the
 	 * vector number and shifting that right by 4, we
 	 * want to spread these out a bit so that they don't
-	 * all fall in the same interrupt level
+	 * all fall in the same interrupt level.
 	 *
-	 * also, we've got to be careful not to trash gate
-	 * 0x80, because int 0x80 is hm, kindof importantish ;)
+	 * Also, we've got to be careful not to trash gate
+	 * 0x80, because int 0x80 is hm, kind of importantish. ;)
 	 */
 	for (i = 0; i < NR_IRQS ; i++) {
 		if ((IO_APIC_VECTOR(i) <= 0xfe)  /* HACK */ &&
@@ -1128,9 +1128,9 @@ void init_IO_APIC_traps(void)
 
 /*
  * This code may look a bit paranoid, but it's supposed to cooperate with
- * a wide range of boards and BIOS bugs ... fortunately only the timer IRQ
- * is so screwy. Thanks to Brian Perkins for testing/hacking this beast
- * fanatically on his truly bugged board.
+ * a wide range of boards and BIOS bugs.  Fortunately only the timer IRQ
+ * is so screwy.  Thanks to Brian Perkins for testing/hacking this beast
+ * fanatically on his truly buggy board.
  */
 __initfunc(static void check_timer (void))
 {
@@ -1142,7 +1142,7 @@ __initfunc(static void check_timer (void))
 	if (!timer_irq_works ()) {
 		if (pin1 != -1)
 			printk("..MP-BIOS bug: 8254 timer not connected to IO-APIC\n");
-		printk("..trying to set up timer as ExtINT ... ");
+		printk("...trying to set up timer as ExtINT... ");
 
 		if (pin2 != -1) {
 			printk(".. (found pin %d) ...", pin2);
@@ -1152,7 +1152,7 @@ __initfunc(static void check_timer (void))
 
 		if (!timer_irq_works ()) {
 			printk(" failed.\n");
-			printk("..trying to set up timer as BP irq ...");
+			printk("...trying to set up timer as BP IRQ...");
 			/*
 			 * Just in case ...
 			 */
@@ -1165,7 +1165,7 @@ __initfunc(static void check_timer (void))
 
 			if (!timer_irq_works ()) {
 				printk(" failed.\n");
-				panic("IO-APIC + timer doesnt work!");
+				panic("IO-APIC + timer doesn't work!");
 			}
 		}
 		printk(" works.\n");
@@ -1201,7 +1201,7 @@ __initfunc(void setup_IO_APIC (void))
 	}
 
 	/*
-	 * If there are no explicit mp irq entries: it's either one of the
+	 * If there are no explicit MP IRQ entries, it's either one of the
 	 * default configuration types or we are broken. In both cases it's
 	 * fine to set up most of the low 16 IO-APIC pins to ISA defaults.
 	 */
@@ -1213,7 +1213,7 @@ __initfunc(void setup_IO_APIC (void))
 	init_IO_APIC_traps();
 
 	/*
-	 * Set up the IO-APIC irq routing table by parsing the MP-BIOS
+	 * Set up the IO-APIC IRQ routing table by parsing the MP-BIOS
 	 * mptable:
 	 */
 	setup_IO_APIC_irqs ();

@@ -169,7 +169,7 @@ static inline void move_first_runqueue(struct task_struct * p)
  * The run-queue lock locks the parts that actually access
  * and change the run-queues, and have to be interrupt-safe.
  */
-spinlock_t scheduler_lock = SPIN_LOCK_UNLOCKED;	/* should be aquired first */
+spinlock_t scheduler_lock = SPIN_LOCK_UNLOCKED;	/* should be acquired first */
 spinlock_t runqueue_lock = SPIN_LOCK_UNLOCKED;  /* second */
 rwlock_t tasklist_lock = RW_LOCK_UNLOCKED;	/* third */
 
@@ -1249,9 +1249,9 @@ asmlinkage int sys_nice(int increment)
 		newprio = 40;
 	/*
 	 * do a "normalization" of the priority (traditionally
-	 * unix nice values are -20..20, linux doesn't really
+	 * Unix nice values are -20 to 20; Linux doesn't really
 	 * use that kind of thing, but uses the length of the
-	 * timeslice instead (default 150 msec). The rounding is
+	 * timeslice instead (default 150 ms). The rounding is
 	 * why we want to avoid negative values.
 	 */
 	newprio = (newprio * DEF_PRIORITY + 10) / 20;

@@ -70,7 +70,7 @@
  *
  *	Calls to printk() are not 100% safe (the function is not threaded).  However,
  *	printk() is only used under an error condition, and the risk is v. small (not
- *	sure if the console write functions 'enjoy' executing multiple contextes in
+ *	sure if the console write functions 'enjoy' executing multiple contexts in
  *	parallel.  I guess they don't...).
  *	Note, for most calls to printk() any held cache-lock is dropped.  This is not
  *	always done for text size reasons - having *_unlock() everywhere is bloat.
@@ -92,11 +92,11 @@
  * index to hold the bufctls.  This allows the bufctl structure to
  * be small (one word), but limits the number of objects a slab (not
  * a cache) can contain when off-slab bufctls are used.  The limit is the
- * size of the largest general-cache that does not use off-slab bufctls,
+ * size of the largest general cache that does not use off-slab bufctls,
  * divided by the size of a bufctl.  For 32bit archs, is this 256/4 = 64.
  * This is not serious, as it is only for large objects, when it is unwise
  * to have too many per slab.
- * Note: This limit can be raised by introducing a general-cache whose size
+ * Note: This limit can be raised by introducing a general cache whose size
  * is less than 512 (PAGE_SIZE<<3), but greater than 256.
  */
 
@@ -124,12 +124,12 @@
  *
  * SLAB_DEBUG_SUPPORT	- 1 for kmem_cache_create() to honour; SLAB_DEBUG_FREE,
  *			  SLAB_DEBUG_INITIAL, SLAB_RED_ZONE & SLAB_POISON.
- *			  0 for faster, smaller, code (espically in the critical paths).
+ *			  0 for faster, smaller, code (especially in the critical paths).
  *
  * SLAB_STATS		- 1 to collect stats for /proc/slabinfo.
- *			  0 for faster, smaller, code (espically in the critical paths).
+ *			  0 for faster, smaller, code (especially in the critical paths).
  *
- * SLAB_SELFTEST	- 1 to perform a few tests, mainly for developement.
+ * SLAB_SELFTEST	- 1 to perform a few tests, mainly for development.
  */
 #define		SLAB_MGMT_CHECKS	1
 #define		SLAB_DEBUG_SUPPORT	0
@@ -180,7 +180,7 @@ typedef struct kmem_slab_s {
 				 s_dma:1;
 } kmem_slab_t;
 
-/* When the slab mgmt is on-slab, this gives the size to use. */
+/* When the slab management is on-slab, this gives the size to use. */
 #define	slab_align_size		(L1_CACHE_ALIGN(sizeof(kmem_slab_t)))
 
 /* Test for end of slab chain. */
@@ -188,7 +188,7 @@ typedef struct kmem_slab_s {
 
 /* s_magic */
 #define	SLAB_MAGIC_ALLOC	0xA5C32F2BUL	/* slab is alive */
-#define	SLAB_MAGIC_DESTROYED	0xB2F23C5AUL	/* slab has been destoryed */
+#define	SLAB_MAGIC_DESTROYED	0xB2F23C5AUL	/* slab has been destroyed */
 
 /* Bufctl's are used for linking objs within a slab, identifying what slab an obj
  * is in, and the address of the associated obj (for sanity checking with off-slab
@@ -260,9 +260,9 @@ struct kmem_cache_s {
 };
 
 /* internal c_flags */
-#define	SLAB_CFLGS_OFF_SLAB	0x010000UL	/* slab mgmt in own cache */
+#define	SLAB_CFLGS_OFF_SLAB	0x010000UL	/* slab management in own cache */
 #define	SLAB_CFLGS_BUFCTL	0x020000UL	/* bufctls in own cache */
-#define	SLAB_CFLGS_GENERAL	0x080000UL	/* a general-cache */
+#define	SLAB_CFLGS_GENERAL	0x080000UL	/* a general cache */
 
 /* c_dflags (dynamic flags).  Need to hold the spinlock to access this member */
 #define	SLAB_CFLGS_GROWN	0x000002UL	/* don't reap a recently grown */
@@ -307,7 +307,7 @@ static void kmem_self_test(void);
 /* maximum num of pages for a slab (prevents large requests to the VM layer) */
 #define	SLAB_MAX_GFP_ORDER	5	/* 32 pages */
 
-/* the 'prefered' minimum num of objs per slab - maybe less for large objs */
+/* the 'preferred' minimum num of objs per slab - maybe less for large objs */
 #define	SLAB_MIN_OBJS_PER_SLAB	4
 
 /* If the num of objs per slab is <= SLAB_MIN_OBJS_PER_SLAB,
@@ -325,7 +325,7 @@ static void kmem_self_test(void);
 #define	SLAB_SET_PAGE_SLAB(pg, x)	((pg)->prev = (struct page *)(x))
 #define	SLAB_GET_PAGE_SLAB(pg)		((kmem_slab_t *)(pg)->prev)
 
-/* Size description struct for general-caches. */
+/* Size description struct for general caches. */
 typedef struct cache_sizes {
 	size_t		 cs_size;
 	kmem_cache_t	*cs_cachep;
@@ -350,7 +350,7 @@ static cache_sizes_t cache_sizes[] = {
 	{0,		NULL}
 };
 
-/* Names for the general-caches.  Not placed into the sizes struct for
+/* Names for the general caches.  Not placed into the sizes struct for
  * a good reason; the string ptr is not needed while searching in kmalloc(),
  * and would 'get-in-the-way' in the h/w cache.
  */
@@ -396,7 +396,7 @@ static struct semaphore	cache_chain_sem;
 /* Place maintainer for reaping. */
 static	kmem_cache_t	*clock_searchp = &cache_cache;
 
-/* Internal slab mgmt cache, for when slab mgmt is off-slab. */
+/* Internal slab management cache, for when slab management is off-slab. */
 static kmem_cache_t	*cache_slabp = NULL;
 
 /* Max number of objs-per-slab for caches which use bufctl's.
@@ -463,9 +463,9 @@ __initfunc(void kmem_cache_sizes_init(void))
 		char **names = cache_sizes_name;
 		cache_sizes_t *sizes = cache_sizes;
 		do {
-			/* For performance, all the general-caches are L1 aligned.
+			/* For performance, all the general caches are L1 aligned.
 			 * This should be particularly beneficial on SMP boxes, as it
-			 * elimantes "false sharing".
+			 * eliminates "false sharing".
 			 * Note for systems short on memory removing the alignment will
 			 * allow tighter packing of the smaller caches. */
 			if (!(sizes->cs_cachep =
@@ -562,7 +562,7 @@ kmem_check_poison_obj(kmem_cache_t *cachep, void *addr)
 }
 #endif	/* SLAB_DEBUG_SUPPORT */
 
-/* Three slab chain funcs - all called with ints disabled and the appropiate
+/* Three slab chain funcs - all called with ints disabled and the appropriate
  * cache-lock held.
  */
 static inline void
@@ -630,7 +630,7 @@ kmem_slab_destroy(kmem_cache_t *cachep, kmem_slab_t *slabp)
 #if	SLAB_DEBUG_SUPPORT
 			else if (cachep->c_flags & SLAB_POISON) {
 				if (kmem_check_poison_obj(cachep, objp))
-					printk(KERN_ERR "kmem_slab_destory: "
+					printk(KERN_ERR "kmem_slab_destroy: "
 					       "Bad poison - %s\n", cachep->c_name);
 			}
 			if (cachep->c_flags & SLAB_RED_ZONE)
@@ -714,7 +714,7 @@ kmem_cache_create(const char *name, size_t size, size_t offset,
 	}
 
 	if (offset < 0 || offset > size) {
-		printk("%sOffset weired %d - %s\n", func_nm, (int) offset, name);
+		printk("%sOffset weird %d - %s\n", func_nm, (int) offset, name);
 		offset = 0;
 	}
 
@@ -781,11 +781,11 @@ kmem_cache_create(const char *name, size_t size, size_t offset,
 	if (flags & SLAB_HWCACHE_ALIGN)
 		align = L1_CACHE_BYTES;
 
-	/* Determine if the slab mgmt and/or bufclts are 'on' or 'off' slab. */
+	/* Determine if the slab management and/or bufclts are 'on' or 'off' slab. */
 	extra = sizeof(kmem_bufctl_t);
 	if (size < (PAGE_SIZE>>3)) {
 		/* Size is small(ish).  Use packing where bufctl size per
-		 * obj is low, and slab mngmnt is on-slab.
+		 * obj is low, and slab management is on-slab.
 		 */
 #if	0
 		if ((flags & SLAB_HIGH_PACK)) {
@@ -802,7 +802,7 @@ kmem_cache_create(const char *name, size_t size, size_t offset,
 		}
 #endif
 	} else {
-		/* Size is large, assume best to place the slab mngmnt obj
+		/* Size is large, assume best to place the slab management obj
 		 * off-slab (should allow better packing of objs).
 		 */
 		flags |= SLAB_CFLGS_OFF_SLAB;
@@ -811,7 +811,7 @@ kmem_cache_create(const char *name, size_t size, size_t offset,
 			/* To avoid waste the bufctls are off-slab... */
 			flags |= SLAB_CFLGS_BUFCTL;
 			extra = 0;
-		} /* else slab mngmnt is off-slab, but freelist ptrs are on. */
+		} /* else slab management is off-slab, but freelist pointers are on. */
 	}
 	size += extra;
 
@@ -1018,8 +1018,8 @@ kmem_cache_shrink(kmem_cache_t *cachep)
 	printk(KERN_ERR "kmem_shrink: Invalid cache addr %p\n", cachep);
 	return 2;
 found:
-	/* Relase the sempahore before getting the cache-lock.  This could
-	 * mean multiple engines are shrinking the cache, but so what...
+	/* Release the semaphore before getting the cache-lock.  This could
+	 * mean multiple engines are shrinking the cache, but so what.
 	 */
 	up(&cache_chain_sem);
 	spin_lock_irq(&cachep->c_spinlock);
@@ -1041,17 +1041,17 @@ found:
 	return ret;
 }
 
-/* Get the mem for a slab mgmt obj. */
+/* Get the memory for a slab management obj. */
 static inline kmem_slab_t *
 kmem_cache_slabmgmt(kmem_cache_t *cachep, void *objp, int local_flags)
 {
 	kmem_slab_t	*slabp;
 
 	if (SLAB_OFF_SLAB(cachep->c_flags)) {
-		/* Slab mgmt obj is off-slab. */
+		/* Slab management obj is off-slab. */
 		slabp = kmem_cache_alloc(cache_slabp, local_flags);
 	} else {
-		/* Slab mgmnt at end of slab mem, placed so that
+		/* Slab management at end of slab memory, placed so that
 		 * the position is 'coloured'.
 		 */
 		void *end;
@@ -1199,7 +1199,7 @@ re_try:
 	if (!(objp = kmem_getpages(cachep, flags, &dma)))
 		goto failed;
 
-	/* Get slab mgmt. */
+	/* Get slab management. */
 	if (!(slabp = kmem_cache_slabmgmt(cachep, objp+offset, local_flags)))
 		goto opps1;
 	if (dma)
@@ -1253,7 +1253,7 @@ failed:
 	if (local_flags != SLAB_ATOMIC && cachep->c_gfporder) {
 		/* For large order (>0) slabs, we try again.
 		 * Needed because the gfp() functions are not good at giving
-		 * out contigious pages unless pushed (but do not push too hard).
+		 * out contiguous pages unless pushed (but do not push too hard).
 		 */
 		if (cachep->c_failures++ < 4 && cachep->c_freep == kmem_slab_end(cachep))
 			goto re_try;
@@ -1632,19 +1632,19 @@ kfree(const void *objp)
 		goto bad_ptr;
 
 	/* Assume we own the page structure - hence no locking.
-	 * If someone is misbehaving (eg. someone calling us with a bad
+	 * If someone is misbehaving (for example, calling us with a bad
 	 * address), then access to the page structure can race with the
-	 * kmem_slab_destory() code.  Need to add a spin_lock to each page
+	 * kmem_slab_destroy() code.  Need to add a spin_lock to each page
 	 * structure, which would be useful in threading the gfp() functions....
 	 */
 	page = &mem_map[nr];
 	if (PageSlab(page)) {
 		kmem_cache_t	*cachep;
 
-		/* Here, we (again) assume the obj address is good.
+		/* Here, we again assume the obj address is good.
 		 * If it isn't, and happens to map onto another
-		 * general-cache page which has no active objs, then
-		 * we race....
+		 * general cache page which has no active objs, then
+		 * we race.
 		 */
 		cachep = SLAB_GET_PAGE_CACHE(page);
 		if (cachep && (cachep->c_flags & SLAB_CFLGS_GENERAL)) {
@@ -1698,9 +1698,9 @@ kmem_find_general_cachep(size_t size)
 {
 	cache_sizes_t	*csizep = cache_sizes;
 
-	/* This function could be moved to the header-file, and
+	/* This function could be moved to the header file, and
 	 * made inline so consumers can quickly determine what
-	 * cache-ptr they require.
+	 * cache pointer they require.
 	 */
 	for (; csizep->cs_size; csizep++) {
 		if (size > csizep->cs_size)
@@ -1729,7 +1729,7 @@ kmem_cache_reap(int gfp_mask)
 		return;
 	}
 
-	/* We really need a test semphore op so we can avoid sleeping when
+	/* We really need a test semaphore op so we can avoid sleeping when
 	 * !wait is true.
 	 */
 	down(&cache_chain_sem);
@@ -1762,8 +1762,8 @@ kmem_cache_reap(int gfp_mask)
 		dma_flag = 0;
 		full_free = 0;
 
-		/* Count num of fully free slabs.  Hopefully there are not many,
-		 * we are holding the cache lock....
+		/* Count the fully free slabs.  There should not be not many,
+		 * since we are holding the cache lock.
 		 */
 		slabp = searchp->c_lastp;
 		while (!slabp->s_inuse && slabp != kmem_slab_end(searchp)) {
@@ -1803,7 +1803,7 @@ next:
 	up(&cache_chain_sem);
 
 	if (!best_cachep) {
-		/* couldn't find anthying to reap */
+		/* couldn't find anything to reap */
 		return;
 	}
 

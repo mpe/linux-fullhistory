@@ -84,7 +84,7 @@ initrd adds the following new options:
     the intermediate step of going via initrd adds a little speed
     advantage and it allows the use of a compressed file system.
     Also, together with LOADLIN you may load the RAM disk directly from
-    CDrom or disk, hence having a floppyless boot from CD,
+    CDROM or disk, hence having a floppyless boot from CD,
     e.g.: E:\loadlin E:\bzImage root=/dev/ram initrd=E:\rdimage
 
 
@@ -256,9 +256,9 @@ boot time, but the system loaded from initrd can use a user-friendly
 dialog and it can also perform some sanity checks (or even some form of
 auto-detection).
 
-Last not least, CDrom distributors may use it for better installation from CD,
-either using a LILO boot floppy and bootstrapping a bigger ramdisk via
-initrd from CD, or using LOADLIN to directly load the ramdisk from CD
+Last not least, CDROM distributors may use it for better installation from CD,
+either using a LILO boot floppy and bootstrapping a bigger RAM disk via
+initrd from CD, or using LOADLIN to directly load the RAM disk from CD
 without need of floppies.
 
 Since initrd is a fairly generic mechanism, it is likely that additional

@@ -251,7 +251,7 @@ struct device
 
 	/* Protocol specific pointers */
 	
-	void 			*atalk_ptr;	/* Appletalk link 	*/
+	void 			*atalk_ptr;	/* AppleTalk link 	*/
 	void			*ip_ptr;	/* IPv4 specific data	*/  
 	void                    *dn_ptr;        /* DECnet specific data */
 

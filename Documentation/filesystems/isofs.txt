@@ -13,17 +13,17 @@ when using discs encoded using Microsoft's Joliet extensions.
 		utf8 option.
   utf8          Encode Unicode names in UTF8 format. Default is no.
 
-Mount options that are unique to the isofs filesystem.
+Mount options unique to the isofs filesystem.
   block=512     Set the block size for the disk to 512 bytes
   block=1024    Set the block size for the disk to 1024 bytes
   block=2048    Set the block size for the disk to 2048 bytes
   check=relaxed Matches filenames with different cases
   check=strict  Matches only filenames with the exact same case
   cruft         Try to handle badly formatted CDs.
-  map=off       Do not map non-rockridge filenames to lowercase
-  map=normal    Map non-rockridge filenames to lowecase
+  map=off       Do not map non-Rock Ridge filenames to lower case
+  map=normal    Map non-Rock Ridge filenames to lower case
   map=acorn     As map=normal but also apply Acorn extensions if present
   mode=xxx      Sets the permissions on files to xxx
   nojoliet      Ignore Joliet extensions if they are present.
-  norock        Ignore rockridge extensions if they are present.
+  norock        Ignore Rock Ridge extensions if they are present.
   unhide        Show hidden files.

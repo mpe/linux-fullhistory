@@ -1,4 +1,3 @@
-
 NOTE: 
 This is one of the technical documents describing a component of
 Coda -- this document describes the client kernel-Venus interface.
@@ -9,7 +8,7 @@ For user level software needed to run Coda:
   ftp://ftp.coda.cs.cmu.edu
 
 To run Coda you need to get a user level cache manager for the client,
-named Venus, as well as tools to manipulate ACL's, to log in etc.  The
+named Venus, as well as tools to manipulate ACLs, to log in, etc.  The
 client needs to have the Coda filesystem selected in the kernel
 configuration.
 
@@ -27,7 +26,7 @@ kernel support.
   v1.0, Nov 9, 1997
 
   This document describes the communication between Venus and kernel
-  level file system code needed for the operation of the Coda filesys-
+  level filesystem code needed for the operation of the Coda file sys-
   tem.  This document version is meant to describe the current interface
   (version 1.0) as well as improvements we envisage.
   ______________________________________________________________________
@@ -177,7 +176,7 @@ kernel support.
   The interface between the kernel and Venus is very similar to the BSD
   VFS interface.  Similar functionality is provided, and the format of
   the parameters and returned data is very similar to the BSD VFS.  This
-  leads to an almost natural environment for implementing a kernel level
+  leads to an almost natural environment for implementing a kernel-level
   filesystem driver for Coda in a BSD system.  However, other operating
   systems such as Linux and Windows 95 and NT have virtual filesystem
   with different interfaces.
@@ -359,7 +358,7 @@ kernel support.
   33..11..  IImmpplleemmeennttaattiioonn ddeettaaiillss
 
   The Unix implementation of this mechanism has been through the
-  implemenation of a character device associated with Coda.  Venus
+  implementation of a character device associated with Coda.  Venus
   retrieves messages by doing a read on the device, replies are sent
   with a write and notification is through the select system call on the
   file descriptor for the device.  The process P is kept waiting on an
@@ -369,7 +368,7 @@ kernel support.
   call is used.  The DeviceIoControl call is designed to copy buffers
   from user memory to kernel memory with OPCODES. The sendmsg_to_kernel
   is issued as a synchronous call, while the getmsg_from_kernel call is
-  asynchrounous.  Windows EventObjects are used for notification of
+  asynchronous.  Windows EventObjects are used for notification of
   message arrival.  The process P is kept waiting on a KernelEvent
   object in NT and a semaphore in Windows 95.
 
@@ -429,7 +428,7 @@ kernel support.
   for the Windows environment when these mature.
 
   struct CodaCred {
-      vuid_t cr_uid, cr_euid, cr_suid, cr_fsuid; /* Real, efftve, set, fs uid*/
+      vuid_t cr_uid, cr_euid, cr_suid, cr_fsuid; /* Real, effective, set, fs uid*/
       vgid_t cr_gid, cr_egid, cr_sgid, cr_fsgid; /* same for groups */
       vgid_t cr_groups[NGROUPS];        /* Group membership for caller */
   };
@@ -514,7 +513,7 @@ kernel support.
 
   Coda specific requests can be made by application through the pioctl
   interface. The pioctl is implemented as an ordinary ioctl on a
-  ficticious file /coda/.CONTROL.  The pioctl call opens this file, gets
+  fictitious file /coda/.CONTROL.  The pioctl call opens this file, gets
   a file handle and makes the ioctl call. Finally it closes the file.
 
   The kernel involvement in this is limited to providing the facility to
@@ -721,7 +720,7 @@ kernel support.
   access will be granted.  It is important to remember that Coda uses
   ACLs to enforce protection and that ultimately the servers, not the
   clients enforce the security of the system.  The result of this call
-  will depend on wether a _t_o_k_e_n is held by the user.
+  will depend on whether a _t_o_k_e_n is held by the user.
 
   EErrrroorrss The object may not exist, or the ACL describing the protection
   may not be accessible.
@@ -765,7 +764,7 @@ kernel support.
   are set by converting the CodaCred to a uid using a macro CRTOUID
   (this macro is platform dependent).  Upon success the VFid and
   attributes of the file are returned.  The Coda FS Driver will normally
-  instantiate a vnode, inode or filehandle at kernel level for the new
+  instantiate a vnode, inode or file handle at kernel level for the new
   object.
 
 
@@ -780,7 +779,7 @@ kernel support.
   to return a file descriptor. The trunctate and exclusive options,
   together with the mode, could simply be part of the mode as it is
   under Unix.  There should be no flags argument; this is used in open
-  (2) to return a filedescriptor for READ or WRITE mode.
+  (2) to return a file descriptor for READ or WRITE mode.
 
   The attributes of the directory should be returned too, since the size
   and mtime changed.
@@ -1221,7 +1220,7 @@ kernel support.
 
   DDeessccrriippttiioonn Ask Venus to update RVM attributes of object VFid. This
   should be called as part of kernel level fsync type calls.  The
-  result indicates if the synching was successful.
+  result indicates if the syncing was successful.
 
   EErrrroorrss
 

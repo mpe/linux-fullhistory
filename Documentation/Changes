@@ -71,7 +71,7 @@ General Information
    <CTRL><ALT><DEL> now performs a cold reboot instead of a warm reboot
 for increased hardware compatibility.  If you want a warm reboot and
 know it works on your hardware, add a "reboot=warm" command line option
-in Lilo.  A small number of machines need "reboot=bios" to reboot via
+in LILO.  A small number of machines need "reboot=bios" to reboot via
 the BIOS.
 
    Also, please remember that cua* devices are now obsolete.  Switch to

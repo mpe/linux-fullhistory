@@ -21,7 +21,7 @@ struct msdos_inode_info {
 
 		I have not put it conditional. With the advent of loadable
 		file system drivers, it would be very easy to compile
-		a MsDOS FS driver unaware of UMSDOS and then later to
+		a MS-DOS FS driver unaware of UMSDOS and then later to
 		load a (then incompatible) UMSDOS FS driver.
 	*/
 	struct pipe_inode_info reserved;

@@ -334,7 +334,7 @@ romfs_lookup(struct inode *dir, struct dentry *dentry)
 	maxoff = dir->i_sb->u.romfs_sb.s_maxsize;
 	offset = ntohl(ri.spec) & ROMFH_MASK;
 
-	/* ok, now find the file, whose name is in "dentry", in the
+	/* OK, now find the file whose name is in "dentry" in the
 	 * directory specified by "dir".  */
 
 	name = dentry->d_name.name;

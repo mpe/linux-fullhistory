@@ -71,7 +71,7 @@ typedef struct user_i387_struct elf_fpregset_t;
 	pr_reg[16] = regs->xss;
 
 /* This yields a mask that user programs can use to figure out what
-   instruction set this cpu supports.  This could be done in userspace,
+   instruction set this CPU supports.  This could be done in user space,
    but it's not easy, and we've already done it here.  */
 
 #define ELF_HWCAP	(boot_cpu_data.x86_capability)

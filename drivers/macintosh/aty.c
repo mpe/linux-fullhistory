@@ -11,16 +11,16 @@
  * as published by the Free Software Foundation; either version
  * 2 of the License, or (at your option) any later version.
  */
-#include <linux/config.h> /* for CONFIG_CHIP_ID and CONFIG_STAT0 */
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/string.h>
-#include <linux/vc_ioctl.h>
 #include <linux/pci.h>
 #include <linux/nvram.h>
 #include <linux/selection.h>
 #include <linux/vt_kern.h>
+#include <asm/vc_ioctl.h>
 #include <asm/prom.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
@@ -28,6 +28,9 @@
 #include <asm/init.h>
 #include "pmac-cons.h"
 #include "aty.h"
+#ifdef CONFIG_ABSCON_COMPAT
+#include <linux/console_compat.h>
+#endif
 
 struct aty_cmap_regs {
 	unsigned char windex;
@@ -708,7 +711,8 @@ aty_init()
 	pmac_init_palette();	/* Initialize colormap */
 
 	/* clear screen */
-	fb_start = frame_buffer + (((n_scanlines % 16) * line_pitch) >> 1);
+	fb_start = frame_buffer + ((chip_type == MACH64_GX_ID) ?
+				   init->offset[color_mode] : 0);
 	memsetw((unsigned short *) fb_start, 0, total_vram);
 
 	display_info.height = n_scanlines;

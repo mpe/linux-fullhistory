@@ -348,11 +348,11 @@ struct bplus_header
   } u;
 };
 
-/* fnode: root of allocation b+ tree, and EA's */
+/* fnode: root of allocation b+ tree, and EAs */
 
 /* Every file and every directory has one fnode, pointed to by the directory
-   entry and pointing to the file's sectors or directory's root dnode.  EA's
-   are also stored here, and there are said to be ACL's somewhere here too. */
+   entry and pointing to the file's sectors or directory's root dnode.  EAs
+   are also stored here, and there are said to be ACLs somewhere here too. */
 
 #define FNODE_MAGIC 0xf7e40aae
 
@@ -392,12 +392,12 @@ struct fnode
   } u;
 
   unsigned file_size;			/* file length, bytes */
-  unsigned n_needea;			/* number of EA's with NEEDEA set */
+  unsigned n_needea;			/* number of EAs with NEEDEA set */
   unsigned zero4[4];
   unsigned ea_offs;			/* offset from start of fnode
 					   to first fnode-resident ea */
   unsigned zero5[2];
-  unsigned char ea[316];		/* zero or more EA's, packed together
+  unsigned char ea[316];		/* zero or more EAs, packed together
 					   with no alignment padding.
 					   (Do not use this name, get here
 					   via fnode + ea_offs. I think.) */
@@ -454,7 +454,7 @@ struct extended_attribute
   unsigned char namelen;		/* length of name, bytes */
   unsigned short valuelen;		/* length of value, bytes */
   /*
-    unsigned char name[namelen];	ascii attrib name
+    unsigned char name[namelen];	ASCII attrib name
     unsigned char nul;			terminating '\0', not counted
     unsigned char value[valuelen];	value, arbitrary
       if this.indirect, valuelen is 8 and the value is

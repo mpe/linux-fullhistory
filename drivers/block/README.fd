@@ -7,8 +7,8 @@ FAQ list:
 at http://poboxes.com/Alain.Knaff/floppy/FAQ.html
 
 
-Lilo config options (Thinkpad users, read this)
-===============================================
+LILO configuration options (Thinkpad users, read this)
+======================================================
 
  The floppy driver is configured using the 'floppy=' option in
 lilo. This option can be typed at the boot prompt, or entered in the
@@ -104,7 +104,7 @@ isn't, use the old method using environment variables.
 
 floppy=nofifo
 	Disables the FIFO entirely. This is needed if you get "Bus
-	master arbitration error" messages from your ethernet card (or
+	master arbitration error" messages from your Ethernet card (or
 	from other devices) while accessing the floppy.
 
 floppy=fifo

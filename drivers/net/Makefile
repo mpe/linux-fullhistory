@@ -61,6 +61,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SKTR),y)
+L_OBJS += sktr.o
+else
+  ifeq ($(CONFIG_SKTR),m)
+  M_OBJS += sktr.o
+  endif
+endif
+
 ifeq ($(CONFIG_ETHERTAP),y)
 L_OBJS += ethertap.o
 else

@@ -183,7 +183,7 @@ extern inline int cpu_logical_map(int cpu)
  
 extern void smp_callin(void);
 extern void smp_boot_cpus(void);
-extern void smp_store_cpu_info(int id);		/* Store per cpu info (like the initial udelay numbers */
+extern void smp_store_cpu_info(int id);		/* Store per CPU info (like the initial udelay numbers */
 extern void smp_message_pass(int target, int msg, unsigned long data, int wait);
 
 extern volatile unsigned long smp_proc_in_lock[NR_CPUS]; /* for computing process time */

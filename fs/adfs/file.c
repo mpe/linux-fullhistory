@@ -28,7 +28,7 @@
 #include <linux/stat.h>
 
 /*
- * We have mostly NULL's here: the current defaults are ok for
+ * We have mostly NULLs here: the current defaults are OK for
  * the adfs filesystem.
  */
 static struct file_operations adfs_file_operations = {

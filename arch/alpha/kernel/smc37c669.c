@@ -1131,7 +1131,7 @@ struct DDB smc_ddb = {
 	0,			/* is a flash update driver		*/
 	0,			/* is a block device			*/
 	0,			/* not seekable				*/
-	0,			/* is an ethernet device		*/
+	0,			/* is an Ethernet device		*/
 	0,			/* is a filesystem driver		*/
 };
 #endif

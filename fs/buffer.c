@@ -1311,7 +1311,7 @@ no_grow:
 	if (!async)
 		return NULL;
 
-	/* Uhhuh. We're _really_ low on memory. Now we just
+	/* We're _really_ low on memory. Now we just
 	 * wait for old buffer heads to become free due to
 	 * finishing IO.  Since this is an async request and
 	 * the reserve list is empty, we're sure there are 

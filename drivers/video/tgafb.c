@@ -296,7 +296,7 @@ static void do_install_cmap(int con, struct fb_info *info);
 
 static struct fb_ops tgafb_ops = {
     tgafb_open, tgafb_release, tgafb_get_fix, tgafb_get_var, tgafb_set_var,
-    tgafb_get_cmap, tgafb_set_cmap, tgafb_pan_display, NULL, tgafb_ioctl
+    tgafb_get_cmap, tgafb_set_cmap, tgafb_pan_display, tgafb_ioctl
 };
 
 
@@ -689,12 +689,13 @@ __initfunc(unsigned long tgafb_init(unsigned long mem_start))
     fb_var.xres = fb_var.xres_virtual = 640;
     fb_var.yres = fb_var.yres_virtual = 480;
     fb_fix.line_length = 80*fb_var.bits_per_pixel;
-    fb_fix.smem_start = (char *)(tga_fb_base + LCA_DENSE_MEM);
+    fb_fix.smem_start = (char *)__pa(tga_fb_base + LCA_DENSE_MEM);
     fb_fix.smem_len = fb_fix.line_length*fb_var.yres;
     fb_fix.type = FB_TYPE_PACKED_PIXELS;
     fb_fix.type_aux = 0;
-    fb_fix.mmio_start = (unsigned char *)tga_regs_base;
+    fb_fix.mmio_start = (char *)__pa(tga_regs_base);
     fb_fix.mmio_len = 0x1000;		/* Is this sufficient? */
+    fb_fix.accel = FB_ACCEL_DEC_TGA;
 
     fb_var.xoffset = fb_var.yoffset = 0;
     fb_var.grayscale = 0;
@@ -714,7 +715,7 @@ __initfunc(unsigned long tgafb_init(unsigned long mem_start))
     fb_var.nonstd = 0;
     fb_var.activate = 0;
     fb_var.height = fb_var.width = -1;
-    fb_var.accel = FB_ACCEL_TGA;
+    fb_var.accel_flags = 0;
     fb_var.pixclock = 39722;
     fb_var.left_margin = 40;
     fb_var.right_margin = 24;
@@ -729,7 +730,7 @@ __initfunc(unsigned long tgafb_init(unsigned long mem_start))
     disp.cmap.start = 0;
     disp.cmap.len = 0;
     disp.cmap.red = disp.cmap.green = disp.cmap.blue = disp.cmap.transp = NULL;
-    disp.screen_base = fb_fix.smem_start;
+    disp.screen_base = (char *)tga_fb_base + LCA_DENSE_MEM;
     disp.visual = fb_fix.visual;
     disp.type = fb_fix.type;
     disp.type_aux = fb_fix.type_aux;

@@ -5,17 +5,17 @@
  *
  * what works and what doesn't:
  *
- *  AM-Mono
+ *  AM mono
  *      probably doesn't (untested)
  *
- *  FM-Mono
- *      should work. The stereo modes are backward compatible to FM-mono,
- *      therefore FM-Mono should be allways available.
+ *  FM-mono
+ *      should work. FM stereo modes are backward-compatible to mono.
+ *      Therefore FM mono should always be available.
  *
- *  FM-Stereo (B/G, used in germany)
+ *  FM stereo (B/G, used in Germany)
  *      should work, with autodetect
  *
- *  FM-Stereo (satellite)
+ *  FM stereo (satellite)
  *      should work, no autodetect (i.e. default is mono, but you can
  *      switch to stereo -- untested)
  *
@@ -605,7 +605,7 @@ static int msp3400c_thread(void *data)
 			dprintk("msp3400: carrier2 val: %5d / %s\n", val,cd[this].name);
 		}
 
-		/* programm the msp3400 according to the results */
+		/* program the msp3400 according to the results */
 		switch (max1) {
 		case 0: /* 4.5 */
 		case 1: /* 5.5 */

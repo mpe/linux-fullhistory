@@ -6,7 +6,7 @@
  *  convert numbers according to section 7.3.3, etc.
  *
  *  isofs special functions.  This file was lifted in its entirety from
- *  the 386bsd iso9660 filesystem, by Pace Willisson <pace@blitz.com>.
+ *  the 386BSD iso9660 filesystem, by Pace Willisson <pace@blitz.com>.
  */
 
 #include <linux/time.h>
@@ -87,7 +87,7 @@ isonum_733 (char * p)
 }
 
 /* 
- * We have to convert from a MM/DD/YY format to the unix ctime format.
+ * We have to convert from a MM/DD/YY format to the Unix ctime format.
  * We have to take into account leap years and all of that good stuff.
  * Unfortunately, the kernel does not have the information on hand to
  * take into account daylight savings time, but it shouldn't matter.

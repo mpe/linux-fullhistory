@@ -1754,7 +1754,7 @@ int TLan_Reset( struct device *dev )
 	 *		areg	The AREG to set the address in (0 - 3).
 	 *		mac	A pointer to an array of chars.  Each
 	 *			element stores one byte of the address.
-	 *			IE, it isn't in ascii.
+	 *			That is, it isn't in ASCII.
 	 *
 	 *	This function transfers a MAC address to one of the
 	 *	TLAN AREGs (address registers).  The TLAN chip locks
@@ -2654,7 +2654,7 @@ void TLan_EeReceiveByte( u16 io_base, u8 *data, int stop )
 	 *
 	 *	Returns:
 	 *		No error = 0, else, the stage at which the error
-	 *		occured.
+	 *		occurred.
 	 *	Parms:
 	 *		io_base		The IO port base address for the
 	 *				TLAN device with the EEPROM to

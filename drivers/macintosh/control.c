@@ -12,8 +12,8 @@
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/string.h>
-#include <linux/vc_ioctl.h>
 #include <linux/nvram.h>
+#include <asm/vc_ioctl.h>
 #include <asm/prom.h>
 #include <asm/io.h>
 #include <asm/adb.h>
@@ -23,6 +23,7 @@
 #include <linux/selection.h>
 #include "pmac-cons.h"
 #include "control.h"
+#include <linux/console_compat.h>
 
 /*
  * Structure of the registers for the RADACAL colormap device.

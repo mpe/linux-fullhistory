@@ -1,7 +1,7 @@
 /*
  *  linux/fs/isofs/dir.c
  *
- *  (C) 1992, 1993, 1994  Eric Youngdale Modified for ISO9660 filesystem.
+ *  (C) 1992, 1993, 1994  Eric Youngdale Modified for ISO 9660 filesystem.
  *
  *  (C) 1991  Linus Torvalds - minix filesystem
  *
@@ -74,7 +74,7 @@ static int isofs_name_translate(char * old, int len, char * new)
 		if (c >= 'A' && c <= 'Z')
 			c |= 0x20;	/* lower case */
 
-		/* Drop trailing '.;1' (ISO9660:1988 7.5.1 requires period) */
+		/* Drop trailing '.;1' (ISO 9660:1988 7.5.1 requires period) */
 		if (c == '.' && i == len - 3 && old[i + 1] == ';' && old[i + 2] == '1')
 			break;
 

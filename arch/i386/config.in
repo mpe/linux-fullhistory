@@ -66,6 +66,10 @@ if [ "$CONFIG_PARPORT" != "n" ]; then
   fi
 fi
 
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  bool 'Support for frame buffer devices (EXPERIMENTAL)' CONFIG_FB
+fi
+
 endmenu
 
 source drivers/pnp/Config.in
@@ -121,6 +125,10 @@ source fs/Config.in
 
 source fs/nls/Config.in
 
+define_bool CONFIG_VGA_CONSOLE y
+
+source drivers/video/Config.in
+
 source drivers/char/Config.in
 
 mainmenu_option next_comment
@@ -143,4 +151,3 @@ fi
 bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
 endmenu
 
-define_bool CONFIG_VGA_CONSOLE y

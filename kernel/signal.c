@@ -255,7 +255,7 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 		t->exit_code = 0;
 		sigdelsetmask(&t->signal, (sigmask(SIGSTOP)|sigmask(SIGTSTP)|
 					   sigmask(SIGTTOU)|sigmask(SIGTTIN)));
-		/* Inflict this corner case with recalculaions, not mainline */
+		/* Inflict this corner case with recalculations, not mainline */
 		recalc_sigpending(t);
 		break;
 
@@ -263,7 +263,7 @@ printk("SIG queue (%s:%d): %d ", t->comm, t->pid, sig);
 	case SIGTTIN: case SIGTTOU:
 		/* If we're stopping again, cancel SIGCONT */
 		sigdelset(&t->signal, SIGCONT);
-		/* Inflict this corner case with recalculaions, not mainline */
+		/* Inflict this corner case with recalculations, not mainline */
 		recalc_sigpending(t);
 		break;
 	}

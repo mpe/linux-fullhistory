@@ -28,9 +28,7 @@
 #include <linux/init.h>
 #include <linux/blk.h>
 #include <linux/ioport.h>
-#ifdef CONFIG_ABSTRACT_CONSOLE
 #include <linux/console.h>
-#endif
 
 #include <asm/mmu.h>
 #include <asm/processor.h>
@@ -256,9 +254,11 @@ prep_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 	request_region(0x80,0x10,"dma page reg");
 	request_region(0xc0,0x20,"dma2");
 
-#ifdef CONFIG_ABSTRACT_CONSOLE
 #ifdef CONFIG_VGA_CONSOLE
         conswitchp = &vga_con;
 #endif
+#ifdef CONFIG_ABSCON_COMPAT
+	/* Console wrapper */
+	conswitchp = &compat_con;
 #endif
 }

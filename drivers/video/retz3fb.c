@@ -81,6 +81,8 @@ struct retz3fb_par {
 	int hsync_len;	/* length of horizontal sync	*/
 	int vsync_len;	/* length of vertical sync	*/
 	int vmode;
+
+	int accel;
 };
 
 struct display_data {
@@ -196,7 +198,7 @@ static struct fb_videomode retz3fb_predefined[] __initdata = {
 	"640x480", {		/* 640x480, 8 bpp */
 	    640, 480, 640, 480, 0, 0, 8, 0,
 	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, FB_ACCEL_NCR77C32BLT, 38461, 28, 32, 12, 10, 96, 2,
+	    0, 0, -1, -1, FB_ACCELF_TEXT, 38461, 28, 32, 12, 10, 96, 2,
 	    FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
     },
@@ -208,7 +210,7 @@ static struct fb_videomode retz3fb_predefined[] __initdata = {
 	"800x600", {		/* 800x600, 8 bpp */
 	    800, 600, 800, 600, 0, 0, 8, 0,
 	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, FB_ACCEL_NCR77C32BLT, 27778, 64, 24, 22, 1, 120, 2,
+	    0, 0, -1, -1, FB_ACCELF_TEXT, 27778, 64, 24, 22, 1, 120, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
     },
@@ -220,21 +222,21 @@ static struct fb_videomode retz3fb_predefined[] __initdata = {
 	"1024x768i", {		/* 1024x768, 8 bpp, interlaced */
 	    1024, 768, 1024, 768, 0, 0, 8, 0,
 	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, FB_ACCEL_NCR77C32BLT, 22222, 40, 40, 32, 9, 160, 8,
+	    0, 0, -1, -1, FB_ACCELF_TEXT, 22222, 40, 40, 32, 9, 160, 8,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_INTERLACED
 	}
     }, {
 	"640x480-16", {		/* 640x480, 16 bpp */
 	    640, 480, 640, 480, 0, 0, 16, 0,
 	    {11, 5, 0}, {5, 6, 0}, {0, 5, 0}, {0, 0, 0},
-	    0, 0, -1, -1, FB_ACCEL_NCR77C32BLT, 38461/2, 28, 32, 12, 10, 96, 2,
+	    0, 0, -1, -1, 0, 38461/2, 28, 32, 12, 10, 96, 2,
 	    FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
     }, {
 	"640x480-24", {		/* 640x480, 24 bpp */
 	    640, 480, 640, 480, 0, 0, 24, 0,
 	    {8, 8, 8}, {8, 8, 8}, {8, 8, 8}, {0, 0, 0},
-	    0, 0, -1, -1, FB_ACCEL_NCR77C32BLT, 38461/3, 28, 32, 12, 10, 96, 2,
+	    0, 0, -1, -1, 0, 38461/3, 28, 32, 12, 10, 96, 2,
 	    FB_SYNC_HOR_HIGH_ACT | FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
     },
@@ -834,12 +836,11 @@ static int retz3_init(void)
 static int retz3_encode_fix(struct fb_fix_screeninfo *fix,
 			    struct retz3fb_par *par)
 {
-	short i;
-
+	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 	strcpy(fix->id, retz3fb_name);
 	fix->smem_start = (char *)z3_fbmem;
 	fix->smem_len = z3_size;
-	fix->mmio_start = (unsigned char *)z3_regs;
+	fix->mmio_start = (char *)z3_regs;
 	fix->mmio_len = 0x00c00000;
 
 	fix->type = FB_TYPE_PACKED_PIXELS;
@@ -854,10 +855,7 @@ static int retz3_encode_fix(struct fb_fix_screeninfo *fix,
 	fix->ywrapstep = 0;
 	fix->line_length = 0;
 
-	fix->accel = FB_ACCEL_NCR77C32BLT;
-
-	for (i = 0; i < arraysize(fix->reserved); i++)
-		fix->reserved[i] = 0;
+	fix->accel = FB_ACCEL_NCR_77C32BLT;
 
 	return 0;
 }
@@ -891,6 +889,11 @@ static int retz3_decode_var(struct fb_var_screeninfo *var,
 	par->hsync_len = var->hsync_len;
 	par->vsync_len = var->vsync_len;
 
+	if (var->accel_flags & FB_ACCELF_TEXT)
+	    par->accel = FB_ACCELF_TEXT;
+	else
+	    par->accel = 0;
+
 	return 0;
 }
 
@@ -903,8 +906,7 @@ static int retz3_decode_var(struct fb_var_screeninfo *var,
 static int retz3_encode_var(struct fb_var_screeninfo *var,
 			    struct retz3fb_par *par)
 {
-	short i;
-
+	memset(var, 0, sizeof(struct fb_var_screeninfo));
 	var->xres = par->xres;
 	var->yres = par->yres;
 	var->xres_virtual = par->xres_vir;
@@ -926,7 +928,7 @@ static int retz3_encode_var(struct fb_var_screeninfo *var,
 	var->height = -1;
 	var->width = -1;
 
-	var->accel = FB_ACCEL_NCR77C32BLT;
+	var->accel_flags = (par->accel && par->bpp == 8) ? FB_ACCELF_TEXT : 0;
 
 	var->pixclock = par->pixclock;
 
@@ -937,9 +939,6 @@ static int retz3_encode_var(struct fb_var_screeninfo *var,
 	var->lower_margin = par->lower_margin;
 	var->hsync_len = par->hsync_len;
 	var->vsync_len = par->vsync_len;
-
-	for (i = 0; i < arraysize(var->reserved); i++)
-		var->reserved[i] = 0;
 
 	var->vmode = par->vmode;
 	return 0;
@@ -1272,7 +1271,7 @@ static void retz3fb_set_disp(int con, struct fb_info *info)
 	if (con == -1)
 		con = 0;
 
-	display->screen_base = (unsigned char *)fix.smem_start;
+	display->screen_base = fix.smem_start;
 	display->visual = fix.visual;
 	display->type = fix.type;
 	display->type_aux = fix.type_aux;
@@ -1283,7 +1282,11 @@ static void retz3fb_set_disp(int con, struct fb_info *info)
 	switch (display->var.bits_per_pixel) {
 #ifdef CONFIG_FBCON_CFB8
 	case 8:
-		display->dispsw = &fbcon_retz3_8;
+		if (display->var.accel_flags & FB_ACCELF_TEXT) {
+		    display->dispsw = &fbcon_retz3_8;
+#warning FIXME: We should reinit the graphics engine here
+		} else
+		    display->dispsw = &fbcon_cfb8;
 		break;
 #endif
 #ifdef CONFIG_FBCON_CFB16
@@ -1305,7 +1308,7 @@ static void retz3fb_set_disp(int con, struct fb_info *info)
 static int retz3fb_set_var(struct fb_var_screeninfo *var, int con,
 			   struct fb_info *info)
 {
-	int err, oldxres, oldyres, oldvxres, oldvyres, oldbpp;
+	int err, oldxres, oldyres, oldvxres, oldvyres, oldbpp, oldaccel;
 	struct display *display;
 
 	if (con >= 0)
@@ -1326,12 +1329,14 @@ static int retz3fb_set_var(struct fb_var_screeninfo *var, int con,
 		oldvxres = display->var.xres_virtual;
 		oldvyres = display->var.yres_virtual;
 		oldbpp = display->var.bits_per_pixel;
+		oldaccel = display->var.accel_flags;
 		display->var = *var;
 
 		if (oldxres != var->xres || oldyres != var->yres ||
 		    oldvxres != var->xres_virtual ||
 		    oldvyres != var->yres_virtual ||
-		    oldbpp != var->bits_per_pixel) {
+		    oldbpp != var->bits_per_pixel ||
+		    oldaccel != var->accel_flags) {
 
 			struct fb_fix_screeninfo fix;
 			retz3fb_get_fix(&fix, con, info);
@@ -1348,7 +1353,11 @@ static int retz3fb_set_var(struct fb_var_screeninfo *var, int con,
 			switch (display->var.bits_per_pixel) {
 #ifdef CONFIG_FBCON_CFB8
 			case 8:
-				display->dispsw = &fbcon_retz3_8;
+				if (var->accel_flags & FB_ACCELF_TEXT) {
+					display->dispsw = &fbcon_retz3_8;
+#warning FIXME: We should reinit the graphics engine here
+				} else
+					display->dispsw = &fbcon_cfb8;
 				break;
 #endif
 #ifdef CONFIG_FBCON_CFB16
@@ -1448,7 +1457,7 @@ static int retz3fb_ioctl(struct inode *inode, struct file *file,
 static struct fb_ops retz3fb_ops = {
 	retz3fb_open, retz3fb_release, retz3fb_get_fix, retz3fb_get_var,
 	retz3fb_set_var, retz3fb_get_cmap, retz3fb_set_cmap,
-	retz3fb_pan_display, NULL, retz3fb_ioctl
+	retz3fb_pan_display, retz3fb_ioctl
 };
 
 

@@ -33,13 +33,13 @@ Sat Nov 22 07:53:36 1997  Theodore Ts'o  <tytso@rsts-11.mit.edu>
  		it.
 
 	* serial.c (autoconfig): Change 16750 test to hopefully eliminate
-		false results by people with strange 16550A's being
-		detected as 16750's.  Hopefully 16750's will still be
-		detected as 16750, and other wierd UART's won't get poorly
+		false results by people with strange 16550As being
+		detected as 16750s.  Hopefully 16750s will still be
+		detected as 16750, and other weird UARTs won't get poorly
 		autodetected.  If this doesn't work, I'll have to disable
-		the auto identification for the 16750....
+		the auto identification for the 16750.
 
-	* tty_io.c (tty_hangup): Now do actually do the tty hangup
+	* tty_io.c (tty_hangup): Now actually do the tty hangup
 		processing during the timer processing, and disable
 		interrupts while doing the hangup processing.  This avoids
 		several nasty race conditions which happened when the
@@ -129,7 +129,7 @@ Wed Feb 12 14:50:44 1997  Theodore Ts'o  <tytso@rsts-11.mit.edu>
 	* serial.c: Update routines to use the new 2.1 memory access
 	 	routines.
 
-Wed Dec  4 07:51:52 1996  Theodre Ts'o  <tytso@localhost.mit.edu>
+Wed Dec  4 07:51:52 1996  Theodore Ts'o  <tytso@localhost.mit.edu>
 
 	* serial.c (change_speed): Use save_flags(); cli() and
 		restore_flags() in order to ensure we don't accidentally
@@ -139,7 +139,7 @@ Wed Dec  4 07:51:52 1996  Theodre Ts'o  <tytso@localhost.mit.edu>
 		should be off this whole time, but we eventually will want
 		to reduce this window.
 
-Thu Nov 21 10:05:22 1996  Theodre Ts'o  <tytso@localhost.mit.edu>
+Thu Nov 21 10:05:22 1996  Theodore Ts'o  <tytso@localhost.mit.edu>
 
 	* tty_ioctl.c (tty_wait_until_sent): Always check the driver
  		wait_until_ready routine, even if there are no characters
@@ -174,7 +174,7 @@ Thu Nov 21 10:05:22 1996  Theodre Ts'o  <tytso@localhost.mit.edu>
  		DTR and RTS.  DTR and RTS are only be changed on the
  		transition to or from the B0 state.
 		(rs_close): Wait for the characters to drain based on
- 		info->timeout.  At low baud rates (50bps), it may take a
+ 		info->timeout.  At low baud rates (50 bps), it may take a
  		long time for the FIFO to completely drain out!
 		(rs_wait_until_sent): Fixed timeout handling.  Now
  		releases control to the scheduler, but checks frequently

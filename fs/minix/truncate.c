@@ -21,7 +21,7 @@
 
 /*
  * Truncate has the most races in the whole filesystem: coding it is
- * a pain in the a**. Especially as I don't do any locking...
+ * a pain in the a**, especially as I don't do any locking.
  *
  * The code may look a bit weird, but that's just because I've tried to
  * handle things like file-size changes in a somewhat graceful manner.

@@ -1,6 +1,6 @@
 /*
- *	DDP:	An implementation of the Appletalk DDP protocol for
- *		ethernet 'ELAP'.
+ *	DDP:	An implementation of the AppleTalk DDP protocol for
+ *		Ethernet 'ELAP'.
  *
  *		Alan Cox  <Alan.Cox@linux.org>
  *
@@ -18,17 +18,17 @@
  *		Alan Cox		:	Added firewall hooks.
  *		Alan Cox		:	Supports new ARPHRD_LOOPBACK
  *		Christer Weinigel	: 	Routing and /proc fixes.
- *		Bradford Johnson	:	Localtalk.
+ *		Bradford Johnson	:	LocalTalk.
  *		Tom Dyas		:	Module support.
  *		Alan Cox		:	Hooks for PPP (based on the
- *						localtalk hook).
+ *						LocalTalk hook).
  *		Alan Cox		:	Posix bits
  *		Alan Cox/Mike Freeman	:	Possible fix to NBP problems
  *		Bradford Johnson	:	IP-over-DDP (experimental)
  *		Jay Schulist		:	Moved IP-over-DDP to its own
  *						driver file. (ipddp.c & ipddp.h)
  *		Jay Schulist		:	Made work as module with 
- *						Appletalk drivers, cleaned it.
+ *						AppleTalk drivers, cleaned it.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -197,7 +197,7 @@ int atalk_get_info(char *buffer, char **start, off_t offset, int length, int dum
 	off_t begin=0;
 
 	/*
-	 * Output the appletalk data for the /proc virtual fs.
+	 * Output the AppleTalk data for the /proc filesystem.
 	 */
 
 	len += sprintf(buffer,"Type local_addr  remote_addr tx_queue rx_queue st uid\n");
@@ -241,7 +241,7 @@ int atalk_get_info(char *buffer, char **start, off_t offset, int length, int dum
 
 /**************************************************************************\
 *                                                                          *
-* Routing tables for the Appletalk socket layer.                           *
+* Routing tables for the AppleTalk socket layer.                           *
 *                                                                          *
 \**************************************************************************/
 
@@ -250,7 +250,7 @@ static struct atalk_iface *atalk_iface_list  = NULL;
 static struct atalk_route atrtr_default; /* For probing devices or in a routerless network */
 
 /*
- * Appletalk interface control
+ * AppleTalk interface control
  */
 
 /*
@@ -476,7 +476,7 @@ static struct atalk_iface *atalk_find_interface(int net, int node)
 
 
 /*
- * Find a route for an appletalk packet. This ought to get cached in
+ * Find a route for an AppleTalk packet. This ought to get cached in
  * the socket (later on...). We know about host routes and the fact
  * that a route must be direct to broadcast.
  */
@@ -504,7 +504,7 @@ static struct atalk_route *atrtr_find(struct at_addr *target)
 
 
 /*
- * Given an appletalk network find the device to use. This can be
+ * Given an AppleTalk network, find the device to use. This can be
  * a simple lookup.
  */
 struct device *atrtr_get_dev(struct at_addr *sa)
@@ -732,8 +732,8 @@ int atif_ioctl(int cmd, void *arg)
 			nr=(struct netrange *)&sa->sat_zero[0];
 
 			/*
-			 * Phase 1 is fine on Localtalk but we don't do
-			 * Ethertalk phase 1. Anyone wanting to add it go ahead.
+			 * Phase 1 is fine on LocalTalk but we don't do
+			 * EtherTalk phase 1. Anyone wanting to add it go ahead.
 			 */
 			if(dev->type == ARPHRD_ETHER && nr->nr_phase != 2)
 				return (-EPROTONOSUPPORT);
@@ -947,7 +947,7 @@ int atalk_rt_get_info(char *buffer, char **start, off_t offset, int length, int 
 /**************************************************************************\
 *                                                                          *
 * Handling for system calls applied via the various interfaces to an       *
-* Appletalk socket object.                                                 *
+* AppleTalk socket object.                                                 *
 *                                                                          *
 \**************************************************************************/
 
@@ -1201,7 +1201,7 @@ static int atalk_accept(struct socket *sock, struct socket *newsock, int flags)
 }
 
 /*
- * Find the name of an appletalk socket. Just copy the right
+ * Find the name of an AppleTalk socket. Just copy the right
  * fields into the sockaddr.
  */
 static int atalk_getname(struct socket *sock, struct sockaddr *uaddr,
@@ -1299,7 +1299,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 	 */
 	if(ddp->deh_sum && atalk_checksum(ddp, ddp->deh_len) != ddp->deh_sum)
 	{
-		/* Not a valid appletalk frame - dustbin time */
+		/* Not a valid AppleTalk frame - dustbin time */
 		kfree_skb(skb);
 		return (0);
 	}
@@ -1318,7 +1318,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 		atif = atalk_find_interface(ddp->deh_dnet, ddp->deh_dnode);
 
 	/* 
-	 * Not ours, so we route the packet via the correct Appletalk interface.
+	 * Not ours, so we route the packet via the correct AppleTalk interface.
 	 */
 	if(atif == NULL)
 	{
@@ -1377,7 +1377,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 		 * Send the buffer onwards
 		 *
 		 * Now we must always be careful. If it's come from 
-		 * localtalk to ethertalk it might not fit
+		 * LocalTalk to EtherTalk it might not fit
 		 *
 		 * Order matters here: If a packet has to be copied
 		 * to make a new headroom (rare hopefully) then it
@@ -1458,7 +1458,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 }
 
 /*
- * Receive a localtalk frame. We make some demands on the caller here.
+ * Receive a LocalTalk frame. We make some demands on the caller here.
  * Caller must provide enough headroom on the packet to pull the short
  * header and append a long one.
  */
@@ -1765,7 +1765,7 @@ static int atalk_shutdown(struct socket *sk,int how)
 }
 
 /*
- * Appletalk ioctl calls.
+ * AppleTalk ioctl calls.
  */
 static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 {
@@ -1910,7 +1910,7 @@ struct packet_type ppptalk_packet_type=
 static char ddp_snap_id[] = {0x08, 0x00, 0x07, 0x80, 0x9B};
 
 /*
- * Export symbols for use by drivers when Appletalk is a module.
+ * Export symbols for use by drivers when AppleTalk is a module.
  */
 EXPORT_SYMBOL(aarp_send_ddp);
 EXPORT_SYMBOL(atrtr_get_dev);
@@ -1969,7 +1969,7 @@ __initfunc(void atalk_proto_init(struct net_proto *pro))
 	atalk_register_sysctl();
 #endif /* CONFIG_SYSCTL */
 
-	printk(KERN_INFO "Appletalk 0.18 for Linux NET3.037\n");
+	printk(KERN_INFO "AppleTalk 0.18 for Linux NET3.037\n");
 }
 
 #ifdef MODULE
@@ -1986,10 +1986,10 @@ int init_module(void)
  * Use counts are incremented/decremented when
  * sockets are created/deleted.
  *
- * Appletalk interfaces are not incremented untill atalkd is run
+ * AppleTalk interfaces are not incremented untill atalkd is run
  * and are only decremented when they are downed.
  *
- * Ergo, before the appletalk module can be removed, all Appletalk
+ * Ergo, before the AppleTalk module can be removed, all AppleTalk
  * sockets be closed from user space.
  */
 

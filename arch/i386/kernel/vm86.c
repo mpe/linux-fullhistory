@@ -27,9 +27,9 @@
  *   as the next instruction might result in a page fault or similar.
  * - a real x86 will have interrupts disabled for one instruction
  *   past the 'sti' that enables them. We don't bother with all the
- *   details yet..
+ *   details yet.
  *
- * Hopefully these problems do not actually matter for anything.
+ * Let's hope these problems do not actually matter for anything.
  */
 
 

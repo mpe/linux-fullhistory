@@ -3962,7 +3962,7 @@ __initfunc(static void set_cmos(int *ints, int dummy, int dummy2))
 	int current_drive=0;
 
 	if (ints[0] != 2){
-		DPRINT("wrong number of parameter for cmos\n");
+		DPRINT("wrong number of parameters for CMOS\n");
 		return;
 	}
 	current_drive = ints[1];
@@ -3974,11 +3974,11 @@ __initfunc(static void set_cmos(int *ints, int dummy, int dummy2))
 		FDC2 = 0x370;
 	if (ints[2] <= 0 || 
 	    (ints[2] >= NUMBER(default_drive_params) && ints[2] != 16)){
-		DPRINT("bad cmos code %d\n", ints[2]);
+		DPRINT("bad CMOS code %d\n", ints[2]);
 		return;
 	}
 	DP->cmos = ints[2];
-	DPRINT("setting cmos code to %d\n", ints[2]);
+	DPRINT("setting CMOS code to %d\n", ints[2]);
 }
 
 static struct param_table {

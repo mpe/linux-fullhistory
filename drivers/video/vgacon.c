@@ -40,7 +40,7 @@
  *
  *	- speed up scrolling by changing the screen origin
  *
- *	- add support for palette, loadable fonts and VESA blanking
+ *	- add support for loadable fonts and VESA blanking
  *
  * KNOWN PROBLEMS/TO DO ==================================================== */
 
@@ -103,8 +103,7 @@ static int vgacon_blank(int blank);
 static int vgacon_get_font(struct vc_data *conp, int *w, int *h, char *data);
 static int vgacon_set_font(struct vc_data *conp, int w, int h, char *data);
 static int vgacon_set_palette(struct vc_data *conp, unsigned char *table);
-static int vgacon_scrolldelta(int lines);
-static int vgacon_set_mode(struct vc_data *conp, int mode);
+static int vgacon_scrolldelta(struct vc_data *conp, int lines);
 
 
 /*
@@ -117,8 +116,8 @@ static int vgacon_show_logo(void);
 /* Description of the hardware situation */
 static unsigned long   vga_video_mem_base;	/* Base of video memory */
 static unsigned long   vga_video_mem_term;	/* End of video memory */
-static unsigned short  vga_video_port_reg;	/* Video register select port */
-static unsigned short  vga_video_port_val;	/* Video register value port */
+static u16             vga_video_port_reg;	/* Video register select port */
+static u16             vga_video_port_val;	/* Video register value port */
 static unsigned long   vga_video_num_columns;	/* Number of text columns */
 static unsigned long   vga_video_num_lines;	/* Number of text lines */
 static unsigned long   vga_video_size_row;
@@ -138,7 +137,7 @@ static unsigned char vga_hardscroll_disabled_by_init = 0;
      *  VGA screen access
      */ 
 
-static inline void vga_writew(unsigned short val, unsigned short * addr)
+static inline void vga_writew(u16 val, u16 * addr)
 {
 #ifdef __powerpc__
 	st_le16(addr, val);
@@ -147,7 +146,7 @@ static inline void vga_writew(unsigned short val, unsigned short * addr)
 #endif /* !__powerpc__ */
 }
 
-static inline unsigned short vga_readw(unsigned short * addr)
+static inline u16 vga_readw(u16 * addr)
 {
 #ifdef __powerpc__
 	return ld_le16(addr);
@@ -156,9 +155,9 @@ static inline unsigned short vga_readw(unsigned short * addr)
 #endif /* !__powerpc__ */	
 }
 
-static inline void vga_memsetw(void * s, unsigned short c, unsigned int count)
+static inline void vga_memsetw(void * s, u16 c, unsigned int count)
 {
-	unsigned short * addr = (unsigned short *) s;
+	u16 * addr = (u16 *) s;
 
 	while (count) {
 		count--;
@@ -166,8 +165,7 @@ static inline void vga_memsetw(void * s, unsigned short c, unsigned int count)
 	}
 }
 
-static inline void vga_memmovew(unsigned short *to, unsigned short *from,
-				unsigned int count)
+static inline void vga_memmovew(u16 *to, u16 *from, unsigned int count)
 {
 	if (to < from) {
 	    while (count) {
@@ -213,8 +211,8 @@ static inline void write_vga(unsigned char reg, unsigned int val)
 __initfunc(static unsigned long vgacon_startup(unsigned long kmem_start,
 					       const char **display_desc))
 {
-	unsigned short saved;
-	unsigned short *p;
+	u16 saved;
+	u16 *p;
 
 	vga_video_num_lines = ORIG_VIDEO_LINES;
 	vga_video_num_columns = ORIG_VIDEO_COLS;
@@ -313,7 +311,7 @@ __initfunc(static unsigned long vgacon_startup(unsigned long kmem_start,
 	 *	Find out if there is a graphics card present.
 	 *	Are there smarter methods around?
 	 */
-	p = (unsigned short *)vga_video_mem_base;
+	p = (u16 *)vga_video_mem_base;
 	saved = vga_readw(p);
 	vga_writew(0xAA55, p);
 	if (vga_readw(p) != 0xAA55) {
@@ -407,7 +405,7 @@ static void vgacon_putcs(struct vc_data *conp, const char *s, int count,
     p = (u16 *)(vga_video_mem_base+ypos*vga_video_size_row+xpos*2);
     sattr = conp->vc_attr << 8;
     while (count--)
-	vga_writew(sattr | *s++, p++);
+	vga_writew(sattr | ((int) (*s++) & 0xff), p++);
 }
 
 
@@ -480,13 +478,12 @@ static void vgacon_bmove(struct vc_data *conp, int sy, int sx, int dy, int dx,
     if (sx == 0 && dx == 0 && width == vga_video_num_columns) {
 	src = vga_video_mem_base + sy * vga_video_size_row;
 	dst = vga_video_mem_base + dy * vga_video_size_row;
-	vga_memmovew((unsigned short *)dst, (unsigned short *)src,
-		     height * width);
+	vga_memmovew((u16 *)dst, (u16 *)src, height * width);
     } else if (dy < sy || (dy == sy && dx < sx)) {
 	src = vga_video_mem_base + sy * vga_video_size_row + sx * 2;
 	dst = vga_video_mem_base + dy * vga_video_size_row + dx * 2;
 	for (rows = height; rows-- ;) {
-	    vga_memmovew((unsigned short *)dst, (unsigned short *)src, width);
+	    vga_memmovew((u16 *)dst, (u16 *)src, width);
 	    src += vga_video_size_row;
 	    dst += vga_video_size_row;
 	}
@@ -494,7 +491,7 @@ static void vgacon_bmove(struct vc_data *conp, int sy, int sx, int dy, int dx,
 	src = vga_video_mem_base + (sy+height-1) * vga_video_size_row + sx * 2;
 	dst = vga_video_mem_base + (dy+height-1) * vga_video_size_row + dx * 2;
 	for (rows = height; rows-- ;) {
-	    vga_memmovew((unsigned short *)dst, (unsigned short *)src, width);
+	    vga_memmovew((u16 *)dst, (u16 *)src, width);
 	    src -= vga_video_size_row;
 	    dst -= vga_video_size_row;
 	}
@@ -551,17 +548,11 @@ static int vgacon_set_palette(struct vc_data *conp, unsigned char *table)
 	return 0;
 }
 
-static int vgacon_scrolldelta(int lines)
+static int vgacon_scrolldelta(struct vc_data *conp, int lines)
 {
     /* TODO */
     return -ENOSYS;
 }
-
-static int vgacon_set_mode(struct vc_data *conp, int mode)
-{
-    return -ENOSYS;
-}
-
 
 __initfunc(static int vgacon_show_logo( void ))
 {
@@ -585,5 +576,5 @@ struct consw vga_con = {
     vgacon_startup, vgacon_init, vgacon_deinit, vgacon_clear, vgacon_putc,
     vgacon_putcs, vgacon_cursor, vgacon_scroll, vgacon_bmove, vgacon_switch,
     vgacon_blank, vgacon_get_font, vgacon_set_font, vgacon_set_palette,
-    vgacon_scrolldelta, vgacon_set_mode
+    vgacon_scrolldelta
 };

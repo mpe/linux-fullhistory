@@ -8,7 +8,7 @@
 
 /*
  * 'kernel_stat.h' contains the definitions needed for doing
- * some kernel statistics (cpu usage, context switches ...),
+ * some kernel statistics (CPU usage, context switches ...),
  * used by rstatd/perfmeter
  */
 

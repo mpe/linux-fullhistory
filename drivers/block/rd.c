@@ -1,39 +1,39 @@
 /*
- * ramdisk.c - Multiple ramdisk driver - gzip-loading version - v. 0.8 beta.
+ * ramdisk.c - Multiple RAM disk driver - gzip-loading version - v. 0.8 beta.
  * 
  * (C) Chad Page, Theodore Ts'o, et. al, 1995. 
  *
- * This ramdisk is designed to have filesystems created on it and mounted
+ * This RAM disk is designed to have filesystems created on it and mounted
  * just like a regular floppy disk.  
  *  
  * It also does something suggested by Linus: use the buffer cache as the
- * ramdisk data.  This makes it possible to dynamically allocate the ramdisk
+ * RAM disk data.  This makes it possible to dynamically allocate the RAM disk
  * buffer - with some consequences I have to deal with as I write this. 
  * 
  * This code is based on the original ramdisk.c, written mostly by
  * Theodore Ts'o (TYT) in 1991.  The code was largely rewritten by
- * Chad Page to use the buffer cache to store the ramdisk data in
+ * Chad Page to use the buffer cache to store the RAM disk data in
  * 1995; Theodore then took over the driver again, and cleaned it up
  * for inclusion in the mainline kernel.
  *
  * The original CRAMDISK code was written by Richard Lyons, and
- * adapted by Chad Page to use the new ramdisk interface.  Theodore
- * Ts'o rewrote it so that both the compressed ramdisk loader and the
- * kernel decompressor uses the same inflate.c codebase.  The ramdisk
- * loader now also loads into a dynamic (buffer cache based) ramdisk,
- * not the old static ramdisk.  Support for the old static ramdisk has
+ * adapted by Chad Page to use the new RAM disk interface.  Theodore
+ * Ts'o rewrote it so that both the compressed RAM disk loader and the
+ * kernel decompressor uses the same inflate.c codebase.  The RAM disk
+ * loader now also loads into a dynamic (buffer cache based) RAM disk,
+ * not the old static RAM disk.  Support for the old static RAM disk has
  * been completely removed.
  *
  * Loadable module support added by Tom Dyas.
  *
  * Further cleanups by Chad Page (page0588@sundance.sjsu.edu):
- *	Cosmetic changes in #ifdef MODULE, code movement, etc...
- * 	When the ramdisk is rmmod'ed, free the protected buffers
- * 	Default ramdisk size changed to 2.88MB
+ *	Cosmetic changes in #ifdef MODULE, code movement, etc.
+ * 	When the RAM disk module is removed, free the protected buffers
+ * 	Default RAM disk size changed to 2.88 MB
  *
  *  Added initrd: Werner Almesberger & Hans Lermen, Feb '96
  *
- * 4/25/96 : Made ramdisk size a parameter (default is now 4MB) 
+* 4/25/96 : Made RAM disk size a parameter (default is now 4 MB) 
  *		- Chad Page
  *
  * Add support for fs images split across >1 disk, Paul Gortmaker, Mar '98
@@ -70,11 +70,11 @@ extern void wait_for_keypress(void);
 #define MAJOR_NR RAMDISK_MAJOR
 #include <linux/blk.h>
 
-/* The ramdisk size is now a parameter */
+/* The RAM disk size is now a parameter */
 #define NUM_RAMDISKS 16		/* This cannot be overridden (yet) */ 
 
 #ifndef MODULE
-/* We don't have to load ramdisks or gunzip them in a module... */
+/* We don't have to load RAM disks or gunzip them in a module. */
 #define RD_LOADER
 #define BUILD_CRAMDISK
 
@@ -86,22 +86,23 @@ static int initrd_users = 0;
 #endif
 #endif
 
-/* Various static variables go here... mostly used within the ramdisk code only. */
+/* Various static variables go here.  Most are used only in the RAM disk code.
+ */
 
 static int rd_length[NUM_RAMDISKS];
 static int rd_blocksizes[NUM_RAMDISKS];
 
 /*
- * Parameters for the boot-loading of the ramdisk.  These are set by
+ * Parameters for the boot-loading of the RAM disk.  These are set by
  * init/main.c (from arguments to the kernel command line) or from the
- * architecture-specific setup routine (from the stored bootsector
+ * architecture-specific setup routine (from the stored boot sector
  * information). 
  */
-int rd_size = 4096;		/* Size of the ramdisks */
+int rd_size = 4096;		/* Size of the RAM disks */
 
 #ifndef MODULE
-int rd_doload = 0;		/* 1 = load ramdisk, 0 = don't load */
-int rd_prompt = 1;		/* 1 = prompt for ramdisk, 0 = don't prompt */
+int rd_doload = 0;		/* 1 = load RAM disk, 0 = don't load */
+int rd_prompt = 1;		/* 1 = prompt for RAM disk, 0 = don't prompt */
 int rd_image_start = 0;		/* starting block # of image */
 #ifdef CONFIG_BLK_DEV_INITRD
 unsigned long initrd_start,initrd_end;
@@ -273,7 +274,7 @@ static struct file_operations fd_fops = {
 	block_fsync		/* fsync */ 
 };
 
-/* This is the registration and initialization section of the ramdisk driver */
+/* This is the registration and initialization section of the RAM disk driver */
 __initfunc(int rd_init(void))
 {
 	int		i;
@@ -292,7 +293,7 @@ __initfunc(int rd_init(void))
 
 	blksize_size[MAJOR_NR] = rd_blocksizes;
 
-	printk("Ramdisk driver initialized : %d ramdisks of %dK size\n",
+	printk("RAM disk driver initialized:  %d RAM disks of %dK size\n",
 							NUM_RAMDISKS, rd_size);
 
 	return 0;
@@ -324,11 +325,11 @@ void cleanup_module(void)
 
 #endif  /* MODULE */
 
-/* End of non-loading portions of the ramdisk driver */
+/* End of non-loading portions of the RAM disk driver */
 
 #ifdef RD_LOADER 
 /*
- * This routine tries to find a ramdisk image to load, and returns the
+ * This routine tries to find a RAM disk image to load, and returns the
  * number of blocks to read for a non-compressed image, 0 if the image
  * is a compressed image, and -1 if an image with the right magic
  * numbers could not be found.
@@ -382,7 +383,7 @@ identify_ramdisk_image(kdev_t device, struct file *fp, int start_block))
 	if (romfsb->word0 == ROMSB_WORD0 &&
 	    romfsb->word1 == ROMSB_WORD1) {
 		printk(KERN_NOTICE
-		       "RAMDISK: Romfs filesystem found at block %d\n",
+		       "RAMDISK: romfs filesystem found at block %d\n",
 		       start_block);
 		nblocks = (ntohl(romfsb->size)+BLOCK_SIZE-1)>>BLOCK_SIZE_BITS;
 		goto done;
@@ -410,14 +411,14 @@ identify_ramdisk_image(kdev_t device, struct file *fp, int start_block))
 	/* Try ext2 */
 	if (ext2sb->s_magic == cpu_to_le16(EXT2_SUPER_MAGIC)) {
 		printk(KERN_NOTICE
-		       "RAMDISK: Ext2 filesystem found at block %d\n",
+		       "RAMDISK: ext2 filesystem found at block %d\n",
 		       start_block);
 		nblocks = le32_to_cpu(ext2sb->s_blocks_count);
 		goto done;
 	}
 
 	printk(KERN_NOTICE
-	       "RAMDISK: Couldn't find valid ramdisk image starting at %d.\n",
+	       "RAMDISK: Couldn't find valid RAM disk image starting at %d.\n",
 	       start_block);
 	
 done:
@@ -430,7 +431,7 @@ done:
 }
 
 /*
- * This routine loads in the ramdisk image.
+ * This routine loads in the RAM disk image.
  */
 __initfunc(static void rd_load_image(kdev_t device,int offset))
 {
@@ -480,7 +481,7 @@ __initfunc(static void rd_load_image(kdev_t device,int offset))
 #else
 		printk(KERN_NOTICE
 		       "RAMDISK: Kernel does not support compressed "
-		       "ramdisk images\n");
+		       "RAM disk images\n");
 #endif
 		goto done;
 	}
@@ -564,7 +565,7 @@ __initfunc(void rd_load(void))
 		floppy_eject();
 #endif
 		printk(KERN_NOTICE
-		       "VFS: Insert root floppy disk to be loaded into ramdisk and press ENTER\n");
+		       "VFS: Insert root floppy disk to be loaded into RAM disk and press ENTER\n");
 		wait_for_keypress();
 	}
 

@@ -259,9 +259,9 @@ void ctrl_alt_del(void)
  *
  * The general idea is that a program which uses just setregid() will be
  * 100% compatible with BSD.  A program which uses just setgid() will be
- * 100% compatible with POSIX w/ Saved ID's. 
+ * 100% compatible with POSIX with saved IDs. 
  *
- * SMP: There are not races, the gid's are checked only by filesystem
+ * SMP: There are not races, the GIDs are checked only by filesystem
  *      operations (as far as semantic preservation is concerned).
  */
 asmlinkage int sys_setregid(gid_t rgid, gid_t egid)
@@ -366,7 +366,7 @@ extern inline void cap_emulate_setxuid(int old_ruid, int old_euid,
  *
  * The general idea is that a program which uses just setreuid() will be
  * 100% compatible with BSD.  A program which uses just setuid() will be
- * 100% compatible with POSIX w/ Saved ID's. 
+ * 100% compatible with POSIX with saved IDs. 
  */
 asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 {
@@ -421,7 +421,7 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 
 		
 /*
- * setuid() is implemented like SysV w/ SAVED_IDS 
+ * setuid() is implemented like SysV with SAVED_IDS 
  * 
  * Note that SAVED_ID's is deficient in that a setuid root program
  * like sendmail, for example, cannot set its uid to be a normal 
@@ -465,7 +465,7 @@ asmlinkage int sys_setuid(uid_t uid)
 
 
 /*
- * This function implementes a generic ability to update ruid, euid,
+ * This function implements a generic ability to update ruid, euid,
  * and suid.  This allows you to implement the 4.4 compatible seteuid().
  */
 asmlinkage int sys_setresuid(uid_t ruid, uid_t euid, uid_t suid)
@@ -763,7 +763,7 @@ out:
 }
 
 /*
- * Supplementary group ID's
+ * Supplementary group IDs
  */
 asmlinkage int sys_getgroups(int gidsetsize, gid_t *grouplist)
 {

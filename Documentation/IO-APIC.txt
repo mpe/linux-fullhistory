@@ -1,5 +1,4 @@
-
-most (all) Intel SMP boards have the so-called 'IO-APIC', which is
+Most (all) Intel SMP boards have the so-called 'IO-APIC', which is
 an enhanced interrupt controller, able to route hardware interrupts
 to multiple CPUs, or to CPU groups.
 

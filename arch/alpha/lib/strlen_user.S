@@ -2,7 +2,7 @@
  * arch/alpha/lib/strlen_user.S
  *
  * Return the length of the string including the NUL terminator
- * (strlen+1) or zero if an error occured.
+ * (strlen+1) or zero if an error occurred.
  */
 
 #include <alpha/regdef.h>

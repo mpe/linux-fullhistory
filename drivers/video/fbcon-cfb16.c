@@ -37,7 +37,7 @@ static u32 tab_cfb16[] = {
 
 void fbcon_cfb16_setup(struct display *p)
 {
-    p->next_line = p->var.xres_virtual<<1;
+    p->next_line = p->line_length ? p->line_length : p->var.xres_virtual<<1;
     p->next_plane = 0;
 }
 
@@ -181,7 +181,7 @@ void fbcon_cfb16_revc(struct display *p, int xx, int yy)
 
 struct display_switch fbcon_cfb16 = {
     fbcon_cfb16_setup, fbcon_cfb16_bmove, fbcon_cfb16_clear, fbcon_cfb16_putc,
-    fbcon_cfb16_putcs, fbcon_cfb16_revc
+    fbcon_cfb16_putcs, fbcon_cfb16_revc, NULL
 };
 
 

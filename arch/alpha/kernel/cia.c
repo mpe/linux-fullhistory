@@ -104,7 +104,7 @@ unsigned long cia_sm_base_r1, cia_sm_base_r2, cia_sm_base_r3;
  *  
  * Notes:
  *	The function number selects which function of a multi-function device 
- *	(e.g., scsi and ethernet).
+ *	(e.g., SCSI and Ethernet).
  * 
  *	The register selects a DWORD (32 bit) register offset.  Hence it
  *	doesn't get shifted by 2 bits as we want to "drop" the bottom two

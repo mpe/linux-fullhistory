@@ -213,7 +213,7 @@ affs_remove_header(struct buffer_head *bh, struct inode *inode)
 
 	/* Mark directory as changed.  We do this before anything else,
 	 * as it must be done anyway and doesn't hurt even if an
-	 * error occures later.
+	 * error occurs later.
 	 */
 	dir = iget(inode->i_sb,be32_to_cpu(FILE_END(bh->b_data,inode)->parent));
 	if (!dir)

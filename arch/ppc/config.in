@@ -77,23 +77,21 @@ if [ "$CONFIG_PARPORT" != "n" ]; then
   fi
 fi
 
-if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  bool 'New unified console driver (EXPERIMENTAL)' CONFIG_ABSTRACT_CONSOLE
+bool 'Support for frame buffer devices' CONFIG_FB
+if [ "$CONFIG_FB" = "y" ]; then
+  bool 'Backward compatibility mode for Xpmac' CONFIG_FB_COMPAT_XPMAC
+else
+  define_bool CONFIG_ABSCON_COMPAT y
 fi
 
 if [ "$CONFIG_PMAC" = "y" ]; then
-  if [ "$CONFIG_ABSTRACT_CONSOLE" = "y" ]; then
-    define_bool CONFIG_FB y
-    bool 'Backward compatibility mode for Xpmac' CONFIG_FB_COMPAT_XPMAC
-  else
+  if [ "$CONFIG_FB" != "y" ]; then
     define_bool CONFIG_PMAC_CONSOLE y
   fi
 else
 # if compiling specifically for prep or chrp, or supporting all arch's
-  if [ "$CONFIG_ABSTRACT_CONSOLE" = "y" ]; then
-    bool 'Support for frame buffer devices' CONFIG_FB
+  if [ "$CONFIG_FB" = "y" ]; then
     bool 'Support for VGA devices' CONFIG_VGA_CONSOLE
-    bool 'Backward compatibility mode for Xpmac' CONFIG_FB_COMPAT_XPMAC
   else
     bool 'Support for PowerMac console' CONFIG_PMAC_CONSOLE
   fi
@@ -108,7 +106,7 @@ bool 'Support for Open Firmware device tree in /proc' CONFIG_PROC_DEVICETREE
 bool 'Include kgdb kernel debugger' CONFIG_KGDB
 bool 'Include xmon kernel debugger' CONFIG_XMON
 
-if [ "$CONFIG_ABSTRACT_CONSOLE" != "y" ]; then
+if [ "$CONFIG_FB" != "y" ]; then
   if [ "$CONFIG_PMAC_CONSOLE" = "y" ]; then
     bool 'Support for Apple "control" display' CONFIG_CONTROL_VIDEO
     bool 'Support for Apple "platinum" display' CONFIG_PLATINUM_VIDEO
@@ -176,9 +174,7 @@ source fs/Config.in
 
 source fs/nls/Config.in
 
-if [ "$CONFIG_ABSTRACT_CONSOLE" = "y" ]; then
-  source drivers/video/Config.in
-fi
+source drivers/video/Config.in
 
 source drivers/char/Config.in
 

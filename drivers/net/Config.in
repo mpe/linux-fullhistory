@@ -188,6 +188,7 @@ bool 'Token Ring driver support' CONFIG_TR
 if [ "$CONFIG_TR" = "y" ]; then
   tristate 'IBM Tropic chipset based adaptor support' CONFIG_IBMTR
 #  tristate 'IBM Lanstreamer PCI adaptor support' CONFIG_IBMLS
+  tristate 'SysKonnect adapter support' CONFIG_SKTR
 fi
 
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then

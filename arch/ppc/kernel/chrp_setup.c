@@ -28,9 +28,7 @@
 #include <linux/init.h>
 #include <linux/blk.h>
 #include <linux/ioport.h>
-#ifdef CONFIG_ABSTRACT_CONSOLE
 #include <linux/console.h>
-#endif
 
 #include <asm/mmu.h>
 #include <asm/processor.h>
@@ -263,5 +261,9 @@ chrp_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 #ifdef CONFIG_FB
 	/* Frame buffer device based console */
 	conswitchp = &fb_con;
+#endif
+#ifdef CONFIG_ABSCON_COMPAT
+	/* Console wrapper */
+	conswitchp = &compat_con;
 #endif
 }

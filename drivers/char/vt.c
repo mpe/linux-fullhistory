@@ -416,7 +416,11 @@ do_fontx_ioctl(int cmd, struct consolefontdesc *user_cfd, int perm)
 			if (i)
 				return i;
 			i = con_adjust_height(cfdarg.charheight);
-			return (i <= 0) ? i : kd_size_changed(i, 0);
+			/*
+			 *  ++Geert: vc_resize_con() will take note of the
+			 *	     changed screen size, if necessary
+			 */
+			return (i <= 0) ? i : 0;
 		} else
 			return -EINVAL;
 	case GIO_FONTX:
@@ -1013,7 +1017,10 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		if (i) return i;
 
 		i = con_adjust_height(default_font_height);
-		if ( i > 0 ) kd_size_changed(i, 0);
+			/*
+			 *  ++Geert: vc_resize_con() will take note of the
+			 *	     changed screen size, if necessary
+			 */
 		con_set_default_unimap();
 
 		return 0;

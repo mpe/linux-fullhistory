@@ -1000,7 +1000,7 @@ static void check_partition(struct gendisk *hd, kdev_t dev)
 
 	/*
 	 * This is a kludge to allow the partition check to be
-	 * skipped for specific drives (e.g. IDE cd-rom drives)
+	 * skipped for specific drives (e.g. IDE CD-ROM drives)
 	 */
 	if ((int)first_sector == -1) {
 		hd->part[MINOR(dev)].start_sect = 0;

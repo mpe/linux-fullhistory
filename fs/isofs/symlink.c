@@ -1,7 +1,7 @@
 /*
  *  linux/fs/isofs/symlink.c
  *
- *  (C) 1992  Eric Youngdale Modified for ISO9660 filesystem.
+ *  (C) 1992  Eric Youngdale Modified for ISO 9660 filesystem.
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *

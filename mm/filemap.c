@@ -901,7 +901,7 @@ page_read_error:
 		goto success;
 
 	/*
-	 * Uhhuh.. Things didn't work out. Return zero to tell the
+	 * Things didn't work out. Return zero to tell the
 	 * mm layer so, possibly freeing the page cache page first.
 	 */
 failure:
@@ -1412,7 +1412,7 @@ page_wait:
 		set_bit(PG_uptodate, &page->flags);
 
 do_update_page:
-		/* Alright, the page is there.  Now update it. */
+		/* All right, the page is there.  Now update it. */
 		status = inode->i_op->updatepage(file, page, buf,
 							offset, bytes, sync);
 done_with_page:

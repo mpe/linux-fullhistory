@@ -145,7 +145,7 @@ start_of_setup:
 	jne	bad_sig
 	jmp	good_sig1
 
-! Routine to print asciiz-string at DS:SI
+! Routine to print ASCII string at DS:SI
 
 prtstr:	lodsb
 	and	al,al
@@ -159,7 +159,7 @@ fin:	ret
 prtsp2:	call	prtspc		! Print double space
 prtspc:	mov	al,#0x20	! Print single space (fall-thru!)
 
-! Part of above routine, this one just prints ascii al
+! Part of above routine, this one just prints ASCII al
 
 prtchr:	push	ax
 	push	cx
@@ -226,12 +226,12 @@ good_sig:
 
 ! check if an old loader tries to load a big-kernel
 	seg cs
-	test	byte ptr loadflags,#LOADED_HIGH ! have we a big kernel ?
+	test	byte ptr loadflags,#LOADED_HIGH ! Have we a big kernel?
 	jz	loader_ok	! NO, no danger even for old loaders
 				! YES, we have a big-kernel
 	seg cs
-	cmp	byte ptr type_of_loader,#0 ! have we one of the new loaders ?
-	jnz	loader_ok	! YES, ok
+	cmp	byte ptr type_of_loader,#0 ! Have we one of the new loaders?
+	jnz	loader_ok	! YES, OK
 				! NO, we have an old loader, must give up
 	push    cs
 	pop	ds
@@ -239,7 +239,7 @@ good_sig:
 	call	prtstr
 	jmp	no_sig_loop
 loader_panic_mess: 
-	.ascii	"Wrong loader, giving up..."
+	.ascii	"Wrong loader:  giving up."
 	db	0
 
 loader_ok:
@@ -255,8 +255,8 @@ loader_ok:
 	int     0x15
 	jc      oldstylemem
 
-! memory size is in 1k chunksizes, to avoid confusing loadlin.
-! we store the 0xe801 memory size in a completely different place,
+! Memory size is in 1 k chunksizes, to avoid confusing loadlin.
+! We store the 0xe801 memory size in a completely different place,
 ! because it will most likely be longer than 16 bits.
 ! (use 1e0 because that's what Larry Augustine uses in his
 ! alternative new memory detection scheme, and it's sensible
@@ -270,7 +270,7 @@ loader_ok:
  	add     [0x1e0],eax     ! and add lower memory into total size.
   
 	! and fall into the old memory detection code to populate the
-	! compatability slot.
+	! compatibility slot.
 
 oldstylemem:
 	pop	ebx
@@ -290,7 +290,7 @@ oldstylemem:
 ! Check for video adapter and its parameters and allow the
 ! user to browse video modes.
 
-	call	video	! NOTE: we need DS pointing to bootsector
+	call	video	! NOTE: we need DS pointing to boot sector
 
 ! Get hd0 data
 
@@ -380,7 +380,7 @@ no_psmouse:
 
 #ifdef CONFIG_APM
 ! check for APM BIOS
-		! NOTE:	DS is pointing to the bootsector
+		! NOTE:	DS is pointing to the boot sector
 		!
 	mov	[64],#0		! version == 0 means no APM BIOS
 
@@ -479,7 +479,7 @@ end_move:
 	mov	ds,ax
 
 ! If we have our code not at 0x90000, we need to move it there now.
-! We also then need to move the params behind it (commandline)
+! We also then need to move the parameters behind it (command line)
 ! Because we would overwrite the code on the current IP, we move
 ! it in two steps, jumping high after the first one.
 	mov	ax,cs
@@ -600,12 +600,12 @@ a20_wait:
 
 ! Well, that certainly wasn't fun :-(. Hopefully it works, and we don't
 ! need no steenking BIOS anyway (except for the initial loading :-).
-! The BIOS-routine wants lots of unnecessary data, and it's less
+! The BIOS routine wants lots of unnecessary data, and it's less
 ! "interesting" anyway. This is how REAL programmers do it.
 !
 ! Well, now's the time to actually move into protected mode. To make
 ! things as simple as possible, we do no register set-up or anything,
-! we let the gnu-compiled 32-bit programs do that. We just jump to
+! we let the GNU-compiled 32-bit programs do that. We just jump to
 ! absolute address 0x1000 (or the loader supplied one),
 ! in 32-bit protected mode.
 !
@@ -725,7 +725,7 @@ bootsect_panic:
 bootsect_panic_loop:
 	jmp	bootsect_panic_loop
 bootsect_panic_mess:
-	.ascii	"INT15 refuses to access high mem, giving up..."
+	.ascii	"INT15 refuses to access high memory.  Giving up."
 	db	0
 
 ! This routine checks that the keyboard command queue is empty
@@ -747,7 +747,7 @@ no_output:
 	ret
 
 !
-! Read the cmos clock. Return the seconds in al
+! Read the CMOS clock. Return the seconds in al
 !
 gettime:
 	push	cx

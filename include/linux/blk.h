@@ -137,8 +137,8 @@ static void floppy_off(unsigned int nr);
 
 #elif (MAJOR_NR == HD_MAJOR)
 
-/* harddisk: timeout is 6 seconds.. */
-#define DEVICE_NAME "harddisk"
+/* Hard disk:  timeout is 6 seconds. */
+#define DEVICE_NAME "hard disk"
 #define DEVICE_INTR do_hd
 #define DEVICE_TIMEOUT HD_TIMER
 #define TIMEOUT_VALUE (6*HZ)
@@ -292,7 +292,7 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_OFF(device)
 
 #elif (MAJOR_NR == CM206_CDROM_MAJOR)
-#define DEVICE_NAME "Philips/LMS cd-rom cm206"
+#define DEVICE_NAME "Philips/LMS CD-ROM cm206"
 #define DEVICE_REQUEST do_cm206_request
 #define DEVICE_NR(device) (MINOR(device))
 #define DEVICE_ON(device)

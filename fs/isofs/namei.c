@@ -1,7 +1,7 @@
 /*
  *  linux/fs/isofs/namei.c
  *
- *  (C) 1992  Eric Youngdale Modified for ISO9660 filesystem.
+ *  (C) 1992  Eric Youngdale Modified for ISO 9660 filesystem.
  *
  *  (C) 1991  Linus Torvalds - minix filesystem
  */

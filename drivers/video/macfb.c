@@ -44,7 +44,7 @@ static struct fb_var_screeninfo macfb_defined={
 	0,		/* standard pixel format */
 	FB_ACTIVATE_NOW,
 	274,195,	/* 14" monitor *Mikael Nykvist's anyway* */
-	FB_ACCEL_NONE,	/* The only way to accelerate a mac is .. */
+	0,		/* The only way to accelerate a mac is .. */
 	0L,0L,0L,0L,0L,
 	0L,0L,0,	/* No sync info */
 	FB_VMODE_NONINTERLACED,
@@ -94,7 +94,7 @@ static int macfb_release(struct fb_info *info)
 static void macfb_encode_var(struct fb_var_screeninfo *var, 
 				struct macfb_par *par)
 {
-	int i=0;
+	memset(var, 0, sizeof(struct fb_var_screeninfo));
 	var->xres=mac_xres;
 	var->yres=mac_yres;
 	var->xres_virtual=mac_vxres;
@@ -110,7 +110,6 @@ static void macfb_encode_var(struct fb_var_screeninfo *var,
 	var->activate=0;
 	var->height= -1;
 	var->width= -1;
-	var->accel=0;
 	var->vmode=FB_VMODE_NONINTERLACED;
 	var->pixclock=0;
 	var->sync=0;
@@ -120,8 +119,6 @@ static void macfb_encode_var(struct fb_var_screeninfo *var,
 	var->lower_margin=0;
 	var->hsync_len=0;
 	var->vsync_len=0;
-	for(i=0;i<arraysize(var->reserved);i++)
-		var->reserved[i]=0;
 	return;
 }
 
@@ -155,8 +152,6 @@ extern int console_loglevel;
 static void macfb_encode_fix(struct fb_fix_screeninfo *fix, 
 				struct macfb_par *par)
 {
-	int i;
-
 	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 	strcpy(fix->id,"Macintosh");
 
@@ -210,7 +205,7 @@ static void macfb_set_disp(int con)
 
 	macfb_get_fix(&fix, con, 0);
 
-	display->screen_base = (u_char *)(fix.smem_start+fix.smem_offset);
+	display->screen_base = fix.smem_start+fix.smem_offset;
 	display->visual = fix.visual;
 	display->type = fix.type;
 	display->type_aux = fix.type_aux;
@@ -323,14 +318,12 @@ static struct fb_ops macfb_ops = {
 	macfb_get_cmap,
 	macfb_set_cmap,
 	macfb_pan_display,
-	NULL,
 	macfb_ioctl
 };
 
 void macfb_setup(char *options, int *ints)
 {
     char *this_opt;
-    int temp;
 
     fb_info.fontname[0] = '\0';
 
@@ -430,7 +423,7 @@ __initfunc(unsigned long macfb_init(unsigned long mem_start))
 	if(err<0)
 	{
 		mac_boom(6);
-		return NULL;
+		return mem_start;
 	}
 
 	macfb_get_var(&disp.var, -1, &fb_info);

@@ -32,6 +32,7 @@
 #ifdef CONFIG_BLK_DEV_RAM
 #include <linux/blk.h>
 #endif
+#include <linux/console.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
 #include <asm/smp.h>
@@ -210,12 +211,20 @@ __initfunc(void setup_arch(char **cmdline_p,
 	}
 #endif
 
-	/* request io space for devices used on all i[345]86 PC'S */
+	/* request I/O space for devices used on all i[345]86 PCs */
 	request_region(0x00,0x20,"dma1");
 	request_region(0x40,0x20,"timer");
 	request_region(0x80,0x10,"dma page reg");
 	request_region(0xc0,0x20,"dma2");
 	request_region(0xf0,0x10,"fpu");
+
+#ifdef CONFIG_VT
+#ifdef CONFIG_FB
+	conswitchp = &fb_con;
+#else
+	conswitchp = &vga_con;
+#endif
+#endif
 }
 
 /*
@@ -359,10 +368,10 @@ static struct cpu_model_info cpu_models[] __initdata = {
 	  { NULL, NULL, NULL, "DX/2", NULL, NULL, NULL, "DX/2-WB", "DX/4",
 	    "DX/4-WB", NULL, NULL, NULL, NULL, "Am5x86-WT", "Am5x86-WB" }},
 	{ X86_VENDOR_AMD,	5,
-	  { "K5/SSA5 (PR-75, PR-90, PR-100)", "K5 (PR-120, PR-133)",
-	    "K5 (PR-166)", "K5 (PR-200)", NULL, NULL,
-	    "K6 (166 - 266)", "K6 (166 - 300)", "K6-2 (200 - 450)",
-	    "K6-3D-Plus (200 - 450)", NULL, NULL, NULL, NULL, NULL, NULL }},
+	  { "K5/SSA5 (PR75, PR90, PR100)", "K5 (PR120, PR133)",
+	    "K5 (PR166)", "K5 (PR200)", NULL, NULL,
+	    "K6 (PR166 - PR266)", "K6 (PR166 - PR300)", "K6-2 (PR233 - PR333)",
+	    "K6-3 (PR300 - PR450)", NULL, NULL, NULL, NULL, NULL, NULL }},
 	{ X86_VENDOR_UMC,	4,
 	  { NULL, "U5D", "U5S", NULL, NULL, NULL, NULL, NULL, NULL, NULL,
 	    NULL, NULL, NULL, NULL, NULL, NULL }},
@@ -457,7 +466,7 @@ int get_cpuinfo(char * buffer)
 			continue;
 #endif
 		p += sprintf(p, "processor\t: %d\n"
-			       "cpu family\t: %c\n"
+			       "CPU family\t: %c\n"
 			       "model\t\t: %s\n"
 			       "vendor_id\t: %s\n",
 			       n,
@@ -503,9 +512,9 @@ int get_cpuinfo(char * buffer)
 			        "hlt_bug\t\t: %s\n"
 			        "sep_bug\t\t: %s\n"
 			        "f00f_bug\t: %s\n"
-			        "fpu\t\t: %s\n"
-			        "fpu_exception\t: %s\n"
-			        "cpuid level\t: %d\n"
+			        "FPU\t\t: %s\n"
+			        "FPU_exception\t: %s\n"
+			        "CPUID level\t: %d\n"
 			        "wp\t\t: %s\n"
 			        "flags\t\t:",
 			     c->fdiv_bug ? "yes" : "no",

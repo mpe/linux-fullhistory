@@ -1,4 +1,3 @@
-
 Documentation for /proc/sys/kernel/*	version 0.1
 	(c) 1998, Rik van Riel <H.H.vanRiel@phys.uu.nl>
 
@@ -89,8 +88,8 @@ would suffice to set your hostname and domainname.
 
 file-max & file-nr:
 
-The kernel allocates filehandles dynamically, but as yet it
-doesn't free them again...
+The kernel allocates file handles dynamically, but as yet it
+doesn't free them again.
 
 The value in file-max denotes the maximum number of file-
 handles that the Linux kernel will allocate. When you get lots
@@ -99,17 +98,17 @@ want to increase this limit.
 
 The three values in file-nr denote the number of allocated
 file handles, the number of used file handles and the maximum
-number of file handles. When the allocated filehandles come
+number of file handles. When the allocated file handles come
 close to the maximum, but the number of actually used ones is
-far behind, you've encountered a peak in your filehandle usage
-and you don't need to increase the maximum.
+far behind, you've encountered a peak in your usage of file
+handles and you don't need to increase the maximum.
 
 ==============================================================
 
 inode-max, inode-nr & inode-state:
 
-As with filehandles, the kernel allocates the inode structures
-dynamically, but can't free them yet...
+As with file handles, the kernel allocates the inode structures
+dynamically, but can't free them yet.
 
 The value in inode-max denotes the maximum number of inode
 handlers. This value should be 3-4 times larger than the value

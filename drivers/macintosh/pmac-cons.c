@@ -12,9 +12,9 @@
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/string.h>
-#include <linux/vc_ioctl.h>
 #include <linux/kd.h>
 #include <linux/version.h>
+#include <asm/vc_ioctl.h>
 #include <asm/processor.h>
 #include <asm/prom.h>
 #include <asm/pgtable.h>
@@ -40,6 +40,7 @@
 #ifdef CONFIG_IMSTT_VIDEO
 #include "imstt.h"
 #endif
+#include <linux/console_compat.h>
 
 int video_mode = VMODE_NVRAM;
 int color_mode = CMODE_NVRAM;
@@ -320,7 +321,7 @@ set_cursor(int currcons)
 		hide_cursor();
 	} else {
 		old_cursor = cursor_pos;
-		cursor_pos = (pos - video_mem_base) >> 1;
+		cursor_pos = (pos - video_mem_start) >> 1;
 		if (old_cursor != -1)
 			invert_cursor(-1);
 		invert_cursor(cursor_pos);
@@ -394,7 +395,7 @@ set_get_cmap(unsigned char *p, int set)
 }
 
 int
-set_get_font(char *p, int set, int ch512)
+set_get_font(unsigned char *p, int set, int ch512)
 {
 	return 0;
 }

@@ -111,7 +111,7 @@ asmlinkage void do_page_fault(unsigned long address, unsigned long mmcsr,
 	unsigned fixup;
 
 	/* As of EV6, a load into $31/$f31 is a prefetch, and never faults
-	   (or is suppressed by the PALcode).  Support that for older cpu's
+	   (or is suppressed by the PALcode).  Support that for older CPUs
 	   by ignoring such an instruction.  */
 	if (cause == 0) {
 		unsigned int insn;

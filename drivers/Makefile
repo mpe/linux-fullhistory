@@ -1,15 +1,15 @@
 #
-# Makefile for the linux kernel device drivers.
+# Makefile for the Linux kernel device drivers.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
 # removes any old dependencies. DON'T put your own dependencies here
-# unless it's something special (ie not a .c file).
+# unless it's something special (not a .c file).
 #
-# Note 2! The CFLAGS definitions are now in the main makefile...
+# Note 2! The CFLAGS definitions are now in the main makefile.
 
 SUB_DIRS     := block char net misc sound
 MOD_SUB_DIRS := $(SUB_DIRS) sbus
-ALL_SUB_DIRS := $(SUB_DIRS) pci scsi sbus cdrom isdn pnp macintosh
+ALL_SUB_DIRS := $(SUB_DIRS) pci scsi sbus cdrom isdn pnp macintosh video
 
 ifdef CONFIG_PCI
 SUB_DIRS += pci
@@ -19,12 +19,17 @@ ifdef CONFIG_SBUS
 SUB_DIRS += sbus
 endif
 
+ifdef CONFIG_VT
+SUB_DIRS += video
+MOD_SUB_DIRS += video
+endif
+
 ifdef CONFIG_PPC
 SUB_DIRS += macintosh
 MOD_SUB_DIRS += macintosh
 endif
 
-# If CONFIG_SCSI is set, the core of scsi support will be added to the kernel,
+# If CONFIG_SCSI is set, the core of SCSI support will be added to the kernel,
 # but some of the low-level things may also be modules.
 ifeq ($(CONFIG_SCSI),y)
 SUB_DIRS += scsi
@@ -63,10 +68,9 @@ SUB_DIRS += ap1000
 ALL_SUB_DIRS += ap1000
 endif
 
-# make will try to add $(MOD_SUB_DIRS).o to modules/MOD_LIST_NAME 
-# when MOD_LIST_NAME is set. We don't have hamradio.o and Linus
-# sort-of insisted on making hamradio a subdirectory to drivers/net.
-#
+# When MOD_LIST_NAME is set, make will try to add $(MOD_SUB_DIRS).o to
+# modules/MOD_LIST_NAME.  We don't have hamradio.o and Linus
+# sort of insisted on making hamradio/ a subdirectory of drivers/net/.
 
 ifeq ($(CONFIG_HAMRADIO),y)
   SUB_DIRS += net/hamradio

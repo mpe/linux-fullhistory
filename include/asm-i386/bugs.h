@@ -83,7 +83,7 @@ __initfunc(static void check_fpu(void))
 	if (fpu_error)
 		return;
 	if (!ignore_irq13) {
-		printk("Ok, fpu using old IRQ13 error reporting\n");
+		printk("OK, FPU using old IRQ 13 error reporting\n");
 		return;
 	}
 	__asm__("fninit\n\t"
@@ -98,9 +98,9 @@ __initfunc(static void check_fpu(void))
 		: "=m" (*&boot_cpu_data.fdiv_bug)
 		: "m" (*&x), "m" (*&y));
 	if (!boot_cpu_data.fdiv_bug)
-		printk("Ok, fpu using exception 16 error reporting.\n");
+		printk("OK, FPU using exception 16 error reporting.\n");
 	else
-		printk("Hmm, fpu using exception 16 error reporting with FDIV bug.\n");
+		printk("Hmm, FPU using exception 16 error reporting with FDIV bug.\n");
 }
 
 __initfunc(static void check_hlt(void))
@@ -111,7 +111,7 @@ __initfunc(static void check_hlt(void))
 		return;
 	}
 	__asm__ __volatile__("hlt ; hlt ; hlt ; hlt");
-	printk("Ok.\n");
+	printk("OK.\n");
 }
 
 __initfunc(static void check_tlb(void))
@@ -145,9 +145,9 @@ __initfunc(static void check_popad(void))
 	  : "=eax" (res)
 	  : "edx" (inp)
 	  : "eax", "ecx", "edx", "edi" );
-	/* If this fails, it means that any user program may lock CPU hard. Too bad. */
+	/* If this fails, it means that any user program may lock the CPU hard. Too bad. */
 	if (res != 12345678) printk( "Buggy.\n" );
-		        else printk( "Ok.\n" );
+		        else printk( "OK.\n" );
 #endif
 }
 

@@ -60,7 +60,7 @@
 #define VM86_GET_AND_RESET_IRQ	6
 
 /*
- * This is the stack-layout seen by the user space programm when we have
+ * This is the stack-layout seen by the user space program when we have
  * done a translation of "SAVE_ALL" from vm86 mode. The real kernel layout
  * is 'kernel_vm86_regs' (see below).
  */

@@ -106,10 +106,11 @@
 			        until after next CDB delivered.
 				Small change in pf_completion to round
 				up transfer size.
+	1.02    GRG 1998.06.16  Eliminated an Ugh
 
 */
 
-#define PF_VERSION      "1.01"
+#define PF_VERSION      "1.02"
 #define PF_MAJOR	47
 #define PF_NAME		"pf"
 #define PF_UNITS	4
@@ -504,31 +505,20 @@ void    cleanup_module(void);
 int     init_module(void)
 
 {       int     err;
-        long    flags;
-
-        save_flags(flags);
-        cli();
 
         err = pf_init();
 
-        restore_flags(flags);
         return err;
 }
 
 void    cleanup_module(void)
 
-{       long flags;
-	int unit;
-
-        save_flags(flags);
-        cli();
+{       int unit;
 
         unregister_blkdev(MAJOR_NR,name);
 
 	for (unit=0;unit<PF_UNITS;unit++)
 	  if (PF.present) pi_release(PI);
-	
-        restore_flags(flags);
 }
 
 #endif

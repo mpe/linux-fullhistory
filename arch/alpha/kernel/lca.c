@@ -84,7 +84,7 @@ unsigned int LCA_DMA_WIN_SIZE = LCA_DMA_WIN_SIZE_DEFAULT;
  *  
  * Notes:
  *	The function number selects which function of a multi-function device 
- *	(e.g., scsi and ethernet).
+ *	(e.g., SCSI and Ethernet).
  * 
  *	The register selects a DWORD (32 bit) register offset.  Hence it
  *	doesn't get shifted by 2 bits as we want to "drop" the bottom two

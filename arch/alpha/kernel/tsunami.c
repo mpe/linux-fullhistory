@@ -1,7 +1,7 @@
 /*
  * Code common to all TSUNAMI chips.
  *
- * Based on code written by David A Rusling (david.rusling@reo.mts.dec.com).
+ * Based on code written by David A. Rusling (david.rusling@reo.mts.dec.com).
  *
  */
 #include <linux/kernel.h>
@@ -18,7 +18,7 @@
 
 /*
  * NOTE: Herein lie back-to-back mb instructions.  They are magic. 
- * One plausible explanation is that the i/o controller does not properly
+ * One plausible explanation is that the I/O controller does not properly
  * handle the system transaction.  Another involves timing.  Ho hum.
  */
 
@@ -84,7 +84,7 @@ unsigned int TSUNAMI_DMA_WIN_SIZE = TSUNAMI_DMA_WIN_SIZE_DEFAULT;
  *  
  * Notes:
  *	The function number selects which function of a multi-function device 
- *	(e.g., scsi and ethernet).
+ *	(e.g., SCSI and Ethernet).
  * 
  *	The register selects a DWORD (32 bit) register offset.  Hence it
  *	doesn't get shifted by 2 bits as we want to "drop" the bottom two

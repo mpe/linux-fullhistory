@@ -1,5 +1,5 @@
 /* -*- linux-c -*-
- * sysctl_net_atalk.c: sysctl interface to net Appletalk subsystem.
+ * sysctl_net_atalk.c: sysctl interface to net AppleTalk subsystem.
  *
  * Begun April 1, 1996, Mike Shaver.
  * Added /proc/sys/net/atalk directory entry (empty =) ). [MS]

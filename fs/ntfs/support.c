@@ -96,7 +96,7 @@ void *ntfs_memmove(void *dest, const void *src, ntfs_size_t n)
 	return memmove(dest, src, n);
 }
 
-/* Warn that an error occured */
+/* Warn that an error occurred. */
 void ntfs_error(const char *fmt,...)
 {
         va_list ap;

@@ -1,8 +1,8 @@
-Amiga filesystems Overview
-==========================
+Overview of Amiga Filesystems
+=============================
 
 Not all varieties of the Amiga filesystems are supported for reading and
-writing. The Amiga currently knows 6 different filesystems:
+writing. The Amiga currently knows six different filesystems:
 
 DOS\0		The old or original filesystem, not really suited for
 		hard disks and normally not used on them, either.
@@ -67,7 +67,7 @@ verbose		The volume name, file system type and block size will
 		be written to the syslog when the filesystem is mounted.
 
 mufs		The filesystem is really a muFS, also it doesn't
-		identify itself as one. This option is neccessary if
+		identify itself as one. This option is necessary if
 		the filesystem wasn't formatted as muFS, but is used
 		as one.
 
@@ -99,9 +99,9 @@ The Amiga protection flags RWEDRWEDHSPARWED are handled as follows:
 
 User id and group id will be used unless set[gu]id are given as mount
 options. Since most of the Amiga file systems are single user systems
-they will be owned by root. The root directory of the Amiga filesystem
-(i. e. the mount point) will be owned by the user who actually mounts
-the filesystem (the root directory doesn't have uid/gid fields).
+they will be owned by root. The root directory (the mount point) of the
+Amiga filesystem will be owned by the user who actually mounts the
+filesystem (the root directory doesn't have uid/gid fields).
 
 Linux -> Amiga:
 
@@ -116,7 +116,7 @@ The Linux rwxrwxrwx file mode is handled as follows:
   - All other flags (suid, sgid, ...) are ignored and will
     not be retained.
     
-Newly created files and directories will get the user and group id
+Newly created files and directories will get the user and group ID
 of the current user and a mode according to the umask.
 
 Symbolic links
@@ -126,7 +126,7 @@ Although the Amiga and Linux file systems resemble each other, there
 are some, not always subtle, differences. One of them becomes apparent
 with symbolic links. While Linux has a file system with exactly one
 root directory, the Amiga has a separate root directory for each
-file system (e.g. partition, floppy disk, ...). With the Amiga,
+file system (for example, partition, floppy disk, ...). With the Amiga,
 these entities are called "volumes". They have symbolic names which
 can be used to access them. Thus, symbolic links can point to a
 different volume. AFFS turns the volume name into a directory name

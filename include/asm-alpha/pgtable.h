@@ -3,9 +3,9 @@
 
 /*
  * This file contains the functions and defines necessary to modify and use
- * the alpha page table tree.
+ * the Alpha page table tree.
  *
- * This hopefully works with any standard alpha page-size, as defined
+ * This hopefully works with any standard Alpha page-size, as defined
  * in <asm/page.h> (currently 8192).
  */
 #include <linux/config.h>
@@ -14,7 +14,7 @@
 #include <asm/processor.h>	/* For TASK_SIZE */
 #include <asm/mmu_context.h>
 
-/* Caches aren't brain-dead on the alpha. */
+/* Caches aren't brain-dead on the Alpha. */
 #define flush_cache_all()			do { } while (0)
 #define flush_cache_mm(mm)			do { } while (0)
 #define flush_cache_range(mm, start, end)	do { } while (0)
@@ -42,7 +42,7 @@ static inline void reload_context(struct task_struct *task)
 
 /*
  * Use a few helper functions to hide the ugly broken ASN
- * numbers on early alpha's (ev4 and ev45)
+ * numbers on early Alphas (ev4 and ev45)
  */
 #ifdef BROKEN_ASN
 
@@ -126,8 +126,8 @@ static inline void flush_tlb_page(struct vm_area_struct *vma,
 }
 
 /*
- * Flush a specified range of user mapping: on the
- * alpha we flush the whole user tlb
+ * Flush a specified range of user mapping:  on the
+ * Alpha we flush the whole user tlb.
  */
 static inline void flush_tlb_range(struct mm_struct *mm,
 	unsigned long start, unsigned long end)
@@ -157,7 +157,7 @@ extern void flush_tlb_range(struct mm_struct *, unsigned long, unsigned long);
 
 #endif /* __SMP__ */
 
-/* Certain architectures need to do special things when pte's
+/* Certain architectures need to do special things when PTEs
  * within a page table are directly modified.  Thus, the following
  * hook is made available.
  */
@@ -174,17 +174,17 @@ extern void flush_tlb_range(struct mm_struct *, unsigned long, unsigned long);
 #define PGDIR_MASK	(~(PGDIR_SIZE-1))
 
 /*
- * entries per page directory level: the alpha is three-level, with
+ * Entries per page directory level:  the Alpha is three-level, with
  * all levels having a one-page page table.
  *
- * The PGD is special: the last entry is reserved for self-mapping.
+ * The PGD is special:  the last entry is reserved for self-mapping.
  */
 #define PTRS_PER_PTE	(1UL << (PAGE_SHIFT-3))
 #define PTRS_PER_PMD	(1UL << (PAGE_SHIFT-3))
 #define PTRS_PER_PGD	((1UL << (PAGE_SHIFT-3))-1)
 #define USER_PTRS_PER_PGD	(TASK_SIZE / PGDIR_SIZE)
 
-/* the no. of pointers that fit on a page: this will go away */
+/* Number of pointers that fit on a page:  this will go away. */
 #define PTRS_PER_PAGE	(1UL << (PAGE_SHIFT-3))
 
 #define VMALLOC_START		0xFFFFFE0000000000
@@ -208,7 +208,7 @@ extern void flush_tlb_range(struct mm_struct *, unsigned long, unsigned long);
 #define _PAGE_ACCESSED	0x40000
 
 /*
- * NOTE! The "accessed" bit isn't necessarily exact: it can be kept exactly
+ * NOTE! The "accessed" bit isn't necessarily exact:  it can be kept exactly
  * by software (use the KRE/URE/KWE/UWE bits appropriately), but I'll fake it.
  * Under Linux/AXP, the "accessed" bit just means "read", and I'll just use
  * the KRE/URE bits to watch for it. That way we don't need to overload the
@@ -242,7 +242,7 @@ extern void flush_tlb_range(struct mm_struct *, unsigned long, unsigned long);
 #define _PAGE_S(x) _PAGE_NORMAL(x)
 
 /*
- * The hardware can handle write-only mappings, but as the alpha
+ * The hardware can handle write-only mappings, but as the Alpha
  * architecture does byte-wide writes with a read-modify-write
  * sequence, it's not practical to have write-without-read privs.
  * Thus the "-w- -> rw-" and "-wx -> rwx" mapping here (and in
@@ -271,7 +271,7 @@ extern void flush_tlb_range(struct mm_struct *, unsigned long, unsigned long);
  * BAD_PAGETABLE is used when we need a bogus page-table, while
  * BAD_PAGE is used for a bogus page.
  *
- * ZERO_PAGE is a global shared page that is always zero: used
+ * ZERO_PAGE is a global shared page that is always zero:  used
  * for zero-mapped memory areas etc..
  */
 extern pte_t __bad_page(void);
@@ -297,7 +297,7 @@ extern unsigned long __zero_page(void);
   ((unsigned long)(address)>>(PAGE_SHIFT-SIZEOF_PTR_LOG2)&PTR_MASK&~PAGE_MASK)
 
 /*
- * Conversion functions: convert a page and protection to a page entry,
+ * Conversion functions:  convert a page and protection to a page entry,
  * and a page entry and page directory to the page they refer to.
  */
 extern inline pte_t mk_pte(unsigned long page, pgprot_t pgprot)
@@ -576,7 +576,7 @@ extern inline void set_pgdir(unsigned long address, pgd_t entry)
 extern pgd_t swapper_pg_dir[1024];
 
 /*
- * The alpha doesn't have any external MMU info: the kernel page
+ * The Alpha doesn't have any external MMU info:  the kernel page
  * tables contain all the necessary information.
  */
 extern inline void update_mmu_cache(struct vm_area_struct * vma,
@@ -585,8 +585,8 @@ extern inline void update_mmu_cache(struct vm_area_struct * vma,
 }
 
 /*
- * Non-present pages: high 24 bits are offset, next 8 bits type,
- * low 32 bits zero..
+ * Non-present pages:  high 24 bits are offset, next 8 bits type,
+ * low 32 bits zero.
  */
 extern inline pte_t mk_swap_pte(unsigned long type, unsigned long offset)
 { pte_t pte; pte_val(pte) = (type << 32) | (offset << 40); return pte; }

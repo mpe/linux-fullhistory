@@ -579,8 +579,14 @@ static u_short maxfmode, chipset;
 #define modx(x,v)	((v) & ((x)-1))
 
 /* if x1 is not a constant, this macro won't make real sense :-) */
+#ifdef __mc68000__
 #define DIVUL(x1, x2) ({int res; asm("divul %1,%2,%3": "=d" (res): \
 	"d" (x2), "d" ((long)((x1)/0x100000000ULL)), "0" ((long)(x1))); res;})
+#else
+/* We know a bit about the numbers, so we can do it this way */
+#define DIVUL(x1, x2) ((((long)((unsigned long long)x1 >> 8) / x2) << 8) + \
+	((((long)((unsigned long long)x1 >> 8) % x2) << 8) / x2))
+#endif
 
 #define min(a, b)	((a) < (b) ? (a) : (b))
 #define max(a, b)	((a) > (b) ? (a) : (b))
@@ -1245,7 +1251,7 @@ extern unsigned short ami_intena_vals[];
 static struct fb_ops amifb_ops = {
 	amifb_open, amifb_release, amifb_get_fix, amifb_get_var,
 	amifb_set_var, amifb_get_cmap, amifb_set_cmap,
-	amifb_pan_display, NULL, amifb_ioctl
+	amifb_pan_display, amifb_ioctl
 };
 
 
@@ -1803,9 +1809,13 @@ default_chipset:
 	 * Calculate the Pixel Clock Values for this Machine
 	 */
 
-	pixclock[TAG_SHRES] = DIVUL(25E9, amiga_eclock);	/* SHRES:  35 ns / 28 MHz */
-	pixclock[TAG_HIRES] = DIVUL(50E9, amiga_eclock);	/* HIRES:  70 ns / 14 MHz */
-	pixclock[TAG_LORES] = DIVUL(100E9, amiga_eclock); 	/* LORES: 140 ns /  7 MHz */
+	{
+	u_long tmp = DIVUL(200E9, amiga_eclock);
+
+	pixclock[TAG_SHRES] = (tmp + 4) / 8;	/* SHRES:  35 ns / 28 MHz */
+	pixclock[TAG_HIRES] = (tmp + 2) / 4;	/* HIRES:  70 ns / 14 MHz */
+	pixclock[TAG_LORES] = (tmp + 1) / 2;	/* LORES: 140 ns /  7 MHz */
+	}
 
 	/*
 	 * Replace the Tag Values with the Real Pixel Clock Values
@@ -2543,7 +2553,8 @@ static int ami_encode_var(struct fb_var_screeninfo *var,
                           struct amifb_par *par)
 {
 	u_short clk_shift, line_shift;
-	int i;
+
+	memset(var, 0, sizeof(struct fb_var_screeninfo));
 
 	clk_shift = par->clk_shift;
 	line_shift = par->line_shift;
@@ -2625,9 +2636,6 @@ static int ami_encode_var(struct fb_var_screeninfo *var,
 		var->sync |= FB_SYNC_EXT;
 	if (par->vmode & FB_VMODE_YWRAP)
 		var->vmode |= FB_VMODE_YWRAP;
-
-	for (i = 0; i < arraysize(var->reserved); i++)
-		var->reserved[i] = 0;
 
 	return 0;
 }
@@ -2927,20 +2935,20 @@ static void ami_do_blank(void)
 		custom.dmacon = DMAF_RASTER | DMAF_SPRITE;
 		red = green = blue = 0;
 		if (!IS_OCS && do_blank > 1) {
-			switch (do_blank) {
-				case 2 : /* suspend vsync */
+			switch (do_blank-1) {
+				case VESA_VSYNC_SUSPEND:
 					custom.hsstrt = hsstrt2hw(par->hsstrt);
 					custom.hsstop = hsstop2hw(par->hsstop);
 					custom.vsstrt = vsstrt2hw(par->vtotal+4);
 					custom.vsstop = vsstop2hw(par->vtotal+4);
 					break;
-				case 3 : /* suspend hsync */
+				case VESA_HSYNC_SUSPEND:
 					custom.hsstrt = hsstrt2hw(par->htotal+16);
 					custom.hsstop = hsstop2hw(par->htotal+16);
 					custom.vsstrt = vsstrt2hw(par->vsstrt);
 					custom.vsstop = vsstrt2hw(par->vsstop);
 					break;
-				case 4 : /* powerdown */
+				case VESA_POWERDOWN:
 					custom.hsstrt = hsstrt2hw(par->htotal+16);
 					custom.hsstop = hsstop2hw(par->htotal+16);
 					custom.vsstrt = vsstrt2hw(par->vtotal+4);

@@ -20,6 +20,7 @@
  * for more details.
  */
 
+
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -61,6 +62,7 @@ struct cyberfb_par {
    int xres;
    int yres;
    int bpp;
+   int accel;
 };
 
 static struct cyberfb_par current_par;
@@ -133,49 +135,49 @@ static struct fb_videomode cyberfb_predefined[] __initdata = {
 	"640x480-8", {		/* Cybervision 8 bpp */
 	    640, 480, 640, 480, 0, 0, 8, 0,
 	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, FB_ACCEL_NONE, CYBER8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    0, 0, -1, -1, FB_ACCELF_TEXT, CYBER8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
     }, {
 	"800x600-8", {		/* Cybervision 8 bpp */
 	    800, 600, 800, 600, 0, 0, 8, 0,
 	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, FB_ACCEL_NONE, CYBER8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    0, 0, -1, -1, FB_ACCELF_TEXT, CYBER8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
     }, {
 	"1024x768-8", {		/* Cybervision 8 bpp */
 	    1024, 768, 1024, 768, 0, 0, 8, 0,
 	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, FB_ACCEL_NONE, CYBER8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    0, 0, -1, -1, FB_ACCELF_TEXT, CYBER8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
     }, {
 	"1152x886-8", {		/* Cybervision 8 bpp */
 	    1152, 886, 1152, 886, 0, 0, 8, 0,
 	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, FB_ACCEL_NONE, CYBER8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    0, 0, -1, -1, FB_ACCELF_TEXT, CYBER8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
     }, {
 	"1280x1024-8", {	/* Cybervision 8 bpp */
 	    1280, 1024, 1280, 1024, 0, 0, 8, 0,
 	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, FB_ACCEL_NONE, CYBER8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    0, 0, -1, -1, FB_ACCELF_TEXT, CYBER8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
     }, {
 	"1600x1200-8", {	/* Cybervision 8 bpp */
 	    1600, 1200, 1600, 1200, 0, 0, 8, 0,
 	    {0, 8, 0}, {0, 8, 0}, {0, 8, 0}, {0, 0, 0},
-	    0, 0, -1, -1, FB_ACCEL_NONE, CYBER8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    0, 0, -1, -1, FB_ACCELF_TEXT, CYBER8_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
     }, {
 	"800x600-16", {		/* Cybervision 16 bpp */
 	    800, 600, 800, 600, 0, 0, 16, 0,
 	    {11, 5, 0}, {5, 6, 0}, {0, 5, 0}, {0, 0, 0},
-	    0, 0, -1, -1, FB_ACCEL_NONE, CYBER16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
+	    0, 0, -1, -1, FB_ACCELF_TEXT, CYBER16_PIXCLOCK, 64, 96, 35, 12, 112, 2,
 	    FB_SYNC_COMP_HIGH_ACT|FB_SYNC_VERT_HIGH_ACT, FB_VMODE_NONINTERLACED
 	}
     }
@@ -371,12 +373,11 @@ static int Cyber_init(void)
 static int Cyber_encode_fix(struct fb_fix_screeninfo *fix,
 			    struct cyberfb_par *par)
 {
-	int i;
-
+	memset(fix, 0, sizeof(struct fb_fix_screeninfo));
 	strcpy(fix->id, cyberfb_name);
-	fix->smem_start = (caddr_t)CyberMem;
+	fix->smem_start = (char *)CyberMem;
 	fix->smem_len = CyberSize;
-	fix->mmio_start = (unsigned char *)CyberRegs;
+	fix->mmio_start = (char *)CyberRegs;
 	fix->mmio_len = 0x10000;
 
 	fix->type = FB_TYPE_PACKED_PIXELS;
@@ -390,9 +391,7 @@ static int Cyber_encode_fix(struct fb_fix_screeninfo *fix,
 	fix->ypanstep = 0;
 	fix->ywrapstep = 0;
 	fix->line_length = 0;
-
-	for (i = 0; i < arraysize(fix->reserved); i++)
-		fix->reserved[i] = 0;
+	fix->accel = FB_ACCEL_S3_TRIO64;
 
 	return(0);
 }
@@ -410,6 +409,10 @@ static int Cyber_decode_var(struct fb_var_screeninfo *var,
 	par->xres = var->xres;
 	par->yres = var->yres;
 	par->bpp = var->bits_per_pixel;
+	if (var->accel_flags & FB_ACCELF_TEXT)
+	    par->accel = FB_ACCELF_TEXT;
+	else
+	    par->accel = 0;
 #else
 	if (Cyberfb_Cyber8) {
 		par->xres = CYBER8_WIDTH;
@@ -433,8 +436,6 @@ static int Cyber_decode_var(struct fb_var_screeninfo *var,
 static int Cyber_encode_var(struct fb_var_screeninfo *var,
 			    struct cyberfb_par *par)
 {
-	int i;
-
 	var->xres = par->xres;
 	var->yres = par->yres;
 	var->xres_virtual = par->xres;
@@ -471,8 +472,7 @@ static int Cyber_encode_var(struct fb_var_screeninfo *var,
 	var->height = -1;
 	var->width = -1;
 
-	var->accel = FB_ACCEL_CYBERVISION;
-	DPRINTK("accel CV64\n");
+	var->accel_flags = (par->accel && par->bpp == 8) ? FB_ACCELF_TEXT : 0;
 
 	var->vmode = FB_VMODE_NONINTERLACED;
 
@@ -489,9 +489,6 @@ static int Cyber_encode_var(struct fb_var_screeninfo *var,
 	var->lower_margin = 12;
 	var->hsync_len = 112;
 	var->vsync_len = 2;
-
-	for (i = 0; i < arraysize(var->reserved); i++)
-		var->reserved[i] = 0;
 
 	return(0);
 }
@@ -847,7 +844,7 @@ static void cyberfb_set_disp(int con, struct fb_info *info)
 	cyberfb_get_fix(&fix, con, info);
 	if (con == -1)
 		con = 0;
-	display->screen_base = (u_char *)fix.smem_start;
+	display->screen_base = fix.smem_start;
 	display->visual = fix.visual;
 	display->type = fix.type;
 	display->type_aux = fix.type_aux;
@@ -858,7 +855,11 @@ static void cyberfb_set_disp(int con, struct fb_info *info)
 	switch (display->var.bits_per_pixel) {
 #ifdef CONFIG_FBCON_CFB8
 	    case 8:
-		display->dispsw = &fbcon_cyber8;
+		if (display->var.accel_flags & FB_ACCELF_TEXT) {
+		    display->dispsw = &fbcon_cyber8;
+#warning FIXME: We should reinit the graphics engine here
+		} else
+		    display->dispsw = &fbcon_cfb8;
 		break;
 #endif
 #ifdef CONFIG_FBCON_CFB16
@@ -880,7 +881,7 @@ static void cyberfb_set_disp(int con, struct fb_info *info)
 static int cyberfb_set_var(struct fb_var_screeninfo *var, int con,
 			   struct fb_info *info)
 {
-	int err, oldxres, oldyres, oldvxres, oldvyres, oldbpp;
+	int err, oldxres, oldyres, oldvxres, oldvyres, oldbpp, oldaccel;
 
 	if ((err = do_fb_set_var(var, con == currcon)))
 		return(err);
@@ -890,11 +891,13 @@ static int cyberfb_set_var(struct fb_var_screeninfo *var, int con,
 		oldvxres = fb_display[con].var.xres_virtual;
 		oldvyres = fb_display[con].var.yres_virtual;
 		oldbpp = fb_display[con].var.bits_per_pixel;
+		oldaccel = fb_display[con].var.accel_flags;
 		fb_display[con].var = *var;
 		if (oldxres != var->xres || oldyres != var->yres ||
 		    oldvxres != var->xres_virtual ||
 		    oldvyres != var->yres_virtual ||
-		    oldbpp != var->bits_per_pixel) {
+		    oldbpp != var->bits_per_pixel ||
+		    oldaccel != var->accel_flags) {
 			cyberfb_set_disp(con, info);
 			(*fb_info.changevar)(con);
 			fb_alloc_cmap(&fb_display[con].cmap, 0, 0);
@@ -975,7 +978,7 @@ static int cyberfb_ioctl(struct inode *inode, struct file *file,
 static struct fb_ops cyberfb_ops = {
 	cyberfb_open, cyberfb_release, cyberfb_get_fix, cyberfb_get_var,
 	cyberfb_set_var, cyberfb_get_cmap, cyberfb_set_cmap,
-	cyberfb_pan_display, NULL, cyberfb_ioctl
+	cyberfb_pan_display, cyberfb_ioctl
 };
 
 
@@ -1175,7 +1178,7 @@ static void fbcon_cyber8_revc(struct display *p, int xx, int yy)
 
 static struct display_switch fbcon_cyber8 = {
    fbcon_cfb8_setup, fbcon_cyber8_bmove, fbcon_cyber8_clear, fbcon_cyber8_putc,
-   fbcon_cyber8_putcs, fbcon_cyber8_revc
+   fbcon_cyber8_putcs, fbcon_cyber8_revc, NULL
 };
 #endif
 
@@ -1183,7 +1186,7 @@ static struct display_switch fbcon_cyber8 = {
 #ifdef MODULE
 int init_module(void)
 {
-	return(cyberfb_init(NULL));
+	return cyberfb_init(NULL);
 }
 
 void cleanup_module(void)

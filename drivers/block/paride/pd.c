@@ -107,10 +107,11 @@
 				Added eject ioctl
 	1.02    GRG 1998.05.06  SMP spinlock changes, 
 				Added slave support
+	1.03    GRG 1998.06.16  Eliminate an Ugh.
 
 */
 
-#define PD_VERSION      "1.02"
+#define PD_VERSION      "1.03"
 #define PD_MAJOR	45
 #define PD_NAME		"pd"
 #define PD_UNITS	4
@@ -606,41 +607,26 @@ void    cleanup_module(void);
 int     init_module(void)
 
 {       int     err, unit;
-        long    flags;
-
-        save_flags(flags);
-        cli();
 
         err = pd_init();
-        if (err) {
-            restore_flags(flags);
-            return err;
-        }
+        if (err) return err;
 
 	pd_geninit(&pd_gendisk);
 
-        if (!pd_gendisk.nr_real) {
-                restore_flags(flags);
-                return -1;
-        }
+        if (!pd_gendisk.nr_real)  return -1;
 
         pd_valid = 0;
 	for (unit=0;unit<PD_UNITS;unit++) 
           if (PD.present) resetup_one_dev(&pd_gendisk,unit);
         pd_valid = 1;
 
-        restore_flags(flags);
         return 0;
 }
 
 void    cleanup_module(void)
 
 {       struct gendisk **gdp;
-        long flags;
 	int unit;
-
-        save_flags(flags);
-        cli();
 
         unregister_blkdev(MAJOR_NR,name);
 
@@ -650,8 +636,6 @@ void    cleanup_module(void)
 
 	for (unit=0;unit<PD_UNITS;unit++) 
 	   if (PD.present) pi_release(PI);
-
-        restore_flags(flags);
 }
 
 #endif

@@ -1,4 +1,3 @@
-
 Documentation for /proc/sys/vm/*	version 0.1
 	(c) 1998, Rik van Riel <H.H.vanRiel@phys.uu.nl>
 
@@ -99,7 +98,7 @@ be used for buffer memory. The percentage is calculated
 as a percentage of total system memory.
 
 The values are:
-min_percent	-- this is the minumum percentage of memory
+min_percent	-- this is the minimum percentage of memory
 		   that should be spent on buffer memory
 borrow_percent  -- when Linux is short on memory, and the
                    buffer cache uses more memory, free pages
@@ -138,7 +137,7 @@ freepages.high	The swapping daemon exits when memory is
 kswapd:
 
 Kswapd is the kernel swapout daemon. That is, kswapd is that
-piece of the kernel that frees memory when it get's fragmented
+piece of the kernel that frees memory when it gets fragmented
 or full. Since every system is different, you'll probably want
 some control over this piece of the system.
 
@@ -152,7 +151,7 @@ tries_base	The maximum number of pages kswapd tries to
 		number. Usually this number will be divided
 		by 4 or 8 (see mm/vmscan.c), so it isn't as
 		big as it looks.
-		When you need to increase the bandwith to/from
+		When you need to increase the bandwidth to/from
 		swap, you'll want to increase this number.
 tries_min	This is the minimum number of times kswapd
 		tries to free a page each time it is called.
@@ -186,9 +185,9 @@ From linux/mm/mmap.c:
 --------------------------------------------------------------
 static inline int vm_enough_memory(long pages)
 {
-    /* Stupid algorithm to decide if we have enough memory: while
-     * simple, it hopefully works in most obvious cases.. Easy to
-     * fool it, but this should catch most mistakes.
+    /* This stupid algorithm decides whether we have enough memory:
+     * while simple, it should work in most obvious cases.  It's
+     * easily fooled, but this should catch most mistakes.
      */
     long freepages;
 
@@ -269,7 +268,7 @@ also scan small processes.
 The values of sc_pageout_weight and sc_bufferout_weight are
 used to control how many tries kswapd will make in order
 to swapout one page / buffer. These values can be used to
-finetune the ratio between user pages and buffer/cache memory.
+fine-tune the ratio between user pages and buffer/cache memory.
 When you find that your Linux system is swapping out too many
 process pages in order to satisfy buffer memory demands, you
 might want to either increase sc_bufferout_weight, or decrease

@@ -1,7 +1,7 @@
 /*
  * linux/fs/nfsd/nfsfh.c
  *
- * NFS server filehandle treatment.
+ * NFS server file handle treatment.
  *
  * Copyright (C) 1995, 1996 Olaf Kirch <okir@monad.swb.de>
  */
@@ -182,7 +182,7 @@ static int add_to_path_cache(struct dentry *dentry)
 	int len, result = 0;
 
 #ifdef NFSD_DEBUG_VERBOSE
-printk("add_to_path_cache: cacheing %s/%s\n",
+printk("add_to_path_cache: caching %s/%s\n",
 dentry->d_parent->d_name.name, dentry->d_name.name);
 #endif
 	/*
@@ -222,7 +222,7 @@ printk("add_to_path_cache: added %s, paths=%d\n", new->name, nfsd_nr_paths);
 	return result;
 
 	/*
-	 * If the dentry's path length changed, just try again ...
+	 * If the dentry's path length changed, just try again.
 	 */
 retry:
 	kfree(new);
@@ -374,7 +374,7 @@ out:
 /*
  * Look up a dentry given inode and parent inode numbers.
  *
- * This relies on the ability of a unix-like filesystem to return
+ * This relies on the ability of a Unix-like filesystem to return
  * the parent inode of a directory as the ".." (second) entry.
  *
  * This could be further optimized if we had an efficient way of
@@ -610,7 +610,7 @@ printk("expire_old: expiring %s older than %d\n",
 /*
  * Add a dentry to the file or dir cache.
  *
- * Note: As NFS filehandles must have an inode, we don't accept
+ * Note: As NFS file handles must have an inode, we don't accept
  * negative dentries.
  */
 static int add_to_fhcache(struct dentry *dentry, int cache)
@@ -846,18 +846,18 @@ static struct dentry *nfsd_cached_lookup(struct knfs_fh *fh)
 }
 
 /*
- * The is the basic lookup mechanism for turning an NFS filehandle 
+ * The is the basic lookup mechanism for turning an NFS file handle 
  * into a dentry. There are several levels to the search:
  * (1) Look for the dentry pointer the short-term fhcache,
  *     and verify that it has the correct inode number.
  *
- * (2) Try to validate the dentry pointer in the filehandle,
+ * (2) Try to validate the dentry pointer in the file handle,
  *     and verify that it has the correct inode number. If this
  *     fails, check for a cached lookup in the fix-up list and
  *     repeat step (2) using the new dentry pointer.
  *
  * (3) Look up the dentry by using the inode and parent inode numbers
- *     to build the name string. This should succeed for any unix-like
+ *     to build the name string. This should succeed for any Unix-like
  *     filesystem.
  *
  * (4) Search for the parent dentry in the dir cache, and then
@@ -886,7 +886,7 @@ find_fh_dentry(struct knfs_fh *fh)
 	}
 
 	/*
-	 * Stage 2: Attempt to validate the dentry in the filehandle.
+	 * Stage 2: Attempt to validate the dentry in the file handle.
 	 */
 	dentry = fh->fh_dcookie;
 recheck:
@@ -896,7 +896,7 @@ recheck:
 		if (dir->i_ino == fh->fh_dirino && dir->i_dev == fh->fh_dev) {
 			struct inode * inode = dentry->d_inode;
 			/*
-			 * NFS filehandles must always have an inode,
+			 * NFS file handles must always have an inode,
 			 * so we won't accept a negative dentry.
 			 */
 			if (inode && inode->i_ino == fh->fh_ino) {
@@ -929,7 +929,7 @@ printk("find_fh_dentry: retried validation successful\n");
 
 	/*
 	 * Stage 3: Look up the dentry based on the inode and parent inode
-	 * numbers. This should work for all unix-like filesystems ...
+	 * numbers. This should work for all Unix-like filesystems.
 	 */
 	looked_up = 1;
 	dentry = lookup_inode(fh->fh_dev, fh->fh_dirino, fh->fh_ino);
@@ -994,7 +994,7 @@ out:
 /*
  * Perform sanity checks on the dentry in a client's file handle.
  *
- * Note that the filehandle dentry may need to be freed even after
+ * Note that the file handle dentry may need to be freed even after
  * an error return.
  */
 u32
@@ -1033,17 +1033,17 @@ fh_verify(struct svc_rqst *rqstp, struct svc_fh *fhp, int type, int access)
 	nfsd_setuser(rqstp, exp);
 
 	/*
-	 * Look up the dentry using the NFS fh.
+	 * Look up the dentry using the NFS file handle.
 	 */
 	error = nfserr_stale;
 	dentry = find_fh_dentry(fh);
 	if (!dentry)
 		goto out;
 	/*
-	 * Note: it's possible that the returned dentry won't be the
-	 * one in the filehandle.  We can correct the FH for our use,
-	 * but unfortunately the client will keep sending the broken
-	 * one.  Hopefully the lookup will keep patching things up..
+	 * Note:  it's possible the returned dentry won't be the one in the
+         * file handle.  We can correct the file handle for our use, but
+         * unfortunately the client will keep sending the broken one.  Let's
+         * hope the lookup will keep patching things up.
 	 */
 	fhp->fh_dentry = dentry;
 	fhp->fh_export = exp;
@@ -1081,7 +1081,7 @@ out:
 }
 
 /*
- * Compose a filehandle for an NFS reply.
+ * Compose a file handle for an NFS reply.
  *
  * Note that when first composed, the dentry may not yet have
  * an inode.  In this case a call to fh_update should be made
@@ -1121,7 +1121,7 @@ fh_compose(struct svc_fh *fhp, struct svc_export *exp, struct dentry *dentry)
 }
 
 /*
- * Update filehandle information after changing a dentry.
+ * Update file handle information after changing a dentry.
  */
 void
 fh_update(struct svc_fh *fhp)
@@ -1147,7 +1147,7 @@ out:
 }
 
 /*
- * Release a filehandle.  If the filehandle carries a dentry count,
+ * Release a file handle.  If the file handle carries a dentry count,
  * we add the dentry to the short-term cache rather than release it.
  */
 void

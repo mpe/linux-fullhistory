@@ -8,8 +8,8 @@ Each DLCI is a point-to-point link between your machine and a remote one.
 As such, a separate device is needed to accommodate the routing.  Within the
 net-tools archives is 'dlcicfg'.  This program will communicate with the
 base "DLCI" device, and create new net devices named 'dlci00', 'dlci01'... 
-The configuration script will ask you how many DLCI's you need, as well as
-how many DLCI's you want to assign to each Frame Relay Access Device (FRAD).
+The configuration script will ask you how many DLCIs you need, as well as
+how many DLCIs you want to assign to each Frame Relay Access Device (FRAD).
 
 The DLCI uses a number of function calls to communicate with the FRAD, all
 of which are stored in the FRAD's private data area.  assoc/deassoc, 

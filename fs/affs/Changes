@@ -37,7 +37,7 @@ Version 3.9
 - truncate() zeroes the unused remainder of a
   partially used last block when a file is truncated.
   It also marks the inode dirty now (which is not
-  really neccessary as notify_change() will do
+  really necessary as notify_change() will do
   it anyway).
 
 - Added a few comments, fixed some typos (and
@@ -54,7 +54,7 @@ Bill Hawes kindly reviewed the affs and sent me the
 patches he did. They're marked (BH). Thanks, Bill!
 
 - Cleanup of error handling in read_super().
-  Didn't release all ressources in case of an
+  Didn't release all resources in case of an
   error. (BH)
 
 - put_inode() releases the ext cache only if it's
@@ -72,7 +72,7 @@ patches he did. They're marked (BH). Thanks, Bill!
 - getblock() did not invalidate the key cache
   when it allocated a new block.
 
-- Removed some unneccessary locks as Bill
+- Removed some unnecessary locks as Bill
   suggested.
 
 - Simplified match_name(), changed all hashing
@@ -129,7 +129,7 @@ Version 3.6
   directory changes).
 
 - Handling of hard links rewritten. To the VFS
-  they appear now as normal unix links. They are
+  they appear now as normal Unix links. They are
   now resolved only once in lookup(). The backside
   is that unlink(), rename() and rmdir() have to
   be smart about them, but the result is worth the
@@ -165,7 +165,7 @@ Version 3.6
 
 - Argument to volume option could overflow the
   name buffer. It is now silently truncated to
-  30 characters. (Damnit! This kind of bug
+  30 characters. (Damn it! This kind of bug
   is too embarrassing.)
 
 - Split inode.c into 2 files, the superblock

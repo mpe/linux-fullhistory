@@ -183,7 +183,7 @@
 #define H8_SYSTEM_DELAY_TEST            0x100000
 #define H8_POWER_SWITCH_TEST            0x200000
 
-/* cpu speeds and clock divisor values */
+/* CPU speeds and clock divisor values */
 #define MHZ_14                           5
 #define MHZ_28                           4
 #define MHZ_57                           3

@@ -6,7 +6,7 @@
 
 /*
  * This file contains the default values for the opereation of the
- * Linux VM subsystem. Finetuning documentation can be found in
+ * Linux VM subsystem. Fine-tuning documentation can be found in
  * linux/Documentation/sysctl/vm.txt.
  * Started 18.12.91
  * Swap aging added 23.2.95, Stephen Tweedie.

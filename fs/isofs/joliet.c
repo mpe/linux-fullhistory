@@ -12,7 +12,7 @@
 #include <linux/iso_fs.h>
 
 /*
- * Convert Unicode 16 to UTF8 or ascii.
+ * Convert Unicode 16 to UTF8 or ASCII.
  */
 static int
 uni16_to_x8(unsigned char *ascii, unsigned char *uni, int len,

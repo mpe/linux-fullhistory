@@ -324,8 +324,8 @@ static unsigned long load_elf_interp(struct elfhdr * interp_elf_ex,
 	/*
 	 * Now fill out the bss section.  First pad the last page up
 	 * to the page boundary, and then perform a mmap to make sure
-	 * that there are zeromapped pages up to and including the last
-	 * bss page.
+	 * that there are zero-mapped pages up to and including the 
+	 * last bss page.
 	 */
 	padzero(elf_bss);
 	elf_bss = ELF_PAGESTART(elf_bss + ELF_EXEC_PAGESIZE - 1); /* What we have mapped so far */
@@ -1222,7 +1222,7 @@ static int elf_core_dump(long signr, struct pt_regs * regs)
 	notes[2].datasz = sizeof(*current);
 	notes[2].data = current;
 
-	/* Try to dump the fpu. */
+	/* Try to dump the FPU. */
 	prstatus.pr_fpvalid = dump_fpu (regs, &fpu);
 	if (!prstatus.pr_fpvalid)
 	{

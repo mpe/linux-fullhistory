@@ -29,6 +29,7 @@ struct display_switch {
     void (*putcs)(struct vc_data *conp, struct display *p, const char *s,
 		  int count, int yy, int xx);     
     void (*revc)(struct display *p, int xx, int yy);
+    void (*cursor)(struct display *p, int mode, int xx, int yy);
 }; 
 
 
@@ -45,12 +46,14 @@ struct display_switch {
 	(((conp)->vc_video_erase_char >> ((p)->inverse ? 8 : 12)) & 0x0f)
 
 /* Monochrome */
-#define attr_bold(p,conp)     \
-	(((conp)->vc_attr & 3) == 2)
-#define attr_reverse(p,conp)  \
+#define attr_bold(p,conp) \
+	((conp)->vc_attr & 2)
+#define attr_reverse(p,conp) \
 	(((conp)->vc_attr & 8) ^ ((p)->inverse ? 8 : 0))
 #define attr_underline(p,conp) \
-	(((conp)->vc_attr) & 4)
+	((conp)->vc_attr & 4)
+#define attr_blink(p,conp) \
+	((conp)->vc_attr & 0x80)
 
 
 /* ================================================================= */
@@ -317,6 +320,54 @@ static __inline__ void *mymemset(void *s, size_t count)
     return(memset(s, 255, count));
 }
 
+#ifdef __i386__
+static __inline__ void fast_memmove(void *d, const void *s, size_t count)
+{
+    if (d < s) {
+__asm__ __volatile__ (
+	"cld\n\t"
+	"shrl $1,%%ecx\n\t"
+	"jnc 1f\n\t"
+	"movsb\n"
+	"1:\tshrl $1,%%ecx\n\t"
+	"jnc 2f\n\t"
+	"movsw\n"
+	"2:\trep\n\t"
+	"movsl"
+	: /* no output */
+	:"c"(count),"D"((long)d),"S"((long)s)
+	:"cx","di","si","memory");
+    } else {
+__asm__ __volatile__ (
+	"std\n\t"
+	"shrl $1,%%ecx\n\t"
+	"jnc 1f\n\t"
+	"movb 3(%%esi),%%al\n\t"
+	"movb %%al,3(%%edi)\n\t"
+	"decl %%esi\n\t"
+	"decl %%edi\n"
+	"1:\tshrl $1,%%ecx\n\t"
+	"jnc 2f\n\t"
+	"movw 2(%%esi),%%ax\n\t"
+	"movw %%ax,2(%%edi)\n\t"
+	"decl %%esi\n\t"
+	"decl %%edi\n\t"
+	"decl %%esi\n\t"
+	"decl %%edi\n"
+	"2:\trep\n\t"
+	"movsl"
+	: /* no output */
+	:"c"(count),"D"(count-4+(long)d),"S"(count-4+(long)s)
+	:"ax","cx","di","si","memory");
+    }
+}
+
+static __inline__ void *mymemmove(char *dst, const char *src, size_t size)
+{
+    fast_memmove(dst, src, size);
+    return dst;
+}
+#else
 static __inline__ void *mymemmove(void *d, const void *s, size_t count)
 {
     return(memmove(d, s, count));
@@ -326,6 +377,7 @@ static __inline__ void fast_memmove(char *dst, const char *src, size_t size)
 {
     memmove(dst, src, size);
 }
+#endif	/* !i386 */
 
 #endif /* !m68k */
 

@@ -64,6 +64,10 @@ ifeq ($(CONFIG_FB_MAC),y)
 L_OBJS += macfb.o
 endif
 
+ifeq ($(CONFIG_FB_HP300),y)
+L_OBJS += hpfb.o
+endif
+
 ifeq ($(CONFIG_FB_OF),y)
 L_OBJS += offb.o
 endif
@@ -86,6 +90,22 @@ endif
 
 ifeq ($(CONFIG_FB_TGA),y)
 L_OBJS += tgafb.o
+endif
+
+ifeq ($(CONFIG_FB_VGA),y)
+L_OBJS += vgafb.o
+endif
+
+ifeq ($(CONFIG_FB_VESA),y)
+L_OBJS += vesafb.o
+endif
+
+ifeq ($(CONFIG_FB_MDA),y)
+L_OBJS += mdafb.o
+else
+  ifeq ($(CONFIG_FB_MDA),m)
+  M_OBJS += mdafb.o
+  endif
 endif
 
 ifeq ($(CONFIG_FB_VIRGE),y)
@@ -158,6 +178,10 @@ ifdef CONFIG_FBCON_MFB
 LX_OBJS += fbcon-mfb.o
 endif
 
+ifdef CONFIG_FBCON_VGA
+LX_OBJS += fbcon-vga.o
+endif
+
 # GSP Console
 
 ifdef CONFIG_AMIGA_GSP
@@ -166,10 +190,16 @@ endif
 
 # VGA Text Console
 
-ifdef CONFIG_ABSTRACT_CONSOLE
 ifdef CONFIG_VGA_CONSOLE
+ifndef CONFIG_FB_VGA
 L_OBJS := $(L_OBJS) vgacon.o
 endif
+endif
+
+# Console Wrapper
+
+ifdef CONFIG_ABSCON_COMPAT
+L_OBJS := $(L_OBJS) compatcon.o
 endif
 
 include $(TOPDIR)/Rules.make

@@ -121,7 +121,7 @@ fs_off_limits(struct super_block *sb)
 }
 
 /*
- * Check whether directory is a mount point, but it is alright if
+ * Check whether directory is a mount point, but it is all right if
  * this is precisely the local mount point being exported.
  */
 static inline int
@@ -178,7 +178,7 @@ printk("nfsd_lookup: %s/%s crossed mount point!\n", dparent->d_name.name, name);
 	}
 
 	/*
-	 * Note: we compose the filehandle now, but as the
+	 * Note: we compose the file handle now, but as the
 	 * dentry may be negative, it may need to be updated.
 	 */
 	fh_compose(resfh, exp, dchild);
@@ -611,7 +611,7 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if(!dirp->i_op || !dirp->i_op->lookup)
 		goto out;
 	/*
-	 * Check whether the response filehandle has been verified yet.
+	 * Check whether the response file handle has been verified yet.
 	 * If it has, the parent directory should already be locked.
 	 */
 	if (!resfhp->fh_dverified) {
@@ -679,7 +679,7 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		write_inode_now(dirp);
 
 	/*
-	 * Update the filehandle to get the new inode info.
+	 * Update the file handle to get the new inode info.
 	 */
 	fh_update(resfhp);
 

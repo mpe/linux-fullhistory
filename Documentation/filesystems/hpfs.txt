@@ -5,7 +5,7 @@ Mount options are the same as for msdos partitions.
   uid=nnn	All files in the partition will be owned by user id nnn.
   gid=nnn	All files in the partition will be in group nnn.
   umask=nnn	The permission mask (see umask(1)) for the partition.
-  conv=binary   Data is returned exactly as is, with CRLF's.  [default]
+  conv=binary   Data is returned exactly as is, with CRLFs.  [default]
   conv=text     (Carriage return, line feed) is replaced with newline.
   conv=auto     Chooses, file by file, conv=binary or conv=text (by guessing)
 

@@ -93,7 +93,7 @@ AFLAGS += -D__SMP__
 endif
 
 #
-# if you want the ram-disk device, define this to be the
+# if you want the RAM disk device, define this to be the
 # size in blocks.
 #
 
@@ -143,6 +143,10 @@ endif
 
 ifdef CONFIG_PNP
 DRIVERS := $(DRIVERS) drivers/pnp/pnp.a
+endif
+
+ifdef CONFIG_VT
+DRIVERS := $(DRIVERS) drivers/video/video.a
 endif
 
 ifeq ($(CONFIG_PARIDE),y)
@@ -319,6 +323,8 @@ modules_install:
 	if [ -f CDROM_MODULES ]; then inst_mod CDROM_MODULES cdrom; fi; \
 	if [ -f HAM_MODULES   ]; then inst_mod HAM_MODULES   net;   fi; \
 	if [ -f SOUND_MODULES ]; then inst_mod SOUND_MODULES sound; fi; \
+	if [ -f VIDEO_MODULES ]; then inst_mod VIDEO_MODULES video; fi; \
+	if [ -f FC4_MODULES   ]; then inst_mod FC4_MODULES   fc4;   fi; \
 	\
 	ls *.o > .allmods; \
 	echo $$MODULES | tr ' ' '\n' | sort | comm -23 .allmods - > .misc; \

@@ -1,6 +1,6 @@
 /*
- *	AARP:		An implementation of the Appletalk aarp protocol for
- *			ethernet 'ELAP'.
+ *	AARP:		An implementation of the AppleTalk AARP protocol for
+ *			Ethernet 'ELAP'.
  *
  *		Alan Cox  <Alan.Cox@linux.org>
  *
@@ -20,7 +20,7 @@
  *
  *
  *	References:
- *		Inside Appletalk (2nd Ed).
+ *		Inside AppleTalk (2nd Ed).
  */
 
 #include <linux/config.h>
@@ -430,7 +430,7 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 	skb->nh.raw=skb->data;
 	
 	/*
-	 *	Check for localtalk first
+	 *	Check for LocalTalk first
 	 */
 	 
 	 
@@ -645,7 +645,7 @@ static void aarp_resolved(struct aarp_entry **list, struct aarp_entry *a, int ha
 
 /*
  *	This is called by the SNAP driver whenever we see an AARP SNAP
- *	frame. We currently only support ethernet.
+ *	frame. We currently only support Ethernet.
  */
 static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 {
@@ -658,7 +658,7 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 	
 	
 	/*
-	 *	We only do ethernet SNAP AARP
+	 *	We only do Ethernet SNAP AARP
 	 */
 	 
 	if(dev->type!=ARPHRD_ETHER)

@@ -142,7 +142,7 @@ static struct display disp[MAX_NR_CONSOLES];
 static struct fb_info fb_info;
 static struct fb_ops dnfb_ops = { 
 	dnfb_open,dnfb_release, dnfb_get_fix, dnfb_get_var, dnfb_set_var,
-	dnfb_get_cmap, dnfb_set_cmap, dnfb_pan_display, NULL, dnfb_ioctl
+	dnfb_get_cmap, dnfb_set_cmap, dnfb_pan_display, dnfb_ioctl
 };
 
 static int currcon=0;
@@ -187,6 +187,7 @@ static int dnfb_get_fix(struct fb_fix_screeninfo *fix, int con,
 static int dnfb_get_var(struct fb_var_screeninfo *var, int con,
 			struct fb_info *info)
 {
+	memset(var, 0, sizeof(struct fb_var_screeninfo));
 	var->xres=1280;
 	var->yres=1024;
 	var->xres_virtual=2048;
@@ -206,7 +207,6 @@ static int dnfb_get_var(struct fb_var_screeninfo *var, int con,
 	var->vsync_len=0;
 	var->sync=0;
 	var->vmode=FB_VMODE_NONINTERLACED;
-	var->accel=FB_ACCEL_NONE;
 
 	return 0;
 
@@ -248,8 +248,6 @@ static int dnfb_set_var(struct fb_var_screeninfo *var, int con,
 	if(var->sync!=0)
 		return -EINVAL;
 	if(var->vmode!=FB_VMODE_NONINTERLACED)
-		return -EINVAL;
-	if(var->accel!=FB_ACCEL_NONE)
 		return -EINVAL;
 
 	return 0;
@@ -297,7 +295,7 @@ static void dnfb_set_disp(int con, struct fb_info *info)
   if(con==-1) 
     con=0;
 
-   disp[con].screen_base = (u_char *)fix.smem_start;
+   disp[con].screen_base = fix.smem_start;
    disp[con].visual = fix.visual;
    disp[con].type = fix.type;
    disp[con].type_aux = fix.type_aux;

@@ -5,7 +5,7 @@
  */
 
 /*
- * This file handles the architecture-dependent parts of process handling..
+ * This file handles the architecture-dependent parts of process handling.
  */
 
 #include <linux/config.h>
@@ -255,7 +255,7 @@ void exit_thread(void)
 void flush_thread(void)
 {
 	/* Arrange for each exec'ed process to start off with a 
-	   clean slate wrt the fpu.  */
+	   clean slate with respect to the FPU.  */
 	current->tss.flags &= ~IEEE_SW_MASK;
 	wrfpcr(FPCR_DYN_NORMAL);
 }

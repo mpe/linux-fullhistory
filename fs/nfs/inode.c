@@ -448,7 +448,7 @@ nfs_fhget(struct dentry *dentry, struct nfs_fh *fhandle,
 		dentry->d_parent->d_name.name, dentry->d_name.name,
 		fattr->fileid);
 
-	/* Install the filehandle in the dentry */
+	/* Install the file handle in the dentry */
 	*((struct nfs_fh *) dentry->d_fsdata) = *fhandle;
 
 #ifdef CONFIG_NFS_SNAPSHOT

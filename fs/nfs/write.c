@@ -19,10 +19,10 @@
  * from the writeback list to the writelock list.
  *
  * Note: we must make sure never to confuse the inode passed in the
- * write_page request with the one in page->inode. As far as I understant
+ * write_page request with the one in page->inode. As far as I understand
  * it, these are different when doing a swap-out.
  *
- * To understand everything that goes one here and in the nfs read code,
+ * To understand everything that goes on here and in the NFS read code,
  * one should be aware that a page is locked in exactly one of the following
  * cases:
  *

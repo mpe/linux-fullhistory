@@ -318,9 +318,6 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
   bool '   Software Watchdog' CONFIG_SOFT_WATCHDOG
 fi
 bool 'Support for user misc device modules' CONFIG_UMISC
-if [ "$CONFIG_AMIGA" = "y" -o "$CONFIG_ATARI" = "y" -o "$CONFIG_MAC" = "y" ]; then
-  define_bool CONFIG_ABSTRACT_CONSOLE y
-fi
 if [ "$CONFIG_ATARI" = "y" ]; then
   bool 'Enhanced Real Time Clock Support' CONFIG_RTC
 fi

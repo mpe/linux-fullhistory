@@ -594,9 +594,9 @@ static int do_md_add (int minor, kdev_t dev)
 	if (hot_add) {
 		/*
 		 * Check the superblock for consistency.
-		 * the personality itself has to check wether it's getting
-		 * added with the proper flags ... also, personality has to
-		 * be checked too ;)
+		 * The personality itself has to check whether it's getting
+		 * added with the proper flags.  The personality has to be
+                 * checked too. ;)
 		 */
 		if (analyze_one_sb (realdev))
 			return -EINVAL;

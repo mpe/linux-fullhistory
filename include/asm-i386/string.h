@@ -403,7 +403,7 @@ extern inline void * __constant_memcpy(void * to, const void * from, size_t n)
 		case 4:
 			*(unsigned long *)to = *(const unsigned long *)from;
 			return to;
-		case 6:	/* for ethernet addresses */
+		case 6:	/* for Ethernet addresses */
 			*(unsigned long *)to = *(const unsigned long *)from;
 			*(2+(unsigned short *)to) = *(2+(const unsigned short *)from);
 			return to;

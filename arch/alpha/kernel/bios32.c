@@ -1090,7 +1090,7 @@ static inline void cabriolet_fixup(void)
  *  6       PCI on board slot 0
  *  7       PCI on board slot 1
  *  8       Intel SIO PCI-ISA bridge chip
- *  9       Tulip - DECchip 21040 ethernet controller
+ *  9       Tulip - DECchip 21040 Ethernet controller
  *   
  *
  * This two layered interrupt approach means that we allocate IRQ 16 and 
@@ -1946,10 +1946,6 @@ static inline void sio_fixup(void)
 }
 
 
-#ifdef CONFIG_TGA_CONSOLE
-extern void tga_console_init(void);
-#endif /* CONFIG_TGA_CONSOLE */
-
 void __init
 pcibios_fixup(void)
 {
@@ -2022,12 +2018,6 @@ pcibios_fixup(void)
 	/* no fixup needed */
 #else
 # error "You must tell me what kind of platform you want."
-#endif
-
-#ifndef CONFIG_ABSTRACT_CONSOLE
-#ifdef CONFIG_TGA_CONSOLE
-	tga_console_init();
-#endif
 #endif
 }
 

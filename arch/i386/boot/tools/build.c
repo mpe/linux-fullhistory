@@ -187,7 +187,7 @@ int main(int argc, char ** argv)
 	}
 	close(fd);
 
-	if (lseek(1, 497, SEEK_SET) != 497)		    /* Write sizes to the bootsector */
+	if (lseek(1, 497, SEEK_SET) != 497)		    /* Write sizes to the boot sector */
 		die("Output: seek failed");
 	buf[0] = setup_sectors;
 	if (write(1, buf, 1) != 1)

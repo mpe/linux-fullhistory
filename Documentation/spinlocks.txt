@@ -11,7 +11,7 @@ On Fri, 2 Jan 1998, Doug Ledford wrote:
 > these routines and go about making use of them?  Do they only lock on a
 > per-processor basis or can they also lock say an interrupt routine from
 > mucking with a queue if the queue routine was manipulating it when the
-> interrupt occured, or should I still use a cli(); based construct on that
+> interrupt occurred, or should I still use a cli(); based construct on that
 > one?
 
 See <asm/spinlock.h>. The basic version is:

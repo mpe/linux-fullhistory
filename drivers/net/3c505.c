@@ -1,9 +1,9 @@
 /*
- * Linux ethernet device driver for the 3Com Etherlink Plus (3C505)
+ * Linux Ethernet device driver for the 3Com Etherlink Plus (3C505)
  *      By Craig Southeren, Juha Laiho and Philip Blundell
  *
  * 3c505.c      This module implements an interface to the 3Com
- *              Etherlink Plus (3c505) ethernet card. Linux device
+ *              Etherlink Plus (3c505) Ethernet card. Linux device
  *              driver interface reverse engineered from the Linux 3C509
  *              device drivers. Some 3C505 information gleaned from
  *              the Crynwr packet driver. Still this driver would not
@@ -1568,7 +1568,7 @@ __initfunc(int elplus_probe(struct device *dev))
 	outb_control(adapter->hcr_val & ~CMDE, dev);
 
 	/*
-	 * copy ethernet address into structure
+	 * copy Ethernet address into structure
 	 */
 	for (i = 0; i < 6; i++)
 		dev->dev_addr[i] = adapter->rx_pcb.data.eth_addr[i];

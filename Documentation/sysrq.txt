@@ -37,7 +37,7 @@ On other - If you know of the key combos for other architectures, please
 
 's'     - Will attempt to sync all mounted filesystems.
 
-'u'     - Will attempt to remount all mounted file systems readonly.
+'u'     - Will attempt to remount all mounted filesystems read-only.
 
 'p'     - Will dump the current registers and flags to your console.
 

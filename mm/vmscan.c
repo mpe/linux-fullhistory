@@ -88,7 +88,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 	 * pages, then delete the swap cache.  We can only do this if
 	 * the swap page's reference count is one: ie. there are no
 	 * other references to it beyond the swap cache (as there must
-	 * still be pte's pointing to it if count > 1).
+	 * still be PTEs pointing to it if count > 1).
 	 * 
 	 * If the page has NOT been touched, and its age reaches zero,
 	 * then we are swapping it out:

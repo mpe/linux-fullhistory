@@ -70,7 +70,7 @@
  * and the name already exists in form of a symlink, try to create the new
  * name indicated by the symlink. The old code always complained that the
  * name already exists, due to not following the symlink even if its target
- * is non-existant.  The new semantics affects also mknod() and link() when
+ * is nonexistent.  The new semantics affects also mknod() and link() when
  * the name is a symlink pointing to a non-existant name.
  *
  * I don't know which semantics is the right one, since I have no access

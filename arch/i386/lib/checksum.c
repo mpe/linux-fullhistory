@@ -33,9 +33,9 @@
 
 unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum) {
 	  /*
-	   * Experiments with ethernet and slip connections show that buff
+	   * Experiments with Ethernet and SLIP connections show that buff
 	   * is aligned on either a 2-byte or 4-byte boundary.  We get at
-	   * least a 2x speedup on 486 and Pentium if it is 4-byte aligned.
+	   * least a twofold speedup on 486 and Pentium if it is 4-byte aligned.
 	   * Fortunately, it is easy to convert 2-byte alignment to 4-byte
 	   * alignment for the unrolled loop.
 	   */
@@ -203,9 +203,9 @@ unsigned int csum_partial(const unsigned char * buf, int len, unsigned int sum) 
  * The macros SRC and DST specify the type of access for the instruction.
  * thus we can call a custom exception handler for all access types.
  *
- * FIXME: could someone double check wether i havent mixed up some SRC and
- *	  DST definitions? It's damn hard to trigger all cases, i hope i got
- *	  them all but theres no guarantee ...
+ * FIXME: could someone double-check whether I haven't mixed up some SRC and
+ *	  DST definitions? It's damn hard to trigger all cases.  I hope I got
+ *	  them all but there's no guarantee.
  */
 
 #define SRC(y...)			\

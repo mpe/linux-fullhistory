@@ -5,8 +5,8 @@
  *
  *  super.c contains code to handle: - mount structures
  *                                   - super-block tables.
- *                                   - mount systemcall
- *                                   - umount systemcall
+ *                                   - mount system call
+ *                                   - umount system call
  *
  *  Added options to /proc/mounts
  *  Torbjörn Lindh (torbjorn.lindh@gopta.se), April 14, 1996.
@@ -645,9 +645,9 @@ static int do_umount(kdev_t dev, int unmount_root)
 
 	/*
 	 * Before checking whether the filesystem is still busy,
-	 * make sure the kernel doesn't hold any quotafiles open
+	 * make sure the kernel doesn't hold any quota files open
 	 * on the device. If the umount fails, too bad -- there
-	 * are no quotas running anymore. Just turn them on again.
+	 * are no quotas running any more. Just turn them on again.
 	 */
 	DQUOT_OFF(dev);
 
@@ -810,12 +810,12 @@ int fs_may_mount(kdev_t dev)
  * [21-Mar-97] T.Schoebel-Theuer: Now this can be overridden when
  * supplying a leading "!" before the dir_name, allowing "stacks" of
  * mounted filesystems. The stacking will only influence any pathname lookups
- * _after_ the mount, but open filedescriptors or working directories that
+ * _after_ the mount, but open file descriptors or working directories that
  * are now covered remain valid. For example, when you overmount /home, any
  * process with old cwd /home/joe will continue to use the old versions,
  * as long as relative paths are used, but absolute paths like /home/joe/xxx
  * will go to the new "top of stack" version. In general, crossing a
- * mountpoint will always go to the top of stack element.
+ * mount point will always go to the top of stack element.
  * Anyone using this new feature must know what he/she is doing.
  */
 

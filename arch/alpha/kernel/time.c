@@ -57,7 +57,7 @@ static struct {
 	__u32 last_time;
 	/* ticks/cycle * 2^48 */
 	unsigned long scaled_ticks_per_cycle;
-	/* last time the cmos clock got updated */
+	/* last time the CMOS clock got updated */
 	time_t last_rtc_update;
 } state;
 

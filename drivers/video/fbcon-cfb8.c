@@ -41,7 +41,7 @@ static u32 nibbletab_cfb8[] = {
 
 void fbcon_cfb8_setup(struct display *p)
 {
-    p->next_line = p->var.xres_virtual;
+    p->next_line = p->line_length ? p->line_length : p->var.xres_virtual;
     p->next_plane = 0;
 }
 
@@ -178,7 +178,7 @@ void fbcon_cfb8_revc(struct display *p, int xx, int yy)
 
 struct display_switch fbcon_cfb8 = {
     fbcon_cfb8_setup, fbcon_cfb8_bmove, fbcon_cfb8_clear, fbcon_cfb8_putc,
-    fbcon_cfb8_putcs, fbcon_cfb8_revc
+    fbcon_cfb8_putcs, fbcon_cfb8_revc, NULL
 };
 
 

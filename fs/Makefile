@@ -1,11 +1,11 @@
 #
-# Makefile for the linux filesystem.
+# Makefile for the Linux filesystems.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
 # removes any old dependencies. DON'T put your own dependencies here
-# unless it's something special (ie not a .c file).
+# unless it's something special (not a .c file).
 #
-# Note 2! The CFLAGS definitions are now in the main makefile...
+# Note 2! The CFLAGS definitions are now in the main makefile.
 
 L_TARGET := filesystems.a
 L_OBJS    = $(join $(SUB_DIRS),$(SUB_DIRS:%=/%.o))

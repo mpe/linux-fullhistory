@@ -86,7 +86,7 @@ static struct file_operations fat_file_operations_1024 = {
 /* #Specification: msdos / special devices / swap file
 	Swap file can't work on special devices with a large sector
 	size (1024 bytes hard sector). Those devices have a weird
-	MsDOS filesystem layout. Generally a single hardware sector
+	MS-DOS filesystem layout. Generally a single hardware sector
 	may contain 2 unrelated logical sector. This mean that there is
 	no easy way to do a mapping between disk sector of a file and virtual
 	memory. So swap file is difficult (not available right now)
@@ -236,8 +236,8 @@ static ssize_t fat_file_read_text(
 		to_reada = count_max / SECTOR_SIZE;
 		if (count_max & (SECTOR_SIZE-1)) to_reada++;
 		if (filp->f_reada || !MSDOS_I(inode)->i_binary){
-			/* Doing a read ahead on ascii file make sure we always */
-			/* pre read enough, since we don't know how many blocks */
+			/* Doing a read ahead on ASCII file make sure we always */
+			/* read enough, since we don't know how many blocks */
 			/* we really need */
 			int ahead = read_ahead[MAJOR(inode->i_dev)];
 			PRINTK (("to_reada %d ahead %d\n",to_reada,ahead));

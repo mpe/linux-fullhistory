@@ -161,7 +161,7 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 #endif /* !__ASSEMBLY__ */
 
 
-/* Certain architectures need to do special things when pte's
+/* Certain architectures need to do special things when PTEs
  * within a page table are directly modified.  Thus, the following
  * hook is made available.
  */

@@ -1,7 +1,7 @@
 
 #! /bin/sh
 #
-# This script is used to configure the linux kernel.
+# This script is used to configure the Linux kernel.
 #
 # It was inspired by the challenge in the original Configure script
 # to ``do something better'', combined with the actual need to ``do
@@ -525,7 +525,7 @@ mv .tmpconfig .config
 mv .tmpconfig.h include/linux/autoconf.h
 
 echo
-echo "The linux kernel is now hopefully configured for your setup."
+echo "The Linux kernel should now be configured for your setup."
 echo "Check the top-level Makefile for additional configuration,"
 echo "and do a 'make dep ; make clean' if you want to be sure all"
 echo "the files are correctly re-made"

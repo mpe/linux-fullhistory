@@ -28,7 +28,7 @@ ESP card.  The drivers are basically a modified version of the serial drivers.
 Features:
 
 - Uses the enhanced mode of the ESP card, allowing a wider range of
-  interrupts and features than compatibilty mode
+  interrupts and features than compatibility mode
 - Uses DMA and 16 bit PIO mode to transfer data to and from the ESP's FIFOs,
   reducing CPU load
 - Supports primary and secondary ports
@@ -71,12 +71,12 @@ insmod esp divisor=0,0,0,0,0,0,0x84,0
 
 The dma= option can be used to set the DMA channel.  The channel can be either
 1 or 3.  Specifying any other value will force the driver to use PIO mode.
-For example, to set the dma channel to 3, the insmod command would be:
+For example, to set the DMA channel to 3, the insmod command would be:
 
 insmod esp dma=3
 
 The rx_trigger= and tx_trigger= options can be used to set the FIFO trigger
-levels.  They specifie when the ESP card should send an interrupt.  Larger
+levels.  They specify when the ESP card should send an interrupt.  Larger
 values will decrease the number of interrupts; however, a value too high may
 result in data loss.  Valid values are 1 through 1023, with 768 being the
 default.  For example, to set the receive trigger level to 512 bytes and the

@@ -108,7 +108,9 @@ static inline void store4pixels(u32 d1, u32 d2, u32 d3, u32 d4, u32 *dest)
     *dest++ = (d2<<16) | (d3>>8);
     *dest++ = (d3<<24) | d4;
 #elif defined(__LITTLE_ENDIAN)
-#error Please add support for little endian byteorder
+    *dest++ = (d1<<8) | (d2>>16);
+    *dest++ = (d2<<16) | (d3>>8);
+    *dest++ = (d3<<24) | d4;
 #else
 #error FIXME: No endianness??
 #endif
@@ -202,7 +204,7 @@ void fbcon_cfb24_revc(struct display *p, int xx, int yy)
 
 struct display_switch fbcon_cfb24 = {
     fbcon_cfb24_setup, fbcon_cfb24_bmove, fbcon_cfb24_clear, fbcon_cfb24_putc,
-    fbcon_cfb24_putcs, fbcon_cfb24_revc
+    fbcon_cfb24_putcs, fbcon_cfb24_revc, NULL
 };
 
 

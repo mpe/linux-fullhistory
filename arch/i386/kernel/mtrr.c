@@ -486,7 +486,7 @@ struct mtrr_state
 };
 
 
-/* Grab all of the mtrr state for this cpu into *state. */
+/* Grab all of the MTRR state for this CPU into *state. */
 __initfunc(static void get_mtrr_state(struct mtrr_state *state))
 {
     unsigned int nvrs, i;
@@ -697,7 +697,7 @@ static void copy_mtrr_state_handler (struct set_mtrr_context *ctxt, void *info)
     }
 }   /*  End Function copy_mtrr_state_handler  */
 
-/* Copies the entire MTRR state of this cpu to all the others. */
+/* Copies the entire MTRR state of this CPU to all the others. */
 static void copy_mtrr_state (void)
 {
     struct mtrr_state ms;

@@ -457,8 +457,8 @@ static int raid1_hot_add_disk (struct md_dev *mddev, kdev_t dev)
 	int n;
 
 	/*
-	 * The device has it's superblock already read and it was found
-	 * to be consistent for generic RAID usage, now we check wether
+	 * The device has its superblock already read and it was found
+	 * to be consistent for generic RAID usage.  Now we check whether
 	 * it's usable for RAID-1 hot addition.
 	 */
 

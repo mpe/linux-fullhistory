@@ -31,8 +31,10 @@
 #include <linux/mm.h>
 #include <linux/init.h>
 #include <linux/vt_kern.h>
+#include <linux/console_struct.h>
 #include <linux/selection.h>
 #include <asm/uaccess.h>
+#include <asm/byteorder.h>
 
 #undef attr
 #undef org
@@ -55,18 +57,15 @@ static int
 vcs_size(struct inode *inode)
 {
 	int size;
-#ifdef CONFIG_FB_CONSOLE
-	int cons = MINOR(inode->i_rdev) & 127;
-
-	if (cons == 0)
-		cons = fg_console;
+   	int currcons = MINOR(inode->i_rdev) & 127;
+	if (currcons == 0)
+		currcons = fg_console;
 	else
-		cons--;
-	if (!vc_cons_allocated(cons))
+		currcons--;
+	if (!vc_cons_allocated(currcons))
 		return -ENXIO;
-#endif
 
-	size = get_video_num_lines(cons) * get_video_num_columns(cons);
+	size = video_num_lines * video_num_columns;
 
 	if (MINOR(inode->i_rdev) & 128)
 		size = 2*size + HEADER_SIZE;
@@ -132,8 +131,8 @@ vcs_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 	} else {
 		if (p < HEADER_SIZE) {
 			char header[HEADER_SIZE];
-			header[0] = (char) get_video_num_lines(currcons);
-			header[1] = (char) get_video_num_columns(currcons);
+			header[0] = (char) video_num_lines;
+			header[1] = (char) video_num_columns;
 			getconsxy(currcons, header+2);
 			while (p < HEADER_SIZE && count > 0)
 			    { count--; put_user(header[p++], buf++); }
@@ -142,7 +141,11 @@ vcs_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 		    p -= HEADER_SIZE;
 		    org = screen_pos(currcons, p/2, viewed);
 		    if ((p & 1) && count > 0)
+#ifdef __BIG_ENDIAN
+			    { count--; put_user(func_scr_readw(org++) & 0xff, buf++); }
+#else
 			    { count--; put_user(func_scr_readw(org++) >> 8, buf++); }
+#endif
 		}
 		while (count > 1) {
 			put_user(func_scr_readw(org++), (unsigned short *) buf);
@@ -150,7 +153,11 @@ vcs_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 			count -= 2;
 		}
 		if (count > 0)
+#ifdef __BIG_ENDIAN
+			put_user(func_scr_readw(org) >> 8, buf++);
+#else
 			put_user(func_scr_readw(org) & 0xff, buf++);
+#endif
 	}
 	read = buf - buf0;
 	*ppos += read;
@@ -212,8 +219,13 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 			    char c;
 				count--;
 				get_user(c,buf++);
+#ifdef __BIG_ENDIAN
+				func_scr_writew(c |
+				     (func_scr_readw(org) & 0xff00), org);
+#else
 				func_scr_writew((c << 8) |
 				     (func_scr_readw(org) & 0xff), org);
+#endif
 				org++;
 			}
 		}
@@ -227,14 +239,16 @@ vcs_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 		if (count > 0) {
 			unsigned char c;
 			get_user(c, (const unsigned char*)buf++);
+#ifdef __BIG_ENDIAN
+			func_scr_writew((func_scr_readw(org) & 0xff) | (c << 8), org);
+#else
 			func_scr_writew((func_scr_readw(org) & 0xff00) | c, org);
+#endif
 		}
 	}
-#ifdef CONFIG_FB_CONSOLE
 	if (currcons == fg_console)
 		/* Horribly inefficient if count < screen size.  */
 		update_screen(currcons);
-#endif
 	written = buf - buf0;
 	*ppos += written;
 	RETURN( written );

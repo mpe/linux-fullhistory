@@ -122,7 +122,7 @@ int minix_remount (struct super_block * sb, int * flags, char * data)
 
 /*
  * Check the root directory of the filesystem to make sure
- * it really _is_ a minix filesystem, and to check the size
+ * it really _is_ a Minix filesystem, and to check the size
  * of the directory entry.
  */
 static const char * minix_checkroot(struct super_block *s, struct inode *dir)
@@ -311,7 +311,7 @@ out_no_map:
 
 out_no_fs:
 	if (!silent)
-		printk("VFS: Can't find a minix or minix V2 filesystem on dev "
+		printk("VFS: Can't find a Minix or Minix V2 filesystem on device "
 		       "%s.\n", kdevname(dev));
     out_release:
 	brelse(bh);

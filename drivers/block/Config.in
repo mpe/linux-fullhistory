@@ -8,7 +8,7 @@ tristate 'Normal floppy disk support' CONFIG_BLK_DEV_FD
 tristate 'Enhanced IDE/MFM/RLL disk/cdrom/tape/floppy support' CONFIG_BLK_DEV_IDE
 comment 'Please see Documentation/ide.txt for help/info on IDE drives'
 if [ "$CONFIG_BLK_DEV_IDE" = "n" ]; then
-  bool 'Old harddisk (MFM/RLL/IDE) driver' CONFIG_BLK_DEV_HD_ONLY
+  bool 'Old hard disk (MFM/RLL/IDE) driver' CONFIG_BLK_DEV_HD_ONLY
 else
   bool '   Use old disk-only driver on primary interface' CONFIG_BLK_DEV_HD_IDE
   dep_tristate '   Include IDE/ATA-2 DISK support' CONFIG_BLK_DEV_IDEDISK $CONFIG_BLK_DEV_IDE
@@ -54,7 +54,7 @@ else
   fi
 fi
 if [ "$CONFIG_MCA" = "y" ]; then
-  bool 'PS/2 ESDI harddisk support' CONFIG_BLK_DEV_PS2
+  bool 'PS/2 ESDI hard disk support' CONFIG_BLK_DEV_PS2
 fi
 
 comment 'Additional Block Devices'
@@ -75,7 +75,7 @@ tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
 if [ "$CONFIG_BLK_DEV_RAM" = "y" ]; then
   bool '   Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD
 fi
-tristate 'XT harddisk support' CONFIG_BLK_DEV_XD
+tristate 'XT hard disk support' CONFIG_BLK_DEV_XD
 
 # PARIDE doesn't need PARPORT, but if PARPORT is configured as a module,
 # PARIDE must also be a module.  The bogus CONFIG_PARIDE_PARPORT option

@@ -303,7 +303,7 @@ out:
 }
 
 /*
- * Note that we play around with the 'TS' bit to hopefully get
+ * Note that we play around with the 'TS' bit in an attempt to get
  * the correct behaviour even in the presence of the asynchronous
  * IRQ13 behaviour
  */

@@ -101,7 +101,7 @@ static inline void remove_mem_queue(struct page * entry)
 spinlock_t page_alloc_lock = SPIN_LOCK_UNLOCKED;
 
 /*
- * This routine is used by the kernel swap deamon to determine
+ * This routine is used by the kernel swap daemon to determine
  * whether we have "enough" free pages. It is fairly arbitrary,
  * but this had better return false if any reasonable "get_free_page()"
  * allocation could currently fail..

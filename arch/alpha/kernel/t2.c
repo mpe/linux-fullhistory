@@ -103,7 +103,7 @@ unsigned long t2_sm_base;
  *  
  * Notes:
  *	The function number selects which function of a multi-function device 
- *	(e.g., scsi and ethernet).
+ *	(e.g., SCSI and Ethernet).
  * 
  *	The register selects a DWORD (32 bit) register offset.  Hence it
  *	doesn't get shifted by 2 bits as we want to "drop" the bottom two
@@ -520,7 +520,7 @@ int t2_clear_errors(void)
 	sable_cpu_regs[cpu]->sic &= ~SIC_SEIC;
 
 	/* 
-	 * clear cpu errors
+	 * clear CPU errors
 	 */
 	sable_cpu_regs[cpu]->bcce |= sable_cpu_regs[cpu]->bcce;
 	sable_cpu_regs[cpu]->cbe  |= sable_cpu_regs[cpu]->cbe;

@@ -24,7 +24,7 @@
 
 /*
  * sys_pipe() is the normal C calling standard for creating
- * a pipe. It's not the way unix traditionally does this, though.
+ * a pipe. It's not the way Unix traditionally does this, though.
  */
 asmlinkage int sys_pipe(unsigned long * fildes)
 {

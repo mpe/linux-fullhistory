@@ -1,0 +1,71 @@
+
+what is vesafb?
+===============
+
+This is a generic driver for a graphic framebuffer on intel boxes.
+
+Idea is simple:  Turn on graphics mode at boot time with the help of
+the BIOS, and use this as framebuffer device /dev/fb0, like the m68k
+(and other) ports do.
+
+This means we decide at boot time whenever we want to run in text or
+graphics mode.  Switching mode later on (in protected mode) is
+impossible, BIOS calls work in real mode only.  VESA BIOS Extentions
+Version 2.0 are required, becauce we need a linear frame buffer.
+
+Advantages:
+
+ * It provides a nice large console (128 cols + 48 lines with 1024x768)
+   without using tiny, unreadable fonts.
+ * You can run XF68_FBDev on top of /dev/fb0 (=> non-accelerated X11
+   support for every VBE 2.0 compilant graphics board).
+ * Most important: boot logo :-)
+
+Disadvantages:
+
+ * graphic mode is slower than text mode...
+
+
+How to use it?
+==============
+
+Switching modes is done using the vga=... boot parameter.  Read
+Documentation/svga.txt for details.  With vesafb both text and
+graphics modes work.  Text modes are handled by vgafb, graphic modes
+by the new vesafb.c.
+
+The graphic modes are not in the list which you get if you boot with
+vga=ask and hit return.  Here are some mode numbers:
+
+    | 640x480  800x600  1024x768
+----+---------------------------
+256 |  0x101    0x103    0x105
+32k |  0x110    0x113    0x116
+64k |  0x111    0x114    0x117
+16M |  0x112    0x115    0x118
+
+Note 1: this are the VESA mode numbers.  The video mode select code
+        expects 0x200 + VESA mode number.
+Note 2: lilo can't handle hex, for booting with "vga=??" you have to
+        transform the numbers to decimal.
+
+
+Speed it up!
+============
+
+Check /usr/src/linux/Documentation/mtrr.txt, enabling write-combining
+for the framebuffer memory gives a performance boost.
+
+There are two ways to do console scrolling: redraw the screen
+completely, or by copying around the video memory.  You can select one
+of them using the kernel command line: video=vesa:redraw or
+video=vesa:memmove.  redraw is the default, becauce this one works
+faster on my box.
+
+
+Have fun!
+
+  Gerd
+
+--
+Gerd Knorr <kraxel@cs.tu-berlin.de>

@@ -9,20 +9,20 @@ fat_cvf.txt
 hpfs.txt
 	- info and mount options for the OS/2 HPFS.
 isofs.txt
-	- info and mount options for the ISO9660 (CDROM) filesystem.
+	- info and mount options for the ISO 9660 (CDROM) filesystem.
 ncpfs.txt
 	- info on Novell Netware(tm) filesystem using NCP protocol.
 ntfs.txt
-	- info and mount options for the NTFS filesystem (Win NT).
+	- info and mount options for the NTFS filesystem (Windows NT).
 romfs.txt
 	- Description of the ROMFS filesystem.
 smbfs.txt
-	- info on using filesystems with the SMB protocol (Win 3.11, Win NT)
+	- info on using filesystems with the SMB protocol (Windows 3.11 and NT)
 sysv-fs.txt
 	- info on the SystemV/Coherent filesystem.
 umsdos.txt
 	- info on the umsdos extensions to the msdos filesystem.
 vfat.txt
-	- info on using the VFAT filesystem used in Win NT and Win 95
+	- info on using the VFAT filesystem used in Windows NT and Windows 95
 vfs.txt
 	- Overview of the Virtual File System

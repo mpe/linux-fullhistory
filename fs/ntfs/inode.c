@@ -733,7 +733,7 @@ layout_attr(ntfs_attribute* attr,char*buf, int size,int *psize)
 /* Try to layout ino into store. Return 0 on success,
    E2BIG if it does not fit, 
    ENOMEM if memory allocation problem,
-   EOPNOTSUP if beyound our capabilities 
+   EOPNOTSUP if beyond our capabilities 
 */
 int 
 layout_inode(ntfs_inode *ino,ntfs_disk_inode *store)

@@ -2,11 +2,11 @@
  *  linux/fs/isofs/inode.c
  *
  *  (C) 1991  Linus Torvalds - minix filesystem
- *      1992, 1993, 1994  Eric Youngdale Modified for ISO9660 filesystem.
+ *      1992, 1993, 1994  Eric Youngdale Modified for ISO 9660 filesystem.
  *      1994  Eberhard Moenkeberg - multi session handling.
  *      1995  Mark Dobie - allow mounting of some weird VideoCDs and PhotoCDs.
  *	1997  Gordon Chaffee - Joliet CDs
- *	1998  Eric Lammerts - ISO9660 Level 3
+ *	1998  Eric Lammerts - ISO 9660 Level 3
  */
 
 #include <linux/config.h>
@@ -374,7 +374,7 @@ struct super_block *isofs_read_super(struct super_block *s, void *data,
 			    } else if (sec->escape[2] == 0x45) {
 				joliet_level = 3;
 			    }
-			    printk("ISO9660 Extensions: Microsoft Joliet Level %d\n",
+			    printk("ISO 9660 Extensions: Microsoft Joliet Level %d\n",
 				   joliet_level);
 			}
 			goto root_found;
@@ -993,7 +993,7 @@ void isofs_read_inode(struct inode * inode)
    enough error checking on the drive itself, but an open ended search
    makes me a little nervous.
 
-   The bsd iso filesystem uses the extent number for an inode, and this
+   The BSD iso filesystem uses the extent number for an inode, and this
    would work really nicely for us except that the read_inode function
    would not have any clean way of finding the actual directory record
    that goes with the file.  If we had such info, then it would pay

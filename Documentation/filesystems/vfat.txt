@@ -34,7 +34,7 @@ uni_xlate=<bool> -- Translate unhandled Unicode characters to special
 posix=<bool>  -- Allow names of same letters, different case such as
                  'LongFileName' and 'longfilename' to coexist.  This has some
                  problems currently because 8.3 conflicts are not handled
-                 correctly for Posix filesystem compliance.
+                 correctly for POSIX filesystem compliance.
 nonumtail=<bool> -- When creating 8.3 aliases, normally the alias will
                  end in '~1' or tilde followed by some number.  If this
                  option is set, then if the filename is 
@@ -61,7 +61,7 @@ TODO
   a get next directory entry approach.  The only thing left that uses
   raw scanning is the directory renaming code.
 
-* Fix the Posix filesystem support to work in 8.3 space.  This involves
+* Fix the POSIX filesystem support to work in 8.3 space.  This involves
   renaming aliases if a conflict occurs between a new filename and
   an old alias.  This is quite a mess.
 

@@ -177,7 +177,7 @@ bad_free:
  * that the page has been used or is no longer needed.
  *
  * Always set the resulting pte to be nowrite (the same as COW pages
- * after one process has exited).  We don't know just how many ptes will
+ * after one process has exited).  We don't know just how many PTEs will
  * share this swap entry, so be cautious and let do_wp_page work out
  * what to do if a write is requested later.
  */

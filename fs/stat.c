@@ -92,7 +92,7 @@ static int cp_new_stat(struct inode * inode, struct stat * statbuf)
 /*
  * Use minix fs values for the number of direct and indirect blocks.  The
  * count is now exact for the minix fs except that it counts zero blocks.
- * Everything is in BLOCK_SIZE'd units until the assignment to
+ * Everything is in units of BLOCK_SIZE until the assignment to
  * tmp.st_blksize.
  */
 #define D_B   7

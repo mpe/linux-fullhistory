@@ -12,7 +12,7 @@
 #include <linux/config.h>
 #include <linux/types.h>
 #include <linux/string.h>
-#ifdef __mc68000__
+#if defined(__mc68000__) || defined(CONFIG_APUS)
 #include <asm/setup.h>
 #endif
 #include "font.h"

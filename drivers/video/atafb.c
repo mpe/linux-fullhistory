@@ -492,6 +492,7 @@ static int tt_encode_fix( struct fb_fix_screeninfo *fix,
 	fix->ypanstep=1;
 	fix->ywrapstep=0;
 	fix->line_length = 0;
+	fix->accel = FB_ACCEL_ATARIBLITT;
 	return 0;
 }
 
@@ -580,7 +581,8 @@ static int tt_decode_var( struct fb_var_screeninfo *var,
 static int tt_encode_var( struct fb_var_screeninfo *var,
 						  struct atafb_par *par )
 {
-	int linelen, i;
+	int linelen;
+	memset(var, 0, sizeof(struct fb_var_screeninfo));
 	var->red.offset=0;
 	var->red.length=4;
 	var->red.msb_right=0;
@@ -668,8 +670,6 @@ static int tt_encode_var( struct fb_var_screeninfo *var,
 	var->nonstd=0;
 	var->activate=0;
 	var->vmode=FB_VMODE_NONINTERLACED;
-	for (i=0; i<arraysize(var->reserved); i++)
-		var->reserved[i]=0;
 	return 0;
 }
 
@@ -816,6 +816,7 @@ static int falcon_encode_fix( struct fb_fix_screeninfo *fix,
 		fix->xpanstep = 2;
 	}
 	fix->line_length = 0;
+	fix->accel = FB_ACCEL_ATARIBLITT;
 	return 0;
 }
 
@@ -1306,11 +1307,12 @@ static int falcon_encode_var( struct fb_var_screeninfo *var,
 							  struct atafb_par *par )
 {
 /* !!! only for VGA !!! */
-	int linelen, i;
+	int linelen;
 	int prescale, plen;
 	int hdb_off, hde_off, base_off;
 	struct falcon_hw *hw = &par->hw.falcon;
 
+	memset(var, 0, sizeof(struct fb_var_screeninfo));
 	/* possible frequencies: 25.175 or 32MHz */
 	var->pixclock = hw->sync & 0x1 ? fext.t :
 	                hw->vid_control & VCO_CLOCK25 ? f25.t : f32.t;
@@ -1461,8 +1463,6 @@ static int falcon_encode_var( struct fb_var_screeninfo *var,
 		var->yoffset=0;
 	var->nonstd=0;	/* what is this for? */
 	var->activate=0;
-	for (i=0; i<arraysize(var->reserved); i++)
-		var->reserved[i]=0;
 	return 0;
 }
 
@@ -1773,6 +1773,7 @@ static int stste_encode_fix( struct fb_fix_screeninfo *fix,
 	}
 	fix->ywrapstep = 0;
 	fix->line_length = 0;
+	fix->accel = FB_ACCEL_ATARIBLITT;
 	return 0;
 }
 
@@ -1838,7 +1839,8 @@ static int stste_decode_var( struct fb_var_screeninfo *var,
 static int stste_encode_var( struct fb_var_screeninfo *var,
 						  struct atafb_par *par )
 {
-	int linelen, i;
+	int linelen;
+	memset(var, 0, sizeof(struct fb_var_screeninfo));
 	var->red.offset=0;
 	var->red.length = ATARIHW_PRESENT(EXTD_SHIFTER) ? 4 : 3;
 	var->red.msb_right=0;
@@ -1908,8 +1910,6 @@ static int stste_encode_var( struct fb_var_screeninfo *var,
 	var->nonstd=0;
 	var->activate=0;
 	var->vmode=FB_VMODE_NONINTERLACED;
-	for (i=0; i<arraysize(var->reserved); i++)
-		var->reserved[i]=0;
 	return 0;
 }
 
@@ -2145,8 +2145,7 @@ static int ext_decode_var( struct fb_var_screeninfo *var,
 static int ext_encode_var( struct fb_var_screeninfo *var,
 						   struct atafb_par *par )
 {
-	int i;
-
+	memset(var, 0, sizeof(struct fb_var_screeninfo));
 	var->red.offset=0;
 	var->red.length=(external_pmode == -1) ? external_depth/3 : 
 			(external_vgaiobase ? external_bitspercol : 0);
@@ -2181,8 +2180,6 @@ static int ext_encode_var( struct fb_var_screeninfo *var,
 	var->nonstd=0;
 	var->activate=0;
 	var->vmode=FB_VMODE_NONINTERLACED;
-	for (i=0; i<arraysize(var->reserved); i++)
-		var->reserved[i]=0;
 	return 0;
 }
 
@@ -2470,7 +2467,7 @@ atafb_set_disp(int con, struct fb_info *info)
 	atafb_get_var(&var, con, info);
 	if (con == -1)
 		con=0;
-	display->screen_base = (u_char *)fix.smem_start;
+	display->screen_base = fix.smem_start;
 	display->visual = fix.visual;
 	display->type = fix.type;
 	display->type_aux = fix.type_aux;
@@ -2642,7 +2639,7 @@ atafb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 static struct fb_ops atafb_ops = {
 	atafb_open, atafb_release, atafb_get_fix, atafb_get_var,
 	atafb_set_var, atafb_get_cmap, atafb_set_cmap,
-	atafb_pan_display, NULL, atafb_ioctl	
+	atafb_pan_display, atafb_ioctl	
 };
 
 static void

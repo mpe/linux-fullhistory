@@ -198,7 +198,7 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 	dprintk("nfsd: CREATE   %d/%ld %s\n",
 		SVCFH_DEV(dirfhp), SVCFH_INO(dirfhp), argp->name);
 
-	/* First verify the parent filehandle */
+	/* First verify the parent file handle */
 	nfserr = fh_verify(rqstp, dirfhp, S_IFDIR, MAY_EXEC);
 	if (nfserr)
 		goto done; /* must fh_put dirfhp even on error */
@@ -212,20 +212,20 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 		goto done;
 
 	/*
-	 * Do a lookup to verify the new filehandle.
+	 * Do a lookup to verify the new file handle.
 	 */
 	nfserr = nfsd_lookup(rqstp, dirfhp, argp->name, argp->len, newfhp);
 	if (nfserr) {
 		if (nfserr != nfserr_noent)
 			goto done;
 		/*
-		 * If the new filehandle wasn't verified, we can't tell
+		 * If the new file handle wasn't verified, we can't tell
 		 * whether the file exists or not. Time to bail ...
 		 */
 		nfserr = nfserr_acces;
 		if (!newfhp->fh_dverified) {
 			printk(KERN_WARNING 
-				"nfsd_proc_create: filehandle not verified\n");
+				"nfsd_proc_create: file handle not verified\n");
 			goto done;
 		}
 	}

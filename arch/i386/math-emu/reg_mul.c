@@ -7,7 +7,7 @@
  |                  W. Metzenthen, 22 Parker St, Ormond, Vic 3163, Australia |
  |                  E-mail   billm@suburbia.net                              |
  |                                                                           |
- | Returns the tag of the result if no exceptions or errors occured.         |
+ | Returns the tag of the result if no exceptions or errors occurred.        |
  |                                                                           |
  +---------------------------------------------------------------------------*/
 

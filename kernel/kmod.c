@@ -15,7 +15,6 @@
 #include <linux/types.h>
 #include <linux/unistd.h>
 #include <asm/smp_lock.h>
-#include <asm/semaphore.h>
 #include <asm/uaccess.h>
 
 /*
@@ -23,7 +22,6 @@
 */
 char modprobe_path[256] = "/sbin/modprobe";
 static char * envp[] = { "HOME=/", "TERM=linux", "PATH=/usr/bin:/bin", NULL };
-static struct semaphore kmod_sem = MUTEX;
 
 /*
 	exec_modprobe is spawned from a kernel-mode user process,
@@ -103,20 +101,15 @@ int request_module(const char * module_name)
 		return -EPERM;
 	}
 
-	down(&kmod_sem);
-
 	pid = kernel_thread(exec_modprobe, (void*) module_name, CLONE_FS);
 	if (pid < 0) {
 		printk(KERN_ERR "kmod: fork failed, errno %d\n", -pid);
-		goto out;
+		return pid;
 	}
 	waitpid_result = waitpid(pid, NULL, __WCLONE);
 	if (waitpid_result != pid) {
 		printk (KERN_ERR "kmod: waitpid(%d,NULL,0) failed, returning %d.\n",
 			pid, waitpid_result);
 	}
-	pid = 0;
-out:
-	up(&kmod_sem);
-	return pid;
+	return 0;
 }

@@ -30,7 +30,7 @@
  * of the value is the Active Time  (at). Minimum value 2 is the fastest and
  * the maximum value 15 is the slowest. Default values should be 15 for both.
  * So 0x24 means 2 for rt and 4 for at. Each of the drives should have
- * both values, and IDESETUP gives automatically rt=15 st=15 for cdroms or
+ * both values, and IDESETUP gives automatically rt=15 st=15 for CDROMs or
  * similar. If value is too small there will be all sorts of failures.
  *
  * Port 0x3e6 bit 0x20 sets these timings on/off. If 0x20 bit is set
@@ -103,7 +103,7 @@ static byte ht6560b_selects [2][MAX_DRIVES] = {{0x3c,0x3c}, {0x3d,0x3d}};
  * Active Time for each drive. Smaller value gives higher speed.
  * In case of failures you should probably fall back to a higher value.
  *
- * Hopefully this example will make it clearer:
+ * Here's an example to make it clearer:
  *
  * DOS:    DEVICE=C:\bin\HTIDE\HTIDE.SYS /D0=2,4 /D1=4,5 /D2=10,10 /D3=15,15
  * Linux:  byte ht6560b_timings [][] = {{0x24, 0x45}, {0xaa, 0xff}};
@@ -198,7 +198,7 @@ static void tune_ht6560b (ide_drive_t *drive, byte pio)
 
 	if (pio == 255)  {	/* auto-tune */
 		if (drive->media != ide_disk)
-			pio = 0; /* some cdroms don't like fast modes (?) */
+			pio = 0; /* some CDROMs don't like fast modes (?) */
 		else
 			pio = ide_get_best_pio_mode(drive, pio, 5, NULL);
 	}

@@ -27,6 +27,9 @@ ifdef CONFIG_VT
 L_OBJS += console.o vt.o vc_screen.o consolemap.o consolemap_deftbl.o
 LX_OBJS += selection.o
 endif
+ifdef CONFIG_FB
+  LX_OBJS += fbmem.o
+endif
 
 ifeq ($(CONFIG_SERIAL),y)
   ifndef CONFIG_SUN_SERIAL
@@ -431,14 +434,6 @@ else
   endif
 endif
 
-ifdef CONFIG_VT
-  ifdef CONFIG_TGA_CONSOLE
-  L_OBJS += tga.o
-  endif
-  ifdef CONFIG_VGA_CONSOLE
-  L_OBJS += vga.o vesa_blank.o
-  endif
-endif
 
 ifeq ($(CONFIG_HFMODEM),y)
 ALL_SUB_DIRS += hfmodem

@@ -8,13 +8,15 @@
  * as published by the Free Software Foundation; either version
  * 2 of the License, or (at your option) any later version.
  */
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/string.h>
-#include <linux/vc_ioctl.h>
 #include <linux/pci.h>
 #include <linux/selection.h>
+#include <linux/vmalloc.h>
+#include <asm/vc_ioctl.h>
 #include <asm/prom.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
@@ -25,6 +27,7 @@
 #include <asm/init.h>
 #include "pmac-cons.h"
 #include "chips.h"
+#include <linux/console_compat.h>
 
 
 static unsigned char *frame_buffer;

@@ -23,6 +23,7 @@
 #include <linux/config.h>	/* CONFIG_ALPHA_LCA etc */
 #include <linux/ioport.h>
 #include <linux/mc146818rtc.h>
+#include <linux/console.h>
 
 #ifdef CONFIG_RTC
 #include <linux/timex.h>
@@ -221,20 +222,29 @@ void setup_arch(char **cmdline_p,
 #ifdef __SMP__
 	setup_smp();
 #endif
+
+#ifdef CONFIG_VGA_CONSOLE
+	conswitchp = &vga_con;
+#endif
+#ifdef CONFIG_FB
+	/* Frame buffer device based console */
+	conswitchp = &fb_con;
+#endif
 }
 
 
 #define N(a) (sizeof(a)/sizeof(a[0]))
 
 /* A change was made to the HWRPB via an ECO and the following code tracks
- * a part of the ECO.  The HWRPB version must be 5 or higher or the ECO
- * was not implemented in the console firmware.  If its at rev 5 or greater
- * we can get the platform ascii string name from the HWRPB.  Thats what this
- * function does.  It checks the rev level and if the string is in the HWRPB
- * it returns the addtess of the string ... a pointer to the platform name.
+ * a part of the ECO.  In HWRPB versions less than 5, the ECO was not
+ * implemented in the console firmware.  If it's revision 5 or greater we can
+ * get the name of the platform as an ASCII string from the HWRPB.  That's what
+ * this function does.  It checks the revision level and if the string is in
+ * the HWRPB it returns the address of the string--a pointer to the name of the
+ * platform.
  *
  * Returns:
- *      - Pointer to a ascii string if its in the HWRPB
+ *      - Pointer to a ASCII string if it's in the HWRPB
  *      - Pointer to a blank string if the data is not in the HWRPB.
  */
 static char *
@@ -378,11 +388,11 @@ int get_cpuinfo(char *buffer)
 		     &systype_name, &sysvariation_name);
 
 	return sprintf(buffer,
-		       "cpu\t\t\t: Alpha\n"
-		       "cpu model\t\t: %s\n"
-		       "cpu variation\t\t: %ld\n"
-		       "cpu revision\t\t: %ld\n"
-		       "cpu serial number\t: %s\n"
+		       "CPU\t\t\t: Alpha\n"
+		       "CPU model\t\t: %s\n"
+		       "CPU variation\t\t: %ld\n"
+		       "CPU revision\t\t: %ld\n"
+		       "CPU serial number\t: %s\n"
 		       "system type\t\t: %s\n"
 		       "system variation\t: %s\n"
 		       "system revision\t\t: %ld\n"

@@ -20,7 +20,7 @@
  * Erik Schoenfelder (schoenfr@ibr.cs.tu-bs.de)
  *	      /proc/net/snmp.
  * Alan Cox (gw4pts@gw4pts.ampr.org) 1/95
- *	      Added Appletalk slots
+ *	      Added AppleTalk slots
  *
  *  proc net directory handling functions
  */

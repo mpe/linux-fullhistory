@@ -176,7 +176,7 @@ typedef struct sigaltstack {
 
 /* sigstack(2) is deprecated, and will be withdrawn in a future version
    of the X/Open CAE Specification.  Use sigaltstack instead.  It is only
-   implemented here for OSF/1 compatability.  */
+   implemented here for OSF/1 compatibility.  */
 
 struct sigstack {
 	void *ss_sp;

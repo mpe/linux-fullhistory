@@ -52,7 +52,7 @@ For any kernel to function in a sane manner it has to provide internal
 locking and protection of its own tables to prevent two processes updating 
 them at once and for example allocating the same memory block. There are 
 two strategies for this within current Unix and Unixlike kernels. 
-Traditional unix systems from the earliest of days use a scheme of 'Coarse 
+Traditional Unix systems from the earliest of days use a scheme of 'Coarse 
 Grained Locking' where the entire kernel is protected by a small number of 
 locks only. Some modern systems use fine grained locking. Because fine 
 grained locking has more overhead it is normally used only on 

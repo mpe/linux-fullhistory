@@ -71,7 +71,7 @@ asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 				break;
 			flag = O_NONBLOCK;
 #ifdef __sparc__
-			/* SunOS compatability item. */
+			/* SunOS compatibility item. */
 			if(O_NONBLOCK != O_NDELAY)
 				flag |= O_NDELAY;
 #endif

@@ -12,8 +12,8 @@
 #include <linux/sched.h>
 #include <linux/delay.h>
 #include <linux/string.h>
-#include <linux/vc_ioctl.h>
 #include <linux/nvram.h>
+#include <asm/vc_ioctl.h>
 #include <asm/prom.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
@@ -21,6 +21,7 @@
 #include <linux/selection.h>
 #include "pmac-cons.h"
 #include "platinum.h"
+#include <linux/console_compat.h>
 
 /*
  * Structure of the registers for the DACula colormap device.
@@ -37,7 +38,7 @@ struct cmap_regs {
 };
 
 /*
- * Structure of the registers for the "platinum" display adaptor".
+ * Structure of the registers for the "platinum" display adaptor.
  */
 #define PAD(x)	char x[12]
 
@@ -424,7 +425,7 @@ map_platinum(struct device_node *dp)
 	cmap_regs = ioremap(cmap_regs_phys, 0x1000);
 
 	/* Grok total video ram */
-	plat_regs->reg[16].r = (unsigned)frame_buffer;
+	plat_regs->reg[16].r = (unsigned)frame_buffer_phys;
 	plat_regs->reg[20].r = 0x1011;	/* select max vram */
 	plat_regs->reg[24].r = 0;	/* switch in vram */
 	eieio();
@@ -521,7 +522,7 @@ platinum_init()
 	for (i = 0; i < 26; ++i)
 		plat_regs->reg[i+32].r = init->regs[i];
 	plat_regs->reg[26+32].r = (one_mb ? init->plat_offset[color_mode] + 4 - color_mode : init->plat_offset[color_mode]);
-	plat_regs->reg[16].r = (unsigned) frame_buffer;
+	plat_regs->reg[16].r = (unsigned) frame_buffer_phys + init->fb_offset;
 	plat_regs->reg[18].r = line_pitch;
 	plat_regs->reg[19].r = (one_mb ? init->mode[color_mode+1] : init->mode[color_mode]);
 	plat_regs->reg[20].r = (one_mb ? 0x11 : 0x1011);

@@ -159,12 +159,12 @@ Currently, there are a number of MCA-specific device drivers.
 3) 3c523
 	drivers/net/3c523.c
 	drivers/net/3c523.h
-   3Com 3c523 Etherlink/MC ethernet driver.
+   3Com 3c523 Etherlink/MC Ethernet driver.
 
 4) SMC Ultra/MCA
 	drivers/net/smc-mca.c
 	drivers/net/smc-mca.h
-	Elite/A (8013EP/A) and Elite10T/A (8013WP/A) ethernet driver
+	Elite/A (8013EP/A) and Elite10T/A (8013WP/A) Ethernet driver
 
 As well, drivers/char/psaux.c was modified to support IRQ sharing (it's
 #ifdef CONFIG_MCA'ed, for your convenience, although PCI users might be

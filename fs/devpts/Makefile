@@ -1,5 +1,5 @@
 #
-# Makefile for the linux /dev/pts virtual filesystem.
+# Makefile for the Linux /dev/pts virtual filesystem.
 #
 
 O_TARGET := devpts.o

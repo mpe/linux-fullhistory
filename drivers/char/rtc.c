@@ -134,11 +134,8 @@ static void rtc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	rtc_irq_data |= (CMOS_READ(RTC_INTR_FLAGS) & 0xF0);
 	wake_up_interruptible(&rtc_wait);	
 
-	if (rtc_status & RTC_TIMER_ON) {
-		del_timer(&rtc_irq_timer);
-		rtc_irq_timer.expires = jiffies + HZ/rtc_freq + 2*HZ/100;
-		add_timer(&rtc_irq_timer);
-	}
+	if (rtc_status & RTC_TIMER_ON)
+		mod_timer(&rtc_irq_timer, jiffies + HZ/rtc_freq + 2*HZ/100);
 }
 
 /*
@@ -596,9 +593,7 @@ void rtc_dropped_irq(unsigned long data)
 	unsigned long flags;
 
 	printk(KERN_INFO "rtc: lost some interrupts at %ldHz.\n", rtc_freq);
-	del_timer(&rtc_irq_timer);
-	rtc_irq_timer.expires = jiffies + HZ/rtc_freq + 2*HZ/100;
-	add_timer(&rtc_irq_timer);
+	mod_timer(&rtc_irq_timer, jiffies + HZ/rtc_freq + 2*HZ/100);
 
 	save_flags(flags);
 	cli();

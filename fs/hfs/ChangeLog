@@ -376,7 +376,7 @@ Fri Feb 14 10:50:14 1997  Paul H. Hargrove  <hargrove@sccm.stanford.edu>
 	  dir.c, brec.c, btree.c, bitmap.c, bnode.c, bdelete.c, bins_del.c,
 	  binsert.c, Makefile, TODO, balloc.c:
 	First shot at portability to the DEC Alpha and non-gcc compilers.
-	This invloved a significant overhaul of the type system.
+	This involved a significant overhaul of the type system.
 
 Tue Feb  4 04:26:54 1997  Paul H. Hargrove  <hargrove@sccm.stanford.edu>
 
@@ -2346,7 +2346,7 @@ Feb 28, 1995: version 0.4 hargrove@sccm.stanford.edu (Paul H. Hargrove)
 	More code reorganization to abstract the btree operations.
 	Added the fork= mount option.
 	Added AppleDouble support.  Executor, from ARDI, can now run programs
-		from HFS filesystems mounted w/ the HFS module.
+		from HFS filesystems mounted with the HFS module.
 
 Jan 28, 1995: version 0.3 hargrove@sccm.stanford.edu (Paul H. Hargrove)
 	Major code reorganization.

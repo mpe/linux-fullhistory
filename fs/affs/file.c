@@ -5,7 +5,7 @@
  *
  *  (C) 1993  Ray Burr - Modified for Amiga FFS filesystem.
  *
- *  (C) 1992  Eric Youngdale Modified for ISO9660 filesystem.
+ *  (C) 1992  Eric Youngdale Modified for ISO 9660 filesystem.
  *
  *  (C) 1991  Linus Torvalds - minix filesystem
  *
@@ -134,7 +134,7 @@ struct inode_operations affs_file_inode_operations_ofs = {
 /* The keys of the extension blocks are stored in a 512-entry
  * deep cache. In order to save memory, not every key of later
  * extension blocks is stored - the larger the file gets, the
- * bigger the holes inbetween.
+ * bigger the holes in between.
  */
 
 static int
@@ -349,8 +349,8 @@ affs_bmap(struct inode *inode, int block)
 
 /* With the affs, getting a random block from a file is not
  * a simple business. Since this fs does not allow holes,
- * it may be neccessary to allocate all the missing blocks
- * inbetween, as well as some new extension blocks. The OFS
+ * it may be necessary to allocate all the missing blocks
+ * in between, as well as some new extension blocks. The OFS
  * is even worse: All data blocks contain pointers to the
  * next ones, so you have to fix [n-1] after allocating [n].
  * What a mess.

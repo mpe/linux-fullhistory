@@ -65,7 +65,7 @@
  * Note by Zoltan Szilagyi 10-12-96:
  *
  * I've succeeded in eliminating the "CU wedged" messages, and hence the
- * lockups, which were only occuring with cards running in 8-bit mode ("force
+ * lockups, which were only occurring with cards running in 8-bit mode ("force
  * 8-bit operation" in Intel's SoftSet utility). This version of the driver
  * sets the 82586 and the ASIC to 8-bit mode at startup; it also stops the
  * CU before submitting a packet for transmission, and then restarts it as soon

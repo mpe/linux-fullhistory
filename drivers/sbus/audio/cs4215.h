@@ -61,7 +61,7 @@ static struct {
 };
 #define CS4215_HPF	(1<<7)	/* High Pass Filter, 1: Enabled */
 
-#define CS4215_12_MASK	0xfcbf	/* Mask off reseved bits in slot 1 & 2 */
+#define CS4215_12_MASK	0xfcbf	/* Mask off reserved bits in slot 1 & 2 */
 
 /* Time Slot 3, Serial Port Control register */
 #define CS4215_XEN	(1<<0)	/* 0: Enable serial output */
@@ -109,7 +109,7 @@ static struct {
 /* Time Slot 7, Input Setting */
 #define CS4215_LG(v)	v	/* Left Gain Setting 0xf: 22.5 dB */
 #define CS4215_IS	(1<<4)	/* Input Select: 1=Microphone, 0=Line */
-#define CS4215_OVR	(1<<5)	/* 1: Overrange condition occured */
+#define CS4215_OVR	(1<<5)	/* 1: Overrange condition occurred */
 #define CS4215_PIO0	(1<<6)	/* Parallel I/O 0 */
 #define CS4215_PIO1	(1<<7)
 

@@ -167,7 +167,7 @@ static int x25_fetch_events (sdla_t* card);
 static int x25_error (sdla_t* card, int err, int cmd, int lcn);
 
 /* X.25 asynchronous event handlers */
-static int incomming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb);
+static int incoming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb);
 static int call_accepted (sdla_t* card, int cmd, int lcn, TX25Mbox* mb);
 static int call_cleared (sdla_t* card, int cmd, int lcn, TX25Mbox* mb);
 static int timeout_event (sdla_t* card, int cmd, int lcn, TX25Mbox* mb);
@@ -822,7 +822,7 @@ tx_done:
 }
 
 /*============================================================================
- * Get ethernet-style interface statistics.
+ * Get Ethernet-style interface statistics.
  * Return a pointer to struct net_device_stats
  */
  
@@ -1177,7 +1177,7 @@ static void poll_active (sdla_t* card)
 
 		/* If there is a packet queued for transmission then kick
 		 * the channel's send routine. When transmission is complete
-		 * or if error has occured, release socket buffer and reset
+		 * or if error has occurred, release socket buffer and reset
 		 * 'tbusy' flag.
 		 */
 		if (skb && (chan_send(dev, skb) == 0))
@@ -1204,8 +1204,8 @@ static void poll_active (sdla_t* card)
 
 /****** SDLA Firmware-Specific Functions *************************************
  * Almost all X.25 commands can unexpetedly fail due to so called 'X.25
- * asynchronous events' such as restart, interrupt, incomming call request,
- * call clear request, etc.  They can't be ignored and have to be delt with
+ * asynchronous events' such as restart, interrupt, incoming call request,
+ * call clear request, etc.  They can't be ignored and have to be dealt with
  * immediately.  To tackle with this problem we execute each interface command
  * in a loop until good return code is received or maximum number of retries
  * is reached.  Each interface command returns non-zero return code, an
@@ -1643,8 +1643,8 @@ static int x25_error (sdla_t* card, int err, int cmd, int lcn)
 			mb->data[dlen] = '\0';
 			switch (mb->cmd.pktType & 0x7F)
 			{
-				case 0x30:		/* incomming call */
-					retry = incomming_call(card, cmd, lcn, mb);
+				case 0x30:		/* incoming call */
+					retry = incoming_call(card, cmd, lcn, mb);
 					break;
 
 				case 0x31:		/* connected */
@@ -1728,7 +1728,7 @@ static int x25_error (sdla_t* card, int err, int cmd, int lcn)
  */
 
 /*============================================================================
- * Handle X.25 incomming call request.
+ * Handle X.25 incoming call request.
  *	RFC 1356 establishes the following rules:
  *	1. The first octet in the Call User Data (CUD) field of the call
  *	   request packet contains NLPID identifying protocol encapsulation.
@@ -1736,12 +1736,12 @@ static int x25_error (sdla_t* card, int err, int cmd, int lcn)
  *	   protocol encapsulation.
  *	3. A diagnostic code 249 defined by ISO/IEC 8208 may be used when
  *	   clearing a call because protocol encapsulation is not supported.
- *	4. If an incomming call is received while a call request is pending
- *	   (i.e. call collision has occured), the incomming call shall be
+ *	4. If an incoming call is received while a call request is pending
+ *	   (i.e. call collision has occurred), the incoming call shall be
  *	   rejected and call request shall be retried.
  */
 
-static int incomming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
+static int incoming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 {
 	wan_device_t* wandev = &card->wandev;
 	int new_lcn = mb->cmd.lcn;
@@ -1754,7 +1754,7 @@ static int incomming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 	if (dev != NULL)
 	{
 		printk(KERN_INFO
-			"%s: X.25 incomming call collision on LCN %d!\n",
+			"%s: X.25 incoming call collision on LCN %d!\n",
 			card->devname, new_lcn);
 		x25_clear_call(card, new_lcn, 0, 0);
 		return 1;
@@ -1764,7 +1764,7 @@ static int incomming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 	if (mb->cmd.qdm & 0x02)
 	{
 		printk(KERN_INFO
-			"%s: X.25 incomming call on LCN %d with D-bit set!\n",
+			"%s: X.25 incoming call on LCN %d with D-bit set!\n",
 			card->devname, new_lcn);
 		x25_clear_call(card, new_lcn, 0, 0);
 		return 1;
@@ -1775,13 +1775,13 @@ static int incomming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 	if (info == NULL)
 	{
 		printk(KERN_ERR
-			"%s: not enough memory to parse X.25 incomming call "
+			"%s: not enough memory to parse X.25 incoming call "
 			"on LCN %d!\n", card->devname, new_lcn);
 		x25_clear_call(card, new_lcn, 0, 0);
 		return 1;
 	}
 	parse_call_info(mb->data, info);
-	printk(KERN_INFO "%s: X.25 incomming call on LCN %d! Call data: %s\n",
+	printk(KERN_INFO "%s: X.25 incoming call on LCN %d! Call data: %s\n",
 		card->devname, new_lcn, mb->data);
 
 	/* Find available channel */
@@ -1793,7 +1793,7 @@ static int incomming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 			continue;
 		if (strcmp(info->src, chan->addr) == 0)
 			break;
-	        /* If just an '@' is specified, accept all incomming calls */
+	        /* If just an '@' is specified, accept all incoming calls */
 	        if (strcmp(chan->addr, "") == 0)
 	                break;
 	}
@@ -1809,7 +1809,7 @@ static int incomming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 	else if (info->nuser == 0)
 	{
 		printk(KERN_INFO
-			"%s: no user data in incomming call on LCN %d!\n",
+			"%s: no user data in incoming call on LCN %d!\n",
 			card->devname, new_lcn);
 		x25_clear_call(card, new_lcn, 0, 0);
 	}
@@ -1831,7 +1831,7 @@ static int incomming_call (sdla_t* card, int cmd, int lcn, TX25Mbox* mb)
 			break;
 		default:
 			printk(KERN_INFO
-				"%s: unsupported NLPID 0x%02X in incomming call "
+				"%s: unsupported NLPID 0x%02X in incoming call "
 				"on LCN %d!\n", card->devname, info->user[0], new_lcn);
 			x25_clear_call(card, new_lcn, 0, 249);
 	}

@@ -841,7 +841,7 @@ static void switch_net_numbers(unsigned char *sendpacket, unsigned long network_
 }				/* switch_net_numbers */
 
 /*============================================================================
- * Get ethernet-style interface statistics.
+ * Get Ethernet-style interface statistics.
  * Return a pointer to struct enet_statistics.
  */
 
@@ -2183,7 +2183,7 @@ static int intr_test(sdla_t * card)
 {
 	ppp_mbox_t *mb = card->mbox;
 	int err, i;
-	/* The critical flag is unset because during intialization (if_open) 
+	/* The critical flag is unset because during initialization (if_open) 
 	 * we want the interrupts to be enabled so that when the wpp_isr is
 	 * called it does not exit due to critical flag set.
 	 */

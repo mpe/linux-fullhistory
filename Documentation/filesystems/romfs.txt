@@ -1,7 +1,6 @@
-
 ROMFS - ROM FILE SYSTEM
 
-This is a quite dumb, read only filesystem, mainly for initial ram
+This is a quite dumb, read only filesystem, mainly for initial RAM
 disks of installation disks.  It has grown up by the need of having
 modules linked at boot time.  Using this filesystem, you get a very
 similar feature, and even the possibility of a small kernel, with a
@@ -29,13 +28,13 @@ However, the main purpose of romfs is to have a very small kernel,
 which has only this filesystem linked in, and then can load any module
 later, with the current module utilities.  It can also be used to run
 some program to decide if you need SCSI devices, and even IDE or
-floppy drives can be loaded later if you use the "initrd" -- initial
-ram disk -- feature of the kernel.  This would not be really news
+floppy drives can be loaded later if you use the "initrd"--initial
+RAM disk--feature of the kernel.  This would not be really news
 flash, but with romfs, you can even spare off your ext2 or minix or
 maybe even affs filesystem until you really know that you need it.
 
 For example, a distribution boot disk can contain only the cd disk
-drivers (and possibly the SCSI drivers), and the ISO filesystem
+drivers (and possibly the SCSI drivers), and the ISO 9660 filesystem
 module.  The kernel can be small enough, since it doesn't have other
 filesystems, like the quite large ext2fs module, which can then be
 loaded off the CD at a later stage of the installation.  Another use
@@ -148,7 +147,7 @@ please contact me.  However, think twice before wanting me to add
 features and code, because the primary and most important advantage of
 this file system is the small code.  On the other hand, don't be
 alarmed, I'm not getting that much romfs related mail.  Now I can
-understand why Avery wrote poems in the arcnet docs to get some more
+understand why Avery wrote poems in the ARCnet docs to get some more
 feedback. :)
 
 romfs has also a mailing list, and to date, it hasn't received any
@@ -167,7 +166,7 @@ I have never found this limiting, but others might.
 one would want to write _anything_ to a file system, he still needs
 a writable file system, thus negating the size advantages.  Possible
 solutions: implement write access as a compile-time option, or a new,
-similarly small writable filesystem for ram disks.
+similarly small writable filesystem for RAM disks.
 
 - Since the files are only required to have alignment on a 16 byte
 boundary, it is currently possibly suboptimal to read or execute files

@@ -223,8 +223,8 @@
 #define DP_BKGD_CLR		0x02C0	/* Dword offset 0_B0 */
 #define DP_FOG_CLR		0x02C4	/* Dword offset 0_B1 */
 #define DP_FRGD_CLR		0x02C4	/* Dword offset 0_B1 */
-#define DP_WRITE_MSK		0x02C8	/* Dword offset 0_B2 */
-#define DP_CHAIN_MSK		0x02CC	/* Dword offset 0_B3 */
+#define DP_WRITE_MASK		0x02C8	/* Dword offset 0_B2 */
+#define DP_CHAIN_MASK		0x02CC	/* Dword offset 0_B3 */
 #define DP_PIX_WIDTH		0x02D0	/* Dword offset 0_B4 */
 #define DP_MIX			0x02D4	/* Dword offset 0_B5 */
 #define DP_SRC			0x02D8	/* Dword offset 0_B6 */
@@ -238,7 +238,7 @@
 #define DP_SET_GUI_ENGINE	0x02FC	/* Dword offset 0_BF */
 
 #define CLR_CMP_CLR		0x0300	/* Dword offset 0_C0 */
-#define CLR_CMP_MSK		0x0304	/* Dword offset 0_C1 */
+#define CLR_CMP_MASK		0x0304	/* Dword offset 0_C1 */
 #define CLR_CMP_CNTL		0x0308	/* Dword offset 0_C2 */
 
 #define FIFO_STAT		0x0310	/* Dword offset 0_C4 */
@@ -569,7 +569,8 @@
 #define PLL_WR_EN		0x02
 
 /* PLL registers */
-#define PLL_MACRO_CNTL		0x01
+#define MPLL_CNTL		0x00
+#define VPLL_CNTL		0x01
 #define PLL_REF_DIV		0x02
 #define PLL_GEN_CNTL		0x03
 #define MCLK_FB_DIV		0x04
@@ -579,7 +580,9 @@
 #define VCLK1_FB_DIV		0x08
 #define VCLK2_FB_DIV		0x09
 #define VCLK3_FB_DIV		0x0A
-#define PLL_XCLK_CNTL		0x0B
+#define PLL_EXT_CNTL		0x0B
+#define DLL_CNTL		0x0C
+#define VFC_CNTL		0x0D
 #define PLL_TEST_CTRL		0x0E
 #define PLL_TEST_COUNT		0x0F
 
@@ -688,28 +691,88 @@
 
 /* ATI PCI constants */
 #define PCI_ATI_VENDOR_ID	0x1002
-#define PCI_MACH64_GX		0x4758
-#define PCI_MACH64_CX		0x4358
-#define PCI_MACH64_CT		0x4354
-#define PCI_MACH64_ET		0x4554
-#define PCI_MACH64_VT		0x5654
-#define PCI_MACH64_GT		0x4754
+
+/* mach64GX family */
+#define PCI_MACH64_GX		0x4758	/* mach64GX (ATI888GX00) */
+#define PCI_MACH64_CX		0x4358	/* mach64CX (ATI888CX00) */
+
+/* mach64CT family */
+#define PCI_MACH64_CT		0x4354	/* mach64CT (ATI264CT) */
+#define PCI_MACH64_ET		0x4554	/* mach64ET (ATI264ET) */
+
+/* mach64CT family / mach64VT class */
+#define PCI_MACH64_VT		0x5654	/* mach64VT (ATI264VT) */
+#define PCI_MACH64_VTB		0x5655	/* mach64VTB (ATI264VTB) */
+#define PCI_MACH64_VT4		0x5656	/* mach64VT4 (ATI264VT4) */
+
+/* mach64CT family / mach64GT (3D RAGE) class */
+#define PCI_MACH64_GB		0x4742	/* RAGE PRO, BGA, AGP 1x and 2x */
+#define PCI_MACH64_GD		0x4744	/* RAGE PRO, BGA, AGP 1x only */
+#define PCI_MACH64_GI		0x4749	/* RAGE PRO, BGA, PCI33 only */
+#define PCI_MACH64_GP		0x4750	/* RAGE PRO, PQFP, PCI33, full 3D */
+#define PCI_MACH64_GQ		0x4751	/* RAGE PRO, PQFP, PCI33, limited 3D */
+#define PCI_MACH64_GT		0x4754	/* 3D RAGE II/II+ */
+#define PCI_MACH64_GTB		0x4755	/* 3D II+ */
+#define PCI_MACH64_GTC		0x4756	/* 3D RAGE IIC */
+#define PCI_MACH64_LT		0x4c47	/* 3D RAGE LT */
+
 
 /* CONFIG_CHIP_ID register constants */
 #define CFG_CHIP_TYPE		0x0000FFFF
 #define CFG_CHIP_CLASS		0x00FF0000
 #define CFG_CHIP_REV		0xFF000000
-#define CFG_CHIP_VERSION	0x07000000
-#define CFG_CHIP_FOUNDRY	0x38000000
-#define CFG_CHIP_REVISION	0xC0000000
+#define CFG_CHIP_MAJOR		0x07000000
+#define CFG_CHIP_FND_ID		0x38000000
+#define CFG_CHIP_MINOR		0xC0000000
+
 
 /* Chip IDs read from CONFIG_CHIP_ID */
-#define MACH64_GX_ID		0xD7
-#define MACH64_CX_ID		0x57
-#define MACH64_CT_ID		0x4354
-#define MACH64_ET_ID		0x4554
-#define MACH64_VT_ID		0x5654
-#define MACH64_GT_ID		0x4754
+
+/* mach64GX family */
+#define MACH64_GX_ID		0xD7	/* mach64GX (ATI888GX00) */
+#define MACH64_CX_ID		0x57	/* mach64CX (ATI888CX00) */
+
+/* mach64CT family */
+#define MACH64_CT_ID		PCI_MACH64_CT
+#define MACH64_ET_ID		PCI_MACH64_ET
+
+/* mach64CT family / mach64VT class */
+#define MACH64_VT_ID		PCI_MACH64_VT
+#define MACH64_VTB_ID		PCI_MACH64_VTB
+#define MACH64_VT4_ID		PCI_MACH64_VT4
+
+/* mach64CT family / mach64GT (3D RAGE) class */
+#define MACH64_GB_ID		PCI_MACH64_GB
+#define MACH64_GD_ID		PCI_MACH64_GD
+#define MACH64_GI_ID		PCI_MACH64_GI
+#define MACH64_GP_ID		PCI_MACH64_GP
+#define MACH64_GQ_ID		PCI_MACH64_GQ
+#define MACH64_GT_ID		PCI_MACH64_GT
+#define MACH64_GTB_ID		PCI_MACH64_GTB
+#define MACH64_GTC_ID		PCI_MACH64_GTC
+#define MACH64_LT_ID		PCI_MACH64_LT
+
+
+/* Mach64 major ASIC revisions */
+#define MACH64_ASIC_NEC_VT_A3		0x08
+#define MACH64_ASIC_NEC_VT_A4		0x48
+#define MACH64_ASIC_SGS_VT_A4		0x40
+#define MACH64_ASIC_SGS_VT_B1S1		0x01
+#define MACH64_ASIC_SGS_GT_B1S1		0x01
+#define MACH64_ASIC_SGS_GT_B1S2		0x41
+#define MACH64_ASIC_UMC_GT_B2U1		0x1a
+#define MACH64_ASIC_UMC_GT_B2U2		0x5a
+#define MACH64_ASIC_UMC_VT_B2U3		0x9a
+#define MACH64_ASIC_UMC_GT_B2U3		0x9a
+#define MACH64_ASIC_UMC_R3B_D_P_A1	0x1b
+#define MACH64_ASIC_UMC_R3B_D_P_A2	0x5b
+#define MACH64_ASIC_UMC_R3B_D_P_A3	0x1c
+#define MACH64_ASIC_UMC_R3B_D_P_A4	0x5c
+
+/* Mach64 foundries */
+#define MACH64_FND_SGS		0
+#define MACH64_FND_NEC		1
+#define MACH64_FND_UMC		3
 
 /* Mach64 chip types */
 #define MACH64_UNKNOWN		0
@@ -900,24 +963,4 @@
 #define MACH64_NUM_CLOCKS	16
 #define MACH64_NUM_FREQS	50
 
-/* Wait until "v" queue entries are free */
-#define aty_WaitQueue(v)    { while ((aty_ld_le32(FIFO_STAT) & 0xffff) > \
-			 ((unsigned short)(0x8000 >> (v)))); }
-
-/* Wait until GP is idle and queue is empty */
-#define aty_WaitIdleEmpty() { aty_WaitQueue(16); \
-			  while ((aty_ld_le32(GUI_STAT) & 1) != 0); }
-
-#define SKIP_2(_v) ((((_v)<<1)&0xfff8)|((_v)&0x3)|(((_v)&0x80)>>5))
-
-#define MACH64_BIT_BLT(_srcx, _srcy, _dstx, _dsty, _w, _h, _dir) \
-{ \
-    aty_WaitQueue(5); \
-    aty_st_le32(SRC_Y_X, (((_srcx) << 16) | ((_srcy) & 0x0000ffff))); \
-    aty_st_le32(SRC_WIDTH1, (_w)); \
-    aty_st_le32(DST_CNTL, (_dir)); \
-    aty_st_le32(DST_Y_X, (((_dstx) << 16) | ((_dsty) & 0x0000ffff))); \
-    aty_st_le32(DST_HEIGHT_WIDTH, (((_w) << 16) | ((_h) & 0x0000ffff))); \
-}
 #endif /* REGMACH64_H */
-

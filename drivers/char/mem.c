@@ -41,8 +41,8 @@ int isdn_init(void);
 #ifdef CONFIG_VIDEO_DEV
 extern int videodev_init(void);
 #endif
-#if defined(CONFIG_FB)
-extern void fbmem_init( void );
+#ifdef CONFIG_FB
+extern void fbmem_init(void);
 #endif
 
 static ssize_t do_write_mem(struct file * file, void *p, unsigned long realp,
@@ -63,7 +63,7 @@ static ssize_t do_write_mem(struct file * file, void *p, unsigned long realp,
 		written+=sz;
 	}
 #endif
-	if (copy_from_user(p, buf, count) < 0) 
+	if (copy_from_user(p, buf, count)) 
 		return -EFAULT;
 	written += count;
 	*ppos += written;
@@ -104,7 +104,7 @@ static ssize_t read_mem(struct file * file, char * buf,
 		}
 	}
 #endif
-	if (copy_to_user(buf, __va(p), count) < 0)
+	if (copy_to_user(buf, __va(p), count))
 		return -EFAULT;
 	read += count;
 	*ppos += read;
@@ -552,7 +552,7 @@ __initfunc(int chr_dev_init(void))
 #endif
 #ifdef CONFIG_JOYSTICK
 	/*
-	 *	Some joysticks only appear when the soundcard they are
+	 *	Some joysticks only appear when the sound card they are
 	 *	connected to is configured. Keep the sound/joystick ordering.
 	 */
 	js_init();

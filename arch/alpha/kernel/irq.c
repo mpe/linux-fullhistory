@@ -827,7 +827,7 @@ void irq_enter(int cpu, int irq)
 			       cpu, previous_irqholder, globl_locked,
 			       globl_icount, local_count);
 #ifdef VERBOSE_IRQLOCK_DEBUGGING
-			printk("Performing backtrace on all cpus,"
+			printk("Performing backtrace on all CPUs,"
 			       " write this down!\n");
 			smp_show_backtrace_all_cpus();
 #endif

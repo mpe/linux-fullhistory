@@ -11,7 +11,7 @@
  */
 
 /*
- * IRQ's are in fact implemented a bit like signal handlers for the kernel.
+ * IRQs are in fact implemented a bit like signal handlers for the kernel.
  * Naturally it's not a 1:1 relation, but there are similarities.
  */
 
@@ -385,7 +385,7 @@ static inline void wait_on_bh(void)
  * Such 'high frequency update' races can be avoided by careful design, but
  * some of our major constructs like spinlocks use similar techniques,
  * it would be nice to clarify this issue. Set this define to 0 if you
- * want to check wether your system freezes. I suspect the delay done
+ * want to check whether your system freezes.  I suspect the delay done
  * by SYNC_OTHER_CORES() is in correlation with 'snooping latency', but
  * i thought that such things are guaranteed by design, since we use
  * the 'LOCK' prefix.

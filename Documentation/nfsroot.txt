@@ -1,5 +1,5 @@
 Mounting the root filesystem via NFS (nfsroot)
-==============================================
+===============================================
 
 Written 1996 by Gero Kuhlmann <gero@gkminix.han.de>
 Updated 1997 by Martin Mares <mj@atrey.karlin.mff.cuni.cz>
@@ -185,12 +185,12 @@ depend on what facilities are available:
 	lar to how LILO is doing it. Please refer to the loadlin docu-
 	mentation for further information.
 
-3.4) Using a bootrom
+3.4) Using a boot ROM
 	This is probably the most elegant way of booting a diskless
-	client. With a bootrom the kernel gets loaded using the TFTP
-	protocol. As far as I know no commercial bootroms already
+	client. With a boot ROM the kernel gets loaded using the TFTP
+	protocol. As far as I know, no commercial boot ROMs yet
 	support booting Linux over the network, but there are two
-	free implementations of a bootrom available on sunsite.unc.edu
+	free implementations of a boot ROM available on sunsite.unc.edu
 	and its mirrors. They are called 'netboot-nfs' and 'etherboot'.
 	Both contain everything you need to boot a diskless Linux client.
 

@@ -66,7 +66,7 @@ logo.gif
 logo.txt
 	- Info on creator of above logo & site to get additional images from.
 m68k/
-	- directory with info about Linux on Motorola 68k archtecture.
+	- directory with info about Linux on Motorola 68k architecture.
 magic-number.txt
 	- list of magic numbers used to mark/protect kernel data structures.
 mandatory.txt
@@ -84,7 +84,7 @@ mtrr.txt
 nbd.txt
 	- info on a TCP implementation of a network block device.
 networking/
-	- directory with info on various linux networking aspects.
+	- directory with info on various aspects of networking with Linux.
 nfsroot.txt
 	- short guide on setting up a diskless box with NFS root filesystem
 oops-tracing.txt

@@ -24,6 +24,8 @@
  *			   Martin Schaller
  *			   Andreas Schwab
  *
+ *  Hardware cursor support added by Emmanuel Marty (core@ggi-project.org)
+ *
  *
  *  The low level operations for the various display memory organizations are
  *  now in separate source files.
@@ -39,7 +41,6 @@
  *  To do:
  *
  *    - Implement 16 plane mode (iplan2p16)
- *    - Hardware cursor
  *
  *
  *  This file is subject to the terms and conditions of the GNU General Public
@@ -82,7 +83,7 @@
 #ifdef CONFIG_MAC
 #include <asm/macints.h>
 #endif
-#ifdef __mc68000__
+#if defined(__mc68000__) || defined(CONFIG_APUS)
 #include <asm/machdep.h>
 #include <asm/setup.h>
 #endif
@@ -101,8 +102,13 @@
 struct display fb_display[MAX_NR_CONSOLES];
 
 
-/* ++Geert: Sorry, no hardware cursor support at the moment;
-   use Atari alike software cursor */
+/*
+ * Emmanuel: fbcon will now use a hardware cursor if the
+ * low-level driver provides a non-NULL dispsw->cursor pointer,
+ * in which case the hardware should do blinking, etc.
+ *
+ * if dispsw->cursor is NULL, use Atari alike software cursor
+ */
 
 #if FLASHING_CURSOR
 static int cursor_drawn = 0;
@@ -164,8 +170,7 @@ static int fbcon_blank(int blank);
 static int fbcon_get_font(struct vc_data *conp, int *w, int *h, char *data);
 static int fbcon_set_font(struct vc_data *conp, int w, int h, char *data);
 static int fbcon_set_palette(struct vc_data *conp, unsigned char *table);
-static int fbcon_scrolldelta(int lines);
-static int fbcon_set_mode(struct vc_data *conp, int mode);
+static int fbcon_scrolldelta(struct vc_data *conp, int lines);
 
 
 /*
@@ -527,26 +532,35 @@ static void fbcon_cursor(struct vc_data *conp, int mode)
     int unit = conp->vc_num;
     struct display *p = &fb_display[unit];
 
+    /* do we have a hardware cursor ? */
+    if (p->dispsw->cursor) {
+	p->cursor_x = conp->vc_x;
+	p->cursor_y = conp->vc_y;
+	p->dispsw->cursor(p, mode, p->cursor_x, real_y(p, p->cursor_y));
+	return;
+    }
+
     /* Avoid flickering if there's no real change. */
     if (p->cursor_x == conp->vc_x && p->cursor_y == conp->vc_y &&
 	(mode == CM_ERASE) == !cursor_on)
 	return;
-    if (CURSOR_UNDRAWN ())
-	p->dispsw->revc(p, p->cursor_x, real_y(p, p->cursor_y));
-    p->cursor_x = conp->vc_x;
-    p->cursor_y = conp->vc_y;
 
-    switch (mode) {
-	case CM_ERASE:
-	    cursor_on = 0;
-	    break;
+	if (CURSOR_UNDRAWN ())
+	    p->dispsw->revc(p, p->cursor_x, real_y(p, p->cursor_y));
+	p->cursor_x = conp->vc_x;
+	p->cursor_y = conp->vc_y;
 
-	case CM_MOVE:
-	case CM_DRAW:
-	    vbl_cursor_cnt = CURSOR_DRAW_DELAY;
-	    cursor_on = 1;
-	    break;
-    }
+	switch (mode) {
+	    case CM_ERASE:
+		cursor_on = 0;
+		break;
+
+	    case CM_MOVE:
+	    case CM_DRAW:
+		vbl_cursor_cnt = CURSOR_DRAW_DELAY;
+		cursor_on = 1;
+		break;
+	}
 }
 
 
@@ -642,9 +656,10 @@ static __inline__ void ypan_down(int unit, struct vc_data *conp,
 {
     p->yscroll -= count;
     if (p->yscroll < 0) {
-	p->yscroll = p->vrows-conp->vc_rows;
-	p->dispsw->bmove(p, 0, 0, p->yscroll+count, 0, conp->vc_rows-count,
-			 conp->vc_cols);
+	p->dispsw->bmove(p, p->yscroll + count, 0,
+			 p->vrows - conp->vc_rows + count, 0,
+			 conp->vc_rows - count, conp->vc_cols);
+	p->yscroll = p->vrows - conp->vc_rows;
     }
     p->var.xoffset = 0;
     p->var.yoffset = p->yscroll*p->fontheight;
@@ -1051,13 +1066,14 @@ static int fbcon_set_palette(struct vc_data *conp, unsigned char *table)
 	val = conp->vc_palette[j++];
 	palette_blue[k] = (val<<8)|val;
     }
-    palette_cmap.len = 1<<p->var.bits_per_pixel;
-    if (palette_cmap.len > 16)
+    if (p->var.bits_per_pixel <= 4)
+	palette_cmap.len = 1<<p->var.bits_per_pixel;
+    else
 	palette_cmap.len = 16;
     return p->fb_info->fbops->fb_set_cmap(&palette_cmap, 1, unit, p->fb_info);
 }
 
-static int fbcon_scrolldelta(int lines)
+static int fbcon_scrolldelta(struct vc_data *conp, int lines)
 {
 #if SUPPORT_SCROLLBACK
     int unit = fg_console; /* xxx */
@@ -1092,20 +1108,6 @@ static int fbcon_scrolldelta(int lines)
 }
 
 
-    /*
-     *  Switch between `text' (emulated and accelerated) and `graphics'
-     *  (unaccelerated text) mode
-     */
-
-static int fbcon_set_mode(struct vc_data *conp, int mode)
-{
-    struct display *p = &fb_display[conp->vc_num];
-    struct fb_ops *ops = p->fb_info->fbops;
-
-    return ops->fb_set_mode ? ops->fb_set_mode(mode, p->fb_info) : 0;
-}
-
-
 #define LOGO_H			80
 #define LOGO_W			80
 #define LOGO_LINE	(LOGO_W/8)
@@ -1120,15 +1122,20 @@ __initfunc(static int fbcon_show_logo( void ))
     unsigned char *dst, *src;
     int i, j, n, x1, y1;
     int logo_depth, done = 0;
-	
-    /* Set colors if visual is PSEUDOCOLOR and we have enough colors */
-    if (p->visual == FB_VISUAL_PSEUDOCOLOR && depth >= 4) {
-	int first_col = depth >= 8 ? 32 : depth > 4 ? 16 : 0;
-	int num_cols = depth >= 8 ? LINUX_LOGO_COLORS : 16;
+
+    /* Set colors if visual is PSEUDOCOLOR and we have enough colors, or for
+     * TRUECOLOR */
+    if ((p->visual == FB_VISUAL_PSEUDOCOLOR && depth >= 4) ||
+	p->visual == FB_VISUAL_TRUECOLOR) {
+	int is_truecolor = (p->visual == FB_VISUAL_TRUECOLOR);
+	int use_256 = (!is_truecolor && depth >= 8) ||
+		      (is_truecolor && depth >= 24);
+	int first_col = use_256 ? 32 : depth > 4 ? 16 : 0;
+	int num_cols = use_256 ? LINUX_LOGO_COLORS : 16;
 	unsigned char *red, *green, *blue;
 	int old_cmap_len;
 	
-	if (depth >= 8) {
+	if (use_256) {
 	    red   = linux_logo_red;
 	    green = linux_logo_green;
 	    blue  = linux_logo_blue;
@@ -1142,7 +1149,7 @@ __initfunc(static int fbcon_show_logo( void ))
 	/* dirty trick to avoid setcmap calling kmalloc which isn't
 	 * initialized yet... */
 	old_cmap_len = fb_display[fg_console].cmap.len;
-	fb_display[fg_console].cmap.len = 1 << depth;
+	fb_display[fg_console].cmap.len = 1 << (depth/(is_truecolor ? 3 : 1));
 	
 	for( i = 0; i < num_cols; i += n ) {
 	    n = num_cols - i;
@@ -1161,7 +1168,7 @@ __initfunc(static int fbcon_show_logo( void ))
 	}
 	fb_display[fg_console].cmap.len = old_cmap_len;
     }
-
+	
     if (depth >= 8) {
 	logo = linux_logo;
 	logo_depth = 8;
@@ -1194,10 +1201,14 @@ __initfunc(static int fbcon_show_logo( void ))
 	    for( y1 = 0; y1 < LOGO_H; y1++ ) {
 		dst = fb + y1*line;
 		for( x1 = 0; x1 < LOGO_W; x1++, src++ ) {
-		val = ((linux_logo_red[*src]   & redmask)   << redshift) |
-		      ((linux_logo_green[*src] & greenmask) << greenshift) |
-		      ((linux_logo_blue[*src]  & bluemask)  << blueshift);
+		    val = (*src << redshift) |
+			  (*src << greenshift) |
+			  (*src << blueshift);
+#ifdef __LITTLE_ENDIAN
+		    for( i = 0; i < bdepth; ++i )
+#else
 		    for( i = bdepth-1; i >= 0; --i )
+#endif
 			*dst++ = val >> (i*8);
 		}
 	    }
@@ -1251,10 +1262,14 @@ __initfunc(static int fbcon_show_logo( void ))
 	for( y1 = 0; y1 < LOGO_H; y1++ ) {
 	    dst = fb + y1*line;
 	    for( x1 = 0; x1 < LOGO_W; x1++, src++ ) {
-		val = ((linux_logo_red[*src]   & redmask)   << redshift) |
-		      ((linux_logo_green[*src] & greenmask) << greenshift) |
-		      ((linux_logo_blue[*src]  & bluemask)  << blueshift);
+		val = ((linux_logo_red[*src-32]   & redmask)   << redshift) |
+		      ((linux_logo_green[*src-32] & greenmask) << greenshift) |
+		      ((linux_logo_blue[*src-32]  & bluemask)  << blueshift);
+#ifdef __LITTLE_ENDIAN
 		for( i = 0; i < bdepth; ++i )
+#else
+		for( i = bdepth-1; i >= 0; --i )
+#endif
 		    *dst++ = val >> (i*8);
 	    }
 	}
@@ -1328,7 +1343,9 @@ __initfunc(static int fbcon_show_logo( void ))
 #endif
 #if defined(CONFIG_FBCON_MFB) || defined(CONFIG_FBCON_AFB) || \
     defined(CONFIG_FBCON_ILBM)
-    if (depth == 1) {
+    if (depth == 1 && (p->type == FB_TYPE_PACKED_PIXELS ||
+		       p->type == FB_TYPE_PLANES ||
+		       p->type == FB_TYPE_INTERLEAVED_PLANES)) {
 	/* monochrome */
 	unsigned char inverse = p->inverse ? 0x00 : 0xff;
 
@@ -1341,6 +1358,21 @@ __initfunc(static int fbcon_show_logo( void ))
 	}
 
 	done = 1;
+    }
+#endif
+#ifdef CONFIG_FBCON_VGA
+    if (depth == 1 && p->type == FB_TYPE_VGA_TEXT) {
+
+        int height = 0;
+        char *p;
+    
+        printk(linux_mda_image);
+
+        for (p = linux_mda_image; *p; p++)
+            if (*p == '\n')
+                height++;
+
+        return height;
     }
 #endif
     /* Modes not yet supported: packed pixels with depth != 8 (does such a
@@ -1359,7 +1391,7 @@ struct consw fb_con = {
     fbcon_startup, fbcon_init, fbcon_deinit, fbcon_clear, fbcon_putc,
     fbcon_putcs, fbcon_cursor, fbcon_scroll, fbcon_bmove, fbcon_switch,
     fbcon_blank, fbcon_get_font, fbcon_set_font, fbcon_set_palette,
-    fbcon_scrolldelta, fbcon_set_mode
+    fbcon_scrolldelta
 };
 
 
@@ -1376,6 +1408,7 @@ static struct display_switch fbcon_dummy = {
     (void *)fbcon_dummy_op,	/* fbcon_dummy_putc */
     (void *)fbcon_dummy_op,	/* fbcon_dummy_putcs */
     (void *)fbcon_dummy_op,	/* fbcon_dummy_revc */
+    NULL,			/* fbcon_dummy_cursor */
 };
 
 

@@ -169,7 +169,7 @@ it.
 
 		Chapter 6: You've made a mess of it
 
-That's ok, we all do.  You've probably been told by your long-time unix
+That's OK, we all do.  You've probably been told by your long-time Unix
 user helper that "GNU emacs" automatically formats the C sources for
 you, and you've noticed that yes, it does do that, but the defaults it
 uses are less than desirable (in fact, they are worse than random

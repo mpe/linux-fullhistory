@@ -155,7 +155,7 @@ void fbcon_mfb_revc(struct display *p, int xx, int yy)
 
 struct display_switch fbcon_mfb = {
     fbcon_mfb_setup, fbcon_mfb_bmove, fbcon_mfb_clear, fbcon_mfb_putc,
-    fbcon_mfb_putcs, fbcon_mfb_revc
+    fbcon_mfb_putcs, fbcon_mfb_revc, NULL
 };
 
 

@@ -40,18 +40,36 @@
  */
 
 struct screen_info {
-	unsigned char  orig_x;
-	unsigned char  orig_y;
-	unsigned char  unused1[2];
-	unsigned short orig_video_page;
-	unsigned char  orig_video_mode;
-	unsigned char  orig_video_cols;
-	unsigned short unused2;
-	unsigned short orig_video_ega_bx;
-	unsigned short unused3;
-	unsigned char  orig_video_lines;
-	unsigned char  orig_video_isVGA;
-	unsigned short orig_video_points;
+	unsigned char  orig_x;			/* 0x00 */
+	unsigned char  orig_y;			/* 0x01 */
+	unsigned short dontuse1;		/* 0x02 -- EXT_MEM_K sits here */
+	unsigned short orig_video_page;		/* 0x04 */
+	unsigned char  orig_video_mode;		/* 0x06 */
+	unsigned char  orig_video_cols;		/* 0x07 */
+	unsigned short unused2;			/* 0x08 */
+	unsigned short orig_video_ega_bx;	/* 0x0a */
+	unsigned short unused3;			/* 0x0c */
+	unsigned char  orig_video_lines;	/* 0x0e */
+	unsigned char  orig_video_isVGA;	/* 0x0f */
+	unsigned short orig_video_points;	/* 0x10 */
+
+	/* VESA graphic mode -- linear frame buffer */
+	unsigned short lfb_width;		/* 0x12 */
+	unsigned short lfb_height;		/* 0x14 */
+	unsigned short lfb_depth;		/* 0x16 */
+	unsigned long  lfb_base;		/* 0x18 */
+	unsigned long  lfb_size;		/* 0x1c */
+	unsigned short dontuse2, dontuse3;	/* 0x20 -- CL_MAGIC and CL_OFFSET here */
+	unsigned short lfb_linelength;		/* 0x24 */
+	unsigned char  red_size;		/* 0x26 */
+	unsigned char  red_pos;			/* 0x27 */
+	unsigned char  green_size;		/* 0x28 */
+	unsigned char  green_pos;		/* 0x29 */
+	unsigned char  blue_size;		/* 0x2a */
+	unsigned char  blue_pos;		/* 0x2b */
+	unsigned char  rsvd_size;		/* 0x2c */
+	unsigned char  rsvd_pos;		/* 0x2d */
+						/* 0x2e -- 0x3f reserved for future expansion */
 };
 
 extern struct screen_info screen_info;
@@ -70,6 +88,7 @@ extern struct screen_info screen_info;
 #define VIDEO_TYPE_EGAM		0x20	/* EGA/VGA in Monochrome Mode	*/
 #define VIDEO_TYPE_EGAC		0x21	/* EGA in Color Mode		*/
 #define VIDEO_TYPE_VGAC		0x22	/* VGA+ in Color Mode		*/
+#define VIDEO_TYPE_VLFB		0x23	/* VESA VGA in graphic mode    	*/
 
 #define VIDEO_TYPE_TGAC		0x40	/* DEC TGA */
 

@@ -39,7 +39,7 @@
  *    knows the PREVENT/ALLOW MEDIUM REMOVAL command, the door should
  *    be locked and unlocked when mounting the first or unmounting the
  *    last filesystem on the device. The code is untested, because I
- *    don't have a removable harddisk.
+ *    don't have a removable hard disk.
  *
  */
 
@@ -147,7 +147,7 @@ struct acsi_info_struct {
 #define TYPE_NO_LUN	0x7f
 
 /* The data returned by MODE SENSE differ between the old Atari
- * harddisks and SCSI disks connected to ACSI. In the following, both
+ * hard disks and SCSI disks connected to ACSI. In the following, both
  * formats are defined and some macros to operate on them potably.
  */
 

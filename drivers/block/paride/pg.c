@@ -114,10 +114,19 @@
 
 */
 
-#define PG_VERSION      "1.0"
+/* Changes:
+
+	1.01	GRG 1998.06.16	Bug fixes
+*/
+
+#define PG_VERSION      "1.01"
 #define PG_MAJOR	97
 #define PG_NAME		"pg"
 #define PG_UNITS	4
+
+#ifndef PI_PG
+#define PI_PG	4
+#endif
 
 /* Here are things one can override from the insmod command.
    Most are autoprobed by paride unless set here.  Verbose is 0
@@ -191,6 +200,7 @@ MODULE_PARM(drive3,"1-6i");
 #define PG_SPIN_DEL     50              /* spin delay in micro-seconds  */
 #define PG_SPIN         200
 #define PG_TMO		HZ
+#define PG_RESET_TMO	10*HZ
 
 #define STAT_ERR        0x01
 #define STAT_INDEX      0x02
@@ -312,31 +322,20 @@ void    cleanup_module(void);
 int     init_module(void)
 
 {       int     err;
-        long    flags;
-
-        save_flags(flags);
-        cli();
 
         err = pg_init();
 
-        restore_flags(flags);
         return err;
 }
 
 void    cleanup_module(void)
 
-{       long flags;
-	int unit;
-
-        save_flags(flags);
-        cli();
+{       int unit;
 
         unregister_chrdev(major,name);
 
 	for (unit=0;unit<PG_UNITS;unit++)
 	  if (PG.present) pi_release(PI);
-	
-        restore_flags(flags);
 }
 
 #endif
@@ -421,14 +420,14 @@ static int pg_command( int unit, char * cmd, int dlen, int tmo )
 
 static int pg_completion( int unit, char * buf, int tmo)
 
-{       int r, s, d, n, p;
+{       int r, d, n, p;
 
         r = pg_wait(unit,STAT_BUSY,STAT_DRQ|STAT_READY|STAT_ERR,
 			tmo,"completion");
 
 	PG.dlen = 0;
 
-        if (RR(0,7)&STAT_DRQ) { 
+        while (RR(0,7)&STAT_DRQ) {
            d = (RR(0,4)+256*RR(0,5));
            n = ((d+3)&0xfffc);
 	   p = RR(0,2)&3;
@@ -436,14 +435,15 @@ static int pg_completion( int unit, char * buf, int tmo)
 	   if (p == 2) pi_read_block(PI,buf,n);
 	   if (verbose > 1) printk("%s: %s %d bytes\n",PG.name,
 				    p?"Read":"Write",n);
-	   PG.dlen = (1-p)*d;
+           PG.dlen += (1-p)*d;
+           buf += d;
+           r = pg_wait(unit,STAT_BUSY,STAT_DRQ|STAT_READY|STAT_ERR,
+                        tmo,"completion");
         }
-
-        s = pg_wait(unit,STAT_BUSY,STAT_READY|STAT_ERR,tmo,"data done");
 
         pi_disconnect(PI); 
 
-        return (r?r:s);
+        return r;
 }
 
 static int pg_reset( int unit )
@@ -458,7 +458,7 @@ static int pg_reset( int unit )
 	pg_sleep(2);
 
         k = 0;
-        while ((k++ < PG_TMO) && (RR(1,6)&STAT_BUSY))
+        while ((k++ < PG_RESET_TMO) && (RR(1,6)&STAT_BUSY))
                 pg_sleep(1);
 
 	flg = 1;

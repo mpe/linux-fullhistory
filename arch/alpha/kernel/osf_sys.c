@@ -366,8 +366,8 @@ struct cdfs_args {
 	int flags;
 	uid_t exroot;
 /*
- * this has lots more here, which linux handles with the option block
- * but I'm too lazy to do the translation into ascii..
+ * This has lots more here, which Linux handles with the option block
+ * but I'm too lazy to do the translation into ASCII.
  */
 };
 
@@ -435,8 +435,8 @@ static void putdev(struct dentry *dentry)
 
 /*
  * We can't actually handle ufs yet, so we translate UFS mounts to
- * ext2fs mounts... I wouldn't mind a UFS filesystem, but the UFS
- * layout is so braindead it's a major headache doing it..
+ * ext2fs mounts. I wouldn't mind a UFS filesystem, but the UFS
+ * layout is so braindead it's a major headache doing it.
  */
 static int osf_ufs_mount(char *dirname, struct ufs_args *args, int flags)
 {
@@ -845,7 +845,7 @@ asmlinkage long osf_sysinfo(int command, char *buf, long count)
 	lock_kernel();
 	offset = command-1;
 	if (offset >= sizeof(sysinfo_table)/sizeof(char *)) {
-		/* Digital unix has a few unpublished interfaces here */
+		/* Digital UNIX has a few unpublished interfaces here */
 		printk("sysinfo(%d)", command);
 		goto out;
 	}
