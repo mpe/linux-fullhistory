@@ -4,7 +4,6 @@
  * Copyright (C) 1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
-#include <linux/config.h> /* for CONFIG_PROFILE */
 #include <asm/head.h>
 
 #include <linux/kernel.h>

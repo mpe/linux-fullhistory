@@ -273,10 +273,8 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 	 * "maxorder" is the highest order number that we're allowed
 	 * to empty in order to find a free page..
 	 */
-	maxorder = order + NR_MEM_LISTS/3;
-	if (gfp_mask & __GFP_MED)
-		maxorder += NR_MEM_LISTS/3;
-	if ((gfp_mask & __GFP_HIGH) || maxorder > NR_MEM_LISTS)
+	maxorder = NR_MEM_LISTS-1;
+	if (gfp_mask & __GFP_HIGH)
 		maxorder = NR_MEM_LISTS;
 
 	if (in_interrupt() && (gfp_mask & __GFP_WAIT)) {
@@ -295,6 +293,7 @@ repeat:
 	if (gfp_mask & __GFP_WAIT) {
 		int freed = try_to_free_pages(gfp_mask,SWAP_CLUSTER_MAX);
 		gfp_mask &= ~__GFP_WAIT;	/* go through this only once */
+		maxorder = NR_MEM_LISTS;	/* Allow anything this time */
 		if (freed)
 			goto repeat;
 	}

@@ -1124,7 +1124,7 @@ static void BusLogic_InitializeProbeInfoList(BusLogic_HostAdapter_T
     If a PCI BIOS is present, interrogate it for MultiMaster and FlashPoint
     Host Adapters; otherwise, default to the standard ISA MultiMaster probe.
   */
-  if (!BusLogic_ProbeOptions.NoProbePCI && pcibios_present())
+  if (!BusLogic_ProbeOptions.NoProbePCI && pci_present())
     {
       if (BusLogic_ProbeOptions.MultiMasterFirst)
 	{

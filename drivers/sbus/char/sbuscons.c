@@ -46,6 +46,7 @@
  *
  */
 
+#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/interrupt.h>

@@ -1,5 +1,5 @@
 /*
- *  $Id: nfsroot.c,v 1.43 1997/10/16 19:55:27 mj Exp $
+ *  $Id: nfsroot.c,v 1.45 1998/03/07 10:44:46 mj Exp $
  *
  *  Copyright (C) 1995, 1996  Gero Kuhlmann <gero@gkminix.han.de>
  *
@@ -59,6 +59,8 @@
  *				host IP address (but host name defaults to IP
  *				address anyway).
  *	Martin Mares	:	Use root_server_addr appropriately during setup.
+ *	Martin Mares	:	Rewrote parameter parsing, now hopefully giving
+ *				correct overriding.
  */
 
 #include <linux/types.h>
@@ -83,11 +85,9 @@
 
 /* Default path we try to mount. "%s" gets replaced by our IP address */
 #define NFS_ROOT		"/tftpboot/%s"
-#define NFS_ROOT_NAME_LEN	256
 
 /* Parameters passed from the kernel command line */
-static char nfs_root_name[NFS_ROOT_NAME_LEN] __initdata = "default";
-static int nfs_params_parsed = 0;
+static char nfs_root_name[256] __initdata = "";
 
 /* Address of NFS server */
 static __u32 servaddr __initdata = 0;
@@ -150,19 +150,15 @@ static struct nfs_bool_opts {
 
 
 /*
- *  Prepare the NFS data structure and parse any options. This tries to
- *  set as many values in the nfs_data structure as known right now.
+ *  Extract IP address from the parameter string if needed. Note that we
+ *  need to have root_server_addr set _before_ IPConfig gets called as it
+ *  can override it.
  */
-__initfunc(static int root_nfs_name(char *name))
+__initfunc(static void root_nfs_parse_addr(char *name))
 {
-	char buf[NFS_MAXPATHLEN];
-	char *cp, *cq, *options, *val;
 	int octets = 0;
+	char *cp, *cq;
 
-	if (nfs_params_parsed)
-		return nfs_params_parsed;
-
-	/* It is possible to override the server IP number here */
 	cp = cq = name;
 	while (octets < 4) {
 		while (*cp >= '0' && *cp <= '9')
@@ -179,45 +175,20 @@ __initfunc(static int root_nfs_name(char *name))
 		if (*cp == ':')
 			*cp++ = '\0';
 		root_server_addr = in_aton(name);
-		name = cp;
+		strcpy(name, cp);
 	}
+}
 
-	/* Clear the nfs_data structure and setup the server hostname */
-	memset(&nfs_data, 0, sizeof(nfs_data));
 
-	/* Set the name of the directory to mount */
-	if (root_server_path[0] && !strcmp(name, "default"))
-		strncpy(buf, root_server_path, NFS_MAXPATHLEN-1);
-	else
-		strncpy(buf, name, NFS_MAXPATHLEN-1);
-	buf[NFS_MAXPATHLEN-1] = '\0';
-	if ((options = strchr(buf, ',')))
-		*options++ = '\0';
-	if (!strcmp(buf, "default"))
-		strcpy(buf, NFS_ROOT);
-	cp = system_utsname.nodename;
-	if (strlen(buf) + strlen(cp) > NFS_MAXPATHLEN) {
-		printk(KERN_ERR "Root-NFS: Pathname for remote directory too long.\n");
-		return -1;
-	}
-	sprintf(nfs_path, buf, cp);
+/*
+ *  Parse option string.
+ */
+__initfunc(static void root_nfs_parse(char *name, char *buf))
+{
+	char *options, *val, *cp;
 
-	/* Set some default values */
-	nfs_port          = -1;
-	nfs_data.version  = NFS_MOUNT_VERSION;
-	nfs_data.flags    = NFS_MOUNT_NONLM;	/* No lockd in nfs root yet */
-	nfs_data.rsize    = NFS_DEF_FILE_IO_BUFFER_SIZE;
-	nfs_data.wsize    = NFS_DEF_FILE_IO_BUFFER_SIZE;
-	nfs_data.bsize	  = 0;
-	nfs_data.timeo    = 7;
-	nfs_data.retrans  = 3;
-	nfs_data.acregmin = 3;
-	nfs_data.acregmax = 60;
-	nfs_data.acdirmin = 30;
-	nfs_data.acdirmax = 60;
-
-	/* Process any options */
-	if (options) {
+	if ((options = strchr(name, ','))) {
+		*options++ = 0;
 		cp = strtok(options, ",");
 		while (cp) {
 			if ((val = strchr(cp, '='))) {
@@ -239,6 +210,50 @@ __initfunc(static int root_nfs_name(char *name))
 			cp = strtok(NULL, ",");
 		}
 	}
+	if (name[0] && strcmp(name, "default")) {
+		strncpy(buf, name, NFS_MAXPATHLEN-1);
+		buf[NFS_MAXPATHLEN-1] = 0;
+	}
+}
+
+
+/*
+ *  Prepare the NFS data structure and parse all options.
+ */
+__initfunc(static int root_nfs_name(char *name))
+{
+	char buf[NFS_MAXPATHLEN];
+	char *cp;
+
+	/* Set some default values */
+	memset(&nfs_data, 0, sizeof(nfs_data));
+	nfs_port          = -1;
+	nfs_data.version  = NFS_MOUNT_VERSION;
+	nfs_data.flags    = NFS_MOUNT_NONLM;	/* No lockd in nfs root yet */
+	nfs_data.rsize    = NFS_DEF_FILE_IO_BUFFER_SIZE;
+	nfs_data.wsize    = NFS_DEF_FILE_IO_BUFFER_SIZE;
+	nfs_data.bsize	  = 0;
+	nfs_data.timeo    = 7;
+	nfs_data.retrans  = 3;
+	nfs_data.acregmin = 3;
+	nfs_data.acregmax = 60;
+	nfs_data.acdirmin = 30;
+	nfs_data.acdirmax = 60;
+	strcpy(buf, NFS_ROOT);
+
+	/* Process options received from the remote server */
+	root_nfs_parse(root_server_path, buf);
+
+	/* Override them by options set on kernel command-line */
+	root_nfs_parse(name, buf);
+
+	cp = system_utsname.nodename;
+	if (strlen(buf) + strlen(cp) > NFS_MAXPATHLEN) {
+		printk(KERN_ERR "Root-NFS: Pathname for remote directory too long.\n");
+		return -1;
+	}
+	sprintf(nfs_path, buf, cp);
+
 	return 1;
 }
 
@@ -317,7 +332,7 @@ __initfunc(void nfs_root_setup(char *line, int *ints))
 			line[sizeof(nfs_root_name) - strlen(NFS_ROOT) - 1] = '\0';
 		sprintf(nfs_root_name, NFS_ROOT, line);
 	}
-	nfs_params_parsed = root_nfs_name(nfs_root_name);
+	root_nfs_parse_addr(nfs_root_name);
 }
 
 

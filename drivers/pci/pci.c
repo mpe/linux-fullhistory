@@ -323,7 +323,7 @@ __initfunc(void pci_init(void))
 	pci_quirks_init();
 #endif
 
-#ifdef CONFIG_PROC
+#ifdef CONFIG_PROC_FS
 	pci_proc_init();
 #endif
 }

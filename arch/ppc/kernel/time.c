@@ -19,6 +19,7 @@
  * creating a software PLL, I have set HZ to 128.  -- Dan
  */
 
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>

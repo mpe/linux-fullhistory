@@ -108,6 +108,7 @@ static elf_addr_t *
 create_elf_tables(char *p, int argc, int envc,
 		  struct elfhdr * exec,
 		  unsigned long load_addr,
+		  unsigned long load_bias,
 		  unsigned long interp_load_addr, int ibcs)
 {
 	elf_caddr_t *argv;
@@ -173,7 +174,7 @@ create_elf_tables(char *p, int argc, int envc,
 		NEW_AUX_ENT(3, AT_PAGESZ, ELF_EXEC_PAGESIZE);
 		NEW_AUX_ENT(4, AT_BASE, interp_load_addr);
 		NEW_AUX_ENT(5, AT_FLAGS, 0);
-		NEW_AUX_ENT(6, AT_ENTRY, (elf_addr_t) exec->e_entry);
+		NEW_AUX_ENT(6, AT_ENTRY, load_bias + exec->e_entry);
 		NEW_AUX_ENT(7, AT_UID, (elf_addr_t) current->uid);
 		NEW_AUX_ENT(8, AT_EUID, (elf_addr_t) current->euid);
 		NEW_AUX_ENT(9, AT_GID, (elf_addr_t) current->gid);
@@ -584,6 +585,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	current->mm->end_data = 0;
 	current->mm->end_code = 0;
 	current->mm->mmap = NULL;
+	current->flags &= ~PF_FORKNOEXEC;
 	elf_entry = (unsigned long) elf_ex.e_entry;
 
 	/* Do this immediately, since STACK_TOP as used in setup_arg_pages
@@ -712,7 +714,7 @@ do_load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 			bprm->argc,
 			bprm->envc,
 			(interpreter_type == INTERPRETER_ELF ? &elf_ex : NULL),
-			load_addr,
+			load_addr, load_bias,
 			interp_load_addr,
 			(interpreter_type == INTERPRETER_AOUT ? 0 : 1));
 	/* N.B. passed_fileno might not be initialized? */

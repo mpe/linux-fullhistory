@@ -113,7 +113,7 @@ int kmod_init(void)
 	 * CLONE_FILES just saves some space (we don't need any
 	 * new file descriptors). Ditto for CLONE_SIGHAND.
 	 */
-	kernel_thread(kmod_thread, NULL, CLONE_FILES | CLONE_FS | CLONE_SIGHAND);
+	kernel_thread(kmod_thread, NULL, CLONE_FILES | CLONE_FS | CLONE_SIGHAND);
 
 	kmod_unload_timer.next = NULL;
 	kmod_unload_timer.prev = NULL;

@@ -283,7 +283,6 @@ extern __inline__ unsigned int parport_yield_blocking(struct pardevice *dev)
 	if ((dev->port->waithead == NULL) || (timeslip < dev->timeslice))
 		return 0;
 	parport_release(dev);
-	schedule();
 	return parport_claim_or_block(dev);
 }
 

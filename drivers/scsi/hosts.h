@@ -23,6 +23,7 @@
     $Header: /vger/u4/cvs/linux/drivers/scsi/hosts.h,v 1.6 1997/01/19 23:07:13 davem Exp $
 */
 
+#include <linux/config.h>
 #include <linux/proc_fs.h>
 
 /* It is senseless to set SG_ALL any higher than this - the performance

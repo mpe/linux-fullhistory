@@ -1,7 +1,7 @@
 /*
  * This is <linux/capability.h>
  *
- * Andrew G. Morgan <morgan@parc.power.net>
+ * Andrew G. Morgan <morgan@transmeta.com>
  * Alexander Kjeldaas <astor@guardian.no>
  * with help from Aleph1, Roland Buresund and Andrew Main.
  */ 

@@ -34,7 +34,7 @@
 
 #undef PARPORT_PARANOID
 
-#define PARPORT_DEFAULT_TIMESLICE	(HZ/10)
+#define PARPORT_DEFAULT_TIMESLICE	(HZ/5)
 
 static struct parport *portlist = NULL, *portlist_tail = NULL;
 static int portcount = 0;

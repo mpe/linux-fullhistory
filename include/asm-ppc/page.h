@@ -1,3 +1,5 @@
+#include <linux/config.h>
+
 #ifndef _PPC_PAGE_H
 #define _PPC_PAGE_H
 

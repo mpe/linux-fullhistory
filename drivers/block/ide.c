@@ -1118,10 +1118,9 @@ struct request **ide_get_queue (kdev_t dev)
  * conditions in the event that an unexpected interrupt occurs while
  * we are in the driver.
  *
- * Note that when an interrupt is used to reenter the driver, the first level
- * handler will already have masked the irq that triggered, but any other ones
- * for the hwgroup will still be unmasked.  The driver tries to be careful
- * about such things.
+ * Note that the io-request lock will guarantee that the driver never gets
+ * re-entered even on another interrupt level, so we no longer need to
+ * mask the irq's.
  */
 static void do_hwgroup_request (ide_hwgroup_t *hwgroup)
 {
@@ -1132,13 +1131,7 @@ static void do_hwgroup_request (ide_hwgroup_t *hwgroup)
 		del_timer(&hwgroup->timer);
 		ide_get_lock(&ide_lock, ide_intr, hwgroup);
 		hwgroup->active = 1;
-		do {
-			disable_irq(hwif->irq);
-		} while ((hwif = hwif->next) != hgif);
 		ide_do_request (hwgroup);
-		do {
-			enable_irq(hwif->irq);
-		} while ((hwif = hwif->next) != hgif);
 	}
 }
 
@@ -1274,10 +1267,6 @@ static void do_ide_intr (int irq, void *dev_id, struct pt_regs *regs)
 	if (!ide_ack_intr (hwif->io_ports[IDE_STATUS_OFFSET], hwif->io_ports[IDE_IRQ_OFFSET]))
 		return;
 
-	do {
-		if (!IDE_IRQ_EQUAL(irq, hwgroup->hwif->irq))
-			disable_irq(hwif->irq);
-	} while ((hwif = hwif->next) != hwgroup->hwif);
 	if (IDE_IRQ_EQUAL(irq, hwif->irq)
 	    && (handler = hwgroup->handler) != NULL) {
 		ide_drive_t *drive = hwgroup->drive;
@@ -1309,10 +1298,6 @@ static void do_ide_intr (int irq, void *dev_id, struct pt_regs *regs)
 	}
 	__cli();
 	hwif = hwgroup->hwif;
-	do {
-		if (!IDE_IRQ_EQUAL(hwif->irq, irq))
-			enable_irq(hwif->irq);
-	} while ((hwif = hwif->next) != hwgroup->hwif);
 }
 
 /*

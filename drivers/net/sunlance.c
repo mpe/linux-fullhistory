@@ -66,6 +66,7 @@ static char *version =
 static char *lancestr = "LANCE";
 static char *lancedma = "LANCE DMA";
 
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <linux/kernel.h>

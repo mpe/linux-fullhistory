@@ -37,11 +37,9 @@ OLD_GAS := $(shell if cat ./GAS_VER | grep 'version 2.7' > /dev/null; then echo 
 $(shell rm -f ./GAS_VER)
 
 ifneq ($(OLD_GAS),yes)
- CFLAGS := $(CFLAGS) -Wa,-m21164a -DBWX_USABLE
-
 # if PYXIS, then enable use of BWIO space
  ifeq ($(CONFIG_ALPHA_PYXIS),y)
-  CFLAGS := $(CFLAGS) -DBWIO_ENABLED
+  CFLAGS := $(CFLAGS) -Wa,-m21164a -DBWX_USABLE -DBWIO_ENABLED
  endif
 endif
 

@@ -6,6 +6,7 @@
  * Copyright (C) 1998 Pavel Machek    (pavel@ucw.cz)
  */
 
+#include <linux/config.h>
 #include <linux/kd.h>
 #include <linux/tty.h>
 #include <linux/malloc.h>

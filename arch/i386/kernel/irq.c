@@ -337,7 +337,7 @@ int get_irq_list(char *buf)
 		if (IO_APIC_IRQ(i))
 			p += sprintf(p, " IO-APIC ");
 		else
-			p += sprintf(p, "  XT PIC ");
+			p += sprintf(p, "  XT-PIC ");
 		p += sprintf(p, "  %s", action->name);
 
 		for (action=action->next; action; action = action->next) {
@@ -669,7 +669,6 @@ void disable_irq(unsigned int irq)
  */
 static void disable_8259A_irq(unsigned int irq)
 {
-	disabled_irq[irq]++;
 	cached_irq_mask |= 1 << irq;
 	set_8259A_irq_mask(irq);
 }
@@ -677,7 +676,7 @@ static void disable_8259A_irq(unsigned int irq)
 #ifdef __SMP__
 static void disable_ioapic_irq(unsigned int irq)
 {
-	disabled_irq[irq]++;
+	disabled_irq[irq] = 1;
 	/*
 	 * We do not disable IO-APIC irqs in hardware ...
 	 */
@@ -688,12 +687,6 @@ void enable_8259A_irq (unsigned int irq)
 {
 	unsigned long flags;
 	spin_lock_irqsave(&irq_controller_lock, flags);
-	if (disabled_irq[irq])
-		disabled_irq[irq]--;
-	else {
-		spin_unlock_irqrestore(&irq_controller_lock, flags);
-		return;
-	}
 	cached_irq_mask &= ~(1 << irq);
 	set_8259A_irq_mask(irq);
 	spin_unlock_irqrestore(&irq_controller_lock, flags);
@@ -706,13 +699,8 @@ void enable_ioapic_irq (unsigned int irq)
 	int cpu = smp_processor_id();
 
 	spin_lock_irqsave(&irq_controller_lock, flags);
-	if (disabled_irq[irq])
-		disabled_irq[irq]--;
-	else {
-		spin_unlock_irqrestore(&irq_controller_lock, flags);
-		return;
-	}
-#if 0
+	disabled_irq[irq] = 0;
+
 	/*
 	 * In the SMP+IOAPIC case it might happen that there are an unspecified
 	 * number of pending IRQ events unhandled. These cases are very rare,
@@ -720,7 +708,7 @@ void enable_ioapic_irq (unsigned int irq)
 	 * better to do it this way as thus we dont have to be aware of
 	 * 'pending' interrupts in the IRQ path, except at this point.
 	 */
-	if (!disabled_irq[irq] && irq_events[irq]) {
+	if (irq_events[irq]) {
 		if (!ipi_pending[irq]) {
 			ipi_pending[irq] = 1;
 			--irq_events[irq];
@@ -728,36 +716,6 @@ void enable_ioapic_irq (unsigned int irq)
 		}
 	}
 	spin_unlock_irqrestore(&irq_controller_lock, flags);
-#else
-	if (!disabled_irq[irq] && irq_events[irq]) {
-		struct pt_regs regs; /* FIXME: these are fake currently */
-
-		disabled_irq[irq]++;
-		hardirq_enter(cpu);
-		spin_unlock(&irq_controller_lock);
-
-		release_irqlock(cpu);
-		while (test_bit(0,&global_irq_lock)) mb();
-again:
-		handle_IRQ_event(irq, &regs);
-
-		spin_lock(&irq_controller_lock);
-		disabled_irq[irq]--;
-		should_handle_irq=0;
-		if (--irq_events[irq] && !disabled_irq[irq]) {
-			should_handle_irq=1;
-			disabled_irq[irq]++;
-		}
-		spin_unlock(&irq_controller_lock);
-
-		if (should_handle_irq)
-			goto again;
-
-		irq_exit(cpu, irq);
-		__restore_flags(flags);
-	} else
-		spin_unlock_irqrestore(&irq_controller_lock, flags);
-#endif
 }
 #endif
 

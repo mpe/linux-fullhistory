@@ -100,10 +100,6 @@ static int irq_write_proc(struct file *file, const char *buffer,
 out_ok:
 	pp->irq = newirq;
 
-	if (oldirq != PARPORT_IRQ_NONE && newirq == PARPORT_IRQ_NONE &&
-	    cad && cad->irq_func)
-		cad->irq_func(pp->irq, cad->private, NULL);
-
 out:
 	return retval;
 }

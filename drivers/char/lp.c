@@ -658,7 +658,7 @@ MODULE_PARM(reset, "i");
 
 #else
 
-static int parport[LP_NO] __initdata = { [0 ... LP_NO-1] = LP_PARPORT_UNSPEC };
+static int parport_nr[LP_NO] __initdata = { [0 ... LP_NO-1] = LP_PARPORT_UNSPEC };
 static int reset __initdata = 0;
 
 static int parport_ptr = 0;
@@ -668,21 +668,21 @@ __initfunc(void lp_setup(char *str, int *ints))
 	if (!str) {
 		if (ints[0] == 0 || ints[1] == 0) {
 			/* disable driver on "lp=" or "lp=0" */
-			parport[0] = LP_PARPORT_OFF;
+			parport_nr[0] = LP_PARPORT_OFF;
 		} else {
 			printk(KERN_WARNING "warning: 'lp=0x%x' is deprecated, ignored\n", ints[1]);
 		}
 	} else if (!strncmp(str, "parport", 7)) {
 		int n = simple_strtoul(str+7, NULL, 10);
 		if (parport_ptr < LP_NO)
-			parport[parport_ptr++] = n;
+			parport_nr[parport_ptr++] = n;
 		else
 			printk(KERN_INFO "lp: too many ports, %s ignored.\n",
 			       str);
 	} else if (!strcmp(str, "auto")) {
-		parport[0] = LP_PARPORT_AUTO;
+		parport_nr[0] = LP_PARPORT_AUTO;
 	} else if (!strcmp(str, "none")) {
-		parport[parport_ptr++] = LP_PARPORT_NONE;
+		parport_nr[parport_ptr++] = LP_PARPORT_NONE;
 	} else if (!strcmp(str, "reset")) {
 		reset = 1;
 	}
