@@ -3091,17 +3091,14 @@ static int devfs_readlink (struct dentry *dentry, char *buffer, int buflen)
 	return vfs_readlink(dentry, buffer, buflen, name);
 }   /*  End Function devfs_readlink  */
 
-static struct dentry *devfs_follow_link (struct dentry *dentry,
-					 struct dentry *base,
-					 struct vfsmount **mnt,
-					 unsigned int follow)
+static int devfs_follow_link (struct dentry *dentry, struct nameidata *nd)
 {
 	struct devfs_inode *di=get_devfs_inode_from_vfs_inode(dentry->d_inode);
 	char *name = ERR_PTR(-ENOENT);
 
 	if (di && di->de->registered)
 		name = di->de->u.symlink.linkname;
-	return vfs_follow_link(dentry, base, mnt, follow, name);
+	return vfs_follow_link(nd, name);
 }   /*  End Function devfs_follow_link  */
 
 static struct inode_operations devfs_iops =

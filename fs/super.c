@@ -364,13 +364,16 @@ static struct proc_fs_info {
 static struct proc_nfs_info {
 	int flag;
 	char *str;
+	char *nostr;
 } nfs_info[] = {
-	{ NFS_MOUNT_SOFT, ",soft" },
-	{ NFS_MOUNT_INTR, ",intr" },
-	{ NFS_MOUNT_POSIX, ",posix" },
-	{ NFS_MOUNT_NOCTO, ",nocto" },
-	{ NFS_MOUNT_NOAC, ",noac" },
-	{ 0, NULL }
+	{ NFS_MOUNT_SOFT, ",soft", ",hard" },
+	{ NFS_MOUNT_INTR, ",intr", "" },
+	{ NFS_MOUNT_POSIX, ",posix", "" },
+	{ NFS_MOUNT_TCP, ",tcp", ",udp" },
+	{ NFS_MOUNT_NOCTO, ",nocto", "" },
+	{ NFS_MOUNT_NOAC, ",noac", "" },
+	{ NFS_MOUNT_NONLM, ",nolock", ",lock" },
+	{ 0, NULL, NULL }
 };
 
 int get_filesystem_info( char *buf )
@@ -401,14 +404,11 @@ int get_filesystem_info( char *buf )
 		}
 		if (!strcmp("nfs", tmp->mnt_sb->s_type->name)) {
 			nfss = &tmp->mnt_sb->u.nfs_sb.s_server;
-			if (nfss->rsize != NFS_DEF_FILE_IO_BUFFER_SIZE) {
-				len += sprintf(buf+len, ",rsize=%d",
-					       nfss->rsize);
-			}
-			if (nfss->wsize != NFS_DEF_FILE_IO_BUFFER_SIZE) {
-				len += sprintf(buf+len, ",wsize=%d",
-					       nfss->wsize);
-			}
+			len += sprintf(buf+len, ",v%d", nfss->rpc_ops->version);
+
+			len += sprintf(buf+len, ",rsize=%d", nfss->rsize);
+
+			len += sprintf(buf+len, ",wsize=%d", nfss->wsize);
 #if 0
 			if (nfss->timeo != 7*HZ/10) {
 				len += sprintf(buf+len, ",timeo=%d",
@@ -436,10 +436,13 @@ int get_filesystem_info( char *buf )
 					       nfss->acdirmax/HZ);
 			}
 			for (nfs_infop = nfs_info; nfs_infop->flag; nfs_infop++) {
-				if (nfss->flags & nfs_infop->flag) {
-					strcpy(buf + len, nfs_infop->str);
-					len += strlen(nfs_infop->str);
-				}
+				char *str;
+				if (nfss->flags & nfs_infop->flag)
+					str = nfs_infop->str;
+				else
+					str = nfs_infop->nostr;
+				strcpy(buf + len, str);
+				len += strlen(str);
 			}
 			len += sprintf(buf+len, ",addr=%s",
 				       nfss->hostname);
@@ -925,15 +928,12 @@ static int do_mount(struct block_device *bdev, const char *dev_name,
 	/*
 	 * Do the lookup first to force automounting.
 	 */
-	dir_d = lookup_dentry(dir_name, NULL, LOOKUP_FOLLOW);
+	dir_d = lookup_dentry(dir_name, LOOKUP_FOLLOW|LOOKUP_POSITIVE);
 	error = PTR_ERR(dir_d);
 	if (IS_ERR(dir_d))
 		goto out;
 
 	down(&mount_sem);
-	error = -ENOENT;
-	if (!dir_d->d_inode)
-		goto dput_and_out;
 	error = -ENOTDIR;
 	if (!S_ISDIR(dir_d->d_inode->i_mode))
 		goto dput_and_out;
@@ -1041,25 +1041,22 @@ static int do_remount(const char *dir,int flags,char *data)
 	struct dentry *dentry;
 	int retval;
 
-	dentry = lookup_dentry(dir, NULL, LOOKUP_FOLLOW);
+	dentry = lookup_dentry(dir, LOOKUP_FOLLOW|LOOKUP_POSITIVE);
 	retval = PTR_ERR(dentry);
 	if (!IS_ERR(dentry)) {
-		retval = -ENOENT;
-		if (dentry->d_inode) {
-			struct super_block * sb = dentry->d_inode->i_sb;
-			retval = -ENODEV;
-			if (sb) {
-				retval = -EINVAL;
-				if (dentry == sb->s_root) {
-					/*
-					 * Shrink the dcache and sync the device.
-					 */
-					shrink_dcache_sb(sb);
-					fsync_dev(sb->s_dev);
-					if (flags & MS_RDONLY)
-						acct_auto_close(sb->s_dev);
-					retval = do_remount_sb(sb, flags, data);
-				}
+		struct super_block * sb = dentry->d_inode->i_sb;
+		retval = -ENODEV;
+		if (sb) {
+			retval = -EINVAL;
+			if (dentry == sb->s_root) {
+				/*
+				 * Shrink the dcache and sync the device.
+				 */
+				shrink_dcache_sb(sb);
+				fsync_dev(sb->s_dev);
+				if (flags & MS_RDONLY)
+					acct_auto_close(sb->s_dev);
+				retval = do_remount_sb(sb, flags, data);
 			}
 		}
 		dput(dentry);
@@ -1151,15 +1148,12 @@ long do_sys_mount(char * dev_name, char * dir_name, char *type_page,
 		retval = -EINVAL;
 		if (!dev_name || !*dev_name)
 			goto fs_out;
-		dentry = lookup_dentry(dev_name, NULL, LOOKUP_FOLLOW);
+		dentry = lookup_dentry(dev_name, LOOKUP_FOLLOW|LOOKUP_POSITIVE);
 		retval = PTR_ERR(dentry);
 		if (IS_ERR(dentry))
 			goto fs_out;
 
-		retval = -ENOENT;
 		inode = dentry->d_inode;
-		if (!inode)
-			goto dput_and_out;
 		retval = -ENOTBLK;
 		if (!S_ISBLK(inode->i_mode))
 			goto dput_and_out;
@@ -1532,7 +1526,7 @@ int __init change_root(kdev_t new_root_dev,const char *put_old)
 		return -EBUSY;
 	}
 	/*  First unmount devfs if mounted  */
-	dir_d = lookup_dentry ("/dev", NULL, LOOKUP_FOLLOW);
+	dir_d = lookup_dentry ("/dev", LOOKUP_FOLLOW|LOOKUP_POSITIVE);
 	if (!IS_ERR(dir_d)) {
 		struct super_block *sb = dir_d->d_inode->i_sb;
 
@@ -1555,12 +1549,9 @@ int __init change_root(kdev_t new_root_dev,const char *put_old)
 	/*
 	 * Get the new mount directory
 	 */
-	dir_d = lookup_dentry(put_old, NULL, LOOKUP_FOLLOW);
+	dir_d = lookup_dentry(put_old, LOOKUP_FOLLOW|LOOKUP_POSITIVE);
 	if (IS_ERR(dir_d)) {
 		error = PTR_ERR(dir_d);
-	} else if (!dir_d->d_inode) {
-		dput(dir_d);
-		error = -ENOENT;
 	} else {
 		error = 0;
 	}

@@ -570,16 +570,12 @@ static unix_socket *unix_find_other(struct sockaddr_un *sunname, int len,
 	if (sunname->sun_path[0]) {
 		/* Do not believe to VFS, grab kernel lock */
 		lock_kernel();
-		dentry = lookup_dentry(sunname->sun_path, NULL, 0);
+		dentry = lookup_dentry(sunname->sun_path,LOOKUP_POSITIVE);
 		err = PTR_ERR(dentry);
 		if (IS_ERR(dentry)) {
 			unlock_kernel();
 			goto fail;
 		}
-		err = -ENOENT;
-		if (!dentry->d_inode)
-			goto put_fail;
-	
 		err = permission(dentry->d_inode,MAY_WRITE);
 		if (err)
 			goto put_fail;

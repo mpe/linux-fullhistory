@@ -160,10 +160,13 @@ static int usblp_open(struct inode *inode, struct file *file)
 	if (usblp->used)
 		return -EBUSY;
 
-	if ((retval = usblp_check_status(usblp)))
-		return retval;
-
 	MOD_INC_USE_COUNT;
+
+	if ((retval = usblp_check_status(usblp))) {
+		MOD_DEC_USE_COUNT;
+		return retval;
+	}
+
 	usblp->used = 1;
 	file->private_data = usblp;
 
@@ -179,17 +182,18 @@ static int usblp_release(struct inode *inode, struct file *file)
 {
 	struct usblp *usblp = file->private_data;
 
-	MOD_DEC_USE_COUNT;
 	usblp->used = 0;
 			
 	if (usblp->dev) {
         	usb_unlink_urb(&usblp->readurb);
         	usb_unlink_urb(&usblp->writeurb);
+		MOD_DEC_USE_COUNT;
 		return 0;
 	}
 
 	usblp_table[usblp->minor] = NULL;
 	kfree(usblp);
+	MOD_DEC_USE_COUNT;
 
 	return 0;
 }

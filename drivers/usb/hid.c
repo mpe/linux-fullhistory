@@ -1288,7 +1288,7 @@ static void hid_init_input(struct hid_device *hid)
 					hid_configure_usage(hid, report->field[i], report->field[i]->usage + j);
 
 			if (k == HID_INPUT_REPORT)  {
-				usb_set_idle(hid->dev, hid->ifnum, report->id, 0);
+				usb_set_idle(hid->dev, hid->ifnum, 0, report->id);
 				hid_read_report(hid, report);
 			}
 		}

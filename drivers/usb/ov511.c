@@ -4,12 +4,13 @@
  * Many improvements by Bret Wallach
  * Color fixes by by Orion Sky Lawlor, olawlor@acm.org, 2/26/2000
  * Snapshot code by Kevin Moore
+ * OV7620 fixes by Charl P. Botha <cpbotha@ieee.org>
  * 
  * Based on the Linux CPiA driver.
  * 
  * Released under GPL v.2 license.
  *
- * Version: 1.10
+ * Version: 1.11
  *
  * Please see the file: linux/Documentation/usb/ov511.txt 
  * and the website at:  http://alpha.dyndns.org/ov511 
@@ -468,14 +469,14 @@ static int ov511_reset(struct usb_device *dev, unsigned char reset_type)
  * registers while the camera is streaming */
 static inline int ov511_stop(struct usb_device *dev)
 {
-	PDEBUG(5, "ov511_stop()");
+	PDEBUG(4, "ov511_stop()");
 	return (ov511_reg_write(dev, OV511_REG_SYSTEM_RESET, 0x3d));
 }
 
 /* Restarts OV511 after ov511_stop() is called */
 static inline int ov511_restart(struct usb_device *dev)
 {
-	PDEBUG(5, "ov511_restart()");
+	PDEBUG(4, "ov511_restart()");
 	return (ov511_reg_write(dev, OV511_REG_SYSTEM_RESET, 0x00));
 }
 
@@ -491,11 +492,11 @@ static int ov511_set_packet_size(struct usb_ov511 *ov511, int size)
 	if (ov511->bridge == BRG_OV511) {
 		if (size == 0) alt = OV511_ALT_SIZE_0;
 		else if (size == 257) alt = OV511_ALT_SIZE_257;
-		else if (size == 512) alt = OV511_ALT_SIZE_512;
+//		else if (size == 512) alt = OV511_ALT_SIZE_512;
 		else if (size == 513) alt = OV511_ALT_SIZE_513;
-		else if (size == 768) alt = OV511_ALT_SIZE_768;
+//		else if (size == 768) alt = OV511_ALT_SIZE_768;
 		else if (size == 769) alt = OV511_ALT_SIZE_769;
-		else if (size == 992) alt = OV511_ALT_SIZE_992;
+//		else if (size == 992) alt = OV511_ALT_SIZE_992;
 		else if (size == 993) alt = OV511_ALT_SIZE_993;
 		else {
 			err("Set packet size: invalid size (%d)", size);
@@ -550,6 +551,8 @@ static inline int ov7610_set_picture(struct usb_ov511 *ov511,
 	int ret;
 	struct usb_device *dev = ov511->dev;
 
+	PDEBUG(4, "ov511_set_picture");
+
 	if (ov511_stop(dev) < 0)
 		return -EIO;
 
@@ -569,6 +572,17 @@ static inline int ov7610_set_picture(struct usb_ov511 *ov511,
 
 		if(ov511_i2c_write(dev, OV7610_REG_BRT, p->brightness >> 8) < 0)
 			return -EIO;
+	}		
+	else if ((ov511->sensor == SEN_OV7620) 
+	         || (ov511->sensor == SEN_OV7620AE)) {
+//		cur_con = ov511_i2c_read(dev, OV7610_REG_CNT);
+//		cur_brt = ov511_i2c_read(dev, OV7610_REG_BRT);
+//	        // DEBUG_CODE
+//	        PDEBUG(1, "con=%d brt=%d", ov511_i2c_read(dev, OV7610_REG_CNT),
+//	                                   ov511_i2c_read(dev, OV7610_REG_BRT)); 
+//
+//		if(ov511_i2c_write(dev, OV7610_REG_CNT, p->contrast >> 8) < 0)
+//			return -EIO;
 	}
 
 	if (ov511_restart(dev) < 0)
@@ -582,6 +596,8 @@ static inline int ov7610_get_picture(struct usb_ov511 *ov511,
 {
 	int ret;
 	struct usb_device *dev = ov511->dev;
+
+	PDEBUG(4, "ov511_get_picture");
 
 	if (ov511_stop(dev) < 0)
 		return -EIO;
@@ -611,6 +627,8 @@ static int ov511_mode_init_regs(struct usb_ov511 *ov511,
 {
 	int rc = 0;
 	struct usb_device *dev = ov511->dev;
+        int hwsbase = 0;
+        int hwebase = 0;
 
 	PDEBUG(3, "ov511_mode_init_regs(ov511, w:%d, h:%d, mode:%d, sub:%d)",
 	       width, height, mode, sub_flag);
@@ -620,30 +638,57 @@ static int ov511_mode_init_regs(struct usb_ov511 *ov511,
 
 	if (mode == VIDEO_PALETTE_GREY) {
 		ov511_reg_write(dev, 0x16, 0x00);
-		ov511_i2c_write(dev, 0x0e, 0x44);
+		if (ov511->sensor == SEN_OV7610
+		    || ov511->sensor == SEN_OV7620AE) {
+			/* these aren't valid on the OV7620 */
+			ov511_i2c_write(dev, 0x0e, 0x44);
+		}
 		ov511_i2c_write(dev, 0x13, autoadjust ? 0x21 : 0x20);
 		/* For snapshot */
 		ov511_reg_write(dev, 0x1e, 0x00);
 		ov511_reg_write(dev, 0x1f, 0x01);
 	} else {
 		ov511_reg_write(dev, 0x16, 0x01);
-		ov511_i2c_write(dev, 0x0e, 0x04);
+	   	if (ov511->sensor == SEN_OV7610
+		    || ov511->sensor == SEN_OV7620AE) {
+		   /* not valid on the OV7620 */
+		   ov511_i2c_write(dev, 0x0e, 0x04);
+		}
 		ov511_i2c_write(dev, 0x13, autoadjust ? 0x01 : 0x00);
 		/* For snapshot */
 		ov511_reg_write(dev, 0x1e, 0x01);
 		ov511_reg_write(dev, 0x1f, 0x03);
 	}
 
+	/* The different sensor ICs handle setting up of window differently */
+        switch (ov511->sensor) {
+	 case SEN_OV7610:
+	 case SEN_OV7620AE:
+	   hwsbase = 0x38;
+	   hwebase = 0x3a; break;
+	 case SEN_OV7620:
+	   hwsbase = 0x2c;
+	   hwebase = 0x2d; break;
+	 default:
+	   hwsbase = 0;
+	   hwebase = 0; break;
+	}
+
 	if (width == 640 && height == 480) {
 		if (sub_flag) {
-			ov511_i2c_write(dev, 0x17, 0x38+(ov511->subx>>2));
+			/* horizontal window start */
+			ov511_i2c_write(dev, 0x17, hwsbase+(ov511->subx>>2));
+			/* horizontal window end */
 			ov511_i2c_write(dev, 0x18,
-					0x3a+((ov511->subx+ov511->subw)>>2));
-			ov511_i2c_write(dev, 0x19, 0x5+(ov511->suby>>1));
-			ov511_i2c_write(dev, 0x1a,
+					hwebase+((ov511->subx+ov511->subw)>>2));
+			/* vertical window start */
+		   	ov511_i2c_write(dev, 0x19, 0x5+(ov511->suby>>1));
+			/* vertical window end */
+		    ov511_i2c_write(dev, 0x1a,
 					0x5+((ov511->suby+ov511->subh)>>1));
 			ov511_reg_write(dev, 0x12, (ov511->subw>>3)-1);
 			ov511_reg_write(dev, 0x13, (ov511->subh>>3)-1);
+			/* clock rate control */
 			ov511_i2c_write(dev, 0x11, 0x01);
 
 			/* Snapshot additions */
@@ -652,8 +697,8 @@ static int ov511_mode_init_regs(struct usb_ov511 *ov511,
 			ov511_reg_write(dev, 0x1c, 0x00);
 			ov511_reg_write(dev, 0x1d, 0x00);
 		} else {
-			ov511_i2c_write(dev, 0x17, 0x38);
-			ov511_i2c_write(dev, 0x18, 0x3a + (640>>2));
+			ov511_i2c_write(dev, 0x17, hwsbase);
+			ov511_i2c_write(dev, 0x18, hwebase + (640>>2));
 			ov511_i2c_write(dev, 0x19, 0x5);
 			ov511_i2c_write(dev, 0x1a, 5 + (480>>1));
 			ov511_reg_write(dev, 0x12, 0x4f);
@@ -666,9 +711,9 @@ static int ov511_mode_init_regs(struct usb_ov511 *ov511,
 			ov511_reg_write(dev, 0x1d, 0x00);
 
 			if (mode == VIDEO_PALETTE_GREY) {
-			  ov511_i2c_write(dev, 0x11, 4); /* check */
+				ov511_i2c_write(dev, 0x11, 4); /* check */
 			} else {
-			  ov511_i2c_write(dev, 0x11, 6); /* check */
+				ov511_i2c_write(dev, 0x11, 6); /* check */
 			}
 		}
 
@@ -680,7 +725,10 @@ static int ov511_mode_init_regs(struct usb_ov511 *ov511,
 
 		ov511_i2c_write(dev, 0x12, 0x24);
 		ov511_i2c_write(dev, 0x14, 0x04);
-		ov511_i2c_write(dev, 0x35, 0x9e);
+
+		/* 7620 doesn't have register 0x35, so play it safe */
+		if (ov511->sensor != SEN_OV7620)
+			ov511_i2c_write(dev, 0x35, 0x9e);
 	} else if (width == 320 && height == 240) {
 		ov511_reg_write(dev, 0x12, 0x27);
 		ov511_reg_write(dev, 0x13, 0x1f);
@@ -970,6 +1018,8 @@ static int ov511_move_data(struct usb_ov511 *ov511, urb_t *urb)
 	int aPackNum[10];
 	struct ov511_frame *frame;
 
+	PDEBUG(4, "ov511_move_data");
+
 	for (i = 0; i < urb->number_of_packets; i++) {
 		int n = urb->iso_frame_desc[i].actual_length;
 		int st = urb->iso_frame_desc[i].status;
@@ -977,7 +1027,7 @@ static int ov511_move_data(struct usb_ov511 *ov511, urb_t *urb)
 		urb->iso_frame_desc[i].status = 0;
 		cdata = urb->transfer_buffer + urb->iso_frame_desc[i].offset;
 
-		aPackNum[i] = n ? cdata[992] : -1;
+		aPackNum[i] = n ? cdata[ov511->packet_size - 1] : -1;
 
 		if (!n || ov511->curframe == -1) continue;
 
@@ -996,7 +1046,7 @@ static int ov511_move_data(struct usb_ov511 *ov511, urb_t *urb)
 		    do_gettimeofday(ts);
 
 		    PDEBUG(4, "Frame End, curframe = %d, packnum=%d, hw=%d, vw=%d",
-			   ov511->curframe, (int)(cdata[992]),
+			   ov511->curframe, (int)(cdata[ov511->packet_size - 1]),
 			   (int)(cdata[9]), (int)(cdata[10]));
 
 		    if (frame->scanstate == STATE_LINES) {
@@ -1059,7 +1109,7 @@ static int ov511_move_data(struct usb_ov511 *ov511, urb_t *urb)
 		 	}
 
 			/* Parse the segments */
-			while(iPix <= 992 - frame->segsize &&
+			while(iPix <= (ov511->packet_size - 1) - frame->segsize &&
 			      frame->segment < frame->width * frame->height / 256) {
 			  int iSegY;
 			  int iSegUV;
@@ -1107,7 +1157,7 @@ static int ov511_move_data(struct usb_ov511 *ov511, urb_t *urb)
 
 			/* Save extra data for next time */
 			if (frame->segment < frame->width * frame->height / 256) {
-			  ov511->scratchlen = 992 - iPix;
+			  ov511->scratchlen = (ov511->packet_size - 1) - iPix;
 			  if (ov511->scratchlen < frame->segsize) {
 			    memmove(ov511->scratch, pData, ov511->scratchlen);
 			  } else {
@@ -1157,13 +1207,20 @@ static int ov511_init_isoc(struct usb_ov511 *ov511)
 {
 	urb_t *urb;
 	int fx, err;
-	
+
+	PDEBUG(4, "ov511_init_isoc");
+
 	ov511->compress = 0;
 	ov511->curframe = -1;
 	ov511->cursbuf = 0;
 	ov511->scratchlen = 0;
 
-	ov511_set_packet_size(ov511, 993);
+	if (ov511->bridge == BRG_OV511)
+		ov511_set_packet_size(ov511, 993);
+	else if (ov511->bridge == BRG_OV511PLUS)
+		ov511_set_packet_size(ov511, 961);
+	else
+		err("invalid bridge type");
 
 	/* We double buffer the Iso lists */
 	urb = usb_alloc_urb(FRAMES_PER_DESC);
@@ -1223,6 +1280,7 @@ static int ov511_init_isoc(struct usb_ov511 *ov511)
 
 static void ov511_stop_isoc(struct usb_ov511 *ov511)
 {
+	PDEBUG(4, "ov511_stop_isoc");
 	if (!ov511->streaming || !ov511->dev)
 		return;
 
@@ -1247,9 +1305,10 @@ static void ov511_stop_isoc(struct usb_ov511 *ov511)
 
 static int ov511_new_frame(struct usb_ov511 *ov511, int framenum)
 {
-#if 1
 	struct ov511_frame *frame;
 	int width, height;
+
+	PDEBUG(4, "ov511_new_frame");
 
 	if (!ov511->dev)
 		return -1;
@@ -1285,7 +1344,6 @@ static int ov511_new_frame(struct usb_ov511 *ov511, int framenum)
 //	/* We want a fresh frame every 30 we get */
 //	ov511->compress = (ov511->compress + 1) % 30;
 
-#endif
 	return 0;
 }
 
@@ -1876,7 +1934,7 @@ static int ov7610_configure(struct usb_ov511 *ov511)
 	}
 	
 	if (tries == 1) {
-		err("Failed to read OV7610 ID. You might not have an OV7610,");
+		err("Failed to read sensor ID. You might not have an OV7610/20,");
 		err("or it may be not responding. Report this to");
 		err("mmcclelland@delphi.com");
 		return -1;
@@ -1929,9 +1987,9 @@ static int ov511_configure(struct usb_ov511 *ov511)
 	 {OV511_REG_BUS,  OV511_REG_SYSTEM_RESET, 0x3d},
 	 {OV511_DONE_BUS, 0x0, 0x00},
 	};
-	static struct ov511_regvals aRegvalsNorm[] =
-	{{OV511_REG_BUS, 0x20, 1},
-#if 1
+
+	static struct ov511_regvals aRegvalsNorm7610[] =
+	{{OV511_REG_BUS, 0x20, 0x01},
 	 {OV511_REG_BUS, 0x52, 0x02},
 	 {OV511_REG_BUS, 0x52, 0x00},
 	 {OV511_REG_BUS, 0x31, 0x1f}, /* 0f */
@@ -1946,16 +2004,14 @@ static int ov511_configure(struct usb_ov511 *ov511)
 	 {OV511_REG_BUS, 0x78, 0x06},
 	 {OV511_REG_BUS, 0x79, 0x03},
 
-
 	 {OV511_I2C_BUS, 0x10, 0xff},
 	 {OV511_I2C_BUS, 0x16, 0x06},
-	 {OV511_I2C_BUS, 0x28, 0x24}, /* 24 */
+	 {OV511_I2C_BUS, 0x28, 0x24},
 	 {OV511_I2C_BUS, 0x2b, 0xac},
 	 {OV511_I2C_BUS, 0x05, 0x00},
 	 {OV511_I2C_BUS, 0x06, 0x00},
 
 	 {OV511_I2C_BUS, 0x12, 0x00},
-//	 {OV511_I2C_BUS, 0x13, 0x00},
 	 {OV511_I2C_BUS, 0x38, 0x81},
 	 {OV511_I2C_BUS, 0x28, 0x24}, /* 0c */
 	 {OV511_I2C_BUS, 0x05, 0x00},
@@ -1970,18 +2026,62 @@ static int ov511_configure(struct usb_ov511 *ov511)
 	 {OV511_I2C_BUS, 0x29, 0x03}, /* 91 */
 	 {OV511_I2C_BUS, 0x2a, 0x04},
 	 {OV511_I2C_BUS, 0x2c, 0xfe},
-//	 {OV511_I2C_BUS, 0x2d, 0x93}, /* d7 */
 	 {OV511_I2C_BUS, 0x30, 0x71},
 	 {OV511_I2C_BUS, 0x31, 0x60},
 	 {OV511_I2C_BUS, 0x32, 0x26},
 	 {OV511_I2C_BUS, 0x33, 0x20},
 	 {OV511_I2C_BUS, 0x34, 0x48},
 	 {OV511_I2C_BUS, 0x12, 0x24},
-//	 {OV511_I2C_BUS, 0x13, 0x01},
 	 {OV511_I2C_BUS, 0x11, 0x01},
 	 {OV511_I2C_BUS, 0x0c, 0x24},
 	 {OV511_I2C_BUS, 0x0d, 0x24},
-#endif
+	 {OV511_DONE_BUS, 0x0, 0x00},
+	};
+
+	static struct ov511_regvals aRegvalsNorm7620[] =
+	{{OV511_REG_BUS, 0x20, 0x01},
+	 {OV511_REG_BUS, 0x52, 0x02},
+	 {OV511_REG_BUS, 0x52, 0x00},
+	 {OV511_REG_BUS, 0x31, 0x1f},
+	 {OV511_REG_BUS, 0x70, 0x3f},
+	 {OV511_REG_BUS, 0x71, 0x3f},
+	 {OV511_REG_BUS, 0x72, 0x01},
+	 {OV511_REG_BUS, 0x73, 0x01},
+	 {OV511_REG_BUS, 0x74, 0x01},
+	 {OV511_REG_BUS, 0x75, 0x01},
+	 {OV511_REG_BUS, 0x76, 0x01},
+	 {OV511_REG_BUS, 0x77, 0x01},
+	 {OV511_REG_BUS, 0x78, 0x06},
+	 {OV511_REG_BUS, 0x79, 0x03},
+
+	 {OV511_I2C_BUS, 0x10, 0xff},
+	 {OV511_I2C_BUS, 0x16, 0x06},
+	 {OV511_I2C_BUS, 0x28, 0x24},
+	 {OV511_I2C_BUS, 0x2b, 0xac},
+
+	 {OV511_I2C_BUS, 0x12, 0x00},
+
+	 {OV511_I2C_BUS, 0x28, 0x24},
+	 {OV511_I2C_BUS, 0x05, 0x00},
+	 {OV511_I2C_BUS, 0x0f, 0x05},
+	 {OV511_I2C_BUS, 0x15, 0x01},
+	 {OV511_I2C_BUS, 0x23, 0x00},
+	 {OV511_I2C_BUS, 0x24, 0x10},
+	 {OV511_I2C_BUS, 0x25, 0x8a},
+	 {OV511_I2C_BUS, 0x26, 0xa2},
+	 {OV511_I2C_BUS, 0x27, 0xe2},
+	 {OV511_I2C_BUS, 0x29, 0x03},
+	 {OV511_I2C_BUS, 0x2a, 0x00},
+	 {OV511_I2C_BUS, 0x2c, 0xfe},
+	 {OV511_I2C_BUS, 0x30, 0x71},
+	 {OV511_I2C_BUS, 0x31, 0x60},
+	 {OV511_I2C_BUS, 0x32, 0x26},
+	 {OV511_I2C_BUS, 0x33, 0x20},
+	 {OV511_I2C_BUS, 0x34, 0x48},
+	 {OV511_I2C_BUS, 0x12, 0x24},
+	 {OV511_I2C_BUS, 0x11, 0x01},
+	 {OV511_I2C_BUS, 0x0c, 0x24},
+	 {OV511_I2C_BUS, 0x0d, 0x24},
 	 {OV511_DONE_BUS, 0x0, 0x00},
 	};
 
@@ -2022,17 +2122,26 @@ static int ov511_configure(struct usb_ov511 *ov511)
 	ov511->frame[1].bytes_read = 0;
 
 	/* Initialize to DEFAULT_WIDTH, DEFAULT_HEIGHT, YUV4:2:0 */
-	if ((rc = ov511_write_regvals(dev, aRegvalsNorm))) goto error;
-	if ((rc = ov511_mode_init_regs(ov511, DEFAULT_WIDTH, DEFAULT_HEIGHT,
-				       VIDEO_PALETTE_RGB24, 0)) < 0) goto error;
+
+	if (ov511->sensor == SEN_OV7620) {
+		if (ov511_write_regvals(dev, aRegvalsNorm7620)) goto error;
+	}
+	else {
+		if (ov511_write_regvals(dev, aRegvalsNorm7610)) goto error;
+	}
+
+	if (ov511_mode_init_regs(ov511, DEFAULT_WIDTH, DEFAULT_HEIGHT,
+				       VIDEO_PALETTE_RGB24, 0) < 0) goto error;
 
 	if (autoadjust) {
 		if (ov511_i2c_write(dev, 0x13, 0x01) < 0) goto error;
-		if (ov511_i2c_write(dev, 0x2d, 0x93) < 0) goto error;
+		if (ov511_i2c_write(dev, 0x2d, 
+		     ov511->sensor==SEN_OV7620?0x91:0x93) < 0) goto error;
 	}
 	else {
 		if (ov511_i2c_write(dev, 0x13, 0x00) < 0) goto error;
-		if (ov511_i2c_write(dev, 0x2d, 0x83) < 0) goto error;
+		if (ov511_i2c_write(dev, 0x2d, 
+		     ov511->sensor==SEN_OV7620?0x81:0x83) < 0) goto error;
 		ov511_i2c_write(dev, 0x28, ov511_i2c_read(dev, 0x28) | 8);
 	}
 
@@ -2207,7 +2316,7 @@ static void ov511_disconnect(struct usb_device *dev, void *ptr)
 		usb_unlink_urb(ov511->sbuf[0].urb);
 		usb_free_urb(ov511->sbuf[0].urb);
 		ov511->sbuf[0].urb = NULL;
-	}	
+	}
 
 	/* Free the memory */
 	if (!ov511->user) {

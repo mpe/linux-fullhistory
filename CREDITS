@@ -1570,6 +1570,15 @@ S: 2200 Mission College Blvd
 S: Santa Clara, CA 95052
 S: USA
 
+N: Petko Manolov
+E: petkan@spct.net
+D: USB ethernet (pegasus) driver
+D: optimizing i[45]86 string routines
+D: i386 task swithing hacks
+S: 5, Vrah Mancho str.
+S: 1324 Sofia
+S: Bulgaria
+
 N: Martin Mares
 E: mj@suse.cz
 E: mj@ucw.cz

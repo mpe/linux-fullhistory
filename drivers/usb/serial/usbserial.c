@@ -14,6 +14,11 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (04/03/2000) gkh
+ *	Changed the probe process to remove the module unload races.
+ *	Changed where the tty layer gets initialized to have devfs work nicer.
+ *	Added initial devfs support.
+ *
  * (03/26/2000) gkh
  *	Split driver up into device specific pieces.
  * 
@@ -268,6 +273,10 @@ static struct usb_serial_device_type *usb_serial_devices[] = {
 	NULL
 };
 
+
+/* variables needed for the tty_driver structure */
+static char *driver_name	= "usb";
+static char *tty_driver_name	= "usb/tty/%d";
 
 
 /* local function prototypes */
@@ -924,6 +933,48 @@ static void generic_write_bulk_callback (struct urb *urb)
 }
 
 
+static struct tty_driver * usb_serial_tty_driver_init (struct usb_serial *serial)
+{
+	struct tty_driver *serial_tty_driver;
+
+	if (!(serial_tty_driver = kmalloc(sizeof(struct tty_driver), GFP_KERNEL))) {
+		err("Out of memory");
+		return NULL;
+	}
+
+	memset (serial_tty_driver, 0x00, sizeof(struct tty_driver));
+
+	/* initialize the entries that we don't want to be NULL */
+	serial_tty_driver->magic		= TTY_DRIVER_MAGIC;
+	serial_tty_driver->driver_name		= driver_name;
+	serial_tty_driver->name			= tty_driver_name;
+	serial_tty_driver->major		= SERIAL_TTY_MAJOR;
+	serial_tty_driver->minor_start		= serial->minor;
+	serial_tty_driver->num			= serial->num_ports;
+	serial_tty_driver->type			= TTY_DRIVER_TYPE_SERIAL;
+	serial_tty_driver->subtype		= SERIAL_TYPE_NORMAL;
+	serial_tty_driver->flags		= TTY_DRIVER_REAL_RAW;
+	serial_tty_driver->refcount		= &serial_refcount;
+	serial_tty_driver->table		= serial_tty;
+	serial_tty_driver->termios		= serial_termios;
+	serial_tty_driver->termios_locked	= serial_termios_locked;
+	serial_tty_driver->open			= serial_open;
+	serial_tty_driver->close		= serial_close;
+	serial_tty_driver->write		= serial_write;
+	serial_tty_driver->write_room		= serial_write_room;
+	serial_tty_driver->ioctl		= serial_ioctl;
+	serial_tty_driver->set_termios		= serial_set_termios;
+	serial_tty_driver->throttle		= serial_throttle;
+	serial_tty_driver->unthrottle		= serial_unthrottle;
+	serial_tty_driver->break_ctl		= serial_break;
+	serial_tty_driver->chars_in_buffer	= serial_chars_in_buffer;
+	serial_tty_driver->init_termios		= tty_std_termios;
+	serial_tty_driver->init_termios.c_cflag	= B9600 | CS8 | CREAD | HUPCL | CLOCAL;
+
+	return serial_tty_driver;
+}
+
+
 static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 {
 	struct usb_serial *serial = NULL;
@@ -1000,6 +1051,7 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 			    (bulk_in_pipe & type->needs_bulk_in) &&
 			    (bulk_out_pipe & type->needs_bulk_out)) {
 				/* found all that we need */
+				MOD_INC_USE_COUNT;
 				info("%s converter detected", type->name);
 
 #ifdef CONFIG_USB_SERIAL_GENERIC
@@ -1012,6 +1064,7 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 				serial = get_free_serial (num_ports, &minor);
 				if (serial == NULL) {
 					err("No more free serial devices");
+					MOD_DEC_USE_COUNT;
 					return NULL;
 				}
 	
@@ -1022,6 +1075,18 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 				serial->num_bulk_in = num_bulk_in;
 				serial->num_bulk_out = num_bulk_out;
 				serial->num_interrupt_in = num_interrupt_in;
+
+				/* initialize a tty_driver for this device */
+				serial->tty_driver = usb_serial_tty_driver_init (serial);
+				if (serial->tty_driver == NULL) {
+					err("Can't create a tty_serial_driver");
+					goto probe_error;
+				}
+
+				if (tty_register_driver (serial->tty_driver)) {
+					err("failed to register tty driver");
+					goto probe_error;
+				}
 
 				/* collect interrupt_in endpoints now, because
 				   the keyspan_pda startup function needs
@@ -1040,8 +1105,7 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 				/* if this device type has a startup function, call it */
 				if (type->startup) {
 					if (type->startup (serial)) {
-						return_serial (serial);
-						return NULL;
+						goto probe_error;
 					}
 				}
 
@@ -1114,8 +1178,6 @@ static void * usb_serial_probe(struct usb_device *dev, unsigned int ifnum)
 					info("%s converter now attached to ttyUSB%d", type->name, serial->minor + i);
 				}
 
-				MOD_INC_USE_COUNT;
-
 				return serial;
 			} else {
 				info("descriptors matched, but endpoints did not");
@@ -1153,8 +1215,16 @@ probe_error:
 		/* return the minor range that this device had */
 		return_serial (serial);
 
+		/* if this device has a tty_driver, then unregister it and free it */
+		if (serial->tty_driver) {
+			tty_unregister_driver (serial->tty_driver);
+			kfree (serial->tty_driver);
+			serial->tty_driver = NULL;
+		}
+
 		/* free up any memory that we allocated */
 		kfree (serial);
+		MOD_DEC_USE_COUNT;
 	}
 	return NULL;
 }
@@ -1205,6 +1275,12 @@ static void usb_serial_disconnect(struct usb_device *dev, void *ptr)
 		/* return the minor range that this device had */
 		return_serial (serial);
 
+		/* if this device has a tty_driver, then unregister it and free it */
+		if (serial->tty_driver) {
+			tty_unregister_driver (serial->tty_driver);
+			kfree (serial->tty_driver);
+			serial->tty_driver = NULL;
+		}
 		/* free up any memory that we allocated */
 		kfree (serial);
 
@@ -1216,46 +1292,6 @@ static void usb_serial_disconnect(struct usb_device *dev, void *ptr)
 }
 
 
-static struct tty_driver serial_tty_driver = {
-	magic:			TTY_DRIVER_MAGIC,
-	driver_name:		"usb",
-	name:			"ttyUSB%d",
-	major:			SERIAL_TTY_MAJOR,
-	minor_start:		0,
-	num:			SERIAL_TTY_MINORS,
-	type:			TTY_DRIVER_TYPE_SERIAL,
-	subtype:		SERIAL_TYPE_NORMAL,
-	flags:			TTY_DRIVER_REAL_RAW,
-	refcount:		&serial_refcount,
-	table:			serial_tty,
-	proc_entry:		NULL,
-	other:			NULL,
-	termios:		serial_termios,
-	termios_locked:		serial_termios_locked,
-	
-	open:			serial_open,
-	close:			serial_close,
-	write:			serial_write,
-	put_char:		NULL,
-	flush_chars:		NULL,
-	write_room:		serial_write_room,
-	ioctl:			serial_ioctl,
-	set_termios:		serial_set_termios,
-	set_ldisc:		NULL, 
-	throttle:		serial_throttle,
-	unthrottle:		serial_unthrottle,
-	stop:			NULL,
-	start:			NULL,
-	hangup:			NULL,
-	break_ctl:		serial_break,
-	wait_until_sent:	NULL,
-	send_xchar:		NULL,
-	read_proc:		NULL,
-	chars_in_buffer:	serial_chars_in_buffer,
-	flush_buffer:		NULL
-};
-
-
 int usb_serial_init(void)
 {
 	int i;
@@ -1265,17 +1301,8 @@ int usb_serial_init(void)
 		serial_table[i] = NULL;
 	}
 
-	/* register the tty driver */
-	serial_tty_driver.init_termios		= tty_std_termios;
-	serial_tty_driver.init_termios.c_cflag	= B9600 | CS8 | CREAD | HUPCL | CLOCAL;
-	if (tty_register_driver (&serial_tty_driver)) {
-		err("failed to register tty driver");
-		return -EPERM;
-	}
-	
 	/* register the USB driver */
 	if (usb_register(&usb_serial_driver) < 0) {
-		tty_unregister_driver(&serial_tty_driver);
 		return -1;
 	}
 
@@ -1286,7 +1313,6 @@ int usb_serial_init(void)
 
 void usb_serial_exit(void)
 {
-	tty_unregister_driver(&serial_tty_driver);
 	usb_deregister(&usb_serial_driver);
 }
 

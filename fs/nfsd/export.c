@@ -246,14 +246,11 @@ exp_export(struct nfsctl_export *nxp)
 
 	/* Look up the dentry */
 	err = -EINVAL;
-	dentry = lookup_dentry(nxp->ex_path, NULL, 0);
+	dentry = lookup_dentry(nxp->ex_path, LOOKUP_POSITIVE);
 	if (IS_ERR(dentry))
 		goto out_unlock;
 
-	err = -ENOENT;
 	inode = dentry->d_inode;
-	if (!inode)
-		goto finish;
 	err = -EINVAL;
 	if (inode->i_dev != dev || inode->i_ino != nxp->ex_ino) {
 		printk(KERN_DEBUG "exp_export: i_dev = %x, dev = %x\n",
@@ -443,7 +440,7 @@ exp_rootfh(struct svc_client *clp, kdev_t dev, ino_t ino,
 
 	err = -EPERM;
 	if (path) {
-		if (!(dentry = lookup_dentry(path, NULL, 0))) {
+		if (!(dentry = lookup_dentry(path, 0))) {
 			printk("nfsd: exp_rootfh path not found %s", path);
 			return -EPERM;
 		}

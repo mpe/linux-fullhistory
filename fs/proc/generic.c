@@ -201,10 +201,10 @@ static int proc_readlink(struct dentry *dentry, char *buffer, int buflen)
 	return vfs_readlink(dentry, buffer, buflen, s);
 }
 
-static struct dentry *proc_follow_link(struct dentry *dentry, struct dentry *base, struct vfsmount **mnt, unsigned flags)
+static int proc_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
 	char *s=((struct proc_dir_entry *)dentry->d_inode->u.generic_ip)->data;
-	return vfs_follow_link(dentry, base, mnt, flags, s);
+	return vfs_follow_link(nd, s);
 }
 
 static struct inode_operations proc_link_inode_operations = {

@@ -769,7 +769,7 @@ again:
 		 * We have to be able to interrupt this wait
 		 * to bring down the daemons ...
 		 */
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		add_wait_queue(&rqstp->rq_wait, &wait);
 		spin_unlock_bh(&serv->sv_lock);
 

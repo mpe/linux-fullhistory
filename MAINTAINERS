@@ -822,8 +822,8 @@ W:	http://www-jcr.lmh.ox.ac.uk/~pnp/
 S:	Maintained
 
 PPP PROTOCOL DRIVERS AND COMPRESSORS
-P:	Al Longyear
-M:	longyear@pobox.com
+P:	Paul Mackerras
+M:	paulus@linuxcare.com
 L:	linux-ppp@vger.rutgers.edu
 S:	Maintained
 

@@ -3,6 +3,7 @@
  *
  * 	(C) Copyright (C) 1999, 2000
  * 	    Greg Kroah-Hartman (greg@kroah.com)
+ *          Bill Ryder (bryder@sgi.com)
  *
  * 	This program is free software; you can redistribute it and/or modify
  * 	it under the terms of the GNU General Public License as published by
@@ -10,6 +11,10 @@
  * 	(at your option) any later version.
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
+ *
+ * (04/04/2000) Bill Ryder 
+ *         Fixed bugs in TCGET/TCSET ioctls (by removing them - they are 
+ *             handled elsewhere in the serial driver chain).
  *
  * (03/30/2000) Bill Ryder 
  *         Implemented lots of ioctls
@@ -284,7 +289,7 @@ static int ftdi_sio_write (struct usb_serial_port *port, int from_user,
 		unsigned char *first_byte = port->write_urb->transfer_buffer;
 
 		/* Was seeing a race here, got a read callback, then write callback before
-		   hitting interuuptible_sleep_on  - so wrapping in add_wait_queue stuff */
+		   hitting interuptible_sleep_on  - so wrapping in add_wait_queue stuff */
 
 		add_wait_queue(&serial->write_wait, &wait);
 		set_current_state (TASK_INTERRUPTIBLE);
@@ -418,7 +423,8 @@ static void ftdi_sio_read_bulk_callback (struct urb *urb)
  
 
 	if (urb->status) {
-		err("nonzero read bulk status received: %d", urb->status);
+		/* This will happen at close every time so it is a dbg not an err */
+		dbg("nonzero read bulk status received: %d", urb->status);
 		return;
 	}
 
@@ -585,59 +591,9 @@ static void ftdi_sio_set_termios (struct usb_serial_port *port, struct termios *
 	return;
 } /* ftdi_sio_set_termios */
 
-
-/*
- * set_termios - Taken from tty_ioctl.c with some mods 
- *
- *   Used to correctly handle various options (ie TERMIOS_FLUSH etc)
- *
- */
-
-/*
- * Internal flag options for termios setting behavior
- */
-#define TERMIOS_FLUSH	1
-#define TERMIOS_WAIT	2
-#define TERMIOS_TERMIO	4
-
-
-/* 
- * set_termios - assumes old_termios is in kernel space not user space 
- *               sets current to port->tty->termios, might check diffs against old_termios one day
- */
-static int set_termios(struct usb_serial_port *port, struct termios *old_termios, int opt)
-{ /* set_termios */
-	struct tty_struct *tty = port->tty;
-	int retval;
-
-#ifdef  NOT_IMPLEMENTED_YET
-	retval = tty_check_change(tty);
-	if (retval)
-		return retval;
-#endif
-
-	
-	if ((opt & TERMIOS_FLUSH) && tty->ldisc.flush_buffer)
-		tty->ldisc.flush_buffer(tty);
-
-	if (opt & TERMIOS_WAIT) {
-		tty_wait_until_sent(tty, 0);
-		if (signal_pending(current))
-			return -EINTR;
-	}
-
-	/* remember port->tty->termios has the new settings */
-	ftdi_sio_set_termios(port, old_termios);
-	return 0;
-} /* set_termios */
-
-
 static int ftdi_sio_ioctl (struct usb_serial_port *port, struct file * file, unsigned int cmd, unsigned long arg)
 {
 	struct usb_serial *serial = port->serial;
-	struct tty_struct *tty = port->tty;
-	struct termios old_termios;
-
 	__u16 urb_value=0; /* Will hold the new flags */
 	char buf[1];
 	int  ret, mask;
@@ -746,50 +702,20 @@ static int ftdi_sio_ioctl (struct usb_serial_port *port, struct file * file, uns
 		}
 		break;
 
-	/* Code for the following is based on code from tty_ioctl.c */
-	case TCGETS:
-		if (kernel_termios_to_user_termios((struct termios *)arg, tty->termios)) {
-			return -EFAULT;
-		} else {
-			return 0;
-		}
-	case TCSETSF:
-		memcpy(&old_termios, tty->termios, sizeof (struct termios));
-                if ((ret = user_termios_to_kernel_termios(tty->termios,
-							  (struct termios *)arg)))
-			return -EFAULT;
-		return set_termios(port, &old_termios,  TERMIOS_FLUSH);
-	case TCSETSW:
-		memcpy(&old_termios, tty->termios, sizeof (struct termios));
-                if ((ret = user_termios_to_kernel_termios(tty->termios,
-							  (struct termios *)arg)))
-			return -EFAULT;
-		return set_termios(port, &old_termios, TERMIOS_WAIT);
-	case TCSETS:
-		memcpy(&old_termios, tty->termios, sizeof (struct termios));
-                if ((ret = user_termios_to_kernel_termios(tty->termios,
-							  (struct termios *)arg)))
-			return -EFAULT;
-		return set_termios(port, &old_termios, 0);
+		/*
+		 * I had originally implemented TCSET{A,S}{,F,W} and
+		 * TCGET{A,S} here separately, however when testing I
+		 * found that the higher layers actually do the termios
+		 * conversions themselves and pass the call onto
+		 * ftdi_sio_set_termios. 
+		 *
+		 */
 
-#ifdef NOT_COMPLETED_YET_NEED_TO_CONVERT_TERMIO_TO_TERMIOS
-	/* the 'A' flavours work on termio not termios */
-	case TCGETA:
-		if (kernel_termios_to_user_termio((struct termios *)arg, tty->termios)) {
-			return -EFAULT;			
-		} else { 
-			return 0;
-		}
-		break;
-	case TCSETAF:
-		return set_termios(port, arg, TERMIOS_FLUSH | TERMIOS_TERMIO);
-	case TCSETAW:
-		return set_termios(port, arg, TERMIOS_WAIT | TERMIOS_TERMIO);
-	case TCSETA:
-		return set_termios(port, arg, TERMIOS_TERMIO);		
-#endif
 	default:
-		err("ftdi_sio ioctl arg not supported - it was 0x%04x",cmd);
+	  /* This is not an error - turns out the higher layers will do 
+	   *  some ioctls itself (see comment above)
+ 	   */
+		dbg("ftdi_sio ioctl arg not supported - it was 0x%04x",cmd);
 		return(-ENOIOCTLCMD);
 		break;
 	}

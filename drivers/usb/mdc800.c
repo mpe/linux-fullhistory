@@ -31,6 +31,10 @@
  * The driver supports only one camera.
  *
  * version 0.7.1
+ * MOD_INC and MOD_DEC are changed in usb_probe to prevent load/unload
+ * problems when compiled as Module.
+ * (04/04/2000)
+ *
  * The mdc800 driver gets assigned the USB Minor 32-47. The Registration
  * was updated to use these values.
  * (26/03/2000)
@@ -77,12 +81,12 @@
 #define MDC800_PRODUCT_ID	0xa800
 
 /* Timeouts (msec) */
-#define TO_READ_FROM_IRQ 			4000
+#define TO_READ_FROM_IRQ 		4000
 #define TO_GET_READY				2000
-#define TO_DOWNLOAD_GET_READY			1500
-#define TO_DOWNLOAD_GET_BUSY			1500
-#define TO_WRITE_GET_READY			3000
-#define TO_DEFAULT_COMMAND			5000
+#define TO_DOWNLOAD_GET_READY	1500
+#define TO_DOWNLOAD_GET_BUSY	1500
+#define TO_WRITE_GET_READY		3000
+#define TO_DEFAULT_COMMAND		5000
 
 /* Minor Number of the device (create with mknod /dev/mustek c 180 32) */
 #define MDC800_DEVICE_MINOR_BASE 32
@@ -517,11 +521,20 @@ static int mdc800_getAnswerSize (char command)
 static int mdc800_device_open (struct inode* inode, struct file *file)
 {
 	int retval=0;
+	
+	MOD_INC_USE_COUNT;
+	
 	if (mdc800->state == NOT_CONNECTED)
+	{
+		MOD_DEC_USE_COUNT;
 		return -EBUSY;
+	}
 
 	if (mdc800->open)
+	{
+		MOD_DEC_USE_COUNT;
 		return -EBUSY;
+	}
 
 	mdc800->rw_lock=0;
 	mdc800->in_count=0;
@@ -538,10 +551,10 @@ static int mdc800_device_open (struct inode* inode, struct file *file)
 	if (usb_submit_urb (mdc800->irq_urb))
 	{
 		err ("request USB irq fails (submit_retval=%i urb_status=%i).",retval, mdc800->irq_urb->status);
+		MOD_DEC_USE_COUNT;
 		return -EIO;
 	}
 
-	MOD_INC_USE_COUNT;
 	mdc800->open=1;
 
 	dbg ("Mustek MDC800 device opened.");

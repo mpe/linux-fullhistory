@@ -32,14 +32,11 @@ static int proc_self_readlink(struct dentry *dentry, char *buffer, int buflen)
 	return vfs_readlink(dentry,buffer,buflen,tmp);
 }
 
-static struct dentry * proc_self_follow_link(struct dentry *dentry,
-						struct dentry *base,
-						struct vfsmount **mnt,
-						unsigned int follow)
+static int proc_self_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
 	char tmp[30];
 	sprintf(tmp, "%d", current->pid);
-	return vfs_follow_link(dentry,base,mnt,follow,tmp);
+	return vfs_follow_link(nd,tmp);
 }	
 
 static struct inode_operations proc_self_inode_operations = {

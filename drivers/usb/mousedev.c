@@ -70,7 +70,7 @@ struct mousedev_list {
 static unsigned char mousedev_genius_seq[] = { 0xe8, 3, 0xe6, 0xe6, 0xe6 };
 static unsigned char mousedev_imps_seq[] = { 0xf3, 200, 0xf3, 100, 0xf3, 80 };
 
-static struct mousedev *mousedev_table[BITS_PER_LONG];
+static struct mousedev *mousedev_table[MOUSEDEV_MINORS];
 
 static void mousedev_event(struct input_handle *handle, unsigned int type, unsigned int code, int value)
 {
@@ -177,9 +177,12 @@ static int mousedev_open(struct inode * inode, struct file * file)
 	if (i > MOUSEDEV_MINORS || !mousedev_table[i])
 		return -ENODEV;
 
-	if (!(list = kmalloc(sizeof(struct mousedev_list), GFP_KERNEL)))
-		return -ENOMEM;
+	MOD_INC_USE_COUNT;
 
+	if (!(list = kmalloc(sizeof(struct mousedev_list), GFP_KERNEL))) {
+		MOD_DEC_USE_COUNT;
+		return -ENOMEM;
+	}
 	memset(list, 0, sizeof(struct mousedev_list));
 
 	list->mousedev = mousedev_table[i];
@@ -189,7 +192,6 @@ static int mousedev_open(struct inode * inode, struct file * file)
 
 	file->private_data = list;
 
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 
@@ -360,19 +362,15 @@ static int mousedev_connect(struct input_handler *handler, struct input_dev *dev
 		printk(KERN_ERR "mousedev: no more free mousedev devices\n");
 		return -1;
 	}
+
+	if (!(mousedev = kmalloc(sizeof(struct mousedev), GFP_KERNEL)))
+		return -1;
+	memset(mousedev, 0, sizeof(struct mousedev));
+	init_waitqueue_head(&mousedev->wait);
+
+	mousedev->devfs = input_register_minor("mouse%d", minor, MOUSEDEV_MINOR_BASE);
 #else
-	if (!mousedev_table[minor]) {
-#endif
-
-		if (!(mousedev = kmalloc(sizeof(struct mousedev), GFP_KERNEL)))
-			return -1;
-		memset(mousedev, 0, sizeof(struct mousedev));
-		init_waitqueue_head(&mousedev->wait);
-
-		mousedev->devfs = input_register_minor("mouse%d", minor, MOUSEDEV_MINOR_BASE);
-
-#ifdef CONFIG_INPUT_MOUSEDEV_MIX
-	} else mousedev = mousedev_table[minor];
+	mousedev = mousedev_table[0];
 #endif
 
 	if (!(handle = kmalloc(sizeof(struct input_handle), GFP_KERNEL))) {
@@ -419,11 +417,24 @@ static struct input_handler mousedev_handler = {
 static int __init mousedev_init(void)
 {
 	input_register_handler(&mousedev_handler);
+
+#ifdef CONFIG_INPUT_MOUSEDEV_MIX
+	if (!(mousedev_table[0] = kmalloc(sizeof(struct mousedev), GFP_KERNEL)))
+		return -1;
+	memset(mousedev_table[0], 0, sizeof(struct mousedev));
+	init_waitqueue_head(&mousedev_table[0]->wait);
+	mousedev_table[0]->devfs = input_register_minor("mouse%d", 0, MOUSEDEV_MINOR_BASE);
+	mousedev_table[0]->used = 1;
+#endif
 	return 0;
 }
 
 static void __exit mousedev_exit(void)
 {
+#ifdef CONFIG_INPUT_MOUSEDEV_MIX
+	input_unregister_minor(mousedev_table[0]->devfs);
+	kfree(mousedev_table[0]);
+#endif
 	input_unregister_handler(&mousedev_handler);
 }
 

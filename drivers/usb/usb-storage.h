@@ -129,8 +129,8 @@ static inline void make_guid( __u32 *pg, __u16 vendor, __u16 product, char *seri
 }
 
 /* Flag definitions */
-#define US_FL_IP_STATUS	      0x00000001         /* status uses interrupt */
-#define US_FL_FIXED_COMMAND   0x00000002 /* expand commands to fixed size */
+#define US_FL_IP_STATUS	      0x00000001 /* status uses interrupt           */
+#define US_FL_FIXED_COMMAND   0x00000002 /* expand commands to fixed size   */
 #define US_FL_MODE_XLATE      0x00000004 /* translate _6 to _10 comands for
-					    Win/MacOS compatibility */
-
+					            Win/MacOS compatibility */
+#define US_FL_CBI_AS_CB       0x00000008 /* treat a CBI dev as a CB dev     */

@@ -38,26 +38,28 @@ int proc_pid_status(struct task_struct*,char*);
 int proc_pid_statm(struct task_struct*,char*);
 int proc_pid_cpu(struct task_struct*,char*);
 
-static struct dentry *proc_fd_link(struct inode *inode, struct vfsmount **mnt)
+/* MOUNT_REWRITE: make all files have non-NULL ->f_vfsmnt (pipefs, sockfs) */
+static int proc_fd_link(struct inode *inode, struct dentry **dentry, struct vfsmount **mnt)
 {
 	if (inode->u.proc_i.file) {
 		if (inode->u.proc_i.file->f_vfsmnt) {
 			*mnt = mntget(inode->u.proc_i.file->f_vfsmnt);
 		}
-		return dget(inode->u.proc_i.file->f_dentry);
+		*dentry = dget(inode->u.proc_i.file->f_dentry);
+		return 0;
 	}
-	return NULL;
+	return -ENOENT;
 }
 
-static struct dentry *proc_exe_link(struct inode *inode, struct vfsmount **mnt)
+static int proc_exe_link(struct inode *inode, struct dentry **dentry, struct vfsmount **mnt)
 {
 	struct mm_struct * mm;
 	struct vm_area_struct * vma;
-	struct dentry *result = NULL;
+	int result = -ENOENT;
 	struct task_struct *task = inode->u.proc_i.task;
 
 	if (!task_lock(task))
-		return NULL;
+		return result;
 	mm = task->mm;
 	if (!mm)
 		goto out;
@@ -67,7 +69,8 @@ static struct dentry *proc_exe_link(struct inode *inode, struct vfsmount **mnt)
 		if ((vma->vm_flags & VM_EXECUTABLE) && 
 		    vma->vm_file) {
 			*mnt = mntget(vma->vm_file->f_vfsmnt);
-			result = dget(vma->vm_file->f_dentry);
+			*dentry = dget(vma->vm_file->f_dentry);
+			result = 0;
 			break;
 		}
 		vma = vma->vm_next;
@@ -78,28 +81,30 @@ out:
 	return result;
 }
 
-static struct dentry *proc_cwd_link(struct inode *inode, struct vfsmount **mnt)
+static int proc_cwd_link(struct inode *inode, struct dentry **dentry, struct vfsmount **mnt)
 {
-	struct dentry *result = NULL;
+	int result = -ENOENT;
 	if (task_lock(inode->u.proc_i.task)) {
 		struct fs_struct *fs = inode->u.proc_i.task->fs;
 		if (fs) {
 			*mnt = mntget(fs->pwdmnt);
-			result = dget(fs->pwd);
+			*dentry = dget(fs->pwd);
+			result = 0;
 		}
 		task_unlock(inode->u.proc_i.task);
 	}
 	return result;
 }
 
-static struct dentry *proc_root_link(struct inode *inode, struct vfsmount **mnt)
+static int proc_root_link(struct inode *inode, struct dentry **dentry, struct vfsmount **mnt)
 {
-	struct dentry *result = NULL;
+	int result = -ENOENT;
 	if (task_lock(inode->u.proc_i.task)) {
 		struct fs_struct *fs = inode->u.proc_i.task->fs;
 		if (fs) {
 			*mnt = mntget(fs->rootmnt);
-			result = dget(fs->root);
+			*dentry = dget(fs->root);
+			result = 0;
 		}
 		task_unlock(inode->u.proc_i.task);
 	}
@@ -176,11 +181,10 @@ static int proc_permission(struct inode *inode, int mask)
 
 	base = current->fs->root;
 	our_vfsmnt = current->fs->rootmnt;
-	de = root = proc_root_link(inode, &vfsmnt); /* Ewww... */
-
-	if (!de)
+	if (proc_root_link(inode, &root, &vfsmnt)) /* Ewww... */
 		return -ENOENT;
 
+	de = root;
 	mnt = vfsmnt;
 	our_sb = base->d_inode->i_sb;
 	sb = de->d_inode->i_sb;
@@ -359,29 +363,22 @@ static struct inode_operations proc_mem_inode_operations = {
 	permission:	proc_permission,
 };
 
-static struct dentry * proc_pid_follow_link(struct dentry *dentry,
-					struct dentry *base,
-					struct vfsmount **vfsmnt,
-					unsigned int follow)
+static int proc_pid_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
 	struct inode *inode = dentry->d_inode;
-	struct dentry * result;
 	int error;
 
 	/* We don't need a base pointer in the /proc filesystem */
-	dput(base);
-	mntput(*vfsmnt);
+	dput(nd->dentry);
+	mntput(nd->mnt);
 
 	error = proc_permission(inode, MAY_EXEC);
-	result = ERR_PTR(error);
 	if (error)
 		goto out;
 
-	result = inode->u.proc_i.op.proc_get_link(inode, vfsmnt);
+	error = inode->u.proc_i.op.proc_get_link(inode, &nd->dentry, &nd->mnt);
 out:
-	if (!result)
-		result = ERR_PTR(-ENOENT);
-	return result;
+	return error;
 }
 
 static int do_proc_readlink(struct dentry *dentry, struct vfsmount *mnt,
@@ -429,13 +426,8 @@ static int proc_pid_readlink(struct dentry * dentry, char * buffer, int buflen)
 	if (error)
 		goto out;
 
-	dentry = inode->u.proc_i.op.proc_get_link(inode, &mnt);
-	error = -ENOENT;
-	if (!dentry)
-		goto out;
-
-	error = PTR_ERR(dentry);
-	if (IS_ERR(dentry))
+	error = inode->u.proc_i.op.proc_get_link(inode, &dentry, &mnt);
+	if (error)
 		goto out;
 
 	error = do_proc_readlink(dentry, mnt, buffer, buflen);

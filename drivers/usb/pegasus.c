@@ -16,11 +16,11 @@
 #include <linux/usb.h>
 
 
-static const char *version = __FILE__ ": v0.3.7 2000/03/23 Written by Petko Manolov (petkan@spct.net)\n";
+static const char *version = __FILE__ ": v0.3.8 2000/04/04 Written by Petko Manolov (petkan@spct.net)\n";
 
 
 #define	PEGASUS_MTU		1500
-#define PEGASUS_MAX_MTU		1536
+#define	PEGASUS_MAX_MTU		1536
 #define	SROM_WRITE		0x01
 #define	SROM_READ		0x02
 #define	PEGASUS_TX_TIMEOUT	(HZ*5)
@@ -55,14 +55,16 @@ MODULE_PARM(loopback, "i");
 static struct usb_eth_dev usb_dev_id[] = {
 	{"Billionton USB-100", 0x08dd, 0x0986, NULL},
 	{"Corega FEter USB-TX", 0x7aa, 0x0004, NULL},
-	{"MELCO LUA-TX", 0x0411, 0x0001, NULL},
-	{ "D-Link DSB-650TX", 0x2001, 0x4002, NULL },
-	{ "D-Link DSB-650TX(PNA)", 0x2001, 0x4003, NULL },
-	{ "Linksys USB100TX", 0x066b, 0x2203, NULL },
-	{ "SMC 202 USB Ethernet", 0x0707, 0x0200, NULL },
-	{ "ADMtek AN986 \"Pegasus\" USB Ethernet (eval board)", 0x07a6, 0x0986, NULL },
-	{ "Accton USB 10/100 Ethernet Adapter", 0x083a, 0x1046, NULL },
-	{ NULL, 0, 0, NULL }
+	{"MELCO/BUFFALO LUA-TX", 0x0411, 0x0001, NULL},
+	{"D-Link DSB-650TX", 0x2001, 0x4001, NULL},
+	{"D-Link DSB-650TX", 0x2001, 0x4002, NULL},
+	{"D-Link DSB-650TX(PNA)", 0x2001, 0x4003, NULL},
+	{"Linksys USB100TX", 0x066b, 0x2203, NULL},
+	{"Linksys USB100TX", 0x066b, 0x2204, NULL},
+	{"SMC 202 USB Ethernet", 0x0707, 0x0200, NULL},
+	{"ADMtek AN986 \"Pegasus\" USB Ethernet (eval board)", 0x07a6, 0x0986, NULL},
+	{"Accton USB 10/100 Ethernet Adapter", 0x083a, 0x1046, NULL},
+	{NULL, 0, 0, NULL}
 };
 
 
@@ -387,7 +389,7 @@ static void pegasus_set_rx_mode(struct net_device *net)
 			(net->flags & IFF_ALLMULTI)) {
 		pegasus_set_register(pegasus->usb, 0, 0xfa);
 		pegasus_set_register(pegasus->usb, 2, 0);
-		info("%s: set allmulti", net->name);
+		info("%s set allmulti", net->name);
 	} else {
 		info("%s: set Rx mode", net->name);
 	}

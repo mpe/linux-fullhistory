@@ -34,7 +34,7 @@
 struct usb_serial_port {
 	int			magic;
 	struct usb_serial	*serial;	/* pointer back to the owner of this port */
-	struct tty_struct *	tty;		/* the coresponding tty for this device */
+	struct tty_struct *	tty;		/* the coresponding tty for this port */
 	unsigned char		minor;
 	unsigned char		number;
 	char			active;		/* someone has this device open */
@@ -56,8 +56,9 @@ struct usb_serial_port {
 struct usb_serial {
 	int				magic;
 	struct usb_device *		dev;
-	struct usb_serial_device_type *	type;
-	unsigned char			minor;
+	struct usb_serial_device_type *	type;			/* the type of usb serial device this is */
+	struct tty_driver *		tty_driver;		/* the tty_driver for this device */
+	unsigned char			minor;			/* the starting minor number for this device */
 	unsigned char			num_ports;		/* the number of ports this device has */
 	char				num_interrupt_in;	/* number of interrupt in endpoints we have */
 	char				num_bulk_in;		/* number of bulk in endpoints we have */

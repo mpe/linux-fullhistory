@@ -311,21 +311,19 @@ static void acm_tty_close(struct tty_struct *tty, struct file *filp)
 
 	if (!acm || !acm->used) return;
 
-	MOD_DEC_USE_COUNT;
-
-	if (--acm->used) return;
-	
-	if (acm->dev) {
-		acm_set_control(acm, acm->ctrlout = 0);
-		usb_unlink_urb(&acm->ctrlurb);
-		usb_unlink_urb(&acm->writeurb);
-		usb_unlink_urb(&acm->readurb);
-		return;
+	if (!--acm->used) {
+		if (acm->dev) {
+			acm_set_control(acm, acm->ctrlout = 0);
+			usb_unlink_urb(&acm->ctrlurb);
+			usb_unlink_urb(&acm->writeurb);
+			usb_unlink_urb(&acm->readurb);
+		} else {
+			tty_unregister_devfs(&acm_tty_driver, acm->minor);
+			acm_table[acm->minor] = NULL;
+			kfree(acm);
+		}
 	}
-
-	tty_unregister_devfs(&acm_tty_driver, acm->minor);
-	acm_table[acm->minor] = NULL;
-	kfree(acm);
+	MOD_DEC_USE_COUNT;
 }
 
 static int acm_tty_write(struct tty_struct *tty, int from_user, const unsigned char *buf, int count)

@@ -18,10 +18,10 @@ static int autofs_readlink(struct dentry *dentry, char *buffer, int buflen)
 	return vfs_readlink(dentry, buffer, buflen, s);
 }
 
-static struct dentry *autofs_follow_link(struct dentry *dentry, struct dentry *base, struct vfsmount **mnt, unsigned flags)
+static int autofs_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
 	char *s=((struct autofs_symlink *)dentry->d_inode->u.generic_ip)->data;
-	return vfs_follow_link(dentry, base, mnt, flags, s);
+	return vfs_follow_link(nd, s);
 }
 
 struct inode_operations autofs_symlink_inode_operations = {

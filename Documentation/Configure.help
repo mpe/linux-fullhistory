@@ -9680,11 +9680,18 @@ CONFIG_USB_OV511
 
 USB ADMtek Pegasus-based ethernet device support
 CONFIG_USB_PEGASUS
-  Say Y if you want to use your USB ethernet device. Note that
-  the code is still experimental. If you have devices with vendor
-  IDs other than ADMtek's, you should change/add them in the
-  driver code and send a message to me (petkan@spct.net) for 
-  update.
+  Say Y if you want to use your USB ethernet device. Supported
+  cards until now are:
+    Accton 10/100
+    Billington USB-100
+    Corega FEter USB-TX
+    MELCO/BUFFALO LUA-TX
+    D-Link DSB-650TX, DSB-650TX-PNA
+    Linksys USB100TX
+    SNC 202
+  If you have devices with vendor IDs other than noted above
+  you should add them in the driver code and send a message
+  to me (petkan@spct.net) for update.
 
   This code is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).

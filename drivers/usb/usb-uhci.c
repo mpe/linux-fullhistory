@@ -12,7 +12,7 @@
  * (C) Copyright 1999 Johannes Erdfelt
  * (C) Copyright 1999 Randy Dunlap
  *
- * $Id: usb-uhci.c,v 1.222 2000/03/13 21:18:02 fliegl Exp $
+ * $Id: usb-uhci.c,v 1.228 2000/04/02 19:55:51 acher Exp $
  */
 
 #include <linux/config.h>
@@ -49,6 +49,8 @@
 
 /* This enables an extra UHCI slab for memory debugging */
 #define DEBUG_SLAB
+
+#define VERSTR "$Revision: 1.228 $ time " __TIME__ " " __DATE__
 
 #include <linux/usb.h>
 #include "usb-uhci.h"
@@ -116,6 +118,26 @@ void clean_descs(uhci_t *s, int force)
 	}
 }
 /*-------------------------------------------------------------------*/
+_static void uhci_switch_timer_int(uhci_t *s)
+{
+
+	if (!list_empty(&s->urb_unlinked)) {
+		s->td1ms->hw.td.status |= TD_CTRL_IOC;
+	}
+	else {
+		s->td1ms->hw.td.status &= ~TD_CTRL_IOC;
+	}
+
+	if (s->timeout_urbs) {
+		s->td32ms->hw.td.status |= TD_CTRL_IOC;
+	}
+	else {
+		s->td32ms->hw.td.status &= ~TD_CTRL_IOC;
+	}
+
+	wmb();
+}
+/*-------------------------------------------------------------------*/
 #ifdef CONFIG_USB_UHCI_HIGH_BANDWIDTH
 _static void enable_desc_loop(uhci_t *s, urb_t *urb)
 {
@@ -162,6 +184,9 @@ _static void queue_urb_unlocked (uhci_t *s, urb_t *urb)
 #endif
 	((urb_priv_t*)urb->hcpriv)->started=jiffies;
 	list_add (p, &s->urb_list);
+	if (urb->timeout)
+		s->timeout_urbs++;
+	uhci_switch_timer_int(s);
 }
 /*-------------------------------------------------------------------*/
 _static void queue_urb (uhci_t *s, urb_t *urb)
@@ -185,6 +210,9 @@ _static void dequeue_urb (uhci_t *s, urb_t *urb)
 #endif
 
 	list_del (&urb->urb_list);
+	if (urb->timeout && s->timeout_urbs)
+		s->timeout_urbs--;
+
 }
 /*-------------------------------------------------------------------*/
 _static int alloc_td (uhci_desc_t ** new, int flags)
@@ -439,6 +467,13 @@ _static void cleanup_skel (uhci_t *s)
 
 	clean_descs(s,1);
 
+	
+	if (s->td32ms) {
+	
+		unlink_td(s,s->td32ms,1);
+		delete_desc(s->td32ms);
+	}
+
 	for (n = 0; n < 8; n++) {
 		td = s->int_chain[n];
 		clean_td_chain (td);
@@ -531,8 +566,9 @@ _static int init_skel (uhci_t *s)
 	if (ret)
 		goto init_skel_cleanup;
 	
-	fill_td (td, TD_CTRL_IOC, 0, 0); // generate 1ms interrupt
+	fill_td (td, 0 * TD_CTRL_IOC, 0, 0); // generate 1ms interrupt (enabled on demand)
 	insert_td (s, qh, td, 0);
+	s->td1ms=td;
 
 	dbg("allocating qh: bulk_chain");
 	ret = alloc_qh (&qh);
@@ -596,6 +632,16 @@ _static int init_skel (uhci_t *s)
 				if ((n & (m - 1)) == ((m - 1) / 2))
 					((uhci_desc_t*) s->iso_td[n])->hw.td.link = virt_to_bus (s->int_chain[o]);
 	}
+
+	ret = alloc_td (&td, 0);
+
+	if (ret)
+		goto init_skel_cleanup;
+	
+	fill_td (td, 0 * TD_CTRL_IOC, 0, 0); // generate 32ms interrupt
+	s->td32ms=td;
+
+	insert_td_horizontal (s, s->int_chain[5], td);
 
 	mb();
 	//uhci_show_queue(s->control_chain);   
@@ -995,6 +1041,7 @@ _static int uhci_unlink_urb_sync (uhci_t *s, urb_t *urb)
 	if (urb->status == -EINPROGRESS) {
 		// URB probably still in work
 		dequeue_urb (s, urb);
+		uhci_switch_timer_int(s);
 		s->unlink_urb_done=1;
 		spin_unlock_irqrestore (&s->urb_list_lock, flags);		
 		
@@ -1125,9 +1172,11 @@ _static int uhci_unlink_urb_async (uhci_t *s,urb_t *urb)
 
 	if (urb->status == -EINPROGRESS) {
 		((urb_priv_t*)urb->hcpriv)->started = ~0;
+
 		dequeue_urb (s, urb);
 		list_add_tail (&urb->urb_list, &s->urb_unlinked); // store urb
-
+		uhci_switch_timer_int(s);
+			
 		s->unlink_urb_done = 1;
 		
 		urb->status = -ECONNABORTED;	// mark urb as "waiting to be killed"	
@@ -1495,7 +1544,7 @@ _static int uhci_submit_urb (urb_t *urb)
 		     (!(urb->transfer_flags & USB_QUEUE_BULK) || !(bulk_urb->transfer_flags & USB_QUEUE_BULK)))) {
 			spin_unlock_irqrestore (&s->urb_list_lock, flags);
 			usb_dec_dev_use (urb->dev);
-			err("ENXIO1 %08x, flags %x, urb %p, burb %p",urb->pipe,urb->transfer_flags,urb,bulk_urb);
+			err("ENXIO %08x, flags %x, urb %p, burb %p",urb->pipe,urb->transfer_flags,urb,bulk_urb);
 			return -ENXIO;	// urb already queued
 		}
 	}
@@ -1599,6 +1648,7 @@ _static void uhci_check_timeouts(uhci_t *s)
 #endif
 
 	}
+	s->timeout_check=jiffies;
 }
 
 /*-------------------------------------------------------------------
@@ -1922,7 +1972,7 @@ _static int rh_submit_urb (urb_t *urb)
 			OK (len);
 		case (0x03):	/* string descriptors */
 			len = usb_root_hub_string (wValue & 0xff,
-				uhci->io_addr, "UHCI",
+			        uhci->io_addr, "UHCI",
 				data, wLength);
 			if (len > 0) {
 				OK (min (leni, len));
@@ -2481,15 +2531,15 @@ restart:
 			goto restart;
 		}
 	}
-	if ((s->frame_counter & 63) == 0)
+	if ((jiffies - s->timeout_check) > (HZ/30)) 
 		uhci_check_timeouts(s);
 
 	clean_descs(s,0);
 	uhci_cleanup_unlink(s, 0);
-	
+	uhci_switch_timer_int(s);
+							
 	spin_unlock (&s->urb_list_lock);
 	
-	s->frame_counter++;
 	outw (status, io_addr + USBSTS);
 
 	//dbg("uhci_interrupt: done");
@@ -2630,12 +2680,14 @@ _static int __init alloc_uhci (struct pci_dev *dev, int irq, unsigned int io_add
 	spin_lock_init (&s->qh_lock);
 	spin_lock_init (&s->td_lock);
 	atomic_set(&s->avoid_bulk, 0);
+	s->timeout_urbs = 0;	
 	s->irq = -1;
 	s->io_addr = io_addr;
 	s->io_size = io_size;
 	s->next = devs;	//chain new uhci device into global list	
-	s->frame_counter = 0;
-	
+	s->timeout_check = 0;
+	s->uhci_pci=dev;
+
 	bus = usb_alloc_bus (&uhci_device_operations);
 	if (!bus) {
 		kfree (s);
@@ -2739,6 +2791,7 @@ _static int __init start_uhci (struct pci_dev *dev)
 			info("Intel USB controller: setting latency timer to %d", UHCI_LATENCY_TIMER);
 			pci_write_config_byte(dev, PCI_LATENCY_TIMER, UHCI_LATENCY_TIMER);
 		}
+	
 		return alloc_uhci(dev, dev->irq, io_addr, io_size);
 	}
 	return -1;

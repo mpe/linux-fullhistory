@@ -448,7 +448,7 @@ static void uhci_inc_fsbr(struct uhci *uhci, struct urb *urb)
 	if (!urbp->fsbr) {
 		urbp->fsbr = 1;
 		if (!uhci->fsbr++)
-			uhci->skel_term_td.link = virt_to_bus(&uhci->skel_hs_control_qh) | UHCI_PTR_QH;
+			uhci->skel_term_qh.link = virt_to_bus(&uhci->skel_hs_control_qh) | UHCI_PTR_QH;
 	}
 
 	spin_unlock_irqrestore(&uhci->framelist_lock, flags);
@@ -467,7 +467,7 @@ static void uhci_dec_fsbr(struct uhci *uhci, struct urb *urb)
 	if (urbp->fsbr) {
 		urbp->fsbr = 0;
 		if (!--uhci->fsbr)
-			uhci->skel_term_td.link = UHCI_PTR_TERM;
+			uhci->skel_term_qh.link = UHCI_PTR_TERM;
 	}
 
 	spin_unlock_irqrestore(&uhci->framelist_lock, flags);
@@ -712,6 +712,10 @@ static int usb_control_retrigger_status(urb_t *urb)
 
 	urbp->short_control_packet = 1;
 
+	/* Create a new QH to avoid pointer overwriting problems */
+	uhci_remove_qh(uhci, urbp->qh);
+
+	urbp->qh = uhci_alloc_qh(urb->dev);
 	/* Delete all of the TD's except for the status TD at the end */
 	td = urbp->list.begin;
 	while (td && td->list.next) {
@@ -726,10 +730,6 @@ static int usb_control_retrigger_status(urb_t *urb)
 		td = nexttd;
 	}
 
-	/* Create a new QH to avoid pointer overwriting problems */
-	uhci_remove_qh(uhci, urbp->qh);
-
-	urbp->qh = uhci_alloc_qh(urb->dev);
 	if (!urbp->qh)
 		return -ENOMEM;
 
@@ -1403,7 +1403,7 @@ static int rh_init_int_timer(urb_t *urb);
 
 static void rh_int_timer_do(unsigned long ptr)
 {
-	urb_t *urb = (urb_t *)ptr, *u;
+	struct urb *urb = (struct urb *)ptr;
 	struct uhci *uhci = (struct uhci *)urb->dev->bus->hcpriv;
 	struct list_head *tmp, *head = &uhci->urb_list;
 	struct urb_priv *urbp;
@@ -1422,15 +1422,22 @@ static void rh_int_timer_do(unsigned long ptr)
 	nested_lock(&uhci->urblist_lock, flags);
 	tmp = head->next;
 	while (tmp != head) {
-		u = list_entry(tmp, urb_t, urb_list);
+		struct urb *u = list_entry(tmp, urb_t, urb_list);
+
+		tmp = tmp->next;
 
 		urbp = (struct urb_priv *)u->hcpriv;
 		if (urbp) {
-			if (urbp->fsbr && time_after(jiffies, urbp->inserttime + IDLE_TIMEOUT))
+			/* Check if the FSBR timed out */
+			if (urbp->fsbr && time_after(urbp->inserttime + IDLE_TIMEOUT, jiffies))
 				uhci_dec_fsbr(uhci, u);
-		}
 
-		tmp = tmp->next;
+			/* Check if the URB timed out */
+			if (u->timeout && time_after(u->timeout, jiffies)) {
+				u->transfer_flags |= USB_ASYNC_UNLINK;
+				uhci_unlink_urb(u);
+			}
+		}
 	}
 	nested_unlock(&uhci->urblist_lock, flags);
 

@@ -323,11 +323,11 @@ struct file *open_exec(const char *name)
 	struct file *file;
 
 	lock_kernel();
-	dentry = lookup_dentry(name, NULL, LOOKUP_FOLLOW);
+	dentry = lookup_dentry(name, LOOKUP_FOLLOW|LOOKUP_POSITIVE);
 	file = (struct file*) dentry;
 	if (!IS_ERR(dentry)) {
 		file = ERR_PTR(-EACCES);
-		if (dentry->d_inode && S_ISREG(dentry->d_inode->i_mode)) {
+		if (S_ISREG(dentry->d_inode->i_mode)) {
 			int err = permission(dentry->d_inode, MAY_EXEC);
 			file = ERR_PTR(err);
 			if (!err) {

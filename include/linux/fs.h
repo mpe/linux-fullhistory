@@ -547,6 +547,12 @@ struct fasync_struct {
 	struct	file 		*fa_file;
 };
 
+struct nameidata {
+	struct dentry *dentry;
+	struct vfsmount *mnt;
+	struct qstr last;
+};
+
 #define FASYNC_MAGIC 0x4601
 
 extern int fasync_helper(int, struct file *, int, struct fasync_struct **);
@@ -713,7 +719,7 @@ struct inode_operations {
 	int (*rename) (struct inode *, struct dentry *,
 			struct inode *, struct dentry *);
 	int (*readlink) (struct dentry *, char *,int);
-	struct dentry * (*follow_link) (struct dentry *, struct dentry *, struct vfsmount **, unsigned int);
+	int (*follow_link) (struct dentry *, struct nameidata *);
 	void (*truncate) (struct inode *);
 	int (*permission) (struct inode *, int);
 	int (*revalidate) (struct dentry *);
@@ -837,12 +843,8 @@ extern int do_truncate(struct dentry *, loff_t start);
 extern int get_unused_fd(void);
 extern void put_unused_fd(unsigned int);
 
-extern struct file *__filp_open(const char *, int, int, struct dentry *, struct vfsmount *);
+extern struct file *filp_open(const char *, int, int);
 extern struct file * dentry_open(struct dentry *, struct vfsmount *, int);
-static inline struct file *filp_open(const char *name, int flags, int mode)
-{
-	return __filp_open(name, flags, mode, NULL, NULL);
-}
 extern int filp_close(struct file *, fl_owner_t id);
 extern char * getname(const char *);
 #define __getname()	((char *) __get_free_page(GFP_KERNEL))
@@ -959,7 +961,7 @@ extern void put_write_access(struct inode *);
 extern struct dentry * do_mknod(const char *, int, dev_t);
 extern int do_pipe(int *);
 
-extern struct dentry * open_namei(const char *, int, int, struct dentry *, struct vfsmount **);
+extern int open_namei(const char *, int, int, struct nameidata *);
 
 extern int kernel_read(struct file *, unsigned long, char *, unsigned long);
 extern struct file * open_exec(const char *);
@@ -991,6 +993,8 @@ extern ino_t find_inode_number(struct dentry *, struct qstr *);
 #define LOOKUP_DIRECTORY	(2)
 #define LOOKUP_SLASHOK		(4)
 #define LOOKUP_CONTINUE		(8)
+#define LOOKUP_POSITIVE		(16)
+#define LOOKUP_PARENT		(32)
 
 /*
  * "descriptor" for what we're up to with a read for sendfile().
@@ -1010,8 +1014,9 @@ typedef struct {
 
 typedef int (*read_actor_t)(read_descriptor_t *, struct page *, unsigned long, unsigned long);
 
-
-extern struct dentry * lookup_dentry(const char *, struct dentry *, unsigned int);
+extern struct dentry * lookup_dentry(const char *, unsigned int);
+extern int walk_init(const char *, unsigned, struct nameidata *);
+extern int walk_name(const char *, unsigned, struct nameidata *);
 extern struct dentry * lookup_one(const char *, struct dentry *);
 extern struct dentry * __namei(const char *, unsigned int);
 
@@ -1085,9 +1090,9 @@ extern ssize_t generic_read_dir(struct file *, char *, size_t, loff_t *);
 extern struct file_operations generic_ro_fops;
 
 extern int vfs_readlink(struct dentry *, char *, int, const char *);
-extern struct dentry *vfs_follow_link(struct dentry *, struct dentry *, struct vfsmount **, unsigned, const char *);
+extern int vfs_follow_link(struct nameidata *, const char *);
 extern int page_readlink(struct dentry *, char *, int);
-extern struct dentry *page_follow_link(struct dentry *, struct dentry *, struct vfsmount **, unsigned);
+extern int page_follow_link(struct dentry *, struct nameidata *);
 extern struct inode_operations page_symlink_inode_operations;
 
 extern int vfs_readdir(struct file *, filldir_t, void *);

@@ -730,7 +730,7 @@ rpc_allocate(unsigned int flags, unsigned int size)
 		}
 		if (flags & RPC_TASK_ASYNC)
 			return NULL;
-		current->state = TASK_INTERRUPTIBLE;
+		set_current_state(TASK_INTERRUPTIBLE);
 		schedule_timeout(HZ>>4);
 	} while (!signalled());
 
@@ -1063,7 +1063,7 @@ rpciod_killall(void)
 		__rpc_schedule();
 		if (all_tasks) {
 			dprintk("rpciod_killall: waiting for tasks to exit\n");
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 			schedule_timeout(1);
 		}
 	}
@@ -1134,7 +1134,7 @@ rpciod_down(void)
 	 * wait briefly before checking the process id.
 	 */
 	current->sigpending = 0;
-	current->state = TASK_INTERRUPTIBLE;
+	set_current_state(TASK_INTERRUPTIBLE);
 	schedule_timeout(1);
 	/*
 	 * Display a message if we're going to wait longer.

@@ -56,7 +56,7 @@ struct evdev_list {
 	struct evdev_list *next;
 };
 
-static struct evdev *evdev_table[BITS_PER_LONG] = { NULL, /* ... */ };
+static struct evdev *evdev_table[EVDEV_MINORS] = { NULL, /* ... */ };
 
 static void evdev_event(struct input_handle *handle, unsigned int type, unsigned int code, int value)
 {
@@ -119,9 +119,12 @@ static int evdev_open(struct inode * inode, struct file * file)
 	if (i > EVDEV_MINORS || !evdev_table[i])
 		return -ENODEV;
 
-	if (!(list = kmalloc(sizeof(struct evdev_list), GFP_KERNEL)))
-		return -ENOMEM;
+	MOD_INC_USE_COUNT;
 
+	if (!(list = kmalloc(sizeof(struct evdev_list), GFP_KERNEL))) {
+		MOD_DEC_USE_COUNT;
+		return -ENOMEM;
+	}
 	memset(list, 0, sizeof(struct evdev_list));
 
 	list->evdev = evdev_table[i];
@@ -132,7 +135,6 @@ static int evdev_open(struct inode * inode, struct file * file)
 
 	list->evdev->used++;
 
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 

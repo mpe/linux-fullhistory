@@ -1160,6 +1160,8 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	unsigned long flags;
 	unsigned long prot;
 	unsigned long o_flags;
+	int acc_mode;
+	struct dentry *dentry;
 	char   name[SHM_FMT_LEN+1];
 
 	if (!shm_sb || (shmid % SEQ_MULTIPLIER) == zero_id)
@@ -1179,19 +1181,35 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 	if (shmflg & SHM_RDONLY) {
 		prot = PROT_READ;
 		o_flags = O_RDONLY;
+		acc_mode = MAY_READ;
 	} else {
 		prot = PROT_READ | PROT_WRITE;
 		o_flags = O_RDWR;
+		acc_mode = MAY_READ | MAY_WRITE;
 	}
 
 	sprintf (name, SHM_FMT, shmid);
 
 	lock_kernel();
-	file = __filp_open(name, o_flags, 0, dget(shm_sb->s_root), NULL);
+	dentry = lookup_one(name, dget(lock_parent(shm_sb->s_root)));
+	unlock_dir(shm_sb->s_root);
+	err = PTR_ERR(dentry);
+	if (IS_ERR(dentry))
+		goto bad_file;
+	err = -ENOENT;
+	if (!dentry->d_inode)
+		goto bad_file;
+	err = permission(dentry->d_inode, acc_mode);
+	if (err)
+		goto bad_file;
+	file = dentry_open(dentry, NULL, o_flags);
+	err = PTR_ERR(file);
 	if (IS_ERR (file))
 		goto bad_file;
+	down(&current->mm->mmap_sem);
 	*raddr = do_mmap (file, addr, file->f_dentry->d_inode->i_size,
 			  prot, flags, 0);
+	up(&current->mm->mmap_sem);
 	unlock_kernel();
 	if (IS_ERR(*raddr))
 		err = PTR_ERR(*raddr);
@@ -1202,7 +1220,7 @@ asmlinkage long sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 
 bad_file:
 	unlock_kernel();
-	if ((err = PTR_ERR(file)) == -ENOENT)
+	if (err == -ENOENT)
 		return -EINVAL;
 	return err;
 }
@@ -1227,7 +1245,7 @@ static int shm_remove_name(int id)
 	sprintf (name, SHM_FMT, id);
 	lock_kernel();
 	dir = lock_parent(shm_sb->s_root);
-	dentry = lookup_one(name, dir);
+	dentry = lookup_one(name, dget(dir));
 	error = PTR_ERR(dentry);
 	if (!IS_ERR(dentry)) {
 		error = vfs_unlink(dir->d_inode, dentry);

@@ -331,7 +331,6 @@ asmlinkage long sys_access(const char * filename, int mode)
 asmlinkage long sys_chdir(const char * filename)
 {
 	int error;
-	struct inode *inode;
 	struct dentry *dentry, *tmp;
 	struct vfsmount *mnt = NULL, *tmp_mnt;
 	char *name;
@@ -343,22 +342,13 @@ asmlinkage long sys_chdir(const char * filename)
 	if (IS_ERR(name))
 		goto out;
 
-	dentry = lookup_dentry(name, NULL, LOOKUP_FOLLOW);
+	dentry = lookup_dentry(name, LOOKUP_POSITIVE | LOOKUP_FOLLOW | LOOKUP_DIRECTORY);
 	putname(name);
 	error = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
 		goto out;
 
-	error = -ENOENT;
-	inode = dentry->d_inode;
-	if (!inode)
-		goto dput_and_out;
-
-	error = -ENOTDIR;
-	if (!S_ISDIR(inode->i_mode))
-		goto dput_and_out;
-
-	error = permission(inode,MAY_EXEC);
+	error = permission(dentry->d_inode,MAY_EXEC);
 	if (error)
 		goto dput_and_out;
 
@@ -420,7 +410,6 @@ out:
 asmlinkage long sys_chroot(const char * filename)
 {
 	int error;
-	struct inode *inode;
 	struct dentry *dentry, *tmp;
 	struct vfsmount *mnt = NULL, *tmp_mnt;
 	char *name;
@@ -432,22 +421,13 @@ asmlinkage long sys_chroot(const char * filename)
 	if (IS_ERR(name))
 		goto out;
 
-	dentry = lookup_dentry(name, NULL, LOOKUP_FOLLOW);
+	dentry = lookup_dentry(name, LOOKUP_POSITIVE | LOOKUP_FOLLOW | LOOKUP_DIRECTORY);
 	putname(name);
 	error = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
 		goto out;
 
-	error = -ENOENT;
-	inode = dentry->d_inode;
-	if (!inode)
-		goto dput_and_out;
-
-	error = -ENOTDIR;
-	if (!S_ISDIR(inode->i_mode))
-		goto dput_and_out;
-
-	error = permission(inode,MAY_EXEC);
+	error = permission(dentry->d_inode,MAY_EXEC);
 	if (error)
 		goto dput_and_out;
 
@@ -668,21 +648,20 @@ out:
  * for the internal routines (ie open_namei()/follow_link() etc). 00 is
  * used by symlinks.
  */
-struct file *__filp_open(const char * filename, int flags, int mode, struct dentry * base, struct vfsmount *mnt)
+struct file *filp_open(const char * filename, int flags, int mode)
 {
-	struct dentry * dentry;
-	int flag,error;
+	int namei_flags, error;
+	struct nameidata nd;
 
-	flag = flags;
-	if ((flag+1) & O_ACCMODE)
-		flag++;
-	if (flag & O_TRUNC)
-		flag |= 2;
+	namei_flags = flags;
+	if ((namei_flags+1) & O_ACCMODE)
+		namei_flags++;
+	if (namei_flags & O_TRUNC)
+		namei_flags |= 2;
 
-	dentry = open_namei(filename, flag, mode, base, &mnt);
-	error = PTR_ERR(dentry);
-	if (!IS_ERR(dentry))
-		return dentry_open(dentry, mnt, flags);
+	error = open_namei(filename, namei_flags, mode, &nd);
+	if (!error)
+		return dentry_open(nd.dentry, nd.mnt, flags);
 
 	return ERR_PTR(error);
 }

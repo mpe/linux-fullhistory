@@ -78,7 +78,7 @@ struct joydev_list {
 	struct joydev_list *next;
 };
 
-static struct joydev *joydev_table[BITS_PER_LONG];
+static struct joydev *joydev_table[JOYDEV_MINORS];
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
 MODULE_SUPPORTED_DEVICE("input/js");
@@ -186,8 +186,12 @@ static int joydev_open(struct inode *inode, struct file *file)
 	if (i > JOYDEV_MINORS || !joydev_table[i])
 		return -ENODEV;
 
-	if (!(list = kmalloc(sizeof(struct joydev_list), GFP_KERNEL)))
+	MOD_INC_USE_COUNT;
+
+	if (!(list = kmalloc(sizeof(struct joydev_list), GFP_KERNEL))) {
+		MOD_DEC_USE_COUNT;
 		return -ENOMEM;
+	}
 	memset(list, 0, sizeof(struct joydev_list));
 
 	list->joydev = joydev_table[i];
@@ -198,7 +202,6 @@ static int joydev_open(struct inode *inode, struct file *file)
 
 	list->joydev->used++;
 
-	MOD_INC_USE_COUNT;
 	return 0;
 }
 

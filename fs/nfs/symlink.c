@@ -87,13 +87,10 @@ static int nfs_readlink(struct dentry *dentry, char *buffer, int buflen)
 	return res;
 }
 
-static struct dentry *
-nfs_follow_link(struct dentry *dentry, struct dentry *base,
-	struct vfsmount **mnt, unsigned int follow)
+static int nfs_follow_link(struct dentry *dentry, struct nameidata *nd)
 {
 	struct page *page = NULL;
-	struct dentry *res = vfs_follow_link(dentry, base, mnt, follow, 
-					     nfs_getlink(dentry, &page));
+	int res = vfs_follow_link(nd, nfs_getlink(dentry,&page));
 	if (page) {
 		kunmap(page);
 		page_cache_release(page);

@@ -2,10 +2,9 @@
 #define __LINUX_UHCI_H
 
 /*
-   $Id: usb-uhci.h,v 1.50 2000/03/13 21:18:04 fliegl Exp $
+   $Id: usb-uhci.h,v 1.54 2000/04/02 19:55:53 acher Exp $
  */
 #define MODNAME "usb-uhci"
-#define VERSTR "$Revision: 1.50 $ time " __TIME__ " " __DATE__
 #define UHCI_LATENCY_TIMER 0
 
 static __inline__ void uhci_wait_ms(unsigned int ms)
@@ -202,6 +201,8 @@ typedef struct uhci {
 	uhci_desc_t *control_chain;
 	uhci_desc_t *bulk_chain;
 	uhci_desc_t *chain_end;
+	uhci_desc_t *td1ms;
+	uhci_desc_t *td32ms;
 	struct list_head free_desc;
 	spinlock_t qh_lock;
 	spinlock_t td_lock;
@@ -209,7 +210,9 @@ typedef struct uhci {
 	int loop_usage;            // URBs using bandwidth reclamation
 
 	struct list_head urb_unlinked;	// list of all unlinked  urbs
-	int frame_counter;
+	long timeout_check;
+	int timeout_urbs;
+	struct pci_dev *uhci_pci;
 } uhci_t, *puhci_t;
 
 

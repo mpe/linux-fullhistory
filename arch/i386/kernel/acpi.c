@@ -103,13 +103,57 @@ static int acpi_p_lvl3_tested = 0;
 
 enum
 {
-	ACPI_ENABLED,
-	ACPI_TABLES_ONLY,
-	ACPI_CHIPSET_ONLY,
-	ACPI_DISABLED,
+	ACPI_ENABLED =       0x00000000, // use ACPI if present
+	ACPI_DISABLED =      0x00000001, // never use ACPI
+	ACPI_TABLES_ONLY =   0x00000002, // never use chipset-specific driver
+	ACPI_CHIPSET_ONLY =  0x00000004, // always use chipset-specific driver
+	ACPI_IGNORE_ERRATA = 0x00000008, // ignore any listed platform errata
+	ACPI_COPY_TABLES  =  0x00000010, // copy ACPI tables before use
+	ACPI_TRUST_TABLES =  0x00000020, // use tables even after ioremap fails
+	ACPI_SCI_DISABLED =  0x00000040, // never enable ACPI (info. only)
+	ACPI_C2_DISABLED  =  0x00000080, // never enter C2
+	ACPI_C3_DISABLED  =  0x00000100, // never enter C3
+	ACPI_S1_DISABLED  =  0x00000200, // never enter S1
+	ACPI_S5_DISABLED  =  0x00000400, // never enter S5
 };
 
-static int acpi_enabled = ACPI_ENABLED;
+struct acpi_option_info
+{
+	const char *name;
+	unsigned long value;
+};
+
+static struct acpi_option_info acpi_options[] =
+{
+	{"on", ACPI_ENABLED},
+	{"off", ACPI_DISABLED},
+	{"tables", ACPI_TABLES_ONLY},
+	{"chipset", ACPI_CHIPSET_ONLY},
+	{"no-errata", ACPI_IGNORE_ERRATA},
+	{"copy-tables", ACPI_COPY_TABLES},
+	{"trust-tables", ACPI_TRUST_TABLES},
+	{"no-sci", ACPI_SCI_DISABLED},
+	{"no-c2", ACPI_C2_DISABLED},
+	{"no-c3", ACPI_C3_DISABLED},
+	{"no-s1", ACPI_S1_DISABLED},
+	{"no-s5", ACPI_S5_DISABLED},
+	{NULL, 0},
+};
+
+static unsigned long acpi_opts = ACPI_ENABLED;
+
+struct acpi_errata_info
+{
+	const char *oem;
+	const char *oem_table;
+	u32 oem_rev;
+	unsigned long options;
+};
+
+struct acpi_errata_info acpi_errata[] =
+{
+	{NULL, NULL, 0, 0},
+};
 
 // bits 8-15 are SLP_TYPa, bits 0-7 are SLP_TYPb
 static unsigned long acpi_slp_typ[] = 
@@ -171,7 +215,7 @@ static struct ctl_table acpi_table[] =
 	 &acpi_p_lvl3_lat, sizeof(acpi_p_lvl3_lat),
 	 0644, NULL, &acpi_do_ulong},
 
-	{ACPI_P_LVL2_LAT, "enter_lvl2_lat",
+	{ACPI_ENTER_LVL2_LAT, "enter_lvl2_lat",
 	 &acpi_enter_lvl2_lat, sizeof(acpi_enter_lvl2_lat),
 	 0644, NULL, &acpi_do_ulong},
 
@@ -405,6 +449,16 @@ static struct acpi_table *__init acpi_map_table(u32 addr)
 			printk(KERN_ERR
 			       "ACPI: unreserved table memory @ 0x%p!\n",
 			       (void*) addr);
+
+			if (acpi_opts & ACPI_TRUST_TABLES) {
+				/* OK, trust that the table is there
+				 * if it isn't you'll get an OOPS here
+				 */
+				static u32 sig;
+				table = (struct acpi_table *)
+					phys_to_virt(addr);
+				sig = table->signature;
+			}
 		}
 	}
 	return table;
@@ -423,14 +477,33 @@ static void acpi_unmap_table(struct acpi_table *table)
 /*
  * Initialize an ACPI table
  */
-static void acpi_init_table(struct acpi_table_info *info,
-			    void *data,
-			    int mapped)
+static int acpi_init_table(struct acpi_table_info *info,
+			   void *data,
+			   int mapped)
 {
 	struct acpi_table *table = (struct acpi_table*) data;
+
+	info->table = NULL;
+	info->size = 0;
+	info->mapped = 0;
+
+	if (!table || table->signature != info->expected_signature)
+		return -EINVAL;
+
+	if (mapped && (acpi_opts & ACPI_COPY_TABLES)) {
+		struct acpi_table *copy
+			= kmalloc(table->length, GFP_KERNEL);
+		if (!copy)
+			return -ENOMEM;
+		memcpy(copy, table, table->length);
+		table = copy;
+		mapped = 0;
+	}
+
 	info->table = table;
-	info->size = (size_t)(table ? table->length:0);
+	info->size = (size_t) table->length;
 	info->mapped = mapped;
+	return 0;
 }
 
 /*
@@ -502,22 +575,13 @@ static int __init acpi_find_tables(void)
 	rsdt_entry_count = (int) ((rsdt->length - sizeof(*rsdt)) >> 2);
 	while (rsdt_entry_count) {
 		struct acpi_table *dt = acpi_map_table(*rsdt_entry);
-		if (dt && dt->signature == ACPI_FACP_SIG) {
-			struct acpi_facp *facp = (struct acpi_facp*) dt;
-			acpi_init_table(&acpi_facp, dt, 1);
+		if (!acpi_init_table(&acpi_facp, dt, 1)) {
+			struct acpi_facp *facp
+				= (struct acpi_facp*) acpi_facp.table;
 
 			// map DSDT if it exists
 			dt = acpi_map_table(facp->dsdt);
-			if (dt && dt->signature == ACPI_DSDT_SIG)
-				acpi_init_table(&acpi_dsdt, dt, 1);
-			else
-				acpi_unmap_table(dt);
-
-			// map FACS if it exists
-			dt = acpi_map_table(facp->facs);
-			if (dt && dt->signature == ACPI_FACS_SIG)
-				acpi_init_table(&acpi_facs, dt, 1);
-			else
+			if (acpi_init_table(&acpi_dsdt, dt, 1))
 				acpi_unmap_table(dt);
 		}
 		else {
@@ -769,6 +833,15 @@ static void acpi_irq(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 /*
+ * Is SCI to be enabled?
+ */
+static inline int
+acpi_sci_enabled(void)
+{
+	return !(acpi_opts & ACPI_SCI_DISABLED);
+}
+
+/*
  * Is ACPI enabled or not?
  */
 static inline int acpi_is_enabled(struct acpi_facp *facp)
@@ -781,7 +854,7 @@ static inline int acpi_is_enabled(struct acpi_facp *facp)
  */
 static int acpi_enable(struct acpi_facp *facp)
 {
-	if (facp->smi_cmd)
+	if (facp->smi_cmd && acpi_sci_enabled())
 		outb(facp->acpi_enable, facp->smi_cmd);
 	return (acpi_is_enabled(facp) ? 0:-1);
 }
@@ -791,16 +864,20 @@ static int acpi_enable(struct acpi_facp *facp)
  */
 static int acpi_disable(struct acpi_facp *facp)
 {
-	// disable and clear any pending events
-	acpi_write_gpe_enable(facp, 0);
-	while (acpi_read_gpe_status(facp))
-		acpi_write_gpe_status(facp, acpi_read_gpe_status(facp));
-	acpi_write_pm1_enable(facp, 0);
-	acpi_write_pm1_status(facp, acpi_read_pm1_status(facp));
+	if (facp->smi_cmd && acpi_sci_enabled()) {
+		// disable and clear any pending events
+		acpi_write_gpe_enable(facp, 0);
+		while (acpi_read_gpe_status(facp)) {
+			acpi_write_gpe_status(facp,
+					      acpi_read_gpe_status(facp));
+		}
+		acpi_write_pm1_enable(facp, 0);
+		acpi_write_pm1_status(facp, acpi_read_pm1_status(facp));
 
-	/* writing acpi_disable to smi_cmd would be appropriate
-	 * here but this causes a nasty crash on many systems
-	 */
+		/* writing acpi_disable to smi_cmd would be appropriate
+		 * here but this causes a nasty crash on many systems
+		 */
+	}
 
 	return 0;
 }
@@ -860,7 +937,7 @@ static void acpi_idle(void)
 sleep3:
 	sleep_level = 3;
 	if (!acpi_p_lvl3_tested) {
-		printk("ACPI C3 works\n");
+		printk(KERN_INFO "ACPI C3 works\n");
 		acpi_p_lvl3_tested = 1;
 	}
 	wake_on_busmaster(facp);
@@ -916,7 +993,7 @@ sleep3_with_arbiter:
 sleep2:
 	sleep_level = 2;
 	if (!acpi_p_lvl2_tested) {
-		printk("ACPI C2 works\n");
+		printk(KERN_INFO "ACPI C2 works\n");
 		acpi_p_lvl2_tested = 1;
 	}
 	wake_on_busmaster(facp);	/* Required to track BM activity.. */
@@ -1006,47 +1083,52 @@ static void acpi_update_clock(void)
 	}
 }
 
-
 /*
  * Enter system sleep state
  */
-static void acpi_enter_sx(acpi_sstate_t state)
+static int acpi_enter_sx(acpi_sstate_t state)
 {
-	unsigned long slp_typ = acpi_slp_typ[(int) state];
-	if (slp_typ != ACPI_SLP_TYP_DISABLED) {
-		struct acpi_facp *facp = (struct acpi_facp*) acpi_facp.table;
-		u16 typa, typb, value;
+	unsigned long slp_typ;
+	u16 typa, typb, value;
+	struct acpi_facp *facp;
 
-		// bits 8-15 are SLP_TYPa, bits 0-7 are SLP_TYPb
-		typa = (slp_typ >> 8) & 0xff;
-		typb = slp_typ & 0xff;
+	slp_typ = acpi_slp_typ[(int) state];
+	if (slp_typ == ACPI_SLP_TYP_DISABLED)
+		return -EPERM;
 
-		typa = ((typa << ACPI_SLP_TYP_SHIFT) & ACPI_SLP_TYP_MASK);
-		typb = ((typb << ACPI_SLP_TYP_SHIFT) & ACPI_SLP_TYP_MASK);
+	// bits 8-15 are SLP_TYPa, bits 0-7 are SLP_TYPb
+	typa = (slp_typ >> 8) & 0xff;
+	typb = slp_typ & 0xff;
+	
+	typa = ((typa << ACPI_SLP_TYP_SHIFT) & ACPI_SLP_TYP_MASK);
+	typb = ((typb << ACPI_SLP_TYP_SHIFT) & ACPI_SLP_TYP_MASK);
 
-		acpi_sleep_start = get_cmos_time();
-		acpi_enter_dx(ACPI_D3);
-		acpi_sleep_state = state;
+	acpi_sleep_start = get_cmos_time();
+	acpi_enter_dx(ACPI_D3);
+	acpi_sleep_state = state;
 
-		// clear wake status
-		acpi_write_pm1_status(facp, ACPI_WAK);
-
-		// set SLP_TYPa/b and SLP_EN
-		if (facp->pm1a_cnt) {
-			value = inw(facp->pm1a_cnt) & ~ACPI_SLP_TYP_MASK;
-			outw(value | typa | ACPI_SLP_EN, facp->pm1a_cnt);
-		}
-		if (facp->pm1b_cnt) {
-			value = inw(facp->pm1b_cnt) & ~ACPI_SLP_TYP_MASK;
-			outw(value | typb | ACPI_SLP_EN, facp->pm1b_cnt);
-		}
-
-		// wait until S1 is entered
-		while (!(acpi_read_pm1_status(facp) & ACPI_WAK)) ;
-		// finished sleeping, update system time
-		acpi_update_clock();
-		acpi_enter_dx(ACPI_D0);
+	facp = (struct acpi_facp*) acpi_facp.table;
+	
+	// clear wake status
+	acpi_write_pm1_status(facp, ACPI_WAK);
+	
+	// set SLP_TYPa/b and SLP_EN
+	if (facp->pm1a_cnt) {
+		value = inw(facp->pm1a_cnt) & ~ACPI_SLP_TYP_MASK;
+		outw(value | typa | ACPI_SLP_EN, facp->pm1a_cnt);
 	}
+	if (facp->pm1b_cnt) {
+		value = inw(facp->pm1b_cnt) & ~ACPI_SLP_TYP_MASK;
+		outw(value | typb | ACPI_SLP_EN, facp->pm1b_cnt);
+	}
+	
+	// wait until S1 is entered
+	while (!(acpi_read_pm1_status(facp) & ACPI_WAK)) ;
+	// finished sleeping, update system time
+	acpi_update_clock();
+	acpi_enter_dx(ACPI_D0);
+	
+	return 0;
 }
 
 /*
@@ -1113,6 +1195,42 @@ static int acpi_release_ioports(struct acpi_facp *facp)
 }
 
 /*
+ * Determine if modification of value is permitted
+ */
+static int
+acpi_verify_mod(int ctl_name)
+{
+	switch (ctl_name) {
+	case ACPI_PM1_ENABLE:
+	case ACPI_GPE_ENABLE:
+	case ACPI_GPE_LEVEL:
+		if (!acpi_sci_enabled())
+			return -EPERM;
+		break;
+	case ACPI_P_LVL2_LAT:
+	case ACPI_ENTER_LVL2_LAT:
+		if (acpi_opts & ACPI_C2_DISABLED)
+			return -EPERM;
+		break;
+	case ACPI_P_LVL3_LAT:
+	case ACPI_ENTER_LVL3_LAT:
+		if (acpi_opts & ACPI_C3_DISABLED)
+			return -EPERM;
+		break;
+	case ACPI_S1_SLP_TYP:
+	case ACPI_SLEEP:
+		if (acpi_opts & ACPI_S1_DISABLED)
+			return -EPERM;
+		break;
+	case ACPI_S5_SLP_TYP:
+		if (acpi_opts & ACPI_S5_DISABLED)
+			return -EPERM;
+		break;
+	}
+	return 0;
+}
+
+/*
  * Examine/modify value
  */
 static int acpi_do_ulong(ctl_table *ctl,
@@ -1141,6 +1259,9 @@ static int acpi_do_ulong(ctl_table *ctl,
 			*len = 0;
 	}
 	else {
+		if (acpi_verify_mod(ctl->ctl_name))
+			return -EPERM;
+
 		size = sizeof(str) - 1;
 		if (size > *len)
 			size = *len;
@@ -1313,6 +1434,9 @@ static int acpi_do_event_reg(ctl_table *ctl,
 	}
 	else
 	{
+		if (acpi_verify_mod(ctl->ctl_name))
+			return -EPERM;
+
 		// fetch user value
 		size = sizeof(str) - 1;
 		if (size > *len)
@@ -1443,24 +1567,71 @@ static int acpi_do_sleep(ctl_table *ctl,
 	}
 	else
 	{
-#ifdef CONFIG_ACPI_S1_SLEEP
-		acpi_enter_sx(ACPI_S1);
-#endif
+		if (acpi_verify_mod(ctl->ctl_name) || acpi_enter_sx(ACPI_S1))
+			return -EPERM;
 	}
 	file->f_pos += *len;
 	return 0;
 }
 
+/*
+ * Parse command line options
+ */
+static int __init acpi_setup(char *str)
+{
+	while (str && *str) {
+		struct acpi_option_info *opt = acpi_options;
+		while (opt->name) {
+			if (!strncmp(str, opt->name, strlen(opt->name))) {
+				acpi_opts |= opt->value;
+				break;
+			}
+			opt++;
+		}
+		str = strpbrk(str, ",");
+		if (str)
+			str += strspn(str, ",");
+	}
+
+	if (acpi_opts)
+		printk(KERN_INFO "ACPI: options 0x%08lx\n", acpi_opts);
+
+	return 1;
+}
+
+/*
+ * kernel/module command line interfaces are both "acpi=OPTION,OPTION,..."
+ */
+__setup("acpi=", acpi_setup);
+
+static char * __initdata acpi = NULL;
+
+MODULE_DESCRIPTION("ACPI driver");
+MODULE_PARM(acpi, "s");
+MODULE_PARM_DESC(acpi, "ACPI driver command line");
 
 /*
  * Initialize and enable ACPI
  */
-static int __init acpi_init(void)
+int __init acpi_init(void)
 {
 	struct acpi_facp *facp = NULL;
 
-	switch (acpi_enabled) {
-	case ACPI_ENABLED:
+	if (acpi)
+		acpi_setup(acpi);
+
+	if (acpi_opts & ACPI_DISABLED) {
+		return -ENODEV;
+	}
+	else if (acpi_opts & ACPI_TABLES_ONLY) {
+		if (acpi_find_tables())
+			return -ENODEV;
+	}
+	else if (acpi_opts & ACPI_CHIPSET_ONLY) {
+		if (acpi_find_chipset())
+			return -ENODEV;
+	}
+	else {
 		switch (acpi_find_tables()) {
 		case 0:
 			// found valid ACPI tables
@@ -1474,17 +1645,6 @@ static int __init acpi_init(void)
 			// found broken ACPI tables
 			return -ENODEV;
 		}
-		break;
-	case ACPI_TABLES_ONLY:
-		if (acpi_find_tables())
-			return -ENODEV;
-		break;
-	case ACPI_CHIPSET_ONLY:
-		if (acpi_find_chipset())
-			return -ENODEV;
-		break;
-	case ACPI_DISABLED:
-		return -ENODEV;
 	}
 
 	facp = (struct acpi_facp*) acpi_facp.table;
@@ -1502,12 +1662,14 @@ static int __init acpi_init(void)
 	 * control in the /proc interfaces.
 	 */
 	if (facp->p_lvl2_lat
-	    && facp->p_lvl2_lat <= ACPI_MAX_P_LVL2_LAT) {
+	    && facp->p_lvl2_lat <= ACPI_MAX_P_LVL2_LAT
+	    && !acpi_verify_mod(ACPI_P_LVL2_LAT)) {
 		acpi_p_lvl2_lat = ACPI_uS_TO_TMR_TICKS(facp->p_lvl2_lat);
 		acpi_enter_lvl2_lat = ACPI_uS_TO_TMR_TICKS(ACPI_TMR_HZ / 1000);
 	}
 	if (facp->p_lvl3_lat
-	    && facp->p_lvl3_lat <= ACPI_MAX_P_LVL3_LAT) {
+	    && facp->p_lvl3_lat <= ACPI_MAX_P_LVL3_LAT
+	    && !acpi_verify_mod(ACPI_P_LVL3_LAT)) {
 		acpi_p_lvl3_lat = ACPI_uS_TO_TMR_TICKS(facp->p_lvl3_lat);
 		acpi_enter_lvl3_lat
 			= ACPI_uS_TO_TMR_TICKS(facp->p_lvl3_lat * 5);
@@ -1519,6 +1681,7 @@ static int __init acpi_init(void)
 	}
 
 	if (facp->sci_int
+	    && acpi_sci_enabled()
 	    && request_irq(facp->sci_int,
 			   acpi_irq,
 			   SA_INTERRUPT | SA_SHIRQ,
@@ -1528,6 +1691,10 @@ static int __init acpi_init(void)
 		       facp->sci_int);
 		goto err_out;
 	}
+
+#ifndef CONFIG_ACPI_S1_SLEEP
+	acpi_opts |= ACPI_S1_DISABLED;
+#endif
 
 	acpi_sysctl = register_sysctl_table(acpi_dir_table, 1);
 
@@ -1559,7 +1726,7 @@ err_out:
 /*
  * Disable and deinitialize ACPI
  */
-static void __exit acpi_exit(void)
+void __exit acpi_exit(void)
 {
 	struct acpi_facp *facp = (struct acpi_facp*) acpi_facp.table;
 
@@ -1570,7 +1737,7 @@ static void __exit acpi_exit(void)
 	acpi_disable(facp);
 	acpi_release_ioports(facp);
 
-	if (facp->sci_int)
+	if (facp->sci_int && acpi_sci_enabled())
 		free_irq(facp->sci_int, &acpi_facp);
 
 	acpi_destroy_tables();
@@ -1581,29 +1748,5 @@ static void __exit acpi_exit(void)
 	pm_active = 0;
 }
 
-/*
- * Parse kernel command line options
- */
-static int __init acpi_setup(char *str)
-{
-	while (str && *str) {
-		if (strncmp(str, "on", 2) == 0)
-			acpi_enabled = ACPI_ENABLED;
-		else if (strncmp(str, "tables", 6) == 0)
-			acpi_enabled = ACPI_TABLES_ONLY;
-		else if (strncmp(str, "chipset", 7) == 0)
-			acpi_enabled = ACPI_CHIPSET_ONLY;
-		else if (strncmp(str, "off", 3) == 0)
-			acpi_enabled = ACPI_DISABLED;
-		str = strpbrk(str, ",");
-		if (str)
-			str += strspn(str, ",");
-	}
-	return 1;
-}
-
-__setup("acpi=", acpi_setup);
-
 module_init(acpi_init);
 module_exit(acpi_exit);
-

@@ -91,7 +91,8 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 					int len, struct svc_fh *resfh)
 {
 	struct svc_export	*exp;
-	struct dentry		*dparent, *dchild;
+	struct dentry		*dparent;
+	struct nameidata nd;
 	int			err;
 
 	dprintk("nfsd: nfsd_lookup(fh %s, %s)\n", SVCFH_fmt(fhp), name);
@@ -116,49 +117,51 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 		/* checking mountpoint crossing is very different when stepping up */
 		if (dparent == exp->ex_dentry) {
 			if (!EX_CROSSMNT(exp))
-				dchild = dget(dparent); /* .. == . just like at / */
+				nd.dentry = dget(dparent); /* .. == . just like at / */
 			else
 			{
 				struct svc_export *exp2 = NULL;
 				struct dentry *dp;
-				dchild = dparent->d_covers->d_parent;
-				for (dp=dchild;
+				nd.dentry = dparent->d_covers->d_parent;
+				for (dp=nd.dentry;
 				     exp2 == NULL && dp->d_covers->d_parent != dp;
 				     dp=dp->d_covers->d_parent)
 					exp2 = exp_get(exp->ex_client, dp->d_inode->i_dev, dp->d_inode->i_ino);
-				if (exp2==NULL || dchild->d_sb != exp2->ex_dentry->d_sb) {
-					dchild = dget(dparent);
+				if (exp2==NULL || nd.dentry->d_sb != exp2->ex_dentry->d_sb) {
+					nd.dentry = dget(dparent);
 				} else {
-					dget(dchild);
+					dget(nd.dentry);
 					exp = exp2;
 				}
 			}
 		} else
-			dchild = dget(dparent->d_parent);
+			nd.dentry = dget(dparent->d_parent);
 	} else {
-		dchild = lookup_dentry(name, dget(dparent), 0);
-		if (IS_ERR(dchild))
+		nd.mnt = NULL;
+		nd.dentry = dget(dparent);
+		err = walk_name(name, 0, &nd);
+		if (err)
 			goto out_nfserr;
 		/*
 		 * check if we have crossed a mount point ...
 		 */
-		if (dchild->d_sb != dparent->d_sb) {
+		if (nd.dentry->d_sb != dparent->d_sb) {
 			struct svc_export *exp2 = NULL;
 			exp2 = exp_get(rqstp->rq_client,
-				       dchild->d_inode->i_dev,
-				       dchild->d_inode->i_ino);
+				       nd.dentry->d_inode->i_dev,
+				       nd.dentry->d_inode->i_ino);
 			if (exp2 && EX_CROSSMNT(exp2))
 				/* successfully crossed mount point */
 				exp = exp2;
-			else if (dchild->d_covers->d_sb == dparent->d_sb) {
+			else if (nd.dentry->d_covers->d_sb == dparent->d_sb) {
 				/* stay in the original filesystem */
-				struct dentry *tdentry = dget(dchild->d_covers);
-				dput(dchild);
-				dchild = tdentry;
+				struct dentry *tdentry = dget(nd.dentry->d_covers);
+				dput(nd.dentry);
+				nd.dentry = tdentry;
 			} else {
 				/* This cannot possibly happen */
-				printk("nfsd_lookup: %s/%s impossible mount point!\n", dparent->d_name.name, dchild->d_name.name);
-				dput(dchild);
+				printk("nfsd_lookup: %s/%s impossible mount point!\n", dparent->d_name.name, nd.dentry->d_name.name);
+				dput(nd.dentry);
 				err = nfserr_acces;
 				goto out;
 
@@ -169,14 +172,14 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 	 * Note: we compose the file handle now, but as the
 	 * dentry may be negative, it may need to be updated.
 	 */
-	err = fh_compose(resfh, exp, dchild);
-	if (!err && !dchild->d_inode)
+	err = fh_compose(resfh, exp, nd.dentry);
+	if (!err && !nd.dentry->d_inode)
 		err = nfserr_noent;
 out:
 	return err;
 
 out_nfserr:
-	err = nfserrno(PTR_ERR(dchild));
+	err = nfserrno(err);
 	goto out;
 }
 
