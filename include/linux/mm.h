@@ -6,6 +6,7 @@
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
+#include <linux/string.h>
 
 #define VERIFY_READ 0
 #define VERIFY_WRITE 1
@@ -150,10 +151,7 @@ extern inline unsigned long get_free_page(int priority)
 
 	page = __get_free_page(priority);
 	if (page)
-		__asm__ __volatile__("rep ; stosl"
-			: /* no outputs */ \
-			:"a" (0),"c" (1024),"D" (page)
-			:"di","cx");
+		memset((void *) page, 0, PAGE_SIZE);
 	return page;
 }
 

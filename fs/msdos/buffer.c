@@ -28,7 +28,7 @@ struct buffer_head *msdos_bread (
 					in the middle of a hardware block. The bad news is
 					that a hardware sector may hold data own by two
 					different files. This means that the hardware sector
-					must be read, patch and written allmost all the time.
+					must be read, patch and written almost all the time.
 
 					Needless to say that it kills write performance
 					on all OS.
@@ -43,8 +43,8 @@ struct buffer_head *msdos_bread (
 					hidden though!
 				*/
 				/*
-					THe memset is there only to catch errors. The msdos
-					fs is only unsing b_data
+					The memset is there only to catch errors. The msdos
+					fs is only using b_data
 				*/
 				memset (ret,0,sizeof(*ret));
 				ret->b_data = real->b_data;
@@ -69,7 +69,7 @@ struct buffer_head *msdos_getblk (
 			A write is always preceded by a read of the complete block
 			(large hardware sector size). This defeat write performance.
 			There is a possibility to optimize this when writing large
-			chunk by making sure we are filling large block. Volunter ?
+			chunk by making sure we are filling large block. Volunteer ?
 		*/
 		ret = msdos_bread (sb,block);
 	}

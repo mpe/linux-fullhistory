@@ -1,11 +1,11 @@
 /*
- * include/asm-i386/processor.h
+ * include/asm-alpha/processor.h
  *
  * Copyright (C) 1994 Linus Torvalds
  */
 
-#ifndef __ASM_I386_PROCESSOR_H
-#define __ASM_I386_PROCESSOR_H
+#ifndef __ASM_ALPHA_PROCESSOR_H
+#define __ASM_ALPHA_PROCESSOR_H
 
 /*
  * Bus types
@@ -30,4 +30,4 @@ struct thread_struct {
 	0, 0, 0, \
 }
 
-#endif /* __ASM_I386_PROCESSOR_H */
+#endif /* __ASM_ALPHA_PROCESSOR_H */

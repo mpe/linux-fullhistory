@@ -133,14 +133,14 @@ typedef void (void_fn)(void);
 
 static void_fn do_null, enter, show_ptregs, send_intr, lastcons, caps_toggle,
 	num, hold, scroll_forw, scroll_back, boot_it, caps_on, compose,
-	SAK, decr_console, incr_console;
+	SAK, decr_console, incr_console, spawn_console;
 
 static void_fnp spec_fn_table[] = {
 	do_null,	enter,		show_ptregs,	show_mem,
 	show_state,	send_intr,	lastcons,	caps_toggle,
 	num,		hold,		scroll_forw,	scroll_back,
 	boot_it,	caps_on,	compose,	SAK,
-	decr_console,	incr_console
+	decr_console,	incr_console,	spawn_console
 };
 
 /* maximum values each key_handler can handle */
@@ -712,6 +712,15 @@ static void boot_it(void)
 static void compose(void)
 {
 	dead_key_next = 1;
+}
+
+int spawnpid, spawnsig;
+
+static void spawn_console(void)
+{
+        if (spawnpid)
+	   if(kill_proc(spawnpid, spawnsig, 1))
+	     spawnpid = 0;
 }
 
 static void SAK(void)

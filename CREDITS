@@ -64,6 +64,13 @@ S: Code 930.5, Goddard Space Flight Center
 S: Greenbelt, Maryland 20771
 S: USA
 
+N: Randolph Bentson
+E: bentson@grieg.seaslug.org
+D: author of driver for Cyclades Cyclom-Y async mux
+S: 2500 Gilman Dr W, #404
+S: Seattle, WA 98119-2102
+S: USA
+
 N: Stephen R. van den Berg (AKA BuGless)
 E: berg@pool.informatik.rwth-aachen.de
 D: General kernel, gcc, and libc hacker
@@ -74,7 +81,7 @@ S: 6369 BG Simpelveld
 S: The Netherlands
 
 N: Hennus Bergman
-E: hennus@sky.ow.org [My uucp-fed Linux box at home]
+E: hennus@sky.ow.nl [My uucp-fed Linux box at home]
 D: Author and maintainer of the QIC-02 tape driver
 S: The Netherlands
 

@@ -1,5 +1,5 @@
-#ifndef _SPARC_OPENPROM_H
-#define _SPARC_OPENPROM_H
+#ifndef __SPARC_OPENPROM_H
+#define __SPARC_OPENPROM_H
 
 /* openprom.h:  Prom structures and defines for access to the OPENBOOT
                 prom routines and data areas.
@@ -19,7 +19,7 @@
 #define	LINUX_OPPROM_MAGIC      0x10010407
 
 /* The device functions structure for the v0 prom. Nice and neat, open,
-   close, read & write divvied up between net + block + char devices. We
+   close, read & write divied up between net + block + char devices. We
    also have a seek routine only usable for block devices. The divide
    and conquer strategy of this struct becomes unnecessary for v2.
 
@@ -33,12 +33,12 @@
 struct linux_dev_v0_funcs {
 	int	(*v0_devopen)(char *device_str);
 	int	(*v0_devclose)(int dev_desc);
-	int	(*v0_rdblkdev)(int dev_desc, int num_blks, int blk_st, caddr_t buf);
-	int	(*v0_wrblkdev)(int dev_desc, int num_blks, int blk_st, caddr_t buf);
-	int	(*v0_wrnetdev)(int dev_desc, int num_bytes, caddr_t buf);
-	int	(*v0_rdnetdev)(int dev_desc, int num_bytes, caddr_t buf);
-	int	(*v0_rdchardev)(int dev_desc, int num_bytes, int dummy, caddr_t buf);
-	int	(*v0_wrchardev)(int dev_desc, int num_bytes, int dummy, caddr_t buf);
+	int	(*v0_rdblkdev)(int dev_desc, int num_blks, int blk_st, char*  buf);
+	int	(*v0_wrblkdev)(int dev_desc, int num_blks, int blk_st, char*  buf);
+	int	(*v0_wrnetdev)(int dev_desc, int num_bytes, char*  buf);
+	int	(*v0_rdnetdev)(int dev_desc, int num_bytes, char*  buf);
+	int	(*v0_rdchardev)(int dev_desc, int num_bytes, int dummy, char*  buf);
+	int	(*v0_wrchardev)(int dev_desc, int num_bytes, int dummy, char*  buf);
 	int	(*v0_seekdev)(int dev_desc, long logical_offst, int from);
 };
 
@@ -54,7 +54,7 @@ struct linux_dev_v0_funcs {
    the time can be a pain in the rear after a while. Why v2 has memory
    allocations in here are beyond me. Perhaps they figure that if you
    are going to use only the prom's device drivers then your memory
-   management is either non-existent or pretty sad. :-)
+   management is either non-existant or pretty sad. :-)
 */
 
 struct linux_dev_v2_funcs {
@@ -64,23 +64,23 @@ struct linux_dev_v2_funcs {
 	    only safe to use for mapping device address spaces...
         */
 
-	caddr_t	(*v2_dumb_mem_alloc)(caddr_t va, unsigned sz);
-	void	(*v2_dumb_mem_free)(caddr_t va, unsigned sz);
+	char* 	(*v2_dumb_mem_alloc)(char*  va, unsigned sz);
+	void	(*v2_dumb_mem_free)(char*  va, unsigned sz);
 
-	/* "dumb" mmap() munmap(), copy on write? what's that? */
-	caddr_t	(*v2_dumb_mmap)(caddr_t virta, int asi, unsigned prot, unsigned sz);
-	void	(*v2_dumb_munmap)(caddr_t virta, unsigned size);
+	/* "dumb" mmap() munmap(), copy on write? whats that? */
+	char* 	(*v2_dumb_mmap)(char*  virta, int asi, unsigned prot, unsigned sz);
+	void	(*v2_dumb_munmap)(char*  virta, unsigned size);
 
 	/* Basic Operations, self-explanatory */
 	int	(*v2_dev_open)(char *devpath);
 	void	(*v2_dev_close)(int d);
-	int	(*v2_dev_read)(int d, caddr_t buf, int nbytes);
-	int	(*v2_dev_write)(int d, caddr_t buf, int nbytes);
+	int	(*v2_dev_read)(int d, char*  buf, int nbytes);
+	int	(*v2_dev_write)(int d, char*  buf, int nbytes);
 	void	(*v2_dev_seek)(int d, int hi, int lo);
 
         /* huh? */
-	void	(*v2_wheee2)();
-	void	(*v2_wheee3)();
+	void	(*v2_wheee2)(void);
+	void	(*v2_wheee3)(void);
 };
 
 /* Just like the device ops, they slightly screwed up the mem-list
@@ -91,7 +91,7 @@ struct linux_dev_v2_funcs {
 
 struct linux_mlist_v0 {
 	struct	linux_mlist_v0 *theres_more;
-	caddr_t	start_adr;
+	char* 	start_adr;
 	unsigned num_bytes;
 };
 
@@ -106,7 +106,7 @@ struct linux_mem_v0 {
 	struct  linux_mlist_v0 **v0_available;	/* what phys. is left over */
 };
 
-/* Arguments sent to the kernel from the boot prompt. */
+/* Arguements sent to the kernel from the boot prompt. */
 
 struct linux_arguments_v0 {
 	char	*argv[8];		/* argv format for boot string */
@@ -136,22 +136,22 @@ struct linux_bootargs_v2 {
    it jumps to the kernel start address. I will update this soon to cover
    the v3 semantics (cpu_start, cpu_stop and other SMP fun things). :-)
 */
-struct promvec {
+struct linux_romvec {
 	/* Version numbers. */
-	u_int	pv_magic;		/* Magic number */
-	u_int	pv_romvec_vers;		/* interface version (0, 2) */
-	u_int	pv_plugin_vers;		/* ??? */
-	u_int	pv_printrev;		/* PROM rev # (* 10, e.g 1.9 = 19) */
+	unsigned int	pv_magic_cookie;      /* Magic Mushroom... */
+	unsigned int	pv_romvers;	      /* iface vers (0, 2, or 3) */
+	unsigned int	pv_plugin_revision;   /* revision relative to above vers */
+	unsigned int	pv_printrev;	      /* printrevision */
 
 	/* Version 0 memory descriptors (see below). */
-	struct	v0mem pv_v0mem;		/* V0: Memory description lists. */
+	struct linux_mem_v0 pv_v0mem;	      /* V0: Memory description lists. */
 
 	/* Node operations (see below). */
-	struct	nodeops *pv_nodeops;	/* node functions */
+	struct	linux_nodeops *pv_nodeops;   /* node functions, gets device data */
 
-	char	**pv_bootstr;		/* Boot command, eg sd(0,0,0)vmunix */
+	char	**pv_bootstr;		    /* Boot command, eg sd(0,0,0)vmunix */
 
-	struct	v0devops pv_v0devops;	/* V0: device ops */
+	struct	linux_dev_v0_funcs pv_v0devops; 	/* V0: device ops */
 
 	/*
 	 * PROMDEV_* cookies.  I fear these may vanish in lieu of fd0/fd1
@@ -178,10 +178,10 @@ struct promvec {
 	/* Miscellany. */
 	void	(*pv_reboot)(char *bootstr);
 	void	(*pv_printf)(const char *fmt, ...);
-	void	(*pv_abort)(void);	/* L1-A abort */
-	int	*pv_ticks;		/* Ticks since last reset */
-	__dead void (*pv_halt)(void);	/* Halt! */
-	void	(**pv_synchook)(void);	/* "sync" command hook */
+	void	(*pv_abort)(void);	/* BREAK key abort */
+	int	*pv_ticks;		/* milliseconds since last reset */
+	void    (*pv_halt)(void);	/* End the show */
+	void	(**pv_synchook)(void);	/* "sync" ptr to function */
 
 	/*
 	 * This eval's a FORTH string.  Unfortunately, its interface
@@ -192,15 +192,15 @@ struct promvec {
 		void	(*v2_eval)(char *str);
 	} pv_fortheval;
 
-	struct	v0bootargs **pv_v0bootargs;	/* V0: Boot args */
+	struct	linux_arguments_v0 **pv_v0bootargs; /* V0: Boot args */
 
 	/* Extract Ethernet address from network device. */
-	u_int	(*pv_enaddr)(int d, char *enaddr);
+	unsigned int	(*pv_enaddr)(int d, char *enaddr);
 
-	struct	v2bootargs pv_v2bootargs;	/* V2: Boot args + std in/out */
-	struct	v2devops pv_v2devops;	/* V2: device operations */
+	struct	linux_bootargs_v2 pv_v2bootargs;    /* V2: Boot args+std-in/out */
+	struct	linux_dev_v2_funcs pv_v2devops;	    /* V2: device operations */
 
-	int	pv_spare[15];
+	int	whatzthis[15];       /* huh? */
 
 	/*
 	 * The following is machine-dependent.
@@ -213,7 +213,41 @@ struct promvec {
 	 * all memory references go to the PROM, so the PROM can do it
 	 * easily.
 	 */
-	void	(*pv_setctxt)(int ctxt, caddr_t va, int pmeg);
+	void	(*pv_setctxt)(int ctxt, char*  va, int pmeg);
+
+	/* Prov version 3 Multiprocessor routines. This stuff is crazy.
+	 * No joke. Calling these when there is only one cpu probably
+	 * crashes the machine, have to test this. :-)
+         */
+
+	/* v3_cpustart() will start the cpu 'whichcpu' in mmu-context
+	 * 'thiscontext' executing at address 'prog_counter'
+	 *
+	 * XXX Have to figure out what 'cancontext' means.
+         */
+
+	int (*v3_cpustart)(unsigned int whichcpu, int cancontext,
+			   int thiscontext, char* prog_counter);
+
+	/* v3_cpustop() will cause cpu 'whichcpu' to stop executint
+	 * until a resume cpu call is made.
+	 */
+
+	int (*v3_cpustop)(unsigned int whichcpu);
+
+	/* v3_cpuidle() will idle cpu 'whichcpu' until a stop or
+	 * resume cpu call is made.
+	 */
+
+	int (*v3_cpuidle)(unsigned int whichcpu);
+
+	/* v3_cpuresume() will resume processor 'whichcpu' executing
+	 * starting with whatever 'pc' and 'npc' were left at the
+	 * last 'idle' or 'stop' call.
+	 */
+
+	int (*v3_cpuresume)(unsigned int whichcpu);
+
 };
 
 /*
@@ -234,19 +268,22 @@ struct promvec {
  * format is an `address', which is made up of one or more sets of three
  * integers as defined below.
  *
+ * One uses these functions to traverse the device tree to see what devices
+ * this machine has attached to it.
+ *
  * N.B.: for the `next' functions, next(0) = first, and next(last) = 0.
  * Whoever designed this part had good taste.  On the other hand, these
  * operation vectors are global, rather than per-node, yet the pointers
  * are not in the openprom vectors but rather found by indirection from
  * there.  So the taste balances out.
  */
-struct openprom_addr {
+struct linux_prom_addr {
 	int	oa_space;		/* address space (may be relative) */
-	u_int	oa_base;		/* address within space */
-	u_int	oa_size;		/* extent (number of bytes) */
+	unsigned int	oa_base;		/* address within space */
+	unsigned int	oa_size;		/* extent (number of bytes) */
 };
 
-struct nodeops {
+struct linux_nodeops {
 	/*
 	 * Tree traversal.
 	 */
@@ -258,10 +295,10 @@ struct nodeops {
 	 * proplen first to make sure it fits.  Kind of a pain, but no
 	 * doubt more convenient for the PROM coder.
 	 */
-	int	(*no_proplen)(int node, caddr_t name);
-	int	(*no_getprop)(int node, caddr_t name, caddr_t val);
-	int	(*no_setprop)(int node, caddr_t name, caddr_t val, int len);
-	caddr_t	(*no_nextprop)(int node, caddr_t name);
+	int	(*no_proplen)(int node, char*  name);
+	int	(*no_getprop)(int node, char*  name, char*  val);
+	int	(*no_setprop)(int node, char*  name, char*  val, int len);
+	char* 	(*no_nextprop)(int node, char*  name);
 };
 
-#endif /* !(_SPARC_OPENPROM_H) */
+#endif /* !(__SPARC_OPENPROM_H) */

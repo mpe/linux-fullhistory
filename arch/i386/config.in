@@ -7,7 +7,19 @@ comment 'General setup'
 
 bool 'Kernel math emulation' CONFIG_MATH_EMULATION n
 bool 'Normal floppy disk support' CONFIG_BLK_DEV_FD y
-bool 'Normal harddisk support' CONFIG_BLK_DEV_HD y
+bool 'Normal (MFM/RLL) disk and IDE disk/cdrom support' CONFIG_ST506 y
+if [ "$CONFIG_ST506" = "y" ]; then
+  bool '   Use old (reliable) disk-only driver for primary i/f' CONFIG_BLK_DEV_HD y
+  if [ "$CONFIG_BLK_DEV_HD" = "y" ]; then
+    bool '   Include new IDE driver for secondary i/f support' CONFIG_BLK_DEV_IDE n
+  else
+    bool '   Use new IDE driver for primary/secondary i/f' CONFIG_BLK_DEV_IDE y
+  fi
+  if [ "$CONFIG_BLK_DEV_IDE" = "y" ]; then
+    bool '   Include support for IDE CDROM (ATAPI)' CONFIG_BLK_DEV_IDECD n
+  fi
+fi
+
 bool 'XT harddisk support' CONFIG_BLK_DEV_XD n
 bool 'Networking support' CONFIG_NET y
 bool 'Limit memory to low 16MB' CONFIG_MAX_16M n
@@ -206,10 +218,6 @@ fi
 bool 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE n
 bool 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE n
 bool 'Selection (cut and paste for virtual consoles)' CONFIG_SELECTION n
-bool 'VESA Power Saving Protocol Support' CONFIG_VESA_PSPM n
-if [ "$CONFIG_VESA_PSPM" = "y" ]; then
-bool 'VESA PSPM Force Off' CONFIG_PSPM_FORCE_OFF n
-fi
 
 
 bool 'QIC-02 tape support' CONFIG_QIC02_TAPE n

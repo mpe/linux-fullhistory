@@ -201,6 +201,7 @@ asmlinkage int sys_fork(struct pt_regs regs)
 	p->it_real_value = p->it_virt_value = p->it_prof_value = 0;
 	p->it_real_incr = p->it_virt_incr = p->it_prof_incr = 0;
 	p->leader = 0;		/* process leadership doesn't inherit */
+	p->tty_old_pgrp = 0;
 	p->utime = p->stime = 0;
 	p->cutime = p->cstime = 0;
 	p->start_time = jiffies;

@@ -18,11 +18,11 @@
 
 OBJS  = tty_io.o n_tty.o console.o keyboard.o serial.o \
 	tty_ioctl.o pty.o vt.o mem.o \
-	defkeymap.o uni_to_437.o
+	defkeymap.o uni_to_437.o vesa_blank.o
 
 SRCS  = tty_io.c n_tty.c console.c keyboard.c serial.c \
 	tty_ioctl.c pty.c vt.c mem.c \
-	defkeymap.c uni_to_437.c
+	defkeymap.c uni_to_437.c vesa_blank.c
 
 
 ifdef CONFIG_CYCLADES

@@ -209,8 +209,8 @@ void rd_load(void)
 	/* If no RAM disk specified, give up early. */
 	if (!rd_length)
 		return;
-	printk("RAMDISK: %d bytes, starting at 0x%x\n",
-			rd_length, (int) rd_start);
+	printk("RAMDISK: %d bytes, starting at 0x%p\n",
+			rd_length, rd_start);
 
 	/* If we are doing a diskette boot, we might have to pre-load it. */
 	if (MAJOR(ROOT_DEV) != FLOPPY_MAJOR)

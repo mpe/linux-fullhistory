@@ -1,3 +1,21 @@
+Thu Dec 29 17:53:48 1994    <tytso@rsx-11.mit.edu>
+
+	* tty_io.c (check_tty_count): New procedure which checks
+		tty->count to make sure that it matches with the number of
+		open file descriptors which point at the structure.  If
+		the number doesn't match, it prints a warning message.
+
+Wed Dec 28 15:41:51 1994    <tytso@rsx-11.mit.edu>
+
+	* tty_io.c (do_tty_hangup, disassociate_ctty): At hangup time,
+		save the tty's current foreground process group in the
+		session leader's task structure.  When the session leader
+		terminates, send a SIGHUP, SIGCONT to that process group.
+		This is not required by POSIX, but it's not prohibited
+		either, and it appears to be the least intrusive way
+		to fix a problem that dialup servers have with
+		orphaned process groups caused by modem hangups.
+
 Thu Dec  8 14:52:11 1994    <tytso@rsx-11.mit.edu>
 
 	* serial.c (rs_ioctl): Don't allow most ioctl's if the serial port

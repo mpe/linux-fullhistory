@@ -23,6 +23,7 @@
 #include <linux/delay.h>
 #include <linux/utsname.h>
 #include <linux/ioport.h>
+#include <linux/hdreg.h>
 
 #include <asm/bugs.h>
 
@@ -80,7 +81,15 @@ extern long rd_init(long mem_start, int length);
 unsigned long net_dev_init(unsigned long, unsigned long);
 extern long bios32_init(long, long);
 
+#ifdef CONFIG_BLK_DEV_IDE
+extern void ide_setup(char *str, int *ints);
+extern void hda_setup(char *str, int *ints);
+extern void hdb_setup(char *str, int *ints);
+extern void hdc_setup(char *str, int *ints);
+extern void hdd_setup(char *str, int *ints);
+#else
 extern void hd_setup(char *str, int *ints);
+#endif /* CONFIG_BLK_DEV_IDE */
 extern void bmouse_setup(char *str, int *ints);
 extern void eth_setup(char *str, int *ints);
 extern void xd_setup(char *str, int *ints);
@@ -191,7 +200,13 @@ struct {
 #ifdef CONFIG_SCSI
 	{ "max_scsi_luns=", scsi_luns_setup },
 #endif
-#ifdef CONFIG_BLK_DEV_HD
+#ifdef CONFIG_BLK_DEV_IDE
+	{ "hda=", hda_setup },
+	{ "hdb=", hdb_setup },
+	{ "hdc=", hdc_setup },
+	{ "hdd=", hdd_setup },
+	{ "hd=",  ide_setup },
+#elif defined(CONFIG_BLK_DEV_HD)
 	{ "hd=", hd_setup },
 #endif
 #ifdef CONFIG_CHR_DEV_ST
@@ -303,15 +318,14 @@ static void calibrate_delay(void)
  * variable if it contains the character '='.
  *
  *
- * This routine also checks for options meant for the kernel - currently
- * only the "root=XXXX" option is recognized. These options are not given
- * to init - they are for internal kernel use only.
+ * This routine also checks for options meant for the kernel.
+ * These options are not given to init - they are for internal kernel use only.
  */
 static void parse_options(char *line)
 {
 	char *next;
-	char *devnames[] = { "hda", "hdb", "sda", "sdb", "sdc", "sdd", "sde", "fd", "xda", "xdb", NULL };
-	int devnums[]    = { 0x300, 0x340, 0x800, 0x810, 0x820, 0x830, 0x840, 0x200, 0xD00, 0xD40, 0};
+	char *devnames[] = { "hda", "hdb", "hdc", "hdd", "sda", "sdb", "sdc", "sdd", "sde", "fd", "xda", "xdb", NULL };
+	int devnums[]    = { 0x300, 0x340, 0x1600, 0x1640, 0x800, 0x810, 0x820, 0x830, 0x840, 0x200, 0xD00, 0xD40, 0};
 	int args, envs;
 
 	if (!*line)

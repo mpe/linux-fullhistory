@@ -112,7 +112,9 @@ struct kbkeycode {
 #define KDGETKEYCODE	0x4B4C	/* read kernel keycode table entry */
 #define KDSETKEYCODE	0x4B4D	/* write kernel keycode table entry */
 
-/* note: 0x4B00-0x4B4D all have had a value at some time;
+#define KDSIGACCEPT	0x4B4E	/* accept kbd generated signals */
+
+/* note: 0x4B00-0x4B4E all have had a value at some time;
    don't reuse for the time being */
 /* note: 0x4B60-0x4B68 used above */
 

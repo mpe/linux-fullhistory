@@ -42,4 +42,34 @@ extern inline void enable_bh(int nr)
 	set_bit(nr, &bh_mask);
 }
 
+/*
+ * Autoprobing for irqs:
+ *
+ * probe_irq_on() and probe_irq_off() provide robust primitives
+ * for accurate IRQ probing during kernel initialization.  They are
+ * reasonably simple to use, are not "fooled" by spurious interrupts,
+ * and, unlike other attempts at IRQ probing, they do not get hung on
+ * stuck interrupts (such as unused PS2 mouse interfaces on ASUS boards).
+ *
+ * For reasonably foolproof probing, use them as follows:
+ *
+ * 1. clear and/or mask the device's internal interrupt.
+ * 2. sti();
+ * 3. irqs = probe_irq_on();      // "take over" all unassigned idle IRQs
+ * 4. enable the device and cause it to trigger an interrupt.
+ * 5. wait for the device to interrupt, using non-intrusive polling or a delay.
+ * 6. irq = probe_irq_off(irqs);  // get IRQ number, 0=none, negative=multiple
+ * 7. service the device to clear its pending interrupt.
+ * 8. loop again if paranoia is required.
+ *
+ * probe_irq_on() returns a mask of snarfed irq's.
+ *
+ * probe_irq_off() takes the mask as a parameter,
+ * and returns the irq number which occured,
+ * or zero if none occured, or a negative irq number
+ * if more than one irq occured.
+ */
+extern unsigned int probe_irq_on(void);	/* returns 0 on failure */
+extern int probe_irq_off(unsigned int); /* returns 0 or negative on failure */
+
 #endif

@@ -32,6 +32,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/irq.h>
+#include <asm/bitops.h>
 
 #define CR0_NE 32
 
@@ -234,6 +235,8 @@ asmlinkage void do_fast_IRQ(int irq)
 	sa->sa_handler(irq);
 }
 
+#define SA_PROBE SA_ONESHOT
+
 /*
  * Using "struct sigaction" is slightly silly, but there
  * are historical reasons and it works well, so..
@@ -253,10 +256,12 @@ static int irqaction(unsigned int irq, struct sigaction * new_sa)
 	save_flags(flags);
 	cli();
 	*sa = *new_sa;
-	if (sa->sa_flags & SA_INTERRUPT)
-		set_intr_gate(0x20+irq,fast_interrupt[irq]);
-	else
-		set_intr_gate(0x20+irq,interrupt[irq]);
+	if (!(sa->sa_flags & SA_PROBE)) { /* SA_ONESHOT is used by probing */
+		if (sa->sa_flags & SA_INTERRUPT)
+			set_intr_gate(0x20+irq,fast_interrupt[irq]);
+		else
+			set_intr_gate(0x20+irq,interrupt[irq]);
+	}
 	if (irq < 8) {
 		cache_21 &= ~(1<<irq);
 		outb(cache_21,0x21);
@@ -332,6 +337,58 @@ static void math_error_irq(int cpl)
 }
 
 static void no_action(int cpl) { }
+
+unsigned int probe_irq_on (void)
+{
+	unsigned int i, irqs = 0, irqmask;
+	unsigned long delay;
+
+	/* first, snaffle up any unassigned irqs */
+	for (i = 15; i > 0; i--) {
+		if (!request_irq(i, no_action, SA_PROBE, "probe")) {
+			enable_irq(i);
+			irqs |= (1 << i);
+		}
+	}
+
+	/* wait for spurious interrupts to mask themselves out again */
+	for (delay = jiffies + 2; delay > jiffies; );	/* min 10ms delay */
+
+	/* now filter out any obviously spurious interrupts */
+	irqmask = (((unsigned int)cache_A1)<<8) | (unsigned int)cache_21;
+	for (i = 15; i > 0; i--) {
+		if (irqs & (1 << i) & irqmask) {
+			irqs ^= (1 << i);
+			free_irq(i);
+		}
+	}
+#ifdef DEBUG
+	printk("probe_irq_on:  irqs=0x%04x irqmask=0x%04x\n", irqs, irqmask);
+#endif
+	return irqs;
+}
+
+int probe_irq_off (unsigned int irqs)
+{
+	unsigned int i, irqmask;
+
+	irqmask = (((unsigned int)cache_A1)<<8) | (unsigned int)cache_21;
+	for (i = 15; i > 0; i--) {
+		if (irqs & (1 << i)) {
+			free_irq(i);
+		}
+	}
+#ifdef DEBUG
+	printk("probe_irq_off: irqs=0x%04x irqmask=0x%04x\n", irqs, irqmask);
+#endif
+	irqs &= irqmask;
+	if (!irqs)
+		return 0;
+	i = ffz(~irqs);
+	if (irqs != (irqs & (1 << i)))
+		i = -i;
+	return i;
+}
 
 void init_IRQ(void)
 {

@@ -18,6 +18,8 @@
 #define LP_NOPA  0x0010
 #define LP_ERR   0x0020
 #define LP_ABORT 0x0040
+#define LP_CAREFUL 0x0080
+#define LP_ABORTOPEN 0x0100
 
 /* timeout for each character.  This is relative to bus cycles -- it
  * is the count in a busy loop.  THIS IS THE VALUE TO CHANGE if you
@@ -59,6 +61,12 @@
 			    or 0 for polling (no IRQ) */
 #define LPGETIRQ 0x0006  /* get the current IRQ number */
 #define LPWAIT   0x0008  /* corresponds to LP_INIT_WAIT */
+#define LPCAREFUL   0x0009  /* call with TRUE arg to require out-of-paper, off-
+			    line, and error indicators good on all writes,
+			    FALSE to ignore them.  Default is ignore. */
+#define LPABORTOPEN 0x000a  /* call with TRUE arg to abort open() on error,
+			    FALSE to ignore error.  Default is ignore.  */
+#define LPGETSTATUS 0x000b  /* return LP_S(minor) */
 
 /* timeout for printk'ing a timeout, in jiffies (100ths of a second).
    This is also used for re-checking error conditions if LP_ABORT is

@@ -14,14 +14,16 @@
 
 #include <asm/openprom.h>
 
-extern struct promvec *romvec;
+extern struct linux_romvec *romvec;
 extern int tbase_needs_unmapping;   /* We do the bug workaround in pagetables.c */
 
-static void check_mmu()
+static void check_mmu(void)
 {
-  register struct promvec *romvec;
+  register struct linux_romvec *lvec;
   register int root_node;
-  register unsigned int present;
+  unsigned int present;
+
+  lvec = romvec;
 
   root_node = (*(romvec->pv_nodeops->no_nextnode))(0);
   tbase_needs_unmapping=0;

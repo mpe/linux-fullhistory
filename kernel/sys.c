@@ -152,6 +152,7 @@ asmlinkage int sys_prof(void)
 }
 
 extern void hard_reset_now(void);
+extern asmlinkage sys_kill(int, int);
 
 /*
  * Reboot system call: for obvious reasons only root may call it,
@@ -173,7 +174,11 @@ asmlinkage int sys_reboot(int magic, int magic_too, int flag)
 		C_A_D = 1;
 	else if (!flag)
 		C_A_D = 0;
-	else
+	else if (flag == 0xCDEF0123) {
+		printk(KERN_EMERG "System halted\n");
+		sys_kill(-1, SIGKILL);
+		do_exit(0);
+	} else
 		return -EINVAL;
 	return (0);
 }

@@ -319,6 +319,7 @@ extern unsigned short plain_map[NR_KEYS];
 #define K_SAK		K(KT_SPEC,15)
 #define K_DECRCONSOLE	K(KT_SPEC,16)
 #define K_INCRCONSOLE	K(KT_SPEC,17)
+#define K_SPAWNCONSOLE	K(KT_SPEC,18)
 
 #define K_ALLOCATED	K(KT_SPEC,126) /* dynamically allocated keymap */
 #define K_NOSUCHMAP	K(KT_SPEC,127) /* returned by KDGKBENT */

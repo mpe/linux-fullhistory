@@ -579,7 +579,7 @@ static Scsi_Cmnd * end_scsi_request(Scsi_Cmnd * SCpnt, int uptodate, int sectors
 #define INIT_SCSI_REQUEST \
 	if (!CURRENT) {\
 		CLEAR_INTR; \
-		sti();   \
+		restore_flags(flags);   \
 		return; \
 	} \
 	if (MAJOR(CURRENT->dev) != MAJOR_NR) \

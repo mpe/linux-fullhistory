@@ -1,5 +1,5 @@
 /*
- *  linux/kernel/hd.c
+ *  linux/drivers/block/hd.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */
@@ -836,14 +836,6 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 		case BLKRRPART: /* Re-read partition tables */
 			return revalidate_hddisk(inode->i_rdev, 1);
 
-		case HDIO_SETUNMASKINTR:	/* obsolete */
-			printk("hd: obsolete syscall: HDIO_SETUNMASKINTR\n");
-			if (!arg)  return -EINVAL;
-			err = verify_area(VERIFY_READ, (long *) arg, sizeof(long));
-			if (err)
-				return err;
-			arg = get_fs_long((long *) arg);
-			/* drop into HDIO_SET_UNMASKINTR */
 		case HDIO_SET_UNMASKINTR:
 			if (!suser()) return -EACCES;
 			if ((arg > 1) || (MINOR(inode->i_rdev) & 0x3F))
@@ -867,14 +859,6 @@ static int hd_ioctl(struct inode * inode, struct file * file,
 			put_fs_long(mult_count[dev], (long *) arg);
 			return 0;
 
-		case HDIO_SETMULTCOUNT:		/* obsolete */
-			printk("hd: obsolete syscall: HDIO_SETMULTCOUNT\n");
-			if (!arg)  return -EINVAL;
-			err = verify_area(VERIFY_READ, (long *) arg, sizeof(long));
-			if (err)
-				return err;
-			arg = get_fs_long((long *) arg);
-			/* drop into HDIO_SET_MULTCOUNT */
 		case HDIO_SET_MULTCOUNT:
 			if (!suser()) return -EACCES;
 			if (MINOR(inode->i_rdev) & 0x3F) return -EINVAL;

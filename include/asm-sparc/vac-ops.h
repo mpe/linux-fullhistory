@@ -12,10 +12,15 @@ extern __inline__ int enable_vac()
 {
   int success;
 
-  __asm__ __volatile__("lduba [0x40000000] 0x2, %0\n\t"
+  &success;
+  
+  __asm__ __volatile__("lduba [%1] 2, %0\n\t"
 		       "or    %0, 0x10, %0\n\t"
-		       "stba  %0, [0x40000000] 0x2\n\t"
-		       "or    %g0, %g0, %0" : "=r" (success) : "0" (success));
+		       "stba  %0, [%1] 2\n\t"
+		       "or    %%g0, %%g0, %0" :
+		       "=r" (success) :
+		       "r" ((unsigned int) 0x40000000),
+		       "0" (success));
   return success;
 }
 
@@ -27,10 +32,13 @@ extern __inline__ int disable_vac()
 {
   int success;
 
-  __asm__ __volatile__("lduba [0x40000000] 0x2, %0\n\t"
+  __asm__ __volatile__("lduba [%1] 0x2, %0\n\t"
 			"xor   %0, 0x10, %0\n\t"
-			"stba  %0, [0x40000000] 0x2\n\t"
-			"or    %g0, %g0, %0" : "=r" (success) : "0" (success));
+			"stba  %0, [%1] 0x2\n\t"
+			"or    %%g0, %%g0, %0" : 
+		       "=r" (success) : 
+		       "r" (0x40000000),
+		       "0" (success));
   return success;
 }
 
@@ -38,31 +46,31 @@ extern __inline__ int disable_vac()
 
 extern __inline__ void hw_flush_vac_context_entry(char* addr)
 {
-  __asm__ __volatile__("sta 0, [%0] 0x7" : : "r" (addr));
+  __asm__ __volatile__("sta %%g0, [%0] 0x7" : : "r" (addr));
 }
 
 extern __inline__ void sw_flush_vac_context_entry(char* addr)
 {
-  __asm__ __volatile__("sta 0, [%0] 0xe" : : "r" (addr));
+  __asm__ __volatile__("sta %%g0, [%0] 0xe" : : "r" (addr));
 }
 
 extern __inline__ void hw_flush_vac_segment_entry(char* addr)
 {
-  __asm__ __volatile__("sta 0, [%0] 0x5" : : "r" (addr));
+  __asm__ __volatile__("sta %%g0, [%0] 0x5" : : "r" (addr));
 }
 
 extern __inline__ void sw_flush_vac_segment_entry(char* addr)
 {
-  __asm__ __volatile__("sta 0, [%0], 0xc" : : "r" (addr));
+  __asm__ __volatile__("sta %%g0, [%0] 0xc" : : "r" (addr));
 }
 
 extern __inline__ void hw_flush_vac_page_entry(char* addr)
 {
-  __asm__ __volatile__("sta 0, [%0] 0x6" : : "r" (addr));
+  __asm__ __volatile__("sta %%g0, [%0] 0x6" : : "r" (addr));
 }
 
 extern __inline__ void sw_flush_vac_page_entry(char* addr)
 {
-  __asm__ __volatile__("sta 0, [%0] 0xd" : : "r" (addr));
+  __asm__ __volatile__("sta %%g0, [%0] 0xd" : : "r" (addr));
 }
  

@@ -51,7 +51,8 @@
 #define UNNAMED_MAJOR	0
 #define MEM_MAJOR	1
 #define FLOPPY_MAJOR	2
-#define HD_MAJOR	3
+#define IDE0_MAJOR	3
+#define HD_MAJOR	IDE0_MAJOR
 #define TTY_MAJOR	4
 #define TTYAUX_MAJOR	5
 #define LP_MAJOR	6
@@ -69,7 +70,7 @@
 #define AF_INET_MAJOR	18
 /* unused: 19, 20 */
 #define SCSI_GENERIC_MAJOR 21
-/* unused: 22 */
+#define IDE1_MAJOR	22
 #define MITSUMI_CDROM_MAJOR 23
 #define CDU535_CDROM_MAJOR 24
 #define MATSUSHITA_CDROM_MAJOR 25

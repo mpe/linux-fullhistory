@@ -213,11 +213,29 @@ static int get_uptime(char * buffer)
 
 	uptime = jiffies;
 	idle = task[0]->utime + task[0]->stime;
+
+	/* The formula for the fraction parts really is ((t * 100) / HZ) % 100, but
+	   that would overflow about every five days at HZ == 100.
+	   Therefore the identity a = (a / b) * b + a % b is used so that it is
+	   calculated as (((t / HZ) * 100) + ((t % HZ) * 100) / HZ) % 100.
+	   The part in front of the '+' always evaluates as 0 (mod 100). All divisions
+	   in the above formulas are truncating. For HZ being a power of 10, the
+	   calculations simplify to the version in the #else part (if the printf
+	   format is adapted to the same number of digits as zeroes in HZ.
+	 */
+#if HZ!=100
+	return sprintf(buffer,"%lu.%02lu %lu.%02lu\n",
+		uptime / HZ,
+		(((uptime % HZ) * 100) / HZ) % 100,
+		idle / HZ,
+		(((idle % HZ) * 100) / HZ) % 100);
+#else
 	return sprintf(buffer,"%lu.%02lu %lu.%02lu\n",
 		uptime / HZ,
 		uptime % HZ,
 		idle / HZ,
 		idle % HZ);
+#endif
 }
 
 static int get_meminfo(char * buffer)

@@ -389,7 +389,7 @@ asmlinkage int sys_umount(char * name)
 			return -EACCES;
 		}
 	} else {
-		if (!inode || !inode->i_sb || inode != inode->i_sb->s_mounted) {
+		if (!inode->i_sb || inode != inode->i_sb->s_mounted) {
 			iput(inode);
 			return -EINVAL;
 		}
@@ -584,6 +584,7 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 	if (!fstype)		
 		return -ENODEV;
 	t = fstype->name;
+	fops = NULL;
 	if (fstype->requires_dev) {
 		retval = namei(dev_name,&inode);
 		if (retval)
@@ -601,22 +602,27 @@ asmlinkage int sys_mount(char * dev_name, char * dir_name, char * type,
 			iput(inode);
 			return -ENXIO;
 		}
+		fops = get_blkfops(MAJOR(dev));
+		if (!fops) {
+			iput(inode);
+			return -ENOTBLK;
+		}
+		if (fops->open) {
+			struct file dummy;	/* allows read-write or read-only flag */
+			memset(&dummy, 0, sizeof(dummy));
+			dummy.f_inode = inode;
+			dummy.f_mode = (new_flags & MS_RDONLY) ? 1 : 3;
+			retval = fops->open(inode, &dummy);
+			if (retval) {
+				iput(inode);
+				return retval;
+			}
+		}
+
 	} else {
 		if (!(dev = get_unnamed_dev()))
 			return -EMFILE;
 		inode = NULL;
-	}
-	fops = get_blkfops(MAJOR(dev));
-	if (fops && fops->open) {
-		struct file dummy;	/* allows read-write or read-only flag */
-		memset(&dummy, 0, sizeof(dummy));
-		dummy.f_inode = inode;
-		dummy.f_mode = (new_flags & MS_RDONLY) ? 1 : 3;
-		retval = fops->open(inode, &dummy);
-		if (retval) {
-			iput(inode);
-			return retval;
-		}
 	}
 	page = 0;
 	if ((new_flags & MS_MGC_MSK) == MS_MGC_VAL) {

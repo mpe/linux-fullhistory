@@ -405,6 +405,7 @@ int in2000_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     unchar *cmd = (unchar *) SCpnt->cmnd;
     unchar target = SCpnt->target;
     void *buff = SCpnt->request_buffer;
+    unsigned long flags;
     int bufflen = SCpnt->request_bufflen;
     int timeout, size, loop;
     int i;
@@ -511,6 +512,7 @@ int in2000_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     /*
      * Set up the FIFO
      */
+    save_flags(flags);
     cli();		/* so FIFO init waits till WD set */
     outb(0,INFRST);
     if ( direction == 1 )
@@ -538,7 +540,7 @@ int in2000_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     outb(COMMAND,INSTAT);
     outb(0,INNLED);
     outb(8,INDATA);		/* Select w/ATN & Transfer */
-    sti();			/* let the intrpt rip */
+    restore_flags(flags);			/* let the intrpt rip */
     return 0;
 }
 

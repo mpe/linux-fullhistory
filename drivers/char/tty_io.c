@@ -65,6 +65,9 @@
 
 #undef TTY_DEBUG_HANGUP
 
+#define TTY_PARANOIA_CHECK
+#define CHECK_TTY_COUNT
+
 #ifdef CONFIG_SELECTION
 extern int set_selection(const int arg, struct tty_struct *tty);
 extern int paste_selection(struct tty_struct *tty);
@@ -72,9 +75,10 @@ extern int sel_loadlut(const int arg);
 extern int mouse_reporting(void);
 extern int shift_state;
 #endif /* CONFIG_SELECTION */
-extern int do_screendump(int arg, int mode);
+extern int do_screendump(unsigned long arg, int mode);
 extern void do_blank_screen(int nopowersave);
 extern void do_unblank_screen(void);
+extern void set_vesa_blanking(const unsigned long arg);
 
 struct termios tty_std_termios;		/* for the benefit of tty drivers  */
 struct tty_driver *tty_drivers = NULL;	/* linked list of tty drivers */
@@ -129,8 +133,6 @@ char *tty_name(struct tty_struct *tty)
 	return(_tty_name(tty, buf));
 }
 
-#define TTY_PARANOIA_CHECK
-
 inline int tty_paranoia_check(struct tty_struct *tty, dev_t device,
 			      const char *routine)
 {
@@ -148,6 +150,33 @@ inline int tty_paranoia_check(struct tty_struct *tty, dev_t device,
 		printk(badmagic, MAJOR(device), MINOR(device), routine);
 		return 1;
 	}
+#endif
+	return 0;
+}
+
+static int check_tty_count(struct tty_struct *tty, const char *routine)
+{
+#ifdef CHECK_TTY_COUNT
+	struct file *f;
+	int i, count = 0;
+	
+	for (f = first_file, i=0; i<nr_files; i++, f = f->f_next) {
+		if (!f->f_count)
+			continue;
+		if (f->private_data == tty) {
+			count++;
+		}
+	}
+	if (tty->driver.type == TTY_DRIVER_TYPE_PTY &&
+	    tty->driver.subtype == PTY_TYPE_SLAVE &&
+	    tty->link && tty->link->count)
+		count++;
+	if (tty->count != count) {
+		printk("Warning: dev (%d, %d) tty->count(%d) != #fd's(%d) in %s\n",
+		       MAJOR(tty->device), MINOR(tty->device), tty->count,
+		       count, routine);
+		return count;
+       }	
 #endif
 	return 0;
 }
@@ -319,6 +348,7 @@ void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 
 	if (!tty)
 		return;
+	check_tty_count(tty, "do_tty_hangup");
 	for (filp = first_file, i=0; i<nr_files; i++, filp = filp->f_next) {
 		if (!filp->f_count)
 			continue;
@@ -359,18 +389,21 @@ void do_tty_hangup(struct tty_struct * tty, struct file_operations *fops)
 		}
 	}
 	
-	if (tty->session > 0) {
-		kill_sl(tty->session,SIGHUP,1);
-		kill_sl(tty->session,SIGCONT,1);
+ 	for_each_task(p) {
+		if ((tty->session > 0) && (p->session == tty->session) &&
+		    p->leader) {
+			send_sig(SIGHUP,p,1);
+			send_sig(SIGCONT,p,1);
+			if (tty->pgrp > 0)
+				p->tty_old_pgrp = tty->pgrp;
+		}
+		if (p->tty == tty)
+			p->tty = NULL;
 	}
 	tty->flags = 0;
 	tty->session = 0;
 	tty->pgrp = -1;
 	tty->ctrl_status = 0;
- 	for_each_task(p) {
-		if (p->tty == tty)
-			p->tty = NULL;
-	}
 	if (tty->driver.flags & TTY_DRIVER_RESET_TERMIOS)
 		*tty->termios = tty->driver.init_termios;
 	if (tty->driver.hangup)
@@ -413,8 +446,13 @@ void disassociate_ctty(int priv)
 	struct tty_struct *tty = current->tty;
 	struct task_struct *p;
 
-	if (!tty)
+	if (!tty) {
+		if (current->tty_old_pgrp) {
+			kill_pg(current->tty_old_pgrp, SIGHUP, priv);
+			kill_pg(current->tty_old_pgrp, SIGCONT, priv);
+		}
 		return;
+	}
 	if (tty->pgrp > 0) {
 		kill_pg(tty->pgrp, SIGHUP, priv);
 		kill_pg(tty->pgrp, SIGCONT, priv);
@@ -894,10 +932,11 @@ static void release_dev(struct file * filp)
 	struct task_struct **p;
 	int	idx;
 	
-
 	tty = (struct tty_struct *)filp->private_data;
 	if (tty_paranoia_check(tty, filp->f_inode->i_rdev, "release_dev"))
 		return;
+
+	check_tty_count(tty, "release_dev");
 
 	tty_fasync(filp->f_inode, filp, 0);
 
@@ -979,7 +1018,7 @@ static void release_dev(struct file * filp)
 	}
 	if (tty->count)
 		return;
-	
+
 	if (o_tty) {
 		if (o_tty->count)
 			return;
@@ -1049,6 +1088,7 @@ static void release_dev(struct file * filp)
 	tty->magic = 0;
 	(*tty->driver.refcount)--;
 	free_page((unsigned long) tty);
+	filp->private_data = 0;
 	if (o_tty) {
 		o_tty->magic = 0;
 		(*o_tty->driver.refcount)--;
@@ -1091,9 +1131,10 @@ retry_open:
 	minor = MINOR(device);
 	
 	retval = init_dev(device, &tty);
-	filp->private_data = tty;
 	if (retval)
 		return retval;
+	filp->private_data = tty;
+	check_tty_count(tty, "tty_open");
 	if (tty->driver.type == TTY_DRIVER_TYPE_PTY &&
 	    tty->driver.subtype == PTY_TYPE_MASTER)
 		noctty = 1;
@@ -1208,7 +1249,7 @@ static int tty_fasync(struct inode * inode, struct file * filp, int on)
 /*
  * XXX does anyone use this anymore?!?
  */
-static int do_get_ps_info(int arg)
+static int do_get_ps_info(unsigned long arg)
 {
 	struct tstruct {
 		int flag;
@@ -1439,6 +1480,9 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 				case 8: /* second arg is 1 or 2 */
 				case 9: /* both are explained in console.c */
 					return do_screendump(arg,retval-7);
+				case 10:
+					set_vesa_blanking(arg);
+					return 0;
 				default: 
 					return -EINVAL;
 			}

@@ -1,12 +1,12 @@
 /*
- * alpha/head.S
+ * alpha/boot/head.S
  *
  * initial boot stuff..
  */
 
+#define __ASSEMBLY__
 #include <asm/system.h>
 
-#undef halt
 #define halt .long PAL_halt
 
 /*

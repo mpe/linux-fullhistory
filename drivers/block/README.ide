@@ -1,0 +1,181 @@
+README.ide -- Information regarding ide.c and ide-cd.c
+================================================================================
+Supported by:  mlord@bnr.ca           -- disks, interfaces, probing
+               snyder@fnald0.fnal.gov -- cdroms, ATAPI, audio
+
+(see description later on below for handling BIG IDE drives with >1024 cyls).
+
+Major features of ide.c & ide-cd.c:
+
+	- support for up to two IDE interfaces on one or two IRQs
+	- support for any mix of up to four disk and/or cdrom drives
+	- support for reading IDE ATAPI cdrom drives (NEC, MITSUMI, VERSA)
+	- support for audio functions on FX400,NEC-260 cdrom drives (others?)
+	- auto-detection of interfaces, drives, IRQs, and disk geometries
+	- support for BIOSs which report "more than 16 heads" on disk drives
+	- uses LBA (slightly faster) on disk drives which support it
+	- support for lots of fancy (E)IDE drive functions with hdparm utility
+	- optional (compile time) support for 32-bit VLB data transfers
+	- support for IDE multiple (block) mode (same as hd.c)
+	- support for interrupt unmasking during I/O (better than hd.c)
+	- auto detection/use of multiple (block) mode settings from BIOS
+	- improved handshaking and error detection/recovery
+	- can co-exist with hd.c to control only the secondary interface
+
+Under construction:
+
+	- support for interface speed selection on jumperless interfaces
+	- improved detection of non-standard IDE ATAPI cdrom drives
+
+To access devices on the second interface, device entries must first be
+created in /dev for them.  To create such entries, simply run the included
+shell script:   MAKEDEV.ide1
+
+ide.c automatically probes for the primary and secondary interfaces,
+for the drives/geometries attached to those interfaces, and for the
+IRQ numbers being used by the interfaces (normally IRQ14 & IRQ15).
+
+The primary and secondary interfaces may share a single IRQ if necessary,
+at a slight performance penalty, whether on separate cards or a single VLB card.
+
+Drives are normally found by auto-probing and/or examining the CMOS/BIOS data.
+For really weird situations, the apparent (fdisk) geometry can also be specified
+on the kernel "command line" using LILO.  The format of such lines is:   
+
+	hdx=cyls,heads,sects,wpcom,irq
+or	hdx=cdrom
+
+where hdx can be any of {hda,hdb,hdc,hdd}, or simply hd, for the "next" drive
+in sequence.  Only the first three parameters are required (cyls,heads,sects),
+and wpcom is ignored for IDE drives.
+
+	Example:  hdc=1050,32,64 hdd=cdrom
+
+If an irq number is given, it will apply to both drives on the same interface,
+either {hda,hdb} or {hdc,hdd}.  The results of successful auto-probing may
+override the physical geometry/irq specified, though the "original" geometry
+is retained as the "logical" geometry for partitioning purposes (fdisk).
+
+Courtesy of Scott Snyder, the driver now supports ATAPI cdrom drives
+such as the NEC-260 and the new MITSUMI triple/quad speed drives.
+Such drives will be identified at boot time, as hda,hdb,hdc or hdd,
+just like a harddisk.
+
+If for some reason your cdrom drive is *not* found at boot time, you can force
+the probe to look harder by supplying a kernel command line parameter
+via LILO, such as:  hdc=cdrom
+
+For example, a GW2000 system might have a harddrive on the primary
+interface (/dev/hda) and an IDE cdrom drive on the secondary interface
+(/dev/hdc).  To mount a CD in the cdrom drive, one would use something like:
+
+	ln -sf /dev/hdc /dev/cdrom
+	mkdir /cd
+	mount /dev/cdrom /cd -t iso9660 -o ro,block=2048
+
+Please pass on any feedback on the cdrom stuff to the author & maintainer,
+Scott Snyder (snyder@fnald0.fnal.gov).
+
+Note that present, the kernel is unable to execute demand-paged binaries
+directly off of the cdrom (due to the different block size).
+
+The hdparm.c program for controlling various IDE features is now packaged
+separately.  Look for it on popular linux FTP sites.
+
+mlord@bnr.ca
+snyder@fnald0.fnal.gov
+================================================================================
+
+How To Use *Big* IDE drives with Linux/DOS
+------------------------------------------
+All IDE drives larger than 504MB ("528Meg") use a "physical" geometry which
+has more than 1024 cylinders.  This presents two problems to most systems:
+
+	1. The INT13 interface to the BIOS only allows 10-bits for cylinder
+	addresses, giving a limit of 1024cyls for programs which use it.
+
+	2. The physical geometry fields of the disk partition table only
+	allows 10-bits for cylinder addresses, giving a similar limit of 1024
+	cyls for operating systems that do not use the "sector count" fields
+	instead of the physical Cyl/Head/Sect (CHS) geometry fields.
+
+Neither of these limitations affects Linux itself, as it (1) does not use the
+BIOS for disk access, and it (2) is clever enough to use the "sector count"
+fields of the partition table instead of the physical CHS geometry fields.
+
+	a) Most folks use LILO to load linux.  LILO uses the INT13 interface
+	to the BIOS to load the kernel at boot time.  Therefore, LILO can only
+	load linux if the files it needs (usually just the kernel images) are
+	located below the magic 1024 cylinder "boundary".
+
+	b) Many folks also like to have bootable DOS partitions on their
+	drive(s).  DOS also uses the INT13 interface to the BIOS, not only
+	for booting, but also for operation after booting.  Therefore, DOS
+	can normally only access partitions which are contained entirely below
+	the magic 1024 cylinder "boundary".
+
+There are at least seven commonly used schemes for kludging DOS to work
+around this "limitation".  In the long term, the problem is being solved
+by introduction of an alternative BIOS interface that does not have the
+same limitations as the INT13 interface.  New versions of DOS are expected
+to detect and use this interface in systems whose BIOS provides it.
+
+But in the present day, alternative solutions are necessary.
+
+The most popular solution in newer systems is to have the BIOS shift bits
+between the cylinder and head number fields.  This is activated by entering
+a translated logical geometry into the BIOS/CMOS setup for the drive.
+Thus, if the drive has a geometry of 2100/16/63 (CHS), then the BIOS could
+present a "logical" geometry of 525/64/63 by "shifting" two bits from the
+cylinder number into the head number field for purposes of the partition table, CMOS setup, and INT13 interfaces.  Linux kernels 1.1.39 and higher detect and
+"handle" this translation automatically, making this a rather painless solution
+for the 1024 cyls problem.  If for some reason Linux gets confused (unlikely),
+then use the kernel command line parameters to pass the *logical* geometry,
+as in:  hda=525,64,63
+
+If the BIOS does not support this form of drive translation, then several
+options remain, listed below in order of increasing popularity:
+
+	- rewrite LILO to bypass the BIOS and talk directly to the drive
+	- boot from a floppy disk instead of the hard drive (takes 10 seconds)
+	- use a partition below the 1024 cyl boundary to hold the linux
+	boot files (kernel images and /boot directory), and place the rest
+	of linux anywhere else on the drive.  These files can reside in a DOS
+	partition, or in a tailor-made linux boot partition.
+
+If you cannot use drive translation, *and* your BIOS also restricts you to
+entering no more than 1024 cylinders in the geometry field in the CMOS setup,
+then you'll have to set it to 1024.  As of v3.5 of this driver, Linux will
+automatically determine the *real* number of cylinders for fdisk to use,
+allowing easy access to the full disk capacity.
+
+Regardless of what you do, all DOS partitions *must* be contained entirely
+within the first 1024 logical cylinders.  For a 1Gig WD disk drive, here's
+a good "half and half" partitioning scheme to start with:
+
+	geometry = 2100/16/63
+	/dev/hda1 from cyl    1 to  992		dos
+	/dev/hda2 from cyl  993 to 1023		swap
+	/dev/hda3 from cyl 1024 to 2100		linux
+
+After installing slackware (or whatever), boot from floppy and mount the dos
+partition under /dos, and then move the /boot directory to /dos/boot,
+and move the /vmlinuz kernel file into /dos/boot.  Then create a symlink
+to put it back where the filesystem standard wants it:  ln -s /dos/boot /boot
+Finally, edit /etc/lilo.conf and change the reference to /vmlinuz to point
+at /boot/vmlinuz and then re-run lilo.  Have Fun.  :)
+
+If you "don't do DOS", then partition as you please, but remember to create
+a small partition to hold the /boot directory (and vmlinuz) as described above
+such that it all lies within the first 1024 cylinders.
+
+Western Digital now ships a "DiskManager 6.03" diskette with all of their big
+hard drives.  Burn it!  That idiotic piece of garbage isn't even universally
+compatible with DOS, let alone other operating systems like Linux.  Eventually
+some kind person will kludge Linux to work with it, but at present the two
+are completely incompatible.  If you have this version of DiskManager on your
+hard disk already, it can be exterminated at the expense of all data on the
+drive (back it up elsewhere), by using the "DM" command from the diskette
+as follows:   DM /Y-
+
+mlord@bnr.ca

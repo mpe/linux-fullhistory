@@ -195,17 +195,19 @@ write_behind_check(int dev)
 {
   Scsi_Tape * STp;
   ST_buffer * STbuffer;
+  unsigned long flags;
 
   STp = &(scsi_tapes[dev]);
   STbuffer = STp->buffer;
 
+  save_flags(flags);
   cli();
   if (STbuffer->last_result < 0) {
     STbuffer->writing = (- STbuffer->writing);
     sleep_on( &(STp->waiting) );
     STbuffer->writing = (- STbuffer->writing);
   }
-  sti();
+  restore_flags(flags);
 
   if (STbuffer->writing < STbuffer->buffer_bytes)
     memcpy(STbuffer->b_data,

@@ -29,4 +29,12 @@ extern __inline__ void udelay(unsigned int usecs)
 	  "umul %o1, %o0, %o0\n\t");
 }
 
+/* calibrate_delay() wants this... */
+
+extern __inline__ unsigned long muldiv(unsigned long a, unsigned long b, unsigned long c)
+{
+	return ((a/c)*c);
+}
+
 #endif /* defined(__SPARC_DELAY_H) */
+

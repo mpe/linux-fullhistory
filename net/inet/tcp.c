@@ -1015,7 +1015,7 @@ static void tcp_send_ack(unsigned long sequence, unsigned long ack,
 				IPPROTO_TCP, sk->opt, MAX_ACK_SIZE,sk->ip_tos,sk->ip_ttl);
 	if (tmp < 0) 
 	{
-  		buff->free=1;
+  		buff->free = 1;
 		sk->prot->wfree(sk, buff->mem_addr, buff->mem_len);
 		return;
 	}
@@ -1482,7 +1482,7 @@ static void tcp_read_wakeup(struct sock *sk)
 			       IPPROTO_TCP, sk->opt, MAX_ACK_SIZE,sk->ip_tos,sk->ip_ttl);
 	if (tmp < 0) 
 	{
-  		buff->free=1;
+  		buff->free = 1;
 		sk->prot->wfree(sk, buff->mem_addr, buff->mem_len);
 		return;
 	}
@@ -1905,7 +1905,7 @@ void tcp_shutdown(struct sock *sk, int how)
   		 *	Enter FIN_WAIT2 on abnormal shutdown -- close before
   		 *	connection established.
   		 */
-	  	buff->free=1;
+	  	buff->free = 1;
 		prot->wfree(sk,buff->mem_addr, buff->mem_len);
 
 		if (sk->state == TCP_ESTABLISHED)
@@ -1941,7 +1941,7 @@ void tcp_shutdown(struct sock *sk, int how)
  	
  	if (skb_peek(&sk->write_queue) != NULL) 
  	{
-  		buff->free=0;
+  		buff->free = 0;
 		if (buff->next != NULL) 
 		{
 			printk("tcp_shutdown: next != NULL\n");
@@ -2380,7 +2380,7 @@ static void tcp_conn_request(struct sock *sk, struct sk_buff *skb,
 	if (tmp < 0) 
 	{
 		sk->err = tmp;
-		buff->free=1;
+		buff->free = 1;
 		kfree_skb(buff,FREE_WRITE);
 		newsk->dead = 1;
 		release_sock(newsk);
@@ -2555,7 +2555,7 @@ static void tcp_close(struct sock *sk, int timeout)
 				return;
 			}
 			buff->sk = sk;
-			buff->free = 1;
+			buff->free = 0;
 			buff->len = sizeof(*t1);
 			buff->localroute = sk->localroute;
 			t1 =(struct tcphdr *) buff->data;
@@ -2610,7 +2610,7 @@ static void tcp_close(struct sock *sk, int timeout)
 			tcp_send_check(t1, sk->saddr, sk->daddr, sizeof(*t1), sk);
 
 			tcp_statistics.TcpOutSegs++;
-	
+
 			if (skb_peek(&sk->write_queue) == NULL) 
 			{
 				sk->sent_seq = sk->write_seq;
@@ -3850,7 +3850,7 @@ static int tcp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 	sk->inuse = 1;
 	buff->len = 24;
 	buff->sk = sk;
-	buff->free = 1;
+	buff->free = 0;
 	buff->localroute = sk->localroute;
 	
 	t1 = (struct tcphdr *) buff->data;

@@ -62,6 +62,11 @@
 #define PAL_rtsys	61
 #define PAL_rti		63
 
+#ifndef __ASSEMBLY__
+
+extern void wrent(void *, unsigned long);
+extern void wrkgp(unsigned long);
+
 #define halt() __asm__ __volatile__(".long 0");
 #define move_to_user_mode() halt()
 #define switch_to(x) halt()
@@ -120,5 +125,7 @@ extern inline void * xchg_ptr(void *m, void *val)
 {
 	return (void *) xchg_u64((long *) m, (unsigned long) val);
 }
+
+#endif /* __ASSEMBLY__ */
 
 #endif

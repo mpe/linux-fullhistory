@@ -134,6 +134,7 @@ static void set_scrmem(int currcons, long offset);
 static void set_origin(int currcons);
 static void blank_screen(void);
 static void unblank_screen(void);
+void poke_blanked_console(void);
 static void gotoxy(int currcons, int new_x, int new_y);
 static void save_cur(int currcons);
 static inline void set_cursor(int currcons);
@@ -141,6 +142,8 @@ static void reset_terminal(int currcons, int do_clear);
 extern void reset_vc(unsigned int new_console);
 extern void vt_init(void);
 extern void register_console(void (*proc)(const char *));
+extern void vesa_blank(void);
+extern void vesa_unblank(void);
 extern void compute_shiftstate(void);
 extern int conv_uni_to_pc(unsigned long ucs);
 
@@ -149,8 +152,8 @@ static unsigned char	video_type;		/* Type of display being used	*/
 static unsigned long	video_mem_base;		/* Base of video memory		*/
 static unsigned long	video_mem_term;		/* End of video memory		*/
 static unsigned char	video_page;		/* Initial video page (unused)  */
-static unsigned short	video_port_reg;		/* Video register select port	*/
-static unsigned short	video_port_val;		/* Video register value port	*/
+       unsigned short	video_port_reg;		/* Video register select port	*/
+       unsigned short	video_port_val;		/* Video register value port	*/
 static unsigned long	video_num_columns;	/* Number of text columns	*/
 static unsigned long	video_num_lines;	/* Number of text lines		*/
 static unsigned long	video_size_row;
@@ -289,167 +292,6 @@ static struct vc {
 
 #define vcmode		(vt_cons[currcons]->vc_mode)
 #define structsize	(sizeof(struct vc_data) + sizeof(struct vt_struct))
-
-#ifdef CONFIG_VESA_PSPM
-/*
- * This section(s) handles the VESA Power Saving Protocol that let a	*
- * monitor be powered down whenever not needed for a longer time.	*
- * VESA protocol defines:						*
- *									*
- *  Mode/Status		HSync	VSync	Video				*
- *  ----------------------------------------------			*
- *  "On"		on	on	active				*
- *  "Suspend" {either}	on	off	blank				*
- *            {  or  }	off	on	blank				*
- *  "Off"               off	off	blank	<<  PSPM_FORCE_OFF	*
- *									*
- * Original code taken from the Power Management Utility (PMU) of	*
- * Huang shi chao, delivered together with many new monitor models	*
- * capable of the VESA Power Saving Protocol.				*
- * Adapted to Linux by Christoph Rimek (chrimek@toppoint.de)  15-may-94	*
- * Re-Adapted by Nicholas Leon (nicholas@neko.binary9.com) 10/94        *
- *                 (with minor reorganization/changes)                  *
- */
-
-
-static void vesa_blank(void);
-static void vesa_unblank(void);
-
-#define seq_port_reg	(0x3c4)		/* Sequencer register select port */
-#define seq_port_val	(0x3c5)		/* Sequencer register value port  */
-#define video_misc_rd	(0x3cc)		/* Video misc. read port	*/
-#define video_misc_wr	(0x3c2)		/* Video misc. write port	*/
-
-/* structure holding original VGA register settings */
-static struct {
-	unsigned char	SeqCtrlIndex;		/* Sequencer Index reg.   */
-	unsigned char	CrtCtrlIndex;		/* CRT-Contr. Index reg.  */
-	unsigned char	CrtMiscIO;		/* Miscellaneous register */
-#ifdef CONFIG_PSPM_FORCE_OFF
-	unsigned char	HorizontalTotal;	/* CRT-Controller:00h */
-	unsigned char	HorizDisplayEnd;	/* CRT-Controller:01h */
-	unsigned char	StartHorizRetrace;	/* CRT-Controller:04h */
-	unsigned char	EndHorizRetrace;	/* CRT-Controller:05h */
-#endif
-	unsigned char	Overflow;		/* CRT-Controller:07h */
-	unsigned char	StartVertRetrace;	/* CRT-Controller:10h */
-	unsigned char	EndVertRetrace;		/* CRT-Controller:11h */
-	unsigned char	ModeControl;		/* CRT-Controller:17h */
-	unsigned char	ClockingMode;		/* Seq-Controller:01h */
-} vga;
-
-static int vesa_blanked = 0;
-
-/* routine to blank a vesa screen */
-static void vesa_blank(void)
-{
-	/* save original values of VGA controller registers */
-	cli();
-	vga.SeqCtrlIndex = inb_p(seq_port_reg);
-	vga.CrtCtrlIndex = inb_p(video_port_reg);
-	vga.CrtMiscIO = inb_p(video_misc_rd);
-	sti();
-#ifdef CONFIG_PSPM_FORCE_OFF
-	outb_p(0x00,video_port_reg);			/* HorizontalTotal */
-	vga.HorizontalTotal = inb_p(video_port_val);
-	outb_p(0x01,video_port_reg);			/* HorizDisplayEnd */
-	vga.HorizDisplayEnd = inb_p(video_port_val);
-	outb_p(0x04,video_port_reg);			/* StartHorizRetrace */
-	vga.StartHorizRetrace = inb_p(video_port_val);
-	outb_p(0x05,video_port_reg);			/* EndHorizRetrace */
-	vga.EndHorizRetrace = inb_p(video_port_val);
-#endif
-	outb_p(0x07,video_port_reg);			/* Overflow */
-	vga.Overflow = inb_p(video_port_val);
-	outb_p(0x10,video_port_reg);			/* StartVertRetrace */
-	vga.StartVertRetrace = inb_p(video_port_val);
-	outb_p(0x11,video_port_reg);			/* EndVertRetrace */
-	vga.EndVertRetrace = inb_p(video_port_val);
-	outb_p(0x17,video_port_reg);			/* ModeControl */
-	vga.ModeControl = inb_p(video_port_val);
-	outb_p(0x01,seq_port_reg);			/* ClockingMode */
-	vga.ClockingMode = inb_p(seq_port_val);
-
-	/* assure that video is enabled */
-	/* "0x20" is VIDEO_ENABLE_bit in register 01 of sequencer */
-	cli();
-	outb_p(0x01,seq_port_reg);
-	outb_p(vga.ClockingMode | 0x20,seq_port_val);
-
-/*	sti(); 
-	cli(); */
-	
-	/* test for vertical retrace in process.... */
-	if ((vga.CrtMiscIO & 0x80) == 0x80)
-		outb_p(vga.CrtMiscIO & 0xef,video_misc_wr);
-
-	/*  Set <End of vertical retrace> to minimum (0) and		*
-	 *  <Start of vertical Retrace> to maximum (incl. overflow)	*
-	 *  Result: turn off vertical sync (VSync) pulse		*/
-	outb_p(0x10,video_port_reg);		/* StartVertRetrace */
-	outb_p(0xff,video_port_val);		/* maximum value */
-	outb_p(0x11,video_port_reg);		/* EndVertRetrace */
-	outb_p(0x40,video_port_val);            /* minimum (bits 0..3)  */
-	outb_p(0x07,video_port_reg);		/* Overflow */
-	outb_p(vga.Overflow | 0x84,video_port_val);	/* bits 9,10 of  */
-							/* vert. retrace */
-#ifdef CONFIG_PSPM_FORCE_OFF
-	/*  Set <End of horizontal retrace> to minimum (0) and	*
-	 *  <Start of horizontal Retrace> to maximum		*
-	 *  Result: turn off horizontal sync (HSync) pulse	*/
-	outb_p(0x04,video_port_reg);		/* StartHorizRetrace */
-	outb_p(0xff,video_port_val);		/* maximum */
-	outb_p(0x05,video_port_reg);		/* EndHorizRetrace */
-	outb_p(0x00,video_port_val);		/* minimum (0) */
-#endif
-	/* restore both index registers */
-	outb_p(vga.SeqCtrlIndex,seq_port_reg);
-	outb_p(vga.CrtCtrlIndex,video_port_reg);
-	sti();
-
-	vesa_blanked = 1;
-}	
-
-/* routine to unblank a vesa screen */
-static void vesa_unblank(void)
-{
-	if (!vesa_blanked)
-	  return;
-
-	/* restore original values of VGA controller registers */
-	cli();
-	outb_p(vga.CrtMiscIO,video_misc_wr);
-#ifdef CONFIG_PSPM_FORCE_OFF
-	outb_p(0x00,video_port_reg);		/* HorizontalTotal */
-	outb_p(vga.HorizontalTotal,video_port_val);
-	outb_p(0x01,video_port_reg);		/* HorizDisplayEnd */
-	outb_p(vga.HorizDisplayEnd,video_port_val);
-	outb_p(0x04,video_port_reg);		/* StartHorizRetrace */
-	outb_p(vga.StartHorizRetrace,video_port_val);
-	outb_p(0x05,video_port_reg);		/* EndHorizRetrace */
-	outb_p(vga.EndHorizRetrace,video_port_val);
-#endif
-	outb_p(0x07,video_port_reg);		/* Overflow */
-	outb_p(vga.Overflow,video_port_val);
-	outb_p(0x10,video_port_reg);		/* StartVertRetrace */
-	outb_p(vga.StartVertRetrace,video_port_val);
-	outb_p(0x11,video_port_reg);		/* EndVertRetrace */
-	outb_p(vga.EndVertRetrace,video_port_val);
-	outb_p(0x17,video_port_reg);		/* ModeControl */
-	outb_p(vga.ModeControl,video_port_val);
-	outb_p(0x01,seq_port_reg);		/* ClockingMode */
-	outb_p(vga.ClockingMode,seq_port_val);
-
-	/* restore index/control registers */
-	outb_p(vga.SeqCtrlIndex,seq_port_reg);
-	outb_p(vga.CrtCtrlIndex,video_port_reg);
-	sti();
-
-	vesa_blanked = 0;
-}
-
-#endif /* CONFIG_VESA_PSPM */
-
 
 static void * memsetw(void * s, unsigned short c, unsigned int count)
 {
@@ -1302,6 +1144,7 @@ static void setterm_command(int currcons)
 			break;
 		case 9:	/* set blanking interval */
 			blankinterval = ((par[1] < 60) ? par[1] : 60) * 60 * HZ;
+			poke_blanked_console();
 			break;
 	}
 }
@@ -2209,10 +2052,8 @@ void do_blank_screen(int nopowersave)
 	hide_cursor();
 	console_blanked = fg_console + 1;
 
-#ifdef CONFIG_VESA_PSPM
 	if(!nopowersave)
 	    vesa_blank();
-#endif	
 }
 
 void do_unblank_screen(void)
@@ -2251,9 +2092,8 @@ void do_unblank_screen(void)
 	set_cursor(fg_console);
 	if (resetorg)
 		__set_origin(blank__origin);
-#ifdef CONFIG_VESA_PSPM
+
 	vesa_unblank();
-#endif
 }
 
 /*
@@ -2307,7 +2147,7 @@ void update_screen(int new_console)
  * the new modes are needed for a fast and complete dump-restore cycle,
  * needed to implement root-window menus in text mode (A Rubini Nov 1994)
  */
-int do_screendump(int arg, int mode)
+int do_screendump(unsigned long arg, int mode)
 {
 	char *sptr, *buf = (char *)arg;
 	int currcons, l, chcount;

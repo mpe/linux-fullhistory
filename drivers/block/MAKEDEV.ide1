@@ -1,0 +1,24 @@
+#!/bin/sh
+makedev () {
+        rm -f /dev/$1
+        echo mknod /dev/$1 $2 $3 $4 &&
+             mknod /dev/$1 $2 $3 $4 &&
+        chown $5 /dev/$1 &&
+        chmod $6 /dev/$1
+}
+
+# Create /dev/hdc*
+makedev hdc b 22 0 root:$disk 660
+for part in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
+do
+	makedev hdc$part b 22 `expr 0 + $part` root:$disk 660
+done
+echo " "
+
+# Create /dev/hdd*
+makedev hdd b 22 64 root:$disk 660
+for part in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16
+do
+	makedev hdd$part b 22 `expr 64 + $part` root:$disk 660
+done
+

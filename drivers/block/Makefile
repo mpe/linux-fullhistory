@@ -59,6 +59,11 @@ OBJS := $(OBJS) hd.o
 SRCS := $(SRCS) hd.c
 endif
 
+ifdef CONFIG_BLK_DEV_IDE
+OBJS := ide.o $(OBJS)
+SRCS := ide.c $(SRCS)
+endif
+
 ifdef CONFIG_BLK_DEV_XD
 OBJS := $(OBJS) xd.o
 SRCS := $(SRCS) xd.c

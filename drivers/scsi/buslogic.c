@@ -240,28 +240,32 @@ static void buslogic_stat(unsigned int base)
 static int buslogic_out(unsigned int base, const unsigned char *cmdp,
 			size_t len)
 {
+    unsigned long flags = 0;
+    
     if (len == 1) {
 	for (;;) {
 	    WAIT_WHILE(STATUS(base), CPRBSY);
+	    save_flags(flags);
 	    cli();
 	    if (!(inb(STATUS(base)) & CPRBSY)) {
 		outb(*cmdp, COMMAND_PARAMETER(base));
-		sti();
+		restore_flags(flags);
 		return FALSE;
 	    }
-	    sti();
+	    restore_flags(flags);
 	}
     } else {
+	save_flags(flags);
 	cli();
 	while (len--) {
 	    WAIT_WHILE(STATUS(base), CPRBSY);
 	    outb(*cmdp++, COMMAND_PARAMETER(base));
 	}
-	sti();
+	restore_flags(flags);
     }
     return FALSE;
   fail:
-    sti();
+    restore_flags(flags);
     buslogic_printk("failed(%u): ", len + 1);
     buslogic_stat(base);
     return TRUE;
@@ -272,15 +276,18 @@ static int buslogic_out(unsigned int base, const unsigned char *cmdp,
    sure whether the board will respond to the command we just sent. */
 static int buslogic_in(unsigned int base, unsigned char *cmdp, size_t len)
 {
+    unsigned long flags;
+    
+    save_flags(flags);
     cli();
     while (len--) {
 	WAIT_UNTIL_FAST(STATUS(base), DIRRDY);
 	*cmdp++ = inb(DATA_IN(base));
     }
-    sti();
+    restore_flags(flags);
     return FALSE;
   fail:
-    sti();
+    restore_flags(flags);
 #if (BUSLOGIC_DEBUG & BD_IO)
     buslogic_printk("failed(%u): ", len + 1);
     buslogic_stat(base);
@@ -421,6 +428,7 @@ static void buslogic_interrupt(int junk)
     size_t mbi, mbo = 0;
     struct Scsi_Host *shpnt;
     Scsi_Cmnd *sctmp;
+    unsigned long flags;
     int irqno, base, flag;
     int needs_restart;
     struct mailbox *mb;
@@ -479,6 +487,7 @@ static void buslogic_interrupt(int junk)
 
 	INTR_RESET(base);
 
+	save_flags(flags);
 	cli();
 
 	mbi = HOSTDATA(shpnt)->last_mbi_used + 1;
@@ -506,7 +515,7 @@ static void buslogic_interrupt(int junk)
 	    HOSTDATA(shpnt)->last_mbi_used = mbi;
 	}
 
-	sti();
+	restore_flags(flags);
 
 	if (!found) {
 	    /* Hmm, no mail.  Must have read it the last time around. */
@@ -593,6 +602,7 @@ int buslogic_queuecommand(Scsi_Cmnd *scpnt, void (*done)(Scsi_Cmnd *))
     void *buff = scpnt->request_buffer;
     int bufflen = scpnt->request_bufflen;
     int mbo;
+    unsigned long flags;
     struct mailbox *mb;
     struct ccb *ccb;
     struct Scsi_Host *shpnt = scpnt->host;
@@ -645,6 +655,7 @@ int buslogic_queuecommand(Scsi_Cmnd *scpnt, void (*done)(Scsi_Cmnd *))
     /* Use the outgoing mailboxes in a round-robin fashion, because this
        is how the host adapter will scan for them. */
 
+    save_flags(flags);
     cli();
 
     mbo = HOSTDATA(shpnt)->last_mbo_used + 1;
@@ -663,7 +674,7 @@ int buslogic_queuecommand(Scsi_Cmnd *scpnt, void (*done)(Scsi_Cmnd *))
     if (mb[mbo].status != MBX_NOT_IN_USE || HOSTDATA(shpnt)->sc[mbo]) {
 	/* ??? Instead of failing, should we enable OMBR interrupts and sleep
 	   until we get one? */
-	sti();
+	restore_flags(flags);
 	buslogic_printk("unable to find empty mailbox.\n");
 	goto fail;
     }
@@ -674,7 +685,7 @@ int buslogic_queuecommand(Scsi_Cmnd *scpnt, void (*done)(Scsi_Cmnd *))
 
     HOSTDATA(shpnt)->last_mbo_used = mbo;
 
-    sti();
+    restore_flags(flags);
 
 #if (BUSLOGIC_DEBUG & BD_COMMAND)
     buslogic_printk("sending command (%d %08X)...", mbo, done);
@@ -1125,6 +1136,7 @@ int buslogic_detect(Scsi_Host_Template *tpnt)
     char bus_type;
     unsigned short max_sg;
     unsigned char bios_translation;
+    unsigned long flags;
     const unsigned char *bios;
     char *model;
     char *firmware_rev;
@@ -1239,11 +1251,12 @@ int buslogic_detect(Scsi_Host_Template *tpnt)
 	    buslogic_printk("enable interrupt channel %d.\n", irq);
 #endif
 
+	    save_flags(flags);
 	    cli();
 	    if (request_irq(irq, buslogic_interrupt, 0, "buslogic")) {
 		buslogic_printk("unable to allocate IRQ for "
 				"BusLogic controller.\n");
-		sti();
+		restore_flags(flags);
 		goto unregister;
 	    }
 
@@ -1252,7 +1265,7 @@ int buslogic_detect(Scsi_Host_Template *tpnt)
 		    buslogic_printk("unable to allocate DMA channel for "
 				    "BusLogic controller.\n");
 		    free_irq(irq);
-		    sti();
+		    restore_flags(flags);
 		    goto unregister;
 		}
 
@@ -1284,7 +1297,7 @@ int buslogic_detect(Scsi_Host_Template *tpnt)
 	    HOSTDATA(shpnt)->last_mbi_used = 2 * BUSLOGIC_MAILBOXES - 1;
 	    HOSTDATA(shpnt)->last_mbo_used = BUSLOGIC_MAILBOXES - 1;
 	    memset(HOSTDATA(shpnt)->sc, 0, sizeof HOSTDATA(shpnt)->sc);
-	    sti();
+	    restore_flags(flags);
 
 #if 0
 	    {
@@ -1369,12 +1382,14 @@ int buslogic_abort(Scsi_Cmnd *scpnt)
     static const unsigned char buscmd[] = { CMD_START_SCSI };
     struct mailbox *mb;
     size_t mbi, mbo;
+    unsigned long flags;
     unsigned int i;
 
     buslogic_printk("%X %X\n",
 		    inb(STATUS(scpnt->host->io_port)),
 		    inb(INTERRUPT(scpnt->host->io_port)));
 
+    save_flags(flags);
     cli();
     mb = HOSTDATA(scpnt->host)->mb;
     mbi = HOSTDATA(scpnt->host)->last_mbi_used + 1;
@@ -1388,7 +1403,7 @@ int buslogic_abort(Scsi_Cmnd *scpnt)
 	if (mbi >= 2 * BUSLOGIC_MAILBOXES)
 	    mbi = BUSLOGIC_MAILBOXES;
     } while (mbi != HOSTDATA(scpnt->host)->last_mbi_used);
-    sti();
+    restore_flags(flags);
 
     if (mb[mbi].status != MBX_NOT_IN_USE) {
 	buslogic_printk("lost interrupt discovered on irq %d"
@@ -1427,6 +1442,7 @@ int buslogic_abort(Scsi_Cmnd *scpnt)
 #if 1
     /* This section of code should be used carefully - some devices cannot
        abort a command, and this merely makes it worse. */
+    save_flags(flags);
     cli();
     for (mbo = 0; mbo < BUSLOGIC_MAILBOXES; mbo++)
 	if (scpnt == HOSTDATA(scpnt->host)->sc[mbo]) {
@@ -1434,7 +1450,7 @@ int buslogic_abort(Scsi_Cmnd *scpnt)
 	    buslogic_out(scpnt->host->io_port, buscmd, sizeof buscmd);
 	    break;
 	}
-    sti();
+    restore_flags(flags);
 #endif
 
     return SCSI_ABORT_SNOOZE;

@@ -14,6 +14,7 @@
 #include <linux/lp.h>
 #include <linux/malloc.h>
 #include <linux/ioport.h>
+#include <linux/fcntl.h>
 
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -73,6 +74,10 @@ static int lp_char_polled(char lpchar, int minor)
 		count ++;
 		if(need_resched)
 			schedule();
+		if ((LP_F(minor) & LP_CAREFUL) &&
+		    (status & (LP_POUTPA|LP_PSELECD|LP_PERRORP)) != 
+		    (LP_PSELECD|LP_PERRORP))
+			continue;
 	} while(!(status & LP_PBUSY) && count < LP_CHAR(minor));
 
 	if (count == LP_CHAR(minor)) {
@@ -108,6 +113,10 @@ static int lp_char_interrupt(char lpchar, int minor)
 	|| !((status = LP_S(minor)) & LP_PACK) || (status & LP_PBUSY)
 	|| !((status = LP_S(minor)) & LP_PACK) || (status & LP_PBUSY)) {
 
+		if ((LP_F(minor) & LP_CAREFUL) &&
+		    (status & (LP_POUTPA|LP_PSELECD|LP_PERRORP)) != 
+		    (LP_PSELECD|LP_PERRORP))
+			return 0;
 		outb_p(lpchar, LP_B(minor));
 		/* must wait before taking strobe high, and after taking strobe
 		   low, according spec.  Some printers need it, others don't. */
@@ -160,29 +169,28 @@ static int lp_write_interrupt(struct inode * inode, struct file * file, char * b
 				--copy_size;
 				++bytes_written;
 			} else {
-				if (!((status = LP_S(minor)) & LP_PERRORP)) {
-					int rc = total_bytes_written + bytes_written;
-
-					if ((status & LP_POUTPA)) {
-						printk("lp%d out of paper\n", minor);
-						if (!rc)
-							rc = -ENOSPC;
-					} else if (!(status & LP_PSELECD)) {
-						printk("lp%d off-line\n", minor);
-						if (!rc)
-							rc = -EIO;
-					} else {
-						printk("lp%d printer error\n", minor);
-						if (!rc)
-							rc = -EIO;
-					}
-					if(LP_F(minor) & LP_ABORT)
-						return rc;
+				int rc = total_bytes_written + bytes_written;
+				status = LP_S(minor);
+				if ((status & LP_POUTPA)) {
+					printk("lp%d out of paper\n", minor);
+					if (LP_F(minor) & LP_ABORT)
+						return rc?rc:-ENOSPC;
+				} else if (!(status & LP_PSELECD)) {
+					printk("lp%d off-line\n", minor);
+					if (LP_F(minor) & LP_ABORT)
+						return rc?rc:-EIO;
+				} else if (!(status & LP_PERRORP)) {
+					printk("lp%d printer error\n", minor);
+					if (LP_F(minor) & LP_ABORT)
+						return rc?rc:-EIO;
 				}
 				cli();
 				outb_p((LP_PSELECP|LP_PINITP|LP_PINTEN), (LP_C(minor)));
 				status = LP_S(minor);
-				if (!(status & LP_PACK) || (status & LP_PBUSY)) {
+				if ((!(status & LP_PACK) || (status & LP_PBUSY))
+				  && (!(LP_F(minor) & LP_CAREFUL) ||
+				  (status & (LP_POUTPA|LP_PSELECD|LP_PERRORP))
+				  == (LP_PSELECD|LP_PERRORP))) {
 					outb_p((LP_PSELECP|LP_PINITP), (LP_C(minor)));
 					sti();
 					continue;
@@ -257,7 +265,7 @@ static int lp_write_polled(struct inode * inode, struct file * file,
 			if (!(status & LP_PERRORP)) {
 				printk("lp%d reported invalid error status (on fire, eh?)\n", minor);
 				if(LP_F(minor) & LP_ABORT)
-					return temp-buf?temp-buf:-EFAULT;
+					return temp-buf?temp-buf:-EIO;
 				current->state = TASK_INTERRUPTIBLE;
 				current->timeout = jiffies + LP_TIMEOUT_POLLED;
 				schedule();
@@ -309,6 +317,25 @@ static int lp_open(struct inode * inode, struct file * file)
 		return -ENODEV;
 	if (LP_F(minor) & LP_BUSY)
 		return -EBUSY;
+
+	/* If ABORTOPEN is set and the printer is offline or out of paper,
+	   we may still want to open it to perform ioctl()s.  Therefore we
+	   have commandeered O_NONBLOCK, even though it is being used in
+	   a non-standard manner.  This is strictly a Linux hack, and
+	   should most likely only ever be used by the tunelp application. */
+        if ((LP_F(minor) & LP_ABORTOPEN) && !(file->f_flags & O_NONBLOCK)) {
+		int status = LP_S(minor);
+		if (status & LP_POUTPA) {
+			printk("lp%d out of paper\n", minor);
+			return -ENOSPC;
+		} else if (!(status & LP_PSELECD)) {
+			printk("lp%d off-line\n", minor);
+			return -EIO;
+		} else if (!(status & LP_PERRORP)) {
+			printk("lp%d printer error\n", minor);
+			return -EIO;
+		}
+	}
 
 	if ((irq = LP_IRQ(minor))) {
 		lp_table[minor].lp_buffer = (char *) kmalloc(LP_BUFFER_SIZE, GFP_KERNEL);
@@ -375,6 +402,18 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 			else
 				LP_F(minor) &= ~LP_ABORT;
 			break;
+		case LPABORTOPEN:
+			if (arg)
+				LP_F(minor) |= LP_ABORTOPEN;
+			else
+				LP_F(minor) &= ~LP_ABORTOPEN;
+			break;
+		case LPCAREFUL:
+			if (arg)
+				LP_F(minor) |= LP_CAREFUL;
+			else
+				LP_F(minor) &= ~LP_CAREFUL;
+			break;
 		case LPWAIT:
 			LP_WAIT(minor) = arg;
 			break;
@@ -423,6 +462,9 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 		}
 		case LPGETIRQ:
 			retval = LP_IRQ(minor);
+			break;
+		case LPGETSTATUS:
+			retval = LP_S(minor);	/* in range 0..255 */
 			break;
 		default:
 			retval = -EINVAL;

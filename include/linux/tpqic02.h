@@ -2,7 +2,7 @@
  *
  * Include file for QIC-02 driver for Linux.
  *
- * Copyright (c) 1992, 1993, 1994 by H. H. Bergman. All rights reserved.
+ * Copyright (c) 1992--1995 by H. H. Bergman. All rights reserved.
  *
  * ******* USER CONFIG SECTION BELOW (Near line 70) *******
  */
@@ -504,7 +504,8 @@
 
 #define TPQD_ALWAYS	0x8000
 
-#define TPQD_DEFAULT_FLAGS	0x01fc
+#define TPQD_DEFAULT_FLAGS	0x00fc
+
 
 #define TPQDBG(f)	((QIC02_TAPE_DEBUG) & (TPQD_##f))
 

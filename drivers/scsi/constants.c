@@ -78,7 +78,7 @@ static const char vendor[] = "VENDOR SPECIFIC";
 
 static void print_opcode(int opcode) {
   const char **table = commands[ group(opcode) ];
-  switch ((int) table) {
+  switch ((unsigned long) table) {
   case RESERVED_GROUP:
   	printk("%s(0x%02x) ", reserved, opcode); 
   	break;

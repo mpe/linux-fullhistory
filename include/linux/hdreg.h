@@ -44,7 +44,8 @@
 #define WIN_SEEK 		0x70
 #define WIN_DIAGNOSE		0x90
 #define WIN_SPECIFY		0x91
-#define WIN_SETIDLE		0x97
+#define WIN_SETIDLE1		0xE3
+#define WIN_SETIDLE2		0x97
 
 #define WIN_PIDENTIFY		0xA1	/* identify ATA-PI device	*/
 #define WIN_MULTREAD		0xC4	/* read multiple sectors	*/
@@ -72,16 +73,15 @@ struct hd_geometry {
 #define HDIO_GETGEO		0x301	/* get device geometry */
 #define HDIO_REQ		HDIO_GETGEO	/* obsolete, use HDIO_GETGEO */
 #define HDIO_GET_UNMASKINTR	0x302	/* get current unmask setting */
-#define HDIO_SETUNMASKINTR	0x303	/* obsolete */
 #define HDIO_GET_MULTCOUNT	0x304	/* get current IDE blockmode setting */
-#define HDIO_SETMULTCOUNT	0x305	/* obsolete */
 #define HDIO_GET_IDENTITY 	0x307	/* get IDE identification info */
+#define HDIO_GET_KEEPSETTINGS 	0x308	/* get keep-settings-on-reset flag */
+#define HDIO_DRIVE_CMD		0x31f	/* execute a special drive command */
 
 /* hd/ide ctl's that pass (arg) non-ptr values are numbered 0x32n/0x33n */
 #define HDIO_SET_MULTCOUNT	0x321	/* set IDE blockmode */
 #define HDIO_SET_UNMASKINTR	0x322	/* permit other irqs during I/O */
 #define HDIO_SET_KEEPSETTINGS	0x323	/* keep ioctl settings on reset */
-#define HDIO_SET_XFERMODE	0x324	/* set IDE transfer mode */
 
 /* structure returned by HDIO_GET_IDENTITY, as per ANSI ATA2 rev.2f spec */
 struct hd_driveid {
@@ -133,4 +133,19 @@ struct hd_driveid {
 	/* unsigned short vendor7  [32];*/	/* vendor unique (words 128-159) */
 	/* unsigned short reservedyy[96];*/	/* reserved (words 160-255) */
 };
-#endif
+
+/*
+ * These routines are used for kernel command line parameters from main.c:
+ */
+#ifdef CONFIG_BLK_DEV_HD
+void hd_setup(char *, int *);
+#endif	/* CONFIG_BLK_DEV_HD */
+#ifdef CONFIG_BLK_DEV_IDE
+void ide_setup(char *, int *);
+void hda_setup(char *, int *);
+void hdb_setup(char *, int *);
+void hdc_setup(char *, int *);
+void hdd_setup(char *, int *);
+#endif	/* CONFIG_BLK_DEV_IDE */
+
+#endif	/* _LINUX_HDREG_H */

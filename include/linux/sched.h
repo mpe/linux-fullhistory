@@ -156,7 +156,7 @@ struct task_struct {
 	unsigned long personality;
 	int dumpable:1;
 	int did_exec:1;
-	int pid,pgrp,session,leader;
+	int pid,pgrp,tty_old_pgrp,session,leader;
 	int	groups[NGROUPS];
 	/* 
 	 * pointers to (original) parent process, youngest child, younger sibling,
@@ -219,7 +219,7 @@ struct task_struct {
 /* signals */	{{ 0, },}, \
 /* stack */	0,(unsigned long) &init_kernel_stack, \
 /* ec,brk... */	0,0,0,0,0, \
-/* pid etc.. */	0,0,0,0, \
+/* pid etc.. */	0,0,0,0,0, \
 /* suppl grps*/ {NOGROUP,}, \
 /* proc links*/ &init_task,&init_task,NULL,NULL,NULL,NULL, \
 /* uid etc */	0,0,0,0,0,0,0,0, \

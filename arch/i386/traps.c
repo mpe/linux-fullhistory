@@ -1,5 +1,5 @@
 /*
- *  linux/kernel/traps.c
+ *  linux/arch/i386/traps.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
  */

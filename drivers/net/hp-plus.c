@@ -27,15 +27,12 @@ static char *version =
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/ioport.h>
+#include <linux/netdevice.h>
+#include <linux/etherdevice.h>
+
 #include <asm/system.h>
 #include <asm/io.h>
 
-#ifdef start_bh_atomic			/* This checks for kernels >= 1.1.0. */
-#include <linux/netdevice.h>
-#include <linux/etherdevice.h>
-#else
-#include "dev.h"
-#endif
 
 #include "8390.h"
 extern struct device *init_etherdev(struct device *dev, int sizeof_private,

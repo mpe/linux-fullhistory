@@ -40,16 +40,29 @@ int read_ahead[MAX_BLKDEV] = {0, };
  *	next-request
  */
 struct blk_dev_struct blk_dev[MAX_BLKDEV] = {
-	{ NULL, NULL },		/* no_dev */
-	{ NULL, NULL },		/* dev mem */
-	{ NULL, NULL },		/* dev fd */
-	{ NULL, NULL },		/* dev hd */
-	{ NULL, NULL },		/* dev ttyx */
-	{ NULL, NULL },		/* dev tty */
-	{ NULL, NULL },		/* dev lp */
-	{ NULL, NULL },		/* dev pipes */
-	{ NULL, NULL },		/* dev sd */
-	{ NULL, NULL }		/* dev st */
+	{ NULL, NULL },		/* 0 no_dev */
+	{ NULL, NULL },		/* 1 dev mem */
+	{ NULL, NULL },		/* 2 dev fd */
+	{ NULL, NULL },		/* 3 dev ide0 or hd */
+	{ NULL, NULL },		/* 4 dev ttyx */
+	{ NULL, NULL },		/* 5 dev tty */
+	{ NULL, NULL },		/* 6 dev lp */
+	{ NULL, NULL },		/* 7 dev pipes */
+	{ NULL, NULL },		/* 8 dev sd */
+	{ NULL, NULL },		/* 9 dev st */
+	{ NULL, NULL },		/* 10 */
+	{ NULL, NULL },		/* 11 */
+	{ NULL, NULL },		/* 12 */
+	{ NULL, NULL },		/* 13 */
+	{ NULL, NULL },		/* 14 */
+	{ NULL, NULL },		/* 15 */
+	{ NULL, NULL },		/* 16 */
+	{ NULL, NULL },		/* 17 */
+	{ NULL, NULL },		/* 18 */
+	{ NULL, NULL },		/* 19 */
+	{ NULL, NULL },		/* 20 */
+	{ NULL, NULL },		/* 21 */
+	{ NULL, NULL }		/* 22 dev ide1 */
 };
 
 /*
@@ -171,10 +184,11 @@ static void add_request(struct blk_dev_struct * dev, struct request * req)
 						kstat.dk_drive[disk_index]++;
 					break;
 		case HD_MAJOR:
-		case XT_DISK_MAJOR:	disk_index = (MINOR(req->dev) & 0x00C0) >> 6;
-					if (disk_index < 4)
-						kstat.dk_drive[disk_index]++;
+		case XT_DISK_MAJOR:	disk_index = (MINOR(req->dev) & 0x0040) >> 6;
+					kstat.dk_drive[disk_index]++;
 					break;
+		case IDE1_MAJOR:	disk_index = ((MINOR(req->dev) & 0x0040) >> 6) + 2;
+					kstat.dk_drive[disk_index]++;
 		default:		break;
 	}
 
@@ -254,17 +268,22 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 repeat:
 	cli();
 
-/* The scsi disk drivers completely remove the request from the queue when
- * they start processing an entry.  For this reason it is safe to continue
- * to add links to the top entry for scsi devices.
+/* The scsi disk drivers and the IDE driver completely remove the request
+ * from the queue when they start processing an entry.  For this reason
+ * it is safe to continue to add links to the top entry for those devices.
  */
-	if ((major == HD_MAJOR
+	if ((   major == IDE0_MAJOR	/* same as HD_MAJOR */
+	     || major == IDE1_MAJOR
 	     || major == FLOPPY_MAJOR
 	     || major == SCSI_DISK_MAJOR
 	     || major == SCSI_CDROM_MAJOR)
 	    && (req = blk_dev[major].current_request))
 	{
+#ifdef CONFIG_BLK_DEV_HD
 	        if (major == HD_MAJOR || major == FLOPPY_MAJOR)
+#else
+		if (major == FLOPPY_MAJOR)
+#endif CONFIG_BLK_DEV_HD
 			req = req->next;
 		while (req) {
 			if (req->dev == bh->b_dev &&
@@ -515,6 +534,9 @@ long blk_dev_init(long mem_start, long mem_end)
 	memset(ro_bits,0,sizeof(ro_bits));
 #ifdef CONFIG_BLK_DEV_HD
 	mem_start = hd_init(mem_start,mem_end);
+#endif
+#ifdef CONFIG_BLK_DEV_IDE
+	mem_start = ide_init(mem_start,mem_end);
 #endif
 #ifdef CONFIG_BLK_DEV_XD
 	mem_start = xd_init(mem_start,mem_end);

@@ -107,7 +107,16 @@ echo "/*" > $CONFIG_H
 echo " * Automatically generated C config: don't edit" >> $CONFIG_H
 echo " */" >> $CONFIG_H
 
-DEFAULT=$1
+DEFAULT=""
+if [ "$1" = "-d" ] ; then
+	DEFAULT="-d"
+	shift
+fi
+
+CONFIG_IN=./config.in
+if [ "$1" != "" ] ; then
+	CONFIG_IN=$1
+fi
 
 if [ -f ./.config ] ; then
 	. ./.config
@@ -115,7 +124,7 @@ if [ -f ./.config ] ; then
 	. /tmp/conf.$$
 	rm /tmp/conf.$$
 fi
-. ./config.in
+. $CONFIG_IN
 
 if [ "$CONFIG_SOUND" = "y" ] ; then
 	$MAKE -C drivers/sound config || exit 1

@@ -129,7 +129,7 @@ asmlinkage int sys_syslog(int type, char * buf, int len)
 			console_loglevel = DEFAULT_CONSOLE_LOGLEVEL;
 			return 0;
 		case 8:
-			if (len < 0 || len > 8)
+			if (len < 1 || len > 8)
 				return -EINVAL;
 			console_loglevel = len;
 			return 0;

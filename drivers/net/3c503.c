@@ -30,6 +30,7 @@ static char *version =
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/string.h>
+#include <linux/delay.h>
 #include <asm/io.h>
 #include <asm/system.h>
 
@@ -145,8 +146,10 @@ el2_probe1(struct device *dev, int ioaddr)
     static unsigned version_printed = 0;
 
     /* Reset and/or avoid any lurking NE2000 */
-    if (inb(ioaddr + 0x408) == 0xff)
+    if (inb(ioaddr + 0x408) == 0xff) {
+    	udelay(1000);
 	return ENODEV;
+    }
 
     /* We verify that it's a 3C503 board by checking the first three octets
        of its ethernet address. */

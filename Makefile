@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 1
-SUBLEVEL = 75
+SUBLEVEL = 76
 
 ARCH = i386
 
@@ -10,6 +10,15 @@ CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 	  else if [ -x /bin/bash ]; then echo /bin/bash; \
 	  else echo sh; fi ; fi)
 TOPDIR	:= $(shell if [ "$$PWD" != "" ]; then echo $$PWD; else pwd; fi)
+
+AS	=as
+LD	=ld
+HOSTCC	=gcc -I$(TOPDIR)/include
+CC	=gcc -D__KERNEL__ -I$(TOPDIR)/include
+MAKE	=make
+CPP	=$(CC) -E
+AR	=ar
+STRIP	=strip
 
 all:	do-it-all
 
@@ -21,7 +30,7 @@ ifeq (.config,$(wildcard .config))
 include .config
 ifeq (.depend,$(wildcard .depend))
 include .depend
-do-it-all:	Version arch-all
+do-it-all:	Version vmlinux
 else
 CONFIGURATION = depend
 do-it-all:	depend
@@ -107,33 +116,43 @@ endif
 Version: dummy
 	rm -f include/linux/version.h
 
-boot:
-	ln -sf arch/$(ARCH)/boot boot
+boot: vmlinux
+	@$(MAKE) -C arch/$(ARCH)/boot
 
-include/asm:
+vmlinux: $(CONFIGURATION) kernel/head.o init/main.o init/version.o linuxsubdirs
+	$(LD) $(LINKFLAGS) kernel/head.o init/main.o init/version.o \
+		$(ARCHIVES) \
+		$(FILESYSTEMS) \
+		$(DRIVERS) \
+		$(LIBS) -o vmlinux
+	nm vmlinux | grep -v '\(compiled\)\|\(\.o$$\)\|\( a \)' | sort > System.map
+
+symlinks:
+	rm -f include/asm
 	( cd include ; ln -sf asm-$(ARCH) asm)
-
-kernel/entry.S:
+	ln -sf ../arch/$(ARCH)/traps.c kernel/traps.c
 	ln -sf ../arch/$(ARCH)/entry.S kernel/entry.S
+	ln -sf ../arch/$(ARCH)/head.S kernel/head.S
 
-symlinks: boot include/asm kernel/entry.S
+oldconfig: symlinks
+	$(CONFIG_SHELL) Configure -d arch/$(ARCH)/config.in
 
-config.in: arch/$(ARCH)/config.in
-	cp $< $@
-
-oldconfig: symlinks config.in
-	$(CONFIG_SHELL) Configure -d $(OPTS)
-
-config: symlinks config.in
-	$(CONFIG_SHELL) Configure $(OPTS)
+config: symlinks
+	$(CONFIG_SHELL) Configure arch/$(ARCH)/config.in
 
 linuxsubdirs: dummy
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i; done
 
 $(TOPDIR)/include/linux/version.h: include/linux/version.h
 
-include/linux/version.h: $(CONFIGURE) Makefile
-	@./makever.sh
+newversion:
+	@if [ ! -f .version ]; then \
+		echo 1 > .version; \
+	else \
+		expr `cat .version` + 1 > .version; \
+	fi
+
+include/linux/version.h: $(CONFIGURATION) Makefile newversion
 	@echo \#define UTS_RELEASE \"$(VERSION).$(PATCHLEVEL).$(SUBLEVEL)\" > include/linux/version.h
 	@if [ -f .name ]; then \
 	   echo \#define UTS_VERSION \"\#`cat .version`-`cat .name` `date`\"; \
@@ -150,18 +169,15 @@ include/linux/version.h: $(CONFIGURE) Makefile
 	 fi >> include/linux/version.h
 	@echo \#define LINUX_COMPILER \"`$(HOSTCC) -v 2>&1 | tail -1`\" >> include/linux/version.h
 
-tools/build: tools/build.c $(CONFIGURE)
-	$(HOSTCC) $(CFLAGS) -o $@ $< -I$(TOPDIR)/include
+kernel/head.o: kernel/head.s
 
-boot/head.o: $(CONFIGURE) boot/head.s
+kernel/head.s: kernel/head.S include/linux/tasks.h
+	$(CPP) -traditional -o $*.s $<
 
-boot/head.s: boot/head.S $(CONFIGURE) include/linux/tasks.h
-	$(CPP) -traditional $< -o $@
+init/version.o: init/version.c include/linux/version.h
+	$(CC) $(CFLAGS) -DUTS_MACHINE='"$(ARCH)"' -c -o init/version.o init/version.c
 
-tools/version.o: tools/version.c include/linux/version.h
-	$(CC) $(CFLAGS) -DUTS_MACHINE='"$(ARCH)"' -c -o tools/version.o tools/version.c
-
-init/main.o: $(CONFIGURE) init/main.c
+init/main.o: init/main.c
 	$(CC) $(CFLAGS) $(PROFILING) -c -o $*.o $<
 
 fs: dummy
@@ -189,16 +205,14 @@ clean:	archclean
 	rm -f kernel/ksyms.lst
 	rm -f core `find . -name '*.[oas]' -print`
 	rm -f core `find . -name 'core' -print`
-	rm -f zImage zSystem.map tools/zSystem tools/system
-	rm -f Image System.map tools/build
-	rm -f zBoot/zSystem zBoot/xtract zBoot/piggyback
+	rm -f vmlinux System.map
 	rm -f .tmp* drivers/sound/configure
 
 mrproper: clean
 	rm -f include/linux/autoconf.h include/linux/version.h
 	rm -f drivers/sound/local.h
 	rm -f .version .config* config.in config.old
-	rm -f boot include/asm kernel/entry.S
+	rm -f include/asm kernel/entry.S kernel/head.S kernel/traps.c
 	rm -f .depend `find . -name .depend -print`
 
 distclean: mrproper
@@ -207,10 +221,9 @@ backup: mrproper
 	cd .. && tar cf - linux | gzip -9 > backup.gz
 	sync
 
-depend dep:
+depend dep: archdep
 	touch include/linux/version.h
 	for i in init/*.c;do echo -n "init/";$(CPP) -M $$i;done > .tmpdepend
-	for i in tools/*.c;do echo -n "tools/";$(CPP) -M $$i;done >> .tmpdepend
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i dep; done
 	rm -f include/linux/version.h
 	mv .tmpdepend .depend
@@ -233,20 +246,3 @@ else
 dummy:
 
 endif
-
-#
-# Leave these dummy entries for now to tell people that they are going away..
-#
-Image:
-	@echo
-	@echo Uncompressed kernel images no longer supported. Use
-	@echo \"make zImage\" instead.
-	@echo
-	@exit 1
-
-disk:
-	@echo
-	@echo Uncompressed kernel images no longer supported. Use
-	@echo \"make zdisk\" instead.
-	@echo
-	@exit 1

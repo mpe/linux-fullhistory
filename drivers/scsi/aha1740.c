@@ -247,6 +247,7 @@ int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     unchar direction;
     unchar *cmd = (unchar *) SCpnt->cmnd;
     unchar target = SCpnt->target;
+    unsigned long flags;
     void *buff = SCpnt->request_buffer;
     int bufflen = SCpnt->request_bufflen;
     int ecbno;
@@ -279,6 +280,7 @@ int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 
     /* locate an available ecb */
 
+    save_flags(flags);
     cli();
     ecbno = aha1740_last_ecb_used + 1;		/* An optimization */
     if (ecbno >= AHA1740_ECBS) ecbno = 0;
@@ -296,7 +298,7 @@ int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
     ecb[ecbno].cmdw = AHA1740CMD_INIT;	/* SCSI Initiator Command doubles as reserved flag */
 
     aha1740_last_ecb_used = ecbno;    
-    sti();
+    restore_flags(flags);
 
 #ifdef DEBUG
     printk("Sending command (%d %x)...",ecbno, done);
@@ -375,6 +377,7 @@ int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
         ulong adrs;
 
 	DEB(printk("aha1740[%d] critical section\n",ecbno));
+	save_flags(flags);
 	cli();
 	if ( ! (inb(G2STAT) & G2STAT_MBXOUT) )
 	{
@@ -394,7 +397,7 @@ int aha1740_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	}
 	while ( inb(G2STAT) & G2STAT_BUSY );		/* And Again! */
 	outb(ATTN_START | (target & 7), ATTN);	/* Start it up */
-	sti();
+	restore_flags(flags);
 	DEB(printk("aha1740[%d] request queued.\n",ecbno));
     }
     else

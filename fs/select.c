@@ -76,7 +76,7 @@ static int check(int flag, select_table * wait, struct file * file)
 	if ((fops = file->f_op) && (select = fops->select))
 		return select(inode, file, flag, wait)
 		    || (wait && select(inode, file, flag, NULL));
-	if (S_ISREG(inode->i_mode))
+	if (flag != SEL_EX)
 		return 1;
 	return 0;
 }

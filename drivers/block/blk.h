@@ -30,16 +30,25 @@
  * These will have to be changed to be aware of different buffer
  * sizes etc.. It actually needs a major cleanup.
  */
+#ifdef IDE_DRIVER
+#define SECTOR_MASK ((BLOCK_SIZE >> 9) - 1)
+#else
 #define SECTOR_MASK (blksize_size[MAJOR_NR] &&     \
 	blksize_size[MAJOR_NR][MINOR(CURRENT->dev)] ? \
 	((blksize_size[MAJOR_NR][MINOR(CURRENT->dev)] >> 9) - 1) :  \
 	((BLOCK_SIZE >> 9)  -  1))
+#endif /* IDE_DRIVER */
 
 #define SUBSECTOR(block) (CURRENT->current_nr_sectors > 0)
 
-extern unsigned long hd_init(unsigned long mem_start, unsigned long mem_end);
 extern unsigned long cdu31a_init(unsigned long mem_start, unsigned long mem_end);
 extern unsigned long mcd_init(unsigned long mem_start, unsigned long mem_end);
+#ifdef CONFIG_BLK_DEV_HD
+extern unsigned long hd_init(unsigned long mem_start, unsigned long mem_end);
+#endif
+#ifdef CONFIG_BLK_DEV_IDE
+extern unsigned long ide_init(unsigned long mem_start, unsigned long mem_end);
+#endif
 #ifdef CONFIG_SBPCD
 extern unsigned long sbpcd_init(unsigned long, unsigned long);
 #endif CONFIG_SBPCD
@@ -64,14 +73,19 @@ extern unsigned long xd_init(unsigned long mem_start, unsigned long mem_end);
   case BLKROGET: { int __err = verify_area(VERIFY_WRITE, (void *) (where), sizeof(long)); \
 		   if (!__err) put_fs_long(0!=is_read_only(dev),(long *) (where)); return __err; }
 		 
-#ifdef MAJOR_NR
+#if defined(MAJOR_NR) || defined(IDE_DRIVER)
 
 /*
- * Add entries as needed. Currently the only block devices
- * supported are hard-disks and floppies.
+ * Add entries as needed.
  */
 
-#if (MAJOR_NR == MEM_MAJOR)
+#ifdef IDE_DRIVER
+
+#define DEVICE_NR(device)	(MINOR(device) >> PARTN_BITS)
+#define DEVICE_ON(device)	/* nothing */
+#define DEVICE_OFF(device)	/* nothing */
+
+#elif (MAJOR_NR == MEM_MAJOR)
 
 /* ram disk */
 #define DEVICE_NAME "ramdisk"
@@ -187,9 +201,9 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
 
-#endif
+#endif /* MAJOR_NR == whatever */
 
-#if (MAJOR_NR != SCSI_TAPE_MAJOR)
+#if (MAJOR_NR != SCSI_TAPE_MAJOR) && !defined(IDE_DRIVER)
 
 #ifndef CURRENT
 #define CURRENT (blk_dev[MAJOR_NR].current_request)
@@ -219,23 +233,46 @@ else \
 
 #define SET_INTR(x) (DEVICE_INTR = (x))
 
-#endif
+#endif /* DEVICE_TIMEOUT */
+
 static void (DEVICE_REQUEST)(void);
+
+#ifdef DEVICE_INTR
+#define CLEAR_INTR SET_INTR(NULL)
+#else
+#define CLEAR_INTR
+#endif
+
+#define INIT_REQUEST \
+	if (!CURRENT) {\
+		CLEAR_INTR; \
+		return; \
+	} \
+	if (MAJOR(CURRENT->dev) != MAJOR_NR) \
+		panic(DEVICE_NAME ": request list destroyed"); \
+	if (CURRENT->bh) { \
+		if (!CURRENT->bh->b_lock) \
+			panic(DEVICE_NAME ": block not locked"); \
+	}
+
+#endif /* (MAJOR_NR != SCSI_TAPE_MAJOR) && !defined(IDE_DRIVER) */
 
 /* end_request() - SCSI devices have their own version */
 
 #if ! SCSI_MAJOR(MAJOR_NR)
 
-static void end_request(int uptodate)
-{
-	struct request * req;
+#ifdef IDE_DRIVER
+static void end_request(byte uptodate, byte hwif) {
+	struct request *req = ide_cur_rq[HWIF];
+#else
+static void end_request(int uptodate) {
+	struct request *req = CURRENT;
+#endif /* IDE_DRIVER */
 	struct buffer_head * bh;
 
-	req = CURRENT;
 	req->errors = 0;
 	if (!uptodate) {
-		printk(DEVICE_NAME " I/O error\n");
-		printk("dev %04lX, sector %lu\n",
+		printk("end_request: I/O error, dev %04lX, sector %lu\n",
 		       (unsigned long)req->dev, req->sector);
 		req->nr_sectors--;
 		req->nr_sectors &= ~SECTOR_MASK;
@@ -259,34 +296,19 @@ static void end_request(int uptodate)
 			return;
 		}
 	}
+#ifdef IDE_DRIVER
+	ide_cur_rq[HWIF] = NULL;
+#else
 	DEVICE_OFF(req->dev);
 	CURRENT = req->next;
+#endif /* IDE_DRIVER */
 	if (req->sem != NULL)
 		up(req->sem);
 	req->dev = -1;
 	wake_up(&wait_for_request);
 }
-#endif
+#endif /* ! SCSI_MAJOR(MAJOR_NR) */
 
-#ifdef DEVICE_INTR
-#define CLEAR_INTR SET_INTR(NULL)
-#else
-#define CLEAR_INTR
-#endif
+#endif /* defined(MAJOR_NR) || defined(IDE_DRIVER) */
 
-#define INIT_REQUEST \
-	if (!CURRENT) {\
-		CLEAR_INTR; \
-		return; \
-	} \
-	if (MAJOR(CURRENT->dev) != MAJOR_NR) \
-		panic(DEVICE_NAME ": request list destroyed"); \
-	if (CURRENT->bh) { \
-		if (!CURRENT->bh->b_lock) \
-			panic(DEVICE_NAME ": block not locked"); \
-	}
-
-#endif
-
-#endif
-#endif
+#endif /* _BLK_H */
