@@ -62,7 +62,7 @@ idt_48:
 
 gdt_48:
 	.word	0x0800			# gdt limit = 2048, 256 GDT entries
-	.long	gdt-0xc0000000		# gdt base = gdt (first SMP CPU)
+	.long	gdt_table-0xc0000000	# gdt base = gdt (first SMP CPU)
 
 .globl SYMBOL_NAME(trampoline_end)
 SYMBOL_NAME_LABEL(trampoline_end)

@@ -56,7 +56,7 @@ static int isofs_readlink(struct inode * inode, char * buffer, int buflen)
 	if (!pnt)
 		return 0;
 
-	i = strlen(pnt)+1;
+	i = strlen(pnt);
 	if (i > buflen)
 		i = buflen; 
 	if (copy_to_user(buffer, pnt, i))

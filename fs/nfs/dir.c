@@ -31,10 +31,6 @@
 
 #define NFS_MAX_AGE 10*HZ	/* max age for dentry validation */
 
-#ifndef shrink_dcache_parent
-#define shrink_dcache_parent(dentry) shrink_dcache_sb((dentry)->d_sb)
-#endif
-
 /* needed by smbfs as well ... move to dcache? */
 extern void nfs_renew_times(struct dentry *);
 
@@ -59,7 +55,7 @@ struct nfs_dirent {
 
 static int nfs_safe_remove(struct dentry *);
 
-static int nfs_dir_open(struct inode * inode, struct file * file);
+static int nfs_dir_open(struct inode *, struct file *);
 static ssize_t nfs_dir_read(struct file *, char *, size_t, loff_t *);
 static int nfs_readdir(struct file *, void *, filldir_t);
 static int nfs_lookup(struct inode *, struct dentry *);
@@ -435,6 +431,21 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 		if (age > NFS_MAX_AGE)
 			d_drop(dentry);
 	}
+
+#ifdef NFS_PARANOIA
+	/*
+	 * Sanity check: if the dentry has been unhashed and the
+	 * inode still has users, we could have problems ...
+	 */
+	if (list_empty(&dentry->d_hash) && dentry->d_inode) {
+		struct inode *inode = dentry->d_inode;
+		if (inode->i_count > 1) {
+printk("nfs_dentry_delete: %s/%s: ino=%ld, count=%d, nlink=%d\n",
+dentry->d_parent->d_name.name, dentry->d_name.name,
+inode->i_ino, inode->i_count, inode->i_nlink);
+		}
+	}
+#endif
 }
 
 static struct dentry_operations nfs_dentry_operations = {
@@ -785,7 +796,7 @@ static int nfs_safe_remove(struct dentry *dentry)
 {
 	struct inode *dir = dentry->d_parent->d_inode;
 	struct inode *inode = dentry->d_inode;
-	int error;
+	int error, rehash = 0;
 		
 	error = -EBUSY;
 	if (inode) {
@@ -813,8 +824,22 @@ dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
 #endif
 		goto out;
 	}
+	/*
+	 * Unhash the dentry while we remove the file ...
+	 */
+	if (!list_empty(&dentry->d_hash)) {
+		d_drop(dentry);
+		rehash = 1;
+	}
 	error = nfs_proc_remove(NFS_SERVER(dir),
 					NFS_FH(dir), dentry->d_name.name);
+	/*
+	 * ... then restore the hashed state.  This ensures that the
+	 * dentry can't become busy after having its file deleted.
+	 */
+	if (rehash) {
+		d_add(dentry, inode);
+	}
 #ifdef NFS_PARANOIA
 if (dentry->d_count > 1)
 printk("nfs_safe_remove: %s/%s busy after delete?? d_count=%d\n",
@@ -827,6 +852,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, inode->i_count);
 		nfs_invalidate_dircache(dir);
 		if (inode && inode->i_nlink)
 			inode->i_nlink --;
+		d_delete(dentry);
 	}
 out:
 	return error;
@@ -858,7 +884,6 @@ static int nfs_unlink(struct inode *dir, struct dentry *dentry)
 		error = nfs_safe_remove(dentry);
 		if (!error) {
 			nfs_renew_times(dentry);
-			d_delete(dentry);
 		}
 	}
 out:
@@ -966,8 +991,9 @@ out:
 static int nfs_rename(struct inode *old_dir, struct dentry *old_dentry,
 		      struct inode *new_dir, struct dentry *new_dentry)
 {
-	struct inode *inode = old_dentry->d_inode;
-	int update = 1, error;
+	struct inode *old_inode = old_dentry->d_inode;
+	struct inode *new_inode = new_dentry->d_inode;
+	int error, rehash = 0, update = 1;
 
 #ifdef NFS_DEBUG_VERBOSE
 printk("nfs_rename: old %s/%s, count=%d, new %s/%s, count=%d\n",
@@ -988,6 +1014,24 @@ new_dentry->d_parent->d_name.name,new_dentry->d_name.name,new_dentry->d_count);
 	if (old_dentry->d_name.len > NFS_MAXNAMLEN ||
 	    new_dentry->d_name.len > NFS_MAXNAMLEN)
 		goto out;
+
+	/*
+	 * First check whether the target is busy ... we can't
+	 * safely do _any_ rename if the target is in use.
+	 */
+	if (new_dentry->d_count > 1) {
+		if (new_inode && S_ISDIR(new_inode->i_mode))
+			shrink_dcache_parent(new_dentry);
+	}
+	error = -EBUSY;
+	if (new_dentry->d_count > 1) {
+#ifdef NFS_PARANOIA
+printk("nfs_rename: target %s/%s busy, d_count=%d\n",
+new_dentry->d_parent->d_name.name,new_dentry->d_name.name,new_dentry->d_count);
+#endif
+		goto out;
+	}
+
 	/*
 	 * Check for within-directory rename ... no complications.
 	 */
@@ -996,15 +1040,14 @@ new_dentry->d_parent->d_name.name,new_dentry->d_name.name,new_dentry->d_count);
 	/*
 	 * Cross-directory move ... check whether it's a file.
 	 */
-	error = -EBUSY;
-	if (S_ISREG(inode->i_mode)) {
-		if (NFS_WRITEBACK(inode)) {
+	if (S_ISREG(old_inode->i_mode)) {
+		if (NFS_WRITEBACK(old_inode)) {
 #ifdef NFS_PARANOIA
 printk("nfs_rename: %s/%s has pending writes\n",
 old_dentry->d_parent->d_name.name, old_dentry->d_name.name);
 #endif
-			nfs_flush_dirty_pages(inode, 0, 0, 0);
-			if (NFS_WRITEBACK(inode)) {
+			nfs_flush_dirty_pages(old_inode, 0, 0, 0);
+			if (NFS_WRITEBACK(old_inode)) {
 #ifdef NFS_PARANOIA
 printk("nfs_rename: %s/%s has pending writes after flush\n",
 old_dentry->d_parent->d_name.name, old_dentry->d_name.name);
@@ -1030,7 +1073,6 @@ old_dentry->d_parent->d_name.name,old_dentry->d_name.name,old_dentry->d_count);
 #endif
 		goto out;
 	}
-
 	if (new_dentry->d_count > 1) {
 #ifdef NFS_PARANOIA
 printk("nfs_rename: new dentry %s/%s busy, d_count=%d\n",
@@ -1040,13 +1082,28 @@ new_dentry->d_parent->d_name.name,new_dentry->d_name.name,new_dentry->d_count);
 	}
 
 	d_drop(old_dentry);
-	d_drop(new_dentry);
 	update = 0;
 
 do_rename:
+	/*
+	 * We must prevent any new references to the target while
+	 * the rename is in progress, so we unhash the dentry.
+	 */
+	if (!list_empty(&new_dentry->d_hash)) {
+		d_drop(new_dentry);
+		rehash = 1;
+	}
 	error = nfs_proc_rename(NFS_SERVER(old_dir),
 				NFS_FH(old_dir), old_dentry->d_name.name,
 				NFS_FH(new_dir), new_dentry->d_name.name);
+	if (rehash) {
+		d_add(new_dentry, new_inode);
+	}
+#ifdef NFS_PARANOIA
+if (new_dentry->d_count > 1)
+printk("nfs_rename: %s/%s busy after rename, d_count=%d\n",
+new_dentry->d_parent->d_name.name,new_dentry->d_name.name,new_dentry->d_count);
+#endif
 	if (!error) {
 		nfs_invalidate_dircache(new_dir);
 		nfs_invalidate_dircache(old_dir);

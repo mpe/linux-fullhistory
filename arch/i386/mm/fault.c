@@ -74,14 +74,6 @@ bad_area:
 	return 0;
 }
 
-asmlinkage void divide_error(void);
-asmlinkage void debug(void);
-asmlinkage void nmi(void);
-asmlinkage void int3(void);
-asmlinkage void overflow(void);
-asmlinkage void bounds(void);
-asmlinkage void invalid_op(void);
-
 asmlinkage void do_divide_error (struct pt_regs *, unsigned long);
 asmlinkage void do_debug (struct pt_regs *, unsigned long);
 asmlinkage void do_nmi (struct pt_regs *, unsigned long);
@@ -90,7 +82,6 @@ asmlinkage void do_overflow (struct pt_regs *, unsigned long);
 asmlinkage void do_bounds (struct pt_regs *, unsigned long);
 asmlinkage void do_invalid_op (struct pt_regs *, unsigned long);
 
-extern int * idt2;
 extern int pentium_f00f_bug;
 
 /*
@@ -105,18 +96,46 @@ extern int pentium_f00f_bug;
  */
 asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
 {
-	struct task_struct *tsk = current;
-	struct mm_struct *mm = tsk->mm;
+	struct task_struct *tsk;
+	struct mm_struct *mm;
 	struct vm_area_struct * vma;
 	unsigned long address;
 	unsigned long page;
 	unsigned long fixup;
 	int write;
 
-	lock_kernel();
-
 	/* get the address */
 	__asm__("movl %%cr2,%0":"=r" (address));
+
+	/*
+	 * Pentium F0 0F C7 C8 bug workaround. Do this first,
+	 * to make sure we don't have locking problems with
+	 * asynchronous traps (ie NMI). 
+	 */
+	if ( !(error_code & 7) && pentium_f00f_bug ) {
+		unsigned long nr;
+		
+		nr = (address - (unsigned long) idt) >> 3;
+
+		if (nr < 7) {
+			static void (*handler[])(struct pt_regs *, unsigned long) = {
+				do_divide_error,	/* 0 - divide overflow */
+				do_debug,		/* 1 - debug trap */
+				do_nmi,			/* 2 - NMI */
+				do_int3,		/* 3 - int 3 */
+				do_overflow,		/* 4 - overflow */
+				do_bounds,		/* 5 - bound range */
+				do_invalid_op };	/* 6 - invalid opcode */
+			handler[nr](regs, 0);
+			return;
+		}
+	}
+
+	lock_kernel();
+
+	tsk = current;
+	mm = tsk->mm;
+
 	down(&mm->mmap_sem);
 	vma = find_vma(mm, address);
 	if (!vma)
@@ -186,46 +205,6 @@ bad_area:
 		tsk->tss.error_code = error_code;
 		tsk->tss.trap_no = 14;
 		force_sig(SIGSEGV, tsk);
-		goto out;
-	}
-
-	printk("<%p/%p>\n", idt2, (void *)address);
-	/*
-	 * Pentium F0 0F C7 C8 bug workaround:
-	 */
-	if ( pentium_f00f_bug && (address >= (unsigned long)idt2) &&
-			(address < (unsigned long)idt2+256*8) ) {
-
-		void (*handler) (void);
-		int nr = (address-(unsigned long)idt2)/8;
-		unsigned long low, high;
-
-		low = idt[nr].a;
-		high = idt[nr].b;
-
-		handler = (void (*) (void)) ((low&0x0000ffff) | (high&0xffff0000));
-		printk("<handler %p... ", handler);
-		unlock_kernel();
-
-		if (handler==divide_error)
-			do_divide_error(regs,error_code);
-		else if (handler==debug)
-			do_debug(regs,error_code);
-		else if (handler==nmi)
-			do_nmi(regs,error_code);
-		else if (handler==int3)
-			do_int3(regs,error_code);
-		else if (handler==overflow)
-			do_overflow(regs,error_code);
-		else if (handler==bounds)
-			do_bounds(regs,error_code);
-		else if (handler==invalid_op)
-			do_invalid_op(regs,error_code);
-		else {
-			printk("INVALID HANDLER!\n");
-			for (;;) __cli();
-		}
-		printk("... done>\n");
 		goto out;
 	}
 

@@ -1,11 +1,20 @@
 #ifndef _LINUX_HEAD_H
 #define _LINUX_HEAD_H
 
-typedef struct desc_struct {
+struct desc_struct {
 	unsigned long a,b;
-} desc_table[256];
+};
 
-extern desc_table idt,gdt;
+extern struct desc_struct idt_table[],gdt_table[];
+extern struct desc_struct *idt, *gdt;
+
+struct Xgt_desc_struct {
+	unsigned short size;
+	unsigned long address __attribute__((packed));
+};
+
+#define idt_descr (*(struct Xgt_desc_struct *)((char *)&idt - 2))
+#define gdt_descr (*(struct Xgt_desc_struct *)((char *)&gdt - 2))
 
 #define GDT_NUL 0
 #define GDT_CODE 1

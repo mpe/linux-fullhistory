@@ -289,7 +289,7 @@ setup_idt:
 	movw %dx,%ax		/* selector = 0x0010 = cs */
 	movw $0x8E00,%dx	/* interrupt gate - dpl=0, present */
 
-	lea SYMBOL_NAME(idt),%edi
+	lea SYMBOL_NAME(idt_table),%edi
 	mov $256,%ecx
 rp_sidt:
 	movl %eax,(%edi)
@@ -328,23 +328,33 @@ ignore_int:
 	iret
 
 /*
- * The interrupt descriptor table has room for 256 idt's
+ * The interrupt descriptor table has room for 256 idt's,
+ * the global descriptor table is dependent on the number
+ * of tasks we can have..
  */
-	ALIGN
-.word 0
-idt_descr:
-	.word 256*8-1		# idt contains 256 entries
-	.long SYMBOL_NAME(idt)
+#define IDT_ENTRIES	256
+#ifdef CONFIG_APM
+#define GDT_ENTRIES	(11+2*NR_TASKS)
+#else
+#define GDT_ENTRIES	(8+2*NR_TASKS)
+#endif
+
+
+.globl SYMBOL_NAME(idt)
+.globl SYMBOL_NAME(gdt)
 
 	ALIGN
-.word 0
+	.word 0
+idt_descr:
+	.word IDT_ENTRIES*8-1		# idt contains 256 entries
+SYMBOL_NAME(idt):
+	.long SYMBOL_NAME(idt_table)
+
+	.word 0
 gdt_descr:
-#ifdef CONFIG_APM
-	.word (11+2*NR_TASKS)*8-1
-#else
-	.word (8+2*NR_TASKS)*8-1
-#endif
-	.long SYMBOL_NAME(gdt)
+	.word GDT_ENTRIES*8-1
+SYMBOL_NAME(gdt):
+	.long SYMBOL_NAME(gdt_table)
 
 /*
  * This is initialized to create a identity-mapping at 0-4M (for bootup
@@ -515,7 +525,7 @@ ENTRY(this_must_match_init_task)
 
 ALIGN
 /* 256 quadwords - 2048 bytes of idt */
-ENTRY(idt)
+ENTRY(idt_table)
 	.fill 256,8,0		# idt is uninitialized
 
 /*
@@ -528,7 +538,7 @@ ENTRY(idt)
  * NOTE! Make sure the gdt descriptor in head.S matches this if you
  * change anything.
  */
-ENTRY(gdt)
+ENTRY(gdt_table)
 	.quad 0x0000000000000000	/* NULL descriptor */
 	.quad 0x0000000000000000	/* not used */
 	.quad 0x00cf9a000000ffff	/* 0x10 kernel 4GB code at 0x00000000 */

@@ -2367,13 +2367,6 @@ CONFIG_SCSI_PPA_HAVE_PEDANTIC
   your EPP chipset is from the SMC series, you are likely to have to
   set this value greater than 0.
 
-EPP Timing
-CONFIG_SCSI_PPA_EPP_TIME
-  This is the "reset time period", a delay time. The lower the value,
-  the faster the access to the ZIP drive; too low a value may
-  cause all sorts of mid-level SCSI problems however. If unsure, go
-  with the default.
-
 Network device support?
 CONFIG_NETDEVICES
   You can say N here in case you don't intend to connect to any other
@@ -5260,7 +5253,7 @@ Radio support
 CONFIG_MISC_RADIO
   If you have a radio card (you will probably know if you do!), then
   you will want to say "y" here and make a character device file 
-  (usually /dev/radio) with major number 10 and minor 129 using mknod
+  (usually /dev/radio) with major number 10 and minor 152 using mknod
   ("man mknod").  And then, don't forget to pick up some useful tools
   to use said device (you _might_ find something at ftp.lmh.ox.ac.uk:
   /users/weejock/linux/radio/, but I haven't written anything too

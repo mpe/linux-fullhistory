@@ -198,6 +198,7 @@ EXPORT_SYMBOL(dput);
 EXPORT_SYMBOL(get_cached_page);
 EXPORT_SYMBOL(put_cached_page);
 EXPORT_SYMBOL(shrink_dcache_sb);
+EXPORT_SYMBOL(shrink_dcache_parent);
 
 #if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
 EXPORT_SYMBOL(do_nfsservctl);

@@ -192,3 +192,4 @@ typedef struct		// master setup structure
 	}	SETUP, *PSETUP;
 
 #endif
+

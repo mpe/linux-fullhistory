@@ -202,12 +202,13 @@ static inline int ncp_namespace(struct inode *inode)
 
 static inline int ncp_preserve_case(struct inode *i)
 {
-	/* If we can get case-sensitive server lookups working, then
-	 *
-	 *  return (ncp_namespace(i) == NW_NS_OS2);
-	 */
-	return 0;
+       	return (ncp_namespace(i) == NW_NS_OS2);
 }
+
+static inline int ncp_case_sensitive(struct inode *i)
+{
+	return 0;
+} 
 
 #endif				/* __KERNEL__ */
 

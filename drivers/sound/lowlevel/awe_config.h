@@ -27,6 +27,7 @@
 /*----------------------------------------------------------------
  * system configuration
  *----------------------------------------------------------------*/
+#define AWE_NEW_KERNEL_INTERFACE
 
 /* if you're using obsolete VoxWare 3.0.x on Linux 1.2.x (or FreeBSD),
  * define the following line.

@@ -41,12 +41,13 @@
     Digital Semiconductor   SROM   Specification.    The  driver   currently
     recognises the following chips:
 
-        DC21040     (no SROM)
-	DC21041[A]
-	DC21140[A]
+        DC21040  (no SROM) 
+	DC21041[A]  
+	DC21140[A] 
+	DC21142 
+	DC21143 
 
-    I plan to  add DC2114[23]  support ASAP,  time permitting.   So far  the
-    driver is known to work with the following cards:
+    So far the driver is known to work with the following cards:
 
         KINGSTON
 	Linksys
@@ -101,7 +102,7 @@
     1) copy de4x5.c from the  /linux/drivers/net directory to your favourite
     temporary directory.
     2) for fixed  autoprobes (not  recommended),  edit the source code  near
-    line 5005 to reflect the I/O address  you're using, or assign these when
+    line 5539 to reflect the I/O address  you're using, or assign these when
     loading by:
 
                    insmod de4x5 io=0xghh           where g = bus number
@@ -179,9 +180,27 @@
     INTERRUPT CARDS FROM THE SLOW INTERRUPT CARDS to ensure that they do not
     run on the same interrupt. PCMCIA/CardBus is another can of worms...
 
+    Finally, I think  I have really  fixed  the module  loading problem with
+    more than one DECchip based  card.  As a  side effect, I don't mess with
+    the  device structure any  more which means that  if more than 1 card in
+    2.0.x is    installed (4  in   2.1.x),  the  user   will have   to  edit
+    linux/drivers/net/Space.c  to make room for  them. Hence, module loading
+    is  the preferred way to use   this driver, since  it  doesn't have this
+    limitation.
+
+    Where SROM  media detection is used and  full duplex is specified in the
+    SROM, the feature is ignored unless de4x5_full_duplex  is set at compile
+    time OR during a module  load (insmod de4x5 de4x5_full_duplex=1).   This
+    is because there  is no way  to automatically  detect full duplex  links
+    except through  autonegotiation.   When I  include  the  autonegotiation
+    feature  in  the  SROM  autoconf   code,   this detection  will    occur
+    automatically.
+
     TO DO:
     ------
 
+    o check what revision numbers the 21142 and 21143 have
+    o
 
     Revision History
     ----------------
@@ -300,11 +319,19 @@
 			  Added byte counters from <phil@tazenda.demon.co.uk>
 			  Added SA_INTERRUPT temporary fix from 
 			   <mjacob@feral.com>.
+      0.53   12-Nov-97    Fix the *_probe() to include 'eth??' name during
+                           module load: bug reported by
+			   <Piete.Brooks@cl.cam.ac.uk>
+			  Fix multi-MAC, one SROM, to work with 2114x chips:
+			   bug reported by <cmetz@inner.net>.
+			  Make above search independent of BIOS device scan
+			   direction.
+			  Completed DC2114[23] autosense functions.
 
     =========================================================================
 */
 
-static const char *version = "de4x5.c:V0.52 1997/4/26 davies@maniac.ultranet.com\n";
+static const char *version = "de4x5.c:V0.53 1997/11/12 davies@maniac.ultranet.com\n";
 
 #include <linux/module.h>
 
@@ -319,7 +346,6 @@ static const char *version = "de4x5.c:V0.52 1997/4/26 davies@maniac.ultranet.com
 #include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/delay.h>
-#include <linux/init.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
 #include <asm/dma.h>
@@ -340,25 +366,28 @@ static const char *version = "de4x5.c:V0.52 1997/4/26 davies@maniac.ultranet.com
 #define c_char const char
 
 #include <linux/version.h>
-#if	LINUX_VERSION_CODE < ((2 << 16) | (1 << 8))
-#define        net_device_stats      enet_statistics
-#define copy_to_user(a,b,c)   memcpy_tofs(a,b,c)
-#define copy_from_user(a,b,c) memcpy_fromfs(a,b,c)
-#define le16_to_cpu(a) cpu_to_le16(a) 
-#define le32_to_cpu(a) cpu_to_le32(a) 
-#ifdef __powerpc__
-#define cpu_to_le16(a) ((((a) & 0x00ffU) << 8) | (((a) & 0xff00U) >> 8))
-#define cpu_to_le32(a) ((((a) & 0x000000ffU) << 24) |\
-		        (((a) & 0x0000ff00U) <<  8) |\
-		        (((a) & 0x00ff0000U) >>  8) |\
-		        (((a) & 0xff000000U) >> 24))
+#if	LINUX_VERSION_CODE < LinuxVersionCode(2,1,0)
+#  define __initfunc(__arginit) __arginit
+#  define test_and_set_bit      set_bit
+#  define net_device_stats      enet_statistics
+#  define copy_to_user(a,b,c)   memcpy_tofs(a,b,c)
+#  define copy_from_user(a,b,c) memcpy_fromfs(a,b,c)
+#  define le16_to_cpu(a)        cpu_to_le16(a) 
+#  define le32_to_cpu(a)        cpu_to_le32(a) 
+#  ifdef __powerpc__
+#    define cpu_to_le16(a) ((((a) & 0x00ffU) << 8) | (((a) & 0xff00U) >> 8))
+#    define cpu_to_le32(a) ((((a) & 0x000000ffU) << 24) |\
+		            (((a) & 0x0000ff00U) <<  8) |\
+		            (((a) & 0x00ff0000U) >>  8) |\
+		            (((a) & 0xff000000U) >> 24))
+#  else
+#    define cpu_to_le16(a)      (a)
+#    define cpu_to_le32(a)      (a)
+#  endif  /* __powerpc__ */
+#  include <asm/segment.h>
 #else
-#define cpu_to_le16(a) (a)
-#define cpu_to_le32(a) (a)
-#endif  /* __powerpc__ */
-#include	<asm/segment.h>
-#else
-#include	<asm/uaccess.h>
+#  include <asm/uaccess.h>
+#  include <linux/init.h>
 #endif  /* LINUX_VERSION_CODE */
 #define TWIDDLE(a) (u_short)le16_to_cpu(get_unaligned((u_short *)(a)))
 
@@ -392,6 +421,7 @@ struct mii_phy {
     u_int ana;              /* NWay Advertisement                        */
     u_int fdx;              /* Full DupleX capabilites for each media    */
     u_int ttm;              /* Transmit Threshold Mode for each media    */
+    u_int mci;              /* 21142 MII Connector Interrupt info        */
 };
 
 #define DE4X5_MAX_PHY 8     /* Allow upto 8 attached PHY devices per board */
@@ -444,7 +474,8 @@ static c_char srom_repair_info[][100] = {
 #ifdef DE4X5_DEBUG
 static int de4x5_debug = DE4X5_DEBUG;
 #else
-static int de4x5_debug = (0);
+/*static int de4x5_debug = (DEBUG_MII | DEBUG_SROM | DEBUG_PCICFG | DEBUG_MEDIA | DEBUG_VERSION);*/
+static int de4x5_debug = (DEBUG_MEDIA | DEBUG_VERSION);
 #endif
 
 #ifdef DE4X5_AUTOSENSE              /* Should be done on a per adapter basis */
@@ -503,6 +534,7 @@ static s32 de4x5_full_duplex = 0;
 #define PCI_MAX_BUS_NUM      8
 #define DE4X5_PCI_TOTAL_SIZE 0x80       /* I/O address extent */
 #define DE4X5_CLASS_CODE     0x00020000 /* Network controller, Ethernet */
+#define NO_MORE_PCI          -2         /* PCI bus search all done */
 
 /*
 ** Memory Alignment. Each descriptor is 4 longwords long. To force a
@@ -785,11 +817,13 @@ static void    load_packet(struct device *dev, char *buf, u32 flags, struct sk_b
 static int     dc21040_autoconf(struct device *dev);
 static int     dc21041_autoconf(struct device *dev);
 static int     dc21140m_autoconf(struct device *dev);
+static int     dc2114x_autoconf(struct device *dev);
 static int     srom_autoconf(struct device *dev);
 static int     de4x5_suspect_state(struct device *dev, int timeout, int prev_state, int (*fn)(struct device *, int), int (*asfn)(struct device *));
 static int     dc21040_state(struct device *dev, int csr13, int csr14, int csr15, int timeout, int next_state, int suspect_state, int (*fn)(struct device *, int));
 static int     test_media(struct device *dev, s32 irqs, s32 irq_mask, s32 csr13, s32 csr14, s32 csr15, s32 msec);
-static int     test_sym_link(struct device *dev, int msec);
+static int     test_for_100Mb(struct device *dev, int msec);
+static int     wait_for_link(struct device *dev);
 static int     test_mii_reg(struct device *dev, int reg, int mask, int pol, long msec);
 static int     is_spd_100(struct device *dev);
 static int     is_100_up(struct device *dev);
@@ -823,7 +857,7 @@ static short   srom_data(u_int command, u_long address);
 /*static void    srom_busy(u_int command, u_long address);*/
 static void    sendto_srom(u_int command, u_long addr);
 static int     getfrom_srom(u_long addr);
-static void    srom_map_media(struct device *dev);
+static int     srom_map_media(struct device *dev);
 static int     srom_infoleaf_info(struct device *dev);
 static void    srom_init(struct device *dev);
 static void    srom_exec(struct device *dev, u_char *p);
@@ -845,16 +879,15 @@ static int     test_bad_enet(struct device *dev, int status);
 
 static void    eisa_probe(struct device *dev, u_long iobase);
 static void    pci_probe(struct device *dev, u_long iobase);
-static struct  device *alloc_device(struct device *dev, u_long iobase);
-static struct  device *insert_device(struct device *dev, u_long iobase,
-				     int (*init)(struct device *));
+static void    srom_search(int index);
 static char    *build_setup_frame(struct device *dev, int mode);
 static void    disable_ast(struct device *dev);
 static void    enable_ast(struct device *dev, u32 time_out);
 static long    de4x5_switch_mac_port(struct device *dev);
+static int     gep_rd(struct device *dev);
+static void    gep_wr(s32 data, struct device *dev);
 static void    timeout(struct device *dev, void (*fn)(u_long data), u_long data, u_long msec);
 static void    yawn(struct device *dev, int state);
-static int     de4x5_dev_index(char *s);
 static void    link_modules(struct device *dev, struct device *tmp);
 static void    de4x5_dbg_open(struct device *dev);
 static void    de4x5_dbg_mii(struct device *dev, int k);
@@ -878,15 +911,25 @@ static int     compact_infoblock(struct device *dev, u_char count, u_char *p);
 int  init_module(void);
 void cleanup_module(void);
 static struct  device *unlink_modules(struct device *p);
-static int autoprobed = 0, loading_module = 1;
+static struct  device *insert_device(struct device *dev, u_long iobase,
+				     int (*init)(struct device *));
+static int count_adapters(void);
+static int loading_module = 1;
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,0)
+MODULE_PARM(de4x5_debug, "i");
+MODULE_PARM(de4x5_full_duplex, "i");
+MODULE_PARM(dec_only, "i");
+#endif /* LINUX_VERSION_CODE */
 # else
-static int autoprobed = 0, loading_module = 0;
+static int loading_module = 0;
 #endif /* MODULE */
 
 static char name[DE4X5_NAME_LENGTH + 1];
 static u_char de4x5_irq[] = EISA_ALLOWED_IRQ_LIST;
-static int num_de4x5s = 0, num_eth = 0;
+static int num_de4x5s = 0;
 static int cfrv = 0, useSROM = 0;
+static int lastEISA = 0, lastPCI = -1;
+static struct device *lastModule = NULL;
 
 /*
 ** List the SROM infoleaf functions and chipsets
@@ -943,28 +986,17 @@ static int (*dc_infoblock[])(struct device *dev, u_char, u_char *) = {
 
 /*
 ** Autoprobing in modules is allowed here. See the top of the file for
-** more info. Until I fix (un)register_netdevice() we won't be able to use it
-** though.
+** more info.
 */
 __initfunc(int
 de4x5_probe(struct device *dev))
 {
-    int status = -ENODEV;
     u_long iobase = dev->base_addr;
 
     eisa_probe(dev, iobase);
     pci_probe(dev, iobase);
     
-    /*
-    ** Walk the device list to check that at least one device
-    ** initialised OK
-    */
-    for (; (dev->priv == NULL) && (dev->next != NULL); dev = dev->next);
-    
-    if (dev->priv) status = 0;
-    if (iobase == 0) autoprobed = 1;
-
-    return status;
+    return (dev->priv ? 0 : -ENODEV);
 }
 
 __initfunc(static int
@@ -1140,7 +1172,6 @@ de4x5_hw_init(struct device *dev, u_long iobase))
 	/* Initialise the SROM pointers if possible */
 	if (lp->useSROM) {
 	    lp->state = INITIALISED;
-	    de4x5_dbg_srom((struct de4x5_srom *)&lp->srom);
 	    if (srom_infoleaf_info(dev)) {
 		return -ENXIO;
 	    }
@@ -1191,7 +1222,7 @@ de4x5_open(struct device *dev)
     u_long iobase = dev->base_addr;
     int i, status = 0;
     s32 omr;
-    
+
     /* Allocate the RX buffers */
     for (i=0; i<lp->rxRingSize; i++) {
 	if (de4x5_alloc_rx_buff(dev, i, 0) == NULL) {
@@ -1230,6 +1261,7 @@ de4x5_open(struct device *dev)
 	    printk("WARNING: there may be IRQ related problems in heavily loaded systems.\n");
 	}
     }
+
     dev->tbusy = 0;                         
     dev->start = 1;
     dev->interrupt = UNMASK_INTERRUPTS;
@@ -1267,7 +1299,7 @@ static int
 de4x5_init(struct device *dev)
 {  
     /* Lock out other processes whilst setting up the hardware */
-    set_bit(0, (void *)&dev->tbusy);
+    test_and_set_bit(0, (void *)&dev->tbusy);
     
     de4x5_sw_reset(dev);
     
@@ -1301,8 +1333,9 @@ de4x5_sw_reset(struct device *dev)
     ** without these values. Cache align 16 long.
     */
     bmr = (lp->chipset==DC21140 ? PBL_8 : PBL_4) | DESC_SKIP_LEN | CACHE_ALIGN;
+    bmr |= ((lp->chipset & ~0x00ff)==DC2114x ? BMR_RML : 0);
     outl(bmr, DE4X5_BMR);
-    
+
     omr = inl(DE4X5_OMR) & ~OMR_PR;             /* Turn off promiscuous mode */
     if (lp->chipset == DC21140) {
 	omr |= (OMR_SDP | OMR_SB);
@@ -1323,13 +1356,13 @@ de4x5_sw_reset(struct device *dev)
     }
     
     barrier();
-    
+
     /* Build the setup frame depending on filtering mode */
     SetMulticastFilter(dev);
     
     load_packet(dev, lp->setup_frame, PERFECT_F|TD_SET|SETUP_FRAME_LEN, NULL);
     outl(omr|OMR_ST, DE4X5_OMR);
-    
+
     /* Poll for setup frame completion (adapter interrupts are disabled now) */
     sti();                                       /* Ensure timer interrupts */
     for (j=0, i=0;(i<500) && (j==0);i++) {       /* Upto 500ms delay */
@@ -1337,7 +1370,7 @@ de4x5_sw_reset(struct device *dev)
 	if ((s32)le32_to_cpu(lp->tx_ring[lp->tx_new].status) >= 0) j=1;
     }
     outl(omr, DE4X5_OMR);                        /* Stop everything! */
-    
+
     if (j == 0) {
 	printk("%s: Setup frame timed out, status %08x\n", dev->name, 
 	       inl(DE4X5_STS));
@@ -1346,7 +1379,7 @@ de4x5_sw_reset(struct device *dev)
     
     lp->tx_new = (++lp->tx_new) % lp->txRingSize;
     lp->tx_old = lp->tx_new;
-    
+
     return status;
 }
 
@@ -1365,7 +1398,7 @@ de4x5_queue_pkt(struct sk_buff *skb, struct device *dev)
 	return 0;
     }
 
-    set_bit(0, (void*)&dev->tbusy);              /* Stop send re-tries */
+    test_and_set_bit(0, (void*)&dev->tbusy);     /* Stop send re-tries */
     if (lp->tx_enable == NO) {                   /* Cannot send for now */
 	return -1;                                
     }
@@ -1380,7 +1413,8 @@ de4x5_queue_pkt(struct sk_buff *skb, struct device *dev)
     sti();
 
     /* Test if cache is already locked - requeue skb if so */
-    if (test_and_set_bit(0, (void *)&lp->cache.lock) && !dev->interrupt) return -1;
+    if (test_and_set_bit(0, (void *)&lp->cache.lock) && !dev->interrupt) 
+	return -1;
 
     /* Transmit descriptor ring full or stale skb */
     if (dev->tbusy || lp->tx_skb[lp->tx_new]) {
@@ -1401,7 +1435,7 @@ de4x5_queue_pkt(struct sk_buff *skb, struct device *dev)
 
 	while (skb && !dev->tbusy && !lp->tx_skb[lp->tx_new]) {
 	    cli();
-	    set_bit(0, (void*)&dev->tbusy);
+	    test_and_set_bit(0, (void*)&dev->tbusy);
 	    load_packet(dev, skb->data, TD_IC | TD_LS | TD_FS | skb->len, skb);
 #if	LINUX_VERSION_CODE >= ((2 << 16) | (1 << 8))
  	    lp->stats.tx_bytes += skb->len;
@@ -1897,15 +1931,15 @@ __initfunc(static void
 eisa_probe(struct device *dev, u_long ioaddr))
 {
     int i, maxSlots, status, device;
+    u_char irq;
     u_short vendor;
     u32 cfid;
     u_long iobase;
     struct bus_type *lp = &bus;
     char name[DE4X5_STRLEN];
-    struct device *tmp;
     
-    if (autoprobed) return;                /* Been here before ! */
-    
+    if (lastEISA == MAX_EISA_SLOTS) return; /* No more EISA devices to search */
+
     lp->bus = EISA;
     
     if (ioaddr == 0) {                     /* Autoprobing */
@@ -1918,7 +1952,7 @@ eisa_probe(struct device *dev, u_long ioaddr))
 	maxSlots = i + 1;
     }
     
-    for (status= -ENODEV;(i<maxSlots)&&(dev!=NULL);i++,iobase+=EISA_SLOT_INC) {
+    for (status = -ENODEV; (i<maxSlots) && (dev!=NULL); i++, iobase+=EISA_SLOT_INC) {
 	if (EISA_signature(name, EISA_ID)) {
 	    cfid = (u32) inl(PCI_CFID);
 	    cfrv = (u_short) inl(PCI_CFRV);
@@ -1926,32 +1960,34 @@ eisa_probe(struct device *dev, u_long ioaddr))
 	    vendor = (u_short) cfid;
 	    
 	    /* Read the EISA Configuration Registers */
-	    dev->irq = inb(EISA_REG0);
-	    dev->irq = de4x5_irq[(dev->irq >> 1) & 0x03];
+	    irq = inb(EISA_REG0);
+	    irq = de4x5_irq[(irq >> 1) & 0x03];
 
-	    if (is_DC2114x) device |= (cfrv & 0x00f0);
+	    if (is_DC2114x) device |= (cfrv & CFRV_RN);
 	    lp->chipset = device;
-	    DevicePresent(DE4X5_APROM);
+
 	    /* Write the PCI Configuration Registers */
 	    outl(PCI_COMMAND_IO | PCI_COMMAND_MASTER, PCI_CFCS);
 	    outl(0x00006000, PCI_CFLT);
 	    outl(iobase, PCI_CBIO);
 	    
+	    DevicePresent(DE4X5_APROM);
 	    if (check_region(iobase, DE4X5_EISA_TOTAL_SIZE) == 0) {
-		if ((tmp = alloc_device(dev, iobase)) != NULL) {
-		    if ((status = de4x5_hw_init(tmp, iobase)) == 0) {
-			num_de4x5s++;
-			if (loading_module) link_modules(dev, tmp);
-		    } else if (loading_module && (tmp != dev)) {
-			kfree(tmp);
-		    }
+		dev->irq = irq;
+		if ((status = de4x5_hw_init(dev, iobase)) == 0) {
+		    num_de4x5s++;
+		    if (loading_module) link_modules(lastModule, dev);
+		    lastEISA = i;
+		    return;
 		}
-	    } else if (autoprobed) {
+	    } else if (ioaddr != 0) {
 		printk("%s: region already allocated at 0x%04lx.\n", dev->name,iobase);
 	    }
 	}
     }
-    
+
+    if (ioaddr == 0) lastEISA = i;
+
     return;
 }
 
@@ -1973,20 +2009,23 @@ eisa_probe(struct device *dev, u_long ioaddr))
 __initfunc(static void
 pci_probe(struct device *dev, u_long ioaddr))
 {
-    u_char irq;
+    u_char irq, timer;
     u_char pb, pbus, dev_num, dnum, dev_fn;
     u_short dev_id, vendor, index, status;
     u_int class = DE4X5_CLASS_CODE;
     u_int device, iobase;
     struct bus_type *lp = &bus;
-    struct device *tmp;
 
-    if (autoprobed) return;
-    
-    if (!pcibios_present()) return;          /* No PCI bus in this machine! */
+    if (lastPCI == NO_MORE_PCI) return;
+
+    if (!pcibios_present()) {
+	lastPCI = NO_MORE_PCI;
+	return;          /* No PCI bus in this machine! */
+    }
     
     lp->bus = PCI;
-    
+    lp->bus_num = 0;
+
     if ((ioaddr < 0x1000) && loading_module) {
 	pbus = (u_short)(ioaddr >> 8);
 	dnum = (u_short)(ioaddr & 0xff);
@@ -1995,7 +2034,7 @@ pci_probe(struct device *dev, u_long ioaddr))
 	dnum = 0;
     }
 
-    for (index=0; 
+    for (index=lastPCI+1; 
 	 (pcibios_find_class(class, index, &pb, &dev_fn)!= PCIBIOS_DEVICE_NOT_FOUND);
 	 index++) {
 	dev_num = PCI_SLOT(dev_fn);
@@ -2010,6 +2049,12 @@ pci_probe(struct device *dev, u_long ioaddr))
 		continue;
 	    }
 
+	    /* Search for an SROM on this bus */
+	    if (lp->bus_num != pb) {
+		lp->bus_num = pb;
+		srom_search(index);
+	    }
+
 	    /* Get the chip configuration revision register */
 	    pcibios_read_config_dword(pb, PCI_DEVICE, PCI_REVISION_ID, &cfrv);
 
@@ -2018,13 +2063,8 @@ pci_probe(struct device *dev, u_long ioaddr))
 	    lp->bus_num = pb;
 	    
 	    /* Set the chipset information */
-	    if (is_DC2114x) device |= (cfrv & 0x00f0);
+	    if (is_DC2114x) device |= (cfrv & CFRV_RN);
 	    lp->chipset = device;
-
-	    if (is_DC21142 || is_DC21143) {
-		printk("de4x5: Detected a %s chip. Currently this is unsupported in this driver.\nPlease email the author to request its inclusion!\n", (is_DC21142?"DC21142":"DC21143"));
-		continue;
-	    }
 
 	    /* Get the board I/O address */
 	    pcibios_read_config_dword(pb, PCI_DEVICE, PCI_BASE_ADDRESS_0, &iobase);
@@ -2044,127 +2084,106 @@ pci_probe(struct device *dev, u_long ioaddr))
 	    }
 	    if (!(status & PCI_COMMAND_MASTER)) continue;
 
+	    /* Check the latency timer for values > 0x60 */
+	    pcibios_read_config_byte(pb, PCI_DEVICE, PCI_LATENCY_TIMER, &timer);
+	    if (timer < 0x60) {
+		pcibios_write_config_byte(pb, PCI_DEVICE, PCI_LATENCY_TIMER, 0x60);
+	    }
+
 	    DevicePresent(DE4X5_APROM);
 	    if (check_region(iobase, DE4X5_PCI_TOTAL_SIZE) == 0) {
-		if ((tmp = alloc_device(dev, iobase)) != NULL) {
-		    tmp->irq = irq;
-		    if ((status = de4x5_hw_init(tmp, iobase)) == 0) {
-			num_de4x5s++;
-			if (loading_module) link_modules(dev, tmp);
-		    } else if (loading_module && (tmp != dev)) {
-			kfree(tmp);
+		dev->irq = irq;
+		if ((status = de4x5_hw_init(dev, iobase)) == 0) {
+		    num_de4x5s++;
+		    if (loading_module) {
+			link_modules(lastModule, dev);
+			lastPCI = index;
 		    }
+		    return;
 		}
-	    } else if (autoprobed) {
+	    } else if (ioaddr != 0) {
 		printk("%s: region already allocated at 0x%04x.\n", dev->name, 
 		       (u_short)iobase);
 	    }
 	}
     }
-    
+
+    if (loading_module) lastPCI = NO_MORE_PCI;
+
     return;
 }
 
 /*
-** Search the entire 'eth' device list for a fixed probe. If a match isn't
-** found then check for an autoprobe or unused device location. If they
-** are not available then insert a new device structure at the end of
-** the current list.
+** This function searches the current bus (which is >0) for a DECchip with an
+** SROM, so that in multiport cards that have one SROM shared between multiple 
+** DECchips, we can find the base SROM irrespective of the BIOS scan direction.
+** For single port cards this is a time waster...
 */
-__initfunc(static struct device *
-alloc_device(struct device *dev, u_long iobase))
+__initfunc(static void
+srom_search(int index))
 {
-    struct device *adev = NULL;
-    int fixed = 0, new_dev = 0;
+    u_char irq, pb, dev_fn;
+    u_short dev_id, dev_num, vendor, status;
+    u_int class = DE4X5_CLASS_CODE;
+    u_int device, iobase;
+    int i, j;
+    struct bus_type *lp = &bus;
 
-    if (!dev) return dev;
-    num_eth = de4x5_dev_index(dev->name);
+    for (; 
+	 (pcibios_find_class(class, index, &pb, &dev_fn)!= PCIBIOS_DEVICE_NOT_FOUND);
+	 index++) {
 
-    if (loading_module) {
-	if (dev->priv) {
-	    dev = insert_device(dev, iobase, de4x5_probe);
+	if (lp->bus_num != pb) return;
+	dev_num = PCI_SLOT(dev_fn);
+	device = 0;
+	pcibios_read_config_word(pb, PCI_DEVICE, PCI_VENDOR_ID, &vendor);
+	pcibios_read_config_word(pb, PCI_DEVICE, PCI_DEVICE_ID, &dev_id);
+	device = dev_id;
+	device <<= 8;
+	if (!(is_DC21040 || is_DC21041 || is_DC21140 || is_DC2114x)) {
+	    continue;
 	}
-	num_eth++;
-	return dev;
-    }
 
-    while (1) {
-	if (((dev->base_addr == DE4X5_NDA) || (dev->base_addr==0)) && !adev) {
-	    adev=dev;
-	} else if ((dev->priv == NULL) && (dev->base_addr==iobase)) {
-	    fixed = 1;
-	} else {
-	    if (dev->next == NULL) {
-		new_dev = 1;
-	    } else if (strncmp(dev->next->name, "eth", 3) != 0) {
-		new_dev = 1;
+	/* Get the chip configuration revision register */
+	pcibios_read_config_dword(pb, PCI_DEVICE, PCI_REVISION_ID, &cfrv);
+
+	/* Set the device number information */
+	lp->device = dev_num;
+	lp->bus_num = pb;
+	    
+	/* Set the chipset information */
+	if (is_DC2114x) device |= (cfrv & CFRV_RN);
+	lp->chipset = device;
+
+	/* Get the board I/O address */
+	pcibios_read_config_dword(pb, PCI_DEVICE, PCI_BASE_ADDRESS_0, &iobase);
+	iobase &= CBIO_MASK;
+
+	/* Fetch the IRQ to be used */
+	pcibios_read_config_byte(pb, PCI_DEVICE, PCI_INTERRUPT_LINE, &irq);
+	if ((irq == 0) || (irq == (u_char) 0xff)) continue;
+	    
+	/* Check if I/O accesses are enabled */
+	pcibios_read_config_word(pb, PCI_DEVICE, PCI_COMMAND, &status);
+	if (!(status & PCI_COMMAND_IO)) continue;
+
+	/* Search for a valid SROM attached to this DECchip */
+	DevicePresent(DE4X5_APROM);
+	for (j=0, i=0; i<ETH_ALEN; i++) {
+	    j += (u_char) *((u_char *)&lp->srom + SROM_HWADD + i);
+	}
+	if ((j != 0) && (j != 0x5fa)) {
+	    last.chipset = device;
+	    last.bus = pb;
+	    last.irq = irq;
+	    for (i=0; i<ETH_ALEN; i++) {
+		last.addr[i] = (u_char)*((u_char *)&lp->srom + SROM_HWADD + i);
 	    }
-	}
-	if ((dev->next == NULL) || new_dev || fixed) break;
-	dev = dev->next;
-	num_eth++;
-    }
-    if (adev && !fixed) {
-	dev = adev;
-	num_eth = de4x5_dev_index(dev->name);
-	new_dev = 0;
-    }
-
-    if (((dev->next == NULL) &&  
-	((dev->base_addr != DE4X5_NDA) && (dev->base_addr != 0)) && !fixed) ||
-	new_dev) {
-	num_eth++;                         /* New device */
-	dev = insert_device(dev, iobase, de4x5_probe);
-    }
-    
-    return dev;
-}
-
-/*
-** If at end of eth device list and can't use current entry, malloc
-** one up. If memory could not be allocated, print an error message.
-*/
-__initfunc(static struct device *
-insert_device(struct device *dev, u_long iobase, int (*init)(struct device *)))
-{
-    struct device *new;
-
-    new = (struct device *)kmalloc(sizeof(struct device)+8, GFP_KERNEL);
-    if (new == NULL) {
-	printk("eth%d: Device not initialised, insufficient memory\n",num_eth);
-	return NULL;
-    } else {
-	memset((char *)new, 0, sizeof(struct device)+8);
-	new->name = (char *)(new + 1);
-	new->base_addr = iobase;       /* assign the io address */
-	new->init = init;              /* initialisation routine */
-	if (!loading_module) {
-	    new->next = dev->next;
-	    dev->next = new;
-	    if (num_eth > 9999) {
-		sprintf(new->name,"eth????");/* New device name */
-	    } else {
-		sprintf(new->name,"eth%d", num_eth);/* New device name */
-	    }
+	    return;
 	}
     }
 
-    return new;
-}
-
-__initfunc(static int
-de4x5_dev_index(char *s))
-{
-    int i=0, j=0;
-
-    for (;*s; s++) {
-	if (isdigit(*s)) {
-	    j=1;
-	    i = (i * 10) + (*s - '0');
-	} else if (j) break;
-    }
-
-    return i;
+    return;
 }
 
 __initfunc(static void
@@ -2199,13 +2218,15 @@ autoconf_media(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
-    int next_tick = DE4X5_AUTOSENSE_MS;;
-    
+    int next_tick = DE4X5_AUTOSENSE_MS;
+
     lp->linkOK = 0;
     lp->c_media = AUTO;                     /* Bogus last media */
     disable_ast(dev);
     inl(DE4X5_MFC);                         /* Zero the lost frames counter */
     lp->media = INIT;
+    lp->tcount = 0;
+
     if (lp->useSROM) {
 	next_tick = srom_autoconf(dev);
     } else if (lp->chipset == DC21040) {
@@ -2609,7 +2630,10 @@ dc21140m_autoconf(struct device *dev)
 	    next_tick &= ~TIMER_CB;
 	} else {
 	    if (lp->useSROM) {
-		srom_map_media(dev);
+		if (srom_map_media(dev) < 0) {
+		    lp->tcount++;
+		    return next_tick;
+		}
 		srom_exec(dev, lp->phy[lp->active].gep);
 		if (lp->infoblock_media == ANS) {
 		    ana = lp->phy[lp->active].ana | MII_ANA_CSMA;
@@ -2691,11 +2715,11 @@ dc21140m_autoconf(struct device *dev)
 	
       case SPD_DET:                              /* Choose 10Mb/s or 100Mb/s */
         if (lp->timeout < 0) {
-	    lp->tmp = (lp->phy[lp->active].id ? MII_SR_LKS :
-		                                  (~inl(DE4X5_GEP) & GEP_LNP));
+	    lp->tmp = (lp->phy[lp->active].id ? MII_SR_LKS : 
+		                                  (~gep_rd(dev) & GEP_LNP));
 	    SET_100Mb_PDET;
 	}
-        if ((slnk = test_sym_link(dev, 6200)) < 0) {
+        if ((slnk = test_for_100Mb(dev, 6500)) < 0) {
 	    next_tick = slnk & ~TIMER_CB;
 	} else {
 	    if (is_spd_100(dev) && is_100_up(dev)) {
@@ -2716,7 +2740,7 @@ dc21140m_autoconf(struct device *dev)
 	    de4x5_init_connection(dev);
 	} else {
 	    if (!lp->linkOK && (lp->autosense == AUTO)) {
-		if (!(is_spd_100(dev) && is_100_up(dev))) {
+		if (!is_100_up(dev) || (!lp->useSROM && !is_spd_100(dev))) {
 		    lp->media = INIT;
 		    lp->tcount++;
 		    next_tick = DE4X5_AUTOSENSE_MS;
@@ -2732,7 +2756,7 @@ dc21140m_autoconf(struct device *dev)
 	    de4x5_init_connection(dev);
 	} else {
 	    if (!lp->linkOK && (lp->autosense == AUTO)) {
-		if (!(!is_spd_100(dev) && is_10_up(dev))) {
+		if (!is_10_up(dev) || (!lp->useSROM && is_spd_100(dev))) {
 		    lp->media = INIT;
 		    lp->tcount++;
 		    next_tick = DE4X5_AUTOSENSE_MS;
@@ -2754,6 +2778,242 @@ dc21140m_autoconf(struct device *dev)
     return next_tick;
 }
 
+/*
+** This routine may be merged into dc21140m_autoconf() sometime as I'm
+** changing how I figure out the media - but trying to keep it backwards
+** compatible with the de500-xa and de500-aa.
+** Whether it's BNC, AUI, SYM or MII is sorted out in the infoblock
+** functions and set during de4x5_mac_port() and/or de4x5_reset_phy().
+** This routine just has to figure out whether 10Mb/s or 100Mb/s is
+** active.
+** When autonegotiation is working, the ANS part searches the SROM for
+** the highest common speed (TP) link that both can run and if that can
+** be full duplex. That infoblock is executed and then the link speed set.
+**
+** Only _10Mb and _100Mb are tested here.
+*/
+static int
+dc2114x_autoconf(struct device *dev)
+{
+    struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+    int iobase = dev->base_addr;
+    s32 cr, anlpa, ana, cap, irqs, irq_mask, imr, omr, slnk, sr, sts;
+    int next_tick = DE4X5_AUTOSENSE_MS;
+
+    switch (lp->media) {
+      case INIT:
+        if (lp->timeout < 0) {
+	    DISABLE_IRQs;
+	    lp->tx_enable = FALSE;
+	    lp->linkOK = 0;
+            lp->timeout = -1;
+	    de4x5_save_skbs(dev);          /* Save non transmitted skb's */
+	}
+	if ((next_tick = de4x5_reset_phy(dev)) < 0) {
+	    next_tick &= ~TIMER_CB;
+	} else {
+            lp->media = SPD_DET;
+	    if ((lp->infoblock_media == ANS) && 
+		                    ((sr=is_anc_capable(dev)) & MII_SR_ANC)) {
+		    ana = (((sr >> 6) & MII_ANA_TAF) | MII_ANA_CSMA);
+		    ana &= (lp->fdx ? ~0 : ~MII_ANA_FDAM);
+		    mii_wr(ana, MII_ANA, lp->phy[lp->active].addr, DE4X5_MII);
+		    lp->media = ANS;
+	    }
+	    lp->local_state = 0;
+	    next_tick = dc2114x_autoconf(dev);
+        }
+	break;
+	
+      case ANS:
+	switch (lp->local_state) {
+	  case 0:
+	    if (lp->timeout < 0) {
+		mii_wr(MII_CR_ASSE | MII_CR_RAN, MII_CR, lp->phy[lp->active].addr, DE4X5_MII);
+	    }
+	    cr = test_mii_reg(dev, MII_CR, MII_CR_RAN, FALSE, 500);
+	    if (cr < 0) {
+		next_tick = cr & ~TIMER_CB;
+	    } else {
+		if (cr) {
+		    lp->local_state = 0;
+		    lp->media = SPD_DET;
+		} else {
+		    lp->local_state++;
+		}
+		next_tick = dc2114x_autoconf(dev);
+	    }
+	    break;
+	    
+	  case 1:
+	    if ((sr=test_mii_reg(dev, MII_SR, MII_SR_ASSC, TRUE, 2000)) < 0) {
+		next_tick = sr & ~TIMER_CB;
+	    } else {
+		lp->media = SPD_DET;
+		lp->local_state = 0;
+		if (sr) {                         /* Success! */
+		    lp->tmp = MII_SR_ASSC;
+		    anlpa = mii_rd(MII_ANLPA, lp->phy[lp->active].addr, DE4X5_MII);
+		    ana = mii_rd(MII_ANA, lp->phy[lp->active].addr, DE4X5_MII);
+		    if (!(anlpa & MII_ANLPA_RF) && 
+			 (cap = anlpa & MII_ANLPA_TAF & ana)) {
+			if (cap & MII_ANA_100M) {
+			    lp->fdx = ((ana & anlpa & MII_ANA_FDAM & MII_ANA_100M) ? TRUE : FALSE);
+			    lp->media = _100Mb;
+			} else if (cap & MII_ANA_10M) {
+			    lp->fdx = ((ana & anlpa & MII_ANA_FDAM & MII_ANA_10M) ? TRUE : FALSE);
+			    lp->media = _10Mb;
+			}
+		    }
+		}                       /* Auto Negotiation failed to finish */
+		next_tick = dc2114x_autoconf(dev);
+	    }                           /* Auto Negotiation failed to start */
+	    break;
+	}
+	break;
+	
+      case AUI:
+	if (!lp->tx_enable) {
+	    if (lp->timeout < 0) {
+		omr = inl(DE4X5_OMR);          /* Set up half duplex for AUI */
+		outl(omr & ~OMR_FDX, DE4X5_OMR);
+	    }
+	    irqs = 0;
+	    irq_mask = 0;
+	    sts = test_media(dev,irqs, irq_mask, 0, 0, 0, 1000);
+	    if (sts < 0) {
+		next_tick = sts & ~TIMER_CB;
+	    } else {
+		if (!(inl(DE4X5_SISR) & SISR_SRA) && (lp->autosense == AUTO)) {
+		    lp->media = BNC;
+		    next_tick = dc2114x_autoconf(dev);
+		} else {
+		    lp->local_state = 1;
+		    de4x5_init_connection(dev);
+		}
+	    }
+	} else if (!lp->linkOK && (lp->autosense == AUTO)) {
+	    lp->media = AUI_SUSPECT;
+	    next_tick = 3000;
+	}
+	break;
+	
+      case AUI_SUSPECT:
+	next_tick = de4x5_suspect_state(dev, 1000, AUI, ping_media, dc2114x_autoconf);
+	break;
+	
+      case BNC:
+	switch (lp->local_state) {
+	  case 0:
+	    if (lp->timeout < 0) {
+		omr = inl(DE4X5_OMR);          /* Set up half duplex for BNC */
+		outl(omr & ~OMR_FDX, DE4X5_OMR);
+	    }
+	    irqs = 0;
+	    irq_mask = 0;
+	    sts = test_media(dev,irqs, irq_mask, 0, 0, 0, 1000);
+	    if (sts < 0) {
+		next_tick = sts & ~TIMER_CB;
+	    } else {
+		lp->local_state++;             /* Ensure media connected */
+		next_tick = dc2114x_autoconf(dev);
+	    }
+	    break;
+	    
+	  case 1:
+	    if (!lp->tx_enable) {
+		if ((sts = ping_media(dev, 3000)) < 0) {
+		    next_tick = sts & ~TIMER_CB;
+		} else {
+		    if (sts) {
+			lp->local_state = 0;
+			lp->tcount++;
+			lp->media = INIT;
+		    } else {
+			de4x5_init_connection(dev);
+		    }
+		}
+	    } else if (!lp->linkOK && (lp->autosense == AUTO)) {
+		lp->media = BNC_SUSPECT;
+		next_tick = 3000;
+	    }
+	    break;
+	}
+	break;
+	
+      case BNC_SUSPECT:
+	next_tick = de4x5_suspect_state(dev, 1000, BNC, ping_media, dc2114x_autoconf);
+	break;
+	
+      case SPD_DET:                              /* Choose 10Mb/s or 100Mb/s */
+	  if (srom_map_media(dev) < 0) {
+	      lp->tcount++;
+	      lp->media = INIT;
+	      return next_tick;
+	  }
+	  if (lp->media == _100Mb) {
+	      if ((slnk = test_for_100Mb(dev, 6500)) < 0) {
+		  lp->media = SPD_DET;
+		  return  (slnk & ~TIMER_CB);
+	      }
+	  } else {
+	      if (wait_for_link(dev) < 0) {
+		  lp->media = SPD_DET;
+		  return PDET_LINK_WAIT;
+	      }
+	  } 
+	  if (((lp->media == _100Mb) && is_100_up(dev)) ||
+	      ((lp->media == _10Mb)  && is_10_up(dev)) ||
+	       (lp->media == BNC) || (lp->media == AUI)) {
+	      next_tick = dc2114x_autoconf(dev);
+	  } else {
+	      lp->tcount++;
+	      lp->media = INIT;
+	  }
+	  break;
+	
+      case _10Mb:
+        next_tick = 3000;
+	if (!lp->tx_enable) {
+	    SET_10Mb;
+	    de4x5_init_connection(dev);
+	} else {
+	    if (!lp->linkOK && (lp->autosense == AUTO)) {
+		if (!is_10_up(dev) || (!lp->useSROM && is_spd_100(dev))) {
+		    lp->media = INIT;
+		    lp->tcount++;
+		    next_tick = DE4X5_AUTOSENSE_MS;
+		}
+	    }
+	}
+	break;
+
+      case _100Mb:
+        next_tick = 3000;
+	if (!lp->tx_enable) {
+	    SET_100Mb;
+	    de4x5_init_connection(dev);
+	} else {
+	    if (!lp->linkOK && (lp->autosense == AUTO)) {
+		if (!is_100_up(dev) || (!lp->useSROM && !is_spd_100(dev))) {
+		    lp->media = INIT;
+		    lp->tcount++;
+		    next_tick = DE4X5_AUTOSENSE_MS;
+		}
+	    }
+	}
+	break;
+
+      default:
+	lp->tcount++;
+printk("Huh?: media:%02x\n", lp->media);
+	lp->media = INIT;
+	break;
+    }
+    
+    return next_tick;
+}
+
 static int
 srom_autoconf(struct device *dev)
 {
@@ -2765,18 +3025,24 @@ srom_autoconf(struct device *dev)
 /*
 ** This mapping keeps the original media codes and FDX flag unchanged.
 ** While it isn't strictly necessary, it helps me for the moment...
+** The early return avoids a media state / SROM media space clash.
 */
-static void
+static int
 srom_map_media(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
 
     lp->fdx = 0;
+    if (lp->infoblock_media == lp->media) 
+      return 0;
+
     switch(lp->infoblock_media) {
       case SROM_10BASETF:
+	if (!de4x5_full_duplex) return -1;
 	lp->fdx = TRUE;
       case SROM_10BASET:
-	if (lp->chipset == DC21140) {
+	if (de4x5_full_duplex && !lp->fdx) return -1;
+	if ((lp->chipset == DC21140) || ((lp->chipset & ~0x00ff) == DC2114x)) {
 	    lp->media = _10Mb;
 	} else {
 	    lp->media = TP;
@@ -2792,8 +3058,10 @@ srom_map_media(struct device *dev)
 	break;
 
       case SROM_100BASETF:
+        if (!de4x5_full_duplex) return -1;
 	lp->fdx = TRUE;
       case SROM_100BASET:
+	if (de4x5_full_duplex && !lp->fdx) return -1;
 	lp->media = _100Mb;
 	break;
 
@@ -2802,8 +3070,10 @@ srom_map_media(struct device *dev)
 	break;
 
       case SROM_100BASEFF:
+	if (!de4x5_full_duplex) return -1;
 	lp->fdx = TRUE;
       case SROM_100BASEF: 
+	if (de4x5_full_duplex && !lp->fdx) return -1;
 	lp->media = _100Mb;
 	break;
 
@@ -2814,10 +3084,11 @@ srom_map_media(struct device *dev)
       default: 
 	printk("%s: Bad media code [%d] detected in SROM!\n", dev->name, 
 	                                                  lp->infoblock_media);
+	return -1;
 	break;
     }
 
-    return;
+    return 0;
 }
 
 static void
@@ -2858,7 +3129,7 @@ de4x5_reset_phy(struct device *dev)
     if ((lp->useSROM) || (lp->phy[lp->active].id)) {
 	if (lp->timeout < 0) {
 	    if (lp->useSROM) {
-		if (lp->phy[lp->active].rst) { /* MII device specific reset */
+		if (lp->phy[lp->active].rst) {
 		    srom_exec(dev, lp->phy[lp->active].rst);
 		    srom_exec(dev, lp->phy[lp->active].rst);
 		} else if (lp->rst) {          /* Type 5 infoblock reset */
@@ -2891,7 +3162,9 @@ test_media(struct device *dev, s32 irqs, s32 irq_mask, s32 csr13, s32 csr14, s32
     
     if (lp->timeout < 0) {
 	lp->timeout = msec/100;
-	reset_init_sia(dev, csr13, csr14, csr15);
+	if (!lp->useSROM) {      /* Already done if by SROM, else dc2104[01] */
+	    reset_init_sia(dev, csr13, csr14, csr15);
+	}
 
 	/* set up the interrupt mask */
 	outl(irq_mask, DE4X5_IMR);
@@ -2901,7 +3174,7 @@ test_media(struct device *dev, s32 irqs, s32 irq_mask, s32 csr13, s32 csr14, s32
 	outl(sts, DE4X5_STS);
 	
 	/* clear csr12 NRA and SRA bits */
-	if (lp->chipset == DC21041) {
+	if ((lp->chipset == DC21041) || lp->useSROM) {
 	    csr12 = inl(DE4X5_SISR);
 	    outl(csr12, DE4X5_SISR);
 	}
@@ -2940,29 +3213,60 @@ test_tp(struct device *dev, s32 msec)
     return sisr;
 }
 
+/*
+** Samples the 100Mb Link State Signal. The sample interval is important
+** because too fast a rate can give erroneous results and confuse the
+** speed sense algorithm.
+*/
+#define SAMPLE_INTERVAL 500  /* ms */
+#define SAMPLE_DELAY    2000 /* ms */
 static int
-test_sym_link(struct device *dev, int msec)
+test_for_100Mb(struct device *dev, int msec)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
-    int iobase = dev->base_addr;
-    int gep = 0;
-    
+    int gep = 0, ret = ((lp->chipset & ~0x00ff)==DC2114x? -1 :GEP_SLNK);
+
     if (lp->timeout < 0) {
-	lp->timeout = msec/100;
+	if ((msec/SAMPLE_INTERVAL) <= 0) return 0;
+	if (msec > SAMPLE_DELAY) {
+	    lp->timeout = (msec - SAMPLE_DELAY)/SAMPLE_INTERVAL;
+	    gep = SAMPLE_DELAY | TIMER_CB;
+	    return gep;
+	} else {
+	    lp->timeout = msec/SAMPLE_INTERVAL;
+	}
     }
     
     if (lp->phy[lp->active].id || lp->useSROM) {
-	gep = ((is_100_up(dev) && is_spd_100(dev)) ? GEP_SLNK : 0);
+	gep = is_100_up(dev) | is_spd_100(dev);
     } else {
-	gep = (~inl(DE4X5_GEP) & (GEP_SLNK | GEP_LNP));
+	gep = (~gep_rd(dev) & (GEP_SLNK | GEP_LNP));
     }
-    if (!(gep & GEP_SLNK) && --lp->timeout) {
-	gep = 100 | TIMER_CB;
+    if (!(gep & ret) && --lp->timeout) {
+	gep = SAMPLE_INTERVAL | TIMER_CB;
     } else {
 	lp->timeout = -1;
     }
     
     return gep;
+}
+
+static int
+wait_for_link(struct device *dev)
+{
+    struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+
+    if (lp->timeout < 0) {
+	lp->timeout = 1;
+    }
+    
+    if (lp->timeout--) {
+	return TIMER_CB;
+    } else {
+	lp->timeout = -1;
+    }
+    
+    return 0;
 }
 
 /*
@@ -2999,16 +3303,18 @@ is_spd_100(struct device *dev)
     u_long iobase = dev->base_addr;
     int spd;
     
-    if (lp->useSROM && !lp->useMII) {
-	spd = (lp->asBitValid & 
-	       (lp->asPolarity ^ (inl(DE4X5_GEP) & lp->asBit))) |
- 		 (lp->linkOK & ~lp->asBitValid);
-    } else if (lp->phy[lp->active].id && (!lp->useSROM || lp->useMII)) {
+    if (lp->useMII) {
 	spd = mii_rd(lp->phy[lp->active].spd.reg, lp->phy[lp->active].addr, DE4X5_MII);
 	spd = ~(spd ^ lp->phy[lp->active].spd.value);
 	spd &= lp->phy[lp->active].spd.mask;
+    } else if (!lp->useSROM) {                      /* de500-xa */
+	spd = ((~gep_rd(dev)) & GEP_SLNK);
     } else {
-	spd = ((~inl(DE4X5_GEP)) & GEP_SLNK);
+	if ((lp->ibn == 2) || !lp->asBitValid)
+	    return ((lp->chipset == DC21143)?(~inl(DE4X5_SISR)&SISR_LS100):0);
+
+	spd = (lp->asBitValid & (lp->asPolarity ^ (gep_rd(dev) & lp->asBit))) |
+	          (lp->linkOK & ~lp->asBitValid);
     }
     
     return spd;
@@ -3020,16 +3326,18 @@ is_100_up(struct device *dev)
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
     
-    if (lp->useSROM && !lp->useMII) {
-	return ((lp->asBitValid & 
-		 (lp->asPolarity ^ (inl(DE4X5_GEP) & lp->asBit))) |
-		(lp->linkOK & ~lp->asBitValid));
-    } else if (lp->phy[lp->active].id && (!lp->useSROM || lp->useMII)) {
+    if (lp->useMII) {
 	/* Double read for sticky bits & temporary drops */
 	mii_rd(MII_SR, lp->phy[lp->active].addr, DE4X5_MII);
 	return (mii_rd(MII_SR, lp->phy[lp->active].addr, DE4X5_MII) & MII_SR_LKS);
+    } else if (!lp->useSROM) {                       /* de500-xa */
+	return ((~gep_rd(dev)) & GEP_SLNK);
     } else {
-	return ((~inl(DE4X5_GEP)) & GEP_SLNK);
+	if ((lp->ibn == 2) || !lp->asBitValid)
+	    return ((lp->chipset == DC21143)?(~inl(DE4X5_SISR)&SISR_LS100):0);
+
+        return ((lp->asBitValid&(lp->asPolarity^(gep_rd(dev)&lp->asBit))) |
+		(lp->linkOK & ~lp->asBitValid));
     }
 }
 
@@ -3039,16 +3347,20 @@ is_10_up(struct device *dev)
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
     
-    if (lp->useSROM && !lp->useMII) {
-	return ((lp->asBitValid & 
-		 (lp->asPolarity ^ (inl(DE4X5_GEP) & lp->asBit))) |
-		(lp->linkOK & ~lp->asBitValid));
-    } else if (lp->phy[lp->active].id && (!lp->useSROM || lp->useMII)) {
+    if (lp->useMII) {
 	/* Double read for sticky bits & temporary drops */
 	mii_rd(MII_SR, lp->phy[lp->active].addr, DE4X5_MII);
 	return (mii_rd(MII_SR, lp->phy[lp->active].addr, DE4X5_MII) & MII_SR_LKS);
+    } else if (!lp->useSROM) {                       /* de500-xa */
+	return ((~gep_rd(dev)) & GEP_LNP);
     } else {
-	return ((~inl(DE4X5_GEP)) & GEP_LNP);
+	if ((lp->ibn == 2) || !lp->asBitValid)
+	    return (((lp->chipset & ~0x00ff) == DC2114x) ?
+		    (~inl(DE4X5_SISR)&SISR_LS10):
+		    0);
+
+	return ((lp->asBitValid&(lp->asPolarity^(gep_rd(dev)&lp->asBit))) |
+		(lp->linkOK & ~lp->asBitValid));
     }
 }
 
@@ -3060,6 +3372,8 @@ is_anc_capable(struct device *dev)
     
     if (lp->phy[lp->active].id && (!lp->useSROM || lp->useMII)) {
 	return (mii_rd(MII_SR, lp->phy[lp->active].addr, DE4X5_MII));
+    } else if ((lp->chipset & ~0x00ff) == DC2114x) {
+	return (inl(DE4X5_SISR) & SISR_LPN) >> 11;
     } else {
 	return 0;
     }
@@ -3271,11 +3585,6 @@ de4x5_cache_state(struct device *dev, int flag)
 	lp->cache.csr0 = inl(DE4X5_BMR);
 	lp->cache.csr6 = (inl(DE4X5_OMR) & ~(OMR_ST | OMR_SR));
 	lp->cache.csr7 = inl(DE4X5_IMR);
-	if (lp->chipset != DC21140) {
-	    lp->cache.csr13 = inl(DE4X5_SICR);
-	    lp->cache.csr14 = inl(DE4X5_STRR);
-	    lp->cache.csr15 = inl(DE4X5_SIGR);
-	}
 	break;
 
       case DE4X5_RESTORE_STATE:
@@ -3283,8 +3592,8 @@ de4x5_cache_state(struct device *dev, int flag)
 	outl(lp->cache.csr6, DE4X5_OMR);
 	outl(lp->cache.csr7, DE4X5_IMR);
 	if (lp->chipset == DC21140) {
-	    outl(lp->cache.gepc, DE4X5_GEP);
-	    outl(lp->cache.gep, DE4X5_GEP);
+	    gep_wr(lp->cache.gepc, dev);
+	    gep_wr(lp->cache.gep, dev);
 	} else {
 	    reset_init_sia(dev, lp->cache.csr13, lp->cache.csr14, 
 			                                      lp->cache.csr15);
@@ -3392,15 +3701,32 @@ de4x5_setup_intr(struct device *dev)
 **
 */
 static void
-reset_init_sia(struct device *dev, s32 sicr, s32 strr, s32 sigr)
+reset_init_sia(struct device *dev, s32 csr13, s32 csr14, s32 csr15)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
-    
+
     RESET_SIA;
-    outl(sigr, DE4X5_SIGR);
-    outl(strr, DE4X5_STRR);
-    outl(sicr, DE4X5_SICR);
+    if (lp->useSROM) {
+	if (lp->ibn == 3) {
+	    srom_exec(dev, lp->phy[lp->active].rst);
+	    srom_exec(dev, lp->phy[lp->active].gep);
+	    outl(1, DE4X5_SICR);
+	    return;
+	} else {
+	    csr15 = lp->cache.csr15;
+	    csr14 = lp->cache.csr14;
+	    csr13 = lp->cache.csr13;
+	    outl(csr15 | lp->cache.gepc, DE4X5_SIGR);
+	    outl(csr15 | lp->cache.gep, DE4X5_SIGR);
+	}
+    } else {
+	outl(csr15, DE4X5_SIGR);
+    }
+    outl(csr14, DE4X5_STRR);
+    outl(csr13, DE4X5_SICR);
+
+    de4x5_ms_delay(10);
 
     return;
 }
@@ -3523,7 +3849,10 @@ PCI_signature(char *name, struct bus_type *lp)
 	if (lp->chipset != DC21041) {
 	    useSROM = TRUE;             /* card is not recognisably DEC */
 	}
+    } else if ((lp->chipset & ~0x00ff) == DC2114x) {
+	useSROM = TRUE;
     }
+
     
     return status;
 }
@@ -3531,17 +3860,31 @@ PCI_signature(char *name, struct bus_type *lp)
 /*
 ** Set up the Ethernet PROM counter to the start of the Ethernet address on
 ** the DC21040, else  read the SROM for the other chips.
+** The SROM may not be present in a multi-MAC card, so first read the
+** MAC address and check for a bad address. If there is a bad one then exit
+** immediately with the prior srom contents intact (the h/w address will
+** be fixed up later).
 */
 static void
 DevicePresent(u_long aprom_addr)
 {
-    int i;
+    int i, j=0;
     struct bus_type *lp = &bus;
     
     if (lp->chipset == DC21040) {
 	outl(0, aprom_addr);           /* Reset Ethernet Address ROM Pointer */
     } else {                           /* Read new srom */
-	u_short tmp, *p = (short *)&lp->srom;
+	u_short tmp, *p = (short *)((char *)&lp->srom + SROM_HWADD);
+	for (i=0; i<(ETH_ALEN>>1); i++) {
+	    tmp = srom_rd(aprom_addr, (SROM_HWADD>>1) + i);
+	    *p = le16_to_cpu(tmp);
+	    j += *p++;
+	}
+	if ((j == 0) || (j == 0x2fffd)) {
+	    return;
+	}
+
+	p=(short *)&lp->srom;
 	for (i=0; i<(sizeof(struct de4x5_srom)>>1); i++) {
 	    tmp = srom_rd(aprom_addr, i);
 	    *p++ = le16_to_cpu(tmp);
@@ -3567,6 +3910,7 @@ get_hw_addr(struct device *dev)
     struct bus_type *lp = &bus;
 
     broken = de4x5_bad_srom(lp);
+
     for (i=0,k=0,j=0;j<3;j++) {
 	k <<= 1;
 	if (k > 0xffff) k-=0xffff;
@@ -3673,6 +4017,10 @@ srom_repair(struct device *dev, int card)
     return;
 }
 
+/*
+** Assume that the irq's do not follow the PCI spec - this is seems
+** to be true so far (2 for 2).
+*/
 static int
 test_bad_enet(struct device *dev, int status)
 {
@@ -3689,10 +4037,8 @@ test_bad_enet(struct device *dev, int status)
 		if (dev->dev_addr[i] != 0) break;
 	    }
 	    for (i=0; i<ETH_ALEN; i++) last.addr[i] = dev->dev_addr[i];
-	    if (((*((int *)dev->dev_addr) & 0x00ffffff) == 0x95c000) &&
-		(lp->chipset == DC21040)) {
-		dev->irq = last.irq;
-	    }
+	    dev->irq = last.irq;
+
 	    status = 0;
 	}
     } else if (!status) {
@@ -3753,9 +4099,6 @@ srom_address(u_int command, u_long addr, u_char offset)
     de4x5_us_delay(1);
     
     i = (getfrom_srom(addr) >> 3) & 0x01;
-    if (i != 0) {
-	printk("Bad SROM address phase.....\n");
-    }
     
     return;
 }
@@ -3868,14 +4211,13 @@ static void
 srom_init(struct device *dev)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
-    u_long iobase = dev->base_addr;
     u_char *p = (u_char *)&lp->srom + lp->infoleaf_offset;
     u_char count;
 
     p+=2;
     if (lp->chipset == DC21140) {
 	lp->cache.gepc = (*p++ | GEP_CTRL);
-	outl(lp->cache.gepc, DE4X5_GEP);
+	gep_wr(lp->cache.gepc, dev);
     }
 
     /* Block count */
@@ -3888,8 +4230,12 @@ srom_init(struct device *dev)
 	} else if (*(p+1) == 5) {
 	    type5_infoblock(dev, 1, p);
 	    p += ((*p & BLOCK_LEN) + 1);
+	} else if (*(p+1) == 4) {
+	    p += ((*p & BLOCK_LEN) + 1);
 	} else if (*(p+1) == 3) {
 	    type3_infoblock(dev, 1, p);
+	    p += ((*p & BLOCK_LEN) + 1);
+	} else if (*(p+1) == 2) {
 	    p += ((*p & BLOCK_LEN) + 1);
 	} else if (*(p+1) == 1) {
 	    type1_infoblock(dev, 1, p);
@@ -3902,18 +4248,31 @@ srom_init(struct device *dev)
     return;
 }
 
+/*
+** A generic routine that writes GEP control, data and reset information
+** to the GEP register (21140) or csr15 GEP portion (2114[23]).
+*/
 static void
 srom_exec(struct device *dev, u_char *p)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_long iobase = dev->base_addr;
     u_char count = (p ? *p++ : 0);
+    u_short *w = (u_short *)p;
 
+    if (((lp->ibn != 1) && (lp->ibn != 3) && (lp->ibn != 5)) || !count) return;
+
+    if (lp->chipset != DC21140) RESET_SIA;
+ 
     while (count--) {
-	if (lp->chipset == DC21140) {
-	    outl(*p++, DE4X5_GEP);
-	}
+	gep_wr(((lp->chipset==DC21140) && (lp->ibn!=5) ? 
+		                                   *p++ : TWIDDLE(w++)), dev);
 	udelay(2000);                       /* 2ms per action */
+    }
+
+    if (lp->chipset != DC21140) {
+	outl(lp->cache.csr14, DE4X5_STRR);
+	outl(lp->cache.csr13, DE4X5_SICR);
     }
 
     return;
@@ -3971,15 +4330,70 @@ dc21140_infoleaf(struct device *dev)
 static int 
 dc21142_infoleaf(struct device *dev)
 {
-printk("dc21142_infoleaf()\n");
-    return DE4X5_AUTOSENSE_MS;
+    struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+    u_char count = 0;
+    u_char *p = (u_char *)&lp->srom + lp->infoleaf_offset;
+    int next_tick = DE4X5_AUTOSENSE_MS;
+
+    /* Read the connection type */
+    p+=2;
+
+    /* Block count */
+    count = *p++;
+
+    /* Recursively figure out the info blocks */
+    if (*p < 128) {
+	next_tick = dc_infoblock[COMPACT](dev, count, p);
+    } else {
+	next_tick = dc_infoblock[*(p+1)](dev, count, p);
+    }
+
+    if (lp->tcount == count) {
+	lp->media = NC;
+        if (lp->media != lp->c_media) {
+	    de4x5_dbg_media(dev);
+	    lp->c_media = lp->media;
+	}
+	lp->media = INIT;
+	lp->tcount = 0;
+	lp->tx_enable = FALSE;
+    }
+
+    return next_tick & ~TIMER_CB;
 }
 
 static int 
 dc21143_infoleaf(struct device *dev)
 {
-printk("dc21143_infoleaf()\n");
-    return DE4X5_AUTOSENSE_MS;
+    struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+    u_char count = 0;
+    u_char *p = (u_char *)&lp->srom + lp->infoleaf_offset;
+    int next_tick = DE4X5_AUTOSENSE_MS;
+
+    /* Read the connection type */
+    p+=2;
+
+    /* Block count */
+    count = *p++;
+
+    /* Recursively figure out the info blocks */
+    if (*p < 128) {
+	next_tick = dc_infoblock[COMPACT](dev, count, p);
+    } else {
+	next_tick = dc_infoblock[*(p+1)](dev, count, p);
+    }
+    if (lp->tcount == count) {
+	lp->media = NC;
+        if (lp->media != lp->c_media) {
+	    de4x5_dbg_media(dev);
+	    lp->c_media = lp->media;
+	}
+	lp->media = INIT;
+	lp->tcount = 0;
+	lp->tx_enable = FALSE;
+    }
+
+    return next_tick & ~TIMER_CB;
 }
 
 /*
@@ -3990,7 +4404,6 @@ static int
 compact_infoblock(struct device *dev, u_char count, u_char *p)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
-    u_long iobase = dev->base_addr;
     u_char flags, csr6;
 
     /* Recursively figure out the info blocks */
@@ -4003,7 +4416,9 @@ compact_infoblock(struct device *dev, u_char count, u_char *p)
     }
 
     if ((lp->media == INIT) && (lp->timeout < 0)) {
-        outl(lp->cache.gepc, DE4X5_GEP);
+        lp->ibn = COMPACT;
+        lp->active = 0;
+	gep_wr(lp->cache.gepc, dev);
 	lp->infoblock_media = (*p++) & COMPACT_MC;
 	lp->cache.gep = *p++;
 	csr6 = *p++;
@@ -4013,7 +4428,7 @@ compact_infoblock(struct device *dev, u_char count, u_char *p)
 	lp->defMedium = (flags & 0x40) ? -1 : 0;
 	lp->asBit = 1 << ((csr6 >> 1) & 0x07);
 	lp->asPolarity = ((csr6 & 0x80) ? -1 : 0) & lp->asBit;
-	lp->infoblock_csr6 = (csr6 & 0x71) << 18;
+	lp->infoblock_csr6 = OMR_DEF | ((csr6 & 0x71) << 18);
 	lp->useMII = FALSE;
 
 	de4x5_switch_mac_port(dev);
@@ -4024,12 +4439,11 @@ compact_infoblock(struct device *dev, u_char count, u_char *p)
 
 /*
 ** This block describes non MII media for the DC21140[A] only.
- */
+*/
 static int 
 type0_infoblock(struct device *dev, u_char count, u_char *p)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
-    u_long iobase = dev->base_addr;
     u_char flags, csr6, len = (*p & BLOCK_LEN)+1;
 
     /* Recursively figure out the info blocks */
@@ -4042,7 +4456,9 @@ type0_infoblock(struct device *dev, u_char count, u_char *p)
     }
 
     if ((lp->media == INIT) && (lp->timeout < 0)) {
-        outl(lp->cache.gepc, DE4X5_GEP);
+        lp->ibn = 0;
+        lp->active = 0;
+        gep_wr(lp->cache.gepc, dev);
 	p+=2;
 	lp->infoblock_media = (*p++) & BLOCK0_MC;
 	lp->cache.gep = *p++;
@@ -4053,7 +4469,7 @@ type0_infoblock(struct device *dev, u_char count, u_char *p)
 	lp->defMedium = (flags & 0x40) ? -1 : 0;
 	lp->asBit = 1 << ((csr6 >> 1) & 0x07);
 	lp->asPolarity = ((csr6 & 0x80) ? -1 : 0) & lp->asBit;
-	lp->infoblock_csr6 = (csr6 & 0x71) << 18;
+	lp->infoblock_csr6 = OMR_DEF | ((csr6 & 0x71) << 18);
 	lp->useMII = FALSE;
 
 	de4x5_switch_mac_port(dev);
@@ -4081,7 +4497,6 @@ type1_infoblock(struct device *dev, u_char count, u_char *p)
 
     p += 2;
     if (lp->state == INITIALISED) {
-	lp->ibn = 1;
 	lp->active = *p++;
 	lp->phy[lp->active].gep = (*p ? p : 0); p += (*p + 1);
 	lp->phy[lp->active].rst = (*p ? p : 0); p += (*p + 1);
@@ -4093,9 +4508,10 @@ type1_infoblock(struct device *dev, u_char count, u_char *p)
     } else if ((lp->media == INIT) && (lp->timeout < 0)) {
         lp->ibn = 1;
         lp->active = *p;
-	lp->infoblock_csr6 = OMR_PS | OMR_HBD;
+	lp->infoblock_csr6 = OMR_MII_100;
 	lp->useMII = TRUE;
 	lp->infoblock_media = ANS;
+	lp->media = ANS;
 	de4x5_switch_mac_port(dev);
     }
 
@@ -4105,11 +4521,85 @@ type1_infoblock(struct device *dev, u_char count, u_char *p)
 static int 
 type2_infoblock(struct device *dev, u_char count, u_char *p)
 {
-    return DE4X5_AUTOSENSE_MS;
+    struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+    u_char len = (*p & BLOCK_LEN)+1;
+
+    /* Recursively figure out the info blocks */
+    if (--count > lp->tcount) {
+	if (*(p+len) < 128) {
+	    return dc_infoblock[COMPACT](dev, count, p+len);
+	} else {
+	    return dc_infoblock[*(p+len+1)](dev, count, p+len);
+	}
+    }
+
+    if ((lp->media == INIT) && (lp->timeout < 0)) {
+        lp->ibn = 2;
+        lp->active = 0;
+	p += 2;
+	lp->infoblock_media = (*p) & MEDIA_CODE;
+
+        if ((*p++) & EXT_FIELD) {
+	    lp->cache.csr13 = TWIDDLE(p); p += 2;
+	    lp->cache.csr14 = TWIDDLE(p); p += 2;
+	    lp->cache.csr15 = TWIDDLE(p); p += 2;
+	} else {
+	    lp->cache.csr13 = CSR13;
+	    lp->cache.csr14 = CSR14;
+	    lp->cache.csr15 = CSR15;
+	}
+        lp->cache.gepc = ((s32)(TWIDDLE(p)) << 16); p += 2;
+        lp->cache.gep  = ((s32)(TWIDDLE(p)) << 16);
+	lp->infoblock_csr6 = OMR_SIA;
+	lp->useMII = FALSE;
+
+	de4x5_switch_mac_port(dev);
+    }
+
+    return dc2114x_autoconf(dev);
 }
 
 static int 
 type3_infoblock(struct device *dev, u_char count, u_char *p)
+{
+    struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+    u_char len = (*p & BLOCK_LEN)+1;
+
+    /* Recursively figure out the info blocks */
+    if (--count > lp->tcount) {
+	if (*(p+len) < 128) {
+	    return dc_infoblock[COMPACT](dev, count, p+len);
+	} else {
+	    return dc_infoblock[*(p+len+1)](dev, count, p+len);
+	}
+    }
+
+    p += 2;
+    if (lp->state == INITIALISED) {
+        lp->active = *p++;
+	lp->phy[lp->active].gep = (*p ? p : 0); p += (2 * (*p) + 1);
+	lp->phy[lp->active].rst = (*p ? p : 0); p += (2 * (*p) + 1);
+	lp->phy[lp->active].mc  = TWIDDLE(p); p += 2;
+	lp->phy[lp->active].ana = TWIDDLE(p); p += 2;
+	lp->phy[lp->active].fdx = TWIDDLE(p); p += 2;
+	lp->phy[lp->active].ttm = TWIDDLE(p); p += 2;
+	lp->phy[lp->active].mci = *p;
+	return 0;
+    } else if ((lp->media == INIT) && (lp->timeout < 0)) {
+        lp->ibn = 3;
+	lp->active = *p;
+	lp->infoblock_csr6 = OMR_MII_100;
+	lp->useMII = TRUE;
+	lp->infoblock_media = ANS;
+
+	de4x5_switch_mac_port(dev);
+    }
+
+    return dc2114x_autoconf(dev);
+}
+
+static int 
+type4_infoblock(struct device *dev, u_char count, u_char *p)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
     u_char flags, csr6, len = (*p & BLOCK_LEN)+1;
@@ -4123,20 +4613,16 @@ type3_infoblock(struct device *dev, u_char count, u_char *p)
 	}
     }
 
-    if (lp->state == INITIALISED) {
-	lp->ibn = 3; p += 2;
-        lp->active = *p++;
-	lp->phy[lp->active].gep = (*p ? p : 0); p += (*p + 1);
-	lp->phy[lp->active].rst = (*p ? p : 0); p += (*p + 1);
-	lp->phy[lp->active].mc  = TWIDDLE(p); p += 2;
-	lp->phy[lp->active].ana = TWIDDLE(p); p += 2;
-	lp->phy[lp->active].fdx = TWIDDLE(p); p += 2;
-	lp->phy[lp->active].ttm = TWIDDLE(p);
-	return 0;
-    } else if (lp->media == INIT) {
+    if ((lp->media == INIT) && (lp->timeout < 0)) {
+        lp->ibn = 4;
+        lp->active = 0;
 	p+=2;
-	lp->infoblock_media = (*p++) & BLOCK0_MC;
-	lp->cache.gep = *p++;
+	lp->infoblock_media = (*p++) & MEDIA_CODE;
+        lp->cache.csr13 = CSR13;              /* Hard coded defaults */
+	lp->cache.csr14 = CSR14;
+	lp->cache.csr15 = CSR15;
+        lp->cache.gepc = ((s32)(TWIDDLE(p)) << 16); p += 2;
+        lp->cache.gep  = ((s32)(TWIDDLE(p)) << 16); p += 2;
 	csr6 = *p++;
 	flags = *p++;
 
@@ -4144,19 +4630,13 @@ type3_infoblock(struct device *dev, u_char count, u_char *p)
 	lp->defMedium = (flags & 0x40) ? -1 : 0;
 	lp->asBit = 1 << ((csr6 >> 1) & 0x07);
 	lp->asPolarity = ((csr6 & 0x80) ? -1 : 0) & lp->asBit;
-	lp->infoblock_csr6 = (csr6 & 0x71) << 18;
-	lp->useMII = TRUE;
+	lp->infoblock_csr6 = OMR_DEF | ((csr6 & 0x71) << 18);
+	lp->useMII = FALSE;
 
 	de4x5_switch_mac_port(dev);
     }
 
-    return dc21140m_autoconf(dev);
-}
-
-static int 
-type4_infoblock(struct device *dev, u_char count, u_char *p)
-{
-    return DE4X5_AUTOSENSE_MS;
+    return dc2114x_autoconf(dev);
 }
 
 /*
@@ -4167,8 +4647,7 @@ static int
 type5_infoblock(struct device *dev, u_char count, u_char *p)
 {
     struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
-    u_long iobase = dev->base_addr;
-    u_char i, j, len = (*p & BLOCK_LEN)+1;
+    u_char len = (*p & BLOCK_LEN)+1;
 
     /* Recursively figure out the info blocks */
     if (--count > lp->tcount) {
@@ -4183,19 +4662,7 @@ type5_infoblock(struct device *dev, u_char count, u_char *p)
     if ((lp->state == INITIALISED) || (lp->media == INIT)) {
 	p+=2;
         lp->rst = p;
-	i = *p++;
-	for (j=0;i;--i) {
-	    if (lp->chipset == DC21140) {
-		if (!j) {
-		    outl(*p++ | GEP_CTRL, DE4X5_GEP);
-		    j++;
-		}
-		outl(*p++, DE4X5_GEP);
-	    } else if (lp->chipset == DC21142) {
-	    } else if (lp->chipset == DC21143) {
-	    }
-	}
-	    
+        srom_exec(dev, lp->rst);
     }
 
     return DE4X5_AUTOSENSE_MS;
@@ -4327,8 +4794,7 @@ getfrom_mii(u32 command, u_long ioaddr)
 }
 
 /*
-** Here's 3 ways to calculate the OUI from the ID registers. One's a brain
-** dead approach, 2 aren't (clue: mine isn't!).
+** Here's 3 ways to calculate the OUI from the ID registers.
 */
 static int
 mii_get_oui(u_char phyaddr, u_long ioaddr)
@@ -4394,7 +4860,7 @@ mii_get_phy(struct device *dev)
 	if (i==0) n++;                             /* Count cycles */
 	while (de4x5_reset_phy(dev)<0) udelay(100);/* Wait for reset */
 	id = mii_get_oui(i, DE4X5_MII); 
-	if ((id == 0) || (id == -1)) continue;     /* Valid ID? */
+	if ((id == 0) || (id == 65535)) continue;  /* Valid ID? */
 	for (j=0; j<limit; j++) {                  /* Search PHY table */
 	    if (id != phy_info[j].id) continue;    /* ID match? */
 	    for (k=0; lp->phy[k].id && (k < DE4X5_MAX_PHY); k++);
@@ -4405,11 +4871,18 @@ mii_get_phy(struct device *dev)
 		lp->mii_cnt++;
 		lp->active++;
 	    } else {
-		i = DE4X5_MAX_MII;                 /* Stop the search */
-		j = limit;
+		goto purgatory;                    /* Stop the search */
 	    }
+	    break;
+	}
+	if ((j == limit) && (i < DE4X5_MAX_MII)) {
+	    printk("%s: Found MII device not currently supported. Please mail the following dump to\nthe author:\n", dev->name);
+	    de4x5_debug |= DEBUG_MII;
+	    de4x5_dbg_mii(dev, i);
+	    printk("\n");
 	}
     }
+  purgatory:
     lp->active = 0;
     if (lp->phy[0].id) {                           /* Reset the PHY devices */
 	for (k=0; lp->phy[k].id && (k < DE4X5_MAX_PHY); k++) { /*For each PHY*/
@@ -4419,7 +4892,8 @@ mii_get_phy(struct device *dev)
 	    de4x5_dbg_mii(dev, k);
 	}
     }
-    
+    if (!lp->mii_cnt) lp->useMII = FALSE;
+
     return lp->mii_cnt;
 }
 
@@ -4480,6 +4954,8 @@ de4x5_switch_mac_port(struct device *dev)
     int iobase = dev->base_addr;
     s32 omr;
 
+    STOP_DE4X5;
+
     /* Assert the OMR_PS bit in CSR6 */
     omr = (inl(DE4X5_OMR) & ~(OMR_PS | OMR_HBD | OMR_TTM | OMR_PCS | OMR_SCR |
 			                                             OMR_FDX));
@@ -4490,10 +4966,12 @@ de4x5_switch_mac_port(struct device *dev)
     /* Soft Reset */
     RESET_DE4X5;
     
-    /* Restore the GEP */
+    /* Restore the GEP - especially for COMPACT and Type 0 Infoblocks */
     if (lp->chipset == DC21140) {
-	outl(lp->cache.gepc, DE4X5_GEP);
-	outl(lp->cache.gep, DE4X5_GEP);
+	gep_wr(lp->cache.gepc, dev);
+	gep_wr(lp->cache.gep, dev);
+    } else if ((lp->chipset & ~0x0ff) == DC2114x) {
+	reset_init_sia(dev, lp->cache.csr13, lp->cache.csr14, lp->cache.csr15);
     }
 
     /* Restore CSR6 */
@@ -4503,6 +4981,36 @@ de4x5_switch_mac_port(struct device *dev)
     inl(DE4X5_MFC);
 
     return omr;
+}
+
+static void
+gep_wr(s32 data, struct device *dev)
+{
+    struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+    int iobase = dev->base_addr;
+
+    if (lp->chipset == DC21140) {
+	outl(data, DE4X5_GEP);
+    } else if ((lp->chipset & ~0x00ff) == DC2114x) {
+	outl((data<<16) | lp->cache.csr15, DE4X5_SIGR);
+    }
+
+    return;
+}
+
+static int
+gep_rd(struct device *dev)
+{
+    struct de4x5_private *lp = (struct de4x5_private *)dev->priv;
+    int iobase = dev->base_addr;
+
+    if (lp->chipset == DC21140) {
+	return inl(DE4X5_GEP);
+    } else if ((lp->chipset & ~0x00ff) == DC2114x) {
+	return (inl(DE4X5_SIGR) & 0x000fffff);
+    }
+
+    return 0;
 }
 
 static void
@@ -4660,25 +5168,18 @@ de4x5_dbg_media(struct device *dev)
     
     if (lp->media != lp->c_media) {
 	if (de4x5_debug & DEBUG_MEDIA) {
-	    if (lp->chipset != DC21140) {
-		printk("%s: media is %s\n", dev->name,
-		       (lp->media == NC  ? "unconnected!" :
-			(lp->media == TP  ? "TP." :
-			 (lp->media == ANS ? "TP/Nway." :
-			  (lp->media == BNC ? "BNC." : 
-			   (lp->media == AUI ? "AUI." : 
-			    (lp->media == BNC_AUI ? "BNC/AUI." : 
-			     (lp->media == EXT_SIA ? "EXT SIA." : 
-			      "???."
-			      ))))))));
-	    } else {
-		printk("%s: mode is %s\n", dev->name,
-		    (lp->media == NC ? "link down or incompatible connection.":
-		     (lp->media == _100Mb  ? "100Mb/s." :
-		      (lp->media == _10Mb   ? "10Mb/s." :
-		       "\?\?\?"
-		       ))));
-	    }
+	    printk("%s: media is %s%s\n", dev->name,
+		   (lp->media == NC  ? "unconnected, link down or incompatible connection" :
+		    (lp->media == TP  ? "TP" :
+		     (lp->media == ANS ? "TP/Nway" :
+		      (lp->media == BNC ? "BNC" : 
+		       (lp->media == AUI ? "AUI" : 
+			(lp->media == BNC_AUI ? "BNC/AUI" : 
+			 (lp->media == EXT_SIA ? "EXT SIA" : 
+			  (lp->media == _100Mb  ? "100Mb/s" :
+			   (lp->media == _10Mb   ? "10Mb/s" :
+			    "???"
+			    ))))))))), (lp->fdx?" full duplex.":"."));
 	}
 	lp->c_media = lp->media;
     }
@@ -4750,7 +5251,8 @@ de4x5_dbg_rx(struct sk_buff *skb, int len)
 
 /*
 ** Perform IOCTL call functions here. Some are privileged operations and the
-** effective uid is checked in those cases.
+** effective uid is checked in those cases. In the normal course of events
+** this function is only used for my testing.
 */
 static int
 de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
@@ -4792,7 +5294,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	}
 	build_setup_frame(dev, PHYS_ADDR_ONLY);
 	/* Set up the descriptor and give ownership to the card */
-	while (test_and_set_bit(0, (void *)&dev->tbusy) != 0);/* Wait for lock to free*/
+	while (test_and_set_bit(0, (void *)&dev->tbusy) != 0);
 	load_packet(dev, lp->setup_frame, TD_IC | PERFECT_F | TD_SET | 
 		                                        SETUP_FRAME_LEN, NULL);
 	lp->tx_new = (++lp->tx_new) % lp->txRingSize;
@@ -4805,6 +5307,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	    omr = inl(DE4X5_OMR);
 	    omr |= OMR_PR;
 	    outl(omr, DE4X5_OMR);
+	    dev->flags |= IFF_PROMISC;
 	} else {
 	    status = -EPERM;
 	}
@@ -4815,6 +5318,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	    omr = inl(DE4X5_OMR);
 	    omr &= ~OMR_PR;
 	    outb(omr, DE4X5_OMR);
+	    dev->flags &= ~IFF_PROMISC;
 	} else {
 	    status = -EPERM;
 	}
@@ -4824,13 +5328,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	printk("%s: Boo!\n", dev->name);
 	
 	break;
-      case DE4X5_GET_MCA:              /* Get the multicast address table */
-	break;
-      case DE4X5_SET_MCA:              /* Set a multicast address */
-	break;
-      case DE4X5_CLR_MCA:              /* Clear all multicast addresses */
-	break;
-      case DE4X5_MCA_EN:               /* Enable pass all multicast addresses*/
+      case DE4X5_MCA_EN:               /* Enable pass all multicast addressing */
 	if (suser()) {
 	    omr = inl(DE4X5_OMR);
 	    omr |= OMR_PM;
@@ -4895,9 +5393,8 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	}
 	break;
 	
-/*
-#define DE4X5_DUMP              0x0f / * Dump the DE4X5 Status * /
-	
+#define DE4X5_DUMP              0x0f /* Dump the DE4X5 Status */
+/*	
       case DE4X5_DUMP:
 	j = 0;
 	tmp.addr[j++] = dev->irq;
@@ -4951,7 +5448,7 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 	tmp.lval[j>>2] = inl(DE4X5_IMR);  j+=4;
 	tmp.lval[j>>2] = lp->chipset; j+=4; 
 	if (lp->chipset == DC21140) {
-	    tmp.lval[j>>2] = inl(DE4X5_GEP);  j+=4;
+	    tmp.lval[j>>2] = gep_rd(dev);  j+=4;
 	} else {
 	    tmp.lval[j>>2] = inl(DE4X5_SISR); j+=4;
 	    tmp.lval[j>>2] = inl(DE4X5_SICR); j+=4;
@@ -5004,21 +5501,33 @@ de4x5_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 #define LP(a) ((struct de4x5_private *)(a))
 static struct device *mdev = NULL;
 static int io=0x0;/* EDIT THIS LINE FOR YOUR CONFIGURATION IF NEEDED        */
+#if LINUX_VERSION_CODE >= LinuxVersionCode(2,1,0)
+MODULE_PARM(io, "i");
+#endif /* LINUX_VERSION_CODE */
 
 int
 init_module(void)
 {
+    int i, num, status = -EIO;
     struct device *p;
 
-    if ((mdev = insert_device(NULL, io, de4x5_probe)) == NULL) 
-      return -ENOMEM;
+    num = count_adapters();
 
-    for (p = mdev; p != NULL; p = LP(p->priv)->next_module) {
-	if (register_netdev(p) != 0)
-	  return -EIO;
+    for (i=0; i<num; i++) {
+	if ((p = insert_device(NULL, io, de4x5_probe)) == NULL) 
+	    return -ENOMEM;
+
+	if (!mdev) mdev = p;
+
+	if (register_netdev(p) != 0) {
+	    kfree(p);
+	} else {
+	    status = 0;                 /* At least one adapter will work */
+	    lastModule = p;
+	}
     }
 
-    return 0;
+    return status;
 }
 
 void
@@ -5054,6 +5563,59 @@ unlink_modules(struct device *p)
     return next;
 }
 
+static int
+count_adapters(void)
+{
+    int i, j;
+    char name[DE4X5_STRLEN];
+    u_char pb, dev_fn, dev_num;
+    u_short dev_id, vendor;
+    u_int class = DE4X5_CLASS_CODE;
+    u_int device, iobase = 0x1000;
+
+    for (j=0, i=1; i<MAX_EISA_SLOTS; i++, iobase+=EISA_SLOT_INC) {
+	if (EISA_signature(name, EISA_ID)) j++;
+    }
+    if (!pcibios_present()) return j;
+
+    for (i=0; 
+	 (pcibios_find_class(class, i, &pb, &dev_fn)!= PCIBIOS_DEVICE_NOT_FOUND);
+	 i++) {
+	dev_num = PCI_SLOT(dev_fn);
+	device = 0;
+	pcibios_read_config_word(pb, PCI_DEVICE, PCI_VENDOR_ID, &vendor);
+	pcibios_read_config_word(pb, PCI_DEVICE, PCI_DEVICE_ID, &dev_id);
+	device = dev_id;
+	device <<= 8;
+	if (is_DC21040 || is_DC21041 || is_DC21140 || is_DC2114x) j++;
+    }
+
+    return j;
+}
+
+/*
+** If at end of eth device list and can't use current entry, malloc
+** one up. If memory could not be allocated, print an error message.
+*/
+__initfunc(static struct device *
+insert_device(struct device *dev, u_long iobase, int (*init)(struct device *)))
+{
+    struct device *new;
+
+    new = (struct device *)kmalloc(sizeof(struct device)+8, GFP_KERNEL);
+    if (new == NULL) {
+	printk("de4x5.c: Device not initialised, insufficient memory\n");
+	return NULL;
+    } else {
+	memset((char *)new, 0, sizeof(struct device)+8);
+	new->name = (char *)(new + 1);
+	new->base_addr = iobase;       /* assign the io address */
+	new->init = init;              /* initialisation routine */
+    }
+
+    return new;
+}
+
 #endif /* MODULE */
 
 
@@ -5064,3 +5626,10 @@ unlink_modules(struct device *p)
  *  compile-command: "gcc -D__KERNEL__ -DMODULE -I/linux/include -Wall -Wstrict-prototypes -fomit-frame-pointer -fno-strength-reduce -malign-loops=2 -malign-jumps=2 -malign-functions=2 -O2 -m486 -c de4x5.c"
  * End:
  */
+
+
+
+
+
+
+

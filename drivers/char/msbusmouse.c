@@ -129,15 +129,14 @@ static int open_mouse(struct inode * inode, struct file * file)
 	return 0;
 }
 
-
-static long write_mouse(struct inode * inode, struct file * file,
-	const char * buffer, unsigned long count)
+static ssize_t write_mouse(struct file * file,
+       const char * buffer, size_t count, loff_t *ppos)
 {
 	return -EINVAL;
 }
 
-static long read_mouse(struct inode * inode, struct file * file,
-	char * buffer, unsigned long count)
+static ssize_t read_mouse(struct file * file,
+       char * buffer, size_t count, loff_t *ppos)
 {
 	int i, dx, dy;
 

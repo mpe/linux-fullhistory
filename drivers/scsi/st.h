@@ -64,7 +64,6 @@ typedef struct {
   unsigned capacity;
   struct wait_queue * waiting;
   Scsi_Device* device;
-  Scsi_Cmnd SCpnt;
   struct semaphore sem;
   ST_buffer * buffer;
 

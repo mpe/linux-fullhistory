@@ -255,13 +255,13 @@ __asm__ __volatile__ ("movw %%dx,%%ax\n\t" \
 	:"ax","dx")
 
 #define set_intr_gate(n,addr) \
-	_set_gate(&idt[n],14,0,addr)
+	_set_gate(idt+(n),14,0,addr)
 
 #define set_trap_gate(n,addr) \
-	_set_gate(&idt[n],15,0,addr)
+	_set_gate(idt+(n),15,0,addr)
 
 #define set_system_gate(n,addr) \
-	_set_gate(&idt[n],15,3,addr)
+	_set_gate(idt+(n),15,3,addr)
 
 #define set_call_gate(a,addr) \
 	_set_gate(a,12,3,addr)

@@ -629,13 +629,12 @@ out_changed:
 	 * Big trouble! The inode has become a different object.
 	 */
 #ifdef NFS_PARANOIA
-printk("nfs_refresh_inode: mode changed, %07o to %07o\n",
-inode->i_mode, fattr->mode);
+printk("nfs_refresh_inode: inode %ld mode changed, %07o to %07o\n",
+inode->i_ino, inode->i_mode, fattr->mode);
 #endif
 	fattr->mode = inode->i_mode; /* save mode */
 	make_bad_inode(inode);
 	inode->i_mode = fattr->mode; /* restore mode */
-	inode->i_nlink = 0;
 	/*
 	 * No need to worry about unhashing the dentry, as the
 	 * lookup validation will know that the inode is bad.

@@ -413,47 +413,26 @@ asmlinkage void math_emulate(long arg)
 
 #endif /* CONFIG_MATH_EMULATION */
 
-static struct
-{
-	short limit __attribute__((packed));
-	void * addr __attribute__((packed));
-	short __pad __attribute__((packed));
-} idt_d;
-
-void * idt2;
-
 __initfunc(void trap_init_f00f_bug(void))
 {
-	pgd_t * pgd;
-	pmd_t * pmd;
-	pte_t * pte;
-	unsigned long twopage;
-
-	printk("moving IDT ... ");
-
-	twopage = (unsigned long) vmalloc (2*PAGE_SIZE);
-
-	idt2 = (void *)(twopage + 4096-7*8);
-
-	memcpy(idt2,&idt,sizeof(idt));
-
-	idt_d.limit = 256*8-1;
-	idt_d.addr = idt2;
-	idt_d.__pad = 0;
-
-        __asm__ __volatile__("\tlidt %0": "=m" (idt_d));
+	unsigned long page;
 
 	/*
-	 * Unmap lower page:
+	 * Allocate a new page in virtual address space, 
+	 * and move the IDT to have entry #7 starting at
+	 * the beginning of the page. We'll force a page
+	 * fault for IDT entries #0-#6..
 	 */
-	pgd = pgd_offset(current->mm, twopage);
-	pmd = pmd_offset(pgd, twopage);
-	pte = pte_offset(pmd, twopage);
+	page = (unsigned long) vmalloc(PAGE_SIZE);
+	memcpy((void *) page, idt_table + 7, (256-7)*8);
 
-	pte_clear(pte);
-	flush_tlb_all();
-
-	printk(" ... done\n");
+	/*
+	 * "idt" is magic - it overlaps the idt_descr
+	 * variable so that updating idt will automatically
+	 * update the idt descriptor..
+	 */
+	idt = (struct desc_struct *)(page - 7*8);
+	__asm__ __volatile__("lidt %0": "=m" (idt_descr));
 }
 
 

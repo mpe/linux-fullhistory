@@ -26,9 +26,6 @@ comment ' '
 tristate 'The IPX protocol' CONFIG_IPX
 if [ "$CONFIG_IPX" != "n" ]; then
   bool 'Full internal IPX network' CONFIG_IPX_INTERN
-  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    bool 'IPX Type 20 Routing' CONFIG_IPX_PPROP_ROUTING
-  fi
 fi
 tristate 'Appletalk DDP' CONFIG_ATALK
 tristate 'Amateur Radio AX.25 Level 2' CONFIG_AX25

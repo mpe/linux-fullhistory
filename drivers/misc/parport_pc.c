@@ -889,9 +889,9 @@ int parport_pc_init(int *io, int *irq, int *dma)
 }
 
 #ifdef MODULE
-static int io[PC_MAX_PORTS+1] = { 0, };
-static int dma[PC_MAX_PORTS] = { PARPORT_DMA_AUTO, };
-static int irq[PC_MAX_PORTS] = { PARPORT_IRQ_AUTO, };
+static int io[PC_MAX_PORTS+1] = { [0 ... PC_MAX_PORTS] = 0 };
+static int dma[PC_MAX_PORTS] = { [0 ... PC_MAX_PORTS-1] = PARPORT_DMA_AUTO };
+static int irq[PC_MAX_PORTS] = { [0 ... PC_MAX_PORTS-1] = PARPORT_IRQ_AUTO };
 MODULE_PARM(io, "1-" __MODULE_STRING(PC_MAX_PORTS) "i");
 MODULE_PARM(irq, "1-" __MODULE_STRING(PC_MAX_PORTS) "i");
 MODULE_PARM(dma, "1-" __MODULE_STRING(PC_MAX_PORTS) "i");

@@ -92,7 +92,6 @@ if [ "$CONFIG_PARPORT" != "n" ]; then
   dep_tristate 'IOMEGA Parallel Port ZIP drive SCSI support' CONFIG_SCSI_PPA $CONFIG_SCSI $CONFIG_PARPORT
   if [ "$CONFIG_SCSI_PPA" != "n" ]; then
     int  '  Pedantic EPP-checking'   CONFIG_SCSI_PPA_HAVE_PEDANTIC 2 0 3
-    int  '  EPP timeout'             CONFIG_SCSI_PPA_EPP_TIME 128
   fi
 fi
 dep_tristate 'PAS16 SCSI support' CONFIG_SCSI_PAS16 $CONFIG_SCSI

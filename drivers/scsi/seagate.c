@@ -72,6 +72,13 @@
  *      x is some number, It will let you specify a default
  *      transfer rate if handshaking isn't working correctly.
  *
+ * -DOLDCNTDATASCEME  There is a new sceme to set the CONTROL
+ *                    and DATA reigsters which complies more closely
+ *                    with the SCSI2 standard. This hopefully eliminates
+ *                    the need to swap the order these registers are
+ *                    'messed' with. It makes the following two options
+ *                    obsolete. To reenable the old sceme define this.
+ *
  * The following to options are patches from the SCSI.HOWTO
  *
  * -DSWAPSTAT  This will swap the definitions for STAT_MSG and STAT_CD.
@@ -794,6 +801,10 @@ static int internal_command (unsigned char target, unsigned char lun,
   unsigned char message = 0;
   register unsigned char status_read;
 
+#ifndef OLDCNTDATASCEME
+  volatile unsigned char tmp_data;
+  volatile unsigned char tmp_control;
+#endif
   unsigned transfersize = 0, underflow = 0;
 
   incommand = 0;
@@ -1029,6 +1040,7 @@ static int internal_command (unsigned char target, unsigned char lun,
  *    try this with a SCSI protocol or logic analyzer to see what is
  *    going on.
  */
+#ifdef OLDCNTDATASCEME
 #ifdef SWAPCNTDATA
 	cli();
       WRITE_CONTROL (BASE_CMD | CMD_DRVR_ENABLE | CMD_SEL |
@@ -1044,6 +1056,16 @@ static int internal_command (unsigned char target, unsigned char lun,
                      (reselect ? CMD_ATTN : 0));
       sti ();
 #endif
+#else
+       tmp_data = (unsigned char) ((1 << target) | (controller_type == SEAGATE 
+? 0x80 : 0x40));
+       tmp_control = BASE_CMD | CMD_DRVR_ENABLE | CMD_SEL |
+                (reselect ? CMD_ATTN : 0) | CMD_BSY;
+       WRITE_CONTROL(tmp_data);
+       WRITE_DATA(tmp_control);
+       tmp_control ^= CMD_BSY;
+       WRITE_CONTROL(tmp_control);
+#endif /* OLDCNTDATASCEME */
       while (!((status_read = STATUS) & STAT_BSY) && (jiffies < clock)
              && !st0x_aborted)
 #if 0 && (DEBUG & PHASE_SELECTION)

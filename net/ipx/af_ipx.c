@@ -750,7 +750,6 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 		}
 	}
 
-#ifdef CONFIG_IPX_PPROP_ROUTING
 	if( ipx->ipx_type == IPX_TYPE_PPROP && ipx->ipx_tctrl < 8 && skb->pkt_type == PACKET_HOST ) 
 	{
 		int i;
@@ -802,7 +801,6 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 		}
 
 	}
-#endif
 
 	if (!ipx->ipx_dest.net)
 		ipx->ipx_dest.net = intrfc->if_netnum;

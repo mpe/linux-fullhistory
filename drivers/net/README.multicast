@@ -26,7 +26,7 @@ arcnet		NO		NO		NO		N/A
 at1700		PROMISC		PROMISC		YES		Software
 atp		PROMISC		PROMISC		YES		Software
 cs89x0		YES		YES		YES		Software
-de4x5		YES		NO		YES		Hardware
+de4x5		YES		YES		YES		Hardware
 de600		NO		NO		NO		N/A
 de620		PROMISC		PROMISC		YES		Software
 depca		YES		PROMISC		YES		Hardware

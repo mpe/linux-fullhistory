@@ -118,22 +118,23 @@ static struct dentry_operations ncp_dentry_operations =
 	ncp_delete_dentry	/* d_delete(struct dentry *) */
 };
 
+
+/*
+ * XXX: It would be better to use the tolower from linux/ctype.h,
+ * but _ctype is needed and it is not exported.
+ */
+#define tolower(c) (((c) >= 'A' && (c) <= 'Z') ? (c)-('A'-'a') : (c))
+
+
 static int 
 ncp_hash_dentry(struct dentry *dentry, struct qstr *this)
 {
-  char al[NCP_MAXPATHLEN];
   unsigned long hash;
   int i;
 
-  memcpy(al,this->name,this->len);
-  al[this->len] = 0;
-
-  if (!ncp_preserve_case(dentry->d_inode))
-      str_lower(al);
-
   hash = init_name_hash();
   for (i=0; i<this->len ; i++)
-    hash = partial_name_hash(al[i],hash);
+    hash = partial_name_hash(tolower(this->name[i]),hash);
   this->hash = end_name_hash(hash);
   
   return 0;
@@ -142,21 +143,18 @@ ncp_hash_dentry(struct dentry *dentry, struct qstr *this)
 static int
 ncp_compare_dentry(struct dentry *dentry, struct qstr *a, struct qstr *b)
 {
-	char al[NCP_MAXPATHLEN],bl[NCP_MAXPATHLEN];
+	int i;
 
 	if (a->len != b->len) return 1;
 
-	if (ncp_preserve_case(dentry->d_inode))
+	if (ncp_case_sensitive(dentry->d_inode))
 	    return strncmp(a->name, b->name, a->len);
 
-	memcpy (al,a->name,a->len);
-	memcpy (bl,b->name,b->len);
-	al[a->len] = bl[b->len] = 0;
+	for (i=0; i<a->len; i++)
+	  if (tolower(a->name[i]) != tolower(b->name[i]))
+	    return 1;
 
-	str_lower(al);
-	str_lower(bl);
-	
-	return strcmp(al,bl);
+	return 0;
 }
 
 /*
@@ -223,10 +221,16 @@ ino_t ncp_invent_inos(unsigned long n)
 static ino_t
 find_inode_number(struct dentry *dir, struct qstr *name)
 {
+        unsigned long hash;
+        int i;
 	struct dentry * dentry;
 	ino_t ino = 0;
-
-	name->hash = full_name_hash(name->name, name->len);
+        
+        hash = init_name_hash();
+        for (i=0; i<name->len ; i++)
+                hash = partial_name_hash(tolower(name->name[i]),hash);
+        name->hash = end_name_hash(hash);
+        
 	dentry = d_lookup(dir, name);
 	if (dentry)
 	{
@@ -278,8 +282,11 @@ ncp_lookup_validate(struct dentry * dentry)
 	struct ncpfs_inode_info finfo;
 	__u8 __name[dentry->d_name.len + 1];
 
-	printk("ncp_lookup_validate called\n");
-      
+        if (!dentry->d_inode) {
+                DPRINTK(KERN_DEBUG "ncp_lookup_validate: called with dentry->d_inode already NULL.\n");
+                return 0;
+        }
+        
 	if (!dir || !S_ISDIR(dir->i_mode)) {
 		printk(KERN_WARNING "ncp_lookup_validate: inode is NULL or not a directory.\n");
 		goto finished;

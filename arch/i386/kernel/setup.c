@@ -360,7 +360,7 @@ int get_cpuinfo(char * buffer)
                                        "fdiv_bug\t: %s\n"
                                        "hlt_bug\t\t: %s\n"
 				       "sep_bug\t\t: %s\n"
-				       "pentium_f00f_bug\t\t: %s\n"
+				       "f00f_bug\t: %s\n"
                                        "fpu\t\t: %s\n"
                                        "fpu_exception\t: %s\n"
                                        "cpuid\t\t: %s\n"
