@@ -18,6 +18,7 @@ struct netpoll {
 	char dev_name[16], *name;
 	int rx_flags;
 	void (*rx_hook)(struct netpoll *, int, char *, int);
+	void (*drop)(struct sk_buff *skb);
 	u32 local_ip, remote_ip;
 	u16 local_port, remote_port;
 	unsigned char local_mac[6], remote_mac[6];
@@ -33,6 +34,7 @@ int netpoll_trap(void);
 void netpoll_set_trap(int trap);
 void netpoll_cleanup(struct netpoll *np);
 int __netpoll_rx(struct sk_buff *skb);
+void netpoll_queue(struct sk_buff *skb);
 
 #ifdef CONFIG_NETPOLL
 static inline int netpoll_rx(struct sk_buff *skb)

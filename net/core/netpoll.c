@@ -19,6 +19,7 @@
 #include <linux/netpoll.h>
 #include <linux/sched.h>
 #include <linux/rcupdate.h>
+#include <linux/workqueue.h>
 #include <net/tcp.h>
 #include <net/udp.h>
 #include <asm/unaligned.h>
@@ -28,12 +29,17 @@
  * message gets out even in extreme OOM situations.
  */
 
-#define MAX_SKBS 32
 #define MAX_UDP_CHUNK 1460
+#define MAX_SKBS 32
+#define MAX_QUEUE_DEPTH (MAX_SKBS / 2)
 
 static DEFINE_SPINLOCK(skb_list_lock);
 static int nr_skbs;
 static struct sk_buff *skbs;
+
+static DEFINE_SPINLOCK(queue_lock);
+static int queue_depth;
+static struct sk_buff *queue_head, *queue_tail;
 
 static atomic_t trapped;
 
@@ -45,6 +51,50 @@ static atomic_t trapped;
 				sizeof(struct iphdr) + sizeof(struct ethhdr))
 
 static void zap_completion_queue(void);
+
+static void queue_process(void *p)
+{
+	unsigned long flags;
+	struct sk_buff *skb;
+
+	while (queue_head) {
+		spin_lock_irqsave(&queue_lock, flags);
+
+		skb = queue_head;
+		queue_head = skb->next;
+		if (skb == queue_tail)
+			queue_head = NULL;
+
+		queue_depth--;
+
+		spin_unlock_irqrestore(&queue_lock, flags);
+
+		dev_queue_xmit(skb);
+	}
+}
+
+static DECLARE_WORK(send_queue, queue_process, NULL);
+
+void netpoll_queue(struct sk_buff *skb)
+{
+	unsigned long flags;
+
+	if (queue_depth == MAX_QUEUE_DEPTH) {
+		__kfree_skb(skb);
+		return;
+	}
+
+	spin_lock_irqsave(&queue_lock, flags);
+	if (!queue_head)
+		queue_head = skb;
+	else
+		queue_tail->next = skb;
+	queue_tail = skb;
+	queue_depth++;
+	spin_unlock_irqrestore(&queue_lock, flags);
+
+	schedule_work(&send_queue);
+}
 
 static int checksum_udp(struct sk_buff *skb, struct udphdr *uh,
 			     unsigned short ulen, u32 saddr, u32 daddr)
@@ -199,7 +249,10 @@ repeat:
 
 	/* avoid ->poll recursion */
 	if(np->poll_owner == __smp_processor_id()) {
-		__kfree_skb(skb);
+		if (np->drop)
+			np->drop(skb);
+		else
+			__kfree_skb(skb);
 		return;
 	}
 
@@ -274,6 +327,8 @@ void netpoll_send_udp(struct netpoll *np, const char *msg, int len)
 	eth->h_proto = htons(ETH_P_IP);
 	memcpy(eth->h_source, np->local_mac, 6);
 	memcpy(eth->h_dest, np->remote_mac, 6);
+
+	skb->dev = np->dev;
 
 	netpoll_send_skb(np, skb);
 }
