@@ -137,8 +137,6 @@ repeat:
 				page_cache_release(page);
 				goto repeat;
 			}
-			if (page_count(page) != 2)
-				printk("hm, busy page truncated? (not necesserily a bug)\n");
 			spin_unlock(&pagecache_lock);
 
 			if (inode->i_op->flushpage)
@@ -160,9 +158,6 @@ repeat:
 			page->prev = NULL;
 			remove_page_from_hash_queue(page);
 			page->inode = NULL;
-
-			if (page_count(page) != 2)
-				printk("hm, busy page truncated? (not necesserily a bug)\n");
 			spin_unlock(&pagecache_lock);
 
 			UnlockPage(page);
@@ -189,6 +184,13 @@ repeat:
 		/* partial truncate, clear end of page */
 		if (offset < PAGE_CACHE_SIZE) {
 			unsigned long address;
+			get_page(page);
+			if (TryLockPage(page)) {
+				spin_unlock(&pagecache_lock);
+				wait_on_page(page);
+				page_cache_release(page);
+				goto repeat;
+			}
 			/*
 			 * It's worth dropping the write lock only at
 			 * this point. We are holding the page lock
@@ -200,10 +202,15 @@ repeat:
 			address = page_address(page);
 			memset((void *) (offset + address), 0, PAGE_CACHE_SIZE - offset);
 			flush_page_to_ram(address);
+
+			if (inode->i_op->flushpage)
+				inode->i_op->flushpage(inode, page, offset);
 			/*
-			 * we have dropped the lock so we have to
+			 * we have dropped the spinlock so we have to
 			 * restart.
 			 */
+			UnlockPage(page);
+			page_cache_release(page);
 			goto repeat;
 		}
 	}
@@ -217,24 +224,8 @@ repeat:
  */
 void remove_inode_page(struct page *page)
 {
-	struct inode *inode = page->inode;
-
 	if (!PageLocked(page))
 		PAGE_BUG(page);
-
-	/*
-	 * We might sleep here. Other processes might arrive and sleep on
-	 * the lock, but nobody is allowed to 'cross' the lock and get a
-	 * reference to the page. We then remove the page from the hash
-	 * before unlocking it. This mechanizm ensures that 1) nobody gets
-	 * a half-freed page 2) nobody creates the same pagecache content
-	 * before we finish destroying this page. This is not a
-	 * performance problem as pages here are candidates for getting
-	 * freed, ie. it's supposed to be unlikely that the above situation
-	 * happens.
-	 */
-	if (inode->i_op->flushpage)
-		inode->i_op->flushpage(inode, page, 1);
 
 	spin_lock(&pagecache_lock);
 	remove_page_from_inode_queue(page);
@@ -274,11 +265,26 @@ int shrink_mmap(int priority, int gfp_mask)
 		
 		referenced = test_and_clear_bit(PG_referenced, &page->flags);
 
+		if ((gfp_mask & __GFP_DMA) && !PageDMA(page))
+			continue;
+
 		if (PageLocked(page))
 			continue;
 
-		if ((gfp_mask & __GFP_DMA) && !PageDMA(page))
-			continue;
+		/* Is it a buffer page? */
+		if (page->buffers) {
+			if (buffer_under_min())
+				continue;
+
+			if (TryLockPage(page))
+				continue;
+			err = try_to_free_buffers(page);
+			UnlockPage(page);
+
+			if (!err)
+				continue;
+			goto out;
+		}
 
 		/* We can't free pages unless there's just one user */
 		if (page_count(page) != 1)
@@ -309,13 +315,14 @@ int shrink_mmap(int priority, int gfp_mask)
 				goto unlock_continue;
 			if (TryLockPage(page))
 				goto unlock_continue;
-			if (page_count(page) != 1) {
-				UnlockPage(page);
-				goto unlock_continue;
+
+			if (page_count(page) == 1) {
+				remove_page_from_inode_queue(page);
+				remove_page_from_hash_queue(page);
+				page->inode = NULL;
 			}
 			spin_unlock(&pagecache_lock);
 
-			remove_inode_page(page);
 			UnlockPage(page);
 			page_cache_release(page);
 			err = 1;
@@ -325,17 +332,6 @@ unlock_continue:
 			continue;
 		}
 		spin_unlock(&pagecache_lock);
-
-		/* Is it a buffer page? */
-		if (page->buffers) {
-			if (buffer_under_min())
-				continue;
-			if (!try_to_free_buffers(page))
-				continue;
-			err = 1;
-			goto out;
-		}
-
 	} while (count > 0);
 	err = 0;
 out:
@@ -1086,17 +1082,14 @@ static int file_send_actor(read_descriptor_t * desc, const char *area, unsigned 
 	ssize_t written;
 	unsigned long count = desc->count;
 	struct file *file = (struct file *) desc->buf;
-	struct inode *inode = file->f_dentry->d_inode;
 	mm_segment_t old_fs;
 
 	if (size > count)
 		size = count;
-	down(&inode->i_sem);
 	old_fs = get_fs();
 	set_fs(KERNEL_DS);
 	written = file->f_op->write(file, area, size, &file->f_pos);
 	set_fs(old_fs);
-	up(&inode->i_sem);
 	if (written < 0) {
 		desc->error = written;
 		written = 0;
@@ -1362,7 +1355,6 @@ static inline int do_write_page(struct inode * inode, struct file * file,
 	int retval;
 	unsigned long size;
 	loff_t loff = offset;
-	mm_segment_t old_fs;
 	int (*writepage) (struct file *, struct page *);
 	struct page * page;
 
@@ -1376,8 +1368,6 @@ static inline int do_write_page(struct inode * inode, struct file * file,
 			return -EIO;
 	}
 	size -= offset;
-	old_fs = get_fs();
-	set_fs(KERNEL_DS);
 	retval = -EIO;
 	writepage = inode->i_op->writepage;
 	page = mem_map + MAP_NR(page_addr);
@@ -1386,11 +1376,13 @@ static inline int do_write_page(struct inode * inode, struct file * file,
 	if (writepage) {
 		retval = writepage(file, page);
 	} else {
+		mm_segment_t old_fs = get_fs();
+		set_fs(KERNEL_DS);
 		if (size == file->f_op->write(file, page_addr, size, &loff))
-		retval = 0;
+			retval = 0;
+		set_fs(old_fs);
 	}
 	UnlockPage(page);
-	set_fs(old_fs);
 	return retval;
 }
 
@@ -1426,9 +1418,7 @@ static int filemap_write_page(struct vm_area_struct * vma,
 		return 0;
 	}
 	
-	down(&inode->i_sem);
 	result = do_write_page(inode, file, (const char *) page, offset);
-	up(&inode->i_sem);
 	fput(file);
 	return result;
 }
@@ -1642,10 +1632,7 @@ static int msync_interval(struct vm_area_struct * vma,
 			struct file * file = vma->vm_file;
 			if (file) {
 				struct dentry * dentry = file->f_dentry;
-				struct inode * inode = dentry->d_inode;
-				down(&inode->i_sem);
 				error = file_fsync(file, dentry);
-				up(&inode->i_sem);
 			}
 		}
 		return error;
@@ -1972,10 +1959,8 @@ int kpiod(void * unused)
 			dentry = p->file->f_dentry;
 			inode = dentry->d_inode;
 			
-			down(&inode->i_sem);
 			do_write_page(inode, p->file,
 				      (const char *) p->page, p->offset);
-			up(&inode->i_sem);
 			fput(p->file);
 			page_cache_free(p->page);
 			kmem_cache_free(pio_request_cache, p);

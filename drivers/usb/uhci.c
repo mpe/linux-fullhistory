@@ -1264,7 +1264,8 @@ static void uhci_interrupt_notify(struct uhci *uhci)
 					struct uhci_qh *interrupt_qh = td->qh;
 
 					usb_dotoggle(td->dev, usb_pipeendpoint(td->info));
-					td->info |= 1 << 19; /* toggle between data0 and data1 */
+					td->info &= ~(1 << 19); /* clear data toggle */
+					td->info |= usb_gettoggle(td->dev, usb_pipeendpoint(td->info)) << 19; /* toggle between data0 and data1 */
 					td->status = (td->status & 0x2f000000) | (1 << 23) | (1 << 24);	/* active */
 
 					/* Remove then readd? Is that necessary */

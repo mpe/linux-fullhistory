@@ -192,7 +192,8 @@ extern struct inode_operations nfs_file_inode_operations;
  */
 extern struct inode_operations nfs_dir_inode_operations;
 extern struct dentry_operations nfs_dentry_operations;
-extern void nfs_invalidate_dircache(struct inode *);
+extern void nfs_flush_dircache(struct inode *);
+extern void nfs_free_dircache(struct inode *);
 
 /*
  * linux/fs/nfs/symlink.c

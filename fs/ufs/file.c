@@ -41,52 +41,6 @@
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
-static long long ufs_file_lseek(struct file *, long long, int);
-static ssize_t ufs_file_write (struct file *, const char *, size_t, loff_t *);
-static int ufs_release_file (struct inode *, struct file *);
-
-/*
- * We have mostly NULL's here: the current defaults are ok for
- * the ufs filesystem.
- */
-static struct file_operations ufs_file_operations = {
-	ufs_file_lseek,	/* lseek */
-	generic_file_read,	/* read */
-	ufs_file_write, 	/* write */
-	NULL,			/* readdir - bad */
-	NULL,			/* poll - default */
-	NULL, 			/* ioctl */
-	generic_file_mmap,	/* mmap */
-	NULL,			/* no special open is needed */
-	NULL,			/* flush */
-	ufs_release_file,	/* release */
-	NULL, 			/* fsync */
-	NULL,			/* fasync */
-	NULL,			/* check_media_change */
-	NULL			/* revalidate */
-};
-
-struct inode_operations ufs_file_inode_operations = {
-	&ufs_file_operations,/* default file operations */
-	NULL,			/* create */
-	NULL,			/* lookup */
-	NULL,			/* link */
-	NULL,			/* unlink */
-	NULL,			/* symlink */
-	NULL,			/* mkdir */
-	NULL,			/* rmdir */
-	NULL,			/* mknod */
-	NULL,			/* rename */
-	NULL,			/* readlink */
-	NULL,			/* follow_link */
-	generic_readpage,	/* readpage */
-	NULL,			/* writepage */
-	ufs_bmap,		/* bmap */
-	ufs_truncate,		/* truncate */
-	NULL, 			/* permission */
-	NULL			/* smap */
-};
-
 /*
  * Make sure the offset never goes beyond the 32-bit mark..
  */
@@ -133,139 +87,49 @@ static inline void remove_suid(struct inode *inode)
 	}
 }
 
-static ssize_t ufs_file_write (
-	struct file * filp,
-	const char * buf,
-	size_t count,
-	loff_t *ppos )
+static int ufs_writepage (struct file *file, struct page *page)
 {
-	struct inode * inode = filp->f_dentry->d_inode;
-	__u32 pos;
-	long block;
-	int offset;
-	int written, c;
-	struct buffer_head * bh, *bufferlist[NBUF];
-	struct super_block * sb;
-	int err;
-	int i,buffercount,write_error;
+	struct dentry *dentry = file->f_dentry;
+	struct inode *inode = dentry->d_inode;
+	unsigned long block;
+	int *p, nr[PAGE_SIZE/512];
+	int i, err, created;
+	struct buffer_head *bh;
 
-	/* POSIX: mtime/ctime may not change for 0 count */
-	if (!count)
-		return 0;
-	write_error = buffercount = 0;
-	if (!inode)
-		return -EINVAL;
-	sb = inode->i_sb;
-	if (sb->s_flags & MS_RDONLY)
-		/*
-		 * This fs has been automatically remounted ro because of errors
-		 */
-		return -ENOSPC;
-
-	if (!S_ISREG(inode->i_mode)) {
-		ufs_warning (sb, "ufs_file_write", "mode = %07o",
-			      inode->i_mode);
-		return -EINVAL;
-	}
-	remove_suid(inode);
-
-	if (filp->f_flags & O_APPEND)
-		pos = inode->i_size;
-	else {
-		pos = *ppos;
-		if (pos != *ppos)
-			return -EINVAL;
-	}
-
-	/* Check for overflow.. */
-	if (pos > (__u32) (pos + count)) {
-		count = ~pos; /* == 0xFFFFFFFF - pos */
-		if (!count)
-			return -EFBIG;
-	}
-
-	/*
-	 * If a file has been opened in synchronous mode, we have to ensure
-	 * that meta-data will also be written synchronously.  Thus, we
-	 * set the i_osync field.  This field is tested by the allocation
-	 * routines.
-	 */
-	if (filp->f_flags & O_SYNC)
-		inode->u.ufs_i.i_osync++;
-	block = pos >> sb->s_blocksize_bits;
-	offset = pos & (sb->s_blocksize - 1);
-	c = sb->s_blocksize - offset;
-	written = 0;
+	i = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;
+	block = page->offset >> inode->i_sb->s_blocksize_bits;
+	p = nr;
+	bh = page->buffers;
 	do {
-		bh = ufs_getfrag (inode, block, 1, &err);
-		if (!bh) {
-			if (!written)
-				written = err;
-			break;
-		}
-		if (c > count)
-			c = count;
-		if (c != sb->s_blocksize && !buffer_uptodate(bh)) {
-			ll_rw_block (READ, 1, &bh);
-			wait_on_buffer (bh);
-			if (!buffer_uptodate(bh)) {
-				brelse (bh);
-				if (!written)
-					written = -EIO;
-				break;
-			}
-		}
-		c -= copy_from_user (bh->b_data + offset, buf, c);
-		if (!c) {
-			brelse(bh);
-			if (!written)
-				written = -EFAULT;
-			break;
-		}
-		update_vm_cache(inode, pos, bh->b_data + offset, c);
-		pos += c;
-		written += c;
-		buf += c;
-		count -= c;
-		mark_buffer_uptodate(bh, 1);
-		mark_buffer_dirty(bh, 0);
-		if (filp->f_flags & O_SYNC)
-			bufferlist[buffercount++] = bh;
+		if (bh && bh->b_blocknr)
+			*p = bh->b_blocknr;
 		else
-			brelse(bh);
-		if (buffercount == NBUF){
-			ll_rw_block(WRITE, buffercount, bufferlist);
-			for(i=0; i<buffercount; i++){
-				wait_on_buffer(bufferlist[i]);
-				if (!buffer_uptodate(bufferlist[i]))
-					write_error=1;
-				brelse(bufferlist[i]);
-			}
-			buffercount=0;
-		}
-		if (write_error)
-			break;
+			*p = ufs_getfrag_block(inode, block, 1, &err, &created);
+		if (!*p)
+			return -EIO;
+		i--;
 		block++;
-		offset = 0;
-		c = sb->s_blocksize;
-	} while (count);
-	if (buffercount){
-		ll_rw_block(WRITE, buffercount, bufferlist);
-		for (i=0; i<buffercount; i++){
-			wait_on_buffer(bufferlist[i]);
-			if (!buffer_uptodate(bufferlist[i]))
-				write_error=1;
-			brelse(bufferlist[i]);
-		}
-	}		
-	if (pos > inode->i_size)
-		inode->i_size = pos;
-	if (filp->f_flags & O_SYNC)
-		inode->u.ufs_i.i_osync--;
-	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
-	*ppos = pos;
-	mark_inode_dirty(inode);
-	return written;
+		p++;
+		if (bh)
+			bh = bh->b_this_page;
+	} while (i > 0);
+
+	brw_page(WRITE, page, inode->i_dev, nr, inode->i_sb->s_blocksize, 1);
+	return 0;
+}
+
+static long ufs_write_one_page(struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char *buf)
+{
+	return block_write_one_page(file, page, offset, bytes, buf, ufs_getfrag_block);
+}
+
+/*
+ * Write to a file (through the page cache).
+ */
+static ssize_t
+ufs_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
+{
+	return generic_file_write(file, buf, count, ppos, ufs_write_one_page);
 }
 
 /*
@@ -277,3 +141,48 @@ static int ufs_release_file (struct inode * inode, struct file * filp)
 {
 	return 0;
 }
+
+/*
+ * We have mostly NULL's here: the current defaults are ok for
+ * the ufs filesystem.
+ */
+static struct file_operations ufs_file_operations = {
+	ufs_file_lseek,	/* lseek */
+	generic_file_read,	/* read */
+	ufs_file_write, 	/* write */
+	NULL,			/* readdir - bad */
+	NULL,			/* poll - default */
+	NULL, 			/* ioctl */
+	generic_file_mmap,	/* mmap */
+	NULL,			/* no special open is needed */
+	NULL,			/* flush */
+	ufs_release_file,	/* release */
+	NULL, 			/* fsync */
+	NULL,			/* fasync */
+	NULL,			/* check_media_change */
+	NULL			/* revalidate */
+};
+
+struct inode_operations ufs_file_inode_operations = {
+	&ufs_file_operations,/* default file operations */
+	NULL,			/* create */
+	NULL,			/* lookup */
+	NULL,			/* link */
+	NULL,			/* unlink */
+	NULL,			/* symlink */
+	NULL,			/* mkdir */
+	NULL,			/* rmdir */
+	NULL,			/* mknod */
+	NULL,			/* rename */
+	NULL,			/* readlink */
+	NULL,			/* follow_link */
+	generic_readpage,	/* readpage */
+	ufs_writepage,		/* writepage */
+	ufs_bmap,		/* bmap */
+	ufs_truncate,		/* truncate */
+	NULL, 			/* permission */
+	NULL,			/* smap */
+	NULL,			/* updatepage */
+	NULL,			/* revalidate */
+	generic_block_flushpage,/* flushpage */
+};

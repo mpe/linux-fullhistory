@@ -112,14 +112,6 @@ repeat:
 	if (j < sb->u.minix_sb.s_firstdatazone ||
 	    j >= sb->u.minix_sb.s_nzones)
 		return 0;
-	if (!(bh = getblk(sb->s_dev,j,BLOCK_SIZE))) {
-		printk("new_block: cannot get block");
-		return 0;
-	}
-	memset(bh->b_data, 0, BLOCK_SIZE);
-	mark_buffer_uptodate(bh, 1);
-	mark_buffer_dirty(bh, 1);
-	brelse(bh);
 	return j;
 }
 

@@ -32,6 +32,9 @@
  * general case (size = XXX). I hope.
  */
 
+#define DATA_BUFFER_USED(bh) \
+	((bh->b_count > 1) || buffer_locked(bh))
+
 /*
  * The functions for minix V1 fs truncation.
  */
@@ -52,7 +55,7 @@ repeat:
 			brelse(bh);
 			goto repeat;
 		}
-		if ((bh && bh->b_count != 1) || tmp != *p) {
+		if ((bh && DATA_BUFFER_USED(bh)) || tmp != *p) {
 			retry = 1;
 			brelse(bh);
 			continue;
@@ -103,7 +106,7 @@ repeat:
 			brelse(bh);
 			goto repeat;
 		}
-		if ((bh && bh->b_count != 1) || tmp != *ind) {
+		if ((bh && DATA_BUFFER_USED(bh)) || tmp != *ind) {
 			retry = 1;
 			brelse(bh);
 			continue;
@@ -216,7 +219,7 @@ repeat:
 			brelse(bh);
 			goto repeat;
 		}
-		if ((bh && bh->b_count != 1) || tmp != *p) {
+		if ((bh && DATA_BUFFER_USED(bh)) || tmp != *p) {
 			retry = 1;
 			brelse(bh);
 			continue;
@@ -267,7 +270,7 @@ repeat:
 			brelse(bh);
 			goto repeat;
 		}
-		if ((bh && bh->b_count != 1) || tmp != *ind) {
+		if ((bh && DATA_BUFFER_USED(bh)) || tmp != *ind) {
 			retry = 1;
 			brelse(bh);
 			continue;

@@ -102,9 +102,7 @@ static ssize_t pipe_write(struct file * filp, const char * buf,
 		free = count;
 	else
 		free = 1; /* can't do it atomically, wait for any free space */
-	up(&inode->i_sem);
-	if (down_interruptible(&inode->i_atomic_write)) {
-		down(&inode->i_sem);
+	if (down_interruptible(&inode->i_sem)) {
 		return -ERESTARTSYS;
 	}
 	while (count>0) {
@@ -145,8 +143,7 @@ static ssize_t pipe_write(struct file * filp, const char * buf,
 	inode->i_ctime = inode->i_mtime = CURRENT_TIME;
 	mark_inode_dirty(inode);
 errout:
-	up(&inode->i_atomic_write);
-	down(&inode->i_sem);
+	up(&inode->i_sem);
 	return written ? written : err;
 }
 
@@ -254,6 +251,7 @@ static int pipe_release(struct inode * inode)
 		inode->i_pipe = NULL;
 		free_page((unsigned long) info->base);
 		kfree(info);
+		return 0;
 	}
 	wake_up_interruptible(&PIPE_WAIT(*inode));
 	return 0;

@@ -109,7 +109,7 @@ union bdflush_param {
 		int dummy3;    /* unused */
 	} b_un;
 	unsigned int data[N_PARAM];
-} bdf_prm = {{90, 500, 64, 256, 15, 30*HZ, 5*HZ, 1884, 2}};
+} bdf_prm = {{100, 500, 64, 256, 15, 30*HZ, 5*HZ, 1884, 2}};
 
 /* These are the min and max parameter values that we will allow to be assigned */
 int bdflush_min[N_PARAM] = {  0,  10,    5,   25,  0,   1*HZ,   1*HZ, 1, 1};
@@ -422,6 +422,24 @@ void invalidate_buffers(kdev_t dev)
 #define _hashfn(dev,block) (((unsigned)(HASHDEV(dev)^block)) & bh_hash_mask)
 #define hash(dev,block) hash_table[_hashfn(dev,block)]
 
+static void insert_into_hash_list(struct buffer_head * bh)
+{
+	bh->b_next = NULL;
+	bh->b_pprev = NULL;
+	if (bh->b_dev) {
+		struct buffer_head **bhp = &hash(bh->b_dev, bh->b_blocknr);
+		struct buffer_head *next = *bhp;
+
+		if (next) {
+			bh->b_next = next;
+			next->b_pprev = &bh->b_next;
+		}
+		*bhp = bh;
+		bh->b_pprev = bhp;
+		nr_hashed_buffers++;
+	}
+}
+
 static inline void remove_from_hash_queue(struct buffer_head * bh)
 {
 	struct buffer_head **pprev = bh->b_pprev;
@@ -433,16 +451,36 @@ static inline void remove_from_hash_queue(struct buffer_head * bh)
 		}
 		*pprev = next;
 		bh->b_pprev = NULL;
+		nr_hashed_buffers--;
 	}
-	nr_hashed_buffers--;
+}
+
+static void insert_into_lru_list(struct buffer_head * bh)
+{
+	struct buffer_head **bhp = &lru_list[bh->b_list];
+
+	if(!*bhp) {
+		*bhp = bh;
+		bh->b_prev_free = bh;
+	}
+
+	if (bh->b_next_free)
+		panic("VFS: buffer LRU pointers corrupted");
+
+	bh->b_next_free = *bhp;
+	bh->b_prev_free = (*bhp)->b_prev_free;
+	(*bhp)->b_prev_free->b_next_free = bh;
+	(*bhp)->b_prev_free = bh;
+
+	nr_buffers++;
+	nr_buffers_type[bh->b_list]++;
 }
 
 static inline void remove_from_lru_list(struct buffer_head * bh)
 {
-	if (!(bh->b_prev_free) || !(bh->b_next_free)) {
-		printk("VFS: LRU block list corrupted\n");
-		*(int*)0 = 0;
-	}
+	if (!(bh->b_prev_free) || !(bh->b_next_free))
+		return;
+
 	if (bh->b_dev == B_FREE) {
 		printk("LRU list corrupted");
 		*(int*)0 = 0;
@@ -455,6 +493,9 @@ static inline void remove_from_lru_list(struct buffer_head * bh)
 	if (lru_list[bh->b_list] == bh)
 		 lru_list[bh->b_list] = NULL;
 	bh->b_next_free = bh->b_prev_free = NULL;
+
+	nr_buffers--;
+	nr_buffers_type[bh->b_list]--;
 }
 
 static inline void remove_from_free_list(struct buffer_head * bh)
@@ -479,15 +520,8 @@ static inline void remove_from_free_list(struct buffer_head * bh)
 
 static void remove_from_queues(struct buffer_head * bh)
 {
-	if(bh->b_dev == B_FREE) {
-		remove_from_free_list(bh); /* Free list entries should not be
-					      in the hash queue */
-		goto out;
-	}
-	nr_buffers_type[bh->b_list]--;
 	remove_from_hash_queue(bh);
 	remove_from_lru_list(bh);
-out:
 }
 
 static inline void put_last_free(struct buffer_head * bh)
@@ -508,69 +542,6 @@ static inline void put_last_free(struct buffer_head * bh)
 		(*bhp)->b_prev_free->b_next_free = bh;
 		(*bhp)->b_prev_free = bh;
 	}
-}
-
-static void insert_into_queues(struct buffer_head * bh)
-{
-	/* put at end of free list */
-	if(bh->b_dev == B_FREE) {
-		put_last_free(bh);
-	} else {
-		struct buffer_head **bhp = &lru_list[bh->b_list];
-
-		if(!*bhp) {
-			*bhp = bh;
-			bh->b_prev_free = bh;
-		}
-
-		if (bh->b_next_free)
-			panic("VFS: buffer LRU pointers corrupted");
-
-		bh->b_next_free = *bhp;
-		bh->b_prev_free = (*bhp)->b_prev_free;
-		(*bhp)->b_prev_free->b_next_free = bh;
-		(*bhp)->b_prev_free = bh;
-
-		nr_buffers_type[bh->b_list]++;
-
-		/* Put the buffer in new hash-queue if it has a device. */
-		bh->b_next = NULL;
-		bh->b_pprev = NULL;
-		if (bh->b_dev) {
-			struct buffer_head **bhp = &hash(bh->b_dev, bh->b_blocknr);
-			struct buffer_head *next = *bhp;
-
-			if (next) {
-				bh->b_next = next;
-				next->b_pprev = &bh->b_next;
-			}
-			*bhp = bh;
-			bh->b_pprev = bhp;
-		}
-		nr_hashed_buffers++;
-	}
-}
-
-static void insert_into_dirty_queue(struct buffer_head * bh)
-{
-	struct buffer_head **bhp;
-
-
-	bhp = &lru_list[BUF_DIRTY];
-	if(!*bhp) {
-		*bhp = bh;
-		bh->b_prev_free = bh;
-	}
-	if (bh->b_next_free)
-		BUG();
-
-	bh->b_next_free = *bhp;
-	bh->b_prev_free = (*bhp)->b_prev_free;
-	(*bhp)->b_prev_free->b_next_free = bh;
-	(*bhp)->b_prev_free = bh;
-
-	nr_buffers++;
-	nr_buffers_type[BUF_DIRTY]++;
 }
 
 struct buffer_head * find_buffer(kdev_t dev, int block, int size)
@@ -673,7 +644,7 @@ void set_blocksize(kdev_t dev, int size)
 			}
 			remove_from_queues(bh);
 			bh->b_dev=B_FREE;
-			insert_into_queues(bh);
+			put_last_free(bh);
 		}
 	}
 }
@@ -693,7 +664,6 @@ static void refill_freelist(int size)
 void init_buffer(struct buffer_head *bh, kdev_t dev, int block,
 		 bh_end_io_t *handler, void *dev_id)
 {
-	bh->b_count = 1;
 	bh->b_list = BUF_CLEAN;
 	bh->b_flushtime = 0;
 	bh->b_dev = dev;
@@ -743,8 +713,12 @@ get_free:
 	 * and that it's unused (b_count=0), unlocked, and clean.
 	 */
 	init_buffer(bh, dev, block, end_buffer_io_sync, NULL);
-	bh->b_state=0;
-	insert_into_queues(bh);
+	bh->b_count = 1;
+	bh->b_state = 0;
+
+	/* Insert the buffer into the regular lists */
+	insert_into_lru_list(bh);
+	insert_into_hash_list(bh);
 	goto out;
 
 	/*
@@ -781,9 +755,9 @@ void set_writetime(struct buffer_head * buf, int flag)
  */
 static void file_buffer(struct buffer_head *bh, int list)
 {
-	remove_from_queues(bh);
+	remove_from_lru_list(bh);
 	bh->b_list = list;
-	insert_into_queues(bh);
+	insert_into_lru_list(bh);
 }
 
 /*
@@ -813,7 +787,7 @@ static inline void balance_dirty (kdev_t dev)
  * A buffer may need to be moved from one buffer list to another
  * (e.g. in case it is not shared any more). Handle this.
  */
-void __refile_buffer(struct buffer_head * buf)
+void refile_buffer(struct buffer_head * buf)
 {
 	int dispose;
 
@@ -829,7 +803,7 @@ void __refile_buffer(struct buffer_head * buf)
 		dispose = BUF_CLEAN;
 	if(dispose != buf->b_list) {
 		file_buffer(buf, dispose);
-		if(dispose == BUF_DIRTY)
+		if (dispose == BUF_DIRTY)
 			balance_dirty(buf->b_dev);
 	}
 }
@@ -1282,89 +1256,143 @@ static int create_page_buffers (int rw, struct page *page, kdev_t dev, int b[], 
 	}
 	tail->b_this_page = head;
 	page->buffers = head;
+	get_page(page);
 	return 0;
 }
 
 /*
- * Can the buffer be thrown out?
- */
-#define BUFFER_BUSY_BITS	((1<<BH_Dirty) | (1<<BH_Lock) | (1<<BH_Protected))
-#define buffer_busy(bh)	((bh)->b_count || ((bh)->b_state & BUFFER_BUSY_BITS))
-
-static int page_idle(struct page *page, int sync)
-{
-	struct buffer_head *head, *bh, *next;
-
-	head = page->buffers;
-	bh = head;
-	do {
-		next = bh->b_this_page;
-
-		if (bh->b_blocknr) {
-			if (buffer_locked(bh)) {
-				wait_on_buffer(bh);
-				return 0;
-			}
-			if (buffer_dirty(bh)) {
-				if (sync) {
-					wait_on_buffer(bh);
-					ll_rw_block(WRITE, 1, &bh);
-					return 0;
-				} else
-					clear_bit(BH_Dirty, &bh->b_state);
-			}
-		}
-		bh = next;
-	} while (bh != head);
-	return 1;
-}
-
-/*
- * We dont have to release all buffers here, but
+ * We don't have to release all buffers here, but
  * we have to be sure that no dirty buffer is left
  * and no IO is going on (no buffer is locked), because
- * we are going to free the underlying page.
+ * we have truncated the file and are going to free the
+ * blocks on-disk..
  */
-int generic_block_flushpage(struct inode *inode, struct page *page, int sync)
+int generic_block_flushpage(struct inode *inode, struct page *page, unsigned long offset)
 {
 	struct buffer_head *head, *bh, *next;
+	unsigned int curr_off = 0;
 
 
 	if (!PageLocked(page))
 		BUG();
 	if (!page->buffers)
-		BUG();
-
-	while (!page_idle(page, sync));
+		return 0;
 
 	head = page->buffers;
 	bh = head;
 	do {
+		unsigned int next_off = curr_off + bh->b_size;
 		next = bh->b_this_page;
-		if (bh->b_blocknr) {
-			if(bh->b_dev == B_FREE) {
-				remove_from_free_list(bh);
-			} else {
-				if (bh->b_list == BUF_DIRTY) {
-					nr_buffers--;
-					nr_buffers_type[BUF_DIRTY]--;
-					remove_from_lru_list(bh);
-				}
+
+		/*
+		 * is this block fully flushed?
+		 */
+		if (offset <= curr_off) {
+			if (bh->b_blocknr) {
+				if (buffer_locked(bh))
+					wait_on_buffer(bh);
+				clear_bit(BH_Dirty, &bh->b_state);
+				if(bh->b_dev == B_FREE)
+					BUG();
+				remove_from_lru_list(bh);
+				bh->b_blocknr = 0;
 			}
-		} else {
 		}
-		bh->b_state = 0;
-		bh->b_count = 0;
-		put_unused_buffer_head(bh);
+		curr_off = next_off;
 		bh = next;
 	} while (bh != head);
-	page->buffers = NULL;
+
+	/*
+	 * subtle. We release buffer-heads only if this is
+	 * the 'final' flushpage. We invalidate the bmap
+	 * cached value in all cases.
+	 */
+	if (!offset) {
+		buffermem += PAGE_SIZE;
+		try_to_free_buffers(page);
+	}
 
 	return 0;
 }
 
+static inline void create_empty_buffers (struct page *page,
+			struct inode *inode, unsigned long blocksize)
+{
+	struct buffer_head *bh, *head, *tail;
 
-long block_write_one_page (struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf, fs_getblock_t fs_get_block)
+	head = create_buffers(page_address(page), blocksize, 1);
+	if (page->buffers)
+		BUG();
+
+	bh = head;
+	do {
+		bh->b_dev = inode->i_dev;
+		tail = bh;
+		bh = bh->b_this_page;
+	} while (bh);
+	tail->b_this_page = head;
+	page->buffers = head;
+}
+
+int block_write_full_page (struct file *file, struct page *page, fs_getblock_t fs_get_block)
+{
+	struct dentry *dentry = file->f_dentry;
+	struct inode *inode = dentry->d_inode;
+	int err, created, i;
+	unsigned long block, phys, offset;
+	struct buffer_head *bh, *head;
+
+	if (!PageLocked(page))
+		BUG();
+
+	if (!page->buffers)
+		create_empty_buffers(page, inode, inode->i_sb->s_blocksize);
+	head = page->buffers;
+
+	offset = page->offset;
+	block = offset >> inode->i_sb->s_blocksize_bits;
+
+	// FIXME: currently we assume page alignment.
+	if (offset & (PAGE_SIZE-1))
+		BUG();
+
+	bh = head;
+	i = 0;
+	do {
+		if (!bh)
+			BUG();
+
+		if (!bh->b_blocknr) {
+			err = -EIO;
+			down(&inode->i_sem);
+			phys = fs_get_block (inode, block, 1, &err, &created);
+			up(&inode->i_sem);
+			if (!phys)
+				goto out;
+
+			init_buffer(bh, inode->i_dev, phys, end_buffer_io_sync, NULL);
+			bh->b_state = (1<<BH_Uptodate);
+		} else {
+			/*
+			 * block already exists, just mark it dirty:
+			 */
+			bh->b_end_io = end_buffer_io_sync;
+			set_bit(BH_Uptodate, &bh->b_state);
+		}
+		mark_buffer_dirty(bh, 0);
+
+		bh = bh->b_this_page;
+		block++;
+	} while (bh != head);
+
+	SetPageUptodate(page);
+	return 0;
+out:
+	ClearPageUptodate(page);
+	return err;
+}
+
+int block_write_one_page (struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf, fs_getblock_t fs_get_block)
 {
 	struct dentry *dentry = file->f_dentry;
 	struct inode *inode = dentry->d_inode;
@@ -1373,7 +1401,7 @@ long block_write_one_page (struct file *file, struct page *page, unsigned long o
 	unsigned long blocksize, start_block, end_block;
 	unsigned long start_offset, start_bytes, end_bytes;
 	unsigned long bbits, phys, blocks, i, len;
-	struct buffer_head *bh;
+	struct buffer_head *bh, *head;
 	char * target_buf;
 
 	target_buf = (char *)page_address(page) + offset;
@@ -1383,22 +1411,9 @@ long block_write_one_page (struct file *file, struct page *page, unsigned long o
 		BUG();
 
 	blocksize = inode->i_sb->s_blocksize;
-	if (!page->buffers) {
-		struct buffer_head *head, *tail;
-
-		head = create_buffers(page_address(page), blocksize, 1);
-		if (page->buffers)
-			BUG();
-
-		bh = head;
-		do {
-			bh->b_dev = inode->i_dev;
-			tail = bh;
-			bh = bh->b_this_page;
-		} while (bh);
-		tail->b_this_page = head;
-		page->buffers = head;
-	}
+	if (!page->buffers)
+		create_empty_buffers(page, inode, blocksize);
+	head = page->buffers;
 
 	bbits = inode->i_sb->s_blocksize_bits;
 	block = page->offset >> bbits;
@@ -1425,49 +1440,14 @@ long block_write_one_page (struct file *file, struct page *page, unsigned long o
 	if (page->offset & (PAGE_SIZE-1))
 		BUG();
 
-	bh = page->buffers;
 	i = 0;
+	bh = head;
 	do {
 		if (!bh)
 			BUG();
 
 		if ((i < start_block) || (i > end_block)) {
 			goto skip;
-		}
-		if (!bh->b_blocknr) {
-			phys = fs_get_block (inode, block, 1, &err, &created);
-			err = -EIO;
-			if (!phys)
-				goto out;
-
-			unlock_kernel();
-			/*
-			 * if partially written block which has contents on
-			 * disk, then we have to read it first.
-			 */
-			if (!created && (start_offset ||
-					(end_bytes && (i == end_block)))) {
-				init_buffer(bh, inode->i_dev, phys, end_buffer_io_sync, NULL);
-				bh->b_state = 0;
-				ll_rw_block(READ, 1, &bh);
-				wait_on_buffer(bh);
-				err = -EIO;
-				if (!buffer_uptodate(bh))
-					goto out_nolock;
-			}
-			lock_kernel();
-
-			init_buffer(bh, inode->i_dev, phys, end_buffer_io_sync, NULL);
-			bh->b_state = (1<<BH_Dirty) | (1<<BH_Uptodate);
-			bh->b_list = BUF_DIRTY;
-			insert_into_dirty_queue(bh);
-		} else {
-			/*
-			 * block already exists, just mark it dirty:
-			 */
-			bh->b_end_io = end_buffer_io_sync;
-			set_bit(BH_Dirty, &bh->b_state);
-			set_bit(BH_Uptodate, &bh->b_state);
 		}
 		unlock_kernel();
 
@@ -1490,16 +1470,52 @@ long block_write_one_page (struct file *file, struct page *page, unsigned long o
 		target_buf += len;
 		buf += len;
 
+		/*
+		 * we dirty buffers only after copying the data into
+		 * the page - this way we can dirty the buffer even if
+		 * the bh is still doing IO.
+		 */
 		lock_kernel();
-		if (bh->b_list != BUF_DIRTY) {
-			bh->b_list = BUF_DIRTY;
-			insert_into_dirty_queue(bh);
+		if (!bh->b_blocknr) {
+			err = -EIO;
+			down(&inode->i_sem);
+			phys = fs_get_block (inode, block, 1, &err, &created);
+			up(&inode->i_sem);
+			if (!phys)
+				goto out;
+
+			unlock_kernel();
+			/*
+			 * if partially written block which has contents on
+			 * disk, then we have to read it first.
+			 */
+			if (!created && (start_offset ||
+					(end_bytes && (i == end_block)))) {
+				init_buffer(bh, inode->i_dev, phys, end_buffer_io_sync, NULL);
+				bh->b_state = 0;
+				ll_rw_block(READ, 1, &bh);
+				wait_on_buffer(bh);
+				err = -EIO;
+				if (!buffer_uptodate(bh))
+					goto out_nolock;
+			}
+			lock_kernel();
+
+			init_buffer(bh, inode->i_dev, phys, end_buffer_io_sync, NULL);
+			bh->b_state = (1<<BH_Uptodate);
+		} else {
+			/*
+			 * block already exists, just mark it dirty:
+			 */
+			bh->b_end_io = end_buffer_io_sync;
+			set_bit(BH_Uptodate, &bh->b_state);
 		}
+		mark_buffer_dirty(bh, 0);
 skip:
 		i++;
 		block++;
 		bh = bh->b_this_page;
-	} while (i < blocks);
+	} while (bh != head);
 	unlock_kernel();
 
 	SetPageUptodate(page);
@@ -1545,7 +1561,7 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 	do {
 		block = *(b++);
 
-		if (fresh && (bh->b_count != 1))
+		if (fresh && (bh->b_count != 0))
 			BUG();
 		if (rw == READ) {
 			if (!fresh)
@@ -1569,12 +1585,8 @@ int brw_page(int rw, struct page *page, kdev_t dev, int b[], int size, int bmap)
 				if (!block)
 					BUG();
 			}
-			set_bit(BH_Dirty, &bh->b_state);
 			set_bit(BH_Uptodate, &bh->b_state);
-			if (bh->b_list != BUF_DIRTY) {
-				bh->b_list = BUF_DIRTY;
-				insert_into_dirty_queue(bh);
-			}
+			mark_buffer_dirty(bh, 0);
 			arr[nr++] = bh;
 		}
 		bh = bh->b_this_page;
@@ -1701,7 +1713,6 @@ static int grow_buffers(int size)
 			tmp->b_next_free = tmp;
 		}
 		insert_point = tmp;
-		nr_buffers++;
 		if (tmp->b_this_page)
 			tmp = tmp->b_this_page;
 		else
@@ -1713,6 +1724,12 @@ static int grow_buffers(int size)
 	buffermem += PAGE_SIZE;
 	return 1;
 }
+
+/*
+ * Can the buffer be thrown out?
+ */
+#define BUFFER_BUSY_BITS	((1<<BH_Dirty) | (1<<BH_Lock) | (1<<BH_Protected))
+#define buffer_busy(bh)	((bh)->b_count || ((bh)->b_state & BUFFER_BUSY_BITS))
 
 /*
  * try_to_free_buffers() checks if all the buffers on this particular page
@@ -1732,6 +1749,13 @@ int try_to_free_buffers(struct page * page)
 		tmp = tmp->b_this_page;
 		if (!buffer_busy(p))
 			continue;
+{
+	static int count = 30;
+	if (count) {
+		count--;
+		printk("bh %p (%04x:%ld): count=%d, state=0x%04x\n", p, p->b_dev, p->b_blocknr, p->b_count, p->b_state);
+	}
+}
 
 		wakeup_bdflush(0);
 		return 0;
@@ -1741,7 +1765,6 @@ int try_to_free_buffers(struct page * page)
 	do {
 		struct buffer_head * p = tmp;
 		tmp = tmp->b_this_page;
-		nr_buffers--;
 		remove_from_queues(p);
 		put_unused_buffer_head(p);
 	} while (tmp != bh);

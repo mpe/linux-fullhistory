@@ -657,7 +657,8 @@ int sysv_bmap(struct inode * inode,int block_nr)
 
 /* Access selected blocks of regular files (or directories) */
 
-static struct buffer_head * inode_getblk(struct inode * inode, int nr, int create)
+static struct buffer_head * inode_getblk(struct inode * inode, int nr, int create,
+					 int metadata, int *phys_block, int *created)
 {
 	struct super_block *sb;
 	u32 tmp;
@@ -669,31 +670,48 @@ static struct buffer_head * inode_getblk(struct inode * inode, int nr, int creat
 repeat:
 	tmp = *p;
 	if (tmp) {
-		result = sv_getblk(sb, inode->i_dev, tmp);
-		if (tmp == *p)
-			return result;
-		brelse(result);
-		goto repeat;
+		if (metadata) {
+			result = sv_getblk(sb, inode->i_dev, tmp);
+			if (tmp == *p)
+				return result;
+			brelse(result);
+			goto repeat;
+		} else {
+			*phys_block = tmp;
+			return NULL;
+		}
 	}
 	if (!create)
 		return NULL;
 	tmp = sysv_new_block(sb);
 	if (!tmp)
 		return NULL;
-	result = sv_getblk(sb, inode->i_dev, tmp);
-	if (*p) {
-		sysv_free_block(sb,tmp);
-		brelse(result);
-		goto repeat;
+	if (metadata) {
+		result = sv_getblk(sb, inode->i_dev, tmp);
+		if (*p) {
+			sysv_free_block(sb, tmp);
+			brelse(result);
+			goto repeat;
+		}
+	} else {
+		if (*p) {
+			sysv_free_block(sb, tmp);
+			goto repeat;
+		}
+		*phys_block = tmp;
+		result = NULL;
+		*created = 1;
 	}
 	*p = tmp;
+
 	inode->i_ctime = CURRENT_TIME;
 	mark_inode_dirty(inode);
 	return result;
 }
 
 static struct buffer_head * block_getblk(struct inode * inode,
-	struct buffer_head * bh, int nr, int create)
+	struct buffer_head * bh, int nr, int create,
+	int metadata, int *phys_block, int *created)
 {
 	struct super_block *sb;
 	u32 tmp, block;
@@ -717,13 +735,19 @@ repeat:
 	if (sb->sv_convert)
 		block = from_coh_ulong(block);
 	if (tmp) {
-		result = sv_getblk(sb, bh->b_dev, block);
-		if (tmp == *p) {
+		if (metadata) {
+			result = sv_getblk(sb, bh->b_dev, block);
+			if (tmp == *p) {
+				brelse(bh);
+				return result;
+			}
+			brelse(result);
+			goto repeat;
+		} else {
+			*phys_block = tmp;
 			brelse(bh);
-			return result;
+			return NULL;
 		}
-		brelse(result);
-		goto repeat;
 	}
 	if (!create) {
 		brelse(bh);
@@ -734,11 +758,17 @@ repeat:
 		brelse(bh);
 		return NULL;
 	}
-	result = sv_getblk(sb, bh->b_dev, block);
-	if (*p) {
-		sysv_free_block(sb,block);
-		brelse(result);
-		goto repeat;
+	if (metadata) {
+		result = sv_getblk(sb, bh->b_dev, block);
+		if (*p) {
+			sysv_free_block(sb,block);
+			brelse(result);
+			goto repeat;
+		}
+	} else {
+		*phys_block = tmp;
+		result = NULL;
+		*created = 1;
 	}
 	*p = (sb->sv_convert ? to_coh_ulong(block) : block);
 	mark_buffer_dirty(bh, 1);
@@ -746,37 +776,74 @@ repeat:
 	return result;
 }
 
-struct buffer_head * sysv_getblk(struct inode * inode, unsigned int block, int create)
+int sysv_getblk_block(struct inode *inode, long block, int create,
+		      int *err, int *created)
 {
-	struct super_block * sb = inode->i_sb;
-	struct buffer_head * bh;
+	struct super_block *sb = inode->i_sb;
+	struct buffer_head *bh, *tmp;
+	int phys_block;
 
-	if (block < 10)
-		return inode_getblk(inode,block,create);
+	*err = -EIO;
+	if (block < 0) {
+		printk("sysv_getblk: block<0");
+		return 0;
+	}
+	if (block > sb->sv_ind_per_block_3) {
+		printk("sysv_getblk: block>big");
+		return 0;
+	}
+	if (block < 10) {
+		tmp = inode_getblk(inode, block, create,
+				   0, &phys_block, created);
+		goto out;
+	}
 	block -= 10;
 	if (block < sb->sv_ind_per_block) {
-		bh = inode_getblk(inode,10,create);
-		return block_getblk(inode, bh, block, create);
+		bh = inode_getblk(inode, 10, create, 1, NULL, NULL);
+		tmp = block_getblk(inode, bh, block, create,
+				   0, &phys_block, created);
+		goto out;
 	}
 	block -= sb->sv_ind_per_block;
 	if (block < sb->sv_ind_per_block_2) {
-		bh = inode_getblk(inode,11,create);
-		bh = block_getblk(inode, bh, block >> sb->sv_ind_per_block_bits, create);
-		return block_getblk(inode, bh, block & sb->sv_ind_per_block_1, create);
+		bh = inode_getblk(inode, 11, create, 1, NULL, NULL);
+		bh = block_getblk(inode, bh, block >> sb->sv_ind_per_block_bits, create,
+				  1, NULL, NULL);
+		tmp = block_getblk(inode, bh, block & sb->sv_ind_per_block_1, create,
+				   0, &phys_block, created);
+		goto out;
 	}
 	block -= sb->sv_ind_per_block_2;
-	if (block < sb->sv_ind_per_block_3) {
-		bh = inode_getblk(inode,12,create);
-		bh = block_getblk(inode, bh, block >> sb->sv_ind_per_block_2_bits, create);
-		bh = block_getblk(inode, bh, (block >> sb->sv_ind_per_block_bits) & sb->sv_ind_per_block_1, create);
-		return block_getblk(inode, bh, block & sb->sv_ind_per_block_1, create);
+	bh = inode_getblk(inode, 12, create, 1, NULL, NULL);
+	bh = block_getblk(inode, bh, block >> sb->sv_ind_per_block_2_bits, create,
+			  1, NULL, NULL);
+	bh = block_getblk(inode, bh,
+			  (block >> sb->sv_ind_per_block_bits) & sb->sv_ind_per_block_1,
+			  create, 1, NULL, NULL);
+	tmp = block_getblk(inode, bh, block & sb->sv_ind_per_block_1, create,
+			   0, &phys_block, created);
+
+out:
+	*err = 0;
+	return phys_block;
+}
+
+struct buffer_head *sysv_getblk (struct inode *inode, unsigned int block, int create)
+{
+	struct buffer_head *tmp = NULL;
+	int phys_block;
+	int err, created;
+
+	phys_block = sysv_getblk_block(inode, block, create, &err, &created);
+	if (phys_block) {
+		tmp = getblk(inode->i_dev, phys_block, BLOCK_SIZE);
+		if (created) {
+			memset(tmp->b_data, 0, BLOCK_SIZE);
+			mark_buffer_uptodate(tmp, 1);
+			mark_buffer_dirty(tmp, 1);
+		}
 	}
-	if ((int)block<0) {
-		printk("sysv_getblk: block<0");
-		return NULL;
-	}
-	printk("sysv_getblk: block>big");
-	return NULL;
+	return tmp;
 }
 
 struct buffer_head * sysv_file_bread(struct inode * inode, int block, int create)

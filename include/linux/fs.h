@@ -356,7 +356,6 @@ struct inode {
 	unsigned long		i_version;
 	unsigned long		i_nrpages;
 	struct semaphore	i_sem;
-	struct semaphore	i_atomic_write;
 	struct inode_operations	*i_op;
 	struct super_block	*i_sb;
 	wait_queue_head_t	i_wait;
@@ -622,7 +621,7 @@ struct inode_operations {
 	int (*smap) (struct inode *,int);
 	int (*updatepage) (struct file *, struct page *, unsigned long, unsigned int);
 	int (*revalidate) (struct dentry *);
-	int (*flushpage) (struct inode *, struct page *, int);
+	int (*flushpage) (struct inode *, struct page *, unsigned long);
 };
 
 struct super_operations {
@@ -750,15 +749,7 @@ extern struct file *inuse_filps;
 
 extern void set_writetime(struct buffer_head *, int);
 extern int try_to_free_buffers(struct page *);
-extern void __refile_buffer(struct buffer_head * buf);
-extern inline void refile_buffer(struct buffer_head * buf)
-{
-	/*
-	 * Subtle, we do not want to refile not hashed buffers ...
-	 */
-	if (buf->b_pprev)
-		__refile_buffer(buf);
-}
+extern void refile_buffer(struct buffer_head * buf);
 
 extern int buffermem;
 
@@ -881,8 +872,10 @@ extern int generic_readpage(struct file *, struct page *);
 extern int generic_file_mmap(struct file *, struct vm_area_struct *);
 extern ssize_t generic_file_read(struct file *, char *, size_t, loff_t *);
 extern ssize_t generic_file_write(struct file *, const char *, size_t, loff_t *, writepage_t);
-extern int generic_block_flushpage(struct inode *, struct page *, int);
-extern long block_write_one_page (struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf, fs_getblock_t fs_get_block);
+extern int generic_block_flushpage(struct inode *, struct page *, unsigned long);
+extern int block_write_one_page (struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf, fs_getblock_t fs_get_block);
+extern int block_write_full_page (struct file *file, struct page *page, fs_getblock_t fs_get_block);
+
 
 extern struct super_block *get_super(kdev_t);
 extern void put_super(kdev_t);

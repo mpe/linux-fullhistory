@@ -651,9 +651,7 @@ static inline ssize_t do_tty_write(
 	ssize_t ret = 0, written = 0;
 	struct inode *inode = file->f_dentry->d_inode;
 	
-	up(&inode->i_sem);
-	if (down_interruptible(&inode->i_atomic_write)) {
-		down(&inode->i_sem);
+	if (down_interruptible(&inode->i_sem)) {
 		return -ERESTARTSYS;
 	}
 	for (;;) {
@@ -678,8 +676,7 @@ static inline ssize_t do_tty_write(
 		file->f_dentry->d_inode->i_mtime = CURRENT_TIME;
 		ret = written;
 	}
-	up(&inode->i_atomic_write);
-	down(&inode->i_sem);
+	up(&inode->i_sem);
 	return ret;
 }
 

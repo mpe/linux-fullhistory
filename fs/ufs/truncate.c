@@ -62,6 +62,9 @@
 #define DIRECT_BLOCK howmany (inode->i_size, uspi->s_bsize)
 #define DIRECT_FRAGMENT howmany (inode->i_size, uspi->s_fsize)
 
+#define DATA_BUFFER_USED(bh) \
+	((bh->b_count > 1) || buffer_locked(bh))
+
 static int ufs_trunc_direct (struct inode * inode)
 {
 	struct super_block * sb;
@@ -114,7 +117,7 @@ static int ufs_trunc_direct (struct inode * inode)
 	frag2 = ufs_fragnum (frag2);
 	for (j = frag1; j < frag2; j++) {
 		bh = get_hash_table (sb->s_dev, tmp + j, uspi->s_fsize);
-		if ((bh && bh->b_count != 1) || tmp != SWAB32(*p)) {
+		if ((bh && DATA_BUFFER_USED(bh)) || tmp != SWAB32(*p)) {
 			retry = 1;
 			brelse (bh);
 			goto next1;
@@ -137,7 +140,7 @@ next1:
 			continue;
 		for (j = 0; j < uspi->s_fpb; j++) {
 			bh = get_hash_table (sb->s_dev, tmp + j, uspi->s_fsize);
-			if ((bh && bh->b_count != 1) || tmp != SWAB32(*p)) {
+			if ((bh && DATA_BUFFER_USED(bh)) || tmp != SWAB32(*p)) {
 				retry = 1;
 				brelse (bh);
 				goto next2;
@@ -176,7 +179,7 @@ next2:
 	frag4 = ufs_fragnum (frag4);
 	for (j = 0; j < frag4; j++) {
 		bh = get_hash_table (sb->s_dev, tmp + j, uspi->s_fsize);
-		if ((bh && bh->b_count != 1) || tmp != SWAB32(*p)) {
+		if ((bh && DATA_BUFFER_USED(bh)) || tmp != SWAB32(*p)) {
 			retry = 1;
 			brelse (bh);
 			goto next1;
@@ -237,7 +240,7 @@ static int ufs_trunc_indirect (struct inode * inode, unsigned offset, u32 * p)
 			continue;
 		for (j = 0; j < uspi->s_fpb; j++) {
 			bh = get_hash_table (sb->s_dev, tmp + j, uspi->s_fsize);
-			if ((bh && bh->b_count != 1) || tmp != SWAB32(*ind)) {
+			if ((bh && DATA_BUFFER_USED(bh)) || tmp != SWAB32(*ind)) {
 				retry = 1;
 				brelse (bh);
 				goto next;

@@ -175,7 +175,7 @@ int ufs_bmap (struct inode * inode, int fragment)
 
 static struct buffer_head * ufs_inode_getfrag (struct inode * inode, 
 	unsigned fragment, unsigned new_fragment, int create, 
-	unsigned required, int * err )
+	unsigned required, int *err, int metadata, int *phys_block, int *created)
 {
 	struct super_block * sb;
 	struct ufs_sb_private_info * uspi;
@@ -201,13 +201,19 @@ repeat:
 	tmp = SWAB32(*p);
 	lastfrag = inode->u.ufs_i.i_lastfrag;
 	if (tmp && fragment < lastfrag) {
-		result = getblk (sb->s_dev, uspi->s_sbbase + tmp + blockoff, sb->s_blocksize);
-		if (tmp == SWAB32(*p)) {
-			UFSD(("EXIT, result %u\n", tmp + blockoff))
-			return result;
+		if (metadata) {
+			result = getblk (sb->s_dev, uspi->s_sbbase + tmp + blockoff,
+					 sb->s_blocksize);
+			if (tmp == SWAB32(*p)) {
+				UFSD(("EXIT, result %u\n", tmp + blockoff))
+					return result;
+			}
+			brelse (result);
+			goto repeat;
+		} else {
+			*phys_block = tmp;
+			return NULL;
 		}
-		brelse (result);
-		goto repeat;
 	}
 	*err = -EFBIG;
 	if (!create)
@@ -269,7 +275,20 @@ repeat:
 		else
 			return NULL;
 	}
-	result = getblk (inode->i_dev, tmp + blockoff, sb->s_blocksize);
+
+	/* The nullification of framgents done in ufs/balloc.c is
+	 * something I don't have the stomache to move into here right
+	 * now. -DaveM
+	 */
+	if (metadata) {
+		result = getblk (inode->i_dev, tmp + blockoff, sb->s_blocksize);
+	} else {
+		*phys_block = tmp;
+		result = NULL;
+		*err = 0;
+		*created = 1;
+	}
+
 	inode->i_ctime = CURRENT_TIME;
 	if (IS_SYNC(inode))
 		ufs_sync_inode (inode);
@@ -280,7 +299,7 @@ repeat:
 
 static struct buffer_head * ufs_block_getfrag (struct inode * inode,
 	struct buffer_head * bh, unsigned fragment, unsigned new_fragment, 
-	int create, unsigned blocksize, int * err)
+	int create, unsigned blocksize, int * err, int metadata, int *phys_block, int *created)
 {
 	struct super_block * sb;
 	struct ufs_sb_private_info * uspi;
@@ -312,19 +331,36 @@ static struct buffer_head * ufs_block_getfrag (struct inode * inode,
 repeat:
 	tmp = SWAB32(*p);
 	if (tmp) {
-		result = getblk (bh->b_dev, uspi->s_sbbase + tmp + blockoff, sb->s_blocksize);
-		if (tmp == SWAB32(*p)) {
+		if (metadata) {
+			result = getblk (bh->b_dev, uspi->s_sbbase + tmp + blockoff,
+					 sb->s_blocksize);
+			if (tmp == SWAB32(*p)) {
+				brelse (bh);
+				UFSD(("EXIT, result %u\n", tmp + blockoff))
+				return result;
+			}
+			brelse (result);
+			goto repeat;
+		} else {
+			*phys_block = tmp;
 			brelse (bh);
-			UFSD(("EXIT, result %u\n", tmp + blockoff))
-			return result;
+			return NULL;
 		}
-		brelse (result);
-		goto repeat;
 	}
-	if (!create || new_fragment >= (current->rlim[RLIMIT_FSIZE].rlim_cur >> sb->s_blocksize)) {
+	*err = -EFBIG;
+	if (!create) {
 		brelse (bh);
-		*err = -EFBIG;
 		return NULL;
+	} else {
+		unsigned long limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
+		if (limit < RLIM_INFINITY) {
+			limit >>= sb->s_blocksize_bits;
+			if (new_fragment >= limit) {
+				brelse (bh);
+				send_sig(SIGXFSZ, current, 0);
+				return NULL;
+			}
+		}
 	}
 	if (block && (tmp = SWAB32(((u32*)bh->b_data)[block-1]) + uspi->s_fpb))
 		goal = tmp + uspi->s_fpb;
@@ -334,12 +370,25 @@ repeat:
 	if (!tmp) {
 		if (SWAB32(*p)) {
 			goto repeat;
-		}
-		else {
+		} else {
+			brelse (bh);
 			return NULL;
 		}
 	}		
-	result = getblk (bh->b_dev, tmp + blockoff, sb->s_blocksize);
+
+	/* The nullification of framgents done in ufs/balloc.c is
+	 * something I don't have the stomache to move into here right
+	 * now. -DaveM
+	 */
+	if (metadata) {
+		result = getblk (bh->b_dev, tmp + blockoff, sb->s_blocksize);
+	} else {
+		*phys_block = tmp;
+		result = NULL;
+		*err = 0;
+		*created = 1;
+	}
+
 	mark_buffer_dirty(bh, 1);
 	if (IS_SYNC(inode)) {
 		ll_rw_block (WRITE, 1, &bh);
@@ -352,14 +401,15 @@ repeat:
 	return result;
 }
 
-struct buffer_head * ufs_getfrag (struct inode * inode, unsigned fragment,
-	int create, int * err)
+int ufs_getfrag_block (struct inode * inode, long fragment,
+		       int create, int * err, int *created)
 {
 	struct super_block * sb;
 	struct ufs_sb_private_info * uspi;
-	struct buffer_head * bh;
+	struct buffer_head * bh, * tmp;
 	unsigned f;
 	unsigned swab;
+	int phys_block;
 	
 	sb = inode->i_sb;
 	uspi = sb->u.ufs_sb.s_uspi;
@@ -367,19 +417,27 @@ struct buffer_head * ufs_getfrag (struct inode * inode, unsigned fragment,
 	*err = -EIO;
 
 	UFSD(("ENTER, ino %lu, fragment %u\n", inode->i_ino, fragment))
+	if (fragment < 0) {
+		ufs_warning (sb, "ufs_getblk", "block < 0");
+		return 0;
+	}
 	if (fragment > ((UFS_NDADDR + uspi->s_apb + uspi->s_2apb + uspi->s_3apb) << uspi->s_fpbshift)) {
 		ufs_warning (sb, "ufs_getblk", "block > big");
-		return NULL;
+		return 0;
 	}
 
 	*err = -ENOSPC;
 	f = fragment;
+	*created = 0;
 	  
 	/*
 	 * Direct fragment
 	 */
-	if (fragment < UFS_NDIR_FRAGMENT)
-		return ufs_inode_getfrag (inode, fragment, fragment, create, 1, err);
+	if (fragment < UFS_NDIR_FRAGMENT) {
+		tmp = ufs_inode_getfrag (inode, fragment, fragment, create, 1,
+					 err, 0, &phys_block, created);
+		goto out;
+	}
 	/*
 	 * Indirect fragment
 	 */
@@ -387,10 +445,12 @@ struct buffer_head * ufs_getfrag (struct inode * inode, unsigned fragment,
 	if (fragment < (1 << (uspi->s_apbshift + uspi->s_fpbshift))) {
 		bh = ufs_inode_getfrag (inode, 
 			UFS_IND_FRAGMENT + (fragment >> uspi->s_apbshift),
-			f, create, uspi->s_fpb, err);
-		return ufs_block_getfrag (inode, bh, 
-			fragment & uspi->s_apbmask,
-			f, create, sb->s_blocksize, err);
+			f, create, uspi->s_fpb, err, 1, NULL, NULL);
+		tmp = ufs_block_getfrag (inode, bh, 
+					 fragment & uspi->s_apbmask,
+					 f, create, sb->s_blocksize,
+					 err, 0, &phys_block, created);
+		goto out;
 	}
 	/*
 	 * Dindirect fragment
@@ -398,14 +458,18 @@ struct buffer_head * ufs_getfrag (struct inode * inode, unsigned fragment,
 	fragment -= 1 << (uspi->s_apbshift + uspi->s_fpbshift);
 	if ( fragment < (1 << (uspi->s_2apbshift + uspi->s_fpbshift))) {
 		bh = ufs_inode_getfrag (inode,
-			UFS_DIND_FRAGMENT + (fragment >> uspi->s_2apbshift), 
-			f, create, uspi->s_fpb, err);
+			UFS_DIND_FRAGMENT + (fragment >> uspi->s_2apbshift),
+			f, create, uspi->s_fpb, err,
+			1, NULL, NULL);
 		bh = ufs_block_getfrag (inode, bh,
 			(fragment >> uspi->s_apbshift) & uspi->s_apbmask, 
-			f, create, sb->s_blocksize, err);
-		return ufs_block_getfrag (inode, bh, 
+			f, create, sb->s_blocksize, err,
+			1, NULL, NULL);
+		tmp = ufs_block_getfrag (inode, bh, 
 			fragment & uspi->s_apbmask,
-			f, create, sb->s_blocksize, err);
+			f, create, sb->s_blocksize, err,
+			0, &phys_block, created);
+		goto out;
 	}
 	/*
 	 * Tindirect fragment
@@ -413,19 +477,42 @@ struct buffer_head * ufs_getfrag (struct inode * inode, unsigned fragment,
 	fragment -= 1 << (uspi->s_2apbshift + uspi->s_fpbshift);
 	bh = ufs_inode_getfrag (inode,
 		UFS_TIND_FRAGMENT + (fragment >> uspi->s_3apbshift), 
-		f, create, uspi->s_fpb, err);
+		f, create, uspi->s_fpb, err, 1, NULL, NULL);
 	bh = ufs_block_getfrag (inode, bh,
 		(fragment >> uspi->s_2apbshift) & uspi->s_apbmask,
-		f, create, sb->s_blocksize, err);
+		f, create, sb->s_blocksize, err, 1, NULL, NULL);
 	bh = ufs_block_getfrag (inode, bh,
 		(fragment >> uspi->s_apbshift) & uspi->s_apbmask, 
-		f, create, sb->s_blocksize, err);
-	return ufs_block_getfrag (inode, bh,
+		f, create, sb->s_blocksize, err, 1, NULL, NULL);
+	tmp = ufs_block_getfrag (inode, bh,
 		fragment & uspi->s_apbmask, 
-		f, create, sb->s_blocksize, err);
+		f, create, sb->s_blocksize, err, 0, &phys_block, created);
+
+out:
+	if (!phys_block)
+		return 0;
+	if (*err)
+		return 0;
+	return phys_block;
 }
 
+struct buffer_head *ufs_getfrag(struct inode *inode, unsigned int fragment,
+				int create, int *err)
+{
+	struct buffer_head *tmp = NULL;
+	int phys_block, created;
 
+	phys_block = ufs_getfrag_block(inode, fragment, create, err, &created);
+	if (phys_block) {
+		tmp = getblk(inode->i_dev, phys_block, inode->i_sb->s_blocksize);
+		if (created) {
+			memset(tmp->b_data, 0, inode->i_sb->s_blocksize);
+			mark_buffer_uptodate(tmp, 1);
+			mark_buffer_dirty(tmp, 1);
+		}
+	}
+	return tmp;
+}
 
 struct buffer_head * ufs_bread (struct inode * inode, unsigned fragment,
 	int create, int * err)

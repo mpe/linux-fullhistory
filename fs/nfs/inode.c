@@ -99,23 +99,28 @@ nfs_delete_inode(struct inode * inode)
 	int failed;
 
 	dprintk("NFS: delete_inode(%x/%ld)\n", inode->i_dev, inode->i_ino);
-	/*
-	 * Flush out any pending write requests ...
-	 */
-	if (NFS_WRITEBACK(inode) != NULL) {
-		unsigned long timeout = jiffies + 5*HZ;
+
+	if (S_ISDIR(inode->i_mode)) {
+		nfs_free_dircache(inode);
+	} else {
+		/*
+		 * Flush out any pending write requests ...
+		 */
+		if (NFS_WRITEBACK(inode) != NULL) {
+			unsigned long timeout = jiffies + 5*HZ;
 #ifdef NFS_DEBUG_VERBOSE
 printk("nfs_delete_inode: inode %ld has pending RPC requests\n", inode->i_ino);
 #endif
-		nfs_inval(inode);
-		while (NFS_WRITEBACK(inode) != NULL &&
-		       time_before(jiffies, timeout)) {
-			current->state = TASK_INTERRUPTIBLE;
-			schedule_timeout(HZ/10);
+			nfs_inval(inode);
+			while (NFS_WRITEBACK(inode) != NULL &&
+			       time_before(jiffies, timeout)) {
+				current->state = TASK_INTERRUPTIBLE;
+				schedule_timeout(HZ/10);
+			}
+			current->state = TASK_RUNNING;
+			if (NFS_WRITEBACK(inode) != NULL)
+				printk("NFS: Arghhh, stuck RPC requests!\n");
 		}
-		current->state = TASK_RUNNING;
-		if (NFS_WRITEBACK(inode) != NULL)
-			printk("NFS: Arghhh, stuck RPC requests!\n");
 	}
 
 	failed = nfs_check_failed_request(inode);
@@ -433,7 +438,7 @@ nfs_zap_caches(struct inode *inode)
 
 	invalidate_inode_pages(inode);
 	if (S_ISDIR(inode->i_mode))
-		nfs_invalidate_dircache(inode);
+		nfs_flush_dircache(inode);
 }
 
 /*
@@ -477,8 +482,6 @@ nfs_fill_inode(struct inode *inode, struct nfs_fattr *fattr)
 		inode->i_size  = fattr->size;
 		inode->i_mtime = fattr->mtime.seconds;
 		NFS_OLDMTIME(inode) = fattr->mtime.seconds;
-		NFS_COOKIES(inode) = NULL;
-		NFS_WRITEBACK(inode) = NULL;
 	}
 	nfs_refresh_inode(inode, fattr);
 }

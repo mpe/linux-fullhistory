@@ -166,9 +166,7 @@ asmlinkage ssize_t sys_write(unsigned int fd, const char * buf, size_t count)
 	if (!file->f_op || !(write = file->f_op->write))
 		goto out;
 
-	down(&inode->i_sem);
 	ret = write(file, buf, count, &file->f_pos);
-	up(&inode->i_sem);
 out:
 	fput(file);
 bad_file:
@@ -304,9 +302,7 @@ asmlinkage ssize_t sys_writev(unsigned long fd, const struct iovec * vector,
 	if (!file)
 		goto bad_file;
 	if (file->f_op && file->f_op->write && (file->f_mode & FMODE_WRITE)) {
-		down(&file->f_dentry->d_inode->i_sem);
 		ret = do_readv_writev(VERIFY_READ, file, vector, count);
-		up(&file->f_dentry->d_inode->i_sem);
 	}
 	fput(file);
 
@@ -376,10 +372,7 @@ asmlinkage ssize_t sys_pwrite(unsigned int fd, const char * buf,
 	if (pos < 0)
 		goto out;
 
-	down(&file->f_dentry->d_inode->i_sem);
 	ret = write(file, buf, count, &pos);
-	up(&file->f_dentry->d_inode->i_sem);
-
 out:
 	fput(file);
 bad_file:
