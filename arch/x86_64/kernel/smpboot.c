@@ -88,8 +88,6 @@ extern unsigned char trampoline_end  [];
 static unsigned long __init setup_trampoline(void)
 {
 	void *tramp = __va(SMP_TRAMPOLINE_BASE); 
-	extern volatile __u32 tramp_gdt_ptr; 
-	tramp_gdt_ptr = __pa_symbol(&cpu_gdt_table); 
 	memcpy(tramp, trampoline_data, trampoline_end - trampoline_data);
 	return virt_to_phys(tramp);
 }
