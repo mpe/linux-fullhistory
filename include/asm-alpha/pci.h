@@ -32,7 +32,7 @@ extern struct linux_hose_info *bus2hose[256];
 
 #if defined(CONFIG_ALPHA_GENERIC) \
     || defined(CONFIG_ALPHA_MCPCIA) \
-    /* || defined(CONFIG_ALPHA_TSUNAMI) */
+    || defined(CONFIG_ALPHA_TSUNAMI)
 
 #define PCI_HANDLE(bus)   ((bus2hose[bus]->pci_hose_index & 3UL) << 32)
 #define DEV_IS_ON_PRIMARY(dev) \

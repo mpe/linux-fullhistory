@@ -538,6 +538,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ACENIC),y)
+L_OBJS += acenic.o
+else
+  ifeq ($(CONFIG_ACENIC),m)
+  M_OBJS += acenic.o
+  endif
+endif
+
 ifeq ($(CONFIG_WAVELAN),y)
 L_OBJS += wavelan.o
 else

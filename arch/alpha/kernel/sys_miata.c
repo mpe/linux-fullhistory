@@ -36,7 +36,7 @@ miata_update_irq_hw(unsigned long irq, unsigned long mask, int unmask_p)
 	if (irq >= 16) {
 		/* Make CERTAIN none of the bogus ints get enabled... */
 		*(vulp)PYXIS_INT_MASK =
-			~((long)mask >> 16) & ~0x4000000000000e3bUL;
+			~((long)mask >> 16) & ~0x400000000000063bUL;
 		mb();
 		/* ... and read it back to make sure it got written.  */
 		*(vulp)PYXIS_INT_MASK;
@@ -62,7 +62,7 @@ miata_device_interrupt(unsigned long vector, struct pt_regs *regs)
 	 * then all the PCI slots/INTXs (12-31).
 	 */
 	/* Maybe HALT should only be used for SRM console boots? */
-	pld &= 0x00000000fffff1c4UL;
+	pld &= 0x00000000fffff9c4UL;
 
 	/*
 	 * Now for every possible bit set, work through them and call
@@ -101,8 +101,8 @@ miata_srm_device_interrupt(unsigned long vector, struct pt_regs * regs)
 	 *  used for this purpose, as PIC interrupts are delivered as the
 	 *  vectors 0x800-0x8f0).
 	 * But I really don't want to change the fixup code for allocation
-	 *  of IRQs, nor the alpha_irq_mask maintenance stuff, both of which look
-	 *  nice and clean now.
+	 *  of IRQs, nor the alpha_irq_mask maintenance stuff, both of which
+	 *  look nice and clean now.
 	 * So, here's this grotty hack... :-(
 	 */
 	if (irq >= 16)
@@ -120,14 +120,15 @@ miata_init_irq(void)
 		alpha_mv.device_interrupt = miata_srm_device_interrupt;
 
 	/* Note invert on MASK bits.  */
-	*(vulp)PYXIS_INT_MASK = ~((long)alpha_irq_mask >> 16); mb();
+	*(vulp)PYXIS_INT_MASK =
+	  ~((long)alpha_irq_mask >> 16) & ~0x400000000000063bUL; mb();
 #if 0
 	/* These break on MiataGL so we'll try not to do it at all.  */
 	*(vulp)PYXIS_INT_HILO = 0x000000B2UL; mb();	/* ISA/NMI HI */
 	*(vulp)PYXIS_RT_COUNT = 0UL; mb();		/* clear count */
 #endif
 	/* Clear upper timer.  */
-	*(vulp)PYXIS_INT_REQ  = 0x4000000000000000UL; mb();
+	*(vulp)PYXIS_INT_REQ  = 0x4000000000000180UL; mb();
 
 	enable_irq(16 + 2);	/* enable HALT switch - SRM only? */
 	enable_irq(16 + 6);     /* enable timer */
@@ -209,22 +210,21 @@ miata_map_irq(struct pci_dev *dev, int slot, int pin)
 		{   -1,    -1,    -1,    -1,    -1},  /* IdSel 15,  EIDE    */
 		{   -1,    -1,    -1,    -1,    -1},  /* IdSel 16,  none    */
 		{   -1,    -1,    -1,    -1,    -1},  /* IdSel 17,  none    */
-	/*	{16+11, 16+11, 16+11, 16+11, 16+11},*//* IdSel 17,  USB ??  */
 		{   -1,    -1,    -1,    -1,    -1},  /* IdSel 18,  PCI-ISA */
 		{   -1,    -1,    -1,    -1,    -1},  /* IdSel 19,  PCI-PCI */
 		{   -1,    -1,    -1,    -1,    -1},  /* IdSel 20,  none    */
 		{   -1,    -1,    -1,    -1,    -1},  /* IdSel 21,  none    */
 		{16+12, 16+12, 16+13, 16+14, 16+15},  /* IdSel 22,  slot 4  */
 		{16+16, 16+16, 16+17, 16+18, 16+19},  /* IdSel 23,  slot 5  */
-		/* The following are actually on bus 1, which is
-		   across the builtin PCI-PCI bridge.  */
-		{16+20, 16+20, 16+21, 16+22, 16+23},  /* IdSel 24,  slot 1  */
-		{16+24, 16+24, 16+25, 16+26, 16+27},  /* IdSel 25,  slot 2  */
-		{16+28, 16+28, 16+29, 16+30, 16+31},  /* IdSel 26,  slot 3  */
+		/* the next 7 are actually on PCI bus 1, across the bridge */
+		{16+11, 16+11, 16+11, 16+11, 16+11},  /* IdSel 24,  QLISP/GL*/
+		{   -1,    -1,    -1,    -1,    -1},  /* IdSel 25,  none    */
+		{   -1,    -1,    -1,    -1,    -1},  /* IdSel 26,  none    */
 		{   -1,    -1,    -1,    -1,    -1},  /* IdSel 27,  none    */
-		{   -1,    -1,    -1,    -1,    -1},  /* IdSel 28,  none    */
-		{   -1,    -1,    -1,    -1,    -1},  /* IdSel 29,  none    */
-		{   -1,    -1,    -1,    -1,    -1},  /* IdSel 30,  none    */
+		{16+20, 16+20, 16+21, 16+22, 16+23},  /* IdSel 28,  slot 1  */
+		{16+24, 16+24, 16+25, 16+26, 16+27},  /* IdSel 29,  slot 2  */
+		{16+28, 16+28, 16+29, 16+30, 16+31},  /* IdSel 30,  slot 3  */
+		/* this bridge is on the main bus of the later original MIATA */
 		{   -1,    -1,    -1,    -1,    -1},  /* IdSel 31,  PCI-PCI */
         };
 	const long min_idsel = 3, max_idsel = 20, irqs_per_slot = 5;
@@ -239,7 +239,7 @@ miata_swizzle(struct pci_dev *dev, int *pinp)
 	/* Check first for the built-in bridge.  */
 	if ((PCI_SLOT(dev->bus->self->devfn) == 8) ||
 	    (PCI_SLOT(dev->bus->self->devfn) == 20)) {
-		slot = PCI_SLOT(dev->devfn) + 5;
+		slot = PCI_SLOT(dev->devfn) + 9;
 	}
 	else 
 	{
@@ -247,7 +247,7 @@ miata_swizzle(struct pci_dev *dev, int *pinp)
 		do {
 			if ((PCI_SLOT(dev->bus->self->devfn) == 8) ||
 			    (PCI_SLOT(dev->bus->self->devfn) == 20)) {
-				slot = PCI_SLOT(dev->devfn) + 5;
+				slot = PCI_SLOT(dev->devfn) + 9;
 				break;
 			}
 			pin = bridge_swizzle(pin, PCI_SLOT(dev->devfn));

@@ -281,7 +281,6 @@ static int set_all_vcs(int fbidx, struct fb_ops *fb,
     var->activate &= ~FB_ACTIVATE_TEST;
     if (err)
 	    return err;
-    info->disp->var = *var;
     for (unit = 0; unit < MAX_NR_CONSOLES; unit++)
 	    if (fb_display[unit].conp && con2fb_map[unit] == fbidx)
 		    fb->fb_set_var(var, unit, info);

@@ -146,8 +146,6 @@ EXPORT_SYMBOL(ide_outsw);
 EXPORT_SYMBOL(start_thread);
 EXPORT_SYMBOL(__kernel_thread);
 
-EXPORT_SYMBOL(__down_interruptible);
-
 EXPORT_SYMBOL(__cli);
 EXPORT_SYMBOL(__sti);
 /*EXPORT_SYMBOL(__restore_flags);*/

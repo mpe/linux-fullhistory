@@ -530,6 +530,9 @@ static void fbcon_setup(int con, int init, int logo)
 	conp->vc_rows = nr_rows;
     }
     p->vrows = p->var.yres_virtual/fontheight(p);
+    if ((p->var.yres % fontheight(p)) &&
+	(p->var.yres_virtual % fontheight(p) < p->var.yres % fontheight(p)))
+	p->vrows--;
     conp->vc_can_do_color = p->var.bits_per_pixel != 1;
     conp->vc_complement_mask = conp->vc_can_do_color ? 0x7700 : 0x0800;
     if (charcnt == 256) {
@@ -1211,7 +1214,7 @@ static int fbcon_blank(struct vc_data *conp, int blank)
 			     p->var.xres_virtual*p->var.yres_virtual*
 			     p->var.bits_per_pixel>>3);
 	     } else
-		 p->dispsw->clear(NULL, p, 0, 0, p->conp->vc_rows, p->conp->vc_cols);
+		 p->dispsw->clear(conp, p, 0, 0, conp->vc_rows, conp->vc_cols);
 	    return 0;
 	} else {
 	    /* Tell console.c that it has to restore the screen itself */
@@ -1339,6 +1342,8 @@ static int fbcon_do_set_font(int unit, struct console_font_op *op, u8 *data, int
 	/* reset wrap/pan */
 	p->var.xoffset = p->var.yoffset = p->yscroll = 0;
 	p->vrows = p->var.yres_virtual/h;
+	if ((p->var.yres % h) && (p->var.yres_virtual % h < p->var.yres % h))
+	    p->vrows--;
 	updatescrollmode(p);
 	vc_resize_con( p->var.yres/h, p->var.xres/w, unit );
     } else if (CON_IS_VISIBLE(p->conp) && vt_cons[unit]->vc_mode == KD_TEXT) {
@@ -1786,8 +1791,15 @@ __initfunc(static int fbcon_show_logo( void ))
 	    unsigned char val, mask;
 	    int plane = p->next_plane;
 
+#if defined(CONFIG_FBCON_IPLAN2P2) || defined(CONFIG_FBCON_IPLAN2P4) || \
+    defined(CONFIG_FBCON_IPLAN2P8)
+	    int line_length = p->line_length;
+
 	    /* for support of Atari interleaved planes */
-#define MAP_X(x)	(plane > line ? x : (x & ~1)*depth + (x & 1))
+#define MAP_X(x)	(line_length ? x : (x & ~1)*depth + (x & 1))
+#else
+#define MAP_X(x)	(x)
+#endif
 	    /* extract a bit from the source image */
 #define	BIT(p,pix,bit)	(p[pix*logo_depth/8] & \
 			 (1 << ((8-((pix*logo_depth)&7)-logo_depth) + bit)))

@@ -1107,8 +1107,9 @@ static int isp1020_reset_hardware(struct Scsi_Host *host)
 
 #if RELOAD_FIRMWARE
 	/* Do not reload firmware if 1040B, i.e. revision 5 chip.  */
-	if (((struct isp1020_hostdata *) host->hostdata)->revision == 5)
-		printk("qlogicisp : 1040B chip, firmware not (re)loaded\n");
+	if (((struct isp1020_hostdata *) host->hostdata)->revision >= 5)
+		printk("qlogicisp : 1040B or later chip,"
+		       " firmware not (re)loaded\n");
 	else
 	{
 		int i;

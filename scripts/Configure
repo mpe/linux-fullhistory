@@ -242,7 +242,7 @@ function tristate () {
 # are nested, and one module requires the presence of something
 # else in the kernel.
 #
-#	tristate question define default ...
+#	dep_tristate question define default ...
 #
 function dep_tristate () {
 	old=$(eval echo "\${$2}")

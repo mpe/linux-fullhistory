@@ -718,12 +718,20 @@
 /* mach64CT family / mach64VT class */
 #define VT_CHIP_ID	0x5654	/* mach64VT (ATI264VT) */
 #define VU_CHIP_ID	0x5655	/* mach64VTB (ATI264VTB) */
+#define VV_CHIP_ID	0x5656	/* mach64VT4 (ATI264VT4) */
 
 /* mach64CT family / mach64GT (3D RAGE) class */
-#define LT_CHIP_ID	0x4c54	/* 3D RAGE LT */
-#define LG_CHIP_ID	0x4c47	/* 3D RAGE LG */
-#define GT_CHIP_ID	0x4754	/* 3D RAGE (GT) */
-#define GU_CHIP_ID	0x4755	/* 3D RAGE II/II+ (GTB) */
+#define LB_CHIP_ID	0x4c42	/* RAGE LT PRO, AGP */
+#define LD_CHIP_ID	0x4c44	/* RAGE LT PRO */
+#define LG_CHIP_ID	0x4c47	/* RAGE LT PRO */
+#define LI_CHIP_ID	0x4c49	/* RAGE LT PRO */
+#define LP_CHIP_ID	0x4c50	/* RAGE LT PRO */
+#define LT_CHIP_ID	0x4c54	/* RAGE LT */
+#define GT_CHIP_ID	0x4754	/* RAGE (GT) */
+#define GU_CHIP_ID	0x4755	/* RAGE II/II+ (GTB) */
+#define GV_CHIP_ID	0x4756	/* RAGE IIC, PCI */
+#define GW_CHIP_ID	0x4757	/* RAGE IIC, AGP */
+#define GZ_CHIP_ID	0x475a	/* RAGE IIC, AGP */
 #define GB_CHIP_ID	0x4742	/* RAGE PRO, BGA, AGP 1x and 2x */
 #define GD_CHIP_ID	0x4744	/* RAGE PRO, BGA, AGP 1x only */
 #define GI_CHIP_ID	0x4749	/* RAGE PRO, BGA, PCI33 only */

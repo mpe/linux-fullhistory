@@ -1,4 +1,4 @@
-/*  $Id: atyfb.c,v 1.89 1998/11/12 13:07:26 geert Exp $
+/*  $Id: atyfb.c,v 1.90 1998/11/20 12:27:03 geert Exp $
  *  linux/drivers/video/atyfb.c -- Frame buffer device for ATI Mach64
  *
  *	Copyright (C) 1997-1998  Geert Uytterhoeven
@@ -435,14 +435,20 @@ static struct aty_features {
     /* mach64CT family / mach64VT class */
     { 0x5654, 0x5654, "mach64VT (ATI264VT)" },
     { 0x5655, 0x5655, "mach64VTB (ATI264VTB)" },
-/*  { 0x5656, 0x5656, "mach64VT4 (ATI264VT4)" }, */
+    { 0x5656, 0x5656, "mach64VT4 (ATI264VT4)" },
 
     /* mach64CT family / mach64GT (3D RAGE) class */
+    { 0x4c42, 0x4c42, "3D RAGE LT PRO (AGP)" },
+    { 0x4c42, 0x4c44, "3D RAGE LT PRO" },
+    { 0x4c42, 0x4c47, "3D RAGE LT PRO" },
+    { 0x4c42, 0x4c49, "3D RAGE LT PRO" },
+    { 0x4c42, 0x4c50, "3D RAGE LT PRO" },
     { 0x4c54, 0x4c54, "3D RAGE LT" },
-    { 0x4c47, 0x4c47, "3D RAGE LG" },
     { 0x4754, 0x4754, "3D RAGE (GT)" },
     { 0x4755, 0x4755, "3D RAGE II+ (GTB)" },
-/*  { 0x4756, 0x4756, "3D RAGE IIC" }, */
+    { 0x4756, 0x4756, "3D RAGE IIC (PCI)" },
+    { 0x4757, 0x4757, "3D RAGE IIC (AGP)" },
+    { 0x475a, 0x475a, "3D RAGE IIC (AGP)" },
     { 0x4742, 0x4742, "3D RAGE PRO (BGA, AGP)" },
     { 0x4744, 0x4744, "3D RAGE PRO (BGA, AGP, 1x only)" },
     { 0x4749, 0x4749, "3D RAGE PRO (BGA, PCI)" },
@@ -1144,8 +1150,7 @@ static int aty_var_to_crtc(const struct fb_info_aty *info,
     crtc->off_pitch = ((yoffset*vxres+xoffset)*bpp/64) | (vxres<<19);
     crtc->gen_cntl = pix_width | c_sync | CRTC_EXT_DISP_EN | CRTC_ENABLE;
     if ((Gx == CT_CHIP_ID) || (Gx == ET_CHIP_ID) ||
-	((Gx == VT_CHIP_ID) && !(Rev & 0x03)) ||
-	((Gx == GT_CHIP_ID) && !(Rev & 0x03))) {
+	((Gx == VT_CHIP_ID || Gx == GT_CHIP_ID) && !(Rev & 0x07))) {
 	/* Not VTB/GTB */
 	/* FIXME: magic FIFO values */
 	crtc->gen_cntl |= aty_ld_le32(CRTC_GEN_CNTL, info) & 0x000e0000;
@@ -1468,10 +1473,9 @@ static void aty_set_pll_ct(const struct fb_info_aty *info,
     aty_st_pll(VCLK0_FB_DIV, pll->vclk_fb_div, info);
     aty_st_pll(PLL_EXT_CNTL, pll->pll_ext_cntl, info);
 
-    if (((Gx == GT_CHIP_ID) && (Rev & 0x03)) || (Gx == GU_CHIP_ID) ||
-	(Gx == LG_CHIP_ID) || (Gx == GB_CHIP_ID) || (Gx == GD_CHIP_ID) ||
-	(Gx == GI_CHIP_ID) || (Gx == GP_CHIP_ID) || (Gx == GQ_CHIP_ID) ||
-	(Gx == VU_CHIP_ID)) {
+    if (!(Gx == GX_CHIP_ID || Gx == CX_CHIP_ID || Gx == CT_CHIP_ID ||
+	  Gx == ET_CHIP_ID ||
+	  ((Gx == VT_CHIP_ID || Gx == GT_CHIP_ID) && !(Rev & 0x07)))) {
 	if (info->ram_type >= SDRAM)
 	    aty_st_pll(DLL_CNTL, 0xa6, info);
 	else
@@ -1494,8 +1498,9 @@ static int aty_dsp_gt(const struct fb_info_aty *info, u8 mclk_fb_div,
 		    (vclk_fb_div*mclk_post_div*bpp);
     if (xclks_per_row < (1<<11))
 	FAIL("Dotclock to high");
-    if ((Gx == GT_CHIP_ID) || (Gx == GU_CHIP_ID) || (Gx == VT_CHIP_ID) ||
-	(Gx == VU_CHIP_ID)) {
+    if (Gx == GT_CHIP_ID || Gx == GU_CHIP_ID || Gx == VT_CHIP_ID ||
+	Gx == VU_CHIP_ID || Gx == GV_CHIP_ID || Gx == GW_CHIP_ID ||
+	Gx == GZ_CHIP_ID) {
 	fifo_size = 24;
 	dsp_loop_latency = 0;
     } else {
@@ -1911,15 +1916,15 @@ static int encode_fix(struct fb_fix_screeninfo *fix,
      *  Reg Block 0 (CT-compatible block) is at ati_regbase_phys
      *  Reg Block 1 (multimedia extensions) is at ati_regbase_phys-0x400
      */
-    if ((Gx == GX_CHIP_ID) || (Gx == CX_CHIP_ID)) {
+    if (Gx == GX_CHIP_ID || Gx == CX_CHIP_ID) {
 	fix->mmio_start = (char *)info->ati_regbase_phys;
 	fix->mmio_len = 0x400;
 	fix->accel = FB_ACCEL_ATI_MACH64GX;
-    } else if ((Gx == CT_CHIP_ID) || (Gx == ET_CHIP_ID)) {
+    } else if (Gx == CT_CHIP_ID || Gx == ET_CHIP_ID) {
 	fix->mmio_start = (char *)info->ati_regbase_phys;
 	fix->mmio_len = 0x400;
 	fix->accel = FB_ACCEL_ATI_MACH64CT;
-    } else if ((Gx == VT_CHIP_ID) || (Gx == VU_CHIP_ID)) {
+    } else if (Gx == VT_CHIP_ID || Gx == VU_CHIP_ID || Gx == VV_CHIP_ID) {
 	fix->mmio_start = (char *)(info->ati_regbase_phys-0x400);
 	fix->mmio_len = 0x800;
 	fix->accel = FB_ACCEL_ATI_MACH64VT;
@@ -2329,7 +2334,7 @@ static void atyfb_save_palette(struct fb_info *fb, int enter)
 		    (Gx == GP_CHIP_ID) || (Gx == GQ_CHIP_ID))
 			tmp |= 0x2;
 		aty_st_8(DAC_CNTL, tmp, info);
-		aty_st_8(DAC_REGS + DAC_MASK, 0xff, info);
+		aty_st_8(DAC_MASK, 0xff, info);
 		eieio();
 		scale = ((Gx != GX_CHIP_ID) && (Gx != CX_CHIP_ID) &&
 			(info->current_par.crtc.bpp == 16)) ? 3 : 0;
@@ -2460,10 +2465,14 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
 		       (Gx == GU_CHIP_ID)) {
 		/* RAGE II+ */
 		pll = 200;
-	    } else if ((Gx == GB_CHIP_ID) || (Gx == GD_CHIP_ID) ||
-		       (Gx == GI_CHIP_ID) || (Gx == GP_CHIP_ID) ||
-		       (Gx == GQ_CHIP_ID)) {
-		/* RAGE PRO */
+	    } else if (Gx == GB_CHIP_ID || Gx == GD_CHIP_ID ||
+		       Gx == GI_CHIP_ID || Gx == GP_CHIP_ID ||
+		       Gx == GQ_CHIP_ID || Gx == VV_CHIP_ID ||
+		       Gx == GV_CHIP_ID || Gx == GW_CHIP_ID ||
+		       Gx == GZ_CHIP_ID || Gx == LD_CHIP_ID ||
+		       Gx == LG_CHIP_ID || Gx == LB_CHIP_ID ||
+		       Gx == LI_CHIP_ID || Gx == LP_CHIP_ID) {
+		/* RAGE PRO or IIC */
 		pll = 230;
 	    } else {
 		/* other RAGE */
@@ -2474,11 +2483,9 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
     }
 
     i = aty_ld_le32(MEM_CNTL, info);
-    gtb_memsize = (((Gx == GT_CHIP_ID) && (Rev & 0x03)) || (Gx == GU_CHIP_ID)
-		|| ((Gx == VT_CHIP_ID) && (Rev & 0x01)) || (Gx == VU_CHIP_ID)
-		|| (Gx == LG_CHIP_ID) || (Gx == GB_CHIP_ID)
-		|| (Gx == GD_CHIP_ID) || (Gx == GI_CHIP_ID)
-		|| (Gx == GP_CHIP_ID) || (Gx == GQ_CHIP_ID));
+    gtb_memsize = !(Gx == GX_CHIP_ID || Gx == CX_CHIP_ID || Gx == CT_CHIP_ID ||
+		    Gx == ET_CHIP_ID ||
+		    ((Gx == VT_CHIP_ID || Gx == GT_CHIP_ID) && !(Rev & 0x07)));
     if (gtb_memsize)
 	switch (i & 0xF) {	/* 0xF used instead of MEM_SIZE_ALIAS */
 	    case MEM_SIZE_512K:
@@ -3303,7 +3310,7 @@ static int atyfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 	(Gx == GP_CHIP_ID) || (Gx == GQ_CHIP_ID))
 	i |= 0x2;	/*DAC_CNTL|0x2 turns off the extra brightness for gt*/
     aty_st_8(DAC_CNTL, i, info);
-    aty_st_8(DAC_REGS + DAC_MASK, 0xff, info);
+    aty_st_8(DAC_MASK, 0xff, info);
     eieio();
     scale = ((Gx != GX_CHIP_ID) && (Gx != CX_CHIP_ID) &&
 	     (info->current_par.crtc.bpp == 16)) ? 3 : 0;
@@ -3398,14 +3405,8 @@ static inline void aty_rectcopy(int srcx, int srcy, int dstx, int dsty,
     } else
 	direction |= DST_X_LEFT_TO_RIGHT;
 
-    wait_for_fifo(5, info);
+    wait_for_fifo(4, info);
     aty_st_le32(DP_SRC, FRGD_SRC_BLIT, info);
-    /*
-     * ++Geert:
-     * Warning: SRC_OFF_PITCH may be thrashed by writing to other registers
-     * (e.g. CRTC_H_TOTAL_DISP, DP_SRC, DP_FRGD_CLR)
-     */
-    aty_st_le32(SRC_OFF_PITCH, (pitch_value / 8) << 22, info);
     aty_st_le32(SRC_Y_X, (srcx << 16) | srcy, info);
     aty_st_le32(SRC_HEIGHT1_WIDTH1, (width << 16) | height, info);
     aty_st_le32(DST_CNTL, direction, info);

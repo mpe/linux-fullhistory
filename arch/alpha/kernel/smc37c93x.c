@@ -241,10 +241,10 @@ static void __init SMCReportDeviceStatus(unsigned long baseAddr)
 int __init SMC93x_Init(void)
 {
 	unsigned long SMCUltraBase;
+	unsigned long flags;
 
+	__save_and_cli(flags);
 	if ((SMCUltraBase = SMCDetectUltraIO()) != 0UL) {
-		printk("SMC FDC37C93X Ultra I/O Controller found @ 0x%lx\n",
-		       SMCUltraBase);
 #if SMC_DEBUG
 		SMCReportDeviceStatus(SMCUltraBase);
 #endif
@@ -264,9 +264,13 @@ int __init SMC93x_Init(void)
 		SMCReportDeviceStatus(SMCUltraBase);
 #endif
 		SMCRunState(SMCUltraBase);
+		__restore_flags(flags);
+		printk("SMC FDC37C93X Ultra I/O Controller found @ 0x%lx\n",
+		       SMCUltraBase);
 		return 1;
 	}
 	else {
+		__restore_flags(flags);
 		DBG_DEVS(("No SMC FDC37C93X Ultra I/O Controller found\n"));
 		return 0;
 	}

@@ -2519,10 +2519,10 @@ SMC37c669_dump_registers(void)
 void __init SMC669_Init ( void )
 {
     SMC37c669_CONFIG_REGS *SMC_base;
+    unsigned long flags;
 
+    __save_and_cli(flags);
     if ( ( SMC_base = SMC37c669_detect( ) ) != NULL ) {
-        printk( "SMC37c669 Super I/O Controller found @ 0x%lx\n",
-		(unsigned long) SMC_base );
 #if SMC_DEBUG
 	SMC37c669_config_mode( TRUE );
 	SMC37c669_dump_registers( );
@@ -2573,8 +2573,12 @@ void __init SMC669_Init ( void )
 	SMC37c669_config_mode( FALSE );
         SMC37c669_display_device_info( );
 #endif
+	__restore_flags(flags);
+        printk( "SMC37c669 Super I/O Controller found @ 0x%lx\n",
+		(unsigned long) SMC_base );
     }
     else {
+	__restore_flags(flags);
 #if SMC_DEBUG
         printk( "No SMC37c669 Super I/O Controller found\n" );
 #endif

@@ -6,25 +6,18 @@
 #
 # Translations of this file available on the WWW:
 #
-#   - http://jf.gee.kyoto-u.ac.jp/JF/JF-ftp/euc/Configure.help.euc
-# is a Japanese translation, maintained by Tetsuyasu YAMADA
-# (tetsu@cauchy.nslab.ntt.co.jp).
-#   - http://nevod.perm.su/service/linux/doc/kernel/Configure.help 
-# is a Russian translation, maintained by kaf@linux.nevod.perm.su.
-#   - http://www.linux-kheops.com/traduc/kernels/
-# has a French translation of the whole kernel, including
-# Configure.help. This is maintained by David Bourgin
-# (dbourgin@wsc.com). 
-#   - http://visar.csustan.edu/~carlos/ contains Spanish translations 
-# of the 2.0 kernel documentation files, produced by Carlos Perelló 
-# Marín (fperllo@ehome.encis.es). 
-#   - ftp://ftp-pavia1.linux.it/pub/linux/Configure.help
-# is a work-in-progress effort of the Italian translation team,
-# currently only for the 2.0 version of this file, maintained 
-# by rubini@linux.it.
-#   - http://www.cs.net.pl/~cezar/Kernel is the beginning of a Polish
-# translation of the 2.0 version of this file, maintained by Cezar
-# Cichocki (cezar@cs.net.pl).
+#   - Japanese, by Tetsuyasu YAMADA (tetsu@cauchy.nslab.ntt.co.jp), at
+#     http://jf.gee.kyoto-u.ac.jp/JF/JF-ftp/euc/Configure.help.euc
+#   - Russian, by kaf@linux.nevod.perm.su, at
+#     http://nevod.perm.su/service/linux/doc/kernel/Configure.help
+#   - French, by David Bourgin (dbourgin@wsc.com), at
+#     http://www.linux-kheops.com/traduc/kernels/
+#   - Spanish, by Carlos Perelló Marín (fperllo@ehome.encis.es), at
+#     http://visar.csustan.edu/~carlos/
+#   - Italian, by Alessandro Rubini (rubini@linux.it), at
+#     ftp://ftp-pavia1.linux.it/pub/linux/Configure.help
+#   - Polish, by Cezar Cichocki (cezar@cs.net.pl), at
+#     http://www.cs.net.pl/~cezar/Kernel
 #
 # Information about what a kernel is, what it does, how to patch and
 # compile it and much more is contained in the Kernel-HOWTO, available
@@ -1761,21 +1754,21 @@ CONFIG_FB_COMPAT_XPMAC
 
 Matrox unified accelerated driver
 CONFIG_FB_MATROX
-  Say Y here if you have Matrox Millenium, Matrox Millenium II, Matrox
-  Mystique, Matrox Mystique 220 or Matrox Productiva G100 in your box.
-  At this time,  G100 support  is untested and  G200 support  does not
-  exist at all.  If you want,  you can select  M, in this  case module
-  matroxfb.o will be created.
-  You can pass parameters into driver if it is compiled into kernel by 
-  specifying "video=matrox:XXX", where meaning of XXX you can found at 
-  the end of main source file  (drivers/video/matroxfb.c) at boottime.
-  Same  parameters can  be passed  into insmod  if driver  is used  as 
-  module.
+  Say Y here  if you have  Matrox Millennium,  Matrox Milleinnium  II, 
+  Matrox Mystique, Matrox Mystique 220, Matrox Productiva G100, Matrox
+  Mystique G200, Matrox Millennium G200  or Matrox Marvel G200 in your 
+  box.  At this time, G100,  Mystique G200 and  Marvel G200 support is
+  untested.  If  you  want,  you  can  select M,  in this  case module
+  matroxfb.o will  be created.  You can pass parameters into driver if 
+  it is compiled  into kernel by  specifying "video=matrox:XXX", where 
+  meaning of XXX you can found at the end of main source file
+  (drivers/video/matroxfb.c)  at  boottime.  Same  parameters  can  be 
+  passed into insmod if driver is used as module.
 
-Matrox Millenium support
+Matrox Millennium support
 CONFIG_FB_MATROX_MILLENIUM
-  Say Y here if you have Matrox Millenium or Matrox Millenium II in the
-  box. If you  select "Advanced  lowlevel driver  options", you  should 
+  Say Y here if you have Matrox Millennium  or Matrox Milleninium II in 
+  the box. If you select "Advanced lowlevel driver options", you should 
   check 4 bpp packed pixel, 8 bpp packed pixel, 16 bpp packed pixel, 24
   bpp  packed pixel  and 32  bpp packed  pixel. You  can also  use font 
   widths different from 8.
@@ -2300,26 +2293,27 @@ CONFIG_IP_PNP
 
 BOOTP support
 CONFIG_IP_PNP_BOOTP
-  If you want your Linux box to mount its whole root filesystem from
-  some other computer over the net via NFS and you want the IP address
-  of your computer to be discovered automatically at boot time using
-  the BOOTP protocol (a special protocol designed for doing this job),
-  say Y here. In case the boot ROM of your network card was designed
-  for booting Linux and does BOOTP itself, providing all necessary
-  information on the kernel command line, you can say N here. If
-  unsure, say Y. Note that if you want to use BOOTP, a BOOTP server
-  must be operating on your network. Read Documentation/nfsroot.txt
-  for details.
+  If you want your Linux box to mount its whole root filesystem (the
+  one containing the directory /) from some other computer over the
+  net via NFS and you want the IP address of your computer to be
+  discovered automatically at boot time using the BOOTP protocol (a
+  special protocol designed for doing this job), say Y here. In case
+  the boot ROM of your network card was designed for booting Linux and
+  does BOOTP itself, providing all necessary information on the kernel
+  command line, you can say N here. If unsure, say Y. Note that if you
+  want to use BOOTP, a BOOTP server must be operating on your network.
+  Read Documentation/nfsroot.txt for details.
 
 RARP support
 CONFIG_IP_PNP_RARP
-  If you want your Linux box to mount its whole root filesystem from
-  some other computer over the net via NFS and you want the IP address
-  of your computer to be discovered automatically at boot time using
-  the RARP protocol (an older protocol which is being obsoleted by
-  BOOTP and DHCP), say Y here. Note that if you want to use RARP, a
-  RARP server must be operating on your network. Read
-  Documentation/nfsroot.txt for details.
+  If you want your Linux box to mount its whole root filesystem (the
+  one containing the directory /) from some other computer over the
+  net via NFS and you want the IP address of your computer to be
+  discovered automatically at boot time using the RARP protocol (an
+  older protocol which is being obsoleted by BOOTP and DHCP), say Y
+  here. Note that if you want to use RARP, a RARP server must be
+  operating on your network. Read Documentation/nfsroot.txt for
+  details.
 
 IP: tunneling
 CONFIG_NET_IPIP
@@ -2469,13 +2463,14 @@ CONFIG_IP_MASQUERADE_IPPORTFW
   Port Forwarding is an addition to IP Masquerading which allows some
   forwarding of packets from outside to inside a firewall on given
   ports. This could be useful if, for example, you want to run a web
-  server behind the firewall or masquerading host and this web server
+  server behind the firewall or masquerading host and that web server
   should be visible to the outside world. An external client connects
   to port 80 of the firewall, the firewall forwards requests to this
   port to the web server, the web server handles the request and the
   results are sent through the firewall to the original client. The
   client thinks that the firewall machine itself is running the web
-  server.
+  server. This can also be used for load balancing if you have a farm
+  of identical web servers behind the firewall.
 
   Information about it is available from
   http://www.monmouth.demon.co.uk/ipsubs/portforwarding.html (to
@@ -2546,10 +2541,9 @@ CONFIG_IP_ALIAS
   available via FTP (user: anonymous) from
   ftp://sunsite.unc.edu/pub/Linux/docs/HOWTO.
 
-  Another scenario would be
-  that there are two logical networks living on your local Ethernet
-  and you want to access them both with the same Ethernet card. This
-  can be done if you say Y here.
+  Another scenario would be that there are two logical networks living
+  on your local Ethernet and you want to access them both with the
+  same Ethernet card. This can also be done if you say Y here.
 
   The configuration of these alias addresses is done with a special
   name syntax explained in Documentation/networking/alias.txt and in
@@ -3837,6 +3831,12 @@ CONFIG_SCSI_NCR53C7xx
   of the box, you may have to change some settings in
   drivers/scsi/53c7,8xx.h.
 
+  Note: there is another driver for the 53c8xx family of controllers
+  ("NCR53C8XX SCSI support" below). You cannot say Y to both of them;
+  you can say M to both and build them as modules, but only one may be
+  active at a time. If you have a 53c8xx board, it's better to use the
+  other driver.
+
   This driver is also available as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want).
   The module will be called 53c7,8xx.o. If you want to compile it as a
@@ -3875,6 +3875,12 @@ CONFIG_SCSI_NCR53C8XX
 
   The NCR53C860 and NCR53C875 support FAST-20 transfers. The NCR53C895
   supports FAST-40 transfers with Ultra2 LVD devices.
+
+  Note: there is another driver for the 53c8xx family of controllers
+  ("NCR53c7,8xx SCSI support" above). You cannot say Y to both of
+  them; you can say M to both and build them as modules, but only one
+  may be active at a time. If you have a 53c8xx board, it's best to
+  use this driver.
 
   Please read drivers/scsi/README.ncr53c8xx for more information.
 
@@ -5350,6 +5356,20 @@ CONFIG_YELLOWFIN
   say M here and read Documentation/modules.txt. This is recommended.
   The module will be called yellowfin.o.
 
+Alteon AceNIC / 3Com 3C985 Gigabit Ethernet support.
+CONFIG_ACENIC
+  Say Y here if you have an Alteon AceNIC or 3Com 3C985 PCI Gigabit
+  Ethernet adapter. The driver allows for using the Jumbo Frame
+  option (9000 bytes/frame) however it requires that your switches
+  can handle this as well. To enable Jumbo Frames, add `mtu 9000' to
+  your ifconfig line.
+
+  If you want to compile this driver as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt. This is recommended.
+  The module will be called acenic.o.
+
+
 AMD LANCE and PCnet (AT1500 and NE2100) support
 CONFIG_LANCE
   If you have a network (Ethernet) card of this type, say Y and read
@@ -6435,18 +6455,17 @@ CONFIG_MINIX_FS
   Minix is a simple operating system used in many classes about OS's.
   The minix filesystem (method to organize files on a hard disk
   partition or a floppy disk) was the original filesystem for Linux,
-  has since been superseded by the second extended filesystem ext2fs
-  but is still being used for root/boot and other floppies or ram
-  disks since it is leaner. You don't want to use it on your hard disk
-  because of certain built-in restrictions. This option will enlarge
-  your kernel by about 25 kB. Everyone should say Y or M so that they
-  are able to read this common floppy filesystem.
+  but has been superseded by the second extended filesystem ext2fs.
+  You don't want to use the minix filesystem on your hard disk because
+  of certain built-in restrictions, but it is sometimes found on older
+  Linux floppy disks. This option will enlarge your kernel by about 
+  25 kB. If unsure, say N.
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
   say M here and read Documentation/modules.txt. The module will be
-  called minix.o. Note that the filesystem of your root partition
-  cannot be compiled as a module.
+  called minix.o. Note that the filesystem of your root partition (the
+  one containing the directory /) cannot be compiled as a module.
 
 Second extended fs support
 CONFIG_EXT2_FS
@@ -6490,8 +6509,9 @@ CONFIG_EXT2_FS
   can be inserted in and removed from the running kernel whenever you
   want), say M here and read Documentation/modules.txt. The module
   will be called ext2.o. Be aware however that the filesystem of your
-  root partition cannot be compiled as a module, and so this could be
-  dangerous. Most everyone wants to say Y here.
+  root partition (the one containing the directory /) cannot be
+  compiled as a module, and so this could be dangerous. Most everyone
+  wants to say Y here.
 
 ISO 9660 CDROM filesystem support
 CONFIG_ISO9660_FS
@@ -6526,12 +6546,27 @@ fat fs support
 CONFIG_FAT_FS
   If you want to use one of the FAT-based filesystems (the MS-DOS,
   VFAT (Windows 95) and UMSDOS (used to run Linux on top of an
-  ordinary DOS partition) filesystems), then you must include FAT
-  support. This is not a filesystem in itself, but it provides the
-  foundation for the other filesystems. It is now also becoming
-  possible to read and write compressed FAT filesystems; read
-  Documentation/filesystems/fat_cvf.txt for details. This option will
-  enlarge your kernel by about 24 kB. If unsure, say Y. 
+  ordinary DOS partition) filesystems), then you must say Y or M here
+  to include FAT support. You will then be able to mount partitions or
+  diskettes with FAT-based filesystems and transparently access the
+  files on them, i.e. MSDOS files will look and behave just like all
+  other Unix files.
+
+  This FAT support is not a filesystem in itself, it only provides the
+  foundation for the other filesystems. You will have to say Y or M to
+  at least one of "msdos fs support" or "vfat fs support" in order to
+  make use of it.
+
+  Another way to read and write MSDOS floppies and hard drive
+  partitions from within Linux (but not transparently) is with the
+  mtools ("man mtools") program suite. This doesn't require the FAT
+  filesystem support.
+
+  It is now also becoming possible to read and write compressed FAT
+  filesystems; read Documentation/filesystems/fat_cvf.txt for details.
+  
+  The FAT support will enlarge your kernel by about 24 kB. If unsure,
+  say Y.
 
   If you want to compile this as a module however ( = code which can
   be inserted in and removed from the running kernel whenever you
@@ -6539,8 +6574,9 @@ CONFIG_FAT_FS
   will be called fat.o. Note that if you compile the FAT support as a
   module, you cannot compile any of the FAT-based filesystems into the
   kernel -- they will have to be modules as well. The filesystem of
-  your root partition cannot be a module, so don't say M here if you
-  intend to use UMSDOS as your root filesystem.
+  your root partition (the one containing the directory /) cannot be a
+  module, so don't say M here if you intend to use UMSDOS as your root
+  filesystem.
 
 msdos fs support
 CONFIG_MSDOS_FS
@@ -6555,16 +6591,14 @@ CONFIG_MSDOS_FS
   transparent, i.e. the MSDOS files look and behave just like all
   other Unix files.
 
-  Another way to read and write MSDOS floppies from within Linux (but
-  not transparently) is with the mtools ("man mtools") program suite,
-  which doesn't require the msdos filesystem support. 
-
   If you want to use umsdos, the Unix-like filesystem on top of DOS,
   which allows you to run Linux from within a DOS partition without
-  repartitioning, you'll have to say Y or M here. If you have Windows
-  95 or Windows NT installed on your MSDOS partitions, you should use
-  the VFAT filesystem instead, or you will not be able to see the long
-  filenames generated by Windows 95 / Windows NT.
+  repartitioning, you'll have to say Y or M here. 
+
+  If you have Windows 95 or Windows NT installed on your MSDOS
+  partitions, you should use the VFAT filesystem (say Y to "vfat fs
+  support" below), or you will not be able to see the long filenames
+  generated by Windows 95 / Windows NT.
 
   This option will enlarge your kernel by about 7 kB. If unsure,
   answer Y. This will only work if you said Y to "fat fs support" as
@@ -6575,15 +6609,19 @@ CONFIG_MSDOS_FS
 
 vfat fs support
 CONFIG_VFAT_FS
-  This allows you to mount MSDOS partitions of your hard drive. It
-  will let you use filenames in a way compatible with the long
-  filenames used by Windows 95 and Windows NT fat-based (not NTFS)
-  partitions. It does not support Windows 95 compressed filesystems.
-  You cannot use the VFAT filesystem for your root partition; use
-  UMSDOS instead. This option enlarges your kernel by about 10 kB and
-  it only works if you said Y to the "fat fs support" above. Please
-  read the file Documentation/filesystems/vfat.txt for details. If
-  unsure, say N.
+  This option provides support for normal Windows filesystems with
+  long filenames. That includes noncompressed FAT-based filesystems
+  used by Windows 95, Windows 98, Windows NT 4.0, and mtools. 
+
+  You cannot use the VFAT filesystem for your Linux root partition
+  (the one containing the directory /); use UMSDOS instead if you
+  want to run Linux from within a DOS partition (i.e. say Y to
+  "umsdos: Unix like fs on top of std MSDOS fs", below).
+
+  The VFAT support enlarges your kernel by about 10 kB and it only
+  works if you said Y to the "fat fs support" above. Please read the
+  file Documentation/filesystems/vfat.txt for details. If unsure, 
+  say Y.
 
   If you want to compile this as a module ( = code which can be
   inserted in and removed from the running kernel whenever you want),
@@ -6598,7 +6636,7 @@ CONFIG_UMSDOS_FS
   backing everything up and restoring afterwards) and hence you're
   able to quickly try out Linux or show it to your friends; the
   disadvantage is that Linux becomes susceptible to DOS viruses and
-  that UMSDOS is somewhat slower than ext2fs. Another use of umsdos
+  that UMSDOS is somewhat slower than ext2fs. Another use of UMSDOS
   is to write files with long unix filenames to MSDOS floppies; it
   also allows Unix-style softlinks and owner/permissions of files on
   MSDOS floppies. You will need a program called umssync in order to
@@ -6609,8 +6647,9 @@ CONFIG_UMSDOS_FS
   you want to compile this as a module ( = code which can be inserted
   in and removed from the running kernel whenever you want), say M
   here and read Documentation/modules.txt. The module will be called
-  umsdos.o. Note that the filesystem of your root partition cannot be
-  a module, so this could be dangerous. If unsure, say N.
+  umsdos.o. Note that the filesystem of your root partition (the one
+  containing the directory /) cannot be a module, so saying M could be
+  dangerous. If unsure, say N.
 
 /proc filesystem support
 CONFIG_PROC_FS
@@ -6671,12 +6710,13 @@ CONFIG_NFS_FS
 
 Root file system on NFS
 CONFIG_ROOT_NFS
-  If you want your Linux box to mount its whole root filesystem from
-  some other computer over the net via NFS (presumably because your
-  box doesn't have a hard disk), say Y. Read Documentation/nfsroot.txt
-  for details. It is likely that in this case, you also want to say Y
-  to "IP: kernel level autoconfiguration" so that your box can
-  discover its network address at boot time. 
+  If you want your Linux box to mount its whole root filesystem (the
+  one containing the directory /) from some other computer over the
+  net via NFS (presumably because your box doesn't have a hard disk),
+  say Y. Read Documentation/nfsroot.txt for details. It is likely that
+  in this case, you also want to say Y to "IP: kernel level
+  autoconfiguration" so that your box can discover its network address
+  at boot time.
   
   Most people say N here. 
 
@@ -6961,7 +7001,7 @@ CONFIG_MAC_PARTITION
   partition tables of Macintosh hard drives, and thus use partitions
   on those drives.
 
-SMB filesystem support (to mount WfW shares etc..)
+SMB filesystem support (to mount Windows shares etc...)
 CONFIG_SMB_FS
   SMB (Server Message Block) is the protocol Windows for Workgroups
   (WfW), Windows 95, Windows NT and OS/2 Lan Manager use to share

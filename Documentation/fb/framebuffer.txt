@@ -2,7 +2,7 @@
 			-----------------------
 
 Maintained by Geert Uytterhoeven (Geert.Uytterhoeven@cs.kuleuven.ac.be)
-Last revised: June 10, 1998
+Last revised: November 7, 1998
 
 
 0. Introduction
@@ -114,7 +114,7 @@ much trouble...
 --------------------------------------
 
 Frame buffer resolutions are maintained using the utility `fbset'. It can
-change the video mode properties of the current resolution. Its main usage is
+change the video mode properties of a frame buffer device. Its main usage is
 to change the current video mode, e.g. during boot up in one of your /etc/rc.*
 or /etc/init.d/* files.
 
@@ -126,8 +126,8 @@ easily add your own modes and refer to them with a simple identifier.
 ---------------
 
 The X server (XF68_FBDev) is the most notable application program for the frame
-buffer device. The current X server is part of the XFree86/XFree68 release
-3.3.1 package and has 2 modes:
+buffer device. Starting with XFree86 release 3.2, the X server is part of
+XFree86 and has 2 modes:
 
   - If the `Display' subsection for the `fbdev' driver in the /etc/XF86Config
     file contains a
@@ -135,19 +135,18 @@ buffer device. The current X server is part of the XFree86/XFree68 release
 	Modes "default"
 
     line, the X server will use the scheme discussed above, i.e. it will start
-    up in the resolution determined by /dev/fb0current (or $FRAMEBUFFER, if
-    set). This is the default for the configuration file supplied with XFree68
-    3.2. It's the most simple configuration (and the only possible one if you
-    want to have a broadcast compatible display, e.g. PAL or NTSC), but it has
-    some limitations.
+    up in the resolution determined by /dev/fb0 (or $FRAMEBUFFER, if set). You
+    still have to specify the color depth (using the Depth keyword) and virtual
+    resolution (using the Virtual keyword) though. This is the default for the
+    configuration file supplied with XFree86. It's the most simple
+    configuration, but it has some limitations.
 
   - Therefore it's also possible to specify resolutions in the /etc/XF86Config
     file. This allows for on-the-fly resolution switching while retaining the
     same virtual desktop size. The frame buffer device that's used is still
     /dev/fb0current (or $FRAMEBUFFER), but the available resolutions are
     defined by /etc/XF86Config now. The disadvantage is that you have to
-    specify the timings in a different format (but `fbset -x' may help) and
-    that you can't have a broadcast compatible display (e.g. no PAL or NTSC).
+    specify the timings in a different format (but `fbset -x' may help).
 
 To tune a video mode, you can use fbset or xvidtune. Note that xvidtune doesn't
 work 100% with XF68_FBDev: the reported clock values are always incorrect.
@@ -298,11 +297,11 @@ For more specific information about the frame buffer device and its
 applications, please refer to the following documentation:
 
   - The manual pages for fbset: fbset(8), fb.modes(5)
-  - The manual pages for XFree68: XF68_FBDev(1), XF86Config(4/5)
+  - The manual pages for XFree86: XF68_FBDev(1), XF86Config(4/5)
   - The mighty kernel sources:
+      o linux/drivers/video/
       o linux/include/linux/fb.h
-      o linux/drivers/char/fbmem.c
-      o linux/drivers/video/*fb.c
+      o linux/include/video/
 
 
 8. Downloading

@@ -351,6 +351,12 @@ static char rawhide_names[][16] = {
 };
 static int rawhide_indices[] = {0,0,0,1,1,2,2,3,3,4,4};
 
+static char tsunami_names[][16] = {
+	"0", "DP264", "Warhol", "Windjammer", "Monet", "Clipper",
+	"Goldrush", "Webbrick", "Catamaran"
+};
+static int tsunami_indices[] = {0,1,2,3,4,5,6,7,8};
+
 
 static struct alpha_machine_vector * __init
 get_sysvec(long type, long variation, long cpu)
@@ -600,6 +606,10 @@ get_sysnames(long type, long variation,
 		if (member < N(rawhide_indices))
 			*variation_name = rawhide_names[rawhide_indices[member]];
 		break;
+	case ST_DEC_TSUNAMI:
+		if (member < N(tsunami_indices))
+			*variation_name = tsunami_names[tsunami_indices[member]];
+		break;
 	}
 }
 
@@ -651,8 +661,8 @@ int get_cpuinfo(char *buffer)
 	} unaligned[2];
 
 	static char cpu_names[][8] = {
-		"EV3", "EV4", "Unknown", "LCA4", "EV5", "EV45", "EV56",
-		"EV6", "PCA56", "PCA57"
+		"EV3", "EV4", "Simulate", "LCA4", "EV5", "EV45", "EV56",
+		"EV6", "PCA56", "PCA57", "EV67"
 	};
 
 	struct percpu_struct *cpu;

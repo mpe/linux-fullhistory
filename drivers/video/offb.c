@@ -301,6 +301,9 @@ extern void imsttfb_of_init(struct device_node *dp);
 #ifdef CONFIG_FB_CT65550
 extern void chips_of_init(struct device_node *dp);
 #endif /* CONFIG_FB_CT65550 */
+#ifdef CONFIG_FB_MATROX
+extern void matrox_of_init(struct device_node *dp);
+#endif /* CONFIG_FB_MATROX */
 #ifdef CONFIG_FB_CONTROL
 extern void control_of_init(struct device_node *dp);
 #endif /* CONFIG_FB_CONTROL */
@@ -411,6 +414,12 @@ __initfunc(static int offb_init_driver(struct device_node *dp))
 	return 1;
     }
 #endif /* CONFIG_FB_CT65550 */
+#ifdef CONFIG_FB_MATROX
+    if (!strncmp(dp->name, "MTRX", 4)) {
+	matrox_of_init(dp);
+	return 1;
+    }
+#endif /* CONFIG_FB_MATROX */
 #ifdef CONFIG_FB_CONTROL
     if(!strcmp(dp->name, "control")) {
 	control_of_init(dp);
@@ -857,10 +866,21 @@ int console_setmode(struct vc_mode *mode, int doit)
     }
     if ((err = mac_vmode_to_var(mode->mode, cmode, &var)))
 	return err;
-    var.activate = doit ? FB_ACTIVATE_NOW : FB_ACTIVATE_TEST;
+    var.activate = FB_ACTIVATE_TEST;
     err = console_fb_info->fbops->fb_set_var(&var, fg_console,
 					     console_fb_info);
-    return err;
+    if (err || !doit)
+	return err;
+    else {
+	int unit;
+	var.activate = FB_ACTIVATE_NOW;
+	for (unit = 0; unit < MAX_NR_CONSOLES; unit++)
+	    if (fb_display[unit].conp &&
+		(GET_FB_IDX(console_fb_info->node) == con2fb_map[unit]))
+		    console_fb_info->fbops->fb_set_var(&var, unit,
+						       console_fb_info);
+    }
+    return 0;
 }
 
 static u16 palette_red[16];

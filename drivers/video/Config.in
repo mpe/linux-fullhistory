@@ -60,11 +60,12 @@ if [ "$CONFIG_FB" = "y" ]; then
     if [ "$CONFIG_PCI" != "n" ]; then
       tristate 'Matrox acceleration' CONFIG_FB_MATROX
       if  [ "$CONFIG_FB_MATROX" != "n" ]; then
-        bool '  Millenium I/II support' CONFIG_FB_MATROX_MILLENIUM
+        bool '  Millennium I/II support' CONFIG_FB_MATROX_MILLENIUM
         bool '  Mystique support' CONFIG_FB_MATROX_MYSTIQUE
         bool '  G100/G200 support' CONFIG_FB_MATROX_G100
         bool '  Multihead support' CONFIG_FB_MATROX_MULTIHEAD
       fi
+      bool 'ATI Mach64 display support' CONFIG_FB_ATY
     fi
   fi
   if [ "$ARCH" = "sparc" -o "$ARCH" = "sparc64" ]; then

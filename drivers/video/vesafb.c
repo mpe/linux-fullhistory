@@ -126,10 +126,12 @@ static int vesafb_release(struct fb_info *info, int user)
 }
 
 static int vesafb_pan_display(struct fb_var_screeninfo *var, int con,
-                            struct fb_info *info)
+                              struct fb_info *info)
 {
 	int offset;
 
+	if (!ypan && !ywrap)
+		return -EINVAL;
 	if (var->xoffset)
 		return -EINVAL;
 	if (ypan && var->yoffset+var->yres > var->yres_virtual)

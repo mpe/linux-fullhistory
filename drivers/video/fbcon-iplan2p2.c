@@ -169,18 +169,25 @@ void fbcon_iplan2p2_bmove(struct display *p, int sy, int sx, int dy, int dx,
 	/*  Special (but often used) case: Moving whole lines can be
 	 *  done with memmove()
 	 */
-	mymemmove(p->screen_base + ((dy * p->next_line) << fontheightlog(p)),
-		  p->screen_base + ((sy * p->next_line) << fontheightlog(p)),
-		  (p->next_line * height) << fontheightlog(p));
+	mymemmove(p->screen_base + dy * p->next_line * fontheight(p),
+		  p->screen_base + sy * p->next_line * fontheight(p),
+		  p->next_line * height * fontheight(p));
     } else {
 	int rows, cols;
 	u8 *src;
 	u8 *dst;
 	int bytes = p->next_line;
-	int linesize = bytes << fontheightlog(p);
-	u_int colsize  = height << fontheightlog(p);
+	int linesize;
+	u_int colsize;
 	u_int upwards  = (dy < sy) || (dy == sy && dx < sx);
 
+	if (fontheightlog(p)) {
+	    linesize = bytes << fontheightlog(p);
+	    colsize = height << fontheightlog(p);
+	} else {
+	    linesize = bytes * fontheight(p);
+	    colsize = height * fontheight(p);
+	}
 	if ((sx & 1) == (dx & 1)) {
 	    /* odd->odd or even->even */
 	    if (upwards) {
@@ -258,19 +265,30 @@ void fbcon_iplan2p2_clear(struct vc_data *conp, struct display *p, int sy,
     u8 *start;
     int rows;
     int bytes = p->next_line;
-    int lines = height << fontheightlog(p);
+    int lines;
     u32 size;
     u32 cval;
     u16 pcval;
 
     cval = expand2l (COLOR_2P (attr_bgcol_ec(p,conp)));
 
+    if (fontheightlog(p))
+	lines = height << fontheightlog(p);
+    else
+	lines = height * fontheight(p);
+
     if (sx == 0 && width * 2 == bytes) {
-	offset = (sy * bytes) << fontheightlog(p);
+	if (fontheightlog(p))
+	    offset = (sy * bytes) << fontheightlog(p);
+	else
+	    offset = sy * bytes * fontheight(p);
 	size = lines * bytes;
 	memset_even_2p(p->screen_base+offset, size, cval);
     } else {
-	offset = ((sy * bytes) << fontheightlog(p)) + (sx>>1)*4 + (sx & 1);
+	if (fontheightlog(p))
+	    offset = ((sy * bytes) << fontheightlog(p)) + (sx>>1)*4 + (sx & 1);
+	else
+	    offset = sy * bytes * fontheight(p) + (sx>>1)*4 + (sx & 1);
 	start = p->screen_base + offset;
 	pcval = expand2w(COLOR_2P(attr_bgcol_ec(p,conp)));
 
@@ -306,8 +324,15 @@ void fbcon_iplan2p2_putc(struct vc_data *conp, struct display *p, int c,
     int bytes = p->next_line;
     u16 eorx, fgx, bgx, fdx;
 
-    dest = p->screen_base + ((yy * bytes) << fontheightlog(p)) + (xx>>1)*4 + (xx & 1);
-    cdat = p->fontdata + ((c & p->charmask) << fontheightlog(p));
+    if (fontheightlog(p)) {
+	dest = (p->screen_base + ((yy * bytes) << fontheightlog(p)) +
+		(xx>>1)*4 + (xx & 1));
+	cdat = p->fontdata + ((c & p->charmask) << fontheightlog(p));
+    } else {
+	dest = (p->screen_base + yy * bytes * fontheight(p) +
+		(xx>>1)*4 + (xx & 1));
+	cdat = p->fontdata + (c & p->charmask) * fontheight(p);
+    }
 
     fgx = expand2w(COLOR_2P(attr_fgcol(p,c)));
     bgx = expand2w(COLOR_2P(attr_bgcol(p,c)));
@@ -330,14 +355,22 @@ void fbcon_iplan2p2_putcs(struct vc_data *conp, struct display *p,
     u16 eorx, fgx, bgx, fdx;
 
     bytes = p->next_line;
-    dest0 = p->screen_base + ((yy * bytes) << fontheightlog(p)) + (xx>>1)*4 + (xx & 1);
+    if (fontheightlog(p))
+	dest0 = (p->screen_base + ((yy * bytes) << fontheightlog(p)) +
+		 (xx>>1)*4 + (xx & 1));
+    else
+	dest0 = (p->screen_base + yy * bytes * fontheight(p) +
+		 (xx>>1)*4 + (xx & 1));
     fgx = expand2w(COLOR_2P(attr_fgcol(p,*s)));
     bgx = expand2w(COLOR_2P(attr_bgcol(p,*s)));
     eorx = fgx ^ bgx;
 
     while (count--) {
 	c = *s++ & p->charmask;
-	cdat  = p->fontdata + (c << fontheightlog(p));
+	if (fontheightlog(p))
+	    cdat = p->fontdata + (c << fontheightlog(p));
+	else
+	    cdat = p->fontdata + c * fontheight(p);
 
 	for (rows = fontheight(p), dest = dest0; rows-- ; dest += bytes) {
 	    fdx = dup2w(*cdat++);
@@ -353,8 +386,12 @@ void fbcon_iplan2p2_revc(struct display *p, int xx, int yy)
     int j;
     int bytes;
 
-    dest = (p->screen_base + ((yy * p->next_line) << fontheightlog(p)) +
-	    (xx>>1)*4 + (xx & 1));
+    if (fontheightlog(p))
+	dest = (p->screen_base + ((yy * p->next_line) << fontheightlog(p)) +
+		(xx>>1)*4 + (xx & 1));
+    else
+	dest = (p->screen_base + yy * p->next_line * fontheight(p) +
+		(xx>>1)*4 + (xx & 1));
     j = fontheight(p);
     bytes = p->next_line;
     while (j--) {

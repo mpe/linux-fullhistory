@@ -719,39 +719,55 @@ layout_bus(struct pci_bus *bus)
 		pcibios_write_config_dword(bridge->bus->number, bridge->devfn,
 					   PCI_IO_BASE, l);
 
-		/* Also clear out the upper 16 bits.  */
+		/*
+		 * Also:
+		 *       clear out the upper 16 bits of IO base/limit.
+		 *       clear out the upper 32 bits of PREF base/limit.
+		*/
 		pcibios_write_config_dword(bridge->bus->number, bridge->devfn,
 					   PCI_IO_BASE_UPPER16, 0);
+		pcibios_write_config_dword(bridge->bus->number, bridge->devfn,
+					   PCI_PREF_BASE_UPPER32, 0);
+		pcibios_write_config_dword(bridge->bus->number, bridge->devfn,
+					   PCI_PREF_LIMIT_UPPER32, 0);
 
 		/*
-		 * Set up the top and bottom of the  PCI Memory segment
+		 * Set up the top and bottom of the PCI Memory segment
 		 * for this bus.
 		 */
 		l = ((bmem & 0xfff00000) >> 16) | ((tmem - 1) & 0xfff00000);
 		pcibios_write_config_dword(bridge->bus->number, bridge->devfn,
 					   PCI_MEMORY_BASE, l);
 		/*
-		 * Turn off downstream PF memory address range:
+		 * Turn off downstream PF memory address range, unless
+		 * there is a VGA behind this bridge, in which case, we
+		 * enable the PREFETCH range to include BIOS ROM at C0000.
+		 *
+		 * NOTE: this is a bit of a hack, done with PREFETCH for
+		 * simplicity, rather than having to add it into the above
+		 * non-PREFETCH range, which could then be bigger than we want.
+		 * We might assume that we could relocate the BIOS ROM, but
+		 * that would depend on having it found by those who need it
+		 * (the DEC BIOS emulator would find it, but I do not know
+		 * about the Xservers). So, we do it this way for now... ;-}
 		 */
+		l = (found_vga) ? 0 : 0x0000ffff;
 		pcibios_write_config_dword(bridge->bus->number, bridge->devfn,
-					   PCI_PREF_MEMORY_BASE, 0x0000ffff);
+					   PCI_PREF_MEMORY_BASE, l);
 
 		/*
 		 * Tell bridge that there is an ISA bus in the system,
 		 * and (possibly) a VGA as well.
 		 */
-		/* ??? This appears to be a single-byte write into MIN_GNT.
-		   What is up with this?  */
-		l = 0x00040000; /* ISA present */
-		if (found_vga) l |= 0x00080000; /* VGA present */
-		pcibios_write_config_dword(bridge->bus->number, bridge->devfn,
-					   0x3c, l);
+		l = (found_vga) ? 0x0c : 0x04;
+		pcibios_write_config_byte(bridge->bus->number, bridge->devfn,
+					   PCI_BRIDGE_CONTROL, l);
 
 		/*
-		 * Clear status bits, enable I/O (for downstream I/O),
-		 * turn on master enable (for upstream I/O), turn on
-		 * memory enable (for downstream memory), turn on
-		 * master enable (for upstream memory and I/O).
+		 * Clear status bits,
+		 * turn on I/O    enable (for downstream I/O),
+		 * turn on memory enable (for downstream memory),
+		 * turn on master enable (for upstream memory and I/O).
 		 */
 		pcibios_write_config_dword(bridge->bus->number, bridge->devfn,
 					   PCI_COMMAND, 0xffff0007);
@@ -806,12 +822,15 @@ void __init
 enable_ide(long ide_base)
 {
 	int data;
+	unsigned long flags;
 
+	__save_and_cli(flags);
 	outb(0, ide_base);		/* set the index register for reg #0 */
 	data = inb(ide_base+1);		/* read the current contents */
 	outb(0, ide_base);		/* set the index register for reg #0 */
 	outb(data | 0x40, ide_base+1);	/* turn on IDE */
 	outb(data | 0x40, ide_base+1);	/* turn on IDE, really! */
+	__restore_flags(flags);
 }
 
 /* Look for mis-configured devices' I/O space addresses behind bridges.  */

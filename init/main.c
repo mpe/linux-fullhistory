@@ -20,6 +20,7 @@
 #include <linux/ioport.h>
 #include <linux/init.h>
 #include <linux/smp_lock.h>
+#include <linux/blk.h>
 
 #include <asm/io.h>
 #include <asm/bugs.h>

@@ -242,7 +242,9 @@ static int currcon = 0;
 static struct display disp;
 static struct fb_info fb_info;
 static struct { u_char red, green, blue, pad; } palette[256];
+#ifdef FBCON_HAS_CFB32
 static u32 fbcon_cfb32_cmap[16];
+#endif
 
 static struct fb_fix_screeninfo fb_fix = { { "DEC TGA ", } };
 static struct fb_var_screeninfo fb_var = { 0, };

@@ -2582,7 +2582,7 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	tty->driver_data = info;
 	info->tty = tty;
 	if (serial_paranoia_check(info, tty->device, "rs_open")) {
-		MOD_DEC_USE_COUNT;
+		/* MOD_DEC_USE_COUNT; "info->tty" will cause this */
 		return -ENODEV;
 	}
 
@@ -2595,7 +2595,7 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	if (!tmp_buf) {
 		page = get_free_page(GFP_KERNEL);
 		if (!page) {
-			MOD_DEC_USE_COUNT;
+			/* MOD_DEC_USE_COUNT; "info->tty" will cause this? */
 			return -ENOMEM;
 		}
 		if (tmp_buf)
@@ -2611,7 +2611,7 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	    (info->flags & ASYNC_CLOSING)) {
 		if (info->flags & ASYNC_CLOSING)
 			interruptible_sleep_on(&info->close_wait);
-		MOD_DEC_USE_COUNT;
+		/* MOD_DEC_USE_COUNT; "info->tty" will cause this? */
 #ifdef SERIAL_DO_RESTART
 		return ((info->flags & ASYNC_HUP_NOTIFY) ?
 			-EAGAIN : -ERESTARTSYS);
@@ -2625,13 +2625,13 @@ static int rs_open(struct tty_struct *tty, struct file * filp)
 	 */
 	retval = startup(info);
 	if (retval) {
-		MOD_DEC_USE_COUNT;
+		/* MOD_DEC_USE_COUNT; "info->tty" will cause this? */
 		return retval;
 	}
 
 	retval = block_til_ready(tty, filp, info);
 	if (retval) {
-		MOD_DEC_USE_COUNT;
+		/* MOD_DEC_USE_COUNT; "info->tty" will cause this? */
 #ifdef SERIAL_DEBUG_OPEN
 		printk("rs_open returning after block_til_ready with %d\n",
 		       retval);

@@ -62,7 +62,7 @@ ruffian_ack_irq(unsigned long irq)
 		outb(0x20, 0x20);
 	} else {
 		/* Ack PYXIS PCI interrupt.  */
-		*(vulp)PYXIS_INT_REQ = (1UL << (irq - 16));
+		*(vulp)PYXIS_INT_REQ = (1UL << (irq - 16)); mb();
 		/* ... and read it back to make sure it got written.  */
 		*(vulp)PYXIS_INT_REQ;
 	}
@@ -91,8 +91,8 @@ ruffian_device_interrupt(unsigned long vector, struct pt_regs *regs)
 	while (pld) {
 		i = ffz(~pld);
 		pld &= pld - 1; /* clear least bit set */
-		if (i == 7) {
-			/* Copy this bit from isa_device_interrupt cause
+		if (i == 7) { /* if ISA int */
+			/* Copy this code from isa_device_interrupt because
 			   we need to hook into int 0 for the timer.  I
 			   refuse to soil device_interrupt with ifdefs.  */
 
@@ -107,13 +107,12 @@ ruffian_device_interrupt(unsigned long vector, struct pt_regs *regs)
 			if (j == 7 && !(inb(0x20) & 0x80)) {
 				/* It's only a passive release... */
 			} else if (j == 0) {
-				timer_interrupt(0, NULL, regs);
+			  	handle_irq(8, -1, regs); /* fake it */
 				ruffian_ack_irq(0);
 			} else {
 				handle_irq(j, j, regs);
 			}
-                } else {
-			/* if not timer int */
+                } else { /* if not an ISA int */
 			handle_irq(16 + i, 16 + i, regs);
 		}
 
@@ -171,6 +170,7 @@ ruffian_pci_fixup(void)
 }
 
 
+#ifdef BUILDING_FOR_MILO
 /*
  * The DeskStation Ruffian motherboard firmware does not place
  * the memory size in the PALimpure area.  Therefore, we use
@@ -207,6 +207,7 @@ ruffian_get_bank_size(unsigned long offset)
 
 	return ret;
 }
+#endif /* BUILDING_FOR_MILO */
 
 static void __init
 ruffian_init_arch(unsigned long *mem_start, unsigned long *mem_end)
@@ -232,10 +233,12 @@ ruffian_init_pit (void)
 static void
 ruffian_kill_arch (int mode, char *reboot_cmd)
 {
+#if 0
+	/* this only causes re-entry to ARCSBIOS */
 	/* Perhaps this works for other PYXIS as well?  */
 	*(vuip) PYXIS_RESET = 0x0000dead;
 	mb();
-
+#endif
 	generic_kill_arch(mode, reboot_cmd);
 }
 
