@@ -654,6 +654,8 @@ struct file_operations {
 	int (*fsync) (struct file *, struct dentry *);
 	int (*fasync) (int, struct file *, int);
 	int (*lock) (struct file *, int, struct file_lock *);
+	ssize_t (*readv) (struct file *, const struct iovec *, unsigned long, loff_t *);
+	ssize_t (*writev) (struct file *, const struct iovec *, unsigned long, loff_t *);
 };
 
 struct inode_operations {

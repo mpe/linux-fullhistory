@@ -199,6 +199,8 @@ struct net_local {
 #define RX_BUF_SIZE 	(1518+14+18)	/* packet+header+RBD */
 #define RX_BUF_END		(dev->mem_end - dev->mem_start)
 
+#define TX_TIMEOUT 5
+
 /*
   That's it: only 86 bytes to set up the beast, including every extra
   command available.  The 170 byte buffer at DUMP_DATA is shared between the
@@ -287,6 +289,7 @@ static void	el16_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static void el16_rx(struct net_device *dev);
 static int	el16_close(struct net_device *dev);
 static struct net_device_stats *el16_get_stats(struct net_device *dev);
+static void el16_tx_timeout (struct net_device *dev);
 
 static void hardware_send_packet(struct net_device *dev, void *buf, short length);
 static void init_82586_mem(struct net_device *dev);
@@ -325,7 +328,7 @@ int __init el16_probe(struct net_device *dev)
 	return ENODEV;
 }
 
-int __init el16_probe1(struct net_device *dev, int ioaddr)
+static int __init el16_probe1(struct net_device *dev, int ioaddr)
 {
 	static unsigned char init_ID_done = 0, version_printed = 0;
 	int i, irq, irqval;
@@ -423,6 +426,8 @@ int __init el16_probe1(struct net_device *dev, int ioaddr)
 	dev->stop		= el16_close;
 	dev->hard_start_xmit = el16_send_packet;
 	dev->get_stats	= el16_get_stats;
+	dev->tx_timeout = el16_tx_timeout;
+	dev->watchdog_timeo = TX_TIMEOUT;
 
 	ether_setup(dev);	/* Generic ethernet behaviour */
 
@@ -443,62 +448,59 @@ static int el16_open(struct net_device *dev)
 	return 0;
 }
 
-static int el16_send_packet(struct sk_buff *skb, struct net_device *dev)
+
+static void el16_tx_timeout (struct net_device *dev)
 {
-	struct net_local *lp = (struct net_local *)dev->priv;
+	struct net_local *lp = (struct net_local *) dev->priv;
+	int ioaddr = dev->base_addr;
+
+	if (net_debug > 1)
+		printk ("%s: transmit timed out, %s?  ", dev->name,
+			isa_readw (shmem + iSCB_STATUS) & 0x8000 ? "IRQ conflict" :
+			"network cable problem");
+	/* Try to restart the adaptor. */
+	if (lp->last_restart == lp->stats.tx_packets) {
+		if (net_debug > 1)
+			printk ("Resetting board.\n");
+		/* Completely reset the adaptor. */
+		init_82586_mem (dev);
+	} else {
+		/* Issue the channel attention signal and hope it "gets better". */
+		if (net_debug > 1)
+			printk ("Kicking board.\n");
+		isa_writew (0xf000 | CUC_START | RX_START, shmem + iSCB_CMD);
+		outb (0, ioaddr + SIGNAL_CA);	/* Issue channel-attn. */
+		lp->last_restart = lp->stats.tx_packets;
+	}
+	dev->trans_start = jiffies;
+	netif_wake_queue (dev);
+}
+
+
+static int el16_send_packet (struct sk_buff *skb, struct net_device *dev)
+{
+	struct net_local *lp = (struct net_local *) dev->priv;
 	int ioaddr = dev->base_addr;
 	unsigned long shmem = dev->mem_start;
 	unsigned long flags;
+	short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
+	unsigned char *buf = skb->data;
 
-#if 0 /* LINK_STATE_XOFF is never set when we reach here */
-	if (test_bit(LINK_STATE_XOFF, &dev->flags))
-	{
-		/* If we get here, some higher level has decided we are broken.
-		   There should really be a "kick me" function call instead. */
-		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < 5)
-			return 1;
-		if (net_debug > 1)
-			printk("%s: transmit timed out, %s?  ", dev->name,
-				   isa_readw(shmem+iSCB_STATUS) & 0x8000 ? "IRQ conflict" :
-				   "network cable problem");
-		/* Try to restart the adaptor. */
-		if (lp->last_restart == lp->stats.tx_packets) {
-			if (net_debug > 1) printk("Resetting board.\n");
-			/* Completely reset the adaptor. */
-			init_82586_mem(dev);
-		} else {
-			/* Issue the channel attention signal and hope it "gets better". */
-			if (net_debug > 1) printk("Kicking board.\n");
-			isa_writew(0xf000|CUC_START|RX_START,shmem+iSCB_CMD);
-			outb(0, ioaddr + SIGNAL_CA);			/* Issue channel-attn. */
-			lp->last_restart = lp->stats.tx_packets;
-		}
-		netif_start_queue(dev);
-		dev->trans_start = jiffies;
-	}
-#endif
+	netif_stop_queue (dev);
 
-	{
-		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
-		unsigned char *buf = skb->data;
+	spin_lock_irqsave (&lp->lock, flags);
 
-		spin_lock_irqsave(&lp->lock, flags);
+	lp->stats.tx_bytes += length;
+	/* Disable the 82586's input to the interrupt line. */
+	outb (0x80, ioaddr + MISC_CTRL);
 
-		lp->stats.tx_bytes+=length;
-		/* Disable the 82586's input to the interrupt line. */
-		outb(0x80, ioaddr + MISC_CTRL);
+	hardware_send_packet (dev, buf, length);
 
-		hardware_send_packet(dev, buf, length);
+	dev->trans_start = jiffies;
+	/* Enable the 82586 interrupt input. */
+	outb (0x84, ioaddr + MISC_CTRL);
 
-		dev->trans_start = jiffies;
-		/* Enable the 82586 interrupt input. */
-		outb(0x84, ioaddr + MISC_CTRL);
-
-		spin_unlock_irqrestore(&lp->lock, flags);
-
-		netif_stop_queue(dev);
-	}
+	spin_unlock_irqrestore (&lp->lock, flags);
 
 	dev_kfree_skb (skb);
 
@@ -788,7 +790,7 @@ static void hardware_send_packet(struct net_device *dev, void *buf, short length
 	}
 
 	if (lp->tx_head != lp->tx_reap)
-		netif_start_queue(dev);
+		netif_wake_queue(dev);
 }
 
 static void el16_rx(struct net_device *dev)

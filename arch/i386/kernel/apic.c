@@ -3,6 +3,8 @@
  *
  *	(c) 1999, 2000 Ingo Molnar <mingo@redhat.com>
  *
+ *	Fixes
+ *	Maciej W. Rozycki	:	Bits for genuine 82489DX timers
  */
 
 #include <linux/config.h>

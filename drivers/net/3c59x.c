@@ -14,6 +14,7 @@
 	   Code 930.5, Goddard Space Flight Center, Greenbelt MD 20771
 
  Version history:
+ 	0.99H+lk0.9 - David S. Miller - softnet, PCI DMA updates
  	0.99H+lk1.0 - Jeff Garzik <jgarzik@mandrakesoft.com>
 		Remove compatibility defines for kernel versions < 2.2.x.
 		Update for new 2.3.x module interface

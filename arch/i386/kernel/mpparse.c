@@ -9,7 +9,7 @@
  *		Erich Boleyn	:	MP v1.4 and additional changes.
  *		Alan Cox	:	Added EBDA scanning
  *		Ingo Molnar	:	various cleanups and rewrites
- *	Maciej W. Rozycki	:	Bits for genuine 82489DX timers
+ *	Maciej W. Rozycki	:	Bits for genuine 82489DX APICs
  */
 
 #include <linux/mm.h>
@@ -339,6 +339,8 @@ static int __init smp_get_mpf(struct intel_mp_floating *mpf)
 	 * Now see if we need to read further.
 	 */
 	if (mpf->mpf_feature1 != 0) {
+		printk("Default MP configuration #%d\n", mpf->mpf_feature1);
+
 		/*
 		 * local APIC has default address
 		 */
@@ -352,6 +354,7 @@ static int __init smp_get_mpf(struct intel_mp_floating *mpf)
 
 		nr_ioapics = 1;
 		mp_ioapics[0].mpc_apicaddr = 0xFEC00000;
+		mp_ioapics[0].mpc_apicid = 2;
 		/*
 		 * Save the default type number, we
 		 * need it later to set the IO-APIC

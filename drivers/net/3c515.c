@@ -1074,7 +1074,7 @@ static void vortex_interrupt IRQ(int irq, void *dev_id, struct pt_regs *regs)
 					virt_to_bus(&lp->tx_ring[entry]))
 					break;			/* It still hasn't been processed. */
 				if (lp->tx_skbuff[entry]) {
-					dev_kfree_skb(lp->tx_skbuff[entry]);
+					dev_kfree_skb_irq(lp->tx_skbuff[entry]);
 					lp->tx_skbuff[entry] = 0;
 				}
 				dirty_tx++;
@@ -1091,7 +1091,7 @@ static void vortex_interrupt IRQ(int irq, void *dev_id, struct pt_regs *regs)
 		if (status & DMADone) {
 			outw(0x1000, ioaddr + Wn7_MasterStatus); /* Ack the event. */
 			dev->tbusy = 0;
-			dev_kfree_skb (lp->tx_skb); /* Release the transfered buffer */
+			dev_kfree_skb_irq (lp->tx_skb); /* Release the transfered buffer */
 			mark_bh(NET_BH);
 		}
 #endif

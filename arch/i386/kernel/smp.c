@@ -103,7 +103,7 @@
 /* The 'big kernel lock' */
 spinlock_t kernel_flag = SPIN_LOCK_UNLOCKED;
 
-struct tlb_state cpu_tlbstate[NR_CPUS];
+struct tlb_state cpu_tlbstate[NR_CPUS] = {[0 ... NR_CPUS-1] = { &init_mm, 0 }};
 
 /*
  * the following functions deal with sending IPIs between CPUs.
@@ -347,12 +347,7 @@ asmlinkage void smp_invalidate_interrupt (void)
 				__flush_tlb_one(flush_va);
 		} else
 			leave_mm(cpu);
-	} else {
-		extern void show_stack (void *);
-		printk("hm #1: %p, %p.\n", flush_mm, cpu_tlbstate[cpu].active_mm);
-		show_stack(NULL);
 	}
-	__flush_tlb();
 	ack_APIC_irq();
 	clear_bit(cpu, &flush_cpumask);
 }
@@ -382,7 +377,7 @@ static void flush_tlb_others (unsigned long cpumask, struct mm_struct *mm,
 	 * Temporarily this turns IRQs off, so that lockups are
 	 * detected by the NMI watchdog.
 	 */
-	spin_lock_irq(&tlbstate_lock);
+	spin_lock(&tlbstate_lock);
 	
 	flush_mm = mm;
 	flush_va = va;
@@ -398,7 +393,7 @@ static void flush_tlb_others (unsigned long cpumask, struct mm_struct *mm,
 
 	flush_mm = NULL;
 	flush_va = 0;
-	spin_unlock_irq(&tlbstate_lock);
+	spin_unlock(&tlbstate_lock);
 }
 	
 void flush_tlb_current_task(void)

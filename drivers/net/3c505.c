@@ -705,7 +705,7 @@ static void elp_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 			outb_control(adapter->hcr_val & ~(DMAE | TCEN | DIR),
 				     dev);
 			if (adapter->current_dma.direction) {
-				dev_kfree_skb(adapter->current_dma.skb);
+				dev_kfree_skb_irq(adapter->current_dma.skb);
 			} else {
 				struct sk_buff *skb = adapter->current_dma.skb;
 				if (skb) {

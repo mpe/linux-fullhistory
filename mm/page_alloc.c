@@ -525,6 +525,9 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 	lmem_map = (struct page *)(PAGE_OFFSET + 
 			MAP_ALIGN((unsigned long)lmem_map - PAGE_OFFSET));
 	*gmap = pgdat->node_mem_map = lmem_map;
+	pgdat->node_size = totalpages;
+	pgdat->node_start_paddr = zone_start_paddr;
+	pgdat->node_start_mapnr = (lmem_map - mem_map);
 
 	/*
 	 * Initially all pages are reserved - free ones are freed
@@ -565,6 +568,9 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 		zone->pages_low = mask*2;
 		zone->pages_high = mask*3;
 		zone->low_on_memory = 0;
+		zone->zone_mem_map = mem_map + offset;
+		zone->zone_start_mapnr = offset;
+		zone->zone_start_paddr = zone_start_paddr;
 
 		for (i = 0; i < size; i++) {
 			struct page *page = mem_map + offset + i;

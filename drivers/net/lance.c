@@ -195,6 +195,8 @@ tx_full and tbusy flags.
 #define LANCE_BUS_IF 0x16
 #define LANCE_TOTAL_SIZE 0x18
 
+#define TX_TIMEOUT	20
+
 /* The LANCE Rx and Tx ring descriptors. */
 struct lance_rx_head {
 	s32 base;
@@ -237,7 +239,7 @@ struct lance_private {
 	struct net_device_stats stats;
 	unsigned char chip_version;	/* See lance_chip_type. */
 	char tx_full;
-	unsigned long lock;
+	spinlock_t devlock;
 };
 
 #define LANCE_MUST_PAD          0x00000001
@@ -296,6 +298,7 @@ static void lance_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int lance_close(struct net_device *dev);
 static struct net_device_stats *lance_get_stats(struct net_device *dev);
 static void set_multicast_list(struct net_device *dev);
+static void lance_tx_timeout (struct net_device *dev);
 
 
 
@@ -518,6 +521,7 @@ int __init lance_probe1(struct net_device *dev, int ioaddr, int irq, int options
 		lp->tx_bounce_buffs = NULL;
 
 	lp->chip_version = lance_version;
+	lp->devlock = SPIN_LOCK_UNLOCKED;
 
 	lp->init_block.mode = 0x0003;		/* Disable Rx and Tx. */
 	for (i = 0; i < 6; i++)
@@ -676,6 +680,8 @@ int __init lance_probe1(struct net_device *dev, int ioaddr, int irq, int options
 	dev->stop = lance_close;
 	dev->get_stats = lance_get_stats;
 	dev->set_multicast_list = set_multicast_list;
+	dev->tx_timeout = lance_tx_timeout;
+	dev->watchdog_timeo = TX_TIMEOUT;
 
 	return 0;
 }
@@ -747,9 +753,8 @@ lance_open(struct net_device *dev)
 	outw(0x0000, ioaddr+LANCE_ADDR);
 	outw(0x0001, ioaddr+LANCE_DATA);
 
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
+	netif_start_queue (dev);
+
 	i = 0;
 	while (i++ < 100)
 		if (inw(ioaddr+LANCE_DATA) & 0x0100)
@@ -801,7 +806,7 @@ lance_init_ring(struct net_device *dev, int gfp)
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 	int i;
 
-	lp->lock = 0, lp->tx_full = 0;
+	lp->tx_full = 0;
 	lp->cur_rx = lp->cur_tx = 0;
 	lp->dirty_rx = lp->dirty_tx = 0;
 
@@ -852,48 +857,47 @@ lance_restart(struct net_device *dev, unsigned int csr0_bits, int must_reinit)
 	outw(csr0_bits, dev->base_addr + LANCE_DATA);
 }
 
+
+static void lance_tx_timeout (struct net_device *dev)
+{
+	struct lance_private *lp = (struct lance_private *) dev->priv;
+	int ioaddr = dev->base_addr;
+
+	outw (0, ioaddr + LANCE_ADDR);
+	printk ("%s: transmit timed out, status %4.4x, resetting.\n",
+		dev->name, inw (ioaddr + LANCE_DATA));
+	outw (0x0004, ioaddr + LANCE_DATA);
+	lp->stats.tx_errors++;
+#ifndef final_version
+	{
+		int i;
+		printk (" Ring data dump: dirty_tx %d cur_tx %d%s cur_rx %d.",
+		  lp->dirty_tx, lp->cur_tx, lp->tx_full ? " (full)" : "",
+			lp->cur_rx);
+		for (i = 0; i < RX_RING_SIZE; i++)
+			printk ("%s %08x %04x %04x", i & 0x3 ? "" : "\n ",
+			 lp->rx_ring[i].base, -lp->rx_ring[i].buf_length,
+				lp->rx_ring[i].msg_length);
+		for (i = 0; i < TX_RING_SIZE; i++)
+			printk ("%s %08x %04x %04x", i & 0x3 ? "" : "\n ",
+			     lp->tx_ring[i].base, -lp->tx_ring[i].length,
+				lp->tx_ring[i].misc);
+		printk ("\n");
+	}
+#endif
+	lance_restart (dev, 0x0043, 1);
+
+	dev->trans_start = jiffies;
+	netif_start_queue (dev);
+}
+
+
 static int lance_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 	int ioaddr = dev->base_addr;
 	int entry;
 	unsigned long flags;
-
-	/* Transmitter timeout, serious problems. */
-	if (dev->tbusy) {
-		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < 20)
-			return 1;
-		outw(0, ioaddr+LANCE_ADDR);
-		printk("%s: transmit timed out, status %4.4x, resetting.\n",
-			   dev->name, inw(ioaddr+LANCE_DATA));
-		outw(0x0004, ioaddr+LANCE_DATA);
-		lp->stats.tx_errors++;
-#ifndef final_version
-		{
-			int i;
-			printk(" Ring data dump: dirty_tx %d cur_tx %d%s cur_rx %d.",
-				   lp->dirty_tx, lp->cur_tx, lp->tx_full ? " (full)" : "",
-				   lp->cur_rx);
-			for (i = 0 ; i < RX_RING_SIZE; i++)
-				printk("%s %08x %04x %04x", i & 0x3 ? "" : "\n ",
-					   lp->rx_ring[i].base, -lp->rx_ring[i].buf_length,
-					   lp->rx_ring[i].msg_length);
-			for (i = 0 ; i < TX_RING_SIZE; i++)
-				printk("%s %08x %04x %04x", i & 0x3 ? "" : "\n ",
-					   lp->tx_ring[i].base, -lp->tx_ring[i].length,
-					   lp->tx_ring[i].misc);
-			printk("\n");
-		}
-#endif
-		lance_restart(dev, 0x0043, 1);
-
-		dev->tbusy=0;
-		dev->trans_start = jiffies;
-
-		return 0;
-	}
-
 	if (lance_debug > 3) {
 		outw(0x0000, ioaddr+LANCE_ADDR);
 		printk("%s: lance_start_xmit() called, csr0 %4.4x.\n", dev->name,
@@ -901,20 +905,8 @@ static int lance_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		outw(0x0000, ioaddr+LANCE_DATA);
 	}
 
-	/* Block a timer-based transmit from overlapping.  This could better be
-	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
-		printk("%s: Transmitter access conflict.\n", dev->name);
-		return 1;
-	}
-
-	if (test_and_set_bit(0, (void*)&lp->lock) != 0) {
-		if (lance_debug > 0)
-			printk("%s: tx queue lock!.\n", dev->name);
-		/* don't clear dev->tbusy flag. */
-		return 1;
-	}
-
+	netif_stop_queue (dev);
+	
 	/* Fill in a Tx ring entry */
 
 	/* Mask to ring buffer boundary. */
@@ -955,14 +947,12 @@ static int lance_start_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	dev->trans_start = jiffies;
 
-	save_flags(flags);
-	cli();
-	lp->lock = 0;
+	spin_lock_irqsave (&lp->devlock, flags);
 	if (lp->tx_ring[(entry+1) & TX_RING_MOD_MASK].base == 0)
-		dev->tbusy=0;
+		netif_start_queue (dev);
 	else
 		lp->tx_full = 1;
-	restore_flags(flags);
+	spin_unlock_irqrestore (&lp->devlock, flags);
 
 	return 0;
 }
@@ -983,10 +973,8 @@ lance_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
 	ioaddr = dev->base_addr;
 	lp = (struct lance_private *)dev->priv;
-	if (dev->interrupt)
-		printk(KERN_WARNING "%s: Re-entering the interrupt handler.\n", dev->name);
-
-	dev->interrupt = 1;
+	
+	spin_lock (&lp->devlock);
 
 	outw(0x00, dev->base_addr + LANCE_ADDR);
 	while ((csr0 = inw(dev->base_addr + LANCE_DATA)) & 0x8600
@@ -1040,7 +1028,7 @@ lance_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 				/* We must free the original skb if it's not a data-only copy
 				   in the bounce buffer. */
 				if (lp->tx_skbuff[entry]) {
-					dev_kfree_skb(lp->tx_skbuff[entry]);
+					dev_kfree_skb_irq(lp->tx_skbuff[entry]);
 					lp->tx_skbuff[entry] = 0;
 				}
 				dirty_tx++;
@@ -1054,12 +1042,12 @@ lance_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 			}
 #endif
 
-			if (lp->tx_full && dev->tbusy
-				&& dirty_tx > lp->cur_tx - TX_RING_SIZE + 2) {
+			if (lp->tx_full &&
+			    (test_bit(LINK_STATE_XOFF, &dev->flags)) &&
+			    dirty_tx > lp->cur_tx - TX_RING_SIZE + 2) {
 				/* The ring is no longer full, clear tbusy. */
 				lp->tx_full = 0;
-				dev->tbusy = 0;
-				mark_bh(NET_BH);
+				netif_wake_queue (dev);
 			}
 
 			lp->dirty_tx = dirty_tx;
@@ -1092,8 +1080,7 @@ lance_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 			   dev->name, inw(ioaddr + LANCE_ADDR),
 			   inw(dev->base_addr + LANCE_DATA));
 
-	dev->interrupt = 0;
-	return;
+	spin_unlock (&lp->devlock);
 }
 
 static int
@@ -1181,8 +1168,7 @@ lance_close(struct net_device *dev)
 	struct lance_private *lp = (struct lance_private *)dev->priv;
 	int i;
 
-	dev->start = 0;
-	dev->tbusy = 1;
+	netif_stop_queue (dev);
 
 	if (chip_table[lp->chip_version].flags & LANCE_HAS_MISSED_FRAME) {
 		outw(112, ioaddr+LANCE_ADDR);

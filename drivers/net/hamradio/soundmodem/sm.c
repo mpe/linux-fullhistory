@@ -3,7 +3,7 @@
 /*
  *	sm.c  -- soundcard radio modem driver.
  *
- *	Copyright (C) 1996-1999  Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *	Copyright (C) 1996-2000  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -508,7 +508,7 @@ static int sm_ioctl(struct net_device *dev, struct ifreq *ifr,
 		return 0;
 
 	case HDLCDRVCTL_SETMODE:
-		if (dev->start || !suser())
+		if (test_bit(LINK_STATE_START, &dev->state) || !suser())
 			return -EACCES;
 		hi->data.modename[sizeof(hi->data.modename)-1] = '\0';
 		return sethw(dev, sm, hi->data.modename);

@@ -30,7 +30,6 @@ typedef struct zone_struct {
 	unsigned long free_pages;
 	int low_on_memory;
 	unsigned long pages_min, pages_low, pages_high;
-	struct pglist_data *zone_pgdat;
 
 	/*
 	 * free areas of different sizes
@@ -42,6 +41,13 @@ typedef struct zone_struct {
 	 */
 	char * name;
 	unsigned long size;
+	/*
+	 * Discontig memory support fields.
+	 */
+	struct pglist_data *zone_pgdat;
+	unsigned long zone_start_paddr;
+	unsigned long zone_start_mapnr;
+	struct page * zone_mem_map;
 } zone_t;
 
 #define ZONE_DMA		0
@@ -74,6 +80,10 @@ typedef struct pglist_data {
 	struct page *node_mem_map;
 	unsigned long *valid_addr_bitmap;
 	struct bootmem_data *bdata;
+	unsigned long node_start_paddr;
+	unsigned long node_start_mapnr;
+	unsigned long node_size;
+	int node_id;
 } pg_data_t;
 
 extern int numnodes;
@@ -81,6 +91,14 @@ extern int numnodes;
 #define memclass(pgzone, tzone)	(((pgzone)->zone_pgdat == (tzone)->zone_pgdat) \
 			&& (((pgzone) - (pgzone)->zone_pgdat->node_zones) <= \
 			((tzone) - (pgzone)->zone_pgdat->node_zones)))
+
+/*
+ * The following two are not meant for general usage. They are here as
+ * prototypes for the discontig memory code.
+ */
+extern void show_free_areas_core(int);
+extern void free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
+		unsigned long *zones_size, unsigned long paddr);
 
 #ifndef CONFIG_DISCONTIGMEM
 
@@ -97,19 +115,6 @@ extern pg_data_t contig_page_data;
 
 #define MAP_ALIGN(x)	((((x) % sizeof(mem_map_t)) == 0) ? (x) : ((x) + \
 		sizeof(mem_map_t) - ((x) % sizeof(mem_map_t))))
-
-#ifdef CONFIG_DISCONTIGMEM
-
-#define LOCAL_MAP_NR(kvaddr) \
-	(((unsigned long)(kvaddr)-LOCAL_BASE_ADDR((kvaddr))) >> PAGE_SHIFT)
-#define MAP_NR(kaddr)	(LOCAL_MAP_NR((kaddr)) + \
-		(((unsigned long)ADDR_TO_MAPBASE((kaddr)) - PAGE_OFFSET) / \
-		sizeof(mem_map_t)))
-#define kern_addr_valid(addr)	((KVADDR_TO_NID((unsigned long)addr) >= \
-	numnodes) ? 0 : (test_bit(LOCAL_MAP_NR((addr)), \
-	NODE_DATA(KVADDR_TO_NID((unsigned long)addr))->valid_addr_bitmap)))
-
-#endif /* CONFIG_DISCONTIGMEM */
 
 #endif /* !__ASSEMBLY__ */
 #endif /* __KERNEL__ */

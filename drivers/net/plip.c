@@ -442,8 +442,7 @@ plip_timer_bh(struct net_device *dev)
 	struct net_local *nl = (struct net_local *)dev->priv;
 	
 	if (!(atomic_read (&nl->kill_timer))) {
-		if (!dev->interrupt)
-			plip_interrupt (-1, dev, NULL);
+		plip_interrupt (-1, dev, NULL);
 
 		queue_task (&nl->timer, &tq_timer);
 	}
@@ -521,7 +520,7 @@ plip_bh_timeout_error(struct net_device *dev, struct net_local *nl,
 		synchronize_irq();
 	}
 	disable_parport_interrupts (dev);
-	dev->tbusy = 1;
+	netif_stop_queue (dev);
 	nl->connection = PLIP_CN_ERROR;
 	write_data (dev, 0x00);
 
@@ -597,7 +596,6 @@ plip_receive_packet(struct net_device *dev, struct net_local *nl,
 		DISABLE(dev->irq);
 		/* Don't need to synchronize irq, as we can safely ignore it */
 		disable_parport_interrupts (dev);
-		dev->interrupt = 0;
 		write_data (dev, 0x01); /* send ACK */
 		if (net_debug > 2)
 			printk(KERN_DEBUG "%s: receive start\n", dev->name);
@@ -869,8 +867,7 @@ plip_connection_close(struct net_device *dev, struct net_local *nl,
 	spin_lock_irq(&nl->lock);
 	if (nl->connection == PLIP_CN_CLOSING) {
 		nl->connection = PLIP_CN_NONE;
-		dev->tbusy = 0;
-		mark_bh(NET_BH);
+		netif_wake_queue (dev);
 	}
 	spin_unlock_irq(&nl->lock);
 	if (nl->should_relinquish) {
@@ -893,11 +890,10 @@ plip_error(struct net_device *dev, struct net_local *nl,
 			printk(KERN_DEBUG "%s: reset interface.\n", dev->name);
 		nl->connection = PLIP_CN_NONE;
 		nl->should_relinquish = 0;
-		dev->tbusy = 0;
-		dev->interrupt = 0;
+		netif_start_queue (dev);
 		enable_parport_interrupts (dev);
 		ENABLE(dev->irq);
-		mark_bh(NET_BH);
+		netif_wake_queue (dev);
 	} else {
 		nl->is_deferred = 1;
 		queue_task(&nl->deferred, &tq_timer);
@@ -923,23 +919,22 @@ plip_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	nl = (struct net_local *)dev->priv;
 	rcv = &nl->rcv_data;
 
-	if (dev->interrupt)
-		return;
+	spin_lock_irq (&nl->lock);
 
 	c0 = read_status(dev);
 	if ((c0 & 0xf8) != 0xc0) {
 		if ((dev->irq != -1) && (net_debug > 1))
 			printk(KERN_DEBUG "%s: spurious interrupt\n", dev->name);
+		spin_unlock_irq (&nl->lock);
 		return;
 	}
-	dev->interrupt = 1;
+
 	if (net_debug > 3)
 		printk(KERN_DEBUG "%s: interrupt.\n", dev->name);
 
-	spin_lock_irq(&nl->lock);
 	switch (nl->connection) {
 	case PLIP_CN_CLOSING:
-		dev->tbusy = 0;
+		netif_start_queue (dev);
 	case PLIP_CN_NONE:
 	case PLIP_CN_SEND:
 		dev->last_rx = jiffies;
@@ -948,21 +943,20 @@ plip_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 		nl->timeout_count = 0;
 		queue_task(&nl->immediate, &tq_immediate);
 		mark_bh(IMMEDIATE_BH);
-		spin_unlock_irq(&nl->lock);
 		break;
 
 	case PLIP_CN_RECEIVE:
 		/* May occur because there is race condition
 		   around test and set of dev->interrupt.
 		   Ignore this interrupt. */
-		spin_unlock_irq(&nl->lock);
 		break;
 
 	case PLIP_CN_ERROR:
-		spin_unlock_irq(&nl->lock);
 		printk(KERN_ERR "%s: receive interrupt in error state\n", dev->name);
 		break;
 	}
+
+	spin_unlock_irq(&nl->lock);
 }
 
 static int
@@ -971,7 +965,7 @@ plip_tx_packet(struct sk_buff *skb, struct net_device *dev)
 	struct net_local *nl = (struct net_local *)dev->priv;
 	struct plip_local *snd = &nl->snd_data;
 
-	if (dev->tbusy)
+	if (test_bit(LINK_STATE_XOFF, &dev->flags))
 		return 1;
 
 	/* We may need to grab the bus */
@@ -981,14 +975,11 @@ plip_tx_packet(struct sk_buff *skb, struct net_device *dev)
 		nl->port_owner = 1;
 	}
 
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
-		printk(KERN_WARNING "%s: Transmitter access conflict.\n", dev->name);
-		return 1;
-	}
-
+	netif_stop_queue (dev);
+	
 	if (skb->len > dev->mtu + dev->hard_header_len) {
 		printk(KERN_WARNING "%s: packet too big, %d.\n", dev->name, (int)skb->len);
-		dev->tbusy = 0;
+		netif_start_queue (dev);
 		return 0;
 	}
 
@@ -1007,7 +998,8 @@ plip_tx_packet(struct sk_buff *skb, struct net_device *dev)
 	queue_task(&nl->immediate, &tq_immediate);
 	mark_bh(IMMEDIATE_BH);
 	spin_unlock_irq(&nl->lock);
-
+	
+	netif_start_queue (dev);
 	return 0;
 }
 
@@ -1115,9 +1107,7 @@ plip_open(struct net_device *dev)
 		}
 	}
 
-	dev->interrupt = 0;
-	dev->start = 1;
-	dev->tbusy = 0;
+	netif_start_queue (dev);
 
 	MOD_INC_USE_COUNT;
 	return 0;
@@ -1131,8 +1121,7 @@ plip_close(struct net_device *dev)
 	struct plip_local *snd = &nl->snd_data;
 	struct plip_local *rcv = &nl->rcv_data;
 
-	dev->tbusy = 1;
-	dev->start = 0;
+	netif_stop_queue (dev);
 	DISABLE(dev->irq);
 	synchronize_irq();
 

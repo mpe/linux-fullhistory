@@ -657,7 +657,7 @@ int __init igafb_init(void)
         memset(info, 0, sizeof(struct fb_info_iga));
 
 	if ((addr = pdev->resource[0].start) == 0) {
-                printk("igafb_init: no memory start\n", addr);
+                printk("igafb_init: no memory start\n");
 		kfree(info);
 		return -ENXIO;
 	}
@@ -697,7 +697,7 @@ int __init igafb_init(void)
 	}
 	if ((info->io_base = (int) ioremap(info->io_base_phys, 0x1000)) == 0) {
                 printk("igafb_init: can't remap %lx[4K]\n", info->io_base_phys);
-		iounmap(info->frame_buffer);
+		iounmap((void *)info->frame_buffer);
                 kfree(info);
 		return -ENXIO;
 	}
@@ -714,7 +714,7 @@ int __init igafb_init(void)
 	if (!info->mmap_map) {
 		printk("igafb_init: can't alloc mmap_map\n");
 		iounmap(info->io_base);
-		iounmap(info->frame_buffer);
+		iounmap((void *)info->frame_buffer);
                 kfree(info);
 		return -ENOMEM;
 	}
@@ -769,7 +769,7 @@ int __init igafb_init(void)
 
 	if (!iga_init(info)) {
 		iounmap(info->io_base);
-		iounmap(info->frame_buffer);
+		iounmap((void *)info->frame_buffer);
 		if (info->mmap_map)
 			kfree(info->mmap_map);
 		kfree(info);

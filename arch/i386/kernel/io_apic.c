@@ -11,6 +11,9 @@
  *      Hidemi Kishimoto <kisimoto@css1.kbnes.nec.co.jp>,
  *	further tested and cleaned up by Zach Brown <zab@redhat.com>
  *	and Ingo Molnar <mingo@redhat.com>
+ *
+ *	Fixes
+ *	Maciej W. Rozycki	:	Bits for genuine 82489DX APICs
  */
 
 #include <linux/mm.h>
@@ -906,40 +909,6 @@ void disable_IO_APIC(void)
 	}
 }
 
-static void __init setup_ioapic_default_id(void)
-{
-	struct IO_APIC_reg_00 reg_00;
-
-	/*
-	 * 'default' mptable configurations mean a hardwired setup,
-	 * 2 CPUs, 16 APIC registers. IO-APIC ID is usually set to 0,
-	 * setting it to ID 2 should be fine.
-	 */
-
-	/*
-	 * Sanity check, is ID 2 really free? Every APIC in the
-	 * system must have a unique ID or we get lots of nice
-	 * 'stuck on smp_invalidate_needed IPI wait' messages.
-	 */
-	if (phys_cpu_present_map & (1<<0x2))
-		panic("APIC ID 2 already used");
-
-	/*
-	 * Set the ID
-	 */
-	*(int *)&reg_00 = io_apic_read(0, 0);
-	printk("...changing IO-APIC physical APIC ID to 2...\n");
-	reg_00.ID = 0x2;
-	io_apic_write(0, 0, *(int *)&reg_00);
-
-	/*
-	 * Sanity check
-	 */
-	*(int *)&reg_00 = io_apic_read(0, 0);
-	if (reg_00.ID != 0x2)
-		panic("could not set ID");
-}
-
 /*
  * function to set the IO-APIC physical IDs based on the
  * values stored in the MPC table.
@@ -966,6 +935,15 @@ static void __init setup_ioapic_ids_from_mpc (void)
 	 	 */
 		printk("...changing IO-APIC physical APIC ID to %d ...",
 					mp_ioapics[apic].mpc_apicid);
+
+		/*
+		 * Sanity check, is the ID really free? Every APIC in the
+		 * system must have a unique ID or we get lots of nice
+		 * 'stuck on smp_invalidate_needed IPI wait' messages.
+		 */
+		if (phys_cpu_present_map & (1<<mp_ioapics[apic].mpc_apicid))
+			panic("APIC ID %d already used",
+				mp_ioapics[apic].mpc_apicid);
 
 		reg_00.ID = mp_ioapics[apic].mpc_apicid;
 		io_apic_write(apic, 0, *(int *)&reg_00);
@@ -1021,7 +999,6 @@ static void __init construct_default_ISA_mptable(void)
 			mp_irqs[0].mpc_dstirq = 2;
 	}
 
-	setup_ioapic_default_id();
 }
 
 /*
@@ -1264,6 +1241,7 @@ static inline void check_timer(void)
 	/*
 	 * get/set the timer IRQ vector:
 	 */
+	disable_8259A_irq(0);
 	vector = assign_irq_vector(0);
 	set_intr_gate(vector, interrupt[0]);
 

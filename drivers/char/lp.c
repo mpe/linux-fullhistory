@@ -409,11 +409,6 @@ static ssize_t lp_write(struct file * file, const char * buf,
  	return retv;
 }
 
-static long long lp_lseek(struct file * file, long long offset, int origin)
-{
-	return -ESPIPE;
-}
-
 #ifdef CONFIG_PARPORT_1284
 
 /* Status readback conforming to ieee1284 */

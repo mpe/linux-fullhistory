@@ -164,6 +164,8 @@ enum commands {
 #define	 RX_SUSPEND	0x0030
 #define	 RX_ABORT	0x0040
 
+#define	 TX_TIMEOUT	5
+
 struct i596_reg {
 	unsigned short porthi;
 	unsigned short portlo;
@@ -267,6 +269,7 @@ struct i596_private {
 	struct tx_cmd tx_cmds[TX_RING_SIZE];
 	struct i596_tbd tbds[TX_RING_SIZE];
 	int next_tx_cmd;
+	spinlock_t lock;
 };
 
 char init_setup[] =
@@ -296,6 +299,7 @@ static void i596_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int i596_close(struct net_device *dev);
 static struct net_device_stats *i596_get_stats(struct net_device *dev);
 static void i596_add_cmd(struct net_device *dev, struct i596_cmd *cmd);
+static void i596_tx_timeout (struct net_device *dev);
 static void print_eth(char *);
 static void set_multicast_list(struct net_device *dev);
 
@@ -561,8 +565,7 @@ static inline void init_i596_mem(struct net_device *dev)
 
 	boguscnt = 200000;
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave (&lp->lock, flags);
 
 	while (lp->scb.command)
 		if (--boguscnt == 0) {
@@ -573,7 +576,7 @@ static inline void init_i596_mem(struct net_device *dev)
 	lp->scb.command = RX_START;
 	CA(dev);
 
-	restore_flags(flags);
+	spin_unlock_irqrestore (&lp->lock, flags);
 
 	boguscnt = 2000;
 	while (lp->scb.command)
@@ -778,8 +781,7 @@ static inline void i596_reset(struct net_device *dev, struct i596_private *lp, i
 	if (i596_debug > 1)
 		printk("i596_reset\n");
 
-	save_flags(flags);
-	cli();
+	spin_lock_irqsave (&lp->lock, flags);
 
 	while (lp->scb.command)
 		if (--boguscnt == 0) {
@@ -787,8 +789,8 @@ static inline void i596_reset(struct net_device *dev, struct i596_private *lp, i
 			       lp->scb.status, lp->scb.command);
 			break;
 		}
-	dev->start = 0;
-	dev->tbusy = 1;
+
+	netif_stop_queue(dev);
 
 	lp->scb.command = CUC_ABORT | RX_ABORT;
 	CA(dev);
@@ -802,14 +804,12 @@ static inline void i596_reset(struct net_device *dev, struct i596_private *lp, i
 			       lp->scb.status, lp->scb.command);
 			break;
 		}
-	restore_flags(flags);
+	spin_unlock_irqrestore (&lp->lock, flags);
 
 	i596_cleanup_cmd(lp);
 	i596_rx(dev);
 
-	dev->start = 1;
-	dev->tbusy = 0;
-	dev->interrupt = 0;
+	netif_start_queue(dev);
 	init_i596_mem(dev);
 }
 
@@ -826,8 +826,8 @@ static void i596_add_cmd(struct net_device *dev, struct i596_cmd *cmd)
 	cmd->status = 0;
 	cmd->command |= (CMD_EOL | CMD_INTR);
 	cmd->next = (struct i596_cmd *) I596_NULL;
-	save_flags(flags);
-	cli();
+
+	spin_lock_irqsave (&lp->lock, flags);
 
 	/*
 	 * RGH  300597:  Looks to me like there could be a race condition
@@ -857,7 +857,8 @@ static void i596_add_cmd(struct net_device *dev, struct i596_cmd *cmd)
 	lp->cmd_backlog++;
 
 	lp->cmd_head = WSWAPcmd(lp->scb.cmd);	/* Is this redundant?  RGH 300597 */
-	restore_flags(flags);
+
+	spin_unlock_irqrestore (&lp->lock, flags);
 
 	if (lp->cmd_backlog > max_cmd_backlog) {
 		unsigned long tickssofar = jiffies - lp->last_cmd;
@@ -886,9 +887,8 @@ static int i596_open(struct net_device *dev)
 #endif
 	init_rx_bufs(dev);
 
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
+	netif_start_queue(dev);
+
 	MOD_INC_USE_COUNT;
 
 	/* Initialize the 82596 memory */
@@ -897,51 +897,53 @@ static int i596_open(struct net_device *dev)
 	return 0;		/* Always succeed */
 }
 
-static int i596_start_xmit(struct sk_buff *skb, struct net_device *dev)
+static void i596_tx_timeout (struct net_device *dev)
 {
 	struct i596_private *lp = (struct i596_private *) dev->priv;
 	int ioaddr = dev->base_addr;
+
+	/* Transmitter timeout, serious problems. */
+	printk ("%s: transmit timed out, status resetting.\n", dev->name);
+
+	lp->stats.tx_errors++;
+
+	/* Try to restart the adaptor */
+	if (lp->last_restart == lp->stats.tx_packets) {
+		if (i596_debug > 1)
+			printk ("Resetting board.\n");
+
+		/* Shutdown and restart */
+		i596_reset (dev, lp, ioaddr);
+	} else {
+		/* Issue a channel attention signal */
+		if (i596_debug > 1)
+			printk ("Kicking board.\n");
+		lp->scb.command = CUC_START | RX_START;
+		CA (dev);
+		lp->last_restart = lp->stats.tx_packets;
+	}
+
+	dev->trans_start = jiffies;
+	netif_wake_queue (dev);
+}
+
+
+static int i596_start_xmit(struct sk_buff *skb, struct net_device *dev)
+{
+	struct i596_private *lp = (struct i596_private *) dev->priv;
 	struct tx_cmd *tx_cmd;
 	struct i596_tbd *tbd;
 
 	if (i596_debug > 2)
 		printk("%s: 82596 start xmit\n", dev->name);
 
-	/* Transmitter timeout, serious problems. */
-	if (dev->tbusy) {
-		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < 5)
-			return 1;
-		printk("%s: transmit timed out, status resetting.\n",
-		       dev->name);
-		lp->stats.tx_errors++;
-		/* Try to restart the adaptor */
-		if (lp->last_restart == lp->stats.tx_packets) {
-			if (i596_debug > 1)
-				printk("Resetting board.\n");
-
-			/* Shutdown and restart */
-			i596_reset(dev, lp, ioaddr);
-		} else {
-			/* Issue a channel attention signal */
-			if (i596_debug > 1)
-				printk("Kicking board.\n");
-			lp->scb.command = CUC_START | RX_START;
-			CA(dev);
-			lp->last_restart = lp->stats.tx_packets;
-		}
-		dev->tbusy = 0;
-		dev->trans_start = jiffies;
-	}
 	if (i596_debug > 3)
 		printk("%s: i596_start_xmit(%x,%x) called\n", dev->name,
 				skb->len, (unsigned int)skb->data);
 
-	/* Block a timer-based transmit from overlapping.  This could better be
-	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
-	if (test_and_set_bit(0, (void *) &dev->tbusy) != 0)
-		printk("%s: Transmitter access conflict.\n", dev->name);
-	else {
+	netif_stop_queue(dev);
+	
+	{
 		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
 		dev->trans_start = jiffies;
 
@@ -982,7 +984,7 @@ static int i596_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		}
 	}
 
-	dev->tbusy = 0;
+	netif_start_queue(dev);
 
 	return 0;
 }
@@ -1086,11 +1088,14 @@ int __init i82596_probe(struct net_device *dev)
 		printk(version);
 
 	/* The 82596-specific entries in the device structure. */
-	dev->open = &i596_open;
-	dev->stop = &i596_close;
-	dev->hard_start_xmit = &i596_start_xmit;
-	dev->get_stats = &i596_get_stats;
-	dev->set_multicast_list = &set_multicast_list;
+	dev->open = i596_open;
+	dev->stop = i596_close;
+	dev->hard_start_xmit = i596_start_xmit;
+	dev->get_stats = i596_get_stats;
+	dev->set_multicast_list = set_multicast_list;
+	dev->tx_timeout = i596_tx_timeout;
+	dev->watchdog_timeo = TX_TIMEOUT;
+	
 
 	dev->mem_start = (int)__get_free_pages(GFP_ATOMIC, 0);
 	dev->priv = (void *)(dev->mem_start);
@@ -1110,6 +1115,7 @@ int __init i82596_probe(struct net_device *dev)
 	lp->scb.command = 0;
 	lp->scb.cmd = (struct i596_cmd *) I596_NULL;
 	lp->scb.rfd = (struct i596_rfd *) I596_NULL;
+	lp->lock = SPIN_LOCK_UNLOCKED;
 
 	return 0;
 }
@@ -1137,14 +1143,10 @@ static void i596_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	if (i596_debug > 3)
 		printk("%s: i596_interrupt(): irq %d\n", dev->name, irq);
 
-	if (dev->interrupt)
-		printk("%s: Re-entering the interrupt handler.\n", dev->name);
-
-	dev->interrupt = 1;
-
 	ioaddr = dev->base_addr;
-
 	lp = (struct i596_private *) dev->priv;
+	
+	spin_lock (&lp->lock);
 
 	while (lp->scb.command)
 		if (--boguscnt == 0) {
@@ -1248,7 +1250,8 @@ static void i596_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			ptr = WSWAPcmd(ptr->next);
 		}
 
-		if ((lp->cmd_head != (struct i596_cmd *) I596_NULL) && (dev->start))
+		if ((lp->cmd_head != (struct i596_cmd *) I596_NULL) &&
+		    (test_bit(LINK_STATE_START, &dev->state)))
 			ack_cmd |= CUC_START;
 		lp->scb.cmd = WSWAPcmd(lp->cmd_head);
 	}
@@ -1257,7 +1260,7 @@ static void i596_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			printk("%s: i596 interrupt received a frame.\n", dev->name);
 		/* Only RX_START if stopped - RGH 07-07-96 */
 		if (status & 0x1000) {
-			if (dev->start)
+			if (test_bit(LINK_STATE_START, &dev->state))
 				ack_cmd |= RX_START;
 			if (i596_debug > 1)
 				printk("%s: i596 interrupt receive unit inactive %x.\n", dev->name, status & 0x00f0);
@@ -1304,7 +1307,8 @@ static void i596_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	if (i596_debug > 4)
 		printk("%s: exiting interrupt.\n", dev->name);
 
-	dev->interrupt = 0;
+	spin_unlock (&lp->lock);
+	
 	return;
 }
 
@@ -1314,8 +1318,7 @@ static int i596_close(struct net_device *dev)
 	int boguscnt = 2000;
 	unsigned long flags;
 
-	dev->start = 0;
-	dev->tbusy = 1;
+	netif_stop_queue(dev);
 
 	if (i596_debug > 1)
 		printk("%s: Shutting down ethercard, status was %4.4x.\n",

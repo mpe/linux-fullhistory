@@ -1096,7 +1096,7 @@ static void rtl8129_interrupt(int irq, void *dev_instance, struct pt_regs *regs)
 				}
 
 				/* Free the original skb. */
-				dev_free_skb(tp->tx_info[entry].skb);
+				dev_kfree_skb_irq(tp->tx_info[entry].skb);
 				tp->tx_info[entry].skb = NULL;
 				if (tp->tx_full) {
 					/* The ring is no longer full, wake the queue. */

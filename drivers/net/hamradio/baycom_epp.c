@@ -3,7 +3,7 @@
 /*
  *	baycom_epp.c  -- baycom epp radio modem driver.
  *
- *	Copyright (C) 1998-1999
+ *	Copyright (C) 1998-2000
  *          Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *	This program is free software; you can redistribute it and/or modify
@@ -47,6 +47,7 @@
 #include <linux/tqueue.h>
 #include <linux/fs.h>
 #include <linux/parport.h>
+#include <linux/smp_lock.h>
 #include <asm/uaccess.h>
 #include <linux/if_arp.h>
 #include <linux/hdlcdrv.h>
@@ -228,8 +229,7 @@ struct baycom_state {
 
         struct net_device_stats stats;
 	unsigned int ptt_keyed;
-        struct sk_buff_head send_queue;  /* Packets awaiting transmission */
-
+	struct sk_buff *skb;  /* next transmit packet  */
 
 #ifdef BAYCOM_DEBUG
 	struct debug_vals {
@@ -377,6 +377,40 @@ static char *envp[] = { "HOME=/", "TERM=linux", "PATH=/usr/bin:/bin", NULL };
 
 static int errno;
 
+static inline void use_init_fs_context(void)
+{
+        struct fs_struct *our_fs, *init_fs;
+
+        /*
+         * Make modprobe's fs context be a copy of init's.
+         *
+         * We cannot use the user's fs context, because it
+         * may have a different root than init.
+         * Since init was created with CLONE_FS, we can grab
+         * its fs context from "init_task".
+         *
+         * The fs context has to be a copy. If it is shared
+         * with init, then any chdir() call in modprobe will
+         * also affect init and the other threads sharing
+         * init_task's fs context.
+         *
+         * We created the exec_modprobe thread without CLONE_FS,
+         * so we can update the fields in our fs context freely.
+         */
+        lock_kernel();
+
+        our_fs = current->fs;
+        dput(our_fs->root);
+        dput(our_fs->pwd);
+
+        init_fs = init_task.fs;
+        our_fs->umask = init_fs->umask;
+        our_fs->root = dget(init_fs->root);
+        our_fs->pwd = dget(init_fs->pwd);
+
+        unlock_kernel();
+}
+
 static int exec_eppfpga(void *b)
 {
 	struct baycom_state *bc = (struct baycom_state *)b;
@@ -394,12 +428,38 @@ static int exec_eppfpga(void *b)
 	sprintf(portarg, "%ld", bc->pdev->port->base);
 	printk(KERN_DEBUG "%s: %s -s -p %s -m %s\n", bc_drvname, eppconfig_path, portarg, modearg);
 
-        for (i = 0; i < current->files->max_fds; i++ )
-		if (current->files->fd[i]) 
-			close(i);
-        set_fs(KERNEL_DS);      /* Allow execve args to be in kernel space. */
+        current->session = 1;
+        current->pgrp = 1;
+
+        use_init_fs_context();
+
+        /* Prevent parent user process from sending signals to child.
+           Otherwise, if the modprobe program does not exist, it might
+           be possible to get a user defined signal handler to execute
+           as the super user right after the execve fails if you time
+           the signal just right.
+        */
+        spin_lock_irq(&current->sigmask_lock);
+        flush_signals(current);
+        flush_signal_handlers(current);
+        spin_unlock_irq(&current->sigmask_lock);
+
+        for (i = 0; i < current->files->max_fds; i++ ) {
+                if (current->files->fd[i]) close(i);
+        }
+
+        /* Drop the "current user" thing */
+        free_uid(current);
+
+        /* Give kmod all privileges.. */
         current->uid = current->euid = current->fsuid = 0;
-        if (execve(eppconfig_path, argv, envp) < 0) {
+        cap_set_full(current->cap_inheritable);
+        cap_set_full(current->cap_effective);
+
+        /* Allow execve args to be in kernel space. */
+        set_fs(KERNEL_DS);
+
+	if (execve(eppconfig_path, argv, envp) < 0) {
                 printk(KERN_ERR "%s: failed to exec %s -s -p %s -m %s, errno = %d\n",
                        bc_drvname, eppconfig_path, portarg, modearg, errno);
                 return -errno;
@@ -515,71 +575,63 @@ static void encode_hdlc(struct baycom_state *bc)
 	
 	if (bc->hdlctx.bufcnt > 0)
 		return;
-	while ((skb = skb_dequeue(&bc->send_queue))) {
-		if (skb->data[0] != 0) {
-			do_kiss_params(bc, skb->data, skb->len);
-			dev_kfree_skb(skb);
-			continue;
-		}
-		pkt_len = skb->len-1; /* strip KISS byte */
-		if (pkt_len >= HDLCDRV_MAXFLEN || pkt_len < 2) {
-			dev_kfree_skb(skb);
-			continue;
-		}
-		wp = bc->hdlctx.buf;
-		bp = skb->data+1;
-		crc = calc_crc_ccitt(bp, pkt_len);
-		crcarr[0] = crc;
-		crcarr[1] = crc >> 8;
-		*wp++ = 0x7e;
-                bitstream = bitbuf = numbit = 0;
-		while (pkt_len > -2) {
-                        bitstream >>= 8;
-                        bitstream |= ((unsigned int)*bp) << 8;
-                        bitbuf |= ((unsigned int)*bp) << numbit;
-                        notbitstream = ~bitstream;
-			bp++;
-			pkt_len--;
-			if (!pkt_len)
-				bp = crcarr;
-                        ENCODEITERA(0);
-                        ENCODEITERA(1);
-                        ENCODEITERA(2);
-                        ENCODEITERA(3);
-                        ENCODEITERA(4);
-                        ENCODEITERA(5);
-                        ENCODEITERA(6);
-                        ENCODEITERA(7);
-                        goto enditer;
-                        ENCODEITERB(0);
-                        ENCODEITERB(1);
-                        ENCODEITERB(2);
-                        ENCODEITERB(3);
-                        ENCODEITERB(4);
-                        ENCODEITERB(5);
-                        ENCODEITERB(6);
-                        ENCODEITERB(7);
-                  enditer:
-                        numbit += 8;
-                        while (numbit >= 8) {
-                                *wp++ = bitbuf;
-                                bitbuf >>= 8;
-                                numbit -= 8;
-                        }
-                }
-		bitbuf |= 0x7e7e << numbit;
-                numbit += 16;
-                while (numbit >= 8) {
-                        *wp++ = bitbuf;
-                        bitbuf >>= 8;
-                        numbit -= 8;
-                }
-		bc->hdlctx.bufptr = bc->hdlctx.buf;
-		bc->hdlctx.bufcnt = wp - bc->hdlctx.buf;
-		dev_kfree_skb(skb);
-		bc->stats.tx_packets++;
+	skb = bc->skb;
+	if (!skb)
 		return;
+	bc->skb = NULL;
+	pkt_len = skb->len-1; /* strip KISS byte */
+	wp = bc->hdlctx.buf;
+	bp = skb->data+1;
+	crc = calc_crc_ccitt(bp, pkt_len);
+	crcarr[0] = crc;
+	crcarr[1] = crc >> 8;
+	*wp++ = 0x7e;
+	bitstream = bitbuf = numbit = 0;
+	while (pkt_len > -2) {
+		bitstream >>= 8;
+		bitstream |= ((unsigned int)*bp) << 8;
+		bitbuf |= ((unsigned int)*bp) << numbit;
+		notbitstream = ~bitstream;
+		bp++;
+		pkt_len--;
+		if (!pkt_len)
+			bp = crcarr;
+		ENCODEITERA(0);
+		ENCODEITERA(1);
+		ENCODEITERA(2);
+		ENCODEITERA(3);
+		ENCODEITERA(4);
+		ENCODEITERA(5);
+		ENCODEITERA(6);
+		ENCODEITERA(7);
+		goto enditer;
+		ENCODEITERB(0);
+		ENCODEITERB(1);
+		ENCODEITERB(2);
+		ENCODEITERB(3);
+		ENCODEITERB(4);
+		ENCODEITERB(5);
+		ENCODEITERB(6);
+		ENCODEITERB(7);
+	enditer:
+		numbit += 8;
+		while (numbit >= 8) {
+			*wp++ = bitbuf;
+			bitbuf >>= 8;
+			numbit -= 8;
+		}
 	}
+	bitbuf |= 0x7e7e << numbit;
+	numbit += 16;
+	while (numbit >= 8) {
+		*wp++ = bitbuf;
+		bitbuf >>= 8;
+		numbit -= 8;
+	}
+	bc->hdlctx.bufptr = bc->hdlctx.buf;
+	bc->hdlctx.bufcnt = wp - bc->hdlctx.buf;
+	dev_kfree_skb(skb);
+	bc->stats.tx_packets++;
 }
 
 /* ---------------------------------------------------------------------- */
@@ -944,6 +996,8 @@ static void epp_bh(struct net_device *dev)
 	bc->debug_vals.demod_cycles = time3 - time2;
 #endif /* BAYCOM_DEBUG */
 	queue_task(&bc->run_bh, &tq_timer);
+	if (!bc->skb)
+		netif_wake_queue(dev);
 	return;
  epptimeout:
 	printk(KERN_ERR "%s: EPP timeout!\n", bc_drvname);
@@ -960,8 +1014,20 @@ static int baycom_send_packet(struct sk_buff *skb, struct net_device *dev)
 
 	baycom_paranoia_check(dev, "baycom_send_packet", 0);
 	bc = (struct baycom_state *)dev->priv;
-	skb_queue_tail(&bc->send_queue, skb);
-	dev->trans_start = jiffies;	
+	if (skb->data[0] != 0) {
+		do_kiss_params(bc, skb->data, skb->len);
+		dev_kfree_skb(skb);
+		return 0;
+	}
+	if (bc->skb)
+		return -1;
+	/* strip KISS byte */
+	if (skb->len >= HDLCDRV_MAXFLEN+1 || skb->len < 3) {
+		dev_kfree_skb(skb);
+		return 0;
+	}
+	netif_stop_queue(dev);
+	bc->skb = skb;
 	return 0;
 }
 
@@ -1030,8 +1096,6 @@ static int epp_open(struct net_device *dev)
 	
 	baycom_paranoia_check(dev, "epp_open", -ENXIO);
 	bc = (struct baycom_state *)dev->priv;
-	if (dev->start)
-		return 0;
         pp = parport_enumerate();
         while (pp && pp->base != dev->base_addr) 
                 pp = pp->next;
@@ -1122,11 +1186,9 @@ static int epp_open(struct net_device *dev)
 	bc->hdlctx.bufcnt = 0;
 	bc->hdlctx.slotcnt = bc->ch_params.slottime;
 	bc->hdlctx.calibrate = 0;
-        dev->start = 1;
-       	dev->tbusy = 0;
-	dev->interrupt = 0;
 	/* start the bottom half stuff */
 	queue_task(&bc->run_bh, &tq_timer);
+	netif_start_queue(dev);
 	MOD_INC_USE_COUNT;
 	return 0;
 
@@ -1144,17 +1206,12 @@ static int epp_close(struct net_device *dev)
 {
 	struct baycom_state *bc;
 	struct parport *pp;
-	struct sk_buff *skb;
 	unsigned char tmp[1];
 
 	baycom_paranoia_check(dev, "epp_close", -EINVAL);
-	if (!dev->start)
-		return 0;
 	bc = (struct baycom_state *)dev->priv;
 	pp = bc->pdev->port;
 	bc->bh_running = 0;
-	dev->start = 0;
-	dev->tbusy = 1;
 	run_task_queue(&tq_timer);  /* dequeue bottom half */
 	bc->stat = EPP_DCDBIT;
 	tmp[0] = 0;
@@ -1162,9 +1219,9 @@ static int epp_close(struct net_device *dev)
 	parport_write_control(pp, 0); /* reset the adapter */
         parport_release(bc->pdev);
         parport_unregister_device(bc->pdev);
-        /* Free any buffers left in the hardware transmit queue */
-        while ((skb = skb_dequeue(&bc->send_queue)))
-			dev_kfree_skb(skb);
+	if (bc->skb)
+		dev_kfree_skb(bc->skb);
+	bc->skb = NULL;
 	printk(KERN_INFO "%s: close epp at iobase 0x%lx irq %u\n",
 	       bc_drvname, dev->base_addr, dev->irq);
 	MOD_DEC_USE_COUNT;
@@ -1280,7 +1337,7 @@ static int baycom_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		break;
 
 	case HDLCDRVCTL_SETMODEMPAR:
-		if ((!suser()) || dev->start)
+		if ((!suser()) || test_bit(LINK_STATE_START, &dev->state))
 			return -EACCES;
 		dev->base_addr = hi.data.mp.iobase;
 		dev->irq = /*hi.data.mp.irq*/0;
@@ -1319,7 +1376,7 @@ static int baycom_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		break;
 
 	case HDLCDRVCTL_SETMODE:
-		if (!suser() || dev->start)
+		if (!suser() || test_bit(LINK_STATE_START, &dev->state))
 			return -EACCES;
 		hi.data.modename[sizeof(hi.data.modename)-1] = '\0';
 		return baycom_setmode(bc, hi.data.modename);
@@ -1385,7 +1442,7 @@ static int baycom_probe(struct net_device *dev)
 	/* Fill in the fields of the device structure */
 	dev_init_buffers(dev);
 
-	skb_queue_head_init(&bc->send_queue);
+	bc->skb = NULL;
 	
 #if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 	dev->hard_header = ax25_encapsulate;
@@ -1461,8 +1518,6 @@ static int __init init_baycomepp(void)
 		dev->name = bc->ifname;
 		dev->if_port = 0;
 		dev->init = baycom_probe;
-		dev->start = 0;
-		dev->tbusy = 1;
 		dev->base_addr = iobase[i];
 		dev->irq = 0;
 		dev->dma = 0;

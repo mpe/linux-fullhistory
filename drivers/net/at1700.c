@@ -111,6 +111,7 @@ typedef unsigned char uchar;
 /* Information that need to be kept for each board. */
 struct net_local {
 	struct enet_statistics stats;
+	spinlock_t lock;
 	unsigned char mc_filter[8];
 	uint jumpered:1;			/* Set iff the board has jumper config. */
 	uint tx_started:1;			/* Packets are on the Tx queue. */
@@ -148,6 +149,10 @@ struct net_local {
 #define	SAPROM			20		/* The station address PROM, if no EEPROM. */
 #define RESET			31		/* Write to reset some parts of the chip. */
 #define AT1700_IO_EXTENT	32
+
+#define TX_TIMEOUT		10
+
+
 /* Index to functions, as function prototypes. */
 
 extern int at1700_probe(struct net_device *dev);
@@ -161,6 +166,7 @@ static void net_rx(struct net_device *dev);
 static int net_close(struct net_device *dev);
 static struct enet_statistics *net_get_stats(struct net_device *dev);
 static void set_rx_mode(struct net_device *dev);
+static void net_tx_timeout (struct net_device *dev);
 
 
 #ifdef CONFIG_MCA
@@ -228,6 +234,7 @@ int at1700_probe1(struct net_device *dev, int ioaddr)
 	char at1700_irqmap[8] = {3, 4, 5, 9, 10, 11, 14, 15};
 	unsigned int i, irq, is_fmv18x = 0, is_at1700 = 0;
 	int slot;
+	struct net_local *lp;
 	
 		/* Resetting the chip doesn't reset the ISA interface, so don't bother.
 	   That means we have to be careful with the register values we probe for.
@@ -427,21 +434,23 @@ found:
 	dev->hard_start_xmit = net_send_packet;
 	dev->get_stats	= net_get_stats;
 	dev->set_multicast_list = &set_rx_mode;
+	dev->tx_timeout = net_tx_timeout;
+	dev->watchdog_timeo = TX_TIMEOUT;
+
+	lp = (struct net_local *)dev->priv;
+	lp->lock = SPIN_LOCK_UNLOCKED;
 
 	/* Fill in the fields of 'dev' with ethernet-generic values. */
 	ether_setup(dev);
 
-	{
-		struct net_local *lp = (struct net_local *)dev->priv;
-		lp->jumpered = is_fmv18x;
-		lp->mca_slot = slot;
-		/* Snarf the interrupt vector now. */
-		if (request_irq(irq, &net_interrupt, 0, dev->name, dev)) {
-			printk ("  AT1700 at %#3x is unusable due to a conflict on"
-					"IRQ %d.\n", ioaddr, irq);
-			lp->invalid_irq = 1;
-			return 0;
-		}
+	lp->jumpered = is_fmv18x;
+	lp->mca_slot = slot;
+	/* Snarf the interrupt vector now. */
+	if (request_irq(irq, &net_interrupt, 0, dev->name, dev)) {
+		printk ("  AT1700 at %#3x is unusable due to a conflict on"
+				"IRQ %d.\n", ioaddr, irq);
+		lp->invalid_irq = 1;
+		return 0;
 	}
 
 	return 0;
@@ -525,86 +534,81 @@ static int net_open(struct net_device *dev)
 		outb(0x80, ioaddr + IOCONFIG1);
 	}
 
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-	dev->start = 1;
+	netif_start_queue(dev);
 
 	MOD_INC_USE_COUNT;
 
 	return 0;
 }
 
-static int
-net_send_packet(struct sk_buff *skb, struct net_device *dev)
+static void net_tx_timeout (struct net_device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
 
-	if (dev->tbusy) {
-		/* If we get here, some higher level has decided we are broken.
-		   There should really be a "kick me" function call instead. */
-		int tickssofar = jiffies - dev->trans_start;
-		if (tickssofar < 10)
-			return 1;
-		printk("%s: transmit timed out with status %04x, %s?\n", dev->name,
-			   inw(ioaddr + STATUS), inb(ioaddr + TX_STATUS) & 0x80
-			   ? "IRQ conflict" : "network cable problem");
-		printk("%s: timeout registers: %04x %04x %04x %04x %04x %04x %04x %04x.\n",
-			   dev->name, inw(ioaddr + 0), inw(ioaddr + 2), inw(ioaddr + 4),
-			   inw(ioaddr + 6), inw(ioaddr + 8), inw(ioaddr + 10),
-			   inw(ioaddr + 12), inw(ioaddr + 14));
-		lp->stats.tx_errors++;
-		/* ToDo: We should try to restart the adaptor... */
-		outw(0xffff, ioaddr + 24);
-		outw(0xffff, ioaddr + TX_STATUS);
-		outw(0xe85a, ioaddr + CONFIG_0);
-		outw(0x8182, ioaddr + TX_INTR);
-		outb(0x00, ioaddr + TX_START);
-		outb(0x03, ioaddr + COL16CNTL);
-		dev->tbusy=0;
-		dev->trans_start = jiffies;
-		lp->tx_started = 0;
-		lp->tx_queue_ready = 1;
-		lp->rx_started = 0;
+	printk ("%s: transmit timed out with status %04x, %s?\n", dev->name,
+		inw (ioaddr + STATUS), inb (ioaddr + TX_STATUS) & 0x80
+		? "IRQ conflict" : "network cable problem");
+	printk ("%s: timeout registers: %04x %04x %04x %04x %04x %04x %04x %04x.\n",
+	 dev->name, inw (ioaddr + 0), inw (ioaddr + 2), inw (ioaddr + 4),
+		inw (ioaddr + 6), inw (ioaddr + 8), inw (ioaddr + 10),
+		inw (ioaddr + 12), inw (ioaddr + 14));
+	lp->stats.tx_errors++;
+	/* ToDo: We should try to restart the adaptor... */
+	outw (0xffff, ioaddr + 24);
+	outw (0xffff, ioaddr + TX_STATUS);
+	outw (0xe85a, ioaddr + CONFIG_0);
+	outw (0x8182, ioaddr + TX_INTR);
+	outb (0x00, ioaddr + TX_START);
+	outb (0x03, ioaddr + COL16CNTL);
+
+	dev->trans_start = jiffies;
+
+	lp->tx_started = 0;
+	lp->tx_queue_ready = 1;
+	lp->rx_started = 0;
+	lp->tx_queue = 0;
+	lp->tx_queue_len = 0;
+
+	netif_wake_queue(dev);
+}
+
+
+static int net_send_packet (struct sk_buff *skb, struct net_device *dev)
+{
+	struct net_local *lp = (struct net_local *) dev->priv;
+	int ioaddr = dev->base_addr;
+	short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
+	unsigned char *buf = skb->data;
+
+	netif_stop_queue (dev);
+
+	/* We may not start transmitting unless we finish transferring
+	   a packet into the Tx queue. During executing the following
+	   codes we possibly catch a Tx interrupt. Thus we flag off
+	   tx_queue_ready, so that we prevent the interrupt routine
+	   (net_interrupt) to start transmitting. */
+	lp->tx_queue_ready = 0;
+	{
+		outw (length, ioaddr + DATAPORT);
+		outsw (ioaddr + DATAPORT, buf, (length + 1) >> 1);
+
+		lp->tx_queue++;
+		lp->tx_queue_len += length + 2;
+	}
+	lp->tx_queue_ready = 1;
+
+	if (lp->tx_started == 0) {
+		/* If the Tx is idle, always trigger a transmit. */
+		outb (0x80 | lp->tx_queue, ioaddr + TX_START);
 		lp->tx_queue = 0;
 		lp->tx_queue_len = 0;
-	}
-
-	/* Block a timer-based transmit from overlapping.  This could better be
-	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */
-	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0)
-		printk("%s: Transmitter access conflict.\n", dev->name);
-	else {
-		short length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
-		unsigned char *buf = skb->data;
-
-		/* We may not start transmitting unless we finish transferring
-		   a packet into the Tx queue. During executing the following
-		   codes we possibly catch a Tx interrupt. Thus we flag off
-		   tx_queue_ready, so that we prevent the interrupt routine
-		   (net_interrupt) to start transmitting. */
-		lp->tx_queue_ready = 0;
-		{
-			outw(length, ioaddr + DATAPORT);
-			outsw(ioaddr + DATAPORT, buf, (length + 1) >> 1);
-
-			lp->tx_queue++;
-			lp->tx_queue_len += length + 2;
-		}
-		lp->tx_queue_ready = 1;
-
-		if (lp->tx_started == 0) {
-			/* If the Tx is idle, always trigger a transmit. */
-			outb(0x80 | lp->tx_queue, ioaddr + TX_START);
-			lp->tx_queue = 0;
-			lp->tx_queue_len = 0;
-			dev->trans_start = jiffies;
-			lp->tx_started = 1;
-			dev->tbusy = 0;
-		} else if (lp->tx_queue_len < 4096 - 1502)
-			/* Yes, there is room for one more packet. */
-			dev->tbusy = 0;
-	}
+		dev->trans_start = jiffies;
+		lp->tx_started = 1;
+		netif_start_queue (dev);
+	} else if (lp->tx_queue_len < 4096 - 1502)
+		/* Yes, there is room for one more packet. */
+		netif_start_queue (dev);
 	dev_kfree_skb (skb);
 
 	return 0;
@@ -623,10 +627,12 @@ net_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		printk ("at1700_interrupt(): irq %d for unknown device.\n", irq);
 		return;
 	}
-	dev->interrupt = 1;
 
 	ioaddr = dev->base_addr;
 	lp = (struct net_local *)dev->priv;
+	
+	spin_lock (&lp->lock);
+	
 	status = inw(ioaddr + TX_STATUS);
 	outw(status, ioaddr + TX_STATUS);
 
@@ -665,17 +671,15 @@ net_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 				lp->tx_queue = 0;
 				lp->tx_queue_len = 0;
 				dev->trans_start = jiffies;
-				dev->tbusy = 0;
-				mark_bh(NET_BH);	/* Inform upper layers. */
+				netif_wake_queue (dev);
 			} else {
 				lp->tx_started = 0;
-				dev->tbusy = 0;
-				mark_bh(NET_BH);	/* Inform upper layers. */
+				netif_wake_queue (dev);
 			}
 		}
 	}
 
-	dev->interrupt = 0;
+	spin_unlock (&lp->lock);
 	return;
 }
 
@@ -767,8 +771,7 @@ static int net_close(struct net_device *dev)
 	struct net_local *lp = (struct net_local *)dev->priv;
 	int ioaddr = dev->base_addr;
 
-	dev->tbusy = 1;
-	dev->start = 0;
+	netif_stop_queue(dev);
 
 	/* Set configuration register 0 to disable Tx and Rx. */
 	outb(0xda, ioaddr + CONFIG_0);

@@ -1,4 +1,4 @@
-/* $Id: pcikbd.c,v 1.43 2000/02/09 22:33:25 davem Exp $
+/* $Id: pcikbd.c,v 1.44 2000/02/11 04:49:13 davem Exp $
  * pcikbd.c: Ultra/AX PC keyboard support.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -1024,9 +1024,6 @@ int __init ps2kbd_probe(void)
 		goto found;
 	}
 #endif
-	if (!pci_present())
-		goto do_enodev;
-
 	/*
 	 * Get the nodes for keyboard and mouse from aliases on normal systems.
 	 */

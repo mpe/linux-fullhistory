@@ -3,7 +3,7 @@
 /*
  *	hdlcdrv.c  -- HDLC packet radio network driver.
  *
- *	Copyright (C) 1996-1999  Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *	Copyright (C) 1996-2000  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -366,20 +366,16 @@ void hdlcdrv_transmitter(struct net_device *dev, struct hdlcdrv_state *s)
 				clear_bit(0, &s->hdlctx.in_hdlc_tx);
 				return;
 			}
-			if (!(skb = skb_dequeue(&s->send_queue))) {
-				int flgs = tenms_to_2flags
-					(s, s->ch_params.tx_tail);
+			if (!(skb = s->skb)) {
+				int flgs = tenms_to_2flags(s, s->ch_params.tx_tail);
 				if (flgs < 2)
 					flgs = 2;
 				s->hdlctx.tx_state = 1;
 				s->hdlctx.numflags = flgs;
 				break;
 			}
-			if (skb->data[0] != 0) {
-				do_kiss_params(s, skb->data, skb->len);
-				dev_kfree_skb(skb);
-				break;
-			}
+			s->skb = NULL;
+			netif_wake_queue(dev);
 			pkt_len = skb->len-1; /* strip KISS byte */
 			if (pkt_len >= HDLCDRV_MAXFLEN || pkt_len < 2) {
 				s->hdlctx.tx_state = 0;
@@ -454,8 +450,7 @@ static inline unsigned short random_num(void)
 
 void hdlcdrv_arbitrate(struct net_device *dev, struct hdlcdrv_state *s)
 {
-	if (!s || s->magic != HDLCDRV_MAGIC || s->hdlctx.ptt || 
-	    skb_queue_empty(&s->send_queue)) 
+	if (!s || s->magic != HDLCDRV_MAGIC || s->hdlctx.ptt || !s->skb) 
 		return;
 	if (s->ch_params.fulldup) {
 		start_tx(dev, s);
@@ -499,8 +494,15 @@ static int hdlcdrv_send_packet(struct sk_buff *skb, struct net_device *dev)
 	if (hdlcdrv_paranoia_check(dev, "hdlcdrv_send_packet"))
 		return 0;
 	sm = (struct hdlcdrv_state *)dev->priv;
-	skb_queue_tail(&sm->send_queue, skb);
-	dev->trans_start = jiffies;	
+	if (skb->data[0] != 0) {
+		do_kiss_params(sm, skb->data, skb->len);
+		dev_kfree_skb(skb);
+		return 0;
+	}
+	if (sm->skb)
+		return -1;
+	netif_stop_queue(dev);
+	sm->skb = skb;
 	return 0;
 }
 
@@ -550,12 +552,9 @@ static int hdlcdrv_open(struct net_device *dev)
 		return -EINVAL;
 	s = (struct hdlcdrv_state *)dev->priv;
 
-	if (dev->start)
-		return 0;
 	if (!s->ops || !s->ops->open)
 		return -ENODEV;
 
-	dev->start = 1;
 	/*
 	 * initialise some variables
 	 */
@@ -573,14 +572,9 @@ static int hdlcdrv_open(struct net_device *dev)
 	s->hdlctx.calibrate = 0;
 
 	i = s->ops->open(dev);
-	if (i) {
-		dev->start = 0;
+	if (i)
 		return i;
-	}
-
-	dev->tbusy = 0;
-	dev->interrupt = 0;
-
+	netif_start_queue(dev);
 	return 0;
 }
 
@@ -592,23 +586,17 @@ static int hdlcdrv_open(struct net_device *dev)
 static int hdlcdrv_close(struct net_device *dev)
 {
 	struct hdlcdrv_state *s;
-	struct sk_buff *skb;
 	int i = 0;
 
 	if (hdlcdrv_paranoia_check(dev, "hdlcdrv_close"))
 		return -EINVAL;
 	s = (struct hdlcdrv_state *)dev->priv;
 
-	if (!dev->start)
-		return 0;
-	dev->start = 0;
-	dev->tbusy = 1;
-
 	if (s->ops && s->ops->close)
 		i = s->ops->close(dev);
-        /* Free any buffers left in the hardware transmit queue */
-        while ((skb = skb_dequeue(&s->send_queue)))
-			dev_kfree_skb(skb);
+	if (s->skb)
+		dev_kfree_skb(s->skb);
+	s->skb = NULL;
 	return i;
 }
 
@@ -667,7 +655,7 @@ static int hdlcdrv_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		break;
 
 	case HDLCDRVCTL_SETMODEMPAR:
-		if ((!suser()) || dev->start)
+		if ((!suser()) || test_bit(LINK_STATE_START, &dev->state))
 			return -EACCES;
 		dev->base_addr = bi.data.mp.iobase;
 		dev->irq = bi.data.mp.irq;
@@ -804,7 +792,7 @@ static int hdlcdrv_probe(struct net_device *dev)
 
 	dev_init_buffers(dev);
 
-	skb_queue_head_init(&s->send_queue);
+	s->skb = NULL;
 	
 #if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 	dev->hard_header = ax25_encapsulate;
@@ -857,8 +845,6 @@ int hdlcdrv_register_hdlcdrv(struct net_device *dev, const struct hdlcdrv_ops *o
 	dev->name = s->ifname;
 	dev->if_port = 0;
 	dev->init = hdlcdrv_probe;
-	dev->start = 0;
-	dev->tbusy = 1;
 	dev->base_addr = baseaddr;
 	dev->irq = irq;
 	dev->dma = dma;
@@ -884,7 +870,7 @@ int hdlcdrv_unregister_hdlcdrv(struct net_device *dev)
 		return -EINVAL;
 	if (s->magic != HDLCDRV_MAGIC)
 		return -EINVAL;
-	if (dev->start && s->ops->close)
+	if (s->ops->close)
 		s->ops->close(dev);
 	unregister_netdev(dev);
 	kfree(s);

@@ -1139,7 +1139,7 @@ pcnet32_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
 		/* We must free the original skb */
 		if (lp->tx_skbuff[entry]) {
-		    dev_kfree_skb(lp->tx_skbuff[entry]);
+		    dev_kfree_skb_irq(lp->tx_skbuff[entry]);
 		    lp->tx_skbuff[entry] = 0;
 		}
 		dirty_tx++;

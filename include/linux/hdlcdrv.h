@@ -250,7 +250,8 @@ struct hdlcdrv_state {
 #endif
 	int ptt_keyed;
 
-	struct sk_buff_head send_queue;  /* Packets awaiting transmission */
+	/* queued skb for transmission */
+	struct sk_buff *skb;
 };
 
 

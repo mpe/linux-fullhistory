@@ -457,12 +457,11 @@ DECLARE_WAIT_QUEUE_HEAD(kswapd_wait);
  * The background pageout daemon, started as a kernel thread
  * from the init process. 
  *
- * This basically executes once a second, trickling out pages
- * so that we have _some_ free memory available even if there
- * is no other activity that frees anything up. This is needed
- * for things like routing etc, where we otherwise might have
- * all activity going on in asynchronous contexts that cannot
- * page things out.
+ * This basically trickles out pages so that we have _some_
+ * free memory available even if there is no other activity
+ * that frees anything up. This is needed for things like routing
+ * etc, where we otherwise might have all activity going on in
+ * asynchronous contexts that cannot page things out.
  *
  * If there are applications that are active memory-allocators
  * (most normal use), this basically shouldn't matter.
@@ -479,7 +478,7 @@ int kswapd(void *unused)
 	/*
 	 * Tell the memory management that we're a "memory allocator",
 	 * and that if we need more memory we should get access to it
-	 * regardless (see "__get_free_pages()"). "kswapd" should
+	 * regardless (see "__alloc_pages()"). "kswapd" should
 	 * never get caught in the normal page freeing logic.
 	 *
 	 * (Kswapd normally doesn't need memory anyway, but sometimes
@@ -492,9 +491,6 @@ int kswapd(void *unused)
 
 	while (1) {
 		/*
-		 * Wake up once a second to see if we need to make
-		 * more memory available.
-		 *
 		 * If we actually get into a low-memory situation,
 		 * the processes needing more memory will wake us
 		 * up on a more timely basis.

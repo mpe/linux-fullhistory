@@ -16,6 +16,18 @@ int numnodes = 1;	/* Initialized for UMA platforms */
 static bootmem_data_t contig_bootmem_data;
 pg_data_t contig_page_data = { bdata: &contig_bootmem_data };
 
+/*
+ * This is meant to be invoked by platforms whose physical memory starts
+ * at a considerably higher value than 0. Examples are Super-H, ARM, m68k.
+ * Should be invoked with paramters (0, 0, unsigned long *[], start_paddr).
+ */
+void __init free_area_init_node(int nid, pg_data_t *pgdat, 
+		unsigned long *zones_size, unsigned long zone_start_paddr)
+{
+	free_area_init_core(0, NODE_DATA(0), &mem_map, zones_size, 
+							zone_start_paddr);
+}
+
 #endif /* !CONFIG_DISCONTIGMEM */
 
 struct page * alloc_pages_node(int nid, int gfp_mask, unsigned long order)
@@ -28,10 +40,6 @@ struct page * alloc_pages_node(int nid, int gfp_mask, unsigned long order)
 #define LONG_ALIGN(x) (((x)+(sizeof(long))-1)&~((sizeof(long))-1))
 
 static spinlock_t node_lock = SPIN_LOCK_UNLOCKED;
-
-extern void show_free_areas_core(int);
-extern void __init free_area_init_core(int nid, pg_data_t *pgdat, 
-	struct page **gmap, unsigned int *zones_size, unsigned long paddr);
 
 void show_free_areas_node(int nid)
 {
@@ -47,7 +55,7 @@ void show_free_areas_node(int nid)
  * Nodes can be initialized parallely, in no particular order.
  */
 void __init free_area_init_node(int nid, pg_data_t *pgdat, 
-		unsigned int *zones_size, unsigned long zone_start_paddr)
+		unsigned long *zones_size, unsigned long zone_start_paddr)
 {
 	int i, size = 0;
 	struct page *discard;
@@ -56,6 +64,7 @@ void __init free_area_init_node(int nid, pg_data_t *pgdat,
 		mem_map = (mem_map_t *)PAGE_OFFSET;
 
 	free_area_init_core(nid, pgdat, &discard, zones_size, zone_start_paddr);
+	pgdat->node_id = nid;
 
 	/*
 	 * Get space for the valid bitmap.

@@ -396,7 +396,7 @@ extern int check_pgt_cache(void);
 extern void paging_init(void);
 extern void free_area_init(unsigned long * zones_size);
 extern void free_area_init_node(int nid, pg_data_t *pgdat, 
-		unsigned int * zones_size, unsigned long zone_start_paddr);
+		unsigned long * zones_size, unsigned long zone_start_paddr);
 extern void mem_init(void);
 extern void show_mem(void);
 extern void oom(struct task_struct * tsk);
@@ -453,14 +453,13 @@ extern struct page *filemap_nopage(struct vm_area_struct * area,
 #define __GFP_WAIT	0x01
 #define __GFP_HIGH	0x02
 #define __GFP_IO	0x04
-#define __GFP_SWAP	0x08
+#define __GFP_DMA	0x08
 #ifdef CONFIG_HIGHMEM
 #define __GFP_HIGHMEM	0x10
 #else
 #define __GFP_HIGHMEM	0x0 /* noop */
 #endif
 
-#define __GFP_DMA	0x20
 
 #define GFP_BUFFER	(__GFP_HIGH | __GFP_WAIT)
 #define GFP_ATOMIC	(__GFP_HIGH)
@@ -468,7 +467,7 @@ extern struct page *filemap_nopage(struct vm_area_struct * area,
 #define GFP_HIGHUSER	(GFP_USER | __GFP_HIGHMEM)
 #define GFP_KERNEL	(__GFP_HIGH | __GFP_WAIT | __GFP_IO)
 #define GFP_NFS		(__GFP_HIGH | __GFP_WAIT | __GFP_IO)
-#define GFP_KSWAPD	(__GFP_IO | __GFP_SWAP)
+#define GFP_KSWAPD	(__GFP_IO)
 
 /* Flag - indicates that the buffer will be suitable for DMA.  Ignored on some
    platforms, used as appropriate on others */

@@ -98,6 +98,10 @@ static unsigned int sock_poll(struct file *file,
 static int sock_ioctl(struct inode *inode, struct file *file,
 		      unsigned int cmd, unsigned long arg);
 static int sock_fasync(int fd, struct file *filp, int on);
+static ssize_t sock_readv(struct file *file, const struct iovec *vector,
+			  unsigned long count, loff_t *ppos);
+static ssize_t sock_writev(struct file *file, const struct iovec *vector,
+			  unsigned long count, loff_t *ppos);
 
 
 /*
@@ -114,7 +118,9 @@ static struct file_operations socket_file_ops = {
 	mmap:		sock_mmap,
 	open:		sock_no_open,	/* special open code to disallow open via /proc */
 	release:	sock_close,
-	fasync:		sock_fasync
+	fasync:		sock_fasync,
+	readv:		sock_readv,
+	writev:		sock_writev
 };
 
 /*
@@ -512,6 +518,27 @@ int sock_readv_writev(int type, struct inode * inode, struct file * file,
 	return sock_sendmsg(sock, &msg, size);
 }
 
+static ssize_t sock_readv(struct file *file, const struct iovec *vector,
+			  unsigned long count, loff_t *ppos)
+{
+	size_t tot_len = 0;
+	int i;
+        for (i = 0 ; i < count ; i++)
+                tot_len += vector[i].iov_len;
+	return sock_readv_writev(VERIFY_WRITE, file->f_dentry->d_inode,
+				 file, vector, count, tot_len);
+}
+	
+static ssize_t sock_writev(struct file *file, const struct iovec *vector,
+			   unsigned long count, loff_t *ppos)
+{
+	size_t tot_len = 0;
+	int i;
+        for (i = 0 ; i < count ; i++)
+                tot_len += vector[i].iov_len;
+	return sock_readv_writev(VERIFY_READ, file->f_dentry->d_inode,
+				 file, vector, count, tot_len);
+}
 
 /*
  *	With an ioctl arg may well be a user mode pointer, but we don't know what to do

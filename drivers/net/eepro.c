@@ -987,7 +987,7 @@ static void eepro_tx_timeout (struct net_device *dev)
 	lp->tx_last = 0;
 
 	dev->trans_start = jiffies;
-	netif_start_queue (dev);
+	netif_wake_queue (dev);
 
 	outb (RCV_ENABLE_CMD, ioaddr);
 }
@@ -1001,6 +1001,8 @@ static int eepro_send_packet(struct sk_buff *skb, struct net_device *dev)
 	if (net_debug > 5)
 		printk(KERN_DEBUG  "%s: entering eepro_send_packet routine.\n", dev->name);
 	
+	netif_stop_queue (dev);
+
 	spin_lock_irqsave(&lp->lock, flags);
 
 	{
@@ -1014,7 +1016,7 @@ static int eepro_send_packet(struct sk_buff *skb, struct net_device *dev)
 
 	}
 
-	compat_dev_kfree_skb (skb, FREE_WRITE);
+	dev_kfree_skb (skb);
 
 	/* You might need to clean up and record Tx statistics here. */
 	/* lp->stats.tx_aborted_errors++; */
@@ -1408,7 +1410,7 @@ hardware_send_packet(struct net_device *dev, void *buf, short length)
 		lp->tx_end = end;
 
 		if (test_bit(LINK_STATE_XOFF, &dev->flags))
-			netif_start_queue(dev);
+			netif_wake_queue(dev);
 		
 		/* Enable RX and TX interrupts */
 		outb(ALL_MASK & ~(RX_MASK | TX_MASK), ioaddr + INT_MASK_REG);

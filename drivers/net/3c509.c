@@ -412,6 +412,9 @@ no_pnp:
 		}
 	}
 
+	if (!request_region(ioaddr, EL3_IO_EXTENT, "3c509"))
+		return -EBUSY;
+
 	/* Set the adaptor tag so that the next card can be found. */
 	outb(0xd0 + ++current_tag, id_port);
 
@@ -419,21 +422,25 @@ no_pnp:
 	outb((ioaddr >> 4) | 0xe0, id_port);
 
 	EL3WINDOW(0);
-	if (inw(ioaddr) != 0x6d50)
+	if (inw(ioaddr) != 0x6d50) {
+		release_region(ioaddr, EL3_IO_EXTENT);
 		return -ENODEV;
+	}
 
 	/* Free the interrupt so that some other card can use it. */
 	outw(0x0f00, ioaddr + WN0_IRQ);
  found:
 	if (dev == NULL) {
 		dev = init_etherdev(dev, sizeof(struct el3_private));
+		if (dev == NULL) {
+			release_region(ioaddr, EL3_IO_EXTENT);
+			return -ENOMEM;
+		}
 	}
 	memcpy(dev->dev_addr, phys_addr, sizeof(phys_addr));
 	dev->base_addr = ioaddr;
 	dev->irq = irq;
 	dev->if_port = (dev->mem_start & 0x1f) ? dev->mem_start & 3 : if_port;
-
-	request_region(dev->base_addr, EL3_IO_EXTENT, "3c509");
 
 	{
 		const char *if_names[] = {"10baseT", "AUI", "undefined", "BNC"};
@@ -599,7 +606,7 @@ el3_tx_timeout (struct net_device *dev)
 	/* Issue TX_RESET and TX_START commands. */
 	outw(TxReset, ioaddr + EL3_CMD);
 	outw(TxEnable, ioaddr + EL3_CMD);
-	netif_start_queue(dev);
+	netif_wake_queue(dev);
 }
 
 
@@ -609,6 +616,8 @@ el3_start_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct el3_private *lp = (struct el3_private *)dev->priv;
 	int ioaddr = dev->base_addr;
 	unsigned long flags;
+
+	netif_stop_queue (dev);
 
 	lp->stats.tx_bytes += skb->len;
 	

@@ -170,12 +170,14 @@ static ssize_t do_readv_writev(int type, struct file *file,
 			       unsigned long count)
 {
 	typedef ssize_t (*io_fn_t)(struct file *, char *, size_t, loff_t *);
+	typedef ssize_t (*iov_fn_t)(struct file *, const struct iovec *, unsigned long, loff_t *);
 
 	size_t tot_len;
 	struct iovec iovstack[UIO_FASTIOV];
 	struct iovec *iov=iovstack;
 	ssize_t ret, i;
 	io_fn_t fn;
+	iov_fn_t fnv;
 	struct inode *inode;
 
 	/*
@@ -187,6 +189,8 @@ static ssize_t do_readv_writev(int type, struct file *file,
 		goto out_nofree;
 	ret = -EINVAL;
 	if (count > UIO_MAXIOV)
+		goto out_nofree;
+	if (!file->f_op)
 		goto out_nofree;
 	if (count > UIO_FASTIOV) {
 		ret = -ENOMEM;
@@ -209,24 +213,15 @@ static ssize_t do_readv_writev(int type, struct file *file,
 				inode, file, file->f_pos, tot_len);
 	if (ret) goto out;
 
-	/*
-	 * Then do the actual IO.  Note that sockets need to be handled
-	 * specially as they have atomicity guarantees and can handle
-	 * iovec's natively
-	 */
-	if (inode->i_sock) {
-		ret = sock_readv_writev(type,inode,file,iov,count,tot_len);
+	fnv = (type == VERIFY_WRITE ? file->f_op->readv : file->f_op->writev);
+	if (fnv) {
+		ret = fnv(file, iov, count, &file->f_pos);
 		goto out;
 	}
 
-	ret = -EINVAL;
-	if (!file->f_op)
-		goto out;
-
 	/* VERIFY_WRITE actually means a read, as we write to user space */
-	fn = file->f_op->read;
-	if (type == VERIFY_READ)
-		fn = (io_fn_t) file->f_op->write;		
+	fn = (type == VERIFY_WRITE ? file->f_op->read :
+	      (io_fn_t) file->f_op->write);
 
 	ret = 0;
 	vector = iov;
@@ -269,7 +264,8 @@ asmlinkage ssize_t sys_readv(unsigned long fd, const struct iovec * vector,
 	file = fget(fd);
 	if (!file)
 		goto bad_file;
-	if (file->f_op && file->f_op->read && (file->f_mode & FMODE_READ))
+	if (file->f_op && (file->f_mode & FMODE_READ) &&
+	    (file->f_op->readv || file->f_op->read))
 		ret = do_readv_writev(VERIFY_WRITE, file, vector, count);
 	fput(file);
 
@@ -288,7 +284,8 @@ asmlinkage ssize_t sys_writev(unsigned long fd, const struct iovec * vector,
 	file = fget(fd);
 	if (!file)
 		goto bad_file;
-	if (file->f_op && file->f_op->write && (file->f_mode & FMODE_WRITE))
+	if (file->f_op && (file->f_mode & FMODE_WRITE) &&
+	    (file->f_op->writev || file->f_op->write))
 		ret = do_readv_writev(VERIFY_READ, file, vector, count);
 	fput(file);
 

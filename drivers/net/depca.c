@@ -270,6 +270,8 @@ static int depca_debug = 1;
 
 #define DEPCA_NDA 0xffe0            /* No Device Address */
 
+#define TX_TIMEOUT (1*HZ)
+
 /*
 ** Ethernet PROM defines
 */
@@ -387,6 +389,7 @@ struct depca_private {
     int	rx_new, tx_new;		   /* The next free ring entry               */
     int rx_old, tx_old;	           /* The ring entries to be free()ed.       */
     struct net_device_stats stats;
+    spinlock_t lock;
     struct {                       /* Private stats counters                 */
 	u32 bins[DEPCA_PKT_STAT_SZ];
 	u32 unicast;
@@ -421,6 +424,7 @@ static int    depca_start_xmit(struct sk_buff *skb, struct net_device *dev);
 static void   depca_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static int    depca_close(struct net_device *dev);
 static int    depca_ioctl(struct net_device *dev, struct ifreq *rq, int cmd);
+static void   depca_tx_timeout (struct net_device *dev);
 static struct net_device_stats *depca_get_stats(struct net_device *dev);
 static void   set_multicast_list(struct net_device *dev);
 
@@ -584,6 +588,7 @@ depca_hw_init(struct net_device *dev, u_long ioaddr, int mca_slot)
 	  memset((char *)dev->priv, 0, sizeof(struct depca_private));
 	  lp->adapter = adapter;
 	  lp->mca_slot = mca_slot;
+	  lp->lock = SPIN_LOCK_UNLOCKED;
  	  sprintf(lp->adapter_name,"%s (%s)", name, dev->name);
 	  request_region(ioaddr, DEPCA_TOTAL_SIZE, lp->adapter_name);
 
@@ -703,6 +708,8 @@ depca_hw_init(struct net_device *dev, u_long ioaddr, int mca_slot)
       dev->get_stats = &depca_get_stats;
       dev->set_multicast_list = &set_multicast_list;
       dev->do_ioctl = &depca_ioctl;
+      dev->tx_timeout = depca_tx_timeout;
+      dev->watchdog_timeo = TX_TIMEOUT;
 
       dev->mem_start = 0;
 	
@@ -755,9 +762,7 @@ depca_open(struct net_device *dev)
     outb(nicsr, DEPCA_NICSR);
     outw(CSR0,DEPCA_ADDR);
     
-    dev->tbusy = 0;                         
-    dev->interrupt = 0;
-    dev->start = 1;
+    netif_start_queue(dev);
     
     status = InitRestartDepca(dev);
 
@@ -781,7 +786,7 @@ depca_init_ring(struct net_device *dev)
   u_long p;
 
   /* Lock out other processes whilst setting up the hardware */
-  test_and_set_bit(0, (void *)&dev->tbusy);
+  netif_stop_queue(dev);
 
   lp->rx_new = lp->tx_new = 0;
   lp->rx_old = lp->tx_old = 0;
@@ -809,121 +814,108 @@ depca_init_ring(struct net_device *dev)
   }
 
   lp->init_block.mode = 0x0000;            /* Enable the Tx and Rx */
-
-  return;
 }
+
+
+static void depca_tx_timeout (struct net_device *dev)
+{
+	u_long ioaddr = dev->base_addr;
+
+	printk ("%s: transmit timed out, status %04x, resetting.\n",
+		dev->name, inw (DEPCA_DATA));
+
+	STOP_DEPCA;
+	depca_init_ring (dev);
+	LoadCSRs (dev);
+	dev->trans_start = jiffies;
+	netif_wake_queue (dev);
+	InitRestartDepca (dev);
+}
+
 
 /* 
 ** Writes a socket buffer to TX descriptor ring and starts transmission 
 */
-static int
-depca_start_xmit(struct sk_buff *skb, struct net_device *dev)
+static int depca_start_xmit (struct sk_buff *skb, struct net_device *dev)
 {
-  struct depca_private *lp = (struct depca_private *)dev->priv;
-  u_long ioaddr = dev->base_addr;
-  int status = 0;
+	struct depca_private *lp = (struct depca_private *) dev->priv;
+	u_long ioaddr = dev->base_addr;
+	int status = 0;
 
-  /* Transmitter timeout, serious problems. */
-  if (dev->tbusy) {
-    int tickssofar = jiffies - dev->trans_start;
-    if (tickssofar < 1*HZ) {
-      status = -1;
-    } else {
-      printk("%s: transmit timed out, status %04x, resetting.\n",
-	     dev->name, inw(DEPCA_DATA));
-	
-      STOP_DEPCA;
-      depca_init_ring(dev);
-      LoadCSRs(dev);
-      dev->interrupt = UNMASK_INTERRUPTS;
-      dev->start = 1;
-      dev->tbusy=0;
-      dev->trans_start = jiffies;
-      InitRestartDepca(dev);
-    }
-    return status;
-  } else if (skb->len > 0) {
-    /* Enforce 1 process per h/w access */
-    if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
-      printk("%s: Transmitter access conflict.\n", dev->name);
-      status = -1;
-    } else {
-      if (TX_BUFFS_AVAIL) {                    /* Fill in a Tx ring entry */
-	status = load_packet(dev, skb);
+	/* Transmitter timeout, serious problems. */
+	if (skb->len < 1)
+		goto out;
 
-	if (!status) {
-	  /* Trigger an immediate send demand. */
-	  outw(CSR0, DEPCA_ADDR);
-	  outw(INEA | TDMD, DEPCA_DATA);
-	  
-	  dev->trans_start = jiffies;
-	  dev_kfree_skb(skb);
-	}
-	if (TX_BUFFS_AVAIL) {
-	  dev->tbusy=0;
-	}  
-      } else {
-	status = -1;
-      }
-    }
-  }
-  
-  return status;
+	netif_stop_queue (dev);
+
+	if (TX_BUFFS_AVAIL) {	/* Fill in a Tx ring entry */
+		status = load_packet (dev, skb);
+
+		if (!status) {
+			/* Trigger an immediate send demand. */
+			outw (CSR0, DEPCA_ADDR);
+			outw (INEA | TDMD, DEPCA_DATA);
+
+			dev->trans_start = jiffies;
+			dev_kfree_skb (skb);
+		}
+		if (TX_BUFFS_AVAIL)
+			netif_start_queue (dev);
+	} else
+		status = -1;
+
+out:
+	return status;
 }
 
 /*
 ** The DEPCA interrupt handler. 
 */
-static void
-depca_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+static void depca_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 {
-  struct net_device *dev = dev_id;
-  struct depca_private *lp;
-  s16 csr0, nicsr;
-  u_long ioaddr;
+	struct net_device *dev = dev_id;
+	struct depca_private *lp;
+	s16 csr0, nicsr;
+	u_long ioaddr;
 
-  if (dev == NULL) {
-    printk ("depca_interrupt(): irq %d for unknown device.\n", irq);
-  } else {
-    lp = (struct depca_private *)dev->priv;
-    ioaddr = dev->base_addr;
-    
-    if (dev->interrupt)
-      printk("%s: Re-entering the interrupt handler.\n", dev->name);
+	if (dev == NULL) {
+		printk ("depca_interrupt(): irq %d for unknown device.\n", irq);
+		return;
+	}
 
-    dev->interrupt = MASK_INTERRUPTS;
+	lp = (struct depca_private *) dev->priv;
+	ioaddr = dev->base_addr;
 
-    /* mask the DEPCA board interrupts and turn on the LED */
-    nicsr = inb(DEPCA_NICSR);
-    nicsr |= (IM|LED);
-    outb(nicsr, DEPCA_NICSR);
+	spin_lock (&lp->lock);
 
-    outw(CSR0, DEPCA_ADDR);
-    csr0 = inw(DEPCA_DATA);
+	/* mask the DEPCA board interrupts and turn on the LED */
+	nicsr = inb (DEPCA_NICSR);
+	nicsr |= (IM | LED);
+	outb (nicsr, DEPCA_NICSR);
 
-    /* Acknowledge all of the current interrupt sources ASAP. */
-    outw(csr0 & INTE, DEPCA_DATA);
+	outw (CSR0, DEPCA_ADDR);
+	csr0 = inw (DEPCA_DATA);
 
-    if (csr0 & RINT)		       /* Rx interrupt (packet arrived) */
-      depca_rx(dev);
+	/* Acknowledge all of the current interrupt sources ASAP. */
+	outw (csr0 & INTE, DEPCA_DATA);
 
-    if (csr0 & TINT) 	               /* Tx interrupt (packet sent) */
-      depca_tx(dev);
+	if (csr0 & RINT)	/* Rx interrupt (packet arrived) */
+		depca_rx (dev);
 
-    if ((TX_BUFFS_AVAIL >= 0) && dev->tbusy) { /* any resources available? */
-      dev->tbusy = 0;                  /* clear TX busy flag */
-      mark_bh(NET_BH);
-    }
+	if (csr0 & TINT)	/* Tx interrupt (packet sent) */
+		depca_tx (dev);
 
-    /* Unmask the DEPCA board interrupts and turn off the LED */
-    nicsr = (nicsr & ~IM & ~LED);
-    outb(nicsr, DEPCA_NICSR);
+	if ((TX_BUFFS_AVAIL >= 0) && (test_bit (LINK_STATE_XOFF, &dev->flags))) {	/* any resources available? */
+		netif_wake_queue (dev);
 
-    dev->interrupt = UNMASK_INTERRUPTS;
-  }
+		/* Unmask the DEPCA board interrupts and turn off the LED */
+		nicsr = (nicsr & ~IM & ~LED);
+		outb (nicsr, DEPCA_NICSR);
+	}
 
-  return;
+	spin_unlock (&lp->lock);
 }
+
 
 static int
 depca_rx(struct net_device *dev)
@@ -1070,8 +1062,7 @@ depca_close(struct net_device *dev)
   s16 nicsr;
   u_long ioaddr = dev->base_addr;
 
-  dev->start = 0;
-  dev->tbusy = 1;
+  netif_stop_queue(dev);
 
   outw(CSR0, DEPCA_ADDR);
 
@@ -1173,8 +1164,7 @@ set_multicast_list(struct net_device *dev)
   u_long ioaddr = dev->base_addr;
   
   if (dev) {
-    while(dev->tbusy) barrier();      /* Stop ring access */
-    set_bit(0, (void*)&dev->tbusy);
+    netif_stop_queue(dev);
     while(lp->tx_old != lp->tx_new);  /* Wait for the ring to empty */
 
     STOP_DEPCA;                       /* Temporarily stop the depca.  */
@@ -1189,7 +1179,7 @@ set_multicast_list(struct net_device *dev)
 
     LoadCSRs(dev);                    /* Reload CSR3 */
     InitRestartDepca(dev);            /* Resume normal operation. */
-    dev->tbusy = 0;                   /* Unlock the TX ring */
+    netif_start_queue(dev);           /* Unlock the TX ring */
   }
 }
 
@@ -1909,21 +1899,19 @@ static int depca_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
     for (i=0; i<ETH_ALEN; i++) {
       dev->dev_addr[i] = tmp.addr[i];
     }
-    while(dev->tbusy) barrier();        /* Stop ring access */
-    test_and_set_bit(0, (void*)&dev->tbusy);
+    netif_stop_queue(dev);
     while(lp->tx_old != lp->tx_new);    /* Wait for the ring to empty */
 
     STOP_DEPCA;                         /* Temporarily stop the depca.  */
     depca_init_ring(dev);               /* Initialize the descriptor rings */
     LoadCSRs(dev);                      /* Reload CSR3 */
     InitRestartDepca(dev);              /* Resume normal operation. */
-    dev->tbusy = 0;                     /* Unlock the TX ring */
+    netif_start_queue(dev);             /* Unlock the TX ring */
     break;
 
   case DEPCA_SET_PROM:               /* Set Promiscuous Mode */
     if (!capable(CAP_NET_ADMIN)) return -EPERM;
-    while(dev->tbusy) barrier();        /* Stop ring access */
-    test_and_set_bit(0, (void*)&dev->tbusy);
+    netif_stop_queue(dev);
     while(lp->tx_old != lp->tx_new);    /* Wait for the ring to empty */
 
     STOP_DEPCA;                         /* Temporarily stop the depca.  */
@@ -1932,13 +1920,12 @@ static int depca_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 
     LoadCSRs(dev);                      /* Reload CSR3 */
     InitRestartDepca(dev);              /* Resume normal operation. */
-    dev->tbusy = 0;                     /* Unlock the TX ring */
+    netif_start_queue(dev);             /* Unlock the TX ring */
     break;
 
   case DEPCA_CLR_PROM:               /* Clear Promiscuous Mode */
     if (!capable(CAP_NET_ADMIN)) return -EPERM;
-    while(dev->tbusy) barrier();        /* Stop ring access */
-    test_and_set_bit(0, (void*)&dev->tbusy);
+    netif_stop_queue(dev);
     while(lp->tx_old != lp->tx_new);    /* Wait for the ring to empty */
 
     STOP_DEPCA;                         /* Temporarily stop the depca.  */
@@ -1947,7 +1934,7 @@ static int depca_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 
     LoadCSRs(dev);                      /* Reload CSR3 */
     InitRestartDepca(dev);              /* Resume normal operation. */
-    dev->tbusy = 0;                     /* Unlock the TX ring */
+    netif_start_queue(dev);             /* Unlock the TX ring */
     break;
 
   case DEPCA_SAY_BOO:                /* Say "Boo!" to the kernel log file */
