@@ -49,7 +49,7 @@ head-y				:= arch/ppc/kernel/head.o
 head-$(CONFIG_8xx)		:= arch/ppc/kernel/head_8xx.o
 head-$(CONFIG_4xx)		:= arch/ppc/kernel/head_4xx.o
 head-$(CONFIG_44x)		:= arch/ppc/kernel/head_44x.o
-head-$(CONFIG_E500)		:= arch/ppc/kernel/head_e500.o
+head-$(CONFIG_FSL_BOOKE)	:= arch/ppc/kernel/head_fsl_booke.o
 
 head-$(CONFIG_6xx)		+= arch/ppc/kernel/idle_6xx.o
 head-$(CONFIG_POWER4)		+= arch/ppc/kernel/idle_power4.o
