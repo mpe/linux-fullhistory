@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.161 1999/04/01 04:35:26 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.162 1999/04/24 00:27:16 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -2189,8 +2189,22 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 		}
 	}
 
+	/* The silly FIN test here is necessary to see an advancing ACK in
+	 * retransmitted FIN frames properly.  Consider the following sequence:
+	 *
+	 *	host1 --> host2		FIN XSEQ:XSEQ(0) ack YSEQ
+	 *	host2 --> host1		FIN YSEQ:YSEQ(0) ack XSEQ
+	 *	host1 --> host2		XSEQ:XSEQ(0) ack YSEQ+1
+	 *	host2 --> host1		FIN YSEQ:YSEQ(0) ack XSEQ+1	(fails tcp_sequence test)
+	 *
+	 * At this point the connection will deadlock with host1 believing
+	 * that his FIN is never ACK'd, and thus it will retransmit it's FIN
+	 * forever.  The following fix is from Taral (taral@taral.net).
+	 */
+
 	/* step 1: check sequence number */
-	if (!tcp_sequence(tp, TCP_SKB_CB(skb)->seq, TCP_SKB_CB(skb)->end_seq)) {
+	if (!tcp_sequence(tp, TCP_SKB_CB(skb)->seq, TCP_SKB_CB(skb)->end_seq) &&
+	    !(th->fin && TCP_SKB_CB(skb)->end_seq == tp->rcv_nxt)) {
 		if (!th->rst) {
 			tcp_send_ack(sk);
 			goto discard;

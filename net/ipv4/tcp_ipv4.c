@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.172 1999/04/22 10:07:36 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.173 1999/04/24 00:27:07 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -1358,7 +1358,14 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 		newtp->last_ack_sent = req->rcv_isn + 1;
 		newtp->backoff = 0;
 		newtp->mdev = TCP_TIMEOUT_INIT;
-		newtp->snd_cwnd = 1;
+
+		/* So many TCP implementations out there (incorrectly) count the
+		 * initial SYN frame in their delayed-ACK and congestion control
+		 * algorithms that we must have the following bandaid to talk
+		 * efficiently to them.  -DaveM
+		 */
+		newtp->snd_cwnd = 2;
+
 		newtp->rto = TCP_TIMEOUT_INIT;
 		newtp->packets_out = 0;
 		newtp->fackets_out = 0;
@@ -1839,10 +1846,16 @@ static int tcp_v4_init_sock(struct sock *sk)
 	tp->mdev = TCP_TIMEOUT_INIT;
 	tp->mss_clamp = ~0;
       
+	/* So many TCP implementations out there (incorrectly) count the
+	 * initial SYN frame in their delayed-ACK and congestion control
+	 * algorithms that we must have the following bandaid to talk
+	 * efficiently to them.  -DaveM
+	 */
+	tp->snd_cwnd = 2;
+
 	/* See draft-stevens-tcpca-spec-01 for discussion of the
 	 * initialization of these values.
 	 */
-	tp->snd_cwnd = 1;
 	tp->snd_cwnd_cnt = 0;
 	tp->snd_ssthresh = 0x7fffffff;	/* Infinity */
 

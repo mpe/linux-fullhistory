@@ -45,12 +45,7 @@ static int try_to_swap_out(struct task_struct * tsk, struct vm_area_struct* vma,
 	page = pte_page(pte);
 	if (MAP_NR(page) >= max_mapnr)
 		return 0;
-
 	page_map = mem_map + MAP_NR(page);
-	if (PageReserved(page_map)
-	    || PageLocked(page_map)
-	    || ((gfp_mask & __GFP_DMA) && !PageDMA(page_map)))
-		return 0;
 
 	if (pte_young(pte)) {
 		/*
@@ -61,6 +56,11 @@ static int try_to_swap_out(struct task_struct * tsk, struct vm_area_struct* vma,
 		set_bit(PG_referenced, &page_map->flags);
 		return 0;
 	}
+
+	if (PageReserved(page_map)
+	    || PageLocked(page_map)
+	    || ((gfp_mask & __GFP_DMA) && !PageDMA(page_map)))
+		return 0;
 
 	/*
 	 * Is the page already in the swap cache? If so, then
@@ -248,9 +248,8 @@ static int swap_out_vma(struct task_struct * tsk, struct vm_area_struct * vma,
 	pgd_t *pgdir;
 	unsigned long end;
 
-	/* Don't swap out areas like shared memory which have their
-	    own separate swapping mechanism or areas which are locked down */
-	if (vma->vm_flags & (VM_SHM | VM_LOCKED))
+	/* Don't swap out areas which are locked down */
+	if (vma->vm_flags & VM_LOCKED)
 		return 0;
 
 	pgdir = pgd_offset(tsk->mm, address);

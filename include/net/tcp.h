@@ -793,17 +793,22 @@ static __inline__ int tcp_snd_test(struct sock *sk, struct sk_buff *skb)
 	 *	c) We are retransmiting [Nagle]
 	 *	d) We have too many packets 'in flight'
 	 *
-	 * 	Don't use the nagle rule for urgent data.
+	 * 	Don't use the nagle rule for urgent data (or
+	 *	for the final FIN -DaveM).
 	 */
 	if ((sk->nonagle == 2 && (skb->len < tp->mss_cache)) ||
 	    (!sk->nonagle &&
 	     skb->len < (tp->mss_cache >> 1) &&
 	     tp->packets_out &&
-	     !(TCP_SKB_CB(skb)->flags & TCPCB_FLAG_URG)))
+	     !(TCP_SKB_CB(skb)->flags & (TCPCB_FLAG_URG|TCPCB_FLAG_FIN))))
 		nagle_check = 0;
 
+	/* Don't be strict about the congestion window for the
+	 * final FIN frame.  -DaveM
+	 */
 	return (nagle_check &&
-		(tcp_packets_in_flight(tp) < tp->snd_cwnd) &&
+		((tcp_packets_in_flight(tp) < tp->snd_cwnd) ||
+		 (TCP_SKB_CB(skb)->flags & TCPCB_FLAG_FIN)) &&
 		!after(TCP_SKB_CB(skb)->end_seq, tp->snd_una + tp->snd_wnd) &&
 		tp->retransmits == 0);
 }
