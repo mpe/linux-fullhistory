@@ -22,13 +22,12 @@
 #include <linux/sched.h>
 #include <linux/signal.h>
 #include <linux/errno.h>
+#include <linux/mouse.h>
 
 #include <asm/io.h>
 #include <asm/segment.h>
 #include <asm/system.h>
 #include <asm/irq.h>
-
-#include "mouse.h"
 
 #define ATIXL_MOUSE_IRQ		5 /* H/W interrupt # set up on ATIXL board */
 #define ATIXL_BUSMOUSE		3 /* Minor device # (mknod c 10 3 /dev/bm) */

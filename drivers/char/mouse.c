@@ -32,8 +32,6 @@
 #include <linux/major.h>
 #include <linux/malloc.h>
 
-#include "mouse.h"
-
 /*
  * Head entry for the doubly linked mouse list
  */

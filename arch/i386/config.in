@@ -226,13 +226,13 @@ if [ "$CONFIG_CD_NO_IDESCSI" = "y" ]; then
   tristate 'Sony CDU31A/CDU33A CDROM support' CONFIG_CDU31A n
   tristate 'Standard Mitsumi [no XA/Multisession] CDROM support' CONFIG_MCD n
   tristate 'Experimental Mitsumi [XA/MultiSession] support' CONFIG_MCDX n
-  tristate 'Matsushita/Panasonic CDROM support' CONFIG_SBPCD n
+  tristate 'Matsushita/Panasonic/Creative, Longshine, TEAC CDROM support' CONFIG_SBPCD n
   if [ "$CONFIG_SBPCD" = "y" ]; then
-    bool 'Matsushita/Panasonic second CDROM controller support' CONFIG_SBPCD2 n
+    bool 'Matsushita/Panasonic, ... second CDROM controller support' CONFIG_SBPCD2 n
     if [ "$CONFIG_SBPCD2" = "y" ]; then
-      bool 'Matsushita/Panasonic third CDROM controller support' CONFIG_SBPCD3 n
+      bool 'Matsushita/Panasonic, ... third CDROM controller support' CONFIG_SBPCD3 n
       if [ "$CONFIG_SBPCD3" = "y" ]; then
-        bool 'Matsushita/Panasonic fourth CDROM controller support' CONFIG_SBPCD4 n
+        bool 'Matsushita/Panasonic, ... fourth CDROM controller support' CONFIG_SBPCD4 n
       fi
     fi
   fi
@@ -266,6 +266,11 @@ tristate 'SMB filesystem (to mount WfW shares etc..) support' CONFIG_SMB_FS n
 comment 'character devices'
 
 bool 'Cyclades async mux support' CONFIG_CYCLADES n
+bool 'Stallion multiport serial support' CONFIG_STALDRV n
+if [ "$CONFIG_STALDRV" = "y" ]; then
+  tristate '  Stallion EasyIO or EC8/32 support' CONFIG_STALLION n
+  tristate '  Stallion EC8/64, ONboard, Brumby support' CONFIG_ISTALLION n
+fi
 tristate 'Parallel printer support' CONFIG_PRINTER n
 tristate 'Logitech busmouse support' CONFIG_BUSMOUSE n
 tristate 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE n

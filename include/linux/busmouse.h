@@ -95,7 +95,6 @@ struct mouse_status {
 };
 
 /* Function Prototypes */
-extern long mouse_init(long);
 
 #endif
 

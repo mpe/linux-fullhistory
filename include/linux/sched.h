@@ -127,12 +127,6 @@ struct mm_struct {
 	unsigned long start_brk, brk, start_stack, start_mmap;
 	unsigned long arg_start, arg_end, env_start, env_end;
 	unsigned long rss;
-	unsigned long min_flt, maj_flt, cmin_flt, cmaj_flt;
-	int swappable:1;
-	unsigned long swap_address;
-	unsigned long old_maj_flt;	/* old value of maj_flt */
-	unsigned long dec_flt;		/* page fault count of the last time */
-	unsigned long swap_cnt;		/* number of pages to swap on next pass */
 	struct vm_area_struct * mmap;
 	struct vm_area_struct * mmap_avl;
 };
@@ -144,9 +138,6 @@ struct mm_struct {
 		0, 0, 0, 0, \
 		0, 0, 0, 0, \
 		0, \
-/* ?_flt */	0, 0, 0, 0, \
-		0, \
-/* swap */	0, 0, 0, 0, \
 		&init_mmap, &init_mmap }
 
 struct signal_struct {
@@ -195,7 +186,15 @@ struct task_struct {
 	unsigned long it_real_incr, it_prof_incr, it_virt_incr;
 	struct timer_list real_timer;
 	long utime, stime, cutime, cstime, start_time;
-	struct rlimit rlim[RLIM_NLIMITS]; 
+/* mm fault and swap info: this can arguably be seen as either mm-specific or thread-specific */
+	unsigned long min_flt, maj_flt, cmin_flt, cmaj_flt;
+	int swappable:1;
+	unsigned long swap_address;
+	unsigned long old_maj_flt;	/* old value of maj_flt */
+	unsigned long dec_flt;		/* page fault count of the last time */
+	unsigned long swap_cnt;		/* number of pages to swap on next pass */
+/* limits */
+	struct rlimit rlim[RLIM_NLIMITS];
 	unsigned short used_math;
 	char comm[16];
 /* file system info */
@@ -254,6 +253,8 @@ struct task_struct {
 /* timeout */	0,0,0,0,0,0,0, \
 /* timer */	{ NULL, NULL, 0, 0, it_real_fn }, \
 /* utime */	0,0,0,0,0, \
+/* flt */	0,0,0,0, \
+/* swp */	0,0,0,0,0, \
 /* rlimits */   { {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX},  \
 		  {LONG_MAX, LONG_MAX}, {_STK_LIM, _STK_LIM},  \
 		  {       0, LONG_MAX}, {LONG_MAX, LONG_MAX}, \

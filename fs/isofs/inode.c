@@ -1,10 +1,11 @@
 /*
  *  linux/fs/isofs/inode.c
  * 
- *  (C) 1992, 1993, 1994  Eric Youngdale Modified for ISO9660 filesystem.
- *      1995  Mark Dobie - patch to allow VideoCD and PhotoCD mounting.
- *
  *  (C) 1991  Linus Torvalds - minix filesystem
+ *      1992, 1993, 1994  Eric Youngdale Modified for ISO9660 filesystem.
+ *      1994  Eberhard Moenkeberg - multi session handling.
+ *      1995  Mark Dobie - allow mounting of some weird VideoCDs and PhotoCDs.
+ *
  */
 
 #ifdef MODULE
@@ -152,7 +153,9 @@ static int parse_options(char *options, struct iso9660_options * popt)
 	return 1;
 }
 
-
+/*
+ * look if the driver can tell the multi session redirection value
+ */
 static unsigned int isofs_get_last_session(int dev)
 {
   struct cdrom_multisession ms_info;
@@ -161,10 +164,6 @@ static unsigned int isofs_get_last_session(int dev)
   extern struct file_operations * get_blkfops(unsigned int);
   int i;
 
-  /*
-   * look if the driver can tell the multi session redirection value
-   * <emoenke@gwdg.de>
-   */
   vol_desc_start=0;
   if (get_blkfops(MAJOR(dev))->ioctl!=NULL)
     {
@@ -565,7 +564,7 @@ void isofs_read_inode(struct inode * inode)
 	
 	inode->i_op = NULL;
 
-	/* get the volume sequence numner */
+	/* get the volume sequence number */
 	volume_seq_no = isonum_723 (raw_inode->volume_sequence_number) ;
 
 	/* 

@@ -108,8 +108,8 @@ static int copy_mm(unsigned long clone_flags, struct task_struct * tsk)
 		return -1;
 	*tsk->mm = *current->mm;
 	tsk->mm->count = 1;
-	tsk->mm->min_flt = tsk->mm->maj_flt = 0;
-	tsk->mm->cmin_flt = tsk->mm->cmaj_flt = 0;
+	tsk->min_flt = tsk->maj_flt = 0;
+	tsk->cmin_flt = tsk->cmaj_flt = 0;
 	if (new_page_tables(tsk))
 		return -1;
 	if (dup_mmap(tsk->mm)) {
@@ -205,6 +205,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 		(*p->binfmt->use_count)++;
 
 	p->did_exec = 0;
+	p->swappable = 0;
 	p->kernel_stack_page = new_stack;
 	*(unsigned long *) p->kernel_stack_page = STACK_MAGIC;
 	p->state = TASK_UNINTERRUPTIBLE;
@@ -242,7 +243,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->semundo = NULL;
 
 	/* ok, now we should be set up.. */
-	p->mm->swappable = 1;
+	p->swappable = 1;
 	p->exit_signal = clone_flags & CSIGNAL;
 	p->counter = current->counter >> 1;
 	wake_up_process(p);			/* do this last, just in case */

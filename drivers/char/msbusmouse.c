@@ -43,6 +43,7 @@
 #include <linux/busmouse.h>
 #include <linux/signal.h>
 #include <linux/errno.h>
+#include <linux/mouse.h>
 
 #include <asm/io.h>
 #include <asm/segment.h>

@@ -1,14 +1,33 @@
-This README belongs to release 3.7 or newer of the SoundBlaster Pro
+This README belongs to release 3.9 or newer of the SoundBlaster Pro
 (Matsushita, Kotobuki, Panasonic, CreativeLabs, Longshine and TEAC)
 CD-ROM driver for Linux.
 
-The driver is able to drive the whole family of "traditional" IDE-style (that
+Sbpcd really, really is NOT for ANY IDE/ATAPI drive!
+Not even if you have an "original" SoundBlaster card with an IDE interface!
+So, you better have a look into README.ide if your port address is 0x1F0,
+0x170, 0x1E8, 0x168 or similar.
+I get tons of mails from IDE/ATAPI drive users - I really can't continue
+any more to answer them all. So, if your drive/interface information sheets
+mention "IDE" (primary, secondary, tertiary, quaternary) and the DOS driver
+invoking line within your CONFIG.SYS is using an address below 0x230:
+DON'T ROB MY LAST NERVE - jumper your interface to address 0x170 and IRQ 15
+(that is the "secondary IDE" configuration), set your drive to "master" and
+use ide-cd as your driver. If you do not have a second IDE hard disk, use the
+LILO commands
+   hdb=noprobe hdc=cdrom
+and get lucky.
+To make it fully clear to you: if you mail me about IDE/ATAPI drive problems,
+my answer is above, and I simply will discard your mail, hoping to stop the
+flood and to find time to lead my 12-years old son towards happy computing.
+
+The driver is able to drive the whole family of "traditional" AT-style (that
 is NOT the new "Enhanced IDE" or "ATAPI" drive standard) Matsushita,
 Kotobuki, Panasonic drives, sometimes labelled as "CreativeLabs". The
 well-known drives are CR-521, CR-522, CR-523, CR-562, CR-563.
+CR-574 is an IDE/ATAPI drive.
 
 The Longshine LCS-7260 is a double-speed drive which uses the "old"
-Matsushita command set. It is supported now - with help by Serge Robyns.
+Matsushita command set. It is supported - with help by Serge Robyns.
 
 There exists an "IBM External ISA CD-ROM Drive" which in fact is a CR-563
 with a special controller board. This drive is supported (the interface is
@@ -16,39 +35,72 @@ of the "LaserMate" type), and it is possibly the best buy today (cheaper than
 an internal drive, and you can use it as an internal, too - f.e. plug it into
 a soundcard).
 
-CreativeLabs has a new drive "CD-200". Support is under construction.
-Drive detection and playing audio should already work. I need qualified
-feedback about the bugs within the data functions or a drive (I never saw
-a CD200).
+CreativeLabs has a new drive "CD200" and a similar drive "CD200F". The latter
+is made by Funai and sometimes named "E2550UA". Support is under construction
+ - CD200F should work, CD200 is still giving problems.
+Drive detection and playing audio should work. I need qualified feedback
+about the bugs within the data functions or a drive (I never saw a CD200).
 
-The quad-speed TEAC CD-55A drive is supported. The routines may still be
-a little bit buggy, but the data rate already reaches 500 kB/sec if you
-set SBP_BUFFER_FRAMES to 64. The drive is able to deliver 600 kB/sec, so
-this has to get a point of work.
+The quad-speed TEAC CD-55A drive is supported, but still does not reach "full
+speed". The data rate already reaches 500 kB/sec if you set SBP_BUFFER_FRAMES
+to 64 (it is not recommended to do that for normal "file access" usage, but it
+can speed up things a lot if you use something like "dd" to read from the
+drive; I use it for verifying self-written CDs this way).
+The drive itself is able to deliver 600 kB/sec, so this has to get a point of
+work; with the normal setup, the performance currently is not even as good as
+double-speed.
 
 This driver is NOT for Mitsumi or Sony or Aztech or Philips or XXX drives,
-and this driver is in no way usable for any new IDE ATAPI drive.
+and again: this driver is in no way usable for any IDE/ATAPI drive. If you 
+think your drive should work and it doesn't: send me the DOS driver for your
+beast (gzipped + uuencoded) and your CONFIG.SYS if you want to ask me for help,
+and include an original log message excerpt, and try to give all information
+a complete idiot needs to understand your hassle already with your first
+mail. And if you want to say "as I have mailed you before", be sure that I
+don't remember your "case" by such remarks; at the moment, I have some 
+hundreds open correspondences about Linux CDROM questions (hope to reduce if
+the IDE/ATAPI user questions disappear). 
+
 
 This driver will work with the soundcard interfaces (SB Pro, SB 16, Galaxy,
-SoundFX, ...) and/or with the "no-sound" cards (Panasonic CI-101P, LaserMate,
-WDH-7001C, Longshine LCS-6853, older Aztech cards, ...).
+SoundFX, Mozart, ...) and with the "no-sound" cards (Panasonic CI-101P,
+LaserMate, WDH-7001C, Longshine LCS-6853, TEAC ...).
 
-It should work too now with the "configurable" interface "Sequoia S-1000",
-which is found on the Spea Media FX sound card. I still need feedback about
-this, or such a card. Anyways, the procedure "boot DOS and wait until 
-CONFIG.SYS is done, then use CTL-ALT-DEL to boot Linux" should make it
-work.
+It finally works now with the "configurable" interface "Sequoia S-1000", too,
+which is found on the Spea Media FX and Ensonic Soundscape sound cards. You
+have to specify the type "SBPRO 2" and the true CDROM port address with it,
+not the "configuration port" address.
+
+If you have a sound card which needs a "configuration driver" instead of
+jumpers for interface types and addresses (like Mozart cards) - those
+drivers get invoked before the DOS CDROM driver in your CONFIG.SYS, typical
+names are "cdsetup.sys" and "mztinit.sys" -, let the sound driver do the
+CDROM port configuration (the leading comments within 
+linux/drivers/sound/mad16.c are just for you!). Hannu Savolainen's mad16.c
+code is able to set up my Mozart card - I simply had to add
+   #define MAD16_CONF 0x06
+   #define MAD16_CDSEL 0x03
+to configure the CDROM interface for type "Panasonic" (LaserMate) and address
+0x340.
 
 The interface type has to get configured in /usr/include/linux/sbpcd.h, 
-because the behavior of some sound card interfaces is different.
+because the register layout is different between the "SoundBlaster" and the
+"LaserMate" type.
 
-With some TEAC drives I have seen interface cards which seem to lack the
-"drive select" lines; always drive 0 gets addressed. To avoid "mirror drives"
-with such interface cards, set MAX_DRIVES to 1 and jumper your drive to ID 0.
+I got a report that the TEAC interface card "I/F E117098" is of type
+"SoundBlaster" (i.e. you have to set SBPRO to 1) even with the addresses
+0x300 and above. This is unusual, and it can't get covered by the auto
+probing scheme.
+If auto-probing found the drive, the address is correct. The reported type
+may be wrong. A "mount" will give success only if the interface type is set
+right. Playing audio should work with a wrong set interface type, too.
 
-The driver respects all known drive firmware releases - my old drive is a 2.11,
-but it should work with CR-52x drives <2.01 ... >3.00 and with CR-56x drives
-<0.75 .. 5.00.
+With some TEAC and some CD200 drives I have seen interface cards which seem
+to lack the "drive select" lines; always drive 0 gets addressed. To avoid
+"mirror drives" (four drives detected where you only have one) with such
+interface cards, set MAX_DRIVES to 1 and jumper your drive to ID 0 (if
+possible).
+
 
 Up to 4 drives per interface card, and up to 4 interface cards are supported.
 All supported drive families can be mixed, but the CR-521 drives are 
@@ -104,13 +156,15 @@ session of a photoCD).
 At ftp.gwdg.de:/pub/linux/hpcdtoppm/ you will find Hadmut Danisch's package to
 convert photo CD image files and Gerd Knorr's viewing utility.
 
-The transfer rate will reach 150 kB/sec with "old" drives, 300 kB/sec with
-double-speed drives, and about 500 kB/sec with quad speed drives.
+The transfer rate will reach 150 kB/sec with CR-52x drives, 300 kB/sec with
+CR-56x drives, and currently not more than 500 kB/sec (usually less than
+250 kB/sec) with the TEAC quad speed drives.
 XA (PhotoCD) disks with "old" drives give only 50 kB/sec.
 
-This release is part of the standard kernel and consists of
+This release consists of
 - this README file
 - the driver file linux/drivers/block/sbpcd.c
+- the stub files linux/drivers/block/sbpcd[234].c
 - the header file linux/include/linux/sbpcd.h.
 
 
@@ -119,21 +173,27 @@ To install:
 
 1. Setup your hardware parameters. Though the driver does "auto-probing" at a
    lot of (not all possible!) addresses, this step is recommended for
-   every-day use.
+   every-day use. You should let sbpcd auto-probe once and use the reported
+   address if a drive got found. The reported type may be incorrect; it is
+   correct if you can mount a data CD. There is no choice for you with the
+   type; only one is the right, the others are deadly wrong.
+
    a. Go into /usr/src/linux/include/linux/sbpcd.h and configure it for your
       hardware (near the beginning):
       a1. Set it up for the appropriate type of interface board.
           "Original" CreativeLabs sound cards need "SBPRO 1".
-          Most "compatible" sound cards (for example "Highscreen", "SoundFX"
-          and "Galaxy") need "SBPRO 0".
+          Most "compatible" sound cards (almost all "non-CreativeLabs" cards)
+          need "SBPRO 0".
           The "no-sound" board from OmniCd needs the "SBPRO 1" setup.
           All other "no-sound" boards need the "SBPRO 0" setup.
+          Possibly some TEAC "no-sound" boards need the "SBPRO 1" setup.
           The Spea Media FX sound card needs "SBPRO 2".
           sbpcd.c holds some examples in its auto-probe list.
           If you configure "SBPRO" wrong, the playing of audio CDs will work,
           but you will not be able to mount a data CD.
       a2. Tell the address of your CDROM_PORT (not of the sound port).
-      a3. Set DISTRIBUTION to 0.
+      a3. If 4 drives get found, but you have only one, set MAX_DRIVES to 1.
+      a4. Set DISTRIBUTION to 0.
    b. Additionally for 2.a1 and 2.a2, the setup may be done during
       boot time (via the "kernel command line" or "LILO option"):
           sbpcd=0x230,SoundBlaster
@@ -142,16 +202,23 @@ To install:
       or
           sbpcd=0x330,SPEA
       This is especially useful if you install a fresh distribution.
+      If the second parameter is a number, it gets taken as the type
+      setting; 0 is "LaserMate", 1 is "SoundBlaster".
+      So, for example
+          sbpcd=0x230,1
+      is equivalent to
+          sbpcd=0x230,SoundBlaster
+
 2. "cd /usr/src/linux" and do a "make config" and select "y" for Matsushita
    CD-ROM support and for ISO9660 FileSystem support. If you do not have a
    second, third, or fourth controller installed, do not say "y" to the 
    secondary Matsushita CD-ROM questions.
-   SCSI and/or SCSI CD-ROM support is not needed.
 
 3. Then do a "make dep", then make the kernel image ("make zlilo" or else).
 
-4. Make the device file(s). The driver uses definitely and exclusive the
-   MAJOR 25, so do
+4. Make the device file(s). This step usually already has been done by the
+   MAKEDEV script.
+   The driver uses MAJOR 25, so, if necessary, do
         mknod /dev/sbpcd  b 25 0       (if you have only one drive)
    and/or
         mknod /dev/sbpcd0 b 25 0
@@ -160,10 +227,8 @@ To install:
         mknod /dev/sbpcd3 b 25 3
    to make the node(s).
 
-   The driver no longer uses the "AT bus style" device numbering; the SCSI
-   scheme is used now; that means, the "first found" drive gets MINOR 0
-   (regardless to its jumpered ID), the "next found" (at the same cable)
-   gets MINOR 1, ...
+   The "first found" drive gets MINOR 0 (regardless to its jumpered ID), the
+   "next found" (at the same cable) gets MINOR 1, ...
    
    For a second interface board, you have to make nodes like
         mknod /dev/sbpcd4 b 26 0
@@ -179,11 +244,12 @@ To install:
 You should now be able to do
               mkdir /CD
 and 
-              mount -t iso9660 -o ro /dev/sbpcd /CD
+              mount -rt iso9660 /dev/sbpcd /CD
 or
-              mount -t iso9660 -o ro,block=2048 /dev/sbpcd /CD
-and see the contents of your CD in the /CD directory, and/or hear music with
-"workman -c /dev/sbpcd &".
+              mount -rt iso9660 -o block=2048 /dev/sbpcd /CD
+and see the contents of your CD in the /CD directory.
+To use audio CDs, a mounting is not recommended (and it would fail if the
+first track is not a data track).
 
 
 Using sbpcd as a "loadable module":
@@ -214,6 +280,8 @@ No DMA and no IRQ is used.
 
 To reduce or increase the amount of kernel messages, edit sbpcd.c and play
 with the "DBG_xxx" switches (initialization of the variable "sbpcd_debug").
+Don't forget to reflect what you do; enabling all DBG_xxx switches at once
+may crash your system.
 
 The driver uses the "variable BLOCK_SIZE" feature. To use it, you have to
 specify "block=2048" as a mount option. Doing this will disable the direct
@@ -225,13 +293,13 @@ distribution) which MUST get handled with a block_size of 1024. Generally,
 one can say all the CDs which hold files of the name YMTRANS.TBL are defective;
 do not use block=2048 with those.
 
-At the beginning of sbpcd.c, you will find some "#define"s (f.e. EJECT and
-JUKEBOX). With that, you can configure the driver for some special things.
+Within sbpcd.h, you will find some "#define"s (f.e. EJECT and JUKEBOX). With
+that, you can configure the driver for some special things.
 You can use the appended program "cdtester" to set the auto-eject feature
 during runtime. Jeff Tranter's "eject" utility can do this, too (and more)
 for you.
 
-There is a new ioctl CDROMMULTISESSION to obtain with a user program if
+There is an ioctl CDROMMULTISESSION to obtain with a user program if
 the CD is an XA disk and - if it is - where the last session starts. The
 "cdtester" program illustrates how to call it.
 
@@ -284,8 +352,8 @@ If your I/O port address is not 0x340, you have to look for the #defines near
 the beginning of sbpcd.h and configure them: set SBPRO to 0 or 1 or 2, and
 change CDROM_PORT to the address of your CDROM I/O port.
 
-Most of the "SoundBlaster compatible" cards behave like the no-sound
-interfaces! 
+Almost all of the "SoundBlaster compatible" cards behave like the no-sound
+interfaces, i.e. need SBPRO 0! 
 
 With "original" SB Pro cards, an initial setting of CD_volume through the
 sound cards MIXER register gets done.
@@ -790,6 +858,21 @@ main(int argc, char *argv[])
 			rc=ioctl(drive,CDROMPLAYMSF,&msf);
 			if (rc<0) printf("CDROMPLAYMSF: rc=%d.\n",rc);
 			break;
+		case 'V':
+			rc=ioctl(drive,CDROMVOLREAD,&volctrl);
+			if (rc<0) printf("CDROMVOLCTRL: rc=%d.\n",rc);
+			printf("Volume: channel 0 (left) %d, channel 1 (right) %d\n",volctrl.channel0,volctrl.channel1);
+			break;  
+		case 'R':
+			rc=ioctl(drive,CDROMRESET);
+			if (rc<0) printf("CDROMRESET: rc=%d.\n",rc);
+			break;
+		case 'B': /* set the driver's (?) read ahead value */
+			printf("enter read-ahead size: ? ");
+			scanf("%d",&i);
+			rc=ioctl(drive,BLKRASET,i);
+			if (rc<0) printf("BLKRASET: rc=%d.\n",rc);
+			break;
 #ifdef AZT_PRIVATE_IOCTLS /*not supported by every CDROM driver*/
 		case 'd':
 			printf("Address (min:sec:frm)  ");
@@ -955,21 +1038,6 @@ main(int argc, char *argv[])
 			rc=ioctl(drive,CDROMAUDIOBUFSIZ,j);
 			printf("%d frames granted.\n",rc);
 			break;
-		case 'V':
-			rc=ioctl(drive,CDROMVOLREAD,&volctrl);
-			if (rc<0) printf("CDROMVOLCTRL: rc=%d.\n",rc);
-			printf("Volume: channel 0 (left) %d, channel 1 (right) %d\n",volctrl.channel0,volctrl.channel1);
-			break;  
-		case 'R':
-			rc=ioctl(drive,CDROMRESET);
-			if (rc<0) printf("CDROMRESET: rc=%d.\n",rc);
-			break;
-		case 'B': /* set the driver's (?) read ahead value */
-			printf("enter read-ahead size: ? ");
-			scanf("%d",&i);
-			rc=ioctl(drive,BLKRASET,i);
-			if (rc<0) printf("BLKRASET: rc=%d.\n",rc);
-			break;
 #endif SBP_PRIVATE_IOCTLS
 		default:
 			printf("unknown command: \"%s\".\n",command);
@@ -978,20 +1046,4 @@ main(int argc, char *argv[])
 	}
 }
 /*==========================================================================*/
-/*
- * Overrides for Emacs so that we follow Linus's tabbing style.
- * Emacs will notice this stuff at the end of the file and automatically
- * adjust the settings for this buffer only.  This must remain at the end
- * of the file. 
- * ---------------------------------------------------------------------------
- * Local variables:
- * c-indent-level: 8
- * c-brace-imaginary-offset: 0
- * c-brace-offset: -8
- * c-argdecl-indent: 8
- * c-label-offset: -8
- * c-continued-statement-offset: 8
- * c-continued-brace-offset: 0
- * End:
- */
 

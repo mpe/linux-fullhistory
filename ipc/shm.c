@@ -660,10 +660,10 @@ static pte_t shm_swap_in(struct vm_area_struct * shmd, unsigned long offset, uns
 		pte = pte_mkdirty(mk_pte(page, PAGE_SHARED));
 		shp->shm_pages[idx] = pte_val(pte);
 	} else
-		--current->mm->maj_flt;  /* was incremented in do_no_page */
+		--current->maj_flt;  /* was incremented in do_no_page */
 
 done:	/* pte_val(pte) == shp->shm_pages[idx] */
-	current->mm->min_flt++;
+	current->min_flt++;
 	mem_map[MAP_NR(pte_page(pte))]++;
 	return pte_modify(pte, shmd->vm_page_prot);
 }

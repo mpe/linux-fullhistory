@@ -628,7 +628,7 @@ void do_wp_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	old_page = pte_page(pte);
 	if (old_page >= high_memory)
 		goto bad_wp_page;
-	vma->vm_mm->min_flt++;
+	tsk->min_flt++;
 	/*
 	 * Do we need to copy?
 	 */
@@ -969,7 +969,7 @@ static inline void do_swap_page(struct task_struct * tsk,
 	if (mem_map[MAP_NR(pte_page(page))] > 1 && !(vma->vm_flags & VM_SHARED))
 		page = pte_wrprotect(page);
 	++vma->vm_mm->rss;
-	++vma->vm_mm->maj_flt;
+	++tsk->maj_flt;
 	set_pte(page_table, page);
 	return;
 }
@@ -1000,14 +1000,14 @@ void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	address &= PAGE_MASK;
 	if (!vma->vm_ops || !vma->vm_ops->nopage) {
 		++vma->vm_mm->rss;
-		++vma->vm_mm->min_flt;
+		++tsk->min_flt;
 		get_empty_page(tsk, vma, page_table);
 		return;
 	}
 	page = __get_free_page(GFP_KERNEL);
 	if (share_page(vma, address, write_access, page)) {
-		++vma->vm_mm->min_flt;
 		++vma->vm_mm->rss;
+		++tsk->min_flt;
 		return;
 	}
 	if (!page) {
@@ -1015,7 +1015,7 @@ void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 		put_page(page_table, BAD_PAGE);
 		return;
 	}
-	++vma->vm_mm->maj_flt;
+	++tsk->maj_flt;
 	++vma->vm_mm->rss;
 	/*
 	 * The fourth argument is "no_share", which tells the low-level code

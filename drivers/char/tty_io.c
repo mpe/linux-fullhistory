@@ -1789,6 +1789,12 @@ long tty_init(long kmem_start)
 #ifdef CONFIG_CYCLADES
 	kmem_start = cy_init(kmem_start);
 #endif
+#ifdef CONFIG_STALLION
+	kmem_start = stl_init(kmem_start);
+#endif
+#ifdef CONFIG_ISTALLION
+	kmem_start = stli_init(kmem_start);
+#endif
 	kmem_start = pty_init(kmem_start);
 	kmem_start = vcs_init(kmem_start);
 	return kmem_start;

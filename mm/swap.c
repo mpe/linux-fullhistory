@@ -331,7 +331,7 @@ void swap_in(struct task_struct * tsk, struct vm_area_struct * vma,
 		return;
 	}
 	vma->vm_mm->rss++;
-	vma->vm_mm->maj_flt++;
+	tsk->maj_flt++;
 	if (!write_access && add_to_swap_cache(page, entry)) {
 		set_pte(page_table, mk_pte(page, vma->vm_page_prot));
 		return;
@@ -461,7 +461,7 @@ static inline int swap_out_pmd(struct task_struct * tsk, struct vm_area_struct *
 
 	do {
 		int result;
-		vma->vm_mm->swap_address = address + PAGE_SIZE;
+		tsk->swap_address = address + PAGE_SIZE;
 		result = try_to_swap_out(tsk, vma, address, pte, limit);
 		if (result)
 			return result;
@@ -530,8 +530,8 @@ static int swap_out_process(struct task_struct * p, unsigned long limit)
 	/*
 	 * Go through process' page directory.
 	 */
-	address = p->mm->swap_address;
-	p->mm->swap_address = 0;
+	address = p->swap_address;
+	p->swap_address = 0;
 
 	/*
 	 * Find the proper vm-area
@@ -551,7 +551,7 @@ static int swap_out_process(struct task_struct * p, unsigned long limit)
 			break;
 		address = vma->vm_start;
 	}
-	p->mm->swap_address = 0;
+	p->swap_address = 0;
 	return 0;
 }
 
@@ -578,7 +578,7 @@ static int swap_out(unsigned int priority, unsigned long limit)
 			}
 
 			p = task[swap_task];
-			if (p && p->mm && p->mm->swappable && p->mm->rss)
+			if (p && p->swappable && p->mm->rss)
 				break;
 
 			swap_task++;
@@ -587,23 +587,23 @@ static int swap_out(unsigned int priority, unsigned long limit)
 		/*
 		 * Determine the number of pages to swap from this process.
 		 */
-		if (!p->mm->swap_cnt) {
-			p->mm->dec_flt = (p->mm->dec_flt * 3) / 4 + p->mm->maj_flt - p->mm->old_maj_flt;
-			p->mm->old_maj_flt = p->mm->maj_flt;
+		if (!p->swap_cnt) {
+			p->dec_flt = (p->dec_flt * 3) / 4 + p->maj_flt - p->old_maj_flt;
+			p->old_maj_flt = p->maj_flt;
 
-			if (p->mm->dec_flt >= SWAP_RATIO / SWAP_MIN) {
-				p->mm->dec_flt = SWAP_RATIO / SWAP_MIN;
-				p->mm->swap_cnt = SWAP_MIN;
-			} else if (p->mm->dec_flt <= SWAP_RATIO / SWAP_MAX)
-				p->mm->swap_cnt = SWAP_MAX;
+			if (p->dec_flt >= SWAP_RATIO / SWAP_MIN) {
+				p->dec_flt = SWAP_RATIO / SWAP_MIN;
+				p->swap_cnt = SWAP_MIN;
+			} else if (p->dec_flt <= SWAP_RATIO / SWAP_MAX)
+				p->swap_cnt = SWAP_MAX;
 			else
-				p->mm->swap_cnt = SWAP_RATIO / p->mm->dec_flt;
+				p->swap_cnt = SWAP_RATIO / p->dec_flt;
 		}
-		if (!--p->mm->swap_cnt)
+		if (!--p->swap_cnt)
 			swap_task++;
 		switch (swap_out_process(p, limit)) {
 			case 0:
-				if (p->mm->swap_cnt)
+				if (p->swap_cnt)
 					swap_task++;
 				break;
 			case 1:

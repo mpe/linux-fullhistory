@@ -45,14 +45,13 @@
 #include <linux/errno.h>
 #include <linux/timer.h>
 #include <linux/malloc.h>
+#include <linux/mouse.h>
 
 #include <asm/io.h>
 #include <asm/segment.h>
 #include <asm/system.h>
 
 #include <linux/config.h>
-
-#include "mouse.h"
 
 #define PSMOUSE_MINOR      1            /* minor device # for this mouse */
 

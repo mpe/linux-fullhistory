@@ -24,6 +24,22 @@ ifdef CONFIG_CYCLADES
 L_OBJS += cyclades.o
 endif
 
+ifeq ($(CONFIG_STALLION),y)
+L_OBJS += stallion.o
+else
+  ifeq ($(CONFIG_STALLION),m)
+  M_OBJS += stallion.o
+  endif
+endif
+
+ifeq ($(CONFIG_ISTALLION),y)
+L_OBJS += istallion.o
+else
+  ifeq ($(CONFIG_ISTALLION),m)
+  M_OBJS += istallion.o
+  endif
+endif
+
 ifeq ($(CONFIG_ATIXL_BUSMOUSE),y)
 M = y
 L_OBJS += atixlmouse.o

@@ -97,6 +97,8 @@ void release(struct task_struct * p)
 			if (STACK_MAGIC != *(unsigned long *)p->kernel_stack_page)
 				printk(KERN_ALERT "release: %s kernel stack corruption. Aiee\n", p->comm);
 			free_page(p->kernel_stack_page);
+			current->cmin_flt += p->min_flt + p->cmin_flt;
+			current->cmaj_flt += p->maj_flt + p->cmaj_flt;
 			kfree(p);
 			return;
 		}
@@ -405,10 +407,9 @@ static void exit_mm(void)
 {
 	struct mm_struct * mm = current->mm;
 
+	current->swappable = 0;
 	if (mm) {
 		if (!--mm->count) {
-			current->p_pptr->mm->cmin_flt += mm->min_flt + mm->cmin_flt;
-			current->p_pptr->mm->cmaj_flt += mm->maj_flt + mm->cmaj_flt;
 			exit_mmap(mm);
 			free_page_tables(current);
 			kfree(mm);

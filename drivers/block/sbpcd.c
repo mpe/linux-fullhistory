@@ -10,9 +10,9 @@
  *            detailed bug reports).
  *            Also for the TEAC CD-55A drive.
  *            Not for Sanyo drives (but sjcd is there...).
- *            Not for Funai drives.
+ *            Not for any other Funai drives than E2550UA (="CD200" with "F").
  *
- *  NOTE:     This is release 3.8.
+ *  NOTE:     This is release 3.9.
  *
  *  VERSION HISTORY
  *
@@ -217,12 +217,19 @@
  *
  *  3.8  Elongated max_latency for CR-56x drives.
  *
+ *  3.9  Finally fixed the long-known SoundScape/SPEA/Sequoia S-1000 interface
+ *       configuration bug.
+ *       Now Corey, Heiko, Ken, Leo, Vadim/Eric & Werner are invited to copy
+ *       the config_spea() routine into their drivers. ;-)
+ *
+ *
  *  TODO
  *
  *     disk change detection
- *     allow & synchronize multi-activity
+ *     synchronize multi-activity
  *        (data + audio + ioctl + disk change, multiple drives)
  *     implement "read all subchannel data" (96 bytes per frame)
+ *     check if CDROMPLAYMSF can cause a hang
  *
  *     special thanks to Kai Makisara (kai.makisara@vtt.fi) for his fine
  *     elaborated speed-up experiments (and the fabulous results!), for
@@ -298,7 +305,7 @@ char kernel_version[]=UTS_RELEASE;
 
 #include "blk.h"
 
-#define VERSION "v3.8 Eberhard Moenkeberg <emoenke@gwdg.de>"
+#define VERSION "v3.9 Eberhard Moenkeberg <emoenke@gwdg.de>"
 
 /*==========================================================================*/
 /*
@@ -364,9 +371,9 @@ static int sbpcd[] =
 	0x270, 1, /* Soundblaster 16 */
 	0x670, 0, /* "sound card #9" */
 	0x690, 0, /* "sound card #9" */
-	0x330, 2, /* SPEA Media FX (default) */
-	0x320, 2, /* SPEA Media FX */
-	0x340, 2, /* SPEA Media FX */
+	0x338, 2, /* SPEA Media FX, Ensonic SoundScape (default) */
+	0x328, 2, /* SPEA Media FX */
+	0x348, 2, /* SPEA Media FX */
 	0x634, 0, /* some newer sound cards */
 	0x638, 0, /* some newer sound cards */
 	0x230, 1, /* some newer sound cards */
@@ -380,7 +387,7 @@ static int sbpcd[] =
 	 */
 	0x330, 0, /* Lasermate, CI-101P, WDH-7001C */
 	0x350, 0, /* Lasermate, CI-101P */
-	0x350, 2, /* SPEA Media FX */
+	0x358, 2, /* SPEA Media FX */
 	0x370, 0, /* Lasermate, CI-101P */
 	0x290, 1, /* Soundblaster 16 */
 	0x310, 0, /* Lasermate, CI-101P, WDH-7001C */
@@ -499,6 +506,8 @@ static const char *str_sb_l = "soundblaster";
 static const char *str_lm = "LaserMate";
 static const char *str_sp = "SPEA";
 static const char *str_sp_l = "spea";
+static const char *str_ss = "SoundScape";
+static const char *str_ss_l = "soundscape";
 const char *type;
 
 #if !(SBPCD_ISSUE-1)
@@ -608,6 +617,7 @@ static struct {
 	u_int lba_multi;
 	int first_session;
 	int last_session;
+	int track_of_last_session;
 	
 	u_char audio_state;
 	u_int pos_audio_start;
@@ -634,7 +644,6 @@ static struct {
 	u_char UPC_ctl_adr;
 	u_char UPC_buf[7];
 	
-	int CDsize_blk;
 	int frame_size;
 	int CDsize_frm;
 	
@@ -730,20 +739,26 @@ static int sbpcd_dbg_ioctl(unsigned long arg, int level)
 static void mark_timeout_delay(u_long i)
 {
 	timed_out_delay=1;
+#if 0
 	msg(DBG_TIM,"delay timer expired.\n");
+#endif
 }
 /*==========================================================================*/
 static void mark_timeout_data(u_long i)
 {
 	timed_out_data=1;
+#if 0
 	msg(DBG_TIM,"data timer expired.\n");
+#endif
 }
 /*==========================================================================*/
 #if 0
 static void mark_timeout_audio(u_long i)
 {
 	timed_out_audio=1;
+#if 0
 	msg(DBG_TIM,"audio timer expired.\n");
+#endif
 }
 #endif
 /*==========================================================================*/
@@ -775,7 +790,7 @@ static void sbp_sleep(u_int time)
  */
 static INLINE void lba2msf(int lba, u_char *msf)
 {
-	lba += CD_BLOCK_OFFSET;
+	lba += CD_MSF_OFFSET;
 	msf[0] = lba / (CD_SECS*CD_FRAMES);
 	lba %= CD_SECS*CD_FRAMES;
 	msf[1] = lba / CD_FRAMES;
@@ -797,8 +812,8 @@ static INLINE u_int blk2msf(u_int blk)
 	u_int mm;
 	
 	msf.c[3] = 0;
-	msf.c[2] = (blk + CD_BLOCK_OFFSET) / (CD_SECS * CD_FRAMES);
-	mm = (blk + CD_BLOCK_OFFSET) % (CD_SECS * CD_FRAMES);
+	msf.c[2] = (blk + CD_MSF_OFFSET) / (CD_SECS * CD_FRAMES);
+	mm = (blk + CD_MSF_OFFSET) % (CD_SECS * CD_FRAMES);
 	msf.c[1] = mm / CD_FRAMES;
 	msf.c[0] = mm % CD_FRAMES;
 	return (msf.n);
@@ -835,7 +850,7 @@ static INLINE int msf2blk(int msfx)
 	int i;
 	
 	msf.n=msfx;
-	i=(msf.c[2] * CD_SECS + msf.c[1]) * CD_FRAMES + msf.c[0] - CD_BLOCK_OFFSET;
+	i=(msf.c[2] * CD_SECS + msf.c[1]) * CD_FRAMES + msf.c[0] - CD_MSF_OFFSET;
 	if (i<0) return (0);
 	return (i);
 }
@@ -847,7 +862,7 @@ static INLINE int msf2lba(u_char *msf)
 {
 	int i;
 	
-	i=(msf[0] * CD_SECS + msf[1]) * CD_FRAMES + msf[2] - CD_BLOCK_OFFSET;
+	i=(msf[0] * CD_SECS + msf[1]) * CD_FRAMES + msf[2] - CD_MSF_OFFSET;
 	if (i<0) return (0);
 	return (i);
 }
@@ -928,7 +943,7 @@ static int CDi_stat_loop(void)
 			if (!(j&s_not_result_ready)) return (j);
 			if (fam0L_drive) if (j&s_attention) return (j);
 		}
-		sbp_sleep(HZ/100);
+		sbp_sleep(1);
 		i = 1;
 	}
 #else
@@ -950,7 +965,7 @@ static int CDi_stat_loop(void)
 				if (!(j&s_not_result_ready)) return (j);
 				if (fam0L_drive) if (j&s_attention) return (j);
 			}
-			sbp_sleep(HZ/100);
+			sbp_sleep(1);
 			i = 1;
 		}
 #endif MODULE
@@ -1025,7 +1040,7 @@ static int ResponseInfo(void)
 					if (!(st&s_not_result_ready)) break;
 				}
 				if ((j!=0)||(timeout<=jiffies)) break;
-				sbp_sleep(HZ/100);
+				sbp_sleep(1);
 				j = 1;
 			}
 			if (timeout<=jiffies) break;
@@ -1181,7 +1196,7 @@ static int ResponseStatus(void)
 				if (!(i&s_not_result_ready)) break;
 			}
 			if ((j!=0)||(timeout<jiffies)) break;
-			sbp_sleep(HZ/100);
+			sbp_sleep(1);
 			j = 1;
 		}
 		while (1);
@@ -1358,7 +1373,7 @@ static int cmd_out_T(void)
 				drvcmd[0]=CMDT_READ_ERR;
 				j=cmd_out_T(); /* !!! recursive here !!! */
 				--recursion;
-				sbp_sleep(HZ/100);
+				sbp_sleep(1);
 			}
 			while (j<0);
 			D_S[d].error_state=infobuf[2];
@@ -1917,7 +1932,7 @@ static int DriveReset(void)
 		i=GetStatus();
 		if ((i<0)&&(i!=-615)) return (-2); /* i!=-615 is from sta2err */
 		if (!st_caddy_in) break;
-		sbp_sleep(HZ/100);
+		sbp_sleep(1);
 	}
 	while (!st_diskok);
 #if 000
@@ -2075,7 +2090,7 @@ static int UnLockDoor(void)
 	{
 		i=cc_LockDoor(0);
 		--j;
-		sbp_sleep(HZ/100);
+		sbp_sleep(1);
 	}
 	while ((i<0)&&(j));
 	if (i<0)
@@ -2095,7 +2110,7 @@ static int LockDoor(void)
 	{
 		i=cc_LockDoor(1);
 		--j;
-		sbp_sleep(HZ/100);
+		sbp_sleep(1);
 	}
 	while ((i<0)&&(j));
 	if (j==0)
@@ -2106,7 +2121,7 @@ static int LockDoor(void)
 		{
 			i=cc_LockDoor(1);
 			--j;
-			sbp_sleep(HZ/100);
+			sbp_sleep(1);
 		}
 		while ((i<0)&&(j));
 	}
@@ -2256,12 +2271,12 @@ static int cc_ModeSense(void)
 	i=cmd_out();
 	if (i<0) return (i);
 	i=0;
+	D_S[d].sense_byte=0;
 	if (fam1_drive) D_S[d].sense_byte=infobuf[i++];
-	else if (fam0L_drive) D_S[d].sense_byte=0;
 	else if (famT_drive)
 	{
-		D_S[d].sense_byte=0;
-		if (infobuf[4]==0x01) D_S[d].xa_byte=0x20; /* wrong!!!! */
+		if (infobuf[4]==0x01) D_S[d].xa_byte=0x20;
+		else D_S[d].xa_byte=0;
 		i=2;
 	}
 	D_S[d].frame_size=make16(infobuf[i],infobuf[i+1]);
@@ -2459,7 +2474,8 @@ static int cc_ReadCapacity(void)
 {
 	int i, j;
 	
-	if (famL_drive) return (0);
+	if (famL_drive) return (0); /* some firmware lacks this command */
+	if (famT_drive) return (0); /* done with cc_ReadTocDescr() */
 	D_S[d].diskstate_flags &= ~cd_size_bit;
 	for (j=3;j>0;j--)
 	{
@@ -2482,31 +2498,15 @@ static int cc_ReadCapacity(void)
 			response_count=5;
 			flags_cmd_out=f_putcmd|f_getsta|f_ResponseStatus|f_obey_p_check;
 		}
-		else if (famT_drive)
-		{
-			response_count=12;
-			drvcmd[0]=CMDT_DISKINFO;
-			drvcmd[1]=0x02;
-			drvcmd[6]=CDROM_LEADOUT;
-			drvcmd[8]=response_count;
-			drvcmd[9]=0x00;
-		}
 		i=cmd_out();
 		if (i>=0) break;
 		msg(DBG_000,"cc_ReadCapacity: cmd_out: err %d\n", i);
 		cc_ReadError();
 	}
 	if (j==0) return (i);
-	if (fam1_drive) D_S[d].CDsize_frm=msf2blk(make32(make16(0,infobuf[0]),make16(infobuf[1],infobuf[2])))+CD_BLOCK_OFFSET;
+	if (fam1_drive) D_S[d].CDsize_frm=msf2blk(make32(make16(0,infobuf[0]),make16(infobuf[1],infobuf[2])))+CD_MSF_OFFSET;
 	else if (fam0_drive) D_S[d].CDsize_frm=make32(make16(0,infobuf[0]),make16(infobuf[1],infobuf[2]));
 	else if (fam2_drive) D_S[d].CDsize_frm=make32(make16(infobuf[0],infobuf[1]),make16(infobuf[2],infobuf[3]));
-	else if (famT_drive)
-	{
-		D_S[d].CDsize_frm=make32(make16(infobuf[8],infobuf[9]),make16(infobuf[10],infobuf[11]));
-		D_S[d].n_first_track=infobuf[2];
-		D_S[d].n_last_track=infobuf[3];
-
-	}
 	D_S[d].diskstate_flags |= cd_size_bit;
 	msg(DBG_000,"cc_ReadCapacity: %d frames.\n", D_S[d].CDsize_frm);
 	return (0);
@@ -2605,6 +2605,7 @@ static int cc_ReadTocDescr(void)
 	{
 		D_S[d].size_msf=make32(make16(infobuf[8],infobuf[9]),make16(infobuf[10],infobuf[11]));
 		D_S[d].size_blk=msf2blk(D_S[d].size_msf);
+		D_S[d].CDsize_frm=D_S[d].size_blk+1;
 		D_S[d].n_first_track=infobuf[2];
 		D_S[d].n_last_track=infobuf[3];
 	}
@@ -2759,7 +2760,7 @@ static int cc_ReadUPC(void)
 	
 	D_S[d].diskstate_flags &= ~upc_bit;
 #if TEST_UPC
-	for (block=CD_BLOCK_OFFSET+1;block<CD_BLOCK_OFFSET+200;block++)
+	for (block=CD_MSF_OFFSET+1;block<CD_MSF_OFFSET+200;block++)
 	{
 #endif TEST_UPC
 		clr_cmdbuf();
@@ -2888,7 +2889,14 @@ static int cc_CheckMultiSession(void)
 		drvcmd[9]=0x40;
 		i=cmd_out();
 		if (i<0) return (i);
-		D_S[d].lba_multi=msf2blk(make32(make16(0,infobuf[9]),make16(infobuf[10],infobuf[11])));
+		D_S[d].first_session=infobuf[2];
+		D_S[d].last_session=infobuf[3];
+		D_S[d].track_of_last_session=infobuf[6];
+		if (D_S[d].first_session!=D_S[d].last_session)
+		{
+			D_S[d].f_multisession=1;
+			D_S[d].lba_multi=msf2blk(make32(make16(0,infobuf[9]),make16(infobuf[10],infobuf[11])));
+		}
 	}
 	for (i=0;i<response_count;i++)
 		sprintf(&msgbuf[i*3], " %02X", infobuf[i]);
@@ -2947,7 +2955,9 @@ static void check_datarate(void)
 	delay_timer.expires=jiffies+11*HZ/10;
 	timed_out_delay=0;
 	add_timer(&delay_timer);
+#if 0
 	msg(DBG_TIM,"delay timer started (11*HZ/10).\n");
+#endif
 	do
 	{
 		i=inb(CDi_status);
@@ -2958,7 +2968,9 @@ static void check_datarate(void)
 	}
 	while (!timed_out_delay);
 	del_timer(&delay_timer);
+#if 0
 	msg(DBG_TIM,"datarate: %04X\n", datarate);
+#endif
 	if (datarate<65536) datarate=65536;
 	maxtim16=datarate*16;
 	maxtim04=datarate*4;
@@ -2969,8 +2981,9 @@ static void check_datarate(void)
 #else
 	maxtim_data=datarate/300;
 #endif LONG_TIMING
-	msg(DBG_TIM,"maxtim_8 %d, maxtim_data %d.\n",
-	    maxtim_8, maxtim_data);
+#if 0
+	msg(DBG_TIM,"maxtim_8 %d, maxtim_data %d.\n", maxtim_8, maxtim_data);
+#endif
 }
 /*==========================================================================*/
 #if 0
@@ -3263,14 +3276,14 @@ static int check_version(void)
 			else
 			{
 				D_S[d].drv_type=drv_100;
-				if ((j!=500)||(j!=102)) ask_mail();
+				if ((j!=500)&&(j!=102)) ask_mail();
 			}
 		}
 		else if (fam2_drive)
 		{
 			msg(DBG_INF,"new drive CD200 (%s)detected.\n", D_S[d].firmware_version);
-			msg(DBG_INF,"support is not fulfilled yet - audio should work.\n");
-			if ((j!=101)&&(j!=35)) ask_mail(); /* only 1.01 and 0.35 known at time */
+			msg(DBG_INF,"CD200 is not fully supported yet - CD200F should work.\n");
+			if ((j!=1)&&(j!=101)&&(j!=35)) ask_mail(); /* unknown version at time */
 		}
 	}
 	msg(DBG_LCS,"drive type %02X\n",D_S[d].drv_type);
@@ -3654,7 +3667,7 @@ static int DiskInfo(void)
 	if ((fam0L_drive) && (D_S[d].xa_byte==0x20))
 	{
 		/* XA disk with old drive */
-		cc_ModeSelect(CD_FRAMESIZE_XA);
+		cc_ModeSelect(CD_FRAMESIZE_RAW1);
 		cc_ModeSense();
 	}
 	if (famT_drive)	cc_prep_mode_T();
@@ -4081,7 +4094,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 		
 	case CDROMREADMODE2: /* not usable at the moment */
 		msg(DBG_IOC,"ioctl: CDROMREADMODE2 requested.\n");
-		cc_ModeSelect(CD_FRAMESIZE_XA);
+		cc_ModeSelect(CD_FRAMESIZE_RAW1);
 		cc_ModeSense();
 		D_S[d].mode=READ_M2;
 		return (0);
@@ -4156,7 +4169,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 				flags_cmd_out |= f_respo3;
 				cc_ReadStatus();
 				if (sbp_status() != 0) break;
-				sbp_sleep(HZ/100);    /* wait a bit, try again */
+				sbp_sleep(1);    /* wait a bit, try again */
 			}
 			if (status_tries == 0)
 			{
@@ -4211,7 +4224,7 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 					if (try != 0 || timeout <= jiffies) break;
 					if (data_retrying == 0) data_waits++;
 					data_retrying = 1;
-					sbp_sleep(HZ/100);
+					sbp_sleep(1);
 					try = 1;
 				}
 				if (try==0)
@@ -4971,12 +4984,15 @@ static struct file_operations sbpcd_fops =
  *             or
  *                 sbpcd=0x300,LaserMate
  *             or
- *                 sbpcd=0x330,SPEA
+ *                 sbpcd=0x330,SoundScape
  *
- * (upper/lower case sensitive here!!!).
+ * (upper/lower case sensitive here - but all-lowercase is ok!!!).
  *
- * the address value has to be the TRUE CDROM PORT ADDRESS -
+ * the address value has to be the CDROM PORT ADDRESS -
  * not the soundcard base address.
+ * For the SPEA/SoundScape setup, DO NOT specify the "configuration port"
+ * address, but the address which is really used for the CDROM (usually 8
+ * bytes above).
  *
  */
 #if (SBPCD_ISSUE-1)
@@ -4986,11 +5002,14 @@ void sbpcd_setup(const char *s, int *p)
 {
 	setup_done++;
 	msg(DBG_INI,"sbpcd_setup called with %04X,%s\n",p[1], s);
-	sbpro_type=0;
+	sbpro_type=0; /* default: "LaserMate" */
+	if (p[0]>1) sbpro_type=p[2];
 	if (!strcmp(s,str_sb)) sbpro_type=1;
 	else if (!strcmp(s,str_sb_l)) sbpro_type=1;
 	else if (!strcmp(s,str_sp)) sbpro_type=2;
 	else if (!strcmp(s,str_sp_l)) sbpro_type=2;
+	else if (!strcmp(s,str_ss)) sbpro_type=2;
+	else if (!strcmp(s,str_ss_l)) sbpro_type=2;
 	if (p[0]>0) sbpcd_ioaddr=p[1];
 	
 	CDo_command=sbpcd_ioaddr;
@@ -5010,24 +5029,32 @@ void sbpcd_setup(const char *s, int *p)
 /*==========================================================================*/
 /*
  * Sequoia S-1000 CD-ROM Interface Configuration
- * as used within SPEA Media FX card
- * The SPEA soundcard has to get configured for 
- *     -> interface type "Matsushita/Panasonic" (not Sony or Mitsumi)
- *     -> I/O base address (0x320, 0x330, 0x340, 0x350)
+ * as used within SPEA Media FX, Ensonic SoundScape and some Reveal cards
+ * The soundcard has to get jumpered for the interface type "Panasonic"
+ * (not Sony or Mitsumi) and to get soft-configured for
+ *     -> configuration port address
+ *     -> CDROM port offset (num_ports): has to be 8 here. Possibly this
+ *        offset value determines the interface type (none, Panasonic,
+ *        Mitsumi, Sony).
+ *        The interface uses a configuration port (0x320, 0x330, 0x340, 0x350)
+ *        some bytes below the real CDROM address.
+ *         
+ *        For the Panasonic style (LaserMate) interface and the configuration
+ *        port 0x330, we have to use an offset of 8; so, the real CDROM port
+ *        address is 0x338.
  */
 static int config_spea(void)
 {
 	int n_ports=0x10; /* 2:0x00, 8:0x10, 16:0x20, 32:0x30 */
-	/* What is n_ports? Number of addresses or base address offset? */
-	int irq_number=0; /* 2:0x01, 7:0x03, 12:0x05, 15:0x07, OFF:0x00 */
-	int dma_channel=0; /* 0:0x08, 1:0x18, 3:0x38, 5:0x58, 6:0x68, 7:0x78, OFF: 0x00 */
+	/* base address offset between configuration port and CDROM port */
+	int irq_number=0; /* off:0x00, 2:0x01, 7:0x03, 12:0x05, 15:0x07 */
+	int dma_channel=0; /* off: 0x00, 0:0x08, 1:0x18, 3:0x38, 5:0x58, 6:0x68 */
 	int dack_polarity=0; /* L:0x00, H:0x80 */
 	int drq_polarity=0x40; /* L:0x00, H:0x40 */
-	
 	int i;
-	
-#define SPEA_REG_1 sbpcd_ioaddr+4
-#define SPEA_REG_2 sbpcd_ioaddr+5
+
+#define SPEA_REG_1 sbpcd_ioaddr-0x08+4
+#define SPEA_REG_2 sbpcd_ioaddr-0x08+5
 	
 	OUT(SPEA_REG_1,0xFF);
 	i=inb(SPEA_REG_1);
@@ -5056,7 +5083,7 @@ static int config_spea(void)
 	OUT(SPEA_REG_2,i);
 	
 	sbpro_type = 0; /* acts like a LaserMate interface now */
-	msg(DBG_SEQ,"found SPEA interface at %04X.\n", sbpcd_ioaddr);
+	msg(DBG_SEQ,"found SoundScape interface at %04X.\n", sbpcd_ioaddr);
 	return (0);
 }
 /*==========================================================================*/
@@ -5080,18 +5107,18 @@ int init_module(void)
 #if DISTRIBUTION
 	if (!setup_done)
 	{
-		msg(DBG_INF,"Looking for Matsushita/Panasonic, CreativeLabs, IBM, Longshine, TEAC CD-ROM drives\n");
-		msg(DBG_INF,"\n= = = = = = = = = = W A R N I N G = = = = = = = = = =\n");
-		msg(DBG_INF,"Auto-Probing can cause a hang (f.e. touching an ethernet card).\n");
+		msg(DBG_INF,"Looking for Matsushita/Panasonic, CreativeLabs, Longshine, TEAC CD-ROM drives\n");
+		msg(DBG_INF,"= = = = = = = = = = W A R N I N G = = = = = = = = = =\n");
+		msg(DBG_INF,"Auto-Probing can cause a hang (f.e. touching an NE2000 card).\n");
 		msg(DBG_INF,"If that happens, you have to reboot and use the\n");
 		msg(DBG_INF,"LILO (kernel) command line feature like:\n");
 		msg(DBG_INF,"   LILO boot: ... sbpcd=0x230,SoundBlaster\n");
 		msg(DBG_INF,"or like:\n");
 		msg(DBG_INF,"   LILO boot: ... sbpcd=0x300,LaserMate\n");
 		msg(DBG_INF,"or like:\n");
-		msg(DBG_INF,"   LILO boot: ... sbpcd=0x330,SPEA\n");
+		msg(DBG_INF,"   LILO boot: ... sbpcd=0x338,SoundScape\n");
 		msg(DBG_INF,"with your REAL address.\n");
-		msg(DBG_INF,"= = = = = = = = = = END of WARNING = = = = = = = = = =\n\n");
+		msg(DBG_INF,"= = = = = = = = = = END of WARNING = = = = = == = = =\n");
 	}
 #endif DISTRIBUTION
 	sbpcd[0]=sbpcd_ioaddr; /* possibly changed by kernel command line */

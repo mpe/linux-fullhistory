@@ -42,6 +42,7 @@
 #include <linux/signal.h>
 #include <linux/errno.h>
 #include <linux/mm.h>
+#include <linux/mouse.h>
 
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -243,7 +244,7 @@ struct file_operations bus_mouse_fops = {
 	fasync_mouse,
 };
 
-static struct mouse bus_mous = {
+static struct mouse bus_mouse = {
 	LOGITECH_BUSMOUSE, "busmouse", &bus_mouse_fops
 };
 

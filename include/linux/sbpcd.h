@@ -13,14 +13,14 @@
  *                             or
  *                                 sbpcd=0x300,LaserMate
  *                             or
- *                                 sbpcd=0x330,SPEA
+ *                                 sbpcd=0x338,SoundScape
  *
  * If sbpcd gets used as a module, you can load it with
  *     insmod /usr/src/linux/modules/sbpcd.o sbpcd=0x230,1
  * or
  *     insmod /usr/src/linux/modules/sbpcd.o sbpcd=0x300,0
  * or
- *     insmod /usr/src/linux/modules/sbpcd.o sbpcd=0x330,2
+ *     insmod /usr/src/linux/modules/sbpcd.o sbpcd=0x338,2
  * respective to override the configured address and type.
  */
 
@@ -35,20 +35,25 @@
  * ========
  * SBPRO type addresses typically are 0x0230 (=0x220+0x10), 0x0250, ...
  * LASERMATE type (CI-101P, WDH-7001C) addresses typically are 0x0300, ...
- * SPEA addresses are from the LASERMATE type and range.
+ * SOUNDSCAPE addresses are from the LASERMATE type and range. You have to
+ * specify the REAL address here, not the configuration port address. Look
+ * at the CDROM driver's invoking line within your DOS CONFIG.SYS, or let
+ * sbpcd auto-probe, if you are not firm with the address.
  * There are some soundcards on the market with 0x0630, 0x0650, ...; their
  * type is not obvious (both types are possible).
  *
  * example: if your SBPRO audio address is 0x220, specify 0x230 and SBPRO 1.
  *          if your soundcard has its CDROM port above 0x300, specify
  *          that address and try SBPRO 0 first.
+ *          if your SoundScape configuration port is at 0x330, specify
+ *          0x338 and SBPRO 2.
  *
  * interface type:
  * ===============
  * set SBPRO to 1 for "true" SoundBlaster card
  * set SBPRO to 0 for "compatible" soundcards and
  *                for "poor" (no sound) interface cards.
- * set SBPRO to 2 for the SPEA Media FX card
+ * set SBPRO to 2 for Ensonic SoundScape or SPEA Media FX cards
  *
  * Almost all "compatible" sound boards need to set SBPRO to 0.
  * If SBPRO is set wrong, the drives will get found - but any

@@ -1042,7 +1042,7 @@ static unsigned long check_aligned(struct buffer_head * first, unsigned long add
 	while (nrbuf-- > 0)
 		brelse(bh[nrbuf]);
 	free_page(address);
-	++current->mm->min_flt;
+	++current->min_flt;
 	return page;
 no_go:
 	while (nrbuf-- > 0)
@@ -1100,7 +1100,7 @@ static unsigned long try_to_load_aligned(unsigned long address,
 	read_buffers(arr,block);
 	while (block-- > 0)
 		brelse(arr[block]);
-	++current->mm->maj_flt;
+	++current->maj_flt;
 	return address;
 not_aligned:
 	while ((tmp = bh) != NULL) {
@@ -1154,7 +1154,7 @@ unsigned long bread_page(unsigned long address, dev_t dev, int b[], int size, in
 		if (where)
 			return where;
 	}
-	++current->mm->maj_flt;
+	++current->maj_flt;
  	for (i=0, j=0; j<PAGE_SIZE ; i++, j+= size) {
 		bh[i] = NULL;
 		if (b[i])

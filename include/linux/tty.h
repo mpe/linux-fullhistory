@@ -281,6 +281,12 @@ extern long vcs_init(long);
 #ifdef CONFIG_CYCLADES
 extern long cy_init(long);
 #endif
+#ifdef CONFIG_STALLION
+extern long stl_init(long);
+#endif
+#ifdef CONFIG_ISTALLION
+extern long stli_init(long);
+#endif
 
 extern int tty_paranoia_check(struct tty_struct *tty, dev_t device,
 			      const char *routine);
