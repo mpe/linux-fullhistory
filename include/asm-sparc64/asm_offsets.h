@@ -268,8 +268,8 @@
 #define ASIZ_thread_fpdepth	0x00000001
 #define AOFF_thread_fault_code	0x0000000e
 #define ASIZ_thread_fault_code	0x00000001
-#define AOFF_thread___pad1	0x0000000f
-#define ASIZ_thread___pad1	0x00000001
+#define AOFF_thread_use_blkcommit	0x0000000f
+#define ASIZ_thread_use_blkcommit	0x00000001
 #define AOFF_thread_fault_address	0x00000010
 #define ASIZ_thread_fault_address	0x00000008
 #define AOFF_thread_fpsaved	0x00000018
@@ -562,8 +562,8 @@
 #define ASIZ_thread_fpdepth	0x00000001
 #define AOFF_thread_fault_code	0x0000000e
 #define ASIZ_thread_fault_code	0x00000001
-#define AOFF_thread___pad1	0x0000000f
-#define ASIZ_thread___pad1	0x00000001
+#define AOFF_thread_use_blkcommit	0x0000000f
+#define ASIZ_thread_use_blkcommit	0x00000001
 #define AOFF_thread_fault_address	0x00000010
 #define ASIZ_thread_fault_address	0x00000008
 #define AOFF_thread_fpsaved	0x00000018
@@ -854,8 +854,8 @@
 #define ASIZ_thread_fpdepth	0x00000001
 #define AOFF_thread_fault_code	0x0000000e
 #define ASIZ_thread_fault_code	0x00000001
-#define AOFF_thread___pad1	0x0000000f
-#define ASIZ_thread___pad1	0x00000001
+#define AOFF_thread_use_blkcommit	0x0000000f
+#define ASIZ_thread_use_blkcommit	0x00000001
 #define AOFF_thread_fault_address	0x00000010
 #define ASIZ_thread_fault_address	0x00000008
 #define AOFF_thread_fpsaved	0x00000018

@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.116 2000/03/15 23:26:22 anton Exp $
+/*  $Id: setup.c,v 1.117 2000/03/27 12:14:54 davem Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -44,6 +44,8 @@
 #include <asm/softirq.h>
 #include <asm/hardirq.h>
 #include <asm/machines.h>
+
+#undef PROM_DEBUG_CONSOLE
 
 struct screen_info screen_info = {
 	0, 0,			/* orig-x, orig-y */
@@ -282,6 +284,7 @@ struct tt_entry *sparc_ttable;
 
 struct pt_regs fake_swapper_regs = { 0, 0, 0, 0, { 0, } };
 
+#ifdef PROM_DEBUG_CONSOLE
 static void prom_cons_write(struct console *con, const char *str, unsigned count)
 {
 	while (count--)
@@ -291,6 +294,7 @@ static void prom_cons_write(struct console *con, const char *str, unsigned count
 static struct console prom_console = {
 	"PROM", prom_cons_write, 0, 0, 0, 0, 0, CON_PRINTBUFFER, 0, 0, 0
 };
+#endif
 
 extern void paging_init(void);
 
@@ -345,6 +349,9 @@ void __init setup_arch(char **cmdline_p)
 		printk("UNKNOWN!\n");
 		break;
 	};
+#ifdef PROM_DEBUG_CONSOLE
+	register_console(&prom_console);
+#endif
 
 #ifdef CONFIG_DUMMY_CONSOLE
 	conswitchp = &dummy_con;

@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 .S.o:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c $< -o $*.o
+	$(CC) $(AFLAGS) -traditional -c $< -o $*.o
 
 all: kernel.o head.o init_task.o
 

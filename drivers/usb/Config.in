@@ -8,6 +8,9 @@ tristate 'Support for USB' CONFIG_USB
 if [ ! "$CONFIG_USB" = "n" ]; then
    bool '  USB verbose debug messages' CONFIG_USB_DEBUG
 
+comment 'Miscellaneous USB options'
+   bool '  Preliminary USB device filesystem' CONFIG_USB_DEVICEFS
+
 comment 'USB Controllers'
    if [ "$CONFIG_USB_UHCI_ALT" != "y" ]; then
       dep_tristate '  UHCI (Intel PIIX4, VIA, ...) support' CONFIG_USB_UHCI $CONFIG_USB
@@ -16,9 +19,6 @@ comment 'USB Controllers'
       dep_tristate '  UHCI Alternate Driver (JE) support' CONFIG_USB_UHCI_ALT $CONFIG_USB
    fi
    dep_tristate '  OHCI (Compaq, iMacs, OPTi, SiS, ALi, ...) support' CONFIG_USB_OHCI $CONFIG_USB
-
-comment 'Miscellaneous USB options'
-   bool '  Preliminary USB device filesystem' CONFIG_USB_DEVICEFS
 
 comment 'USB Devices'
    dep_tristate '  USB Printer support' CONFIG_USB_PRINTER $CONFIG_USB

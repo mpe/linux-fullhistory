@@ -13,7 +13,7 @@ MOD_SUB_DIRS := $(SUB_DIRS)
 ALL_SUB_DIRS := $(SUB_DIRS)
 
 .S.o:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c $< -o $*.o
+	$(CC) $(AFLAGS) -traditional -c $< -o $*.o
 
 L_TARGET = kdb.a
 L_OBJS  = kdbsupport.o kdb_io.o kdb_bt.o kdb_traps.o

@@ -45,9 +45,12 @@ EXPORT_SYMBOL(input_close_device);
 EXPORT_SYMBOL(input_event);
 #endif
 
+#define INPUT_MAJOR	13
+
 static struct input_dev *input_dev = NULL;
 static struct input_handler *input_handler = NULL;
-
+static struct input_handler *input_table[8] = { NULL, /* ... */ };
+static devfs_handle_t input_devfs_handle = NULL;
 static int input_number = 0;
 
 void input_event(struct input_dev *dev, unsigned int type, unsigned int code, int value)
@@ -224,6 +227,13 @@ void input_register_handler(struct input_handler *handler)
 	struct input_dev *dev = input_dev;
 
 /*
+ * Add minors if needed.
+ */
+
+	if (handler->fops != NULL)
+		input_table[handler->minor >> 5] = handler;
+
+/*
  * Add the handler.
  */
 
@@ -263,6 +273,12 @@ void input_unregister_handler(struct input_handler *handler)
 
 	*handlerptr = (*handlerptr)->next;
 
+/*
+ * Remove minors.
+ */
+
+	if (handler->fops != NULL)
+		input_table[handler->minor >> 5] = NULL;
 }
 
 void input_open_device(struct input_handle *handle)
@@ -302,3 +318,52 @@ void input_close_device(struct input_handle *handle)
 		handleptr = &((*handleptr)->hnext);
 	*handleptr = (*handleptr)->hnext;
 }
+
+static int input_open_file(struct inode *inode, struct file *file)
+{
+	struct input_handler *handler = input_table[MINOR(inode->i_rdev) >> 5];
+
+	if (!handler || !handler->fops || !handler->fops->open)
+		return -ENODEV;
+
+	file->f_op = handler->fops;
+
+	return handler->fops->open(inode, file);
+}
+
+static struct file_operations input_fops = {
+	open: input_open_file,
+};
+
+devfs_handle_t input_register_minor(char *name, int minor, int minor_base)
+{
+	char devfs_name[16];
+	sprintf(devfs_name, name, minor);
+	return devfs_register(input_devfs_handle, devfs_name, 0, DEVFS_FL_DEFAULT, INPUT_MAJOR, minor + minor_base,
+		S_IFCHR | S_IRUGO | S_IWUSR, 0, 0, &input_fops, NULL);
+}
+
+void input_unregister_minor(devfs_handle_t handle)
+{
+	devfs_unregister(handle);
+}
+
+static int __init input_init(void)
+{
+	if (devfs_register_chrdev(INPUT_MAJOR, "input", &input_fops)) {
+		printk(KERN_ERR "input: unable to register char major %d", INPUT_MAJOR);
+		return -EBUSY;
+	}
+	input_devfs_handle = devfs_mk_dir(NULL, "input", 5, NULL);
+	return 0;
+}
+
+static void __exit input_exit(void)
+{
+	devfs_unregister(input_devfs_handle);
+        if (devfs_unregister_chrdev(INPUT_MAJOR, "input"))
+                printk(KERN_ERR "input: can't unregister char major %d", INPUT_MAJOR);
+}
+
+module_init(input_init);
+module_exit(input_exit);

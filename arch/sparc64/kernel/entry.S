@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.113 2000/03/06 22:33:42 davem Exp $
+/* $Id: entry.S,v 1.115 2000/03/29 09:55:30 davem Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -998,12 +998,12 @@ linux_sparc_syscall32:
 
 	mov		%i5, %o5				! IEU1
 	srl		%i2, 0, %o2				! IEU0	Group
-	mov		%i0, %l5				! IEU1
-	andcc		%l0, 0x20, %g0				! IEU1	Group
+	andcc		%l0, 0x20, %g0				! IEU0	Group
 	bne,pn		%icc, linux_syscall_trace32		! CTI
-	 srl		%i3, 0, %o3				! IEU0
+	 mov		%i0, %l5				! IEU1
 	call		%l7					! CTI	Group brk forced
-	 add		%o7, 3f-.-4, %o7			! IEU0
+	 srl		%i3, 0, %o3				! IEU0
+	ba,a,pt		%xcc, 3f
 
 	/* Linux native and SunOS system calls enter here... */
 	.align	32
@@ -1032,30 +1032,31 @@ linux_sparc_syscall:
 	 mov		%i0, %l5				! IEU0
 2:	call		%l7					! CTI	Group brk forced
 	 mov		%i5, %o5				! IEU0
+	nop
+
 3:	stx		%o0, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_I0]
 ret_sys_call:
 #ifdef SYSCALL_TRACING
 	call		syscall_trace_exit
 	 add		%sp, STACK_BIAS + REGWIN_SZ, %o1
 #endif
-	ldx		[%curptr + AOFF_task_flags], %l6
+	ldx		[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TSTATE], %g3
+	ldx		[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC], %l1 ! pc = npc
 	sra		%o0, 0, %o0
 	mov		%ulo(TSTATE_XCARRY | TSTATE_ICARRY), %g2
-	ldx		[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TSTATE], %g3
 	cmp		%o0, -ENOIOCTLCMD
 	sllx		%g2, 32, %g2
 	bgeu,pn		%xcc, 1f
-	 andcc		%l6, 0x20, %l6	
 
-	/* System call success, clear Carry condition code. */
-	andn		%g3, %g2, %g3
+	 andcc		%l0, 0x20, %l6	
+	andn		%g3, %g2, %g3		/* System call success, clear Carry condition code. */
 	stx		%g3, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TSTATE]	
 	bne,pn		%icc, linux_syscall_trace2
-	 ldx		[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC], %l1 ! pc = npc
-	add		%l1, 0x4, %l2				         !npc = npc+4
+	 add		%l1, 0x4, %l2				         ! npc = npc+4
 	stx		%l1, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TPC]
-	b,pt		%xcc, rtrap_clr_l6
+	ba,pt		%xcc, rtrap_clr_l6
 	 stx		%l2, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC]
+
 1:
 	/* System call failure, set Carry condition code.
 	 * Also, get abs(errno) to return to the process.
@@ -1066,15 +1067,14 @@ ret_sys_call:
 	mov		1, %l6
 	stx		%g3, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TSTATE]
 	bne,pn		%icc, linux_syscall_trace2
-	 ldx		[%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC], %l1 ! pc = npc
-	add		%l1, 0x4, %l2				         !npc = npc+4
-
+	 add		%l1, 0x4, %l2				         !npc = npc+4
 	stx		%l1, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TPC]
+
 	b,pt		%xcc, rtrap
 	 stx		%l2, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC]
 linux_syscall_trace2:
 	call		syscall_trace
-	 add		%l1, 0x4, %l2			/* npc = npc+4 */
+	 nop
 	stx		%l1, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TPC]
 	ba,pt		%xcc, rtrap
 	 stx		%l2, [%sp + STACK_BIAS + REGWIN_SZ + PT_V9_TNPC]
@@ -1082,6 +1082,9 @@ linux_syscall_trace2:
 	.align		32
 	.globl		__flushw_user
 __flushw_user:
+	rdpr		%otherwin, %g1
+	brz,pn		%g1, 2f
+	 clr		%g2
 1:	save		%sp, -128, %sp
 	rdpr		%otherwin, %g1
 	brnz,pt		%g1, 1b
@@ -1090,4 +1093,4 @@ __flushw_user:
 	brnz,pt		%g2, 1b
 	 restore	%g0, %g0, %g0
 2:	retl
-	 mov		%g3, %o7
+	 nop

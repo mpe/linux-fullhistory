@@ -686,11 +686,12 @@ void iput(struct inode *inode)
 				inode->i_state|=I_FREEING;
 				spin_unlock(&inode_lock);
 
+				if (inode->i_data.nrpages)
+					truncate_inode_pages(&inode->i_data, 0);
+
 				destroy = 1;
 				if (op && op->delete_inode) {
 					void (*delete)(struct inode *) = op->delete_inode;
-					if (inode->i_data.nrpages)
-						truncate_inode_pages(&inode->i_data, 0);
 					/* s_op->delete_inode internally recalls clear_inode() */
 					delete(inode);
 				} else

@@ -2,6 +2,7 @@
 #include <linux/sched.h>
 #include <linux/timer.h>
 #include <linux/netfilter.h>
+#include <linux/in.h>
 #include <linux/udp.h>
 #include <linux/netfilter_ipv4/ip_conntrack_protocol.h>
 

@@ -8,9 +8,9 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 .S.s:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -E -o $*.s $<
+	$(CPP) $(AFLAGS) -o $*.s $<
 .S.o:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -c -o $*.o $<
+	$(CC) $(AFLAGS) -c -o $*.o $<
 
 O_TARGET := kernel.o
 O_OBJS   := entry.o traps.o process.o osf_sys.o irq.o irq_alpha.o \

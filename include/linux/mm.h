@@ -163,7 +163,7 @@ typedef struct page {
 #define PG_error		 1
 #define PG_referenced		 2
 #define PG_uptodate		 3
-#define PG__unused_00		 4
+#define PG_dirty		 4
 #define PG_decr_after		 5
 #define PG_unused_01		 6
 #define PG__unused_02		 7
@@ -180,6 +180,8 @@ typedef struct page {
 #define Page_Uptodate(page)	test_bit(PG_uptodate, &(page)->flags)
 #define SetPageUptodate(page)	set_bit(PG_uptodate, &(page)->flags)
 #define ClearPageUptodate(page)	clear_bit(PG_uptodate, &(page)->flags)
+#define Page_Dirty(page)	test_bit(PG_dirty, &(page)->flags)
+#define SetPageDirty(page)	set_bit(PG_dirty, &(page)->flags)
 #define PageLocked(page)	test_bit(PG_locked, &(page)->flags)
 #define LockPage(page)		set_bit(PG_locked, &(page)->flags)
 #define TryLockPage(page)	test_and_set_bit(PG_locked, &(page)->flags)
@@ -188,7 +190,7 @@ typedef struct page {
 					wake_up(&page->wait); \
 				} while (0)
 #define PageError(page)		test_bit(PG_error, &(page)->flags)
-#define SetPageError(page)	test_and_set_bit(PG_error, &(page)->flags)
+#define SetPageError(page)	set_bit(PG_error, &(page)->flags)
 #define ClearPageError(page)	clear_bit(PG_error, &(page)->flags)
 #define PageReferenced(page)	test_bit(PG_referenced, &(page)->flags)
 #define PageDecrAfter(page)	test_bit(PG_decr_after, &(page)->flags)

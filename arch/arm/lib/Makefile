@@ -37,7 +37,7 @@ L_OBJS	+= $(L_OBJS_$(MACHINE))
 include $(TOPDIR)/Rules.make
 
 .S.o:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c -o $*.o $<
+	$(CC) $(AFLAGS) -traditional -c -o $*.o $<
 
 constants.h: getconsdata.o extractconstants.pl
 	$(PERL) extractconstants.pl $(OBJDUMP) > $@

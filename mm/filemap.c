@@ -250,6 +250,11 @@ int shrink_mmap(int priority, int gfp_mask, zone_t *zone)
 		count--;
 
 		dispose = &young;
+
+		/* avoid unscalable SMP locking */
+		if (!page->buffers && page_count(page) > 1)
+			goto dispose_continue;
+
 		if (TryLockPage(page))
 			goto dispose_continue;
 
@@ -260,22 +265,11 @@ int shrink_mmap(int priority, int gfp_mask, zone_t *zone)
 		   page locked down ;). */
 		spin_unlock(&pagemap_lru_lock);
 
-		/* avoid unscalable SMP locking */
-		if (!page->buffers && page_count(page) > 1)
-			goto unlock_noput_continue;
-
-		/* Take the pagecache_lock spinlock held to avoid
-		   other tasks to notice the page while we are looking at its
-		   page count. If it's a pagecache-page we'll free it
-		   in one atomic transaction after checking its page count. */
-		spin_lock(&pagecache_lock);
-
 		/* avoid freeing the page while it's locked */
 		get_page(page);
 
 		/* Is it a buffer page? */
 		if (page->buffers) {
-			spin_unlock(&pagecache_lock);
 			if (!try_to_free_buffers(page))
 				goto unlock_continue;
 			/* page was locked, inode can't go away under us */
@@ -283,20 +277,19 @@ int shrink_mmap(int priority, int gfp_mask, zone_t *zone)
 				atomic_dec(&buffermem_pages);
 				goto made_buffer_progress;
 			}
-			spin_lock(&pagecache_lock);
 		}
+
+		/* Take the pagecache_lock spinlock held to avoid
+		   other tasks to notice the page while we are looking at its
+		   page count. If it's a pagecache-page we'll free it
+		   in one atomic transaction after checking its page count. */
+		spin_lock(&pagecache_lock);
 
 		/*
 		 * We can't free pages unless there's just one user
 		 * (count == 2 because we added one ourselves above).
 		 */
 		if (page_count(page) != 2)
-			goto cache_unlock_continue;
-
-		/*
-		 * We did the page aging part.
-		 */
-		if (nr_lru_pages < freepages.min * priority)
 			goto cache_unlock_continue;
 
 		/*
@@ -312,8 +305,7 @@ int shrink_mmap(int priority, int gfp_mask, zone_t *zone)
 
 		/* is it a page-cache page? */
 		if (page->mapping) {
-			if (!pgcache_under_min())
-			{
+			if (!Page_Dirty(page) && !pgcache_under_min()) {
 				remove_page_from_inode_queue(page);
 				remove_page_from_hash_queue(page);
 				page->mapping = NULL;
@@ -329,20 +321,11 @@ int shrink_mmap(int priority, int gfp_mask, zone_t *zone)
 cache_unlock_continue:
 		spin_unlock(&pagecache_lock);
 unlock_continue:
+		spin_lock(&pagemap_lru_lock);
 		UnlockPage(page);
 		put_page(page);
-dispose_relock_continue:
-		/* even if the dispose list is local, a truncate_inode_page()
-		   may remove a page from its queue so always
-		   synchronize with the lru lock while accesing the
-		   page->lru field */
-		spin_lock(&pagemap_lru_lock);
 		list_add(page_lru, dispose);
 		continue;
-
-unlock_noput_continue:
-		UnlockPage(page);
-		goto dispose_relock_continue;
 
 dispose_continue:
 		list_add(page_lru, dispose);
@@ -1724,10 +1707,8 @@ static int msync_interval(struct vm_area_struct * vma,
 		error = vma->vm_ops->sync(vma, start, end-start, flags);
 		if (!error && (flags & MS_SYNC)) {
 			struct file * file = vma->vm_file;
-			if (file) {
-				struct dentry * dentry = file->f_dentry;
-				error = file_fsync(file, dentry);
-			}
+			if (file)
+				error = file_fsync(file, file->f_dentry);
 		}
 		return error;
 	}
@@ -2237,9 +2218,9 @@ asmlinkage long sys_mincore(unsigned long start, size_t len,
 
 	down(&current->mm->mmap_sem);
 
-	if (start & ~PAGE_MASK)
+	if (start & ~PAGE_CACHE_MASK)
 		goto out;
-	len = (len + ~PAGE_MASK) & PAGE_MASK;
+	len = (len + ~PAGE_CACHE_MASK) & PAGE_CACHE_MASK;
 	end = start + len;
 	if (end < start)
 		goto out;
@@ -2371,8 +2352,7 @@ static inline void remove_suid(struct inode *inode)
 }
 
 /*
- * Write to a file through the page cache. This is mainly for the
- * benefit of NFS and possibly other network-based file systems.
+ * Write to a file through the page cache. 
  *
  * We currently put everything into the page cache prior to writing it.
  * This is not a problem when writing full pages. With partial pages,
@@ -2389,8 +2369,7 @@ static inline void remove_suid(struct inode *inode)
 ssize_t
 generic_file_write(struct file *file,const char *buf,size_t count,loff_t *ppos)
 {
-	struct dentry	*dentry = file->f_dentry; 
-	struct inode	*inode = dentry->d_inode; 
+	struct inode	*inode = file->f_dentry->d_inode; 
 	struct address_space *mapping = inode->i_mapping;
 	unsigned long	limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
 	loff_t		pos;

@@ -6,6 +6,7 @@
  * (C) Copyright 1999 Gregory P. Smith
  */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/list.h>

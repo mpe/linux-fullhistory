@@ -1,4 +1,4 @@
-/* $Id: io.h,v 1.33 2000/02/25 05:47:38 davem Exp $ */
+/* $Id: io.h,v 1.34 2000/03/30 01:40:54 davem Exp $ */
 #ifndef __SPARC64_IO_H
 #define __SPARC64_IO_H
 
@@ -155,6 +155,68 @@ extern __inline__ void _writel(unsigned int l, unsigned long addr)
 #define writeb(__b, __addr)	(_writeb((__b), (unsigned long)(__addr)))
 #define writew(__w, __addr)	(_writew((__w), (unsigned long)(__addr)))
 #define writel(__l, __addr)	(_writel((__l), (unsigned long)(__addr)))
+
+/* Now versions without byte-swapping. */
+extern __inline__ unsigned int _raw_readb(unsigned long addr)
+{
+	unsigned int ret;
+
+	__asm__ __volatile__("lduba\t[%1] %2, %0\t/* pci_raw_readb */"
+			     : "=r" (ret)
+			     : "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E));
+
+	return ret;
+}
+
+extern __inline__ unsigned int _raw_readw(unsigned long addr)
+{
+	unsigned int ret;
+
+	__asm__ __volatile__("lduha\t[%1] %2, %0\t/* pci_raw_readw */"
+			     : "=r" (ret)
+			     : "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E));
+
+	return ret;
+}
+
+extern __inline__ unsigned int _raw_readl(unsigned long addr)
+{
+	unsigned int ret;
+
+	__asm__ __volatile__("lduwa\t[%1] %2, %0\t/* pci_raw_readl */"
+			     : "=r" (ret)
+			     : "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E));
+
+	return ret;
+}
+
+extern __inline__ void _raw_writeb(unsigned char b, unsigned long addr)
+{
+	__asm__ __volatile__("stba\t%r0, [%1] %2\t/* pci_raw_writeb */"
+			     : /* no outputs */
+			     : "Jr" (b), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E));
+}
+
+extern __inline__ void _raw_writew(unsigned short w, unsigned long addr)
+{
+	__asm__ __volatile__("stha\t%r0, [%1] %2\t/* pci_raw_writew */"
+			     : /* no outputs */
+			     : "Jr" (w), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E));
+}
+
+extern __inline__ void _raw_writel(unsigned int l, unsigned long addr)
+{
+	__asm__ __volatile__("stwa\t%r0, [%1] %2\t/* pci_raw_writel */"
+			     : /* no outputs */
+			     : "Jr" (l), "r" (addr), "i" (ASI_PHYS_BYPASS_EC_E));
+}
+
+#define __raw_readb(__addr)		(_raw_readb((unsigned long)(__addr)))
+#define __raw_readw(__addr)		(_raw_readw((unsigned long)(__addr)))
+#define __raw_readl(__addr)		(_raw_readl((unsigned long)(__addr)))
+#define __raw_writeb(__b, __addr)	(_raw_writeb((__b), (unsigned long)(__addr)))
+#define __raw_writew(__w, __addr)	(_raw_writew((__w), (unsigned long)(__addr)))
+#define __raw_writel(__l, __addr)	(_raw_writel((__l), (unsigned long)(__addr)))
 
 /* Valid I/O Space regions are anywhere, because each PCI bus supported
  * can live in an arbitrary area of the physical address range.

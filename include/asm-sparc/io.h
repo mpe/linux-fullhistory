@@ -1,5 +1,5 @@
 /*
- * $Id: io.h,v 1.25 2000/01/22 07:35:46 zaitcev Exp $
+ * $Id: io.h,v 1.26 2000/03/30 01:43:26 davem Exp $
  */
 #ifndef __SPARC_IO_H
 #define __SPARC_IO_H
@@ -47,6 +47,31 @@ extern __inline__ void writew(unsigned short b, unsigned long addr) {
 
 extern __inline__ void writel(unsigned int b, unsigned long addr) {
 	*(volatile unsigned long*)addr = flip_dword(b);
+}
+
+/* Now the 'raw' versions. */
+extern __inline__ unsigned long __raw_readb(unsigned long addr) {
+	return *(volatile unsigned char*)addr;
+}
+
+extern __inline__ unsigned long __raw_readw(unsigned long addr) {
+	return *(volatile unsigned short*)addr;
+}
+
+extern __inline__ unsigned long __raw_readl(unsigned long addr) {
+	return *(volatile unsigned long*)addr;
+}
+
+extern __inline__ void __raw_writeb(unsigned char b, unsigned long addr) {
+	*(volatile unsigned char*)addr = b;
+}
+
+extern __inline__ void __raw_writew(unsigned short b, unsigned long addr) {
+	*(volatile unsigned short*)addr = b;
+}
+
+extern __inline__ void __raw_writel(unsigned int b, unsigned long addr) {
+	*(volatile unsigned long*)addr = b;
 }
 
 /*

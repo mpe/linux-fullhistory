@@ -8,10 +8,10 @@
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
 .S.s:
-	$(CPP) -D__ASSEMBLY__ $(AFLAGS) -ansi $< -o $*.s
+	$(CPP) $(AFLAGS) -ansi $< -o $*.s
 
 .S.o:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -c $< -o $*.o
+	$(CC) $(AFLAGS) -ansi -c $< -o $*.o
 
 all: kernel.o head.o init_task.o
 
@@ -47,7 +47,7 @@ O_OBJS += ebus.o
 endif
 
 head.o: head.S
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -c $*.S -o $*.o
+	$(CC) $(AFLAGS) -ansi -c $*.S -o $*.o
 
 check_asm: dummy
 	@echo "/* Automatically generated. Do not edit. */" > asm_offsets.h
@@ -62,7 +62,7 @@ check_asm: dummy
 	@echo "#undef __SMP__" >> tmp.c
 	@echo "#undef CONFIG_SMP" >> tmp.c
 	@echo "#include <linux/sched.h>" >> tmp.c
-	$(CC) $(CPPFLAGS) -E tmp.c -o tmp.i
+	$(CPP) $(CPPFLAGS) tmp.c -o tmp.i
 	@echo "/* Automatically generated. Do not edit. */" > check_asm.c
 	@echo "#include <linux/config.h>" >> check_asm.c
 	@echo "#undef __SMP__" >> check_asm.c
@@ -87,7 +87,7 @@ check_asm: dummy
 	@echo "#undef CONFIG_SMP" >> tmp.c
 	@echo "#define CONFIG_SMP 1" >> tmp.c
 	@echo "#include <linux/sched.h>" >> tmp.c
-	$(CC) $(CPPFLAGS) -D__SMP__ -E tmp.c -o tmp.i
+	$(CPP) $(CPPFLAGS) -D__SMP__ tmp.c -o tmp.i
 	@echo "/* Automatically generated. Do not edit. */" > check_asm.c
 	@echo "#include <linux/config.h>" >> check_asm.c
 	@echo "#undef CONFIG_SMP" >> check_asm.c

@@ -29,9 +29,9 @@
  */
 
 #define EVDEV_MINOR_BASE	64
+#define EVDEV_MINORS		32
 #define EVDEV_BUFFER_SIZE	64
 
-#include <linux/miscdevice.h>
 #include <linux/poll.h>
 #include <linux/malloc.h>
 #include <linux/module.h>
@@ -39,11 +39,11 @@
 #include <linux/input.h>
 
 struct evdev {
-	char name[32];
 	int used;
+	int minor;
 	struct input_handle handle;
-	struct miscdevice misc;
 	wait_queue_head_t wait;
+	devfs_handle_t devfs;
 	struct evdev_list *list;
 };
 
@@ -56,8 +56,7 @@ struct evdev_list {
 	struct evdev_list *next;
 };
 
-static unsigned long evdev_miscbits = 0;
-static struct evdev *evdev_base[BITS_PER_LONG];
+static struct evdev *evdev_table[BITS_PER_LONG] = { NULL, /* ... */ };
 
 static void evdev_event(struct input_handle *handle, unsigned int type, unsigned int code, int value)
 {
@@ -101,8 +100,8 @@ static int evdev_release(struct inode * inode, struct file * file)
 	*listptr = (*listptr)->next;
 	
 	if (!--list->evdev->used) {
-		clear_bit(list->evdev->misc.minor - EVDEV_MINOR_BASE, &evdev_miscbits);
-		misc_deregister(&list->evdev->misc);
+		input_unregister_minor(list->evdev->devfs);
+		evdev_table[list->evdev->minor] = NULL;
 		kfree(list->evdev);
 	}
 
@@ -117,7 +116,7 @@ static int evdev_open(struct inode * inode, struct file * file)
 	struct evdev_list *list;
 	int i = MINOR(inode->i_rdev) - EVDEV_MINOR_BASE;
 
-	if (i > BITS_PER_LONG || !test_bit(i, &evdev_miscbits))
+	if (i > EVDEV_MINORS || !evdev_table[i])
 		return -ENODEV;
 
 	if (!(list = kmalloc(sizeof(struct evdev_list), GFP_KERNEL)))
@@ -125,9 +124,9 @@ static int evdev_open(struct inode * inode, struct file * file)
 
 	memset(list, 0, sizeof(struct evdev_list));
 
-	list->evdev = evdev_base[i];
-	list->next = evdev_base[i]->list;
-	evdev_base[i]->list = list;
+	list->evdev = evdev_table[i];
+	list->next = evdev_table[i]->list;
+	evdev_table[i]->list = list;
 
 	file->private_data = list;
 
@@ -205,22 +204,22 @@ static struct file_operations evdev_fops = {
 static int evdev_connect(struct input_handler *handler, struct input_dev *dev)
 {
 	struct evdev *evdev;
+	int minor;
+
+	for (minor = 0; minor < EVDEV_MINORS && evdev_table[minor]; minor++);
+	if (evdev_table[minor]) {
+		printk(KERN_ERR "evdev: no more free evdev devices\n");
+		return -1;
+	}
 
 	if (!(evdev = kmalloc(sizeof(struct evdev), GFP_KERNEL)))
 		return -1;
-
 	memset(evdev, 0, sizeof(struct evdev));
 
 	init_waitqueue_head(&evdev->wait);
 
-	evdev->misc.minor = ffz(evdev_miscbits);
-	set_bit(evdev->misc.minor, &evdev_miscbits);
-	evdev_base[evdev->misc.minor] = evdev;
-
-	sprintf(evdev->name, "evdev%d", evdev->misc.minor);
-	evdev->misc.name = evdev->name;
-	evdev->misc.minor += EVDEV_MINOR_BASE;
-	evdev->misc.fops = &evdev_fops;
+	evdev->minor = minor;
+	evdev_table[minor] = evdev;
 
 	evdev->handle.dev = dev;
 	evdev->handle.handler = handler;
@@ -228,11 +227,10 @@ static int evdev_connect(struct input_handler *handler, struct input_dev *dev)
 
 	evdev->used = 1;
 
-	misc_register(&evdev->misc);
 	input_open_device(&evdev->handle);
+	evdev->devfs = input_register_minor("event%d", minor, EVDEV_MINOR_BASE);
 
-	printk("%s: Event device for input%d on misc%d - /dev/input%d\n",
-		evdev->name, dev->number, evdev->misc.minor, evdev->misc.minor - EVDEV_MINOR_BASE);
+	printk("event%d: Event device for input%d\n", minor, dev->number);
 
 	return 0;
 }
@@ -244,8 +242,8 @@ static void evdev_disconnect(struct input_handle *handle)
 	input_close_device(handle);
 
 	if (!--evdev->used) {
-		clear_bit(evdev->misc.minor - EVDEV_MINOR_BASE, &evdev_miscbits);
-		misc_deregister(&evdev->misc);
+		input_unregister_minor(evdev->devfs);
+		evdev_table[evdev->minor] = NULL;
 		kfree(evdev);
 	}
 }
@@ -254,6 +252,8 @@ static struct input_handler evdev_handler = {
 	event:		evdev_event,
 	connect:	evdev_connect,
 	disconnect:	evdev_disconnect,
+	fops:		&evdev_fops,
+	minor:		EVDEV_MINOR_BASE,
 };
 
 static int __init evdev_init(void)

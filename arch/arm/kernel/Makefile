@@ -59,12 +59,12 @@ MX_OBJS 	:= $(sort $(filter     $(export-objs), $(obj-m)))
 all: kernel.o $(HEAD_OBJ) init_task.o
 
 $(HEAD_OBJ): $(HEAD_OBJ:.o=.S)
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -DTEXTADDR=$(TEXTADDR) -traditional -c $(HEAD_OBJ:.o=.S) -o $@
+	$(CC) $(AFLAGS) -DTEXTADDR=$(TEXTADDR) -traditional -c $(HEAD_OBJ:.o=.S) -o $@
 
 include $(TOPDIR)/Rules.make
 
 .S.o:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) $(AFLAGS_$@) -c -o $*.o $<
+	$(CC) $(AFLAGS) $(AFLAGS_$@) -c -o $*.o $<
 
 # Spell out some dependencies that `make dep' doesn't spot
 entry-armv.o: calls.S ../lib/constants.h

@@ -18,10 +18,10 @@ promlib.a: $(OBJS)
 	sync
 
 .S.s:
-	$(CPP) -D__ASSEMBLY__ $(AFLAGS) -ansi $< -o $*.s
+	$(CPP) $(AFLAGS) -ansi $< -o $*.s
 
 .S.o:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -c $< -o $*.o
+	$(CC) $(AFLAGS) -ansi -c $< -o $*.o
 
 dep:
 	$(CPP) $(CPPFLAGS) -M *.c > .depend

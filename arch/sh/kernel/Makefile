@@ -7,7 +7,7 @@
 #
 
 .S.o:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c $< -o $*.o
+	$(CC) $(AFLAGS) -traditional -c $< -o $*.o
 
 O_TARGET := kernel.o
 O_OBJS   := process.o signal.o entry.o traps.o irq.o irq_onchip.o \
@@ -29,7 +29,7 @@ all: kernel.o head.o init_task.o
 entry.o: entry.S
 
 head.o: head.S
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c $*.S -o $*.o
+	$(CC) $(AFLAGS) -traditional -c $*.S -o $*.o
 
 clean:
 

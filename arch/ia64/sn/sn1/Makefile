@@ -10,9 +10,9 @@ CFLAGS          :=     $(CFLAGS) -DCONFIG_SGI_SN1 -DSN1 -DSN -DSOFTSDV \
 AFLAGS          :=      $(AFLAGS) -DCONFIG_SGI_SN1 -DSN1 -DSOFTSDV
 
 .S.s:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -E -o $*.s $<
+	$(CPP) $(AFLAGS) -o $*.s $<
 .S.o:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -c -o $*.o $<
+	$(CC) $(AFLAGS) -c -o $*.o $<
 
 all: sn1.a
 

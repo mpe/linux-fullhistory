@@ -45,15 +45,17 @@
 #include <linux/poll.h>
 #include <linux/init.h>
 
-#define JOYDEV_MAJOR            15
+#define JOYDEV_MINOR_BASE	0
+#define JOYDEV_MINORS		32
 #define JOYDEV_BUFFER_SIZE	64
 
 struct joydev {
-	char name[32];
 	int used;
-	struct input_handle handle;
 	int minor;
+	char name[32];
+	struct input_handle handle;
 	wait_queue_head_t wait;
+	devfs_handle_t devfs;
 	struct joydev *next;
 	struct joydev_list *list;
 	struct js_corr corr[ABS_MAX];
@@ -76,11 +78,10 @@ struct joydev_list {
 	struct joydev_list *next;
 };
 
-static unsigned long joydev_minors = 0;
-static struct joydev *joydev_base[BITS_PER_LONG];
+static struct joydev *joydev_table[BITS_PER_LONG];
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@suse.cz>");
-MODULE_SUPPORTED_DEVICE("js");
+MODULE_SUPPORTED_DEVICE("input/js");
 
 static int joydev_correct(int value, struct js_corr *corr)
 {
@@ -166,7 +167,8 @@ static int joydev_release(struct inode * inode, struct file * file)
 	*listptr = (*listptr)->next;
 	
 	if (!--list->joydev->used) {
-		clear_bit(list->joydev->minor, &joydev_minors);
+		input_unregister_minor(list->joydev->devfs);
+		joydev_table[list->joydev->minor] = NULL;
 		kfree(list->joydev);
 	}
 
@@ -179,22 +181,18 @@ static int joydev_release(struct inode * inode, struct file * file)
 static int joydev_open(struct inode *inode, struct file *file)
 {
 	struct joydev_list *list;
-	int i = MINOR(inode->i_rdev);
+	int i = MINOR(inode->i_rdev) - JOYDEV_MINOR_BASE;
 
-	if (MAJOR(inode->i_rdev) != JOYSTICK_MAJOR)
-		return -EINVAL;
-
-	if (i > BITS_PER_LONG || !test_bit(i, &joydev_minors))
+	if (i > JOYDEV_MINORS || !joydev_table[i])
 		return -ENODEV;
 
 	if (!(list = kmalloc(sizeof(struct joydev_list), GFP_KERNEL)))
 		return -ENOMEM;
-
 	memset(list, 0, sizeof(struct joydev_list));
 
-	list->joydev = joydev_base[i];
-	list->next = joydev_base[i]->list;
-	joydev_base[i]->list = list;	
+	list->joydev = joydev_table[i];
+	list->next = joydev_table[i]->list;
+	joydev_table[i]->list = list;	
 
 	file->private_data = list;
 
@@ -373,26 +371,29 @@ static struct file_operations joydev_fops = {
 static int joydev_connect(struct input_handler *handler, struct input_dev *dev)
 {
 	struct joydev *joydev;
-	int i, j;
+	int i, j, minor;
 
 	if (!(test_bit(EV_KEY, dev->evbit) && test_bit(EV_ABS, dev->evbit) &&
 	      test_bit(ABS_X, dev->absbit) && test_bit(ABS_Y, dev->absbit) &&
 	     (test_bit(BTN_TRIGGER, dev->keybit) || test_bit(BTN_A, dev->keybit)
 		|| test_bit(BTN_1, dev->keybit)))) return -1;
 
+	for (minor = 0; minor < JOYDEV_MINORS && joydev_table[minor]; minor++);
+	if (joydev_table[minor]) {
+		printk(KERN_ERR "joydev: no more free joydev devices\n");
+		return -1;
+	}
+
 	if (!(joydev = kmalloc(sizeof(struct joydev), GFP_KERNEL)))
 		return -1;
-
 	memset(joydev, 0, sizeof(struct joydev));
 
 	init_waitqueue_head(&joydev->wait);
 
-	if (joydev_minors == -1) {
-		printk("Can't register new joystick - 32 devices already taken.\n");
-		return -1;
-	}
-
 	sprintf(joydev->name, "joydev%d", joydev->minor);
+
+	joydev->minor = minor;
+	joydev_table[minor] = joydev;
 
 	joydev->handle.dev = dev;
 	joydev->handle.handler = handler;
@@ -421,10 +422,6 @@ static int joydev_connect(struct input_handler *handler, struct input_dev *dev)
 			joydev->nkey++;
 		}
 
-	joydev->minor = ffz(joydev_minors);
-	set_bit(joydev->minor, &joydev_minors);
-	joydev_base[joydev->minor] = joydev;
-
 	for (i = 0; i < joydev->nabs; i++) {
 		j = joydev->abspam[i];
 		if (dev->absmax[j] == dev->absmin[j]) {
@@ -440,8 +437,9 @@ static int joydev_connect(struct input_handler *handler, struct input_dev *dev)
 	}
 
 	input_open_device(&joydev->handle);	
+	joydev->devfs = input_register_minor("js%d", minor, JOYDEV_MINOR_BASE);
 
-	printk("%s: Joystick device for input%d on /dev/js%d\n", joydev->name, dev->number, joydev->minor);
+	printk("js%d: Joystick device for input%d\n", minor, dev->number);
 
 	return 0;
 }
@@ -453,7 +451,8 @@ static void joydev_disconnect(struct input_handle *handle)
 	input_close_device(handle);
 
 	if (!--joydev->used) {
-		clear_bit(joydev->minor, &joydev_minors);
+		input_unregister_minor(joydev->devfs);
+		joydev_table[joydev->minor] = NULL;
 		kfree(joydev);
 	}
 }
@@ -462,14 +461,12 @@ static struct input_handler joydev_handler = {
 	event:		joydev_event,
 	connect:	joydev_connect,
 	disconnect:	joydev_disconnect,
+	fops:		&joydev_fops,
+	minor:		JOYDEV_MINOR_BASE,
 };
 
 static int __init joydev_init(void)
 {
-	if (register_chrdev(JOYDEV_MAJOR, "js", &joydev_fops)) {
-		printk(KERN_ERR "joydev: unable to get major %d for joystick\n", JOYDEV_MAJOR);
-		return -EBUSY;
-	}
 	input_register_handler(&joydev_handler);
 	return 0;
 }
@@ -477,8 +474,6 @@ static int __init joydev_init(void)
 static void __exit joydev_exit(void)
 {
 	input_unregister_handler(&joydev_handler);
-	if (unregister_chrdev(JOYSTICK_MAJOR, "js"))
-		printk(KERN_ERR "js: can't unregister device\n");
 }
 
 module_init(joydev_init);

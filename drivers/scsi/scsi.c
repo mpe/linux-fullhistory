@@ -1866,6 +1866,8 @@ static int proc_scsi_gen_write(struct file * file, const char * buf,
 			 * Nobody is using this device any more.
 			 * Free all of the command structures.
 			 */
+                        if (HBA_ptr->hostt->revoke)
+                                HBA_ptr->hostt->revoke(scd);
 			devfs_unregister (scd->de);
 			scsi_release_commandblocks(scd);
 

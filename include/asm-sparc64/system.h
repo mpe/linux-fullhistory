@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.56 2000/03/06 22:33:45 davem Exp $ */
+/* $Id: system.h,v 1.57 2000/03/27 10:38:57 davem Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
@@ -131,16 +131,8 @@ extern void __global_restore_flags(unsigned long flags);
 
 extern void synchronize_user_stack(void);
 
-extern __inline__ void flushw_user(void)
-{
-	__asm__ __volatile__("
-		rdpr		%%otherwin, %%g1
-		brz,pt		%%g1, 1f
-		 mov		%%o7, %%g3
-		call		__flushw_user
-		 clr		%%g2
-1:"	: : : "g1", "g2", "g3");
-}
+extern void __flushw_user(void);
+#define flushw_user() __flushw_user()
 
 #define flush_user_windows flushw_user
 #define flush_register_windows flushw_all

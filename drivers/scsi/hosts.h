@@ -96,6 +96,8 @@ typedef struct	SHT
      */
     int (* detect)(struct SHT *);
 
+    int (*revoke)(Scsi_Device *);
+
     /* Used with loadable modules to unload the host structures.  Note:
      * there is a default action built into the modules code which may
      * be sufficient for most host adapters.  Thus you may not have to supply

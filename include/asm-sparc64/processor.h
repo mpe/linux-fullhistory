@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.62 2000/03/26 09:13:53 davem Exp $
+/* $Id: processor.h,v 1.63 2000/03/27 10:38:57 davem Exp $
  * include/asm-sparc64/processor.h
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -51,7 +51,7 @@ struct thread_struct {
 	unsigned long ksp __attribute__ ((aligned(16)));
 	unsigned char wstate, cwp, flags;
 	mm_segment_t current_ds;
-	unsigned char w_saved, fpdepth, fault_code, __pad1;
+	unsigned char w_saved, fpdepth, fault_code, use_blkcommit;
 	unsigned long fault_address;
 	unsigned char fpsaved[7];
 	unsigned char __pad2;
@@ -91,7 +91,7 @@ struct thread_struct {
 #define INIT_THREAD  {					\
 /* ksp, wstate, cwp, flags, current_ds, */ 		\
    0,   0,      0,   0,     KERNEL_DS,			\
-/* w_saved, fpdepth, fault_code, __pad1, */		\
+/* w_saved, fpdepth, fault_code, use_blkcommit, */	\
    0,       0,       0,          0,			\
 /* fault_address, fpsaved, __pad2, kregs, */		\
    0,             { 0 },   0,      0,			\

@@ -34,7 +34,7 @@ endif
 include $(TOPDIR)/Rules.make
 
 .S.o:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) $(AFLAGS_$@) -traditional -c -o $*.o $<
+	$(CC) $(AFLAGS) $(AFLAGS_$@) -traditional -c -o $*.o $<
 
 # Special dependencies
 fault-armv.o: fault-common.c

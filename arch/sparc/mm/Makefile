@@ -7,6 +7,9 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
+.S.o:
+	$(CC) $(AFLAGS) -ansi -c -o $*.o $<
+
 O_TARGET := mm.o
 O_OBJS   := fault.o init.o loadmmu.o generic.o extable.o btfixup.o
 ifeq ($(CONFIG_SUN4),y)
@@ -21,15 +24,3 @@ O_OBJS   += sun4c.o
 endif
 
 include $(TOPDIR)/Rules.make
-
-hypersparc.o: hypersparc.S
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -c -o hypersparc.o hypersparc.S
-
-viking.o: viking.S
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -c -o viking.o viking.S
-
-tsunami.o: tsunami.S
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -c -o tsunami.o tsunami.S
-
-swift.o: swift.S
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -c -o swift.o swift.S

@@ -263,7 +263,7 @@ struct tcp_opt {
 	__u16	mss_cache;	/* Cached effective mss, not including SACKS */
 	__u16	mss_clamp;	/* Maximal mss, negotiated at connection setup */
 	__u16	ext_header_len;	/* Network protocol overhead (IP/IPv6 options) */
-	__u8	dup_acks;	/* Consequetive duplicate acks seen from other end */
+	__u8	dup_acks;	/* Consecutive duplicate acks seen from other end */
 	__u8	retransmits;
 
 	__u8	__empty1;

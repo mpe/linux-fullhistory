@@ -3,9 +3,9 @@
 #
 
 .S.s:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -E -o $*.s $<
+	$(CPP) $(AFLAGS) -o $*.s $<
 .S.o:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -c -o $*.o $<
+	$(CC) $(AFLAGS) -c -o $*.o $<
 
 all: ia32.o
 

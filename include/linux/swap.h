@@ -173,6 +173,8 @@ do {						\
 
 #define	lru_cache_del(page)			\
 do {						\
+	if (!PageLocked(page))			\
+		BUG();				\
 	spin_lock(&pagemap_lru_lock);		\
 	list_del(&(page)->lru);			\
 	nr_lru_pages--;				\

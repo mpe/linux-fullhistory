@@ -1,4 +1,4 @@
-/* $Id: ioport.c,v 1.36 2000/03/16 08:22:53 anton Exp $
+/* $Id: ioport.c,v 1.37 2000/03/28 06:38:19 davem Exp $
  * ioport.c:  Simple io mapping allocator.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -581,6 +581,7 @@ dma_addr_t pci_map_single(struct pci_dev *hwdev, void *ptr, size_t size, int dir
 {
 	if (direction == PCI_DMA_NONE)
 		BUG();
+	/* IIep is write-through, not flushing. */
 	return virt_to_bus(ptr);
 }
 
@@ -591,11 +592,15 @@ dma_addr_t pci_map_single(struct pci_dev *hwdev, void *ptr, size_t size, int dir
  * After this call, reads by the cpu to the buffer are guarenteed to see
  * whatever the device wrote there.
  */
-void pci_unmap_single(struct pci_dev *hwdev, dma_addr_t dma_addr, size_t size, int direction)
+void pci_unmap_single(struct pci_dev *hwdev, dma_addr_t ba, size_t size,
+    int direction)
 {
 	if (direction == PCI_DMA_NONE)
 		BUG();
-	/* Nothing to do... */
+	if (direction != PCI_DMA_TODEVICE) {
+		mmu_inval_dma_area((unsigned long)bus_to_virt(ba),
+		    (size + PAGE_SIZE-1) & PAGE_MASK);
+	}
 }
 
 /* Map a set of buffers described by scatterlist in streaming
@@ -613,13 +618,14 @@ void pci_unmap_single(struct pci_dev *hwdev, dma_addr_t dma_addr, size_t size, i
  * Device ownership issues as mentioned above for pci_map_single are
  * the same here.
  */
-int pci_map_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nents, int direction)
+int pci_map_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nents,
+    int direction)
 {
 	int n;
 
 	if (direction == PCI_DMA_NONE)
 		BUG();
-
+	/* IIep is write-through, not flushing. */
 	for (n = 0; n < nents; n++) {
 		sg->dvma_address = virt_to_bus(sg->address);
 		sg->dvma_length = sg->length;
@@ -632,15 +638,24 @@ int pci_map_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nents, int dir
  * Again, cpu read rules concerning calls here are the same as for
  * pci_unmap_single() above.
  */
-void pci_unmap_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nhwents, int direction)
+void pci_unmap_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nents,
+    int direction)
 {
+	int n;
+
 	if (direction == PCI_DMA_NONE)
 		BUG();
-	/* Nothing to do... */
+	if (direction != PCI_DMA_TODEVICE) {
+		for (n = 0; n < nents; n++) {
+			mmu_inval_dma_area((unsigned long)sg->address,
+			    (sg->length + PAGE_SIZE-1) & PAGE_MASK);
+			sg++;
+		}
+	}
 }
 
 /* Make physical memory consistent for a single
- * streaming mode DMA translation after a transfer.
+ * streaming mode DMA translation before or after a transfer.
  *
  * If you perform a pci_map_single() but wish to interrogate the
  * buffer using the cpu, yet do not wish to teardown the PCI dma
@@ -652,8 +667,10 @@ void pci_dma_sync_single(struct pci_dev *hwdev, dma_addr_t ba, size_t size, int 
 {
 	if (direction == PCI_DMA_NONE)
 		BUG();
-	mmu_inval_dma_area((unsigned long)bus_to_virt(ba),
-	    (size + PAGE_SIZE-1) & PAGE_MASK);
+	if (direction != PCI_DMA_TODEVICE) {
+		mmu_inval_dma_area((unsigned long)bus_to_virt(ba),
+		    (size + PAGE_SIZE-1) & PAGE_MASK);
+	}
 }
 
 /* Make physical memory consistent for a set of streaming
@@ -664,13 +681,16 @@ void pci_dma_sync_single(struct pci_dev *hwdev, dma_addr_t ba, size_t size, int 
  */
 void pci_dma_sync_sg(struct pci_dev *hwdev, struct scatterlist *sg, int nents, int direction)
 {
+	int n;
+
 	if (direction == PCI_DMA_NONE)
 		BUG();
-	while (nents) {
-		--nents;
-		mmu_inval_dma_area((unsigned long)sg->address,
-		    (sg->dvma_length + PAGE_SIZE-1) & PAGE_MASK);
-		sg++;
+	if (direction != PCI_DMA_TODEVICE) {
+		for (n = 0; n < nents; n++) {
+			mmu_inval_dma_area((unsigned long)sg->address,
+			    (sg->length + PAGE_SIZE-1) & PAGE_MASK);
+			sg++;
+		}
 	}
 }
 #endif CONFIG_PCI

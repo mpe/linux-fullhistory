@@ -3,7 +3,7 @@
 #
 
 .S.o:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -c $< -o $@
+	$(CC) $(AFLAGS) -c $< -o $@
 
 OBJS  = __divdi3.o __divsi3.o __udivdi3.o __udivsi3.o		\
 	__moddi3.o __modsi3.o __umoddi3.o __umodsi3.o		\

@@ -13,10 +13,10 @@ lib.a: $(OBJS)
 	sync
 
 .S.s:
-	$(CPP) -D__ASSEMBLY__ $(AFLAGS) -ansi -DST_DIV0=0x2 $< -o $*.s
+	$(CPP) $(AFLAGS) -ansi -DST_DIV0=0x2 $< -o $*.s
 
 .S.o:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -DST_DIV0=0x2 -c $< -o $*.o
+	$(CC) $(AFLAGS) -ansi -DST_DIV0=0x2 -c $< -o $*.o
 
 dep:
 

@@ -5,6 +5,7 @@
    DO IT.
  */
 #include <linux/skbuff.h>
+#include <linux/in.h>
 #include <linux/ip.h>
 #include <linux/icmp.h>
 #include <linux/udp.h>

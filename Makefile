@@ -88,7 +88,7 @@ CPPFLAGS += -D__SMP__
 endif
 
 CFLAGS := $(CPPFLAGS) -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
-AFLAGS := $(CPPFLAGS) -D__ASSEMBLY__ -traditional
+AFLAGS := -D__ASSEMBLY__ $(CPPFLAGS)
 
 # use '-fno-strict-aliasing', but only if the compiler can take it
 CFLAGS += $(shell if $(CC) -fno-strict-aliasing -S -o /dev/null -xc /dev/null >/dev/null 2>&1; then echo "-fno-strict-aliasing"; fi)
@@ -185,9 +185,9 @@ include arch/$(ARCH)/Makefile
 export	NETWORKS DRIVERS LIBS HEAD LDFLAGS LINKFLAGS MAKEBOOT ASFLAGS
 
 .S.s:
-	$(CPP) $(AFLAGS) -o $*.s $<
+	$(CPP) $(AFLAGS) -traditional -o $*.s $<
 .S.o:
-	$(CC) $(AFLAGS) -c -o $*.o $<
+	$(CC) $(AFLAGS) -traditional -c -o $*.o $<
 
 Version: dummy
 	@rm -f include/linux/compile.h

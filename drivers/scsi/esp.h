@@ -1,4 +1,4 @@
-/* $Id: esp.h,v 1.27 1999/12/15 14:12:52 davem Exp $
+/* $Id: esp.h,v 1.28 2000/03/30 01:33:17 davem Exp $
  * esp.h:  Defines and structures for the Sparc ESP (Enhanced SCSI
  *         Processor) driver under Linux.
  *
@@ -398,12 +398,14 @@ extern int esp_abort(Scsi_Cmnd *);
 extern int esp_reset(Scsi_Cmnd *, unsigned int);
 extern int esp_proc_info(char *buffer, char **start, off_t offset, int length,
 			 int hostno, int inout);
+extern int esp_revoke(Scsi_Device* SDptr);
 
 #define SCSI_SPARC_ESP {                                        \
 		proc_name:      "esp",				\
 		proc_info:      &esp_proc_info,			\
 		name:           "Sun ESP 100/100a/200",		\
 		detect:         esp_detect,			\
+		revoke:		esp_revoke,			\
 		info:           esp_info,			\
 		command:        esp_command,			\
 		queuecommand:   esp_queue,			\

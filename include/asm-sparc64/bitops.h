@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.27 2000/02/09 03:28:33 davem Exp $
+/* $Id: bitops.h,v 1.28 2000/03/27 10:38:56 davem Exp $
  * bitops.h: Bit string operations on the V9.
  *
  * Copyright 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -8,132 +8,17 @@
 #define _SPARC64_BITOPS_H
 
 #include <asm/byteorder.h>
-#include <asm/asi.h>         /* For the little endian spaces. */
 
-/* These can all be exported to userland, because the atomic
- * primitives used are not privileged.
- */
+extern long __test_and_set_bit(unsigned long nr, void *addr);
+extern long __test_and_clear_bit(unsigned long nr, void *addr);
+extern long __test_and_change_bit(unsigned long nr, void *addr);
 
-/* Set bit 'nr' in 64-bit quantity at address 'addr' where bit '0'
- * is in the highest of the eight bytes and bit '63' is the high bit
- * within the first byte. Sparc is BIG-Endian. Unless noted otherwise
- * all bit-ops return 0 if bit was previously clear and != 0 otherwise.
- */
-
-extern __inline__ int test_and_set_bit(unsigned long nr, void *addr)
-{
-	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
-	unsigned long oldbit;
-
-	__asm__ __volatile__("
-1:	ldx		[%2], %%g7
-	andcc		%%g7, %1, %0
-	bne,pn		%%xcc, 2f
-	 xor		%%g7, %1, %%g5
-	casx 		[%2], %%g7, %%g5
-	cmp		%%g7, %%g5
-	bne,pn		%%xcc, 1b
-	 nop
-2:
-"	: "=&r" (oldbit)
-	: "HIr" (1UL << (nr & 63)), "r" (m)
-	: "g5", "g7", "cc", "memory");
-	return oldbit != 0;
-}
-
-extern __inline__ void set_bit(unsigned long nr, void *addr)
-{
-	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
-
-	__asm__ __volatile__("
-1:	ldx		[%1], %%g7
-	andcc		%%g7, %0, %%g0
-	bne,pn		%%xcc, 2f
-	 xor		%%g7, %0, %%g5
-	casx 		[%1], %%g7, %%g5
-	cmp		%%g7, %%g5
-	bne,pn		%%xcc, 1b
-	 nop
-2:
-"	: /* no outputs */
-	: "HIr" (1UL << (nr & 63)), "r" (m)
-	: "g5", "g7", "cc", "memory");
-}
-
-extern __inline__ int test_and_clear_bit(unsigned long nr, void *addr)
-{
-	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
-	unsigned long oldbit;
-
-	__asm__ __volatile__("
-1:	ldx		[%2], %%g7
-	andcc		%%g7, %1, %0
-	be,pn		%%xcc, 2f
-	 xor		%%g7, %1, %%g5
-	casx 		[%2], %%g7, %%g5
-	cmp		%%g7, %%g5
-	bne,pn		%%xcc, 1b
-	 nop
-2:
-"	: "=&r" (oldbit)
-	: "HIr" (1UL << (nr & 63)), "r" (m)
-	: "g5", "g7", "cc", "memory");
-	return oldbit != 0;
-}
-
-extern __inline__ void clear_bit(unsigned long nr, void *addr)
-{
-	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
-
-	__asm__ __volatile__("
-1:	ldx		[%1], %%g7
-	andcc		%%g7, %0, %%g0
-	be,pn		%%xcc, 2f
-	 xor		%%g7, %0, %%g5
-	casx 		[%1], %%g7, %%g5
-	cmp		%%g7, %%g5
-	bne,pn		%%xcc, 1b
-	 nop
-2:
-"	: /* no outputs */
-	: "HIr" (1UL << (nr & 63)), "r" (m)
-	: "g5", "g7", "cc", "memory");
-}
-
-extern __inline__ int test_and_change_bit(unsigned long nr, void *addr)
-{
-	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
-	unsigned long oldbit;
-
-	__asm__ __volatile__("
-1:	ldx		[%2], %%g7
-	and		%%g7, %1, %0
-	xor		%%g7, %1, %%g5
-	casx 		[%2], %%g7, %%g5
-	cmp		%%g7, %%g5
-	bne,pn		%%xcc, 1b
-	 nop
-"	: "=&r" (oldbit)
-	: "HIr" (1UL << (nr & 63)), "r" (m)
-	: "g5", "g7", "cc", "memory");
-	return oldbit != 0;
-}
-
-extern __inline__ void change_bit(unsigned long nr, void *addr)
-{
-	unsigned long * m = ((unsigned long *) addr) + (nr >> 6);
-
-	__asm__ __volatile__("
-1:	ldx		[%1], %%g7
-	xor		%%g7, %0, %%g5
-	casx 		[%1], %%g7, %%g5
-	cmp		%%g7, %%g5
-	bne,pn		%%xcc, 1b
-	 nop
-"	: /* no outputs */
-	: "HIr" (1UL << (nr & 63)), "r" (m)
-	: "g5", "g7", "cc", "memory");
-}
+#define test_and_set_bit(nr,addr)	(__test_and_set_bit(nr,addr)!=0)
+#define test_and_clear_bit(nr,addr)	(__test_and_clear_bit(nr,addr)!=0)
+#define test_and_change_bit(nr,addr)	(__test_and_change_bit(nr,addr)!=0)
+#define set_bit(nr,addr)		((void)__test_and_set_bit(nr,addr))
+#define clear_bit(nr,addr)		((void)__test_and_clear_bit(nr,addr))
+#define change_bit(nr,addr)		((void)__test_and_change_bit(nr,addr))
 
 extern __inline__ int test_bit(int nr, __const__ void *addr)
 {
@@ -280,50 +165,13 @@ found_middle:
 #define find_first_zero_bit(addr, size) \
         find_next_zero_bit((addr), (size), 0)
 
-/* Now for the ext2 filesystem bit operations and helper routines.
- * Note the usage of the little endian ASI's, werd, V9 is supreme.
- */
-extern __inline__ int set_le_bit(int nr,void * addr)
-{
-	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
-	unsigned long oldbit;
+extern long __test_and_set_le_bit(int nr, void *addr);
+extern long __test_and_clear_le_bit(int nr, void *addr);
 
-	__asm__ __volatile__("
-1:	lduwa		[%2] %3, %%g7
-	andcc		%%g7, %1, %0
-	bne,pn		%%icc, 2f
-	 xor		%%g7, %1, %%g5
-	casa 		[%2] %3, %%g7, %%g5
-	cmp		%%g7, %%g5
-	bne,pn		%%icc, 1b
-	 nop
-2:
-"	: "=&r" (oldbit)
-	: "HIr" (1UL << (nr & 31)), "r" (m), "i" (ASI_PL)
-	: "g5", "g7", "cc", "memory");
-	return oldbit != 0;
-}
-
-extern __inline__ int clear_le_bit(int nr, void * addr)
-{
-	unsigned int * m = ((unsigned int *) addr) + (nr >> 5);
-	unsigned long oldbit;
-
-	__asm__ __volatile__("
-1:	lduwa		[%2] %3, %%g7
-	andcc		%%g7, %1, %0
-	be,pn		%%icc, 2f
-	 xor		%%g7, %1, %%g5
-	casa 		[%2] %3, %%g7, %%g5
-	cmp		%%g7, %%g5
-	bne,pn		%%icc, 1b
-	 nop
-2:
-"	: "=&r" (oldbit)
-	: "HIr" (1UL << (nr & 31)), "r" (m), "i" (ASI_PL)
-	: "g5", "g7", "cc", "memory");
-	return oldbit != 0;
-}
+#define test_and_set_le_bit(nr,addr)	(__test_and_set_le_bit(nr,addr)!=0)
+#define test_and_clear_le_bit(nr,addr)	(__test_and_clear_le_bit(nr,addr)!=0)
+#define set_le_bit(nr,addr)		((void)__test_and_set_le_bit(nr,addr))
+#define clear_le_bit(nr,addr)		((void)__test_and_clear_le_bit(nr,addr))
 
 extern __inline__ int test_le_bit(int nr, __const__ void * addr)
 {
@@ -375,8 +223,8 @@ found_middle:
 
 #ifdef __KERNEL__
 
-#define ext2_set_bit			set_le_bit
-#define ext2_clear_bit			clear_le_bit
+#define ext2_set_bit			test_and_set_le_bit
+#define ext2_clear_bit			test_and_clear_le_bit
 #define ext2_test_bit  			test_le_bit
 #define ext2_find_first_zero_bit	find_first_zero_le_bit
 #define ext2_find_next_zero_bit		find_next_zero_le_bit

@@ -29,8 +29,8 @@
  */
 
 #define MOUSEDEV_MINOR_BASE 	32
+#define MOUSEDEV_MINORS		32
 
-#include <linux/miscdevice.h>
 #include <linux/malloc.h>
 #include <linux/poll.h>
 #include <linux/module.h>
@@ -46,12 +46,11 @@
 #endif
 
 struct mousedev {
-	char name[32];
 	int used;
-	struct input_handle handle;
-	struct miscdevice misc;
+	int minor;
 	wait_queue_head_t wait;
 	struct mousedev_list *list;
+	devfs_handle_t devfs;
 };
 
 struct mousedev_list {
@@ -71,12 +70,7 @@ struct mousedev_list {
 static unsigned char mousedev_genius_seq[] = { 0xe8, 3, 0xe6, 0xe6, 0xe6 };
 static unsigned char mousedev_imps_seq[] = { 0xf3, 200, 0xf3, 100, 0xf3, 80 };
 
-#ifdef CONFIG_INPUT_MOUSEDEV_MIX
-static struct mousedev mousedev_single;
-#else
-static unsigned long mousedev_miscbits = 0;
-static struct mousedev *mousedev_base[BITS_PER_LONG];
-#endif
+static struct mousedev *mousedev_table[BITS_PER_LONG];
 
 static void mousedev_event(struct input_handle *handle, unsigned int type, unsigned int code, int value)
 {
@@ -163,13 +157,11 @@ static int mousedev_release(struct inode * inode, struct file * file)
 		listptr = &((*listptr)->next);
 	*listptr = (*listptr)->next;
 	
-#ifndef CONFIG_INPUT_MOUSEDEV_MIX
 	if (!--list->mousedev->used) {
-		clear_bit(list->mousedev->misc.minor - MOUSEDEV_MINOR_BASE, &mousedev_miscbits);
-		misc_deregister(&list->mousedev->misc);
+		input_unregister_minor(list->mousedev->devfs);
+		mousedev_table[list->mousedev->minor] = NULL;
 		kfree(list->mousedev);
 	}
-#endif
 
 	kfree(list);
 
@@ -180,29 +172,20 @@ static int mousedev_release(struct inode * inode, struct file * file)
 static int mousedev_open(struct inode * inode, struct file * file)
 {
 	struct mousedev_list *list;
-
-#ifndef CONFIG_INPUT_MOUSEDEV_MIX
 	int i = MINOR(inode->i_rdev) - MOUSEDEV_MINOR_BASE;
-	if (i > BITS_PER_LONG || !test_bit(i, &mousedev_miscbits))
+
+	if (i > MOUSEDEV_MINORS || !mousedev_table[i])
 		return -ENODEV;
-#endif
 
 	if (!(list = kmalloc(sizeof(struct mousedev_list), GFP_KERNEL)))
 		return -ENOMEM;
 
 	memset(list, 0, sizeof(struct mousedev_list));
 
-
-#ifdef CONFIG_INPUT_MOUSEDEV_MIX
-	list->mousedev = &mousedev_single;
-	list->next = mousedev_single.list;
-	mousedev_single.list = list;
-#else
-	list->mousedev = mousedev_base[i];
-	list->next = mousedev_base[i]->list;
-	mousedev_base[i]->list = list;
+	list->mousedev = mousedev_table[i];
+	list->next = mousedev_table[i]->list;
+	mousedev_table[i]->list = list;
 	list->mousedev->used++;
-#endif
 
 	file->private_data = list;
 
@@ -359,6 +342,9 @@ struct file_operations mousedev_fops = {
 
 static int mousedev_connect(struct input_handler *handler, struct input_dev *dev)
 {
+	struct mousedev *mousedev;
+	struct input_handle *handle;
+	int minor = 0;
 
 	if (!test_bit(EV_KEY, dev->evbit) ||
 	   (!test_bit(BTN_LEFT, dev->keybit) && !test_bit(BTN_TOUCH, dev->keybit)))
@@ -367,109 +353,77 @@ static int mousedev_connect(struct input_handler *handler, struct input_dev *dev
 	if ((!test_bit(EV_REL, dev->evbit) || !test_bit(REL_X, dev->relbit)) &&
 	    (!test_bit(EV_ABS, dev->evbit) || !test_bit(ABS_X, dev->absbit)))
 		return -1;
-	
-#ifdef CONFIG_INPUT_MOUSEDEV_MIX
-	{
-		struct input_handle *handle;
 
-		if (!(handle = kmalloc(sizeof(struct input_handle), GFP_KERNEL)))
-			return -1;
-
-		memset(handle, 0, sizeof(struct input_handle));
-
-		handle->dev = dev;
-		handle->handler = handler;
-		handle->private = &mousedev_single;
-
-		input_open_device(handle);
-
-		printk("mousedev.c: Adding mouse: input%d\n", dev->number);
+#ifndef CONFIG_INPUT_MOUSEDEV_MIX
+	for (minor = 0; minor < MOUSEDEV_MINORS && mousedev_table[minor]; minor++);
+	if (mousedev_table[minor]) {
+		printk(KERN_ERR "mousedev: no more free mousedev devices\n");
+		return -1;
 	}
 #else
-	{
-		struct mousedev *mousedev;
+	if (!mousedev_table[minor]) {
+#endif
 
 		if (!(mousedev = kmalloc(sizeof(struct mousedev), GFP_KERNEL)))
 			return -1;
-
 		memset(mousedev, 0, sizeof(struct mousedev));
-
-		mousedev->misc.minor = ffz(mousedev_miscbits);
-		set_bit(mousedev->misc.minor, &mousedev_miscbits);
-		mousedev_base[mousedev->misc.minor] = mousedev;
-
-		sprintf(mousedev->name, "mousedev%d", mousedev->misc.minor);
-		mousedev->misc.name = mousedev->name;
-		mousedev->misc.minor += MOUSEDEV_MINOR_BASE;
-		mousedev->misc.fops = &mousedev_fops;
-
-		mousedev->handle.dev = dev;
-		mousedev->handle.handler = handler;
-		mousedev->handle.private = mousedev;
-
 		init_waitqueue_head(&mousedev->wait);
 
-		mousedev->used = 1;
+		mousedev->devfs = input_register_minor("mouse%d", minor, MOUSEDEV_MINOR_BASE);
 
-		misc_register(&mousedev->misc);
-		input_open_device(&mousedev->handle);
-
-		printk("%s: PS/2 mouse device for input%d on misc%d\n",
-			mousedev->name, dev->number, mousedev->misc.minor);
-	}
+#ifdef CONFIG_INPUT_MOUSEDEV_MIX
+	} else mousedev = mousedev_table[minor];
 #endif
+
+	if (!(handle = kmalloc(sizeof(struct input_handle), GFP_KERNEL))) {
+		if (!mousedev->used) kfree(mousedev);
+		return -1;
+	}
+	memset(handle, 0, sizeof(struct input_handle));
+
+	mousedev->used++;
+	mousedev->minor = minor;
+	mousedev_table[minor] = mousedev;
+
+	handle->dev = dev;
+	handle->handler = handler;
+	handle->private = mousedev;
+
+	input_open_device(handle);
+
+	printk("mouse%d: PS/2 mouse device for input%d\n", minor, dev->number);
 
 	return 0;
 }
 
 static void mousedev_disconnect(struct input_handle *handle)
 {
-#ifdef CONFIG_INPUT_MOUSEDEV_MIX
-	printk("mousedev.c: Removing mouse: input%d\n", handle->dev->number);
-	input_close_device(handle);
-	kfree(handle);
-#else
 	struct mousedev *mousedev = handle->private;
 	input_close_device(handle);
+	kfree(handle);
 	if (!--mousedev->used) {
-		clear_bit(mousedev->misc.minor - MOUSEDEV_MINOR_BASE, &mousedev_miscbits);
-		misc_deregister(&mousedev->misc);
+		input_unregister_minor(mousedev->devfs);
+		mousedev_table[mousedev->minor] = NULL;
 		kfree(mousedev);
 	}
-#endif
 }
 	
 static struct input_handler mousedev_handler = {
 	event:		mousedev_event,
 	connect:	mousedev_connect,
 	disconnect:	mousedev_disconnect,
+	fops:		&mousedev_fops,
+	minor:		MOUSEDEV_MINOR_BASE,
 };
 
 static int __init mousedev_init(void)
 {
 	input_register_handler(&mousedev_handler);
-
-#ifdef CONFIG_INPUT_MOUSEDEV_MIX
-	memset(&mousedev_single, 0, sizeof(struct mousedev));
-
-	init_waitqueue_head(&mousedev_single.wait);
-	mousedev_single.misc.minor = MOUSEDEV_MINOR_BASE;
-	mousedev_single.misc.name = "mousedev";
-	mousedev_single.misc.fops = &mousedev_fops;
-
-	misc_register(&mousedev_single.misc);
-
-	printk("mousedev: PS/2 mouse device on misc%d\n", mousedev_single.misc.minor);
-#endif
-
 	return 0;
 }
 
 static void __exit mousedev_exit(void)
 {
-#ifdef CONFIG_INPUT_MOUSEDEV_MIX
-	misc_deregister(&mousedev_single.misc);
-#endif
 	input_unregister_handler(&mousedev_handler);
 }
 

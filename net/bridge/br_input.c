@@ -5,7 +5,7 @@
  *	Authors:
  *	Lennert Buytenhek		<buytenh@gnu.org>
  *
- *	$Id: br_input.c,v 1.4 2000/03/21 21:08:47 davem Exp $
+ *	$Id: br_input.c,v 1.5 2000/03/30 01:22:23 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -94,6 +94,8 @@ static void __br_handle_frame(struct sk_buff *skb)
 		br_flood(br, skb, 1);
 		if (!passedup)
 			br_pass_frame_up(br, skb);
+		else
+			kfree_skb(skb);
 		return;
 	}
 
@@ -102,6 +104,8 @@ static void __br_handle_frame(struct sk_buff *skb)
 	if (dst != NULL && dst->is_local) {
 		if (!passedup)
 			br_pass_frame_up(br, skb);
+		else
+			kfree_skb(skb);
 		br_fdb_put(dst);
 		return;
 	}

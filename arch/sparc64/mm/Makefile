@@ -8,10 +8,10 @@
 # Note 2! The CFLAGS definition is now in the main makefile...
 
 .S.s:
-	$(CPP) -D__ASSEMBLY__ $(AFLAGS) -ansi $< -o $*.s
+	$(CPP) $(AFLAGS) -ansi $< -o $*.s
 
 .S.o:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) -ansi -c $< -o $*.o
+	$(CC) $(AFLAGS) -ansi -c $< -o $*.o
 
 O_TARGET := mm.o
 O_OBJS   := ultra.o fault.o init.o generic.o extable.o modutil.o

@@ -38,7 +38,7 @@
 
 static const char *version =
 "eepro100.c:v1.09j-t 9/29/99 Donald Becker http://cesdis.gsfc.nasa.gov/linux/drivers/eepro100.html\n"
-"eepro100.c: $Revision: 1.28 $ 2000/03/28 Modified by Andrey V. Savochkin <saw@saw.sw.com.sg> and others\n";
+"eepro100.c: $Revision: 1.29 $ 2000/03/30 Modified by Andrey V. Savochkin <saw@saw.sw.com.sg> and others\n";
 
 /* A few user-configurable values that apply to all boards.
    First set is undocumented and spelled per Intel recommendations. */
@@ -93,6 +93,7 @@ static int debug = -1;			/* The debug level */
 #error You must compile this driver with "-O".
 #endif
 
+#include <linux/config.h>
 #include <linux/version.h>
 #include <linux/module.h>
 #if defined(MODVERSIONS)
@@ -353,6 +354,14 @@ enum pci_flags_bit {
 };
 
 #ifndef USE_IO
+/* Currently alpha headers define in/out macros.
+   Undefine them.  2000/03/30  SAW */
+#undef inb
+#undef inw
+#undef inl
+#undef outb
+#undef outw
+#undef outl
 #define inb readb
 #define inw readw
 #define inl readl
@@ -460,8 +469,7 @@ struct speedo_mc_block {
 	unsigned int tx;
 	dma_addr_t frame_dma;
 	unsigned int len;
-	char fill[16 - sizeof(struct speedo_mc_block *) - sizeof(unsigned int) - sizeof(dma_addr_t) - sizeof(unsigned int)];
-	struct descriptor frame;
+	struct descriptor frame __attribute__ ((__aligned__(16)));
 };
 
 /* Elements of the dump_statistics block. This block must be lword aligned. */

@@ -1,4 +1,4 @@
-/* $Id: ultra.S,v 1.40 2000/03/26 09:13:51 davem Exp $
+/* $Id: ultra.S,v 1.41 2000/03/27 10:38:51 davem Exp $
  * ultra.S: Don't expand these all over the place...
  *
  * Copyright (C) 1997, 2000 David S. Miller (davem@redhat.com)
@@ -206,7 +206,6 @@ iflush2:sub		%o1, 0x20, %g3
 	ba,a,pt		%xcc, 3b
 
 	.align		32
-	.globl		__prefill_dtlb
 __prefill_dtlb:
 	rdpr		%pstate, %g7
 	wrpr		%g7, PSTATE_IE, %pstate
@@ -216,8 +215,6 @@ __prefill_dtlb:
 	flush		%g6
 	retl
 	 wrpr		%g7, %pstate
-
-	.globl		__prefill_itlb
 __prefill_itlb:
 	rdpr		%pstate, %g7
 	wrpr		%g7, PSTATE_IE, %pstate
@@ -227,6 +224,23 @@ __prefill_itlb:
 	flush		%g6
 	retl
 	 wrpr		%g7, %pstate
+
+	.globl		update_mmu_cache
+update_mmu_cache:	/* %o0=vma, %o1=address, %o2=pte */
+	ldub		[%g6 + AOFF_task_thread + AOFF_thread_fault_code], %o3
+	srlx		%o1, 13, %o1
+	ldx		[%o0 + 0x0], %o4		/* XXX vma->vm_mm */
+	brz,pn		%o3, 1f
+	 sllx		%o1, 13, %o0
+	ldx		[%o4 + AOFF_mm_context], %o5
+	andcc		%o3, FAULT_CODE_DTLB, %g0
+	mov		%o2, %o1
+	and		%o5, 0x3ff, %o5
+	bne,pt		%xcc, __prefill_dtlb
+	 or		%o0, %o5, %o0
+	ba,a,pt		%xcc, __prefill_itlb
+1:	retl
+	 nop
 
 #ifdef __SMP__
 	/* These are all called by the slaves of a cross call, at

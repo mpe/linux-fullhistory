@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.51 2000/03/15 07:19:25 davem Exp $
+/* $Id: page.h,v 1.52 2000/03/28 06:07:25 anton Exp $
  * page.h:  Various defines and such for MMU operations on the Sparc for
  *          the Linux kernel.
  *
@@ -32,11 +32,20 @@
 
 #ifndef __ASSEMBLY__
 
-#define BUG() do { printk("kernel BUG at %s:%d!\n", __FILE__, __LINE__); *(int *)0=0; } while (0)
-
-#define PAGE_BUG(page) do { \
-	BUG(); \
+#if (__GNUC__ > 2) || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8)
+/* We need the mb()'s so we don't trigger a compiler bug - Anton */
+#define BUG() do { \
+	mb(); \
+	__builtin_trap(); \
+	mb(); \
+} while(0)
+#else
+#define BUG() do { \
+	printk("kernel BUG at %s:%d!\n", __FILE__, __LINE__); *(int *)0=0; \
 } while (0)
+#endif
+
+#define PAGE_BUG(page)	BUG()
 
 #define clear_page(page)	 memset((void *)(page), 0, PAGE_SIZE)
 #define copy_page(to,from) 	memcpy((void *)(to), (void *)(from), PAGE_SIZE)

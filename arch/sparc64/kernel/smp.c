@@ -469,52 +469,83 @@ void smp_flush_tlb_all(void)
  */
 void smp_flush_tlb_mm(struct mm_struct *mm)
 {
-	u32 ctx = CTX_HWBITS(mm->context);
+	if (CTX_VALID(mm->context)) {
+		u32 ctx = CTX_HWBITS(mm->context);
+		int cpu = smp_processor_id();
 
-	if (mm == current->active_mm &&
-	    atomic_read(&mm->mm_users) == 1 &&
-	    (mm->cpu_vm_mask == (1UL << smp_processor_id())))
-		goto local_flush_and_out;
+		if (mm == current->active_mm && atomic_read(&mm->mm_users) == 1) {
+			/* See smp_flush_tlb_page for info about this. */
+			mm->cpu_vm_mask = (1UL << cpu);
+			goto local_flush_and_out;
+		}
 
-	smp_cross_call(&xcall_flush_tlb_mm, ctx, 0, 0);
+		smp_cross_call(&xcall_flush_tlb_mm, ctx, 0, 0);
 
-local_flush_and_out:
-	__flush_tlb_mm(ctx, SECONDARY_CONTEXT);
+	local_flush_and_out:
+		__flush_tlb_mm(ctx, SECONDARY_CONTEXT);
+	}
 }
 
 void smp_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 			 unsigned long end)
 {
-	u32 ctx = CTX_HWBITS(mm->context);
+	if (CTX_VALID(mm->context)) {
+		u32 ctx = CTX_HWBITS(mm->context);
+		int cpu = smp_processor_id();
 
-	start &= PAGE_MASK;
-	end   &= PAGE_MASK;
-	if(mm == current->active_mm &&
-	   atomic_read(&mm->mm_users) == 1 &&
-	   (mm->cpu_vm_mask == (1UL << smp_processor_id())))
-		goto local_flush_and_out;
+		start &= PAGE_MASK;
+		end   &= PAGE_MASK;
 
-	smp_cross_call(&xcall_flush_tlb_range, ctx, start, end);
+		if (mm == current->active_mm && atomic_read(&mm->mm_users) == 1) {
+			mm->cpu_vm_mask = (1UL << cpu);
+			goto local_flush_and_out;
+		}
 
-local_flush_and_out:
-	__flush_tlb_range(ctx, start, SECONDARY_CONTEXT, end, PAGE_SIZE, (end-start));
+		smp_cross_call(&xcall_flush_tlb_range, ctx, start, end);
+
+	local_flush_and_out:
+		__flush_tlb_range(ctx, start, SECONDARY_CONTEXT, end, PAGE_SIZE, (end-start));
+	}
 }
 
 void smp_flush_tlb_page(struct mm_struct *mm, unsigned long page)
 {
-	u32 ctx = CTX_HWBITS(mm->context);
+	if (CTX_VALID(mm->context)) {
+		u32 ctx = CTX_HWBITS(mm->context);
+		int cpu = smp_processor_id();
 
-	page &= PAGE_MASK;
-	if(mm == current->active_mm &&
-	   atomic_read(&mm->mm_users) == 1 &&
-	   (mm->cpu_vm_mask == (1UL << smp_processor_id()))) {
-		goto local_flush_and_out;
+		page &= PAGE_MASK;
+		if (mm == current->active_mm && atomic_read(&mm->mm_users) == 1) {
+			/* By virtue of being the current address space, and
+			 * having the only reference to it, the following operation
+			 * is safe.
+			 *
+			 * It would not be a win to perform the xcall tlb flush in
+			 * this case, because even if we switch back to one of the
+			 * other processors in cpu_vm_mask it is almost certain that
+			 * all TLB entries for this context will be replaced by the
+			 * time that happens.
+			 */
+			mm->cpu_vm_mask = (1UL << cpu);
+			goto local_flush_and_out;
+		} else {
+			/* By virtue of running under the mm->page_table_lock,
+			 * and mmu_context.h:switch_mm doing the same, the following
+			 * operation is safe.
+			 */
+			if (mm->cpu_vm_mask == (1UL << cpu))
+				goto local_flush_and_out;
+		}
+
+		/* OK, we have to actually perform the cross call.  Most likely
+		 * this is a cloned mm or kswapd is kicking out pages for a task
+		 * which has run recently on another cpu.
+		 */
+		smp_cross_call(&xcall_flush_tlb_page, ctx, page, 0);
+
+	local_flush_and_out:
+		__flush_tlb_page(ctx, page, SECONDARY_CONTEXT);
 	}
-
-	smp_cross_call(&xcall_flush_tlb_page, ctx, page, 0);
-
-local_flush_and_out:
-	__flush_tlb_page(ctx, page, SECONDARY_CONTEXT);
 }
 
 /* CPU capture. */
@@ -603,13 +634,16 @@ static inline void sparc64_do_profile(unsigned long pc, unsigned long o7)
 		extern int rwlock_impl_begin, rwlock_impl_end;
 		extern int atomic_impl_begin, atomic_impl_end;
 		extern int __memcpy_begin, __memcpy_end;
+		extern int __bitops_begin, __bitops_end;
 
 		if ((pc >= (unsigned long) &atomic_impl_begin &&
 		     pc < (unsigned long) &atomic_impl_end) ||
 		    (pc >= (unsigned long) &rwlock_impl_begin &&
 		     pc < (unsigned long) &rwlock_impl_end) ||
 		    (pc >= (unsigned long) &__memcpy_begin &&
-		     pc < (unsigned long) &__memcpy_end))
+		     pc < (unsigned long) &__memcpy_end) ||
+		    (pc >= (unsigned long) &__bitops_begin &&
+		     pc < (unsigned long) &__bitops_end))
 			pc = o7;
 
 		pc -= (unsigned long) &_stext;

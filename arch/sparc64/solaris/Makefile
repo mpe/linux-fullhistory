@@ -15,10 +15,10 @@ CPPFLAGS = $(MODFLAGS)
 endif
 
 .S.s:
-	$(CPP) -D__ASSEMBLY__ $(AFLAGS) $(CPPFLAGS) -ansi $< -o $*.s
+	$(CPP) $(AFLAGS) $(CPPFLAGS) -ansi $< -o $*.s
 
 .S.o:
-	$(CC) -D__ASSEMBLY__ $(AFLAGS) $(CPPFLAGS) -ansi -c $< -o $*.o
+	$(CC) $(AFLAGS) $(CPPFLAGS) -ansi -c $< -o $*.o
 
 ifneq ($(CONFIG_SOLARIS_EMUL),y)
 do_it_all:

@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.79 2000/03/17 14:41:18 davem Exp $
+/* $Id: sparc64_ksyms.c,v 1.80 2000/03/27 10:38:47 davem Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -169,6 +169,13 @@ EXPORT_SYMBOL_NOVERS(__rwsem_wake);
 /* Atomic counter implementation. */
 EXPORT_SYMBOL_PRIVATE(atomic_add);
 EXPORT_SYMBOL_PRIVATE(atomic_sub);
+
+/* Atomic bit operations. */
+EXPORT_SYMBOL_PRIVATE(test_and_set_bit);
+EXPORT_SYMBOL_PRIVATE(test_and_clear_bit);
+EXPORT_SYMBOL_PRIVATE(test_and_change_bit);
+EXPORT_SYMBOL_PRIVATE(test_and_set_le_bit);
+EXPORT_SYMBOL_PRIVATE(test_and_clear_le_bit);
 
 EXPORT_SYMBOL(ivector_table);
 EXPORT_SYMBOL(enable_irq);

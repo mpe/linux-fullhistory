@@ -70,27 +70,11 @@ extern void smp_flush_tlb_page(struct mm_struct *mm, unsigned long page);
 
 #define flush_cache_all()	smp_flush_cache_all()
 #define flush_tlb_all()		smp_flush_tlb_all()
-
-extern __inline__ void flush_tlb_mm(struct mm_struct *mm)
-{
-	if (CTX_VALID(mm->context))
-		smp_flush_tlb_mm(mm);
-}
-
-extern __inline__ void flush_tlb_range(struct mm_struct *mm, unsigned long start,
-				       unsigned long end)
-{
-	if (CTX_VALID(mm->context))
-		smp_flush_tlb_range(mm, start, end);
-}
-
-extern __inline__ void flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
-{
-	struct mm_struct *mm = vma->vm_mm;
-
-	if (CTX_VALID(mm->context))
-		smp_flush_tlb_page(mm, page);
-}
+#define flush_tlb_mm(mm)	smp_flush_tlb_mm(mm)
+#define flush_tlb_range(mm, start, end) \
+	smp_flush_tlb_range(mm, start, end)
+#define flush_tlb_page(vma, page) \
+	smp_flush_tlb_page((vma)->vm_mm, page)
 
 #endif /* ! __SMP__ */
 

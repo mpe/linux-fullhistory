@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.44 2000/03/26 09:13:51 davem Exp $
+/* $Id: fault.c,v 1.45 2000/03/27 10:38:51 davem Exp $
  * arch/sparc64/mm/fault.c: Page fault handlers for the 64-bit Sparc.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -285,6 +285,9 @@ good_area:
 	if (fault_code & FAULT_CODE_WRITE) {
 		if (!(vma->vm_flags & VM_WRITE))
 			goto bad_area;
+		if ((vma->vm_flags & VM_EXEC) != 0 &&
+		    vma->vm_file != NULL)
+			current->thread.use_blkcommit = 1;
 	} else {
 		/* Allow reads even for write-only mappings */
 		if (!(vma->vm_flags & (VM_READ | VM_EXEC)))
@@ -342,5 +345,6 @@ do_sigbus:
 fault_done:
 	/* These values are no longer needed, clear them. */
 	current->thread.fault_code = 0;
+	current->thread.use_blkcommit = 0;
 	current->thread.fault_address = 0;
 }

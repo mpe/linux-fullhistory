@@ -1,4 +1,4 @@
-/* $Id: parport_sunbpp.c,v 1.9 1999/10/14 05:59:43 ecd Exp $
+/* $Id: parport_sunbpp.c,v 1.10 2000/03/27 01:47:56 anton Exp $
  * Parallel-port routines for Sun architecture
  * 
  * Author: Derrick J. Brashear <shadow@dementia.org>
@@ -334,6 +334,8 @@ static int __init init_one_port(struct sbus_dev *sdev)
 		sbus_iounmap(base, size);
 		return 0;
 	}
+
+	p->size = size;
 
 	dprintk(("init_one_port: request_irq(%08x:%p:%x:%s:%p) ",
 		p->irq, parport_sunbpp_interrupt, SA_SHIRQ, p->name, p));

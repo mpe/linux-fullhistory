@@ -89,7 +89,7 @@ static unsigned int spx_datagram_poll(struct file * file, struct socket *sock, p
 	if (sock_writeable(sk))
 		mask |= POLLOUT | POLLWRNORM | POLLWRBAND;
 	else
-		sk->socket->flags |= SO_NOSPACE;
+		set_bit(SOCK_ASYNC_NOSPACE,&sk->socket->flags);
 
 	return mask;
 }
@@ -231,7 +231,7 @@ static int spx_listen(struct socket *sock, int backlog)
                 sk->ack_backlog = 0;
                 sk->state = TCP_LISTEN;
         }
-        sk->socket->flags |= SO_ACCEPTCON;
+        sk->socket->flags |= __SO_ACCEPTCON;
 
         return (0);
 }
@@ -248,7 +248,7 @@ static int spx_accept(struct socket *sock, struct socket *newsock, int flags)
 		return (-EINVAL);
 	sk = sock->sk;
 
-        if((sock->state != SS_UNCONNECTED) || !(sock->flags & SO_ACCEPTCON))
+        if((sock->state != SS_UNCONNECTED) || !(sock->flags & __SO_ACCEPTCON))
                 return (-EINVAL);
         if(sock->type != SOCK_SEQPACKET)
 		return (-EOPNOTSUPP);

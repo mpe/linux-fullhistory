@@ -1,4 +1,4 @@
-/* $Id: esp.c,v 1.92 2000/02/18 13:49:58 davem Exp $
+/* $Id: esp.c,v 1.94 2000/03/30 02:09:10 davem Exp $
  * esp.c:  EnhancedScsiProcessor Sun SCSI driver code.
  *
  * Copyright (C) 1995, 1998 David S. Miller (davem@caip.rutgers.edu)
@@ -4346,6 +4346,13 @@ static void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
 		ESP_INTSON(esp->dregs);
 	}
 	spin_unlock_irqrestore(&esp->lock, flags);
+}
+
+int esp_revoke(Scsi_Device* SDptr)
+{
+	struct esp *esp = (struct esp *) SDptr->host->hostdata;
+	esp->targets_present &= ~(1 << SDptr->id);
+	return 0;
 }
 
 #ifdef MODULE

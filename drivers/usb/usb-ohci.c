@@ -1475,7 +1475,7 @@ static int rh_unlink_urb (urb_t * urb)
 
 /* reset the HC not the BUS */
 
-static void hc_reset (ohci_t * ohci)
+static int hc_reset (ohci_t * ohci)
 {
 	int timeout = 30;
 	int smm_timeout = 50; /* 0,5 sec */
@@ -1487,7 +1487,7 @@ static void hc_reset (ohci_t * ohci)
 			wait_ms (10);
 			if (--smm_timeout == 0) {
 				err("USB HC TakeOver failed!");
-				break;
+				return -1;
 			}
 		}
 	}	
@@ -1501,11 +1501,12 @@ static void hc_reset (ohci_t * ohci)
 	while ((readl (&ohci->regs->cmdstatus) & 0x01) != 0) { /* 10us Reset */
 		if (--timeout == 0) {
 			err("USB HC reset timed out!");
-			return;
+			return -1;
 		}	
 		udelay (1);
 	}	 
 	ohci->disabled = 0;
+	return 0;
 }
 
 /*-------------------------------------------------------------------------*/
@@ -1707,7 +1708,11 @@ static int hc_found_ohci (struct pci_dev *dev, int irq, void * mem_base)
 	INIT_LIST_HEAD (&ohci->ohci_hcd_list);
 	list_add (&ohci->ohci_hcd_list, &ohci_hcd_list);
 
-	hc_reset (ohci);
+	if (hc_reset (ohci) < 0) {
+		hc_release_ohci (ohci);
+		return -ENODEV;
+	}
+
 	writel (ohci->hc_control = OHCI_USB_RESET, &ohci->regs->control);
 	wait_ms (10);
 	usb_register_bus (ohci->bus);
