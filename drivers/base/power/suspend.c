@@ -134,6 +134,8 @@ int device_power_down(pm_message_t state)
  Done:
 	return error;
  Error:
+	printk(KERN_ERR "Could not power down device %s: "
+		"error %d\n", kobject_name(&dev->kobj), error);
 	dpm_power_up();
 	goto Done;
 }

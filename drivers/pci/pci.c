@@ -312,22 +312,24 @@ pci_set_power_state(struct pci_dev *dev, pci_power_t state)
 /**
  * pci_choose_state - Choose the power state of a PCI device
  * @dev: PCI device to be suspended
- * @state: target sleep state for the whole system
+ * @state: target sleep state for the whole system. This is the value
+ *	that is passed to suspend() function.
  *
  * Returns PCI power state suitable for given device and given system
  * message.
  */
 
-pci_power_t pci_choose_state(struct pci_dev *dev, u32 state)
+pci_power_t pci_choose_state(struct pci_dev *dev, pm_message_t state)
 {
 	if (!pci_find_capability(dev, PCI_CAP_ID_PM))
 		return PCI_D0;
 
 	switch (state) {
-	case 0:	return PCI_D0;
-	case 2: return PCI_D2;
+	case 0: return PCI_D0;
 	case 3: return PCI_D3hot;
-	default: BUG();
+	default:
+		printk("They asked me for state %d\n", state);
+		BUG();
 	}
 	return PCI_D0;
 }
