@@ -404,6 +404,7 @@ void grok_partitions(struct gendisk *dev, int drive, unsigned minors, long size)
 	if (!size || minors == 1)
 		return;
 
+	blk_size[dev->major] = NULL;
 	check_partition(dev, MKDEV(dev->major, first_minor), 1 + first_minor);
 
  	/*

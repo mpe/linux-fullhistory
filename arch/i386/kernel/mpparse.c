@@ -436,7 +436,7 @@ static int __init smp_scan_config (unsigned long base, unsigned long length)
 			smp_found_config = 1;
 			printk("found SMP MP-table at %08lx\n",
 						virt_to_phys(mpf));
-			reserve_bootmem((unsigned long)mpf, PAGE_SIZE);
+			reserve_bootmem(virt_to_phys(mpf), PAGE_SIZE);
 			if (mpf->mpf_physptr)
 				reserve_bootmem(mpf->mpf_physptr, PAGE_SIZE);
 			mpf_found = mpf;

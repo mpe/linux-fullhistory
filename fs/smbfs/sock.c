@@ -15,6 +15,7 @@
 #include <linux/net.h>
 #include <linux/mm.h>
 #include <linux/netdevice.h>
+#include <linux/smp_lock.h>
 #include <net/scm.h>
 #include <net/ip.h>
 
@@ -79,13 +80,33 @@ _send(struct socket *socket, const void *buff, int len)
 	return err;
 }
 
+struct data_callback {
+	struct tq_struct cb;
+	struct sock *sk;
+};
 /*
  * N.B. What happens if we're in here when the socket closes??
  */
 static void
-smb_data_callback(struct sock *sk, int len)
+found_data(struct sock *sk)
 {
-	struct socket *socket = sk->socket;
+	/*
+	 * FIXME: copied from sock_def_readable, it should be a call to
+	 * server->data_ready()	-- manfreds@colorfullife.com
+	 */
+	read_lock(&sk->callback_lock);
+	if(!sk->dead) {
+		wake_up_interruptible(sk->sleep);
+		sock_wake_async(sk->socket,1,POLL_IN);
+	}
+	read_unlock(&sk->callback_lock);
+}
+
+static void
+smb_data_callback(void* ptr)
+{
+	struct data_callback* job=ptr;
+	struct socket *socket = job->sk->socket;
 	unsigned char peek_buf[4];
 	int result;
 	mm_segment_t fs;
@@ -93,10 +114,11 @@ smb_data_callback(struct sock *sk, int len)
 	fs = get_fs();
 	set_fs(get_ds());
 
+	lock_kernel();
 	while (1)
 	{
 		result = -EIO;
-		if (sk->dead)
+		if (job->sk->dead)
 		{
 #ifdef SMBFS_PARANOIA
 			printk("smb_data_callback: sock dead!\n");
@@ -120,12 +142,30 @@ smb_data_callback(struct sock *sk, int len)
 		if (result == -EAGAIN)
 			break;
 	}
+	unlock_kernel();
 	set_fs(fs);
 
 	if (result != -EAGAIN)
-	{
-		wake_up_interruptible(sk->sleep);
+		found_data(job->sk);
+	kfree(ptr);
+}
+
+static void
+smb_data_ready(struct sock *sk, int len)
+{
+	struct data_callback* job;
+	job = kmalloc(sizeof(struct data_callback),GFP_ATOMIC);
+	if(job == 0) {
+		printk("smb_data_ready(): lost SESSION KEEPALIVE due to OOM.\n");
+		found_data(sk);
+		return;
 	}
+	job->cb.next = NULL;
+	job->cb.sync = 0;
+	job->cb.routine = smb_data_callback;
+	job->cb.data = job;
+	job->sk = sk;
+	queue_task(&job->cb, &tq_scheduler);
 }
 
 int
@@ -182,8 +222,8 @@ smb_catch_keepalive(struct smb_sb_info *server)
 	/*
 	 * Install the callback atomically to avoid races ...
 	 */
-	data_ready = xchg(&sk->data_ready, smb_data_callback);
-	if (data_ready != smb_data_callback)
+	data_ready = xchg(&sk->data_ready, smb_data_ready);
+	if (data_ready != smb_data_ready)
 	{
 		server->data_ready = data_ready;
 		error = 0;
@@ -232,10 +272,10 @@ smb_dont_catch_keepalive(struct smb_sb_info *server)
 	 */
 	data_ready = xchg(&sk->data_ready, server->data_ready);
 	server->data_ready = NULL;
-	if (data_ready != smb_data_callback)
+	if (data_ready != smb_data_ready)
 	{
 		printk("smb_dont_catch_keepalive: "
-		       "sk->data_callback != smb_data_callback\n");
+		       "sk->data_ready != smb_data_ready\n");
 	}
 	error = 0;
 out:
@@ -256,7 +296,7 @@ smb_close_socket(struct smb_sb_info *server)
 printk("smb_close_socket: closing socket %p\n", server_sock(server));
 #endif
 #ifdef SMBFS_PARANOIA
-if (server_sock(server)->sk->data_ready == smb_data_callback)
+if (server_sock(server)->sk->data_ready == smb_data_ready)
 printk("smb_close_socket: still catching keepalives!\n");
 #endif
 		server->sock_file = NULL;
