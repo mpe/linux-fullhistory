@@ -153,8 +153,12 @@ static ssize_t set_temp_##suffix(struct device *dev, const char *buf,	\
 {									\
 	struct i2c_client *client = to_i2c_client(dev);			\
 	struct ds1621_data *data = ds1621_update_client(dev);		\
-	data->value = LM75_TEMP_TO_REG(simple_strtoul(buf, NULL, 10));	\
+	u16 val = LM75_TEMP_TO_REG(simple_strtoul(buf, NULL, 10));	\
+									\
+	down(&data->update_lock);					\
+	data->value = val;						\
 	ds1621_write_value(client, reg, data->value);			\
+	up(&data->update_lock);						\
 	return count;							\
 }
 

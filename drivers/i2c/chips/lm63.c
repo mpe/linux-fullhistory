@@ -191,11 +191,14 @@ static ssize_t set_fan1_low(struct device *dev, const char *buf,
 	struct i2c_client *client = to_i2c_client(dev);
 	struct lm63_data *data = i2c_get_clientdata(client);
 	unsigned long val = simple_strtoul(buf, NULL, 10);
+
+	down(&data->update_lock);
 	data->fan1_low = FAN_TO_REG(val);
 	i2c_smbus_write_byte_data(client, LM63_REG_TACH_LIMIT_LSB,
 				  data->fan1_low & 0xFF);
 	i2c_smbus_write_byte_data(client, LM63_REG_TACH_LIMIT_MSB,
 				  data->fan1_low >> 8);
+	up(&data->update_lock);
 	return count;
 }
 
@@ -217,10 +220,12 @@ static ssize_t set_pwm1(struct device *dev, const char *buf, size_t count)
 		return -EPERM;
 
 	val = simple_strtoul(buf, NULL, 10);
+	down(&data->update_lock);
 	data->pwm1_value = val <= 0 ? 0 :
 			   val >= 255 ? 2 * data->pwm1_freq :
 			   (val * data->pwm1_freq * 2 + 127) / 255;
 	i2c_smbus_write_byte_data(client, LM63_REG_PWM_VALUE, data->pwm1_value);
+	up(&data->update_lock);
 	return count;
 }
 
@@ -256,8 +261,11 @@ static ssize_t set_##value(struct device *dev, const char *buf, \
 	struct i2c_client *client = to_i2c_client(dev); \
 	struct lm63_data *data = i2c_get_clientdata(client); \
 	long val = simple_strtol(buf, NULL, 10); \
+ \
+	down(&data->update_lock); \
 	data->value = TEMP8_TO_REG(val); \
 	i2c_smbus_write_byte_data(client, reg, data->value); \
+	up(&data->update_lock); \
 	return count; \
 }
 #define set_temp11(value, reg_msb, reg_lsb) \
@@ -267,9 +275,12 @@ static ssize_t set_##value(struct device *dev, const char *buf, \
 	struct i2c_client *client = to_i2c_client(dev); \
 	struct lm63_data *data = i2c_get_clientdata(client); \
 	long val = simple_strtol(buf, NULL, 10); \
+ \
+	down(&data->update_lock); \
 	data->value = TEMP11_TO_REG(val); \
 	i2c_smbus_write_byte_data(client, reg_msb, data->value >> 8); \
 	i2c_smbus_write_byte_data(client, reg_lsb, data->value & 0xff); \
+	up(&data->update_lock); \
 	return count; \
 }
 set_temp8(temp1_high, LM63_REG_LOCAL_HIGH);
@@ -292,10 +303,14 @@ static ssize_t set_temp2_crit_hyst(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct lm63_data *data = i2c_get_clientdata(client);
-	int hyst = TEMP8_FROM_REG(data->temp2_crit) -
-		   simple_strtol(buf, NULL, 10);
+	long val = simple_strtol(buf, NULL, 10);
+	long hyst;
+
+	down(&data->update_lock);
+	hyst = TEMP8_FROM_REG(data->temp2_crit) - val;
 	i2c_smbus_write_byte_data(client, LM63_REG_REMOTE_TCRIT_HYST,
 				  HYST_TO_REG(hyst));
+	up(&data->update_lock);
 	return count;
 }
 

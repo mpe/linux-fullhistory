@@ -195,16 +195,20 @@ static ssize_t set_fan_min(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct smsc47m1_data *data = i2c_get_clientdata(client);
+	long rpmdiv, val = simple_strtol(buf, NULL, 10);
 
-	long rpmdiv = simple_strtol(buf, NULL, 10)
-		    * DIV_FROM_REG(data->fan_div[nr]);
+	down(&data->update_lock);
+	rpmdiv = val * DIV_FROM_REG(data->fan_div[nr]);
 
-	if (983040 > 192 * rpmdiv || 2 * rpmdiv > 983040)
+	if (983040 > 192 * rpmdiv || 2 * rpmdiv > 983040) {
+		up(&data->update_lock);
 		return -EINVAL;
+	}
 
 	data->fan_preload[nr] = 192 - ((983040 + rpmdiv / 2) / rpmdiv);
 	smsc47m1_write_value(client, SMSC47M1_REG_FAN_PRELOAD(nr),
 			     data->fan_preload[nr]);
+	up(&data->update_lock);
 
 	return count;
 }
@@ -224,12 +228,16 @@ static ssize_t set_fan_div(struct device *dev, const char *buf,
 
 	if (new_div == old_div) /* No change */
 		return count;
+
+	down(&data->update_lock);
 	switch (new_div) {
 	case 1: data->fan_div[nr] = 0; break;
 	case 2: data->fan_div[nr] = 1; break;
 	case 4: data->fan_div[nr] = 2; break;
 	case 8: data->fan_div[nr] = 3; break;
-	default: return -EINVAL;
+	default:
+		up(&data->update_lock);
+		return -EINVAL;
 	}
 
 	tmp = smsc47m1_read_value(client, SMSC47M1_REG_FANDIV) & 0x0F;
@@ -242,6 +250,7 @@ static ssize_t set_fan_div(struct device *dev, const char *buf,
 	data->fan_preload[nr] = SENSORS_LIMIT(tmp, 0, 191);
 	smsc47m1_write_value(client, SMSC47M1_REG_FAN_PRELOAD(nr),
 			     data->fan_preload[nr]);
+	up(&data->update_lock);
 
 	return count;
 }
@@ -257,11 +266,13 @@ static ssize_t set_pwm(struct device *dev, const char *buf,
 	if (val < 0 || val > 255)
 		return -EINVAL;
 
+	down(&data->update_lock);
 	data->pwm[nr] &= 0x81; /* Preserve additional bits */
 	data->pwm[nr] |= PWM_TO_REG(val);
-
 	smsc47m1_write_value(client, SMSC47M1_REG_PWM(nr),
 			     data->pwm[nr]);
+	up(&data->update_lock);
+
 	return count;
 }
 
@@ -276,11 +287,12 @@ static ssize_t set_pwm_en(struct device *dev, const char *buf,
 	if (val != 0 && val != 1)
 		return -EINVAL;
 
+	down(&data->update_lock);
 	data->pwm[nr] &= 0xFE; /* preserve the other bits */
 	data->pwm[nr] |= !val;
-
 	smsc47m1_write_value(client, SMSC47M1_REG_PWM(nr),
 			     data->pwm[nr]);
+	up(&data->update_lock);
 
 	return count;
 }

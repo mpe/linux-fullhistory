@@ -190,8 +190,11 @@ static ssize_t set_in_##suffix(struct device *dev, const char *buf, \
 	struct i2c_client *client = to_i2c_client(dev); \
 	struct lm80_data *data = i2c_get_clientdata(client); \
 	long val = simple_strtol(buf, NULL, 10); \
+ \
+	down(&data->update_lock);\
 	data->value = IN_TO_REG(val); \
 	lm80_write_value(client, reg, data->value); \
+	up(&data->update_lock);\
 	return count; \
 }
 set_in(min0, in_min[0], LM80_REG_IN_MIN(0));
@@ -237,8 +240,11 @@ static ssize_t set_fan_##suffix(struct device *dev, const char *buf, \
 	struct i2c_client *client = to_i2c_client(dev); \
 	struct lm80_data *data = i2c_get_clientdata(client); \
 	long val = simple_strtoul(buf, NULL, 10); \
+ \
+	down(&data->update_lock);\
 	data->value = FAN_TO_REG(val, DIV_FROM_REG(data->div)); \
 	lm80_write_value(client, reg, data->value); \
+	up(&data->update_lock);\
 	return count; \
 }
 set_fan(min1, fan_min[0], LM80_REG_FAN_MIN(1), fan_div[0]);
@@ -253,14 +259,13 @@ static ssize_t set_fan_div(struct device *dev, const char *buf,
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct lm80_data *data = i2c_get_clientdata(client);
-	unsigned long min, val;
+	unsigned long min, val = simple_strtoul(buf, NULL, 10);
 	u8 reg;
 
 	/* Save fan_min */
+	down(&data->update_lock);
 	min = FAN_FROM_REG(data->fan_min[nr],
 			   DIV_FROM_REG(data->fan_div[nr]));
-
-	val = simple_strtoul(buf, NULL, 10);
 
 	switch (val) {
 	case 1: data->fan_div[nr] = 0; break;
@@ -270,6 +275,7 @@ static ssize_t set_fan_div(struct device *dev, const char *buf,
 	default:
 		dev_err(&client->dev, "fan_div value %ld not "
 			"supported. Choose one of 1, 2, 4 or 8!\n", val);
+		up(&data->update_lock);
 		return -EINVAL;
 	}
 
@@ -280,6 +286,7 @@ static ssize_t set_fan_div(struct device *dev, const char *buf,
 	/* Restore fan_min */
 	data->fan_min[nr] = FAN_TO_REG(min, DIV_FROM_REG(data->fan_div[nr]));
 	lm80_write_value(client, LM80_REG_FAN_MIN(nr + 1), data->fan_min[nr]);
+	up(&data->update_lock);
 
 	return count;
 }
@@ -317,8 +324,11 @@ static ssize_t set_temp_##suffix(struct device *dev, const char *buf, \
 	struct i2c_client *client = to_i2c_client(dev); \
 	struct lm80_data *data = i2c_get_clientdata(client); \
 	long val = simple_strtoul(buf, NULL, 10); \
+ \
+	down(&data->update_lock); \
 	data->value = TEMP_LIMIT_TO_REG(val); \
 	lm80_write_value(client, reg, data->value); \
+	up(&data->update_lock); \
 	return count; \
 }
 set_temp(hot_max, temp_hot_max, LM80_REG_TEMP_HOT_MAX);

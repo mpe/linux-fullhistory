@@ -296,9 +296,12 @@ static ssize_t store_in_##reg (struct device *dev, const char *buf, size_t count
 	u32 val; \
 	 \
 	val = simple_strtoul(buf, NULL, 10) / 10; \
+	 \
+	down(&data->update_lock); \
 	data->in_##reg[nr] = IN_TO_REG(val); \
 	w83781d_write_value(client, W83781D_REG_IN_##REG(nr), data->in_##reg[nr]); \
 	 \
+	up(&data->update_lock); \
 	return count; \
 }
 store_in_reg(MIN, min);
@@ -363,11 +366,14 @@ store_fan_min(struct device *dev, const char *buf, size_t count, int nr)
 	u32 val;
 
 	val = simple_strtoul(buf, NULL, 10);
+
+	down(&data->update_lock);
 	data->fan_min[nr - 1] =
 	    FAN_TO_REG(val, DIV_FROM_REG(data->fan_div[nr - 1]));
 	w83781d_write_value(client, W83781D_REG_FAN_MIN(nr),
 			    data->fan_min[nr - 1]);
 
+	up(&data->update_lock);
 	return count;
 }
 
@@ -426,6 +432,8 @@ static ssize_t store_temp_##reg (struct device *dev, const char *buf, size_t cou
 	 \
 	val = simple_strtol(buf, NULL, 10); \
 	 \
+	down(&data->update_lock); \
+	 \
 	if (nr >= 2) {	/* TEMP2 and TEMP3 */ \
 		data->temp_##reg##_add[nr-2] = LM75_TEMP_TO_REG(val); \
 		w83781d_write_value(client, W83781D_REG_TEMP_##REG(nr), \
@@ -436,6 +444,7 @@ static ssize_t store_temp_##reg (struct device *dev, const char *buf, size_t cou
 			data->temp_##reg); \
 	} \
 	 \
+	up(&data->update_lock); \
 	return count; \
 }
 store_temp_reg(OVER, max);
@@ -548,6 +557,8 @@ store_beep_reg(struct device *dev, const char *buf, size_t count,
 
 	val = simple_strtoul(buf, NULL, 10);
 
+	down(&data->update_lock);
+
 	if (update_mask == BEEP_MASK) {	/* We are storing beep_mask */
 		data->beep_mask = BEEP_MASK_TO_REG(val, data->type);
 		w83781d_write_value(client, W83781D_REG_BEEP_INTS1,
@@ -567,6 +578,7 @@ store_beep_reg(struct device *dev, const char *buf, size_t count,
 	w83781d_write_value(client, W83781D_REG_BEEP_INTS2,
 			    val2 | data->beep_enable << 7);
 
+	up(&data->update_lock);
 	return count;
 }
 
@@ -609,13 +621,15 @@ store_fan_div_reg(struct device *dev, const char *buf, size_t count, int nr)
 	struct w83781d_data *data = i2c_get_clientdata(client);
 	unsigned long min;
 	u8 reg;
+	unsigned long val = simple_strtoul(buf, NULL, 10);
 
+	down(&data->update_lock);
+	
 	/* Save fan_min */
 	min = FAN_FROM_REG(data->fan_min[nr],
 			   DIV_FROM_REG(data->fan_div[nr]));
 
-	data->fan_div[nr] = DIV_TO_REG(simple_strtoul(buf, NULL, 10),
-				      data->type);
+	data->fan_div[nr] = DIV_TO_REG(val, data->type);
 
 	reg = (w83781d_read_value(client, nr==2 ? W83781D_REG_PIN : W83781D_REG_VID_FANDIV)
 	       & (nr==0 ? 0xcf : 0x3f))
@@ -634,6 +648,7 @@ store_fan_div_reg(struct device *dev, const char *buf, size_t count, int nr)
 	data->fan_min[nr] = FAN_TO_REG(min, DIV_FROM_REG(data->fan_div[nr]));
 	w83781d_write_value(client, W83781D_REG_FAN_MIN(nr+1), data->fan_min[nr]);
 
+	up(&data->update_lock);
 	return count;
 }
 
@@ -680,9 +695,10 @@ store_pwm_reg(struct device *dev, const char *buf, size_t count, int nr)
 
 	val = simple_strtoul(buf, NULL, 10);
 
+	down(&data->update_lock);
 	data->pwm[nr - 1] = PWM_TO_REG(val);
 	w83781d_write_value(client, W83781D_REG_PWM(nr), data->pwm[nr - 1]);
-
+	up(&data->update_lock);
 	return count;
 }
 
@@ -694,6 +710,8 @@ store_pwmenable_reg(struct device *dev, const char *buf, size_t count, int nr)
 	u32 val, reg;
 
 	val = simple_strtoul(buf, NULL, 10);
+
+	down(&data->update_lock);
 
 	switch (val) {
 	case 0:
@@ -710,9 +728,11 @@ store_pwmenable_reg(struct device *dev, const char *buf, size_t count, int nr)
 		break;
 
 	default:
+		up(&data->update_lock);
 		return -EINVAL;
 	}
 
+	up(&data->update_lock);
 	return count;
 }
 
@@ -774,6 +794,8 @@ store_sensor_reg(struct device *dev, const char *buf, size_t count, int nr)
 
 	val = simple_strtoul(buf, NULL, 10);
 
+	down(&data->update_lock);
+
 	switch (val) {
 	case 1:		/* PII/Celeron diode */
 		tmp = w83781d_read_value(client, W83781D_REG_SCFG1);
@@ -805,6 +827,7 @@ store_sensor_reg(struct device *dev, const char *buf, size_t count, int nr)
 		break;
 	}
 
+	up(&data->update_lock);
 	return count;
 }
 
