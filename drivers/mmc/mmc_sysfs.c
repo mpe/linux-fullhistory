@@ -109,7 +109,7 @@ mmc_bus_hotplug(struct device *dev, char **envp, int num_envp, char *buf,
 	return 0;
 }
 
-static int mmc_bus_suspend(struct device *dev, u32 state)
+static int mmc_bus_suspend(struct device *dev, pm_message_t state)
 {
 	struct mmc_driver *drv = to_mmc_driver(dev->driver);
 	struct mmc_card *card = dev_to_mmc_card(dev);
