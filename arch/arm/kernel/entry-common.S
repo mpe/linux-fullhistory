@@ -2,6 +2,8 @@
  * All exits to user mode from the kernel go through this code.
  */
 
+#include <linux/config.h>
+
 		.globl	ret_from_sys_call
 
 		.globl	SYMBOL_NAME(fpreturn)

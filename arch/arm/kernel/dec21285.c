@@ -3,7 +3,6 @@
  *
  * Copyright (C) 1998 Russell King
  */
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/pci.h>
 #include <linux/init.h>

@@ -1535,10 +1535,10 @@ int eata2x_reset(Scsi_Cmnd *SCarg, unsigned int reset_flags) {
 #endif
 
    HD(j)->in_reset = TRUE;
-   sti();
-   time = jiffies;
-   while ((jiffies - time) < (10 * HZ) && limit++ < 200000) udelay(100L);
-   cli();
+
+   /* Wait 2 seconds ???!!! */
+   { unsigned long msec = 2 * 1000; while (--msec) udelay(1000); }
+
    printk("%s: reset, interrupts disabled, loops %d.\n", BN(j), limit);
 
    for (i = 0; i < sh[j]->can_queue; i++) {

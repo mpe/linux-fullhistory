@@ -858,7 +858,6 @@ static void in2000_intr (int irqnum, void * dev_id, struct pt_regs *ptregs)
 struct Scsi_Host *instance;
 struct IN2000_hostdata *hostdata;
 Scsi_Cmnd *patch, *cmd;
-unsigned long flags;
 uchar asr, sr, phs, id, lun, *ucp, msg;
 int i,j;
 unsigned long length;
@@ -874,11 +873,6 @@ unsigned short f;
       return;
       }
    hostdata = (struct IN2000_hostdata *)instance->hostdata;
-
-/* OK - it should now be safe to re-enable system interrupts */
-
-   save_flags(flags);
-   sti();
 
 #ifdef PROC_STATISTICS
    hostdata->int_cnt++;
@@ -1014,7 +1008,6 @@ DB(DB_FIFO,printk("{W:%02x} ",read1_io(IO_FIFO_COUNT)))
             }
 
       write1_io(0, IO_LED_OFF);
-      restore_flags(flags);
       return;
       }
 
@@ -1030,7 +1023,6 @@ DB(DB_FIFO,printk("{W:%02x} ",read1_io(IO_FIFO_COUNT)))
    if (!cmd && (sr != CSR_RESEL_AM && sr != CSR_TIMEOUT && sr != CSR_SELECT)) {
       printk("\nNR:wd-intr-1\n");
       write1_io(0, IO_LED_OFF);
-      restore_flags(flags);
       return;
       }
 
@@ -1092,10 +1084,12 @@ DB(DB_TRANSFER,printk("(%p,%d)",cmd->SCp.ptr,cmd->SCp.this_residual))
 /* Respond to the specific WD3393 interrupt - there are quite a few! */
 
    switch (sr) {
+      unsigned long flags;
 
       case CSR_TIMEOUT:
 DB(DB_INTR,printk("TIMEOUT"))
 
+	 save_flags(flags);
          cli();
          if (hostdata->state == S_RUNNING_LEVEL2)
             hostdata->connected = NULL;
@@ -1114,7 +1108,7 @@ CHECK_NULL(cmd,"csr_timeout")
  * are commands waiting to be executed.
  */
 
-         sti();
+         restore_flags(flags);
          in2000_execute(instance);
          break;
 
@@ -1361,6 +1355,7 @@ printk("sync_xfer=%02x",hostdata->sync_xfer[cmd->target]);
 /* Note: this interrupt will occur only after a LEVEL2 command */
 
       case CSR_SEL_XFER_DONE:
+         save_flags(flags);
          cli();
 
 /* Make sure that reselection is enabled at this point - it may
@@ -1388,7 +1383,7 @@ DB(DB_INTR,printk(":%d.%d",cmd->SCp.Status,lun))
  * there are commands waiting to be executed.
  */
 
-            sti();
+            restore_flags(flags);
             in2000_execute(instance);
             }
          else {
@@ -1447,6 +1442,7 @@ DB(DB_INTR,printk("%02x",hostdata->outgoing_msg[0]))
  * so we treat it as a normal command-complete-disconnect.
  */
 
+	 save_flags(flags);
          cli();
 
 /* Make sure that reselection is enabled at this point - it may
@@ -1473,12 +1469,13 @@ DB(DB_INTR,printk("UNEXP_DISC-%ld",cmd->pid))
  * there are commands waiting to be executed.
  */
 
-         sti();
+         restore_flags(flags);
          in2000_execute(instance);
          break;
 
 
       case CSR_DISC:
+         save_flags(flags);
          cli();
 
 /* Make sure that reselection is enabled at this point - it may
@@ -1524,7 +1521,7 @@ DB(DB_INTR,printk(":%d",cmd->SCp.Status))
  * there are commands waiting to be executed.
  */
 
-         sti();
+         restore_flags(flags);
          in2000_execute(instance);
          break;
 
@@ -1633,7 +1630,6 @@ DB(DB_INTR,printk("-%ld",cmd->pid))
       }
 
    write1_io(0, IO_LED_OFF);
-   restore_flags(flags);
 
 DB(DB_INTR,printk("} "))
 

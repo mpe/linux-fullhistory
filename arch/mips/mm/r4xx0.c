@@ -11,6 +11,7 @@
  *  - many of the bug workarounds are not efficient at all, but at
  *    least they are functional ...
  */
+#include <linux/config.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>

@@ -1333,6 +1333,7 @@ void ide_timer_expiry (unsigned long data)
 	}
 	hwgroup->busy = 1;	/* should already be "1" */
 	hwgroup->handler = NULL;
+	del_timer(&hwgroup->timer);
 	if (hwgroup->poll_timeout != 0) {	/* polling in progress? */
 		IDE_SPIN_UNLOCK_IRQRESTORE("ide_timer_expiry3", &hwgroup->spinlock, flags);
 		handler(drive);
@@ -1348,7 +1349,6 @@ void ide_timer_expiry (unsigned long data)
 		IDE_SPIN_UNLOCK_IRQRESTORE("ide_timer_expiry5", &hwgroup->spinlock, flags);
 		ide_error(drive, "irq timeout", GET_STAT());
 	}
-	del_timer(&hwgroup->timer);
 	start_next_request(hwgroup, 0);
 }
 

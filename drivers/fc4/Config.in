@@ -9,9 +9,10 @@ if [ ! "$CONFIG_FC4" = "n" ]; then
   comment 'FC4 drivers'
   tristate 'Sun SOC/Sbus' CONFIG_FC4_SOC m
   comment 'FC4 targets'
-  dep_tristate 'SparcSTORAGE Array 100 and 200 series' CONFIG_SCSI_PLUTO "$CONFIG_SCSI"
+  dep_tristate 'SparcSTORAGE Array 100 and 200 series' CONFIG_SCSI_PLUTO $CONFIG_SCSI
 else
   define_bool CONFIG_FC4_SOC n
   define_bool CONFIG_SCSI_PLUTO n
 fi
 endmenu
+

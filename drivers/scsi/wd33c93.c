@@ -1766,9 +1766,12 @@ char buf[32];
 #endif
 
 
-   cli();
-   reset_wd33c93(instance);
-   sti();
+   { unsigned long flags;
+     save_flags(flags);
+     cli();
+     reset_wd33c93(instance);
+     restore_flags(flags);
+   }
 
    printk("wd33c93-%d: chip=%s/%d no_sync=0x%x no_dma=%d",instance->host_no,
          (hostdata->chip==C_WD33C93)?"WD33c93":

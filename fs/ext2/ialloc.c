@@ -405,7 +405,7 @@ repeat:
 		return NULL;
 	}
 	bitmap_nr = load_inode_bitmap (sb, i);
-		if (bitmap_nr < 0) {
+	if (bitmap_nr < 0) {
 		unlock_super (sb);
 		iput(inode);
 		*err = -EIO;
@@ -493,7 +493,13 @@ repeat:
 	inc_inode_version (inode, gdp, mode);
 
 	unlock_super (sb);
-	DQUOT_ALLOC_INODE(sb, inode);
+	if(DQUOT_ALLOC_INODE(sb, inode)) {
+		sb->dq_op->drop(inode);
+		inode->i_nlink = 0;
+		iput(inode);
+		*err = -EDQUOT;
+		return NULL;
+	}
 	ext2_debug ("allocating inode %lu\n", inode->i_ino);
 
 	*err = 0;

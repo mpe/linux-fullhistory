@@ -649,8 +649,6 @@ static void seagate_reconnect_intr (int irq, void *dev_id,
   int temp;
   Scsi_Cmnd *SCtmp;
 
-/* enable all other interrupts. */
-  sti ();
 #if (DEBUG & PHASE_RESELECT)
   printk ("scsi%d : seagate_reconnect_intr() called\n", hostno);
 #endif
@@ -1015,11 +1013,14 @@ static int internal_command (unsigned char target, unsigned char lun,
  */
 
 #if defined(ARBITRATE)
+      { unsigned long flags;
+      save_flags (flags);
       cli ();
       WRITE_CONTROL (0);
       WRITE_DATA ((controller_type == SEAGATE) ? 0x80 : 0x40);
       WRITE_CONTROL (CMD_START_ARB);
-      sti ();
+      restore_flags (flags);
+      }
       while (!((status_read = STATUS) & (STAT_ARB_CMPL | STAT_SEL)) &&
              (jiffies < clock) && !st0x_aborted) ;
 
@@ -1054,19 +1055,25 @@ static int internal_command (unsigned char target, unsigned char lun,
  */
 #ifdef OLDCNTDATASCEME
 #ifdef SWAPCNTDATA
+      { unsigned long flags;
+        save_flags(flags);
 	cli();
       WRITE_CONTROL (BASE_CMD | CMD_DRVR_ENABLE | CMD_SEL |
                      (reselect ? CMD_ATTN : 0));
       WRITE_DATA ((unsigned char) ((1 << target) |
                                (controller_type == SEAGATE ? 0x80 : 0x40)));
-	sti();
+	restore_flags(flags);
+      }
 #else
+      { unsigned long flags;
+      save_flags(flags);
       cli ();
       WRITE_DATA ((unsigned char) ((1 << target) |
                                (controller_type == SEAGATE ? 0x80 : 0x40)));
       WRITE_CONTROL (BASE_CMD | CMD_DRVR_ENABLE | CMD_SEL |
                      (reselect ? CMD_ATTN : 0));
-      sti ();
+      restore_flags (flags);
+      }
 #endif
 #else
        tmp_data = (unsigned char) ((1 << target) | (controller_type == SEAGATE 

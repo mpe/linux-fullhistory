@@ -305,7 +305,7 @@ static inline kernel_cap_t cap_invert(kernel_cap_t c)
 #define cap_set_full(c)      do { (c).cap = ~0; } while(0)
 #define cap_mask(c,mask)     do { (c).cap &= (mask).cap; } while(0)
 
-#define cap_is_fs_cap(c)     ((c) & CAP_FS_MASK)
+#define cap_is_fs_cap(c)     (CAP_TO_MASK(c) & CAP_FS_MASK)
 
 #endif /* __KERNEL__ */
 

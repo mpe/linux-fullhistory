@@ -33,7 +33,7 @@ http://cyberbuzz.gatech.edu/kaboom/linux/ as well.
    Also, don't forget http://www.linuxhq.com/ for all your Linux kernel
 needs.
 
-Last updated: May 5, 1998
+Last updated: May 9, 1998
 Current Author: Chris Ricker (kaboom@gatech.edu).
 
 Current Minimal Requirements
@@ -45,7 +45,7 @@ running, the suggested command should tell you.
 
 - Kernel modules	 modutils-2.1.85         ; insmod -V
 - Gnu C 		 2.7.2.3                 ; gcc --version
-- Binutils		 2.8.1.0.1               ; ld -v
+- Binutils		 2.8.1.0.23              ; ld -v
 - Linux C Library	 5.4.44                  ; ls -l /lib/libc.so.*
 - Dynamic Linker (ld.so) 1.9.5                   ; ldd --version
 - Linux C++ Library	 2.7.2.8                 ; ls -l /usr/lib/libg++.so.*
@@ -59,7 +59,7 @@ running, the suggested command should tell you.
 - NFS                    0.4.21                  ; showmount --version
 - Bash                   1.14.7                  ; bash -version
 - Ncpfs                  2.1.1                   ; ncpmount -v
-- Pcmcia-cs              3.0.0
+- Pcmcia-cs              May 4, 1998
 - PPP                    2.3.5                   ; pppd -v
 
 Upgrade notes
@@ -127,11 +127,13 @@ Binutils
 to find out the proper way to upgrade it.  No, the instruction to "rm
 `which encaps`" is not a joke.
 
-The last public release of the binutils 2.8.x series is 2.8.1.0.23. 
-Binutils 2.8.1.0.25 to 2.9.1.0.2 are all very buggy; do not use them. 
-Binutils 2.9.1 (note the absence of a suffix) is all right, and binutils
-2.9.1.0.3 (and presumably later revisions) will probably work, too. 
-Stick with 2.8.1.0.23 to be safe. 
+   The last public release of the binutils 2.8.x series was 2.8.1.0.23.
+Binutils 2.8.1.0.25 to 2.9.1.0.2 are beta releases, and are known to be
+very buggy.  Binutils 2.9.1 (note the absence of a suffix) from the FSF
+should work, and binutils 2.9.1.0.3 and later releases are also good.
+Either use binutils-2.8.1.0.23 or binutils-2.9.1.0.4 or later.  Glibc2
+users should especially try to use the 2.9.1.0.x releases, as they
+resolve known issues with glibc2 and binutils-2.8.x releases.
 
 Gnu C
 =====
@@ -273,12 +275,23 @@ Where to get the files
 Binutils
 ========
 
-The 2.8.1.0.1 release:
+The 2.8.1.0.23 release:
 ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.8.1.0.23.bin.tar.gz
 ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.8.1.0.23.bin.tar.gz
 Installation notes:
 ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.binutils-2.8.1.0.23
 ftp://sunsite.unc.edu/pub/Linux/GCC/release.binutils-2.8.1.0.23
+
+The 2.9.1.0.4 release:
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.9.1.0.4-glibc.x86.tar.gz
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.9.1.0.4-libc5.x86.tar.gz
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/binutils-2.9.1.0.4.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.9.1.0.4-glibc.x86.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.9.1.0.4-libc5.x86.tar.gz
+ftp://sunsite.unc.edu/pub/Linux/GCC/binutils-2.9.1.0.4.tar.gz
+Installation notes:
+ftp://tsx-11.mit.edu/pub/linux/packages/GCC/release.binutils-2.9.1.0.4
+ftp://sunsite.unc.edu/pub/Linux/GCC/release.binutils-2.9.1.0.4
 
 Gnu C
 =====

@@ -1,14 +1,13 @@
 #ifndef _I386_CURRENT_H
 #define _I386_CURRENT_H
 
-static inline unsigned long get_esp(void)
+static inline struct task_struct * get_current(void)
 {
-	unsigned long esp;
-	__asm__("movl %%esp,%0":"=r" (esp));
-	return esp;
-}
-
-#define current ((struct task_struct *)(get_esp() & ~8191UL))
-
+	struct task_struct *current;
+	__asm__("andl %%esp,%0; ":"=r" (current) : "0" (~8191UL));
+	return current;
+ }
+ 
+#define current get_current()
 
 #endif /* !(_I386_CURRENT_H) */

@@ -40,8 +40,8 @@ struct poll_table_struct;
 #define NR_OPEN 1024
 
 #define NR_SUPER 64
-#define BLOCK_SIZE 1024
 #define BLOCK_SIZE_BITS 10
+#define BLOCK_SIZE (1<<BLOCK_SIZE_BITS)
 
 /* And dynamically-tunable limits and defaults: */
 extern int max_inodes;

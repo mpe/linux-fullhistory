@@ -1,5 +1,5 @@
-		       PC Joystick driver v1.0.6 beta
-	 (c) 1997 Vojtech Pavlik <vojtech@atrey.karlin.mff.cuni.cz>
+			PC Joystick driver v1.0.9
+	(c) 1997 Vojtech Pavlik <vojtech@atrey.karlin.mff.cuni.cz>
 ----------------------------------------------------------------------------
 
 1. Intro
@@ -8,20 +8,22 @@
 resistor based) and digital (switch based) joysticks connected via the PC
 game port. It can support up to 2 joysticks.
 
-  Because the joystick driver is still in its beta stage I'm very interested
-in any problems you encounter while using it. Bug reports and success
-stories are also welcome.
+  Should you encounter any problems while using the driver, or joysticks
+this driver can't make complete use of, I'm very interested in hearing about
+them. Bug reports and success stories are also welcome.
 
 2. Usage
 ~~~~~~~~
   If you enable the joystick driver in the kernel configuration, all
-connected joysticks should be found automatically. If that doesn't work, you
-can pass the joystick driver the following kernel command line arguments:
+connected joysticks should be found automatically. The driver can detect
+standard two-axis two-button, and three-axis four-button joysticks only. If
+that isn't your case, you can pass the joystick driver the following kernel
+command line arguments:
 
 js=0xXX,0xYY
 
   Where XX and YY are bit masks for the two joysticks, with the bits
-representing:
+representing which buttons and axes of the joystick are present:
 
 Bit | Explanation
 -----------------
@@ -33,9 +35,6 @@ Bit | Explanation
  5  | Button 1
  6  | Button 2
  7  | Button 3
-
-  These bitmasks are ANDed with what's found by the driver and the result is
-used. 
 
   Another method of using the driver is loading it as a module. For that,
 select `M' for this driver in the kernel configuration and insert the
@@ -53,23 +52,19 @@ options joystick js=0xXX,0xYY
 create the device files using mknod (man mknod for more info):
 
 mknod /dev/js0 c 15 0
-mknod /dev/js1 c 15 1 
+mknod /dev/js1 c 15 1
 
 3. Calibration
 ~~~~~~~~~~~~~~
   As of version 1.0 the calibration routines used in the joystick driver are
 worth using. The idea of calibration is that you have to calibrate the
 joystick only once, and then set the calibration at boot-time, thus removing
-the need of re-calibrating it in each program that uses it. 
+the need of re-calibrating it in each program that uses it.
 
   For calibration, use the jscal program, contained in the joystick package
 which is available at:
 
-ftp://atrey.karlin.mff.cuni.cz/pub/local/vojtech/joystick/joystick-1.0.6.tar.gz
-
-And soon also at:
-
-ftp://sunsite.unc.edu/pub/Linux/kernel/patches/console/joystick-1.0.6.tar.gz
+ftp://atrey.karlin.mff.cuni.cz/pub/linux/joystick/joystick-1.0.9.tar.gz
 
 4. Programming Interface
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -88,65 +83,65 @@ be dropped in the future.
   Thanks to the following authors that contributed to the joystick driver
 development:
 
-     0.1-0.5		Arthur C. Smith <asmith@cbnewsd.att.com>
-     0.5		Eyal Lebedinsky	<eyal@eyal.emu.id.au>
-     0.6		Jeff Tranter	<tranter@software.mitel.com>
-     0.7 		Carlos Puchol	<cpg@cs.utexas.edu>
-     0.7.1-0.8		Matt Rhoten	<mrhoten@oz.net>
-     0.7.3		Dan Fandrich	<dan@fch.wimsey.bc.ca>
-     0.7.3		Sverker Wilberg	<sverkerw@manila.docs.uu.se>
-     0.8		Hal Maney	<maney@norden.com>
-     0.8		Bernd Schmidt	<crux@pool.informatik.rwth-aachen.de>
-     0.9		Alan Cox	<alan@cymru.net>
-     0.9.0-1.0.6	Vojtech Pavlik  <vojtech@atrey.karlin.mff.cuni.cz>
+      0.1-0.5		Arthur C. Smith <asmith@cbnewsd.att.com>
+      0.5		Eyal Lebedinsky	<eyal@eyal.emu.id.au>
+      0.6		Jeff Tranter	<tranter@software.mitel.com>
+      0.7 		Carlos Puchol	<cpg@cs.utexas.edu>
+      0.7.1-0.8		Matt Rhoten	<mrhoten@oz.net>
+      0.7.3		Dan Fandrich	<dan@fch.wimsey.bc.ca>
+      0.7.3		Sverker Wilberg	<sverkerw@manila.docs.uu.se>
+      0.8		Hal Maney	<maney@norden.com>
+      0.8		Bernd Schmidt	<crux@pool.informatik.rwth-aachen.de>
+      0.9		Alan Cox	<alan@lxorguk.ukuu.org.uk>
+      0.9.0-1.0.9	Vojtech Pavlik  <vojtech@atrey.karlin.mff.cuni.cz>
 
 6. Change Log
 ~~~~~~~~~~~~~
   The current (1.0.x) version was originally based on the 0.7.3 version of
 the joystick driver, which caused some inconsistencies in version numbering.
-The following log documents all changes done to the driver by various
+The following log documents all changes done to the driver by the above
 contributors:
 
-Version 0.1	Original version 
+Version 0.1	Original version
 		Works but lacks multi-joystick support
 Version 0.2	Added multi-joystick support (minor 0 and 1)
-     		Added delay between measuring joystick axis
-     		Added scaling ioctl
+		Added delay between measuring joystick axis
+		Added scaling ioctl
 Version 0.3	Modified scaling to use ints to prevent kernel
-     		panics 8-)
+		panics 8-)
 Version 0.4	Linux 0.99.6 and fixed race condition in js_read.
-     		After looking at a schematic of a joystick card
-     		it became apparent that any write to the joystick
-     		port started ALL the joystick one shots. If the
-     		one that we are reading is short enough and the
-     		first one to be read, the second one will return
-     		bad data if its one shot has not expired when
-     		the joystick port is written for the second time.
-     		Thus solves the mystery delay problem in 0.2!
+		After looking at a schematic of a joystick card
+		it became apparent that any write to the joystick
+		port started ALL the joystick one shots. If the
+		one that we are reading is short enough and the
+		first one to be read, the second one will return
+		bad data if its one shot has not expired when
+		the joystick port is written for the second time.
+		Thus solves the mystery delay problem in 0.2!
 Version 0.5	Upgraded the driver to the 0.99.9 kernel, added
-     		joystick support to the make config options,
-     		updated the driver to return the buttons as
-     		positive logic, and read both axis at once
-     		and added some new ioctls.
+		joystick support to the make config options,
+		updated the driver to return the buttons as
+		positive logic, and read both axis at once
+		and added some new ioctls.
 Version 0.6	Made necessary changes to work with 0.99.15
-     		kernel (and hopefully 1.0). Also did some
-     		cleanup: indented code, fixed some typos, wrote
-     		man page, etc ...
-Version 0.7	Support for modules	    
+		kernel (and hopefully 1.0). Also did some
+		cleanup: indented code, fixed some typos, wrote
+		man page, etc ...
+Version 0.7	Support for modules
 Version 0.7.1	Fix bug in reading button state of js1
-     		Add include so module compiles under recent kernels
+		Add include so module compiles under recent kernels
 Version 0.7.3	Include directives changed for joystick.h
-     		Separated out joystick detection/counting, cleanup
-     		Fix for detection of 3-axis joysticks
-     		Better detection announcement
-     		Added I/O port registration, cleaned up code
+		Separated out joystick detection/counting, cleanup
+		Fix for detection of 3-axis joysticks
+		Better detection announcement
+		Added I/O port registration, cleaned up code
 Version 0.8	New read loop
-     		Cleaned up #includes to allow #include of joystick.h with
-     		gcc -Wall and from g++
-     		Made js_init fail if it finds zero joysticks
-     		General source/comment cleanup
-     		Use of MOD_(INC|DEC)_USE_COUNT
-     		Changes to compile correctly under 1.3 in kernel or as module
+		Cleaned up #includes to allow #include of joystick.h with
+		gcc -Wall and from g++
+		Made js_init fail if it finds zero joysticks
+		General source/comment cleanup
+		Use of MOD_(INC|DEC)_USE_COUNT
+		Changes to compile correctly under 1.3 in kernel or as module
 Version 0.9	Ported to 2.1.x
 		Reformatted to resemble Linux coding standard
 		Removed semaphore bug (we can dump the lot I think)
@@ -156,51 +151,63 @@ Version 0.9	Ported to 2.1.x
 		Removed 'save_busy'. Just set busy to 1.
 Version 0.9.0	Based on 0.7.3
 		New read function that allows two axes to have the same value
-     		New joystick calibration code
-     		Real support for 3-axis joysticks	
-     		CPU speed independent timeouts
-     		Reads may happen even for unwhole record size => cat /dev/js0 works
-     		Correct error for lseek
-     		/dev/js? can be read simultaneously by several processes
+		New joystick calibration code
+		Real support for 3-axis joysticks
+		CPU speed independent timeouts
+		Reads may happen even for unwhole record size => cat /dev/js0 works
+		Correct error for lseek
+		/dev/js? can be read simultaneously by several processes
 Version 0.9.1	IOCTLs now obey general Linux IOCTL rules ('j' letter assigned)
-     		Use of verify_area result codes
+		Use of verify_area result codes
 		Fuzz correction added
-     		Semaphore and many cli()'s removed
-     		Fix for TurboFire joysticks - read buttons always
-     		Fix for broken joysticks - return with -ENODEV only if joystick
-     		completely disconnected
-     		Fix in read function to allow zero results 
-     		Broken line correction added for broken joysticks (eg. JB-500)
-     		Timeouts back separated for easier setting
-     		Some fixes and cleanups in read function
+		Semaphore and many cli()'s removed
+		Fix for TurboFire joysticks - read buttons always
+		Fix for broken joysticks - return with -ENODEV only if joystick
+		completely disconnected
+		Fix in read function to allow zero results
+		Broken line correction added for broken joysticks (eg. JB-500)
+		Timeouts back separated for easier setting
+		Some fixes and cleanups in read function
 Version 0.9.2	Fixed a typo causing nothing to be working
 Version 1.0.0	Event approach started
 Version 1.0.1	Complete rewrite
 		Compiles but doesn't work
 Version 1.0.2	Works, many bugs fixed, more yet to come
 Version 1.0.3	Tail cutting logic changes & fixes
-     		Fix in js_do_bh - no more zero values for axes
-     		Lost event changes & fixes
+		Fix in js_do_bh - no more zero values for axes
+		Lost event changes & fixes
 Version 1.0.4	Kernel command line & module configuration support
-     		Better cli()/sti() handling
-     		Linux 2.1.25 select => poll changes
+		Better cli()/sti() handling
+		Linux 2.1.25 select => poll changes
 Version 1.0.5	Fixes in calibration routines
 		Better jscal
 Version 1.0.6	Backward compatibility with old js driver added
-     		Init value after recalibration bug fixed
+		Init value after recalibration bug fixed
 		Using KERN_* printk() codes
-     		Finally leaving ALPHA and going beta
-     		Cosmetic changes
+		Finally leaving ALPHA and going beta
+		Cosmetic changes
+Version 1.0.7	Readme update
+		Linux 2.1.89 poll update
+		Compatibility mode fix - refresh data after open
+		Cosmetic changes & cleanup
+Version 1.0.8	Changing the __u16 data to __s16 in event packet
+		The range is now -32727..0..32767
+		Broken line correction needs 2 coefs less
+		Fix to report number of buttons correctly
+		Removed various trailing spaces
+Version 1.0.9	Fix for compatibility mode - don't do correction
+		Fix max number of module parameters
 
 7. To do
 ~~~~~~~~
   Sooner or later I'll get to these:
 
-     		Backport & create patches for 2.0
-     		Try using Pentium timers for better precision
-     		Create patches for most common programs using joystick
-		Support for cards with hw calibration (Gravis Ultrasound, QuickShot)
-     		Support for multiport cards (QuickShot 4-joy board)
-     		Support for multiaxis, multibutton joysticks (Gravis Firebird)
-     		Support for MS digital joystick
+		Make an optional read routine using Pentium timers for better precision (*)
+		Support for hats and more buttons ala CH Flightstick (*)
+		Support for hats ala TM FCS (*)
+		Include support for MS SideWinder digital mode (*)
+		Create patches for most common programs using joystick
+		Support for cards with HW speed compensation
+		Support for more than one joystick port
 
+ (*) - Already in the development 1.1 version.

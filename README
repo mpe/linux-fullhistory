@@ -40,7 +40,7 @@ ON WHAT HARDWARE DOES IT RUN?
 
   Linux was first developed for 386/486-based PCs.  These days it also
   runs on DEC Alphas, SUN Sparcs, M68000 machines (like Atari and Amiga),
-  MIPS and PowerPC.
+  MIPS, PowerPC, and others.
 
 DOCUMENTATION:
 
@@ -68,11 +68,16 @@ INSTALLING the kernel:
    to get it all put in place. Replace "XX" with the version number of the
    latest kernel.
 
- - You can also upgrade between 2.1.xx releases by patching.  To install
-   by patching, get all the newer patch files and do
+ - You can also upgrade between 2.1.xx releases by patching.  Patches are
+   distributed in the traditional gzip and the new bzip2 format.  To
+   install by patching, get all the newer patch files and do
 
 		cd /usr/src
 		gzip -cd patchXX.gz | patch -p0
+
+   or
+		cd /usr/src
+		bzip2 -dc patchXX.bz2 | patch -p0
 
    (repeat xx for all versions bigger than the version of your current
    source tree, _in_order_) and you should be ok.  You may want to remove
@@ -190,7 +195,11 @@ COMPILING the kernel:
 
  - Keep a backup kernel handy in case something goes wrong.  This is 
    especially true for the development releases, since each new release
-   contains new code which has not been debugged. 
+   contains new code which has not been debugged.  Make sure you keep a
+   backup of the modules corresponding to that kernel, as well.  If you
+   are installing a new kernel with the same version number as your
+   working kernel, make a backup of your modules directory before you
+   do a "make modules_install".
 
  - In order to boot your new kernel, you'll need to copy the kernel
    image (found in /usr/src/linux/arch/i386/boot/zImage after compilation)
@@ -206,8 +215,8 @@ COMPILING the kernel:
    If you boot Linux from the hard drive, chances are you use LILO which
    uses the kernel image as specified in the file /etc/lilo.conf.  The
    kernel image file is usually /vmlinuz, or /zImage, or /etc/zImage. 
-   To use the new kernel, copy the new image over the old one (save a
-   backup of the original!).  Then, you MUST RERUN LILO to update the
+   To use the new kernel, save a copy of the old image and copy the new
+   image over the old one.  Then, you MUST RERUN LILO to update the
    loading map!! If you don't, you won't be able to boot the new kernel
    image. 
 

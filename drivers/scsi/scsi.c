@@ -1457,6 +1457,7 @@ SCSI_LOG_MLQUEUE(4,
     memcpy ((void *) SCpnt->data_cmnd , (const void *) cmnd, 12);
     SCpnt->reset_chain = NULL;
     SCpnt->serial_number = 0;
+    SCpnt->serial_number_at_timeout = 0;
     SCpnt->bufflen = bufflen;
     SCpnt->buffer = buffer;
     SCpnt->flags = 0;
@@ -1525,6 +1526,10 @@ scsi_done (Scsi_Cmnd * SCpnt)
       SCSI_LOG_MLCOMPLETE(1,printk("Ignoring completion of %p due to timeout status", SCpnt));
       return;
     }
+
+  /* Set the serial numbers back to zero */
+  SCpnt->serial_number = 0;
+  SCpnt->serial_number_at_timeout = 0;
 
   SCpnt->state = SCSI_STATE_BHQUEUE;
   SCpnt->owner = SCSI_OWNER_BH_HANDLER;
@@ -2300,6 +2305,8 @@ int scsi_proc_info(char *buffer, char **start, off_t offset, int length,
 	    return(-ENOSYS);  /* We do not yet support unplugging */
 
 	scan_scsis (HBA_ptr, 1, channel, id, lun);
+	if (HBA_ptr->select_queue_depths != NULL)
+		(HBA_ptr->select_queue_depths)(HBA_ptr, HBA_ptr->host_queue);
 	return(length);
 
     }

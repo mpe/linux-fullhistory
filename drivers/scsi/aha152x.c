@@ -1271,7 +1271,7 @@ int aha152x_abort(Scsi_Cmnd *SCpnt)
     HOSTDATA(shpnt)->aborting++;
     HOSTDATA(shpnt)->abortion_complete=0;
 
-    sti();  /* Hi Eric, guess what ;-) */
+    restore_flags(flags);
 
     /* sleep until the abortion is complete */
     while(!HOSTDATA(shpnt)->abortion_complete)
@@ -1556,7 +1556,7 @@ void aha152x_intr(int irqno, void *dev_id, struct pt_regs * regs)
      intr(). To avoid race conditions, we have to return
      immediately afterwards. */
   CLRBITS(DMACNTRL0, INTEN);
-  sti();  /* Yes, sti() really needs to be here */
+  /* sti();  FIXME!!! Yes, sti() really needs to be here if we want to lock up */
 
   /* disconnected target is trying to reconnect.
      Only possible, if we have disconnected nexuses and

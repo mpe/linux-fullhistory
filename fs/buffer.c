@@ -38,6 +38,7 @@
 #include <linux/blkdev.h>
 #include <linux/sysrq.h>
 #include <linux/file.h>
+#include <linux/init.h>
 #include <linux/quotaops.h>
 
 #include <asm/system.h>
@@ -1729,7 +1730,7 @@ void show_buffers(void)
  * Use gfp() for the hash table to decrease TLB misses, use
  * SLAB cache for buffer heads.
  */
-void buffer_init(void)
+__initfunc(void buffer_init(void))
 {
 	int order = 5;		/* Currently maximum order.. */
 	unsigned int nr_hash;

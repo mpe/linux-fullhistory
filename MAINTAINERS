@@ -84,7 +84,7 @@ S:	Maintained
 
 8390 NETWORK DRIVERS [WD80x3/SMC-ELITE, SMC-ULTRA, NE2000, 3C503, etc.]
 P:	Paul Gortmaker
-M	gpg109@rsphy1.anu.edu.au
+M:	gpg109@rsphy1.anu.edu.au
 L:	linux-net@vger.rutgers.edu
 S:	Maintained
 W:	http://rsphy1.anu.edu.au/~gpg109/ne2000.html

@@ -6,7 +6,6 @@
  *
  * $Id: indy_sc.c,v 1.4 1998/05/04 09:12:57 ralf Exp $
  */
-#include <linux/config.h>
 #include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>

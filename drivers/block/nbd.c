@@ -316,6 +316,8 @@ static int nbd_ioctl(struct inode *inode, struct file *file,
 	struct nbd_device *lo;
 	int dev, error;
 
+	/* Anyone capable of this syscall can do *real bad* things */
+
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
 	if (!inode)
@@ -422,6 +424,11 @@ static struct file_operations nbd_fops =
 int nbd_init(void)
 {
 	int i;
+
+	if (sizeof(struct nbd_request) != 24) {
+		printk(KERN_CRIT "Sizeof nbd_request needs to be 24 in order to work!\n" );
+		return -EIO;
+	}
 
 	if (register_blkdev(MAJOR_NR, "nbd", &nbd_fops)) {
 		printk("Unable to get major number %d for NBD\n",

@@ -851,18 +851,18 @@ static inline Scb *alloc_scbs (int needed)
     save_flags (flags);
     cli ();
     while (busy) {		/* someone else is allocating */
-	sti ();			/* Yes this is really needed here */
+	spin_unlock_irq(&io_request_lock);
 	for (now = jiffies; now == jiffies; );	/* wait a jiffy */
-	cli ();
+	spin_lock_irq(&io_request_lock);
     }
     busy = 1;			/* not busy now; it's our turn */
 
     while (freescbs < needed) {
 	timeout = jiffies + WAITnexttimeout;
 	do {
-	    sti ();		/* Yes this is really needed here */
+	    spin_unlock_irq(&io_request_lock);
 	    for (now = jiffies; now == jiffies; );	/* wait a jiffy */
-	    cli ();
+	    spin_lock_irq(&io_request_lock);
 	} while (freescbs < needed && jiffies <= timeout);
 	/*
 	 *  If we get here with enough free Scbs, we can take them.

@@ -1620,7 +1620,7 @@ NCR53c7xx_run_tests (struct Scsi_Host *host) {
 	    NCR53c7x0_write8 (DCNTL_REG, hostdata->saved_dcntl | DCNTL_SSM |
 						DCNTL_STD);
 	printk (" started\n");
-	sti();
+	restore_flags(flags);
 
 	/* 
 	 * This is currently a .5 second timeout, since (in theory) no slow 
@@ -1715,7 +1715,7 @@ NCR53c7xx_run_tests (struct Scsi_Host *host) {
 	    if (hostdata->options & OPTION_DEBUG_TRACE)
 	        NCR53c7x0_write8 (DCNTL_REG, hostdata->saved_dcntl |
 				DCNTL_SSM | DCNTL_STD);
-	    sti();
+	    restore_flags(flags);
 
 	    timeout = jiffies + 5 * HZ;	/* arbitrary */
 	    while ((hostdata->test_completed == -1) && jiffies < timeout)
@@ -5372,7 +5372,7 @@ NCR53c7xx_reset (Scsi_Cmnd *cmd, unsigned int reset_flags) {
 	disable(host);
     else if (hostdata->resets != -1)
 	--hostdata->resets;
-    sti();
+    restore_flags(flags);
     for (; nuke_list; nuke_list = tmp) {
 	tmp = (Scsi_Cmnd *) nuke_list->SCp.buffer;
     	nuke_list->result = DID_RESET << 16;
@@ -5828,7 +5828,7 @@ return_outstanding_commands (struct Scsi_Host *host, int free, int issue) {
 	    printk ("scsi%d : loop detected in running list!\n", host->host_no);
 	    break;
 	} else {
-	    printk ("The sti() implicit in a printk() prevents hangs\n");
+	    printk ("Duh? Bad things happening in the NCR driver\n");
 	    break;
 	}
 

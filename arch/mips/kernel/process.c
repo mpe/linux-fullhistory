@@ -9,7 +9,6 @@
  *
  * $Id: process.c,v 1.10 1998/05/04 09:17:53 ralf Exp $
  */
-#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>

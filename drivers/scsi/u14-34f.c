@@ -629,10 +629,8 @@ static int board_inquiry(unsigned int j) {
    /* Issue OGM interrupt */
    outb(CMD_OGM_INTR, sh[j]->io_port + REG_LCL_INTR);
 
-   sti();
-   time = jiffies;
-   while ((jiffies - time) < HZ && limit++ < 20000) udelay(100L);
-   cli();
+   /* Wait a second.. */
+   { unsigned int msec = 1000; while (--msec) udelay(1000); }
 
    if (cpp->adapter_status || HD(j)->cp_stat[0] != FREE) {
       HD(j)->cp_stat[0] = FREE;
@@ -1233,10 +1231,10 @@ int u14_34f_reset(Scsi_Cmnd *SCarg, unsigned int reset_flags) {
 #endif
 
    HD(j)->in_reset = TRUE;
-   sti();
-   time = jiffies;
-   while ((jiffies - time) < (10 * HZ) && limit++ < 200000) udelay(100L);
-   cli();
+
+   /* Wait 2 seconds ???!!! */
+   { unsigned int msec = 2*1000; while (--msec) udelay(1000); }
+
    printk("%s: reset, interrupts disabled, loops %d.\n", BN(j), limit);
 
    for (i = 0; i < sh[j]->can_queue; i++) {

@@ -524,7 +524,11 @@ got_block:
 	/*
 	 * Check quota for allocation of this block.
 	 */
-	DQUOT_ALLOC_BLOCK(sb, inode, 1);
+	if(DQUOT_ALLOC_BLOCK(sb, inode, 1)) {
+		unlock_super(sb);
+		*err = -EDQUOT;
+		return 0;
+	}
 
 	tmp = j + i * EXT2_BLOCKS_PER_GROUP(sb) + le32_to_cpu(es->s_first_data_block);
 
@@ -560,7 +564,8 @@ got_block:
 		for (k = 1;
 		     k < prealloc_goal && (j + k) < EXT2_BLOCKS_PER_GROUP(sb);
 		     k++) {
-			DQUOT_PREALLOC_BLOCK(sb, inode, 1);
+			if (DQUOT_PREALLOC_BLOCK(sb, inode, 1))
+				break;
 			if (ext2_set_bit (j + k, bh->b_data)) {
 				DQUOT_FREE_BLOCK(sb, inode, 1);
  				break;

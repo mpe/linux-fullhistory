@@ -976,7 +976,6 @@ static int irq_probe()
     int i;
     
     inb(INT_REG);               /* clear the interrupt register */
-    sti();
     irqs = probe_irq_on();
     
     /* Invalid command will cause an interrupt */

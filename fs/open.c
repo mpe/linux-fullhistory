@@ -552,7 +552,7 @@ static int chown_common(struct dentry * dentry, uid_t user, gid_t group)
 		newattrs.ia_mode &= ~S_ISGID;
 		newattrs.ia_valid |= ATTR_MODE;
 	}
-	DQUOT_TRANSFER(dentry, newattrs);
+	error = DQUOT_TRANSFER(dentry, &newattrs);
 out:
 	return error;
 }

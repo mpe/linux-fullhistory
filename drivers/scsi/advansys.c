@@ -5579,7 +5579,7 @@ advansys_abort(Scsi_Cmnd *scp)
                 asc_dvc_varp = &boardp->dvc_var.asc_dvc_var;
                 scp->result = HOST_BYTE(DID_ABORT);
 
-                sti(); /* Enable interrupts for AscAbortSRB(). */
+                /* sti(); - FIXME!!! Enable interrupts for AscAbortSRB() must be careful about io_lock. */
                 ASC_DBG1(1, "advansys_abort: before AscAbortSRB(), scp %x\n",
                     (unsigned) scp);
                 switch (AscAbortSRB(asc_dvc_varp, (ulong) scp)) {
@@ -5849,9 +5849,9 @@ advansys_reset(Scsi_Cmnd *scp, unsigned int reset_flags)
                  * Reset the target's SCSI bus.
                  */
                 ASC_DBG(1, "advansys_reset: before AscResetSB()\n");
-                sti();    /* Enable interrupts for AscResetSB(). */
+                /* sti();    FIXME!!! Enable interrupts for AscResetSB(). */
                 status = AscResetSB(asc_dvc_varp);
-                cli();
+                /* cli();    FIXME!!! */
                 switch (status) {
                 case ASC_TRUE:
                     ASC_DBG(1, "advansys_reset: AscResetSB() success\n");
@@ -5874,9 +5874,9 @@ advansys_reset(Scsi_Cmnd *scp, unsigned int reset_flags)
                 ASC_DBG1(1,
                     "advansys_reset: before AscResetDevice(), target %d\n",
                     scp->target);
-                sti();    /* Enable interrupts for AscResetDevice(). */
+                /* sti();    FIXME!!! Enable interrupts for AscResetDevice(). */
                 status = AscResetDevice(asc_dvc_varp, scp->target);
-                cli();
+                /* cli();    FIXME!!! */
 
                 switch (status) {
                 case ASC_TRUE:
@@ -5888,9 +5888,9 @@ advansys_reset(Scsi_Cmnd *scp, unsigned int reset_flags)
                 default:
                     ASC_DBG(1,
 "advansys_reset: AscResetDevice() failed; Calling AscResetSB()\n");
-                    sti();    /* Enable interrupts for AscResetSB(). */
+                    /* sti();   FIXME!!! Enable interrupts for AscResetSB(). */
                     status = AscResetSB(asc_dvc_varp);
-                    cli();
+                    /* cli(); */
                     switch (status) {
                     case ASC_TRUE:
                         ASC_DBG(1, "advansys_reset: AscResetSB() TRUE\n");

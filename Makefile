@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 101
+SUBLEVEL = 102
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/)
 
@@ -86,10 +86,6 @@ SVGA_MODE=	-DSVGA_MODE=NORMAL_VGA
 #
 
 CFLAGS = -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
-
-ifdef CONFIG_CPP
-CFLAGS := $(CFLAGS) -x c++
-endif
 
 ifdef SMP
 CFLAGS += -D__SMP__

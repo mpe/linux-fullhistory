@@ -1,13 +1,12 @@
 /*
- *  $Id: joystick.c,v 1.6 1998/03/30 11:10:43 mj Exp $
- *
- *  Copyright (C) 1997, 1998 Vojtech Pavlik
+ * linux/drivers/char/joystick.c  Version 1.0.9
+ * Copyright (C) 1996-1998 Vojtech Pavlik
  */
 
 /*
- *  This is joystick driver for Linux. It supports up to two analog joysticks
- *  on a PC compatible machine. See Documentation/joystick.txt for changelog
- *  and credits.
+ * This is joystick driver for Linux. It supports up to two analog joysticks
+ * on a PC compatible machine. See Documentation/joystick.txt for changelog
+ * and credits.
  */
 
 #include <linux/init.h>
@@ -30,10 +29,10 @@
 #define JS_BH_MIN_PERIOD	HZ/25		/* axis min valid time (40 ms) */
 #define JS_BH_MAX_PERIOD	HZ/25*2		/* axis max valid time (80 ms) */
 
-#define JS_FIFO_SIZE    	16		/* number of FIFO entries */
+#define JS_FIFO_SIZE		16		/* number of FIFO entries */
 #define JS_BUFF_SIZE		32 		/* output buffer size */
-#define JS_RETRIES		4		/* number of retries */ 
-#define JS_DEF_PREC		8		/* initial precision for all axes */
+#define JS_RETRIES		4		/* number of retries */
+#define JS_DEF_PREC		16		/* initial precision for all axes */
 
 #define JS_NUM			2		/* number of joysticks */
 
@@ -44,7 +43,7 @@
 #define PIT_DATA 		0x40		/* timer 0 data port */
 #define JS_PORT 		0x201		/* joystick port */
 
-#define JS_TRIGGER      	0xff		/* triggers one-shots */
+#define JS_TRIGGER		0xff		/* triggers one-shots */
 #define PIT_READ_TIMER		0x00		/* to read timer 0 */
 
 #define DELTA(X,Y,Z)	((X)-(Y)+(((X)>=(Y))?0:Z))				/* cyclic delta */
@@ -101,7 +100,7 @@ static unsigned int js_buttons = 0;
 
 MODULE_AUTHOR("Vojtech Pavlik <vojtech@atrey.karlin.mff.cuni.cz>");
 MODULE_SUPPORTED_DEVICE("js");
-MODULE_PARM(js, "0-1b");
+MODULE_PARM(js, "1-2b");
 
 static char js[] = {0, 0};
 
@@ -113,7 +112,7 @@ static char js[] = {0, 0};
 static inline int get_pit(void)
 {
 	int t, flags;
-	
+
 	save_flags(flags);
 	cli();
 	outb(PIT_READ_TIMER, PIT_MODE);
@@ -146,36 +145,34 @@ static int js_correct(int value, struct js_corr *corr)
 	int t;
 
 	if (corr->type == JS_CORR_NONE) return value;
-	t = value > corr->coef[0] ? (value < corr->coef[1] ? corr->coef[0] : value - corr->coef[1] + corr->coef[0]) : value;
-	if (t == corr->coef[0]) return 32768;
+	t = value > corr->coef[0] ? (value < corr->coef[1] ? 0 : value - corr->coef[1]) : value - corr->coef[0];
 
 	switch (corr->type) {
 	case JS_CORR_BROKEN:
-		t = t < corr->coef[0] ? ((corr->coef[2] * t) >> 14) + corr->coef[3] :
-					((corr->coef[4] * t) >> 14) + corr->coef[5];
+		t = t < 0 ? ((corr->coef[2] * t) >> 14) : ((corr->coef[3] * t) >> 14);
 		break;
-	default: 
+	default:
 		return 0;
 	}
 
-	if (t < 0) return 0;
-        if (t > 65535) return 65535;
+	if (t < -32767) return -32767;
+	if (t >  32767) return  32767;
 
-        return t;
+	return t;
 }
 
 /*
- * js_compare() compares two close axis values and decides 
+ * js_compare() compares two close axis values and decides
  * whether they are "same".
  */
 
 static int js_compare(int x, int y, int prec)
 {
-	return (x < y + prec) && (y < x + prec); 
+	return (x < y + prec) && (y < x + prec);
 }
 
 /*
- * js_probe() probes for joysticks 
+ * js_probe() probes for joysticks
  */
 
 inline int js_probe(void)
@@ -193,10 +190,10 @@ inline int js_probe(void)
 	} else
 	switch (t & JS_AXES) {
 		case 0x0c: jsd[0].exist = 0x33; jsd[1].exist = 0x00; break;	/* joystick 0 connected */
-		case 0x03: jsd[0].exist = 0x00; jsd[1].exist = 0xcc; break;	/* joystick 1 connected */
+		case 0x03: jsd[0].exist = 0xcc; jsd[1].exist = 0x00; break;	/* joystick 1 connected */
 		case 0x04: jsd[0].exist = 0xfb; jsd[1].exist = 0x00; break;	/* 3-axis joystick connected */
 		case 0x00: jsd[0].exist = 0x33; jsd[1].exist = 0xcc; break;	/* joysticks 0 and 1 connected */
-		default:   jsd[0].exist = 0x00; jsd[1].exist = 0x00; return -1;	/* no joysticks */	
+		default:   jsd[0].exist = 0x00; jsd[1].exist = 0x00; return -1;	/* no joysticks */
 	}
 
 	js_axes_exist = (jsd[0].exist | jsd[1].exist) & JS_AXES;
@@ -205,7 +202,7 @@ inline int js_probe(void)
 	return 0;
 }
 
-/* 
+/*
  * js_do_timer() controls the action by adding entries to the event
  * fifo each time a button changes its state or axis valid time
  * expires.
@@ -223,7 +220,7 @@ static void js_do_timer(unsigned long data)
 			js_mark_time = jiffies;
 			mark_bh(JS_BH);
 		}
-	} 
+	}
 	else
  	if ((jiffies > js_bh_time + JS_BH_MAX_PERIOD) && !js_mark_time) {
 		js_mark_time = jiffies;
@@ -257,7 +254,7 @@ static void js_add_event(int i, __u32 time, __u8 type, __u8 number, __u16 value)
 static void js_sync_buff(void)
 {
 	int i;
-	
+
 	for (i = 0; i < JS_NUM; i++)
 	if (jsd[i].list)
 	if (jsd[i].bhead != jsd[i].ahead)	{
@@ -266,12 +263,12 @@ static void js_sync_buff(void)
 			curl = jsd[i].list;
 			while (curl) {
 				if (ROT(jsd[i].bhead, curl->tail, jsd[i].ahead) || (curl->tail == jsd[i].bhead)) {
-					curl->tail = jsd[i].ahead; 				
+					curl->tail = jsd[i].ahead;
 					curl->startup = jsd[i].exist;
 				}
 				curl = curl->next;
 			}
-			jsd[i].tail = jsd[i].ahead;		
+			jsd[i].tail = jsd[i].ahead;
 		}
 		jsd[i].bhead = jsd[i].ahead;
 		wake_up_interruptible(&jsd[i].wait);
@@ -316,8 +313,8 @@ static void js_do_bh(void)
 			cli();						/* no interrupts */
 			outb(JS_TRIGGER, JS_PORT);			/* trigger one-shots */
 			outb(PIT_READ_TIMER, PIT_MODE);			/* read timer */
-			t = (t1l = inb(PIT_DATA)) | 
-			    (t1h = inb(PIT_DATA)) << 8;	
+			t = (t1l = inb(PIT_DATA)) |
+			    (t1h = inb(PIT_DATA)) << 8;
 			restore_flags(flags);
 
 			do {
@@ -328,7 +325,7 @@ static void js_do_bh(void)
 					joy_state = (joy_state << 8) | jss;
 					i++;
 				}
-				
+
 				cli();
 				outb(PIT_READ_TIMER, PIT_MODE);
 				t1l = inb(PIT_DATA);
@@ -341,15 +338,15 @@ static void js_do_bh(void)
  * Process the gathered axis data in joy_state.
  */
 
-			joy_state ^= ((joy_state >> 8) | 0xff000000L);  /* More magic */
+			joy_state ^= ((joy_state >> 8) | 0xff000000L);	/* More magic */
 
 			for (; i > 0; i--) {
 				for (j = 0; j < 4; j++)
 				if (joy_state & js_axes_exist & (1 << j)) {
-					jsm = js_correct(DELTA_TX(t, t_low, t_high), &js_axis[j].corr);
+					jsm = DELTA_TX(t, t_low, t_high);
 					if (!js_compare(jsm, js_axis[j].value, js_axis[j].corr.prec)) {
 						if (jsm < js_axis[j].value || !retries)
-							 js_axis[j].value = jsm;
+							js_axis[j].value = jsm;
 						again = 1;
 					}
 				}
@@ -358,7 +355,7 @@ static void js_do_bh(void)
 				t_high = t_high >> 8;
 			}
 
-		} while (retries++ < JS_RETRIES && again); 
+		} while (retries++ < JS_RETRIES && again);
 
 /*
  * Check if joystick lost.
@@ -390,8 +387,9 @@ static void js_do_bh(void)
 			k = 0;
 			for (j = 0; j < 4; j++)
 			if ((1 << j) & jsd[i].exist) {
-				if (!js_compare(js_axis[j].value, old_axis[j], js_axis[j].corr.prec))
-					js_add_event(i, js_mark_time, JS_EVENT_AXIS, k, js_axis[j].value);
+				if ((t = js_correct(js_axis[j].value, &js_axis[j].corr)) !=
+					js_correct(old_axis[j], &js_axis[j].corr))
+					js_add_event(i, js_mark_time, JS_EVENT_AXIS, k, t);
 				k++;
 			}
 		}
@@ -448,7 +446,7 @@ static ssize_t js_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 	unsigned long blocks = count / sizeof(struct js_event);
 	unsigned long i = 0, j;
 	int t, u = curl->tail;
-        int retval = 0;
+	int retval = 0;
 
 /*
  * Check user data.
@@ -474,13 +472,13 @@ static ssize_t js_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 
 
 	if ((GOF(curl->tail) == jsd[minor].ahead && !curl->startup && count != sizeof(struct JS_DATA_TYPE))
-            || (curl->startup && !js_bh_time)) {
+		|| (curl->startup && !js_bh_time)) {
 
 		add_wait_queue(&jsd[minor].wait, &wait);
 		current->state = TASK_INTERRUPTIBLE;
 
 		while ((GOF(curl->tail) == jsd[minor].ahead && !curl->startup && count != sizeof(struct JS_DATA_TYPE))
-		       || (curl->startup && !js_bh_time)) {
+			|| (curl->startup && !js_bh_time)) {
 
 			if (file->f_flags & O_NONBLOCK) {
 				retval = -EAGAIN;
@@ -501,7 +499,7 @@ static ssize_t js_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 	}
 
 	if (retval) return retval;
-	
+
 /*
  * Do the i/o.
  */
@@ -519,15 +517,15 @@ static ssize_t js_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 				if (curl->startup & (1 << j)) {
 					tmpevent.type = JS_EVENT_AXIS | JS_EVENT_INIT;
 					tmpevent.number = t;
-					tmpevent.value = js_axis[j].value;
-  					if (copy_to_user(&buff[i], &tmpevent, sizeof(struct js_event)))
+					tmpevent.value = js_correct(js_axis[j].value, &js_axis[j].corr);
+				if (copy_to_user(&buff[i], &tmpevent, sizeof(struct js_event)))
 						retval = -EFAULT;
 					if (put_user((__u32)((jiffies - curl->time) * (1000/HZ)), &buff[i].time))
 						retval = -EFAULT;
 					curl->startup &= ~(1 << j);
 					i++;
 				}
-				t++;	
+				t++;
 			}
 
 /*
@@ -541,14 +539,14 @@ static ssize_t js_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 					tmpevent.type = JS_EVENT_BUTTON | JS_EVENT_INIT;
 					tmpevent.number = t;
 					tmpevent.value = (js_buttons >> j) & 1;
-  					if (copy_to_user(&buff[i], &tmpevent, sizeof(struct js_event)))
+					if (copy_to_user(&buff[i], &tmpevent, sizeof(struct js_event)))
 						retval = -EFAULT;
 					if (put_user((__u32)((jiffies - curl->time) * (1000/HZ)), &buff[i].time))
 						retval = -EFAULT;
 					curl->startup &= ~(1 << j);
 					i++;
 				}
-				t++;	
+				t++;
 			}
 		}
 
@@ -564,7 +562,7 @@ static ssize_t js_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 			curl->tail = t;
 			i++;
 		}
-	
+
 	}
 
 	else
@@ -609,7 +607,7 @@ static ssize_t js_read(struct file *file, char *buf, size_t count, loff_t *ppos)
 		}
 		if (!curl) jsd[minor].tail = t;
 	}
-	
+
 	return retval ? retval : i*sizeof(struct js_event);
 }
 
@@ -624,19 +622,16 @@ static unsigned int js_poll(struct file *file, poll_table *wait)
  	curl = file->private_data;
 
 	poll_wait(file, &jsd[minor].wait, wait);
-	if (GOF(curl->tail) != jsd[minor].ahead) 
+	if (GOF(curl->tail) != jsd[minor].ahead)
 		return POLLIN | POLLRDNORM;
-        return 0;
+	return 0;
 }
 
 /*
  * js_ioctl handles misc ioctl calls.
  */
 
-static int js_ioctl(struct inode *inode,
-		     struct file *file,
-		     unsigned int cmd,
-		     unsigned long arg)
+static int js_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
 {
 	unsigned int minor = MINOR(inode->i_rdev);
 	int i, j;
@@ -672,7 +667,7 @@ static int js_ioctl(struct inode *inode,
 		j = 0;
 		for (i = 0; i < 4; i++)
 		if ((1 << i) & jsd[minor].exist) {
-			if (copy_to_user((void *) arg + j * sizeof(struct js_corr), &js_axis[i].corr, 
+			if (copy_to_user((void *) arg + j * sizeof(struct js_corr), &js_axis[i].corr,
 				sizeof(struct js_corr))) return -EFAULT;
 			j++;
 		}
@@ -680,7 +675,7 @@ static int js_ioctl(struct inode *inode,
 	default:
 		return -EINVAL;
 	}
-	
+
 	return 0;
 }
 
@@ -701,14 +696,14 @@ static int js_open(struct inode *inode, struct file *file)
 		return -ENODEV;
 	if (!jsd[minor].exist) {
 		js_probe();
-		if (jsd[minor].exist) printk(KERN_INFO "js%d: %d-axis joystick at %#x\n", 
-			minor,  count_bits(jsd[minor].exist & JS_AXES), JS_PORT);
+		if (jsd[minor].exist) printk(KERN_INFO "js%d: %d-axis %d-button joystick at %#x\n",
+			minor, count_bits(jsd[minor].exist & JS_AXES), count_bits(jsd[minor].exist & JS_BUTTONS), JS_PORT);
 		else return -ENODEV;
 	}
 
 	MOD_INC_USE_COUNT;
 
-	if (!jsd[0].list && !jsd[1].list) { 
+	if (!jsd[0].list && !jsd[1].list) {
 		js_timer.expires = jiffies + JS_TIMER_PERIOD;
 		add_timer(&js_timer);
 	}
@@ -789,7 +784,7 @@ __initfunc(void js_setup(char *str, int *ints))
 
 {
 	js[0] = ((ints[0] > 0) ? ints[1] : 0 );
-        js[1] = ((ints[0] > 1) ? ints[2] : 0 );
+	js[1] = ((ints[0] > 1) ? ints[2] : 0 );
 }
 #endif
 
@@ -799,7 +794,7 @@ __initfunc(void js_setup(char *str, int *ints))
  */
 
 #ifdef MODULE
-int init_module(void) 
+int init_module(void)
 #else
 __initfunc(int js_init(void))
 #endif
@@ -823,7 +818,7 @@ __initfunc(int js_init(void))
 
 	for (i = 0; i < JS_NUM; i++) {
 		if (jsd[i].exist) printk(KERN_INFO "js%d: %d-axis %d-button joystick at %#x\n",
-			 i,  count_bits(jsd[i].exist & JS_AXES), count_bits(jsd[i].exist & JS_AXES), JS_PORT);
+			i, count_bits(jsd[i].exist & JS_AXES), count_bits(jsd[i].exist & JS_BUTTONS), JS_PORT);
 		jsd[i].ahead = jsd[i].bhead = 0;
 		jsd[i].tail = JS_BUFF_SIZE - 1;
 		jsd[i].list = NULL;
@@ -832,7 +827,7 @@ __initfunc(int js_init(void))
 	}
 
 	for (i = 0; i < 4; i++) {
-		js_axis[i].corr.type = JS_CORR_NONE; 
+		js_axis[i].corr.type = JS_CORR_NONE;
 		js_axis[i].corr.prec = JS_DEF_PREC;
 	}
 
@@ -841,7 +836,7 @@ __initfunc(int js_init(void))
 	enable_bh(JS_BH);
 	init_timer(&js_timer);
 	js_timer.function = js_do_timer;
-		
+
 	return 0;
 }
 

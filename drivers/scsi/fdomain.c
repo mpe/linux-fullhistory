@@ -1191,7 +1191,7 @@ void fdomain_16x0_intr( int irq, void *dev_id, struct pt_regs * regs )
 				   interruptions while this routine is
 				   running. */
 
-   sti();			/* Yes, we really want sti() here */
+   /* sti();			 Yes, we really want sti() here if we want to lock up our machine */
    
    outb( 0x00, Interrupt_Cntl_port );
 

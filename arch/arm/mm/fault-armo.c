@@ -5,6 +5,7 @@
  *  Modifications for ARM processor (c) 1995, 1996 Russell King
  */
 
+#include <linux/config.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/head.h>

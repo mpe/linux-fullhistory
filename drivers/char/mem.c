@@ -32,9 +32,6 @@ void soundcard_init(void);
 #ifdef CONFIG_ISDN
 int isdn_init(void);
 #endif
-#ifdef CONFIG_PCWATCHDOG
-int pcwatchdog_init(void);
-#endif
 #ifdef CONFIG_VIDEO_DEV
 extern int videodev_init(void);
 #endif

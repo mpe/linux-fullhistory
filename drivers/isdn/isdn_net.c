@@ -1764,6 +1764,8 @@ isdn_net_init(struct device *ndev)
 	ndev->type = ARPHRD_ETHER;
 	ndev->addr_len = ETH_ALEN;
 
+	ndev->tx_queue_len = 10; /* for clients without MPPP 5 is better.  */
+
 	for (i = 0; i < ETH_ALEN; i++)
 		ndev->broadcast[i] = 0xff;
 

@@ -304,14 +304,17 @@ update_out:
 static void soc_intr(int irq, void *dev_id, struct pt_regs *regs)
 {
 	u32 cmd;
+	unsigned long flags;
 	register struct soc *s = (struct soc *)dev_id;
 
+	spin_lock_irqsave(&io_request_lock, flags);
 	cmd = s->regs->cmd;
 	for (; (cmd = SOC_INTR (s, cmd)); cmd = s->regs->cmd) {
 		if (cmd & SOC_CMD_RSP_Q1) soc_unsolicited (s);
 		if (cmd & SOC_CMD_RSP_Q0) soc_solicited (s);
 		if (cmd & SOC_CMD_REQ_QALL) soc_request (s, cmd);
 	}
+	spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
 #define TOKEN(proto, port, token) (((proto)<<12)|(token)|(port))

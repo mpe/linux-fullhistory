@@ -81,9 +81,7 @@ extern int dsp56k_init(void);
 extern int nvram_init(void);
 extern int radio_init(void);
 extern void hfmodem_init(void);
-#ifdef CONFIG_PC110_PAD
 extern int pc110pad_init(void);
-#endif
 
 #ifdef CONFIG_PROC_FS
 static int misc_read_proc(char *buf, char **start, off_t offset,

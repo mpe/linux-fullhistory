@@ -2703,7 +2703,7 @@ void gdth_timeout(void)
 
     timer_table[GDTH_TIMER].expires = jiffies + 30*HZ;
     timer_active |= 1<<GDTH_TIMER;
-    sti();
+    restore_flags(flags);
 }
 #endif
 

@@ -32,7 +32,6 @@
 #include <linux/hippidevice.h>
 #include <linux/skbuff.h>
 #include <linux/errno.h>
-#include <linux/config.h>
 #include <net/arp.h>
 #include <net/sock.h>
 #include <asm/checksum.h>

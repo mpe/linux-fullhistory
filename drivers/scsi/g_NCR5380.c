@@ -614,6 +614,7 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
 {
     int len = 0;
     NCR5380_local_declare();
+    unsigned long flags;
     unsigned char status;
     int i;
     struct Scsi_Host *scsi_ptr;
@@ -622,7 +623,8 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
 #ifdef NCR5380_STATS
     Scsi_Device *dev;
     extern const char *const scsi_device_types[MAX_SCSI_DEVICE_CODE];
-#endif    
+#endif
+    save_flags(flags);
     cli();
 
     for (scsi_ptr = first_instance; scsi_ptr; scsi_ptr=scsi_ptr->next)
@@ -721,7 +723,7 @@ int generic_NCR5380_proc_info(char* buffer, char** start, off_t offset, int leng
     len -= offset;
     if (len > length)
 	    len = length;
-    sti();
+    restore_flags(flags);
     return len;
 }
 

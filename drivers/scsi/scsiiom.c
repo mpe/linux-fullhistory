@@ -1426,12 +1426,13 @@ DC390_ScsiRstDetect( PACB pACB )
 #ifdef DC390_DEBUG0
     printk("RST_DETEC");
 #endif
-    save_flags(flags);
-    sti();
-    wlval = jiffies + HZ;
-    while( jiffies < wlval );	 /* delay 1 sec */
 
+    /* delay a second */
+    { unsigned int msec = 1*1000; while (--msec) udelay(1000); }
+
+    save_flags(flags);
     cli();
+
     ioport = pACB->IOPortBase;
     bval = DMA_IDLE_CMD;
     outb(bval,ioport+DMA_Cmd);

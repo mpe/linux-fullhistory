@@ -146,6 +146,10 @@ void scsi_old_times_out (Scsi_Cmnd * SCpnt)
     unsigned long flags;
 
     spin_lock_irqsave(&io_request_lock, flags);
+
+    /* Set the serial_number_at_timeout to the current serial_number */
+    SCpnt->serial_number_at_timeout = SCpnt->serial_number;
+
     switch (SCpnt->internal_timeout & (IN_ABORT | IN_RESET | IN_RESET2 | IN_RESET3))
     {
     case NORMAL_TIMEOUT:
@@ -321,6 +325,7 @@ void scsi_old_done (Scsi_Cmnd * SCpnt)
     struct Scsi_Host * host = SCpnt->host;
     int result = SCpnt->result;
     SCpnt->serial_number = 0;
+    SCpnt->serial_number_at_timeout = 0;
     oldto = update_timeout(SCpnt, 0);
 
 #ifdef DEBUG_TIMEOUT

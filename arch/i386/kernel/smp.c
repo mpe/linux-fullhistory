@@ -1564,7 +1564,7 @@ __initfunc(static unsigned int get_8254_timer_count (void))
  * APIC double write bug.
  */
 
-#define APIC_DIVISOR 1
+#define APIC_DIVISOR 16
 
 void setup_APIC_timer (unsigned int clocks)
 {
@@ -1588,7 +1588,7 @@ void setup_APIC_timer (unsigned int clocks)
 	 */
 	tmp_value = apic_read(APIC_TDCR);
 	apic_write(APIC_TDCR , (tmp_value & ~APIC_TDR_DIV_1 )
-				 | APIC_TDR_DIV_1);
+				 | APIC_TDR_DIV_16);
 
 	tmp_value = apic_read(APIC_TMICT);
 	apic_write(APIC_TMICT, clocks/APIC_DIVISOR);

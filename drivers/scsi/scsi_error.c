@@ -201,6 +201,9 @@ static void do_scsi_times_out (Scsi_Cmnd * SCpnt)
      }
 #endif
 
+    /* Set the serial_number_at_timeout to the current serial_number */
+    SCpnt->serial_number_at_timeout = SCpnt->serial_number;
+
     SCpnt->state = SCSI_STATE_TIMEOUT;
     SCpnt->owner = SCSI_OWNER_ERROR_HANDLER;
     
