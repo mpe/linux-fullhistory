@@ -260,7 +260,7 @@ end:
 }
 
 
-int __init
+static int __init
 acpi_container_init(void)
 {
 	int	result = 0;
@@ -281,7 +281,7 @@ acpi_container_init(void)
 	return(0);
 }
 
-void __exit
+static void __exit
 acpi_container_exit(void)
 {
 	int			action = UNINSTALL_NOTIFY_HANDLER;

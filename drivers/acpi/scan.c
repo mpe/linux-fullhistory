@@ -27,6 +27,10 @@ static LIST_HEAD(acpi_device_list);
 DEFINE_SPINLOCK(acpi_device_lock);
 LIST_HEAD(acpi_wakeup_device_list);
 
+static int
+acpi_bus_trim(struct acpi_device	*start,
+		int rmdevice);
+
 static void acpi_device_release(struct kobject * kobj)
 {
 	struct acpi_device * dev = container_of(kobj,struct acpi_device,kobj);
@@ -890,7 +894,7 @@ static void acpi_device_set_id(struct acpi_device * device, struct acpi_device *
 	acpi_os_free(buffer.pointer);
 }
 
-int acpi_device_set_context(struct acpi_device * device, int type)
+static int acpi_device_set_context(struct acpi_device * device, int type)
 {
 	acpi_status status = AE_OK;
 	int result = 0;
@@ -915,7 +919,7 @@ int acpi_device_set_context(struct acpi_device * device, int type)
 	return result;
 }
 
-void acpi_device_get_debug_info(struct acpi_device * device, acpi_handle handle, int type)
+static void acpi_device_get_debug_info(struct acpi_device * device, acpi_handle handle, int type)
 {
 #ifdef CONFIG_ACPI_DEBUG_OUTPUT
 	char		*type_string = NULL;
@@ -958,7 +962,7 @@ void acpi_device_get_debug_info(struct acpi_device * device, acpi_handle handle,
 }
 
 
-int
+static int
 acpi_bus_remove (
 	struct acpi_device *dev,
 	int rmdevice)
@@ -1256,7 +1260,7 @@ int acpi_bus_scan (struct acpi_device	*start)
 EXPORT_SYMBOL(acpi_bus_scan);
 
 
-int
+static int
 acpi_bus_trim(struct acpi_device	*start,
 		int rmdevice)
 {
