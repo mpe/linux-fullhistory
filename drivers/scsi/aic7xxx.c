@@ -209,7 +209,7 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
     0, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL
 };
 
-#define AIC7XXX_C_VERSION  "5.0.12"
+#define AIC7XXX_C_VERSION  "5.0.13"
 
 #define NUMBER(arr)     (sizeof(arr) / sizeof(arr[0]))
 #define MIN(a,b)        (((a) < (b)) ? (a) : (b))
@@ -270,18 +270,24 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
 #  include <asm/spinlock.h>
 #  include <linux/smp.h>
 #  define cpuid smp_processor_id()
-#  define DRIVER_LOCK_INIT \
-     spin_lock_init(&p->spin_lock);
-#  define DRIVER_LOCK \
+#  if LINUX_VERSION_CODE < KERNEL_VERSION(2,1,95)
+#    define DRIVER_LOCK_INIT \
+       spin_lock_init(&p->spin_lock);
+#    define DRIVER_LOCK \
        if(!p->cpu_lock_count[cpuid]) { \
          spin_lock_irqsave(&p->spin_lock, cpu_flags); \
          p->cpu_lock_count[cpuid]++; \
        } else { \
          p->cpu_lock_count[cpuid]++; \
        }
-#  define DRIVER_UNLOCK \
-     if(--p->cpu_lock_count[cpuid] == 0) \
-       spin_unlock_irqrestore(&p->spin_lock, cpu_flags);
+#    define DRIVER_UNLOCK \
+       if(--p->cpu_lock_count[cpuid] == 0) \
+         spin_unlock_irqrestore(&p->spin_lock, cpu_flags);
+#  else
+#    define DRIVER_LOCK_INIT
+#    define DRIVER_LOCK
+#    define DRIVER_UNLOCK
+#  endif
 #else
 #  define cpuid 0
 #  define DRIVER_LOCK_INIT
@@ -2159,7 +2165,9 @@ static inline void
 aic7xxx_done_cmds_complete(struct aic7xxx_host *p)
 {
   Scsi_Cmnd *cmd;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,1,95)
   unsigned int cpu_flags = 0;
+#endif
   
   DRIVER_LOCK
   while (p->completeq.head != NULL)
@@ -3193,7 +3201,9 @@ aic7xxx_run_waiting_queues(struct aic7xxx_host *p)
   struct aic7xxx_scb *scb;
   int tindex;
   int sent;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,1,95)
   unsigned long cpu_flags = 0;
+#endif
 
 
   if (p->waiting_scbs.head == NULL)
@@ -3261,8 +3271,12 @@ aic7xxx_timer(struct aic7xxx_host *p)
   int i;
   unsigned long cpu_flags = 0;
   struct aic7xxx_scb *scb;
-   
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,1,95)   
   DRIVER_LOCK
+#else
+  spin_lock_irqsave(&io_request_lock, cpu_flags);
+#endif
   for(i=0; i<MAX_TARGETS; i++)
   {
     if ( (p->dev_timer[i].expires) && 
@@ -3282,7 +3296,11 @@ aic7xxx_timer(struct aic7xxx_host *p)
     }
   }
   aic7xxx_run_waiting_queues(p);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,1,95)   
   DRIVER_UNLOCK
+#else
+  spin_unlock_irqrestore(&io_request_lock, cpu_flags);
+#endif
 }
 
 /*+F*************************************************************************
@@ -4893,7 +4911,6 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
 {
   struct aic7xxx_host *p;
   unsigned char intstat;
-  unsigned long cpu_flags = 0;
 
   p = (struct aic7xxx_host *)dev_id;
 
@@ -4924,6 +4941,7 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
       p->spurious_int++;
     }
 #endif
+    return;
   }
   else if (p->flags & AHC_IN_ISR)
   {
@@ -4934,7 +4952,6 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
    * Handle all the interrupt sources - especially for SCSI
    * interrupts, we won't get a second chance at them.
    */
-  DRIVER_LOCK
   intstat = aic_inb(p, INTSTAT);
   p->spurious_int = 0;
 
@@ -4943,24 +4960,6 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
    */
   p->isr_count++;
   p->flags |= AHC_IN_ISR;
-  if (!(p->flags & AHC_A_SCANNED) && (p->isr_count == 1))
-  {
-    /*
-     * We must only have one card at this IRQ and it must have been
-     * added to the board data before the spurious interrupt occurred.
-     * It is sufficient that we check isr_count and not the spurious
-     * interrupt count.
-     */
-    if (intstat)
-    {
-      /* Try clearing all interrupts. */
-      aic_outb(p, CLRBRKADRINT | CLRSCSIINT | CLRCMDINT | CLRSEQINT, CLRINT);
-      unpause_sequencer(p, TRUE);
-    }
-    DRIVER_UNLOCK
-    printk("scsi%d: Encountered spurious interrupt.\n", p->host_no);
-    return;
-  }
 
   /*
    * Indicate that we're in the interrupt handler.
@@ -5069,7 +5068,6 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
   {
     aic7xxx_handle_scsiint(p, intstat);
   }
-  DRIVER_UNLOCK
   if(!(p->flags & (AHC_IN_ABORT | AHC_IN_RESET)))
   {
     aic7xxx_done_cmds_complete(p);
@@ -5080,7 +5078,7 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
 
 /*+F*************************************************************************
  * Function:
- *   aic7xxx_isr
+ *   do_aic7xxx_isr
  *
  * Description:
  *   This is a gross hack to solve a problem in linux kernels 2.1.85 and
@@ -5090,14 +5088,16 @@ aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
 static void
 do_aic7xxx_isr(int irq, void *dev_id, struct pt_regs *regs)
 {
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,93)
-  unsigned long flags;
+  unsigned long cpu_flags;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2,1,95)
 
-  spin_lock_irqsave(&io_request_lock, flags);
+  spin_lock_irqsave(&io_request_lock, cpu_flags);
   aic7xxx_isr(irq, dev_id, regs);
-  spin_unlock_irqrestore(&io_request_lock, flags);
+  spin_unlock_irqrestore(&io_request_lock, cpu_flags);
 #else
+  DRIVER_LOCK
   aic7xxx_isr(irq, dev_id, regs);
+  DRIVER_UNLOCK
 #endif
 }
 
@@ -8007,7 +8007,9 @@ aic7xxx_queue(Scsi_Cmnd *cmd, void (*fn)(Scsi_Cmnd *))
   struct aic7xxx_host *p;
   struct aic7xxx_scb *scb;
   int tindex = TARGET_INDEX(cmd);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,1,95)
   unsigned long cpu_flags = 0;
+#endif
 
   p = (struct aic7xxx_host *) cmd->host->hostdata;
   /*
@@ -8327,7 +8329,9 @@ aic7xxx_abort(Scsi_Cmnd *cmd)
   struct aic7xxx_host *p;
   int    result, found=0;
   unsigned char tmp_char, saved_hscbptr, next_hscbptr, prev_hscbptr;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,1,95)
   unsigned long cpu_flags = 0;
+#endif
   Scsi_Cmnd *cmd_next, *cmd_prev;
 
   p = (struct aic7xxx_host *) cmd->host->hostdata;
@@ -8646,7 +8650,9 @@ aic7xxx_reset(Scsi_Cmnd *cmd, unsigned int flags)
   struct aic7xxx_host *p;
   int    tindex;
   int    result = -1;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,1,95)
   unsigned long cpu_flags = 0;
+#endif
 #define DEVICE_RESET 0x01
 #define BUS_RESET    0x02
 #define HOST_RESET   0x04

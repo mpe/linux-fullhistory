@@ -427,7 +427,6 @@ static void do_sr_request (void)
     Scsi_Cmnd * SCpnt = NULL;
     struct request * req = NULL;
     Scsi_Device * SDev;
-    unsigned long flags;
     int flag = 0;
 
     while (1==1){

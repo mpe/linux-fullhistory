@@ -25,7 +25,7 @@
 
 #define AIC7XXX_H_VERSION  "3.2.4"
 
-#ifndef LINUX_KERNEL_VERSION
+#ifndef LINUX_VERSION_CODE
 #include <linux/version.h>
 #endif
 

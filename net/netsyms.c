@@ -64,6 +64,9 @@ extern struct datalink_proto   *make_EII_client(void);
 extern struct datalink_proto   *make_8023_client(void);
 extern void destroy_EII_client(struct datalink_proto *);
 extern void destroy_8023_client(struct datalink_proto *);
+#endif
+
+#ifdef CONFIG_IPV6_MODULE
 #ifdef CONFIG_SYSCTL
 extern int sysctl_max_syn_backlog;
 #endif

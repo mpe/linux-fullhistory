@@ -358,7 +358,8 @@ void register_console(struct console * console)
 		if (console->index >= 0 &&
 		    console->index != console_cmdline[i].index)
 			continue;
-		if (console->index < 0) console->index = 0;
+		if (console->index < 0)
+			console->index = console_cmdline[i].index;
 		if (console->setup &&
 		    console->setup(console, console_cmdline[i].options) != 0)
 			break;

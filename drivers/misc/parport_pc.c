@@ -162,9 +162,9 @@ void parport_pc_release_resources(struct parport *p)
 
 int parport_pc_claim_resources(struct parport *p)
 {
-	/* FIXME check that resources are free */
+	int err;
 	if (p->irq != PARPORT_IRQ_NONE)
-		request_irq(p->irq, parport_pc_null_intr_func, 0, p->name, NULL);
+		if ((err = request_irq(p->irq, parport_pc_null_intr_func, 0, p->name, NULL)) != 0) return err;
 	request_region(p->base, p->size, p->name);
 	if (p->modes & PARPORT_MODE_PCECR)
 		request_region(p->base+0x400, 3, p->name);

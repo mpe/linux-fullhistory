@@ -6,6 +6,8 @@
 #ifndef __ASM_ARCH_SYSTEM_H
 #define __ASM_ARCH_SYSTEM_H
 
+#include <linux/config.h>
+
 #ifdef CONFIG_ARCH_ARC
 
 #define cliIF()				\

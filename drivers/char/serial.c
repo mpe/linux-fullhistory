@@ -3613,6 +3613,7 @@ __initfunc(static int serial_console_setup(struct console *co, char *options))
 	 *	Disable UART interrupts, set DTR and RTS high
 	 *	and set speed.
 	 */
+	outb(cval, ser->port + UART_LCR);  /* don't assume that DLAB is clear */
 	outb(0, ser->port + UART_IER);
 	outb(UART_MCR_DTR | UART_MCR_RTS, ser->port + UART_MCR);
 	outb(cval | UART_LCR_DLAB, ser->port + UART_LCR);	/* set DLAB */

@@ -69,10 +69,10 @@ asmlinkage int printk(const char * fmt, ...)
  */
 
 #define NIPQUAD(addr) \
-	(((addr) >> 0)  & 0xff), \
-	(((addr) >> 8)  & 0xff), \
-	(((addr) >> 16) & 0xff), \
-	(((addr) >> 24) & 0xff)
+	(int)(((addr) >> 0)  & 0xff), \
+	(int)(((addr) >> 8)  & 0xff), \
+	(int)(((addr) >> 16) & 0xff), \
+	(int)(((addr) >> 24) & 0xff)
 
 #endif /* __KERNEL__ */
 

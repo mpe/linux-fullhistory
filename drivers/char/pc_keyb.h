@@ -17,7 +17,7 @@
 
 #define KBD_INIT_TIMEOUT HZ		/* Timeout in jiffies for initializing the keyboard */
 #define KBC_TIMEOUT 250			/* Timeout in ms for sending to keyboard controller */
-#define KBD_TIMEOUT 250			/* Timeout in ms for keyboard command acknowledge */
+#define KBD_TIMEOUT 1000		/* Timeout in ms for keyboard command acknowledge */
 
 /*
  *	Internal variables of the driver

@@ -1093,7 +1093,7 @@ __initfunc(asmlinkage void start_kernel(void))
 	 *	Like idlers init is an unlocked kernel thread, which will
 	 *	make syscalls (and thus be locked).
 	 */
-	kernel_thread(init, NULL, 0);
+	kernel_thread(init, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 /*
  * task[0] is meant to be used as an "idle" task: it may not sleep, but
  * it might do some general things like count free pages or it could be
@@ -1132,16 +1132,16 @@ static int init(void * unused)
 #endif
 
 	/* Launch bdflush from here, instead of the old syscall way. */
-	kernel_thread(bdflush, NULL, 0);
+	kernel_thread(bdflush, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 	/* Start the background pageout daemon. */
 	kswapd_setup();
-	kernel_thread(kswapd, NULL, 0);
+	kernel_thread(kswapd, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 
 #if CONFIG_AP1000
 	/* Start the async paging daemon. */
 	{
 	  extern int asyncd(void *);	 
-	  kernel_thread(asyncd, NULL, 0);
+	  kernel_thread(asyncd, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 	}
 #endif
 

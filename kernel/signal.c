@@ -788,6 +788,7 @@ do_sigaction(int sig, const struct k_sigaction *act, struct k_sigaction *oact)
 
 	if (act) {
 		*k = *act;
+		sigdelsetmask(&k->sa.sa_mask, sigmask(SIGKILL) | sigmask(SIGSTOP));
 
 		/*
 		 * POSIX 3.3.1.3:

@@ -6,11 +6,11 @@
 #include <linux/pci.h>
 #include <linux/string.h>
 #include <linux/blk.h>
-#incldue <asm/spinlock.h>
 #include <linux/init.h>
 
 #include <asm/io.h>
 #include <asm/system.h>
+#include <asm/spinlock.h>
 
 #include "scsi.h"
 #include "hosts.h"

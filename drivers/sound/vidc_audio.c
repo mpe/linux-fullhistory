@@ -6,11 +6,9 @@
  * Copyright (C) 1997 Russell King <rmk@arm.uk.linux.org>
  */
 
-#include <linux/config.h>
-#include "sound_config.h"
 #include <asm/hardware.h>
 #include <asm/io.h>
-
+#include "sound_config.h"
 #include "vidc.h"
 
 /*

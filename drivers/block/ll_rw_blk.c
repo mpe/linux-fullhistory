@@ -149,11 +149,6 @@ void unplug_device(void * data)
 		}
 	}
 	if (queue_new_request)
-		/*
-		 * request functions are smart enough to notice a change
-		 * in the request queue, calling them without the spinlock
-		 * is OK, i think. <-- FIXME: [is this true? --mingo]
-		 */
 		(dev->request_fn)();
 
 	spin_unlock_irqrestore(&io_request_lock,flags);
@@ -348,10 +343,6 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 	if (scsi_blk_major(MAJOR(req->rq_dev)))
 		queue_new_request = 1;
 out:
-	/*
-	 * request_fn() is usually a quite complex and slow function,
-	 * we want to call it with no spinlocks held
-	 */
 	if (queue_new_request)
 		(dev->request_fn)();
 	spin_unlock_irqrestore(&io_request_lock,flags);

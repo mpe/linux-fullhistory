@@ -189,8 +189,15 @@ struct thread_struct {
 	regs->esp = new_esp; \
 } while (0)
 
+/* Forward declaration, a strange C thing */
+struct mm_struct;
+
 /* Free all resources held by a thread. */
 extern void release_thread(struct task_struct *);
+
+/* Copy and release all segment info associated with a VM */
+extern void copy_segments(int nr, struct task_struct *p, struct mm_struct * mm);
+extern void release_segments(struct mm_struct * mm);
 
 /*
  * Return saved PC of a blocked thread.

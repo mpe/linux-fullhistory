@@ -18,7 +18,7 @@
 
 static int read_ldt(void * ptr, unsigned long bytecount)
 {
-	void * address = current->ldt;
+	void * address = current->mm->segments;
 	unsigned long size;
 
 	if (!ptr)
@@ -37,6 +37,7 @@ static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 {
 	struct modify_ldt_ldt_s ldt_info;
 	unsigned long *lp;
+	struct mm_struct * mm;
 	int error, i;
 
 	if (bytecount != sizeof(ldt_info))
@@ -48,19 +49,32 @@ static int write_ldt(void * ptr, unsigned long bytecount, int oldmode)
 	if ((ldt_info.contents == 3 && (oldmode || ldt_info.seg_not_present == 0)) || ldt_info.entry_number >= LDT_ENTRIES)
 		return -EINVAL;
 
-	if (!current->ldt) {
+	mm = current->mm;
+
+	/*
+	 * Horrible dependencies! Try to get rid of this. This is wrong,
+	 * as it only reloads the ldt for the first process with this
+	 * mm. The implications are that you should really make sure that
+	 * you have a ldt before you do the first clone(), otherwise
+	 * you get strange behaviour (the kernel is safe, it's just user
+	 * space strangeness).
+	 *
+	 * For no good reason except historical, the GDT index of the LDT
+	 * is chosen to follow the index number in the task[] array.
+	 */
+	if (!mm->segments) {
 		for (i=1 ; i<NR_TASKS ; i++) {
-			if (task[i] == current) {
-				if (!(current->ldt = (struct desc_struct*) vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE)))
+			if (task[i]->mm == mm) {
+				if (!(mm->segments = (void *) vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE)))
 					return -ENOMEM;
-				memset(current->ldt, 0, LDT_ENTRIES*LDT_ENTRY_SIZE);
-				set_ldt_desc(gdt+(i<<1)+FIRST_LDT_ENTRY, current->ldt, LDT_ENTRIES);
+				memset(mm->segments, 0, LDT_ENTRIES*LDT_ENTRY_SIZE);
+				set_ldt_desc(gdt+(i<<1)+FIRST_LDT_ENTRY, mm->segments, LDT_ENTRIES);
 				load_ldt(i);
 			}
 		}
 	}
 	
-	lp = (unsigned long *) &current->ldt[ldt_info.entry_number];
+	lp = (unsigned long *) (LDT_ENTRY_SIZE * ldt_info.entry_number + (unsigned long) mm->segments);
    	/* Allow LDTs to be cleared by the user. */
    	if (ldt_info.base_addr == 0 && ldt_info.limit == 0
 		&& (oldmode ||

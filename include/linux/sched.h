@@ -168,6 +168,11 @@ struct mm_struct {
 	unsigned long rss, total_vm, locked_vm;
 	unsigned long def_flags;
 	unsigned long cpu_vm_mask;
+	/*
+	 * This is an architecture-specific pointer: the portable
+	 * part of Linux does not know about any segments.
+	 */
+	void * segments;
 };
 
 #define INIT_MM {					\
@@ -178,7 +183,7 @@ struct mm_struct {
 		0, 0, 0, 				\
 		0, 0, 0, 0,				\
 		0, 0, 0,				\
-		0, 0 }
+		0, 0, NULL }
 
 struct signal_struct {
 	atomic_t		count;
@@ -267,8 +272,6 @@ struct task_struct {
 /* ipc stuff */
 	struct sem_undo *semundo;
 	struct sem_queue *semsleeping;
-/* ldt for this task - used by Wine.  If NULL, default_ldt is used */
-	struct desc_struct *ldt;
 /* tss for this task */
 	struct thread_struct tss;
 /* filesystem information */
@@ -357,7 +360,6 @@ struct task_struct {
 /* comm */	"swapper", \
 /* fs info */	0,NULL, \
 /* ipc */	NULL, NULL, \
-/* ldt */	NULL, \
 /* tss */	INIT_TSS, \
 /* fs */	&init_fs, \
 /* files */	&init_files, \

@@ -30,6 +30,7 @@
 #include <asm/uaccess.h>
 #include <asm/dma.h>
 #include <asm/system.h>
+#include <asm/spinlock.h>
 
 /* The driver prints some debugging information on the console if DEBUG
    is defined and non-zero. */
@@ -250,6 +251,9 @@ st_sleep_done (Scsi_Cmnd * SCpnt)
 st_do_scsi(Scsi_Cmnd *SCpnt, Scsi_Tape *STp, unsigned char *cmd, int bytes,
 	   int timeout, int retries)
 {
+  unsigned long flags;
+
+  spin_lock_irqsave(&io_request_lock, flags);
   if (SCpnt == NULL)
     if ((SCpnt = scsi_allocate_device(NULL, STp->device, 1)) == NULL) {
       printk(KERN_ERR "st%d: Can't get SCSI request.\n", TAPE_NR(STp->devt));
@@ -264,6 +268,7 @@ st_do_scsi(Scsi_Cmnd *SCpnt, Scsi_Tape *STp, unsigned char *cmd, int bytes,
 
   scsi_do_cmd(SCpnt, (void *)cmd, (STp->buffer)->b_data, bytes,
 	      st_sleep_done, timeout, retries);
+  spin_unlock_irqrestore(&io_request_lock, flags);
 
   down(SCpnt->request.sem);
 
@@ -976,6 +981,7 @@ st_write(struct file * filp, const char * buf, size_t count, loff_t *ppos)
     ST_mode * STm;
     ST_partstat * STps;
     int dev = TAPE_NR(inode->i_rdev);
+    unsigned long flags;
 
     STp = &(scsi_tapes[dev]);
 
@@ -1271,10 +1277,12 @@ st_write(struct file * filp, const char * buf, size_t count, loff_t *ppos)
       STp->write_pending = 1;
 #endif
 
+      spin_lock_irqsave(&io_request_lock, flags);
       scsi_do_cmd (SCpnt,
 		   (void *) cmd, (STp->buffer)->b_data,
 		   (STp->buffer)->writing,
 		   st_sleep_done, STp->timeout, MAX_WRITE_RETRIES);
+      spin_unlock_irqrestore(&io_request_lock, flags);
     }
     else if (SCpnt != NULL)
       {

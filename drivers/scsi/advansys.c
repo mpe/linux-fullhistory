@@ -3844,8 +3844,11 @@ STATIC int          asc_proc_copy(off_t, off_t, char *, int , char *, int);
 #endif /* version >= v1.3.0 */
 #if LINUX_VERSION_CODE < ASC_LINUX_VERSION(1,3,70)
 STATIC void         advansys_interrupt(int, struct pt_regs *);
-#else /* version >= v1.3.70 */
+#elif LINUX_VERSION_CODE < ASC_LINUX_VERSION(2,1,95)
 STATIC void         advansys_interrupt(int, void *, struct pt_regs *);
+#else /* version >= 2.1.95 */
+STATIC void         advansys_interrupt(int, void *, struct pt_regs *);
+STATIC void         do_advansys_interrupt(int, void *, struct pt_regs *);
 #endif /* version >= v1.3.70 */
 #if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(1,3,89)
 STATIC void         advansys_select_queue_depths(struct Scsi_Host *,

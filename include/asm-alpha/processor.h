@@ -92,6 +92,9 @@ extern void start_thread(struct pt_regs *, unsigned long, unsigned long);
 /* Free all resources held by a thread. */
 extern void release_thread(struct task_struct *);
 
+#define copy_segments(nr, tsk, mm)	do { } while (0)
+#define release_segments(mm)		do { } while (0)
+
 /* NOTE: The task struct and the stack go together!  */
 #define alloc_task_struct() \
         ((struct task_struct *) __get_free_pages(GFP_KERNEL,1))

@@ -6,11 +6,9 @@
  *	Copyright (C) 1997 by Russell King <rmk@arm.uk.linux.org>
  */
 
-#include <linux/config.h>
 #include <asm/io.h>
 #include <asm/dma.h>
 #include "sound_config.h"
-
 #include "vidc.h"
 
 int vidc_busy;

@@ -108,7 +108,12 @@ int kmod_init(void)
 {
 	printk("Starting kmod\n");
 
-	kernel_thread(kmod_thread, NULL, 0);
+	/*
+	 * CLONE_FS means that our "cwd" will follow that of init.
+	 * CLONE_FILES just saves some space (we don't need any
+	 * new file descriptors). Ditto for CLONE_SIGHAND.
+	 */
+	kernel_thread(kmod_thread, NULL, CLONE_FILES | CLONE_FS | CLONE_SIGHAND);
 
 	kmod_unload_timer.next = NULL;
 	kmod_unload_timer.prev = NULL;

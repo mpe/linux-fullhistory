@@ -6,6 +6,7 @@
  * (C) 1998 Russell King
  */
 
+#include <linux/config.h>
 #include <asm/irq.h>
 
 #define NR_SCANCODES 128

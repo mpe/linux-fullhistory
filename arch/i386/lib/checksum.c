@@ -123,6 +123,8 @@ unsigned int csum_partial(const unsigned char * buff, int len, unsigned int sum)
 unsigned int csum_partial_copy_generic (const char *src, char *dst,
 				  int len, int sum, int *src_err_ptr, int *dst_err_ptr)
 {
+    __u32 tmp_var;
+
     __asm__ __volatile__ ( "
 		testl $2, %%edi		# Check alignment. 
 		jz 2f			# Jump if alignment is ok.
@@ -137,7 +139,7 @@ unsigned int csum_partial_copy_generic (const char *src, char *dst,
 		addw %%bx, %%ax	
 		adcl $0, %%eax
 	2:
-		pushl %%ecx
+		movl %%ecx, %8
 		shrl $5, %%ecx
 		jz 2f
 		testl %%esi, %%esi
@@ -174,7 +176,7 @@ unsigned int csum_partial_copy_generic (const char *src, char *dst,
 		dec %%ecx
 		jne 1b
 		adcl $0, %%eax
-	2:	popl %%edx
+	2:	movl %8, %%edx
 		movl %%edx, %%ecx
 		andl $0x1c, %%edx
 		je 4f
@@ -231,9 +233,10 @@ unsigned int csum_partial_copy_generic (const char *src, char *dst,
 ################################################
 
 "
-	: "=a" (sum), "=m" (src_err_ptr), "=m" (dst_err_ptr)
-	:  "0" (sum), "c" (len), "S" (src), "D" (dst),
-		"i" (-EFAULT)
+	: "=a" (sum)
+	: "m" (src_err_ptr), "m" (dst_err_ptr),
+	  "0" (sum), "c" (len), "S" (src), "D" (dst),
+		"i" (-EFAULT), "m"(tmp_var)
 	: "bx", "cx", "dx", "si", "di" );
 
     return(sum);

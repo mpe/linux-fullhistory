@@ -418,42 +418,36 @@ void show_regs(struct pt_regs * regs)
 		0xffff & regs->xds,0xffff & regs->xes);
 }
 
-/*
- * Free current thread data structures etc..
- */
-
-void exit_thread(void)
+void release_segments(struct mm_struct *mm)
 {
-	/* forget lazy i387 state */
-	if (last_task_used_math == current)
-		last_task_used_math = NULL;
+	void * ldt;
+
 	/* forget local segments */
 	__asm__ __volatile__("movl %w0,%%fs ; movl %w0,%%gs ; lldt %w0"
 		: /* no outputs */
 		: "r" (0));
 	current->tss.ldt = 0;
-	if (current->ldt) {
-		void * ldt = current->ldt;
-		current->ldt = NULL;
+
+	ldt = mm->segments;
+	if (ldt) {
+		mm->segments = NULL;
 		vfree(ldt);
 	}
+}
+
+/*
+ * Free current thread data structures etc..
+ */
+void exit_thread(void)
+{
+	/* forget lazy i387 state */
+	if (last_task_used_math == current)
+		last_task_used_math = NULL;
 }
 
 void flush_thread(void)
 {
 	int i;
-
-	if (current->ldt) {
-		free_page((unsigned long) current->ldt);
-		current->ldt = NULL;
-		for (i=1 ; i<NR_TASKS ; i++) {
-			if (task[i] == current)  {
-				set_ldt_desc(gdt+(i<<1)+
-					     FIRST_LDT_ENTRY,&default_ldt, 1);
-				load_ldt(i);
-			}
-		}	
-	}
 
 	for (i=0 ; i<8 ; i++)
 		current->debugreg[i] = 0;
@@ -479,13 +473,30 @@ void release_thread(struct task_struct *dead_task)
 {
 }
 
+void copy_segments(int nr, struct task_struct *p, struct mm_struct *new_mm)
+{
+	int ldt_size = 1;
+	void * ldt = &default_ldt;
+	struct mm_struct * old_mm = current->mm;
+
+	p->tss.ldt = _LDT(nr);
+	if (old_mm->segments) {
+		new_mm->segments = vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE);
+		if (new_mm->segments) {
+			ldt = new_mm->segments;
+			ldt_size = LDT_ENTRIES;
+			memcpy(ldt, old_mm->segments, LDT_ENTRIES*LDT_ENTRY_SIZE);
+		}
+	}
+	set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY, ldt, LDT_ENTRIES);
+}
+
 int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	struct task_struct * p, struct pt_regs * regs)
 {
 	struct pt_regs * childregs;
 
 	p->tss.tr = _TSS(nr);
-	p->tss.ldt = _LDT(nr);
 	p->tss.es = __KERNEL_DS;
 	p->tss.cs = __KERNEL_CS;
 	p->tss.ss = __KERNEL_DS;
@@ -508,16 +519,8 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long esp,
 	childregs->eax = 0;
 	childregs->esp = esp;
 	p->tss.back_link = 0;
-	if (p->ldt) {
-		p->ldt = (struct desc_struct*) vmalloc(LDT_ENTRIES*LDT_ENTRY_SIZE);
-		if (p->ldt != NULL)
-			memcpy(p->ldt, current->ldt, LDT_ENTRIES*LDT_ENTRY_SIZE);
-	}
 	set_tss_desc(gdt+(nr<<1)+FIRST_TSS_ENTRY,&(p->tss));
-	if (p->ldt)
-		set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY,p->ldt, 512);
-	else
-		set_ldt_desc(gdt+(nr<<1)+FIRST_LDT_ENTRY,&default_ldt, 1);
+
 	/*
 	 * a bitmap offset pointing outside of the TSS limit causes a nicely
 	 * controllable SIGSEGV. The first sys_ioperm() call sets up the
