@@ -296,7 +296,7 @@ static int gs_real_chars_in_buffer(struct tty_struct *tty)
 }
 
 
-static int gs_wait_tx_flushed (void * ptr, int timeout) 
+static int gs_wait_tx_flushed (void * ptr, unsigned long timeout) 
 {
 	struct gs_port *port = ptr;
 	unsigned long end_jiffies;
