@@ -197,8 +197,7 @@ ext3_get_acl(struct inode *inode, int type)
 		acl = NULL;
 	else
 		acl = ERR_PTR(retval);
-	if (value)
-		kfree(value);
+	kfree(value);
 
 	if (!IS_ERR(acl)) {
 		switch(type) {
@@ -267,8 +266,7 @@ ext3_set_acl(handle_t *handle, struct inode *inode, int type,
 	error = ext3_xattr_set_handle(handle, inode, name_index, "",
 				      value, size, 0);
 
-	if (value)
-		kfree(value);
+	kfree(value);
 	if (!error) {
 		switch(type) {
 			case ACL_TYPE_ACCESS:

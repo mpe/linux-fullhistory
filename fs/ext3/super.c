@@ -395,10 +395,8 @@ static void ext3_put_super (struct super_block * sb)
 	percpu_counter_destroy(&sbi->s_dirs_counter);
 	brelse(sbi->s_sbh);
 #ifdef CONFIG_QUOTA
-	for (i = 0; i < MAXQUOTAS; i++) {
-		if (sbi->s_qf_names[i])
-			kfree(sbi->s_qf_names[i]);
-	}
+	for (i = 0; i < MAXQUOTAS; i++)
+		kfree(sbi->s_qf_names[i]);
 #endif
 
 	/* Debugging code just in case the in-memory inode orphan list
@@ -883,10 +881,8 @@ clear_qf_name:
 					"quota turned on.\n");
 				return 0;
 			}
-			if (sbi->s_qf_names[qtype]) {
-				kfree(sbi->s_qf_names[qtype]);
-				sbi->s_qf_names[qtype] = NULL;
-			}
+			kfree(sbi->s_qf_names[qtype]);
+			sbi->s_qf_names[qtype] = NULL;
 			break;
 		case Opt_jqfmt_vfsold:
 			sbi->s_jquota_fmt = QFMT_VFS_OLD;
