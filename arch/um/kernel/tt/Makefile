@@ -12,17 +12,15 @@ obj-y = exec_kern.o exec_user.o gdb.o ksyms.o mem.o mem_user.o process_kern.o \
 
 obj-$(CONFIG_PT_PROXY) += gdb_kern.o ptproxy/
 
-USER_OBJS := $(filter %_user.o,$(obj-y)) gdb.o time.o tracer.o
-USER_OBJS := $(foreach file,$(USER_OBJS),$(obj)/$(file))
+USER_OBJS := gdb.o time.o tracer.o
+
+include arch/um/scripts/Makefile.rules
 
 UNMAP_CFLAGS := $(patsubst -pg -DPROFILING,,$(USER_CFLAGS))
 UNMAP_CFLAGS := $(patsubst -fprofile-arcs -ftest-coverage,,$(UNMAP_CFLAGS))
 
-$(USER_OBJS) : %.o: %.c
-	$(CC) $(CFLAGS_$(notdir $@)) $(USER_CFLAGS) -c -o $@ $<
-
-$(obj)/unmap.o: $(src)/unmap.c
-	$(CC) $(UNMAP_CFLAGS) -c -o $@ $<
+#XXX: partially copied from arch/um/scripts/Makefile.rules
+$(obj)/unmap.o: c_flags = -Wp,-MD,$(depfile) $(UNMAP_CFLAGS)
 
 $(obj)/unmap_fin.o : $(obj)/unmap.o
 	$(LD) -r -o $(obj)/unmap_tmp.o $< $(shell $(CC) -print-file-name=libc.a)

@@ -9,7 +9,8 @@ lib-y = bitops.o bugs.o csum-partial.o delay.o fault.o mem.o memcpy.o \
 	syscalls.o sysrq.o thunk.o
 
 USER_OBJS := ptrace_user.o sigcontext.o
-USER_OBJS := $(foreach file,$(USER_OBJS),$(obj)/$(file))
+
+include arch/um/scripts/Makefile.rules
 
 SYMLINKS = bitops.c csum-copy.S csum-partial.c csum-wrappers.c memcpy.S \
 	semaphore.c thunk.S
@@ -27,13 +28,10 @@ thunk.S-dir = lib
 
 define make_link
        -rm -f $1
-       ln -sf $(TOPDIR)/arch/x86_64/$($(notdir $1)-dir)/$(notdir $1) $1
+       ln -sf $(srctree)/arch/x86_64/$($(notdir $1)-dir)/$(notdir $1) $1
 endef
 
 $(SYMLINKS):
 	$(call make_link,$@)
-
-$(USER_OBJS) : %.o: %.c
-	$(CC) $(CFLAGS_$(notdir $@)) $(USER_CFLAGS) -c -o $@ $<
 
 CFLAGS_csum-partial.o := -Dcsum_partial=arch_csum_partial

@@ -5,7 +5,8 @@ obj-$(CONFIG_HIGHMEM) += highmem.o
 obj-$(CONFIG_MODULES) += module.o
 
 USER_OBJS := bugs.o ptrace_user.o sigcontext.o fault.o
-USER_OBJS := $(foreach file,$(USER_OBJS),$(obj)/$(file))
+
+include arch/um/scripts/Makefile.rules
 
 SYMLINKS = bitops.c semaphore.c highmem.c module.c
 
@@ -24,9 +25,6 @@ define make_link
 	-rm -f $1
 	ln -sf $(srctree)/arch/i386/$($(notdir $1)-dir)/$(notdir $1) $1
 endef
-
-$(USER_OBJS) : %.o: %.c
-	$(CC) $(CFLAGS_$(notdir $@)) $(USER_CFLAGS) -c -o $@ $<
 
 $(SYMLINKS): 
 	$(call make_link,$@)
