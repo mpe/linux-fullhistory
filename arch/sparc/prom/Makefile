@@ -23,11 +23,4 @@ promlib.a: $(OBJS)
 dep:
 	$(CPP) -M *.c > .depend
 
-dummy:
-
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
+include $(TOPDIR)/Rules.make

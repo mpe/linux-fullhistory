@@ -28,6 +28,27 @@ static struct exec_domain *exec_domains = &default_exec_domain;
 
 static asmlinkage void no_lcall7(struct pt_regs * regs)
 {
+
+  /*
+   * This may have been a static linked SVr4 binary, so we would have the
+   * personality set incorrectly.  Check to see whether SVr4 is available,
+   * and use it, otherwise give the user a SEGV.
+   */
+	if (current->exec_domain && current->exec_domain->use_count)
+		(*current->exec_domain->use_count)--;
+
+	current->personality = PER_SVR4;
+	current->exec_domain = lookup_exec_domain(current->personality);
+
+	if (current->exec_domain && current->exec_domain->use_count)
+		(*current->exec_domain->use_count)++;
+
+	if (current->exec_domain && current->exec_domain->handler
+	&& current->exec_domain->handler != no_lcall7) {
+		current->exec_domain->handler(regs);
+		return;
+	}
+
 	send_sig(SIGSEGV, current, 1);
 }
 

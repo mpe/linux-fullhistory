@@ -122,6 +122,11 @@ static volatile unsigned int timeout[SCSI_DEBUG_MAILBOXES] ={0,};
 
 static char sense_buffer[128] = {0,};
 
+/*
+ * Semaphore used to simulate bus lockups.
+ */
+static int scsi_debug_lockup = 0;
+
 static void scsi_dump(Scsi_Cmnd * SCpnt, int flag){
     int i;
 #if 0
@@ -229,7 +234,7 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	scsi_debug_errsts = 0;
 	break;
     case TEST_UNIT_READY:
-	printk("Test unit ready.\n");
+	printk("Test unit ready(%x %d)\n", buff, bufflen);
 	if (buff)
 	    memset(buff, 0, bufflen);
 	scsi_debug_errsts = 0;
@@ -288,6 +293,7 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	    /* If this is block 0, then we want to read the partition table for this
 	     * device.  Let's make one up */
 	    if(block == 0 && target == 0) {
+                memset(buff, 0, bufflen);
 		*((unsigned short *) (buff+510)) = 0xAA55;
 		p = (struct partition* ) (buff + 0x1be);
 		npart = 0;
@@ -412,8 +418,12 @@ int scsi_debug_queuecommand(Scsi_Cmnd * SCpnt, void (*done)(Scsi_Cmnd *))
 	printk("scsi_debug_queuecommand: done cant be NULL\n");
     
 #ifdef IMMEDIATE
-    SCpnt->result = scsi_debug_errsts;
-    scsi_debug_intr_handle();  /* No timer - do this one right away */
+    if( !scsi_debug_lockup )
+    {
+        SCpnt->result = scsi_debug_errsts;
+        scsi_debug_intr_handle();  /* No timer - do this one right away */
+    }
+    restore_flags(flags);
 #else
     timeout[i] = jiffies+DISK_SPEED;
     
@@ -580,19 +590,20 @@ int scsi_debug_reset(Scsi_Cmnd * SCpnt)
     unsigned long flags;
     
     void (*my_done)(Scsi_Cmnd *);
+    scsi_debug_lockup = 0;
     DEB(printk("scsi_debug_reset called\n"));
     for(i=0;i<SCSI_DEBUG_MAILBOXES; i++) {
-      if (SCint[i] == NULL) continue;
-      SCint[i]->result = DID_ABORT << 16;
-      my_done = do_done[i];
-      my_done(SCint[i]);
-      save_flags(flags);
-      cli();
-      SCint[i] = NULL;
-      do_done[i] = NULL;
-      timeout[i] = 0;
-      restore_flags(flags);
-  };
+        if (SCint[i] == NULL) continue;
+        SCint[i]->result = DID_ABORT << 16;
+        my_done = do_done[i];
+        my_done(SCint[i]);
+        save_flags(flags);
+        cli();
+        SCint[i] = NULL;
+        do_done[i] = NULL;
+        timeout[i] = 0;
+        restore_flags(flags);
+    }
     return 0;
 }
 
@@ -602,7 +613,7 @@ const char *scsi_debug_info(void)
     return buffer;
 }
 
-/* generic_proc_info
+/* scsi_debug_proc_info
  * Used if the driver currently has no own support for /proc/scsi
  */
 int scsi_debug_proc_info(char *buffer, char **start, off_t offset, 
@@ -611,7 +622,35 @@ int scsi_debug_proc_info(char *buffer, char **start, off_t offset,
     int len, pos, begin;
 
     if(inout == 1)
-	return(-ENOSYS);  /* This is a no-op */
+    {
+        /* First check for the Signature */
+        if (length >= 10 && strncmp(buffer, "scsi_debug", 10) == 0) {
+            buffer += 11;
+            length -= 11;
+            /*
+             * OK, we are getting some kind of command.  Figure out
+             * what we are supposed to do here.  Simulate bus lockups
+             * to test our reset capability.
+             */
+            if( length == 6 && strncmp(buffer, "lockup", length) == 0 )
+            {
+                scsi_debug_lockup = 1;
+                return length;
+            } 
+            
+            if( length == 6 && strncmp(buffer, "unlock", length) == 0 )
+            {
+                scsi_debug_lockup = 0;
+                return length;
+            } 
+            
+            printk("Unknown command:%s\n", buffer);
+        } else 
+            printk("Wrong Signature:%10s\n", (char *) ((ulong)buffer-11));
+
+        return -EINVAL;
+        
+    }
     
     begin = 0;
     pos = len = sprintf(buffer, 

@@ -88,10 +88,10 @@ int ext2_check_dir_entry (char * function, struct inode * dir,
 		error_msg = "inode out of bounds";
 
 	if (error_msg != NULL)
-		ext2_error (dir->i_sb, function, "bad directory entry: %s\n"
+		ext2_error (dir->i_sb, function, "bad entry in directory #%lu: %s - "
 			    "offset=%lu, inode=%lu, rec_len=%d, name_len=%d",
-			    error_msg, offset, (unsigned long) de->inode, de->rec_len,
-			    de->name_len);
+			    dir->i_ino, error_msg, offset, (unsigned long) de->inode,
+			    de->rec_len, de->name_len);
 	return error_msg == NULL ? 1 : 0;
 }
 
@@ -118,6 +118,9 @@ static int ext2_readdir (struct inode * inode, struct file * filp,
 		blk = (filp->f_pos) >> EXT2_BLOCK_SIZE_BITS(sb);
 		bh = ext2_bread (inode, blk, 0, &err);
 		if (!bh) {
+			ext2_error (sb, "ext2_readdir",
+				    "directory #%lu contains a hole at offset %lu",
+				    inode->i_ino, (unsigned long)filp->f_pos);
 			filp->f_pos += sb->s_blocksize - offset;
 			continue;
 		}

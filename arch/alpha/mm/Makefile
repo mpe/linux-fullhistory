@@ -11,8 +11,6 @@
 	$(CC) $(CFLAGS) -c $<
 .s.o:
 	$(AS) -o $*.o $<
-.c.s:
-	$(CC) $(CFLAGS) -S $<
 
 OBJS	= init.o fault.o
 
@@ -24,9 +22,4 @@ modules:
 dep:
 	$(CPP) -M *.c > .depend
 
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
+include $(TOPDIR)/Rules.make

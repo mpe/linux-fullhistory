@@ -50,8 +50,8 @@
 /*
  * The second extended file system version
  */
-#define EXT2FS_DATE		"95/03/19"
-#define EXT2FS_VERSION		"0.5a"
+#define EXT2FS_DATE		"95/07/02"
+#define EXT2FS_VERSION		"0.5b"
 
 /*
  * Debug code
@@ -102,11 +102,15 @@
 #define EXT2_ACLE_PER_BLOCK(s)		(EXT2_BLOCK_SIZE(s) / sizeof (struct ext2_acl_entry))
 #define	EXT2_ADDR_PER_BLOCK(s)		(EXT2_BLOCK_SIZE(s) / sizeof (__u32))
 #ifdef __KERNEL__
-# define EXT2_BLOCK_SIZE_BITS(s)	((s)->u.ext2_sb.s_es->s_log_block_size + 10)
+# define EXT2_BLOCK_SIZE_BITS(s)	((s)->s_blocksize_bits)
 #else
 # define EXT2_BLOCK_SIZE_BITS(s)	((s)->s_log_block_size + 10)
 #endif
 #define	EXT2_INODES_PER_BLOCK(s)	(EXT2_BLOCK_SIZE(s) / sizeof (struct ext2_inode))
+#ifdef __KERNEL__
+#define	EXT2_ADDR_PER_BLOCK_BITS(s)	((s)->u.ext2_sb.s_addr_per_block_bits)
+#define	EXT2_INODES_PER_BLOCK_BITS(s)	((s)->u.ext2_sb.s_inodes_per_block_bits)
+#endif
 
 /*
  * Macro-instructions used to manage fragments
@@ -175,6 +179,7 @@ struct ext2_group_desc
 # define EXT2_BLOCKS_PER_GROUP(s)	((s)->u.ext2_sb.s_blocks_per_group)
 # define EXT2_DESC_PER_BLOCK(s)		((s)->u.ext2_sb.s_desc_per_block)
 # define EXT2_INODES_PER_GROUP(s)	((s)->u.ext2_sb.s_inodes_per_group)
+# define EXT2_DESC_PER_BLOCK_BITS(s)	((s)->u.ext2_sb.s_desc_per_block_bits)
 #else
 # define EXT2_BLOCKS_PER_GROUP(s)	((s)->s_blocks_per_group)
 # define EXT2_DESC_PER_BLOCK(s)		(EXT2_BLOCK_SIZE(s) / sizeof (struct ext2_group_desc))

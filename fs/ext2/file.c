@@ -114,6 +114,7 @@ static int ext2_file_read (struct inode * inode, struct file * filp,
 	read = 0;
 	block = offset >> EXT2_BLOCK_SIZE_BITS(sb);
 	offset &= (sb->s_blocksize - 1);
+	chars = sb->s_blocksize - offset;
 	size = (size + sb->s_blocksize - 1) >> EXT2_BLOCK_SIZE_BITS(sb);
 	blocks = (left + offset + sb->s_blocksize - 1) >> EXT2_BLOCK_SIZE_BITS(sb);
 	bhb = bhe = buflist;
@@ -188,12 +189,10 @@ static int ext2_file_read (struct inode * inode, struct file * filp,
 					break;
 				}
 			}
-			if (left < sb->s_blocksize - offset)
-				chars = left;
-			else
-				chars = sb->s_blocksize - offset;
-			filp->f_pos += chars;
 			left -= chars;
+			if (left < 0)
+				chars += left;
+			filp->f_pos += chars;
 			read += chars;
 			if (*bhe) {
 				memcpy_tofs (buf, offset + (*bhe)->b_data,
@@ -205,6 +204,7 @@ static int ext2_file_read (struct inode * inode, struct file * filp,
 					put_user (0, buf++);
 			}
 			offset = 0;
+			chars = sb->s_blocksize;
 			if (++bhe == &buflist[NBUF])
 				bhe = buflist;
 		} while (left > 0 && bhe != bhb && (!*bhe || !(*bhe)->b_lock));
@@ -234,9 +234,10 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 	const loff_t two_gb = 2147483647;
 	loff_t pos;
 	off_t pos2;
+	long block;
+	int offset;
 	int written, c;
 	struct buffer_head * bh, *bufferlist[NBUF];
-	char * p;
 	struct super_block * sb;
 	int err;
 	int i,buffercount,write_error;
@@ -272,22 +273,25 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 	 */
 	if (filp->f_flags & O_SYNC)
 		inode->u.ext2_i.i_osync++;
+	block = pos2 >> EXT2_BLOCK_SIZE_BITS(sb);
+	offset = pos2 & (sb->s_blocksize - 1);
+	c = sb->s_blocksize - offset;
 	written = 0;
-	while (written < count) {
+	while (count > 0) {
 		if (pos > two_gb) {
 			if (!written)
 				written = -EFBIG;
 			break;
 		}
-		bh = ext2_getblk (inode, pos2 / sb->s_blocksize, 1, &err);
+		bh = ext2_getblk (inode, block, 1, &err);
 		if (!bh) {
 			if (!written)
 				written = err;
 			break;
 		}
-		c = sb->s_blocksize - (pos2 % sb->s_blocksize);
-		if (c > count-written)
-			c = count - written;
+		count -= c;
+		if (count < 0)
+			c += count;
 		if (c != sb->s_blocksize && !bh->b_uptodate) {
 			ll_rw_block (READ, 1, &bh);
 			wait_on_buffer (bh);
@@ -298,11 +302,10 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 				break;
 			}
 		}
-		p = (pos2 % sb->s_blocksize) + bh->b_data;
 		pos2 += c;
 		pos += c;
 		written += c;
-		memcpy_fromfs (p, buf, c);
+		memcpy_fromfs (bh->b_data + offset, buf, c);
 		buf += c;
 		bh->b_uptodate = 1;
 		mark_buffer_dirty(bh, 0);
@@ -322,6 +325,9 @@ static int ext2_file_write (struct inode * inode, struct file * filp,
 		}
 		if(write_error)
 			break;
+		block++;
+		offset = 0;
+		c = sb->s_blocksize;
 	}
 	if ( buffercount ){
 		ll_rw_block(WRITE, buffercount, bufferlist);

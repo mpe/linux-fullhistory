@@ -24,7 +24,7 @@ static inline unsigned short from64to16(unsigned long x)
 
 /*
  * computes the checksum of the TCP/UDP pseudo-header
- * returns a 16-bit checksum, already complemented
+ * returns a 16-bit checksum, already complemented.
  */
 unsigned short int csum_tcpudp_magic(unsigned long saddr,
 				   unsigned long daddr,
@@ -32,7 +32,9 @@ unsigned short int csum_tcpudp_magic(unsigned long saddr,
 				   unsigned short proto,
 				   unsigned int sum)
 {
-	return ~from64to16(saddr + daddr + sum + (ntohs(len) << 16) + (proto << 8));
+	return ~from64to16(saddr + daddr + sum +
+		((unsigned long) ntohs(len) << 16) +
+		((unsigned long) proto << 8));
 }
 
 /*
@@ -83,6 +85,7 @@ static inline unsigned long do_csum(unsigned char * buff, int len)
 					carry = (w > result);
 				} while (count);
 				result += carry;
+				result = (result & 0xffffffff) + (result >> 32);
 			}
 			if (len & 4) {
 				result += *(unsigned int *) buff;

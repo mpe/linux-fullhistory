@@ -4,8 +4,6 @@
 
 CFLAGS := $(CFLAGS) -ansi
 
-.c.s:
-	$(CC) $(CFLAGS) -S $<
 .s.o:
 	$(AS) -c -o $*.o $<
 .c.o:
@@ -40,9 +38,4 @@ ashrdi3.o: ashrdi3.S
 
 dep:
 
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
+include $(TOPDIR)/Rules.make

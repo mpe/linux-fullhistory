@@ -11,8 +11,6 @@
 	$(CC) $(CFLAGS) -c $<
 .s.o:
 	$(AS) -o $*.o $<
-.c.s:
-	$(CC) $(CFLAGS) -S $<
 
 OBJS	= memory.o swap.o mmap.o filemap.o mprotect.o kmalloc.o vmalloc.o
 
@@ -24,9 +22,5 @@ modules:
 dep:
 	$(CPP) -M *.c > .depend
 
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
+
+include $(TOPDIR)/Rules.make

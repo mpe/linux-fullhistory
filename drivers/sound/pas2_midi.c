@@ -83,8 +83,8 @@ pas_midi_open (int dev, int mode,
 
   if (mode == OPEN_READ || mode == OPEN_READWRITE)
     {
-      ctrl |= M_C_ENA_INPUT_IRQ;/*
-					 * Enable input
+      ctrl |= M_C_ENA_INPUT_IRQ;	/*
+					   * Enable input
 					 */
       input_opened = 1;
     }
@@ -134,9 +134,9 @@ dump_to_midi (unsigned char midi_byte)
 
   fifo_space = ((x = pas_read (MIDI_FIFO_STATUS)) >> 4) & 0x0f;
 
-  if (fifo_space == 15 || (fifo_space < 2 && ofifo_bytes > 13))	/*
-									 * Fifo
-									 * full
+  if (fifo_space == 15 || (fifo_space < 2 && ofifo_bytes > 13))		/*
+									   * Fifo
+									   * full
 									 */
     {
       return 0;			/*
@@ -239,6 +239,7 @@ static struct midi_operations pas_midi_operations =
 {
   {"Pro Audio Spectrum", 0, 0, SNDCARD_PAS},
   &std_midi_synth,
+  {0},
   pas_midi_open,
   pas_midi_close,
   pas_midi_ioctl,
@@ -319,8 +320,10 @@ pas_midi_interrupt (void)
       RESTORE_INTR (flags);
     }
 
+#if 0
   if (stat & M_S_FRAMING_ERROR)
     printk ("MIDI framing error\n");
+#endif
 
   if (stat & M_S_OUTPUT_OVERRUN)
     {
@@ -328,8 +331,8 @@ pas_midi_interrupt (void)
       ofifo_bytes = 100;
     }
 
-  pas_write (stat, MIDI_STATUS);/*
-					 * Acknowledge interrupts
+  pas_write (stat, MIDI_STATUS);	/*
+					   * Acknowledge interrupts
 					 */
 }
 

@@ -1,7 +1,7 @@
                        Readme-File README.aztcd
    for Aztech CD-ROM CDA268-01A, ORCHID CD-3110, OKANO/WEARNES CDD110 
                           CD-ROM  Driver 
-                       Version 1.0 and newer
+                       Version 1.2 and newer
                    (for other drives see 6.-8.)
 
 NOTE: THIS DRIVER WILL WORK WITH THE CD-ROM DRIVES LISTED, WHICH HAVE
@@ -10,20 +10,27 @@ NOTE: THIS DRIVER WILL WORK WITH THE CD-ROM DRIVES LISTED, WHICH HAVE
       IT WILL DEFINITELY NOT WORK WITH CD-ROM DRIVES WITH *IDE*-INTERFACE,
       such as the Aztech CDA269-031SE !!! IF YOU'RE USING A CD-ROM DRIVE
       WITH IDE-INTERFACE, SOMETIMES ALSO CALLED ATAPI-COMPATIBLE, PLEASE 
-      USE THE ide-cd.c DRIVER, WRITTEN BY MARK LORD AND SCOTT SNYDER !!!
+      USE THE ide-cd.c DRIVER, WRITTEN BY MARK LORD AND SCOTT SNYDER !
+      THE STANDARD-KERNEL 1.2.x NOW ALSO SUPPORTS IDE-CDROM-DRIVES, SEE THE
+      HARDDISK (!) SECTION OF make config, WHEN COMPILING A NEW KERNEL!!!
 ----------------------------------------------------------------------------
 Contents of this file:
-                         1. NOTE
-                         2. INSTALLATION
-                         3. CONFIGURING YOUR KERNEL
-                         4. RECOMPILING YOUR KERNEL
-                         5. KNOWN PROBLEMS, FUTURE DEVELOPMENTS
-                         6. BUG REPORTS
-                         7. OTHER DRIVES
-                         8. IF YOU DON'T SUCCEED ... DEBUGGING  
-                         9. TECHNICAL HISTORY OF THE DRIVER
-                        10. ACKNOWLEDGMENTS
-                        11. PROGRAMMING ADD ONS: CDPLAY.C
+                         1.  NOTE
+                         2.  INSTALLATION
+                         3.  CONFIGURING YOUR KERNEL
+                         4.  RECOMPILING YOUR KERNEL
+                         4.1 AZTCD AS A RUN-TIME LOADABLE MODULE
+                         4.2 CDROM CONNECTED TO A SOUNDCARD
+                         5.  KNOWN PROBLEMS, FUTURE DEVELOPMENTS
+			 5.1 MULTISESSION SUPPORT
+			 5.2 STATUS RECOGNITION
+			 5.3 DOSEMU's CDROM SUPPORT
+                         6.  BUG REPORTS
+                         7.  OTHER DRIVES
+                         8.  IF YOU DON'T SUCCEED ... DEBUGGING  
+                         9.  TECHNICAL HISTORY OF THE DRIVER
+                        10.  ACKNOWLEDGMENTS
+                        11.  PROGRAMMING ADD ONS: CDPLAY.C
                         APPENDIX: Source code of cdplay.c
 ----------------------------------------------------------------------------
 
@@ -94,7 +101,7 @@ filesystem, you have to recompile your kernel:
 - Edit aztcd.h to set the I/O-address to your I/O-Base address (AZT_BASE_ADDR), 
   the driver does not use interrupts or DMA, so if you are using an AZTECH
   CD268, an ORCHID CD-3110 or ORCHID/WEARNES CDD110 that's the only item you 
-  have to set up. 
+  have to set up. If you have a soundcard, read chapter 4.2.
   Users of other drives should read chapter OTHER DRIVES of this file.
   You also can configure that address by LILO boot parameter aztcd=... 
 - Build a new kernel, configure it for 'Aztech/Orchid/Okano/Wearnes support' 
@@ -126,8 +133,10 @@ filesystem, you have to recompile your kernel:
 4.1 AZTCD AS A RUN-TIME LOADABLE MODULE
 If you do not need aztcd permanently, you can also load and remove the driver
 during runtime via insmod and rmmod. To build aztcd as a loadable module you 
-must *not* configure your kernel for AZTECH support. But you need to have
-the ISO9660-filesystem included! So rebuild your kernel, if necessary.
+must *not* configure your kernel for AZTECH support. Nevertheless, you may
+run into problems, if the version of your boot kernel is not the same than
+the source kernel version, from which you create the modules. So rebuild your 
+kernel, if necessary. 
 
 Now edit the base address of your AZTECH interface card in
 /usr/src/linux/include/linux/aztcd.h to the appropriate value. Then change
@@ -137,20 +146,42 @@ to /usr/src/linux and do a
 After that you can run-time load the driver via
                     insmod /lib/modules/X.X.X/misc/aztcd.o
 and remove it via   rmmod  aztcd.
-If you have not configured the correct base address, you can also supply the
+If you did not set the correct base address in aztcd.h, you can also supply the
 base address when loading the driver via
                     insmod /lib/modules/X.X.X/misc/aztcd.o aztcd=<base address>
-In all commands 'X.X.X' is the current linux kernel version number. For details
-see file README.modules in /usr/src/linux.
+If you do not have the iso9660-filesystem in your boot kernel, you also have
+to load it before you can mount the CDROM:
+                    insmod /lib/modules/X.X.X/fs/isofs.o
+The mount procedure works as described in 4. above.
+(In all commands 'X.X.X' is the current linux kernel version number. For details
+see file README.modules in /usr/src/linux.)
 
+4.2 CDROM CONNECTED TO A SOUNDCARD
+Most soundcards do have a bus interface to the CDROM-drive. In many cases
+this soundcard needs to be configured, before the CDROM can be used. This
+configuration procedure consists of writing some kind of initialization
+data to the soundcard registers. The AZTECH-CDROM driver in the moment does
+only support one type of soundcard (SoundWave32). Users of other soundcards
+should try to boot DOS first and let their DOS drivers initialize the
+soundcard and CDROM, then warm boot (or use loadlin) their PC to start
+Linux.
+Support for the CDROM-interface of SoundWave32-soundcards is directly
+implemented in the AZTECH driver. Please edit /usr/src/linux/include/aztdc.h,
+uncomment line '#define AZT_SW32' and set the appropiate value for
+AZT_BASE_ADDR and AZT_SW32_BASE_ADDR. This support was tested with an Orchid
+CDS-3110 connected to a SoundWave32.
+If you want your soundcard to be supported, find out, how it needs to be
+configured and mail me (see 6.) the appropriate information. 
 
 5. KNOWN PROBLEMS, FUTURE DEVELOPMENTS
+5.1 MULTISESSION SUPPORT
 The driver does not support applications such as photo CD, multi session CD
 etc.. I do not plan to include the support for that in the driver, because I
 do not use such applications. If you are interested in that stuff and would
 like to extend the drivers capability on your own, please contact me, I'll
 support you as far as I can. 
 
+5.2 STATUS RECOGNITION
 The drive status recognition does not work correctly in all cases. Changing
 a disk or having the door open, when a drive is already mounted, is detected 
 by the Aztech driver itself, but nevertheless causes multiple read attempts
@@ -170,6 +201,16 @@ shown to be a little critical. If you get kernel panic messages, edit aztcd.c
 and substitute STEN_LOW_WAIT by STEN_LOW. Busy waiting with STEN_LOW is more
 stable, but also causes CPU overhead.
 
+5.3 DOSEMU's CD-ROM SUPPORT
+With release 1.20 aztcd was modified to allow access to CD-ROMS when running
+under dosemu-0.60. aztcd-versions before 1.20 are most likely to crash
+Linux, when a CD-ROM is accessed under dosemu. This problem has partly been
+fixed, but still when accessing a directory for the first time the system
+might hang for some 30sec. So be patient, when using dosemu's CD-ROM support
+in combination with aztcd :-) ! Unfortunately up to now, I could not locate
+the root cause of that problem. It seems to be somewhere in the interaction
+of the kernel with dosemu's and aztcd's buffers. I appreciate any help on
+this subject !
 
 6. BUG REPORTS
 Please send detailed bug reports and bug fixes via EMail to
@@ -380,7 +421,7 @@ questions in the newsgroups. He really is *the* Linux CD-ROM guru. Thanks
 also to all the guys on the Internet, who collected valuable technical 
 information about CDROMs. 
 
-Joe Nardone (nardone@clark.net) was a patient tester even for my first
+Joe Nardone (joe@access.digex.net) was a patient tester even for my first
 trial, which was more than slow, and made suggestions for code improvement.
 Especially the 'finite state machine' azt_poll() was rewritten by Joe to get
 clean C code and avoid the ugly 'gotos', which I copied from mcd.c.
@@ -390,6 +431,9 @@ and suggested a lot of patches for them.
 
 Joseph Piskor and Peter Nugent were the first users with the ORCHID CD3110
 and also were very patient with the problems which occurred.
+
+Reinhard Max delivered the information for the CDROM-interface of the
+SoundWave32 soundcards.
 
 Anybody, who is interested in these items should have a look at 'ftp.gwdg.de',
 directory 'pub/linux/cdrom' and at 'ftp.cdrom.com', directory 'pub/cdrom'.

@@ -79,6 +79,7 @@ struct hd_geometry {
 #define HDIO_GET_IDENTITY 	0x307	/* get IDE identification info */
 #define HDIO_GET_KEEPSETTINGS 	0x308	/* get keep-settings-on-reset flag */
 #define HDIO_GET_CHIPSET	0x309	/* get current interface type setting */
+#define HDIO_GET_NOWERR	0x30a	/* get ignore-write-error flag */
 #define HDIO_DRIVE_CMD		0x31f	/* execute a special drive command */
 
 /* hd/ide ctl's that pass (arg) non-ptr values are numbered 0x32n/0x33n */
@@ -86,6 +87,7 @@ struct hd_geometry {
 #define HDIO_SET_UNMASKINTR	0x322	/* permit other irqs during I/O */
 #define HDIO_SET_KEEPSETTINGS	0x323	/* keep ioctl settings on reset */
 #define HDIO_SET_CHIPSET	0x324	/* optimise driver for interface type */
+#define HDIO_SET_NOWERR	0x325	/* set ignore-write-error flag */
 
 /* structure returned by HDIO_GET_IDENTITY, as per ANSI ATA2 rev.2f spec */
 struct hd_driveid {

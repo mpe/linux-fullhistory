@@ -184,8 +184,8 @@ MIDIbuf_open (int dev, struct fileinfo *file)
     }
 
   /*
- *    Interrupts disabled. Be careful
- */
+     *    Interrupts disabled. Be careful
+   */
 
   DISABLE_INTR (flags);
   if ((err = midi_devs[dev]->open (dev, mode,
@@ -245,14 +245,14 @@ MIDIbuf_release (int dev, struct fileinfo *file)
   DISABLE_INTR (flags);
 
   /*
- * Wait until the queue is empty
- */
+     * Wait until the queue is empty
+   */
 
   if (mode != OPEN_READ)
     {
-      midi_devs[dev]->putc (dev, 0xfe);	/*
-						 * Active sensing to shut the
-						 * devices
+      midi_devs[dev]->putc (dev, 0xfe);		/*
+						   * Active sensing to shut the
+						   * devices
 						 */
 
       while (!PROCESS_ABORTING (midi_sleeper[dev], midi_sleep_flag[dev]) &&
@@ -379,22 +379,32 @@ MIDIbuf_ioctl (int dev, struct fileinfo *file,
 
   dev = dev >> 4;
 
-  switch (cmd)
+  if (((cmd >> 8) & 0xff) == 'C')
     {
+      if (midi_devs[dev]->coproc)	/* Coprocessor ioctl */
+	return midi_devs[dev]->coproc->ioctl (midi_devs[dev]->coproc->devc, cmd, arg, 0);
+      else
+	printk ("/dev/midi%d: No coprocessor for this device\n", dev);
 
-    case SNDCTL_MIDI_PRETIME:
-      val = IOCTL_IN (arg);
-      if (val < 0)
-	val = 0;
-
-      val = (HZ * val) / 10;
-      parms[dev].prech_timeout = val;
-      return IOCTL_OUT (arg, val);
-      break;
-
-    default:
-      return midi_devs[dev]->ioctl (dev, cmd, arg);
+      return RET_ERROR (EREMOTEIO);
     }
+  else
+    switch (cmd)
+      {
+
+      case SNDCTL_MIDI_PRETIME:
+	val = IOCTL_IN (arg);
+	if (val < 0)
+	  val = 0;
+
+	val = (HZ * val) / 10;
+	parms[dev].prech_timeout = val;
+	return IOCTL_OUT (arg, val);
+	break;
+
+      default:
+	return midi_devs[dev]->ioctl (dev, cmd, arg);
+      }
 }
 
 #ifdef ALLOW_SELECT

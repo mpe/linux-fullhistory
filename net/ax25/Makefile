@@ -11,8 +11,6 @@
 	$(CC) $(CFLAGS) -c $<
 .s.o:
 	$(AS) -o $*.o $<
-.c.s:
-	$(CC) $(CFLAGS) -S $<
 
 
 OBJS	:= af_ax25.o
@@ -32,9 +30,5 @@ dep:
 tar:
 		tar -cvf /dev/f1 .
 
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
+
+include $(TOPDIR)/Rules.make

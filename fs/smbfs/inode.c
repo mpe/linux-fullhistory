@@ -250,6 +250,8 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
 	server->m.dir_mode  = (server->m.dir_mode &
                              (S_IRWXU|S_IRWXG|S_IRWXO)) | S_IFDIR;
 
+        smb_init_root(server);
+
         /*
          * Make the connection to the server
          */
@@ -278,18 +280,18 @@ smb_read_super(struct super_block *sb, void *raw_data, int silent)
                 goto fail;
 	}
 
+	if ((error = smb_stat_root(server)) < 0) {
+		sb->s_dev = 0;
+		printk("smb_read_super: could not get root dir attributes\n");
+                smb_kfree_s(server->packet, server->max_xmit);
+                goto fail;
+	}
+
 	DPRINTK("smb_read_super : %u %u %u %u\n",
                 SMB_SBP(sb)->s_attr.total,
                 SMB_SBP(sb)->s_attr.blocksize,
                 SMB_SBP(sb)->s_attr.allocblocks,
                 SMB_SBP(sb)->s_attr.free);
-
-        if (smb_init_root(server) != 0) {
-                sb->s_dev = 0;
-                printk("smb_read_super: invalid root directory\n");
-                smb_kfree_s(server->packet, server->max_xmit);
-                goto fail;
-        }
 
         DPRINTK("smb_read_super: SMB_SBP(sb) = %x\n", (int)SMB_SBP(sb));
 
@@ -406,7 +408,7 @@ int smb_current_malloced;
 
 #ifdef MODULE
 
-static char kernel_version[] = UTS_RELEASE;
+char kernel_version[] = UTS_RELEASE;
 
 /* looks ugly, taken from gcc-info */
 static void *shut_up_gcc = (&shut_up_gcc, kernel_version);

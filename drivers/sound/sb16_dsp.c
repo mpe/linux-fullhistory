@@ -42,11 +42,11 @@
 
 extern int      sbc_base;
 
-static int      sb16_dsp_ok = 0;/*
+static int      sb16_dsp_ok = 0;	/*
 
 
-					 * *  * * Set to 1 after successful *
-					 * * initialization   */
+					   * *  * * Set to 1 after successful *
+					   * * initialization   */
 static int      dsp_16bit = 0;
 static int      dsp_stereo = 0;
 static int      dsp_current_speed = 8000;	/*
@@ -228,7 +228,7 @@ sb16_dsp_open (int dev, int mode)
 
   sb_reset_dsp ();
 
-  if (ALLOC_DMA_CHN (dma8,"sb16 8bit"))
+  if (ALLOC_DMA_CHN (dma8, "SB16 (8bit)"))
     {
       printk ("SB16: Unable to grab DMA%d\n", dma8);
       sb_free_irq ();
@@ -236,7 +236,7 @@ sb16_dsp_open (int dev, int mode)
     }
 
   if (dma16 != dma8)
-    if (ALLOC_DMA_CHN (dma16,"sb16 16bit"))
+    if (ALLOC_DMA_CHN (dma16, "SB16 (16bit)"))
       {
 	printk ("SB16: Unable to grab DMA%d\n", dma16);
 	sb_free_irq ();
@@ -436,6 +436,7 @@ sb16_dsp_halt (int dev)
       sb_dsp_command01 (0xda);
       sb_dsp_command01 (0xd0);
     }
+  DMAbuf_reset_dma (dev);
 }
 
 static void
@@ -472,9 +473,7 @@ sb16_dsp_init (long mem_start, struct address_info *hw_config)
   if (sbc_major < 4)
     return mem_start;		/* Not a SB16 */
 
-#ifndef SCO
   sprintf (sb16_dsp_operations.name, "SoundBlaster 16 %d.%d", sbc_major, sbc_minor);
-#endif
 
   printk (" <%s>", sb16_dsp_operations.name);
 
@@ -532,8 +531,8 @@ sb16_dsp_detect (struct address_info *hw_config)
   DEB (printk ("SoundBlaster 16: IRQ %d DMA %d OK\n", sb_config->irq, hw_config->dma));
 
   /*
- * dsp_showmessage(0xe3,99);
- */
+     * dsp_showmessage(0xe3,99);
+   */
   sb16_dsp_ok = 1;
   return 1;
 }

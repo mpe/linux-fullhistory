@@ -28,6 +28,12 @@
 
 #define ALLOW_SELECT
 
+#ifdef MODULE
+#include <linux/config.h>
+#include <linux/module.h>
+#include <linux/version.h>
+#endif
+
 #include <linux/param.h>
 #include <linux/types.h>
 #include <linux/errno.h>
@@ -45,7 +51,8 @@
 #include <linux/wait.h>
 #include <linux/malloc.h>
 #include <linux/string.h>
-#include <linux/soundcard.h>
+
+#include "linux/soundcard.h"
 
 typedef char snd_rw_buf;
 
@@ -93,7 +100,7 @@ struct snd_wait {
 #define SOMEONE_WAITING(q, f) (f.mode & WK_SLEEP)
 #define WAKE_UP(q, f)			{f.mode = WK_WAKEUP;wake_up(&q);}
 
-#define ALLOC_DMA_CHN(chn,deviceID)	request_dma(chn,deviceID)
+#define ALLOC_DMA_CHN(chn,deviceID)	request_dma(chn, deviceID)
 #define RELEASE_DMA_CHN(chn)		free_dma(chn)
 
 #define GET_TIME()			jiffies
@@ -102,7 +109,7 @@ struct snd_wait {
 
 /* DISABLE_INTR is used to disable interrupts.
    These macros store the current flags to the (unsigned long) variable given
-   as a parameter. RESTORE_INTR returns the interrupt enable bit to state
+   as a parameter. RESTORE_INTR returns the interrupt ebable bit to state
    before DISABLE_INTR or ENABLE_INTR */
 
 #define DISABLE_INTR(flags)	__asm__ __volatile__("pushfl ; popl %0 ; cli":"=r" (flags));
@@ -152,10 +159,28 @@ struct snd_wait {
   add_timer (&name);}
 
 #define INB	inb
+#define INW	inw
 #define OUTB	outb
+#define OUTW	outw
 
 /*
  * SND_SA_INTERRUPT is required. Otherwise the IRQ number is not passed 
  * the handler.
  */
 #define SND_SA_INTERRUPT
+
+/*
+ * The macro DECLARE_FILE() adds an entry to struct fileinfo referencing the
+ * connected filestructure.
+ * This entry must be initialized in sound_open() in soundcard.c
+ *
+ * ISSET_FILE_FLAG() allows checking of flags like O_NONBLOCK on files
+ *
+ */
+
+#define DECLARE_FILE()                   struct file *filp
+#define ISSET_FILE_FLAG(fileinfo, flag)  (fileinfo->filp->f_flags & (flag) ? \
+					  1 : 0)
+#define INT_HANDLER_PROTO() void(*hndlr)(int, struct pt_regs *)
+#define INT_HANDLER_PARMS(irq, parms) int irq, struct pt_regs *parms
+#define INT_HANDLER_CALL(irq) irq, NULL

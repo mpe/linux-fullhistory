@@ -70,12 +70,16 @@ static void sg_free(char *buff,int size);
 static int sg_ioctl(struct inode * inode,struct file * file,
 		    unsigned int cmd_in, unsigned long arg)
 {
+    int result;
     int dev = MINOR(inode->i_rdev);
     if ((dev<0) || (dev>=sg_template.dev_max))
 	return -ENXIO;
     switch(cmd_in)
     {
     case SG_SET_TIMEOUT:
+        result = verify_area(VERIFY_READ, arg, sizeof(long));
+        if (result) return result;
+
 	scsi_generics[dev].timeout=get_user((int *) arg);
 	return 0;
     case SG_GET_TIMEOUT:
@@ -93,6 +97,11 @@ static int sg_open(struct inode * inode, struct file * filp)
 	return -ENXIO;
     if (O_RDWR!=(flags & O_ACCMODE))
 	return -EACCES;
+
+  /*
+   * If we want exclusive access, then wait until the device is not
+   * busy, and then set the flag to prevent anyone else from using it.
+   */
     if (flags & O_EXCL)
     {
 	while(scsi_generics[dev].users)
@@ -106,6 +115,10 @@ static int sg_open(struct inode * inode, struct file * filp)
 	scsi_generics[dev].exclude=1;
     }
     else
+        /*
+         * Wait until nobody has an exclusive open on
+         * this device.
+         */
 	while(scsi_generics[dev].exclude)
 	{
 	    if (flags & O_NONBLOCK)
@@ -114,7 +127,15 @@ static int sg_open(struct inode * inode, struct file * filp)
 	    if (current->signal & ~current->blocked)
 		return -ERESTARTSYS;
 	}
-    if (!scsi_generics[dev].users && scsi_generics[dev].pending && scsi_generics[dev].complete)
+
+    /*
+     * OK, we should have grabbed the device.  Mark the thing so
+     * that other processes know that we have it, and initialize the
+     * state variables to known values.
+     */
+    if (!scsi_generics[dev].users 
+        && scsi_generics[dev].pending
+        && scsi_generics[dev].complete)
     {
 	if (scsi_generics[dev].buff != NULL)
 	    sg_free(scsi_generics[dev].buff,scsi_generics[dev].buff_len);
@@ -174,6 +195,11 @@ static void sg_free(char *buff,int size)
     scsi_free(buff,size);
 }
 
+/*
+ * Read back the results of a previous command.  We use the pending and
+ * complete semaphores to tell us whether the buffer is available for us
+ * and whether the command is actually done.
+ */
 static int sg_read(struct inode *inode,struct file *filp,char *buf,int count)
 {
     int dev=MINOR(inode->i_rdev);
@@ -181,6 +207,10 @@ static int sg_read(struct inode *inode,struct file *filp,char *buf,int count)
     struct scsi_generic *device=&scsi_generics[dev];
     if ((i=verify_area(VERIFY_WRITE,buf,count)))
 	return i;
+
+    /*
+     * Wait until the command is actually done.
+     */
     while(!device->pending || !device->complete)
     {
 	if (filp->f_flags & O_NONBLOCK)
@@ -189,6 +219,10 @@ static int sg_read(struct inode *inode,struct file *filp,char *buf,int count)
 	if (current->signal & ~current->blocked)
 	    return -ERESTARTSYS;
     }
+
+    /*
+     * Now copy the result back to the user buffer.
+     */
     device->header.pack_len=device->header.reply_len;
     device->header.result=0;
     if (count>=sizeof(struct sg_header))
@@ -203,6 +237,11 @@ static int sg_read(struct inode *inode,struct file *filp,char *buf,int count)
     }
     else
 	count=0;
+    
+    /*
+     * Clean up, and release the device so that we can send another
+     * command.
+     */
     sg_free(device->buff,device->buff_len);
     device->buff = NULL;
     device->pending=0;
@@ -210,6 +249,11 @@ static int sg_read(struct inode *inode,struct file *filp,char *buf,int count)
     return count;
 }
 
+/*
+ * This function is called by the interrupt handler when we
+ * actually have a command that is complete.  Change the
+ * flags to indicate that we have a result.
+ */
 static void sg_command_done(Scsi_Cmnd * SCpnt)
 {
     int dev=SCpnt->request.dev;
@@ -220,6 +264,11 @@ static void sg_command_done(Scsi_Cmnd * SCpnt)
 	SCpnt->request.dev=-1;
 	return;
     }
+
+    /*
+     * See if the command completed normally, or whether something went
+     * wrong.
+     */
     memcpy(device->header.sense_buffer, SCpnt->sense_buffer, sizeof(SCpnt->sense_buffer));
     if (SCpnt->sense_buffer[0])
     {
@@ -227,29 +276,44 @@ static void sg_command_done(Scsi_Cmnd * SCpnt)
     }
     else
 	device->header.result=SCpnt->result;
+
+    /*
+     * Now wake up the process that is waiting for the
+     * result.
+     */
     device->complete=1;
     SCpnt->request.dev=-1;
     wake_up(&scsi_generics[dev].read_wait);
 }
 
+#define SG_SEND 0
+#define SG_REC  1
+
 static int sg_write(struct inode *inode,struct file *filp,char *buf,int count)
 {
-    int dev=MINOR(inode->i_rdev);
-    Scsi_Cmnd *SCpnt;
-    int bsize,size,amt,i;
-    unsigned char opcode;
-    unsigned char cmnd[MAX_COMMAND_SIZE];
-    struct scsi_generic *device=&scsi_generics[dev];
+    int			  bsize,size,amt,i;
+    unsigned char	  cmnd[MAX_COMMAND_SIZE];
+    int			  dev=MINOR(inode->i_rdev);
+    struct scsi_generic   * device=&scsi_generics[dev];
+    int			  direction;
+    unsigned char	  opcode;
+    Scsi_Cmnd		* SCpnt;
+    int			  sgcnt;
     
     if ((i=verify_area(VERIFY_READ,buf,count)))
 	return i;
     /*
-     * The minimum scsi command length is 6 bytes.  If we get anything less than this,
-     * it is clearly bogus.
+     * The minimum scsi command length is 6 bytes.  If we get anything
+     * less than this, it is clearly bogus.  
      */
     if (count<(sizeof(struct sg_header) + 6))
 	return -EIO;
-    /* make sure we can fit */
+
+    /*
+     * If we still have a result pending from a previous command,
+     * wait until the result has been read by the user before sending
+     * another command.
+     */
     while(device->pending)
     {
 	if (filp->f_flags & O_NONBLOCK)
@@ -261,27 +325,61 @@ static int sg_write(struct inode *inode,struct file *filp,char *buf,int count)
 	if (current->signal & ~current->blocked)
 	    return -ERESTARTSYS;
     }
+
+    /*
+     * Mark the device flags for the new state.
+     */
     device->pending=1;
     device->complete=0;
     memcpy_fromfs(&device->header,buf,sizeof(struct sg_header));
-    /* fix input size */
+
+    /*
+     * fix input size, and see if we are sending data.
+     */
     device->header.pack_len=count;
     buf+=sizeof(struct sg_header);
-    bsize=(device->header.pack_len>device->header.reply_len) ? device->header.pack_len : device->header.reply_len;
+    if( device->header.pack_len > device->header.reply_len )
+    {
+        bsize = device->header.pack_len;
+        direction = SG_SEND;
+    } else {
+        bsize = device->header.reply_len;
+        direction = SG_REC;
+    }
+    
+    /*
+     * Don't include the command header itself in the size.
+     */
     bsize-=sizeof(struct sg_header);
+
+    /*
+     * Allocate a buffer that is large enough to hold the data
+     * that has been requested.  Round up to an even number of sectors,
+     * since scsi_malloc allocates in chunks of 512 bytes.
+     */
     amt=bsize;
     if (!bsize)
 	bsize++;
     bsize=(bsize+511) & ~511;
+
+    /*
+     * If we cannot allocate the buffer, report an error.
+     */
     if ((bsize<0) || !(device->buff=sg_malloc(device->buff_len=bsize)))
     {
 	device->pending=0;
 	wake_up(&device->write_wait);
 	return -ENOMEM;
     }
+
 #ifdef DEBUG
     printk("allocating device\n");
 #endif
+
+    /*
+     * Grab a device pointer for the device we want to talk to.  If we
+     * don't want to block, just return with the appropriate message.
+     */
     if (!(SCpnt=allocate_device(NULL,device->device, !(filp->f_flags & O_NONBLOCK))))
     {
 	device->pending=0;
@@ -293,39 +391,72 @@ static int sg_write(struct inode *inode,struct file *filp,char *buf,int count)
 #ifdef DEBUG
     printk("device allocated\n");
 #endif    
-    /* now issue command */
+
+    /*
+     * Now we need to grab the command itself from the user's buffer.
+     */
     SCpnt->request.dev=dev;
     SCpnt->sense_buffer[0]=0;
     opcode = get_user(buf);
     size=COMMAND_SIZE(opcode);
     if (opcode >= 0xc0 && device->header.twelve_byte) size = 12;
     SCpnt->cmd_len = size;
-    amt-=device->header.pack_len>device->header.reply_len ? size : 0;
+
+    /*
+     * If we are writing data, subtract off the size
+     * of the command itself, to get the amount of actual data
+     * that we need to send to the device.
+     */
+    if( direction == SG_SEND )
+        amt -= size;
+    
     /*
      * Verify that the user has actually passed enough bytes for this command.
      */
-    if (count<(sizeof(struct sg_header) + size))
+    if( count < (sizeof(struct sg_header) + size) )
     {
 	device->pending=0;
-	wake_up(&device->write_wait);
-	sg_free(device->buff,device->buff_len);
+        wake_up( &device->write_wait );
+        sg_free( device->buff, device->buff_len );
 	device->buff = NULL;
 	return -EIO;
     }
     
+    /*
+     * Now copy the SCSI command from the user's address space.
+     */
     memcpy_fromfs(cmnd,buf,size);
     buf+=size;
-    memcpy_fromfs(device->buff,buf,device->header.pack_len-size-sizeof(struct sg_header));
-    cmnd[1]=(cmnd[1] & 0x1f) | (device->device->lun<<5);
+
+    /*
+     * If we are writing data, copy the data we are writing.  The pack_len
+     * field also includes the length of the header and the command,
+     * so we need to subtract these off.
+     */
+    if( direction == SG_SEND )  memcpy_fromfs(device->buff,buf, amt);
+    
+    /*
+     * Set the LUN field in the command structure.
+     */
+    cmnd[1]= (cmnd[1] & 0x1f) | (device->device->lun<<5);
+
 #ifdef DEBUG
     printk("do cmd\n");
 #endif
+
+    /*
+     * Now pass the actual command down to the low-level driver.  We
+     * do not do any more here - when the interrupt arrives, we will
+     * then do the post-processing.
+     */
     scsi_do_cmd (SCpnt,(void *) cmnd,
 		 (void *) device->buff,amt,
 		 sg_command_done,device->timeout,SG_DEFAULT_RETRIES);
+
 #ifdef DEBUG
     printk("done cmd\n");
 #endif               
+
     return count;
 }
 

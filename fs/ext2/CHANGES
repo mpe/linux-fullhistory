@@ -1,3 +1,10 @@
+Changes from version 0.5a to version 0.5b
+=========================================
+	- More consistency checks on directories.
+	- The ext2.diff patch from Tom May <ftom@netcom.com> has been
+	  integrated.  This patch replaces expensive "/" and "%" with
+	  cheap ">>" and "&" where possible.
+
 Changes from version 0.5 to version 0.5a
 ========================================
 	- Zero the partial block following the end of the file when a file

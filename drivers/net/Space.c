@@ -66,6 +66,7 @@ extern int e2100_probe(struct device *);
 extern int ni52_probe(struct device *);
 extern int ni65_probe(struct device *);
 extern int SK_init(struct device *);
+extern int seeq8005_probe(struct device *);
 
 /* Detachable devices ("pocket adaptors") */
 extern int atp_init(struct device *);
@@ -81,6 +82,9 @@ ethif_probe(struct device *dev)
 	return 1;		/* ENXIO */
 
     if (1
+#if defined(CONFIG_SEEQ8005)
+	&& seeq8005_probe(dev)
+#endif
 #if defined(CONFIG_HP100)
 	&& hp100_probe(dev)
 #endif	

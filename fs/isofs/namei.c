@@ -178,8 +178,18 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 		      dlen--;
 		  }
 		}
-		match = isofs_match(namelen,name,dpnt,dlen);
-		if (cpnt) {
+		/*
+		 * Skip hidden or associated files unless unhide is set 
+		 */
+		match = 0;
+		if(   !(de->flags[-dir->i_sb->u.isofs_sb.s_high_sierra] & 5)
+		   || dir->i_sb->u.isofs_sb.s_unhide == 'y' )
+		{
+			match = isofs_match(namelen,name,dpnt,dlen);
+		}
+
+		if (cpnt)
+		{
 			kfree(cpnt);
 			cpnt = NULL;
 		}

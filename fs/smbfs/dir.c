@@ -554,11 +554,10 @@ smb_free_inode_info(struct smb_inode_info *i)
         }
 }
         
-int
+void
 smb_init_root(struct smb_server *server)
 {
         struct smb_inode_info *root = &(server->root);
-        int result;
 
         root->finfo.path = server->m.root_path;
         root->finfo.len  = strlen(root->finfo.path);
@@ -568,6 +567,14 @@ smb_init_root(struct smb_server *server)
         root->nused = 1;
         root->dir   = NULL;
         root->next = root->prev = root;
+        return;
+}
+
+int
+smb_stat_root(struct smb_server *server)
+{
+        struct smb_inode_info *root = &(server->root);
+        int result;
 
         if (root->finfo.len == 0) {
                 result = smb_proc_getattr(server, "\\", 1, &(root->finfo));
@@ -776,6 +783,8 @@ smb_create(struct inode *dir, const char *name, int len, int mode,
 
         entry.attr  = 0;
         entry.ctime = CURRENT_TIME;
+        entry.atime = CURRENT_TIME;
+        entry.mtime = CURRENT_TIME;
         entry.size  = 0;
 
         error = smb_proc_create(SMB_SERVER(dir), path, len, &entry);

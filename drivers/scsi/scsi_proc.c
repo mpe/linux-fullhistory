@@ -7,7 +7,7 @@
  * information directly to the lowlevel driver.
  *
  * (c) 1995 Michael Neuffer neuffer@goofy.zdv.uni-mainz.de 
- * Version: 0.99.5   last change: 95/06/28
+ * Version: 0.99.6   last change: 95/07/04
  * 
  * generic command parser provided by: 
  * Andreas Heilwagen <crashcar@informatik.uni-koblenz.de>
@@ -86,8 +86,7 @@ int generic_proc_info(char *buffer, char **start, off_t offset,
     begin = 0;
     pos = len = sprintf(buffer, 
 			"The driver does not yet support the proc-fs\n");
-    if(pos < offset)
-    {
+    if(pos < offset) {
 	len = 0;
 	begin = pos;
     }
@@ -110,27 +109,23 @@ extern int dispatch_scsi_info(int ino, char *buffer, char **start,
     struct Scsi_Host *hpnt = scsi_hostlist;
 
     if(func != 2) {    
-	if(ino == PROC_SCSI_SCSI) {
+	if(ino == PROC_SCSI_SCSI) {            
             /*
-             * If there are no hosts, tell the user to go away.
+             * This is for the scsi core, rather than any specific
+             * lowlevel driver.
              */
-            if( hpnt == NULL ) {
-                return (-ENOSYS);
-            }
-
-	    retval = scsi_proc_info(buffer, start, offset, length, 
-				  hpnt->host_no, func);
-            return(retval);
+            return(scsi_proc_info(buffer, start, offset, length, 0, func));
         }
 
 	while(hpnt) {
-	    if (ino == (hpnt->host_no + PROC_SCSI_FILE)) 
+	    if (ino == (hpnt->host_no + PROC_SCSI_FILE)) {
                 if(hpnt->hostt->proc_info == NULL)
                     return generic_proc_info(buffer, start, offset, length, 
                                              hpnt->host_no, func);
                 else
-                    return(hpnt->hostt->proc_info(buffer, start, offset, length, 
-                                                  hpnt->host_no, func));
+                    return(hpnt->hostt->proc_info(buffer, start, offset, 
+                                                  length, hpnt->host_no, func));
+            }
 	    hpnt = hpnt->next;
 	}
 	return(-EBADF);
@@ -154,8 +149,13 @@ void build_proc_dir_hba_entries(void)
 {
     Scsi_Host_Template *tpnt = scsi_hosts;
     struct Scsi_Host *hpnt;
-    static char names[PROC_SCSI_LAST - PROC_SCSI_FILE][3];
     uint x, y;
+
+    /* namespace for 16 HBAs with host_no 0-999 
+     * I don't think we'll need more. Having more than 2 
+     * HBAs in one system is already highly unusual 
+     */
+    static char names[PROC_SCSI_LAST - PROC_SCSI_FILE][4];
     
     x = y = 0;
 

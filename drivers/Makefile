@@ -9,14 +9,13 @@
 
 .S.s:
 	$(CPP) -traditional $< -o $*.s
-.c.s:
-	$(CC) $(CFLAGS) -S $<
 .s.o:
 	$(AS) -c -o $*.o $<
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 
 SUBDIRS	= block char net #streams
+ALL_SUBDIRS = block char net scsi #streams
 
 ifdef CONFIG_PCI
 SUBDIRS := $(SUBDIRS) pci
@@ -36,17 +35,9 @@ driversubdirs: dummy
 	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i; done
 
 modules: dummy
-	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i modules; done
+	set -e; for i in $(ALL_SUBDIRS); do $(MAKE) -C $$i modules; done
 
 dep:
-	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i dep; done
+	set -e; for i in $(ALL_SUBDIRS); do $(MAKE) -C $$i dep; done
 
-dummy:
-
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
-
+include $(TOPDIR)/Rules.make

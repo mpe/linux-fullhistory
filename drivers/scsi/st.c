@@ -83,8 +83,8 @@ static int debugging = 1;
 #define MAX_READY_RETRIES 5
 #define NO_TAPE  NOT_READY
 
-#define ST_TIMEOUT 90000
-#define ST_LONG_TIMEOUT 200000
+#define ST_TIMEOUT (900 * HZ)
+#define ST_LONG_TIMEOUT (2000 * HZ)
 
 static int st_nbr_buffers;
 static ST_buffer **st_buffers;

@@ -11,9 +11,6 @@
 	$(CC) $(CFLAGS) -c $<
 .s.o:
 	$(AS) -o $*.o $<
-.c.s:
-	$(CC) $(CFLAGS) -S $<
-
 
 OBJS	:= utils.o route.o proc.o timer.o protocol.o packet.o \
 		   arp.o ip.o raw.o icmp.o tcp.o udp.o devinet.o af_inet.o \
@@ -43,9 +40,5 @@ dep:
 tar:
 		tar -cvf /dev/f1 .
 
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
+
+include $(TOPDIR)/Rules.make

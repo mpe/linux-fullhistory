@@ -164,6 +164,13 @@ S: 14509 NE 39th Street #1096
 S: Bellevue, Washington 98007
 S: USA
 
+N: Hamish Coleman
+E: hamish@zot.apana.org.au
+D: SEEQ8005 network driver
+S: 98 Paxton Street
+S: East Malvern, Victoria, 3145
+S: Australia
+
 N: Alan Cox
 E: A.Cox@swansea.ac.uk
 E: iiitac@pyr.swan.ac.uk
@@ -235,7 +242,7 @@ S: Sweden
 
 N: Paal-Kristian Engstad
 E: engstad@funcom.com
-D: Wrote smbfs (to mount WfW, NT and OS/2 network drives.)
+D: Kernel smbfs (to mount WfW, NT and OS/2 network drives.)
 S: Oscars gt. 35
 S: N-0258 OSLO
 S: Norway
@@ -473,6 +480,13 @@ D: Loadable modules and ftape driver
 S: Mr. v. Boemellaan 39
 S: NL-5237 KA 's-Hertogenbosch
 S: The Netherlands
+
+N: Volker Lendecke
+E: lendecke@namu01.gwdg.de
+D: Kernel smbfs (to mount WfW, NT and OS/2 network drives.)
+S: Innersteweg 11
+S: 37081 Goettingen
+S: Germany
 
 N: Kevin Lentin
 E: kevinl@cs.monash.edu.au

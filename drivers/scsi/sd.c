@@ -58,8 +58,8 @@
  *  Time out in seconds for disks and Magneto-opticals (which are slower).
  */
 
-#define SD_TIMEOUT 700
-#define SD_MOD_TIMEOUT 750
+#define SD_TIMEOUT (7 * HZ)
+#define SD_MOD_TIMEOUT (8 * HZ)
 
 #define CLUSTERABLE_DEVICE(SC) (SC->host->use_clustering && \
 				SC->device->type != TYPE_MOD)
@@ -904,7 +904,8 @@ static int sd_init_onedisk(int i)
     
     /* We need to retry the READ_CAPACITY because a UNIT_ATTENTION is 
      * considered a fatal error, and many devices report such an error 
-     * just after a scsi bus reset. */
+     * just after a scsi bus reset. 
+     */
     
     SCpnt = allocate_device(NULL, rscsi_disks[i].device, 1);
     buffer = (unsigned char *) scsi_malloc(512);
@@ -1177,7 +1178,7 @@ static void sd_init()
 static void sd_finish()
 {
     int i;
-    
+
     blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
     
     sd_gendisk.next = gendisk_head;
@@ -1201,11 +1202,10 @@ static void sd_finish()
      * a two block (4 sector) read ahead. 
      */
     if(rscsi_disks[0].device && rscsi_disks[0].device->host->sg_tablesize)
-	read_ahead[MAJOR_NR] = 120;
-    /* 64 sector read-ahead */
+	read_ahead[MAJOR_NR] = 120;  /* 120 sector read-ahead */
     else
 	read_ahead[MAJOR_NR] = 4;  /* 4 sector read-ahead */
-    
+
     return;
 }
 

@@ -129,14 +129,15 @@ int ext2_bmap (struct inode * inode, int block)
 {
 	int i;
 	int addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
+	int addr_per_block_bits = EXT2_ADDR_PER_BLOCK_BITS(inode->i_sb);
 
 	if (block < 0) {
 		ext2_warning (inode->i_sb, "ext2_bmap", "block < 0");
 		return 0;
 	}
 	if (block >= EXT2_NDIR_BLOCKS + addr_per_block +
-		     addr_per_block * addr_per_block +
-		     addr_per_block * addr_per_block * addr_per_block) {
+		(1 << (addr_per_block_bits * 2)) +
+		((1 << (addr_per_block_bits * 2)) << addr_per_block_bits)) {
 		ext2_warning (inode->i_sb, "ext2_bmap", "block > big");
 		return 0;
 	}
@@ -151,29 +152,29 @@ int ext2_bmap (struct inode * inode, int block)
 					  inode->i_sb->s_blocksize), block);
 	}
 	block -= addr_per_block;
-	if (block < addr_per_block * addr_per_block) {
+	if (block < (1 << (addr_per_block_bits * 2))) {
 		i = inode_bmap (inode, EXT2_DIND_BLOCK);
 		if (!i)
 			return 0;
 		i = block_bmap (bread (inode->i_dev, i,
 				       inode->i_sb->s_blocksize),
-				block / addr_per_block);
+				block >> addr_per_block_bits);
 		if (!i)
 			return 0;
 		return block_bmap (bread (inode->i_dev, i,
 					  inode->i_sb->s_blocksize),
 				   block & (addr_per_block - 1));
 	}
-	block -= addr_per_block * addr_per_block;
+	block -= (1 << (addr_per_block_bits * 2));
 	i = inode_bmap (inode, EXT2_TIND_BLOCK);
 	if (!i)
 		return 0;
 	i = block_bmap (bread (inode->i_dev, i, inode->i_sb->s_blocksize),
-			block / (addr_per_block * addr_per_block));
+			block >> (addr_per_block_bits * 2));
 	if (!i)
 		return 0;
 	i = block_bmap (bread (inode->i_dev, i, inode->i_sb->s_blocksize),
-			(block / addr_per_block) & (addr_per_block - 1));
+			(block >> addr_per_block_bits) & (addr_per_block - 1));
 	if (!i)
 		return 0;
 	return block_bmap (bread (inode->i_dev, i, inode->i_sb->s_blocksize),
@@ -335,10 +336,11 @@ static int block_getcluster (struct inode * inode, struct buffer_head * bh,
 
 	if(!bh) return 0;
 
-	if(nr % (PAGE_SIZE / inode->i_sb->s_blocksize) != 0) goto out;
+	if((nr & ((PAGE_SIZE >> EXT2_BLOCK_SIZE_BITS(inode->i_sb)) - 1)) != 0)
+		goto out;
 	if(nr + 3 > EXT2_ADDR_PER_BLOCK(inode->i_sb)) goto out;
 
-	for(i=0; i< (PAGE_SIZE / inode->i_sb->s_blocksize); i++) {
+	for(i=0; i< (PAGE_SIZE >> EXT2_BLOCK_SIZE_BITS(inode->i_sb)); i++) {
 	  p = (u32 *) bh->b_data + nr + i;
 	  
 	  /* All blocks in cluster must already be allocated */
@@ -363,15 +365,16 @@ struct buffer_head * ext2_getblk (struct inode * inode, long block,
 	struct buffer_head * bh;
 	unsigned long b;
 	unsigned long addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
+	int addr_per_block_bits = EXT2_ADDR_PER_BLOCK_BITS(inode->i_sb);
 
 	*err = -EIO;
 	if (block < 0) {
 		ext2_warning (inode->i_sb, "ext2_getblk", "block < 0");
 		return NULL;
 	}
-	if (block > EXT2_NDIR_BLOCKS + addr_per_block  +
-		    addr_per_block * addr_per_block +
-		    addr_per_block * addr_per_block * addr_per_block) {
+	if (block > EXT2_NDIR_BLOCKS + addr_per_block +
+		(1 << (addr_per_block_bits * 2)) +
+		((1 << (addr_per_block_bits * 2)) << addr_per_block_bits)) {
 		ext2_warning (inode->i_sb, "ext2_getblk", "block > big");
 		return NULL;
 	}
@@ -401,18 +404,18 @@ struct buffer_head * ext2_getblk (struct inode * inode, long block,
 				     inode->i_sb->s_blocksize, b, err);
 	}
 	block -= addr_per_block;
-	if (block < addr_per_block * addr_per_block) {
+	if (block < (1 << (addr_per_block_bits * 2))) {
 		bh = inode_getblk (inode, EXT2_DIND_BLOCK, create, b, err);
-		bh = block_getblk (inode, bh, block / addr_per_block, create,
-				   inode->i_sb->s_blocksize, b, err);
+		bh = block_getblk (inode, bh, block >> addr_per_block_bits,
+				   create, inode->i_sb->s_blocksize, b, err);
 		return block_getblk (inode, bh, block & (addr_per_block - 1),
 				     create, inode->i_sb->s_blocksize, b, err);
 	}
-	block -= addr_per_block * addr_per_block;
+	block -= (1 << (addr_per_block_bits * 2));
 	bh = inode_getblk (inode, EXT2_TIND_BLOCK, create, b, err);
-	bh = block_getblk (inode, bh, block/(addr_per_block * addr_per_block),
+	bh = block_getblk (inode, bh, block >> (addr_per_block_bits * 2),
 			   create, inode->i_sb->s_blocksize, b, err);
-	bh = block_getblk (inode, bh, (block/addr_per_block) & (addr_per_block - 1),
+	bh = block_getblk (inode, bh, (block >> addr_per_block_bits) & (addr_per_block - 1),
 			   create, inode->i_sb->s_blocksize, b, err);
 	return block_getblk (inode, bh, block & (addr_per_block - 1), create,
 			     inode->i_sb->s_blocksize, b, err);
@@ -424,6 +427,7 @@ int ext2_getcluster (struct inode * inode, long block)
 	int err, create;
 	unsigned long b;
 	unsigned long addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
+	int addr_per_block_bits = EXT2_ADDR_PER_BLOCK_BITS(inode->i_sb);
 
 	create = 0;
 	err = -EIO;
@@ -431,9 +435,9 @@ int ext2_getcluster (struct inode * inode, long block)
 		ext2_warning (inode->i_sb, "ext2_getblk", "block < 0");
 		return 0;
 	}
-	if (block > EXT2_NDIR_BLOCKS + addr_per_block  +
-		    addr_per_block * addr_per_block +
-		    addr_per_block * addr_per_block * addr_per_block) {
+	if (block > EXT2_NDIR_BLOCKS + addr_per_block +
+		(1 << (addr_per_block_bits * 2)) +
+		((1 << (addr_per_block_bits * 2)) << addr_per_block_bits)) {
 		ext2_warning (inode->i_sb, "ext2_getblk", "block > big");
 		return 0;
 	}
@@ -450,18 +454,18 @@ int ext2_getcluster (struct inode * inode, long block)
 					 inode->i_sb->s_blocksize);
 	}
 	block -= addr_per_block;
-	if (block < addr_per_block * addr_per_block) {
+	if (block < (1 << (addr_per_block_bits * 2))) {
 		bh = inode_getblk (inode, EXT2_DIND_BLOCK, create, b, &err);
-		bh = block_getblk (inode, bh, block / addr_per_block, create,
-				   inode->i_sb->s_blocksize, b, &err);
+		bh = block_getblk (inode, bh, block >> addr_per_block_bits,
+				   create, inode->i_sb->s_blocksize, b, &err);
 		return block_getcluster (inode, bh, block & (addr_per_block - 1),
 				     inode->i_sb->s_blocksize);
 	}
-	block -= addr_per_block * addr_per_block;
+	block -= (1 << (addr_per_block_bits * 2));
 	bh = inode_getblk (inode, EXT2_TIND_BLOCK, create, b, &err);
-	bh = block_getblk (inode, bh, block/(addr_per_block * addr_per_block),
+	bh = block_getblk (inode, bh, block >> (addr_per_block_bits * 2),
 			   create, inode->i_sb->s_blocksize, b, &err);
-	bh = block_getblk (inode, bh, (block/addr_per_block) & (addr_per_block - 1),
+	bh = block_getblk (inode, bh, (block >> addr_per_block_bits) & (addr_per_block - 1),
 			   create, inode->i_sb->s_blocksize, b, &err);
 	return block_getcluster (inode, bh, block & (addr_per_block - 1),
 				 inode->i_sb->s_blocksize);
@@ -505,8 +509,8 @@ void ext2_read_inode (struct inode * inode)
 	if (block_group >= inode->i_sb->u.ext2_sb.s_groups_count)
 		ext2_panic (inode->i_sb, "ext2_read_inode",
 			    "group >= groups count");
-	group_desc = block_group / EXT2_DESC_PER_BLOCK(inode->i_sb);
-	desc = block_group % EXT2_DESC_PER_BLOCK(inode->i_sb);
+	group_desc = block_group >> EXT2_DESC_PER_BLOCK_BITS(inode->i_sb);
+	desc = block_group & (EXT2_DESC_PER_BLOCK(inode->i_sb) - 1);
 	bh = inode->i_sb->u.ext2_sb.s_group_desc[group_desc];
 	if (!bh)
 		ext2_panic (inode->i_sb, "ext2_read_inode",
@@ -514,13 +518,13 @@ void ext2_read_inode (struct inode * inode)
 	gdp = (struct ext2_group_desc *) bh->b_data;
 	block = gdp[desc].bg_inode_table +
 		(((inode->i_ino - 1) % EXT2_INODES_PER_GROUP(inode->i_sb))
-		 / EXT2_INODES_PER_BLOCK(inode->i_sb));
+		 >> EXT2_INODES_PER_BLOCK_BITS(inode->i_sb));
 	if (!(bh = bread (inode->i_dev, block, inode->i_sb->s_blocksize)))
 		ext2_panic (inode->i_sb, "ext2_read_inode",
 			    "unable to read i-node block - "
 			    "inode=%lu, block=%lu", inode->i_ino, block);
 	raw_inode = ((struct ext2_inode *) bh->b_data) +
-		(inode->i_ino - 1) % EXT2_INODES_PER_BLOCK(inode->i_sb);
+		((inode->i_ino - 1) & (EXT2_INODES_PER_BLOCK(inode->i_sb) - 1));
 	inode->i_mode = raw_inode->i_mode;
 	inode->i_uid = raw_inode->i_uid;
 	inode->i_gid = raw_inode->i_gid;
@@ -596,8 +600,8 @@ static struct buffer_head * ext2_update_inode (struct inode * inode)
 	if (block_group >= inode->i_sb->u.ext2_sb.s_groups_count)
 		ext2_panic (inode->i_sb, "ext2_write_inode",
 			    "group >= groups count");
-	group_desc = block_group / EXT2_DESC_PER_BLOCK(inode->i_sb);
-	desc = block_group % EXT2_DESC_PER_BLOCK(inode->i_sb);
+	group_desc = block_group >> EXT2_DESC_PER_BLOCK_BITS(inode->i_sb);
+	desc = block_group & (EXT2_DESC_PER_BLOCK(inode->i_sb) - 1);
 	bh = inode->i_sb->u.ext2_sb.s_group_desc[group_desc];
 	if (!bh)
 		ext2_panic (inode->i_sb, "ext2_write_inode",
@@ -605,7 +609,7 @@ static struct buffer_head * ext2_update_inode (struct inode * inode)
 	gdp = (struct ext2_group_desc *) bh->b_data;
 	block = gdp[desc].bg_inode_table +
 		(((inode->i_ino - 1) % EXT2_INODES_PER_GROUP(inode->i_sb))
-		 / EXT2_INODES_PER_BLOCK(inode->i_sb));
+		 >> EXT2_INODES_PER_BLOCK_BITS(inode->i_sb));
 	if (!(bh = bread (inode->i_dev, block, inode->i_sb->s_blocksize)))
 		ext2_panic (inode->i_sb, "ext2_write_inode",
 			    "unable to read i-node block - "

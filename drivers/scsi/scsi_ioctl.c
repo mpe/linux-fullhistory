@@ -42,11 +42,14 @@
 
 static int ioctl_probe(struct Scsi_Host * host, void *buffer)
 {
-    int temp;
+    int temp, result;
     unsigned int len,slen;
     const char * string;
     
     if ((temp = host->hostt->present) && buffer) {
+        result = verify_area(VERIFY_READ, buffer, sizeof(long));
+        if (result) return result;
+
 	len = get_user ((unsigned int *) buffer);
 	if(host->hostt->info)
 	    string = host->hostt->info(host);
@@ -56,7 +59,9 @@ static int ioctl_probe(struct Scsi_Host * host, void *buffer)
 	    slen = strlen(string);
 	    if (len > slen)
 		len = slen + 1;
-	    verify_area(VERIFY_WRITE, buffer, len);
+            result = verify_area(VERIFY_WRITE, buffer, len);
+            if (result) return result;
+
 	    memcpy_tofs (buffer, string, len);
 	}
     }
@@ -139,7 +144,7 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
 		break;
 	    };
 	default: /* Fall through for non-removable media */
-	    printk("SCSI CD error: host %d id %d lun %d return code = %x\n",
+	    printk("SCSI error: host %d id %d lun %d return code = %x\n",
 		   dev->host->host_no,
 		   dev->id,
 		   dev->lun,
@@ -157,6 +162,11 @@ static int ioctl_internal_command(Scsi_Device *dev, char * cmd)
     return result;
 }
 
+/*
+ * This interface is depreciated - users should use the scsi generics
+ * interface instead, as this is a more flexible approach to performing
+ * generic SCSI commands on a device.
+ */
 static int ioctl_command(Scsi_Device *dev, void *buffer)
 {
     char * buf;
@@ -171,11 +181,35 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
     if (!buffer)
 	return -EINVAL;
     
- 	inlen = get_user((unsigned int *) buffer);
- 	outlen = get_user( ((unsigned int *) buffer) + 1);
-  
-  	cmd_in = (char *) ( ((int *)buffer) + 2);
- 	opcode = get_user(cmd_in); 
+
+    /*
+     * Verify that we can read at least this much.
+     */
+    result = verify_area(VERIFY_READ, buffer, 2*sizeof(long) + 1);
+    if (result) return result;
+
+    /*
+     * The structure that we are passed should look like:
+     *
+     * struct sdata{
+     *	int inlen;
+     *	int outlen;
+     *	char cmd[];  # However many bytes are used for cmd.
+     *	char data[];
+     */
+    inlen = get_user((unsigned int *) buffer);
+    outlen = get_user( ((unsigned int *) buffer) + 1);
+    
+    /*
+     * We do not transfer more than MAX_BUF with this interface.
+     * If the user needs to transfer more data than this, they
+     * should use scsi_generics instead.
+     */
+    if( inlen > MAX_BUF ) inlen = MAX_BUF;
+    if( outlen > MAX_BUF ) outlen = MAX_BUF;
+
+    cmd_in = (char *) ( ((int *)buffer) + 2);
+    opcode = get_user(cmd_in); 
     
     needed = buf_needed = (inlen > outlen ? inlen : outlen);
     if(buf_needed){
@@ -187,9 +221,27 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
     } else
 	buf = NULL;
     
-    memcpy_fromfs ((void *) cmd,  cmd_in,  cmdlen = COMMAND_SIZE (opcode));
-    memcpy_fromfs ((void *) buf,  (void *) (cmd_in + cmdlen), inlen > MAX_BUF ? MAX_BUF : inlen);
+    /*
+     * Obtain the command from the user's address space.
+     */
+    cmdlen = COMMAND_SIZE(opcode);
+
+    result = verify_area(VERIFY_READ, cmd_in, 
+                         cmdlen + inlen > MAX_BUF ? MAX_BUF : inlen);
+    if (result) return result;
+
+    memcpy_fromfs ((void *) cmd,  cmd_in,  cmdlen);
     
+    /*
+     * Obtain the data to be sent to the device (if any).
+     */
+    memcpy_fromfs ((void *) buf,  
+                   (void *) (cmd_in + cmdlen), 
+                   inlen);
+    
+    /*
+     * Set the lun field to the correct value.
+     */
     cmd[1] = ( cmd[1] & 0x1f ) | (dev->lun << 5);
     
 #ifndef DEBUG_NO_CMD
@@ -205,22 +257,25 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
 	down(&sem);
 	/* Hmm.. Have to ask about this one */
 	while (SCpnt->request.dev != 0xfffe) schedule();
-    };
+    }
     
     
-    /* If there was an error condition, pass the info back to the user. */
+    /* 
+     * If there was an error condition, pass the info back to the user. 
+     */
     if(SCpnt->result) {
-	result = verify_area(VERIFY_WRITE, cmd_in, sizeof(SCpnt->sense_buffer));
-	if (result)
-	    return result;
-	memcpy_tofs((void *) cmd_in,  SCpnt->sense_buffer, sizeof(SCpnt->sense_buffer));
+        result = verify_area(VERIFY_WRITE, 
+                             cmd_in, 
+                             sizeof(SCpnt->sense_buffer));
+        if (result) return result;
+        memcpy_tofs((void *) cmd_in,  
+                    SCpnt->sense_buffer, 
+                    sizeof(SCpnt->sense_buffer));
     } else {
-	
-	result = verify_area(VERIFY_WRITE, cmd_in, (outlen > MAX_BUF) ? MAX_BUF  : outlen);
-	if (result)
-	    return result;
-	memcpy_tofs ((void *) cmd_in,  buf,  (outlen > MAX_BUF) ? MAX_BUF  : outlen);
-    };
+        result = verify_area(VERIFY_WRITE, cmd_in, outlen);
+        if (result) return result;
+        memcpy_tofs ((void *) cmd_in,  buf,  outlen);
+    }
     result = SCpnt->result;
     SCpnt->request.dev = -1;  /* Mark as not busy */
     if (buf) scsi_free(buf, buf_needed);
@@ -255,6 +310,7 @@ static int ioctl_command(Scsi_Device *dev, void *buffer)
  */
 int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
 {
+    int result;
     char scsi_cmd[12];
     
     /* No idea how this happens.... */
@@ -262,7 +318,9 @@ int scsi_ioctl (Scsi_Device *dev, int cmd, void *arg)
     
     switch (cmd) {
     case SCSI_IOCTL_GET_IDLUN:
-	verify_area(VERIFY_WRITE, (void *) arg, sizeof(int));
+        result = verify_area(VERIFY_WRITE, (void *) arg, sizeof(long));
+        if (result) return result;
+
 	put_user(dev->id + (dev->lun << 8) + (dev->host->host_no << 16) +
 		    /* This has been added to support 
 		     * multichannel HBAs, it might cause 

@@ -22,7 +22,7 @@
 #include <linux/net.h>
 #include <linux/mm.h>
 #include <linux/netdevice.h>
-#include "/usr/src/linux/include/net/ip.h"
+#include <net/ip.h>
 
 #include <linux/smb.h>
 #include <linux/smbno.h>

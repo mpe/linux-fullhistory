@@ -9,8 +9,6 @@
 # parent makes..
 #
 
-.c.s:
-	$(CC) $(CFLAGS) -S $<
 .s.o:
 	$(AS) -c -o $*.o $<
 .c.o:
@@ -108,17 +106,10 @@ ifdef MODULES
 	$(CPP) -M -DMODULE $(MODULES:.o=.c) >> .depend
 endif
 
-dummy:
-
 conmakehash: conmakehash.c
 	$(HOSTCC) -o conmakehash conmakehash.c
 
 uni_hash_tbl.h: $(FONTMAPFILE) conmakehash
 	./conmakehash $(FONTMAPFILE) 641 283 6 > uni_hash_tbl.h
 
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
+include $(TOPDIR)/Rules.make

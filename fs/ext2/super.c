@@ -15,6 +15,7 @@
 
 #include <stdarg.h>
 
+#include <asm/bitops.h>
 #include <asm/segment.h>
 #include <asm/system.h>
 
@@ -388,6 +389,8 @@ static int ext2_check_descriptors (struct super_block * sb)
 	return 1;
 }
 
+#define log2(n) ffz(~(n))
+
 struct super_block * ext2_read_super (struct super_block * sb, void * data,
 				      int silent)
 {
@@ -439,8 +442,8 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 				MAJOR(dev), MINOR(dev));
 		return NULL;
 	}
-	sb->s_blocksize = EXT2_MIN_BLOCK_SIZE << es->s_log_block_size;
-	sb->s_blocksize_bits = EXT2_BLOCK_SIZE_BITS(sb);
+	sb->s_blocksize_bits = sb->u.ext2_sb.s_es->s_log_block_size + 10;
+	sb->s_blocksize = 1 << sb->s_blocksize_bits;
 	if (sb->s_blocksize != BLOCK_SIZE && 
 	    (sb->s_blocksize == 1024 || sb->s_blocksize == 2048 ||  
 	     sb->s_blocksize == 4096)) {
@@ -480,7 +483,6 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	sb->u.ext2_sb.s_desc_per_block = sb->s_blocksize /
 					 sizeof (struct ext2_group_desc);
 	sb->u.ext2_sb.s_sbh = bh;
-	sb->u.ext2_sb.s_es = es;
 	if (resuid != EXT2_DEF_RESUID)
 		sb->u.ext2_sb.s_resuid = resuid;
 	else
@@ -492,6 +494,12 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	sb->u.ext2_sb.s_mount_state = es->s_state;
 	sb->u.ext2_sb.s_rename_lock = 0;
 	sb->u.ext2_sb.s_rename_wait = NULL;
+	sb->u.ext2_sb.s_addr_per_block_bits =
+		log2 (EXT2_ADDR_PER_BLOCK(sb));
+	sb->u.ext2_sb.s_inodes_per_block_bits =
+		log2 (EXT2_INODES_PER_BLOCK(sb));
+	sb->u.ext2_sb.s_desc_per_block_bits =
+		log2 (EXT2_DESC_PER_BLOCK(sb));
 #ifdef EXT2FS_PRE_02B_COMPAT
 	if (sb->s_magic == EXT2_PRE_02B_MAGIC) {
 		if (es->s_blocks_count > 262144) {

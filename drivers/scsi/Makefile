@@ -6,8 +6,6 @@
 # unless it's something special (ie not a .c file).
 #
 
-.c.s:
-	$(CC) $(CFLAGS) -S $<
 .s.o:
 	$(AS) -c -o $*.o $<
 .c.o:
@@ -264,13 +262,10 @@ modules: $(SCSI_MODULE_VER) $(SCSI_MODULE_OBJS)
 	(cd ../../modules;for i in $(SCSI_MODULE_OBJS); do ln -sf ../drivers/scsi/$$i .; done)
 
 dep:	$(SCSI_DEP)
-	$(CPP) -M $(AHA152X) $(SCSI_SRCS) > .depend
-	$(CPP) -M -DMODULE $(patsubst sd_mod.c,sd.c sd_ioctl.c, \
-			   $(patsubst sr_mod.c,sr.c sr_ioctl.c, $(SCSI_MODULE_OBJS:.o=.c))) >> .depend
+	$(CPP) -M $(AHA152X) constants.c $(SCSI_OBJS:.o=.c) > .depend
+	$(CPP) -M -DMODULE $(patsubst scsi_mod.c,scsi.c hosts.c scsi_ioctl.c \
+					constants.c scsicam.c scsi_proc.c, \
+			   $(patsubst sd_mod.c,sd.c sd_ioctl.c, \
+			   $(patsubst sr_mod.c,sr.c sr_ioctl.c, $(SCSI_MODULE_OBJS:.o=.c)))) >> .depend
 
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
+include $(TOPDIR)/Rules.make

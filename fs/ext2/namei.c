@@ -101,9 +101,7 @@ static struct buffer_head * ext2_find_entry (struct inode * dir,
 			bh_read[toread++] = bh;
 	}
 
-	block = 0;
-	offset = 0;
-	while (offset < dir->i_size) {
+	for (block = 0, offset = 0; offset < dir->i_size; block++) {
 		struct buffer_head * bh;
 		struct ext2_dir_entry * de;
 		char * dlimit;
@@ -113,9 +111,13 @@ static struct buffer_head * ext2_find_entry (struct inode * dir,
 			toread = 0;
 		}
 		bh = bh_use[block % NAMEI_RA_SIZE];
-		if (!bh)
-			ext2_panic (sb, "ext2_find_entry",
-				    "buffer head pointer is NULL");
+		if (!bh) {
+			ext2_error (sb, "ext2_find_entry",
+				    "directory #%lu contains a hole at offset %lu",
+				    dir->i_ino, offset);
+			offset += sb->s_blocksize;
+			continue;
+		}
 		wait_on_buffer (bh);
 		if (!bh->b_uptodate) {
 			/*
@@ -149,7 +151,7 @@ static struct buffer_head * ext2_find_entry (struct inode * dir,
 			bh = NULL;
 		else
 			bh = ext2_getblk (dir, block + NAMEI_RA_SIZE, 0, &err);
-		bh_use[block++ % NAMEI_RA_SIZE] = bh;
+		bh_use[block % NAMEI_RA_SIZE] = bh;
 		if (bh && !bh->b_uptodate)
 			bh_read[toread++] = bh;
 	}
@@ -558,7 +560,8 @@ static int empty_dir (struct inode * inode)
 	if (inode->i_size < EXT2_DIR_REC_LEN(1) + EXT2_DIR_REC_LEN(2) ||
 	    !(bh = ext2_bread (inode, 0, 0, &err))) {
 	    	ext2_warning (inode->i_sb, "empty_dir",
-			      "bad directory (dir %lu)", inode->i_ino);
+			      "bad directory (dir #%lu) - no data block",
+			      inode->i_ino);
 		return 1;
 	}
 	de = (struct ext2_dir_entry *) bh->b_data;
@@ -566,7 +569,8 @@ static int empty_dir (struct inode * inode)
 	if (de->inode != inode->i_ino || !de1->inode || 
 	    strcmp (".", de->name) || strcmp ("..", de1->name)) {
 	    	ext2_warning (inode->i_sb, "empty_dir",
-			      "bad directory (dir %lu)", inode->i_ino);
+			      "bad directory (dir #%lu) - no `.' or `..'",
+			      inode->i_ino);
 		return 1;
 	}
 	offset = de->rec_len + de1->rec_len;
@@ -576,6 +580,9 @@ static int empty_dir (struct inode * inode)
 			brelse (bh);
 			bh = ext2_bread (inode, offset >> EXT2_BLOCK_SIZE_BITS(sb), 1, &err);
 			if (!bh) {
+				ext2_error (sb, "empty_dir",
+					    "directory #%lu contains a hole at offset %lu",
+					    inode->i_ino, offset);
 				offset += sb->s_blocksize;
 				continue;
 			}

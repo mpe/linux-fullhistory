@@ -34,6 +34,8 @@ extern int		eth_header(struct sk_buff *skb, struct device *dev,
 extern int		eth_rebuild_header(void *buff, struct device *dev,
 			unsigned long dst, struct sk_buff *skb);
 extern unsigned short	eth_type_trans(struct sk_buff *skb, struct device *dev);
+extern void		eth_copy_and_sum(struct sk_buff *dest,
+				unsigned char *src, int length, int base);
 
 #endif
 

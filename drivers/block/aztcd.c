@@ -1,5 +1,5 @@
-#define AZT_VERSION "V1.0"
-/*      $Id: aztcd.c,v 1.0 1995/03/25 08:27:11 root Exp $
+#define AZT_VERSION "1.30"
+/*      $Id: aztcd.c,v 1.30 1995/07/04 08:28:06 root Exp $
 	linux/drivers/block/aztcd.c - AztechCD268 CDROM driver
 
 	Copyright (C) 1994,1995 Werner Zimmermann (zimmerma@rz.fht-esslingen.de)
@@ -104,6 +104,18 @@
                 Added support for loadable MODULEs, so aztcd can now also be
                 loaded by insmod and removed by rmmod during run time
                 Werner Zimmermann, Mar. 24, 95
+        V1.10   Implemented soundcard configuration for Orchid CDS-3110 drives
+                connected to Soundwave32 cards. Release for LST 2.1.
+                (still experimental)
+                Werner Zimmermann, May 8, 95
+        V1.20   Implemented limited support for DOSEMU0.60's cdrom.c. Now it works, but
+                sometimes DOSEMU may hang for 30 seconds or so. A fully functional ver-
+                sion needs an update of Dosemu0.60's cdrom.c, which will come with the 
+                next revision of Dosemu.
+                Also Soundwave32 support no works.
+                Werner Zimmermann, May 22, 95
+	V1.30   Auto-eject feature. Inspired by Franc Racis (racis@psu.edu)
+	        Werner Zimmermann, July 4, 95
 	NOTE: 
 	Points marked with ??? are questionable !
 */
@@ -135,16 +147,30 @@
 #define MAJOR_NR AZTECH_CDROM_MAJOR 
 
 #include "blk.h"
-#ifndef MODULE
+
+#ifdef MODULE
+#else
 # define MOD_INC_USE_COUNT
 # define MOD_DEC_USE_COUNT
 #endif
 
 #include <linux/aztcd.h>
 
+#define SET_TIMER(func, jifs)   delay_timer.expires = jifs; \
+                                delay_timer.function = (void *) func; \
+                                add_timer(&delay_timer); 
+
+#define CLEAR_TIMER             del_timer(&delay_timer);
+
+#define RETURNM(message,value) {printk("aztcd: Warning: %s failed\n",message);\
+                                return value;}
+#define RETURN(message)        {printk("aztcd: Warning: %s failed\n",message);\
+                                return;}
+
 static int aztPresent = 0;
 
 #if 0
+#define AZT_TEST
 #define AZT_TEST1 /* <int-..> */
 #define AZT_TEST2 /* do_aztcd_request */
 #define AZT_TEST3 /* AZT_S_state */
@@ -197,6 +223,7 @@ static short azt_port = AZT_BASE_ADDR;
 
 static char  azt_cont = 0;
 static char  azt_init_end = 0;
+static char  azt_auto_eject = AZT_AUTO_EJECT;
 
 static int AztTimeout, AztTries;
 static struct wait_queue *azt_waitq = NULL; 
@@ -209,7 +236,6 @@ static struct azt_Play_msf azt_Play;
 static int  aztAudioStatus = CDROM_AUDIO_NO_STATUS;
 static char aztDiskChanged = 1;
 static char aztTocUpToDate = 0;
-
 
 static void azt_transfer(void);
 static void azt_poll(void);
@@ -234,6 +260,7 @@ static void aztUnlockDoor(void);
 
 static unsigned char aztIndatum;
 static unsigned long aztTimeOutCount;
+static int aztCmd = 0;
 
 /* Macros for the drive hardware interface handshake, these macros use
    busy waiting */
@@ -270,7 +297,7 @@ void sten_low(void)
   do { aztIndatum=inb(STATUS_PORT);
        aztTimeOutCount++;
        if (aztTimeOutCount>=AZT_TIMEOUT)
-	{ if (azt_init_end) printk("aztcd: Error Wait STEN_LOW\n");
+	{ if (azt_init_end) printk("aztcd: Error Wait STEN_LOW commands:%x\n",aztCmd);
 	  break;
 	}
      } while (aztIndatum&AFL_STATUS);
@@ -297,24 +324,24 @@ void dten_low(void)
 void statusAzt(void)
 { AztTimeout = AZT_STATUS_DELAY;
   SET_TIMER(aztStatTimer, 1); 
-  sleep_on(&azt_waitq);    
-  if (AztTimeout <= 0) printk("aztcd: Error Wait STEN_LOW_WAIT\n");
+  sleep_on(&azt_waitq);
+  if (AztTimeout <= 0) printk("aztcd: Error Wait STEN_LOW_WAIT command:%x\n",aztCmd);
   return;
 }
 
 static void aztStatTimer(void)
-{       if (!(inb(STATUS_PORT) & AFL_STATUS))
-	{       wake_up(&azt_waitq);
-		return;
-	}
-	AztTimeout--;
-	if (AztTimeout <= 0)
-	{       wake_up(&azt_waitq);
-		return;
-	}
-	SET_TIMER(aztStatTimer, 1);
+{ if (!(inb(STATUS_PORT) & AFL_STATUS))
+     { wake_up(&azt_waitq);
+       return;
+     }
+  AztTimeout--;
+  if (AztTimeout <= 0)
+     { wake_up(&azt_waitq);
+       printk("aztcd: Error aztStatTimer: Timeout\n");
+       return;
+     }
+  SET_TIMER(aztStatTimer, 1);
 }
-
 
 void aztcd_setup(char *str, int *ints)
 {  if (ints[0] > 0)
@@ -363,6 +390,7 @@ static int aztSendCmd(int cmd)
 #ifdef AZT_DEBUG
    printk("aztcd: Executing command %x\n",cmd);
 #endif
+   aztCmd=cmd;
    outb(POLLED,MODE_PORT);
    do { if (inb(STATUS_PORT)&AFL_STATUS) break;
 	inb(DATA_PORT);    /* if status left from last command, read and */
@@ -386,7 +414,7 @@ static int aztSendCmd(int cmd)
      { printk("### Error 2 aztcd: aztSendCmd %x \n",cmd);
        azt_error=0xA5;
      }
-   return -1;
+   RETURNM("aztSendCmd",-1);
 }
 
 /*
@@ -423,7 +451,7 @@ static int sendAztCmd(int cmd, struct azt_Play_msf *params)
      { printk("### Error 2 aztcd: sendAztCmd %x\n ",cmd);
        azt_error=0xA5;
      }
-   return -1;
+   RETURNM("sendAztCmd",-1);
 }
 
 
@@ -440,16 +468,17 @@ static int check_aztcd_media_change(dev_t full_dev)
  */
 static int aztStatus(void)  
 {       int st;
-	int i;
+/*	int i;
 
-	i = inb(STATUS_PORT) & AFL_STATUS;   /* is STEN=0?    ???*/
+	i = inb(STATUS_PORT) & AFL_STATUS;    is STEN=0?    ???
 	if (!i)
-	{
-		st = inb(DATA_PORT) & 0xFF;
+*/      STEN_LOW;
+        if (aztTimeOutCount<AZT_TIMEOUT)	
+	{   	st = inb(DATA_PORT) & 0xFF;
 		return st;
 	}
 	else
-		return -1;
+		RETURNM("aztStatus",-1);
 }
 
 /*
@@ -458,7 +487,7 @@ static int aztStatus(void)
 static int getAztStatus(void)
 {       int st;
 
-	if (aztSendCmd(ACMD_GET_STATUS)) return -1;
+	if (aztSendCmd(ACMD_GET_STATUS)) RETURNM("getAztStatus 1",-1);
 	STEN_LOW;
 	st = inb(DATA_PORT) & 0xFF;
 #ifdef AZT_DEBUG
@@ -487,22 +516,14 @@ static int getAztStatus(void)
  * Send a 'Play' command and get the status.  Use only from the top half.
  */
 static int aztPlay(struct azt_Play_msf *arg)
-{       if (sendAztCmd(ACMD_PLAY_AUDIO, arg) < 0) return -1;
+{       if (sendAztCmd(ACMD_PLAY_AUDIO, arg) < 0) RETURNM("aztPlay",-1);
 	return 0;
 }
 
 
 long azt_msf2hsg(struct msf *mp)
-{
-#ifdef AZT_DEBUG
-	if (mp->min  >=70) printk("aztcd: Error msf2hsg address Minutes\n");
-	if (mp->sec  >=60) printk("aztcd: Error msf2hsg address Seconds\n");
-	if (mp->frame>=75) printk("aztcd: Error msf2hsg address Frames\n");
-#endif
-	return azt_bcd2bin(mp -> frame)
-		+ azt_bcd2bin(mp -> sec) * 75
-		+ azt_bcd2bin(mp -> min) * 4500
-		- 150;
+{ return azt_bcd2bin(mp -> frame) + azt_bcd2bin(mp -> sec) * 75
+		                  + azt_bcd2bin(mp -> min) * 4500 - 150;
 }
 
 static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsigned long arg)
@@ -517,12 +538,12 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
         struct cdrom_volctrl volctrl;
 
 #ifdef AZT_DEBUG
-	printk("aztcd: starting aztcd_ioctl - Command:%x\n",cmd);
+	printk("aztcd: starting aztcd_ioctl - Command:%x   Time: %li\n",cmd, jiffies);
 #endif
-	if (!ip) return -EINVAL;
-	if (getAztStatus()<0) return -EIO;
+	if (!ip) RETURNM("aztcd_ioctl 1",-EINVAL);
+	if (getAztStatus()<0) RETURNM("aztcd_ioctl 2", -EIO);
 	if (!aztTocUpToDate)
-	{ if ((i=aztUpdateToc())<0) return i; /* error reading TOC */
+	{ if ((i=aztUpdateToc())<0) RETURNM("aztcd_ioctl 3", i); /* error reading TOC */
 	}
 
 	switch (cmd)
@@ -530,12 +551,12 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
 	case CDROMSTART:     /* Spin up the drive. Don't know, what to do,
 	                        at least close the tray */
 #ifdef AZT_PRIVATE_IOCTLS 
-	        if (aztSendCmd(ACMD_CLOSE)) return -1;
+	        if (aztSendCmd(ACMD_CLOSE)) RETURNM("aztcd_ioctl 4",-1);
 	        STEN_LOW_WAIT;
 #endif
 		break;
 	case CDROMSTOP:      /* Spin down the drive */
-		if (aztSendCmd(ACMD_STOP)) return -1;
+		if (aztSendCmd(ACMD_STOP)) RETURNM("aztcd_ioctl 5",-1);
 		STEN_LOW_WAIT;
 		/* should we do anything if it fails? */
 		aztAudioStatus = CDROM_AUDIO_NO_STATUS;
@@ -546,10 +567,11 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
 		if (aztGetQChannelInfo(&qInfo) < 0)
 		{ /* didn't get q channel info */
 		  aztAudioStatus = CDROM_AUDIO_NO_STATUS;
-		  return 0;
+		  RETURNM("aztcd_ioctl 7",0);
 		}
 		azt_Play.start = qInfo.diskTime;        /* remember restart point */
-		if (aztSendCmd(ACMD_PAUSE)) return -1;
+
+		if (aztSendCmd(ACMD_PAUSE)) RETURNM("aztcd_ioctl 8",-1);
 		STEN_LOW_WAIT;
 		aztAudioStatus = CDROM_AUDIO_PAUSED;
 		break;
@@ -590,7 +612,7 @@ printk("aztcd play: %02x:%02x.%02x to %02x:%02x.%02x\n",
 		break;
 	case CDROMPLAYMSF:   /* Play starting at the given MSF address. */
 /*              if (aztAudioStatus == CDROM_AUDIO_PLAY) 
-		{ if (aztSendCmd(ACMD_STOP)) return -1;
+		{ if (aztSendCmd(ACMD_STOP)) RETURNM("aztcd_ioctl 9",-1);
 		  STEN_LOW;
 		  aztAudioStatus = CDROM_AUDIO_NO_STATUS;
 		}
@@ -661,13 +683,28 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 		memcpy_tofs((void *) arg, &entry, sizeof entry);
 		break;
 	case CDROMSUBCHNL:   /* Get subchannel info */
-		st = verify_area(VERIFY_READ, (void *) arg, sizeof subchnl);
-		if (st) return st;
-		st = verify_area(VERIFY_WRITE, (void *) arg, sizeof subchnl);
-		if (st) return st;
-		memcpy_fromfs(&subchnl, (void *) arg, sizeof subchnl);
+		st = verify_area(VERIFY_READ, (void *) arg, sizeof(struct cdrom_subchnl));
+		if (st) { 
+#ifdef AZT_DEBUG
+		          printk("aztcd: exiting aztcd_ioctl - Error 1 - Command:%x\n",cmd);
+#endif
+		          return st;
+		        }  
+		st = verify_area(VERIFY_WRITE, (void *) arg, sizeof(struct cdrom_subchnl));
+		if (st) { 
+#ifdef AZT_DEBUG
+		          printk("aztcd: exiting aztcd_ioctl - Error 2 - Command:%x\n",cmd);
+#endif
+		          return st;
+		        }  
+		memcpy_fromfs(&subchnl, (void *) arg, sizeof (struct cdrom_subchnl));
 		if (aztGetQChannelInfo(&qInfo) < 0)
-		  return -EIO;
+		if (st) { 
+#ifdef AZT_DEBUG
+		          printk("aztcd: exiting aztcd_ioctl - Error 3 - Command:%x\n",cmd);
+#endif
+     		  	  return -EIO;
+     		  	}  
 		subchnl.cdsc_audiostatus = aztAudioStatus;
 		subchnl.cdsc_adr = qInfo.ctrl_addr;
 		subchnl.cdsc_ctrl = qInfo.ctrl_addr >> 4;
@@ -677,17 +714,16 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 		{ subchnl.cdsc_absaddr.lba = azt_msf2hsg(&qInfo.diskTime);
 		  subchnl.cdsc_reladdr.lba = azt_msf2hsg(&qInfo.trackTime);
 		}
-		else if (subchnl.cdsc_format == CDROM_MSF)
-		{ subchnl.cdsc_absaddr.msf.minute = azt_bcd2bin(qInfo.diskTime.min);
+		else  /*default*/
+		{ subchnl.cdsc_format = CDROM_MSF;
+		  subchnl.cdsc_absaddr.msf.minute = azt_bcd2bin(qInfo.diskTime.min);
 		  subchnl.cdsc_absaddr.msf.second = azt_bcd2bin(qInfo.diskTime.sec);
-		  subchnl.cdsc_absaddr.msf.frame = azt_bcd2bin(qInfo.diskTime.frame);
+		  subchnl.cdsc_absaddr.msf.frame  = azt_bcd2bin(qInfo.diskTime.frame);
 		  subchnl.cdsc_reladdr.msf.minute = azt_bcd2bin(qInfo.trackTime.min);
 		  subchnl.cdsc_reladdr.msf.second = azt_bcd2bin(qInfo.trackTime.sec);
 		  subchnl.cdsc_reladdr.msf.frame  = azt_bcd2bin(qInfo.trackTime.frame);
 		}
-		else
-		  return -EINVAL;
-		memcpy_tofs((void *) arg, &subchnl, sizeof subchnl);
+		memcpy_tofs((void *) arg, &subchnl, sizeof (struct cdrom_subchnl));
 		break;
 	case CDROMVOLCTRL:   /* Volume control 
 	 * With my Aztech CD268-01A volume control does not work, I can only
@@ -709,12 +745,16 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
                 aztUnlockDoor(); /* Assume user knows what they're doing */
 	       /* all drives can at least stop! */
 		if (aztAudioStatus == CDROM_AUDIO_PLAY) 
-		{ if (aztSendCmd(ACMD_STOP)) return -1;
+		{ if (aztSendCmd(ACMD_STOP)) RETURNM("azt_ioctl 10",-1);
 		  STEN_LOW_WAIT;
 		}
-		if (aztSendCmd(ACMD_EJECT)) return -1;
+		if (aztSendCmd(ACMD_EJECT)) RETURNM("azt_ioctl 11",-1);
+		STEN_LOW_WAIT; /*???*/
 		aztAudioStatus = CDROM_AUDIO_NO_STATUS;
 		break;
+	case CDROMEJECT_SW:
+		azt_auto_eject = (char) arg;
+		break;	
 	case CDROMREADMODE1: /*read data in mode 1 (2048 Bytes)*/
 	case CDROMREADMODE2: /*read data in mode 2 (2336 Bytes)*/
 /*Take care, the following code is not compatible with other CD-ROM drivers,
@@ -759,7 +799,7 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 		return -EINVAL;
 	}
 #ifdef AZT_DEBUG
-	printk("aztcd: exiting aztcd_ioctl\n");
+        printk("aztcd: exiting aztcd_ioctl Command:%x  Time:%li\n",cmd,jiffies);
 #endif
 	return 0;
 }
@@ -772,7 +812,7 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 static void azt_transfer(void)
 { 
 #ifdef AZT_TEST
-  printk("aztcd: executing azt_transfer\n");
+  printk("aztcd: executing azt_transfer Time:%li\n",jiffies);
 #endif
   if (CURRENT_VALID) {
     while (CURRENT -> nr_sectors) {
@@ -808,7 +848,7 @@ static void azt_transfer(void)
 static void do_aztcd_request(void)
 {
 #ifdef AZT_TEST
-  printk(" do_aztcd_request(%ld+%ld)\n", CURRENT -> sector, CURRENT -> nr_sectors);
+  printk(" do_aztcd_request(%ld+%ld) Time:%li\n", CURRENT -> sector, CURRENT -> nr_sectors,jiffies);
 #endif
   azt_transfer_is_active = 1;
   while (CURRENT_VALID) {
@@ -840,7 +880,7 @@ static void do_aztcd_request(void)
 #ifdef AZT_TEST2
   printk("azt_next_bn:%x  azt_buf_in:%x azt_buf_out:%x  azt_buf_bn:%x\n", \
 	  azt_next_bn, azt_buf_in, azt_buf_out, azt_buf_bn[azt_buf_in]);
-  printk(" do_aztcd_request ends\n");
+  printk(" do_aztcd_request ends  Time:%li\n",jiffies);
 #endif
 
 }
@@ -852,7 +892,7 @@ static void azt_poll(void)
     int skip = 0;
 
     if (azt_error) {                             /* ???*/
-	if (aztSendCmd(ACMD_GET_ERROR)) return;
+	if (aztSendCmd(ACMD_GET_ERROR)) RETURN("azt_poll 1");
 	STEN_LOW;
 	azt_error=inb(DATA_PORT)&0xFF;
 	printk("aztcd: I/O error 0x%02x\n", azt_error);
@@ -897,8 +937,7 @@ static void azt_poll(void)
 	    printk("AZT_S_START\n");
 	  }
 #endif
-
-	  if(aztSendCmd(ACMD_GET_STATUS)) return;  /*result will be checked by aztStatus() */
+	  if(aztSendCmd(ACMD_GET_STATUS)) RETURN("azt_poll 2");  /*result will be checked by aztStatus() */
 	  azt_state = azt_mode == 1 ? AZT_S_READ : AZT_S_MODE;
 	  AztTimeout = 3000;
 	  break;
@@ -936,11 +975,12 @@ static void azt_poll(void)
 	    return;
 	  }
 					/*???*/
-	  if (aztSendCmd(ACMD_SET_MODE)) return;
-	  outb(0x01, DATA_PORT);            /*Mode 1*/
+/*	  if (aztSendCmd(ACMD_SET_MODE)) RETURN("azt_poll 3");
+	  outb(0x01, DATA_PORT);          
 	  PA_OK;
 	  STEN_LOW;
-	  if (aztSendCmd(ACMD_GET_STATUS)) return;
+*/        if (aztSendCmd(ACMD_GET_STATUS)) RETURN("azt_poll 4");
+	  STEN_LOW; /*???*/
 	  azt_mode = 1;
 	  azt_state = AZT_S_READ;
 	  AztTimeout = 3000;
@@ -1148,7 +1188,7 @@ static void azt_poll(void)
 	    }
 	    azt_read_count--;
 	  }  
-	  if (aztSendCmd(ACMD_GET_STATUS)) return;
+	  if (aztSendCmd(ACMD_GET_STATUS)) RETURN("azt_poll 5");
 	  azt_state = AZT_S_STOPPING;
 	  AztTimeout = 1000;
 	  break;
@@ -1209,8 +1249,8 @@ static void azt_poll(void)
    if (!AztTimeout--) 
     { printk("aztcd: timeout in state %d\n", azt_state);
       azt_state = AZT_S_STOP;
-      if (aztSendCmd(ACMD_STOP)) return; 
-      STEN_LOW_WAIT;    
+      if (aztSendCmd(ACMD_STOP)) RETURN("azt_poll 6"); 
+      STEN_LOW_WAIT;     
     };
 
   SET_TIMER(azt_poll, 1);
@@ -1289,6 +1329,8 @@ static void aztcd_release(struct inode * inode, struct file * file)
 	sync_dev(inode->i_rdev);             /*??? isn't it a read only dev?*/
 	invalidate_buffers(inode -> i_rdev);
 	aztUnlockDoor();
+        if (azt_auto_eject)
+           aztSendCmd(ACMD_EJECT);
         CLEAR_TIMER;
   }
   return;
@@ -1345,7 +1387,25 @@ int init_module(void)
 #endif	  
 	}
 
-	/* check for card */
+#ifdef AZT_SW32   /*CDROM connected to Soundwave32 card*/
+        if ((0xFF00 & inw(AZT_SW32_ID_REG)) != 0x4500)
+           { printk("aztcd: no Soundwave32 card detected at base:%x init:%x config:%x id:%x\n",
+		 AZT_SW32_BASE_ADDR,AZT_SW32_INIT,AZT_SW32_CONFIG_REG,AZT_SW32_ID_REG);
+#ifndef MODULE
+	         return (mem_start);
+#else
+                 return -EIO;
+#endif	  
+	   }
+        else                
+           { printk("aztcd: Soundwave32 card detected at %x  Version %x\n",
+	 	 AZT_SW32_BASE_ADDR, inw(AZT_SW32_ID_REG));
+	     outw(AZT_SW32_INIT,AZT_SW32_CONFIG_REG);
+	     for (count=0;count<10000;count++);          /*delay a bit*/    	 
+           }
+#endif	
+
+	/* check for presence of drive */
 	outb(POLLED,MODE_PORT);                 /*???*/
 	inb(CMD_PORT);
 	inb(CMD_PORT);
@@ -1515,13 +1575,12 @@ int aztGetQChannelInfo(struct azt_Toc *qp)
 	int st;
 
 #ifdef AZT_DEBUG
-	printk("aztcd: starting aztGetQChannelInfo\n");
+	printk("aztcd: starting aztGetQChannelInfo  Time:%li\n",jiffies);
 #endif
-	if ((st=getAztStatus())==-1) return -1;
-	if (aztSendCmd(ACMD_GET_Q_CHANNEL))          return -1;
-	STEN_LOW_WAIT;
-	if (aztGetValue(&notUsed) <0)                return -1; /*Nullbyte ein-*/
-							     /*lesen ???*/
+	if ((st=getAztStatus())==-1)        RETURNM("aztGetQChannelInfo 1",-1);
+	if (aztSendCmd(ACMD_GET_Q_CHANNEL)) RETURNM("aztGetQChannelInfo 2",-1);
+	/*STEN_LOW_WAIT; ??? Dosemu0.60's cdrom.c does not like STEN_LOW_WAIT here*/
+	if (aztGetValue(&notUsed)) RETURNM("aztGetQChannelInfo 3",-1); /*??? Nullbyte einlesen*/
 	if ((st&AST_MODE_BITS)==AST_INITIAL)
 	 { qp->ctrl_addr=0;      /* when audio stop ACMD_GET_Q_CHANNEL returns */
 	   qp->track=0;          /* only one byte with Aztech drives */
@@ -1535,19 +1594,19 @@ int aztGetQChannelInfo(struct azt_Toc *qp)
 	   return 0;  
 	 }
 	else
-	 { if (aztGetValue(&qp -> ctrl_addr) < 0)       return -1;
-	   if (aztGetValue(&qp -> track) < 0)           return -1;
-	   if (aztGetValue(&qp -> pointIndex) < 0)      return -1;
-	   if (aztGetValue(&qp -> trackTime.min) < 0)   return -1;
-	   if (aztGetValue(&qp -> trackTime.sec) < 0)   return -1;
-	   if (aztGetValue(&qp -> trackTime.frame) < 0) return -1;
-	   if (aztGetValue(&notUsed) < 0)               return -1;
-	   if (aztGetValue(&qp -> diskTime.min) < 0)    return -1;
-	   if (aztGetValue(&qp -> diskTime.sec) < 0)    return -1;
-	   if (aztGetValue(&qp -> diskTime.frame) < 0)  return -1;
+	 { if (aztGetValue(&qp -> ctrl_addr) < 0)       RETURNM("aztGetQChannelInfo 4",-1);
+	   if (aztGetValue(&qp -> track) < 0)           RETURNM("aztGetQChannelInfo 4",-1);
+	   if (aztGetValue(&qp -> pointIndex) < 0)      RETURNM("aztGetQChannelInfo 4",-1);
+	   if (aztGetValue(&qp -> trackTime.min) < 0)   RETURNM("aztGetQChannelInfo 4",-1);
+	   if (aztGetValue(&qp -> trackTime.sec) < 0)   RETURNM("aztGetQChannelInfo 4",-1);
+	   if (aztGetValue(&qp -> trackTime.frame) < 0) RETURNM("aztGetQChannelInfo 4",-1);
+	   if (aztGetValue(&notUsed) < 0)               RETURNM("aztGetQChannelInfo 4",-1);
+	   if (aztGetValue(&qp -> diskTime.min) < 0)    RETURNM("aztGetQChannelInfo 4",-1);
+	   if (aztGetValue(&qp -> diskTime.sec) < 0)    RETURNM("aztGetQChannelInfo 4",-1);
+	   if (aztGetValue(&qp -> diskTime.frame) < 0)  RETURNM("aztGetQChannelInfo 4",-1);
 	 }
 #ifdef AZT_DEBUG
-	printk("aztcd: exiting aztGetQChannelInfo\n");
+	printk("aztcd: exiting aztGetQChannelInfo  Time:%li\n",jiffies);
 #endif
 	return 0;
 }
@@ -1558,7 +1617,7 @@ int aztGetQChannelInfo(struct azt_Toc *qp)
 static int aztUpdateToc()
 {
 #ifdef AZT_DEBUG
-	printk("aztcd: starting aztUpdateToc\n");
+	printk("aztcd: starting aztUpdateToc  Time:%li\n",jiffies);
 #endif  
 	if (aztTocUpToDate)
 		return 0;
@@ -1571,7 +1630,7 @@ static int aztUpdateToc()
 
 	aztTocUpToDate = 1;
 #ifdef AZT_DEBUG
-	printk("aztcd: exiting aztUpdateToc\n");
+	printk("aztcd: exiting aztUpdateToc  Time:%li\n",jiffies);
 #endif
 	return 0;
 }
@@ -1586,13 +1645,13 @@ static int aztGetDiskInfo()
   struct azt_Toc qInfo;
 
 #ifdef AZT_DEBUG
-  printk("aztcd: starting aztGetDiskInfo\n");
+  printk("aztcd: starting aztGetDiskInfo  Time:%li\n",jiffies);
 #endif
-  if (aztSendCmd(ACMD_SEEK_TO_LEADIN)) return -1;
+  if (aztSendCmd(ACMD_SEEK_TO_LEADIN)) RETURNM("aztGetDiskInfo 1",-1);
   STEN_LOW_WAIT;
   test=0;
   for (limit=300;limit>0;limit--)
-   {  if (aztGetQChannelInfo(&qInfo)<0) return -1;
+   {  if (aztGetQChannelInfo(&qInfo)<0) RETURNM("aztGetDiskInfo 2",-1);
       if (qInfo.pointIndex==0xA0)   /*Number of FirstTrack*/
 	{ DiskInfo.first=qInfo.diskTime.min;
 	  DiskInfo.first = azt_bcd2bin(DiskInfo.first);
@@ -1618,7 +1677,7 @@ static int aztGetDiskInfo()
       if (test==0x0F) break;
    }
 #ifdef AZT_DEBUG
-printk ("aztcd: exiting aztGetDiskInfo\n");
+printk ("aztcd: exiting aztGetDiskInfo  Time:%li\n",jiffies);
 printk("Disk Info: first %d last %d length %02x:%02x.%02x first %02x:%02x.%02x\n",
 	DiskInfo.first,
 	DiskInfo.last,
@@ -1643,7 +1702,7 @@ static int aztGetToc()
 	struct azt_Toc qInfo;
 
 #ifdef AZT_DEBUG
-	printk("aztcd: starting aztGetToc\n");
+	printk("aztcd: starting aztGetToc  Time:%li\n",jiffies);
 #endif
 	for (i = 0; i < MAX_TRACKS; i++)
 		Toc[i].pointIndex = 0;
@@ -1651,12 +1710,12 @@ static int aztGetToc()
 	i = DiskInfo.last + 3;
 
 /* Is there a good reason to stop motor before TOC read?
-	if (aztSendCmd(ACMD_STOP)) return -1;
+	if (aztSendCmd(ACMD_STOP)) RETURNM("aztGetToc 1",-1);
 	STEN_LOW_WAIT;
 */
 
 	azt_mode = 0x05;
-	if (aztSendCmd(ACMD_SEEK_TO_LEADIN)) return -1; /*???*/
+	if (aztSendCmd(ACMD_SEEK_TO_LEADIN)) RETURNM("aztGetToc 2",-1); /*???*/
 	STEN_LOW_WAIT;
 
 	for (limit = 300; limit > 0; limit--)
@@ -1679,7 +1738,7 @@ static int aztGetToc()
 	Toc[DiskInfo.last + 1].diskTime = DiskInfo.diskLength;
 
 #ifdef AZT_DEBUG
-printk("aztcd: exiting aztGetToc\n");
+printk("aztcd: exiting aztGetToc  Time:%li\n",jiffies);
 for (i = 1; i <= DiskInfo.last+1; i++)
 printk("i = %2d ctl-adr = %02X track %2d px %02X %02X:%02X.%02X    %02X:%02X.%02X\n",
 i, Toc[i].ctrl_addr, Toc[i].track, Toc[i].pointIndex,

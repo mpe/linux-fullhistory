@@ -1,11 +1,18 @@
 Installation
 ------------
 
+IMPORTANT!	Read this if you are installing a separately
+		distributed version of this driver.
+		Check that your kernel version works with this
+		release of the driver (see Readme). Also verify
+		that your current kernel version doesn't have more
+		recent sound driver version than this one.
+
 - Since you are reading this, you have already installed the files so
   let's skip this step. To be serious, the sound driver belongs
   to linux/drivers/sound. 
 
-- To build the device files you need to run the enclosed shell script 
+- To build the device files you need to run the enclosed shell scrip 
   (see below).
 
 - If you are installing a separately distributed version, copy the
@@ -22,6 +29,20 @@ Installation
 
 Boot time configuration (using lilo)
 ------------------------------------
+
+NOTE!	This information is little bit obsolete since it doesn't cover
+ 	some cards recently added to the driver.
+
+-------------------------------------------------------------------
+NOTE2!	This method to configure the sound driver is not normally
+	required. All configuration information is entered when the
+	kernel/driver is compiled. This method just gives a way
+	to override some configuration parameters during boot.
+
+	So THE METHOD PRESENTED IN THIS CHAPTER IS NORMALLY COMPLETELY
+	USELESS. DON'T USE IT UNLESS YOU HAVE A VERY SPECIAL REASON TO
+	DO THAT.
+-------------------------------------------------------------------
 
 This version of the sound driver has capability to accept the configuration
 parameters from the boot loader (for example lilo). By default the 
@@ -52,7 +73,7 @@ Each option is encoded as the following:
 					6=SB16 (16 bit DMA number)
 					7=SB16 Midi (MPU-401 emulation)
 			(There are some new ones also but they are currently
-			not documented).
+			not documented. The card numbers are in soundcard.h).
 
 These are the configuration templates for various soundcards:
 
@@ -68,7 +89,7 @@ These are the configuration templates for various soundcards:
 
 		sound=0x2220Id,0x138800	  (remember to set the IRQ and DMA)
 	or if you have SB16 or SB16ASP, you have to use the following:
-	        (use the same IRQ (the I columns) in all three places. The
+	        (use the same IRQ (the I colums) in all three places. The
 	         the D is the 16 bit DMA channel (5 to 7) and the d is 
 	         the 8 bit one (1 or 3). The X is the 2nd digit of the
 	         midi IO address (3 or 0)).
@@ -134,7 +155,7 @@ command:
 
 	cat /dev/sndstat 
 
-and look at the output. It should display some useful info about the
+and look at the output. It should display some usefull info about the
 driver configuration. If there is no /dev/sndstat 
 (/dev/sndstat: No such file or directory), ensure that you have executed the
 soundinstall script (at the end of this file). The message: 
@@ -147,7 +168,7 @@ Run the script at the end of this file.
 
 - /dev/???????: No such device.
 You have not booted with a kernel containing the driver or the I/O address
-configuration doesn't match your hardware. 
+configuration doesn't match your hardaware. 
 
 - The module player (str) plays just a second and then stops completely.
 You have incorrect IRQ settings (usual with SB cards).
@@ -159,7 +180,7 @@ You should use lower speed (-s speed), buy a faster computer or a Gravis
 UltraSound card. (If you already have GUS, you should use gmod and not the
 str). If the DSP_BUFFSIZE in the sound/local.h is less than (nr_channels*
 speed_in_Hz * (bits/8))/2, it could explain the pausing problem. Also check
-that the turbo switch is on and don't run applications like weather forecasting
+that the turbo swich is on and don't run applications like weather forecasting
 on background. Sometimes (very rarely) an IRQ conflict can cause similar
 problems with SB cards.
 If you want to play modules on a 386sx while recompiling the world, buy a GUS.
@@ -171,7 +192,7 @@ hannu@voxware.pp.fi
 ----------------- cut here ------------------------------
 #!/bin/sh
 #
-#	soundinstall		
+#	soudinstall		
 #
 #
 # Create the devices
@@ -205,51 +226,66 @@ if [ -e /dev/patmgr1 ]; then
 fi
 mknod -m 666 /dev/patmgr1 c 14 33
 
-###	#	Sequencer2	(14, 8)
-###	#
-###	if [ -e /dev/sequencer2 ]; then
-###		rm -f /dev/sequencer2
-###	fi
-###	mknod -m 666 /dev/sequencer2 c 14 8
+	#	music	(14, 8)
+	#
+	if [ -e /dev/music ]; then
+		rm -f /dev/music
+	fi
+
+	mknod -m 666 /dev/music c 14 8
+	if [ -e /dev/sequencer2 ]; then
+		rm -f /dev/sequencer2
+	fi
+	ln -s /dev/music /dev/sequencer2
 
 #	Midi devices
 #
 if [ -e /dev/midi ]; then
 	rm -f /dev/midi		# Old name. Don't use it
 fi
-###	if [ -e /dev/midi00 ]; then
-###		rm -f /dev/midi00
-###	fi
-###	mknod -m 666 /dev/midi00 c 14 2
-###	
-###	if [ -e /dev/midi01 ]; then
-###		rm -f /dev/midi01
-###	fi
-###	mknod -m 666 /dev/midi01 c 14 18
-###	
-###	if [ -e /dev/midi02 ]; then
-###		rm -f /dev/midi02
-###	fi
-###	mknod -m 666 /dev/midi02 c 14 34
-###	
-###	if [ -e /dev/midi03 ]; then
-###		rm -f /dev/midi03
-###	fi
-###	mknod -m 666 /dev/midi03 c 14 50
+	if [ -e /dev/midi00 ]; then
+		rm -f /dev/midi00
+	fi
+	mknod -m 666 /dev/midi00 c 14 2
+	
+	if [ -e /dev/midi01 ]; then
+		rm -f /dev/midi01
+	fi
+	mknod -m 666 /dev/midi01 c 14 18
+	
+	if [ -e /dev/midi02 ]; then
+		rm -f /dev/midi02
+	fi
+	mknod -m 666 /dev/midi02 c 14 34
+	
+	if [ -e /dev/midi03 ]; then
+		rm -f /dev/midi03
+	fi
+	mknod -m 666 /dev/midi03 c 14 50
 #
 #	DSP		(14, 3)
 #
 if [ -e /dev/dsp ]; then
 	rm -f /dev/dsp
 fi
-mknod -m 666 /dev/dsp c 14 3
+if [ -e /dev/dsp0 ]; then
+	rm -f /dev/dsp0
+fi
+mknod -m 666 /dev/dsp0 c 14 3
+ln -s /dev/dsp0 /dev/dsp
+
 #
 #	SPARC compatible /dev/audio	(14, 4)	
 #
 if [ -e /dev/audio ]; then
 	rm -f /dev/audio
 fi
-mknod -m 666 /dev/audio c 14 4
+if [ -e /dev/audio0 ]; then
+	rm -f /dev/audio0
+fi
+mknod -m 666 /dev/audio0 c 14 4
+ln -s /dev/audio0 /dev/audio
+
 #
 #	DSP1		(14, 19) /dev/dsp for the second soundcard.
 #				Also the SB emulation part of the

@@ -119,6 +119,9 @@ smb_file_read(struct inode *inode, struct file *file, char *buf, int count)
 
         file->f_pos = pos;
 
+	if (!IS_RDONLY(inode)) inode->i_atime = CURRENT_TIME;
+	inode->i_dirt = 1;
+
         DPRINTK("smb_file_read: exit %s\n", SMB_FINFO(inode)->path);
 
         return already_read;
@@ -177,6 +180,9 @@ smb_file_write(struct inode *inode, struct file *file, char *buf, int count)
 			break;
 		}
 	}
+
+	inode->i_mtime = inode->i_ctime = CURRENT_TIME;
+	inode->i_dirt = 1;
 
 	file->f_pos = pos;
 

@@ -11,8 +11,6 @@
 	$(CC) $(CFLAGS) -c $<
 .s.o:
 	$(AS) -o $*.o $<
-.c.s:
-	$(CC) $(CFLAGS) -S $<
 
 OBJS	= fault.o vac-flush.o init.o sun4c.o srmmu.o loadmmu.o
 
@@ -24,9 +22,4 @@ modules:
 dep:
 	$(CPP) -M *.c > .depend
 
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
+include $(TOPDIR)/Rules.make

@@ -1,7 +1,7 @@
 /*
  * sound/patmgr.c
  *
- * The patch manager interface for the /dev/sequencer
+ * The patch maneger interface for the /dev/sequencer
  *
  * Copyright by Hannu Savolainen 1993
  *
@@ -234,8 +234,12 @@ pmgr_inform (int dev, int event, unsigned long p1, unsigned long p2,
     printk ("  PATMGR: Server %d mbox full. Why?\n", dev);
   else
     {
-      mbox[dev] =
-	(struct patmgr_info *) KERNEL_MALLOC (sizeof (struct patmgr_info));
+      if ((mbox[dev] =
+	   (struct patmgr_info *) KERNEL_MALLOC (sizeof (struct patmgr_info))) == NULL)
+	{
+	  printk ("pmgr: Couldn't allocate memory for a message\n");
+	  return 0;
+	}
 
       mbox[dev]->key = PM_K_EVENT;
       mbox[dev]->command = event;

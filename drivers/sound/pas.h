@@ -42,6 +42,8 @@
 #define WAIT_STATE			0xBF88		/* R W	Control		Four-bit bus wait-state count (~140ns ea.)	*/
 #define BOARD_REV_ID			0x2789		/* R	Control		Extended Board Revision ID			*/
 
+#define CHIP_REV			0xFF88		/* R	0=PAS, 1=PAS+, 2=CDPC, 3=PAS16C, 4=PAS16D */
+
 #define SYSTEM_CONFIGURATION_1		0x8388		/* R W	Control								*/
 	#define S_C_1_PCS_ENABLE	0x01		/* R W  PC speaker	1=enable, 0=disable PC speaker emulation	*/
 	#define S_C_1_PCM_CLOCK_SELECT	0x02		/* R W  PCM		1=14.31818Mhz/12, 0=28.224Mhz master clock	*/ 
@@ -59,6 +61,7 @@
 
 #define IO_CONFIGURATION_1		0xF388		/* R W	Control								*/
 	#define I_C_1_BOOT_RESET_ENABLE	0x80		/* R W  Control		1=reset board on warm boot, 0=don't		*/
+	#define I_C_1_JOYSTICK_ENABLE	0x40		/* R W  Control		1=enable joystick port, 0=don't		        */
 #define IO_CONFIGURATION_2		0xF389		/* R W  Control								*/
 	#define	I_C_2_PCM_DMA_DISABLED	0x00		/* R W  PCM		PCM DMA disabled				*/
 #define IO_CONFIGURATION_3		0xF38A		/* R W	Control								*/
@@ -80,7 +83,7 @@
 
 #define OPERATION_MODE_1		0xEF8B		/* R	Control								*/
 	#define	O_M_1_CDROM_TYPE	0x03		/* R	CD-ROM		3=SCSI, 2=Sony, 0=no CD-ROM interface		*/
-	#define O_M_1_FM_TYPE		0x04		/* R	FM		1=stereo, 0=mono FM chip			*/
+	#define O_M_1_FM_TYPE		0x04		/* R	FM		1=sterero, 0=mono FM chip			*/
 	#define O_M_1_PCM_TYPE 		0x08		/* R	PCM		1=16-bit Codec, 0=8-bit DAC			*/
 #define OPERATION_MODE_2		0xFF8B		/* R	Control								*/
 	#define O_M_2_PCS_ENABLED	0x02		/* R	PC speaker	PC speaker emulation 1=enabled, 0=disabled	*/

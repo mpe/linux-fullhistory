@@ -51,7 +51,8 @@
 					 SOUND_MASK_CD)
 
 #define SB16_MIXER_DEVICES		(SOUND_MASK_SYNTH | SOUND_MASK_PCM | SOUND_MASK_SPEAKER | SOUND_MASK_LINE | SOUND_MASK_MIC | \
-					 SOUND_MASK_CD | SOUND_MASK_RECLEV | \
+					 SOUND_MASK_CD | \
+					 SOUND_MASK_IGAIN | SOUND_MASK_OGAIN | \
 					 SOUND_MASK_VOLUME | SOUND_MASK_BASS | SOUND_MASK_TREBLE)
 
 /*
@@ -144,7 +145,9 @@ MIX_ENT(SOUND_MIXER_MIC,	0x0a, 2, 3, 0x00, 0, 0),
 MIX_ENT(SOUND_MIXER_CD,		0x28, 7, 4, 0x28, 3, 4),
 MIX_ENT(SOUND_MIXER_IMIX,	0x00, 0, 0, 0x00, 0, 0),
 MIX_ENT(SOUND_MIXER_ALTPCM,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_RECLEV,	0x00, 0, 0, 0x00, 0, 0)
+MIX_ENT(SOUND_MIXER_RECLEV,	0x00, 0, 0, 0x00, 0, 0),
+MIX_ENT(SOUND_MIXER_IGAIN,	0x00, 0, 0, 0x00, 0, 0),
+MIX_ENT(SOUND_MIXER_OGAIN,	0x00, 0, 0, 0x00, 0, 0)
 };
 #endif
 
@@ -160,23 +163,51 @@ MIX_ENT(SOUND_MIXER_MIC,	0x3a, 7, 5, 0x00, 0, 0),
 MIX_ENT(SOUND_MIXER_CD,		0x36, 7, 5, 0x37, 7, 5),
 MIX_ENT(SOUND_MIXER_IMIX,	0x00, 0, 0, 0x00, 0, 0),
 MIX_ENT(SOUND_MIXER_ALTPCM,	0x00, 0, 0, 0x00, 0, 0),
-MIX_ENT(SOUND_MIXER_RECLEV,	0x3f, 7, 2, 0x40, 7, 2)
+MIX_ENT(SOUND_MIXER_RECLEV,	0x3f, 7, 2, 0x40, 7, 2), /* Obsolete. Use IGAIN */
+MIX_ENT(SOUND_MIXER_IGAIN,	0x3f, 7, 2, 0x40, 7, 2),
+MIX_ENT(SOUND_MIXER_OGAIN,	0x41, 7, 2, 0x42, 7, 2)
 };
+
+#ifdef SM_GAMES       /* Master volume is lower and PCM & FM volumes
+			     higher than with SB Pro. This improves the
+			     sound quality */
 
 static unsigned short levels[SOUND_MIXER_NRDEVICES] =
 {
-  0x5a5a,			/* Master Volume */
-  0x3232,			/* Bass */
-  0x3232,			/* Treble */
-  0x4b4b,			/* FM */
-  0x4b4b,			/* PCM */
+  0x2020,			/* Master Volume */
+  0x4b4b,			/* Bass */
+  0x4b4b,			/* Treble */
+  0x6464,			/* FM */
+  0x6464,			/* PCM */
   0x4b4b,			/* PC Speaker */
   0x4b4b,			/* Ext Line */
   0x0000,			/* Mic */
   0x4b4b,			/* CD */
   0x4b4b,			/* Recording monitor */
   0x4b4b,			/* SB PCM */
-  0x4b4b};			/* Recording level */
+  0x4b4b,			/* Recording level */
+  0x4b4b,			/* Input gain */
+  0x4b4b};			/* Output gain */
+
+#else  /* If the user selected just plain SB Pro */
+
+static unsigned short levels[SOUND_MIXER_NRDEVICES] =
+{
+  0x5a5a,			/* Master Volume */
+  0x4b4b,			/* Bass */
+  0x4b4b,			/* Treble */
+  0x4b4b,			/* FM */
+  0x4b4b,			/* PCM */
+  0x4b4b,			/* PC Speaker */
+  0x4b4b,			/* Ext Line */
+  0x1010,			/* Mic */
+  0x4b4b,			/* CD */
+  0x4b4b,			/* Recording monitor */
+  0x4b4b,			/* SB PCM */
+  0x4b4b,			/* Recording level */
+  0x4b4b,			/* Input gain */
+  0x4b4b};			/* Output gain */
+#endif /* SM_GAMES */
 
 static unsigned char sb16_recmasks_L[SOUND_MIXER_NRDEVICES] =
 {
@@ -191,7 +222,9 @@ static unsigned char sb16_recmasks_L[SOUND_MIXER_NRDEVICES] =
 	0x04,	/* SOUND_MIXER_CD	*/
 	0x00,	/* SOUND_MIXER_IMIX	*/
 	0x00,	/* SOUND_MIXER_ALTPCM	*/
-	0x00	/* SOUND_MIXER_RECLEV	*/
+	0x00,	/* SOUND_MIXER_RECLEV	*/
+	0x00,	/* SOUND_MIXER_IGAIN	*/
+	0x00	/* SOUND_MIXER_OGAIN	*/
 };
 
 static unsigned char sb16_recmasks_R[SOUND_MIXER_NRDEVICES] =
@@ -207,7 +240,9 @@ static unsigned char sb16_recmasks_R[SOUND_MIXER_NRDEVICES] =
 	0x02,	/* SOUND_MIXER_CD	*/
 	0x00,	/* SOUND_MIXER_IMIX	*/
 	0x00,	/* SOUND_MIXER_ALTPCM	*/
-	0x00	/* SOUND_MIXER_RECLEV	*/
+	0x00,	/* SOUND_MIXER_RECLEV	*/
+	0x00,	/* SOUND_MIXER_IGAIN	*/
+	0x00	/* SOUND_MIXER_OGAIN	*/
 };
 
 /*

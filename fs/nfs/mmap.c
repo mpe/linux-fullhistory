@@ -73,9 +73,10 @@ static unsigned long nfs_file_mmap_nopage(struct vm_area_struct * area,
 #endif
 
 	tmp = page + PAGE_SIZE;
-	while (clear--) {
-		*(char *)--tmp = 0;
+	if (clear > 0){
+		memset ((char*)(tmp-clear),0,clear);
 	}
+
 	return page;
 }
 

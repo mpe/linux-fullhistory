@@ -2,6 +2,7 @@
  *  linux/fs/isofs/inode.c
  * 
  *  (C) 1992, 1993, 1994  Eric Youngdale Modified for ISO9660 filesystem.
+ *      1995  Mark Dobie - patch to allow VideoCD and PhotoCD mounting.
  *
  *  (C) 1991  Linus Torvalds - minix filesystem
  */
@@ -425,6 +426,7 @@ void isofs_read_inode(struct inode * inode)
 	void *cpnt = NULL;
 	int high_sierra;
 	int block;
+	int volume_seq_no ;
 	int i;
 
 	block = inode->i_ino >> ISOFS_BUFFER_BITS(inode);
@@ -563,16 +565,23 @@ void isofs_read_inode(struct inode * inode)
 	
 	inode->i_op = NULL;
 
-	/* A volume number of 0 is nonsense.  Disable checking if we see
-	   this */
+	/* get the volume sequence numner */
+	volume_seq_no = isonum_723 (raw_inode->volume_sequence_number) ;
+
+	/* 
+	 * Disable checking if we see any volume number other than 0 or 1.
+	 * We could use the cruft option, but that has multiple purposes, one
+	 * of which is limiting the file size to 16Mb.  Thus we silently allow
+	 * volume numbers of 0 to go through without complaining.
+	 */
 	if (inode->i_sb->u.isofs_sb.s_cruft == 'n' && 
-	    isonum_723 (raw_inode->volume_sequence_number) == 0) {
+	    (volume_seq_no != 0) && (volume_seq_no != 1)) {
 	  printk("Warning: defective cdrom.  Enabling \"cruft\" mount option.\n");
 	  inode->i_sb->u.isofs_sb.s_cruft = 'y';
 	}
 
 	if (inode->i_sb->u.isofs_sb.s_cruft != 'y' && 
-	    isonum_723 (raw_inode->volume_sequence_number) != 1) {
+	    (volume_seq_no != 0) && (volume_seq_no != 1)) {
 		printk("Multi volume CD somehow got mounted.\n");
 	} else {
 	  if (S_ISREG(inode->i_mode))

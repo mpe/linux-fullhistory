@@ -33,7 +33,7 @@
 
 #include "gus_hw.h"
 
-void            gusintr (int, struct pt_regs * regs);
+void            gusintr (INT_HANDLER_PARMS (irq, dummy));
 
 int             gus_base, gus_irq, gus_dma;
 extern int      gus_wave_volume;
@@ -45,7 +45,7 @@ attach_gus_card (long mem_start, struct address_info *hw_config)
 {
   int             io_addr;
 
-  snd_set_irq_handler (hw_config->irq, gusintr);
+  snd_set_irq_handler (hw_config->irq, gusintr, "Gravis Ultrasound");
 
   if (gus_wave_detect (hw_config->io_base))	/*
 						 * Try first the default
@@ -118,7 +118,7 @@ probe_gus (struct address_info *hw_config)
 }
 
 void
-gusintr (int irq, struct pt_regs * regs)
+gusintr (INT_HANDLER_PARMS (irq, dummy))
 {
   unsigned char   src;
 
@@ -128,7 +128,7 @@ gusintr (int irq, struct pt_regs * regs)
 
 #ifndef EXCLUDE_GUSMAX
   if (have_gus_max)
-    ad1848_interrupt (irq, regs);
+    ad1848_interrupt (INT_HANDLER_CALL (irq));
 #endif
 
   while (1)

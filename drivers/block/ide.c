@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 3.16  May 30, 1995
+ *  linux/drivers/block/ide.c	Version 4.00  Jul 10, 1995
  *
  *  Copyright (C) 1994, 1995  Linus Torvalds & authors (see below)
  */
@@ -40,47 +40,10 @@
  *  inspiration from lots of linux users, esp.  hamish@zot.apana.org.au
  *
  *  Version 1.0 ALPHA	initial code, primary i/f working okay
- *  Version 1.1 ALPHA	fixes for dual i/f
- *  Version 1.2 ALPHA	first serious attempt at sharing irqs
  *  Version 1.3 BETA	dual i/f on shared irq tested & working!
  *  Version 1.4 BETA	added auto probing for irq(s)
  *  Version 1.5 BETA	added ALPHA (untested) support for IDE cd-roms,
- *			fixed hd.c coexistence bug, other minor stuff
- *  Version 1.6 BETA	fix link error when cd-rom not configured
- *  Version 2.0 BETA	lots of minor fixes; remove annoying messages; ...
- *  Version 2.2 BETA	fixed reset_drives; major overhaul of autoprobing
- *  Version 2.3 BETA	set DEFAULT_UNMASK_INTR to 0 again; cosmetic changes
- *  Version 2.4 BETA	added debounce on reading of drive status reg,
- *			added config flags to remove unwanted features
- *  Version 2.5 BETA	fixed problem with leftover phantom IRQ after probe,
- *			allow "set_geometry" even when in LBA (as per spec(?)),
- *			assorted miscellaneous tweaks.
- *  Version 2.6 BETA	more config flag stuff, another probing tweak,
- *  (not released)	multmode now defaults to status quo from boot time,
- *			moved >16heads check to init time, rearranged reset code
- *			added HDIO_DRIVE_CMD, removed standby/xfermode stuff
- *			hopefully fixed ATAPI probing code, added hdx=cdrom
- *  Version 2.7 BETA	fixed invocation of cdrom_setup()
- *  Version 2.8 BETA	fixed compile error for DISK_RECOVERY_TIME>0
- *			fixed incorrect drive selection in DO_DRIVE_CMD (Bug!)
- *  Version 2.9 BETA	more work on ATAPI CDROM recognition
- *  (not released)	changed init order so partition checks go in sequence
- *  Version 3.0 BETA	included ide-cd.c update from Steve with Mitsumi fixes
- *			attempt to fix byte-swap problem with Mitsumi id_info
- *			ensure drives on second i/f get initialized on boot
- *			preliminary compile-time support for 32bit IDE i/f chips
- *			added check_region() and snarf_region() to probes
- *  Version 3.1 BETA	ensure drives on *both* i/f get initialized on boot
- *			fix byte-swap problem with Mitsumi id_info
- *			changed ide_timermask into ide_timerbit
- *			get rid of unexpected interrupts after probing
- *			don't wait for READY_STAT on cdrom drives
- *  Version 3.2 BETA	Ooops.. mistakenly left VLB_32BIT_IDE on by default
- *			new ide-cd.c from Scott
- *  Version 3.3 BETA	fix compiling with PROBE_FOR_IRQS==0
- *  (sent to Linus)	tweak in do_probe() to fix Delman's DRDY problem
- *  Version 3.4 BETA	removed "444" debug message
- *  (sent to Linus)
+ *  ...
  *  Version 3.5		correct the bios_cyl field if it's too small
  *  (linux 1.1.76)	 (to help fdisk with brain-dead BIOSs)
  *  Version 3.6		cosmetic corrections to comments and stuff
@@ -120,12 +83,23 @@
  *			add boot flag to enable "dtc2278" probe
  *			add probe to avoid EATA (SCSI) interfaces,
  *			 courtesy of neuffer@goofy.zdv.uni-mainz.de.
+ *  Version 4.00	tidy up verify_area() calls - heiko@colossus.escape.de
+ *			add flag to ignore WRERR_STAT for some drives
+ *			 courtesy of David.H.West@um.cc.umich.edu
+ *			assembly syntax tweak to VLB_SYNC
+ *			removeable drive support from scuba@cs.tu-berlin.de
+ *			add transparent support for DiskManager-6.0x "Dynamic
+ *			 Disk Overlay" (DDO), most of this in in genhd.c
+ *			eliminate "multiple mode turned off" message at boot
  *
  *  To do:
- *	- improved CMD support:  tech info is supposedly "in the mail"
+ *	- add support for alternative IDE port addresses
+ *	- refine the DiskManager-6.0x overlay support (special cases)
+ *	- improved CMD support:  tech info is in my hands for 640B chip
  *	- special 32-bit controller-type detection & support
  *	- figure out how to support oddball "intelligent" caching cards
  *	- reverse-engineer 3/4 drive support on fancy "Promise" cards
+ *	- find someone to work on IDE *tape drive* support
  */
 
 #include <linux/config.h>
@@ -262,7 +236,7 @@ typedef unsigned char		byte;	/* used everywhere */
 
 #if SUPPORT_VLB_32BIT
 #if SUPPORT_VLB_SYNC
-#define VLB_SYNC __asm__ __volatile__ ("pusha\n movl $0x01f2,%edx\n inb (%dx),%al\n inb (%dx),%al\n inb (%dx),%al\n popa\n")
+#define VLB_SYNC __asm__ __volatile__ ("pusha\n movl $0x01f2,%edx\n inb %dx,%al\n inb %dx,%al\n inb %dx,%al\n popa\n")
 #endif	/* SUPPORT_VLB_SYNC */
 #endif	/* SUPPORT_VLB_32BIT */
 
@@ -274,7 +248,7 @@ static uint probe_dtc2278 = 0;
 #define GET_STAT(hwif)		IN_BYTE(HD_STATUS,hwif)
 #define OK_STAT(stat,good,bad)	(((stat)&((good)|(bad)))==(good))
 #define BAD_R_STAT		(BUSY_STAT   | ERR_STAT)
-#define BAD_W_STAT		(BUSY_STAT   | ERR_STAT | WRERR_STAT)
+#define BAD_W_STAT		(BAD_R_STAT  | WRERR_STAT)
 #define BAD_STAT		(BAD_R_STAT  | DRQ_STAT)
 #define DRIVE_READY		(READY_STAT  | SEEK_STAT)
 #define DATA_READY		(DRIVE_READY | DRQ_STAT)
@@ -333,15 +307,15 @@ typedef struct {
 	byte     unmask;		/* pretty quick access to this also */
 	dev_type type		: 1;	/* disk or cdrom (or tape, floppy..) */
 	unsigned present	: 1;	/* drive is physically present */
-	unsigned dont_probe 	: 1;	/* from:  hdx=noprobe */
+	unsigned noprobe 	: 1;	/* from:  hdx=noprobe */
 	unsigned keep_settings  : 1;	/* restore settings after drive reset */
 	unsigned busy		: 1;	/* mutex for ide_open, revalidate_.. */
 	unsigned vlb_32bit	: 1;	/* use 32bit in/out for data */
 	unsigned vlb_sync	: 1;	/* needed for some 32bit chip sets */
-	unsigned reserved0	: 1;	/* unused */
+	unsigned be_quiet	: 1;	/* supress "multiple mode" msg at boot */
 	special_t special;		/* special action flags */
 	select_t  select;		/* basic drive/head select reg value */
-	byte mult_count, chipset, reserved2;
+	byte mult_count, chipset, bad_wstat;
 	byte usage, mult_req, wpcom, ctl;
 	byte head, sect, bios_head, bios_sect;
 	unsigned short cyl, bios_cyl;
@@ -782,7 +756,7 @@ static void write_intr (ide_dev_t *dev)
 	int i;
 	struct request *rq = ide_cur_rq[DEV_HWIF];
 
-	if (OK_STAT(stat=GET_STAT(DEV_HWIF),DRIVE_READY,BAD_W_STAT)) {
+	if (OK_STAT(stat=GET_STAT(DEV_HWIF),DRIVE_READY,dev->bad_wstat)) {
 #ifdef DEBUG
 		printk("%s: write: sector %ld, buffer=0x%08lx, remaining=%ld\n",
 			dev->name, rq->sector, (unsigned long) rq->buffer,
@@ -849,7 +823,7 @@ static void multwrite_intr (ide_dev_t *dev)
 	int i;
 	struct request *rq = &ide_write_rq[DEV_HWIF];
 
-	if (OK_STAT(stat=GET_STAT(DEV_HWIF),DRIVE_READY,BAD_W_STAT)) {
+	if (OK_STAT(stat=GET_STAT(DEV_HWIF),DRIVE_READY,dev->bad_wstat)) {
 		if (stat & DRQ_STAT) {
 			if (rq->nr_sectors) {
 				if (dev->mult_count)
@@ -896,13 +870,14 @@ static void set_multmode_intr (ide_dev_t *dev)
 		dev->mult_req = dev->mult_count = 0;
 		dev->special.b.recalibrate = 1;
 		(void) dump_status(DEV_HWIF, "set_multmode", stat);
-	} else {
+	} else if (!dev->be_quiet) {
 		if ((dev->mult_count = dev->mult_req))
 			printk ("  %s: enabled %d-sector multiple mode\n",
 				dev->name, dev->mult_count);
 		else
 			printk ("  %s: multiple mode turned off\n", dev->name);
 	}
+	dev->be_quiet = 0;
 	DO_REQUEST;
 }
 
@@ -1078,7 +1053,7 @@ static inline int do_rw_disk (ide_dev_t *dev, struct request *rq, unsigned long 
 	if (rq->cmd == WRITE) {
 		OUT_BYTE(dev->wpcom,HD_PRECOMP);	/* for ancient drives */
 		OUT_BYTE(dev->mult_count ? WIN_MULTWRITE : WIN_WRITE, HD_COMMAND);
-		WAIT_STAT(dev, DATA_READY, BAD_W_STAT, WAIT_DRQ, "DRQ", error);
+		WAIT_STAT(dev,DATA_READY,dev->bad_wstat,WAIT_DRQ,"DRQ",error);
 		if (!dev->unmask)
 			cli();
 		if (dev->mult_count) {
@@ -1383,6 +1358,8 @@ static int ide_open(struct inode * inode, struct file * filp)
 		sleep_on(&dev->wqueue);
 	dev->usage++;
 	restore_flags(flags);
+	if (dev->id->config & (1<<7))	/* for removeable disks */
+		check_disk_change(inode->i_rdev);
 #ifdef CONFIG_BLK_DEV_IDECD
 	if (dev->type == cdrom)
 		return cdrom_open (inode, filp, dev);
@@ -1416,7 +1393,7 @@ static void ide_release(struct inode * inode, struct file * file)
  * usage == 1 (we need an open channel to use an ioctl :-), so this
  * is our limit.
  */
-static int revalidate_disk(int i_rdev)
+static int revalidate_disk(dev_t  i_rdev)
 {
 	unsigned int i, major, start, drive = DEVICE_NR(i_rdev);
 	ide_dev_t *dev;
@@ -1584,29 +1561,34 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			memcpy_tofs((char *)arg, (char *)dev->id, sizeof(*dev->id));
 			return 0;
 
+			case HDIO_GET_NOWERR:
+			return write_fs_long(arg, dev->bad_wstat == BAD_R_STAT);
+
 		case HDIO_SET_KEEPSETTINGS:
 		case HDIO_SET_UNMASKINTR:
+		case HDIO_SET_NOWERR:
+		case HDIO_SET_CHIPSET:
 			if (!suser()) return -EACCES;
 			if ((arg > 1) || (MINOR(inode->i_rdev) & PARTN_MASK))
 				return -EINVAL;
 			save_flags(flags);
 			cli();
-			if (cmd == HDIO_SET_KEEPSETTINGS)
-				dev->keep_settings = arg;
-			else
-				dev->unmask = arg;
-			restore_flags(flags);
-			return 0;
-
-		case HDIO_SET_CHIPSET:
-			if (!suser()) return -EACCES;
-			if ((arg > 3) || (MINOR(inode->i_rdev) & PARTN_MASK))
-				return -EINVAL;
-			save_flags(flags);
-			cli();
-			dev->chipset   = arg;
-			dev->vlb_sync  = (arg & 2) >> 1;
-			dev->vlb_32bit = (arg & 1);
+			switch (cmd) {
+				case HDIO_SET_KEEPSETTINGS:
+					dev->keep_settings = arg;
+					break;
+				case HDIO_SET_UNMASKINTR:
+					dev->unmask = arg;
+					break;
+				case HDIO_SET_NOWERR:
+					dev->bad_wstat = arg ? BAD_R_STAT : BAD_W_STAT;
+					break;
+				case HDIO_SET_CHIPSET:
+					dev->chipset   = arg;
+					dev->vlb_sync  = (arg & 2) >> 1;
+					dev->vlb_32bit = (arg & 1);
+					break;
+			}
 			restore_flags(flags);
 			return 0;
 
@@ -1625,14 +1607,12 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			dev->mult_req = arg;
 			dev->special.b.set_multmode = 1;
 			restore_flags(flags);
-#ifdef IDE_DRIVE_CMD
+#ifndef IDE_DRIVE_CMD
+			return 0;
+#else
 			do_drive_cmd (inode->i_rdev, NULL);
 			return (dev->mult_count == arg) ? 0 : -EIO;
-#else
-			return 0;
-#endif	/* IDE_DRIVE_CMD */
 
-#ifdef IDE_DRIVE_CMD
 		case HDIO_DRIVE_CMD:
 		{
 			unsigned long args;
@@ -1640,11 +1620,13 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			if (NULL == (long *) arg)
 				err = do_drive_cmd(inode->i_rdev,NULL);
 			else {
-				if (!(err = verify_area(VERIFY_WRITE,(long *)arg,sizeof(long))))
+				if (!(err = verify_area(VERIFY_READ,(long *)arg,sizeof(long))))
 				{
 					args = get_user((long *)arg);
-					err = do_drive_cmd(inode->i_rdev,(char *)&args);
-					put_user(args,(long *)arg);
+					if (!(err = verify_area(VERIFY_WRITE,(long *)arg,sizeof(long)))) {
+						err = do_drive_cmd(inode->i_rdev,(char *)&args);
+						put_user(args,(long *)arg);
+					}
 				}
 			}
 			return err;
@@ -1662,18 +1644,20 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 	}
 }
 
-#ifdef CONFIG_BLK_DEV_IDECD
 static int ide_check_media_change (dev_t full_dev)
 {
 	ide_dev_t *dev;
 
 	if ((dev = get_info_ptr(full_dev)) == NULL)
 		return -ENODEV;
-	if (dev->type != cdrom)
-		return 0;
-	return cdrom_check_media_change (dev);
-}
+#ifdef CONFIG_BLK_DEV_IDECD
+	if (dev->type == cdrom)
+		return cdrom_check_media_change (dev);
 #endif	/* CONFIG_BLK_DEV_IDECD */
+	if (dev->id->config & (1<<7))	/* for removeable disks */
+		return 1;	/* always assume it was changed */
+	return 0;
+}
 
 
 static void fixstring (byte *s, int bytecount, int byteswap)
@@ -1850,8 +1834,10 @@ static void do_identify (ide_dev_t *dev, byte cmd)
 		dev->mult_req = INITIAL_MULT_COUNT;
 		if (dev->mult_req > id->max_multsect)
 			dev->mult_req = id->max_multsect;
-		if (dev->mult_req || ((id->multsect_valid & 1) && id->multsect))
+		if (dev->mult_req || ((id->multsect_valid & 1) && id->multsect)) {
 			dev->special.b.set_multmode = 1;
+			dev->be_quiet = 1;
+		}
 		printk(", MaxMult=%d", id->max_multsect);
 	}
 	printk("\n");
@@ -1998,7 +1984,7 @@ static byte probe_for_drive (ide_dev_t *dev)
  *		1  device was found (note: dev->present might still be 0)
  */
 {
-	if (dev->dont_probe)			/* skip probing? */
+	if (dev->noprobe)			/* skip probing? */
 		return dev->present;
 	if (do_probe(dev, WIN_IDENTIFY) >= 2) {	/* if !(success || timed-out) */
 #ifdef CONFIG_BLK_DEV_IDECD
@@ -2106,7 +2092,7 @@ void ide_setup(char *str, int *ints)
 		}
 #endif /* SUPPORT_DTC2278 */
 #if SUPPORT_SERIALIZE
-		if (!strcmp(str,"serialize") || !strcmp(str,"cmd")) {
+		if (!strcmp(str,"serialize")) {
 			printk("%s\n",str);
 			single_threaded = 1;	/* serialize all drive access */
 			return;
@@ -2114,7 +2100,12 @@ void ide_setup(char *str, int *ints)
 #endif /* SUPPORT_SERIALIZE */
 		if (!strcmp(str,"noprobe")) {
 			printk("%s\n",str);
-			dev->dont_probe = 1;	/* don't probe for this drive */
+			dev->noprobe = 1;	/* don't probe for this drive */
+			return;
+		}
+		if (!strcmp(str,"nowerr")) {
+			printk("%s\n",str);
+			dev->bad_wstat = BAD_R_STAT; /* ignore WRERR_STAT */
 			return;
 		}
 #ifdef CONFIG_BLK_DEV_IDECD
@@ -2166,6 +2157,22 @@ void hdd_setup(char *str, int *ints)
 {
 	next_drive = 3;
 	ide_setup (str, ints);
+}
+
+
+void ide_xlate_1024 (dev_t full_dev)
+{
+	ide_dev_t *dev;
+
+	if ((dev = get_info_ptr(full_dev)) != NULL) {
+		dev->bios_cyl -= 1;		/* keeps fdisk sane */
+		while (dev->bios_cyl > 1024) {
+			if (dev->bios_head > 32)
+				return;
+			dev->bios_head *= 2;
+			dev->bios_cyl  /= 2;
+		}
+	}
 }
 
 #ifndef CONFIG_BLK_DEV_HD
@@ -2238,6 +2245,8 @@ static void init_ide_data (byte hwif)
 		dev->keep_settings		= 0;
 		ide_hd[hwif][drive<<PARTN_BITS].start_sect = 0;
 		dev->name = ide_devname[hwif][drive];
+		if (!dev->bad_wstat)
+			dev->bad_wstat = BAD_W_STAT;
 	}
 }
 
@@ -2319,11 +2328,9 @@ static struct file_operations ide_fops = {
 	ide_open,		/* open */
 	ide_release,		/* release */
 	block_fsync		/* fsync */
-#ifdef CONFIG_BLK_DEV_IDECD
 	,NULL,			/* fasync */
 	ide_check_media_change,	/* check_media_change */
-	NULL			/* revalidate */
-#endif CONFIG_BLK_DEV_IDECD
+	revalidate_disk		/* revalidate */
 };
 
 

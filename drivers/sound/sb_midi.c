@@ -42,7 +42,7 @@
  * future version of this driver.
  */
 
-extern int      sb_dsp_ok;	/* Set to 1 after successful initialization */
+extern int      sb_dsp_ok;	/* Set to 1 atfer successful initialization */
 extern int      sbc_base;
 
 extern int      sb_midi_mode;
@@ -217,6 +217,7 @@ static struct midi_operations sb_midi_operations =
 {
   {"SoundBlaster", 0, 0, SNDCARD_SB},
   &std_midi_synth,
+  {0},
   sb_midi_open,
   sb_midi_close,
   sb_midi_ioctl,

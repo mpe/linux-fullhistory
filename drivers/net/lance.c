@@ -188,12 +188,13 @@ struct lance_init_block {
 };
 
 struct lance_private {
-	char *name;
-	void *pad;
-	/* The Tx and Rx ring entries must aligned on 8-byte boundaries. */
+	/* The Tx and Rx ring entries must be aligned on 8-byte boundaries.
+	   This is accomplished by allocating 7 extra bytes for the struct
+	   and adjusting the start of the struct to be 8-byte aligned.  */
 	struct lance_rx_head rx_ring[RX_RING_SIZE];
 	struct lance_tx_head tx_ring[TX_RING_SIZE];
 	struct lance_init_block		init_block;
+	char *name;
 	/* The saved address of a sent-in-place packet/buffer, for skfree(). */
 	struct sk_buff* tx_skbuff[TX_RING_SIZE];
 	long rx_buffs;				/* Address of Rx and Tx buffers. */
@@ -206,7 +207,6 @@ struct lance_private {
 	unsigned char chip_version;			/* See lance_chip_type. */
 	char tx_full;
 	char lock;
-	int pad0, pad1;				/* Used for 8-byte alignment */
 };
 
 #define LANCE_MUST_PAD          0x00000001
@@ -249,6 +249,10 @@ enum {OLD_LANCE = 0, PCNET_ISA=1, PCNET_ISAP=2, PCNET_PCI=3, PCNET_VLB=4, LANCE_
 /* Non-zero only if the current card is a PCI with BIOS-set IRQ. */
 static unsigned char pci_irq_line = 0;
 
+/* Non-zero if lance_probe1() needs to allocate low-memory bounce buffers.
+   Assume yes until we know the memory size. */
+static unsigned char lance_need_isa_bounce_buffers = 1;
+
 static int lance_open(struct device *dev);
 static void lance_init_ring(struct device *dev);
 static int lance_start_xmit(struct sk_buff *skb, struct device *dev);
@@ -271,6 +275,9 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs);
 unsigned long lance_init(unsigned long mem_start, unsigned long mem_end)
 {
 	int *port;
+
+	if (mem_end <= 16*1024*1024)
+		lance_need_isa_bounce_buffers = 0;
 
 #if defined(CONFIG_PCI)
     if (pcibios_present()) {
@@ -342,7 +349,7 @@ unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
 	   This method provided by L. Julliard, Laurent_Julliard@grenoble.hp.com.
 	   */
 	if ( *((unsigned short *) 0x000f0102) == 0x5048)  {
-		short ioaddr_table[] = { 0x300, 0x320, 0x340, 0x360};
+		static const short ioaddr_table[] = { 0x300, 0x320, 0x340, 0x360};
 		int hp_port = ( *((unsigned char *) 0x000f00f1) & 1)  ? 0x499 : 0x99;
 		/* We can have boards other than the built-in!  Verify this is on-board. */
 		if ((inb(hp_port) & 0xc0) == 0x80
@@ -384,8 +391,12 @@ unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
 		}
 	}
 
-	dev = init_etherdev(0, sizeof(struct lance_private)
-						+ PKT_BUF_SZ*(RX_RING_SIZE + TX_RING_SIZE),
+	dev = init_etherdev(0, 7
+						+ ((sizeof(struct lance_private) + 7) & ~7)
+						+ PKT_BUF_SZ*RX_RING_SIZE
+						+ (lance_need_isa_bounce_buffers
+						   ? PKT_BUF_SZ*TX_RING_SIZE
+						   : 0),
 						&mem_start);
 
 	chipname = chip_table[lance_version].name;
@@ -403,17 +414,9 @@ unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
 	dev->priv = (void *)(((int)dev->priv + 7) & ~7);
 	lp = (struct lance_private *)dev->priv;
 	lp->name = chipname;
-	lp->rx_buffs = (long)dev->priv + sizeof(struct lance_private);
+	lp->rx_buffs = (long)lp + ((sizeof(struct lance_private) + 7) & ~7);
 	lp->tx_bounce_buffs = (char (*)[PKT_BUF_SZ])
 						   (lp->rx_buffs + PKT_BUF_SZ*RX_RING_SIZE);
-
-#ifndef final_version
-	/* This should never happen. */
-	if ((int)(lp->rx_ring) & 0x07) {
-		printk(" **ERROR** LANCE Rx and Tx rings not on even boundary.\n");
-		return mem_start;
-	}
-#endif
 
 	lp->chip_version = lance_version;
 
@@ -438,15 +441,15 @@ unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
 		dev->dma = 4;			/* Native bus-master, no DMA channel needed. */
 		dev->irq = pci_irq_line;
 	} else if (hp_builtin) {
-		char dma_tbl[4] = {3, 5, 6, 0};
-		char irq_tbl[8] = {3, 4, 5, 9};
+		static const char dma_tbl[4] = {3, 5, 6, 0};
+		static const char irq_tbl[4] = {3, 4, 5, 9};
 		unsigned char port_val = inb(hp_builtin);
 		dev->dma = dma_tbl[(port_val >> 4) & 3];
 		dev->irq = irq_tbl[(port_val >> 2) & 3];
 		printk(" HP Vectra IRQ %d DMA %d.\n", dev->irq, dev->dma);
 	} else if (hpJ2405A) {
-		char dma_tbl[4] = {3, 5, 6, 7};
-		char irq_tbl[8] = {3, 4, 5, 9, 10, 11, 12, 15};
+		static const char dma_tbl[4] = {3, 5, 6, 7};
+		static const char irq_tbl[8] = {3, 4, 5, 9, 10, 11, 12, 15};
 		short reset_val = inw(ioaddr+LANCE_RESET);
 		dev->dma = dma_tbl[(reset_val >> 2) & 3];
 		dev->irq = irq_tbl[(reset_val >> 4) & 7];
@@ -503,10 +506,10 @@ unsigned long lance_probe1(int ioaddr, unsigned long mem_start)
 		} else
 			printk(", assigned DMA %d.\n", dev->dma);
 	} else {			/* OK, we have to auto-DMA. */
-		int dmas[] = { 5, 6, 7, 3 }, boguscnt;
-
 		for (i = 0; i < 4; i++) {
+			static const char dmas[] = { 5, 6, 7, 3 };
 			int dma = dmas[i];
+			int boguscnt;
 
 			/* Don't enable a permanently busy DMA channel, or the machine
 			   will hang. */
@@ -1000,7 +1003,8 @@ lance_rx(struct device *dev)
 			}
 			skb->dev = dev;
 			skb_reserve(skb,2);	/* 16 byte align */
-			eth_copy_and_sum(skb_put(skb,pkt_len),
+			skb_put(skb,pkt_len);	/* Make room */
+			eth_copy_and_sum(skb,
 				   (unsigned char *)(lp->rx_ring[entry].base & 0x00ffffff),
 				   pkt_len,0);
 			skb->protocol=eth_type_trans(skb,dev);

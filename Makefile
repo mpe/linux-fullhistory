@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 8
+SUBLEVEL = 9
 
 ARCH = i386
 
@@ -106,8 +106,6 @@ endif
 
 include arch/$(ARCH)/Makefile
 
-.c.s:
-	$(CC) $(CFLAGS) -S -o $*.s $<
 .s.o:
 	$(AS) -o $*.o $<
 .c.o:

@@ -17,8 +17,6 @@ INPUT_DATA=input_data
 INPUT_LEN=input_len
 endif
 
-.c.s:
-	$(CC) $(CFLAGS) -S $<
 .s.o:
 	$(AS) -o $*.o $<
 .c.o:

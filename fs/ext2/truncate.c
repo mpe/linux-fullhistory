@@ -354,9 +354,10 @@ void ext2_truncate (struct inode * inode)
 	 * zeroed in case it ever becomes accessible again because of
 	 * subsequent file growth.
 	 */
-	offset = inode->i_size % inode->i_sb->s_blocksize;
+	offset = inode->i_size & (inode->i_sb->s_blocksize - 1);
 	if (offset) {
-		bh = ext2_bread (inode, inode->i_size / inode->i_sb->s_blocksize,
+		bh = ext2_bread (inode,
+				 inode->i_size >> EXT2_BLOCK_SIZE_BITS(inode->i_sb),
 				 0, &err);
 		if (bh) {
 			memset (bh->b_data + offset, 0,

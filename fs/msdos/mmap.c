@@ -2,7 +2,7 @@
  *	fs/msdos/mmap.c
  *
  *	Written by Jacques Gelinas (jacques@solucorp.qc.ca)
- *	Inspired by fs/nfs/mmap.c (Jaon Tombs 15 Aug 1993)
+ *	Inspired by fs/nfs/mmap.c (Jon Tombs 15 Aug 1993)
  *
  *	msdos mmap handling
  */

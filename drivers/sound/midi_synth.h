@@ -14,6 +14,8 @@ void midi_synth_aftertouch (int dev, int channel, int pressure);
 void midi_synth_controller (int dev, int channel, int ctrl_num, int value);
 int midi_synth_patchmgr (int dev, struct patmgr_info *rec);
 void midi_synth_bender (int dev, int chn, int value);
+void midi_synth_setup_voice (int dev, int voice, int chn);
+void do_midi_msg (int synthno, unsigned char *msg, int mlen);
 
 
 #ifndef _MIDI_SYNTH_C_
@@ -40,6 +42,8 @@ static struct synth_operations std_midi_synth =
   midi_synth_panning,
   NULL,
   midi_synth_patchmgr,
-  midi_synth_bender
+  midi_synth_bender,
+  NULL,	/* alloc_voice */
+  midi_synth_setup_voice
 };
 #endif

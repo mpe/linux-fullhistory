@@ -6,8 +6,6 @@
 # unless it's something special (ie not a .c file).
 #
 
-.c.s:
-	$(CC) $(CFLAGS) -S $<
 .s.o:
 	$(AS) -c -o $*.o $<
 .c.o:
@@ -24,10 +22,4 @@ modules:
 dep:
 	$(CPP) -M *.c > .depend
 
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
-
+include $(TOPDIR)/Rules.make

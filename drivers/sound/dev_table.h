@@ -107,6 +107,20 @@ struct dma_buffparms {
 	int	 underrun_count;
 };
 
+/*
+ * Structure for use with various microcontrollers and DSP processors 
+ * in the recent soundcards.
+ */
+typedef struct coproc_operations {
+		char name[32];
+		int (*open) (void *devc, int sub_device);
+		void (*close) (void *devc, int sub_device);
+		int (*ioctl) (void *devc, unsigned int cmd, unsigned int arg, int local);
+		void (*reset) (void *devc);
+
+		void *devc;		/* Driver specific info */
+	} coproc_operations;
+
 struct audio_operations {
         char name[32];
 	int flags;
@@ -133,9 +147,12 @@ struct audio_operations {
 	long buffsize;
 	int dmachan;
 	struct dma_buffparms *dmap;
+	struct coproc_operations *coproc;
+	int mixer_dev;
 };
 
 struct mixer_operations {
+	char name[32];
 	int (*ioctl) (int dev, unsigned int cmd, unsigned int arg);
 };
 
@@ -162,14 +179,29 @@ struct synth_operations {
 	int (*pmgr_interface) (int dev, struct patmgr_info *info);
 	void (*bender) (int dev, int chn, int value);
 	int (*alloc_voice) (int dev, int chn, int note, struct voice_alloc_info *alloc);
+	void (*setup_voice) (int dev, int voice, int chn);
 
  	struct voice_alloc_info alloc;
  	struct channel_info chn_info[16];
 };
 
+struct midi_input_info { /* MIDI input scanner variables */
+#define MI_MAX	10
+    		int             m_busy;
+    		unsigned char   m_buf[MI_MAX];
+		unsigned char	m_prev_status;	/* For running status */
+    		int             m_ptr;
+#define MST_INIT			0
+#define MST_DATA			1
+#define MST_SYSEX			2
+    		int             m_state;
+    		int             m_left;
+	};
+
 struct midi_operations {
 	struct midi_info info;
 	struct synth_operations *converter;
+	struct midi_input_info in_info;
 	int (*open) (int dev, int mode,
 		void (*inputintr)(int dev, unsigned char data),
 		void (*outputintr)(int dev)
@@ -183,6 +215,7 @@ struct midi_operations {
 	int (*command) (int dev, unsigned char *data);
 	int (*buffer_status) (int dev);
 	int (*prefix_cmd) (int dev, unsigned char status);
+	struct coproc_operations *coproc;
 };
 
 struct sound_timer_operations {
@@ -221,6 +254,16 @@ struct sound_timer_operations {
 	struct driver_info sound_drivers[] = {
 #ifndef EXCLUDE_PSS
 	  {SNDCARD_PSS, "Echo Personal Sound System PSS (ESC614)", attach_pss, probe_pss},
+#	ifdef PSS_MPU_BASE
+	  {SNDCARD_PSS_MPU, "PSS-MPU", attach_pss_mpu, probe_pss_mpu},
+#	endif
+#	ifdef PSS_MSS_BASE
+	  {SNDCARD_PSS_MSS, "PSS-MSS", attach_pss_mss, probe_pss_mss},
+#	endif
+#endif
+#ifndef EXCLUDE_MAD16
+		{SNDCARD_MAD16,	"MAD16/Mozart (MSS)",		attach_mad16, probe_mad16},
+		{SNDCARD_MAD16_MPU,	"MAD16/Mozart (MPU)",		attach_mad16_mpu, probe_mad16_mpu},
 #endif
 #ifndef EXCLUDE_YM3812
 		{SNDCARD_ADLIB,	"OPL-2/OPL-3 FM",		attach_adlib_card, probe_adlib},
@@ -254,9 +297,19 @@ struct sound_timer_operations {
 #ifndef EXCLUDE_GUS
 		{SNDCARD_GUS,	"Gravis Ultrasound",	attach_gus_card, probe_gus},
 #endif
+#ifndef EXCLUDE_SSCAPE
+		{SNDCARD_SSCAPE, "Ensoniq Soundscape",	attach_sscape, probe_sscape},
+		{SNDCARD_SSCAPE_MSS,	"MS Sound System (SoundScape)",	attach_ss_ms_sound, probe_ss_ms_sound},
+#endif
+#ifndef EXCLUDE_TRIX
+		{SNDCARD_TRXPRO, "MediaTriX AudioTriX Pro",	attach_trix_wss, probe_trix_wss},
+		{SNDCARD_TRXPRO_SB, "AudioTriX (SB mode)",	attach_trix_sb, probe_trix_sb},
+		{SNDCARD_TRXPRO_MPU, "AudioTriX MIDI",	attach_trix_mpu, probe_trix_mpu},
+#endif
 		{0,			"*?*",			NULL, NULL}
 	};
 
+#ifdef linux
 /*
  *	List of devices actually configured in the system.
  *
@@ -266,7 +319,51 @@ struct sound_timer_operations {
 	struct card_info snd_installed_cards[] = {
 #ifndef EXCLUDE_PSS
 	     {SNDCARD_PSS, {PSS_BASE, PSS_IRQ, PSS_DMA}, SND_DEFAULT_ENABLE},
+#	ifdef PSS_MPU_BASE
+	     {SNDCARD_PSS_MPU, {PSS_MPU_BASE, PSS_MPU_IRQ, 0}, SND_DEFAULT_ENABLE},
+#	endif
+#	ifdef PSS_MSS_BASE
+	     {SNDCARD_PSS_MSS, {PSS_MSS_BASE, PSS_MSS_IRQ, PSS_MSS_DMA}, SND_DEFAULT_ENABLE},
+#	endif
 #endif
+#ifndef EXCLUDE_TRIX
+	     {SNDCARD_TRXPRO, {TRIX_BASE, TRIX_IRQ, TRIX_DMA}, SND_DEFAULT_ENABLE},
+#	ifdef TRIX_SB_BASE
+	     {SNDCARD_TRXPRO_SB, {TRIX_SB_BASE, TRIX_SB_IRQ, TRIX_SB_DMA}, SND_DEFAULT_ENABLE},
+#	endif
+#	ifdef TRIX_MPU_BASE
+	     {SNDCARD_TRXPRO_MPU, {TRIX_MPU_BASE, TRIX_MPU_IRQ, 0}, SND_DEFAULT_ENABLE},
+#	endif
+#endif
+#ifndef EXCLUDE_SSCAPE
+	     {SNDCARD_SSCAPE, {SSCAPE_BASE, SSCAPE_IRQ, SSCAPE_DMA}, SND_DEFAULT_ENABLE},
+	     {SNDCARD_SSCAPE_MSS, {SSCAPE_MSS_BASE, SSCAPE_MSS_IRQ, SSCAPE_MSS_DMA}, SND_DEFAULT_ENABLE},
+#endif
+#ifndef EXCLUDE_MAD16
+	     {SNDCARD_MAD16, {MAD16_BASE, MAD16_IRQ, MAD16_DMA}, SND_DEFAULT_ENABLE},
+#	ifdef MAD16_MPU_BASE
+	     {SNDCARD_MAD16_MPU, {MAD16_MPU_BASE, MAD16_MPU_IRQ, 0}, SND_DEFAULT_ENABLE},
+#	endif
+#endif
+
+#ifndef EXCLUDE_MSS
+		{SNDCARD_MSS, {MSS_BASE, MSS_IRQ, MSS_DMA}, SND_DEFAULT_ENABLE},
+#	ifdef MSS2_BASE
+		{SNDCARD_MSS, {MSS2_BASE, MSS2_IRQ, MSS2_DMA}, SND_DEFAULT_ENABLE},
+#	endif
+#endif
+
+#ifndef EXCLUDE_PAS
+		{SNDCARD_PAS, {PAS_BASE, PAS_IRQ, PAS_DMA}, SND_DEFAULT_ENABLE},
+#endif
+
+#ifndef EXCLUDE_SB
+#	ifndef SBC_DMA
+#		define SBC_DMA		1
+#	endif
+		{SNDCARD_SB, {SBC_BASE, SBC_IRQ, SBC_DMA}, SND_DEFAULT_ENABLE},
+#endif
+
 #if !defined(EXCLUDE_MPU401) && !defined(EXCLUDE_MIDI)
 		{SNDCARD_MPU401, {MPU_BASE, MPU_IRQ, 0}, SND_DEFAULT_ENABLE},
 #ifdef MPU2_BASE
@@ -276,23 +373,9 @@ struct sound_timer_operations {
 		{SNDCARD_MPU401, {MPU3_BASE, MPU2_IRQ, 0}, SND_DEFAULT_ENABLE},
 #endif
 #endif
-#ifndef EXCLUDE_MSS
-		{SNDCARD_MSS, {MSS_BASE, MSS_IRQ, MSS_DMA}, SND_DEFAULT_ENABLE},
-#	ifdef MSS2_BASE
-		{SNDCARD_MSS, {MSS2_BASE, MSS2_IRQ, MSS2_DMA}, SND_DEFAULT_ENABLE},
-#	endif
-#endif
 
 #if !defined(EXCLUDE_UART6850) && !defined(EXCLUDE_MIDI)
 		{SNDCARD_UART6850, {U6850_BASE, U6850_IRQ, 0}, SND_DEFAULT_ENABLE},
-#endif
-
-#ifndef EXCLUDE_PAS
-		{SNDCARD_PAS, {PAS_BASE, PAS_IRQ, PAS_DMA}, SND_DEFAULT_ENABLE},
-#endif
-
-#ifndef EXCLUDE_SB
-		{SNDCARD_SB, {SBC_BASE, SBC_IRQ, SBC_DMA}, SND_DEFAULT_ENABLE},
 #endif
 
 #if !defined(EXCLUDE_SB) && !defined(EXCLUDE_SB16)
@@ -317,11 +400,15 @@ struct sound_timer_operations {
 		{0, {0}, 0}
 	};
 
-	int num_sound_drivers =
-	    sizeof(sound_drivers) / sizeof (struct driver_info);
 	int num_sound_cards =
 	    sizeof(snd_installed_cards) / sizeof (struct card_info);
 
+#else
+	int num_sound_cards = 0;
+#endif	/* linux */
+
+	int num_sound_drivers =
+	    sizeof(sound_drivers) / sizeof (struct driver_info);
 
 #else
 	extern struct audio_operations * audio_devs[MAX_AUDIO_DEV]; int num_audiodevs;

@@ -23,7 +23,7 @@
  *  Eberhard Moenkeberg (he gave me much support and the initial kick)
  *  Bernd Huebner, Ruediger Helsch (Unifix-Software Gmbh, they
  *      improved the original driver)
- *  John Tombs, Bjorn Ekwall (module support)
+ *  Jon Tombs, Bjorn Ekwall (module support)
  *  Daniel v. Mosnenck (he sent me the Technical and Programming Reference)
  *  Gerd Knorr (he lent me his PhotoCD)
  *  Nils Faerber and Roger E. Wolff (extensivly tested the LU portion)

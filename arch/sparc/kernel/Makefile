@@ -7,8 +7,6 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-.c.s:
-	$(CC) $(CFLAGS) -S $<
 .s.o:
 	$(AS) -o $*.o $<
 .c.o:
@@ -36,13 +34,4 @@ dep:
 	$(CPP) -M *.c > .depend
 	$(CPP) -M -D__ASSEMBLY__ -ansi *.S >>.depend
 
-dummy:
-
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
-
-
+include $(TOPDIR)/Rules.make

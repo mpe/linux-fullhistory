@@ -180,6 +180,7 @@ static struct midi_operations sb16midi_operations =
 {
   {"SoundBlaster 16 Midi", 0, 0, SNDCARD_SB16MIDI},
   &std_midi_synth,
+  {0},
   sb16midi_open,
   sb16midi_close,
   sb16midi_ioctl,

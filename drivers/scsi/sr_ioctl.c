@@ -139,6 +139,10 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
     case CDROMPLAYMSF:
     {
 	struct cdrom_msf msf;
+
+        err = verify_area (VERIFY_READ, (void *) arg, sizeof (msf));
+        if (err) return err;
+
 	memcpy_fromfs(&msf, (void *) arg, sizeof(msf));
 	
 	sr_cmd[0] = SCMD_PLAYAUDIO_MSF;
@@ -159,6 +163,10 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
     case CDROMPLAYTRKIND:
     {
 	struct cdrom_ti ti;
+
+        err = verify_area (VERIFY_READ, (void *) arg, sizeof (ti));
+        if (err) return err;
+
 	memcpy_fromfs(&ti, (void *) arg, sizeof(ti));
 	
 	sr_cmd[0] = SCMD_PLAYAUDIO_TI;
@@ -213,7 +221,9 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	struct cdrom_tocentry tocentry;
 	char * buffer;
 	
-	verify_area (VERIFY_READ, (void *) arg, sizeof (struct cdrom_tocentry));
+        err = verify_area (VERIFY_READ, (void *) arg, sizeof (struct cdrom_tocentry));
+        if (err) return err;
+
 	memcpy_fromfs (&tocentry, (void *) arg, sizeof (struct cdrom_tocentry));
 	
 	sr_cmd[0] = SCMD_READ_TOC;
@@ -267,7 +277,10 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	return result;
 	
     case CDROMEJECT:
-	if (scsi_CDs[target].device -> access_count != 1)
+        /*
+         * Allow 0 for access count for auto-eject feature.
+         */
+	if (scsi_CDs[target].device -> access_count > 1)
 	    return -EBUSY;
 	
 	sr_ioctl (inode, NULL, SCSI_IOCTL_DOORUNLOCK, 0);
@@ -281,12 +294,18 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	
 	return result;
 	
+    case CDROMEJECT_SW:
+        scsi_CDs[target].auto_eject = !!arg;
+        return 0;
+
     case CDROMVOLCTRL:
     {
 	char * buffer, * mask;
 	struct cdrom_volctrl volctrl;
 	
-	verify_area (VERIFY_READ, (void *) arg, sizeof (struct cdrom_volctrl));
+        err = verify_area (VERIFY_READ, (void *) arg, sizeof (struct cdrom_volctrl));
+        if (err) return err;
+
 	memcpy_fromfs (&volctrl, (void *) arg, sizeof (struct cdrom_volctrl));
 	
 	/* First we get the current params so we can just twiddle the volume */

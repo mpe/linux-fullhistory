@@ -13,6 +13,10 @@
  *
  *	    Modified by Eric Youngdale eric@aib.com to support loadable
  *	    low-level scsi drivers.
+ *
+ *	 Modified by Thomas Quinot thomas@melchior.frmug.fr.net to
+ *	 provide auto-eject.
+ *
  */
 
 #ifdef MODULE
@@ -39,7 +43,7 @@
 #include "constants.h"
 
 #define MAX_RETRIES 3
-#define SR_TIMEOUT 15000
+#define SR_TIMEOUT (150 * HZ)
 
 static void sr_init(void);
 static void sr_finish(void);
@@ -69,9 +73,13 @@ static void sr_release(struct inode * inode, struct file * file)
 {
 	sync_dev(inode->i_rdev);
 	if(! --scsi_CDs[MINOR(inode->i_rdev)].device->access_count)
-	sr_ioctl(inode, NULL, SCSI_IOCTL_DOORUNLOCK, 0);
+        {
+            sr_ioctl(inode, NULL, SCSI_IOCTL_DOORUNLOCK, 0);
+	    if (scsi_CDs[MINOR(inode->i_rdev)].auto_eject)
+                sr_ioctl(inode, NULL, CDROMEJECT, 0);
+        }
 	if (scsi_CDs[MINOR(inode->i_rdev)].device->host->hostt->usage_count)
-	(*scsi_CDs[MINOR(inode->i_rdev)].device->host->hostt->usage_count)--;
+            (*scsi_CDs[MINOR(inode->i_rdev)].device->host->hostt->usage_count)--;
 	if(sr_template.usage_count) (*sr_template.usage_count)--;
 }
 
@@ -302,6 +310,11 @@ static void rw_intr (Scsi_Cmnd * SCpnt)
  *
  *   kraxel@cs.tu-berlin.de (Gerd Knorr)
  */
+/*
+ * 19950704 operator@melchior.frmug.fr.net (Thomas Quinot)
+ *
+ *   - SONY:	Same as Nec.
+ */
 
 static void sr_photocd(struct inode *inode)
 {
@@ -481,7 +494,7 @@ static void sr_photocd(struct inode *inode)
             printk ("sr_photocd: multisession CD detected. start: %lu\n",sector);
 #endif
         break;
-        
+                
     case SCSI_MAN_NEC_OLDCDR:
     case SCSI_MAN_UNKNOWN:
     default:
@@ -1057,6 +1070,7 @@ void sr_finish()
 	scsi_CDs[i].use = 1;
 	scsi_CDs[i].ten = 1;
 	scsi_CDs[i].remap = 1;
+	scsi_CDs[i].auto_eject = 0; /* Default is not to eject upon unmount. */
 	sr_sizes[i] = scsi_CDs[i].capacity;
     }
     

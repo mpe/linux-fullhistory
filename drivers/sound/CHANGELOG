@@ -1,10 +1,39 @@
-Changelog for version 2.90
-------------------------------------
+Changelog for version 3.0
+-------------------------
 
-This is an intermediate release (v3.0 prototype with some experimental
-features disabled). See experimental.txt for more info.
+Since 3.0-beta2
+- Minor fixes.
+- Added Readme.cards
 
-Since pre-3.0-949712
+Since 3.0-beta1
+- Minor fixes to the modules support.
+- Eliminated call to sb_free_irq() in ad1848.c
+- Rewritten MAD16&Mozart support (not tested with MAD16 Pro).
+- Fix to DMA initialization of PSS cards.
+- Some fixes to ad1848/cs42xx mixer support (GUS MAX, MSS, etc.)
+- Fixed some bugs in the PSS driver which caused I/O errors with
+  the MSS mode (/dev/dsp).
+
+Since 3.0-950506
+- Recording with GUS MAX fixed. It works when the driver is configured
+  to use two DMA channels with GUS MAX (16 bit ones recommended).
+
+Since 3.0-94xxxx
+- Too many changes
+
+Since 3.0-940818
+- Fixes for Linux 1.1.4x.
+- Disables Disney Sound System with SG NX Pro 16 (less noise).
+
+Since 2.90-2
+- Fixes to soundcard.h
+- Non blocking mode to /dev/sequencer
+- Experimental detection code for Ensoniq Soundscape.
+
+Since 2.90
+- Minor and major bug fixes
+
+Since pre-3.0-940712
 - GUS MAX support
 - Partially working MSS/WSS support (could work with some cards).
 - Hardware u-Law and A-Law support with AD1848/CS4248 and CS4231 codecs
@@ -91,7 +120,7 @@ Since 2.2
 
 Since 2.1
 - Preliminary support for SB16. 
-  - The SB16 mixer is supported in its native mode.
+  - The SB16 mixer is supported in it's native mode.
   - Digitized voice capability up to 44.1 kHz/8 bit/mono
     (16 bit and stereo support coming in the next release).
 - Fixed some bugs in the digitized voice driver for PAS16.

@@ -5,8 +5,6 @@
 OBJS	=bare.o init_me.o ../kernel/promops.o ../lib/lib.a
 BOOTLINKFLAGS = -N -Ttext 0x200000 -e _first_adr_in_text
 
-.c.s:
-	$(CC) $(CFLAGS) -S -o $*.s $<
 .s.o:
 	$(AS) -o $*.o $<
 .c.o:
@@ -25,11 +23,4 @@ dep:
 	$(CPP) -M *.c > .depend
 	$(CPP) -M -D__ASSEMBLY__ -ansi *.S >>.depend
 
-dummy:
-
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
+include $(TOPDIR)/Rules.make

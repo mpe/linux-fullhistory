@@ -404,7 +404,7 @@ struct cdrom_multisession
 #define	CDROMREADAUDIO		0x530e		/* (struct cdrom_read_audio)	*/
 /*
  * preliminary extension for enable (1) / disable (0) auto-ejecting
- * currently used by sbpcd.c
+ * currently used by sbpcd.c and sr.c
  * (still may change if other drivers will use it, too):
  */
 #define	CDROMEJECT_SW		0x530f		/* arg: 0 or 1 */

@@ -9,8 +9,6 @@
 
 .S.s:
 	$(CPP) -traditional $< -o $*.s
-.c.s:
-	$(CC) $(CFLAGS) -S $<
 .s.o:
 	$(AS) -o $*.o $<
 .c.o:
@@ -36,13 +34,6 @@ sched.o: sched.c
 dep:
 	$(CPP) -M *.c > .depend
 
-dummy:
 modules:
 
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
-
+include $(TOPDIR)/Rules.make

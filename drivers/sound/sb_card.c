@@ -25,6 +25,9 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
+ * Modified:
+ *  Riccardo Facchetti  24 Mar 1995
+ *  - Added the Audio Excel DSP 16 initialization routine.
  */
 
 #include "sound_config.h"
@@ -46,6 +49,12 @@ attach_sb_card (long mem_start, struct address_info *hw_config)
 int
 probe_sb (struct address_info *hw_config)
 {
+#if !defined(EXCLUDE_AEDSP16) && defined(AEDSP16_SBPRO)
+  /*
+     * Initialize Audio Excel DSP 16 to SBPRO.
+   */
+  InitAEDSP16_SBPRO (hw_config);
+#endif
   return sb_dsp_detect (hw_config);
 }
 

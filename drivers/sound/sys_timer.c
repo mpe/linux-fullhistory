@@ -51,17 +51,23 @@ static unsigned long
 tmr2ticks (int tmr_value)
 {
   /*
- *    Convert system timer ticks (HZ) to MIDI ticks
- */
+     *    Convert system timer ticks (HZ) to MIDI ticks
+   */
 
   unsigned long   tmp;
   unsigned long   scale;
 
-  tmp = (tmr_value * 1000) / HZ;/* Convert to msecs */
+  tmp = (tmr_value * 1000) / HZ;	/* Convert to msecs */
 
-  scale = (60 * 1000) / (curr_tempo * curr_timebase);	/* msecs per MIDI tick */
+  if (curr_tempo == 0 || curr_timebase == 0)	/* Error? */
+    scale = 1;
+  else
+    scale = (60 * 1000) / (curr_tempo * curr_timebase);		/* msecs per MIDI tick */
 
-  return (tmp + (scale / 2)) / scale;
+  if (scale == 0)		/* Error? */
+    scale = 1;
+
+  return (tmp + (scale >> 1)) / scale;
 }
 
 static void

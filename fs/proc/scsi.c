@@ -8,12 +8,13 @@
  *
  *  /proc/scsi directory handling functions
  *
- *  last change: 95/06/13    
+ *  last change: 95/07/04    
  *
  *  Initial version: March '95
- *  95/15/05 Added subdirectories for each driver and show every
+ *  95/05/15 Added subdirectories for each driver and show every
  *	     registered HBA as a single file. 
- *  95/30/05 Added rudimentary write support for parameter passing
+ *  95/05/30 Added rudimentary write support for parameter passing
+ *  95/07/04 Fixed bugs in directory handling
  *
  *  TODO: Improve support to write to the driver files
  *	  Optimize directory handling 
@@ -96,13 +97,17 @@ inline static uint count_dir_entries(uint inode, uint *num)
 
     (uint) *num = flag = index = 0;    
     
-    if(dispatch_scsi_info_ptr)
-    {
+    if(dispatch_scsi_info_ptr) {
 	if (inode == PROC_SCSI) { 
 	    dir = scsi_dir;
             while(dir[(uint)*num].low_ino)
                 (*num)++;
         } else {
+            /* Here we do not simply count the entries. Since the array
+             * contains the directories of all drivers, we need to return
+             * a pointer to the beginning of the directory information
+             * and its length.
+             */
 	    dir = scsi_hba_dir;
             while(dir[index].low_ino || dir[index].low_ino <= PROC_SCSI_LAST) {
                 if(dir[index].low_ino == inode)
@@ -140,8 +145,7 @@ static int proc_lookupscsi(struct inode * dir, const char * name, int len,
 	iput(dir);
 	return(-ENOENT);
     }
-    if (dispatch_scsi_info_ptr != NULL)
-    {
+    if (dispatch_scsi_info_ptr != NULL) {
 	if (dir->i_ino <= PROC_SCSI_SCSI)
 	    de = scsi_dir;
 	else {
@@ -170,7 +174,7 @@ static int proc_readscsidir(struct inode * inode, struct file * filp,
     struct proc_dir_entry * de;
     uint index, num;
  
-    index = num = 0;
+    num = 0;
 
     if (!inode || !S_ISDIR(inode->i_mode))
 	return(-EBADF);
@@ -221,7 +225,6 @@ int get_not_present_info(char *buffer, char **start, off_t offset, int length)
 static int proc_readscsi(struct inode * inode, struct file * file,
 			 char * buf, int count)
 {
-    uint ino;
     int length;
     int bytes = count;
     int copied = 0;
@@ -235,18 +238,14 @@ static int proc_readscsi(struct inode * inode, struct file * file,
 				   * end of the file */
     if (!(page = (char *) __get_free_page(GFP_KERNEL)))
 	return(-ENOMEM);
-    ino = inode->i_ino;
     
-    
-    while(bytes > 0 || count == -1)
-    {
-	
+    while(bytes > 0 || count == -1) {	
 	thistime = bytes;
 	if(bytes > PROC_BLOCK_SIZE || count == -1)
 	    thistime = PROC_BLOCK_SIZE;
 	
 	if(dispatch_scsi_info_ptr)
-	    length = dispatch_scsi_info_ptr(ino, page, &start, 
+	    length = dispatch_scsi_info_ptr(inode->i_ino, page, &start, 
 					    file->f_pos, thistime, 0);
 	else
 	    length = get_not_present_info(page, &start, file->f_pos, thistime);

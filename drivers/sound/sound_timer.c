@@ -87,8 +87,8 @@ static unsigned long
 tmr2ticks (int tmr_value)
 {
   /*
- *    Convert timer ticks to MIDI ticks
- */
+     *    Convert timer ticks to MIDI ticks
+   */
 
   unsigned long   tmp;
   unsigned long   scale;
@@ -110,8 +110,8 @@ reprogram_timer (void)
   usecs_per_tick = (60 * 1000000) / (curr_tempo * curr_timebase);
 
   /*
- * Don't kill the system by setting too high timer rate
- */
+     * Don't kill the system by setting too high timer rate
+   */
   if (usecs_per_tick < 2000)
     usecs_per_tick = 2000;
 

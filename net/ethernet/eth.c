@@ -233,9 +233,12 @@ void eth_header_cache(struct device *dev, struct sock *sk, unsigned long saddr, 
  *	Copy from an ethernet device memory space to an sk_buff while checksumming if IP
  */
  
-void eth_copy_and_sum(struct sk_buff *dest,unsigned char *src, int length, int base)
+void eth_copy_and_sum(struct sk_buff *dest, unsigned char *src, int length, int base)
 {
-	struct ethhdr *eth=(struct ethhdr *)dest->data;
+	struct ethhdr *eth;
+
+	IS_SKB(dest);
+	eth=(struct ethhdr *)dest->data;
 	memcpy(dest->data,src,34);	/* ethernet is always >= 60 */
 	length-=34;
 	if(eth->h_proto!=htons(ETH_P_IP))

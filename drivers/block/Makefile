@@ -9,8 +9,6 @@
 # parent makefile.
 #
 
-.c.s:
-	$(CC) $(CFLAGS) -S $<
 .s.o:
 	$(AS) -c -o $*.o $<
 .c.o:
@@ -147,11 +145,4 @@ modules: $(BLOCK_MODULE_OBJS)
 	echo $(BLOCK_MODULE_OBJS) > ../../modules/BLOCK_MODULES
 	(cd ../../modules;for i in $(BLOCK_MODULE_OBJS); do ln -sf ../drivers/block/$$i .; done)
 
-dummy:
-
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
+include $(TOPDIR)/Rules.make

@@ -53,6 +53,10 @@ struct ext2_sb_info {
 	unsigned short s_resuid;
 	unsigned short s_resgid;
 	unsigned short s_mount_state;
+	unsigned short s_pad;
+	int s_addr_per_block_bits;
+	int s_inodes_per_block_bits;
+	int s_desc_per_block_bits;
 };
 
 #endif	/* _LINUX_EXT2_FS_SB */

@@ -81,6 +81,7 @@
  *		Alan Cox	:	Set saddr on raw output frames as per BSD.
  *		Alan Cox	:	Stopped broadcast source route explosions.
  *		Alan Cox	:	Can disable source routing
+ *		Takeshi Sone    :	Masquerading didn't work.
  *
  *  
  *
@@ -1023,11 +1024,21 @@ void ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned l
 	 */
 
 	
-	if(!(is_frag&4) && (fw_res=ip_fw_chk(skb->h.iph, dev, ip_fw_fwd_chain, ip_fw_fwd_policy, 0))!=1)
+	if(!(is_frag&4))
 	{
-		if(fw_res==-1)
+		fw_res=ip_fw_chk(skb->h.iph, dev, ip_fw_fwd_chain, ip_fw_fwd_policy, 0);
+		switch (fw_res) {
+		case 1:
+#ifdef CONFIG_IP_MASQUERADE
+		case 2:
+#endif
+			break;
+		case -1:
 			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0, dev);
-		return;
+			/* fall thru */
+		default:
+			return;
+		}
 	}
 #endif
 	/*

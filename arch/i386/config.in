@@ -166,6 +166,7 @@ if [ "$CONFIG_NET_ISA" = "y" ]; then
 	bool 'DEPCA support' CONFIG_DEPCA n
 	bool 'EtherWorks 3 support' CONFIG_EWRK3 n
 	if [ "$CONFIG_NET_ALPHA" = "y" ]; then
+		bool 'SEEQ8005 support' CONFIG_SEEQ8005 n
 		bool 'AT1700 support' CONFIG_AT1700 n
 		bool 'EtherExpressPro support' CONFIG_EEXPRESS_PRO n
 		bool 'EtherExpress support' CONFIG_EEXPRESS n

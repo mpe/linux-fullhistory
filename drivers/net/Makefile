@@ -24,6 +24,10 @@ Space.o: Space.c ../../include/linux/autoconf.h
 
 net_init.o: ../../include/linux/autoconf.h
 
+ifdef CONFIG_SEEQ8005
+NETDRV_OBJS := $(NETDRV_OBJS) seeq8005.o
+endif
+
 ifdef CONFIG_IBMTR
 NETDRV_OBJS := $(NETDRV_OBJS) ibmtr.o
 endif
@@ -304,8 +308,4 @@ modules:
 
 endif
 
-# include a dependency file if one exists
-
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
+include $(TOPDIR)/Rules.make

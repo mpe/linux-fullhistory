@@ -147,12 +147,10 @@ asmlinkage int sys_sigaction(int signum, const struct sigaction * action,
 		if (err)
 			return err;
 		memcpy_fromfs(&new_sa, action, sizeof(struct sigaction));
+		new_sa.sa_mask |= _S(signum);
 		if (new_sa.sa_flags & SA_NOMASK)
-			new_sa.sa_mask = 0;
-		else {
-			new_sa.sa_mask |= _S(signum);
-			new_sa.sa_mask &= _BLOCKABLE;
-		}
+			new_sa.sa_mask &= ~_S(signum);
+		new_sa.sa_mask &= _BLOCKABLE;
 		if (new_sa.sa_handler != SIG_DFL && new_sa.sa_handler != SIG_IGN) {
 			err = verify_area(VERIFY_READ, new_sa.sa_handler, 1);
 			if (err)

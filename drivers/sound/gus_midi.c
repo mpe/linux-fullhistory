@@ -231,6 +231,7 @@ static struct midi_operations gus_midi_operations =
 {
   {"Gravis UltraSound Midi", 0, 0, SNDCARD_GUS},
   &std_midi_synth,
+  {0},
   gus_midi_open,
   gus_midi_close,
   gus_midi_ioctl,
@@ -296,10 +297,12 @@ gus_midi_interrupt (int dummy)
 	}
     }
 
+#if 0
   if (stat & MIDI_FRAME_ERR)
-    printk ("Midi framing error\n");
+    printk ("GUS: Midi framing error\n");
   if (stat & MIDI_OVERRUN && input_opened)
     printk ("GUS: Midi input overrun\n");
+#endif
 
   RESTORE_INTR (flags);
 }

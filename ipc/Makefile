@@ -11,8 +11,6 @@
 	$(CC) $(CFLAGS) -c $<
 .s.o:
 	$(AS) -o $*.o $<
-.c.s:
-	$(CC) $(CFLAGS) -S $<
 
 OBJS	=  util.o 
 SRCS	=  util.c
@@ -29,11 +27,5 @@ dep:
 	$(CPP) -M $(SRCS) > .depend
 
 modules:
-dummy:
 
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
+include $(TOPDIR)/Rules.make

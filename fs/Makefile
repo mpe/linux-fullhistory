@@ -79,8 +79,6 @@ else
 MODULE_OBJS := $(MODULE_OBJS) binfmt_elf.o
 endif
 
-.c.s:
-	$(CC) $(CFLAGS) -S $<
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 .s.o:
@@ -114,11 +112,4 @@ depend dep:
 	set -e; for i in $(MODULE_FS_SUBDIRS); do \
 	  test ! -d $$i || $(MAKE) -C $$i CFLAGS="$(CFLAGS) -DMODULE" dep; done
 
-dummy:
-
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
+include $(TOPDIR)/Rules.make

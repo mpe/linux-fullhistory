@@ -81,7 +81,7 @@
  * errors to allow safe writing by specialized programs.
  */
 
-/* 1994/4/24 -- Dan Fandrich -- added support for Commodore 1581 3.5" disks
+/* 1995/4/24 -- Dan Fandrich -- added support for Commodore 1581 3.5" disks
  * by defining bit 1 of the "stretch" parameter to mean put sectors on the
  * opposite side of the disk, leaving the sector IDs alone (i.e. Commodore's
  * drives are "upside-down").

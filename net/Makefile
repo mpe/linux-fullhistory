@@ -15,8 +15,6 @@ SUBOBJS     := $(foreach f,$(SUBDIRS),$f/$f.o)
 	$(CC) $(CFLAGS) -c $<
 .s.o:
 	$(AS) -o $*.o $<
-.c.s:
-	$(CC) $(CFLAGS) -S $<
 
 OBJS	=  socket.o protocols.o
 
@@ -35,12 +33,4 @@ dep:
 
 modules:
 
-dummy:
-
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
-
+include $(TOPDIR)/Rules.make

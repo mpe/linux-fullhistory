@@ -68,6 +68,8 @@ extern struct file_operations * get_blkfops(unsigned int);
   
 extern void *sys_call_table;
 
+extern int aout_core_dump(long signr, struct pt_regs * regs);
+
 #ifdef CONFIG_FTAPE
 extern char * ftape_big_buffer;
 #endif

@@ -41,14 +41,14 @@ static char *version=
 
 struct device *irq2dev_map[16] = {0, 0, /* ... zeroed */};
 
-int irqs_busy = 0x2147;		/* The set of fixed IRQs (keyboard, timer, etc) */
-int irqs_used = 0x0001;		/* The set of fixed IRQs sometimes enabled. */
-int irqs_reserved = 0x0000;	/* An advisory "reserved" table. */
-int irqs_shared = 0x0000;	/* IRQ lines "shared" among conforming cards.*/
+unsigned long irqs_busy = 0x2147;		/* The set of fixed IRQs (keyboard, timer, etc) */
+unsigned long irqs_used = 0x0001;		/* The set of fixed IRQs sometimes enabled. */
+unsigned long irqs_reserved = 0x0000;		/* An advisory "reserved" table. */
+unsigned long irqs_shared = 0x0000;		/* IRQ lines "shared" among conforming cards.*/
 
-static volatile int irq_number;	/* The latest irq number we actually found. */
-static volatile int irq_bitmap; /* The irqs we actually found. */
-static int irq_handled;		/* The irq lines we have a handler on. */
+static volatile unsigned long irq_bitmap;	/* The irqs we actually found. */
+static unsigned long irq_handled;		/* The irq lines we have a handler on. */
+static volatile int irq_number;			/* The latest irq number we actually found. */
 
 static void autoirq_probe(int irq, struct pt_regs * regs)
 {

@@ -79,13 +79,13 @@ pcm_set_speed (int arg)
   tmp = pas_read (FILTER_FREQUENCY);
 
   /*
- * Set anti-aliasing filters according to sample rate. You really *NEED*
- * to enable this feature for all normal recording unless you want to
- * experiment with aliasing effects.
- * These filters apply to the selected "recording" source.
- * I (pfw) don't know the encoding of these 5 bits. The values shown
- * come from the SDK found on ftp.uwp.edu:/pub/msdos/proaudio/.
-*/
+     * Set anti-aliasing filters according to sample rate. You reall *NEED*
+     * to enable this feature for all normal recording unless you want to
+     * experiment with aliasing effects.
+     * These filters apply to the selected "recording" source.
+     * I (pfw) don't know the encoding of these 5 bits. The values shown
+     * come from the SDK found on ftp.uwp.edu:/pub/msdos/proaudio/.
+   */
 #if !defined NO_AUTO_FILTER_SET
   tmp &= 0xe0;
   if (pcm_speed >= 2 * 17897)
@@ -128,8 +128,8 @@ pcm_set_channels (int arg)
       pas_write (pas_read (PCM_CONTROL) ^ P_C_PCM_MONO, PCM_CONTROL);
 
       pcm_channels = arg;
-      pcm_set_speed (pcm_speed);/*
-					 * The speed must be reinitialized
+      pcm_set_speed (pcm_speed);	/*
+					   * The speed must be reinitialized
 					 */
     }
 

@@ -302,6 +302,7 @@ typedef struct scsi_device {
     unsigned writeable:1;
     unsigned removable:1; 
     unsigned random:1;
+    unsigned has_cmdblocks:1;
     unsigned changed:1;             /* Data invalid due to media change */
     unsigned busy:1;                /* Used to prevent races */
     unsigned lockable:1;            /* Able to prevent media removal */
@@ -312,6 +313,8 @@ typedef struct scsi_device {
     unsigned disconnect:1;          /* can disconnect */
     unsigned soft_reset:1;          /* Uses soft reset option */
     unsigned sync:1;                /* Negotiate for sync transfers */
+    unsigned single_lun:1;          /* Indicates we should only allow I/O to
+                                       one of the luns for the device at a time. */
     unsigned char current_tag;      /* current tag */
     unsigned char sync_min_period;  /* Not less than this period */
     unsigned char sync_max_offset;  /* Not greater than this offset */

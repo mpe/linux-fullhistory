@@ -369,6 +369,8 @@ sys_fork:
 	jsr $26,($27),alpha_fork
 	br $0,undo_switch_stack
 	ldq $0,0($30)
+	bis $31,2,$19	/* Make sure that the stored user register v0 has */
+	stq $19,0($30)	/* the syscall # for fork */
 	ret $31,($26),1
 .end	sys_fork
 
@@ -406,8 +408,16 @@ entSys:
 	beq	$1,1f
 	ldq	$27,0($2)
 1:	jsr	$26,($27),do_entSys
+	ldq	$1,0($30)	/* We have to handle ptrace specially */
+	subq	$1,26,$1	/* since it returns a pointer value it will*/
+	bne	$1,3f		/* set up a3 and v0 in the return frame */
+	ldq	$1,72($30)
+	stq	$1,0($30)
+	stq	$0,72($30)
 	bis	$31,$31,$1
-	bge	$0,2f
+	br	$31,ret_from_sys_call
+3:	bis	$31,$31,$1
+	bge	$0,2f		/* the call succeeded */
 	bis	$31,$31,$26	/* tell "ret_from_sys_call" that we can restart */
 	ldq	$19,0($30)	/* .. with this syscall nr */
 	ldq	$20,72($30)	/* .. and this a3 */

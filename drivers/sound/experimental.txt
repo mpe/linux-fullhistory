@@ -1,11 +1,9 @@
-This version contains some features which is are NOT enabled by default. 
+This version contains some features which is may NOT be enabled by default. 
 I'm trying to release an official/reliable version soon so that the
 Linux version of Doom (and other games) becomes possible. For that reason
 I have disabled some features which are not reliable enough to be
 released for wide public. If you are interested to try them, please
 read this file carefully.
-
-There are currently following goodies which I have disabled:
 
 1) ECHO PSS (Personal Sound System support)
 
@@ -21,38 +19,20 @@ If you are interested, remove the B(OPT_PSS) from the DISABLED_OPTIONS
 You have also to enable the MSS support since I have not integrated
 the AD1848 driver with the PSS one yet.
 
-2) WSS/MSS (Microsoft Sound System) support
+2) /dev/music (/dev/sequencer2)
 
-The MSS standard is based on the AD1848 codec by Analog Devices.
-Since I don't know how the software configuration of the MSS works
-so it's not supported yet. This driver should work if your card
-has jumpers for the I/O base, IRQ and DMA or there is a way to configure
-them using DOS. You could try this if you have a soundcard with
-AD1848 codec. I have tried to use this with Aztech SG NX Pro 16 without
-success. 
-If you are interested, remove the B(OPT_MSS) from the DISABLED_OPTIONS
-(see above).
-
-3) /dev/sequencer2
-
-This version has a new device file called /dev/sequence2. I have not
+This version has a new device file called /dev/music. I have not
 implemented all parts of it but it's there. It's only interesting if
 you are writing a sequencer program yourself. Enable by creating
-the device file /dev/sequencer (minor 8).
+the device file /dev/music. Use the script at the end of linux/Readme
 
-4) /dev/midi##
+3) /dev/midi##
 
 These are tty like raw devices for MIDI ports. Since there is a minor
 incompatibility between different versions of Linux, I have disabled
 this feature by default. You just need to create the device files yourself.
-IMPORTANT!	If you get warning at line 64 of midibuf.c,
-		don't try to use /dev/midi## files. Otherwise your
-		system halts. You may also try to fix the
-		DEFINE_TIMER() macro in os.h (just remove the 2nd NULL).
-		This could happen with some earlier versions of Linux
-		(before 1.1.0???).
 
-5) Support for hardware based u-Law/A-Law and ADPCM formats.
+4) Support for hardware based u-Law/A-Law and ADPCM formats.
 
 The AD1848 (and compatibles) are able to do compression and
 decompression by hardware. This version has experimental support
@@ -95,7 +75,7 @@ bytes each time (this is really important).
 
 
 	2a) If the fragment gets played before the application writes a new
-	one, the device will be stopped and restarted which causes a click.
+	one, the device will be stoppen and restarted which causes a click.
 	When the process calls write next time, it will be processes as 
 	in step 1.
 
@@ -121,13 +101,13 @@ bytes each time (this is really important).
 	the process blocks for at most the time required to play a
 	buffer fragment.
 
-This method synchronizes the process and the audio device together 
-automatically. The process will block at most the 'fragment_time'. Usually 
+This method syncronizes the process and the audio device together 
+automaticly. The process will block at most the 'fragment_time'. Usually 
 less, depending on how much it needs time to do other things. The maximum
 delay between writing a byte and the time when it finally plays is
 at most 3 times the 'fragment_time'. 
 
-The delay depends on how much time the program needs to do its 
+The delay depends on how much time the program needs to do it's 
 computations for the next sample (updating screen etc). If it's about
 80% of the 'fragment_time' the game will run almost without delays. If it 
 uses more time, there is a risk that the audio buffer gets empty.
@@ -142,7 +122,7 @@ ioctl(fd, SNDCTL_DSP_SETFRAGMENT, &frag);
 ioctl(NDCTL_DSP_SPEED); /* And #channels & #bits if required */
 
 /*
- * Query the actual fragment size since the driver may refuse
+ * Query the actual fragment sice since the driver may refuse
  * the requested one (unlikely but possible?)
  */
 
@@ -157,4 +137,29 @@ while(True)
 I have tested this with a modified version of str.c. The algorithm works 
 as long as the playing program gets enough time to run. Hitting ENTER on 
 another virtual console causes a pause/click (with 2 frags of 64 bytes).
+
+NOTE! It's important to know that this call may be called just once and
+it must be done immediately after open(). The fragment size will remain
+in effect until the device is closed.
 ------------------- cut here ---------------------
+
+6)	Detection and initialization code for Ensoniq Soundscape
+
+This version is able to initialize SoundScape (almost). However
+PCM recording and playback don't work. Also MIDI playback sounds wierd
+since the driver is not able to set volume controls properly.
+The soundscape support is disabled. You need to enable it by editing
+beginning of configure.c. Also read comments in sndscape/README.
+
+7)	select() support for /dev/audio and /dev/dsp. (/dev/midi## and
+	/dev/sequencer had it already in v2.90).
+
+There is now select() support in the audio/dsp driver (for Linux only).
+However I have not tried this feature yet. 
+There are also some new ioctl() calls (please look at soundcard.h).
+
+8)	MIDI recording in /dev/music (/dev/sequencer2)
+
+MIDI recording was earlier implemented only with full MPU-401 devices.
+This version has it also for dumb MIDI ports. However I have not tested it
+yet.

@@ -10,6 +10,11 @@
  *  in the early extended-partition checks and added DM partitions
  */
 
+/*
+ *  Support for DiskManager v6.0x added by Mark Lord (mlord@bnr.ca)
+ *  with hints from uwe@eas.iis.fhg.de (us3@irz.inf.tu-dresden.de).
+ */
+
 #include <linux/fs.h>
 #include <linux/genhd.h>
 #include <linux/kernel.h>
@@ -105,21 +110,62 @@ done:
 
 static int msdos_partition(struct gendisk *hd, unsigned int dev, unsigned long first_sector)
 {
-	int i, minor = current_minor;
+	int i, minor = current_minor, found_dm6 = 0;
 	struct buffer_head *bh;
 	struct partition *p;
 	int mask = (1 << hd->minor_shift) - 1;
+	extern void ide_xlate_1024(dev_t);
 
+read_mbr:
 	if (!(bh = bread(dev,0,1024))) {
 		printk("unable to read partition table\n");
 		return -1;
 	}
-	if (*(unsigned short *) (bh->b_data+510) != 0xAA55) {
+	if (*(unsigned short *)  (0x1fe + bh->b_data) != 0xAA55) {
 		brelse(bh);
 		return 0;
 	}
+	p = (struct partition *) (0x1be + bh->b_data);
+
+	/*
+	 *  Check for Disk Manager v6.0x "Dynamic Disk Overlay" (DDO)
+	 */
+	if (p->sys_ind == DM6_PARTITION && !found_dm6++)
+	{
+		printk(" [DM6:DDO]");
+		/*
+		 * Everything is offset by one track (p->end_sector sectors),
+		 * and a translated geometry is used to reduce the number
+		 * of apparent cylinders to 1024 or less.
+		 *
+		 * For complete compatibility with linux fdisk, we do:
+		 *  1. tell the driver to offset *everything* by one track,
+		 *  2. reduce the apparent disk capacity by one track,
+		 *  3. adjust the geometry reported by HDIO_GETGEO (for fdisk),
+		 *	(does nothing if not an IDE drive, but that's okay).
+		 *  4. invalidate our in-memory copy of block zero,
+		 *  5. restart the partition table hunt from scratch.
+		 */
+		first_sector                    += p->end_sector;
+		hd->part[MINOR(dev)].start_sect += p->end_sector;
+		hd->part[MINOR(dev)].nr_sects   -= p->end_sector;
+		ide_xlate_1024(dev);	/* harmless if not an IDE drive */
+		bh->b_dirt = 0;		/* prevent re-use of this block */
+		bh->b_uptodate = 0;
+		bh->b_req = 0;
+		brelse(bh);
+		goto read_mbr;
+	}
+
+	/*
+	 *  Check for Disk Manager v6.0x DDO on a secondary drive (?)
+	 */
+	if (p->sys_ind == DM6_AUXPARTITION) {
+		printk(" [DM6]");
+		ide_xlate_1024(dev);	/* harmless if not an IDE drive */
+	}
+
 	current_minor += 4;  /* first "extra" minor (for extended partitions) */
-	p = (struct partition *) (0x1BE + bh->b_data);
 	for (i=1 ; i<=4 ; minor++,i++,p++) {
 		if (!p->nr_sects)
 			continue;
@@ -133,10 +179,10 @@ static int msdos_partition(struct gendisk *hd, unsigned int dev, unsigned long f
 		}
 	}
 	/*
-	 * check for Disk Manager partition table
+	 *  Check for old-style Disk Manager partition table
 	 */
 	if (*(unsigned short *) (bh->b_data+0xfc) == 0x55AA) {
-		p = (struct partition *) (0x1BE + bh->b_data);
+		p = (struct partition *) (0x1be + bh->b_data);
 		for (i = 4 ; i < 16 ; i++, current_minor++) {
 			p--;
 			if ((current_minor & mask) >= mask-2)

@@ -5,11 +5,10 @@
 #
 #
 
-VERSION		= 2.90-2
+VERSION		= `cat .version`
 TARGET_OS	= linux
+USRINCDIR	= /usr/include
 
-.c.s:
-	$(CC) $(CFLAGS) -S $<
 .s.o:
 	$(AS) -c -o $*.o $<
 .c.o:
@@ -20,14 +19,10 @@ OBJS   = soundcard.o audio.o dmabuf.o sb_dsp.o dev_table.o \
 	 pas2_pcm.o pas2_mixer.o pas2_midi.o gus_card.o gus_wave.o mpu401.o \
 	 gus_midi.o gus_vol.o patmgr.o sb_mixer.o sb16_dsp.o sb_midi.o \
 	 sb16_midi.o sound_switch.o midi_synth.o uart6850.o sound_timer.o \
-	 sys_timer.o ics2101.o ad1848.o pss.o
+	 sys_timer.o ics2101.o ad1848.o pss.o sscape.o trix.o aedsp16.o \
+	 mad16.o
 
 all:	local.h sound.a
-
-/usr/include/sys/soundcard.h:
-	@echo "WARNING! Your /usr/include/sys/soundcard.h not found."
-	@echo "Please make a new /usr/include/sys/soundcard.h containing"
-	@echo "just a line #include <linux/soundcard.h>"
 
 sound.a: $(OBJS) 
 	-rm -f sound.a
@@ -36,7 +31,7 @@ sound.a: $(OBJS)
 
 clean:
 	rm -f core core.* *.o *.a tmp_make *~ x z *%
-	rm -f configure sound_stub.c
+	rm -f configure
 	for i in *.c;do rm -f `basename $$i .c`.s;done
 
 indent:
@@ -44,38 +39,36 @@ indent:
 
 local.h:
 	$(MAKE) clean
+	$(MAKE) setup-$(TARGET_OS)
 	$(MAKE) config
 	$(MAKE) dep
 
-config: configure /usr/include/sys/soundcard.h
-	@echo Compiling Sound Driver v $(VERSION) for Linux
+config: configure
+	@$(MAKE) setup-$(TARGET_OS)
 	@./configure > local.h
-	@echo \#define SOUND_VERSION_STRING \"$(VERSION)\" >> local.h
 	@echo \#define SOUND_CONFIG_DATE \"`date`\" >> local.h
 	@echo \#define SOUND_CONFIG_BY \"`whoami`\" >> local.h
 	@echo \#define SOUND_CONFIG_HOST \"`hostname`\" >> local.h
-	@if [ -x /bin/dnsdomainname ]; then \
-           echo \#define SOUND_CONFIG_DOMAIN \"`dnsdomainname`\"; \
-         else \
-           echo \#define SOUND_CONFIG_DOMAIN \"`domainname`\"; \
-         fi >> local.h
+	@echo \#define SOUND_CONFIG_DOMAIN \"`hostname -d`\" >> local.h
 
 clrconf:
-	rm -f local.h .depend
+	rm -f local.h .depend synth-ld.h trix_boot.h smw-midi0001.h
 
-configure: configure.c /usr/include/sys/soundcard.h
+configure: configure.c
 	$(HOSTCC) -o configure configure.c
 	@cat .blurb
 
 dep:
-	$(MAKE) /usr/include/sys/soundcard.h
 	$(CPP) -M *.c > .depend
 
-modules:
+setup-linux:
+	@echo Compiling Sound Driver v $(VERSION) for Linux
 
-#
-# include a dependency file if one exists
-#
-ifeq (.depend,$(wildcard .depend))
-include .depend
-endif
+sound.o: $(OBJS) 
+	-rm -f sound.o
+	$(LD) -r -o sound.o $(OBJS)
+
+modules: sound.o
+	(cd ../../modules; ln -fs ../drivers/sound/sound.o .)
+
+include $(TOPDIR)/Rules.make

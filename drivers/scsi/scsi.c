@@ -51,7 +51,6 @@
 
 #undef USE_STATIC_SCSI_MEMORY
 
-
 /*
 static const char RCSid[] = "$Header: /usr/src/linux/kernel/blk_drv/scsi/RCS/scsi.c,v 1.5 1993/09/24 12:45:18 drew Exp drew $";
 */
@@ -164,65 +163,94 @@ static void scsi_dump_status(void);
  * lock up. 
  */
 
-struct blist{
+#define BLIST_NOLUN     0x01
+#define BLIST_FORCELUN  0x02
+#define BLIST_BORKEN    0x04
+#define BLIST_KEY       0x08
+#define BLIST_SINGLELUN 0x10
+
+struct dev_info{
     char * vendor;
     char * model;
     char * revision; /* Latest revision known to be bad.  Not used yet */
+    unsigned flags;
 };
 
-static struct blist blacklist[] =
+/*
+ * This is what was previously known as the blacklist.  The concept
+ * has been expanded so that we can specify other 
+ * The blacklist is used to determine which devices cannot tolerate a
+ * lun probe because of buggy firmware.  Far too many for my liking,
+ * which is why the default is now for there to be no lun scan. 
+ */
+static struct dev_info device_list[] =
 {
-{"CHINON","CD-ROM CDS-431","H42"}, /* Locks up if polled for lun != 0 */
-{"CHINON","CD-ROM CDS-535","Q14"}, /* Locks up if polled for lun != 0 */
-{"DENON","DRD-25X","V"},           /* Locks up if probed for lun != 0 */
-{"HITACHI","DK312C","CM81"},       /* Responds to all lun - dtg */
-{"HITACHI","DK314C","CR21" },      /* responds to all lun */
-{"IMS", "CDD521/10","2.06"},       /* Locks-up when LUN>0 polled. */
-{"MAXTOR","XT-3280","PR02"},       /* Locks-up when LUN>0 polled. */
-{"MAXTOR","XT-4380S","B3C"},       /* Locks-up when LUN>0 polled. */
-{"MAXTOR","MXT-1240S","I1.2"},     /* Locks up when LUN>0 polled */
-{"MAXTOR","XT-4170S","B5A"},       /* Locks-up sometimes when LUN>0 polled. */
-{"MAXTOR","XT-8760S","B7B"},       /* guess what? */
-{"NEC","CD-ROM DRIVE:841","1.0"},  /* Locks-up when LUN>0 polled. */
-{"RODIME","RO3000S","2.33"},       /* Locks up if polled for lun != 0 */
-{"SEAGATE", "ST157N", "\004|j"},   /* causes failed REQUEST SENSE on lun 1 
-				    * for aha152x controller, which causes 
-				    * SCSI code to reset bus.*/
-{"SEAGATE", "ST296","921"},        /* Responds to all lun */
-{"SONY","CD-ROM CDU-541","4.3d"},
-{"SONY","CD-ROM CDU-55S","1.0i"},
-{"TANDBERG","TDC 3600","U07"},     /* Locks up if polled for lun != 0 */
-{"TEAC","CD-ROM","1.06"},          /* causes failed REQUEST SENSE on lun 1 
-				    * for seagate controller, which causes 
-				    * SCSI code to reset bus.*/
-{"TEXEL","CD-ROM","1.06"},         /* causes failed REQUEST SENSE on lun 1 
-				    * for seagate controller, which causes 
-				    * SCSI code to reset bus.*/
-{"QUANTUM","LPS525S","3110"},      /* Locks sometimes if polled for lun != 0 */
-{"QUANTUM","PD1225S","3110"},      /* Locks sometimes if polled for lun != 0 */
-{"MEDIAVIS","CDR-H93MV","1.31"},   /* Locks up if polled for lun != 0 */
-{"SANKYO", "CP525","6.64"},        /* causes failed REQ SENSE, extra reset */
-{"HP", "C1750A", "3226"},          /* scanjet iic */
-{"HP", "C1790A", ""},              /* scanjet iip */
-{"HP", "C2500A", ""},              /* scanjet iicx */
+{"CHINON","CD-ROM CDS-431","H42", BLIST_NOLUN}, /* Locks up if polled for lun != 0 */
+{"CHINON","CD-ROM CDS-535","Q14", BLIST_NOLUN}, /* Locks up if polled for lun != 0 */
+{"DENON","DRD-25X","V", BLIST_NOLUN},           /* Locks up if probed for lun != 0 */
+{"HITACHI","DK312C","CM81", BLIST_NOLUN},       /* Responds to all lun - dtg */
+{"HITACHI","DK314C","CR21" , BLIST_NOLUN},      /* responds to all lun */
+{"IMS", "CDD521/10","2.06", BLIST_NOLUN},       /* Locks-up when LUN>0 polled. */
+{"MAXTOR","XT-3280","PR02", BLIST_NOLUN},       /* Locks-up when LUN>0 polled. */
+{"MAXTOR","XT-4380S","B3C", BLIST_NOLUN},       /* Locks-up when LUN>0 polled. */
+{"MAXTOR","MXT-1240S","I1.2", BLIST_NOLUN},     /* Locks up when LUN>0 polled */
+{"MAXTOR","XT-4170S","B5A", BLIST_NOLUN},       /* Locks-up sometimes when LUN>0 polled. */
+{"MAXTOR","XT-8760S","B7B", BLIST_NOLUN},       /* guess what? */
+{"NEC","CD-ROM DRIVE:841","1.0", BLIST_NOLUN},  /* Locks-up when LUN>0 polled. */
+{"RODIME","RO3000S","2.33", BLIST_NOLUN},       /* Locks up if polled for lun != 0 */
+{"SEAGATE", "ST157N", "\004|j", BLIST_NOLUN},   /* causes failed REQUEST SENSE on lun 1 
+                                                 * for aha152x controller, which causes 
+                                                 * SCSI code to reset bus.*/
+{"SEAGATE", "ST296","921", BLIST_NOLUN},        /* Responds to all lun */
+{"SONY","CD-ROM CDU-541","4.3d", BLIST_NOLUN},
+{"SONY","CD-ROM CDU-55S","1.0i", BLIST_NOLUN},
+{"SONY","CD-ROM CDU-561","1.7x", BLIST_NOLUN},
+{"TANDBERG","TDC 3600","U07", BLIST_NOLUN},     /* Locks up if polled for lun != 0 */
+{"TEAC","CD-ROM","1.06", BLIST_NOLUN},          /* causes failed REQUEST SENSE on lun 1 
+                                                 * for seagate controller, which causes 
+                                                 * SCSI code to reset bus.*/
+{"TEXEL","CD-ROM","1.06", BLIST_NOLUN},         /* causes failed REQUEST SENSE on lun 1 
+                                                 * for seagate controller, which causes 
+                                                 * SCSI code to reset bus.*/
+{"QUANTUM","LPS525S","3110", BLIST_NOLUN},      /* Locks sometimes if polled for lun != 0 */
+{"QUANTUM","PD1225S","3110", BLIST_NOLUN},      /* Locks sometimes if polled for lun != 0 */
+{"MEDIAVIS","CDR-H93MV","1.31", BLIST_NOLUN},   /* Locks up if polled for lun != 0 */
+{"SANKYO", "CP525","6.64", BLIST_NOLUN},        /* causes failed REQ SENSE, extra reset */
+{"HP", "C1750A", "3226", BLIST_NOLUN},          /* scanjet iic */
+{"HP", "C1790A", "", BLIST_NOLUN},              /* scanjet iip */
+{"HP", "C2500A", "", BLIST_NOLUN},              /* scanjet iicx */
+
+/*
+ * Other types of devices that have special flags.
+ */
+{"SONY","CD-ROM CDU-8001","*", BLIST_BORKEN},
+{"TEXEL","CD-ROM","1.06", BLIST_BORKEN},
+{"INSITE","Floptical   F*8I","*", BLIST_KEY},
+{"INSITE","I325VM","*", BLIST_KEY},
+{"PIONEER","CD-ROMDRM-602X","*", BLIST_FORCELUN | BLIST_SINGLELUN},
+{"PIONEER","CD-ROMDRM-604X","*", BLIST_FORCELUN | BLIST_SINGLELUN},
+/*
+ * Must be at end of list...
+ */
 {NULL, NULL, NULL}
 };
 
-static int blacklisted(unsigned char * response_data){
+static int get_device_flags(unsigned char * response_data){
     int i = 0;
     unsigned char * pnt;
     for(i=0; 1; i++){
-	if(blacklist[i].vendor == NULL) return 0;
+	if(device_list[i].vendor == NULL) return 0;
 	pnt = &response_data[8];
 	while(*pnt && *pnt == ' ') pnt++;
-	if(memcmp(blacklist[i].vendor, pnt,
-		  strlen(blacklist[i].vendor))) continue;
+	if(memcmp(device_list[i].vendor, pnt,
+		  strlen(device_list[i].vendor))) continue;
 	pnt = &response_data[16];
 	while(*pnt && *pnt == ' ') pnt++;
-	if(memcmp(blacklist[i].model, pnt,
-		  strlen(blacklist[i].model))) continue;
-	return 1;
+	if(memcmp(device_list[i].model, pnt,
+		  strlen(device_list[i].model))) continue;
+	return device_list[i].flags;
     }
+    return 0;
 }
 
 /*
@@ -323,7 +351,7 @@ void scsi_luns_setup(char *str, int *ints) {
 
 /*
  *  Detecting SCSI devices :
- *  We scan all present host adapter's busses,  from ID 0 to ID 6.
+ *  We scan all present host adapter's busses,  from ID 0 to ID (max_id).
  *  We use the INQUIRY command, determine device type, and pass the ID /
  *  lun address of all sequential devices to the tape driver, all random
  *  devices to the disk driver.
@@ -338,6 +366,8 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
     unsigned char * scsi_result;
     Scsi_Device * SDpnt, *SDtail;
     struct Scsi_Device_Template * sdtpnt;
+    int                 bflags;
+    int                 max_dev_lun = 0;
     Scsi_Cmnd  *SCpnt;
     
     ++in_scan_scsis;
@@ -364,7 +394,7 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 	channel = hchannel;
 	dev = hid;
 	lun = hlun;
-	goto crude;
+	goto crude; /* Anyone remember good ol' BASIC ?  :-) */
     }
 
     for (channel = 0; channel <= shpnt->max_channel; channel++)
@@ -374,9 +404,14 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 		
 		/*
 		 * We need the for so our continue, etc. work fine.
+                 * We put this in a variable so that we can override
+                 * it during the scan if we detect a device *KNOWN*
+                 * to have multiple logical units.
 		 */
-		for (lun = 0; lun < (max_scsi_luns < shpnt->max_lun ? 
-				     max_scsi_luns : shpnt->max_lun); ++lun)
+                max_dev_lun = (max_scsi_luns < shpnt->max_lun ? 
+                               max_scsi_luns : shpnt->max_lun);
+
+		for (lun = 0; lun < max_dev_lun; ++lun)
 		{
 		crude:
 		    memset(SDpnt, 0, sizeof(Scsi_Device));
@@ -531,6 +566,7 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 			SDpnt->changed = 0;
 			SDpnt->access_count = 0;
 			SDpnt->busy = 0;
+                        SDpnt->has_cmdblocks = 0;
 			/*
 			 * Currently, all sequential devices are assumed to be
 			 * tapes, all random devices disk, with the appropriate
@@ -560,6 +596,7 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 #endif
 			}
 			
+                        SDpnt->single_lun = 0;
 			SDpnt->soft_reset =
 			    (scsi_result[7] & 1) && ((scsi_result[3] &7) == 2);
 			SDpnt->random = (type == TYPE_TAPE) ? 0 : 1;
@@ -599,6 +636,12 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 			     */
 
 			    SDpnt->disconnect = 0;
+
+                            /*
+                             * Get any flags for this device.
+                             */
+                            bflags = get_device_flags(scsi_result);
+
 			    
 			    /*
 			     * Some revisions of the Texel CD ROM drives have 
@@ -608,38 +651,16 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 			     * change it here if it turns out that it isn't
 			     * a TEXEL drive.
 			     */
-			    if((strncmp("SONY",(char *) &scsi_result[8], 4)!= 0
-				|| strncmp("CD-ROM CDU-8001",
-					   (char *) &scsi_result[16], 15) != 0)
-			       && (strncmp("TEXEL", 
-					   (char *) &scsi_result[8], 5) != 0 
-				   || strncmp("CD-ROM", 
-					      (char *) &scsi_result[16], 6) != 0
-				/*
-				 * XXX 1.06 has problems, some one should 
-				 * figure out the others too so ALL TEXEL 
-				 * drives don't suffer in performance, 
-				 * especially when I finish integrating my 
-				 * seagate patches which do multiple I_T_L 
-				 * nexuses.
-				 */
-				
-#ifdef notyet
-				|| (strncmp("1.06", 
-					    (char *) &scsi_result, 4) != 0)
-#endif
-				))
+                            if( (bflags & BLIST_BORKEN) == 0 )
+                            {
 				SDpnt->borken = 0;
+                            }
 			    
 			    
 			    /* These devices need this "key" to unlock the
 			     * devices so we can use it 
 			     */
-			    if(memcmp("INSITE", &scsi_result[8], 6) == 0 &&
-			       (memcmp("Floptical   F*8I", 
-				       &scsi_result[16], 16) == 0
-				|| memcmp("I325VM", 
-					  &scsi_result[16], 6) == 0)) {
+                            if( (bflags & BLIST_KEY) != 0 ) {
 				printk("Unlocked floptical drive.\n");
 				SDpnt->lockable = 0;
 				scsi_cmd[0] = MODE_SENSE;
@@ -680,7 +701,32 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 			    /* Some scsi devices cannot be polled for lun != 0
 			     * due to firmware bugs 
 			     */
-			    if(blacklisted(scsi_result)) break;
+			    if(bflags & BLIST_NOLUN) break;
+
+                            /*
+                             * If we want to only allow I/O to one of the luns
+                             * attached to this device at a time, then we set this
+                             * flag.
+                             */
+                            if(bflags & BLIST_SINGLELUN)
+                            {
+                                SDpnt->single_lun = 1;
+                            }
+
+                            /*
+                             * If this device is known to support multiple units, override
+                             * the other settings, and scan all of them.
+                             */
+                            if(bflags & BLIST_FORCELUN)
+                            {
+                                /*
+                                 * We probably want to make this a variable, but this
+                                 * will do for now.
+                                 */
+                                max_dev_lun = 8;
+                            }
+ 
+
 			    /* Old drives like the MAXTOR XT-3280 say vers=0 */
 			    if ((scsi_result[2] & 0x07) == 0)
 				break;
@@ -692,6 +738,10 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
 			}
 		    }       /* if result == DID_OK ends */
 
+                    /*
+                     * This might screw us up with multi-lun devices, but the user can
+                     * scan for them too.
+                     */
 		    if(hardcoded == 1)
 			goto leave;
 		} /* for lun ends */
@@ -778,6 +828,7 @@ Scsi_Cmnd * request_queueable (struct request * req, Scsi_Device * device)
 {
     Scsi_Cmnd * SCpnt = NULL;
     int tablesize;
+    Scsi_Cmnd * found = NULL;
     struct buffer_head * bh, *bhp;
     
     if (!device)
@@ -787,11 +838,44 @@ Scsi_Cmnd * request_queueable (struct request * req, Scsi_Device * device)
 	panic("Invalid device in request_queueable");
     
     SCpnt =  device->host->host_queue;
-    while(SCpnt){
-	if(SCpnt->target == device->id && SCpnt->lun == device->lun 
-	   && SCpnt->channel == device->channel)
-	    if(SCpnt->request.dev < 0) break;
-	SCpnt = SCpnt->next;
+
+    /*
+     * Look for a free command block.  If we have been instructed not to queue
+     * multiple commands to multi-lun devices, then check to see what else is going on
+     * for this device first.
+     */
+      
+    SCpnt = device->host->host_queue;
+    if (!device->single_lun) {
+        while(SCpnt){
+            if(SCpnt->target == device->id &&
+               SCpnt->lun == device->lun) {
+                if(SCpnt->request.dev < 0) break;
+            }
+            SCpnt = SCpnt->next;
+        }
+    } else {
+        while(SCpnt){
+            if(SCpnt->target == device->id) {
+                if (SCpnt->lun == device->lun) {
+                    if(found == NULL 
+                       && SCpnt->request.dev < 0) 
+                    {
+                        found=SCpnt;
+                    }
+                } 
+                if(SCpnt->request.dev >= 0) {
+                    /*
+                     * I think that we should really limit things to one
+                     * outstanding command per device - this is what tends to trip
+                     * up buggy firmware.
+                     */
+                    return NULL;
+                }
+            }
+            SCpnt = SCpnt->next;
+        }
+        SCpnt = found;
     }
     
     if (!SCpnt) return NULL;
@@ -841,14 +925,14 @@ Scsi_Cmnd * request_queueable (struct request * req, Scsi_Device * device)
     SCpnt->transfersize = 0;
     SCpnt->underflow = 0;
     SCpnt->cmd_len = 0;
-#if 1
+
 /* Since not everyone seems to set the device info correctly
  * before Scsi_Cmnd gets send out to scsi_do_command, we do it here.
  */ 
     SCpnt->channel = device->channel;
     SCpnt->lun = device->lun;
     SCpnt->target = device->id;
-#endif
+
     return SCpnt;
 }
 
@@ -873,6 +957,7 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, Scsi_Device * device,
     struct Scsi_Host * host;
     Scsi_Cmnd * SCpnt = NULL;
     Scsi_Cmnd * SCwait = NULL;
+    Scsi_Cmnd * found = NULL;
     
     if (!device)
 	panic ("No device passed to allocate_device().\n");
@@ -887,15 +972,40 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, Scsi_Device * device,
     if (intr_count && SCSI_BLOCK(host)) return NULL;
     
     while (1==1){
-	SCpnt = host->host_queue;
-	while(SCpnt){
-	    if(SCpnt->target == device->id && SCpnt->lun == device->lun
-	       && SCpnt->channel == device->channel) {
-		SCwait = SCpnt;
-		if(SCpnt->request.dev < 0) break;
-	    }
-	    SCpnt = SCpnt->next;
-	}
+        SCpnt = device->host->host_queue;
+        if (!device->single_lun) {
+            while(SCpnt){
+                if(SCpnt->target == device->id &&
+                   SCpnt->lun == device->lun) {
+                    if(SCpnt->request.dev < 0) break;
+                }
+                SCpnt = SCpnt->next;
+            }
+        } else {
+            while(SCpnt){
+                if(SCpnt->target == device->id) {
+                    if (SCpnt->lun == device->lun) {
+                        if(found == NULL 
+                           && SCpnt->request.dev < 0) 
+                        {
+                            found=SCpnt;
+                        }
+                    } 
+                    if(SCpnt->request.dev >= 0) {
+                        /*
+                         * I think that we should really limit things to one
+                         * outstanding command per device - this is what tends to trip
+                         * up buggy firmware.
+                         */
+                        found = NULL;
+                        break;
+                    }
+                }
+                SCpnt = SCpnt->next;
+            }
+            SCpnt = found;
+        }
+
 	save_flags(flags);
 	cli();
 	/* See if this request has already been queued by an interrupt routine
@@ -964,15 +1074,16 @@ Scsi_Cmnd * allocate_device (struct request ** reqp, Scsi_Device * device,
     SCpnt->old_use_sg  = 0;
     SCpnt->transfersize = 0;      /* No default transfer size */
     SCpnt->cmd_len = 0;
+
     SCpnt->underflow = 0;         /* Do not flag underflow conditions */
-#if 1
-/* Since not everyone seems to set the device info correctly
- * before Scsi_Cmnd gets send out to scsi_do_command, we do it here.
- */ 
+
+    /* Since not everyone seems to set the device info correctly
+     * before Scsi_Cmnd gets send out to scsi_do_command, we do it here.
+     */ 
     SCpnt->channel = device->channel;
     SCpnt->lun = device->lun;
     SCpnt->target = device->id;
-#endif
+
     return SCpnt;
 }
 
@@ -2139,6 +2250,7 @@ void scsi_build_commandblocks(Scsi_Device * SDpnt)
 	SCpnt->prev = NULL;
 	host->host_queue = SCpnt;
     }
+    SDpnt->has_cmdblocks = 1;
 }
 
 /*
@@ -2196,6 +2308,7 @@ unsigned long scsi_dev_init (unsigned long memory_start, unsigned long memory_en
 	if(SDpnt->attached) scsi_build_commandblocks(SDpnt);
     }
     
+
     if (scsi_devicelist)
 	dma_sectors = 16;  /* Base value we use */
     
@@ -2584,6 +2697,7 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 		scsi_init_free((char *) sdpnt->host->host_queue, sizeof(Scsi_Cmnd));
 		sdpnt->host->host_queue = SCpnt;
 		if (SCpnt) SCpnt->prev = NULL;
+                sdpnt->has_cmdblocks = 0;
 	    }
     
     /* Next free up the Scsi_Device structures for this host */
@@ -2672,7 +2786,6 @@ static void scsi_unregister_host(Scsi_Host_Template * tpnt)
 static int scsi_register_device_module(struct Scsi_Device_Template * tpnt)
 {
     Scsi_Device * SDpnt;
-    int previous_attachment;
     
     if (tpnt->next) return 1;
     
@@ -2686,7 +2799,7 @@ static int scsi_register_device_module(struct Scsi_Device_Template * tpnt)
     
     /*
      * If any of the devices would match this driver, then perform the
-     * init function.  +
+     * init function.
      */
     if(tpnt->init && tpnt->dev_noticed) (*tpnt->init)();
     
@@ -2695,13 +2808,12 @@ static int scsi_register_device_module(struct Scsi_Device_Template * tpnt)
      */
     for(SDpnt = scsi_devices; SDpnt; SDpnt = SDpnt->next)
     {
-	previous_attachment = SDpnt->attached;
 	if(tpnt->attach)  (*tpnt->attach)(SDpnt);
 	/*
 	 * If this driver attached to the device, and we no longer
 	 * have anything attached, release the scso command blocks.
 	 */
-	if(SDpnt->attached && previous_attachment == 0)
+	if(SDpnt->attached && SDpnt->has_cmdblocks == 0)
 	    scsi_build_commandblocks(SDpnt);
     }
     
@@ -2750,6 +2862,7 @@ static int scsi_unregister_device(struct Scsi_Device_Template * tpnt)
 		    scsi_init_free((char *) SCpnt, sizeof(*SCpnt));
 		}
 	    }
+            SDpnt->has_cmdblocks = 0;
 	}
     }
     /*

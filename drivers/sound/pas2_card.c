@@ -44,7 +44,7 @@ int             translat_code;
 static int      pas_intr_mask = 0;
 static int      pas_irq = 0;
 
-static char     pas_model;
+char            pas_model;
 static char    *pas_model_names[] =
 {"", "Pro AudioSpectrum+", "CDPC", "Pro AudioSpectrum 16", "Pro AudioSpectrum 16D"};
 
@@ -79,13 +79,13 @@ pas2_msg (char *foo)
 /******************* Begin of the Interrupt Handler ********************/
 
 void
-pasintr (int unused, struct pt_regs * regs)
+pasintr (INT_HANDLER_PARMS (irq, dummy))
 {
   int             status;
 
   status = pas_read (INTERRUPT_STATUS);
-  pas_write (status, INTERRUPT_STATUS);	/*
-						 * Clear interrupt
+  pas_write (status, INTERRUPT_STATUS);		/*
+						   * Clear interrupt
 						 */
 
   if (status & I_S_PCM_SAMPLE_BUFFER_IRQ)
@@ -117,7 +117,7 @@ pas_set_intr (int mask)
 
   if (!pas_intr_mask)
     {
-      if ((err = snd_set_irq_handler (pas_irq, pasintr)) < 0)
+      if ((err = snd_set_irq_handler (pas_irq, pasintr, "PAS16")) < 0)
 	return err;
     }
   pas_intr_mask |= mask;
@@ -182,9 +182,13 @@ config_pas_hw (struct address_info *hw_config)
   pas_write (S_M_PCM_RESET | S_M_FM_RESET | S_M_SB_RESET | S_M_MIXER_RESET	/*
 										 * |
 										 * S_M_OPL3_DUAL_MONO
-	     	     	     	     	     	     	     	     	     	     	     	     	     	     	     	     										 */ , SERIAL_MIXER);
+										 */ , SERIAL_MIXER);
 
-  pas_write (I_C_1_BOOT_RESET_ENABLE, IO_CONFIGURATION_1);
+  pas_write (I_C_1_BOOT_RESET_ENABLE
+#ifdef PAS_JOYSTICK_ENABLE
+	     | I_C_1_JOYSTICK_ENABLE
+#endif
+	     ,IO_CONFIGURATION_1);
 
   if (pas_irq < 0 || pas_irq > 15)
     {
@@ -219,9 +223,9 @@ config_pas_hw (struct address_info *hw_config)
     }
 
   /*
- * This fixes the timing problems of the PAS due to the Symphony chipset
- * as per Media Vision.  Only define this if your PAS doesn't work correctly.
- */
+     * This fixes the timing problems of the PAS due to the Symphony chipset
+     * as per Media Vision.  Only define this if your PAS doesn't work correctly.
+   */
 #ifdef SYMPHONY_PAS
   OUTB (0x05, 0xa8);
   OUTB (0x60, 0xa9);
@@ -253,8 +257,8 @@ config_pas_hw (struct address_info *hw_config)
   else
     pas_write (0, PRESCALE_DIVIDER);
 
-  pas_write (P_M_MV508_ADDRESS | 5, PARALLEL_MIXER);
-  pas_write (5, PARALLEL_MIXER);
+  mix_write (P_M_MV508_ADDRESS | 5, PARALLEL_MIXER);
+  mix_write (5, PARALLEL_MIXER);
 
 #if !defined(EXCLUDE_SB_EMULATION) || !defined(EXCLUDE_SB)
 
@@ -295,6 +299,8 @@ config_pas_hw (struct address_info *hw_config)
 	pas_write (irq_dma, EMULATION_CONFIGURATION);
       }
   }
+#else
+  pas_write (0x00, COMPATIBILITY_ENABLE);
 #endif
 
   if (!ok)
@@ -348,7 +354,7 @@ detect_pas_hw (struct address_info *hw_config)
 				 */
     return 0;
 
-  pas_model = O_M_1_to_card[pas_read (OPERATION_MODE_1) & 0x0f];
+  pas_model = pas_read (CHIP_REV);
 
   return pas_model;
 }
@@ -361,7 +367,7 @@ attach_pas_card (long mem_start, struct address_info *hw_config)
   if (detect_pas_hw (hw_config))
     {
 
-      if ((pas_model = O_M_1_to_card[pas_read (OPERATION_MODE_1) & 0x0f]))
+      if (pas_model = pas_read (CHIP_REV))
 	{
 	  printk (" <%s rev %d>", pas_model_names[(int) pas_model], pas_read (BOARD_REV_ID));
 	}

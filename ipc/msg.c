@@ -105,7 +105,7 @@ asmlinkage int sys_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msg
 	msq->msg_stime = CURRENT_TIME;
 	if (msq->rwait)
 		wake_up (&msq->rwait);
-	return msgsz;
+	return 0;
 }
 
 asmlinkage int sys_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgtyp, 
