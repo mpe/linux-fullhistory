@@ -1,7 +1,7 @@
 /*
  *	Low-Level PCI Support for SGI Visual Workstation
  *
- *	(c) 1999 Martin Mares <mj@suse.cz>
+ *	(c) 1999--2000 Martin Mares <mj@suse.cz>
  */
 
 #include <linux/config.h>
@@ -85,7 +85,7 @@ static void __init pcibios_fixup_irqs(void)
 	u8 pin;
 	int irq;
 
-	for(dev=pci_devices; dev; dev=dev->next) {
+	pci_for_each_dev(dev) {
 		pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
 		dev->irq = 0;
 		if (!pin)

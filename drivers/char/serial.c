@@ -3990,7 +3990,6 @@ static struct pci_board pci_boards[] = {
  */
 static void probe_serial_pci(void) 
 {
-	u16 subvendor, subdevice;
 	int k, line;
 	struct pci_dev *dev = NULL;
 	struct pci_board *board;
@@ -4002,18 +4001,7 @@ static void probe_serial_pci(void)
 	printk(KERN_DEBUG "Entered probe_serial_pci()\n");
 #endif
   
-	if (!pcibios_present()) {
-#ifdef SERIAL_DEBUG_PCI
-		printk(KERN_DEBUG "Leaving probe_serial_pci() (no pcibios)\n");
-#endif
-		return;
-	}
-
-	for(dev=pci_devices; dev; dev=dev->next) {
-		pci_read_config_word(dev, PCI_SUBSYSTEM_VENDOR_ID,
-					 &subvendor);
-		pci_read_config_word(dev, PCI_SUBSYSTEM_ID, &subdevice);
-
+	pci_for_each_dev(dev) {
 		for (board = pci_boards; board->vendor; board++) {
 			if (board->vendor != (unsigned short) PCI_ANY_ID &&
 			    dev->vendor != board->vendor)
@@ -4022,10 +4010,10 @@ static void probe_serial_pci(void)
 			    dev->device != board->device)
 				continue;
 			if (board->subvendor != (unsigned short) PCI_ANY_ID &&
-			    subvendor != board->subvendor)
+			    dev->subsystem_vendor != board->subvendor)
 				continue;
 			if (board->subdevice != (unsigned short) PCI_ANY_ID &&
-			    subdevice != board->subdevice)
+			    dev->subsystem_device != board->subdevice)
 				continue;
 			break;
 		}

@@ -2559,14 +2559,6 @@ static struct display_switch matroxfb_cfb32 = {
 };
 #endif
 
-static struct pci_dev* pci_find(struct pci_dev* p) {
-	
-	DBG("pci_find")
-	
-	if (p) return p->next;
-	return pci_devices;
-}
-
 static void initMatrox(WPMINFO struct display* p) {
 	struct display_switch *swtmp;
 
@@ -6021,15 +6013,15 @@ static int __init matrox_init(void){
 
 	if (disabled)
 		return -ENXIO; 
-	while ((pdev = pci_find(pdev)) != NULL) {
+	while ((pdev = pci_find_device(PCI_ANY_ID, PCI_ANY_ID, pdev))) {
 		struct board* b;
 		u_int8_t rev;
 		u_int16_t svid;
 		u_int16_t sid;
 
 		pci_read_config_byte(pdev, PCI_REVISION_ID, &rev);
-		pci_read_config_word(pdev, PCI_SUBSYSTEM_VENDOR_ID, &svid);
-		pci_read_config_word(pdev, PCI_SUBSYSTEM_ID, &sid);
+		svid = dev->subsystem_vendor;
+		sid = dev->subsystem_device;
 		for (b = dev_list; b->vendor; b++) {
 			if ((b->vendor != pdev->vendor) || (b->device != pdev->device) || (b->rev < rev)) continue;
 			if (b->svid)

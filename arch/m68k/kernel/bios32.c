@@ -449,69 +449,6 @@ static void __init layout_bus(struct pci_bus *bus, unsigned long pci_mem_base,
 
 #endif /* !PCI_MODIFY */
 
-/*
- * Given the vendor and device ids, find the n'th instance of that device
- * in the system.
- */
-
-int pcibios_find_device(unsigned short vendor, unsigned short device_id,
-			unsigned short index, unsigned char *bus,
-			unsigned char *devfn)
-{
-	unsigned int curr = 0;
-	struct pci_dev *dev;
-
-	for (dev = pci_devices; dev; dev = dev->next)
-	{
-		if (dev->vendor == vendor && dev->device == device_id)
-		{
-			if (curr == index)
-			{
-				*devfn = dev->devfn;
-				*bus = dev->bus->number;
-				return PCIBIOS_SUCCESSFUL;
-			}
-			++curr;
-		}
-	}
-	return PCIBIOS_DEVICE_NOT_FOUND;
-}
-
-/*
- * Given the class, find the n'th instance of that device
- * in the system.
- */
-
-int pcibios_find_class(unsigned int class_code, unsigned short index,
-		       unsigned char *bus, unsigned char *devfn)
-{
-	unsigned int curr = 0;
-	struct pci_dev *dev;
-
-	for (dev = pci_devices; dev; dev = dev->next)
-	{
-		if (dev->class == class_code)
-		{
-			if (curr == index)
-			{
-				*devfn = dev->devfn;
-				*bus = dev->bus->number;
-				return PCIBIOS_SUCCESSFUL;
-			}
-			++curr;
-		}
-	}
-	return PCIBIOS_DEVICE_NOT_FOUND;
-}
-
-int pcibios_present(void)
-{
-	if (MACH_IS_HADES)
-		return 1;
-	else
-		return 0;
-}
-
 void __init pcibios_init(void)
 {
 	printk("Linux/m68k PCI BIOS32 revision %x.%02x\n", MAJOR_REV, MINOR_REV);
@@ -574,7 +511,7 @@ void __init pcibios_fixup(void)
 	 * Scan the tree, allocating PCI memory and I/O space.
 	 */
 
-	layout_bus(&pci_root, orig_mem_base, orig_io_base);
+	layout_bus(pci_bus_b(pci_root.next), orig_mem_base, orig_io_base);
 
 	pci_mem_base = orig_mem_base;
 	pci_io_base = orig_io_base;

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.114 2000/01/03 17:19:17 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.115 2000/01/06 00:42:09 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -343,20 +343,17 @@ static __inline__ u16 tcp_v6_check(struct tcphdr *th, int len,
 
 static __u32 tcp_v6_init_sequence(struct sock *sk, struct sk_buff *skb)
 {
-	__u32 si;
-	__u32 di;
-
 	if (skb->protocol == __constant_htons(ETH_P_IPV6)) {
-		si = skb->nh.ipv6h->saddr.s6_addr32[3];
-		di = skb->nh.ipv6h->daddr.s6_addr32[3];
+		return secure_tcpv6_sequence_number(skb->nh.ipv6h->daddr.s6_addr32,
+						    skb->nh.ipv6h->saddr.s6_addr32,
+						    skb->h.th->dest,
+						    skb->h.th->source);
 	} else {
-		si = skb->nh.iph->saddr;
-		di = skb->nh.iph->daddr;
+		return secure_tcp_sequence_number(skb->nh.iph->daddr,
+						  skb->nh.iph->saddr,
+						  skb->h.th->dest,
+						  skb->h.th->source);
 	}
-
-	return secure_tcp_sequence_number(di, si,
-					  skb->h.th->dest,
-					  skb->h.th->source);
 }
 
 static int tcp_v6_check_established(struct sock *sk)
@@ -622,9 +619,9 @@ static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr,
 	 */
 
 	if (!tp->write_seq)
-		tp->write_seq = secure_tcp_sequence_number(np->saddr.s6_addr32[3],
-							   np->daddr.s6_addr32[3],
-							   sk->sport, sk->dport);
+		tp->write_seq = secure_tcpv6_sequence_number(np->saddr.s6_addr32,
+							     np->daddr.s6_addr32,
+							     sk->sport, sk->dport);
 
 	err = tcp_connect(sk, buff);
 	if (err == 0)

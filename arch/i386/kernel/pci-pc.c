@@ -1,7 +1,7 @@
 /*
  *	Low-Level PCI Support for PC
  *
- *	(c) 1999 Martin Mares <mj@suse.cz>
+ *	(c) 1999--2000 Martin Mares <mj@suse.cz>
  */
 
 #include <linux/config.h>
@@ -21,6 +21,8 @@
 #include "pci-i386.h"
 
 unsigned int pci_probe = PCI_PROBE_BIOS | PCI_PROBE_CONF1 | PCI_PROBE_CONF2;
+
+static struct pci_bus *pci_root_bus;
 
 /*
  * IRQ routing table provided by the BIOS
@@ -624,26 +626,31 @@ static struct pci_ops * __init pci_find_bios(void)
 
 static void __init pcibios_sort(void)
 {
-	struct pci_dev *dev = pci_devices;
-	struct pci_dev **last = &pci_devices;
-	struct pci_dev *d, **dd, *e;
-	int idx;
+	LIST_HEAD(sorted_devices);
+	struct list_head *ln;
+	struct pci_dev *dev, *d;
+	int idx, found;
 	unsigned char bus, devfn;
 
 	DBG("PCI: Sorting device list...\n");
-	while ((e = dev)) {
-		idx = 0;
-		while (pci_bios_find_device(e->vendor, e->device, idx, &bus, &devfn) == PCIBIOS_SUCCESSFUL) {
+	while (pci_devices.next != &pci_devices) {
+		ln = pci_devices.next;
+		list_del(ln);
+		dev = pci_dev_g(ln);
+		idx = found = 0;
+		while (pci_bios_find_device(dev->vendor, dev->device, idx, &bus, &devfn) == PCIBIOS_SUCCESSFUL) {
 			idx++;
-			for(dd=&dev; (d = *dd); dd = &d->next) {
+			for (ln=pci_devices.next; ln != &pci_devices; ln=ln->next) {
+				d = pci_dev_g(ln);
 				if (d->bus->number == bus && d->devfn == devfn) {
-					*dd = d->next;
-					*last = d;
-					last = &d->next;
+					list_del(&d->global_list);
+					list_add_tail(&d->global_list, &sorted_devices);
+					if (d == dev)
+						found = 1;
 					break;
 				}
 			}
-			if (!d) {
+			if (ln == &pci_devices) {
 				printk("PCI: BIOS reporting unknown device %02x:%02x\n", bus, devfn);
 				/*
 				 * We must not continue scanning as several buggy BIOSes
@@ -652,16 +659,14 @@ static void __init pcibios_sort(void)
 				break;
 			}
 		}
-		if (e == dev) {
+		if (!found) {
 			printk("PCI: Device %02x:%02x not found by BIOS\n",
 				dev->bus->number, dev->devfn);
-			d = dev;
-			dev = dev->next;
-			*last = d;
-			last = &d->next;
+			list_del(&dev->global_list);
+			list_add_tail(&dev->global_list, &sorted_devices);
 		}
 	}
-	*last = NULL;
+	list_splice(&sorted_devices, &pci_devices);
 }
 
 /*
@@ -736,16 +741,19 @@ static struct irq_routing_table * __init pcibios_get_irq_routing_table(void)
 
 static void __init pcibios_fixup_ghosts(struct pci_bus *b)
 {
-	struct pci_dev *d, *e, **z;
+	struct list_head *ln, *mn;
+	struct pci_dev *d, *e;
 	int mirror = PCI_DEVFN(16,0);
 	int seen_host_bridge = 0;
 	int i;
 
 	DBG("PCI: Scanning for ghost devices on bus %d\n", b->number);
-	for(d=b->devices; d && d->devfn < mirror; d=d->sibling) {
+	for (ln=b->devices.next; ln != &b->devices; ln=ln->next) {
+		d = pci_dev_b(ln);
 		if ((d->class >> 8) == PCI_CLASS_BRIDGE_HOST)
 			seen_host_bridge++;
-		for(e=d->next; e; e=e->sibling) {
+		for (mn=ln->next; mn != &b->devices; mn=mn->next) {
+			e = pci_dev_b(mn);
 			if (e->devfn != d->devfn + mirror ||
 			    e->vendor != d->vendor ||
 			    e->device != d->device ||
@@ -758,20 +766,23 @@ static void __init pcibios_fixup_ghosts(struct pci_bus *b)
 					continue;
 			break;
 		}
-		if (!e)
+		if (mn == &b->devices)
 			return;
 	}
 	if (!seen_host_bridge)
 		return;
 	printk("PCI: Ignoring ghost devices on bus %02x\n", b->number);
-	for(e=b->devices; e->sibling != d; e=e->sibling);
-	e->sibling = NULL;
-	for(z=&pci_devices; (d=*z);)
-		if (d->bus == b && d->devfn >= mirror) {
-			*z = d->next;
-			kfree_s(d, sizeof(*d));
+
+	ln = &b->devices;
+	while (ln->next != &b->devices) {
+		d = pci_dev_b(ln->next);
+		if (d->devfn >= mirror) {
+			list_del(&d->global_list);
+			list_del(&d->bus_list);
+			kfree(d);
 		} else
-			z = &d->next;
+			ln = ln->next;
+	}
 }
 
 /*
@@ -783,10 +794,10 @@ static void __init pcibios_fixup_ghosts(struct pci_bus *b)
  */
 static void __init pcibios_fixup_peer_bridges(void)
 {
-	struct pci_bus *b = pci_root;
+	struct list_head *ln;
+	struct pci_bus *b = pci_root_bus;
 	int n, cnt=-1;
-	struct pci_dev *d;
-	struct pci_ops *ops = pci_root->ops;
+	struct pci_ops *ops = pci_root_bus->ops;
 
 #ifdef CONFIG_PCI_DIRECT
 	/*
@@ -798,8 +809,10 @@ static void __init pcibios_fixup_peer_bridges(void)
 		return;
 #endif
 
-	for(d=b->devices; d; d=d->sibling)
-		if ((d->class >> 8) == PCI_CLASS_BRIDGE_HOST)
+	DBG("PCI: Peer bridge fixup\n");
+
+	for(ln=b->devices.next; ln != &b->devices; ln=ln->next)
+		if ((pci_dev_b(ln)->class >> 8) == PCI_CLASS_BRIDGE_HOST)
 			cnt++;
 	n = b->subordinate + 1;
 	while (n <= 0xff) {
@@ -864,9 +877,9 @@ static void __init pci_fixup_i450nx(struct pci_dev *d)
 		pci_read_config_byte(d, reg++, &subb);
 		DBG("i450NX PXB %d: %02x/%02x/%02x\n", pxb, busno, suba, subb);
 		if (busno)
-			pci_scan_bus(busno, pci_root->ops, NULL);	/* Bus A */
+			pci_scan_bus(busno, pci_root_bus->ops, NULL);	/* Bus A */
 		if (suba < subb)
-			pci_scan_bus(suba+1, pci_root->ops, NULL);	/* Bus B */
+			pci_scan_bus(suba+1, pci_root_bus->ops, NULL);	/* Bus B */
 	}
 }
 
@@ -879,7 +892,7 @@ static void __init pci_fixup_rcc(struct pci_dev *d)
 	u8 busno;
 	pci_read_config_byte(d, 0x44, &busno);
 	printk("PCI: RCC host bridge: secondary bus %02x\n", busno);
-	pci_scan_bus(busno, pci_root->ops, NULL);
+	pci_scan_bus(busno, pci_root_bus->ops, NULL);
 }
 
 static void __init pci_fixup_compaq(struct pci_dev *d)
@@ -891,7 +904,7 @@ static void __init pci_fixup_compaq(struct pci_dev *d)
 	u8 busno;
 	pci_read_config_byte(d, 0xc8, &busno);
 	printk("PCI: Compaq host bridge: secondary bus %02x\n", busno);
-	pci_scan_bus(busno, pci_root->ops, NULL);
+	pci_scan_bus(busno, pci_root_bus->ops, NULL);
 }
 
 static void __init pci_fixup_umc_ide(struct pci_dev *d)
@@ -1000,7 +1013,7 @@ static void __init pcibios_irq_peer_trick(struct irq_routing_table *rt)
 		 *  It might be a secondary bus, but in this case its parent is already
 		 *  known (ascending bus order) and therefore pci_scan_bus returns immediately.
 		 */
-		if (busmap[i] && pci_scan_bus(i, pci_root->ops, NULL))
+		if (busmap[i] && pci_scan_bus(i, pci_root_bus->ops, NULL))
 			printk("PCI: Discovered primary peer bus %02x [IRQ]\n", i);
 }
 
@@ -1063,7 +1076,6 @@ static char *pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_table *r
 	case ID(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371FB_0):
 	case ID(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371SB_0):
 	case ID(PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371AB_0):
-	case ID(PCI_VENDOR_ID_AL, PCI_DEVICE_ID_AL_M1533):
 		/* Intel PIIX: PIRQ holds configuration register address */
 		pci_read_config_byte(router, pirq, &x);
 		if (x < 16) {
@@ -1078,6 +1090,7 @@ static char *pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_table *r
 		}
 		DBG(" -> [PIIX] sink\n");
 		return NULL;
+	case ID(PCI_VENDOR_ID_AL, PCI_DEVICE_ID_AL_M1533):
 	default:
 		DBG(" -> unknown router %04x/%04x\n", rt->rtr_vendor, rt->rtr_device);
 		if (newirq && mask == (1 << newirq)) {
@@ -1096,6 +1109,7 @@ static void __init pcibios_fixup_irqs(void)
 	struct pci_dev *dev;
 	u8 pin;
 
+	DBG("PCI: IRQ fixup\n");
 	rtable = pirq_table = pcibios_find_irq_routing_table();
 #ifdef CONFIG_PCI_BIOS
 	if (!rtable && pci_bios_present)
@@ -1105,7 +1119,7 @@ static void __init pcibios_fixup_irqs(void)
 	if (rtable)
 		pcibios_irq_peer_trick(rtable);
 
-	for(dev=pci_devices; dev; dev=dev->next) {
+	pci_for_each_dev(dev) {
 		pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
 #if defined(CONFIG_X86_IO_APIC)
 		/*
@@ -1198,7 +1212,7 @@ void __init pcibios_init(void)
 	}
 
 	printk("PCI: Probing PCI hardware\n");
-	pci_scan_bus(0, ops, NULL);
+	pci_root_bus = pci_scan_bus(0, ops, NULL);
 
 	pcibios_fixup_irqs();
 	if (pci_probe & PCI_PEER_FIXUP)

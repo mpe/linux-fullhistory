@@ -340,6 +340,16 @@ struct address_space {
 	unsigned long		nrpages;
 };
 
+struct block_device {
+	struct list_head	bd_hash;
+	atomic_t		bd_count;
+/*	struct address_space	bd_data; */
+	dev_t			bd_dev;  /* not a kdev_t - it's a search key */
+	atomic_t		bd_openers;
+/*	struct bdev_operations *bd_op; */
+	struct semaphore	bd_sem;	/* open/close mutex */
+};
+
 struct inode {
 	struct list_head	i_hash;
 	struct list_head	i_list;
@@ -370,6 +380,7 @@ struct inode {
 	spinlock_t		i_shared_lock;
 	struct dquot		*i_dquot[MAXQUOTAS];
 	struct pipe_inode_info	*i_pipe;
+	struct block_device	*i_bdev;
 
 	unsigned long		i_state;
 
@@ -559,6 +570,8 @@ struct super_block {
 	struct list_head	s_dirty;	/* dirty inodes */
 	struct list_head	s_files;
 
+	struct block_device	*s_bdev;
+
 	union {
 		struct minix_sb_info	minix_sb;
 		struct ext2_sb_info	ext2_sb;
@@ -743,12 +756,17 @@ extern char * getname(const char *);
 #define __getname()	((char *) __get_free_page(GFP_KERNEL))
 #define putname(name)	free_page((unsigned long)(name))
 
+enum {BDEV_FILE, BDEV_SWAP, BDEV_FS, BDEV_RAW};
 extern void kill_fasync(struct fasync_struct *, int, int);
 extern int register_blkdev(unsigned int, const char *, struct file_operations *);
 extern int unregister_blkdev(unsigned int, const char *);
+extern struct block_device *bdget(dev_t);
+extern void bdput(struct block_device *);
 extern int blkdev_open(struct inode *, struct file *);
-extern int blkdev_release (struct inode *);
 extern struct file_operations def_blk_fops;
+extern int ioctl_by_bdev(struct block_device *, unsigned, unsigned long);
+extern int blkdev_get(struct block_device *, mode_t, unsigned, int);
+extern int blkdev_put(struct block_device *, int);
 
 /* fs/devices.c */
 extern int register_chrdev(unsigned int, const char *, struct file_operations *);
@@ -760,8 +778,8 @@ extern char * cdevname(kdev_t);
 extern char * kdevname(kdev_t);
 extern void init_special_inode(struct inode *, umode_t, int);
 
-extern void init_fifo(struct inode *);
 extern struct inode_operations fifo_inode_operations;
+extern struct inode_operations blkdev_inode_operations;
 
 /* Invalid inode operations -- fs/bad_inode.c */
 extern void make_bad_inode(struct inode *);

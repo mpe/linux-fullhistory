@@ -14,7 +14,22 @@
  * Version History:
  *    Version 1.00 - Initial version
  */
- 
+
+/*
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms of the GNU General Public License as published by the
+ * Free Software Foundation; either version 2 of the License, or (at your
+ * option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful, but
+ * WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
+ * or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License
+ * for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program; if not, write to the Free Software Foundation,
+ * Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
+ */
 
 #define __NO_VERSION__
 
@@ -46,13 +61,15 @@
 #include "usb.h"
 #include "ov511.h"
 
+#define OV511_I2C_RETRIES 3
+
 /* Video Size 384 x 288 x 3 bytes for RGB */
-#define MAX_FRAME_SIZE (384 * 288 * 3)
+#define MAX_FRAME_SIZE (320 * 240 * 3)
 
 // FIXME - Force CIF to make some apps happy for the moment. Should find a 
 //         better way to do this.
-#define DEFAULT_WIDTH 384
-#define DEFAULT_HEIGHT 288
+#define DEFAULT_WIDTH 320
+#define DEFAULT_HEIGHT 240
 
 char kernel_version[] = UTS_RELEASE;
 
@@ -173,7 +190,7 @@ static void rvfree(void *mem, unsigned long size)
 	vfree(mem);
 }
 
-int usb_ov511_reg_write(struct usb_device *dev, unsigned char reg, unsigned char value)
+int ov511_reg_write(struct usb_device *dev, unsigned char reg, unsigned char value)
 {
 	int rc;
 
@@ -183,13 +200,13 @@ int usb_ov511_reg_write(struct usb_device *dev, unsigned char reg, unsigned char
 		USB_TYPE_CLASS | USB_RECIP_DEVICE,
 		0, (__u16)reg, &value, 1, HZ);	
 			
-	PDEBUG("reg write: 0x%X:0x%X\n", reg, value);
+	PDEBUG("reg write: 0x%02X:0x%02X\n", reg, value);
 			
 	return rc;
 }
 
 /* returns: negative is error, pos or zero is data */
-int usb_ov511_reg_read(struct usb_device *dev, unsigned char reg)
+int ov511_reg_read(struct usb_device *dev, unsigned char reg)
 {
 	int rc;
 	unsigned char buffer[1];
@@ -200,7 +217,7 @@ int usb_ov511_reg_read(struct usb_device *dev, unsigned char reg)
 		USB_DIR_IN | USB_TYPE_CLASS | USB_RECIP_DEVICE,
 		0, (__u16)reg, buffer, 1, HZ);
                                
-	PDEBUG("reg read: 0x%X:0x%X\n", reg, buffer[0]);
+	PDEBUG("reg read: 0x%02X:0x%02X\n", reg, buffer[0]);
 	
 	if(rc < 0)
 		return rc;
@@ -208,89 +225,116 @@ int usb_ov511_reg_read(struct usb_device *dev, unsigned char reg)
 		return buffer[0];	
 }
 
-int usb_ov511_cam_reg_write(struct usb_device *dev, unsigned char reg, unsigned char value)
+int ov511_i2c_write(struct usb_device *dev, unsigned char reg, unsigned char value)
 {
-	int rc;
-	
-	// Three byte write cycle
-	
-	//    Set slave ID (This might only need to be done once)
-	//    (CAMERA SPECIFIC (OV7610/OV7110))
-	rc = usb_ov511_reg_write(dev, OV511_REG_I2C_SLAVE_ID_WRITE,
-	                         OV7610_I2C_WRITE_ID);
-	if (rc < 0) return rc;
-	
-	//    Select camera register (I2C sub-address)
-	rc = usb_ov511_reg_write(dev, OV511_REG_I2C_SUB_ADDRESS_3_BYTE, reg);
-	if (rc < 0) return rc;
+	int rc, retries;
 
-	//    Write "value" to I2C data port of OV511
-	rc = usb_ov511_reg_write(dev, OV511_REG_I2C_DATA_PORT, value);	
-	if (rc < 0) return rc;
-	
-	// FIXME - should ensure bus is idle before continuing
-	
-	//    Initiate 3-byte write cycle
-	rc = usb_ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x01);	
+	PDEBUG("i2c write: 0x%02X:0x%02X\n", reg, value);
+	/* Three byte write cycle */
+	for(retries = OV511_I2C_RETRIES;;) {
+		/* Select camera register */
+		rc = ov511_reg_write(dev, OV511_REG_I2C_SUB_ADDRESS_3_BYTE, reg);
+		if (rc < 0) return rc;
 
-	return rc;
+		/* Write "value" to I2C data port of OV511 */
+		rc = ov511_reg_write(dev, OV511_REG_I2C_DATA_PORT, value);	
+		if (rc < 0) return rc;
+
+		/* Initiate 3-byte write cycle */
+		rc = ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x01);
+		if (rc < 0) return rc;
+
+		do rc = ov511_reg_read(dev, OV511_REG_I2C_CONTROL);
+		while(rc > 0 && ((rc&1) == 0)); /* Retry until idle */
+		if (rc < 0) return rc;
+
+		if((rc&2) == 0) /* Ack? */
+			break;
+
+		/* I2C abort */	
+		ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x10);
+
+		if (--retries < 0) return -1;
+	}
+
+	return 0;
 }
 
 /* returns: negative is error, pos or zero is data */
-int usb_ov511_cam_reg_read(struct usb_device *dev, unsigned char reg)
+int ov511_i2c_read(struct usb_device *dev, unsigned char reg)
 {
-	int rc;
+	int rc, value, retries;
 
-	// Two byte write cycle
-	
-	//    Set slave ID (This might only need to be done once)
-	//    (CAMERA SPECIFIC (OV7610/OV7110))
-	rc = usb_ov511_reg_write(dev, OV511_REG_I2C_SLAVE_ID_WRITE, 		                         OV7610_I2C_WRITE_ID);
+	/* Two byte write cycle */
+	for(retries = OV511_I2C_RETRIES;;) {
+		/* Select camera register */
+		rc = ov511_reg_write(dev, OV511_REG_I2C_SUB_ADDRESS_2_BYTE, reg);
+		if (rc < 0) return rc;
+
+		/* Initiate 2-byte write cycle */
+		rc = ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x03);
+		if (rc < 0) return rc;
+
+		do rc = ov511_reg_read(dev, OV511_REG_I2C_CONTROL);
+		while(rc > 0 && ((rc&1) == 0)); /* Retry until idle */
+		if (rc < 0) return rc;
+
+		if((rc&2) == 0) /* Ack? */
+			break;
+
+		/* I2C abort */	
+		ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x10);
+
+		if (--retries < 0) return -1;
+	}
+
+	/* Two byte read cycle */
+	for(retries = OV511_I2C_RETRIES;;) {
+		/* Initiate 2-byte read cycle */
+		rc = ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x05);
+		if (rc < 0) return rc;
+
+		do rc = ov511_reg_read(dev, OV511_REG_I2C_CONTROL);
+		while(rc > 0 && ((rc&1) == 0)); /* Retry until idle */
+		if (rc < 0) return rc;
+
+		if((rc&2) == 0) /* Ack? */
+			break;
+
+		/* I2C abort */	
+		rc = ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x10);
+		if (rc < 0) return rc;
+
+		if (--retries < 0) return -1;
+	}
+
+	value = ov511_reg_read(dev, OV511_REG_I2C_DATA_PORT);
+	PDEBUG("i2c read: 0x%02X:0x%02X\n", reg, value);
+		
+	/* This is needed to make ov511_i2c_write() work */
+	rc = ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x05);
 	if (rc < 0) return rc;
 	
-	//    Select camera register (I2C sub-address)
-	rc = usb_ov511_reg_write(dev, OV511_REG_I2C_SUB_ADDRESS_2_BYTE, reg);	
-	if (rc < 0) return rc;
-	
-	//    Initiate 2-byte write cycle
-	rc = usb_ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x03);	
-	if (rc < 0) return rc;
-	
-	// Two byte read cycle
-	
-	//    Set slave ID (This might only need to be done once)
-	//    (CAMERA SPECIFIC (OV7610/OV7110))
-	rc = usb_ov511_reg_write(dev, OV511_REG_I2C_SLAVE_ID_READ,
-	                         OV7610_I2C_READ_ID);
-	if (rc < 0) return rc;
-	
-	//    Initiate 2-byte read cycle
-	rc = usb_ov511_reg_write(dev, OV511_REG_I2C_CONTROL, 0x05);	
-	if (rc < 0) return rc;
-	
-	// FIXME - should check I2C bus status here before reading data!
-	
-	//    Write "value" to I2C data port of OV511
-	return usb_ov511_reg_read(dev, OV511_REG_I2C_DATA_PORT);	
+	return (value);
 }
 
-int usb_ov511_reset(struct usb_device *dev, unsigned char reset_type)
+int ov511_reset(struct usb_device *dev, unsigned char reset_type)
 {
 	int rc;
 	
 	PDEBUG("Reset: type=0x%X\n", reset_type);
-	rc = usb_ov511_reg_write(dev, OV511_REG_SYSTEM_RESET, reset_type);
+	rc = ov511_reg_write(dev, OV511_REG_SYSTEM_RESET, reset_type);
 	if (rc < 0)
 		printk(KERN_ERR "ov511: reset: command failed\n");
 
-	rc = usb_ov511_reg_write(dev, OV511_REG_SYSTEM_RESET, 0);
+	rc = ov511_reg_write(dev, OV511_REG_SYSTEM_RESET, 0);
 	if (rc < 0)
 		printk(KERN_ERR "ov511: reset: command failed\n");
 
 	return rc;
 }
 
-int usb_ov511_set_packet_size(struct usb_ov511 *ov511, int size)
+int ov511_set_packet_size(struct usb_ov511 *ov511, int size)
 {
 	int alt, multiplier, err;
 		
@@ -303,7 +347,7 @@ int usb_ov511_set_packet_size(struct usb_ov511 *ov511, int size)
 			break;
 		case 993:
 			alt = 1;
-			multiplier = 32;
+			multiplier = 31;
 			break;
 		case 768:
 			alt = 2;
@@ -311,7 +355,7 @@ int usb_ov511_set_packet_size(struct usb_ov511 *ov511, int size)
 			break;
 		case 769:
 			alt = 3;
-			multiplier = 25;
+			multiplier = 24;
 			break;
 		case 512:
 			alt = 4;
@@ -319,11 +363,11 @@ int usb_ov511_set_packet_size(struct usb_ov511 *ov511, int size)
 			break;
 		case 513:
 			alt = 5;
-			multiplier = 17;
+			multiplier = 16;
 			break;
 		case 257:
 			alt = 6;
-			multiplier = 9;
+			multiplier = 8;
 			break;
 		case 0:
 			alt = 7;
@@ -335,7 +379,7 @@ int usb_ov511_set_packet_size(struct usb_ov511 *ov511, int size)
 			return -EINVAL;
 	}
 
-	err = usb_ov511_reg_write(ov511->dev, OV511_REG_FIFO_PACKET_SIZE,
+	err = ov511_reg_write(ov511->dev, OV511_REG_FIFO_PACKET_SIZE,
 	                          multiplier);
 	if (err < 0) {
 		printk(KERN_ERR "ov511: Set packet size: Set FIFO size ret %d\n",
@@ -349,7 +393,7 @@ int usb_ov511_set_packet_size(struct usb_ov511 *ov511, int size)
 	}
 
 	// FIXME - Should we only reset the FIFO?
-	if (usb_ov511_reset(ov511->dev, OV511_RESET_NOREGS) < 0)
+	if (ov511_reset(ov511->dev, OV511_RESET_NOREGS) < 0)
 		return -ENOMEM;
 
 	return 0;
@@ -358,43 +402,85 @@ int usb_ov511_set_packet_size(struct usb_ov511 *ov511, int size)
 /* How much data is left in the scratch buf? */
 #define scratch_left(x)	(ov511->scratchlen - (int)((char *)x - (char *)ov511->scratch))
 
-// FIXME - Useless stub
-static void ov511_parse_data(struct usb_ov511 *ov511)
+static int ov511_move_data(struct usb_ov511 *ov511, urb_t *urb)
 {
-	PDEBUG("ov511_parse_data not implemented\n"); // TEMPORARY CODE
-}
-
-static int ov511_compress_isochronous(struct usb_ov511 *ov511, urb_t *urb)
-{
-	unsigned char *cdata, *data;
+	unsigned char *cdata;
 	int i, totlen = 0;
+	int aPackNum[10];
+	struct ov511_frame *frame;
 
-	data = ov511->scratch + ov511->scratchlen;
+	if (ov511->curframe == -1) {
+	  return 0;
+	}
+
 	for (i = 0; i < urb->number_of_packets; i++) {
 		int n = urb->iso_frame_desc[i].actual_length;
 		int st = urb->iso_frame_desc[i].status;
 		
 		cdata = urb->transfer_buffer + urb->iso_frame_desc[i].offset;
 
-		if (st) { 
+		if (!n) continue;
+
+		aPackNum[i] = n ? cdata[512] : -1;
+
+		if (st){ 
 			// Macro - must be in braces!
 			PDEBUG("data error: [%d] len=%d, status=%d\n",
 				i, n, st);
-		 }
-
-		if ((ov511->scratchlen + n) > SCRATCH_BUF_SIZE) {
-			PDEBUG("scratch buf overflow!scr_len: %d, n: %d\n", ov511->scratchlen, n );
-			return totlen;
 		}
 
-		if (n) {
-			memmove(data, cdata, n);
-			data += n;
-			totlen += n;
-			ov511->scratchlen += n;
+		frame = &ov511->frame[ov511->curframe];
+		
+		/* Can we find a frame end */
+		if ((cdata[0] | cdata[1] | cdata[2] | cdata[3] | 
+		     cdata[4] | cdata[5] | cdata[6] | cdata[7]) == 0 &&
+		    (cdata[8] & 8) && (cdata[8] & 0x80)) {
+
+		    PDEBUG("Found Frame End!, packnum = %d\n", (int)(cdata[512]));
+		    PDEBUG("Current frame = %d\n", ov511->curframe);
+
+		    if (frame->scanstate == STATE_LINES) {
+		        if (waitqueue_active(&frame->wq)) {
+			  PDEBUG("About to wake up waiting processes\n");
+			  frame->grabstate = FRAME_DONE;
+			  wake_up_interruptible(&frame->wq);
+			}
+		    }
 		}
+
+		/* Can we find a frame start */
+		else if ((cdata[0] | cdata[1] | cdata[2] | cdata[3] | 
+			  cdata[4] | cdata[5] | cdata[6] | cdata[7]) == 0 &&
+			 (cdata[8] & 8)) {
+		    PDEBUG("ov511: Found Frame Start!, packnum = %d\n", (int)(cdata[512]));
+		    frame->scanstate = STATE_LINES;
+		    frame->curpix = 0;
+		}
+
+		/* Are we in a frame? */
+		else if (frame->scanstate == STATE_LINES) {
+		  unsigned char *f = frame->data + 3 * frame->curpix;
+		  int i;
+		  if (frame->curpix <= 320 * 240 - 256) {
+		    for (i=0; i<256; i++) {
+		      *f++ = *cdata;
+		      *f++ = *cdata;
+		      *f++ = *cdata++;
+		      *f++ = *cdata;
+		      *f++ = *cdata;
+		      *f++ = *cdata++;
+		    }
+		    frame->curpix += 512;
+		  } else {
+		    PDEBUG("Too many pixels!\n");
+		  }
+		}
+
 	}
 
+	PDEBUG("pn: %d %d %d %d %d %d %d %d %d %d\n",
+	       aPackNum[0], aPackNum[1], aPackNum[2], aPackNum[3], aPackNum[4],
+	       aPackNum[5],aPackNum[6], aPackNum[7], aPackNum[8], aPackNum[9]);
 	return totlen;
 }
 
@@ -405,7 +491,17 @@ static void ov511_isoc_irq(struct urb *urb)
 	struct ov511_sbuf *sbuf;
 	int i;
 
-	PDEBUG("ov511_isoc_irq: %p status %d, errcount = %d, length = %d\n", urb, urb->status, urb->error_count, urb->actual_length);
+#if 0
+	static int last_status, last_error_count, last_actual_length;
+	if (last_status != urb->status ||
+	    last_error_count != urb->error_count ||
+	    last_actual_length != urb->actual_length) {
+	  PDEBUG("ov511_isoc_irq: %p status %d, errcount = %d, length = %d\n", urb, urb->status, urb->error_count, urb->actual_length);
+	  last_status = urb->status;
+	  last_error_count = urb->error_count;
+	  last_actual_length = urb->actual_length;
+	}
+#endif
 
 	if (!ov511->streaming) {
 		PDEBUG("hmmm... not streaming, but got interrupt\n");
@@ -413,11 +509,10 @@ static void ov511_isoc_irq(struct urb *urb)
 	}
 	
 	sbuf = &ov511->sbuf[ov511->cursbuf];
-//	usb_kill_isoc(sbuf->isodesc);
 
 	/* Copy the data received into our scratch buffer */
-	len = ov511_compress_isochronous(ov511, urb);
-
+	len = ov511_move_data(ov511, urb);
+#if 0
 	/* If we don't have a frame we're current working on, complain */
 	if (ov511->scratchlen) {
 		if (ov511->curframe < 0) {
@@ -426,7 +521,7 @@ static void ov511_isoc_irq(struct urb *urb)
 		} else
 			ov511_parse_data(ov511);
 	}
-
+#endif
 	for (i = 0; i < FRAMES_PER_DESC; i++) {
 		sbuf->urb->iso_frame_desc[i].status = 0;
 		sbuf->urb->iso_frame_desc[i].actual_length = 0;
@@ -434,9 +529,6 @@ static void ov511_isoc_irq(struct urb *urb)
 	
 	/* Move to the next sbuf */
 	ov511->cursbuf = (ov511->cursbuf + 1) % OV511_NUMSBUF;
-
-	/* Reschedule this block of Isochronous desc */
-//	usb_run_isoc(sbuf->isodesc, ov511->sbuf[ov511->cursbuf].isodesc);
 
 	return;
 }
@@ -452,9 +544,25 @@ static int ov511_init_isoc(struct usb_ov511 *ov511)
 	ov511->cursbuf = 0;
 	ov511->scratchlen = 0;
 
-	// FIXME - is this the proper size?
-	usb_ov511_set_packet_size(ov511, 512);
+	ov511_set_packet_size(ov511, 512);
 	
+#define OV511_COLOR_BAR_TEST
+#ifdef OV511_COLOR_BAR_TEST
+	{
+	  int rc;
+	  rc = ov511_i2c_read(ov511->dev, 0x12);
+	  rc = ov511_i2c_write(ov511->dev, 0x12, 0x3f);
+	  rc = ov511_i2c_read(ov511->dev, 0x12);
+	  rc = ov511_i2c_read(ov511->dev, 0x13);
+	  rc = ov511_i2c_write(ov511->dev, 0x14, 0x4);
+	  rc = ov511_i2c_read(ov511->dev, 0x14);
+	  rc = ov511_i2c_write(ov511->dev, 0x28, 0x60);
+	  rc = ov511_i2c_read(ov511->dev, 0x28);
+	  ov511_reg_write(ov511->dev, OV511_REG_CAMERA_DATA_INPUT_SELECT,
+			      0);
+	}
+#endif
+
 	/* We double buffer the Iso lists */
 	urb = usb_alloc_urb(FRAMES_PER_DESC);
 	
@@ -494,7 +602,7 @@ static int ov511_init_isoc(struct usb_ov511 *ov511)
  		urb->iso_frame_desc[fx].offset = FRAME_SIZE_PER_DESC * fx;
 		urb->iso_frame_desc[fx].length = FRAME_SIZE_PER_DESC;
 	}
-	
+
 	ov511->sbuf[1].urb->next = ov511->sbuf[0].urb;
 	ov511->sbuf[0].urb->next = ov511->sbuf[1].urb;
 
@@ -509,7 +617,7 @@ static int ov511_init_isoc(struct usb_ov511 *ov511)
 
 	ov511->streaming = 1;
 
-	return 0; 
+	return 0;
 }
 
 
@@ -518,14 +626,7 @@ static void ov511_stop_isoc(struct usb_ov511 *ov511)
 	if (!ov511->streaming)
 		return;
 
-// FIXME - Figure out how to do this with the ov511 (Does the below do it?)
-//	/* Turn off continuous grab */
-//	if (usb_cpia_set_grab_mode(cpia->dev, 0) < 0) {
-//		printk(KERN_ERR "cpia_set_grab_mode error\n");
-//		return /* -EBUSY */;
-//	}
-
-	usb_ov511_set_packet_size(ov511, 0);
+	ov511_set_packet_size(ov511, 0);
 	
 	/* Unschedule all of the iso td's */
 	usb_unlink_urb(ov511->sbuf[1].urb);
@@ -570,25 +671,8 @@ static int ov511_new_frame(struct usb_ov511 *ov511, int framenum)
 		height = DEFAULT_HEIGHT;
 	height = (height / 4) * 4;	/* Multiple of 4 */
 	
-// FIXME - Don't know how to implement the equivalent of this for the ov511
-//	/* Set the ROI they want */
-//	if (usb_cpia_set_roi(cpia->dev, 0, width / 8, 0, height / 4) < 0)
-//		return -EBUSY;
-
-//	if (usb_cpia_set_compression(cpia->dev, cpia->compress ?
-//			COMP_AUTO : COMP_DISABLED, DONT_DECIMATE) < 0) {
-//		printk(KERN_ERR "cpia_set_compression error\n");
-//		return -EBUSY;
-//	}
-
-	/* We want a fresh frame every 30 we get */
-	ov511->compress = (ov511->compress + 1) % 30;
-
-//	/* Grab the frame */
-//	if (usb_cpia_upload_frame(cpia->dev, WAIT_FOR_NEXT_FRAME) < 0) {
-//		printk(KERN_ERR "cpia_upload_frame error\n");
-//		return -EBUSY;
-//	}
+//	/* We want a fresh frame every 30 we get */
+//	ov511->compress = (ov511->compress + 1) % 30;
 
 	return 0;
 }
@@ -1061,48 +1145,69 @@ static struct video_device ov511_template = {
 	0
 };
 
-static int usb_ov511_configure(struct usb_ov511 *ov511)
+static int ov511_configure(struct usb_ov511 *ov511)
 {
 	struct usb_device *dev = ov511->dev;
 	int temprc;   // DEBUG CODE
-	
+
 	/* Set altsetting 0 */
 	if (usb_set_interface(dev, ov511->iface, 0) < 0) {
 		printk(KERN_ERR "ov511: usb_set_interface error\n");
 		return -EBUSY;
 	}
-	
+
 	memcpy(&ov511->vdev, &ov511_template, sizeof(ov511_template));
 
 	init_waitqueue_head(&ov511->frame[0].wq);
 	init_waitqueue_head(&ov511->frame[1].wq);
-	
+
 	if (video_register_device(&ov511->vdev, VFL_TYPE_GRABBER) == -1) {
 		printk(KERN_ERR "ov511: video_register_device failed\n");
 		return -EBUSY;
 	}
 
-	// Disable compression
-	if (usb_ov511_reg_write(dev, OV511_OMNICE_ENABLE, 0x00) < 0) {
-		printk(KERN_ERR "ov511: disable compression: command failed\n");
+	/* Reset in case driver was unloaded and reloaded without unplug */
+	if (ov511_reset(dev, OV511_RESET_ALL) < 0)
 		goto error;
-	}
-	
-	// Initialize system
-	// FIXME - This should be moved to a function
-	if (usb_ov511_reg_write(dev, OV511_REG_SYSTEM_INIT, 0x01) < 0) {
+
+	/* Initialize system */
+	if (ov511_reg_write(dev, OV511_REG_SYSTEM_INIT, 0x01) < 0) {
 		printk(KERN_ERR "ov511: enable system: command failed\n");
 		goto error;
 	}
+
+	/* This seems to be necessary */
+	if (ov511_reset(dev, OV511_RESET_ALL) < 0)
+		goto error;
+
+	/* Disable compression */
+	if (ov511_reg_write(dev, OV511_OMNICE_ENABLE, 0x00) < 0) {
+		printk(KERN_ERR "ov511: disable compression: command failed\n");
+		goto error;
+	}
+
+// FIXME - error checking needed
+	ov511_reg_write(dev, OV511_REG_I2C_SLAVE_ID_WRITE,
+	                     OV7610_I2C_WRITE_ID);
+	ov511_reg_write(dev, OV511_REG_I2C_SLAVE_ID_READ,
+	                     OV7610_I2C_READ_ID);
+
+// DEBUG CODE
+//	usb_ov511_reg_write(dev, OV511_REG_I2C_CLOCK_PRESCALER,
+//						 OV511_I2C_CLOCK_PRESCALER);
 	
-	if (usb_ov511_reset(dev, OV511_RESET_NOREGS) < 0)
+	if (ov511_reset(dev, OV511_RESET_NOREGS) < 0)
 		goto error;
 	
+	/* Dummy read to sync I2C */
+	ov511_i2c_read(dev, 0x1C);
+	
 // DEBUG - TEST CODE FOR CAMERA REG READ
-     	temprc = usb_ov511_cam_reg_read(dev, 0x1D);
-     	PDEBUG("Camera reg 0x1D: 0x%X\n", temprc);
-// END DEBUG CODE
+	temprc = ov511_i2c_read(dev, 0x1C);
 
+     	temprc = ov511_i2c_read(dev, 0x1D);
+// END DEBUG CODE
+     	
 	ov511->compress = 0;
 	
 	return 0;
@@ -1156,14 +1261,14 @@ static void* ov511_probe(struct usb_device *dev, unsigned int ifnum)
 	ov511->dev = dev;
 	ov511->iface = interface->bInterfaceNumber;
 
-	rc = usb_ov511_reg_read(dev, OV511_REG_SYSTEM_CUSTOM_ID);
+	rc = ov511_reg_read(dev, OV511_REG_SYSTEM_CUSTOM_ID);
 	if (rc < 0) {
 		printk("ov511: Unable to read camera bridge registers\n");
 		return NULL;
-	} else if (rc == 3) { // D-Link DSB-C300
+	} else if (rc == 3) {  /* D-Link DSB-C300 */
 		printk("ov511: Camera is a D-Link DSB-C300\n");
 		ov511->customid = 3;
-	} else if (rc == 21) { // Creative Labs WebCam 3
+	} else if (rc == 21) { /* Creative Labs WebCam 3 */
 		printk("ov511: Camera is a Creative Labs WebCam 3\n");
 		ov511->customid = 21;		
 	} else {
@@ -1173,11 +1278,7 @@ static void* ov511_probe(struct usb_device *dev, unsigned int ifnum)
 		return NULL;
 	}
 
-	// Reset in case driver was unloaded and reloaded without unplug
-	if (usb_ov511_reset(dev, OV511_RESET_ALL) < 0)
-		return NULL;
-	
-	if (!usb_ov511_configure(ov511)) {
+	if (!ov511_configure(ov511)) {
 		ov511->user=0;
 		init_MUTEX(&ov511->lock);	/* to 1 == available */
 		return ov511;

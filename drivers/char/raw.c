@@ -18,12 +18,10 @@
 
 #define dprintk(x...) 
 
-static kdev_t raw_device_bindings[256] = {};
+static struct block_device *raw_device_bindings[256] = {};
 static int raw_device_inuse[256] = {};
 static int raw_device_sector_size[256] = {};
 static int raw_device_sector_bits[256] = {};
-
-extern struct file_operations * get_blkfops(unsigned int major);
 
 static ssize_t rw_raw_dev(int rw, struct file *, char *, size_t, loff_t *);
 
@@ -62,63 +60,10 @@ static struct file_operations raw_ctl_fops = {
 	NULL		/* fsync */
 };
 
-
-
 void __init raw_init(void)
 {
 	register_chrdev(RAW_MAJOR, "raw", &raw_fops);
 }
-
-
-/*
- * The raw IO open and release code needs to fake appropriate
- * open/release calls to the underlying block devices.  
- */
-
-static int bdev_open(kdev_t dev, int mode)
-{
-	int err = 0;
-	struct file dummy_file = {};
-	struct dentry dummy_dentry = {};
-	struct inode * inode = get_empty_inode();
-	
-	if (!inode)
-		return -ENOMEM;
-	
-	dummy_file.f_op = get_blkfops(MAJOR(dev));
-	if (!dummy_file.f_op) {
-		err = -ENODEV;
-		goto done;
-	}
-	
-	if (dummy_file.f_op->open) {
-		inode->i_rdev = dev;
-		dummy_dentry.d_inode = inode;
-		dummy_file.f_dentry = &dummy_dentry;
-		dummy_file.f_mode = mode;
-		err = dummy_file.f_op->open(inode, &dummy_file);
-	}
-
- done:
-	iput(inode);
-	return err;
-}
-
-static int bdev_close(kdev_t dev)
-{
-	int err;
-	struct inode * inode = get_empty_inode();
-
-	if (!inode)
-		return -ENOMEM;
-	
-	inode->i_rdev = dev;
-	err = blkdev_release(inode);
-	iput(inode);
-	return err;
-}
-
-
 
 /* 
  * Open/close code for raw IO.
@@ -127,7 +72,8 @@ static int bdev_close(kdev_t dev)
 int raw_open(struct inode *inode, struct file *filp)
 {
 	int minor;
-	kdev_t bdev;
+	struct block_device * bdev;
+	kdev_t rdev;	/* it should eventually go away */
 	int err;
 	int sector_size;
 	int sector_bits;
@@ -150,10 +96,11 @@ int raw_open(struct inode *inode, struct file *filp)
 	 */
 
 	bdev = raw_device_bindings[minor];
-	if (bdev == NODEV) 
+	if (!bdev)
 		return -ENODEV;
 
-	err = bdev_open(bdev, filp->f_mode);
+	rdev = to_kdev_t(bdev->bd_dev);
+	err = blkdev_get(bdev, filp->f_mode, 0, BDEV_RAW);
 	if (err)
 		return err;
 	
@@ -171,15 +118,15 @@ int raw_open(struct inode *inode, struct file *filp)
 	 */
 	
 	sector_size = 512;
-	if (lookup_vfsmnt(bdev) != NULL) {
-		if (blksize_size[MAJOR(bdev)])
-			sector_size = blksize_size[MAJOR(bdev)][MINOR(bdev)];
+	if (lookup_vfsmnt(rdev) != NULL) {
+		if (blksize_size[MAJOR(rdev)])
+			sector_size = blksize_size[MAJOR(rdev)][MINOR(rdev)];
 	} else {
-		if (hardsect_size[MAJOR(bdev)])
-			sector_size = hardsect_size[MAJOR(bdev)][MINOR(bdev)];
+		if (hardsect_size[MAJOR(rdev)])
+			sector_size = hardsect_size[MAJOR(rdev)][MINOR(rdev)];
 	}
 
-	set_blocksize(bdev, sector_size);
+	set_blocksize(rdev, sector_size);
 	raw_device_sector_size[minor] = sector_size;
 
 	for (sector_bits = 0; !(sector_size & 1); )
@@ -192,11 +139,11 @@ int raw_open(struct inode *inode, struct file *filp)
 int raw_release(struct inode *inode, struct file *filp)
 {
 	int minor;
-	kdev_t bdev;
+	struct block_device *bdev;
 	
 	minor = MINOR(inode->i_rdev);
 	bdev = raw_device_bindings[minor];
-	bdev_close(bdev);
+	blkdev_put(bdev, BDEV_RAW);
 	raw_device_inuse[minor]--;
 	return 0;
 }
@@ -261,11 +208,14 @@ int raw_ctl_ioctl(struct inode *inode,
 				err = -EBUSY;
 				break;
 			}
+			if (raw_device_bindings[minor])
+				bdput(raw_device_bindings[minor]);
 			raw_device_bindings[minor] = 
-				MKDEV(rq.block_major, rq.block_minor);
+				bdget(kdev_t_to_nr(MKDEV(rq.block_major, rq.block_minor)));
 		} else {
-			rq.block_major = MAJOR(raw_device_bindings[minor]);
-			rq.block_minor = MINOR(raw_device_bindings[minor]);
+			kdev_t dev=to_kdev_t(raw_device_bindings[minor]->bd_dev);
+			rq.block_major = MAJOR(dev);
+			rq.block_minor = MINOR(dev);
 			err = copy_to_user((void *) arg, &rq, sizeof(rq));
 		}
 		break;
@@ -317,7 +267,7 @@ ssize_t	rw_raw_dev(int rw, struct file *filp, char *buf,
 	 */
 
 	minor = MINOR(filp->f_dentry->d_inode->i_rdev);
-	dev = raw_device_bindings[minor];
+	dev = to_kdev_t(raw_device_bindings[minor]->bd_dev);
 	sector_size = raw_device_sector_size[minor];
 	sector_bits = raw_device_sector_bits[minor];
 	sector_mask = sector_size- 1;

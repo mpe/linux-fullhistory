@@ -1,7 +1,7 @@
 /*
  * drivers/video/clgenfb.c - driver for Cirrus Logic chipsets
  *
- * Copyright 1999 Jeff Garzik <jgarzik@pobox.com>
+ * Copyright 1999 Jeff Garzik <jgarzik@mandrakesoft.com>
  *
  * Contributors (thanks, all!)
  *
@@ -2594,10 +2594,10 @@ static void clgen_pci_unmap (struct clgenfb_info *info)
 {
 	iounmap (info->fbmem);
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,13)
-	__release_region (&iomem_resource, info->fbmem_phys, info->size);
-	__release_region (&iomem_resource, 0xA0000, 65535);
+	release_mem_region(info->fbmem_phys, info->size);
+	release_mem_region(0xA0000, 65535);
 	if (release_io_ports)
-		__release_region (&ioport_resource, 0x3C0, 32);
+		release_region(0x3C0, 32);
 #endif
 }
 #endif /* MODULE */
@@ -2679,21 +2679,20 @@ static int __init clgen_pci_setup (struct clgenfb_info *info,
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,13)
 
-	if (!__request_region (&iomem_resource, board_addr,
-			       board_size, "clgenfb")) {
+	if (!request_mem_region(board_addr, board_size, "clgenfb")) {
 		pci_write_config_word (pdev, PCI_COMMAND, tmp16);
 		printk(KERN_ERR "clgen: cannot reserve region 0x%lu, abort\n",
 		       board_addr);
 		return -1;
 	}
-	if (!__request_region (&iomem_resource, 0xA0000, 65535, "clgenfb")) {
+	if (!request_mem_region(0xA0000, 65535, "clgenfb")) {
 		pci_write_config_word (pdev, PCI_COMMAND, tmp16);
 		printk(KERN_ERR "clgen: cannot reserve region 0x%lu, abort\n",
 		       0xA0000L);
-		__release_region(&iomem_resource, board_addr, board_size);
+		release_mem_region(board_addr, board_size);
 		return -1;
 	}
-	if (__request_region(&ioport_resource, 0x3C0, 32, "clgenfb"))
+	if (request_region(0x3C0, 32, "clgenfb"))
 		release_io_ports = 1;
 
 #endif /* kernel > 2.3.13 */
@@ -2750,7 +2749,7 @@ static int __init clgen_zorro_find (int *key_o, int *key2_o, clgen_board_t *btyp
 static void clgen_zorro_unmap (struct clgenfb_info *info)
 {
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,13)
-	__release_region(&iomem_resource, info->board_addr, info->board_size);
+	release_mem_region(info->board_addr, info->board_size);
 #endif
 	if (info->btype == BT_PICASSO4) {
 		iounmap (info->board_addr);
@@ -2788,8 +2787,7 @@ static int __init clgen_zorro_setup (struct clgenfb_info *info,
 	info->board_addr = board_addr = (unsigned long) cd->cd_BoardAddr;
 	info->board_size = board_size = (unsigned long) cd->cd_BoardSize;
 
-	if (!__request_region(&iomem_resource, board_addr,
-			      board_size, "clgenfb")) {
+	if (!request_mem_region(board_addr, board_size, "clgenfb")) {
 		printk(KERN_ERR "clgen: cannot reserve region 0x%lu, abort\n",
 		       board_addr);
 		return -1;
@@ -3023,7 +3021,7 @@ int __init clgenfb_setup(char *options) {
      */
 
 #ifdef MODULE
-MODULE_AUTHOR("Copyright 1999 Jeff Garzik <jgarzik@pobox.com>");
+MODULE_AUTHOR("Copyright 1999 Jeff Garzik <jgarzik@mandrakesoft.com>");
 MODULE_DESCRIPTION("Accelerated FBDev driver for Cirrus Logic chips");
 
 int init_module (void)

@@ -45,14 +45,7 @@ static void nm256_interrupt_zx (int irq, void *dev_id, struct pt_regs *dummy);
 #define PCI_DEVICE_ID_NEOMAGIC_NM256AV_AUDIO 0x8005
 #define PCI_DEVICE_ID_NEOMAGIC_NM256ZX_AUDIO 0x8006
 
-/* eeeew. */
-#if LINUX_VERSION_CODE > KERNEL_VERSION(2,3,0)
 #define RSRCADDRESS(dev,num) ((dev)->resource[(num)].start)
-#else
-#define RSRCADDRESS(dev,num) ((dev)->base_address[(num)] \
-			      & PCI_BASE_ADDRESS_MEM_MASK)
-
-#endif
 
 /* List of cards.  */
 static struct nm256_info *nmcard_list;

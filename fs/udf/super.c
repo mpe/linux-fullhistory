@@ -1335,14 +1335,14 @@ udf_read_super(struct super_block *sb, void *options, int silent)
 		goto error_out;
 
 	if ( uopt.session == 0xFFFFFFFF )
-		UDF_SB_SESSION(sb) = udf_get_last_session(sb->s_dev);
+		UDF_SB_SESSION(sb) = udf_get_last_session(sb);
 	else
 		UDF_SB_SESSION(sb) = uopt.session;
 
 	udf_debug("Multi-session=%d\n", UDF_SB_SESSION(sb));
 
 	if ( uopt.lastblock == 0xFFFFFFFF )
-		UDF_SB_LASTBLOCK(sb) = udf_get_last_block(sb->s_dev, &(UDF_SB(sb)->s_flags));
+		UDF_SB_LASTBLOCK(sb) = udf_get_last_block(sb, &(UDF_SB(sb)->s_flags));
 	else
 		UDF_SB_LASTBLOCK(sb) = uopt.lastblock;
 

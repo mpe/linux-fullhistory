@@ -3324,10 +3324,10 @@ static void tulip_detach(dev_node_t *node)
 	if (*devp) {
 		struct net_device *dev = *devp;
 		struct tulip_private *tp = dev->priv;
+		*devp = *next;
 		unregister_netdev(dev);
 		kfree(dev);
 		kfree(tp);
-		*devp = *next;
 		kfree(node);
 		MOD_DEC_USE_COUNT;
 	}

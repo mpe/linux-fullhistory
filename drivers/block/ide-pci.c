@@ -635,7 +635,7 @@ static void __init hpt366_device_order_fixup (struct pci_dev *dev, ide_pci_devic
 	if (PCI_FUNC(dev->devfn) & 1)
 		return;
 	pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin1);
-	for (findev=pci_devices; findev; findev=findev->next) {
+	pci_for_each_dev(findev) {
 		if ((findev->vendor == dev->vendor) &&
 		    (findev->device == dev->device) &&
 		    ((findev->devfn - dev->devfn) == 1) &&
@@ -669,9 +669,7 @@ void __init ide_scan_pcibus (void)
 	ide_pci_devid_t		devid;
 	ide_pci_device_t	*d;
 
-	if (!pci_present())
-		return;
-	for(dev = pci_devices; dev; dev=dev->next) {
+	pci_for_each_dev(dev) {
 		devid.vid = dev->vendor;
 		devid.did = dev->device;
 		for (d = ide_pci_chipsets; d->devid.vid && !IDE_PCI_DEVID_EQ(d->devid, devid); ++d);

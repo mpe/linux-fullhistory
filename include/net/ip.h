@@ -96,7 +96,6 @@ extern int		ip_mc_output(struct sk_buff *skb);
 extern int		ip_fragment(struct sk_buff *skb, int (*out)(struct sk_buff*));
 extern int		ip_do_nat(struct sk_buff *skb);
 extern void		ip_send_check(struct iphdr *ip);
-extern int		ip_id_count;			  
 extern int		ip_queue_xmit(struct sk_buff *skb);
 extern void		ip_init(void);
 extern int		ip_build_xmit(struct sock *sk,
@@ -179,6 +178,16 @@ int ip_dont_fragment(struct sock *sk, struct dst_entry *dst)
 	return (sk->protinfo.af_inet.pmtudisc == IP_PMTUDISC_DO ||
 		(sk->protinfo.af_inet.pmtudisc == IP_PMTUDISC_WANT &&
 		 !(dst->mxlock&(1<<RTAX_MTU))));
+}
+
+extern void __ip_select_ident(struct iphdr *iph, struct dst_entry *dst);
+
+extern __inline__ void ip_select_ident(struct iphdr *iph, struct dst_entry *dst)
+{
+	if (iph->frag_off&__constant_htons(IP_DF))
+		iph->id = 0;
+	else
+		__ip_select_ident(iph, dst);
 }
 
 /*

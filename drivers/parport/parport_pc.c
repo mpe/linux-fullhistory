@@ -1828,7 +1828,7 @@ static int __init parport_pc_init_pci (int irq, int dma)
 	}
 
 	/* Look for parallel controllers that we don't know about. */
-	for (pcidev = pci_devices; pcidev; pcidev = pcidev->next) {
+	pci_for_each_dev(pcidev) {
 		const int class_noprogif = pcidev->class & ~0xff;
 		if (class_noprogif != (PCI_CLASS_COMMUNICATION_PARALLEL << 8))
 			continue;

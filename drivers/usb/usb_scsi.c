@@ -1,24 +1,22 @@
-/* Driver for USB SCSI-like devices
+/* Driver for USB Mass Storage compliant devices
  *
  * (c) 1999 Michael Gee (michael@linuxspecific.com)
- * (c) 1999 Matthew Dharm (mdharm@one-eyed-alien.net)
- *
- * This driver is schizoid  - it makes a USB device appear as both a SCSI
- * device and a character device. The latter is only available if the device
- * has an interrupt endpoint, and is used specifically to receive interrupt
- * events.
+ * (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
  *
  * In order to support various 'strange' devices, this module supports plug-in
  * device-specific filter modules, which can do their own thing when required.
  *
- * Further reference.
+ * Further reference:
  *	This driver is based on the 'USB Mass Storage Class' document. This
- *	describes in detail the transformation of SCSI command blocks to the
- *	equivalent USB control and data transfer required.
+ *	describes in detail the protocol used to communicate with such
+ *      devices.  Clearly, the designers had SCSI commands in mind when they
+ *      created this document.  The commands are all similar to commands
+ *      in the SCSI-II specification.
+ *
  *	It is important to note that in a number of cases this class exhibits
  *	class-specific exemptions from the USB specification. Notably the
  *	usage of NAK, STALL and ACK differs from the norm, in that they are
- *	used to communicate wait, failed and OK on SCSI commands.
+ *	used to communicate wait, failed and OK on commands.
  *	Also, for certain devices, the interrupt endpoint is used to convey
  *	status of a command.
  *
@@ -47,12 +45,14 @@
 #include "usb.h"
 #include "usb_scsi.h"
 
-/* direction table (what a pain) */
-
+/* direction table -- this indicates the direction of the data
+ * transfer for each command code -- a 1 indicates input
+ */
 unsigned char us_direction[256/8] = {
-
-#include "usb_scsi_dt.c"
-
+	0x28, 0x81, 0x14, 0x14, 0x20, 0x01, 0x90, 0x77, 
+	0x0C, 0x20, 0x00, 0x04, 0x00, 0x00, 0x00, 0x00, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x01, 
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
 #ifdef REWRITE_PROJECT

@@ -921,8 +921,8 @@ static int __init pm2fb_conf(struct pm2fb_info* p){
 	DPRINTK("found board: %s\n", board_table[p->board].name);
 
 	p->regions.p_fb=p->regions.fb_base;
-	if (!__request_region(&iomem_resource, p->regions.p_fb,
-			      p->regions.fb_size, "pm2fb")) {
+	if (!request_mem_region(p->regions.p_fb, p->regions.fb_size,
+		    		"pm2fb")) {
 		printk (KERN_ERR "pm2fb: cannot reserve fb memory, abort\n");
 		return 0;
 	}
@@ -933,8 +933,7 @@ static int __init pm2fb_conf(struct pm2fb_info* p){
 #else
 	p->regions.p_regs=p->regions.rg_base+PM2_REGS_SIZE;
 #endif
-	if (!__request_region(&iomem_resource, p->regions.p_regs,
-			      PM2_REGS_SIZE, "pm2fb")) {
+	if (!request_mem_region(p->regions.p_regs, PM2_REGS_SIZE, "pm2fb")) {
 		printk (KERN_ERR "pm2fb: cannot reserve mmio memory, abort\n");
 		UNMAP(p->regions.v_fb, p->regions.fb_size);
 		return 0;
@@ -1047,7 +1046,7 @@ static int __init pm2pci_detect(struct pm2fb_info* p) {
 	}
 	DPRINTK("scanning PCI bus for known chipsets...\n");
 
-	for (dev = pci_devices; !pci->dev && dev; dev = dev->next) {
+	pci_for_each_dev(dev) {
 		for (i = 0; pm2pci_cards[i].vendor; i++)
 			if (pm2pci_cards[i].vendor == dev->vendor &&
 			    pm2pci_cards[i].device == dev->device) {
@@ -1056,6 +1055,8 @@ static int __init pm2pci_detect(struct pm2fb_info* p) {
 				DPRINTK("... found %s\n", pm2pci_cards[i].name);
 				break;
 			}
+		if (pci->dev)
+			break;
 	}
 	if (!pci->dev) {
 		DPRINTK("no PCI board found.\n");
@@ -2036,10 +2037,10 @@ static void pm2fb_cleanup(void) {
 	pm2fb_reset(i);
 
 	UNMAP(i->regions.v_fb, i->regions.fb_size);
-	__release_region(&iomem_resource, i->regions.p_fb, i->regions.fb_size);
+	release_mem_region(i->regions.p_fb, i->regions.fb_size);
 
 	UNMAP(i->regions.v_regs, PM2_REGS_SIZE);
-	__release_region(&iomem_resource, i->regions.p_regs, PM2_REGS_SIZE);
+	release_mem_region(i->regions.p_regs, PM2_REGS_SIZE);
 
 	if (board_table[i->board].cleanup)
 		board_table[i->board].cleanup(i);

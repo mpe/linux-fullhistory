@@ -267,8 +267,8 @@ int cb_alloc(socket_info_t * s)
 	bus = s->cap.cb_dev->subordinate;
 	memset(&tmp, 0, sizeof(tmp));
 	tmp.bus = bus;
+	tmp.sysdata = bus->sysdata;
 	tmp.devfn = 0;
-	printk("bus=%p, number=%d\n", bus, bus->number);
 
 	pci_readw(&tmp, PCI_VENDOR_ID, &vend);
 	pci_readw(&tmp, PCI_DEVICE_ID, &dev);
@@ -280,8 +280,7 @@ int cb_alloc(socket_info_t * s)
 	if (hdr & 0x80) {
 		do {
 			tmp.devfn = fn;
-			pci_readw(&tmp, PCI_VENDOR_ID, &v);
-			if (v != vend)
+			if (pci_readw(&tmp, PCI_VENDOR_ID, &v) || !v || v == 0xffff)
 				break;
 			fn++;
 		} while (fn < 8);
@@ -298,15 +297,14 @@ int cb_alloc(socket_info_t * s)
 		int r;
 
 		dev->bus = bus;
+		dev->sysdata = bus->sysdata;
 		dev->devfn = i;
-		if (i < fn - 1) {
-			dev->sibling = dev->next = &c[i + 1].dev;
-		}
 		dev->vendor = vend;
 		pci_readw(dev, PCI_DEVICE_ID, &dev->device);
 		dev->hdr_type = hdr;
 
 		pci_setup_device(dev);
+		/* FIXME: Do we need to enable the expansion ROM? */
 		for (r = 0; r < 7; r++) {
 			struct resource *res = dev->resource + r;
 			if (res->flags) {
@@ -321,19 +319,17 @@ int cb_alloc(socket_info_t * s)
 			       res->end,
 			       res->flags);
 		}
-		pci_enable_device(dev);
 
+		list_add_tail(&dev->bus_list, &bus->devices);
+		list_add_tail(&dev->global_list, &pci_devices);
 #ifdef CONFIG_PROC_FS
 		pci_proc_attach_device(dev);
 #endif
+
+		pci_enable_device(dev);
 	}
 
-	/* Link into PCI device chain */
-	bus->devices = &c[0].dev;
-	c[fn - 1].dev.next = pci_devices;
-	pci_devices = &c[0].dev;
 	s->cb_config = c;
-
 	return CS_SUCCESS;
 }
 
@@ -351,25 +347,18 @@ static void free_resources(struct pci_dev *dev)
 void cb_free(socket_info_t * s)
 {
 	cb_config_t *c = s->cb_config;
-	struct pci_bus *bus = s->cap.cb_dev->subordinate;
+	int i;
 
 	if (c) {
-		struct pci_dev **p;
-		/* Unlink from PCI device chain */
-		p = &pci_devices;
-		while (*p) {
-			struct pci_dev *dev = *p;
-			if (dev->bus != bus) {
-				p = &dev->next;
-				continue;
-			}
-			*p = dev->next;
+		for(i=0; i<s->functions; i++) {
+			struct pci_dev *dev = &c[i].dev;
+			list_del(&dev->bus_list);
+			list_del(&dev->global_list);
 			free_resources(dev);
 #ifdef CONFIG_PROC_FS
 			pci_proc_detach_device(dev);
 #endif
 		}
-		bus->devices = NULL;
 		kfree(s->cb_config);
 		s->cb_config = NULL;
 		printk(KERN_INFO "cs: cb_free(bus %d)\n", s->cap.cb_dev->subordinate->number);

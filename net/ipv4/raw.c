@@ -5,7 +5,7 @@
  *
  *		RAW - implementation of IP "raw" sockets.
  *
- * Version:	$Id: raw.c,v 1.44 1999/12/15 22:39:21 davem Exp $
+ * Version:	$Id: raw.c,v 1.45 2000/01/06 00:41:58 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -257,6 +257,7 @@ struct rawfakehdr
 {
 	struct  iovec *iov;
 	u32	saddr;
+	struct dst_entry *dst;
 };
 
 /*
@@ -296,7 +297,7 @@ static int raw_getrawfrag(const void *p, char *to, unsigned int offset, unsigned
 	 	 *	ip_build_xmit clean (well less messy).
 		 */
 		if (!iph->id)
-			iph->id = htons(ip_id_count++);
+			ip_select_ident(iph, rfh->dst);
 		iph->check=ip_fast_csum((unsigned char *)iph, iph->ihl);
 	}
 	return 0;
@@ -416,6 +417,7 @@ back_from_confirm:
 
 	rfh.iov = msg->msg_iov;
 	rfh.saddr = rt->rt_src;
+	rfh.dst = &rt->u.dst;
 	if (!ipc.addr)
 		ipc.addr = rt->rt_dst;
 	err=ip_build_xmit(sk, sk->protinfo.af_inet.hdrincl ? raw_getrawfrag : raw_getfrag,

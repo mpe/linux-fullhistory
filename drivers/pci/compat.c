@@ -3,7 +3,7 @@
  *
  *	PCI Bus Services -- Function For Backward Compatibility
  *
- *	Copyright 1998, 1999 Martin Mares <mj@suse.cz>
+ *	Copyright 1998--2000 Martin Mares <mj@suse.cz>
  */
 
 #include <linux/types.h>
@@ -13,7 +13,7 @@
 int
 pcibios_present(void)
 {
-	return !!pci_devices;
+	return pci_devices.next != &pci_devices;
 }
 
 int

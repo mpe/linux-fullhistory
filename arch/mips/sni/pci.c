@@ -30,7 +30,7 @@ static void sni_rm200_pcibios_fixup (void)
 {
 	struct pci_dev *dev;
 
-	for (dev=pci_devices; dev; dev=dev->next) {
+	pci_for_each_dev(dev) {
 		/*
 		 * TODO: Take care of RM300 revision D boards for where the
 		 * network slot became an ordinary PCI slot.

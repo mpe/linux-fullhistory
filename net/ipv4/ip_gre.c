@@ -815,7 +815,7 @@ static int ipgre_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	iph->tot_len		=	htons(skb->len);
-	iph->id			=	htons(ip_id_count++);
+	ip_select_ident(iph, &rt->u.dst);
 	ip_send_check(iph);
 
 	stats->tx_bytes += skb->len;

@@ -428,13 +428,18 @@ static unsigned int yenta_probe_irq(pci_socket_t *socket)
 
 	/* Are we set up to route the IO irq to the PCI irq? */
 	bridge_ctrl = config_readw(socket, CB_BRIDGE_CONTROL);
-	if (!(bridge_ctrl & CB_BRIDGE_INTR)) {
-		socket->io_irq = socket->cb_irq;
-		if (socket->cb_irq && socket->cb_irq < 16)
-			return 1 << socket->cb_irq;
+	if (socket->cb_irq) {
+		if (bridge_ctrl & CB_BRIDGE_INTR) {
+			bridge_ctrl &= ~CB_BRIDGE_INTR;
+			config_writew(socket, CB_BRIDGE_CONTROL, bridge_ctrl);
+		}
+		printk("CardBus: using PCI interrupt %d\n", socket->cb_irq);
+		return 1 << socket->cb_irq;
+	}
 
-		/* Uhhuh. Try falling back on ISA interrupts */
-		printk("CardBus: Hmm.. Bad PCI irq routing (irq%d)\n", socket->cb_irq);
+	/* Uhhuh. No PCI interrupt: try falling back on ISA interrupts */
+	printk("CardBus: Hmm.. No PCI irq routing (irq%d).\n", socket->cb_irq);
+	if (!(bridge_ctrl & CB_BRIDGE_INTR)) {
 		bridge_ctrl |= CB_BRIDGE_INTR;
 		config_writew(socket, CB_BRIDGE_CONTROL, bridge_ctrl);
 	}
@@ -558,8 +563,6 @@ static void yenta_allocate_res(pci_socket_t *socket, int nr, unsigned type)
 	offset = 0x1c + 8*nr;
 	bus = socket->dev->subordinate;
 	res = socket->dev->resource + PCI_BRIDGE_RESOURCES + nr;
-	printk("dev=%p, bus=%p, parent=%p\n", socket->dev, bus, socket->dev->bus);
-	printk("res = %p, bus->res = %p\n", res, bus->resource[nr]);
 	res->name = bus->name;
 	res->flags = type;
 	res->start = 0;

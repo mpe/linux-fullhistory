@@ -1,7 +1,7 @@
 /*
  * sysctl_net_ipv4.c: sysctl interface to net IPV4 subsystem.
  *
- * $Id: sysctl_net_ipv4.c,v 1.40 1999/09/07 02:31:17 davem Exp $
+ * $Id: sysctl_net_ipv4.c,v 1.41 2000/01/06 00:42:03 davem Exp $
  *
  * Begun April 1, 1996, Mike Shaver.
  * Added /proc/sys/net/ipv4 directory entry (empty =) ). [MS]
@@ -69,6 +69,13 @@ extern int sysctl_icmp_echoreply_time;
 
 /* From igmp.c */
 extern int sysctl_igmp_max_memberships;
+
+/* From inetpeer.c */
+extern int inet_peer_threshold;
+extern int inet_peer_minttl;
+extern int inet_peer_maxttl;
+extern int inet_peer_gc_mintime;
+extern int inet_peer_gc_maxtime;
 
 int tcp_retr1_max = 255; 
 
@@ -200,6 +207,20 @@ ctl_table ipv4_table[] = {
 	{NET_IPV4_IGMP_MAX_MEMBERSHIPS, "igmp_max_memberships",
 	 &sysctl_igmp_max_memberships, sizeof(int), 0644, NULL, &proc_dointvec},
 #endif
+	{NET_IPV4_INET_PEER_THRESHOLD, "inet_peer_threshold",
+	 &inet_peer_threshold, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_IPV4_INET_PEER_MINTTL, "inet_peer_minttl",
+	 &inet_peer_minttl, sizeof(int), 0644, NULL,
+	 &proc_dointvec_jiffies, &sysctl_jiffies},
+	{NET_IPV4_INET_PEER_MAXTTL, "inet_peer_maxttl",
+	 &inet_peer_maxttl, sizeof(int), 0644, NULL,
+	 &proc_dointvec_jiffies, &sysctl_jiffies},
+	{NET_IPV4_INET_PEER_GC_MINTIME, "inet_peer_gc_mintime",
+	 &inet_peer_gc_mintime, sizeof(int), 0644, NULL,
+	 &proc_dointvec_jiffies, &sysctl_jiffies},
+	{NET_IPV4_INET_PEER_GC_MAXTIME, "inet_peer_gc_maxtime",
+	 &inet_peer_gc_maxtime, sizeof(int), 0644, NULL,
+	 &proc_dointvec_jiffies, &sysctl_jiffies},
 	{0}
 };
 

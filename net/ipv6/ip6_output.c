@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_output.c,v 1.22 1999/08/20 11:06:21 davem Exp $
+ *	$Id: ip6_output.c,v 1.23 2000/01/06 00:42:07 davem Exp $
  *
  *	Based on linux/net/ipv4/ip_output.c
  *
@@ -45,7 +45,17 @@
 #include <net/rawv6.h>
 #include <net/icmp.h>
 
-static u32	ipv6_fragmentation_id = 1;
+static __inline__ void ipv6_select_ident(struct sk_buff *skb, struct frag_hdr *fhdr)
+{
+	static u32 ipv6_fragmentation_id = 1;
+	static spinlock_t ip6_id_lock = SPIN_LOCK_UNLOCKED;
+
+	spin_lock_bh(&ip6_id_lock);
+	fhdr->identification = ipv6_fragmentation_id;
+	if (++ipv6_fragmentation_id == 0)
+		ipv6_fragmentation_id = 1;
+	spin_unlock_bh(&ip6_id_lock);
+}
 
 int ip6_output(struct sk_buff *skb)
 {
@@ -224,7 +234,7 @@ static __inline__ u8 * ipv6_build_fraghdr(struct sk_buff *skb, u8* prev_hdr, uns
 
 	fhdr->reserved = 0;
 	fhdr->frag_off = htons(offset);
-	fhdr->identification = ipv6_fragmentation_id++;
+	ipv6_select_ident(skb, fhdr);
 	return &fhdr->nexthdr;
 }
 

@@ -707,9 +707,11 @@ void free_irq(unsigned int irq, void *dev_id)
 			}
 			spin_unlock_irqrestore(&irq_controller_lock,flags);
 
+#ifdef __SMP__
 			/* Wait to make sure it's not being used on another CPU */
 			while (irq_desc[irq].status & IRQ_INPROGRESS)
 				barrier();
+#endif
 			kfree(action);
 			return;
 		}

@@ -425,71 +425,54 @@ static int parse_options(char *options, struct iso9660_options * popt)
  */
 #define WE_OBEY_THE_WRITTEN_STANDARDS 1
 
-static unsigned int isofs_get_last_session(kdev_t dev,s32 session )
+static unsigned int isofs_get_last_session(struct super_block *sb,s32 session )
 {
-  struct cdrom_multisession ms_info;
-  unsigned int vol_desc_start;
-  struct inode inode_fake;
-  struct file_operations *fops;
-  extern struct file_operations * get_blkfops(unsigned int);
-  int i;
+	struct cdrom_multisession ms_info;
+	unsigned int vol_desc_start;
+	struct block_device *bdev = sb->s_bdev;
+	kdev_t dev = sb->s_dev;
+	int i;
 
-  vol_desc_start=0;
-  fops = get_blkfops(MAJOR(dev));
-  if (fops && fops->ioctl)
-    {
-      /* Whoops.  We must save the old FS, since otherwise
-       * we would destroy the kernels idea about FS on root
-       * mount in read_super... [chexum]
-       */
-      mm_segment_t old_fs=get_fs();
-      inode_fake.i_rdev=dev;
-      init_waitqueue_head(&inode_fake.i_wait);
-      ms_info.addr_format=CDROM_LBA;
-      /* If a minor device was explicitly opened, set session to the
-       * minor number. For instance, if /dev/hdc1 is mounted, session
-       * 1 on the CD-ROM is selected. CD_PART_MAX gives access to
-       * a max of 64 sessions on IDE. SCSI drives must still use
-       * the session option to mount.
-       */
-      if ((MINOR(dev) % CD_PART_MAX) && (MAJOR(dev) != SCSI_CDROM_MAJOR))
+	vol_desc_start=0;
+	ms_info.addr_format=CDROM_LBA;
+	/* If a minor device was explicitly opened, set session to the
+	 * minor number. For instance, if /dev/hdc1 is mounted, session
+	 * 1 on the CD-ROM is selected. CD_PART_MAX gives access to
+	 * a max of 64 sessions on IDE. SCSI drives must still use
+	 * the session option to mount.
+	 */
+	if ((MINOR(dev) % CD_PART_MAX) && (MAJOR(dev) != SCSI_CDROM_MAJOR))
 		session = MINOR(dev) % CD_PART_MAX;
-      set_fs(KERNEL_DS);
-      if(session >= 0 && session <= 99) {
-	      struct cdrom_tocentry Te;
-	      Te.cdte_track=session;
-	      Te.cdte_format=CDROM_LBA;
-	      i=get_blkfops(MAJOR(dev))->ioctl(&inode_fake,
-				       NULL,
-				       CDROMREADTOCENTRY,
-				       (unsigned long) &Te);
-	      set_fs(old_fs);
-	      if(!i) printk(KERN_ERR"Session %d start %d type %d\n",session,Te.cdte_addr.lba,Te.cdte_ctrl&CDROM_DATA_TRACK);
-	      if(i || (Te.cdte_ctrl&CDROM_DATA_TRACK) != 4)
-			printk(KERN_ERR"Invalid session number or type of track\n");
-		else return Te.cdte_addr.lba;
-      }
-      i=get_blkfops(MAJOR(dev))->ioctl(&inode_fake,
-				       NULL,
-				       CDROMMULTISESSION,
-				       (unsigned long) &ms_info);
-      set_fs(old_fs);
-      if(session > 0) printk(KERN_ERR"Invalid session number\n");
+	if(session >= 0 && session <= 99) {
+		struct cdrom_tocentry Te;
+		Te.cdte_track=session;
+		Te.cdte_format=CDROM_LBA;
+		i = ioctl_by_bdev(bdev, CDROMREADTOCENTRY, (unsigned long) &Te);
+		if (!i) {
+			printk(KERN_DEBUG "Session %d start %d type %d\n",
+			       session, Te.cdte_addr.lba,
+			       Te.cdte_ctrl&CDROM_DATA_TRACK);
+			if ((Te.cdte_ctrl&CDROM_DATA_TRACK) == 4)
+				return Te.cdte_addr.lba;
+		}
+			
+		printk(KERN_ERR "Invalid session number or type of track\n");
+	}
+	i = ioctl_by_bdev(bdev, CDROMMULTISESSION, (unsigned long) &ms_info);
+	if(session > 0) printk(KERN_ERR "Invalid session number\n");
 #if 0
-      printk("isofs.inode: CDROMMULTISESSION: rc=%d\n",i);
-      if (i==0)
-	{
-	  printk("isofs.inode: XA disk: %s\n", ms_info.xa_flag ? "yes":"no");
-	  printk("isofs.inode: vol_desc_start = %d\n", ms_info.addr.lba);
+	printk("isofs.inode: CDROMMULTISESSION: rc=%d\n",i);
+	if (i==0) {
+		printk("isofs.inode: XA disk: %s\n",ms_info.xa_flag?"yes":"no");
+		printk("isofs.inode: vol_desc_start = %d\n", ms_info.addr.lba);
 	}
 #endif
-      if (i==0)
+	if (i==0)
 #if WE_OBEY_THE_WRITTEN_STANDARDS
         if (ms_info.xa_flag) /* necessary for a valid ms_info.addr */
 #endif
-          vol_desc_start=ms_info.addr.lba;
-    }
-  return vol_desc_start;
+		vol_desc_start=ms_info.addr.lba;
+	return vol_desc_start;
 }
 
 /*
@@ -569,7 +552,7 @@ static struct super_block *isofs_read_super(struct super_block *s, void *data,
 	s->u.isofs_sb.s_high_sierra = high_sierra = 0; /* default is iso9660 */
 
 	vol_desc_start = (opt.sbsector != -1) ?
-		opt.sbsector : isofs_get_last_session(dev,opt.session);
+		opt.sbsector : isofs_get_last_session(s,opt.session);
 
   	for (iso_blknum = vol_desc_start+16;
              iso_blknum < vol_desc_start+100; iso_blknum++)

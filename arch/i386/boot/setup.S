@@ -202,9 +202,9 @@ bad_sig:
 	xorb	%bh, %bh
 	movb	(497), %bl			# get setup sect from bootsect
 	subw	$4, %bx				# LILO loads 4 sectors of setup
-	shlw	$7, %bx				# convert to dwords (1sect=2^7 dwords)
+	shlw	$8, %bx				# convert to words (1sect=2^8 words)
 	movw	%bx, %cx
-	shrw	$2, %bx				# convert to segment
+	shrw	$3, %bx				# convert to segment
 	addw	$SYSSEG, %bx
 	movw	%bx, %cs:start_sys_seg
 # Move rest of setup code/data to here

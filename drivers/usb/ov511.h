@@ -63,7 +63,7 @@
 /* System control register numbers */
 #define OV511_REG_SYSTEM_RESET				0x50
 #define 	OV511_RESET_UDC				0x01
-#define 	OV511_RESET_I2O				0x02
+#define 	OV511_RESET_I2C				0x02
 #define 	OV511_RESET_FIFO			0x04
 #define 	OV511_RESET_OMNICE			0x08
 #define 	OV511_RESET_DRAM_INTF		0x10
@@ -109,7 +109,7 @@
 #define SCRATCH_BUF_SIZE (STREAM_BUF_SIZE * 2)
 
 #define FRAMES_PER_DESC		10  /* FIXME - What should this be? */
-#define FRAME_SIZE_PER_DESC	960	/* FIXME - Shouldn't be hardcoded */
+#define FRAME_SIZE_PER_DESC	512	/* FIXME - Shouldn't be hardcoded */
 
 // FIXME - should this be 0x81 (endpoint address) or 0x01 (endpoint number)?
 #define OV511_ENDPOINT_ADDRESS 0x81 /* Address of isoc endpoint */
@@ -118,6 +118,7 @@
 // FIXME - these can vary between specific models
 #define OV7610_I2C_WRITE_ID 0x42
 #define OV7610_I2C_READ_ID  0x43
+#define OV511_I2C_CLOCK_PRESCALER 0x03
 
 /* Prototypes */
 int usb_ov511_reg_read(struct usb_device *dev, unsigned char reg);
@@ -164,6 +165,7 @@ struct ov511_frame {
 	int scanstate;		/* State of scanning */
 
 	int curline;		/* Line of frame we're working on */
+	int curpix;
 
 	long scanlength;	/* uncompressed, raw data length of frame */
 	long bytes_read;	/* amount of scanlength that has been read from *data */

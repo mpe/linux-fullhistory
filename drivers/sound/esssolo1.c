@@ -61,6 +61,8 @@
  *    07.10.99   0.9   Fix initialization; complain if sequencer writes time out
  *                     Revised resource grabbing for the FM synthesizer
  *    28.10.99   0.10  More waitqueue races fixed
+ *    09.12.99   0.11  Work around stupid Alpha port issue (virt_to_bus(kmalloc(GFP_DMA)) > 16M)
+ *                     Disabling recording on Alpha
  *
  */
 
@@ -419,6 +421,14 @@ static int prog_dmabuf(struct solo1_state *s, struct dmabuf *db, int gfp_mask)
 				break;
 		if (!db->rawbuf)
 			return -ENOMEM;
+		/* work around a problem of the alpha port */
+		if ((gfp_mask & GFP_DMA) && (virt_to_bus(db->rawbuf) & (~0xffffffUL))) {
+			printk(KERN_ERR "solo1: requested DMA buffer below 16M but got 0x%lx, Alpha bug?\n", 
+			       (unsigned long)virt_to_bus(db->rawbuf));
+			kfree(db->rawbuf);
+			db->rawbuf = NULL;
+			return -ENOMEM;
+		}
 		db->buforder = order;
 		/* now mark the pages as reserved; otherwise remap_page_range doesn't do what we want */
 		mapend = MAP_NR(db->rawbuf + (PAGE_SIZE << db->buforder) - 1);
@@ -1417,6 +1427,12 @@ static int solo1_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		if (s->dma_dac.mapped)
 			s->dma_dac.count &= s->dma_dac.fragsize-1;
 		spin_unlock_irqrestore(&s->lock, flags);
+#if 0
+		printk(KERN_DEBUG "esssolo1: GETOPTR: bytes %u blocks %u ptr %u, buforder %u numfrag %u fragshift %u\n"
+		       KERN_DEBUG "esssolo1: swptr %u count %u fragsize %u dmasize %u fragsamples %u\n",
+		       cinfo.bytes, cinfo.blocks, cinfo.ptr, s->dma_dac.buforder, s->dma_dac.numfrag, s->dma_dac.fragshift,
+		       s->dma_dac.swptr, s->dma_dac.count, s->dma_dac.fragsize, s->dma_dac.dmasize, s->dma_dac.fragsamples);
+#endif
                 return copy_to_user((void *)arg, &cinfo, sizeof(cinfo));
 
         case SNDCTL_DSP_GETBLKSIZE:
@@ -1549,10 +1565,6 @@ static int solo1_open(struct inode *inode, struct file *file)
 	s->open_mode |= file->f_mode & (FMODE_READ | FMODE_WRITE);
 	up(&s->open_sem);
 	MOD_INC_USE_COUNT;
-	if (prog_dmabuf_dac(s) || prog_dmabuf_adc(s)) {
-		solo1_release(inode, file);
-		return -ENOMEM;
-	}
 	prog_codec(s);
 	return 0;
 }
@@ -2142,7 +2154,7 @@ static int __init init_solo1(void)
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "solo1: version v0.10 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "solo1: version v0.11 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ESS, PCI_DEVICE_ID_ESS_SOLO1, pcidev))) {
 		if (!RSRCISIOREGION(pcidev, 0) ||

@@ -91,15 +91,17 @@ unsigned long resource_fixup(struct pci_dev * dev, struct resource * res,
 	return start;
 }
 
-static void __init pcibios_claim_resources(struct pci_bus *bus)
+static void __init pcibios_claim_resources(struct list_head *bus_list)
 {
+	struct list_head *ln, *dn;
+	struct pci_bus *bus;
 	struct pci_dev *dev;
 	int idx;
 
-	while (bus)
-	{
-		for (dev=bus->devices; dev; dev=dev->sibling)
-		{
+	for (ln=bus_list->next; ln != bus_list; ln=ln->next) {
+		bus = pci_bus_b(ln);
+		for (dn=bus->devices.next; dn != &bus->devices; dn=dn->next) {
+			dev = pci_dev_b(dn);
 			for (idx = 0; idx < PCI_NUM_RESOURCES; idx++)
 			{
 				struct resource *r = &dev->resource[idx];
@@ -114,9 +116,7 @@ static void __init pcibios_claim_resources(struct pci_bus *bus)
 				}
 			}
 		}
-		if (bus->children)
-			pcibios_claim_resources(bus->children);
-		bus = bus->next;
+		pcibios_claim_resources(&bus->children);
 	}
 }
 

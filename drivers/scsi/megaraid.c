@@ -1411,37 +1411,27 @@ int findCard (Scsi_Host_Template * pHostTmpl,
 {
   mega_host_config *megaCfg;
   struct Scsi_Host *host;
-  u_char pciBus, pciDevFun, megaIrq;
+  u_char megaIrq;
   u32 megaBase;
-  u16 pciIdx = 0;
   u16 numFound = 0;
 
-  struct pci_dev *pdev = pci_devices;
+  struct pci_dev *pdev = NULL;
   
   while ((pdev = pci_find_device (pciVendor, pciDev, pdev))) {
-    pciBus = pdev->bus->number;
-    pciDevFun = pdev->devfn;
     if ((flag & BOARD_QUARTZ) && (skip_id == -1)) {
       u16 magic;
-      pcibios_read_config_word (pciBus, pciDevFun,
-				PCI_CONF_AMISIG,
-				&magic);
-      if (magic != AMI_SIGNATURE) {
-        pciIdx++;
+      pci_read_config_word(pdev, PCI_CONF_AMISIG, &magic);
+      if (magic != AMI_SIGNATURE)
 	continue;		/* not an AMI board */
-      }
     }
-    printk (KERN_INFO "megaraid: found 0x%4.04x:0x%4.04x:idx %d:bus %d:slot %d:func %d\n",
+    printk (KERN_INFO "megaraid: found 0x%4.04x:0x%4.04x: in %s\n",
 	    pciVendor,
 	    pciDev,
-	    pciIdx, pciBus,
-	    PCI_SLOT (pciDevFun),
-	    PCI_FUNC (pciDevFun));
+	    pdev->slot_name);
 
     /* Read the base port and IRQ from PCI */
     megaBase = pdev->resource[0].start;
     megaIrq  = pdev->irq;
-    pciIdx++;
 
     if (flag & BOARD_QUARTZ) {
 
@@ -1470,7 +1460,7 @@ int findCard (Scsi_Host_Template * pHostTmpl,
     megaCfg->host->irq = megaIrq;
     megaCfg->host->io_port = megaBase;
     megaCfg->host->n_io_port = 16;
-    megaCfg->host->unique_id = (pciBus << 8) | pciDevFun;
+    megaCfg->host->unique_id = (pdev->bus->number << 8) | pdev->devfn;
     megaCtlrs[numCtlrs++] = megaCfg; 
     if (flag != BOARD_QUARTZ) {
       /* Request our IO Range */

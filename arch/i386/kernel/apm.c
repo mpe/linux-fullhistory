@@ -1491,6 +1491,13 @@ static int __init apm_init(void)
 		APM_INIT_ERROR_RETURN;
 	}
 
+#ifdef CONFIG_ACPI
+	if (acpi_active) {
+		printk(KERN_NOTICE "apm: overridden by ACPI.\n");
+		APM_INIT_ERROR_RETURN;
+	}
+#endif
+
 	/*
 	 * Set up a segment that references the real mode segment 0x40
 	 * that extends up to the end of page zero (that we have reserved).

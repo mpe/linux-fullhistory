@@ -1969,9 +1969,8 @@ int __init tdfxfb_init(void) {
   if(!pcibios_present()) return -ENXIO;
 #endif
 
-  for(pdev = pci_devices; pdev; pdev = pdev->next) {
+  while ((pdev = pci_find_device(PCI_VENDOR_ID_3DFX, PCI_ANY_ID, pdev))) {
     if(((pdev->class >> 16) == PCI_BASE_CLASS_DISPLAY) &&
-       (pdev->vendor == PCI_VENDOR_ID_3DFX) &&
        ((pdev->device == PCI_DEVICE_ID_3DFX_BANSHEE) ||
 	(pdev->device == PCI_DEVICE_ID_3DFX_VOODOO3))) {
       char* name = pdev->device == PCI_DEVICE_ID_3DFX_BANSHEE

@@ -3,7 +3,7 @@
  *
  * drivers/pci/helper.c
  *
- * Copyright 1999 Jeff Garzik <jgarzik@pobox.com>
+ * Copyright 1999 Jeff Garzik <jgarzik@mandrakesoft.com>
  * This software is free.  See the file COPYING for licensing details.
  *
  */

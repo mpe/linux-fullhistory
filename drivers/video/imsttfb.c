@@ -1919,21 +1919,15 @@ imsttfb_init(void)
 	/* We don't want to be called like this. */
 	/* We rely on Open Firmware (offb) instead. */
 #elif defined(CONFIG_PCI)
-	struct pci_dev *pdev;
+	struct pci_dev *pdev = NULL;
 	struct fb_info_imstt *p;
 	__u32 addr;
 	__u16 cmd;
 
-	for (pdev = pci_devices; pdev; pdev = pdev->next) {
-		if (!(((pdev->class >> 16) == PCI_BASE_CLASS_DISPLAY)
-		      && (pdev->vendor == PCI_VENDOR_ID_IMS)))
+	while ((pdev = pci_find_device(PCI_VENDOR_ID_IMS, PCI_ANY_ID, pdev))) {
+		if ((pdev->class >> 16) != PCI_BASE_CLASS_DISPLAY)
 			continue;
-
-		pci_read_config_word(pdev, PCI_COMMAND, &cmd);
-		if (!(cmd & PCI_COMMAND_MEMORY)) {
-			cmd |= PCI_COMMAND_MEMORY;
-			pci_write_config_word(pdev, PCI_COMMAND, cmd);
-		}
+		pci_enable_device(pdev);
 
 		addr = pdev->resource[0].start;
 		if (!addr)

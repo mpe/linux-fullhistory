@@ -998,7 +998,7 @@ prep_pcibios_fixup(void)
 	printk("Setting PCI interrupts for a \"%s\"\n", Motherboard_map_name);
 	if (OpenPIC) {
 		/* PCI interrupts are controlled by the OpenPIC */
-		for(dev=pci_devices; dev; dev=dev->next) {
+		pci_for_each_dev(dev) {
 			if (dev->bus->number == 0) {
                        		dev->irq = openpic_to_irq(Motherboard_map[PCI_SLOT(dev->devfn)]);
 				pcibios_write_config_byte(dev->bus->number, dev->devfn, PCI_INTERRUPT_PIN, dev->irq);
@@ -1007,8 +1007,7 @@ prep_pcibios_fixup(void)
 		return;
 	}
 
-	for(dev=pci_devices; dev; dev=dev->next)
-	{
+	pci_for_each_dev(dev) {
 		/*
 		 * Use our old hard-coded kludge to figure out what
 		 * irq this device uses.  This is necessary on things

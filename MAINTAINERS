@@ -192,7 +192,7 @@ S:	Maintained
 
 CIRRUS LOGIC GENERIC FBDEV DRIVER
 P:	Jeff Garzik
-M:	jgarzik@pobox.com
+M:	jgarzik@mandrakesoft.com
 L:	linux-fbdev@vuser.vu.union.edu
 S:	Maintained
 
@@ -996,7 +996,7 @@ S:	Maintained
 
 VIA 82Cxxx AUDIO DRIVER
 P:	Jeff Garzik
-M:	jgarzik@pobox.com
+M:	jgarzik@mandrakesoft.com
 S:	Maintained
 
 VIDEO FOR LINUX

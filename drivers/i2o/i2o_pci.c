@@ -229,9 +229,8 @@ int __init i2o_pci_scan(void)
 	int count=0;
 	
 	printk(KERN_INFO "i2o: Checking for PCI I2O controllers...\n");
-	
-	for(dev=pci_devices; dev!=NULL; dev=dev->next)
-	{
+
+	pci_for_each_dev(dev) {
 		if((dev->class>>8)!=PCI_CLASS_INTELLIGENT_I2O)
 			continue;
 		if((dev->class&0xFF)>1)

@@ -24,7 +24,7 @@ void pcibios_report_device_errors(void)
 {
 	struct pci_dev *dev;
 
-	for (dev = pci_devices; dev; dev = dev->next) {
+	pci_for_each_dev(dev) {
 		u16 status;
 
 		pci_read_config_word(dev, PCI_STATUS, &status);
@@ -121,11 +121,12 @@ static void __init pcibios_claim_resources(void)
 	struct pci_dev *dev;
 	int idx;
 
-	for (dev = pci_devices; dev; dev = dev->next)
+	pci_for_each_dev(dev) {
 		for (idx = 0; idx < PCI_NUM_RESOURCES; idx++)
 			if (dev->resource[idx].flags &&
 			    dev->resource[idx].start)
 				pci_claim_resource(dev, idx);
+	}
 }
 
 void __init

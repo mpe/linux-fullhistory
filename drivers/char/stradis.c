@@ -2243,26 +2243,19 @@ int init_module(void)
 int init_stradis_cards(struct video_init *unused)
 {
 #endif
-	struct pci_dev *dev = pci_devices;
+	struct pci_dev *dev = NULL;
 	int result = 0, i;
-	u32 newcard;
 
 	saa_num = 0;
 
-	while (dev) {
-		if (dev->vendor == PCI_VENDOR_ID_PHILIPS)
-			if (dev->device == PCI_DEVICE_ID_PHILIPS_SAA7146) {
-				pci_read_config_dword(dev,
-					PCI_SUBSYSTEM_VENDOR_ID, &newcard);
-				if (!newcard)
-					printk(KERN_INFO "stradis%d: rev1 decoder\n", saa_num);
-				else
-					printk(KERN_INFO "stradis%d: SDM2xx found\n", saa_num); 
-				result = configure_saa7146(dev, saa_num++);
-			}
+	while ((dev = pci_find_device(PCI_VENDOR_ID_PHILIPS, PCI_DEVICE_ID_PHILIPS_SAA7146, dev))) {
+		if (!dev->subsystem_vendor_id)
+			printk(KERN_INFO "stradis%d: rev1 decoder\n", saa_num);
+		else
+			printk(KERN_INFO "stradis%d: SDM2xx found\n", saa_num); 
+		result = configure_saa7146(dev, saa_num++);
 		if (result)
 			return result;
-		dev = dev->next;
 	}
 	if (saa_num)
 		printk(KERN_INFO "stradis: %d card(s) found.\n", saa_num);

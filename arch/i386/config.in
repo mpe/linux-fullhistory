@@ -120,6 +120,12 @@ tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 source drivers/parport/Config.in
 
 bool 'ACPI support' CONFIG_ACPI
+if [ "$CONFIG_ACPI" != "n" ]; then
+   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+     bool '  Enter S1 for sleep' CONFIG_ACPI_S1_SLEEP
+   fi
+fi
+
 bool 'Advanced Power Management BIOS support' CONFIG_APM
 if [ "$CONFIG_APM" != "n" ]; then
    bool '  Ignore USER SUSPEND' CONFIG_APM_IGNORE_USER_SUSPEND

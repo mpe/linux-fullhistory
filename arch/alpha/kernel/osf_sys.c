@@ -43,14 +43,8 @@
 #include <asm/hwrpb.h>
 #include <asm/processor.h>
 
-extern int do_mount(kdev_t, const char *, const char *, char *, int, void *);
+extern int do_mount(struct block_device *, const char *, const char *, char *, int, void *);
 extern int do_pipe(int *);
-
-extern struct file_operations *get_blkfops(unsigned int);
-extern struct file_operations *get_chrfops(unsigned int);
-
-extern kdev_t get_unnamed_dev(void);
-extern void put_unnamed_dev(kdev_t);
 
 extern asmlinkage int sys_swapon(const char *specialfile, int swap_flags);
 extern asmlinkage unsigned long sys_brk(unsigned long);
@@ -400,18 +394,16 @@ struct procfs_args {
 	uid_t exroot;
 };
 
-static int getdev(const char *name, int rdonly, struct dentry **dp)
+static struct dentry *getdev(const char *name, int rdonly)
 {
-	kdev_t dev;
 	struct dentry *dentry;
 	struct inode *inode;
-	struct file_operations *fops;
 	int retval;
 
 	dentry = namei(name);
 	retval = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
-		return retval;
+		return dentry;
 
 	retval = -ENOTBLK;
 	inode = dentry->d_inode;
@@ -421,48 +413,20 @@ static int getdev(const char *name, int rdonly, struct dentry **dp)
 	retval = -EACCES;
 	if (IS_NODEV(inode))
 		goto out_dput;
-
-	retval = -ENXIO;
-	dev = inode->i_rdev;
-	if (MAJOR(dev) >= MAX_BLKDEV)
-		goto out_dput;
-
-	retval = -ENODEV;
-	fops = get_blkfops(MAJOR(dev));
-	if (!fops)
-		goto out_dput;
-	if (fops->open) {
-		struct file dummy;
-		memset(&dummy, 0, sizeof(dummy));
-		dummy.f_dentry = dentry;
-		dummy.f_mode = rdonly ? 1 : 3;
-		retval = fops->open(inode, &dummy);
-		if (retval)
-			goto out_dput;
-	}
-	*dp = dentry;
-	retval = 0;
-out:
-	return retval;
+	return dentry;
 
 out_dput:
 	dput(dentry);
-	goto out;
-}
-
-static void putdev(struct dentry *dentry)
-{
-	struct file_operations *fops;
-
-	fops = get_blkfops(MAJOR(dentry->d_inode->i_rdev));
-	if (fops->release)
-		fops->release(dentry->d_inode, NULL);
+	return ERR_PTR(retval);
 }
 
 /*
  * We can't actually handle ufs yet, so we translate UFS mounts to
  * ext2fs mounts. I wouldn't mind a UFS filesystem, but the UFS
  * layout is so braindead it's a major headache doing it.
+ *
+ * Just how long ago was it written? OTOH our UFS driver may be still
+ * unhappy with OSF UFS. [CHECKME]
  */
 static int osf_ufs_mount(char *dirname, struct ufs_args *args, int flags)
 {
@@ -474,13 +438,12 @@ static int osf_ufs_mount(char *dirname, struct ufs_args *args, int flags)
 	if (copy_from_user(&tmp, args, sizeof(tmp)))
 		goto out;
 
-	retval = getdev(tmp.devname, 0, &dentry);
-	if (retval)
+	dentry = getdev(tmp.devname, 0);
+	retval = PTR_ERR(dentry);
+	if (IS_ERR(dentry)
 		goto out;
-	retval = do_mount(dentry->d_inode->i_rdev, tmp.devname, dirname, 
+	retval = do_mount(dentry->d_inode->i_bdev, tmp.devname, dirname, 
 				"ext2", flags, NULL);
-	if (retval)
-		putdev(dentry);
 	dput(dentry);
 out:
 	return retval;
@@ -496,13 +459,12 @@ static int osf_cdfs_mount(char *dirname, struct cdfs_args *args, int flags)
 	if (copy_from_user(&tmp, args, sizeof(tmp)))
 		goto out;
 
-	retval = getdev(tmp.devname, 1, &dentry);
-	if (retval)
+	dentry = getdev(tmp.devname, 1);
+	retval = PTR_ERR(dentry);
+	if (IS_ERR(dentry))
 		goto out;
-	retval = do_mount(dentry->d_inode->i_rdev, tmp.devname, dirname, 
+	retval = do_mount(dentry->d_inode->i_bdev, tmp.devname, dirname, 
 				"iso9660", flags, NULL);
-	if (retval)
-		putdev(dentry);
 	dput(dentry);
 out:
 	return retval;
@@ -510,19 +472,12 @@ out:
 
 static int osf_procfs_mount(char *dirname, struct procfs_args *args, int flags)
 {
-	kdev_t dev;
 	int retval;
 	struct procfs_args tmp;
 
 	if (copy_from_user(&tmp, args, sizeof(tmp)))
 		return -EFAULT;
-	dev = get_unnamed_dev();
-	if (!dev)
-		return -ENODEV;
-	retval = do_mount(dev, "", dirname, "proc", flags, NULL);
-	if (retval)
-		put_unnamed_dev(dev);
-	return retval;
+	return do_mount(NULL, "", dirname, "proc", flags, NULL);
 }
 
 asmlinkage int osf_mount(unsigned long typenr, char *path, int flag, void *data)

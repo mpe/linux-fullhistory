@@ -1,4 +1,4 @@
-/*  $Id: atyfb.c,v 1.133 1999/12/09 10:23:13 davem Exp $
+/*  $Id: atyfb.c,v 1.134 1999/12/23 21:32:09 geert Exp $
  *  linux/drivers/video/atyfb.c -- Frame buffer device for ATI Mach64
  *
  *	Copyright (C) 1997-1998  Geert Uytterhoeven
@@ -470,9 +470,6 @@ static int read_aty_sense(const struct fb_info_aty *info);
      */
 
 int atyfb_init(void);
-#ifdef CONFIG_FB_OF
-void atyfb_of_init(struct device_node *dp);
-#endif
 #ifndef MODULE
 int atyfb_setup(char*);
 #endif
@@ -3640,13 +3637,10 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
 
 int __init atyfb_init(void)
 {
-#if defined(CONFIG_FB_OF)
-    /* We don't want to be called like this. */
-    /* We rely on Open Firmware (offb) instead. */
-#elif defined(CONFIG_PCI)
-    struct pci_dev *pdev;
+#if defined(CONFIG_PCI)
+    struct pci_dev *pdev = NULL;
     struct fb_info_aty *info;
-    unsigned long addr;
+    unsigned long addr, res_start, res_size;
 #ifdef __sparc__
     extern void (*prom_palette) (int);
     extern int con_is_present(void);
@@ -3663,9 +3657,8 @@ int __init atyfb_init(void)
     u16 tmp;
 #endif
 
-    for (pdev = pci_devices; pdev; pdev = pdev->next) {
-	if (((pdev->class >> 16) == PCI_BASE_CLASS_DISPLAY) &&
-	    (pdev->vendor == PCI_VENDOR_ID_ATI)) {
+    while ((pdev = pci_find_device(PCI_VENDOR_ID_ATY, PCI_ANY_ID, pdev))) {
+	if ((pdev->class >> 16) == PCI_BASE_CLASS_DISPLAY) {
 	    struct resource *rp;
 
 	    info = kmalloc(sizeof(struct fb_info_aty), GFP_ATOMIC);
@@ -3680,6 +3673,11 @@ int __init atyfb_init(void)
 		    rp = &pdev->resource[1];
 	    addr = rp->start;
 	    if (!addr)
+		continue;
+
+	    res_start = rp->start;
+	    res_size = rp->end-rp->start+1;
+	    if (!request_mem_region(res_start, res_size, "atyfb"))
 		continue;
 
 #ifdef __sparc__
@@ -3707,6 +3705,7 @@ int __init atyfb_init(void)
 	    if (!info->mmap_map) {
 		printk("atyfb_init: can't alloc mmap_map\n");
 		kfree(info);
+		release_mem_region(res_start, res_size);
 		return -ENXIO;
 	    }
 	    memset(info->mmap_map, 0, j * sizeof(*info->mmap_map));
@@ -3886,6 +3885,7 @@ int __init atyfb_init(void)
 
 	    if(!info->ati_regbase) {
 		    kfree(info);
+		    release_mem_region(res_start, res_size);
 		    return -ENOMEM;
 	    }
 
@@ -3913,6 +3913,7 @@ int __init atyfb_init(void)
 
 	    if(!info->frame_buffer) {
 		    kfree(info);
+		    release_mem_region(res_start, res_size);
 		    return -ENXIO;
 	    }
 
@@ -3922,6 +3923,7 @@ int __init atyfb_init(void)
 		if (info->mmap_map)
 		    kfree(info->mmap_map);
 		kfree(info);
+		release_mem_region(res_start, res_size);
 		return -ENXIO;
 	    }
 
@@ -3943,6 +3945,18 @@ int __init atyfb_init(void)
 	    info->mmap_map[1].prot_mask = _PAGE_CACHE;
 	    info->mmap_map[1].prot_flag = _PAGE_E;
 #endif /* __sparc__ */
+
+#ifdef CONFIG_PMAC_PBOOK
+	    if (first_display == NULL)
+		pmu_register_sleep_notifier(&aty_sleep_notifier);
+	    info->next = first_display;
+	    first_display = info;
+#endif
+
+#ifdef CONFIG_FB_COMPAT_XPMAC
+	    if (!console_fb_info)
+		console_fb_info = &info->fb_info;
+#endif /* CONFIG_FB_COMPAT_XPMAC */
 	}
     }
 
@@ -4002,114 +4016,6 @@ int __init atyfb_init(void)
 #endif /* CONFIG_ATARI */
     return 0;
 }
-
-#ifdef CONFIG_FB_OF
-void __init atyfb_of_init(struct device_node *dp)
-{
-    unsigned long addr;
-    u8 bus, devfn;
-    u16 cmd;
-    struct fb_info_aty *info;
-    int i;
-
-    if (device_is_compatible(dp, "ATY,264LTPro")) {
-	/* XXX kludge for now */
-	if (dp->name == 0 || strcmp(dp->name, "ATY,264LTProA") != 0
-	    || dp->parent == 0)
-	    return;
-	dp = dp->parent;
-    }
-    switch (dp->n_addrs) {
-	case 1:
-	case 2:
-	case 3:
-	    addr = dp->addrs[0].address;
-	    break;
-	case 4:
-	    addr = dp->addrs[1].address;
-	    break;
-	default:
-	    printk("Warning: got %d adresses for ATY:\n", dp->n_addrs);
-	    for (i = 0; i < dp->n_addrs; i++)
-		printk(" %08x-%08x", dp->addrs[i].address,
-		       dp->addrs[i].address+dp->addrs[i].size-1);
-	    if (dp->n_addrs)
-		printk("\n");
-	    return;
-    }
-
-    info = kmalloc(sizeof(struct fb_info_aty), GFP_ATOMIC);
-    if (!info) {
-	printk("atyfb_of_init: can't alloc fb_info_aty\n");
-	return;
-    }
-    memset(info, 0, sizeof(struct fb_info_aty));
-
-    info->ati_regbase_phys = 0x7ff000+addr;
-    info->ati_regbase = (unsigned long)ioremap(info->ati_regbase_phys,
-						   0x1000);
-
-    if(! info->ati_regbase) {
-	    printk("atyfb_of_init: ioremap() returned NULL\n");
-	    kfree(info);
-	    return;
-    }
-
-    info->ati_regbase_phys += 0xc00;
-    info->ati_regbase += 0xc00;
-
-    /* enable memory-space accesses using config-space command register */
-    if (pci_device_loc(dp, &bus, &devfn) == 0) {
-	pcibios_read_config_word(bus, devfn, PCI_COMMAND, &cmd);
-	if (cmd != 0xffff) {
-	    cmd |= PCI_COMMAND_MEMORY;
-	    pcibios_write_config_word(bus, devfn, PCI_COMMAND, cmd);
-	}
-    }
-
-#ifdef __BIG_ENDIAN
-    /* Use the big-endian aperture */
-    addr += 0x800000;
-#endif
-
-    /* Map in frame buffer */
-    info->frame_buffer_phys = addr;
-    info->frame_buffer = (unsigned long)ioremap(addr, 0x800000);
-
-    if(! info->frame_buffer) {
-	    printk("atyfb_of_init: ioremap() returned NULL\n");
-	    kfree(info);
-	    return;
-    }
-
-    if (!aty_init(info, dp->full_name)) {
-	kfree(info);
-	return;
-    }
-
-#ifdef CONFIG_PMAC_PBOOK
-    if (first_display == NULL)
-	pmu_register_sleep_notifier(&aty_sleep_notifier);
-    info->next = first_display;
-    first_display = info;
-#endif
-	
-
-#ifdef CONFIG_PMAC_PBOOK
-    if (first_display == NULL)
-	pmu_register_sleep_notifier(&aty_sleep_notifier);
-    info->next = first_display;
-    first_display = info;
-#endif
-	
-
-#ifdef CONFIG_FB_COMPAT_XPMAC
-    if (!console_fb_info)
-	console_fb_info = &info->fb_info;
-#endif /* CONFIG_FB_COMPAT_XPMAC */
-}
-#endif /* CONFIG_FB_OF */
-
 
 #ifndef MODULE
 int __init atyfb_setup(char *options)

@@ -444,7 +444,6 @@ asmlinkage long sys_swapoff(const char * specialfile)
 {
 	struct swap_info_struct * p = NULL;
 	struct dentry * dentry;
-	struct file filp;
 	int i, type, prev;
 	int err = -EPERM;
 	
@@ -508,17 +507,8 @@ asmlinkage long sys_swapoff(const char * specialfile)
 		p->flags = SWP_WRITEOK;
 		goto out_dput;
 	}
-	if(p->swap_device){
-		memset(&filp, 0, sizeof(filp));		
-		filp.f_dentry = dentry;
-		filp.f_mode = 3; /* read write */
-		/* open it again to get fops */
-		if( !blkdev_open(dentry->d_inode, &filp) &&
-		   filp.f_op && filp.f_op->release){
-			filp.f_op->release(dentry->d_inode,&filp);
-			filp.f_op->release(dentry->d_inode,&filp);
-		}
-	}
+	if (p->swap_device)
+		blkdev_put(dentry->d_inode->i_bdev, BDEV_SWAP);
 	dput(dentry);
 
 	dentry = p->swap_file;
@@ -598,18 +588,17 @@ asmlinkage long sys_swapon(const char * specialfile, int swap_flags)
 	unsigned int type;
 	int i, j, prev;
 	int error = -EPERM;
-	struct file filp;
 	static int least_priority = 0;
 	union swap_header *swap_header = 0;
 	int swap_header_version;
 	int nr_good_pages = 0;
 	unsigned long maxpages;
 	int swapfilesize;
+	struct block_device *bdev = NULL;
 	
 	lock_kernel();
 	if (!capable(CAP_SYS_ADMIN))
 		goto out;
-	memset(&filp, 0, sizeof(filp));
 	p = swap_info;
 	for (type = 0 ; type < nr_swapfiles ; type++,p++)
 		if (!(p->flags & SWP_USED))
@@ -648,9 +637,9 @@ asmlinkage long sys_swapon(const char * specialfile, int swap_flags)
 		p->swap_device = dev;
 		set_blocksize(dev, PAGE_SIZE);
 		
-		filp.f_dentry = swap_dentry;
-		filp.f_mode = 3; /* read write */
-		error = blkdev_open(swap_dentry->d_inode, &filp);
+		bdev = swap_dentry->d_inode->i_bdev;
+
+		error = blkdev_get(bdev, FMODE_READ|FMODE_WRITE, 0, BDEV_SWAP);
 		if (error)
 			goto bad_swap_2;
 		set_blocksize(dev, PAGE_SIZE);
@@ -812,8 +801,8 @@ asmlinkage long sys_swapon(const char * specialfile, int swap_flags)
 	error = 0;
 	goto out;
 bad_swap:
-	if(filp.f_op && filp.f_op->release)
-		filp.f_op->release(filp.f_dentry->d_inode,&filp);
+	if (bdev)
+		blkdev_put(bdev, BDEV_SWAP);
 bad_swap_2:
 	if (p->swap_map)
 		vfree(p->swap_map);

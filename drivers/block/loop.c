@@ -375,7 +375,10 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 	}
 
 	if (S_ISBLK(inode->i_mode)) {
-		error = blkdev_open(inode, file);
+		/* dentry will be wired, so... */
+		error = blkdev_get(inode->i_bdev, file->f_mode,
+				   file->f_flags, BDEV_FILE);
+
 		lo->lo_device = inode->i_rdev;
 		lo->lo_flags = 0;
 
@@ -482,7 +485,8 @@ static int loop_clr_fd(struct loop_device *lo, kdev_t dev)
 		return -EBUSY;
 
 	if (S_ISBLK(dentry->d_inode->i_mode))
-		blkdev_release (dentry->d_inode);
+		blkdev_put(dentry->d_inode->i_bdev, BDEV_FILE);
+
 	lo->lo_dentry = NULL;
 
 	if (lo->lo_backing_file != NULL) {

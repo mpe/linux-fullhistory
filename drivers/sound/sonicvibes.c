@@ -3,7 +3,7 @@
 /*
  *      sonicvibes.c  --  S3 Sonic Vibes audio driver.
  *
- *      Copyright (C) 1998-1999  Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *      Copyright (C) 1998-2000  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *      This program is free software; you can redistribute it and/or modify
  *      it under the terms of the GNU General Public License as published by
@@ -35,55 +35,55 @@
  *  out first how to drive them...
  *
  *  Revision history
- *    06.05.98   0.1   Initial release
- *    10.05.98   0.2   Fixed many bugs, esp. ADC rate calculation
- *                     First stab at a simple midi interface (no bells&whistles)
- *    13.05.98   0.3   Fix stupid cut&paste error: set_adc_rate was called instead of
- *                     set_dac_rate in the FMODE_WRITE case in sv_open
- *                     Fix hwptr out of bounds (now mpg123 works)
- *    14.05.98   0.4   Don't allow excessive interrupt rates
- *    08.06.98   0.5   First release using Alan Cox' soundcore instead of miscdevice
- *    03.08.98   0.6   Do not include modversions.h
- *                     Now mixer behaviour can basically be selected between
- *                     "OSS documented" and "OSS actual" behaviour
- *    31.08.98   0.7   Fix realplayer problems - dac.count issues
- *    10.12.98   0.8   Fix drain_dac trying to wait on not yet initialized DMA
- *    16.12.98   0.9   Fix a few f_file & FMODE_ bugs
- *    06.01.99   0.10  remove the silly SA_INTERRUPT flag.
- *                     hopefully killed the egcs section type conflict
- *    12.03.99   0.11  cinfo.blocks should be reset after GETxPTR ioctl.
- *                     reported by Johan Maes <joma@telindus.be>
- *    22.03.99   0.12  return EAGAIN instead of EBUSY when O_NONBLOCK
- *                     read/write cannot be executed
- *    05.04.99   0.13  added code to sv_read and sv_write which should detect
- *                     lockups of the sound chip and revive it. This is basically
- *                     an ugly hack, but at least applications using this driver
- *                     won't hang forever. I don't know why these lockups happen,
- *                     it might well be the motherboard chipset (an early 486 PCI
- *                     board with ALI chipset), since every busmastering 100MB
- *                     ethernet card I've tried (Realtek 8139 and Macronix tulip clone)
- *                     exhibit similar behaviour (they work for a couple of packets
- *                     and then lock up and can be revived by ifconfig down/up).
- *    07.04.99   0.14  implemented the following ioctl's: SOUND_PCM_READ_RATE, 
- *                     SOUND_PCM_READ_CHANNELS, SOUND_PCM_READ_BITS; 
- *                     Alpha fixes reported by Peter Jones <pjones@redhat.com>
- *                     Note: dmaio hack might still be wrong on archs other than i386
- *    15.06.99   0.15  Fix bad allocation bug.
- *                     Thanks to Deti Fliegl <fliegl@in.tum.de>
- *    28.06.99   0.16  Add pci_set_master
- *    03.08.99   0.17  adapt to Linus' new __setup/__initcall
- *                     added kernel command line options "sonicvibes=reverb" and "sonicvibesdmaio=dmaioaddr"
- *    12.08.99   0.18  module_init/__setup fixes
- *    24.08.99   0.19  get rid of the dmaio kludge, replace with allocate_resource
- *    31.08.99   0.20  add spin_lock_init
- *                     __initlocaldata to fix gcc 2.7.x problems
- *                     use new resource allocation to allocate DDMA IO space
- *                     replaced current->state = x with set_current_state(x)
- *    03.09.99   0.21  change read semantics for MIDI to match
- *                     OSS more closely; remove possible wakeup race
- *    28.10.99   0.22  More waitqueue races fixed
- *    01.12.99   0.23  New argument to allocate_resource
- *    07.12.99   0.24  More allocate_resource semantics change
+ *    06.05.1998   0.1   Initial release
+ *    10.05.1998   0.2   Fixed many bugs, esp. ADC rate calculation
+ *                       First stab at a simple midi interface (no bells&whistles)
+ *    13.05.1998   0.3   Fix stupid cut&paste error: set_adc_rate was called instead of
+ *                       set_dac_rate in the FMODE_WRITE case in sv_open
+ *                       Fix hwptr out of bounds (now mpg123 works)
+ *    14.05.1998   0.4   Don't allow excessive interrupt rates
+ *    08.06.1998   0.5   First release using Alan Cox' soundcore instead of miscdevice
+ *    03.08.1998   0.6   Do not include modversions.h
+ *                       Now mixer behaviour can basically be selected between
+ *                       "OSS documented" and "OSS actual" behaviour
+ *    31.08.1998   0.7   Fix realplayer problems - dac.count issues
+ *    10.12.1998   0.8   Fix drain_dac trying to wait on not yet initialized DMA
+ *    16.12.1998   0.9   Fix a few f_file & FMODE_ bugs
+ *    06.01.1999   0.10  remove the silly SA_INTERRUPT flag.
+ *                       hopefully killed the egcs section type conflict
+ *    12.03.1999   0.11  cinfo.blocks should be reset after GETxPTR ioctl.
+ *                       reported by Johan Maes <joma@telindus.be>
+ *    22.03.1999   0.12  return EAGAIN instead of EBUSY when O_NONBLOCK
+ *                       read/write cannot be executed
+ *    05.04.1999   0.13  added code to sv_read and sv_write which should detect
+ *                       lockups of the sound chip and revive it. This is basically
+ *                       an ugly hack, but at least applications using this driver
+ *                       won't hang forever. I don't know why these lockups happen,
+ *                       it might well be the motherboard chipset (an early 486 PCI
+ *                       board with ALI chipset), since every busmastering 100MB
+ *                       ethernet card I've tried (Realtek 8139 and Macronix tulip clone)
+ *                       exhibit similar behaviour (they work for a couple of packets
+ *                       and then lock up and can be revived by ifconfig down/up).
+ *    07.04.1999   0.14  implemented the following ioctl's: SOUND_PCM_READ_RATE, 
+ *                       SOUND_PCM_READ_CHANNELS, SOUND_PCM_READ_BITS; 
+ *                       Alpha fixes reported by Peter Jones <pjones@redhat.com>
+ *                       Note: dmaio hack might still be wrong on archs other than i386
+ *    15.06.1999   0.15  Fix bad allocation bug.
+ *                       Thanks to Deti Fliegl <fliegl@in.tum.de>
+ *    28.06.1999   0.16  Add pci_set_master
+ *    03.08.1999   0.17  adapt to Linus' new __setup/__initcall
+ *                       added kernel command line options "sonicvibes=reverb" and "sonicvibesdmaio=dmaioaddr"
+ *    12.08.1999   0.18  module_init/__setup fixes
+ *    24.08.1999   0.19  get rid of the dmaio kludge, replace with allocate_resource
+ *    31.08.1999   0.20  add spin_lock_init
+ *                       __initlocaldata to fix gcc 2.7.x problems
+ *                       use new resource allocation to allocate DDMA IO space
+ *                       replaced current->state = x with set_current_state(x)
+ *    03.09.1999   0.21  change read semantics for MIDI to match
+ *                       OSS more closely; remove possible wakeup race
+ *    28.10.1999   0.22  More waitqueue races fixed
+ *    01.12.1999   0.23  New argument to allocate_resource
+ *    07.12.1999   0.24  More allocate_resource semantics change
  *
  */
 

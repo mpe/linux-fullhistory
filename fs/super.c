@@ -45,7 +45,6 @@
 static DECLARE_MUTEX(mount_sem);
 
 extern void wait_for_keypress(void);
-extern struct file_operations * get_blkfops(unsigned int major);
 
 extern int root_mountflags;
 
@@ -530,7 +529,8 @@ struct super_block *get_empty_super(void)
 	return s;
 }
 
-static struct super_block * read_super(kdev_t dev,const char *name,int flags,
+static struct super_block * read_super(kdev_t dev, struct block_device *bdev,
+				       const char *name, int flags,
 				       void *data, int silent)
 {
 	struct super_block * s;
@@ -541,7 +541,7 @@ static struct super_block * read_super(kdev_t dev,const char *name,int flags,
 	check_disk_change(dev);
 	s = get_super(dev);
 	if (s)
-		goto out;
+		goto found;	/* ought to set ->s_bdev */
 
 	type = get_fs_type(name);
 	if (!type) {
@@ -553,23 +553,30 @@ static struct super_block * read_super(kdev_t dev,const char *name,int flags,
 	if (!s)
 		goto out;
 	s->s_dev = dev;
+	s->s_bdev = bdev;
 	s->s_flags = flags;
 	s->s_dirt = 0;
 	sema_init(&s->s_vfs_rename_sem,1);
 	/* N.B. Should lock superblock now ... */
 	if (!type->read_super(s, data, silent))
 		goto out_fail;
-	s->s_dev = dev; /* N.B. why do this again?? */
 	s->s_type = type;
+bd_get:
+	/* tell bdcache that we are going to keep this one */
+	if (bdev)
+		atomic_inc(&bdev->bd_count);
 out:
 	return s;
 
-	/* N.B. s_dev should be cleared in type->read_super */
 out_fail:
 	s->s_dev = 0;
+	s->s_bdev = 0;
 out_null:
 	s = NULL;
 	goto out;
+found:
+	s->s_bdev = bdev;
+	goto bd_get;
 }
 
 /*
@@ -632,9 +639,10 @@ static void d_mount(struct dentry *covered, struct dentry *dentry)
 	dentry->d_covers = covered;
 }
 
-static int do_umount(kdev_t dev, int unmount_root, int flags)
+static struct block_device *do_umount(kdev_t dev, int unmount_root, int flags)
 {
 	struct super_block * sb;
+	struct block_device *bdev;
 	int retval;
 	
 	retval = -ENOENT;
@@ -681,7 +689,7 @@ static int do_umount(kdev_t dev, int unmount_root, int flags)
 		retval = 0;
 		if (!(sb->s_flags & MS_RDONLY))
 			retval = do_remount_sb(sb, MS_RDONLY, 0);
-		return retval;
+		return ERR_PTR(retval);
 	}
 
 	retval = d_umount(sb);
@@ -706,43 +714,44 @@ static int do_umount(kdev_t dev, int unmount_root, int flags)
 	}
 
 	sb->s_dev = 0;		/* Free the superblock */
+	bdev = sb->s_bdev;
+	sb->s_bdev = NULL;
 	unlock_super(sb);
 
 	remove_vfsmnt(dev);
+
+	return bdev;
+
 out:
-	return retval;
+	return ERR_PTR(retval);
 }
 
 static int umount_dev(kdev_t dev, int flags)
 {
 	int retval;
-	struct inode * inode = get_empty_inode();
+	struct block_device *bdev;
 
-	retval = -ENOMEM;
-	if (!inode)
-		goto out;
-
-	inode->i_rdev = dev;
 	retval = -ENXIO;
 	if (MAJOR(dev) >= MAX_BLKDEV)
-		goto out_iput;
+		goto out;
 
 	fsync_dev(dev);
 
 	down(&mount_sem);
 
-	retval = do_umount(dev, 0, flags);
-	if (!retval) {
-		fsync_dev(dev);
-		if (dev != ROOT_DEV) {
-			blkdev_release(inode);
+	bdev = do_umount(dev, 0, flags);
+	if (IS_ERR(bdev))
+		retval = PTR_ERR(bdev);
+	else {
+		retval = 0;
+		if (bdev) {
+			blkdev_put(bdev, BDEV_FS);
+			bdput(bdev);
+		} else {
 			put_unnamed_dev(dev);
 		}
 	}
-
 	up(&mount_sem);
-out_iput:
-	iput(inode);
 out:
 	return retval;
 }
@@ -750,12 +759,6 @@ out:
 /*
  * Now umount can handle mount points as well as block devices.
  * This is important for filesystems which use unnamed block devices.
- *
- * There is a little kludge here with the dummy_inode.  The current
- * vfs release functions only use the r_dev field in the inode so
- * we give them the info they need without using a real inode.
- * If any other fields are ever needed by any block device release
- * functions, they should be faked here.  -- jrs
  *
  * We now support a flag for forced unmount like the other 'big iron'
  * unixes. Our API is identical to OSF/1 to avoid making a mess of AMD
@@ -840,13 +843,28 @@ int fs_may_mount(kdev_t dev)
  * Anyone using this new feature must know what he/she is doing.
  */
 
-int do_mount(kdev_t dev, const char * dev_name, const char * dir_name,
-	     const char * type, int flags, void * data)
+int do_mount(struct block_device *bdev, const char *dev_name,
+	     const char *dir_name, const char * type, int flags, void * data)
 {
+	kdev_t dev;
 	struct dentry * dir_d;
 	struct super_block * sb;
 	struct vfsmount *vfsmnt;
 	int error;
+
+	if (bdev) {
+		mode_t mode = FMODE_READ; /* we always need it ;-) */
+		if (!(flags & MS_RDONLY))
+			mode |= FMODE_WRITE;
+		dev = to_kdev_t(bdev->bd_dev);
+		error = blkdev_get(bdev, mode, 0, BDEV_FS);
+		if (error)
+			return error;
+	} else {
+		dev = get_unnamed_dev();
+		if (!dev)
+			return -EMFILE;	/* huh? */
+	}
 
 	error = -EACCES;
 	if (!(flags & MS_RDONLY) && dev && is_read_only(dev))
@@ -874,7 +892,7 @@ int do_mount(kdev_t dev, const char * dev_name, const char * dir_name,
 	 * read_super just does a get_super().
 	 */
 	error = -EINVAL;
-	sb = read_super(dev, type, flags, data, 0);
+	sb = read_super(dev, bdev, type, flags, data, 0);
 	if (!sb)
 		goto dput_and_out;
 
@@ -884,20 +902,30 @@ int do_mount(kdev_t dev, const char * dev_name, const char * dir_name,
 	 */
 	error = -EBUSY;
 	if (!fs_may_mount(dev))
-		goto dput_and_out;
+		goto bdput_and_out;
 
 	error = -ENOMEM;
 	vfsmnt = add_vfsmnt(sb, dev_name, dir_name);
 	if (vfsmnt) {
 		d_mount(dget(dir_d), sb->s_root);
-		error = 0;
+		dput(dir_d);
+		up(&mount_sem);
+		return 0;
 	}
 
+bdput_and_out:
+	sb->s_bdev = NULL;
+	if (bdev)
+		bdput(bdev);
 dput_and_out:
 	dput(dir_d);
 	up(&mount_sem);
 out:
-	return error;	
+	if (bdev)
+		blkdev_put(bdev, BDEV_FS);
+	else
+		put_unnamed_dev(dev);
+	return error;
 }
 
 
@@ -1017,11 +1045,10 @@ asmlinkage long sys_mount(char * dev_name, char * dir_name, char * type,
 	struct file_system_type * fstype;
 	struct dentry * dentry = NULL;
 	struct inode * inode = NULL;
-	kdev_t dev;
+	struct block_device *bdev = NULL;
 	int retval;
 	unsigned long flags = 0;
 	unsigned long page = 0;
-	struct file dummy;	/* allows read-write or read-only flag */
 
 	if (!capable(CAP_SYS_ADMIN))
 		return -EPERM;
@@ -1047,7 +1074,6 @@ asmlinkage long sys_mount(char * dev_name, char * dir_name, char * type,
 	if (!fstype)		
 		goto out;
 
-	memset(&dummy, 0, sizeof(dummy));
 	if (fstype->fs_flags & FS_REQUIRES_DEV) {
 		dentry = namei(dev_name);
 		retval = PTR_ERR(dentry);
@@ -1063,28 +1089,7 @@ asmlinkage long sys_mount(char * dev_name, char * dir_name, char * type,
 		if (IS_NODEV(inode))
 			goto dput_and_out;
 
-		dev = inode->i_rdev;
-		retval = -ENXIO;
-		if (MAJOR(dev) >= MAX_BLKDEV)
-			goto dput_and_out;
-
-		retval = -ENOTBLK;
-		dummy.f_op = get_blkfops(MAJOR(dev));
-		if (!dummy.f_op)
-			goto dput_and_out;
-
-		if (dummy.f_op->open) {
-			dummy.f_dentry = dentry;
-			dummy.f_mode = (new_flags & MS_RDONLY) ? 1 : 3;
-			retval = dummy.f_op->open(inode, &dummy);
-			if (retval)
-				goto dput_and_out;
-		}
-
-	} else {
-		retval = -EMFILE;
-		if (!(dev = get_unnamed_dev()))
-			goto out;
+		bdev = inode->i_bdev;
 	}
 
 	page = 0;
@@ -1092,27 +1097,17 @@ asmlinkage long sys_mount(char * dev_name, char * dir_name, char * type,
 		flags = new_flags & ~MS_MGC_MSK;
 		retval = copy_mount_options(data, &page);
 		if (retval < 0)
-			goto clean_up;
+			goto dput_and_out;
 	}
-	retval = do_mount(dev, dev_name, dir_name, fstype->name, flags,
+	retval = do_mount(bdev, dev_name, dir_name, fstype->name, flags,
 				(void *) page);
 	free_page(page);
-	if (retval)
-		goto clean_up;
 
 dput_and_out:
 	dput(dentry);
 out:
 	unlock_kernel();
 	return retval;
-
-clean_up:
-	if (dummy.f_op) {
-		if (dummy.f_op->release)
-			dummy.f_op->release(inode, NULL);
-	} else
-		put_unnamed_dev(dev);
-	goto dput_and_out;
 }
 
 void __init mount_root(void)
@@ -1120,8 +1115,8 @@ void __init mount_root(void)
 	struct file_system_type * fs_type;
 	struct super_block * sb;
 	struct vfsmount *vfsmnt;
-	struct inode * d_inode = NULL;
-	struct file filp;
+	struct block_device *bdev = NULL;
+	mode_t mode;
 	int retval;
 
 #ifdef CONFIG_ROOT_NFS
@@ -1130,6 +1125,7 @@ void __init mount_root(void)
 		if ((fs_type = get_fs_type("nfs"))) {
 			sb = get_empty_super(); /* "can't fail" */
 			sb->s_dev = get_unnamed_dev();
+			sb->s_bdev = NULL;
 			sb->s_flags = root_mountflags;
 			sema_init(&sb->s_vfs_rename_sem,1);
 			vfsmnt = add_vfsmnt(sb, "/dev/root", "/");
@@ -1177,23 +1173,17 @@ void __init mount_root(void)
 	}
 #endif
 
-	memset(&filp, 0, sizeof(filp));
-	d_inode = get_empty_inode();
-	if (!d_inode)
-		panic(__FUNCTION__ ": unable to allocate root inode");
-	d_inode->i_rdev = ROOT_DEV;
-	filp.f_dentry = NULL;
-	if ( root_mountflags & MS_RDONLY)
-		filp.f_mode = 1; /* read only */
-	else
-		filp.f_mode = 3; /* read write */
-	retval = blkdev_open(d_inode, &filp);
+	bdev = bdget(kdev_t_to_nr(ROOT_DEV));
+	if (!bdget)
+		panic(__FUNCTION__ ": unable to allocate root device");
+	mode = FMODE_READ;
+	if (!(root_mountflags & MS_RDONLY))
+		mode |= FMODE_WRITE;
+	retval = blkdev_get(bdev, mode, 0, BDEV_FS);
 	if (retval == -EROFS) {
 		root_mountflags |= MS_RDONLY;
-		filp.f_mode = 1;
-		retval = blkdev_open(d_inode, &filp);
+		retval = blkdev_get(bdev, FMODE_READ, 0, BDEV_FS);
 	}
-	iput(d_inode);
 	if (retval)
 	        /*
 		 * Allow the user to distinguish between failed open
@@ -1204,7 +1194,7 @@ void __init mount_root(void)
 	else for (fs_type = file_systems ; fs_type ; fs_type = fs_type->next) {
   		if (!(fs_type->fs_flags & FS_REQUIRES_DEV))
   			continue;
-  		sb = read_super(ROOT_DEV,fs_type->name,root_mountflags,NULL,1);
+  		sb = read_super(ROOT_DEV,bdev,fs_type->name,root_mountflags,NULL,1);
 		if (sb) {
 			sb->s_flags = root_mountflags;
 			current->fs->root = dget(sb->s_root);
@@ -1213,8 +1203,10 @@ void __init mount_root(void)
 				fs_type->name,
 				(sb->s_flags & MS_RDONLY) ? " readonly" : "");
 			vfsmnt = add_vfsmnt(sb, "/dev/root", "/");
-			if (vfsmnt)
+			if (vfsmnt) {
+				bdput(bdev); /* sb holds a reference */
 				return;
+			}
 			panic("VFS: add_vfsmnt failed for root fs");
 		}
 	}
@@ -1268,16 +1260,20 @@ int __init change_root(kdev_t new_root_dev,const char *put_old)
 		error = -ENOTDIR;
 	}
 	if (error) {
-		int umount_error;
+		struct block_device *bdev;
 
 		printk(KERN_NOTICE "Trying to unmount old root ... ");
-		umount_error = do_umount(old_root_dev,1, 0);
-		if (!umount_error) {
+		bdev = do_umount(old_root_dev,1, 0);
+		if (!IS_ERR(bdev)) {
 			printk("okay\n");
 			invalidate_buffers(old_root_dev);
+			if (bdev) {
+				blkdev_put(bdev, BDEV_FS);
+				bdput(bdev);
+			}
 			return 0;
 		}
-		printk(KERN_ERR "error %d\n",umount_error);
+		printk(KERN_ERR "error %d\n",PTR_ERR(bdev));
 		return error;
 	}
 	remove_vfsmnt(old_root_dev);

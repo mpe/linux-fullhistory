@@ -334,7 +334,7 @@ static int sohci_submit_urb (urb_t * urb)
 	/* for ISOC transfers calculate start frame index */
 	if (urb->transfer_flags & USB_ISO_ASAP) { 
 		urb->start_frame = ((ed->state == ED_OPER)? (ed->last_iso + 1): 
-								(ohci->hcca.frame_no + 10)) & 0xffff;
+								(le16_to_cpu (ohci->hcca.frame_no) + 10)) & 0xffff;
 	}	
 	
 	td_submit_urb (urb); /* fill the TDs and link it to the ed */
@@ -385,8 +385,10 @@ static int sohci_unlink_urb (urb_t * urb)
 			spin_unlock_irqrestore (&usb_ed_lock, flags);
 
 			current->state = TASK_UNINTERRUPTIBLE;
-			schedule_timeout (HZ / 10); /* wait until all TDs are deleted */
-			remove_wait_queue (&op_wakeup, &wait); 
+			if(schedule_timeout (HZ / 10)) /* wait until all TDs are deleted */
+				remove_wait_queue (&op_wakeup, &wait); 
+			else
+				printk (KERN_ERR MODSTR "unlink URB timeout!\n");
 		} else 
 			urb_rm_priv (urb);
 		usb_dec_dev_use (urb->dev);		
@@ -463,7 +465,7 @@ static int sohci_get_current_frame_number (struct usb_device *usb_dev)
 {
 	ohci_t * ohci = usb_dev->bus->hcpriv;
 	
-	return ohci->hcca.frame_no;
+	return le16_to_cpu (ohci->hcca.frame_no);
 }
 
 /*-------------------------------------------------------------------------*/
@@ -775,7 +777,7 @@ static void ep_rm_ed (struct usb_device * usb_dev, ed_t * ed)
 	writel (OHCI_INTR_SF, &ohci->regs->intrstatus);
 	writel (OHCI_INTR_SF, &ohci->regs->intrenable); /* enable sof interrupt */
 
-	frame = ohci->hcca.frame_no & 0x1;
+	frame = le16_to_cpu (ohci->hcca.frame_no) & 0x1;
 	ed->ed_rm_list = ohci->ed_rm_list[frame];
 	ohci->ed_rm_list[frame] = ed;
 
@@ -1486,7 +1488,7 @@ static int hc_start (ohci_t * ohci)
 	writel (0, &ohci->regs->ed_controlhead);
 	writel (0, &ohci->regs->ed_bulkhead);
 	
-	writel (virt_to_bus(&ohci->hcca), &ohci->regs->hcca); /* a reset clears this */
+	writel (virt_to_bus (&ohci->hcca), &ohci->regs->hcca); /* a reset clears this */
    
   	fminterval = 0x2edf;
 	writel ((fminterval * 9) / 10, &ohci->regs->periodicstart);
@@ -1527,14 +1529,14 @@ static void hc_interrupt (int irq, void * __ohci, struct pt_regs * r)
 	struct ohci_regs * regs = ohci->regs;
  	int ints; 
 
-	if ((ohci->hcca.done_head != 0) && !(ohci->hcca.done_head & 0x01)) {
+	if ((ohci->hcca.done_head != 0) && !(le32_to_cpu (ohci->hcca.done_head) & 0x01)) {
 		ints =  OHCI_INTR_WDH;
 	} else { 
  		if ((ints = (readl (&regs->intrstatus) & readl (&regs->intrenable))) == 0)
 			return;
 	} 
 
-	dbg (KERN_DEBUG MODSTR "Interrupt: %x frame: %x \n", ints, ohci->hcca.frame_no);
+	dbg (KERN_DEBUG MODSTR "Interrupt: %x frame: %x \n", ints, le16_to_cpu (ohci->hcca.frame_no));
 	
 	if (ints & OHCI_INTR_WDH) {
 		writel (OHCI_INTR_WDH, &regs->intrdisable);	
@@ -1548,7 +1550,7 @@ static void hc_interrupt (int irq, void * __ohci, struct pt_regs * r)
 	}
 
 	if (ints & OHCI_INTR_SF) { 
-		unsigned int frame = (ohci->hcca.frame_no) & 1;
+		unsigned int frame = le16_to_cpu (ohci->hcca.frame_no) & 1;
 		writel (OHCI_INTR_SF, &regs->intrdisable);	
 		if (ohci->ed_rm_list[!frame] != NULL) {
 			dl_del_list (ohci, !frame);

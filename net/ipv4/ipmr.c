@@ -9,7 +9,7 @@
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  *
- *	Version: $Id: ipmr.c,v 1.48 1999/12/15 22:39:16 davem Exp $
+ *	Version: $Id: ipmr.c,v 1.49 2000/01/06 00:41:56 davem Exp $
  *
  *	Fixes:
  *	Michael Chastain	:	Incorrect size of copying.
@@ -1095,7 +1095,7 @@ static void ip_encap(struct sk_buff *skb, u32 saddr, u32 daddr)
 	iph->protocol	=	IPPROTO_IPIP;
 	iph->ihl	=	5;
 	iph->tot_len	=	htons(skb->len);
-	iph->id		=	htons(ip_id_count++);
+	ip_select_ident(iph, skb->dst);
 	ip_send_check(iph);
 
 	skb->h.ipiph = skb->nh.iph;

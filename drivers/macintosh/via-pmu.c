@@ -1047,8 +1047,9 @@ pbook_pci_save(void)
 	struct pci_save *ps;
 
 	npci = 0;
-	for (pd = pci_devices; pd != NULL; pd = pd->next)
+	pci_for_each_dev(pd) {
 		++npci;
+	}
 	n_pbook_pci_saves = npci;
 	if (npci == 0)
 		return;
@@ -1057,13 +1058,12 @@ pbook_pci_save(void)
 	if (ps == NULL)
 		return;
 
-	for (pd = pci_devices; pd != NULL && npci != 0; pd = pd->next) {
+	pci_for_each_dev(pd) {
 		pci_read_config_word(pd, PCI_COMMAND, &ps->command);
 		pci_read_config_word(pd, PCI_CACHE_LINE_SIZE, &ps->cache_lat);
 		pci_read_config_word(pd, PCI_INTERRUPT_LINE, &ps->intr);
 		pci_read_config_dword(pd, PCI_ROM_ADDRESS, &ps->rom_address);
 		++ps;
-		--npci;
 	}
 }
 
@@ -1071,11 +1071,12 @@ static void __openfirmware
 pbook_pci_restore(void)
 {
 	u16 cmd;
-	struct pci_save *ps = pbook_pci_saves;
+	struct pci_save *ps = pbook_pci_saves - 1;
 	struct pci_dev *pd;
 	int j;
 
-	for (pd = pci_devices; pd != NULL; pd = pd->next, ++ps) {
+	pci_for_each_dev(pd) {
+		ps++;
 		if (ps->command == 0)
 			continue;
 		pci_read_config_word(pd, PCI_COMMAND, &cmd);

@@ -3,7 +3,7 @@
 /*
  *      es1371.c  --  Creative Ensoniq ES1371.
  *
- *      Copyright (C) 1998-1999  Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *      Copyright (C) 1998-2000  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *      This program is free software; you can redistribute it and/or modify
  *      it under the terms of the GNU General Public License as published by
@@ -38,62 +38,64 @@
  *  there are several MIDI to PCM (WAV) packages, one of them is timidity.
  *
  *  Revision history
- *    04.06.98   0.1   Initial release
- *                     Mixer stuff should be overhauled; especially optional AC97 mixer bits
- *                     should be detected. This results in strange behaviour of some mixer
- *                     settings, like master volume and mic.
- *    08.06.98   0.2   First release using Alan Cox' soundcore instead of miscdevice
- *    03.08.98   0.3   Do not include modversions.h
- *                     Now mixer behaviour can basically be selected between
- *                     "OSS documented" and "OSS actual" behaviour
- *    31.08.98   0.4   Fix realplayer problems - dac.count issues
- *    27.10.98   0.5   Fix joystick support
- *                     -- Oliver Neukum (c188@org.chemie.uni-muenchen.de)
- *    10.12.98   0.6   Fix drain_dac trying to wait on not yet initialized DMA
- *    23.12.98   0.7   Fix a few f_file & FMODE_ bugs
- *                     Don't wake up app until there are fragsize bytes to read/write
- *    06.01.99   0.8   remove the silly SA_INTERRUPT flag.
- *                     hopefully killed the egcs section type conflict
- *    12.03.99   0.9   cinfo.blocks should be reset after GETxPTR ioctl.
- *                     reported by Johan Maes <joma@telindus.be>
- *    22.03.99   0.10  return EAGAIN instead of EBUSY when O_NONBLOCK
- *                     read/write cannot be executed
- *    07.04.99   0.11  implemented the following ioctl's: SOUND_PCM_READ_RATE, 
- *                     SOUND_PCM_READ_CHANNELS, SOUND_PCM_READ_BITS; 
- *                     Alpha fixes reported by Peter Jones <pjones@redhat.com>
- *                     Another Alpha fix (wait_src_ready in init routine)
- *                     reported by "Ivan N. Kokshaysky" <ink@jurassic.park.msu.ru>
- *                     Note: joystick address handling might still be wrong on archs
- *                     other than i386
- *    15.06.99   0.12  Fix bad allocation bug.
- *                     Thanks to Deti Fliegl <fliegl@in.tum.de>
- *    28.06.99   0.13  Add pci_set_master
- *    03.08.99   0.14  adapt to Linus' new __setup/__initcall
- *                     added kernel command line option "es1371=joystickaddr"
- *                     removed CONFIG_SOUND_ES1371_JOYPORT_BOOT kludge
- *    10.08.99   0.15  (Re)added S/PDIF module option for cards revision >= 4.
- *                     Initial version by Dave Platt <dplatt@snulbug.mtview.ca.us>.
- *                     module_init/__setup fixes
- *    08.16.99   0.16  Joe Cotellese <joec@ensoniq.com>
- *                     Added detection for ES1371 revision ID so that we can
- *                     detect the ES1373 and later parts.
- *                     added AC97 #defines for readability
- *                     added a /proc file system for dumping hardware state
- *                     updated SRC and CODEC w/r functions to accomodate bugs
- *                     in some versions of the ES137x chips.
- *    31.08.99   0.17  add spin_lock_init
- *                     __initlocaldata to fix gcc 2.7.x problems
- *                     replaced current->state = x with set_current_state(x)
- *    03.09.99   0.18  change read semantics for MIDI to match
- *                     OSS more closely; remove possible wakeup race
- *    21.10.99   0.19  Round sampling rates, requested by
- *                     Kasamatsu Kenichi <t29w0267@ip.media.kyoto-u.ac.jp>
- *    27.10.99   0.20  Added SigmaTel 3D enhancement string
- *                     Codec ID printing changes
- *    28.10.99   0.21  More waitqueue races fixed
- *                     Joe Cotellese <joec@ensoniq.com>
- *                     Changed PCI detection routine so we can more easily
- *                     detect ES137x chip and derivatives.
+ *    04.06.1998   0.1   Initial release
+ *                       Mixer stuff should be overhauled; especially optional AC97 mixer bits
+ *                       should be detected. This results in strange behaviour of some mixer
+ *                       settings, like master volume and mic.
+ *    08.06.1998   0.2   First release using Alan Cox' soundcore instead of miscdevice
+ *    03.08.1998   0.3   Do not include modversions.h
+ *                       Now mixer behaviour can basically be selected between
+ *                       "OSS documented" and "OSS actual" behaviour
+ *    31.08.1998   0.4   Fix realplayer problems - dac.count issues
+ *    27.10.1998   0.5   Fix joystick support
+ *                       -- Oliver Neukum (c188@org.chemie.uni-muenchen.de)
+ *    10.12.1998   0.6   Fix drain_dac trying to wait on not yet initialized DMA
+ *    23.12.1998   0.7   Fix a few f_file & FMODE_ bugs
+ *                       Don't wake up app until there are fragsize bytes to read/write
+ *    06.01.1999   0.8   remove the silly SA_INTERRUPT flag.
+ *                       hopefully killed the egcs section type conflict
+ *    12.03.1999   0.9   cinfo.blocks should be reset after GETxPTR ioctl.
+ *                       reported by Johan Maes <joma@telindus.be>
+ *    22.03.1999   0.10  return EAGAIN instead of EBUSY when O_NONBLOCK
+ *                       read/write cannot be executed
+ *    07.04.1999   0.11  implemented the following ioctl's: SOUND_PCM_READ_RATE, 
+ *                       SOUND_PCM_READ_CHANNELS, SOUND_PCM_READ_BITS; 
+ *                       Alpha fixes reported by Peter Jones <pjones@redhat.com>
+ *                       Another Alpha fix (wait_src_ready in init routine)
+ *                       reported by "Ivan N. Kokshaysky" <ink@jurassic.park.msu.ru>
+ *                       Note: joystick address handling might still be wrong on archs
+ *                       other than i386
+ *    15.06.1999   0.12  Fix bad allocation bug.
+ *                       Thanks to Deti Fliegl <fliegl@in.tum.de>
+ *    28.06.1999   0.13  Add pci_set_master
+ *    03.08.1999   0.14  adapt to Linus' new __setup/__initcall
+ *                       added kernel command line option "es1371=joystickaddr"
+ *                       removed CONFIG_SOUND_ES1371_JOYPORT_BOOT kludge
+ *    10.08.1999   0.15  (Re)added S/PDIF module option for cards revision >= 4.
+ *                       Initial version by Dave Platt <dplatt@snulbug.mtview.ca.us>.
+ *                       module_init/__setup fixes
+ *    08.16.1999   0.16  Joe Cotellese <joec@ensoniq.com>
+ *                       Added detection for ES1371 revision ID so that we can
+ *                       detect the ES1373 and later parts.
+ *                       added AC97 #defines for readability
+ *                       added a /proc file system for dumping hardware state
+ *                       updated SRC and CODEC w/r functions to accomodate bugs
+ *                       in some versions of the ES137x chips.
+ *    31.08.1999   0.17  add spin_lock_init
+ *                       __initlocaldata to fix gcc 2.7.x problems
+ *                       replaced current->state = x with set_current_state(x)
+ *    03.09.1999   0.18  change read semantics for MIDI to match
+ *                       OSS more closely; remove possible wakeup race
+ *    21.10.1999   0.19  Round sampling rates, requested by
+ *                       Kasamatsu Kenichi <t29w0267@ip.media.kyoto-u.ac.jp>
+ *    27.10.1999   0.20  Added SigmaTel 3D enhancement string
+ *                       Codec ID printing changes
+ *    28.10.1999   0.21  More waitqueue races fixed
+ *                       Joe Cotellese <joec@ensoniq.com>
+ *                       Changed PCI detection routine so we can more easily
+ *                       detect ES137x chip and derivatives.
+ *    05.01.2000   0.22  Should now work with rev7 boards; patch by
+ *                       Eric Lemar, elemar@cs.washington.edu
  */
 
 /*****************************************************************************/
@@ -1260,7 +1262,7 @@ static int mixer_rdch(struct es1371_state *s, unsigned int ch, int *arg)
 		
 	case SOUND_MIXER_SPEAKER:
 		j = rdcodec(s, AC97_PCBEEP_VOL);
-		if (j & AC97_MUTE
+		if (j & AC97_MUTE)
 			return put_user(0, (int *)arg);
 		return put_user(0x6464 - ((j >> 1) & 0xf) * 0x606, (int *)arg);
 		
@@ -3132,8 +3134,8 @@ static int __init probe_chip(struct pci_dev *pcidev, int index)
 	pci_set_master(pcidev);  /* enable bus mastering */
 	/* if we are a 5880 turn on the AC97 */
 	if (s->vendor == PCI_VENDOR_ID_ENSONIQ &&
-	    s->device == PCI_DEVICE_ID_ENSONIQ_CT5880 &&
-	    s->rev == CT5880REV_CT5880_C) {
+	    ((s->device == PCI_DEVICE_ID_ENSONIQ_CT5880 && s->rev == CT5880REV_CT5880_C) || 
+	     (s->device == PCI_DEVICE_ID_ENSONIQ_ES1371 && s->rev == ES1371REV_CT5880_A))) { 
 		cssr |= CSTAT_5880_AC97_RST;
 		outl(cssr, s->io+ES1371_REG_STATUS);
 		/* need to delay around 20ms(bleech) to give

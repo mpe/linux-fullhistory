@@ -25,6 +25,7 @@
 
 #include <linux/module.h>
 #include <linux/init.h>
+#include <linux/string.h>
 #include <linux/miscdevice.h>
 #include <linux/sched.h>
 #include <linux/time.h>
@@ -119,6 +120,9 @@ static unsigned long acpi_p_blk = 0;
 
 static int acpi_p_lvl2_tested = 0;
 static int acpi_p_lvl3_tested = 0;
+
+static int acpi_disabled = 0;
+int acpi_active = 0;
 
 // bits 8-15 are SLP_TYPa, bits 0-7 are SLP_TYPb
 static unsigned long acpi_slp_typ[] = 
@@ -1146,8 +1150,10 @@ static int acpi_do_sleep(ctl_table *ctl,
 	}
 	else
 	{
+#ifdef CONFIG_ACPI_S1_SLEEP
 		acpi_enter_sx(ACPI_S1);
 		acpi_enter_sx(ACPI_S0);
+#endif
 	}
 	file->f_pos += *len;
 	return 0;
@@ -1160,29 +1166,30 @@ static int __init acpi_init(void)
 {
 	int pid;
 
+	if (acpi_disabled)
+		return -ENODEV;
+
 	if (acpi_find_tables() && acpi_find_piix4()) {
 		// no ACPI tables and not PIIX4
 		return -ENODEV;
 	}
 
     	/*
-    	 * Are the latencies in uS or in ticks in the tables? 
-    	 * Maybe this should do ACPI_uS_TO_TMR_TICKS?
-    	 *
-    	 * Whatever. Internally we always keep them in timer
+    	 * Internally we always keep latencies in timer
     	 * ticks, which is simpler and more consistent (what is
     	 * an uS to us?). Besides, that gives people more
     	 * control in the /proc interfaces.
     	 */
 	if (acpi_facp->p_lvl2_lat
 	    && acpi_facp->p_lvl2_lat <= ACPI_MAX_P_LVL2_LAT) {
-		acpi_p_lvl2_lat = acpi_facp->p_lvl2_lat;
-		acpi_enter_lvl2_lat = ACPI_TMR_HZ / 1000;
+		acpi_p_lvl2_lat = ACPI_uS_TO_TMR_TICKS(acpi_facp->p_lvl2_lat);
+		acpi_enter_lvl2_lat = ACPI_uS_TO_TMR_TICKS(ACPI_TMR_HZ / 1000);
 	}
 	if (acpi_facp->p_lvl3_lat
 	    && acpi_facp->p_lvl3_lat <= ACPI_MAX_P_LVL3_LAT) {
-		acpi_p_lvl3_lat = acpi_facp->p_lvl3_lat;
-		acpi_enter_lvl3_lat = acpi_facp->p_lvl3_lat * 5;
+		acpi_p_lvl3_lat = ACPI_uS_TO_TMR_TICKS(acpi_facp->p_lvl3_lat);
+		acpi_enter_lvl3_lat
+			= ACPI_uS_TO_TMR_TICKS(acpi_facp->p_lvl3_lat * 5);
 	}
 
 	if (acpi_facp->sci_int
@@ -1205,6 +1212,8 @@ static int __init acpi_init(void)
 			    CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
 
 	acpi_power_off = acpi_power_off_handler;
+
+	acpi_active = 1;
 
 	/*
 	 * Set up the ACPI idle function. Note that we can't really
@@ -1239,6 +1248,22 @@ static void __exit acpi_exit(void)
 
 	acpi_destroy_tables();
 }
+
+static int __init acpi_setup(char *str)
+{
+	while (str && *str) {
+		if (strncmp(str, "off", 3) == 0)
+			acpi_disabled = 1;
+		else if (strncmp(str, "on", 2) == 0)
+			acpi_disabled = 0;
+		str = strpbrk(str, ",");
+		if (str)
+			str += strspn(str, ",");
+	}
+	return 1;
+}
+
+__setup("acpi=", acpi_setup);
 
 /*
  * Register a device with the ACPI subsystem

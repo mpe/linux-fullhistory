@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.192 1999/12/23 02:04:50 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.193 2000/01/06 00:42:01 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -595,7 +595,8 @@ __inline__ struct sock *tcp_v4_lookup(u32 saddr, u16 sport, u32 daddr, u16 dport
 
 static inline __u32 tcp_v4_init_sequence(struct sock *sk, struct sk_buff *skb)
 {
-	return secure_tcp_sequence_number(sk->saddr, sk->daddr,
+	return secure_tcp_sequence_number(skb->nh.iph->daddr,
+					  skb->nh.iph->saddr,
 					  skb->h.th->dest,
 					  skb->h.th->source);
 }

@@ -258,9 +258,9 @@ extern inline void init_rwsem(struct rw_semaphore *sem)
 }
 
 /* we use FASTCALL convention for the helpers */
-extern struct rw_semaphore *FASTCALL(down_read_failed(struct rw_semaphore *sem));
-extern struct rw_semaphore *FASTCALL(down_write_failed(struct rw_semaphore *sem));
-extern struct rw_semaphore *FASTCALL(rwsem_wake(struct rw_semaphore *sem));
+extern struct rw_semaphore *FASTCALL(__down_read_failed(struct rw_semaphore *sem));
+extern struct rw_semaphore *FASTCALL(__down_write_failed(struct rw_semaphore *sem));
+extern struct rw_semaphore *FASTCALL(__rwsem_wake(struct rw_semaphore *sem));
 
 extern inline void down_read(struct rw_semaphore *sem)
 {

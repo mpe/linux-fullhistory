@@ -1,7 +1,7 @@
 /*
  *	Linux NET3:	IP/IP protocol decoder. 
  *
- *	Version: $Id: ipip.c,v 1.29 1999/08/31 07:03:42 davem Exp $
+ *	Version: $Id: ipip.c,v 1.30 2000/01/06 00:41:55 davem Exp $
  *
  *	Authors:
  *		Sam Lantinga (slouken@cs.ucdavis.edu)  02/01/95
@@ -616,7 +616,7 @@ static int ipip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 		iph->ttl	=	old_iph->ttl;
 
 	iph->tot_len		=	htons(skb->len);
-	iph->id			=	htons(ip_id_count++);
+	ip_select_ident(iph, &rt->u.dst);
 	ip_send_check(iph);
 
 	stats->tx_bytes += skb->len;

@@ -476,7 +476,7 @@ pmac_pcibios_fixup(void)
 	 *	  honor the existence of multi-function devices where
 	 *	  different functions have different interrupt pins. [mj]
 	 */
-	for(dev=pci_devices; dev; dev=dev->next)
+	pci_for_each_dev(dev)
 	{
 		/*
 		 * Open Firmware often doesn't initialize the,

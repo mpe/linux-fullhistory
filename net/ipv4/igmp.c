@@ -8,7 +8,7 @@
  *	the older version didn't come out right using gcc 2.5.8, the newer one
  *	seems to fall out with gcc 2.6.2.
  *
- *	Version: $Id: igmp.c,v 1.35 1999/12/15 22:39:10 davem Exp $
+ *	Version: $Id: igmp.c,v 1.36 2000/01/06 00:41:54 davem Exp $
  *
  *	Authors:
  *		Alan Cox <Alan.Cox@linux.org>
@@ -224,13 +224,13 @@ static int igmp_send_report(struct net_device *dev, u32 group, int type)
 	iph->version  = 4;
 	iph->ihl      = (sizeof(struct iphdr)+4)>>2;
 	iph->tos      = 0;
-	iph->frag_off = 0;
+	iph->frag_off = __constant_htons(IP_DF);
 	iph->ttl      = 1;
 	iph->daddr    = dst;
 	iph->saddr    = rt->rt_src;
 	iph->protocol = IPPROTO_IGMP;
 	iph->tot_len  = htons(IGMP_SIZE);
-	iph->id	      = htons(ip_id_count++);
+	ip_select_ident(iph, &rt->u.dst);
 	((u8*)&iph[1])[0] = IPOPT_RA;
 	((u8*)&iph[1])[1] = 4;
 	((u8*)&iph[1])[2] = 0;

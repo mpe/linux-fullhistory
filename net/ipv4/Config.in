@@ -8,7 +8,9 @@ if [ "$CONFIG_IP_ADVANCED_ROUTER" = "y" ]; then
    define_bool CONFIG_NETLINK y
    bool '    IP: policy routing' CONFIG_IP_MULTIPLE_TABLES
    if [ "$CONFIG_IP_MULTIPLE_TABLES" = "y" ]; then
-      bool '      IP: use FWMARK value as routing key' CONFIG_IP_ROUTE_FWMARK
+      if [ "$CONFIG_NETFILTER" = "y" ]; then
+         bool '      IP: use FWMARK value as routing key' CONFIG_IP_ROUTE_FWMARK
+      fi
       bool '      IP: fast network address translation' CONFIG_IP_ROUTE_NAT
    fi
    bool '    IP: equal cost multipath' CONFIG_IP_ROUTE_MULTIPATH

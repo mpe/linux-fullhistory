@@ -3465,13 +3465,12 @@ int configure_bt848(struct pci_dev *dev, int bttv_num)
 
 static int find_bt848(void)
 {
-        struct pci_dev *dev = pci_devices;
+        struct pci_dev *dev;
         int result=0;
 
         bttv_num=0;
 
-        while (dev)
-        {
+	pci_for_each_dev(dev) {
                 if (dev->vendor == PCI_VENDOR_ID_BROOKTREE)
                         if ((dev->device == PCI_DEVICE_ID_BT848)||
                             (dev->device == PCI_DEVICE_ID_BT849)||
@@ -3480,7 +3479,6 @@ static int find_bt848(void)
                                 result=configure_bt848(dev,bttv_num++);
                 if (result)
                         return result;
-                dev = dev->next;
         }
 	if(bttv_num)
 		printk(KERN_INFO "bttv: %d Bt8xx card(s) found.\n", bttv_num);

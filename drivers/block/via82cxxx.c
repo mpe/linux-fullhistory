@@ -2,7 +2,7 @@
  * linux/drivers/block/via82cxxx.c	Version 0.06	Dec. 13, 1999
  *
  *  Copyright (C) 1998-99 Michel Aubry, Maintainer
- *  Copyright (C) 1999 Jeff Garzik, MVP4 Support (jgarzik@pobox.com)
+ *  Copyright (C) 1999 Jeff Garzik, MVP4 Support (jgarzik@mandrakesoft.com)
  *  Copyright (C) 1998-99 Andre Hedrick (andre@suse.com)
  *  May be copied or modified under the terms of the GNU General Public License
  *

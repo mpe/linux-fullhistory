@@ -141,7 +141,7 @@ sio_collect_irq_levels(void)
 	struct pci_dev *dev;
 
 	/* Iterate through the devices, collecting IRQ levels.  */
-	for (dev = pci_devices; dev; dev = dev->next) {
+	pci_for_each_dev(dev) {
 		if ((dev->class >> 16 == PCI_BASE_CLASS_BRIDGE) &&
 		    (dev->class >> 8 != PCI_CLASS_BRIDGE_PCMCIA))
 			continue;

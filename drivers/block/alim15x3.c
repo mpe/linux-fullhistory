@@ -609,23 +609,13 @@ static int ali15x3_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 
 unsigned int __init pci_init_ali15x3 (struct pci_dev *dev, const char *name)
 {
-	struct pci_dev *isa;
 	unsigned long fixdma_base = dev->resource[4].start;
 	byte tmpbyte;
 	unsigned long flags;
 
 	pci_read_config_byte(dev, PCI_REVISION_ID, &m5229_revision);
 
-	for (isa = pci_devices; isa; isa=isa->next) {
-		/*
-		 * look for ISA bridge
-		 */
-		if (isa->vendor == PCI_VENDOR_ID_AL &&
-		    isa->device == PCI_DEVICE_ID_AL_M1533) {
-			isa_dev = isa;
-			break;
-		}
-	}
+	isa_dev = pci_find_device(PCI_VENDOR_ID_AL, PCI_DEVICE_ID_AL_M1533, NULL);
 
 	if (!fixdma_base || fixdma_base == PCI_BASE_ADDRESS_IO_MASK) {
 		/*

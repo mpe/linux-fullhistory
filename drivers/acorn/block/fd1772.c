@@ -1350,10 +1350,6 @@ static int invalidate_drive(int rdev)
 static int fd_ioctl(struct inode *inode, struct file *filp,
 		    unsigned int cmd, unsigned long param)
 {
-#define IOCTL_MODE_BIT 8
-#define OPEN_WRITE_BIT 16
-#define IOCTL_ALLOWED (filp && (filp->f_mode & IOCTL_MODE_BIT))
-
 	int drive, device;
 
 	device = inode->i_rdev;
@@ -1361,8 +1357,6 @@ static int fd_ioctl(struct inode *inode, struct file *filp,
 		RO_IOCTLS(inode->i_rdev, param);
 	}
 	drive = MINOR(device);
-	if (!IOCTL_ALLOWED)
-		return -EPERM;
 	switch (cmd) {
 	case FDFMTBEG:
 		return 0;
@@ -1544,12 +1538,6 @@ static int floppy_open(struct inode *inode, struct file *filp)
 	if (old_dev && old_dev != inode->i_rdev)
 		invalidate_buffers(old_dev);
 
-	/* Allow ioctls if we have write-permissions even if read-only open */
-	if (filp->f_mode & 2 || permission(inode, 2) == 0)
-		filp->f_mode |= IOCTL_MODE_BIT;
-	if (filp->f_mode & 2)
-		filp->f_mode |= OPEN_WRITE_BIT;
-
 	if (filp->f_flags & O_NDELAY)
 		return 0;
 
@@ -1570,12 +1558,9 @@ static void floppy_release(struct inode *inode, struct file *filp)
 {
 	int drive;
 
-	drive = inode->i_rdev & 3;
+	drive = MINOR(inode->i_rdev) & 3;
 
-	if (!filp || (filp->f_mode & (2 | OPEN_WRITE_BIT)))
-		/* if the file is mounted OR (writable now AND writable at open
-		   time) Linus: Does this cover all cases? */
-		block_fsync(inode, filp);
+	block_fsync(inode, filp);
 
 	if (fd_ref[drive] < 0)
 		fd_ref[drive] = 0;

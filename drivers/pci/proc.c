@@ -218,12 +218,12 @@ static struct inode_operations proc_bus_pci_inode_operations = {
 static int
 get_pci_dev_info(char *buf, char **start, off_t pos, int count)
 {
-	struct pci_dev *dev = pci_devices;
+	struct pci_dev *dev;
 	off_t at = 0;
 	int len, i, cnt;
 
 	cnt = 0;
-	while (dev && count > cnt) {
+	pci_for_each_dev(dev) {
 		len = sprintf(buf, "%02x%02x\t%04x%04x\t%x",
 			dev->bus->number,
 			dev->devfn,
@@ -247,7 +247,6 @@ get_pci_dev_info(char *buf, char **start, off_t pos, int count)
 				cnt += len;
 			buf += len;
 		}
-		dev = dev->next;
 	}
 	return (count > cnt) ? cnt : count;
 }
@@ -289,18 +288,6 @@ int pci_proc_detach_device(struct pci_dev *dev)
 	return 0;
 }
 
-void __init proc_bus_pci_add(struct pci_bus *bus)
-{
-	while (bus) {
-		struct pci_dev *dev;
-
-		for(dev = bus->devices; dev; dev = dev->sibling)
-			pci_proc_attach_device(dev);
-		if (bus->children)
-			proc_bus_pci_add(bus->children);
-		bus = bus->next;
-	}
-}
 
 /*
  *  Backward compatible /proc/pci interface.
@@ -406,12 +393,15 @@ static int pci_read_proc(char *buf, char **start, off_t off,
 	int nprinted, len, begin = 0;
 	struct pci_dev *dev;
 
-	len   = sprintf(buf, "PCI devices found:\n");
+	len = sprintf(buf, "PCI devices found:\n");
 
-	for (dev = pci_devices; dev; dev = dev->next) {
+	*eof = 1;
+	pci_for_each_dev(dev) {
 		nprinted = sprint_dev_config(dev, buf + len, count - len);
-		if (nprinted < 0)
+		if (nprinted < 0) {
+			*eof = 0;
 			break;
+		}
 		len += nprinted;
 		if (len+begin < off) {
 			begin += len;
@@ -420,8 +410,6 @@ static int pci_read_proc(char *buf, char **start, off_t off,
 		if (len+begin >= off+count)
 			break;
 	}
-	if (!dev || len+begin < off)
-		*eof = 1;
 	off -= begin;
 	*start = buf + off;
 	len -= off;
@@ -435,10 +423,13 @@ static int pci_read_proc(char *buf, char **start, off_t off,
 static int __init pci_proc_init(void)
 {
 	if (pci_present()) {
+		struct pci_dev *dev;
 		proc_bus_pci_dir = proc_mkdir("pci", proc_bus);
 		create_proc_info_entry("devices", 0, proc_bus_pci_dir,
 					get_pci_dev_info);
-		proc_bus_pci_add(pci_root);
+		pci_for_each_dev(dev) {
+			pci_proc_attach_device(dev);
+		}
 		create_proc_read_entry("pci", 0, NULL, pci_read_proc, NULL);
 	}
 	return 0;

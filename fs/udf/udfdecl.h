@@ -158,8 +158,8 @@ extern struct buffer_head *udf_read_untagged(struct super_block *, Uint32, Uint3
 extern void udf_release_data(struct buffer_head *);
 
 /* lowlevel.c */
-extern unsigned int udf_get_last_session(kdev_t);
-extern unsigned int udf_get_last_block(kdev_t, int *);
+extern unsigned int udf_get_last_session(struct super_block *);
+extern unsigned int udf_get_last_block(struct super_block *, int *);
 
 /* partition.c */
 extern Uint32 udf_get_pblock(struct super_block *, Uint32, Uint16, Uint32);

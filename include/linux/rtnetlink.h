@@ -249,6 +249,11 @@ struct rta_cacheinfo
 	__s32	rta_expires;
 	__u32	rta_error;
 	__u32	rta_used;
+
+#define RTNETLINK_HAVE_PEERINFO 1
+	__u32	rta_id;
+	__u32	rta_ts;
+	__u32	rta_tsage;
 };
 
 /* RTM_METRICS --- array of struct rtattr with types of RTAX_* */

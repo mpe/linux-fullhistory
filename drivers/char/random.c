@@ -1936,7 +1936,7 @@ static __u32 halfMD4Transform (__u32 const buf[4], __u32 const in[8])
 	/* Alternative: return sum of all words? */
 }
 
-#if 0	/* May be needed for IPv6 */
+#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
 
 static __u32 twothirdsMD4Transform (__u32 const buf[4], __u32 const in[12])
 {
@@ -2001,6 +2001,59 @@ static __u32 twothirdsMD4Transform (__u32 const buf[4], __u32 const in[12])
 #define REKEY_INTERVAL	300
 #define HASH_BITS 24
 
+#if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
+__u32 secure_tcpv6_sequence_number(__u32 *saddr, __u32 *daddr,
+				   __u16 sport, __u16 dport)
+{
+	static __u32	rekey_time = 0;
+	static __u32	count = 0;
+	static __u32	secret[12];
+	struct timeval 	tv;
+	__u32		seq;
+
+	/* The procedure is the same as for IPv4, but addresses are longer. */
+
+	do_gettimeofday(&tv);	/* We need the usecs below... */
+
+	if (!rekey_time || (tv.tv_sec - rekey_time) > REKEY_INTERVAL) {
+		rekey_time = tv.tv_sec;
+		/* First five words are overwritten below. */
+		get_random_bytes(&secret[5], sizeof(secret)-5*4);
+		count = (tv.tv_sec/REKEY_INTERVAL) << HASH_BITS;
+	}
+
+	memcpy(secret, saddr, 16);
+	secret[4]=(sport << 16) + dport;
+
+	seq = (twothirdsMD4Transform(daddr, secret) &
+	       ((1<<HASH_BITS)-1)) + count;
+
+	seq += tv.tv_usec + tv.tv_sec*1000000;
+	return seq;
+}
+
+__u32 secure_ipv6_id(__u32 *daddr)
+{
+	static time_t	rekey_time = 0;
+	static __u32	secret[12];
+	time_t		t;
+
+	/*
+	 * Pick a random secret every REKEY_INTERVAL seconds.
+	 */
+	t = CURRENT_TIME;
+	if (!rekey_time || (t - rekey_time) > REKEY_INTERVAL) {
+		rekey_time = t;
+		/* First word is overwritten below. */
+		get_random_bytes(secret, sizeof(secret));
+	}
+
+	return twothirdsMD4Transform(daddr, secret);
+}
+
+#endif
+
+
 __u32 secure_tcp_sequence_number(__u32 saddr, __u32 daddr,
 				 __u16 sport, __u16 dport)
 {
@@ -2052,6 +2105,38 @@ __u32 secure_tcp_sequence_number(__u32 saddr, __u32 daddr,
 	       saddr, daddr, sport, dport, seq);
 #endif
 	return seq;
+}
+
+/*  The code below is shamelessly stolen from secure_tcp_sequence_number().
+ *  All blames to Andrey V. Savochkin <saw@msu.ru>.
+ */
+__u32 secure_ip_id(__u32 daddr)
+{
+	static time_t	rekey_time = 0;
+	static __u32	secret[12];
+	time_t		t;
+
+	/*
+	 * Pick a random secret every REKEY_INTERVAL seconds.
+	 */
+	t = CURRENT_TIME;
+	if (!rekey_time || (t - rekey_time) > REKEY_INTERVAL) {
+		rekey_time = t;
+		/* First word is overwritten below. */
+		get_random_bytes(secret+1, sizeof(secret)-4);
+	}
+
+	/*
+	 *  Pick a unique starting offset for each IP destination.
+	 *  Note that the words are placed into the first words to be
+	 *  mixed in with the halfMD4.  This is because the starting
+	 *  vector is also a random secret (at secret+8), and further
+	 *  hashing fixed data into it isn't going to improve anything,
+	 *  so we should get started with the variable data.
+	 */
+	secret[0]=daddr;
+
+	return halfMD4Transform(secret+8, secret);
 }
 
 #ifdef CONFIG_SYN_COOKIES

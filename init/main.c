@@ -509,6 +509,7 @@ asmlinkage void __init start_kernel(void)
 	page_cache_init(mempages);
 	kiobuf_init();
 	signals_init();
+	bdev_init();
 	inode_init();
 	file_table_init();
 #if defined(CONFIG_SYSVIPC)

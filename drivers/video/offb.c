@@ -26,6 +26,7 @@
 #include <linux/fb.h>
 #include <linux/selection.h>
 #include <linux/init.h>
+#include <linux/ioport.h>
 #ifdef CONFIG_FB_COMPAT_XPMAC
 #include <asm/vc_ioctl.h>
 #endif
@@ -290,9 +291,6 @@ static int offb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 }
 
 
-#ifdef CONFIG_FB_ATY
-extern void atyfb_of_init(struct device_node *dp);
-#endif /* CONFIG_FB_ATY */
 #ifdef CONFIG_FB_ATY128
 extern void aty128fb_of_init(struct device_node *dp);
 #endif /* CONFIG_FB_ATY */
@@ -414,6 +412,13 @@ int __init offb_init(void)
     return 0;
 }
 
+
+    /*
+     *  This function is intended to go away as soon as all OF-aware frame
+     *  buffer device drivers have been converted to use PCI probing and PCI
+     *  resources. [ Geert ]
+     */
+
 static int __init offb_init_driver(struct device_node *dp)
 {
 #ifdef CONFIG_FB_ATY128
@@ -422,12 +427,6 @@ static int __init offb_init_driver(struct device_node *dp)
 	return 1;
     }
 #endif
-#ifdef CONFIG_FB_ATY
-    if (!strncmp(dp->name, "ATY", 3)) {
-	atyfb_of_init(dp);
-	return 1;
-    }
-#endif /* CONFIG_FB_ATY */
 #ifdef CONFIG_FB_S3TRIO
     if (!strncmp(dp->name, "S3Trio", 6)) {
     	s3triofb_init_of(dp);
@@ -506,7 +505,7 @@ static void __init offb_init_nodriver(struct device_node *dp)
 	address = (u_long)*up;
     else {
 	for (i = 0; i < dp->n_addrs; ++i)
-	    if (dp->addrs[i].size >= len)
+	    if (dp->addrs[i].size >= pitch*height*depth/8)
 		break;
 	if (i >= dp->n_addrs) {
 	    printk(KERN_ERR "no framebuffer address found for %s\n", dp->full_name);
@@ -533,17 +532,25 @@ static void offb_init_fb(const char *name, const char *full_name,
     struct fb_var_screeninfo *var;
     struct display *disp;
     struct fb_info_offb *info;
+    unsigned long res_start = address;
+    unsigned long res_size = pitch*height*depth/8;
+
+    if (!request_mem_region(res_start, res_size, "offb"))
+	return;
 
     printk(KERN_INFO "Using unsupported %dx%d %s at %lx, depth=%d, pitch=%d\n",
 	   width, height, name, address, depth, pitch);
     if (depth != 8 && depth != 16 && depth != 32) {
 	printk(KERN_ERR "%s: can't use depth = %d\n", full_name, depth);
+	release_mem_region(res_start, res_size);
 	return;
     }
 
     info = kmalloc(sizeof(struct fb_info_offb), GFP_ATOMIC);
-    if (info == 0)
+    if (info == 0) {
+	release_mem_region(res_start, res_size);
 	return;
+    }
     memset(info, 0, sizeof(*info));
 
     fix = &info->fix;
@@ -707,6 +714,7 @@ static void offb_init_fb(const char *name, const char *full_name,
 
     if (register_framebuffer(&info->info) < 0) {
 	kfree(info);
+	release_mem_region(res_start, res_size);
 	return;
     }
 

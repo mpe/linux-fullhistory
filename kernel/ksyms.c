@@ -52,8 +52,6 @@
 
 extern int console_loglevel;
 extern void set_device_ro(kdev_t dev,int flag);
-extern struct file_operations * get_blkfops(unsigned int);
-extern int blkdev_release(struct inode * inode);
 #if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
 extern int (*do_nfsservctl)(int, void *, void *);
 #endif
@@ -258,9 +256,10 @@ EXPORT_SYMBOL(is_read_only);
 EXPORT_SYMBOL(set_device_ro);
 EXPORT_SYMBOL(bmap);
 EXPORT_SYMBOL(sync_dev);
-EXPORT_SYMBOL(get_blkfops);
 EXPORT_SYMBOL(blkdev_open);
-EXPORT_SYMBOL(blkdev_release);
+EXPORT_SYMBOL(blkdev_get);
+EXPORT_SYMBOL(blkdev_put);
+EXPORT_SYMBOL(ioctl_by_bdev);
 EXPORT_SYMBOL(gendisk_head);
 EXPORT_SYMBOL(resetup_one_dev);
 EXPORT_SYMBOL(unplug_device);
@@ -417,7 +416,6 @@ EXPORT_SYMBOL(clear_inode);
 EXPORT_SYMBOL(nr_async_pages);
 EXPORT_SYMBOL(___strtok);
 EXPORT_SYMBOL(init_special_inode);
-EXPORT_SYMBOL(fifo_inode_operations);
 EXPORT_SYMBOL(read_ahead);
 EXPORT_SYMBOL(get_hash_table);
 EXPORT_SYMBOL(get_empty_inode);

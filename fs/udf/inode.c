@@ -1157,7 +1157,7 @@ static void udf_fill_inode(struct inode *inode, struct buffer_head *bh)
 		}
 		case FILE_TYPE_FIFO:
 		{
-			init_special_inode(inode, inode->i_mode|S_FIFO, 0);
+			init_special_inode(inode, inode->i_mode | S_IFIFO, 0);
 			break;
 		}
 		case FILE_TYPE_SYMLINK:

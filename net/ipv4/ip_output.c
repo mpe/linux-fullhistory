@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.75 1999/12/21 04:05:04 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.76 2000/01/06 00:41:57 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -71,6 +71,7 @@
 #include <net/icmp.h>
 #include <net/raw.h>
 #include <net/checksum.h>
+#include <net/inetpeer.h>
 #include <linux/igmp.h>
 #include <linux/netfilter_ipv4.h>
 #include <linux/mroute.h>
@@ -81,8 +82,6 @@
  */
 
 int sysctl_ip_dynaddr = 0;
-
-int ip_id_count = 0;
 
 /* Generate a checksum for an outgoing IP datagram. */
 __inline__ void ip_send_check(struct iphdr *iph)
@@ -154,7 +153,7 @@ void ip_build_and_send_pkt(struct sk_buff *skb, struct sock *sk,
 {
 	struct rtable *rt = (struct rtable *)skb->dst;
 	struct iphdr *iph;
-	
+
 	/* Build the IP header. */
 	if (opt)
 		iph=(struct iphdr *)skb_push(skb,sizeof(struct iphdr) + opt->optlen);
@@ -172,7 +171,7 @@ void ip_build_and_send_pkt(struct sk_buff *skb, struct sock *sk,
 	iph->saddr    = rt->rt_src;
 	iph->protocol = sk->protocol;
 	iph->tot_len  = htons(skb->len);
-	iph->id       = htons(ip_id_count++);
+	ip_select_ident(iph, &rt->u.dst);
 	skb->nh.iph   = iph;
 
 	if (opt && opt->optlen) {
@@ -356,6 +355,8 @@ static inline int ip_queue_xmit2(struct sk_buff *skb)
 	if (ip_dont_fragment(sk, &rt->u.dst))
 		iph->frag_off |= __constant_htons(IP_DF);
 
+	ip_select_ident(iph, &rt->u.dst);
+
 	/* Add an IP checksum. */
 	ip_send_check(iph);
 
@@ -375,6 +376,7 @@ fragment:
 		kfree_skb(skb);
 		return -EMSGSIZE;
 	}
+	ip_select_ident(iph, &rt->u.dst);
 	return ip_fragment(skb, skb->dst->output);
 }
 
@@ -429,7 +431,6 @@ int ip_queue_xmit(struct sk_buff *skb)
 	}
 
 	iph->tot_len = htons(skb->len);
-	iph->id = htons(ip_id_count++);
 
 	return NF_HOOK(PF_INET, NF_IP_LOCAL_OUT, skb, NULL, rt->u.dst.dev,
 		       ip_queue_xmit2);
@@ -475,7 +476,7 @@ static int ip_build_xmit_slow(struct sock *sk,
 	int err;
 	int offset, mf;
 	int mtu;
-	unsigned short id;
+	u16 id = 0;
 
 	int hh_len = (rt->u.dst.dev->hard_header_len + 15)&~15;
 	int nfrags=0;
@@ -485,7 +486,7 @@ static int ip_build_xmit_slow(struct sock *sk,
 	mtu = rt->u.dst.pmtu;
 	if (ip_dont_fragment(sk, &rt->u.dst))
 		df = htons(IP_DF);
-  
+
 	length -= sizeof(struct iphdr);
 
 	if (opt) {
@@ -493,12 +494,12 @@ static int ip_build_xmit_slow(struct sock *sk,
 		maxfraglen = ((mtu-sizeof(struct iphdr)-opt->optlen) & ~7) + fragheaderlen;
 	} else {
 		fragheaderlen = sizeof(struct iphdr);
-		
+
 		/*
 		 *	Fragheaderlen is the size of 'overhead' on each buffer. Now work
 		 *	out the size of the frames to send.
 		 */
-	 
+
 		maxfraglen = ((mtu-sizeof(struct iphdr)) & ~7) + fragheaderlen;
 	}
 
@@ -510,15 +511,15 @@ static int ip_build_xmit_slow(struct sock *sk,
 	/*
 	 *	Start at the end of the frame by handling the remainder.
 	 */
-	 
+
 	offset = length - (length % (maxfraglen - fragheaderlen));
-	
+
 	/*
 	 *	Amount of memory to allocate for final fragment.
 	 */
-	 
+
 	fraglen = length - offset + fragheaderlen;
-	
+
 	if (length-offset==0) {
 		fraglen = maxfraglen;
 		offset -= maxfraglen-fragheaderlen;
@@ -527,14 +528,14 @@ static int ip_build_xmit_slow(struct sock *sk,
 	/*
 	 *	The last fragment will not have MF (more fragments) set.
 	 */
-	 
+
 	mf = 0;
 
 	/*
 	 *	Don't fragment packets for path mtu discovery.
 	 */
-	 
-	if (offset > 0 && df) { 
+
+	if (offset > 0 && sk->protinfo.af_inet.pmtudisc==IP_PMTUDISC_DO) { 
 		ip_local_error(sk, EMSGSIZE, rt->rt_dst, sk->dport, mtu);
  		return -EMSGSIZE;
 	}
@@ -542,15 +543,9 @@ static int ip_build_xmit_slow(struct sock *sk,
 		goto out;
 
 	/*
-	 *	Get an identifier
-	 */
-	 
-	id = htons(ip_id_count++);
-
-	/*
 	 *	Begin outputting the bytes.
 	 */
-	 
+
 	do {
 		char *data;
 		struct sk_buff * skb;
@@ -566,7 +561,7 @@ static int ip_build_xmit_slow(struct sock *sk,
 		/*
 		 *	Fill in the control structures
 		 */
-		 
+
 		skb->priority = sk->priority;
 		skb->dst = dst_clone(&rt->u.dst);
 		skb_reserve(skb, hh_len);
@@ -574,14 +569,14 @@ static int ip_build_xmit_slow(struct sock *sk,
 		/*
 		 *	Find where to start putting bytes.
 		 */
-		 
+
 		data = skb_put(skb, fraglen);
 		skb->nh.iph = (struct iphdr *)data;
 
 		/*
 		 *	Only write IP header onto non-raw packets 
 		 */
-		 
+
 		{
 			struct iphdr *iph = (struct iphdr *)data;
 
@@ -594,9 +589,23 @@ static int ip_build_xmit_slow(struct sock *sk,
 			}
 			iph->tos = sk->protinfo.af_inet.tos;
 			iph->tot_len = htons(fraglen - fragheaderlen + iph->ihl*4);
+			iph->frag_off = htons(offset>>3)|mf|df;
 			iph->id = id;
-			iph->frag_off = htons(offset>>3);
-			iph->frag_off |= mf|df;
+			if (!mf) {
+				if (offset || !df) {
+					/* Select an unpredictable ident only
+					 * for packets without DF or having
+					 * been fragmented.
+					 */
+					__ip_select_ident(iph, &rt->u.dst);
+					id = iph->id;
+				}
+
+				/*
+				 *	Any further fragments will have MF set.
+				 */
+				mf = htons(IP_MF);
+			}
 			if (rt->rt_type == RTN_MULTICAST)
 				iph->ttl = sk->protinfo.af_inet.mc_ttl;
 			else
@@ -607,14 +616,8 @@ static int ip_build_xmit_slow(struct sock *sk,
 			iph->daddr = rt->rt_dst;
 			iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
 			data += iph->ihl*4;
-			
-			/*
-			 *	Any further fragments will have MF set.
-			 */
-			 
-			mf = htons(IP_MF);
 		}
-		
+
 		/*
 		 *	User data callback
 		 */
@@ -712,20 +715,20 @@ int ip_build_xmit(struct sock *sk,
 		goto error; 
 	skb_reserve(skb, hh_len);
 	}
-	
+
 	skb->priority = sk->priority;
 	skb->dst = dst_clone(&rt->u.dst);
 
 	skb->nh.iph = iph = (struct iphdr *)skb_put(skb, length);
-	
+
 	if(!sk->protinfo.af_inet.hdrincl) {
 		iph->version=4;
 		iph->ihl=5;
 		iph->tos=sk->protinfo.af_inet.tos;
 		iph->tot_len = htons(length);
-		iph->id=htons(ip_id_count++);
 		iph->frag_off = df;
 		iph->ttl=sk->protinfo.af_inet.mc_ttl;
+		ip_select_ident(iph, &rt->u.dst);
 		if (rt->rt_type != RTN_MULTICAST)
 			iph->ttl=sk->protinfo.af_inet.ttl;
 		iph->protocol=sk->protocol;
@@ -757,8 +760,6 @@ error:
 	ip_statistics.IpOutDiscards++;
 	return err; 
 }
-		       
-
 
 /*
  *	This IP datagram is too large to be sent in one piece.  Break it up into
@@ -905,7 +906,7 @@ int ip_fragment(struct sk_buff *skb, int (*output)(struct sk_buff*))
 	kfree_skb(skb);
 	ip_statistics.IpFragOKs++;
 	return err;
-	
+
 fail:
 	kfree_skb(skb); 
 	ip_statistics.IpFragFails++;
@@ -1006,7 +1007,6 @@ static struct packet_type ip_packet_type =
 	NULL,
 };
 
-
 /*
  *	IP registers the packet type and then calls the subprotocol initialisers
  */
@@ -1016,9 +1016,9 @@ void __init ip_init(void)
 	dev_add_pack(&ip_packet_type);
 
 	ip_rt_init();
+	inet_initpeers();
 
 #ifdef CONFIG_IP_MULTICAST
 	proc_net_create("igmp", 0, ip_mc_procinfo);
 #endif
 }
-

@@ -3387,9 +3387,6 @@ static int get_floppy_geometry(int drive, int type, struct floppy_struct **g)
 static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 		    unsigned long param)
 {
-#define IOCTL_MODE_BIT 8
-#define OPEN_WRITE_BIT 16
-#define IOCTL_ALLOWED (filp && (filp->f_mode & IOCTL_MODE_BIT))
 #define OUT(c,x) case c: outparam = (const char *) (x); break
 #define IN(c,x,tag) case c: *(x) = inparam. tag ; return 0
 
@@ -3457,8 +3454,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 		return -EINVAL;
 
 	/* permission checks */
-	if (((cmd & 0x40) && !IOCTL_ALLOWED) ||
-	    ((cmd & 0x80) && !suser()))
+	if ((cmd & 0x80) && !suser())
 		return -EPERM;
 
 	/* copyin */
@@ -3578,7 +3574,6 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 		return fd_copyout((void *)param, outparam, size);
 	else
 		return 0;
-#undef IOCTL_ALLOWED
 #undef OUT
 #undef IN
 }
@@ -3630,53 +3625,13 @@ static void config_types(void)
 		printk("\n");
 }
 
-static ssize_t floppy_read(struct file * filp, char *buf,
-			   size_t count, loff_t *ppos)
-{
-	struct inode *inode = filp->f_dentry->d_inode;
-	int drive = DRIVE(inode->i_rdev);
-
-	check_disk_change(inode->i_rdev);
-	if (UTESTF(FD_DISK_CHANGED))
-		return -ENXIO;
-	return block_read(filp, buf, count, ppos);
-}
-
-static ssize_t floppy_write(struct file * filp, const char * buf,
-			    size_t count, loff_t *ppos)
-{
-	struct inode * inode = filp->f_dentry->d_inode;
-	int block;
-	int ret;
-	int drive = DRIVE(inode->i_rdev);
-
-	if (!UDRS->maxblock)
-		UDRS->maxblock=1;/* make change detectable */
-	check_disk_change(inode->i_rdev);
-	if (UTESTF(FD_DISK_CHANGED))
-		return -ENXIO;
-	if (!UTESTF(FD_DISK_WRITABLE))
-		return -EROFS;
-	block = (*ppos + count) >> 9;
-	INFBOUND(UDRS->maxblock, block);
-	ret= block_write(filp, buf, count, ppos);
-	return ret;
-}
-
 static int floppy_release(struct inode * inode, struct file * filp)
 {
 	int drive;
 
 	drive = DRIVE(inode->i_rdev);
 
-	/*
-	 * If filp is NULL, we're being called from blkdev_release
-	 * or after a failed mount attempt.  In the former case the
-	 * device has already been sync'ed, and in the latter no
-	 * sync is required.  Otherwise, sync if filp is writable.
-	 */
-	if (filp && (filp->f_mode & (2 | OPEN_WRITE_BIT)))
-		block_fsync(filp, filp->f_dentry);
+	block_fsync(filp, filp->f_dentry);
 
 	if (UDRS->fd_ref < 0)
 		UDRS->fd_ref=0;
@@ -3773,12 +3728,6 @@ static int floppy_open(struct inode * inode, struct file * filp)
 			buffer_track = -1;
 		invalidate_buffers(MKDEV(FLOPPY_MAJOR,old_dev));
 	}
-
-	/* Allow ioctls if we have write-permissions even if read-only open */
-	if ((filp->f_mode & 2) || (permission(inode,2) == 0))
-		filp->f_mode |= IOCTL_MODE_BIT;
-	if (filp->f_mode & 2)
-		filp->f_mode |= OPEN_WRITE_BIT;
 
 	if (UFDCS->rawcmd == 1)
 		UFDCS->rawcmd = 2;
@@ -3880,8 +3829,8 @@ static int floppy_revalidate(kdev_t dev)
 
 static struct file_operations floppy_fops = {
 	NULL,			/* lseek - default */
-	floppy_read,		/* read - general block-dev read */
-	floppy_write,		/* write - general block-dev write */
+	block_read,		/* read - general block-dev read */
+	block_write,		/* write - general block-dev write */
 	NULL,		       	/* readdir - bad */
 	NULL,			/* poll */
 	fd_ioctl,		/* ioctl */

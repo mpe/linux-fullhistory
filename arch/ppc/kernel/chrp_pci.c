@@ -282,8 +282,7 @@ chrp_pcibios_fixup(void)
 	}
 	
 	/* PCI interrupts are controlled by the OpenPIC */
-	for( dev=pci_devices ; dev; dev=dev->next )
-	{
+	pci_for_each_dev(dev) {
 		if ( dev->irq )
 			dev->irq = openpic_to_irq( dev->irq );
 		/* these need to be absolute addrs for OF and Matrox FB -- Cort */

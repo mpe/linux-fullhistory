@@ -1598,14 +1598,13 @@ aty128fb_init(void)
 void
 aty128pci_probe(void)
 {
-    struct pci_dev *pdev;
+    struct pci_dev *pdev = NULL;
     struct fb_info_aty128 *info;
     unsigned long fb_addr, reg_addr;
     u16 tmp;
 
-    for (pdev = pci_devices; pdev; pdev = pdev->next) {
-	if (((pdev->class >> 16) == PCI_BASE_CLASS_DISPLAY) &&
-	    (pdev->vendor == PCI_VENDOR_ID_ATI)) {
+    while ((pdev = pci_find_device(PCI_VENDOR_ID_ATI, PCI_ANY_ID, pdev))) {
+	if ((pdev->class >> 16) == PCI_BASE_CLASS_DISPLAY) {
 	    struct resource *rp;
 
 	    /* FIXME add other known R128 device ID's */

@@ -924,8 +924,7 @@ int __init vga16_init(void)
 
 	printk(KERN_DEBUG "vga16fb: initializing\n");
 
-	if (!__request_region(&iomem_resource, VGA_FB_PHYS, VGA_FB_PHYS_LEN,
-			      "vga16fb")) {
+	if (!request_mem_region(VGA_FB_PHYS, VGA_FB_PHYS_LEN, "vga16fb")) {
 		printk (KERN_ERR "vga16fb: unable to reserve VGA memory, exiting\n");
 		return -1;
 	}
@@ -951,7 +950,7 @@ int __init vga16_init(void)
 
 	/* note - does not cause failure, b/c vgacon probably still owns this 
 	 * region (FIXME) */
-	if (__request_region(&ioport_resource, 0x3C0, 32, "vga16fb"))
+	if (request_region(0x3C0, 32, "vga16fb"))
 		release_io_ports = 1;
 
 	disp.var = vga16fb_defined;
@@ -994,9 +993,9 @@ void cleanup_module(void)
 {
     unregister_framebuffer(&vga16fb.fb_info);
     iounmap(vga16fb.video_vbase);
-    __release_region(&iomem_resource, VGA_FB_PHYS, VGA_FB_PHYS_LEN);
+    release_mem_region(VGA_FB_PHYS, VGA_FB_PHYS_LEN);
     if (release_io_ports)
-    	__release_region(&ioport_resource, 0x3c0, 32);
+    	release_region(0x3c0, 32);
 }
 
 #endif

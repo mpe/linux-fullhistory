@@ -20,8 +20,6 @@
  */
 
 static void *isapnp_alloc(long size);
-struct pci_bus *isapnp_cards;
-struct pci_dev *isapnp_devices;
 
 struct isapnp_info_buffer {
 	char *buffer;		/* pointer to begin of buffer */
@@ -539,10 +537,12 @@ static void isapnp_print_device(isapnp_info_buffer_t *buffer, struct pci_dev *de
  
 static void isapnp_info_read(isapnp_info_buffer_t *buffer)
 {
-	struct pci_bus *card;
-	struct pci_dev *dev;
+	struct list_head *card_list;
 	
-	for (card = isapnp_cards; card; card = card->next) {
+	for (card_list = isapnp_cards.next; card_list != &isapnp_cards; card_list = card_list->next) {
+		struct pci_bus *card = list_entry(card_list, struct pci_bus, node);
+		struct list_head *dev_list;
+
 		isapnp_printf(buffer, "Card %i '", card->number);
 		isapnp_print_devid(buffer, card->vendor, card->device);
 		isapnp_printf(buffer, ":%s'", card->name[0]?card->name:"Unknown");
@@ -551,8 +551,10 @@ static void isapnp_info_read(isapnp_info_buffer_t *buffer)
 		if (card->productver)
 			isapnp_printf(buffer, " Product version %x.%x", card->productver >> 4, card->productver & 0x0f);
 		isapnp_printf(buffer,"\n");
-		for (dev = card->devices; dev; dev = dev->sibling)
+		for (dev_list = card->devices.next; dev_list != &card->devices; dev_list = dev_list->next) {
+			struct pci_dev *dev = list_entry(dev_list, struct pci_dev, bus_list);
 			isapnp_print_device(buffer, dev);
+		}
 	}
 }
 
@@ -640,14 +642,17 @@ static int isapnp_set_card(char *line)
 static int isapnp_select_csn(char *line)
 {
 	int csn;
+	struct list_head *list;
 	char index[16], value[32];
 
 	isapnp_info_device = NULL;
 	isapnp_get_str(index, line, sizeof(index));
 	csn = simple_strtoul(index, NULL, 0);
-	for (isapnp_info_card = isapnp_cards; isapnp_info_card; isapnp_info_card = isapnp_info_card->next)
+	for (list = isapnp_cards.next; list != &isapnp_cards; list = list->next) {
+		isapnp_info_card = list_entry(list, struct pci_bus, node);
 		if (isapnp_info_card->number == csn)
 			break;
+	}
 	if (isapnp_info_card == NULL) {
 		printk("isapnp: cannot find CSN %i\n", csn);
 		return 1;

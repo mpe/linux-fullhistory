@@ -1,7 +1,7 @@
 /*
  * linux/drivers/video/rivafb.c - nVidia RIVA 128/TNT/TNT2 fb driver
  *
- * Copyright 1999 Jeff Garzik <jgarzik@pobox.com>
+ * Copyright 1999 Jeff Garzik <jgarzik@mandrakesoft.com>
  *
  * Contributors:
  *
@@ -622,12 +622,12 @@ static int __init riva_pci_register (struct pci_dev *pd,
 	rinfo->ctrl_base_phys = rinfo->pd->resource[0].start;
 	rinfo->fb_base_phys = rinfo->pd->resource[1].start;
 
-	__request_region(&ioport_resource, 0x3C0, 32, "rivafb");
+	request_region(0x3C0, 32, "rivafb");
 
-	if (!__request_region (&iomem_resource, rinfo->ctrl_base_phys,
-			       rinfo->base0_region_size, "rivafb") ||
-	    !__request_region (&iomem_resource, rinfo->fb_base_phys,
-			       rinfo->base1_region_size, "rivafb")) {
+	if (!request_mem_region(rinfo->ctrl_base_phys,
+				rinfo->base0_region_size, "rivafb") ||
+	    !request_mem_region(rinfo->fb_base_phys, rinfo->base1_region_size,
+				"rivafb")) {
 		printk (KERN_ERR PFX "cannot reserve MMIO region\n");
 		return -ENXIO;
 	}

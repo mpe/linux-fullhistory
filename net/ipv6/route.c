@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: route.c,v 1.42 1999/12/15 22:39:53 davem Exp $
+ *	$Id: route.c,v 1.43 2000/01/06 00:42:08 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -1544,6 +1544,9 @@ static int rt6_fill_node(struct sk_buff *skb, struct rt6_info *rt,
 	ci.rta_used = rt->u.dst.__use;
 	ci.rta_clntref = atomic_read(&rt->u.dst.__refcnt);
 	ci.rta_error = rt->u.dst.error;
+	ci.rta_id = 0;
+	ci.rta_ts = 0;
+	ci.rta_tsage = 0;
 	RTA_PUT(skb, RTA_CACHEINFO, sizeof(ci), &ci);
 	nlh->nlmsg_len = skb->tail - b;
 	return skb->len;

@@ -174,6 +174,8 @@ extern inline void acpi_dev_idle(struct acpi_dev *dev)
 	}
 }
 
+extern int acpi_active;
+
 #else /* CONFIG_ACPI */
 
 extern inline struct acpi_dev*

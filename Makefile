@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 3
-SUBLEVEL = 36
+SUBLEVEL = 37
 EXTRAVERSION =
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
@@ -343,6 +343,18 @@ init/main.o: init/main.c include/config/MARKER
 fs lib mm ipc kernel drivers net: dummy
 	$(MAKE) $(subst $@, _dir_$@, $@)
 
+TAGS: dummy
+	etags `find include/asm-$(ARCH) -name '*.h'`
+	find include -type d \( -name "asm-*" -o -name config \) -prune -o -name '*.h' -print | xargs etags -a
+	find $(SUBDIRS) init -name '*.c' | xargs etags -a
+
+# Exuberant ctags works better with -I 
+tags: dummy
+	CTAGSF=`ctags --version | grep -i exuberant >/dev/null && echo "-I __initdata,__initlocaldata,__exitdata,EXPORT_SYMBOL,EXPORT_SYMBOL_NOVERS"`; \
+	ctags $$CTAGSF `find include/asm-$(ARCH) -name '*.h'` && \
+	find include -type d \( -name "asm-*" -o -name config \) -prune -o -name '*.h' -print | xargs ctags $$CTAGSF -a && \
+	find $(SUBDIRS) init -name '*.c' | xargs ctags $$CTAGSF -a
+
 MODFLAGS = -DMODULE
 ifdef CONFIG_MODULES
 ifdef CONFIG_MODVERSIONS
@@ -446,7 +458,7 @@ mrproper: clean archmrproper
 distclean: mrproper
 	rm -f core `find . \( -name '*.orig' -o -name '*.rej' -o -name '*~' \
 		-o -name '*.bak' -o -name '#*#' -o -name '.*.orig' \
-		-o -name '.*.rej' -o -name '.SUMS' -o -size 0 \) -print` TAGS
+		-o -name '.*.rej' -o -name '.SUMS' -o -size 0 \) -print` TAGS tags
 
 backup: mrproper
 	cd .. && tar cf - linux/ | gzip -9 > backup.gz

@@ -685,7 +685,7 @@ struct sunos_nfs_mount_args {
 	char       *netname;   /* server's netname */
 };
 
-extern int do_mount(kdev_t, const char *, const char *, char *, int, void *);
+extern int do_mount(struct block_device *, const char *, const char *, char *, int, void *);
 extern dev_t get_unnamed_dev(void);
 extern void put_unnamed_dev(dev_t);
 extern asmlinkage int sys_mount(char *, char *, char *, unsigned long, void *);
@@ -767,7 +767,6 @@ asmlinkage int sunos_nfs_mount(char *dir_name, int linux_flags, void *data)
 	char *the_name;
 	struct nfs_mount_data linux_nfs_mount;
 	struct sunos_nfs_mount_args *sunos_mount = data;
-	dev_t dev;
 
 	/* Ok, here comes the fun part: Linux's nfs mount needs a
 	 * socket connection to the server, but SunOS mount does not
@@ -809,13 +808,7 @@ asmlinkage int sunos_nfs_mount(char *dir_name, int linux_flags, void *data)
 	linux_nfs_mount.hostname [255] = 0;
 	putname (the_name);
 
-	dev = get_unnamed_dev ();
-	
-	ret = do_mount (dev, "", dir_name, "nfs", linux_flags, &linux_nfs_mount);
-	if (ret)
-	    put_unnamed_dev(dev);
-
-	return ret;
+	return do_mount (NULL, "", dir_name, "nfs", linux_flags, &linux_nfs_mount);
 }
 
 /* XXXXXXXXXXXXXXXXXXXX */

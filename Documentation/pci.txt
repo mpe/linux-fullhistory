@@ -35,8 +35,13 @@ pci_find_subsys(VENDOR_ID, DEVICE_ID, SUBSYS_VENDOR_ID, SUBSYS_DEVICE_ID, dev).
 VENDOR_ID or DEVICE_ID.  This allows searching for any device from a
 specific vendor, for example.
 
-   In case you want to do some complex matching, look at pci_devices -- it's
-a linked list of pci_dev structures for all PCI devices in the system.
+   In case you want to do some complex matching, you can walk the list of all
+known PCI devices:
+
+		struct pci_dev *dev;
+		pci_for_each_dev(dev) {
+			... do anything you want with dev ...
+		}
 
    The `struct pci_dev *' pointer serves as an identification of a PCI device
 and is passed to all other functions operating on PCI devices.

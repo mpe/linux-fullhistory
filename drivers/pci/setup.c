@@ -144,8 +144,10 @@ void __init
 pci_assign_unassigned_resources(u32 min_io, u32 min_mem)
 {
 	struct pci_dev *dev;
-	for (dev = pci_devices; dev; dev = dev->next)
+
+	pci_for_each_dev(dev) {
 		pdev_assign_unassigned_resources(dev, min_io, min_mem);
+	}
 }
 
 #define ROUND_UP(x, a)		(((x) + (a) - 1) & ~((a) - 1))
@@ -157,14 +159,16 @@ pbus_set_ranges(struct pci_bus *bus, struct pbus_set_ranges_data *outer)
 	struct pbus_set_ranges_data inner;
 	struct pci_bus *child;
 	struct pci_dev *dev;
+	struct list_node *ln;
 
 	inner.found_vga = 0;
 	inner.mem_start = inner.io_start = ~0UL;
 	inner.mem_end = inner.io_end = 0;
 
 	/* Collect information about how our direct children are layed out. */
-	for (dev = bus->devices; dev; dev = dev->sibling) {
+	for (ln=bus->devices.next; ln != &bus->devices; ln=ln->next) {
 		int i;
+		dev = pci_dev_b(ln);
 		for (i = 0; i < PCI_NUM_RESOURCES; i++) {
 			struct resource *res = &dev->resource[i];
 			if (res->flags & IORESOURCE_IO) {
@@ -184,8 +188,8 @@ pbus_set_ranges(struct pci_bus *bus, struct pbus_set_ranges_data *outer)
 	}
 
 	/* And for all of the sub-busses.  */
-	for (child = bus->children; child; child = child->next)
-		pbus_set_ranges(child, &inner);
+	for (ln=bus->children.next; ln != &bus->children; ln=ln->next)
+		pbus_set_ranges(pci_bus_b(ln), &inner);
 
 	/* Align the values.  */
 	inner.io_start = ROUND_DOWN(inner.io_start, 4*1024);
@@ -271,9 +275,10 @@ pbus_set_ranges(struct pci_bus *bus, struct pbus_set_ranges_data *outer)
 void __init
 pci_set_bus_ranges(void)
 {
-	struct pci_bus *bus;
-	for (bus = pci_root; bus; bus = bus->next)
-		pbus_set_ranges(bus, NULL);
+	struct list_node *ln;
+
+	for(ln=pci_root_buses.next; ln != &pci_root_buses; ln=ln->next)
+		pci_set_ranges(pci_bus_b(ln), NULL);
 }
 
 static void __init
@@ -315,8 +320,9 @@ pci_fixup_irqs(u8 (*swizzle)(struct pci_dev *, u8 *),
 	       int (*map_irq)(struct pci_dev *, u8, u8))
 {
 	struct pci_dev *dev;
-	for (dev = pci_devices; dev; dev = dev->next)
+	pci_for_each_dev(dev) {
 		pdev_fixup_irq(dev, swizzle, map_irq);
+	}
 }
 
 int

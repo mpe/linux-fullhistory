@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *	Alexey Kuznetsov	<kuznet@ms2.inr.ac.ru>
  *
- *	$Id: sit.c,v 1.34 1999/08/31 07:04:16 davem Exp $
+ *	$Id: sit.c,v 1.35 2000/01/06 00:42:08 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -544,7 +544,7 @@ static int ipip6_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 		iph->ttl	=	iph6->hop_limit;
 
 	iph->tot_len		=	htons(skb->len);
-	iph->id			=	htons(ip_id_count++);
+	ip_select_ident(iph, &rt->u.dst);
 	ip_send_check(iph);
 
 	stats->tx_bytes += skb->len;

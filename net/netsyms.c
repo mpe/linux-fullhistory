@@ -28,6 +28,7 @@
 #endif
 #include <net/pkt_sched.h>
 #include <net/scm.h>
+#include <linux/random.h>
 
 #ifdef CONFIG_BRIDGE
 #include <net/br.h>
@@ -235,7 +236,7 @@ EXPORT_SYMBOL(ip_options_compile);
 EXPORT_SYMBOL(ip_options_undo);
 EXPORT_SYMBOL(arp_send);
 EXPORT_SYMBOL(arp_broken_ops);
-EXPORT_SYMBOL(ip_id_count);
+EXPORT_SYMBOL(__ip_select_ident);
 EXPORT_SYMBOL(ip_send_check);
 EXPORT_SYMBOL(ip_fragment);
 EXPORT_SYMBOL(inet_family_ops);
@@ -376,6 +377,12 @@ EXPORT_SYMBOL(dev_loopback_xmit);
 #ifdef CONFIG_SYSCTL
 EXPORT_SYMBOL(sysctl_max_syn_backlog);
 #endif
+
+#if defined (CONFIG_IPV6_MODULE)
+EXPORT_SYMBOL(secure_tcpv6_sequence_number);
+EXPORT_SYMBOL(secure_ipv6_id);
+#endif
+
 #endif
 
 #ifdef CONFIG_NETLINK

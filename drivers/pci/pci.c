@@ -6,7 +6,7 @@
  *	Copyright 1993 -- 1997 Drew Eckhardt, Frederic Potter,
  *	David Mosberger-Tang
  *
- *	Copyright 1997 -- 1999 Martin Mares <mj@suse.cz>
+ *	Copyright 1997 -- 2000 Martin Mares <mj@suse.cz>
  */
 
 #include <linux/types.h>
@@ -27,19 +27,19 @@
 #define DBG(x...)
 #endif
 
-struct pci_bus *pci_root;
-struct pci_dev *pci_devices = NULL;
-static struct pci_dev **pci_last_dev_p = &pci_devices;
+LIST_HEAD(pci_root_buses);
+LIST_HEAD(pci_devices);
 
 struct pci_dev *
 pci_find_slot(unsigned int bus, unsigned int devfn)
 {
 	struct pci_dev *dev;
 
-	for(dev=pci_devices; dev; dev=dev->next)
+	pci_for_each_dev(dev) {
 		if (dev->bus->number == bus && dev->devfn == devfn)
-			break;
-	return dev;
+			return dev;
+	}
+	return NULL;
 }
 
 
@@ -48,20 +48,16 @@ pci_find_subsys(unsigned int vendor, unsigned int device,
 		unsigned int ss_vendor, unsigned int ss_device,
 		struct pci_dev *from)
 {
-	struct pci_dev *dev;
+	struct list_head *n = from ? from->global_list.next : pci_devices.next;
 
-	if (from)
-		dev = from->next;
-	else
-		dev = pci_devices;
-
-	while (dev) {
+	while (n != &pci_devices) {
+		struct pci_dev *dev = pci_dev_g(n);
 		if ((vendor == PCI_ANY_ID || dev->vendor == vendor) &&
 		    (device == PCI_ANY_ID || dev->device == device) &&
 		    (ss_vendor == PCI_ANY_ID || dev->subsystem_vendor == ss_vendor) &&
 		    (ss_device == PCI_ANY_ID || dev->subsystem_device == ss_device))
 			return dev;
-		dev = dev->next;
+		n = n->next;
 	}
 	return NULL;
 }
@@ -77,13 +73,15 @@ pci_find_device(unsigned int vendor, unsigned int device, struct pci_dev *from)
 struct pci_dev *
 pci_find_class(unsigned int class, struct pci_dev *from)
 {
-	if (!from)
-		from = pci_devices;
-	else
-		from = from->next;
-	while (from && from->class != class)
-		from = from->next;
-	return from;
+	struct list_head *n = from ? from->global_list.next : pci_devices.next;
+
+	while (n != &pci_devices) {
+		struct pci_dev *dev = pci_dev_g(n);
+		if (dev->class == class)
+			return dev;
+		n = n->next;
+	}
+	return NULL;
 }
 
 
@@ -412,6 +410,19 @@ void __init pci_read_bridge_bases(struct pci_bus *child)
 	}
 }
 
+static struct pci_bus * __init pci_alloc_bus(void)
+{
+	struct pci_bus *b;
+
+	b = kmalloc(sizeof(*b), GFP_KERNEL);
+	if (b) {
+		memset(b, 0, sizeof(*b));
+		INIT_LIST_HEAD(&b->children);
+		INIT_LIST_HEAD(&b->devices);
+	}
+	return b;
+}
+
 static struct pci_bus * __init pci_add_new_bus(struct pci_bus *parent, struct pci_dev *dev, int busnr)
 {
 	struct pci_bus *child;
@@ -419,11 +430,9 @@ static struct pci_bus * __init pci_add_new_bus(struct pci_bus *parent, struct pc
 	/*
 	 * Allocate a new bus, and inherit stuff from the parent..
 	 */
-	child = kmalloc(sizeof(*child), GFP_KERNEL);
-	memset(child, 0, sizeof(*child));
+	child = pci_alloc_bus();
 
-	child->next = parent->children;
-	parent->children = child;
+	list_add_tail(&child->node, &parent->children);
 	child->self = dev;
 	dev->subordinate = child;
 	child->parent = parent;
@@ -455,6 +464,7 @@ static int __init pci_scan_cardbus(struct pci_bus *bus, struct pci_dev *dev, int
 	/*
 	 * Insert it into the tree of buses.
 	 */
+	DBG("Scanning CardBus bridge %s\n", dev->slot_name);
 	child = pci_add_new_bus(bus, dev, ++busnr);
 
 	for (i = 0; i < 4; i++)
@@ -517,6 +527,7 @@ static int __init pci_scan_bridge(struct pci_bus *bus, struct pci_dev * dev, int
 	/*
 	 * Insert it into the tree of buses.
 	 */
+	DBG("Scanning behind PCI bridge %s\n", dev->slot_name);
 	child = pci_add_new_bus(bus, dev, ++max);
 	sprintf(child->name, "PCI Bus #%02x", child->number);
 
@@ -598,6 +609,8 @@ int pci_setup_device(struct pci_dev * dev)
 	class >>= 8;				    /* upper 3 bytes */
 	dev->class = class;
 	class >>= 8;
+
+	DBG("Found %02x:%02x [%04x/%04x] %06x %02x\n", dev->bus->number, dev->devfn, dev->vendor, dev->device, class, dev->hdr_type);
 
 	switch (dev->hdr_type) {		    /* header type */
 	case PCI_HEADER_TYPE_NORMAL:		    /* standard header */
@@ -694,21 +707,12 @@ struct pci_dev * __init pci_scan_slot(struct pci_dev *temp)
 			first_dev = dev;
 		}
 
-		DBG("PCI: %02x:%02x [%04x/%04x] %06x %02x\n", bus->number, dev->devfn, dev->vendor, dev->device, dev->class, hdr_type);
-
 		/*
-		 * Put it into the global PCI device chain. It's used to
-		 * find devices once everything is set up.
+		 * Link the device to both the global PCI device chain and
+		 * the per-bus list of devices.
 		 */
-		*pci_last_dev_p = dev;
-		pci_last_dev_p = &dev->next;
-
-		/*
-		 * Now insert it into the list of devices held
-		 * by the parent bus.
-		 */
-		*bus->last_dev_p = dev;
-		bus->last_dev_p = &dev->sibling;
+		list_add_tail(&dev->global_list, &pci_devices);
+		list_add_tail(&dev->bus_list, &bus->devices);
 
 		/* Fix up broken headers */
 		pci_fixup_device(PCI_FIXUP_HEADER, dev);
@@ -719,10 +723,10 @@ struct pci_dev * __init pci_scan_slot(struct pci_dev *temp)
 static unsigned int __init pci_do_scan_bus(struct pci_bus *bus)
 {
 	unsigned int devfn, max;
+	struct list_head *ln;
 	struct pci_dev *dev, dev0;
 
-	DBG("pci_do_scan_bus for bus %d\n", bus->number);
-	bus->last_dev_p = &bus->devices;
+	DBG("Scanning bus %02x\n", bus->number);
 	max = bus->secondary;
 
 	/* Create a device template */
@@ -740,8 +744,10 @@ static unsigned int __init pci_do_scan_bus(struct pci_bus *bus)
 	 * After performing arch-dependent fixup of the bus, look behind
 	 * all PCI-to-PCI bridges on this bus.
 	 */
+	DBG("Fixups for bus %02x\n", bus->number);
 	pcibios_fixup_bus(bus);
-	for (dev = bus->devices; dev; dev = dev->sibling) {
+	for (ln=bus->devices.next; ln != &bus->devices; ln=ln->next) {
+		dev = pci_dev_b(ln);
 		switch (dev->class >> 8) {
 		case PCI_CLASS_BRIDGE_PCI:
 			max = pci_scan_bridge(bus, dev, max);
@@ -759,40 +765,34 @@ static unsigned int __init pci_do_scan_bus(struct pci_bus *bus)
 	 *
 	 * Return how far we've got finding sub-buses.
 	 */
-	DBG("PCI: pci_do_scan_bus returning with max=%02x\n", max);
+	DBG("Bus scan for %02x returning with max=%02x\n", bus->number, max);
 	return max;
 }
 
-static int __init pci_bus_exists(struct pci_bus *b, int nr)
+static int __init pci_bus_exists(struct list_head *list, int nr)
 {
-	while (b) {
-		if (b->number == nr)
+	struct list_head *l;
+
+	for(l=list->next; l != list; l = l->next) {
+		struct pci_bus *b = pci_bus_b(l);
+		if (b->number == nr || pci_bus_exists(&b->children, nr))
 			return 1;
-		if (b->children && pci_bus_exists(b->children, nr))
-			return 1;
-		b = b->next;
 	}
 	return 0;
 }
 
 struct pci_bus * __init pci_alloc_primary_bus(int bus)
 {
-	struct pci_bus *b, **r;
+	struct pci_bus *b;
 
-	if (pci_bus_exists(pci_root, bus)) {
+	if (pci_bus_exists(&pci_root_buses, bus)) {
 		/* If we already got to this bus through a different bridge, ignore it */
 		DBG("PCI: Bus %02x already known\n", bus);
 		return NULL;
 	}
 
-	b = kmalloc(sizeof(*b), GFP_KERNEL);
-	memset(b, 0, sizeof(*b));
-
-	/* Put the new bus at the end of the chain of busses.  */
-	r = &pci_root;
-	while (*r)
-		r = &(*r)->next;
-	*r = b;
+	b = pci_alloc_bus();
+	list_add_tail(&b->node, &pci_root_buses);
 
 	b->number = b->secondary = bus;
 	b->resource[0] = &ioport_resource;
@@ -817,8 +817,9 @@ void __init pci_init(void)
 
 	pcibios_init();
 
-	for(dev=pci_devices; dev; dev=dev->next)
+	pci_for_each_dev(dev) {
 		pci_fixup_device(PCI_FIXUP_FINAL, dev);
+	}
 }
 
 static int __init pci_setup(char *str)

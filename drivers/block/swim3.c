@@ -250,9 +250,6 @@ static int floppy_revalidate(kdev_t dev);
 static int swim3_add_device(struct device_node *swims);
 int swim3_init(void);
 
-#define IOCTL_MODE_BIT	8
-#define OPEN_WRITE_BIT	16
-
 static void swim3_select(struct floppy_state *fs, int sel)
 {
 	volatile struct swim3 *sw = fs->swim3;
@@ -821,8 +818,7 @@ static int floppy_ioctl(struct inode *inode, struct file *filp,
 	if (devnum >= floppy_count)
 		return -ENODEV;
 		
-	if (((cmd & 0x40) && !(filp && (filp->f_mode & IOCTL_MODE_BIT))) ||
-	    ((cmd & 0x80) && !suser()))
+	if ((cmd & 0x80) && !suser())
 		return -EPERM;
 
 	fs = &floppy_states[devnum];
@@ -916,12 +912,6 @@ static int floppy_open(struct inode *inode, struct file *filp)
 	else
 		++fs->ref_count;
 
-	/* Allow ioctls if we have write-permissions even if read-only open */
-	if ((filp->f_mode & 2) || (permission(inode, 2) == 0))
-		filp->f_mode |= IOCTL_MODE_BIT;
-	if (filp->f_mode & 2)
-		filp->f_mode |= OPEN_WRITE_BIT;
-
 	return 0;
 }
 
@@ -934,14 +924,7 @@ static int floppy_release(struct inode *inode, struct file *filp)
 	if (devnum >= floppy_count)
 		return -ENODEV;
 
-	/*
-	 * If filp is NULL, we're being called from blkdev_release
-	 * or after a failed mount attempt.  In the former case the
-	 * device has already been sync'ed, and in the latter no
-	 * sync is required.  Otherwise, sync if filp is writable.
-	 */
-	if (filp && (filp->f_mode & (2 | OPEN_WRITE_BIT)))
-		block_fsync (filp, filp->f_dentry);
+	block_fsync (filp, filp->f_dentry);
 
 	fs = &floppy_states[devnum];
 	sw = fs->swim3;

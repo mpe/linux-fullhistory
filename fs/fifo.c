@@ -170,11 +170,3 @@ static struct file_operations def_fifo_fops = {
 struct inode_operations fifo_inode_operations = {
 	&def_fifo_fops,		/* default file operations */
 };
-
-
-/* Goner. Filesystems do not use it anymore. */
-
-void init_fifo(struct inode * inode)
-{
-	inode->i_op = &fifo_inode_operations;
-}

@@ -83,9 +83,11 @@
 #include <linux/pkt_sched.h>
 #include <linux/mroute.h>
 #include <linux/netfilter_ipv4.h>
+#include <linux/random.h>
 #include <net/protocol.h>
 #include <net/ip.h>
 #include <net/route.h>
+#include <net/inetpeer.h>
 #include <net/sock.h>
 #include <net/ip_fib.h>
 #include <net/arp.h>
@@ -134,6 +136,7 @@ static struct timer_list rt_periodic_timer =
 static struct dst_entry * ipv4_dst_check(struct dst_entry * dst, u32);
 static struct dst_entry * ipv4_dst_reroute(struct dst_entry * dst,
 					   struct sk_buff *);
+static void		  ipv4_dst_destroy(struct dst_entry * dst);
 static struct dst_entry * ipv4_negative_advice(struct dst_entry *);
 static void		  ipv4_link_failure(struct sk_buff *skb);
 static int rt_garbage_collect(void);
@@ -148,7 +151,7 @@ struct dst_ops ipv4_dst_ops =
 	rt_garbage_collect,
 	ipv4_dst_check,
 	ipv4_dst_reroute,
-	NULL,
+	ipv4_dst_destroy,
 	ipv4_negative_advice,
 	ipv4_link_failure,
 	sizeof(struct rtable),
@@ -626,6 +629,65 @@ restart:
 	return 0;
 }
 
+void rt_bind_peer(struct rtable *rt, int create)
+{
+	static spinlock_t rt_peer_lock = SPIN_LOCK_UNLOCKED;
+	struct inet_peer *peer;
+
+	peer = inet_getpeer(rt->rt_dst, create);
+
+	spin_lock_bh(&rt_peer_lock);
+	if (rt->peer == NULL) {
+		rt->peer = peer;
+		peer = NULL;
+	}
+	spin_unlock_bh(&rt_peer_lock);
+	if (peer)
+		inet_putpeer(peer);
+}
+
+/*
+ * Peer allocation may fail only in serious out-of-memory conditions.  However
+ * we still can generate some output.
+ * Random ID selection looks a bit dangerous because we have no chances to
+ * select ID being unique in a reasonable period of time.
+ * But broken packet identifier may be better than no packet at all.
+ */
+static void ip_select_fb_ident(struct iphdr *iph)
+{
+	static spinlock_t ip_fb_id_lock = SPIN_LOCK_UNLOCKED;
+	static u32 ip_fallback_id;
+	u32 salt;
+
+	spin_lock_bh(&ip_fb_id_lock);
+	salt = secure_ip_id(ip_fallback_id ^ iph->daddr);
+	iph->id = salt & 0xFFFF;
+	ip_fallback_id = salt;
+	spin_unlock_bh(&ip_fb_id_lock);
+}
+
+void __ip_select_ident(struct iphdr *iph, struct dst_entry *dst)
+{
+	struct rtable *rt = (struct rtable *) dst;
+
+	if (rt) {
+		if (rt->peer == NULL)
+			rt_bind_peer(rt, 1);
+
+		/* If peer is attached to destination, it is never detached,
+		   so that we need not to grab a lock to dereference it.
+		 */
+		if (rt->peer) {
+			iph->id = inet_getid(rt->peer);
+			return;
+		}
+	} else {
+		printk(KERN_DEBUG "rt_bind_peer(0) @%p\n", NET_CALLER(iph));
+	}
+
+	ip_select_fb_ident(iph);
+}
+
 static void rt_del(unsigned hash, struct rtable *rt)
 {
 	struct rtable **rthp;
@@ -726,6 +788,9 @@ void ip_rt_redirect(u32 old_gw, u32 daddr, u32 new_gw,
 
 				/* Redirect received -> path was valid */
 				dst_confirm(&rth->u.dst);
+
+				if (rt->peer)
+					atomic_inc(&rt->peer->refcnt);
 
 				if (!arp_bind_neighbour(&rt->u.dst) ||
 				    !(rt->u.dst.neighbour->nud_state&NUD_VALID)) {
@@ -971,6 +1036,17 @@ static struct dst_entry * ipv4_dst_reroute(struct dst_entry * dst,
 					   struct sk_buff *skb)
 {
 	return NULL;
+}
+
+static void ipv4_dst_destroy(struct dst_entry * dst)
+{
+	struct rtable *rt = (struct rtable *) dst;
+	struct inet_peer *peer = rt->peer;
+
+	if (peer) {
+		rt->peer = NULL;
+		inet_putpeer(peer);
+	}
 }
 
 static void ipv4_link_failure(struct sk_buff *skb)
@@ -1885,6 +1961,16 @@ static int rt_fill_info(struct sk_buff *skb, u32 pid, u32 seq, int event, int no
 	else
 		ci.rta_expires = 0;
 	ci.rta_error = rt->u.dst.error;
+	ci.rta_id = 0;
+	ci.rta_ts = 0;
+	ci.rta_tsage = 0;
+	if (rt->peer) {
+		ci.rta_id = rt->peer->ip_id_count;
+		if (rt->peer->tcp_ts_stamp) {
+			ci.rta_ts = rt->peer->tcp_ts;
+			ci.rta_tsage = xtime.tv_sec - rt->peer->tcp_ts_stamp;
+		}
+	}
 #ifdef CONFIG_IP_MROUTE
 	eptr = (struct rtattr*)skb->tail;
 #endif

@@ -541,8 +541,7 @@ int __init vesafb_init(void)
 	video_visual = (video_bpp == 8) ?
 		FB_VISUAL_PSEUDOCOLOR : FB_VISUAL_TRUECOLOR;
 
-	if (!__request_region(&iomem_resource, video_base, video_size,
-			      "vesafb")) {
+	if (!request_mem_region(video_base, video_size, "vesafb")) {
 		printk(KERN_ERR
 		       "vesafb: abort, cannot reserve video memory at 0x%lu\n",
 			video_base);
@@ -647,7 +646,7 @@ int __init vesafb_init(void)
 
 	/* request failure does not faze us, as vgacon probably has this
 	 * region already (FIXME) */
-	__request_region(&ioport_resource, 0x3c0, 32, "vesafb");
+	request_region(0x3c0, 32, "vesafb");
 
 	if (mtrr)
 		mtrr_add(video_base, video_size, MTRR_TYPE_WRCOMB, 1);
