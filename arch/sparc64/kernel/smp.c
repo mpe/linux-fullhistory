@@ -1055,74 +1055,6 @@ void __init smp_tick_init(void)
 	prof_counter(boot_cpu_id) = prof_multiplier(boot_cpu_id) = 1;
 }
 
-extern unsigned long cheetah_tune_scheduling(void);
-
-static void __init smp_tune_scheduling(void)
-{
-	unsigned long orig_flush_base, flush_base, flags, *p;
-	unsigned int ecache_size, order;
-	cycles_t tick1, tick2, raw;
-	int cpu_node;
-
-	/* Approximate heuristic for SMP scheduling.  It is an
-	 * estimation of the time it takes to flush the L2 cache
-	 * on the local processor.
-	 *
-	 * The ia32 chooses to use the L1 cache flush time instead,
-	 * and I consider this complete nonsense.  The Ultra can service
-	 * a miss to the L1 with a hit to the L2 in 7 or 8 cycles, and
-	 * L2 misses are what create extra bus traffic (ie. the "cost"
-	 * of moving a process from one cpu to another).
-	 */
-	printk("SMP: Calibrating ecache flush... ");
-	if (tlb_type == cheetah || tlb_type == cheetah_plus)
-		return;
-
-	cpu_find_by_instance(0, &cpu_node, NULL);
-	ecache_size = prom_getintdefault(cpu_node,
-					 "ecache-size", (512 * 1024));
-	if (ecache_size > (4 * 1024 * 1024))
-		ecache_size = (4 * 1024 * 1024);
-	orig_flush_base = flush_base =
-		__get_free_pages(GFP_KERNEL, order = get_order(ecache_size));
-
-	if (flush_base != 0UL) {
-		local_irq_save(flags);
-
-		/* Scan twice the size once just to get the TLB entries
-		 * loaded and make sure the second scan measures pure misses.
-		 */
-		for (p = (unsigned long *)flush_base;
-		     ((unsigned long)p) < (flush_base + (ecache_size<<1));
-		     p += (64 / sizeof(unsigned long)))
-			*((volatile unsigned long *)p);
-
-		tick1 = tick_ops->get_tick();
-
-		__asm__ __volatile__("1:\n\t"
-				     "ldx	[%0 + 0x000], %%g1\n\t"
-				     "ldx	[%0 + 0x040], %%g2\n\t"
-				     "ldx	[%0 + 0x080], %%g3\n\t"
-				     "ldx	[%0 + 0x0c0], %%g5\n\t"
-				     "add	%0, 0x100, %0\n\t"
-				     "cmp	%0, %2\n\t"
-				     "bne,pt	%%xcc, 1b\n\t"
-				     " nop"
-				     : "=&r" (flush_base)
-				     : "0" (flush_base),
-				       "r" (flush_base + ecache_size)
-				     : "g1", "g2", "g3", "g5");
-
-		tick2 = tick_ops->get_tick();
-
-		local_irq_restore(flags);
-
-		raw = (tick2 - tick1);
-
-		free_pages(orig_flush_base, order);
-	}
-}
-
 /* /proc/profile writes can call this, don't __init it please. */
 static DEFINE_SPINLOCK(prof_setup_lock);
 
@@ -1212,11 +1144,6 @@ void __init smp_cpus_done(unsigned int max_cpus)
 	       (long) num_online_cpus(),
 	       bogosum/(500000/HZ),
 	       (bogosum/(5000/HZ))%100);
-
-	/* We want to run this with all the other cpus spinning
-	 * in the kernel.
-	 */
-	smp_tune_scheduling();
 }
 
 /* This needn't do anything as we do not sleep the cpu
