@@ -1,6 +1,6 @@
 /* am7990 (lance) definitions
  * 
- * This is a extension to the Linux operating system, and is covered by
+ * This is an extension to the Linux operating system, and is covered by
  * same Gnu Public License that covers that work.
  * 
  * Michael Hipp

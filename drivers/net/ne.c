@@ -299,14 +299,21 @@ static int ne_probe1(struct device *dev, int ioaddr)
 	    wordlength = 1;
     }
 
+    /*	At this point, wordlength *only* tells us if the SA_prom is doubled
+	up or not because some broken PCI cards don't respect the byte-wide
+	request in program_seq above, and hence don't have doubled up values. 
+	These broken cards would otherwise be detected as an ne1000.  */
+
+    if (wordlength == 2)
+	for (i = 0; i < 16; i++)
+		SA_prom[i] = SA_prom[i+i];
+    
+    if (pci_irq_line)
+	wordlength = 2;		/* Catch broken cards mentioned above. */
+
     if (wordlength == 2) {
 	/* We must set the 8390 for word mode. */
 	outb_p(0x49, ioaddr + EN0_DCFG);
-	/* We used to reset the ethercard here, but it doesn't seem
-	   to be necessary. */
-	/* Un-double the SA_prom values. */
-	for (i = 0; i < 16; i++)
-	    SA_prom[i] = SA_prom[i+i];
 	start_page = NESM_START_PG;
 	stop_page = NESM_STOP_PG;
     } else {

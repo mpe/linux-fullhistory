@@ -1,5 +1,6 @@
 #ifndef _LINUX_MSG_H
 #define _LINUX_MSG_H
+
 #include <linux/ipc.h>
 
 /* msgrcv options */
@@ -8,37 +9,37 @@
 
 /* one msqid structure for each queue on the system */
 struct msqid_ds {
-    struct ipc_perm msg_perm;
-    struct msg *msg_first;  /* first message on queue */
-    struct msg *msg_last;   /* last message in queue */
-    time_t msg_stime;       /* last msgsnd time */
-    time_t msg_rtime;       /* last msgrcv time */
-    time_t msg_ctime;       /* last change time */
-    struct wait_queue *wwait;
-    struct wait_queue *rwait;
-    ushort msg_cbytes;      /* current number of bytes on queue */
-    ushort msg_qnum;        /* number of messages in queue */
-    ushort msg_qbytes;      /* max number of bytes on queue */
-    ushort msg_lspid;       /* pid of last msgsnd */
-    ushort msg_lrpid;       /* last receive pid */
+	struct ipc_perm msg_perm;
+	struct msg *msg_first;		/* first message on queue */
+	struct msg *msg_last;		/* last message in queue */
+	__kernel_time_t msg_stime;	/* last msgsnd time */
+	__kernel_time_t msg_rtime;	/* last msgrcv time */
+	__kernel_time_t msg_ctime;	/* last change time */
+	struct wait_queue *wwait;
+	struct wait_queue *rwait;
+	unsigned short msg_cbytes;	/* current number of bytes on queue */
+	unsigned short msg_qnum;	/* number of messages in queue */
+	unsigned short msg_qbytes;	/* max number of bytes on queue */
+	__kernel_pid_t msg_lspid;	/* pid of last msgsnd */
+	__kernel_pid_t msg_lrpid;	/* last receive pid */
 };
 
 /* message buffer for msgsnd and msgrcv calls */
 struct msgbuf {
-    long mtype;         /* type of message */
-    char mtext[1];      /* message text */
+	long mtype;         /* type of message */
+	char mtext[1];      /* message text */
 };
 
 /* buffer for msgctl calls IPC_INFO, MSG_INFO */
 struct msginfo {
-    int msgpool;
-    int msgmap; 
-    int msgmax; 
-    int msgmnb; 
-    int msgmni; 
-    int msgssz; 
-    int msgtql; 
-    ushort  msgseg; 
+	int msgpool;
+	int msgmap; 
+	int msgmax; 
+	int msgmnb; 
+	int msgmni; 
+	int msgssz; 
+	int msgtql; 
+	unsigned short  msgseg; 
 };
 
 #define MSGMNI   128   /* <= 1K */     /* max # of msg queue identifiers */
@@ -57,11 +58,11 @@ struct msginfo {
 
 /* one msg structure for each message */
 struct msg {
-    struct msg *msg_next;   /* next message on queue */
-    long  msg_type;          
-    char *msg_spot;         /* message text address */
-    time_t msg_stime;       /* msgsnd time */
-    short msg_ts;           /* message text size */
+	struct msg *msg_next;   /* next message on queue */
+	long  msg_type;          
+	char *msg_spot;         /* message text address */
+	time_t msg_stime;       /* msgsnd time */
+	short msg_ts;           /* message text size */
 };
 
 /* ipcs ctl commands */

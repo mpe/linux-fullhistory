@@ -849,7 +849,7 @@ asmlinkage void start_kernel(void)
  * anything that can be useful, but shouldn't take time from the real
  * processes.
  *
- * Right now task[0] just does a infinite idle loop.
+ * Right now task[0] just does an infinite idle loop.
  */
  	cpu_idle(NULL);
 }

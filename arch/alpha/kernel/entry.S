@@ -55,6 +55,7 @@
 	stq	$2,16($30);		\
 	stq	$3,24($30);		\
 	stq	$4,32($30);		\
+	lda	$2,hae;			\
 	stq	$5,40($30);		\
 	stq	$6,48($30);		\
 	stq	$7,56($30);		\
@@ -62,6 +63,7 @@
 	stq	$19,72($30);		\
 	stq	$20,80($30);		\
 	stq	$21,88($30);		\
+	ldq	$2,HAE_CACHE($2);	\
 	stq	$22,96($30);		\
 	stq	$23,104($30);		\
 	stq	$24,112($30);		\
@@ -69,34 +71,33 @@
 	stq	$26,128($30);		\
 	stq	$27,136($30);		\
 	stq	$28,144($30);		\
-	lda	$2,hae;			\
-	ldq	$2,HAE_CACHE($2);	\
 	stq	$2,152($30)
 
 #define RESTORE_ALL			\
-	lda	$8,hae;			\
-	ldq	$7,HAE_CACHE($8);	\
-	ldq	$6,152($30);		\
-	subq	$7,$6,$5;		\
-	beq	$5,99f;			\
-	ldq	$7,HAE_REG($8);		\
-	addq	$31,7,$16;		\
-	call_pal PAL_swpipl;		\
-	stq	$6,HAE_CACHE($8);	\
-	stq	$6,0($7);		\
-	mb;				\
-	bis	$0,$0,$16;		\
-	call_pal PAL_swpipl;		\
-99:;					\
+	lda	$19,hae;		\
 	ldq	$0,0($30);		\
 	ldq	$1,8($30);		\
 	ldq	$2,16($30);		\
 	ldq	$3,24($30);		\
+	ldq	$20,152($30);		\
+	ldq	$21,HAE_CACHE($19);	\
 	ldq	$4,32($30);		\
 	ldq	$5,40($30);		\
 	ldq	$6,48($30);		\
 	ldq	$7,56($30);		\
+	subq	$20,$21,$20;		\
 	ldq	$8,64($30);		\
+	beq	$20,99f;		\
+	ldq	$20,HAE_REG($19);	\
+	addq	$31,7,$16;		\
+	call_pal PAL_swpipl;		\
+	stq	$21,HAE_CACHE($19);	\
+	stq	$21,0($20);		\
+	bis	$0,$0,$16;		\
+	call_pal PAL_swpipl;		\
+	ldq	$0,0($30);		\
+	ldq	$1,8($30);		\
+99:;					\
 	ldq	$19,72($30);		\
 	ldq	$20,80($30);		\
 	ldq	$21,88($30);		\
@@ -111,7 +112,7 @@
 
 .text
 .set noat
-#ifdef __linux__
+#if defined(__linux__) && !defined(__ELF__)
   .set singlegp
 #endif
 
@@ -473,24 +474,22 @@ alpha_switch_to:
 .globl	ret_from_sys_call
 .ent	entSys
 entSys:
-	stq	$16,24($30)
-	stq	$17,32($30)
-	stq	$18,40($30)
 	SAVE_ALL
-	/* FIXME: optimize */
 	lda	$1,current_set
+	lda	$4,NR_SYSCALLS($31)
+	stq	$16,SP_OFF+24($30)
+	lda	$5,sys_call_table
 	ldq	$2,0($1)
-	ldq	$3,TASK_FLAGS($2)
-	and     $3,PF_PTRACED,$3
-	bne     $3,strace
-	/* end of strace */	
-	lda	$1,NR_SYSCALLS($31)
-	lda	$2,sys_call_table
 	lda	$27,do_entSys
-	cmpult	$0,$1,$1
-	s8addq	$0,$2,$2
-	beq	$1,1f
-	ldq	$27,0($2)
+	cmpult	$0,$4,$4
+	ldq	$3,TASK_FLAGS($2)
+	stq	$17,SP_OFF+32($30)
+	s8addq	$0,$5,$5
+	and     $3,PF_PTRACED,$3
+	stq	$18,SP_OFF+40($30)
+	bne     $3,strace
+	beq	$4,1f
+	ldq	$27,0($5)
 1:	jsr	$26,($27),do_entSys
 	blt	$0,syscall_error	/* the call failed */
 	stq	$0,0($30)

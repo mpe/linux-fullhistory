@@ -123,6 +123,10 @@ static int pty_write(struct tty_struct * tty, int from_user,
 		down(&tmp_buf_sem);
 		temp_buffer = tmp_buf +
 			((tty->driver.subtype-1) * PTY_BUF_SIZE);
+		if (exception()) {
+			up(&tmp_buf_sem);
+			return -EFAULT;
+		}
 		while (count > 0) {
 			n = MIN(count, PTY_BUF_SIZE);
 			memcpy_fromfs(temp_buffer, buf, n);
@@ -134,6 +138,7 @@ static int pty_write(struct tty_struct * tty, int from_user,
 			buf += n;  c+= n;
 			count -= n;
 		}
+		end_exception();
 		up(&tmp_buf_sem);
 	} else {
 		c = MIN(count, to->ldisc.receive_room(to));

@@ -30,14 +30,12 @@
  *	18(%esp) - %eax
  *	1C(%esp) - %ds
  *	20(%esp) - %es
- *      24(%esp) - %fs
- *	28(%esp) - %gs
- *	2C(%esp) - orig_eax
- *	30(%esp) - %eip
- *	34(%esp) - %cs
- *	38(%esp) - %eflags
- *	3C(%esp) - %oldesp
- *	40(%esp) - %oldss
+ *	24(%esp) - orig_eax
+ *	28(%esp) - %eip
+ *	2C(%esp) - %cs
+ *	30(%esp) - %eflags
+ *	34(%esp) - %oldesp
+ *	38(%esp) - %oldss
  *
  * "current" is in register %ebx during any slow entries.
  */
@@ -57,14 +55,12 @@ EBP		= 0x14
 EAX		= 0x18
 DS		= 0x1C
 ES		= 0x20
-FS		= 0x24
-GS		= 0x28
-ORIG_EAX	= 0x2C
-EIP		= 0x30
-CS		= 0x34
-EFLAGS		= 0x38
-OLDESP		= 0x3C
-OLDSS		= 0x40
+ORIG_EAX	= 0x24
+EIP		= 0x28
+CS		= 0x2C
+EFLAGS		= 0x30
+OLDESP		= 0x34
+OLDSS		= 0x38
 
 CF_MASK		= 0x00000001
 IF_MASK		= 0x00000200
@@ -88,8 +84,6 @@ ENOSYS = 38
 
 #define SAVE_ALL \
 	cld; \
-	push %gs; \
-	push %fs; \
 	push %es; \
 	push %ds; \
 	pushl %eax; \
@@ -204,8 +198,6 @@ ENOSYS = 38
 	popl %eax; \
 	pop %ds; \
 	pop %es; \
-	pop %fs; \
-	pop %gs; \
 	addl $4,%esp; \
 	iret
 
@@ -228,8 +220,6 @@ ENOSYS = 38
 	popl %eax; \
 	pop %ds; \
 	pop %es; \
-	pop %fs; \
-	pop %gs; \
 	addl $4,%esp; \
 	iret
 #endif
@@ -287,7 +277,6 @@ ENTRY(system_call)
 	movl SYMBOL_NAME(sys_call_table)(,%eax,4),%eax
 	testl %eax,%eax
 	je ret_from_sys_call
-	andl $~CF_MASK,EFLAGS(%esp)	# clear carry - assume no errors
 	testb $0x20,flags(%ebx)		# PF_TRACESYS
 	jne tracesys
 	call *%eax
@@ -296,51 +285,39 @@ ENTRY(system_call)
 	.globl ret_from_sys_call
 ret_from_sys_call:
 	cmpl $0,SYMBOL_NAME(intr_count)
-	jne 2f
+	jne 1f
 9:	movl SYMBOL_NAME(bh_mask),%eax
 	andl SYMBOL_NAME(bh_active),%eax
 	jne handle_bottom_half
-	movl EFLAGS(%esp),%eax		# check VM86 flag: CS/SS are
-	testl $(VM_MASK),%eax		# different then
-	jne 1f
-	cmpw $(KERNEL_CS),CS(%esp)	# was old code segment supervisor ?
-	je 2f
-1:	sti
-	orl $(IF_MASK),%eax		# these just try to make sure
-	andl $~NT_MASK,%eax		# the program doesn't do anything
-	movl %eax,EFLAGS(%esp)		# stupid
+	movl EFLAGS(%esp),%eax		# mix EFLAGS and CS
+	movb CS(%esp),%al
+	testl $(VM_MASK | 3),%eax	# return to VM86 mode or non-supervisor?
+	je 1f
 	cmpl $0,SYMBOL_NAME(need_resched)
 	jne reschedule
-	cmpl SYMBOL_NAME(task),%ebx	# task[0] cannot have signals
-	je 2f
-	movl blocked(%ebx),%ecx
-	movl %ecx,%eax			# save blocked in %eax for signal handling
-	notl %ecx
-	andl signal(%ebx),%ecx
+	movl blocked(%ebx),%eax
+	movl %eax,%esi			# save blocked in %esi for signal handling
+	notl %eax
+	andl signal(%ebx),%eax
 	jne signal_return
-2:	RESTORE_ALL
+1:	RESTORE_ALL
 	ALIGN
 signal_return:
-	movl %esp,%ecx
-	pushl %ecx
-	testl $(VM_MASK),EFLAGS(%ecx)
+	testl $(VM_MASK),EFLAGS(%esp)
+	pushl %esp
 	jne v86_signal_return
-	pushl %eax
+	pushl %esi
 	call SYMBOL_NAME(do_signal)
-	popl %eax
-	popl %eax
+	addl $8,%esp
 	RESTORE_ALL
 	ALIGN
 v86_signal_return:
-	pushl %eax
 	call SYMBOL_NAME(save_v86_state)
-	popl %edx
 	movl %eax,%esp
 	pushl %eax
-	pushl %edx
+	pushl %esi
 	call SYMBOL_NAME(do_signal)
-	popl %edx
-	popl %edx
+	addl $8,%esp
 	RESTORE_ALL
 	ALIGN
 tracesys:
@@ -357,8 +334,6 @@ ENTRY(divide_error)
 	pushl $ SYMBOL_NAME(do_divide_error)
 	ALIGN
 error_code:
-	push %fs
-	push %es
 	push %ds
 	pushl %eax
 	xorl %eax,%eax
@@ -369,12 +344,12 @@ error_code:
 	decl %eax			# eax = -1
 	pushl %ecx
 	pushl %ebx
-	cld
 	xorl %ecx,%ecx			# zero ecx
+	cld
+	mov %es,%cx			# get the lower order bits of es
 	xchgl %eax, ORIG_EAX(%esp)	# orig_eax (get the error code. )
-	mov %gs,%bx			# get the lower order bits of gs
 	movl %esp,%edx
-	xchgl %ecx, GS(%esp)		# get the address and save gs.
+	xchgl %ecx, ES(%esp)		# get the address and save es.
 	pushl %eax			# push the error code
 	pushl %edx
 	movl $(KERNEL_DS),%edx

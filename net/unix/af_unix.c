@@ -931,9 +931,9 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 		 *	have suggested. Big mallocs stress the vm too
 		 *	much.
 		 */
-
-		if(size > 4000 && sock->type!=SOCK_DGRAM)
-			limit = 4000;	/* Fall back to 4K if we can't grab a big buffer this instant */
+#define MAX_ALLOC (PAGE_SIZE*7/8)
+		if(size > MAX_ALLOC && sock->type!=SOCK_DGRAM)
+			limit = MAX_ALLOC;	/* Fall back to 4K if we can't grab a big buffer this instant */
 		else
 			limit = 0;	/* Otherwise just grab and wait */
 

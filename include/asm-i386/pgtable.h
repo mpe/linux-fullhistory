@@ -5,7 +5,7 @@
 
 /*
  * Define USE_PENTIUM_MM if you want the 4MB page table optimizations.
- * This works only on a intel Pentium.
+ * This works only on an intel Pentium.
  */
 #define USE_PENTIUM_MM 1
 
@@ -248,8 +248,8 @@ static inline void flush_tlb_range(struct mm_struct *mm,
 #define __S111	PAGE_SHARED
 
 /*
- * Define this if things work differently on a i386 and a i486:
- * it will (on a i486) warn about kernel memory accesses that are
+ * Define this if things work differently on an i386 and an i486:
+ * it will (on an i486) warn about kernel memory accesses that are
  * done without a 'verify_area(VERIFY_WRITE,..)'
  */
 #undef TEST_VERIFY_AREA

@@ -120,7 +120,7 @@ extern void chipset_init(struct device *dev, int startp);
  */
 #ifdef HAVE_DEVLIST
 /*
- * Support for a alternate probe manager,
+ * Support for an alternate probe manager,
  * which will eliminate the boilerplate below.
  */
 struct netdev_entry netcard_drv =

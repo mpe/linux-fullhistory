@@ -16,7 +16,7 @@
  * EV5 this is 127.
  *
  * On the EV4, the ASNs are more-or-less useless anyway, as they are
- * only used as a icache tag, not for TB entries.  On the EV5 ASN's
+ * only used as an icache tag, not for TB entries.  On the EV5 ASN's
  * also validate the TB entries, and thus make a lot more sense.
  *
  * The EV4 ASN's don't even match the architecture manual, ugh.  And

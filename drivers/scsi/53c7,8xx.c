@@ -153,7 +153,7 @@
  *		in the host code.
  *
  *	On the NCR53c710, interrupts are generated as on the NCR53c8x0,
- *		only the lack of a interrupt-on-the-fly facility complicates
+ *		only the lack of an interrupt-on-the-fly facility complicates
  *		things.   Also, SCSI ID registers and commands are 
  *		bit fielded rather than binary encoded.
  *		
@@ -248,7 +248,7 @@ typedef unsigned int  u32;
 #include <linux/proc_fs.h>
 #include <linux/string.h>
 #include <linux/malloc.h>
-#include <linuxv/malloc.h>
+#include <linux/vmalloc.h>
 #include <linux/mm.h>
 #include <linux/ioport.h>
 #include <linux/time.h>

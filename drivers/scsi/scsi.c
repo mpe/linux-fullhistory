@@ -282,6 +282,7 @@ static struct dev_info device_list[] =
 {"PIONEER","CD-ROM DRM-604X","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 {"EMULEX","MD21/S2     ESDI","*", BLIST_SINGLELUN},
 {"CANON","IPUBJD","*", BLIST_SPARSELUN},
+{"MATSHITA","PD","*", BLIST_FORCELUN | BLIST_SINGLELUN},
 /*
  * Must be at end of list...
  */

@@ -255,7 +255,8 @@ unsigned long do_mmap(struct file * file, unsigned long addr, unsigned long len,
 
 	/* Private writable mapping? Check memory availability.. */
 	if ((vma->vm_flags & (VM_SHARED | VM_WRITE)) == VM_WRITE) {
-		if (!vm_enough_memory(len >> PAGE_SHIFT)) {
+		if (!(flags & MAP_NORESERVE) &&
+		    !vm_enough_memory(len >> PAGE_SHIFT)) {
 			kfree(vma);
 			return -ENOMEM;
 		}

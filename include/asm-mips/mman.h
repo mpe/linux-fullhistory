@@ -39,7 +39,7 @@
 #define MAP_ANONYMOUS	0x0800		/* don't use a file */
 #define MAP_GROWSDOWN	0x1000		/* stack-like segment */
 #define MAP_DENYWRITE	0x2000		/* ETXTBSY */
-#define MAP_EXECUTABLE	0x4000		/* mark it as a executable */
+#define MAP_EXECUTABLE	0x4000		/* mark it as an executable */
 #define MAP_LOCKED	0x8000		/* pages are locked */
 
 /*

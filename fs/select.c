@@ -35,7 +35,7 @@
  * sleep/wakeup mechanism works.
  *
  * Two very simple procedures, select_wait() and free_wait() make all the work.
- * select_wait() is a inline-function defined in <linux/sched.h>, as all select
+ * select_wait() is an inline-function defined in <linux/sched.h>, as all select
  * functions have to call it to add an entry to the select table.
  */
 
@@ -67,86 +67,143 @@ static void free_wait(select_table * p)
  * and we aren't going to sleep on the select_table.  -- jrs
  */
 
-static int check(int flag, select_table * wait, struct file * file)
+static inline int __check(
+	int (*select) (struct inode *, struct file *, int, select_table *),
+	struct inode *inode,
+	struct file *file,
+	int flag,
+	select_table * wait)
 {
-	struct inode * inode;
-	struct file_operations *fops;
-	int (*select) (struct inode *, struct file *, int, select_table *);
-
-	inode = file->f_inode;
-	if ((fops = file->f_op) && (select = fops->select))
-		return select(inode, file, flag, wait)
-		    || (wait && select(inode, file, flag, NULL));
-	if (flag != SEL_EX)
-		return 1;
-	return 0;
+	return select(inode, file, flag, wait) ||
+		(wait && select(inode, file, flag, NULL));
 }
 
-static int do_select(int n, fd_set *in, fd_set *out, fd_set *ex,
-	fd_set *res_in, fd_set *res_out, fd_set *res_ex)
-{
-	int count;
-	select_table wait_table, *wait;
-	struct select_table_entry *entry;
-	unsigned long set;
-	int i,j;
-	int max = -1;
+#define check(flag,wait,file) \
+(((file)->f_op && (file)->f_op->select) ? \
+ __check((file)->f_op->select,(file)->f_inode,file,flag,wait) \
+ : \
+ (flag != SEL_EX))
 
-	j = 0;
-	for (;;) {
-		i = j * __NFDBITS;
-		if (i >= n)
-			break;
-		set = in->fds_bits[j] | out->fds_bits[j] | ex->fds_bits[j];
-		j++;
-		for ( ; set ; i++,set >>= 1) {
-			if (i >= n)
-				goto end_check;
-			if (!(set & 1))
-				continue;
-			if (!current->files->fd[i])
-				return -EBADF;
-			if (!current->files->fd[i]->f_inode)
-				return -EBADF;
-			max = i;
+/*
+ * Due to kernel stack usage, we use a _limited_ fd_set type here, and once
+ * we really start supporting >256 file descriptors we'll probably have to
+ * allocate the kernel fd_set copies dynamically.. (The kernel select routines
+ * are careful to touch only the defined low bits of any fd_set pointer, this
+ * is important for performance too).
+ */
+typedef unsigned long limited_fd_set[NR_OPEN/(8*(sizeof(unsigned long)))];
+
+typedef struct {
+	limited_fd_set in, out, ex;
+	limited_fd_set res_in, res_out, res_ex;
+} fd_set_buffer;
+
+#define __IN(in)	(in)
+#define __OUT(in)	(in + sizeof(limited_fd_set)/sizeof(unsigned long))
+#define __EX(in)	(in + 2*sizeof(limited_fd_set)/sizeof(unsigned long))
+#define __RES_IN(in)	(in + 3*sizeof(limited_fd_set)/sizeof(unsigned long))
+#define __RES_OUT(in)	(in + 4*sizeof(limited_fd_set)/sizeof(unsigned long))
+#define __RES_EX(in)	(in + 5*sizeof(limited_fd_set)/sizeof(unsigned long))
+
+#define BITS(in)	(*__IN(in)|*__OUT(in)|*__EX(in))
+
+static int max_select_fd(unsigned long n, fd_set_buffer *fds)
+{
+	unsigned long *open_fds, *in;
+	unsigned long set;
+	int max;
+
+	/* handle last in-complete long-word first */
+	set = ~(~0UL << (n & (__NFDBITS-1)));
+	n /= __NFDBITS;
+	open_fds = current->files->open_fds.fds_bits+n;
+	in = fds->in+n;
+	max = 0;
+	if (set) {
+		set &= BITS(in);
+		if (set) {
+			if (!(set & ~*open_fds))
+				goto get_max;
+			return -EBADF;
 		}
 	}
-end_check:
-	n = max + 1;
+	while (n) {
+		in--;
+		open_fds--;
+		n--;
+		set = BITS(in);
+		if (!set)
+			continue;
+		if (set & ~*open_fds)
+			return -EBADF;
+		if (max)
+			continue;
+get_max:
+		do {
+			max++;
+			set >>= 1;
+		} while (set);
+		max += n * __NFDBITS;
+	}
+
+	return max;
+}
+
+#define BIT(i)		(1UL << ((i)&(__NFDBITS-1)))
+#define MEM(i,m)	((m)+(unsigned)(i)/__NFDBITS)
+#define ISSET(i,m)	(((i)&*(m)) != 0)
+#define SET(i,m)	(*(m) |= (i))
+
+static int do_select(int n, fd_set_buffer *fds)
+{
+	int retval;
+	select_table wait_table, *wait;
+	struct select_table_entry *entry;
+	int i;
+
+	retval = max_select_fd(n, fds);
+	if (retval < 0)
+		goto out;
+	n = retval;
+	retval = -ENOMEM;
 	if(!(entry = (struct select_table_entry*) __get_free_page(GFP_KERNEL)))
-		return -ENOMEM;
-	count = 0;
+		goto out;
+	retval = 0;
 	wait_table.nr = 0;
 	wait_table.entry = entry;
 	wait = &wait_table;
-repeat:
-	current->state = TASK_INTERRUPTIBLE;
-	for (i = 0 ; i < n ; i++) {
-		if (FD_ISSET(i,in) && check(SEL_IN,wait,current->files->fd[i])) {
-			FD_SET(i, res_in);
-			count++;
-			wait = NULL;
+	for (;;) {
+		struct file ** fd = current->files->fd;
+		current->state = TASK_INTERRUPTIBLE;
+		for (i = 0 ; i < n ; i++,fd++) {
+			unsigned long bit = BIT(i);
+			unsigned long *in = MEM(i,fds->in);
+			if (ISSET(bit,__IN(in)) && check(SEL_IN,wait,*fd)) {
+				SET(bit, __RES_IN(in));
+				retval++;
+				wait = NULL;
+			}
+			if (ISSET(bit,__OUT(in)) && check(SEL_OUT,wait,*fd)) {
+				SET(bit, __RES_OUT(in));
+				retval++;
+				wait = NULL;
+			}
+			if (ISSET(bit,__EX(in)) && check(SEL_EX,wait,*fd)) {
+				SET(bit, __RES_EX(in));
+				retval++;
+				wait = NULL;
+			}
 		}
-		if (FD_ISSET(i,out) && check(SEL_OUT,wait,current->files->fd[i])) {
-			FD_SET(i, res_out);
-			count++;
-			wait = NULL;
-		}
-		if (FD_ISSET(i,ex) && check(SEL_EX,wait,current->files->fd[i])) {
-			FD_SET(i, res_ex);
-			count++;
-			wait = NULL;
-		}
-	}
-	wait = NULL;
-	if (!count && current->timeout && !(current->signal & ~current->blocked)) {
+		wait = NULL;
+		if (retval || !current->timeout || (current->signal & ~current->blocked))
+			break;
 		schedule();
-		goto repeat;
 	}
 	free_wait(&wait_table);
 	free_page((unsigned long) entry);
 	current->state = TASK_RUNNING;
-	return count;
+out:
+	return retval;
 }
 
 /*
@@ -202,20 +259,11 @@ static inline void __zero_fd_set(long nr, unsigned long * fdset)
 }		
 
 /*
- * Due to kernel stack usage, we use a _limited_ fd_set type here, and once
- * we really start supporting >256 file descriptors we'll probably have to
- * allocate the kernel fd_set copies dynamically.. (The kernel select routines
- * are careful to touch only the defined low bits of any fd_set pointer, this
- * is important for performance too).
- *
  * Note a few subtleties: we use "long" for the dummy, not int, and we do a
  * subtract by 1 on the nr of file descriptors. The former is better for
  * machines with long > int, and the latter allows us to test the bit count
  * against "zero or positive", which can mostly be just a sign bit test..
  */
-typedef struct {
-	unsigned long dummy[NR_OPEN/(8*(sizeof(unsigned long)))];
-} limited_fd_set;
 
 #define get_fd_set(nr,fsp,fdp) \
 __get_fd_set(nr, (int *) (fsp), (int *) (fdp))
@@ -237,9 +285,7 @@ __zero_fd_set((nr)-1, (unsigned long *) (fdp))
 asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct timeval *tvp)
 {
 	int error;
-	limited_fd_set res_in, in;
-	limited_fd_set res_out, out;
-	limited_fd_set res_ex, ex;
+	fd_set_buffer fds;
 	unsigned long timeout;
 
 	error = -EINVAL;
@@ -247,9 +293,9 @@ asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct 
 		goto out;
 	if (n > NR_OPEN)
 		n = NR_OPEN;
-	if ((error = get_fd_set(n, inp, &in)) ||
-	    (error = get_fd_set(n, outp, &out)) ||
-	    (error = get_fd_set(n, exp, &ex))) goto out;
+	if ((error = get_fd_set(n, inp, &fds.in)) ||
+	    (error = get_fd_set(n, outp, &fds.out)) ||
+	    (error = get_fd_set(n, exp, &fds.ex))) goto out;
 	timeout = ~0UL;
 	if (tvp) {
 		error = verify_area(VERIFY_WRITE, tvp, sizeof(*tvp));
@@ -260,17 +306,11 @@ asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct 
 		if (timeout)
 			timeout += jiffies + 1;
 	}
-	zero_fd_set(n, &res_in);
-	zero_fd_set(n, &res_out);
-	zero_fd_set(n, &res_ex);
+	zero_fd_set(n, &fds.res_in);
+	zero_fd_set(n, &fds.res_out);
+	zero_fd_set(n, &fds.res_ex);
 	current->timeout = timeout;
-	error = do_select(n,
-		(fd_set *) &in,
-		(fd_set *) &out,
-		(fd_set *) &ex,
-		(fd_set *) &res_in,
-		(fd_set *) &res_out,
-		(fd_set *) &res_ex);
+	error = do_select(n, &fds);
 	timeout = current->timeout - jiffies - 1;
 	current->timeout = 0;
 	if ((long) timeout < 0)
@@ -289,9 +329,9 @@ asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct 
 			goto out;
 		error = 0;
 	}
-	set_fd_set(n, inp, &res_in);
-	set_fd_set(n, outp, &res_out);
-	set_fd_set(n, exp, &res_ex);
+	set_fd_set(n, inp, &fds.res_in);
+	set_fd_set(n, outp, &fds.res_out);
+	set_fd_set(n, exp, &fds.res_ex);
 out:
 	return error;
 }

@@ -1,5 +1,5 @@
 static char rcsid[] =
-"$Revision: 1.36.3.7A $$Date: 1996/07/27 10:25:50 $";
+"$Revision: 1.36.3.9 $$Date: 1996/10/07 19:47:13 $";
 /*
  *  linux/drivers/char/cyclades.c
  *
@@ -24,6 +24,14 @@ static char rcsid[] =
  *   int cy_open(struct tty_struct *tty, struct file *filp);
  *
  * $Log: cyclades.c,v $
+ * Revision 1.36.3.9  1996/10/07 19:47:13  bentson
+ * add MOD_DEC_USE_COUNT in one return from cy_close (as
+ * noted by Jon Lewis <jlewis@INORGANIC5.FDT.NET>)
+ *
+ * Revision 1.36.3.8  1996/06/07 16:29:00  bentson
+ * starting minor number at zero; added missing verify_area
+ * as noted by Heiko Eissfeldt <heiko@colossus.escape.de>
+ *
  * Revision 1.36.3.7  1996/04/19 21:06:18  bentson
  * remove unneeded boot message & fix CLOCAL hardware flow
  * control (Miquel van Smoorenburg <miquels@Q.cistron.nl>);
@@ -2355,6 +2363,7 @@ cy_close(struct tty_struct * tty, struct file * filp)
 
     /* If the TTY is being hung up, nothing to do */
     if (tty_hung_up_p(filp)) {
+	MOD_DEC_USE_COUNT;
 	restore_flags(flags);
 	return;
     }

@@ -1120,10 +1120,12 @@ int pcxe_init(void)
 	pcxe_termios = kmalloc(sizeof(struct termios *) * nbdevs, GFP_KERNEL);
 	if (!pcxe_termios)
 		panic("Unable to allocate pcxe_termios struct");
+	memset(pcxe_termios,0,sizeof(struct termios *)*nbdevs);
 
 	pcxe_termios_locked = kmalloc(sizeof(struct termios *) * nbdevs, GFP_KERNEL);
 	if (!pcxe_termios_locked)
 		panic("Unable to allocate pcxe_termios_locked struct");
+	memset(pcxe_termios_locked,0,sizeof(struct termios *)*nbdevs);
 
 	init_bh(DIGI_BH,do_pcxe_bh);
 	enable_bh(DIGI_BH);

@@ -317,7 +317,6 @@ extern unsigned long lca_init (unsigned long mem_start, unsigned long mem_end);
  */
 struct el_lca_mcheck_short {
 	struct el_common	h;		/* common logout header */
-	unsigned long		reason;		/* reason for machine check */
 	unsigned long		esr;		/* error-status register */
 	unsigned long		ear;		/* error-address register */
 	unsigned long		dc_stat;	/* dcache status register */
@@ -327,7 +326,7 @@ struct el_lca_mcheck_short {
 
 struct el_lca_mcheck_long {
 	struct el_common	h;		/* common logout header */
-	unsigned long		pt[32];		/* PAL temps (pt[0] is reason) */
+	unsigned long		pt[31];		/* PAL temps */
 	unsigned long		exc_addr;	/* exception address */
 	unsigned long		pad1[3];
 	unsigned long		pal_base;	/* PALcode base address */

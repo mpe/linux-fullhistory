@@ -1,4 +1,4 @@
-/* $Id: advansys.c,v 1.20 1996/09/26 00:47:54 bobf Exp bobf $ */
+/* $Id: advansys.c,v 1.24 1996/10/05 00:58:14 bobf Exp bobf $ */
 /*
  * advansys.c - Linux Host Driver for AdvanSys SCSI Adapters
  * 
@@ -18,9 +18,10 @@
  */
 
 /*
- * The driver has been run with the v1.2.13, v1.3.57, and v2.0.21 kernels.
+ * The driver has been used in the following kernels:
+ * v1.2.13, v1.3.57, v2.0.21, v2.1.0
  */
-#define ASC_VERSION "1.7"    /* AdvanSys Driver Version */
+#define ASC_VERSION "1.8"    /* AdvanSys Driver Version */
 
 /*
 
@@ -441,9 +442,38 @@
          5. Remove the request timeout issue form the driver issues list.
          6. Miscellaneous documentation additions and changes.
 
+     1.8 (10/4/96):
+         1. Make changes to handle the new v2.1.0 kernel memory mapping
+            in which a kernel virtual address may not be equivalent to its
+            bus or DMA memory address.
+         2. Change abort and reset request handling to make it yet even
+            more robust.
+         3. Try to mitigate request starvation by sending ordered requests
+            to heavily loaded, tag queuing enabled devices.
+         4. Maintain statistics on request response time.
+         5. Add request response time statistics and other information to
+            the adapter /proc file: /proc/scsi/advansys[0...].
+
   I. Known Problems or Issues
 
-         None
+         1. If a large "Device Queue Size" is set in the adapter
+            BIOS and a device supports the queue depth and the device
+            is heavily loaded, requests may be sent to the device
+            faster than they can be executed causing the requests to
+            queue up in the low-level driver on a wait queue. This may
+            lead to time-out abort requests by the mid-level driver.
+            
+            The short term solution is to set a smaller "Device Queue
+            Size" in the adapter BIOS. Response times can be monitored
+            per device by reading the /proc/scsi/advansys/[0...] file.
+            
+            The long term solution is to modify the mid-level driver to
+            institute a flow control mechanism between the two levels.
+            The low-level driver would notify the mid-level driver when
+            a device is falling behind on executing requests. This would
+            prevent the mid-level driver from sending more requests until
+            the low-level driver has notified it that the device has caught
+            up on request execution.
 
   J. Credits
 
@@ -2137,15 +2167,52 @@ int                 AscRestoreNewMicroCode(ASC_DVC_VAR asc_ptr_type *, ASC_MC_SA
 #define DRIVER_BYTE(byte)	((byte) << 24)
 
 /*
- * REQ and REQP are the generic name for a SCSI request block and pointer.
- * REQPTID(reqp) returns reqp's target id.
- * REQPNEXT(reqp) returns reqp's next pointer.
- * REQPNEXTP(reqp) returns a pointer to reqp's next pointer.
+ * The following definitions and macros are OS independent interfaces to
+ * the queue functions:
+ *  REQ - SCSI request structure
+ *  REQP - pointer to SCSI request structure
+ *  REQPTID(reqp) - reqp's target id
+ *  REQPNEXT(reqp) - reqp's next pointer
+ *  REQPNEXTP(reqp) - pointer to reqp's next pointer
+ *  REQPTIME(reqp) - reqp's time stamp value
+ *  REQTIMESTAMP() - system time stamp value
  */
 typedef Scsi_Cmnd			REQ, *REQP;
 #define REQPNEXT(reqp)		((REQP) ((reqp)->host_scribble))
 #define REQPNEXTP(reqp)		((REQP *) &((reqp)->host_scribble))
 #define REQPTID(reqp)		((reqp)->target)
+#define REQPTIME(reqp)		((reqp)->SCp.this_residual)
+#define REQTIMESTAMP()		(jiffies)
+
+#define REQTIMESTAT(function, ascq, reqp, tid) \
+{ \
+	/*
+	 * If the request time stamp is less than the system time stamp, then \
+	 * maybe the system time stamp wrapped. Set the request time to zero.\
+	 */ \
+	if (REQPTIME(reqp) <= REQTIMESTAMP()) { \
+		REQPTIME(reqp) = REQTIMESTAMP() - REQPTIME(reqp); \
+	} else { \
+		/* Indicate an error occurred with the assertion. */ \
+		ASC_ASSERT(REQPTIME(reqp) <= REQTIMESTAMP()); \
+		REQPTIME(reqp) = 0; \
+	} \
+	/* Handle first minimum time case without external initialization. */ \
+	if (((ascq)->q_tot_cnt[tid] == 1) ||  \
+		(REQPTIME(reqp) < (ascq)->q_min_tim[tid])) { \
+			(ascq)->q_min_tim[tid] = REQPTIME(reqp); \
+			ASC_DBG3(1, "%s: new q_min_tim[%d] %u\n", \
+				(function), (tid), (ascq)->q_min_tim[tid]); \
+		} \
+	if (REQPTIME(reqp) > (ascq)->q_max_tim[tid]) { \
+		(ascq)->q_max_tim[tid] = REQPTIME(reqp); \
+		ASC_DBG3(1, "%s: new q_max_tim[%d] %u\n", \
+			(function), tid, (ascq)->q_max_tim[tid]); \
+	} \
+	(ascq)->q_tot_tim[tid] += REQPTIME(reqp); \
+	/* Reset the time stamp field. */ \
+	REQPTIME(reqp) = 0; \
+}
 
 /* asc_enqueue() flags */
 #define ASC_FRONT		1
@@ -2287,8 +2354,7 @@ typedef Scsi_Cmnd			REQ, *REQP;
 #define	ASC_DBG3(lvl, s, a1, a2, a3)
 #define	ASC_DBG4(lvl, s, a1, a2, a3, a4)
 #define	ASC_DBG_PRT_SCSI_HOST(lvl, s)
-#define	ASC_DBG_PRT_DVC_VAR(lvl, v)
-#define	ASC_DBG_PRT_DVC_CFG(lvl, c)
+#define	ASC_DBG_PRT_SCSI_CMND(lvl, s)
 #define	ASC_DBG_PRT_SCSI_Q(lvl, scsiqp)
 #define	ASC_DBG_PRT_QDONE_INFO(lvl, qdone)
 #define	ASC_DBG_PRT_HEX(lvl, name, start, length)
@@ -2348,17 +2414,10 @@ typedef Scsi_Cmnd			REQ, *REQP;
 		} \
 	}
 
-#define	ASC_DBG_PRT_DVC_VAR(lvl, v) \
+#define	ASC_DBG_PRT_SCSI_CMND(lvl, s) \
 	{ \
 		if (asc_dbglvl >= (lvl)) { \
-			asc_prt_dvc_var(v); \
-		} \
-	}
-
-#define	ASC_DBG_PRT_DVC_CFG(lvl, c) \
-	{ \
-		if (asc_dbglvl >= (lvl)) { \
-			asc_prt_dvc_cfg(c); \
+			asc_prt_scsi_cmnd(s); \
 		} \
 	}
 
@@ -2447,6 +2506,10 @@ typedef struct asc_queue {
 #ifdef ADVANSYS_STATS
 	short					q_cur_cnt[ASC_MAX_TID+1]; /* current queue count */
 	short					q_max_cnt[ASC_MAX_TID+1]; /* maximum queue count */
+	ulong					q_tot_cnt[ASC_MAX_TID+1]; /* total enqueue count */
+	ulong					q_tot_tim[ASC_MAX_TID+1]; /* total time queued */
+	ushort					q_max_tim[ASC_MAX_TID+1]; /* maximum time queued */
+	ushort					q_min_tim[ASC_MAX_TID+1]; /* minimum time queued */
 #endif /* ADVANSYS_STATS */
 } asc_queue_t;
 
@@ -2464,10 +2527,11 @@ typedef struct asc_board {
 	ASC_DVC_CFG			 asc_dvc_cfg;		/* Device configuration */
 	asc_queue_t			 active;			/* Active command queue */
 	asc_queue_t			 waiting;		  	/* Waiting command queue */
+	asc_queue_t			 done;				/* Done command queue */
 	ASC_SCSI_BIT_ID_TYPE init_tidmask;		/* Target initialized mask */
 	ASCEEP_CONFIG		 eep_config;		/* EEPROM configuration */
-	asc_queue_t			 scsi_done_q;		/* Completion command queue */
-	ulong				 reset_jiffies;		/* Saved time of last reset */
+	ulong				 last_reset;		/* Saved time of last reset */
+	ushort				 rcnt[ASC_MAX_TID+1]; /* Starvation Request Count */
 #if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(1,3,0)
 	/* /proc/scsi/advansys/[0...] */
 	char				 *prtbuf;			/* Statistics Print Buffer */
@@ -2646,6 +2710,7 @@ STATIC int			asc_prt_board_stats(struct Scsi_Host *, char *, int);
 #endif /* ADVANSYS_STATS */
 #ifdef ADVANSYS_DEBUG
 STATIC void 		asc_prt_scsi_host(struct Scsi_Host *);
+STATIC void 		asc_prt_scsi_cmnd(Scsi_Cmnd *);
 STATIC void 		asc_prt_dvc_cfg(ASC_DVC_CFG *);
 STATIC void 		asc_prt_dvc_var(ASC_DVC_VAR *);
 STATIC void 		asc_prt_scsi_q(ASC_SCSI_Q *);
@@ -3512,7 +3577,9 @@ advansys_info(struct Scsi_Host *shp)
  * Polled-I/O. Apparently host drivers shouldn't return until
  * command is finished.
  *
- * XXX - Can host drivers block here instead of spinning on command status?
+ * Note: This is an old interface that is no longer used by the SCSI
+ * mid-level driver. The new interface, advansys_queuecommand(),
+ * currently handles all requests.
  */
 int
 advansys_command(Scsi_Cmnd *scp)
@@ -3521,6 +3588,10 @@ advansys_command(Scsi_Cmnd *scp)
 	ASC_STATS(scp->host, command);
 	scp->SCp.Status = 0; /* Set to a known state */
 	advansys_queuecommand(scp, advansys_command_done);
+	/*
+	 * XXX - Can host drivers block here instead of spinning on
+	 * command status?
+	 */
 	while (scp->SCp.Status == 0) {
 		continue;
 	}
@@ -3571,11 +3642,11 @@ advansys_queuecommand(Scsi_Cmnd *scp, void (*done)(Scsi_Cmnd *))
 		}
 
 		/*
-		 * Add blocked requests to the board's 'scsi_done_q'. The queued
+		 * Add blocked requests to the board's 'done' queue. The queued
 		 * requests will be completed at the end of the abort or reset
 		 * handling.
 		 */
-		asc_enqueue(&boardp->scsi_done_q, scp, ASC_BACK);
+		asc_enqueue(&boardp->done, scp, ASC_BACK);
 		restore_flags(flags);
 		return 0;
 	}
@@ -3601,7 +3672,7 @@ advansys_queuecommand(Scsi_Cmnd *scp, void (*done)(Scsi_Cmnd *))
 	 * target waiting list.
 	 * 
 	 * If an error occurred, the request will have been placed on the
-	 * board's 'scsi_done_q' and must be completed before returning.
+	 * board's 'done' queue and must be completed before returning.
 	 */
 	scp->scsi_done = done;
 	switch (asc_execute_scsi_cmnd(scp)) {
@@ -3612,7 +3683,7 @@ advansys_queuecommand(Scsi_Cmnd *scp, void (*done)(Scsi_Cmnd *))
 		break;
 	case ASC_ERROR:
 	default:
-		done_scp = asc_dequeue_list(&boardp->scsi_done_q, NULL, ASC_TID_ALL);
+		done_scp = asc_dequeue_list(&boardp->done, NULL, ASC_TID_ALL);
 		/* Interrupts could be enabled here. */
 		asc_scsi_done_list(done_scp);
 		break;
@@ -3634,16 +3705,16 @@ advansys_abort(Scsi_Cmnd *scp)
 	asc_board_t			*boardp;
 	ASC_DVC_VAR			*asc_dvc_varp;
 	int					flags;
-	int					status = ASC_FALSE;
-	int					abort_do_done = ASC_FALSE;
-	Scsi_Cmnd			*done_scp;
-	int					ret = ASC_ERROR;
-
-	ASC_DBG1(1, "advansys_abort: scp %x\n", (unsigned) scp);
+	int					do_scsi_done;
+	int					scp_found;
+	Scsi_Cmnd			*done_scp = NULL;
+	int					ret;
 
 	/* Save current flags and disable interrupts. */
 	save_flags(flags);
 	cli();
+
+	ASC_DBG1(1, "advansys_abort: scp %x\n", (unsigned) scp);
 
 #ifdef ADVANSYS_STATS
 	if (scp->host != NULL) {
@@ -3651,25 +3722,46 @@ advansys_abort(Scsi_Cmnd *scp)
 	}	
 #endif /* ADVANSYS_STATS */
 
+#ifdef ADVVANSYS_DEBUG
+	do_scsi_done = ASC_ERROR;
+	scp_found = ASC_ERROR;
+	ret = ASC_ERROR;
+#endif /* ADVANSYS_DEBUG */
+
 #if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(1,3,89)
 	if (scp->serial_number != scp->serial_number_at_timeout) {
+		ASC_PRINT1(
+"advansys_abort: timeout serial number changed for request %x\n",
+			(unsigned) scp);
+		do_scsi_done = ASC_FALSE;
+		scp_found = ASC_FALSE;
 		ret = SCSI_ABORT_NOT_RUNNING;
 	} else
 #endif /* version >= v1.3.89 */
 	if ((shp = scp->host) == NULL) {
 		scp->result = HOST_BYTE(DID_ERROR);
+		do_scsi_done = ASC_TRUE;
+		scp_found = ASC_FALSE;
 		ret = SCSI_ABORT_ERROR;
 	} else if ((boardp = ASC_BOARDP(shp))->flags & 
 				(ASC_HOST_IN_RESET | ASC_HOST_IN_ABORT)) {
 		ASC_PRINT2(
 "advansys_abort: board %d: Nested host reset or abort, flags 0x%x\n",
 			boardp->id, boardp->flags);
+		do_scsi_done = ASC_TRUE;
+		if ((asc_rmqueue(&boardp->active, scp) == ASC_TRUE) ||
+		    (asc_rmqueue(&boardp->waiting, scp) == ASC_TRUE)) {
+			scp_found = ASC_TRUE;
+		} else {
+			scp_found = ASC_FALSE;
+		}
 		scp->result = HOST_BYTE(DID_ERROR);
 		ret = SCSI_ABORT_ERROR;
 	} else {
 		/* Set abort flag to avoid nested reset or abort requests. */
 		boardp->flags |= ASC_HOST_IN_ABORT;
 
+		do_scsi_done = ASC_TRUE;
 		if (asc_rmqueue(&boardp->waiting, scp) == ASC_TRUE) {
 			/*
 		 	 * If asc_rmqueue() found the command on the waiting
@@ -3678,6 +3770,7 @@ advansys_abort(Scsi_Cmnd *scp)
 		 	 */
 			ASC_DBG1(1, "advansys_abort: scp %x found on waiting queue\n",
 				(unsigned) scp);
+			scp_found = ASC_TRUE;
 			scp->result = HOST_BYTE(DID_ABORT);
 			ret = SCSI_ABORT_SUCCESS;
 		} else if (asc_isqueued(&boardp->active, scp) == ASC_TRUE) {
@@ -3693,7 +3786,7 @@ advansys_abort(Scsi_Cmnd *scp)
 			sti(); /* Enable interrupts for AscAbortSRB(). */
 			ASC_DBG1(1, "advansys_abort: before AscAbortSRB(), scp %x\n",
 				(unsigned) scp);
-			switch (status = AscAbortSRB(asc_dvc_varp, (ulong) scp)) {
+			switch (AscAbortSRB(asc_dvc_varp, (ulong) scp)) {
 			case ASC_TRUE:
 				/* asc_isr_callback() will be called */
 				ASC_DBG(1, "advansys_abort: AscAbortSRB() TRUE\n");
@@ -3713,20 +3806,23 @@ advansys_abort(Scsi_Cmnd *scp)
 			cli();
 
 			/*
-			 * If the abort failed, remove the request from the
-			 * active list and complete it.
+			 * The request will either still be on the active queue
+			 * or have been added to the board's done queue.
 			 */
-			if (status != ASC_TRUE) {
-				if (asc_rmqueue(&boardp->active, scp) == ASC_TRUE) {
-					scp->result = HOST_BYTE(DID_ABORT);
-					abort_do_done = ASC_TRUE;
-				}
+			if (asc_rmqueue(&boardp->active, scp) == ASC_TRUE) {
+				scp->result = HOST_BYTE(DID_ABORT);
+				scp_found = ASC_TRUE;
+			} else {
+				scp_found = asc_rmqueue(&boardp->done, scp);
+				ASC_ASSERT(scp_found == ASC_TRUE);
 			}
 
 		} else {
 			/*
 			 * The command was not found on the active or waiting queues.
 			 */
+			do_scsi_done = ASC_TRUE;
+			scp_found = ASC_FALSE;
 			ret = SCSI_ABORT_NOT_RUNNING;
 		}
 
@@ -3736,11 +3832,11 @@ advansys_abort(Scsi_Cmnd *scp)
 		/*
 		 * Because the ASC_HOST_IN_ABORT flag causes both
 		 * 'advansys_interrupt' and 'asc_isr_callback' to
-		 * queue requests to the board's 'scsi_done_q' and
+		 * queue requests to the board's 'done' queue and
 		 * prevents waiting commands from being executed,
 		 * these queued requests must be handled here.
 		 */
-		done_scp = asc_dequeue_list(&boardp->scsi_done_q, NULL, ASC_TID_ALL);
+		done_scp = asc_dequeue_list(&boardp->done, NULL, ASC_TID_ALL);
 
 		/*
 		 * Start any waiting commands for the board.
@@ -3749,22 +3845,39 @@ advansys_abort(Scsi_Cmnd *scp)
 			ASC_DBG(1, "advansys_interrupt: before asc_execute_queue()\n");
 			asc_execute_queue(&boardp->waiting);
 		}
+	}
 
-		/* Interrupts could be enabled here. */
+	/* Interrupts could be enabled here. */
 
-		/*
-		 * If needed, complete the aborted request.
-		 */
-		if (abort_do_done == ASC_TRUE) {
+	/*
+	 * Complete the request to be aborted, unless it has been
+	 * restarted as detected above, even if it was not found on
+	 * the device active or waiting queues.
+	 */
+	ASC_ASSERT(do_scsi_done != ASC_ERROR);
+	ASC_ASSERT(scp_found != ASC_ERROR);
+	if (do_scsi_done == ASC_TRUE) {
+		if (scp->scsi_done == NULL) {
+			ASC_PRINT1(
+"advansys_abort: aborted request scsi_done() is NULL, %x\n",
+				(unsigned) scp);
+		} else {
+			if (scp_found == ASC_FALSE) {
+				ASC_PRINT1(
+"advansys_abort: abort request not active or waiting, completing anyway %x\n",
+					(unsigned) scp);
+			}
 			ASC_STATS(scp->host, done);
 			scp->scsi_done(scp);
 		}
+	}
 
-		/*
-		 * It is possible for the request done function to re-enable
-		 * interrupts without confusing the driver. But here interrupts
-		 * aren't enabled until all requests have been completed.
-		 */
+	/*
+	 * It is possible for the request done function to re-enable
+	 * interrupts without confusing the driver. But here interrupts
+	 * aren't enabled until all requests have been completed.
+	 */
+	if (done_scp != NULL) {
 		asc_scsi_done_list(done_scp);
 	}
 
@@ -3795,17 +3908,17 @@ advansys_reset(Scsi_Cmnd *scp, unsigned int reset_flags)
 	int					flags;
 	Scsi_Cmnd			*done_scp = NULL, *last_scp = NULL;
 	Scsi_Cmnd			*tscp, *new_last_scp;
-	int					scp_found = ASC_FALSE;
-	int 				device_reset = ASC_FALSE;
+	int					do_scsi_done;
+	int					scp_found;
 	int					status;
 	int					target;
-	int					ret = ASC_ERROR;
-
-	ASC_DBG1(1, "advansys_reset: %x\n", (unsigned) scp);
+	int					ret;
 
 	/* Save current flags and disable interrupts. */
 	save_flags(flags);
 	cli();
+
+	ASC_DBG1(1, "advansys_reset: %x\n", (unsigned) scp);
 
 #ifdef ADVANSYS_STATS
 	if (scp->host != NULL) {
@@ -3815,21 +3928,35 @@ advansys_reset(Scsi_Cmnd *scp, unsigned int reset_flags)
 
 #if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(1,3,89)
 	if (scp->serial_number != scp->serial_number_at_timeout) {
+		ASC_PRINT1(
+"advansys_reset: timeout serial number changed for request %x\n",
+			(unsigned) scp);
+		do_scsi_done = ASC_FALSE;
+		scp_found = ASC_FALSE;
 		ret = SCSI_RESET_NOT_RUNNING;
 	} else
 #endif /* version >= v1.3.89 */
 	if ((shp = scp->host) == NULL) {
 		scp->result = HOST_BYTE(DID_ERROR);
+		do_scsi_done = ASC_TRUE;
+		scp_found = ASC_FALSE;
 		ret = SCSI_RESET_ERROR;
 	} else if ((boardp = ASC_BOARDP(shp))->flags & 
 				(ASC_HOST_IN_RESET | ASC_HOST_IN_ABORT)) {
 		ASC_PRINT2(
 "advansys_reset: board %d: Nested host reset or abort, flags 0x%x\n",
 			boardp->id, boardp->flags);
+		do_scsi_done = ASC_TRUE;
+		if ((asc_rmqueue(&boardp->active, scp) == ASC_TRUE) ||
+		    (asc_rmqueue(&boardp->waiting, scp) == ASC_TRUE)) {
+			scp_found = ASC_TRUE;
+		} else {
+			scp_found = ASC_FALSE;
+		}
 		scp->result = HOST_BYTE(DID_ERROR);
 		ret = SCSI_RESET_ERROR;
-	} else if (jiffies >= boardp->reset_jiffies &&
-			   jiffies < (boardp->reset_jiffies + (10 * HZ))) {
+	} else if (jiffies >= boardp->last_reset &&
+			   jiffies < (boardp->last_reset + (10 * HZ))) {
 		/*
 		 * Don't allow a reset to be attempted within 10 seconds
 		 * of the last reset.
@@ -3840,15 +3967,27 @@ advansys_reset(Scsi_Cmnd *scp, unsigned int reset_flags)
 		 */
 		ASC_DBG(1,
 			"advansys_reset: reset within 10 sec of last reset ignored\n");
+		do_scsi_done = ASC_TRUE;
+		if ((asc_rmqueue(&boardp->active, scp) == ASC_TRUE) ||
+		    (asc_rmqueue(&boardp->waiting, scp) == ASC_TRUE)) {
+			scp_found = ASC_TRUE;
+		} else {
+			scp_found = ASC_FALSE;
+		}
 		scp->result = HOST_BYTE(DID_ERROR);
 		ret = SCSI_RESET_ERROR;
 	} else {
+		int device_reset = ASC_FALSE;
+
+		do_scsi_done = ASC_TRUE;
+
 		/* Set reset flag to avoid nested reset or abort requests. */
 		boardp->flags |= ASC_HOST_IN_RESET;
 
 		/*
-	 	 * If the request is on the target waiting or active queue,
-		 * note that it was found and remove it from its queue.
+	 	 * If the request is on the target waiting or active queue
+		 * or the board done queue, then remove it and note that it
+		 * was found.
 		 */
 		if (asc_rmqueue(&boardp->active, scp) == ASC_TRUE) {
 			ASC_DBG(1, "advansys_reset: active scp_found = TRUE\n");
@@ -3856,6 +3995,10 @@ advansys_reset(Scsi_Cmnd *scp, unsigned int reset_flags)
 		} else if (asc_rmqueue(&boardp->waiting, scp) == ASC_TRUE) {
 			ASC_DBG(1, "advansys_reset: waiting scp_found = TRUE\n");
 			scp_found = ASC_TRUE;
+		} else if (asc_rmqueue(&boardp->done, scp) == ASC_TRUE) {
+			scp_found = ASC_TRUE;
+		} else {
+			scp_found = ASC_FALSE;
 		}
 
 		/*
@@ -3939,11 +4082,11 @@ advansys_reset(Scsi_Cmnd *scp, unsigned int reset_flags)
 		/*
 		 * Because the ASC_HOST_IN_RESET flag causes both
 		 * 'advansys_interrupt' and 'asc_isr_callback' to
-		 * queue requests to the board's 'scsi_done_q' and
+		 * queue requests to the board's 'done' queue and
 		 * prevents waiting commands from being executed,
 		 * these queued requests must be handled here.
 		 */
-		done_scp = asc_dequeue_list(&boardp->scsi_done_q, &last_scp,
+		done_scp = asc_dequeue_list(&boardp->done, &last_scp,
 									ASC_TID_ALL);
 
 		/*
@@ -4006,7 +4149,7 @@ advansys_reset(Scsi_Cmnd *scp, unsigned int reset_flags)
 		}
 
 		/* Save the time of the most recently completed reset. */
-		boardp->reset_jiffies = jiffies;
+		boardp->last_reset = jiffies;
 
 		/* Clear reset flag. */
 		boardp->flags &= ~ASC_HOST_IN_RESET;
@@ -4018,34 +4161,35 @@ advansys_reset(Scsi_Cmnd *scp, unsigned int reset_flags)
 			ASC_DBG(1, "advansys_interrupt: before asc_execute_queue()\n");
 			asc_execute_queue(&boardp->waiting);
 		}
-
-		/* Interrupts could be enabled here. */
-
-#if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(1,3,89)
-		/*
-		 * If the command was found on the active or waiting request
-		 * queues or if the the SCSI_RESET_SYNCHRONOUS flag is set,
-		 * then done the command now.
-		 */
-		if (scp_found == ASC_TRUE || (reset_flags & SCSI_RESET_SYNCHRONOUS)) {
-			scp->result = HOST_BYTE(DID_RESET);
-			ASC_STATS(scp->host, done);
-			scp->scsi_done(scp);
-		}
-#else /* version >= v1.3.89 */
-		if (scp_found == ASC_TRUE) {
-			scp->result = HOST_BYTE(DID_RESET);
-			ASC_STATS(scp->host, done);
-			scp->scsi_done(scp);
-		}
-#endif /* version >= v1.3.89 */
 		ret = SCSI_RESET_SUCCESS;
+	}
 
-		/*
-		 * It is possible for the request done function to re-enable
-		 * interrupts without confusing the driver. But here interrupts
-		 * aren't enabled until requests have been completed.
-		 */
+	/* Interrupts could be enabled here. */
+
+	ASC_ASSERT(do_scsi_done != ASC_ERROR);
+	ASC_ASSERT(scp_found != ASC_ERROR);
+	if (do_scsi_done == ASC_TRUE) {
+		if (scp->scsi_done == NULL) {
+			ASC_PRINT1(
+"advansys_reset: reset request scsi_done() is NULL, %x\n",
+				(unsigned) scp);
+		} else {
+			if (scp_found == ASC_FALSE) {
+				ASC_PRINT1(
+"advansys_reset: reset request not active or waiting, completing anyway %x\n",
+					(unsigned) scp);
+			}
+			ASC_STATS(scp->host, done);
+			scp->scsi_done(scp);
+		}
+	}
+
+	/*
+	 * It is possible for the request done function to re-enable
+	 * interrupts without confusing the driver. But here interrupts
+	 * aren't enabled until requests have been completed.
+	 */
+	if (done_scp != NULL) {
 		asc_scsi_done_list(done_scp);
 	}
 
@@ -4239,11 +4383,11 @@ advansys_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			 * Add to the list of requests that must be completed.
 			 */
 			if (done_scp == NULL) {
-				done_scp = asc_dequeue_list(&boardp->scsi_done_q, &last_scp,
+				done_scp = asc_dequeue_list(&boardp->done, &last_scp,
 					ASC_TID_ALL);
 			} else {
 				ASC_ASSERT(last_scp != NULL);
-				REQPNEXT(last_scp) = asc_dequeue_list(&boardp->scsi_done_q,
+				REQPNEXT(last_scp) = asc_dequeue_list(&boardp->done,
 					&new_last_scp, ASC_TID_ALL);
 				if (new_last_scp != NULL) {
 					ASC_ASSERT(REQPNEXT(last_scp) != NULL);
@@ -4318,6 +4462,7 @@ asc_scsi_done_list(Scsi_Cmnd *scp)
 		tscp = REQPNEXT(scp);
 		REQPNEXT(scp) = NULL;
 		ASC_STATS(scp->host, done);
+		ASC_ASSERT(scp->scsi_done != NULL);
 		scp->scsi_done(scp);
 		scp = tscp;
 	}
@@ -4360,7 +4505,7 @@ asc_scsi_done_list(Scsi_Cmnd *scp)
  * 	host_scribble - used for pointer to another Scsi_Cmnd
  *
  * If this function returns ASC_NOERROR or ASC_ERROR the request
- * has been enqueued on the board's 'scsi_done_q' and must be
+ * has been enqueued on the board's 'done' queue and must be
  * completed by the caller.
  *
  * If ASC_BUSY is returned the request must be enqueued by the
@@ -4387,7 +4532,7 @@ asc_execute_scsi_cmnd(Scsi_Cmnd *scp)
 	if ((boardp->init_tidmask & ASC_TIX_TO_TARGET_ID(scp->target)) == 0) {
 		if (asc_init_dev(asc_dvc_varp, scp) == ASC_FALSE) {
 			scp->result = HOST_BYTE(DID_BAD_TARGET);
-			asc_enqueue(&boardp->scsi_done_q, scp, ASC_BACK);
+			asc_enqueue(&boardp->done, scp, ASC_BACK);
 			return ASC_ERROR;
 		}
 		boardp->init_tidmask |= ASC_TIX_TO_TARGET_ID(scp->target);
@@ -4412,9 +4557,29 @@ asc_execute_scsi_cmnd(Scsi_Cmnd *scp)
 	asc_scsi_q.q1.target_id = ASC_TID_TO_TARGET_ID(scp->target);
 	asc_scsi_q.q1.target_lun = scp->lun;
 	asc_scsi_q.q2.target_ix = ASC_TIDLUN_TO_IX(scp->target, scp->lun);
+#if LINUX_VERSION_CODE < ASC_LINUX_VERSION(2,1,0)
 	asc_scsi_q.q1.sense_addr = (ulong) &scp->sense_buffer[0];
+#else /* version >= v2.1.0 */
+	asc_scsi_q.q1.sense_addr = virt_to_bus(&scp->sense_buffer[0]);
+#endif /* version >= v2.1.0 */
 	asc_scsi_q.q1.sense_len = sizeof(scp->sense_buffer);
-	asc_scsi_q.q2.tag_code = M2_QTAG_MSG_SIMPLE;
+
+	/*
+	 * If there are more than five outstanding commands for the
+	 * current target, then every tenth command send an ORDERED
+	 * request. This heuristic tries to retain the benefit of
+	 * request sorting while preventing request starvation.
+	 *
+	 * The request count is incremented below for every successfully
+	 * started request.
+	 * 
+	 */
+	if ((asc_dvc_varp->cur_dvc_qng[scp->target] > 5) &&
+	    (boardp->rcnt[scp->target] % 10) == 0) {
+		asc_scsi_q.q2.tag_code = M2_QTAG_MSG_ORDERED;
+	} else {
+		asc_scsi_q.q2.tag_code = M2_QTAG_MSG_SIMPLE;
+	}
 
 	/*
 	 * Build ASC_SCSI_Q for a contiguous buffer or a scatter-gather
@@ -4425,8 +4590,11 @@ asc_execute_scsi_cmnd(Scsi_Cmnd *scp)
 		 * CDB request of single contiguous buffer.
 		 */
 		ASC_STATS(scp->host, cont_cnt);
- 		/* request_buffer is already a real address. */
+#if LINUX_VERSION_CODE < ASC_LINUX_VERSION(2,1,0)
 		asc_scsi_q.q1.data_addr = (ulong) scp->request_buffer;
+#else /* version >= v2.1.0 */
+		asc_scsi_q.q1.data_addr = virt_to_bus(scp->request_buffer);
+#endif /* version >= v2.1.0 */
 		asc_scsi_q.q1.data_cnt = scp->request_bufflen;
 		ASC_STATS_ADD(scp->host, cont_xfer,
 					  ASC_CEILING(scp->request_bufflen, 512));
@@ -4444,7 +4612,7 @@ asc_execute_scsi_cmnd(Scsi_Cmnd *scp)
 "asc_execute_scsi_cmnd: board %d: use_sg %d > sg_tablesize %d\n",
 				boardp->id, scp->use_sg, scp->host->sg_tablesize);
 			scp->result = HOST_BYTE(DID_ERROR);
-			asc_enqueue(&boardp->scsi_done_q, scp, ASC_BACK);
+			asc_enqueue(&boardp->done, scp, ASC_BACK);
 			return ASC_ERROR;
 		}
 
@@ -4468,7 +4636,11 @@ asc_execute_scsi_cmnd(Scsi_Cmnd *scp)
 		 */
 		slp = (struct scatterlist *) scp->request_buffer;
 		for (sgcnt = 0; sgcnt < scp->use_sg; sgcnt++, slp++) {
+#if LINUX_VERSION_CODE < ASC_LINUX_VERSION(2,1,0)
 			asc_sg_head.sg_list[sgcnt].addr = (ulong) slp->address;
+#else /* version >= v2.1.0 */
+			asc_sg_head.sg_list[sgcnt].addr = virt_to_bus(slp->address);
+#endif /* version >= v2.1.0 */
 			asc_sg_head.sg_list[sgcnt].bytes = slp->length;
 			ASC_STATS_ADD(scp->host, sg_xfer, ASC_CEILING(slp->length, 512));
 		}
@@ -4484,6 +4656,11 @@ asc_execute_scsi_cmnd(Scsi_Cmnd *scp)
 	switch (ret = AscExeScsiQueue(asc_dvc_varp, &asc_scsi_q)) {
 	case ASC_NOERROR:
 		ASC_STATS(scp->host, asc_noerror);
+		/*
+		 * Increment monotonically increasing per device successful
+		 * request count. Wrapping of 'rcnt' doesn't matter.
+		 */
+		boardp->rcnt[scp->target]++;
 		asc_enqueue(&boardp->active, scp, ASC_BACK);
 		ASC_DBG(1, "asc_execute_scsi_cmnd: AscExeScsiQueue(), ASC_NOERROR\n");
 		break;
@@ -4497,7 +4674,7 @@ asc_execute_scsi_cmnd(Scsi_Cmnd *scp)
 			boardp->id, asc_dvc_varp->err_code);
 		ASC_STATS(scp->host, asc_error);
 		scp->result = HOST_BYTE(DID_ERROR);
-		asc_enqueue(&boardp->scsi_done_q, scp, ASC_BACK);
+		asc_enqueue(&boardp->done, scp, ASC_BACK);
 		break;
 	default:
 		ASC_PRINT2(
@@ -4505,7 +4682,7 @@ asc_execute_scsi_cmnd(Scsi_Cmnd *scp)
 			boardp->id, asc_dvc_varp->err_code);
 		ASC_STATS(scp->host, asc_unknown);
 		scp->result = HOST_BYTE(DID_ERROR);
-		asc_enqueue(&boardp->scsi_done_q, scp, ASC_BACK);
+		asc_enqueue(&boardp->done, scp, ASC_BACK);
 		break;
 	}
 
@@ -4645,7 +4822,7 @@ asc_isr_callback(ASC_DVC_VAR *asc_dvc_varp, ASC_QDONE_INFO *qdonep)
 	 * The done function for the command will be called from
 	 * advansys_interrupt().
 	 */
-	asc_enqueue(&boardp->scsi_done_q, scp, ASC_BACK);
+	asc_enqueue(&boardp->done, scp, ASC_BACK);
 
 	return;
 }
@@ -5188,12 +5365,14 @@ asc_enqueue(asc_queue_t *ascq, REQP reqp, int flag)
 	ascq->q_tidmask |= ASC_TIX_TO_TARGET_ID(tid);
 #ifdef ADVANSYS_STATS
 	/* Maintain request queue statistics. */
+	ascq->q_tot_cnt[tid]++;
 	ascq->q_cur_cnt[tid]++;
 	if (ascq->q_cur_cnt[tid] > ascq->q_max_cnt[tid]) {
 		ascq->q_max_cnt[tid] = ascq->q_cur_cnt[tid];
 		ASC_DBG2(1, "asc_enqueue: new q_max_cnt[%d] %d\n",
 			tid, ascq->q_max_cnt[tid]);
 	}
+	REQPTIME(reqp) = REQTIMESTAMP();
 #endif /* ADVANSYS_STATS */
 	ASC_DBG1(1, "asc_enqueue: reqp %x\n", (unsigned) reqp);
 	return;
@@ -5227,6 +5406,7 @@ asc_dequeue(asc_queue_t *ascq, int tid)
 		/* Maintain request queue statistics. */
 		ascq->q_cur_cnt[tid]--;
 		ASC_ASSERT(ascq->q_cur_cnt[tid] >= 0);
+		REQTIMESTAT("asc_dequeue", ascq, reqp, tid);
 #endif /* ADVANSYS_STATS */
 	}
 	ASC_DBG1(1, "asc_dequeue: reqp %x\n", (unsigned) reqp);
@@ -5249,6 +5429,9 @@ asc_dequeue(asc_queue_t *ascq, int tid)
  * (or the function return value) is not NULL, i.e. use a temporary
  * variable for 'lastpp' and check its value after the function return
  * before assigning it to the list last pointer.
+ *
+ * Unfortunately collecting queuing time statistics adds overhead to
+ * the function that isn't inherent to the function's algorithm.
  */
 REQP
 asc_dequeue_list(asc_queue_t *ascq, REQP *lastpp, int tid)
@@ -5268,7 +5451,7 @@ asc_dequeue_list(asc_queue_t *ascq, REQP *lastpp, int tid)
 	if (tid != ASC_TID_ALL) {
 		/* Return all requests for the specified 'tid'. */
 		if ((ascq->q_tidmask & ASC_TIX_TO_TARGET_ID(tid)) == 0) {
-			/* List is empty set first and last return pointers to NULL. */
+			/* List is empty; Set first and last return pointers to NULL. */
 			firstp = lastp = NULL;
 		} else {
 			firstp = ascq->q_first[tid];
@@ -5276,7 +5459,13 @@ asc_dequeue_list(asc_queue_t *ascq, REQP *lastpp, int tid)
 			ascq->q_first[tid] = ascq->q_last[tid] = NULL;
 			ascq->q_tidmask &= ~ASC_TIX_TO_TARGET_ID(tid);
 #ifdef ADVANSYS_STATS
-			ascq->q_cur_cnt[tid] = 0;
+			{
+				REQP reqp;
+				ascq->q_cur_cnt[tid] = 0;
+				for (reqp = firstp; reqp; reqp = REQPNEXT(reqp)) {
+					REQTIMESTAT("asc_dequeue_list", ascq, reqp, tid);
+				}
+			}
 #endif /* ADVANSYS_STATS */
 		}
 	} else {
@@ -5299,6 +5488,14 @@ asc_dequeue_list(asc_queue_t *ascq, REQP *lastpp, int tid)
 #endif /* ADVANSYS_STATS */
 			}
 		}
+#ifdef ADVANSYS_STATS
+		{
+			REQP reqp;
+			for (reqp = firstp; reqp; reqp = REQPNEXT(reqp)) {
+				REQTIMESTAT("asc_dequeue_list", ascq, reqp, reqp->target);
+			}
+		}
+#endif /* ADVANSYS_STATS */
 	}
 	if (lastpp) {
 		*lastpp = lastp;
@@ -5324,7 +5521,7 @@ asc_rmqueue(asc_queue_t *ascq, REQP reqp)
 	int			tid;
 	int			ret = ASC_FALSE;
 
-	ASC_DBG2(1, "asc_rmqueue: ascq %x, reqp %d\n",
+	ASC_DBG2(1, "asc_rmqueue: ascq %x, reqp %x\n",
 		(unsigned) ascq, (unsigned) reqp);
 	ASC_ASSERT(interrupts_enabled() == ASC_FALSE);
 	ASC_ASSERT(reqp != NULL);
@@ -5373,6 +5570,7 @@ asc_rmqueue(asc_queue_t *ascq, REQP reqp)
 	/* Maintain request queue statistics. */
 	if (ret == ASC_TRUE) {
 		ascq->q_cur_cnt[tid]--;
+		REQTIMESTAT("asc_rmqueue", ascq, reqp, tid);
 	}
 	ASC_ASSERT(ascq->q_cur_cnt[tid] >= 0);
 #endif /* ADVANSYS_STATS */
@@ -5406,6 +5604,7 @@ asc_isqueued(asc_queue_t *ascq, REQP reqp)
 			break;
 		}
 	}
+	ASC_DBG1(1, "asc_isqueued: ret %x\n", ret);
 	return ret;
 }
 
@@ -5608,40 +5807,40 @@ asc_prt_driver_conf(struct Scsi_Host *shp, char *cp, int cplen)
 	ASC_PRT_NEXT();
 
 	len = asc_prt_line(cp, leftlen,
-#if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(1,3,89)
+#if LINUX_VERSION_CODE < ASC_LINUX_VERSION(1,3,89)
+" host_busy %u, last_reset %u, max_id %u, max_lun %u\n",
+		shp->host_busy, shp->last_reset, shp->max_id, shp->max_lun);
+#else /* version >= v1.3.89 */
 " host_busy %u, last_reset %u, max_id %u, max_lun %u, max_channel %u\n",
 		shp->host_busy, shp->last_reset, shp->max_id, shp->max_lun,
 		shp->max_channel);
-#else /* version >= v1.3.89 */
-" host_busy %u, last_reset %u, max_id %u, max_lun %u\n",
-		shp->host_busy, shp->last_reset, shp->max_id, shp->max_lun);
 #endif /* version >= v1.3.89 */
 	ASC_PRT_NEXT();
 	
 	len = asc_prt_line(cp, leftlen,
-#if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(1,3,57)
+#if LINUX_VERSION_CODE < ASC_LINUX_VERSION(1,3,57)
+" can_queue %d, this_id %d, sg_tablesize %u, cmd_per_lun %u\n",
+		shp->can_queue, shp->this_id, shp->sg_tablesize, shp->cmd_per_lun);
+#else /* version >= v1.3.57 */
 " unique_id %d, can_queue %d, this_id %d, sg_tablesize %u, cmd_per_lun %u\n",
 		shp->unique_id, shp->can_queue, shp->this_id, shp->sg_tablesize,
 		shp->cmd_per_lun);
-#else /* version >= v1.3.57 */
-" can_queue %d, this_id %d, sg_tablesize %u, cmd_per_lun %u\n",
-		shp->can_queue, shp->this_id, shp->sg_tablesize, shp->cmd_per_lun);
 #endif /* version >= v1.3.57 */
 	ASC_PRT_NEXT();
 
 	len = asc_prt_line(cp, leftlen,
-#if LINUX_VERSION_CODE >= ASC_LINUX_VERSION(1,3,57)
-" unchecked_isa_dma %d, use_clustering %d, loaded_as_module %d\n",
-		shp->unchecked_isa_dma, shp->use_clustering, shp->loaded_as_module);
-#else /* version >= v1.3.57 */
+#if LINUX_VERSION_CODE < ASC_LINUX_VERSION(1,3,57)
 " unchecked_isa_dma %d, loaded_as_module %d\n",
 		shp->unchecked_isa_dma, shp->loaded_as_module);
+#else /* version >= v1.3.57 */
+" unchecked_isa_dma %d, use_clustering %d, loaded_as_module %d\n",
+		shp->unchecked_isa_dma, shp->use_clustering, shp->loaded_as_module);
 #endif /* version >= v1.3.57 */
 	ASC_PRT_NEXT();
 
 	len = asc_prt_line(cp, leftlen,
-" flags %x, reset_jiffies %x, jiffies %x\n",
-		ASC_BOARDP(shp)->flags, ASC_BOARDP(shp)->reset_jiffies, jiffies);
+" flags %x, last_reset %x, jiffies %x\n",
+		ASC_BOARDP(shp)->flags, ASC_BOARDP(shp)->last_reset, jiffies);
 	ASC_PRT_NEXT();
 
  	return totlen;
@@ -5897,18 +6096,19 @@ DvcLeaveCritical(int flags)
 }
 
 /*
- * Convert a virtual address to a virtual address.
- *
- * Apparently Linux is loaded V=R (virtual equals real). Just return
- * the virtual address.
+ * Convert a virtual address to a bus address.
  */
 ulong
 DvcGetPhyAddr(uchar *buf_addr, ulong buf_len)
 {
-	ulong phys_addr;
+	ulong bus_addr;
 
-	phys_addr = (ulong) buf_addr;
-	return phys_addr;
+#if LINUX_VERSION_CODE < ASC_LINUX_VERSION(2,1,0)
+	bus_addr = (ulong) buf_addr;
+#else /* version >= v2.1.0 */
+	bus_addr = virt_to_bus(buf_addr);
+#endif /* version >= v2.1.0 */
+	return bus_addr;
 }
 
 ulong
@@ -5919,7 +6119,11 @@ DvcGetSGList(ASC_DVC_VAR *asc_dvc_sg, uchar *buf_addr, ulong buf_len,
 
 	buf_size = buf_len;
 	asc_sg_head_ptr->entry_cnt = 1;
+#if LINUX_VERSION_CODE < ASC_LINUX_VERSION(2,1,0)
 	asc_sg_head_ptr->sg_list[0].addr = (ulong) buf_addr;
+#else /* version >= v2.1.0 */
+	asc_sg_head_ptr->sg_list[0].addr = virt_to_bus(buf_addr);
+#endif /* version >= v2.1.0 */
 	asc_sg_head_ptr->sg_list[0].bytes = buf_size;
 	return buf_size;
 }
@@ -6170,25 +6374,6 @@ asc_prt_board_stats(struct Scsi_Host *shp, char *cp, int cplen)
 	ASC_PRT_NEXT();
 
 	/*
-	 * Display request queuing statistics.
-	 */
-	len = asc_prt_line(cp, leftlen,
-" Active and Pending Request Queues:\n");
-	ASC_PRT_NEXT();
-
-	active = &ASC_BOARDP(shp)->active;
-	waiting = &ASC_BOARDP(shp)->waiting;
-	for (i = 0; i < ASC_MAX_TID + 1; i++) {
-		if (active->q_max_cnt[i] > 0 || waiting->q_max_cnt[i] > 0) {
-			len = asc_prt_line(cp, leftlen,
-"  target %d: active [cur %d, max %d], waiting [cur %d, max %d]\n",
-				i, active->q_cur_cnt[i], active->q_max_cnt[i],
-				waiting->q_cur_cnt[i], waiting->q_max_cnt[i]);
-			ASC_PRT_NEXT();
-		}
-	}
-
-	/*
 	 * Display data transfer statistics.
 	 */
 	if (s->cont_cnt > 0) {
@@ -6235,6 +6420,44 @@ asc_prt_board_stats(struct Scsi_Host *shp, char *cp, int cplen)
 		ASC_PRT_NEXT();
 	}
 
+	/*
+	 * Display request queuing statistics.
+	 */
+	len = asc_prt_line(cp, leftlen,
+" Active and Waiting Request Queues (time unit: %d HZ):\n", HZ);
+	ASC_PRT_NEXT();
+
+	active = &ASC_BOARDP(shp)->active;
+	waiting = &ASC_BOARDP(shp)->waiting;
+	for (i = 0; i < ASC_MAX_TID + 1; i++) {
+		if (active->q_tot_cnt[i] > 0 || waiting->q_tot_cnt[i] > 0) {
+			len = asc_prt_line(cp, leftlen, " target %d\n", i);
+			ASC_PRT_NEXT();
+
+			len = asc_prt_line(cp, leftlen,
+"   active: cnt [cur %d, max %d, tot %u], time [min %d, max %d, avg %lu.%01lu]\n",
+				active->q_cur_cnt[i], active->q_max_cnt[i],
+				active->q_tot_cnt[i],
+				active->q_min_tim[i], active->q_max_tim[i],
+				(active->q_tot_cnt[i] == 0) ? 0 :
+				(active->q_tot_tim[i]/active->q_tot_cnt[i]),
+				(active->q_tot_cnt[i] == 0) ? 0 :
+				ASC_TENTHS(active->q_tot_tim[i], active->q_tot_cnt[i]));
+			ASC_PRT_NEXT();
+
+			len = asc_prt_line(cp, leftlen,
+"   waiting: cnt [cur %d, max %d, tot %u], time [min %u, max %u, avg %lu.%01lu]\n",
+				waiting->q_cur_cnt[i], waiting->q_max_cnt[i],
+				waiting->q_tot_cnt[i],
+				waiting->q_min_tim[i], waiting->q_max_tim[i],
+				(waiting->q_tot_cnt[i] == 0) ? 0 :
+				(waiting->q_tot_tim[i]/waiting->q_tot_cnt[i]),
+				(waiting->q_tot_cnt[i] == 0) ? 0 :
+				ASC_TENTHS(waiting->q_tot_tim[i], waiting->q_tot_cnt[i]));
+			ASC_PRT_NEXT();
+		}
+	}
+
  	return totlen;
 }
 #endif /* ADVANSYS_STATS */
@@ -6272,6 +6495,60 @@ asc_prt_scsi_host(struct Scsi_Host *s)
 
 	asc_prt_dvc_var(&ASC_BOARDP(s)->asc_dvc_var);
 	asc_prt_dvc_cfg(&ASC_BOARDP(s)->asc_dvc_cfg);
+}
+
+/*
+ * asc_prt_scsi_cmnd()
+ */
+STATIC void 
+asc_prt_scsi_cmnd(Scsi_Cmnd *s)
+{
+	printk("Scsi_Cmnd at addr %x\n", (unsigned) s);
+
+#if LINUX_VERSION_CODE < ASC_LINUX_VERSION(1,3,0)
+	printk(
+" host %x, device %x, target %u, lun %u\n",
+		(unsigned) s->host, (unsigned) s->device, s->target, s->lun);
+#else /* version >= v1.3.0 */
+	printk(
+" host %x, device %x, target %u, lun %u, channel %u,\n",
+		(unsigned) s->host, (unsigned) s->device, s->target, s->lun,
+		s->channel);
+#endif /* version >= v1.3.0 */
+
+	asc_prt_hex(" CDB", s->cmnd, s->cmd_len);
+
+	printk(
+" use_sg %u, sglist_len %u, abort_reason %x\n",
+		s->use_sg, s->sglist_len, s->abort_reason);
+
+#if LINUX_VERSION_CODE < ASC_LINUX_VERSION(1,3,89)
+	printk(
+" retries %d, allowed %d\n",
+		 s->retries, s->allowed);
+#else /* version >= v1.3.89 */
+	printk(
+" serial_number %x, serial_number_at_timeout %x, retries %d, allowed %d\n",
+		(unsigned) s->serial_number, (unsigned) s->serial_number_at_timeout,
+		 s->retries, s->allowed);
+#endif /* version >= v1.3.89 */
+
+	printk(
+" timeout_per_command %d, timeout_total %d, timeout %d\n",
+		s->timeout_per_command, s->timeout_total, s->timeout);
+
+	printk(
+" internal_timeout %u, flags %u, this_count %d\n",
+		s->internal_timeout, s->flags, s->this_count);
+
+	printk(
+" scsi_done %x, done %x, host_scribble %x, result %x\n",
+		(unsigned) s->scsi_done, (unsigned) s->done,
+		(unsigned) s->host_scribble, s->result);
+
+	printk(
+" tag %u, pid %u\n",
+		(unsigned) s->tag, (unsigned) s->pid);
 }
 
 /*

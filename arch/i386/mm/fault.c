@@ -110,6 +110,7 @@ good_area:
  */
 bad_area:
 	up(&mm->mmap_sem);
+	handle_exception(&tsk->tss.ex);
 	if (error_code & 4) {
 		tsk->tss.cr2 = address;
 		tsk->tss.error_code = error_code;

@@ -42,6 +42,59 @@ extern int EISA_bus;
 #define TASK_SIZE	(0xC0000000UL)
 
 /*
+ * VM exception register save area..
+ *
+ * When no exceptions are active, count = -1.
+ */
+struct exception_struct {
+	unsigned long count;
+	unsigned long ebx;
+	unsigned long esi;
+	unsigned long edi;
+	unsigned long ebp;
+	unsigned long esp;
+	unsigned long eip;
+};
+
+extern inline int __exception(struct exception_struct *ex)
+{
+	int result;
+	__asm__("incl 0(%2)\n\t"
+		"jne 1f\n\t"
+		"movl %%ebx,4(%2)\n\t"
+		"movl %%esi,8(%2)\n\t"
+		"movl %%edi,12(%2)\n\t"
+		"movl %%ebp,16(%2)\n\t"
+		"movl %%esp,20(%2)\n\t"
+		"movl $1f,24(%2)\n"
+		"1:"
+		:"=a" (result)
+		:"0" (0), "d" (ex)
+		:"cx","memory");
+	return result;
+}
+
+extern inline void handle_exception(struct exception_struct *ex)
+{
+	if (!ex->count) {
+		ex->count--;
+		__asm__("movl  4(%0),%%ebx\n\t"
+			"movl  8(%0),%%esi\n\t"
+			"movl 12(%0),%%edi\n\t"
+			"movl 16(%0),%%ebp\n\t"
+			"movl 20(%0),%%esp\n\t"
+			"movl 24(%0),%%eax\n\t"
+			"jmp *%%eax"
+			: /* no outputs */
+			:"d" (ex)
+			:"memory");
+	}
+}
+
+#define exception()	__exception(&current->tss.ex)
+#define end_exception()	(current->tss.ex.count--)
+
+/*
  * Size of io_bitmap in longwords: 32 is ports 0-0x3ff.
  */
 #define IO_BITMAP_SIZE	32
@@ -111,6 +164,7 @@ struct thread_struct {
 	struct vm86_struct * vm86_info;
 	unsigned long screen_bitmap;
 	unsigned long v86flags, v86mask, v86mode;
+	struct exception_struct ex;
 };
 
 #define INIT_MMAP { &init_mm, 0xC0000000, 0xFFFFF000, PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC }
@@ -128,16 +182,21 @@ struct thread_struct {
 	{~0, }, /* ioperm */ \
 	_TSS(0), 0, 0, 0, KERNEL_DS, \
 	{ { 0, }, },  /* 387 state */ \
-	NULL, 0, 0, 0, 0 /* vm86_info */ \
+	NULL, 0, 0, 0, 0 /* vm86_info */, \
+	{ -1, } \
 }
 
 #define alloc_kernel_stack()    __get_free_page(GFP_KERNEL)
 #define free_kernel_stack(page) free_page((page))
 
 #define start_thread(regs, new_eip, new_esp) do {\
-	set_fs(USER_DS); \
-	regs->cs = USER_CS; \
-	regs->ds = regs->es = regs->ss = regs->fs = regs->gs = USER_DS; \
+	unsigned long seg = USER_DS; \
+	__asm__("mov %w0,%%fs ; mov %w0,%%gs":"=r" (seg) :"0" (seg)); \
+	set_fs(seg); \
+	regs->xds = seg; \
+	regs->xes = seg; \
+	regs->xss = seg; \
+	regs->xcs = USER_CS; \
 	regs->eip = new_eip; \
 	regs->esp = new_esp; \
 } while (0)

@@ -65,7 +65,7 @@ sb_dsp_command (sb_devc * devc, unsigned char val)
   /*
    * Note! the i<500000 is an emergency exit. The sb_dsp_command() is sometimes
    * called while interrupts are disabled. This means that the timer is
-   * disabled also. However the timeout situation is a abnormal condition.
+   * disabled also. However the timeout situation is an abnormal condition.
    * Normally the DSP should be ready to accept commands after just couple of
    * loops.
    */

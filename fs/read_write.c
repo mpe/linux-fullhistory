@@ -112,6 +112,7 @@ asmlinkage long sys_read(unsigned int fd, char * buf, unsigned long count)
 	int error;
 	struct file * file;
 	struct inode * inode;
+	long (*read)(struct inode *, struct file *, char *, unsigned long);
 
 	error = -EBADF;
 	file = fget(fd);
@@ -123,19 +124,16 @@ asmlinkage long sys_read(unsigned int fd, char * buf, unsigned long count)
 	error = -EBADF;
 	if (!(file->f_mode & 1))
 		goto out;
-	error = -EINVAL;
-	if (!file->f_op || !file->f_op->read)
-		goto out;
-	error = 0;
-	if (count <= 0)
-		goto out;
 	error = locks_verify_area(FLOCK_VERIFY_READ,inode,file,file->f_pos,count);
 	if (error)
 		goto out;
 	error = verify_area(VERIFY_WRITE,buf,count);
 	if (error)
 		goto out;
-	error = file->f_op->read(inode,file,buf,count);
+	error = -EINVAL;
+	if (!file->f_op || !(read = file->f_op->read))
+		goto out;
+	error = read(inode,file,buf,count);
 out:
 	fput(file, inode);
 bad_file:
@@ -147,6 +145,7 @@ asmlinkage long sys_write(unsigned int fd, const char * buf, unsigned long count
 	int error;
 	struct file * file;
 	struct inode * inode;
+	long (*write)(struct inode *, struct file *, const char *, unsigned long);
 
 	error = -EBADF;
 	file = fget(fd);
@@ -157,39 +156,17 @@ asmlinkage long sys_write(unsigned int fd, const char * buf, unsigned long count
 		goto out;
 	if (!(file->f_mode & 2))
 		goto out;
-	error = -EINVAL;
-	if (!file->f_op || !file->f_op->write)
-		goto out;
-	error = 0;
-	if (!count)
-		goto out;
 	error = locks_verify_area(FLOCK_VERIFY_WRITE,inode,file,file->f_pos,count);
 	if (error)
 		goto out;
 	error = verify_area(VERIFY_READ,buf,count);
 	if (error)
 		goto out;
-	/*
-	 * If data has been written to the file, remove the setuid and
-	 * the setgid bits. We do it anyway otherwise there is an
-	 * extremely exploitable race - does your OS get it right |->
-	 *
-	 * Set ATTR_FORCE so it will always be changed.
-	 */
-	if (!suser() && (inode->i_mode & (S_ISUID | S_ISGID))) {
-		struct iattr newattrs;
-		/*
-		 * Don't turn off setgid if no group execute. This special
-		 * case marks candidates for mandatory locking.
-		 */
-		newattrs.ia_mode = inode->i_mode &
-			~(S_ISUID | ((inode->i_mode & S_IXGRP) ? S_ISGID : 0));
-		newattrs.ia_valid = ATTR_CTIME | ATTR_MODE | ATTR_FORCE;
-		notify_change(inode, &newattrs);
-	}
-
+	error = -EINVAL;
+	if (!file->f_op || !(write = file->f_op->write))
+		goto out;
 	down(&inode->i_sem);
-	error = file->f_op->write(inode,file,buf,count);
+	error = write(inode,file,buf,count);
 	up(&inode->i_sem);
 out:
 	fput(file, inode);

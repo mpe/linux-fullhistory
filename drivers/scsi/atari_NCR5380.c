@@ -194,7 +194,7 @@
 /*
  * Using this file :
  * This file a skeleton Linux SCSI driver for the NCR 5380 series
- * of chips.  To use it, you write a architecture specific functions 
+ * of chips.  To use it, you write an architecture specific functions 
  * and macros and include this file in your driver.
  *
  * These macros control options : 

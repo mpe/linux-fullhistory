@@ -131,7 +131,7 @@ static void set_multicast_list(struct device *dev);
    (detachable devices only).
    */
 #ifdef HAVE_DEVLIST
-/* Support for a alternate probe manager, which will eliminate the
+/* Support for an alternate probe manager, which will eliminate the
    boilerplate below. */
 struct netdev_entry at1700_drv =
 {"at1700", at1700_probe1, AT1700_IO_EXTENT, at1700_probe_list};

@@ -155,7 +155,7 @@ enum scsi_directory_inos {
 
 /*
  * This is not completely implemented yet. The idea is to
- * create a in-memory tree (like the actual /proc filesystem
+ * create an in-memory tree (like the actual /proc filesystem
  * tree) of these proc_dir_entries, so that we can dynamically
  * add new files to /proc.
  *

@@ -184,7 +184,7 @@ static inline struct sock * get_tcp_sock(u32 saddr, u16 sport, u32 daddr, u16 dp
 }
 
 /*
- * React to a out-of-window TCP sequence number in an incoming packet
+ * React to an out-of-window TCP sequence number in an incoming packet
  */
  
 static void bad_tcp_sequence(struct sock *sk, struct tcphdr *th, u32 end_seq,

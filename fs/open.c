@@ -550,7 +550,7 @@ cleanup_file:
 }
 
 /*
- * Find a empty file descriptor entry, and mark it busy
+ * Find an empty file descriptor entry, and mark it busy
  */
 int get_unused_fd(void)
 {

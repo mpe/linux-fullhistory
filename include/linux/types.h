@@ -16,6 +16,7 @@ typedef __kernel_pid_t		pid_t;
 typedef __kernel_uid_t		uid_t;
 typedef __kernel_gid_t		gid_t;
 typedef __kernel_daddr_t	daddr_t;
+typedef __kernel_key_t		key_t;
 
 #if defined(__GNUC__) && !defined(__STRICT_ANSI__)
 typedef __kernel_loff_t		loff_t;

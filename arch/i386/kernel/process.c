@@ -225,17 +225,16 @@ void hard_reset_now(void)
 void show_regs(struct pt_regs * regs)
 {
 	printk("\n");
-	printk("EIP: %04x:[<%08lx>]",0xffff & regs->cs,regs->eip);
-	if (regs->cs & 3)
-		printk(" ESP: %04x:%08lx",0xffff & regs->ss,regs->esp);
+	printk("EIP: %04x:[<%08lx>]",0xffff & regs->xcs,regs->eip);
+	if (regs->xcs & 3)
+		printk(" ESP: %04x:%08lx",0xffff & regs->xss,regs->esp);
 	printk(" EFLAGS: %08lx\n",regs->eflags);
 	printk("EAX: %08lx EBX: %08lx ECX: %08lx EDX: %08lx\n",
 		regs->eax,regs->ebx,regs->ecx,regs->edx);
 	printk("ESI: %08lx EDI: %08lx EBP: %08lx",
 		regs->esi, regs->edi, regs->ebp);
-	printk(" DS: %04x ES: %04x FS: %04x GS: %04x\n",
-		0xffff & regs->ds,0xffff & regs->es,
-		0xffff & regs->fs,0xffff & regs->gs);
+	printk(" DS: %04x ES: %04x\n",
+		0xffff & regs->xds,0xffff & regs->xes);
 }
 
 /*
@@ -387,7 +386,23 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	if (dump->start_stack < TASK_SIZE)
 		dump->u_ssize = ((unsigned long) (TASK_SIZE - dump->start_stack)) >> PAGE_SHIFT;
 
-	dump->regs = *regs;
+	dump->regs.ebx = regs->ebx;
+	dump->regs.ecx = regs->ecx;
+	dump->regs.edx = regs->edx;
+	dump->regs.esi = regs->esi;
+	dump->regs.edi = regs->edi;
+	dump->regs.ebp = regs->ebp;
+	dump->regs.eax = regs->eax;
+	dump->regs.ds = regs->xds;
+	dump->regs.es = regs->xes;
+	__asm__("mov %%fs,%0":"=r" (dump->regs.fs));
+	__asm__("mov %%gs,%0":"=r" (dump->regs.gs));
+	dump->regs.orig_eax = regs->orig_eax;
+	dump->regs.eip = regs->eip;
+	dump->regs.cs = regs->xcs;
+	dump->regs.eflags = regs->eflags;
+	dump->regs.esp = regs->esp;
+	dump->regs.ss = regs->xss;
 
 	dump->u_fpvalid = dump_fpu (regs, &dump->i387);
 }

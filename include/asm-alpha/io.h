@@ -150,7 +150,7 @@ extern void		_writel(unsigned int b, unsigned long addr);
 #endif
 
 /*
- * The "address" in IO memory space is not clearly either a integer or a
+ * The "address" in IO memory space is not clearly either an integer or a
  * pointer. We will accept both, thus the casts.
  *
  * On the alpha, we have the whole physical address space mapped at all

@@ -409,10 +409,10 @@ set_get_font(char * arg, int set, int ch512)
 		arg += cmapsz;
 		if (set)
 		  for (i=0; i<cmapsz ; i++)
-		    *(charmap+i) = get_user(arg+i);
+		    scr_writeb(get_user(arg+i), charmap+i);
 		else
 		  for (i=0; i<cmapsz ; i++)
-		    put_user(*(charmap+i), arg+i);
+		    put_user(scr_readb(charmap+i), arg+i);
 	      }
 	  }
 	

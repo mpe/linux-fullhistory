@@ -115,7 +115,7 @@ static void hpp_io_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
 /*	Probe a list of addresses for an HP LAN+ adaptor.
 	This routine is almost boilerplate. */
 #ifdef HAVE_DEVLIST
-/* Support for a alternate probe manager, which will eliminate the
+/* Support for an alternate probe manager, which will eliminate the
    boilerplate below. */
 struct netdev_entry hpplus_drv =
 {"hpplus", hpp_probe1, HP_IO_EXTENT, hpplus_portlist};

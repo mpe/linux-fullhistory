@@ -31,20 +31,18 @@ struct pt_regs {
 	long edi;
 	long ebp;
 	long eax;
-	unsigned short ds, __dsu;
-	unsigned short es, __esu;
-	unsigned short fs, __fsu;
-	unsigned short gs, __gsu;
+	int  xds;
+	int  xes;
 	long orig_eax;
 	long eip;
-	unsigned short cs, __csu;
+	int  xcs;
 	long eflags;
 	long esp;
-	unsigned short ss, __ssu;
+	int  xss;
 };
 
 #ifdef __KERNEL__
-#define user_mode(regs) ((VM_MASK & (regs)->eflags) || (3 & (regs)->cs))
+#define user_mode(regs) ((VM_MASK & (regs)->eflags) || (3 & (regs)->xcs))
 #define instruction_pointer(regs) ((regs)->eip)
 extern void show_regs(struct pt_regs *);
 #endif

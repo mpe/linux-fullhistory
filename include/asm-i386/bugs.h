@@ -115,7 +115,7 @@ static void check_tlb(void)
 #ifndef CONFIG_M386
 	/*
 	 * The 386 chips don't support TLB finegrained invalidation.
-	 * They will fault when they hit a invlpg instruction.
+	 * They will fault when they hit an invlpg instruction.
 	 */
 	if (x86 == 3) {
 		printk("CPU is a 386 and this kernel was compiled for 486 or better.\n");

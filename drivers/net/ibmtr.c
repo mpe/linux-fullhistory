@@ -1488,7 +1488,7 @@ void tr_readlog(struct device *dev) {
 
 /* tok_get_stats():  Basically a scaffold routine which will return
    the address of the tr_statistics structure associated with
-   this device -- the tr.... structure is a ethnet look-alike
+   this device -- the tr.... structure is an ethnet look-alike
    so at least for this iteration may suffice.   */
 
 static struct enet_statistics * tok_get_stats(struct device *dev) {

@@ -14,11 +14,26 @@ extern void * high_memory;
 
 #include <asm/page.h>
 #include <asm/atomic.h>
+#include <asm/segment.h>
 
 #define VERIFY_READ 0
 #define VERIFY_WRITE 1
 
-extern int verify_area(int, const void *, unsigned long);
+extern int __verify_write(const void *, unsigned long);
+
+#define verify_write(type,addr,size) \
+(((type) && !wp_works_ok)?__verify_write((addr),(size)):0)
+
+extern inline int verify_area(int type, const void * addr, unsigned long size)
+{
+	int retval = 0;
+	if (get_fs() != KERNEL_DS) {
+		retval = -EFAULT;
+		if (size <= TASK_SIZE && TASK_SIZE-size >= (unsigned long) addr)
+			retval = verify_write(type,addr,size);
+	}
+	return retval;
+}
 
 /*
  * Linux kernel virtual memory manager primitives.
@@ -333,17 +348,18 @@ static inline struct vm_area_struct * find_vma(struct mm_struct * mm, unsigned l
 	struct vm_area_struct * result = NULL;
 
 	if (mm) {
-		struct vm_area_struct * tree = mm->mmap_avl;
+		struct vm_area_struct ** next = &mm->mmap_avl;
 		for (;;) {
+			struct vm_area_struct *tree = *next;
 			if (tree == avl_empty)
 				break;
-			if (tree->vm_end > addr) {
-				result = tree;
-				if (tree->vm_start <= addr)
-					break;
-				tree = tree->vm_avl_left;
-			} else
-				tree = tree->vm_avl_right;
+			next = &tree->vm_avl_right;
+			if (tree->vm_end <= addr)
+				continue;
+			next = &tree->vm_avl_left;
+			result = tree;
+			if (tree->vm_start <= addr)
+				break;
 		}
 	}
 	return result;

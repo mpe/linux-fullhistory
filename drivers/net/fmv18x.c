@@ -124,7 +124,7 @@ static void set_multicast_list(struct device *dev);
    (detachable devices only).
    */
 #ifdef HAVE_DEVLIST
-/* Support for a alternate probe manager, which will eliminate the
+/* Support for an alternate probe manager, which will eliminate the
    boilerplate below. */
 struct netdev_entry fmv18x_drv =
 {"fmv18x", fmv18x_probe1, FMV18X_IO_EXTENT, fmv18x_probe_list};

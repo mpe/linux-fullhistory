@@ -809,6 +809,11 @@ do_it_again:
 	}
 
 	add_wait_queue(&tty->read_wait, &wait);
+
+	if (exception())
+		goto user_fault;
+
+	disable_bh(TQUEUE_BH);
 	while (1) {
 		/* First test for status change. */
 		if (tty->packet && tty->link->ctrl_status) {
@@ -844,7 +849,9 @@ do_it_again:
 				retval = -ERESTARTSYS;
 				break;
 			}
+			enable_bh(TQUEUE_BH);
 			schedule();
+			disable_bh(TQUEUE_BH);
 			continue;
 		}
 		current->state = TASK_RUNNING;
@@ -859,9 +866,7 @@ do_it_again:
 			while (1) {
 				int eol;
 
-				disable_bh(TQUEUE_BH);
 				if (!tty->read_cnt) {
-					enable_bh(TQUEUE_BH);
 					break;
 				}
 				eol = clear_bit(tty->read_tail,
@@ -870,7 +875,6 @@ do_it_again:
 				tty->read_tail = ((tty->read_tail+1) &
 						  (N_TTY_BUF_SIZE-1));
 				tty->read_cnt--;
-				enable_bh(TQUEUE_BH);
 				if (!eol) {
 					put_user(c, b++);
 					if (--nr)
@@ -887,10 +891,8 @@ do_it_again:
 				break;
 			}
 		} else {
-			disable_bh(TQUEUE_BH);
 			copy_from_read_buf(tty, &b, &nr);
 			copy_from_read_buf(tty, &b, &nr);
-			enable_bh(TQUEUE_BH);
 		}
 
 		/* If there is enough space in the read buffer now, let the
@@ -905,6 +907,8 @@ do_it_again:
 		if (time)
 			current->timeout = time + jiffies;
 	}
+	enable_bh(TQUEUE_BH);
+	end_exception();
 	remove_wait_queue(&tty->read_wait, &wait);
 
 	if (!waitqueue_active(&tty->read_wait))
@@ -919,7 +923,13 @@ do_it_again:
                 goto do_it_again;
 	if (!size && !retval)
 	        clear_bit(TTY_PUSH, &tty->flags);
-        return (size ? size : retval);
+	return (size ? size : retval);
+
+user_fault:
+	enable_bh(TQUEUE_BH);
+	remove_wait_queue(&tty->read_wait, &wait);
+	current->timeout = 0;
+	return -EFAULT;
 }
 
 static int write_chan(struct tty_struct * tty, struct file * file,
@@ -949,12 +959,17 @@ static int write_chan(struct tty_struct * tty, struct file * file,
 			break;
 		}
 		if (O_OPOST(tty)) {
+			if (exception()) {
+				retval = -EFAULT;
+				break;
+			}
 			while (nr > 0) {
 				c = get_user(b);
 				if (opost(c, tty) < 0)
 					break;
 				b++; nr--;
 			}
+			end_exception();
 			if (tty->driver.flush_chars)
 				tty->driver.flush_chars(tty);
 		} else {

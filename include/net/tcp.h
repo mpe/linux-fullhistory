@@ -159,7 +159,7 @@ extern void tcp_send_delayed_ack(struct sock *sk, int max_timeout, unsigned long
 extern void tcp_send_reset(unsigned long saddr, unsigned long daddr, struct tcphdr *th,
 	  struct proto *prot, struct options *opt, struct device *dev, int tos, int ttl);
 
-extern void tcp_enqueue_partial(struct sk_buff *, struct sock *);
+extern void tcp_enqueue_partial(struct sock *, struct sk_buff *);
 extern struct sk_buff * tcp_dequeue_partial(struct sock *);
 extern void tcp_shrink_skb(struct sock *,struct sk_buff *,u32);
 

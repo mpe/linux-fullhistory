@@ -393,7 +393,7 @@ void atari_init_IRQ(void)
 	if (ATARIHW_PRESENT(PCM_8BIT) && ATARIHW_PRESENT(MICROWIRE)) {
 		/* Initialize the LM1992 Sound Controller to enable
 		   the PSG sound.  This is misplaced here, it should
-		   be in a atasound_init(), that doesn't exist yet. */
+		   be in an atasound_init(), that doesn't exist yet. */
 		atari_microwire_cmd(MW_LM1992_PSG_HIGH);
 	}
 	

@@ -16,6 +16,7 @@
 #include <linux/mman.h>
 
 #include <asm/segment.h>
+#include <asm/ipc.h>
 
 /*
  * sys_pipe() is the normal C calling standard for creating

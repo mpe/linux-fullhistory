@@ -678,16 +678,12 @@ end_wp_page:
 /*
  * Ugly, ugly, but the goto's result in better assembly..
  */
-int verify_area(int type, const void * addr, unsigned long size)
+int __verify_write(const void * addr, unsigned long size)
 {
 	struct vm_area_struct * vma;
 	unsigned long start = (unsigned long) addr;
 
-	/* If the current user space is mapped to kernel space (for the
-	 * case where we use a fake user buffer with get_fs/set_fs()) we
-	 * don't expect to find the address in the user vm map.
-	 */
-	if (!size || get_fs() == KERNEL_DS)
+	if (!size)
 		return 0;
 
 	vma = find_vma(current->mm, start);
@@ -697,37 +693,8 @@ int verify_area(int type, const void * addr, unsigned long size)
 		goto check_stack;
 
 good_area:
-	if (type == VERIFY_WRITE)
-		goto check_write;
-	for (;;) {
-		struct vm_area_struct * next;
-		if (!(vma->vm_flags & VM_READ))
-			goto bad_area;
-		if (vma->vm_end - start >= size)
-			return 0;
-		next = vma->vm_next;
-		if (!next || vma->vm_end != next->vm_start)
-			goto bad_area;
-		vma = next;
-	}
-
-check_write:
 	if (!(vma->vm_flags & VM_WRITE))
 		goto bad_area;
-	if (!wp_works_ok)
-		goto check_wp_fault_by_hand;
-	for (;;) {
-		if (vma->vm_end - start >= size)
-			break;
-		if (!vma->vm_next || vma->vm_end != vma->vm_next->vm_start)
-			goto bad_area;
-		vma = vma->vm_next;
-		if (!(vma->vm_flags & VM_WRITE))
-			goto bad_area;
-	}
-	return 0;
-
-check_wp_fault_by_hand:
 	size--;
 	size += start & ~PAGE_MASK;
 	size >>= PAGE_SHIFT;
@@ -914,7 +881,7 @@ void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 	 * for other architectures too.
 	 *
 	 * Note that if write_access is true, we either now have
-	 * a exclusive copy of the page, or this is a shared mapping,
+	 * an exclusive copy of the page, or this is a shared mapping,
 	 * so we can make it writable and dirty to avoid having to
 	 * handle that later.
 	 */

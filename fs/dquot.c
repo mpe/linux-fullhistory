@@ -675,7 +675,7 @@ static int get_stats(caddr_t addr)
 }
 
 /*
- * Initialize pointer in a inode to the right dquots.
+ * Initialize pointer in an inode to the right dquots.
  */
 void dquot_initialize(struct inode *inode, short type)
 {
@@ -734,7 +734,7 @@ void dquot_drop(struct inode *inode)
 
 /*
  * This is a simple algorithm that calculates the size of a file in blocks.
- * This is only used on filesystems that do not have a i_blocks count.
+ * This is only used on filesystems that do not have an i_blocks count.
  */
 static u_long isize_to_blocks(size_t isize, size_t blksize)
 {

@@ -168,8 +168,8 @@ do { if ((mm_struct) == current->mm) invalidate(); else printk("Can't invalidate
 #endif
 
 /*
- * Define this if things work differently on a i386 and a i486:
- * it will (on a i486) warn about kernel memory accesses that are
+ * Define this if things work differently on an i386 and an i486:
+ * it will (on an i486) warn about kernel memory accesses that are
  * done without a 'verify_area(VERIFY_WRITE,..)'
  */
 #undef CONFIG_TEST_VERIFY_AREA

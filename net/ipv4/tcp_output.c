@@ -264,7 +264,7 @@ void tcp_send_partial(struct sock *sk)
  *	Queue a partial frame
  */
  
-void tcp_enqueue_partial(struct sk_buff * skb, struct sock * sk)
+void tcp_enqueue_partial(struct sock * sk, struct sk_buff * skb)
 {
 	struct sk_buff * tmp;
 	unsigned long flags;
@@ -895,7 +895,7 @@ void tcp_send_delayed_ack(struct sock * sk, int max_timeout, unsigned long timeo
 		timeout = 0;
 	timeout += jiffies;
 
-	/* Use new timeout only if there wasn't a older one earlier  */
+	/* Use new timeout only if there wasn't an older one earlier  */
 	if (!del_timer(&sk->delack_timer) || timeout < sk->delack_timer.expires)
 		sk->delack_timer.expires = timeout;
 

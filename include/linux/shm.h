@@ -7,13 +7,13 @@
 
 struct shmid_ds {
 	struct ipc_perm shm_perm;	/* operation perms */
-	int	shm_segsz;		/* size of segment (bytes) */
-	time_t	shm_atime;		/* last attach time */
-	time_t	shm_dtime;		/* last detach time */
-	time_t	shm_ctime;		/* last change time */
-	unsigned short	shm_cpid;	/* pid of creator */
-	unsigned short	shm_lpid;	/* pid of last operator */
-	short	shm_nattch;		/* no. of current attaches */
+	int		shm_segsz;		/* size of segment (bytes) */
+	__kernel_time_t	shm_atime;		/* last attach time */
+	__kernel_time_t	shm_dtime;		/* last detach time */
+	__kernel_time_t	shm_ctime;		/* last change time */
+	__kernel_pid_t	shm_cpid;	/* pid of creator */
+	__kernel_pid_t	shm_lpid;	/* pid of last operator */
+	unsigned short	shm_nattch;		/* no. of current attaches */
 	/* the following are private */
 	unsigned short   shm_npages;	/* size of segment (pages) */
 	unsigned long   *shm_pages;	/* array of ptrs to frames -> SHMMAX */ 
@@ -34,11 +34,11 @@ struct shmid_ds {
 #define SHM_UNLOCK 	12
 
 struct	shminfo {
-    int shmmax;	
-    int shmmin;	
-    int shmmni;	
-    int shmseg;	
-    int shmall;	
+	int shmmax;
+	int shmmin;
+	int shmmni;
+	int shmseg;
+	int shmall;
 };
 
 #ifdef __KERNEL__
@@ -50,21 +50,21 @@ struct	shminfo {
 /* ipcs ctl commands */
 #define SHM_STAT 	13
 #define SHM_INFO 	14
+
 struct shm_info {
-	int   used_ids;
-	ulong shm_tot; /* total allocated shm */
-	ulong shm_rss; /* total resident shm */
-	ulong shm_swp; /* total swapped shm */
-	ulong swap_attempts;
-	ulong swap_successes;
+	int used_ids;
+	unsigned long shm_tot;	/* total allocated shm */
+	unsigned long shm_rss;	/* total resident shm */
+	unsigned long shm_swp;	/* total swapped shm */
+	unsigned long swap_attempts;
+	unsigned long swap_successes;
 };
 
 asmlinkage int sys_shmget (key_t key, int size, int flag);
-asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *addr);
+asmlinkage int sys_shmat (int shmid, char *shmaddr, int shmflg, unsigned long *addr);
 asmlinkage int sys_shmdt (char *shmaddr);
 asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf);
 
 #endif /* __KERNEL__ */
 
 #endif /* _LINUX_SHM_H_ */
-

@@ -20,8 +20,9 @@
 /* These are linux-specific */
 #define MAP_GROWSDOWN	0x1000		/* stack-like segment */
 #define MAP_DENYWRITE	0x2000		/* ETXTBSY */
-#define MAP_EXECUTABLE	0x4000		/* mark it as a executable */
+#define MAP_EXECUTABLE	0x4000		/* mark it as an executable */
 #define MAP_LOCKED	0x8000		/* lock the mapping */
+#define MAP_NORESERVE	0x10000		/* don't check for reservations */
 
 #define MS_ASYNC	1		/* sync memory asynchronously */
 #define MS_SYNC		2		/* synchronous memory sync */

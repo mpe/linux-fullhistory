@@ -101,7 +101,7 @@ inline void wait_for_buffer(struct device *dev);
    (detachable devices only).
    */
 #ifdef HAVE_DEVLIST
-/* Support for a alternate probe manager, which will eliminate the
+/* Support for an alternate probe manager, which will eliminate the
    boilerplate below. */
 struct netdev_entry seeq8005_drv =
 {"seeq8005", seeq8005_probe1, SEEQ8005_IO_EXTENT, seeq8005_portlist};

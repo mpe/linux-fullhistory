@@ -41,13 +41,29 @@ struct user_i387_struct {
 	long	st_space[20];	/* 8*10 bytes for each FP-reg = 80 bytes */
 };
 
+/*
+ * This is the old layout of "struct pt_regs", and
+ * is still the layout used by user more (the new
+ * pt_regs doesn't have all registers as the kernel
+ * doesn't use the extra segment registers)
+ */
+struct user_regs_struct {
+	long ebx, ecx, edx, esi, edi, ebp, eax;
+	unsigned short ds, __ds, es, __es;
+	unsigned short fs, __fs, gs, __gs;
+	long orig_eax, eip;
+	unsigned short cs, __cs;
+	long eflags, esp;
+	unsigned short ss, __ss;
+};
+
 /* When the kernel dumps core, it starts by dumping the user struct -
    this will be used by gdb to figure out where the data and stack segments
    are within the file, and what virtual addresses to use. */
 struct user{
 /* We start with the registers, to mimic the way that "memory" is returned
    from the ptrace(3,...) function.  */
-  struct pt_regs regs;		/* Where the registers are actually stored */
+  struct user_regs_struct regs;		/* Where the registers are actually stored */
 /* ptrace does not yet supply these.  Someday.... */
   int u_fpvalid;		/* True if math co-processor being used. */
                                 /* for this mess. Not yet used. */

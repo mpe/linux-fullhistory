@@ -1391,7 +1391,12 @@ static int con_write(struct tty_struct * tty, int from_user,
 	disable_bh(CONSOLE_BH);
 	while (!tty->stopped &&	count) {
 		enable_bh(CONSOLE_BH);
+		if (exception()) {
+			n = -EFAULT;
+			break;
+		}
 		c = from_user ? get_user(buf) : *buf;
+		end_exception();
 		buf++; n++; count--;
 		disable_bh(CONSOLE_BH);
 

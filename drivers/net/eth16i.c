@@ -398,7 +398,7 @@ static int eth16i_probe1(struct device *dev, short ioaddr)
     return -ENODEV;
   
   /* 
-     Now it seems that we have found a ethernet chip in this particular
+     Now it seems that we have found an ethernet chip in this particular
      ioaddr. The MB86985 chip has this feature, that when you read a 
      certain register it will increase its io base address to next
      configurable slot. Now when we have found the chip, first thing is

@@ -21,6 +21,19 @@
 extern struct hwrpb_struct *hwrpb;
 extern asmlinkage void wrmces(unsigned long mces);
 extern int alpha_sys_type;
+
+/*
+ * Machine check reasons.  Defined according to PALcode sources
+ * (osf.h and platform.h).
+ */
+#define MCHK_K_TPERR		0x0080
+#define MCHK_K_TCPERR		0x0082
+#define MCHK_K_HERR		0x0084
+#define MCHK_K_ECC_C		0x0086
+#define MCHK_K_ECC_NC		0x0088
+#define MCHK_K_OS_BUGCHECK	0x008A
+#define MCHK_K_PAL_BUGCHECK	0x0090
+
 /*
  * BIOS32-style PCI interface:
  */
@@ -38,7 +51,7 @@ extern int alpha_sys_type;
 
 static volatile unsigned int CIA_mcheck_expected = 0;
 static volatile unsigned int CIA_mcheck_taken = 0;
-static unsigned long CIA_jd, CIA_jd1, CIA_jd2;
+static unsigned long CIA_jd;
 
 
 /*
@@ -438,16 +451,19 @@ int cia_pci_clr_err(void)
 }
 
 void cia_machine_check(unsigned long vector, unsigned long la_ptr,
-			 struct pt_regs * regs)
+		       struct pt_regs * regs)
 {
-#if 0
-        printk("CIA machine check ignored\n") ;
-#else
 	struct el_common *mchk_header;
+	struct el_procdata *mchk_procdata;
 	struct el_CIA_sysdata_mcheck *mchk_sysdata;
+	unsigned long * ptr;
+	const char * reason;
+	char buf[128];
+	long i;
 
 	mchk_header = (struct el_common *)la_ptr;
-
+	mchk_procdata =
+		(struct el_procdata *)(la_ptr + mchk_header->proc_offset);
 	mchk_sysdata = 
 	  (struct el_CIA_sysdata_mcheck *)(la_ptr + mchk_header->sys_offset);
 
@@ -458,13 +474,14 @@ void cia_machine_check(unsigned long vector, unsigned long la_ptr,
 	     CIA_mcheck_expected, mchk_sysdata->epic_dcsr, mchk_sysdata->epic_pear));
 #ifdef DEBUG
 	{
-	    unsigned long *ptr;
-	    int i;
+		unsigned long *ptr;
+		int i;
 
-	    ptr = (unsigned long *)la_ptr;
-	    for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {
-		printk(" +%lx %lx %lx\n", i*sizeof(long), ptr[i], ptr[i+1]);
-	    }
+		ptr = (unsigned long *)la_ptr;
+		for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {
+			printk(" +%lx %lx %lx\n", i*sizeof(long),
+			       ptr[i], ptr[i+1]);
+		}
 	}
 #endif /* DEBUG */
 	/*
@@ -483,12 +500,56 @@ void cia_machine_check(unsigned long vector, unsigned long la_ptr,
 		cia_pci_clr_err();
 		wrmces(0x7);
 		mb();
+		return;
 	}
-#if 1
-	else
-	  printk("CIA machine check NOT expected\n") ;
-#endif
-#endif
+
+	switch ((unsigned int) mchk_header->code) {
+	      case MCHK_K_TPERR:	reason = "tag parity error"; break;
+	      case MCHK_K_TCPERR:	reason = "tag control parity error"; break;
+	      case MCHK_K_HERR:		reason = "generic hard error"; break;
+	      case MCHK_K_ECC_C:	reason = "correctable ECC error"; break;
+	      case MCHK_K_ECC_NC:	reason = "uncorrectable ECC error"; break;
+	      case MCHK_K_OS_BUGCHECK:	reason = "OS-specific PAL bugcheck"; break;
+	      case MCHK_K_PAL_BUGCHECK:	reason = "callsys in kernel mode"; break;
+	      case 0x96: reason = "i-cache read retryable error"; break;
+	      case 0x98: reason = "processor detected hard error"; break;
+
+		/* system specific (these are for Alcor, at least): */
+	      case 0x203: reason = "system detected uncorrectable ECC error"; break;
+	      case 0x205: reason = "parity error detected by CIA"; break;
+	      case 0x207: reason = "non-existent memory error"; break;
+	      case 0x209: reason = "PCI SERR detected"; break;
+	      case 0x20b: reason = "PCI data parity error detected"; break;
+	      case 0x20d: reason = "PCI address parity error detected"; break;
+	      case 0x20f: reason = "PCI master abort error"; break;
+	      case 0x211: reason = "PCI target abort error"; break;
+	      case 0x213: reason = "scatter/gather PTE invalid error"; break;
+	      case 0x215: reason = "flash ROM write error"; break;
+	      case 0x217: reason = "IOA timeout detected"; break;
+	      case 0x219: reason = "IOCHK#, EISA add-in board parity or other catastrophic error"; break;
+	      case 0x21b: reason = "EISA fail-safe timer timeout"; break;
+	      case 0x21d: reason = "EISA bus time-out"; break;
+	      case 0x21f: reason = "EISA software generated NMI"; break;
+	      case 0x221: reason = "unexpected ev5 IRQ[3] interrupt"; break;
+	      default:
+		sprintf(buf, "reason for machine-check unknown (0x%x)",
+			(unsigned int) mchk_header->code);
+		reason = buf;
+		break;
+	}
+	wrmces(rdmces());	/* reset machine check pending flag */
+	mb();
+
+	printk(KERN_CRIT "  CIA machine check: %s%s\n",
+	       reason, mchk_header->retry ? " (retryable)" : "");
+
+	/* dump the the logout area to give all info: */
+
+	ptr = (unsigned long *)la_ptr;
+	for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {
+	    printk(KERN_CRIT " +%8lx %016lx %016lx\n",
+		   i*sizeof(long), ptr[i], ptr[i+1]);
+	}
 }
 
 #endif /* CONFIG_ALPHA_CIA */

@@ -386,11 +386,14 @@ void ioc_error (__u32 stat0, __u32 stat1)
 
 void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *regs)
 {
+	unsigned long * ptr;
 	const char * reason;
 	union el_lca el;
 	char buf[128];
+	long i;
 
-	printk("lca: machine check (la=0x%lx,pc=0x%lx)\n", la, regs->pc);
+	printk(KERN_CRIT "lca: machine check (la=0x%lx,pc=0x%lx)\n",
+	       la, regs->pc);
 	el.c = (struct el_common *) la;
 	/*
 	 * The first quadword after the common header always seems to
@@ -399,9 +402,9 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 	 * logout frame, the upper 32 bits is the machine check
 	 * revision level, which we ignore for now.
 	 */
-	switch (el.s->reason & 0xffffffff) {
+	switch (el.c->code & 0xffffffff) {
 	      case MCHK_K_TPERR:	reason = "tag parity error"; break;
-	      case MCHK_K_TCPERR:	reason = "tag something parity error"; break;
+	      case MCHK_K_TCPERR:	reason = "tag control parity error"; break;
 	      case MCHK_K_HERR:		reason = "access to non-existent memory"; break;
 	      case MCHK_K_ECC_C:	reason = "correctable ECC error"; break;
 	      case MCHK_K_ECC_NC:	reason = "non-correctable ECC error"; break;
@@ -416,7 +419,7 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 	      case MCHK_K_UNKNOWN:
 	      default:
 		sprintf(buf, "reason for machine-check unknown (0x%lx)",
-			el.s->reason & 0xffffffff);
+			el.c->code & 0xffffffff);
 		reason = buf;
 		break;
 	}
@@ -425,7 +428,8 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 
 	switch (el.c->size) {
 	      case sizeof(struct el_lca_mcheck_short):
-		printk("  Reason: %s (short frame%s, dc_stat=%lx):\n",
+		printk(KERN_CRIT
+		       "  Reason: %s (short frame%s, dc_stat=%lx):\pn",
 		       reason, el.c->retry ? ", retryable" : "", el.s->dc_stat);
 		if (el.s->esr & ESR_EAV) {
 		    mem_error(el.s->esr, el.s->ear);
@@ -436,11 +440,12 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 		break;
 
 	      case sizeof(struct el_lca_mcheck_long):
-		printk("  Reason: %s (long frame%s):\n",
+		printk(KERN_CRIT "  Reason: %s (long frame%s):\n",
 		       reason, el.c->retry ? ", retryable" : "");
-		printk("    reason: %lx  exc_addr: %lx  dc_stat: %lx\n", 
+		printk(KERN_CRIT
+		       "    reason: %lx  exc_addr: %lx  dc_stat: %lx\n", 
 		       el.l->pt[0], el.l->exc_addr, el.l->dc_stat);
-		printk("    car: %lx\n", el.l->car);
+		printk(KERN_CRIT "    car: %lx\n", el.l->car);
 		if (el.l->esr & ESR_EAV) {
 		    mem_error(el.l->esr, el.l->ear);
 		}
@@ -450,7 +455,15 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 		break;
 
 	      default:
-		printk("  Unknown errorlog size %d\n", el.c->size);
+		printk(KERN_CRIT "  Unknown errorlog size %d\n", el.c->size);
+	}
+
+	/* dump the the logout area to give all info: */
+
+	ptr = (unsigned long *) la;
+	for (i = 0; i < el.c->size / sizeof(long); i += 2) {
+	    printk(KERN_CRIT " +%8lx %016lx %016lx\n",
+		   i*sizeof(long), ptr[i], ptr[i+1]);
 	}
 }
 

@@ -418,7 +418,7 @@ void fdc_set_write_precomp(int precomp)
 	fdc_update_dsr();
 }
 
-/* Read back the Drive Specification regs on a i82078, so that we
+/* Read back the Drive Specification regs on an i82078, so that we
  * are able to restore them later
  */
 void fdc_save_drive_specs(void)
@@ -1011,11 +1011,11 @@ int fdc_probe(void)
 						result = fdc_issue_command(cmd, 1, stat, 1);
 						TRACE(2, "FDC is already locked");
 					}
-					/* Test for a i82078 FDC */
+					/* Test for an i82078 FDC */
 					cmd[0] = FDC_PARTID;
 					result = fdc_issue_command(cmd, 1, stat, 1);
 					if (result < 0 || stat[0] == 0x80) {
-						/* invalid command: not a i82078xx type FDC */
+						/* invalid command: not an i82078xx type FDC */
 						result = no_fdc;
 						for (i = 0; i < 4; ++i) {
 							outb_p(i, fdc.tdr);
@@ -1045,12 +1045,12 @@ int fdc_probe(void)
 							result = fdc_issue_command(cmd, 1, stat, 16);
 							if (result < 0) {
 								TRACE(1, "FDC_SAVE failed. Dunno why");
-								/* guess we better claim the fdc to be a i82078 */
+								/* guess we better claim the fdc to be an i82078 */
 								result = i82078;
 								TRACE(2, "Type i82078 FDC (i suppose) found");
 							} else {
 								if ((stat[0] & FDC_SEL3V_BIT)) {
-									/* fdc running off 5Volts; Pray that it's a i82078-1
+									/* fdc running off 5Volts; Pray that it's an i82078-1
 									 */
 									TRACE(2, "Type i82078-1 or 5Volt i82078SL FDC found");
 									TRACE(2, "Treating it as an i82078-1 (2Mbps) FDC");

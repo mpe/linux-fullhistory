@@ -888,6 +888,54 @@ static void wait_for_tcp_memory(struct sock * sk)
 	lock_sock(sk);
 }
 
+/*
+ * Add more stuff to the end of skb->len
+ */
+static int fill_in_partial_skb(struct sock *sk, struct sk_buff *skb,
+	unsigned char * from, int seglen)
+{
+	void (*send)(struct sock *sk, struct sk_buff *skb);
+	int copy, tcp_size;
+
+	tcp_size = skb->tail - (unsigned char *)(skb->h.th + 1);
+
+	/*
+	 *	Now we may find the frame is as big, or too
+	 *	big for our MSS. Thats all fine. It means the
+	 *	MSS shrank (from an ICMP) after we allocated 
+	 *	this frame.
+	 */
+
+	copy = sk->mss - tcp_size;
+	if (copy <= 0) {
+		tcp_send_skb(sk, skb);
+		return 0;
+	}
+
+	/*
+	 *	Otherwise continue to fill the buffer.
+	 */
+	send = tcp_send_skb;
+	if (copy > seglen) {
+		send = tcp_enqueue_partial;
+		copy = seglen;
+	}
+	if (exception()) {
+		tcp_enqueue_partial(sk, skb);
+		return -EFAULT;
+	}
+	memcpy_fromfs(skb->tail, from, copy);
+	end_exception();
+	tcp_size += copy;
+	skb->tail += copy;
+	skb->len += copy;
+	skb->csum = csum_partial(skb->tail - tcp_size, tcp_size, 0);
+	if (!sk->packets_out)
+		send = tcp_send_skb;
+	send(sk, skb);
+	return copy;
+}
+
 
 /*
  *	This routine copies from a user buffer into a socket,
@@ -937,9 +985,10 @@ static int do_tcp_sendmsg(struct sock *sk,
 
 		while(seglen > 0)
 		{
-			int copy, delay;
+			int copy;
 			int tmp;
 			struct sk_buff *skb;
+			void (*send)(struct sock *, struct sk_buff *);
 
 			/*
 			 * Stop on errors
@@ -1004,56 +1053,21 @@ static int do_tcp_sendmsg(struct sock *sk,
 			 *	If there is a partly filled frame we can fill
 			 *	out.
 			 */
-			if ((skb = tcp_dequeue_partial(sk)) != NULL)
-			{
-				int tcp_size;
-
-				tcp_size = skb->tail - (unsigned char *)(skb->h.th + 1);
-
-				/* Add more stuff to the end of skb->len */
-				if (!(flags & MSG_OOB))
-				{
-					copy = min(sk->mss - tcp_size, seglen);
-					
-					/*
-					 *	Now we may find the frame is as big, or too
-					 *	big for our MSS. Thats all fine. It means the
-					 *	MSS shrank (from an ICMP) after we allocated 
-					 *	this frame.
-					 */
-					 
-					if (copy <= 0)
-					{
-						/*
-						 *	Send the now forced complete frame out. 
-						 *
-						 *	Note for 2.1: The MSS reduce code ought to
-						 *	flush any frames in partial that are now
-						 *	full sized. Not serious, potential tiny
-						 *	performance hit.
-						 */
-						tcp_send_skb(sk,skb);
-						/*
-						 *	Get a new buffer and try again.
-						 */
-						continue;
-					}
-					/*
-					 *	Otherwise continue to fill the buffer.
-					 */
-					tcp_size += copy;
-					memcpy_fromfs(skb_put(skb,copy), from, copy);
-					skb->csum = csum_partial(skb->tail - tcp_size, tcp_size, 0);
-					from += copy;
-					copied += copy;
-					len -= copy;
-					sk->write_seq += copy;
-					seglen -= copy;
+			skb = tcp_dequeue_partial(sk);
+			if (skb) {
+				if (!(flags & MSG_OOB)) {
+					int retval;
+					retval = fill_in_partial_skb(sk, skb, from, seglen);
+					if (retval < 0)
+						return retval;
+					seglen -= retval;
+					from += retval;
+					copied += retval;
+					len -= retval;
+					sk->write_seq += retval;
+					continue;
 				}
-				if (tcp_size >= sk->mss || (flags & MSG_OOB) || !sk->packets_out)
-					tcp_send_skb(sk, skb);
-				else
-					tcp_enqueue_partial(skb, sk);
+				tcp_send_skb(sk, skb);
 				continue;
 			}
 
@@ -1084,12 +1098,12 @@ static int do_tcp_sendmsg(struct sock *sk,
 			 *	We should really check the window here also.
 			 */
 
-			delay = 0;
+			send = tcp_send_skb;
 			tmp = copy + sk->prot->max_header + 15;
 			if (copy < sk->mss && !(flags & MSG_OOB) && sk->packets_out)
 			{
 				tmp = tmp - copy + sk->mtu + 128;
-				delay = 1;
+				send = tcp_enqueue_partial;
 			}
 			skb = sock_wmalloc(sk, tmp, 0, GFP_KERNEL);
 
@@ -1156,23 +1170,27 @@ static int do_tcp_sendmsg(struct sock *sk,
 				skb->h.th->urg_ptr = ntohs(copy);
 			}
 
+			if (exception())
+				goto bad_access;
 			skb->csum = csum_partial_copy_fromuser(from,
-				skb_put(skb,copy), copy, 0);
-
+				skb->tail, copy, 0);
+			end_exception();
+			skb->tail += copy;
+			skb->len += copy;
 			from += copy;
 			copied += copy;
 			len -= copy;
 			seglen -= copy;
-			skb->free = 0;
 			sk->write_seq += copy;
+			skb->free = 0;
 
-			if (delay)
-			{
-				tcp_enqueue_partial(skb, sk);
-				continue;
+			send(sk, skb);
+			continue;
+
+bad_access:
+			sock_wfree(sk, skb);
+			return -EFAULT;
 			}
-			tcp_send_skb(sk, skb);
-		}
 	}
 	sk->err = 0;
 
@@ -1829,7 +1847,7 @@ static void tcp_close(struct sock *sk, unsigned long timeout)
 
 
 /*
- * Wait for a incoming connection, avoid race
+ * Wait for an incoming connection, avoid race
  * conditions. This must be called with the socket
  * locked.
  */

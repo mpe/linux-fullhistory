@@ -2,14 +2,11 @@
 #define _ASMAXP_SHMPARAM_H
 
 /*
- * Address range for shared memory attaches if no address passed to
- * shmat().  These ought to be changed to something >4GB so 32-bit
- * errors are caught more easily.  However, they don't seem to be used
- * except for ELF stuff, so it's not really critical until we get ELF
- * support for the Alpha.
+ * Address range for shared memory attaches if no address passed to shmat().
  */
-#define SHM_RANGE_START	0x50000000
-#define SHM_RANGE_END	0x60000000
+#define SHM_RANGE_START	0x14000000000
+#define SHM_RANGE_END	0x15000000000
+
 
 /*
  * Format of a swap-entry for shared memory pages currently out in

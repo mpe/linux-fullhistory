@@ -97,6 +97,11 @@ good_area:
  */
 bad_area:
 	up(&mm->mmap_sem);
+	/* Did we have an exception handler installed? */
+	if (current->tss.ex.count == 1) {
+		current->tss.ex.count = 0;
+		__handle_exception(&current->tss.ex);
+	}
 	if (user_mode(&regs)) {
 		printk("%s: memory violation at pc=%08lx rp=%08lx (bad address = %08lx)\n",
 			tsk->comm, regs.pc, regs.r26, address);

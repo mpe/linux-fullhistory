@@ -1062,7 +1062,7 @@ static void do_slock(unsigned char value, char up_flag)
 
 /*
  * send_data sends a character to the keyboard and waits
- * for a acknowledge, possibly retrying if asked to. Returns
+ * for an acknowledge, possibly retrying if asked to. Returns
  * the success status.
  */
 static int send_data(unsigned char data)

@@ -390,7 +390,7 @@ static const char *rcsid = "$Id: sk_g16.c,v 1.1 1994/06/30 16:25:15 root Exp $";
  *
  * PROM: The PROM obtains the ETHERNET-MAC-Address. It is realised as a
  *       8-Bit PROM, this means only the 16 even addresses are used of the
- *       32 Byte Address region. Access to a odd address results in invalid
+ *       32 Byte Address region. Access to an odd address results in invalid
  *       data.
  * 
  * LANCE I/O Reg: The I/O Reg is build of 4 single Registers, Low-Byte Write,

@@ -11,7 +11,7 @@
  * Kill-line thanks to John T Kohl, who also corrected VMIN = VTIME = 0.
  *
  * Modified by Theodore Ts'o, 9/14/92, to dynamically allocate the
- * tty_struct and tty_queue structures.  Previously there was a array
+ * tty_struct and tty_queue structures.  Previously there was an array
  * of 256 tty_struct's which was statically allocated, and the
  * tty_queue structures were allocated at boot time.  Both are now
  * dynamically allocated only when the tty is open.
@@ -1441,16 +1441,22 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 					     sizeof (struct winsize));
 			if (retval)
 				return retval;
+			if (exception())
+				return -EFAULT;
 			memcpy_tofs((struct winsize *) arg, &tty->winsize,
 				    sizeof (struct winsize));
+			end_exception();
 			return 0;
 		case TIOCSWINSZ:
 			retval = verify_area(VERIFY_READ, (void *) arg,
 					     sizeof (struct winsize));
 			if (retval)
-				return retval;			
+				return retval;
+			if (exception())
+				return -EFAULT;
 			memcpy_fromfs(&tmp_ws, (struct winsize *) arg,
 				      sizeof (struct winsize));
+			end_exception();
 			if (memcmp(&tmp_ws, &tty->winsize,
 				   sizeof(struct winsize))) {
 				if (tty->pgrp > 0)
@@ -1477,7 +1483,10 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 			retval = verify_area(VERIFY_READ, (void *) arg, sizeof(int));
 			if (retval)
 				return retval;
+			if (exception())
+				return -EFAULT;
 			arg = get_user((unsigned int *) arg);
+			end_exception();
 			if (arg)
 				file->f_flags |= O_NONBLOCK;
 			else
@@ -1539,7 +1548,10 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 					     sizeof (pid_t));
 			if (retval)
 				return retval;
+			if (exception())
+				return -EFAULT;
 			put_user(real_tty->pgrp, (pid_t *) arg);
+			end_exception();
 			return 0;
 		case TIOCSPGRP:
 			retval = tty_check_change(real_tty);
@@ -1563,7 +1575,10 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 					     sizeof (int));
 			if (retval)
 				return retval;
+			if (exception())
+				return -EFAULT;
 			put_user(tty->ldisc.num, (int *) arg);
+			end_exception();
 			return 0;
 		case TIOCSETD:
 			retval = tty_check_change(tty);
@@ -1573,7 +1588,10 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 					     sizeof (int));
 			if (retval)
 				return retval;
+			if (exception())
+				return -EFAULT;
 			arg = get_user((int *) arg);
+			end_exception();
 			return tty_set_ldisc(tty, arg);
 		case TIOCLINUX:
 			if (tty->driver.type != TTY_DRIVER_TYPE_CONSOLE)
@@ -1583,7 +1601,11 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 			retval = verify_area(VERIFY_READ, (void *) arg, 1);
 			if (retval)
 				return retval;
-			switch (retval = get_user((char *)arg))
+			if (exception())
+				return -EFAULT;
+			retval = get_user((char *)arg);
+			end_exception();
+			switch (retval)
 			{
 				case 0:
 				case 8:

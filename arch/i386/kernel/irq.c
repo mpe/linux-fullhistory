@@ -187,7 +187,7 @@ static struct irqaction irq13 = { smp_message_irq, SA_INTERRUPT, 0, "IPI", NULL,
 #else
 
 /*
- * Note that on a 486, we don't want to do a SIGFPE on a irq13
+ * Note that on a 486, we don't want to do a SIGFPE on an irq13
  * as the irq is unreliable, and exception 16 works correctly
  * (ie as explained in the intel literature). On a 386, you
  * can't use exception 16 due to bad IBM design, so we have to

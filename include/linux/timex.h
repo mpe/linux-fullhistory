@@ -73,7 +73,7 @@
 
 /*
  * The SHIFT_SCALE define establishes the decimal point of the time_phase
- * variable which serves as a an extension to the low-order bits of the
+ * variable which serves as an extension to the low-order bits of the
  * system clock variable. The SHIFT_UPDATE define establishes the decimal
  * point of the time_offset variable which represents the current offset
  * with respect to standard time. The FINEUSEC define represents 1 usec in

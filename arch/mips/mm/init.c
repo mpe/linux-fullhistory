@@ -34,7 +34,7 @@ extern char empty_zero_page[PAGE_SIZE];
  * BAD_PAGE is the page that is used for page faults when linux
  * is out-of-memory. Older versions of linux just did a
  * do_exit(), but using this instead means there is less risk
- * for a process dying in kernel mode, possibly leaving a inode
+ * for a process dying in kernel mode, possibly leaving an inode
  * unused etc..
  *
  * BAD_PAGETABLE is the accompanying page-table: it is initialized

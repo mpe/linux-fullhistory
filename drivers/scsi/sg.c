@@ -73,7 +73,7 @@ static int sg_ioctl(struct inode * inode,struct file * file,
     switch(cmd_in)
     {
     case SG_SET_TIMEOUT:
-        result = verify_area(VERIFY_READ, (const void *)arg, sizeof(long));
+        result = verify_area(VERIFY_READ, (const void *)arg, sizeof(int));
         if (result) return result;
 
 	scsi_generics[dev].timeout=get_user((int *) arg);
@@ -196,7 +196,7 @@ static void sg_free(char *buff,int size)
  * complete semaphores to tell us whether the buffer is available for us
  * and whether the command is actually done.
  */
-static int sg_read(struct inode *inode,struct file *filp,char *buf,int count)
+static long sg_read(struct inode *inode,struct file *filp,char *buf,unsigned long count)
 {
     int dev=MINOR(inode->i_rdev);
     int i;
@@ -318,7 +318,7 @@ static void sg_command_done(Scsi_Cmnd * SCpnt)
     wake_up(&scsi_generics[dev].read_wait);
 }
 
-static int sg_write(struct inode *inode,struct file *filp,const char *buf,int count)
+static long sg_write(struct inode *inode,struct file *filp,const char *buf,unsigned long count)
 {
     int			  bsize,size,amt,i;
     unsigned char	  cmnd[MAX_COMMAND_SIZE];

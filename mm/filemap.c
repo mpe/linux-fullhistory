@@ -657,14 +657,17 @@ success:
 		 */
 	{
 		unsigned long offset, nr;
+
+		if (exception())
+			goto page_read_exception;
 		offset = pos & ~PAGE_MASK;
 		nr = PAGE_SIZE - offset;
 		if (nr > count)
 			nr = count;
-
 		if (nr > inode->i_size - pos)
 			nr = inode->i_size - pos;
 		memcpy_tofs(buf, (void *) (page_address(page) + offset), nr);
+		end_exception();
 		release_page(page);
 		buf += nr;
 		pos += nr;
@@ -736,6 +739,11 @@ page_read_error:
 				goto success;
 			error = -EIO; /* Some unspecified error occurred.. */
 		}
+		release_page(page);
+		break;
+
+page_read_exception:
+		error = -EFAULT;
 		release_page(page);
 		break;
 	}

@@ -26,6 +26,32 @@
 #define wp_works_ok 1
 #define wp_works_ok__is_a_macro /* for versions in ksyms.c */
 
+/*
+ * The VM exception save area. We need to save
+ *	return address (r26)
+ *	PC (r30)
+ *	function-call-saved regs (r9-r15)
+ * Count is used to do some basic sanity checking, and
+ * to handle the case where a kernel service itself sets
+ * up exceptions while another exception is active.
+ *
+ * NOTE: Exceptions are not "recursive": in the case above
+ * the oldest exception is the one that is left active, but
+ * the VM fault handler will notice a count != 1 and abort
+ * because exceptions within exceptions are an error.
+ */
+struct exception_struct {
+	unsigned long count;
+	unsigned long r9, r10, r11, r12, r13, r14, r15;
+	unsigned long r26, r30;
+};
+
+extern int __exception(struct exception_struct *);
+extern void __handle_exception(struct exception_struct *) __attribute__((noreturn));
+
+#define exception()	__exception(&current->tss.ex)
+#define end_exception()	(current->tss.ex.count--)
+
 struct thread_struct {
 	/* the fields below are used by PALcode and must match struct pcb: */
 	unsigned long ksp;
@@ -47,6 +73,7 @@ struct thread_struct {
 	 * bit 1..5: IEEE_TRAP_ENABLE bits (see fpu.h)
 	 */
 	unsigned long flags;
+	struct exception_struct ex;
 };
 
 #define INIT_MMAP { &init_mm, 0xfffffc0000000000,  0xfffffc0010000000, \
@@ -56,7 +83,8 @@ struct thread_struct {
 	0, 0, 0, \
 	0, 0, 0, \
 	0, 0, 0, \
-	0 \
+	0, \
+	{ 0, } \
 }
 
 #define alloc_kernel_stack()    __get_free_page(GFP_KERNEL)

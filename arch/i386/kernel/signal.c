@@ -79,23 +79,31 @@ static void restore_i387(struct _fpstate *buf)
  */
 asmlinkage int sys_sigreturn(unsigned long __unused)
 {
-#define COPY(x) regs->x = context.x
-#define COPY_SEG(x) \
-if ((context.x & 0xfffc) && (context.x & 3) != 3) goto badframe; COPY(x);
-#define COPY_SEG_STRICT(x) \
-if (!(context.x & 0xfffc) || (context.x & 3) != 3) goto badframe; COPY(x);
-	struct sigcontext context;
+#define COPY(x) regs->x = context->x
+#define COPY_SEG(seg) \
+{ unsigned int tmp = context->seg; \
+if ((tmp & 0xfffc) && (tmp & 3) != 3) goto badframe; \
+regs->x##seg = tmp; }
+#define COPY_SEG_STRICT(seg) \
+{ unsigned int tmp = context->seg; \
+if ((tmp & 0xfffc) && (tmp & 3) != 3) goto badframe; \
+regs->x##seg = tmp; }
+#define GET_SEG(seg) \
+{ unsigned int tmp = context->seg; \
+if ((tmp & 0xfffc) && (tmp & 3) != 3) goto badframe; \
+__asm__("mov %w0,%%" #seg: :"r" (tmp)); }
+	struct sigcontext * context;
 	struct pt_regs * regs;
 
 	regs = (struct pt_regs *) &__unused;
-	if (verify_area(VERIFY_READ, (void *) regs->esp, sizeof(context)))
+	context = (struct sigcontext *) regs->esp;
+	if (verify_area(VERIFY_READ, context, sizeof(*context)))
 		goto badframe;
-	memcpy_fromfs(&context,(void *) regs->esp, sizeof(context));
-	current->blocked = context.oldmask & _BLOCKABLE;
+	current->blocked = context->oldmask & _BLOCKABLE;
 	COPY_SEG(ds);
 	COPY_SEG(es);
-	COPY_SEG(fs);
-	COPY_SEG(gs);
+	GET_SEG(fs);
+	GET_SEG(gs);
 	COPY_SEG_STRICT(ss);
 	COPY_SEG_STRICT(cs);
 	COPY(eip);
@@ -104,15 +112,15 @@ if (!(context.x & 0xfffc) || (context.x & 3) != 3) goto badframe; COPY(x);
 	COPY(esp); COPY(ebp);
 	COPY(edi); COPY(esi);
 	regs->eflags &= ~0x40DD5;
-	regs->eflags |= context.eflags & 0x40DD5;
+	regs->eflags |= context->eflags & 0x40DD5;
 	regs->orig_eax = -1;		/* disable syscall checks */
-	if (context.fpstate) {
-		struct _fpstate * buf = context.fpstate;
+	if (context->fpstate) {
+		struct _fpstate * buf = context->fpstate;
 		if (verify_area(VERIFY_READ, buf, sizeof(*buf)))
 			goto badframe;
 		restore_i387(buf);
 	}
-	return context.eax;
+	return context->eax;
 badframe:
 	do_exit(SIGSEGV);
 }
@@ -164,7 +172,7 @@ static void setup_frame(struct sigaction * sa,
 	unsigned long * frame;
 
 	frame = (unsigned long *) regs->esp;
-	if (regs->ss != USER_DS && sa->sa_restorer)
+	if ((regs->xss & 0xffff) != USER_DS && sa->sa_restorer)
 		frame = (unsigned long *) sa->sa_restorer;
 	frame -= 64;
 	if (verify_area(VERIFY_WRITE,frame,64*4))
@@ -178,10 +186,15 @@ static void setup_frame(struct sigaction * sa,
 		put_user(current->exec_domain->signal_invmap[signr], frame+1);
 	else
 		put_user(signr, frame+1);
-	put_user(regs->gs, frame+2);
-	put_user(regs->fs, frame+3);
-	put_user(regs->es, frame+4);
-	put_user(regs->ds, frame+5);
+	{
+		unsigned int tmp = 0;
+#define PUT_SEG(seg, mem) \
+__asm__("mov %%" #seg",%w0":"=r" (tmp):"0" (tmp)); *(mem) = tmp;
+		PUT_SEG(gs, frame+2);
+		PUT_SEG(fs, frame+3);
+	}
+	put_user(regs->xes, frame+4);
+	put_user(regs->xds, frame+5);
 	put_user(regs->edi, frame+6);
 	put_user(regs->esi, frame+7);
 	put_user(regs->ebp, frame+8);
@@ -193,10 +206,10 @@ static void setup_frame(struct sigaction * sa,
 	put_user(current->tss.trap_no, frame+14);
 	put_user(current->tss.error_code, frame+15);
 	put_user(regs->eip, frame+16);
-	put_user(regs->cs, frame+17);
+	put_user(regs->xcs, frame+17);
 	put_user(regs->eflags, frame+18);
 	put_user(regs->esp, frame+19);
-	put_user(regs->ss, frame+20);
+	put_user(regs->xss, frame+20);
 	put_user((unsigned long) save_i387((struct _fpstate *)(frame+32)),frame+21);
 /* non-iBCS2 extensions.. */
 	put_user(oldmask, frame+22);
@@ -211,9 +224,15 @@ static void setup_frame(struct sigaction * sa,
 	/* Set up registers for signal handler */
 	regs->esp = (unsigned long) frame;
 	regs->eip = (unsigned long) sa->sa_handler;
-	regs->cs = USER_CS; regs->ss = USER_DS;
-	regs->ds = USER_DS; regs->es = USER_DS;
-	regs->gs = USER_DS; regs->fs = USER_DS;
+	{
+		unsigned long seg = USER_DS;
+		__asm__("mov %w0,%%fs ; mov %w0,%%gs":"=r" (seg) :"0" (seg));
+		set_fs(seg);
+		regs->xds = seg;
+		regs->xes = seg;
+		regs->xss = seg;
+		regs->xcs = USER_CS;
+	}
 	regs->eflags &= ~TF_MASK;
 }
 
@@ -273,7 +292,7 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 		 *	including volatiles for the inline function to get
 		 *	current combined with this gets it confused.
 		 */
-	        struct task_struct *t=current;
+		struct task_struct *t=current;
 		__asm__("bsf %3,%1\n\t"
 			"btrl %1,%0"
 			:"=m" (t->signal),"=r" (signr)

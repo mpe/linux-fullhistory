@@ -27,7 +27,7 @@
  * in linux/version.h, and should only be used by linux/version.c
  */
 
-/* Shouldn't these be defined somewhere in a i386 definition? */
+/* Shouldn't these be defined somewhere in an i386 definition? */
 
 /* Don't touch these, unless you really know what you're doing. */
 #define DEF_INITSEG	0x9000

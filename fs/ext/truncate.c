@@ -242,7 +242,7 @@ void ext_truncate(struct inode * inode)
 }
 
 /*
- * Called when a inode is released. Note that this is different
+ * Called when an inode is released. Note that this is different
  * from ext_open: open gets called at every open, but release
  * gets called only when /all/ the files are closed.
  */

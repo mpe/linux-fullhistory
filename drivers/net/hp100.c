@@ -1030,7 +1030,7 @@ static int hp100_down_vg_link( struct device *dev )
   if ( i <= 0 )				/* not signal - not logout */
     return 0;
   hp100_andw( ~HP100_LINK_CMD, LAN_CFG_VG );
-  time = jiffies + 10; 
+  time = jiffies + 10*HZ/100; 
   while ( time > jiffies )
     if ( !( hp100_inw( LAN_CFG_VG ) & ( HP100_LINK_UP_ST | 
                                         HP100_LINK_CABLE_ST | 

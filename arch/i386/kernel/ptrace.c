@@ -28,10 +28,9 @@
 #define TRAP_FLAG 0x100
 
 /*
- * this is the number to subtract from the top of the stack. To find
- * the local frame.
+ * Offset of eflags on child stack..
  */
-#define MAGICNUMBER 68
+#define EFL_OFFSET ((EFL-2)*4-sizeof(struct pt_regs))
 
 /* change a pid into a task struct. */
 static inline struct task_struct * get_task(int pid)
@@ -295,6 +294,71 @@ static int write_long(struct task_struct * tsk, unsigned long addr,
 	return 0;
 }
 
+static int putreg(struct task_struct *child,
+	unsigned long regno, unsigned long value)
+{
+	switch (regno >> 2) {
+		case ORIG_EAX:
+			return -EIO;
+		case FS:
+			if (value && (value & 3) != 3)
+				return -EIO;
+			child->tss.fs = value;
+			return 0;
+		case GS:
+			if (value && (value & 3) != 3)
+				return -EIO;
+			child->tss.gs = value;
+			return 0;
+		case DS:
+		case ES:
+			if (value && (value & 3) != 3)
+				return -EIO;
+			value &= 0xffff;
+			break;
+		case SS:
+		case CS:
+			if ((value & 3) != 3)
+				return -EIO;
+			value &= 0xffff;
+			break;
+		case EFL:
+			value &= FLAG_MASK;
+			value |= get_stack_long(child, EFL_OFFSET) & ~FLAG_MASK;
+	}
+	if (regno > GS*4)
+		regno -= 2*4;
+	put_stack_long(child, regno - sizeof(struct pt_regs), value);
+	return 0;
+}
+
+static unsigned long getreg(struct task_struct *child,
+	unsigned long regno)
+{
+	unsigned long retval = ~0UL;
+
+	switch (regno >> 2) {
+		case FS:
+			retval = child->tss.fs;
+			break;
+		case GS:
+			retval = child->tss.gs;
+			break;
+		case DS:
+		case ES:
+		case SS:
+		case CS:
+			retval = 0xffff;
+			/* fall through */
+		default:
+			if (regno > GS*4)
+				regno -= 2*4;
+			regno = regno - sizeof(struct pt_regs);
+			retval &= get_stack_long(child, regno);
+	}
+	return retval;
+}
+
 asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 {
 	struct task_struct *child;
@@ -376,15 +440,8 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			if (res)
 				return res;
 			tmp = 0;  /* Default return condition */
-			if(addr < 17*sizeof(long)) {
-			  addr = addr >> 2; /* temporary hack. */
-
-			  tmp = get_stack_long(child, sizeof(long)*addr - MAGICNUMBER);
-			  if (addr == DS || addr == ES ||
-			      addr == FS || addr == GS ||
-			      addr == CS || addr == SS)
-			    tmp &= 0xffff;
-			};
+			if(addr < 17*sizeof(long))
+				tmp = getreg(child, addr);
 			if(addr >= (long) &dummy->u_debugreg[0] &&
 			   addr <= (long) &dummy->u_debugreg[7]){
 				addr -= (long) &dummy->u_debugreg[0];
@@ -405,35 +462,14 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			    addr > sizeof(struct user) - 3)
 				return -EIO;
 
-			addr = addr >> 2; /* temporary hack. */
-
-			if (addr == ORIG_EAX)
-				return -EIO;
-			if (addr == DS || addr == ES ||
-			    addr == FS || addr == GS ||
-			    addr == CS || addr == SS) {
-			    	data &= 0xffff;
-			    	if (data && (data & 3) != 3)
-					return -EIO;
-			}
-			if (addr == EFL) {   /* flags. */
-				data &= FLAG_MASK;
-				data |= get_stack_long(child, EFL*sizeof(long)-MAGICNUMBER)  & ~FLAG_MASK;
-			}
-		  /* Do not allow the user to set the debug register for kernel
-		     address space */
-		  if(addr < 17){
-			  if (put_stack_long(child, sizeof(long)*addr-MAGICNUMBER, data))
-				return -EIO;
-			return 0;
-			};
+			if (addr < 17*sizeof(long))
+				return putreg(child, addr, data);
 
 		  /* We need to be very careful here.  We implicitly
 		     want to modify a portion of the task_struct, and we
 		     have to be selective about what portions we allow someone
 		     to modify. */
 
-		  addr = addr << 2;  /* Convert back again */
 		  if(addr >= (long) &dummy->u_debugreg[0] &&
 		     addr <= (long) &dummy->u_debugreg[7]){
 
@@ -469,8 +505,8 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			child->exit_code = data;
 			wake_up_process(child);
 	/* make sure the single step bit is not set. */
-			tmp = get_stack_long(child, sizeof(long)*EFL-MAGICNUMBER) & ~TRAP_FLAG;
-			put_stack_long(child, sizeof(long)*EFL-MAGICNUMBER,tmp);
+			tmp = get_stack_long(child, EFL_OFFSET) & ~TRAP_FLAG;
+			put_stack_long(child, EFL_OFFSET,tmp);
 			return 0;
 		}
 
@@ -487,8 +523,8 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			wake_up_process(child);
 			child->exit_code = SIGKILL;
 	/* make sure the single step bit is not set. */
-			tmp = get_stack_long(child, sizeof(long)*EFL-MAGICNUMBER) & ~TRAP_FLAG;
-			put_stack_long(child, sizeof(long)*EFL-MAGICNUMBER,tmp);
+			tmp = get_stack_long(child, EFL_OFFSET) & ~TRAP_FLAG;
+			put_stack_long(child, EFL_OFFSET, tmp);
 			return 0;
 		}
 
@@ -498,8 +534,8 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			if ((unsigned long) data > NSIG)
 				return -EIO;
 			child->flags &= ~PF_TRACESYS;
-			tmp = get_stack_long(child, sizeof(long)*EFL-MAGICNUMBER) | TRAP_FLAG;
-			put_stack_long(child, sizeof(long)*EFL-MAGICNUMBER,tmp);
+			tmp = get_stack_long(child, EFL_OFFSET) | TRAP_FLAG;
+			put_stack_long(child, EFL_OFFSET, tmp);
 			wake_up_process(child);
 			child->exit_code = data;
 	/* give it a chance to run. */
@@ -518,8 +554,8 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			child->p_pptr = child->p_opptr;
 			SET_LINKS(child);
 			/* make sure the single step bit is not set. */
-			tmp = get_stack_long(child, sizeof(long)*EFL-MAGICNUMBER) & ~TRAP_FLAG;
-			put_stack_long(child, sizeof(long)*EFL-MAGICNUMBER,tmp);
+			tmp = get_stack_long(child, EFL_OFFSET) & ~TRAP_FLAG;
+			put_stack_long(child, EFL_OFFSET, tmp);
 			return 0;
 		}
 

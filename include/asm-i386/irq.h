@@ -27,8 +27,6 @@ extern void enable_irq(unsigned int);
 
 #define SAVE_ALL \
 	"cld\n\t" \
-	"push %gs\n\t" \
-	"push %fs\n\t" \
 	"push %es\n\t" \
 	"push %ds\n\t" \
 	"pushl %eax\n\t" \
@@ -40,9 +38,7 @@ extern void enable_irq(unsigned int);
 	"pushl %ebx\n\t" \
 	"movl $" STR(KERNEL_DS) ",%edx\n\t" \
 	"mov %dx,%ds\n\t" \
-	"mov %dx,%es\n\t" \
-	"movl $0,%edx\n\t"  \
-	"movl %edx,%db7\n\t"
+	"mov %dx,%es\n\t"
 
 /*
  * SAVE_MOST/RESTORE_MOST is used for the faster version of IRQ handlers,

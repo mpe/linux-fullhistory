@@ -1088,13 +1088,12 @@ E: snprobst@immd4.informatik.uni-erlangen.de
 D: The Linux Support Team Erlangen
 
 N: Daniel Quinlan
-E: Daniel.Quinlan@linux.org
-W: http://www.bucknell.edu/~quinlan
+E: quinlan@pathname.com
+W: http://www.pathname.com/~quinlan/
 D: FSSTND coordinator; FHS editor
 D: random Linux documentation, patches, and hacks
-S: Box C-5083
-S: Bucknell University
-S: Lewisburg, Pennsylvania 17837
+S: 4390 Albany Dr. #41A
+S: San Jose, California 95129
 S: USA
 
 N: Eric S. Raymond

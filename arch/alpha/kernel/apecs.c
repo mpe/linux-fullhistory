@@ -526,8 +526,8 @@ void apecs_machine_check(unsigned long vector, unsigned long la_ptr,
 #define MCHK_NO_DEVSEL 0x205L
 #define MCHK_NO_TABT 0x204L
 	if (apecs_mcheck_expected &&
-	    (((unsigned int)mchk_procdata->paltemp[0] == MCHK_NO_DEVSEL) ||
-	     ((unsigned int)mchk_procdata->paltemp[0] == MCHK_NO_TABT))
+	    (((unsigned int)mchk_header->code == MCHK_NO_DEVSEL) ||
+	     ((unsigned int)mchk_header->code == MCHK_NO_TABT))
 	    )
 	{
 #else
@@ -550,19 +550,21 @@ void apecs_machine_check(unsigned long vector, unsigned long la_ptr,
 		printk("apecs_machine_check: HW correctable (0x%lx)\n", vector);
 	}
 	else {
-		printk("APECS machine check:\n");
-		printk("  vector=0x%lx la_ptr=0x%lx\n",
+		printk(KERN_CRIT "APECS machine check:\n");
+		printk(KERN_CRIT "  vector=0x%lx la_ptr=0x%lx\n",
 		       vector, la_ptr);
-		printk("  pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
+		printk(KERN_CRIT
+		       "  pc=0x%lx size=0x%x procoffset=0x%x sysoffset 0x%x\n",
 		       regs->pc, mchk_header->size, mchk_header->proc_offset,
 		       mchk_header->sys_offset);
-		printk("  expected %d DCSR 0x%lx PEAR 0x%lx\n",
+		printk(KERN_CRIT "  expected %d DCSR 0x%lx PEAR 0x%lx\n",
 		       apecs_mcheck_expected, mchk_sysdata->epic_dcsr,
 		       mchk_sysdata->epic_pear);
 
 		ptr = (unsigned long *)la_ptr;
 		for (i = 0; i < mchk_header->size / sizeof(long); i += 2) {
-		    printk(" +%lx %lx %lx\n", i*sizeof(long), ptr[i], ptr[i+1]);
+		    printk(KERN_CRIT " +%lx %lx %lx\n",
+			   i*sizeof(long), ptr[i], ptr[i+1]);
 		}
 #if 0
 		/* doesn't work with MILO */

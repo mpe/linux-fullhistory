@@ -379,48 +379,73 @@ extern unsigned long cia_init (unsigned long mem_start,
 /*
  * Data structure for handling CIA machine checks:
  */
+/* ev5-specific info: */
+struct el_procdata {
+	unsigned long shadow[8];	/* PALmode shadow registers */
+	unsigned long paltemp[24];	/* PAL temporary registers */
+	/* EV5-specific fields */
+	unsigned long exc_addr;		/* Address of excepting instruction. */
+	unsigned long exc_sum;		/* Summary of arithmetic traps. */
+	unsigned long exc_mask;		/* Exception mask (from exc_sum). */
+	unsigned long exc_base;		/* PALbase at time of exception. */
+	unsigned long isr;		/* Interrupt summary register. */
+	unsigned long icsr;		/* Ibox control register. */
+	unsigned long ic_perr_stat;
+	unsigned long dc_perr_stat;
+	unsigned long va;		/* Effective VA of fault or miss. */
+	unsigned long mm_stat;
+	unsigned long sc_addr;
+	unsigned long sc_stat;
+	unsigned long bc_tag_addr;
+	unsigned long ei_addr;
+	unsigned long fill_syn;
+	unsigned long ei_stat;
+	unsigned long ld_lock;
+};
+
+/* system-specific info: */
 struct el_CIA_sysdata_mcheck {
-    u_long      coma_gcr;                       
-    u_long      coma_edsr;                      
-    u_long      coma_ter;                       
-    u_long      coma_elar;                      
-    u_long      coma_ehar;                      
-    u_long      coma_ldlr;                      
-    u_long      coma_ldhr;                      
-    u_long      coma_base0;                     
-    u_long      coma_base1;                     
-    u_long      coma_base2;                     
-    u_long      coma_cnfg0;                     
-    u_long      coma_cnfg1;                     
-    u_long      coma_cnfg2;                     
-    u_long      epic_dcsr;                      
-    u_long      epic_pear;                      
-    u_long      epic_sear;                      
-    u_long      epic_tbr1;                      
-    u_long      epic_tbr2;                      
-    u_long      epic_pbr1;                      
-    u_long      epic_pbr2;                      
-    u_long      epic_pmr1;                      
-    u_long      epic_pmr2;                      
-    u_long      epic_harx1;                     
-    u_long      epic_harx2;                     
-    u_long      epic_pmlt;                      
-    u_long      epic_tag0;                      
-    u_long      epic_tag1;                      
-    u_long      epic_tag2;                      
-    u_long      epic_tag3;                      
-    u_long      epic_tag4;                      
-    u_long      epic_tag5;                      
-    u_long      epic_tag6;                      
-    u_long      epic_tag7;                      
-    u_long      epic_data0;                     
-    u_long      epic_data1;                     
-    u_long      epic_data2;                     
-    u_long      epic_data3;                     
-    u_long      epic_data4;                     
-    u_long      epic_data5;                     
-    u_long      epic_data6;                     
-    u_long      epic_data7;                     
+    unsigned long      coma_gcr;                       
+    unsigned long      coma_edsr;                      
+    unsigned long      coma_ter;                       
+    unsigned long      coma_elar;                      
+    unsigned long      coma_ehar;                      
+    unsigned long      coma_ldlr;                      
+    unsigned long      coma_ldhr;                      
+    unsigned long      coma_base0;                     
+    unsigned long      coma_base1;                     
+    unsigned long      coma_base2;                     
+    unsigned long      coma_cnfg0;                     
+    unsigned long      coma_cnfg1;                     
+    unsigned long      coma_cnfg2;                     
+    unsigned long      epic_dcsr;                      
+    unsigned long      epic_pear;                      
+    unsigned long      epic_sear;                      
+    unsigned long      epic_tbr1;                      
+    unsigned long      epic_tbr2;                      
+    unsigned long      epic_pbr1;                      
+    unsigned long      epic_pbr2;                      
+    unsigned long      epic_pmr1;                      
+    unsigned long      epic_pmr2;                      
+    unsigned long      epic_harx1;                     
+    unsigned long      epic_harx2;                     
+    unsigned long      epic_pmlt;                      
+    unsigned long      epic_tag0;                      
+    unsigned long      epic_tag1;                      
+    unsigned long      epic_tag2;                      
+    unsigned long      epic_tag3;                      
+    unsigned long      epic_tag4;                      
+    unsigned long      epic_tag5;                      
+    unsigned long      epic_tag6;                      
+    unsigned long      epic_tag7;                      
+    unsigned long      epic_data0;                     
+    unsigned long      epic_data1;                     
+    unsigned long      epic_data2;                     
+    unsigned long      epic_data3;                     
+    unsigned long      epic_data4;                     
+    unsigned long      epic_data5;                     
+    unsigned long      epic_data6;                     
+    unsigned long      epic_data7;                     
 };
 
 #define RTC_PORT(x)	(0x70 + (x))

@@ -102,22 +102,22 @@ int kstack_depth_to_print = 24;
 
 	esp = (unsigned long) &regs->esp;
 	ss = KERNEL_DS;
-	if ((regs->eflags & VM_MASK) || (3 & regs->cs) == 3)
+	if ((regs->eflags & VM_MASK) || (3 & regs->xcs) == 3)
 		return;
-	if (regs->cs & 3) {
+	if (regs->xcs & 3) {
 		esp = regs->esp;
-		ss = regs->ss;
+		ss = regs->xss & 0xffff;
 	}
 	console_verbose();
 	printk("%s: %04lx\n", str, err & 0xffff);
 	printk("CPU:    %d\n", smp_processor_id());
-	printk("EIP:    %04x:[<%08lx>]\nEFLAGS: %08lx\n", 0xffff & regs->cs,regs->eip,regs->eflags);
+	printk("EIP:    %04x:[<%08lx>]\nEFLAGS: %08lx\n", 0xffff & regs->xcs,regs->eip,regs->eflags);
 	printk("eax: %08lx   ebx: %08lx   ecx: %08lx   edx: %08lx\n",
 		regs->eax, regs->ebx, regs->ecx, regs->edx);
 	printk("esi: %08lx   edi: %08lx   ebp: %08lx   esp: %08lx\n",
 		regs->esi, regs->edi, regs->ebp, esp);
-	printk("ds: %04x   es: %04x   fs: %04x   gs: %04x   ss: %04x\n",
-		regs->ds, regs->es, regs->fs, regs->gs, ss);
+	printk("ds: %04x   es: %04x   ss: %04x\n",
+		regs->xds & 0xffff, regs->xes & 0xffff, ss);
 	store_TR(i);
 	if (STACK_MAGIC != *(unsigned long *)current->kernel_stack_page)
 		printk("Corrupted stack page\n");
@@ -158,7 +158,7 @@ int kstack_depth_to_print = 24;
 	}
 	printk("\nCode: ");
 	for(i=0;i<20;i++)
-		printk("%02x ",0xff & get_seg_byte(regs->cs,(i+(char *)regs->eip)));
+		printk("%02x ",0xff & get_seg_byte(regs->xcs & 0xffff,(i+(char *)regs->eip)));
 	printk("\n");
 	do_exit(SIGSEGV);
 }
@@ -174,12 +174,8 @@ DO_ERROR( 9, SIGFPE,  "coprocessor segment overrun", coprocessor_segment_overrun
 DO_ERROR(10, SIGSEGV, "invalid TSS", invalid_TSS, current)
 DO_ERROR(11, SIGBUS,  "segment not present", segment_not_present, current)
 DO_ERROR(12, SIGBUS,  "stack segment", stack_segment, current)
+DO_ERROR(15, SIGSEGV, "reserved", reserved, current)
 DO_ERROR(17, SIGSEGV, "alignment check", alignment_check, current)
-
-asmlinkage void do_reserved(struct pt_regs * regs, long error_code)
-{
-	printk("Uhhuh.. Reserved trap code, whazzup? (%ld)\n", error_code);
-}
 
 asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 {
@@ -215,7 +211,7 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 	force_sig(SIGTRAP, current);
 	current->tss.trap_no = 1;
 	current->tss.error_code = error_code;
-	if ((regs->cs & 3) == 0) {
+	if ((regs->xcs & 3) == 0) {
 		/* If this is a kernel mode trap, then reset db7 and allow us to continue */
 		__asm__("movl %0,%%db7"
 			: /* no output */
@@ -330,7 +326,7 @@ void trap_init(void)
 		return;
 	}
 	smptrap++;
-	if (strncmp((char*)phys_to_virt(0x0FFFD9), "EISA", 4) == 0)
+	if (readl(0x0FFFD9) == 'E' + ('I'<<8) + ('S'<<16) + ('A'<<24))
 		EISA_bus = 1;
 	set_call_gate(&default_ldt,lcall7);
 	set_trap_gate(0,&divide_error);

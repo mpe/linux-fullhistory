@@ -1454,7 +1454,7 @@ static void smc_rcv(struct device *dev)
 	PRINTK2(("RCV: STATUS %4x LENGTH %4x\n", status, packet_length ));
 	/* 
 	 . the packet length contains 3 extra words : 
-	 . status, length, and a extra word with an odd byte .
+	 . status, length, and an extra word with an odd byte .
 	*/
 	packet_length -= 6; 
 	

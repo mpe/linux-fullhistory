@@ -3,13 +3,12 @@
 # This version of the Linux kernel configuration help texts
 # corresponds to the kernel versions 2.0.x.
 #
-# International versions available on the WWW:
-#   - http://www.eis.or.jp/muse/kikutani/Configure.help-1.2.x.euc 
-# is a Japanese translation of a previous version of this file,
-# written by kikutani@eis.or.jp.
+# International versions of this file available on the WWW:
+#   - http://jf.gee.kyoto-u.ac.jp/JF/JF-ftp/euc/Configure.help.euc
+# is a Japanese translation, maintained by Tetsuyasu YAMADA
+# (tetsu@cauchy.nslab.ntt.jp). 
 #   - http://nevod.perm.su/service/linux/doc/kernel/Configure.help 
-# is a Russian translation of this file, maintained by
-# kaf@linux.nevod.perm.su.
+# is a Russian translation, maintained by kaf@linux.nevod.perm.su.
 #
 # Information about what a kernel is, what it does, how to patch and
 # compile it and much more is contained in the Kernel-HOWTO, available
@@ -115,18 +114,15 @@ CONFIG_BLK_DEV_INITRD
 
 Loop device support
 CONFIG_BLK_DEV_LOOP
-  Enabling this option will allow you to mount a file as a file system.
-  This is useful if you want to check an ISO9660 file system before
-  burning the CD, or want to use floppy images without first writing
-  them to floppy.
-  This option also allows one to mount a filesystem with encryption.
-  To use these features, you need a recent version of mount, such as
-  the one found at ftp.win.tue.nl:/pub/linux/util/mount-2.5X.tar.gz.
-  If you want to use encryption, you might also be interested in the
-  (old) DES package ftp.funet.fi:/pub/OS/Linux/BETA/loop/des.1.tar.gz.
-  Note that this loop device has nothing to do with the loopback
-  device used for network connections from the machine to itself.
-  Most users will answer N here.
+  Enabling this option will allow you to mount a file as a file
+  system.  This is useful if you want to check an ISO9660 file system
+  before burning the CD, or want to use floppy images without first
+  writing them to floppy.  This option also allows one to mount a
+  filesystem with encryption.  To use these features, you need a
+  recent version of mount (check the file Documentation/Changes for
+  location and latest version).  Note that this loop device has
+  nothing to do with the loopback device used for network connections
+  from the machine to itself.  Most users will answer N here.
 
 Enhanced IDE/MFM/RLL disk/cdrom/tape support
 CONFIG_BLK_DEV_IDE 
@@ -566,10 +562,9 @@ CONFIG_BLK_DEV_TRITON
   If your PCI system uses an IDE harddrive (as opposed to SCSI, say)
   and includes the Intel 430FX PCI Triton chipset, you will want to
   enable this option to allow use of bus-mastering DMA data transfers.
-  Read the comments at the beginning of drivers/block/triton.c.  The
-  hdparm utility can be obtained via ftp (user: anonymous) from
-  sunsite.unc.edu:/pub/Linux/kernel/patches/diskdrives/.  It is safe
-  to say Y.
+  Read the comments at the beginning of drivers/block/triton.c.  Check
+  the file Documentation/Changes for location and latest version of
+  the hdparm utility. It is safe to say Y to this question.
 
 System V IPC
 CONFIG_SYSVIPC
@@ -593,56 +588,55 @@ CONFIG_BINFMT_ELF
   executables used across different architectures and operating
   systems. This option will enable your kernel to run ELF binaries and
   enlarge it by about 2kB. ELF support under Linux is quickly
-  replacing the traditional Linux a.out format because it is portable
-  (this does *not* mean that you will be able to run executables from
-  different architectures or operating systems!) and makes building
-  run-time libraries very easy. Many new executables are distributed
-  solely in ELF format. You definitely want to say Y here. Information
-  about ELF is on the WWW at
+  replacing the traditional Linux a.out formats (QMAGIC and ZMAGIC)
+  because it is portable (this does *not* mean that you will be able
+  to run executables from different architectures or operating
+  systems!) and makes building run-time libraries very easy. Many new
+  executables are distributed solely in ELF format. You definitely
+  want to say Y here. Information about ELF is on the WWW at
   http://www.sjc.ox.ac.uk/users/barlow/elf-howto.html (To browse the
   WWW, you need to have access to a machine on the Internet that has
   one of the programs lynx, netscape or Mosaic).  If you find that
   after upgrading to Linux kernel 1.3 and saying Y here, you still
   can't run any ELF binaries (they just crash), then you'll have to
-  install the newest ELF runtime libraries, including ld.so (available
-  via ftp (user: anonymous) from
-  tsx-11.mit.edu:/pub/linux/packages/GCC). Also note that ELF binary
-  support was broken in kernel versions 1.3.0 - 1.3.2. Either use a
-  newer 1.3 kernel or one of the stable 1.2 versions. If you want to
-  compile this as a module ( = code which can be inserted in and
-  removed from the running kernel whenever you want), say M here and
-  read Documentation/modules.txt. Saying M or N here is dangerous
-  because some crucial programs on your system might be in ELF
-  format. 
+  install the newest ELF runtime libraries, including ld.so (check the
+  file Documentation/Changes for location and latest version). If you
+  want to compile this as a module ( = code which can be inserted in
+  and removed from the running kernel whenever you want), say M here
+  and read Documentation/modules.txt. Saying M or N here is dangerous
+  because some crucial programs on your system might be in ELF format.
 
 Compile kernel as ELF - if your GCC is ELF-GCC
 CONFIG_KERNEL_ELF
   The gcc version 2.7.0 and newer produces the new ELF binary format
-  as default. If you have such a compiler (try "gcc -v"), say Y
-  here, otherwise N.
+  as default. If you have such a compiler (try "gcc -v"), say Y here,
+  otherwise N.  
   It is possible, albeit almost pointless, to compile the kernel in
-  a.out format even if your compiler produces ELF as default. For
-  that, you would have to say N here and change the variables LD and
-  CC in the toplevel Makefile. Similarly, if your compiler produces
-  a.out by default but is able to produce ELF, you can compile the
-  kernel in ELF by saying Y here and editing the variables CC
-  and LD in the toplevel Makefile.
+  a.out (i.e. QMAGIC) format even if your compiler produces ELF as
+  default. For that, you would have to say N here and change the
+  variables LD and CC in the toplevel Makefile. Similarly, if your
+  compiler produces a.out by default but is able to produce ELF, you
+  can compile the kernel in ELF by saying Y here and editing the
+  variables CC and LD in the toplevel Makefile.
 
 Kernel support for A.OUT binaries
 CONFIG_BINFMT_AOUT
-  A.OUT (Assembler.OUTput) format is a format for libraries and
-  executables used in the earliest versions of UNIX. Linux used this
-  format until it was replaced with the ELF format.
-  As more and more programs are converted to ELF, the use for A.OUT
+  A.out (Assembler.OUTput) is a set of formats for libraries and
+  executables used in the earliest versions of UNIX. Linux used the
+  a.out formats QMAGIC and ZMAGIC until they were replaced with the
+  ELF format.
+  As more and more programs are converted to ELF, the use for a.out
   will gradually diminish. If you disable this option it will reduce
   your kernel by one page. This is not much and by itself does not
-  warrant removing support. However its removal is a good idea when
-  you wish to ensure that absolutely none of your programs will use
-  this older executable format. If you don't know what to answer at
-  this point then answer Y. You may answer M for module support and
-  later load the module when you find a program which needs a.out
-  format. Saying M or N here is dangerous, because some crucial
-  programs on your system might be in A.OUT format.
+  warrant removing support. However its removal is a good idea if you
+  wish to ensure that absolutely none of your programs will use this
+  older executable format. If you don't know what to answer at this
+  point then answer Y. If someone told you "You need a kernel with
+  QMAGIC support" then you'll have to say Y here. You may answer M 
+  to compile a.out support as a module and later load the module when
+  you want to use a program or library in a.out format. Saying M or N
+  here is dangerous though, because some crucial programs on your
+  system might still be in A.OUT format.
 
 Kernel support for JAVA binaries
 CONFIG_BINFMT_JAVA
@@ -664,7 +658,7 @@ CONFIG_BINFMT_JAVA
   warrant removing support. However its removal is a good idea if you
   do not have the JDK installed. If you don't know what to answer at
   this point then answer Y. You may answer M for module support and
-  later load the module when you install the JDK or find a interesting
+  later load the module when you install the JDK or find an interesting
   Java program that you can't live without.
 
 Processor type
@@ -699,7 +693,7 @@ CONFIG_CPU_LITTLE_ENDIAN
   opposed to mips-linux-gcc or mips-linuxelf-gcc), say Y here,
   otherwise N. Most MIPS machines use little-endian code, but it might
   be necessary to run older Mips systems, such as the Sony News and
-  MIPS RC3xxx in big endian mode.
+  MIPS RC3xxx, in big endian mode.
 
 Enable loadable module support
 CONFIG_MODULES
@@ -717,14 +711,13 @@ CONFIG_MODVERSIONS
   kernel. Enabling this option makes it possible, and safe, to use the
   same modules even after compiling a new kernel; this requires the
   program modprobe. All the software needed for module support is in
-  the modules package in sunsite.unc.edu:/pub/Linux/kernel, available
-  via ftp (user: anonymous) to be extracted with "tar xzvf filename".
-  NOTE: if you say Y here but don't have the program genksyms (which
-  is also contained in the above mentioned modules package), then the
-  building of your kernel will fail.
-  If you are going to use modules that are generated from non-kernel
-  sources, you would benefit from this option. Otherwise it's not that
-  important. So, N ought to be a safe bet.
+  the modules package (check the file Documentation/Changes for
+  location and latest version).  NOTE: if you say Y here but don't
+  have the program genksyms (which is also contained in the above
+  mentioned modules package), then the building of your kernel will
+  fail.  If you are going to use modules that are generated from
+  non-kernel sources, you would benefit from this option. Otherwise
+  it's not that important. So, N ought to be a safe bet.
 
 Kernel daemon support
 CONFIG_KERNELD
@@ -840,19 +833,20 @@ CONFIG_IP_FIREWALL
   about 2kB. You may need to read the FIREWALL-HOWTO, available via
   ftp (user: anonymous) in
   sunsite.unc.edu:/pub/Linux/docs/HOWTO. Also, you will need the
-  ipfwadm tool (available via ftp (user: anonymous) from ftp.xos.nl) 
-  to allow selective blocking of internet traffic based
-  on type, origin and destination.  You need to enable IP firewalling
-  in order to be able to use IP masquerading (i.e. local computers can
-  chat with an outside host, but that outside host is made to think
-  that it is talking to the firewall box. Makes the local network
-  completely invisible and avoids the need to allocate valid IP host
-  addresses for the machines on the local net) or to use the IP packet
-  accounting to see what is using all your network bandwidth.
-  This option is also needed when you want to enable the transparent
-  proxying support (makes the computers on the local network think
-  they're talking to a remote computer, while in reality the traffic
-  is redirected by your Linux firewall to a local proxy server).
+  ipfwadm tool (check the file Documentation/Changes for location and
+  latest version) to allow selective blocking of internet traffic
+  based on type, origin and destination.  You need to enable IP
+  firewalling in order to be able to use IP masquerading (i.e. local
+  computers can chat with an outside host, but that outside host is
+  made to think that it is talking to the firewall box. Makes the
+  local network completely invisible and avoids the need to allocate
+  valid IP host addresses for the machines on the local net) or to use
+  the IP packet accounting to see what is using all your network
+  bandwidth.  This option is also needed when you want to enable the
+  transparent proxying support (makes the computers on the local
+  network think they're talking to a remote computer, while in reality
+  the traffic is redirected by your Linux firewall to a local proxy
+  server).
 
 IP: accounting
 CONFIG_IP_ACCT
@@ -863,7 +857,8 @@ CONFIG_IP_ACCT
   firewalling. The data is accessible with "cat /proc/net/ip_acct", so
   you want to say Y to the /proc filesystem below, if you say Y
   here. To specify what exactly should be recorded, you need the tool
-  ipfwadm (available from ftp.xos.nl if you don't have a copy already).
+  ipfwadm (check the file Documentation/Changes for location and
+  latest version).
 
 IP: tunneling
 CONFIG_NET_IPIP
@@ -977,17 +972,25 @@ CONFIG_INET_PCTCP
 
 Reverse ARP
 CONFIG_INET_RARP
-  Since you asked: if there's a diskless machine on your local network
-  that know its hardware ethernet address but doesn't know its IP
-  address upon startup, it can send out a Reverse Address Resolution
-  Protocol request to find out its own IP address. If you want your
-  Linux box to be able to *answer* such requests, say Y here; you'd
-  have to run the program rarp ("man rarp") on your box.  Superior
-  solutions to the same problem are given by the protocols BOOTP and
-  DHCP. If you want to compile RARP support as a module ( = code which
-  can be inserted in and removed from the running kernel whenever you
-  want), say M here and read Documentation/modules.txt.  If you don't
-  understand a word, say N and rest in peace.
+  Since you asked: if there are (usually diskless or portable)
+  machines on your local network that know their hardware ethernet
+  addresses but don't know their IP addresses upon startup, they can
+  send out a Reverse Address Resolution Protocol (RARP) request to
+  find out their own IP addresses. Diskless Sun 3 machines use this
+  procedure at boot time. If you want your Linux box to be able to
+  *answer* such requests, say Y here; you'd have to run the program
+  rarp ("man rarp") on your box. If you actually want to use a
+  diskless Sun 3 machine as an Xterminal to Linux, say Y here and
+  fetch Linux-Xkernel from
+  ftp://sunsite.unc.edu/pub/Linux/system/Network/boot.net/.  Superior
+  solutions to the problem of booting and configuring machines over a
+  net connection are given by the protocol BOOTP and its successor
+  DHCP. See the DHCP FAQ
+  http://web.syr.edu/~jmwobus/comfaqs/dhcp.faq.html for details.  If
+  you want to compile RARP support as a module ( = code which can be
+  inserted in and removed from the running kernel whenever you want),
+  say M here and read Documentation/modules.txt.  If you don't
+  understand a word of the above, say N and rest in peace.
 
 Assume subnets are local
 CONFIG_INET_SNARL
@@ -1734,7 +1737,8 @@ CONFIG_DUMMY
   module ( = code which can be inserted in and removed from the
   running kernel whenever you want), say M here and read
   Documentation/modules.txt. If you want to use more than one dummy
-  device at a time, you need to compile it as a module.
+  device at a time, you need to compile it as a module. Instead of
+  'dummy', it will they will then be called 'dummy0', 'dummy1' etc.
   
 SLIP (serial line) support
 CONFIG_SLIP
@@ -1974,7 +1978,7 @@ CONFIG_DLCI_MAX
 
 Sangoma S502A FRAD support
 CONFIG_SDLA
-  Say Y here if you need a driver for the Sangoma S502A, S502E and
+  Say Y here if you need a driver for the Sangoma S502A, S502E, and
   S508 Frame Relay Access Devices. These are multi-protocol
   cards, but only frame relay is supported by the driver at this
   time. Please read Documentation/framerelay.txt. This driver is also
@@ -2978,25 +2982,25 @@ CONFIG_ROOT_NFS
 BOOTP support
 CONFIG_RNFS_BOOTP
   If you want your Linux box to mount its whole root filesystem from
-  some other computer over the net via NFS and you want the address
-  of your computer to be discovered automatically using the BOOTP
-  protocol (a special protocol designed for doing this job), say Y
-  here. In case the boot ROM of your network card was designed for
-  booting Linux and does BOOTP itself, providing all necessary
-  information on the kernel command line, you can say N here.
-  If unsure, say Y. Note that in case you want to use BOOTP, a BOOTP
+  some other computer over the net via NFS and you want the IP address
+  of your computer to be discovered automatically at boot time using
+  the BOOTP protocol (a special protocol designed for doing this job),
+  say Y here. In case the boot ROM of your network card was designed
+  for booting Linux and does BOOTP itself, providing all necessary
+  information on the kernel command line, you can say N here.  If
+  unsure, say Y. Note that in case you want to use BOOTP, a BOOTP
   server must be operating on your network. Read
   Documentation/nfsroot.txt for details.
 
 RARP support
 CONFIG_RNFS_RARP
   If you want your Linux box to mount its whole root filesystem from
-  some other computer over the net via NFS and you want the address
-  of your computer to be discovered automatically using the RARP
-  protocol (an older protocol which is being obsoleted by BOOTP), say
-  Y here. Note that in case you want to use RARP, a RARP server must be
-  operating on your network. Read Documentation/nfsroot.txt for
-  details. 
+  some other computer over the net via NFS and you want the IP address
+  of your computer to be discovered automatically at boot time using
+  the RARP protocol (an older protocol which is being obsoleted by
+  BOOTP), say Y here. Note that in case you want to use RARP, a RARP
+  server must be operating on your network. Read
+  Documentation/nfsroot.txt for details.
 
 ISO9660 cdrom filesystem support
 CONFIG_ISO9660_FS

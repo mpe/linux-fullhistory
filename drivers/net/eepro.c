@@ -300,7 +300,7 @@ buffer (transmit-buffer = 32K - receive-buffer).
    (detachable devices only).
    */
 #ifdef HAVE_DEVLIST
-/* Support for a alternate probe manager, which will eliminate the
+/* Support for an alternate probe manager, which will eliminate the
    boilerplate below. */
 struct netdev_entry netcard_drv =
 {"eepro", eepro_probe1, EEPRO_IO_EXTENT, eepro_portlist};

@@ -39,7 +39,7 @@ void invalidate_dquots(kdev_t dev, short type)
 }
 
 /*
- * Initialize pointer in a inode to the right dquots.
+ * Initialize pointer in an inode to the right dquots.
  */
 void dquot_initialize(struct inode *inode, short type)
 {

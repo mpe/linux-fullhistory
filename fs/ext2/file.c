@@ -80,6 +80,21 @@ struct inode_operations ext2_file_inode_operations = {
 	NULL			/* smap */
 };
 
+static inline void remove_suid(struct inode *inode)
+{
+	unsigned int mode;
+
+	/* set S_IGID if S_IXGRP is set, and always set S_ISUID */
+	mode = (inode->i_mode & S_IXGRP)*(S_ISGID/S_IXGRP) | S_ISUID;
+
+	/* was any of the uid bits set? */
+	mode &= inode->i_mode;
+	if (mode && suser()) {
+		inode->i_mode &= ~mode;
+		inode->i_dirt = 1;
+	}
+}
+
 static long ext2_file_write (struct inode * inode, struct file * filp,
 			    const char * buf, unsigned long count)
 {
@@ -111,6 +126,7 @@ static long ext2_file_write (struct inode * inode, struct file * filp,
 			      inode->i_mode);
 		return -EINVAL;
 	}
+	remove_suid(inode);
 	if (filp->f_flags & O_APPEND)
 		pos = inode->i_size;
 	else
@@ -153,7 +169,13 @@ static long ext2_file_write (struct inode * inode, struct file * filp,
 				break;
 			}
 		}
+		if (exception()) {
+			brelse(bh);
+			written = -EFAULT;
+			break;
+		}
 		memcpy_fromfs (bh->b_data + offset, buf, c);
+		end_exception();
 		update_vm_cache(inode, pos, bh->b_data + offset, c);
 		pos2 += c;
 		pos += c;
@@ -201,7 +223,7 @@ static long ext2_file_write (struct inode * inode, struct file * filp,
 }
 
 /*
- * Called when a inode is released. Note that this is different
+ * Called when an inode is released. Note that this is different
  * from ext2_open: open gets called at every open, but release
  * gets called only when /all/ the files are closed.
  */

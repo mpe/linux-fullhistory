@@ -51,6 +51,10 @@ static long pipe_read(struct inode * inode, struct file * filp,
 		interruptible_sleep_on(&PIPE_WAIT(*inode));
 	}
 	PIPE_LOCK(*inode)++;
+	if (exception()) {
+		PIPE_LOCK(*inode)--;
+		return -EFAULT;
+	}
 	while (count>0 && (size = PIPE_SIZE(*inode))) {
 		chars = PIPE_MAX_RCHUNK(*inode);
 		if (chars > count)
@@ -66,6 +70,7 @@ static long pipe_read(struct inode * inode, struct file * filp,
 		memcpy_tofs(buf, pipebuf, chars );
 		buf += chars;
 	}
+	end_exception();
 	PIPE_LOCK(*inode)--;
 	wake_up_interruptible(&PIPE_WAIT(*inode));
 	if (read) {
@@ -105,6 +110,10 @@ static long pipe_write(struct inode * inode, struct file * filp,
 			interruptible_sleep_on(&PIPE_WAIT(*inode));
 		}
 		PIPE_LOCK(*inode)++;
+		if (exception()) {
+			PIPE_LOCK(*inode)--;
+			return -EFAULT;
+		}
 		while (count>0 && (free = PIPE_FREE(*inode))) {
 			chars = PIPE_MAX_WCHUNK(*inode);
 			if (chars > count)
@@ -118,6 +127,7 @@ static long pipe_write(struct inode * inode, struct file * filp,
 			memcpy_fromfs(pipebuf, buf, chars );
 			buf += chars;
 		}
+		end_exception();
 		PIPE_LOCK(*inode)--;
 		wake_up_interruptible(&PIPE_WAIT(*inode));
 		free = 1;

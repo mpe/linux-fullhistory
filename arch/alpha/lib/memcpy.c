@@ -81,7 +81,7 @@ static inline void __memcpy_unaligned(unsigned long d, unsigned long s, long n)
 }
 
 /*
- * Hmm.. Strange. The __asm__ here is there to make gcc use a integer register
+ * Hmm.. Strange. The __asm__ here is there to make gcc use an integer register
  * for the load-store. I don't know why, but it would seem that using a floating
  * point register for the move seems to slow things down (very small difference,
  * though).

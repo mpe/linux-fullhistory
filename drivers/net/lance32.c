@@ -55,7 +55,7 @@ int lance32_debug = 1;
  *         only tested on Alpha Noname Board
  * v0.02:  changed IRQ handling for new interrupt scheme (dev_id)
  *         tested on a ASUS SP3G
- * v0.10:  fixed a odd problem with the 79C794 in a Compaq Deskpro XL
+ * v0.10:  fixed an odd problem with the 79C794 in a Compaq Deskpro XL
  *         looks like the 974 doesn't like stopping and restarting in a
  *         short period of time; now we do a reinit of the lance; the
  *         bug was triggered by doing ifconfig eth0 <ip> broadcast <addr>
