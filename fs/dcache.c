@@ -118,6 +118,11 @@ repeat:
 	}
 	list_add(&dentry->d_lru, &dentry_unused);
 	dentry_stat.nr_unused++;
+	/*
+	 * Update the timestamp
+	 */
+	dentry->d_reftime = jiffies;
+
 out:
 	if (count >= 0) {
 		dentry->d_count = count;
@@ -135,15 +140,12 @@ out:
  * Try to invalidate the dentry if it turns out to be
  * possible. If there are other users of the dentry we
  * can't invalidate it.
- *
- * We should probably try to see if we can invalidate
- * any unused children - right now we refuse to invalidate
- * too much. That would require a better child list
- * data structure, though.
  */
 int d_invalidate(struct dentry * dentry)
 {
-	/* We might want to do a partial shrink_dcache here */
+	/* Check whether to do a partial shrink_dcache */
+	if (dentry->d_count > 1 && !list_empty(&dentry->d_subdirs))
+		shrink_dcache_parent(dentry);
 	if (dentry->d_count != 1)
 		return -EBUSY;
 
@@ -152,27 +154,31 @@ int d_invalidate(struct dentry * dentry)
 }
 
 /*
- * Selects less valuable dentries to be pruned when
- * we need inodes or memory. The selected dentries
- * are moved to the old end of the list where
- * prune_dcache() can find them.
+ * Select less valuable dentries to be pruned when we need
+ * inodes or memory. The selected dentries are moved to the
+ * old end of the list where prune_dcache() can find them.
+ * 
+ * Negative dentries are included in the selection so that
+ * they don't accumulate at the end of the list. The count
+ * returned is the total number of dentries selected, which
+ * may be much larger than the requested number of inodes.
  */
-int select_dcache(int count, int page_count)
+int select_dcache(int inode_count, int page_count)
 {
-	struct list_head *tail = &dentry_unused;
-	struct list_head *next = dentry_unused.prev;
-	int forward = 0, young = 0, depth = dentry_stat.nr_unused >> 1;
-	int found = 0, pages = 0;
+	struct list_head *next, *tail = &dentry_unused;
+	int found = 0, forward = 0, young = 8;
+	int depth = dentry_stat.nr_unused >> 1;
+	unsigned long min_value = 0, max_value = 4;
 
-#ifdef DCACHE_DEBUG
-printk("select_dcache: %d unused, count=%d, pages=%d\n",
-dentry_stat.nr_unused, count, page_count);
-#endif
+	if (page_count)
+		max_value = -1;
+
+	next = tail->prev;
 	while (next != &dentry_unused && depth--) {
 		struct list_head *tmp = next;
 		struct dentry *dentry = list_entry(tmp, struct dentry, d_lru);
 		struct inode *inode = dentry->d_inode;
-		unsigned long value = 0;
+		unsigned long value = 0;	
 
 		next = tmp->prev;
 		if (forward)
@@ -184,56 +190,57 @@ dentry_stat.nr_unused, count, page_count);
 			continue;
 		}
 		/*
+		 * Check the dentry's age to see whether to change direction.
+		 */
+		if (!forward) {
+			int age = (jiffies - dentry->d_reftime) / HZ;
+			if (age < dentry_stat.age_limit) {
+				if (!--young) {
+					forward = 1;
+					next = dentry_unused.next;
+					/*
+		 			 * Update the limits -- we don't want
+					 * files with too few or too many pages.
+					 */
+ 					if (page_count) {
+						min_value = 3;
+						max_value = 15;
+					}
+#ifdef DCACHE_DEBUG
+printk("select_dcache: %s/%s age=%d, scanning forward\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, age);
+#endif
+				}
+				continue;
+			}
+		} 
+
+		/*
 		 * Select dentries based on the page cache count ...
-		 * should factor in number of uses as well.
+		 * should factor in number of uses as well. We take
+		 * all negative dentries so that they don't accumulate.
+		 * (We skip inodes that aren't immediately available.)
 		 */
 		if (inode) {
-			if (inode->i_state)
-				continue;
 			value = inode->i_nrpages;	
-		}
-		/*
-		 * Consider various exemptions ...
-		 */
-		if (!page_count) {
-			if (!inode)
+			if (value >= max_value || value < min_value)
 				continue;
-			if (value >= 3)
-				continue;
-		} else if (!forward) {
-			if (inode) {
-				int age = CURRENT_TIME - inode->i_atime;
-				if (age < dentry_stat.age_limit) {
-					if (++young > 8) {
-						forward = 1;
-						next = dentry_unused.next;
-#ifdef DCACHE_DEBUG
-printk("select_dcache: age=%d, pages=%d, scanning forward\n", age, pages);
-#endif
-					}
-					continue;
-				}
-			}
-		} else {
-			/*
-			 * If we're scanning from the front, don't take
-			 * files with only a trivial amount of memory.
-			 */
-			if (value < 3 || value > 15)
+			if (inode->i_state || inode->i_count > 1)
 				continue;
 		}
+
 		/*
-		 * Move the dentry behind the tail
+		 * Move the selected dentries behind the tail.
 		 */
 		if (tmp != tail->prev) {
 			list_del(tmp);
 			list_add(tmp, tail->prev);
 		}
 		tail = tmp;
-		pages += value;
-		if (++found >= count)
+		found++;
+		if (inode && --inode_count <= 0)
 			break;
-		if (page_count && pages >= page_count)
+		if (page_count && (page_count -= value) <= 0)
 			break;
 	}
 	return found;
@@ -430,7 +437,7 @@ void check_dcache_memory()
 		if (goal) {
 			if (goal > 50)
 				goal = 50;
-			count = select_dcache(128, goal);
+			count = select_dcache(32, goal);
 #ifdef DCACHE_DEBUG
 printk("check_dcache_memory: goal=%d, count=%d\n", goal, count);
 #endif
@@ -453,7 +460,7 @@ struct dentry * d_alloc(struct dentry * parent, const struct qstr *name)
 	 * Prune the dcache if there are too many unused dentries.
 	 */
 	if (dentry_stat.nr_unused > 3*(nr_inodes >> 1)) {
-#ifdef DCACHE_PARANOIA
+#ifdef DCACHE_DEBUG
 printk("d_alloc: %d unused, pruning dcache\n", dentry_stat.nr_unused);
 #endif
 		prune_dcache(8);
@@ -579,30 +586,33 @@ struct dentry * d_lookup(struct dentry * parent, struct qstr * name)
 int d_validate(struct dentry *dentry, struct dentry *dparent,
 	       unsigned int hash, unsigned int len)
 {
-	struct list_head *base = d_hash(dparent, hash);
-	struct list_head *lhp = base;
+	struct list_head *base, *lhp;
+	int valid = 1;
 
-	while ((lhp = lhp->next) != base) {
-		if (dentry == list_entry(lhp, struct dentry, d_hash))
-			goto found_it;
-	}
+	if (dentry != dparent) {
+		base = d_hash(dparent, hash);
+		lhp = base;
+		while ((lhp = lhp->next) != base) {
+			if (dentry == list_entry(lhp, struct dentry, d_hash))
+				goto out;
+		}
+	} else {
+		/*
+		 * Special case: local mount points don't live in
+		 * the hashes, so we search the super blocks.
+		 */
+		struct super_block *sb = super_blocks + 0;
 
-	/* Special case, local mount points don't live in the hashes.
-	 * So if we exhausted the chain, search the super blocks.
-	 */
-	if (dentry && dentry == dparent) {
-		struct super_block *sb;
-
-		for (sb = super_blocks + 0; sb < super_blocks + NR_SUPER; sb++) {
+		for (; sb < super_blocks + NR_SUPER; sb++) {
+			if (!sb->s_dev)
+				continue;
 			if (sb->s_root == dentry)
-				goto found_it;
+				goto out;
 		}
 	}
-	return 0;
-found_it:
-	return	(dentry->d_parent == dparent) &&
-		(dentry->d_name.hash == hash) &&
-		(dentry->d_name.len == len);
+	valid = 0;
+out:
+	return valid;
 }
 
 /*

@@ -36,6 +36,8 @@
 #include <asm/uaccess.h>
 #endif
 
+extern void fh_update(struct svc_fh*);
+
 #define NFSDDBG_FACILITY		NFSDDBG_FILEOP
 
 /* Open mode for nfsd_open */
@@ -108,10 +110,11 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 	dprintk("nfsd: nfsd_lookup(fh %p, %s)\n", SVCFH_DENTRY(fhp), name);
 
 	/* Obtain dentry and export. */
-	if ((err = fh_verify(rqstp, fhp, S_IFDIR, MAY_NOP)) != 0)
-		return err;
+	err = fh_verify(rqstp, fhp, S_IFDIR, MAY_NOP);
+	if (err)
+		goto out;
 
-	dparent = fhp->fh_handle.fh_dentry;
+	dparent = fhp->fh_dentry;
 	exp  = fhp->fh_export;
 
 	/* Fast path... */
@@ -121,11 +124,16 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 	    !nfsd_iscovered(dparent, exp)) {
 		struct dentry *dchild;
 
-		dchild = lookup_dentry(name, dget(dparent), 1);
+		/* Lookup the name, but don't follow links */
+		dchild = lookup_dentry(name, dget(dparent), 0);
 		err = PTR_ERR(dchild);
 		if (IS_ERR(dchild))
 			return nfserrno(-err);
 
+		/*
+		 * Note: we compose the filehandle now, but as the
+		 * dentry may be negative, it may need to be updated.
+		 */
 		fh_compose(resfh, exp, dchild);
 		return (dchild->d_inode ? 0 : nfserr_noent);
 	}
@@ -135,6 +143,7 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 		return nfserr_noent;
 	if (nfsd_iscovered(dparent, exp))
 		return nfserr_acces;
+out:
 	return err;
 }
 
@@ -158,10 +167,11 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 		ftype = S_IFREG;
 
 	/* Get inode */
-	if ((err = fh_verify(rqstp, fhp, ftype, accmode)) != 0)
-		return err;
+	err = fh_verify(rqstp, fhp, ftype, accmode);
+	if (err)
+		goto out;
 
-	dentry = fhp->fh_handle.fh_dentry;
+	dentry = fhp->fh_dentry;
 	inode = dentry->d_inode;
 
 	/* The size case is special... */
@@ -169,7 +179,7 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 		if (iap->ia_size < inode->i_size) {
 			err = nfsd_permission(fhp->fh_export, dentry, MAY_TRUNC);
 			if (err != 0)
-				return err;
+				goto out;
 		}
 		if ((err = get_write_access(inode)) != 0)
 			return nfserrno(-err);
@@ -211,8 +221,9 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 		if (EX_ISSYNC(fhp->fh_export))
 			write_inode_now(inode);
 	}
-
-	return 0;
+	err = 0;
+out:
+	return err;
 }
 
 /*
@@ -230,20 +241,23 @@ nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 
 	access = wflag? MAY_WRITE : MAY_READ;
 	if ((err = fh_verify(rqstp, fhp, type, access)) != 0)
-		return err;
+		goto out;
 
-	dentry = fhp->fh_handle.fh_dentry;
+	dentry = fhp->fh_dentry;
 	inode = dentry->d_inode;
 
 	/* Disallow access to files with the append-only bit set or
 	 * with mandatory locking enabled */
+	err = nfserr_perm;
 	if (IS_APPEND(inode) || IS_ISMNDLK(inode))
-		return nfserr_perm;
+		goto out;
 	if (!inode->i_op || !inode->i_op->default_file_ops)
-		return nfserr_perm;
+		goto out;
 
-	if (wflag && (err = get_write_access(inode)) != 0)
-		return nfserrno(-err);
+	if (wflag && (err = get_write_access(inode)) != 0) {
+		err = nfserrno(-err);
+		goto out;
+	}
 
 	memset(filp, 0, sizeof(*filp));
 	filp->f_op    = inode->i_op->default_file_ops;
@@ -252,6 +266,7 @@ nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	filp->f_mode  = wflag? FMODE_WRITE : FMODE_READ;
 	filp->f_dentry = dentry;
 
+	err = 0;
 	if (filp->f_op->open) {
 		err = filp->f_op->open(inode, filp);
 		if (err) {
@@ -262,11 +277,11 @@ nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 			 * is really on callers stack frame. -DaveM
 			 */
 			filp->f_count--;
-			return nfserrno(-err);
+			err = nfserrno(-err);
 		}
 	}
-
-	return 0;
+out:
+	return err;
 }
 
 /*
@@ -281,7 +296,8 @@ nfsd_close(struct file *filp)
 	if (!inode->i_count)
 		printk(KERN_WARNING "nfsd: inode count == 0!\n");
 	if (!dentry->d_count)
-		printk(KERN_WARNING "nfsd: wheee, dentry count == 0!\n");
+		printk(KERN_WARNING "nfsd: wheee, %s/%s d_count == 0!\n",
+			dentry->d_parent->d_name.name, dentry->d_name.name);
 	if (filp->f_op && filp->f_op->release)
 		filp->f_op->release(inode, filp);
 	if (filp->f_mode & FMODE_WRITE)
@@ -299,6 +315,9 @@ nfsd_sync(struct inode *inode, struct file *filp)
 
 /*
  * Obtain the readahead parameters for the given file
+ *
+ * N.B. is raparm cache for a file cleared when the file closes??
+ * (dentry might be reused later.)
  */
 static inline struct raparms *
 nfsd_get_raparms(struct dentry *dentry)
@@ -506,39 +525,53 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	struct inode	*dirp;
 	int		err;
 
+	err = nfserr_perm;
 	if (!flen)
-		return nfserr_perm;
+		goto out;
 	if (!(iap->ia_valid & ATTR_MODE))
 		iap->ia_mode = 0;
-	if ((err = fh_verify(rqstp, fhp, S_IFDIR, MAY_CREATE)) != 0)
-		return err;
+	err = fh_verify(rqstp, fhp, S_IFDIR, MAY_CREATE);
+	if (err)
+		goto out;
 
-	dentry = fhp->fh_handle.fh_dentry;
+	dentry = fhp->fh_dentry;
 	dirp = dentry->d_inode;
 
 	/* Get all the sanity checks out of the way before we lock the parent. */
-	if(!dirp->i_op || !dirp->i_op->lookup) {
-		return nfserrno(-ENOTDIR);
-	} else if(type == S_IFREG) {
+	err = nfserr_notdir;
+	if(!dirp->i_op || !dirp->i_op->lookup)
+		goto out;
+	err = nfserr_perm;
+	if (type == S_IFREG) {
 		if(!dirp->i_op->create)
-			return nfserr_perm;
+			goto out;
 	} else if(type == S_IFDIR) {
 		if(!dirp->i_op->mkdir)
-			return nfserr_perm;
+			goto out;
 	} else if((type == S_IFCHR) || (type == S_IFBLK) || (type == S_IFIFO)) {
 		if(!dirp->i_op->mknod)
-			return nfserr_perm;
+			goto out;
 	} else {
-		return nfserr_perm;
+		goto out;
 	}
 
-	if(!resfhp->fh_dverified) {
+	/*
+	 * The response filehandle may have been setup already ...
+	 */
+	if (!resfhp->fh_dverified) {
 		dchild = lookup_dentry(fname, dget(dentry), 0);
 		err = PTR_ERR(dchild);
 		if(IS_ERR(dchild))
 			return nfserrno(-err);
 	} else
-		dchild = resfhp->fh_handle.fh_dentry;
+		dchild = resfhp->fh_dentry;
+	/*
+	 * Make sure the child dentry is still negative ...
+	 */
+	if (dchild->d_inode) {
+		printk("nfsd_create: dentry %s/%s not negative!\n",
+			dentry->d_parent->d_name.name, dentry->d_name.name);
+	}
 
 	/* Looks good, lock the directory. */
 	fh_lock(fhp);
@@ -562,9 +595,15 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if (EX_ISSYNC(fhp->fh_export))
 		write_inode_now(dirp);
 
-	/* If needed, assemble the file handle for the newly created file.  */
-	if(!resfhp->fh_dverified)
+	/*
+	 * Assemble the file handle for the newly created file,
+	 * or update the filehandle to get the new inode info.
+	 */
+	if (!resfhp->fh_dverified) {
 		fh_compose(resfhp, fhp->fh_export, dchild);
+	} else {
+		fh_update(resfhp);
+	}
 
 	/* Set file attributes. Mode has already been set and
 	 * setting uid/gid works only for root. Irix appears to
@@ -574,7 +613,7 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	err = 0;
 	if ((iap->ia_valid &= (ATTR_UID|ATTR_GID|ATTR_MODE)) != 0)
 		err = nfsd_setattr(rqstp, resfhp, iap);
-
+out:
 	return err;
 }
 
@@ -597,7 +636,7 @@ nfsd_truncate(struct svc_rqst *rqstp, struct svc_fh *fhp, unsigned long size)
 	if ((err = fh_verify(rqstp, fhp, S_IFREG, MAY_WRITE|MAY_TRUNC)) != 0)
 		return err;
 
-	dentry = fhp->fh_handle.fh_dentry;
+	dentry = fhp->fh_dentry;
 	inode = dentry->d_inode;
 
 	if ((err = get_write_access(inode)) != 0)
@@ -635,7 +674,7 @@ nfsd_readlink(struct svc_rqst *rqstp, struct svc_fh *fhp, char *buf, int *lenp)
 	if ((err = fh_verify(rqstp, fhp, S_IFLNK, MAY_READ)) != 0)
 		return err;
 
-	dentry = fhp->fh_handle.fh_dentry;
+	dentry = fhp->fh_dentry;
 	inode = dentry->d_inode;
 
 	if (!inode->i_op || !inode->i_op->readlink)
@@ -673,7 +712,7 @@ nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	if ((err = fh_verify(rqstp, fhp, S_IFDIR, MAY_CREATE)) != 0)
 		return err;
 
-	dentry = fhp->fh_handle.fh_dentry;
+	dentry = fhp->fh_dentry;
 	dirp = dentry->d_inode;
 
 	if (nfsd_iscovered(dentry, fhp->fh_export)	||
@@ -720,7 +759,7 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 	    (err = fh_verify(rqstp, tfhp, S_IFREG, MAY_NOP)) != 0)
 		return err;
 
-	ddir = ffhp->fh_handle.fh_dentry;
+	ddir = ffhp->fh_dentry;
 	dirp = ddir->d_inode;
 
 	dnew = lookup_dentry(fname, dget(ddir), 1);
@@ -731,7 +770,7 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 	err = -EEXIST;
 	if (dnew->d_inode)
 		goto dput_and_out;
-	dest = tfhp->fh_handle.fh_dentry->d_inode;
+	dest = tfhp->fh_dentry->d_inode;
 
 	err = -EPERM;
 	if (!len)
@@ -794,10 +833,10 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	 || (err = fh_verify(rqstp, tfhp, S_IFDIR, MAY_CREATE)) != 0)
 		return err;
 
-	fdentry = ffhp->fh_handle.fh_dentry;
+	fdentry = ffhp->fh_dentry;
 	fdir = fdentry->d_inode;
 
-	tdentry = tfhp->fh_handle.fh_dentry;
+	tdentry = tfhp->fh_dentry;
 	tdir = tdentry->d_inode;
 
 	if (!flen || (fname[0] == '.' && 
@@ -816,6 +855,7 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	if (IS_ERR(ndentry))
 		goto out_dput_old;
 
+	/* N.B. check this ... problems in locking?? */
 	nfsd_double_down(&tdir->i_sem, &fdir->i_sem);
 	err = -EXDEV;
 	if (fdir->i_dev != tdir->i_dev)
@@ -856,7 +896,7 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	if ((err = fh_verify(rqstp, fhp, S_IFDIR, MAY_REMOVE)) != 0)
 		return err;
 
-	dentry = fhp->fh_handle.fh_dentry;
+	dentry = fhp->fh_dentry;
 	dirp = dentry->d_inode;
 
 	rdentry = lookup_dentry(fname, dget(dentry), 0);
@@ -975,20 +1015,24 @@ nfsd_statfs(struct svc_rqst *rqstp, struct svc_fh *fhp, struct statfs *stat)
 	unsigned long		oldfs;
 	int			err;
 
-	if ((err = fh_verify(rqstp, fhp, 0, MAY_NOP)) != 0)
-		return err;
-	dentry = fhp->fh_handle.fh_dentry;
+	err = fh_verify(rqstp, fhp, 0, MAY_NOP);
+	if (err)
+		goto out;
+	dentry = fhp->fh_dentry;
 	inode = dentry->d_inode;
 
+	err = nfserr_io;
 	if (!(sb = inode->i_sb) || !sb->s_op->statfs)
-		return nfserr_io;
+		goto out;
 
 	oldfs = get_fs();
 	set_fs (KERNEL_DS);
 	sb->s_op->statfs(sb, stat, sizeof(*stat));
 	set_fs (oldfs);
+	err = 0;
 
-	return 0;
+out:
+	return err;
 }
 
 /*

@@ -78,6 +78,8 @@ nfsd_proc_setattr(struct svc_rqst *rqstp, struct nfsd_sattrargs *argp,
 
 /*
  * Look up a path name component
+ * Note: the dentry in the resp->fh may be negative if the file
+ * doesn't exist yet.
  * N.B. After this call resp->fh needs an fh_put
  */
 static int
@@ -88,10 +90,8 @@ nfsd_proc_lookup(struct svc_rqst *rqstp, struct nfsd_diropargs *argp,
 
 	dprintk("nfsd: LOOKUP   %p %s\n", SVCFH_DENTRY(&argp->fh), argp->name);
 
-	nfserr = nfsd_lookup(rqstp, &argp->fh,
-				    argp->name,
-				    argp->len,
-				    &resp->fh);
+	nfserr = nfsd_lookup(rqstp, &argp->fh, argp->name, argp->len,
+				 &resp->fh);
 
 	fh_put(&argp->fh);
 	RETURN(nfserr);
@@ -209,11 +209,10 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 	nfserr = fh_verify(rqstp, dirfhp, S_IFDIR, MAY_EXEC);
 	if (nfserr)
 		goto done; /* must fh_put dirfhp even on error */
-	dirp = dirfhp->fh_handle.fh_dentry->d_inode;
+	dirp = dirfhp->fh_dentry->d_inode;
 
 	/* Check for MAY_WRITE separately. */
-	nfserr = nfsd_permission(dirfhp->fh_export,
-				 dirfhp->fh_handle.fh_dentry,
+	nfserr = nfsd_permission(dirfhp->fh_export, dirfhp->fh_dentry,
 				 MAY_WRITE);
 	if (nfserr == nfserr_rofs) {
 		rdonly = 1;	/* Non-fatal error for echo > /dev/null */
@@ -224,7 +223,7 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 	exists = !nfsd_lookup(rqstp, dirfhp, argp->name, argp->len, newfhp);
 
 	if (newfhp->fh_dverified)
-		inode = newfhp->fh_handle.fh_dentry->d_inode;
+		inode = newfhp->fh_dentry->d_inode;
 
 	/* Get rid of this soon... */
 	if (exists && !inode) {

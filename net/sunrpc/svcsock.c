@@ -766,7 +766,6 @@ again:
 		}
 	}
 
-printk("svc_recv: svsk=%p, use count=%d\n", svsk, svsk->sk_inuse);
 	dprintk("svc: server %p servicing socket %p\n", rqstp, svsk);
 	len = svsk->sk_recvfrom(rqstp);
 

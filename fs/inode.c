@@ -358,33 +358,30 @@ static int free_inodes(int goal)
  */
 static void try_to_free_inodes(int goal)
 {
-	int retried = 0, found;
+	int retry = 1, found;
 
 	/*
 	 * Check whether to preshrink the dcache ...
 	 */
-	if (inodes_stat.preshrink) {
-		spin_unlock(&inode_lock);
-		select_dcache(goal, 0);
-		prune_dcache(goal);
-		spin_lock(&inode_lock);
-	}
+	if (inodes_stat.preshrink)
+		goto preshrink;
 
-repeat:
-	found = free_inodes(goal);
-
-	/*
-	 * If we didn't free any inodes, do a limited
-	 * pruning of the dcache to help the next time.
-	 */
-	if (!found) {
+	retry = 0;
+	do {
+		if (free_inodes(goal))
+			break;
+		/*
+		 * If we didn't free any inodes, do a limited
+		 * pruning of the dcache to help the next time.
+		 */
+	preshrink:
 		spin_unlock(&inode_lock);
-		select_dcache(goal, 0);
-		prune_dcache(goal);
+		found = select_dcache(goal, 0);
+		if (found < goal)
+			found = goal;
+		prune_dcache(found);
 		spin_lock(&inode_lock);
-		if (inodes_stat.preshrink && !retried++)
-			goto repeat;
-	}
+	} while (retry--);
 }
 
 /*
@@ -440,11 +437,11 @@ static struct inode * grow_inodes(void)
 	 * If the allocation failed, do an extensive pruning of 
 	 * the dcache and then try again to free some inodes.
 	 */
-	prune_dcache(128);
+	prune_dcache(inodes_stat.nr_inodes >> 2);
 	inodes_stat.preshrink = 1;
 
 	spin_lock(&inode_lock);
-	free_inodes(128);
+	free_inodes(inodes_stat.nr_inodes >> 2);
 	{
 		struct list_head *tmp = inode_unused.next;
 		if (tmp != &inode_unused) {

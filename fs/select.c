@@ -328,6 +328,17 @@ asmlinkage int sys_select(int n, fd_set *inp, fd_set *outp, fd_set *exp, struct 
 	zero_fd_set(n, &fds->res_out);
 	zero_fd_set(n, &fds->res_ex);
 	error = do_select(n, fds, wait);
+	if (tvp && !(current->personality & STICKY_TIMEOUTS)) {
+		unsigned long timeout = current->timeout - jiffies - 1;
+		unsigned long sec = 0, usec = 0;
+		if ((long) timeout > 0) {
+			sec = timeout / HZ;
+			usec = timeout % HZ;
+			usec *= (1000000/HZ);
+		}
+		put_user(sec, &tvp->tv_sec);
+		put_user(usec, &tvp->tv_usec);
+	}
 	current->timeout = 0;
 	if (error < 0)
 		goto out;

@@ -32,10 +32,16 @@ static struct semaphore		nlm_file_sema = MUTEX;
  * Lookup file info. If it doesn't exist, create a file info struct
  * and open a (VFS) file for the given inode.
  *
+ * The NFS filehandle must have been validated prior to this call,
+ * as we assume that the dentry pointer is valid.
+ *
  * FIXME:
  * Note that we open the file O_RDONLY even when creating write locks.
  * This is not quite right, but for now, we assume the client performs
  * the proper R/W checking.
+ *
+ * The dentry in the FH may not be validated .. can we call this with
+ * the full svc_fh?
  */
 u32
 nlm_lookup_file(struct svc_rqst *rqstp, struct nlm_file **result,
@@ -43,21 +49,24 @@ nlm_lookup_file(struct svc_rqst *rqstp, struct nlm_file **result,
 {
 	struct nlm_file	*file;
 	struct knfs_fh	*fh = (struct knfs_fh *) f;
-	unsigned int	hash = FILE_HASH(fh->fh_dhash);
+	struct dentry	*dentry = fh->fh_dcookie;
+	unsigned int	hash = FILE_HASH(dentry->d_name.hash);
 	u32		nfserr;
 
-	dprintk("lockd: nlm_file_lookup(%p)\n", fh->fh_dentry);
+	dprintk("lockd: nlm_file_lookup(%s/%s)\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name);
 
 	/* Lock file table */
 	down(&nlm_file_sema);
 
 	for (file = nlm_files[hash]; file; file = file->f_next) {
-		if (file->f_handle.fh_dentry == fh->fh_dentry
+		if (file->f_handle.fh_dcookie == dentry
 		 && !memcmp(&file->f_handle, fh, sizeof(*fh)))
 			goto found;
 	}
 
-	dprintk("lockd: creating file for %p\n", fh->fh_dentry);
+	dprintk("lockd: creating file for %s/%s\n",
+		dentry->d_parent->d_name.name, dentry->d_name.name);
 	if (!(file = (struct nlm_file *) kmalloc(sizeof(*file), GFP_KERNEL))) {
 		up(&nlm_file_sema);
 		return nlm_lck_denied_nolocks;

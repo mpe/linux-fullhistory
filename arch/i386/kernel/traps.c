@@ -103,6 +103,7 @@ asmlinkage void segment_not_present(void);
 asmlinkage void stack_segment(void);
 asmlinkage void general_protection(void);
 asmlinkage void page_fault(void);
+asmlinkage void page_fault_f00f(void);
 asmlinkage void coprocessor_error(void);
 asmlinkage void reserved(void);
 asmlinkage void alignment_check(void);
@@ -418,6 +419,14 @@ __initfunc(void trap_init_f00f_bug(void))
 	unsigned long page;
 
 	/*
+	 * We use a special page fault handler, to actually detect
+	 * 'bounced' traps/exceptions #0-6. This new page fault
+	 * handler is a few tens of cycles slower than the 'normal'
+	 * one.
+	 */
+	set_trap_gate(14,&page_fault_f00f);
+
+	/*
 	 * Allocate a new page in virtual address space, 
 	 * and move the IDT to have entry #7 starting at
 	 * the beginning of the page. We'll force a page
@@ -433,6 +442,7 @@ __initfunc(void trap_init_f00f_bug(void))
 	 */
 	idt = (struct desc_struct *)(page - 7*8);
 	__asm__ __volatile__("lidt %0": "=m" (idt_descr));
+
 }
 
 

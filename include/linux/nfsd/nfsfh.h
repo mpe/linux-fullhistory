@@ -27,12 +27,12 @@
  * ino/dev of the exported inode.
  */
 struct nfs_fhbase {
-	struct dentry		*fb_dentry;
-	struct dentry		*fb_dparent;
-	unsigned int		fb_dhash;
-	unsigned int		fb_dlen;
-	ino_t			fb_xino;
+	struct dentry *		fb_dentry;	/* dentry cookie */
+	ino_t			fb_ino;		/* our inode number */
+	ino_t			fb_dirino;	/* dir inode number */
+	dev_t			fb_dev;		/* our device */
 	dev_t			fb_xdev;
+	ino_t			fb_xino;
 };
 
 #define NFS_FH_PADDING		(NFS_FHSIZE - sizeof(struct nfs_fhbase))
@@ -41,13 +41,12 @@ struct knfs_fh {
 	__u8			fh_cookie[NFS_FH_PADDING];
 };
 
-#define fh_dentry		fh_base.fb_dentry
-#define fh_dparent		fh_base.fb_dparent
-#define fh_dhash		fh_base.fb_dhash
-#define fh_dlen			fh_base.fb_dlen
-#define fh_xino			fh_base.fb_xino
+#define fh_dcookie		fh_base.fb_dentry
+#define fh_ino			fh_base.fb_ino
+#define fh_dirino		fh_base.fb_dirino
+#define fh_dev			fh_base.fb_dev
 #define fh_xdev			fh_base.fb_xdev
-
+#define fh_xino			fh_base.fb_xino
 
 #ifdef __KERNEL__
 
@@ -57,6 +56,7 @@ struct knfs_fh {
  */
 typedef struct svc_fh {
 	struct knfs_fh		fh_handle;	/* FH data */
+	struct dentry *		fh_dentry;	/* validated dentry */
 	struct svc_export *	fh_export;	/* export pointer */
 	size_t			fh_pre_size;	/* size before operation */
 	time_t			fh_pre_mtime;	/* mtime before oper */
@@ -69,17 +69,26 @@ typedef struct svc_fh {
 /*
  * Shorthand for dprintk()'s
  */
-#define SVCFH_DENTRY(f)		((f)->fh_handle.fh_dentry)
+#define SVCFH_DENTRY(f)		((f)->fh_dentry)
 
 /*
  * Function prototypes
  */
-u32             fh_verify(struct svc_rqst *, struct svc_fh *, int, int);
-void            fh_compose(struct svc_fh *, struct svc_export *, struct dentry *);
+u32	fh_verify(struct svc_rqst *, struct svc_fh *, int, int);
+void	fh_compose(struct svc_fh *, struct svc_export *, struct dentry *);
+void	fh_put(struct svc_fh *);
+void	nfsd_fh_init(void);
+void	nfsd_fh_free(void);
 
 static __inline__ struct svc_fh *
 fh_copy(struct svc_fh *dst, struct svc_fh *src)
 {
+	if (src->fh_dverified) {
+		struct dentry *dentry = src->fh_dentry;
+		printk("fh_copy: copying %s/%s, already verified!\n",
+			dentry->d_parent->d_name.name, dentry->d_name.name);
+	}
+			
 	*dst = *src;
 	return dst;
 }
@@ -97,7 +106,7 @@ fh_init(struct svc_fh *fhp)
 static inline void
 fh_lock(struct svc_fh *fhp)
 {
-	struct inode	*inode = fhp->fh_handle.fh_dentry->d_inode;
+	struct inode	*inode = fhp->fh_dentry->d_inode;
 
 	/*
 	dfprintk(FILEOP, "nfsd: fh_lock(%x/%ld) locked = %d\n",
@@ -117,7 +126,7 @@ fh_lock(struct svc_fh *fhp)
 static inline void
 fh_unlock(struct svc_fh *fhp)
 {
-	struct inode	*inode = fhp->fh_handle.fh_dentry->d_inode;
+	struct inode	*inode = fhp->fh_dentry->d_inode;
 
 	if (fhp->fh_locked) {
 		if (!fhp->fh_post_version)
@@ -130,17 +139,7 @@ fh_unlock(struct svc_fh *fhp)
 /*
  * Release an inode
  */
-#ifndef NFSD_DEBUG
-static inline void
-fh_put(struct svc_fh *fhp)
-{
-	if (fhp->fh_dverified) {
-		fh_unlock(fhp);
-		dput(fhp->fh_handle.fh_dentry);
-		fhp->fh_dverified = 0;
-	}
-}
-#else
+#if 0
 #define fh_put(fhp)	__fh_put(fhp, __FILE__, __LINE__)
 
 static inline void
@@ -151,7 +150,7 @@ __fh_put(struct svc_fh *fhp, char *file, int line)
 	if (!fhp->fh_dverified)
 		return;
 
-	dentry = fhp->fh_handle.fh_dentry;
+	dentry = fhp->fh_dentry;
 	if (!dentry->d_count) {
 		printk("nfsd: trying to free free dentry in %s:%d\n"
 		       "      file %s/%s\n",
@@ -159,13 +158,11 @@ __fh_put(struct svc_fh *fhp, char *file, int line)
 		       dentry->d_parent->d_name.name, dentry->d_name.name);
 	} else {
 		fh_unlock(fhp);
-		dput(dentry);
 		fhp->fh_dverified = 0;
+		dput(dentry);
 	}
 }
 #endif
-
-
 
 #endif /* __KERNEL__ */
 

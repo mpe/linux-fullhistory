@@ -3274,7 +3274,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 			return 0;
                 case BLKRAGET:
 			return put_user(read_ahead[MAJOR(inode->i_rdev)],
-					(int *) param);
+					(long *) param);
 		case BLKFLSBUF:
 			if(!suser()) return -EACCES;
 			fsync_dev(inode->i_rdev);
@@ -3283,7 +3283,7 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 
 		case BLKGETSIZE:
 			ECALL(get_floppy_geometry(drive, type, &g));
-			return put_user(g->size, (int *) param);
+			return put_user(g->size, (long *) param);
 		/* BLKRRPART is not defined as floppies don't have
 		 * partition tables */
 	}

@@ -451,6 +451,17 @@ S: 1123 North Oak Park Avenue
 S: Oak Park, Illinois 60302
 S: USA
 
+N: Jim Freeman
+E: jfree@caldera.com
+W: http://www.sovereign.org/
+D: Initial GPL'd Frame Relay driver
+D: Dynamic PPP devices
+D: Sundry modularizations (PPP, IPX, ...) and fixes
+S: Caldera, Inc.
+S: 240 West Center St.
+S: Orem, Utah 84059-1920
+S: USA
+
 N: Bob Frey
 E: bobf@advansys.com
 D: AdvanSys SCSI driver

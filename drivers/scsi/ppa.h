@@ -100,7 +100,7 @@ static char *PPA_MODE_STRING[] =
 int ppa_sg = SG_ALL;		/* enable/disable scatter-gather. */
 
 /* other options */
-#define PPA_CAN_QUEUE   0	/* use "queueing" interface */
+#define PPA_CAN_QUEUE   1	/* use "queueing" interface */
 #define PPA_BURST_SIZE	512	/* data burst size */
 #define PPA_SELECT_TMO  5000	/* how long to wait for target ? */
 #define PPA_SPIN_TMO    50000	/* ppa_wait loop limiter */

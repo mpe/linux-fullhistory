@@ -363,7 +363,7 @@ int
 nfssvc_encode_attrstat(struct svc_rqst *rqstp, u32 *p,
 					struct nfsd_attrstat *resp)
 {
-	if (!(p = encode_fattr(rqstp, p, resp->fh.fh_handle.fh_dentry->d_inode)))
+	if (!(p = encode_fattr(rqstp, p, resp->fh.fh_dentry->d_inode)))
 		return 0;
 	return xdr_ressize_check(rqstp, p);
 }
@@ -373,7 +373,7 @@ nfssvc_encode_diropres(struct svc_rqst *rqstp, u32 *p,
 					struct nfsd_diropres *resp)
 {
 	if (!(p = encode_fh(p, &resp->fh))
-	 || !(p = encode_fattr(rqstp, p, resp->fh.fh_handle.fh_dentry->d_inode)))
+	 || !(p = encode_fattr(rqstp, p, resp->fh.fh_dentry->d_inode)))
 		return 0;
 	return xdr_ressize_check(rqstp, p);
 }
@@ -391,7 +391,7 @@ int
 nfssvc_encode_readres(struct svc_rqst *rqstp, u32 *p,
 					struct nfsd_readres *resp)
 {
-	if (!(p = encode_fattr(rqstp, p, resp->fh.fh_handle.fh_dentry->d_inode)))
+	if (!(p = encode_fattr(rqstp, p, resp->fh.fh_dentry->d_inode)))
 		return 0;
 	*p++ = htonl(resp->count);
 	p += XDR_QUADLEN(resp->count);

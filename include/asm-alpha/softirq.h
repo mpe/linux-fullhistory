@@ -14,7 +14,7 @@ static inline void clear_active_bhs(unsigned long x)
 	unsigned long temp;
 	__asm__ __volatile__(
 	"1:	ldq_l %0,%1\n"
-	"	and %0,%2,%0\n"
+	"	bic %0,%2,%0\n"
 	"	stq_c %0,%1\n"
 	"	beq %0,2f\n"
 	".section .text2,\"ax\"\n"

@@ -17,11 +17,11 @@
 #include <linux/fcntl.h>
 #include <linux/net.h>
 #include <linux/in.h>
-#include <linux/nfs.h>
 #include <linux/version.h>
 #include <linux/unistd.h>
 #include <linux/malloc.h>
 
+#include <linux/nfs.h>
 #include <linux/sunrpc/svc.h>
 #include <linux/nfsd/nfsd.h>
 #include <linux/nfsd/cache.h>
@@ -38,6 +38,7 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 
+extern void nfsd_fh_init(void);
 extern long sys_call_table[];
 
 static int	nfsctl_svc(struct nfsctl_svc *data);
@@ -64,6 +65,7 @@ nfsd_init(void)
 	nfsd_export_init();	/* Exports table */
 	nfsd_lockd_init();	/* lockd->nfsd callbacks */
 	nfsd_racache_init();	/* Readahead param cache */
+	nfsd_fh_init();		/* FH table */
 	initialized = 1;
 }
 
@@ -141,31 +143,33 @@ asmlinkage handle_sys_nfsservctl(int cmd, void *opaque_argp, void *opaque_resp)
 	union nfsctl_res *	res = NULL;
 	int			err;
 
+	MOD_INC_USE_COUNT;
 	lock_kernel ();
 	if (!initialized)
 		nfsd_init();
+	err = -EPERM;
 	if (!suser()) {
-		err = -EPERM;
 		goto done;
 	}
+	err = -EFAULT;
 	if (!access_ok(VERIFY_READ, argp, sizeof(*argp))
 	 || (resp && !access_ok(VERIFY_WRITE, resp, sizeof(*resp)))) {
-		err = -EFAULT;
-		goto done;
-	}
-	if (!(arg = kmalloc(sizeof(*arg), GFP_USER)) ||
-	    (resp && !(res = kmalloc(sizeof(*res), GFP_USER)))) {
-		err = -ENOMEM;	/* ??? */
-		goto done;
-	}
-	copy_from_user(arg, argp, sizeof(*argp));
-	if (arg->ca_version != NFSCTL_VERSION) {
-		printk(KERN_WARNING "nfsd: incompatible version in syscall.\n");
-		err = -EINVAL;
 		goto done;
 	}
 
-	MOD_INC_USE_COUNT;
+	err = -ENOMEM;	/* ??? */
+	if (!(arg = kmalloc(sizeof(*arg), GFP_USER)) ||
+	    (resp && !(res = kmalloc(sizeof(*res), GFP_USER)))) {
+		goto done;
+	}
+
+	err = -EINVAL;
+	copy_from_user(arg, argp, sizeof(*argp));
+	if (arg->ca_version != NFSCTL_VERSION) {
+		printk(KERN_WARNING "nfsd: incompatible version in syscall.\n");
+		goto done;
+	}
+
 	switch(cmd) {
 	case NFSCTL_SVC:
 		err = nfsctl_svc(&arg->ca_svc);
@@ -193,7 +197,6 @@ asmlinkage handle_sys_nfsservctl(int cmd, void *opaque_argp, void *opaque_resp)
 	default:
 		err = -EINVAL;
 	}
-	MOD_DEC_USE_COUNT;
 
 	if (!err && resp)
 		copy_to_user(resp, res, sizeof(*resp));
@@ -205,6 +208,7 @@ done:
 		kfree(res);
 
 	unlock_kernel ();
+	MOD_DEC_USE_COUNT;
 	return err;
 }
 
@@ -224,7 +228,6 @@ int
 init_module(void)
 {
 	printk("Installing knfsd (copyright (C) 1996 okir@monad.swb.de).\n");
-	nfsd_init();
 	do_nfsservctl = handle_sys_nfsservctl;
 	return 0;
 }
@@ -242,6 +245,7 @@ cleanup_module(void)
 	do_nfsservctl = NULL;
 	nfsd_export_shutdown();
 	nfsd_cache_shutdown();
+	nfsd_fh_free();
 #ifdef CONFIG_PROC_FS
 	nfsd_stat_shutdown();
 #endif

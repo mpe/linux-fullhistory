@@ -74,15 +74,6 @@ bad_area:
 	return 0;
 }
 
-asmlinkage void do_divide_error (struct pt_regs *, unsigned long);
-asmlinkage void do_debug (struct pt_regs *, unsigned long);
-asmlinkage void do_nmi (struct pt_regs *, unsigned long);
-asmlinkage void do_int3 (struct pt_regs *, unsigned long);
-asmlinkage void do_overflow (struct pt_regs *, unsigned long);
-asmlinkage void do_bounds (struct pt_regs *, unsigned long);
-asmlinkage void do_invalid_op (struct pt_regs *, unsigned long);
-
-extern int pentium_f00f_bug;
 
 /*
  * This routine handles page faults.  It determines the address,
@@ -94,45 +85,17 @@ extern int pentium_f00f_bug;
  *	bit 1 == 0 means read, 1 means write
  *	bit 2 == 0 means kernel, 1 means user-mode
  */
-asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
+static void __do_page_fault(struct pt_regs *regs, unsigned long error_code,
+				unsigned long address)
 {
 	struct task_struct *tsk;
 	struct mm_struct *mm;
 	struct vm_area_struct * vma;
-	unsigned long address;
 	unsigned long page;
 	unsigned long fixup;
 	int write;
 
-	/* get the address */
-	__asm__("movl %%cr2,%0":"=r" (address));
-
-	/*
-	 * Pentium F0 0F C7 C8 bug workaround. Do this first,
-	 * to make sure we don't have locking problems with
-	 * asynchronous traps (ie NMI). 
-	 */
-	if ( !(error_code & 7) && pentium_f00f_bug ) {
-		unsigned long nr;
-		
-		nr = (address - (unsigned long) idt) >> 3;
-
-		if (nr < 7) {
-			static void (*handler[])(struct pt_regs *, unsigned long) = {
-				do_divide_error,	/* 0 - divide overflow */
-				do_debug,		/* 1 - debug trap */
-				do_nmi,			/* 2 - NMI */
-				do_int3,		/* 3 - int 3 */
-				do_overflow,		/* 4 - overflow */
-				do_bounds,		/* 5 - bound range */
-				do_invalid_op };	/* 6 - invalid opcode */
-			handler[nr](regs, 0);
-			return;
-		}
-	}
-
 	lock_kernel();
-
 	tsk = current;
 	mm = tsk->mm;
 
@@ -253,3 +216,65 @@ bad_area:
 out:
 	unlock_kernel();
 }
+
+
+/*
+ * One of these two functions is the real page fault handler, which one depends
+ * on wether the CPU has the F00F bug:
+ */
+
+asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long error_code)
+{
+	unsigned long address;
+
+	/* get the address */
+	__asm__("movl %%cr2,%0":"=r" (address));
+
+	__do_page_fault(regs, error_code, address);
+}
+
+asmlinkage void do_divide_error (struct pt_regs *, unsigned long);
+asmlinkage void do_debug (struct pt_regs *, unsigned long);
+asmlinkage void do_nmi (struct pt_regs *, unsigned long);
+asmlinkage void do_int3 (struct pt_regs *, unsigned long);
+asmlinkage void do_overflow (struct pt_regs *, unsigned long);
+asmlinkage void do_bounds (struct pt_regs *, unsigned long);
+asmlinkage void do_invalid_op (struct pt_regs *, unsigned long);
+
+extern int pentium_f00f_bug;
+
+asmlinkage void do_page_fault_f00f(struct pt_regs *regs, unsigned long error_code)
+{
+	unsigned long address;
+
+	/* get the address */
+	__asm__("movl %%cr2,%0":"=r" (address));
+
+	/*
+	 * Pentium F0 0F C7 C8 bug workaround. Do this first,
+	 * to make sure we don't have locking problems with
+	 * asynchronous traps (ie NMI). 
+	 */
+	if ( !(error_code & 5) && pentium_f00f_bug ) {
+		unsigned long nr;
+		
+		nr = (address - (unsigned long) idt) >> 3;
+
+		if (nr < 7) {
+			static void (*handler[])(struct pt_regs *, unsigned long) = {
+				do_divide_error,	/* 0 - divide overflow */
+				do_debug,		/* 1 - debug trap */
+				do_nmi,			/* 2 - NMI */
+				do_int3,		/* 3 - int 3 */
+				do_overflow,		/* 4 - overflow */
+				do_bounds,		/* 5 - bound range */
+				do_invalid_op };	/* 6 - invalid opcode */
+			if (nr == 3 || nr == 4) regs->eip++;
+			handler[nr](regs, 0);
+			return;
+		}
+	}
+	__do_page_fault(regs, error_code, address);
+}
+
+

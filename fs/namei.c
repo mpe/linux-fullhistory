@@ -235,9 +235,11 @@ static struct dentry * real_lookup(struct dentry * parent, struct qstr * name)
 		result = ERR_PTR(-ENOMEM);
 		if (dentry) {
 			int error = dir->i_op->lookup(dir, dentry);
-			result = ERR_PTR(error);
-			if (!error)
-				result = dentry;
+			result = dentry;
+			if (error) {
+				dput(dentry);
+				result = ERR_PTR(error);
+			}
 		}
 	}
 	up(&dir->i_sem);

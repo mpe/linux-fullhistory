@@ -37,7 +37,7 @@
 /* if you have lowlevel.h in the lowlevel directory (OSS-Lite), define
  * the following line.
  */
-#undef HAS_LOWLEVEL_H
+#define HAS_LOWLEVEL_H
 
 /* if your system doesn't support patch manager (OSS 3.7 or newer),
  * define the following line.

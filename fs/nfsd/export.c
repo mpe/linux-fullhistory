@@ -179,27 +179,24 @@ exp_export(struct nfsctl_export *nxp)
 	}
 
 	/* Look up the dentry */
+	err = -EINVAL;
 	dentry = lookup_dentry(nxp->ex_path, NULL, 0);
-	if (IS_ERR(dentry)) {
-		err = -EINVAL;
+	if (IS_ERR(dentry))
 		goto finish;
-	}
+	err = -ENOENT;
 	inode = dentry->d_inode;
-	if(!inode) {
-		err = -ENOENT;
+	if(!inode)
 		goto finish;
-	}
+	err = -EINVAL;
 	if(inode->i_dev != nxp->ex_dev || inode->i_ino != nxp->ex_ino) {
 		/* I'm just being paranoid... */
-		err = -EINVAL;
 		goto finish;
 	}
 
 	/* We currently export only dirs. */
-	if (!S_ISDIR(inode->i_mode)) {
-		err = -ENOTDIR;
+	err = -ENOTDIR;
+	if (!S_ISDIR(inode->i_mode))
 		goto finish;
-	}
 
 	/* If this is a sub-export, must be root of FS */
 	if ((parent = exp_parent(clp, dev)) != NULL) {
@@ -211,10 +208,9 @@ exp_export(struct nfsctl_export *nxp)
 		}
 	}
 
-	if (!(exp = kmalloc(sizeof(*exp), GFP_USER))) {
-		err = -ENOMEM;
+	err = -ENOMEM;
+	if (!(exp = kmalloc(sizeof(*exp), GFP_USER)))
 		goto finish;
-	}
 	dprintk("nfsd: created export entry %p for client %p\n", exp, clp);
 
 	strcpy(exp->ex_path, nxp->ex_path);

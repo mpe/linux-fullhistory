@@ -349,6 +349,10 @@ ENTRY(page_fault)
 	pushl $ SYMBOL_NAME(do_page_fault)
 	jmp error_code
 
+ENTRY(page_fault_f00f)
+	pushl $ SYMBOL_NAME(do_page_fault_f00f)
+	jmp error_code
+
 ENTRY(spurious_interrupt_bug)
 	pushl $0
 	pushl $ SYMBOL_NAME(do_spurious_interrupt_bug)
