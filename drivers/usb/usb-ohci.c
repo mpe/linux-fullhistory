@@ -252,6 +252,9 @@ static int sohci_submit_urb (urb_t * urb)
 	
 	if (urb->hcpriv) return -EINVAL; /* urb already in use */
 
+//	if(usb_endpoint_halted (urb->dev, usb_pipeendpoint (pipe), usb_pipeout (pipe))) 
+//		return -EPIPE;
+	
 	usb_inc_dev_use (urb->dev);
 	ohci = (ohci_t *) urb->dev->bus->hcpriv;
 	
@@ -838,28 +841,36 @@ static void td_submit_urb (urb_t * urb)
 	int data_len = urb->transfer_buffer_length;
 	int cnt = 0; 
 	__u32 info = 0;
-  
+  	unsigned int toggle = 0;
 
+	/* OHCI handles the DATA-toggles itself, we just use the USB-toggle bits for reseting */
+  	if(usb_gettoggle(urb->dev, usb_pipeendpoint(urb->pipe), usb_pipeout(urb->pipe))) {
+  		toggle = TD_T_TOGGLE;
+	} else {
+  		toggle = TD_T_DATA0;
+		usb_settoggle(urb->dev, usb_pipeendpoint(urb->pipe), usb_pipeout(urb->pipe), 1);
+	}
+	
 	urb_priv->td_cnt = 0;
 	
 	switch (usb_pipetype (urb->pipe)) {
 		case PIPE_BULK:
 			info = usb_pipeout (urb->pipe)? 
-				TD_CC | TD_DP_OUT | TD_T_TOGGLE: TD_CC | TD_DP_IN | TD_T_TOGGLE;
+				TD_CC | TD_DP_OUT : TD_CC | TD_DP_IN ;
 			while(data_len > 4096) {		
-				td_fill (info, data, 4096, urb, (cnt? 0: ST_ADDR) | ADD_LEN, cnt);
+				td_fill (info | (cnt? TD_T_TOGGLE:toggle), data, 4096, urb, (cnt? 0: ST_ADDR) | ADD_LEN, cnt);
 				data += 4096; data_len -= 4096; cnt++;
 			}
 			info = usb_pipeout (urb->pipe)?
-				TD_CC | TD_DP_OUT | TD_T_TOGGLE: TD_CC | TD_R | TD_DP_IN | TD_T_TOGGLE;
-			td_fill (info, data, data_len, urb, (cnt? 0: ST_ADDR) | ADD_LEN, cnt);
+				TD_CC | TD_DP_OUT : TD_CC | TD_R | TD_DP_IN ;
+			td_fill (info | (cnt? TD_T_TOGGLE:toggle), data, data_len, urb, (cnt? 0: ST_ADDR) | ADD_LEN, cnt);
 			cnt++;
 			writel (OHCI_BLF, &ohci->regs->cmdstatus); /* start bulk list */
 			break;
 
 		case PIPE_INTERRUPT:
 			info = usb_pipeout (urb->pipe)? 
-				TD_CC | TD_DP_OUT | TD_T_TOGGLE: TD_CC | TD_R | TD_DP_IN | TD_T_TOGGLE;
+				TD_CC | TD_DP_OUT | toggle: TD_CC | TD_R | TD_DP_IN | toggle;
 			td_fill (info, data, data_len, urb, ST_ADDR | ADD_LEN, cnt++);
 			break;
 
@@ -1059,6 +1070,8 @@ static void dl_done_list (ohci_t * ohci, td_t * td_list)
   		}
   		/* error code of transfer */
   		cc = TD_CC_GET (tdINFO);
+  		if( cc == TD_CC_STALL) usb_endpoint_halt(urb->dev, usb_pipeendpoint(urb->pipe), usb_pipeout(urb->pipe));
+  		
   		if (!(urb->transfer_flags & USB_DISABLE_SPD) && (cc == TD_DATAUNDERRUN))
 						cc = TD_CC_NOERROR;
   		if (++(urb_priv->td_cnt) == urb_priv->length) {

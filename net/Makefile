@@ -20,6 +20,10 @@ endif
 
 ifeq ($(CONFIG_INET),y)
 SUB_DIRS += ipv4
+ifeq ($(CONFIG_NETFILTER),y)
+SUB_DIRS += ipv4/netfilter
+MOD_SUB_DIRS += ipv4/netfilter
+endif
 endif
 
 ifeq ($(CONFIG_UNIX),y)
@@ -198,7 +202,7 @@ endif
 endif
 
 L_TARGET     := network.a
-L_OBJS	     := $(SOCK) protocols.o $(join $(SUB_DIRS),$(SUB_DIRS:%=/%.o))
+L_OBJS	     := $(SOCK) protocols.o $(join $(SUB_DIRS), $(patsubst %,/%.o,$(notdir $(SUB_DIRS))))
 
 M_OBJS	     :=
 

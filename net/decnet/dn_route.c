@@ -805,10 +805,7 @@ non_local_input:
 	key.scope = RT_SCOPE_UNIVERSE;
 
 #ifdef CONFIG_DECNET_ROUTE_FWMASK
-	if (skb->nfreason == NF_REASON_FOR_ROUTING)
-		key.fwmark = skb->fwmark;
-	else
-		key.fwmark = 0;
+	key.fwmark = skb->fwmark;
 #else
 	key.fwmark = 0;
 #endif
@@ -886,9 +883,7 @@ int dn_route_input(struct sk_buff *skb)
 				(rt->key.daddr == cb->dst) &&
 				(rt->key.oif == 0) &&
 #ifdef CONFIG_DECNET_ROUTE_FWMASK
-				(rt->key.fwmark == (skb->nfreason ==
-							NF_REASON_FOR_ROUTING
-							? skb->nfmark : 0)) &&
+				(rt->key.fwmark == skb->nfmark) &&
 #endif
 				(rt->key.iif == cb->iif)) {
 			rt->u.dst.lastuse = jiffies;

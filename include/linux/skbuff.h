@@ -122,8 +122,6 @@ struct sk_buff {
 #ifdef CONFIG_NETFILTER
 	/* Can be used for communication between hooks. */
         unsigned long	nfmark;
-	/* Reason for doing this to the packet (see netfilter.h) */
-	__u32		nfreason;
 	/* Cache info */
 	__u32		nfcache;
 	/* Associated connection, if any */

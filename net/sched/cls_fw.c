@@ -66,7 +66,7 @@ static int fw_classify(struct sk_buff *skb, struct tcf_proto *tp,
 	struct fw_head *head = (struct fw_head*)tp->root;
 	struct fw_filter *f;
 #ifdef CONFIG_NETFILTER
-	u32 id = (skb->nfreason == NF_REASON_FOR_CLS_FW ? skb->nfmark : 0);
+	u32 id = skb->nfmark;
 #else
 	u32 id = 0;
 #endif

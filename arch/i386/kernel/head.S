@@ -58,10 +58,19 @@ startup_32:
  *	New page tables may be in 4Mbyte page mode and may
  *	be using the global pages. 
  *
+ *	NOTE! If we are on a 486 we may have no cr4 at all!
+ *	So we do not try to touch it unless we really have
+ *	some bits in it to set.  This won't work if the BSP
+ *	implements cr4 but this AP does not -- very unlikely
+ *	but be warned!  The same applies to the pse feature
+ *	if not equally supported. --macro
+ *
  *	NOTE! We have to correct for the fact that we're
  *	not yet offset PAGE_OFFSET..
  */
 #define cr4_bits mmu_cr4_features-__PAGE_OFFSET
+	cmpl $0,cr4_bits
+	je 1f
 	movl %cr4,%eax		# Turn on 4Mb pages
 	orl cr4_bits,%eax
 	movl %eax,%cr4
@@ -219,7 +228,6 @@ is386:	pushl %ecx		# restore original EFLAGS
 	orl $2,%eax		# set MP
 2:	movl %eax,%cr0
 	call check_x87
-4:
 #ifdef __SMP__
 	incb ready
 #endif

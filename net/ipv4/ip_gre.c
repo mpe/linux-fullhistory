@@ -599,6 +599,10 @@ int ipgre_rcv(struct sk_buff *skb, unsigned short len)
 		skb->dev = tunnel->dev;
 		dst_release(skb->dst);
 		skb->dst = NULL;
+#ifdef CONFIG_NETFILTER
+		nf_conntrack_put(skb->nfct);
+		skb->nfct = NULL;
+#endif
 		netif_rx(skb);
 		read_unlock(&ipgre_lock);
 		return(0);
@@ -817,6 +821,11 @@ static int ipgre_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 	iph->tot_len		=	htons(skb->len);
 	ip_select_ident(iph, &rt->u.dst);
 	ip_send_check(iph);
+
+#ifdef CONFIG_NETFILTER
+	nf_conntrack_put(skb->nfct);
+	skb->nfct = NULL;
+#endif
 
 	stats->tx_bytes += skb->len;
 	stats->tx_packets++;

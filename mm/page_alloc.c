@@ -58,6 +58,8 @@ static int zone_balance_max[MAX_NR_ZONES] = { 255 , 255, 255, };
  */
 #define BAD_RANGE(zone,x) (((zone) != (x)->zone) || (((x)-mem_map) < (zone)->offset) || (((x)-mem_map) >= (zone)->offset+(zone)->size))
 
+#if 0
+
 static inline unsigned long classfree(zone_t *zone)
 {
 	unsigned long free = 0;
@@ -70,6 +72,8 @@ static inline unsigned long classfree(zone_t *zone)
 	free += zone->free_pages;
 	return(free);
 }
+
+#endif
 
 /*
  * Buddy system. Hairy. You really aren't expected to understand this
@@ -148,8 +152,10 @@ void __free_pages_ok (struct page *page, unsigned long order)
 
 	spin_unlock_irqrestore(&zone->lock, flags);
 
-	if (classfree(zone) > zone->pages_high)
+	if (zone->free_pages > zone->pages_high) {
 		zone->zone_wake_kswapd = 0;
+		zone->low_on_memory = 0;
+	}
 }
 
 #define MARK_USED(index, order, area) \
@@ -176,7 +182,8 @@ static inline struct page * expand (zone_t *zone, struct page *page,
 	return page;
 }
 
-static inline struct page * rmqueue (zone_t *zone, unsigned long order)
+static FASTCALL(struct page * rmqueue(zone_t *zone, unsigned long order));
+static struct page * rmqueue(zone_t *zone, unsigned long order)
 {
 	free_area_t * area = zone->free_area + order;
 	unsigned long curr_order = order;
@@ -216,19 +223,43 @@ static inline struct page * rmqueue (zone_t *zone, unsigned long order)
 	return NULL;
 }
 
-static inline int zone_balance_memory (zone_t *zone, int gfp_mask)
+static int zone_balance_memory(zonelist_t *zonelist)
 {
-	int freed;
+	int tried = 0, freed = 0;
+	zone_t **zone;
+	int gfp_mask = zonelist->gfp_mask;
+	extern wait_queue_head_t kswapd_wait;
 
-	/*
-	 * In the atomic allocation case we only 'kick' the
-	 * state machine, but do not try to free pages
-	 * ourselves.
-	 */
-	freed = try_to_free_pages(gfp_mask, zone);
+	zone = zonelist->zones;
+	for (;;) {
+		zone_t *z = *(zone++);
+		if (!z)
+			break;
+		if (z->free_pages > z->pages_low)
+			continue;
 
-	if (!freed && !(gfp_mask & __GFP_HIGH))
-		return 0;
+		z->zone_wake_kswapd = 1;
+		wake_up_interruptible(&kswapd_wait);
+
+		/* Are we reaching the critical stage? */
+		if (!z->low_on_memory) {
+			/* Not yet critical, so let kswapd handle it.. */
+			if (z->free_pages > z->pages_min)
+				continue;
+			z->low_on_memory = 1;
+		}
+		/*
+		 * In the atomic allocation case we only 'kick' the
+		 * state machine, but do not try to free pages
+		 * ourselves.
+		 */
+		tried = 1;
+		freed |= try_to_free_pages(gfp_mask, z);
+	}
+	if (tried && !freed) {
+		if (!(gfp_mask & __GFP_HIGH))
+			return 0;
+	}
 	return 1;
 }
 
@@ -237,9 +268,7 @@ static inline int zone_balance_memory (zone_t *zone, int gfp_mask)
  */
 struct page * __alloc_pages (zonelist_t *zonelist, unsigned long order)
 {
-	zone_t **zone, *z;
-	struct page *page;
-	int gfp_mask;
+	zone_t **zone = zonelist->zones;
 
 	/*
 	 * (If anyone calls gfp from interrupts nonatomically then it
@@ -248,10 +277,8 @@ struct page * __alloc_pages (zonelist_t *zonelist, unsigned long order)
 	 * We are falling back to lower-level zones if allocation
 	 * in a higher zone fails.
 	 */
-	zone = zonelist->zones;
-	gfp_mask = zonelist->gfp_mask;
 	for (;;) {
-		z = *(zone++);
+		zone_t *z = *(zone++);
 		if (!z)
 			break;
 		if (!z->size)
@@ -261,23 +288,10 @@ struct page * __alloc_pages (zonelist_t *zonelist, unsigned long order)
 		 * do our best to just allocate things without
 		 * further thought.
 		 */
-		if (!(current->flags & PF_MEMALLOC))
-		{
-			unsigned long free = classfree(z);
-
-			if (free <= z->pages_high)
-			{
-				extern wait_queue_head_t kswapd_wait;
-
-				z->zone_wake_kswapd = 1;
-				wake_up_interruptible(&kswapd_wait);
-
-				if (free <= z->pages_min)
-					z->low_on_memory = 1;
-
-				if (z->low_on_memory)
-					goto balance;
-			}
+		if (!(current->flags & PF_MEMALLOC)) {
+			/* Are we low on memory? */
+			if (z->free_pages <= z->pages_low)
+				continue;
 		}
 		/*
 		 * This is an optimization for the 'higher order zone
@@ -287,24 +301,30 @@ struct page * __alloc_pages (zonelist_t *zonelist, unsigned long order)
 		 * we do not take the spinlock and it's not exact for
 		 * the higher order case, but will do it for most things.)
 		 */
-ready:
 		if (z->free_pages) {
-			page = rmqueue(z, order);
+			struct page *page = rmqueue(z, order);
 			if (page)
 				return page;
 		}
 	}
-
-nopage:
+	if (zone_balance_memory(zonelist)) {
+		zone = zonelist->zones;
+		for (;;) {
+			zone_t *z = *(zone++);
+			if (!z)
+				break;
+			if (z->free_pages) {
+				struct page *page = rmqueue(z, order);
+				if (page)
+					return page;
+			}
+		}
+	}
 	return NULL;
 
 /*
  * The main chunk of the balancing code is in this offline branch:
  */
-balance:
-	if (!zone_balance_memory(z, gfp_mask))
-		goto nopage;
-	goto ready;
 }
 
 /*
@@ -549,7 +569,7 @@ void __init free_area_init_core(int nid, pg_data_t *pgdat, struct page **gmap,
 
 		zone->offset = offset;
 		cumulative += size;
-		mask = (cumulative / zone_balance_ratio[j]);
+		mask = (size / zone_balance_ratio[j]);
 		if (mask < zone_balance_min[j])
 			mask = zone_balance_min[j];
 		else if (mask > zone_balance_max[j])

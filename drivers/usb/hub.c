@@ -4,8 +4,6 @@
  * (C) Copyright 1999 Linus Torvalds
  * (C) Copyright 1999 Johannes Erdfelt
  * (C) Copyright 1999 Gregory P. Smith
- *
- * $Id: hub.c,v 1.21 2000/01/16 21:19:44 acher Exp $
  */
 
 #include <linux/kernel.h>
@@ -75,31 +73,29 @@ static int usb_get_port_status(struct usb_device *dev, int port, void *data)
  * the low-level driver that it wants to be re-activated,
  * or zero to say "I'm done".
  */
-static int hub_irq(int status, void *__buffer, int len, void *dev_id)
+static void hub_irq(struct urb *urb)
 {
-	struct usb_hub *hub = dev_id;
+	struct usb_hub *hub = (struct usb_hub *)urb->context;
 	unsigned long flags;
 
-	switch (status) {
-	case -ENODEV:
-		/* Just ignore it */
-		break;
-	case 0:
-		/* Something happened, let khubd figure it out */
-		if (waitqueue_active(&khubd_wait)) {
-			/* Add the hub to the event queue */
-			spin_lock_irqsave(&hub_event_lock, flags);
-			if (hub->event_list.next == &hub->event_list) {
-				list_add(&hub->event_list, &hub_event_list);
-				/* Wake up khubd */
-				wake_up(&khubd_wait);
-			}
-			spin_unlock_irqrestore(&hub_event_lock, flags);
-		}
-		break;
+	if (urb->status) {
+		if (urb->status != -ENOENT)
+			dbg("nonzero status in irq %d", urb->status);
+
+		return;
 	}
 
-	return 1;
+	/* Something happened, let khubd figure it out */
+	if (waitqueue_active(&khubd_wait)) {
+		/* Add the hub to the event queue */
+		spin_lock_irqsave(&hub_event_lock, flags);
+		if (hub->event_list.next == &hub->event_list) {
+			list_add(&hub->event_list, &hub_event_list);
+			/* Wake up khubd */
+			wake_up(&khubd_wait);
+		}
+		spin_unlock_irqrestore(&hub_event_lock, flags);
+	}
 }
 
 static void usb_hub_power_on(struct usb_hub *hub)
@@ -196,13 +192,14 @@ static int usb_hub_configure(struct usb_hub *hub)
 	return 0;
 }
 
-static void * hub_probe(struct usb_device *dev, unsigned int i)
+static void *hub_probe(struct usb_device *dev, unsigned int i)
 {
 	struct usb_interface_descriptor *interface;
 	struct usb_endpoint_descriptor *endpoint;
 	struct usb_hub *hub;
 	unsigned long flags;
-	int ret;
+	unsigned int pipe;
+	int maxp, ret;
 
 	interface = &dev->actconfig->interface[i].altsetting[0];
 
@@ -233,7 +230,8 @@ static void * hub_probe(struct usb_device *dev, unsigned int i)
 	/* We found a hub */
 	info("USB hub found");
 
-	if ((hub = kmalloc(sizeof(*hub), GFP_KERNEL)) == NULL) {
+	hub = kmalloc(sizeof(*hub), GFP_KERNEL);
+	if (!hub) {
 		err("couldn't kmalloc hub struct");
 		return NULL;
 	}
@@ -250,26 +248,24 @@ static void * hub_probe(struct usb_device *dev, unsigned int i)
 	spin_unlock_irqrestore(&hub_event_lock, flags);
 
 	if (usb_hub_configure(hub) >= 0) {
-		hub->irqpipe = usb_rcvintpipe(dev, endpoint->bEndpointAddress);
-		ret = usb_request_irq(dev, hub->irqpipe,
-			hub_irq, endpoint->bInterval,
-			hub, &hub->irq_handle);
+		pipe = usb_rcvintpipe(dev, endpoint->bEndpointAddress);
+		maxp = usb_maxpacket(dev, pipe, usb_pipeout(pipe));
+
+		if (maxp > sizeof(hub->buffer))
+			maxp = sizeof(hub->buffer);
+
+		hub->urb = usb_alloc_urb(0);
+		if (!hub->urb) {
+			err("couldn't allocate interrupt urb");
+			goto fail;
+		}
+
+		FILL_INT_URB(hub->urb, dev, pipe, hub->buffer, maxp, hub_irq,
+			hub, endpoint->bInterval);
+		ret = usb_submit_urb(hub->urb);
 		if (ret) {
-			err("usb_request_irq failed (%d)", ret);
-			/* free hub, but first clean up its list. */
-			spin_lock_irqsave(&hub_event_lock, flags);
-
-			/* Delete it and then reset it */
-			list_del(&hub->event_list);
-			INIT_LIST_HEAD(&hub->event_list);
-			list_del(&hub->hub_list);
-			INIT_LIST_HEAD(&hub->hub_list);
-
-			spin_unlock_irqrestore(&hub_event_lock, flags);
-
-			kfree(hub);
-
-			return NULL;
+			err("usb_submit_urb failed (%d)", ret);
+			goto fail;
 		}
 
 		/* Wake up khubd */
@@ -277,11 +273,27 @@ static void * hub_probe(struct usb_device *dev, unsigned int i)
 	}
 
 	return hub;
+
+fail:
+	/* free hub, but first clean up its list. */
+	spin_lock_irqsave(&hub_event_lock, flags);
+
+	/* Delete it and then reset it */
+	list_del(&hub->event_list);
+	INIT_LIST_HEAD(&hub->event_list);
+	list_del(&hub->hub_list);
+	INIT_LIST_HEAD(&hub->hub_list);
+
+	spin_unlock_irqrestore(&hub_event_lock, flags);
+
+	kfree(hub);
+
+	return NULL;
 }
 
 static void hub_disconnect(struct usb_device *dev, void *ptr)
 {
-	struct usb_hub *hub = ptr;
+	struct usb_hub *hub = (struct usb_hub *)ptr;
 	unsigned long flags;
 
 	spin_lock_irqsave(&hub_event_lock, flags);
@@ -294,8 +306,10 @@ static void hub_disconnect(struct usb_device *dev, void *ptr)
 
 	spin_unlock_irqrestore(&hub_event_lock, flags);
 
-	if (hub->irq_handle) {
-		usb_release_irq(hub->dev, hub->irq_handle, hub->irqpipe);
+	if (hub->urb) {
+		usb_unlink_urb(hub->urb);
+		usb_free_urb(hub->urb);
+		hub->urb = NULL;
 	}
 
 	/* Free the memory */

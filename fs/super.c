@@ -581,7 +581,6 @@ out_fail:
 	s->s_dev = 0;
 	s->s_bdev = 0;
 	s->s_type = NULL;
-	put_filesystem(type);
 	unlock_super(s);
 	return NULL;
 }
@@ -1245,7 +1244,7 @@ void __init mount_root(void)
 	 * devfs crap and checking it right now. Later.
 	 */
 	if (!ROOT_DEV)
-		panic("I have no root and I want to sream");
+		panic("I have no root and I want to scream");
 
 	bdev = bdget(kdev_t_to_nr(ROOT_DEV));
 	if (!bdev)

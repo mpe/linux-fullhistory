@@ -1,7 +1,7 @@
 /*
  *	Linux NET3:	IP/IP protocol decoder. 
  *
- *	Version: $Id: ipip.c,v 1.30 2000/01/06 00:41:55 davem Exp $
+ *	Version: $Id: ipip.c,v 1.31 2000/03/17 14:41:51 davem Exp $
  *
  *	Authors:
  *		Sam Lantinga (slouken@cs.ucdavis.edu)  02/01/95
@@ -483,6 +483,10 @@ int ipip_rcv(struct sk_buff *skb, unsigned short len)
 		skb->dev = tunnel->dev;
 		dst_release(skb->dst);
 		skb->dst = NULL;
+#ifdef CONFIG_NETFILTER
+		nf_conntrack_put(skb->nfct);
+		skb->nfct = NULL;
+#endif
 		netif_rx(skb);
 		read_unlock(&ipip_lock);
 		return 0;
@@ -618,6 +622,11 @@ static int ipip_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 	iph->tot_len		=	htons(skb->len);
 	ip_select_ident(iph, &rt->u.dst);
 	ip_send_check(iph);
+
+#ifdef CONFIG_NETFILTER
+	nf_conntrack_put(skb->nfct);
+	skb->nfct = NULL;
+#endif
 
 	stats->tx_bytes += skb->len;
 	stats->tx_packets++;

@@ -9,7 +9,7 @@ if [ "$CONFIG_IP_ADVANCED_ROUTER" = "y" ]; then
    bool '    IP: policy routing' CONFIG_IP_MULTIPLE_TABLES
    if [ "$CONFIG_IP_MULTIPLE_TABLES" = "y" ]; then
       if [ "$CONFIG_NETFILTER" = "y" ]; then
-         bool '      IP: use FWMARK value as routing key' CONFIG_IP_ROUTE_FWMARK
+         bool '      IP: use netfilter MARK value as routing key' CONFIG_IP_ROUTE_FWMARK
       fi
       bool '      IP: fast network address translation' CONFIG_IP_ROUTE_NAT
    fi
@@ -53,3 +53,6 @@ bool '  IP: Allow large windows (not recommended if <16Mb of memory)' CONFIG_SKB
 #if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then 
 #   bool '  IP: support checksum copy to user for UDP (EXPERIMENTAL)'  CONFIG_UDP_DELAY_CSUM
 #fi
+if [ "$CONFIG_NETFILTER" != "n" ]; then
+   source net/ipv4/netfilter/Config.in
+fi

@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.89 2000/03/14 07:31:19 jj Exp $
+# $Id: config.in,v 1.90 2000/03/17 05:18:02 anton Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -19,18 +19,6 @@ define_bool CONFIG_VT_CONSOLE y
 
 bool 'Symmetric multi-processing support (does not work on sun4/sun4c)' CONFIG_SMP
 
-bool 'Support for SUN4 machines (disables SUN4[CDM] support)' CONFIG_SUN4
-if [ "$CONFIG_SUN4" != "y" ]; then
-   bool 'Support for PCI and PS/2 keyboard/mouse' CONFIG_PCI
-   source drivers/pci/Config.in
-fi
-
-mainmenu_option next_comment
-comment 'Console drivers'
-bool 'PROM console' CONFIG_PROM_CONSOLE
-source drivers/video/Config.in
-endmenu
-
 # Global things across all Sun machines.
 define_bool CONFIG_SBUS y
 define_bool CONFIG_SBUSCHAR y
@@ -43,9 +31,11 @@ define_bool CONFIG_SUN_KEYBOARD y
 define_bool CONFIG_SUN_CONSOLE y
 define_bool CONFIG_SUN_AUXIO y
 define_bool CONFIG_SUN_IO y
+
+bool 'Support for SUN4 machines (disables SUN4[CDM] support)' CONFIG_SUN4
 if [ "$CONFIG_SUN4" != "y" ]; then
-   source drivers/sbus/char/Config.in
-   source drivers/sbus/audio/Config.in
+   bool 'Support for PCI and PS/2 keyboard/mouse' CONFIG_PCI
+   source drivers/pci/Config.in
 fi
 
 tristate 'Openprom tree appears in /proc/openprom' CONFIG_SUN_OPENPROMFS
@@ -74,15 +64,27 @@ fi
 endmenu
 
 mainmenu_option next_comment
+comment 'Console drivers'
+bool 'PROM console' CONFIG_PROM_CONSOLE
+source drivers/video/Config.in
+endmenu
+
+if [ "$CONFIG_SUN4" != "y" ]; then
+   source drivers/sbus/char/Config.in
+   source drivers/sbus/audio/Config.in
+fi
+
+mainmenu_option next_comment
 comment 'Block devices'
 
 bool 'Normal floppy disk support' CONFIG_BLK_DEV_FD
+
 bool 'Multiple devices driver support' CONFIG_BLK_DEV_MD
 if [ "$CONFIG_BLK_DEV_MD" = "y" ]; then
    tristate '  Linear (append) mode' CONFIG_MD_LINEAR
    tristate '  RAID-0 (striping) mode' CONFIG_MD_STRIPED
-   tristate '  RAID-1 (mirroring) mode' CONFIG_MD_MIRRORING
-   tristate '  RAID-4/RAID-5 mode' CONFIG_MD_RAID5
+#   tristate '  RAID-1 (mirroring) mode' CONFIG_MD_MIRRORING
+#   tristate '  RAID-4/RAID-5 mode' CONFIG_MD_RAID5
 fi
 
 tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
@@ -98,16 +100,6 @@ endmenu
 if [ "$CONFIG_NET" = "y" ]; then
    source net/Config.in
 fi
-
-mainmenu_option next_comment
-comment 'ISDN subsystem'
-
-tristate 'ISDN support' CONFIG_ISDN
-if [ "$CONFIG_ISDN" != "n" ]; then
-   source drivers/isdn/Config.in
-fi
-endmenu
-
 
 define_bool CONFIG_IDE n
 define_bool CONFIG_BLK_DEV_IDE_MODES n
@@ -125,6 +117,15 @@ define_bool CONFIG_BLK_DEV_HD n
 #   define_bool CONFIG_BLK_DEV_HD n
 # fi
 # endmenu
+
+mainmenu_option next_comment
+comment 'ISDN subsystem'
+
+tristate 'ISDN support' CONFIG_ISDN
+if [ "$CONFIG_ISDN" != "n" ]; then
+   source drivers/isdn/Config.in
+fi
+endmenu
 
 mainmenu_option next_comment
 comment 'SCSI support'
@@ -196,12 +197,16 @@ if [ "$CONFIG_NET" = "y" ]; then
       fi
       tristate '  Sun LANCE support' CONFIG_SUNLANCE
       tristate '  Sun Happy Meal 10/100baseT support' CONFIG_HAPPYMEAL
-      tristate '  Sun BigMAC 10/100baseT support (EXPERIMENTAL)' CONFIG_SUNBMAC
+      if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+	 tristate '  Sun BigMAC 10/100baseT support (EXPERIMENTAL)' CONFIG_SUNBMAC
+      fi
       tristate '  Sun QuadEthernet support' CONFIG_SUNQE
       tristate '  MyriCOM Gigabit Ethernet support' CONFIG_MYRI_SBUS
+
 #      bool '  FDDI driver support' CONFIG_FDDI
 #      if [ "$CONFIG_FDDI" = "y" ]; then
 #      fi
+
       if [ "$CONFIG_ATM" = "y" ]; then
 	 source drivers/atm/Config.in
       fi

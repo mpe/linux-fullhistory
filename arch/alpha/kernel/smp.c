@@ -1003,15 +1003,11 @@ flush_icache_page(struct vm_area_struct *vma, struct page *page)
 int
 smp_info(char *buffer)
 {
-	long i;
-	unsigned long sum = 0;
-	for (i = 0; i < NR_CPUS; i++)
-		sum += cpu_data[i].ipi_count;
-
-	return sprintf(buffer, "CPUs probed %d active %d map 0x%lx IPIs %ld\n",
-		       smp_num_probed, smp_num_cpus, cpu_present_mask, sum);
+	return sprintf(buffer,
+		       "cpus active\t\t: %d\n"
+		       "cpu active mask\t\t: %016lx\n",
+		       smp_num_cpus, cpu_present_mask);
 }
-
 
 #if DEBUG_SPINLOCK
 void

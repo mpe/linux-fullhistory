@@ -318,6 +318,15 @@ P: 1024/04880A44 72E5 7031 4414 2EB6 F6B4  4CBD 1181 7032 0488 0A44
 D: IEEE 1394 subsystem rewrite and maintainer
 D: Texas Instruments PCILynx IEEE 1394 driver
 
+N: Marc Boucher
+E: marc@mbsi.ca
+P: CA 67 A5 1A 38 CE B6 F2  D5 83 51 03 D2 9C 30 9E  CE D2 DD 65
+D: Netfilter core
+D: IP policy routing by mark
+D: Various fixes (mostly networking)
+S: Montreal, Quebec
+S: Canada
+
 N: Zoltán Böszörményi
 E: zboszor@mail.externet.hu
 D: MTRR emulation with Cyrix style ARR registers, Athlon MTRR support

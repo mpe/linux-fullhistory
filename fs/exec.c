@@ -165,14 +165,12 @@ asmlinkage long sys_uselib(const char * library)
 	if (file && file->f_dentry && file->f_op && file->f_op->read) {
 		spin_lock(&binfmt_lock);
 		for (fmt = formats ; fmt ; fmt = fmt->next) {
-			int (*fn)(int) = fmt->load_shlib;
-			if (!fn)
+			if (!fmt->load_shlib)
 				continue;
 			if (!try_inc_mod_count(fmt->module))
 				continue;
 			spin_unlock(&binfmt_lock);
-			/* N.B. Should use file instead of fd */
-			retval = fn(fd);
+			retval = fmt->load_shlib(file);
 			spin_lock(&binfmt_lock);
 			put_binfmt(fmt);
 			if (retval != -ENOEXEC)

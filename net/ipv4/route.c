@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.81 2000/02/09 11:16:42 davem Exp $
+ * Version:	$Id: route.c,v 1.82 2000/03/17 14:41:52 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1187,10 +1187,7 @@ ip_route_input_mc(struct sk_buff *skb, u32 daddr, u32 saddr,
 	rth->rt_dst	= daddr;
 	rth->key.tos	= tos;
 #ifdef CONFIG_IP_ROUTE_FWMARK
-	if (skb->nfreason == NF_REASON_FOR_ROUTING)
-		rth->key.fwmark	= skb->nfmark;
-	else 
-		rth->key.fwmark	= 0;
+	rth->key.fwmark	= skb->nfmark;
 #endif
 	rth->key.src	= saddr;
 	rth->rt_src	= saddr;
@@ -1269,10 +1266,7 @@ int ip_route_input_slow(struct sk_buff *skb, u32 daddr, u32 saddr,
 	key.src = saddr;
 	key.tos = tos;
 #ifdef CONFIG_IP_ROUTE_FWMARK
-	if (skb->nfreason == NF_REASON_FOR_ROUTING)
-		key.fwmark = skb->nfmark;
-	else 
-		key.fwmark = 0;
+	key.fwmark = skb->nfmark;
 #endif
 	key.iif = dev->ifindex;
 	key.oif = 0;
@@ -1395,10 +1389,7 @@ int ip_route_input_slow(struct sk_buff *skb, u32 daddr, u32 saddr,
 	rth->rt_dst	= daddr;
 	rth->key.tos	= tos;
 #ifdef CONFIG_IP_ROUTE_FWMARK
-	if (skb->nfreason == NF_REASON_FOR_ROUTING)
-		rth->key.fwmark	= skb->nfmark;
-	else 
-		rth->key.fwmark	= 0;
+	rth->key.fwmark	= skb->nfmark;
 #endif
 	rth->key.src	= saddr;
 	rth->rt_src	= saddr;
@@ -1473,10 +1464,7 @@ local_input:
 	rth->rt_dst	= daddr;
 	rth->key.tos	= tos;
 #ifdef CONFIG_IP_ROUTE_FWMARK
-	if (skb->nfreason == NF_REASON_FOR_ROUTING)
-		rth->key.fwmark	= skb->nfmark;
-	else 
-		rth->key.fwmark	= 0;
+	rth->key.fwmark	= skb->nfmark;
 #endif
 	rth->key.src	= saddr;
 	rth->rt_src	= saddr;
@@ -1563,9 +1551,7 @@ int ip_route_input(struct sk_buff *skb, u32 daddr, u32 saddr,
 		    rth->key.iif == iif &&
 		    rth->key.oif == 0 &&
 #ifdef CONFIG_IP_ROUTE_FWMARK
-		    rth->key.fwmark 
-		    == (skb->nfreason == NF_REASON_FOR_ROUTING 
-			? skb->nfmark : 0) &&
+		    rth->key.fwmark == skb->nfmark &&
 #endif
 		    rth->key.tos == tos) {
 			rth->u.dst.lastuse = jiffies;

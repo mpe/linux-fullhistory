@@ -73,7 +73,7 @@ static void __init quirk_sb16audio_resources(struct pci_dev *dev)
 	int    changed = 0;
 
 	/* 
-	 * The default range on the mtu port for these devices is 0x388-0x388.
+	 * The default range on the mpu port for these devices is 0x388-0x388.
 	 * Here we increase that range so that two such cards can be
 	 * auto-configured.
 	 */

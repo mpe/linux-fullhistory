@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.201 2000/03/08 19:36:42 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.202 2000/03/17 14:41:53 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -71,8 +71,6 @@ extern int sysctl_ip_dynaddr;
 /* Socket used for sending RSTs */ 	
 struct inode tcp_inode;
 struct socket *tcp_socket=&tcp_inode.u.socket_i;
-
-static void tcp_v4_send_reset(struct sk_buff *skb);
 
 void tcp_v4_send_check(struct sock *sk, struct tcphdr *th, int len, 
 		       struct sk_buff *skb);
@@ -1059,7 +1057,7 @@ void tcp_v4_send_check(struct sock *sk, struct tcphdr *th, int len,
  *	Exception: precedence violation. We do not implement it in any case.
  */
 
-static void tcp_v4_send_reset(struct sk_buff *skb)
+void tcp_v4_send_reset(struct sk_buff *skb)
 {
 	struct tcphdr *th = skb->h.th;
 	struct tcphdr rth;

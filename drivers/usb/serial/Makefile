@@ -14,7 +14,7 @@ ALL_SUB_DIRS	:= $(SUB_DIRS)
 O_TARGET	:= serial.o
 M_OBJS		:= usb-serial.o
 O_OBJS		:= usb-serial.o
-#MOD_LIST_NAME	:= USB_MODULES
+MOD_LIST_NAME	:= USB_SERIAL_MODULES
 
 # Objects that export symbols.
 

@@ -52,9 +52,6 @@
  */
 #define IS_ISMNDLK(i)	(S_ISREG((i)->i_mode) && MANDATORY_LOCK(i))
 
-/* Check for dir entries '.' and '..' */
-#define isdotent(n, l)	(l < 3 && n[0] == '.' && (l == 1 || n[1] == '.'))
-
 /*
  * This is a cache of readahead params that help us choose the proper
  * readahead strategy. Initially, we set all readahead parameters to 0
@@ -76,47 +73,6 @@ struct raparms {
 
 static struct raparms *		raparml = NULL;
 static struct raparms *		raparm_cache = NULL;
-
-
-/*
- * We need to do a check-parent every time
- * after we have locked the parent - to verify
- * that the parent is still our parent and
- * that we are still hashed onto it..
- *
- * This is required in case two processes race
- * on removing (or moving) the same entry: the
- * parent lock will serialize them, but the
- * other process will be too late..
- *
- * Note that this nfsd_check_parent is identical
- * the check_parent in linux/fs/namei.c.
- */
-#define nfsd_check_parent(dir, dentry) \
-	((dir) == (dentry)->d_parent && !d_unhashed(dentry))
-
-/*
- * Lock a parent directory following the VFS locking protocol.
- */
-int
-fh_lock_parent(struct svc_fh *parent_fh, struct dentry *dchild)
-{
-	fh_lock(parent_fh);
-	/*
-	 * Make sure the parent->child relationship still holds,
-	 * and that the child is still hashed.
-	 */
-	if (nfsd_check_parent(parent_fh->fh_dentry, dchild))
-	    return 0;
-
-	printk(KERN_WARNING
-		"fh_lock_parent: %s/%s parent changed or child unhashed\n",
-		dchild->d_parent->d_name.name, dchild->d_name.name);
-
-	fh_unlock(parent_fh);
-	return nfserr_noent;
-}
-
 
 /*
  * Look up one component of a pathname.
@@ -156,35 +112,57 @@ nfsd_lookup(struct svc_rqst *rqstp, struct svc_fh *fhp, const char *name,
 	err = nfserr_acces;
 
 	/* Lookup the name, but don't follow links */
-	if (strcmp(name,"..")==0 && dparent->d_covers != dparent)
-		dchild = dget(dparent);
-	else
+	if (strcmp(name, "..")==0) {
+		/* checking mountpoint crossing is very different when stepping up */
+		if (dparent == exp->ex_dentry) {
+			if (!EX_CROSSMNT(exp))
+				dchild = dget(dparent); /* .. == . just like at / */
+			else
+			{
+				struct svc_export *exp2 = NULL;
+				struct dentry *dp;
+				dchild = dparent->d_covers->d_parent;
+				for (dp=dchild;
+				     exp2 == NULL && dp->d_covers->d_parent != dp;
+				     dp=dp->d_covers->d_parent)
+					exp2 = exp_get(exp->ex_client, dp->d_inode->i_dev, dp->d_inode->i_ino);
+				if (exp2==NULL || dchild->d_sb != exp2->ex_dentry->d_sb) {
+					dchild = dget(dparent);
+				} else {
+					dget(dchild);
+					exp = exp2;
+				}
+			}
+		} else
+			dchild = dget(dparent->d_parent);
+	} else {
 		dchild = lookup_dentry(name, dget(dparent), 0);
-	if (IS_ERR(dchild))
-		goto out_nfserr;
-	/*
-	 * check if we have crossed a mount point ...
-	 */
-	if (dchild->d_sb != dparent->d_sb) {
-		struct svc_export *exp2 = NULL;
-		exp2 = exp_get(rqstp->rq_client,
-			       dchild->d_inode->i_dev,
-			       dchild->d_inode->i_ino);
-		if (exp2 && EX_CROSSMNT(exp2))
-			/* successfully crossed mount point */
-			exp = exp2;
-		else if (dchild->d_covers->d_sb == dparent->d_sb) {
-			/* stay in the original filesystem */
-			struct dentry *tdentry = dget(dchild->d_covers);
-			dput(dchild);
-			dchild = tdentry;
-		} else {
-			/* This cannot possibly happen */
-			printk("nfsd_lookup: %s/%s impossible mount point!\n", dparent->d_name.name, dchild->d_name.name);
-			dput(dchild);
-			err = nfserr_acces;
-			goto out;
+		if (IS_ERR(dchild))
+			goto out_nfserr;
+		/*
+		 * check if we have crossed a mount point ...
+		 */
+		if (dchild->d_sb != dparent->d_sb) {
+			struct svc_export *exp2 = NULL;
+			exp2 = exp_get(rqstp->rq_client,
+				       dchild->d_inode->i_dev,
+				       dchild->d_inode->i_ino);
+			if (exp2 && EX_CROSSMNT(exp2))
+				/* successfully crossed mount point */
+				exp = exp2;
+			else if (dchild->d_covers->d_sb == dparent->d_sb) {
+				/* stay in the original filesystem */
+				struct dentry *tdentry = dget(dchild->d_covers);
+				dput(dchild);
+				dchild = tdentry;
+			} else {
+				/* This cannot possibly happen */
+				printk("nfsd_lookup: %s/%s impossible mount point!\n", dparent->d_name.name, dchild->d_name.name);
+				dput(dchild);
+				err = nfserr_acces;
+				goto out;
 
+			}
 		}
 	}
 	/*
@@ -216,6 +194,7 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 	int		imode;
 	int		err;
 	kernel_cap_t	saved_cap = 0;
+	int		size_change = 0;
 
 	if (iap->ia_valid & (ATTR_ATIME | ATTR_MTIME | ATTR_SIZE))
 		accmode |= MAY_WRITE;
@@ -305,14 +284,31 @@ nfsd_setattr(struct svc_rqst *rqstp, struct svc_fh *fhp, struct iattr *iap)
 		saved_cap = current->cap_effective;
 		cap_clear(current->cap_effective);
 	}
+#ifdef CONFIG_QUOTA
+	/* DQUOT_TRANSFER needs both ia_uid and ia_gid defined */
+	if (iap->ia_valid & (ATTR_UID|ATTR_GID)) {
+		if (! (iap->ia_valid & ATTR_UID))
+			iap->ia_uid = inode->i_uid;
+		if (! (iap->ia_valid & ATTR_GID))
+			iap->ia_gid = inode->i_gid;
+		iap->ia_valid |= ATTR_UID|ATTR_GID;
+	}
+#endif /* CONFIG_QUOTA */
+
 	if (iap->ia_valid & ATTR_SIZE) {
 		fh_lock(fhp);
+		size_change = 1;
+	}
+#ifdef CONFIG_QUOTA
+	if (iap->ia_valid & (ATTR_UID|ATTR_GID)) 
+		err = DQUOT_TRANSFER(dentry, iap);
+	else
+#endif
 		err = notify_change(dentry, iap);
+	if (size_change) {
 		fh_unlock(fhp);
 		put_write_access(inode);
 	}
-	else
-		err = notify_change(dentry, iap);
 	if (current->fsuid != 0)
 		current->cap_effective = saved_cap;
 	if (err)
@@ -647,11 +643,11 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	uid_t			saved_euid;
 #endif
 
-	if (!cnt)
-		goto out;
 	err = nfsd_open(rqstp, fhp, S_IFREG, MAY_WRITE, &file);
 	if (err)
 		goto out;
+	if (!cnt)
+		goto out_close;
 	err = nfserr_perm;
 	if (!file.f_op->write)
 		goto out_close;
@@ -812,6 +808,9 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	err = nfserr_perm;
 	if (!flen)
 		goto out;
+	err = nfserr_exist;
+	if (isdotent(fname, flen))
+		goto out;
 
 	err = fh_verify(rqstp, fhp, S_IFDIR, MAY_CREATE);
 	if (err)
@@ -829,14 +828,11 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	 */
 	if (!resfhp->fh_dverified) {
 		/* called from nfsd_proc_mkdir, or possibly nfsd3_proc_create */
-		dchild = lookup_dentry(fname, dget(dentry), 0);
+		fh_lock(fhp);
+		dchild = lookup_one(fname, dget(dentry));
 		err = PTR_ERR(dchild);
 		if (IS_ERR(dchild))
 			goto out_nfserr;
-		/* Lock the parent and check for errors ... */
-		err = fh_lock_parent(fhp, dchild);
-		if (err)
-			goto out;
 		err = fh_compose(resfhp, fhp->fh_export, dchild);
 		if (err)
 			goto out;
@@ -934,6 +930,9 @@ nfsd_create_v3(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	err = nfserr_perm;
 	if (!flen)
 		goto out;
+	err = nfserr_exist;
+	if (isdotent(fname, flen))
+		goto out;
 	if (!(iap->ia_valid & ATTR_MODE))
 		iap->ia_mode = 0;
 	err = fh_verify(rqstp, fhp, S_IFDIR, MAY_CREATE);
@@ -948,21 +947,16 @@ nfsd_create_v3(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	err = nfserr_notdir;
 	if(!dirp->i_op || !dirp->i_op->lookup)
 		goto out;
+	fh_lock(fhp);
 
 	/*
 	 * Compose the response file handle.
 	 */
-	dchild = lookup_dentry(fname, dget(dentry), 0);
+	dchild = lookup_one(fname, dget(dentry));
 	err = PTR_ERR(dchild);
 	if(IS_ERR(dchild))
 		goto out_nfserr;
 
-	/*
-	 * We must lock the directory before we check for the inode.
-	 */
-	err = fh_lock_parent(fhp, dchild);
-	if (err)
-		goto out;
 	err = fh_compose(resfhp, fhp->fh_export, dchild);
 	if (err)
 		goto out;
@@ -1096,23 +1090,19 @@ nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	err = nfserr_noent;
 	if (!flen || !plen)
 		goto out;
+	err = nfserr_exist;
+	if (isdotent(fname, flen))
+		goto out;
 
 	err = fh_verify(rqstp, fhp, S_IFDIR, MAY_CREATE);
 	if (err)
 		goto out;
+	fh_lock(fhp);
 	dentry = fhp->fh_dentry;
-
-	dnew = lookup_dentry(fname, dget(dentry), 0);
+	dnew = lookup_one(fname, dget(dentry));
 	err = PTR_ERR(dnew);
 	if (IS_ERR(dnew))
 		goto out_nfserr;
-
-	/*
-	 * Lock the parent before checking for existence
-	 */
-	err = fh_lock_parent(fhp, dnew);
-	if (err)
-		goto out_compose;
 
 	err = vfs_symlink(dentry->d_inode, dnew, path);
 	if (!err) {
@@ -1134,7 +1124,6 @@ nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	fh_unlock(fhp);
 
 	/* Compose the fh so the dentry will be freed ... */
-out_compose:
 	cerr = fh_compose(resfhp, fhp->fh_export, dnew);
 	if (err==0) err = cerr;
 out:
@@ -1167,20 +1156,18 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 	err = nfserr_perm;
 	if (!len)
 		goto out;
+	err = nfserr_exist;
+	if (isdotent(fname, len))
+		goto out;
 
+	fh_lock(ffhp);
 	ddir = ffhp->fh_dentry;
 	dirp = ddir->d_inode;
 
-	dnew = lookup_dentry(fname, dget(ddir), 0);
+	dnew = lookup_one(fname, dget(ddir));
 	err = PTR_ERR(dnew);
 	if (IS_ERR(dnew))
 		goto out_nfserr;
-	/*
-	 * Lock the parent before checking for existence
-	 */
-	err = fh_lock_parent(ffhp, dnew);
-	if (err)
-		goto out_dput;
 
 	dold = tfhp->fh_dentry;
 	dest = dold->d_inode;
@@ -1199,7 +1186,6 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 	}
 
 	fh_unlock(ffhp);
-out_dput:
 	dput(dnew);
 out:
 	return err;
@@ -1207,29 +1193,6 @@ out:
 out_nfserr:
 	err = nfserrno(err);
 	goto out;
-}
-
-/*
- * This follows the model of double_lock() in the VFS.
- */
-static inline void nfsd_double_down(struct semaphore *s1, struct semaphore *s2)
-{
-	if (s1 != s2) {
-		if ((unsigned long) s1 < (unsigned long) s2) {
-			struct semaphore *tmp = s1;
-			s1 = s2;
-			s2 = tmp;
-		}
-		down(s1);
-	}
-	down(s2);
-}
-
-static inline void nfsd_double_up(struct semaphore *s1, struct semaphore *s2)
-{
-	up(s1);
-	if (s1 != s2)
-		up(s2);
 }
 
 /*
@@ -1261,15 +1224,12 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	if (fdir->i_dev != tdir->i_dev)
 		goto out;
 
-	/* N.B. We shouldn't need this ... dentry layer handles it */
 	err = nfserr_perm;
-	if (!flen || (fname[0] == '.' && 
-	    (flen == 1 || (flen == 2 && fname[1] == '.'))) ||
-	    !tlen || (tname[0] == '.' && 
-	    (tlen == 1 || (tlen == 2 && tname[1] == '.'))))
+	if (!flen || isdotent(fname, flen) || !tlen || isdotent(tname, tlen))
 		goto out;
 
-	odentry = lookup_dentry(fname, dget(fdentry), 0);
+	double_down(&tdir->i_sem, &fdir->i_sem);
+	odentry = lookup_one(fname, dget(fdentry));
 	err = PTR_ERR(odentry);
 	if (IS_ERR(odentry))
 		goto out_nfserr;
@@ -1278,15 +1238,10 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	if (!odentry->d_inode)
 		goto out_dput_old;
 
-	ndentry = lookup_dentry(tname, dget(tdentry), 0);
+	ndentry = lookup_one(tname, dget(tdentry));
 	err = PTR_ERR(ndentry);
 	if (IS_ERR(ndentry))
 		goto out_dput_old;
-
-	/*
-	 * Lock the parent directories.
-	 */
-	nfsd_double_down(&tdir->i_sem, &fdir->i_sem);
 
 #ifdef CONFIG_NFSD_V3
 	/* Fill in the pre-op attr for the wcc data for both 
@@ -1296,19 +1251,11 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	fill_pre_wcc(tfhp);
 #endif /* CONFIG_NFSD_V3 */
 
-	err = -ENOENT;
-	/* GAM3 check for parent changes after locking. */
-	if (nfsd_check_parent(fdentry, odentry) &&
-	    nfsd_check_parent(tdentry, ndentry)) {
-
-		err = vfs_rename(fdir, odentry, tdir, ndentry);
-		if (!err && EX_ISSYNC(tfhp->fh_export)) {
-			nfsd_sync_dir(tdentry);
-			nfsd_sync_dir(fdentry);
-		}
-	} else
-		dprintk("nfsd: Caught race in nfsd_rename");
-
+	err = vfs_rename(fdir, odentry, tdir, ndentry);
+	if (!err && EX_ISSYNC(tfhp->fh_export)) {
+		nfsd_sync_dir(tdentry);
+		nfsd_sync_dir(fdentry);
+	}
 #ifdef CONFIG_NFSD_V3
         /* Fill in the post-op attr for the wcc data for both 
          * tdir and fdir
@@ -1316,7 +1263,7 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	fill_post_wcc(ffhp);
 	fill_post_wcc(tfhp);
 #endif /* CONFIG_NFSD_V3 */
-	nfsd_double_up(&tdir->i_sem, &fdir->i_sem);
+	double_up(&tdir->i_sem, &fdir->i_sem);
 	dput(ndentry);
 
 out_dput_old:
@@ -1343,7 +1290,6 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	struct inode	*dirp;
 	int		err;
 
-	/* N.B. We shouldn't need this test ... handled by dentry layer */
 	err = nfserr_acces;
 	if (!flen || isdotent(fname, flen))
 		goto out;
@@ -1351,10 +1297,11 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	if (err)
 		goto out;
 
+	fh_lock(fhp);
 	dentry = fhp->fh_dentry;
 	dirp = dentry->d_inode;
 
-	rdentry = lookup_dentry(fname, dget(dentry), 0);
+	rdentry = lookup_one(fname, dget(dentry));
 	err = PTR_ERR(rdentry);
 	if (IS_ERR(rdentry))
 		goto out_nfserr;
@@ -1362,12 +1309,6 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	if (!rdentry->d_inode) {
 		dput(rdentry);
 		err = nfserr_noent;
-		goto out;
-	}
-
-	err = fh_lock_parent(fhp, rdentry);
-	if (err) {
-		dput(rdentry);
 		goto out;
 	}
 
@@ -1436,6 +1377,7 @@ nfsd_readdir(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	 * may choose to do less.
 	 */
 	inode = file.f_dentry->d_inode;
+	down(&inode->i_sem);
 	while (1) {
 		oldlen = cd.buflen;
 
@@ -1444,9 +1386,7 @@ nfsd_readdir(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 			file.f_inode->i_dev, file.f_inode->i_ino,
 			(int) file.f_pos, (int) oldlen, (int) cd.buflen);
 		 */
-		down(&inode->i_sem);
 		err = file.f_op->readdir(&file, &cd, (filldir_t) func);
-		up(&inode->i_sem);
 		if (err < 0)
 			goto out_nfserr;
 		if (oldlen == cd.buflen)
@@ -1454,6 +1394,7 @@ nfsd_readdir(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 		if (cd.eob)
 			break;
 	}
+	up(&inode->i_sem);
 
 	/* If we didn't fill the buffer completely, we're at EOF */
 	eof = !cd.eob;
@@ -1482,6 +1423,7 @@ out:
 	return err;
 
 out_nfserr:
+	up(&inode->i_sem);
 	err = nfserrno(err);
 	goto out_close;
 }

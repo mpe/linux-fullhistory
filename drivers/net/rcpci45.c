@@ -1221,7 +1221,7 @@ static void __exit rcpci_cleanup_module (void)
 }
 
 module_init(rcpci_init_module);
-module_exit(rcpci_clenaup_module);
+module_exit(rcpci_cleanup_module);
 
 
 static int

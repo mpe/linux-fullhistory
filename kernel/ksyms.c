@@ -141,6 +141,7 @@ EXPORT_SYMBOL(iget4);
 EXPORT_SYMBOL(iput);
 EXPORT_SYMBOL(__namei);
 EXPORT_SYMBOL(lookup_dentry);
+EXPORT_SYMBOL(lookup_one);
 EXPORT_SYMBOL(__open_namei);
 EXPORT_SYMBOL(sys_close);
 EXPORT_SYMBOL(d_alloc_root);
@@ -505,3 +506,6 @@ EXPORT_SYMBOL(tasklet_kill);
 /* init task, for moving kthread roots - ought to export a function ?? */
 
 EXPORT_SYMBOL(init_task_union);
+
+EXPORT_SYMBOL(tasklist_lock);
+EXPORT_SYMBOL(pidhash);

@@ -1546,7 +1546,7 @@ void __init cpu_init (void)
 	cpus_initialized++;
 	printk("Initializing CPU#%d\n", nr);
 
-	if (cpu_has_pse)
+	if (cpu_has_vme || cpu_has_tsc || cpu_has_de)
 		clear_in_cr4(X86_CR4_VME|X86_CR4_PVI|X86_CR4_TSD|X86_CR4_DE);
 
 	__asm__ __volatile__("lgdt %0": "=m" (gdt_descr));

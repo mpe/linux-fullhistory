@@ -14,6 +14,10 @@
  *
  * See Documentation/usb/usb-serial.txt for more information on using this driver
  * 
+ * (03/17/2000) gkh
+ *	Added config option for debugging messages.
+ *	Added patch for keyspan pda from Brian Warner.
+ *
  * (03/06/2000) gkh
  *	Added the keyspan pda code from Brian Warner <warner@lothar.com>
  *	Moved a bunch of the port specific stuff into its own structure. This
@@ -175,7 +179,12 @@
 #include <linux/tty.h>
 #include <linux/module.h>
 #include <linux/spinlock.h>
-#define DEBUG
+
+#ifdef CONFIG_USB_SERIAL_DEBUG
+	#define DEBUG
+#else
+	#undef DEBUG
+#endif
 #include <linux/usb.h>
 
 #ifdef CONFIG_USB_SERIAL_WHITEHEAT
@@ -1428,6 +1437,7 @@ static void keyspan_pda_rx_interrupt (struct urb *urb)
 		case 2: /* tx unthrottle interrupt */
 			serial->tx_throttled = 0;
 			wake_up(&serial->write_wait); /* wake up writer */
+			wake_up(&tty->write_wait); /* them too */
 			break;
 		default:
 			break;
@@ -1846,25 +1856,12 @@ static int keyspan_pda_write_room (struct tty_struct *tty)
 static int keyspan_pda_chars_in_buffer (struct tty_struct *tty) 
 {
 	struct usb_serial *serial = (struct usb_serial *)tty->driver_data; 
-	unsigned char count;
-	int rc;
-
-	/* used by tty stuff to wait for output to drain. Go ask the
-	   device how much is still queued in the tx ring */
-	rc = usb_control_msg(serial->dev, usb_rcvctrlpipe(serial->dev, 0),
-			     6, /* write_room */
-			     USB_TYPE_VENDOR | USB_RECIP_INTERFACE
-			     | USB_DIR_IN,
-			     1, /* value: 1 means chars_in_buffer */
-			     0, /* index */
-			     &count,
-			     1,
-			     2*HZ);
-	if (rc < 0)
-		return rc; /* failed */
-	if (rc == 0)
-		return -EIO; /* device didn't return any data */
-	return (count);
+	
+	/* when throttled, return at least WAKEUP_CHARS to tell select() (via
+	   n_tty.c:normal_poll() ) that we're not writeable. */
+	if (serial->tx_throttled)
+		return 256;
+	return 0;
 }
 
 

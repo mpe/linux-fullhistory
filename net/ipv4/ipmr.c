@@ -9,7 +9,7 @@
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  *
- *	Version: $Id: ipmr.c,v 1.50 2000/01/09 02:19:32 davem Exp $
+ *	Version: $Id: ipmr.c,v 1.51 2000/03/17 14:41:52 davem Exp $
  *
  *	Fixes:
  *	Michael Chastain	:	Incorrect size of copying.
@@ -1100,6 +1100,10 @@ static void ip_encap(struct sk_buff *skb, u32 saddr, u32 daddr)
 
 	skb->h.ipiph = skb->nh.iph;
 	skb->nh.iph = iph;
+#ifdef CONFIG_NETFILTER
+	nf_conntrack_put(skb->nfct);
+	skb->nfct = NULL;
+#endif
 }
 
 static inline int ipmr_forward_finish(struct sk_buff *skb)
@@ -1433,6 +1437,10 @@ int pim_rcv_v1(struct sk_buff * skb, unsigned short len)
 	skb->dst = NULL;
 	((struct net_device_stats*)reg_dev->priv)->rx_bytes += skb->len;
 	((struct net_device_stats*)reg_dev->priv)->rx_packets++;
+#ifdef CONFIG_NETFILTER
+	nf_conntrack_put(skb->nfct);
+	skb->nfct = NULL;
+#endif
 	netif_rx(skb);
 	dev_put(reg_dev);
 	return 0;
@@ -1488,6 +1496,10 @@ int pim_rcv(struct sk_buff * skb, unsigned short len)
 	((struct net_device_stats*)reg_dev->priv)->rx_bytes += skb->len;
 	((struct net_device_stats*)reg_dev->priv)->rx_packets++;
 	skb->dst = NULL;
+#ifdef CONFIG_NETFILTER
+	nf_conntrack_put(skb->nfct);
+	skb->nfct = NULL;
+#endif
 	netif_rx(skb);
 	dev_put(reg_dev);
 	return 0;

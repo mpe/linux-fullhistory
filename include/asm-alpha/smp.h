@@ -30,7 +30,6 @@ struct cpuinfo_alpha {
 	unsigned long pgtable_cache_sz;
 	unsigned long ipi_count;
 	unsigned long irq_attempt[NR_IRQS];
-	unsigned long smp_local_irq_count;
 	unsigned long prof_multiplier;
 	unsigned long prof_counter;
 	int irq_count, bh_count;

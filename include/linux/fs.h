@@ -995,6 +995,7 @@ typedef int (*read_actor_t)(read_descriptor_t *, struct page *, unsigned long, u
 
 
 extern struct dentry * lookup_dentry(const char *, struct dentry *, unsigned int);
+extern struct dentry * lookup_one(const char *, struct dentry *);
 extern struct dentry * __namei(const char *, unsigned int);
 
 #define namei(pathname)		__namei(pathname, 1)

@@ -49,6 +49,14 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_COMX),y)
+LX_OBJS += comx.o
+else
+  ifeq ($(CONFIG_COMX),m)
+  MX_OBJS += comx.o
+  endif
+endif
+
 ifeq ($(CONFIG_COMX_HW_COMX),y)
 L_OBJS += comx-hw-comx.o
 else 

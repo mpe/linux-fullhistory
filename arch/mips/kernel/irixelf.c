@@ -42,7 +42,7 @@
 #undef DEBUG_ELF
 
 static int load_irix_binary(struct linux_binprm * bprm, struct pt_regs * regs);
-static int load_irix_library(int fd);
+static int load_irix_library(struct file *);
 static int irix_core_dump(long signr, struct pt_regs * regs,
                           struct file *file);
 extern int dump_fpu (elf_fpregset_t *);
@@ -820,7 +820,7 @@ out_free_ph:
 /* This is really simpleminded and specialized - we are loading an
  * a.out library that is given an ELF header.
  */
-static inline int do_load_irix_library(struct file *file)
+static int load_irix_library(struct file *file)
 {
 	struct elfhdr elf_ex;
 	struct elf_phdr *elf_phdata  =  NULL;
@@ -834,8 +834,6 @@ static inline int do_load_irix_library(struct file *file)
 	int i,j, k;
 
 	len = 0;
-	if (!file->f_op)
-		return -EACCES;
 	dentry = file->f_dentry;
 	inode = dentry->d_inode;
 	elf_bss = 0;
@@ -888,12 +886,14 @@ static inline int do_load_irix_library(struct file *file)
 	while(elf_phdata->p_type != PT_LOAD) elf_phdata++;
 	
 	/* Now use mmap to map the library into memory. */
+	down(&current->mm->mmap_sem);
 	error = do_mmap(file,
 			elf_phdata->p_vaddr & 0xfffff000,
 			elf_phdata->p_filesz + (elf_phdata->p_vaddr & 0xfff),
 			PROT_READ | PROT_WRITE | PROT_EXEC,
 			MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE,
 			elf_phdata->p_offset & 0xfffff000);
+	up(&current->mm->mmap_sem);
 
 	k = elf_phdata->p_vaddr + elf_phdata->p_filesz;
 	if(k > elf_bss) elf_bss = k;
@@ -911,19 +911,6 @@ static inline int do_load_irix_library(struct file *file)
 	  do_brk(len, bss-len);
 	kfree(elf_phdata);
 	return 0;
-}
-
-static int load_irix_library(int fd)
-{
-	int retval = -EACCES;
-	struct file *file;
-
-	file = fget(fd);
-	if (file) {
-		retval = do_load_irix_library(file);
-		fput(file);
-	}
-	return retval;
 }
 	
 /* Called through irix_syssgi() to map an elf image given an FD,

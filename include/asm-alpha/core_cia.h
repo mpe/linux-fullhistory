@@ -533,62 +533,58 @@ __EXTERN_INLINE int cia_is_ioaddr(unsigned long addr)
 #ifdef __WANT_IO_DEF
 
 #ifdef CONFIG_ALPHA_PYXIS
-# define __inb		cia_bwx_inb
-# define __inw		cia_bwx_inw
-# define __inl		cia_bwx_inl
-# define __outb		cia_bwx_outb
-# define __outw		cia_bwx_outw
-# define __outl		cia_bwx_outl
-# define __readb	cia_bwx_readb
-# define __readw	cia_bwx_readw
-# define __writeb	cia_bwx_writeb
-# define __writew	cia_bwx_writew
-# define __readl	cia_bwx_readl
-# define __readq	cia_bwx_readq
-# define __writel	cia_bwx_writel
-# define __writeq	cia_bwx_writeq
-# define __ioremap	cia_bwx_ioremap
-# define inb(port)		__inb((port))
-# define inw(port)		__inw((port))
-# define inl(port)		__inl((port))
-# define outb(x, port)		__outb((x),(port))
-# define outw(x, port)		__outw((x),(port))
-# define outl(x, port)		__outl((x),(port))
-# define __raw_readb(addr)	__readb((addr))
-# define __raw_readw(addr)	__readw((addr))
-# define __raw_writeb(b, addr)	__writeb((b),(addr))
-# define __raw_writew(b, addr)	__writew((b),(addr))
-# define __raw_readl(a)		__readl((unsigned long)(a))
-# define __raw_readq(a)		__readq((unsigned long)(a))
-# define __raw_writel(v,a)	__writel((v),(unsigned long)(a))
-# define __raw_writeq(v,a)	__writeq((v),(unsigned long)(a))
+# define __inb(p)		cia_bwx_inb((unsigned long)(p))
+# define __inw(p)		cia_bwx_inw((unsigned long)(p))
+# define __inl(p)		cia_bwx_inl((unsigned long)(p))
+# define __outb(x,p)		cia_bwx_outb((x),(unsigned long)(p))
+# define __outw(x,p)		cia_bwx_outw((x),(unsigned long)(p))
+# define __outl(x,p)		cia_bwx_outl((x),(unsigned long)(p))
+# define __readb(a)		cia_bwx_readb((unsigned long)(a))
+# define __readw(a)		cia_bwx_readw((unsigned long)(a))
+# define __readl(a)		cia_bwx_readl((unsigned long)(a))
+# define __readq(a)		cia_bwx_readq((unsigned long)(a))
+# define __writeb(x,a)		cia_bwx_writeb((x),(unsigned long)(a))
+# define __writew(x,a)		cia_bwx_writew((x),(unsigned long)(a))
+# define __writel(x,a)		cia_bwx_writel((x),(unsigned long)(a))
+# define __writeq(x,a)		cia_bwx_writeq((x),(unsigned long)(a))
+# define __ioremap(a)		cia_bwx_ioremap((unsigned long)(a))
+# define inb(p)			__inb(p)
+# define inw(p)			__inw(p)
+# define inl(p)			__inl(p)
+# define outb(x,p)		__outb((x),(port))
+# define outw(x,p)		__outw((x),(port))
+# define outl(x,p)		__outl((x),(port))
+# define __raw_readb(a)		__readb(a)
+# define __raw_readw(a)		__readw(a)
+# define __raw_readl(a)		__readl(a)
+# define __raw_readq(a)		__readq(a)
+# define __raw_writeb(x,a)	__writeb((x),(a))
+# define __raw_writew(x,a)	__writew((x),(a))
+# define __raw_writel(x,a)	__writel((x),(a))
+# define __raw_writeq(x,a)	__writeq((x),(a))
 #else
-# define __inb		cia_inb
-# define __inw		cia_inw
-# define __inl		cia_inl
-# define __outb		cia_outb
-# define __outw		cia_outw
-# define __outl		cia_outl
-# define __readb	cia_readb
-# define __readw	cia_readw
-# define __writeb	cia_writeb
-# define __writew	cia_writew
-# define __readl	cia_readl
-# define __readq	cia_readq
-# define __writel	cia_writel
-# define __writeq	cia_writeq
-# define __ioremap	cia_ioremap
-# define inb(port) \
-    (__builtin_constant_p((port))?__inb(port):_inb(port))
-# define outb(x, port) \
-    (__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
-# define __raw_readl(a)		__readl((unsigned long)(a))
-# define __raw_readq(a)		__readq((unsigned long)(a))
-# define __raw_writel(v,a)	__writel((v),(unsigned long)(a))
-# define __raw_writeq(v,a)	__writeq((v),(unsigned long)(a))
+# define __inb(p)		cia_inb((unsigned long)(p))
+# define __inw(p)		cia_inw((unsigned long)(p))
+# define __inl(p)		cia_inl((unsigned long)(p))
+# define __outb(x,p)		cia_outb((x),(unsigned long)(p))
+# define __outw(x,p)		cia_outw((x),(unsigned long)(p))
+# define __outl(x,p)		cia_outl((x),(unsigned long)(p))
+# define __readb(a)		cia_readb((unsigned long)(a))
+# define __readw(a)		cia_readw((unsigned long)(a))
+# define __readl(a)		cia_readl((unsigned long)(a))
+# define __readq(a)		cia_readq((unsigned long)(a))
+# define __writeb(x,a)		cia_writeb((x),(unsigned long)(a))
+# define __writew(x,a)		cia_writew((x),(unsigned long)(a))
+# define __writel(x,a)		cia_writel((x),(unsigned long)(a))
+# define __writeq(x,a)		cia_writeq((x),(unsigned long)(a))
+# define __ioremap(a)		cia_ioremap((unsigned long)(a))
+# define __raw_readl(a)		__readl(a)
+# define __raw_readq(a)		__readq(a)
+# define __raw_writel(v,a)	__writel((v),(a))
+# define __raw_writeq(v,a)	__writeq((v),(a))
 #endif /* PYXIS */
 
-#define __is_ioaddr	cia_is_ioaddr
+#define __is_ioaddr(a)		cia_is_ioaddr((unsigned long)(a))
 
 #endif /* __WANT_IO_DEF */
 

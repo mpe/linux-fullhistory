@@ -9,7 +9,6 @@
 #include <linux/netlink.h>
 
 extern int mkiss_init_ctrl_dev(void);
-extern int ppp_init(void);
 extern int slip_init_ctrl_dev(void);
 extern int strip_init_ctrl_dev(void);
 extern int x25_asy_init_ctrl_dev(void);
@@ -77,7 +76,7 @@ struct net_probe pci_probes[] __initdata = {
         {cpm_enet_init, 0},
 #endif
 #if defined(CONFIG_COMX)
-	{comx_init(), 0},
+	{comx_init, 0},
 #endif	/*
 	 *	SLHC if present needs attaching so other people see it
 	 *	even if not opened.
@@ -166,9 +165,6 @@ static void __init network_ldisc_init(void)
 #endif
 #if defined(CONFIG_STRIP)
 	strip_init_ctrl_dev();
-#endif
-#if defined(CONFIG_PPP)
-	ppp_init();
 #endif
 }
 

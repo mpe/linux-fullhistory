@@ -224,8 +224,8 @@ static ssize_t joydev_read(struct file *file, char *buf, size_t count, loff_t *p
 
 		struct JS_DATA_TYPE data;
 
-		data.buttons =  (joydev->nkey > 0 && test_bit(joydev->keypam[0], input->key)) ? 1 : 0 |
-				(joydev->nkey > 1 && test_bit(joydev->keypam[1], input->key)) ? 2 : 0;
+		data.buttons =  ((joydev->nkey > 0 && test_bit(joydev->keypam[0], input->key)) ? 1 : 0) |
+				((joydev->nkey > 1 && test_bit(joydev->keypam[1], input->key)) ? 2 : 0);
 		data.x = ((joydev_correct(input->abs[ABS_X], &joydev->corr[0]) / 256) + 128) >> joydev->glue.JS_CORR.x;
 		data.y = ((joydev_correct(input->abs[ABS_Y], &joydev->corr[1]) / 256) + 128) >> joydev->glue.JS_CORR.y;
 

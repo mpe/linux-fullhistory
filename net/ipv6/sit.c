@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *	Alexey Kuznetsov	<kuznet@ms2.inr.ac.ru>
  *
- *	$Id: sit.c,v 1.35 2000/01/06 00:42:08 davem Exp $
+ *	$Id: sit.c,v 1.36 2000/03/17 14:42:08 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -388,6 +388,10 @@ int ipip6_rcv(struct sk_buff *skb, unsigned short len)
 		skb->dev = tunnel->dev;
 		dst_release(skb->dst);
 		skb->dst = NULL;
+#ifdef CONFIG_NETFILTER
+		nf_conntrack_put(skb->nfct);
+		skb->nfct = NULL;
+#endif
 		netif_rx(skb);
 		read_unlock(&ipip6_lock);
 		return 0;
@@ -546,6 +550,11 @@ static int ipip6_tunnel_xmit(struct sk_buff *skb, struct net_device *dev)
 	iph->tot_len		=	htons(skb->len);
 	ip_select_ident(iph, &rt->u.dst);
 	ip_send_check(iph);
+
+#ifdef CONFIG_NETFILTER
+	nf_conntrack_put(skb->nfct);
+	skb->nfct = NULL;
+#endif
 
 	stats->tx_bytes += skb->len;
 	stats->tx_packets++;

@@ -40,7 +40,7 @@
 #include <linux/elf.h>
 
 static int load_elf_binary(struct linux_binprm * bprm, struct pt_regs * regs);
-static int load_elf_library(int fd);
+static int load_elf_library(struct file*);
 extern int dump_fpu (struct pt_regs *, elf_fpregset_t *);
 extern void dump_thread(struct pt_regs *, struct user *);
 
@@ -787,9 +787,8 @@ out_free_ph:
 /* This is really simpleminded and specialized - we are loading an
    a.out library that is given an ELF header. */
 
-static int load_elf_library(int fd)
+static int load_elf_library(struct file *file)
 {
-	struct file * file;
 	struct dentry * dentry;
 	struct inode * inode;
 	struct elf_phdr *elf_phdata;
@@ -799,9 +798,6 @@ static int load_elf_library(int fd)
 	loff_t offset = 0;
 
 	error = -EACCES;
-	file = fget(fd);
-	if (!file || !file->f_op)
-		goto out;
 	dentry = file->f_dentry;
 	inode = dentry->d_inode;
 
@@ -813,27 +809,27 @@ static int load_elf_library(int fd)
 	retval = file->f_op->read(file, (char *) &elf_ex, sizeof(elf_ex), &offset);
 	set_fs(USER_DS);
 	if (retval != sizeof(elf_ex))
-		goto out_putf;
+		goto out;
 
 	if (memcmp(elf_ex.e_ident, ELFMAG, SELFMAG) != 0)
-		goto out_putf;
+		goto out;
 
 	/* First of all, some simple consistency checks */
 	if (elf_ex.e_type != ET_EXEC || elf_ex.e_phnum > 2 ||
 	   !elf_check_arch(elf_ex.e_machine) ||
 	   (!inode->i_fop || !inode->i_fop->mmap))
-		goto out_putf;
+		goto out;
 
 	/* Now read in all of the header information */
 
 	j = sizeof(struct elf_phdr) * elf_ex.e_phnum;
 	if (j > ELF_EXEC_PAGESIZE)
-		goto out_putf;
+		goto out;
 
 	error = -ENOMEM;
 	elf_phdata = (struct elf_phdr *) kmalloc(j, GFP_KERNEL);
 	if (!elf_phdata)
-		goto out_putf;
+		goto out;
 
 	/* N.B. check for error return?? */
 	retval = read_exec(dentry, elf_ex.e_phoff, (char *) elf_phdata,
@@ -848,6 +844,7 @@ static int load_elf_library(int fd)
 	while (elf_phdata->p_type != PT_LOAD) elf_phdata++;
 
 	/* Now use mmap to map the library into memory. */
+	down(&current->mm->mmap_sem);
 	error = do_mmap(file,
 			ELF_PAGESTART(elf_phdata->p_vaddr),
 			(elf_phdata->p_filesz +
@@ -856,6 +853,7 @@ static int load_elf_library(int fd)
 			MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE,
 			(elf_phdata->p_offset -
 			 ELF_PAGEOFFSET(elf_phdata->p_vaddr)));
+	up(&current->mm->mmap_sem);
 	if (error != ELF_PAGESTART(elf_phdata->p_vaddr))
 		goto out_free_ph;
 
@@ -873,8 +871,6 @@ static int load_elf_library(int fd)
 
 out_free_ph:
 	kfree(elf_phdata);
-out_putf:
-	fput(file);
 out:
 	return error;
 }

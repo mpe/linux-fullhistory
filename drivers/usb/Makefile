@@ -45,7 +45,7 @@ ifeq ($(CONFIG_USB_SERIAL),y)
 	obj-y += serial/serial.o
 else
 	ifeq ($(CONFIG_USB_SERIAL),m)
-		MOD_SUB_DIRS += serial
+		MOD_IN_SUB_DIRS += serial
 	endif
 endif
 

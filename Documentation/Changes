@@ -43,7 +43,7 @@ Current Minimal Requirements
 encountered a bug!  If you're unsure what version you're currently
 running, the suggested command should tell you.
 
-- Kernel modutils	 2.3.7                   ; insmod -V
+- Kernel modutils	 2.3.10                  ; insmod -V
 - Gnu C 		 2.7.2.3                 ; gcc --version
 - Binutils		 2.9.1.0.7               ; ld -v
 - Linux libc5 C Library	 5.4.46                  ; ls -l /lib/libc*
@@ -174,7 +174,7 @@ Modules
 =======
 
    You need to upgrade to the latest version of modutils for the Linux
-2.3 kernel.  This version will also work with your 2.0 kernel.
+2.3 kernel.  This version can also be built to work with your 2.0 kernel.
 
    As of 2.1.90-pre1, kerneld has been replaced by a kernel thread,
 kmod.  See Documentation/kmod.txt for more information.  The main
@@ -586,8 +586,8 @@ ftp://metalab.unc.edu/pub/Linux/GCC/ld.so-1.9.9.tar.gz
 Modules utilities
 =================
 
-The 2.3.7 release:
-ftp://ftp.ocs.com.au/pub/modutils/v2.3/modutils-2.3.7.tar.gz
+The 2.3.10 release:
+ftp://ftp.ocs.com.au/pub/modutils/v2.3/modutils-2.3.10.tar.gz
 
 Procps utilities
 ================

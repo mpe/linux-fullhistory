@@ -147,7 +147,7 @@ static struct dentry *nfsd_iget(struct super_block *sb, unsigned long ino, __u32
 			generation);
 
 		iput(inode);
-		return NULL;
+		return ERR_PTR(-ESTALE);
 	}
 	/* now to find a dentry.
 	 * If possible, get a well-connected one
@@ -353,10 +353,6 @@ find_fh_dentry(struct super_block *sb, ino_t ino, int generation, ino_t dirino, 
 	if (IS_ERR(result))
 		goto err_out;
 	err = -ESTALE;
-	if (!result) {
-		dprintk("find_fh_dentry: No inode found.\n");
-		goto err_out;
-	}
 	if (! (result->d_flags & DCACHE_NFSD_DISCONNECTED))
 		return result;
 

@@ -4,9 +4,10 @@
  * Thanks to Rob `CmdrTaco' Malda for not influencing this code in any
  * way.
  *
- * Rusty Russell (C)1998 -- This code is GPL.
+ * Rusty Russell (C)2000 -- This code is GPL.
  *
  * February 2000: Modified by James Morris to have 1 queue per protocol.
+ * 15-Mar-2000:   Added NF_REPEAT --RR.
  */
 #include <linux/config.h>
 #include <linux/netfilter.h>
@@ -55,8 +56,6 @@ static struct nf_queue_handler_t {
 int nf_register_hook(struct nf_hook_ops *reg)
 {
 	struct list_head *i;
-
-	NFDEBUG("nf_register_hook: pf=%i hook=%u.\n", reg->pf, reg->hooknum);
 
 	br_write_lock_bh(BR_NETPROTO_LOCK);
 	for (i = nf_hooks[reg->pf][reg->hooknum].next; 
@@ -119,7 +118,16 @@ out:
 void nf_unregister_sockopt(struct nf_sockopt_ops *reg)
 {
 	/* No point being interruptible: we're probably in cleanup_module() */
+ restart:
 	down(&nf_sockopt_mutex);
+	if (reg->use != 0) {
+		/* To be woken by nf_sockopt call... */
+		reg->cleanup_task = current;
+		up(&nf_sockopt_mutex);
+		set_current_state(TASK_UNINTERRUPTIBLE);
+		schedule();
+		goto restart;
+	}
 	list_del(&reg->list);
 	up(&nf_sockopt_mutex);
 }
@@ -178,7 +186,7 @@ void nf_dump_skb(int pf, struct sk_buff *skb)
 			dst_port = ntohs(tcp->dest);
 		}
 	
-		printk("PROTO=%d %ld.%ld.%ld.%ld:%hu %ld.%ld.%ld.%ld:%hu"
+		printk("PROTO=%d %d.%d.%d.%d:%hu %d.%d.%d.%d:%hu"
 		       " L=%hu S=0x%2.2hX I=%hu F=0x%4.4hX T=%hu",
 		       ip->protocol,
 		       (ntohl(ip->saddr)>>24)&0xFF,
@@ -261,9 +269,16 @@ void nf_debug_ip_finish_output2(struct sk_buff *skb)
 		if (skb->nf_debug != ((1 << NF_IP_PRE_ROUTING)
 				      | (1 << NF_IP_FORWARD)
 				      | (1 << NF_IP_POST_ROUTING))) {
-			printk("ip_finish_output: bad unowned skb = %p: ",skb);
-			debug_print_hooks_ip(skb->nf_debug);
-			nf_dump_skb(PF_INET, skb);
+			/* Fragments will have no owners, but still
+                           may be local */
+			if (!(skb->nh.iph->frag_off & htons(IP_MF|IP_OFFSET))
+			    || skb->nf_debug != ((1 << NF_IP_LOCAL_OUT)
+						 | (1 << NF_IP_POST_ROUTING))){
+				printk("ip_finish_output:"
+				       " bad unowned skb = %p: ",skb);
+				debug_print_hooks_ip(skb->nf_debug);
+				nf_dump_skb(PF_INET, skb);
+			}
 		}
 	}
 }
@@ -274,31 +289,42 @@ static int nf_sockopt(struct sock *sk, int pf, int val,
 		      char *opt, int *len, int get)
 {
 	struct list_head *i;
+	struct nf_sockopt_ops *ops;
 	int ret;
 
 	if (down_interruptible(&nf_sockopt_mutex) != 0)
 		return -EINTR;
 
 	for (i = nf_sockopts.next; i != &nf_sockopts; i = i->next) {
-		struct nf_sockopt_ops *ops = (struct nf_sockopt_ops *)i;
+		ops = (struct nf_sockopt_ops *)i;
 		if (ops->pf == pf) {
 			if (get) {
 				if (val >= ops->get_optmin
 				    && val < ops->get_optmax) {
+					ops->use++;
+					up(&nf_sockopt_mutex);
 					ret = ops->get(sk, val, opt, len);
 					goto out;
 				}
 			} else {
 				if (val >= ops->set_optmin
 				    && val < ops->set_optmax) {
+					ops->use++;
+					up(&nf_sockopt_mutex);
 					ret = ops->set(sk, val, opt, *len);
 					goto out;
 				}
 			}
 		}
 	}
-	ret = -ENOPROTOOPT;
+	up(&nf_sockopt_mutex);
+	return -ENOPROTOOPT;
+	
  out:
+	down(&nf_sockopt_mutex);
+	ops->use--;
+	if (ops->cleanup_task)
+		wake_up_process(ops->cleanup_task);
 	up(&nf_sockopt_mutex);
 	return ret;
 }
@@ -334,6 +360,10 @@ static unsigned int nf_iterate(struct list_head *head,
 		case NF_DROP:
 			return NF_DROP;
 
+		case NF_REPEAT:
+			*i = (*i)->prev;
+			break;
+
 #ifdef CONFIG_NETFILTER_DEBUG
 		case NF_ACCEPT:
 			break;
@@ -367,7 +397,6 @@ int nf_register_queue_handler(int pf, nf_queue_outfn_t outfn, void *data)
 /* The caller must flush their queue before this */
 int nf_unregister_queue_handler(int pf)
 {
-	NFDEBUG("Unregistering Netfilter queue handler for pf=%d\n", pf);
 	br_write_lock_bh(BR_NETPROTO_LOCK);
 	queue_handler[pf].outfn = NULL;
 	queue_handler[pf].data = NULL;
@@ -390,7 +419,6 @@ static void nf_queue(struct sk_buff *skb,
 	struct nf_info *info;
 
 	if (!queue_handler[pf].outfn) {
-		NFDEBUG("nf_queue: noone wants the packet, dropping it.\n");
 		kfree_skb(skb);
 		return;
 	}
@@ -431,6 +459,14 @@ int nf_hook_slow(int pf, unsigned int hook, struct sk_buff *skb,
 	struct list_head *elem;
 	unsigned int verdict;
 	int ret = 0;
+
+#ifdef CONFIG_NETFILTER_DEBUG
+	if (skb->nf_debug & (1 << hook)) {
+		printk("nf_hook: hook %i already set.\n", hook);
+		nf_dump_skb(pf, skb);
+	}
+	skb->nf_debug |= (1 << hook);
+#endif
 
 	elem = &nf_hooks[pf][hook];
 	verdict = nf_iterate(&nf_hooks[pf][hook], &skb, hook, indev,
@@ -473,6 +509,11 @@ void nf_reinject(struct sk_buff *skb, struct nf_info *info,
 	}
 
 	/* Continue traversal iff userspace said ok... */
+	if (verdict == NF_REPEAT) {
+		elem = elem->prev;
+		verdict = NF_ACCEPT;
+	}
+
 	if (verdict == NF_ACCEPT) {
 		verdict = nf_iterate(&nf_hooks[info->pf][info->hook],
 				     &skb, info->hook, 

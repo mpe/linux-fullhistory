@@ -90,8 +90,6 @@ Current status:
    not all of the standard USB descriptors are handled: Get_Status, Set_Feature
    O_NONBLOCK, select()
 
- The device usually appears at /dev/ttyUSB1 .
-
 
 Generic Serial driver
 

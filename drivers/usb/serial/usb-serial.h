@@ -371,6 +371,7 @@ static struct usb_serial_device_type keyspan_pda_fake_device = {
 	num_interrupt_in:	NUM_DONT_CARE,
 	num_bulk_in:		NUM_DONT_CARE,
 	num_bulk_out:		NUM_DONT_CARE,
+	num_ports:		1,
 	startup:		keyspan_pda_fake_startup
 };
 static struct usb_serial_device_type keyspan_pda_device = {

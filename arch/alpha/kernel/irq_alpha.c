@@ -6,6 +6,7 @@
 #include <linux/init.h>
 #include <linux/sched.h>
 #include <linux/irq.h>
+#include <linux/kernel_stat.h>
 
 #include <asm/machvec.h>
 #include <asm/dma.h>
@@ -61,14 +62,22 @@ do_entInt(unsigned long type, unsigned long vector, unsigned long la_ptr,
 		break;
 	case 1:
 #ifdef CONFIG_SMP
-		cpu_data[smp_processor_id()].smp_local_irq_count++;
+	  {
+		long cpu;
 		smp_percpu_timer_interrupt(&regs);
-		if (smp_processor_id() == boot_cpuid)
-#endif
+		cpu = smp_processor_id();
+		if (cpu != boot_cpuid) {
+		        irq_attempt(cpu, RTC_IRQ)++;
+		        kstat.irqs[cpu][RTC_IRQ]++;
+		} else {
 			handle_irq(RTC_IRQ, &regs);
+		}
+	  }
+#else
+		handle_irq(RTC_IRQ, &regs);
+#endif
 		return;
 	case 2:
-		irq_err_count++;
 		alpha_mv.machine_check(vector, la_ptr, &regs);
 		return;
 	case 3:

@@ -438,32 +438,27 @@ __EXTERN_INLINE void mcpcia_writeq(unsigned long b, unsigned long addr)
 
 #ifdef __WANT_IO_DEF
 
-#define __inb		mcpcia_inb
-#define __inw		mcpcia_inw
-#define __inl		mcpcia_inl
-#define __outb		mcpcia_outb
-#define __outw		mcpcia_outw
-#define __outl		mcpcia_outl
-#define __readb		mcpcia_readb
-#define __readw		mcpcia_readw
-#define __writeb	mcpcia_writeb
-#define __writew	mcpcia_writew
-#define __readl		mcpcia_readl
-#define __readq		mcpcia_readq
-#define __writel	mcpcia_writel
-#define __writeq	mcpcia_writeq
-#define __ioremap	mcpcia_ioremap
-#define __is_ioaddr	mcpcia_is_ioaddr
+#define __inb(p)		mcpcia_inb((unsigned long)(p))
+#define __inw(p)		mcpcia_inw((unsigned long)(p))
+#define __inl(p)		mcpcia_inl((unsigned long)(p))
+#define __outb(x,p)		mcpcia_outb((x),(unsigned long)(p))
+#define __outw(x,p)		mcpcia_outw((x),(unsigned long)(p))
+#define __outl(x,p)		mcpcia_outl((x),(unsigned long)(p))
+#define __readb(a)		mcpcia_readb((unsigned long)(a))
+#define __readw(a)		mcpcia_readw((unsigned long)(a))
+#define __readl(a)		mcpcia_readl((unsigned long)(a))
+#define __readq(a)		mcpcia_readq((unsigned long)(a))
+#define __writeb(x,a)		mcpcia_writeb((x),(unsigned long)(a))
+#define __writew(x,a)		mcpcia_writew((x),(unsigned long)(a))
+#define __writel(x,a)		mcpcia_writel((x),(unsigned long)(a))
+#define __writeq(x,a)		mcpcia_writeq((x),(unsigned long)(a))
+#define __ioremap(a)		mcpcia_ioremap((unsigned long)(a))
+#define __is_ioaddr(a)		mcpcia_is_ioaddr((unsigned long)(a))
 
-# define inb(port) \
-  (__builtin_constant_p((port))?__inb(port):_inb(port))
-# define outb(x, port) \
-  (__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
-
-#define __raw_readl(a)		__readl((unsigned long)(a))
-#define __raw_readq(a)		__readq((unsigned long)(a))
-#define __raw_writel(v,a)	__writel((v),(unsigned long)(a))
-#define __raw_writeq(v,a)	__writeq((v),(unsigned long)(a))
+#define __raw_readl(a)		__readl(a)
+#define __raw_readq(a)		__readq(a)
+#define __raw_writel(v,a)	__writel((v),(a))
+#define __raw_writeq(v,a)	__writeq((v),(a))
 
 #endif /* __WANT_IO_DEF */
 

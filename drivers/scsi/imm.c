@@ -330,7 +330,7 @@ static unsigned char imm_wait(int host_no)
 static int imm_negotiate(imm_struct * tmp)
 {
     /*
-     * The following is supposedly the IEEE 1248-1994 negotiate
+     * The following is supposedly the IEEE 1284-1994 negotiate
      * sequence. I have yet to obtain a copy of the above standard
      * so this is a bit of a guess...
      *

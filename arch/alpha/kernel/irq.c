@@ -219,15 +219,33 @@ setup_irq(unsigned int irq, struct irqaction * new)
 	}
 	spin_unlock_irqrestore(&desc->lock,flags);
 
-	register_irq_proc(irq);
 	return 0;
 }
 
 static struct proc_dir_entry * root_irq_dir;
-static struct proc_dir_entry * irq_dir [NR_IRQS];
-static struct proc_dir_entry * smp_affinity_entry [NR_IRQS];
+static struct proc_dir_entry * irq_dir[NR_IRQS];
 
-static unsigned long irq_affinity [NR_IRQS] = { [0 ... NR_IRQS-1] = ~0UL };
+#ifdef CONFIG_SMP
+static struct proc_dir_entry * smp_affinity_entry[NR_IRQS];
+static char irq_user_affinity[NR_IRQS];
+static unsigned long irq_affinity[NR_IRQS] = { [0 ... NR_IRQS-1] = ~0UL };
+
+static void
+select_smp_affinity(int irq)
+{
+	static int last_cpu;
+	int cpu = last_cpu + 1;
+
+	if (! irq_desc[irq].handler->set_affinity || irq_user_affinity[irq])
+		return;
+
+	while (((cpu_present_mask >> cpu) & 1) == 0)
+		cpu = (cpu < NR_CPUS ? cpu + 1 : 0);
+	last_cpu = cpu;
+
+	irq_affinity[irq] = 1UL << cpu;
+	irq_desc[irq].handler->set_affinity(irq, 1UL << cpu);
+}
 
 #define HEX_DIGITS 16
 
@@ -290,18 +308,22 @@ irq_affinity_write_proc(struct file *file, const char *buffer,
 
 	err = parse_hex_value(buffer, count, &new_value);
 
-#if CONFIG_SMP
-	/*
-	 * Do not allow disabling IRQs completely - it's a too easy
-	 * way to make the system unusable accidentally :-) At least
-	 * one online CPU still has to be targeted.
-	 */
-	if (!(new_value & cpu_present_mask))
+	/* The special value 0 means release control of the
+	   affinity to kernel.  */
+	if (new_value == 0) {
+		irq_user_affinity[irq] = 0;
+		select_smp_affinity(irq);
+	}
+	/* Do not allow disabling IRQs completely - it's a too easy
+	   way to make the system unusable accidentally :-) At least
+	   one online CPU still has to be targeted.  */
+	else if (!(new_value & cpu_present_mask))
 		return -EINVAL;
-#endif
-
-	irq_affinity[irq] = new_value;
-	irq_desc[irq].handler->set_affinity(irq, new_value);
+	else {
+		irq_affinity[irq] = new_value;
+		irq_user_affinity[irq] = 1;
+		irq_desc[irq].handler->set_affinity(irq, new_value);
+	}
 
 	return full_count;
 }
@@ -313,7 +335,7 @@ prof_cpu_mask_read_proc(char *page, char **start, off_t off,
 	unsigned long *mask = (unsigned long *) data;
 	if (count < HEX_DIGITS+1)
 		return -EINVAL;
-	return sprintf (page, "%08lx\n", *mask);
+	return sprintf (page, "%016lx\n", *mask);
 }
 
 static int
@@ -330,6 +352,7 @@ prof_cpu_mask_write_proc(struct file *file, const char *buffer,
 	*mask = new_value;
 	return full_count;
 }
+#endif /* CONFIG_SMP */
 
 #define MAX_NAMELEN 10
 
@@ -348,6 +371,7 @@ register_irq_proc (unsigned int irq)
 	/* create /proc/irq/1234 */
 	irq_dir[irq] = proc_mkdir(name, root_irq_dir);
 
+#ifdef CONFIG_SMP
 	/* create /proc/irq/1234/smp_affinity */
 	entry = create_proc_entry("smp_affinity", 0700, irq_dir[irq]);
 
@@ -357,6 +381,7 @@ register_irq_proc (unsigned int irq)
 	entry->write_proc = irq_affinity_write_proc;
 
 	smp_affinity_entry[irq] = entry;
+#endif
 }
 
 unsigned long prof_cpu_mask = ~0UL;
@@ -370,6 +395,7 @@ init_irq_proc (void)
 	/* create /proc/irq */
 	root_irq_dir = proc_mkdir("irq", 0);
 
+#ifdef CONFIG_SMP
 	/* create /proc/irq/prof_cpu_mask */
 	entry = create_proc_entry("prof_cpu_mask", 0700, root_irq_dir);
 
@@ -377,6 +403,7 @@ init_irq_proc (void)
 	entry->data = (void *)&prof_cpu_mask;
 	entry->read_proc = prof_cpu_mask_read_proc;
 	entry->write_proc = prof_cpu_mask_write_proc;
+#endif
 
 	/*
 	 * Create entries for all existing IRQs.
@@ -425,6 +452,10 @@ request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
 	action->name = devname;
 	action->next = NULL;
 	action->dev_id = dev_id;
+
+#ifdef CONFIG_SMP
+	select_smp_affinity(irq);
+#endif
 
 	retval = setup_irq(irq, action);
 	if (retval)
@@ -522,10 +553,10 @@ get_irq_list(char *buf)
 		*p++ = '\n';
 	}
 #if CONFIG_SMP
-	p += sprintf(p, "LOC: ");
+	p += sprintf(p, "IPI: ");
 	for (j = 0; j < smp_num_cpus; j++)
 		p += sprintf(p, "%10lu ",
-			     cpu_data[cpu_logical_map(j)].smp_local_irq_count);
+			     cpu_data[cpu_logical_map(j)].ipi_count);
 	p += sprintf(p, "\n");
 #endif
 	p += sprintf(p, "ERR: %10lu\n", irq_err_count);

@@ -22,11 +22,6 @@
 #include <asm/io.h>
 #endif
 
-static inline void
-enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
-{
-}
-
 extern inline unsigned long
 __reload_thread(struct thread_struct *pcb)
 {
@@ -221,6 +216,12 @@ extern inline void
 destroy_context(struct mm_struct *mm)
 {
 	/* Nothing to do.  */
+}
+
+static inline void
+enter_lazy_tlb(struct mm_struct *mm, struct task_struct *tsk, unsigned cpu)
+{
+	tsk->thread.ptbr = ((unsigned long)mm->pgd - IDENT_ADDR) >> PAGE_SHIFT;
 }
 
 #ifdef __MMU_EXTERN_INLINE

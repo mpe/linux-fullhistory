@@ -67,6 +67,7 @@ struct shmid_kernel /* private to the kernel */
 	unsigned long		shm_npages; /* size of segment (pages) */
 	pte_t			**shm_dir;  /* ptr to arr of ptrs to frames */ 
 	int			id;
+	int			destroyed; /* set if the final detach kills */
 	union permap {
 		struct shmem {
 			time_t			atime;
@@ -101,7 +102,6 @@ static struct ipc_ids shm_ids;
 #define shm_lockall()	ipc_lockall(&shm_ids)
 #define shm_unlockall()	ipc_unlockall(&shm_ids)
 #define shm_get(id)	((struct shmid_kernel*)ipc_get(&shm_ids,id))
-#define shm_rmid(id)	((struct shmid_kernel*)ipc_rmid(&shm_ids,id))
 #define shm_checkid(s, id)	\
 	ipc_checkid(&shm_ids,&s->shm_perm,id)
 #define shm_buildid(id, seq) \
@@ -111,6 +111,7 @@ static int newseg (key_t key, const char *name, int namelen, int shmflg, size_t 
 static void killseg_core(struct shmid_kernel *shp, int doacc);
 static void shm_open (struct vm_area_struct *shmd);
 static void shm_close (struct vm_area_struct *shmd);
+static void shm_remove_name(int id);
 static struct page * shm_nopage(struct vm_area_struct *, unsigned long, int);
 static int shm_swapout(struct page *, struct file *);
 #ifdef CONFIG_PROC_FS
@@ -262,7 +263,7 @@ static struct super_block *shm_read_super(struct super_block *s,void *data,
 	struct inode * root_inode;
 
 	if (shm_sb) {
-		printk ("shm fs already mounted\n");
+		printk(KERN_ERR "shm fs already mounted\n");
 		return NULL;
 	}
 
@@ -270,7 +271,7 @@ static struct super_block *shm_read_super(struct super_block *s,void *data,
 	shm_ctlmni = SHMMNI;
 	shm_mode   = S_IRWXUGO | S_ISVTX;
 	if (shm_parse_options (data)) {
-		printk ("shm fs invalid option\n");
+		printk(KERN_ERR "shm fs invalid option\n");
 		goto out_unlock;
 	}
 
@@ -293,7 +294,7 @@ static struct super_block *shm_read_super(struct super_block *s,void *data,
 	return s;
 
 out_no_root:
-	printk("proc_read_super: get root inode failed\n");
+	printk(KERN_ERR "proc_read_super: get root inode failed\n");
 	iput(root_inode);
 out_unlock:
 	return NULL;
@@ -304,6 +305,16 @@ static int shm_remount_fs (struct super_block *sb, int *flags, char *data)
 	if (shm_parse_options (data))
 		return -EINVAL;
 	return 0;
+}
+
+static inline struct shmid_kernel *shm_rmid(int id)
+{
+	return (struct shmid_kernel *)ipc_rmid(&shm_ids,id);
+}
+
+static __inline__ int shm_addid(struct shmid_kernel *shp)
+{
+	return ipc_addid(&shm_ids, &shp->shm_perm, shm_ctlmni+1);
 }
 
 static void shm_put_super(struct super_block *sb)
@@ -325,7 +336,7 @@ static void shm_put_super(struct super_block *sb)
 		if (!(shp = shm_lock (i)))
 			continue;
 		if (shp->shm_nattch)
-			printk ("shm_nattch = %ld\n", shp->shm_nattch);
+			printk(KERN_DEBUG "shm_nattch = %ld\n", shp->shm_nattch);
 		shp = shm_rmid(i);
 		shm_unlock(i);
 		killseg_core(shp, 1);
@@ -661,12 +672,13 @@ static int newseg (key_t key, const char *name, int namelen,
 
 	if (size > shm_ctlmax)
 		return -EINVAL;
+		
 	if (shm_tot + numpages >= shm_ctlall)
 		return -ENOSPC;
 
 	if (!(shp = newseg_alloc(numpages, namelen ? namelen : SHM_FMT_LEN + 1)))
 		return -ENOMEM;
-	id = ipc_addid(&shm_ids, &shp->shm_perm, shm_ctlmni+1);
+	id = shm_addid(shp);
 	if(id == -1) {
 		shm_free(shp->shm_dir,numpages);
 		kfree(shp);
@@ -1002,15 +1014,49 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 	}
 	case IPC_RMID:
 	{
-		char name[SHM_FMT_LEN+1];
-		if ((shmid % SEQ_MULTIPLIER)== zero_id)
+		/*
+		 *	We cannot simply remove the file. The SVID states
+		 *	that the block remains until the last person
+		 *	detaches from it, then is deleted. A shmat() on
+		 *	an RMID segment is legal in older Linux and if 
+		 *	we change it apps break...
+		 *
+		 *	Instead we set a destroyed flag, and then blow
+		 *	the name away when the usage hits zero.
+		 */
+		if ((shmid % SEQ_MULTIPLIER) == zero_id)
 			return -EINVAL;
-		sprintf (name, SHM_FMT, shmid);
 		lock_kernel();
-		err = do_unlink (name, dget(shm_sb->s_root));
+		down(&shm_ids.sem);
+		shp = shm_lock(shmid);
+		if (shp == NULL) {
+			unlock_kernel();
+			return -EINVAL;
+		}
+		err = -EIDRM;
+		if (shm_checkid(shp, shmid) == 0) {
+			if (shp->shm_nattch == 0) {
+				int id=shp->id;
+				shm_unlock(shmid);
+				/* The kernel lock prevents new attaches from
+				 * being happening.  We can't hold shm_lock here
+				 * else we will deadlock in shm_lookup when we
+				 * try to recursively grab it.
+				 */
+				shm_remove_name(id);
+			} else {
+				/* Do not find me any more */
+				shp->destroyed = 1;
+				shp->shm_perm.key = IPC_PRIVATE; /* Do not find it any more */
+				/* Unlock */
+				shm_unlock(shmid);
+			}
+			err = 0;
+		} else {
+			shm_unlock(shmid);
+		}
+		up(&shm_ids.sem);
 		unlock_kernel();
-		if (err == -ENOENT)
-			err = -EINVAL;
 		return err;
 	}
 
@@ -1137,6 +1183,19 @@ static void shm_open (struct vm_area_struct *shmd)
 }
 
 /*
+ *	Remove a name. Must be called with lock_kernel
+ */
+ 
+static void shm_remove_name(int id)
+{
+	char name[SHM_FMT_LEN+1];
+	sprintf (name, SHM_FMT, id);
+	if(do_unlink (name, dget(shm_sb->s_root)))
+		printk(KERN_ERR "Unlink of SHM object '%s' failed.\n",
+			name);
+}
+
+/*
  * remove the attach descriptor shmd.
  * free memory for segment if it is marked destroyed.
  * The descriptor has already been removed from the current->mm->mmap list
@@ -1147,13 +1206,30 @@ static void shm_close (struct vm_area_struct *shmd)
 	int id = shmd->vm_file->f_dentry->d_inode->i_ino;
 	struct shmid_kernel *shp;
 
+	lock_kernel();
+
 	/* remove from the list of attaches of the shm segment */
 	if(!(shp = shm_lock(id)))
 		BUG();
 	shp->shm_lprid = current->pid;
 	shp->shm_dtim = CURRENT_TIME;
 	shp->shm_nattch--;
-	shm_unlock(id);
+	if(shp->shm_nattch == 0 && shp->destroyed) {
+		int pid=shp->id;
+		shp->destroyed = 0;
+		shm_unlock(id);
+
+		/* The kernel lock prevents new attaches from
+		 * being happening.  We can't hold shm_lock here
+		 * else we will deadlock in shm_lookup when we
+		 * try to recursively grab it.
+		 */
+		shm_remove_name(pid);
+	} else {
+		shm_unlock(id);
+	}
+
+	unlock_kernel();
 }
 
 /*

@@ -78,16 +78,10 @@ struct usb_hub_descriptor {
 	__u8  bDescriptorType;
 	__u8  bNbrPorts;
 	__u16 wHubCharacteristics;
-#if 0
-	__u8  wHubCharacteristics[2];   /* __u16 but not aligned! */
-#endif
 	__u8  bPwrOn2PwrGood;
 	__u8  bHubContrCurrent;
 	/* DeviceRemovable and PortPwrCtrlMask want to be variable-length 
 	   bitmaps that hold max 256 entries, but for now they're ignored */
-#if 0
-	__u8  filler;
-#endif
 } __attribute__ ((packed));
 
 struct usb_device;
@@ -112,9 +106,10 @@ struct usb_hub {
 	/* Device structure */
 	struct usb_device *dev;
 
-	/* Reference to the hub's polling IRQ and its associated pipe */
-	void *irq_handle;
-	unsigned int irqpipe;
+	/* Interrupt polling pipe */
+	struct urb *urb;
+
+	char buffer[USB_MAXCHILDREN / 8];
 
 	/* List of hubs */
 	struct list_head hub_list;

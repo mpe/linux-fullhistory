@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.36 2000/02/16 07:31:35 davem Exp $
+/* $Id: sys_sparc.c,v 1.37 2000/03/17 05:48:46 anton Exp $
  * linux/arch/sparc64/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -348,9 +348,10 @@ asmlinkage int solaris_syscall(struct pt_regs *regs)
 	lock_kernel();
 	regs->tpc = regs->tnpc;
 	regs->tnpc += 4;
-	if(++count <= 20)
+	if(++count <= 5) {
 		printk ("For Solaris binary emulation you need solaris module loaded\n");
-	show_regs (regs);
+		show_regs (regs);
+	}
 	send_sig(SIGSEGV, current, 1);
 	unlock_kernel();
 	return -ENOSYS;

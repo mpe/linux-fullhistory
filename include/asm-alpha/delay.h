@@ -31,21 +31,16 @@ __delay(int loops)
 }
 
 extern __inline__ void
-udelay(unsigned long usecs)
+__udelay(unsigned long usecs, unsigned long lps)
 {
-	unsigned long lps;
-
-#ifdef __SMP__
-	lps = cpu_data[smp_processor_id()].loops_per_sec;
-#else
-	lps = loops_per_sec;
-#endif
-
-	/* Compute (usecs * 2**32 / 10**6) * loops_per_sec / 2**32.  */
-
-        usecs *= 0x10c6;                /* 2^32 / 10^6 */
-	usecs *= lps;
+	usecs *= ((1UL << 32) / 1000000) * lps;
 	__delay((long)usecs >> 32);
 }
+
+#ifdef __SMP__
+#define udelay(u)  __udelay((u), cpu_data[smp_processor_id()].loops_per_sec)
+#else
+#define udelay(u)  __udelay((u), loops_per_sec)
+#endif
 
 #endif /* defined(__ALPHA_DELAY_H) */

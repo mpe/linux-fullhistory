@@ -303,8 +303,6 @@ init_tsunami_irqs(struct hw_interrupt_type * ops, int imin, int imax)
 static void __init
 dp264_init_irq(void)
 {
-	int cpu;
-
 	outb(0, DMA1_RESET_REG);
 	outb(0, DMA2_RESET_REG);
 	outb(DMA_MODE_CASCADE, DMA2_MODE_REG);

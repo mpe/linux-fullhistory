@@ -432,7 +432,7 @@ static int comx_statistics(struct net_device *dev, char *page)
 		ch->line_status & PROTO_UP ? "UP" : "DOWN");
 	len += sprintf(page + len, "Modem status changes: %lu, Transmitter status "
 		"is %s, tbusy: %d\n", ch->current_stats->tx_carrier_errors, ch->HW_txe ? 
-		ch->HW_txe(dev) ? "IDLE" : "BUSY" : "NOT READY", (int)dev->tbusy);
+		ch->HW_txe(dev) ? "IDLE" : "BUSY" : "NOT READY", netif_running(dev));
 	len += sprintf(page + len, "Interface load (input): %d / %d / %d bits/s (",
 		LOADAVG(0,0), LOADAVG(1, 0), LOADAVG(2, 0));
 	tmpstr[0] = 0;
@@ -860,7 +860,7 @@ static int comx_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 		return -EIO;
 	}
 
-	new_dir->ops = &proc_dir_inode_operations;  // ez egy normalis /proc konyvtar
+	new_dir->proc_iops = &proc_dir_inode_operations;  // ez egy normalis /proc konyvtar
 	new_dir->nlink = 2;
 	new_dir->data = NULL; // ide jon majd a struct dev
 
@@ -884,7 +884,7 @@ static int comx_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	    S_IFREG | 0644, new_dir)) == NULL) {
 		return -ENOMEM;
 	}
-	debug_file->ops = &comx_debug_inode_ops;
+	debug_file->proc_iops = &comx_debug_inode_ops;
 	debug_file->data = (void *)debug_file; 
 	debug_file->read_proc = NULL; // see below
 	debug_file->write_proc = &comx_write_proc;
@@ -1027,7 +1027,7 @@ static struct proc_dir_entry *create_comx_proc_entry(char *name, int mode,
 	struct proc_dir_entry *new_file;
 
 	if ((new_file = create_proc_entry(name, S_IFREG | mode, dir)) != NULL) {
-		new_file->ops = &comx_normal_inode_ops;
+		new_file->proc_iops = &comx_normal_inode_ops;
 		new_file->data = (void *)new_file;
 		new_file->read_proc = &comx_read_proc;
 		new_file->write_proc = &comx_write_proc;
@@ -1129,7 +1129,7 @@ int comx_unregister_protocol(char *name)
 #define comx_init init_module
 #endif
 
-__initfunc(int comx_init(void))
+int __init comx_init(void)
 {
 	struct proc_dir_entry *new_file;
 
@@ -1177,7 +1177,7 @@ __initfunc(int comx_init(void))
 		return -ENOMEM;
 	}
 	
-	new_file->ops = &comx_normal_inode_ops;
+	new_file->proc_iops = &comx_normal_inode_ops;
 	new_file->data = new_file;
 	new_file->read_proc = &comx_root_read_proc;
 	new_file->write_proc = NULL;

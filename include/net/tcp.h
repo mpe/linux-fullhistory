@@ -669,6 +669,8 @@ extern void		       	tcp_v4_send_check(struct sock *sk,
 						  struct tcphdr *th, int len, 
 						  struct sk_buff *skb);
 
+extern void			tcp_v4_send_reset(struct sk_buff *skb);
+
 extern int			tcp_v4_conn_request(struct sock *sk,
 						    struct sk_buff *skb);
 

@@ -689,6 +689,8 @@ S:	Maintained
 NETFILTER
 P:	Rusty Russell
 M:	Rusty.Russell@rustcorp.com.au
+P:	Marc Boucher
+M:	marc@mbsi.ca
 W:	http://www.samba.org/netfilter/
 W:	http://netfilter.kernelnotes.org
 W:	http://antarctica.penguincomputing.com/~netfilter/

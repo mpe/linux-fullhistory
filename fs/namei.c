@@ -451,6 +451,76 @@ no_inode:
 }
 
 /*
+ * Restricted form of lookup. Doesn't follow links, single-component only,
+ * needs parent already locked. Doesn't follow mounts.
+ */
+struct dentry * lookup_one(const char * name, struct dentry * base)
+{
+	struct dentry * dentry;
+	struct inode *inode;
+	int err;
+	unsigned long hash;
+	struct qstr this;
+	unsigned int c;
+
+	inode = base->d_inode;
+	err = permission(inode, MAY_EXEC);
+	dentry = ERR_PTR(err);
+	if (err)
+		goto out;
+
+	this.name = name;
+	c = *(const unsigned char *)name;
+	if (!c)
+		goto access;
+
+	hash = init_name_hash();
+	do {
+		name++;
+		if (c == '/')
+			goto access;
+		hash = partial_name_hash(c, hash);
+		c = *(const unsigned char *)name;
+	} while (c);
+	this.len = name - (const char *) this.name;
+	this.hash = end_name_hash(hash);
+
+	/*
+	 * See if the low-level filesystem might want
+	 * to use its own hash..
+	 */
+	if (base->d_op && base->d_op->d_hash) {
+		err = base->d_op->d_hash(base, &this);
+		dentry = ERR_PTR(err);
+		if (err < 0)
+			goto out;
+	}
+
+	dentry = cached_lookup(base, &this, 0);
+	if (!dentry) {
+		struct dentry *new = d_alloc(base, &this);
+		dentry = ERR_PTR(-ENOMEM);
+		if (!new)
+			goto out;
+		dentry = inode->i_op->lookup(inode, new);
+		if (!dentry)
+			dentry = new;
+		else {
+			dput(new);
+			if (IS_ERR(dentry))
+				goto out;
+		}
+	}
+
+out:
+	dput(base);
+	return dentry;
+access:
+	dentry = ERR_PTR(-EACCES);
+	goto out;
+}
+
+/*
  *	namei()
  *
  * is used by most simple commands to get the inode of a specified name.

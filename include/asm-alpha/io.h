@@ -112,12 +112,12 @@ extern void _sethae (unsigned long addr);	/* cached version */
 
 /* In a generic kernel, we always go through the machine vector.  */
 
-# define __inb		alpha_mv.mv_inb
-# define __inw		alpha_mv.mv_inw
-# define __inl		alpha_mv.mv_inl
-# define __outb		alpha_mv.mv_outb
-# define __outw		alpha_mv.mv_outw
-# define __outl		alpha_mv.mv_outl
+# define __inb(p)	alpha_mv.mv_inb((unsigned long)(p))
+# define __inw(p)	alpha_mv.mv_inw((unsigned long)(p))
+# define __inl(p)	alpha_mv.mv_inl((unsigned long)(p))
+# define __outb(x,p)	alpha_mv.mv_outb((x),(unsigned long)(p))
+# define __outw(x,p)	alpha_mv.mv_outw((x),(unsigned long)(p))
+# define __outl(x,p)	alpha_mv.mv_outl((x),(unsigned long)(p))
 
 # define __readb(a)	alpha_mv.mv_readb((unsigned long)(a))
 # define __readw(a)	alpha_mv.mv_readw((unsigned long)(a))
@@ -128,8 +128,8 @@ extern void _sethae (unsigned long addr);	/* cached version */
 # define __writel(v,a)	alpha_mv.mv_writel((v),(unsigned long)(a))
 # define __writeq(v,a)	alpha_mv.mv_writeq((v),(unsigned long)(a))
 
-# define __ioremap(a)	alpha_mv.mv_ioremap(a)
-# define __is_ioaddr(a)	alpha_mv.mv_is_ioaddr(a)
+# define __ioremap(a)	alpha_mv.mv_ioremap((unsigned long)(a))
+# define __is_ioaddr(a)	alpha_mv.mv_is_ioaddr((unsigned long)(a))
 
 # define inb		__inb
 # define inw		__inw
@@ -210,13 +210,13 @@ extern void		_writeq(unsigned long b, unsigned long addr);
  * redefined by userlevel programs.
  */
 #ifndef inb
-# define inb(p)		_inb((p))
+# define inb(p)		_inb(p)
 #endif
 #ifndef inw
-# define inw(p)		_inw((p))
+# define inw(p)		_inw(p)
 #endif
 #ifndef inl
-# define inl(p)		_inl((p))
+# define inl(p)		_inl(p)
 #endif
 #ifndef outb
 # define outb(b,p)	_outb((b),(p))
@@ -254,12 +254,12 @@ extern void		_writeq(unsigned long b, unsigned long addr);
 
 /* Userspace declarations.  */
 
-extern unsigned int	inb (unsigned long port);
-extern unsigned int	inw (unsigned long port);
-extern unsigned int	inl (unsigned long port);
-extern void		outb (unsigned char b,unsigned long port);
-extern void		outw (unsigned short w,unsigned long port);
-extern void		outl (unsigned int l,unsigned long port);
+extern unsigned int	inb(unsigned long port);
+extern unsigned int	inw(unsigned long port);
+extern unsigned int	inl(unsigned long port);
+extern void		outb(unsigned char b,unsigned long port);
+extern void		outw(unsigned short w,unsigned long port);
+extern void		outl(unsigned int l,unsigned long port);
 extern unsigned long	readb(unsigned long addr);
 extern unsigned long	readw(unsigned long addr);
 extern unsigned long	readl(unsigned long addr);

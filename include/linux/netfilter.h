@@ -16,7 +16,8 @@
 #define NF_ACCEPT 1
 #define NF_STOLEN 2
 #define NF_QUEUE 3
-#define NF_MAX_VERDICT NF_QUEUE
+#define NF_REPEAT 4
+#define NF_MAX_VERDICT NF_REPEAT
 
 /* Generic cache responses from hook functions. */
 #define NFC_ALTERED 0x8000
@@ -66,6 +67,10 @@ struct nf_sockopt_ops
 	int get_optmin;
 	int get_optmax;
 	int (*get)(struct sock *sk, int optval, void *user, int *len);
+
+	/* Number of users inside set() or get(). */
+	unsigned int use;
+	struct task_struct *cleanup_task;
 };
 
 /* Each queued (to userspace) skbuff has one of these. */
@@ -172,13 +177,5 @@ extern void nf_invalidate_cache(int pf);
 #define SUMAX(a,b) ((size_t)(a)>(size_t)(b) ? (ssize_t)(a) : (ssize_t)(b))
 #define SUMIN(a,b) ((size_t)(a)<(size_t)(b) ? (ssize_t)(a) : (ssize_t)(b))
 #endif /*__KERNEL__*/
-
-enum nf_reason {
-	/* Do not, NOT, reorder these.  Add at end. */
-	NF_REASON_NONE,
-	NF_REASON_SET_BY_IPCHAINS,
-	NF_REASON_FOR_ROUTING,
-	NF_REASON_FOR_CLS_FW,
-};
 
 #endif /*__LINUX_NETFILTER_H*/

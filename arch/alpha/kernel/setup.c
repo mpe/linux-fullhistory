@@ -846,6 +846,22 @@ platform_string(void)
 	}
 }
 
+static int
+get_nr_processors(struct percpu_struct *cpubase, unsigned long num)
+{
+	struct percpu_struct *cpu;
+	int i, count = 0;
+
+	for (i = 0; i < num; i++) {
+		cpu = (struct percpu_struct *)
+			((char *)cpubase + i*hwrpb->processor_size);
+		if ((cpu->flags & 0x1cc) == 0x1cc)
+			count++;
+	}
+	return count;
+}
+
+
 /*
  * BUFFER is PAGE_SIZE bytes long.
  */
@@ -865,7 +881,7 @@ int get_cpuinfo(char *buffer)
 	char *cpu_name;
 	char *systype_name;
 	char *sysvariation_name;
-	int len;
+	int len, nr_processors;
 
 	cpu = (struct percpu_struct*)((char*)hwrpb + hwrpb->processor_offset);
 	cpu_index = (unsigned) (cpu->type - 1);
@@ -875,6 +891,8 @@ int get_cpuinfo(char *buffer)
 
 	get_sysnames(hwrpb->sys_type, hwrpb->sys_variation,
 		     &systype_name, &sysvariation_name);
+
+	nr_processors = get_nr_processors(cpu, hwrpb->nr_processors);
 
 	len = sprintf(buffer,
 		      "cpu\t\t\t: Alpha\n"
@@ -894,7 +912,8 @@ int get_cpuinfo(char *buffer)
 		      "BogoMIPS\t\t: %lu.%02lu\n"
 		      "kernel unaligned acc\t: %ld (pc=%lx,va=%lx)\n"
 		      "user unaligned acc\t: %ld (pc=%lx,va=%lx)\n"
-		      "platform string\t\t: %s\n",
+		      "platform string\t\t: %s\n"
+		      "cpus detected\t\t: %d\n",
 		       cpu_name, cpu->variation, cpu->revision,
 		       (char*)cpu->serial_no,
 		       systype_name, sysvariation_name, hwrpb->sys_revision,
@@ -909,7 +928,7 @@ int get_cpuinfo(char *buffer)
 		       loops_per_sec / 500000, (loops_per_sec / 5000) % 100,
 		       unaligned[0].count, unaligned[0].pc, unaligned[0].va,
 		       unaligned[1].count, unaligned[1].pc, unaligned[1].va,
-		       platform_string());
+		       platform_string(), nr_processors);
 
 #ifdef __SMP__
 	len += smp_info(buffer+len);

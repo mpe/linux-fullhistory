@@ -1060,7 +1060,7 @@ static void __devinit show_parconfig_smsc37c669(int io, int key)
 	       (cr23*4 >=0x100) ?"yes":"no", (cr1 & 4) ? "yes" : "no");
 	printk("SMSC LPT Config: Port mode=%s, EPP version =%s\n",
 	       (cr1 & 0x08 ) ? "Standard mode only (SPP)" : modes[cr4 & 0x03], 
-	       (cr4 & 40) ? "1.7" : "1.9");
+	       (cr4 & 0x40) ? "1.7" : "1.9");
 
 	/* Heuristics !  BIOS setup for this mainboard device limits
 	   the choices to standard settings, i.e. io-address and IRQ
@@ -1172,12 +1172,15 @@ static void __devinit decode_winbond(int efer, int key, int devid, int devrev, i
 
 	/* Values are from public data sheets pdf files, I can just
            confirm 83977TF is correct :-) */
-	if      (id == 0x9773) type="83977TF";
+	if      (id == 0x9771) type="83977F/AF";
+	else if (id == 0x9773) type="83977TF / SMSC 97w33x/97w34x";
 	else if (id == 0x9774) type="83977ATF";
 	else if ((id & ~0x0f) == 0x5270) type="83977CTF / SMSC 97w36x";
-	else if ((id & ~0x0f) == 0x52f0) type="83977EF / SMSC 97x35x";
+	else if ((id & ~0x0f) == 0x52f0) type="83977EF / SMSC 97w35x";
 	else if ((id & ~0x0f) == 0x5210) type="83627";
 	else if ((id & ~0x0f) == 0x6010) type="83697HF";
+	else if ((oldid &0x0f ) == 0x0a) { type="83877F"; progif=1;}
+	else if ((oldid &0x0f ) == 0x0b) { type="83877AF"; progif=1;}
 	else if ((oldid &0x0f ) == 0x0c) { type="83877TF"; progif=1;}
 	else if ((oldid &0x0f ) == 0x0d) { type="83877ATF"; progif=1;}
 	else progif=0;
@@ -1225,7 +1228,15 @@ static void __devinit decode_smsc(int efer, int key, int devid, int devrev)
 
 static void __devinit winbond_check(int io, int key)
 {
-	int devid,devrev,oldid;
+	int devid,devrev,oldid,x_devid,x_devrev,x_oldid;
+
+	/* First probe without key */
+	outb(0x20,io);
+	x_devid=inb(io+1);
+	outb(0x21,io);
+	x_devrev=inb(io+1);
+	outb(0x09,io);
+	x_oldid=inb(io+1);
 
 	outb(key,io);
 	outb(key,io);     /* Write Magic Sequence to EFER, extended
@@ -1238,12 +1249,23 @@ static void __devinit winbond_check(int io, int key)
 	oldid=inb(io+1);
 	outb(0xaa,io);    /* Magic Seal */
 
+	if ((x_devid == devid) && (x_devrev == devrev) && (x_oldid == oldid))
+		return; /* protection against false positives */
+
 	decode_winbond(io,key,devid,devrev,oldid);
 }
 
 static void __devinit winbond_check2(int io,int key)
 {
-        int devid,devrev,oldid;
+        int devid,devrev,oldid,x_devid,x_devrev,x_oldid;
+
+	/* First probe without the key */
+	outb(0x20,io+2);
+	x_devid=inb(io+2);
+	outb(0x21,io+1);
+	x_devrev=inb(io+2);
+	outb(0x09,io+1);
+	x_oldid=inb(io+2);
 
         outb(key,io);     /* Write Magic Byte to EFER, extended
                              funtion enable register */
@@ -1255,23 +1277,44 @@ static void __devinit winbond_check2(int io,int key)
         oldid=inb(io+2);
         outb(0xaa,io);    /* Magic Seal */
 
+	if ((x_devid == devid) && (x_devrev == devrev) && (x_oldid == oldid))
+		return; /* protection against false positives */
+
         decode_winbond(io,key,devid,devrev,oldid);
 }
 
 static void __devinit smsc_check(int io, int key)
 {
-        int devid,devrev;
+        int id,rev,oldid,oldrev,x_id,x_rev,x_oldid,x_oldrev;
+
+	/* First probe without the key */
+	outb(0x0d,io);
+	x_oldid=inb(io+1);
+	outb(0x0e,io);
+	x_oldrev=inb(io+1);
+	outb(0x20,io);
+	x_id=inb(io+1);
+	outb(0x21,io);
+	x_rev=inb(io+1);
 
         outb(key,io);
         outb(key,io);     /* Write Magic Sequence to EFER, extended
                              funtion enable register */
         outb(0x0d,io);    /* Write EFIR, extended function index register */
-        devid=inb(io+1);  /* Read EFDR, extended function data register */
+        oldid=inb(io+1);  /* Read EFDR, extended function data register */
         outb(0x0e,io);
-        devrev=inb(io+1);
+        oldrev=inb(io+1);
+	outb(0x20,io);
+	id=inb(io+1);
+	outb(0x21,io);
+	rev=inb(io+1);
         outb(0xaa,io);    /* Magic Seal */
 
-        decode_smsc(io,key,devid,devrev);
+	if ((x_id == id) && (x_oldrev == oldrev) &&
+	    (x_oldid == oldid) && (x_rev == rev))
+		return; /* protection against false positives */
+
+        decode_smsc(io,key,oldid,oldrev);
 }
 
 
@@ -1584,7 +1627,8 @@ static int __devinit parport_ECP_supported(struct parport *pb)
 
 	configb = inb (CONFIGB (pb));
 	if (!(configb & 0x40)) {
-		printk (KERN_WARNING "0x%lx: IRQ conflict!\n", pb->base);
+		printk (KERN_WARNING "0x%lx: possible IRQ conflict!\n",
+			pb->base);
 		pb->irq = PARPORT_IRQ_NONE;
 	}
 	printk (KERN_DEBUG "0x%lx: ECP port cfgA=0x%02x cfgB=0x%02x\n",

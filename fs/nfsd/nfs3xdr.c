@@ -727,25 +727,40 @@ encode_entry(struct readdir_cd *cd, const char *name,
 	/* throw in readdirplus baggage */
 	if (plus) {
 		struct svc_fh	fh;
+		struct svc_export	*exp;
+		struct dentry		*dparent, *dchild;
+
+		dparent = cd->dirfh->fh_dentry;
+		exp  = cd->dirfh->fh_export;
 
 		fh_init(&fh, NFS3_FHSIZE);
-		/* Disabled for now because of lock-up */
-		if (0 && nfsd_lookup(cd->rqstp, cd->dirfh, name, namlen, &fh) == 0) {
-			p = encode_post_op_attr(cd->rqstp, p, fh.fh_dentry);
-			p = encode_fh(p, &fh);
-			fh_put(&fh);
-		} else {
-			/* Didn't find this entry... weird.
-			 * Proceed without the attrs anf fh anyway.
-			 */
-			*p++ = 0;
-			*p++ = 0;
-		}
+		if (fh_verify(cd->rqstp, cd->dirfh, S_IFDIR, MAY_EXEC) != 0)
+			goto noexec;
+		if (isdotent(name, namlen)) {
+			dchild = dparent;
+			if (namlen == 2)
+				dchild = dchild->d_parent;
+			dchild = dget(dchild);
+		} else
+			dchild = lookup_one(name, dget(dparent));
+		if (IS_ERR(dchild))
+			goto noexec;
+		if (fh_compose(&fh, exp, dchild) != 0 || !dchild->d_inode)
+			goto noexec;
+		p = encode_post_op_attr(cd->rqstp, p, fh.fh_dentry);
+		p = encode_fh(p, &fh);
+		fh_put(&fh);
 	}
 
+out:
 	cd->buflen = buflen;
 	cd->buffer = p;
 	return 0;
+
+noexec:
+	*p++ = 0;
+	*p++ = 0;
+	goto out;
 }
 
 int

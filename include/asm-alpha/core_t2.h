@@ -516,27 +516,22 @@ __EXTERN_INLINE int t2_is_ioaddr(unsigned long addr)
 
 #ifdef __WANT_IO_DEF
 
-#define __inb		t2_inb
-#define __inw		t2_inw
-#define __inl		t2_inl
-#define __outb		t2_outb
-#define __outw		t2_outw
-#define __outl		t2_outl
-#define __readb		t2_readb
-#define __readw		t2_readw
-#define __readl		t2_readl
-#define __readq		t2_readq
-#define __writeb	t2_writeb
-#define __writew	t2_writew
-#define __writel	t2_writel
-#define __writeq	t2_writeq
-#define __ioremap	t2_ioremap
-#define __is_ioaddr	t2_is_ioaddr
-
-#define inb(port) \
-  (__builtin_constant_p((port))?__inb(port):_inb(port))
-#define outb(x, port) \
-  (__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
+#define __inb(p)		t2_inb((unsigned long)(p))
+#define __inw(p)		t2_inw((unsigned long)(p))
+#define __inl(p)		t2_inl((unsigned long)(p))
+#define __outb(x,p)		t2_outb((x),(unsigned long)(p))
+#define __outw(x,p)		t2_outw((x),(unsigned long)(p))
+#define __outl(x,p)		t2_outl((x),(unsigned long)(p))
+#define __readb(a)		t2_readb((unsigned long)(a))
+#define __readw(a)		t2_readw((unsigned long)(a))
+#define __readl(a)		t2_readl((unsigned long)(a))
+#define __readq(a)		t2_readq((unsigned long)(a))
+#define __writeb(x,a)		t2_writeb((x),(unsigned long)(a))
+#define __writew(x,a)		t2_writew((x),(unsigned long)(a))
+#define __writel(x,a)		t2_writel((x),(unsigned long)(a))
+#define __writeq(x,a)		t2_writeq((x),(unsigned long)(a))
+#define __ioremap(a)		t2_ioremap((unsigned long)(a))
+#define __is_ioaddr(a)		t2_is_ioaddr((unsigned long)(a))
 
 #endif /* __WANT_IO_DEF */
 

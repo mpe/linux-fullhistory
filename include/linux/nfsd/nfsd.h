@@ -172,6 +172,9 @@ void		nfsd_lockd_unexport(struct svc_client *);
 #define	nfserr_badtype		__constant_htonl(NFSERR_BADTYPE)
 #define	nfserr_jukebox		__constant_htonl(NFSERR_JUKEBOX)
 
+/* Check for dir entries '.' and '..' */
+#define isdotent(n, l)	(l < 3 && n[0] == '.' && (l == 1 || n[1] == '.'))
+
 /*
  * Time of server startup
  */

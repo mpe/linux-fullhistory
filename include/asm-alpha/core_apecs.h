@@ -511,32 +511,27 @@ __EXTERN_INLINE int apecs_is_ioaddr(unsigned long addr)
 
 #ifdef __WANT_IO_DEF
 
-#define __inb		apecs_inb
-#define __inw		apecs_inw
-#define __inl		apecs_inl
-#define __outb		apecs_outb
-#define __outw		apecs_outw
-#define __outl		apecs_outl
-#define __readb		apecs_readb
-#define __readw		apecs_readw
-#define __readl		apecs_readl
-#define __readq		apecs_readq
-#define __writeb	apecs_writeb
-#define __writew	apecs_writew
-#define __writel	apecs_writel
-#define __writeq	apecs_writeq
-#define __ioremap	apecs_ioremap
-#define __is_ioaddr	apecs_is_ioaddr
+#define __inb(p)		apecs_inb((unsigned long)(p))
+#define __inw(p)		apecs_inw((unsigned long)(p))
+#define __inl(p)		apecs_inl((unsigned long)(p))
+#define __outb(x,p)		apecs_outb((x),(unsigned long)(p))
+#define __outw(x,p)		apecs_outw((x),(unsigned long)(p))
+#define __outl(x,p)		apecs_outl((x),(unsigned long)(p))
+#define __readb(a)		apecs_readb((unsigned long)(a))
+#define __readw(a)		apecs_readw((unsigned long)(a))
+#define __readl(a)		apecs_readl((unsigned long)(a))
+#define __readq(a)		apecs_readq((unsigned long)(a))
+#define __writeb(x,a)		apecs_writeb((x),(unsigned long)(a))
+#define __writew(x,a)		apecs_writew((x),(unsigned long)(a))
+#define __writel(x,a)		apecs_writel((x),(unsigned long)(a))
+#define __writeq(x,a)		apecs_writeq((x),(unsigned long)(a))
+#define __ioremap(a)		apecs_ioremap((unsigned long)(a))
+#define __is_ioaddr(a)		apecs_is_ioaddr((unsigned long)(a))
 
-#define inb(port) \
-  (__builtin_constant_p((port))?__inb(port):_inb(port))
-#define outb(x, port) \
-  (__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
-
-#define __raw_readl(a)		__readl((unsigned long)(a))
-#define __raw_readq(a)		__readq((unsigned long)(a))
-#define __raw_writel(v,a)	__writel((v),(unsigned long)(a))
-#define __raw_writeq(v,a)	__writeq((v),(unsigned long)(a))
+#define __raw_readl(a)		__readl(a)
+#define __raw_readq(a)		__readq(a)
+#define __raw_writel(v,a)	__writel((v),(a))
+#define __raw_writeq(v,a)	__writeq((v),(a))
 
 #endif /* __WANT_IO_DEF */
 

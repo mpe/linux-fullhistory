@@ -689,18 +689,17 @@ status_phase:
 	return 0;
 
 td_error:
-	/* Some debugging code */
-	if (debug) {
+	if (status & TD_CTRL_STALLED)
+		/* endpoint has stalled - mark it halted */
+		usb_endpoint_halt(urb->dev, uhci_endpoint(td->info),
+	    			uhci_packetout(td->info));
+	else if (debug) {
+		/* Some debugging code */
 		dbg("uhci_result_control() failed with status %x", status);
 
 		/* Print the chain for debugging purposes */
 		uhci_show_queue(urbp->qh);
 	}
-
-	if (status & TD_CTRL_STALLED)
-		/* endpoint has stalled - mark it halted */
-		usb_endpoint_halt(urb->dev, uhci_endpoint(td->info),
-	    			uhci_packetout(td->info));
 
 	return uhci_map_status(status, uhci_packetout(td->info));
 }
@@ -818,8 +817,12 @@ static int uhci_result_interrupt(urb_t *urb)
 	return 0;
 
 td_error:
-	/* Some debugging code */
-	if (debug) {
+	if (status & TD_CTRL_STALLED)
+		/* endpoint has stalled - mark it halted */
+		usb_endpoint_halt(urb->dev, uhci_endpoint(td->info),
+	    			uhci_packetout(td->info));
+	else if (debug) {
+		/* Some debugging code */
 		dbg("uhci_result_interrupt/bulk() failed with status %x",
 			status);
 
@@ -829,11 +832,6 @@ td_error:
 		else
 			uhci_show_td(td);
 	}
-
-	if (status & TD_CTRL_STALLED)
-		/* endpoint has stalled - mark it halted */
-		usb_endpoint_halt(urb->dev, uhci_endpoint(td->info),
-	    			uhci_packetout(td->info));
 
 	return uhci_map_status(status, uhci_packetout(td->info));
 }
@@ -1251,12 +1249,14 @@ static int uhci_unlink_urb(urb_t *urb)
 		uhci_unlink_generic(urb);
 
 		if (urb->transfer_flags & USB_ASYNC_UNLINK) {
+			urb->status = -ECONNABORTED;
+
 			spin_lock_irqsave(&uhci->urb_remove_lock, flags);
 			list_add(&urb->urb_list, &uhci->urb_remove_list);
 			spin_unlock_irqrestore(&uhci->urb_remove_lock, flags);
-
-			urb->status = -ECONNABORTED;
 		} else {
+			urb->status = -ENOENT;
+
 			if (in_interrupt()) {	/* wait at least 1 frame */
 				static int errorcount = 10;
 
@@ -1268,8 +1268,6 @@ static int uhci_unlink_urb(urb_t *urb)
 
 			if (urb->complete)
 				urb->complete(urb);
-
-			urb->status = -ENOENT;
 		}
 	}
 

@@ -360,32 +360,27 @@ __EXTERN_INLINE int lca_is_ioaddr(unsigned long addr)
 
 #ifdef __WANT_IO_DEF
 
-#define __inb		lca_inb
-#define __inw		lca_inw
-#define __inl		lca_inl
-#define __outb		lca_outb
-#define __outw		lca_outw
-#define __outl		lca_outl
-#define __readb		lca_readb
-#define __readw		lca_readw
-#define __writeb	lca_writeb
-#define __writew	lca_writew
-#define __readl		lca_readl
-#define __readq		lca_readq
-#define __writel	lca_writel
-#define __writeq	lca_writeq
-#define __ioremap	lca_ioremap
-#define __is_ioaddr	lca_is_ioaddr
+#define __inb(p)		lca_inb((unsigned long)(p))
+#define __inw(p)		lca_inw((unsigned long)(p))
+#define __inl(p)		lca_inl((unsigned long)(p))
+#define __outb(x,p)		lca_outb((x),(unsigned long)(p))
+#define __outw(x,p)		lca_outw((x),(unsigned long)(p))
+#define __outl(x,p)		lca_outl((x),(unsigned long)(p))
+#define __readb(a)		lca_readb((unsigned long)(a))
+#define __readw(a)		lca_readw((unsigned long)(a))
+#define __readl(a)		lca_readl((unsigned long)(a))
+#define __readq(a)		lca_readq((unsigned long)(a))
+#define __writeb(x,a)		lca_writeb((x),(unsigned long)(a))
+#define __writew(x,a)		lca_writew((x),(unsigned long)(a))
+#define __writel(x,a)		lca_writel((x),(unsigned long)(a))
+#define __writeq(x,a)		lca_writeq((x),(unsigned long)(a))
+#define __ioremap(a)		lca_ioremap((unsigned long)(a))
+#define __is_ioaddr(a)		lca_is_ioaddr((unsigned long)(a))
 
-#define inb(port) \
-  (__builtin_constant_p((port))?__inb(port):_inb(port))
-#define outb(x, port) \
-  (__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
-
-#define __raw_readl(a)		__readl((unsigned long)(a))
-#define __raw_readq(a)		__readq((unsigned long)(a))
-#define __raw_writel(v,a)	__writel((v),(unsigned long)(a))
-#define __raw_writeq(v,a)	__writeq((v),(unsigned long)(a))
+#define __raw_readl(a)		__readl(a)
+#define __raw_readq(a)		__readq(a)
+#define __raw_writel(v,a)	__writel((v),(a))
+#define __raw_writeq(v,a)	__writeq((v),(a))
 
 #endif /* __WANT_IO_DEF */
 

@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.78 2000/03/15 15:02:30 jj Exp $
+/* $Id: sparc64_ksyms.c,v 1.79 2000/03/17 14:41:18 davem Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -142,6 +142,8 @@ EXPORT_SYMBOL(cpu_data);
 
 /* Misc SMP information */
 EXPORT_SYMBOL(smp_num_cpus);
+EXPORT_SYMBOL(__cpu_number_map);
+EXPORT_SYMBOL(__cpu_logical_map);
 
 /* Spinlock debugging library, optional. */
 #ifdef SPIN_LOCK_DEBUG

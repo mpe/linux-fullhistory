@@ -18,7 +18,6 @@
  *		- determine MCLK from previous setting -done for x86            
  *              - calculate XCLK, rather than probe BIOS
  *		- hardware cursor support
- *              - acceleration (do not use with Rage128 Pro!)
  *		- ioctl()'s
  */
 
@@ -109,13 +108,13 @@ struct aty128_chip_info {
 /* supported Rage128 chipsets */
 static const struct aty128_chip_info aty128_pci_probe_list[] __initdata =
 {
-    {"Rage128 RE (PCI)", PCI_DEVICE_ID_ATI_RAGE128_RE},
-    {"Rage128 RF (AGP)", PCI_DEVICE_ID_ATI_RAGE128_RF},
-    {"Rage128 RK (PCI)", PCI_DEVICE_ID_ATI_RAGE128_RK},
-    {"Rage128 RL (AGP)", PCI_DEVICE_ID_ATI_RAGE128_RL},
-    {"Rage128 Pro PF (AGP)", PCI_DEVICE_ID_ATI_RAGE128_PF},
-    {"Rage128 Pro PR (PCI)", PCI_DEVICE_ID_ATI_RAGE128_PR},
-    {NULL, 0}
+    { "Rage128 RE (PCI)", PCI_DEVICE_ID_ATI_RAGE128_RE },
+    { "Rage128 RF (AGP)", PCI_DEVICE_ID_ATI_RAGE128_RF },
+    { "Rage128 RK (PCI)", PCI_DEVICE_ID_ATI_RAGE128_RK },
+    { "Rage128 RL (AGP)", PCI_DEVICE_ID_ATI_RAGE128_RL },
+    { "Rage128 Pro PF (AGP)", PCI_DEVICE_ID_ATI_RAGE128_PF },
+    { "Rage128 Pro PR (PCI)", PCI_DEVICE_ID_ATI_RAGE128_PR },
+    { NULL, 0 }
 };
 
 /* packed BIOS settings */
@@ -162,20 +161,20 @@ struct aty128_meminfo {
 };
 
 /* various memory configurations */
-const struct aty128_meminfo sdr_128   =
+static const struct aty128_meminfo sdr_128   =
     { 4, 4, 3, 3, 1, 3, 1, 16, 30, 16, "128-bit SDR SGRAM (1:1)" };
-const struct aty128_meminfo sdr_64    =
+static const struct aty128_meminfo sdr_64    =
     { 4, 8, 3, 3, 1, 3, 1, 17, 46, 17, "64-bit SDR SGRAM (1:1)" };
-const struct aty128_meminfo sdr_sgram =
+static const struct aty128_meminfo sdr_sgram =
     { 4, 4, 1, 2, 1, 2, 1, 16, 24, 16, "64-bit SDR SGRAM (2:1)" };
-const struct aty128_meminfo ddr_sgram =
+static const struct aty128_meminfo ddr_sgram =
     { 4, 4, 3, 3, 2, 3, 1, 16, 31, 16, "64-bit DDR SGRAM" };
 
 static int currcon = 0;
 
 static char *aty128fb_name = "ATY Rage128";
 static char fontname[40] __initdata = { 0 };
-static char noaccel __initdata = 1;
+static char noaccel __initdata = 0;
 static unsigned int initdepth __initdata = 8;
 
 #ifndef MODULE
@@ -273,6 +272,7 @@ struct fb_info_aty128 {
 #ifdef CONFIG_MTRR
     struct { int vram; int vram_valid; } mtrr;
 #endif
+    int fifo_slots;                 /* free slots in FIFO (64 max) */
 };
 
 static struct fb_info_aty128 *board_list = NULL;
@@ -344,7 +344,8 @@ static void aty128_init_engine(const struct aty128fb_par *par,
 				struct fb_info_aty128 *info);
 static void aty128_reset_engine(const struct fb_info_aty128 *info);
 static void aty128_flush_pixel_cache(const struct fb_info_aty128 *info);
-static void wait_for_fifo(u16 entries, const struct fb_info_aty128 *info);
+static void do_wait_for_fifo(u16 entries, struct fb_info_aty128 *info);
+static void wait_for_fifo(u16 entries, struct fb_info_aty128 *info);
 static void wait_for_idle(struct fb_info_aty128 *info);
 static u32 bpp_to_depth(u32 bpp);
 
@@ -483,7 +484,8 @@ _aty_st_pll(unsigned int pll_index, u32 val,
     aty_st_8(CLOCK_CNTL_INDEX, (pll_index & 0x1F) | PLL_WR_EN);
     aty_st_le32(CLOCK_CNTL_DATA, val);
 }
- 
+
+
 /* return true when the PLL has completed an atomic update */
 static int
 aty_pll_readupdate(const struct fb_info_aty128 *info)
@@ -547,52 +549,64 @@ register_test(const struct fb_info_aty128 *info)
      * Accelerator engine functions
      */
 static void
-wait_for_idle(struct fb_info_aty128 *info)
+do_wait_for_fifo(u16 entries, struct fb_info_aty128 *info)
 {
-    unsigned long timeout = jiffies + HZ/20;
-    int reset = 1;
+    int i;
 
-    wait_for_fifo(64, info);
-
-    while (time_before(jiffies, timeout))
-	if ((aty_ld_le32(GUI_STAT) & GUI_ACTIVE) != ENGINE_IDLE) {
-	    reset = 0;
-	    break;
-	}
-
-    if (reset)
+    for (;;) {
+        for (i = 0; i < 2000000; i++) {
+            info->fifo_slots = aty_ld_le32(GUI_STAT) & 0x0fff;
+            if (info->fifo_slots >= entries)
+                return;
+        }
 	aty128_reset_engine(info);
-	
-    info->blitter_may_be_busy = 0;
+    }
 }
 
 
 static void
-wait_for_fifo(u16 entries, const struct fb_info_aty128 *info)
+wait_for_idle(struct fb_info_aty128 *info)
 {
-    unsigned long timeout = jiffies + HZ/20;
-    int reset = 1;
+    int i;
 
-    while (time_before(jiffies, timeout))
-	if ((aty_ld_le32(GUI_STAT) & 0x00000FFF) < entries) {
-	    reset = 0;
-	    break;
-	}
+    do_wait_for_fifo(64, info);
 
-    if (reset)
-	aty128_reset_engine(info);
+    for (;;) {
+        for (i = 0; i < 2000000; i++) {
+            if (!(aty_ld_le32(GUI_STAT) & (1 << 31))) {
+                aty128_flush_pixel_cache(info);
+                info->blitter_may_be_busy = 0;
+                return;
+            }
+        }
+        aty128_reset_engine(info);
+    }
+}
+
+
+static void
+wait_for_fifo(u16 entries, struct fb_info_aty128 *info)
+{
+    if (info->fifo_slots < entries)
+        do_wait_for_fifo(64, info);
+    info->fifo_slots -= entries;
 }
 
 
 static void
 aty128_flush_pixel_cache(const struct fb_info_aty128 *info)
 {
-    int i = 16384;
+    int i;
+    u32 tmp;
 
-    aty_st_le32(PC_NGUI_CTLSTAT, aty_ld_le32(PC_NGUI_CTLSTAT) | 0x000000ff);
+    tmp = aty_ld_le32(PC_NGUI_CTLSTAT);
+    tmp &= ~(0x00ff);
+    tmp |= 0x00ff;
+    aty_st_le32(PC_NGUI_CTLSTAT, tmp);
 
-    while (i && ((aty_ld_le32(PC_NGUI_CTLSTAT) & PC_BUSY) == PC_BUSY))
-	i--;
+    for (i = 0; i < 2000000; i++)
+        if (!(aty_ld_le32(PC_NGUI_CTLSTAT) & PC_BUSY))
+            break;
 }
 
 
@@ -798,7 +812,7 @@ aty128_var_to_crtc(const struct fb_var_screeninfo *var,
         return -EINVAL;
     }
 
-    h_disp = (xres/8) - 1;
+    h_disp = (xres >> 3) - 1;
     h_total = (((xres + right + hslen + left) / 8) - 1) & 0xFFFFL;
 
     v_disp = yres - 1;
@@ -1485,7 +1499,7 @@ aty128_encode_fix(struct fb_fix_screeninfo *fix,
 
     fix->type        = FB_TYPE_PACKED_PIXELS;
     fix->type_aux    = 0;
-    fix->line_length = par->crtc.vxres*par->crtc.bpp/8;
+    fix->line_length = par->crtc.vxres*par->crtc.bpp >> 3;
     fix->visual      = par->crtc.bpp <= 8 ? FB_VISUAL_PSEUDOCOLOR
                                           : FB_VISUAL_DIRECTCOLOR;
     fix->ywrapstep = 0;
@@ -1662,7 +1676,7 @@ aty128fb_setup(char *options)
         else if(!strncmp(this_opt, "nomtrr", 6)) {
             mtrr = 0;
         }
-#endif /* CONFIG_MTRR */
+#endif
 #ifdef CONFIG_PPC
         /* vmode and cmode depreciated */
 	else if (!strncmp(this_opt, "vmode:", 6)) {
@@ -1791,7 +1805,7 @@ aty128_init(struct fb_info_aty128 *info, const char *name)
 
     dac = aty_ld_le32(DAC_CNTL);
     dac |= (DAC_8BIT_EN | DAC_RANGE_CNTL | DAC_BLANKING);
-    dac |= DAC_MASK;			/* set DAC mask              */
+    dac |= DAC_MASK;
     aty_st_le32(DAC_CNTL, dac);
 
     /* turn off bus mastering, just in case */
@@ -2309,21 +2323,21 @@ aty128_rectcopy(int srcx, int srcy, int dstx, int dsty,
 
     wait_for_fifo(2, info);
     save_dp_datatype = aty_ld_le32(DP_DATATYPE);
-    save_dp_cntl = aty_ld_le32(DP_CNTL);
+    save_dp_cntl     = aty_ld_le32(DP_CNTL);
 
     wait_for_fifo(6, info);
-    aty_st_le32(DP_DATATYPE, (0 | BRUSH_SOLIDCOLOR << 16) | SRC_DSTCOLOR);
+    aty_st_le32(DP_DATATYPE, (BRUSH_SOLIDCOLOR << 16) | SRC_DSTCOLOR);
     aty_st_le32(DP_MIX, ROP3_SRCCOPY | DP_SRC_RECT);
     aty_st_le32(DP_CNTL, DST_X_LEFT_TO_RIGHT | DST_Y_TOP_TO_BOTTOM);
     aty_st_le32(SRC_Y_X, (srcy << 16) | srcx);
     aty_st_le32(DST_Y_X, (dsty << 16) | dstx);
     aty_st_le32(DST_HEIGHT_WIDTH, (height << 16) | width);
 
+    info->blitter_may_be_busy = 1;
+
     wait_for_fifo(2, info);
     aty_st_le32(DP_DATATYPE, save_dp_datatype);
     aty_st_le32(DP_CNTL, save_dp_cntl); 
-
-    info->blitter_may_be_busy = 1;
 
     wait_for_idle(info);
 }
@@ -2333,16 +2347,15 @@ aty128_rectcopy(int srcx, int srcy, int dstx, int dsty,
      * Text mode accelerated functions
      */
 
-
 static void
 fbcon_aty128_bmove(struct display *p, int sy, int sx, int dy, int dx,
 			int height, int width)
 {
-    sx *= fontwidth(p);
-    sy *= fontheight(p);
-    dx *= fontwidth(p);
-    dy *= fontheight(p);
-    width *= fontwidth(p);
+    sx     *= fontwidth(p);
+    sy     *= fontheight(p);
+    dx     *= fontwidth(p);
+    dy     *= fontheight(p);
+    width  *= fontwidth(p);
     height *= fontheight(p);
 
     aty128_rectcopy(sx, sy, dx, dy, width, height,

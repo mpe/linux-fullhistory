@@ -3,7 +3,7 @@
  *	
  *		Alan Cox, <alan@redhat.com>
  *
- *	Version: $Id: icmp.c,v 1.65 2000/02/22 23:54:25 davem Exp $
+ *	Version: $Id: icmp.c,v 1.66 2000/03/17 14:41:50 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -332,20 +332,6 @@ struct icmp_control
 static struct icmp_control icmp_pointers[NR_ICMP_TYPES+1];
 
 /*
- *	Build xmit assembly blocks
- */
-
-struct icmp_bxm
-{
-	void *data_ptr;
-	int data_len;
-	struct icmphdr icmph;
-	unsigned long csum;
-	struct ip_options replyopts;
-	unsigned char  optbuf[40];
-};
-
-/*
  *	The ICMP socket. This is the most convenient way to flow control
  *	our ICMP output as well as maintain a clean interface throughout
  *	all layers. All Socketless IP sends will soon be gone.
@@ -508,7 +494,7 @@ static int icmp_glue_bits(const void *p, char *to, unsigned int offset, unsigned
  *	Driving logic for building and sending ICMP messages.
  */
 
-static void icmp_reply(struct icmp_bxm *icmp_param, struct sk_buff *skb)
+void icmp_reply(struct icmp_bxm *icmp_param, struct sk_buff *skb)
 {
 	struct sock *sk=icmp_socket->sk;
 	struct ipcm_cookie ipc;

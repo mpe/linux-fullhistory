@@ -195,6 +195,7 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 	svc_fh		*newfhp = &resp->fh;
 	struct iattr	*attr = &argp->attrs;
 	struct inode	*inode;
+	struct dentry	*dchild;
 	int		nfserr, type, mode, rdonly = 0;
 	dev_t		rdev = NODEV;
 
@@ -214,14 +215,24 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 	} else if (nfserr)
 		goto done;
 
-	/*
-	 * Do a lookup to verify the new file handle.
-	 */
+	nfserr = nfserr_acces;
+	if (!argp->len)
+		goto done;
+	nfserr = nfserr_exist;
+	if (isdotent(argp->name, argp->len))
+		goto done;
+	fh_lock(dirfhp);
+	dchild = lookup_one(argp->name, dget(dirfhp->fh_dentry));
+	nfserr = nfserrno(PTR_ERR(dchild));
+	if (IS_ERR(dchild))
+		goto out_unlock;
 	fh_init(newfhp, NFS_FHSIZE);
-	nfserr = nfsd_lookup(rqstp, dirfhp, argp->name, argp->len, newfhp);
+	nfserr = fh_compose(newfhp, dirfhp->fh_export, dchild);
+	if (!nfserr && !dchild->d_inode)
+		nfserr = nfserr_noent;
 	if (nfserr) {
 		if (nfserr != nfserr_noent)
-			goto done;
+			goto out_unlock;
 		/*
 		 * If the new file handle wasn't verified, we can't tell
 		 * whether the file exists or not. Time to bail ...
@@ -230,22 +241,11 @@ nfsd_proc_create(struct svc_rqst *rqstp, struct nfsd_createargs *argp,
 		if (!newfhp->fh_dverified) {
 			printk(KERN_WARNING 
 				"nfsd_proc_create: file handle not verified\n");
-			goto done;
+			goto out_unlock;
 		}
 	}
 
-	/*
-	 * Lock the parent directory and check for existence.
-	 */
-	nfserr = fh_lock_parent(dirfhp, newfhp->fh_dentry);
-	if (nfserr)
-		goto done;
 	inode = newfhp->fh_dentry->d_inode;
-	if (inode && newfhp->fh_handle.fh_fileid_type == 0)
-		 /* inode might have been instantiated while we slept */
-		nfserr = fh_update(newfhp);
-	if (nfserr)
-		goto done;
 
 	/* Unfudge the mode bits */
 	if (attr->ia_valid & ATTR_MODE) { 

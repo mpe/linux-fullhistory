@@ -493,38 +493,37 @@ __EXTERN_INLINE int irongate_is_ioaddr(unsigned long addr)
 
 #ifdef __WANT_IO_DEF
 
-#define __inb		irongate_inb
-#define __inw		irongate_inw
-#define __inl		irongate_inl
-#define __outb		irongate_outb
-#define __outw		irongate_outw
-#define __outl		irongate_outl
-#define __readb		irongate_readb
-#define __readw		irongate_readw
-#define __writeb	irongate_writeb
-#define __writew	irongate_writew
-#define __readl		irongate_readl
-#define __readq		irongate_readq
-#define __writel	irongate_writel
-#define __writeq	irongate_writeq
-#define __ioremap	irongate_ioremap
-#define __is_ioaddr	irongate_is_ioaddr
+#define __inb(p)		irongate_inb((unsigned long)(p))
+#define __inw(p)		irongate_inw((unsigned long)(p))
+#define __inl(p)		irongate_inl((unsigned long)(p))
+#define __outb(x,p)		irongate_outb((x),(unsigned long)(p))
+#define __outw(x,p)		irongate_outw((x),(unsigned long)(p))
+#define __outl(x,p)		irongate_outl((x),(unsigned long)(p))
+#define __readb(a)		irongate_readb((unsigned long)(a))
+#define __readw(a)		irongate_readw((unsigned long)(a))
+#define __readl(a)		irongate_readl((unsigned long)(a))
+#define __readq(a)		irongate_readq((unsigned long)(a))
+#define __writeb(x,a)		irongate_writeb((x),(unsigned long)(a))
+#define __writew(x,a)		irongate_writew((x),(unsigned long)(a))
+#define __writel(x,a)		irongate_writel((x),(unsigned long)(a))
+#define __writeq(x,a)		irongate_writeq((x),(unsigned long)(a))
+#define __ioremap(a)		irongate_ioremap((unsigned long)(a))
+#define __is_ioaddr(a)		irongate_is_ioaddr((unsigned long)(a))
 
-#define inb(port)	__inb((port))
-#define inw(port)	__inw((port))
-#define inl(port)	__inl((port))
-#define outb(v, port)	__outb((v),(port))
-#define outw(v, port)	__outw((v),(port))
-#define outl(v, port)	__outl((v),(port))
-
-#define __raw_readb(a)		__readb((unsigned long)(a))
-#define __raw_readw(a)		__readw((unsigned long)(a))
-#define __raw_readl(a)		__readl((unsigned long)(a))
-#define __raw_readq(a)		__readq((unsigned long)(a))
-#define __raw_writeb(v,a)	__writeb((v),(unsigned long)(a))
-#define __raw_writew(v,a)	__writew((v),(unsigned long)(a))
-#define __raw_writel(v,a)	__writel((v),(unsigned long)(a))
-#define __raw_writeq(v,a)	__writeq((v),(unsigned long)(a))
+#define inb(p)			__inb(p)
+#define inw(p)			__inw(p)
+#define inl(p)			__inl(p)
+#define outb(x,p)		__outb((x),(p))
+#define outw(x,p)		__outw((x),(p))
+#define outl(x,p)		__outl((x),(p))
+#define __raw_readb(a)		__readb(a)
+#define __raw_readw(a)		__readw(a)
+#define __raw_readl(a)		__readl(a)
+#define __raw_readq(a)		__readq(a)
+#define __raw_writeb(v,a)	__writeb((v),(a))
+#define __raw_writew(v,a)	__writew((v),(a))
+#define __raw_writel(v,a)	__writel((v),(a))
+#define __raw_writeq(v,a)	__writeq((v),(a))
 
 #endif /* __WANT_IO_DEF */
 

@@ -488,13 +488,13 @@ static int __init acpi_find_tables(void)
 	if (!rsdt) {
 		printk(KERN_ERR "ACPI: missing RSDT at 0x%p\n",
 		       (void*) rsdp->rsdt);
-		return -ENODEV;
+		return -EINVAL;
 	}
 	else if (rsdt->signature != ACPI_RSDT_SIG) {
 		printk(KERN_ERR "ACPI: bad RSDT at 0x%p (%08x)\n",
 		       (void*) rsdp->rsdt, (unsigned) rsdt->signature);
 		acpi_unmap_table(rsdt);
-		return -ENODEV;
+		return -EINVAL;
 	}
 	// search RSDT for FACP
 	acpi_facp.table = NULL;
@@ -532,7 +532,7 @@ static int __init acpi_find_tables(void)
 
 	if (!acpi_facp.table) {
 		printk(KERN_ERR "ACPI: missing FACP\n");
-		return -ENODEV;
+		return -EINVAL;
 	}
 	return 0;
 }
@@ -1461,8 +1461,19 @@ static int __init acpi_init(void)
 
 	switch (acpi_enabled) {
 	case ACPI_ENABLED:
-		if (acpi_find_tables() && acpi_find_chipset())
+		switch (acpi_find_tables()) {
+		case 0:
+			// found valid ACPI tables
+			break;
+		case -ENODEV:
+			// found no ACPI tables, try chipset-specific
+			if (acpi_find_chipset())
+				return -ENODEV;
+			break;
+		default:
+			// found broken ACPI tables
 			return -ENODEV;
+		}
 		break;
 	case ACPI_TABLES_ONLY:
 		if (acpi_find_tables())
@@ -1477,6 +1488,12 @@ static int __init acpi_init(void)
 	}
 
 	facp = (struct acpi_facp*) acpi_facp.table;
+
+	if (PM_IS_ACTIVE()) {
+		printk(KERN_NOTICE "acpi: APM is already active.\n");
+		goto err_out;
+	}
+	pm_active = 1;
 
 	/*
 	 * Internally we always keep latencies in timer
@@ -1516,8 +1533,6 @@ static int __init acpi_init(void)
 
 	pm_power_off = acpi_power_off;
 
-	pm_active = 1;
-
 	/*
 	 * Set up the ACPI idle function. Note that we can't really
 	 * do this with multiple CPU's, we'd need a per-CPU ACPI
@@ -1549,7 +1564,6 @@ static void __exit acpi_exit(void)
 	struct acpi_facp *facp = (struct acpi_facp*) acpi_facp.table;
 
 	pm_idle = NULL;
-	pm_active = 0;
 	pm_power_off = NULL;
 
 	unregister_sysctl_table(acpi_sysctl);
@@ -1563,6 +1577,8 @@ static void __exit acpi_exit(void)
 
 	if (pci_driver_registered)
 		pci_unregister_driver(&acpi_driver);
+
+	pm_active = 0;
 }
 
 /*

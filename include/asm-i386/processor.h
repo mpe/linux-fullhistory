@@ -116,6 +116,10 @@ extern struct cpuinfo_x86 cpu_data[];
 		(boot_cpu_data.x86_capability & X86_FEATURE_PAE)
 #define cpu_has_tsc \
 		(boot_cpu_data.x86_capability & X86_FEATURE_TSC)
+#define cpu_has_de \
+		(boot_cpu_data.x86_capability & X86_FEATURE_DE)
+#define cpu_has_vme \
+		(boot_cpu_data.x86_capability & X86_FEATURE_VME)
 
 extern char ignore_irq13;
 

@@ -1,3 +1,17 @@
+2000-03-16  Tim Waugh  <twaugh@redhat.com>
+
+	* parport_pc.c (parport_ECP_supported): This seems to trigger on
+	machines that don't have an IRQ conflict; toned down the warning
+	message accordingly.
+
+2000-03-16  Gunther Mayer  <gunther.mayer@braunschweig.netsurf.de>
+
+	* parport_pc.c (show_parconfig_smsc37c669): Fix typo.
+	(decode_winbond): More IDs.
+	(winbond_check): Protect against false positives.
+	(winbond_check2): Likewise.
+	(smsc_check): Likewise.
+
 2000-03-15  Tim Waugh  <twaugh@redhat.com>
 
 	* parport_pc.c (cleanup_module): Don't call pci_unregister_driver

@@ -30,7 +30,7 @@
 #include <asm/pgalloc.h>
 
 static int load_aout_binary(struct linux_binprm *, struct pt_regs * regs);
-static int load_aout_library(int fd);
+static int load_aout_library(struct file*);
 static int aout_core_dump(long signr, struct pt_regs * regs, struct file *file);
 
 extern void dump_thread(struct pt_regs *, struct user *);
@@ -414,9 +414,8 @@ beyond_if:
 	return 0;
 }
 
-static int load_aout_library(int fd)
+static int load_aout_library(struct file *file)
 {
-        struct file * file;
 	struct inode * inode;
 	unsigned long bss, start_addr, len;
 	unsigned long error;
@@ -424,12 +423,6 @@ static int load_aout_library(int fd)
 	loff_t offset = 0;
 	struct exec ex;
 
-	retval = -EACCES;
-	file = fget(fd);
-	if (!file)
-		goto out;
-	if (!file->f_op)
-		goto out_putf;
 	inode = file->f_dentry->d_inode;
 
 	retval = -ENOEXEC;
@@ -438,17 +431,17 @@ static int load_aout_library(int fd)
 	error = file->f_op->read(file, (char *) &ex, sizeof(ex), &offset);
 	set_fs(USER_DS);
 	if (error != sizeof(ex))
-		goto out_putf;
+		goto out;
 
 	/* We come in here for the regular a.out style of shared libraries */
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != QMAGIC) || N_TRSIZE(ex) ||
 	    N_DRSIZE(ex) || ((ex.a_entry & 0xfff) && N_MAGIC(ex) == ZMAGIC) ||
 	    inode->i_size < ex.a_text+ex.a_data+N_SYMSIZE(ex)+N_TXTOFF(ex)) {
-		goto out_putf;
+		goto out;
 	}
 
 	if (N_FLAGS(ex))
-		goto out_putf;
+		goto out;
 
 	/* For  QMAGIC, the starting address is 0x20 into the page.  We mask
 	   this off to get the starting address for the page */
@@ -474,16 +467,18 @@ static int load_aout_library(int fd)
 				   (unsigned long) start_addr + ex.a_text + ex.a_data);
 
 		retval = 0;
-		goto out_putf;
+		goto out;
 	}
 	/* Now use mmap to map the library into memory. */
+	down(&current->mm->mmap_sem);
 	error = do_mmap(file, start_addr, ex.a_text + ex.a_data,
 			PROT_READ | PROT_WRITE | PROT_EXEC,
 			MAP_FIXED | MAP_PRIVATE | MAP_DENYWRITE,
 			N_TXTOFF(ex));
+	up(&current->mm->mmap_sem);
 	retval = error;
 	if (error != start_addr)
-		goto out_putf;
+		goto out;
 
 	len = PAGE_ALIGN(ex.a_text + ex.a_data);
 	bss = ex.a_text + ex.a_data + ex.a_bss;
@@ -491,12 +486,9 @@ static int load_aout_library(int fd)
 		error = do_brk(start_addr + len, bss - len);
 		retval = error;
 		if (error != start_addr + len)
-			goto out_putf;
+			goto out;
 	}
 	retval = 0;
-
-out_putf:
-	fput(file);
 out:
 	return retval;
 }

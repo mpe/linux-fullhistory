@@ -1396,7 +1396,7 @@ ncr_pci_init (Scsi_Host_Template *tpnt, int board, int chip,
     int i, irq;
     struct pci_dev *pdev = pci_find_slot(bus, device_fn);
 
-    printk("scsi-ncr53c7,8xx : at PCI bus %d, device %d,  function %d\n",
+    printk("scsi-ncr53c7,8xx : at PCI bus %d, device %d, function %d\n",
 	bus, (int) (device_fn & 0xf8) >> 3, 
     	(int) device_fn & 7);
 
@@ -1406,10 +1406,8 @@ ncr_pci_init (Scsi_Host_Template *tpnt, int board, int chip,
 	return -1;
     }
 
-    if ((error = pcibios_read_config_word (bus, device_fn, PCI_COMMAND, 
-	    &command)) ||
-	(error = pcibios_read_config_byte (bus, device_fn, PCI_CLASS_REVISION,
-	    &revision))) {
+    if ((error = pci_read_config_word (pdev, PCI_COMMAND, &command)) ||
+	(error = pci_read_config_byte (pdev, PCI_CLASS_REVISION, &revision))) {
 	printk ("scsi-ncr53c7,8xx : error %d not initializing due to error reading configuration space\n"
 		"	 perhaps you specified an incorrect PCI bus, device, or function.\n", error);
 	return -1;
@@ -1451,24 +1449,21 @@ ncr_pci_init (Scsi_Host_Template *tpnt, int board, int chip,
      */
 
     if (command & PCI_COMMAND_IO) { 
-	if ((io_port & 3) != 1) {
-	    printk ("scsi-ncr53c7,8xx : disabling I/O mapping since base address 0 (0x%x)\n"
-    	    	    "        bits 0..1 indicate a non-IO mapping\n",
-		(unsigned) io_port);
+	if (!(pdev->resource[0].flags & IORESOURCE_IO)) {
+	    printk ("scsi-ncr53c7,8xx : disabling I/O mapping since base "
+		    "address 0\n        contains a non-IO mapping\n");
 	    io_port = 0;
-	} else
-	    io_port &= PCI_BASE_ADDRESS_IO_MASK;
+	}
     } else {
     	io_port = 0;
     }
 
     if (command & PCI_COMMAND_MEMORY) {
-	if ((base & PCI_BASE_ADDRESS_SPACE) != PCI_BASE_ADDRESS_SPACE_MEMORY) {
-	    printk("scsi-ncr53c7,8xx : disabling memory mapping since base address 1\n"
-		   "        contains a non-memory mapping\n");
+	if (!(pdev->resource[1].flags & IORESOURCE_MEM)) {
+	    printk("scsi-ncr53c7,8xx : disabling memory mapping since base "
+		   "address 1\n        contains a non-memory mapping\n");
 	    base = 0;
-	} else 
-	    base &= PCI_BASE_ADDRESS_MEM_MASK;
+	}
     } else {
 	base = 0;
     }
