@@ -653,8 +653,10 @@ next_task:
 		if ((fl->fl_owner == blocked_owner)
 		    && (fl->fl_pid == blocked_pid)) {
 			fl = fl->fl_next;
-			blocked_owner = fl->fl_owner;
-			blocked_pid = fl->fl_pid;
+			if (fl) {
+				blocked_owner = fl->fl_owner;
+				blocked_pid = fl->fl_pid;
+			}
 			goto next_task;
 		}
 	}

@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 1999-2000 by David Brownell <david-b@pacbell.net>
+ * Copyright (C) 1999-2000 by David Brownell <dbrownell@users.sourceforge.net>
  *
  * This program is free software; you can redistribute it and/or modify it
  * under the terms of the GNU General Public License as published by the
@@ -90,6 +90,7 @@ static const struct camera {
 	/* These have the same application level protocol */  
     { 0x040a, 0x0120 },		// Kodak DC-240
     { 0x040a, 0x0130 },		// Kodak DC-280
+    { 0x040a, 0x0132 },		// Kodak DC-3400
 
 	/* These have a different application level protocol which
 	 * is part of the Flashpoint "DigitaOS".  That supports some
@@ -498,7 +499,7 @@ void __exit usb_dc2xx_cleanup(void)
 }
 
 
-MODULE_AUTHOR("David Brownell, david-b@pacbell.net");
+MODULE_AUTHOR("David Brownell, <dbrownell@users.sourceforge.net>");
 MODULE_DESCRIPTION("USB Camera Driver for Kodak DC-2xx series cameras");
 
 module_init (usb_dc2xx_init);

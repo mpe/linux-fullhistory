@@ -138,6 +138,8 @@
  */
 
 #include <linux/module.h>
+#include <linux/init.h>
+
 #include <linux/stddef.h>
 #include <linux/spinlock.h>
 #include <linux/smp_lock.h>
@@ -3452,12 +3454,10 @@ static struct address_info the_hw_config = {
 	CO_IRQ(CO_APIC_LI_AUDIO)	/* irq */
 };
 
-#ifdef MODULE
-
 MODULE_DESCRIPTION("SGI Visual Workstation sound module");
 MODULE_AUTHOR("Bob Miller <kbob@sgi.com>");
 
-extern int init_module(void)
+static int __init init_vwsnd(void)
 {
 	int err;
 
@@ -3472,23 +3472,15 @@ extern int init_module(void)
 	return 0;
 }
 
-extern void cleanup_module(void)
+static void __exit cleanup_vwsnd(void)
 {
 	DBGX("sound::vwsnd::cleanup_module()\n");
 
 	unload_vwsnd(&the_hw_config);
 }
 
-#else
-
-extern void init_vwsnd(void)
-{
-	DBGX("sound::vwsnd::init_vwsnd()\n");
-	if (probe_vwsnd(&the_hw_config))
-		(void) attach_vwsnd(&the_hw_config);
-}
-
-#endif /* !MODULE */
+module_init(init_vwsnd);
+module_exit(cleanup_vwsnd);
 
 /*
  * Local variables:

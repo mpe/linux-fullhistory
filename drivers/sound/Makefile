@@ -43,7 +43,6 @@ obj-$(CONFIG_SOUND_AEDSP16)	+= aedsp16.o
 obj-$(CONFIG_SOUND_PSS)		+= pss.o ad1848.o mpu401.o
 obj-$(CONFIG_SOUND_TRIX)	+= trix.o ad1848.o sb_lib.o uart401.o
 obj-$(CONFIG_SOUND_OPL3SA1)	+= opl3sa.o ad1848.o uart401.o
-obj-$(CONFIG_SOUND_SOFTOSS)	+= softoss2.o
 obj-$(CONFIG_SOUND_SSCAPE)	+= sscape.o ad1848.o mpu401.o
 obj-$(CONFIG_SOUND_MAD16)	+= mad16.o ad1848.o sb_lib.o uart401.o
 obj-$(CONFIG_SOUND_CS4232)	+= cs4232.o uart401.o
@@ -79,6 +78,7 @@ obj-$(CONFIG_SOUND_ES1370)	+= es1370.o
 obj-$(CONFIG_SOUND_ES1371)	+= es1371.o ac97_codec.o
 obj-$(CONFIG_SOUND_ESSSOLO1)	+= esssolo1.o
 obj-$(CONFIG_SOUND_FUSION)	+= cs46xx.o ac97_codec.o
+obj-$(CONFIG_SOUND_CS4281)	+= cs4281.o
 obj-$(CONFIG_SOUND_MAESTRO)	+= maestro.o
 obj-$(CONFIG_SOUND_TRIDENT)	+= trident.o ac97_codec.o
 
@@ -104,7 +104,7 @@ endif
 
 # Declare multi-part drivers.
 
-list-multi	:= sound.o gus.o pas2.o sb.o sb_lib.o softoss2.o vidc_mod.o \
+list-multi	:= sound.o gus.o pas2.o sb.o sb_lib.o vidc_mod.o \
     soundcore.o wavefront.o
 
 sound-objs	:= 							\
@@ -119,7 +119,6 @@ gus-objs	:= gus_card.o gus_midi.o gus_vol.o gus_wave.o ics2101.o
 pas2-objs	:= pas2_card.o pas2_midi.o pas2_mixer.o pas2_pcm.o
 sb-objs		:= sb_card.o
 sb_lib-objs	:= sb_common.o sb_audio.o sb_midi.o sb_mixer.o sb_ess.o
-softoss2-objs	:= softoss.o softoss_rs.o
 vidc_mod-objs	:= vidc.o vidc_fill.o
 wavefront-objs  := wavfront.o wf_midi.o yss225.o
 
@@ -180,9 +179,6 @@ sb.o: $(sb-objs)
 
 sb_lib.o: $(sb_lib-objs)
 	$(LD) -r -o $@ $(sb_lib-objs)
-
-softoss2.o: $(softoss2-objs)
-	$(LD) -r -o $@ $(softoss2-objs)
 
 vidc_mod.o: $(vidc_mod-objs)
 	$(LD) -r -o $@ $(vidc_mod-objs)

@@ -23,10 +23,6 @@ EXPORT_SYMBOL(sound_timer_interrupt);
 EXPORT_SYMBOL(sound_timer_syncinterval);
 EXPORT_SYMBOL(reprogram_timer);
 
-#include "softoss.h"
-
-EXPORT_SYMBOL(softsynthp);
-
 /* Tuning */
 
 #define _SEQUENCER_C_

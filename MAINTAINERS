@@ -210,13 +210,6 @@ M:	jgarzik@mandrakesoft.com
 L:	linux-fbdev@vuser.vu.union.edu
 S:	Maintained
 
-COMPAQ SMART CISS RAID DRIVER 
-P:      Charles White
-M:      Charles White <arrays@compaq.com>
-L:      compaqandlinux@cpqlin.van-dijk.net
-W:	ftp.compaq.com/pub/products/drivers/linux	
-S:     	Supported 
-
 COMPAQ FIBRE CHANNEL 64-bit/66MHz PCI non-intelligent HBA
 P:      Amy Vanzant-Hodge 
 M:      Amy Vanzant-Hodge (fibrechannel@compaq.com)
@@ -230,6 +223,13 @@ M:	Charles White <arrays@compaq.com>
 L:	compaqandlinux@cpqlin.van-dijk.net
 W:	ftp.compaq.com/pub/products/drivers/linux
 S:	Supported	
+
+COMPAQ SMART CISS RAID DRIVER 
+P:	Charles White
+M:	Charles White <arrays@compaq.com>
+L:	compaqandlinux@cpqlin.van-dijk.net
+W:	ftp.compaq.com/pub/products/drivers/linux	
+S:	Supported 
 
 COMPUTONE INTELLIPORT MULTIPORT CARD
 P:     Doug McNash

@@ -444,6 +444,13 @@ try_again:
 		 * processes, etc).
 		 */
 		if (gfp_mask & __GFP_WAIT) {
+			/*
+			 * Give other processes a chance to run:
+			 */
+			if (current->need_resched) {
+				__set_current_state(TASK_RUNNING);
+				schedule();
+			}
 			try_to_free_pages(gfp_mask);
 			memory_pressure++;
 			goto try_again;

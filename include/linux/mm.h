@@ -441,7 +441,6 @@ struct zone_t;
 /* filemap.c */
 extern void remove_inode_page(struct page *);
 extern unsigned long page_unuse(struct page *);
-extern int shrink_mmap(int, int);
 extern void truncate_inode_pages(struct address_space *, loff_t);
 
 /* generic vm_area_ops exported for stackable file systems */
@@ -469,11 +468,11 @@ extern struct page *filemap_nopage(struct vm_area_struct * area,
 
 #define GFP_BUFFER	(__GFP_HIGH | __GFP_WAIT)
 #define GFP_ATOMIC	(__GFP_HIGH)
-#define GFP_USER	(__GFP_WAIT | __GFP_IO)
-#define GFP_HIGHUSER	(GFP_USER | __GFP_HIGHMEM)
+#define GFP_USER	(             __GFP_WAIT | __GFP_IO)
+#define GFP_HIGHUSER	(             __GFP_WAIT | __GFP_IO | __GFP_HIGHMEM)
 #define GFP_KERNEL	(__GFP_HIGH | __GFP_WAIT | __GFP_IO)
 #define GFP_NFS		(__GFP_HIGH | __GFP_WAIT | __GFP_IO)
-#define GFP_KSWAPD	(__GFP_IO)
+#define GFP_KSWAPD	(                          __GFP_IO)
 
 /* Flag - indicates that the buffer will be suitable for DMA.  Ignored on some
    platforms, used as appropriate on others */

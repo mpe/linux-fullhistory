@@ -119,7 +119,7 @@ drop_pte:
 	 * our scan.
 	 *
 	 * Basically, this just makes it possible for us to do
-	 * some real work in the future in "shrink_mmap()".
+	 * some real work in the future in "refill_inactive()".
 	 */
 	if (!pte_dirty(pte)) {
 		flush_cache_page(vma, address);
@@ -159,7 +159,7 @@ drop_pte:
 	 * NOTE NOTE NOTE! This should just set a
 	 * dirty bit in 'page', and just drop the
 	 * pte. All the hard work would be done by
-	 * shrink_mmap().
+	 * refill_inactive().
 	 *
 	 * That would get rid of a lot of problems.
 	 */
@@ -891,7 +891,7 @@ static int refill_inactive(unsigned int gfp_mask, int user)
 	do {
 		made_progress = 0;
 
-		if (current->need_resched && (gfp_mask & __GFP_IO)) {
+		if (current->need_resched) {
 			__set_current_state(TASK_RUNNING);
 			schedule();
 		}
@@ -899,34 +899,32 @@ static int refill_inactive(unsigned int gfp_mask, int user)
 		while (refill_inactive_scan(priority, 1) ||
 				swap_out(priority, gfp_mask, idle_time)) {
 			made_progress = 1;
-			if (!--count)
+			if (--count <= 0)
 				goto done;
 		}
 
-		/* Try to get rid of some shared memory pages.. */
-		if (gfp_mask & __GFP_IO) {
-			/*
-			 * don't be too light against the d/i cache since
-		   	 * shrink_mmap() almost never fail when there's
-		   	 * really plenty of memory free. 
-			 */
-			count -= shrink_dcache_memory(priority, gfp_mask);
-			count -= shrink_icache_memory(priority, gfp_mask);
-			/*
-			 * Not currently working, see fixme in shrink_?cache_memory
-			 * In the inner funtions there is a comment:
-			 * "To help debugging, a zero exit status indicates
-			 *  all slabs were released." (-arca?)
-			 * lets handle it in a primitive but working way...
-			 *	if (count <= 0)
-			 *		goto done;
-			 */
+		/*
+		 * don't be too light against the d/i cache since
+	   	 * refill_inactive() almost never fail when there's
+	   	 * really plenty of memory free. 
+		 */
+		count -= shrink_dcache_memory(priority, gfp_mask);
+		count -= shrink_icache_memory(priority, gfp_mask);
+		/*
+		 * Not currently working, see fixme in shrink_?cache_memory
+		 * In the inner funtions there is a comment:
+		 * "To help debugging, a zero exit status indicates
+		 *  all slabs were released." (-arca?)
+		 * lets handle it in a primitive but working way...
+		 *	if (count <= 0)
+		 *		goto done;
+		 */
 
-			while (shm_swap(priority, gfp_mask)) {
-				made_progress = 1;
-				if (!--count)
-					goto done;
-			}
+		/* Try to get rid of some shared memory pages.. */
+		while (shm_swap(priority, gfp_mask)) {
+			made_progress = 1;
+			if (--count <= 0)
+				goto done;
 		}
 
 		/*
@@ -934,7 +932,7 @@ static int refill_inactive(unsigned int gfp_mask, int user)
 		 */
 		while (swap_out(priority, gfp_mask, 0)) {
 			made_progress = 1;
-			if (!--count)
+			if (--count <= 0)
 				goto done;
 		}
 
@@ -955,9 +953,9 @@ static int refill_inactive(unsigned int gfp_mask, int user)
 			priority--;
 	} while (priority >= 0);
 
-	/* Always end on a shrink_mmap.., may sleep... */
+	/* Always end on a refill_inactive.., may sleep... */
 	while (refill_inactive_scan(0, 1)) {
-		if (!--count)
+		if (--count <= 0)
 			goto done;
 	}
 
@@ -968,11 +966,6 @@ done:
 static int do_try_to_free_pages(unsigned int gfp_mask, int user)
 {
 	int ret = 0;
-
-	/*
-	 * First, reclaim unused slab cache memory.
-	 */
-	kmem_cache_reap(gfp_mask);
 
 	/*
 	 * If we're low on free pages, move pages from the
@@ -992,13 +985,14 @@ static int do_try_to_free_pages(unsigned int gfp_mask, int user)
 	 * the inode and dentry cache whenever we do this.
 	 */
 	if (free_shortage() || inactive_shortage()) {
-		if (gfp_mask & __GFP_IO) {
-			ret += shrink_dcache_memory(6, gfp_mask);
-			ret += shrink_icache_memory(6, gfp_mask);
-		}
-
+		ret += shrink_dcache_memory(6, gfp_mask);
+		ret += shrink_icache_memory(6, gfp_mask);
 		ret += refill_inactive(gfp_mask, user);
 	} else {
+		/*
+		 * Reclaim unused slab cache memory.
+		 */
+		kmem_cache_reap(gfp_mask);
 		ret = 1;
 	}
 
@@ -1153,9 +1147,8 @@ int try_to_free_pages(unsigned int gfp_mask)
 {
 	int ret = 1;
 
-	if (gfp_mask & __GFP_WAIT) {
+	if (gfp_mask & __GFP_WAIT)
 		ret = do_try_to_free_pages(gfp_mask, 1);
-	}
 
 	return ret;
 }

@@ -34,14 +34,11 @@ if [ "$CONFIG_PARIDE" = "y" -o "$CONFIG_PARIDE" = "m" ]; then
    source drivers/block/paride/Config.in
 fi
 dep_tristate 'Compaq SMART2 support' CONFIG_BLK_CPQ_DA $CONFIG_PCI
+dep_tristate 'Compaq CISS Array support' CONFIG_BLK_CPQ_CISS_DA $CONFIG_PCI 
 dep_tristate 'Mylex DAC960/DAC1100 PCI RAID Controller support' CONFIG_BLK_DEV_DAC960 $CONFIG_PCI
 
 tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
 dep_tristate 'Network block device support' CONFIG_BLK_DEV_NBD $CONFIG_NET
-
-if [ "$CONFIG_PCI" = "y" ]; then
-  tristate 'Compaq CISS Array support' CONFIG_BLK_CPQ_CISS_DA
-fi
 
 tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
 if [ "$CONFIG_BLK_DEV_RAM" = "y" -o "$CONFIG_BLK_DEV_RAM" = "m" ]; then

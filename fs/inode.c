@@ -457,7 +457,17 @@ void prune_icache(int goal)
 int shrink_icache_memory(int priority, int gfp_mask)
 {
 	int count = 0;
-		
+
+	/*
+	 * Nasty deadlock avoidance..
+	 *
+	 * We may hold various FS locks, and we don't
+	 * want to recurse into the FS that called us
+	 * in clear_inode() and friends..
+	 */
+	if (!(gfp_mask & __GFP_IO))
+		return 0;
+
 	if (priority)
 		count = inodes_stat.nr_unused / priority;
 	prune_icache(count);

@@ -35,6 +35,7 @@
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/bitops.h>
+#include <linux/delay.h>
 #include <linux/ac97_codec.h>
 #include <asm/uaccess.h>
 
@@ -566,10 +567,8 @@ int ac97_probe_codec(struct ac97_codec *codec)
 	/* also according to spec, we wait for codec-ready state */	
 	if (codec->codec_wait)
 		codec->codec_wait(codec);
-	else {
-		current->state = TASK_UNINTERRUPTIBLE;
-		schedule_timeout(5);
-	}
+	else
+		udelay(10);
 
 	if ((audio = codec->codec_read(codec, AC97_RESET)) & 0x8000) {
 		printk(KERN_ERR "ac97_codec: %s ac97 codec not present\n",
@@ -588,7 +587,6 @@ int ac97_probe_codec(struct ac97_codec *codec)
 	id2 = codec->codec_read(codec, AC97_VENDOR_ID2);
 	for (i = 0; i < arraysize(ac97_codec_ids); i++) {
 		if (ac97_codec_ids[i].id == ((id1 << 16) | id2)) {
-			codec->id = ac97_codec_ids[i].id;
 			codec->name = ac97_codec_ids[i].name;
 			codec->codec_init = ac97_codec_ids[i].init;
 			break;
@@ -630,7 +628,7 @@ static int ac97_init_mixer(struct ac97_codec *codec)
 	codec->codec_write(codec, AC97_PCMOUT_VOL, 0L);
 
 	/* codec specific initialization for 4-6 channel output or secondary codec stuff */
-	if (codec->id != 0 && codec->codec_init != NULL) {
+	if (codec->codec_init != NULL) {
 		codec->codec_init(codec);
 	}
 
@@ -649,6 +647,10 @@ static int ac97_init_mixer(struct ac97_codec *codec)
 
 static int sigmatel_init(struct ac97_codec * codec)
 {
+	/* Only set up secondary codec */
+	if (codec->id == 0)
+		return 1;
+
 	codec->codec_write(codec, AC97_SURROUND_MASTER, 0L);
 
 	/* initialize SigmaTel STAC9721/23 as secondary codec, decoding AC link

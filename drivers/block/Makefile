@@ -31,7 +31,7 @@ obj-$(CONFIG_BLK_DEV_LOOP)	+= loop.o
 obj-$(CONFIG_BLK_DEV_PS2)	+= ps2esdi.o
 obj-$(CONFIG_BLK_DEV_XD)	+= xd.o
 obj-$(CONFIG_BLK_CPQ_DA)	+= cpqarray.o
-obj-$(CONFIG_BLK_CPQ_CISS_DA)	+= cciss.o
+obj-$(CONFIG_BLK_CPQ_CISS_DA)  += cciss.o
 obj-$(CONFIG_BLK_DEV_DAC960)	+= DAC960.o
 
 obj-$(CONFIG_BLK_DEV_NBD)	+= nbd.o

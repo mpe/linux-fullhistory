@@ -483,6 +483,7 @@ static struct proc_nfs_info {
 	{ NFS_MOUNT_NOCTO, ",nocto", "" },
 	{ NFS_MOUNT_NOAC, ",noac", "" },
 	{ NFS_MOUNT_NONLM, ",nolock", ",lock" },
+	{ NFS_MOUNT_BROKEN_SUID, ",broken_suid", "" },
 	{ 0, NULL, NULL }
 };
 

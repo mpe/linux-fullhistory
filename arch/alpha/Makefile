@@ -8,7 +8,7 @@
 # Copyright (C) 1994 by Linus Torvalds
 #
 
-NM := nm -B
+NM := $(NM) -B
 
 LINKFLAGS = -static -T arch/alpha/vmlinux.lds -N #-relax
 CFLAGS := $(CFLAGS) -pipe -mno-fp-regs -ffixed-8

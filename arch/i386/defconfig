@@ -113,10 +113,10 @@ CONFIG_BLK_DEV_FD=y
 # CONFIG_BLK_DEV_XD is not set
 # CONFIG_PARIDE is not set
 # CONFIG_BLK_CPQ_DA is not set
+# CONFIG_BLK_CPQ_CISS_DA is not set
 # CONFIG_BLK_DEV_DAC960 is not set
 # CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_NBD is not set
-# CONFIG_BLK_CPQ_CISS_DA is not set
 # CONFIG_BLK_DEV_RAM is not set
 # CONFIG_BLK_DEV_INITRD is not set
 
@@ -599,6 +599,7 @@ CONFIG_SOUND=y
 # CONFIG_SOUND_CMPCI is not set
 # CONFIG_SOUND_EMU10K1 is not set
 # CONFIG_SOUND_FUSION is not set
+# CONFIG_SOUND_CS4281 is not set
 # CONFIG_SOUND_ES1370 is not set
 CONFIG_SOUND_ES1371=y
 # CONFIG_SOUND_ESSSOLO1 is not set

@@ -279,7 +279,7 @@ static inline unsigned long __cmpxchg(volatile void *ptr, unsigned long old,
 #define rmb()	mb()
 #define wmb()	__asm__ __volatile__ ("": : :"memory")
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define smp_mb()	mb()
 #define smp_rmb()	rmb()
 #define smp_wmb()	wmb()

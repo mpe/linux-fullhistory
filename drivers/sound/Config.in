@@ -16,6 +16,7 @@ if [ "$CONFIG_SOUND_CMPCI" = "y" -o "$CONFIG_SOUND_CMPCI" = "m" ]; then
 fi
 dep_tristate '  Creative SBLive! (EMU10K1)' CONFIG_SOUND_EMU10K1 $CONFIG_SOUND
 dep_tristate '  Crystal SoundFusion (CS4280/461x)' CONFIG_SOUND_FUSION $CONFIG_SOUND
+dep_tristate '  Crystal Sound CS4281' CONFIG_SOUND_CS4281 $CONFIG_SOUND
 dep_tristate '  Ensoniq AudioPCI (ES1370)' CONFIG_SOUND_ES1370 $CONFIG_SOUND
 dep_tristate '  Creative Ensoniq AudioPCI 97 (ES1371)' CONFIG_SOUND_ES1371 $CONFIG_SOUND
 dep_tristate '  ESS Technology Solo1' CONFIG_SOUND_ESSSOLO1 $CONFIG_SOUND
@@ -127,12 +128,6 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
       fi
    fi
 
-   dep_tristate '    SoftOSS software wave table engine' CONFIG_SOUND_SOFTOSS $CONFIG_SOUND_OSS
-   if [ "$CONFIG_SOUND_SOFTOSS" = "y" ]; then
-      int 'Sampling rate for SoftOSS 8000 to 48000' CONFIG_SOFTOSS_RATE 22050
-      int 'Max # of concurrent voices for SoftOSS 4 to 32' CONFIG_SOFTOSS_VOICES 32
-   fi
-  
    dep_tristate '    100% Sound Blaster compatibles (SB16/32/64, ESS, Jazz16) support' CONFIG_SOUND_SB $CONFIG_SOUND_OSS
    dep_tristate '    AWE32 synth' CONFIG_SOUND_AWE32_SYNTH $CONFIG_SOUND_OSS
    dep_tristate '    Full support for Turtle Beach WaveFront (Tropez Plus, Tropez, Maui) synth/soundcards' CONFIG_SOUND_WAVEFRONT $CONFIG_SOUND_OSS m

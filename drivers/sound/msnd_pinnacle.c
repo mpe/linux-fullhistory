@@ -1610,10 +1610,6 @@ static int digital __initdata;
 static int fifosize __initdata =	DEFFIFOSIZE;
 static int calibrate_signal __initdata;
 
-/* If we're a module, this is just init_module */
-
-int init_module(void)
-
 #else /* not a module */
 
 static int write_ndelay __initdata =	-1;
@@ -1692,14 +1688,10 @@ static int fifosize __initdata =	CONFIG_MSND_FIFOSIZE;
 #endif
 static int
 calibrate_signal __initdata =		CONFIG_MSND_CALSIGNAL;
-
-#ifdef MSND_CLASSIC
-int __init msnd_classic_init(void)
-#else
-int __init msnd_pinnacle_init(void)
-#endif /* MSND_CLASSIC */
-
 #endif /* MODULE */
+
+
+static int __init msnd_init(void)
 {
 	int err;
 #ifndef MSND_CLASSIC
@@ -1875,11 +1867,12 @@ int __init msnd_pinnacle_init(void)
 	return 0;
 }
 
-#ifdef MODULE
-void cleanup_module(void)
+static void __exit msdn_cleanup(void)
 {
 	unload_multisound();
 	msnd_fifo_free(&dev.DAPF);
 	msnd_fifo_free(&dev.DARF);
 }
-#endif
+
+module_init(msnd_init);
+module_exit(msdn_cleanup);

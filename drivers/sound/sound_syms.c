@@ -49,8 +49,5 @@ EXPORT_SYMBOL(load_mixer_volumes);
 EXPORT_SYMBOL(conf_printf);
 EXPORT_SYMBOL(conf_printf2);
 
-extern int softoss_dev;
-EXPORT_SYMBOL(softoss_dev);
-
 MODULE_DESCRIPTION("OSS Sound subsystem");
 MODULE_AUTHOR("Hannu Savolainen, et al.");

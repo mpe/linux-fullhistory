@@ -712,11 +712,12 @@ static void lp_attach (struct parport *port)
 		if (parport_nr[0] == LP_PARPORT_AUTO &&
 		    port->probe_info[0].class != PARPORT_CLASS_PRINTER)
 			return;
-
+		if (lp_count == LP_NO) {
+			printk("lp: ignoring parallel port (max. %d)\n",LP_NO);
+			return;
+		}
 		if (!lp_register(lp_count, port))
-			if (++lp_count == LP_NO)
-				break;
-
+			lp_count++;
 		break;
 
 	default:

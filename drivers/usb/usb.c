@@ -25,19 +25,7 @@
 #include <linux/bitops.h>
 #include <linux/malloc.h>
 #include <linux/interrupt.h>  /* for in_interrupt() */
-
-
-#if	defined(CONFIG_KMOD) && defined(CONFIG_HOTPLUG)
 #include <linux/kmod.h>
-#include <linux/sched.h>
-#include <asm/uaccess.h>
-
-#define __KERNEL_SYSCALLS__
-#include <linux/unistd.h>
-
-/* waitpid() call glue uses this */
-static int errno;
-#endif
 
 
 #ifdef CONFIG_USB_DEBUG
@@ -183,6 +171,19 @@ struct usb_interface *usb_ifnum_to_if(struct usb_device *dev, unsigned ifnum)
 	for (i = 0; i < dev->actconfig->bNumInterfaces; i++)
 		if (dev->actconfig->interface[i].altsetting[0].bInterfaceNumber == ifnum)
 			return &dev->actconfig->interface[i];
+
+	return NULL;
+}
+
+struct usb_endpoint_descriptor *usb_epnum_to_ep_desc(struct usb_device *dev, unsigned epnum)
+{
+	int i, j, k;
+
+	for (i = 0; i < dev->actconfig->bNumInterfaces; i++)
+		for (j = 0; j < dev->actconfig->interface[i].num_altsetting; j++)
+			for (k = 0; k < dev->actconfig->interface[i].altsetting[j].bNumEndpoints; k++)
+				if (epnum == dev->actconfig->interface[i].altsetting[j].endpoint[k].bEndpointAddress)
+					return &dev->actconfig->interface[i].altsetting[j].endpoint[k];
 
 	return NULL;
 }
@@ -504,40 +505,6 @@ static int usb_find_interface_driver(struct usb_device *dev, unsigned ifnum)
  * (normally /sbin/hotplug) when USB devices get added or removed.
  */
 
-static int exec_helper (void *arg)
-{
-	void **params = (void **) arg;
-	char *path = (char *) params [0];
-	char **argv = (char **) params [1];
-	char **envp = (char **) params [2];
-	return exec_usermodehelper (path, argv, envp);
-}
-
-int call_usermodehelper (char *path, char **argv, char **envp)
-{
-	void *params [3] = { path, argv, envp };
-	int pid, pid2, retval;
-	mm_segment_t fs;
-
-	if ((pid = kernel_thread (exec_helper, (void *) params, 0)) < 0) {
-		err ("failed fork of %s, errno = %d", argv [0], -pid);
-		return -1;
-	}
-
-	/* set signal mask? */
-	fs = get_fs ();
-	set_fs (KERNEL_DS);				/* retval is in kernel space. */
-	pid2 = waitpid (pid, &retval, __WCLONE);	/* "errno" gets assigned */
-	set_fs (fs);
-	/* restore signal mask? */
-
-	if (pid2 != pid) {
-		err ("waitpid(%d) failed, returned %d\n", pid, pid2);
-			return -1;
-	}
-	return retval;
-}
-
 static int to_bcd (char *buf, __u16 *bcdValue)
 {
 	int	retval = 0;
@@ -700,7 +667,8 @@ static void call_policy (char *verb, struct usb_device *dev)
 	value = call_usermodehelper (argv [0], argv, envp);
 	kfree (buf);
 	kfree (envp);
-	dbg ("kusbd policy returned 0x%x", value);
+	if (value != 0)
+		dbg ("kusbd policy returned 0x%x", value);
 }
 
 #else
@@ -1455,8 +1423,6 @@ void usb_disconnect(struct usb_device **pdev)
 
 	info("USB disconnect on device %d", dev->devnum);
 
-	call_policy ("remove", dev);
-
 	if (dev->actconfig) {
 		for (i = 0; i < dev->actconfig->bNumInterfaces; i++) {
 			struct usb_interface *interface = &dev->actconfig->interface[i];
@@ -1476,6 +1442,9 @@ void usb_disconnect(struct usb_device **pdev)
 		if (*child)
 			usb_disconnect(child);
 	}
+
+	/* Let policy agent unload modules etc */
+	call_policy ("remove", dev);
 
 	/* Free the device number and remove the /proc/bus/usb entry */
 	if (dev->devnum > 0) {
@@ -2046,6 +2015,7 @@ struct list_head *usb_bus_get_list(void)
  * then these symbols need to be exported for the modules to use.
  */
 EXPORT_SYMBOL(usb_ifnum_to_if);
+EXPORT_SYMBOL(usb_epnum_to_ep_desc);
 
 EXPORT_SYMBOL(usb_register);
 EXPORT_SYMBOL(usb_deregister);

@@ -166,7 +166,7 @@ repeat:
 			return 0;
 		/*
 		 * Though the "found" page was in the swap cache an instant
-		 * earlier, it might have been removed by shrink_mmap etc.
+		 * earlier, it might have been removed by refill_inactive etc.
 		 * Re search ... Since find_lock_page grabs a reference on
 		 * the page, it can not be reused for anything else, namely
 		 * it can not be associated with another swaphandle, so it

@@ -294,6 +294,7 @@ void use_config(const char * name, int len)
  * The state machine looks for (approximately) these Perl regular expressions:
  *
  *    m|\/\*.*?\*\/|
+ *    m|\/\/.*|
  *    m|'.*?'|
  *    m|".*?"|
  *    m|#\s*include\s*"(.*?)"|
@@ -326,9 +327,18 @@ __start:
 	CASE('C',  cee);
 	goto start;
 
+/* // */
+slash_slash:
+	GETNEXT
+	CASE('\n', start);
+	NOTCASE('\\', slash_slash);
+	GETNEXT
+	goto slash_slash;
+
 /* / */
 slash:
 	GETNEXT
+	CASE('/',  slash_slash);
 	NOTCASE('*', __start);
 slash_star_dot_star:
 	GETNEXT

@@ -492,17 +492,26 @@ asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 }
 
 /*
- * Careful - we must not do a lock-kernel until we have checked that the
- * debug fault happened in user mode. Getting debug exceptions while
- * in the kernel has to be handled without locking, to avoid deadlocks..
+ * Our handling of the processor debug registers is non-trivial.
+ * We do not clear them on entry and exit from the kernel. Therefore
+ * it is possible to get a watchpoint trap here from inside the kernel.
+ * However, the code in ./ptrace.c has ensured that the user can
+ * only set watchpoints on userspace addresses. Therefore the in-kernel
+ * watchpoint trap can only occur in code which is reading/writing
+ * from user space. Such code must not hold kernel locks (since it
+ * can equally take a page fault), therefore it is safe to call
+ * force_sig_info even though that claims and releases locks.
+ * 
+ * Code in ./signal.c ensures that the debug control register
+ * is restored before we deliver any signal, and therefore that
+ * user code runs with the correct debug control register even though
+ * we clear it here.
  *
  * Being careful here means that we don't have to be as careful in a
  * lot of more complicated places (task switching can be a bit lazy
  * about restoring all the debug state, and ptrace doesn't have to
  * find every occurrence of the TF bit that could be saved away even
- * by user code - and we don't have to be careful about what values
- * can be written to the debug registers because there are no really
- * bad cases).
+ * by user code)
  */
 asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 {
@@ -539,28 +548,31 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 			goto clear_TF;
 	}
 
-	/* If this is a kernel mode trap, we need to reset db7 to allow us to continue sanely */
-	if ((regs->xcs & 3) == 0)
-		goto clear_dr7;
-
 	/* Ok, finally something we can handle */
 	tsk->thread.trap_no = 1;
 	tsk->thread.error_code = error_code;
 	info.si_signo = SIGTRAP;
 	info.si_errno = 0;
 	info.si_code = TRAP_BRKPT;
-	info.si_addr = (void *)regs->eip;
+	
+	/* If this is a kernel mode trap, save the user PC on entry to 
+	 * the kernel, that's what the debugger can make sense of.
+	 */
+	info.si_addr = ((regs->xcs & 3) == 0) ? (void *)tsk->thread.eip : 
+	                                        (void *)regs->eip;
 	force_sig_info(SIGTRAP, &info, tsk);
-	return;
 
-debug_vm86:
-	handle_vm86_trap((struct kernel_vm86_regs *) regs, error_code, 1);
-	return;
-
+	/* Disable additional traps. They'll be re-enabled when
+	 * the signal is delivered.
+	 */
 clear_dr7:
 	__asm__("movl %0,%%db7"
 		: /* no output */
 		: "r" (0));
+	return;
+
+debug_vm86:
+	handle_vm86_trap((struct kernel_vm86_regs *) regs, error_code, 1);
 	return;
 
 clear_TF:

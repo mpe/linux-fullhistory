@@ -155,6 +155,8 @@ nfsd(struct svc_rqst *rqstp)
 	sprintf(current->comm, "nfsd");
 	current->fs->umask = 0;
 
+	current->rlim[RLIMIT_FSIZE].rlim_cur = RLIM_INFINITY; 
+
 	nfsdstats.th_cnt++;
 	/* Let svc_process check client's authentication. */
 	rqstp->rq_auth = 1;

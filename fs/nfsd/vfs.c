@@ -469,11 +469,11 @@ nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	atomic_set(&filp->f_count, 1);
 	filp->f_dentry = dentry;
 	if (access & MAY_WRITE) {
-		filp->f_flags = O_WRONLY;
+		filp->f_flags = O_WRONLY|O_LARGEFILE;
 		filp->f_mode  = FMODE_WRITE;
 		DQUOT_INIT(inode);
 	} else {
-		filp->f_flags = O_RDONLY;
+		filp->f_flags = O_RDONLY|O_LARGEFILE;
 		filp->f_mode  = FMODE_READ;
 	}
 

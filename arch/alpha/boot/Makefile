@@ -68,7 +68,7 @@ vmlinux.nh: $(VMLINUX) $(OBJSTRIP)
 	$(OBJSTRIP) -v $(VMLINUX) vmlinux.nh
 
 vmlinux: $(TOPDIR)/vmlinux
-	strip -o vmlinux $(VMLINUX)
+	$(STRIP) -o vmlinux $(VMLINUX)
 
 tools/lxboot: $(OBJSTRIP) bootloader
 	$(OBJSTRIP) -p bootloader tools/lxboot

@@ -25,6 +25,7 @@
 #include <linux/config.h>
 
 #include "sound_config.h"
+#include <linux/init.h>
 #include <linux/types.h>
 #include <linux/errno.h>
 #include <linux/signal.h>
@@ -50,8 +51,6 @@
 #ifndef valid_dma
 #define valid_dma(n) ((n) >= 0 && (n) < MAX_DMA_CHANNELS && (n) != 4)
 #endif
-
-static int      chrdev_registered = 0;
 
 /*
  * Table for permanently allocated memory (used when unloading the module)
@@ -583,34 +582,6 @@ static void soundcard_register_devfs (int do_register)
 	}
 }
 
-#ifdef MODULE
-static void
-#else
-void
-#endif
-soundcard_init(void)
-{
-	/* drag in sound_syms.o */
-	{
-		extern char sound_syms_symbol;
-		sound_syms_symbol = 0;
-	}
-
-#ifndef MODULE
-	create_special_devices();
-	chrdev_registered = 1;
-#endif
-
-	soundcard_register_devfs(1); /* register after we know # of devices */
-}
-
-#ifdef MODULE
-
-static void destroy_special_devices(void)
-{
-	unregister_sound_special(1);
-	unregister_sound_special(8);
-}
 
 static int dmabuf = 0;
 static int dmabug = 0;
@@ -618,14 +589,21 @@ static int dmabug = 0;
 MODULE_PARM(dmabuf, "i");
 MODULE_PARM(dmabug, "i");
 
-int init_module(void)
+static int __init oss_init(void)
 {
 	int             err;
+	
+	/* drag in sound_syms.o */
+	{
+		extern char sound_syms_symbol;
+		sound_syms_symbol = 0;
+	}
 
 #ifdef CONFIG_PCI
 	if(dmabug)
 		isa_dma_bridge_buggy = dmabug;
 #endif
+
 	err = create_special_devices();
 	if (err) {
 		printk(KERN_ERR "sound: driver already loaded/included in kernel\n");
@@ -635,8 +613,7 @@ int init_module(void)
 	/* Protecting the innocent */
 	sound_dmap_flag = (dmabuf > 0 ? 1 : 0);
 
-	chrdev_registered = 1;
-	soundcard_init();
+	soundcard_register_devfs(1);
 
 	if (sound_nblocks >= 1024)
 		printk(KERN_ERR "Sound warning: Deallocation table was too small.\n");
@@ -644,7 +621,7 @@ int init_module(void)
 	return 0;
 }
 
-void cleanup_module(void)
+static void __exit oss_cleanup(void)
 {
 	int i;
 
@@ -652,8 +629,9 @@ void cleanup_module(void)
 		return;
 
 	soundcard_register_devfs (0);
-	if (chrdev_registered)
-		destroy_special_devices();
+	
+	unregister_sound_special(1);
+	unregister_sound_special(8);
 
 	sound_stop_timer();
 
@@ -669,7 +647,10 @@ void cleanup_module(void)
 		vfree(sound_mem_blocks[i]);
 
 }
-#endif
+
+module_init(oss_init);
+module_exit(oss_cleanup);
+
 
 int sound_alloc_dma(int chn, char *deviceID)
 {

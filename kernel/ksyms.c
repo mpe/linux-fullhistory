@@ -76,6 +76,7 @@ EXPORT_SYMBOL(request_module);
 EXPORT_SYMBOL(exec_usermodehelper);
 #ifdef CONFIG_HOTPLUG
 EXPORT_SYMBOL(hotplug_path);
+EXPORT_SYMBOL(call_usermodehelper);
 #endif
 #endif
 
@@ -215,6 +216,8 @@ EXPORT_SYMBOL(page_hash_bits);
 EXPORT_SYMBOL(page_hash_table);
 EXPORT_SYMBOL(file_lock_list);
 EXPORT_SYMBOL(file_lock_sem);
+EXPORT_SYMBOL(locks_init_lock);
+EXPORT_SYMBOL(locks_copy_lock);
 EXPORT_SYMBOL(posix_lock_file);
 EXPORT_SYMBOL(posix_test_lock);
 EXPORT_SYMBOL(posix_block_lock);

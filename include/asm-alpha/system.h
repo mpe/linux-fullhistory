@@ -137,7 +137,7 @@ __asm__ __volatile__("mb": : :"memory")
 #define wmb() \
 __asm__ __volatile__("wmb": : :"memory")
 
-#ifdef __SMP__
+#ifdef CONFIG_SMP
 #define smp_mb()	mb()
 #define smp_rmb()	rmb()
 #define smp_wmb()	wmb()

@@ -353,6 +353,7 @@ nfs_read_super(struct super_block *sb, void *raw_data, int silent)
 
 	clnt->cl_intr     = (data->flags & NFS_MOUNT_INTR)? 1 : 0;
 	clnt->cl_softrtry = (data->flags & NFS_MOUNT_SOFT)? 1 : 0;
+	clnt->cl_droppriv = (data->flags & NFS_MOUNT_BROKEN_SUID) ? 1 : 0;
 	clnt->cl_chatty   = 1;
 	server->client    = clnt;
 

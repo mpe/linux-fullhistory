@@ -180,7 +180,8 @@ unx_marshal(struct rpc_task *task, u32 *p, int ruid)
 	memcpy(p, clnt->cl_nodename, n);
 	p += (n + 3) >> 2;
 
-	if (ruid) {
+	/* Note: we don't use real uid if it involves raising priviledge */
+	if (ruid && cred->uc_uid != 0 && cred->uc_gid != 0) {
 		*p++ = htonl((u32) cred->uc_uid);
 		*p++ = htonl((u32) cred->uc_gid);
 	} else {

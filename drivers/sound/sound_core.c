@@ -36,6 +36,7 @@
 
 #include <linux/config.h>
 #include <linux/module.h>
+#include <linux/init.h>
 #include <linux/malloc.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -61,9 +62,6 @@ extern int msnd_classic_init(void);
 #endif
 #ifdef CONFIG_SOUND_MSNDPIN
 extern int msnd_pinnacle_init(void);
-#endif
-#ifdef CONFIG_SOUND_CMPCI
-extern int init_cmpci(void);
 #endif
 
 /*
@@ -545,12 +543,11 @@ int soundcore_open(struct inode *inode, struct file *file)
 extern int mod_firmware_load(const char *, char **);
 EXPORT_SYMBOL(mod_firmware_load);
 
-#ifdef MODULE
 
 MODULE_DESCRIPTION("Core sound module");
 MODULE_AUTHOR("Alan Cox");
 
-void cleanup_module(void)
+static void __exit cleanup_soundcore(void)
 {
 	/* We have nothing to really do here - we know the lists must be
 	   empty */
@@ -558,10 +555,7 @@ void cleanup_module(void)
 	devfs_unregister (devfs_handle);
 }
 
-int init_module(void)
-#else
-int soundcore_init(void)
-#endif
+static int __init init_soundcore(void)
 {
 	if(devfs_register_chrdev(SOUND_MAJOR, "sound", &soundcore_fops)==-1)
 	{
@@ -569,20 +563,9 @@ int soundcore_init(void)
 		return -EBUSY;
 	}
 	devfs_handle = devfs_mk_dir (NULL, "sound", NULL);
-	/*
-	 *	Now init non OSS drivers
-	 */
-#ifdef CONFIG_SOUND_CMPCI
-	init_cmpci();
-#endif
-#ifdef CONFIG_SOUND_MSNDCLAS
-	msnd_classic_init();
-#endif
-#ifdef CONFIG_SOUND_MSNDPIN
-	msnd_pinnacle_init();
-#endif
-#ifdef CONFIG_SOUND_VWSND
-	init_vwsnd();
-#endif
+
 	return 0;
 }
+
+module_init(init_soundcore);
+module_exit(cleanup_soundcore);

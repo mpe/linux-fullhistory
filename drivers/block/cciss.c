@@ -20,6 +20,7 @@
  *
  */
 
+#include <linux/config.h>	/* CONFIG_PROC_FS */
 #include <linux/module.h>
 #include <linux/version.h>
 #include <linux/types.h>
@@ -28,11 +29,11 @@
 #include <linux/malloc.h>
 #include <linux/delay.h>
 #include <linux/major.h>
-#include <linux/blkpg.h>
 #include <linux/fs.h>
+#include <linux/blkpg.h>
 #include <linux/timer.h>
 #include <linux/proc_fs.h>
-#include <linux/capability.h>
+#include <linux/init.h> 
 #include <linux/hdreg.h>
 #include <linux/spinlock.h>
 #include <asm/uaccess.h>
@@ -43,8 +44,8 @@
 #include <linux/genhd.h>
 
 #define CCISS_DRIVER_VERSION(maj,min,submin) ((maj<<16)|(min<<8)|(submin))
-#define DRIVER_NAME "Compaq CISS Driver (v 1.0.0)"
-#define DRIVER_VERSION CCISS_DRIVER_VERSION(1,0,0)
+#define DRIVER_NAME "Compaq CISS Driver (v 2.4.0)"
+#define DRIVER_VERSION CCISS_DRIVER_VERSION(2,4,0)
 
 /* Embedded module documentation macros - see modules.h */
 MODULE_AUTHOR("Charles M. White III - Compaq Computer Corporation");
@@ -83,14 +84,14 @@ static void do_cciss_request(int i);
  */
 #define DO_CCISS_REQUEST(x) { do_cciss_request(x); }
 
-static void do_cciss_request0(request_queue_t *q) DO_CCISS_REQUEST(0);
-static void do_cciss_request1(request_queue_t *q) DO_CCISS_REQUEST(1);
-static void do_cciss_request2(request_queue_t *q) DO_CCISS_REQUEST(2);
-static void do_cciss_request3(request_queue_t *q) DO_CCISS_REQUEST(3);
-static void do_cciss_request4(request_queue_t *q) DO_CCISS_REQUEST(4);
-static void do_cciss_request5(request_queue_t *q) DO_CCISS_REQUEST(5);
-static void do_cciss_request6(request_queue_t *q) DO_CCISS_REQUEST(6);
-static void do_cciss_request7(request_queue_t *q) DO_CCISS_REQUEST(7);
+static void do_cciss_request0(request_queue_t * q) DO_CCISS_REQUEST(0);
+static void do_cciss_request1(request_queue_t * q) DO_CCISS_REQUEST(1);
+static void do_cciss_request2(request_queue_t * q) DO_CCISS_REQUEST(2);
+static void do_cciss_request3(request_queue_t * q) DO_CCISS_REQUEST(3);
+static void do_cciss_request4(request_queue_t * q) DO_CCISS_REQUEST(4);
+static void do_cciss_request5(request_queue_t * q) DO_CCISS_REQUEST(5);
+static void do_cciss_request6(request_queue_t * q) DO_CCISS_REQUEST(6);
+static void do_cciss_request7(request_queue_t * q) DO_CCISS_REQUEST(7);
 
 static int cciss_open(struct inode *inode, struct file *filep);
 static int cciss_release(struct inode *inode, struct file *filep);
@@ -106,17 +107,29 @@ static void cciss_getgeometry(int cntl_num);
 static inline void addQ(CommandList_struct **Qptr, CommandList_struct *c);
 static void start_io( ctlr_info_t *h);
 
+#ifdef CONFIG_PROC_FS
+static int cciss_proc_get_info(char *buffer, char **start, off_t offset, 
+		int length, int *eof, void *data);
+static void cciss_procinit(int i);
+#else
+static int cciss_proc_get_info(char *buffer, char **start, off_t offset, 
+		int length, int *eof, void *data) {}
+static void cciss_procinit(int i) {}
+#endif /* CONFIG_PROC_FS */
+
 static struct block_device_operations cciss_fops  = {
-	ioctl: cciss_ioctl,		/* ioctl */
-	open: cciss_open,		/* open code */
-	release: cciss_release,		/* release */
-	revalidate: frevalidate_logvol,	/* revalidate */
+	open:			cciss_open, 
+	release:        	cciss_release,
+        ioctl:			cciss_ioctl,
+	revalidate:		frevalidate_logvol,
 };
 
 /*
  * Report information about this controller.
  */
-static int cciss_proc_get_info(char *buffer, char **start, off_t offset, int length, int *eof, void *data)
+#ifdef CONFIG_PROC_FS
+static int cciss_proc_get_info(char *buffer, char **start, off_t offset, 
+		int length, int *eof, void *data)
 {
         off_t pos = 0;
         off_t len = 0;
@@ -170,19 +183,18 @@ static int cciss_proc_get_info(char *buffer, char **start, off_t offset, int len
  * Get us a file in /proc/cciss that says something about each controller.
  * Create /proc/cciss if it doesn't exist yet.
  */
-static void cciss_procinit(int i)
+static void __init cciss_procinit(int i)
 {
-        struct proc_dir_entry *pd;
-
         if (proc_cciss == NULL) {
-                proc_cciss = proc_mkdir("cciss", NULL);
+                proc_cciss = proc_mkdir("driver/cciss", NULL);
                 if (!proc_cciss) 
 			return;
         }
 
-        pd = create_proc_read_entry(hba[i]->devname, 0, proc_cciss,
-        	cciss_proc_get_info, hba[i]);
+        create_proc_read_entry(hba[i]->devname, 0, proc_cciss,
+        		cciss_proc_get_info, hba[i]);
 }
+#endif /* CONFIG_PROC_FS */
 
 /* 
  * For operations that cannot sleep, a command block is allocated at init, 
@@ -264,13 +276,13 @@ static void cmd_free(ctlr_info_t *h, CommandList_struct *c)
 /*  
  * fills in the disk information. 
  */
-static void cciss_geninit(int ctlr)
+static void cciss_geninit( int ctlr)
 {
 	drive_info_struct *drv;
 	int i,j;
-
+	
 	/* Loop through each real device */ 
-	hba[ctlr]->gendisk.nr_real = 0;
+	hba[ctlr]->gendisk.nr_real = 0; 
 	for(i=0; i< NWD; i++)
 	{
 		drv = &(hba[ctlr]->drv[i]);
@@ -336,7 +348,7 @@ static int cciss_release(struct inode *inode, struct file *filep)
 	printk(KERN_DEBUG "cciss_release %x (%x:%x)\n", inode->i_rdev, ctlr, dsk);
 #endif /* CCISS_DEBUG */
 
-	fsync_dev(inode->i_rdev);
+	/* fsync_dev(inode->i_rdev); */
 
 	hba[ctlr]->drv[dsk].usage_count--;
 	hba[ctlr]->usage_count--;
@@ -378,29 +390,25 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 		if (!arg) return -EINVAL;
 		put_user(hba[ctlr]->hd[MINOR(inode->i_rdev)].nr_sects, (long*)arg);
 		return 0;
-	case BLKRASET:
-		if (!capable(CAP_SYS_ADMIN)) return -EACCES;
-		if (!(inode->i_rdev)) return -EINVAL;
-		if (arg>0xff) return -EINVAL;
-		read_ahead[MAJOR(inode->i_rdev)] = arg;
-		return 0;
-	case BLKRAGET:
-		if (!arg) return -EINVAL;
-		put_user(read_ahead[MAJOR(inode->i_rdev)], (int*)arg);
-		return 0;
 	case BLKRRPART:
 		return revalidate_logvol(inode->i_rdev, 1);
-
+	case BLKFLSBUF:
+	case BLKROSET:
+	case BLKROGET:
+	case BLKRASET:
+	case BLKRAGET:
+	case BLKPG:
+		return( blk_ioctl(inode->i_rdev, cmd, arg));
 	case CCISS_GETPCIINFO:
 	{
 		cciss_pci_info_struct pciinfo;
 
 		if (!arg) return -EINVAL;
-		pciinfo.bus = hba[ctlr]->pci_dev->bus->number;
-		pciinfo.dev_fn = hba[ctlr]->pci_dev->devfn;
+		pciinfo.bus = hba[ctlr]->pci_bus;
+		pciinfo.dev_fn = hba[ctlr]->pci_dev_fn;
 		pciinfo.board_id = hba[ctlr]->board_id;
-		if(copy_to_user((void *) arg, &pciinfo, sizeof( cciss_pci_info_struct)))
-			return -EFAULT;
+		if (copy_to_user((void *) arg, &pciinfo,  sizeof( cciss_pci_info_struct ))
+			return  -EFAULT;
 		return(0);
 	}	
 	case CCISS_GETINTINFO:
@@ -411,8 +419,8 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 		if (!arg) return -EINVAL;
 		intinfo.delay = readl(&c->cfgtable->HostWrite.CoalIntDelay);
 		intinfo.count = readl(&c->cfgtable->HostWrite.CoalIntCount);
-		if(copy_to_user((void *) arg, &intinfo, sizeof( cciss_coalint_struct)))
-			return  -EFAULT;
+		if (copy_to_user((void *) arg, &intinfo, sizeof( cciss_coalint_struct ))
+			return -EFAULT;
                 return(0);
         }
 	case CCISS_SETINTINFO:
@@ -424,8 +432,8 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 
 		if (!arg) return -EINVAL;	
 		if (!capable(CAP_SYS_ADMIN)) return -EPERM;
-		if(copy_from_user(&intinfo, (void *) arg,  sizeof( cciss_coalint_struct)))
-			return  -EFAULT;
+		if (copy_from_user(&intinfo, (void *) arg, sizeof( cciss_coalint_struct))
+			return -EFAULT;
 		if ( (intinfo.delay == 0 ) && (intinfo.count == 0))
 
 		{
@@ -471,8 +479,8 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 		if (!arg) return -EINVAL;
 		for(i=0;i<16;i++)
 			NodeName[i] = readb(&c->cfgtable->ServerName[i]);
-                if(copy_to_user((void *) arg, NodeName, sizeof(NodeName_type)))
-                	return -EFAULT;
+                if (copy_to_user((void *) arg, NodeName, sizeof( NodeName_type))
+                	return  -EFAULT;
                 return(0);
         }
 	case CCISS_SETNODENAME:
@@ -485,7 +493,7 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 		if (!arg) return -EINVAL;
 		if (!capable(CAP_SYS_ADMIN)) return -EPERM;
 		
-		if(copy_from_user(NodeName, (void *) arg, sizeof( NodeName_type)))
+		if (copy_from_user(NodeName, (void *) arg, sizeof( NodeName_type))
 			return -EFAULT;
 
 		spin_lock_irqsave(&io_request_lock, flags);
@@ -506,7 +514,7 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 		}	
 		spin_unlock_irqrestore(&io_request_lock, flags);
 		if (i >= MAX_CONFIG_WAIT)
-			return -EIO;
+			return( -EFAULT);
                 return(0);
         }
 
@@ -517,7 +525,7 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 
 		if (!arg) return -EINVAL;
                 heartbeat = readl(&c->cfgtable->HeartBeat);
-                if(copy_to_user((void *) arg, &heartbeat, sizeof( Heartbeat_type)))
+                if (copy_to_user((void *) arg, &heartbeat, sizeof( Heartbeat_type))
                 	return -EFAULT;
                 return(0);
         }
@@ -528,8 +536,8 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 
 		if (!arg) return -EINVAL;
                 BusTypes = readl(&c->cfgtable->BusTypes);
-                if(copy_to_user((void *) arg, &BusTypes, sizeof( BusTypes_type)))
-                	return -EFAULT;
+                if (copy_to_user((void *) arg, &BusTypes, sizeof( BusTypes_type) )
+                	return  -EFAULT;
                 return(0);
         }
 	case CCISS_GETFIRMVER:
@@ -539,7 +547,7 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 		if (!arg) return -EINVAL;
 		memcpy(firmware, hba[ctlr]->firm_ver, 4);
 
-                if(copy_to_user((void *) arg, firmware, sizeof( FirmwareVer_type)))
+                if (copy_to_user((void *) arg, firmware, sizeof( FirmwareVer_type))
                 	return -EFAULT;
                 return(0);
         }
@@ -549,7 +557,7 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 
                 if (!arg) return -EINVAL;
 
-                if(copy_to_user((void *) arg, &DriverVer, sizeof( DriverVer_type)))
+                if (copy_to_user((void *) arg, &DriverVer, sizeof( DriverVer_type) )
                 	return -EFAULT;
                 return(0);
         }
@@ -570,8 +578,8 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 	
 		if (!capable(CAP_SYS_RAWIO)) return -EPERM;
 
-		if(copy_from_user(&iocommand, (void *) arg, sizeof( IOCTL_Command_struct)))
-			return -EFAULT; 
+		if (copy_from_user(&iocommand, (void *) arg, sizeof( IOCTL_Command_struct) )
+			return -EFAULT;
 		if((iocommand.buf_size < 1) && 
 				(iocommand.Request.Type.Direction != XFER_NONE))
 		{	
@@ -589,7 +597,7 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 		if (iocommand.Request.Type.Direction == XFER_WRITE)
 		{
 			/* Copy the data into the buffer we created */ 
-			if(copy_from_user(buff, iocommand.buf,iocommand.buf_size))
+			if (copy_from_user(buff, iocommand.buf, iocommand.buf_size))
 				return -EFAULT;
 		}
 		if ((c = cmd_alloc(NULL)) == NULL)
@@ -635,16 +643,11 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 
 		/* Wait for completion */
 		while(c->cmd_type != CMD_IOCTL_DONE)
-		{
-			set_task_state(current, TASK_UNINTERRUPTIBLE);
 			schedule_timeout(1);
-			rmb();
-		}
 
 		/* Copy the error information out */ 
 		iocommand.error_info = *(c->err_info);
-		if ( copy_to_user((void *) arg, &iocommand,
-                        sizeof( IOCTL_Command_struct) ) < 0 )
+		if ( copy_to_user((void *) arg, &iocommand, sizeof( IOCTL_Command_struct) ) )
 		{
 			cmd_free(NULL, c);
 			if (buff != NULL) 
@@ -655,8 +658,7 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 		if (iocommand.Request.Type.Direction == XFER_READ)
                 {
                         /* Copy the data out of the buffer we created */
-                        if (copy_to_user(iocommand.buf, buff, 
-                        	iocommand.buf_size) < 0) 
+                        if (copy_to_user(iocommand.buf, buff, iocommand.buf_size))
 			{
 			             cmd_free(NULL, c);
 			             kfree(buff);
@@ -668,14 +670,8 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
                 return(0);
 	} 
 
-	case BLKFLSBUF:
-	case BLKROSET:
-	case BLKROGET:
-	case BLKPG:
-		return blk_ioctl(inode->i_rdev, cmd, arg);
-
 	default:
-		return -EINVAL;
+		return -EBADRQC;
 	}
 	
 }
@@ -721,9 +717,9 @@ static int revalidate_logvol(kdev_t dev, int maxusage)
                 /* reset the blocksize so we can read the partition table */
                 blksize_size[MAJOR_NR+ctlr][minor] = 1024;
         }
-	gdev->part[start].nr_sects =  hba[ctlr]->drv[target].nr_blocks;
-	/* 16 minors per disk... */
-	grok_partitions(gdev, target, 16, hba[ctlr]->drv[target].nr_blocks);
+	/* setup partitions per disk */
+	grok_partitions(gdev, target, MAX_PART, 
+			hba[ctlr]->drv[target].nr_blocks);
         hba[ctlr]->drv[target].usage_count--;
         return 0;
 }
@@ -1016,13 +1012,13 @@ static int sendcmd(
 /*
  * Map (physical) PCI mem into (virtual) kernel space
  */
-static void *remap_pci_mem(ulong base, ulong size)
+static ulong remap_pci_mem(ulong base, ulong size)
 {
         ulong page_base        = ((ulong) base) & PAGE_MASK;
         ulong page_offs        = ((ulong) base) - page_base;
-        void *page_remapped    = ioremap(page_base, page_offs+size);
+        ulong page_remapped    = (ulong) ioremap(page_base, page_offs+size);
 
-        return (page_remapped ? (page_remapped + page_offs) : NULL);
+        return (ulong) (page_remapped ? (page_remapped + page_offs) : 0UL);
 }
 
 /*
@@ -1191,25 +1187,24 @@ static void do_cciss_request(int ctlr)
 	int log_unit, start_blk, seg, sect;
 	char *lastdataend;
 	struct buffer_head *bh;
-	struct request *creq;
 	struct list_head *queue_head;
+	struct request *creq;
 	u64bit temp64;
 
-	queue_head = &blk_dev[MAJOR_NR+ctlr].request_queue.queue_head;
-
-	if(list_empty(queue_head))
+	queue_head = &blk_dev[MAJOR_NR+ctlr].request_queue.queue_head;	
+	if (list_empty(queue_head))
+	{
+		/* nothing to do... */
+		start_io(h);
+		return;
+	}
+	creq =	blkdev_entry_next_request(queue_head); 
+	if ((creq == NULL) || (creq->rq_status == RQ_INACTIVE))
 	{
 		/* nothing to do... restart processing and return */ 
 		start_io(h);
 		return;
 	}
-	creq = blkdev_entry_next_request(queue_head);
-	if (creq->rq_status == RQ_INACTIVE)
-	{	
-                start_io(h);
-                return;
-        }
-
 	if ((ctlr != (MAJOR(creq->rq_dev)-MAJOR_NR)) || (ctlr > nr_ctlr)
 		|| (h == NULL))
 	{
@@ -1218,6 +1213,7 @@ static void do_cciss_request(int ctlr)
 			ctlr, creq->rq_dev, creq);
 #endif /* CCISS_DEBUG */
 		complete_buffers(creq->bh, 0);
+		start_io(h); 
 		return;
 	}
 	if (( c = cmd_alloc(h)) == NULL)
@@ -1317,8 +1313,9 @@ static void do_cciss_request(int ctlr)
 	} else
 	{
 #ifdef CCISS_DEBUG
-		printk(KERN_DEBUG "cciss: Done with %p, queueing %p\n", creq, creq->next);
+		printk("cciss: Done with %p, queueing %p\n", creq);
 #endif /* CCISS_DEBUG */
+			
 		blkdev_dequeue_request(creq);
 		end_that_request_last(creq);
 	}
@@ -1424,28 +1421,37 @@ static void print_cfg_table( CfgTable_struct *tb)
 }
 #endif /* CCISS_DEBUG */
 
-static int cciss_pci_init(ctlr_info_t *c, struct pci_dev *pdev)
+static int cciss_pci_init(ctlr_info_t *c, unchar bus, unchar device_fn)
 {
 	ushort vendor_id, device_id, command;
 	unchar cache_line_size, latency_timer;
 	unchar irq, revision;
-	unsigned long addr[6];
+	uint addr[6];
 	__u32 board_id;
+	struct pci_dev *pdev;
 
 	int i;
 
+	pdev = pci_find_slot(bus, device_fn);
 	vendor_id = pdev->vendor;
 	device_id = pdev->device;
 	irq = pdev->irq;
 
 	for(i=0; i<6; i++)
-		addr[i] = pci_resource_start(pdev, i);
-	(void) pci_read_config_word(pdev, PCI_COMMAND,&command);
-	(void) pci_read_config_byte(pdev, PCI_CLASS_REVISION,&revision);
-	(void) pci_read_config_byte(pdev, PCI_CACHE_LINE_SIZE, &cache_line_size);
-	(void) pci_read_config_byte(pdev, PCI_LATENCY_TIMER, &latency_timer);
+		addr[i] = pdev->resource[i].start;
 
-	(void) pci_read_config_dword(pdev, PCI_SUBSYSTEM_VENDOR_ID, &board_id);
+	if (pci_enable_device(pdev))
+		return( -1);
+	
+	(void) pci_read_config_word(pdev, PCI_COMMAND,&command);
+	(void) pci_read_config_byte(pdev, PCI_CLASS_REVISION, &revision);
+	(void) pci_read_config_byte(pdev, PCI_CACHE_LINE_SIZE,
+						&cache_line_size);
+	(void) pci_read_config_byte(pdev, PCI_LATENCY_TIMER,
+						&latency_timer);
+
+	(void) pci_read_config_dword(pdev, PCI_SUBSYSTEM_VENDOR_ID, 
+						&board_id);
 
 #ifdef CCISS_DEBUG
 	printk("vendor_id = %x\n", vendor_id);
@@ -1466,7 +1472,7 @@ static int cciss_pci_init(ctlr_info_t *c, struct pci_dev *pdev)
 	 * Memory base addr is first addr , the second points to the config
          *   table
 	 */
-	c->paddr = addr[0];
+	c->paddr = pci_resource_start(pdev, 0);
 	c->vaddr = remap_pci_mem(c->paddr, 128);
 	c->cfgtable = (CfgTable_struct *) remap_pci_mem(addr[1], 
 						sizeof(CfgTable_struct));
@@ -1526,21 +1532,23 @@ static int cciss_pci_init(ctlr_info_t *c, struct pci_dev *pdev)
  */
 static int cciss_pci_detect(void)
 {
-	struct pci_dev *pdev;
 
-	pdev = pci_find_device(PCI_VENDOR_ID_COMPAQ,
-			       PCI_DEVICE_ID_COMPAQ_CISS, NULL);
-	while (pdev) {
+	int index;
+	unchar bus=0, dev_fn=0;
+	
+		for(index=0; ; index++) {
+			if (pcibios_find_device(PCI_VENDOR_ID_COMPAQ,
+			 	PCI_DEVICE_ID_COMPAQ_CISS, 
+					index, &bus, &dev_fn))
+				break;
 			printk(KERN_DEBUG "cciss: Device %x has been found at %x %x\n",
-				PCI_DEVICE_ID_COMPAQ_CISS,
-				pdev->bus->number, pdev->devfn);
+				PCI_DEVICE_ID_COMPAQ_CISS, bus, dev_fn);
+			if (index == 1000000) break;
 			if (nr_ctlr == 8) {
 				printk(KERN_WARNING "cciss: This driver"
 				" supports a maximum of 8 controllers.\n");
 				break;
 			}
-			if (pci_enable_device(pdev))
-				continue;
 			hba[nr_ctlr] = kmalloc(sizeof(ctlr_info_t), GFP_KERNEL);
 			if(hba[nr_ctlr]==NULL)
 			{
@@ -1548,19 +1556,18 @@ static int cciss_pci_detect(void)
 				continue;
 			}
 			memset(hba[nr_ctlr], 0, sizeof(ctlr_info_t));
-			if (cciss_pci_init(hba[nr_ctlr], pdev) != 0)
+			if (cciss_pci_init(hba[nr_ctlr], bus, dev_fn) != 0)
 			{
 				kfree(hba[nr_ctlr]);
 				continue;
 			}
 			sprintf(hba[nr_ctlr]->devname, "cciss%d", nr_ctlr);
 			hba[nr_ctlr]->ctlr = nr_ctlr;
-			hba[nr_ctlr]->pci_dev = pdev;
+			hba[nr_ctlr]->pci_bus = bus;
+			hba[nr_ctlr]->pci_dev_fn = dev_fn;
 			nr_ctlr++;
 
-		pdev = pci_find_device(PCI_VENDOR_ID_COMPAQ,
-				       PCI_DEVICE_ID_COMPAQ_CISS, pdev);
-	}
+		}
 	return nr_ctlr;
 
 }
@@ -1747,11 +1754,10 @@ static void cciss_getgeometry(int cntl_num)
  *  stealing all these major device numbers.
  *  returns the number of block devices registered.
  */
-int cciss_init(void)
+int __init cciss_init(void)
 {
 	int num_cntlrs_reg = 0;
-	int i;
-	int j;
+	int i,j;
 
 	void (*request_fns[MAX_CTLR])(request_queue_t *) = {
                 do_cciss_request0, do_cciss_request1,
@@ -1827,6 +1833,16 @@ int cciss_init(void)
 		hba[i]->access.set_intr_mask(hba[i], CCISS_INTR_ON);
 
 		cciss_procinit(i);
+		
+		blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR+i),
+				request_fns[i]);
+		blk_queue_headactive(BLK_DEFAULT_QUEUE(MAJOR_NR+i), 0);
+
+		/* fill in the other Kernel structs */
+		blksize_size[MAJOR_NR+i] = hba[i]->blocksizes;
+                hardsect_size[MAJOR_NR+i] = hba[i]->hardsizes;
+                read_ahead[MAJOR_NR+i] = READ_AHEAD;
+
 		/* Fill in the gendisk data */ 	
 		hba[i]->gendisk.major = MAJOR_NR + i;
 		hba[i]->gendisk.major_name = "cciss";
@@ -1836,40 +1852,32 @@ int cciss_init(void)
 		hba[i]->gendisk.sizes = hba[i]->sizes;
 		hba[i]->gendisk.nr_real = hba[i]->num_luns;
 
-		/* fill in the other Kernel structs */ 
-		blk_init_queue(BLK_DEFAULT_QUEUE(MAJOR_NR + i), 
-			request_fns[i]);		
-		blk_queue_headactive(BLK_DEFAULT_QUEUE(MAJOR_NR + i), 0);
-		blksize_size[MAJOR_NR+i] = hba[i]->blocksizes;
-		hardsect_size[MAJOR_NR+i] = hba[i]->hardsizes;
-		read_ahead[MAJOR_NR+i] = READ_AHEAD;
-
 		/* Get on the disk list */ 
 		hba[i]->gendisk.next = gendisk_head;
 		gendisk_head = &(hba[i]->gendisk); 
-		
+
 		cciss_geninit(i);
-		for(j=0; j<NWD; j++)	
-			register_disk(&hba[i]->gendisk, 
-				MKDEV(MAJOR_NR+i,j<<4),
-				16, &cciss_fops, hba[i]->drv[j].nr_blocks);
+		for(j=0; j<NWD; j++)
+			register_disk(&(hba[i]->gendisk),
+				MKDEV(MAJOR_NR+i, j <<4), 
+				MAX_PART, &cciss_fops, 
+				hba[i]->drv[j].nr_blocks);
 	}
 	return(nr_ctlr);
 }
 
-#ifdef MODULE
 EXPORT_NO_SYMBOLS;
 
-
 /* This is a bit of a hack... */
-int init_module(void)
+static int __init init_cciss_module(void)
 {
+
 	if (cciss_init() == 0) /* all the block dev numbers already used */
 		return -EIO;	  /* or no controllers were found */
 	return 0;
 }
 
-void cleanup_module(void)
+static void __exit cleanup_cciss_module(void)
 {
 	int i;
 	struct gendisk *g;
@@ -1879,9 +1887,8 @@ void cleanup_module(void)
 		/* Turn board interrupts off */ 
 		hba[i]->access.set_intr_mask(hba[i], CCISS_INTR_OFF);
 		free_irq(hba[i]->intr, hba[i]);
-		iounmap(hba[i]->vaddr);
+		iounmap((void*)hba[i]->vaddr);
 		unregister_blkdev(MAJOR_NR+i, hba[i]->devname);
-		blk_cleanup_queue(BLK_DEFAULT_QUEUE(MAJOR_NR + i));
 		remove_proc_entry(hba[i]->devname, proc_cciss);	
 
 		/* remove it from the disk list */ 
@@ -1898,7 +1905,7 @@ void cleanup_module(void)
 				}
 			}
 		}
-		remove_proc_entry("cciss", &proc_root);
+		remove_proc_entry("driver/cciss", &proc_root);
 		kfree(hba[i]->cmd_pool);
 		kfree(hba[i]->errinfo_pool);
                 kfree(hba[i]->cmd_pool_bits);
@@ -1906,5 +1913,5 @@ void cleanup_module(void)
 	}
 }
 
-#endif /* MODULE */
-
+module_init(init_cciss_module);
+module_exit(cleanup_cciss_module);

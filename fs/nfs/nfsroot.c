@@ -157,6 +157,7 @@ static struct nfs_bool_opts {
 #endif
 	{ "udp",	~NFS_MOUNT_TCP,		0 },
 	{ "tcp",	~NFS_MOUNT_TCP,		NFS_MOUNT_TCP },
+	{ "broken_suid",~NFS_MOUNT_BROKEN_SUID,	NFS_MOUNT_BROKEN_SUID },
 	{ NULL,		0,			0 }
 };
 

@@ -28,12 +28,6 @@
 #ifdef CONFIG_I2C
 extern int i2c_init_all(void);
 #endif
-#ifdef CONFIG_SOUND
-void soundcore_init(void);
-#ifdef CONFIG_SOUND_OSS
-void soundcard_init(void);
-#endif
-#endif
 #ifdef CONFIG_SPARCAUDIO
 extern int sparcaudio_init(void);
 #endif
@@ -641,15 +635,6 @@ int __init chr_dev_init(void)
 	lp_m68k_init();
 #endif
 	misc_init();
-#ifdef CONFIG_SOUND
-	soundcore_init();
-#ifdef CONFIG_SOUND_OSS
-	soundcard_init();
-#endif
-#endif
-#ifdef CONFIG_SPARCAUDIO
-	sparcaudio_init();
-#endif
 #if CONFIG_QIC02_TAPE
 	qic02_tape_init();
 #endif

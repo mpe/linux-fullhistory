@@ -496,8 +496,10 @@ static unsigned int usb_device_poll(struct file *file, struct poll_table_struct 
 	lock_kernel();
 	if (!st) {
 		st = kmalloc(sizeof(struct usb_device_status), GFP_KERNEL);
-		if (!st)
+		if (!st) {
+			unlock_kernel();
 			return POLLIN;
+		}
 		/*
 		 * need to prevent the module from being unloaded, since
 		 * proc_unregister does not call the release method and

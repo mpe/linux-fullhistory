@@ -2287,8 +2287,6 @@ static int	rear_out = 0;
 MODULE_PARM(spdif_loop, "i");
 MODULE_PARM(four_ch, "i");
 MODULE_PARM(rear_out, "i");
-
-int  __init init_module(void)
 #else
 #ifdef CONFIG_SOUND_CMPCI_SPDIFLOOP
 static int	spdif_loop = 1;
@@ -2305,9 +2303,9 @@ static int	rear_out = 1;
 #else
 static int	rear_out = 0;
 #endif
-
-int __init init_cmpci(void)
 #endif
+
+static int __init init_cmpci(void)
 {
 	struct cm_state *s;
 	struct pci_dev *pcidev = NULL;
@@ -2499,12 +2497,10 @@ int __init init_cmpci(void)
 
 /* --------------------------------------------------------------------- */
 
-#ifdef MODULE
-
 MODULE_AUTHOR("ChenLi Tien, cltien@home.com");
 MODULE_DESCRIPTION("CMPCI Audio Driver");
 
-void cleanup_module(void)
+static void __exit cleanup_cmpci(void)
 {
 	struct cm_state *s;
 
@@ -2538,4 +2534,5 @@ void cleanup_module(void)
 	printk(KERN_INFO "cmpci: unloading\n");
 }
 
-#endif /* MODULE */
+module_init(init_cmpci);
+module_exit(cleanup_cmpci);

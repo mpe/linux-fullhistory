@@ -206,7 +206,6 @@ static int shm_swp; /* number of shared memory pages that are in swap */
 /* some statistics */
 static ulong swap_attempts;
 static ulong swap_successes;
-static ulong used_segs;
 
 void __init shm_init (void)
 {
@@ -364,7 +363,9 @@ static int shm_statfs(struct super_block *sb, struct statfs *buf)
 	buf->f_blocks = shm_ctlall;
 	buf->f_bavail = buf->f_bfree = shm_ctlall - shm_tot;
 	buf->f_files = shm_ctlmni;
-	buf->f_ffree = shm_ctlmni - used_segs;
+	shm_lockall();
+	buf->f_ffree = shm_ctlmni - shm_ids.in_use + 1;
+	shm_unlockall();
 	buf->f_namelen = SHM_NAME_LEN;
 	return 0;
 }
@@ -593,7 +594,6 @@ static pte_t **shm_alloc(unsigned long pages, int doacc)
 	if (doacc) {
 		shm_lockall();
 		shm_tot += pages;
-		used_segs++;
 		shm_unlockall();
 	}
 	return ret;
@@ -646,7 +646,6 @@ static void shm_free(pte_t** dir, unsigned long pages, int doacc)
 		shm_rss -= rss;
 		shm_swp -= swp;
 		shm_tot -= pages;
-		used_segs--;
 		shm_unlockall();
 	}
 }
@@ -970,7 +969,7 @@ asmlinkage long sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
 
 		memset(&shm_info,0,sizeof(shm_info));
 		shm_lockall();
-		shm_info.used_ids = shm_ids.in_use;
+		shm_info.used_ids = shm_ids.in_use - 1; /* correct the /dev/zero hack */
 		shm_info.shm_rss = shm_rss;
 		shm_info.shm_tot = shm_tot;
 		shm_info.shm_swp = shm_swp;
@@ -1535,6 +1534,12 @@ int shm_swap (int prio, int gfp_mask)
 	int loop = 0;
 	int counter;
 	struct page * page_map;
+
+	/*
+	 * Push this inside:
+	 */
+	if (!(gfp_mask & __GFP_IO))
+		return 0;
 
 	zshm_swap(prio, gfp_mask);
 	counter = shm_rss >> prio;

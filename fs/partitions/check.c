@@ -146,6 +146,16 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
  			sprintf(buf, "%s/c%dd%dp%d", maj, ctlr, disk, part);
  		return buf;
  	}
+	if (hd->major >= COMPAQ_CISS_MAJOR && hd->major <= COMPAQ_CISS_MAJOR+7) {
+                int ctlr = hd->major - COMPAQ_CISS_MAJOR;
+                int disk = minor >> hd->minor_shift;
+                int part = minor & (( 1 << hd->minor_shift) - 1);
+                if (part == 0)
+                        sprintf(buf, "%s/c%dd%d", maj, ctlr, disk);
+                else
+                        sprintf(buf, "%s/c%dd%dp%d", maj, ctlr, disk, part);
+                return buf;
+	}
 	if (hd->major >= DAC960_MAJOR && hd->major <= DAC960_MAJOR+7) {
 		int ctlr = hd->major - DAC960_MAJOR;
  		int disk = minor >> hd->minor_shift;
@@ -181,6 +191,10 @@ void add_gd_partition(struct gendisk *hd, int minor, int start, int size)
 		printk(" p%d", (minor & ((1 << hd->minor_shift) - 1)));
 	else
 		printk(" %s", disk_name(hd, minor, buf));
+	if (hd->major >= COMPAQ_CISS_MAJOR+0 && hd->major <= COMPAQ_CISS_MAJOR+7)
+                printk(" p%d", (minor & ((1 << hd->minor_shift) - 1)));
+        else
+                printk(" %s", disk_name(hd, minor, buf));
 #endif
 }
 

@@ -20,7 +20,6 @@
 #include <linux/errno.h>
 #include <linux/delay.h>
 #include <linux/sched.h>
-#include <linux/delay.h>
 #include <asm/io.h>
 
 struct JEDECTable mtd_JEDEC_table[] = 

@@ -247,5 +247,44 @@ int request_module(const char * module_name)
 */
 char hotplug_path[256] = "/sbin/hotplug";
 
+
+static int exec_helper (void *arg)
+{
+	void **params = (void **) arg;
+	char *path = (char *) params [0];
+	char **argv = (char **) params [1];
+	char **envp = (char **) params [2];
+	return exec_usermodehelper (path, argv, envp);
+}
+
+
+int call_usermodehelper (char *path, char **argv, char **envp)
+{
+	void *params [3] = { path, argv, envp };
+	int pid, pid2, retval;
+	mm_segment_t fs;
+
+	if ( ! current->fs->root ) {
+		printk(KERN_ERR "call_usermodehelper[%s]: no root fs\n",
+			path);
+		return -EPERM;
+	}
+	if ((pid = kernel_thread (exec_helper, (void *) params, 0)) < 0) {
+		printk(KERN_ERR "failed fork %s, errno = %d", argv [0], -pid);
+		return -1;
+	}
+
+	fs = get_fs ();
+	set_fs (KERNEL_DS);
+	pid2 = waitpid (pid, &retval, __WCLONE);
+	set_fs (fs);
+
+	if (pid2 != pid) {
+		printk(KERN_ERR "waitpid(%d) failed, %d\n", pid, pid2);
+			return -1;
+	}
+	return retval;
+}
+
 #endif
 

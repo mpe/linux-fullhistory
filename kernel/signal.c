@@ -191,6 +191,7 @@ static int collect_signal(int sig, struct sigpending *list, siginfo_t *info)
 		/* Ok, it wasn't in the queue.  We must have
 		   been out of queue space.  So zero out the
 		   info.  */
+		sigdelset(&list->signal, sig);
 		info->si_signo = sig;
 		info->si_errno = 0;
 		info->si_code = 0;

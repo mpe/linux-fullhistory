@@ -29,6 +29,7 @@
 /*
  * USB recipients
  */
+#define USB_RECIP_MASK			0x1f
 #define USB_RECIP_DEVICE		0x00
 #define USB_RECIP_INTERFACE		0x01
 #define USB_RECIP_ENDPOINT		0x02
@@ -553,6 +554,7 @@ struct usb_device {
 };
 
 extern struct usb_interface *usb_ifnum_to_if(struct usb_device *dev, unsigned ifnum);
+extern struct usb_endpoint_descriptor *usb_epnum_to_ep_desc(struct usb_device *dev, unsigned epnum);
 
 extern int usb_register(struct usb_driver *);
 extern void usb_deregister(struct usb_driver *);
