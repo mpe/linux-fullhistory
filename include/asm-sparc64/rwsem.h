@@ -56,16 +56,16 @@ static __inline__ int rwsem_atomic_update(int delta, struct rw_semaphore *sem)
 	int tmp = delta;
 
 	__asm__ __volatile__(
-		"1:\tlduw	[%2], %%g5\n\t"
-		"add		%%g5, %1, %%g7\n\t"
-		"cas		[%2], %%g5, %%g7\n\t"
-		"cmp		%%g5, %%g7\n\t"
+		"1:\tlduw	[%2], %%g1\n\t"
+		"add		%%g1, %1, %%g7\n\t"
+		"cas		[%2], %%g1, %%g7\n\t"
+		"cmp		%%g1, %%g7\n\t"
 		"bne,pn		%%icc, 1b\n\t"
 		" membar	#StoreLoad | #StoreStore\n\t"
 		"mov		%%g7, %0\n\t"
 		: "=&r" (tmp)
 		: "0" (tmp), "r" (sem)
-		: "g5", "g7", "memory", "cc");
+		: "g1", "g7", "memory", "cc");
 
 	return tmp + delta;
 }
