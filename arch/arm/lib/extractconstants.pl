@@ -34,7 +34,7 @@ while (<DATA>) {
 	if ($elf) {
 		chomp;
 		$addr = substr ($_, 0, 8);
-		$name = substr ($_, 32);
+		$name = substr ($_, rindex($_, " ") + 1);
 		$nam[hex($addr)] = $name;
 	}
 }

@@ -1,4 +1,4 @@
-/* $Id: ide.h,v 1.6 1998/03/15 13:29:13 ecd Exp $
+/* $Id: ide.h,v 1.8 1998/04/23 05:04:14 davem Exp $
  * ide.h: Ultra/PCI specific IDE glue.
  *
  * Copyright (C) 1997  David S. Miller (davem@caip.rutgers.edu)
@@ -97,24 +97,43 @@ static __inline__ int ide_ack_intr(ide_ioreg_t status_port, ide_ioreg_t irq_port
 
 /* From m68k code... */
 
+#ifdef insl
+#undef insl
+#endif
+#ifdef outsl
+#undef outsl
+#endif
+#ifdef insw
+#undef insw
+#endif
+#ifdef outsw
+#undef outsw
+#endif
+
 #define insl(data_reg, buffer, wcount) insw(data_reg, buffer, (wcount)<<1)
 #define outsl(data_reg, buffer, wcount) outsw(data_reg, buffer, (wcount)<<1)
 
 #define insw(port, buf, nr) ide_insw((port), (buf), (nr))
 #define outsw(port, buf, nr) ide_outsw((port), (buf), (nr))
 
+/* We need to use L1 cache bypassing to prevent dcache alias
+ * inconsistencies with user space.  -DaveM
+ */
 static __inline__ void ide_insw(unsigned long port,
 				void *dst,
 				unsigned long count)
 {
 	volatile unsigned short *data_port;
-	u16 *ps = dst;
+	u16 *ps = (u16 *)__pa(dst);
 	u32 *pi;
 
 	data_port = (volatile unsigned short *)port;
 
 	if(((u64)ps) & 0x2) {
-		*ps++ = *data_port;
+		__asm__ __volatile__("stha %0, [%1] %2"
+				     : /* no outputs */
+				     : "r" (*data_port), "r" (ps++),
+				       "i" (ASI_PHYS_USE_EC));
 		count--;
 	}
 	pi = (u32 *)ps;
@@ -123,12 +142,18 @@ static __inline__ void ide_insw(unsigned long port,
 
 		w  = (*data_port) << 16;
 		w |= (*data_port);
-		*pi++ = w;
+		__asm__ __volatile__("stwa %0, [%1] %2"
+				     : /* no outputs */
+				     : "r" (w), "r" (pi++),
+				       "i" (ASI_PHYS_USE_EC));
 		count -= 2;
 	}
 	ps = (u16 *)pi;
 	if(count)
-		*ps = *data_port;
+		__asm__ __volatile__("stha %0, [%1] %2"
+				     : /* no outputs */
+				     : "r" (*data_port), "r" (ps),
+				       "i" (ASI_PHYS_USE_EC));
 }
 
 static __inline__ void ide_outsw(unsigned long port,
@@ -136,27 +161,37 @@ static __inline__ void ide_outsw(unsigned long port,
 				 unsigned long count)
 {
 	volatile unsigned short *data_port;
-	const u16 *ps = src;
+	const u16 *ps = (const u16 *)__pa(src);
 	const u32 *pi;
 
 	data_port = (volatile unsigned short *)port;
 
 	if(((u64)src) & 0x2) {
-		*data_port = *ps++;
+		u16 w;
+		__asm__ __volatile__("lduha [%1] %2, %0"
+				     : "=r" (w)
+				     : "r" (ps++), "i" (ASI_PHYS_USE_EC));
+		*data_port = w;
 		count--;
 	}
 	pi = (const u32 *)ps;
 	while(count >= 2) {
 		u32 w;
-
-		w = *pi++;
+		__asm__ __volatile__("lduwa [%1] %2, %0"
+				     : "=r" (w)
+				     : "r" (pi++), "i" (ASI_PHYS_USE_EC));
 		*data_port = (w >> 16);
 		*data_port = w;
 		count -= 2;
 	}
 	ps = (const u16 *)pi;
-	if(count)
-		*data_port = *ps;
+	if(count) {
+		u16 w;
+		__asm__ __volatile__("lduha [%1] %2, %0"
+				     : "=r" (w)
+				     : "r" (ps++), "i" (ASI_PHYS_USE_EC));
+		*data_port = w;
+	}
 }
 
 #define T_CHAR          (0x0000)        /* char:  don't touch  */

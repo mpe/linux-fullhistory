@@ -3,8 +3,9 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: system.c,v 1.3 1997/09/13 02:19:18 ralf Exp $
+ * $Id: system.c,v 1.4 1998/05/01 01:35:19 ralf Exp $
  */
+#include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/string.h>
@@ -56,7 +57,7 @@ static struct smatch sgi_cputable[] = {
 
 #define NUM_CPUS 9 /* for now */
 
-static enum sgi_mach string_to_mach(char *s)
+__initfunc(static enum sgi_mach string_to_mach(char *s))
 {
 	int i;
 
@@ -71,7 +72,7 @@ static enum sgi_mach string_to_mach(char *s)
 	return (enum sgi_mach) 0;
 }
 
-static int string_to_cpu(char *s)
+__initfunc(static int string_to_cpu(char *s))
 {
 	int i;
 
@@ -90,7 +91,7 @@ static int string_to_cpu(char *s)
  * We' call this early before loadmmu().  If we do the other way around
  * the firmware will crash and burn.
  */
-void sgi_sysinit(void)
+__initfunc(void sgi_sysinit(void))
 {
 	pcomponent *p, *toplev, *cpup = 0;
 	int cputype = -1;

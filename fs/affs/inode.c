@@ -255,6 +255,8 @@ affs_put_inode(struct inode *inode)
 {
 	pr_debug("AFFS: put_inode(ino=%lu, nlink=%u)\n",
 		inode->i_ino,inode->i_nlink);
+
+	affs_free_prealloc(inode);
 	if (inode->i_count == 1) {
 		unsigned long cache_page = (unsigned long) inode->u.affs_i.i_ec;
 		if (cache_page) {
@@ -323,6 +325,11 @@ affs_new_inode(const struct inode *dir)
 
 	return inode;
 }
+
+/*
+ * Add an entry to a directory. Create the header block
+ * and insert it into the hash table.
+ */
 
 int
 affs_add_entry(struct inode *dir, struct inode *link, struct inode *inode,

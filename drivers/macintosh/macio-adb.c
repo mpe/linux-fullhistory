@@ -14,6 +14,7 @@
 #include <asm/hydra.h>
 #include <asm/irq.h>
 #include <asm/system.h>
+#include <asm/init.h>
 
 struct preg {
 	unsigned char r;
@@ -63,6 +64,8 @@ static int macio_adb_send_request(struct adb_request *req, int sync);
 static int macio_adb_autopoll(int on);
 static void macio_adb_poll(void);
 static void completed(void);
+
+__openfirmware
 
 void macio_adb_init(void)
 {

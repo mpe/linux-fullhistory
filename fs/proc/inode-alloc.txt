@@ -1,0 +1,50 @@
+Inode allocations in the proc-fs (hex-numbers):
+
+  00000000		reserved
+  00000001-00000fff	static entries
+       001		root-ino
+       002		load-avg
+       003		uptime
+       ...
+       080		net/*
+       ...
+       100		scsi/*
+       ...
+       xxx		mca/*
+       ...
+       yyy		bus/*
+       ...
+       fff		end
+
+  00001000-00001fff	dynamic entries
+
+  00002000-00002fff	openprom entries
+
+  0001xxxx-7fffxxxx	pid-dir entries for pid 1-7fff
+      0000		unused
+      0001		unused
+      0002		pid
+      0003		pid/status
+       ...
+      0008		pid/fd
+       ...
+      00xx-00ff		unused
+      01xx		pid/fd/* for fd 0-ff
+       ...
+      01ff		end
+      0200-ffff		unused
+
+  80000000-ffffffff	unused
+
+
+
+New allocation:
+
+  00000000-0000ffff	unchanged
+
+  0001xxxx-7fffxxxx	pid-dir entries for pid 1-7fff
+      0000-00ff		unchanged
+      0100-7fff		unused
+      8000-ffff		pid/fd/* for fd 0-7fff
+
+  80000000-ffffffff	unchanged

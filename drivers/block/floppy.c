@@ -694,7 +694,7 @@ static int disk_change(int drive)
 		DPRINT("checking disk change line for drive %d\n",drive);
 		DPRINT("jiffies=%ld\n", jiffies);
 		DPRINT("disk change line=%x\n",fd_inb(FD_DIR)&0x80);
-		DPRINT("flags=%x\n",UDRS->flags);
+		DPRINT("flags=%lx\n",UDRS->flags);
 	}
 #endif
 	if (UDP->flags & FD_BROKEN_DCL)

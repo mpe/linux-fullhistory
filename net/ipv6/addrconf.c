@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: addrconf.c,v 1.38 1998/03/20 09:12:14 davem Exp $
+ *	$Id: addrconf.c,v 1.39 1998/05/03 14:31:04 alan Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -1808,7 +1808,7 @@ __initfunc(void addrconf_init(void))
 	addr_chk_timer.expires = jiffies + ADDR_CHECK_FREQUENCY;
 	add_timer(&addr_chk_timer);
 #ifdef CONFIG_RTNETLINK
-	rtnetlink_links[AF_INET6] = inet6_rtnetlink_table;
+	rtnetlink_links[PF_INET6] = inet6_rtnetlink_table;
 #endif
 #ifdef CONFIG_SYSCTL
 	addrconf_sysctl.sysctl_header =
@@ -1825,7 +1825,7 @@ void addrconf_cleanup(void)
 	int i;
 
 #ifdef CONFIG_RTNETLINK
-	rtnetlink_links[AF_INET6] = NULL;
+	rtnetlink_links[PF_INET6] = NULL;
 #endif
 #ifdef CONFIG_SYSCTL
 	addrconf_sysctl_unregister(&ipv6_devconf_dflt);

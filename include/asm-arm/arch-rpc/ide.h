@@ -3,12 +3,13 @@
  *
  * Copyright (c) 1997 Russell King
  */
+#include <asm/irq.h>
 
 static __inline__ int
 ide_default_irq(ide_ioreg_t base)
 {
 	if (base == 0x1f0)
-		return 9;
+		return IRQ_HARDDISK;
 	return 0;
 }
 
@@ -40,5 +41,5 @@ ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int stepping, int *irq)
 	}
 	*p++ = ctrl;
 	if (irq != NULL)
-		irq = 0;
+		*irq = 0;
 }

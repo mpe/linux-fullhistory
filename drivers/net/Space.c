@@ -95,6 +95,10 @@ extern int mace_probe(struct device *);
 extern int cs89x0_probe(struct device *dev);
 extern int ethertap_probe(struct device *dev);
 extern int epic100_probe(struct device *dev);
+extern int rtl8139_probe(struct device *dev);
+
+/* Gigabit Ethernet adapters */
+extern int yellowfin_probe(struct device *dev);
 
 /* Detachable devices ("pocket adaptors") */
 extern int atp_init(struct device *);
@@ -104,6 +108,9 @@ extern int de620_probe(struct device *);
 /* FDDI adapters */
 extern int dfx_probe(struct device *dev);
 extern int apfddi_init(struct device *dev);
+
+/* HIPPI boards */
+extern int cern_hippi_probe(struct device *);
 
 
 __initfunc(static int ethif_probe(struct device *dev))
@@ -291,6 +298,12 @@ __initfunc(static int ethif_probe(struct device *dev))
 #ifdef CONFIG_EPIC100
 	&& epic100_probe(dev)
 #endif
+#ifdef CONFIG_RTL8139
+        && rtl8139_probe(dev)
+#endif
+#ifdef CONFIG_YELLOWFIN
+        && yellowfin_probe(dev)
+#endif
 	&& 1 ) {
 	return 1;	/* -ENODEV or -EAGAIN would be more accurate. */
     }
@@ -320,6 +333,28 @@ __initfunc(static int fddiif_probe(struct device *dev))
 }
 #endif
 
+#ifdef CONFIG_HIPPI
+static int hippi_probe(struct device *dev)
+{
+	/*
+	 * Damn this is ugly.
+	 *
+	 * Why the heck would we want to determine this from the base
+	 * address? Stupid PC'ism .... grrrrr.
+	 */
+	if (dev->base_addr == -1)
+		return 1;
+
+	if (1
+#ifdef CONFIG_CERN_HIPPI
+	    && cern_hippi_probe(dev)
+#endif
+	    && 1 ) {
+		return 1; /* -ENODEV or -EAGAIN would be more accurate. */
+	}
+	return 0;
+}
+#endif
 
 #ifdef CONFIG_ETHERTAP
     static struct device tap0_dev = { "tap0", 0, 0, 0, 0, NETLINK_TAPBASE, 0, 0, 0, 0, NEXT_DEV, ethertap_probe, };
@@ -539,6 +574,20 @@ static struct device tr0_dev = {
 		{"fddi0", 0, 0, 0, 0, 0, 0, 0, 0, 0, &fddi1_dev, fddiif_probe};
 #undef	NEXT_DEV
 #define	NEXT_DEV	(&fddi0_dev)
+#endif 
+
+#ifdef CONFIG_HIPPI
+	static struct device hip3_dev =
+		{"hip3", 0, 0, 0, 0, -1, 0, 0, 0, 0, NEXT_DEV, hippi_probe};
+	static struct device hip2_dev =
+		{"hip2", 0, 0, 0, 0, -1, 0, 0, 0, 0, &hip3_dev, hippi_probe};
+	static struct device hip1_dev =
+		{"hip1", 0, 0, 0, 0, -1, 0, 0, 0, 0, &hip2_dev, hippi_probe};
+	static struct device hip0_dev =
+		{"hip0", 0, 0, 0, 0, 0, 0, 0, 0, 0, &hip1_dev, hippi_probe};
+
+#undef	NEXT_DEV
+#define	NEXT_DEV	(&hip0_dev)
 #endif 
 
 #ifdef CONFIG_APBIF

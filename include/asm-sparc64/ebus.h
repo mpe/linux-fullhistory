@@ -1,4 +1,4 @@
-/* $Id: ebus.h,v 1.5 1998/03/15 10:14:46 ecd Exp $
+/* $Id: ebus.h,v 1.6 1998/04/13 07:27:07 davem Exp $
  * ebus.h: PCI to Ebus pseudo driver software state.
  *
  * Copyright (C) 1997 Eddie C. Dost (ecd@skynet.be)
@@ -82,7 +82,7 @@ struct linux_ebus_dma {
 
 extern struct linux_ebus		*ebus_chain;
 
-extern unsigned long ebus_init(unsigned long, unsigned long);
+extern void ebus_init(void);
 
 #define for_each_ebus(bus)						\
         for((bus) = ebus_chain; (bus); (bus) = (bus)->next)

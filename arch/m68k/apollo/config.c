@@ -14,7 +14,6 @@
 #include <asm/irq.h>
 #include <asm/machdep.h>
 
-extern struct consw fb_con;
 extern void dn_sched_init(void (*handler)(int,void *,struct pt_regs *));
 extern int dn_keyb_init(void);
 extern int dn_dummy_kbdrate(struct kbd_repeat *);

@@ -1,4 +1,4 @@
-/* $Id: pcicons.h,v 1.2 1997/08/24 12:13:11 ecd Exp $
+/* $Id: pcicons.h,v 1.3 1998/05/03 21:56:12 davem Exp $
  * pcicons.h: Stuff which is generic across all PCI console drivers.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -13,6 +13,7 @@
 
 extern unsigned long pcivga_iobase;
 extern unsigned long pcivga_membase;
+extern unsigned long pcivga_membase2;
 
 extern unsigned char vga_font[8192];
 

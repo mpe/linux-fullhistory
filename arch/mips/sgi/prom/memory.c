@@ -1,10 +1,12 @@
-/* $Id: memory.c,v 1.1.1.1 1997/06/01 03:16:40 ralf Exp $
+/*
  * memory.c: PROM library functions for acquiring/using memory descriptors
  *           given to us from the ARCS firmware.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
+ *
+ * $Id: memory.c,v 1.2 1998/05/01 01:35:25 ralf Exp $
  */
-
+#include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/sched.h>
@@ -18,7 +20,7 @@
 
 /* #define DEBUG */
 
-struct linux_mdesc *prom_getmdesc(struct linux_mdesc *curr)
+__initfunc(struct linux_mdesc *prom_getmdesc(struct linux_mdesc *curr))
 {
 	return romvec->get_mdesc(curr);
 }
@@ -38,12 +40,12 @@ static char *mtypes[8] = {
 
 static struct prom_pmemblock prom_pblocks[PROM_MAX_PMEMBLOCKS];
 
-struct prom_pmemblock *prom_getpblock_array(void)
+__initfunc(struct prom_pmemblock *prom_getpblock_array(void))
 {
 	return &prom_pblocks[0];
 }
 
-static void prom_setup_memupper(void)
+__initfunc(static void prom_setup_memupper(void))
 {
 	struct prom_pmemblock *p, *highest;
 
@@ -60,7 +62,7 @@ static void prom_setup_memupper(void)
 #endif
 }
 
-void prom_meminit(void)
+__initfunc(void prom_meminit(void))
 {
 	struct linux_mdesc *p;
 	int totram;
@@ -104,7 +106,7 @@ void prom_meminit(void)
 }
 
 /* Called from mem_init() to fixup the mem_map page settings. */
-void prom_fixup_mem_map(unsigned long start, unsigned long end)
+__initfunc(void prom_fixup_mem_map(unsigned long start, unsigned long end))
 {
 	struct prom_pmemblock *p;
 	int i, nents;

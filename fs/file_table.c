@@ -5,7 +5,6 @@
  *  Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
  */
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
@@ -122,43 +121,3 @@ int init_private_file(struct file *filp, struct dentry *dentry, int mode)
 	else
 		return 0;
 }
-
-#ifdef CONFIG_QUOTA
-
-void add_dquot_ref(kdev_t dev, short type)
-{
-	struct file *filp;
-
-	for (filp = inuse_filps; filp; filp = filp->f_next) {
-		struct inode * inode;
-		if (!filp->f_dentry)
-			continue;
-		inode = filp->f_dentry->d_inode;
-		if (!inode || inode->i_dev != dev)
-			continue;
-		if (filp->f_mode & FMODE_WRITE && inode->i_sb->dq_op) {
-			inode->i_sb->dq_op->initialize(inode, type);
-			inode->i_flags |= S_WRITE;
-		}
-	}
-}
-
-void reset_dquot_ptrs(kdev_t dev, short type)
-{
-	struct file *filp;
-
-	for (filp = inuse_filps; filp; filp = filp->f_next) {
-		struct inode * inode;
-		if (!filp->f_dentry)
-			continue;
-		inode = filp->f_dentry->d_inode;
-		if (!inode || inode->i_dev != dev)
-			continue;
-		if (IS_WRITABLE(inode)) {
-			inode->i_dquot[type] = NODQUOT;
-			inode->i_flags &= ~S_WRITE;
-		}
-	}
-}
-
-#endif

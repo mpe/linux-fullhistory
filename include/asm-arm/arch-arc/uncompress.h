@@ -52,7 +52,7 @@ static void puts(const char *s)
 			}
 		} else {
 			ptr = VIDMEM + ((y*video_num_columns*params->bytes_per_char_v+x)*bytes_per_char_h);
-			ll_write_char(ptr, c|(white<<8));
+			ll_write_char(ptr, c|(white<<16));
 			if ( ++x >= video_num_columns ) {
 				x = 0;
 				if ( ++y >= video_num_lines ) {

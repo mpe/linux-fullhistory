@@ -242,7 +242,7 @@ struct proc_dir_entry proc_scsi_aic7xxx = {
 #  include <linux/bios32.h>
 #endif
 
-#if !defined(__alpha__)
+#if !defined(__alpha__) && !defined(__sparc__)
 #  define MMAPIO
 #endif
 
@@ -950,10 +950,10 @@ struct aic7xxx_host {
   unsigned short           needwdtr_copy;    /* default config */
   unsigned short           ultraenb;         /* Ultra mode target list */
   unsigned short           bios_control;     /* bios control - SEEPROM */
+  unsigned int             irq;              /* IRQ for this adapter */
   unsigned short           adapter_control;  /* adapter control - SEEPROM */
   unsigned char            pci_bus;
   unsigned char            pci_device_fn;
-  unsigned char            irq;              /* IRQ for this adapter */
 
 #ifdef AIC7XXX_PROC_STATS
   /*
@@ -5245,6 +5245,7 @@ aic7xxx_select_queue_depth(struct Scsi_Host *host,
   }
 }
 
+#if defined(__i386__) || defined(__alpha__)
 /*+F*************************************************************************
  * Function:
  *   aic7xxx_probe
@@ -5322,6 +5323,7 @@ aic7xxx_probe(int slot, int base, ahc_flag_type *flags)
 
   return (AHC_NONE);
 }
+#endif /* __i386__ || __alpha__ */
 
 /*+F*************************************************************************
  * Function:
@@ -7266,7 +7268,7 @@ aic7xxx_detect(Scsi_Host_Template *template)
     unsigned short command;
     unsigned int  devconfig, i;
 #ifdef MMAPIO
-    unsigned long page_offset;
+    unsigned long page_offset, base;
 #endif
     struct aic7xxx_host *first_7895 = NULL;
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2,1,92)

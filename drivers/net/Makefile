@@ -71,7 +71,6 @@ ifeq ($(CONFIG_SK_G16),y)
 L_OBJS += sk_g16.o
 endif
 
-
 ifeq ($(CONFIG_HP100),y)
 L_OBJS += hp100.o
 else
@@ -419,6 +418,22 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_RTL8139),y)
+L_OBJS += rtl8139.o
+else
+  ifeq ($(CONFIG_RTL8139),m)
+  M_OBJS += rtl8139.o
+  endif
+endif
+
+ifeq ($(CONFIG_YELLOWFIN),y)
+L_OBJS += yellowfin.o
+else
+  ifeq ($(CONFIG_YELLOWFIN),m)
+  M_OBJS += yellowfin.o
+  endif
+endif
+
 ifeq ($(CONFIG_WAVELAN),y)
 L_OBJS += wavelan.o
 else
@@ -747,7 +762,7 @@ L_OBJS += mace.o
 endif
 
 ifeq ($(CONFIG_VENDOR_SANGOMA),y)
-  L_OBJS += sdladrv.o
+  LX_OBJS += sdladrv.o
   L_OBJS += sdlamain.o
   ifeq ($(CONFIG_WANPIPE_X25),y)
     L_OBJS += sdla_x25.o

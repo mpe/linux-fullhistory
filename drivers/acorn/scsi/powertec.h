@@ -1,7 +1,7 @@
 /*
  * PowerTec SCSI driver
  *
- * Copyright (C) 1997 Russell King
+ * Copyright (C) 1997-1998 Russell King
  */
 #ifndef POWERTECSCSI_H
 #define POWERTECSCSI_H
@@ -64,10 +64,20 @@ use_new_eh_code:		0					\
 
 #ifndef HOSTS_C
 
-typedef struct {
-    FAS216_Info info;
+#include <asm/dma.h>
 
-    /* other info... */
+#define NR_SG	256
+
+typedef struct {
+	FAS216_Info info;
+
+	struct {
+		unsigned int term_port;
+		unsigned int terms;
+	} control;
+
+	/* other info... */
+	dmasg_t		dmasg[NR_SG];	/* Scatter DMA list	*/
 } PowerTecScsi_Info;
 
 #endif /* HOSTS_C */

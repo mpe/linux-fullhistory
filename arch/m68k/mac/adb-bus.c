@@ -6,9 +6,11 @@
  *		Copyright (C) 1996 Paul Mackerras.
  *
  *	MSch (9/97) Partial rewrite of interrupt handler to MacII style
- *	ADB handshake, based on:
- *		- Guide to Mac Hardware
- *		- Guido Koerber's session with a logic analyzer
+ *		ADB handshake, based on:
+ *			- Guide to Mac Hardware
+ *			- Guido Koerber's session with a logic analyzer
+ *
+ *	MSch (1/98) Integrated start of IIsi driver by Robert Thompson
  */
  
 #include <stdarg.h>
@@ -63,6 +65,9 @@
 #define SR_DATA		0x08		/* Shift register data */
 #define SR_CLOCK	0x10		/* Shift register clock */
 
+/* JRT */
+#define ADB_DELAY 150
+
 static struct adb_handler {
     void (*handler)(unsigned char *, int, struct pt_regs *);
 } adb_handler[16];
@@ -98,6 +103,8 @@ extern void adb_clock_interrupt(int irq, void *arg, struct pt_regs *regs);
 extern void adb_data_interrupt(int irq, void *arg, struct pt_regs *regs);
 static void adb_input(unsigned char *buf, int nb, struct pt_regs *regs);
 
+static void adb_hw_setup_IIsi(void);
+
 /*
  * Misc. defines for testing 
  */
@@ -118,11 +125,13 @@ extern int console_loglevel;
 #define ADBDEBUG_INPUT		(2048)
 #define ADBDEBUG_DEVICE		(4096)
 
+#define ADBDEBUG_IISI		(8192)
+
 
 #define DEBUG_ADB
 
 #ifdef DEBUG_ADB
-#define ADBDEBUG	(ADBDEBUG_READ | ADBDEBUG_START | ADBDEBUG_WRITE | ADBDEBUG_SRQ | ADBDEBUG_REQUEST)
+#define ADBDEBUG	(ADBDEBUG_INPUT | ADBDEBUG_READ | ADBDEBUG_START | ADBDEBUG_WRITE | ADBDEBUG_SRQ | ADBDEBUG_REQUEST)
 #else
 #define ADBDEBUG	(0)
 #endif
@@ -132,7 +141,7 @@ extern int console_loglevel;
 void adb_bus_init(void)
 {
 	unsigned long flags;
-	unsigned char c;
+	unsigned char c, i;
 	
 	save_flags(flags);
 	cli();
@@ -174,31 +183,7 @@ void adb_bus_init(void)
 		 	via_write(via1, vIER, IER_SET|SR_INT); 
 		 	/* This clears the interrupt bit */
 		 	via_write(via1, vIFR, SR_INT);
-#if 0 	
-		 	ct=1000;
- 			while( ct-- && (via_read(via1, vBufB)&TREQ))
- 				udelay(1000);
-		 	if(ct<0)
- 				printk("No sync occured\n");
- 			ct=1000;
- 			while( ct-- && !(via_read(via1, vIFR)&SR_INT))
- 				udelay(1000);
-		 	if(ct<0)
-		 		printk("No sync 2 occured\n");
-		 	via_read(via1, vSR);
-		 	via_write(via1, vBufB, via_read(via1, vBufB)|TACK);
-		 	while( ct-- && !(via_read(via1, vBufB)&TREQ))
- 				udelay(1000);
-		 	if(ct<0)
- 				printk("No sync 3 occured\n");
- 			ct=1000;
- 			while( ct-- && !(via_read(via1, vIFR)&SR_INT))
- 				udelay(1000);
-		 	if(ct<0)
- 				printk("No sync 4 occured\n");
-		 	via_read(via1, vSR);
- 			via_write(via1, vBufB, via_read(via1, vBufB)|TIP);
-#endif
+
 		 	/*
 		 	 *	Ok we probably ;) have a ready to use adb bus. Its also
 		 	 *	hopefully idle (Im assuming the mac didnt leave a half
@@ -214,7 +199,6 @@ void adb_bus_init(void)
 			 */
 		case MAC_ADB_CUDA:
 			printk("adb: CUDA interface.\n");
-#ifdef TRY_CUDA
 			/* don't know what to set up here ... */
 			adb_state = idle;
 			/* Set the lines up. We want TREQ as input TACK|TIP as output */
@@ -222,12 +206,47 @@ void adb_bus_init(void)
 			request_irq(IRQ_MAC_ADB, adb_cuda_interrupt, IRQ_FLG_LOCK, 
 				    "adb CUDA interrupt", adb_cuda_interrupt);
 			break;
-#else
-			goto nosupp;
-#endif
 		case MAC_ADB_IISI:
 			printk("adb: Using IIsi hardware.\n");
-			goto nosupp;
+			printk("\tDEBUG_JRT\n");
+			/* Set the lines up. We want TREQ as input TACK|TIP as output */
+		 	via_write(via1, vDirB, ((via_read(via1,vDirB)|TACK|TIP)&~TREQ));
+
+			/*
+			 * MSch: I'm pretty sure the setup is mildly wrong
+			 * for the IIsi. 
+			 */
+			/* Initial state: idle (clear state bits) */
+		 	via_write(via1, vBufB, (via_read(via1, vBufB) & ~(TIP|TACK)) );
+			last_status = (via_read(via1, vBufB)&~ST_MASK);
+		 	/* Shift register on input */
+		 	c=via_read(via1, vACR);
+		 	c&=~SR_CTRL;		/* Clear shift register bits */
+		 	c|=SR_EXT;		/* Shift on external clock; out or in? */
+		 	via_write(via1, vACR, c);
+		 	/* Wipe any pending data and int */
+		 	via_read(via1, vSR);
+
+		 	/* This is interrupts on enable SR for keyboard */
+		 	via_write(via1, vIER, IER_SET|SR_INT); 
+		 	/* This clears the interrupt bit */
+		 	via_write(via1, vIFR, SR_INT);
+
+			/* get those pesky clock ticks we missed while booting */
+			for ( i = 0; i < 30; i++) {
+				udelay(ADB_DELAY);
+				adb_hw_setup_IIsi();
+				udelay(ADB_DELAY);
+				if (via_read(via1, vBufB) & TREQ)
+					break;
+			}
+		 	/*
+		 	 *	Ok we probably ;) have a ready to use adb bus. Its also
+ 			 */
+			request_irq(IRQ_MAC_ADB, adb_cuda_interrupt, IRQ_FLG_LOCK, 
+				    "adb interrupt", adb_cuda_interrupt);
+			adb_state = idle;
+ 			break;
 		default:
 			printk("adb: Unknown hardware interface.\n");
 		nosupp:
@@ -255,6 +274,62 @@ void adb_bus_init(void)
 	restore_flags(flags);	
 } 
 	
+void adb_hw_setup_IIsi(void)
+{
+	int dummy;
+	long poll_timeout;
+
+	printk("adb_IIsi: cleanup!\n");
+
+	/* ??? */
+	udelay(ADB_DELAY);
+
+	/* disable SR int. */
+	via_write(via1, vIER, IER_CLR|SR_INT);
+	/* set SR to shift in */
+	via_write(via1, vACR, via_read(via1, vACR ) & ~SR_OUT);
+
+	/* this is required, especially on faster machines */
+	udelay(ADB_DELAY);
+
+	if (!(via_read(via1, vBufB) & TREQ)) { /* IRQ on */
+		/* start frame */
+		via_write(via1, vBufB,via_read(via1,vBufB) | TIP);
+
+		while (1) {
+			/* poll for ADB interrupt and watch for timeout */
+			/* if time out, keep going in hopes of not hanging the
+			 * ADB chip - I think */
+			poll_timeout = ADB_DELAY * 5;
+			while ( !(via_read(via1, vIFR) & SR_INT) 
+				&& (poll_timeout-- > 0) )
+				dummy = via_read(via1, vBufB);
+
+			dummy = via_read(via1, vSR);	/* reset interrupt flag */
+
+			/* perhaps put in a check here that ignores all data
+			 * after the first ADB_MAX_MSG_LENGTH bytes ??? */
+
+			/* end of frame reached ?? */
+			if (via_read(via1, vBufB) & TREQ)
+				break;
+
+			/* set ACK */
+			via_write(via1,vBufB,via_read(via1, vBufB) | TACK);
+			/* delay */
+			udelay(ADB_DELAY);
+			/* clear ACK */
+			via_write(via1,vBufB,via_read(via1, vBufB) & ~TACK);
+		}
+		/* end frame */
+		via_write(via1, vBufB,via_read(via1,vBufB) & ~TIP);
+		/* probably don't need to delay this long */
+		udelay(ADB_DELAY);
+	}
+	/* re-enable SR int. */
+	via_write(via1, vIER, IER_SET|SR_INT);
+}
+
 #define WAIT_FOR(cond, what)				\
     do {						\
 	for (x = 1000; !(cond); --x) {			\
@@ -288,7 +363,7 @@ int adb_request(struct adb_request *req, void (*done)(struct adb_request *),
 	/*
 	 * skip first byte if not CUDA 
 	 */
-	if (macintosh_config->adb_type != MAC_ADB_CUDA) {
+	if (macintosh_config->adb_type == MAC_ADB_II) {
 		start =  va_arg(list, int);
 		nbytes--;
 	}
@@ -390,8 +465,12 @@ void adb_queue_poll(void)
 		printk("adb: Polling %d\n",pod);
 #endif
 
-	/* XXX: that's a TALK, register 0, MacII version */
-	adb_build_request(&r,NULL, 1, (pod<<4|0xC));
+	if (macintosh_config->adb_type == MAC_ADB_II)
+		/* XXX: that's a TALK, register 0, MacII version */
+		adb_build_request(&r,NULL, 1, (pod<<4|0xC));
+	else
+		/* CUDA etc. version */
+		adb_build_request(&r,NULL, 2, 0, (pod<<4|0xC));
 
 	r.reply_expected=0;
 	r.done=NULL;
@@ -545,7 +624,7 @@ static void adb_start(void)
 	 * IRQ signaled ?? (means ADB controller wants to send, or might 
 	 * be end of packet if we were reading)
 	 */
-	if ((via_read(via1, vBufB)& TREQ) == 0) 
+	if ((via_read(via1, vBufB) & TREQ) == 0) 
 	{
 		switch(macintosh_config->adb_type)
 		{
@@ -560,7 +639,12 @@ static void adb_start(void)
 				/* printk("device busy - fail\n"); */
 				restore_flags(flags);
 				/* a byte is coming in from the CUDA */
-				return;			
+				return;
+			case MAC_ADB_IISI:
+				printk("adb_start: device busy - fail\n");
+				retry_req = req;
+				restore_flags(flags);
+				return;
 			case MAC_ADB_II:
 				/*
 				 * if the interrupt handler set the need_poll
@@ -635,6 +719,19 @@ static void adb_start(void)
 			via_write(via1, vSR, req->data[0]);
 			via_write(via1, vBufB, via_read(via1, vBufB)&~TIP);
 			break;
+		case MAC_ADB_IISI:
+			/* store command byte (first byte is 'type' byte) */
+			command_byte = req->data[1];
+			/* set ADB state to 'active' */
+			via_write(via1, vBufB, via_read(via1, vBufB) | TIP);
+			/* switch ACK off (in case it was left on) */
+			via_write(via1, vBufB, via_read(via1, vBufB) & ~TACK);
+			/* set the shift register to shift out and send a byte */
+			via_write(via1, vACR, via_read(via1, vACR) | SR_OUT); 
+			via_write(via1, vSR, req->data[0]);
+			/* signal 'byte ready' */
+			via_write(via1, vBufB, via_read(via1, vBufB) | TACK);
+			break;
 		case MAC_ADB_II:
 			/* store command byte */
 			command_byte = req->data[0];
@@ -653,14 +750,14 @@ static void adb_start(void)
 #endif
 			break;
 	}
+	adb_state = sent_first_byte;
+	data_index = 1;
 #if (ADBDEBUG & ADBDEBUG_START)
 	if (console_loglevel == 10)
 		printk("sent first byte of %d: %x, (%x %x) ... ", 
 			req->nbytes, req->data[0], adb_state, 
 			(via_read(via1, vBufB) & (ST_MASK|TREQ)) );
 #endif
-	adb_state = sent_first_byte;
-	data_index = 1;
 	restore_flags(flags);
 }
 
@@ -748,6 +845,12 @@ void adb_data_interrupt(int irq, void *arg, struct pt_regs *regs)
  * and retransmit (Talk to the last active device). Cleanup of code and 
  * testing of the CUDA functionality is required, though. 
  * Note2: As of 13/12/97, CUDA support is definitely broken ...
+ * Note3: As of 21/12/97, CUDA works on a P475. What was broken? The assumption
+ * that Q700 and Q800 use CUDA :-(
+ *
+ * 27/01/98: IIsi driver implemented (thanks to Robert Thompson for the 
+ * initial bits). See adb_cuda_interrupts ...
+ *
  * Next TODO: implementation of IIsi ADB protocol (maybe the USE_ORIG 
  * conditionals can be a start?)
  */
@@ -786,6 +889,26 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 				x = via_read(via1, vSR); 
 				via_write(via1, vBufB, via_read(via1,vBufB)&~TIP);
 			}
+			else if(macintosh_config->adb_type==MAC_ADB_IISI)
+			{
+				udelay(150);
+				/* set SR to IN (??? no byte received else) */
+				via_write(via1, vACR,via_read(via1, vACR)&~SR_OUT); 
+		 		/* signal start of frame */
+		 		via_write(via1, vBufB, via_read(via1, vBufB) | TIP);
+				/* read first byte */
+				x = via_read(via1, vSR);
+				first_byte = x;
+#if (ADBDEBUG & ADBDEBUG_READ)
+				if (console_loglevel == 10)
+					printk("adb_macIIsi : receiving unsol. packet: %x (%x %x) ", 
+						x, adb_state, status);
+#endif
+				/* ACK adb chip */
+		 		via_write(via1, vBufB, via_read(via1, vBufB) | TACK);
+				udelay(150);
+		 		via_write(via1, vBufB, via_read(via1, vBufB) & ~TACK);
+			}
 			else if(macintosh_config->adb_type==MAC_ADB_II)
 			{
 #if (ADBDEBUG & ADBDEBUG_STATUS)
@@ -801,12 +924,8 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 					printk("adb_macII: receiving unsol. packet: %x (%x %x) ", 
 						x, adb_state, status);
 #endif
-#ifdef USE_ORIG
-				via_write(via1, vBufB, via_read(via1, vBufB)&~(TIP|TACK));
-#else
 				/* set ADB state = even for first data byte */
 				via_write(via1, vBufB, (via_read(via1, vBufB)&~ST_MASK)|ST_EVEN);
-#endif
 			}
 			adb_state = reading;
 			reply_ptr = cuda_rbuf;
@@ -831,7 +950,34 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 				x = via_read(via1, vSR); 
 				via_write(via1,vBufB, 
 					via_read(via1, vBufB)&~TIP);
-			} else if(macintosh_config->adb_type==MAC_ADB_II) {
+			} 
+			else if(macintosh_config->adb_type==MAC_ADB_IISI)
+			{
+				/* set SR to IN */
+				via_write(via1, vACR,via_read(via1, vACR)&~SR_OUT); 
+		 		/* signal start of frame */
+		 		via_write(via1, vBufB, via_read(via1, vBufB) | TIP);
+				/* read first byte */
+				x = via_read(via1, vSR);
+				first_byte = x;
+#if (ADBDEBUG & ADBDEBUG_READ)
+				if (console_loglevel == 10)
+					printk("adb_macIIsi: reading reply: %x (%x %x) ",
+						x, adb_state, status);
+#endif
+#if 0
+				if( via_read(via1,vBufB) & TREQ)
+					ending = 1;
+				else
+					ending = 0;
+#endif
+				/* ACK adb chip */
+		 		via_write(via1, vBufB, via_read(via1, vBufB) | TACK);
+				udelay(150);
+		 		via_write(via1, vBufB, via_read(via1, vBufB) & ~TACK);
+			}
+			else if(macintosh_config->adb_type==MAC_ADB_II) 
+			{
 				/* handshake etc. for II ?? */
 				x = via_read(via1, vSR);
 				first_byte = x;
@@ -840,12 +986,8 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 					printk("adb_macII: reading reply: %x (%x %x) ",
 						x, adb_state, status);
 #endif
-#ifdef USE_ORIG
-				via_write(via1, vBufB, via_read(via1, vBufB)&~(TIP|TACK));
-#else
 				/* set ADB state = even for first data byte */
 				via_write(via1, vBufB, (via_read(via1, vBufB)&~ST_MASK)|ST_EVEN);
-#endif
 			}
 			adb_state = reading;			
 			reply_ptr = current_req->reply;
@@ -862,6 +1004,11 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 			break;
 
 		case sent_first_byte:
+#if (ADBDEBUG & ADBDEBUG_WRITE)
+			if (console_loglevel == 10)
+				printk(" sending: %x (%x %x) ",
+					current_req->data[1], adb_state, status);
+#endif
 			if(macintosh_config->adb_type==MAC_ADB_CUDA)
 			{
 				if (status == TREQ + TIP + SR_OUT) 
@@ -886,14 +1033,45 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 					adb_state = sending;
 				}
 			}
+			else if(macintosh_config->adb_type==MAC_ADB_IISI)
+			{
+				/* switch ACK off */
+				via_write(via1, vBufB, via_read(via1, vBufB) & ~TACK);
+				if ( !(via_read(via1, vBufB) & TREQ) ) 
+				{
+					/* collision */
+#if (ADBDEBUG & ADBDEBUG_WRITE)
+					if (console_loglevel == 10)
+						printk("adb_macIIsi: send collison, aborting!\n");
+#endif
+					/* set shift in */
+					via_write(via1, vACR,
+						via_read(via1, vACR)&~SR_OUT); 
+					/* clear SR int. */
+					x = via_read(via1, vSR); 
+					/* set ADB state to 'idle' */
+					via_write(via1, vBufB,
+						via_read(via1,vBufB) & ~(TIP|TACK)); 
+					adb_state = idle;
+				}
+				else
+				{
+					/* delay */
+					udelay(ADB_DELAY);
+					/* set the shift register to shift out and send a byte */
+#if 0
+					via_write(via1, vACR, via_read(via1, vACR) | SR_OUT); 
+#endif
+					via_write(via1, vSR, current_req->data[1]);
+					/* signal 'byte ready' */
+					via_write(via1, vBufB, via_read(via1, vBufB) | TACK);
+					data_index=2;			
+					adb_state = sending;
+				}
+			}
 			else if(macintosh_config->adb_type==MAC_ADB_II)
 			{
 				/* how to detect a collision here ?? */
-#if (ADBDEBUG & ADBDEBUG_WRITE)
-				if (console_loglevel == 10)
-					printk(" sending: %x (%x %x) ",
-						current_req->data[1], adb_state, status);
-#endif
 				/* maybe we're already done (Talk, or Poll)? */
 				if (data_index >= current_req->nbytes) 
 				{
@@ -934,14 +1112,9 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 					via_write(via1, vACR,
 						via_read(via1, vACR) & ~SR_OUT);
 					x=via_read(via1, vSR);
-#ifdef USE_ORIG
-					via_write(via1, vBufB,
-						via_read(via1, vBufB)|TACK|TIP);
-#else
 					/* set ADB state idle - might get SRQ */
 					via_write(via1, vBufB,
 						(via_read(via1, vBufB)&~ST_MASK)|ST_IDLE);
-#endif
 					break;
 				}
 #if (ADBDEBUG & ADBDEBUG_STATUS)
@@ -951,14 +1124,9 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 #endif
 				/* SR already set to shift out; send byte */
 				via_write(via1, vSR, current_req->data[1]);
-#ifdef USE_ORIG
-				via_write(via1, vBufB,
-					via_read(via1, vBufB)^TACK);
-#else
 				/* set state to ST_EVEN (first byte was: ST_CMD) */
 				via_write(via1, vBufB,
 					(via_read(via1, vBufB)&~ST_MASK)|ST_EVEN);
-#endif
 				data_index=2;			
 				adb_state = sending;
 			}
@@ -968,6 +1136,11 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 			req = current_req;
 			if (data_index >= req->nbytes) 
 			{
+#if (ADBDEBUG & ADBDEBUG_WRITE)
+				if (console_loglevel == 10)
+					printk(" -> end (%d of %d) (%x %x)!\n",
+						data_index-1, req->nbytes, adb_state, status);
+#endif
 				/* end of packet */
 				if(macintosh_config->adb_type==MAC_ADB_CUDA)
 				{
@@ -977,29 +1150,34 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 					via_write(via1, vBufB,
 						via_read(via1,vBufB)|TACK|TIP); 
 				}
+				else if(macintosh_config->adb_type==MAC_ADB_IISI)
+				{
+					/* XXX maybe clear ACK here ??? */
+					/* switch ACK off */
+					via_write(via1, vBufB, via_read(via1, vBufB) & ~TACK);
+					/* delay */
+					udelay(ADB_DELAY);
+					/* set the shift register to shift in */
+					via_write(via1, vACR, via_read(via1, vACR)|SR_OUT); 
+					/* clear SR int. */
+					x = via_read(via1, vSR); 
+					/* set ADB state 'idle' (end of frame) */
+					via_write(via1, vBufB,
+						via_read(via1,vBufB) & ~(TACK|TIP)); 
+				}
 				else if(macintosh_config->adb_type==MAC_ADB_II)
 				{
 					/*
 					 * XXX Not sure: maybe only switch to 
 					 * input mode on Talk ??
 					 */
-#if (ADBDEBUG & ADBDEBUG_WRITE)
-					if (console_loglevel == 10)
-						printk(" -> end (%d of %d) (%x %x)!\n",
-							data_index-1, req->nbytes, adb_state, status);
-#endif
 					/* set to shift in */
 					via_write(via1, vACR,
 						via_read(via1, vACR) & ~SR_OUT);
 					x=via_read(via1, vSR);
-#ifdef USE_ORIG
-					via_write(via1, vBufB,
-						via_read(via1, vBufB)|TACK|TIP);
-#else
 					/* set ADB state idle - might get SRQ */
 					via_write(via1, vBufB,
 						(via_read(via1, vBufB)&~ST_MASK)|ST_IDLE);
-#endif
 				}
 				req->sent = 1;
 				if (req->reply_expected) 
@@ -1008,7 +1186,12 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 					 * maybe fake a reply here on Listen ?? 
 					 * Otherwise, a Listen hangs on success
 					 */
-					if ( ((req->data[0]&0xc) == 0xc) )
+					if ( macintosh_config->adb_type==MAC_ADB_II
+					     && ((req->data[0]&0xc) == 0xc) )
+						adb_state = awaiting_reply;
+					else if ( macintosh_config->adb_type != MAC_ADB_II
+						  && ( req->data[0]      == 0x0) 
+						  && ((req->data[1]&0xc) == 0xc) )
 						adb_state = awaiting_reply;
 					else {
 						/*
@@ -1063,34 +1246,46 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 			}
 			else 
 			{
+#if (ADBDEBUG & ADBDEBUG_WRITE)
+				if (console_loglevel == 10)
+					printk(" %x (%x %x) ",
+						req->data[data_index], adb_state, status);
+#endif
 				if(macintosh_config->adb_type==MAC_ADB_CUDA)
 				{
 					via_write(via1, vSR, req->data[data_index++]); 
 					via_write(via1, vBufB, 
 						via_read(via1, vBufB)^TACK); 
 				}
-				else if(macintosh_config->adb_type==MAC_ADB_II)
+				else if(macintosh_config->adb_type==MAC_ADB_IISI)
 				{
-#if (ADBDEBUG & ADBDEBUG_WRITE)
-					if (console_loglevel == 10)
-						printk(" %x (%x %x) ",
-							req->data[data_index], adb_state, status);
+					/* switch ACK off */
+					via_write(via1, vBufB, via_read(via1, vBufB) & ~TACK);
+					/* delay */
+					udelay(ADB_DELAY);
+					/* XXX: need to check for collision?? */
+					/* set the shift register to shift out and send a byte */
+#if 0
+					via_write(via1, vACR, via_read(via1, vACR)|SR_OUT); 
 #endif
 					via_write(via1, vSR, req->data[data_index++]);
-#ifdef USE_ORIG
-					via_write(via1, vBufB,
-						via_read(via1, vBufB)^TACK);
-#else
+					/* signal 'byte ready' */
+					via_write(via1, vBufB, via_read(via1, vBufB) | TACK);
+				}
+				else if(macintosh_config->adb_type==MAC_ADB_II)
+				{
+					via_write(via1, vSR, req->data[data_index++]);
 					/* invert state bits, toggle ODD/EVEN */
 					x = via_read(via1, vBufB);
 					via_write(via1, vBufB,
 						(x&~ST_MASK)|~(x&ST_MASK));
-#endif
 				}
 			}
 			break;
 
 		case reading:
+
+			/* timeout / SRQ handling for II hw */
 #ifdef POLL_ON_TIMEOUT
 			if((reply_len-prefix_len)==3 && memcmp(reply_ptr-3,"\xFF\xFF\xFF",3)==0)
 #else
@@ -1128,15 +1323,11 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 						x, adb_state, status);
 #endif
 
-#ifdef USE_ORIG
-				via_write(via1, vBufB,
-					via_read(via1, vBufB)|TACK|TIP);
-#else
 #if 0	/* XXX leave status unchanged!! - need to check this again! */
+	/* XXX Only touch status on II !!! */
 				/* set ADB state to idle (required by adb_start()) */
 				via_write(via1, vBufB,
 					(via_read(via1, vBufB)&~ST_MASK)|ST_IDLE);
-#endif
 #endif
 
 				/*
@@ -1206,6 +1397,7 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 				 */
 				break;
 			}
+			/* end timeout / SRQ handling for II hw. */
 			if((reply_len-prefix_len)>3 && memcmp(reply_ptr-3,"\xFF\xFF\xFF",3)==0)
 			{
 				/* SRQ tacked on data packet */
@@ -1241,7 +1433,7 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 				reply_len++;
 			}
 			/* The usual handshake ... */
-			if(macintosh_config->adb_type==MAC_ADB_CUDA)
+			if (macintosh_config->adb_type==MAC_ADB_CUDA)
 			{
 				if (status == TIP)
 				{
@@ -1259,7 +1451,27 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 						via_read(via1, vBufB)^TACK); 
 				}
 			}
-			if(macintosh_config->adb_type==MAC_ADB_II)
+			else if (macintosh_config->adb_type==MAC_ADB_IISI)
+			{
+				/* ACK adb chip (maybe check for end first?) */
+		 		via_write(via1, vBufB, via_read(via1, vBufB) | TACK);
+				udelay(150);
+		 		via_write(via1, vBufB, via_read(via1, vBufB) & ~TACK);
+				/* end of frame?? */
+				if (status & TREQ)
+				{
+#if (ADBDEBUG & ADBDEBUG_READ)
+					if (console_loglevel == 10)
+						printk("adb_IIsi: end of frame!\n");
+#endif
+					/* that's all folks */
+					via_write(via1, vBufB,
+						via_read(via1, vBufB) & ~(TACK|TIP)); 
+					adb_state = read_done;
+					/* maybe process read_done here?? Handshake anyway?? */
+				}
+			}
+			else if (macintosh_config->adb_type==MAC_ADB_II)
 			{
 				/*
 				 * NetBSD hints that the next to last byte 
@@ -1277,10 +1489,6 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 					if (console_loglevel == 10)
 						printk(" -> read done!\n");
 #endif
-#ifdef USE_ORIG
-					via_write(via1, vBufB,
-						via_read(via1, vBufB)|TACK|TIP);
-#else
 #if 0		/* XXX: we take one more byte (why?), so handshake! */
 					/* set ADB state to idle */
 					via_write(via1, vBufB,
@@ -1290,7 +1498,6 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 					x = via_read(via1, vBufB);
 					via_write(via1, vBufB,
 						(x&~ST_MASK)|~(x&ST_MASK));
-#endif
 #endif
 					/* adjust packet length */
 					reply_len--;
@@ -1303,10 +1510,6 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 					if(status!=TIP+TREQ)
 						printk("macII_adb: state=reading status=%x\n", status);
 #endif
-#ifdef USE_ORIG
-					via_write(via1, vBufB, 
-						via_read(via1, vBufB)^TACK);
-#else
 					/* not caught: ST_CMD */
 					/* required for re-entry 'reading'! */
 					if ((status&ST_MASK) == ST_IDLE) {
@@ -1319,7 +1522,6 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 						via_write(via1, vBufB,
 							(x&~ST_MASK)|~(x&ST_MASK));
 					}
-#endif
 				}
 			}
 			break;
@@ -1352,7 +1554,6 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 			last_reply = command_byte;
 			last_active = (command_byte&0xf0)>>4;
 
-
 			/*
 			 * Assert status = ST_IDLE ??
 			 */
@@ -1374,15 +1575,6 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 				break;
 			}
 
-#ifdef USE_ORIG
-			/*
-			 * This will fail - TREQ is active low -> 0 is IRQ !!
-			 */ 
-			if (status == TREQ) 
-			{
-				via_write(via1, vBufB,
-					via_read(via1, vBufB)|~TIP); 
-#else
 			/*
 			 * /IRQ seen, so the ADB controller has data for us
 			 */
@@ -1391,7 +1583,7 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
 				/* set ADB state to idle */
 				via_write(via1, vBufB,
 					(via_read(via1, vBufB)&~ST_MASK)|ST_IDLE); 
-#endif
+
 				adb_state = reading;
 				reply_ptr = cuda_rbuf;
 				reply_len = 0;
@@ -1428,28 +1620,71 @@ void adb_interrupt(int irq, void *arg, struct pt_regs *regs)
  * Restart of CUDA support: please modify this interrupt handler while 
  * working at the Quadra etc. ADB driver. We can try to merge them later, or
  * remove the CUDA stuff from the MacII handler
+ *
+ * MSch 27/01/98: Implemented IIsi driver based on initial code by Robert 
+ * Thompson and hints from the NetBSD driver. CUDA and IIsi seem more closely
+ * related than to the MacII code, so merging all three might be a bad
+ * idea.
  */
 
 void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 {
 	int x, status;
 	struct adb_request *req;
+	unsigned long flags;
+	
+	save_flags(flags);
+	cli();
 
-	status = (~via_read(via1, vBufB) & (TIP|TREQ)) | (via_read(via1, vACR) & SR_OUT);
+	if(macintosh_config->adb_type==MAC_ADB_CUDA)
+		status = (~via_read(via1, vBufB) & (TIP|TREQ)) | (via_read(via1, vACR) & SR_OUT);
+	else
+		status = via_read(via1, vBufB) & (TIP|TREQ);
+
+#if (ADBDEBUG & ADBDEBUG_INT)
 	if (console_loglevel == 10)
 		printk("adb_interrupt: state=%d status=%x\n", adb_state, status);
+#endif
 
 	switch (adb_state) 
 	{
 		case idle:
+			first_byte = 0;
 			if(macintosh_config->adb_type==MAC_ADB_CUDA)
 			{
+#if (ADBDEBUG & ADBDEBUG_STATUS)
 				/* CUDA has sent us the first byte of data - unsolicited */
 				if (status != TREQ)
 					printk("cuda: state=idle, status=%x want=%x\n", 
 						status, TREQ);
+#endif
 				x = via_read(via1, vSR); 
+#if (ADBDEBUG & ADBDEBUG_READ)
+				if (console_loglevel == 10)
+					printk("adb_cuda: receiving unsol. packet: %x (%x %x) ", 
+						x, adb_state, status);
+#endif
 				via_write(via1, vBufB, via_read(via1,vBufB)&~TIP);
+			}
+			else if(macintosh_config->adb_type==MAC_ADB_IISI)
+			{
+				udelay(150);
+				/* set SR to IN */
+				via_write(via1, vACR,via_read(via1, vACR)&~SR_OUT); 
+		 		/* signal start of frame */
+		 		via_write(via1, vBufB, via_read(via1, vBufB) | TIP);
+				/* read first byte */
+				x = via_read(via1, vSR);
+				first_byte = x;
+#if (ADBDEBUG & ADBDEBUG_READ)
+				if (console_loglevel == 10)
+					printk("adb_IIsi : receiving unsol. packet: %x (%x %x) ", 
+						x, adb_state, status);
+#endif
+				/* ACK adb chip */
+		 		via_write(via1, vBufB, via_read(via1, vBufB) | TACK);
+				udelay(150);
+		 		via_write(via1, vBufB, via_read(via1, vBufB) & ~TACK);
 			}
 			else if(macintosh_config->adb_type==MAC_ADB_II)
 			{
@@ -1469,12 +1704,45 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 			if(macintosh_config->adb_type==MAC_ADB_CUDA)
 			{
 				/* CUDA has sent us the first byte of data of a reply */
+#if (ADBDEBUG & ADBDEBUG_STATUS)
 				if (status != TREQ)
 					printk("cuda: state=awaiting_reply, status=%x want=%x\n", 
 						status, TREQ);
+#endif
 				x = via_read(via1, vSR); 
+#if (ADBDEBUG & ADBDEBUG_READ)
+				if (console_loglevel == 10)
+					printk("adb_cuda: reading reply: %x (%x %x) ",
+						x, adb_state, status);
+#endif
 				via_write(via1,vBufB, 
 					via_read(via1, vBufB)&~TIP);
+			}
+			else if(macintosh_config->adb_type==MAC_ADB_IISI)
+			{
+				/* udelay(150);*/
+				/* set SR to IN */
+				via_write(via1, vACR,via_read(via1, vACR)&~SR_OUT); 
+		 		/* signal start of frame */
+		 		via_write(via1, vBufB, via_read(via1, vBufB) | TIP);
+				/* read first byte */
+				x = via_read(via1, vSR);
+				first_byte = x;
+#if (ADBDEBUG & ADBDEBUG_READ)
+				if (console_loglevel == 10)
+					printk("adb_IIsi: reading reply: %x (%x %x) ",
+						x, adb_state, status);
+#endif
+#if 0
+				if( via_read(via1,vBufB) & TREQ)
+					ending = 1;
+				else
+					ending = 0;
+#endif
+				/* ACK adb chip */
+		 		via_write(via1, vBufB, via_read(via1, vBufB) | TACK);
+				udelay(150);
+		 		via_write(via1, vBufB, via_read(via1, vBufB) & ~TACK);
 			}
 			adb_state = reading;			
 			reply_ptr = current_req->reply;
@@ -1485,11 +1753,16 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 		case sent_first_byte:
 			if(macintosh_config->adb_type==MAC_ADB_CUDA)
 			{
+#if (ADBDEBUG & ADBDEBUG_WRITE)
+				if (console_loglevel == 10)
+					printk(" sending: %x (%x %x) ",
+						current_req->data[1], adb_state, status);
+#endif
 				if (status == TREQ + TIP + SR_OUT) 
 				{
 					/* collision */
 					if (console_loglevel == 10)
-						printk("cuda: send collision!\n");
+						printk("adb_cuda: send collision!\n");
 					via_write(via1, vACR,
 						via_read(via1, vACR)&~SR_OUT); 
 					x = via_read(via1, vSR); 
@@ -1500,13 +1773,51 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 				else
 				{
 					/* assert status == TIP + SR_OUT */
+#if (ADBDEBUG & ADBDEBUG_STATUS)
 					if (status != TIP + SR_OUT)
-						printk("cuda: state=sent_first_byte status=%x want=%x\n", 
+						printk("adb_cuda: state=sent_first_byte status=%x want=%x\n", 
 							status, TIP + SR_OUT);
+#endif
 					via_write(via1,vSR,current_req->data[1]); 
 					via_write(via1, vBufB,
 						via_read(via1, vBufB)^TACK); 
 					data_index = 2;
+					adb_state = sending;
+				}
+			}
+			else if(macintosh_config->adb_type==MAC_ADB_IISI)
+			{
+				/* switch ACK off */
+				via_write(via1, vBufB, via_read(via1, vBufB) & ~TACK);
+				if ( !(via_read(via1, vBufB) & TREQ) ) 
+				{
+					/* collision */
+#if (ADBDEBUG & ADBDEBUG_WRITE)
+					if (console_loglevel == 10)
+						printk("adb_macIIsi: send collison, aborting!\n");
+#endif
+					/* set shift in */
+					via_write(via1, vACR,
+						via_read(via1, vACR)&~SR_OUT); 
+					/* clear SR int. */
+					x = via_read(via1, vSR); 
+					/* set ADB state to 'idle' */
+					via_write(via1, vBufB,
+						via_read(via1,vBufB) & ~(TIP|TACK)); 
+					adb_state = idle;
+				}
+				else
+				{
+					/* delay */
+					udelay(ADB_DELAY);
+					/* set the shift register to shift out and send a byte */
+#if 0
+					via_write(via1, vACR, via_read(via1, vACR) | SR_OUT); 
+#endif
+					via_write(via1, vSR, current_req->data[1]);
+					/* signal 'byte ready' */
+					via_write(via1, vBufB, via_read(via1, vBufB) | TACK);
+					data_index=2;			
 					adb_state = sending;
 				}
 			}
@@ -1527,6 +1838,11 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 			req = current_req;
 			if (data_index >= req->nbytes) 
 			{
+#if (ADBDEBUG & ADBDEBUG_WRITE)
+				if (console_loglevel == 10)
+					printk(" -> end (%d of %d) (%x %x)!\n",
+						data_index-1, req->nbytes, adb_state, status);
+#endif
 				if(macintosh_config->adb_type==MAC_ADB_CUDA)
 				{
 					via_write(via1, vACR,
@@ -1534,6 +1850,21 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 					x = via_read(via1, vSR); 
 					via_write(via1, vBufB,
 						via_read(via1,vBufB)|TACK|TIP); 
+				}
+				else if(macintosh_config->adb_type==MAC_ADB_IISI)
+				{
+					/* XXX maybe clear ACK here ??? */
+					/* switch ACK off */
+					via_write(via1, vBufB, via_read(via1, vBufB) & ~TACK);
+					/* delay */
+					udelay(ADB_DELAY);
+					/* set the shift register to shift in */
+					via_write(via1, vACR, via_read(via1, vACR)|SR_OUT); 
+					/* clear SR int. */
+					x = via_read(via1, vSR); 
+					/* set ADB state 'idle' (end of frame) */
+					via_write(via1, vBufB,
+						via_read(via1,vBufB) & ~(TACK|TIP)); 
 				}
 				else if(macintosh_config->adb_type==MAC_ADB_II)
 				{
@@ -1546,7 +1877,40 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 				req->sent = 1;
 				if (req->reply_expected) 
 				{
-					adb_state = awaiting_reply;
+					/* 
+					 * maybe fake a reply here on Listen ?? 
+					 * Otherwise, a Listen hangs on success
+					 * CUDA+IIsi: only ADB Talk considered
+					 * RTC/PRAM read (0x1 0x3) to follow.
+					 */
+					if ( (req->data[0] == 0x0) && ((req->data[1]&0xc) == 0xc) )
+						adb_state = awaiting_reply;
+					else {
+						/*
+						 * Reply expected, but none
+						 * possible -> fake reply.
+						 */
+#if (ADBDEBUG & ADBDEBUG_PROT)
+						printk("ADB: reply expected on Listen, faking reply\n");
+#endif
+						/* make it look weird */
+						/* XXX: return reply_len -1? */
+						/* XXX: fake ADB header? */
+						req->reply[0] = req->reply[1] = req->reply[2] = 0xFF;  
+						req->reply_len = 3;
+						req->got_reply = 1;
+						current_req = req->next;
+						if (req->done)
+							(*req->done)(req);
+						/* 
+						 * ready with this one, run 
+						 * next command !
+						 */
+						/* set state to idle !! */
+						adb_state = idle;
+						if (current_req || retry_req)
+							adb_start();
+					}
 				}
 				else
 				{
@@ -1560,11 +1924,31 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 			}
 			else 
 			{
+#if (ADBDEBUG & ADBDEBUG_WRITE)
+				if (console_loglevel == 10)
+					printk(" %x (%x %x) ",
+						req->data[data_index], adb_state, status);
+#endif
 				if(macintosh_config->adb_type==MAC_ADB_CUDA)
 				{
 					via_write(via1, vSR, req->data[data_index++]); 
 					via_write(via1, vBufB, 
 						via_read(via1, vBufB)^TACK); 
+				}
+				else if(macintosh_config->adb_type==MAC_ADB_IISI)
+				{
+					/* switch ACK off */
+					via_write(via1, vBufB, via_read(via1, vBufB) & ~TACK);
+					/* delay */
+					udelay(ADB_DELAY);
+					/* XXX: need to check for collision?? */
+					/* set the shift register to shift out and send a byte */
+#if 0
+					via_write(via1, vACR, via_read(via1, vACR)|SR_OUT); 
+#endif
+					via_write(via1, vSR, req->data[data_index++]);
+					/* signal 'byte ready' */
+					via_write(via1, vBufB, via_read(via1, vBufB) | TACK);
 				}
 				else if(macintosh_config->adb_type==MAC_ADB_II)
 				{
@@ -1579,14 +1963,17 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 			if(reply_len==3 && memcmp(reply_ptr-3,"\xFF\xFF\xFF",3)==0)
 			{
 				/* Terminate the SRQ packet */
-				printk("CUDA: Got an SRQ\n");
+#if (ADBDEBUG & ADBDEBUG_SRQ)
+				if (console_loglevel == 10)
+					printk("adb: Got an SRQ\n");
+#endif
 				adb_state = idle;
 				adb_queue_poll();
 				break;
 			}
 			/* Sanity check - botched in orig. code! */
 			if(reply_len>15) {
-				printk("CUDA: reply buffer overrun!\n");
+				printk("adb_cuda: reply buffer overrun!\n");
 				/* wrap buffer */
 				reply_len=0;
 				if (reading_reply)
@@ -1595,9 +1982,11 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 					reply_ptr = cuda_rbuf;
 			}
 			*reply_ptr = via_read(via1, vSR); 
+#if (ADBDEBUG & ADBDEBUG_READ)
 			if (console_loglevel == 10)
-				printk(" %p-> %x (%x %x) ", 
-					reply_ptr, *reply_ptr, adb_state, status);
+				printk(" %x (%x %x) ", 
+					*reply_ptr, adb_state, status);
+#endif
 			reply_ptr++;
 			reply_len++;
 			if(macintosh_config->adb_type==MAC_ADB_CUDA)
@@ -1612,11 +2001,34 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 				else 
 				{
 					/* assert status == TIP | TREQ */
+#if (ADBDEBUG & ADBDEBUG_STATUS)
 					if (status != TIP + TREQ)
 						printk("cuda: state=reading status=%x want=%x\n", 
 							status, TIP + TREQ);
+#endif
 					via_write(via1, vBufB, 
 						via_read(via1, vBufB)^TACK); 
+				}
+			}
+			else if (macintosh_config->adb_type==MAC_ADB_IISI)
+			{
+				/* ACK adb chip (maybe check for end first?) */
+		 		via_write(via1, vBufB, via_read(via1, vBufB) | TACK);
+				udelay(150);
+		 		via_write(via1, vBufB, via_read(via1, vBufB) & ~TACK);
+				/* end of frame?? */
+				if (status & TREQ)
+				{
+#if (ADBDEBUG & ADBDEBUG_READ)
+					if (console_loglevel == 10)
+						printk("adb_IIsi: end of frame!\n");
+#endif
+					/* that's all folks */
+					via_write(via1, vBufB,
+						via_read(via1, vBufB) & ~(TACK|TIP)); 
+					adb_state = read_done;
+					/* XXX maybe process read_done here?? 
+					   Handshake anyway?? */
 				}
 			}
 			if(macintosh_config->adb_type==MAC_ADB_II)
@@ -1629,16 +2041,26 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 				}
 				else
 				{
+#if (ADBDEBUG & ADBDEBUG_STATUS)
 					if(status!=TIP+TREQ)
 						printk("macII_adb: state=reading status=%x\n", status);
+#endif
 					via_write(via1, vBufB, 
 						via_read(via1, vBufB)^TACK);
 				}
 			}
-			break;
+			/* fall through for IIsi on end of frame */
+			if (macintosh_config->adb_type != MAC_ADB_IISI
+			    || adb_state != read_done)
+				break;
 
 		case read_done:
 			x = via_read(via1, vSR); 
+#if (ADBDEBUG & ADBDEBUG_READ)
+			if (console_loglevel == 10)
+				printk("adb: read done: %x (%x %x)!\n", 
+					x, adb_state, status);
+#endif
 			if (reading_reply) 
 			{
 				req = current_req;
@@ -1653,10 +2075,21 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 				adb_input(cuda_rbuf, reply_ptr - cuda_rbuf, regs);
 			}
 
-			if (status == TREQ) 
+			if (macintosh_config->adb_type==MAC_ADB_CUDA 
+			      &&   status & TREQ) 
 			{
 				via_write(via1, vBufB,
-					via_read(via1, vBufB)|~TIP); 
+					via_read(via1, vBufB)&~TIP); 
+				adb_state = reading;
+				reply_ptr = cuda_rbuf;
+				reading_reply = 0;
+			}
+			else if  (macintosh_config->adb_type==MAC_ADB_IISI
+			      && !(status & TREQ))
+			{
+				udelay(150);
+				via_write(via1, vBufB,
+					via_read(via1, vBufB) | TIP); 
 				adb_state = reading;
 				reply_ptr = cuda_rbuf;
 				reading_reply = 0;
@@ -1669,8 +2102,11 @@ void adb_cuda_interrupt(int irq, void *arg, struct pt_regs *regs)
 			break;
 
 		default:
-			printk("adb_interrupt: unknown adb_state %d?\n", adb_state);
+			printk("adb_cuda_interrupt: unknown adb_state %d?\n", adb_state);
 	}
+
+	restore_flags(flags);
+
 }
 
 /*

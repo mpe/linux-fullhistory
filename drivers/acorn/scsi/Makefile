@@ -72,6 +72,18 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_EESOXSCSI),y)
+  L_OBJS += eesox.o
+  CONFIG_QUEUE_BUILTIN=y
+  CONFIG_FAS216_BUILTIN=y
+else
+  ifeq ($(CONFIG_SCSI_EESOXSCSI),m)
+    M_OBJS += eesox.o
+    CONFIG_QUEUE_MODULE=y
+    CONFIG_FAS216_MODULE=y
+  endif
+endif
+
 ifeq ($(CONFIG_QUEUE_BUILTIN),y)
   LX_OBJS += queue.o msgqueue.o
 else

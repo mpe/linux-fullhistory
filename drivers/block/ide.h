@@ -508,10 +508,13 @@ extern  ide_module_t	*ide_modules;
 #endif
 
 /*
- * One final include file, which references some of the data/defns from above
+ * We need blk.h, but we replace its end_request by our own version.
  */
-#define IDE_DRIVER	/* "parameter" for blk.h */
+#define IDE_DRIVER		/* Toggle some magic bits in blk.h */
+#define LOCAL_END_REQUEST	/* Don't generate end_request in blk.h */
 #include <linux/blk.h>
+
+void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup);
 
 /*
  * This is used for (nearly) all data transfers from/to the IDE interface

@@ -100,13 +100,13 @@ Lrow4bpplp:	ldr	r7, [lr, r7, lsl #2]
 Lrow8bpplp:	mov	ip, r7, lsr #4
 		ldr	ip, [lr, ip, lsl #2]
 		mul	r4, r2, ip
-		and	ip, r7, #15
-		eor	r4, r3, r4
-		ldr	ip, [lr, ip, lsl #2]
-		mul	ip, r2, ip
-		tst	r1, #7
+		and	ip, r7, #15			@ avoid r4
+		ldr	ip, [lr, ip, lsl #2]		@ avoid r4
+		mul	ip, r2, ip			@ avoid r4
+		eor	r4, r3, r4			@ avoid ip
+		tst	r1, #7				@ avoid ip
+		sub	r0, r0, r5			@ avoid ip
 		eor	ip, r3, ip
-		sub	r0, r0, r5
 		stmia	r0, {r4, ip}
 		LOADREGS(eqfd, sp!, {r4 - r7, pc})
 		sub	r1, r1, #1
@@ -114,13 +114,13 @@ Lrow8bpplp:	mov	ip, r7, lsr #4
 		mov	ip, r7, lsr #4
 		ldr	ip, [lr, ip, lsl #2]
 		mul	r4, r2, ip
-		and	ip, r7, #15
-		eor	r4, r3, r4
-		ldr	ip, [lr, ip, lsl #2]
-		mul	ip, r2, ip
-		tst	r1, #7
+		and	ip, r7, #15			@ avoid r4
+		ldr	ip, [lr, ip, lsl #2]		@ avoid r4
+		mul	ip, r2, ip			@ avoid r4
+		eor	r4, r3, r4			@ avoid ip
+		tst	r1, #7				@ avoid ip
+		sub	r0, r0, r5			@ avoid ip
 		eor	ip, r3, ip
-		sub	r0, r0, r5
 		stmia	r0, {r4, ip}
 		subne	r1, r1, #1
 		ldrneb	r7, [r6, r1]

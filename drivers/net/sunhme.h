@@ -468,9 +468,9 @@ struct happy_meal_txd {
 			    (hp)->tx_old - (hp)->tx_new - 1)
 
 #define RX_OFFSET          2
-#define RX_BUF_ALLOC_SIZE  (ETH_FRAME_LEN + RX_OFFSET + (64 * 3))
+#define RX_BUF_ALLOC_SIZE  (1546 + RX_OFFSET + 64)
 
-#define RX_COPY_THRESHOLD  128
+#define RX_COPY_THRESHOLD  256
 
 struct hmeal_init_block {
 	struct happy_meal_rxd happy_meal_rxd[RX_RING_MAXSIZE];

@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.64 1998/02/16 14:06:44 jj Exp $
+/* $Id: pgtable.h,v 1.67 1998/05/01 09:33:53 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -186,14 +186,14 @@ extern void __flush_tlb_page(unsigned long context, unsigned long page);
 extern __inline__ void flush_tlb_mm(struct mm_struct *mm)
 {
 	if(mm->context != NO_CONTEXT)
-		__flush_tlb_mm(mm->context & 0x1fff);
+		__flush_tlb_mm(mm->context & 0x3ff);
 }
 
 extern __inline__ void flush_tlb_range(struct mm_struct *mm, unsigned long start,
 				       unsigned long end)
 {
 	if(mm->context != NO_CONTEXT)
-		__flush_tlb_range(mm->context & 0x1fff, start, end);
+		__flush_tlb_range(mm->context & 0x3ff, start, end);
 }
 
 extern __inline__ void flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
@@ -201,7 +201,7 @@ extern __inline__ void flush_tlb_page(struct vm_area_struct *vma, unsigned long 
 	struct mm_struct *mm = vma->vm_mm;
 
 	if(mm->context != NO_CONTEXT)
-		__flush_tlb_page(mm->context & 0x1fff, page & PAGE_MASK);
+		__flush_tlb_page(mm->context & 0x3ff, page & PAGE_MASK);
 }
 
 #else /* __SMP__ */
@@ -355,14 +355,79 @@ extern struct pgtable_cache_struct {
 	unsigned long *pmd_cache;
 	unsigned long *pte_cache;
 	unsigned long pgcache_size;
+	unsigned long pgdcache_size;
 } pgt_quicklists;
 #endif
 #define pgd_quicklist		(pgt_quicklists.pgd_cache)
 #define pmd_quicklist		(pgt_quicklists.pmd_cache)
 #define pte_quicklist		(pgt_quicklists.pte_cache)
 #define pgtable_cache_size	(pgt_quicklists.pgcache_size)
+#define pgd_cache_size		(pgt_quicklists.pgdcache_size)
 
-extern pgd_t *get_pgd_slow(void);
+extern __inline__ void __init_pgd(pgd_t *pgdp)
+{
+	extern void __bfill64(void *, unsigned long *);
+	extern unsigned long two_null_pmd_table;
+	
+	__bfill64((void *)pgdp, &two_null_pmd_table);
+}
+
+#ifndef __SMP__
+
+extern __inline__ void free_pgd_fast(pgd_t *pgd)
+{
+	struct page *page = mem_map + MAP_NR(pgd);
+
+	if (!page->pprev_hash) {
+		(unsigned long *)page->next_hash = pgd_quicklist;
+		pgd_quicklist = (unsigned long *)page;
+	}
+	(unsigned long)page->pprev_hash |= (((unsigned long)pgd & (PAGE_SIZE / 2)) ? 2 : 1);
+	pgd_cache_size++;
+}
+
+extern __inline__ pgd_t *get_pgd_fast(void)
+{
+        struct page *ret;
+
+        if ((ret = (struct page *)pgd_quicklist) != NULL) {
+                unsigned long mask = (unsigned long)ret->pprev_hash;
+		unsigned long off = 0;
+
+		if (mask & 1)
+			mask &= ~1;
+		else {
+			off = PAGE_SIZE / 2;
+			mask &= ~2;
+		}
+		(unsigned long)ret->pprev_hash = mask;
+		if (!mask)
+			pgd_quicklist = (unsigned long *)ret->next_hash;
+                ret = (struct page *)(PAGE_OFFSET + (ret->map_nr << PAGE_SHIFT) + off);
+                pgd_cache_size--;
+        } else {
+		ret = (struct page *) __get_free_page(GFP_KERNEL);
+		if(ret) {
+			struct page *page = mem_map + MAP_NR(ret);
+			
+			__init_pgd((pgd_t *)ret);
+			(unsigned long)page->pprev_hash = 2;
+			(unsigned long *)page->next_hash = pgd_quicklist;
+			pgd_quicklist = (unsigned long *)page;
+			pgd_cache_size++;
+		}
+        }
+        return (pgd_t *)ret;
+}
+
+#else /* __SMP__ */
+
+extern __inline__ void free_pgd_fast(pgd_t *pgd)
+{
+	*(unsigned long *)pgd = (unsigned long) pgd_quicklist;
+	pgd_quicklist = (unsigned long *) pgd;
+	pgtable_cache_size++;
+}
 
 extern __inline__ pgd_t *get_pgd_fast(void)
 {
@@ -372,17 +437,14 @@ extern __inline__ pgd_t *get_pgd_fast(void)
 		pgd_quicklist = (unsigned long *)(*ret);
 		ret[0] = ret[1];
 		pgtable_cache_size--;
-	} else
-		ret = (unsigned long *)get_pgd_slow();
+	} else {
+		ret = (unsigned long *) __get_free_page(GFP_KERNEL);
+		if(ret)
+			__init_pgd((pgd_t *)ret);
+	}
 	return (pgd_t *)ret;
 }
-
-extern __inline__ void free_pgd_fast(pgd_t *pgd)
-{
-	*(unsigned long *)pgd = (unsigned long) pgd_quicklist;
-	pgd_quicklist = (unsigned long *) pgd;
-	pgtable_cache_size++;
-}
+#endif /* __SMP__ */
 
 extern __inline__ void free_pgd_slow(pgd_t *pgd)
 {
@@ -530,7 +592,7 @@ extern __inline__ void update_mmu_cache(struct vm_area_struct *vma,
 					unsigned long address, pte_t pte)
 {
 	struct mm_struct *mm = vma->vm_mm;
-	unsigned long ctx = mm->context & 0x1fff;
+	unsigned long ctx = mm->context & 0x3ff;
 	unsigned long tag_access;
 
 	tag_access = address | ctx;
@@ -549,7 +611,7 @@ extern __inline__ void update_mmu_cache(struct vm_area_struct *vma,
 2:
 	wrpr	%%g1, 0x0, %%pstate
 "	: /* no outputs */
-	: "i" (PSTATE_IE), "r" (vma->vm_flags & VM_EXEC),
+	: "i" (PSTATE_IE), "r" (vma->vm_flags & VM_EXECUTABLE),
 	  "i" (TLB_TAG_ACCESS), "r" (tag_access), "r" (pte_val(pte)),
 	  "i" (ASI_IMMU), "i" (ASI_ITLB_DATA_IN),
 	  "i" (ASI_DMMU), "i" (ASI_DTLB_DATA_IN)

@@ -1,13 +1,13 @@
 /*
- *  linux/arch/mips/kernel/process.c
+ * linux/arch/mips/kernel/process.c
  *
- *  Copyright (C) 1995 Ralf Baechle
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
  *
- *  Modified for R3000/DECStation support by Paul M. Antoine 1995, 1996
+ * Copyright (C) 1994 - 1998 by Ralf Baechle and others.
  *
- * This file handles the architecture-dependent parts of initialization,
- * though it does not yet currently fully support the DECStation,
- * or R3000 - PMA.
+ * $Id: process.c,v 1.10 1998/05/04 09:17:53 ralf Exp $
  */
 #include <linux/config.h>
 #include <linux/errno.h>
@@ -32,11 +32,6 @@
 #include <asm/uaccess.h>
 #include <asm/io.h>
 #include <asm/elf.h>
-#ifdef CONFIG_SGI
-#include <asm/sgialib.h>
-#endif
-
-int active_ds = USER_DS;
 
 asmlinkage void ret_from_sys_call(void);
 
@@ -54,10 +49,22 @@ void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp)
 
 void exit_thread(void)
 {
+	/* Forget lazy fpu state */
+	if (last_task_used_math == current) {
+		set_cp0_status(ST0_CU1, ST0_CU1);
+		__asm__ __volatile__("cfc1\t$0,$31");
+		last_task_used_math = NULL;
+	}
 }
 
 void flush_thread(void)
 {
+	/* Forget lazy fpu state */
+	if (last_task_used_math == current) {
+		set_cp0_status(ST0_CU1, ST0_CU1);
+		__asm__ __volatile__("cfc1\t$0,$31");
+		last_task_used_math = NULL;
+	}
 }
 
 void release_thread(struct task_struct *dead_task)
@@ -72,6 +79,10 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 
 	childksp = (unsigned long)p + KERNEL_STACK_SIZE - 32;
 
+	if (last_task_used_math == current) {
+		set_cp0_status(ST0_CU1, ST0_CU1);
+		r4xx0_save_fp(p);
+	}
 	/* set up new TSS. */
 	childregs = (struct pt_regs *) childksp - 1;
 	*childregs = *regs;
@@ -87,13 +98,13 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 		regs->regs[3] = 0;
 	}
 	if (childregs->cp0_status & ST0_CU0) {
+		childregs->regs[28] = (unsigned long) p;
 		childregs->regs[29] = childksp;
 		p->tss.current_ds = KERNEL_DS;
 	} else {
 		childregs->regs[29] = usp;
 		p->tss.current_ds = USER_DS;
 	}
-	p->tss.ksp = childksp;
 	p->tss.reg29 = (unsigned long) childregs;
 	p->tss.reg31 = (unsigned long) ret_from_sys_call;
 
@@ -102,7 +113,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	 * switching for most programs since they don't use the fpu.
 	 */
 	p->tss.cp0_status = read_32bit_cp0_register(CP0_STATUS) &
-                            ~(ST0_CU3|ST0_CU2|ST0_CU1|ST0_KSU|ST0_ERL|ST0_EXL);
+                            ~(ST0_CU3|ST0_CU2|ST0_CU1|ST0_KSU);
 	childregs->cp0_status &= ~(ST0_CU3|ST0_CU2|ST0_CU1);
 	p->mm->context = 0;
 

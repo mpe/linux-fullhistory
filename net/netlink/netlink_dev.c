@@ -116,7 +116,7 @@ static int netlink_open(struct inode * inode, struct file * file)
 	MOD_INC_USE_COUNT;
 	
 	err = -EINVAL;
-	if (net_families[AF_NETLINK]==NULL)
+	if (net_families[PF_NETLINK]==NULL)
   		goto out;
 
 	err = -ENFILE;
@@ -125,7 +125,7 @@ static int netlink_open(struct inode * inode, struct file * file)
 
 	sock->type = SOCK_RAW;
 
-	if ((err = net_families[AF_NETLINK]->create(sock, minor)) < 0) 
+	if ((err = net_families[PF_NETLINK]->create(sock, minor)) < 0) 
 	{
 		sock_release(sock);
 		goto out;

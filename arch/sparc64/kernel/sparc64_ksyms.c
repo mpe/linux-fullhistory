@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.33 1998/04/06 16:09:40 jj Exp $
+/* $Id: sparc64_ksyms.c,v 1.36 1998/04/16 07:07:19 ecd Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -113,10 +113,10 @@ EXPORT_SYMBOL_PRIVATE(global_restore_flags);
 #else
 EXPORT_SYMBOL(local_irq_count);
 #endif
-EXPORT_SYMBOL(enable_irq);
-EXPORT_SYMBOL(disable_irq);
 EXPORT_SYMBOL_PRIVATE(_lock_kernel);
 EXPORT_SYMBOL_PRIVATE(_unlock_kernel);
+EXPORT_SYMBOL(enable_irq);
+EXPORT_SYMBOL(disable_irq);
 
 EXPORT_SYMBOL_PRIVATE(flushw_user);
 
@@ -140,6 +140,12 @@ EXPORT_SYMBOL(ebus_chain);
 EXPORT_SYMBOL(pci_dvma_offset);
 EXPORT_SYMBOL(pci_dvma_mask);
 EXPORT_SYMBOL(empty_zero_page);
+EXPORT_SYMBOL(outsb);
+EXPORT_SYMBOL(outsw);
+EXPORT_SYMBOL(outsl);
+EXPORT_SYMBOL(insb);
+EXPORT_SYMBOL(insw);
+EXPORT_SYMBOL(insl);
 #endif
 
 /* Solaris/SunOS binary compatibility */

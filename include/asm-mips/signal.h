@@ -7,17 +7,22 @@
  *
  * Copyright (C) 1995, 1996, 1997 by Ralf Baechle
  *
- * $Id: signal.h,v 1.2 1997/09/07 05:27:50 ralf Exp $
+ * $Id: signal.h,v 1.8 1998/05/01 01:36:11 ralf Exp $
  */
 #ifndef __ASM_MIPS_SIGNAL_H
 #define __ASM_MIPS_SIGNAL_H
 
-#include <asm/sgidefs.h>
+#include <linux/types.h>
 
-typedef unsigned long sigset_t;
+#define _NSIG		128
+#define _NSIG_BPW	32
+#define _NSIG_WORDS	(_NSIG / _NSIG_BPW)
 
-#define _NSIG		32
-#define NSIG		_NSIG
+typedef struct {
+	unsigned long sig[_NSIG_WORDS];
+} sigset_t;
+
+typedef unsigned long old_sigset_t;		/* at least 32 bits */
 
 #define SIGHUP		 1	/* Hangup (POSIX).  */
 #define SIGINT		 2	/* Interrupt (ANSI).  */
@@ -54,34 +59,48 @@ typedef unsigned long sigset_t;
 #define SIGXCPU		30	/* CPU limit exceeded (4.2 BSD).  */
 #define SIGXFSZ		31	/* File size limit exceeded (4.2 BSD).  */
 
+/* These should not be considered constants from userland.  */
+#define SIGRTMIN	32
+#define SIGRTMAX	(_NSIG-1)
+
 /*
- * sa_flags values: SA_STACK is not currently supported, but will allow the
- * usage of signal stacks by using the (now obsolete) sa_restorer field in
- * the sigaction structure as a stack pointer. This is now possible due to
- * the changes in signal handling. LBT 010493.
+ * SA_FLAGS values:
+ *
+ * SA_ONSTACK is not currently supported, but will allow sigaltstack(2).
  * SA_INTERRUPT is a no-op, but left due to historical reasons. Use the
  * SA_RESTART flag to get restarting signals (which were the default long ago)
- * SA_SHIRQ flag is for shared interrupt support on PCI and EISA.
+ * SA_NOCLDSTOP flag to turn off SIGCHLD when children stop.
+ * SA_RESETHAND clears the handler when the signal is delivered.
+ * SA_NOCLDWAIT flag on SIGCHLD to inhibit zombies.
+ * SA_NODEFER prevents the current signal from being masked in the handler.
+ *
+ * SA_ONESHOT and SA_NOMASK are the historical Linux names for the Single
+ * Unix names RESETHAND and NODEFER respectively.
  */
-#define SA_STACK	0x1
-#define SA_ONSTACK	SA_STACK
-#define SA_RESTART	0x4
-#define SA_NOCLDSTOP	0x20000
-/* Non ABI signals */
-#define SA_INTERRUPT	0x01000000
-#define SA_NOMASK	0x02000000
-#define SA_ONESHOT	0x04000000
-#define SA_SHIRQ	0x08000000
+#define SA_STACK	0x00000001
+#define SA_RESETHAND	0x00000002
+#define SA_RESTART	0x00000004
+#define SA_SIGINFO	0x00000008
+#define SA_NODEFER	0x00000010
+#define SA_NOCLDWAIT	0x00010000	/* Not supported yet */
+#define SA_NOCLDSTOP	0x00020000
+
+#define SA_NOMASK	SA_NODEFER	/* DANGER: was 0x02000000 */
+#define SA_ONESHOT	SA_RESETHAND	/* DANGER: was 0x04000000 */
 
 #ifdef __KERNEL__
 /*
  * These values of sa_flags are used only by the kernel as part of the
  * irq handling routines.
  *
- * SA_INTERRUPT is also used by the irq handling routines.
+ * SA_INTERRUPT is a no-op, but left due to historical reasons. Use the
+ * SA_RESTART flag to get restarting signals (which were the default long ago)
+ * SA_SHIRQ flag is for shared interrupt support on PCI and EISA.
  */
-#define SA_PROBE SA_ONESHOT
-#define SA_SAMPLE_RANDOM SA_RESTART
+#define SA_INTERRUPT		0x01000000	/* interrupt handling */
+#define SA_SHIRQ		0x08000000
+#define SA_PROBE		SA_ONESHOT
+#define SA_SAMPLE_RANDOM	SA_RESTART
 #endif /* __KERNEL__ */
 
 #define SIG_BLOCK	1	/* for blocking signals */
@@ -102,17 +121,13 @@ struct sigaction {
 	unsigned int	sa_flags;
 	__sighandler_t	sa_handler;
 	sigset_t	sa_mask;
-	unsigned int	__pad0[3];	/* reserved, keep size constant */
+	int		sa_resv[2];	/* reserved */
+};
 
-	/* Abi says here follows reserved int[2] */
-	void		(*sa_restorer)(void);
-#if (_MIPS_ISA == _MIPS_ISA_MIPS1) || (_MIPS_ISA == _MIPS_ISA_MIPS2)
-	/*
-	 * For 32 bit code we have to pad struct sigaction to get
-	 * constant size for the ABI
-	 */
-	int		__pad1[1];	/* reserved */
-#endif
+/* XXX use sa_rev for storing ka_restorer */
+struct k_sigaction {
+	struct sigaction sa;
+	void (*ka_restorer)(void);
 };
 
 #ifdef __KERNEL__

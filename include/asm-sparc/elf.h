@@ -1,4 +1,4 @@
-/* $Id: elf.h,v 1.15 1998/03/23 08:41:32 jj Exp $ */
+/* $Id: elf.h,v 1.16 1998/05/01 16:28:47 davem Exp $ */
 #ifndef __ASMSPARC_ELF_H
 #define __ASMSPARC_ELF_H
 
@@ -42,7 +42,7 @@ typedef unsigned long elf_fpregset_t;
    the loader.  We need to make sure that it is out of the way of the program
    that it will "exec", and that there is sufficient room for the brk.  */
 
-#define ELF_ET_DYN_BASE         (TASK_UNMAPPED_BASE + 0x1000000)
+#define ELF_ET_DYN_BASE         (TASK_UNMAPPED_BASE(0) + 0x1000000)
 
 /* This yields a mask that user programs can use to figure out what
    instruction set this cpu supports.  This can NOT be done in userspace

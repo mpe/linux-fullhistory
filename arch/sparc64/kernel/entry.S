@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.76 1998/01/05 17:00:13 jj Exp $
+/* $Id: entry.S,v 1.78 1998/05/01 20:36:24 davem Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -58,8 +58,7 @@ sparc64_dtlb_prot_catch:
 	 mov		1, %o2
 	.align		32
 sparc64_dtlb_refbit_catch:
-	srlx		%g5, 9, %g4
-	and		%g4, ((_PAGE_PRESENT | _PAGE_READ) >> 9), %g4
+	and		%g5, ((_PAGE_PRESENT | _PAGE_READ) >> 9), %g4
 	cmp		%g4, ((_PAGE_PRESENT | _PAGE_READ) >> 9)
 	be,a,pt		%xcc, 2f
 	 mov		1, %g4
@@ -85,8 +84,7 @@ sparc64_dtlb_refbit_catch:
 	 clr		%l6
 	.align		32
 sparc64_itlb_refbit_catch:
-	srlx		%g5, 9, %g4
-	and		%g4, ((_PAGE_PRESENT | _PAGE_READ) >> 9), %g4
+	and		%g5, ((_PAGE_PRESENT | _PAGE_READ) >> 9), %g4
 	cmp		%g4, ((_PAGE_PRESENT | _PAGE_READ) >> 9)
 	be,a,pt		%xcc, 3f
 	 mov		1, %g4
@@ -666,7 +664,7 @@ sys_ptrace:	add		%sp, STACK_BIAS + REGWIN_SZ, %o0
 		ba,pt		%xcc, rtrap
 		 clr		%l6
 
-	/* This is how fork() was meant to be done, 12 instruction entry.
+	/* This is how fork() was meant to be done, 8 instruction entry.
 	 *
 	 * I questioned the following code briefly, let me clear things
 	 * up so you must not reason on it like I did.
@@ -695,7 +693,8 @@ sys_ptrace:	add		%sp, STACK_BIAS + REGWIN_SZ, %o0
 sys_fork:
 sys_vfork:	mov		SIGCHLD, %o0
 		clr		%o1
-sys_clone:	mov		%o7, %l5
+sys_clone:	flushw
+		mov		%o7, %l5
 		add		%sp, STACK_BIAS + REGWIN_SZ, %o2
 		movrz		%o1, %fp, %o1
 		call		do_fork

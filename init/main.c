@@ -64,7 +64,6 @@ extern int bdflush(void *);
 extern int kswapd(void *);
 extern void kswapd_setup(void);
 
-extern void dquot_init(void);
 extern void init_IRQ(void);
 extern void init_modules(void);
 extern long console_init(long, long);
@@ -283,6 +282,9 @@ extern void ftape_setup(char *str, int *ints);
 
 #if defined(CONFIG_SYSVIPC)
 extern void ipc_init(void);
+#endif
+#if defined(CONFIG_QUOTA)
+extern void dquot_init_hash(void);
 #endif
 
 #ifdef CONFIG_MD_BOOT
@@ -1060,7 +1062,9 @@ __initfunc(asmlinkage void start_kernel(void))
 #if defined(CONFIG_SYSVIPC)
 	ipc_init();
 #endif
-	dquot_init();
+#if defined(CONFIG_QUOTA)
+	dquot_init_hash();
+#endif
 	check_bugs();
 
 	printk("POSIX conformance testing by UNIFIX\n");

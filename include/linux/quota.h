@@ -33,7 +33,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Version: $Id: quota.h,v 1.8 1995/03/11 11:43:07 mvw Exp mvw $
+ * Version: $Id: quota.h,v 2.0 1996/11/17 16:48:14 mvw Exp mvw $
  */
 
 #ifndef _LINUX_QUOTA_
@@ -43,7 +43,6 @@
 
 /*
  * Convert diskblocks to blocks and the other way around.
- * currently only to fool the BSD source. :-)
  */
 #define dbtob(num) (num << 10)
 #define btodb(num) (num >> 10)
@@ -74,16 +73,20 @@
  * Definitions for the default names of the quotas files.
  */
 #define INITQFNAMES { \
-   "user",      /* USRQUOTA */ \
-   "group",   /* GRPQUOTA */ \
-   "undefined", \
+	"user",    /* USRQUOTA */ \
+	"group",   /* GRPQUOTA */ \
+	"undefined", \
 };
 
 #define QUOTAFILENAME "quota"
 #define QUOTAGROUP "staff"
 
-#define NR_DQHASH 43            /* Just an arbitrary number any suggestions ? */
-#define NR_DQUOTS 256           /* Number of quotas active at one time */
+extern int nr_dquots, nr_free_dquots;
+extern int max_dquots;
+extern int dquot_root_squash;
+
+#define NR_DQHASH 43            /* Just an arbitrary number */
+#define NR_DQUOTS 256           /* Maximum number of quotas active at one time (Configurable from /proc/sys/fs) */
 
 /*
  * Command definitions for the 'quotactl' system call.
@@ -103,6 +106,7 @@
 #define Q_SYNC     0x0600	/* sync disk copy of a filesystems quotas */
 #define Q_SETQLIM  0x0700	/* set limits */
 #define Q_GETSTATS 0x0800	/* get collected stats */
+#define Q_RSQUASH  0x1000	/* set root_squash option */
 
 /*
  * The following structure defines the format of the disk quota file
@@ -110,14 +114,14 @@
  * indexed by user or group number.
  */
 struct dqblk {
-    __u32 dqb_bhardlimit;	/* absolute limit on disk blks alloc */
-    __u32 dqb_bsoftlimit;	/* preferred limit on disk blks */
-    __u32 dqb_curblocks;	/* current block count */
-    __u32 dqb_ihardlimit;	/* maximum # allocated inodes */
-    __u32 dqb_isoftlimit;	/* preferred inode limit */
-    __u32 dqb_curinodes;	/* current # allocated inodes */
-    time_t dqb_btime;		/* time limit for excessive disk use */
-    time_t dqb_itime;		/* time limit for excessive files */
+	__u32 dqb_bhardlimit;	/* absolute limit on disk blks alloc */
+	__u32 dqb_bsoftlimit;	/* preferred limit on disk blks */
+	__u32 dqb_curblocks;	/* current block count */
+	__u32 dqb_ihardlimit;	/* absolute limit on allocated inodes */
+	__u32 dqb_isoftlimit;	/* preferred inode limit */
+	__u32 dqb_curinodes;	/* current # allocated inodes */
+	time_t dqb_btime;		/* time limit for excessive disk use */
+	time_t dqb_itime;		/* time limit for excessive inode use */
 };
 
 /*
@@ -135,20 +139,17 @@ struct dqblk {
 #define dqoff(UID)      ((loff_t)((UID) * sizeof (struct dqblk)))
 
 struct dqstats {
-   __u32 lookups;
-   __u32 drops;
-   __u32 reads;
-   __u32 writes;
-   __u32 cache_hits;
-   __u32 pages_allocated;
-   __u32 allocated_dquots;
-   __u32 free_dquots;
-   __u32 syncs;
+	__u32 lookups;
+	__u32 drops;
+	__u32 reads;
+	__u32 writes;
+	__u32 cache_hits;
+	__u32 allocated_dquots;
+	__u32 free_dquots;
+	__u32 syncs;
 };
 
 #ifdef __KERNEL__
-
-#include <linux/mount.h>
 
 /*
  * Maximum length of a message generated in the quota system,
@@ -164,18 +165,19 @@ struct dqstats {
 #define DQ_FAKE       0x40	/* no limits only usage */
 
 struct dquot {
-   unsigned int dq_id;		/* id this applies to (uid, gid) */
-   short dq_type;		/* type of quota */
-   kdev_t dq_dev;                /* Device this applies to */
-   short dq_flags;		/* see DQ_* */
-   short dq_count;		/* reference count */
-   struct vfsmount *dq_mnt;     /* vfsmountpoint this applies to */
-   struct dqblk dq_dqb;         /* diskquota usage */
-   struct wait_queue *dq_wait;	/* pointer to waitqueue */
-   struct dquot *dq_prev;	/* pointer to prev dquot */
-   struct dquot *dq_next;	/* pointer to next dquot */
-   struct dquot *dq_hash_prev;	/* pointer to prev dquot */
-   struct dquot *dq_hash_next;	/* pointer to next dquot */
+	unsigned int dq_id;		/* ID this applies to (uid, gid) */
+	short dq_type;			/* Type of quota */
+	kdev_t dq_dev;			/* Device this applies to */
+	short dq_flags;			/* See DQ_* */
+	short dq_count;			/* Reference count */
+	unsigned long dq_referenced;	/* Number of times this dquot was referenced during its lifetime */
+	struct vfsmount *dq_mnt;	/* VFS_mount_point this applies to */
+	struct dqblk dq_dqb;		/* Diskquota usage */
+	struct wait_queue *dq_wait;	/* Pointer to waitqueue */
+	struct dquot *dq_next;		/* Pointer to next dquot */
+	struct dquot *dq_hash_next;	/* Pointer to next in dquot_hash */
+	struct dquot **dq_hash_pprev;	/* Pointer to previous in dquot_hash */
+	struct dquot **dq_pprev;
 };
 
 #define NODQUOT (struct dquot *)NULL
@@ -190,22 +192,6 @@ struct dquot {
 
 #define QUOTA_OK          0
 #define NO_QUOTA          1
-
-/*
- * declaration of quota_function calls in kernel.
- */
-
-extern void dquot_initialize(struct inode *inode, short type);
-extern void dquot_drop(struct inode *inode);
-extern int dquot_alloc_block(const struct inode *inode, unsigned long number);
-extern int dquot_alloc_inode(const struct inode *inode, unsigned long number);
-extern void dquot_free_block(const struct inode *inode, unsigned long number);
-extern void dquot_free_inode(const struct inode *inode, unsigned long number);
-extern int dquot_transfer(struct inode *inode, struct iattr *iattr, char direction);
-
-extern void invalidate_dquots(kdev_t dev, short type);
-extern int quota_off(kdev_t dev, short type);
-extern int sync_dquots(kdev_t dev, short type);
 
 #else
 

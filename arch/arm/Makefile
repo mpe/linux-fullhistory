@@ -12,52 +12,54 @@
 #
 # Copyright (C) 1995, 1996 by Russell King
 
-CFLAGS_PROC	:=
-ASFLAGS_PROC	:=
+CFLAGS_PROC		:=
+ASFLAGS_PROC		:=
 
-ifeq ($(CONFIG_CPU_ARM2),y)
-PROCESSOR	 = armo
-ASFLAGS_PROC	+= -m2
-ifeq ($(CONFIG_BINUTILS_NEW),y)
-CFLAGS_PROC	+= -mcpu=arm2
-ASFLAGS_PROC	+= -m2
-else
-CFLAGS_PROC	+= -m2
-ASFLAGS_PROC	+= -m2
-endif
-endif
+# All processors get `-mshort-load-bytes' for now, to work around alignment
+# problems.  This is more of a hack that just happens to work than a real fix
+# but it will do for now.
 
-ifeq ($(CONFIG_CPU_ARM3),y)
-PROCESSOR	 = armo
-ifeq ($(CONFIG_BINUTILS_NEW),y)
-CFLAGS_PROC	+= -mcpu=arm3
-ASFLAGS_PROC	+= -m3
-else
-CFLAGS_PROC	+= -m3
-ASFLAGS_PROC	+= -m3
-endif
-endif
-
-ifeq ($(CONFIG_CPU_ARM6),y)
-PROCESSOR	 = armv
-ifeq ($(CONFIG_BINUTILS_NEW),y)
-CFLAGS_PROC	+= -mcpu=arm6
-ASFLAGS_PROC	+= -m6
-else
-CFLAGS_PROC	+= -m6
-ASFLAGS_PROC	+= -m6
-endif
+ifeq ($(CONFIG_CPU_26),y)
+  PROCESSOR		 = armo
+  ifeq ($(CONFIG_BINUTILS_NEW),y)
+    CFLAGS_PROC		+= -mapcs-26 -mshort-load-bytes
+    ifeq ($(CONFIG_CPU_ARM2),y)
+      CFLAGS_PROC	+= -mcpu=arm2
+      ASFLAGS_PROC	+= -m2
+    endif
+    ifeq ($(CONFIG_CPU_ARM3),y)
+      CFLAGS_PROC	+= -mcpu=arm3
+      ASFLAGS_PROC	+= -m3
+    endif
+  else
+    ifeq ($(CONFIG_CPU_ARM2),y)
+      CFLAGS_PROC	+= -m2
+      ASFLAGS_PROC	+= -m2
+    endif
+    ifeq ($(CONFIG_CPU_ARM3),y)
+      CFLAGS_PROC	+= -m3
+      ASFLAGS_PROC	+= -m3
+    endif
+  endif
 endif
 
-ifeq ($(CONFIG_CPU_SA110),y)
-PROCESSOR	 = armv
-ifeq ($(CONFIG_BINUTILS_NEW),y)
-CFLAGS_PROC	+= -mcpu=strongarm110
-ASFLAGS_PROC	+= -m6
-else
-CFLAGS_PROC	+= -m6
-ASFLAGS_PROC	+= -m6
-endif
+ifeq ($(CONFIG_CPU_32),y)
+  PROCESSOR		 = armv
+  ifeq ($(CONFIG_BINUTILS_NEW),y)
+    CFLAGS_PROC		+= -mapcs-32 -mshort-load-bytes
+    ifeq ($(CONFIG_CPU_ARM6),y)
+      CFLAGS_PROC	+= -mcpu=arm6
+    endif
+    ifeq ($(CONFIG_CPU_ARM7),y)
+      CFLAGS_PROC	+= -mcpu=arm7
+    endif
+    ifeq ($(CONFIG_CPU_SA110),y)
+      CFLAGS_PROC	+= -mcpu=strongarm110
+    endif
+  else
+    CFLAGS_PROC		+= -m6
+  endif
+  ASFLAGS_PROC		+= -m6
 endif
 
 # Processor Architecture
@@ -71,9 +73,6 @@ endif
 COMPRESSED_HEAD	 = head.o
 
 ifeq ($(PROCESSOR),armo)
-ifeq ($(CONFIG_BINUTILS_NEW),y)
-CFLAGS_PROC	+= -mapcs-26 -mshort-load-bytes
-endif
 TEXTADDR	 = 0x02080000
 ZTEXTADDR	 = 0x01800000
 ZRELADDR	 = 0x02080000
@@ -92,11 +91,7 @@ COMPRESSED_EXTRA = $(TOPDIR)/arch/arm/lib/ll_char_wr.o
 endif
 
 ifeq ($(PROCESSOR),armv)
-ifeq ($(CONFIG_BINUTILS_NEW),y)
-CFLAGS_PROC	+= -mapcs-32 -mshort-load-bytes
-endif
 TEXTADDR	 = 0xC0008000
-endif
 
 ifeq ($(CONFIG_ARCH_RPC),y)
 MACHINE		 = rpc
@@ -122,21 +117,27 @@ endif
 
 ifeq ($(CONFIG_ARCH_NEXUSPCI),y)
 MACHINE		 = nexuspci
+ARCHDIR		 = nexuspci
 TEXTADDR	 = 0xc0000000
 ZTEXTADDR	 = 0x40200000
 ZRELADDR	 = 0x40000000
 COMPRESSED_EXTRA = $(TOPDIR)/arch/arm/lib/ll_char_wr_scc.o
 COMPRESSED_HEAD	 = head-nexuspci.o
 endif
+endif
 
-OBJDUMP		 = $(CROSS_COMPILE)objdump
 PERL		 = perl
+ifeq ($(CONFIG_BINUTILS_NEW),y)
+LD		 = $(CROSS_COMPILE)ld -m elf32arm
+else
 LD		 = $(CROSS_COMPILE)ld -m elf_arm
-CPP		 = $(CC) -E
+endif
 OBJCOPY		 = $(CROSS_COMPILE)objcopy -O binary -R .note -R .comment -S
+OBJDUMP		 = $(CROSS_COMPILE)objdump
+CPP		 = $(CC) -E
 ARCHCC		:= $(word 1,$(CC))
 GCCLIB		:= `$(ARCHCC) $(CFLAGS_PROC) --print-libgcc-file-name`
-GCCARCH		:= -B/usr/src/bin/arm/arm-linuxelf- 
+#GCCARCH		:= -B/usr/bin/arm-linuxelf- 
 HOSTCFLAGS	:= $(CFLAGS:-fomit-frame-pointer=)
 ifeq ($(CONFIG_FRAME_POINTER),y)
 CFLAGS		:= $(CFLAGS:-fomit-frame-pointer=)
@@ -225,5 +226,8 @@ archclean:
 	@$(MAKEBOOT) clean
 	$(RM) arch/arm/lib/constants.h
 
+archmrproper:
+
 archdep:
 	@$(MAKEBOOT) dep
+sed -e /^MACHINE..*=/s,= .*,= rpc,;/^PROCESSOR..*=/s,= .*,= armv, linux/arch/arm/Makefile.normal

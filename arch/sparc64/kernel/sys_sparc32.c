@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.77 1998/03/29 10:10:50 davem Exp $
+/* $Id: sys_sparc32.c,v 1.83 1998/05/04 05:35:39 jj Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -60,7 +60,7 @@
  
 extern char * getname_quicklist;
 extern int getname_quickcount;
-extern struct semaphore getname_quicklock;
+extern spinlock_t getname_quicklock;
 
 /* Tuning: increase locality by reusing same pages again...
  * if getname_quicklist becomes too long on low memory machines, either a limit
@@ -70,15 +70,15 @@ extern struct semaphore getname_quicklock;
 static inline char * get_page(void)
 {
 	char * res;
-	down(&getname_quicklock);
+	spin_lock(&getname_quicklock);
 	res = getname_quicklist;
 	if (res) {
 		getname_quicklist = *(char**)res;
 		getname_quickcount--;
 	}
-	else
+	spin_unlock(&getname_quicklock);
+	if (!res)
 		res = (char*)__get_free_page(GFP_KERNEL);
-	up(&getname_quicklock);
 	return res;
 }
 
@@ -845,9 +845,6 @@ asmlinkage long sys32_readv(int fd, u32 vector, u32 count)
 
 	ret = do_readv_writev32(VERIFY_WRITE, file,
 				(struct iovec32 *)A(vector), count);
-	if (ret > 0)
-		current->io_usage += ret;
-
 out:
 	fput(file);
 bad_file:
@@ -872,9 +869,6 @@ asmlinkage long sys32_writev(int fd, u32 vector, u32 count)
 	ret = do_readv_writev32(VERIFY_READ, file,
 				(struct iovec32 *)A(vector), count);
 	up(&file->f_dentry->d_inode->i_sem);
-	if (ret > 0)
-		current->io_usage += ret;
-
 out:
 	fput(file);
 bad_file:
@@ -1148,6 +1142,7 @@ asmlinkage int sys32_select(int n, u32 inp, u32 outp, u32 exp, u32 tvp_x)
 		put_user(sec, &tvp->tv_sec);
 		put_user(usec, &tvp->tv_usec);
 	}
+	current->timeout = 0;
 
 	if (ret < 0)
 		goto out;
@@ -2556,14 +2551,16 @@ copy_strings32(int argc,u32 * argv,unsigned long *page,
 			return 0;
 		p -= len; pos = p;
 		while (len) {
-			char *pag;
+			char *pag = (char *) page[pos/PAGE_SIZE];
 			int offset, bytes_to_copy;
 
 			offset = pos % PAGE_SIZE;
-			if (!(pag = (char *) page[pos/PAGE_SIZE]) &&
-			    !(pag = (char *) page[pos/PAGE_SIZE] =
-			      (unsigned long *) get_free_page(GFP_USER)))
-				return 0;
+			if(!pag) {
+				pag = (char *) page[pos/PAGE_SIZE] = get_user_page(pos);
+				if(!pag)
+					return 0;
+				clear_page(pag);
+			}
 			bytes_to_copy = PAGE_SIZE - offset;
 			if (bytes_to_copy > len)
 				bytes_to_copy = len;
@@ -2703,119 +2700,274 @@ struct module_info32 {
 	s32 usecount;
 };
 
-extern asmlinkage int sys_query_module(const char *name_user, int which, char *buf, size_t bufsize, size_t *ret);
+/* Query various bits about modules.  */
 
-asmlinkage int sys32_query_module(u32 name_user, int which, u32 buf, __kernel_size_t32 bufsize, u32 retv)
+extern long get_mod_name(const char *user_name, char **buf);
+extern void put_mod_name(char *buf);
+extern struct module *find_module(const char *name);
+extern struct module kernel_module;
+
+static int
+qm_modules(char *buf, size_t bufsize, __kernel_size_t32 *ret)
 {
-	char *buff;
-	mm_segment_t old_fs = get_fs();
-	size_t val;
-	int ret, i, j;
-	unsigned long *p;
-	char *usernam = NULL;
-	int bufsiz = bufsize;
-	struct module_info mi;
-	
-	switch (which) {
-	case 0:	return sys_query_module ((const char *)A(name_user), which, (char *)A(buf), (size_t)bufsize, (size_t *)A(retv));
-	case QM_SYMBOLS:
-		bufsiz <<= 1;
-	case QM_MODULES:
-	case QM_REFS:
-	case QM_DEPS:
-		if (name_user) {
-			usernam = getname32 (name_user);
-			ret = PTR_ERR(usernam);
-			if (IS_ERR(usernam))
-				return ret;
-		}
-		buff = kmalloc (bufsiz, GFP_KERNEL);
-		if (!buff) {
-			if (name_user) putname32 (usernam);
-			return -ENOMEM;
-		}
-qmsym_toshort:
-		set_fs (KERNEL_DS);
-		ret = sys_query_module (usernam, which, buff, bufsiz, &val);
-		set_fs (old_fs);
-		if (which != QM_SYMBOLS) {
-			if (ret == -ENOSPC || !ret) {
-				if (put_user (val, (__kernel_size_t32 *)A(retv)))
-					ret = -EFAULT;
-			}
-			if (!ret) {
-				if (copy_to_user ((char *)A(buf), buff, bufsize))
-					ret = -EFAULT;
-			}
-		} else {
-			if (ret == -ENOSPC) {
-				if (put_user (2 * val, (__kernel_size_t32 *)A(retv)))
-					ret = -EFAULT;
-			}
-			p = (unsigned long *)buff;
-			if (!ret) {
-				if (put_user (val, (__kernel_size_t32 *)A(retv)))
-					ret = -EFAULT;
-			}
-			if (!ret) {
-				j = val * 8;
-				for (i = 0; i < val; i++, p += 2) {
-					if (bufsize < (2 * sizeof (u32))) {
-						bufsiz = 0;
-						goto qmsym_toshort;
-					}
-					if (put_user (p[0], (u32 *)A(buf)) ||
-				    	    __put_user (p[1] - j, (((u32 *)A(buf))+1))) {
-						ret = -EFAULT;
-						break;
-					}
-					bufsize -= (2 * sizeof (u32));
-					buf += (2 * sizeof (u32));
-				}
-			}
-			if (!ret && val) {
-				char *strings = buff + ((unsigned long *)buff)[1];
-				j = *(p - 1) - ((unsigned long *)buff)[1];
-				j = j + strlen (strings + j) + 1;
-				if (bufsize < j) {
-					bufsiz = 0;
-					goto qmsym_toshort;
-				}
-				if (copy_to_user ((char *)A(buf), strings, j))
-					ret = -EFAULT;
-			}
-		}
-		kfree (buff);
-		if (name_user) putname32 (usernam);
-		return ret;
-	case QM_INFO:
-		if (name_user) {
-			usernam = getname32 (name_user);
-			ret = PTR_ERR(usernam);
-			if (IS_ERR(usernam))
-				return ret;
-		}
-		set_fs (KERNEL_DS);
-		ret = sys_query_module (usernam, which, (char *)&mi, sizeof (mi), &val);
-		set_fs (old_fs);
-		if (!ret) {
-			if (put_user (sizeof (struct module_info32), (__kernel_size_t32 *)A(retv)))
-				ret = -EFAULT;
-			else if (bufsize < sizeof (struct module_info32))
-				ret = -ENOSPC;
-		}
-		if (!ret) {
-			if (put_user (mi.addr, &(((struct module_info32 *)A(buf))->addr)) ||
-			    __put_user (mi.size, &(((struct module_info32 *)A(buf))->size)) ||
-			    __put_user (mi.flags, &(((struct module_info32 *)A(buf))->flags)) ||
-			    __put_user (mi.usecount, &(((struct module_info32 *)A(buf))->usecount)))
-				ret = -EFAULT;
-		}
-		if (name_user) putname32 (usernam);
-		return ret;
-	default:
-		return -EINVAL;
+	struct module *mod;
+	size_t nmod, space, len;
+
+	nmod = space = 0;
+
+	for (mod=module_list; mod != &kernel_module; mod=mod->next, ++nmod) {
+		len = strlen(mod->name)+1;
+		if (len > bufsize)
+			goto calc_space_needed;
+		if (copy_to_user(buf, mod->name, len))
+			return -EFAULT;
+		buf += len;
+		bufsize -= len;
+		space += len;
 	}
+
+	if (put_user(nmod, ret))
+		return -EFAULT;
+	else
+		return 0;
+
+calc_space_needed:
+	space += len;
+	while ((mod = mod->next) != &kernel_module)
+		space += strlen(mod->name)+1;
+
+	if (put_user(space, ret))
+		return -EFAULT;
+	else
+		return -ENOSPC;
+}
+
+static int
+qm_deps(struct module *mod, char *buf, size_t bufsize, __kernel_size_t32 *ret)
+{
+	size_t i, space, len;
+
+	if (mod == &kernel_module)
+		return -EINVAL;
+	if ((mod->flags & (MOD_RUNNING | MOD_DELETED)) != MOD_RUNNING)
+		if (put_user(0, ret))
+			return -EFAULT;
+		else
+			return 0;
+
+	space = 0;
+	for (i = 0; i < mod->ndeps; ++i) {
+		const char *dep_name = mod->deps[i].dep->name;
+
+		len = strlen(dep_name)+1;
+		if (len > bufsize)
+			goto calc_space_needed;
+		if (copy_to_user(buf, dep_name, len))
+			return -EFAULT;
+		buf += len;
+		bufsize -= len;
+		space += len;
+	}
+
+	if (put_user(i, ret))
+		return -EFAULT;
+	else
+		return 0;
+
+calc_space_needed:
+	space += len;
+	while (++i < mod->ndeps)
+		space += strlen(mod->deps[i].dep->name)+1;
+
+	if (put_user(space, ret))
+		return -EFAULT;
+	else
+		return -ENOSPC;
+}
+
+static int
+qm_refs(struct module *mod, char *buf, size_t bufsize, __kernel_size_t32 *ret)
+{
+	size_t nrefs, space, len;
+	struct module_ref *ref;
+
+	if (mod == &kernel_module)
+		return -EINVAL;
+	if ((mod->flags & (MOD_RUNNING | MOD_DELETED)) != MOD_RUNNING)
+		if (put_user(0, ret))
+			return -EFAULT;
+		else
+			return 0;
+
+	space = 0;
+	for (nrefs = 0, ref = mod->refs; ref ; ++nrefs, ref = ref->next_ref) {
+		const char *ref_name = ref->ref->name;
+
+		len = strlen(ref_name)+1;
+		if (len > bufsize)
+			goto calc_space_needed;
+		if (copy_to_user(buf, ref_name, len))
+			return -EFAULT;
+		buf += len;
+		bufsize -= len;
+		space += len;
+	}
+
+	if (put_user(nrefs, ret))
+		return -EFAULT;
+	else
+		return 0;
+
+calc_space_needed:
+	space += len;
+	while ((ref = ref->next_ref) != NULL)
+		space += strlen(ref->ref->name)+1;
+
+	if (put_user(space, ret))
+		return -EFAULT;
+	else
+		return -ENOSPC;
+}
+
+static inline int
+qm_symbols(struct module *mod, char *buf, size_t bufsize, __kernel_size_t32 *ret)
+{
+	size_t i, space, len;
+	struct module_symbol *s;
+	char *strings;
+	unsigned *vals;
+
+	if ((mod->flags & (MOD_RUNNING | MOD_DELETED)) != MOD_RUNNING)
+		if (put_user(0, ret))
+			return -EFAULT;
+		else
+			return 0;
+
+	space = mod->nsyms * 2*sizeof(u32);
+
+	i = len = 0;
+	s = mod->syms;
+
+	if (space > bufsize)
+		goto calc_space_needed;
+
+	if (!access_ok(VERIFY_WRITE, buf, space))
+		return -EFAULT;
+
+	bufsize -= space;
+	vals = (unsigned *)buf;
+	strings = buf+space;
+
+	for (; i < mod->nsyms ; ++i, ++s, vals += 2) {
+		len = strlen(s->name)+1;
+		if (len > bufsize)
+			goto calc_space_needed;
+
+		if (copy_to_user(strings, s->name, len)
+		    || __put_user(s->value, vals+0)
+		    || __put_user(space, vals+1))
+			return -EFAULT;
+
+		strings += len;
+		bufsize -= len;
+		space += len;
+	}
+
+	if (put_user(i, ret))
+		return -EFAULT;
+	else
+		return 0;
+
+calc_space_needed:
+	for (; i < mod->nsyms; ++i, ++s)
+		space += strlen(s->name)+1;
+
+	if (put_user(space, ret))
+		return -EFAULT;
+	else
+		return -ENOSPC;
+}
+
+static inline int
+qm_info(struct module *mod, char *buf, size_t bufsize, __kernel_size_t32 *ret)
+{
+	int error = 0;
+
+	if (mod == &kernel_module)
+		return -EINVAL;
+
+	if (sizeof(struct module_info32) <= bufsize) {
+		struct module_info32 info;
+		info.addr = (unsigned long)mod;
+		info.size = mod->size;
+		info.flags = mod->flags;
+		info.usecount = (mod_member_present(mod, can_unload)
+				 && mod->can_unload ? -1 : mod->usecount);
+
+		if (copy_to_user(buf, &info, sizeof(struct module_info32)))
+			return -EFAULT;
+	} else
+		error = -ENOSPC;
+
+	if (put_user(sizeof(struct module_info32), ret))
+		return -EFAULT;
+
+	return error;
+}
+
+asmlinkage int sys32_query_module(u32 name_user, int which, u32 buf, __kernel_size_t32 bufsize, u32 ret)
+{
+	struct module *mod;
+	int err;
+
+	lock_kernel();
+	if (name_user == 0)
+		mod = &kernel_module;
+	else {
+		long namelen;
+		char *name;
+
+		if ((namelen = get_mod_name((char *)A(name_user), &name)) < 0) {
+			err = namelen;
+			goto out;
+		}
+		err = -ENOENT;
+		if (namelen == 0)
+			mod = &kernel_module;
+		else if ((mod = find_module(name)) == NULL) {
+			put_mod_name(name);
+			goto out;
+		}
+		put_mod_name(name);
+	}
+
+	switch (which)
+	{
+	case 0:
+		err = 0;
+		break;
+	case QM_MODULES:
+		err = qm_modules((char *)A(buf), bufsize, (__kernel_size_t32 *)A(ret));
+		break;
+	case QM_DEPS:
+		err = qm_deps(mod, (char *)A(buf), bufsize, (__kernel_size_t32 *)A(ret));
+		break;
+	case QM_REFS:
+		err = qm_refs(mod, (char *)A(buf), bufsize, (__kernel_size_t32 *)A(ret));
+		break;
+	case QM_SYMBOLS:
+		err = qm_symbols(mod, (char *)A(buf), bufsize, (__kernel_size_t32 *)A(ret));
+		break;
+	case QM_INFO:
+		err = qm_info(mod, (char *)A(buf), bufsize, (__kernel_size_t32 *)A(ret));
+		break;
+	default:
+		err = -EINVAL;
+		break;
+	}
+out:
+	unlock_kernel();
+	return err;
 }
 
 struct kernel_sym32 {

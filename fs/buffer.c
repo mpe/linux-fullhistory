@@ -38,6 +38,7 @@
 #include <linux/blkdev.h>
 #include <linux/sysrq.h>
 #include <linux/file.h>
+#include <linux/quotaops.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -266,9 +267,9 @@ void sync_dev(kdev_t dev)
 	sync_supers(dev);
 	sync_inodes(dev);
 	sync_buffers(dev, 0);
-	sync_dquots(dev, -1);
-	/* 
-	 * FIXME(eric) we need to sync the physical devices here. 
+	DQUOT_SYNC(dev);
+	/*
+	 * FIXME(eric) we need to sync the physical devices here.
 	 * This is because some (scsi) controllers have huge amounts of
 	 * cache onboard (hundreds of Mb), and we need to instruct
 	 * them to commit all of the dirty memory to disk, and we should
@@ -285,7 +286,7 @@ int fsync_dev(kdev_t dev)
 	sync_buffers(dev, 0);
 	sync_supers(dev);
 	sync_inodes(dev);
-	sync_dquots(dev, -1);
+	DQUOT_SYNC(dev);
 	return sync_buffers(dev, 1);
 }
 

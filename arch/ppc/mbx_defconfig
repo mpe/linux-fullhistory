@@ -12,7 +12,9 @@ CONFIG_8xx=y
 # CONFIG_PREP is not set
 # CONFIG_CHRP is not set
 # CONFIG_ALL_PPC is not set
+# CONFIG_APUS is not set
 CONFIG_MBX=y
+CONFIG_SERIAL_CONSOLE=y
 CONFIG_MACH_SPECIFIC=y
 
 #
@@ -34,7 +36,9 @@ CONFIG_KERNEL_ELF=y
 # CONFIG_PMAC_CONSOLE is not set
 # CONFIG_MAC_KEYBOARD is not set
 # CONFIG_MAC_FLOPPY is not set
+# CONFIG_MAC_SERIAL is not set
 # CONFIG_PROC_DEVICETREE is not set
+# CONFIG_KGDB is not set
 # CONFIG_XMON is not set
 CONFIG_VGA_CONSOLE=y
 
@@ -52,17 +56,11 @@ CONFIG_VGA_CONSOLE=y
 # CONFIG_BLK_DEV_LOOP is not set
 # CONFIG_BLK_DEV_NBD is not set
 # CONFIG_BLK_DEV_MD is not set
-CONFIG_BLK_DEV_RAM=y
-CONFIG_BLK_DEV_INITRD=y
+# CONFIG_BLK_DEV_RAM is not set
 # CONFIG_BLK_DEV_XD is not set
 CONFIG_PARIDE_PARPORT=y
 # CONFIG_PARIDE is not set
 # CONFIG_BLK_DEV_HD is not set
-
-#
-# NEW devices (io_request, all ALPHA and dangerous)
-#
-# CONFIG_IO_REQUEST is not set
 
 #
 # Networking options
@@ -142,13 +140,13 @@ CONFIG_NET_ETHERNET=y
 #
 # CONFIG_QUOTA is not set
 # CONFIG_MINIX_FS is not set
-CONFIG_EXT2_FS=y
+# CONFIG_EXT2_FS is not set
 # CONFIG_ISO9660_FS is not set
 # CONFIG_FAT_FS is not set
 # CONFIG_MSDOS_FS is not set
 # CONFIG_UMSDOS_FS is not set
 # CONFIG_VFAT_FS is not set
-# CONFIG_PROC_FS is not set
+CONFIG_PROC_FS=y
 CONFIG_NFS_FS=y
 CONFIG_ROOT_NFS=y
 # CONFIG_NFSD is not set
@@ -171,8 +169,7 @@ CONFIG_LOCKD=y
 # Character devices
 #
 # CONFIG_VT is not set
-CONFIG_SERIAL=y
-CONFIG_SERIAL_CONSOLE=y
+# CONFIG_SERIAL is not set
 # CONFIG_SERIAL_EXTENDED is not set
 # CONFIG_SERIAL_NONSTANDARD is not set
 # CONFIG_MOUSE is not set
@@ -189,8 +186,3 @@ CONFIG_SERIAL_CONSOLE=y
 # Ftape, the floppy tape device driver
 #
 # CONFIG_FTAPE is not set
-
-#
-# Sound
-#
-# CONFIG_SOUND is not set

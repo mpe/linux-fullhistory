@@ -742,6 +742,24 @@ CONFIG_MD_RAID5
   want to compile it as a module, say M here and read
   Documentation/modules.txt. If unsure, say Y.
 
+IDE card support
+CONFIG_BLK_DEV_IDE_CARDS
+  On Acorn systems, enable this if you wish to use an IDE interface
+  expansion card. If you do not or are unsure, say N to this.
+
+ICS IDE interface
+CONFIG_BLK_DEV_IDE_ICS
+  On Acorn systems, enable this if you wish to use the ICS IDE
+  interface card.  This is not required for ICS partition support.
+  If you are unsure, say N to this.
+
+ADFS partition support
+CONFIG_BLK_DEV_PART
+  This allows Linux on Acorn systems to determine its partitions in
+  the 'non-ADFS' partition area of the hard disk - usually located
+  after the ADFS partition.  You are probably using this system, so
+  you should enable it.
+
 Boot support (linear, striped)
 CONFIG_MD_BOOT
   To boot with an initial linear or striped md device you have to say
@@ -3585,6 +3603,51 @@ CONFIG_SCSI_DEBUG
   important data. This is primarily of use to people trying to debug
   the middle and upper layers of the SCSI subsystem. If unsure, say N.
 
+AcornSCSI support
+CONFIG_SCSI_ACORNSCSI_3
+  This enables support for the Acorn SCSI card (aka30).  If you have an
+  Acorn system with one of these, say Y.  If unsure, say N.
+
+Acorn SCSI tagged queue support
+CONFIG_SCSI_ACORNSCSI_TAGGED_QUEUE
+  Say Y here to enable tagged queuing support on the Acorn SCSI card.
+
+Acorn SCSI Synchronous transfers support
+CONFIG_SCSI_ACORNSCSI_SYNC
+  Say Y here to enable synchronous transfer negociation with all targets
+  on the Acorn SCSI card.
+
+Oak SCSI support
+CONFIG_SCSI_OAK1
+  This enables support for the Oak SCSI card.  If you have an Acorn system
+  with one of these, say Y.  If unsure, say N.
+
+Cumana SCSI I support
+CONFIG_SCSI_CUMANA_1
+  This enables support for the Cumana SCSI I card.  If you have an Acorn
+  system with one of these, say Y.  If unsure, say N.
+
+Cumana SCSI II support
+CONFIG_SCSI_CUMANA_2
+  This enables support for the Cumana SCSI II card.  If you have an Acorn
+  system with one of these, say Y.  If unsure, say N.
+
+EcoSCSI support
+CONFIG_SCSI_ECOSCSI
+  This enables support for the EcoSCSI card - a small card that sits in
+  the Econet socket.  If you have an Acorn system with one of these,
+  say Y.  If unsure, say N.
+
+EESOX SCSI support
+CONFIG_SCSI_EESOXSCSI
+  This enables support for the EESOX SCSI card.  If you have an Acorn
+  system with one of these, say Y, otherwise say N.
+
+Powertec SCSI support
+CONFIG_SCSI_POWERTECSCSI
+  This enables support for the Powertec SCSI card on Acorn systems.  If
+  you have one of these, say Y.  If unsure, say N.  
+
 Network device support?
 CONFIG_NETDEVICES
   You can say N here if you don't intend to connect to any other
@@ -3815,6 +3878,17 @@ RadioTrack i/o port
 CONFIG_RADIO_RTRACK_PORT
   Enter either 0x30f or 0x20f here.  The card default is 0x30f, if you
   haven't changed the jumper setting on the card.
+
+Aztech/Packard Bell Radio
+CONFIG_RADIO_AZTECH
+  Choose Y here if you have one of these, and then fill in the port
+  address below.
+
+Aztech/Packard Bell radio card i/o port
+CONFIG_RADIO_AZTECH_PORT
+  Enter either 0x350 or 0x358 here.  The card default is 0x350, if you
+  haven't changed the setting of jumper JP3 on the card.  Removing the
+  jumper sets the card to 0x358.
 
 LAPB over Ethernet driver
 CONFIG_LAPBETHER
@@ -5060,6 +5134,26 @@ Digital DEFEA and DEFPA adapter support
 CONFIG_DEFXX
   This is support for the DIGITAL series of EISA (DEFEA) and PCI
   (DEFPA) controllers which can connect you to a local FDDI network.
+
+Acorn Ether1 card
+CONFIG_ARM_ETHER1
+  If you have an Acorn system with one of these (AKA25) network cards,
+  you should say Y to this option if you wish to use it with Linux.
+
+Acorn/ANT Ether3 card
+CONFIG_ARM_ETHER3
+  If you have an Acorn system with one of these network cards, you
+  should say Y to this option if you wish to use it with Linux.
+
+I Cubed EtherH card
+CONFIG_ARM_ETHERH
+  If you have an Acorn system with one of these network cards, you
+  should say Y to this option if you wish to use it with Linux.
+
+EBSA-110 ethernet interface
+CONFIG_AM79C961A
+  If you wish to compile a kernel for the EBSA-110, then you should
+  always answer Y to this.
 
 Support CDROM drives that are not SCSI or IDE/ATAPI
 CONFIG_CD_NO_IDESCSI
@@ -6441,6 +6535,13 @@ CONFIG_SOFTCURSOR
   or change their color depending on the virtual console you're on.
   See Documentation/VGA-softcursor.txt for more information.
 
+Acorn's ADFS filesystem support (read only) (EXPERIMENTAL)
+CONFIG_ADFS_FS
+  The Advanced Disk File System is the filesystem used on floppy and
+  hard disks by Acorn Systems.  Currently in development, as a read-
+  only driver for hard disks.  These should be the first partition
+  (eg. /dev/[sh]d?1) on each of your drives.  If unsure, say N.
+
 Standard/generic serial support
 CONFIG_SERIAL
   This selects whether you want to include the driver for the standard
@@ -7413,6 +7514,17 @@ CONFIG_JOYSTICK
   inserted in and removed from the running kernel whenever you want).
   The module will be called joystick.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
+
+Atomwide Serial Support
+CONFIG_ATOMWIDE_SERIAL
+  If you have an Atomwide Serial card for an Acorn system, say Y to
+  this option.  The driver can handle 1, 2, or 3 port cards.
+  If unsure, say N
+
+The Serial Port Dual Serial Port
+CONFIG_DUALSP_SERIAL
+  If you have the Serial Port's dual serial card for an Acorn system,
+  say Y to this option.  If unsure, say N
 
 Sound card support
 CONFIG_SOUND

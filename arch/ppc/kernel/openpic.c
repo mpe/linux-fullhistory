@@ -264,7 +264,7 @@ __initfunc(void openpic_init(void))
     openpic_set_spurious(OPENPIC_VEC_SPURIOUS);
 
     if (request_irq(IRQ_8259_CASCADE, no_action, SA_INTERRUPT,
-		    "OpenPIC cascade", NULL))
+		    "82c59 cascade", NULL))
 	printk("Unable to get OpenPIC IRQ 0 for cascade\n");
     openpic_set_priority(0, 0);
     openpic_disable_8259_pass_through();

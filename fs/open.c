@@ -20,6 +20,7 @@
 #include <linux/file.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/quotaops.h>
 
 #include <asm/uaccess.h>
 #include <asm/bitops.h>
@@ -134,8 +135,7 @@ asmlinkage int sys_truncate(const char * path, unsigned long length)
 				  length < inode->i_size ? length : inode->i_size,
 				  abs(inode->i_size - length));
 	if (!error) {
-		if (inode->i_sb && inode->i_sb->dq_op)
-			inode->i_sb->dq_op->initialize(inode, -1);
+		DQUOT_INIT(inode);
 		error = do_truncate(dentry, length);
 	}
 	put_write_access(inode);
@@ -552,16 +552,7 @@ static int chown_common(struct dentry * dentry, uid_t user, gid_t group)
 		newattrs.ia_mode &= ~S_ISGID;
 		newattrs.ia_valid |= ATTR_MODE;
 	}
-	if (inode->i_sb && inode->i_sb->dq_op) {
-		inode->i_sb->dq_op->initialize(inode, -1);
-		error = -EDQUOT;
-		if (inode->i_sb->dq_op->transfer(inode, &newattrs, 0))
-			goto out;
-		error = notify_change(dentry, &newattrs);
-		if (error)
-			inode->i_sb->dq_op->transfer(inode, &newattrs, 1);
-	} else
-		error = notify_change(dentry, &newattrs);
+	DQUOT_TRANSFER(dentry, newattrs);
 out:
 	return error;
 }
@@ -599,6 +590,7 @@ asmlinkage int sys_lchown(const char * filename, uid_t user, gid_t group)
 	unlock_kernel();
 	return error;
 }
+
 
 asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 {

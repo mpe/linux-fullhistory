@@ -3,10 +3,10 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: indy_timer.c,v 1.3 1997/08/11 04:37:09 ralf Exp $
+ * $Id: indy_timer.c,v 1.5 1998/05/01 01:35:17 ralf Exp $
  */
-
 #include <linux/errno.h>
+#include <linux/init.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/param.h>
@@ -98,15 +98,25 @@ static int set_rtc_mmss(unsigned long nowtime)
 }
 
 static long last_rtc_update = 0;
+unsigned long missed_heart_beats = 0;
 
 void indy_timer_interrupt(struct pt_regs *regs)
 {
+	unsigned long count;
 	int irq = 7;
 
 	/* Ack timer and compute new compare. */
-	r4k_cur = (read_32bit_cp0_register(CP0_COUNT) + r4k_offset);
+	count = read_32bit_cp0_register(CP0_COUNT);
+	/* This has races.  */
+	if ((count - r4k_cur) >= r4k_offset) {
+		/* If this happens to often we'll need to compensate.  */
+		missed_heart_beats++;
+		r4k_cur = count + r4k_offset;
+	}
+        else
+            r4k_cur += r4k_offset;
 	ack_r4ktimer(r4k_cur);
-	kstat.interrupts[irq]++;
+	kstat.irqs[0][irq]++;
 	do_timer(regs);
 
 	/* We update the Dallas time of day approx. every 11 minutes,
@@ -123,8 +133,8 @@ void indy_timer_interrupt(struct pt_regs *regs)
 	    last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
 }
 
-static inline unsigned long dosample(volatile unsigned char *tcwp,
-				     volatile unsigned char *tc2p)
+static unsigned long dosample(volatile unsigned char *tcwp,
+                              volatile unsigned char *tc2p)
 {
 	unsigned long ct0, ct1;
 	unsigned char msb, lsb;
@@ -138,16 +148,12 @@ static inline unsigned long dosample(volatile unsigned char *tcwp,
 	ct0 = read_32bit_cp0_register(CP0_COUNT);
 
 	/* Latch and spin until top byte of counter2 is zero */
-	*tcwp = (SGINT_TCWORD_CNT2 | SGINT_TCWORD_CLAT);
-	ct1 = read_32bit_cp0_register(CP0_COUNT);
-	lsb = *tc2p;
-	msb = *tc2p;
-	while(msb) {
+	do {
 		*tcwp = (SGINT_TCWORD_CNT2 | SGINT_TCWORD_CLAT);
-		ct1 = read_32bit_cp0_register(CP0_COUNT);
 		lsb = *tc2p;
 		msb = *tc2p;
-	}
+		ct1 = read_32bit_cp0_register(CP0_COUNT);
+	} while(msb);
 
 	/* Stop the counter. */
 	*tcwp = (SGINT_TCWORD_CNT2 | SGINT_TCWORD_CALL | SGINT_TCWORD_MSWST);
@@ -189,7 +195,7 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
 	  )*60 + sec; /* finally seconds */
 }
 
-unsigned long get_indy_time(void)
+__initfunc(static unsigned long get_indy_time(void))
 {
 	struct indy_clock *clock = INDY_CLOCK_REGS;
 	unsigned int year, mon, day, hour, min, sec;
@@ -234,7 +240,7 @@ unsigned long get_indy_time(void)
 
 #define ALLINTS (IE_IRQ0 | IE_IRQ1 | IE_IRQ2 | IE_IRQ3 | IE_IRQ4 | IE_IRQ5)
 
-void indy_timer_init(void)
+__initfunc(void indy_timer_init(void))
 {
 	struct sgi_ioc_timers *p;
 	volatile unsigned char *tcwp, *tc2p;
@@ -254,11 +260,9 @@ void indy_timer_init(void)
 	tc2p = &p->tcnt2;
 
 	printk("calculating r4koff... ");
-	r4k_offset = dosample(tcwp, tc2p);  /* First sample. */
-	dosample(tcwp, tc2p);               /* Eat one... */
-	r4k_offset += dosample(tcwp, tc2p); /* Second sample. */
-	r4k_offset = (r4k_offset >> 1);     /* Get average. */
-	r4k_offset = HZ * r4k_offset;       /* Multiply by HZ */
+	dosample(tcwp, tc2p);			/* First sample. */
+	dosample(tcwp, tc2p);			/* Eat one.	*/
+	r4k_offset = dosample(tcwp, tc2p);	/* Second sample. */
 
 	printk("%08lx(%d)\n", r4k_offset, (int) r4k_offset);
 
@@ -278,7 +282,7 @@ void indy_8254timer_irq(void)
 	int irq = 4;
 
 	irq_enter(cpu, irq);
-	kstat.interrupts[irq]++;
+	kstat.irqs[0][irq]++;
 	printk("indy_8254timer_irq: Whoops, should not have gotten this IRQ\n");
 	prom_getchar();
 	prom_imode();
@@ -303,4 +307,3 @@ void do_settimeofday(struct timeval *tv)
 	time_esterror = MAXPHASE;
 	sti();
 }
-

@@ -7,6 +7,8 @@
  *
  */
 
+#define update_rtc()
+
 extern __inline__ unsigned long gettimeoffset (void)
 {
 	return 0;

@@ -98,7 +98,7 @@ static inline void remove_mem_queue(struct page * entry)
  *
  * Hint: -mask = 1+~mask
  */
-static spinlock_t page_alloc_lock = SPIN_LOCK_UNLOCKED;
+spinlock_t page_alloc_lock = SPIN_LOCK_UNLOCKED;
 
 /*
  * This routine is used by the kernel swap deamon to determine

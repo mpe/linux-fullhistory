@@ -1,4 +1,4 @@
-/* $Id: pcicons.c,v 1.13 1998/04/01 06:55:11 ecd Exp $
+/* $Id: pcicons.c,v 1.17 1998/05/03 21:56:10 davem Exp $
  * pcicons.c: PCI specific probing and console operations layer.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -17,6 +17,7 @@
 #include <linux/major.h>
 #include <linux/timer.h>
 #include <linux/version.h>
+#include <linux/malloc.h>
 
 #include <asm/uaccess.h>
 #include <asm/oplib.h>
@@ -47,6 +48,13 @@ extern struct console vt_console_driver;
 static void pci_install_consops(void);
 static int (*fbuf_offset)(int);
 
+static int color_fbuf_offset_1280_144 (int cindex)
+{
+	register int i = (cindex/144);
+	/* (1280 * CHAR_HEIGHT) == 101.0000.0000.0000 */
+	return skip_bytes + (i << 14) + (i << 12) + ((cindex % 144) << 3);
+}
+
 static int color_fbuf_offset_1152_128(int cindex)
 {
 	register int i = (cindex >> 7);
@@ -59,6 +67,30 @@ static int color_fbuf_offset_1024_128(int cindex)
 	register int i = (cindex >> 7);
 	/* (1024 * CHAR_HEIGHT) == 100.0000.0000.0000 */
 	return skip_bytes + (i << 14) + ((cindex & 127) << 3);
+}
+
+static int color_fbuf_offset_800_96 (int cindex)
+{
+	register int i = (cindex / 96);
+	/* (800 * CHAR_HEIGHT) == 11.0010.0000.0000 */
+	return skip_bytes + (i<<13) + (i<<12) + (i<<9) + ((cindex % 96)<<3);
+}
+
+static int color_fbuf_offset_640_80 (int cindex)
+{
+	register int i = (cindex/80);
+	/* (640 * CHAR_HEIGHT) == 10.1000.0000.0000 */
+	return skip_bytes + (i << 13) + (i << 11) + ((cindex % 80) << 3);
+}
+	 
+static int color_fbuf_offset_generic (int cindex)
+{
+#if 0
+	/* XXX Implement me -DaveM */
+	return skip_bytes + (cindex / video_num_columns) * bytes_per_row + ((cindex % video_num_columns) << 3);
+#else
+	return 0;
+#endif
 }
 
 static __u32 expand_bits_8[16] = {
@@ -349,7 +381,7 @@ static int pci_set_get_font(char *arg, int set, int ch512)
 	for (i = 0; i < 256; i++) {
 		for (line = 0; line < CHAR_HEIGHT; line++) {
 			unsigned char value;
-			__get_user_ret(value, (arg + (i + 32 + line)), -EFAULT);
+			__get_user_ret(value, (arg + (i * 32 + line)), -EFAULT);
 			vga_font[i * CHAR_HEIGHT + line] = value;
 		}
 	}
@@ -478,16 +510,13 @@ static void pci_clear_margin(void)
 		fb->switch_from_graph();
 }
 
-static unsigned long
-pci_postsetup(fbinfo_t *fb, unsigned long memory_start)
+static void pci_postsetup(fbinfo_t *fb)
 {
-	fb->color_map = (char *)memory_start;
+	fb->color_map = kmalloc(fb->type.fb_cmsize * 3, GFP_ATOMIC);
 	pci_set_palette();
-	return memory_start + fb->type.fb_cmsize * 3;
 }
 
-__initfunc(static unsigned long
-pci_con_type_init(unsigned long kmem_start, const char **display_desc))
+__initfunc(static void pci_con_type_init(const char **display_desc))
 {
 	can_do_color = 1;
 
@@ -505,12 +534,9 @@ pci_con_type_init(unsigned long kmem_start, const char **display_desc))
 		/*
 		 * Fake the screen memory with some CPU memory
 		 */
-		video_mem_base = kmem_start;
-		kmem_start += video_screen_size;
-		video_mem_term = kmem_start;
+		video_mem_base = (unsigned long)kmalloc(video_screen_size, GFP_ATOMIC);
+		video_mem_term = (video_mem_base + video_screen_size);
 	}
-
-	return kmem_start;
 }
 
 __initfunc(static void pci_con_type_init_finish(void))
@@ -573,14 +599,19 @@ __initfunc(static void pci_con_type_init_finish(void))
 
 unsigned long pcivga_iobase = 0;
 unsigned long pcivga_membase = 0;
+unsigned long pcivga_membase2 = 0;
 
 static struct {
 	int depth;
 	int resx, resy;
 	int x_margin, y_margin;
 } scr_def[] = {
+	{ 8, 1280, 1024, 64, 80 },
+	{ 8, 1152, 1024, 64, 80 },
 	{ 8, 1152, 900, 64, 18 },
 	{ 8, 1024, 768, 0, 0 },
+	{ 8, 800, 600, 16, 12 },
+	{ 8, 640, 480, 0, 0 },
 	{ 0 }
 };
 
@@ -626,6 +657,9 @@ __initfunc(int pci_console_probe(void))
 		x_margin = scr_def[i].x_margin;
 		y_margin = scr_def[i].y_margin;
 		skip_bytes = y_margin * fb->linebytes + x_margin;
+
+		/* XXX Check that ORIG_VIDEO_COLS match -DaveM */
+		fbuf_offset = color_fbuf_offset_generic;
 		switch (fb->type.fb_width) {
 			case 1152:
 				fbuf_offset = color_fbuf_offset_1152_128;
@@ -633,11 +667,26 @@ __initfunc(int pci_console_probe(void))
 			case 1024:
 				fbuf_offset = color_fbuf_offset_1024_128;
 				break;
+			case 1280:
+				fbuf_offset = color_fbuf_offset_1280_144;
+				break;
+			case 800:
+				fbuf_offset = color_fbuf_offset_800_96;
+				break;
+			case 640:
+				fbuf_offset = color_fbuf_offset_640_80;
+				break;
 			default:
 				prom_printf("can't handle console width %d\n",
 					    fb->type.fb_width);
 				prom_halt();
 		}
+		break;
+	}
+	if(scr_def[i].depth == 0) {
+		prom_printf("can't support console resolution %dX%d\n",
+			    fb->type.fb_width, fb->type.fb_height);
+		prom_halt();
 	}
 
 	pci_install_consops();

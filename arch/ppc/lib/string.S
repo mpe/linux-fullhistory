@@ -274,6 +274,8 @@ __copy_tofrom_user:
 	.long	17b,99b
 .text
 
+#undef CLEAR_USE_DCBZ 1
+#undef CLEAR_NO_CACHE 1
 	.globl	__clear_user
 __clear_user:
 	addi	r6,r3,-4
@@ -281,17 +283,34 @@ __clear_user:
 	li	r5,0
 	cmplwi	0,r4,4
 	blt	7f
+	/* clear a single word */
 11:	stwu	r5,4(r6)
 	beqlr
+#if defined(CLEAR_NO_CACHE) && defined (CONFIG_6xx)
+	/* 
+	 * no reason to turn off the cache for a single word 
+	 * or a few bytes -- Cort 
+	 */
+	mfspr	r7,HID0
+	ori	r8,r7,HID0_DLOCK
+	mtspr	HID0,r8
+#endif /* CLEAR_NO_CACHE */
+	/* clear word sized chunks */
 	andi.	r0,r6,3
 	add	r4,r0,r4
 	subf	r6,r0,r6
-	rlwinm	r0,r4,32-2,2,31
+	/*rlwinm	r0,r4,32-2,2,31*/
+	srwi	r0,r4,2
 	mtctr	r0
 	bdz	6f
 1:	stwu	r5,4(r6)
 	bdnz	1b
 6:	andi.	r4,r4,3
+#if defined(CLEAR_NO_CACHE) && defined (CONFIG_6xx)
+	/* restore the original state of HID0 in case cache was off -- Cort */
+	mtspr	HID0,r7
+#endif /* CLEAR_NO_CACHE */	
+	/* clear byte sized chunks */
 7:	cmpwi	0,r4,0
 	beqlr
 	mtctr	r4
@@ -305,6 +324,9 @@ __clear_user:
 	.align	2
 	.long	11b,99b
 	.long	1b,99b
+#ifdef CLEAR_USE_DCBZ
+	/*.long	66b,99b*/
+#endif		
 	.long	8b,99b
 .text
 

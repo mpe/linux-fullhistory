@@ -1,4 +1,4 @@
-/* $Id: ultra.S,v 1.20 1997/10/03 20:42:46 davem Exp $
+/* $Id: ultra.S,v 1.21 1998/04/28 08:23:30 davem Exp $
  * ultra.S: Don't expand these all over the place...
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -12,7 +12,7 @@
 	.text
 	.align		32
 	.globl		__flush_tlb_mm, __flush_tlb_range, __flush_tlb_page
-__flush_tlb_mm:		/* %o0 == (mm->context & 0x1fff) */
+__flush_tlb_mm:		/* %o0 == (mm->context & 0x3ff) */
 	mov		SECONDARY_CONTEXT, %g7
 9:	ldxa		[%g7] ASI_DMMU, %g2
 	cmp		%g2, %o0
@@ -33,7 +33,7 @@ __flush_tlb_mm:		/* %o0 == (mm->context & 0x1fff) */
 	retl
 	 wrpr		%g1, 0, %pstate
 	nop
-__flush_tlb_range:	/* %o0 == (mm->context & 0x1fff), %o1 == start, %o2 == end */
+__flush_tlb_range:	/* %o0 == (mm->context & 0x3ff), %o1 == start, %o2 == end */
 	sethi		%hi(8192 - 1), %g5
 	or		%g5, %lo(8192 - 1), %g5
 	andn		%o1, %g5, %o1
@@ -72,7 +72,7 @@ __flush_tlb_range:	/* %o0 == (mm->context & 0x1fff), %o1 == start, %o2 == end */
 	 nop
 
 	.align		32
-__flush_tlb_page:	/* %o0 == (mm->context & 0x1fff), %o1 == page & PAGE_MASK */
+__flush_tlb_page:	/* %o0 == (mm->context & 0x3ff), %o1 == page & PAGE_MASK */
 	mov		SECONDARY_CONTEXT, %g7
 	ldxa		[%g7] ASI_DMMU, %g2
 	cmp		%g2, %o0

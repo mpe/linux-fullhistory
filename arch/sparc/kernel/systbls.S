@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.71 1998/03/24 06:25:06 ecd Exp $
+/* $Id: systbls.S,v 1.72 1998/04/14 13:49:46 jj Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -63,7 +63,7 @@ C_LABEL(sys_call_table):
 	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
 	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall)
 	.long C_LABEL(sys_gettimeofday), C_LABEL(sys_getrusage)
-	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_nis_syscall), C_LABEL(sys_readv)
+	.long C_LABEL(sys_nis_syscall), C_LABEL(sys_getcwd), C_LABEL(sys_readv)
 	.long C_LABEL(sys_writev), C_LABEL(sys_settimeofday), C_LABEL(sys_fchown)
 	.long C_LABEL(sys_fchmod), C_LABEL(sys_nis_syscall), C_LABEL(sys_setreuid)
 	.long C_LABEL(sys_setregid), C_LABEL(sys_rename), C_LABEL(sys_truncate)

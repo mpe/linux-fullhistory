@@ -1,11 +1,10 @@
 /*
- *	linux/drivers/net/am79c961.c
+ * linux/drivers/net/am79c961.c
  *
- *	Derived from various things including skeleton.c
+ * Derived from various things including skeleton.c
  *
- *	R.M.King 1995.
+ * R.M.King 1995.
  */
-
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -35,33 +34,42 @@
 #include "am79c961a.h"
 
 static unsigned int net_debug = NET_DEBUG;
-static void am79c961_setmulticastlist (struct device *dev);
+
+static void
+am79c961_setmulticastlist (struct device *dev);
 
 static char *version = "am79c961 ethernet driver (c) 1995 R.M.King v0.00\n";
 
-static void write_rreg (unsigned long base, unsigned int reg, unsigned short val)
+#define FUNC_PROLOGUE \
+	struct dev_priv *priv = (struct dev_priv *)dev->priv
+
+/* --------------------------------------------------------------------------- */
+
+static void
+write_rreg (unsigned long base, unsigned int reg, unsigned short val)
 {
-    __asm__("
-	strh	%1, [%2]	@ NET_RAP
-	strh	%0, [%2, #-4]	@ NET_RDP
-	" : : "r" (val), "r" (reg), "r" (0xf0000464));
+	__asm__("
+		strh	%1, [%2]	@ NET_RAP
+		strh	%0, [%2, #-4]	@ NET_RDP
+		" : : "r" (val), "r" (reg), "r" (0xf0000464));
 }
 
 static inline void
 write_ireg (unsigned long base, unsigned int reg, unsigned short val)
 {
-    __asm__("
-	strh	%1, [%2]	@ NET_RAP
-	strh	%0, [%2, #8]	@ NET_RDP
-	" : : "r" (val), "r" (reg), "r" (0xf0000464));
+	__asm__("
+		strh	%1, [%2]	@ NET_RAP
+		strh	%0, [%2, #8]	@ NET_RDP
+		" : : "r" (val), "r" (reg), "r" (0xf0000464));
 }
 
 #define am_writeword(dev,off,val)\
-    __asm__("\
-	strh	%0, [%1]\
-	" : : "r" ((val) & 0xffff), "r" (0xe0000000 + ((off) << 1)));
+	__asm__("\
+		strh	%0, [%1]\
+		" : : "r" ((val) & 0xffff), "r" (0xe0000000 + ((off) << 1)));
 
-static inline void am_writebuffer(struct device *dev, unsigned int offset, unsigned char *buf, unsigned int length)
+static inline void
+am_writebuffer(struct device *dev, unsigned int offset, unsigned char *buf, unsigned int length)
 {
 	offset = 0xe0000000 + (offset << 1);
 	length = (length + 1) & ~1;
@@ -72,8 +80,7 @@ static inline void am_writebuffer(struct device *dev, unsigned int offset, unsig
 		buf += 2;
 		length -= 2;
 	}
-	while (length > 8) 
-	{
+	while (length > 8) {
 		unsigned int tmp, tmp2;
 		__asm__ __volatile__("
 			ldmia	%1!, {%2, %3}
@@ -107,7 +114,8 @@ read_rreg (unsigned int base_addr, unsigned int reg)
 	return v;
 }
 
-static inline unsigned short am_readword (struct device *dev, unsigned long off)
+static inline unsigned short
+am_readword (struct device *dev, unsigned long off)
 {
 	unsigned long address = 0xe0000000 + (off << 1);
 	unsigned short val;
@@ -118,7 +126,8 @@ static inline unsigned short am_readword (struct device *dev, unsigned long off)
 	return val;
 }
 
-static inline void am_readbuffer(struct device *dev, unsigned int offset, unsigned char *buf, unsigned int length)
+static inline void
+am_readbuffer(struct device *dev, unsigned int offset, unsigned char *buf, unsigned int length)
 {
 	offset = 0xe0000000 + (offset << 1);
 	length = (length + 1) & ~1;
@@ -158,12 +167,8 @@ static inline void am_readbuffer(struct device *dev, unsigned int offset, unsign
 	}
 }
 
-/*
- *	From here on is mostly non ARM specific. Watch the fact it knows
- *	the chip can hit all memory (kmalloc).
- */
-
-static int am79c961_ramtest(struct device *dev, unsigned int val)
+static int
+am79c961_ramtest(struct device *dev, unsigned int val)
 {
 	unsigned char *buffer = kmalloc (65536, GFP_KERNEL);
 	int i, error = 0, errorcount = 0;
@@ -190,9 +195,10 @@ static int am79c961_ramtest(struct device *dev, unsigned int val)
 	return errorcount;
 }
 
-static void am79c961_init_for_open(struct device *dev)
+static void
+am79c961_init_for_open(struct device *dev)
 {
-    	struct dev_priv *priv = (struct dev_priv *)dev->priv;
+	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 	unsigned long hdr_addr, first_free_addr;
 	unsigned long flags;
 	unsigned char *p;
@@ -212,9 +218,8 @@ static void am79c961_init_for_open(struct device *dev)
 	priv->rxtail = 0;
 	priv->rxhdr = hdr_addr;
 
-	for (i = 0; i < RX_BUFFERS; i++) 
-	{
-    		priv->rxbuffer[i] = first_free_addr;
+	for (i = 0; i < RX_BUFFERS; i++) {
+		priv->rxbuffer[i] = first_free_addr;
 		am_writeword (dev, hdr_addr, first_free_addr);
 		am_writeword (dev, hdr_addr + 2, RMD_OWN);
 		am_writeword (dev, hdr_addr + 4, (-1600));
@@ -225,9 +230,8 @@ static void am79c961_init_for_open(struct device *dev)
 	priv->txhead = 0;
 	priv->txtail = 0;
 	priv->txhdr = hdr_addr;
-	for (i = 0; i < TX_BUFFERS; i++) 
-	{
-    		priv->txbuffer[i] = first_free_addr;
+	for (i = 0; i < TX_BUFFERS; i++) {
+		priv->txbuffer[i] = first_free_addr;
 		am_writeword (dev, hdr_addr, first_free_addr);
 		am_writeword (dev, hdr_addr + 2, 0);
 		am_writeword (dev, hdr_addr + 4, 0);
@@ -251,7 +255,7 @@ static void am79c961_init_for_open(struct device *dev)
 	write_rreg (dev->base_addr, BASERXH, 0);
 	write_rreg (dev->base_addr, BASETXL, priv->txhdr);
 	write_rreg (dev->base_addr, BASERXH, 0);
-	write_rreg (dev->base_addr, POLLINT, 0);	
+	write_rreg (dev->base_addr, POLLINT, 0);
 	write_rreg (dev->base_addr, SIZERXR, -RX_BUFFERS);
 	write_rreg (dev->base_addr, SIZETXR, -TX_BUFFERS);
 	write_rreg (dev->base_addr, CSR0, CSR0_STOP);
@@ -259,7 +263,8 @@ static void am79c961_init_for_open(struct device *dev)
 	write_rreg (dev->base_addr, CSR0, CSR0_IENA|CSR0_STRT);
 }
 
-static int am79c961_init(struct device *dev)
+static int
+am79c961_init(struct device *dev)
 {
 	unsigned long flags;
 
@@ -280,15 +285,14 @@ static int am79c961_init(struct device *dev)
 /*
  * This is the real probe routine.
  */
-
-static int am79c961_probe1(struct device *dev)
+static int
+am79c961_probe1(struct device *dev)
 {
 	static unsigned version_printed = 0;
 	struct dev_priv *priv;
 	int i;
 
-	if (!dev->priv) 
-	{
+	if (!dev->priv) {
 		dev->priv = kmalloc (sizeof (struct dev_priv), GFP_KERNEL);
 		if (!dev->priv)
 			return -ENOMEM;
@@ -300,21 +304,19 @@ static int am79c961_probe1(struct device *dev)
 	/*
 	 * The PNP initialisation should have been done by the ether bootp loader.
 	 */
-	 
 	inb ((dev->base_addr + NET_RESET) >> 1);	/* reset the device */
 
 	udelay (5);
 
 	if (inb (dev->base_addr >> 1) != 0x08 ||
-		inb ((dev->base_addr >> 1) + 1) != 00 ||
-		inb ((dev->base_addr >> 1) + 2) != 0x2b) 
-	{
+	    inb ((dev->base_addr >> 1) + 1) != 00 ||
+	    inb ((dev->base_addr >> 1) + 2) != 0x2b) {
 		kfree (dev->priv);
 		dev->priv = NULL;
 		return -ENODEV;
-	 }
+	}
 
-	 /*
+	/*
 	 * Ok, we've found a valid hw ID
 	 */
 
@@ -325,14 +327,12 @@ static int am79c961_probe1(struct device *dev)
 	request_region (dev->base_addr, 0x18, "am79c961");
 
 	/* Retrive and print the ethernet address. */
-	for (i = 0; i < 6; i++) 
-	{
-    		dev->dev_addr[i] = inb ((dev->base_addr >> 1) + i) & 0xff;
+	for (i = 0; i < 6; i++) {
+		dev->dev_addr[i] = inb ((dev->base_addr >> 1) + i) & 0xff;
 		printk (i == 5 ? "%02x\n" : "%02x:", dev->dev_addr[i]);
 	}
 
-	if (am79c961_init(dev)) 
-	{
+	if (am79c961_init(dev)) {
 		kfree (dev->priv);
 		dev->priv = NULL;
 		return -ENODEV;
@@ -346,10 +346,12 @@ static int am79c961_probe1(struct device *dev)
 
 	/* Fill in the fields of the device structure with ethernet values. */
 	ether_setup(dev);
+
 	return 0;
 }
 
-int am79c961_probe(struct device *dev)
+int
+am79c961_probe(struct device *dev)
 {
 	static int initialised = 0;
 
@@ -371,10 +373,10 @@ int am79c961_probe(struct device *dev)
  * registers that "should" only need to be set once at boot, so that
  * there is non-reboot way to recover if something goes wrong.
  */
-
-static int am79c961_open(struct device *dev)
+static int
+am79c961_open(struct device *dev)
 {
-    	struct dev_priv *priv = (struct dev_priv *)dev->priv;
+	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 
 	MOD_INC_USE_COUNT;
 
@@ -384,6 +386,7 @@ static int am79c961_open(struct device *dev)
 		return -EAGAIN;
 
 	am79c961_init_for_open(dev);
+
 	dev->tbusy = 0;
 	dev->interrupt = 0;
 	dev->start = 1;
@@ -393,13 +396,14 @@ static int am79c961_open(struct device *dev)
 /*
  * The inverse routine to am79c961_open().
  */
- 
-static int am79c961_close(struct device *dev)
+static int
+am79c961_close(struct device *dev)
 {
 	dev->tbusy = 1;
 	dev->start = 0;
 
 	am79c961_init(dev);
+
 	free_irq (dev->irq, dev);
 
 	MOD_DEC_USE_COUNT;
@@ -410,10 +414,9 @@ static int am79c961_close(struct device *dev)
  * Get the current statistics.	This may be called with the card open or
  * closed.
  */
-
 static struct enet_statistics *am79c961_getstats (struct device *dev)
 {
-    	struct dev_priv *priv = (struct dev_priv *)dev->priv;
+	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 	return &priv->stats;
 }
 
@@ -423,7 +426,6 @@ static struct enet_statistics *am79c961_getstats (struct device *dev)
  * We don't attempt any packet filtering.  The card may have a SEEQ 8004
  * in which does not have the other ethernet address registers present...
  */
-
 static void am79c961_setmulticastlist (struct device *dev)
 {
 	unsigned long flags;
@@ -441,18 +443,16 @@ static void am79c961_setmulticastlist (struct device *dev)
 }
 
 /*
- *	Transmit a packet
+ * Transmit a packet
  */
-
-static int am79c961_sendpacket(struct sk_buff *skb, struct device *dev)
+static int
+am79c961_sendpacket(struct sk_buff *skb, struct device *dev)
 {
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
 
-	if (!dev->tbusy) 
-	{
+	if (!dev->tbusy) {
 again:
-		if (!test_and_set_bit(0, (void*)&dev->tbusy)) 
-		{
+		if (!test_and_set_bit(0, (void*)&dev->tbusy)) {
 			unsigned int length = ETH_ZLEN < skb->len ? skb->len : ETH_ZLEN;
 			unsigned int hdraddr, bufaddr;
 			unsigned long flags;
@@ -474,17 +474,12 @@ again:
 
 			if (!(am_readword (dev, priv->txhdr + (priv->txhead << 3) + 2) & TMD_OWN))
 				dev->tbusy = 0;
-			dev_kfree_skb (skb, FREE_WRITE);
+			dev_kfree_skb (skb);
 			return 0;
-		}
-		else
-		{
+		} else
 			printk(KERN_ERR "%s: Transmitter access conflict.\n", dev->name);
 			return 1;
-		}
-	}
-	else 
-	{
+	} else {
 		int tickssofar = jiffies - dev->trans_start;
 		if (tickssofar < 5)
 			return 1;
@@ -496,7 +491,8 @@ again:
 	}
 }
 
-static void am79c961_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+static void
+am79c961_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct device *dev = (struct device *)dev_id;
 	struct dev_priv *priv = (struct dev_priv *)dev->priv;
@@ -508,6 +504,7 @@ static void am79c961_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 #endif
 
 	dev->interrupt = 1;
+
 	status = read_rreg (dev->base_addr, CSR0);
 	write_rreg (dev->base_addr, CSR0, status & (CSR0_TINT|CSR0_RINT|CSR0_MISS|CSR0_IENA));
 
@@ -529,14 +526,13 @@ static void am79c961_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 /*
  * If we have a good packet(s), get it/them out of the buffers.
  */
-
-static void am79c961_rx(struct device *dev, struct dev_priv *priv)
+static void
+am79c961_rx(struct device *dev, struct dev_priv *priv)
 {
 	unsigned long hdraddr;
 	unsigned long pktaddr;
 
-	do 
-	{
+	do {
 		unsigned long status;
 		struct sk_buff *skb;
 		int len;
@@ -552,18 +548,15 @@ static void am79c961_rx(struct device *dev, struct dev_priv *priv)
 		if (priv->rxtail >= RX_BUFFERS)
 			priv->rxtail = 0;
 
-		if ((status & (RMD_ERR|RMD_STP|RMD_ENP)) != (RMD_STP|RMD_ENP)) 
-		{
+		if ((status & (RMD_ERR|RMD_STP|RMD_ENP)) != (RMD_STP|RMD_ENP)) {
 			am_writeword (dev, hdraddr + 2, RMD_OWN);
 			priv->stats.rx_errors ++;
-			if (status & RMD_ERR) 
-			{
+			if (status & RMD_ERR) {
 				if (status & RMD_FRAM)
 					priv->stats.rx_frame_errors ++;
 				if (status & RMD_CRC)
 					priv->stats.rx_crc_errors ++;
-			}
-			else if (status & RMD_STP)
+			} else if (status & RMD_STP)
 				priv->stats.rx_length_errors ++;
 			continue;
 		}
@@ -595,8 +588,8 @@ static void am79c961_rx(struct device *dev, struct dev_priv *priv)
 /*
  * Update stats for the transmitted packet
  */
-
-static void am79c961_tx(struct device *dev, struct dev_priv *priv)
+static void
+am79c961_tx(struct device *dev, struct dev_priv *priv)
 {
 	do {
 		unsigned long hdraddr;

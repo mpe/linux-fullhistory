@@ -129,8 +129,8 @@ static int mlock_fixup(struct vm_area_struct * vma,
 
 		if (newflags & VM_LOCKED)
 			while (start < end) {
-				char c;
-				get_user(c,(char *) start);
+				int c;
+				get_user(c,(int *) start);
 				__asm__ __volatile__("": :"r" (c));
 				start += PAGE_SIZE;
 			}

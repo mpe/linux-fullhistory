@@ -1,14 +1,11 @@
-			   ARM Linux 2.1.78
+			   ARM Linux 2.1.99
 			   ================
-
- **  The ARM support contained within is NOT complete - it will not build.   **
- **    If you want to build it, then please obtain a full copy of the ARM    **
- ** patches from ftp://ftp.arm.uk.linux.org/pub/armlinux/kernel-sources/v2.1 **
 
   Since this is a development kernel, it will not be as stable as the 2.0
   series, and can cause very nasty problems (eg, trashing your hard disk).
   When running one of these kernels, I advise you to back up the complete
   contents of all your hard disks.
+
 
 Contributors
 ------------
@@ -28,26 +25,16 @@ Contributors
   Mail: Philip.Blundell@pobox.com
   Desc: Architecture and processor selection during make config.
 
+
 Todo list
 ---------
 
   This is the list of changes to be done (roughly prioritorised):
 
-  * fully test new A5000 & older MEMC translation code
+  * fully test new MEMC translation code
   * fully test new AcornSCSI driver.
   * reply to email ;)
 
-Bugs
-----
-
-  Fixed bugs in this version 2.1.76:
-
-  Modules believed to be buggy (please report your successes/failures):
-
-  * AcornSCSI believed to occasionally corrupt hard drives.
-  * All NCR5380-based SCSI devices [Cumana I, Oak, EcoSCSI] are slow,
-    and may not allow write access.
-  * A5000 and older machine kernel builds may not be as stable as they were.
 
 			     Notes
 			     =====
@@ -76,11 +63,12 @@ Compilation of kernel
 	to
     CROSS_COMPILE=<your-path-to-your-compiler-without-gcc>
 	eg.
-    CROSS_COMPILE=/usr/src/bin/arm/arm-linuxelf-
+    CROSS_COMPILE=/usr/bin/arm-unknown-linuxelf-
 
   Do a 'make config', followed by 'make dep', and finally 'make all' to
   build the kernel (vmlinux).  A compressed image can be built by doing
   a 'make zImage' instead of 'make all'.
+
 
 Bug reports etc
 ---------------
@@ -96,6 +84,7 @@ Bug reports etc
   For patches, please include some explanation as to what the patch does
   and why (if relevant).
 
+
 Modules
 -------
 
@@ -108,6 +97,7 @@ Modules
   as such Acorn RiscPCs and other architectures using these processors can
   make good use of modularisation.
 
+
 ADFS Image files
 ----------------
 
@@ -117,6 +107,7 @@ ADFS Image files
 
   Please note that the PCEmulator DOS partitions have a partition table at
   the start, and as such, you will have to give '-o offset' to losetup.
+
 
 Kernel initialisation abort codes
 ---------------------------------
@@ -128,16 +119,18 @@ Kernel initialisation abort codes
     Stripes of White,Red,Yellow,Green:
        Kernel does not support the processor architecture detected.
 
+
 Request to developers
 ---------------------
 
   When writing device drivers which include a separate assember file, please
   include it in with the C file, and not the arch/arm/lib directory.  This
   allows the driver to be compiled as a loadable module without requiring
-  half the code to be needlessly compiled into the kernel image.
+  half the code to be compiled into the kernel image.
 
   In general, try to avoid using assembler unless it is really necessary.  It
   makes drivers far less easy to port to other hardware.
+
 
 ST506 hard drives
 -----------------
@@ -167,3 +160,22 @@ ST506 hard drives
   hasn't got any code for disc change detection in there at the moment which
   could be a bit of a problem!  Suggestions on the correct way to do this
   are welcome.
+
+
+Kernel entry (head-armv.S)
+--------------------------
+  The initial entry into the kernel made via head-armv.S uses architecture
+  independent code.  The architecture is selected by the value of 'r1' on
+  entry, which must be kept unique.  You can register a new architecture
+  by mailing the following details to rmk@arm.uk.linux.org.  Please give
+  the mail a subject of 'Register new architecture':
+
+    Name: <name of your architecture>
+    ARCHDIR: <name of include/asm-arm/arch-* directory>
+    Description:
+    <description of your architecture>
+
+  Please follow this format - it is an automated system.  You should
+  receive a reply the next day.
+---
+Russell King (03/05/1998)

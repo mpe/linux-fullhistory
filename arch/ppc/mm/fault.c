@@ -62,13 +62,13 @@ void do_page_fault(struct pt_regs *regs, unsigned long address,
 	struct vm_area_struct * vma;
 	struct mm_struct *mm = current->mm;
 
-	/*printk("address: %08lx code: %08lx %s%s%s%s%s%s\n",
-	       address,error_code,
+	/*printk("address: %08lx nip:%08lx code: %08lx %s%s%s%s%s%s\n",
+	       address,regs->nip,error_code,
 	       (error_code&0x40000000)?"604 tlb&htab miss ":"",
 	       (error_code&0x20000000)?"603 tlbmiss ":"",
 	       (error_code&0x02000000)?"write ":"",
 	       (error_code&0x08000000)?"prot ":"",
-	       (error_code&0x95700000)?"I/O ":"",
+	       (error_code&0x80000000)?"I/O ":"",
 	       (regs->trap == 0x400)?"instr":"data"
 	       );*/
 	       
@@ -161,32 +161,6 @@ void
 bad_page_fault(struct pt_regs *regs, unsigned long address)
 {
 	unsigned long fixup;
-#if 0	
-	extern unsigned long video_mem_base;
-	extern unsigned long video_mem_term;
-	
-	/*
-	 * Remap video IO areas for buggy X servers.
-	 * The S3 server wants direct access to video memory
-	 * at 0x8000 0000 and 0xc000 0000 on prep systems, but
-	 * we don't allow that AND we remap the io areas so it's not
-	 * even there!
-	 * So, for this task only give a virtual=physical mapping of the
-	 * video mem.
-	 * -- Cort
-	 */
-	if ( is_prep && user_mode(regs) )
-	{
-			printk("%s/%d: fault on %x\n",
-			       current->comm,current->pid,address);
-			printk("mapping: %x -> %x\n",
-			       address&PAGE_MASK, address&PAGE_MASK);
-			map_page(current,address&PAGE_MASK,address&PAGE_MASK,
-				 _PAGE_PRESENT | _PAGE_ACCESSED | _PAGE_RW | _PAGE_DIRTY | _PAGE_HWWRITE|_PAGE_NO_CACHE|_PAGE_WRITETHRU);
-			return;
-	}
-#endif	
-	
 	if (user_mode(regs)) {
 		force_sig(SIGSEGV, current);
 		return;
@@ -209,6 +183,7 @@ bad_page_fault(struct pt_regs *regs, unsigned long address)
 	      regs->nip,regs->link,address,current->comm,current->pid);
 }
 
+#ifdef CONFIG_8xx
 /*
  * I need a va to pte function for the MPC8xx so I can set the cache
  * attributes on individual pages used by the Communication Processor
@@ -286,6 +261,17 @@ print_8xx_pte(struct mm_struct *mm, unsigned long addr)
                         if (pte) {
                                 printk(" (0x%08lx)->(0x%08lx)->0x%08lx\n",
                                         (long)pgd, (long)pte, (long)pte_val(*pte));
+#define pp ((long)pte_val(*pte))				
+				printk(" RPN: %05x PP: %x SPS: %x SH: %x "
+				       "CI: %x v: %x\n",
+				       pp>>12,    /* rpn */
+				       (pp>>10)&3, /* pp */
+				       (pp>>3)&1, /* small */
+				       (pp>>2)&1, /* shared */
+				       (pp>>1)&1, /* cache inhibit */
+				       pp&1       /* valid */
+				       );
+#undef pp				
                         }
                         else {
                                 printk("no pte\n");
@@ -320,6 +306,7 @@ get_8xx_pte(struct mm_struct *mm, unsigned long addr)
         }
         return(retval);
 }
+#endif /* CONFIG_8xx */
 
 #if 0
 /*

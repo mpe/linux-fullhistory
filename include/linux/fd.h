@@ -189,7 +189,7 @@ enum {
  * Current drive state (not directly modifiable by user, readonly)
  */
 struct floppy_drive_struct {
-	signed char flags;
+	unsigned long flags;
 /* values for these flags */
 #define FD_NEED_TWADDLE (1 << FD_NEED_TWADDLE_BIT)
 #define FD_VERIFY (1 << FD_VERIFY_BIT)

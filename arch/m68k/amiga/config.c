@@ -76,7 +76,6 @@ extern void amiga_floppy_setup(char *, int *);
 #endif
 static void amiga_reset (void);
 static int amiga_wait_key (struct console *co);
-extern struct consw fb_con;
 extern void zorro_init(void);
 extern void amiga_init_sound(void);
 static void amiga_savekmsg_init(void);

@@ -11,13 +11,14 @@
  */
 
 #include <linux/config.h>
+#include <asm/irq.h>
 
 static __inline__ int
 ide_default_irq(ide_ioreg_t base)
 {
 #ifdef CONFIG_ARCH_A5K
 	if (base == 0x1f0)
-		return 11;
+		return IRQ_HARDDISK;
 #endif
 	return 0;
 }
@@ -52,5 +53,5 @@ ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int stepping, int *irq)
 	}
 	*p++ = ctrl;
 	if (irq != NULL)
-		irq = 0;
+		*irq = 0;
 }

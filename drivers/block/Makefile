@@ -38,6 +38,22 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_AMIGA_FLOPPY),y)
+  L_OBJS += amiflop.o
+else
+  ifeq ($(CONFIG_AMIGA_FLOPPY),m)
+    M_OBJS += amiflop.o
+  endif
+endif
+
+ifeq ($(CONFIG_ATARI_FLOPPY),y)
+  L_OBJS += ataflop.o
+else
+  ifeq ($(CONFIG_ATARI_FLOPPY),m)
+  M_OBJS += ataflop.o
+  endif
+endif
+
 ifeq ($(CONFIG_ATARI_ACSI),y)
   LX_OBJS += acsi.o
 else
@@ -91,9 +107,7 @@ ifeq ($(CONFIG_BLK_DEV_IDE),y)
 else
   ifeq ($(CONFIG_BLK_DEV_IDE),m)
   MIX_OBJS += ide.o
-  ifeq ($(CONFIG_PROC_FS),y)
-    M_OBJS += ide-proc.o
-  endif
+  # ide-mod includes ide-proc
   M_OBJS += ide-mod.o
   MX_OBJS += ide-probe.o
   endif

@@ -30,6 +30,8 @@
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
+#include <asm/mipsregs.h>
+#include <asm/prctl.h>
 
 #include <linux/config.h>
 
@@ -51,6 +53,11 @@ static struct linux_binfmt irix_format = {
 	NULL, &__this_module.usecount, load_irix_binary, load_irix_library, irix_core_dump
 #endif
 };
+
+#ifndef elf_addr_t
+#define elf_addr_t unsigned long
+#define elf_caddr_t char *
+#endif
 
 #ifdef DEBUG_ELF
 /* Debugging routines. */
@@ -152,68 +159,67 @@ unsigned long * create_irix_tables(char * p, int argc, int envc,
 				   unsigned int interp_load_addr,
 				   struct pt_regs *regs, struct elf_phdr *ephdr)
 {
-	char **argv, **envp;
-	unsigned long *sp;
-	unsigned long *csp;
-
+	elf_caddr_t *argv;
+	elf_caddr_t *envp;
+	elf_addr_t *sp, *csp;
+	
 #ifdef DEBUG_ELF
 	printk("create_irix_tables: p[%p] argc[%d] envc[%d] "
 	       "load_addr[%08x] interp_load_addr[%08x]\n",
 	       p, argc, envc, load_addr, interp_load_addr);
 #endif
-	sp = (unsigned long *) (0xfffffffc & (unsigned long) p);
-
-	/* Make sure we will be aligned properly at the end of this. */
+	sp = (elf_addr_t *) (~15UL & (unsigned long) p);
 	csp = sp;
 	csp -= exec ? DLINFO_ITEMS*2 : 2;
-	csp -= envc + 1;
+	csp -= envc+1;
 	csp -= argc+1;
-	if (!(((unsigned long) csp) & 4))
-	    sp--;
+	csp -= 1;		/* argc itself */
+	if ((unsigned long)csp & 15UL) {
+		sp -= (16UL - ((unsigned long)csp & 15UL)) / sizeof(*sp);
+	}
 
-	sp -= exec ? DLINFO_ITEMS*2 : 2;
-	sp -= envc+1;
-	envp = (char **) sp;
-	sp -= argc+1;
-	argv = (char **) sp;
-
-	__put_user((unsigned long)argc, --sp);
-
+	/*
+	 * Put the ELF interpreter info on the stack
+	 */
 #define NEW_AUX_ENT(nr, id, val) \
-	__put_user ((id), sp+(nr*2)); \
-	__put_user ((val), sp+(nr*2+1)); \
+	  __put_user ((id), sp+(nr*2)); \
+	  __put_user ((val), sp+(nr*2+1)); \
 
-#define INTERP_ALIGN  (~((64 * 1024) - 1))
+	sp -= 2;
+	NEW_AUX_ENT(0, AT_NULL, 0);
 
-	NEW_AUX_ENT (0, AT_NULL, 0);
 	if(exec) {
-		struct elf_phdr * eppnt;
-		eppnt = (struct elf_phdr *) exec->e_phoff;
+		sp -= 11*2;
 
-		/* Put this here for an ELF program interpreter */
-		NEW_AUX_ENT (0, AT_PHDR, ephdr->p_vaddr);
+		NEW_AUX_ENT (0, AT_PHDR, load_addr + exec->e_phoff);
 		NEW_AUX_ENT (1, AT_PHENT, sizeof (struct elf_phdr));
 		NEW_AUX_ENT (2, AT_PHNUM, exec->e_phnum);
-		NEW_AUX_ENT (3, AT_PAGESZ, PAGE_SIZE);
-		NEW_AUX_ENT (4, AT_BASE, (interp_load_addr & (INTERP_ALIGN)));
+		NEW_AUX_ENT (3, AT_PAGESZ, ELF_EXEC_PAGESIZE);
+		NEW_AUX_ENT (4, AT_BASE, interp_load_addr);
 		NEW_AUX_ENT (5, AT_FLAGS, 0);
-		NEW_AUX_ENT (6, AT_ENTRY, (unsigned long) exec->e_entry);
-		NEW_AUX_ENT (7, AT_UID, (unsigned long) current->uid);
-		NEW_AUX_ENT (8, AT_EUID, (unsigned long) current->euid);
-		NEW_AUX_ENT (9, AT_GID, (unsigned long) current->gid);
-		NEW_AUX_ENT (10, AT_EGID, (unsigned long) current->egid);
+		NEW_AUX_ENT (6, AT_ENTRY, (elf_addr_t) exec->e_entry);
+		NEW_AUX_ENT (7, AT_UID, (elf_addr_t) current->uid);
+		NEW_AUX_ENT (8, AT_EUID, (elf_addr_t) current->euid);
+		NEW_AUX_ENT (9, AT_GID, (elf_addr_t) current->gid);
+		NEW_AUX_ENT (10, AT_EGID, (elf_addr_t) current->egid);
 	}
 #undef NEW_AUX_ENT
 
+	sp -= envc+1;
+	envp = (elf_caddr_t *) sp;
+	sp -= argc+1;
+	argv = (elf_caddr_t *) sp;
+
+	__put_user((elf_addr_t)argc,--sp);
 	current->mm->arg_start = (unsigned long) p;
 	while (argc-->0) {
-		__put_user(p, argv++);
+		__put_user((elf_caddr_t)(unsigned long)p,argv++);
 		p += strlen_user(p);
 	}
 	__put_user(NULL, argv);
 	current->mm->arg_end = current->mm->env_start = (unsigned long) p;
 	while (envc-->0) {
-		__put_user(p, envp++);
+		__put_user((elf_caddr_t)(unsigned long)p,envp++);
 		p += strlen_user(p);
 	}
 	__put_user(NULL, envp);
@@ -441,7 +447,8 @@ static inline int look_for_irix_interpreter(char **name,
 					    struct elf_phdr *epp,
 					    struct linux_binprm *bprm, int pnum)
 {
-	int i, old_fs;
+	mm_segment_t old_fs;
+	int i;
 	int retval = -EINVAL;
 	struct dentry *dentry = NULL;
 
@@ -473,9 +480,8 @@ static inline int look_for_irix_interpreter(char **name,
 			retval = PTR_ERR(dentry);
 			goto out;
 		}
-
 		retval = read_exec(dentry, 0, bprm->buf, 128, 1);
-		if(retval)
+		if(retval < 0)
 			goto dput_and_out;
 
 		*interp_elf_ex = *((struct elfhdr *) bprm->buf);
@@ -546,7 +552,7 @@ static inline void map_executable(struct file *fp, struct elf_phdr *epp, int pnu
 
 static inline int map_interpreter(struct elf_phdr *epp, struct elfhdr *ihp,
 				  struct dentry *identry, unsigned int *iladdr,
-				  int pnum, int old_fs,
+				  int pnum, mm_segment_t old_fs,
 				  unsigned int *eentry)
 {
 	int i;
@@ -573,6 +579,32 @@ static inline int map_interpreter(struct elf_phdr *epp, struct elfhdr *ihp,
 	return 0;
 }
 
+/*
+ * IRIX maps a page at 0x200000 that holds information about the 
+ * process and the system, here we map the page and fill the
+ * structure
+ */
+void irix_map_prda_page (void)
+{
+	unsigned long v;
+	struct prda *pp;
+
+	v =  do_mmap (NULL, PRDA_ADDRESS, PAGE_SIZE, PROT_READ | PROT_WRITE | PROT_EXEC,
+		      MAP_FIXED | MAP_PRIVATE, 0);
+	
+	if (v < 0)
+		return;
+
+	pp = (struct prda *) v;
+	pp->prda_sys.t_pid  = current->pid;
+	pp->prda_sys.t_prid = read_32bit_cp0_register (CP0_PRID);
+	pp->prda_sys.t_rpid = current->pid;
+
+	/* We leave the rest set to zero */
+}
+	
+
+	
 /* These are the functions used to load ELF style executables and shared
  * libraries.  There is no binary dependent code anywhere else.
  */
@@ -585,8 +617,9 @@ static inline int do_load_irix_binary(struct linux_binprm * bprm,
 	unsigned int load_addr, elf_bss, elf_brk;
 	unsigned int elf_entry, interp_load_addr = 0;
 	unsigned int start_code, end_code, end_data, elf_stack;
-	int old_fs, elf_exec_fileno, retval, has_interp, has_ephdr, i;
+	int elf_exec_fileno, retval, has_interp, has_ephdr, i;
 	char *elf_interpreter;
+	mm_segment_t old_fs;
 	
 	load_addr = 0;
 	has_interp = has_ephdr = 0;
@@ -759,6 +792,12 @@ static inline int do_load_irix_binary(struct linux_binprm * bprm,
 	 * bss and break sections.
 	 */
 	set_brk(elf_bss, elf_brk);
+
+	/*
+	 * IRIX maps a page at 0x200000 which holds some system
+	 * information.  Programs depend on this.
+	 */
+	irix_map_prda_page ();
 
 	padzero(elf_bss);
 
@@ -1086,7 +1125,7 @@ static int irix_core_dump(long signr, struct pt_regs * regs)
 	struct file file;
 	struct dentry *dentry;
 	struct inode *inode;
-	unsigned short fs;
+	mm_segment_t fs;
 	char corefile[6+sizeof(current->comm)];
 	int segs;
 	int i;
@@ -1190,8 +1229,8 @@ static int irix_core_dump(long signr, struct pt_regs * regs)
 	notes[0].datasz = sizeof(prstatus);
 	notes[0].data = &prstatus;
 	prstatus.pr_info.si_signo = prstatus.pr_cursig = signr;
-	prstatus.pr_sigpend = current->signal;
-	prstatus.pr_sighold = current->blocked;
+	prstatus.pr_sigpend = current->signal.sig[0];
+	prstatus.pr_sighold = current->blocked.sig[0];
 	psinfo.pr_pid = prstatus.pr_pid = current->pid;
 	psinfo.pr_ppid = prstatus.pr_ppid = current->p_pptr->pid;
 	psinfo.pr_pgrp = prstatus.pr_pgrp = current->pgrp;

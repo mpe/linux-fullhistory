@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.90 1998/03/24 18:12:05 jj Exp $
+/* $Id: head.S,v 1.91 1998/04/24 13:40:48 jj Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -403,7 +403,7 @@ C_LABEL(trapbase_cpu3):
 	BAD_TRAP(0xfc) BAD_TRAP(0xfd) BAD_TRAP(0xfe) BAD_TRAP(0xff)
 
 #endif
-	.align 4096
+	.align PAGE_SIZE
 
 /* This was the only reasonable way I could think of to properly align
  * these page-table data structures.

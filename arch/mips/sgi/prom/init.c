@@ -1,9 +1,11 @@
-/* $Id: init.c,v 1.1.1.1 1997/06/01 03:16:40 ralf Exp $
+/*
  * init.c: PROM library initialisation code.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
+ *
+ * $Id: init.c,v 1.2 1998/05/01 01:35:25 ralf Exp $
  */
-
+#include <linux/init.h>
 #include <linux/kernel.h>
 
 #include <asm/sgialib.h>
@@ -19,7 +21,7 @@ unsigned short prom_vers, prom_rev;
 
 extern void prom_testtree(void);
 
-int prom_init(int argc, char **argv, char **envp)
+__initfunc(int prom_init(int argc, char **argv, char **envp))
 {
 	struct linux_promblock *pb;
 

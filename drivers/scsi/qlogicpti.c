@@ -563,7 +563,6 @@ static inline void qlogicpti_set_hostdev_defaults(struct qlogicpti *qpti)
 	}
 }
 
-static void qlogicpti_intr_handler(int irq, void *dev_id, struct pt_regs *regs);
 static void do_qlogicpti_intr_handler(int irq, void *dev_id, struct pt_regs *regs);
 
 /* Detect all PTI Qlogic ISP's in the machine. */
@@ -1051,18 +1050,10 @@ static int qlogicpti_return_status(struct Status_Entry *sts)
 	return (sts->scsi_status & STATUS_MASK) | (host_status << 16);
 }
 
-static void do_qlogicpti_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&io_request_lock, flags);
-	qlogicpti_intr_handler(irq, dev_id, regs);
-	spin_unlock_irqrestore(&io_request_lock, flags);
-}
-
 #ifndef __sparc_v9__
 
-static void qlogicpti_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
+static __inline__ void qlogicpti_intr_handler(int irq, void *dev_id,
+					      struct pt_regs *regs)
 {
 	static int running = 0;
 	Scsi_Cmnd *Cmnd;
@@ -1150,7 +1141,8 @@ repeat:
 
 #else /* __sparc_v9__ */
 
-static void qlogicpti_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
+static __inline__ void qlogicpti_intr_handler(int irq, void *dev_id,
+					      struct pt_regs *regs)
 {
 	struct qlogicpti *qpti = dev_id;
 	Scsi_Cmnd *Cmnd;
@@ -1217,6 +1209,15 @@ static void qlogicpti_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 #endif
+
+static void do_qlogicpti_intr_handler(int irq, void *dev_id, struct pt_regs *regs)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&io_request_lock, flags);
+	qlogicpti_intr_handler(irq, dev_id, regs);
+	spin_unlock_irqrestore(&io_request_lock, flags);
+}
 
 int qlogicpti_abort(Scsi_Cmnd *Cmnd)
 {

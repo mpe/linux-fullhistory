@@ -107,4 +107,6 @@ endif
 archclean:
 	rm -f vmlinux.gz
 
+archmrproper:
+
 archdep:

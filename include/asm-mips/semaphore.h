@@ -10,7 +10,9 @@
 #ifndef __ASM_MIPS_SEMAPHORE_H
 #define __ASM_MIPS_SEMAPHORE_H
 
+#include <asm/system.h>
 #include <asm/atomic.h>
+#include <asm/spinlock.h>
 
 struct semaphore {
 	atomic_t count;
@@ -24,6 +26,8 @@ struct semaphore {
 extern void __down(struct semaphore * sem);
 extern int  __down_interruptible(struct semaphore * sem);
 extern void __up(struct semaphore * sem);
+
+extern spinlock_t semaphore_wake_lock;
 
 #define sema_init(sem, val)	atomic_set(&((sem)->count), val)
 

@@ -1,4 +1,4 @@
-/* $Id: sbuscons.c,v 1.15 1998/03/31 01:49:50 davem Exp $
+/* $Id: sbuscons.c,v 1.17 1998/04/24 12:29:54 davem Exp $
  * sbuscons.c: Routines specific to SBUS frame buffer consoles.
  *
  * Copyright (C) 1995 Peter Zaitcev (zaitcev@lab.ipmce.su)
@@ -366,8 +366,7 @@ static void sbus_render_screen(void)
 	sbus_blitc (*contents, (unsigned long) contents);
 }
 
-__initfunc(static unsigned long
-sbus_con_type_init(unsigned long kmem_start, const char **display_desc))
+__initfunc(static void sbus_con_type_init(const char **display_desc))
 {
         can_do_color = (con_type != FBTYPE_SUN2BW);
 
@@ -381,11 +380,9 @@ sbus_con_type_init(unsigned long kmem_start, const char **display_desc))
 		/*
 		 * fake the screen memory with some CPU memory
 		 */
-		video_mem_base = kmem_start;
-		kmem_start += video_screen_size;
-		video_mem_term = kmem_start;
+		video_mem_base = (unsigned long)kmalloc(video_screen_size, GFP_ATOMIC);
+		video_mem_term = (video_mem_base + video_screen_size);
 	}
-	return kmem_start;
 }
 
 __initfunc(static void sbus_con_type_init_finish(void))
@@ -694,10 +691,9 @@ static void sbus_console_restore_palette (void)
 	        (*fb_restore_palette) (&fbinfo[0]);
 }
 
-__initfunc(unsigned long cg_postsetup(fbinfo_t *fb, unsigned long start_mem))
+__initfunc(void cg_postsetup(fbinfo_t *fb))
 {
-	fb->color_map = (char *)start_mem;
-	return start_mem + 256*3;
+	fb->color_map = kmalloc(256 * 3, GFP_ATOMIC);
 }
 
 static char *known_cards [] __initdata = {

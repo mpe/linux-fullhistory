@@ -1,4 +1,4 @@
-/* $Id: signal.h,v 1.2 1997/09/03 12:29:21 jj Exp $
+/* $Id: signal.h,v 1.3 1998/04/12 06:20:33 davem Exp $
  * signal.h: Signal emulation for Solaris
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -106,4 +106,3 @@ struct sol_siginfo {
 #define SOLARIS_POLL_ERR        4
 #define SOLARIS_POLL_PRI        5
 #define SOLARIS_POLL_HUP        6
-    

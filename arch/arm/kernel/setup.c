@@ -50,19 +50,18 @@ extern const struct processor arm7_processor_functions;
 extern const struct processor sa110_processor_functions;
 
 struct armversions armidlist[] = {
-#if defined(CONFIG_CPU_ARM2) || defined(CONFIG_CPU_ARM3)
-	{ 0x41560200, 0xfffffff0, F_MEMC	, "ARM/VLSI",	"arm2"		, &arm2_processor_functions   },
-	{ 0x41560250, 0xfffffff0, F_MEMC	, "ARM/VLSI",	"arm250"	, &arm250_processor_functions },
-	{ 0x41560300, 0xfffffff0, F_MEMC|F_CACHE, "ARM/VLSI",	"arm3"		, &arm3_processor_functions   },
+#if defined(CONFIG_CPU_26)
+	{ 0x41560200, 0xfffffff0, F_MEMC	, "ARM/VLSI",	"arm2"		, &arm2_processor_functions   , "arm2"},
+	{ 0x41560250, 0xfffffff0, F_MEMC	, "ARM/VLSI",	"arm250"	, &arm250_processor_functions , "arm3"},
+	{ 0x41560300, 0xfffffff0, F_MEMC|F_CACHE, "ARM/VLSI",	"arm3"		, &arm3_processor_functions   , "arm3"},
+#elif defined(CONFIG_CPU_32)
+	{ 0x41560600, 0xfffffff0, F_MMU|F_32BIT	, "ARM/VLSI",	"arm6"		, &arm6_processor_functions   , "arm6"},
+	{ 0x41560610, 0xfffffff0, F_MMU|F_32BIT	, "ARM/VLSI",	"arm610"	, &arm6_processor_functions   , "arm6"},
+	{ 0x41007000, 0xffffff00, F_MMU|F_32BIT , "ARM/VLSI",   "arm7"		, &arm7_processor_functions   , "arm6"},
+	{ 0x41007100, 0xffffff00, F_MMU|F_32BIT , "ARM/VLSI",   "arm710"	, &arm7_processor_functions   , "arm6"},
+	{ 0x4401a100, 0xfffffff0, F_MMU|F_32BIT	, "DEC",	"sa110"		, &sa110_processor_functions  , "sa1x"},
 #endif
-#if defined(CONFIG_CPU_ARM6) || defined(CONFIG_CPU_SA110)
-	{ 0x41560600, 0xfffffff0, F_MMU|F_32BIT	, "ARM/VLSI",	"arm6"		, &arm6_processor_functions   },
-	{ 0x41560610, 0xfffffff0, F_MMU|F_32BIT	, "ARM/VLSI",	"arm610"	, &arm6_processor_functions   },
-	{ 0x41007000, 0xffffff00, F_MMU|F_32BIT , "ARM/VLSI",   "arm7"		, &arm7_processor_functions   },
-	{ 0x41007100, 0xffffff00, F_MMU|F_32BIT , "ARM/VLSI",   "arm710"	, &arm7_processor_functions   },
-	{ 0x4401a100, 0xfffffff0, F_MMU|F_32BIT	, "DEC",	"sa110"		, &sa110_processor_functions  },
-#endif
-	{ 0x00000000, 0x00000000, 0		, "***",	"*unknown*"	, NULL }
+	{ 0x00000000, 0x00000000, 0		, "***",	"*unknown*"	, NULL			      , NULL  }
 };
 
 static struct param_struct *params = (struct param_struct *)PARAMS_BASE;

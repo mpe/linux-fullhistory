@@ -22,10 +22,12 @@
 #include <linux/proc_fs.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
+#include <linux/quotaops.h>
 
 #include <asm/uaccess.h>
 #include <asm/unaligned.h>
 #include <asm/semaphore.h>
+#include <asm/spinlock.h>
 #include <asm/namei.h>
 
 /* This can be removed after the beta phase. */
@@ -84,48 +86,48 @@
  * semantics.  See the comments in "open_namei" and "do_link" below.
  */
 
-static char * quicklist = NULL;
-static int quickcount = 0;
-struct semaphore quicklock = MUTEX;
+char * getname_quicklist = NULL;
+int getname_quickcount = 0;
+spinlock_t getname_quicklock = SPIN_LOCK_UNLOCKED;
 
 /* Tuning: increase locality by reusing same pages again...
- * if quicklist becomes too long on low memory machines, either a limit
+ * if getname_quicklist becomes too long on low memory machines, either a limit
  * should be added or after a number of cycles some pages should
  * be released again ...
  */
 static inline char * get_page(void)
 {
 	char * res;
-	down(&quicklock);
-	res = quicklist;
+	spin_lock(&getname_quicklock);
+	res = getname_quicklist;
 	if (res) {
 #ifdef DEBUG
 		char * tmp = res;
 		int i;
-		for(i=0; i<quickcount; i++)
+		for(i=0; i<getname_quickcount; i++)
 			tmp = *(char**)tmp;
 		if (tmp)
 			printk("bad quicklist %x\n", (int)tmp);
 #endif
-		quicklist = *(char**)res;
-		quickcount--;
+		getname_quicklist = *(char**)res;
+		getname_quickcount--;
 	}
-	else
+	spin_unlock(&getname_quicklock);
+	if (!res)
 		res = (char*)__get_free_page(GFP_KERNEL);
-	up(&quicklock);
 	return res;
 }
 
 inline void putname(char * name)
 {
 	if (name) {
-		down(&quicklock);
-		*(char**)name = quicklist;
-		quicklist = name;
-		quickcount++;
-		up(&quicklock);
+		spin_lock(&getname_quicklock);
+		*(char**)name = getname_quicklist;
+		getname_quicklist = name;
+		getname_quickcount++;
+		spin_unlock(&getname_quicklock);
 	}
-	/* if a quicklist limit is necessary to introduce, call
+	/* if a getname_quicklist limit is necessary to introduce, call
 	 * free_page((unsigned long) name);
 	 */
 }
@@ -573,8 +575,7 @@ struct dentry * open_namei(const char * pathname, int flag, int mode)
 		else if (!dir->d_inode->i_op || !dir->d_inode->i_op->create)
 			error = -EACCES;
 		else if ((error = permission(dir->d_inode,MAY_WRITE | MAY_EXEC)) == 0) {
-			if (dir->d_inode->i_sb && dir->d_inode->i_sb->dq_op)
-				dir->d_inode->i_sb->dq_op->initialize(dir->d_inode, -1);
+			DQUOT_INIT(dir->d_inode);
 			error = dir->d_inode->i_op->create(dir->d_inode, dentry, mode);
 			/* Don't check for write permission, don't truncate */
 			acc_mode = 0;
@@ -637,8 +638,7 @@ struct dentry * open_namei(const char * pathname, int flag, int mode)
 		 */
 		error = locks_verify_locked(inode);
 		if (!error) {
-			if (inode->i_sb && inode->i_sb->dq_op)
-				inode->i_sb->dq_op->initialize(inode, -1);
+			DQUOT_INIT(inode);
 			
 			error = do_truncate(dentry, 0);
 		}
@@ -647,8 +647,7 @@ struct dentry * open_namei(const char * pathname, int flag, int mode)
 			goto exit;
 	} else
 		if (flag & FMODE_WRITE)
-			if (inode->i_sb && inode->i_sb->dq_op)
-				inode->i_sb->dq_op->initialize(inode, -1);
+			DQUOT_INIT(inode);
 
 	return dentry;
 
@@ -690,8 +689,7 @@ struct dentry * do_mknod(const char * filename, int mode, dev_t dev)
 	if (!dir->d_inode->i_op || !dir->d_inode->i_op->mknod)
 		goto exit_lock;
 
-	if (dir->d_inode->i_sb && dir->d_inode->i_sb->dq_op)
-		dir->d_inode->i_sb->dq_op->initialize(dir->d_inode, -1);
+	DQUOT_INIT(dir->d_inode);
 	error = dir->d_inode->i_op->mknod(dir->d_inode, dentry, mode, dev);
 	retval = ERR_PTR(error);
 	if (!error)
@@ -775,8 +773,7 @@ static inline int do_mkdir(const char * pathname, int mode)
 	if (!dir->d_inode->i_op || !dir->d_inode->i_op->mkdir)
 		goto exit_lock;
 
-	if (dir->d_inode->i_sb && dir->d_inode->i_sb->dq_op)
-		dir->d_inode->i_sb->dq_op->initialize(dir->d_inode, -1);
+	DQUOT_INIT(dir->d_inode);
 	mode &= 0777 & ~current->fs->umask;
 	error = dir->d_inode->i_op->mkdir(dir->d_inode, dentry, mode);
 
@@ -848,8 +845,7 @@ static inline int do_rmdir(const char * name)
 	if (!dir->d_inode->i_op || !dir->d_inode->i_op->rmdir)
 		goto exit_lock;
 
-	if (dir->d_inode->i_sb && dir->d_inode->i_sb->dq_op)
-		dir->d_inode->i_sb->dq_op->initialize(dir->d_inode, -1);
+	DQUOT_INIT(dir->d_inode);
 
 	if (dentry->d_count > 1)
 		shrink_dcache_parent(dentry);
@@ -924,8 +920,7 @@ static inline int do_unlink(const char * name)
 	if (!dir->d_inode->i_op || !dir->d_inode->i_op->unlink)
 		goto exit_lock;
 
-	if (dir->d_inode->i_sb && dir->d_inode->i_sb->dq_op)
-		dir->d_inode->i_sb->dq_op->initialize(dir->d_inode, -1);
+	DQUOT_INIT(dir->d_inode);
 
 	error = dir->d_inode->i_op->unlink(dir->d_inode, dentry);
 
@@ -986,8 +981,7 @@ static inline int do_symlink(const char * oldname, const char * newname)
 	if (!dir->d_inode->i_op || !dir->d_inode->i_op->symlink)
 		goto exit_lock;
 
-	if (dir->d_inode->i_sb && dir->d_inode->i_sb->dq_op)
-		dir->d_inode->i_sb->dq_op->initialize(dir->d_inode, -1);
+	DQUOT_INIT(dir->d_inode);
 	error = dir->d_inode->i_op->symlink(dir->d_inode, dentry, oldname);
 
 exit_lock:
@@ -1082,8 +1076,7 @@ static inline int do_link(const char * oldname, const char * newname)
 	if (!dir->d_inode->i_op || !dir->d_inode->i_op->link)
 		goto exit_lock;
 
-	if (dir->d_inode->i_sb && dir->d_inode->i_sb->dq_op)
-		dir->d_inode->i_sb->dq_op->initialize(dir->d_inode, -1);
+	DQUOT_INIT(dir->d_inode);
 	error = dir->d_inode->i_op->link(old_dentry, dir->d_inode, new_dentry);
 
 exit_lock:
@@ -1207,8 +1200,8 @@ static inline int do_rename(const char * oldname, const char * newname)
 	if (!old_dir->d_inode->i_op || !old_dir->d_inode->i_op->rename)
 		goto exit_lock;
 
-	if (new_dir->d_inode->i_sb && new_dir->d_inode->i_sb->dq_op)
-		new_dir->d_inode->i_sb->dq_op->initialize(new_dir->d_inode, -1);
+	DQUOT_INIT(old_dir->d_inode);
+	DQUOT_INIT(new_dir->d_inode);
 	error = old_dir->d_inode->i_op->rename(old_dir->d_inode, old_dentry,
 					       new_dir->d_inode, new_dentry);
 

@@ -118,6 +118,14 @@ sys_rt_sigsuspend(sigset_t *unewset, size_t sigsetsize, int p3, int p4, int p6,
 	}
 }
 
+
+asmlinkage int sys_rt_sigreturn(unsigned long __unused)
+{
+	printk("sys_rt_sigreturn(): %s/%d not yet implemented.\n",
+	       current->comm,current->pid);
+	do_exit(SIGSEGV);
+}
+
 int 
 sys_sigaction(int sig, const struct old_sigaction *act,
 	      struct old_sigaction *oact)

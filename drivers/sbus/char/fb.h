@@ -1,4 +1,4 @@
-/* $Id: fb.h,v 1.33 1997/08/25 07:50:29 jj Exp $
+/* $Id: fb.h,v 1.34 1998/04/13 07:26:55 davem Exp $
  * fb.h: contains the definitions of the structures that various sun
  *       frame buffer can use to do console driver stuff.
  *
@@ -150,7 +150,7 @@ typedef struct fbinfo {
 	void   (*setcurshape)(struct fbinfo *);
 	void   (*setcursormap)(struct fbinfo *, unsigned char *, 
 			unsigned char *, unsigned char *);
-	unsigned long (*postsetup)(struct fbinfo *, unsigned long);
+	void   (*postsetup)(struct fbinfo *);
 	void (*clear_fb)(int);
 	void (*set_other_palette)(int);
 	void	(*blitc)(unsigned short, int, int);
@@ -208,7 +208,7 @@ extern int sbus_hw_scursor(struct fbcursor *,fbinfo_t *);
 extern int sbus_hw_cursor_shown;
 extern int sun_prom_console_id;
 
-extern unsigned long cg_postsetup(fbinfo_t *, unsigned long);
+extern void cg_postsetup(fbinfo_t *);
 
 #define FB_DEV(x) (MINOR(x) / 32)
 

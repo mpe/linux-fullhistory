@@ -49,7 +49,7 @@ int kstack_depth_to_print = 200;
 
 static int verify_stack_pointer (unsigned long stackptr, int size)
 {
-#if defined(CONFIG_CPU_ARM2) || defined(CONFIG_CPU_ARM3)
+#ifdef CONFIG_CPU_26
 	if (stackptr < 0x02048000 || stackptr + size > 0x03000000)
         	return -EFAULT;
 #else
@@ -90,38 +90,52 @@ void dump_mem(unsigned long bottom, unsigned long top)
 #define VMALLOC_OFFSET (8*1024*1024)
 #define MODULE_RANGE (8*1024*1024)
 
-static void dump_instr (unsigned long pc)
+static void dump_instr(unsigned long pc, int user)
 {
 	unsigned long module_start, module_end;
 	int pmin = -2, pmax = 3, ok = 0;
 	extern char start_kernel, _etext;
 
-	module_start = VMALLOC_START;
-	module_end   = module_start + MODULE_RANGE;
+	if (!user) {
+		module_start = VMALLOC_START;
+		module_end   = module_start + MODULE_RANGE;
 
-	if ((pc >= (unsigned long) &start_kernel) &&
-	    (pc <= (unsigned long) &_etext)) {
-		if (pc + pmin < (unsigned long) &start_kernel)
-			pmin = ((unsigned long) &start_kernel) - pc;
-		if (pc + pmax > (unsigned long) &_etext)
-			pmax = ((unsigned long) &_etext) - pc;
-		ok = 1;
-	} else if (pc >= module_start && pc <= module_end) {
-		if (pc + pmin < module_start)
-			pmin = module_start - pc;
-		if (pc + pmax > module_end)
-			pmax = module_end - pc;
-		ok = 1;
-	}
+		if ((pc >= (unsigned long) &start_kernel) &&
+		    (pc <= (unsigned long) &_etext)) {
+			if (pc + pmin < (unsigned long) &start_kernel)
+				pmin = ((unsigned long) &start_kernel) - pc;
+			if (pc + pmax > (unsigned long) &_etext)
+				pmax = ((unsigned long) &_etext) - pc;
+			ok = 1;
+		} else if (pc >= module_start && pc <= module_end) {
+			if (pc + pmin < module_start)
+				pmin = module_start - pc;
+			if (pc + pmax > module_end)
+				pmax = module_end - pc;
+			ok = 1;
+		}
+	} else
+		ok = verify_area(VERIFY_READ, (void *)(pc + pmin), pmax - pmin) == 0;
+
 	printk ("Code: ");
 	if (ok) {
 		int i;
 		for (i = pmin; i < pmax; i++)
-			printk("%08lx ", ((unsigned long *)pc)[i]);
+			printk(i == 0 ? "(%08lx) " : "%08lx ", ((unsigned long *)pc)[i]);
 		printk ("\n");
 	} else
 		printk ("pc not in code space\n");
-}	
+}
+
+static void dump_state(char *str, struct pt_regs *regs, int err)
+{
+	console_verbose();
+	printk("Internal error: %s: %x\n", str, err);
+	printk("CPU: %d\n", smp_processor_id());
+	show_regs(regs);
+	printk("Process %s (pid: %d, stackpage=%08lx)\n",
+		current->comm, current->pid, 4096+(unsigned long)current);
+}
 
 /*
  * This function is protected against kernel-mode re-entrancy.  If it
@@ -149,12 +163,7 @@ void die_if_kernel(char *str, struct pt_regs *regs, int err, int ret)
 		break;
 	}
 
-	console_verbose();
-	printk("Internal error: %s: %x\n", str, err);
-	printk("CPU: %d", smp_processor_id());
-	show_regs(regs);
-	printk("Process %s (pid: %d, stackpage=%08lx)\n",
-		current->comm, current->pid, 4096+(unsigned long)current);
+	dump_state(str, regs, err);
 
 	cstack = (unsigned long)(regs + 1);
 	sstack = 4096+(unsigned long)current;
@@ -180,7 +189,7 @@ void die_if_kernel(char *str, struct pt_regs *regs, int err, int ret)
 		}
 	}
 
-	dump_instr(instruction_pointer(regs));
+	dump_instr(instruction_pointer(regs), 0);
 	died = 0;
 	if (ret != -1)
 		do_exit (ret);
@@ -268,13 +277,13 @@ asmlinkage void arm_syscall (int no, struct pt_regs *regs)
 {
 	switch (no) {
 	case 0: /* branch through 0 */
-		printk ("[%d] %s: branch through zero\n", current->pid, current->comm);
-		force_sig (SIGILL, current);
-		if (user_mode(regs)) {
-			show_regs (regs);
-			c_backtrace (regs->ARM_fp, processor_mode(regs));
-		}
-		die_if_kernel ("Oops", regs, 0, SIGILL);
+		force_sig(SIGSEGV, current);
+//		if (user_mode(regs)) {
+//			dump_state("branch through zero", regs, 0);
+//			if (regs->ARM_fp)
+//				c_backtrace (regs->ARM_fp, processor_mode(regs));
+//		}
+		die_if_kernel ("branch through zero", regs, 0, SIGSEGV);
 		break;
 
 	case 1: /* SWI_BREAK_POINT */
@@ -297,8 +306,7 @@ asmlinkage void arm_syscall (int no, struct pt_regs *regs)
 
 asmlinkage void deferred(int n, struct pt_regs *regs)
 {
-	printk ("[%d] %s: old system call %X\n", current->pid, current->comm, n);
-	show_regs (regs);
+	dump_state("old system call", regs, 0);
 	force_sig (SIGILL, current);
 }
 
@@ -312,3 +320,37 @@ asmlinkage void arm_invalidptr (const char *function, int size)
 	printk ("Invalid pointer size in %s (PC=%p) size %d\n",
 		function, __builtin_return_address(0), size);
 }
+
+#ifdef CONFIG_CPU_26
+asmlinkage void baddataabort(int code, unsigned long instr, struct pt_regs *regs)
+{
+	unsigned long phys, addr = instruction_pointer(regs);
+
+#ifdef CONFIG_DEBUG_ERRORS
+	printk("pid=%d\n", current->pid);
+
+	show_regs(regs);
+	dump_instr(instruction_pointer(regs), 1);
+	{
+		pgd_t *pgd;
+
+		printk ("current->tss.memmap = %08lX\n", current->tss.memmap);
+		pgd = pgd_offset(current->mm, addr);
+		printk ("*pgd = %08lx", pgd_val (*pgd));
+		if (!pgd_none (*pgd)) {
+			pmd_t *pmd;
+			pmd = pmd_offset (pgd, addr);
+			printk (", *pmd = %08lx", pmd_val (*pmd));
+			if (!pmd_none (*pmd)) {
+				unsigned long ptr = pte_page(*pte_offset(pmd, addr));
+				printk (", *pte = %08lx", pte_val (*pte_offset (pmd, addr)));
+				phys = ptr + (addr & 0x7fff);
+			}
+		}
+		printk ("\n");
+	}
+#endif
+	panic("unknown data abort code %d [pc=%08lx *pc=%08lx lr=%08lx sp=%08lx]",
+		code, regs->ARM_pc, instr, regs->ARM_lr, regs->ARM_sp);
+}
+#endif

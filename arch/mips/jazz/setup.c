@@ -1,5 +1,5 @@
 /*
- * Setup pointers to hardware dependand routines.
+ * Setup pointers to hardware dependant routines.
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -7,20 +7,25 @@
  *
  * Copyright (C) 1996, 1997 by Ralf Baechle
  *
- * $Id: setup.c,v 1.5 1997/12/02 05:51:05 ralf Exp $
+ * $Id: setup.c,v 1.6 1998/05/04 09:17:45 ralf Exp $
  */
+#include <linux/config.h>
+#include <linux/hdreg.h>
 #include <linux/init.h>
 #include <linux/ioport.h>
 #include <linux/sched.h>
 #include <linux/interrupt.h>
+#include <linux/mm.h>
 #include <asm/bootinfo.h>
 #include <asm/keyboard.h>
+#include <asm/ide.h>
 #include <asm/irq.h>
 #include <asm/jazz.h>
 #include <asm/ptrace.h>
 #include <asm/reboot.h>
 #include <asm/vector.h>
 #include <asm/io.h>
+#include <asm/pgtable.h>
 
 /*
  * Initial irq handlers.
@@ -40,6 +45,8 @@ extern void jazz_keyboard_setup(void);
 extern void jazz_machine_restart(char *command);
 extern void jazz_machine_halt(void);
 extern void jazz_machine_power_off(void);
+
+extern struct ide_ops std_ide_ops;
 
 void (*board_time_init)(struct irqaction *irq);
 
@@ -118,4 +125,8 @@ __initfunc(void jazz_setup(void))
 	_machine_restart = jazz_machine_restart;
 	_machine_halt = jazz_machine_halt;
 	_machine_power_off = jazz_machine_power_off;
+
+#ifdef CONFIG_BLK_DEV_IDE
+	ide_ops = &std_ide_ops;
+#endif
 }

@@ -39,114 +39,7 @@ static void add_bridges(struct device_node *dev, unsigned long *mem_ptr);
 #define BANDIT_MAGIC	0x50
 #define BANDIT_COHERENT	0x40
 
-/*
- * For a bandit bridge, turn on cache coherency if necessary.
- * N.B. we can't use pcibios_*_config_* here because bridges[]
- * is not initialized yet.
- */
-static void init_bandit(struct bridge_data *bp)
-{
-	unsigned int vendev, magic;
-	int rev;
-
-	/* read the word at offset 0 in config space for device 11 */
-	out_le32(bp->cfg_addr, (1UL << BANDIT_DEVNUM) + PCI_VENDOR_ID);
-	udelay(2);
-	vendev = in_le32((volatile unsigned int *)bp->cfg_data);
-	if (vendev != (BANDIT_DEVID << 16) + APPLE_VENDID) {
-		printk(KERN_WARNING "bandit isn't? (%x)\n", vendev);
-		return;
-	}
-
-	/* read the revision id */
-	out_le32(bp->cfg_addr, (1UL << BANDIT_DEVNUM) + PCI_REVISION_ID);
-	udelay(2);
-	rev = in_8(bp->cfg_data);
-	if (rev != BANDIT_REVID)
-		printk(KERN_WARNING "Unknown revision %d for bandit at %p\n",
-		       rev, bp->io_base);
-
-	/* read the word at offset 0x50 */
-	out_le32(bp->cfg_addr, (1UL << BANDIT_DEVNUM) + BANDIT_MAGIC);
-	udelay(2);
-	magic = in_le32((volatile unsigned int *)bp->cfg_data);
-	if ((magic & BANDIT_COHERENT) != 0)
-		return;
-	magic |= BANDIT_COHERENT;
-	udelay(2);
-	out_le32((volatile unsigned int *)bp->cfg_data, magic);
-	printk(KERN_INFO "Cache coherency enabled for bandit/PSX at %p\n",
-	       bp->io_base);
-}
-
-unsigned long pmac_find_bridges(unsigned long mem_start, unsigned long mem_end)
-{
-	int bus;
-	struct bridge_data *bridge;
-
-	bridge_list = 0;
-	max_bus = 0;
-	add_bridges(find_devices("bandit"), &mem_start);
-	add_bridges(find_devices("chaos"), &mem_start);
-	bridges = (struct bridge_data **) mem_start;
-	mem_start += (max_bus + 1) * sizeof(struct bridge_data *);
-	memset(bridges, 0, (max_bus + 1) * sizeof(struct bridge_data *));
-	for (bridge = bridge_list; bridge != NULL; bridge = bridge->next)
-		for (bus = bridge->bus_number; bus <= bridge->max_bus; ++bus)
-			bridges[bus] = bridge;
-
-	return mem_start;
-}
-
-static void add_bridges(struct device_node *dev, unsigned long *mem_ptr)
-{
-	int *bus_range;
-	int len;
-	struct bridge_data *bp;
-	struct reg_property *addr;
-
-	for (; dev != NULL; dev = dev->next) {
-		addr = (struct reg_property *) get_property(dev, "reg", &len);
-		if (addr == NULL || len < sizeof(*addr)) {
-			printk(KERN_WARNING "Can't use %s: no address\n",
-			       dev->full_name);
-			continue;
-		}
-		bus_range = (int *) get_property(dev, "bus-range", &len);
-		if (bus_range == NULL || len < 2 * sizeof(int)) {
-			printk(KERN_WARNING "Can't get bus-range for %s\n",
-			       dev->full_name);
-			continue;
-		}
-		if (bus_range[1] == bus_range[0])
-			printk(KERN_INFO "PCI bus %d", bus_range[0]);
-		else
-			printk(KERN_INFO "PCI buses %d..%d", bus_range[0],
-			       bus_range[1]);
-		printk(" controlled by %s at %x\n", dev->name, addr->address);
-		bp = (struct bridge_data *) *mem_ptr;
-		*mem_ptr += sizeof(struct bridge_data);
-		bp->cfg_addr = (volatile unsigned int *)
-			ioremap(addr->address + 0x800000, 0x1000);
-		bp->cfg_data = (volatile unsigned char *)
-			ioremap(addr->address + 0xc00000, 0x1000);
-		bp->io_base = (void *) ioremap(addr->address, 0x10000);
-#ifdef CONFIG_PMAC
-		if (isa_io_base == 0)
-			isa_io_base = (unsigned long) bp->io_base;
-#endif
-		bp->bus_number = bus_range[0];
-		bp->max_bus = bus_range[1];
-		bp->next = bridge_list;
-		bp->node = dev;
-		bridge_list = bp;
-		if (bp->max_bus > max_bus)
-			max_bus = bp->max_bus;
-
-		if (strcmp(dev->name, "bandit") == 0)
-			init_bandit(bp);
-	}
-}
+__pmac
 
 void *pci_io_base(unsigned int bus)
 {
@@ -303,3 +196,113 @@ int pmac_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
 	out_le32((volatile unsigned int *)bp->cfg_data, val);
 	return PCIBIOS_SUCCESSFUL;
 }
+
+/*
+ * For a bandit bridge, turn on cache coherency if necessary.
+ * N.B. we can't use pcibios_*_config_* here because bridges[]
+ * is not initialized yet.
+ */
+__initfunc(static void init_bandit(struct bridge_data *bp))
+{
+	unsigned int vendev, magic;
+	int rev;
+
+	/* read the word at offset 0 in config space for device 11 */
+	out_le32(bp->cfg_addr, (1UL << BANDIT_DEVNUM) + PCI_VENDOR_ID);
+	udelay(2);
+	vendev = in_le32((volatile unsigned int *)bp->cfg_data);
+	if (vendev != (BANDIT_DEVID << 16) + APPLE_VENDID) {
+		printk(KERN_WARNING "bandit isn't? (%x)\n", vendev);
+		return;
+	}
+
+	/* read the revision id */
+	out_le32(bp->cfg_addr, (1UL << BANDIT_DEVNUM) + PCI_REVISION_ID);
+	udelay(2);
+	rev = in_8(bp->cfg_data);
+	if (rev != BANDIT_REVID)
+		printk(KERN_WARNING "Unknown revision %d for bandit at %p\n",
+		       rev, bp->io_base);
+
+	/* read the word at offset 0x50 */
+	out_le32(bp->cfg_addr, (1UL << BANDIT_DEVNUM) + BANDIT_MAGIC);
+	udelay(2);
+	magic = in_le32((volatile unsigned int *)bp->cfg_data);
+	if ((magic & BANDIT_COHERENT) != 0)
+		return;
+	magic |= BANDIT_COHERENT;
+	udelay(2);
+	out_le32((volatile unsigned int *)bp->cfg_data, magic);
+	printk(KERN_INFO "Cache coherency enabled for bandit/PSX at %p\n",
+	       bp->io_base);
+}
+
+__initfunc(unsigned long pmac_find_bridges(unsigned long mem_start, unsigned long mem_end))
+{
+	int bus;
+	struct bridge_data *bridge;
+
+	bridge_list = 0;
+	max_bus = 0;
+	add_bridges(find_devices("bandit"), &mem_start);
+	add_bridges(find_devices("chaos"), &mem_start);
+	bridges = (struct bridge_data **) mem_start;
+	mem_start += (max_bus + 1) * sizeof(struct bridge_data *);
+	memset(bridges, 0, (max_bus + 1) * sizeof(struct bridge_data *));
+	for (bridge = bridge_list; bridge != NULL; bridge = bridge->next)
+		for (bus = bridge->bus_number; bus <= bridge->max_bus; ++bus)
+			bridges[bus] = bridge;
+
+	return mem_start;
+}
+
+__initfunc(static void add_bridges(struct device_node *dev, unsigned long *mem_ptr))
+{
+	int *bus_range;
+	int len;
+	struct bridge_data *bp;
+	struct reg_property *addr;
+
+	for (; dev != NULL; dev = dev->next) {
+		addr = (struct reg_property *) get_property(dev, "reg", &len);
+		if (addr == NULL || len < sizeof(*addr)) {
+			printk(KERN_WARNING "Can't use %s: no address\n",
+			       dev->full_name);
+			continue;
+		}
+		bus_range = (int *) get_property(dev, "bus-range", &len);
+		if (bus_range == NULL || len < 2 * sizeof(int)) {
+			printk(KERN_WARNING "Can't get bus-range for %s\n",
+			       dev->full_name);
+			continue;
+		}
+		if (bus_range[1] == bus_range[0])
+			printk(KERN_INFO "PCI bus %d", bus_range[0]);
+		else
+			printk(KERN_INFO "PCI buses %d..%d", bus_range[0],
+			       bus_range[1]);
+		printk(" controlled by %s at %x\n", dev->name, addr->address);
+		bp = (struct bridge_data *) *mem_ptr;
+		*mem_ptr += sizeof(struct bridge_data);
+		bp->cfg_addr = (volatile unsigned int *)
+			ioremap(addr->address + 0x800000, 0x1000);
+		bp->cfg_data = (volatile unsigned char *)
+			ioremap(addr->address + 0xc00000, 0x1000);
+		bp->io_base = (void *) ioremap(addr->address, 0x10000);
+#ifdef CONFIG_PMAC
+		if (isa_io_base == 0)
+			isa_io_base = (unsigned long) bp->io_base;
+#endif
+		bp->bus_number = bus_range[0];
+		bp->max_bus = bus_range[1];
+		bp->next = bridge_list;
+		bp->node = dev;
+		bridge_list = bp;
+		if (bp->max_bus > max_bus)
+			max_bus = bp->max_bus;
+
+		if (strcmp(dev->name, "bandit") == 0)
+			init_bandit(bp);
+	}
+}
+

@@ -32,6 +32,7 @@
 #include <linux/smp_lock.h>
 #include <linux/fd.h>
 #include <linux/init.h>
+#include <linux/quotaops.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -109,7 +110,9 @@ static struct vfsmount *add_vfsmnt(struct super_block *sb,
 	lptr->mnt_sb = sb;
 	lptr->mnt_dev = sb->s_dev;
 	lptr->mnt_flags = sb->s_flags;
-	sema_init(&lptr->mnt_sem, 1);
+
+	sema_init(&lptr->mnt_dquot.semaphore, 1);
+	lptr->mnt_dquot.flags = 0;
 
 	/* N.B. Is it really OK to have a vfsmount without names? */
 	if (dev_name && !IS_ERR(tmp = getname(dev_name))) {
@@ -642,7 +645,11 @@ static int do_umount(kdev_t dev, int unmount_root)
 	 * on the device. If the umount fails, too bad -- there
 	 * are no quotas running anymore. Just turn them on again.
 	 */
-	quota_off(dev, -1);
+	DQUOT_OFF(dev);
+
+#ifdef CONFIG_BSD_PROCESS_ACCT
+	(void) acct_auto_close(dev);
+#endif
 
 	/*
 	 * Shrink dcache, then fsync. This guarantees that if the

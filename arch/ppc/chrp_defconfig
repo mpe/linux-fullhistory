@@ -226,7 +226,6 @@ CONFIG_DE4X5=y
 # CD-ROM drivers (not for SCSI or IDE/ATAPI drives)
 #
 # CONFIG_CD_NO_IDESCSI is not set
-CONFIG_CDROM=y
 
 #
 # Filesystems

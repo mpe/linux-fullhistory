@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.47 1998/04/10 10:19:04 geert Exp $
+# $Id: config.in,v 1.53 1998/05/02 12:06:12 davem Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -27,6 +27,10 @@ choice 'Machine Type' \
   	 APUS           CONFIG_APUS \
 	 MBX		CONFIG_MBX" PReP
 endmenu
+
+if [ "$CONFIG_MBX" = "y" ];then
+  define_bool CONFIG_SERIAL_CONSOLE y
+fi
 
 if [ "$CONFIG_ALL_PPC" != "y" ]; then
   define_bool CONFIG_MACH_SPECIFIC y
@@ -84,8 +88,6 @@ if [ "$CONFIG_PMAC" = "y" ]; then
   else
     define_bool CONFIG_PMAC_CONSOLE y
   fi
-  define_bool CONFIG_MAC_KEYBOARD y
-  define_bool CONFIG_MAC_FLOPPY	y
 else
 # if compiling specifically for prep or chrp, or supporting all arch's
   if [ "$CONFIG_ABSTRACT_CONSOLE" = "y" ]; then
@@ -95,9 +97,10 @@ else
   else
     bool 'Support for PowerMac console' CONFIG_PMAC_CONSOLE
   fi
-  bool 'Support for PowerMac keyboard' CONFIG_MAC_KEYBOARD
-  bool 'Support for PowerMac floppy' CONFIG_MAC_FLOPPY
 fi
+bool 'Support for PowerMac keyboard' CONFIG_MAC_KEYBOARD
+bool 'Support for PowerMac floppy' CONFIG_MAC_FLOPPY
+bool 'Support for PowerMac serial ports' CONFIG_MAC_SERIAL
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   bool 'Support for PowerMac mouse (EXPERIMENTAL)' CONFIG_MACMOUSE
 fi
@@ -122,7 +125,7 @@ endmenu
 
 source drivers/pnp/Config.in
 source drivers/block/Config.in
-source drivers.new/Config.in
+#source drivers.new/Config.in
 
 if [ "$CONFIG_NET" = "y" ]; then
   source net/Config.in
@@ -179,11 +182,12 @@ fi
 
 source drivers/char/Config.in
 
-mainmenu_option next_comment
-comment 'Sound'
-
-tristate 'Sound card support' CONFIG_SOUND
-if [ "$CONFIG_SOUND" != "n" ]; then
-  source drivers/sound/Config.in
-fi
-endmenu
+#mainmenu_option next_comment
+#comment 'Sound'
+#
+#tristate 'Sound card support' CONFIG_SOUND
+#if [ "$CONFIG_SOUND" != "n" ]; then
+#  source drivers/sound/Config.in
+#fi
+#
+#endmenu

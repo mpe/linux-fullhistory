@@ -21,6 +21,7 @@
 #include <asm/io.h>
 #include <asm/ohare.h>
 #include <asm/mediabay.h>
+#include <asm/init.h>
 
 struct media_bay_hw {
 	unsigned char	b0;
@@ -84,6 +85,8 @@ static void set_media_bay(int id);
  * an infinite loop calling the media bay interrupt handler.
  * Therefore we do it all by polling the media bay once each tick.
  */
+
+__pmac /* I don't know of any chrp with a mediabay -- Cort */
 
 void
 media_bay_init(void)

@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.38 1998/03/27 07:01:56 davem Exp $ */
+/* $Id: unistd.h,v 1.40 1998/04/14 13:49:55 jj Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 
@@ -135,7 +135,7 @@
 #define __NR_gettimeofday       116 /* Common                                      */
 #define __NR_getrusage          117 /* Common                                      */
 #define __NR_getsockopt         118 /* Common                                      */
-/* #define __NR_ni_syscall      119    ENOSYS under SunOS                          */
+#define __NR_getcwd      	119 /* Linux Specific                              */
 #define __NR_readv              120 /* Common                                      */
 #define __NR_writev             121 /* Common                                      */
 #define __NR_settimeofday       122 /* Common                                      */

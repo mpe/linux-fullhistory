@@ -3,9 +3,9 @@
  *		operating system.  INET is implemented using the  BSD Socket
  *		interface as the means of communication with the user level.
  *
- *		AF_INET protocol family socket handler.
+ *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.71 1998/04/16 05:38:16 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.72 1998/05/03 14:30:49 alan Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -330,23 +330,23 @@ static int inet_create(struct socket *sock, int protocol)
 	/* Compatibility */
 	if (sock->type == SOCK_PACKET) {
 		static int warned; 
-		if (net_families[AF_PACKET]==NULL)
+		if (net_families[PF_PACKET]==NULL)
 		{
 #if defined(CONFIG_KMOD) && defined(CONFIG_PACKET_MODULE)
 			char module_name[30];
-			sprintf(module_name,"net-pf-%d", AF_PACKET);
+			sprintf(module_name,"net-pf-%d", PF_PACKET);
 			request_module(module_name);
-			if (net_families[AF_PACKET] == NULL)
+			if (net_families[PF_PACKET] == NULL)
 #endif
 			return -ESOCKTNOSUPPORT;
 		}
 		if (!warned++)
-			printk(KERN_INFO "%s uses obsolete (AF_INET,SOCK_PACKET)\n", current->comm);
-		return net_families[AF_PACKET]->create(sock, protocol);
+			printk(KERN_INFO "%s uses obsolete (PF_INET,SOCK_PACKET)\n", current->comm);
+		return net_families[PF_PACKET]->create(sock, protocol);
 	}
 
 	sock->state = SS_UNCONNECTED;
-	sk = sk_alloc(AF_INET, GFP_KERNEL, 1);
+	sk = sk_alloc(PF_INET, GFP_KERNEL, 1);
 	if (sk == NULL) 
 		goto do_oom;
 
@@ -398,7 +398,7 @@ static int inet_create(struct socket *sock, int protocol)
 #ifdef CONFIG_TCP_NAGLE_OFF
 	sk->nonagle = 1;
 #endif  
-	sk->family = AF_INET;
+	sk->family = PF_INET;
 	sk->protocol = protocol;
 
 	sk->prot = prot;
@@ -958,7 +958,7 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 }
 
 struct proto_ops inet_stream_ops = {
-	AF_INET,
+	PF_INET,
 
 	sock_no_dup,
 	inet_release,
@@ -979,7 +979,7 @@ struct proto_ops inet_stream_ops = {
 };
 
 struct proto_ops inet_dgram_ops = {
-	AF_INET,
+	PF_INET,
 
 	sock_no_dup,
 	inet_release,
@@ -1000,7 +1000,7 @@ struct proto_ops inet_dgram_ops = {
 };
 
 struct net_proto_family inet_family_ops = {
-	AF_INET,
+	PF_INET,
 	inet_create
 };
 

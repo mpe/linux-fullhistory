@@ -2,9 +2,8 @@
 # Block device driver configuration
 #
 mainmenu_option next_comment
-comment 'Acorn-Specific floppy, IDE, and other block devices'
+comment 'Acorn-specific block devices'
 
-tristate 'Normal floppy disk support' CONFIG_BLK_DEV_FD
 bool '   Support expansion card IDE interfaces' CONFIG_BLK_DEV_IDE_CARDS
 if [ "$CONFIG_BLK_DEV_IDE_CARDS" = "y" ]; then
   dep_tristate '    ICS IDE interface support' CONFIG_BLK_DEV_IDE_ICSIDE $CONFIG_BLK_DEV_IDE

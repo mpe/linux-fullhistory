@@ -19,6 +19,7 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 
+#include <asm/asi.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -72,6 +73,41 @@ repeat:
 	return pgtable;
 }
 
+/* We must bypass the L1-cache to avoid alias issues.  -DaveM */
+static __inline__ unsigned long read_user_long(unsigned long kvaddr)
+{
+	unsigned long ret;
+
+	__asm__ __volatile__("ldxa [%1] %2, %0"
+			     : "=r" (ret)
+			     : "r" (__pa(kvaddr)), "i" (ASI_PHYS_USE_EC));
+	return ret;
+}
+
+static __inline__ unsigned int read_user_int(unsigned long kvaddr)
+{
+	unsigned int ret;
+
+	__asm__ __volatile__("lduwa [%1] %2, %0"
+			     : "=r" (ret)
+			     : "r" (__pa(kvaddr)), "i" (ASI_PHYS_USE_EC));
+	return ret;
+}
+
+static __inline__ void write_user_long(unsigned long kvaddr, unsigned long val)
+{
+	__asm__ __volatile__("stxa %0, [%1] %2"
+			     : /* no outputs */
+			     : "r" (val), "r" (__pa(kvaddr)), "i" (ASI_PHYS_USE_EC));
+}
+
+static __inline__ void write_user_int(unsigned long kvaddr, unsigned int val)
+{
+	__asm__ __volatile__("stwa %0, [%1] %2"
+			     : /* no outputs */
+			     : "r" (val), "r" (__pa(kvaddr)), "i" (ASI_PHYS_USE_EC));
+}
+
 static inline unsigned long get_long(struct task_struct * tsk,
 	struct vm_area_struct * vma, unsigned long addr)
 {
@@ -84,7 +120,7 @@ static inline unsigned long get_long(struct task_struct * tsk,
 	if (MAP_NR(page) >= max_mapnr)
 		return 0;
 	page += addr & ~PAGE_MASK;
-	retval = *(unsigned long *) page;
+	retval = read_user_long(page);
 	flush_page_to_ram(page);
 	return retval;
 }
@@ -103,14 +139,12 @@ static inline void put_long(struct task_struct * tsk, struct vm_area_struct * vm
 		unsigned long pgaddr;
 
 		pgaddr = page + (addr & ~PAGE_MASK);
-		*(unsigned long *) (pgaddr) = data;
+		write_user_long(pgaddr, data);
 
 		__asm__ __volatile__("
 		membar	#StoreStore
 		flush	%0
 "		: : "r" (pgaddr & ~7) : "memory");
-
-		flush_page_to_ram(page);
 	}
 /* we're bypassing pagetables, so we have to set the dirty bit ourselves */
 /* this should also re-instate whatever read-only mode there was before */
@@ -131,7 +165,7 @@ static inline unsigned int get_int(struct task_struct * tsk,
 	if (MAP_NR(page) >= max_mapnr)
 		return 0;
 	page += addr & ~PAGE_MASK;
-	retval = *(unsigned int *) page;
+	retval = read_user_int(page);
 	flush_page_to_ram(page);
 	return retval;
 }
@@ -150,14 +184,12 @@ static inline void put_int(struct task_struct * tsk, struct vm_area_struct * vma
 		unsigned long pgaddr;
 
 		pgaddr = page + (addr & ~PAGE_MASK);
-		*(unsigned int *) (pgaddr) = data;
+		write_user_int(pgaddr, data);
 
 		__asm__ __volatile__("
 		membar	#StoreStore
 		flush	%0
 "		: : "r" (pgaddr & ~7) : "memory");
-
-		flush_page_to_ram(page);
 	}
 /* we're bypassing pagetables, so we have to set the dirty bit ourselves */
 /* this should also re-instate whatever read-only mode there was before */
@@ -890,7 +922,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			vma = find_extend_vma(child, src);
 			if (!vma) {
 				pt_error_return(regs, EIO);
-				goto out;
+				goto flush_and_out;
 			}
 			pgtable = get_page (child, vma, src, 0);
 			if (src & ~PAGE_MASK) {
@@ -904,13 +936,13 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 				if (copy_to_user (dest, ((char *)page) + (src & ~PAGE_MASK), curlen)) {
 					flush_page_to_ram(page);
 					pt_error_return(regs, EFAULT);
-					goto out;
+					goto flush_and_out;
 				}
 				flush_page_to_ram(page);
 			} else {
 				if (clear_user (dest, curlen)) {
 					pt_error_return(regs, EFAULT);
-					goto out;
+					goto flush_and_out;
 				}
 			}
 			src += curlen;
@@ -918,7 +950,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			len -= curlen;
 		}
 		pt_succ_return(regs, 0);
-		goto out;
+		goto flush_and_out;
 	}
 
 	case PTRACE_WRITETEXT:
@@ -934,7 +966,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			vma = find_extend_vma(child, dest);
 			if (!vma) {
 				pt_error_return(regs, EIO);
-				goto out;
+				goto flush_and_out;
 			}
 			pgtable = get_page (child, vma, dest, 1);
 			if (dest & ~PAGE_MASK) {
@@ -951,7 +983,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 					set_pte(pgtable, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
 					flush_tlb_page(vma, dest);
 					pt_error_return(regs, EFAULT);
-					goto out;
+					goto flush_and_out;
 				}
 				flush_page_to_ram(page);
 				set_pte(pgtable, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
@@ -962,7 +994,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 			len -= curlen;
 		}
 		pt_succ_return(regs, 0);
-		goto out;
+		goto flush_and_out;
 	}
 
 	case PTRACE_SYSCALL: /* continue and stop at (return from) syscall */
@@ -1040,6 +1072,12 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 	default:
 		pt_error_return(regs, EIO);
 		goto out;
+	}
+flush_and_out:
+	{
+		unsigned long va;
+		for(va =  0; va < (PAGE_SIZE << 1); va += 32)
+			spitfire_put_dcache_tag(va, 0x0);
 	}
 out:
 	unlock_kernel();

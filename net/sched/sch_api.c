@@ -928,7 +928,7 @@ __initfunc(int pktsched_init(void))
 #endif
 
 #ifdef CONFIG_RTNETLINK
-	struct rtnetlink_link *link_p = rtnetlink_links[AF_UNSPEC];
+	struct rtnetlink_link *link_p = rtnetlink_links[PF_UNSPEC];
 
 	/* Setup rtnetlink links. It is made here to avoid
 	   exporting large number of public symbols.

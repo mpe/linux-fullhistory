@@ -1,5 +1,5 @@
 /*
- * $Id: elf.h,v 1.4 1997/12/16 05:36:40 ralf Exp $
+ * $Id: elf.h,v 1.10 1998/05/01 01:35:51 ralf Exp $
  */
 #ifndef __ASM_MIPS_ELF_H
 #define __ASM_MIPS_ELF_H
@@ -38,6 +38,21 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
 	memcpy((char *) &_dest, (char *) _regs,			\
 	       sizeof(struct pt_regs));
 
+/* This yields a mask that user programs can use to figure out what
+   instruction set this cpu supports.  This could be done in userspace,
+   but it's not easy, and we've already done it here.  */
+
+#define ELF_HWCAP       (0)
+
+/* This yields a string that ld.so will use to load implementation
+   specific libraries for optimization.  This is more specific in
+   intent than poking at uname or /proc/cpuinfo.
+
+   For the moment, we have only optimizations for the Intel generations,
+   but that could change... */
+
+#define ELF_PLATFORM  (NULL)
+
 /* See comments in asm-alpha/elf.h, this is the same thing
  * on the MIPS.
  */
@@ -49,5 +64,10 @@ typedef elf_fpreg_t elf_fpregset_t[ELF_NFPREG];
    that it will "exec", and that there is sufficient room for the brk.  */
 
 #define ELF_ET_DYN_BASE         (2 * TASK_SIZE / 3)
+
+#ifdef __KERNEL__
+#define SET_PERSONALITY(ex,ibcs2) \
+	current->personality = (ibcs2 ? PER_SVR4 : PER_LINUX)
+#endif
 
 #endif /* __ASM_MIPS_ELF_H */

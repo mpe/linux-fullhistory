@@ -18,6 +18,7 @@
 #include <linux/timex.h>
 #include <linux/kernel_stat.h>
 #include <linux/mc146818rtc.h>
+#include <linux/init.h>
 
 #include <asm/segment.h>
 #include <asm/io.h>
@@ -30,7 +31,7 @@ static int nvram_as1 = NVRAM_AS1;
 static int nvram_as0 = NVRAM_AS0;
 static int nvram_data = NVRAM_DATA;
 
-void chrp_time_init(void)
+__initfunc(void chrp_time_init(void))
 {
 	struct device_node *rtcs;
 	int base;
@@ -150,7 +151,7 @@ unsigned long chrp_get_rtc_time(void)
 }
 
 
-void chrp_calibrate_decr(void)
+__initfunc(void chrp_calibrate_decr(void))
 {
 	struct device_node *cpu;
 	int freq, *fp, divisor;

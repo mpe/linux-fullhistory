@@ -11,22 +11,34 @@
 #include "asm/residual.h"
 #include <elf.h>
 #include <linux/config.h>
+#include <asm/page.h>
 #ifdef CONFIG_MBX
 #include <asm/mbx.h>
 bd_t	hold_board_info;
 #endif
 
-/* this is where the INITRD gets moved to for safe keeping */
-#define INITRD_DESTINATION /*0x00f00000*/ 0x01800000
-#ifdef CONFIG_8xx
-char *avail_ram = (char *) 0x00200000;
-char *end_avail = (char *) 0x00400000;
-#else /* CONFIG_8xx */
-/* this will do for now - Cort */
-char *avail_ram = (char *) 0x00800000; /* start with 8M */
-/* assume 15M max since this is where we copy the initrd to -- Cort */
-char *end_avail = (char *) INITRD_DESTINATION; 
-#endif /* CONFIG_8xx */
+/*
+ * MBX: loads at:      	0x00200000
+ *      board data at: 	end of ram
+ * PREP:
+ *  powerstack 1:
+ *      network load at:   configurable - should set to link addr-0x400
+ *                         exec. addr set to link addr
+ *            such as load: 0x005ffc00 exec 0x00600000
+ *      hd/floppy/tape load at:
+ *  powerstack 2:
+ *      loads at:       0x00400000
+ *  IBM 830 (carolina):
+ *      loads at:	???
+ *
+ * Please send me load/board info and such data for hardware not
+ * listed here so I can keep track since things are getting tricky
+ * with the different load addrs with different firmware.  This will
+ * help to avoid breaking the load/boot process.
+ * -- Cort
+ */
+char *avail_ram;
+char *end_avail;
 
 char cmd_line[256];
 RESIDUAL hold_residual;
@@ -313,24 +325,35 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 	orig_y = 24;
 	
 	
-#ifndef CONFIG_8xx
+#ifndef CONFIG_MBX
 	vga_init(0xC0000000);
 	/* copy the residual data */
 	if (residual)
 		memcpy(&hold_residual,residual,sizeof(RESIDUAL));
-#endif /* CONFIG_8xx */
-#ifdef CONFIG_MBX	
+#else /* CONFIG_MBX */
 	/* copy board data */
 	if (residual)
 		_bcopy((char *)residual, (char *)&hold_board_info,
 		       sizeof(hold_board_info));
-#endif /* CONFIG_8xx */
+#endif /* CONFIG_MBX */
+	
+	/* MBX/prep put the board/residual data at the end of memory */
+	if ( residual )
+		end_avail = (char *)PAGE_ALIGN((unsigned long)residual);
+	/* prep netboot looses the residual */
+	else
+		end_avail = (char *)0x00800000;
 	
 
 	puts("loaded at:     "); puthex(load_addr);
 	puts(" "); puthex((unsigned long)(load_addr + (4*num_words))); puts("\n");
-	puts("relocated to:  "); puthex((unsigned long)&start);
-	puts(" "); puthex((unsigned long)((unsigned long)&start + (4*num_words))); puts("\n");
+	if ( (unsigned long)load_addr != (unsigned long)&start )
+	{
+		puts("relocated to:  "); puthex((unsigned long)&start);
+		puts(" ");
+		puthex((unsigned long)((unsigned long)&start + (4*num_words)));
+		puts("\n");
+	}
 
 	if ( residual )
 	{
@@ -357,6 +380,8 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 		puts("\n");
 	}
 
+	/* we have to subtract 0x10000 here to correct for objdump including the
+	   size of the elf header which we strip -- Cort */
 	zimage_start = (char *)(load_addr - 0x10000 + ZIMAGE_OFFSET);
 	zimage_size = ZIMAGE_SIZE;
 	puts("zimage at:     "); puthex((unsigned long)zimage_start);
@@ -367,20 +392,45 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
 	else
 		initrd_start = 0;
 	initrd_end = INITRD_SIZE + initrd_start;
-  
+
+	/*
+	 * setup avail_ram - this is the first part of ram usable
+	 * by the uncompress code. -- Cort
+	 */
+	avail_ram = (char *)PAGE_ALIGN((unsigned long)zimage_start+zimage_size);
+	if ( (load_addr+(num_words*4)) > (unsigned long) avail_ram )
+		avail_ram = (char *)(load_addr+(num_words*4));
+	if ( ((unsigned long)&start+(num_words*4)) > (unsigned long) avail_ram )
+		avail_ram = (char *)((unsigned long)&start+(num_words*4));
+	
 	/* relocate initrd */
 	if ( initrd_start )
 	{
 		puts("initrd at:     "); puthex(initrd_start);
 		puts(" "); puthex(initrd_end); puts("\n");
-		
-		memcpy ((void *)INITRD_DESTINATION,(void *)initrd_start,
+		/*
+		 * Memory is really tight on the MBX (we can assume 4M)
+		 * so put the initrd at the TOP of ram, and set end_avail
+		 * to right after that.
+		 *
+		 * I should do something like this for prep, too and keep
+		 * a variable end_of_DRAM to keep track of what we think the
+		 * max ram is.
+		 * -- Cort
+		 */
+		memcpy ((void *)PAGE_ALIGN(-PAGE_SIZE+(unsigned long)end_avail-INITRD_SIZE),
+			(void *)initrd_start,
 			INITRD_SIZE );
-		initrd_end = INITRD_DESTINATION + INITRD_SIZE;
-		initrd_start = INITRD_DESTINATION;
-		puts("Moved initrd to:  "); puthex(initrd_start);
+		initrd_start = PAGE_ALIGN(-PAGE_SIZE+(unsigned long)end_avail-INITRD_SIZE);
+		initrd_end = initrd_start + INITRD_SIZE;
+		end_avail = (char *)initrd_start;
+		puts("relocated to:  "); puthex(initrd_start);
 		puts(" "); puthex(initrd_end); puts("\n");
 	}
+	
+	puts("avail ram:     "); puthex((unsigned long)avail_ram); puts(" ");
+	puthex((unsigned long)end_avail); puts("\n");
+	
 #ifndef CONFIG_MBX
 	CRT_tstc();  /* Forces keyboard to be initialized */
 #endif	
@@ -417,13 +467,14 @@ decompress_kernel(unsigned long load_addr, int num_words, unsigned long cksum, R
        
 	puts("Uncompressing Linux...");
 
-	/* these _bcopy() calls are here so I can add breakpoints to the boot for mbx -- Cort */
-	/*_bcopy( (char *)0x100,(char *)&sanity, 0x2000-0x100);*/
 	gunzip(0, 0x400000, zimage_start, &zimage_size);
-	/*_bcopy( (char *)&sanity,(char *)0x100,0x2000-0x100);*/
 	puts("done.\n");
 	puts("Now booting the kernel\n");
+#ifndef CONFIG_MBX	
 	return (unsigned long)&hold_residual;
+#else
+	return (unsigned long)&hold_board_info;
+#endif	
 }
 
 void puthex(unsigned long val)

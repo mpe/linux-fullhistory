@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1996, 1997 by Ralf Baechle
  *
- * $Id: uaccess.h,v 1.5 1997/12/01 16:44:08 ralf Exp $
+ * $Id: uaccess.h,v 1.9 1998/05/04 09:19:05 ralf Exp $
  */
 #ifndef __ASM_MIPS_UACCESS_H
 #define __ASM_MIPS_UACCESS_H
@@ -26,21 +26,18 @@
  *
  * For historical reasons, these macros are grossly misnamed.
  */
-#define KERNEL_DS 0
-#define USER_DS 1
+#define KERNEL_DS	((mm_segment_t) { 0UL })
+#define USER_DS		((mm_segment_t) { 1UL })
 
 #define VERIFY_READ    0
 #define VERIFY_WRITE   1
 
-extern int active_ds;
+#define get_fs()        (current->tss.current_ds)
+#define get_ds()	(KERNEL_DS)
+#define set_fs(x)       (current->tss.current_ds=(x))
 
-#define get_fs()        active_ds
-#define set_fs(x)       (active_ds=(x))
+#define segment_eq(a,b)	((a).seg == (b).seg)
 
-static inline unsigned long get_ds(void)
-{
-	return KERNEL_DS;
-}
 
 /*
  * Is a address valid? This does a straighforward calculation rather
@@ -53,8 +50,8 @@ static inline unsigned long get_ds(void)
  *  - OR we are in kernel mode.
  */
 #define __access_ok(addr,size,mask) \
-	(((__signed__ long)((mask)&(addr | size | (addr+size)))) >= 0)
-#define __access_mask (-(long)get_fs())
+        (((__signed__ long)((mask)&(addr | size | (addr+size)))) >= 0)
+#define __access_mask (-(long)(get_fs().seg))
 
 #define access_ok(type,addr,size) \
 __access_ok(((unsigned long)(addr)),(size),__access_mask)
@@ -108,24 +105,6 @@ if (__get_user(x,ptr)) return ret; })
 struct __large_struct { unsigned long buf[100]; };
 #define __m(x) (*(struct __large_struct *)(x))
 
-#define copy_to_user(to,from,n)   __copy_tofrom_user((to),(from),(n),__cu_to)
-#define copy_from_user(to,from,n) __copy_tofrom_user((to),(from),(n),__cu_from)
-
-extern size_t __copy_user(void *__to, const void *__from, size_t __n);
-
-#define __copy_tofrom_user(to,from,n,v) ({ \
-	void * __cu_to; \
-	const void * __cu_from; \
-	long __cu_len; \
-	\
-	__cu_to = (to); \
-	__cu_from = (from); \
-	__cu_len = (n); \
-	if (__access_ok(((unsigned long)(v)),__cu_len,__access_mask)) \
-		__cu_len = __copy_user(__cu_to, __cu_from, __cu_len); \
-	__cu_len; \
-})
-
 /*
  * Yuck.  We need two variants, one for 64bit operation and one
  * for 32 bit mode and old iron.
@@ -174,18 +153,15 @@ __asm__ __volatile__( \
 	"move\t%0,$0\n" \
 	"2:\n\t" \
 	".section\t.fixup,\"ax\"\n" \
-	"3:\t.set\tnoat\n\t" \
-	"la\t$1,2b\n\t" \
-	"li\t%0,%3\n\t" \
-	"jr\t$1\n\t" \
-	".set\tat\n\t" \
+	"3:\tli\t%0,%3\n\t" \
+	"move\t%1,$0\n\t" \
+	"j\t2b\n\t" \
 	".previous\n\t" \
 	".section\t__ex_table,\"a\"\n\t" \
-	STR(PTR)"\t1b,3b\n\t" \
+	".word\t1b,3b\n\t" \
 	".previous" \
 	:"=r" (__gu_err), "=r" (__gu_val) \
-	:"o" (__m(__gu_addr)), "i" (-EFAULT) \
-	:"$1"); })
+	:"o" (__m(__gu_addr)), "i" (-EFAULT)); })
 
 /*
  * Get a long long 64 using 32 bit registers.
@@ -197,20 +173,18 @@ __asm__ __volatile__( \
 	"2:\tlw\t%D1,%3\n\t" \
 	"move\t%0,$0\n" \
 	"3:\t.section\t.fixup,\"ax\"\n" \
-	"4:\t.set\tnoat\n\t" \
-	"la\t$1,3b\n\t" \
-	"li\t%0,%4\n\t" \
-	"jr\t$1\n\t" \
-	".set\tat\n\t" \
+	"4:\tli\t%0,%4\n\t" \
+	"move\t%1,$0\n\t" \
+	"move\t%D1,$0\n\t" \
+	"j\t3b\n\t" \
 	".previous\n\t" \
 	".section\t__ex_table,\"a\"\n\t" \
-	STR(PTR)"\t1b,4b\n\t" \
-	STR(PTR)"\t2b,4b\n\t" \
+	".word\t1b,4b\n\t" \
+	".word\t2b,4b\n\t" \
 	".previous" \
 	:"=r" (__gu_err), "=&r" (__gu_val) \
 	:"o" (__m(__gu_addr)), "o" (__m(__gu_addr + 4)), \
-	 "i" (-EFAULT) \
-	:"$1"); })
+	 "i" (-EFAULT)); })
 
 extern void __get_user_unknown(void);
 
@@ -262,18 +236,14 @@ __asm__ __volatile__( \
 	"move\t%0,$0\n" \
 	"2:\n\t" \
 	".section\t.fixup,\"ax\"\n" \
-	"3:\t.set\tnoat\n\t" \
-	"la\t$1,2b\n\t" \
-	"li\t%0,%3\n\t" \
-	"jr\t$1\n\t" \
-	".set\tat\n\t" \
+	"3:\tli\t%0,%3\n\t" \
+	"j\t2b\n\t" \
 	".previous\n\t" \
 	".section\t__ex_table,\"a\"\n\t" \
-	STR(PTR)"\t1b,3b\n\t" \
+	".word\t1b,3b\n\t" \
 	".previous" \
 	:"=r" (__pu_err) \
-	:"r" (__pu_val), "o" (__m(__pu_addr)), "i" (-EFAULT) \
-	:"$1"); })
+	:"r" (__pu_val), "o" (__m(__pu_addr)), "i" (-EFAULT)); })
 
 #define __put_user_asm_ll32 \
 ({ \
@@ -283,20 +253,16 @@ __asm__ __volatile__( \
 	"move\t%0,$0\n" \
 	"3:\n\t" \
 	".section\t.fixup,\"ax\"\n" \
-	"4:\t.set\tnoat\n\t" \
-	"la\t$1,3b\n\t" \
-	"li\t%0,%4\n\t" \
-	"jr\t$1\n\t" \
-	".set\tat\n\t" \
+	"4:\tli\t%0,%4\n\t" \
+	"j\t3b\n\t" \
 	".previous\n\t" \
 	".section\t__ex_table,\"a\"\n\t" \
-	STR(PTR)"\t1b,4b\n\t" \
-	STR(PTR)"\t2b,4b\n\t" \
+	".word\t1b,4b\n\t" \
+	".word\t2b,4b\n\t" \
 	".previous" \
 	:"=r" (__pu_err) \
 	:"r" (__pu_val), "o" (__m(__pu_addr)), "o" (__m(__pu_addr + 4)), \
-	 "i" (-EFAULT) \
-	:"$1"); })
+	 "i" (-EFAULT)); })
 
 extern void __put_user_unknown(void);
 
@@ -310,62 +276,195 @@ if (copy_from_user(to,from,n)) \
         return retval; \
 })
 
-#define __copy_to_user(to,from,n)                       \
-         __copy_user((to),(from),(n))
+extern size_t __copy_user(void *__to, const void *__from, size_t __n);
 
-#define __copy_from_user(to,from,n)                     \
-         __copy_user((to),(from),(n))
-
-#define __clear_user(addr,size) \
-({ \
-	void *__cu_end; \
+#define __copy_to_user(to,from,n) ({ \
+	void *__cu_to; \
+	const void *__cu_from; \
+	long __cu_len; \
+	\
+	__cu_to = (to); \
+	__cu_from = (from); \
+	__cu_len = (n); \
 	__asm__ __volatile__( \
-		".set\tnoreorder\n\t" \
-		"1:\taddiu\t%0,1\n" \
-		"bne\t%0,%1,1b\n\t" \
-		"sb\t$0,-1(%0)\n\t" \
-		"2:\t.set\treorder\n\t" \
-		".section\t.fixup,\"ax\"\n" \
-		"3:\t.set\tnoat\n\t" \
-		"subu\t%0,1\n\t" \
-		"j\t2b\n\t" \
-		".set\tat\n\t" \
-		".previous\n\t" \
-		".section\t__ex_table,\"a\"\n\t" \
-		STR(PTR)"\t1b,3b\n\t" \
-		".previous" \
-		:"=r" (addr), "=r" (__cu_end) \
-		:"0" (addr), "1" (addr + size), "i" (-EFAULT) \
-		:"$1","memory"); \
-		size = __cu_end - (addr); \
+		"move\t$4, %1\n\t" \
+		"move\t$5, %2\n\t" \
+		"move\t$6, %3\n\t" \
+		"jal\t__copy_user\n\t" \
+		"move\t%0, $6" \
+		: "=r" (__cu_len) \
+		: "r" (__cu_to), "r" (__cu_from), "r" (__cu_len) \
+		: "$4", "$5", "$6", "$8", "$9", "$10", "$11", "$12", "$15", \
+		  "$24", "$31","memory"); \
+	__cu_len; \
 })
+
+#define __copy_from_user(to,from,n) ({ \
+	void *__cu_to; \
+	const void *__cu_from; \
+	long __cu_len; \
+	\
+	__cu_to = (to); \
+	__cu_from = (from); \
+	__cu_len = (n); \
+	__asm__ __volatile__( \
+		"move\t$4, %1\n\t" \
+		"move\t$5, %2\n\t" \
+		"move\t$6, %3\n\t" \
+		".set\tnoat\n\t" \
+		"addu\t$1, %2, %3\n\t" \
+		".set\tat\n\t" \
+		"jal\t__copy_user\n\t" \
+		"move\t%0, $6" \
+		: "=r" (__cu_len) \
+		: "r" (__cu_to), "r" (__cu_from), "r" (__cu_len) \
+		: "$4", "$5", "$6", "$8", "$9", "$10", "$11", "$12", "$15", \
+		  "$24", "$31","memory"); \
+	__cu_len; \
+})
+
+#define copy_to_user(to,from,n) ({ \
+	void *__cu_to; \
+	const void *__cu_from; \
+	long __cu_len; \
+	\
+	__cu_to = (to); \
+	__cu_from = (from); \
+	__cu_len = (n); \
+	if (access_ok(VERIFY_WRITE, __cu_to, __cu_len)) \
+		__asm__ __volatile__( \
+			"move\t$4, %1\n\t" \
+			"move\t$5, %2\n\t" \
+			"move\t$6, %3\n\t" \
+			"jal\t__copy_user\n\t" \
+			"move\t%0, $6" \
+			: "=r" (__cu_len) \
+			: "r" (__cu_to), "r" (__cu_from), "r" (__cu_len) \
+			: "$4", "$5", "$6", "$8", "$9", "$10", "$11", "$12", \
+			  "$15", "$24", "$31","memory"); \
+	__cu_len; \
+})
+
+#define copy_from_user(to,from,n) ({ \
+	void *__cu_to; \
+	const void *__cu_from; \
+	long __cu_len; \
+	\
+	__cu_to = (to); \
+	__cu_from = (from); \
+	__cu_len = (n); \
+	if (access_ok(VERIFY_READ, __cu_from, __cu_len)) \
+		__asm__ __volatile__( \
+			"move\t$4, %1\n\t" \
+			"move\t$5, %2\n\t" \
+			"move\t$6, %3\n\t" \
+			".set\tnoat\n\t" \
+			"addu\t$1, %2, %3\n\t" \
+			".set\tat\n\t" \
+			"jal\t__copy_user\n\t" \
+			"move\t%0, $6" \
+			: "=r" (__cu_len) \
+			: "r" (__cu_to), "r" (__cu_from), "r" (__cu_len) \
+			: "$4", "$5", "$6", "$8", "$9", "$10", "$11", "$12", \
+			  "$15", "$24", "$31","memory"); \
+	__cu_len; \
+})
+
+extern inline __kernel_size_t
+__clear_user(void *addr, __kernel_size_t size)
+{
+	__kernel_size_t res;
+
+	__asm__ __volatile__(
+		"move\t$4, %1\n\t"
+		"move\t$5, $0\n\t"
+		"move\t$6, %2\n\t"
+		"jal\t__bzero\n\t"
+		"move\t%0, $6"
+		: "=r" (res)
+		: "r" (addr), "r" (size)
+		: "$4", "$5", "$6", "$8", "$9", "$31");
+
+	return res;
+}
 
 #define clear_user(addr,n) ({ \
 void * __cl_addr = (addr); \
 unsigned long __cl_size = (n); \
 if (__cl_size && __access_ok(VERIFY_WRITE, ((unsigned long)(__cl_addr)), __cl_size)) \
-__clear_user(__cl_addr, __cl_size); \
+__cl_size = __clear_user(__cl_addr, __cl_size); \
 __cl_size; })
 
 /*
  * Returns: -EFAULT if exception before terminator, N if the entire
  * buffer filled, else strlen.
  */
-extern long __strncpy_from_user(char *__to, const char *__from, long __to_len);
+extern inline long
+__strncpy_from_user(char *__to, const char *__from, long __len)
+{
+	long res;
 
-#define strncpy_from_user(dest,src,count) ({                            \
-	const void * __sc_src = (src);                                  \
-	long __sc_res = -EFAULT;                                        \
-	if (access_ok(VERIFY_READ, __sc_src, 0)) {                      \
-		__sc_res = __strncpy_from_user(dest, __sc_src, count);  \
-} __sc_res; })
+	__asm__ __volatile__(
+		"move\t$4, %1\n\t"
+		"move\t$5, %2\n\t"
+		"move\t$6, %3\n\t"
+		"jal\t__strncpy_from_user_nocheck_asm\n\t"
+		"move\t%0, $2"
+		: "=r" (res)
+		: "r" (__to), "r" (__from), "r" (__len)
+		: "$2", "$3", "$4", "$5", "$6", "$8", "$31", "memory");
+
+	return res;
+}
+
+extern inline long
+strncpy_from_user(char *__to, const char *__from, long __len)
+{
+	long res;
+
+	__asm__ __volatile__(
+		"move\t$4, %1\n\t"
+		"move\t$5, %2\n\t"
+		"move\t$6, %3\n\t"
+		"jal\t__strncpy_from_user_asm\n\t"
+		"move\t%0, $2"
+		: "=r" (res)
+		: "r" (__to), "r" (__from), "r" (__len)
+		: "$2", "$3", "$4", "$5", "$6", "$8", "$31", "memory");
+
+	return res;
+}
+
 
 /* Returns: 0 if bad, string length+1 (memory size) of string if ok */
-extern long __strlen_user(const char *);
-
-extern inline long strlen_user(const char *str)
+extern inline long __strlen_user(const char *s)
 {
-	return access_ok(VERIFY_READ,str,0) ? __strlen_user(str) : 0;
+	long res;
+
+	__asm__ __volatile__(
+		"move\t$4, %1\n\t"
+		"jal\t__strlen_user_nocheck_asm\n\t"
+		"move\t%0, $2"
+		: "=r" (res)
+		: "r" (s)
+		: "$2", "$4", "$8", "$31");
+
+	return res;
+}
+
+extern inline long strlen_user(const char *s)
+{
+	long res;
+
+	__asm__ __volatile__(
+		"move\t$4, %1\n\t"
+		"jal\t__strlen_user_asm\n\t"
+		"move\t%0, $2"
+		: "=r" (res)
+		: "r" (s)
+		: "$2", "$4", "$8", "$31");
+
+	return res;
 }
 
 struct exception_table_entry

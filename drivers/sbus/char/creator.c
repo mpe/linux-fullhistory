@@ -1,4 +1,4 @@
-/* $Id: creator.c,v 1.14 1998/03/10 20:18:32 jj Exp $
+/* $Id: creator.c,v 1.15 1998/04/13 07:26:55 davem Exp $
  * creator.c: Creator/Creator3D frame buffer driver
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -507,11 +507,10 @@ ffb_reset (fbinfo_t *fb)
 		sbus_hw_hide_cursor ();
 }
 
-__initfunc(static unsigned long ffb_postsetup (fbinfo_t *fb, unsigned long memory_start))
+__initfunc(static void ffb_postsetup (fbinfo_t *fb))
 {
-	fb->info.ffb.clut = (u32 *)(memory_start);
-        fb->color_map = (u8 *)(memory_start+256*4);
-        return memory_start + 256*4 + 256*3;
+	fb->info.ffb.clut = kmalloc(256 * 4, GFP_ATOMIC);
+        fb->color_map = kmalloc(256 * 3, GFP_ATOMIC);
 }
 
 __initfunc(void creator_setup (fbinfo_t *fb, int slot, int ffb_node, unsigned long ffb, int ffb_io))

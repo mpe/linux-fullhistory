@@ -85,7 +85,7 @@ void chrp_ide_probe(void)
 {
 }
 
-void chrp_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq)
+__initfunc(void chrp_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq))
 {
 	int i;
 
@@ -221,7 +221,7 @@ chrp_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 
 	ROOT_DEV = to_kdev_t(0x0802); /* sda2 (sda1 is for the kernel) */
 	
-#ifdef CONFIG_BLK_DEV_RAM
+#ifdef CONFIG_BLK_DEV_INITRD
 	/* initrd_start and size are setup by boot/head.S and kernel/head.S */
 	if ( initrd_start )
 	{

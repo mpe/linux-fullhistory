@@ -19,10 +19,10 @@ ifndef CONFIG_MBX
 L_OBJS   := via-cuda.o adb.o nvram.o macio-adb.o via-pmu.o mediabay.o
 endif
 
-ifeq ($(CONFIG_SERIAL)$(CONFIG_PMAC),yy)
+ifeq ($(CONFIG_MAC_SERIAL),y)
   LX_OBJS += macserial.o
 else
-  ifeq ($(CONFIG_SERIAL)$(CONFIG_PMAC),my)
+  ifeq ($(CONFIG_MAC_SERIAL),m)
     MX_OBJS += macserial.o
   endif
 endif

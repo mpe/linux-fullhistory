@@ -24,7 +24,6 @@ static char ErrorBuffer[256];
 
 /*
  * Functions for accessing Amiga-FFS structures.
- *
  */
 
 /* Set *NAME to point to the file name in a file header block in memory
@@ -85,7 +84,7 @@ affs_insert_hash(unsigned long next, struct buffer_head *file, struct inode *ino
 
 	return 0;
 }
-/* Remove a header block from it's hash table (directory).
+/* Remove a header block from its hash table (directory).
  * 'inode' may be any inode on the partition, it's only
  * used for calculating the block size and superblock
  * reference.
@@ -226,7 +225,7 @@ affs_remove_header(struct buffer_head *bh, struct inode *inode)
 
 	orig_ino = be32_to_cpu(FILE_END(bh->b_data,inode)->original);
 	if (orig_ino) {		/* This is just a link. Nothing much to do. */
-		pr_debug("      Removing link.\n");
+		pr_debug("AFFS: Removing link.\n");
 		if ((error = affs_remove_link(bh,inode)))
 			return error;
 		if ((error = affs_remove_hash(bh,inode)))
@@ -237,7 +236,7 @@ affs_remove_header(struct buffer_head *bh, struct inode *inode)
 	
 	link_ino = be32_to_cpu(FILE_END(bh->b_data,inode)->link_chain);
 	if (link_ino) {		/* This is the complicated case. Yuck. */
-		pr_debug("      Removing original with links to it.\n");
+		pr_debug("AFFS: Removing original with links to it.\n");
 		/* Unlink the object and its first link from their directories. */
 		if ((error = affs_remove_hash(bh,inode)))
 			return error;
@@ -275,7 +274,7 @@ affs_remove_header(struct buffer_head *bh, struct inode *inode)
 		return 1;
 	}
 	/* Plain file/dir. This is the simplest case. */
-	pr_debug("      Removing plain file/dir.\n");
+	pr_debug("AFFS: Removing plain file/dir.\n");
 	if ((error = affs_remove_hash(bh,inode)))
 		return error;
 	return 0;
@@ -307,6 +306,11 @@ affs_checksum_block(int bsize, void *data, s32 *ptype, s32 *stype)
 		sum += be32_to_cpu(*p++);
 	return sum;
 }
+
+/*
+ * Calculate the checksum of a disk block and store it
+ * at the indicated position.
+ */
 
 void
 affs_fix_checksum(int bsize, void *data, int cspos)

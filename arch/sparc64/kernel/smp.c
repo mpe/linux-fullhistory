@@ -85,7 +85,6 @@ __initfunc(void smp_store_cpu_info(int id))
 {
 	cpu_data[id].udelay_val			= loops_per_sec;
 	cpu_data[id].irq_count			= 0;
-	cpu_data[id].last_tlbversion_seen	= tlb_context_cache & CTX_VERSION_MASK;
 	cpu_data[id].pgcache_size		= 0;
 	cpu_data[id].pgd_cache			= NULL;
 	cpu_data[id].pmd_cache			= NULL;
@@ -368,16 +367,28 @@ void smp_flush_tlb_all(void)
 	__flush_tlb_all();
 }
 
+/* We know that the window frames of the user have been flushed
+ * to the stack before we get here because all callers of us
+ * are flush_tlb_*() routines, and these run after flush_cache_*()
+ * which performs the flushw.
+ */
 static void smp_cross_call_avoidance(struct mm_struct *mm)
 {
-	spin_lock(&scheduler_lock);
-	get_new_mmu_context(mm, &tlb_context_cache);
-	mm->cpu_vm_mask = (1UL << smp_processor_id());
-	if(segment_eq(current->tss.current_ds,USER_DS)) {
-		u32 ctx = mm->context & 0x1fff;
+	u32 ctx;
 
-		current->tss.ctx = ctx;
-		spitfire_set_secondary_context(ctx);
+	spin_lock(&scheduler_lock);
+	get_new_mmu_context(mm);
+	mm->cpu_vm_mask = (1UL << smp_processor_id());
+	current->tss.ctx = ctx = mm->context & 0x3ff;
+	spitfire_set_secondary_context(ctx);
+	__asm__ __volatile__("flush %g6");
+	spitfire_flush_dtlb_secondary_context();
+	spitfire_flush_itlb_secondary_context();
+	__asm__ __volatile__("flush %g6");
+	if(!segment_eq(current->tss.current_ds,USER_DS)) {
+		/* Rarely happens. */
+		current->tss.ctx = 0;
+		spitfire_set_secondary_context(0);
 		__asm__ __volatile__("flush %g6");
 	}
 	spin_unlock(&scheduler_lock);
@@ -385,7 +396,7 @@ static void smp_cross_call_avoidance(struct mm_struct *mm)
 
 void smp_flush_tlb_mm(struct mm_struct *mm)
 {
-	u32 ctx = mm->context & 0x1fff;
+	u32 ctx = mm->context & 0x3ff;
 
 	if(mm == current->mm && mm->count == 1) {
 		if(mm->cpu_vm_mask == (1UL << smp_processor_id()))
@@ -401,7 +412,7 @@ local_flush_and_out:
 void smp_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 			 unsigned long end)
 {
-	u32 ctx = mm->context & 0x1fff;
+	u32 ctx = mm->context & 0x3ff;
 
 	if(mm == current->mm && mm->count == 1) {
 		if(mm->cpu_vm_mask == (1UL << smp_processor_id()))
@@ -416,7 +427,7 @@ local_flush_and_out:
 
 void smp_flush_tlb_page(struct mm_struct *mm, unsigned long page)
 {
-	u32 ctx = mm->context & 0x1fff;
+	u32 ctx = mm->context & 0x3ff;
 
 	if(mm == current->mm && mm->count == 1) {
 		if(mm->cpu_vm_mask == (1UL << smp_processor_id()))
@@ -424,7 +435,7 @@ void smp_flush_tlb_page(struct mm_struct *mm, unsigned long page)
 		return smp_cross_call_avoidance(mm);
 	}
 #if 0 /* XXX Disabled until further notice... */
-	else if(mm != current->mm && mm->count == 1) {
+	else if(mm->count == 1) {
 		/* Try to handle two special cases to avoid cross calls
 		 * in common scenerios where we are swapping process
 		 * pages out.

@@ -3,9 +3,9 @@
  *		operating system.  INET is implemented using the  BSD Socket
  *		interface as the means of communication with the user level.
  *
- *		AF_INET6 protocol dispatch tables.
+ *		PF_INET6 protocol dispatch tables.
  *
- * Version:	$Id: protocol.c,v 1.5 1997/03/18 18:24:44 davem Exp $
+ * Version:	$Id: protocol.c,v 1.6 1998/05/03 14:31:09 alan Exp $
  *
  * Authors:	Pedro Roque	<roque@di.fc.ul.pt>
  *

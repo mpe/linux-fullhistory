@@ -33,7 +33,7 @@ extern __inline__ void set_fs (mm_segment_t fs)
 
 #define __range_ok(addr,size) ({					\
 	unsigned long flag, sum;					\
-	__asm__ __volatile__("adds %1, %2, %3; cmpls %1, %0; movls %0, #0" \
+	__asm__ __volatile__("subs %1, %0, %3; cmpcs %1, %2; movcs %0, #0" \
 		: "=&r" (flag), "=&r" (sum)				\
 		: "r" (addr), "Ir" (size), "0" (current->addr_limit)	\
 		: "cc");						\

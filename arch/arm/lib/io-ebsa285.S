@@ -1,4 +1,3 @@
-#define __ASSEMBLER__
 #include <linux/linkage.h>
 
 ENTRY(insl)

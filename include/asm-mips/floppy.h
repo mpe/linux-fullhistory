@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1995, 1996, 1997 Ralf Baechle
  *
- * $Id: floppy.h,v 1.3 1997/09/07 03:59:02 ralf Exp $
+ * $Id: floppy.h,v 1.14 1998/05/01 01:35:52 ralf Exp $
  */
 #ifndef __ASM_MIPS_FLOPPY_H
 #define __ASM_MIPS_FLOPPY_H

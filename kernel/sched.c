@@ -399,9 +399,7 @@ asmlinkage void schedule(void)
 	need_resched = 0;
 	prev = current;
 	this_cpu = smp_processor_id();
-	if (local_irq_count[this_cpu])
-		goto scheduling_in_interrupt;
-	if (local_bh_count[this_cpu])
+	if (in_interrupt())
 		goto scheduling_in_interrupt;
 	release_kernel_lock(prev, this_cpu, lock_depth);
 	if (bh_active & bh_mask)

@@ -51,6 +51,9 @@ extern int sg_big_buff;
 #ifdef __sparc__
 extern char reboot_command [];
 #endif
+#ifdef __powerpc__
+extern unsigned long htab_reclaim_on, zero_paged_on;
+#endif
 
 static int parse_table(int *, int, void *, size_t *, void *, size_t,
 		       ctl_table *, void **);
@@ -144,18 +147,6 @@ static ctl_table kern_table[] = {
 	 0644, NULL, &proc_dostring, &sysctl_string},
 	{KERN_DOMAINNAME, "domainname", system_utsname.domainname, 64,
 	 0644, NULL, &proc_dostring, &sysctl_string},
-	{KERN_NRINODE, "inode-nr", &inodes_stat, 2*sizeof(int),
-	 0444, NULL, &proc_dointvec},
-	{KERN_STATINODE, "inode-state", &inodes_stat, 7*sizeof(int),
-	 0444, NULL, &proc_dointvec},
-	{KERN_MAXINODE, "inode-max", &max_inodes, sizeof(int),
-	 0644, NULL, &proc_dointvec},
-	{KERN_NRFILE, "file-nr", &nr_files, 3*sizeof(int),
-	 0444, NULL, &proc_dointvec},
-	{KERN_MAXFILE, "file-max", &max_files, sizeof(int),
-	 0644, NULL, &proc_dointvec},
-	{KERN_DENTRY, "dentry-state", &dentry_stat, 6*sizeof(int),
-	 0444, NULL, &proc_dointvec},
 	{KERN_PANIC, "panic", &panic_timeout, sizeof(int),
 	 0644, NULL, &proc_dointvec},
 #ifdef CONFIG_BLK_DEV_INITRD
@@ -172,6 +163,12 @@ static ctl_table kern_table[] = {
 	{KERN_SPARC_REBOOT, "reboot-cmd", reboot_command,
 	 256, 0644, NULL, &proc_dostring, &sysctl_string },
 #endif
+#ifdef __powerpc__
+	{KERN_PPC_HTABRECLAIM, "htab-reclaim", &htab_reclaim_on, sizeof(int),
+	 0644, NULL, &proc_dointvec},
+	{KERN_PPC_ZEROPAGED, "zero-paged", &zero_paged_on, sizeof(int),
+	 0644, NULL, &proc_dointvec},
+#endif
 	{KERN_CTLALTDEL, "ctrl-alt-del", &C_A_D, sizeof(int),
 	 0644, NULL, &proc_dointvec},
 	{KERN_PRINTK, "printk", &console_loglevel, 4*sizeof(int),
@@ -181,7 +178,7 @@ static ctl_table kern_table[] = {
 	 0644, NULL, &proc_dostring, &sysctl_string },
 #endif
 #ifdef CONFIG_CHR_DEV_SG
-	{KERN_NRFILE, "sg-big-buff", &sg_big_buff, sizeof (int),
+	{KERN_SG_BIG_BUFF, "sg-big-buff", &sg_big_buff, sizeof (int),
 	 0444, NULL, &proc_dointvec},
 #endif
 	{0}
@@ -213,6 +210,22 @@ static ctl_table proc_table[] = {
 };
 
 static ctl_table fs_table[] = {
+	{FS_NRINODE, "inode-nr", &inodes_stat, 2*sizeof(int),
+	 0444, NULL, &proc_dointvec},
+	{FS_STATINODE, "inode-state", &inodes_stat, 7*sizeof(int),
+	 0444, NULL, &proc_dointvec},
+	{FS_MAXINODE, "inode-max", &max_inodes, sizeof(int),
+	 0644, NULL, &proc_dointvec},
+	{FS_NRFILE, "file-nr", &nr_files, 3*sizeof(int),
+	 0444, NULL, &proc_dointvec},
+	{FS_MAXFILE, "file-max", &max_files, sizeof(int),
+	 0644, NULL, &proc_dointvec},
+	{FS_NRDQUOT, "dquot-nr", &nr_dquots, 2*sizeof(int),
+	 0444, NULL, &proc_dointvec},
+	{FS_MAXDQUOT, "dquot-max", &max_dquots, sizeof(int),
+	 0644, NULL, &proc_dointvec},
+	{FS_DENTRY, "dentry-state", &dentry_stat, 6*sizeof(int),
+	 0444, NULL, &proc_dointvec},
 	{0}
 };
 
@@ -892,9 +905,6 @@ int sysctl_string(ctl_table *table, int *name, int nlen,
 		if (len == table->maxlen)
 			len--;
 		((char *) table->data)[len] = 0;
-#ifdef CONFIG_TRANS_NAMES
-		translations_dirty = 1;
-#endif
 	}
 	return 0;
 }

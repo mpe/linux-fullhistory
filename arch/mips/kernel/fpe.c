@@ -6,7 +6,7 @@
  *
  * Copyright (C) 1997 Ralf Baechle
  *
- * $Id: fpe.c,v 1.1 1997/08/11 04:17:18 ralf Exp $
+ * $Id: fpe.c,v 1.2 1998/05/01 01:33:48 ralf Exp $
  */
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -18,7 +18,7 @@
 #include <asm/branch.h>
 #include <asm/ptrace.h>
 
-MODULE_AUTHOR("Ralf Baechle <ralf@gnu.ai.mit.edu>");
+MODULE_AUTHOR("Ralf Baechle <ralf@gnu.org>");
 MODULE_DESCRIPTION("Experimental floating point exception handler");
 MODULE_SUPPORTED_DEVICE("MIPS FPU");
 

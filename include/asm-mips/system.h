@@ -7,6 +7,8 @@
  *
  * Copyright (C) 1994, 1995 by Ralf Baechle
  * Modified further for R[236]000 by Paul M. Antoine, 1996
+ *
+ * $Id: system.h,v 1.7 1998/05/04 09:19:03 ralf Exp $
  */
 #ifndef __ASM_MIPS_SYSTEM_H
 #define __ASM_MIPS_SYSTEM_H
@@ -17,18 +19,18 @@
 extern __inline__ void
 __sti(void)
 {
-    __asm__ __volatile__(
-	".set\tnoreorder\n\t"
-	".set\tnoat\n\t"
-	"mfc0\t$1,$12\n\t"
-	"ori\t$1,0x1f\n\t"
-	"xori\t$1,0x1e\n\t"
-	"mtc0\t$1,$12\n\t"
-	".set\tat\n\t"
-	".set\treorder"
-	: /* no outputs */
-	: /* no inputs */
-	: "$1", "memory");
+	__asm__ __volatile__(
+		".set\tnoreorder\n\t"
+		".set\tnoat\n\t"
+		"mfc0\t$1,$12\n\t"
+		"ori\t$1,0x1f\n\t"
+		"xori\t$1,0x1e\n\t"
+		"mtc0\t$1,$12\n\t"
+		".set\tat\n\t"
+		".set\treorder"
+		: /* no outputs */
+		: /* no inputs */
+		: "$1", "memory");
 }
 
 /*
@@ -41,21 +43,21 @@ __sti(void)
 extern __inline__ void
 __cli(void)
 {
-    __asm__ __volatile__(
-	".set\tnoreorder\n\t"
-	".set\tnoat\n\t"
-	"mfc0\t$1,$12\n\t"
-	"ori\t$1,1\n\t"
-	"xori\t$1,1\n\t"
-	"mtc0\t$1,$12\n\t"
-	"nop\n\t"
-	"nop\n\t"
-	"nop\n\t"
-	".set\tat\n\t"
-	".set\treorder"
-	: /* no outputs */
-	: /* no inputs */
-	: "$1", "memory");
+	__asm__ __volatile__(
+		".set\tnoreorder\n\t"
+		".set\tnoat\n\t"
+		"mfc0\t$1,$12\n\t"
+		"ori\t$1,1\n\t"
+		"xori\t$1,1\n\t"
+		"mtc0\t$1,$12\n\t"
+		"nop\n\t"
+		"nop\n\t"
+		"nop\n\t"
+		".set\tat\n\t"
+		".set\treorder"
+		: /* no outputs */
+		: /* no inputs */
+		: "$1", "memory");
 }
 
 #define __save_flags(x)                  \
@@ -87,16 +89,16 @@ __asm__ __volatile__(                    \
 extern void __inline__
 __restore_flags(int flags)
 {
-    __asm__ __volatile__(
-	".set\tnoreorder\n\t"
-	"mtc0\t%0,$12\n\t"
-	"nop\n\t"
-	"nop\n\t"
-	"nop\n\t"
-	".set\treorder"
-	: /* no output */
-	: "r" (flags)
-	: "memory");
+	__asm__ __volatile__(
+		".set\tnoreorder\n\t"
+		"mtc0\t%0,$12\n\t"
+		"nop\n\t"
+		"nop\n\t"
+		"nop\n\t"
+		".set\treorder"
+		: /* no output */
+		: "r" (flags)
+		: "memory");
 }
 
 /*
@@ -113,7 +115,7 @@ __asm__ __volatile__(					\
 	"# prevent instructions being moved around\n\t"	\
 	".set\tnoreorder\n\t"				\
 	".set\treorder"					\
-        : /* no output */				\
+	: /* no output */				\
 	: /* no input */				\
 	: "memory")
 
@@ -125,45 +127,10 @@ __asm__ __volatile__(					\
 extern asmlinkage void (*resume)(void *tsk);
 #endif /* !defined (__LANGUAGE_ASSEMBLY__) */
 
-/*
- * FIXME: resume() assumes current == prev
- */
 #define switch_to(prev,next) \
 do { \
-	prev->tss.current_ds = active_ds; \
-        active_ds = next->tss.current_ds; \
-        resume(next); \
+	resume(next); \
 } while(0)
-
-/*
- * The 8 and 16 bit variants have to disable interrupts temporarily.
- * Both are currently unused.
- */
-extern __inline__ unsigned long xchg_u8(volatile char * m, unsigned long val)
-{
-	unsigned long flags, retval;
-
-	save_flags(flags);
-	cli();
-	retval = *m;
-	*m = val;
-	restore_flags(flags);
-
-	return retval;
-}
-
-extern __inline__ unsigned long xchg_u16(volatile short * m, unsigned long val)
-{
-	unsigned long flags, retval;
-
-	save_flags(flags);
-	cli();
-	retval = *m;
-	*m = val;
-	restore_flags(flags);
-
-	return retval;
-}
 
 /*
  * For 32 and 64 bit operands we can take advantage of ll and sc.
@@ -186,8 +153,9 @@ extern __inline__ unsigned long xchg_u32(volatile int * m, unsigned long val)
 		".set\tat\n\t"
 		".set\treorder"
 		: "=r" (val), "=r" (m), "=r" (dummy)
-		: "1" (m), "2" (val));
-#else /* FIXME: Brain-dead approach, but then again, I AM hacking - PMA */
+		: "1" (m), "2" (val)
+		: "memory");
+#else
 	unsigned long flags, retval;
 
 	save_flags(flags);
@@ -218,7 +186,8 @@ extern __inline__ unsigned long xchg_u64(volatile long * m, unsigned long val)
 		".set\tat\n\t"
 		".set\treorder"
 		: "=r" (val), "=r" (m), "=r" (dummy)
-		: "1" (m), "2" (val));
+		: "1" (m), "2" (val)
+		: "memory");
 
 	return val;
 }
@@ -239,14 +208,12 @@ extern void __xchg_called_with_bad_pointer(void);
 static __inline__ unsigned long __xchg(unsigned long x, volatile void * ptr, int size)
 {
 	switch (size) {
-		case 1:
-			return xchg_u8(ptr, x);
-		case 2:
-			return xchg_u16(ptr, x);
 		case 4:
 			return xchg_u32(ptr, x);
+#if defined(__mips64)
 		case 8:
 			return xchg_u64(ptr, x);
+#endif
 	}
 	__xchg_called_with_bad_pointer();
 	return x;

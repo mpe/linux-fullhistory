@@ -149,7 +149,7 @@ static struct sock *rose_alloc_sock(void)
 	struct sock *sk;
 	rose_cb *rose;
 
-	if ((sk = sk_alloc(AF_ROSE, GFP_ATOMIC, 1)) == NULL)
+	if ((sk = sk_alloc(PF_ROSE, GFP_ATOMIC, 1)) == NULL)
 		return NULL;
 
 	if ((rose = kmalloc(sizeof(*rose), GFP_ATOMIC)) == NULL) {
@@ -1320,12 +1320,12 @@ static int rose_get_info(char *buffer, char **start, off_t offset, int length, i
 } 
 
 static struct net_proto_family rose_family_ops = {
-	AF_ROSE,
+	PF_ROSE,
 	rose_create
 };
 
 static struct proto_ops rose_proto_ops = {
-	AF_ROSE,
+	PF_ROSE,
 
 	sock_no_dup,
 	rose_release,
@@ -1462,7 +1462,7 @@ void cleanup_module(void)
 #endif
 	unregister_netdevice_notifier(&rose_dev_notifier);
 
-	sock_unregister(AF_ROSE);
+	sock_unregister(PF_ROSE);
 
 	for (i = 0; i < rose_ndevs; i++) {
 		if (dev_rose[i].priv != NULL) {

@@ -53,13 +53,13 @@ typedef __u64	Elf64_Word;
 
 #define EM_MIPS_RS4_BE 10	/* MIPS R4000 big-endian */
 
-#define EM_SPARC64     11	/* SPARC v9 (not official) 64-bit */
-
 #define EM_PARISC      15	/* HPPA */
 
 #define EM_SPARC32PLUS 18	/* Sun's "v8plus" */
 
 #define EM_PPC	       20	/* PowerPC */
+
+#define EM_SPARCV9     43	/* SPARC v9 64-bit */
 
 /*
  * This is an interim value that we will use until the committee comes
@@ -210,6 +210,7 @@ typedef struct {
 #define HWCAP_SPARC_STBAR       2
 #define HWCAP_SPARC_SWAP        4
 #define HWCAP_SPARC_MULDIV      8
+#define HWCAP_SPARC_V9		16
 
 
 /*

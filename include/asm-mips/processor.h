@@ -5,7 +5,7 @@
  * written by Ralf Baechle
  * Modified further for R[236]000 compatibility by Paul M. Antoine
  *
- * $Id: processor.h,v 1.5 1997/12/01 16:48:39 ralf Exp $
+ * $Id: processor.h,v 1.20 1998/05/04 09:18:59 ralf Exp $
  */
 #ifndef __ASM_MIPS_PROCESSOR_H
 #define __ASM_MIPS_PROCESSOR_H
@@ -51,7 +51,8 @@ extern int EISA_bus;
 /* This decides where the kernel will search for a free chunk of vm
  * space during mmap's.
  */
-#define TASK_UNMAPPED_BASE	(TASK_SIZE / 3)
+#define TASK_UNMAPPED_BASE(off)	(TASK_SIZE / 3)
+#define TASK_UNMAPPED_ALIGN(addr, off)	PAGE_ALIGN(addr)
 
 /*
  * Size of io_bitmap in longwords: 32 is ports 0-0x3ff.
@@ -90,21 +91,21 @@ typedef struct {
  */
 struct thread_struct {
         /* Saved main processor registers. */
-        unsigned long reg16 __attribute__ ((aligned (8)));
+        unsigned long reg16;
 	unsigned long reg17, reg18, reg19, reg20, reg21, reg22, reg23;
-        unsigned long reg28, reg29, reg30, reg31;
+        unsigned long reg29, reg30, reg31;
 
 	/* Saved cp0 stuff. */
 	unsigned long cp0_status;
 
 	/* Saved fpu/fpu emulator stuff. */
-	union mips_fpu_union fpu __attribute__ ((aligned (8)));
+	union mips_fpu_union fpu;
 
 	/* Other stuff associated with the thread. */
-	unsigned long cp0_badvaddr;
+	unsigned long cp0_badvaddr;	/* Last user fault */
+	unsigned long cp0_baduaddr;	/* Last kernel fault accessing USEG */
 	unsigned long error_code;
 	unsigned long trap_no;
-	unsigned long ksp;			/* Top of kernel stack   */
 	unsigned long pg_dir;                   /* used in tlb refill    */
 #define MF_FIXADE 1			/* Fix address errors in software */
 #define MF_LOGADE 2			/* Log address errors to syslog */
@@ -124,7 +125,7 @@ struct thread_struct {
          * saved main processor registers \
          */ \
 	0, 0, 0, 0, 0, 0, 0, 0, \
-	            0, 0, 0, 0, \
+	               0, 0, 0, \
 	/* \
 	 * saved cp0 stuff \
 	 */ \
@@ -136,12 +137,11 @@ struct thread_struct {
 	/* \
 	 * Other stuff associated with the process \
 	 */ \
-	0, 0, 0, (unsigned long)&init_task_union + KERNEL_STACK_SIZE - 32, \
-	(unsigned long) swapper_pg_dir, \
+	0, 0, 0, 0, (unsigned long) swapper_pg_dir, \
 	/* \
 	 * For now the default is to fix address errors \
 	 */ \
-	MF_FIXADE, 0, 0, 0 \
+	MF_FIXADE, { 0 }, 0, 0 \
 }
 
 #ifdef __KERNEL__
@@ -167,16 +167,12 @@ extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 	return ((unsigned long*)t->reg29)[17];
 }
 
+extern int (*user_mode)(struct pt_regs *);
+
 /*
  * Do necessary setup to start up a newly executed thread.
  */
 extern void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long sp);
-
-/*
- * Does the process account for user or for system time?
- */
-extern int (*running_in_user_mode)(void);
-#define USES_USER_TIME(regs) running_in_user_mode()
 
 /* Allocation and freeing of basic task resources. */
 /*

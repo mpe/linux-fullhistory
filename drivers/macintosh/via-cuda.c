@@ -20,6 +20,7 @@
 #include <asm/io.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
+#include <asm/init.h>
 
 static volatile unsigned char *via;
 
@@ -72,6 +73,7 @@ static unsigned char cuda_rbuf[16];
 static unsigned char *reply_ptr;
 static int reading_reply;
 static int data_index;
+static struct device_node *vias;
 
 static int init_via(void);
 static void cuda_start(void);
@@ -80,11 +82,11 @@ static void cuda_input(unsigned char *buf, int nb, struct pt_regs *regs);
 static int cuda_adb_send_request(struct adb_request *req, int sync);
 static int cuda_adb_autopoll(int on);
 
-void
-via_cuda_init()
-{
-    struct device_node *vias;
+__openfirmware
 
+void
+find_via_cuda()
+{
     vias = find_devices("via-cuda");
     if (vias == 0)
 	return;
@@ -111,12 +113,21 @@ via_cuda_init()
     }
     via = (volatile unsigned char *) ioremap(vias->addrs->address, 0x2000);
 
+    cuda_state = idle;
+
     if (!init_via()) {
 	printk(KERN_ERR "init_via failed\n");
-	return;
+	via = NULL;
     }
 
-    cuda_state = idle;
+    adb_hardware = ADB_VIACUDA;
+}
+
+void
+via_cuda_init(void)
+{
+    if (via == NULL)
+	return;
 
     if (request_irq(vias->intrs[0].line, via_interrupt, 0, "VIA", (void *)0)) {
 	printk(KERN_ERR "VIA: can't get irq %d\n", vias->intrs[0].line);
@@ -128,7 +139,6 @@ via_cuda_init()
     via[IER] = IER_SET|SR_INT; eieio();	/* enable interrupt from SR */
 
     /* Set function pointers */
-    adb_hardware = ADB_VIACUDA;
     adb_send_request = cuda_adb_send_request;
     adb_autopoll = cuda_adb_autopoll;
 }

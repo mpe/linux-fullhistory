@@ -45,12 +45,12 @@
 	processor.u.armv3v4._flush_icache_area((_start), (_end))
 
 /*
- * We don't have a mem map cache...
+ * We don't have a MEMC chip...
  */
-#define update_mm_cache_all()			do { } while (0)
-#define update_mm_cache_task(tsk)		do { } while (0)
-#define update_mm_cache_mm(mm)			do { } while (0)
-#define update_mm_cache_mm_addr(mm,addr,pte)	do { } while (0)
+#define update_memc_all()		do { } while (0)
+#define update_memc_task(tsk)		do { } while (0)
+#define update_memc_mm(mm)		do { } while (0)
+#define update_memc_addr(mm,addr,pte)	do { } while (0)
 
 /*
  * This flushes back any buffered write data.  We have to clean and flush the entries
@@ -133,7 +133,6 @@
 #define PTRS_PER_PTE    256
 #define PTRS_PER_PMD    1
 #define PTRS_PER_PGD    4096
-#define USER_PTRS_PER_PGD	(TASK_SIZE / PGDIR_SIZE)
 
 /* Just any arbitrary offset to the start of the vmalloc VM area: the
  * current 8MB value just means that there will be a 8MB "hole" after the

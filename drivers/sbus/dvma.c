@@ -74,8 +74,8 @@ init_one_dvma(struct Linux_SBus_DMA *dma, int num_dma))
 }
 
 /* Probe this SBus DMA module(s) */
-__initfunc(unsigned long
-dvma_init(struct linux_sbus *sbus, unsigned long memory_start))
+__initfunc(void
+dvma_init(struct linux_sbus *sbus))
 {
 	struct linux_sbus_device *this_dev;
 	struct Linux_SBus_DMA *dma;
@@ -93,8 +93,7 @@ dvma_init(struct linux_sbus *sbus, unsigned long memory_start))
 			continue;
 
 		/* Found one... */
-		dma = (struct Linux_SBus_DMA *) memory_start;
-		memory_start += sizeof(struct Linux_SBus_DMA);
+		dma = kmalloc(sizeof(struct Linux_SBus_DMA), GFP_ATOMIC);
 
 		dma->SBus_dev = this_dev;
 
@@ -127,22 +126,18 @@ dvma_init(struct linux_sbus *sbus, unsigned long memory_start))
 		init_one_dvma(dma, num_dma++);
 		
 	};  /* while(this_dev) */
-
-	return memory_start;
 }
 
 #ifdef CONFIG_SUN4
 
 #include <asm/sun4paddr.h>
 
-__initfunc(unsigned long
-sun4_dvma_init(unsigned long memory_start))
+__initfunc(void sun4_dvma_init(void))
 {
 	struct Linux_SBus_DMA *dma;
 	struct Linux_SBus_DMA *dchain;
 
-	dma = (struct Linux_SBus_DMA *) memory_start;
-	memory_start += sizeof(struct Linux_SBus_DMA);
+	dma = kmalloc(sizeof(struct Linux_SBus_DMA), GFP_ATOMIC);
 
 	/* No SBUS */
 	dma->SBus_dev = 0x0;
@@ -158,7 +153,6 @@ sun4_dvma_init(unsigned long memory_start))
 	dma->node = 0x0;
 
 	init_one_dvma(dma, 0);
-	return memory_start;
 }
 
 #endif

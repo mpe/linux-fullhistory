@@ -38,52 +38,48 @@
 #define PT_R31    148
 #define PT_LO     152
 #define PT_HI     156
-#define PT_OR2    160
-#define PT_OR7    164
-#define PT_EPC    168
-#define PT_BVADDR 172
-#define PT_STATUS 176
-#define PT_CAUSE  180
-#define PT_SIZE   184
+#define PT_EPC    160
+#define PT_BVADDR 164
+#define PT_STATUS 168
+#define PT_CAUSE  172
+#define PT_SIZE   176
 
 /* MIPS task_struct offsets. */
 #define TASK_STATE         0
-#define TASK_COUNTER       4
-#define TASK_PRIORITY      8
-#define TASK_SIGNAL        12
-#define TASK_BLOCKED       16
-#define TASK_FLAGS         20
-#define TASK_MM            920
+#define TASK_COUNTER       52
+#define TASK_PRIORITY      56
+#define TASK_FLAGS         4
+#define TASK_SIGPENDING    8
+#define TASK_MM            928
 
 /* MIPS specific thread_struct offsets. */
-#define THREAD_REG16   552
-#define THREAD_REG17   556
-#define THREAD_REG18   560
-#define THREAD_REG19   564
-#define THREAD_REG20   568
-#define THREAD_REG21   572
-#define THREAD_REG22   576
-#define THREAD_REG23   580
-#define THREAD_REG28   584
-#define THREAD_REG29   588
-#define THREAD_REG30   592
-#define THREAD_REG31   596
-#define THREAD_STATUS  600
-#define THREAD_FPU     608
-#define THREAD_BVADDR  872
-#define THREAD_ECODE   876
-#define THREAD_TRAPNO  880
-#define THREAD_KSP     884
-#define THREAD_PGDIR   888
-#define THREAD_MFLAGS  892
-#define THREAD_CURDS   896
-#define THREAD_TRAMP   900
-#define THREAD_OLDCTX  904
+#define THREAD_REG16   568
+#define THREAD_REG17   572
+#define THREAD_REG18   576
+#define THREAD_REG19   580
+#define THREAD_REG20   584
+#define THREAD_REG21   588
+#define THREAD_REG22   592
+#define THREAD_REG23   596
+#define THREAD_REG29   600
+#define THREAD_REG30   604
+#define THREAD_REG31   608
+#define THREAD_STATUS  612
+#define THREAD_FPU     616
+#define THREAD_BVADDR  880
+#define THREAD_BUADDR  884
+#define THREAD_ECODE   888
+#define THREAD_TRAPNO  892
+#define THREAD_PGDIR   896
+#define THREAD_MFLAGS  900
+#define THREAD_CURDS   904
+#define THREAD_TRAMP   908
+#define THREAD_OLDCTX  912
 
 /* Linux mm_struct offsets. */
 #define MM_COUNT      12
 #define MM_PGD        8
-#define MM_CONTEXT    28
+#define MM_CONTEXT    32
 
 /* Linux sigcontext offsets. */
 #define SC_REGMASK    0

@@ -20,7 +20,9 @@
 #include <linux/smp_lock.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+#ifdef CONFIG_BSD_PROCESS_ACCT
 #include <linux/acct.h>
+#endif
 
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
@@ -346,7 +348,9 @@ NORET_TYPE void do_exit(long code)
 		panic("Attempted to kill the idle task!");
 fake_volatile:
 	current->flags |= PF_EXITING;
+#ifdef CONFIG_BSD_PROCESS_ACCT
 	acct_process(code);
+#endif
 	del_timer(&current->real_timer);
 	sem_exit();
 	__exit_mm(current);

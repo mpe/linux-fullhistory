@@ -5,6 +5,7 @@
 #include <linux/stddef.h>
 #include <linux/reboot.h>
 #include <linux/nvram.h>
+#include <asm/init.h>
 #include <asm/ptrace.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
@@ -22,6 +23,9 @@ static volatile unsigned char *nvram_data;
 static int nvram_mult;
 
 #define NVRAM_SIZE	0x2000	/* 8kB of non-volatile RAM */
+
+
+__pmac
 
 void pmac_nvram_init(void)
 {

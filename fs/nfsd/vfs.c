@@ -31,6 +31,7 @@
 
 #include <linux/sunrpc/svc.h>
 #include <linux/nfsd/nfsd.h>
+#include <linux/quotaops.h>
 
 #if LINUX_VERSION_CODE >= 0x020100
 #include <asm/uaccess.h>
@@ -289,6 +290,9 @@ nfsd_open(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 	filp->f_mode  = wflag? FMODE_WRITE : FMODE_READ;
 	filp->f_dentry = dentry;
 
+	if (wflag)
+		DQUOT_INIT(inode);
+
 	err = 0;
 	if (filp->f_op && filp->f_op->open) {
 		err = filp->f_op->open(inode, filp);
@@ -325,8 +329,10 @@ nfsd_close(struct file *filp)
 			dentry->d_parent->d_name.name, dentry->d_name.name);
 	if (filp->f_op && filp->f_op->release)
 		filp->f_op->release(inode, filp);
-	if (filp->f_mode & FMODE_WRITE)
+	if (filp->f_mode & FMODE_WRITE) {
 		put_write_access(inode);
+		DQUOT_DROP(inode);
+	}
 }
 
 /*
@@ -604,6 +610,7 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 
 	/* Looks good, lock the directory. */
 	fh_lock(fhp);
+	DQUOT_INIT(dirp);
 	switch (type) {
 	case S_IFREG:
 		err = dirp->i_op->create(dirp, dchild, iap->ia_mode);
@@ -617,6 +624,7 @@ nfsd_create(struct svc_rqst *rqstp, struct svc_fh *fhp,
 		err = dirp->i_op->mknod(dirp, dchild, iap->ia_mode, rdev);
 		break;
 	}
+	DQUOT_DROP(dirp);
 	fh_unlock(fhp);
 
 	if (err < 0)
@@ -674,6 +682,7 @@ nfsd_truncate(struct svc_rqst *rqstp, struct svc_fh *fhp, unsigned long size)
 
 	/* Things look sane, lock and do it. */
 	fh_lock(fhp);
+	DQUOT_INIT(inode);
 	newattrs.ia_size = size;
 	newattrs.ia_valid = ATTR_SIZE | ATTR_CTIME;
 	err = notify_change(dentry, &newattrs);
@@ -683,6 +692,7 @@ nfsd_truncate(struct svc_rqst *rqstp, struct svc_fh *fhp, unsigned long size)
 			inode->i_op->truncate(inode);
 	}
 	put_write_access(inode);
+	DQUOT_DROP(inode);
 	fh_unlock(fhp);
 out_nfserr:
 	if (err)
@@ -771,7 +781,9 @@ nfsd_symlink(struct svc_rqst *rqstp, struct svc_fh *fhp,
 	err = -EEXIST;
 	if (!dnew->d_inode) {
 		fh_lock(fhp);
+		DQUOT_INIT(dirp);
 		err = dirp->i_op->symlink(dirp, dnew, path);
+		DQUOT_DROP(dirp);
 		fh_unlock(fhp);
 		if (!err) {
 			if (EX_ISSYNC(fhp->fh_export))
@@ -840,7 +852,9 @@ nfsd_link(struct svc_rqst *rqstp, struct svc_fh *ffhp,
 		goto dput_and_out;
 
 	fh_lock(ffhp);
+	DQUOT_INIT(dirp);
 	err = dirp->i_op->link(dold, dirp, dnew);
+	DQUOT_DROP(dirp);
 	fh_unlock(ffhp);
 
 	if (!err && EX_ISSYNC(ffhp->fh_export)) {
@@ -938,11 +952,16 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	nfsd_double_down(&tdir->i_sem, &fdir->i_sem);
 	/* N.B. check for parent changes after locking?? */
 
+	DQUOT_INIT(fdir);
+	DQUOT_INIT(tdir);
 	err = fdir->i_op->rename(fdir, odentry, tdir, ndentry);
 	if (!err && EX_ISSYNC(tfhp->fh_export)) {
 		write_inode_now(fdir);
 		write_inode_now(tdir);
 	}
+	DQUOT_DROP(fdir);
+	DQUOT_DROP(tdir);
+
 	nfsd_double_up(&tdir->i_sem, &fdir->i_sem);
 	dput(ndentry);
 
@@ -987,6 +1006,7 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 		goto out_nfserr;
 
 	fh_lock(fhp);
+	DQUOT_INIT(dirp);
 	if (type == S_IFDIR) {
 		err = -ENOTDIR;
 		if (dirp->i_op && dirp->i_op->rmdir)
@@ -996,6 +1016,7 @@ nfsd_unlink(struct svc_rqst *rqstp, struct svc_fh *fhp, int type,
 		if (dirp->i_op && dirp->i_op->unlink)
 			err = dirp->i_op->unlink(dirp, rdentry);
 	}
+	DQUOT_DROP(dirp);
 	fh_unlock(fhp);
 
 	dput(rdentry);

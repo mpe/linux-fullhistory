@@ -35,9 +35,10 @@
 #include <linux/string.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
+#include <linux/fddidevice.h>
+#include <linux/hippidevice.h>
 #include <linux/trdevice.h>
 #include <linux/if_arp.h>
-#include <linux/fddidevice.h>
 #include <linux/if_ltalk.h>
 #include <linux/rtnetlink.h>
 
@@ -162,6 +163,63 @@ static int fddi_change_mtu(struct device *dev, int new_mtu)
 
 #endif
 
+#ifdef CONFIG_HIPPI
+static int hippi_change_mtu(struct device *dev, int new_mtu)
+{
+	/*
+	 * HIPPI's got these nice large MTUs.
+	 */
+	if ((new_mtu < 68) || (new_mtu > 65280))
+		return -EINVAL;
+	dev->mtu = new_mtu;
+	return(0);
+}
+
+
+/*
+ * For HIPPI we will actually use the lower 4 bytes of the hardware
+ * address as the I-FIELD rather than the actual hardware address.
+ */
+static int hippi_mac_addr(struct device *dev, void *p)
+{
+	struct sockaddr *addr = p;
+	if(dev->start)
+		return -EBUSY;
+	memcpy(dev->dev_addr, addr->sa_data, dev->addr_len);
+	return 0;
+}
+
+
+struct device *init_hippi_dev(struct device *dev, int sizeof_priv)
+{
+	struct device *tmp_dev;		/* pointer to a device structure */
+
+	/* Find next free HIPPI entry */
+
+	for (tmp_dev = dev; tmp_dev != NULL; tmp_dev = tmp_dev->next)
+		if ((strncmp(tmp_dev->name, "hip", 3) == 0) &&
+		    (tmp_dev->base_addr == 0))
+			break;
+
+	if (tmp_dev == NULL)
+	{
+		printk("Could not find free HIPPI device structure.\n");
+		return NULL;
+	}
+		
+	tmp_dev->init = NULL;
+	sizeof_priv = (sizeof_priv + 3) & ~3;
+	tmp_dev->priv = sizeof_priv ?								kmalloc(sizeof_priv, GFP_KERNEL) : NULL;
+
+	if (tmp_dev->priv)
+		memset(dev->priv, 0, sizeof_priv);
+
+	/* Initialize remaining device structure information */
+
+	hippi_setup(tmp_dev);
+	return tmp_dev;
+}
+#endif
 
 void ether_setup(struct device *dev)
 {
@@ -233,6 +291,40 @@ void fddi_setup(struct device *dev)
 	return;
 }
 
+#endif
+
+#ifdef CONFIG_HIPPI
+void hippi_setup(struct device *dev)
+{
+	dev->set_multicast_list	= NULL;
+	dev->change_mtu			= hippi_change_mtu;
+	dev->hard_header		= hippi_header;
+	dev->rebuild_header 		= hippi_rebuild_header;
+	dev->set_mac_address 		= hippi_mac_addr;
+	dev->hard_header_parse		= NULL;
+	dev->hard_header_cache		= NULL;
+	dev->header_cache_update	= NULL;
+
+	/*
+	 * We don't support HIPPI `ARP' for the time being, and probably
+	 * never will unless someone else implements it. However we
+	 * still need a fake ARPHRD to make ifconfig and friends play ball.
+	 */
+	dev->type		= ARPHRD_HIPPI;
+	dev->hard_header_len 	= HIPPI_HLEN;
+	dev->mtu		= 65280;
+	dev->addr_len		= HIPPI_ALEN;
+	dev->tx_queue_len	= 25 /* 5 */;
+	memset(dev->broadcast, 0xFF, HIPPI_ALEN);
+
+	/* New-style flags. */
+	dev->flags	= IFF_NODYNARP; /*
+					 * HIPPI doesn't support
+					 * broadcast+multicast and we only
+					 * use static ARP tables.
+					 */
+	dev_init_buffers(dev);
+}
 #endif
 
 #if defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE)

@@ -17,6 +17,7 @@
 #include <linux/stat.h>
 #include <asm/dbdma.h>
 #include <asm/io.h>
+#include <asm/pgtable.h>
 #include <asm/prom.h>
 #include <asm/system.h>
 #include <asm/spinlock.h>
@@ -91,11 +92,11 @@ mac53c94_detect(Scsi_Host_Template *tp)
 			panic("no 53c94 state");
 		state->host = host;
 		state->regs = (volatile struct mac53c94_regs *)
-			node->addrs[0].address;
-		state->intr = node->intrs[0];
+			ioremap(node->addrs[0].address, 0x1000);
+		state->intr = node->intrs[0].line;
 		state->dma = (volatile struct dbdma_regs *)
-			node->addrs[1].address;
-		state->dmaintr = node->intrs[1];
+			ioremap(node->addrs[1].address, 0x1000);
+		state->dmaintr = node->intrs[1].line;
 
 		clkprop = get_property(node, "clock-frequency", &proplen);
 		if (clkprop == NULL || proplen != sizeof(int)) {
@@ -504,9 +505,36 @@ static int
 data_goes_out(Scsi_Cmnd *cmd)
 {
 	switch (cmd->cmnd[0]) {
-	case WRITE_6:
-	case WRITE_10:
-	case WRITE_12:		/* any others? */
+	case CHANGE_DEFINITION: 
+	case COMPARE:	  
+	case COPY:
+	case COPY_VERIFY:	    
+	case FORMAT_UNIT:	 
+	case LOG_SELECT:
+	case MEDIUM_SCAN:	  
+	case MODE_SELECT:
+	case MODE_SELECT_10:
+	case REASSIGN_BLOCKS: 
+	case RESERVE:
+	case SEARCH_EQUAL:	  
+	case SEARCH_EQUAL_12: 
+	case SEARCH_HIGH:	 
+	case SEARCH_HIGH_12:  
+	case SEARCH_LOW:
+	case SEARCH_LOW_12:
+	case SEND_DIAGNOSTIC: 
+	case SEND_VOLUME_TAG:	     
+	case SET_WINDOW: 
+	case UPDATE_BLOCK:	
+	case WRITE_BUFFER:
+ 	case WRITE_6:	
+	case WRITE_10:	
+	case WRITE_12:	  
+	case WRITE_LONG:	
+	case WRITE_LONG_2:      /* alternate code for WRITE_LONG */
+	case WRITE_SAME:	
+	case WRITE_VERIFY:
+	case WRITE_VERIFY_12:
 		return 1;
 	default:
 		return 0;

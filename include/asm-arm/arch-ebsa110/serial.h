@@ -21,7 +21,7 @@
 #define STD_COM_FLAGS (ASYNC_BOOT_AUTOCONF | ASYNC_SKIP_TEST)
 
      /* UART CLK        PORT  IRQ     FLAGS        */
-#define RS_UARTS \
+#define SERIAL_PORT_DFNS \
 	{ 0, BASE_BAUD, 0x3F8,  1, STD_COM_FLAGS },	/* ttyS0 */	\
 	{ 0, BASE_BAUD, 0x2F8,  2, STD_COM_FLAGS },	/* ttyS1 */	\
 	{ 0, BASE_BAUD, 0    ,  0, STD_COM_FLAGS },	/* ttyS2 */	\

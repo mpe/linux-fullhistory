@@ -11,12 +11,13 @@
 #include <asm/dma.h>
 #include <asm/io.h>
 #include <asm/hardware.h>
+#include <asm/pgtable.h>
 
 #include "dma.h"
 
-int arch_request_dma(dmach_t channel, dma_t *dma)
+int arch_request_dma(dmach_t channel, dma_t *dma, const char *dev_id)
 {
-	if (channel == DMA_VIRTUAL_FLOPPY0)
+	if (channel == DMA_VIRTUAL_FLOPPY)
 		return 0;
 	else
 		return -EINVAL;
@@ -24,14 +25,14 @@ int arch_request_dma(dmach_t channel, dma_t *dma)
 
 void arch_free_dma(dmach_t channel, dma_t *dma)
 {
-	if (channel != DMA_VIRTUAL_FLOPPY0)
+	if (channel != DMA_VIRTUAL_FLOPPY)
 		printk ("arch_free_dma: invalid channel %d\n", channel);
 }
 
 int arch_get_dma_residue(dmach_t channel, dma_t *dma)
 {
-	if (channel != DMA_VIRTUAL_FLOPPY0)
-		printk ("arch_dma_count: invalid channel %d\n", dmanr);
+	if (channel != DMA_VIRTUAL_FLOPPY)
+		printk ("arch_dma_count: invalid channel %d\n", channel);
 	else {
 		extern int floppy_fiqresidual(void);
 		return floppy_fiqresidual();
@@ -41,7 +42,7 @@ int arch_get_dma_residue(dmach_t channel, dma_t *dma)
 
 void arch_enable_dma(dmach_t channel, dma_t *dma)
 {
-	if (channel != DMA_VIRTUAL_FLOPPY0)
+	if (channel != DMA_VIRTUAL_FLOPPY)
 		printk ("arch_enable_dma: invalid channel %d\n", channel);
 	else {
 		void *fiqhandler_start;
@@ -67,7 +68,7 @@ void arch_enable_dma(dmach_t channel, dma_t *dma)
 
 void arch_disable_dma(dmach_t channel, dma_t *dma)
 {
-	if (channel != DMA_VIRTUAL_FLOPPY0)
+	if (channel != DMA_VIRTUAL_FLOPPY)
 		printk ("arch_disable_dma: invalid channel %d\n", channel);
 	else
 		disable_irq (dma->dma_irq);
@@ -75,5 +76,5 @@ void arch_disable_dma(dmach_t channel, dma_t *dma)
 
 __initfunc(void arch_dma_init(dma_t *dma))
 {
-	dma[DMA_VIRTUAL_FLOPPY0].dma_irq = 64;
+	dma[DMA_VIRTUAL_FLOPPY].dma_irq = 64;
 }

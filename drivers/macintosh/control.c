@@ -19,6 +19,7 @@
 #include <asm/adb.h>
 #include <asm/cuda.h>
 #include <asm/pgtable.h>
+#include <asm/init.h>
 #include <linux/selection.h>
 #include "pmac-cons.h"
 #include "control.h"
@@ -265,6 +266,8 @@ static struct control_regvals *control_reg_init[20] = {
 	&control_reg_init_19,
 	&control_reg_init_20
 };
+
+__openfirmware
 
 /*
  * Get the monitor sense value.

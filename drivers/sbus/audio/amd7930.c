@@ -29,7 +29,7 @@
 #include <asm/io.h>
 #include <asm/sbus.h>
 
-#include "audio.h"
+#include <asm/audioio.h>
 #include "amd7930.h"
 
 #define MAX_DRIVERS 1
@@ -342,7 +342,6 @@ static void fill_D_xmit_fifo(struct amd7930_info *info)
 static void transceive_Dchannel(struct amd7930_info *info)
 {
 	__u8 dummy;
-	int lbrp=0;	/* Last Byte of Received Packet (LBRP) */
 
 #define D_XMIT_ERRORS (AMR_DER_COLLISION | AMR_DER_UNRN)
 #define D_RECV_ERRORS (AMR_DER_RABRT | AMR_DER_RFRAME | AMR_DER_FCS | \
@@ -433,7 +432,7 @@ static void transceive_Bchannel(struct amd7930_channel *channel,
 			channel->output_count = 0;
 			if (channel->output_callback)
 				(*channel->output_callback)
-					(channel->output_callback_arg);
+					(channel->output_callback_arg,1);
 		}
 	} else {
 		*io_reg = channel->xmit_idle_char;
@@ -631,9 +630,9 @@ static void amd7930_stop_input(struct sparcaudio_driver *drv)
 static void amd7930_sunaudio_getdev(struct sparcaudio_driver *drv,
 				 audio_device_t * audinfo)
 {
-	strncpy(audinfo->name, "amd7930", sizeof(audinfo->name) - 1);
-	strncpy(audinfo->version, "x", sizeof(audinfo->version) - 1);
-	strncpy(audinfo->config, "audio", sizeof(audinfo->config) - 1);
+	strncpy(audinfo->name, "SUNW,am79c30", sizeof(audinfo->name) - 1);
+	strncpy(audinfo->version, "a", sizeof(audinfo->version) - 1);
+	strncpy(audinfo->config, "onboard1", sizeof(audinfo->config) - 1);
 }
 
 static int amd7930_sunaudio_getdev_sunos(struct sparcaudio_driver *drv)

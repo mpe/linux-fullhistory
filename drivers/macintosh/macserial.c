@@ -36,6 +36,7 @@
 #ifdef CONFIG_KGDB
 #include <asm/kgdb.h>
 #endif
+#include <asm/init.h>
 
 #include "macserial.h"
 
@@ -79,9 +80,9 @@ static unsigned char scc_inittab[] = {
 #endif
 #define ZS_CLOCK         3686400 	/* Z8530 RTxC input clock rate */
 
-DECLARE_TASK_QUEUE(tq_serial);
+static DECLARE_TASK_QUEUE(tq_serial);
 
-struct tty_driver serial_driver, callout_driver;
+static struct tty_driver serial_driver, callout_driver;
 static int serial_refcount;
 
 /* serial subtype definitions */
@@ -126,6 +127,8 @@ static struct termios *serial_termios_locked[NUM_CHANNELS];
  */
 static unsigned char tmp_buf[4096]; /* This is cheating */
 static struct semaphore tmp_buf_sem = MUTEX;
+
+__openfirmware
 
 static inline int serial_paranoia_check(struct mac_serial *info,
 					dev_t device, const char *routine)
@@ -281,7 +284,7 @@ static _INLINE_ void rs_sched_event(struct mac_serial *info,
 {
 	info->event |= 1 << event;
 	queue_task(&info->tqueue, &tq_serial);
-	mark_bh(SERIAL_BH);
+	mark_bh(MACSERIAL_BH);
 }
 
 static _INLINE_ void receive_chars(struct mac_serial *info,
@@ -410,7 +413,7 @@ static _INLINE_ void status_handle(struct mac_serial *info)
 /*
  * This is the serial driver's generic interrupt routine
  */
-void rs_interrupt(int irq, void *dev_id, struct pt_regs * regs)
+static void rs_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 {
 	struct mac_serial *info = (struct mac_serial *) dev_id;
 	unsigned char zs_intreg;
@@ -1311,7 +1314,7 @@ static void rs_wait_until_sent(struct tty_struct *tty, int timeout)
 /*
  * rs_hangup() --- called by tty_hangup() when a hangup is signaled.
  */
-void rs_hangup(struct tty_struct *tty)
+static void rs_hangup(struct tty_struct *tty)
 {
 	struct mac_serial * info = (struct mac_serial *)tty->driver_data;
 
@@ -1464,7 +1467,7 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
  * the IRQ chain.   It also performs the serial-specific
  * initialization for the tty structure.
  */
-int rs_open(struct tty_struct *tty, struct file * filp)
+static int rs_open(struct tty_struct *tty, struct file * filp)
 {
 	struct mac_serial	*info;
 	int 			retval, line;
@@ -1599,14 +1602,14 @@ probe_sccs()
 }
 
 /* rs_init inits the driver */
-int rs_init(void)
+int macserial_init(void)
 {
 	int channel, i;
 	unsigned long flags;
 	struct mac_serial *info;
 
 	/* Setup base handler, and timer table. */
-	init_bh(SERIAL_BH, do_serial_bh);
+	init_bh(MACSERIAL_BH, do_serial_bh);
 	timer_table[RS_TIMER].fn = rs_timer;
 	timer_table[RS_TIMER].expires = 0;
 
@@ -1722,6 +1725,7 @@ int rs_init(void)
 	return 0;
 }
 
+#if 0
 /*
  * register_serial and unregister_serial allows for serial ports to be
  * configured at run-time, to support PCMCIA modems.
@@ -1736,6 +1740,7 @@ void unregister_serial(int line)
 {
 	return;
 }
+#endif
 
 /*
  * ------------------------------------------------------------
@@ -1864,10 +1869,9 @@ static struct console sercons = {
 /*
  *	Register console.
  */
-__initfunc (long serial_console_init(long kmem_start, long kmem_end))
+__initfunc (void serial_console_init(void))
 {
 	register_console(&sercons);
-	return kmem_start;
 }
 #endif /* ifdef CONFIG_SERIAL_CONSOLE */
 #ifdef CONFIG_KGDB

@@ -21,6 +21,8 @@
 
 #ifndef __LANGUAGE_ASSEMBLY__
 
+#define get_user_page(vaddr)		__get_free_page(GFP_KERNEL)
+#define free_user_page(page, addr)	free_page(addr)
 extern void (*clear_page)(unsigned long page);
 extern void (*copy_page)(unsigned long to, unsigned long from);
 

@@ -395,7 +395,7 @@ errout:
 __initfunc(int tc_filter_init(void))
 {
 #ifdef CONFIG_RTNETLINK
-	struct rtnetlink_link *link_p = rtnetlink_links[AF_UNSPEC];
+	struct rtnetlink_link *link_p = rtnetlink_links[PF_UNSPEC];
 
 	/* Setup rtnetlink links. It is made here to avoid
 	   exporting large number of public symbols.

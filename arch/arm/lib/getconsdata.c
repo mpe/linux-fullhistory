@@ -10,6 +10,8 @@
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
 
+#undef PAGE_READONLY
+
 #define OFF_TSK(n) (unsigned long)&(((struct task_struct *)0)->n)
 #define OFF_MM(n) (unsigned long)&(((struct mm_struct *)0)->n)
 
@@ -31,7 +33,7 @@ unsigned long PGD = OFF_MM(pgd);
 unsigned long TSS_MEMMAP = OFF_TSK(tss.memmap);
 unsigned long TSS_SAVE = OFF_TSK(tss.save);
 unsigned long TSS_FPESAVE = OFF_TSK(tss.fpstate.soft.save);
-#if defined(CONFIG_CPU_ARM2) || defined(CONFIG_CPU_ARM3)
+#ifdef CONFIG_CPU_26
 unsigned long TSS_MEMCMAP = OFF_TSK(tss.memcmap);
 #endif
 

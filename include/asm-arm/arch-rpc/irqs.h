@@ -1,5 +1,5 @@
 /*
- * linux/include/asm-arm/arch-a5k/irqs.h
+ * linux/include/asm-arm/arch-rpc/irqs.h
  *
  * Copyright (C) 1996 Russell King
  */
@@ -13,9 +13,8 @@
 #define IRQ_TIMER1		6
 #define IRQ_IMMEDIATE		7
 #define IRQ_EXPCARDFIQ		8
-#define IRQ_SOUNDCHANGE		9
+#define IRQ_HARDDISK		9
 #define IRQ_SERIALPORT		10
-#define IRQ_HARDDISK		11
 #define IRQ_FLOPPYDISK		12
 #define IRQ_EXPANSIONCARD	13
 #define IRQ_KEYBOARDTX		14
@@ -35,3 +34,6 @@
 #define FIQ_FORCE		7
 
 #define IRQ_TIMER		IRQ_TIMER0
+
+#define irq_cannonicalize(i)	(i)
+

@@ -1,45 +1,28 @@
 /*
  * arch/arm/kernel/dma-dummy.c
  *
- * Copyright (C) 1998 Russell King
+ * Copyright (C) 1998 Philip Blundell
+ * Copyright (c) 1998 Russell King
  *
  * Dummy DMA functions
  */
-#include <linux/sched.h>
+#include <linux/errno.h>
 #include <linux/init.h>
 
-#include <asm/dma.h>
-#include <asm/io.h>
-#include <asm/hardware.h>
-
-#include "dma.h"
-
-int arch_request_dma(dmach_t channel, dma_t *dma, const char *devname)
+int request_dma(int channel, const char *device_id)
 {
 	return -EINVAL;
 }
 
-void arch_free_dma(dmach_t channel, dma_t *dma)
+void free_dma(int channel)
 {
-	printk ("arch_free_dma: invalid channel %d\n", channel);
 }
 
-void arch_enable_dma(dmach_t channel, dma_t *dma)
+int get_dma_list(char *buf)
 {
-	printk ("arch_enable_dma: invalid channel %d\n", channel);
-}
-
-void arch_disable_dma(dmach_t channel, dma_t *dma)
-{
-	printk ("arch_disable_dma: invalid channel %d\n", channel);
-}
-
-int arch_get_dma_residue(dmach_t channel, dma_t *dma)
-{
-	printk ("arch_get_dma_residue: invalid channel %d\n", channel);
 	return 0;
 }
 
-__initfunc(void arch_dma_init(dma_t *dma))
+__initfunc(void init_dma(void))
 {
 }

@@ -309,8 +309,8 @@ struct qe_txd {
 	  (qp)->tx_old - (qp)->tx_new - (TX_RING_SIZE - SUN4C_TX_RING_SIZE))
 
 
-#define RX_COPY_THRESHOLD  128
-#define RX_BUF_ALLOC_SIZE  (ETH_FRAME_LEN + (64 * 3))
+#define RX_COPY_THRESHOLD  256
+#define RX_BUF_ALLOC_SIZE  (1546 + 64)
 
 struct qe_init_block {
 	struct qe_rxd qe_rxd[RX_RING_MAXSIZE];

@@ -1,48 +1,50 @@
-/* $Id: tree.c,v 1.1.1.1 1997/06/01 03:16:40 ralf Exp $
+/*
  * tree.c: PROM component device tree code.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
+ *
+ * $Id: tree.c,v 1.2 1998/05/01 01:35:30 ralf Exp $
  */
-
+#include <linux/init.h>
 #include <asm/sgialib.h>
 
 #define DEBUG_PROM_TREE
 
-pcomponent *prom_getsibling(pcomponent *this)
+__initfunc(pcomponent *prom_getsibling(pcomponent *this))
 {
 	if(this == PROM_NULL_COMPONENT)
 		return PROM_NULL_COMPONENT;
 	return romvec->next_component(this);
 }
 
-pcomponent *prom_getchild(pcomponent *this)
+__initfunc(pcomponent *prom_getchild(pcomponent *this))
 {
 	return romvec->child_component(this);
 }
 
-pcomponent *prom_getparent(pcomponent *child)
+__initfunc(pcomponent *prom_getparent(pcomponent *child))
 {
 	if(child == PROM_NULL_COMPONENT)
 		return PROM_NULL_COMPONENT;
 	return romvec->parent_component(child);
 }
 
-long prom_getcdata(void *buffer, pcomponent *this)
+__initfunc(long prom_getcdata(void *buffer, pcomponent *this))
 {
 	return romvec->component_data(buffer, this);
 }
 
-pcomponent *prom_childadd(pcomponent *this, pcomponent *tmp, void *data)
+__initfunc(pcomponent *prom_childadd(pcomponent *this, pcomponent *tmp, void *data))
 {
 	return romvec->child_add(this, tmp, data);
 }
 
-long prom_delcomponent(pcomponent *this)
+__initfunc(long prom_delcomponent(pcomponent *this))
 {
 	return romvec->comp_del(this);
 }
 
-pcomponent *prom_componentbypath(char *path)
+__initfunc(pcomponent *prom_componentbypath(char *path))
 {
 	return romvec->component_by_path(path);
 }
@@ -72,7 +74,7 @@ static char *iflags[] = {
 	"input", "output"
 };
 
-static void dump_component(pcomponent *p)
+__initfunc(static void dump_component(pcomponent *p))
 {
 	prom_printf("[%p]:class<%s>type<%s>flags<%s>ver<%d>rev<%d>",
 		    p, classes[p->class], types[p->type],
@@ -81,7 +83,7 @@ static void dump_component(pcomponent *p)
 		    p->key, p->amask, (int)p->cdsize, (int)p->ilen, p->iname);
 }
 
-static void traverse(pcomponent *p, int op)
+__initfunc(static void traverse(pcomponent *p, int op))
 {
 	dump_component(p);
 	if(prom_getchild(p))
@@ -90,7 +92,7 @@ static void traverse(pcomponent *p, int op)
 		traverse(prom_getsibling(p), 1);
 }
 
-void prom_testtree(void)
+__initfunc(void prom_testtree(void))
 {
 	pcomponent *p;
 

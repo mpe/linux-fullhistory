@@ -47,9 +47,18 @@ extern int msgqueue_msglength (MsgQueue_t *msgq);
  * Purpose : return a message & its length
  * Params  : msgq   - queue to obtain message from
  *	     length - pointer to int for message length
- * Returns : pointer to message string
+ * Returns : pointer to message string, or NULL
  */
 extern char *msgqueue_getnextmsg (MsgQueue_t *msgq, int *length);
+
+/*
+ * Function: char *msgqueue_peeknextmsg(MsgQueue_t *msgq, int *length)
+ * Purpose : return next message & length without removing it from the list
+ * Params  : msgq   - queue to obtain message from
+ *         : length - pointer to int for message length
+ * Returns : pointer to message string, or NULL
+ */
+extern char *msgqueue_peeknextmsg(MsgQueue_t *msgq, int *length);
 
 /*
  * Function: int msgqueue_addmsg (MsgQueue_t *msgq, int length, ...)

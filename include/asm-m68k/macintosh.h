@@ -56,6 +56,8 @@ struct mac_model
 #define MAC_ADB_II		1
 #define MAC_ADB_IISI		2
 #define MAC_ADB_CUDA		3
+#define MAC_ADB_PB1		4
+#define MAC_ADB_PB2		5
 
 #define MAC_VIA_II		1
 #define MAC_VIA_IIci		2
@@ -93,7 +95,7 @@ struct mac_model
 #define MAC_MODEL_IIFX		13	/* And well numbered it is too */
 #define MAC_MODEL_IISI		18
 #define MAC_MODEL_Q900		20
-#define MAC_MODEL_PB170		25
+#define MAC_MODEL_PB170		21
 #define MAC_MODEL_Q700		22
 #define MAC_MODEL_CLII		23
 #define MAC_MODEL_PB140		25
@@ -109,6 +111,7 @@ struct mac_model
 #define MAC_MODEL_LCII		37	/* aka: P400/405/410/430 */
 #define MAC_MODEL_PB250		38
 #define MAC_MODEL_IIVI		44
+#define MAC_MODEL_P600		45
 #define MAC_MODEL_IIVX		48
 #define MAC_MODEL_CCL		49
 #define MAC_MODEL_PB165C	50
@@ -123,6 +126,7 @@ struct mac_model
 #define MAC_MODEL_PB270C	77
 #define MAC_MODEL_Q840		78
 #define MAC_MODEL_P550		80
+#define MAC_MODEL_CCLII		83
 #define MAC_MODEL_PB165		84
 #define MAC_MODEL_PB190 	85
 #define MAC_MODEL_TV		88

@@ -98,7 +98,7 @@ static struct sock *nr_alloc_sock(void)
 	struct sock *sk;
 	nr_cb *nr;
 
-	if ((sk = sk_alloc(AF_NETROM, GFP_ATOMIC, 1)) == NULL)
+	if ((sk = sk_alloc(PF_NETROM, GFP_ATOMIC, 1)) == NULL)
 		return NULL;
 
 	if ((nr = kmalloc(sizeof(*nr), GFP_ATOMIC)) == NULL) {
@@ -1235,12 +1235,12 @@ static int nr_get_info(char *buffer, char **start, off_t offset, int length, int
 
 static struct net_proto_family nr_family_ops = 
 {
-	AF_NETROM,
+	PF_NETROM,
 	nr_create
 };
 
 static struct proto_ops nr_proto_ops = {
-	AF_NETROM,
+	PF_NETROM,
 
 	sock_no_dup,
 	nr_release,
@@ -1363,7 +1363,7 @@ void cleanup_module(void)
 #ifdef CONFIG_SYSCTL
 	nr_unregister_sysctl();
 #endif
-	sock_unregister(AF_NETROM);
+	sock_unregister(PF_NETROM);
 
 	for (i = 0; i < nr_ndevs; i++) {
 		if (dev_nr[i].priv != NULL) {

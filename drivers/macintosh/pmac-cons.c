@@ -6,6 +6,7 @@
  */
 #include <linux/config.h>
 #include <linux/kernel.h>
+#include <linux/malloc.h>
 #include <linux/tty.h>
 #include <linux/mm.h>
 #include <linux/sched.h>
@@ -23,6 +24,7 @@
 #include <asm/cuda.h>
 #define INCLUDE_LINUX_LOGO_DATA
 #include <asm/linux_logo.h>
+#include <asm/init.h>
 #include <linux/selection.h>
 #include <linux/console_struct.h>
 #include <linux/vt_kern.h>
@@ -193,6 +195,8 @@ struct display_interface {
 	  aty_setmode, aty_set_palette, aty_set_blanking },
  	{ "ATY,mach64_3DU", map_aty_display, aty_init,
 	  aty_setmode, aty_set_palette, aty_set_blanking },
+ 	{ "ATY,XCLAIM3DPro", map_aty_display, aty_init,
+	  aty_setmode, aty_set_palette, aty_set_blanking },
 #endif
 #ifdef CONFIG_IMSTT_VIDEO
 	{ "IMS,tt128mb", map_imstt_display_ibm, imstt_init, 
@@ -224,6 +228,8 @@ struct vc_mode display_info;
 
 #define cmapsz	(16*256)
 extern unsigned char vga_font[cmapsz];
+
+__openfirmware
 
 static inline unsigned pixel32(int currcons, int cidx)
 {
@@ -637,20 +643,20 @@ pmac_vmode_setup(char *str, int *ints)
 		color_mode = ints[2];
 }
 
-unsigned long
-con_type_init(unsigned long mem_start, const char **type_p)
+void
+con_type_init(const char **type_p)
 {
+	unsigned long nb = MAX_TEXT_COLS * MAX_TEXT_ROWS * 2;
+
 	if (current_display == NULL)
-		return mem_start;
+		return;
 	current_display->init_interface();
 	can_do_color = 1;
 	video_type = VIDEO_TYPE_PMAC;
 	*type_p = display_info.name;
-	video_mem_base = mem_start;
-	mem_start += MAX_TEXT_COLS * MAX_TEXT_ROWS * 2;
-	video_mem_term = mem_start;
+	video_mem_base = (unsigned long) kmalloc(nb, GFP_ATOMIC);
+	video_mem_term = video_mem_base + nb;
 	memset((char *) video_mem_base, 0, video_screen_size);
-	return mem_start;
 }
 
 int

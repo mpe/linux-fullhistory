@@ -1,5 +1,5 @@
 /*
- * linux/include/asm-arm/arch-ebsa110/system.h
+ * linux/include/asm-arm/arch-nexuspci/system.h
  *
  * Copyright (c) 1996,1997,1998 Russell King.
  */
@@ -9,7 +9,7 @@
 extern __inline__ void arch_hard_reset (void)
 {
 	/*
-	 * loop endlessly
+	 * loop endlessly - the watchdog will reset us if it's enabled.
 	 */
 	cli();
 	while (1);

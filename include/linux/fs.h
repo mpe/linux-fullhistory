@@ -21,7 +21,9 @@
 
 #include <asm/atomic.h>
 #include <asm/bitops.h>
+#include <asm/cache.h>
 
+struct poll_table_struct;
 
 
 /*
@@ -87,7 +89,7 @@ extern int max_files, nr_files, nr_free_files;
 #define MS_SYNCHRONOUS	16	/* Writes are synced at once */
 #define MS_REMOUNT	32	/* Alter flags of a mounted FS */
 #define MS_MANDLOCK	64	/* Allow mandatory locks on an FS */
-#define S_WRITE		128	/* Write on file/directory/symlink */
+#define S_QUOTA		128	/* Quota initialized for file/directory/symlink */
 #define S_APPEND	256	/* Append-only file */
 #define S_IMMUTABLE	512	/* Immutable file */
 #define MS_NOATIME	1024	/* Do not update access times. */
@@ -119,7 +121,7 @@ extern int max_files, nr_files, nr_free_files;
 #define IS_SYNC(inode) ((inode)->i_flags & MS_SYNCHRONOUS)
 #define IS_MANDLOCK(inode) ((inode)->i_flags & MS_MANDLOCK)
 
-#define IS_WRITABLE(inode) ((inode)->i_flags & S_WRITE)
+#define IS_QUOTAINIT(inode) ((inode)->i_flags & S_QUOTA)
 #define IS_APPEND(inode) ((inode)->i_flags & S_APPEND)
 #define IS_IMMUTABLE(inode) ((inode)->i_flags & S_IMMUTABLE)
 #define IS_NOATIME(inode) ((inode)->i_flags & MS_NOATIME)
@@ -316,7 +318,11 @@ struct iattr {
 #define ATTR_FLAG_IMMUTABLE	8 	/* Immutable file */
 #define ATTR_FLAG_NODIRATIME	16 	/* Don't update atime for directory */
 
+/*
+ * Includes for diskquotas and mount structures.
+ */
 #include <linux/quota.h>
+#include <linux/mount.h>
 
 struct inode {
 	struct list_head	i_hash;
@@ -632,11 +638,11 @@ struct super_operations {
 struct dquot_operations {
 	void (*initialize) (struct inode *, short);
 	void (*drop) (struct inode *);
-	int (*alloc_block) (const struct inode *, unsigned long);
-	int (*alloc_inode) (const struct inode *, unsigned long);
+	int (*alloc_block) (const struct inode *, unsigned long, uid_t, char);
+	int (*alloc_inode) (const struct inode *, unsigned long, uid_t);
 	void (*free_block) (const struct inode *, unsigned long);
 	void (*free_inode) (const struct inode *, unsigned long);
-	int (*transfer) (struct inode *, struct iattr *, char);
+	int (*transfer) (struct inode *, struct iattr *, char, uid_t);
 };
 
 struct file_system_type {

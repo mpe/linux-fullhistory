@@ -2013,6 +2013,8 @@ struct net_device_stats *dfx_ctl_get_stats(
 
 	bp->stats.rx_packets			= bp->rcv_total_frames;
 	bp->stats.tx_packets			= bp->xmt_total_frames;
+	bp->stats.rx_bytes			= bp->rcv_total_bytes;
+	bp->stats.tx_bytes			= bp->xmt_total_bytes;
 	bp->stats.rx_errors				= (u32)(bp->rcv_crc_errors + bp->rcv_frame_status_errors + bp->rcv_length_errors);
 	bp->stats.tx_errors				= bp->xmt_length_errors;
 	bp->stats.rx_dropped			= bp->rcv_discards;
@@ -3099,6 +3101,8 @@ void dfx_rcv_queue_process(
 					bp->rcv_total_frames++;
 					if (*(p_buff + RCV_BUFF_K_DA) & 0x01)
 						bp->rcv_multicast_frames++;
+				 
+					bp->rcv_total_bytes += skb->len;
 				}
 			}
 			}
@@ -3375,13 +3379,14 @@ void dfx_xmt_done(
 
 		p_xmt_drv_descr = &(bp->xmt_drv_descr_blk[bp->rcv_xmt_reg.index.xmt_comp]);
 
-		/* Return skb to operating system */
-
-		dev_kfree_skb(p_xmt_drv_descr->p_skb);
-
 		/* Increment transmit counters */
 
 		bp->xmt_total_frames++;
+		bp->xmt_total_bytes += p_xmt_drv_descr->p_skb->len;
+
+		/* Return skb to operating system */
+
+		dev_kfree_skb(p_xmt_drv_descr->p_skb);
 
 		/*
 		 * Move to start of next packet by updating completion index

@@ -1,8 +1,12 @@
-/* $Id: indy_mc.c,v 1.1.1.1 1997/06/01 03:16:40 ralf Exp $
+/*
  * indy_mc.c: Routines for manipulating the INDY memory controller.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
+ *
+ * $Id: indy_mc.c,v 1.3 1998/05/04 09:18:37 ralf Exp $
  */
+#include <linux/init.h>
+#include <linux/kernel.h>
 
 #include <asm/addrspace.h>
 #include <asm/ptrace.h>
@@ -43,7 +47,7 @@ static inline char *mconfig_string(unsigned long val)
 	};
 }
 
-void sgimc_init(void)
+__initfunc(void sgimc_init(void))
 {
 	unsigned long tmpreg;
 

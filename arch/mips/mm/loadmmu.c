@@ -3,9 +3,9 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: loadmmu.c,v 1.4 1997/12/02 05:51:07 ralf Exp $
+ * $Id: loadmmu.c,v 1.6 1998/05/01 01:34:54 ralf Exp $
  */
-
+#include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -30,8 +30,8 @@ void (*flush_cache_sigtramp)(unsigned long addr);
 void (*flush_page_to_ram)(unsigned long page);
 
 /* DMA cache operations. */
-void (*flush_cache_pre_dma_out)(unsigned long start, unsigned long size);
-void (*flush_cache_post_dma_in)(unsigned long start, unsigned long size);
+void (*dma_cache_wback_inv)(unsigned long start, unsigned long size);
+void (*dma_cache_inv)(unsigned long start, unsigned long size);
 
 /* TLB operations. */
 void (*flush_tlb_all)(void);
@@ -51,6 +51,8 @@ void (*show_regs)(struct pt_regs *);
 void (*add_wired_entry)(unsigned long entrylo0, unsigned long entrylo1,
 			unsigned long entryhi, unsigned long pagemask);
 
+int (*user_mode)(struct pt_regs *);
+
 asmlinkage void (*resume)(void *tsk);
 
 extern void ld_mmu_r2300(void);
@@ -59,7 +61,7 @@ extern void ld_mmu_r6000(void);
 extern void ld_mmu_tfp(void);
 extern void ld_mmu_andes(void);
 
-void loadmmu(void)
+__initfunc(void loadmmu(void))
 {
 	switch(mips_cputype) {
 	case CPU_R2000:

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.25 1998/04/06 16:10:31 jj Exp $
+# $Id: Makefile,v 1.26 1998/04/18 03:40:54 davem Exp $
 # sparc64/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -56,6 +56,8 @@ vmlinux.aout: vmlinux
 
 archclean:
 	rm -f $(TOPDIR)/vmlinux.aout
+
+archmrproper:
 
 archdep:
 

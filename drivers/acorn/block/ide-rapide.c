@@ -1,10 +1,11 @@
 /*
- * linux/arch/arm/drivers/block/ide-ics.c
+ * linux/arch/arm/drivers/block/ide-rapide.c
  *
- * Copyright (c) 1996 Russell King.
+ * Copyright (c) 1996-1998 Russell King.
  *
  * Changelog:
  *  08-06-1996	RMK	Created
+ *  13-04-1998	RMK	Added manufacturer and product IDs
  */
 
 #include <linux/module.h>
@@ -16,38 +17,39 @@
 #include "../../block/ide.h"
 
 static const card_ids rapide_cids[] = {
+	{ MANU_YELLOWSTONE, PROD_YELLOWSTONE_RAPIDE32 },
 	{ 0xffff, 0xffff }
 };
 
 static struct expansion_card *ec[MAX_ECARDS];
 static int result[MAX_ECARDS];
 
-static inline int rapide_register (struct expansion_card *ec)
+static inline int rapide_register(struct expansion_card *ec)
 {
 	unsigned long port = ecard_address (ec, ECARD_MEMC, 0);
 
-	return ide_register_port (port, port + 0x206, 4, ec->irq);
+	return ide_register_port(port, port + 0x206, 4, ec->irq);
 }
 
-int rapide_init (void)
+int rapide_init(void)
 {
 	int i;
 
 	for (i = 0; i < MAX_ECARDS; i++)
 		ec[i] = NULL;
 
-	ecard_startfind ();
+	ecard_startfind();
 
 	for (i = 0; ; i++) {
-		if ((ec[i] = ecard_find (0, rapide_cids)) == NULL)
+		if ((ec[i] = ecard_find(0, rapide_cids)) == NULL)
 			break;
 
-		ecard_claim (ec[i]);
-		result[i] = rapide_register (ec[i]);
+		ecard_claim(ec[i]);
+		result[i] = rapide_register(ec[i]);
 	}
 	for (i = 0; i < MAX_ECARDS; i++)
 		if (ec[i] && result[i] < 0) {
-			ecard_release (ec[i]);
+			ecard_release(ec[i]);
 			ec[i] = NULL;
 	}
 	return 0;
@@ -67,10 +69,10 @@ void cleanup_module (void)
 	for (i = 0; i < MAX_ECARDS; i++)
 		if (ec[i]) {
 			unsigned long port;
-			port = ecard_address (ec[i], ECARD_MEMC, 0);
+			port = ecard_address(ec[i], ECARD_MEMC, 0);
 
-			ide_unregister_port (port, ec[i]->irq, 16);
-			ecard_release (ec[i]);
+			ide_unregister_port(port, ec[i]->irq, 16);
+			ecard_release(ec[i]);
 			ec[i] = NULL;
 		}
 }

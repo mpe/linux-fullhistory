@@ -7,7 +7,7 @@
  *
  * Copyright (c) 1994, 1995, 1996, 1997 by Ralf Baechle
  *
- * $Id: string.h,v 1.3 1997/08/11 04:11:53 ralf Exp $
+ * $Id: string.h,v 1.7 1998/05/04 09:19:02 ralf Exp $
  */
 #ifndef __ASM_MIPS_STRING_H
 #define __ASM_MIPS_STRING_H
@@ -128,29 +128,23 @@ extern void *memcpy(void *__to, __const__ void *__from, size_t __n);
 extern void *memmove(void *__dest, __const__ void *__src, size_t __n);
 
 #define __HAVE_ARCH_BCOPY
-extern char * bcopy(const char * src, char * dest, int count);
+extern __inline__ char * bcopy(const char * src, char * dest, int count)
+{
+	memmove(dest, src, count);
+}
 
 #define __HAVE_ARCH_MEMSCAN
 extern __inline__ void *memscan(void *__addr, int __c, size_t __size)
 {
 	char *__end = (char *)__addr + __size;
 
-	if (!__size)
-		return __addr;
-	__asm__(".set\tnoreorder\n\t"
-		".set\tnoat\n"
-		"1:\tlbu\t$1,(%0)\n\t"
-#if _MIPS_ISA == _MIPS_ISA_MIPS1
-		"nop\n\t"
-#endif
-		"beq\t$1,%3,2f\n\t"
+	__asm__(".set\tnoat\n"
+		"1:\tbeq\t%0,%1,2f\n\t"
 		"addiu\t%0,1\n\t"
-		"bne\t%0,%2,1b\n\t"
-		"nop\n\t"
-		".set\tat\n\t"
-		".set\treorder\n"
-		"2:"
-		: "=r" (__addr)
+		"lb\t$1,-1(%0)\n\t"
+		"bne\t$1,%4,1b\n"
+		"2:\t.set\tat"
+		: "=r" (__addr), "=r" (__end)
 		: "0" (__addr), "1" (__end), "r" (__c)
 		: "$1");
 

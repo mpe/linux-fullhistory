@@ -1,5 +1,5 @@
 /*
- * $Id: setup.c,v 1.68 1998/04/07 08:20:33 geert Exp $
+ * $Id: setup.c,v 1.77 1998/05/04 07:24:38 geert Exp $
  * Common prep/pmac/chrp boot and setup code.
  */
 
@@ -73,11 +73,11 @@ struct screen_info screen_info = {
 /*
  * I really need to add multiple-console support... -- Cort
  */
-int pmac_display_supported(char *name)
+__initfunc(int pmac_display_supported(char *name))
 {
 	return 0;
 }
-void pmac_find_display(void)
+__initfunc(void pmac_find_display(void))
 {
 }
 #endif
@@ -103,6 +103,7 @@ struct screen_info screen_info = {
 /* cmd is ignored for now... */
 void machine_restart(char *cmd)
 {
+#ifndef CONFIG_MBX
 	struct adb_request req;
 	unsigned long flags;
 	unsigned long i = 10000;
@@ -176,10 +177,15 @@ void machine_restart(char *cmd)
 		for(;;);
 		break;
 	}
+#else /* CONFIG_MBX */
+	extern void MBX_gorom(void);
+	MBX_gorom();
+#endif /* CONFIG_MBX */
 }
 
 void machine_power_off(void)
 {
+#ifndef CONFIG_MBX	
 	struct adb_request req;
 #if 0	
 	int err;
@@ -222,8 +228,10 @@ void machine_power_off(void)
 #endif
 #endif
 	}
-	for (;;)
-		;
+	for (;;);
+#else /* CONFIG_MBX */
+	machine_restart(NULL);
+#endif /* CONFIG_MBX */
 }
 
 void machine_halt(void)
@@ -244,6 +252,7 @@ void machine_halt(void)
 #ifdef CONFIG_BLK_DEV_IDE
 void ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 {
+#ifndef CONFIG_MBX
 	switch (_machine) {
 	case _MACH_Pmac:
 		pmac_ide_init_hwif_ports(p,base,irq);
@@ -255,11 +264,13 @@ void ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 		prep_ide_init_hwif_ports(p,base,irq);
 		break;
 	}
+#endif
 }
 #endif
 
 unsigned long cpu_temp(void)
 {
+#if 0	
 	unsigned long i, temp, thrm1, dir;
 	int sanity;
 	
@@ -318,8 +329,9 @@ unsigned long cpu_temp(void)
 	}
 	asm("mtspr 1020, %0\n\t"
 	    "mtspr 1022, %0\n\t" ::"r" (0) );
+#endif
 #endif	
-	return temp;
+	return 0;
 }
 
 int get_cpuinfo(char *buffer)
@@ -390,13 +402,18 @@ int get_cpuinfo(char *buffer)
 		case 10:
 			len += sprintf(len+buffer, "604ev5 (MachV)\n");
 			break;
+		case 50:
+			len += sprintf(len+buffer, "821\n");
+		case 80:
+			len += sprintf(len+buffer, "860\n");
+			break;
 		default:
 			len += sprintf(len+buffer, "unknown (%lu)\n",
 				       GET_PVR>>16);
 			break;
 		}
-
-
+		
+#ifndef CONFIG_MBX
 		/*
 		 * Assume here that all clock rates are the same in a
 		 * smp system.  -- Cort
@@ -426,7 +443,20 @@ int get_cpuinfo(char *buffer)
 				       res.VitalProductData.ProcessorHz);
 			else
 				len += sprintf(len+buffer, "???\n");
-		}				
+		}
+#else /* CONFIG_MBX */
+		{
+			bd_t	*bp;
+			extern	RESIDUAL res;
+			
+			bp = (bd_t *)&res;
+			
+			len += sprintf(len+buffer,"clock\t\t: %dMHz\n"
+				      "bus clock\t: %dMHz\n",
+				      bp->bi_intfreq /*/ 1000000*/,
+				      bp->bi_busfreq /*/ 1000000*/);
+		}
+#endif /* CONFIG_MBX */		
 		
 		len += sprintf(len+buffer, "revision\t: %ld.%ld\n",
 			       (GET_PVR & 0xff00) >> 8, GET_PVR & 0xff);
@@ -460,6 +490,7 @@ int get_cpuinfo(char *buffer)
 			            ((zeropage_calls)?zeropage_calls:1));
 	}
 
+#ifndef CONFIG_MBX
 	switch (_machine)
 	{
 	case _MACH_Pmac:
@@ -477,6 +508,7 @@ int get_cpuinfo(char *buffer)
 		break;
 #endif
 	}
+#endif /* ndef CONFIG_MBX */	
 	return len;
 }
 
@@ -488,8 +520,8 @@ __initfunc(unsigned long
 identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		 unsigned long r6, unsigned long r7))
 {
-	extern setup_pci_ptrs(void);
-#ifndef CONFIG_MBX8xx
+	extern void setup_pci_ptrs(void);
+#ifndef CONFIG_MBX
 
 #ifdef CONFIG_APUS
 	if ( r3 == 0x61707573 )
@@ -513,7 +545,7 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 
 		return 0;
 	}
-#endif
+#endif /* CONFIG_APUS */
 
 #ifndef CONFIG_MACH_SPECIFIC
 	/* prep boot loader tells us if we're prep or not */
@@ -621,14 +653,14 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		}
 		else /* assume motorola if no residual (netboot?) */
 			_prep_type = _PREP_Motorola;
-#ifdef CONFIG_BLK_DEV_RAM
+#ifdef CONFIG_BLK_DEV_INITRD
 		/* take care of initrd if we have one */
 		if ( r4 )
 		{
 			initrd_start = r4 + KERNELBASE;
 			initrd_end = r5 + KERNELBASE;
 		}
-#endif /* CONFIG_BLK_DEV_RAM */
+#endif /* CONFIG_BLK_DEV_INITRD */
 		/* take care of cmd line */
 		if ( r6 )
 		{
@@ -637,14 +669,14 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		}
 		break;
 	case _MACH_chrp:
-#ifdef CONFIG_BLK_DEV_RAM
+#ifdef CONFIG_BLK_DEV_INITRD
 		/* take care of initrd if we have one */
 		if ( r3 )
 		{
 			initrd_start = r3 + KERNELBASE;
 			initrd_end = r3+ r4 + KERNELBASE;
 		}
-#endif /* CONFIG_BLK_DEV_RAM */
+#endif /* CONFIG_BLK_DEV_INITRD */
 #if !defined(CONFIG_MACH_SPECIFIC)
 		isa_io_base = CHRP_ISA_IO_BASE;
 		isa_mem_base = CHRP_ISA_MEM_BASE;
@@ -657,22 +689,21 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 	default:
 		printk("Unknown machine type in identify_machine!\n");
 	}
-#else /* CONFIG_MBX8xx */
-	extern setup_pci_ptrs(void);
+#else /* CONFIG_MBX */
 
 	if ( r3 )
 		memcpy( (void *)&res,(void *)(r3+KERNELBASE), sizeof(bd_t) );
 
 	setup_pci_ptrs();
 
-#ifdef CONFIG_BLK_DEV_RAM
+#ifdef CONFIG_BLK_DEV_INITRD
 	/* take care of initrd if we have one */
 	if ( r4 )
 	{
 		initrd_start = r4 + KERNELBASE;
 		initrd_end = r5 + KERNELBASE;
 	}
-#endif /* CONFIG_BLK_DEV_RAM */
+#endif /* CONFIG_BLK_DEV_INITRD */
 	/* take care of cmd line */
 	if ( r6 )
 	{
@@ -682,7 +713,6 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 	}
 
 #endif /* CONFIG_MBX */
-	
 	return 0;
 }
 
@@ -693,6 +723,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 	extern void chrp_setup_arch(unsigned long *, unsigned long *);
 	extern void prep_setup_arch(unsigned long *, unsigned long *);
 	extern void apus_setup_arch(char **, unsigned long *, unsigned long *);
+	extern void mbx_setup_arch(unsigned long *, unsigned long *);
 	extern int panic_timeout;
 	extern char _etext[], _edata[];
 	extern char *klimit;
@@ -718,7 +749,9 @@ __initfunc(void setup_arch(char **cmdline_p,
 
 	*memory_start_p = find_available_memory();
 	*memory_end_p = (unsigned long) end_of_DRAM;
-
+#ifdef CONFIG_MBX
+	mbx_setup_arch(memory_start_p,memory_end_p);
+#else /* CONFIG_MBX */	
 	switch (_machine) {
 	case _MACH_Pmac:
 		pmac_setup_arch(memory_start_p, memory_end_p);
@@ -738,4 +771,5 @@ __initfunc(void setup_arch(char **cmdline_p,
 	default:
 		printk("Unknown machine %d in setup_arch()\n", _machine);
 	}
+#endif /* CONFIG_MBX */	
 }

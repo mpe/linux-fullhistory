@@ -5,11 +5,12 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1996, 1997 by Ralf Baechle
+ * Copyright (C) 1996, 1997, 1998 by Ralf Baechle
  *
- * $Id: hw-access.c,v 1.3 1997/07/29 17:46:46 ralf Exp $
+ * $Id: hw-access.c,v 1.4 1998/05/01 01:35:32 ralf Exp $
  */
 #include <linux/delay.h>
+#include <linux/init.h>
 #include <linux/kbdcntrlr.h>
 #include <linux/kernel.h>
 #include <linux/linkage.h>
@@ -182,7 +183,7 @@ static unsigned char sni_read_status(void)
 	return inb(KBD_STATUS_REG);
 }
 
-void sni_rm200_keyboard_setup(void)
+__initfunc(void sni_rm200_keyboard_setup(void))
 {
 	kbd_read_input = sni_read_input;
 	kbd_write_output = sni_write_output;

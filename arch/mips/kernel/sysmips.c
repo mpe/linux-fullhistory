@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1995, 1996, 1997 by Ralf Baechle
  *
- * $Id: sysmips.c,v 1.3 1997/07/18 06:26:02 ralf Exp $
+ * $Id: sysmips.c,v 1.7 1998/05/01 01:34:38 ralf Exp $
  */
 #include <linux/errno.h>
 #include <linux/linkage.h>

@@ -63,34 +63,57 @@ Soft_emulate_8xx(struct pt_regs *regs)
 	ea = (uint *)(regs->gpr[idxreg] + disp);
 	ip = (uint *)&current->tss.fpr[flreg];
 
-	if (inst == LFD) {
+	switch ( inst )
+	{
+	case LFD:
 		if (copy_from_user(ip, ea, sizeof(double)))
 			retval = EFAULT;
-	}
-	else if (inst == LFDU) {
-
+		break;
+		
+	case LFDU:
 		if (copy_from_user(ip, ea, sizeof(double)))
 			retval = EFAULT;
 		else
 			regs->gpr[idxreg] = (uint)ea;
-	}
-	else if (inst == STFD) {
-
+		break;
+	case STFD:
 		if (copy_to_user(ea, ip, sizeof(double)))
 			retval = EFAULT;
-	}
-	else if (inst == STFDU) {
+		break;
 
+	case STFDU:
 		if (copy_to_user(ea, ip, sizeof(double)))
 			retval = EFAULT;
 		else
 			regs->gpr[idxreg] = (uint)ea;
-	}
-	else {
+		break;
+	default:
 		retval = 1;
+		printk("Bad emulation %s/%d\n"
+		       " NIP: %08x instruction: %08x opcode: %x "
+		       "A: %x B: %x C: %x code: %x rc: %x\n",
+		       current->comm,current->pid,
+		       regs->nip,
+		       instword,inst,
+		       (instword>>16)&0x1f,
+		       (instword>>11)&0x1f,
+		       (instword>>6)&0x1f,
+		       (instword>>1)&0x1f,
+		       instword&1);
+		{
+			int pa;
+			print_8xx_pte(current->mm,regs->nip);
+			pa = get_8xx_pte(current->mm,regs->nip) & PAGE_MASK;
+			pa |= (regs->nip & ~PAGE_MASK);
+			pa = __va(pa);
+			printk("Kernel VA for NIP %x ", pa);
+			print_8xx_pte(current->mm,pa);
+		}
+		
 	}
 
 	if (retval == 0)
 		regs->nip += 4;
 	return(retval);
 }
+

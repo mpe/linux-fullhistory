@@ -1732,7 +1732,7 @@ static int ipx_create(struct socket *sock, int protocol)
 	switch(sock->type)
 	{
 		case SOCK_DGRAM:
-			sk=sk_alloc(AF_IPX, GFP_KERNEL, 1);
+			sk=sk_alloc(PF_IPX, GFP_KERNEL, 1);
 			if(sk==NULL)
 				return(-ENOMEM);
                         sock->ops = &ipx_dgram_ops;
@@ -2300,12 +2300,12 @@ int ipx_unregister_spx(void)
  */
  
 static struct net_proto_family ipx_family_ops = {
-	AF_IPX,
+	PF_IPX,
 	ipx_create
 };
 
 static struct proto_ops ipx_dgram_ops = {
-	AF_IPX,
+	PF_IPX,
 	sock_no_dup,
 	ipx_release,
 	ipx_bind,

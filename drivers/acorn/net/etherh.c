@@ -4,12 +4,15 @@
  * NS8390 ANT etherh specific driver
  *  For Acorn machines
  *
+ * Thanks to I-Cubed for information on their cards.
+ *
  * By Russell King.
  *
  * Changelog:
- *  08-Dec-1996	RMK	1.00	Created
+ *  08-12-1996	RMK	1.00	Created
  *		RMK	1.03	Added support for EtherLan500 cards
- *  23-Nov-1997	RMK	1.04	Added media autodetection
+ *  23-11-1997	RMK	1.04	Added media autodetection
+ *  16-04-1998	RMK	1.05	Improved media autodetection
  *
  * Insmod Module Parameters
  * ------------------------
@@ -54,7 +57,7 @@ static const card_ids etherh_cids[] = {
 	{ 0xffff, 0xffff }
 };
 
-static char *version = "etherh [500/600/600A] ethernet driver (c) 1997 R.M.King v1.04\n";
+static char *version = "etherh [500/600/600A] ethernet driver (c) 1998 R.M.King v1.05\n";
 
 #define ETHERH500_DATAPORT	0x200	/* MEMC */
 #define ETHERH500_NS8390	0x000	/* MEMC */
@@ -66,6 +69,7 @@ static char *version = "etherh [500/600/600A] ethernet driver (c) 1997 R.M.King 
 
 #define ETHERH_CP_IE		1
 #define ETHERH_CP_IF		2
+#define ETHERH_CP_HEARTBEAT	2
 
 #define ETHERH_TX_START_PAGE	1
 #define ETHERH_STOP_PAGE	0x7f
@@ -77,7 +81,7 @@ static char *version = "etherh [500/600/600A] ethernet driver (c) 1997 R.M.King 
  * This is an ascii string...
  */
 static int
-etherh_addr (char *addr, struct expansion_card *ec)
+etherh_addr(char *addr, struct expansion_card *ec)
 {
 	struct in_chunk_dir cd;
 	char *s;
@@ -95,19 +99,80 @@ etherh_addr (char *addr, struct expansion_card *ec)
 	return ENODEV;
 }
 
+static void
+etherh_setif(struct device *dev)
+{
+	unsigned long addr;
+	unsigned long flags;
+
+	save_flags_cli(flags);
+
+	/* set the interface type */
+	switch (dev->mem_end) {
+	case PROD_I3_ETHERLAN600:
+	case PROD_I3_ETHERLAN600A:
+		addr = dev->base_addr + EN0_RCNTHI;
+
+		if (ei_status.interface_num)	/* 10b2 */
+			outb((inb(addr) & 0xf8) | 1, addr);
+		else				/* 10bT */
+			outb((inb(addr) & 0xf8), addr);
+		break;
+
+	case PROD_I3_ETHERLAN500:
+		addr = dev->rmem_start;
+
+		if (ei_status.interface_num)	/* 10b2 */
+			outb(inb(addr) & ~ETHERH_CP_IF, addr);
+		else				/* 10bT */
+			outb(inb(addr) | ETHERH_CP_IF, addr);
+		break;
+
+	default:
+		break;
+	}
+
+	restore_flags(flags);
+}
+
+static int
+etherh_getifstat(struct device *dev)
+{
+	int stat;
+
+	switch (dev->mem_end) {
+	case PROD_I3_ETHERLAN600:
+	case PROD_I3_ETHERLAN600A:
+		if (ei_status.interface_num)	/* 10b2 */
+			stat = 1;
+		else				/* 10bT */
+			stat = inb(dev->base_addr+EN0_RCNTHI) & 4;
+		break;
+
+	case PROD_I3_ETHERLAN500:
+		if (ei_status.interface_num)	/* 10b2 */
+			stat = 1;
+		else				/* 10bT */
+			stat = inb(dev->rmem_start) & ETHERH_CP_HEARTBEAT;
+		break;
+
+	default:
+		stat = 0;
+		break;
+	}
+
+	return stat != 0;
+}
+
 /*
  * Reset the 8390 (hard reset)
  */
 static void
-etherh_reset (struct device *dev)
+etherh_reset(struct device *dev)
 {
-	unsigned int addr = dev->base_addr;
-	int crb;
+	outb_p(E8390_NODMA+E8390_PAGE0+E8390_STOP, dev->base_addr);
 
-	if (dev->mem_end == PROD_I3_ETHERLAN600 || dev->mem_end == PROD_I3_ETHERLAN600A) {
-		crb = inb (addr + EN0_RCNTHI) & 0xf8;
-		outb (ei_status.interface_num ? crb | 1: crb, addr+EN0_RCNTHI);
-	}
+	etherh_setif(dev);
 }
 
 /*
@@ -262,9 +327,6 @@ etherh_get_header (struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 static int
 etherh_open(struct device *dev)
 {
-	unsigned int addr = dev->base_addr;
-	int crb;
-
 	MOD_INC_USE_COUNT;
 
 	if (request_irq(dev->irq, ei_interrupt, 0, "etherh", dev)) {
@@ -272,12 +334,8 @@ etherh_open(struct device *dev)
 		return -EAGAIN;
 	}
 
-	if (dev->mem_end == PROD_I3_ETHERLAN600 || dev->mem_end == PROD_I3_ETHERLAN600A) {
-		crb = inb (addr + EN0_RCNTHI) & 0xf8;
-		outb (ei_status.interface_num ? crb | 1: crb, addr+EN0_RCNTHI);
-	}
-
-	ei_open (dev);
+	etherh_reset(dev);
+	ei_open(dev);
 	return 0;
 }
 
@@ -302,7 +360,8 @@ etherh_probe1(struct device *dev)
 {
 	static int version_printed;
 	unsigned int addr, i, reg0, tmp;
-	char *dev_type;
+	const char *dev_type;
+	const char *if_type;
 
 	addr = dev->base_addr;
 
@@ -352,11 +411,10 @@ etherh_probe1(struct device *dev)
 		dev->name, dev_type, dev->base_addr, dev->irq);
 
 	for (i = 0; i < 6; i++)
-		printk (i == 5 ? "%2.2x\n" : "%2.2x:", dev->dev_addr[i]);
+		printk (i == 5 ? "%2.2x " : "%2.2x:", dev->dev_addr[i]);
 
 	ei_status.name = "etherh";
 	ei_status.word16 = 1;
-	ei_status.interface_num = dev->if_port & 1;
 	ei_status.tx_start_page = ETHERH_TX_START_PAGE;
 	ei_status.rx_start_page = ei_status.tx_start_page + TX_PAGES;
 	ei_status.stop_page = ETHERH_STOP_PAGE;
@@ -367,20 +425,36 @@ etherh_probe1(struct device *dev)
 	dev->open = etherh_open;
 	dev->stop = etherh_close;
 
+	/* select 10bT */
+	ei_status.interface_num = 0;
+	if_type = "10BaseT";
+	etherh_setif(dev);
+	udelay(1000);
+	if (!etherh_getifstat(dev)) {
+		if_type = "10Base2";
+		ei_status.interface_num = 1;
+		etherh_setif(dev);
+	}
+	if (!etherh_getifstat(dev))
+		if_type = "UNKNOWN";
+
+	printk("%s\n", if_type);
+
+	etherh_reset(dev);
 	NS8390_init (dev, 0);
 	return 0;
 }
 
-static void etherh_irq_enable (ecard_t *ec, int irqnr)
+static void etherh_irq_enable(ecard_t *ec, int irqnr)
 {
 	unsigned int ctrl_addr = (unsigned int)ec->irq_data;
-	outb (inb (ctrl_addr) | ETHERH_CP_IE, ctrl_addr);
+	outb(inb(ctrl_addr) | ETHERH_CP_IE, ctrl_addr);
 }
 
-static void etherh_irq_disable (ecard_t *ec, int irqnr)
+static void etherh_irq_disable(ecard_t *ec, int irqnr)
 {
 	unsigned int ctrl_addr = (unsigned int)ec->irq_data;
-	outb (inb (ctrl_addr) & ~ETHERH_CP_IE, ctrl_addr);
+	outb(inb(ctrl_addr) & ~ETHERH_CP_IE, ctrl_addr);
 }
 
 static expansioncard_ops_t etherh_ops = {
@@ -401,6 +475,7 @@ static void etherh_initdev (ecard_t *ec, struct device *dev)
 	case PROD_I3_ETHERLAN500:
 		dev->base_addr = ecard_address (ec, ECARD_MEMC, 0) + ETHERH500_NS8390;
 		dev->mem_start = dev->base_addr + ETHERH500_DATAPORT;
+		dev->rmem_start = (unsigned long)
 		ec->irq_data   = (void *)ecard_address (ec, ECARD_IOC, ECARD_FAST)
 				  + ETHERH500_CTRLPORT;
 		break;
@@ -446,7 +521,6 @@ etherh_probe(struct device *dev)
 
 static int io[MAX_ETHERH_CARDS];
 static int irq[MAX_ETHERH_CARDS];
-static int xcvr[MAX_ETHERH_CARDS] = { 1, 1 };
 static char ethernames[MAX_ETHERH_CARDS][9];
 static struct device *my_ethers[MAX_ETHERH_CARDS];
 static struct expansion_card *ec[MAX_ETHERH_CARDS];
@@ -490,7 +564,6 @@ init_module(void)
 
 		dev->init = etherh_probe1;
 		dev->name = ethernames[i];
-		dev->if_port = xcvr[i];
 
 		my_ethers[i] = dev;
 

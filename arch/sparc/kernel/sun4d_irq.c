@@ -1,4 +1,4 @@
-/*  $Id: sun4d_irq.c,v 1.12 1998/03/19 15:36:36 jj Exp $
+/*  $Id: sun4d_irq.c,v 1.13 1998/04/15 14:58:33 jj Exp $
  *  arch/sparc/kernel/sun4d_irq.c:
  *			SS1000/SC2000 interrupt handling.
  *
@@ -495,7 +495,7 @@ __initfunc(static void sun4d_init_timers(void (*counter_fn)(int, void *, struct 
 #endif
 }
 
-__initfunc(unsigned long sun4d_init_sbi_irq(unsigned long memory_start))
+__initfunc(void sun4d_init_sbi_irq(void))
 {
 	struct linux_sbus *sbus;
 	unsigned mask;
@@ -503,9 +503,7 @@ __initfunc(unsigned long sun4d_init_sbi_irq(unsigned long memory_start))
 	nsbi = 0;
 	for_each_sbus(sbus)
 		nsbi++;
-	memory_start = ((memory_start + 7) & ~7);
-	sbus_actions = (struct sbus_action *)memory_start;
-	memory_start += (nsbi * 8 * 4 * sizeof(struct sbus_action));
+	sbus_actions = (struct sbus_action *)kmalloc (nsbi * 8 * 4 * sizeof(struct sbus_action), GFP_ATOMIC);
 	memset (sbus_actions, 0, (nsbi * 8 * 4 * sizeof(struct sbus_action)));
 	for_each_sbus(sbus) {
 #ifdef __SMP__	
@@ -521,7 +519,6 @@ __initfunc(unsigned long sun4d_init_sbi_irq(unsigned long memory_start))
 			release_sbi(sbus->devid, mask);
 		}
 	}
-	return memory_start;
 }
 
 __initfunc(void sun4d_init_IRQ(void))

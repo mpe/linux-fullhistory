@@ -65,49 +65,13 @@ static int rdtsc_ok = 1;
 /* --------------------------------------------------------------------- */
 
 #ifdef __i386__
-
 __initfunc(static void i386_capability(void))
 {
-        unsigned long flags;
-        unsigned long fl1;
-        union {
-                struct {
-                        unsigned int ebx, edx, ecx;
-                } r;
-                unsigned char s[13];
-        } id;
-        unsigned int eax;
-	unsigned int x86_capability;
-
-        save_flags(flags);
-        flags |= 0x200000;
-        restore_flags(flags);
-        save_flags(flags);
-        fl1 = flags;
-        flags &= ~0x200000;
-        restore_flags(flags);
-        save_flags(flags);
-        if (!(fl1 & 0x200000) || (flags & 0x200000)) {
-                printk(KERN_WARNING "%s: cpu does not support CPUID\n", hfmodem_drvname);
-                return;
-        }
-        __asm__ ("cpuid" : "=a" (eax), "=b" (id.r.ebx), "=c" (id.r.ecx), "=d" (id.r.edx) :
-                 "0" (0));
-        id.s[12] = 0;
-        if (eax < 1) {
-                printk(KERN_WARNING "%s: cpu (vendor string %s) does not support capability "
-                       "list\n", hfmodem_drvname, id.s);
-                return;
-        }
-        printk(KERN_INFO "%s: cpu: vendor string %s ", hfmodem_drvname, id.s);
-        __asm__ ("cpuid" : "=a" (eax), "=d" (x86_capability) : "0" (1) : "ebx", "ecx");
-        printk("fam %d mdl %d step %d cap 0x%x\n", (eax >> 8) & 15, (eax >> 4) & 15, eax & 15, 
-	       x86_capability);
-	if (x86_capability & 0x10)
+	if (boot_cpu_data.x86_capability & 0x10)
 		rdtsc_ok = 1;
 	else
 		printk(KERN_INFO "%s: cpu does not support the rdtsc instruction\n", hfmodem_drvname);
-}       
+}
 #endif /* __i386__ */   
 
 /* --------------------------------------------------------------------- */

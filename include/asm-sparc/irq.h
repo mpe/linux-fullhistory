@@ -67,11 +67,6 @@ extern __inline__ void irq_exit(int cpu, int irq)
 #define irq_exit(cpu, irq)		(local_irq_count[cpu]--)
 #endif
 
-static __inline__ int irq_cannonicalize(int irq)
-{
-	return irq;
-}
-
 /* Dave Redman (djhr@tadpole.co.uk)
  * changed these to function pointers.. it saves cycles and will allow
  * the irq dependencies to be split into different files at a later date

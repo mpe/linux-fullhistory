@@ -16,6 +16,7 @@
 #include <asm/io.h>
 #include <asm/hardirq.h>
 #include <asm/delay.h>
+#include <asm/irq.h>
 
 extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(elf_fpregset_t *);
@@ -37,6 +38,9 @@ EXPORT_SYMBOL(__ioremap);
 EXPORT_SYMBOL(iounmap);
 EXPORT_SYMBOL(local_bh_count);
 EXPORT_SYMBOL(local_irq_count);
+EXPORT_SYMBOL(enable_irq);
+EXPORT_SYMBOL(disable_irq);
+
 EXPORT_SYMBOL_NOVERS(__down_failed);
 EXPORT_SYMBOL_NOVERS(__down_failed_interruptible);
 EXPORT_SYMBOL_NOVERS(__up_wakeup);

@@ -79,6 +79,11 @@ extern void scrollfront(int);
 
 struct l1a_kbd_state l1a_state = { 0, 0 };
 
+/* Dummy function for now, we need it to link.  -DaveM */
+void kbd_reset_setup(char *str, int *ints)
+{
+}
+
 #ifndef CONFIG_PCI
 struct wait_queue * keypress_wait = NULL;
 #endif

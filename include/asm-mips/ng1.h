@@ -46,3 +46,5 @@ struct ng1_setgammaramp_args {
         unsigned char green [256];
         unsigned char blue  [256];
 };
+
+

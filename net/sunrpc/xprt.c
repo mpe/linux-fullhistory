@@ -1231,7 +1231,7 @@ xprt_create(struct file *file, struct sockaddr_in *ap, struct rpc_timeout *to)
 	}
 
 	sock = &file->f_inode->u.socket_i;
-	if (sock->ops->family != AF_INET) {
+	if (sock->ops->family != PF_INET) {
 		printk(KERN_WARNING "RPC: only INET sockets supported\n");
 		return NULL;
 	}
@@ -1284,7 +1284,7 @@ xprt_create_socket(int proto, struct sockaddr_in *sap, struct rpc_timeout *to)
 			   (proto == IPPROTO_UDP)? "udp" : "tcp", proto);
 
 	type = (proto == IPPROTO_UDP)? SOCK_DGRAM : SOCK_STREAM;
-	if ((err = sock_create(AF_INET, type, proto, &sock)) < 0) {
+	if ((err = sock_create(PF_INET, type, proto, &sock)) < 0) {
 		printk("RPC: can't create socket (%d).\n", -err);
 		goto failed;
 	}

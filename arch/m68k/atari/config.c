@@ -70,7 +70,6 @@ extern void atari_mksound( unsigned int count, unsigned int ticks );
 #ifdef CONFIG_HEARTBEAT
 static void atari_heartbeat( int on );
 #endif
-extern struct consw fb_con;
 
 /* atari specific timer functions (in time.c) */
 extern void atari_sched_init(void (*)(int, void *, struct pt_regs *));

@@ -9,8 +9,11 @@
 #include <linux/nvram.h>
 #include <linux/init.h>
 #include <asm/uaccess.h>
+#include <asm/init.h>
 
 #define NVRAM_SIZE	8192
+
+__openfirmware
 
 static long long nvram_llseek(struct file *file, loff_t offset, int origin)
 {

@@ -147,7 +147,7 @@ static int netlink_create(struct socket *sock, int protocol)
 
 	sock->ops = &netlink_ops;
 
-	sk = sk_alloc(AF_NETLINK, GFP_KERNEL, 1);
+	sk = sk_alloc(PF_NETLINK, GFP_KERNEL, 1);
 	if (!sk)
 		return -ENOMEM;
 
@@ -980,7 +980,7 @@ done:
 #endif
 
 struct proto_ops netlink_ops = {
-	AF_NETLINK,
+	PF_NETLINK,
 
 	sock_no_dup,
 	netlink_release,
@@ -1001,7 +1001,7 @@ struct proto_ops netlink_ops = {
 };
 
 struct net_proto_family netlink_family_ops = {
-	AF_NETLINK,
+	PF_NETLINK,
 	netlink_create
 };
 

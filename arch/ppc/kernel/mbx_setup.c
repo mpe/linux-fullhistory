@@ -72,53 +72,19 @@ void mbx_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 #endif
 }
 
-int
-mbx_get_cpuinfo(char *buffer)
-{
-	int	pvr = _get_PVR();
-	int	len;
-	char	*model;
-	bd_t	*bp;
-	extern	RESIDUAL res;
-  
-	/* I know the MPC860 is 0x50.  I don't have the book handy
-	 * to check the others.
-	 */
-	if ((pvr>>16) == 0x50)
-		model = "MPC860";
-	else
-		model = "unknown";
-
-#ifdef __SMP__
-#define CD(X)		(cpu_data[n].X)  
-#else
-#define CD(X) (X)
-#define CPUN 0
-#endif
-	bp = (bd_t *)&res;
-
-	len = sprintf(buffer,"processor\t: %d\n"
-		      "cpu\t\t: %s\n"
-		      "revision\t: %d.%d\n"
-		      "clock\t\t: %d MHz\n"
-		      "bus clock\t: %d MHz\n",
-		      CPUN,
-		      model,
-		      MAJOR(pvr), MINOR(pvr),
-		      bp->bi_intfreq / 1000000,
-		      bp->bi_busfreq / 1000000
-		);
-  
-	return len;
-}
-
 __initfunc(void
 mbx_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
 	int	cpm_page;
-
+	extern char cmd_line[];
+	
 	cpm_page = *memory_start_p;
 	*memory_start_p += PAGE_SIZE;
+	
+	sprintf(cmd_line,
+"%s root=/dev/nfs nfsroot=/sys/mbxroot",
+		cmd_line);
+	printk("Boot arguments: %s\n", cmd_line);
 
 	/* Reset the Communication Processor Module.
 	*/
@@ -128,7 +94,7 @@ mbx_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 	ROOT_DEV = to_kdev_t(0x0301); /* hda1 */
 #endif
 	
-#ifdef CONFIG_BLK_DEV_RAM
+#ifdef CONFIG_BLK_DEV_INITRD
 #if 0
 	ROOT_DEV = to_kdev_t(0x0200); /* floppy */  
 	rd_prompt = 1;

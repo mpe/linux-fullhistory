@@ -22,6 +22,7 @@
 #include <asm/cuda.h>
 #include <asm/pmu.h>
 #include <asm/pci-bridge.h>
+#include <asm/init.h>
 #include "pmac-cons.h"
 #include "chips.h"
 
@@ -31,6 +32,8 @@ static unsigned char *blitter_regs;
 static unsigned char *io_space;
 static unsigned long chips_base_phys;
 static unsigned long chips_io_phys;
+
+__openfirmware
 
 void
 map_chips_display(struct device_node *dp)

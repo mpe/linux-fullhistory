@@ -85,7 +85,6 @@ mbx_cpm_reset(uint host_page_addr)
 	*/
 	dp_alloc_base = CPM_DATAONLY_BASE;
 	dp_alloc_top = dp_alloc_base + CPM_DATAONLY_SIZE;
-
 	/* Set the host page for allocation.
 	*/
 	host_buffer = host_page_addr;	/* Host virtual page address */
@@ -104,7 +103,6 @@ mbx_cpm_reset(uint host_page_addr)
 	    (CICR_SCD_SCC4 | CICR_SCC_SCC3 | CICR_SCB_SCC2 | CICR_SCA_SCC1) |
 		((CPM_INTERRUPT/2) << 13) | CICR_HP_MASK;
 	((immap_t *)MBX_IMAP_ADDR)->im_cpic.cpic_cimr = 0;
-
 	/* Set our interrupt handler with the core CPU.
 	*/
 	if (request_irq(CPM_INTERRUPT, cpm_interrupt, 0, "cpm", NULL) != 0)
@@ -113,7 +111,6 @@ mbx_cpm_reset(uint host_page_addr)
 	/* Install our own error handler.
 	*/
 	cpm_install_handler(CPMVEC_ERROR, cpm_error_interrupt, NULL);
-
 	((immap_t *)MBX_IMAP_ADDR)->im_cpic.cpic_cicr |= CICR_IEN;
 }
 

@@ -154,7 +154,7 @@ restore_sigcontext(struct pt_regs *regs, struct sigcontext *sc)
 	__get_user(regs->ARM_sp, &sc->arm_sp);
 	__get_user(regs->ARM_lr, &sc->arm_lr);
 	__get_user(regs->ARM_pc, &sc->arm_pc);		/* security! */
-#if defined(CONFIG_CPU_ARM6) || defined(CONFIG_CPU_SA110)
+#ifdef CONFIG_CPU_32
 	__get_user(regs->ARM_cpsr, &sc->arm_cpsr);	/* security! */
 #endif
 
@@ -238,7 +238,7 @@ setup_sigcontext(struct sigcontext *sc, /*struct _fpstate *fpstate,*/
 	__put_user (regs->ARM_sp, &sc->arm_sp);
 	__put_user (regs->ARM_lr, &sc->arm_lr);
 	__put_user (regs->ARM_pc, &sc->arm_pc);		/* security! */
-#if defined(CONFIG_CPU_ARM6) || defined(CONFIG_CPU_SA110)
+#ifdef CONFIG_CPU_32
 	__put_user (regs->ARM_cpsr, &sc->arm_cpsr);	/* security! */
 #endif
 

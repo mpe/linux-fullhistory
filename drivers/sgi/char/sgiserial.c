@@ -17,6 +17,7 @@
 #include <linux/mm.h>
 #include <linux/kernel.h>
 #include <linux/delay.h>
+#include <linux/console.h>
 
 #include <asm/io.h>
 #include <asm/irq.h>
@@ -52,6 +53,19 @@ static int zs_cons_chanout = 0;
 static int zs_cons_chanin = 0;
 struct sgi_serial *zs_consinfo = 0;
 
+static struct console sgi_console_driver = {
+        "debug",
+        NULL,                   /* write */
+        NULL,                   /* read */
+        NULL,                   /* device */
+        NULL,                   /* wait_key */
+        NULL,                   /* unblank */
+        NULL,                   /* setup */
+        CON_PRINTBUFFER,
+        -1,
+        0,
+        NULL
+};
 static unsigned char kgdb_regs[16] = {
 	0, 0, 0,                     /* write 0, 1, 2 */
 	(Rx8 | RxENABLE),            /* write 3 */
@@ -960,14 +974,14 @@ static void rs_fair_output(void)
 /*
  * zs_console_print is registered for printk.
  */
-static void zs_console_print(const char *p)
-{
-	char c;
 
-	while((c=*(p++)) != 0) {
-		if(c == '\n')
+static void zs_console_print(struct console *co, const char *str, unsigned int count)
+{
+
+	while(count--) {
+		if(*str == '\n')
 			rs_put_char('\r');
-		rs_put_char(c);
+		rs_put_char(*str++);
 	}
 
 	/* Comment this if you want to have a strict interrupt-driven output */
@@ -1712,7 +1726,7 @@ static inline struct sgi_zslayout *get_zs(int chip)
 
 }
 
-extern void register_console(void (*proc)(const char *));
+
 
 static inline void
 rs_cons_check(struct sgi_serial *ss, int channel)
@@ -1723,6 +1737,7 @@ rs_cons_check(struct sgi_serial *ss, int channel)
 
 	i = o = io = 0;
 
+
 	/* Is this one of the serial console lines? */
 	if((zs_cons_chanout != channel) &&
 	   (zs_cons_chanin != channel))
@@ -1730,15 +1745,19 @@ rs_cons_check(struct sgi_serial *ss, int channel)
 	zs_conschan = ss->zs_channel;
 	zs_consinfo = ss;
 
+
 	/* Register the console output putchar, if necessary */
 	if((zs_cons_chanout == channel)) {
 		o = 1;
 		/* double whee.. */
+
 		if(!consout_registered) {
-			register_console(zs_console_print);
+		  sgi_console_driver.write = zs_console_print;
+			register_console(&sgi_console_driver);
 			consout_registered = 1;
 		}
 	}
+
 
 	/* If this is console input, we handle the break received
 	 * status interrupt on this line to mean prom_halt().
@@ -1756,6 +1775,7 @@ rs_cons_check(struct sgi_serial *ss, int channel)
 		panic("Console baud rate weirdness");
 	}
 
+
 	/* Set flag variable for this port so that it cannot be
 	 * opened for other uses by accident.
 	 */
@@ -1766,9 +1786,11 @@ rs_cons_check(struct sgi_serial *ss, int channel)
 			printk("zs%d: console I/O\n", ((channel>>1)&1));
 			msg_printed = 1;
 		}
+
 	} else {
 		printk("zs%d: console %s\n", ((channel>>1)&1),
 		       (i==1 ? "input" : (o==1 ? "output" : "WEIRD")));
+
 	}
 }
 
@@ -1779,6 +1801,7 @@ int rs_init(void)
 {
 	int chip, channel, i, flags;
 	struct sgi_serial *info;
+
 
 	/* Setup base handler, and timer table. */
 	init_bh(SERIAL_BH, do_serial_bh);
@@ -1966,6 +1989,7 @@ rs_cons_hook(int chip, int out, int line)
 {
 	int channel;
 
+	
 	if(chip)
 		panic("rs_cons_hook called with chip not zero");
 	if(line != 1 && line != 2)
@@ -1981,10 +2005,11 @@ rs_cons_hook(int chip, int out, int line)
 	zs_soft[channel].change_needed = 0;
 	zs_soft[channel].clk_divisor = 16;
 	zs_soft[channel].zs_baud = get_zsbaud(&zs_soft[channel]);
-	if(out)
+	if(out) 
 		zs_cons_chanout = ((chip * 2) + channel);
-	else
+	else 
 		zs_cons_chanin = ((chip * 2) + channel);
+	
 	rs_cons_check(&zs_soft[channel], channel);
 }
 

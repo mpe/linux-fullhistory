@@ -10,9 +10,10 @@
 #include <asm/smp.h>
 
 /*
- * main IPI interface, handles INIT, TLB flush, STOP, etc.:
+ * main IPI interface, handles INIT, TLB flush, STOP, etc. (defined in asm header):
+ *
+ * extern void smp_message_pass(int target, int msg, unsigned long data, int wait);
  */ 
-extern void smp_message_pass(int target, int msg, unsigned long data, int wait);
 
 /*
  * Boot processor call to load the other CPU's

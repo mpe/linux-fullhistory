@@ -345,8 +345,8 @@ struct Scsi_Host
     unsigned char *base;
     unsigned long io_port;
     unsigned char n_io_port;
-    unsigned char irq;
     unsigned char dma_channel;
+    unsigned int  irq;
 
     /*
      * This is a unique identifier that must be assigned so that we

@@ -103,6 +103,15 @@ affs_free_block(struct super_block *sb, s32 block)
 	unlock_super(sb);
 }
 
+/*
+ * Allocate a block in the given allocation zone.
+ * Since we have to byte-swap the bitmap on little-endian
+ * machines, this is rather expensive. Therefor we will
+ * preallocate up to 16 blocks from the same word, if
+ * possible. We are not doing preallocations in the
+ * header zone, though.
+ */
+
 static s32
 affs_balloc(struct inode *inode, int zone_no)
 {
@@ -173,6 +182,8 @@ found:
 
 	return block;
 }
+
+/* Find a new allocation zone, starting at zone_no. */
 
 static int
 affs_find_new_zone(struct super_block *sb, int zone_no)
@@ -257,11 +268,13 @@ affs_find_new_zone(struct super_block *sb, int zone_no)
 	zone->z_end   = zone->z_start + az->az_size;
 	zone->z_az_no = i;
 	zone->z_lru_time = jiffies;
-	pr_debug("  ++ found zone (%d) in bm %d at lw offset %d with %d free blocks\n",
+	pr_debug("AFFS: found zone (%d) in bm %d at lw offset %d with %d free blocks\n",
 		 i,(i >> (sb->s_blocksize_bits - 7)),zone->z_start,az->az_free);
 	unlock_super(sb);
 	return az->az_free;
 }
+
+/* Allocate a new header block. */
 
 s32
 affs_new_header(struct inode *inode)
@@ -291,6 +304,8 @@ init_block:
 
 	return block;
 }
+
+/* Allocate a new data block. */
 
 s32
 affs_new_data(struct inode *inode)
@@ -378,9 +393,7 @@ affs_make_zones(struct super_block *sb)
 	pr_debug("AFFS: make_zones(): num_zones=%d\n",sb->u.affs_sb.s_num_az);
 
 	mid = (sb->u.affs_sb.s_num_az + 1) / 2;
-	sb->u.affs_sb.s_zones[0].z_az_no = mid;
-	affs_find_new_zone(sb,0);
-	for (i = 1; i < MAX_ZONES; i++) {
+	for (i = 0; i < MAX_ZONES; i++) {
 		sb->u.affs_sb.s_zones[i].z_az_no = mid;
 		affs_find_new_zone(sb,i);
 	}

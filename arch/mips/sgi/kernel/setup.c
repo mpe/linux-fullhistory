@@ -3,12 +3,14 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: setup.c,v 1.5 1997/09/13 02:19:18 ralf Exp $
+ * $Id: setup.c,v 1.5 1998/05/01 01:35:19 ralf Exp $
  */
+#include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 
 #include <asm/addrspace.h>
+#include <asm/bcache.h>
 #include <asm/keyboard.h>
 #include <asm/reboot.h>
 #include <asm/vector.h>
@@ -49,7 +51,7 @@ static unsigned char sgi_read_status(void)
 	return sgi_kh->command;
 }
 
-static void sgi_keyboard_setup(void)
+__initfunc(static void sgi_keyboard_setup(void))
 {
 	kbd_read_input = sgi_read_input;
 	kbd_write_output = sgi_write_output;
@@ -57,12 +59,12 @@ static void sgi_keyboard_setup(void)
 	kbd_read_status = sgi_read_status;
 }
 
-static void sgi_irq_setup(void)
+__initfunc(static void sgi_irq_setup(void))
 {
 	sgint_init();
 }
 
-void sgi_setup(void)
+__initfunc(void sgi_setup(void))
 {
 	char *ctype;
 
@@ -82,6 +84,9 @@ void sgi_setup(void)
 
 	/* Init INDY memory controller. */
 	sgimc_init();
+
+	/* Now enable boardcaches, if any. */
+	indy_sc_init();
 
 	/* ARCS console environment variable is set to "g?" for
 	 * graphics console, it is set to "d" for the first serial

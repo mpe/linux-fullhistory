@@ -43,6 +43,28 @@ start_:
 	ori	r4,r4,MSR_EE
 	andc	r3,r3,r4
 	mtmsr	r3
+/* check if we need to relocate ourselves to the link addr or were we
+   loaded there to begin with -- Cort */
+	lis	r4,start@h
+	ori	r4,r4,start@l
+	mflr	r3
+	subi	r3,r3,4		/* we get the nip, not the ip of the branch */
+	mr	r8,r3
+	cmp	0,r3,r4
+	bne	1010f
+/* compute size of whole image in words.  this should be moved to
+ * start_ldr() -- Cort
+ */
+	lis	r4,start@h
+	ori	r4,r4,start@l
+	lis	r5,end@h
+	ori	r5,r5,end@l
+	addi	r5,r5,3		/* round up */
+	sub	r5,r5,r4
+	srwi	r5,r5,2
+	mr	r7,r5
+	b	start_ldr
+1010:
 /* Copy relocation code down to location 0x0100 (where we hope it's safe!) */
 	mflr	r3
 	addi	r5,r3,start_ldr-start_
@@ -115,13 +137,18 @@ start_ldr:
 	andc	r1,r1,r2
 /* Run loader */
 #ifdef CONFIG_MBX
+        mr      r21, r11
         bl      serial_init             /* Init MBX serial port */
-#define ILAP_ADDRESS    0xfa000020
-        lis     r8, ILAP_ADDRESS@h
-        lwz     r8, ILAP_ADDRESS@l(r8)
+        mr      r11, r21
+	lis	r8,start@h
+	ori	r8,r8,start@l
 	li	r9,end@h
 	ori	r9,r9,end@l
 	sub	r7,r8,r9
+	srwi	r7,r7,2
+#define ILAP_ADDRESS    0xfa000020
+        lis     r8, ILAP_ADDRESS@h
+        lwz     r8, ILAP_ADDRESS@l(r8)
         addis   r8, r8, 1               /* Add 64K */
 #endif	
 	mr	r3,r8			/* Load point */

@@ -71,6 +71,27 @@ SECTIONS
   . = ALIGN(4096);
   __init_end = .;
 
+  . = ALIGN(4096);
+  __pmac_begin = .;
+  .text.pmac : { *(.text.pmac) }
+  .data.pmac : { *(.data.pmac) }
+  . = ALIGN(4096);
+  __pmac_end = .;
+
+  . = ALIGN(4096);
+  __prep_begin = .;
+  .text.prep : { *(.text.prep) }
+  .data.prep : { *(.data.prep) }
+  . = ALIGN(4096);
+  __prep_end = .;
+
+  . = ALIGN(4096);
+  __openfirmware_begin = .;
+  .text.openfirmware : { *(.text.openfirmware) }
+  .data.openfirmware : { *(.data.openfirmware) }
+  . = ALIGN(4096);
+  __openfirmware_end = .;
+
   __bss_start = .;
   .bss       :
   {

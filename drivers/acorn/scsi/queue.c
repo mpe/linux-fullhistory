@@ -298,7 +298,7 @@ Scsi_Cmnd *queue_remove_tgtluntag (Queue_t *queue, int target, int lun, int tag)
 			else
 				queue->tail = NULL;
 		} else {
-		 	prev->next = q->next;
+			prev->next = q->next;
 			if (prev->next)
 				prev->next->prev = prev;
 			else

@@ -29,6 +29,10 @@ ifdef CONFIG_FDDI
 O_OBJS += fddi.o
 endif
 
+ifdef CONFIG_HIPPI
+O_OBJS += hippi.o
+endif
+
 ifdef CONFIG_IPX
 	SNAP=y
 endif

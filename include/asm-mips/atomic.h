@@ -9,9 +9,9 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1996 by Ralf Baechle
+ * Copyright (C) 1996, 1997 by Ralf Baechle
  *
- * $Id: atomic.h,v 1.2 1997/06/20 03:05:12 ralf Exp $
+ * $Id: atomic.h,v 1.4 1998/05/01 01:35:45 ralf Exp $
  */
 #ifndef __ASM_MIPS_ATOMIC_H
 #define __ASM_MIPS_ATOMIC_H

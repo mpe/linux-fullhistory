@@ -100,16 +100,6 @@ EXPORT_SYMBOL(quicklists);
 EXPORT_SYMBOL(__bad_pmd);
 EXPORT_SYMBOL(__bad_pmd_kernel);
 
-/* dma */
-EXPORT_SYMBOL(dma_str);
-EXPORT_SYMBOL(enable_dma);
-EXPORT_SYMBOL(disable_dma);
-EXPORT_SYMBOL(set_dma_addr);
-EXPORT_SYMBOL(set_dma_count);
-EXPORT_SYMBOL(set_dma_mode);
-EXPORT_SYMBOL(get_dma_residue);
-EXPORT_SYMBOL(set_dma_sg);
-
 /*
  * floating point math emulator support.
  * These symbols will never change their calling convention...
@@ -155,12 +145,12 @@ EXPORT_SYMBOL_NOVERS(memscan);
 EXPORT_SYMBOL_NOVERS(memzero);
 
 	/* user mem (segment) */
-#if defined(CONFIG_CPU_ARM6) || defined(CONFIG_CPU_SA110)
+#if defined(CONFIG_CPU_32)
 EXPORT_SYMBOL(__arch_copy_from_user);
 EXPORT_SYMBOL(__arch_copy_to_user);
 EXPORT_SYMBOL(__arch_clear_user);
 EXPORT_SYMBOL(__arch_strlen_user);
-#elif defined(CONFIG_CPU_ARM2) || defined(CONFIG_CPU_ARM3)
+#elif defined(CONFIG_CPU_26)
 EXPORT_SYMBOL(uaccess_kernel);
 EXPORT_SYMBOL(uaccess_user);
 #endif

@@ -5,7 +5,6 @@
  * Integrated into 2.1.97+,  Andrew G. Morgan <morgan@transmeta.com>
  */ 
 
-#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
 #include <linux/capability.h>

@@ -13,21 +13,17 @@ O_TARGET := fs.o
 O_OBJS    = open.o read_write.o devices.o file_table.o buffer.o \
 		super.o  block_dev.o stat.o exec.o pipe.o namei.o fcntl.o \
 		ioctl.o readdir.o select.o fifo.o locks.o filesystems.o \
-		inode.o dcache.o attr.o bad_inode.o $(BINFMTS) 
+		dcache.o inode.o attr.o bad_inode.o $(BINFMTS) 
 
 MOD_LIST_NAME := FS_MODULES
 ALL_SUB_DIRS = coda minix ext2 fat msdos vfat proc isofs nfs umsdos ntfs \
 		hpfs sysv smbfs ncpfs ufs affs romfs autofs hfs lockd nfsd \
-		nls devpts
+		nls devpts adfs
 
 ifeq ($(CONFIG_QUOTA),y)
 O_OBJS += dquot.o
 else
 O_OBJS += noquot.o
-endif
-
-ifeq ($(CONFIG_TRANS_NAMES),y)
-O_OBJS += nametrans.o
 endif
 
 ifeq ($(CONFIG_CODA_FS),y)

@@ -83,7 +83,7 @@ static int spx_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
 
-	sk = sk_alloc(AF_IPX, GFP_KERNEL, 1);
+	sk = sk_alloc(PF_IPX, GFP_KERNEL, 1);
 	if(sk == NULL)
                 return (-ENOMEM);
 
@@ -806,7 +806,7 @@ static int spx_getsockopt(struct socket *sock, int level, int optname,
 }
 
 static struct proto_ops spx_operations = {
-        AF_IPX,
+        PF_IPX,
         sock_no_dup,
         spx_release,
         spx_bind,
@@ -827,7 +827,7 @@ static struct proto_ops spx_operations = {
 
 static struct net_proto_family spx_family_ops=
 {
-	AF_IPX,
+	PF_IPX,
 	spx_create
 };
 
@@ -842,7 +842,7 @@ void spx_proto_init(void)
         if (error)
                 printk(KERN_ERR "SPX: unable to register with IPX.\n");
 
-	/* route socket(AF_IPX, SOCK_SEQPACKET) calls through spx_create() */
+	/* route socket(PF_IPX, SOCK_SEQPACKET) calls through spx_create() */
 
 	printk(KERN_INFO "Sequenced Packet eXchange (SPX) 0.01 for Linux NET3.037\n");
 	return;

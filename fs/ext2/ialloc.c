@@ -33,6 +33,7 @@
 #include <linux/stat.h>
 #include <linux/string.h>
 #include <linux/locks.h>
+#include <linux/quotaops.h>
 
 #include <asm/bitops.h>
 #include <asm/byteorder.h>
@@ -231,8 +232,7 @@ void ext2_free_inode (struct inode * inode)
 	is_directory = S_ISDIR(inode->i_mode);
 
 	/* Do this BEFORE marking the inode not in use */
-	if (sb->dq_op)
-		sb->dq_op->free_inode (inode, 1);
+	DQUOT_FREE_INODE(sb, inode);
 	clear_inode (inode);
 
 	/* Ok, now we can actually update the inode bitmaps.. */
@@ -493,17 +493,7 @@ repeat:
 	inc_inode_version (inode, gdp, mode);
 
 	unlock_super (sb);
-	if (sb->dq_op) {
-		sb->dq_op->initialize (inode, -1);
-		if (sb->dq_op->alloc_inode (inode, 1)) {
-			sb->dq_op->drop (inode);
-			inode->i_nlink = 0;
-			iput (inode);
-			*err = -EDQUOT;
-			return NULL;
-		}
-		inode->i_flags |= S_WRITE;
-	}
+	DQUOT_ALLOC_INODE(sb, inode);
 	ext2_debug ("allocating inode %lu\n", inode->i_ino);
 
 	*err = 0;

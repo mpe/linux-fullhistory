@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.38 1998/01/30 11:00:11 jj Exp $ */
+/* $Id: system.h,v 1.39 1998/05/01 09:33:55 davem Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
@@ -43,10 +43,10 @@ extern unsigned long empty_zero_page;
 	__asm__ __volatile__("wrpr	0, %%pil" : : : "memory")
 
 #define getipl() \
-({ int retval; __asm__ __volatile__("rdpr	%%pil, %0" : "=r" (retval)); retval; })
+({ unsigned long retval; __asm__ __volatile__("rdpr	%%pil, %0" : "=r" (retval)); retval; })
 
 #define swap_pil(__new_pil) \
-({	int retval; \
+({	unsigned long retval; \
 	__asm__ __volatile__("rdpr	%%pil, %0\n\t" \
 			     "wrpr	%1, %%pil" \
 			     : "=r" (retval) \
@@ -56,7 +56,7 @@ extern unsigned long empty_zero_page;
 })
 
 #define read_pil_and_cli() \
-({	int retval; \
+({	unsigned long retval; \
 	__asm__ __volatile__("rdpr	%%pil, %0\n\t" \
 			     "wrpr	15, %%pil" \
 			     : "=r" (retval) \

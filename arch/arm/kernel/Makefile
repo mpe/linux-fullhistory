@@ -11,7 +11,7 @@ ENTRY_OBJ = entry-$(PROCESSOR).o
 O_TARGET := kernel.o
 O_OBJS   := $(ENTRY_OBJ) ioport.o irq.o process.o ptrace.o signal.o sys_arm.o time.o traps.o
 
-all: kernel.o $(HEAD_OBJ) init_task.o
+all: lib kernel.o $(HEAD_OBJ) init_task.o
 
 ifeq ($(CONFIG_MODULES),y)
 OX_OBJS = armksyms.o
@@ -19,28 +19,31 @@ else
 O_OBJS += armksyms.o
 endif
 
-ifdef CONFIG_PCI
-  O_OBJS += bios32.o
-endif
-
 ifdef CONFIG_ARCH_ACORN
-  O_OBJS += setup.o ecard.o iic.o dma.o
+  O_OBJS += setup.o ecard.o iic.o
   ifdef CONFIG_ARCH_ARC
     O_OBJS += oldlatches.o
   endif
   O_OBJS += dma-$(MACHINE).o
+  OX_OBJS += dma.o
 endif
 
 ifeq ($(MACHINE),ebsa110)
-  O_OBJS += setup-ebsa110.o dma.o dma-dummy.o
+  O_OBJS += setup-ebsa110.o dma-dummy.o
 endif
 
 ifeq ($(MACHINE),ebsa285)
-  O_OBJS += dma.o dma-dummy.o leds-ebsa285.o setup-ebsa110.o
+  O_OBJS += dma-dummy.o leds-ebsa285.o setup-ebsa110.o
+  ifdef CONFIG_PCI
+    O_OBJS += dec21285.o
+  endif
 endif
 
 ifeq ($(MACHINE),nexuspci)
-  O_OBJS += setup-ebsa110.o
+  O_OBJS += setup-ebsa110.o dma-dummy.o
+  ifdef CONFIG_PCI
+    O_OBJS += plx9080.o
+  endif
 endif
 
 $(HEAD_OBJ): $(HEAD_OBJ:.o=.S)
@@ -53,7 +56,7 @@ include $(TOPDIR)/Rules.make
 
 $(ENTRY_OBJ): ../lib/constants.h
 
-.PHONY: ../lib/constants.h
+.PHONY: lib
 
-../lib/constants.h:
+lib:
 	$(MAKE) -C ../lib constants.h

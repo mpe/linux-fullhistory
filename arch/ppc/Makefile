@@ -95,6 +95,8 @@ archclean:
 	@$(MAKEBOOT) clean
 	@$(MAKECHRPBOOT) clean
 
+archmrproper:
+
 archdep:
 	$(MAKEBOOT) fastdep
 	$(MAKECHRPBOOT) fastdep

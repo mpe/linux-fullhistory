@@ -17,6 +17,10 @@
 #include <net/neighbour.h>
 #include <net/snmp.h>
 
+#ifdef CONFIG_BRIDGE
+#include <net/br.h>
+#endif
+
 #ifdef CONFIG_INET
 #include <linux/ip.h>
 #include <linux/etherdevice.h>
@@ -190,6 +194,10 @@ EXPORT_SYMBOL(sklist_destroy_socket);
 EXPORT_SYMBOL(sklist_insert_socket);
 
 EXPORT_SYMBOL(scm_detach_fds);
+
+#ifdef CONFIG_BRIDGE 
+EXPORT_SYMBOL(br_ioctl);
+#endif
 
 #ifdef CONFIG_INET
 /* Internet layer registration */

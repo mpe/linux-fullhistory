@@ -1,4 +1,4 @@
-/* $Id: p1275.c,v 1.12 1997/07/26 18:39:01 davem Exp $
+/* $Id: p1275.c,v 1.13 1998/04/24 15:45:35 jj Exp $
  * p1275.c: Sun IEEE 1275 PROM low level interface routines
  *
  * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -23,6 +23,8 @@ struct {
 	unsigned long prom_args [23];		/* 0x18 */
 	char prom_buffer [3000];
 } p1275buf;
+
+extern void prom_world(int);
 
 void prom_cif_interface (void)
 {
@@ -115,7 +117,11 @@ long p1275_cmd (char *service, long fmt, ...)
 	}
 	va_end(list);
 
+	prom_world(1);
+	
 	prom_cif_interface();
+	
+	prom_world(0);
 
 	attrs = fmt >> 8;
 	va_start(list, fmt);

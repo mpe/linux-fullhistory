@@ -55,8 +55,8 @@
 
 /* status register (read) */
 #define REG_STAT(x)		((x)->scsi.io_port + (4 << (x)->scsi.io_shift))
-#define STAT_IO		(1 << 0)				/* IO phase		*/
-#define STAT_CD		(1 << 1)				/* CD phase		*/
+#define STAT_IO			(1 << 0)			/* IO phase		*/
+#define STAT_CD			(1 << 1)			/* CD phase		*/
 #define STAT_MSG		(1 << 2)			/* MSG phase		*/
 #define STAT_TRANSFERDONE	(1 << 3)			/* Transfer completed	*/
 #define STAT_TRANSFERCNTZ	(1 << 4)			/* Transfer counter is zero */
@@ -98,6 +98,7 @@
 #define IS_NOTCOMMAND		0x02				/* Not in command state	*/
 #define IS_EARLYPHASE		0x03				/* Early phase change	*/
 #define IS_COMPLETE		0x04				/* Command ok		*/
+#define IS_SOF			0x08				/* Sync off flag	*/
 
 /* Transfer period step (write) */
 #define REG_STP(x)		((x)->scsi.io_port + (6 << (x)->scsi.io_shift))
@@ -170,6 +171,7 @@
 typedef enum {
 	PHASE_IDLE,					/* we're not planning on doing anything	*/
 	PHASE_SELECTION,				/* selecting a device			*/
+	PHASE_MESSAGESENT,				/* selected, and we're sending cmd	*/
 	PHASE_RECONNECTED,				/* reconnected				*/
 	PHASE_DATAOUT,					/* data out to device			*/
 	PHASE_DATAIN,					/* data in from device			*/
@@ -188,6 +190,7 @@ typedef enum {
 
 typedef enum {
 	fasdma_none,					/* No dma				*/
+	fasdma_pio,					/* PIO mode				*/
 	fasdma_pseudo,					/* Pseudo DMA				*/
 	fasdma_real_block,				/* Real DMA, on block by block basis	*/
 	fasdma_real_all					/* Real DMA, on request by request	*/
@@ -196,10 +199,14 @@ typedef enum {
 typedef enum {
 	syncneg_start,					/* Negociate with device for Sync xfers	*/
 	syncneg_sent,					/* Sync Xfer negociation sent		*/
-	syncneg_complete				/* Sync Xfer complete			*/
+	syncneg_complete,				/* Sync Xfer complete			*/
+	syncneg_invalid					/* Sync Xfer not supported		*/
 } syncneg_t;
 
+#define MAGIC	0x441296bdUL
+
 typedef struct {
+	unsigned long		magic_start;
 	struct Scsi_Host	*host;			/* host					*/
 	Scsi_Cmnd		*SCpnt;			/* currently processing command		*/
 	Scsi_Cmnd		*origSCpnt;		/* original connecting command		*/
@@ -208,7 +215,7 @@ typedef struct {
 	struct {
 		unsigned int	io_port;		/* base address of FAS216		*/
 		unsigned int	io_shift;		/* shift to adjust reg offsets by	*/
-		unsigned char	irq;			/* interrupt				*/
+		unsigned int	irq;			/* interrupt				*/
 		unsigned char	cfg[4];			/* configuration registers		*/
 		const char	*type;			/* chip type				*/
 		phase_t		phase;			/* current phase			*/
@@ -223,6 +230,7 @@ typedef struct {
 
 		MsgQueue_t	msgs;			/* message queue for connected device	*/
 
+		unsigned int	async_stp;		/* Async transfer STP value		*/
 		unsigned short	last_message;		/* last message to be sent		*/
 
 		unsigned char	disconnectable:1;	/* this command can be disconnected	*/
@@ -246,8 +254,9 @@ typedef struct {
 	struct {
 		unsigned char	clockrate;		/* clock rate of FAS device (MHz)	*/
 		unsigned char	select_timeout;		/* timeout (R5)				*/
-		unsigned int	asyncperiod;		/* Async transfer period (ns)		*/
 		unsigned char	sync_max_depth;		/* Synchronous xfer max fifo depth	*/
+		unsigned char	cntl3;			/* Control Reg 3			*/
+		unsigned int	asyncperiod;		/* Async transfer period (ns)		*/
 	} ifcfg;
 
 	/* queue handling */
@@ -268,13 +277,15 @@ typedef struct {
 	/* dma */
 	struct {
 		fasdmatype_t	transfer_type;		/* current type of DMA transfer		*/
-		fasdmatype_t	(*setup) (struct Scsi_Host *host, Scsi_Pointer *SCp, fasdmadir_t direction);
-		int		(*pseudo)(struct Scsi_Host *host, Scsi_Pointer *SCp, fasdmadir_t direction, int transfer);
+		fasdmatype_t	(*setup) (struct Scsi_Host *host, Scsi_Pointer *SCp, fasdmadir_t direction, fasdmatype_t min_dma);
+		void		(*pseudo)(struct Scsi_Host *host, Scsi_Pointer *SCp, fasdmadir_t direction, int transfer);
 		void		(*stop)  (struct Scsi_Host *host, Scsi_Pointer *SCp);
 	} dma;
 
 	/* miscellaneous */
 	int			internal_done;		/* flag to indicate request done */
+
+	unsigned long		magic_end;
 } FAS216_Info;
 
 /* Function: int fas216_init (struct Scsi_Host *instance)

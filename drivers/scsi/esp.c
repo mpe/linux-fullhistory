@@ -173,7 +173,9 @@ static int esps_running = 0;
 
 /* Forward declarations. */
 static void esp_intr(int irq, void *dev_id, struct pt_regs *pregs);
-static void do_esp_intr(int irq, void *dev_id, struct pt_regs *pregs);
+#ifndef __sparc_v9__
+static void esp_intr_4d(int irq, void *dev_id, struct pt_regs *pregs);
+#endif
 
 /* Debugging routines */
 struct esp_cmdstrings {
@@ -641,25 +643,385 @@ static inline void esp_bootup_reset(struct Sparc_ESP *esp, struct Sparc_ESP_regs
 	trash = eregs->esp_intrpt;
 }
 
-/* Detecting ESP chips on the machine.  This is the simple and easy
- * version.
- */
-__initfunc(int esp_detect(Scsi_Host_Template *tpnt))
+__initfunc(int detect_one_esp
+(Scsi_Host_Template *tpnt, struct linux_sbus_device *esp_dev, struct linux_sbus_device *espdma,
+ struct linux_sbus *sbus, int id, int hme))
 {
-#ifdef __sparc_v9__
 	struct devid_cookie dcookie;
-#endif
 	struct Sparc_ESP *esp, *elink;
 	struct Scsi_Host *esp_host;
-	struct linux_sbus *sbus;
-	struct linux_sbus_device *esp_dev, *sbdev_iter;
 	struct Sparc_ESP_regs *eregs;
 	struct sparc_dma_registers *dregs;
 	struct Linux_SBus_DMA *dma, *dlink;
 	unsigned int fmhz;
 	unchar ccf, bsizes, bsizes_more;
-	int nesps = 0, esps_in_use = 0;
 	int esp_node, i;
+	
+	esp_host = scsi_register(tpnt, sizeof(struct Sparc_ESP));
+	if(!esp_host)
+		panic("Cannot register ESP SCSI host");
+	if(hme)
+		esp_host->max_id = 16;
+	esp = (struct Sparc_ESP *) esp_host->hostdata;
+	if(!esp)
+		panic("No esp in hostdata");
+	esp->ehost = esp_host;
+	esp->edev = esp_dev;
+	esp->esp_id = id;
+
+	/* Put into the chain of esp chips detected */
+	if(espchain) {
+		elink = espchain;
+		while(elink->next) elink = elink->next;
+		elink->next = esp;
+	} else {
+		espchain = esp;
+	}
+	esp->next = 0;
+
+	/* Get misc. prom information */
+#define ESP_IS_MY_DVMA(esp, dma)  \
+	(!dma->SBus_dev || \
+	 ((esp->edev->my_bus == dma->SBus_dev->my_bus) && \
+          (esp->edev->slot == dma->SBus_dev->slot) && \
+	  (!strcmp(dma->SBus_dev->prom_name, "dma") || \
+	   !strcmp(dma->SBus_dev->prom_name, "espdma"))))
+
+	esp_node = esp_dev->prom_node;
+	prom_getstring(esp_node, "name", esp->prom_name,
+		       sizeof(esp->prom_name));
+	esp->prom_node = esp_node;
+	if(espdma) {
+		for_each_dvma(dlink) {
+			if(dlink->SBus_dev == espdma)
+				break;
+		}
+	} else {
+		for_each_dvma(dlink) {
+			if(ESP_IS_MY_DVMA(esp, dlink) &&
+			   !dlink->allocated)
+				break;
+		}
+	}
+#undef ESP_IS_MY_DVMA
+	/* If we don't know how to handle the dvma,
+	 * do not use this device.
+	 */
+	if(!dlink){
+		printk ("Cannot find dvma for ESP%d's SCSI\n",
+			esp->esp_id);
+		scsi_unregister (esp_host);
+		return -1;
+	}
+	if (dlink->allocated){
+		printk ("esp%d: can't use my espdma\n",
+			esp->esp_id);
+		scsi_unregister (esp_host);
+		return -1;
+	}
+	dlink->allocated = 1;
+	dma = dlink;
+	esp->dma = dma;
+	esp->dregs = dregs = dma->regs;
+
+	/* Map in the ESP registers from I/O space */
+	if(!hme) {
+		prom_apply_sbus_ranges(esp->edev->my_bus, 
+				       esp->edev->reg_addrs,
+				       1, esp->edev);
+
+		esp->eregs = eregs = (struct Sparc_ESP_regs *)
+		sparc_alloc_io(esp->edev->reg_addrs[0].phys_addr, 0,
+			       PAGE_SIZE, "ESP Registers",
+			       esp->edev->reg_addrs[0].which_io, 0x0);
+	} else {
+		/* On HME, two reg sets exist, first is DVMA,
+		 * second is ESP registers.
+		 */
+		esp->eregs = eregs = (struct Sparc_ESP_regs *)
+		sparc_alloc_io(esp->edev->reg_addrs[1].phys_addr, 0,
+			       PAGE_SIZE, "ESP Registers",
+			       esp->edev->reg_addrs[1].which_io, 0x0);
+	}
+	if(!eregs)
+		panic("ESP registers unmappable");
+	esp->esp_command =
+		sparc_dvma_malloc(16, "ESP DVMA Cmd Block",
+				  &esp->esp_command_dvma);
+	if(!esp->esp_command || !esp->esp_command_dvma)
+		panic("ESP DVMA transport area unmappable");
+
+	/* Set up the irq's etc. */
+	esp->ehost->base = (unsigned char *) esp->eregs;
+	esp->ehost->io_port =
+		esp->edev->reg_addrs[0].phys_addr;
+	esp->ehost->n_io_port = (unsigned char)
+		esp->edev->reg_addrs[0].reg_size;
+	esp->ehost->irq = esp->irq = esp->edev->irqs[0].pri;
+
+#ifndef __sparc_v9__
+	if (sparc_cpu_model != sun4d) {
+		/* Allocate the irq only if necessary */
+		for_each_esp(elink) {
+			if((elink != esp) && (esp->irq == elink->irq)) {
+				goto esp_irq_acquired; /* BASIC rulez */
+			}
+		}
+		if(request_irq(esp->ehost->irq, esp_intr, SA_SHIRQ,
+			       "Sparc ESP SCSI", NULL))
+			panic("Cannot acquire ESP irq line");
+esp_irq_acquired:
+		printk("esp%d: IRQ %d ", esp->esp_id, esp->ehost->irq);
+	} else {
+		dcookie.real_dev_id = esp;
+		dcookie.bus_cookie = esp_dev;
+		if (request_irq(esp->ehost->irq, esp_intr_4d,
+			(SA_SHIRQ | SA_DCOOKIE),
+			"Sparc ESP SCSI", &dcookie))
+			panic("Cannot acquire ESP irq line");
+		printk("esp%d: INO[%x] IRQ %d ", esp->esp_id, dcookie.ret_ino, esp->ehost->irq);
+		esp->ehost->irq = esp->irq = dcookie.ret_ino;
+	}
+#else
+	/* On Ultra we must always call request_irq for each
+	 * esp, so that imap registers get setup etc.
+	 */
+	dcookie.real_dev_id = esp;
+	dcookie.imap = dcookie.iclr = 0;
+	dcookie.pil = -1;
+	dcookie.bus_cookie = sbus;
+	if(request_irq(esp->ehost->irq, esp_intr,
+		       (SA_SHIRQ | SA_SBUS | SA_DCOOKIE),
+		       "Sparc ESP SCSI", &dcookie))
+		panic("Cannot acquire ESP irq line");
+	esp->ehost->irq = esp->irq = dcookie.ret_ino;
+	printk("esp%d: INO[%x] IRQ %d ",
+	       esp->esp_id, esp->ehost->irq, dcookie.ret_pil);
+#endif
+
+	/* Figure out our scsi ID on the bus */
+	esp->scsi_id = prom_getintdefault(esp->prom_node,
+					  "initiator-id",
+					  -1);
+	if(esp->scsi_id == -1)
+		esp->scsi_id = prom_getintdefault(esp->prom_node,
+						  "scsi-initiator-id",
+						  -1);
+	if(esp->scsi_id == -1)
+		esp->scsi_id = (!esp->edev->my_bus) ? 7 :
+			prom_getintdefault(esp->edev->my_bus->prom_node,
+					   "scsi-initiator-id",
+					   7);
+	esp->ehost->this_id = esp->scsi_id;
+	esp->scsi_id_mask = (1 << esp->scsi_id);
+
+	/* Check for differential SCSI-bus */
+	esp->diff = prom_getbool(esp->prom_node, "differential");
+	if(esp->diff)
+		printk("Differential ");
+
+	/* Check out the clock properties of the chip. */
+
+	/* This is getting messy but it has to be done
+	 * correctly or else you get weird behavior all
+	 * over the place.  We are trying to basically
+	 * figure out three pieces of information.
+	 *
+	 * a) Clock Conversion Factor
+	 *
+	 *    This is a representation of the input
+	 *    crystal clock frequency going into the
+	 *    ESP on this machine.  Any operation whose
+	 *    timing is longer than 400ns depends on this
+	 *    value being correct.  For example, you'll
+	 *    get blips for arbitration/selection during
+	 *    high load or with multiple targets if this
+	 *    is not set correctly.
+	 *
+	 * b) Selection Time-Out
+	 *
+	 *    The ESP isn't very bright and will arbitrate
+	 *    for the bus and try to select a target
+	 *    forever if you let it.  This value tells
+	 *    the ESP when it has taken too long to
+	 *    negotiate and that it should interrupt
+	 *    the CPU so we can see what happened.
+	 *    The value is computed as follows (from
+	 *    NCR/Symbios chip docs).
+	 *
+	 *          (Time Out Period) *  (Input Clock)
+	 *    STO = ----------------------------------
+	 *          (8192) * (Clock Conversion Factor)
+	 *
+	 *    You usually want the time out period to be
+	 *    around 250ms, I think we'll set it a little
+	 *    bit higher to account for fully loaded SCSI
+	 *    bus's and slow devices that don't respond so
+	 *    quickly to selection attempts. (yeah, I know
+	 *    this is out of spec. but there is a lot of
+	 *    buggy pieces of firmware out there so bite me)
+	 *
+	 * c) Imperical constants for synchronous offset
+	 *    and transfer period register values
+	 *
+	 *    This entails the smallest and largest sync
+	 *    period we could ever handle on this ESP.
+	 */
+
+	fmhz = prom_getintdefault(esp->prom_node,
+				  "clock-frequency",
+				  -1);
+	if(fmhz==-1)
+		fmhz = (!esp->edev->my_bus) ? 0 :
+			prom_getintdefault(esp->edev->my_bus->prom_node,
+					   "clock-frequency",
+					   -1);
+	if(fmhz <= (5000000))
+		ccf = 0;
+	else
+		ccf = (((5000000 - 1) + (fmhz))/(5000000));
+	if(!ccf || ccf > 8) {
+		/* If we can't find anything reasonable,
+		 * just assume 20MHZ.  This is the clock
+		 * frequency of the older sun4c's where I've
+		 * been unable to find the clock-frequency
+		 * PROM property.  All other machines provide
+		 * useful values it seems.
+		 */
+		ccf = ESP_CCF_F4;
+		fmhz = (20000000);
+	}
+	if(ccf==(ESP_CCF_F7+1))
+		esp->cfact = ESP_CCF_F0;
+	else if(ccf == ESP_CCF_NEVER)
+		esp->cfact = ESP_CCF_F2;
+	else
+		esp->cfact = ccf;
+	esp->cfreq = fmhz;
+	esp->ccycle = ESP_MHZ_TO_CYCLE(fmhz);
+	esp->ctick = ESP_TICK(ccf, esp->ccycle);
+	esp->neg_defp = ESP_NEG_DEFP(fmhz, ccf);
+	esp->sync_defp = SYNC_DEFP_SLOW;
+	printk("SCSI ID %d  Clock %d MHz CCF=%d Time-Out %d ",
+	       esp->scsi_id, (fmhz / 1000000),
+	       ccf, (int) esp->neg_defp);
+
+	/* Find the burst sizes this dma/sbus/esp supports. */
+	bsizes = prom_getintdefault(esp->prom_node, "burst-sizes", 0xff);
+	bsizes &= 0xff;
+	if(espdma) {
+		bsizes_more = prom_getintdefault(
+				  espdma->prom_node,
+				  "burst-sizes", 0xff);
+		if(bsizes_more != 0xff)
+			bsizes &= bsizes_more;
+	}
+	if (esp->edev->my_bus) {
+		bsizes_more = prom_getintdefault(esp->edev->my_bus->prom_node,
+						 "burst-sizes", 0xff);
+		if(bsizes_more != 0xff)
+			bsizes &= bsizes_more;
+	}
+
+	if(bsizes == 0xff || (bsizes & DMA_BURST16)==0 ||
+	   (bsizes & DMA_BURST32)==0)
+		bsizes = (DMA_BURST32 - 1);
+
+	esp->bursts = bsizes;
+
+	/* Probe the revision of this esp */
+	esp->config1 = (ESP_CONFIG1_PENABLE | (esp->scsi_id & 7));
+	esp->config2 = (ESP_CONFIG2_SCSI2ENAB | ESP_CONFIG2_REGPARITY);
+	eregs->esp_cfg2 = esp->config2;
+	if((eregs->esp_cfg2 & ~(ESP_CONFIG2_MAGIC)) !=
+	   (ESP_CONFIG2_SCSI2ENAB | ESP_CONFIG2_REGPARITY)) {
+		printk("NCR53C90(esp100) detected\n");
+		esp->erev = esp100;
+	} else {
+		eregs->esp_cfg2 = esp->config2 = 0;
+		eregs->esp_cfg3 = 0;
+		eregs->esp_cfg3 = esp->config3[0] = 5;
+		if(eregs->esp_cfg3 != 5) {
+			printk("NCR53C90A(esp100a) detected\n");
+			esp->erev = esp100a;
+		} else {
+			int target;
+
+			for(target=0; target<8; target++)
+				esp->config3[target] = 0;
+			eregs->esp_cfg3 = 0;
+			if(ccf > ESP_CCF_F5) {
+				printk("NCR53C9XF(espfast) detected\n");
+				esp->erev = fast;
+				eregs->esp_cfg2 = esp->config2 = 0;
+				esp->sync_defp = SYNC_DEFP_FAST;
+			} else {
+				printk("NCR53C9x(esp236) detected\n");
+				esp->erev = esp236;
+				eregs->esp_cfg2 = esp->config2 = 0;
+			}
+		}
+	}				
+
+	/* Initialize the command queues */
+	esp->current_SC = 0;
+	esp->disconnected_SC = 0;
+	esp->issue_SC = 0;
+
+	/* Clear the state machines. */
+	esp->targets_present = 0;
+	esp->resetting_bus = 0;
+	esp->snip = 0;
+	esp->targets_present = 0;
+	for(i = 0; i < 32; i++)
+		esp->espcmdlog[i] = 0;
+	esp->espcmdent = 0;
+	for(i = 0; i < 16; i++) {
+		esp->cur_msgout[i] = 0;
+		esp->cur_msgin[i] = 0;
+	}
+	esp->prevmsgout = esp->prevmsgin = 0;
+	esp->msgout_len = esp->msgin_len = 0;
+
+	/* Reset the thing before we try anything... */
+	esp_bootup_reset(esp, eregs);
+
+	return 0;
+}
+
+/* Detecting ESP chips on the machine.  This is the simple and easy
+ * version.
+ */
+
+#ifdef CONFIG_SUN4
+
+#include <asm/sun4paddr.h>
+
+__initfunc(int esp_detect(Scsi_Host_Template *tpnt))
+{
+	static struct linux_sbus_device esp_dev;
+	int esps_in_use = 0;
+
+	espchain = 0;
+
+	memset (&esp_dev, 0, sizeof(esp_dev));
+	esp_dev.reg_addrs[0].phys_addr = SUN4_300_ESP_PHYSADDR;
+	esp_dev.irqs[0].pri = 4;
+
+	if (!detect_one_esp(tpnt, &esp_dev, NULL, NULL, 0, 0))
+		esps_in_use++;
+	printk("ESP: Total of 1 ESP hosts found, %d actually in use.\n", esps_in_use);
+	esps_running = esps_in_use;
+	return esps_in_use;
+}
+
+#else /* !CONFIG_SUN4 */
+
+__initfunc(int esp_detect(Scsi_Host_Template *tpnt))
+{
+	struct linux_sbus *sbus;
+	struct linux_sbus_device *esp_dev, *sbdev_iter;
+	int nesps = 0, esps_in_use = 0;
 
 	espchain = 0;
 	if(!SBus_chain) {
@@ -693,320 +1055,10 @@ __initfunc(int esp_detect(Scsi_Host_Template *tpnt))
 						continue; /* how can this happen? */
 				}
 			}
-			esp_host = scsi_register(tpnt, sizeof(struct Sparc_ESP));
-			if(!esp_host)
-				panic("Cannot register ESP SCSI host");
-			if(hme)
-				esp_host->max_id = 16;
-			esp = (struct Sparc_ESP *) esp_host->hostdata;
-			if(!esp)
-				panic("No esp in hostdata");
-			esp->ehost = esp_host;
-			esp->edev = esp_dev;
-			esp->esp_id = nesps++;
-
-			/* Put into the chain of esp chips detected */
-			if(espchain) {
-				elink = espchain;
-				while(elink->next) elink = elink->next;
-				elink->next = esp;
-			} else {
-				espchain = esp;
-			}
-			esp->next = 0;
-
-			/* Get misc. prom information */
-#define ESP_IS_MY_DVMA(esp, dma)  \
-	((esp->edev->my_bus == dma->SBus_dev->my_bus) && \
-         (esp->edev->slot == dma->SBus_dev->slot) && \
-	 (!strcmp(dma->SBus_dev->prom_name, "dma") || \
-	  !strcmp(dma->SBus_dev->prom_name, "espdma")))
-
-			esp_node = esp_dev->prom_node;
-			prom_getstring(esp_node, "name", esp->prom_name,
-				       sizeof(esp->prom_name));
-			esp->prom_node = esp_node;
-			if(espdma) {
-				for_each_dvma(dlink) {
-					if(dlink->SBus_dev == espdma)
-						break;
-				}
-			} else {
-				for_each_dvma(dlink) {
-					if(ESP_IS_MY_DVMA(esp, dlink) &&
-					   !dlink->allocated)
-						break;
-				}
-			}
-#undef ESP_IS_MY_DVMA
-			/* If we don't know how to handle the dvma,
-			 * do not use this device.
-			 */
-			if(!dlink){
-				printk ("Cannot find dvma for ESP%d's SCSI\n",
-					esp->esp_id);
-				scsi_unregister (esp_host);
+			
+			if (detect_one_esp(tpnt, esp_dev, espdma, sbus, nesps++, hme) < 0)
 				continue;
-			}
-			if (dlink->allocated){
-				printk ("esp%d: can't use my espdma\n",
-					esp->esp_id);
-				scsi_unregister (esp_host);
-				continue;
-			}
-			dlink->allocated = 1;
-			dma = dlink;
-			esp->dma = dma;
-			esp->dregs = dregs = dma->regs;
-
-			/* Map in the ESP registers from I/O space */
-			if(!hme) {
-				prom_apply_sbus_ranges(esp->edev->my_bus, 
-						       esp->edev->reg_addrs,
-						       1, esp->edev);
-
-				esp->eregs = eregs = (struct Sparc_ESP_regs *)
-				sparc_alloc_io(esp->edev->reg_addrs[0].phys_addr, 0,
-					       PAGE_SIZE, "ESP Registers",
-					       esp->edev->reg_addrs[0].which_io, 0x0);
-			} else {
-				/* On HME, two reg sets exist, first is DVMA,
-				 * second is ESP registers.
-				 */
-				esp->eregs = eregs = (struct Sparc_ESP_regs *)
-				sparc_alloc_io(esp->edev->reg_addrs[1].phys_addr, 0,
-					       PAGE_SIZE, "ESP Registers",
-					       esp->edev->reg_addrs[1].which_io, 0x0);
-			}
-			if(!eregs)
-				panic("ESP registers unmappable");
-			esp->esp_command =
-				sparc_dvma_malloc(16, "ESP DVMA Cmd Block",
-						  &esp->esp_command_dvma);
-			if(!esp->esp_command || !esp->esp_command_dvma)
-				panic("ESP DVMA transport area unmappable");
-
-			/* Set up the irq's etc. */
-			esp->ehost->base = (unsigned char *) esp->eregs;
-			esp->ehost->io_port =
-				esp->edev->reg_addrs[0].phys_addr;
-			esp->ehost->n_io_port = (unsigned char)
-				esp->edev->reg_addrs[0].reg_size;
-			esp->ehost->irq = esp->irq = esp->edev->irqs[0].pri;
-
-#ifndef __sparc_v9__
-			/* Allocate the irq only if necessary */
-			for_each_esp(elink) {
-				if((elink != esp) && (esp->irq == elink->irq)) {
-					goto esp_irq_acquired; /* BASIC rulez */
-				}
-			}
-			if(request_irq(esp->ehost->irq, do_esp_intr, SA_SHIRQ,
-				       "Sparc ESP SCSI", NULL))
-				panic("Cannot acquire ESP irq line");
-esp_irq_acquired:
-			printk("esp%d: IRQ %d ", esp->esp_id, esp->ehost->irq);
-#else
-			/* On Ultra we must always call request_irq for each
-			 * esp, so that imap registers get setup etc.
-			 */
-			dcookie.real_dev_id = esp;
-			dcookie.imap = dcookie.iclr = 0;
-			dcookie.pil = -1;
-			dcookie.bus_cookie = sbus;
-			if(request_irq(esp->ehost->irq, do_esp_intr,
-				       (SA_SHIRQ | SA_SBUS | SA_DCOOKIE),
-				       "Sparc ESP SCSI", &dcookie))
-				panic("Cannot acquire ESP irq line");
-			esp->ehost->irq = esp->irq = dcookie.ret_ino;
-			printk("esp%d: INO[%x] IRQ %d ",
-			       esp->esp_id, esp->ehost->irq, dcookie.ret_pil);
-#endif
-
-			/* Figure out our scsi ID on the bus */
-			esp->scsi_id = prom_getintdefault(esp->prom_node,
-							  "initiator-id",
-							  -1);
-			if(esp->scsi_id == -1)
-				esp->scsi_id = prom_getintdefault(esp->prom_node,
-								  "scsi-initiator-id",
-								  -1);
-			if(esp->scsi_id == -1)
-				esp->scsi_id =
-					prom_getintdefault(esp->edev->my_bus->prom_node,
-							   "scsi-initiator-id",
-							   7);
-			esp->ehost->this_id = esp->scsi_id;
-			esp->scsi_id_mask = (1 << esp->scsi_id);
-
-			/* Check for differential SCSI-bus */
-			esp->diff = prom_getbool(esp->prom_node, "differential");
-			if(esp->diff)
-				printk("Differential ");
-
-			/* Check out the clock properties of the chip. */
-
-			/* This is getting messy but it has to be done
-			 * correctly or else you get weird behavior all
-			 * over the place.  We are trying to basically
-			 * figure out three pieces of information.
-			 *
-			 * a) Clock Conversion Factor
-			 *
-			 *    This is a representation of the input
-			 *    crystal clock frequency going into the
-			 *    ESP on this machine.  Any operation whose
-			 *    timing is longer than 400ns depends on this
-			 *    value being correct.  For example, you'll
-			 *    get blips for arbitration/selection during
-			 *    high load or with multiple targets if this
-			 *    is not set correctly.
-			 *
-			 * b) Selection Time-Out
-			 *
-			 *    The ESP isn't very bright and will arbitrate
-			 *    for the bus and try to select a target
-			 *    forever if you let it.  This value tells
-			 *    the ESP when it has taken too long to
-			 *    negotiate and that it should interrupt
-			 *    the CPU so we can see what happened.
-			 *    The value is computed as follows (from
-			 *    NCR/Symbios chip docs).
-			 *
-			 *          (Time Out Period) *  (Input Clock)
-			 *    STO = ----------------------------------
-			 *          (8192) * (Clock Conversion Factor)
-			 *
-			 *    You usually want the time out period to be
-			 *    around 250ms, I think we'll set it a little
-			 *    bit higher to account for fully loaded SCSI
-			 *    bus's and slow devices that don't respond so
-			 *    quickly to selection attempts. (yeah, I know
-			 *    this is out of spec. but there is a lot of
-			 *    buggy pieces of firmware out there so bite me)
-			 *
-			 * c) Imperical constants for synchronous offset
-			 *    and transfer period register values
-			 *
-			 *    This entails the smallest and largest sync
-			 *    period we could ever handle on this ESP.
-			 */
-
-			fmhz = prom_getintdefault(esp->prom_node,
-						  "clock-frequency",
-						  -1);
-			if(fmhz==-1)
-				fmhz = prom_getintdefault(esp->edev->my_bus->prom_node,
-							  "clock-frequency",
-							  -1);
-			if(fmhz <= (5000000))
-				ccf = 0;
-			else
-				ccf = (((5000000 - 1) + (fmhz))/(5000000));
-			if(!ccf || ccf > 8) {
-				/* If we can't find anything reasonable,
-				 * just assume 20MHZ.  This is the clock
-				 * frequency of the older sun4c's where I've
-				 * been unable to find the clock-frequency
-				 * PROM property.  All other machines provide
-				 * useful values it seems.
-				 */
-				ccf = ESP_CCF_F4;
-				fmhz = (20000000);
-			}
-			if(ccf==(ESP_CCF_F7+1))
-				esp->cfact = ESP_CCF_F0;
-			else if(ccf == ESP_CCF_NEVER)
-				esp->cfact = ESP_CCF_F2;
-			else
-				esp->cfact = ccf;
-			esp->cfreq = fmhz;
-			esp->ccycle = ESP_MHZ_TO_CYCLE(fmhz);
-			esp->ctick = ESP_TICK(ccf, esp->ccycle);
-			esp->neg_defp = ESP_NEG_DEFP(fmhz, ccf);
-			esp->sync_defp = SYNC_DEFP_SLOW;
-			printk("SCSI ID %d  Clock %d MHz CCF=%d Time-Out %d ",
-			       esp->scsi_id, (fmhz / 1000000),
-			       ccf, (int) esp->neg_defp);
-
-			/* Find the burst sizes this dma/sbus/esp supports. */
-			bsizes = prom_getintdefault(esp->prom_node, "burst-sizes", 0xff);
-			bsizes &= 0xff;
-			if(espdma) {
-				bsizes_more = prom_getintdefault(
-						  espdma->prom_node,
-						  "burst-sizes", 0xff);
-				if(bsizes_more != 0xff)
-					bsizes &= bsizes_more;
-			}
-			bsizes_more = prom_getintdefault(esp->edev->my_bus->prom_node,
-							 "burst-sizes", 0xff);
-			if(bsizes_more != 0xff)
-				bsizes &= bsizes_more;
-
-			if(bsizes == 0xff || (bsizes & DMA_BURST16)==0 ||
-			   (bsizes & DMA_BURST32)==0)
-				bsizes = (DMA_BURST32 - 1);
-
-			esp->bursts = bsizes;
-
-			/* Probe the revision of this esp */
-			esp->config1 = (ESP_CONFIG1_PENABLE | (esp->scsi_id & 7));
-			esp->config2 = (ESP_CONFIG2_SCSI2ENAB | ESP_CONFIG2_REGPARITY);
-			eregs->esp_cfg2 = esp->config2;
-			if((eregs->esp_cfg2 & ~(ESP_CONFIG2_MAGIC)) !=
-			   (ESP_CONFIG2_SCSI2ENAB | ESP_CONFIG2_REGPARITY)) {
-				printk("NCR53C90(esp100) detected\n");
-				esp->erev = esp100;
-			} else {
-				eregs->esp_cfg2 = esp->config2 = 0;
-				eregs->esp_cfg3 = 0;
-				eregs->esp_cfg3 = esp->config3[0] = 5;
-				if(eregs->esp_cfg3 != 5) {
-					printk("NCR53C90A(esp100a) detected\n");
-					esp->erev = esp100a;
-				} else {
-					int target;
-
-					for(target=0; target<8; target++)
-						esp->config3[target] = 0;
-					eregs->esp_cfg3 = 0;
-					if(ccf > ESP_CCF_F5) {
-						printk("NCR53C9XF(espfast) detected\n");
-						esp->erev = fast;
-						eregs->esp_cfg2 = esp->config2 = 0;
-						esp->sync_defp = SYNC_DEFP_FAST;
-					} else {
-						printk("NCR53C9x(esp236) detected\n");
-						esp->erev = esp236;
-						eregs->esp_cfg2 = esp->config2 = 0;
-					}
-				}
-			}				
-
-			/* Initialize the command queues */
-			esp->current_SC = 0;
-			esp->disconnected_SC = 0;
-			esp->issue_SC = 0;
-
-			/* Clear the state machines. */
-			esp->targets_present = 0;
-			esp->resetting_bus = 0;
-			esp->snip = 0;
-			esp->targets_present = 0;
-			for(i = 0; i < 32; i++)
-				esp->espcmdlog[i] = 0;
-			esp->espcmdent = 0;
-			for(i = 0; i < 16; i++) {
-				esp->cur_msgout[i] = 0;
-				esp->cur_msgin[i] = 0;
-			}
-			esp->prevmsgout = esp->prevmsgin = 0;
-			esp->msgout_len = esp->msgin_len = 0;
-
-			/* Reset the thing before we try anything... */
-			esp_bootup_reset(esp, eregs);
-
+				
 			esps_in_use++;
 		} /* for each sbusdev */
 	} /* for each sbus */
@@ -1015,6 +1067,8 @@ esp_irq_acquired:
 	esps_running = esps_in_use;
 	return esps_in_use;
 }
+
+#endif /* !CONFIG_SUN4 */
 
 /* The info function will return whatever useful
  * information the developer sees fit.  If not provided, then
@@ -4040,24 +4094,17 @@ esp_handle_done:
 	return;
 }
 
-static void do_esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&io_request_lock, flags);
-	esp_intr(irq, dev_id, pregs);
-	spin_unlock_irqrestore(&io_request_lock, flags);
-}
-
 #ifndef __sparc_v9__
 
 #ifndef __SMP__
 static void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
 {
 	struct Sparc_ESP *esp;
+	unsigned long flags;
 	int again;
 
 	/* Handle all ESP interrupts showing at this IRQ level. */
+	spin_lock_irqsave(&io_request_lock, flags);
 repeat:
 	again = 0;
 	for_each_esp(esp) {
@@ -4077,14 +4124,17 @@ repeat:
 	}
 	if(again)
 		goto repeat;
+	spin_unlock_irqrestore(&io_request_lock, flags);
 }
 #else
 /* For SMP we only service one ESP on the list list at our IRQ level! */
 static void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
 {
 	struct Sparc_ESP *esp;
+	unsigned long flags;
 
 	/* Handle all ESP interrupts showing at this IRQ level. */
+	spin_lock_irqsave(&io_request_lock, flags);
 	for_each_esp(esp) {
 		if(((esp)->irq & 0xf) == irq) {
 			if(DMA_IRQ_P(esp->dregs)) {
@@ -4096,19 +4146,21 @@ static void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
 				ESPIRQ((")"));
 
 				DMA_INTSON(esp->dregs);
-				return;
+				goto out;
 			}
 		}
 	}
+out:
+	spin_unlock_irqrestore(&io_request_lock, flags);
 }
 #endif
 
-#else /* __sparc_v9__ */
-
-static void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
+static void esp_intr_4d(int irq, void *dev_id, struct pt_regs *pregs)
 {
 	struct Sparc_ESP *esp = dev_id;
+	unsigned long flags;
 
+	spin_lock_irqsave(&io_request_lock, flags);
 	if(DMA_IRQ_P(esp->dregs)) {
 		DMA_INTSOFF(esp->dregs);
 
@@ -4118,6 +4170,26 @@ static void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
 
 		DMA_INTSON(esp->dregs);
 	}
+	spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
+#else /* __sparc_v9__ */
+
+static void esp_intr(int irq, void *dev_id, struct pt_regs *pregs)
+{
+	struct Sparc_ESP *esp = dev_id;
+	unsigned long flags;
+
+	spin_lock_irqsave(&io_request_lock, flags);
+	if(DMA_IRQ_P(esp->dregs)) {
+		DMA_INTSOFF(esp->dregs);
+
+		ESPIRQ(("I[%d:%d](", smp_processor_id(), esp->esp_id));
+		esp_handle(esp);
+		ESPIRQ((")"));
+
+		DMA_INTSON(esp->dregs);
+	}
+	spin_unlock_irqrestore(&io_request_lock, flags);
+}
 #endif

@@ -1,17 +1,12 @@
 /*
  * linux/include/asm-arm/arch-nexuspci/dma.h
  *
- * Architecture DMA routines
+ * Architecture DMA routines - NexusPCI has no DMA, so this file is very
+ * simple. :-)
  *
  * Copyright (C) 1998 Philip Blundell
  */
 
-#ifndef __ASM_ARCH_DMA_H
-#define __ASM_ARCH_DMA_H
-
-/* NexusPCI has no DMA */
-
-#warning No DMA on this platform
-
-#endif /* _ASM_ARCH_DMA_H */
+/* Need this to keep <asm/dma.h> happy. */
+typedef unsigned int dmamode_t;
 

@@ -8,7 +8,7 @@
  * License.  See the file COPYING in the main directory of this archive
  * for more details.
  *
- * $Id: bootinfo.h,v 1.3 1997/09/19 08:37:44 ralf Exp $
+ * $Id: bootinfo.h,v 1.7 1998/05/01 01:35:46 ralf Exp $
  */
 #ifndef __ASM_MIPS_BOOTINFO_H
 #define __ASM_MIPS_BOOTINFO_H
@@ -26,9 +26,10 @@
 #define MACH_GROUP_SNI_RM	4 /* Siemens Nixdorf RM series                */
 #define MACH_GROUP_ACN		5
 #define MACH_GROUP_SGI          6 /* Silicon Graphics workstations and servers */
+#define MACH_GROUP_RESERVED     7 /* No Such Architecture	 	      */
 
 #define GROUP_NAMES { "unknown", "Jazz", "Digital", "ARC", \
-                      "SNI", "ACN", "SGI" }
+                      "SNI", "ACN", "SGI", "NSA" }
 
 /*
  * Valid machtype values for group unknown (low order halfword of mips_machtype)
@@ -81,8 +82,6 @@
  * Valid machtype for group SGI
  */
 #define MACH_SGI_INDY		0	/* R4?K and R5K Indy workstaions */
-
-#define GROUP_SGI_NAMES { "Indy" }
 
 #define GROUP_SGI_NAMES { "Indy" }
 

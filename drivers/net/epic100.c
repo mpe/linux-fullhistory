@@ -69,7 +69,6 @@ static int max_interrupt_work = 10;
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <asm/processor.h>		/* Processor type for cache alignment. */
 #include <asm/bitops.h>
 #include <asm/io.h>
@@ -124,6 +123,7 @@ char kernel_version[] = UTS_RELEASE;
 
 #if (LINUX_VERSION_CODE < 0x20123)
 #define test_and_set_bit(val, addr) set_bit(val, addr)
+#include <linux/bios32.h>
 #else
 #ifdef MODULE
 MODULE_AUTHOR("Donald Becker <becker@cesdis.gsfc.nasa.gov>");
@@ -258,7 +258,7 @@ static int options[] = {-1, -1, -1, -1, -1, -1, -1, -1};
 #endif
 
 static struct device *epic100_probe1(struct device *dev, int ioaddr, int irq,
-									 int chip_id, int options, int card_idx);
+                                 int chip_id, int options, int card_idx);
 static int epic_open(struct device *dev);
 static int read_eeprom(int ioaddr, int location);
 static int mii_read(int ioaddr, int phy_id, int location);
@@ -293,11 +293,17 @@ int epic100_probe(struct device *dev)
 	   well with the current structure.  So instead we detect just the
 	   Epic cards in slot order. */
 
-	if (pcibios_present()) {
+	if (pci_present()) {
 		unsigned char pci_bus, pci_device_fn;
 
 		for (;pci_index < 0xff; pci_index++) {
-			unsigned char pci_irq_line, pci_latency;
+#if LINUX_VERSION_CODE >= 0x20155
+			unsigned int pci_irq_line;
+			struct pci_dev *pdev;
+#else
+			unsigned char pci_irq_line;
+#endif
+			unsigned char pci_latency;
 			unsigned short pci_command, vendor, device;
 			unsigned int pci_ioaddr, chip_idx = 0;
 
@@ -317,10 +323,16 @@ int epic100_probe(struct device *dev)
 
 			pcibios_read_config_word(pci_bus, pci_device_fn,
 									 PCI_DEVICE_ID, &device);
+#if LINUX_VERSION_CODE >= 0x20155
+			pdev = pci_find_slot(pci_bus, pci_device_fn);
+			pci_irq_line = pdev->irq;
+			pci_ioaddr = pdev->base_address[0];
+#else
 			pcibios_read_config_byte(pci_bus, pci_device_fn,
 									 PCI_INTERRUPT_LINE, &pci_irq_line);
 			pcibios_read_config_dword(pci_bus, pci_device_fn,
 									  PCI_BASE_ADDRESS_0, &pci_ioaddr);
+#endif
 			/* Remove I/O space marker in bit 0. */
 			pci_ioaddr &= ~3;
 
@@ -730,6 +742,17 @@ epic_start_xmit(struct sk_buff *skb, struct device *dev)
 	struct epic_private *tp = (struct epic_private *)dev->priv;
 	int entry;
 	u32 flag;
+
+#ifndef final_version
+	if (skb == NULL || skb->len <= 0) {
+		printk("%s: Obsolete driver layer request made: skbuff==NULL.\n",
+			   dev->name);
+#if 0
+		dev_tint(dev);
+#endif
+		return 0;
+	}
+#endif
 
 	/* Block a timer-based transmit from overlapping.  This could better be
 	   done with atomic_swap(1, dev->tbusy), but set_bit() works as well. */

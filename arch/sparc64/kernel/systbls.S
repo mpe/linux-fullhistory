@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.41 1998/03/24 05:57:57 ecd Exp $
+/* $Id: systbls.S,v 1.42 1998/04/14 13:49:52 jj Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -40,11 +40,11 @@ sys_call_table32:
 /*100*/ .word sys_getpriority, sys32_rt_sigreturn, sys32_rt_sigaction, sys32_rt_sigprocmask, sys32_rt_sigpending
 	.word sys32_rt_sigtimedwait, sys32_rt_sigqueueinfo, sys32_rt_sigsuspend, sys_nis_syscall, sys_nis_syscall
 /*110*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
-	.word sys_nis_syscall, sys32_gettimeofday, sys32_getrusage, sys_nis_syscall, sys_nis_syscall
+	.word sys_nis_syscall, sys32_gettimeofday, sys32_getrusage, sys_nis_syscall, sys_getcwd
 /*120*/	.word sys32_readv, sys32_writev, sys32_settimeofday, sys_fchown, sys_fchmod
 	.word sys_nis_syscall, sys32_setreuid, sys32_setregid, sys_rename, sys_truncate
 /*130*/	.word sys_ftruncate, sys_flock, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall
-	.word sys_nis_syscall, sys_mkdir, sys_rmdir, sys_nis_syscall, sys_nis_syscall
+	.word sys_nis_syscall, sys_mkdir, sys_rmdir, sys32_utimes, sys_nis_syscall
 /*140*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys32_getrlimit
 	.word sys32_setrlimit, sys_nis_syscall, sys32_prctl, sys32_pciconfig_read, sys32_pciconfig_write
 /*150*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_poll, sys_nis_syscall
@@ -99,11 +99,11 @@ sys_call_table:
 /*100*/	.word sys_getpriority, sys_rt_sigreturn, sys_rt_sigaction, sys_rt_sigprocmask, sys_rt_sigpending
 	.word sys_rt_sigtimedwait, sys_rt_sigqueueinfo, sys_rt_sigsuspend, sys_nis_syscall, sys_nis_syscall
 /*110*/	.word sys_nis_syscall, sys_nis_syscall, sys_nis_syscall, sys_recvmsg, sys_sendmsg
-	.word sys_nis_syscall, sys_gettimeofday, sys_getrusage, sys_getsockopt, sys_nis_syscall
+	.word sys_nis_syscall, sys_gettimeofday, sys_getrusage, sys_getsockopt, sys_getcwd
 /*120*/	.word sys_readv, sys_writev, sys_settimeofday, sys_fchown, sys_fchmod
 	.word sys_recvfrom, sys_setreuid, sys_setregid, sys_rename, sys_truncate
 /*130*/	.word sys_ftruncate, sys_flock, sys_nis_syscall, sys_sendto, sys_shutdown
-	.word sys_socketpair, sys_mkdir, sys_rmdir, sys_nis_syscall, sys_nis_syscall
+	.word sys_socketpair, sys_mkdir, sys_rmdir, sys_utimes, sys_nis_syscall
 /*140*/	.word sys_nis_syscall, sys_getpeername, sys_nis_syscall, sys_nis_syscall, sys_getrlimit
 	.word sys_setrlimit, sys_nis_syscall, sys_prctl, sys_pciconfig_read, sys_pciconfig_write
 /*150*/	.word sys_getsockname, sys_nis_syscall, sys_nis_syscall, sys_poll, sys_nis_syscall

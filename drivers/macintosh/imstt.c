@@ -22,6 +22,7 @@
 #include <asm/io.h>
 #include <asm/pgtable.h>
 #include <asm/pci-bridge.h>
+#include <asm/init.h>
 #include <linux/selection.h>
 #include <linux/vt_kern.h>
 #include "pmac-cons.h"
@@ -480,6 +481,8 @@ static void map_imstt_display(struct device_node *, int);
 static int read_imstt_sense(void);
 static int imstt_vram_reqd(int vmode, int cmode);
 
+
+__openfirmware
 
 #if 0
 static int get_tvp_ireg(int iaddr)

@@ -74,7 +74,7 @@ enum pid_directory_inos {
 };
 
 enum pid_subdirectory_inos {
-	PROC_PID_FD_DIR = 1
+	PROC_PID_FD_DIR = 0x8000,	/* 0x8000-0xffff */
 };
 
 enum net_directory_inos {

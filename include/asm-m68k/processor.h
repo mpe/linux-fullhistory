@@ -19,7 +19,8 @@
 /* This decides where the kernel will search for a free chunk of vm
  * space during mmap's.
  */
-#define TASK_UNMAPPED_BASE	0xC0000000UL
+#define TASK_UNMAPPED_BASE(off)	0xC0000000UL
+#define TASK_UNMAPPED_ALIGN(addr, off)	PAGE_ALIGN(addr)
 
 /*
  * Bus types
@@ -93,6 +94,9 @@ extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 	else
 		return sw->retpc;
 }
+
+#define copy_segments(nr, tsk, mm)	do { } while (0)
+#define release_segments(mm)		do { } while (0)
 
 /* Allocation and freeing of basic task resources. */
 #define alloc_task_struct() \

@@ -6,7 +6,7 @@
 
 L_TARGET := lib.a
 L_OBJS   := backtrace.o bitops.o checksum.o delay.o fp_support.o \
-	    loaders.o memcpy.o memfastset.o system.o string.o uaccess.o
+	    loaders.o memcpy.o system.o string.o uaccess.o
 
 ifeq ($(PROCESSOR),armo)
   L_OBJS += uaccess-armo.o
@@ -37,6 +37,8 @@ constants.h: getconsdata.o extractconstants.pl
 
 getconsdata.o: getconsdata.c
 	$(CC) $(CFLAGS) -c getconsdata.c
+
+checksum.o: constants.h
 
 %.o: %.S
 ifneq ($(CONFIG_BINUTILS_NEW),y)

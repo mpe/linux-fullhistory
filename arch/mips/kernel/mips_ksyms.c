@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1996, 1997 by Ralf Baechle
  *
- * $Id: mips_ksyms.c,v 1.4 1997/08/11 04:17:18 ralf Exp $
+ * $Id: mips_ksyms.c,v 1.7 1998/05/04 09:17:52 ralf Exp $
  */
 #include <linux/config.h>
 #include <linux/module.h>
@@ -32,7 +32,6 @@ EXPORT_SYMBOL(EISA_bus);
 /*
  * String functions
  */
-EXPORT_SYMBOL_NOVERS(bcopy);
 EXPORT_SYMBOL_NOVERS(memcmp);
 EXPORT_SYMBOL_NOVERS(memset);
 EXPORT_SYMBOL_NOVERS(memcpy);
@@ -47,13 +46,13 @@ EXPORT_SYMBOL_NOVERS(strtok);
 
 EXPORT_SYMBOL(clear_page);
 EXPORT_SYMBOL(__mips_bh_counter);
+EXPORT_SYMBOL(local_bh_count);
 EXPORT_SYMBOL(local_irq_count);
 
 /*
  * Userspace access stuff.
  */
 EXPORT_SYMBOL(__copy_user);
-EXPORT_SYMBOL(active_ds);
 
 /* Networking helper routines. */
 EXPORT_SYMBOL(csum_partial_copy);

@@ -4,6 +4,10 @@
  *  Copyright (C) 1991, 1992 Linus Torvalds
  *
  *  proc fd directory handling functions
+ *
+ *  01-May-98 Edgar Toernig <froese@gmx.de>
+ *	Added support for more than 256 fds.
+ *	Limit raised to 32768.
  */
 
 #include <linux/errno.h>
@@ -91,7 +95,7 @@ static int proc_lookupfd(struct inode * dir, struct dentry * dentry)
 			goto out;
 		fd *= 10;
 		fd += c;
-		if (fd & 0xffff0000)
+		if (fd & 0xffff8000)
 			goto out;
 	}
 
@@ -111,8 +115,7 @@ static int proc_lookupfd(struct inode * dir, struct dentry * dentry)
 	if (!file || !file->f_dentry)
 		goto out;
 
-	/* N.B. What happens if fd > 255?? */
-	ino = (pid << 16) + (PROC_PID_FD_DIR << 8) + fd;
+	ino = (pid << 16) + PROC_PID_FD_DIR + fd;
 	inode = proc_get_inode(dir->i_sb, ino, NULL);
 	if (inode) {
 		d_add(dentry, inode);
@@ -144,7 +147,7 @@ static int proc_readfd(struct file * filp, void * dirent, filldir_t filldir)
 		goto out;
 
 	for (fd = filp->f_pos; fd < 2; fd++, filp->f_pos++) {
-		unsigned long ino = inode->i_ino;
+		ino = inode->i_ino;
 		if (fd)
 			ino = (ino & 0xffff0000) | PROC_PID_INO;
 		if (filldir(dirent, "..", fd+1, fd, ino) < 0)
@@ -176,7 +179,7 @@ static int proc_readfd(struct file * filp, void * dirent, filldir_t filldir)
 		/* Drop the task lock, as the filldir function may block */
 		read_unlock(&tasklist_lock);
 
-		ino = (pid << 16) + (PROC_PID_FD_DIR << 8) + fd;
+		ino = (pid << 16) + PROC_PID_FD_DIR + fd;
 		if (filldir(dirent, buf+j, NUMBUF-j, fd+2, ino) < 0)
 			goto out;
 

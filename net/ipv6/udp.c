@@ -7,7 +7,7 @@
  *
  *	Based on linux/ipv4/udp.c
  *
- *	$Id: udp.c,v 1.27 1998/03/21 07:28:06 davem Exp $
+ *	$Id: udp.c,v 1.28 1998/05/03 14:31:12 alan Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -147,7 +147,7 @@ static struct sock *udp_v6_lookup(struct in6_addr *saddr, u16 sport,
 
 	for(sk = udp_hash[hnum & (UDP_HTABLE_SIZE - 1)]; sk != NULL; sk = sk->next) {
 		if((sk->num == hnum)		&&
-		   (sk->family == AF_INET6)	&&
+		   (sk->family == PF_INET6)	&&
 		   !(sk->dead && (sk->state == TCP_CLOSE))) {
 			struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
 			int score = 0;

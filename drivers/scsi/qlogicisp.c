@@ -55,6 +55,8 @@
 
 #define DEFAULT_LOOP_COUNT	1000000
 
+#define LinuxVersionCode(v, p, s) (((v)<<16)+((p)<<8)+(s))
+
 /* End Configuration section *************************************************/
 
 #include <linux/module.h>
@@ -1160,7 +1162,7 @@ static int isp1020_reset_hardware(struct Scsi_Host *host)
 
 static int isp1020_init(struct Scsi_Host *sh)
 {
-	u_int io_base;
+	u_long io_base;
 	struct isp1020_hostdata *hostdata;
 	u_char revision;
 	u_int irq;

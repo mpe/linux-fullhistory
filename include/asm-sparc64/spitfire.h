@@ -1,4 +1,4 @@
-/* $Id: spitfire.h,v 1.8 1997/05/18 04:16:56 davem Exp $
+/* $Id: spitfire.h,v 1.9 1998/04/28 08:23:33 davem Exp $
  * spitfire.h: SpitFire/BlackBird/Cheetah inline MMU operations.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -85,7 +85,7 @@ extern __inline__ void spitfire_set_primary_context(unsigned long ctx)
 {
 	__asm__ __volatile__("stxa	%0, [%1] %2"
 			     : /* No outputs */
-			     : "r" (ctx & 0x1fff),
+			     : "r" (ctx & 0x3ff),
 			       "r" (PRIMARY_CONTEXT), "i" (ASI_DMMU));
 	membar("#Sync");
 }
@@ -104,7 +104,7 @@ extern __inline__ void spitfire_set_secondary_context(unsigned long ctx)
 {
 	__asm__ __volatile__("stxa	%0, [%1] %2"
 			     : /* No outputs */
-			     : "r" (ctx & 0x1fff),
+			     : "r" (ctx & 0x3ff),
 			       "r" (SECONDARY_CONTEXT), "i" (ASI_DMMU));
 	membar("#Sync");
 }

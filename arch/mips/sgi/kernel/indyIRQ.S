@@ -1,4 +1,4 @@
-/* $Id: indyIRQ.S,v 1.2 1997/09/20 19:20:14 root Exp $
+/* $Id: indyIRQ.S,v 1.3 1998/05/01 01:35:14 ralf Exp $
  * indyIRQ.S: Interrupt exception dispatch code for FullHouse and
  *            Guiness.
  *
@@ -68,7 +68,6 @@
 
 	/* Wheee, a timer interrupt. */
 	move	a0, sp
-	addiu	t0, s7, 1
 	jal	indy_timer_interrupt
 	 nop				# delay slot
 
@@ -117,7 +116,6 @@
 	 */
 	andi	a0, s0, (CAUSEF_IP4 | CAUSEF_IP5)
 	beq	a0, zero, 1f
-	 addiu	t0, s7, 1
 
 	/* Must be one of the 8254 timers... */
 	move	a0, sp

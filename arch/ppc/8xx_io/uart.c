@@ -59,6 +59,7 @@ static DECLARE_TASK_QUEUE(tq_serial);
 
 static struct tty_driver serial_driver, callout_driver;
 static int serial_refcount;
+static int serial_console_setup(struct console *co, char *options);
 
 /*
  * Serial driver configuration section.  Here are the various options:
@@ -277,7 +278,7 @@ static _INLINE_ void receive_chars(ser_info_t *info)
 {
 	struct tty_struct *tty = info->tty;
 	unsigned char ch, *cp;
-	int	ignored = 0;
+	/*int	ignored = 0;*/
 	int	i;
 	ushort	status;
 	struct	async_icount *icount;
@@ -594,10 +595,10 @@ static void do_serial_hangup(void *private_)
 	tty_hangup(tty);
 }
 
-static void rs_8xx_timer(void)
+/*static void rs_8xx_timer(void)
 {
 	printk("rs_8xx_timer\n");
-}
+}*/
 
 
 static int startup(ser_info_t *info)
@@ -1607,7 +1608,7 @@ static void rs_8xx_wait_until_sent(struct tty_struct *tty, int timeout)
 {
 	ser_info_t *info = (ser_info_t *)tty->driver_data;
 	unsigned long orig_jiffies, char_time;
-	int lsr;
+	/*int lsr;*/
 	volatile cbd_t *bdp;
 	
 	if (serial_paranoia_check(info, tty->device, "rs_wait_until_sent"))
@@ -1645,7 +1646,7 @@ static void rs_8xx_wait_until_sent(struct tty_struct *tty, int timeout)
 		printk("lsr = %d (jiff=%lu)...", lsr, jiffies);
 #endif
 		current->state = TASK_INTERRUPTIBLE;
-/*		current->counter = 0;	/* make us low-priority */
+/*		current->counter = 0;	 make us low-priority */
 		current->timeout = jiffies + char_time;
 		schedule();
 		if (signal_pending(current))
@@ -2030,6 +2031,185 @@ static _INLINE_ void show_serial_version(void)
  	printk(KERN_INFO "%s version %s\n", serial_name, serial_version);
 }
 
+
+/*
+ * The serial console driver used during boot.  Note that these names
+ * clash with those found in "serial.c", so we currently can't support
+ * the 16xxx uarts and these at the same time.  I will fix this to become
+ * an indirect function call from tty_io.c (or something).
+ */
+
+#ifdef CONFIG_SERIAL_CONSOLE
+
+/*
+ * Print a string to the serial port trying not to disturb any possible
+ * real use of the port...
+ */
+static void serial_console_write(struct console *c, const char *s,
+				unsigned count)
+{
+	struct		serial_state	*ser;
+	ser_info_t			*info;
+	unsigned			i;
+	volatile	cbd_t		*bdp, *bdbase;
+	volatile	smc_uart_t	*up;
+	volatile	u_char		*cp;
+
+	ser = rs_table + c->index;
+
+	/* If the port has been initialized for general use, we have
+	 * to use the buffer descriptors allocated there.  Otherwise,
+	 * we simply use the single buffer allocated.
+	 */
+	if ((info = (ser_info_t *)ser->info) != NULL) {
+		bdp = info->tx_cur;
+		bdbase = info->tx_bd_base;
+	}
+	else {
+		/* Pointer to UART in parameter ram.
+		*/
+		up = (smc_uart_t *)&cpmp->cp_dparam[ser->port];
+
+		/* Get the address of the host memory buffer.
+		 */
+		bdp = bdbase = (cbd_t *)&cpmp->cp_dpmem[up->smc_tbase];
+	}
+
+	/*
+	 * We need to gracefully shut down the transmitter, disable
+	 * interrupts, then send our bytes out.
+	 */
+
+	/*
+	 * Now, do each character.  This is not as bad as it looks
+	 * since this is a holding FIFO and not a transmitting FIFO.
+	 * We could add the complexity of filling the entire transmit
+	 * buffer, but we would just wait longer between accesses......
+	 */
+	for (i = 0; i < count; i++, s++) {
+		/* Wait for transmitter fifo to empty.
+		 * Ready indicates output is ready, and xmt is doing
+		 * that, not that it is ready for us to send.
+		 */
+		while (bdp->cbd_sc & BD_SC_READY);
+		/* Send the character out. */
+		cp = __va(bdp->cbd_bufaddr);
+		*cp = *s;
+		
+		bdp->cbd_datlen = 1;
+		bdp->cbd_sc |= BD_SC_READY;
+
+		if (bdp->cbd_sc & BD_SC_WRAP)
+			bdp = bdbase;
+		else
+			bdp++;
+
+		/* if a LF, also do CR... */
+		if (*s == 10) {
+			while (bdp->cbd_sc & BD_SC_READY);
+			cp = __va(bdp->cbd_bufaddr);
+			*cp = 13;
+			bdp->cbd_datlen = 1;
+			bdp->cbd_sc |= BD_SC_READY;
+
+			if (bdp->cbd_sc & BD_SC_WRAP) {
+				bdp = bdbase;
+			}
+			else {
+				bdp++;
+			}
+		}
+	}
+
+	/*
+	 * Finally, Wait for transmitter & holding register to empty
+	 *  and restore the IER
+	 */
+	while (bdp->cbd_sc & BD_SC_READY);
+
+	if (info)
+		info->tx_cur = (cbd_t *)bdp;
+}
+
+/*
+ * Receive character from the serial port.  This only works well
+ * before the port is initialize for real use.
+ */
+static int serial_console_wait_key(struct console *co)
+{
+	struct serial_state		*ser;
+	u_char				c, *cp;
+	ser_info_t			*info;
+	volatile	cbd_t		*bdp;
+	volatile	smc_uart_t	*up;
+
+	ser = rs_table + co->index;
+
+	/* Pointer to UART in parameter ram.
+	*/
+	up = (smc_uart_t *)&cpmp->cp_dparam[ser->port];
+
+	/* Get the address of the host memory buffer.
+	 * If the port has been initialized for general use, we must
+	 * use information from the port structure.
+	 */
+	if ((info = (ser_info_t *)ser->info))
+		bdp = info->rx_cur;
+	else
+		bdp = (cbd_t *)&cpmp->cp_dpmem[up->smc_rbase];
+
+	/*
+	 * We need to gracefully shut down the receiver, disable
+	 * interrupts, then read the input.
+	 */
+	while (bdp->cbd_sc & BD_SC_EMPTY);	/* Wait for a character */
+	cp = __va(bdp->cbd_bufaddr);
+
+	if (info) {
+		if (bdp->cbd_sc & BD_SC_WRAP) {
+			bdp = info->rx_bd_base;
+		}
+		else {
+			bdp++;
+		}
+		info->rx_cur = (cbd_t *)bdp;
+	}
+
+	c = *cp;
+	return((int)c);
+}
+
+static kdev_t serial_console_device(struct console *c)
+{
+	return MKDEV(TTYAUX_MAJOR, 64 + c->index);
+}
+
+
+static struct console sercons = {
+	"ttyS",
+	serial_console_write,
+	NULL,
+	serial_console_device,
+	serial_console_wait_key,
+	NULL,
+	serial_console_setup,
+	CON_PRINTBUFFER,
+	CONFIG_SERIAL_CONSOLE_PORT,
+	0,
+	NULL
+};
+
+/*
+ *	Register console.
+ */
+__initfunc (long console_8xx_init(long kmem_start, long kmem_end))
+{
+	register_console(&sercons);
+	return kmem_start;
+}
+
+#endif
+
 /*
  * The serial driver boot-time initialization code!
  */
@@ -2055,7 +2235,8 @@ __initfunc(int rs_8xx_init(void))
 
 	/* Initialize the tty_driver structure */
 	
-	memset(&serial_driver, 0, sizeof(struct tty_driver));
+	/*memset(&serial_driver, 0, sizeof(struct tty_driver));*/
+	__clear_user(&serial_driver,sizeof(struct tty_driver));
 	serial_driver.magic = TTY_DRIVER_MAGIC;
 	serial_driver.driver_name = "serial";
 	serial_driver.name = "ttyS";
@@ -2147,7 +2328,8 @@ __initfunc(int rs_8xx_init(void))
 #endif
 		info = kmalloc(sizeof(ser_info_t), GFP_KERNEL);
 		if (info) {
-			memset(info, 0, sizeof(ser_info_t));
+			/*memset(info, 0, sizeof(ser_info_t));*/
+			__clear_user(info,sizeof(ser_info_t));
 			info->magic = SERIAL_MAGIC;
 			info->flags = state->flags;
 			info->tqueue.routine = do_softint;
@@ -2267,159 +2449,6 @@ __initfunc(int rs_8xx_init(void))
 	return 0;
 }
 
-/*
- * The serial console driver used during boot.  Note that these names
- * clash with those found in "serial.c", so we currently can't support
- * the 16xxx uarts and these at the same time.  I will fix this to become
- * an indirect function call from tty_io.c (or something).
- */
-
-#ifdef CONFIG_SERIAL_CONSOLE
-
-/*
- * Print a string to the serial port trying not to disturb any possible
- * real use of the port...
- */
-static void serial_console_write(struct console *c, const char *s,
-				unsigned count)
-{
-	struct		serial_state	*ser;
-	ser_info_t			*info;
-	unsigned			i;
-	volatile	cbd_t		*bdp, *bdbase;
-	volatile	smc_uart_t	*up;
-	volatile	u_char		*cp;
-
-	ser = rs_table + c->index;
-
-	/* If the port has been initialized for general use, we have
-	 * to use the buffer descriptors allocated there.  Otherwise,
-	 * we simply use the single buffer allocated.
-	 */
-	if ((info = (ser_info_t *)ser->info) != NULL) {
-		bdp = info->tx_cur;
-		bdbase = info->tx_bd_base;
-	}
-	else {
-		/* Pointer to UART in parameter ram.
-		*/
-		up = (smc_uart_t *)&cpmp->cp_dparam[ser->port];
-
-		/* Get the address of the host memory buffer.
-		 */
-		bdp = bdbase = (cbd_t *)&cpmp->cp_dpmem[up->smc_tbase];
-	}
-
-	/*
-	 * We need to gracefully shut down the transmitter, disable
-	 * interrupts, then send our bytes out.
-	 */
-
-	/*
-	 * Now, do each character.  This is not as bad as it looks
-	 * since this is a holding FIFO and not a transmitting FIFO.
-	 * We could add the complexity of filling the entire transmit
-	 * buffer, but we would just wait longer between accesses......
-	 */
-	for (i = 0; i < count; i++, s++) {
-
-		/* Wait for transmitter fifo to empty.
-		 * Ready indicates output is ready, and xmt is doing
-		 * that, not that it is ready for us to send.
-		 */
-		while (bdp->cbd_sc & BD_SC_READY);
-
-		/* Send the character out. */
-		cp = __va(bdp->cbd_bufaddr);
-		*cp = *s;
-		bdp->cbd_datlen = 1;
-		bdp->cbd_sc |= BD_SC_READY;
-
-		if (bdp->cbd_sc & BD_SC_WRAP)
-			bdp = bdbase;
-		else
-			bdp++;
-
-		/* if a LF, also do CR... */
-		if (*s == 10) {
-			while (bdp->cbd_sc & BD_SC_READY);
-			cp = __va(bdp->cbd_bufaddr);
-			*cp = 13;
-			bdp->cbd_datlen = 1;
-			bdp->cbd_sc |= BD_SC_READY;
-
-			if (bdp->cbd_sc & BD_SC_WRAP) {
-				bdp = bdbase;
-			}
-			else {
-				bdp++;
-			}
-		}
-	}
-
-	/*
-	 * Finally, Wait for transmitter & holding register to empty
-	 *  and restore the IER
-	 */
-	while (bdp->cbd_sc & BD_SC_READY);
-
-	if (info)
-		info->tx_cur = (cbd_t *)bdp;
-}
-
-/*
- * Receive character from the serial port.  This only works well
- * before the port is initialize for real use.
- */
-static int serial_console_wait_key(struct console *co)
-{
-	struct serial_state		*ser;
-	u_char				c, *cp;
-	ser_info_t			*info;
-	volatile	cbd_t		*bdp;
-	volatile	smc_uart_t	*up;
-
-	ser = rs_table + co->index;
-
-	/* Pointer to UART in parameter ram.
-	*/
-	up = (smc_uart_t *)&cpmp->cp_dparam[ser->port];
-
-	/* Get the address of the host memory buffer.
-	 * If the port has been initialized for general use, we must
-	 * use information from the port structure.
-	 */
-	if ((info = ser->info))
-		bdp = info->rx_cur;
-	else
-		bdp = (cbd_t *)&cpmp->cp_dpmem[up->smc_rbase];
-
-	/*
-	 * We need to gracefully shut down the receiver, disable
-	 * interrupts, then read the input.
-	 */
-	while (bdp->cbd_sc & BD_SC_EMPTY);	/* Wait for a character */
-	cp = __va(bdp->cbd_bufaddr);
-
-	if (info) {
-		if (bdp->cbd_sc & BD_SC_WRAP) {
-			bdp = info->rx_bd_base;
-		}
-		else {
-			bdp++;
-		}
-		info->rx_cur = (cbd_t *)bdp;
-	}
-
-	c = *cp;
-	return((int)c);
-}
-
-static kdev_t serial_console_device(struct console *c)
-{
-	return MKDEV(TTYAUX_MAJOR, 64 + c->index);
-}
-
 /* This must always be called before the rs_8xx_init() function, otherwise
  * it blows away the port control information.
 */
@@ -2431,7 +2460,6 @@ __initfunc(static int serial_console_setup(struct console *co, char *options))
 	volatile	cpm8xx_t	*cp;
 	volatile	smc_t		*sp;
 	volatile	smc_uart_t	*up;
-
 	co->cflag = CREAD|CLOCAL|B9600|CS8;
 
 	ser = rs_table + co->index;
@@ -2441,7 +2469,6 @@ __initfunc(static int serial_console_setup(struct console *co, char *options))
 	/* Right now, assume we are using SMCs.
 	*/
 	sp = &cp->cp_smc[ser->smc_scc_num];
-
 	/* When we get here, the CPM has been reset, so we need
 	 * to configure the port.
 	 * We need to allocate a transmit and receive buffer descriptor
@@ -2486,8 +2513,12 @@ __initfunc(static int serial_console_setup(struct console *co, char *options))
 	/* Send the CPM an initialize command.
 	*/
 	cp->cp_cpcr = mk_cr_cmd(CPM_CR_CH_SMC1, CPM_CR_INIT_TRX) | CPM_CR_FLG;
+	/*
+	 * delay for a bit - this is necessary on my board!
+	 *  -- Cort
+	 */
+	printk("");
 	while (cp->cp_cpcr & CPM_CR_FLG);
-
 	/* Set UART mode, 8 bit, no parity, one stop.
 	 * Enable receive and transmit.
 	 */
@@ -2496,35 +2527,10 @@ __initfunc(static int serial_console_setup(struct console *co, char *options))
 	/* Set up the baud rate generator.
 	*/
 	mbx_cpm_setbrg(ser->smc_scc_num, 9600);
- 
+
 	/* And finally, enable Rx and Tx.
 	*/
 	sp->smc_smcmr |= SMCMR_REN | SMCMR_TEN;
 
 	return 0;
 }
-
-static struct console sercons = {
-	"ttyS",
-	serial_console_write,
-	NULL,
-	serial_console_device,
-	serial_console_wait_key,
-	NULL,
-	serial_console_setup,
-	CON_PRINTBUFFER,
-	CONFIG_SERIAL_CONSOLE_PORT,
-	0,
-	NULL
-};
-
-/*
- *	Register console.
- */
-__initfunc (long console_8xx_init(long kmem_start, long kmem_end))
-{
-	register_console(&sercons);
-	return kmem_start;
-}
-
-#endif

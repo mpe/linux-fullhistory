@@ -1,5 +1,5 @@
 /*
- *  $Id: ipconfig.c,v 1.11 1998/02/12 07:43:16 davem Exp $
+ *  $Id: ipconfig.c,v 1.12 1998/05/03 14:30:53 alan Exp $
  *
  *  Automatic Configuration of IP -- use BOOTP or RARP or user-supplied
  *  information to configure own IP address and routes.
@@ -552,7 +552,7 @@ __initfunc(static int ic_udp_open(struct socket **sock))
 {
 	int err;
 
-	if ((err = sock_create(AF_INET, SOCK_DGRAM, IPPROTO_UDP, sock)) < 0)
+	if ((err = sock_create(PF_INET, SOCK_DGRAM, IPPROTO_UDP, sock)) < 0)
 		printk(KERN_ERR "BOOTP: Cannot open UDP socket!\n");
 	return err;
 }

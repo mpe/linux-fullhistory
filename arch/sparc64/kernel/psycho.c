@@ -1,4 +1,4 @@
-/* $Id: psycho.c,v 1.50 1998/04/10 12:29:47 ecd Exp $
+/* $Id: psycho.c,v 1.54 1998/05/01 19:16:32 ecd Exp $
  * psycho.c: Ultra/AX U2P PCI controller support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caipfs.rutgers.edu)
@@ -9,6 +9,8 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/init.h>
+#include <linux/mm.h>
+#include <linux/malloc.h>
 
 #include <asm/ebus.h>
 #include <asm/sbus.h> /* for sanity check... */
@@ -17,6 +19,7 @@
 #undef FIXUP_REGS_DEBUG
 #undef FIXUP_IRQ_DEBUG
 #undef FIXUP_VMA_DEBUG
+#undef PCI_COOKIE_DEBUG
 
 #ifdef PROM_DEBUG
 #define dprintf	prom_printf
@@ -94,19 +97,12 @@ static int pbm_write_config_dword(struct linux_pbm_info *pbm,
  */
 static int pci_probe_enable = 0;
 
-static inline unsigned long long_align(unsigned long addr)
+__initfunc(static void psycho_iommu_init(struct linux_psycho *psycho, int tsbsize))
 {
-	return ((addr + (sizeof(unsigned long) - 1)) &
-		~(sizeof(unsigned long) - 1));
-}
-
-__initfunc(static unsigned long psycho_iommu_init(struct linux_psycho *psycho,
-						  int tsbsize,
-						  unsigned long memory_start))
-{
-	unsigned long tsbbase = PAGE_ALIGN(memory_start);
+	unsigned long tsbbase;
 	unsigned long control, i;
 	unsigned long *iopte;
+	unsigned long order;
 
 	/*
 	 * Invalidate TLB Entries.
@@ -120,9 +116,12 @@ __initfunc(static unsigned long psycho_iommu_init(struct linux_psycho *psycho,
 	control &= ~(IOMMU_CTRL_DENAB);
 	psycho->psycho_regs->iommu_control = control;
 
-	memory_start = (tsbbase + ((tsbsize * 1024) * 8));
+	for(order = 0;; order++) {
+		if((PAGE_SIZE << order) >= ((tsbsize * 1024) * 8))
+			break;
+	}
+	tsbbase = __get_free_pages(GFP_DMA, order);
 	iopte = (unsigned long *)tsbbase;
-
 	for(i = 0; i < (tsbsize * 1024); i++) {
 		*iopte = (IOPTE_VALID | IOPTE_64K |
 			  IOPTE_CACHE | IOPTE_WRITE);
@@ -154,8 +153,6 @@ __initfunc(static unsigned long psycho_iommu_init(struct linux_psycho *psycho,
 		break;
 	}
 	psycho->psycho_regs->iommu_control = control;
-
-	return memory_start;
 }
 
 extern void prom_pbm_ranges_init(int node, struct linux_pbm_info *pbm);
@@ -164,7 +161,7 @@ extern void prom_pbm_intmap_init(int node, struct linux_pbm_info *pbm);
 /*
  * Poor man's PCI...
  */
-__initfunc(unsigned long sabre_init(int pnode, unsigned long memory_start))
+__initfunc(void sabre_init(int pnode))
 {
 	struct linux_prom64_registers pr_regs[2];
 	struct linux_psycho *sabre;
@@ -175,8 +172,7 @@ __initfunc(unsigned long sabre_init(int pnode, unsigned long memory_start))
 	u32 portid;
 	int bus;
 
-	sabre = (struct linux_psycho *)memory_start;
-	memory_start = long_align(memory_start + sizeof(struct linux_psycho));
+	sabre = kmalloc(sizeof(struct linux_psycho), GFP_ATOMIC);
 
 	portid = prom_getintdefault(pnode, "upa-portid", 0xff);
 
@@ -262,7 +258,7 @@ __initfunc(unsigned long sabre_init(int pnode, unsigned long memory_start))
 			prom_halt();
 	}
 
-	memory_start = psycho_iommu_init(sabre, tsbsize, memory_start);
+	psycho_iommu_init(sabre, tsbsize);
 	pci_dvma_offset = vdma[0];
 
 	printk("SABRE: DVMA at %08x [%08x]\n", vdma[0], vdma[1]);
@@ -338,11 +334,15 @@ __initfunc(unsigned long sabre_init(int pnode, unsigned long memory_start))
 		if (!node)
 			break;
 	}
-
-	return memory_start;
 }
 
-__initfunc(unsigned long pcibios_init(unsigned long memory_start, unsigned long memory_end))
+static __inline__ int
+apb_present(struct linux_psycho *psycho)
+{
+	return psycho->pci_bus ? 1 : 0;
+}
+
+__initfunc(void pcibios_init(void))
 {
 	struct linux_prom64_registers pr_regs[3];
 	struct linux_psycho *psycho;
@@ -355,7 +355,6 @@ __initfunc(unsigned long pcibios_init(unsigned long memory_start, unsigned long 
 	dprintf("PCI: Probing for controllers.\n");
 #endif
 
-	memory_start = long_align(memory_start);
 	node = prom_getchild(prom_root_node);
 	while((node = prom_searchsiblings(node, "pci")) != 0) {
 		struct linux_psycho *search;
@@ -365,11 +364,11 @@ __initfunc(unsigned long pcibios_init(unsigned long memory_start, unsigned long 
 
 		err = prom_getproperty(node, "model", namebuf, sizeof(namebuf));
 		if ((err > 0) && !strncmp(namebuf, "SUNW,sabre", err)) {
-			memory_start = sabre_init(node, memory_start);
+			sabre_init(node);
 			goto next_pci;
 		}
 
-		psycho = (struct linux_psycho *)memory_start;
+		psycho = kmalloc(sizeof(struct linux_psycho), GFP_ATOMIC);
 
 		portid = prom_getintdefault(node, "upa-portid", 0xff);
 		for(search = psycho_root; search; search = search->next) {
@@ -384,9 +383,6 @@ __initfunc(unsigned long pcibios_init(unsigned long memory_start, unsigned long 
 				goto other_pbm;
 			}
 		}
-
-		memory_start = long_align(memory_start +
-					  sizeof(struct linux_psycho));
 
 		memset(psycho, 0, sizeof(*psycho));
 
@@ -452,7 +448,7 @@ __initfunc(unsigned long pcibios_init(unsigned long memory_start, unsigned long 
 			psycho->pci_config_space);
 #endif
 
-		memory_start = psycho_iommu_init(psycho, 32, memory_start);
+		psycho_iommu_init(psycho, 32);
 		pci_dvma_offset = 0x80000000UL;
 
 		is_pbm_a = ((pr_regs[0].phys_addr & 0x6000) == 0x2000);
@@ -504,14 +500,11 @@ __initfunc(unsigned long pcibios_init(unsigned long memory_start, unsigned long 
 		prom_halt();
 	}
 
-	psycho_index_map = (struct linux_psycho **)long_align(memory_start);
-	memory_start = long_align(memory_start + linux_num_psycho
-					       * sizeof(struct linux_psycho *));
+	psycho_index_map = kmalloc(sizeof(struct linux_psycho *) * linux_num_psycho,
+				   GFP_ATOMIC);
 
 	for (psycho = psycho_root; psycho; psycho = psycho->next)
 		psycho_index_map[psycho->index] = psycho;
-
-	return memory_start;
 }
 
 int pcibios_present(void)
@@ -577,40 +570,14 @@ static inline void pci_add_vma(struct linux_pbm_info *pbm, struct pci_vma *new, 
 	}
 }
 
-static unsigned long *pci_alloc_arena = NULL;
-
-static inline void pci_init_alloc_init(unsigned long *mstart)
-{
-	pci_alloc_arena = mstart;
-}
-
-static inline void pci_init_alloc_fini(void)
-{
-	pci_alloc_arena = NULL;
-}
-
-__initfunc(static void *pci_init_alloc(int size))
-{
-	unsigned long start = long_align(*pci_alloc_arena);
-	void *mp = (void *)start;
-
-	if(!pci_alloc_arena) {
-		prom_printf("pci_init_alloc: pci_vma arena not init'd\n");
-		prom_halt();
-	}
-	start += size;
-	*pci_alloc_arena = start;
-	return mp;
-}
-
 static inline struct pci_vma *pci_vma_alloc(void)
 {
-	return pci_init_alloc(sizeof(struct pci_vma));
+	return kmalloc(sizeof(struct pci_vma), GFP_ATOMIC);
 }
 
 static inline struct pcidev_cookie *pci_devcookie_alloc(void)
 {
-	return pci_init_alloc(sizeof(struct pcidev_cookie));
+	return kmalloc(sizeof(struct pcidev_cookie), GFP_ATOMIC);
 }
 
 
@@ -694,6 +661,14 @@ __initfunc(static void apb_init(struct linux_psycho *sabre))
 	unsigned short stmp;
 	unsigned int itmp;
 
+	for(pdev = pci_devices; pdev; pdev = pdev->next) {
+		if(pdev->vendor == PCI_VENDOR_ID_SUN &&
+		   pdev->device == PCI_DEVICE_ID_SUN_SABRE) {
+			/* Increase latency timer on top level bridge. */
+			pci_write_config_byte(pdev, PCI_LATENCY_TIMER, 0xf8);
+			break;
+		}
+	}
 	for (pdev = sabre->pci_bus->devices; pdev; pdev = pdev->sibling) {
 		if (pdev->vendor == PCI_VENDOR_ID_SUN &&
 		    pdev->device == PCI_DEVICE_ID_SUN_SIMBA) {
@@ -732,12 +707,14 @@ __initfunc(static void apb_init(struct linux_psycho *sabre))
 			pci_write_config_byte(pdev, APB_PIO_TARGET_LATENCY_TIMER, 0);
 			pci_write_config_byte(pdev, APB_DMA_TARGET_RETRY_LIMIT, 0x80);
 			pci_write_config_byte(pdev, APB_DMA_TARGET_LATENCY_TIMER, 0);
+
+			/* Increase primary latency timer. */
+			pci_write_config_byte(pdev, PCI_LATENCY_TIMER, 0xf8);
 		}
 	}
 }
 
-__initfunc(static void sabre_probe(struct linux_psycho *sabre,
-				   unsigned long *mstart))
+__initfunc(static void sabre_probe(struct linux_psycho *sabre))
 {
 	struct pci_bus *pbus = sabre->pci_bus;
 	static unsigned char busno = 0;
@@ -745,7 +722,7 @@ __initfunc(static void sabre_probe(struct linux_psycho *sabre,
 	pbus->number = pbus->secondary = busno;
 	pbus->sysdata = sabre;
 
-	pbus->subordinate = pci_scan_bus(pbus, mstart);
+	pbus->subordinate = pci_scan_bus(pbus);
 	busno = pbus->subordinate + 1;
 
 	for(pbus = pbus->children; pbus; pbus = pbus->next) {
@@ -759,8 +736,7 @@ __initfunc(static void sabre_probe(struct linux_psycho *sabre,
 }
 
 
-__initfunc(static void pbm_probe(struct linux_pbm_info *pbm,
-				 unsigned long *mstart))
+__initfunc(static void pbm_probe(struct linux_pbm_info *pbm))
 {
 	static struct pci_bus *pchain = NULL;
 	struct pci_bus *pbus = &pbm->pci_bus;
@@ -777,7 +753,7 @@ __initfunc(static void pbm_probe(struct linux_pbm_info *pbm,
 
 	pbm_fixup_busno(pbm, busno);
 
-	pbus->subordinate = pci_scan_bus(pbus, mstart);
+	pbus->subordinate = pci_scan_bus(pbus);
 
 	/*
 	 * Set the maximum subordinate bus of this pbm.
@@ -842,6 +818,10 @@ __initfunc(static void pdev_cookie_fillin(struct linux_pbm_info *pbm, struct pci
 	pcp->pbm = pbm;
 	pcp->prom_node = node;
 	pdev->sysdata = pcp;
+#ifdef PCI_COOKIE_DEBUG
+	dprintf("pdev_cookie_fillin: pdev [%02x.%02x]: pbm %p, node %x\n",
+		pdev->bus->number, pdev->devfn, pbm, node);
+#endif
 }
 
 __initfunc(static void fill_in_pbm_cookies(struct pci_bus *pbus,
@@ -850,6 +830,11 @@ __initfunc(static void fill_in_pbm_cookies(struct pci_bus *pbus,
 	struct pci_dev *pdev;
 
 	pbus->sysdata = pbm;
+
+#ifdef PCI_COOKIE_DEBUG
+	dprintf("fill_in_pbm_cookies: pbus [%02x]: pbm %p\n",
+		pbus->number, pbm);
+#endif
 
 	for(pdev = pbus->devices; pdev; pdev = pdev->sibling)
 		pdev_cookie_fillin(pbm, pdev);
@@ -973,7 +958,7 @@ static inline void record_assignments(struct linux_pbm_info *pbm)
 {
 	struct pci_vma *vp;
 
-	if (pbm->parent->pci_bus) {
+	if (apb_present(pbm->parent)) {
 		/*
 		 * Disallow anything that is not in our IO/MEM map on SIMBA.
 		 */
@@ -984,12 +969,8 @@ static inline void record_assignments(struct linux_pbm_info *pbm)
 
 		for (pdev = pbus->devices; pdev; pdev = pdev->sibling) {
 			struct pcidev_cookie *pcp = pdev->sysdata;
-			if (!pcp) {
-				prom_printf("record_assignments: "
-					"no pcidev_cookie for pdev %02x\n",
-					pdev->devfn);
-				prom_halt();
-			}
+			if (!pcp)
+				continue;
 			if (pcp->pbm == pbm)
 				break;
 		}
@@ -1448,9 +1429,12 @@ __initfunc(static unsigned long psycho_pcislot_imap_offset(unsigned long ino))
 }
 
 /* Exported for EBUS probing layer. */
-__initfunc(unsigned int psycho_irq_build(struct linux_pbm_info *pbm, unsigned int full_ino))
+__initfunc(unsigned int psycho_irq_build(struct linux_pbm_info *pbm,
+					 struct pci_dev *pdev,
+					 unsigned int full_ino))
 {
 	unsigned long imap_off, ign, ino;
+	int need_dma_sync = 0;
 
 	ign = (full_ino & PSYCHO_IMAP_IGN) >> 6;
 	ino = (full_ino & PSYCHO_IMAP_INO);
@@ -1540,7 +1524,11 @@ __initfunc(unsigned int psycho_irq_build(struct linux_pbm_info *pbm, unsigned in
 	}
 	imap_off -= imap_offset(imap_a_slot0);
 
-	return pci_irq_encode(imap_off, pbm->parent->index, ign, ino);
+	if (apb_present(pbm->parent) && (pdev->bus->number != pbm->pci_first_busno)) {
+		need_dma_sync = 1;
+	}
+
+	return pci_irq_encode(imap_off, pbm->parent->index, ign, ino, need_dma_sync);
 }
 
 __initfunc(static int pbm_intmap_match(struct linux_pbm_info *pbm,
@@ -1618,7 +1606,7 @@ __initfunc(static void fixup_irq(struct pci_dev *pdev,
 
 	/* See if we find a matching interrupt-map entry. */
 	if (pbm_intmap_match(pbm, pdev, preg, &prom_irq)) {
-		pdev->irq = psycho_irq_build(pbm,
+		pdev->irq = psycho_irq_build(pbm, pdev,
 					     (pbm->parent->upa_portid << 6)
 					     | prom_irq);
 #ifdef FIXUP_IRQ_DEBUG
@@ -1627,14 +1615,14 @@ __initfunc(static void fixup_irq(struct pci_dev *pdev,
 #endif
 	/* See if fully specified already (ie. for onboard devices like hme) */
 	} else if(((prom_irq & PSYCHO_IMAP_IGN) >> 6) == pbm->parent->upa_portid) {
-		pdev->irq = psycho_irq_build(pbm, prom_irq);
+		pdev->irq = psycho_irq_build(pbm, pdev, prom_irq);
 #ifdef FIXUP_IRQ_DEBUG
 		dprintf("fully specified prom_irq[%x] pdev->irq[%x]",
 		        prom_irq, pdev->irq);
 #endif
 	/* See if onboard device interrupt (i.e. bit 5 set) */
 	} else if((prom_irq & PSYCHO_IMAP_INO) & 0x20) {
-		pdev->irq = psycho_irq_build(pbm,
+		pdev->irq = psycho_irq_build(pbm, pdev,
 					     (pbm->parent->upa_portid << 6)
 					     | prom_irq);
 #ifdef FIXUP_IRQ_DEBUG
@@ -1669,7 +1657,7 @@ __initfunc(static void fixup_irq(struct pci_dev *pdev,
 		}
 		slot = (slot << 2);
 
-		pdev->irq = psycho_irq_build(pbm,
+		pdev->irq = psycho_irq_build(pbm, pdev,
 					     (((portid << 6) & PSYCHO_IMAP_IGN)
 					     | (bus | slot | line)));
 
@@ -1818,7 +1806,7 @@ __initfunc(static void psycho_final_fixup(struct linux_psycho *psycho))
 		fixup_addr_irq(&psycho->pbm_B);
 }
 
-__initfunc(unsigned long pcibios_fixup(unsigned long memory_start, unsigned long memory_end))
+__initfunc(void pcibios_fixup(void))
 {
 	struct linux_psycho *psycho;
 
@@ -1838,18 +1826,16 @@ __initfunc(unsigned long pcibios_fixup(unsigned long memory_start, unsigned long
 
 	for (psycho = psycho_root; psycho; psycho = psycho->next) {
 		/* Probe bus on builtin PCI. */
-		if (psycho->pci_bus)
-			sabre_probe(psycho, &memory_start);
+		if (apb_present(psycho))
+			sabre_probe(psycho);
 		else {
 			/* Probe busses under PBM B. */
-			pbm_probe(&psycho->pbm_B, &memory_start);
+			pbm_probe(&psycho->pbm_B);
 
 			/* Probe busses under PBM A. */
-			pbm_probe(&psycho->pbm_A, &memory_start);
+			pbm_probe(&psycho->pbm_A);
 		}
 	}
-
-	pci_init_alloc_init(&memory_start);
 
 	/* Walk all PCI devices found.  For each device, and
 	 * PCI bridge which is not one of the PSYCHO PBM's, fill in the
@@ -1857,7 +1843,7 @@ __initfunc(unsigned long pcibios_fixup(unsigned long memory_start, unsigned long
 	 * a pci_dev cookie (PBM+PROM_NODE, for pci_dev's).
 	 */
 	for (psycho = psycho_root; psycho; psycho = psycho->next) {
-		if (psycho->pci_bus)
+		if (apb_present(psycho))
 			sabre_cookie_fillin(psycho);
 
 		fill_in_pbm_cookies(&psycho->pbm_A.pci_bus,
@@ -1873,9 +1859,7 @@ __initfunc(unsigned long pcibios_fixup(unsigned long memory_start, unsigned long
 		psycho_final_fixup(psycho);
 	}
 
-	pci_init_alloc_fini();
-
-	return ebus_init(memory_start, memory_end);
+	return ebus_init();
 }
 
 /* "PCI: The emerging standard..." 8-( */
@@ -2257,7 +2241,7 @@ int pcibios_read_config_byte (unsigned char bus, unsigned char devfn,
 {
 	struct linux_pbm_info *pbm = bus2pbm[bus];
 
-	if (pbm && pbm->parent && pbm->parent->pci_bus)
+	if (pbm && pbm->parent && apb_present(pbm->parent))
 		return sabre_read_config_byte(pbm, bus, devfn, where, value);
 	return pbm_read_config_byte(pbm, bus, devfn, where, value);
 }
@@ -2267,7 +2251,7 @@ int pcibios_read_config_word (unsigned char bus, unsigned char devfn,
 {
 	struct linux_pbm_info *pbm = bus2pbm[bus];
 
-	if (pbm && pbm->parent && pbm->parent->pci_bus)
+	if (pbm && pbm->parent && apb_present(pbm->parent))
 		return sabre_read_config_word(pbm, bus, devfn, where, value);
 	return pbm_read_config_word(pbm, bus, devfn, where, value);
 }
@@ -2277,7 +2261,7 @@ int pcibios_read_config_dword (unsigned char bus, unsigned char devfn,
 {
 	struct linux_pbm_info *pbm = bus2pbm[bus];
 
-	if (pbm && pbm->parent && pbm->parent->pci_bus)
+	if (pbm && pbm->parent && apb_present(pbm->parent))
 		return sabre_read_config_dword(pbm, bus, devfn, where, value);
 	return pbm_read_config_dword(pbm, bus, devfn, where, value);
 }
@@ -2287,7 +2271,7 @@ int pcibios_write_config_byte (unsigned char bus, unsigned char devfn,
 {
 	struct linux_pbm_info *pbm = bus2pbm[bus];
 
-	if (pbm && pbm->parent && pbm->parent->pci_bus)
+	if (pbm && pbm->parent && apb_present(pbm->parent))
 		return sabre_write_config_byte(pbm, bus, devfn, where, value);
 	return pbm_write_config_byte(pbm, bus, devfn, where, value);
 }
@@ -2297,7 +2281,7 @@ int pcibios_write_config_word (unsigned char bus, unsigned char devfn,
 {
 	struct linux_pbm_info *pbm = bus2pbm[bus];
 
-	if (pbm && pbm->parent && pbm->parent->pci_bus)
+	if (pbm && pbm->parent && apb_present(pbm->parent))
 		return sabre_write_config_word(pbm, bus, devfn, where, value);
 	return pbm_write_config_word(bus2pbm[bus], bus, devfn, where, value);
 }
@@ -2307,7 +2291,7 @@ int pcibios_write_config_dword (unsigned char bus, unsigned char devfn,
 {
 	struct linux_pbm_info *pbm = bus2pbm[bus];
 
-	if (pbm && pbm->parent && pbm->parent->pci_bus)
+	if (pbm && pbm->parent && apb_present(pbm->parent))
 		return sabre_write_config_dword(pbm, bus, devfn, where, value);
 	return pbm_write_config_dword(bus2pbm[bus], bus, devfn, where, value);
 }

@@ -343,8 +343,8 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			struct pt_regs *regs;
 			unsigned long tmp;
 
-			regs = (struct pt_regs *)
-				(child->tss.ksp - sizeof(struct pt_regs));
+			regs = (struct pt_regs *) ((unsigned long) child +
+			       KERNEL_STACK_SIZE - 32 - sizeof(struct pt_regs));
 			tmp = 0;  /* Default return value. */
 			if(addr < 32 && addr >= 0) {
 				tmp = regs->regs[addr];
@@ -399,8 +399,8 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			struct pt_regs *regs;
 			int res = 0;
 
-			regs = (struct pt_regs *)
-				(child->tss.ksp - sizeof(struct pt_regs));
+			regs = (struct pt_regs *) ((unsigned long) child +
+			       KERNEL_STACK_SIZE - 32 - sizeof(struct pt_regs));
 			if(addr < 32 && addr >= 0) {
 				regs->regs[addr] = data;
 			} else if(addr >= 32 && addr < 64) {
@@ -436,7 +436,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 
 		case PTRACE_SYSCALL: /* continue and stop at next (return from) syscall */
 		case PTRACE_CONT: { /* restart after signal. */
-			if ((unsigned long) data > NSIG) {
+			if ((unsigned long) data > _NSIG) {
 				res = -EIO;
 				goto out;
 			}
@@ -465,7 +465,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		}
 
 		case PTRACE_DETACH: { /* detach a process that was attached. */
-			if ((unsigned long) data > NSIG) {
+			if ((unsigned long) data > _NSIG) {
 				res = -EIO;
 				goto out;
 			}
@@ -503,9 +503,7 @@ asmlinkage void syscall_trace(void)
 	 * stopping signal is not SIGTRAP.  -brl
 	 */
 	if (current->exit_code) {
-		spin_lock_irq(&current->sigmask_lock);
-		current->signal |= (1 << (current->exit_code - 1));
-		spin_unlock_irq(&current->sigmask_lock);
+		send_sig(current->exit_code, current, 1);
+		current->exit_code = 0;
 	}
-	current->exit_code = 0;
 }

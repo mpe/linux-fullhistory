@@ -69,9 +69,25 @@ zvmlinux.initrd: zvmlinux
 		--add-section=image=../coffboot/vmlinux.gz \
 		zvmlinux.initrd.tmp $@
 	rm zvmlinux.initrd.tmp
-
-else
-zvmlinux.initrd:
+endif
+ifeq ($(CONFIG_MBX),y)
+zvmlinux.initrd: zvmlinux
+	$(LD) $(ZLINKFLAGS) -o zvmlinux.initrd.tmp $(OBJECTS)
+	$(OBJCOPY) $(OBJCOPY_ARGS) -R .comment \
+		--add-section=initrd=ramdisk.image.gz \
+		--add-section=image=../coffboot/vmlinux.gz \
+		zvmlinux.initrd.tmp zvmlinux.initrd
+	$(CC) $(CFLAGS) -DINITRD_OFFSET=`sh offset zvmlinux.initrd initrd` \
+		-DINITRD_SIZE=`sh size zvmlinux.initrd initrd` \
+		-DZIMAGE_OFFSET=`sh offset zvmlinux.initrd image` \
+		-DZIMAGE_SIZE=`sh size zvmlinux.initrd image` \
+		-DKERNELBASE=$(KERNELBASE) -c -o misc.o misc.c
+	$(LD) $(ZLINKFLAGS) -o zvmlinux.initrd.tmp $(OBJECTS)
+	$(OBJCOPY) $(OBJCOPY_ARGS) -R .comment \
+		--add-section=initrd=ramdisk.image.gz \
+		--add-section=image=../coffboot/vmlinux.gz \
+		zvmlinux.initrd.tmp $@
+	rm zvmlinux.initrd.tmp
 endif
 
 zImage: zvmlinux mkprep

@@ -28,6 +28,7 @@
 #include <linux/a.out.h>
 #include <linux/interrupt.h>
 #include <linux/config.h>
+#include <linux/init.h>
 
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
@@ -69,11 +70,6 @@ void (*debugger_fault_handler)(struct pt_regs *regs);
  */
 
 void
-trap_init(void)
-{
-}
-
-void
 _exception(int signr, struct pt_regs *regs)
 {
 	if (!user_mode(regs))
@@ -93,6 +89,11 @@ MachineCheckException(struct pt_regs *regs)
 {
 	if ( !user_mode(regs) )
 	{
+#ifdef CONFIG_MBX
+		/* the mbx pci read routines can cause machine checks -- Cort */
+		bad_page_fault(regs,regs->dar);
+		return;
+#endif /* CONFIG_MBX */
 #if defined(CONFIG_XMON) || defined(CONFIG_KGDB)
 		if (debugger_fault_handler) {
 			debugger_fault_handler(regs);
@@ -230,32 +231,28 @@ trace_syscall(struct pt_regs *regs)
 }
 
 #ifdef CONFIG_8xx
-
 void
 SoftwareEmulation(struct pt_regs *regs)
 {
 	int	errcode;
 	extern int	Soft_emulate_8xx (struct pt_regs *regs);
+	extern void print_8xx_pte(struct mm_struct *, unsigned long);	
 
-	if (user_mode(regs)) {
-#if 0
-		printk("(user mode)\n");
-		_exception(SIGTRAP, regs);
-#else
-		if (errcode = Soft_emulate_8xx(regs)) {
-printk("Software Emulation 0x%x: 0x%x ",
-			regs->nip, *((uint *)regs->nip));
-print_8xx_pte(current->mm, regs->nip);
+	if (user_mode(regs))
+	{
+		if ((errcode = Soft_emulate_8xx(regs))) {
+printk("Software Emulation %s/%d NIP: %lx *NIP: 0x%x code: %x",
+       current->comm,current->pid,
+       regs->nip, *((uint *)regs->nip), errcode);
+/*print_8xx_pte(current->mm, regs->nip);*/
 			if (errcode == EFAULT)
 				_exception(SIGBUS, regs);
 			else
 				_exception(SIGILL, regs);
 		}
-#endif
 	}
 	else {
-		printk("(kernel mode)\n");
-		panic("Kernel Mode Software Emulation");
+		panic("Kernel Mode Software FPU Emulation");
 	}
 }
 #endif
@@ -265,4 +262,8 @@ TAUException(struct pt_regs *regs)
 {
 	printk("TAU trap at PC: %lx, SR: %lx, vector=%lx\n",
 	       regs->nip, regs->msr, regs->trap);
+}
+
+__initfunc(void trap_init(void))
+{
 }

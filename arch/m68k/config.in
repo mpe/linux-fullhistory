@@ -196,7 +196,7 @@ if [ "$CONFIG_AMIGA" = "y" ]; then
     bool 'A4000T SCSI support' CONFIG_A4000T_SCSI
     bool 'A4091 SCSI support' CONFIG_A4091_SCSI
     bool 'WarpEngine SCSI support' CONFIG_WARPENGINE_SCSI
-#    bool 'Cyberstorm Mk III SCSI support' CONFIG_CYBERSTORMIII_SCSI
+    bool 'Cyberstorm Mk III SCSI support' CONFIG_CYBERSTORMIII_SCSI
 #    bool 'GVP Turbo 040/060 SCSI support' CONFIG_GVP_TURBO_SCSI
   fi
 fi
@@ -286,7 +286,6 @@ if [ "$CONFIG_VME" = "n" ]; then
   if [ "$CONFIG_VT" = "y" ]; then
     bool 'Support for console on virtual terminal' CONFIG_VT_CONSOLE
   fi
-  define_bool CONFIG_FB_CONSOLE y
 fi
 
 if [ "$CONFIG_ATARI" = "y" ]; then

@@ -30,7 +30,7 @@ struct stripe_head {
 	int			size;			/* buffers size */
 	int			pd_idx;			/* parity disk index */
 	int			nr_pending;		/* nr of pending cmds */
-	__u32			state;			/* state flags */
+	unsigned long		state;			/* state flags */
 	int			cmd;			/* stripe cmd */
 	int			count;			/* nr of waiters */
 	int			write_method;		/* reconstruct-write / read-modify-write */

@@ -21,6 +21,7 @@
 #include <linux/raid5.h>
 #include <asm/bitops.h>
 #include <asm/atomic.h>
+#include <asm/md.h>
 
 static struct md_personality raid5_personality;
 
@@ -741,10 +742,16 @@ static unsigned long compute_blocknr(struct stripe_head *sh, int i)
 	return blocknr;
 }
 
+#ifdef HAVE_ARCH_XORBLOCK
 static void xor_block(struct buffer_head *dest, struct buffer_head *source)
 {
-	int lines = dest->b_size / (sizeof (int)) / 8, i;
-	int *destp = (int *) dest->b_data, *sourcep = (int *) source->b_data;
+	__xor_block((char *) dest->b_data, (char *) source->b_data, dest->b_size);
+}
+#else
+static void xor_block(struct buffer_head *dest, struct buffer_head *source)
+{
+	long lines = dest->b_size / (sizeof (long)) / 8, i;
+	long *destp = (long *) dest->b_data, *sourcep = (long *) source->b_data;
 
 	for (i = lines; i > 0; i--) {
 		*(destp + 0) ^= *(sourcep + 0);
@@ -759,6 +766,7 @@ static void xor_block(struct buffer_head *dest, struct buffer_head *source)
 		sourcep += 8;
 	}
 }
+#endif
 
 static void compute_block(struct stripe_head *sh, int dd_idx)
 {

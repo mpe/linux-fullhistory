@@ -37,6 +37,15 @@ SECTIONS
   } =0
   _etext = .;
   PROVIDE (etext = .);
+
+  /* Startup code */
+  . = ALIGN(4096);
+  __init_begin = .;
+  .text.init : { *(.text.init) }
+  .data.init : { *(.data.init) }
+  . = ALIGN(4096);	/* Align double page for init_task_union */
+  __init_end = .;
+
   .fini      : { *(.fini)    } =0
   .reginfo : { *(.reginfo) }
   /* Adjust the address for the data segment.  We want to adjust up to
@@ -74,6 +83,7 @@ SECTIONS
   .sdata     : { *(.sdata) }
   _edata  =  .;
   PROVIDE (edata = .);
+
   __bss_start = .;
   _fbss = .;
   .bss       :

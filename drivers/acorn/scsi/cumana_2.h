@@ -1,7 +1,7 @@
 /*
  * Cumana SCSI II driver
  *
- * Copyright (C) 1997 Russell King
+ * Copyright (C) 1997-1998 Russell King
  */
 #ifndef CUMANA_2_H
 #define CUMANA_2_H
@@ -57,12 +57,19 @@ use_clustering:		DISABLE_CLUSTERING					\
 
 #ifndef HOSTS_C
 
-typedef struct {
-    FAS216_Info info;
+#include <asm/dma.h>
 
-    /* other info... */
-    unsigned int	cstatus;	/* card status register	*/
-    unsigned int	dmaarea;	/* Pseudo DMA area	*/
+#define NR_SG	256
+
+typedef struct {
+	FAS216_Info info;
+
+	/* other info... */
+	unsigned int	status;		/* card status register	*/
+	unsigned int	alatch;		/* Control register	*/
+	unsigned int	terms;		/* Terminator state	*/
+	unsigned int	dmaarea;	/* Pseudo DMA area	*/
+	dmasg_t		dmasg[NR_SG];	/* Scatter DMA list	*/
 } CumanaScsi2_Info;
 
 #define CSTATUS_IRQ	(1 << 0)

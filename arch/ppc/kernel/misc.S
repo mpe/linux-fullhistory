@@ -436,8 +436,8 @@ sys_call_table:
 	.long sys_time
 	.long sys_mknod
 	.long sys_chmod		/* 15 */
-	.long sys_chown
-	.long /*sys_break*/ sys_ni_syscall
+	.long sys_lchown
+	.long sys_ni_syscall
 	.long sys_stat
 	.long sys_lseek
 	.long sys_getpid	/* 20 */
@@ -590,9 +590,19 @@ sys_call_table:
 	.long sys_poll
 	.long sys_nfsservctl
 	.long sys_setresgid	
-	.long sys_getresgid	/* 170 */
+	.long sys_getresgid		/* 170 */
 	.long sys_prctl
+	.long sys_rt_sigreturn
+	.long sys_rt_sigaction
+	.long sys_rt_sigprocmask	
+	.long sys_rt_sigpending		/* 175 */
+	.long sys_rt_sigtimedwait
+	.long sys_rt_sigqueueinfo
+	.long sys_rt_sigsuspend
+	.long sys_pread
+	.long sys_pwrite		/* 180 */
+	.long sys_chown
+	.long sys_getcwd
 	.long sys_xstat
 	.long sys_xmknod
-	.space (NR_syscalls-173)*4
-
+	.space (NR_syscalls-185)*4

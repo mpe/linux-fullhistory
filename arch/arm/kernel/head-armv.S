@@ -7,6 +7,9 @@
  */
 #include <linux/config.h>
 #include <linux/linkage.h>
+
+#define DEBUG
+
 		.text
 		.align
 
@@ -245,8 +248,11 @@ __entry:
 		mov	fp, #0
 		b	SYMBOL_NAME(start_kernel)
 
-#if 1
-
+#ifdef DEBUG
+/*
+ * Some debugging routines (useful if you've got MM problems and
+ * printk isn't working).  For DEBUGGING ONLY!!!
+ */
 #if defined(CONFIG_ARCH_RPC)
 		.macro	addruart,rx
 		mov	\rx, #0xe0000000
@@ -309,6 +315,26 @@ __entry:
 
 		.macro	waituart,rd,rx
 		.endm
+
+#elif defined(CONFIG_ARCH_NEXUSPCI)
+		.macro	addruart,rx
+		ldr	\rx, =0xfff00000
+		.endm
+
+		.macro	senduart,rd,rx
+		str	\rd, [\rx, #0xc]
+		.endm
+
+		.macro	busyuart,rd,rx
+1001:		ldr	\rd, [\rx, #0x4]
+		tst	\rd, #1 << 0
+		bne	1001b
+		.endm
+
+		.macro	waituart,rd,rx
+		.endm
+#else
+#error Unknown architecture
 #endif
 
 /*
@@ -358,6 +384,8 @@ ENTRY(printch)
 		mov	r1, r0
 		mov	r0, #0
 		b	1b
+
+		.ltorg
 
 		.bss
 hexbuf:		.space 16

@@ -8,6 +8,7 @@ if [ "$CONFIG_SCSI_ACORNSCSI_3" != "n" ]; then
 fi
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   dep_tristate 'CumanaSCSI II support (Experimental)' CONFIG_SCSI_CUMANA_2 $CONFIG_SCSI
+  dep_tristate 'EESOX support (Experimental)' CONFIG_SCSI_EESOXSCSI $CONFIG_SCSI
   dep_tristate 'PowerTec support (Experimental)' CONFIG_SCSI_POWERTECSCSI $CONFIG_SCSI
 
   comment 'The following drives are not fully supported'

@@ -26,12 +26,6 @@ extern void (*flush_cache_sigtramp)(unsigned long addr);
 extern void (*flush_page_to_ram)(unsigned long page);
 #define flush_icache_range(start, end) flush_cache_all()
 
-/*
- * Prototype of the DMA related cacheflushing stuff.
- */
-extern void (*flush_cache_pre_dma_out)(unsigned long start, unsigned long size);
-extern void (*flush_cache_post_dma_in)(unsigned long start, unsigned long size);
-
 /* TLB flushing:
  *
  *  - flush_tlb_all() flushes all processes TLB entries
@@ -127,8 +121,7 @@ extern void (*add_wired_entry)(unsigned long entrylo0, unsigned long entrylo1,
 
 #define _PAGE_CHG_MASK  (PAGE_MASK | __READABLE | __WRITEABLE | _CACHE_MASK)
 
-#define PAGE_NONE	__pgprot(_PAGE_PRESENT | _PAGE_ACCESSED | \
-                        _CACHE_CACHABLE_NONCOHERENT)
+#define PAGE_NONE	__pgprot(0)
 #define PAGE_SHARED     __pgprot(_PAGE_PRESENT | _PAGE_READ | _PAGE_WRITE | \
 			_CACHE_CACHABLE_NONCOHERENT)
 #define PAGE_COPY       __pgprot(_PAGE_PRESENT | _PAGE_READ | \

@@ -3,9 +3,9 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: r2300.c,v 1.3 1997/12/02 05:51:08 ralf Exp $
+ * $Id: r2300.c,v 1.5 1998/05/01 01:34:55 ralf Exp $
  */
-
+#include <linux/init.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
@@ -253,7 +253,12 @@ static void r2300_add_wired_entry(unsigned long entrylo0, unsigned long entrylo1
 	 */
 }
 
-void ld_mmu_r2300(void)
+static int r2300_user_mode(struct pt_regs *regs)
+{
+	return !(regs->cp0_status & 0x4);
+}
+
+__initfunc(void ld_mmu_r2300(void))
 {
 	clear_page = r2300_clear_page;
 	copy_page = r2300_copy_page;
@@ -278,5 +283,6 @@ void ld_mmu_r2300(void)
     
         add_wired_entry = r2300_add_wired_entry;
 
+	user_mode = r2300_user_mode;
 	flush_tlb_all();
 }

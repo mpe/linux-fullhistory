@@ -325,7 +325,7 @@ __start:
 	ori	r8, r8, MD_SVALID	/* Make it valid */
 	mtspr	MD_TWC, r8
 	lis	r8, 0xfa000000@h	/* Create paddr for TLB */
-	ori	r8, r8, MI_BOOTINIT
+	ori	r8, r8, MI_BOOTINIT|0x2 /* Inhibit cache -- Cort */
 	mtspr	MD_RPN, r8
 #endif
 
@@ -338,19 +338,17 @@ __start:
 	mtspr	DC_CST, r8
 	lis	r8, IDC_ENABLE@h
 	mtspr	IC_CST, r8
-#ifdef notdef
+#if 0
 	mtspr	DC_CST, r8
 #else
 	/* I still have a bug somewhere because the Ethernet driver
 	 * does not want to work with copyback enabled.  For now,
 	 * at least enable write through.
 	 */
-#if 0	
 	lis	r8, DC_SFWT@h
 	mtspr	DC_CST, r8
 	lis	r8, IDC_ENABLE@h
 	mtspr	DC_CST, r8
-#endif	
 #endif
 
 /* We now have the lower 8 Meg mapped into TLB entries, and the caches
@@ -689,11 +687,11 @@ InstructionAddressInvalid:
 	STD_EXCEPTION(0x1000, SoftEmu, SoftwareEmulation)
 #endif
 
-#ifndef CONFIG_8xx
 /*
  * Handle TLB miss for DATA Load operation on 603/603e
  */
 	. = 0x1100
+#ifndef CONFIG_8xx
 DataLoadTLBMiss:
 #ifdef NO_RELOAD_HTAB
 /*
@@ -1558,11 +1556,12 @@ start_here:
 	bl	set_mbx_memory
 #endif
 	bl	MMU_init
-
 /*
  * Go back to running unmapped so we can load up new values
  * for SDR1 (hash table pointer) and the segment registers
  * and change to using our exception vectors.
+ * On the 8xx, all we have to do is invalidate the TLB to clear
+ * the old 8M byte TLB mappings and load the page table base register.
  */
 #ifndef CONFIG_8xx
 	lis	r6,_SDR1@ha
@@ -1586,7 +1585,6 @@ start_here:
 	rfi
 /* Load up the kernel context */
 2:
-
 	SYNC			/* Force all PTE updates to finish */
 	tlbia			/* Clear all TLB entries */
 #ifndef CONFIG_8xx
@@ -1610,7 +1608,6 @@ start_here:
 	LOAD_BAT(2,32,r3,r4,r5)
 	LOAD_BAT(3,48,r3,r4,r5)
 #endif /* CONFIG_8xx */
-	
 /* Set up for using our exception vectors */
 	/* ptr to phys current tss */
 	tophys(r4,r2,r4)
@@ -1618,7 +1615,6 @@ start_here:
 	mtspr	SPRG3,r4
 	li	r3,0
 	mtspr	SPRG2,r3	/* 0 => r1 has kernel sp */
-
 /* Now turn on the MMU for real! */
 	li	r4,MSR_KERNEL
 	lis	r3,start_kernel@h
@@ -1893,11 +1889,12 @@ _GLOBAL(_switch)
  * page directory loaded into the MMU base register, and set the
  * ASID compare register with the new "context".
  */
-	mtspr	M_CASID, r5		/* Update context */
-	lwz	r5,MM-TSS(r4)		/* Get virtual address of mm */
-	lwz	r5,PGD(r5)		/* get new->mm->pgd */	
-	tophys(r5, r5, 0)		/* convert to phys addr */
-	mtspr	M_TWB, r5		/* Update MMU base address */
+        lwz     r3,MM-TSS(r4)           /* Get virtual address of mm */
+        lwz     r3,PGD(r3)              /* get new->mm->pgd */
+        addis   r3,r3,-KERNELBASE@h     /* convert to phys addr */
+        mtspr   M_TWB, r3               /* Update MMU base address */
+        mtspr   M_CASID, r5             /* Update context */
+        tlbia
 #endif
 	SYNC
 
@@ -2262,18 +2259,6 @@ enter_rtas:
 	rfi			/* return to caller */
 #endif /* CONFIG_8xx */
 
-#ifdef CONFIG_8xx
-/* This is called during an exec when new page tables are created.
- * It maps to the SET_PAGE_DIR macro.  I guess I should make it an
- * inline function.
- */
-_GLOBAL(set_page_dir)
-	addis	r3,r3,-KERNELBASE@h	/* convert to phys addr */
-	mtspr	M_TWB, r3		/* Update MMU base address */
-	blr
-#endif
-	
-		
 #ifdef __SMP__
 /*
  * Secondary processor begins executing here.

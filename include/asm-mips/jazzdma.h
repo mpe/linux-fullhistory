@@ -1,5 +1,7 @@
 /*
  * Helpfile for jazzdma.c -- Mips Jazz R4030 DMA controller support
+ *
+ * $Id: jazzdma.h,v 1.6 1998/05/01 01:35:57 ralf Exp $
  */
 #ifndef __ASM_MIPS_JAZZDMA_H
 #define __ASM_MIPS_JAZZDMA_H
@@ -21,6 +23,7 @@ void vdma_set_mode(int channel, int mode);
 void vdma_set_addr(int channel, long addr);
 void vdma_set_count(int channel, int count);
 int vdma_get_residue(int channel);
+int vdma_get_enable(int channel);
 
 /*
  * some definitions used by the driver functions

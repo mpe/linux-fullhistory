@@ -787,13 +787,13 @@ int ax25_create(struct socket *sock, int protocol)
 
 	switch (sock->type) {
 		case SOCK_DGRAM:
-			if (protocol == 0 || protocol == AF_AX25)
+			if (protocol == 0 || protocol == PF_AX25)
 				protocol = AX25_P_TEXT;
 			break;
 		case SOCK_SEQPACKET:
 			switch (protocol) {
 				case 0:
-				case AF_AX25:	/* For CLX */
+				case PF_AX25:	/* For CLX */
 					protocol = AX25_P_TEXT;
 					break;
 				case AX25_P_SEGMENT:
@@ -828,7 +828,7 @@ int ax25_create(struct socket *sock, int protocol)
 			return -ESOCKTNOSUPPORT;
 	}
 
-	if ((sk = sk_alloc(AF_AX25, GFP_ATOMIC, 1)) == NULL)
+	if ((sk = sk_alloc(PF_AX25, GFP_ATOMIC, 1)) == NULL)
 		return -ENOMEM;
 
 	if ((ax25 = ax25_create_cb()) == NULL) {
@@ -854,7 +854,7 @@ struct sock *ax25_make_new(struct sock *osk, struct ax25_dev *ax25_dev)
 	struct sock *sk;
 	ax25_cb *ax25;
 
-	if ((sk = sk_alloc(AF_AX25, GFP_ATOMIC, 1)) == NULL)
+	if ((sk = sk_alloc(PF_AX25, GFP_ATOMIC, 1)) == NULL)
 		return NULL;
 
 	if ((ax25 = ax25_create_cb()) == NULL) {
@@ -1689,12 +1689,12 @@ static int ax25_get_info(char *buffer, char **start, off_t offset, int length, i
 
 static struct net_proto_family ax25_family_ops =
 {
-	AF_AX25,
+	PF_AX25,
 	ax25_create
 };
 
 static struct proto_ops ax25_proto_ops = {
-	AF_AX25,
+	PF_AX25,
 
 	sock_no_dup,
 	ax25_release,
@@ -1820,7 +1820,7 @@ void cleanup_module(void)
 	ax25_packet_type.type = htons(ETH_P_AX25);
 	dev_remove_pack(&ax25_packet_type);
 
-	sock_unregister(AF_AX25);
+	sock_unregister(PF_AX25);
 }
 #endif
 

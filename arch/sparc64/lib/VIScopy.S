@@ -1,4 +1,4 @@
-/* $Id: VIScopy.S,v 1.14 1997/08/22 15:54:53 jj Exp $
+/* $Id: VIScopy.S,v 1.15 1998/04/26 07:21:54 davem Exp $
  * VIScopy.S: High speed copy operations utilizing the UltraSparc
  *            Visual Instruction Set.
  *
@@ -978,7 +978,16 @@ fpu_retl:
 VIScopyfixup_reto2:
 		mov		%o2, %o0
 VIScopyfixup_ret:
-		retl
+		/* If this is copy_from_user(), zero out the rest of the
+		 * kernel buffer.
+		 */
+		andcc		asi_src, 0x1, %g0
+		bne		1f
+		 mov		%o0, %o4
+		/* XXX Here, somehow get original kernel pointer (was in %o0)
+		 * XXX and bzero() all remaining bytes in kernel buffer.
+		 */
+1:		retl
 		 wr		%g0, 0, %fprs
 VIScopyfixup1:	subcc		%g2, 18, %g2
 		bgeu,a,pt	%icc, VIScopyfixup1

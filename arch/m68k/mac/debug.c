@@ -16,6 +16,7 @@
 
 #include <linux/config.h>
 #include <linux/types.h>
+#include <linux/sched.h>
 #include <linux/tty.h>
 #include <linux/console.h>
 #include <linux/init.h>
@@ -131,7 +132,7 @@ void mac_debugging_penguin(int peng)
 	if (!MACH_IS_MAC) 
 		return;
 
-	if (compat_boot_info.bi_mac.videodepth ==1) 
+	if (mac_videodepth ==1) 
 		pengoffset=(unsigned char *)(mac_videobase+80*mac_rowbytes)
 			   +5*peng;
 	else
@@ -163,13 +164,13 @@ static void mac_boom_boom(void)
 	int i;
 	
 	if(!boomoffset)
-		if (compat_boot_info.bi_mac.videodepth == 1) {
+		if (mac_videodepth == 1) {
 			boomoffset=(unsigned char *)(mac_videobase+160*mac_rowbytes);
 		} else {
 			boomoffset=(unsigned char *)(mac_videobase+256*mac_rowbytes);
 		}
 	else
-		if (compat_boot_info.bi_mac.videodepth == 1)
+		if (mac_videodepth == 1)
 			boomoffset+=5;
 		else
 			boomoffset+=32;	

@@ -28,6 +28,7 @@
 #include <linux/stat.h>
 #include <linux/string.h>
 #include <linux/locks.h>
+#include <linux/quotaops.h>
 
 
 /*
@@ -625,8 +626,7 @@ int ext2_rmdir (struct inode * dir, struct dentry *dentry)
 		goto end_rmdir;
 
 	inode = dentry->d_inode;
-	if (inode->i_sb->dq_op)
-		inode->i_sb->dq_op->initialize (inode, -1);
+	DQUOT_INIT(inode);
 
 	retval = -EPERM;
 	if ((dir->i_mode & S_ISVTX) && 
@@ -715,8 +715,7 @@ int ext2_unlink(struct inode * dir, struct dentry *dentry)
 		goto end_unlink;
 
 	inode = dentry->d_inode;
-	if (inode->i_sb->dq_op)
-		inode->i_sb->dq_op->initialize (inode, -1);
+	DQUOT_INIT(inode);
 
 	retval = -EPERM;
 	if (S_ISDIR(inode->i_mode))
@@ -936,8 +935,7 @@ static int do_ext2_rename (struct inode * old_dir, struct dentry *old_dentry,
 			brelse (new_bh);
 			new_bh = NULL;
 		} else {
-			if (new_inode->i_sb->dq_op)
-				new_inode->i_sb->dq_op->initialize (new_inode, -1);
+			DQUOT_INIT(new_inode);
 		}
 	}
 	retval = 0;

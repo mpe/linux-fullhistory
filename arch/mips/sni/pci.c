@@ -4,9 +4,11 @@
  * for more details.
  *
  * SNI specific PCI support for RM200/RM300.
+ *
+ * $Id: pci.c,v 1.4 1998/05/01 01:35:34 ralf Exp $
  */
 #include <linux/config.h>
-#include <linux/init.h>
+#include <linux/bios32.h>
 #include <linux/pci.h>
 #include <linux/types.h>
 #include <asm/byteorder.h>
@@ -15,13 +17,14 @@
 
 #ifdef CONFIG_PCI
 
-extern inline u32 mkaddr(unsigned char bus, unsigned char dev_fn,
-                         unsigned char where)
-{
-	return ((bus    & 0xff) << 0x10) |
-	       ((dev_fn & 0xff) << 0x08) |
-	       (where  & 0xfc);
-}
+#define mkaddr(bus, dev_fn, where)                                           \
+do {                                                                         \
+	if (bus == 0 && dev_fn >= PCI_DEVFN(8, 0))                           \
+		return -1;                                                   \
+	*(volatile u32 *)PCIMT_CONFIG_ADDRESS = ((bus    & 0xff) << 0x10) |  \
+	                                        ((dev_fn & 0xff) << 0x08) |  \
+	                                        (where  & 0xfc);             \
+} while(0);
 
 static unsigned long sni_rm200_pcibios_fixup (unsigned long memory_start,
                                               unsigned long memory_end)
@@ -31,6 +34,9 @@ static unsigned long sni_rm200_pcibios_fixup (unsigned long memory_start,
 	 * Take care of RM300 revision D boards for where the network
 	 * slot became an ordinary PCI slot.
 	 */
+	pcibios_write_config_byte(0, PCI_DEVFN(1, 0), PCI_INTERRUPT_LINE,
+	                          PCIMT_IRQ_SCSI);
+
 	return memory_start;
 }
 
@@ -45,7 +51,7 @@ static int sni_rm200_pcibios_read_config_byte (unsigned char bus,
 {
 	u32 res;
 
-	*(volatile u32 *)PCIMT_CONFIG_ADDRESS = mkaddr(bus, dev_fn, where);
+	mkaddr(bus, dev_fn, where);
 	res = *(volatile u32 *)PCIMT_CONFIG_DATA;
 	res = (le32_to_cpu(res) >> ((where & 3) << 3)) & 0xff;
 	*val = res;
@@ -62,7 +68,7 @@ static int sni_rm200_pcibios_read_config_word (unsigned char bus,
 
 	if (where & 1)
 		return PCIBIOS_BAD_REGISTER_NUMBER;
-	*(volatile u32 *)PCIMT_CONFIG_ADDRESS = mkaddr(bus, dev_fn, where);
+	mkaddr(bus, dev_fn, where);
 	res = *(volatile u32 *)PCIMT_CONFIG_DATA;
 	res = (le32_to_cpu(res) >> ((where & 3) << 3)) & 0xffff;
 	*val = res;
@@ -77,9 +83,9 @@ static int sni_rm200_pcibios_read_config_dword (unsigned char bus,
 {
 	u32 res;
 
-	if (where & 3)
+		if (where & 3)
 		return PCIBIOS_BAD_REGISTER_NUMBER;
-	*(volatile u32 *)PCIMT_CONFIG_ADDRESS = mkaddr(bus, dev_fn, where);
+	mkaddr(bus, dev_fn, where);
 	res = *(volatile u32 *)PCIMT_CONFIG_DATA;
 	res = le32_to_cpu(res);
 	*val = res;
@@ -92,7 +98,9 @@ static int sni_rm200_pcibios_write_config_byte (unsigned char bus,
                                                 unsigned char where,
                                                 unsigned char val)
 {
-	/* To do */
+	mkaddr(bus, dev_fn, where);
+	*(volatile u8 *)(PCIMT_CONFIG_DATA + (where & 3)) = val;
+
 	return PCIBIOS_SUCCESSFUL;
 }
 
@@ -101,7 +109,11 @@ static int sni_rm200_pcibios_write_config_word (unsigned char bus,
                                                 unsigned char where,
                                                 unsigned short val)
 {
-	/* To do */
+	if (where & 1)
+		return PCIBIOS_BAD_REGISTER_NUMBER;
+	mkaddr(bus, dev_fn, where);
+	*(volatile u16 *)(PCIMT_CONFIG_DATA + (where & 3)) = le16_to_cpu(val);
+
 	return PCIBIOS_SUCCESSFUL;
 }
 
@@ -112,7 +124,7 @@ static int sni_rm200_pcibios_write_config_dword (unsigned char bus,
 {
 	if (where & 3)
 		return PCIBIOS_BAD_REGISTER_NUMBER;
-	*(volatile u32 *)PCIMT_CONFIG_ADDRESS = mkaddr(bus, dev_fn, where);
+	mkaddr(bus, dev_fn, where);
 	*(volatile u32 *)PCIMT_CONFIG_DATA = le32_to_cpu(val);
 
 	return PCIBIOS_SUCCESSFUL;

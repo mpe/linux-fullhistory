@@ -14,20 +14,10 @@ comment 'Machine selection'
 bool 'Support for Acer PICA 1 chipset' CONFIG_ACER_PICA_61
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   bool 'Support for Algorithmics P4032' CONFIG_ALGOR_P4032
-  bool 'Support for DECstation' CONFIG_DECSTATION
-  bool 'Support for Deskstation RPC44' CONFIG_DESKSTATION_RPC44
-  bool 'Support for Deskstation Tyne' CONFIG_DESKSTATION_TYNE
-  bool 'Support for Mips Magnum 3000' CONFIG_MIPS_MAGNUM_3000
 fi
 bool 'Support for Mips Magnum 4000' CONFIG_MIPS_MAGNUM_4000
 bool 'Support for Olivetti M700-10' CONFIG_OLIVETTI_M700
-if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  bool 'Support for SGI workstations' CONFIG_SGI
-  if [ "$CONFIG_SGI" = "y" ]; then
-    bool 'Support for SGI graphic devices' CONFIG_SGI_GRAPHICS
-    define_bool CONFIG_UMISC y
-  fi
-fi
+bool 'Support for SGI workstations' CONFIG_SGI
 bool 'Support for SNI RM200 PCI' CONFIG_SNI_RM200_PCI
 
 #
@@ -42,18 +32,15 @@ if [ "$CONFIG_ALGOR_P4032" = "y" ]; then
 fi
 if [ "$CONFIG_MIPS_MAGNUM_4000" = "y" -o \
      "$CONFIG_OLIVETTI_M700" = "y" ]; then
-       define_bool CONFIG_VIDEO_G364 y
+	define_bool CONFIG_MIPS_JAZZ y
+	define_bool CONFIG_VIDEO_G364 y
+	define_bool CONFIG_VGA_CONSOLE y
 fi
-if [ "$CONFIG_DESKSTATION_RPC44" = "y" -o \
-     "$CONFIG_DESKSTATION_TYNE" = "y" ]; then
-	define_bool CONFIG_MIPS_ARC y
-fi
-if [ "$CONFIG_ACER_PICA_61" = "y" -o \
-     "$CONFIG_OLIVETTI_M700" = "y" -o \
-     "$CONFIG_MIPS_MAGNUM_4000" = "y" ]; then
+if [ "$CONFIG_ACER_PICA_61" = "y" ]; then
 	define_bool CONFIG_MIPS_JAZZ y
 fi
 if [ "$CONFIG_SNI_RM200_PCI" = "y" ]; then
+	define_bool CONFIG_VGA_CONSOLE y
 	define_bool CONFIG_PCI y
 fi
 endmenu
@@ -96,12 +83,12 @@ fi
 
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
+bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 bool 'Sysctl support' CONFIG_SYSCTL
 
 if [ "$CONFIG_SGI" != "y" ]; then
   tristate 'Parallel port support' CONFIG_PARPORT
 fi
-
 endmenu
 
 mainmenu_option next_comment
@@ -111,6 +98,7 @@ if [ "$CONFIG_MODULES" = "y" ]; then
   bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
   bool 'Kernel module loader' CONFIG_KMOD
 fi
+endmenu
 
 source drivers/block/Config.in
 
@@ -174,6 +162,8 @@ if [ "$CONFIG_NET" = "y" ]; then
 fi
 
 if [ "$CONFIG_SGI" != "y" ]; then
+	source drivers/net/hamradio/Config.in
+
 	mainmenu_option next_comment
 	comment 'ISDN subsystem'
 
@@ -193,32 +183,34 @@ if [ "$CONFIG_SGI" != "y" ]; then
 	endmenu
 fi
 
+# Conditionally compile in the Uniform CD-ROM driver
+if [ "$CONFIG_BLK_DEV_IDECD" = "y" -o "$CONFIG_BLK_DEV_SR" = "y" -o "$CONFIG_SBPCD" = "y" -o "$CONFIG_MCD" = "y" -o "$CONFIG_CM206" = "y" -o "$CONFIG_CDU31A" = "y" ]; then
+  define_bool CONFIG_CDROM y
+else
+  if [ "$CONFIG_BLK_DEV_IDECD" = "m" -o "$CONFIG_BLK_DEV_SR" = "m" -o "$CONFIG_SBPCD" = "m" -o "$CONFIG_MCD" = "m" -o "$CONFIG_CM206" = "m" -o "$CONFIG_CDU31A" = "m" ]; then
+    define_bool CONFIG_CDROM m
+  else
+    define_bool CONFIG_CDROM n
+  fi
+fi
+
 source fs/Config.in
 
 source fs/nls/Config.in
 
-if [ "$CONFIG_SGI" != "y" ]; then
-  source drivers/char/Config.in
+source drivers/char/Config.in
 
-  mainmenu_option next_comment
-  comment 'Sound'
+mainmenu_option next_comment
+comment 'Sound'
 
-  tristate 'Sound card support' CONFIG_SOUND
-  if [ "$CONFIG_SOUND" != "n" ]; then
-    source drivers/sound/Config.in
-  fi
-  endmenu
-else
-  comment 'SGI Character Devices'
-  bool 'Virtual terminal' CONFIG_VT
-  if [ "$CONFIG_VT" = "y" ]; then
-    bool 'Console on virtual terminal' CONFIG_VT_CONSOLE
-  fi
-  tristate 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE
-  bool 'SGI Zilog85C30 serial support' CONFIG_SGI_SERIAL
-  if [ "$CONFIG_SGI_SERIAL" != "n" ]; then
-    define_bool CONFIG_SERIAL y
-  fi
+tristate 'Sound card support' CONFIG_SOUND
+if [ "$CONFIG_SOUND" != "n" ]; then
+  source drivers/sound/Config.in
+fi
+endmenu
+
+if [ "$CONFIG_SGI" = "y" ]; then
+  source drivers/sgi/char/Config.in
 fi
 
 mainmenu_option next_comment

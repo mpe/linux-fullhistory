@@ -122,6 +122,8 @@ extern unsigned long reloc_offset(void);
 
 #define ALIGN(x) (((x) + sizeof(unsigned long)-1) & -sizeof(unsigned long))
 
+__pmac
+
 static void
 prom_exit()
 {

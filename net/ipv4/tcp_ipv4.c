@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.145 1998/05/02 12:47:13 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.146 1998/05/03 14:30:59 alan Exp $
  *
  *		IPv4 specific functions
  *
@@ -1155,7 +1155,7 @@ drop:
 struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req, struct sk_buff *skb,
 				      int snd_mss)
 {
-	struct sock *newsk = sk_alloc(AF_INET, GFP_ATOMIC, 0);
+	struct sock *newsk = sk_alloc(PF_INET, GFP_ATOMIC, 0);
 
 	if(newsk != NULL) {
 		struct tcp_opt *newtp;

@@ -31,6 +31,10 @@ extern inline void st_le32(volatile unsigned *addr, unsigned val)
 	asm volatile("stwbrx %0,0,%1" : : "r" (val), "r" (addr) : "memory");
 }
 
+/* alas, egcs sounds like it has a bug in this code that doesn't use the
+   inline asm correctly, and can cause file corruption. Until I hear that
+   it's fixed, I can live without the extra speed. I hope. */
+#if !(__GNUC__ >= 2 && __GNUC_MINOR__ >= 90)
 #if 0
 #  define __arch_swab16(x) ld_le16(&x)
 #  define __arch_swab32(x) ld_le32(&x)
@@ -59,6 +63,8 @@ static __inline__ __const__ __u32 ___arch__swab32(__u32 value)
 #define __arch__swab32(x) ___arch__swab32(x)
 #define __arch__swab16(x) ___arch__swab16(x)
 #endif /* 0 */
+
+#endif
 
 /* The same, but returns converted value from the location pointer by addr. */
 #define __arch__swab16p(addr) ld_le16(addr)

@@ -1,4 +1,4 @@
-/* $Id: irq.c,v 1.52 1998/03/19 00:22:54 ecd Exp $
+/* $Id: irq.c,v 1.53 1998/04/20 07:14:58 ecd Exp $
  * irq.c: UltraSparc IRQ handling/init/registry.
  *
  * Copyright (C) 1997  David S. Miller  (davem@caip.rutgers.edu)
@@ -36,6 +36,7 @@
 
 /* Internal flag, should not be visible elsewhere at all. */
 #define SA_IMAP_MASKED		0x100
+#define SA_DMA_SYNC		0x200
 
 #ifdef __SMP__
 void distribute_irqs(void);
@@ -543,6 +544,8 @@ int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *)
 #ifdef CONFIG_PCI
 		if(PCI_IRQ_P(irq)) {
 			pci_irq_frobnicate(&cpu_irq, &ivindex_fixup, &imap, &iclr, irq);
+			if (irq & PCI_IRQ_DMA_SYNC)
+				irqflags |= SA_DMA_SYNC;
 		} else
 #endif
 		if(irqflags & SA_DCOOKIE) {

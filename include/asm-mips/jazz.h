@@ -9,7 +9,7 @@
  *
  * This file is a mess. It really needs some reorganisation!
  *
- * $Id: jazz.h,v 1.5 1997/12/01 21:26:48 ralf Exp $
+ * $Id: jazz.h,v 1.6 1998/05/01 01:35:56 ralf Exp $
  */
 #ifndef __ASM_MIPS_JAZZ_H 
 #define __ASM_MIPS_JAZZ_H 

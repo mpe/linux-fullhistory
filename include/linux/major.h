@@ -40,6 +40,7 @@
 #define CYCLADES_MAJOR  19
 #define CYCLADESAUX_MAJOR 20
 #define MITSUMI_X_CDROM_MAJOR 20
+#define MFM_ACORN_MAJOR 21	/* ARM Linux /dev/mfm */
 #define SCSI_GENERIC_MAJOR 21
 #define Z8530_MAJOR 34
 #define DIGI_MAJOR 23

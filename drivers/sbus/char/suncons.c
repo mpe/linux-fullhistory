@@ -1,4 +1,4 @@
-/* $Id: suncons.c,v 1.79 1998/01/30 10:59:23 jj Exp $
+/* $Id: suncons.c,v 1.80 1998/04/13 07:27:01 davem Exp $
  * suncons.c: Sparc platform console generic layer.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -14,6 +14,7 @@
 #include <linux/vt.h>
 #include <linux/selection.h>
 #include <linux/proc_fs.h>
+#include <linux/malloc.h>
 
 #include <asm/page.h>
 #include <asm/pgtable.h>
@@ -100,10 +101,8 @@ static void nop_console_restore_palette(void)
 {
 }
 
-static unsigned long nop_con_type_init(unsigned long mem_start,
-				       const char **display_desc)
+static void nop_con_type_init(const char **display_desc)
 {
-	return mem_start;
 }
 
 static void nop_con_type_init_finish(void)
@@ -222,9 +221,9 @@ void console_restore_palette(void)
 	suncons_ops.console_restore_palette();
 }
 
-unsigned long con_type_init(unsigned long mem_start, const char **disp_desc)
+void con_type_init(const char **disp_desc)
 {
-	return suncons_ops.con_type_init(mem_start, disp_desc);
+	return suncons_ops.con_type_init(disp_desc);
 }
 
 void con_type_init_finish(void)
@@ -283,14 +282,14 @@ get_phys (unsigned long addr)
 extern int sbus_console_probe(void);
 extern int serial_console;
 
-__initfunc(static unsigned long finish_console_init(unsigned long memory_start))
+__initfunc(static void finish_console_init(void))
 {
 	static int confinish_has_run = 0;
 	int i, j;
 
 	if(confinish_has_run != 0) {
 		printk("finish_console_init: Someone tries to run me twice.\n");
-		return memory_start;
+		return;
 	}
 	for(i = FRAME_BUFFERS; i > 1; i--)
 		if(fbinfo[i - 1].type.fb_type != FBTYPE_NOTYPE)
@@ -299,7 +298,7 @@ __initfunc(static unsigned long finish_console_init(unsigned long memory_start))
 
 	for(j = 0; j < i; j++)
 		if (fbinfo[j].postsetup)
-			memory_start = (*fbinfo[j].postsetup)(fbinfo+j, memory_start);
+			(*fbinfo[j].postsetup)(fbinfo+j);
 
 	suncons_ops.clear_screen();
 
@@ -316,30 +315,50 @@ __initfunc(static unsigned long finish_console_init(unsigned long memory_start))
 #endif
 
 	confinish_has_run = 1;
-
-	return memory_start;
 }
-
-#ifdef CONFIG_PCI
-extern void pci_console_inithook(void);
-#endif
 
 __initfunc(int con_is_present(void))
 {
 	return serial_console ? 0 : 1;
 }
 
-__initfunc(unsigned long sun_console_init(unsigned long memory_start))
+#ifdef CONFIG_PCI
+extern int pci_console_probe(void);
+extern void pci_console_inithook(void);
+
+__initfunc(void pci_console_init(void))
+{
+	/* Nothing to do in this case. */
+	if (!con_is_present())
+		return;
+		
+	if (!cons_type) {
+		/* Some console was already found on SBUS or UPA */
+		return;
+	}
+
+	if(pci_console_probe()) {
+		prom_printf("Could not probe PCI console, bailing out...\n");
+		prom_halt();
+	}
+
+	finish_console_init();
+
+	con_type_init_finish();
+}
+
+#endif /* CONFIG_PCI */
+
+__initfunc(void sun_console_init(void))
 {
 	int i;
 
 	/* Nothing to do in this case. */
 	if (!con_is_present())
-		return memory_start;
+		return;
 
-	fbinfo = (fbinfo_t *)memory_start;
+	fbinfo = kmalloc(sizeof(fbinfo_t) * FRAME_BUFFERS, GFP_ATOMIC);
 	memset(fbinfo, 0, FRAME_BUFFERS * sizeof(fbinfo_t));
-	memory_start += (FRAME_BUFFERS * sizeof(fbinfo_t));
 	fbinfos = 0;
 
 	for (i = 0; i < FRAME_BUFFERS; i++)
@@ -348,39 +367,12 @@ __initfunc(unsigned long sun_console_init(unsigned long memory_start))
 	if(sbus_console_probe()) {
 #ifdef CONFIG_PCI
 		cons_type = 1;
-		pci_console_inithook();
-		return memory_start;
+		return pci_console_inithook();
 #else
 		/* XXX We need to write PROM console fallback driver... */
 		prom_printf("Could not probe SBUS console, bailing out...\n");
 		prom_halt();
 #endif
 	}
-	return finish_console_init(memory_start);
+	return finish_console_init();
 }
-
-#ifdef CONFIG_PCI
-extern int pci_console_probe(void);
-
-__initfunc(unsigned long pci_console_init(unsigned long memory_start))
-{
-	/* Nothing to do in this case. */
-	if (!con_is_present())
-		return memory_start;
-		
-	if (!cons_type) {
-		/* Some console was already found on SBUS or UPA */
-		return memory_start;
-	}
-
-	if(pci_console_probe()) {
-		prom_printf("Could not probe PCI console, bailing out...\n");
-		prom_halt();
-	}
-
-	memory_start = finish_console_init(memory_start);
-
-	con_type_init_finish();
-	return memory_start;
-}
-#endif

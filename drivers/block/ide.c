@@ -3,7 +3,6 @@
  *
  *  Copyright (C) 1994-1998  Linus Torvalds & authors (see below)
  */
-#define _IDE_C		/* needed by <linux/blk.h> */
 
 /*
  *  Maintained by Mark Lord  <mlord@pobox.com>
@@ -98,6 +97,8 @@
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
 
+#define _IDE_C			/* Tell ide.h it's really us */
+
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/types.h>
@@ -147,6 +148,28 @@ ide_module_t *ide_modules = NULL;
  * This is declared extern in ide.h, for access by other IDE modules:
  */
 ide_hwif_t	ide_hwifs[MAX_HWIFS];	/* master data repository */
+
+/*
+ * This is our end_request replacement function.
+ */
+void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup)
+{
+	struct request *req;
+	unsigned long flags;
+
+	spin_lock_irqsave(&io_request_lock,flags);
+	req = hwgroup->rq;
+
+	if (end_that_request_first(req, uptodate, DEVICE_NAME))
+		goto out;
+	add_blkdev_randomness(MAJOR(req->rq_dev));
+	hwgroup->drive->queue = req->next;
+        blk_dev[MAJOR(req->rq_dev)].current_request = NULL;
+        hwgroup->rq = NULL;
+	end_that_request_last(req);
+out:
+	spin_unlock_irqrestore(&io_request_lock,flags);
+}
 
 #if (DISK_RECOVERY_TIME > 0)
 /*

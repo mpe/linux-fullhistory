@@ -1003,7 +1003,7 @@
 #define __NR_time			(__NR_Linux +  13)
 #define __NR_mknod			(__NR_Linux +  14)
 #define __NR_chmod			(__NR_Linux +  15)
-#define __NR_chown			(__NR_Linux +  16)
+#define __NR_lchown			(__NR_Linux +  16)
 #define __NR_break			(__NR_Linux +  17)
 #define __NR_oldstat			(__NR_Linux +  18)
 #define __NR_lseek			(__NR_Linux +  19)
@@ -1180,11 +1180,21 @@
 #define __NR_setresgid			(__NR_Linux + 190)
 #define __NR_getresgid			(__NR_Linux + 191)
 #define __NR_prctl			(__NR_Linux + 192)
+#define __NR_rt_sigreturn		(__NR_Linux + 193)
+#define __NR_rt_sigaction		(__NR_Linux + 194)
+#define __NR_rt_sigprocmask		(__NR_Linux + 195)
+#define __NR_rt_sigpending		(__NR_Linux + 196)
+#define __NR_rt_sigtimedwait		(__NR_Linux + 197)
+#define __NR_rt_sigqueueinfo		(__NR_Linux + 198)
+#define __NR_rt_sigsuspend		(__NR_Linux + 199)
+#define __NR_pread			(__NR_Linux + 200)
+#define __NR_pwrite			(__NR_Linux + 201)
+#define __NR_chown			(__NR_Linux + 202)
 
 /*
  * Offset of the last Linux flavoured syscall
  */
-#define __NR_Linux_syscalls		192
+#define __NR_Linux_syscalls		202
 
 #ifndef __LANGUAGE_ASSEMBLY__
 
@@ -1197,7 +1207,8 @@ register long __err __asm__ ("$7"); \
 __asm__ volatile ("li\t$2,%2\n\t" \
 		  "syscall" \
                   : "=r" (__res), "=r" (__err) \
-                  : "i" (__NR_##name)); \
+                  : "i" (__NR_##name) \
+                  : "$8","$9","$10","$11","$12","$13","$14","$15","$24"); \
 if (__err == 0) \
 	return (type) __res; \
 errno = __res; \
@@ -1218,7 +1229,7 @@ __asm__ volatile ("move\t$4,%3\n\t" \
                   "syscall" \
                   : "=r" (__res), "=r" (__err) \
                   : "i" (__NR_##name),"r" ((long)(a)) \
-                  : "$4"); \
+                  : "$4","$8","$9","$10","$11","$12","$13","$14","$15","$24"); \
 if (__err == 0) \
 	return (type) __res; \
 errno = __res; \
@@ -1237,7 +1248,8 @@ __asm__ volatile ("move\t$4,%3\n\t" \
                   : "=r" (__res), "=r" (__err) \
                   : "i" (__NR_##name),"r" ((long)(a)), \
                                       "r" ((long)(b)) \
-                  : "$4","$5"); \
+                  : "$4","$5","$8","$9","$10","$11","$12","$13","$14","$15", \
+                    "$24"); \
 if (__err == 0) \
 	return (type) __res; \
 errno = __res; \
@@ -1258,7 +1270,8 @@ __asm__ volatile ("move\t$4,%3\n\t" \
                   : "i" (__NR_##name),"r" ((long)(a)), \
                                       "r" ((long)(b)), \
                                       "r" ((long)(c)) \
-                  : "$4","$5","$6"); \
+                  : "$4","$5","$6","$8","$9","$10","$11","$12","$13","$14", \
+                    "$15","$24"); \
 if (__err == 0) \
 	return (type) __res; \
 errno = __res; \
@@ -1281,7 +1294,8 @@ __asm__ volatile ("move\t$4,%3\n\t" \
                                       "r" ((long)(b)), \
                                       "r" ((long)(c)), \
                                       "r" ((long)(d)) \
-                  : "$4","$5","$6"); \
+                  : "$4","$5","$6""$8","$9","$10","$11","$12","$13","$14", \
+                    "$15","$24"); \
 if (__err == 0) \
 	return (type) __res; \
 errno = __res; \
@@ -1309,7 +1323,8 @@ __asm__ volatile ("move\t$4,%3\n\t" \
                                       "r" ((long)(c)), \
                                       "r" ((long)(d)), \
                                       "m" ((long)(e)) \
-                  : "$2","$4","$5","$6","$7"); \
+                  : "$2","$4","$5","$6","$7","$8","$9","$10","$11","$12", \
+                    "$13","$14","$15","$24"); \
 if (__err == 0) \
 	return (type) __res; \
 errno = __res; \
@@ -1340,7 +1355,8 @@ __asm__ volatile ("move\t$4,%3\n\t" \
                                       "r" ((long)(d)), \
                                       "m" ((long)(e)), \
                                       "m" ((long)(f)) \
-                  : "$2","$3","$4","$5","$6","$7"); \
+                  : "$2","$3","$4","$5","$6","$7","$8","$9","$10","$11", \
+                    "$12","$13","$14","$15","$24"); \
 if (__err == 0) \
 	return (type) __res; \
 errno = __res; \
@@ -1374,7 +1390,8 @@ __asm__ volatile ("move\t$4,%3\n\t" \
                                       "m" ((long)(e)), \
                                       "m" ((long)(f)), \
                                       "m" ((long)(g)) \
-                  : "$2","$3","$4","$5","$6","$7"); \
+                  : "$2","$3","$4","$5","$6","$7","$8","$9","$10","$11", \
+                    "$12","$13","$14","$15","$24"); \
 if (__err == 0) \
 	return (type) __res; \
 errno = __res; \
@@ -1397,6 +1414,8 @@ return -1; \
  */
 #define __NR__exit __NR_exit
 static inline _syscall0(int,idle)
+static inline _syscall0(int,fork)
+static inline _syscall2(int,clone,unsigned long,flags,char *,esp)
 static inline _syscall0(int,pause)
 static inline _syscall1(int,setup,int,magic)
 static inline _syscall0(int,sync)
@@ -1429,11 +1448,11 @@ static inline pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long f
 
 	__asm__ __volatile__(
 		".set\tnoreorder\n\t"
-		"move\t$8,$sp\n\t"
+		"move\t$6,$sp\n\t"
 		"move\t$4,%5\n\t"
 		"li\t$2,%1\n\t"
 		"syscall\n\t"
-		"beq\t$8,$sp,1f\n\t"
+		"beq\t$6,$sp,1f\n\t"
 		"subu\t$sp,32\n\t"	/* delay slot */
 		"jalr\t%4\n\t"
 		"move\t$4,%3\n\t"	/* delay slot */

@@ -1,4 +1,4 @@
-/* $Id: leo.c,v 1.26 1998/03/10 20:18:29 jj Exp $
+/* $Id: leo.c,v 1.27 1998/04/13 07:26:57 davem Exp $
  * leo.c: SUNW,leo 24/8bit frame buffer driver
  *
  * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -503,14 +503,13 @@ leo_reset (fbinfo_t *fb)
 }
 
 
-__initfunc(static unsigned long leo_postsetup (fbinfo_t *fb, unsigned long memory_start))
+__initfunc(static void leo_postsetup (fbinfo_t *fb))
 {
-	fb->info.leo.cluts[0] = (u32 *)(memory_start);
-	fb->info.leo.cluts[1] = (u32 *)(memory_start+256*4);
-	fb->info.leo.cluts[2] = (u32 *)(memory_start+256*4*2);
-	fb->info.leo.xlut = (u8 *)(memory_start+256*4*3);
-	fb->color_map = (u8 *)(memory_start+256*4*3+256);
-	return memory_start + (256*4*3) + 256 + 256*3;
+	fb->info.leo.cluts[0] = kmalloc(256 * 4, GFP_ATOMIC);
+	fb->info.leo.cluts[1] = kmalloc(256 * 4, GFP_ATOMIC);
+	fb->info.leo.cluts[2] = kmalloc(256 * 4, GFP_ATOMIC);
+	fb->info.leo.xlut     = kmalloc(256,     GFP_ATOMIC);
+	fb->color_map         = kmalloc(256 * 3, GFP_ATOMIC);
 }
 
 __initfunc(void leo_setup (fbinfo_t *fb, int slot, u32 leo, int leo_io))

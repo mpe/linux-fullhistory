@@ -112,9 +112,7 @@ void show_regs(struct pt_regs * regs)
 
 	flags = condition_codes(regs);
 
-	printk("\n"
-		"pc : [<%08lx>]\n"
-		"lr : [<%08lx>]\n"
+	printk( "pc : [<%08lx>]    lr : [<%08lx>]\n"
 		"sp : %08lx  ip : %08lx  fp : %08lx\n",
 		instruction_pointer(regs),
 		regs->ARM_lr, regs->ARM_sp,
@@ -133,22 +131,23 @@ void show_regs(struct pt_regs * regs)
 		flags & CC_Z_BIT ? 'Z' : 'z',
 		flags & CC_C_BIT ? 'C' : 'c',
 		flags & CC_V_BIT ? 'V' : 'v');
-	printk("  IRQs %s  FIQs %s  Mode %s\n",
+	printk("  IRQs %s  FIQs %s  Mode %s  Segment %s\n",
 		interrupts_enabled(regs) ? "on" : "off",
 		fast_interrupts_enabled(regs) ? "on" : "off",
-		processor_modes[processor_mode(regs)]);
-#if defined(CONFIG_CPU_ARM6) || defined(CONFIG_CPU_SA110)
-{ int ctrl, transbase, dac;
-  __asm__ (
-"	mrc p15, 0, %0, c1, c0\n"
-"	mrc p15, 0, %1, c2, c0\n"
-"	mrc p15, 0, %2, c3, c0\n"
- : "=r" (ctrl), "=r" (transbase), "=r" (dac));
-  printk("Control: %04X  Table: %08X  DAC: %08X  ",
-  	ctrl, transbase, dac);
-  }
+		processor_modes[processor_mode(regs)],
+		get_fs() == get_ds() ? "kernel" : "user");
+#if defined(CONFIG_CPU_32)
+	{
+		int ctrl, transbase, dac;
+		  __asm__ (
+		"	mrc p15, 0, %0, c1, c0\n"
+		"	mrc p15, 0, %1, c2, c0\n"
+		"	mrc p15, 0, %2, c3, c0\n"
+		: "=r" (ctrl), "=r" (transbase), "=r" (dac));
+		printk("Control: %04X  Table: %08X  DAC: %08X\n",
+		  	ctrl, transbase, dac);
+	}
 #endif
-  	printk ("Segment %s\n", get_fs() == get_ds() ? "kernel" : "user");
 }
 
 /*
@@ -172,7 +171,15 @@ void flush_thread(void)
 	current->flags &= ~PF_USEDFPU;
 }
 
+void release_segments(struct mm_struct *mm)
+{
+}
+
 void release_thread(struct task_struct *dead_task)
+{
+}
+
+void copy_segments(int nr, struct task_struct *p, struct mm_struct *new_mm)
 {
 }
 

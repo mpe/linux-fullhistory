@@ -36,8 +36,8 @@ struct cpuinfo_sparc {
 	unsigned long	irq_count;
 	unsigned int	multiplier;
 	unsigned int	counter;
-	unsigned long	last_tlbversion_seen;
 	unsigned long	pgcache_size;
+	unsigned long	pgdcache_size;
 
 	/* Dcache line 2 */
 	unsigned long	*pgd_cache;

@@ -26,7 +26,7 @@ DOS\5		The Fast File System with directory cache. Supported read only.
 
 All of the above filesystems allow block sizes from 512 to 32K bytes.
 Supported block sizes are: 512, 1024, 2048 and 4096 bytes. Larger blocks
-speed up almost everything with the expense of wasted disk space. The speed
+speed up almost everything at the expense of wasted disk space. The speed
 gain above 4K seems not really worth the price, so you don't lose too
 much here, either.
 
@@ -45,12 +45,13 @@ setgid[=gid]	Same as above, but for gid.
 
 mode=mode	Sets the mode flags to the given (octal) value, regardless
 		of the original permissions. Directories will get an x
-		permission, if the corresponding r bit is set.
+		permission if the corresponding r bit is set.
 		This is useful since most of the plain AmigaOS files
 		will map to 600.
 
 reserved=num	Sets the number of reserved blocks at the start of the
-		partition to num. Default is 2.
+		partition to num. You should never need this option.
+		Default is 2.
 
 root=block	Sets the block number of the root block. This should never
 		be necessary.
@@ -71,11 +72,13 @@ mufs		The filesystem is really a muFS, also it doesn't
 		as one.
 
 prefix=path	Path will be prefixed to every absolute path name of
-		symbolic links on an AFFS partition. Default = /
+		symbolic links on an AFFS partition. Default = "/".
+		(See below.)
 
 volume=name	When symbolic links with an absolute path are created
-		on an AFFS partition, volume will be prepended as the
+		on an AFFS partition, name will be prepended as the
 		volume name. Default = "" (empty string).
+		(See below.)
 
 Handling of the Users/Groups and protection flags
 =================================================
@@ -92,11 +95,13 @@ The Amiga protection flags RWEDRWEDHSPARWED are handled as follows:
 
   - H and P are always retained and ignored under Linux.
 
-  - A is always reset when written.
+  - A is always reset when a file is written to.
 
 User id and group id will be used unless set[gu]id are given as mount
 options. Since most of the Amiga file systems are single user systems
-they will be owned by root.
+they will be owned by root. The root directory of the Amiga filesystem
+(i. e. the mount point) will be owned by the user who actually mounts
+the filesystem (the root directory doesn't have uid/gid fields).
 
 Linux -> Amiga:
 
@@ -139,12 +144,12 @@ might be "User", "WB" and "Graphics", the mount points /amiga/User,
 Examples
 ========
 
-Command line
-    mount  Archive/Amiga/Workbench3.1.adf /mnt -t affs -o loop,reserved=4
+Command line:
+    mount  Archive/Amiga/Workbench3.1.adf /mnt -t affs -o loop,verbose
     mount  /dev/sda3 /Amiga -t affs
 
-/etc/fstab example
-    /dev/sdb5	/d/f    affs    ro
+/etc/fstab entry:
+    /dev/sdb5	/amiga/Workbench    affs    noauto,user,exec,verbose 0 0
 
 Bugs, Restrictions, Caveats
 ===========================
@@ -159,10 +164,10 @@ can be changed by setting the compile-time option AFFS_NO_TRUNCATE
 in include/linux/amigaffs.h).
 
 Case is ignored by the affs in filename matching, but Linux shells
-do care about the case. Example (with /mnt being an affs mounted fs):
-    rm /mnt/WRONGCASE
+do care about the case. Example (with /wb being an affs mounted fs):
+    rm /wb/WRONGCASE
 will remove /mnt/wrongcase, but
-    rm /mnt/WR*
+    rm /wb/WR*
 will not since the names are matched by the shell.
 
 The block allocation is designed for hard disk partitions. If more
@@ -170,14 +175,20 @@ than 1 process writes to a (small) diskette, the blocks are allocated
 in an ugly way (but the real AFFS doesn't do much better). This
 is also true when space gets tight.
 
+You cannot execute programs on an OFS (Old File System), since the
+program files cannot be memory mapped due to the 488 byte blocks.
+For the same reason you cannot mount an image on such a filesystem
+via the loopback device.
+
 The bitmap valid flag in the root block may not be accurate when the
 system crashes while an affs partition is mounted. There's currently
-no way to fix this without an Amiga (disk validator) or manually
-(who would do this?). Maybe later.
+no way to fix a garbled filesystem without an Amiga (disk validator)
+or manually (who would do this?). Maybe later.
 
 A fsck.affs and mkfs.affs will probably be available in the future.
-Until then, you should do
-    ln -s /bin/true /etc/fs/mkfs.affs
+If you mount them on system startup, you may want to tell fsck
+that the fs should not be checked (place a '0' in the sixth field
+of /etc/fstab).
 
 It's not possible to read floppy disks with a normal PC or workstation
 due to an incompatibility with the Amiga floppy controller.

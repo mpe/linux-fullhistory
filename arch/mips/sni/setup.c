@@ -1,5 +1,5 @@
 /*
- * Setup pointers to hardware dependand routines.
+ * Setup pointers to hardware dependant routines.
  *
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
@@ -7,17 +7,21 @@
  *
  * Copyright (C) 1996, 1997 by Ralf Baechle
  *
- * $Id: setup.c,v 1.5 1997/12/01 16:19:12 ralf Exp $
+ * $Id: setup.c,v 1.5 1998/05/04 09:18:42 ralf Exp $
  */
 #include <asm/ptrace.h>
+#include <linux/config.h>
+#include <linux/hdreg.h>
 #include <linux/ioport.h>
 #include <linux/sched.h>
 #include <linux/init.h>
 #include <linux/interrupt.h>
 #include <linux/timex.h>
 #include <linux/pci.h>
+#include <asm/bcache.h>
 #include <asm/bootinfo.h>
 #include <asm/keyboard.h>
+#include <asm/ide.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/processor.h>
@@ -44,6 +48,8 @@ extern void sni_rm200_keyboard_setup(void);
 extern void sni_machine_restart(char *command);
 extern void sni_machine_halt(void);
 extern void sni_machine_power_off(void);
+
+extern struct ide_ops std_ide_ops;
 
 __initfunc(static void sni_irq_setup(void))
 {
@@ -94,32 +100,8 @@ static inline void sni_pcimt_detect(void)
 	asic = (csmsr & 0x08) ? asic : !asic;
 	p += sprintf(p, ", ASIC PCI Rev %s", asic ? "1.0" : "1.1");
 	printk("%s.\n", boardtype);
-
-	cacheconf = *(volatile unsigned int *)PCIMT_CACHECONF;
-	switch(cacheconf & 7) {
-	case 0:
-		printk("Secondary cache disabled\n");
-		break;
-	case 1:
-		printk("256kb secondary cache\n");
-		break;
-	case 2:
-		printk("512kb secondary cache\n");
-		break;
-	case 3:
-		printk("1mb secondary cache\n");
-		break;
-	case 4:
-		printk("2mb secondary cache\n");
-		break;
-	case 5:
-		printk("4mb secondary cache\n");
-		break;
-	default:
-		panic("invalid secondary cache size\n");
-	}
 }
-	
+
 __initfunc(void sni_rm200_pci_setup(void))
 {
 	tag *atag;
@@ -149,6 +131,7 @@ __initfunc(void sni_rm200_pci_setup(void))
 	}
 
 	sni_pcimt_detect();
+	sni_pcimt_sc_init();
 
 	irq_setup = sni_irq_setup;
 	fd_cacheflush = sni_fd_cacheflush;	// Will go away
@@ -183,4 +166,7 @@ __initfunc(void sni_rm200_pci_setup(void))
 	 */
 	request_region(0xcfc,0x04,"PCI config data");
 	pci_ops = &sni_pci_ops;
+#ifdef CONFIG_BLK_DEV_IDE
+	ide_ops = &std_ide_ops;
+#endif
 }

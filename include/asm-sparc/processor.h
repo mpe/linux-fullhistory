@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.62 1998/02/05 14:20:02 jj Exp $
+/* $Id: processor.h,v 1.63 1998/04/23 08:26:22 davem Exp $
  * include/asm-sparc/processor.h
  *
  * Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
@@ -153,6 +153,9 @@ extern __inline__ void start_thread(struct pt_regs * regs, unsigned long pc,
 
 /* Free all resources held by a thread. */
 #define release_thread(tsk)		do { } while(0)
+
+#define copy_segments(nr, tsk, mm)	do { } while (0)
+#define release_segments(mm)		do { } while (0)
 
 #ifdef __KERNEL__
 

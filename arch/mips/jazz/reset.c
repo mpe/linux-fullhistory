@@ -2,16 +2,36 @@
  *  linux/arch/mips/jazz/process.c
  *
  *  Reset a Jazz machine.
+ *
+ *  $Id: reset.c,v 1.2 1998/05/01 01:33:40 ralf Exp $
  */
+
+#include <linux/sched.h>
+#include <asm/jazz.h>
 #include <asm/io.h>
 #include <asm/system.h>
 #include <asm/reboot.h>
+#include <asm/delay.h>
+#include <asm/keyboard.h>
+
+static inline void kb_wait(void)
+{
+	unsigned long start = jiffies;
+
+	do {
+		if (! (kbd_read_status() & 0x02))
+			return;
+	} while (jiffies - start < 50);
+}
 
 void jazz_machine_restart(char *command)
 {
-	printk("Implement jazz_machine_restart().\n");
-	printk("Press reset to continue.\n");
-	while(1);
+    while (1) {
+	kb_wait ();    
+	kbd_write_command (0xd1);
+	kb_wait ();
+	kbd_write_output (0x00);
+    }
 }
 
 void jazz_machine_halt(void)

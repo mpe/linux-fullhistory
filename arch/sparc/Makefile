@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.34 1998/04/06 16:09:34 jj Exp $
+# $Id: Makefile,v 1.35 1998/04/18 03:40:53 davem Exp $
 # sparc/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -45,6 +45,8 @@ endif
 
 archclean:
 	-$(MAKE) -C arch/sparc/boot archclean
+
+archmrproper:
 	-$(MAKE) -C arch/sparc/math-emu cleansymlinks
 
 archdep:

@@ -1,5 +1,5 @@
 /*
- * linux/include/asm-arm/arch-ebsa/a.out.h
+ * linux/include/asm-arm/arch-nexuspci/a.out.h
  *
  * Copyright (C) 1996 Russell King
  */

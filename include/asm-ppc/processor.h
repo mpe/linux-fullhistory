@@ -234,7 +234,8 @@ void release_thread(struct task_struct *);
 /* This decides where the kernel will search for a free chunk of vm
  * space during mmap's.
  */
-#define TASK_UNMAPPED_BASE     (TASK_SIZE / 8 * 3)
+#define TASK_UNMAPPED_BASE(off)	(TASK_SIZE / 8 * 3)
+#define TASK_UNMAPPED_ALIGN(addr, off)	PAGE_ALIGN(addr)
 
 #define COPY_TASK_STRUCT(dst, src) 	\
 do {					\
@@ -284,6 +285,9 @@ static inline unsigned long thread_saved_pc(struct thread_struct *t)
 {
 	return (t->regs) ? t->regs->nip : 0;
 }
+
+#define copy_segments(nr, tsk, mm)	do { } while (0)
+#define release_segments(mm)		do { } while (0)
 
 /*
  * NOTE! The task struct and the stack go together

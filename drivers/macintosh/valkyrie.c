@@ -19,6 +19,7 @@
 #include <asm/adb.h>
 #include <asm/cuda.h>
 #include <asm/pgtable.h>
+#include <asm/init.h>
 #include <linux/selection.h>
 #include "pmac-cons.h"
 #include "valkyrie.h"
@@ -141,6 +142,8 @@ static struct valkyrie_regvals *valkyrie_reg_init[20] = {
 	&valkyrie_reg_init_15,
 	NULL, NULL, NULL, NULL, NULL
 };
+
+__openfirmware
 
 /*
  * Get the monitor sense value.

@@ -189,7 +189,7 @@ irq_prio_h:	.byte	 0, 8, 9, 8,10,10,10,10,11,11,11,11,10,10,10,10
 		 */
 		.macro	adrsvc, cond, reg, label
 		adr\cond	\reg, \label
-		orr\cond	\reg, \reg, #3
+		orr\cond	\reg, \reg, #0x08000003
 		.endm
 
 #if 0
@@ -422,7 +422,7 @@ vector_IRQ:	ldr	r13, .LCirq			@ Ill leave this one in just in case...
 		@ routine called with r0 = irq number, r1 = struct pt_regs *
 		@
 		adr	lr, 1b
-		orr	lr, lr, #3			@ Force SVC
+		orr	lr, lr, #0x08000003		@ Force SVC
 		bne	do_IRQ
 		b	ret_with_reschedule
 
@@ -442,7 +442,7 @@ __irq_svc:	teqp	pc, #0x08000003
 		@ routine called with r0 = irq number, r1 = struct pt_regs *
 		@
 		adr	lr, 1b
-		orr	lr, lr, #3			@ Force SVC
+		orr	lr, lr, #0x08000003		@ Force SVC
 		bne	do_IRQ				@ Returns to 1b
 		SVC_RESTORE_ALL
 
@@ -512,17 +512,11 @@ Ldata_do:	mov	r3, sp
 		b	Ldata_ldcstc_pre	@ ldc	rd, [rn, #m]
 		b	Ldata_unknown
 Ldata_unknown:	@ Part of jumptable
-		ldr	r3, [sp, #15 * 4]
-		str	r3, [sp, #-4]!
-		mov	r1, r1, lsr #2
-		mov	r2, r0
-		mov	r3, r4
-		adr	r0, Ltt
-		bl	SYMBOL_NAME(printk)
-Llpxx:		b	Llpxx
-
-Ltt:		.ascii	"Unknown data abort code %d [pc=%p, *pc=%p]\nLR=%p\0"
-		.align
+		mov	r0, r1
+		mov	r1, r4
+		mov	r2, r3
+	mov r3, lr
+		b	baddataabort
 
 Ldata_ldrstr_post:
 		mov	r0, r4, lsr #14		@ Get Rn

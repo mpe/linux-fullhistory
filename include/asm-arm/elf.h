@@ -6,6 +6,7 @@
  */
 
 #include <asm/ptrace.h>
+#include <asm/procinfo.h>
 
 typedef unsigned long elf_greg_t;
 
@@ -48,7 +49,15 @@ typedef struct { void *null; } elf_fpregset_t;
    specific libraries for optimization.  This is more specific in
    intent than poking at uname or /proc/cpuinfo. */
 
-#define ELF_PLATFORM	(NULL)
+/* For now we just provide a fairly general string that describes the
+   processor family.  This could be made more specific later if someone
+   implemented optimisations that require it.  26-bit CPUs give you
+   "arm2" for ARM2 (no SWP) and "arm3" for anything else (ARM1 isn't
+   supported).  32-bit CPUs give you "arm6" for anything based on an
+   ARM6 or ARM7 core and "sa1x" for anything based on a StrongARM-1
+   core.  */
+
+#define ELF_PLATFORM	(armidlist[armidindex].optname)
 
 #ifdef __KERNEL__
 #define SET_PERSONALITY(ex,ibcs2) \

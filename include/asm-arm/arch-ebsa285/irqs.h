@@ -43,3 +43,6 @@
  * Now map them to the Linux interrupts
  */
 #define IRQ_TIMER		IRQ_TIMER1
+
+#define irq_cannonicalize(i)	(i)
+

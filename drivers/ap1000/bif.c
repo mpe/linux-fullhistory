@@ -127,7 +127,6 @@ int bif_init(struct device *dev)
     dev->rebuild_header	= bif_rebuild_header;
     dev->open = bif_open;
     dev->flags = IFF_NOARP;   /* Don't use ARP on this device */
-    dev->family = AF_INET;
     dev->priv = kmalloc(sizeof(struct net_device_stats), GFP_KERNEL);
     if (dev->priv == NULL)
 	return -ENOMEM;
@@ -138,10 +137,6 @@ int bif_init(struct device *dev)
     dev->stop = bif_stop;
     dev->get_stats = bif_get_stats;
 
-    /* Initialise the bif device structure */
-    for (i = 0; i < DEV_NUMBUFFS; i++)
-	skb_queue_head_init(&dev->buffs[i]);
-    
     dev->set_mac_address = bif_set_mac_address;
     dev->header_cache_update = NULL;
     dev->do_ioctl = bif_do_ioctl;    
@@ -149,12 +144,9 @@ int bif_init(struct device *dev)
     dev->set_multicast_list = bif_set_multicast_list;
 
     memset(dev->broadcast, 0xFF, ETH_ALEN);
-    
-    dev->pa_addr = 0;
-    dev->pa_brdaddr = 0;
-    dev->pa_mask = 0;
-    dev->pa_alen = 4;
 
+    dev_init_buffers(dev);
+    
     return(0);
 }
 

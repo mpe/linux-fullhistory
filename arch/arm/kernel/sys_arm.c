@@ -30,8 +30,6 @@
  */
 /* proc/system.h */
 const char xchg_str[] = "xchg";
-/* arch/dma.h */
-const char dma_str[] = "%s: dma %d not supported\n";
 
 /*
  * sys_pipe() is the normal C calling standard for creating

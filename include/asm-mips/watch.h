@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1996, 1997 by Ralf Baechle
  *
- * $Id: watch.h,v 1.2 1997/09/19 08:37:44 ralf Exp $
+ * $Id: watch.h,v 1.3 1998/05/01 01:36:18 ralf Exp $
  */
 #ifndef __ASM_WATCH_H
 #define __ASM_WATCH_H

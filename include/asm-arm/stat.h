@@ -38,6 +38,7 @@ struct stat {
 	unsigned long  __unused5;
 };
 
+#if 0
 typedef struct {
 	unsigned int	minor;
 	unsigned int	major;
@@ -73,5 +74,5 @@ struct stat64 {
 #define __XSTAT_VER_TYPEMASK	0xff00
 
 #define __XMKNOD_VER_1		1
-
+#endif
 #endif

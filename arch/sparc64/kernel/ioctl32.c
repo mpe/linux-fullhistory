@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.35 1998/04/10 02:01:46 davem Exp $
+/* $Id: ioctl32.c,v 1.37 1998/05/06 05:34:13 davem Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -28,6 +28,8 @@
 #include <linux/if_ppp.h>
 #include <linux/mtio.h>
 #include <linux/cdrom.h>
+#include <linux/loop.h>
+#include <linux/auto_fs.h>
 
 #include <scsi/scsi.h>
 /* Ugly hack. */
@@ -58,6 +60,22 @@ static int w_long(unsigned int fd, unsigned int cmd, u32 arg)
 	int err;
 	unsigned long val;
 	
+	set_fs (KERNEL_DS);
+	err = sys_ioctl(fd, cmd, (unsigned long)&val);
+	set_fs (old_fs);
+	if (!err && put_user(val, (u32 *)A(arg)))
+		return -EFAULT;
+	return err;
+}
+ 
+static int rw_long(unsigned int fd, unsigned int cmd, u32 arg)
+{
+	mm_segment_t old_fs = get_fs();
+	int err;
+	unsigned long val;
+	
+	if(get_user(val, (u32 *)A(arg)))
+		return -EFAULT;
 	set_fs (KERNEL_DS);
 	err = sys_ioctl(fd, cmd, (unsigned long)&val);
 	set_fs (old_fs);
@@ -1059,6 +1077,57 @@ static int cdrom_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
 	return 0;
 }
 
+struct loop_info32 {
+	int			lo_number;      /* ioctl r/o */
+	__kernel_dev_t32	lo_device;      /* ioctl r/o */
+	unsigned int		lo_inode;       /* ioctl r/o */
+	__kernel_dev_t32	lo_rdevice;     /* ioctl r/o */
+	int			lo_offset;
+	int			lo_encrypt_type;
+	int			lo_encrypt_key_size;    /* ioctl w/o */
+	int			lo_flags;       /* ioctl r/o */
+	char			lo_name[LO_NAME_SIZE];
+	unsigned char		lo_encrypt_key[LO_KEY_SIZE]; /* ioctl w/o */
+	unsigned int		lo_init[2];
+	char			reserved[4];
+};
+
+static int loop_status(unsigned int fd, unsigned int cmd, u32 arg)
+{
+	mm_segment_t old_fs = get_fs();
+	struct loop_info l;
+	int err = 0;
+
+	switch(cmd) {
+	case LOOP_SET_STATUS:
+		if ((get_user(l.lo_number, &((struct loop_info32 *)A(arg))->lo_number) ||
+		     __get_user(l.lo_device, &((struct loop_info32 *)A(arg))->lo_device) ||
+		     __get_user(l.lo_inode, &((struct loop_info32 *)A(arg))->lo_inode) ||
+		     __get_user(l.lo_rdevice, &((struct loop_info32 *)A(arg))->lo_rdevice) ||
+		     __copy_from_user((char *)&l.lo_offset, (char *)&((struct loop_info32 *)A(arg))->lo_offset,
+					   8 + (unsigned long)l.lo_init - (unsigned long)&l.lo_offset)))
+			return -EFAULT;
+		set_fs (KERNEL_DS);
+		err = sys_ioctl (fd, cmd, (unsigned long)&l);
+		set_fs (old_fs);
+		break;
+	case LOOP_GET_STATUS:
+		set_fs (KERNEL_DS);
+		err = sys_ioctl (fd, cmd, (unsigned long)&l);
+		set_fs (old_fs);
+		if (!err && 
+		    (put_user(l.lo_number, &((struct loop_info32 *)A(arg))->lo_number) ||
+		     __put_user(l.lo_device, &((struct loop_info32 *)A(arg))->lo_device) ||
+		     __put_user(l.lo_inode, &((struct loop_info32 *)A(arg))->lo_inode) ||
+		     __put_user(l.lo_rdevice, &((struct loop_info32 *)A(arg))->lo_rdevice) ||
+		     __copy_to_user((char *)&((struct loop_info32 *)A(arg))->lo_offset,
+					   (char *)&l.lo_offset, (unsigned long)l.lo_init - (unsigned long)&l.lo_offset)))
+			err = -EFAULT;
+		break;
+	}
+	return err;
+}
+
 asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 {
 	struct file * filp;
@@ -1184,6 +1253,15 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case CDROMREADAUDIO:
 	case CDROMREADALL:
 		error = cdrom_ioctl_trans(fd, cmd, arg);
+		goto out;
+		
+	case LOOP_SET_STATUS:
+	case LOOP_GET_STATUS:
+		error = loop_status(fd, cmd, arg);
+		goto out;
+
+	case AUTOFS_IOC_SETTIMEOUT:
+		error = rw_long(fd, cmd, arg);
 		goto out;
 
 	/* List here exlicitly which ioctl's are known to have
@@ -1455,6 +1533,17 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case CDROM_DRIVE_STATUS:
 	case CDROM_DISC_STATUS:
 	case CDROM_CHANGER_NSLOTS:
+	
+	/* Big L */
+	case LOOP_SET_FD:
+	case LOOP_CLR_FD:
+
+	/* AUTOFS */
+	case AUTOFS_IOC_READY:
+	case AUTOFS_IOC_FAIL:
+	case AUTOFS_IOC_CATATONIC:
+	case AUTOFS_IOC_PROTOVER:
+	case AUTOFS_IOC_EXPIRE:
 
 		error = sys_ioctl (fd, cmd, (unsigned long)arg);
 		goto out;

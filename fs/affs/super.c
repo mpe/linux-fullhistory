@@ -44,7 +44,7 @@ affs_put_super(struct super_block *sb)
 {
 	int	 i;
 
-	pr_debug("affs_put_super()\n");
+	pr_debug("AFFS: put_super()\n");
 
 	for (i = 0; i < sb->u.affs_sb.s_bm_count; i++)
 		affs_brelse(sb->u.affs_sb.s_bitmap[i].bm_bh);
@@ -262,7 +262,7 @@ affs_read_super(struct super_block *s, void *data, int silent)
 	unsigned long		 mount_flags;
 	unsigned long		 offset;
 
-	pr_debug("affs_read_super(%s)\n",data ? (const char *)data : "no options");
+	pr_debug("AFFS: read_super(%s)\n",data ? (const char *)data : "no options");
 
 	MOD_INC_USE_COUNT;
 	lock_super(s);
@@ -396,6 +396,7 @@ got_root:
 			/* fall thru */
 		case FS_OFS:
 			s->u.affs_sb.s_flags |= SF_OFS;
+			s->s_flags |= MS_NOEXEC;
 			break;
 		case MUFS_DCOFS:
 		case MUFS_INTLOFS:
@@ -403,6 +404,7 @@ got_root:
 		case FS_DCOFS:
 		case FS_INTLOFS:
 			s->u.affs_sb.s_flags |= SF_INTL | SF_OFS;
+			s->s_flags |= MS_NOEXEC;
 			break;
 		default:
 			goto out_unknown_fs;
@@ -433,7 +435,7 @@ got_root:
 	ptype  = num_bm * sizeof(struct affs_bm_info) +
 		 az_no * sizeof(struct affs_alloc_zone) +
 		 MAX_ZONES * sizeof(struct affs_zone);
-	pr_debug("num_bm=%d, az_no=%d, sum=%d\n",num_bm,az_no,ptype);
+	pr_debug("AFFS: num_bm=%d, az_no=%d, sum=%d\n",num_bm,az_no,ptype);
 	if (!(s->u.affs_sb.s_bitmap = kmalloc(ptype, GFP_KERNEL)))
 		goto out_no_bitmap;
 	memset(s->u.affs_sb.s_bitmap,0,ptype);
@@ -597,7 +599,7 @@ out_bad_num:
 		mapidx, num_bm);
 	goto out_free_bitmap;
 out_no_root:
-	printk(KERN_ERR "AFFS: get root inode failed\n");
+	printk(KERN_ERR "AFFS: Get root inode failed\n");
 
 	/*
 	 * Begin the cascaded cleanup ...

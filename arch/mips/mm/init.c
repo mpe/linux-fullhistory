@@ -1,10 +1,14 @@
 /*
- *  arch/mips/mm/init.c
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
  *
- *  Copyright (C) 1991, 1992, 1993, 1994  Linus Torvalds
- *  Ported to MIPS by Ralf Baechle
+ * Copyright (C) 1994, 1995, 1996 by Ralf Baechle
+ *
+ * $Id: init.c,v 1.14 1998/05/01 01:34:53 ralf Exp $
  */
 #include <linux/config.h>
+#include <linux/init.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
 #include <linux/head.h>
@@ -113,58 +117,12 @@ pte_t * __bad_pagetable(void)
 	return (pte_t *)page;
 }
 
-static inline void
-__zeropage(unsigned long page)
-{
-	unsigned long dummy1, dummy2;
-
-#if (_MIPS_ISA == _MIPS_ISA_MIPS3) || (_MIPS_ISA == _MIPS_ISA_MIPS4)
-        /*
-         * Use 64bit code even for Linux/MIPS 32bit on R4000
-         */
-	__asm__ __volatile__(
-		".set\tnoreorder\n"
-		".set\tnoat\n\t"
-		".set\tmips3\n"
-		"1:\tsd\t$0,(%0)\n\t"
-		"subu\t%1,1\n\t"
-		"bnez\t%1,1b\n\t"
-		"addiu\t%0,8\n\t"
-		".set\tmips0\n\t"
-		".set\tat\n"
-		".set\treorder"
-		:"=r" (dummy1),
-		 "=r" (dummy2)
-		:"0" (page),
-		 "1" (PAGE_SIZE/8));
-#else /* (_MIPS_ISA == _MIPS_ISA_MIPS1) || (_MIPS_ISA == _MIPS_ISA_MIPS2) */
-	__asm__ __volatile__(
-		".set\tnoreorder\n"
-		"1:\tsw\t$0,(%0)\n\t"
-		"subu\t%1,1\n\t"
-		"bnez\t%1,1b\n\t"
-		"addiu\t%0,4\n\t"
-		".set\treorder"
-		:"=r" (dummy1),
-		 "=r" (dummy2)
-		:"0" (page),
-		 "1" (PAGE_SIZE/4));
-#endif
-}
-
-static inline void
-zeropage(unsigned long page)
-{
-	flush_page_to_ram(page);
-	__zeropage(page);
-}
-
 pte_t __bad_page(void)
 {
 	extern char empty_bad_page[PAGE_SIZE];
 	unsigned long page = (unsigned long)empty_bad_page;
 
-	zeropage(page);
+	clear_page(page);
 	return pte_mkdirty(mk_pte(page, PAGE_SHARED));
 }
 
@@ -198,13 +156,13 @@ void show_mem(void)
 
 extern unsigned long free_area_init(unsigned long, unsigned long);
 
-unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
+__initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_mem))
 {
 	pgd_init((unsigned long)swapper_pg_dir);
 	return free_area_init(start_mem, end_mem);
 }
 
-void mem_init(unsigned long start_mem, unsigned long end_mem)
+__initfunc(void mem_init(unsigned long start_mem, unsigned long end_mem))
 {
 	int codepages = 0;
 	int datapages = 0;
@@ -221,7 +179,7 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	high_memory = (void *)end_mem;
 
 	/* clear the zero-page */
-	memset(empty_zero_page, 0, PAGE_SIZE);
+	clear_page((unsigned long)empty_zero_page);
 
 	/* mark usable pages in the mem_map[] */
 	start_mem = PAGE_ALIGN(start_mem);
@@ -229,25 +187,9 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	for(tmp = MAP_NR(start_mem);tmp < max_mapnr;tmp++)
 		clear_bit(PG_reserved, &mem_map[tmp].flags);
 
-	/*
-	 * For rPC44 and RM200 we've reserved some memory too much.  Free
-	 * the memory from PAGE_SIZE to PAGE_OFFSET + 0xa0000 again.  We
-	 * don't free the lowest page where the exception handlers will
-	 * reside.
-	 */
-	if (mips_machgroup ==  MACH_GROUP_ARC &&
-	    mips_machtype == MACH_DESKSTATION_RPC44)
-		for(tmp = MAP_NR(PAGE_OFFSET + PAGE_SIZE);
-		    tmp < MAP_NR(PAGE_OFFSET + 0xa000); tmp++)
-			clear_bit(PG_reserved, &mem_map[tmp].flags);
-
 
 #ifdef CONFIG_SGI
 	prom_fixup_mem_map(start_mem, (unsigned long)high_memory);
-#endif
-
-#ifdef CONFIG_DESKSTATION_TYNE
-	deskstation_tyne_dma_init();
 #endif
 
 	for (tmp = PAGE_OFFSET; tmp < end_mem; tmp += PAGE_SIZE) {
@@ -284,9 +226,20 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	return;
 }
 
+extern char __init_begin, __init_end;
+
 void free_initmem(void)
 {
-	/* To be written */
+	unsigned long addr;
+        
+	addr = (unsigned long)(&__init_begin);
+	for (; addr < (unsigned long)(&__init_end); addr += PAGE_SIZE) {
+		mem_map[MAP_NR(addr)].flags &= ~(1 << PG_reserved);
+		atomic_set(&mem_map[MAP_NR(addr)].count, 1);
+		free_page(addr);
+	}
+	printk("Freeing unused kernel memory: %dk freed\n",
+	       (&__init_end - &__init_begin) >> 10);
 }
 
 void si_meminfo(struct sysinfo *val)

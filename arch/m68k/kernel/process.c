@@ -66,6 +66,7 @@ asmlinkage int sys_idle(void)
 	current->priority = -100;
 	current->counter = -100;
 	for (;;){
+		check_pgt_cache();
 		if (!need_resched)
 #if defined(CONFIG_ATARI) && !defined(CONFIG_AMIGA) && !defined(CONFIG_MAC)
 			/* block out HSYNC on the atari (falcon) */

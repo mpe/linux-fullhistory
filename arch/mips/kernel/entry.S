@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1994, 1995 by Ralf Baechle
  *
- * $Id: entry.S,v 1.4 1997/09/20 19:20:13 root Exp $
+ * $Id: entry.S,v 1.9 1998/05/04 09:17:50 ralf Exp $
  */
 
 /*
@@ -40,7 +40,7 @@
 		.set	noreorder
 		.set	mips3
 		.align 4
-handle_bottom_half:
+EXPORT(handle_bottom_half)
 		jal	do_bottom_half
 		 nop
 		b	9f
@@ -57,24 +57,16 @@ EXPORT(ret_from_irq)
 		bnez	t0,handle_bottom_half
 9:		 lw	t0,PT_STATUS(sp)	# returning to kernel mode?
 
-		andi	t1,t0, 0x10
-		beqz	t1,return		# -> yes
-		 lw	t1,need_resched
-		bnez	t1,reschedule
-		 GET_CURRENT(s0)
-		lw	t0,task
-		lw	a0,TASK_BLOCKED(s0)
-
-		beq	s0,t0,return		# task[0] cannot have signals
-		 lw	t0,TASK_SIGNAL(s0)
-
-		nor	t1,zero,a0
-		and	t1,t0,t1
-		beqz	t1,return
+		andi	t1, t0, 0x10
+		beqz	t1, return		# -> yes
+		 lw	t1, need_resched
+		bnez	t1, reschedule
+		lw	v0, TASK_SIGPENDING($28)
+		 move	a0, zero
+		beqz	v0, return
 		 nop
-
 		jal	do_signal
-		 move	a1,sp
+		 move	a1, sp
 
 EXPORT(return)	.set	noat
 		RESTORE_ALL
@@ -104,14 +96,22 @@ LEAF(spurious_interrupt)
  * the C preprocessor ...
  */
 #define __BUILD_clear_none(exception)
+#define __BUILD_clear_sti(exception)                                    \
+		STI
+#define __BUILD_clear_cli(exception)                                    \
+		CLI
+#define __BUILD_clear_kmode(exception)                                  \
+		KMODE
 #define __BUILD_clear_fpe(exception)                                    \
 		cfc1	a1,fcr31;                                       \
 		li	a2,~(0x3f<<12);                                 \
 		and	a2,a1;                                          \
-		ctc1	a2,fcr31;
+		ctc1	a2,fcr31;                                       \
+		STI
 #define __BUILD_clear_ade(exception)                                    \
 		MFC0	t0,CP0_BADVADDR;                                \
-		REG_S	t0,PT_BVADDR(sp);
+		REG_S	t0,PT_BVADDR(sp);                               \
+		STI
 #define __BUILD_silent(exception)
 
 #define fmt "Got %s at %08lx.\n"
@@ -137,32 +137,28 @@ EXPORT(exception_count_##exception);                                    \
 		.set	noat;                                           \
 		SAVE_ALL;                                               \
 		__BUILD_clear_##clear(exception);                       \
-		STI;                                                    \
 		.set	at;                                             \
 		__BUILD_##verbose(exception);                           \
-		li	t0,-1;                    /* not a sys call */  \
-		REG_S	t0,PT_OR2(sp);                                  \
 		jal	do_##handler;                                   \
 		 move	a0,sp;                                          \
 		j	ret_from_sys_call;                              \
 		 nop;                                                   \
 		END(handle_##exception)
 
-		BUILD_HANDLER(adel,ade,ade,silent)		/* #4  */
-		BUILD_HANDLER(ades,ade,ade,silent)		/* #5  */
-		BUILD_HANDLER(ibe,ibe,none,verbose)		/* #6  */
-		BUILD_HANDLER(dbe,dbe,none,verbose)		/* #7  */
-		BUILD_HANDLER(sys,sys,none,silent)		/* #8  */
-		BUILD_HANDLER(bp,bp,none,silent)		/* #9  */
-		BUILD_HANDLER(ri,ri,none,silent)		/* #10 */
-		BUILD_HANDLER(cpu,cpu,none,silent)		/* #11 */
-		BUILD_HANDLER(ov,ov,none,silent)		/* #12 */
-		BUILD_HANDLER(tr,tr,none,silent)		/* #13 */
-		BUILD_HANDLER(vcei,vcei,none,verbose)		/* #14 */
+		BUILD_HANDLER(adel,ade,kmode,silent)		/* #4  */
+		BUILD_HANDLER(ades,ade,kmode,silent)		/* #5  */
+		BUILD_HANDLER(ibe,ibe,cli,verbose)		/* #6  */
+		BUILD_HANDLER(dbe,dbe,cli,verbose)		/* #7  */
+		BUILD_HANDLER(bp,bp,sti,silent)			/* #9  */
+		BUILD_HANDLER(ri,ri,sti,silent)			/* #10 */
+		BUILD_HANDLER(cpu,cpu,sti,silent)		/* #11 */
+		BUILD_HANDLER(ov,ov,sti,silent)			/* #12 */
+		BUILD_HANDLER(tr,tr,sti,silent)			/* #13 */
+		BUILD_HANDLER(vcei,vcei,sti,verbose)		/* #14 */
 		BUILD_HANDLER(fpe,fpe,fpe,silent)		/* #15 */
-		BUILD_HANDLER(watch,watch,none,verbose)		/* #23 */
-		BUILD_HANDLER(vced,vced,none,verbose)		/* #31 */
-		BUILD_HANDLER(reserved,reserved,none,verbose)	/* others */
+		BUILD_HANDLER(watch,watch,sti,verbose)		/* #23 */
+		BUILD_HANDLER(vced,vced,sti,verbose)		/* #31 */
+		BUILD_HANDLER(reserved,reserved,sti,verbose)	/* others */
 
 /*
  * Table of syscalls

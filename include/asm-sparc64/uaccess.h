@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.24 1997/12/15 15:05:14 jj Exp $ */
+/* $Id: uaccess.h,v 1.25 1998/04/28 08:23:34 davem Exp $ */
 #ifndef _ASM_UACCESS_H
 #define _ASM_UACCESS_H
 
@@ -52,7 +52,7 @@ do {										\
 			flushw_user ();						\
 			current->tss.ctx = 0;					\
 		} else {							\
-			current->tss.ctx = (current->mm->context & 0x1fff);	\
+			current->tss.ctx = (current->mm->context & 0x3ff);	\
 		}								\
 		spitfire_set_secondary_context(current->tss.ctx); 		\
 		__asm__ __volatile__("flush %g6");				\

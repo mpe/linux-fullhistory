@@ -4,7 +4,7 @@
  * Copyright (C) 1992 Linus Torvalds
  * Copyright (C) 1994, 1995, 1996, 1997 Ralf Baechle
  *
- * $Id: irq.c,v 1.7 1997/09/26 11:51:33 ralf Exp $
+ * $Id: irq.c,v 1.11 1998/05/01 01:34:02 ralf Exp $
  */
 #include <linux/errno.h>
 #include <linux/init.h>
@@ -29,6 +29,7 @@
 unsigned char cache_21 = 0xff;
 unsigned char cache_A1 = 0xff;
 
+unsigned int local_bh_count[NR_CPUS];
 unsigned int local_irq_count[NR_CPUS];
 unsigned long spurious_count = 0;
 
@@ -104,7 +105,7 @@ int get_irq_list(char *buf)
 		if (!action) 
 			continue;
 		len += sprintf(buf+len, "%2d: %8d %c %s",
-			i, kstat.interrupts[i],
+			i, kstat.irqs[0][i],
 			(action->flags & SA_INTERRUPT) ? '+' : ' ',
 			action->name);
 		for (action=action->next; action; action = action->next) {
@@ -133,7 +134,7 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 
 	cpu = smp_processor_id();
 	irq_enter(cpu, irq);
-	kstat.interrupts[irq]++;
+	kstat.irqs[cpu][irq]++;
 
 	/*
 	 * mask and ack quickly, we don't want the irq controller
@@ -162,6 +163,7 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
         	} while (action);
 		if (do_random & SA_SAMPLE_RANDOM)
 			add_interrupt_randomness(irq);
+		unmask_irq (irq);
 		__cli();
 	}
 	irq_exit(cpu, irq);

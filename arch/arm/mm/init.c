@@ -119,10 +119,10 @@ __initfunc(unsigned long paging_init(unsigned long start_mem, unsigned long end_
 	memzero (empty_zero_page, PAGE_SIZE);
 	start_mem = setup_pagetables (start_mem, end_mem);
 
-	flush_tlb_all ();
-	update_mm_cache_all ();
+	flush_tlb_all();
+	update_memc_all();
 
-	return free_area_init (start_mem, end_mem);
+	return free_area_init(start_mem, end_mem);
 }
 
 /*

@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.42 1998/01/28 10:00:04 ecd Exp $
+/* $Id: processor.h,v 1.43 1998/04/23 08:26:30 davem Exp $
  * include/asm-sparc64/processor.h
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -205,6 +205,9 @@ do { \
 
 /* Free all resources held by a thread. */
 #define release_thread(tsk)		do { } while(0)
+
+#define copy_segments(nr, tsk, mm)	do { } while (0)
+#define release_segments(mm)		do { } while (0)
 
 #ifdef __KERNEL__
 /* Allocation and freeing of task_struct and kernel stack. */

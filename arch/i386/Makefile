@@ -92,5 +92,7 @@ install: vmlinux
 archclean:
 	@$(MAKEBOOT) clean
 
+archmrproper:
+
 archdep:
 	@$(MAKEBOOT) dep

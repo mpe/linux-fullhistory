@@ -33,9 +33,10 @@
 #define MD_DEFAULT_DISK_READAHEAD	(256 * 1024)
 
 /* ioctls */
-#define REGISTER_DEV _IO (MD_MAJOR, 1)
-#define START_MD     _IO (MD_MAJOR, 2)
-#define STOP_MD      _IO (MD_MAJOR, 3)
+#define REGISTER_DEV 		_IO (MD_MAJOR, 1)
+#define START_MD     		_IO (MD_MAJOR, 2)
+#define STOP_MD      		_IO (MD_MAJOR, 3)
+#define REGISTER_DEV_NEW	_IO (MD_MAJOR, 4)
 
 /*
    personalities :
@@ -199,6 +200,7 @@ typedef struct md_superblock_s {
 #include <linux/mm.h>
 #include <linux/fs.h>
 #include <linux/blkdev.h>
+#include <asm/semaphore.h>
 
 /*
  * Kernel-based reconstruction is mostly working, but still requires
@@ -208,12 +210,6 @@ typedef struct md_superblock_s {
 
 #define MAX_REAL     8		/* Max number of physical dev per md dev */
 #define MAX_MD_DEV   4		/* Max number of md dev */
-
-#if SUPPORT_RECONSTRUCTION
-#define MAX_MD_THREADS (MAX_MD_DEV * 3)	/* Max number of kernel threads */
-#else
-#define MAX_MD_THREADS (MAX_MD_DEV)	/* Max number of kernel threads */
-#endif /* SUPPORT_RECONSTRUCTION */
 
 #define FACTOR(a)         ((a)->repartition & FACTOR_MASK)
 #define MAX_FAULT(a)      (((a)->repartition & FAULT_MASK)>>8)
@@ -279,10 +275,12 @@ struct md_thread {
 	void			(*run) (void *data);
 	void			*data;
 	struct wait_queue	*wqueue;
-	__u32			flags;
+	unsigned long           flags;
+	struct semaphore	*sem;
+	struct task_struct	*tsk;
 };
 
-#define THREAD_WAKEUP	0
+#define THREAD_WAKEUP  0
 
 extern struct md_dev md_dev[MAX_MD_DEV];
 extern int md_size[MAX_MD_DEV];

@@ -33,13 +33,4 @@ extern unsigned int local_irq_count[];
 #define irq_exit(cpu, irq)      (--local_irq_count[cpu])
 #endif
 
-extern unsigned int local_irq_count[];
-
-#ifdef __SMP__
-#error Send superfluous SMP boxes to ralf@uni-koblenz.de
-#else
-#define irq_enter(cpu, irq)     (++local_irq_count[cpu])
-#define irq_exit(cpu, irq)      (--local_irq_count[cpu])
-#endif
-
 #endif /* __ASM_MIPS_IRQ_H */

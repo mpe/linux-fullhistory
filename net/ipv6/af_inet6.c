@@ -1,5 +1,5 @@
 /*
- *	AF_INET6 socket family
+ *	PF_INET6 socket protocol family
  *	Linux INET6 implementation 
  *
  *	Authors:
@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/af_inet.c
  *
- *	$Id: af_inet6.c,v 1.30 1998/03/25 00:23:05 davem Exp $
+ *	$Id: af_inet6.c,v 1.31 1998/05/03 14:31:06 alan Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -71,7 +71,7 @@ static int inet6_create(struct socket *sock, int protocol)
 	struct sock *sk;
 	struct proto *prot;
 
-	sk = sk_alloc(AF_INET6, GFP_KERNEL, 1);
+	sk = sk_alloc(PF_INET6, GFP_KERNEL, 1);
 	if (sk == NULL) 
 		goto do_oom;
 
@@ -105,7 +105,7 @@ static int inet6_create(struct socket *sock, int protocol)
 
 	sk->destruct            = NULL;
 	sk->zapped		= 0;
-	sk->family		= AF_INET6;
+	sk->family		= PF_INET6;
 	sk->protocol		= protocol;
 
 	sk->prot		= prot;
@@ -336,7 +336,7 @@ static int inet6_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 }
 
 struct proto_ops inet6_stream_ops = {
-	AF_INET6,
+	PF_INET6,
 
 	sock_no_dup,
 	inet6_release,
@@ -357,7 +357,7 @@ struct proto_ops inet6_stream_ops = {
 };
 
 struct proto_ops inet6_dgram_ops = {
-	AF_INET6,
+	PF_INET6,
 
 	sock_no_dup,
 	inet6_release,
@@ -378,7 +378,7 @@ struct proto_ops inet6_dgram_ops = {
 };
 
 struct net_proto_family inet6_family_ops = {
-	AF_INET6,
+	PF_INET6,
 	inet6_create
 };
 
@@ -485,7 +485,7 @@ void cleanup_module(void)
 {
 	sit_cleanup();
 	ipv6_cleanup();
-	sock_unregister(AF_INET6);
+	sock_unregister(PF_INET6);
 #ifdef CONFIG_PROC_FS
 	proc_net_unregister(proc_net_raw6.low_ino);
 	proc_net_unregister(proc_net_tcp6.low_ino);

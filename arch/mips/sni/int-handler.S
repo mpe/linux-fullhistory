@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1994 - 1997 by Ralf Baechle
  *
- * $Id: int-handler.S,v 1.3 1997/12/01 16:39:24 ralf Exp $
+ * $Id: int-handler.S,v 1.3 1998/05/01 01:35:33 ralf Exp $
  */
 #include <asm/asm.h>
 #include <linux/config.h>

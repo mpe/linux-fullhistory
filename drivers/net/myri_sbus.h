@@ -171,7 +171,7 @@ struct myri_txd {
 #define MYRINET_MTU        8432
 #define RX_ALLOC_SIZE      8448
 #define MYRI_PAD_LEN       2
-#define RX_COPY_THRESHOLD  128
+#define RX_COPY_THRESHOLD  256
 
 /* These numbers are cast in stone, new firmware is needed if
  * you want to change them.

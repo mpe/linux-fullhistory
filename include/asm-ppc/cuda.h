@@ -37,6 +37,7 @@
 
 #ifdef __KERNEL__
 
+void find_via_cuda(void);
 void via_cuda_init(void);
 int cuda_request(struct adb_request *req,
 		 void (*done)(struct adb_request *), int nbytes, ...);

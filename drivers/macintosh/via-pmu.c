@@ -23,6 +23,7 @@
 #include <asm/io.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
+#include <asm/init.h>
 
 static volatile unsigned char *via;
 
@@ -79,6 +80,7 @@ static int adb_int_pending;
 static int pmu_adb_flags;
 static int adb_dev_map = 0;
 static struct adb_request bright_req_1, bright_req_2;
+static struct device_node *vias;
 
 static int init_pmu(void);
 static int pmu_queue_request(struct adb_request *req);
@@ -138,11 +140,11 @@ static s8 pmu_data_len[256][2] = {
 /*f8*/	{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1},
 };
 
-void
-via_pmu_init()
-{
-	struct device_node *vias;
+__openfirmware
 
+void
+find_via_pmu()
+{
 	vias = find_devices("via-pmu");
 	if (vias == 0)
 		return;
@@ -174,7 +176,19 @@ via_pmu_init()
 	pmu_state = idle;
 
 	if (!init_pmu())
+		via = NULL;
+
+	adb_hardware = ADB_VIAPMU;
+}
+
+void
+via_pmu_init(void)
+{
+	if (vias == NULL)
 		return;
+
+	bright_req_1.complete = 1;
+	bright_req_2.complete = 1;
 
 	if (request_irq(vias->intrs[0].line, via_pmu_interrupt, 0, "VIA-PMU",
 			(void *)0)) {
@@ -187,12 +201,8 @@ via_pmu_init()
 	out_8(&via[IER], IER_SET | SR_INT | CB1_INT);
 
 	/* Set function pointers */
-	adb_hardware = ADB_VIAPMU;
 	adb_send_request = pmu_adb_send_request;
 	adb_autopoll = pmu_adb_autopoll;
-
-	bright_req_1.complete = 1;
-	bright_req_2.complete = 1;
 }
 
 static int

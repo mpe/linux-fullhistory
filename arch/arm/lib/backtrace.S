@@ -3,6 +3,7 @@
  *
  * Copyright (C) 1995, 1996 Russell King
  */
+#include <linux/config.h>
 #include <linux/linkage.h>
 #include <asm/assembler.h>
 		.text
@@ -21,9 +22,13 @@ ENTRY(__backtrace)
 
 ENTRY(c_backtrace)
 		stmfd	sp!, {r4 - r8, lr}	@ Save an extra register so we have a location...
+#ifdef CONFIG_CPU_32
 		tst	r1, #0x10		@ 26 or 32-bit?
 		moveq	mask, #0xfc000003
 		movne	mask, #0
+#else
+		mov	mask, #0xfc000003
+#endif
 		tst	mask, r0
 		movne	r0, #0
 		movs	frame, r0

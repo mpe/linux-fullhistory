@@ -1,4 +1,4 @@
-/* $Id: sgi.h,v 1.1.1.1 1997/06/01 03:17:12 ralf Exp $
+/* $Id: sgi.h,v 1.2 1998/05/01 01:36:05 ralf Exp $
  * sgi.h: Definitions specific to SGI machines.
  *
  * Copyright (C) 1996 David S. Miller (dm@sgi.com)

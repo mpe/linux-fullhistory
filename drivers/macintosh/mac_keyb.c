@@ -20,6 +20,7 @@
 #include <asm/bitops.h>
 #include <asm/adb.h>
 #include <asm/cuda.h>
+#include <asm/init.h>
 
 #include <linux/kbd_kern.h>
 #include <linux/kbd_ll.h>
@@ -28,7 +29,7 @@
 #define KEYB_LEDREG	2	/* register # for leds on ADB keyboard */
 #define MOUSE_DATAREG	0	/* reg# for movement/button codes from mouse */
 
-static u_short macplain_map[NR_KEYS] = __initdata {
+static u_short macplain_map[NR_KEYS] __initdata = {
 	0xfb61,	0xfb73,	0xfb64,	0xfb66,	0xfb68,	0xfb67,	0xfb7a,	0xfb78,
 	0xfb63,	0xfb76,	0xf200,	0xfb62,	0xfb71,	0xfb77,	0xfb65,	0xfb72,
 	0xfb79,	0xfb74,	0xf031,	0xf032,	0xf033,	0xf034,	0xf036,	0xf035,
@@ -194,6 +195,8 @@ static unsigned char dont_repeat[128] = {
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, /* scroll lock */
 	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 };
+
+__openfirmware
 
 int mackbd_setkeycode(unsigned int scancode, unsigned int keycode)
 {

@@ -41,7 +41,6 @@ static struct buffer_head *affs_getblock(struct inode *inode, s32 block);
 static ssize_t affs_file_read_ofs(struct file *filp, char *buf, size_t count, loff_t *ppos);
 static ssize_t affs_file_write(struct file *filp, const char *buf, size_t count, loff_t *ppos);
 static ssize_t affs_file_write_ofs(struct file *filp, const char *buf, size_t cnt, loff_t *ppos);
-static int affs_release_file(struct inode *inode, struct file *filp);
 static int alloc_ext_cache(struct inode *inode);
 
 static struct file_operations affs_file_operations = {
@@ -53,7 +52,7 @@ static struct file_operations affs_file_operations = {
 	NULL,			/* ioctl - default */
 	generic_file_mmap,	/* mmap */
 	NULL,			/* no special open */
-	affs_release_file,	/* release */
+	NULL,			/* release */
 	file_fsync,		/* brute force, but works */
 	NULL,			/* fasync */
 	NULL,			/* check_media_change */
@@ -93,7 +92,7 @@ static struct file_operations affs_file_operations_ofs = {
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
 	NULL,			/* no special open */
-	affs_release_file,	/* release */
+	NULL,			/* release */
 	file_fsync,		/* brute force, but works */
 	NULL,			/* fasync */
 	NULL,			/* check_media_change */
@@ -184,7 +183,7 @@ seqnum_to_index(int seqnum)
 }
 
 /* Now the other way round: Calculate the sequence
- * number of a extension block of a key at the
+ * number of an extension block of a key at the
  * given index in the cache.
  */
 
@@ -545,7 +544,7 @@ affs_file_read_ofs(struct file *filp, char *buf, size_t count, loff_t *ppos)
 	}
 	blocksize = AFFS_I2BSIZE(inode) - 24;
 	if (!(S_ISREG(inode->i_mode))) {
-		pr_debug("affs_file_read: mode = %07o",inode->i_mode);
+		pr_debug("AFFS: file_read: mode = %07o",inode->i_mode);
 		return -EINVAL;
 	}
 	if (*ppos >= inode->i_size || count <= 0)
@@ -680,11 +679,8 @@ affs_file_write_ofs(struct file *filp, const char *buf, size_t count, loff_t *pp
 			   inode->i_mode);
 		return -EINVAL;
 	}
-	if (!inode->u.affs_i.i_ec) {
-		if (alloc_ext_cache(inode)) {
-			return -ENOMEM;
-		}
-	}
+	if (!inode->u.affs_i.i_ec && alloc_ext_cache(inode))
+		return -ENOMEM;
 	if (filp->f_flags & O_APPEND)
 		pos = inode->i_size;
 	else
@@ -740,11 +736,13 @@ affs_file_write_ofs(struct file *filp, const char *buf, size_t count, loff_t *pp
 	return written;
 }
 
-/* Free any preallocated blocks */
+/* Free any preallocated blocks. */
+
 void
 affs_free_prealloc(struct inode *inode)
 {
-	struct super_block *sb = inode->i_sb;
+	struct super_block	*sb = inode->i_sb;
+	struct affs_zone	*zone;
 	int block;
 
 	pr_debug("AFFS: free_prealloc(ino=%lu)\n", inode->i_ino);
@@ -755,123 +753,141 @@ affs_free_prealloc(struct inode *inode)
 		inode->u.affs_i.i_pa_cnt--;
 		affs_free_block(sb, block);
 	}
+	if (inode->u.affs_i.i_zone) {
+		zone = &sb->u.affs_sb.s_zones[inode->u.affs_i.i_zone];
+		if (zone->z_ino == inode->i_ino)
+			zone->z_ino = 0;
+	}
 }
+
+/* Truncate (or enlarge) a file to the requested size. */
 
 void
 affs_truncate(struct inode *inode)
 {
-	struct buffer_head	*bh;
-	struct buffer_head	*ebh;
-	struct affs_zone	*zone;
-	int	 first;
+	struct buffer_head	*bh = NULL;
+	int	 first;			/* First block to be thrown away	*/
 	int	 block;
 	s32	 key;
 	s32	*keyp;
 	s32	 ekey;
 	s32	 ptype, stype;
 	int	 freethis;
-	int	 blocksize;
+	int	 net_blocksize;
+	int	 blocksize = AFFS_I2BSIZE(inode);
 	int	 rem;
 	int	 ext;
 
 	pr_debug("AFFS: truncate(inode=%ld,size=%lu)\n",inode->i_ino,inode->i_size);
 
-	blocksize = AFFS_I2BSIZE(inode) - ((inode->i_sb->u.affs_sb.s_flags & SF_OFS) ? 24 : 0);
-	first = (inode->i_size + blocksize - 1) / blocksize;
+	net_blocksize = blocksize - ((inode->i_sb->u.affs_sb.s_flags & SF_OFS) ? 24 : 0);
+	first = (inode->i_size + net_blocksize - 1) / net_blocksize;
 	if (inode->u.affs_i.i_lastblock < first - 1) {
-		if (!inode->u.affs_i.i_ec) {
-			if (alloc_ext_cache(inode)) {
-				/* Fine! No way to indicate an error. What can we do? */
-				return;
-			}
+		/* There has to be at least one new block to be allocated */
+		if (!inode->u.affs_i.i_ec && alloc_ext_cache(inode)) {
+			/* XXX Fine! No way to indicate an error. */
+			return /* -ENOSPC */;
 		}
 		bh = affs_getblock(inode,first - 1);
-
-		affs_free_prealloc(inode);
-		if (inode->u.affs_i.i_zone) {
-			lock_super(inode->i_sb);
-			zone = &inode->i_sb->u.affs_sb.s_zones[inode->u.affs_i.i_zone];
-			if (zone->z_ino == inode->i_ino)
-				zone->z_ino = 0;
-			unlock_super(inode->i_sb);
-		}
 		if (!bh) {
 			affs_warning(inode->i_sb,"truncate","Cannot extend file");
-			inode->i_size = blocksize * (inode->u.affs_i.i_lastblock + 1);
+			inode->i_size = net_blocksize * (inode->u.affs_i.i_lastblock + 1);
 		} else if (inode->i_sb->u.affs_sb.s_flags & SF_OFS) {
-			rem = inode->i_size % blocksize;
-			DATA_FRONT(bh)->data_size = cpu_to_be32(rem ? rem : blocksize);
-			affs_fix_checksum(AFFS_I2BSIZE(inode),bh->b_data,5);
+			rem = inode->i_size % net_blocksize;
+			DATA_FRONT(bh)->data_size = cpu_to_be32(rem ? rem : net_blocksize);
+			affs_fix_checksum(blocksize,bh->b_data,5);
 			mark_buffer_dirty(bh,0);
 		}
-		affs_brelse(bh);
-		return;
+		goto out_truncate;
 	}
-	ekey  = inode->i_ino;
-	ext   = 0;
+	ekey = inode->i_ino;
+	ext  = 0;
 
+	/* Free all blocks starting at 'first' and all then-empty
+	 * extension blocks. Do not free the header block, though.
+	 */
 	while (ekey) {
-		if (!(bh = affs_bread(inode->i_dev,ekey,AFFS_I2BSIZE(inode)))) {
+		if (!(bh = affs_bread(inode->i_dev,ekey,blocksize))) {
 			affs_error(inode->i_sb,"truncate","Cannot read block %d",ekey);
-			break;
+			goto out_truncate;
 		}
-		ptype = be32_to_cpu(((struct file_front *)bh->b_data)->primary_type);
-		stype = be32_to_cpu(FILE_END(bh->b_data,inode)->secondary_type);
+		if (affs_checksum_block(blocksize,bh->b_data,&ptype,&stype)) {
+			affs_error(inode->i_sb,"truncate","Checksum error in header/ext block %d",
+				   ekey);
+			goto out_truncate;
+		}
 		if (stype != ST_FILE || (ptype != T_SHORT && ptype != T_LIST)) {
-			affs_error(inode->i_sb,"truncate","Bad block (ptype=%d, stype=%d)",
-			           ptype,stype);
-			affs_brelse(bh);
-			break;
+			affs_error(inode->i_sb,"truncate",
+				   "Bad block (key=%d, ptype=%d, stype=%d)",ekey,ptype,stype);
+			goto out_truncate;
 		}
-		/* Do not throw away file header */
+		/* Do we have to free this extension block after
+		 * freeing the data blocks pointed to?
+		 */
 		freethis = first == 0 && ekey != inode->i_ino;
+
+		/* Free the data blocks. 'first' is relative to this
+		 * extension block and may well lie behind this block.
+		 */
 		for (block = first; block < AFFS_I2HSIZE(inode); block++) {
 			keyp = &AFFS_BLOCK(bh->b_data,inode,block);
 			key  = be32_to_cpu(*keyp);
 			if (key) {
 				*keyp = 0;
 				affs_free_block(inode->i_sb,key);
-			} else {
-				block = AFFS_I2HSIZE(inode);
+			} else
 				break;
-			}
 		}
-		keyp = &GET_END_PTR(struct file_end,bh->b_data,AFFS_I2BSIZE(inode))->extension;
+		keyp = &GET_END_PTR(struct file_end,bh->b_data,blocksize)->extension;
 		key  = be32_to_cpu(*keyp);
+
+		/* If 'first' is in this block or is the first
+		 * in the next one, this will be the last in
+		 * the list, thus we have to adjust the count
+		 * and zero the pointer to the next ext block.
+		 */
 		if (first <= AFFS_I2HSIZE(inode)) {
-			((struct file_front *)bh->b_data)->block_count = be32_to_cpu(first);
+			((struct file_front *)bh->b_data)->block_count = cpu_to_be32(first);
 			first = 0;
 			*keyp = 0;
-			if ((inode->i_sb->u.affs_sb.s_flags & SF_OFS) && first > 0) {
-				block = be32_to_cpu(AFFS_BLOCK(bh->b_data,inode,first - 1));
-				if ((ebh = affs_bread(inode->i_dev,block,AFFS_I2BSIZE(inode)))) {
-					if(!(affs_checksum_block(AFFS_I2BSIZE(inode),ebh->b_data,
-					     &ptype,NULL))) {
-						rem = inode->i_size % blocksize;
-						rem = cpu_to_be32(rem ? blocksize : rem);
-						((struct data_front *)ebh->b_data)->data_size = rem;
-						((struct data_front *)ebh->b_data)->next_data = 0;
-						affs_fix_checksum(AFFS_I2BSIZE(inode),ebh->b_data,5);
-						mark_buffer_dirty(ebh,1);
-					}
-					affs_brelse(ebh);
-				}
-			}
-		} else {
-			first -= AFFS_I2HSIZE(inode);
-		}
-		if (freethis) {		/* Don't bother fixing checksum */
-			affs_brelse(bh);
-			affs_free_block(inode->i_sb,ekey);
-		} else {
-			affs_fix_checksum(AFFS_I2BSIZE(inode),bh->b_data,5);
+			affs_fix_checksum(blocksize,bh->b_data,5);
 			mark_buffer_dirty(bh,1);
-			affs_brelse(bh);
-		}
+		} else
+			first -= AFFS_I2HSIZE(inode);
+		affs_brelse(bh);
+		bh = NULL;
+		if (freethis)			/* Don't bother fixing checksum */
+			affs_free_block(inode->i_sb,ekey);
 		ekey = key;
 	}
-	inode->u.affs_i.i_lastblock = ((inode->i_size + blocksize - 1) / blocksize) - 1;
+	block = ((inode->i_size + net_blocksize - 1) / net_blocksize) - 1;
+	inode->u.affs_i.i_lastblock = block;
 
+	/* If the file is not truncated to a block boundary,
+	 * the partial block after the EOF must be zeroed
+	 * so it cannot become accessible again.
+	 */
+
+	rem = inode->i_size % net_blocksize;
+	if (rem) {
+		if ((inode->i_sb->u.affs_sb.s_flags & SF_OFS)) 
+			rem += 24;
+		pr_debug("AFFS: Zeroing from offset %d in block %d\n",rem,block);
+		bh = affs_getblock(inode,block);
+		if (bh) {
+			memset(bh->b_data + rem,0,blocksize - rem);
+			if ((inode->i_sb->u.affs_sb.s_flags & SF_OFS)) {
+				((struct data_front *)bh->b_data)->data_size = cpu_to_be32(rem);
+				((struct data_front *)bh->b_data)->next_data = 0;
+				affs_fix_checksum(blocksize,bh->b_data,5);
+			}
+			mark_buffer_dirty(bh,1);
+		} else 
+			affs_error(inode->i_sb,"truncate","Cannot read block %d",block);
+	}
+
+out_truncate:
+	affs_brelse(bh);
 	/* Invalidate cache */
 	if (inode->u.affs_i.i_ec) {
 		inode->u.affs_i.i_ec->max_ext = 0;
@@ -880,31 +896,13 @@ affs_truncate(struct inode *inode)
 			inode->u.affs_i.i_ec->kc[key].kc_last     = -1;
 		}
 	}
-
-}
-
-static int
-affs_release_file(struct inode *inode, struct file *filp)
-{
-	struct super_block *sb = inode->i_sb;
-	struct affs_zone	*zone;
-
-	pr_debug("AFFS: release_file(ino=%lu)\n",inode->i_ino);
-
-	if (filp->f_mode & 2) {		/* Free preallocated blocks */
-		affs_free_prealloc(inode);
-		if (inode->u.affs_i.i_zone) {
-			zone = &sb->u.affs_sb.s_zones[inode->u.affs_i.i_zone];
-			if (zone->z_ino == inode->i_ino)
-				zone->z_ino = 0;
-		}
-	}
-	return 0;
+	mark_inode_dirty(inode);
 }
 
 /*
  * Called only when we need to allocate the extension cache.
  */
+
 static int
 alloc_ext_cache(struct inode *inode)
 {
@@ -928,9 +926,7 @@ alloc_ext_cache(struct inode *inode)
 	/* We only have to initialize non-zero values.
 	 * get_free_page() zeroed the page already.
 	 */
-	key = inode->u.affs_i.i_original;
-	if (!inode->u.affs_i.i_original)
-		key = inode->i_ino;
+	key = inode->i_ino;
 	inode->u.affs_i.i_ec->ec[0] = key;
 	for (i = 0; i < 4; i++) {
 		inode->u.affs_i.i_ec->kc[i].kc_this_key = key;

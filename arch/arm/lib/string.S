@@ -1,24 +1,55 @@
 /*
  * linux/arch/arm/lib/string.S
  *
- * Copyright (C) 1995, 1996 Russell King
+ * Copyright (C) 1995-1998 Russell King
+ *
+ * This is commonly used to clear the frame buffer and the frame
+ * backing buffer.  As such, it will be rarely called with r2 < 32.
+ *
+ * Optimisations by Matthew Wilcox
  */
 #include <linux/linkage.h>
 #include <asm/assembler.h>
 		.text
 # Prototype: char *strrchr(const char *s,char c);
 
-@ r0 = pointer, r1 = length
-		.global	memzero
-memzero:	stmfd	sp!, {lr}
-		mov	r2, #0
-		mov	r3, #0
-		mov	ip, #0
-		mov	lr, #0
-1:		subs	r1, r1, #4*8
-		stmgeia	r0!, {r2, r3, ip, lr}
-		stmgeia	r0!, {r2, r3, ip, lr}
+/*
+ * Prototype: void memzero(void *d, size_t n)
+ */
+ENTRY(memzero)
+		mov	r2, r1
+		mov	r1, #0
+/*
+ * Prototype: void memsetl(unsigned long *d, unsigned long c, size_t n)
+ */
+ENTRY(memsetl)
+		teq	r2, #0
+		RETINSTR(moveq,pc,lr)
+		stmfd	sp!, {lr}
+		mov	lr, r1
+		mov	r3, r1
+		mov	ip, r1
+
+		@ r2 = {32 ... 4}
+
+1:		subs	r2, r2, #32
+		stmgeia	r0!, {r1, r3, ip, lr}
+		stmgeia	r0!, {r1, r3, ip, lr}
 		bgt	1b
+		LOADREGS(eqfd, sp!, {pc})
+
+		@ r2 can be {-4 ... -28}
+
+		cmp	r2, #-16
+		stmgeia	r0!, {r1, r3, ip, lr}
+		addlts	r2, r2, #16
+		LOADREGS(eqfd, sp!, {pc})
+
+		@ r2 can be {-4 ... -12}
+
+		cmp	r2, #-8
+		stmgeia	r0!, {r1, r3}
+		strne	r1, [r0]
 		LOADREGS(fd, sp!, {pc})
 
 		.global	__page_memcpy

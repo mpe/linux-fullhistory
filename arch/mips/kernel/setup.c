@@ -5,10 +5,11 @@
  *  Copyright (C) 1995, 1996  Ralf Baechle
  *  Copyright (C) 1996  Stoned Elipot
  *
- * $Id: setup.c,v 1.5 1997/12/06 08:55:42 ralf Exp $
+ * $Id: setup.c,v 1.9 1998/05/04 09:17:56 ralf Exp $
  */
 #include <linux/config.h>
 #include <linux/errno.h>
+#include <linux/hdreg.h>
 #include <linux/init.h>
 #include <linux/ioport.h>
 #include <linux/sched.h>
@@ -34,6 +35,7 @@
 #include <asm/asm.h>
 #include <asm/bootinfo.h>
 #include <asm/cachectl.h>
+#include <asm/ide.h>
 #include <asm/io.h>
 #include <asm/vector.h>
 #include <asm/stackframe.h>
@@ -85,6 +87,11 @@ int EISA_bus = 0;
  */
 struct drive_info_struct drive_info = DEFAULT_DRIVE_INFO;
 struct screen_info screen_info = DEFAULT_SCREEN_INFO;
+
+#ifdef CONFIG_BLK_DEV_IDE
+extern struct ide_ops no_ide_ops;
+struct ide_ops *ide_ops;
+#endif
 
 /*
  * setup informations
@@ -170,25 +177,15 @@ __initfunc(void setup_arch(char **cmdline_p,
 	atag = bi_TagFind(tag_vram_base);
 	memcpy(&mips_vram_base, TAGVALPTR(atag), atag->size);
 
+	/* Save defaults for configuration dependand routines.  */
 	irq_setup = default_irq_setup;
 	fd_cacheflush = default_fd_cacheflush;
+#ifdef CONFIG_BLK_DEV_IDE
+	ide_ops = &no_ide_ops;
+#endif
 
 	switch(mips_machgroup)
 	{
-#ifdef CONFIG_MIPS_DECSTATION
-	case MACH_GROUP_DEC:
-		decstation_setup();
-		break;
-#endif
-#if defined(CONFIG_MIPS_ARC) 
-	/*
-	 * Perhaps arch/mips/deskstation should be renamed to arch/mips/arc.
-	 * For now CONFIG_MIPS_ARC means DeskStation. -Stoned.
-	 */
-	case MACH_GROUP_ARC:
-		deskstation_setup();
-		break;
-#endif
 #ifdef CONFIG_MIPS_JAZZ
 	case MACH_GROUP_JAZZ:
 		jazz_setup();

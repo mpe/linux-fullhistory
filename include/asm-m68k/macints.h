@@ -143,7 +143,7 @@ void mac_turnon_irq( unsigned irq );
 void mac_turnoff_irq( unsigned irq );
 void mac_clear_pending_irq( unsigned irq );
 int  mac_irq_pending( unsigned irq );
-int  nubus_request_irq(int slot, void (*handler)(int,void *,struct pt_regs *));
+int  nubus_request_irq(int slot, void *dev_id, void (*handler)(int,void *,struct pt_regs *));
 int  nubus_free_irq(int slot);
 
 unsigned long mac_register_nubus_int( void );

@@ -13,7 +13,7 @@
 # Copyright (C) 1994, 1995, 1996 by Ralf Baechle
 # DECStation modifications by Paul M. Antoine, 1996
 #
-# $Id: Makefile,v 1.9 1997/09/19 08:34:54 ralf Exp $
+# $Id: Makefile,v 1.14 1998/05/01 01:33:20 ralf Exp $
 #
 
 #
@@ -100,31 +100,12 @@ CORE_FILES    += arch/mips/algor/algor.o
 SUBDIRS       += arch/mips/algor
 #LOADADDR      += 0x80000000
 endif
-ifdef CONFIG_DECSTATION
-CORE_FILES    += arch/mips/dec/dec.o
-SUBDIRS       += arch/mips/dec
-LINKSCRIPT    += arch/mips/dec/ld.script
-LOADADDR      += 0x80000000
-endif
-ifdef CONFIG_DESKSTATION_RPC44
-CORE_FILES    += arch/mips/deskstation/deskstation.o
-SUBDIRS       += arch/mips/deskstation
-LOADADDR      += 0x80100000
-endif
-ifdef CONFIG_DESKSTATION_TYNE
-CORE_FILES    += arch/mips/deskstation/deskstation.o
-SUBDIRS       += arch/mips/deskstation
-LOADADDR      += 0x80000000
-endif
 #
 # Acer PICA 61, Mips Magnum 4000 and Olivetti M700.
 #
 ifdef CONFIG_MIPS_JAZZ
 CORE_FILES    += arch/mips/jazz/jazz.o
 SUBDIRS       += arch/mips/jazz
-LOADADDR      += 0x80000000
-endif
-ifdef CONFIG_MIPS_MAGNUM_3000
 LOADADDR      += 0x80000000
 endif
 ifdef CONFIG_SNI_RM200_PCI

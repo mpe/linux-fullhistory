@@ -27,7 +27,7 @@ struct __sysctl_args {
 
 /* For internal pattern-matching use only: */
 #ifdef __KERNEL__
-#define CTL_ANY		-1	/* Matches any name */
+#define CTL_ANY		-1		/* Matches any name */
 #define CTL_NONE	0
 #endif
 
@@ -54,24 +54,19 @@ enum
 	KERN_PROF,		/* table: profiling information */
 	KERN_NODENAME,
 	KERN_DOMAINNAME,
-	KERN_NRINODE,
-	KERN_MAXINODE,
-	KERN_NRFILE,
-	KERN_MAXFILE,
 	KERN_SECURELVL,		/* int: system security level */
 	KERN_PANIC,		/* int: panic timeout */
 	KERN_REALROOTDEV,	/* real root device to mount after initrd */
-	KERN_NFSRNAME,		/* NFS root name */
-	KERN_NFSRADDRS,		/* NFS root addresses */
 	KERN_JAVA_INTERPRETER,	/* path to Java(tm) interpreter */
 	KERN_JAVA_APPLETVIEWER,	/* path to Java(tm) appletviewer */
 	KERN_SPARC_REBOOT,	/* reboot command on Sparc */
 	KERN_CTLALTDEL,		/* int: allow ctl-alt-del to reboot */
 	KERN_PRINTK,            /* sturct: control printk logging parameters */
 	KERN_NAMETRANS,		/* Name translation */
-	KERN_STATINODE,
-	KERN_DENTRY,		/* dentry statistics */
+	KERN_PPC_HTABRECLAIM,	/* turn htab reclaimation on/off on PPC */
+	KERN_PPC_ZEROPAGED,	/* turn idle page zeroing on/off on PPC */
 	KERN_MODPROBE,
+	KERN_SG_BIG_BUFF
 };
 
 
@@ -360,6 +355,17 @@ enum {
 /* CTL_PROC names: */
 
 /* CTL_FS names: */
+enum
+{
+	FS_NRINODE=1,		/* int: current number of allocated inodes */
+	FS_STATINODE,
+	FS_MAXINODE,		/* int: maximum number of inodes that can be allocated */
+	FS_NRDQUOT,		/* int: current number of allocated dquots */
+	FS_MAXDQUOT,		/* int: maximum number of dquots that can be allocated */
+	FS_NRFILE,		/* int: current number of allocated filedescriptors */
+	FS_MAXFILE,		/* int: maximum number of filedescriptors that can be allocated */
+	FS_DENTRY,
+};
 
 /* CTL_DEBUG names: */
 

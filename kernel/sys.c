@@ -841,9 +841,6 @@ asmlinkage int sys_sethostname(char *name, int len)
 	if(copy_from_user(system_utsname.nodename, name, len))
 		return -EFAULT;
 	system_utsname.nodename[len] = 0;
-#ifdef CONFIG_TRANS_NAMES
-	translations_dirty = 1;
-#endif
 	return 0;
 }
 
@@ -872,9 +869,6 @@ asmlinkage int sys_setdomainname(char *name, int len)
 	if(copy_from_user(system_utsname.domainname, name, len))
 		return -EFAULT;
 	system_utsname.domainname[len] = 0;
-#ifdef CONFIG_TRANS_NAMES
-	translations_dirty = 1;
-#endif
 	return 0;
 }
 

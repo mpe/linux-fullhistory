@@ -1,221 +1,701 @@
-/* memcpy.S: Mips optimized memcpy based upon SparcLinux code.
+/*
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
  *
- *  Copyright(C) 1995 Linus Torvalds
- *  Copyright(C) 1996 David S. Miller
- *  Copyright(C) 1996 Eddie C. Dost
+ * $Id: memcpy.S,v 1.2 1998/05/04 09:18:16 ralf Exp $
  *
- * derived from:
- *	e-mail between David and Eddie.
+ * Unified implementation of memcpy, memmove and the __copy_user backend.
+ * For __rmemcpy and memmove an exception is always a kernel bug, therefore
+ * they're not protected.  In order to keep the exception fixup routine
+ * simple all memory accesses in __copy_user to src rsp. dst are stricly
+ * incremental.  The fixup routine depends on $at not being changed.
  */
-
 #include <asm/asm.h>
+#include <asm/offset.h>
 #include <asm/regdef.h>
 
-#define MOVE_BIGCHUNK(src, dst, offset, t0, t1, t2, t3, t4, t5) \
-	lw	t0, (offset + 0x18)(src); \
-	lw	t1, (offset + 0x1c)(src); \
-	sw	t0, (offset + 0x18)(dst); \
-	lw	t2, (offset + 0x10)(src); \
-	sw	t1, (offset + 0x1c)(dst); \
-	lw	t3, (offset + 0x14)(src); \
-	sw	t2, (offset + 0x10)(dst); \
-	lw	t4, (offset + 0x08)(src); \
-	sw	t3, (offset + 0x14)(dst); \
-	lw	t5, (offset + 0x0c)(src); \
-	sw	t4, (offset + 0x08)(dst); \
-	lw	t0, (offset + 0x00)(src); \
-	sw	t5, (offset + 0x0c)(dst); \
-	lw	t1, (offset + 0x04)(src); \
-	sw	t0, (offset + 0x00)(dst); \
-	sw	t1, (offset + 0x04)(dst); \
+/*
+ * The fixup routine for copy_to_user depends on copying strictly in
+ * increasing order.  Gas expands the ulw/usw macros in the wrong order for
+ * little endian machines, so we cannot depend on them.
+ */
+#ifdef __MIPSEB__
+#define uswL	swl
+#define uswU	swr
+#define ulwL	lwl
+#define ulwU	lwr
+#endif
+#ifdef __MIPSEL__
+#define uswL	swr
+#define uswU	swl
+#define ulwL	lwr
+#define ulwU	lwl
+#endif
 
-	/* Alignment cases are:
-	 * 1) (src&0x3)=0x0 (dst&0x3)=0x0 	can optimize
-	 * 2) (src&0x3)=0x1 (dst&0x3)=0x1	can optimize
-	 * 3) (src&0x3)=0x2 (dst&0x3)=0x2	can optimize
-	 * 4) (src&0x3)=0x3 (dst&0x3)=0x3	can optimize
-	 * 5) anything else			cannot optimize
-	 */
+#define EX(insn,reg,addr,handler)			\
+9:	insn	reg, addr;				\
+	.section __ex_table,"a"; 			\
+	PTR	9b, handler; 				\
+	.previous
 
-	/* I hate MIPS register names... AIEEE, it's a SPARC! */
-#define o0 a0
-#define o1 a1
-#define o2 a2
-#define o3 a3
-#define o4 t0
-#define o5 t1
-#define o6 sp
-#define o7 ra
-#define g0 zero
-#define g1 t2
-#define g2 t3
-#define g3 t4
-#define g4 t5
-#define g5 t6
-#define g6 t7
-#define g7 t8
+#define UEX(insn,reg,addr,handler)			\
+9:	insn ## L reg, addr;				\
+10:	insn ## U reg, 3 + addr;			\
+	.section __ex_table,"a"; 			\
+	PTR	9b, handler; 				\
+	PTR	10b, handler; 				\
+	.previous
+
+/* ascending order, destination aligned  */
+#define MOVE_BIGCHUNK(src, dst, offset, t0, t1, t2, t3) \
+	EX(lw, t0, (offset + 0x00)(src), l_fixup); \
+	EX(lw, t1, (offset + 0x04)(src), l_fixup); \
+	EX(lw, t2, (offset + 0x08)(src), l_fixup); \
+	EX(lw, t3, (offset + 0x0c)(src), l_fixup); \
+	EX(sw, t0, (offset + 0x00)(dst), s_fixup); \
+	EX(sw, t1, (offset + 0x04)(dst), s_fixup); \
+	EX(sw, t2, (offset + 0x08)(dst), s_fixup); \
+	EX(sw, t3, (offset + 0x0c)(dst), s_fixup); \
+	EX(lw, t0, (offset + 0x10)(src), l_fixup); \
+	EX(lw, t1, (offset + 0x14)(src), l_fixup); \
+	EX(lw, t2, (offset + 0x18)(src), l_fixup); \
+	EX(lw, t3, (offset + 0x1c)(src), l_fixup); \
+	EX(sw, t0, (offset + 0x10)(dst), s_fixup); \
+	EX(sw, t1, (offset + 0x14)(dst), s_fixup); \
+	EX(sw, t2, (offset + 0x18)(dst), s_fixup); \
+	EX(sw, t3, (offset + 0x1c)(dst), s_fixup)
+
+/* ascending order, destination unaligned  */
+#define UMOVE_BIGCHUNK(src, dst, offset, t0, t1, t2, t3) \
+	EX(lw, t0, (offset + 0x00)(src), l_fixup); \
+	EX(lw, t1, (offset + 0x04)(src), l_fixup); \
+	EX(lw, t2, (offset + 0x08)(src), l_fixup); \
+	EX(lw, t3, (offset + 0x0c)(src), l_fixup); \
+	UEX(usw, t0, (offset + 0x00)(dst), s_fixup); \
+	UEX(usw, t1, (offset + 0x04)(dst), s_fixup); \
+	UEX(usw, t2, (offset + 0x08)(dst), s_fixup); \
+	UEX(usw, t3, (offset + 0x0c)(dst), s_fixup); \
+	EX(lw, t0, (offset + 0x10)(src), l_fixup); \
+	EX(lw, t1, (offset + 0x14)(src), l_fixup); \
+	EX(lw, t2, (offset + 0x18)(src), l_fixup); \
+	EX(lw, t3, (offset + 0x1c)(src), l_fixup); \
+	UEX(usw, t0, (offset + 0x10)(dst), s_fixup); \
+	UEX(usw, t1, (offset + 0x14)(dst), s_fixup); \
+	UEX(usw, t2, (offset + 0x18)(dst), s_fixup); \
+	UEX(usw, t3, (offset + 0x1c)(dst), s_fixup)
 
 	.text
 	.set	noreorder
 	.set	noat
 
-	.globl	bcopy
-	.globl	amemmove
-	.globl	memmove
-	.globl	memcpy
-	.align	2
-bcopy:
-	move	o3, o0
-	move	o0, o1
-	move	o1, o3
+	.align	5
+LEAF(memcpy)					/* a0=dst a1=src a2=len */
+	move	v0, a0				/* return value */
+__memcpy:
+EXPORT(__copy_user)
+	xor	t0, a0, a1
+	andi	t0, t0, 0x3
+	move	t7, a0
+	beqz	t0, can_align
+	 sltiu	t8, a2, 0x8
 
-amemmove:
-memmove:
-memcpy:			/* o0=dst o1=src o2=len */
-	xor	o4, o0, o1
-	andi	o4, o4, 0x3
-	move	g6, o0
-	beq	o4, g0, can_align
-	 sltiu	g7, o2, 0x8
-
-	b	cannot_optimize
-	 move	g1, o2
+	b	memcpy_u_src			# bad alignment
+	 move	t2, a2
 
 can_align:
-	bne	g7, g0, cannot_optimize
-	 move	g1, o2
+	bnez	t8, small_memcpy		# < 8 bytes to copy
+	 move	t2, a2
 
-	beq	o2, g0, out
-	 andi	g7, o1, 0x1
+	beqz	a2, out
+	 andi	t8, a1, 0x1
 
 hword_align:
-	beq	g7, g0, word_align
-	 andi	g7, o1, 0x2
+	beqz	t8, word_align
+	 andi	t8, a1, 0x2
 
-	lbu	o4, 0x00(o1)
-	subu	o2, o2, 0x1
-	sb	o4, 0x00(o0)
-	addu	o1, o1, 0x1
-	addu	o0, o0, 0x1
-	andi	g7, o1, 0x2
+	EX(lb, t0, (a1), l_fixup)
+	subu	a2, a2, 0x1
+	EX(sb, t0, (a0), s_fixup)
+	addu	a1, a1, 0x1
+	addu	a0, a0, 0x1
+	andi	t8, a1, 0x2
 
 word_align:
-	beq	g7, g0, dword_align
-	 sltiu	g7, o2, 56
+	beqz	t8, dword_align
+	 sltiu	t8, a2, 56
 	
-	lhu	o4, 0x00(o1)
-	subu	o2, o2, 0x2
-	sh	o4, 0x00(o0)
-	sltiu	g7, o2, 56
-	addu	o0, o0, 0x2
-	addu	o1, o1, 0x2
+	EX(lh, t0, (a1), l_fixup)
+	subu	a2, a2, 0x2
+	EX(sh, t0, (a0), s_fixup)
+	sltiu	t8, a2, 56
+	addu	a0, a0, 0x2
+	addu	a1, a1, 0x2
 
 dword_align:
-	bne	g7, g0, do_end_words
-	 move	g7, o2
+	bnez	t8, do_end_words
+	 move	t8, a2
 
-	andi	g7, o1, 0x4
-	beq	g7, zero, qword_align
-	 andi	g7, o1, 0x8
+	andi	t8, a1, 0x4
+	beqz	t8, qword_align
+	 andi	t8, a1, 0x8
 
-	lw	o4, 0x00(o1)
-	subu	o2, o2, 0x4
-	sw	o4, 0x00(o0)
-	addu	o1, o1, 0x4
-	addu	o0, o0, 0x4
-	andi	g7, o1, 0x8
+	EX(lw, t0, 0x00(a1), l_fixup)
+	subu	a2, a2, 0x4
+	EX(sw, t0, 0x00(a0), s_fixup)
+	addu	a1, a1, 0x4
+	addu	a0, a0, 0x4
+	andi	t8, a1, 0x8
 
 qword_align:
-	beq	g7, g0, oword_align
-	 andi	g7, o1, 0x10
+	beqz	t8, oword_align
+	 andi	t8, a1, 0x10
 
-	lw	o4, 0x00(o1)
-	lw	o5, 0x04(o1)
-	subu	o2, o2, 0x8
-	sw	o4, 0x00(o0)
-	addu	o1, o1, 0x8
-	sw	o5, 0x04(o0)
-	andi	g7, o1, 0x10
-	addu	o0, o0, 0x8
+	EX(lw, t0, 0x00(a1), l_fixup)
+	EX(lw, t1, 0x04(a1), l_fixup)
+	subu	a2, a2, 0x8
+	EX(sw, t0, 0x00(a0), s_fixup)
+	EX(sw, t1, 0x04(a0), s_fixup)
+	addu	a1, a1, 0x8
+	andi	t8, a1, 0x10
+	addu	a0, a0, 0x8
 
 oword_align:
-	beq	g7, g0, begin_movement
-	 srl	g7, o2, 0x7
+	beqz	t8, begin_movement
+	 srl	t8, a2, 0x7
 
-	lw	g2, 0x08(o1)
-	lw	g3, 0x0c(o1)
-	lw	o4, 0x00(o1)
-	lw	o5, 0x04(o1)
-	sw	g2, 0x08(o0)
-	subu	o2, o2, 0x10
-	sw	g3, 0x0c(o0)
-	addu	o1, o1, 0x10
-	sw	o4, 0x00(o0)
-	srl	g7, o2, 0x7
-	addu	o0, o0, 0x10
-	sw	o5, -0x0c(o0)
+	EX(lw, t3, 0x00(a1), l_fixup)
+	EX(lw, t4, 0x04(a1), l_fixup)
+	EX(lw, t0, 0x08(a1), l_fixup)
+	EX(lw, t1, 0x0c(a1), l_fixup)
+	EX(sw, t3, 0x00(a0), s_fixup)
+	EX(sw, t4, 0x04(a0), s_fixup)
+	EX(sw, t0, 0x08(a0), s_fixup)
+	EX(sw, t1, 0x0c(a0), s_fixup)
+	subu	a2, a2, 0x10
+	addu	a1, a1, 0x10
+	srl	t8, a2, 0x7
+	addu	a0, a0, 0x10
 
 begin_movement:
-	beq	g7, g0, 0f
-	 andi	g1, o2, 0x40
+	beqz	t8, 0f
+	 andi	t2, a2, 0x40
 
 move_128bytes:
-	MOVE_BIGCHUNK(o1, o0, 0x00, o4, o5, g2, g3, g4, g5)
-	MOVE_BIGCHUNK(o1, o0, 0x20, o4, o5, g2, g3, g4, g5)
-	MOVE_BIGCHUNK(o1, o0, 0x40, o4, o5, g2, g3, g4, g5)
-	MOVE_BIGCHUNK(o1, o0, 0x60, o4, o5, g2, g3, g4, g5)
-	subu	g7, g7, 0x01
-	addu	o1, o1, 0x80
-	bne	g7, g0, move_128bytes
-	 addu	o0, o0, 0x80
+	MOVE_BIGCHUNK(a1, a0, 0x00, t0, t1, t3, t4)
+	MOVE_BIGCHUNK(a1, a0, 0x20, t0, t1, t3, t4)
+	MOVE_BIGCHUNK(a1, a0, 0x40, t0, t1, t3, t4)
+	MOVE_BIGCHUNK(a1, a0, 0x60, t0, t1, t3, t4)
+	subu	t8, t8, 0x01
+	addu	a1, a1, 0x80
+	bnez	t8, move_128bytes
+	 addu	a0, a0, 0x80
 
 0:
-	beq	g1, g0, 1f
-	 andi	g1, o2, 0x20
+	beqz	t2, 1f
+	 andi	t2, a2, 0x20
 
 move_64bytes:
-	MOVE_BIGCHUNK(o1, o0, 0x00, o4, o5, g2, g3, g4, g5)
-	MOVE_BIGCHUNK(o1, o0, 0x20, o4, o5, g2, g3, g4, g5)
-	addu	o1, o1, 0x40
-	addu	o0, o0, 0x40
+	MOVE_BIGCHUNK(a1, a0, 0x00, t0, t1, t3, t4)
+	MOVE_BIGCHUNK(a1, a0, 0x20, t0, t1, t3, t4)
+	addu	a1, a1, 0x40
+	addu	a0, a0, 0x40
 
 1:
-	beq	g1, g0, do_end_words
-	 andi	g7, o2, 0x1c
+	beqz	t2, do_end_words
+	 andi	t8, a2, 0x1c
 
 move_32bytes:
-	MOVE_BIGCHUNK(o1, o0, 0x00, o4, o5, g2, g3, g4, g5)
-	andi	g7, o2, 0x1c
-	addu	o1, o1, 0x20
-	addu	o0, o0, 0x20
+	MOVE_BIGCHUNK(a1, a0, 0x00, t0, t1, t3, t4)
+	andi	t8, a2, 0x1c
+	addu	a1, a1, 0x20
+	addu	a0, a0, 0x20
 
 do_end_words:
-	beq	g7, g0, maybe_end_cruft
-	 srl	g7, g7, 0x2
+	beqz	t8, maybe_end_cruft
+	 srl	t8, t8, 0x2
 
 end_words:
-	lw	o4, 0x00(o1)
-	subu	g7, g7, 0x1
-	sw	o4, 0x00(o0)
-	addu	o1, o1, 0x4
-	bne	g7, g0, end_words
-	 addu	o0, o0, 0x4
+	EX(lw, t0, (a1), l_fixup)
+	subu	t8, t8, 0x1
+	EX(sw, t0, (a0), s_fixup)
+	addu	a1, a1, 0x4
+	bnez	t8, end_words
+	 addu	a0, a0, 0x4
 
 maybe_end_cruft:
-	andi	g1, o2, 0x3
+	andi	t2, a2, 0x3
 
-cannot_optimize:
-	beq	g1, g0, out
-	 move	o2, g1
+small_memcpy:
+	beqz	t2, out
+	 move	a2, t2
 
 end_bytes:
-	lbu	o4, 0x00(o1)
-	subu	o2, o2, 0x1
-	sb	o4, 0x00(o0)
-	addu	o1, o1, 0x1
-	bne	o2, g0, end_bytes
-	 addu	o0, o0, 0x1
+	EX(lb, t0, (a1), l_fixup)
+	subu	a2, a2, 0x1
+	EX(sb, t0, (a0), s_fixup)
+	addu	a1, a1, 0x1
+	bnez	a2, end_bytes
+	 addu	a0, a0, 0x1
 
-out:
-	jr	o7
-	 move	v0, g6
+out:	jr	ra
+	 move	a2, zero
+
+/* ------------------------------------------------------------------------- */
+
+/* Bad, bad.  At least try to align the source  */
+
+memcpy_u_src:
+	bnez	t8, small_memcpy		# < 8 bytes?
+	 move	t2, a2
+
+	addiu	t0, a1, 7			# t0: how much to align
+	ori	t0, 7
+	xori	t0, 7
+	subu	t0, a1
+
+	UEX(ulw, t1, 0(a1), l_fixup)		# dword alignment
+	UEX(ulw, t2, 4(a1), l_fixup)
+	UEX(usw, t1, 0(a0), s_fixup)
+	UEX(usw, t2, 4(a0), s_fixup)
+
+	addu	a1, t0				# src
+	addu	a0, t0				# dst
+	subu	a2, t0				# len
+
+	sltiu	t8, a2, 56
+	bnez	t8, u_do_end_words
+	 andi	t8, a2, 0x3c
+
+	andi	t8, a1, 8			# now qword aligned?
+
+u_qword_align:
+	beqz	t8, u_oword_align
+	 andi	t8, a1, 0x10
+
+	EX(lw, t0, 0x00(a1), l_fixup)
+	EX(lw, t1, 0x04(a1), l_fixup)
+	subu	a2, a2, 0x8
+	UEX(usw, t0, 0x00(a0), s_fixup)
+	UEX(usw, t1, 0x04(a0), s_fixup)
+	addu	a1, a1, 0x8
+	andi	t8, a1, 0x10
+	addu	a0, a0, 0x8
+
+u_oword_align:
+	beqz	t8, u_begin_movement
+	 srl	t8, a2, 0x7
+
+	EX(lw, t3, 0x08(a1), l_fixup)
+	EX(lw, t4, 0x0c(a1), l_fixup)
+	EX(lw, t0, 0x00(a1), l_fixup)
+	EX(lw, t1, 0x04(a1), l_fixup)
+	UEX(usw, t3, 0x08(a0), s_fixup)
+	UEX(usw, t4, 0x0c(a0), s_fixup)
+	UEX(usw, t0, 0x00(a0), s_fixup)
+	UEX(usw, t1, 0x04(a0), s_fixup)
+	subu	a2, a2, 0x10
+	addu	a1, a1, 0x10
+	srl	t8, a2, 0x7
+	addu	a0, a0, 0x10
+
+u_begin_movement:
+	beqz	t8, 0f
+	 andi	t2, a2, 0x40
+
+u_move_128bytes:
+	UMOVE_BIGCHUNK(a1, a0, 0x00, t0, t1, t3, t4)
+	UMOVE_BIGCHUNK(a1, a0, 0x20, t0, t1, t3, t4)
+	UMOVE_BIGCHUNK(a1, a0, 0x40, t0, t1, t3, t4)
+	UMOVE_BIGCHUNK(a1, a0, 0x60, t0, t1, t3, t4)
+	subu	t8, t8, 0x01
+	addu	a1, a1, 0x80
+	bnez	t8, u_move_128bytes
+	 addu	a0, a0, 0x80
+
+0:
+	beqz	t2, 1f
+	 andi	t2, a2, 0x20
+
+u_move_64bytes:
+	UMOVE_BIGCHUNK(a1, a0, 0x00, t0, t1, t3, t4)
+	UMOVE_BIGCHUNK(a1, a0, 0x20, t0, t1, t3, t4)
+	addu	a1, a1, 0x40
+	addu	a0, a0, 0x40
+
+1:
+	beqz	t2, u_do_end_words
+	 andi	t8, a2, 0x1c
+
+u_move_32bytes:
+	UMOVE_BIGCHUNK(a1, a0, 0x00, t0, t1, t3, t4)
+	andi	t8, a2, 0x1c
+	addu	a1, a1, 0x20
+	addu	a0, a0, 0x20
+
+u_do_end_words:
+	beqz	t8, u_maybe_end_cruft
+	 srl	t8, t8, 0x2
+
+u_end_words:
+	EX(lw, t0, 0x00(a1), l_fixup)
+	subu	t8, t8, 0x1
+	UEX(usw, t0, 0x00(a0), s_fixup)
+	addu	a1, a1, 0x4
+	bnez	t8, u_end_words
+	 addu	a0, a0, 0x4
+
+u_maybe_end_cruft:
+	andi	t2, a2, 0x3
+
+u_cannot_optimize:
+	beqz	t2, out
+	 move	a2, t2
+
+u_end_bytes:
+	EX(lb, t0, (a1), l_fixup)
+	subu	a2, a2, 0x1
+	EX(sb, t0, (a0), s_fixup)
+	addu	a1, a1, 0x1
+	bnez	a2, u_end_bytes
+	 addu	a0, a0, 0x1
+
+	jr	ra
+	 move	a2, zero
+	END(memcpy)
+
+/* descending order, destination aligned  */
+#define RMOVE_BIGCHUNK(src, dst, offset, t0, t1, t2, t3) \
+	lw	t0, (offset + 0x10)(src); \
+	lw	t1, (offset + 0x14)(src); \
+	lw	t2, (offset + 0x18)(src); \
+	lw	t3, (offset + 0x1c)(src); \
+	sw	t0, (offset + 0x10)(dst); \
+	sw	t1, (offset + 0x14)(dst); \
+	sw	t2, (offset + 0x18)(dst); \
+	sw	t3, (offset + 0x1c)(dst); \
+	lw	t0, (offset + 0x00)(src); \
+	lw	t1, (offset + 0x04)(src); \
+	lw	t2, (offset + 0x08)(src); \
+	lw	t3, (offset + 0x0c)(src); \
+	sw	t0, (offset + 0x00)(dst); \
+	sw	t1, (offset + 0x04)(dst); \
+	sw	t2, (offset + 0x08)(dst); \
+	sw	t3, (offset + 0x0c)(dst)
+
+/* descending order, destination ununaligned  */
+#define RUMOVE_BIGCHUNK(src, dst, offset, t0, t1, t2, t3) \
+	lw	t0, (offset + 0x10)(src); \
+	lw	t1, (offset + 0x14)(src); \
+	lw	t2, (offset + 0x18)(src); \
+	lw	t3, (offset + 0x1c)(src); \
+	usw	t0, (offset + 0x10)(dst); \
+	usw	t1, (offset + 0x14)(dst); \
+	usw	t2, (offset + 0x18)(dst); \
+	usw	t3, (offset + 0x1c)(dst); \
+	lw	t0, (offset + 0x00)(src); \
+	lw	t1, (offset + 0x04)(src); \
+	lw	t2, (offset + 0x08)(src); \
+	lw	t3, (offset + 0x0c)(src); \
+	usw	t0, (offset + 0x00)(dst); \
+	usw	t1, (offset + 0x04)(dst); \
+	usw	t2, (offset + 0x08)(dst); \
+	usw	t3, (offset + 0x0c)(dst)
+
+	.align	5
+LEAF(memmove)
+	sltu	t0, a0, a1			# dst < src -> memcpy
+	bnez	t0, memcpy
+	 addu	v0, a0, a2
+	sltu	t0, v0, a1			# dst + len < src -> non-
+	bnez	t0, __memcpy			# overlapping, can use memcpy
+	 move	v0, a0				/* return value */
+	END(memmove)
+
+LEAF(__rmemcpy)					/* a0=dst a1=src a2=len */
+	addu	a0, a2				# dst = dst + len
+	addu	a1, a2				# src = src + len
+
+	xor	t0, a0, a1
+	andi	t0, t0, 0x3
+	move	t7, a0
+	beqz	t0, r_can_align
+	 sltiu	t8, a2, 0x8
+
+	b	r_memcpy_u_src			# bad alignment
+	 move	t2, a2
+
+r_can_align:
+	bnez	t8, r_small_memcpy		# < 8 bytes to copy
+	 move	t2, a2
+
+	beqz	a2, r_out
+	 andi	t8, a1, 0x1
+
+r_hword_align:
+	beqz	t8, r_word_align
+	 andi	t8, a1, 0x2
+
+	lb	t0, -1(a1)
+	subu	a2, a2, 0x1
+	sb	t0, -1(a0)
+	subu	a1, a1, 0x1
+	subu	a0, a0, 0x1
+	andi	t8, a1, 0x2
+
+r_word_align:
+	beqz	t8, r_dword_align
+	 sltiu	t8, a2, 56
+	
+	lh	t0, -2(a1)
+	subu	a2, a2, 0x2
+	sh	t0, -2(a0)
+	sltiu	t8, a2, 56
+	subu	a0, a0, 0x2
+	subu	a1, a1, 0x2
+
+r_dword_align:
+	bnez	t8, r_do_end_words
+	 move	t8, a2
+
+	andi	t8, a1, 0x4
+	beqz	t8, r_qword_align
+	 andi	t8, a1, 0x8
+
+	lw	t0, -4(a1)
+	subu	a2, a2, 0x4
+	sw	t0, -4(a0)
+	subu	a1, a1, 0x4
+	subu	a0, a0, 0x4
+	andi	t8, a1, 0x8
+
+r_qword_align:
+	beqz	t8, r_oword_align
+	 andi	t8, a1, 0x10
+
+	subu	a1, a1, 0x8
+	lw	t0, 0x04(a1)
+	lw	t1, 0x00(a1)
+	subu	a0, a0, 0x8
+	sw	t0, 0x04(a0)
+	sw	t1, 0x00(a0)
+	subu	a2, a2, 0x8
+
+	andi	t8, a1, 0x10
+
+r_oword_align:
+	beqz	t8, r_begin_movement
+	 srl	t8, a2, 0x7
+
+	subu	a1, a1, 0x10
+	lw	t3, 0x08(a1)			# assumes subblock ordering
+	lw	t4, 0x0c(a1)
+	lw	t0, 0x00(a1)
+	lw	t1, 0x04(a1)
+	subu	a0, a0, 0x10
+	sw	t3, 0x08(a0)
+	sw	t4, 0x0c(a0)
+	sw	t0, 0x00(a0)
+	sw	t1, 0x04(a0)
+	subu	a2, a2, 0x10
+	srl	t8, a2, 0x7
+
+r_begin_movement:
+	beqz	t8, 0f
+	 andi	t2, a2, 0x40
+
+r_move_128bytes:
+	RMOVE_BIGCHUNK(a1, a0, -0x80, t0, t1, t3, t4)
+	RMOVE_BIGCHUNK(a1, a0, -0x60, t0, t1, t3, t4)
+	RMOVE_BIGCHUNK(a1, a0, -0x40, t0, t1, t3, t4)
+	RMOVE_BIGCHUNK(a1, a0, -0x20, t0, t1, t3, t4)
+	subu	t8, t8, 0x01
+	subu	a1, a1, 0x80
+	bnez	t8, r_move_128bytes
+	 subu	a0, a0, 0x80
+
+0:
+	beqz	t2, 1f
+	 andi	t2, a2, 0x20
+
+r_move_64bytes:
+	subu	a1, a1, 0x40
+	subu	a0, a0, 0x40
+	RMOVE_BIGCHUNK(a1, a0, 0x20, t0, t1, t3, t4)
+	RMOVE_BIGCHUNK(a1, a0, 0x00, t0, t1, t3, t4)
+
+1:
+	beqz	t2, r_do_end_words
+	 andi	t8, a2, 0x1c
+
+r_move_32bytes:
+	subu	a1, a1, 0x20
+	subu	a0, a0, 0x20
+	RMOVE_BIGCHUNK(a1, a0, 0x00, t0, t1, t3, t4)
+	andi	t8, a2, 0x1c
+
+r_do_end_words:
+	beqz	t8, r_maybe_end_cruft
+	 srl	t8, t8, 0x2
+
+r_end_words:
+	lw	t0, -4(a1)
+	subu	t8, t8, 0x1
+	sw	t0, -4(a0)
+	subu	a1, a1, 0x4
+	bnez	t8, r_end_words
+	 subu	a0, a0, 0x4
+
+r_maybe_end_cruft:
+	andi	t2, a2, 0x3
+
+r_small_memcpy:
+	beqz	t2, r_out
+	 move	a2, t2
+
+r_end_bytes:
+	lb	t0, -1(a1)
+	subu	a2, a2, 0x1
+	sb	t0, -1(a0)
+	subu	a1, a1, 0x1
+	bnez	a2, r_end_bytes
+	 subu	a0, a0, 0x1
+
+r_out:
+	jr	ra
+	 move	a2, zero
+
+/* ------------------------------------------------------------------------- */
+
+/* Bad, bad.  At least try to align the source  */
+
+r_memcpy_u_src:
+	bnez	t8, r_small_memcpy		# < 8 bytes?
+	 move	t2, a2
+
+	andi	t0, a1, 7			# t0: how much to align
+
+	ulw	t1, -8(a1)			# dword alignment
+	ulw	t2, -4(a1)
+	usw	t1, -8(a0)
+	usw	t2, -4(a0)
+
+	subu	a1, t0				# src
+	subu	a0, t0				# dst
+	subu	a2, t0				# len
+
+	sltiu	t8, a2, 56
+	bnez	t8, ru_do_end_words
+	 andi	t8, a2, 0x3c
+
+	andi	t8, a1, 8			# now qword aligned?
+
+ru_qword_align:
+	beqz	t8, ru_oword_align
+	 andi	t8, a1, 0x10
+
+	subu	a1, a1, 0x8
+	lw	t0, 0x00(a1)
+	lw	t1, 0x04(a1)
+	subu	a0, a0, 0x8
+	usw	t0, 0x00(a0)
+	usw	t1, 0x04(a0)
+	subu	a2, a2, 0x8
+
+	andi	t8, a1, 0x10
+
+ru_oword_align:
+	beqz	t8, ru_begin_movement
+	 srl	t8, a2, 0x7
+
+	subu	a1, a1, 0x10
+	lw	t3, 0x08(a1)			# assumes subblock ordering
+	lw	t4, 0x0c(a1)
+	lw	t0, 0x00(a1)
+	lw	t1, 0x04(a1)
+	subu	a0, a0, 0x10
+	usw	t3, 0x08(a0)
+	usw	t4, 0x0c(a0)
+	usw	t0, 0x00(a0)
+	usw	t1, 0x04(a0)
+	subu	a2, a2, 0x10
+
+	srl	t8, a2, 0x7
+
+ru_begin_movement:
+	beqz	t8, 0f
+	 andi	t2, a2, 0x40
+
+ru_move_128bytes:
+	RUMOVE_BIGCHUNK(a1, a0, -0x80, t0, t1, t3, t4)
+	RUMOVE_BIGCHUNK(a1, a0, -0x60, t0, t1, t3, t4)
+	RUMOVE_BIGCHUNK(a1, a0, -0x40, t0, t1, t3, t4)
+	RUMOVE_BIGCHUNK(a1, a0, -0x20, t0, t1, t3, t4)
+	subu	t8, t8, 0x01
+	subu	a1, a1, 0x80
+	bnez	t8, ru_move_128bytes
+	 subu	a0, a0, 0x80
+
+0:
+	beqz	t2, 1f
+	 andi	t2, a2, 0x20
+
+ru_move_64bytes:
+	subu	a1, a1, 0x40
+	subu	a0, a0, 0x40
+	RUMOVE_BIGCHUNK(a1, a0, 0x20, t0, t1, t3, t4)
+	RUMOVE_BIGCHUNK(a1, a0, 0x00, t0, t1, t3, t4)
+
+1:
+	beqz	t2, ru_do_end_words
+	 andi	t8, a2, 0x1c
+
+ru_move_32bytes:
+	subu	a1, a1, 0x20
+	subu	a0, a0, 0x20
+	RUMOVE_BIGCHUNK(a1, a0, 0x00, t0, t1, t3, t4)
+	andi	t8, a2, 0x1c
+
+ru_do_end_words:
+	beqz	t8, ru_maybe_end_cruft
+	 srl	t8, t8, 0x2
+
+ru_end_words:
+	lw	t0, -4(a1)
+	usw	t0, -4(a0)
+	subu	t8, t8, 0x1
+	subu	a1, a1, 0x4
+	bnez	t8, ru_end_words
+	 subu	a0, a0, 0x4
+
+ru_maybe_end_cruft:
+	andi	t2, a2, 0x3
+
+ru_cannot_optimize:
+	beqz	t2, r_out
+	 move	a2, t2
+
+ru_end_bytes:
+	lb	t0, -1(a1)
+	subu	a2, a2, 0x1
+	sb	t0, -1(a0)
+	subu	a1, a1, 0x1
+	bnez	a2, ru_end_bytes
+	 subu	a0, a0, 0x1
+
+	jr	ra
+	 move	a2, zero
+	END(__rmemcpy)
+
+l_fixup:					# clear the rest of the buffer
+	lw	t0, THREAD_BUADDR($28)
+	 nop
+	subu	a2, AT, t0			# a2 bytes to go
+	addu	a0, t0				# compute start address in a1
+	subu	a0, a1
+	j	__bzero
+	 move	a1, zero
+
+s_fixup:
+	jr	ra
+	 nop

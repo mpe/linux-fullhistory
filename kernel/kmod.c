@@ -86,13 +86,12 @@ int request_module(const char * module_name)
 	int pid;
 	int waitpid_result;
 
-	pid = kernel_thread(exec_modprobe, (void*) module_name,
-			    CLONE_FS | SIGCHLD);
+	pid = kernel_thread(exec_modprobe, (void*) module_name, CLONE_FS);
 	if (pid < 0) {
 		printk(KERN_ERR "kmod: fork failed, errno %d\n", -pid);
 		return pid;
 	}
-	waitpid_result = waitpid(pid, NULL, 0);
+	waitpid_result = waitpid(pid, NULL, __WCLONE);
 	if (waitpid_result != pid) {
 		printk (KERN_ERR "kmod: waitpid(%d,NULL,0) failed, returning %d.\n",
 			pid, waitpid_result);

@@ -59,6 +59,12 @@ extern char m68k_command_line[CL_SIZE];
 
 void *mac_env;		/* Loaded by the boot asm */
 
+/* The locgial video addr. determined by head.S - testing */
+extern unsigned long mac_videobase;
+
+/* The phys. video addr. - might be bogus on some machines */
+unsigned long mac_orig_videoaddr;
+
 extern int mac_keyb_init(void);
 extern int mac_kbdrate(struct kbd_repeat *k);
 extern void mac_kbd_leds(unsigned int leds);
@@ -183,8 +189,6 @@ void mac_waitbut (void)
 	;
 }
 
-extern struct consw fb_con;
-extern struct fb_info *mac_fb_init(long *);
 extern void mac_video_setup(char *, int *);
 
 void mac_debug_init (void)
@@ -213,15 +217,13 @@ __initfunc(int mac_parse_bootinfo(const struct bi_record *record))
     int unknown = 0;
     const u_long *data = record->data;
 
-    if (compat_bi)
-        return(unknown);
-
     switch (record->tag) {
 	case BI_MAC_MODEL:
 	    mac_bi_data.id = *data;
 	    break;
 	case BI_MAC_VADDR:
-	    mac_bi_data.videoaddr = *data;
+	    mac_orig_videoaddr = *data;
+	    mac_bi_data.videoaddr = mac_videobase;
 	    break;
 	case BI_MAC_VDEPTH:
 	    mac_bi_data.videodepth = *data;
@@ -256,39 +258,6 @@ __initfunc(int mac_parse_bootinfo(const struct bi_record *record))
     return(unknown);
 }
 
-__initfunc(void mac_copy_compat(void))
-{
-    int i;
-
-    compat_bi = 1;
-    
-    for (i=0; i<compat_boot_info.num_memory; i++) {
-    	m68k_memory[m68k_num_memory].addr = compat_boot_info.memory[i].addr;
-    	m68k_memory[m68k_num_memory].size = compat_boot_info.memory[i].size;
-	m68k_num_memory++;
-    }
-
-    m68k_ramdisk.addr = compat_boot_info.ramdisk_addr;
-    m68k_ramdisk.size = compat_boot_info.ramdisk_size;
-
-    strncpy(m68k_command_line, (const char *)compat_boot_info.command_line, 
-            CL_SIZE);
-    m68k_command_line[CL_SIZE-1] = '\0';
-                                
-    mac_bi_data.id = compat_boot_info.bi_mac.id;
-    mac_bi_data.videoaddr =  compat_boot_info.bi_mac.videoaddr;
-    mac_bi_data.videodepth = compat_boot_info.bi_mac.videodepth;
-    mac_bi_data.videorow = compat_boot_info.bi_mac.videorow;
-    mac_bi_data.dimensions = compat_boot_info.bi_mac.dimensions;
-    mac_bi_data.videological = compat_boot_info.bi_mac.videological;
-    mac_bi_data.sccbase = compat_boot_info.bi_mac.sccbase;
-    mac_bi_data.boottime = compat_boot_info.bi_mac.boottime;
-    mac_bi_data.gmtbias = compat_boot_info.bi_mac.gmtbias;
-    mac_bi_data.memsize = compat_boot_info.bi_mac.memsize;
-    mac_bi_data.cpuid = compat_boot_info.bi_mac.cpuid;
-
-}
-
 __initfunc(void config_mac(void))
 {
 
@@ -320,8 +289,7 @@ __initfunc(void config_mac(void))
     mach_mksound         = mac_mksound;
 #endif
     mach_reset           = mac_reset;
-#ifdef CONFIG_BLK_DEV_FD
-    mach_floppy_init	 = mac_floppy_init;
+#ifdef CONFIG_MAC_FLOPPY
     mach_floppy_setup	 = mac_floppy_setup;
 #endif
     conswitchp	         = &fb_con;
@@ -361,6 +329,8 @@ __initfunc(void config_mac(void))
      */
 
     nubus_sweep_video();
+
+    mac_debugging_penguin(6);
 }	
 
 
@@ -405,7 +375,7 @@ static struct mac_model mac_data_table[]=
 	{	MAC_MODEL_CCL,  "Color Classic",	MAC_ADB_IISI,	MAC_VIA_IIci,	MAC_SCSI_OLD,	MAC_IDE_NONE,	MAC_SCC_II,     MAC_ETHER_NONE,	MAC_NUBUS},
 
 	/*
-	 *	Some Mac LC machines. Basically the same as the IIci
+	 *	Some Mac LC machines. Basically the same as the IIci, ADB like IIsi
 	 */
 	
 	{	MAC_MODEL_LCII,	"LC II",  MAC_ADB_IISI,	MAC_VIA_IIci,	MAC_SCSI_OLD,	MAC_IDE_NONE,	MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
@@ -420,28 +390,24 @@ static struct mac_model mac_data_table[]=
 	 */	 
 	 
 	{	MAC_MODEL_Q605, "Quadra 605", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA,  MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_SONIC,	MAC_NUBUS},
-	{	MAC_MODEL_Q610, "Quadra 610", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA,  MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_SONIC,	MAC_NUBUS},
+	{	MAC_MODEL_Q610, "Quadra 610", MAC_ADB_II,   MAC_VIA_QUADRA, MAC_SCSI_QUADRA,  MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_SONIC,	MAC_NUBUS},
 	{	MAC_MODEL_Q630, "Quadra 630", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA,  MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_SONIC,	MAC_NUBUS},
- 	{	MAC_MODEL_Q650, "Quadra 650", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA,  MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_SONIC,	MAC_NUBUS},
+ 	{	MAC_MODEL_Q650, "Quadra 650", MAC_ADB_II,   MAC_VIA_QUADRA, MAC_SCSI_QUADRA,  MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_SONIC,	MAC_NUBUS},
 	/*	The Q700 does have a NS Sonic */
-#if 0
-	{	MAC_MODEL_Q700, "Quadra 700", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA2, MAC_IDE_NONE, MAC_SCC_QUADRA2,	MAC_ETHER_SONIC,	MAC_NUBUS},
-	{	MAC_MODEL_Q800, "Quadra 800", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA,  MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_SONIC,	MAC_NUBUS},
-#else
-	{	MAC_MODEL_Q700, "Quadra 700", MAC_ADB_II, MAC_VIA_QUADRA, MAC_SCSI_QUADRA2, MAC_IDE_NONE, MAC_SCC_QUADRA2,	MAC_ETHER_SONIC,	MAC_NUBUS},
-	{	MAC_MODEL_Q800, "Quadra 800", MAC_ADB_II, MAC_VIA_QUADRA, MAC_SCSI_QUADRA,  MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_SONIC,	MAC_NUBUS},
-#endif
+	{	MAC_MODEL_Q700, "Quadra 700", MAC_ADB_II,   MAC_VIA_QUADRA, MAC_SCSI_QUADRA2, MAC_IDE_NONE, MAC_SCC_QUADRA2,	MAC_ETHER_SONIC,	MAC_NUBUS},
+	{	MAC_MODEL_Q800, "Quadra 800", MAC_ADB_II,   MAC_VIA_QUADRA, MAC_SCSI_QUADRA,  MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_SONIC,	MAC_NUBUS},
 	/* Does the 840 have ethernet ??? documents seem to indicate its not quite a
 	   Quadra in this respect ? */
 	{	MAC_MODEL_Q840, "Quadra 840", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA3, MAC_IDE_NONE, MAC_SCC_II,	        MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_Q900, "Quadra 900", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA2, MAC_IDE_NONE, MAC_SCC_QUADRA2,	MAC_ETHER_SONIC,	MAC_NUBUS},
-	{	MAC_MODEL_Q950, "Quadra 950", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA2, MAC_IDE_NONE, MAC_SCC_QUADRA2,	MAC_ETHER_SONIC,	MAC_NUBUS},
+	/* These might have IOP problems */
+	{	MAC_MODEL_Q900, "Quadra 900", MAC_ADB_IISI, MAC_VIA_QUADRA, MAC_SCSI_QUADRA2, MAC_IDE_NONE, MAC_SCC_QUADRA2,	MAC_ETHER_SONIC,	MAC_NUBUS},
+	{	MAC_MODEL_Q950, "Quadra 950", MAC_ADB_IISI, MAC_VIA_QUADRA, MAC_SCSI_QUADRA2, MAC_IDE_NONE, MAC_SCC_QUADRA2,	MAC_ETHER_SONIC,	MAC_NUBUS},
 
 	/* 
 	 *	Performa - more LC type machines
 	 */
 
-	{	MAC_MODEL_P460, "Performa 460", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_OLD, MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_P460, "Performa 460", MAC_ADB_IISI, MAC_VIA_QUADRA, MAC_SCSI_OLD, MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
 	{	MAC_MODEL_P475, "Performa 475", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE, MAC_NUBUS},
 	{	MAC_MODEL_P520, "Performa 520", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_OLD, MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
 	{	MAC_MODEL_P550, "Performa 550", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_OLD, MAC_IDE_NONE, MAC_SCC_II,	MAC_ETHER_NONE,	MAC_NUBUS},
@@ -454,37 +420,37 @@ static struct mac_model mac_data_table[]=
 	 *	Centris - just guessing again; maybe like Quadra
 	 */
 
-	{	MAC_MODEL_C610, "Centris 610",   MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_C650, "Centris 650",   MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_C610, "Centris 610",   MAC_ADB_II,   MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_C650, "Centris 650",   MAC_ADB_II,   MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
 	{	MAC_MODEL_C660, "Centris 660AV", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
 
 	/*
 	 *      Power books - seem similar to early Quadras ? (most have 030 though)
 	 */
 
-	{	MAC_MODEL_PB140,  "PowerBook 140",   MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB145,  "PowerBook 145",   MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB140,  "PowerBook 140",   MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB145,  "PowerBook 145",   MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
 	/*	The PB150 has IDE, and IIci style VIA */
-	{	MAC_MODEL_PB150,  "PowerBook 150",   MAC_ADB_CUDA, MAC_VIA_IIci,   MAC_SCSI_QUADRA, MAC_IDE_PB,	  MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB160,  "PowerBook 160",   MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB165,  "PowerBook 165",   MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB165C, "PowerBook 165c",  MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB170,  "PowerBook 170",   MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB180,  "PowerBook 180",   MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB180C, "PowerBook 180c",  MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB190,  "PowerBook 190cs", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB520,  "PowerBook 520",   MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB150,  "PowerBook 150",   MAC_ADB_PB1, MAC_VIA_IIci,   MAC_SCSI_QUADRA, MAC_IDE_PB,	  MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB160,  "PowerBook 160",   MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB165,  "PowerBook 165",   MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB165C, "PowerBook 165c",  MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB170,  "PowerBook 170",   MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB180,  "PowerBook 180",   MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB180C, "PowerBook 180c",  MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB190,  "PowerBook 190cs", MAC_ADB_PB1, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB520,  "PowerBook 520",   MAC_ADB_PB2, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
 
 	/*
 	 *      Power book Duos - similar to Power books, I hope
 	 */
 
-	{	MAC_MODEL_PB210,  "PowerBook Duo 210",  MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB230,  "PowerBook Duo 230",  MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB250,  "PowerBook Duo 250",  MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB270C, "PowerBook Duo 270c", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB280,  "PowerBook Duo 280",  MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
-	{	MAC_MODEL_PB280C, "PowerBook Duo 280c", MAC_ADB_CUDA, MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB210,  "PowerBook Duo 210",  MAC_ADB_PB2,  MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB230,  "PowerBook Duo 230",  MAC_ADB_PB2,  MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB250,  "PowerBook Duo 250",  MAC_ADB_PB2,  MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB270C, "PowerBook Duo 270c", MAC_ADB_PB2,  MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB280,  "PowerBook Duo 280",  MAC_ADB_PB2,  MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
+	{	MAC_MODEL_PB280C, "PowerBook Duo 280c", MAC_ADB_PB2,  MAC_VIA_QUADRA, MAC_SCSI_QUADRA, MAC_IDE_NONE, MAC_SCC_QUADRA,	MAC_ETHER_NONE,	MAC_NUBUS},
 
 	/*
 	 *	Other stuff ??
@@ -541,14 +507,17 @@ void mac_identify(void)
 		mac_bi_data.videoaddr, mac_bi_data.videorow, 
 		mac_bi_data.videodepth, mac_bi_data.dimensions & 0xFFFF, 
 		mac_bi_data.dimensions >> 16); 
+	printk (" Videological 0x%lx phys. 0x%lx, SCC at 0x%lx \n",
+		mac_bi_data.videological, mac_orig_videoaddr, 
+		mac_bi_data.sccbase); 
 	printk (" Boottime: 0x%lx GMTBias: 0x%lx \n",
 		mac_bi_data.boottime, mac_bi_data.gmtbias); 
-	printk (" Videological 0x%lx, SCC at 0x%lx \n",
-		mac_bi_data.videological, mac_bi_data.sccbase); 
 	printk (" Machine ID: %ld CPUid: 0x%lx memory size: 0x%lx \n",
 		mac_bi_data.id, mac_bi_data.cpuid, mac_bi_data.memsize); 
+#if 0
 	printk ("Ramdisk: addr 0x%lx size 0x%lx\n", 
 		m68k_ramdisk.addr, m68k_ramdisk.size);
+#endif
 
 	/*
 	 *	Save the pointer

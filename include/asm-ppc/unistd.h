@@ -21,7 +21,7 @@
 #define __NR_time		 13
 #define __NR_mknod		 14
 #define __NR_chmod		 15
-#define __NR_chown		 16
+#define __NR_lchown		 16
 #define __NR_break		 17
 #define __NR_oldstat		 18
 #define __NR_lseek		 19
@@ -177,8 +177,19 @@
 #define __NR_setresgid		169
 #define __NR_getresgid		170
 #define __NR_prctl		171
-#define __NR_xstat		172
-#define __NR_xmknod		173
+#define __NR_rt_sigreturn	172
+#define __NR_rt_sigaction	173
+#define __NR_rt_sigprocmask	174
+#define __NR_rt_sigpending	175
+#define __NR_rt_sigtimedwait	177
+#define __NR_rt_sigqueueinfo	178
+#define __NR_rt_sigsuspend	179
+#define __NR_pread		180
+#define __NR_pwrite		181
+#define __NR_chown		182
+#define __NR_getcwd		183
+#define __NR_xstat		184
+#define __NR_xmknod		185
 
 #define __NR(n)	#n
 #define __do_syscall(n) \

@@ -8,11 +8,12 @@
  * Copyright 1994, 1995, 1996, 1997 by Ralf Baechle
  * Modified for R3000 by Paul M. Antoine, 1995, 1996
  *
- * $Id: traps.c,v 1.7 1997/12/01 16:33:28 ralf Exp $
+ * $Id: traps.c,v 1.10 1998/05/04 09:17:57 ralf Exp $
  */
 #include <linux/config.h>
 #include <linux/init.h>
 #include <linux/mm.h>
+#include <linux/sched.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 
@@ -26,10 +27,6 @@
 #include <asm/watch.h>
 #include <asm/system.h>
 #include <asm/uaccess.h>
-
-#ifdef CONFIG_SGI
-#include <asm/sgialib.h>
-#endif
 
 #undef CONF_DEBUG_EXCEPTIONS
 
@@ -105,7 +102,7 @@ void show_registers(char * str, struct pt_regs * regs, long err)
 	/*
 	 * Dump the stack
 	 */
-	printk("Process %s (pid: %d, stackpage=%08lx)\nStack: ",
+	printk("Process %s (pid: %ld, stackpage=%08lx)\nStack: ",
 		current->comm, current->pid, (unsigned long)current);
 	for(i=0;i<5;i++)
 		printk("%08x ", *sp++);
@@ -167,18 +164,9 @@ void show_registers(char * str, struct pt_regs * regs, long err)
 
 void die_if_kernel(const char * str, struct pt_regs * regs, long err)
 {
-	/*
-	 * Just return if in user mode.
-	 * XXX
-	 */
-#if (_MIPS_ISA == _MIPS_ISA_MIPS1) || (_MIPS_ISA == _MIPS_ISA_MIPS2)
-	if (!((regs)->cp0_status & 0x4))
+	if (user_mode(regs))	/* Just return if in user mode.  */
 		return;
-#endif
-#if (_MIPS_ISA == _MIPS_ISA_MIPS3) || (_MIPS_ISA == _MIPS_ISA_MIPS4)
-	if (regs->cp0_status & ST0_KSU == KSU_USER)
-		return;
-#endif
+
 	console_verbose();
 	printk("%s: %04lx\n", str, err & 0xffff);
 	show_regs(regs);
@@ -196,6 +184,7 @@ static void default_be_board_handler(struct pt_regs *regs)
 void do_ibe(struct pt_regs *regs)
 {
 	lock_kernel();
+show_regs(regs); while(1);
 	ibe_board_handler(regs);
 	unlock_kernel();
 }
@@ -203,6 +192,7 @@ void do_ibe(struct pt_regs *regs)
 void do_dbe(struct pt_regs *regs)
 {
 	lock_kernel();
+show_regs(regs); while(1);
 	dbe_board_handler(regs);
 	unlock_kernel();
 }
@@ -240,7 +230,10 @@ int unregister_fpe(void (*handler)(struct pt_regs *regs, unsigned int fcr31))
 }
 #endif
 
-void do_fpe(struct pt_regs *regs, unsigned int fcr31)
+/*
+ * XXX Delayed fp exceptions when doing a lazy ctx switch XXX
+ */
+void do_fpe(struct pt_regs *regs, unsigned long fcr31)
 {
 #ifdef CONFIG_MIPS_FPE_MODULE
 	if (fpe_handler != NULL) {
@@ -252,8 +245,23 @@ void do_fpe(struct pt_regs *regs, unsigned int fcr31)
 #ifdef CONF_DEBUG_EXCEPTIONS
 	show_regs(regs);
 #endif
-	printk("Caught floating exception at epc == %08lx, fcr31 == %08x\n",
-	       regs->cp0_epc, fcr31);
+	if (fcr31 & 0x20000) {
+		/* Retry instruction with flush to zero ...  */
+		if (!(fcr31 & (1<<24))) {
+			printk("Setting flush to zero for %s.\n",
+			       current->comm);
+			fcr31 &= ~0x20000;
+			fcr31 |= (1<<24);
+			__asm__ __volatile__(
+				"ctc1\t%0,$31"
+				: /* No outputs */
+				: "r" (fcr31));
+			goto out;
+		}
+		printk("Unimplemented exception at 0x%08lx in %s.\n",
+		       regs->cp0_epc, current->comm);
+	}
+
 	if (compute_return_epc(regs))
 		goto out;
 	force_sig(SIGFPE, current);
@@ -337,7 +345,7 @@ void do_ri(struct pt_regs *regs)
 #ifdef CONF_DEBUG_EXCEPTIONS
 	show_regs(regs);
 #endif
-	printk("[%s:%d] Illegal instruction at %08lx ra=%08lx\n",
+	printk("[%s:%ld] Illegal instruction at %08lx ra=%08lx\n",
 	       current->comm, current->pid, regs->cp0_epc, regs->regs[31]);
 	if (compute_return_epc(regs))
 		goto out;
@@ -350,16 +358,29 @@ void do_cpu(struct pt_regs *regs)
 {
 	unsigned int cpid;
 
-	lock_kernel();
 	cpid = (regs->cp0_cause >> CAUSEB_CE) & 3;
-	if (cpid == 1)
-	{
-		regs->cp0_status |= ST0_CU1;
+	if (cpid != 1)
+		goto bad_cid;
+
+	regs->cp0_status |= ST0_CU1;
+	if (last_task_used_math == current)
 		goto out;
+
+	if (current->used_math) {		/* Using the FPU again.  */
+		r4xx0_lazy_fpu_switch(last_task_used_math);
+	} else {				/* First time FPU user.  */
+
+		r4xx0_init_fpu();
+		current->used_math = 1;
 	}
+	last_task_used_math = current;
+	return;
+
+bad_cid:
+	lock_kernel();
 	force_sig(SIGILL, current);
-out:
 	unlock_kernel();
+out:
 }
 
 void do_vcei(struct pt_regs *regs)
@@ -460,13 +481,6 @@ void set_except_vector(int n, void *addr)
 	}
 }
 
-typedef asmlinkage int (*syscall_t)(void *a0,...);
-asmlinkage int (*do_syscalls)(struct pt_regs *regs, syscall_t fun, int narg);
-extern asmlinkage int r4k_do_syscalls(struct pt_regs *regs,
-				      syscall_t fun, int narg);
-extern asmlinkage int r2300_do_syscalls(struct pt_regs *regs,
-					syscall_t fun, int narg);
-
 asmlinkage void (*save_fp_context)(struct sigcontext *sc);
 extern asmlinkage void r4k_save_fp_context(struct sigcontext *sc);
 extern asmlinkage void r2300_save_fp_context(struct sigcontext *sc);
@@ -489,7 +503,6 @@ __initfunc(void trap_init(void))
 	unsigned long i;
 
 	if(mips_machtype == MACH_MIPS_MAGNUM_4000 ||
-	   mips_machtype == MACH_DESKSTATION_RPC44 ||
 	   mips_machtype == MACH_SNI_RM200_PCI)
 		EISA_bus = 1;
 
@@ -560,7 +573,6 @@ __initfunc(void trap_init(void))
 		memcpy((void *)(KSEG0 + 0x100), (void *) KSEG0, 0x80);
 		memcpy((void *)(KSEG0 + 0x180), &except_vec3_r4000, 0x80);
 
-		do_syscalls = r4k_do_syscalls;
 		save_fp_context = r4k_save_fp_context;
 		restore_fp_context = r4k_restore_fp_context;
 		resume = r4xx0_resume;
@@ -607,7 +619,6 @@ __initfunc(void trap_init(void))
 	case CPU_R3000:
 	case CPU_R3000A:
 		memcpy((void *)KSEG0, &except_vec0_r2300, 0x80);
-		do_syscalls = r2300_do_syscalls;
 		save_fp_context = r2300_save_fp_context;
 		restore_fp_context = r2300_restore_fp_context;
 		resume = r2300_resume;

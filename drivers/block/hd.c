@@ -73,6 +73,8 @@ static struct wait_queue * busy_wait = NULL;
 static int reset = 0;
 static int hd_error = 0;
 
+#define SUBSECTOR(block) (CURRENT->current_nr_sectors > 0)
+
 /*
  *  This struct defines the HD's and their types.
  */

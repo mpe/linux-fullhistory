@@ -14,3 +14,6 @@
 
 /* timer is part of the DUART */
 #define IRQ_TIMER		IRQ_DUART
+
+#define irq_cannonicalize(i)	(i)
+

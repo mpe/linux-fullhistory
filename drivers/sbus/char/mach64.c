@@ -1,4 +1,4 @@
-/* $Id: mach64.c,v 1.17 1998/04/06 06:42:23 davem Exp $
+/* $Id: mach64.c,v 1.18 1998/05/03 21:56:07 davem Exp $
  * mach64.c: Ultra/PCI Mach64 console driver.
  *
  * Just about all of this is from the PPC/mac driver, see that for
@@ -28,7 +28,7 @@
 #include "mach64.h"
 #include "fb.h"
 
-static unsigned int mach64_pci_membase;
+static unsigned int mach64_pci_membase, mach64_pci_membase2;
 static unsigned int mach64_pci_iobase;
 
 #define MACH64_LE_FBOFF	0x000000
@@ -83,6 +83,9 @@ mach64_mmap(struct inode *inode, struct file *file, struct vm_area_struct *vma,
 	if (vma->vm_offset == (mach64_pci_iobase & PAGE_MASK)) {
 		addr = __pa((pcivga_iobase & PAGE_MASK));
 		size = PAGE_SIZE;
+	} else if(mach64_pci_membase2 &&
+		  (vma->vm_offset == (mach64_pci_membase2 & PAGE_MASK))) {
+		addr = __pa((pcivga_membase2 & PAGE_MASK));
 	} else if (vma->vm_offset >= (mach64_pci_membase + 0x800000)) {
 		addr = __pa(pcivga_membase) - mach64_pci_membase
 			+ vma->vm_offset;
@@ -194,6 +197,9 @@ int mach64_init(fbinfo_t *fb)
 	else
 		pcivga_membase = addr & PCI_BASE_ADDRESS_MEM_MASK;
 
+	pcivga_membase2 = (pdev->base_address[2] &
+			   PCI_BASE_ADDRESS_MEM_MASK);
+
 	if(!pcivga_iobase || !pcivga_membase) {
 		prom_printf("mach64_init: I/O or MEM baseaddr is missing\n");
 		prom_printf("mach64_init: ba[0]=%016lx ba[1]=%016lx\n",
@@ -209,8 +215,12 @@ int mach64_init(fbinfo_t *fb)
 				  PCI_BASE_ADDRESS_1, &mach64_pci_iobase);
 	mach64_pci_iobase &= PCI_BASE_ADDRESS_IO_MASK;
 
-	printk("mach64_init: IOBASE[%016lx] MEMBASE[%016lx]\n",
-		pcivga_iobase, pcivga_membase);
+	pcibios_read_config_dword(pdev->bus->number, pdev->devfn,
+				  PCI_BASE_ADDRESS_2, &mach64_pci_membase2);
+	mach64_pci_membase2 &= PCI_BASE_ADDRESS_MEM_MASK;
+
+	printk("mach64_init: IOBASE[%016lx] M1[%016lx] M2[%016lx]\n",
+		pcivga_iobase, pcivga_membase, pcivga_membase2);
 
 	cookie = pdev->sysdata;
 	pbm = cookie->pbm;

@@ -364,14 +364,14 @@ static int unix_create(struct socket *sock, int protocol)
 		default:
 			return -ESOCKTNOSUPPORT;
 	}
-	sk = sk_alloc(AF_UNIX, GFP_KERNEL, 1);
+	sk = sk_alloc(PF_UNIX, GFP_KERNEL, 1);
 	if (!sk)
 		return -ENOMEM;
 
 	sock_init_data(sock,sk);
 
 	sk->destruct = unix_destruct_addr;
-	sk->protinfo.af_unix.family=AF_UNIX;
+	sk->protinfo.af_unix.family=PF_UNIX;
 	sk->protinfo.af_unix.dentry=NULL;
 	sk->sock_readers=1;			/* Us */
 	sk->protinfo.af_unix.readsem=MUTEX;	/* single task reading lock */
@@ -1446,7 +1446,7 @@ done:
 #endif
 
 struct proto_ops unix_stream_ops = {
-	AF_UNIX,
+	PF_UNIX,
 	
 	sock_no_dup,
 	unix_release,
@@ -1467,7 +1467,7 @@ struct proto_ops unix_stream_ops = {
 };
 
 struct proto_ops unix_dgram_ops = {
-	AF_UNIX,
+	PF_UNIX,
 	
 	sock_no_dup,
 	unix_release,
@@ -1488,7 +1488,7 @@ struct proto_ops unix_dgram_ops = {
 };
 
 struct net_proto_family unix_family_ops = {
-	AF_UNIX,
+	PF_UNIX,
 	unix_create
 };
 
@@ -1534,7 +1534,7 @@ __initfunc(void unix_proto_init(struct net_proto *pro))
 #ifdef MODULE
 void cleanup_module(void)
 {
-	sock_unregister(AF_UNIX);
+	sock_unregister(PF_UNIX);
 #ifdef CONFIG_SYSCTL
 	unix_sysctl_unregister();
 #endif

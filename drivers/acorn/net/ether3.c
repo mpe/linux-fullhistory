@@ -340,6 +340,23 @@ ether3_init_for_open(struct device *dev)
 	outw(priv->regs.command | CMD_RXON, REG_COMMAND);
 }
 
+static inline int
+ether3_probe_bus_8(struct device *dev, int val)
+{
+	outb(val & 255, REG_RECVPTR);
+	outb(val >> 8, REG_RECVPTR + 1);
+
+	return inb(REG_RECVPTR) == (val & 255) && inb(REG_RECVPTR + 1) == (val >> 8);
+}
+
+static inline int
+ether3_probe_bus_16(struct device *dev, int val)
+{
+	outw(val, REG_RECVPTR);
+
+	return inw(REG_RECVPTR) == val;
+}
+
 /*
  * This is the real probe routine.
  */
@@ -373,15 +390,14 @@ ether3_probe1(struct device *dev))
 	/* Test using Receive Pointer (16-bit register) to find out
 	 * how the ether3 is connected to the bus...
 	 */
-	outb(0, REG_RECVPTR);
-	outb(1, REG_RECVPTR + 1);
+	if (ether3_probe_bus_8(dev, 0x100) &&
+	    ether3_probe_bus_8(dev, 0x201))
+		bus_type = BUS_8;
 
-	if (inb(REG_RECVPTR + 1) == 1) {
-		if (inb(REG_RECVPTR) == 0)
-			bus_type = BUS_8;
-		else if (inw(REG_RECVPTR) == 0x101)
-			bus_type = BUS_16;
-	}
+	if (bus_type == BUS_UNKNOWN &&
+	    ether3_probe_bus_16(dev, 0x101) &&
+	    ether3_probe_bus_16(dev, 0x201))
+		bus_type = BUS_16;
 
 	switch (bus_type) {
 	case BUS_UNKNOWN:

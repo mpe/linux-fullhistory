@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1996, 1997 by Ralf Baechle
  *
- * $Id: sigcontext.h,v 1.4 1997/12/01 16:46:19 ralf Exp $
+ * $Id: sigcontext.h,v 1.6 1998/05/01 01:36:10 ralf Exp $
  */
 #ifndef __ASM_MIPS_SIGCONTEXT_H
 #define __ASM_MIPS_SIGCONTEXT_H
@@ -32,8 +32,7 @@ struct sigcontext {
 	unsigned int       sc_cause;		/* Unused */
 	unsigned int       sc_badvaddr;		/* Unused */
 
-	unsigned long      sc_sigset;		/* kernel's sigset_t */
-	unsigned long      __pad0[3];		/* pad for constant size */
+	unsigned long      sc_sigset[4];	/* kernel's sigset_t */
 };
 
 #endif /* __ASM_MIPS_SIGCONTEXT_H */

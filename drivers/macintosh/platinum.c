@@ -17,6 +17,7 @@
 #include <asm/prom.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
+#include <asm/init.h>
 #include <linux/selection.h>
 #include "pmac-cons.h"
 #include "platinum.h"
@@ -351,6 +352,8 @@ static struct plat_regvals *platinum_reg_init[VMODE_MAX] = {
 	&platinum_reg_init_19,
 	&platinum_reg_init_20
 };
+
+__openfirmware
 
 /*
  * Get the monitor sense value.

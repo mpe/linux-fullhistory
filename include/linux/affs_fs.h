@@ -93,7 +93,8 @@ extern int			 init_affs_fs(void);
 
 /* file.c */
 
-extern void   affs_truncate(struct inode *);
+void		affs_free_prealloc(struct inode *inode);
+extern void	affs_truncate(struct inode *);
 
 /* dir.c */
 

@@ -1,5 +1,5 @@
 /*
- * $Id: pci.c,v 1.24 1998/02/19 21:29:49 cort Exp $
+ * $Id: pci.c,v 1.27 1998/04/24 02:46:47 cort Exp $
  * Common pmac/prep/chrp pci routines. -- Cort
  */
 
@@ -88,6 +88,19 @@ extern int prep_pcibios_write_config_word(unsigned char bus, unsigned char dev_f
 extern int prep_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
 					   unsigned char offset, unsigned int val);
 
+extern int mbx_pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
+					 unsigned char offset, unsigned char *val);
+extern int mbx_pcibios_read_config_word(unsigned char bus, unsigned char dev_fn,
+					 unsigned char offset, unsigned short *val);
+extern int mbx_pcibios_read_config_dword(unsigned char bus, unsigned char dev_fn,
+					  unsigned char offset, unsigned int *val);
+extern int mbx_pcibios_write_config_byte(unsigned char bus, unsigned char dev_fn,
+					  unsigned char offset, unsigned char val);
+extern int mbx_pcibios_write_config_word(unsigned char bus, unsigned char dev_fn,
+					  unsigned char offset, unsigned short val);
+extern int mbx_pcibios_write_config_dword(unsigned char bus, unsigned char dev_fn,
+					   unsigned char offset, unsigned int val);
+
 int pcibios_read_config_byte(unsigned char bus, unsigned char dev_fn,
 			     unsigned char offset, unsigned char *val)
 {
@@ -124,15 +137,14 @@ int pcibios_present(void)
 	return 1;
 }
 
-__initfunc(unsigned long
-	   pcibios_init(unsigned long mem_start,unsigned long mem_end))
+__initfunc(void pcibios_init(void))
 {
-	return mem_start;
 }
 
 __initfunc(void
 	   setup_pci_ptrs(void))
 {
+#ifndef CONFIG_MBX  
 	switch (_machine) {
 	case _MACH_prep:
 		ptr_pcibios_read_config_byte = prep_pcibios_read_config_byte;
@@ -158,12 +170,20 @@ __initfunc(void
 		ptr_pcibios_write_config_word = chrp_pcibios_write_config_word;
 		ptr_pcibios_write_config_dword = chrp_pcibios_write_config_dword;
 		break;
+	default:
+		printk("setup_pci_ptrs(): unknown machine type!\n");
 	}
+#else  /* CONFIG_MBX */	
+	ptr_pcibios_read_config_byte = mbx_pcibios_read_config_byte;
+	ptr_pcibios_read_config_word = mbx_pcibios_read_config_word;
+	ptr_pcibios_read_config_dword = mbx_pcibios_read_config_dword;
+	ptr_pcibios_write_config_byte = mbx_pcibios_write_config_byte;
+	ptr_pcibios_write_config_word = mbx_pcibios_write_config_word;
+	ptr_pcibios_write_config_dword = mbx_pcibios_write_config_dword;
+#endif /* CONFIG_MBX */	
 }
 
-__initfunc(unsigned long
-	   pcibios_fixup(unsigned long mem_start, unsigned long mem_end))
-
+__initfunc(void pcibios_fixup(void))
 {
 	extern route_pci_interrupts(void);
 	struct pci_dev *dev;
@@ -223,7 +243,6 @@ __initfunc(unsigned long
 		}
 		break;
 	}
-	return mem_start;
 }
 
 __initfunc(char *pcibios_setup(char *str))

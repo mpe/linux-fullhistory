@@ -76,9 +76,4 @@ extern __inline__ unsigned long get_softint(void)
 	return retval;
 }
 
-static __inline__ int irq_cannonicalize(int irq)
-{
-	return irq;
-}
-
 #endif

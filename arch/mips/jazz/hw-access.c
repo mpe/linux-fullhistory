@@ -7,9 +7,10 @@
  *
  * Copyright (C) 1995, 1996, 1997 by Ralf Baechle
  *
- * $Id: hw-access.c,v 1.4 1997/07/29 17:46:45 ralf Exp $
+ * $Id: hw-access.c,v 1.4 1998/05/01 01:33:36 ralf Exp $
  */
 #include <linux/delay.h>
+#include <linux/init.h>
 #include <linux/linkage.h>
 #include <linux/types.h>
 #include <linux/mm.h>
@@ -173,11 +174,12 @@ static unsigned char jazz_read_status(void)
 	return jazz_kh->command;
 }
 
-void jazz_keyboard_setup(void)
+__initfunc(void jazz_keyboard_setup(void))
 {
 	kbd_read_input = jazz_read_input;
 	kbd_write_output = jazz_write_output;
 	kbd_write_command = jazz_write_command;
 	kbd_read_status = jazz_read_status;
 	request_region(0x60, 16, "keyboard");
+	r4030_write_reg16(JAZZ_IO_IRQ_ENABLE, r4030_read_reg16(JAZZ_IO_IRQ_ENABLE) | JAZZ_IE_KEYBOARD);
 }

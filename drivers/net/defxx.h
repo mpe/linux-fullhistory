@@ -1771,9 +1771,12 @@ typedef struct DFX_board_tag
 	u32						rcv_length_errors;
 	u32						rcv_total_frames;
 	u32						rcv_multicast_frames;
+	u32						rcv_total_bytes;
+
 	u32						xmt_discards;
 	u32						xmt_length_errors;
 	u32						xmt_total_frames;
+	u32						xmt_total_bytes;
 	} DFX_board_t;
 
 #endif	/* #ifndef _DEFXX_H_ */

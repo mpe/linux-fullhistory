@@ -6,6 +6,8 @@
 
 #ifdef __KERNEL__
 
+#define get_user_page(vaddr)		__get_free_page(GFP_KERNEL)
+#define free_user_page(page, addr)	free_page(addr)
 #define clear_page(page)	memzero((void *)(page), PAGE_SIZE)
 #define copy_page(to,from)	memcpy((void *)(to), (void *)(from), PAGE_SIZE)
 

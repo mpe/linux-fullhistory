@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.116 1998/05/02 14:50:11 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.118 1998/05/06 04:53:48 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -593,7 +593,7 @@ static int tcp_clean_rtx_queue(struct sock *sk, __u32 ack,
 		 * connection startup slow start one packet too
 		 * quickly.  This is severely frowned upon behavior.
 		 */
-		if(sacked & TCPCB_SACKED_RETRANS && tp->retrans_out)
+		if((sacked & TCPCB_SACKED_RETRANS) && tp->retrans_out)
 			tp->retrans_out--;
 		if(!(scb->flags & TCPCB_FLAG_SYN)) {
 			acked |= FLAG_DATA_ACKED;
@@ -968,7 +968,7 @@ void tcp_time_wait(struct sock *sk)
 		tw->af_specific	= sk->tp_pinfo.af_tcp.af_specific;
 
 #if defined(CONFIG_IPV6) || defined(CONFIG_IPV6_MODULE)
-		if(tw->family == AF_INET6) {
+		if(tw->family == PF_INET6) {
 			memcpy(&tw->v6_daddr,
 			       &sk->net_pinfo.af_inet6.daddr,
 			       sizeof(struct in6_addr));

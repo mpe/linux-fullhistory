@@ -327,6 +327,9 @@ int get_irq_list(char *buf)
 			else
 				len += sprintf(buf+len, "  OpenPIC ");
 			break;
+		case _MACH_mbx:
+			len += sprintf(buf+len, "   MPC8xx ");
+			break;
 		}
 
 		len += sprintf(buf+len, "   %s",action->name);

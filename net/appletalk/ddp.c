@@ -990,7 +990,7 @@ static int atalk_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
 
-	sk = sk_alloc(AF_APPLETALK, GFP_KERNEL, 1);
+	sk = sk_alloc(PF_APPLETALK, GFP_KERNEL, 1);
 	if(sk == NULL)
 		return (-ENOMEM);
 
@@ -1304,7 +1304,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 		return (0);
 	}
 
-	if(call_in_firewall(AF_APPLETALK, skb->dev, ddp, NULL,&skb)!=FW_ACCEPT)
+	if(call_in_firewall(PF_APPLETALK, skb->dev, ddp, NULL,&skb)!=FW_ACCEPT)
 	{
 		kfree_skb(skb);
 		return (0);
@@ -1338,7 +1338,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 		/*
 		 * Check firewall allows this routing
 		 */
-		if(call_fw_firewall(AF_APPLETALK, skb->dev, ddp, NULL, &skb) != FW_ACCEPT)
+		if(call_fw_firewall(PF_APPLETALK, skb->dev, ddp, NULL, &skb) != FW_ACCEPT)
 		{
 			kfree_skb(skb);
 			return (0);
@@ -1452,10 +1452,7 @@ static int atalk_rcv(struct sk_buff *skb, struct device *dev, struct packet_type
 	skb->sk = sock;
 
 	if(sock_queue_rcv_skb(sock, skb) < 0)
-	{
-		skb->sk = NULL;
 		kfree_skb(skb);
-	}
 
 	return (0);
 }
@@ -1611,8 +1608,8 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	skb = sock_alloc_send_skb(sk, size, 0, flags&MSG_DONTWAIT, &err);
 	if(skb == NULL)
 		return (err);
-
-	skb->sk  = sk;
+	
+	skb->sk = sk;
 	skb_reserve(skb, ddp_dl->header_length);
 	skb_reserve(skb, dev->hard_header_len);
 
@@ -1652,7 +1649,7 @@ static int atalk_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	else
 		ddp->deh_sum = atalk_checksum(ddp, len + sizeof(*ddp));
 
-	if(call_out_firewall(AF_APPLETALK, skb->dev, ddp, NULL, &skb) != FW_ACCEPT)
+	if(call_out_firewall(PF_APPLETALK, skb->dev, ddp, NULL, &skb) != FW_ACCEPT)
 	{
 		kfree_skb(skb);
 		return (-EPERM);
@@ -1859,13 +1856,13 @@ static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 
 static struct net_proto_family atalk_family_ops=
 {
-	AF_APPLETALK,
+	PF_APPLETALK,
 	atalk_create
 };
 
 static struct proto_ops atalk_dgram_ops=
 {
-	AF_APPLETALK,
+	PF_APPLETALK,
 
 	sock_no_dup,
 	atalk_release,
@@ -2014,7 +2011,7 @@ void cleanup_module(void)
 	dev_remove_pack(&ltalk_packet_type);
 	dev_remove_pack(&ppptalk_packet_type);
 	unregister_snap_client(ddp_snap_id);
-	sock_unregister(atalk_family_ops.family);
+	sock_unregister(PF_APPLETALK);
 
 	return;
 }

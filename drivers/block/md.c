@@ -70,7 +70,6 @@ extern kdev_t name_to_kdev_t(char *line) __init;
 static struct hd_struct md_hd_struct[MAX_MD_DEV];
 static int md_blocksizes[MAX_MD_DEV];
 int md_maxreadahead[MAX_MD_DEV];
-static struct md_thread md_threads[MAX_MD_THREADS];
 #if SUPPORT_RECONSTRUCTION
 static struct md_thread *md_sync_thread = NULL;
 #endif /* SUPPORT_RECONSTRUCTION */
@@ -96,6 +95,8 @@ static struct gendisk md_gendisk=
 
 static struct md_personality *pers[MAX_PERSONALITY]={NULL, };
 struct md_dev md_dev[MAX_MD_DEV];
+
+int md_thread(void * arg);
 
 static struct gendisk *find_gendisk (kdev_t dev)
 {
@@ -803,31 +804,6 @@ static void do_md_request (void)
 {
   printk ("Got md request, not good...");
   return;
-}  
-
-/*
- * We run MAX_MD_THREADS from md_init() and arbitrate them in run time.
- * This is not so elegant, but how can we use kernel_thread() from within
- * loadable modules?
- */
-struct md_thread *md_register_thread (void (*run) (void *), void *data)
-{
-	int i;
-	for (i = 0; i < MAX_MD_THREADS; i++) {
-		if (md_threads[i].run == NULL) {
-			md_threads[i].run = run;
-			md_threads[i].data = data;
-			return md_threads + i;
-		}
-	}
-	return NULL;
-}
-
-void md_unregister_thread (struct md_thread *thread)
-{
-	thread->run = NULL;
-	thread->data = NULL;
-	thread->flags = 0;
 }
 
 void md_wakeup_thread(struct md_thread *thread)
@@ -836,6 +812,90 @@ void md_wakeup_thread(struct md_thread *thread)
 	wake_up(&thread->wqueue);
 }
 
+struct md_thread *md_register_thread (void (*run) (void *), void *data)
+{
+	struct md_thread *thread = (struct md_thread *)
+		kmalloc(sizeof(struct md_thread), GFP_KERNEL);
+	int ret;
+	struct semaphore sem = MUTEX_LOCKED;
+	
+	if (!thread) return NULL;
+	
+	memset(thread, 0, sizeof(struct md_thread));
+	init_waitqueue(&thread->wqueue);
+	
+	thread->sem = &sem;
+	thread->run = run;
+	thread->data = data;
+	ret = kernel_thread(md_thread, thread, 0);
+	if (ret < 0) {
+		kfree(thread);
+		return NULL;
+	}
+	down(&sem);
+	return thread;
+}
+
+void md_unregister_thread (struct md_thread *thread)
+{
+	struct semaphore sem = MUTEX_LOCKED;
+	
+	thread->sem = &sem;
+	thread->run = NULL;
+	if (thread->tsk)
+		printk("Killing md_thread %d %p %s\n",
+		       thread->tsk->pid, thread->tsk, thread->tsk->comm);
+	else
+		printk("Aiee. md_thread has 0 tsk\n");
+	send_sig(SIGKILL, thread->tsk, 1);
+	printk("downing on %p\n", &sem);
+	down(&sem);
+}
+
+#define SHUTDOWN_SIGS   (sigmask(SIGKILL)|sigmask(SIGINT)|sigmask(SIGTERM))
+
+int md_thread(void * arg)
+{
+	struct md_thread *thread = arg;
+
+	lock_kernel();
+	exit_mm(current);
+	exit_files(current);
+	exit_fs(current);
+	
+	current->session = 1;
+	current->pgrp = 1;
+	sprintf(current->comm, "md_thread");
+	siginitsetinv(&current->blocked, SHUTDOWN_SIGS);
+	thread->tsk = current;
+	up(thread->sem);
+
+	for (;;) {
+		cli();
+		if (!test_bit(THREAD_WAKEUP, &thread->flags)) {
+			do {
+			        spin_lock(&current->sigmask_lock);
+				flush_signals(current);
+	  			spin_unlock(&current->sigmask_lock);
+				interruptible_sleep_on(&thread->wqueue);
+				cli();
+				if (test_bit(THREAD_WAKEUP, &thread->flags))
+					break;
+				if (!thread->run) {
+					sti();
+					up(thread->sem);
+					return 0;
+				}
+			} while (signal_pending(current));
+		}
+		sti();
+		clear_bit(THREAD_WAKEUP, &thread->flags);
+		if (thread->run) {
+			thread->run(thread->data);
+			run_task_queue(&tq_disk);
+		}
+	}
+}
 
 EXPORT_SYMBOL(md_size);
 EXPORT_SYMBOL(md_maxreadahead);
@@ -980,37 +1040,6 @@ int unregister_md_personality (int p_num)
   pers[i]=NULL;
   return 0;
 } 
-
-int md_thread(void * arg)
-{
-	struct md_thread *thread = arg;
-
-	current->session = 1;
-	current->pgrp = 1;
-	sprintf(current->comm, "md_thread");
-
-	lock_kernel();
-	for (;;) {
-		sti();
-		clear_bit(THREAD_WAKEUP, &thread->flags);
-		if (thread->run) {
-			thread->run(thread->data);
-			run_task_queue(&tq_disk);
-		}
-		cli();
-		if (!test_bit(THREAD_WAKEUP, &thread->flags)) {
-			do {
-			         spin_lock(&current->sigmask_lock);
-				 flush_signals(current);
-				 spin_unlock(&current->sigmask_lock);
-				 interruptible_sleep_on(&thread->wqueue);
-				 cli();
-				 if (test_bit(THREAD_WAKEUP, &thread->flags))
-				 	break;
-			} while (signal_pending(current));
-		}
-	}
-}
 
 static md_descriptor_t *get_spare(struct md_dev *mddev)
 {
@@ -1281,8 +1310,6 @@ void raid5_init (void);
 
 __initfunc(int md_init (void))
 {
-  int i;
-
   printk ("md driver %d.%d.%d MAX_MD_DEV=%d, MAX_REAL=%d\n",
     MD_MAJOR_VERSION, MD_MINOR_VERSION, MD_PATCHLEVEL_VERSION,
     MAX_MD_DEV, MAX_REAL);
@@ -1291,15 +1318,6 @@ __initfunc(int md_init (void))
   {
     printk ("Unable to get major %d for md\n", MD_MAJOR);
     return (-1);
-  }
-
-  memset(md_threads, 0, MAX_MD_THREADS * sizeof(struct md_thread));
-  printk("md: starting %d kernel threads\n", MAX_MD_THREADS);
-  for (i = 0; i < MAX_MD_THREADS; i++) {
-    md_threads[i].run = NULL;
-    init_waitqueue(&md_threads[i].wqueue);
-    md_threads[i].flags = 0;
-    kernel_thread (md_thread, md_threads + i, 0);
   }
 
   blk_dev[MD_MAJOR].request_fn=DEVICE_REQUEST;

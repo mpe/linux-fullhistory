@@ -17,8 +17,9 @@
 #include <asm/pmu.h>
 #include <asm/uaccess.h>
 #include <asm/hydra.h>
+#include <asm/init.h>
 
-enum adb_hw adb_hardware;
+enum adb_hw adb_hardware = ADB_NONE;
 int (*adb_send_request)(struct adb_request *req, int sync);
 int (*adb_autopoll)(int on);
 static void adb_scan_bus(void);
@@ -28,6 +29,8 @@ static struct adb_handler {
 	int original_address;
 	int handler_id;
 } adb_handler[16];
+
+__openfirmware
 
 static int adb_nodev(void)
 {
@@ -137,7 +140,6 @@ static void adb_scan_bus(void)
 
 void adb_init(void)
 {
-	adb_hardware = ADB_NONE;
 	adb_send_request = (void *) adb_nodev;
 	adb_autopoll = (void *) adb_nodev;
 	if ( (_machine != _MACH_chrp) && (_machine != _MACH_Pmac) )

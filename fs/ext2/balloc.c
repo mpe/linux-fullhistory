@@ -32,6 +32,7 @@
 #include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/locks.h>
+#include <linux/quotaops.h>
 
 #include <asm/bitops.h>
 #include <asm/byteorder.h>
@@ -321,8 +322,7 @@ do_more:
 				      "bit already cleared for block %lu", 
 				      block);
 		else {
-			if (sb->dq_op)
-				sb->dq_op->free_block(inode, fs_to_dq_blocks(1, sb->s_blocksize));
+			DQUOT_FREE_BLOCK(sb, inode, 1);
 			gdp->bg_free_blocks_count =
 				cpu_to_le16(le16_to_cpu(gdp->bg_free_blocks_count)+1);
 			es->s_free_blocks_count =
@@ -524,12 +524,7 @@ got_block:
 	/*
 	 * Check quota for allocation of this block.
 	 */
-	if (sb->dq_op)
-		if (sb->dq_op->alloc_block (inode, fs_to_dq_blocks(1, sb->s_blocksize))) {
-			unlock_super (sb);
-			*err = -EDQUOT;
-			return 0;
-		}
+	DQUOT_ALLOC_BLOCK(sb, inode, 1);
 
 	tmp = j + i * EXT2_BLOCKS_PER_GROUP(sb) + le32_to_cpu(es->s_first_data_block);
 
@@ -544,8 +539,7 @@ got_block:
 	if (ext2_set_bit (j, bh->b_data)) {
 		ext2_warning (sb, "ext2_new_block",
 			      "bit already set for block %d", j);
-		if (sb->dq_op)
-			sb->dq_op->free_block(inode, fs_to_dq_blocks(1, sb->s_blocksize));
+		DQUOT_FREE_BLOCK(sb, inode, 1);
 		goto repeat;
 	}
 
@@ -566,12 +560,9 @@ got_block:
 		for (k = 1;
 		     k < prealloc_goal && (j + k) < EXT2_BLOCKS_PER_GROUP(sb);
 		     k++) {
-			if (sb->dq_op)
-				if (sb->dq_op->alloc_block(inode, fs_to_dq_blocks(1, sb->s_blocksize)))
-					break;
+			DQUOT_PREALLOC_BLOCK(sb, inode, 1);
 			if (ext2_set_bit (j + k, bh->b_data)) {
-				if (sb->dq_op)
-					sb->dq_op->free_block(inode, fs_to_dq_blocks(1, sb->s_blocksize));
+				DQUOT_FREE_BLOCK(sb, inode, 1);
  				break;
 			}
 			(*prealloc_count)++;

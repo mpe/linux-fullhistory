@@ -1,4 +1,4 @@
-/* $Id: io-unit.c,v 1.10 1998/03/03 12:31:14 jj Exp $
+/* $Id: io-unit.c,v 1.11 1998/04/13 07:26:37 davem Exp $
  * io-unit.c:  IO-UNIT specific routines for memory management.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek    (jj@sunsite.mff.cuni.cz)
@@ -23,22 +23,17 @@
 #define IOD(x) do { } while (0)
 #endif
 
-#define LONG_ALIGN(x) (((x)+(sizeof(long))-1)&~((sizeof(long))-1))
-
 #define IOPERM        (IOUPTE_CACHE | IOUPTE_WRITE | IOUPTE_VALID)
 #define MKIOPTE(phys) __iopte((((phys)>>4) & IOUPTE_PAGE) | IOPERM)
 
-__initfunc(unsigned long
-iounit_init(int sbi_node, int io_node, unsigned long memory_start,
-	    unsigned long memory_end, struct linux_sbus *sbus))
+__initfunc(void
+iounit_init(int sbi_node, int io_node, struct linux_sbus *sbus))
 {
 	iopte_t *xpt, *xptend;
 	struct iounit_struct *iounit;
 	struct linux_prom_registers iommu_promregs[PROMREG_MAX];
 	
-	memory_start = LONG_ALIGN(memory_start);
-	iounit = (struct iounit_struct *)memory_start;
-	memory_start = LONG_ALIGN(memory_start + sizeof(struct iounit_struct));
+	iounit = kmalloc(sizeof(struct iounit_struct), GFP_ATOMIC);
 	
 	memset(iounit, 0, sizeof(*iounit));
 	iounit->limit[0] = IOUNIT_BMAP1_START;
@@ -62,8 +57,6 @@ iounit_init(int sbi_node, int io_node, unsigned long memory_start,
 	for (xptend = iounit->page_table + (16 * PAGE_SIZE) / sizeof(iopte_t);
 	     xpt < xptend;)
 	     	*xpt++ = 0;
-	     	
-	return memory_start;
 }
 
 /* One has to hold iounit->lock to call this */

@@ -190,7 +190,11 @@
 		.long	SYMBOL_NAME(sys_rt_sigsuspend_wrapper)
 /* 180 */	.long	SYMBOL_NAME(sys_pread)
 		.long	SYMBOL_NAME(sys_pwrite)
+#if 0
 		.long	SYMBOL_NAME(sys_xstat)
 		.long	SYMBOL_NAME(sys_xmknod)
+#else
+		.space	8
+#endif
 		.space	(NR_syscalls - 184) * 4
 #endif

@@ -5,7 +5,7 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * $Id: keyboard.h,v 1.8 1997/12/02 05:51:14 ralf Exp $
+ * $Id: keyboard.h,v 1.7 1998/05/01 01:35:57 ralf Exp $
  */
 #ifndef __ASM_MIPS_KEYBOARD_H
 #define __ASM_MIPS_KEYBOARD_H

@@ -1,4 +1,4 @@
-/* $Id: page.h,v 1.17 1998/01/14 17:16:28 jj Exp $ */
+/* $Id: page.h,v 1.18 1998/05/01 09:33:50 davem Exp $ */
 
 #ifndef _SPARC64_PAGE_H
 #define _SPARC64_PAGE_H
@@ -13,9 +13,61 @@
 
 #define PAGE_MASK    (~(PAGE_SIZE-1))
 
+
 #ifdef __KERNEL__
 
 #ifndef __ASSEMBLY__
+
+#define PAGE_ALIAS_BITS		(PAGE_SIZE)	/* 16K Dcache, 8K pages */
+#ifdef __SMP__
+#define ULOCK_DECLARE extern spinlock_t user_page_lock;
+#else
+#define ULOCK_DECLARE
+#endif
+struct upcache {
+	struct page *list;
+	unsigned long count;
+};
+extern struct upcache user_page_cache[2];
+#define USER_PAGE_WATER		16
+
+extern unsigned long get_user_page_slow(int which);
+#define get_user_page(__vaddr) \
+({ \
+	ULOCK_DECLARE \
+	int which = ((__vaddr) & PAGE_ALIAS_BITS) ? 1 : 0; \
+	struct upcache *up = &user_page_cache[which]; \
+	struct page *p; \
+	unsigned long ret; \
+	spin_lock(&user_page_lock); \
+	if((p = up->list) != NULL) { \
+		up->list = p->next; \
+		up->count--; \
+	} \
+	spin_unlock(&user_page_lock); \
+	if(p != NULL) \
+		ret = PAGE_OFFSET+PAGE_SIZE*p->map_nr; \
+	else \
+		ret = get_user_page_slow(which); \
+	ret; \
+})
+
+#define free_user_page(__page, __addr) \
+do { \
+	ULOCK_DECLARE \
+	int which = ((__addr) & PAGE_ALIAS_BITS) ? 1 : 0; \
+	struct upcache *up = &user_page_cache[which]; \
+	if(atomic_read(&(__page)->count) == 1 && \
+           up->count < USER_PAGE_WATER) { \
+		spin_lock(&user_page_lock); \
+		(__page)->age = PAGE_INITIAL_AGE; \
+		(__page)->next = up->list; \
+		up->list = (__page); \
+		up->count++; \
+		spin_unlock(&user_page_lock); \
+	} else \
+		free_page(addr); \
+} while(0)
 
 #define clear_page(page) memset((void *)(page), 0, PAGE_SIZE)
 
@@ -81,9 +133,15 @@ typedef unsigned long iopgprot_t;
 
 #endif /* (STRICT_MM_TYPECHECKS) */
 
-#define TASK_UNMAPPED_BASE	((current->tss.flags & SPARC_FLAG_32BIT) ? \
-				 (0x0000000070000000UL) : \
-				 (0xfffff80000000000UL))
+#define TASK_UNMAPPED_BASE(__off)	(((current->tss.flags & SPARC_FLAG_32BIT) ? \
+				 	 (0x0000000070000000UL) : \
+				 	 (0xfffff80000000000UL)) + \
+					 (__off & PAGE_SIZE))
+
+/* On Ultra this aligns to the size of the L1 cache. */
+#define TASK_UNMAPPED_ALIGN(__addr, __off) \
+	((((__addr)+((PAGE_SIZE<<1UL)-1UL)) & ~((PAGE_SIZE << 1UL)-1UL)) + \
+	 (__off&PAGE_SIZE))
 
 #endif /* !(__ASSEMBLY__) */
 

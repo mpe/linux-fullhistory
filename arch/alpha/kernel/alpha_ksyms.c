@@ -23,6 +23,7 @@
 #include <linux/interrupt.h>
 #include <asm/softirq.h>
 #include <asm/fpu.h>
+#include <asm/irq.h>
 
 #define __KERNEL_SYSCALLS__
 #include <asm/unistd.h>
@@ -43,6 +44,8 @@ extern void __remqu (void);
 
 EXPORT_SYMBOL(local_bh_count);
 EXPORT_SYMBOL(local_irq_count);
+EXPORT_SYMBOL(enable_irq);
+EXPORT_SYMBOL(disable_irq);
 
 /* platform dependent support */
 EXPORT_SYMBOL(_inb);

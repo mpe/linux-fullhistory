@@ -1,4 +1,4 @@
-/* $Id: irixioctl.c,v 1.2 1997/12/02 05:51:06 ralf Exp $
+/* $Id: irixioctl.c,v 1.6 1998/05/01 01:33:59 ralf Exp $
  * irixioctl.c: A fucking mess...
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
@@ -56,8 +56,8 @@ static struct tty_struct *get_real_tty(struct tty_struct *tp)
 asmlinkage int irix_ioctl(int fd, unsigned long cmd, unsigned long arg)
 {
 	struct tty_struct *tp, *rtp;
+	mm_segment_t old_fs;
 	int error = 0;
-	int old_fs;
 
 	lock_kernel();
 #ifdef DEBUG_IOCTLS
@@ -237,7 +237,7 @@ asmlinkage int irix_ioctl(int fd, unsigned long cmd, unsigned long arg)
 
 	default: {
 #ifdef DEBUG_MISSING_IOCTL
-		char *msg = "Unimplemented IOCTL cmd tell dm@engr.sgi.com\n";
+		char *msg = "Unimplemented IOCTL cmd tell linux@engr.sgi.com\n";
 
 #ifdef DEBUG_IOCTLS
 		printk("UNIMP_IOCTL, %08lx)\n", arg);

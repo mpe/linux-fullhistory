@@ -72,9 +72,9 @@ extern inline unix_socket *unix_get_socket(struct file *filp)
 		struct sock * s = sock->sk;
 
 		/*
-		 *	AF_UNIX ?
+		 *	PF_UNIX ?
 		 */
-		if (s && sock->ops && sock->ops->family == AF_UNIX)
+		if (s && sock->ops && sock->ops->family == PF_UNIX)
 			u_sock = s;
 	}
 	return u_sock;

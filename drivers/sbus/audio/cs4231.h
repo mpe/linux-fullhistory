@@ -10,65 +10,83 @@
 
 #include <linux/types.h>
 
+/* According to the CS4231A data provided on CS web site and sun's includes */
+
 struct cs4231_regs {
-         u_char iar;            /* Index Address Register */
-         u_char pad0[3];         
-         u_char idr;            /* Indexed Data Register */
-         u_char pad1[3];        
-         u_char statr;          /* Status Register */
-         u_char pad2[3];        
-         u_char piodr;          /* PIO Data Register I/O */
-         u_char pad3[3];        
+  __volatile__ __u8 iar;            /* Index Address Register */
+  __volatile__ __u8 pad0[3];         
+  __volatile__ __u8 idr;            /* Indexed Data Register */
+  __volatile__ __u8 pad1[3];        
+  __volatile__ __u8 statr;          /* Status Register */
+  __volatile__ __u8 pad2[3];        
+  __volatile__ __u8 piodr;          /* PIO Data Register */
+  __volatile__ __u8 pad3[3];        
+  __volatile__ __u32 dmacsr;         /* APC CSR */
+  __volatile__ __u32 dmapad[3];        
+  __volatile__ __u32 dmacva;         /* Capture Virtual Address */
+  __volatile__ __u32 dmacc;          /* Capture Count */
+  __volatile__ __u32 dmacnva;        /* Capture Next Virtual Address */
+  __volatile__ __u32 dmacnc;         /* Capture Next Count */
+  __volatile__ __u32 dmapva;         /* Playback Virtual Address */
+  __volatile__ __u32 dmapc;          /* Playback Count */
+  __volatile__ __u32 dmapnva;        /* Playback Next Virtual Address */
+  __volatile__ __u32 dmapnc;         /* Playback Next Count */
 };
 
-struct cs4231_dma {
-         u_long         dmacsr;         /* APC CSR */
-         u_long         dmapad[3];        
-         u_long         dmacva;         /* Capture Virtual Address */
-         u_long         dmacc;          /* Capture Count */
-         u_long         dmacnva;        /* Capture Next Virtual Address */
-         u_long         dmacnc;         /* Capture Next Count */
-         u_long         dmapva;         /* Playback Virtual Address */
-         u_long         dmapc;          /* Playback Count */
-         u_long         dmapnva;        /* Playback Next Virtual Address */
-         u_long         dmapnc;         /* Playback Next Count */
-};
+/* Our structure for each chip */
 
 struct cs4231_chip {
-        struct cs4231_regs *pioregs;
-        struct cs4231_dma dmaregs;
-	struct audio_info perchip_info;
-	int irq;
-	unsigned long regs_size;
+  struct cs4231_regs *regs;
+  struct audio_info perchip_info;
+  unsigned int playlen, reclen;
+  int irq;
+  unsigned long regs_size;
+  
+  /* Keep track of various info */
+  volatile unsigned int status;
+  
+  /* Current buffer that the driver is playing. */
+  volatile __u8 * output_ptr;
+  volatile unsigned long output_size;
 
-	/* Keep track of various info */
-	volatile unsigned int status;
+  /* Current record buffer. */
+  volatile __u8 * input_ptr;
+  volatile unsigned long input_size;
 
-        int dma;
-        int dma2;
+  /* Number of buffers in the pipe. */
+  volatile unsigned long playing_count;
+  volatile unsigned long recording_count;
 };
 
-/* Status bits */
+/* Local status bits */
 #define CS_STATUS_NEED_INIT 0x01
 #define CS_STATUS_INIT_ON_CLOSE 0x02
 #define CS_STATUS_REV_A 0x04
+#define CS_STATUS_INTS_ON 0x08
+#define CS_STATUS_IS_ULTRA 0x10
 
 #define CS_TIMEOUT      9000000
 
 #define GAIN_SET(var, gain)     ((var & ~(0x3f)) | gain)
 #define RECGAIN_SET(var, gain)  ((var & ~(0x1f)) | gain)
 
-#define IAR_AUTOCAL_BEGIN       0x40 /* IAR_MCE */
-#define IAR_AUTOCAL_END         ~(0x40) /* IAR_MCD */
-#define IAR_NOT_READY            0x80    /* 80h not ready CODEC state */
+/* bits 0-3 set address of register accessed by idr register */
+/* bit 4 allows access to idr registers 16-31 in mode 2 only */
+/* bit 5 if set causes dma transfers to cease if the int bit of status set */
+#define IAR_AUTOCAL_BEGIN       0x40    /* MCE */
+#define IAR_NOT_READY           0x80    /* INIT */
 
-/* Each register assumed mode 1 and 2 unless noted */
+#define IAR_AUTOCAL_END         ~(IAR_AUTOCAL_BEGIN) /* MCD */
+
+/* Registers 1-15 modes 1 and 2. Registers 16-31 mode 2 only */
+/* Registers assumed to be same in both modes unless noted */
 
 /* 0 - Left Input Control */
 /* 1 - Right Input Control */
 #define MIC_ENABLE(var)         ((var & 0x2f) | 0x80)
 #define LINE_ENABLE(var)        (var & 0x2f)
 #define CDROM_ENABLE(var)       ((var & 0x2f) | 0x40)
+#define OUTPUTLOOP_ENABLE(var)  ((var & 0x2f) | 0xC0)
 #define INPUTCR_AUX1            0x40
 
 /* 2 - Left Aux 1 Input Control */
@@ -85,31 +103,41 @@ struct cs4231_chip {
 #define CHANGE_DFR(var, val)            ((var & ~(0xF)) | val)
 #define CHANGE_ENCODING(var, val)       ((var & ~(0xe0)) | val)
 #define DEFAULT_DATA_FMAT               CS4231_DFR_ULAW
+#define CS4231_DFR_5512                 0x01
+#define CS4231_DFR_6615                 0x0f
 #define CS4231_DFR_8000                 0x00
 #define CS4231_DFR_9600                 0x0e
 #define CS4231_DFR_11025                0x03
 #define CS4231_DFR_16000                0x02
 #define CS4231_DFR_18900                0x05
 #define CS4231_DFR_22050                0x07
+#define CS4231_DFR_27429                0x04
 #define CS4231_DFR_32000                0x06
+#define CS4231_DFR_33075                0x0d
 #define CS4231_DFR_37800                0x09
 #define CS4231_DFR_44100                0x0b
 #define CS4231_DFR_48000                0x0c
 #define CS4231_DFR_LINEAR8              0x00
 #define CS4231_DFR_ULAW                 0x20
+#define CS4231_DFR_LINEARLE             0x40
 #define CS4231_DFR_ALAW                 0x60
-#define CS4231_DFR_ADPCM                0xa0
-#define CS4231_DFR_LINEARBE             0xc0
+#define CS4231_DFR_ADPCM                0xa0 /* N/A in mode 1 */
+#define CS4231_DFR_LINEARBE             0xc0 /* N/A in mode 1 */
 #define CS4231_STEREO_ON(val)           (val | 0x10)
 #define CS4231_MONO_ON(val)             (val & ~0x10)
 
 /* 9 - Interface Config. Register */
-#define CHIP_INACTIVE           0x08
-#define PEN_ENABLE              (0x01)
+#define PEN_ENABLE              (0x01) /* Playback Enable */
 #define PEN_DISABLE             (~0x01)
-#define CEN_ENABLE              (0x02)
+#define CEN_ENABLE              (0x02) /* Capture Enable */
 #define CEN_DISABLE             (~0x02)
-#define ACAL_DISABLE            (~0x08)
+#define SDC_ENABLE              (0x04) /* Turn on single DMA Channel mode */
+#define ACAL_CONV               0x08   /* Turn on converter autocal */
+#define ACAL_DISABLE            (~0x08) 
+#define ACAL_DAC                0x10  /* Turn on DAC autocal */
+#define ACAL_FULL               (ACAL_DAC|ACAL_CONV) /* Turn on full autocal */
+#define PPIO                    0x20 /* do playback via PIO rather than DMA */
+#define CPIO                    0x40 /* do capture via PIO rather than DMA */
 #define ICR_AUTOCAL_INIT        0x01
 
 /* 10 - Pin Control Register */
@@ -129,8 +157,8 @@ struct cs4231_chip {
 #define LOOPB_ON                0x01
 #define LOOPB_OFF               0x00
 
-/* 14 - Unused (mode 1) */
-/* 15 - Unused (mode 1) */
+/* 14 - shared play/capture upper (mode 1) */
+/* 15 - shared play/capture lower (mode 1) */
 
 /* 14 - Playback Upper (mode 2) */
 /* 15 - Playback Lower (mode 2) */
@@ -138,11 +166,16 @@ struct cs4231_chip {
 /* The rest are mode 2 only */
 
 /* 16 - Alternate Feature 1 Enable */
-#define OLB_ENABLE              0x80
+#define DAC_ZERO                0x01
+#define PLAY_MCE                0x10
+#define CAPTURE_MCE             0x20
+#define TIMER_ENABLE            0x40
+#define OLB_ENABLE              0x80 /* go to 2.88 vpp analog output */
 
 /* 17 - Alternate Feature 2 Enable */
-#define HPF_ON                  0x01
-#define XTALE_ON                0x20
+#define HPF_ON                  0x01 /* High Pass Filter */
+#define XTALE_ON                0x02 /* Enable both crystals */
+#define APAR_OFF                0x04 /* ADPCM playback accum reset */
 
 /* 18 - Left Line Input Gain */
 /* 19 - Right Line Input Gain */
@@ -151,11 +184,18 @@ struct cs4231_chip {
 /* 21 - Timer Low */
 
 /* 22 - unused */
-/* 23 - unused */
+
+/* 23 - Alt. Fea. Ena 3 */
+#define ACF 0x01
 
 /* 24 - Alternate Feature Status */
 #define CS_PU                   0x01 /* Underrun */
-#define CS_PO                   0x20 /* Overrun */
+#define CS_PO                   0x02 /* Overrun */
+#define CS_CU                   0x04 /* Underrun */
+#define CS_CO                   0x08 /* Overrun */
+#define CS_PI                   0x10 
+#define CS_CI                   0x20 
+#define CS_TI                   0x40 
 
 /* 25 - Version */
 #define CS4231A         0x20
@@ -163,7 +203,9 @@ struct cs4231_chip {
 
 /* 26 - Mono I/O Control */
 #define CHANGE_MONO_GAIN(val)   ((val & ~(0xFF)) | val)
+#define MONO_IOCR_BYPASS     0x20 
 #define MONO_IOCR_MUTE       0x40
+#define MONO_IOCR_INMUTE     0x80
 
 /* 27 - Unused */
 
@@ -176,29 +218,29 @@ struct cs4231_chip {
 /* 31 - Capture Lower */
 
 /* Following are CSR register definitions for the Sparc */
-/* Also list "Solaris" equivs for now, not really useful tho */
-#define CS_INT_PENDING 0x800000 /* APC_IP */ /* Interrupt Pending */
-#define CS_PLAY_INT    0x400000 /* APC_PI */ /* Playback interrupt */
-#define CS_CAPT_INT    0x200000 /* APC_CI */ /* Capture interrupt */
-#define CS_GENL_INT    0x100000 /* APC_EI */ /* General interrupt */
-#define CS_XINT_ENA    0x80000  /* APC_IE */ /* General ext int. enable */
-#define CS_XINT_PLAY   0x40000  /* APC_PIE */ /* Playback ext intr */
-#define CS_XINT_CAPT   0x20000  /* APC_CIE */ /* Capture ext intr */
-#define CS_XINT_GENL   0x10000  /* APC_EIE */ /* Error ext intr */
-#define CS_XINT_EMPT   0x8000   /* APC_PMI */ /* Pipe empty interrupt */
-#define CS_XINT_PEMP   0x4000   /* APC_PM */ /* Play pipe empty */
-#define CS_XINT_PNVA   0x2000   /* APC_PD */ /* Playback NVA dirty */
-#define CS_XINT_PENA   0x1000   /* APC_PMIE */ /* play pipe empty Int enable */
-#define CS_XINT_COVF   0x800    /* APC_CM */ /* Cap data dropped on floor */
-#define CS_XINT_CNVA   0x400    /* APC_CD */ /* Capture NVA dirty */
-#define CS_XINT_CEMP   0x200    /* APC_CMI */ /* Capture pipe empty interrupt */
-#define CS_XINT_CENA   0x100    /* APC_CMIE */ /* Cap. pipe empty int enable */
-#define CS_PPAUSE      0x80     /* APC_PPAUSE */ /* Pause the play DMA */
-#define CS_CPAUSE      0x40     /* APC_CPAUSE */ /* Pause the capture DMA */
-#define CS_CDC_RESET   0x20     /* APC_CODEC_PDN */ /* CODEC RESET */
-#define PDMA_READY     0x08     /* PDMA_GO */
-#define CDMA_READY     0x04     /* CDMA_GO */
-#define CS_CHIP_RESET  0x01     /* APC_RESET */       /* Reset the chip */
+
+#define CS_INT_PENDING 0x800000 /* Interrupt Pending */
+#define CS_PLAY_INT    0x400000 /* Playback interrupt */
+#define CS_CAPT_INT    0x200000 /* Capture interrupt */
+#define CS_GENL_INT    0x100000 /* General interrupt */
+#define CS_XINT_ENA    0x80000  /* General ext int. enable */
+#define CS_XINT_PLAY   0x40000  /* Playback ext intr */
+#define CS_XINT_CAPT   0x20000  /* Capture ext intr */
+#define CS_XINT_GENL   0x10000  /* Error ext intr */
+#define CS_XINT_EMPT   0x8000   /* Pipe empty interrupt */
+#define CS_XINT_PEMP   0x4000   /* Play pipe empty */
+#define CS_XINT_PNVA   0x2000   /* Playback NVA dirty */
+#define CS_XINT_PENA   0x1000   /* play pipe empty Int enable */
+#define CS_XINT_COVF   0x800    /* Cap data dropped on floor */
+#define CS_XINT_CNVA   0x400    /* Capture NVA dirty */
+#define CS_XINT_CEMP   0x200    /* Capture pipe empty interrupt */
+#define CS_XINT_CENA   0x100    /* Cap. pipe empty int enable */
+#define CS_PPAUSE      0x80     /* Pause the play DMA */
+#define CS_CPAUSE      0x40     /* Pause the capture DMA */
+#define CS_CDC_RESET   0x20     /* CODEC RESET */
+#define PDMA_READY     0x08     /* Play DMA Go */
+#define CDMA_READY     0x04     /* Capture DMA Go */
+#define CS_CHIP_RESET  0x01     /* Reset the chip */
 
 #define CS_INIT_SETUP  (CDMA_READY | PDMA_READY | CS_XINT_ENA | CS_XINT_PLAY | CS_XINT_GENL | CS_INT_PENDING | CS_PLAY_INT | CS_CAPT_INT | CS_GENL_INT) 
 
@@ -223,8 +265,5 @@ struct cs4231_chip {
 #define CS4231_CHANNELS     (1)             /* channels/sample */
 
 #define CS4231_RATE   (8000)                /* default sample rate */
-/* Other rates supported are:
- * 9600, 11025, 16000, 18900, 22050, 32000, 37800, 44100, 48000 
- */
 
 #endif

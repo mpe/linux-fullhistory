@@ -32,21 +32,6 @@ extern spinlock_t io_request_lock;
 (s1)->sector < (s2)->sector)))
 
 /*
- * These will have to be changed to be aware of different buffer
- * sizes etc.. It actually needs a major cleanup.
- */
-#if defined(IDE_DRIVER) || defined(MD_DRIVER)
-#define SECTOR_MASK ((BLOCK_SIZE >> 9) - 1)
-#else
-#define SECTOR_MASK (blksize_size[MAJOR_NR] &&     \
-	blksize_size[MAJOR_NR][MINOR(CURRENT->rq_dev)] ? \
-	((blksize_size[MAJOR_NR][MINOR(CURRENT->rq_dev)] >> 9) - 1) :  \
-	((BLOCK_SIZE >> 9)  -  1))
-#endif /* IDE_DRIVER */
-
-#define SUBSECTOR(block) (CURRENT->current_nr_sectors > 0)
-
-/*
  * Initialization functions.
  */
 extern int isp16_init(void);
@@ -65,12 +50,18 @@ extern int cdi_init(void);
 extern int hd_init(void);
 extern int ide_init(void);
 extern int xd_init(void);
+extern int mfm_init(void);
 extern int loop_init(void);
 extern int md_init(void);
 extern int ap_init(void);
 extern int ddv_init(void);
 extern int z2_init(void);
 extern int swim3_init(void);
+extern int amiga_floppy_init(void);
+extern int atari_floppy_init(void);
+extern int nbd_init(void);
+extern int ez_init(void);
+extern int bpcd_init(void);
 extern int ps2esdi_init(void);
 
 extern void set_device_ro(kdev_t dev,int flag);
@@ -112,6 +103,7 @@ void initrd_init(void);
 #define DEVICE_NR(device)	(MINOR(device) >> PARTN_BITS)
 #define DEVICE_ON(device)	/* nothing */
 #define DEVICE_OFF(device)	/* nothing */
+#define DEVICE_NAME "ide"
 
 #elif (MAJOR_NR == RAMDISK_MAJOR)
 
@@ -338,6 +330,23 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_ON(device) 
 #define DEVICE_OFF(device)
 
+#elif (MAJOR_NR == MFM_ACORN_MAJOR)
+
+#define DEVICE_NAME "mfm disk"
+#define DEVICE_INTR do_mfm
+#define DEVICE_REQUEST do_mfm_request
+#define DEVICE_NR(device) (MINOR(device) >> 6)
+#define DEVICE_ON(device)
+#define DEVICE_OFF(device)
+
+#elif (MAJOR_NR == NBD_MAJOR)
+
+#define DEVICE_NAME "nbd"
+#define DEVICE_REQUEST do_nbd_request
+#define DEVICE_NR(device) (MINOR(device))
+#define DEVICE_ON(device) 
+#define DEVICE_OFF(device)
+
 #endif /* MAJOR_NR == whatever */
 
 #if (MAJOR_NR != SCSI_TAPE_MAJOR)
@@ -347,11 +356,16 @@ static void floppy_off(unsigned int nr);
 #define CURRENT (blk_dev[MAJOR_NR].current_request)
 #endif
 
+#ifndef DEVICE_NAME
+#define DEVICE_NAME "unknown"
+#endif
+
 #define CURRENT_DEV DEVICE_NR(CURRENT->rq_dev)
 
 #ifdef DEVICE_INTR
 static void (*DEVICE_INTR)(void) = NULL;
 #endif
+
 #ifdef DEVICE_TIMEOUT
 
 #define SET_TIMER \
@@ -395,89 +409,40 @@ static void (DEVICE_REQUEST)(void);
 
 #endif /* !defined(IDE_DRIVER) */
 
-/* end_request() - SCSI devices have their own version */
-/*               - IDE drivers have their own copy too */
+/*
+ * end_request() and friends. Must be called with the request queue spinlock
+ * acquired. All functions called within end_request() _must_be_ atomic.
+ *
+ * Several drivers define their own end_request and call end_that_request_first()
+ * and end_that_request_last() for parts of the original function. This prevents
+ * code duplication in drivers.
+ */
+
+int end_that_request_first(struct request *req, int uptodate, char *name);
+void end_that_request_last(struct request *req);
+
+#ifndef LOCAL_END_REQUEST	/* If we have our own end_request, we do not want to include this mess */
 
 #if ! SCSI_BLK_MAJOR(MAJOR_NR)
 
-/*
- * The [*_]end_request() handler has to be called with the request queue
- * spinlock aquired. All functions called within end_request() _must be_
- * atomic.
- */
-#if defined(IDE_DRIVER) && !defined(_IDE_C) /* shared copy for IDE modules */
-void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup);
-#else
-
-#ifdef IDE_DRIVER
-void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup) {
-	int nsect;
-	struct buffer_head *bh;
-	struct request *req;
-	unsigned long flags;
-
-	spin_lock_irqsave(&io_request_lock,flags);
-	req = hwgroup->rq;
-#else
 static void end_request(int uptodate) {
-	int nsect;
-	struct buffer_head *bh;
 	struct request *req = CURRENT;
 
-#endif /* IDE_DRIVER */
-	req->errors = 0;
-	if (!uptodate) {
-		printk("end_request: I/O error, dev %s, sector %lu\n",
-			kdevname(req->rq_dev), req->sector);
-		if ((bh = req->bh) != NULL) {
-			nsect = bh->b_size >> 9;
-			req->nr_sectors--;
-			req->nr_sectors &= ~(nsect - 1);
-			req->sector += nsect;
-			req->sector &= ~(nsect - 1);
-		}
-	}
+	if (end_that_request_first(req, uptodate, DEVICE_NAME))
+		return;
 
-	if ((bh = req->bh) != NULL) {
-		req->bh = bh->b_reqnext;
-		bh->b_reqnext = NULL;
-		bh->b_end_io(bh, uptodate);
-		if ((bh = req->bh) != NULL) {
-			req->current_nr_sectors = bh->b_size >> 9;
-			if (req->nr_sectors < req->current_nr_sectors) {
-				req->nr_sectors = req->current_nr_sectors;
-				printk("end_request: buffer-list destroyed\n");
-			}
-			req->buffer = bh->b_data;
-#ifdef IDE_DRIVER
-			spin_unlock_irqrestore(&io_request_lock,flags);
-#endif /* IDE_DRIVER */
-			return;
-		}
-	}
 #ifndef DEVICE_NO_RANDOM
 	add_blkdev_randomness(MAJOR(req->rq_dev));
 #endif
-#ifdef IDE_DRIVER
-	hwgroup->drive->queue = req->next;
-	blk_dev[MAJOR(req->rq_dev)].current_request = NULL;
-	hwgroup->rq = NULL;
-#else
 	DEVICE_OFF(req->rq_dev);
 	CURRENT = req->next;
-#endif /* IDE_DRIVER */
-	if (req->sem != NULL)
-		up(req->sem);
-	req->rq_status = RQ_INACTIVE;
-	wake_up(&wait_for_request);
-#ifdef IDE_DRIVER
-	spin_unlock_irqrestore(&io_request_lock,flags);
-#endif /* IDE_DRIVER */
+	end_that_request_last(req);
 }
-#endif /* defined(IDE_DRIVER) && !defined(_IDE_C) */
-#endif /* ! SCSI_BLK_MAJOR(MAJOR_NR) */
-#endif /* (MAJOR_NR != SCSI_TAPE_MAJOR) */
 
+#endif /* ! SCSI_BLK_MAJOR(MAJOR_NR) */
+#endif /* LOCAL_END_REQUEST */
+
+#endif /* (MAJOR_NR != SCSI_TAPE_MAJOR) */
 #endif /* defined(MAJOR_NR) || defined(IDE_DRIVER) */
 
 #endif /* _BLK_H */

@@ -16,6 +16,7 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 
+#include <asm/hardirq.h>
 #include <asm/pgtable.h>
 #include <asm/mmu_context.h>
 #include <asm/system.h>
@@ -43,6 +44,8 @@ asmlinkage void do_page_fault(struct pt_regs *regs, unsigned long writeaccess,
 	struct mm_struct *mm = tsk->mm;
 	unsigned long fixup;
 
+	if (local_irq_count[smp_processor_id()] != 0)
+		die_if_kernel("page fault from irq handler", regs, writeaccess);
 	lock_kernel();
 #if 0
 	printk("[%s:%d:%08lx:%ld:%08lx]\n", current->comm, current->pid,
@@ -85,7 +88,7 @@ bad_area:
 	if (user_mode(regs)) {
 		tsk->tss.cp0_badvaddr = address;
 		tsk->tss.error_code = writeaccess;
-#if 1
+#if 0
 		printk("do_page_fault() #2: sending SIGSEGV to %s for illegal %s\n"
 		       "%08lx (epc == %08lx, ra == %08lx)\n",
 		       tsk->comm,
@@ -94,9 +97,6 @@ bad_area:
 		       (unsigned long) regs->cp0_epc,
 		       (unsigned long) regs->regs[31]);
 #endif
-
-		current->tss.cp0_badvaddr = address;
-		current->tss.error_code = writeaccess;
 		force_sig(SIGSEGV, tsk);
 		goto out;
 	}
@@ -105,6 +105,8 @@ bad_area:
 	fixup = search_exception_table(regs->cp0_epc);
 	if (fixup) {
 		long new_epc;
+
+		tsk->tss.cp0_baduaddr = address;
 		new_epc = fixup_exception(dpf_reg, fixup, regs->cp0_epc);
 		printk(KERN_DEBUG "%s: Exception at [<%lx>] (%lx)\n",
 		       tsk->comm, regs->cp0_epc, new_epc);

@@ -488,6 +488,13 @@ int apfddi_stop(struct device *dev)
 int apfddi_init(struct device *dev)
 {
     int i;
+
+    /*
+     * Check if this thing has already been initialised.
+     */
+    if (apfddi_device != NULL)
+	return -ENODEV;
+
     printk("apfddi_init(): Initialising fddi interface\n");
 
     apfddi_device = dev;
@@ -523,12 +530,6 @@ int apfddi_init(struct device *dev)
 
     memset(dev->broadcast, 0xFF, ETH_ALEN);
     
-    dev->family = AF_INET;
-    dev->pa_addr = in_aton("150.203.142.28");  /* hibana-f */
-    dev->pa_mask = in_aton("255.255.255.0");
-    dev->pa_brdaddr = dev->pa_addr | ~dev->pa_mask;
-    dev->pa_alen = 4;
-
     return(0);
 }
 

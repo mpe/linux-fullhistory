@@ -156,4 +156,7 @@
 #define	EDQUOT		1133	/* Quota exceeded */
 #define ENFSREMOTE	1134	/* ??? */
 
+/* The biggest error number defined here or in <linux/errno.h>. */
+#define EMAXERRNO	1134
+
 #endif /* __ASM_MIPS_ERRNO_H */

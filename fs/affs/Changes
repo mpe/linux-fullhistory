@@ -28,6 +28,26 @@ Known bugs:
 
 Please direct bug reports to: hjw@zvw.de
 
+Version 3.9
+-----------
+
+- Moved cleanup from release_file() to put_inode().
+  This makes the the first one obsolete.
+
+- truncate() zeroes the unused remainder of a
+  partially used last block when a file is truncated.
+  It also marks the inode dirty now (which is not
+  really neccessary as notify_change() will do
+  it anyway).
+
+- Added a few comments, fixed some typos (and
+  introduced some new ones), made the debug messages
+  more consistent. Changed a bad example in the
+  doc file (affs.txt).
+
+- Sets the NOEXEC flag in read_super() for old file
+  systems, since you can't run programs on them.
+
 Version 3.8
 -----------
 Bill Hawes kindly reviewed the affs and sent me the

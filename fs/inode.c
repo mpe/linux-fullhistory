@@ -8,6 +8,7 @@
 #include <linux/string.h>
 #include <linux/mm.h>
 #include <linux/dcache.h>
+#include <linux/quotaops.h>
 
 /*
  * New inode.c implementation.
@@ -190,6 +191,7 @@ void sync_inodes(kdev_t dev)
 			continue;
 
 		sync_list(&sb->s_dirty);
+
 		if (dev)
 			break;
 	}
@@ -223,8 +225,8 @@ void clear_inode(struct inode *inode)
 	if (inode->i_nrpages)
 		truncate_inode_pages(inode, 0);
 	wait_on_inode(inode);
-	if (IS_WRITABLE(inode) && inode->i_sb && inode->i_sb->dq_op)
-		inode->i_sb->dq_op->drop(inode);
+	if (IS_QUOTAINIT(inode))
+		DQUOT_DROP(inode);
 	if (inode->i_sb && inode->i_sb->s_op && inode->i_sb->s_op->clear_inode)
 		inode->i_sb->s_op->clear_inode(inode);
 

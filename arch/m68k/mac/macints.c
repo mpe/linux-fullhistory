@@ -174,8 +174,6 @@ void mac_init_IRQ(void)
 {
         int i;
 
-	mac_debugging_penguin(6);
-
 #ifdef DEBUG_MACINTS
 	printk("Mac interrupt stuff initializing ...\n");
 #endif
@@ -274,7 +272,6 @@ void mac_init_IRQ(void)
 	param_table[2]   =   &rbv_param[0];
 	param_table[3]   = &nubus_param[0];
 
-	mac_debugging_penguin(7);
 #ifdef DEBUG_MACINTS
 	printk("Mac interrupt init done!\n");
 #endif
@@ -626,7 +623,7 @@ static void via_irq(unsigned char *via, int *viaidx, struct pt_regs *regs)
 	 
 	if(events==0)
 	{
-		printk("via_irq: nothing pending!\n");
+		printk("via%d_irq: nothing pending!\n", *viaidx + 1);
 		return;
 	}
 
@@ -869,14 +866,14 @@ void mac_SCC_handler(int irq, void *dev_id, struct pt_regs *regs)
  
 static int nubus_active=0;
  
-int nubus_request_irq(int slot, void (*handler)(int,void *,struct pt_regs *))
+int nubus_request_irq(int slot, void *dev_id, void (*handler)(int,void *,struct pt_regs *))
 {
 	slot-=9;
 /*	printk("Nubus request irq for slot %d\n",slot);*/
 	if(nubus_handler[slot].handler!=nubus_wtf)
 		return -EBUSY;
 	nubus_handler[slot].handler=handler;
-	nubus_handler[slot].dev_id =handler;
+	nubus_handler[slot].dev_id =dev_id;
 	nubus_param[slot].flags    = IRQ_FLG_LOCK;
 	nubus_param[slot].devname  = "nubus";
 
@@ -964,7 +961,7 @@ static void via_do_nubus(int slot, void *via, struct pt_regs *regs)
 		{
 			if(map&(1<<i))
 			{
-				(nubus_handler[i].handler)(i+9, via, regs);
+				(nubus_handler[i].handler)(i+9, nubus_handler[i].dev_id, regs);
 			}
 		}
 		/* clear it */

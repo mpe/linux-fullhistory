@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 100
+SUBLEVEL = 101
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/)
 
@@ -355,7 +355,7 @@ clean:	archclean
 	fi
 	rm -f submenu*
 
-mrproper: clean
+mrproper: clean archmrproper
 	rm -f include/linux/autoconf.h include/linux/version.h
 	rm -f drivers/net/hamradio/soundmodem/sm_tbl_{afsk1200,afsk2666,fsk9600}.h
 	rm -f drivers/net/hamradio/soundmodem/sm_tbl_{hapn4800,psk4800}.h

@@ -60,6 +60,8 @@
    to make things a bit more efficient */
 #define SECTOR_BLOCK_SHIFT 9
 
+#define SECTOR_MASK ((BLOCK_SIZE >> 9) - 1)
+
 /* try to read ahead a bit */
 #define DDV_READ_AHEAD 64
 

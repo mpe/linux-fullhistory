@@ -73,6 +73,7 @@ CONFIG_BLK_DEV_IDEDMA=y
 # Additional Block Devices
 #
 # CONFIG_BLK_DEV_LOOP is not set
+# CONFIG_BLK_DEV_NBD is not set
 # CONFIG_BLK_DEV_MD is not set
 # CONFIG_BLK_DEV_RAM is not set
 # CONFIG_BLK_DEV_XD is not set

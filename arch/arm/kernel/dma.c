@@ -15,6 +15,7 @@
  * Moved DMA resource allocation here...
  */
 #include <linux/sched.h>
+#include <linux/module.h>
 #include <linux/malloc.h>
 #include <linux/mman.h>
 #include <linux/init.h>
@@ -27,6 +28,8 @@
 #include <asm/dma.h>
 
 #include "dma.h"
+
+const char dma_str[] = "%s: dma %d not supported\n";
 
 static dma_t dma_chan[MAX_DMA_CHANNELS];
 
@@ -182,6 +185,15 @@ int get_dma_residue(dmach_t channel)
 {
 	return arch_get_dma_residue(channel, &dma_chan[channel]);
 }
+
+EXPORT_SYMBOL(dma_str);
+EXPORT_SYMBOL(enable_dma);
+EXPORT_SYMBOL(disable_dma);
+EXPORT_SYMBOL(set_dma_addr);
+EXPORT_SYMBOL(set_dma_count);
+EXPORT_SYMBOL(set_dma_mode);
+EXPORT_SYMBOL(get_dma_residue);
+EXPORT_SYMBOL(set_dma_sg);
 
 __initfunc(void init_dma(void))
 {

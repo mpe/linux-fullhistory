@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.93 1998/03/25 10:43:16 jj Exp $
+/* $Id: fault.c,v 1.94 1998/05/01 16:00:27 jj Exp $
  * fault.c:  Page fault handlers for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -248,9 +248,11 @@ bad_area:
 			extern const unsigned __csum_partial_copy_start[];
 			extern const unsigned __csum_partial_copy_end[];
 
+#ifdef DEBUG_EXCEPTIONS
 			printk("Exception: PC<%08lx> faddr<%08lx>\n", regs->pc, address);
 			printk("EX_TABLE: insn<%08lx> fixup<%08x> g2<%08lx>\n",
 				regs->pc, fixup, g2);
+#endif
 			if ((regs->pc >= (unsigned long)__memset_start &&
 			     regs->pc < (unsigned long)__memset_end) ||
 			    (regs->pc >= (unsigned long)__csum_partial_copy_start &&

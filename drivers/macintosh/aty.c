@@ -25,6 +25,7 @@
 #include <asm/io.h>
 #include <asm/pgtable.h>
 #include <asm/pci-bridge.h>
+#include <asm/init.h>
 #include "pmac-cons.h"
 #include "aty.h"
 
@@ -150,6 +151,8 @@ static struct aty_regvals *aty_vt_reg_init[21] = {
 	&aty_vt_reg_init_19,
 	&aty_vt_reg_init_20
 };
+
+__openfirmware
 
 static inline int
 aty_vram_reqd(int vmode, int cmode)

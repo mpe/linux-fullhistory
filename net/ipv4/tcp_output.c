@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.87 1998/04/26 01:11:35 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.90 1998/05/06 04:59:15 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -415,8 +415,7 @@ static void tcp_retrans_try_collapse(struct sock *sk, struct sk_buff *skb, int m
 		}
 	
 		/* Update sequence range on original skb. */
-		TCP_SKB_CB(skb)->end_seq +=
-			TCP_SKB_CB(next_skb)->end_seq - TCP_SKB_CB(next_skb)->seq;
+		TCP_SKB_CB(skb)->end_seq = TCP_SKB_CB(next_skb)->end_seq;
 
 		/* Merge over control information. */
 		flags |= TCP_SKB_CB(next_skb)->flags; /* This moves PSH/FIN etc. over */
@@ -453,7 +452,9 @@ void tcp_simple_retransmit(struct sock *sk)
 	 * and not use it for RTT calculation in the absence of
 	 * the timestamp option.
 	 */
-	for (skb = skb_peek(&sk->write_queue); skb != tp->send_head;
+	for (skb = skb_peek(&sk->write_queue);
+	     ((skb != tp->send_head) &&
+	      (skb != (struct sk_buff *)&sk->write_queue));
 	     skb = skb->next) 
 		if (skb->len > mss)
 			tcp_retransmit_skb(sk, skb); 
@@ -536,6 +537,10 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 	if (tp->retrans_head == tp->send_head)
 		tp->retrans_head = NULL;
 
+	/* Each time, advance the retrans_head if we got
+	 * a packet out or we skipped one because it was
+	 * SACK'd.  -DaveM
+	 */
 	while ((skb = tp->retrans_head) != NULL) {
 		/* If it has been ack'd by a SACK block, we don't
 		 * retransmit it.
@@ -544,14 +549,17 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 			/* Send it out, punt if error occurred. */
 			if(tcp_retransmit_skb(sk, skb))
 				break;
+
+			update_retrans_head(sk);
 		
 			/* Stop retransmitting if we've hit the congestion
 			 * window limit.
 			 */
 			if (tp->retrans_out >= (tp->snd_cwnd >> TCP_CWND_SHIFT))
 				break;
+		} else {
+			update_retrans_head(sk);
 		}
-		update_retrans_head(sk);
 	}
 }
 
@@ -732,8 +740,6 @@ struct sk_buff * tcp_make_synack(struct sock *sk, struct dst_entry *dst,
 		mss = min(mss, sk->user_mss);
 	if (req->tstamp_ok)
 		mss -= TCPOLEN_TSTAMP_ALIGNED;
-	else
-		req->mss += TCPOLEN_TSTAMP_ALIGNED;
 
 	/* Don't offer more than they did.
 	 * This way we don't have to memorize who said what.

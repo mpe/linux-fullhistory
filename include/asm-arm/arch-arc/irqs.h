@@ -47,3 +47,5 @@
 #define FIQ_FORCE		7
 
 #define IRQ_TIMER		IRQ_TIMER0
+
+#define irq_cannonicalize(i)	(i)

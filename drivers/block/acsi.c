@@ -1851,7 +1851,7 @@ void cleanup_module(void)
 
 	if (unregister_blkdev( MAJOR_NR, "ad" ) != 0)
 		printk( KERN_ERR "acsi: cleanup_module failed\n");
-	
+
 	for (gdp = &gendisk_head; *gdp; gdp = &((*gdp)->next))
 		if (*gdp == &acsi_gendisk)
 			break;

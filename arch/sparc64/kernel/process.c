@@ -1,9 +1,9 @@
-/*  $Id: process.c,v 1.52 1998/03/29 12:57:53 ecd Exp $
+/*  $Id: process.c,v 1.54 1998/04/28 08:23:28 davem Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
- *  Copyright (C) 1996 Eddie C. Dost   (ecd@skynet.be)
- *  Copyright (C) 1997, 1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ *  Copyright (C) 1996       Eddie C. Dost   (ecd@skynet.be)
+ *  Copyright (C) 1997, 1998 Jakub Jelinek   (jj@sunsite.mff.cuni.cz)
  */
 
 /*
@@ -43,6 +43,45 @@
 
 #ifndef __SMP__
 
+extern int pgt_cache_water[2];
+
+static inline void ultra_check_pgt_cache(void)
+{
+        struct page *page, *page2;
+
+        if(pgtable_cache_size > pgt_cache_water[0]) {
+                do {
+                        if(pmd_quicklist)
+                                free_pmd_slow(get_pmd_fast());
+                        if(pte_quicklist)
+                                free_pte_slow(get_pte_fast());
+                } while(pgtable_cache_size > pgt_cache_water[1]);
+        }
+        if (pgd_cache_size > pgt_cache_water[0] / 4) {
+                for (page2 = NULL, page = (struct page *)pgd_quicklist; page;) {
+                        if ((unsigned long)page->pprev_hash == 3) {
+                                if (page2)
+                                        page2->next_hash = page->next_hash;
+                                else
+                                        (struct page *)pgd_quicklist = page->next_hash;
+                                page->next_hash = NULL;
+                                page->pprev_hash = NULL;
+                                pgd_cache_size -= 2;
+                                free_page(PAGE_OFFSET + (page->map_nr << PAGE_SHIFT));
+                                if (page2)
+                                        page = page2->next_hash;
+                                else
+                                        page = (struct page *)pgd_quicklist;
+                                if (pgd_cache_size <= pgt_cache_water[1] / 4)
+                                        break;
+                                continue;
+                        }
+                        page2 = page;
+                        page = page->next_hash;
+                }
+        }
+}
+
 /*
  * the idle loop on a Sparc... ;)
  */
@@ -55,7 +94,7 @@ asmlinkage int sys_idle(void)
 	current->priority = -100;
 	current->counter = -100;
 	for (;;) {
-		check_pgt_cache();
+		ultra_check_pgt_cache();
 		run_task_queue(&tq_scheduler);
 		schedule();
 	}
@@ -422,7 +461,7 @@ void flush_thread(void)
 		get_mmu_context(current);
 		spin_unlock(&scheduler_lock);
 	}
-	current->tss.ctx = current->mm->context & 0x1fff;
+	current->tss.ctx = current->mm->context & 0x3ff;
 	spitfire_set_secondary_context (current->tss.ctx);
 	__asm__ __volatile__("flush %g6");
 }
@@ -584,7 +623,7 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 		p->tss.kregs->u_regs[UREG_FP] = sp;
 		p->tss.flags &= ~SPARC_FLAG_KTHREAD;
 		p->tss.current_ds = USER_DS;
-		p->tss.ctx = (p->mm->context & 0x1fff);
+		p->tss.ctx = (p->mm->context & 0x3ff);
 		if (sp != regs->u_regs[UREG_FP]) {
 			unsigned long csp;
 

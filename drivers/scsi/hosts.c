@@ -57,6 +57,26 @@
 #include "gvp11.h"
 #endif
 
+#ifdef CONFIG_CYBERSTORM_SCSI
+#include "cyberstorm.h"
+#endif
+
+#ifdef CONFIG_CYBERSTORMII_SCSI
+#include "cyberstormII.h"
+#endif
+
+#ifdef CONFIG_BLZ2060_SCSI
+#include "blz2060.h"
+#endif
+
+#ifdef CONFIG_BLZ1230_SCSI
+#include "blz1230.h"
+#endif
+
+#ifdef CONFIG_FASTLANE_SCSI
+#include "fastlane.h"
+#endif
+
 #ifdef CONFIG_ATARI_SCSI
 #include "atari_scsi.h"
 #endif
@@ -263,6 +283,21 @@ static Scsi_Host_Template builtin_scsi_hosts[] =
 #endif
 #ifdef CONFIG_GVP11_SCSI
 	GVP11_SCSI,
+#endif
+#ifdef CONFIG_CYBERSTORM_SCSI
+	SCSI_CYBERSTORM,
+#endif
+#ifdef CONFIG_CYBERSTORMII_SCSI
+	SCSI_CYBERSTORMII,
+#endif
+#ifdef CONFIG_BLZ2060_SCSI
+	SCSI_BLZ2060,
+#endif
+#ifdef CONFIG_BLZ1230_SCSI
+	SCSI_BLZ1230,
+#endif
+#ifdef CONFIG_FASTLANE_SCSI
+	SCSI_FASTLANE,
 #endif
 #endif
 

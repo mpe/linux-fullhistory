@@ -1,4 +1,4 @@
-/* $Id: sgint23.h,v 1.1.1.1 1997/06/01 03:17:12 ralf Exp $
+/* $Id: sgint23.h,v 1.2 1998/05/01 01:36:09 ralf Exp $
  * sgint23.h: Defines for the SGI INT2 and INT3 chipsets.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
@@ -126,7 +126,7 @@ struct sgi_ioc_timers {
 #define SGINT_TCWORD_CNT2   0x80 /* Select counter two */
 #define SGINT_TCWORD_CRBCK  0xc0 /* Readback command */
 
-#define SGINT_TCSAMP_COUNTER  0x164
+#define SGINT_TCSAMP_COUNTER  10255
 
 struct sgi_int2_regs {
 	struct sgi_ioc_ints ints;

@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.170 1998/03/09 14:04:01 jj Exp $
+/* $Id: srmmu.c,v 1.171 1998/04/24 15:03:35 jj Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -512,7 +512,7 @@ static inline pgd_t *srmmu_get_pgd_fast(void)
 		pgd_cache_size--;
 	}
 	spin_unlock(&pgd_spinlock);
-	return (pte_t *)ret;
+	return (pgd_t *)ret;
 }
 
 static inline pgd_t *srmmu_get_pgd_slow(void)

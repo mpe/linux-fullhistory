@@ -20,17 +20,6 @@ static char *region_map [] = {
 	"u", "s", "k", "!"
 };
 
-static char *cache_map [] = {
-	"c/nc/wt/nwa,",
-	"c/nc/wt/wa, ",
-	"uncached,   ",
-	"c/nc/wb,    "
-	"unknown,    ",
-	"unknown,    ",
-	"unknown,    ",
-	"unknown,    "
-};
-
 void
 dump_tlb(int first, int last)
 {
@@ -69,9 +58,9 @@ dump_tlb(int first, int last)
 			c0 = (entrylo0 >> 3) & 7;
 			c1 = (entrylo1 >> 3) & 7;
 
-			printk("%s vpn2=%08x "
-			       "[pfn=%06x c=%d d=%d v=%d g=%d]"
-			       "[pfn=%06x c=%d d=%d v=%d g=%d]",
+			printk("%s vpn2=%08Lx "
+			       "[pfn=%06Lx c=%d d=%d v=%d g=%Ld]"
+			       "[pfn=%06Lx c=%d d=%d v=%d g=%Ld]",
 			       region_map [r], (entryhi >> 13) & 0xffffffff,
 			       (entrylo0 >> 6) & 0xffffff, c0,
 			       (entrylo0 & 4) ? 1 : 0,

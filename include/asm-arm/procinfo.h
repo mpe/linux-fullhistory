@@ -18,13 +18,17 @@
 #ifndef __ASSEMBLER__
 
 struct armversions {
-	unsigned long id;
-	unsigned long mask;
-	unsigned long features;
-	const char *manu;
-	const char *name;
-	const struct processor *proc;
+	unsigned long id;		/* Processor ID			*/
+	unsigned long mask;		/* Processor ID mask		*/
+	unsigned long features;		/* Features (see above)		*/
+	const char *manu;		/* Manufacturer			*/
+	const char *name;		/* Processor name		*/
+	const struct processor *proc;	/* Processor-specific ASM	*/
+	const char *optname;		/* Optimisation name		*/
 };
+
+extern struct armversions armidlist[];
+extern int armidindex;
 
 #endif
 

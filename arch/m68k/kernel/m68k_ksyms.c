@@ -1,4 +1,3 @@
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/linkage.h>
 #include <linux/sched.h>
@@ -44,6 +43,8 @@ EXPORT_SYMBOL(strrchr);
 EXPORT_SYMBOL(strstr);
 EXPORT_SYMBOL(local_irq_count);
 EXPORT_SYMBOL(local_bh_count);
+EXPORT_SYMBOL(enable_irq);
+EXPORT_SYMBOL(disable_irq);
 
 /* Networking helper routines. */
 EXPORT_SYMBOL(csum_partial_copy);

@@ -1,4 +1,4 @@
-/* $Id: ebus.c,v 1.23 1998/03/29 16:27:24 ecd Exp $
+/* $Id: ebus.c,v 1.26 1998/04/21 06:34:02 ecd Exp $
  * ebus.c: PCI to EBus bridge device.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -8,6 +8,7 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/init.h>
+#include <linux/malloc.h>
 #include <linux/string.h>
 
 #include <asm/system.h>
@@ -30,7 +31,7 @@ struct linux_ebus *ebus_chain = 0;
 
 extern void prom_ebus_ranges_init(struct linux_ebus *);
 extern void prom_ebus_intmap_init(struct linux_ebus *);
-extern unsigned long pci_console_init(unsigned long memory_start);
+extern void pci_console_init(void);
 
 #ifdef CONFIG_SUN_OPENPROMIO
 extern int openprom_init(void);
@@ -48,19 +49,9 @@ extern int flash_init(void);
 extern int envctrl_init(void);
 #endif
 
-extern unsigned int psycho_irq_build(struct linux_pbm_info *pbm,
-				     unsigned int full_ino);
-
-static inline unsigned long
-ebus_alloc(unsigned long *memory_start, size_t size)
+static inline unsigned long ebus_alloc(size_t size)
 {
-	unsigned long mem;
-
-	*memory_start = (*memory_start + 7) & ~(7);
-	mem = *memory_start;
-	*memory_start += size;
-	memset((void *)mem, 0, size);
-	return mem;
+	return (unsigned long)kmalloc(size, GFP_ATOMIC);
 }
 
 __initfunc(void ebus_intmap_match(struct linux_ebus *ebus,
@@ -117,11 +108,27 @@ __initfunc(void fill_ebus_child(int node, struct linux_prom_registers *preg,
 	len = prom_getproperty(node, "interrupts", (char *)&irqs, sizeof(irqs));
 	if ((len == -1) || (len == 0)) {
 		dev->num_irqs = 0;
+		/*
+		 * Oh, well, some PROMs don't export interrupts
+		 * property to children of EBus devices...
+		 *
+		 * Be smart about PS/2 keyboard and mouse.
+		 */
+		if (!strcmp(dev->parent->prom_name, "8042")) {
+			if (!strcmp(dev->prom_name, "kb_ps2")) {
+				dev->num_irqs = 1;
+				dev->irqs[0] = dev->parent->irqs[0];
+			} else {
+				dev->num_irqs = 1;
+				dev->irqs[0] = dev->parent->irqs[1];
+			}
+		}
 	} else {
 		dev->num_irqs = len / sizeof(irqs[0]);
 		for (i = 0; i < dev->num_irqs; i++) {
 			ebus_intmap_match(dev->bus, preg, &irqs[i]);
-			dev->irqs[i] = psycho_irq_build(dev->bus->parent, irqs[i]);
+			dev->irqs[i] = psycho_irq_build(dev->bus->parent,
+							dev->bus->self, irqs[i]);
 		}
 	}
 
@@ -139,9 +146,7 @@ __initfunc(void fill_ebus_child(int node, struct linux_prom_registers *preg,
 #endif
 }
 
-__initfunc(unsigned long fill_ebus_device(int node,
-					  struct linux_ebus_device *dev,
-					  unsigned long memory_start))
+__initfunc(void fill_ebus_device(int node, struct linux_ebus_device *dev))
 {
 	struct linux_prom_registers regs[PROMREG_MAX];
 	struct linux_ebus_child *child;
@@ -176,7 +181,8 @@ __initfunc(unsigned long fill_ebus_device(int node,
 		dev->num_irqs = len / sizeof(irqs[0]);
 		for (i = 0; i < dev->num_irqs; i++) {
 			ebus_intmap_match(dev->bus, &regs[0], &irqs[i]);
-			dev->irqs[i] = psycho_irq_build(dev->bus->parent, irqs[i]);
+			dev->irqs[i] = psycho_irq_build(dev->bus->parent,
+							dev->bus->self, irqs[i]);
 		}
 	}
 
@@ -194,7 +200,7 @@ __initfunc(unsigned long fill_ebus_device(int node,
 #endif
 	if ((node = prom_getchild(node))) {
 		dev->children = (struct linux_ebus_child *)
-			ebus_alloc(&memory_start, sizeof(struct linux_ebus_child));
+			ebus_alloc(sizeof(struct linux_ebus_child));
 
 		child = dev->children;
 		child->next = 0;
@@ -204,7 +210,7 @@ __initfunc(unsigned long fill_ebus_device(int node,
 
 		while ((node = prom_getsibling(node))) {
 			child->next = (struct linux_ebus_child *)
-				ebus_alloc(&memory_start, sizeof(struct linux_ebus_child));
+				ebus_alloc(sizeof(struct linux_ebus_child));
 
 			child = child->next;
 			child->next = 0;
@@ -213,15 +219,12 @@ __initfunc(unsigned long fill_ebus_device(int node,
 			fill_ebus_child(node, &regs[0], child);
 		}
 	}
-
-	return memory_start;
 }
 
 extern void sun4u_start_timers(void);
 extern void clock_probe(void);
 
-__initfunc(unsigned long ebus_init(unsigned long memory_start,
-				   unsigned long memory_end))
+__initfunc(void ebus_init(void))
 {
 	struct linux_prom_pci_registers regs[PROMREG_MAX];
 	struct linux_pbm_info *pbm;
@@ -237,7 +240,7 @@ __initfunc(unsigned long ebus_init(unsigned long memory_start,
 	int num_ebus = 0;
 
 	if (!pci_present())
-		return memory_start;
+		return;
 
 	pdev = pci_find_device(PCI_VENDOR_ID_SUN, PCI_DEVICE_ID_SUN_EBUS, 0);
 	if (!pdev) {
@@ -245,14 +248,14 @@ __initfunc(unsigned long ebus_init(unsigned long memory_start,
 #ifdef PROM_DEBUG
 		dprintf("ebus: No EBus's found.\n");
 #endif
-		return memory_start;
+		return;
 	}
 
 	cookie = pdev->sysdata;
 	ebusnd = cookie->prom_node;
 
 	ebus_chain = ebus = (struct linux_ebus *)
-			ebus_alloc(&memory_start, sizeof(struct linux_ebus));
+			ebus_alloc(sizeof(struct linux_ebus));
 	ebus->next = 0;
 
 	while (ebusnd) {
@@ -323,24 +326,23 @@ __initfunc(unsigned long ebus_init(unsigned long memory_start,
 			goto next_ebus;
 
 		ebus->devices = (struct linux_ebus_device *)
-				ebus_alloc(&memory_start,
-					   sizeof(struct linux_ebus_device));
+				ebus_alloc(sizeof(struct linux_ebus_device));
 
 		dev = ebus->devices;
 		dev->next = 0;
 		dev->children = 0;
 		dev->bus = ebus;
-		memory_start = fill_ebus_device(nd, dev, memory_start);
+		fill_ebus_device(nd, dev);
 
 		while ((nd = prom_getsibling(nd))) {
 			dev->next = (struct linux_ebus_device *)
-				ebus_alloc(&memory_start, sizeof(struct linux_ebus_device));
+				ebus_alloc(sizeof(struct linux_ebus_device));
 
 			dev = dev->next;
 			dev->next = 0;
 			dev->children = 0;
 			dev->bus = ebus;
-			memory_start = fill_ebus_device(nd, dev, memory_start);
+			fill_ebus_device(nd, dev);
 		}
 
 	next_ebus:
@@ -353,13 +355,13 @@ __initfunc(unsigned long ebus_init(unsigned long memory_start,
 		ebusnd = cookie->prom_node;
 
 		ebus->next = (struct linux_ebus *)
-			ebus_alloc(&memory_start, sizeof(struct linux_ebus));
+			ebus_alloc(sizeof(struct linux_ebus));
 		ebus = ebus->next;
 		ebus->next = 0;
 		++num_ebus;
 	}
 
-	memory_start = pci_console_init(memory_start);
+	pci_console_init();
 
 #ifdef CONFIG_SUN_OPENPROMIO
 	openprom_init();
@@ -381,5 +383,4 @@ __initfunc(unsigned long ebus_init(unsigned long memory_start,
 #endif
 	sun4u_start_timers();
 	clock_probe();
-	return memory_start;
 }

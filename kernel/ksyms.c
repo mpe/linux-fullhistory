@@ -269,8 +269,6 @@ EXPORT_SYMBOL(proc_dointvec_minmax);
 /* interrupt handling */
 EXPORT_SYMBOL(request_irq);
 EXPORT_SYMBOL(free_irq);
-EXPORT_SYMBOL(enable_irq);
-EXPORT_SYMBOL(disable_irq);
 EXPORT_SYMBOL(probe_irq_on);
 EXPORT_SYMBOL(probe_irq_off);
 EXPORT_SYMBOL(bh_active);

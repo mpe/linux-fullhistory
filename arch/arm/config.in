@@ -7,7 +7,7 @@ mainmenu_name "Linux Kernel Configuration"
 define_bool CONFIG_ARM y
 
 mainmenu_option next_comment
-comment 'System type and processor type'
+comment 'System and processor type'
 choice 'ARM system type'	\
 	"Archimedes		CONFIG_ARCH_ARC \
 	 A5000			CONFIG_ARCH_A5K \
@@ -20,29 +20,55 @@ if [ "$CONFIG_ARCH_ARC" = "y" -o "$CONFIG_ARCH_A5K" = "y" -o "$CONFIG_ARCH_RPC" 
 else
   define_bool CONFIG_ARCH_ACORN n
 fi
-if [ "$CONFIG_ARCH_NEXUSPCI" = "y" -o "$CONFIG_ARCH_EBSA285" = "y" ]; then
+if [ "$CONFIG_ARCH_NEXUSPCI" = "y" ]; then
   define_bool CONFIG_PCI y
 else
-  define_bool CONFIG_PCI n
-fi
-if [ "$CONFIG_ARCH_NEXUSPCI" = "y" -o "$CONFIG_ARCH_EBSA110" = "y" -o "$CONFIG_ARCH_EBSA285" = "y" ]; then
-  define_bool CONFIG_CPU_SA110 y
-else
-  if [ "$CONFIG_ARCH_A5K" = "y" ]; then
-    define_bool CONFIG_CPU_ARM3 y
-  else
-    choice 'ARM cpu type'		\
-	"ARM2			CONFIG_CPU_ARM2 \
-	 ARM3			CONFIG_CPU_ARM3 \
-	 ARM6/7			CONFIG_CPU_ARM6 \
-	 StrongARM		CONFIG_CPU_SA110" StrongARM
+  if [ "$CONFIG_ARCH_EBSA285" = "y" ]; then
+    bool "PCI support" CONFIG_PCI
   fi
+fi
+
+# Figure out whether this system uses 26-bit or 32-bit CPUs.  Nobody has
+# ever built a machine that can take both, and now that ARM3 is obsolete
+# nobody is likely to either.
+
+if [ "$CONFIG_ARCH_RPC" = "y" -o "$CONFIG_ARCH_NEXUSPCI" = "y" -o "$CONFIG_ARCH_EBSA110" = "y" -o "$CONFIG_ARCH_EBSA285" = "y" ]; then
+  define_bool CONFIG_CPU_32 y
+  define_bool CONFIG_CPU_26 n
+else
+  if [ "$CONFIG_ARCH_ARC" = "y" -o "$CONFIG_ARCH_A5K" = "y" ]; then
+    define_bool CONFIG_CPU_32 n
+    define_bool CONFIG_CPU_26 y
+  fi
+fi
+
+# Now allow the user to choose a more precise CPU.  This is only used to set
+# the flags we pass to GCC, not in any code.
+
+choice 'Optimise for CPU'		\
+	"ARM2		CONFIG_CPU_ARM2 \
+	 ARM3		CONFIG_CPU_ARM3 \
+	 ARM6		CONFIG_CPU_ARM6 \
+	 ARM7		CONFIG_CPU_ARM7 \
+	 SA110		CONFIG_CPU_SA110" ARM6
+
+if [ "$CONFIG_CPU_26" = "y" ]; then
+
+# For 26-bit CPUs, the page size changes with the amount of physical RAM!
+# The default is 4MB but if the user has less they have to own up to it here.
+
+  choice 'Physical memory size'		\
+	"4MB+		CONFIG_PAGESIZE_32	\
+	 2MB		CONFIG_PAGESIZE_16	\
+	 1MB/512K	CONFIG_PAGESIZE_8" 4MB+
 fi
 endmenu
 
 mainmenu_option next_comment
 comment 'Code maturity level options'
 bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
+bool 'Use new compilation options (for GCC 2.8)' CONFIG_BINUTILS_NEW
+bool 'Compile kernel with frame pointer (for useful debugging)' CONFIG_FRAME_POINTER
 endmenu
 
 mainmenu_option next_comment
@@ -56,31 +82,48 @@ endmenu
 
 mainmenu_option next_comment
 comment 'General setup'
-bool 'Compile kernel with frame pointer (for useful debugging)' CONFIG_FRAME_POINTER
-bool 'Use new compilation options (for GCC 2.8)' CONFIG_BINUTILS_NEW
-bool 'Debug kernel errors' CONFIG_DEBUG_ERRORS
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
-# This needs kernel/acct.c to be updated
-#bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
+bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
 bool 'Sysctl support' CONFIG_SYSCTL
 tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
 tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
-if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-#  tristate 'Kernel support for JAVA binaries' CONFIG_BINFMT_JAVA
-  define_bool CONFIG_BINFMT_JAVA n
-fi
+tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
+
 tristate 'Parallel port support' CONFIG_PARPORT
 if [ "$CONFIG_PARPORT" != "n" ]; then
   dep_tristate '  PC-style hardware' CONFIG_PARPORT_PC $CONFIG_PARPORT
+  dep_tristate '  Archimedes hardware' CONFIG_PARPORT_ARC $CONFIG_PARPORT
+# If exactly one hardware type is selected then parport will optimise away
+# support for loading any others.  Defeat this if the user is keen.
+  if [ "$CONFIG_PARPORT_PC" = "n" -o "$CONFIG_PARPORT_ARC" = "n" ]; then
+    if [ "$CONFIG_PARPORT_PC" != "n" -o "$CONFIG_PARPORT_ARC" != "n" ]; then
+      bool '   Support foreign hardware' CONFIG_PARPORT_OTHER
+    fi
+  fi
 fi
 endmenu
 
 source arch/arm/drivers/block/Config.in
 source drivers/acorn/block/Config.in
 
+source arch/arm/drivers/char/Config.in
+bool 'Support Frame buffer devices' CONFIG_FB
+source drivers/video/Config.in
+
 if [ "$CONFIG_NET" = "y" ]; then
   source net/Config.in
+fi
+
+if [ "$CONFIG_NET" = "y" ]; then
+  mainmenu_option next_comment
+  comment 'Network device support'
+
+  bool 'Network device support?' CONFIG_NETDEVICES
+  if [ "$CONFIG_NETDEVICES" = "y" ]; then
+    source drivers/net/Config.in
+  fi
+  endmenu
 fi
 
 mainmenu_option next_comment
@@ -93,13 +136,13 @@ if [ "$CONFIG_SCSI" != "n" ]; then
 fi
 endmenu
 
-if [ "$CONFIG_NET" = "y" ]; then
+if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
   mainmenu_option next_comment
-  comment 'Network device support'
+  comment 'Sound'
 
-  bool 'Network device support?' CONFIG_NETDEVICES
-  if [ "$CONFIG_NETDEVICES" = "y" ]; then
-    source drivers/net/Config.in
+  tristate 'Sound support' CONFIG_SOUND
+  if [ "$CONFIG_SOUND" != "n" ]; then
+    source drivers/sound/Config.in
   fi
   endmenu
 fi
@@ -113,37 +156,14 @@ fi
 # fi
 # endmenu
 
-# Conditionally compile in the Uniform CD-ROM driver
-if [ "$CONFIG_BLK_DEV_IDECD" = "y" -o "$CONFIG_BLK_DEV_SR" = "y" ]; then
-  define_bool CONFIG_CDROM y
-else
-  if [ "$CONFIG_BLK_DEV_IDECD" = "m" -o "$CONFIG_BLK_DEV_SR" = "m" ]; then
-    define_bool CONFIG_CDROM m
-  else
-    define_bool CONFIG_CDROM n
-  fi
-fi
-
 source fs/Config.in
 
 source fs/nls/Config.in
 
-source arch/arm/drivers/char/Config.in
-
-if [ "$CONFIG_ARCH_ACORN" = "y" ]; then
-  mainmenu_option next_comment
-  comment 'Sound'
-
-  tristate 'Sound support' CONFIG_SOUND
-  if [ "$CONFIG_SOUND" != "n" ]; then
-    source drivers/sound/Config.in
-  fi
-  endmenu
-fi
-
 mainmenu_option next_comment
 comment 'Kernel hacking'
 
+bool 'Debug kernel errors' CONFIG_DEBUG_ERRORS
 #bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC
 bool 'Kernel profiling support' CONFIG_PROFILE
 if [ "$CONFIG_PROFILE" = "y" ]; then

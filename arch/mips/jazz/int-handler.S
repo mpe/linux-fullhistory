@@ -10,7 +10,7 @@
  *        Squeeze the last cycles out of the handlers.  Only a dead
  *        cycle is a good cycle.
  *
- * $Id: int-handler.S,v 1.3 1997/09/20 19:20:11 root Exp $
+ * $Id: int-handler.S,v 1.5 1998/05/01 01:33:37 ralf Exp $
  */
 #include <asm/asm.h>
 #include <asm/mipsconfig.h>
@@ -114,16 +114,8 @@ ll_isa_irq:	lw	a0,JAZZ_EISA_IRQ_ACK
 		 */
 		jal	do_IRQ
 		 move	a1,sp
-		/*
-		 * Unblock first pic
-		 */
-		lbu	a0,%lo(JAZZ_PORT_BASE)+0x21(s0)
-		lb	a0,%lo(cache_21)(s4)
-		nor	s1,zero,s1
-		and	a0,s1
-		sb	a0,%lo(cache_21)(s4)
 		j	ret_from_irq
-		 sb	a0,%lo(JAZZ_PORT_BASE)+0x21(s0)
+		nop
 
 		.align	5
 ack_second:	/*
@@ -142,19 +134,12 @@ ack_second:	/*
 		/*
 		 * Now call the real handler
 		 */
+		or      a0, 8
 		jal	do_IRQ
 		 move	a1,sp
 
-		/*
-		 * Unblock second pic
-		 */
-		lb	a0,%lo(JAZZ_PORT_BASE)+0xa1(s0)
-		lb	a0,%lo(cache_A1)(s4)
-		nor	s1,zero,s1
-		and	a0,s1
-		sb	a0,%lo(cache_A1)(s4)
 		j	ret_from_irq
-		 sb	a0,%lo(JAZZ_PORT_BASE)+0xa1(s0)
+		nop
 
 /*
  * Hmm...  This is not just a plain PC clone so the question is
@@ -236,7 +221,7 @@ ll_vectors:	PTR	ll_count		# Count/Compare IRQ
 		.set	reorder
 loc_no_irq:	PANIC("Unimplemented loc_no_irq handler")
 /*
- * Parallel port IRQ, remapped to level 5
+ * Parallel port IRQ
  */
 loc_parallel:	li	s1,~JAZZ_IE_PARALLEL
 		li	a0,JAZZ_PARALLEL_IRQ
@@ -256,14 +241,17 @@ loc_sound:	PANIC("Unimplemented loc_sound handler")
 loc_video:	PANIC("Unimplemented loc_video handler")
 
 /*
- * Ethernet interrupt handler, remapped to level 13
+ * Ethernet interrupt handler
  */
 loc_ethernet: 	li	s1,~JAZZ_IE_ETHERNET
 		li	a0,JAZZ_ETHERNET_IRQ
 		b	loc_call
 
+/*
+ * SCSI interrupt handler
+ */
 loc_scsi:	li	s1,~JAZZ_IE_SCSI
-		li	a0,12         # JAZZ_SCSI_IRQ
+		li	a0,JAZZ_SCSI_IRQ
 		b	loc_call
 
 /*
@@ -276,14 +264,14 @@ loc_keyboard:	li	s1,~JAZZ_IE_KEYBOARD
 loc_mouse:	PANIC("Unimplemented loc_mouse handler")
 
 /*
- * Serial port 1 IRQ, remapped to level 3
+ * Serial port 1 IRQ
  */
 loc_serial1:	li	s1,~JAZZ_IE_SERIAL1
 		li	a0,JAZZ_SERIAL1_IRQ
 		b	loc_call
 
 /*
- * Serial port 2 IRQ, remapped to level 4
+ * Serial port 2 IRQ
  */
 loc_serial2:	li	s1,~JAZZ_IE_SERIAL2
 		li	a0,JAZZ_SERIAL2_IRQ

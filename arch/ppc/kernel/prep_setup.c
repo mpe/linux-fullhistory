@@ -62,7 +62,7 @@ extern int rd_prompt;		/* 1 = prompt for ramdisk, 0 = don't prompt */
 extern int rd_image_start;	/* starting block # of image */
 #endif
 
-void prep_ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq)
+__initfunc(void prep_ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq))
 {
 	ide_ioreg_t port = base;
 	int i = 8;
@@ -188,7 +188,7 @@ prep_setup_arch(unsigned long * memory_start_p, unsigned long * memory_end_p))
 		break;
 	}
 	
-#ifdef CONFIG_BLK_DEV_RAM
+#ifdef CONFIG_BLK_DEV_INITRD
 	/* initrd_start and size are setup by boot/head.S and kernel/head.S */
 	if ( initrd_start )
 	{

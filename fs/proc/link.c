@@ -111,10 +111,9 @@ static struct dentry * proc_follow_link(struct dentry *dentry,
 			goto out_unlock;
 		}
 		default:
-			switch (ino >> 8) {
+			if (ino & PROC_PID_FD_DIR) {
 				struct file * file;
-			case PROC_PID_FD_DIR:
-				ino &= 0xff;
+				ino &= 0x7fff;
 				file = fcheck_task(p, ino);
 				if (!file || !file->f_dentry)
 					goto out_unlock;

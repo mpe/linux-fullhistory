@@ -30,10 +30,8 @@
 #include <linux/malloc.h>
 #include <linux/interrupt.h>
 #include <linux/pci.h>
-#include <linux/bios32.h>
 #include <linux/init.h>
-#include <asm/bitops.h>
-
+#include <linux/delay.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
@@ -41,8 +39,9 @@
 #include <asm/8xx_immap.h>
 #include <asm/pgtable.h>
 #include <asm/mbx.h>
+#include <asm/bitops.h>
+#include <asm/uaccess.h>
 #include "commproc.h"
-#include <linux/delay.h>
 
 /*
  *				Theory of Operation
@@ -151,284 +150,7 @@ static void set_multicast_list(struct device *dev);
 
 /* GET THIS FROM THE VPD!!!!
 */
-static	ushort	my_enet_addr[] = { 0x0800, 0x3e26, 0x1559 };
-
-/* Initialize the CPM Ethernet on SCC1.  If EPPC-Bug loaded us, or performed
- * some other network I/O, a whole bunch of this has already been set up.
- * It is no big deal if we do it again, we just have to disable the
- * transmit and receive to make sure we don't catch the CPM with some
- * inconsistent control information.
- */
-__initfunc(int cpm_enet_init(void))
-{
-	struct device *dev;
-	struct cpm_enet_private *cep;
-	int i, j;
-	unsigned char	*eap;
-	unsigned long	mem_addr;
-	pte_t		*pte;
-	volatile	cbd_t		*bdp;
-	volatile	cpm8xx_t	*cp;
-	volatile	scc_t		*sccp;
-	volatile	scc_enet_t	*ep;
-	volatile	immap_t		*immap;
-
-	cp = cpmp;	/* Get pointer to Communication Processor */
-
-	immap = (immap_t *)MBX_IMAP_ADDR;	/* and to internal registers */
-
-	/* Allocate some private information.
-	*/
-	cep = (struct cpm_enet_private *)kmalloc(sizeof(*cep), GFP_KERNEL);
-	memset(cep, 0, sizeof(*cep));
-
-	/* Create an Ethernet device instance.
-	*/
-	dev = init_etherdev(0, 0);
-
-	/* Get pointer to SCC1 area in parameter RAM.
-	*/
-	ep = (scc_enet_t *)(&cp->cp_dparam[PROFF_SCC1]);
-
-	/* And another to the SCC register area.
-	*/
-	sccp = (volatile scc_t *)(&cp->cp_scc[0]);
-	cep->sccp = (scc_t *)sccp;		/* Keep the pointer handy */
-
-	/* Disable receive and transmit in case EPPC-Bug started it.
-	*/
-	sccp->scc_gsmrl &= ~(SCC_GSMRL_ENR | SCC_GSMRL_ENT);
-
-	/* Cookbook style from the MPC860 manual.....
-	 * Not all of this is necessary if EPPC-Bug has initialized
-	 * the network.
-	 */
-
-	/* Configure port A pins for Txd and Rxd.
-	*/
-	immap->im_ioport.iop_papar |= (PA_ENET_RXD | PA_ENET_TXD);
-	immap->im_ioport.iop_padir &= ~(PA_ENET_RXD | PA_ENET_TXD);
-	immap->im_ioport.iop_paodr &= ~PA_ENET_TXD;
-
-	/* Configure port C pins to enable CLSN and RENA.
-	*/
-	immap->im_ioport.iop_pcpar &= ~(PC_ENET_CLSN | PC_ENET_RENA);
-	immap->im_ioport.iop_pcdir &= ~(PC_ENET_CLSN | PC_ENET_RENA);
-	immap->im_ioport.iop_pcso |= (PC_ENET_CLSN | PC_ENET_RENA);
-
-	/* Configure port A for TCLK and RCLK.
-	*/
-	immap->im_ioport.iop_papar |= (PA_ENET_TCLK | PA_ENET_RCLK);
-	immap->im_ioport.iop_padir &= ~(PA_ENET_TCLK | PA_ENET_RCLK);
-
-	/* Configure Serial Interface clock routing.
-	 * First, clear all SCC1 bits to zero, then set the ones we want.
-	 */
-	cp->cp_sicr &= ~SICR_ENET_MASK;
-	cp->cp_sicr |= SICR_ENET_CLKRT;
-
-	/* Manual says set SDDR, but I can't find anything with that
-	 * name.  I think it is a misprint, and should be SDCR.  This
-	 * has already been set by the communication processor initialization.
-	 */
-
-	/* Allocate space for the buffer descriptors in the DP ram.
-	 * These are relative offsets in the DP ram address space.
-	 * Initialize base addresses for the buffer descriptors.
-	 */
-	i = mbx_cpm_dpalloc(sizeof(cbd_t) * RX_RING_SIZE);
-	ep->sen_genscc.scc_rbase = i;
-	cep->rx_bd_base = (cbd_t *)&cp->cp_dpmem[i];
-
-	i = mbx_cpm_dpalloc(sizeof(cbd_t) * TX_RING_SIZE);
-	ep->sen_genscc.scc_tbase = i;
-	cep->tx_bd_base = (cbd_t *)&cp->cp_dpmem[i];
-
-	cep->dirty_tx = cep->cur_tx = cep->tx_bd_base;
-	cep->cur_rx = cep->rx_bd_base;
-
-	/* Issue init Rx BD command for SCC1.
-	 * Manual says to perform an Init Rx parameters here.  We have
-	 * to perform both Rx and Tx because the SCC may have been
-	 * already running.
-	 * In addition, we have to do it later because we don't yet have
-	 * all of the BD control/status set properly.
-	cp->cp_cpcr = mk_cr_cmd(CPM_CR_CH_SCC1, CPM_CR_INIT_RX) | CPM_CR_FLG;
-	while (cp->cp_cpcr & CPM_CR_FLG);
-	 */
-
-	/* Initialize function code registers for big-endian.
-	*/
-	ep->sen_genscc.scc_rfcr = SCC_EB;
-	ep->sen_genscc.scc_tfcr = SCC_EB;
-
-	/* Set maximum bytes per receive buffer.
-	 * This appears to be an Ethernet frame size, not the buffer
-	 * fragment size.  It must be a multiple of four.
-	 */
-	ep->sen_genscc.scc_mrblr = PKT_MAXBLR_SIZE;
-
-	/* Set CRC preset and mask.
-	*/
-	ep->sen_cpres = 0xffffffff;
-	ep->sen_cmask = 0xdebb20e3;
-
-	ep->sen_crcec = 0;	/* CRC Error counter */
-	ep->sen_alec = 0;	/* alignment error counter */
-	ep->sen_disfc = 0;	/* discard frame counter */
-
-	ep->sen_pads = 0x8888;	/* Tx short frame pad character */
-	ep->sen_retlim = 15;	/* Retry limit threshold */
-
-	ep->sen_maxflr = PKT_MAXBUF_SIZE;   /* maximum frame length register */
-	ep->sen_minflr = PKT_MINBUF_SIZE;  /* minimum frame length register */
-
-	ep->sen_maxd1 = PKT_MAXBUF_SIZE;	/* maximum DMA1 length */
-	ep->sen_maxd2 = PKT_MAXBUF_SIZE;	/* maximum DMA2 length */
-
-	/* Clear hash tables.
-	*/
-	ep->sen_gaddr1 = 0;
-	ep->sen_gaddr2 = 0;
-	ep->sen_gaddr3 = 0;
-	ep->sen_gaddr4 = 0;
-	ep->sen_iaddr1 = 0;
-	ep->sen_iaddr2 = 0;
-	ep->sen_iaddr3 = 0;
-	ep->sen_iaddr4 = 0;
-
-	/* Set Ethernet station address.  This must come from the
-	 * Vital Product Data (VPD) EEPROM.....as soon as I get the
-	 * I2C interface working.....
-	 *
-	 * Since we performed a diskless boot, the Ethernet controller
-	 * has been initialized and we copy the address out into our
-	 * own structure.
-	 */
-#ifdef notdef
-	ep->sen_paddrh = my_enet_addr[0];
-	ep->sen_paddrm = my_enet_addr[1];
-	ep->sen_paddrl = my_enet_addr[2];
-#else
-	eap = (unsigned char *)&(ep->sen_paddrh);
-	for (i=5; i>=0; i--)
-		dev->dev_addr[i] = *eap++;
-#endif
-
-	ep->sen_pper = 0;	/* 'cause the book says so */
-	ep->sen_taddrl = 0;	/* temp address (LSB) */
-	ep->sen_taddrm = 0;
-	ep->sen_taddrh = 0;	/* temp address (MSB) */
-
-	/* Now allocate the host memory pages and initialize the
-	 * buffer descriptors.
-	 */
-	bdp = cep->tx_bd_base;
-	for (i=0; i<TX_RING_SIZE; i++) {
-
-		/* Initialize the BD for every fragment in the page.
-		*/
-		bdp->cbd_sc = 0;
-		bdp->cbd_bufaddr = 0;
-		bdp++;
-	}
-
-	/* Set the last buffer to wrap.
-	*/
-	bdp--;
-	bdp->cbd_sc |= BD_SC_WRAP;
-
-	bdp = cep->rx_bd_base;
-	for (i=0; i<CPM_ENET_RX_PAGES; i++) {
-
-		/* Allocate a page.
-		*/
-		mem_addr = __get_free_page(GFP_KERNEL);
-
-		/* Make it uncached.
-		*/
-		pte = va_to_pte(&init_task, mem_addr);
-		pte_val(*pte) |= _PAGE_NO_CACHE;
-		flush_tlb_page(current->mm->mmap, mem_addr);
-
-		/* Initialize the BD for every fragment in the page.
-		*/
-		for (j=0; j<CPM_ENET_RX_FRPPG; j++) {
-			bdp->cbd_sc = BD_ENET_RX_EMPTY | BD_ENET_RX_INTR;
-			bdp->cbd_bufaddr = __pa(mem_addr);
-			mem_addr += CPM_ENET_RX_FRSIZE;
-			bdp++;
-		}
-	}
-
-	/* Set the last buffer to wrap.
-	*/
-	bdp--;
-	bdp->cbd_sc |= BD_SC_WRAP;
-
-	/* Let's re-initialize the channel now.  We have to do it later
-	 * than the manual describes because we have just now finished
-	 * the BD initialization.
-	 */
-	cp->cp_cpcr = mk_cr_cmd(CPM_CR_CH_SCC1, CPM_CR_INIT_TRX) | CPM_CR_FLG;
-	while (cp->cp_cpcr & CPM_CR_FLG);
-
-	cep->skb_cur = cep->skb_dirty = 0;
-
-	sccp->scc_scce = 0xffff;	/* Clear any pending events */
-
-	/* Enable interrupts for transmit error, complete frame
-	 * received, and any transmit buffer we have also set the
-	 * interrupt flag.
-	 */
-	sccp->scc_sccm = (SCCE_ENET_TXE | SCCE_ENET_RXF | SCCE_ENET_TXB);
-
-	/* Install our interrupt handler.
-	*/
-	cpm_install_handler(CPMVEC_SCC1, cpm_enet_interrupt, dev);
-
-	/* Set GSMR_H to enable all normal operating modes.
-	 * Set GSMR_L to enable Ethernet to MC68160.
-	 */
-	sccp->scc_gsmrh = 0;
-	sccp->scc_gsmrl = (SCC_GSMRL_TCI | SCC_GSMRL_TPL_48 | SCC_GSMRL_TPP_10 | SCC_GSMRL_MODE_ENET);
-
-	/* Set sync/delimiters.
-	*/
-	sccp->scc_dsr = 0xd555;
-
-	/* Set processing mode.  Use Ethernet CRC, catch broadcast, and
-	 * start frame search 22 bit times after RENA.
-	 */
-	sccp->scc_pmsr = (SCC_PMSR_ENCRC | SCC_PMSR_BRO | SCC_PMSR_NIB22);
-
-	/* It is now OK to enable the Ethernet transmitter.
-	*/
-	immap->im_ioport.iop_pcpar |= PC_ENET_TENA;
-	immap->im_ioport.iop_pcdir &= ~PC_ENET_TENA;
-
-	dev->base_addr = (unsigned long)ep;
-	dev->priv = cep;
-	dev->name = "CPM_ENET";
-
-	/* The CPM Ethernet specific entries in the device structure. */
-	dev->open = cpm_enet_open;
-	dev->hard_start_xmit = cpm_enet_start_xmit;
-	dev->stop = cpm_enet_close;
-	dev->get_stats = cpm_enet_get_stats;
-	dev->set_multicast_list = set_multicast_list;
-
-	/* And last, enable the transmit and receive processing.
-	*/
-	sccp->scc_gsmrl |= (SCC_GSMRL_ENR | SCC_GSMRL_ENT);
-
-	printk("CPM ENET Version 0.1, ");
-	for (i=0; i<5; i++)
-		printk("%02x:", dev->dev_addr[i]);
-	printk("%02x\n", dev->dev_addr[5]);
-
-	return 0;
-}
+/*static	ushort	my_enet_addr[] = { 0x0800, 0x3e26, 0x1559 };*/
 
 static int
 cpm_enet_open(struct device *dev)
@@ -851,7 +573,6 @@ static void set_multicast_list(struct device *dev)
 	u_char	*mcptr, *tdptr;
 	volatile scc_enet_t *ep;
 	int	i, j;
-
 	cep = (struct cpm_enet_private *)dev->priv;
 
 	/* Get pointer to SCC1 area in parameter RAM.
@@ -859,6 +580,7 @@ static void set_multicast_list(struct device *dev)
 	ep = (scc_enet_t *)dev->base_addr;
 
 	if (dev->flags&IFF_PROMISC) {
+	  
 		/* Log any net taps. */
 		printk("%s: Promiscuous mode enabled.\n", dev->name);
 		cep->sccp->scc_pmsr |= SCC_PMSR_PRO;
@@ -905,8 +627,289 @@ static void set_multicast_list(struct device *dev)
 				 * filter mask.
 				 */
 				cpmp->cp_cpcr = mk_cr_cmd(CPM_CR_CH_SCC1, CPM_CR_SET_GADDR) | CPM_CR_FLG;
+				/* this delay is necessary here -- Cort */
+				udelay(10);
 				while (cpmp->cp_cpcr & CPM_CR_FLG);
 			}
 		}
 	}
 }
+
+/* Initialize the CPM Ethernet on SCC1.  If EPPC-Bug loaded us, or performed
+ * some other network I/O, a whole bunch of this has already been set up.
+ * It is no big deal if we do it again, we just have to disable the
+ * transmit and receive to make sure we don't catch the CPM with some
+ * inconsistent control information.
+ */
+__initfunc(int cpm_enet_init(void))
+{
+	struct device *dev;
+	struct cpm_enet_private *cep;
+	int i, j;
+	unsigned char	*eap;
+	unsigned long	mem_addr;
+	pte_t		*pte;
+	volatile	cbd_t		*bdp;
+	volatile	cpm8xx_t	*cp;
+	volatile	scc_t		*sccp;
+	volatile	scc_enet_t	*ep;
+	volatile	immap_t		*immap;
+
+	cp = cpmp;	/* Get pointer to Communication Processor */
+
+	immap = (immap_t *)MBX_IMAP_ADDR;	/* and to internal registers */
+
+	/* Allocate some private information.
+	*/
+	cep = (struct cpm_enet_private *)kmalloc(sizeof(*cep), GFP_KERNEL);
+	/*memset(cep, 0, sizeof(*cep));*/
+	__clear_user(cep,sizeof(*cep));
+
+	/* Create an Ethernet device instance.
+	*/
+	dev = init_etherdev(0, 0);
+
+	/* Get pointer to SCC1 area in parameter RAM.
+	*/
+	ep = (scc_enet_t *)(&cp->cp_dparam[PROFF_SCC1]);
+
+	/* And another to the SCC register area.
+	*/
+	sccp = (volatile scc_t *)(&cp->cp_scc[0]);
+	cep->sccp = (scc_t *)sccp;		/* Keep the pointer handy */
+
+	/* Disable receive and transmit in case EPPC-Bug started it.
+	*/
+	sccp->scc_gsmrl &= ~(SCC_GSMRL_ENR | SCC_GSMRL_ENT);
+
+	/* Cookbook style from the MPC860 manual.....
+	 * Not all of this is necessary if EPPC-Bug has initialized
+	 * the network.
+	 */
+
+	/* Configure port A pins for Txd and Rxd.
+	*/
+	immap->im_ioport.iop_papar |= (PA_ENET_RXD | PA_ENET_TXD);
+	immap->im_ioport.iop_padir &= ~(PA_ENET_RXD | PA_ENET_TXD);
+	immap->im_ioport.iop_paodr &= ~PA_ENET_TXD;
+
+	/* Configure port C pins to enable CLSN and RENA.
+	*/
+	immap->im_ioport.iop_pcpar &= ~(PC_ENET_CLSN | PC_ENET_RENA);
+	immap->im_ioport.iop_pcdir &= ~(PC_ENET_CLSN | PC_ENET_RENA);
+	immap->im_ioport.iop_pcso |= (PC_ENET_CLSN | PC_ENET_RENA);
+
+	/* Configure port A for TCLK and RCLK.
+	*/
+	immap->im_ioport.iop_papar |= (PA_ENET_TCLK | PA_ENET_RCLK);
+	immap->im_ioport.iop_padir &= ~(PA_ENET_TCLK | PA_ENET_RCLK);
+
+	/* Configure Serial Interface clock routing.
+	 * First, clear all SCC1 bits to zero, then set the ones we want.
+	 */
+	cp->cp_sicr &= ~SICR_ENET_MASK;
+	cp->cp_sicr |= SICR_ENET_CLKRT;
+
+	/* Manual says set SDDR, but I can't find anything with that
+	 * name.  I think it is a misprint, and should be SDCR.  This
+	 * has already been set by the communication processor initialization.
+	 */
+
+	/* Allocate space for the buffer descriptors in the DP ram.
+	 * These are relative offsets in the DP ram address space.
+	 * Initialize base addresses for the buffer descriptors.
+	 */
+	i = mbx_cpm_dpalloc(sizeof(cbd_t) * RX_RING_SIZE);
+	ep->sen_genscc.scc_rbase = i;
+	cep->rx_bd_base = (cbd_t *)&cp->cp_dpmem[i];
+
+	i = mbx_cpm_dpalloc(sizeof(cbd_t) * TX_RING_SIZE);
+	ep->sen_genscc.scc_tbase = i;
+	cep->tx_bd_base = (cbd_t *)&cp->cp_dpmem[i];
+
+	cep->dirty_tx = cep->cur_tx = cep->tx_bd_base;
+	cep->cur_rx = cep->rx_bd_base;
+
+	/* Issue init Rx BD command for SCC1.
+	 * Manual says to perform an Init Rx parameters here.  We have
+	 * to perform both Rx and Tx because the SCC may have been
+	 * already running.
+	 * In addition, we have to do it later because we don't yet have
+	 * all of the BD control/status set properly.
+	cp->cp_cpcr = mk_cr_cmd(CPM_CR_CH_SCC1, CPM_CR_INIT_RX) | CPM_CR_FLG;
+	while (cp->cp_cpcr & CPM_CR_FLG);
+	 */
+
+	/* Initialize function code registers for big-endian.
+	*/
+	ep->sen_genscc.scc_rfcr = SCC_EB;
+	ep->sen_genscc.scc_tfcr = SCC_EB;
+
+	/* Set maximum bytes per receive buffer.
+	 * This appears to be an Ethernet frame size, not the buffer
+	 * fragment size.  It must be a multiple of four.
+	 */
+	ep->sen_genscc.scc_mrblr = PKT_MAXBLR_SIZE;
+
+	/* Set CRC preset and mask.
+	*/
+	ep->sen_cpres = 0xffffffff;
+	ep->sen_cmask = 0xdebb20e3;
+
+	ep->sen_crcec = 0;	/* CRC Error counter */
+	ep->sen_alec = 0;	/* alignment error counter */
+	ep->sen_disfc = 0;	/* discard frame counter */
+
+	ep->sen_pads = 0x8888;	/* Tx short frame pad character */
+	ep->sen_retlim = 15;	/* Retry limit threshold */
+
+	ep->sen_maxflr = PKT_MAXBUF_SIZE;   /* maximum frame length register */
+	ep->sen_minflr = PKT_MINBUF_SIZE;  /* minimum frame length register */
+
+	ep->sen_maxd1 = PKT_MAXBUF_SIZE;	/* maximum DMA1 length */
+	ep->sen_maxd2 = PKT_MAXBUF_SIZE;	/* maximum DMA2 length */
+
+	/* Clear hash tables.
+	*/
+	ep->sen_gaddr1 = 0;
+	ep->sen_gaddr2 = 0;
+	ep->sen_gaddr3 = 0;
+	ep->sen_gaddr4 = 0;
+	ep->sen_iaddr1 = 0;
+	ep->sen_iaddr2 = 0;
+	ep->sen_iaddr3 = 0;
+	ep->sen_iaddr4 = 0;
+
+	/* Set Ethernet station address.  This must come from the
+	 * Vital Product Data (VPD) EEPROM.....as soon as I get the
+	 * I2C interface working.....
+	 *
+	 * Since we performed a diskless boot, the Ethernet controller
+	 * has been initialized and we copy the address out into our
+	 * own structure.
+	 */
+#ifdef notdef
+	ep->sen_paddrh = my_enet_addr[0];
+	ep->sen_paddrm = my_enet_addr[1];
+	ep->sen_paddrl = my_enet_addr[2];
+#else
+	eap = (unsigned char *)&(ep->sen_paddrh);
+	for (i=5; i>=0; i--)
+		dev->dev_addr[i] = *eap++;
+#endif
+
+	ep->sen_pper = 0;	/* 'cause the book says so */
+	ep->sen_taddrl = 0;	/* temp address (LSB) */
+	ep->sen_taddrm = 0;
+	ep->sen_taddrh = 0;	/* temp address (MSB) */
+
+	/* Now allocate the host memory pages and initialize the
+	 * buffer descriptors.
+	 */
+	bdp = cep->tx_bd_base;
+	for (i=0; i<TX_RING_SIZE; i++) {
+
+		/* Initialize the BD for every fragment in the page.
+		*/
+		bdp->cbd_sc = 0;
+		bdp->cbd_bufaddr = 0;
+		bdp++;
+	}
+
+	/* Set the last buffer to wrap.
+	*/
+	bdp--;
+	bdp->cbd_sc |= BD_SC_WRAP;
+
+	bdp = cep->rx_bd_base;
+	for (i=0; i<CPM_ENET_RX_PAGES; i++) {
+
+		/* Allocate a page.
+		*/
+		mem_addr = __get_free_page(GFP_KERNEL);
+
+		/* Make it uncached.
+		*/
+		pte = va_to_pte(&init_task, mem_addr);
+		pte_val(*pte) |= _PAGE_NO_CACHE;
+		flush_tlb_page(current->mm->mmap, mem_addr);
+
+		/* Initialize the BD for every fragment in the page.
+		*/
+		for (j=0; j<CPM_ENET_RX_FRPPG; j++) {
+			bdp->cbd_sc = BD_ENET_RX_EMPTY | BD_ENET_RX_INTR;
+			bdp->cbd_bufaddr = __pa(mem_addr);
+			mem_addr += CPM_ENET_RX_FRSIZE;
+			bdp++;
+		}
+	}
+
+	/* Set the last buffer to wrap.
+	*/
+	bdp--;
+	bdp->cbd_sc |= BD_SC_WRAP;
+
+	/* Let's re-initialize the channel now.  We have to do it later
+	 * than the manual describes because we have just now finished
+	 * the BD initialization.
+	 */
+	cp->cp_cpcr = mk_cr_cmd(CPM_CR_CH_SCC1, CPM_CR_INIT_TRX) | CPM_CR_FLG;
+	while (cp->cp_cpcr & CPM_CR_FLG);
+
+	cep->skb_cur = cep->skb_dirty = 0;
+
+	sccp->scc_scce = 0xffff;	/* Clear any pending events */
+
+	/* Enable interrupts for transmit error, complete frame
+	 * received, and any transmit buffer we have also set the
+	 * interrupt flag.
+	 */
+	sccp->scc_sccm = (SCCE_ENET_TXE | SCCE_ENET_RXF | SCCE_ENET_TXB);
+
+	/* Install our interrupt handler.
+	*/
+	cpm_install_handler(CPMVEC_SCC1, cpm_enet_interrupt, dev);
+
+	/* Set GSMR_H to enable all normal operating modes.
+	 * Set GSMR_L to enable Ethernet to MC68160.
+	 */
+	sccp->scc_gsmrh = 0;
+	sccp->scc_gsmrl = (SCC_GSMRL_TCI | SCC_GSMRL_TPL_48 | SCC_GSMRL_TPP_10 | SCC_GSMRL_MODE_ENET);
+
+	/* Set sync/delimiters.
+	*/
+	sccp->scc_dsr = 0xd555;
+
+	/* Set processing mode.  Use Ethernet CRC, catch broadcast, and
+	 * start frame search 22 bit times after RENA.
+	 */
+	sccp->scc_pmsr = (SCC_PMSR_ENCRC | SCC_PMSR_BRO | SCC_PMSR_NIB22);
+
+	/* It is now OK to enable the Ethernet transmitter.
+	*/
+	immap->im_ioport.iop_pcpar |= PC_ENET_TENA;
+	immap->im_ioport.iop_pcdir &= ~PC_ENET_TENA;
+
+	dev->base_addr = (unsigned long)ep;
+	dev->priv = cep;
+	dev->name = "CPM_ENET";
+
+	/* The CPM Ethernet specific entries in the device structure. */
+	dev->open = cpm_enet_open;
+	dev->hard_start_xmit = cpm_enet_start_xmit;
+	dev->stop = cpm_enet_close;
+	dev->get_stats = cpm_enet_get_stats;
+	dev->set_multicast_list = set_multicast_list;
+
+	/* And last, enable the transmit and receive processing.
+	*/
+	sccp->scc_gsmrl |= (SCC_GSMRL_ENR | SCC_GSMRL_ENT);
+
+	printk("CPM ENET Version 0.1, ");
+	for (i=0; i<5; i++)
+		printk("%02x:", dev->dev_addr[i]);
+	printk("%02x\n", dev->dev_addr[5]);
+
+	return 0;
+}
+

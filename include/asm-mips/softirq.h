@@ -1,3 +1,14 @@
+/*
+ * include/asm-mips/softirq.h
+ *
+ * This file is subject to the terms and conditions of the GNU General Public
+ * License.  See the file "COPYING" in the main directory of this archive
+ * for more details.
+ *
+ * Copyright (C) 1997, 1998 by Ralf Baechle
+ *
+ * $Id: softirq.h,v 1.2 1998/05/01 01:36:13 ralf Exp $
+ */
 #ifndef __ASM_MIPS_SOFTIRQ_H
 #define __ASM_MIPS_SOFTIRQ_H
 
@@ -6,6 +17,8 @@
  * referenced at all outside of this file.
  */
 extern atomic_t __mips_bh_counter;
+
+extern unsigned int local_bh_count[NR_CPUS];
 
 #define get_active_bhs()	(bh_mask & bh_active)
 
@@ -20,7 +33,7 @@ static inline void clear_active_bhs(unsigned long x)
 		"beqz\t%0,1b"
 		:"=&r" (temp),
 		 "=m" (bh_active)
-		:"Ir" (x),
+		:"Ir" (~x),
 		 "m" (bh_active));
 }
 
@@ -58,36 +71,21 @@ extern inline void enable_bh(int nr)
 		bh_mask |= 1 << nr;
 }
 
-/*
- * start_bh_atomic/end_bh_atomic also nest
- * naturally by using a counter
- */
 extern inline void start_bh_atomic(void)
 {
-#ifdef __SMP__
-	atomic_inc(&__mips_bh_counter);
-	synchronize_irq();
-#else
-	atomic_inc(&__mips_bh_counter);
-#endif
+	local_bh_count[smp_processor_id()]++;
+	barrier();
 }
 
 extern inline void end_bh_atomic(void)
 {
-	atomic_dec(&__mips_bh_counter);
+	barrier();
+	local_bh_count[smp_processor_id()]--;
 }
 
-#ifndef __SMP__
-
 /* These are for the irq's testing the lock */
-#define softirq_trylock()	(atomic_read(&__mips_bh_counter) ? \
-				0 : \
-				((atomic_set(&__mips_bh_counter,1)),1))
-#define softirq_endlock()	(atomic_set(&__mips_bh_counter, 0))
+#define softirq_trylock(cpu)	(local_bh_count[cpu] ? 0 : (local_bh_count[cpu] = 1))
+#define softirq_endlock(cpu)	(local_bh_count[cpu] = 0)
+#define synchronize_bh()	do { } while (0)
 
-#else
-
-#error FIXME
-
-#endif /* __SMP__ */
 #endif /* __ASM_MIPS_SOFTIRQ_H */

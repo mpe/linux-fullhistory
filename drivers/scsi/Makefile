@@ -163,6 +163,54 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_SCSI_SGIWD93),y)
+L_OBJS += sgiwd93.o wd33c93.o
+else
+  ifeq ($(CONFIG_SCSI_SGIWD93),m)
+  M_OBJS += sgiwd93.o wd33c93.o
+  endif
+endif
+
+ifeq ($(CONFIG_CYBERSTORM_SCSI),y)
+L_OBJS += NCR53C9x.o cyberstorm.o
+else
+  ifeq ($(CONFIG_CYBERSTORM_SCSI),m)
+  M_OBJS += NCR53C9x.o cyberstorm.o
+  endif
+endif
+
+ifeq ($(CONFIG_CYBERSTORMII_SCSI),y)
+L_OBJS += NCR53C9x.o cyberstormII.o
+else
+  ifeq ($(CONFIG_CYBERSTORMII_SCSI),m)
+  M_OBJS += NCR53C9x.o cyberstormII.o
+  endif
+endif
+
+ifeq ($(CONFIG_BLZ2060_SCSI),y)
+L_OBJS += NCR53C9x.o blz2060.o
+else
+  ifeq ($(CONFIG_BLZ2060_SCSI),m)
+  M_OBJS += NCR53C9x.o blz2060.o
+  endif
+endif
+
+ifeq ($(CONFIG_BLZ1230_SCSI),y)
+L_OBJS += NCR53C9x.o blz1230.o
+else
+  ifeq ($(CONFIG_BLZ1230_SCSI),m)
+  M_OBJS += NCR53C9x.o blz1230.o
+  endif
+endif
+
+ifeq ($(CONFIG_FASTLANE_SCSI),y)
+L_OBJS += NCR53C9x.o fastlane.o
+else
+  ifeq ($(CONFIG_FASTLANE_SCSI),m)
+  M_OBJS += NCR53C9x.o fastlane.o
+  endif
+endif
+
 ifeq ($(CONFIG_ATARI_SCSI),y)
 L_OBJS += atari_scsi.o
 else
@@ -464,19 +512,26 @@ endif
 
 include $(TOPDIR)/Rules.make
 
-53c8xx_d.h 53c8xx_u.h : 53c7,8xx.scr script_asm.pl
-	ln -sf 53c7,8xx.scr fake.c
-	$(CPP) -traditional -DCHIP=810 fake.c | grep -v '^#' | perl script_asm.pl 
+53c8xx_d.h: 53c7,8xx.scr script_asm.pl
+	ln -sf 53c7,8xx.scr fake8.c
+	$(CPP) -traditional -DCHIP=810 fake8.c | grep -v '^#' | perl script_asm.pl 
 	mv script.h 53c8xx_d.h
 	mv scriptu.h 53c8xx_u.h
-	rm fake.c
+	rm fake8.c
 
-53c7xx_d.h 53c7xx_u.h : 53c7xx.scr script_asm.pl
-	ln -sf 53c7xx.scr fake.c
-	$(CPP) -traditional -DCHIP=710 fake.c | grep -v '^#' | perl -s script_asm.pl -ncr7x0_family
+53c8xx_u.h: 53c8xx_d.h
+
+53c7xx_d.h: 53c7xx.scr script_asm.pl
+	ln -sf 53c7xx.scr fake7.c
+	$(CPP) -traditional -DCHIP=710 fake7.c | grep -v '^#' | perl -s script_asm.pl -ncr7x0_family
 	mv script.h 53c7xx_d.h
 	mv scriptu.h 53c7xx_u.h
-	rm fake.c
+	rm fake7.c
+
+53c7xx_u.h: 53c7xx_d.h
+
+53c7xx.o : 53c7xx_d.h 53c7xx.c
+	$(CC) $(CFLAGS) -c 53c7xx.c
 
 scsi_mod.o: $(MIX_OBJS) hosts.o scsi.o scsi_ioctl.o constants.o \
 		scsicam.o scsi_proc.o scsi_error.o scsi_obsolete.o scsi_queue.o

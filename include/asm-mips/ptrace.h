@@ -30,8 +30,6 @@ struct pt_regs {
 	/* Other saved registers. */
 	unsigned long lo;
 	unsigned long hi;
-	unsigned long orig_reg2;
-	unsigned long orig_reg7;
 
 	/*
 	 * saved cp0 registers

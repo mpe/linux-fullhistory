@@ -4,7 +4,7 @@
  * Copyright (C) 1996 David S. Miller
  * Made portable by Ralf Baechle
  *
- * $Id: offset.c,v 1.3 1997/07/29 18:57:11 ralf Exp $
+ * $Id: offset.c,v 1.6 1998/05/04 09:18:45 ralf Exp $
  */
 
 #include <linux/types.h>
@@ -65,8 +65,6 @@ void output_ptreg_defines(void)
 	offset("#define PT_R31    ", struct pt_regs, regs[31]);
 	offset("#define PT_LO     ", struct pt_regs, lo);
 	offset("#define PT_HI     ", struct pt_regs, hi);
-	offset("#define PT_OR2    ", struct pt_regs, orig_reg2);
-	offset("#define PT_OR7    ", struct pt_regs, orig_reg7);
 	offset("#define PT_EPC    ", struct pt_regs, cp0_epc);
 	offset("#define PT_BVADDR ", struct pt_regs, cp0_badvaddr);
 	offset("#define PT_STATUS ", struct pt_regs, cp0_status);
@@ -81,9 +79,8 @@ void output_task_defines(void)
 	offset("#define TASK_STATE         ", struct task_struct, state);
 	offset("#define TASK_COUNTER       ", struct task_struct, counter);
 	offset("#define TASK_PRIORITY      ", struct task_struct, priority);
-	offset("#define TASK_SIGNAL        ", struct task_struct, signal);
-	offset("#define TASK_BLOCKED       ", struct task_struct, blocked);
 	offset("#define TASK_FLAGS         ", struct task_struct, flags);
+	offset("#define TASK_SIGPENDING    ", struct task_struct, sigpending);
 	offset("#define TASK_MM            ", struct task_struct, mm);
 	linefeed;
 }
@@ -99,16 +96,15 @@ void output_thread_defines(void)
 	offset("#define THREAD_REG21   ", struct task_struct, tss.reg21);
 	offset("#define THREAD_REG22   ", struct task_struct, tss.reg22);
 	offset("#define THREAD_REG23   ", struct task_struct, tss.reg23);
-	offset("#define THREAD_REG28   ", struct task_struct, tss.reg28);
 	offset("#define THREAD_REG29   ", struct task_struct, tss.reg29);
 	offset("#define THREAD_REG30   ", struct task_struct, tss.reg30);
 	offset("#define THREAD_REG31   ", struct task_struct, tss.reg31);
 	offset("#define THREAD_STATUS  ", struct task_struct, tss.cp0_status);
 	offset("#define THREAD_FPU     ", struct task_struct, tss.fpu);
 	offset("#define THREAD_BVADDR  ", struct task_struct, tss.cp0_badvaddr);
+	offset("#define THREAD_BUADDR  ", struct task_struct, tss.cp0_baduaddr);
 	offset("#define THREAD_ECODE   ", struct task_struct, tss.error_code);
 	offset("#define THREAD_TRAPNO  ", struct task_struct, tss.trap_no);
-	offset("#define THREAD_KSP     ", struct task_struct, tss.ksp);
 	offset("#define THREAD_PGDIR   ", struct task_struct, tss.pg_dir);
 	offset("#define THREAD_MFLAGS  ", struct task_struct, tss.mflags);
 	offset("#define THREAD_CURDS   ", struct task_struct, tss.current_ds);

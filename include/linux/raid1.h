@@ -37,8 +37,8 @@ struct raid1_data {
 
 struct raid1_bh {
 	unsigned int		remaining;
-	unsigned int		state;
 	int			cmd;
+	unsigned long		state;
 	struct md_dev		*mddev;
 	struct buffer_head	*master_bh;
 	struct buffer_head	*mirror_bh [MD_SB_DISKS];

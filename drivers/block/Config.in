@@ -60,7 +60,7 @@ fi
 comment 'Additional Block Devices'
 
 tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
-#tristate 'Network block device support' CONFIG_BLK_DEV_NBD
+tristate 'Network block device support' CONFIG_BLK_DEV_NBD
 bool 'Multiple devices driver support' CONFIG_BLK_DEV_MD
 if [ "$CONFIG_BLK_DEV_MD" = "y" ]; then
   tristate '   Linear (append) mode' CONFIG_MD_LINEAR

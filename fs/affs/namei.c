@@ -253,6 +253,7 @@ affs_unlink(struct inode *dir, struct dentry *dentry)
 	
 	inode->i_nlink = retval;
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
+	dir->i_version = ++event;
 	mark_inode_dirty(inode);
 	d_delete(dentry);
 	mark_inode_dirty(dir);
@@ -277,7 +278,7 @@ affs_create(struct inode *dir, struct dentry *dentry, int mode)
 	if (!inode)
 		goto out;
 
-	pr_debug(" -- ino=%lu\n",inode->i_ino);
+	pr_debug("AFFS: ino=%lu\n",inode->i_ino);
 	if (dir->i_sb->u.affs_sb.s_flags & SF_OFS)
 		inode->i_op = &affs_file_inode_operations_ofs;
 	else
@@ -390,6 +391,7 @@ affs_rmdir(struct inode *dir, struct dentry *dentry)
 	inode->i_nlink = retval;
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 	retval         = 0;
+	dir->i_version = ++event;
 	mark_inode_dirty(dir);
 	mark_inode_dirty(inode);
 	d_delete(dentry);
@@ -546,7 +548,7 @@ affs_rename(struct inode *old_dir, struct dentry *old_dentry,
 	unsigned long		 new_ino;
 	int			 retval;
 
-	pr_debug("AFFS: rename(old=%lu,\"%*s\" (inode=%p) to new=%lu,\"%*s\" (inode=%p) )\n",
+	pr_debug("AFFS: rename(old=%lu,\"%*s\" (inode=%p) to new=%lu,\"%*s\" (inode=%p))\n",
 		 old_dir->i_ino,old_dentry->d_name.len,old_dentry->d_name.name,old_inode,
 		 new_dir->i_ino,new_dentry->d_name.len,new_dentry->d_name.name,new_inode);
 	

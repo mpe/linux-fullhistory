@@ -246,7 +246,7 @@ int rtnetlink_dump_all(struct sk_buff *skb, struct netlink_callback *cb)
 		s_idx = 1;
 	for (idx=1; idx<NPROTO; idx++) {
 		int type = cb->nlh->nlmsg_type-RTM_BASE;
-		if (idx < s_idx || idx == AF_PACKET)
+		if (idx < s_idx || idx == PF_PACKET)
 			continue;
 		if (rtnetlink_links[idx] == NULL ||
 		    rtnetlink_links[idx][type].dumpit == NULL)
@@ -336,7 +336,7 @@ rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh, int *errp)
 
 	link_tab = rtnetlink_links[family];
 	if (link_tab == NULL)
-		link_tab = rtnetlink_links[AF_UNSPEC];
+		link_tab = rtnetlink_links[PF_UNSPEC];
 	link = &link_tab[type];
 
 	sz_idx = type>>2;
@@ -349,7 +349,7 @@ rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh, int *errp)
 
 	if (kind == 2 && nlh->nlmsg_flags&NLM_F_DUMP) {
 		if (link->dumpit == NULL)
-			link = &(rtnetlink_links[AF_UNSPEC][type]);
+			link = &(rtnetlink_links[PF_UNSPEC][type]);
 
 		if (link->dumpit == NULL)
 			goto err_inval;
@@ -398,7 +398,7 @@ rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh, int *errp)
 	}
 
 	if (link->doit == NULL)
-		link = &(rtnetlink_links[AF_UNSPEC][type]);
+		link = &(rtnetlink_links[PF_UNSPEC][type]);
 	if (link->doit == NULL)
 		goto err_inval;
 	err = link->doit(skb, nlh, (void *)&rta);
@@ -538,8 +538,8 @@ __initfunc(void rtnetlink_init(void))
 	if (rtnl == NULL)
 		panic("rtnetlink_init: cannot initialize rtnetlink\n");
 	register_netdevice_notifier(&rtnetlink_dev_notifier);
-	rtnetlink_links[AF_UNSPEC] = link_rtnetlink_table;
-	rtnetlink_links[AF_PACKET] = link_rtnetlink_table;
+	rtnetlink_links[PF_UNSPEC] = link_rtnetlink_table;
+	rtnetlink_links[PF_PACKET] = link_rtnetlink_table;
 }
 
 

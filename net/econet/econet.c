@@ -557,7 +557,7 @@ static int econet_create(struct socket *sock, int protocol)
 	MOD_INC_USE_COUNT;
 
 	err = -ENOBUFS;
-	sk = sk_alloc(AF_ECONET, GFP_KERNEL, 1);
+	sk = sk_alloc(PF_ECONET, GFP_KERNEL, 1);
 	if (sk == NULL)
 		goto out;
 
@@ -570,7 +570,7 @@ static int econet_create(struct socket *sock, int protocol)
 		goto out_free;
 	memset(sk->protinfo.af_econet, 0, sizeof(struct econet_opt));
 	sk->zapped=0;
-	sk->family = AF_ECONET;
+	sk->family = PF_ECONET;
 	sk->num = protocol;
 
 	sklist_insert_socket(&econet_sklist, sk);
@@ -727,12 +727,12 @@ static int econet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg
 }
 
 static struct net_proto_family econet_family_ops = {
-	AF_ECONET,
+	PF_ECONET,
 	econet_create
 };
 
 static struct proto_ops econet_ops = {
-	AF_ECONET,
+	PF_ECONET,
 
 	sock_no_dup,
 	econet_release,
@@ -1008,7 +1008,7 @@ __initfunc(static int aun_udp_initialise(void))
 
 	/* We can count ourselves lucky Acorn machines are too dim to
 	   speak IPv6. :-) */
-	if ((error = sock_create(AF_INET, SOCK_DGRAM, 0, &udpsock)) < 0)
+	if ((error = sock_create(PF_INET, SOCK_DGRAM, 0, &udpsock)) < 0)
 	{
 		printk("AUN: socket error %d\n", -error);
 		return error;

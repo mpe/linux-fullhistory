@@ -4638,12 +4638,27 @@ printf(KERN_INFO "ncr53c%s-%d: rev=0x%02x, base=0x%lx, io_port=0x%lx, irq=%d\n",
 	**	Then enable disconnects.
 	*/
 	save_flags(flags); cli();
-	if (ncr_reset_scsi_bus(np, 1, driver_setup.settle_delay) != 0) {
-		printf("%s: FATAL ERROR: CHECK SCSI BUS - CABLES, TERMINATION, DEVICE POWER etc.!\n", ncr_name(np));
-		restore_flags(flags);
-		goto attach_error;
-	}
-	ncr_exception (np);
+	do {
+		if (ncr_reset_scsi_bus(np, 1, driver_setup.settle_delay) != 0) {
+			printf("%s: FATAL ERROR: CHECK SCSI BUS - CABLES, "
+			       "TERMINATION, DEVICE POWER etc.!\n",
+			       ncr_name(np));
+			restore_flags(flags);
+			goto attach_error;
+		}
+
+		/*
+		** On Ultra/AXi, the NCR53C876 sometimes does not get the
+		** RST bit set in SIST the first time, so retry resetting
+		** the SCSI bus until the chip is properly initialized.
+		*/
+		np->disc = 1;
+		ncr_exception (np);
+		if (np->disc) {
+			printk("%s: Chip not responding to CRST, retrying\n",
+			       ncr_name(np));
+		}
+	} while (np->disc);
 	restore_flags(flags);
 
 	np->disc = 1;

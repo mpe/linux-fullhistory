@@ -5,7 +5,9 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1996 by Ralf Baechle
+ * Copyright (C) 1996, 1998 by Ralf Baechle
+ *
+ * $Id: unaligned.c,v 1.3 1998/05/04 09:17:59 ralf Exp $
  *
  * This file contains exception handler for address error exception with the
  * special capability to execute faulting instructions in software.  The
@@ -34,13 +36,7 @@
  * sysmips(MIPS_FIXADE, x);
  * ...
  *
- * The parameter x is 0 for disabeling software emulation.  Set bit 0 for
- * enabeling software emulation and bit 1 for enabeling printing debug
- * messages into syslog to aid finding address errors in programs.
- *
- * The logging feature is an addition over RISC/os and IRIX where only the
- * values 0 and 1 are acceptable values for x.  I'll probably remove this
- * hack later on.
+ * The argument x is 0 for disabling software emulation, enabled otherwise.
  *
  * Below a little program to play around with this feature.
  *
@@ -69,12 +65,6 @@
  *         printf("\n");
  * }
  *
- * Until I've written the code to handle branch delay slots it may happen
- * that the kernel receives an ades/adel instruction from an insn in a
- * branch delay slot but is unable to handle this case.  The kernel knows
- * this fact and therefore will kill the process.  For most code you can
- * fix this temporarily by compiling with flags -fno-delayed-branch -Wa,-O0.
- *
  * Coprozessor loads are not supported; I think this case is unimportant
  * in the practice.
  *
@@ -88,18 +78,14 @@
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 
+#include <asm/asm.h>
 #include <asm/branch.h>
 #include <asm/byteorder.h>
 #include <asm/inst.h>
 #include <asm/uaccess.h>
 
-#undef CONF_NO_UNALIGNED_KERNEL_ACCESS
-#undef CONF_LOG_UNALIGNED_ACCESSES
-
 #define STR(x)  __STR(x)
 #define __STR(x)  #x
-
-typedef unsigned long register_t;
 
 /*
  * User code may only access USEG; kernel code may access the
@@ -110,10 +96,12 @@ typedef unsigned long register_t;
 		goto sigbus;
 
 static inline void
-emulate_load_store_insn(struct pt_regs *regs, unsigned long addr, unsigned long pc)
+emulate_load_store_insn(struct pt_regs *regs,
+                        unsigned long addr,
+                        unsigned long pc)
 {
 	union mips_instruction insn;
-	register_t value;
+	unsigned long value, fixup;
 
 	regs->regs[0] = 0;
 	/*
@@ -358,99 +346,70 @@ emulate_load_store_insn(struct pt_regs *regs, unsigned long addr, unsigned long 
 		 */
 	default:
 		/*
-		 * Pheeee...  We encountered an yet unknown instruction ...
+		 * Pheeee...  We encountered an yet unknown instruction or
+		 * cache coherence problem.  Die sucker, die ...
 		 */
-		force_sig(SIGILL, current);
+		goto sigill;
 	}
 	return;
 
 fault:
+	/* Did we have an exception handler installed? */
+	fixup = search_exception_table(regs->cp0_epc);
+	if (fixup) {
+		long new_epc;
+		new_epc = fixup_exception(dpf_reg, fixup, regs->cp0_epc);
+		printk(KERN_DEBUG "%s: Forwarding exception at [<%lx>] (%lx)\n",
+		       current->comm, regs->cp0_epc, new_epc);
+		regs->cp0_epc = new_epc;
+		return;
+	}
+
+	lock_kernel();
 	send_sig(SIGSEGV, current, 1);
+	unlock_kernel();
 	return;
 sigbus:
+	lock_kernel();
 	send_sig(SIGBUS, current, 1);
+	unlock_kernel();
+	return;
+sigill:
+	lock_kernel();
+	send_sig(SIGILL, current, 1);
+	unlock_kernel();
 	return;
 }
 
 unsigned long unaligned_instructions;
 
-static inline void
-fix_ade(struct pt_regs *regs, unsigned long pc)
+asmlinkage void do_ade(struct pt_regs *regs)
 {
+	unsigned long pc;
+
 	/*
 	 * Did we catch a fault trying to load an instruction?
+	 * This also catches attempts to activate MIPS16 code on
+	 * CPUs which don't support it.
 	 */
-	if (regs->cp0_badvaddr == pc) {
-		/*
-		 * Phee...  Either the code is severly messed up or the
-		 * process tried to activate some MIPS16 code.
-		 */
-		force_sig(SIGBUS, current);
-	}
+	if (regs->cp0_badvaddr == regs->cp0_epc)
+		goto sigbus;
 
-	/*
-	 * Ok, this wasn't a failed instruction load.  The CPU was capable of
-	 * reading the instruction and faulted after this.  So we don't need
-	 * to verify_area the address of the instrucion.  We still don't
-	 * know whether the address used was legal and therefore need to do
-	 * verify_area().  The CPU already did the checking for legal
-	 * instructions for us, so we don't need to do this.
-	 */
+	pc = regs->cp0_epc + ((regs->cp0_cause & CAUSEF_BD) ? 4 : 0);
+	if (compute_return_epc(regs))
+		return;
+	if ((current->tss.mflags & MF_FIXADE) == 0)
+		goto sigbus;
+
 	emulate_load_store_insn(regs, regs->cp0_badvaddr, pc);
 	unaligned_instructions++;
-}
 
-#define kernel_address(x) ((long)(x) < 0)
+	return;
 
-asmlinkage void
-do_ade(struct pt_regs *regs)
-{
-	register_t pc = regs->cp0_epc;
-	register_t badvaddr __attribute__ ((unused)) = regs->cp0_badvaddr;
-	char adels;
-
+sigbus:
 	lock_kernel();
-	adels = (((regs->cp0_cause & CAUSEF_EXCCODE) >>
-                  CAUSEB_EXCCODE) == 4) ? 'l' : 's';
-
-#ifdef CONF_NO_UNALIGNED_KERNEL_ACCESS
-	/*
-	 * In an ideal world there are no unaligned accesses by the kernel.
-	 * So be a bit noisy ...
-	 */
-	if (kernel_address(badvaddr) && !user_mode(regs)) {
-		show_regs(regs);
-		panic("Caught adel%c exception in kernel mode accessing %08lx.",
-		      adels, badvaddr);
-	}
-#endif /* CONF_NO_UNALIGNED_KERNEL_ACCESS */
-
-#ifdef CONF_LOG_UNALIGNED_ACCESSES
-	if (current->tss.mflags & MF_LOGADE) {
-		register_t logpc = pc;
-		if (regs->cp0_cause & CAUSEF_BD)
-			logpc += 4;
-		printk(KERN_DEBUG
-		       "Caught adel%c in '%s' at 0x%08lx accessing 0x%08lx.\n",
-		       adels, current->comm, logpc, regs->cp0_badvaddr);
-	}
-#endif /* CONF_LOG_UNALIGNED_ACCESSES */
-
-	if (compute_return_epc(regs))
-		goto out;
-	if(current->tss.mflags & MF_FIXADE) {
-		pc += ((regs->cp0_cause & CAUSEF_BD) ? 4 : 0);
-		fix_ade(regs, pc);
-		goto out;
-	}
-
-#ifdef CONF_DEBUG_EXCEPTIONS
-	show_regs(regs);
-#endif
-
 	force_sig(SIGBUS, current);
-
-out:
 	unlock_kernel();
+
 	return;
 }

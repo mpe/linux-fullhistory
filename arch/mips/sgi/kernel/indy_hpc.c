@@ -1,8 +1,11 @@
-/* $Id: indy_hpc.c,v 1.1.1.1 1997/06/01 03:16:40 ralf Exp $
+/*
  * indy_hpc.c: Routines for generic manipulation of the HPC controllers.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
+ *
+ * $Id: indy_hpc.c,v 1.2 1998/05/01 01:35:14 ralf Exp $
  */
+#include <linux/init.h>
 
 #include <asm/addrspace.h>
 #include <asm/ptrace.h>
@@ -38,7 +41,7 @@ void sgihpc_write2_modify(int set, int clear)
 	hpc3mregs->write2 = write2;
 }
 
-void sgihpc_init(void)
+__initfunc(void sgihpc_init(void))
 {
 	unsigned long sid, crev, brev;
 
