@@ -1103,7 +1103,7 @@ static int con_write(struct tty_struct * tty, int from_user,
 {
 	int c, n = 0;
 	unsigned int currcons;
-	struct vt_struct *vt = tty->driver_data;
+	struct vt_struct *vt = (struct vt_struct *)tty->driver_data;
 
 	currcons = vt->vc_num;
 	if (currcons >= NR_CONSOLES) {
@@ -1834,7 +1834,7 @@ static void highlight(const int currcons, const int s, const int e)
 static void highlight_pointer(const int currcons, const int where)
 {
         unsigned char *p;
-	static char *prev=NULL;
+	static unsigned char *prev=NULL;
 
 	if (where==-1) /* remove the pointer */
 	{

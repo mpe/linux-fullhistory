@@ -182,7 +182,7 @@ static int setsize(unsigned long capacity,unsigned int *cyls,unsigned int *hds,
       	    cylinders = capacity / temp;/* Compute number of cylinders */ 
       	} 
     } 
-    if (cylinders == 0) rv=-1; 		/* Give error if 0 cylinders */ 
+    if (cylinders == 0) rv=(unsigned)-1;/* Give error if 0 cylinders */ 
 
     *cyls = (unsigned int) cylinders;	/* Stuff return values */ 
     *secs = (unsigned int) sectors; 

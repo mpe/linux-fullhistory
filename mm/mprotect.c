@@ -63,20 +63,20 @@ static inline int mprotect_fixup_start(struct vm_area_struct * vma,
 	unsigned long end,
 	int newflags, int prot)
 {
-	struct vm_area_struct * new;
+	struct vm_area_struct * n;
 
-	new = kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
-	if (!new)
+	n = (struct vm_area_struct *) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
+	if (!n)
 		return -ENOMEM;
-	*new = *vma;
+	*n = *vma;
 	vma->vm_start = end;
-	new->vm_end = end;
-	vma->vm_offset += vma->vm_start - new->vm_start;
-	new->vm_flags = newflags;
-	new->vm_page_prot = prot;
-	if (new->vm_inode)
-		new->vm_inode->i_count++;
-	insert_vm_struct(current, new);
+	n->vm_end = end;
+	vma->vm_offset += vma->vm_start - n->vm_start;
+	n->vm_flags = newflags;
+	n->vm_page_prot = prot;
+	if (n->vm_inode)
+		n->vm_inode->i_count++;
+	insert_vm_struct(current, n);
 	merge_segments(current->mm->mmap);
 	return 0;
 }
@@ -85,20 +85,20 @@ static inline int mprotect_fixup_end(struct vm_area_struct * vma,
 	unsigned long start,
 	int newflags, int prot)
 {
-	struct vm_area_struct * new;
+	struct vm_area_struct * n;
 
-	new = kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
-	if (!new)
+	n = (struct vm_area_struct *) kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
+	if (!n)
 		return -ENOMEM;
-	*new = *vma;
+	*n = *vma;
 	vma->vm_end = start;
-	new->vm_start = start;
-	new->vm_offset += new->vm_start - vma->vm_start;
-	new->vm_flags = newflags;
-	new->vm_page_prot = prot;
-	if (new->vm_inode)
-		new->vm_inode->i_count++;
-	insert_vm_struct(current, new);
+	n->vm_start = start;
+	n->vm_offset += n->vm_start - vma->vm_start;
+	n->vm_flags = newflags;
+	n->vm_page_prot = prot;
+	if (n->vm_inode)
+		n->vm_inode->i_count++;
+	insert_vm_struct(current, n);
 	merge_segments(current->mm->mmap);
 	return 0;
 }

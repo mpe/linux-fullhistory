@@ -225,7 +225,7 @@ retry:
 		PRINTK("NFS reply getattr\n");
 	}
 	else {
-		if (!ruid && current->euid == 0 && current->uid != 0) {
+		if (!ruid && current->fsuid == 0 && current->uid != 0) {
 			ruid = 1;
 			goto retry;
 		}
@@ -260,7 +260,7 @@ retry:
 		PRINTK("NFS reply setattr\n");
 	}
 	else {
-		if (!ruid && current->euid == 0 && current->uid != 0) {
+		if (!ruid && current->fsuid == 0 && current->uid != 0) {
 			ruid = 1;
 			goto retry;
 		}
@@ -300,7 +300,7 @@ retry:
 		PRINTK("NFS reply lookup\n");
 	}
 	else {
-		if (!ruid && current->euid == 0 && current->uid != 0) {
+		if (!ruid && current->fsuid == 0 && current->uid != 0) {
 			ruid = 1;
 			goto retry;
 		}
@@ -338,7 +338,7 @@ retry:
 			PRINTK("NFS reply readlink %s\n", res);
 	}
 	else {
-		if (!ruid && current->euid == 0 && current->uid != 0) {
+		if (!ruid && current->fsuid == 0 && current->uid != 0) {
 			ruid = 1;
 			goto retry;
 		}
@@ -381,7 +381,7 @@ retry:
 			PRINTK("NFS reply read %d\n", len);
 	}
 	else {
-		if (!ruid && current->euid == 0 && current->uid != 0) {
+		if (!ruid && current->fsuid == 0 && current->uid != 0) {
 			ruid = 1;
 			goto retry;
 		}
@@ -419,7 +419,7 @@ retry:
 		PRINTK("NFS reply write\n");
 	}
 	else {
-		if (!ruid && current->euid == 0 && current->uid != 0) {
+		if (!ruid && current->fsuid == 0 && current->uid != 0) {
 			ruid = 1;
 			goto retry;
 		}
@@ -457,7 +457,7 @@ retry:
 		PRINTK("NFS reply create\n");
 	}
 	else {
-		if (!ruid && current->euid == 0 && current->uid != 0) {
+		if (!ruid && current->fsuid == 0 && current->uid != 0) {
 			ruid = 1;
 			goto retry;
 		}
@@ -490,7 +490,7 @@ retry:
 		PRINTK("NFS reply remove\n");
 	}
 	else {
-		if (!ruid && current->euid == 0 && current->uid != 0) {
+		if (!ruid && current->fsuid == 0 && current->uid != 0) {
 			ruid = 1;
 			goto retry;
 		}
@@ -527,7 +527,7 @@ retry:
 		PRINTK("NFS reply rename\n");
 	}
 	else {
-		if (!ruid && current->euid == 0 && current->uid != 0) {
+		if (!ruid && current->fsuid == 0 && current->uid != 0) {
 			ruid = 1;
 			goto retry;
 		}
@@ -562,7 +562,7 @@ retry:
 		PRINTK("NFS reply link\n");
 	}
 	else {
-		if (!ruid && current->euid == 0 && current->uid != 0) {
+		if (!ruid && current->fsuid == 0 && current->uid != 0) {
 			ruid = 1;
 			goto retry;
 		}
@@ -598,7 +598,7 @@ retry:
 		PRINTK("NFS reply symlink\n");
 	}
 	else {
-		if (!ruid && current->euid == 0 && current->uid != 0) {
+		if (!ruid && current->fsuid == 0 && current->uid != 0) {
 			ruid = 1;
 			goto retry;
 		}
@@ -636,7 +636,7 @@ retry:
 		PRINTK("NFS reply mkdir\n");
 	}
 	else {
-		if (!ruid && current->euid == 0 && current->uid != 0) {
+		if (!ruid && current->fsuid == 0 && current->uid != 0) {
 			ruid = 1;
 			goto retry;
 		}
@@ -669,7 +669,7 @@ retry:
 		PRINTK("NFS reply rmdir\n");
 	}
 	else {
-		if (!ruid && current->euid == 0 && current->uid != 0) {
+		if (!ruid && current->fsuid == 0 && current->uid != 0) {
 			ruid = 1;
 			goto retry;
 		}
@@ -723,7 +723,7 @@ retry:
 		}
 	}
 	else {
-		if (!ruid && current->euid == 0 && current->uid != 0) {
+		if (!ruid && current->fsuid == 0 && current->uid != 0) {
 			ruid = 1;
 			goto retry;
 		}
@@ -757,7 +757,7 @@ retry:
 		PRINTK("NFS reply statfs\n");
 	}
 	else {
-		if (!ruid && current->euid == 0 && current->uid != 0) {
+		if (!ruid && current->fsuid == 0 && current->uid != 0) {
 			ruid = 1;
 			goto retry;
 		}
@@ -792,7 +792,7 @@ static int *nfs_rpc_header(int *p, int procedure, int ruid)
 	p1 = p++;
 	*p++ = htonl(CURRENT_TIME); /* traditional, could be anything */
 	p = xdr_encode_string(p, (char *) sys);
-	*p++ = htonl(ruid ? current->uid : current->euid);
+	*p++ = htonl(ruid ? current->uid : current->fsuid);
 	*p++ = htonl(current->egid);
 	p2 = p++;
 	for (i = 0; i < 16 && i < NGROUPS && current->groups[i] != NOGROUP; i++)

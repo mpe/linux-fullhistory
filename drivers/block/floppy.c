@@ -1523,7 +1523,7 @@ static void setup_format_params(void)
 {
 	struct fparm {
 		unsigned char track,head,sect,size;
-	} *here = (void *)floppy_track_buffer;
+	} *here = (struct fparm *)floppy_track_buffer;
 	int ssize,il,n;
 	int count,head_shift,track_shift;
 

@@ -197,7 +197,7 @@ scsi_unregister(struct Scsi_Host * sh){
 
 struct Scsi_Host * scsi_register(Scsi_Host_Template * tpnt, int j){
 	struct Scsi_Host * retval, *shpnt;
-	retval = scsi_init_malloc(sizeof(struct Scsi_Host) + j);
+	retval = (struct Scsi_Host *)scsi_init_malloc(sizeof(struct Scsi_Host) + j);
 	retval->host_busy = 0;
 	if(j > 0xffff) panic("Too many extra bytes requested\n");
 	retval->extra_bytes = j;

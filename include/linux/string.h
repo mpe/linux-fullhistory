@@ -11,7 +11,11 @@
 extern "C" {
 #endif
 
+#ifdef i386
+
 #include <asm/string.h>		/* inline functions for i386.. */
+
+#else
 
 extern char * strcpy(char *, const char *);
 extern char * strncpy(char *, const char *, size_t);
@@ -32,6 +36,8 @@ extern void * memmove(void *, const void *, size_t);
 extern int memcmp(const void *, const void *, size_t);
 extern void * memchr(const void *, char, size_t);
 extern void * memset(void *, char, size_t);
+
+#endif
 
 #ifdef __cplusplus
 }

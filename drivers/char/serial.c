@@ -290,7 +290,7 @@ static inline void serial_outp(struct async_struct *info, int offset,
  */
 static void rs_stop(struct tty_struct *tty)
 {
-	struct async_struct *info = tty->driver_data;
+	struct async_struct *info = (struct async_struct *)tty->driver_data;
 	unsigned long flags;
 
 	if (serial_paranoia_check(info, tty->device, "rs_stop"))
@@ -306,7 +306,7 @@ static void rs_stop(struct tty_struct *tty)
 
 static void rs_start(struct tty_struct *tty)
 {
-	struct async_struct *info = tty->driver_data;
+	struct async_struct *info = (struct async_struct *)tty->driver_data;
 	unsigned long flags;
 	
 	if (serial_paranoia_check(info, tty->device, "rs_start"))
@@ -694,9 +694,9 @@ static void do_serial_bh(void *unused)
 	run_task_queue(&tq_serial);
 }
 
-static void do_softint(void *private)
+static void do_softint(void *private_)
 {
-	struct async_struct	*info = (struct async_struct *) private;
+	struct async_struct	*info = (struct async_struct *) private_;
 	struct tty_struct	*tty;
 	
 	tty = info->tty;
@@ -1185,7 +1185,7 @@ static void change_speed(struct async_struct *info)
 
 static void rs_put_char(struct tty_struct *tty, unsigned char ch)
 {
-	struct async_struct *info = tty->driver_data;
+	struct async_struct *info = (struct async_struct *)tty->driver_data;
 	unsigned long flags;
 
 	if (serial_paranoia_check(info, tty->device, "rs_put_char"))
@@ -1208,7 +1208,7 @@ static void rs_put_char(struct tty_struct *tty, unsigned char ch)
 
 static void rs_flush_chars(struct tty_struct *tty)
 {
-	struct async_struct *info = tty->driver_data;
+	struct async_struct *info = (struct async_struct *)tty->driver_data;
 	unsigned long flags;
 				
 	if (serial_paranoia_check(info, tty->device, "rs_flush_chars"))
@@ -1228,7 +1228,7 @@ static int rs_write(struct tty_struct * tty, int from_user,
 		    unsigned char *buf, int count)
 {
 	int	c, total = 0;
-	struct async_struct *info = tty->driver_data;
+	struct async_struct *info = (struct async_struct *)tty->driver_data;
 	unsigned long flags;
 				
 	if (serial_paranoia_check(info, tty->device, "rs_write"))
@@ -1272,7 +1272,7 @@ static int rs_write(struct tty_struct * tty, int from_user,
 
 static int rs_write_room(struct tty_struct *tty)
 {
-	struct async_struct *info = tty->driver_data;
+	struct async_struct *info = (struct async_struct *)tty->driver_data;
 	int	ret;
 				
 	if (serial_paranoia_check(info, tty->device, "rs_write_room"))
@@ -1285,7 +1285,7 @@ static int rs_write_room(struct tty_struct *tty)
 
 static int rs_chars_in_buffer(struct tty_struct *tty)
 {
-	struct async_struct *info = tty->driver_data;
+	struct async_struct *info = (struct async_struct *)tty->driver_data;
 				
 	if (serial_paranoia_check(info, tty->device, "rs_chars_in_buffer"))
 		return 0;
@@ -1294,7 +1294,7 @@ static int rs_chars_in_buffer(struct tty_struct *tty)
 
 static void rs_flush_buffer(struct tty_struct *tty)
 {
-	struct async_struct *info = tty->driver_data;
+	struct async_struct *info = (struct async_struct *)tty->driver_data;
 				
 	if (serial_paranoia_check(info, tty->device, "rs_flush_buffer"))
 		return;
@@ -1317,7 +1317,7 @@ static void rs_flush_buffer(struct tty_struct *tty)
  */
 static void rs_throttle(struct tty_struct * tty)
 {
-	struct async_struct *info = tty->driver_data;
+	struct async_struct *info = (struct async_struct *)tty->driver_data;
 #ifdef SERIAL_DEBUG_THROTTLE
 	char	buf[64];
 	
@@ -1340,7 +1340,7 @@ static void rs_throttle(struct tty_struct * tty)
 
 static void rs_unthrottle(struct tty_struct * tty)
 {
-	struct async_struct *info = tty->driver_data;
+	struct async_struct *info = (struct async_struct *)tty->driver_data;
 #ifdef SERIAL_DEBUG_THROTTLE
 	char	buf[64];
 	
@@ -1627,7 +1627,7 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 		    unsigned int cmd, unsigned long arg)
 {
 	int error;
-	struct async_struct * info = tty->driver_data;
+	struct async_struct * info = (struct async_struct *)tty->driver_data;
 	int retval;
 
 	if (serial_paranoia_check(info, tty->device, "rs_ioctl"))
@@ -1718,7 +1718,7 @@ static int rs_ioctl(struct tty_struct *tty, struct file * file,
 
 static void rs_set_termios(struct tty_struct *tty, struct termios *old_termios)
 {
-	struct async_struct *info = tty->driver_data;
+	struct async_struct *info = (struct async_struct *)tty->driver_data;
 
 	if (tty->termios->c_cflag == old_termios->c_cflag)
 		return;
@@ -1748,7 +1748,7 @@ static void rs_set_termios(struct tty_struct *tty, struct termios *old_termios)
  */
 static void rs_close(struct tty_struct *tty, struct file * filp)
 {
-	struct async_struct * info = tty->driver_data;
+	struct async_struct * info = (struct async_struct *)tty->driver_data;
 
 	if (!info || serial_paranoia_check(info, tty->device, "rs_close"))
 		return;
@@ -1822,7 +1822,7 @@ static void rs_close(struct tty_struct *tty, struct file * filp)
  */
 void rs_hangup(struct tty_struct *tty)
 {
-	struct async_struct * info = tty->driver_data;
+	struct async_struct * info = (struct async_struct *)tty->driver_data;
 	
 	if (serial_paranoia_check(info, tty->device, "rs_hangup"))
 		return;

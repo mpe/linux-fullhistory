@@ -232,7 +232,7 @@ plip_init(struct device *dev)
 
     dev->priv = kmalloc(sizeof (struct net_local), GFP_KERNEL);
     memset(dev->priv, 0, sizeof(struct net_local));
-    pl=dev->priv;
+    pl = (struct net_local *) dev->priv;
     
     pl->trigger_us	=	PLIP_TRIGGER_WAIT;
     pl->nibble_us	=	PLIP_NIBBLE_WAIT;
@@ -693,7 +693,7 @@ static void
 plip_interrupt(int reg_ptr)
 {
     int irq = -(((struct pt_regs *)reg_ptr)->orig_eax+2);
-    struct device *dev = irq2dev_map[irq];
+    struct device *dev = (struct device *) irq2dev_map[irq];
     struct net_local *lp = (struct net_local *)dev->priv;
     struct plip_local *rcv = &lp->rcv_data;
     struct plip_local *snd = &lp->snd_data;

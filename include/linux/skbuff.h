@@ -46,7 +46,7 @@ struct sk_buff {
   volatile unsigned long	when;	/* used to compute rtt's	*/
   struct timeval		stamp;
   struct device			*dev;
-  void				*mem_addr;
+  struct sk_buff		*mem_addr;
   union {
 	struct tcphdr	*th;
 	struct ethhdr	*eth;

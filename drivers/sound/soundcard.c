@@ -219,7 +219,7 @@ snd_set_irq_handler (int interrupt_level, void (*hndlr) (int))
 {
   int             retcode;
 
-  retcode = request_irq(interrupt_level, &hndlr,
+  retcode = request_irq(interrupt_level, hndlr,
 #ifdef SND_SA_INTERRUPT
 	SA_INTERRUPT,
 #else

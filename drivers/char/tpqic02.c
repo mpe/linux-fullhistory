@@ -2832,7 +2832,7 @@ static int qic02_get_resources(void)
 	 */
 
 	/* get IRQ */
-	if (request_irq(QIC02_TAPE_IRQ, qic02_tape_interrupt, SA_INTERRUP, "QIC-02")) {
+	if (request_irq(QIC02_TAPE_IRQ, qic02_tape_interrupt, SA_INTERRUPT, "QIC-02")) {
 		printk(TPQIC02_NAME ": can't allocate IRQ%d for QIC-02 tape\n",
 			QIC02_TAPE_IRQ);
 		status_zombie = YES;

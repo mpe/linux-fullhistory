@@ -121,7 +121,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	int console, i;
 	unsigned char ucval;
 	struct kbd_struct * kbd;
-	struct vt_struct *vt = tty->driver_data;
+	struct vt_struct *vt = (struct vt_struct *)tty->driver_data;
 
 	console = vt->vc_num;
 

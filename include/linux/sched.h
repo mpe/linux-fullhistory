@@ -270,8 +270,8 @@ struct task_struct {
 	 */
 	struct task_struct *p_opptr, *p_pptr, *p_cptr, *p_ysptr, *p_osptr;
 	struct wait_queue *wait_chldexit;	/* for wait4() */
-	unsigned short uid,euid,suid;
-	unsigned short gid,egid,sgid;
+	unsigned short uid,euid,suid,fsuid;
+	unsigned short gid,egid,sgid,fsgid;
 	unsigned long timeout;
 	unsigned long it_real_value, it_prof_value, it_virt_value;
 	unsigned long it_real_incr, it_prof_incr, it_virt_incr;
@@ -332,7 +332,7 @@ struct task_struct {
 /* pid etc.. */	0,0,0,0, \
 /* suppl grps*/ {NOGROUP,}, \
 /* proc links*/ &init_task,&init_task,NULL,NULL,NULL,NULL, \
-/* uid etc */	0,0,0,0,0,0, \
+/* uid etc */	0,0,0,0,0,0,0,0, \
 /* timeout */	0,0,0,0,0,0,0,0,0,0,0,0, \
 /* rlimits */   { {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX},  \
 		  {LONG_MAX, LONG_MAX}, {LONG_MAX, LONG_MAX},  \

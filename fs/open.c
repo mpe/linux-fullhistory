@@ -128,7 +128,7 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 		return -EROFS;
 	}
 	if (times) {
-		if ((current->euid != inode->i_uid) && !suser()) {
+		if ((current->fsuid != inode->i_uid) && !fsuser()) {
 			iput(inode);
 			return -EPERM;
 		}
@@ -136,7 +136,7 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 		modtime = get_fs_long((unsigned long *) &times->modtime);
 		inode->i_ctime = CURRENT_TIME;
 	} else {
-		if ((current->euid != inode->i_uid) &&
+		if ((current->fsuid != inode->i_uid) &&
 		    !permission(inode,MAY_WRITE)) {
 			iput(inode);
 			return -EACCES;
@@ -152,41 +152,30 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 }
 
 /*
- * XXX we should use the real ids for checking _all_ components of the
- * path.  Now we only use them for the final component of the path.
+ * access() needs to use the real uid/gid, not the effective uid/gid.
+ * We do this by temporarily setting fsuid/fsgid to the wanted values
  */
-asmlinkage int sys_access(const char * filename,int mode)
+asmlinkage int sys_access(const char * filename, int mode)
 {
 	struct inode * inode;
-	int res, i_mode;
+	int old_fsuid, old_fsgid;
+	int res;
 
 	if (mode != (mode & S_IRWXO))	/* where's F_OK, X_OK, W_OK, R_OK? */
 		return -EINVAL;
+	old_fsuid = current->fsuid;
+	old_fsgid = current->fsgid;
+	current->fsuid = current->uid;
+	current->fsgid = current->gid;
 	res = namei(filename,&inode);
-	if (res)
-		return res;
-	i_mode = inode->i_mode;
-	res = i_mode & S_IRWXUGO;
-	if (current->uid == inode->i_uid)
-		res >>= 6;		/* needs cleaning? */
-	else if (in_group_p(inode->i_gid))
-		res >>= 3;		/* needs cleaning? */
-	iput(inode);
-	if ((res & mode) == mode)
-		return 0;
-	/*
-	 * XXX we are doing this test last because we really should be
-	 * swapping the effective with the real user id (temporarily),
-	 * and then calling suser() routine.  If we do call the
-	 * suser() routine, it needs to be called last. 
-	 *
-	 * XXX nope.  suser() is inappropriate and swapping the ids while
-	 * decomposing the path would be racy.
-	 */
-	if ((!current->uid) &&
-	    (S_ISDIR(i_mode) || !(mode & S_IXOTH) || (i_mode & S_IXUGO)))
-		return 0;
-	return -EACCES;
+	if (!res) {
+		if (!permission(inode, mode))
+			res = -EACCES;
+		iput(inode);
+	}
+	current->fsuid = old_fsuid;
+	current->fsgid = old_fsgid;
+	return res;
 }
 
 asmlinkage int sys_chdir(const char * filename)
@@ -241,7 +230,7 @@ asmlinkage int sys_chroot(const char * filename)
 		iput(inode);
 		return -ENOTDIR;
 	}
-	if (!suser()) {
+	if (!fsuser()) {
 		iput(inode);
 		return -EPERM;
 	}
@@ -259,14 +248,14 @@ asmlinkage int sys_fchmod(unsigned int fd, mode_t mode)
 		return -EBADF;
 	if (!(inode = file->f_inode))
 		return -ENOENT;
-	if ((current->euid != inode->i_uid) && !suser())
+	if ((current->fsuid != inode->i_uid) && !fsuser())
 		return -EPERM;
 	if (IS_RDONLY(inode))
 		return -EROFS;
 	if (mode == (mode_t) -1)
 		mode = inode->i_mode;
 	inode->i_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
-	if (!suser() && !in_group_p(inode->i_gid))
+	if (!fsuser() && !in_group_p(inode->i_gid))
 		inode->i_mode &= ~S_ISGID;
 	inode->i_ctime = CURRENT_TIME;
 	inode->i_dirt = 1;
@@ -281,7 +270,7 @@ asmlinkage int sys_chmod(const char * filename, mode_t mode)
 	error = namei(filename,&inode);
 	if (error)
 		return error;
-	if ((current->euid != inode->i_uid) && !suser()) {
+	if ((current->fsuid != inode->i_uid) && !fsuser()) {
 		iput(inode);
 		return -EPERM;
 	}
@@ -292,7 +281,7 @@ asmlinkage int sys_chmod(const char * filename, mode_t mode)
 	if (mode == (mode_t) -1)
 		mode = inode->i_mode;
 	inode->i_mode = (mode & S_IALLUGO) | (inode->i_mode & ~S_IALLUGO);
-	if (!suser() && !in_group_p(inode->i_gid))
+	if (!fsuser() && !in_group_p(inode->i_gid))
 		inode->i_mode &= ~S_ISGID;
 	inode->i_ctime = CURRENT_TIME;
 	inode->i_dirt = 1;
@@ -316,9 +305,9 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 		user = inode->i_uid;
 	if (group == (gid_t) -1)
 		group = inode->i_gid;
-	if ((current->euid == inode->i_uid && user == inode->i_uid &&
+	if ((current->fsuid == inode->i_uid && user == inode->i_uid &&
 	     (in_group_p(group) || group == inode->i_gid)) ||
-	    suser()) {
+	    fsuser()) {
 		inode->i_uid = user;
 		inode->i_gid = group;
 		inode->i_ctime = CURRENT_TIME;
@@ -344,9 +333,9 @@ asmlinkage int sys_chown(const char * filename, uid_t user, gid_t group)
 		user = inode->i_uid;
 	if (group == (gid_t) -1)
 		group = inode->i_gid;
-	if ((current->euid == inode->i_uid && user == inode->i_uid &&
+	if ((current->fsuid == inode->i_uid && user == inode->i_uid &&
 	     (in_group_p(group) || group == inode->i_gid)) ||
-	    suser()) {
+	    fsuser()) {
 		inode->i_uid = user;
 		inode->i_gid = group;
 		inode->i_ctime = CURRENT_TIME;

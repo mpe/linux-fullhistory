@@ -278,7 +278,7 @@ static void identify_intr(void)
 			id.cyls*id.heads*id.sectors/2048, id.buf_size/2,
 			hd_info[dev].cyl, hd_info[dev].head, hd_info[dev].sect, id.max_multsect);
 		/* save drive info for later query via HDIO_GETIDENTITY */
-		if (NULL != (hd_ident_info[dev] = kmalloc(sizeof(id),GFP_ATOMIC)))
+		if (NULL != (hd_ident_info[dev] = (struct hd_driveid *)kmalloc(sizeof(id),GFP_ATOMIC)))
 			*hd_ident_info[dev] = id;
 		
 		/* flush remaining 384 (reserved/undefined) ID bytes: */

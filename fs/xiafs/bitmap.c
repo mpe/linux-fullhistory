@@ -329,8 +329,8 @@ struct inode * xiafs_new_inode(struct inode * dir)
     inode->i_count = 1;
     inode->i_nlink = 1;
     inode->i_dev = sb->s_dev;
-    inode->i_uid = current->euid;
-    inode->i_gid = (dir->i_mode & S_ISGID) ? dir->i_gid : current->egid;
+    inode->i_uid = current->fsuid;
+    inode->i_gid = (dir->i_mode & S_ISGID) ? dir->i_gid : current->fsgid;
     inode->i_dirt = 1;
     inode->i_ino = tmp;
     inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;

@@ -121,7 +121,8 @@ int do_mmap(struct file * file, unsigned long addr, unsigned long len,
 		else
 			mask |= PAGE_SHARED;
 
-	vma = kmalloc(sizeof(struct vm_area_struct), GFP_KERNEL);
+	vma = (struct vm_area_struct *)kmalloc(sizeof(struct vm_area_struct),
+		GFP_KERNEL);
 	if (!vma)
 		return -ENOMEM;
 

@@ -475,7 +475,7 @@ repeat:
 	inode->i_count = 1;
 	inode->i_nlink = 1;
 	inode->i_dev = sb->s_dev;
-	inode->i_uid = current->euid;
+	inode->i_uid = current->fsuid;
 	if (test_opt (sb, GRPID))
 		inode->i_gid = dir->i_gid;
 	else if (dir->i_mode & S_ISGID) {
@@ -483,7 +483,7 @@ repeat:
 		if (S_ISDIR(mode))
 			mode |= S_ISGID;
 	} else
-		inode->i_gid = current->egid;
+		inode->i_gid = current->fsgid;
 	inode->i_dirt = 1;
 	inode->i_ino = j;
 	inode->i_blksize = sb->s_blocksize;

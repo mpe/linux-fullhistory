@@ -68,8 +68,9 @@ void putname(char * name)
  *	permission()
  *
  * is used to check for read/write/execute permissions on a file.
- * I don't know if we should look at just the euid or both euid and
- * uid, but that should be easily changed.
+ * We use "fsuid" for this, letting us set arbitrary permissions
+ * permissions for filesystem access without changing the "normal"
+ * uids which are used for other things..
  */
 int permission(struct inode * inode,int mask)
 {
@@ -77,11 +78,11 @@ int permission(struct inode * inode,int mask)
 
 	if (inode->i_op && inode->i_op->permission)
 		return inode->i_op->permission(inode, mask);
-	else if (current->euid == inode->i_uid)
+	else if (current->fsuid == inode->i_uid)
 		mode >>= 6;
 	else if (in_group_p(inode->i_gid))
 		mode >>= 3;
-	if (((mode & mask & 0007) == mask) || suser())
+	if (((mode & mask & 0007) == mask) || fsuser())
 		return 1;
 	return 0;
 }
@@ -418,7 +419,7 @@ asmlinkage int sys_mknod(const char * filename, int mode, dev_t dev)
 	int error;
 	char * tmp;
 
-	if (S_ISDIR(mode) || (!S_ISFIFO(mode) && !suser()))
+	if (S_ISDIR(mode) || (!S_ISFIFO(mode) && !fsuser()))
 		return -EPERM;
 	switch (mode & S_IFMT) {
 	case 0:

@@ -550,7 +550,7 @@ ppp_open(struct tty_struct *tty)
   }
 
   /* Allocate a user-level receive buffer */
-  ppp->us_rbuff = kmalloc (RBUFSIZE, GFP_KERNEL);
+  ppp->us_rbuff = (unsigned char *) kmalloc (RBUFSIZE, GFP_KERNEL);
   if (ppp->us_rbuff == NULL) {
     PRINTKN (1,(KERN_ERR "ppp: no space for user receive buffer\n"));
     ppp_release (ppp);
@@ -2013,7 +2013,7 @@ static void ppp_print_buffer(const char *name, char *buf, int count, int seg)
 
   set_fs (seg);
 
-  if (name != (char *) NULL)
+  if (name != NULL)
     PRINTK ((KERN_DEBUG "ppp: %s, count = %d\n", name, count));
 
   while (count > 8) {

@@ -28,7 +28,7 @@ int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 		put_fs_long (inode->u.ext2_i.i_flags, (long *) arg);
 		return 0;
 	case EXT2_IOC_SETFLAGS:
-		if ((current->euid != inode->i_uid) && !suser())
+		if ((current->fsuid != inode->i_uid) && !fsuser())
 			return -EPERM;
 		if (IS_RDONLY(inode))
 			return -EROFS;
@@ -42,7 +42,7 @@ int ext2_ioctl (struct inode * inode, struct file * filp, unsigned int cmd,
 		put_fs_long (inode->u.ext2_i.i_version, (long *) arg);
 		return 0;
 	case EXT2_IOC_SETVERSION:
-		if ((current->euid != inode->i_uid) && !suser())
+		if ((current->fsuid != inode->i_uid) && !fsuser())
 			return -EPERM;
 		if (IS_RDONLY(inode))
 			return -EROFS;

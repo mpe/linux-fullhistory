@@ -880,7 +880,7 @@ static void put_unused_buffer_head(struct buffer_head * bh)
 	struct wait_queue * wait;
 
 	wait = ((volatile struct buffer_head *) bh)->b_wait;
-	memset((void *) bh,0,sizeof(*bh));
+	memset(bh,0,sizeof(*bh));
 	((volatile struct buffer_head *) bh)->b_wait = wait;
 	bh->b_next_free = unused_list;
 	unused_list = bh;

@@ -29,12 +29,12 @@ int ext2_permission (struct inode * inode, int mask)
 	/*
 	 * Special case, access is always granted for root
 	 */
-	if (suser ())
+	if (fsuser())
 		return 1;
 	/*
 	 * If no ACL, checks using the file mode
 	 */
-	else if (current->euid == inode->i_uid)
+	else if (current->fsuid == inode->i_uid)
 		mode >>= 6;
 	else if (in_group_p (inode->i_gid))
 		mode >>= 3;

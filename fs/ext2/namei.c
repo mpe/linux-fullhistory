@@ -430,7 +430,7 @@ int ext2_mknod (struct inode * dir, const char * name, int len, int mode,
 		iput (dir);
 		return -ENOSPC;
 	}
-	inode->i_uid = current->euid;
+	inode->i_uid = current->fsuid;
 	inode->i_mode = mode;
 	inode->i_op = NULL;
 	if (S_ISREG(inode->i_mode))
@@ -630,9 +630,9 @@ repeat:
 		schedule();
 		goto repeat;
 	}
-        if ((dir->i_mode & S_ISVTX) && !suser() &&
-            current->euid != inode->i_uid &&
-            current->euid != dir->i_uid)
+        if ((dir->i_mode & S_ISVTX) && !fsuser() &&
+            current->fsuid != inode->i_uid &&
+            current->fsuid != dir->i_uid)
 		goto end_rmdir;
 	if (inode == dir)	/* we may not delete ".", but "../dir" is ok */
 		goto end_rmdir;
@@ -711,9 +711,9 @@ repeat:
 		schedule();
 		goto repeat;
 	}
-	if ((dir->i_mode & S_ISVTX) && !suser() &&
-	    current->euid != inode->i_uid &&
-	    current->euid != dir->i_uid)
+	if ((dir->i_mode & S_ISVTX) && !fsuser() &&
+	    current->fsuid != inode->i_uid &&
+	    current->fsuid != dir->i_uid)
 		goto end_unlink;
 	if (!inode->i_nlink) {
 		ext2_warning (inode->i_sb, "ext2_unlink",
@@ -946,8 +946,8 @@ start_up:
 		goto end_rename;
 	retval = -EPERM;
 	if ((old_dir->i_mode & S_ISVTX) && 
-	    current->euid != old_inode->i_uid &&
-	    current->euid != old_dir->i_uid && !suser())
+	    current->fsuid != old_inode->i_uid &&
+	    current->fsuid != old_dir->i_uid && !fsuser())
 		goto end_rename;
 	new_bh = ext2_find_entry (new_dir, new_name, new_len, &new_de);
 	if (new_bh) {
@@ -977,8 +977,8 @@ start_up:
 	}
 	retval = -EPERM;
 	if (new_inode && (new_dir->i_mode & S_ISVTX) &&
-	    current->euid != new_inode->i_uid &&
-	    current->euid != new_dir->i_uid && !suser())
+	    current->fsuid != new_inode->i_uid &&
+	    current->fsuid != new_dir->i_uid && !fsuser())
 		goto end_rename;
 	if (S_ISDIR(old_inode->i_mode)) {
 		retval = -ENOTDIR;

@@ -149,7 +149,7 @@ static inline void __constant_memcpy_fromfs(void * to, const void * from, unsign
 			return;
 		case 3:
 			*(short *) to = get_user_word((const short *) from);
-			*(char *) to = get_user_byte(2+(const char *) from);
+			*((char *) to + 2) = get_user_byte(2+(const char *) from);
 			return;
 		case 4:
 			*(int *) to = get_user_long((const int *) from);

@@ -60,8 +60,13 @@ asmlinkage int printk(const char * fmt, ...)
  * BSD-style accounting where the process is flagged if it uses root
  * privs).  The implication of this is that you should do normal
  * permissions checks first, and check suser() last.
+ *
+ * "suser()" checks against the effective user id, while "fsuser()"
+ * is used for file permission checking and checks against the fsuid..
  */
 #define suser() (current->euid == 0)
+#define fsuser() (current->fsuid == 0)
+
 extern int splx (int new_ipl);
 #endif /* __KERNEL__ */
 

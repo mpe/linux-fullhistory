@@ -634,7 +634,7 @@ static int tty_read(struct inode * inode, struct file * file, char * buf, int co
 	int i;
 	struct tty_struct * tty;
 
-	tty = file->private_data;
+	tty = (struct tty_struct *)file->private_data;
 	if (tty_paranoia_check(tty, inode->i_rdev, "tty_read"))
 		return -EIO;
 	if (!tty || (tty->flags & (1 << TTY_IO_ERROR)))
@@ -676,7 +676,7 @@ static int tty_write(struct inode * inode, struct file * file, char * buf, int c
 	if (is_console && redirect)
 		tty = redirect;
 	else
-		tty = file->private_data;
+		tty = (struct tty_struct *)file->private_data;
 	if (tty_paranoia_check(tty, inode->i_rdev, "tty_write"))
 		return -EIO;
 	if (!tty || !tty->driver.write || (tty->flags & (1 << TTY_IO_ERROR)))
@@ -886,7 +886,7 @@ static void release_dev(struct file * filp)
 	int	idx;
 	
 
-	tty = filp->private_data;
+	tty = (struct tty_struct *)filp->private_data;
 	if (tty_paranoia_check(tty, filp->f_inode->i_rdev, "release_dev"))
 		return;
 
@@ -1136,7 +1136,7 @@ static int tty_select(struct inode * inode, struct file * filp, int sel_type, se
 {
 	struct tty_struct * tty;
 
-	tty = filp->private_data;
+	tty = (struct tty_struct *)filp->private_data;
 	if (tty_paranoia_check(tty, inode->i_rdev, "tty_select"))
 		return 0;
 
@@ -1150,7 +1150,7 @@ static int tty_fasync(struct inode * inode, struct file * filp, int on)
 	struct tty_struct * tty;
 	struct fasync_struct *fa, *prev;
 
-	tty = filp->private_data;
+	tty = (struct tty_struct *)filp->private_data;
 	if (tty_paranoia_check(tty, inode->i_rdev, "tty_fasync"))
 		return 0;
 
@@ -1162,7 +1162,7 @@ static int tty_fasync(struct inode * inode, struct file * filp, int on)
 	if (on) {
 		if (fa)
 			return 0;
-		fa = kmalloc(sizeof(struct fasync_struct), GFP_KERNEL);
+		fa = (struct fasync_struct *)kmalloc(sizeof(struct fasync_struct), GFP_KERNEL);
 		if (!fa)
 			return -ENOMEM;
 		fa->magic = FASYNC_MAGIC;
@@ -1228,7 +1228,7 @@ static int tty_ioctl(struct inode * inode, struct file * file,
 	unsigned char	ch;
 	char	mbz = 0;
 	
-	tty = file->private_data;
+	tty = (struct tty_struct *)file->private_data;
 	if (tty_paranoia_check(tty, inode->i_rdev, "tty_ioctl"))
 		return -EINVAL;
 
@@ -1466,9 +1466,9 @@ void do_SAK( struct tty_struct *tty)
  * This routine is called out of the software interrupt to flush data
  * from the flip buffer to the line discipline.
  */
-static void flush_to_ldisc(void *private)
+static void flush_to_ldisc(void *private_)
 {
-	struct tty_struct *tty = private;
+	struct tty_struct *tty = (struct tty_struct *) private_;
 	unsigned char	*cp;
 	char		*fp;
 	int		count;

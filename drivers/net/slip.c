@@ -986,7 +986,7 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 	/* Allow stty to read, but not set, the serial port */
 	case TCGETS:
 	case TCGETA:
-		return n_tty_ioctl(tty, file, cmd, (unsigned long) arg);
+		return n_tty_ioctl(tty, (struct file *) file, cmd, (unsigned long) arg);
 		
 	default:
 		return -ENOIOCTLCMD;

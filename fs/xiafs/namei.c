@@ -294,7 +294,7 @@ int xiafs_mknod(struct inode *dir, const char *name, int len, int mode, int rdev
         iput(dir);
 	return -ENOSPC;
     }
-    inode->i_uid = current->euid;
+    inode->i_uid = current->fsuid;
     inode->i_mode = mode;
     inode->i_op = NULL;
     if (S_ISREG(inode->i_mode))
@@ -496,9 +496,9 @@ int xiafs_rmdir(struct inode * dir, const char * name, int len)
     retval = -EPERM;
     if (!(inode = iget(dir->i_sb, de->d_ino)))
         goto end_rmdir;
-    if ((dir->i_mode & S_ISVTX) && !suser() &&
-            current->euid != inode->i_uid &&
-            current->euid != dir->i_uid)
+    if ((dir->i_mode & S_ISVTX) && !fsuser() &&
+            current->fsuid != inode->i_uid &&
+            current->fsuid != dir->i_uid)
         goto end_rmdir;
     if (inode->i_dev != dir->i_dev)
         goto end_rmdir;
@@ -558,9 +558,9 @@ repeat:
 	schedule();
 	goto repeat;
     }
-    if ((dir->i_mode & S_ISVTX) && !suser() &&
-	    current->euid != inode->i_uid &&
-	    current->euid != dir->i_uid)
+    if ((dir->i_mode & S_ISVTX) && !fsuser() &&
+	    current->fsuid != inode->i_uid &&
+	    current->fsuid != dir->i_uid)
         goto end_unlink;
     if (!inode->i_nlink) {
         printk("XIA-FS: Deleting nonexistent file (%s %d)\n", WHERE_ERR);
@@ -730,8 +730,8 @@ try_again:
         goto end_rename;
     retval = -EPERM;
     if ((old_dir->i_mode & S_ISVTX) && 
-	    current->euid != old_inode->i_uid &&
-	    current->euid != old_dir->i_uid && !suser())
+	    current->fsuid != old_inode->i_uid &&
+	    current->fsuid != old_dir->i_uid && !fsuser())
         goto end_rename;
     new_bh = xiafs_find_entry(new_dir, new_name, new_len, &new_de, NULL);
     if (new_bh) {
@@ -751,8 +751,8 @@ try_again:
     }
     retval = -EPERM;
     if (new_inode && (new_dir->i_mode & S_ISVTX) && 
-	    current->euid != new_inode->i_uid &&
- 	    current->euid != new_dir->i_uid && !suser())
+	    current->fsuid != new_inode->i_uid &&
+ 	    current->fsuid != new_dir->i_uid && !fsuser())
         goto end_rename;
     if (S_ISDIR(old_inode->i_mode)) {
         retval = -EEXIST;

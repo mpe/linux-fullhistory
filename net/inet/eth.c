@@ -166,7 +166,7 @@ int eth_rebuild_header(void *buff, struct device *dev, unsigned long dst,
 unsigned short eth_type_trans(struct sk_buff *skb, struct device *dev)
 {
 	struct ethhdr *eth = (struct ethhdr *) skb->data;
-	char *rawp;
+	unsigned char *rawp;
 	
 	if(*eth->h_dest&1)
 	{

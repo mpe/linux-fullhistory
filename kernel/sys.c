@@ -233,6 +233,7 @@ asmlinkage int sys_setregid(gid_t rgid, gid_t egid)
 	if (rgid != (gid_t) -1 ||
 	    (egid != (gid_t) -1 && egid != old_rgid))
 		current->sgid = current->egid;
+	current->fsgid = current->egid;
 	return 0;
 }
 
@@ -242,9 +243,9 @@ asmlinkage int sys_setregid(gid_t rgid, gid_t egid)
 asmlinkage int sys_setgid(gid_t gid)
 {
 	if (suser())
-		current->gid = current->egid = current->sgid = gid;
+		current->gid = current->egid = current->sgid = current->fsgid = gid;
 	else if ((gid == current->gid) || (gid == current->sgid))
-		current->egid = gid;
+		current->egid = current->fsgid = gid;
 	else
 		return -EPERM;
 	return 0;
@@ -321,6 +322,7 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 	if (ruid != (uid_t) -1 ||
 	    (euid != (uid_t) -1 && euid != old_ruid))
 		current->suid = current->euid;
+	current->fsuid = euid;
 	return 0;
 }
 
@@ -338,12 +340,41 @@ asmlinkage int sys_setreuid(uid_t ruid, uid_t euid)
 asmlinkage int sys_setuid(uid_t uid)
 {
 	if (suser())
-		current->uid = current->euid = current->suid = uid;
+		current->uid = current->euid = current->suid = current->fsuid = uid;
 	else if ((uid == current->uid) || (uid == current->suid))
-		current->euid = uid;
+		current->fsuid = current->euid = uid;
 	else
 		return -EPERM;
 	return(0);
+}
+
+/*
+ * "setfsuid()" sets the fsuid - the uid used for filesystem checks. This
+ * is used for "access()" and for the NFS deamon (letting nfsd stay at
+ * whatever uid it wants to). It normally shadows "euid", except when
+ * explicitly set by setfsuid() or for access..
+ */
+asmlinkage int sys_setfsuid(uid_t uid)
+{
+	int old_fsuid = current->fsuid;
+
+	if (uid == current->uid || uid == current->euid ||
+	    uid == current->suid || uid == current->fsuid || suser())
+		current->fsuid = uid;
+	return old_fsuid;
+}
+
+/*
+ * Samma på svenska..
+ */
+asmlinkage int sys_setfsgid(gid_t gid)
+{
+	int old_fsgid = current->fsgid;
+
+	if (gid == current->gid || gid == current->egid ||
+	    gid == current->sgid || gid == current->fsgid || suser())
+		current->fsgid = gid;
+	return old_fsgid;
 }
 
 asmlinkage int sys_times(struct tms * tbuf)
@@ -542,7 +573,7 @@ int in_group_p(gid_t grp)
 {
 	int	i;
 
-	if (grp == current->egid)
+	if (grp == current->fsgid)
 		return 1;
 
 	for (i = 0; i < NGROUPS; i++) {

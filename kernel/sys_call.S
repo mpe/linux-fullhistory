@@ -538,5 +538,7 @@ _sys_call_table:
 	.long _sys_sysfs		/* 135 */
 	.long _sys_personality
 	.long 0				/* for afs_syscall */
+	.long _sys_setfsuid
+	.long _sys_setfsgid
 
 	.space (NR_syscalls-137)*4

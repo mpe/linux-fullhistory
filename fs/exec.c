@@ -612,8 +612,7 @@ restart_interp:
 	}
 	i = bprm.inode->i_mode;
 	if (IS_NOSUID(bprm.inode) && (((i & S_ISUID) && bprm.inode->i_uid != current->
-	    euid) || ((i & S_ISGID) && !in_group_p(bprm.inode->i_gid))) &&
-	    !suser()) {
+	    euid) || ((i & S_ISGID) && !in_group_p(bprm.inode->i_gid))) && !suser()) {
 		retval = -EPERM;
 		goto exec_error2;
 	}
@@ -816,8 +815,8 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		(current->mm->start_code = N_TXTADDR(ex)))));
 	current->mm->rss = 0;
 	current->mm->mmap = NULL;
-	current->suid = current->euid = bprm->e_uid;
-	current->sgid = current->egid = bprm->e_gid;
+	current->suid = current->euid = current->fsuid = bprm->e_uid;
+	current->sgid = current->egid = current->fsgid = bprm->e_gid;
 	if (N_MAGIC(ex) == OMAGIC) {
 		do_mmap(NULL, 0, ex.a_text+ex.a_data,
 			PROT_READ|PROT_WRITE|PROT_EXEC,

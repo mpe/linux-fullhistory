@@ -216,9 +216,9 @@ static int umsdos_create_any (
 			info.entry.mode = mode;
 			info.entry.rdev = rdev;
 			info.entry.flags = flags;
-			info.entry.uid = current->euid;
+			info.entry.uid = current->fsuid;
 			info.entry.gid = (dir->i_mode & S_ISGID)
-				? dir->i_gid : current->egid;
+				? dir->i_gid : current->fsgid;
 			info.entry.ctime = info.entry.atime = info.entry.mtime
 				= CURRENT_TIME;
 			info.entry.nlink = 1;
@@ -659,9 +659,9 @@ int UMSDOS_mkdir(
 		if (ret == 0){
 			info.entry.mode = mode | S_IFDIR;
 			info.entry.rdev = 0;
-			info.entry.uid = current->euid;
+			info.entry.uid = current->fsuid;
 			info.entry.gid = (dir->i_mode & S_ISGID)
-				? dir->i_gid : current->egid;
+				? dir->i_gid : current->fsgid;
 			info.entry.ctime = info.entry.atime = info.entry.mtime
 				= CURRENT_TIME;
 			info.entry.flags = 0;
