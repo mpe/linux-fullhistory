@@ -373,12 +373,12 @@ to me.
 
 nfsd daemon doesn't work anymore
 ================================
-   The RedHat distribution 2.x and 3.x have a bug that they do
-route add -net 127.0.0.1 at startup. That is wrong. Correct is 
-route add -net 127.0.0.0. 
+   The Red Hat distributions 2.x, 3.x and Caldera 1.0 have a bug where
+they do "route add -net 127.0.0.1" at startup.  That is wrong.  The
+correct command is "route add -net 127.0.0.0". 
 
-Workaround: Change in /etc/sysconfig/network-scripts/ifcup-lo
-the "route add -net ${IPADDR}" into "route add -net 127.0.0.0"
+Workaround: Change in "/etc/sysconfig/network-scripts/ifup-lo" the
+"route add -net ${IPADDR}" into "route add -net 127.0.0.0".
   
 How to know the version of the installed programs
 *************************************************

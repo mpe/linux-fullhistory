@@ -1,13 +1,9 @@
-/* * Last edited: Nov 29 18:14 1995 (cort) */
 /*
  *  ARCH/ppc/mm/fault.c
  *
  *  Copyright (C) 1991, 1992, 1993, 1994  Linus Torvalds
  *  Ported to PPC by Gary Thomas
  */
-
-/*#define NOISY_DATAFAULT*/
-/*#define NOISY_INSTRFAULT*/
 
 #include <linux/config.h>
 #include <linux/signal.h>
@@ -27,146 +23,105 @@
 extern void die_if_kernel(char *, struct pt_regs *, long);
 extern void do_page_fault(struct pt_regs *, unsigned long, unsigned long);
 
-#if 0
 #define SHOW_FAULTS
-#endif
+#undef  SHOW_FAULTS
+#define PAUSE_AFTER_FAULT
+#undef  PAUSE_AFTER_FAULT
 
 void
 DataAccessException(struct pt_regs *regs)
 {
-  pgd_t *dir;
-  pmd_t *pmd;
-  pte_t *pte;
-  int tries, mode = 0;
-  if (user_mode(regs)) mode |= 0x04;
-  if (regs->dsisr & 0x02000000) mode |= 0x02;  /* Load/store */
-  if (regs->dsisr & 0x08000000) mode |= 0x01;  /* Protection violation */
-#ifdef NOISY_DATAFAULT
-  printk("Data fault on %x\n",regs->dar);
+	pgd_t *dir;
+	pmd_t *pmd;
+	pte_t *pte;
+	int tries, mode = 0;
+	if (user_mode(regs)) mode |= 0x04;
+	if (regs->dsisr & 0x02000000) mode |= 0x02;  /* Load/store */
+	if (regs->dsisr & 0x08000000) mode |= 0x01;  /* Protection violation */
+#ifdef SHOW_FAULTS
+	printk("Data Access Fault - Loc: %x, DSISR: %x, PC: %x\n", regs->dar, regs->dsisr, regs->nip);
+#ifdef PAUSE_AFTER_FAULT
+cnpause();
+#endif			
 #endif
-  if (mode & 0x01)
-  {
-#if 0
-    printk("Write Protect Fault - Loc: %x, DSISR: %x, PC: %x\n", regs->dar, regs->dsisr, regs->nip);
-#endif
-#ifdef NOISY_DATAFAULT
-    printk("Write Protect fault\n ");
-#endif
-    do_page_fault(regs, regs->dar, mode);
-#ifdef NOISY_DATAFAULT    
-    printk("Write Protect fault handled\n");
-#endif
-    return;
-  }
-/*   printk("trying\n"); */
-  for (tries = 0;  tries < 1;  tries++)
-  {
-    dir = pgd_offset(current->mm, regs->dar & PAGE_MASK);
-    if (dir)
-    {
-      pmd = pmd_offset(dir, regs->dar & PAGE_MASK);
-      if (pmd && pmd_present(*pmd))
-      {
-	pte = pte_offset(pmd, regs->dar & PAGE_MASK);
-	if (pte && pte_present(*pte))
+	if (mode & 0x01)
 	{
-#if 0
-	  printk("Page mapped - PTE: %x[%x]\n", pte, *(long *)pte);
+#ifdef SHOW_FAULTS
+printk("Write Protect Fault - Loc: %x, DSISR: %x, PC: %x\n", regs->dar, regs->dsisr, regs->nip);
 #endif
-	  MMU_hash_page(&current->tss, regs->dar & PAGE_MASK, pte);
-	  return;
+		do_page_fault(regs, regs->dar, mode);
+		return;
 	}
-      }
-    } else
-    {
-      printk("No PGD\n");
-    }
-#ifdef NOISY_DATAFAULT    
-    printk("fall through page fault addr=%x; ip=%x\n",
-	   regs->dar,regs->nip);
-    printk("beforefault: pgd[0] = %x[%x]\n",current->mm->pgd,*(current->mm->pgd));
-#endif
-    do_page_fault(regs, regs->dar, mode);
-#ifdef NOISY_DATAFAULT    
-    printk("handled: pgd[0] = %x[%x]\n",current->mm->pgd,*(current->mm->pgd));
-#endif
-  }
+	for (tries = 0;  tries < 1;  tries++)
+	{
+		dir = pgd_offset(current->mm, regs->dar & PAGE_MASK);
+		if (dir)
+		{
+			pmd = pmd_offset(dir, regs->dar & PAGE_MASK);
+			if (pmd && pmd_present(*pmd))
+			{
+				pte = pte_offset(pmd, regs->dar & PAGE_MASK);
+				if (pte && pte_present(*pte))
+				{
+#ifdef SHOW_FAULTS
+					printk("Page mapped - PTE: %x[%x], Context: %x\n", pte, *(long *)pte, current->mm->context);
+#endif					
+					MMU_hash_page(&current->tss, regs->dar & PAGE_MASK, pte);
+					return;
+				}
+			}
+		} else
+		{
+			printk("No PGD\n");
+		}
+		do_page_fault(regs, regs->dar, mode);
+	}
 }
 
 void
 InstructionAccessException(struct pt_regs *regs)
 {
-  pgd_t *dir;
-  pmd_t *pmd;
-  pte_t *pte;
-  int tries, mode = 0;
-  
-#if NOISY_INSTRFAULT
-  printk("Instr fault on %x\n",regs->dar);
+	pgd_t *dir;
+	pmd_t *pmd;
+	pte_t *pte;
+	int tries, mode = 0;
+	unsigned long addr = regs->nip;
+	if (user_mode(regs)) mode |= 0x04;
+#ifdef SHOW_FAULTS
+	printk("Instruction Access Fault - Loc: %x, DSISR: %x, PC: %x\n", regs->dar, regs->dsisr, regs->nip);
+#ifdef PAUSE_AFTER_FAULT
+cnpause();
 #endif
-  if (user_mode(regs)) mode |= 0x04;
-  if (regs->dsisr & 0x02000000) mode |= 0x02;  /* Load/store */
-  if (regs->dsisr & 0x08000000) mode |= 0x01;  /* Protection violation */
-  
-  if (mode & 0x01)
-  {
-    do_page_fault(regs, regs->dar, mode); 
-    return;
-  }
-  for (tries = 0;  tries < 1;  tries++)
-  {
-    /*     dir = pgd_offset(current->mm, regs->nip & PAGE_MASK); */
-    dir = pgd_offset(current->mm, regs->dar & PAGE_MASK);
-#ifdef NOISY_INSTRFAULT
-/*	printk("regs->dar=%x current=%x current->mm=%x current->mm->pgd=%x current->tss.pg_tables=%x\n",
-	       regs->dar,current,current->mm,current->mm->pgd,current->tss.pg_tables);*/
-#endif
-    if (dir)
-    {
-      pmd = pmd_offset(dir, regs->dar & PAGE_MASK); 
-      if (pmd && pmd_present(*pmd))
-      {
- 	pte = pte_offset(pmd, regs->dar & PAGE_MASK); 
-
-#ifdef NOISY_INSTRFAULT
-/*	printk("dir %x(%x) pmd %x(%x) pte %x\n",dir,*dir,pmd,*pmd,pte);*/
-#if 0
-	printk("pgd_offset mm=%x mm->pgd=%x dirshouldbe=%x\n",
-	       current->mm, current->mm->pgd,
-	       current->mm->pgd+((regs->dar&PAGE_MASK) >> PGDIR_SHIFT));
-	printk("dir is %x\n", dir);
-	
-	/* 	printk("got pte\n"); */
-	if (pte) {
-	  printk("pgd=%x; dir=%x->%x; pmd=%x->%x; pte=%x; \n",
-		 current->mm->pgd,dir,*dir,pmd,*pmd,pte);
-	  if (pte_present(*pte)) {
-	    printk("pte present\n");
-	  } else {
-	    printk("pte not present\n");
-	  }
-	} else {
-	  printk("pte false\n");
-	}
-#endif
-#endif
-	if (pte && pte_present(*pte))
+#endif	
+	if (mode & 0x01)
 	{
-/* 	  MMU_hash_page(&current->tss, regs->nip & PAGE_MASK, pte); */
- 	  MMU_hash_page(&current->tss, regs->dar & PAGE_MASK, pte); 
-	  return;
+		do_page_fault(regs, addr, mode);
+		return;
 	}
-      }
-    } else
-    {
-#ifdef NOISY_INSTRFAULT      
-      panic("No PGD Instruction Access Fault - Loc: %x, DSISR: %x, PC: %x current->mm\n",
-	    regs->dar, regs->dsisr, regs->nip, current->mm);
-#endif
-    }
-/*     do_page_fault(regs, regs->nip, mode); */
-     do_page_fault(regs, regs->dar, mode);
-  }
+	for (tries = 0;  tries < 1;  tries++)
+	{
+		dir = pgd_offset(current->mm, addr & PAGE_MASK);
+		if (dir)
+		{
+			pmd = pmd_offset(dir, addr & PAGE_MASK);
+			if (pmd && pmd_present(*pmd))
+			{
+				pte = pte_offset(pmd, addr & PAGE_MASK);
+				if (pte && pte_present(*pte))
+				{
+#ifdef SHOW_FAULTS
+					printk("Page mapped - PTE: %x[%x], Context: %x\n", pte, *(long *)pte, current->mm->context);
+#endif					
+					MMU_hash_page(&current->tss, addr & PAGE_MASK, pte);
+					return;
+				}
+			}
+		} else
+		{
+			printk("No PGD\n");
+		}
+		do_page_fault(regs, addr, mode);
+	}
 }
 
 /*
@@ -182,160 +137,148 @@ InstructionAccessException(struct pt_regs *regs)
  */
 void do_page_fault(struct pt_regs *regs, unsigned long address, unsigned long error_code)
 {
-  struct vm_area_struct * vma;
-  unsigned long page;
+	struct vm_area_struct * vma;
+	unsigned long page;
 
-/*   printk("In do_page_fault()\n"); */
-#if 1
-  for (vma = current->mm->mmap ; ; vma = vma->vm_next)
-  {
-    if (!vma)
-    {
-      panic("!vma: ip = %x; current=%x[%d]; mm=%x; mmap=%x; address = %x error_code = %x\n",
-	    regs->nip, current,current->pid,current->mm,current->mm->mmap, address, error_code);
-      goto bad_area;
-    }
-    if (vma->vm_end > address)
-      break;
-  }
-#else
-  vma = find_vma(current, address);
-  if (!vma)
-  {
-  }
-    goto bad_area;
+	for (vma = current->mm->mmap ; ; vma = vma->vm_next)
+	{
+#ifdef SHOW_FAULTS
+printk("VMA(%x) - Start: %x, End: %x, Flags: %x\n", vma, vma->vm_start, vma->vm_end, vma->vm_flags);		
 #endif
-  if (vma->vm_start <= address){
-    goto good_area;
-  }
-  if (!(vma->vm_flags & VM_GROWSDOWN))
-  {
-    printk("stack: gpr[1]=%x ip = %x; current=%x[%d]; mm=%x; mmap=%x; address = %x error_code = %x\n",regs->gpr[1],regs->nip, current,current->pid,current->mm,current->mm->mmap, address, error_code);
-    panic("stack\n");
-    goto bad_area;
-  }
-  if (vma->vm_end - address > current->rlim[RLIMIT_STACK].rlim_cur)
-  {
-    printk("stack2: vma->vm_end-address %x rlim %x\n", vma->vm_end - address,
-	   current->rlim[RLIMIT_STACK].rlim_cur);
-    printk("stack2: vm_end %x address = %x\n", vma->vm_end,address);
-    printk("stack2: gpr[1]=%x ip = %x; current=%x[%d]; mm=%x; mmap=%x; address = %x error_code = %x\n",regs->gpr[1],regs->nip, current,current->pid,current->mm,current->mm->mmap, address, error_code);
-    panic("stack2\n");
-    goto bad_area;
-  }
-  vma->vm_offset -= vma->vm_start - (address & PAGE_MASK);
-  vma->vm_start = (address & PAGE_MASK);
-  
-  /*
-   * Ok, we have a good vm_area for this memory access, so
-   * we can handle it..
-   */
+		if (!vma)
+			goto bad_area;
+		if (vma->vm_end > address)
+			break;
+	}
+	if (vma->vm_start <= address)
+		goto good_area;
+	if (!(vma->vm_flags & VM_GROWSDOWN))
+		goto bad_area;
+	if (vma->vm_end - address > current->rlim[RLIMIT_STACK].rlim_cur)
+		goto bad_area;
+	vma->vm_offset -= vma->vm_start - (address & PAGE_MASK);
+	vma->vm_start = (address & PAGE_MASK);
+/*
+ * Ok, we have a good vm_area for this memory access, so
+ * we can handle it..
+ */
 good_area:
-  /*
-   * was it a write?
-   */
-  if (error_code & 2) {
-    if (!(vma->vm_flags & VM_WRITE))
-    {
-      panic("do_page_fault()  write\n");
-      panic("do_page_fault() write! current: %x, address:%x, vm_flags: %x, mm: %x; vma(%x) %x to %x\n",
-	    current,address,vma->vm_flags,current->mm,vma,vma->vm_start,vma->vm_end);
-      goto bad_area;
-    }
-  } else {
-    /* read with protection fault? */
-    if (error_code & 1)
-    {
-      panic("do_page_fault()  error code thing\n");	    
-      goto bad_area;
-    }
-    if (!(vma->vm_flags & (VM_READ | VM_EXEC)))
-    {
-#if 0
-      _printk("vma = %x\n", vma);
-      _printk("vma->vm_flags = %x\n", vma->vm_flags);      
-      _printk("VM_READ = %x VM_EXEC = %x\n",VM_READ,VM_EXEC);
-#endif
-#if 0
-      printk("vma = %x VM_READ = %x VM_EXEC = %x\n",
-	     vma, VM_READ,VM_EXEC);
-      printk("vma->vm_start = %x vma->vm_end = %d\n",
-	     vma->vm_start, vma->vm_end);
-      printk("error_code = %x\n", error_code);      
-      printk("regs = %x\n", regs);
-      printk("vma->vm_flags = %x\n", vma->vm_flags);
-#endif
-/*      printk("do_page_fault()  multi thing\n"); */
-      goto bad_area; 
-    }
-  }
-/*   printk("premm: pgd[0] = %x[%x]\n",current->mm->pgd,*(current->mm->pgd)); */
-  handle_mm_fault(vma, address, error_code & 2); 
-/*   printk("handled fault for %x in %x to %x flags %x\n", */
-/* 	 address,vma->vm_start,vma->vm_end,vma->vm_flags); */
-  return;
-  
-  /*
-   * Something tried to access memory that isn't in our memory map..
-   * Fix it, but check if it's kernel or user first..
-   */
+	/*
+	 * was it a write?
+	 */
+	if (error_code & 2) {
+		if (!(vma->vm_flags & VM_WRITE))
+			goto bad_area;
+	} else {
+		/* read with protection fault? */
+		if (error_code & 1)
+			goto bad_area;
+		if (!(vma->vm_flags & (VM_READ | VM_EXEC)))
+			goto bad_area;
+	}
+	handle_mm_fault(vma, address, error_code & 2);
+	flush_page(address);  /* Flush & Invalidate cache - note: address is OK now */
+	return;
+
+/*
+ * Something tried to access memory that isn't in our memory map..
+ * Fix it, but check if it's kernel or user first..
+ */
 bad_area:
-  if (user_mode(regs)) {
-    printk("Task: %x, PC: %x, bad area! - Addr: %x\n", current, regs->nip, address);
-    send_sig(SIGSEGV, current, 1);
-    return;
-  }
+printk("Task: %x, PC: %x/%x, bad area! - Addr: %x\n", current, regs->nip, current->tss.last_pc, address);
+print_user_backtrace(current->tss.user_stack);
+print_kernel_backtrace();
 #if 0
-  panic("KERNEL! Task: %x, PC: %x, bad area! - Addr: %x, PGDIR: %x\n",
-	 current, regs->nip, address, current->tss.pg_tables);
-#else
-  /*  panic("KERNEL mm! current: %x,  address:%x, vm_flags: %x, mm: %x; \nvma(%x) %x to %x swapper_pg_dir %x\n",
-	current,address,vma->vm_flags,current->mm,vma,vma->vm_start,vma->vm_end,
-	swapper_pg_dir);*/
-  printk("KERNEL mm! current: %x,  address:%x, vm_flags: %x, mm: %x; vma(%x) %x to %x\n",
-	current,address,vma->vm_flags,current->mm,vma,vma->vm_start,vma->vm_end);
-  panic("Kernel access of bad area\n");
-	 
+cnpause();
+if (!user_mode(regs))
+{
+   print_backtrace(regs->gpr[1]);
+}
 #endif
-  
-  while (1) ;
+dump_regs(regs);
+	if (user_mode(regs)) {
+#if 0
+		current->tss.cp0_badvaddr = address;
+		current->tss.error_code = error_code;
+		current->tss.trap_no = 14;
+#endif
+		force_sig(SIGSEGV, current);
+		return;
+	}
+printk("KERNEL! Task: %x, PC: %x, bad area! - Addr: %x, PGDIR: %x\n", current, regs->nip, address, current->tss.pg_tables);
+dump_regs(regs);
+while (1) ;
+#if 0	
+	/*
+	 * Oops. The kernel tried to access some bad page. We'll have to
+	 * terminate things with extreme prejudice.
+	 */
+	if ((unsigned long) (address-TASK_SIZE) < PAGE_SIZE) {
+		printk(KERN_ALERT "Unable to handle kernel NULL pointer dereference");
+		pg0[0] = pte_val(mk_pte(0, PAGE_SHARED));
+	} else
+		printk(KERN_ALERT "Unable to handle kernel paging request");
+	printk(" at virtual address %08lx\n",address);
+	page = current->tss.pg_dir;
+	printk(KERN_ALERT "current->tss.pg_dir = %08lx\n", page);
+	page = ((unsigned long *) page)[address >> PGDIR_SHIFT];
+	printk(KERN_ALERT "*pde = %08lx\n", page);
+	if (page & 1) {
+		page &= PAGE_MASK;
+		address &= 0x003ff000;
+		page = ((unsigned long *) page)[address >> PAGE_SHIFT];
+		printk(KERN_ALERT "*pte = %08lx\n", page);
+	}
+	die_if_kernel("Oops", regs, error_code);
+#endif	
+	do_exit(SIGKILL);
 }
 
 va_to_phys(unsigned long address)
 {
-  pgd_t *dir;
-  pmd_t *pmd;
-  pte_t *pte;
-  dir = pgd_offset(current->mm, address & PAGE_MASK);
-  if (dir)
-  {
-    pmd = pmd_offset(dir, address & PAGE_MASK);
-    if (pmd && pmd_present(*pmd))
-    {
-      pte = pte_offset(pmd, address & PAGE_MASK);
-      if (pte && pte_present(*pte))
-      {
-	return(pte_page(*pte) | (address & ~(PAGE_MASK-1)));
-      }
-    } else
-    {
-      return (0);
-    }
-  } else
-  {
-    return (0);
-  }
+	pgd_t *dir;
+	pmd_t *pmd;
+	pte_t *pte;
+	dir = pgd_offset(current->mm, address & PAGE_MASK);
+	if (dir)
+	{
+		pmd = pmd_offset(dir, address & PAGE_MASK);
+		if (pmd && pmd_present(*pmd))
+		{
+			pte = pte_offset(pmd, address & PAGE_MASK);
+			if (pte && pte_present(*pte))
+			{
+				return(pte_page(*pte) | (address & ~(PAGE_MASK-1)));
+			}
+		} else
+		{
+			return (0);
+		}
+	} else
+	{
+		return (0);
+	}
+	return (0);
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
+/*
+ * See if an address should be valid in the current context.
+ */
+valid_addr(unsigned long addr)
+{
+	struct vm_area_struct * vma;
+	for (vma = current->mm->mmap ; ; vma = vma->vm_next)
+	{
+		if (!vma)
+		{
+			return (0);
+		}
+		if (vma->vm_end > addr)
+			break;
+	}
+	if (vma->vm_start <= addr)
+	{
+		return (1);
+	}
+	return (0);
+}

@@ -87,33 +87,29 @@ struct thread_struct
 	unsigned long	*pg_tables;	/* MMU information */
 	unsigned long	segs[16];	/* MMU Segment registers */
 	unsigned long	last_pc;	/* PC when last entered system */
+	unsigned long	user_stack;	/* [User] Stack when entered kernel */
 	double		fpr[32];	/* Complete floating point set */
+	unsigned long	wchan;		/* Event task is sleeping on */
+	unsigned long	*regs;		/* Pointer to saved register state */
    };
 
 #define INIT_TSS  { \
-	0, 0, 0, \
-	0, 0, 0, \
-	0, 0, 0, \
+	0, 0, {0}, \
+	0, 0, {0}, \
 }
 
 #define INIT_MMAP { &init_mm, 0, 0x40000000, \
 		      PAGE_SHARED, VM_READ | VM_WRITE | VM_EXEC }
 
-
-
+#define alloc_kernel_stack()    get_free_page(GFP_KERNEL)
+#define free_kernel_stack(page) free_page((page))
 
 /*
- * Return saved PC of a blocked thread.  This assumes the frame pointer
- * is the 6th saved long on the kernel stack and that the saved return
- * address is the first long in the frame.  This all holds provided the
- * thread blocked through a call to schedule().
+ * Return saved PC of a blocked thread. For now, this is the "user" PC
  */
 static inline unsigned long thread_saved_pc(struct thread_struct *t)
 {
-	unsigned long fp;
-
-	fp = ((unsigned long*)t->ksp)[6];
-	return *(unsigned long*)fp;
+	return (t->last_pc);
 }
 
 #endif

@@ -5,6 +5,15 @@
  * and John Boyd, Nov. 1992.
  */
 
+/*
+ * Note: Adapted for PowerPC by Gary Thomas
+ *
+ * There may be some comments or restrictions made here which are
+ * not valid for the PowerPC (PreP) platform.  Take what you read
+ * with a grain of salt.
+ */
+ 
+
 #ifndef _ASM_DMA_H
 #define _ASM_DMA_H
 
@@ -70,7 +79,8 @@
 #define MAX_DMA_CHANNELS	8
 
 /* The maximum address that we can perform a DMA transfer to on this platform */
-#define MAX_DMA_ADDRESS      0x1000000
+/* Doesn't really apply... */
+#define MAX_DMA_ADDRESS      0xFFFFFFFF
 
 /* 8237 DMA controllers */
 #define IO_DMA1_BASE	0x00	/* 8 bit slave DMA, channels 0..3 */
@@ -117,13 +127,21 @@
 #define DMA_CNT_6               0xCA
 #define DMA_CNT_7               0xCE
 
-#define DMA_PAGE_0              0x87    /* DMA page registers */
-#define DMA_PAGE_1              0x83
-#define DMA_PAGE_2              0x81
-#define DMA_PAGE_3              0x82
-#define DMA_PAGE_5              0x8B
-#define DMA_PAGE_6              0x89
-#define DMA_PAGE_7              0x8A
+#define DMA_LO_PAGE_0              0x87    /* DMA page registers */
+#define DMA_LO_PAGE_1              0x83
+#define DMA_LO_PAGE_2              0x81
+#define DMA_LO_PAGE_3              0x82
+#define DMA_LO_PAGE_5              0x8B
+#define DMA_LO_PAGE_6              0x89
+#define DMA_LO_PAGE_7              0x8A
+
+#define DMA_HI_PAGE_0              0x487    /* DMA page registers */
+#define DMA_HI_PAGE_1              0x483
+#define DMA_HI_PAGE_2              0x481
+#define DMA_HI_PAGE_3              0x482
+#define DMA_HI_PAGE_5              0x48B
+#define DMA_HI_PAGE_6              0x489
+#define DMA_HI_PAGE_7              0x48A
 
 #define DMA_MODE_READ	0x44	/* I/O to memory, no autoinit, increment, single mode */
 #define DMA_MODE_WRITE	0x48	/* memory to I/O, no autoinit, increment, single mode */
@@ -132,10 +150,19 @@
 /* enable/disable a specific DMA channel */
 static __inline__ void enable_dma(unsigned int dmanr)
 {
+	if (dmanr != 4)
+	{
+		dma_outb(0, DMA2_MASK_REG);  /* This may not be enabled */
+		dma_outb(0, DMA2_CMD_REG);  /* Enable group */
+	}
 	if (dmanr<=3)
+	{
 		dma_outb(dmanr,  DMA1_MASK_REG);
-	else
+		dma_outb(0, DMA1_CMD_REG);  /* Enable group */
+	} else
+	{
 		dma_outb(dmanr & 3,  DMA2_MASK_REG);
+	}
 }
 
 static __inline__ void disable_dma(unsigned int dmanr)
@@ -175,29 +202,30 @@ static __inline__ void set_dma_mode(unsigned int dmanr, char mode)
  * the lower 16 bits of the DMA current address register, but a 64k boundary
  * may have been crossed.
  */
-static __inline__ void set_dma_page(unsigned int dmanr, char pagenr)
+static __inline__ void set_dma_page(unsigned int dmanr, int pagenr)
 {
 	switch(dmanr) {
 		case 0:
-			dma_outb(pagenr, DMA_PAGE_0);
+			dma_outb(pagenr, DMA_LO_PAGE_0);
 			break;
 		case 1:
-			dma_outb(pagenr, DMA_PAGE_1);
+			dma_outb(pagenr, DMA_LO_PAGE_1);
 			break;
 		case 2:
-			dma_outb(pagenr, DMA_PAGE_2);
+			dma_outb(pagenr, DMA_LO_PAGE_2);
+			dma_outb(pagenr>>8, DMA_HI_PAGE_2); 
 			break;
 		case 3:
-			dma_outb(pagenr, DMA_PAGE_3);
+			dma_outb(pagenr, DMA_LO_PAGE_3);
 			break;
 		case 5:
-			dma_outb(pagenr & 0xfe, DMA_PAGE_5);
+			dma_outb(pagenr & 0xfe, DMA_LO_PAGE_5);
 			break;
 		case 6:
-			dma_outb(pagenr & 0xfe, DMA_PAGE_6);
+			dma_outb(pagenr & 0xfe, DMA_LO_PAGE_6);
 			break;
 		case 7:
-			dma_outb(pagenr & 0xfe, DMA_PAGE_7);
+			dma_outb(pagenr & 0xfe, DMA_LO_PAGE_7);
 			break;
 	}
 }
@@ -206,16 +234,16 @@ static __inline__ void set_dma_page(unsigned int dmanr, char pagenr)
 /* Set transfer address & page bits for specific DMA channel.
  * Assumes dma flipflop is clear.
  */
-static __inline__ void set_dma_addr(unsigned int dmanr, unsigned int a)
+static __inline__ void set_dma_addr(unsigned int dmanr, unsigned int phys)
 {
-	set_dma_page(dmanr, a>>16);
 	if (dmanr <= 3)  {
-	    dma_outb( a & 0xff, ((dmanr&3)<<1) + IO_DMA1_BASE );
-            dma_outb( (a>>8) & 0xff, ((dmanr&3)<<1) + IO_DMA1_BASE );
+	    dma_outb( phys & 0xff, ((dmanr&3)<<1) + IO_DMA1_BASE );
+            dma_outb( (phys>>8) & 0xff, ((dmanr&3)<<1) + IO_DMA1_BASE );
 	}  else  {
-	    dma_outb( (a>>1) & 0xff, ((dmanr&3)<<2) + IO_DMA2_BASE );
-	    dma_outb( (a>>9) & 0xff, ((dmanr&3)<<2) + IO_DMA2_BASE );
+	    dma_outb( (phys>>1) & 0xff, ((dmanr&3)<<2) + IO_DMA2_BASE );
+	    dma_outb( (phys>>9) & 0xff, ((dmanr&3)<<2) + IO_DMA2_BASE );
 	}
+	set_dma_page(dmanr, phys>>16);
 }
 
 

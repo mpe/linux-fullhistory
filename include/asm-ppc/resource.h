@@ -2,13 +2,6 @@
 #define _PPC_RESOURCE_H
 
 /*
- * These were swiped from asm-i386 so they don't fit well with the
- * powerstack very well at all.  Anyone want to go through them and
- * correct them?
- *                              -- Cort
- */
-
-/*
  * Resource limits
  */
 
@@ -20,11 +13,25 @@
 #define RLIMIT_RSS	5		/* max resident set size */
 #define RLIMIT_NPROC	6		/* max number of processes */
 #define RLIMIT_NOFILE	7		/* max number of open files */
+#define RLIMIT_MEMLOCK	8		/* max locked-in-memory address space */
 
-#ifdef notdef
-#define RLIMIT_MEMLOCK	8		/* max locked-in-memory address space*/
-#endif
+#define RLIM_NLIMITS	9
 
-#define RLIM_NLIMITS	8
+#ifdef __KERNEL__
+
+#define INIT_RLIMITS					\
+{							\
+	{ LONG_MAX, LONG_MAX },				\
+	{ LONG_MAX, LONG_MAX },				\
+	{ LONG_MAX, LONG_MAX },				\
+	{ _STK_LIM, _STK_LIM },				\
+	{        0, LONG_MAX },				\
+	{ LONG_MAX, LONG_MAX },				\
+	{ MAX_TASKS_PER_USER, MAX_TASKS_PER_USER },	\
+	{ NR_OPEN, NR_OPEN },				\
+	{ LONG_MAX, LONG_MAX },				\
+}
+
+#endif /* __KERNEL__ */
 
 #endif

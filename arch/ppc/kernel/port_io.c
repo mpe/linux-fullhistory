@@ -24,6 +24,41 @@ inl(int port)
 	return (_LE_to_BE_long(*((unsigned  long *)(_IO_BASE+port))));
 }
 
+void insb(int port, char *ptr, int len)
+{
+	unsigned char *io_ptr = (unsigned char *)(_IO_BASE+port);
+	while (len-- > 0)
+	{
+		*ptr++ = *io_ptr;
+	}
+}
+
+#if 0
+void insw(int port, short *ptr, int len)
+{
+	unsigned short *io_ptr = (unsigned short *)(_IO_BASE+port);
+	while (len-- > 0)
+	{
+		*ptr++ = _LE_to_BE_short(*io_ptr);
+	}
+}
+#else
+void insw(int port, short *ptr, int len)
+{
+	unsigned short *io_ptr = (unsigned short *)(_IO_BASE+port);
+	_insw(io_ptr, ptr, len);
+}
+#endif
+
+void insw_unswapped(int port, short *ptr, int len)
+{
+	unsigned short *io_ptr = (unsigned short *)(_IO_BASE+port);
+	while (len-- > 0)
+	{
+		*ptr++ = *io_ptr;
+	}
+}
+
 void insl(int port, long *ptr, int len)
 {
 	unsigned long *io_ptr = (unsigned long *)(_IO_BASE+port);
@@ -56,6 +91,41 @@ outl(unsigned long val,int port)
 {
 	*((unsigned  long *)(_IO_BASE+port)) = _LE_to_BE_long(val);
 	return (val);
+}
+
+void outsb(int port, char *ptr, int len)
+{
+	unsigned char *io_ptr = (unsigned char *)(_IO_BASE+port);
+	while (len-- > 0)
+	{
+		*io_ptr = *ptr++;
+	}
+}
+
+#if 0
+void outsw(int port, short *ptr, int len)
+{
+	unsigned short *io_ptr = (unsigned short *)(_IO_BASE+port);
+	while (len-- > 0)
+	{
+		*io_ptr = _LE_to_BE_short(*ptr++);
+	}
+}
+#else
+void outsw(int port, short *ptr, int len)
+{
+	unsigned short *io_ptr = (unsigned short *)(_IO_BASE+port);
+	_outsw(io_ptr, ptr, len);
+}
+#endif
+
+void outsw_unswapped(int port, short *ptr, int len)
+{
+	unsigned short *io_ptr = (unsigned short *)(_IO_BASE+port);
+	while (len-- > 0)
+	{
+		*io_ptr = *ptr++;
+	}
 }
 
 void outsl(int port, long *ptr, int len)

@@ -36,6 +36,7 @@ typedef unsigned long	Elf32_Word;
 #define EM_88K   5
 #define EM_486   6   /* Perhaps disused */
 #define EM_860   7
+#define EM_PPC   20
 
 /* This is the info that is needed to parse the dynamic section of the file */
 #define DT_NULL		0

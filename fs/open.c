@@ -86,34 +86,37 @@ asmlinkage int sys_truncate(const char * path, unsigned long length)
 	error = namei(path,&inode);
 	if (error)
 		return error;
-	if (S_ISDIR(inode->i_mode)) {
-		iput(inode);
-		return -EACCES;
-	}
-	if ((error = permission(inode,MAY_WRITE)) != 0) {
-		iput(inode);
-		return error;
-	}
-	if (IS_RDONLY(inode)) {
-		iput(inode);
-		return -EROFS;
-	}
-	if (IS_IMMUTABLE(inode) || IS_APPEND(inode)) {
-		iput(inode);
-		return -EPERM;
-	}
+
+	error = -EACCES;
+	if (S_ISDIR(inode->i_mode))
+		goto out;
+
+	error = permission(inode,MAY_WRITE);
+	if (error)
+		goto out;
+
+	error = -EROFS;
+	if (IS_RDONLY(inode))
+		goto out;
+
+	error = -EPERM;
+	if (IS_IMMUTABLE(inode) || IS_APPEND(inode))
+		goto out;
+
 	error = get_write_access(inode);
-	if (error) {
-		iput(inode);
-		return error;
-	}
+	if (error)
+		goto out;
+
 	error = locks_verify_area(FLOCK_VERIFY_WRITE, inode, NULL,
 				  length < inode->i_size ? length : inode->i_size,
 				  abs(inode->i_size - length));
-	if (error)
-		return error;
-	error = do_truncate(inode, length);
+	if (!error) {
+		if (inode->i_sb && inode->i_sb->dq_op)
+			inode->i_sb->dq_op->initialize(inode, -1);
+		error = do_truncate(inode, length);
+	}
 	put_write_access(inode);
+out:
 	iput(inode);
 	return error;
 }
@@ -135,9 +138,9 @@ asmlinkage int sys_ftruncate(unsigned int fd, unsigned long length)
 	error = locks_verify_area(FLOCK_VERIFY_WRITE, inode, file,
 				  length < inode->i_size ? length : inode->i_size,
 				  abs(inode->i_size - length));
-	if (error)
-		return error;
-	return do_truncate(inode, length);
+	if (!error)
+		error = do_truncate(inode, length);
+	return error;
 }
 
 #ifndef __alpha__

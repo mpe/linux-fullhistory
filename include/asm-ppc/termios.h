@@ -1,16 +1,15 @@
 #ifndef _PPC_TERMIOS_H
 #define _PPC_TERMIOS_H
 
-
 /*
- * These were swiped from the alpha termios.h.  These probably aren't
- * correct but we can fix them as we come across problems.
- *                                -- Cort
+ * Liberally adapted from alpha/termios.h.  In particular, the c_cc[]
+ * fields have been reordered so that termio & termios share the
+ * common subset in the same order (for brain dead programs that don't
+ * know or care about the differences).
  */
 
-#include <linux/types.h>
-
-#include <asm/ioctl.h>
+#include <asm/ioctls.h>
+#include <asm/termbits.h>
 
 struct sgttyb {
 	char	sg_ispeed;
@@ -109,6 +108,9 @@ struct ltchars {
 #define TIOCSERGETMULTI 0x545A /* Get multiport config  */
 #define TIOCSERSETMULTI 0x545B /* Set multiport config */
 
+#define TIOCMIWAIT	0x545C	/* wait for a change on serial input line(s) */
+#define TIOCGICOUNT	0x545D	/* read serial port inline interrupt counts */
+
 /* Used for packet mode */
 #define TIOCPKT_DATA		 0
 #define TIOCPKT_FLUSHREAD	 1
@@ -125,7 +127,7 @@ struct winsize {
 	unsigned short ws_ypixel;
 };
 
-#define NCC 8
+#define NCC 10
 struct termio {
 	unsigned short c_iflag;		/* input mode flags */
 	unsigned short c_oflag;		/* output mode flags */
@@ -148,38 +150,36 @@ struct termios {
 };
 
 /* c_cc characters */
-#define VEOF 0
-#define VEOL 1
-#define VEOL2 2
-#define VERASE 3
-#define VWERASE 4
-#define VKILL 5
-#define VREPRINT 6
-#define VSWTC 7
-#define VINTR 8
-#define VQUIT 9
-#define VSUSP 10
-#define VSTART 12
-#define VSTOP 13
-#define VLNEXT 14
-#define VDISCARD 15
-#define VMIN 16
-#define VTIME 17
-
-/*
- * ..and the same for c_cc in the termio structure.. 
- * Oh, how I love being backwardly compatible.
- */
 #define _VINTR	0
 #define _VQUIT	1
 #define _VERASE	2
 #define _VKILL	3
 #define _VEOF	4
-#define _VMIN	4
-#define _VEOL	5
-#define _VTIME	5
-#define _VEOL2	6
-#define _VSWTC	7
+#define _VMIN	5
+#define _VEOL	6
+#define _VTIME	7
+#define _VEOL2	8
+#define _VSWTC	9
+
+#define VINTR 	0
+#define VQUIT 	1
+#define VERASE 	2
+#define VKILL	3
+#define VEOF	4
+#define VMIN	5
+#define VEOL	6
+#define VTIME	7
+#define VEOL2	8
+#define VSWTC	9
+
+#define VWERASE 	10
+#define VREPRINT	11
+#define VSUSP 		12
+#define VSTART		13
+#define VSTOP		14
+#define VLNEXT		15
+#define VDISCARD	16
+
 
 #ifdef __KERNEL__
 /*	eof=^D		eol=\0		eol2=\0		erase=del
@@ -187,8 +187,11 @@ struct termios {
 	intr=^C		quit=^\		susp=^Z		<OSF/1 VDSUSP>
 	start=^Q	stop=^S		lnext=^V	discard=^U
 	vmin=\1		vtime=\0
-*/
 #define INIT_C_CC "\004\000\000\177\027\025\022\000\003\034\032\000\021\023\026\025\001\000"
+*/
+
+/*                   ^C  ^\ del  ^U  ^D   1   0   0   0   0  ^W  ^R  ^Z  ^Q  ^S  ^V  ^U  */
+#define INIT_C_CC "\003\034\177\025\004\001\000\000\000\000\027\022\032\021\023\026\025" 
 #endif
 
 /* c_iflag bits */
@@ -388,7 +391,7 @@ extern inline void trans_to_termio(struct termios * termios,
 	termio->c_cc[_VEOL]  = termios->c_cc[VEOL];
 	termio->c_cc[_VEOL2] = termios->c_cc[VEOL2];
 	termio->c_cc[_VSWTC] = termios->c_cc[VSWTC];
-	if (!(termios->c_lflag & ICANON)) {
+	if (1/*!(termios->c_lflag & ICANON)*/) {
 		termio->c_cc[_VMIN]  = termios->c_cc[VMIN];
 		termio->c_cc[_VTIME] = termios->c_cc[VTIME];
 	}
@@ -396,4 +399,4 @@ extern inline void trans_to_termio(struct termios * termios,
 
 #endif	/* __KERNEL__ */
 
-#endif	/* _ALPHA_TERMIOS_H */
+#endif	/* _PPC_TERMIOS_H */

@@ -74,8 +74,19 @@ hannu@voxware.pp.fi
 
 ----------------- cut here ------------------------------
 #!/bin/sh
+# *****************************************
+# * NOTICE!
+# *
+# * For security reasons read access to /dev/dsp* and /dev/audio* has been
+# * disabled from other than root. Otherwise any user may be able to spy
+# * what is being talked about near the microphone.
+# * This effectively disables audio recording by other than root. In case
+# * this capability is required, you should change AUDIOPERMS (below) to 666
+# * before executing this script.
+# *****************************************
+AUDIOPERMS=622
 #
-#	soundinstall		
+#
 #
 #
 # Create the devices
@@ -161,7 +172,7 @@ fi
 if [ -e /dev/dsp0 ]; then
 	rm -f /dev/dsp0
 fi
-mknod -m 666 /dev/dsp0 c 14 3
+mknod -m $AUDIOPERMS /dev/dsp0 c 14 3
 ln -s /dev/dsp0 /dev/dsp
 
 #
@@ -173,13 +184,13 @@ fi
 if [ -e /dev/dspW0 ]; then
 	rm -f /dev/dspW0
 fi
-mknod -m 666 /dev/dspW0 c 14 5
+mknod -m $AUDIOPERMS /dev/dspW0 c 14 5
 ln -s /dev/dspW0 /dev/dspW
 
 if [ -e /dev/dspW1 ]; then
 	rm -f /dev/dspW1
 fi
-mknod -m 666 /dev/dspW1 c 14 37
+mknod -m $AUDIOPERMS /dev/dspW1 c 14 37
 
 #
 #	SPARC compatible /dev/audio	(14, 4)	
@@ -190,7 +201,7 @@ fi
 if [ -e /dev/audio0 ]; then
 	rm -f /dev/audio0
 fi
-mknod -m 666 /dev/audio0 c 14 4
+mknod -m $AUDIOPERMS /dev/audio0 c 14 4
 ln -s /dev/audio0 /dev/audio
 
 #
@@ -201,7 +212,7 @@ ln -s /dev/audio0 /dev/audio
 if [ -e /dev/dsp1 ]; then
 	rm -f /dev/dsp1
 fi
-mknod -m 666 /dev/dsp1 c 14 19
+mknod -m $AUDIOPERMS /dev/dsp1 c 14 19
 #
 #	SPARC audio1	(14, 20) 
 #				/dev/audio for the second soundcard.
@@ -211,7 +222,7 @@ mknod -m 666 /dev/dsp1 c 14 19
 if [ -e /dev/audio1 ]; then
 	rm -f /dev/audio1
 fi
-mknod -m 666 /dev/audio1 c 14 20
+mknod -m $AUDIOPERMS /dev/audio1 c 14 20
 #
 #	/dev/sndstat	(14,6)	For debugging purposes
 #

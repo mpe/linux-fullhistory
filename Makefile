@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 99
-SUBLEVEL = 7
+SUBLEVEL = 8
 
 ARCH = i386
 
@@ -225,7 +225,7 @@ include/linux/compile.h: $(CONFIGURATION) include/linux/version.h newversion
 	 else \
 	   echo \#define LINUX_COMPILE_DOMAIN ; \
 	 fi >> .ver
-	@echo \#define LINUX_COMPILER \"`$(HOSTCC) -v 2>&1 | tail -1`\" >> .ver
+	@echo \#define LINUX_COMPILER \"`$(CC) -v 2>&1 | tail -1`\" >> .ver
 	@mv -f .ver $@
 
 include/linux/version.h: ./Makefile

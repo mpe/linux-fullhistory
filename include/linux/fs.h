@@ -272,7 +272,7 @@ struct inode {
 	uid_t		i_uid;
 	gid_t		i_gid;
 	kdev_t		i_rdev;
-	unsigned long	i_size;
+	off_t		i_size;
 	time_t		i_atime;
 	time_t		i_mtime;
 	time_t		i_ctime;

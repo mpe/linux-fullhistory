@@ -604,7 +604,8 @@ static __inline__ void fib_add_1(short flags, __u32 dst, __u32 mask,
 		 *	but less metric. We'll delete it 
 		 *	after instantiation of new route.
 		 */
-		if (f1->fib_info->fib_gateway == gw)
+		if (f1->fib_info->fib_gateway == gw &&
+		    (gw || f1->fib_info->fib_dev == dev))
 			dup_fp = fp;
 		fp = &f1->fib_next;
 	}
@@ -643,7 +644,8 @@ static __inline__ void fib_add_1(short flags, __u32 dst, __u32 mask,
 
 	while ((f1 = *fp) != NULL && f1->fib_dst == dst)
 	{
-		if (f1->fib_info->fib_gateway == gw)
+		if (f1->fib_info->fib_gateway == gw &&
+		    (gw || f1->fib_info->fib_dev == dev))
 		{
 			cli();
 			*fp = f1->fib_next;

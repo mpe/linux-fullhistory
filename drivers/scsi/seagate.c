@@ -924,7 +924,7 @@ connect_loop :
 			if (STATUS & STAT_BSY) {
 				printk("scsi%d : BST asserted after we've been aborted.\n",
 					hostno);
-				seagate_st0x_reset(NULL);
+				seagate_st0x_reset(NULL, 0);
 				return retcode(DID_RESET);
 			}
 			return retcode(st0x_aborted);
@@ -1597,7 +1597,7 @@ int seagate_st0x_abort (Scsi_Cmnd * SCpnt)
 	the seagate_st0x_reset function resets the SCSI bus
 */
 	
-int seagate_st0x_reset (Scsi_Cmnd * SCpnt)
+int seagate_st0x_reset (Scsi_Cmnd * SCpnt, unsigned int reset_flags)
 	{
 	unsigned clock;
 	/*

@@ -163,6 +163,12 @@ S: Bessemerstraat 21
 S: Amsterdam
 S: The Netherlands
 
+N: Ray Burr
+E: ryb@nightmare.com
+D: Original author of Amiga FFS filesystem
+S: Orlando, Florida
+S: USA
+
 N: Michael Callahan
 E: callahan@maths.ox.ac.uk
 D: PPP for Linux
@@ -518,7 +524,8 @@ E: ajh@primag.co.uk
 D: Selection mechanism
 
 N: Jochen Hein
-E: Hein@Informatik.TU-Clausthal.de
+E: jochen.hein@informatik.tu-clausthal.de
+P: 1024/4A27F015 25 72 FB E3 85 9F DE 3B  CB 0A DA DA 40 77 05 6C
 D: National Language Support
 D: German Support-Disks for SLS/Slackware called SLT
 D: Linux Internationalization Project
@@ -830,7 +837,7 @@ D: Credit file compilator
 N: Kevin E. Martin
 E: martin@cs.unc.edu
 D: Developed original accelerated X servers included in XFree86
-D: XF86_Mach64 (forthcoming -- please don't ask when)
+D: XF86_Mach64
 D: XF86_Mach32
 D: XF86_Mach8
 D: XF86_8514

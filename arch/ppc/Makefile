@@ -12,28 +12,29 @@
 #
 # Copyright (C) 1994 by Linus Torvalds
 # Changes for PPC by Gary Thomas
-# Modified by Cort Dougan
 #
+
 # PowerPC (cross) tools
-AS		= /usr/local/bin/as.ppc
-ASFLAGS		= 
-LD		= /u/cort/ppc-gcc/bin/ld.ppc
+AS		= as.ppc
+ASFLAGS		=
+LD		= ld.ppc
 #LINKFLAGS	= -T arch/ppc/ld.script -Ttext 0x90000000 -Map vmlinux.map
-LINKFLAGS	= -T arch/ppc/ld.script -Ttext 0x90000000 
+LINKFLAGS	= -T arch/ppc/ld.script -Ttext 0x90000000
 HOSTCC		= gcc
-CC		= /usr/local/bin/gcc.ppc 
+CC		= cc.ppc
 CFLAGS		= -D__KERNEL__ -I$(TOPDIR)/include \
-		-Wstrict-prototypes \
+		-Wall -Wstrict-prototypes \
+		-msoft-float \
 		-fomit-frame-pointer \
 		-fno-builtin \
 		-finhibit-size-directive \
-		-O2 -pipe
-#-Wall
+		-fsigned-char \
+		-O2
 CPP		= $(CC) -E $(CFLAGS)
-AR		= /u/cort/ppc-gcc/bin/ar.ppc
-RANLIB		= /u/cort/ppc-gcc/bin/ranlib.ppc
-STRIP		= /u/cort/ppc-gcc/bin/strip.ppc
-NM		= /u/cort/ppc-gcc/bin/nm.ppc
+AR		= ar.ppc
+RANLIB		= ranlib.ppc
+STRIP		= strip.ppc
+NM		= nm.ppc
 
 #
 # Set these to indicate how to link it..
@@ -61,19 +62,11 @@ NM		= /u/cort/ppc-gcc/bin/nm.ppc
 
 HEAD := arch/ppc/kernel/head.o
 
-ARCH_SUBDIRS = arch/ppc/kernel arch/ppc/mm
+ARCH_SUBDIRS = arch/ppc/kernel arch/ppc/mm arch/ppc/lib
 SUBDIRS := $(SUBDIRS) $(ARCH_SUBDIRS)
-ARCHIVES := arch/ppc/kernel/kernel.o arch/ppc/mm/mm.o $(ARCHIVES)
-
-## ifdef CONFIG_IBCS
-## SUBDIRS := $(SUBDIRS) arch/ppc/ibcs
-## DRIVERS := $(DRIVERS) arch/ppc/ibcs/ibcs.o
-## endif
-
-## ifdef CONFIG_MATH_EMULATION
-## SUBDIRS := $(SUBDIRS) arch/ppc/math-emu
-## DRIVERS := $(DRIVERS) arch/ppc/math-emu/math.a
-## endif
+ARCHIVES := arch/ppc/kernel/kernel.o arch/ppc/mm/mm.o arch/ppc/lib/lib.o $(ARCHIVES)
+NO_RD_ARCHIVES := arch/ppc/kernel/no_ramdisk.o $(ARCHIVES)
+ARCHIVES := arch/ppc/kernel/ramdisk.o $(ARCHIVES)
 
 arch/ppc/kernel: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=arch/ppc/kernel
@@ -81,28 +74,44 @@ arch/ppc/kernel: dummy
 arch/ppc/mm: dummy
 	$(MAKE) linuxsubdirs SUBDIRS=arch/ppc/mm
 
-## MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
+arch/ppc/lib: dummy
+	$(MAKE) linuxsubdirs SUBDIRS=arch/ppc/lib
+
+MAKEBOOT = $(MAKE) -C arch/$(ARCH)/boot
+
+vmlinux.no_ramdisk: $(CONFIGURATION) init/main.o init/version.o linuxsubdirs
+	$(LD) $(LINKFLAGS) $(HEAD) init/main.o init/version.o \
+		$(NO_RD_ARCHIVES) \
+		$(FILESYSTEMS) \
+		$(DRIVERS) \
+		$(LIBS) -o vmlinux.no_ramdisk
+
 ## 
-## zImage: vmlinux
-## 	@$(MAKEBOOT) zImage
-## 
+zImage: vmlinux
+	@$(MAKEBOOT) zImage
+
+tImage: vmlinux
+	@$(MAKEBOOT) tImage
+
+bImage: vmlinux.no_ramdisk
+	@$(MAKEBOOT) bImage
+
+bdisk: vmlinux.no_ramdisk
+	@$(MAKEBOOT) bdisk
+
 ## compressed: zImage
 ## 
 ## zlilo: vmlinux
 ## 	@$(MAKEBOOT) zlilo
 ## 
-## zdisk: vmlinux
-## 	@$(MAKEBOOT) zdisk
-## 
+zdisk: vmlinux
+	@$(MAKEBOOT) zdisk
+ 
 ## install: vmlinux
 ## 	@$(MAKEBOOT) install
 
 archclean:
-#	@$(MAKEBOOT) clean
-	/bin/rm -f arch/ppc/kernel/*.o arch/ppc/kernel/mk_defs arch/ppc/kernel/ppc_defs.h mm/*.o
-	/bin/rm -f arch/ppc/kernel/*~ arch/ppc/kernel/*~      
+	@$(MAKEBOOT) clean
 
 archdep:
 #	@$(MAKEBOOT) dep
-
-

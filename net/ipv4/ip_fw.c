@@ -210,7 +210,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, __u16 *redirport, struct ip_
 	__u32			src, dst;
 	__u16			src_port=0xFFFF, dst_port=0xFFFF, icmp_type=0xFF;
 	unsigned short		f_prt=0, prt;
-	char			notcpsyn=1, notcpack=1, match;
+	char			notcpsyn=0, notcpack=0, match;
 	unsigned short		offset;
 	int			answer;
 	unsigned char		tosand, tosxor;
@@ -289,12 +289,12 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, __u16 *redirport, struct ip_
 			if (!offset) {
 				src_port=ntohs(tcp->source);
 				dst_port=ntohs(tcp->dest);
-				if(tcp->ack)
-					/* We *DO* have ACK, value FALSE */
-					notcpack=0;
-				if(tcp->syn && notcpack)
-					/* We *DO* have SYN, value FALSE */
-					notcpsyn=0;
+				if(!tcp->ack)
+					/* We do NOT have ACK, value TRUE */
+					notcpack=1;
+				if(!tcp->syn || !notcpack)
+					/* We do NOT have SYN, value TRUE */
+					notcpsyn=1;
 			}
 			prt=IP_FW_F_TCP;
 			break;
@@ -401,22 +401,22 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, __u16 *redirport, struct ip_
 			continue;
 
 #endif
+		/*
+		 * For all non-TCP packets and/or non-first fragments,
+		 * notcpsyn and notcpack will always be FALSE,
+		 * so the IP_FW_F_TCPSYN and IP_FW_F_TCPACK flags
+		 * are actually ignored for these packets.
+		 */
+		 
+		if((f->fw_flg&IP_FW_F_TCPSYN) && notcpsyn)
+		 	continue;
+
+		if((f->fw_flg&IP_FW_F_TCPACK) && notcpack)
+		 	continue;
+
 		f_prt=f->fw_flg&IP_FW_F_KIND;
 		if (f_prt!=IP_FW_F_ALL) 
 		{
-			/*
-			 * This is actually buggy as if you set ACK/SYN flags
-			 * on UDP or ICMP firewall it will never work,but 
-			 * actually it is a concern of software which sets
-			 * firewall entries.
-			 */
-			 
-			if((f->fw_flg&IP_FW_F_TCPSYN) && notcpsyn)
-			 	continue;
-
-			if((f->fw_flg&IP_FW_F_TCPACK) && notcpack)
-			 	continue;
-
 			/*
 			 *	Specific firewall - packet's protocol
 			 *	must match firewall's.

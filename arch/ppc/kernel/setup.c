@@ -22,16 +22,20 @@
 #include <linux/a.out.h>
 #include <linux/tty.h>
 
+#define SIO_CONFIG_RA	0x398
+#define SIO_CONFIG_RD	0x399
+
 #include <asm/pgtable.h>
+
+extern unsigned long *end_of_DRAM;
 extern PTE *Hash;
 extern unsigned long Hash_size, Hash_mask;
 
 char sda_root[] = "root=/dev/sda1";
+extern int root_mountflags;
 
 unsigned char aux_device_present;
-int get_cpuinfo(char *buffer)
-{
-}
+
 /*
  * The format of "screen_info" is strange, and due to early
  * i386-setup code. This is just enough to make the console
@@ -43,8 +47,12 @@ struct screen_info screen_info = {
 	0,			/* orig-video-page */
 	0,			/* orig-video-mode */
 	80,			/* orig-video-cols */
-	0,0,0,			/* ega_ax, ega_bx, ega_cx */
-	25			/* orig-video-lines */
+	0,			/* unused [short] */
+	0,			/* ega_bx */
+	0,			/* unused [short] */
+	25,			/* orig-video-lines */
+	0,			/* isVGA */
+	16			/* video points */
 };
 
 unsigned long bios32_init(unsigned long memory_start, unsigned long memory_end)
@@ -57,7 +65,7 @@ unsigned long find_end_of_memory(void)
 	unsigned char dram_size = inb(0x0804);
 	unsigned long total;
 _printk("DRAM Size = %x\n", dram_size);
-_printk("Config registers = %x/%x/%x\n", inb(0x0800), inb(0x0801), inb(0x0802));
+_printk("Config registers = %x/%x/%x/%x\n", inb(0x0800), inb(0x0801), inb(0x0802), inb(0x0803));
 	switch (dram_size & 0x07)
 	{
 		case 0:
@@ -112,9 +120,8 @@ _printk("Config registers = %x/%x/%x\n", inb(0x0800), inb(0x0801), inb(0x0802));
 			total += 0x00000000;  /* Module not present */
 			break;
 	}
-_printk("register total = %08X\n", total);	
 /* TEMP */ total = 0x01000000;
-/*_cnpause();	*/
+/* _cnpause();	*/
 /* CAUTION!! This can be done more elegantly! */	
 	if (total < 0x01000000)
 	{
@@ -132,25 +139,28 @@ _printk("register total = %08X\n", total);
 
 int size_memory;
 
-#define DEFAULT_ROOT_DEVICE 0x0200	/* fd0 */
+/* #define DEFAULT_ROOT_DEVICE 0x0200	/* fd0 */
+#define DEFAULT_ROOT_DEVICE 0x0801	/* sda1 */
 
 void setup_arch(char **cmdline_p,
 	unsigned long * memory_start_p, unsigned long * memory_end_p)
 {
-
-  extern int _end;
+	extern int _end;
 	extern char cmd_line[];
+	unsigned char reg;
 
-	ROOT_DEV = DEFAULT_ROOT_DEVICE;
+	/* Set up floppy in PS/2 mode */
+	outb(0x09, SIO_CONFIG_RA);
+	reg = inb(SIO_CONFIG_RD);
+	reg = (reg & 0x3F) | 0x40;
+	outb(reg, SIO_CONFIG_RD);
+	outb(reg, SIO_CONFIG_RD);	/* Have to write twice to change! */
+	ROOT_DEV = to_kdev_t(DEFAULT_ROOT_DEVICE);
 	aux_device_present = 0xaa;
 	*cmdline_p = cmd_line;
 	*memory_start_p = (unsigned long) &_end;
-	*memory_end_p = (unsigned long *)Hash;
+	*memory_end_p = (unsigned long *)end_of_DRAM;
 	size_memory = *memory_end_p - KERNELBASE;  /* Relative size of memory */
-
-/*	_printk("setup_arch() done!  memory_start = %08X memory_end = %08X\n"
-		,*memory_start_p,*memory_end_p);*/
-
 }
 
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on)
@@ -164,9 +174,40 @@ extern long builtin_ramdisk_size;
 void
 builtin_ramdisk_init(void)
 {
-	if (ROOT_DEV == DEFAULT_ROOT_DEVICE)
+	if ((ROOT_DEV == to_kdev_t(DEFAULT_ROOT_DEVICE)) && (builtin_ramdisk_size != 0))
 	{
 		rd_preloaded_init(&builtin_ramdisk_image, builtin_ramdisk_size);
+	} else
+	{  /* Not ramdisk - assume root needs to be mounted read only */
+		root_mountflags |= MS_RDONLY;
 	}
 }
 
+#define MAJOR(n) (((n)&0xFF00)>>8)
+#define MINOR(n) ((n)&0x00FF)
+
+int
+get_cpuinfo(char *buffer)
+{
+	int pvr = _get_PVR();
+	char *model;
+	switch (pvr>>16)
+	{
+		case 3:
+			model = "603";
+			break;
+		case 4:
+			model = "604";
+			break;
+		case 6:
+			model = "603e";
+			break;
+		case 7:
+			model = "603ev";
+			break;
+		default:
+			model = "unknown";
+			break;
+	}
+	return sprintf(buffer, "PowerPC %s rev %d.%d\n", model, MAJOR(pvr), MINOR(pvr));
+}

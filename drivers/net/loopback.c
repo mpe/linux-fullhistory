@@ -122,7 +122,6 @@ int loopback_init(struct device *dev)
 	dev->mtu		= LOOPBACK_MTU;
 	dev->tbusy		= 0;
 	dev->hard_start_xmit	= loopback_xmit;
-	dev->open		= NULL;
 	dev->hard_header	= eth_header;
 	dev->hard_header_len	= ETH_HLEN;		/* 14			*/
 	dev->addr_len		= ETH_ALEN;		/* 6			*/

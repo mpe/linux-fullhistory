@@ -29,6 +29,7 @@ typedef struct _PTE
 #define PP_RWXX	0	/* Supervisor read/write, User none */
 #define PP_RWRX 1	/* Supervisor read/write, User read */
 #define PP_RWRW 2	/* Supervisor read/write, User read/write */
+#define PP_RXRX 3	/* Supervisor read,       User read */
 
 /* Segment Register */
 

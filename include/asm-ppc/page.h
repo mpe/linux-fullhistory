@@ -63,6 +63,7 @@ typedef unsigned long pgprot_t;
 #define MAP_PAGE_RESERVED	(1<<15)
 
 
+#if 0  /* Now defined in "mm.h" */
 /*
  * This used to be an unsigned short...
  * 
@@ -75,6 +76,7 @@ typedef struct {
 		 dirty:1,
 		 reserved:1;
 } mem_map_t;
+#endif
 
 /* Certain architectures need to do special things when pte's
  * within a page table are directly modified.  Thus, the following

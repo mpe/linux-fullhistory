@@ -257,6 +257,14 @@ type name (type1 arg1,type2 arg2,type3 arg3,type4 arg4,type5 arg5) \
  * won't be any messing with the stack from main(), but we define
  * some others too.
  */
+
+extern long __kernel_thread(unsigned long, int (*)(void *), void *);
+
+static inline long kernel_thread(int (*fn)(void *), void * arg, unsigned long flags)
+{
+	return __kernel_thread(flags | CLONE_VM, fn, arg);
+}
+ 
 /*
    some of these had problems getting the right arguments (namely sys_clone())
    when they were inline.

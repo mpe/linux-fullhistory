@@ -55,13 +55,8 @@ included and seems to be working fine!
 Where do I discuss these drivers?
 ---------------------------------
 
-HEY!! - the linux-arcnet@807-city.on.ca mailing list is now so unstable
-that I can't recommend people even bother with it.  I no longer have an
-account on 807-CITY (though they still graciously forward my mail to me) so
-there's not much I can do.
-
-However, Tomasz Motylewski has been so kind as to set up a new and improved
-mailing list; subscribe by sending a message with the BODY "subscribe
+Tomasz Motylewski has been so kind as to set up a new and improved
+mailing list.  Subscribe by sending a message with the BODY "subscribe
 linux-arcnet YOUR REAL NAME" to listserv@tichy.ch.uj.edu.pl.  Then, to
 submit messages to the list, mail to linux-arcnet@tichy.ch.uj.edu.pl.
 
@@ -208,16 +203,19 @@ Windows 95: Tools are included with Win95 that let you use either the LANMAN
 	you're completely insane, and/or you need to build some kind of
 	hybrid network that uses both encapsulation types.
 
-OS2: Has not been tested.  The "correct" solution would be to buy either of
-	IBM's "TCP/IP for OS/2" or "Warp Connect" packages.  However,
-	ftp.microsoft.com also has a freeware Lan Manager for OS/2 client
+OS2: I've been told it works under Warp Connect with an ARCnet driver from
+	SMC.  You need to use the 'arc0e' interface for this.  If you get
+	the SMC driver to work with the TCP/IP stuff included in the
+	"normal" Warp Bonus Pack, let me know.
+
+	ftp.microsoft.com also has a freeware "Lan Manager for OS/2" client
 	which should use the same protocol as WfWg does.  I had no luck
 	installing it under Warp, however.  Please mail me with any results.
 
 NetBSD/AmiTCP: These use an old version of the Internet standard ARCnet
 	protocol (RFC1051) which is compatible with the Linux driver v2.10
 	ALPHA and above using the arc0s device. (See "Multiprotocol ARCnet"
-	below.)
+	below.)  ** Newer versions of NetBSD apparently support RFC1201.
 
 
 Using Multiprotocol ARCnet
@@ -281,14 +279,14 @@ can set up your network then:
    If you need only arc0, then the following commands should get you going:
    	ifconfig arc0 MY.IP.ADD.RESS
    	route add MY.IP.ADD.RESS arc0
-   	route add SUB.NET.ADD.RESS arc0
+   	route add -net SUB.NET.ADD.RESS arc0
    	[add other local routes here]
    	
    If you need arc0e (and only arc0e), it's a little different:
    	ifconfig arc0 MY.IP.ADD.RESS
    	ifconfig arc0e MY.IP.ADD.RESS
    	route add MY.IP.ADD.RESS arc0e
-   	route add SUB.NET.ADD.RESS arc0e
+   	route add -net SUB.NET.ADD.RESS arc0e
    
    arc0s works much the same way as arc0e.
 

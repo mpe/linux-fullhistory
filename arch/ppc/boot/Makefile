@@ -24,14 +24,48 @@ OBJECTS = head.o main.o
 
 all:	linux.boot
 
-linux.boot: $(TOPDIR)/vmlinux mkboot
-	mkboot $(TOPDIR)/vmlinux /u/cort/bootpd/vmlinux
+#zImage: $(CONFIGURE) bootsect setup compressed/vmlinux tools/build
+zImage: compressed/vmlinux mk_type41
+	mkboot compressed/vmlinux vmlinux 0
+	mk_type41 vmlinux zImage
+	cp compressed/vmlinux zBoot
+	rm -f vmlinux compressed/vmlinux
 
-mkboot : cortstrip.c
-	$(HOSTCC) -o mkboot cortstrip.c
+zdisk: zImage
+	dd if=zImage of=/dev/fd0 bs=36b	
 
+compressed/vmlinux: $(TOPDIR)/vmlinux
+	@$(MAKE) -C compressed vmlinux
+
+tImage: mk_type41 $(TOPDIR)/vmlinux
+	mkboot $(TOPDIR)/vmlinux vmlinux 0
+	mk_type41 vmlinux tImage
+	rm -f vmlinux
+
+bImage: mk_type41 $(TOPDIR)/vmlinux.no_ramdisk
+	mkboot $(TOPDIR)/vmlinux.no_ramdisk vmlinux 0
+	mk_type41 vmlinux bImage
+	rm -f vmlinux
+
+xImage: compressed/vmlinux.no_ramdisk
+	mkboot compressed/vmlinux.no_ramdisk vmlinux 0
+	mk_type41 vmlinux xImage
+	rm -f vmlinux compressed/vmlinux.no_ramdisk
+
+compressed/vmlinux.no_ramdisk: $(TOPDIR)/vmlinux.no_ramdisk
+	@$(MAKE) -C compressed vmlinux.no_ramdisk
+
+bdisk: xImage
+	dd if=xImage of=/dev/fd0 bs=36b
+	
+linux.boot: $(TOPDIR)/vmlinux
+	mkboot $(TOPDIR)/vmlinux $@ 0
+
+mk_type41: mk_type41.c
+	cc -o mk_type41 mk_type41.c
+	
 clean:
 	rm -f linux.boot 
 
 dep:
-
+fastdep:

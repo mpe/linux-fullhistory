@@ -854,8 +854,8 @@ static int transfer_data(struct s_drive_stuff *stuffp,
 				printk(KERN_ERR MCDX ": transfer timeout.\n");
 			}
 			/*
-			 * We don't report about !stuffp->introk, sice this is
-			 * allready done in the interrupt routine.
+			 * We don't report about !stuffp->introk, since this is
+			 * already done in the interrupt routine.
 			 */
 			stuffp->busy = 0;
 			stuffp->valid = 0;

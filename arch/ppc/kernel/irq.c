@@ -24,14 +24,19 @@
 #include <linux/ioport.h>
 #include <linux/interrupt.h>
 #include <linux/timex.h>
-#include <linux/malloc.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/bitops.h>
 
-#define CR0_NE 32
+/*
+ * For the BeBox, interrupt numbers are 0..15 for 8259 PIC interrupts
+ * and 16..31 for other BeBox motherboard type interrupts.
+ */
+ 
+unsigned long isBeBox[];
+unsigned char *BeBox_IO_page;
 
 static unsigned char cache_21 = 0xff;
 static unsigned char cache_A1 = 0xff;
@@ -41,15 +46,21 @@ void disable_irq(unsigned int irq_nr)
 	unsigned char mask;
 	int s = _disable_interrupts();
 
-	mask = 1 << (irq_nr & 7);
-	if (irq_nr < 8) {
-		cache_21 |= mask;
-		outb(cache_21,0x21);
-		_enable_interrupts(s);
-		return;
+	if (isBeBox[0] && (irq_nr >= 16))
+	{
+		BeBox_disable_irq(irq_nr);
+	} else
+	{
+		mask = 1 << (irq_nr & 7);
+		if (irq_nr < 8) {
+			cache_21 |= mask;
+			outb(cache_21,0x21);
+		} else
+		{
+			cache_A1 |= mask;
+			outb(cache_A1,0xA1);
+		}
 	}
-	cache_A1 |= mask;
-	outb(cache_A1,0xA1);
 	_enable_interrupts(s);
 }
 
@@ -58,104 +69,143 @@ void enable_irq(unsigned int irq_nr)
 	unsigned char mask;
 	int s = _disable_interrupts();
 
-	mask = ~(1 << (irq_nr & 7));
-	if (irq_nr < 8) {
-		cache_21 &= mask;
-		outb(cache_21,0x21);
+	if (isBeBox[0] && (irq_nr >= 16))
+	{
+		BeBox_enable_irq(irq_nr);
 		_enable_interrupts(s);
 		return;
+	} else
+	{
+		mask = ~(1 << (irq_nr & 7));
+		if (irq_nr < 8) {
+			cache_21 &= mask;
+			outb(cache_21,0x21);
+		} else
+		{
+			cache_A1 &= mask;
+			outb(cache_A1,0xA1);
+		}
 	}
-	cache_A1 &= mask;
-	outb(cache_A1,0xA1);
 	_enable_interrupts(s);
 }
 
 /*
  * Irq handlers.
  */
-static struct irqaction timer_irq = { NULL, 0, 0, NULL, NULL, NULL};
-static struct irqaction cascade_irq = { NULL, 0, 0, NULL, NULL, NULL};
-static struct irqaction math_irq = { NULL, 0, 0, NULL, NULL, NULL};
+struct irq_action {
+	void (*handler)(int, void *dev, struct pt_regs *);
+	unsigned long flags;
+	unsigned long mask;
+	const char *name;
+	int notified;
+	void *dev_id;
+};
 
-static struct irqaction *irq_action[16] = {
-	  NULL, NULL, NULL, NULL, NULL, NULL , NULL, NULL,
-	  NULL, NULL, NULL, NULL, NULL, NULL , NULL, NULL
+static struct irq_action irq_action[32] = {
+	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL },
+	{ NULL, 0, 0, NULL }, { NULL, 0, 0, NULL }
 };
 
 int get_irq_list(char *buf)
 {
 	int i, len = 0;
-	struct irqaction * action;
+	struct irq_action * action = irq_action;
 
-	for (i = 0 ; i < 16 ; i++) {
-	        action = *(i + irq_action);
-		if (!action) 
-		        continue;
-		len += sprintf(buf+len, "%2d: %8d %c %s",
+	for (i = 0;  i < 132;  i++, action++) {
+		if (!action->handler)
+			continue;
+		len += sprintf(buf+len, "%2d: %8d %c %s\n",
 			i, kstat.interrupts[i],
 			(action->flags & SA_INTERRUPT) ? '+' : ' ',
 			action->name);
-		for (action=action->next; action; action = action->next) {
-			len += sprintf(buf+len, ",%s %s",
-				(action->flags & SA_INTERRUPT) ? " +" : "",
-				action->name);
-		}
-		len += sprintf(buf+len, "\n");
 	}
 	return len;
 }
 
 asmlinkage void handle_IRQ(struct pt_regs *regs)
 {
-	int irq, s;
-	struct irqaction * action;
+	int irq, _irq, s;
+	struct irq_action *action;
 	intr_count++;
-	/* Figure out IRQ#, etc. */
-	outb(0x0C, 0x20);  /* Poll interrupt controller */
-	irq = inb(0x20);
-	irq &= 0x07;  /* Caution! */
-	if (irq == 2)
-	{ /* Cascaded interrupt -> IRQ8..IRQ15 */
-		outb(0x0C, 0xA0);
-		irq = inb(0xA0) & 0x07;
-		irq += 8;
-	}
-	/* Mask interrupt & Issue EOI to interrupt controller */
-	if (irq > 7)
+	if (!isBeBox[0] || ((irq = BeBox_irq()) < 16))
 	{
-		outb(cache_A1 | (1<<(irq-7)), 0xA1);
-		outb(0x20, 0xA0);
-		/* Need to ack cascade controller as well */
-		outb(0x20, 0x20);
+		/* Figure out IRQ#, etc. */
+		outb(0x0C, 0x20);  /* Poll interrupt controller */
+		irq = _irq = inb(0x20);
+		irq &= 0x07;  /* Caution! */
+		if (irq == 2)
+		{ /* Cascaded interrupt -> IRQ8..IRQ15 */
+			outb(0x0C, 0xA0);
+			irq = (_irq = inb(0xA0)) & 0x07;
+			irq += 8;
+		}
+		/* Mask interrupt & Issue EOI to interrupt controller */
+		if (irq > 7)
+		{
+			cache_A1 |= (1<<(irq-8));
+			outb(cache_A1, 0xA1);
+#if 0			
+			outb(0x20, 0xA0);
+			/* Need to ack cascade controller as well */
+			outb(0x20, 0x20);
+#else			
+			outb(0x60|(irq-8), 0xA0);	/* Specific EOI */
+			/* Need to ack cascade controller as well */
+			outb(0x62, 0x20);
+#endif			
+		} else
+		{
+			cache_21 |= (1<<irq);
+			outb(cache_21, 0x21);
+			outb(0x20, 0x20);
+		}
+	}
+	action = irq + irq_action;
+	kstat.interrupts[irq]++;
+	if (action->handler)
+	{
+		action->handler(irq, action->dev_id, regs);
 	} else
 	{
-		outb(cache_21 | (1<<irq), 0x21);
-		outb(0x20, 0x20);
-	}
-	action = *(irq + irq_action);
-	kstat.interrupts[irq]++;
-	while (action) {
-	    if (action->handler)
-	    {
-		action->handler(irq, action->dev_id, regs);
-	    } else
-	    {
-		_printk("Bogus interrupt #%d\n", irq);
-	    }
-	    action = action->next;
+		printk("Bogus interrupt #%d/%x, PC: %x\n", irq, _irq, regs->nip);
 	}
 	if (_disable_interrupts() && !action->notified)
 	{
 		action->notified = 1;
 		printk("*** WARNING! %s handler [IRQ %d] turned interrupts on!\n", action->name, irq);
 	}
-	/* Re-enable interrupt */
-	if (irq > 7)
+	if (irq < 16)
 	{
-		outb(cache_A1, 0xA1);
+		if (!(action->flags & SA_ONESHOT))
+		{
+			/* Re-enable interrupt */
+			if (irq > 7)
+			{
+				cache_A1 &= ~(1<<(irq-8));
+				outb(cache_A1, 0xA1);
+			} else
+			{
+				cache_21 &= ~(1<<irq);
+				outb(cache_21, 0x21);
+			}
+		}
 	} else
 	{
-		outb(cache_21, 0x21);
+		BeBox_enable_irq(irq);
 	}
 	intr_count--;
 }
@@ -169,10 +219,15 @@ asmlinkage void handle_IRQ(struct pt_regs *regs)
  * Re-initializing the interrupt controller [which might lose some
  * pending edge detected interrupts] seems to fix it.
  */
-void check_irq(void )
+check_irq()
 {
-	int s = _disable_interrupts();
+	int s;
 	unsigned char _a0, _a1, _20, _21;
+	if (isBeBox[0])
+	{
+		return;
+	}
+	s = _disable_interrupts();
 	_a1 = inb(0xA1);
 	_21 = inb(0x21);
 	outb(0x0C, 0x20);  _20 = inb(0x20);	
@@ -201,15 +256,10 @@ void check_irq(void )
 	_enable_interrupts(s);
 }
 
-#define SA_PROBE SA_ONESHOT
-
-int request_irq(unsigned int irq, 
-		void (*handler)(int, void *, struct pt_regs *),
-		unsigned long irqflags, 
-		const char * devname,
-		void *dev_id)
+int request_irq(unsigned int irq, void (*handler)(int, void *, struct pt_regs *),
+	unsigned long irqflags, const char * devname, void *dev_id)
 {
-	struct irqaction * action, *tmp = NULL;
+	struct irq_action * action;
 	unsigned long flags;
 
 #if 0
@@ -217,77 +267,33 @@ _printk("Request IRQ #%d, Handler: %x\n", irq, handler);
 cnpause();
 #endif
 	if (irq > 15)
-		return -EINVAL;
-	if (!handler)
-	    return -EINVAL;
-	action = *(irq + irq_action);
-	if (action) {
-	    if ((action->flags & SA_SHIRQ) && (irqflags & SA_SHIRQ)) {
-		for (tmp = action; tmp->next; tmp = tmp->next);
-	    } else {
-		return -EBUSY;
-	    }
-	    if ((action->flags & SA_INTERRUPT) ^ (irqflags & SA_INTERRUPT)) {
-	      printk("Attempt to mix fast and slow interrupts on IRQ%d denied\n", irq);
-	      return -EBUSY;
-	    }   
+	{
+		if (!isBeBox[0] || (irq > 31))
+			return -EINVAL;
 	}
+	action = irq + irq_action;
+	if (action->handler)
+		return -EBUSY;
+	if (!handler)
+		return -EINVAL;
 	save_flags(flags);
 	cli();
-	if (irq == 2)
-	    action = &cascade_irq;
-	else if (irq == 13)
-	  action = &math_irq;
-	else if (irq == TIMER_IRQ)
-	  action = &timer_irq;
-	else
-	  action = (struct irqaction *)kmalloc(sizeof(struct irqaction), GFP_KERNEL);
-
-	if (!action) { 
-	    restore_flags(flags);
-	    return -ENOMEM;
-	}
-
 	action->handler = handler;
 	action->flags = irqflags;
 	action->mask = 0;
 	action->name = devname;
-	action->next = NULL;
 	action->dev_id = dev_id;
-
-	if (tmp) {
-	    tmp->next = action;
-	} else {
-	    *(irq + irq_action) = action;
-#if 0	
-	    if (!(action->flags & SA_PROBE)) { /* SA_ONESHOT is used by probing */
-		if (action->flags & SA_INTERRUPT)
-		  set_intr_gate(0x20+irq,fast_interrupt[irq]);
-		else
-		  set_intr_gate(0x20+irq,interrupt[irq]);
-	    }
-#endif	
-	    if (irq < 8) {
-		cache_21 &= ~(1<<irq);
-		outb(cache_21,0x21);
-	    } else {
-		cache_21 &= ~(1<<2);
-		cache_A1 &= ~(1<<(irq-8));
-		outb(cache_21,0x21);
-		outb(cache_A1,0xA1);
-	    }
-	}
+	enable_irq(irq);
 	restore_flags(flags);
 	return 0;
 }
 		
 void free_irq(unsigned int irq, void *dev_id)
 {
-	struct irqaction * action = *(irq + irq_action);
-	struct irqaction * tmp = NULL;
+	struct irq_action * action = irq + irq_action;
 	unsigned long flags;
 
-	if (irq > 15) {
+	if (irq > 31) {
 		printk("Trying to free IRQ%d\n",irq);
 		return;
 	}
@@ -295,51 +301,27 @@ void free_irq(unsigned int irq, void *dev_id)
 		printk("Trying to free free IRQ%d\n",irq);
 		return;
 	}
-	if (dev_id) {
-	    for (; action; action = action->next) {
-	        if (action->dev_id == dev_id) break;
-		tmp = action;
-	    }
-	    if (!action) {
-		printk("Trying to free free shared IRQ%d\n",irq);
-		return;
-	    }
-	} else if (action->flags & SA_SHIRQ) {
-	    printk("Trying to free shared IRQ%d with NULL device ID\n", irq);
-	    return;
-	}
+	disable_irq(irq);
 	save_flags(flags);
 	cli();
-	if (action && tmp) {
-	    tmp->next = action->next;
-	} else {
-	    *(irq + irq_action) = action->next;
-	}
-
-	if ((irq == 2) || (irq == 13) | (irq == TIMER_IRQ))
-	  memset(action, 0, sizeof(struct irqaction));
-	else 
-	  kfree_s(action, sizeof(struct irqaction));
-	
-	if (!(*(irq + irq_action))) {
-	    if (irq < 8) {
-		cache_21 |= 1 << irq;
-		outb(cache_21,0x21);
-	    } else {
-		cache_A1 |= 1 << (irq-8);
-		outb(cache_A1,0xA1);
-	    }
-#if 0	
-	    set_intr_gate(0x20+irq,bad_interrupt[irq]);
-#endif	
-	}
-
+	action->handler = NULL;
+	action->flags = 0;
+	action->mask = 0;
+	action->name = NULL;
+	action->dev_id = NULL;
 	restore_flags(flags);
 }
 
-static void no_action(int cpl, void *dev_id, struct pt_regs * regs) { }
+#define SA_PROBE SA_ONESHOT
 
-unsigned /*int*/ long probe_irq_on (void)
+static void no_action(int irq, void *dev, struct pt_regs * regs)
+{
+#ifdef DEBUG
+	printk("Probe got IRQ: %d\n", irq);
+#endif
+}
+
+unsigned long probe_irq_on (void)
 {
 	unsigned int i, irqs = 0, irqmask;
 	unsigned long delay;
@@ -369,7 +351,7 @@ unsigned /*int*/ long probe_irq_on (void)
 	return irqs;
 }
 
-int probe_irq_off (unsigned /*int*/ long irqs)
+int probe_irq_off (unsigned long irqs)
 {
 	unsigned int i, irqmask;
 
@@ -390,16 +372,9 @@ int probe_irq_off (unsigned /*int*/ long irqs)
 		i = -i;
 	return i;
 }
-
+ 
 void init_IRQ(void)
 {
-	unsigned long *vme2_ie  = (unsigned long *)0xFEFF006C;
-	unsigned long *vme2_ic  = (unsigned long *)0xFEFF0074;
-	unsigned long *vme2_il2 = (unsigned long *)0xFEFF007C;
-	unsigned long *vme2_ioc = (unsigned long *)0xFEFF0088;
-	unsigned char *vme2pci_ic = (unsigned char *)0x80802050;
-	unsigned char *ibc_pirq = (unsigned char *)0x80800860;
-	unsigned char *ibc_pcicon = (unsigned char *)0x80800840;
 	int i;
 
 	/* set the clock to 100 Hz */
@@ -410,33 +385,171 @@ void init_IRQ(void)
 		printk("Unable to get IRQ2 for cascade\n");
 	request_region(0x20,0x20,"pic1");
 	request_region(0xa0,0x20,"pic2");
-#if 0	
-	/* Enable SIG0 */
-	*vme2_ie = (*vme2_ie & 0xFFFBFFFF) | 0x00040000;
-	/* Clear any pending interrupts */
-	*vme2_ic = 0xFFFFFFFF;
-	/* SIG0 -> Level 5 */
-	*vme2_il2 = (*vme2_il2 & 0xFFFFF0FF) | 0x00000500;
-	/* Master interrupt enable */
-	*vme2_ioc |= 0x00800000;
-#endif	
-	/* Enable interrupts from VMECHIP */
-	*vme2pci_ic |= 0x08;
-	/* Route PCI interrupts */
-	ibc_pirq[0] = 0x0A;  /* PIRQ0 -> ISA10 */
-	ibc_pirq[1] = 0x0B;  /* PIRQ1 -> ISA11 */
-	ibc_pirq[2] = 0x0E;  /* PIRQ2 -> ISA14 */
-	ibc_pirq[3] = 0x0F;  /* PIRQ3 -> ISA15 */
-	/* Enable PCI interrupts */
-	*ibc_pcicon |= 0x20;
-} 
 
-PCI_irq(int irq)
+	/* Set up PCI interrupts */
+	route_PCI_interrupts();
+
+	if (isBeBox[0])
+	{
+		BeBox_init_IRQ();
+	}
+}
+
+/*
+ * Wrapper for "bottom 1/2" of interrupt processing.  This routine
+ * is called whenever an interrupt needs non-interrupt-time service.
+ */
+
+_do_bottom_half()
 {
-	static short _irq[] = {10, 11, 14, 15};
-	int res = _irq[(irq-1)&0x03];
-#if 0	
-	_printk("PCI IRQ #%d = %d\n", irq, res);
+	_enable_interrupts(1);
+	do_bottom_half();
+	_disable_interrupts();
+}
+ 
+
+/*
+ * Support for interrupts on the BeBox
+ */
+
+#define CPU0_INT_MASK	(volatile unsigned long *)(BeBox_IO_page+0x0F0)
+#define CPU1_INT_MASK	(volatile unsigned long *)(BeBox_IO_page+0x1F0)
+#define INT_SOURCE	(volatile unsigned long *)(BeBox_IO_page+0x2F0)
+#define CPU_RESET	(volatile unsigned long *)(BeBox_IO_page+0x4F0)
+
+#define CPU_HRESET	0x20000000
+#define CPU_SRESET	0x40000000
+
+#define SCSI_IRQ	16
+
+#define INT_SCSI	(1<<21)
+#define INT_8259	(1<<5)
+
+/*
+ * Map of pseudo IRQs to actual bits
+ * Note: We give out IRQ #16..31 for all interrupt sources which are
+ * not found in the 8259 PIC.
+ */
+ 
+unsigned long BeBox_IRQ_map[] =
+   {
+   	INT_SCSI,	/* 16 - SCSI */
+   	0x00000000,	/* 17 - Unused */
+   	0x00000000,	/* 18 - Unused */
+   	0x00000000,	/* 19 - Unused */
+   	0x00000000,	/* 20 - Unused */
+   	0x00000000,	/* 21 - Unused */
+   	0x00000000,	/* 22 - Unused */
+   	0x00000000,	/* 23 - Unused */
+   	0x00000000,	/* 24 - Unused */
+   	0x00000000,	/* 25 - Unused */
+   	0x00000000,	/* 26 - Unused */
+   	0x00000000,	/* 27 - Unused */
+   	0x00000000,	/* 28 - Unused */
+   	0x00000000,	/* 29 - Unused */
+   	0x00000000,	/* 30 - Unused */
+   	0x00000000,	/* 31 - Unused */
+   };
+
+volatile int CPU1_alive;
+volatile int CPU1_trace;
+
+static
+_NOP()
+{
+}
+
+static
+_delay()
+{
+	int i;
+	for (i = 0;  i < 100;  i++) _NOP();
+}
+
+void
+BeBox_init_IRQ(void)
+{
+	int tmr;
+	volatile extern long BeBox_CPU1_vector;
+	*CPU0_INT_MASK = 0x0FFFFFFC;  /* Clear all bits? */	
+	*CPU0_INT_MASK = 0x80000003 | INT_8259;
+	*CPU1_INT_MASK = 0x0FFFFFFC;  
+printk("Start CPU #1 - CPU Status: %x\n", *CPU_RESET);
+	BeBox_CPU1_vector = 0x0100;  /* Reset */
+	tmr = 0;
+	while (CPU1_alive == 0)
+	{
+		if (++tmr == 1000)
+		{
+printk("CPU #1 not there? - CPU Status: %x, Trace: %x\n", *CPU_RESET, CPU1_trace);
+			break;
+		}
+		_delay();
+	}
+printk("CPU #1 running!\n");
+#if 0
+/* Temp - for SCSI */
+	*(unsigned char *)0x81000038 = 0x00;
+	*(unsigned char *)0x8080103C = 0xFF;
+	*(unsigned char *)0x8080100D = 0x32;
 #endif	
-	return (res);
+}
+
+void
+BeBox_disable_irq(int irq)
+{
+	/* Note: this clears the particular bit */
+	*CPU0_INT_MASK = BeBox_IRQ_map[irq-16];
+}
+
+void
+BeBox_enable_irq(int irq)
+{
+	int s = _disable_interrupts();
+	/* Sets a single bit */
+#if 0	
+printk("BeBox IRQ Mask = %x", *CPU0_INT_MASK);
+#endif
+	*CPU0_INT_MASK = 0x80000000 | BeBox_IRQ_map[irq-16];
+#if 0
+printk("/%x\n", *CPU0_INT_MASK);
+#endif	
+	_enable_interrupts(s);	
+}
+
+int
+BeBox_irq(void)
+{
+	int i;
+	unsigned long cpu0_int_mask;
+	unsigned long int_state;
+	cpu0_int_mask = (*CPU0_INT_MASK & 0x0FFFFFFC) & ~INT_8259;
+	int_state = cpu0_int_mask & *INT_SOURCE;
+	if (int_state)
+	{ /* Determine the pseudo-interrupt # */
+#if 0	
+		printk("Ints[%x] = %x, Mask[%x] = %x/%x, State = %x\n", INT_SOURCE, *INT_SOURCE, CPU0_INT_MASK, *CPU0_INT_MASK, cpu0_int_mask, int_state);
+#endif		
+		for (i = 0;  i < 16;  i++)
+		{
+			if (BeBox_IRQ_map[i] & int_state)
+			{
+				return (i+16);
+			}
+		}
+printk("Ints[%x] = %x, Mask[%x] = %x/%x, State = %x\n", INT_SOURCE, *INT_SOURCE, CPU0_INT_MASK, *CPU0_INT_MASK, cpu0_int_mask, int_state);
+printk("Can't find BeBox IRQ!\n");
+	}
+	return (0);
+}
+
+BeBox_state()
+{
+	printk("Int state = %x, CPU0 mask = %x, CPU1 mask = %x\n", *INT_SOURCE, *CPU0_INT_MASK, *CPU1_INT_MASK);
+}
+
+BeBox_CPU1()
+{
+	CPU1_alive++;
+	while (1) ;
 }

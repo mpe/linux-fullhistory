@@ -2,66 +2,12 @@
 #define TRUE  1
 #include <stdarg.h>
 
+extern int isBeBox[];
+
 extern void cnputc(char c);
-char cngetc(void);
-int cntstc(void);
-void _cnpause(void);
-void cnpause(void);
-void video_on(void);
-int CRT_init(void);
-int kbd(int noblock);
-int scankbd(void);
+
 static char *_sprintk_ptr;
-void kbdreset(void);
-int CRT_test(void);
-int CRT_putc(int , unsigned char );
-/*int CRT_putc(int port, u_char c)*/
-int CRT_getc(void);
-int _vprintk(   int (*putc)(), const char *fmt0, va_list ap);
-static _cvt(unsigned long val, char *buf, long radix, char *digits);
-static void cursor(void);
-static void initscreen(void );
 
-/*
- * COM1 NS16550 support
- */
-
-struct NS16550
-	{
-		unsigned char rbr;  /* 0 */
-		unsigned char ier;  /* 1 */
-		unsigned char fcr;  /* 2 */
-		unsigned char lcr;  /* 3 */
-		unsigned char mcr;  /* 4 */
-		unsigned char lsr;  /* 5 */
-		unsigned char msr;  /* 6 */
-		unsigned char scr;  /* 7 */
-	};
-
-#define thr rbr
-#define iir fcr
-#define dll rbr
-#define dlm ier
-
-#define LSR_DR   0x01  /* Data ready */
-#define LSR_OE   0x02  /* Overrun */
-#define LSR_PE   0x04  /* Parity error */
-#define LSR_FE   0x08  /* Framing error */
-#define LSR_BI   0x10  /* Break */
-#define LSR_THRE 0x20  /* Xmit holding register empty */
-#define LSR_TEMT 0x40  /* Xmitter empty */
-#define LSR_ERR  0x80  /* Error */
-
-#define COM1	0x800003F8
-#define COM2	0x800002F8
-
-typedef struct NS16550 *NS16550_t;
-
-const NS16550_t COM_PORTS[] = { COM1,COM2};
-
-volatile struct NS16550 *NS16550_init(int chan);
-void NS16550_putc(volatile struct NS16550 *com_port, unsigned char c);
-unsigned char NS16550_getc(volatile struct NS16550 *com_port);
 static _sputc(char c)
 {
    *_sprintk_ptr++ = c;
@@ -102,7 +48,11 @@ _printk(char const *fmt, ...)
 
 #define is_digit(c) ((c >= '0') && (c <= '9'))
 
-int _vprintk(   int (*putc)(), const char *fmt0, va_list ap)
+int
+_vprintk(putc, fmt0, ap)
+   int (*putc)();
+   const char *fmt0;
+   va_list ap;
 {
    char c, sign, *cp;
    int left_prec, right_prec, zero_fill, length, pad, pad_on_right;
@@ -262,6 +212,7 @@ static _cvt(unsigned long val, char *buf, long radix, char *digits)
 /*
  * Console I/O interface
  */
+
 typedef const (*proc)();
 typedef int dev_t;
 
@@ -276,24 +227,24 @@ static int port = 0;
 static int line_num = 0;
 #define MAX_LINES 24
 
-char cngetc(void)
+char
+cngetc()
 {
    int s = _disable_interrupts();
    char c = '\0';
    if (port == CRT_PORT)
    {
-/*      c = CRT_getc(port);*/
-     c = CRT_getc();
+      c = CRT_getc(port);
    } else
    if (port)
    {
-      c = NS16550_getc((struct NS16550 *)port);
+      c = NS16550_getc(port);
    }
    _enable_interrupts(s);
    return (c);
 }
 
-int cntstc(void)
+cntstc()
 {
    return (0);
 }
@@ -319,7 +270,7 @@ cnputc(char c)
          port = CRT_PORT;
       } else
       {
-         port =(int) NS16550_init(0);
+         port = NS16550_init(0);
       }
       init = TRUE;
    }
@@ -329,7 +280,7 @@ cnputc(char c)
    } else
    if (port)
    {
-      NS16550_putc((struct NS16550 *)port, c);
+      NS16550_putc(port, c);
    }
    if (c == '\n')
    {
@@ -345,7 +296,7 @@ cnputc(char c)
    }
 }
 
-void _cnpause(void)
+_cnpause()
 {
    int c;
    int s = _disable_interrupts();
@@ -374,17 +325,56 @@ void _cnpause(void)
    _enable_interrupts(s);
 }
 
-void cnpause(void)
+cnpause()
 {
    int c;
    int s = _disable_interrupts();
+   flush_data_cache();
    printk("-- More? ");
    while ((c = cngetc()) == 0);
    printk("\r         \r");  /* Erase prompt */
    _enable_interrupts(s);
 }
 
-volatile struct NS16550 *NS16550_init(int chan)
+/*
+ * COM1 NS16550 support
+ */
+
+struct NS16550
+	{
+		unsigned char rbr;  /* 0 */
+		unsigned char ier;  /* 1 */
+		unsigned char fcr;  /* 2 */
+		unsigned char lcr;  /* 3 */
+		unsigned char mcr;  /* 4 */
+		unsigned char lsr;  /* 5 */
+		unsigned char msr;  /* 6 */
+		unsigned char scr;  /* 7 */
+	};
+
+#define thr rbr
+#define iir fcr
+#define dll rbr
+#define dlm ier
+
+#define LSR_DR   0x01  /* Data ready */
+#define LSR_OE   0x02  /* Overrun */
+#define LSR_PE   0x04  /* Parity error */
+#define LSR_FE   0x08  /* Framing error */
+#define LSR_BI   0x10  /* Break */
+#define LSR_THRE 0x20  /* Xmit holding register empty */
+#define LSR_TEMT 0x40  /* Xmitter empty */
+#define LSR_ERR  0x80  /* Error */
+
+#define COM1	0x800003F8
+#define COM2	0x800002F8
+
+typedef struct NS16550 *NS16550_t;
+
+const NS16550_t COM_PORTS[] = { COM1, COM2};
+
+volatile struct NS16550 *
+NS16550_init(int chan)
 {
 	volatile struct NS16550 *com_port;
 	volatile unsigned char xx;
@@ -406,13 +396,12 @@ volatile struct NS16550 *NS16550_init(int chan)
 }
 
 
-void NS16550_putc(volatile struct NS16550 *com_port, unsigned char c)
+NS16550_putc(volatile struct NS16550 *com_port, unsigned char c)
 {
 	volatile int i;
 	while ((com_port->lsr & LSR_THRE) == 0) ;
 	com_port->thr = c;
 }
-
 
 unsigned char NS16550_getc(volatile struct NS16550 *com_port)
 {
@@ -495,7 +484,8 @@ unsigned short	pccolor_so;		/* color/attributes, standout mode */
 /*
  * cursor() sets an offset (0-1999) into the 80x25 text area   
  */
-static void cursor(void)
+static void
+cursor()
 {
  	int pos = screen.cp - Crtat;
 
@@ -508,7 +498,8 @@ static void cursor(void)
 	}
 }
 
-static void initscreen(void )
+static void
+initscreen()
 {
 	struct screen *d = &screen;
 
@@ -545,7 +536,8 @@ fillw(unsigned short val, unsigned short *buf, int num)
  * "ca" is the color/attributes value (left-shifted by 8)
  * or 0 if the current regular color for that screen is to be used.
  */
-int CRT_putc(int port, unsigned char c)
+void 
+CRT_putc(int port, u_char c)
 {
 	struct screen *d = &screen;
 	u_short *base;
@@ -790,20 +782,21 @@ int CRT_putc(int port, unsigned char c)
 	cursor();
 }
 
-void video_on(void)
+video_on()
 { /* Enable video */
 	outb(0x3C4, 0x01);
 	outb(0x3C5, inb(0x3C5)&~20);
 }
 
-int CRT_init(void)
+CRT_init()
 {
 	unsigned long *PCI_base = (unsigned long *)0x80808010;  /* Magic */
 	struct screen *d = &screen;
-	if (*PCI_base)
+	if (!isBeBox[0] && *PCI_base)
 	{ /* No CRT configured */
 		return (0);
 	}
+	/* Assume BeBox uses only VGA */
 	video_on();
 	d->cp = Crtat = (u_short *)&ISA_mem[0x0B8000];
 	addr_6845 = CGA_BASE;
@@ -975,7 +968,9 @@ const unsigned char keycode[] = {
 	_x__, 0x4E, 0x51, 0x4A, _x__, 0x49, 0x46, 0x54, /* 0x78-0x7F */
 };
 
-int kbd(int noblock)
+int
+kbd(noblock)
+	int noblock;
 {
 	unsigned char dt, brk, act;
 	int first = 1;	
@@ -1050,12 +1045,11 @@ loop:
 	goto loop;
 }
 
-int scankbd(void)
-{
+scankbd() {
 	return (kbd(1) != -1);
 }
 
-void kbdreset(void)
+kbdreset()
 {
 	unsigned char c;
 
@@ -1076,14 +1070,14 @@ void kbdreset(void)
 		;
 }
 
-int CRT_getc(void)
+CRT_getc()
 {
 	int c;
 	while ((c = kbd(0)) == 0) ;
 	return(c);
 }
 
-int CRT_test(void)
+CRT_test()
 {
 	return ((inb(KBSTATP) & KBINRDY) != 0);
 }
@@ -1195,3 +1189,12 @@ dump_buf(unsigned char *p, int s)
 }
 
 
+do_cnpause()
+{
+	static int line = 0;
+	if (++line > MAX_LINES)
+	{
+		cnpause();
+		line = 0;
+	}
+}

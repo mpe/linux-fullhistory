@@ -2,323 +2,106 @@
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
-# This is a stripped down version to just get us what we need to
-# get the kernel to its knees for now.
-#                   -- Cort
+mainmenu_name "Linux Kernel Configuration"
 
+mainmenu_option next_comment
+comment 'Code maturity level options'
+bool 'Prompt for development and/or incomplete code/drivers' CONFIG_EXPERIMENTAL
+endmenu
+
+mainmenu_option next_comment
+comment 'Loadable module support'
+bool 'Enable loadable module support' CONFIG_MODULES
+if [ "$CONFIG_MODULES" = "y" ]; then
+  bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS
+  bool 'Kernel daemon support (e.g. autoload of modules)' CONFIG_KERNELD
+fi
+endmenu
+
+mainmenu_option next_comment
 comment 'General setup'
 
-#bool 'Kernel math emulation' CONFIG_MATH_EMULATION n
-tristate 'Normal floppy disk support' CONFIG_BLK_DEV_FD y
-#bool 'Normal (MFM/RLL) disk and IDE disk/cdrom support' CONFIG_ST506 
-if [ "$CONFIG_ST506" = "y" ]; then
-  comment 'Please see drivers/block/README.ide for help/info on IDE drives'
-  bool '   Use old disk-only driver for primary i/f' CONFIG_BLK_DEV_HD n
-  if [ "$CONFIG_BLK_DEV_HD" = "y" ]; then
-    bool '   Include new IDE driver for secondary i/f support' CONFIG_BLK_DEV_IDE n
-  else
-    bool '   Use new IDE driver for primary/secondary i/f' CONFIG_BLK_DEV_IDE y
-  fi
-  if [ "$CONFIG_BLK_DEV_IDE" = "y" ]; then
-    bool '   Include support for IDE/ATAPI CDROMs' CONFIG_BLK_DEV_IDECD n
-  fi
-fi
-
-#bool 'XT harddisk support' CONFIG_BLK_DEV_XD n
-bool 'Networking support' CONFIG_NET y
-#bool 'Limit memory to low 16MB' CONFIG_MAX_16M n
-bool 'PCI bios support' CONFIG_PCI y
+bool 'Kernel math emulation' CONFIG_MATH_EMULATION
+bool 'Networking support' CONFIG_NET
+bool 'Limit memory to low 16MB' CONFIG_MAX_16M
+bool 'PCI bios support' CONFIG_PCI
 if [ "$CONFIG_PCI" = "y" ]; then
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    bool '   PCI bridge optimization (experimental)' CONFIG_PCI_OPTIMIZE n
-  fi
-  if [ "$CONFIG_BLK_DEV_IDE" = "y" ]; then
-    bool '   PCI Triton IDE Bus Master DMA support' CONFIG_BLK_DEV_TRITON y
+    bool '   PCI bridge optimization (experimental)' CONFIG_PCI_OPTIMIZE
   fi
 fi
-bool 'System V IPC' CONFIG_SYSVIPC y
-tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF y
+bool 'System V IPC' CONFIG_SYSVIPC
+tristate 'Kernel support for a.out binaries' CONFIG_BINFMT_AOUT
+tristate 'Kernel support for JAVA binaries' CONFIG_BINFMT_JAVA
+tristate 'Kernel support for ELF binaries' CONFIG_BINFMT_ELF
 if [ "$CONFIG_BINFMT_ELF" = "y" ]; then
-bool 'Compile kernel as ELF - if your GCC is ELF-GCC' CONFIG_KERNEL_ELF y
+  bool 'Compile kernel as ELF - if your GCC is ELF-GCC' CONFIG_KERNEL_ELF
 fi
-tristate 'Kernel support for A.OUT binaries' CONFIG_BINFMT_AOUT y
-#bool 'Use -mpentium flag for Pentium-specific optimizations' CONFIG_M586 n
-#if [ "$CONFIG_M586" = "n" ]; then
-#bool 'Use -m486 flag for 486-specific optimizations' CONFIG_M486 y
-#fi
 
-comment 'Loadable module support'
-bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS n
+source drivers/block/Config.in
 
 if [ "$CONFIG_NET" = "y" ]; then
-comment 'Networking options'
-bool 'TCP/IP networking' CONFIG_INET y
-if [ "$CONFIG_INET" = "y" ]; then
-bool 'IP: forwarding/gatewaying' CONFIG_IP_FORWARD n
-bool 'IP: multicasting' CONFIG_IP_MULTICAST n
-bool 'IP: firewalling' CONFIG_IP_FIREWALL n
-bool 'IP: accounting' CONFIG_IP_ACCT n
-tristate 'IP: tunneling' CONFIG_NET_IPIP n
-if [ "$CONFIG_IP_FORWARD" = "y" -a "$CONFIG_IP_FIREWALL" = "y" ]; then
-  bool 'IP: firewall packet logging' CONFIG_IP_FIREWALL_VERBOSE y
-  bool 'IP: masquerading (ALPHA)' CONFIG_IP_MASQUERADE n
-fi
-if [ "$CONFIG_IP_FORWARD" = "y" -a "$CONFIG_IP_MULTICAST" = "y" -a "$CONFIG_NET_IPIP" = "y" ]; then
-  bool 'IP: multicast routing(in progress)' CONFIG_IP_MROUTE n
-fi
-comment '(it is safe to leave these untouched)'
-bool 'IP: PC/TCP compatibility mode' CONFIG_INET_PCTCP n
-tristate 'IP: Reverse ARP' CONFIG_INET_RARP n
-bool 'IP: Assume subnets are local' CONFIG_INET_SNARL y
-bool 'IP: Disable NAGLE algorithm (normally enabled)' CONFIG_TCP_NAGLE_OFF n
-bool 'IP: Drop source routed frames' CONFIG_IP_NOSR y
-bool 'IP: Allow large windows (not recommended if <16Mb of memory)' CONFIG_SKB_LARGE y
-fi
-bool 'The IPX protocol' CONFIG_IPX n
-bool 'Appletalk DDP' CONFIG_ATALK n
-bool 'Amateur Radio AX.25 Level 2' CONFIG_AX25 n
-if [ "$CONFIG_AX25" = "y" ]; then
-  bool 'Amateur Radio NET/ROM' CONFIG_NETROM n
-fi
+  source net/Config.in
 fi
 
+mainmenu_option next_comment
 comment 'SCSI support'
 
-tristate 'SCSI support' CONFIG_SCSI y
+tristate 'SCSI support' CONFIG_SCSI
 
-if [ "$CONFIG_SCSI" = "n" ]; then
-
-comment 'Skipping SCSI configuration options...'
-
-else
-
-comment 'SCSI support type (disk, tape, CDrom)'
-
-dep_tristate 'SCSI disk support' CONFIG_BLK_DEV_SD y $CONFIG_SCSI
-dep_tristate 'SCSI tape support' CONFIG_CHR_DEV_ST n $CONFIG_SCSI
-dep_tristate 'SCSI CDROM support' CONFIG_BLK_DEV_SR y $CONFIG_SCSI
-dep_tristate 'SCSI generic support' CONFIG_CHR_DEV_SG n $CONFIG_SCSI
-
-comment 'Some SCSI devices (e.g. CD jukebox) support multiple LUNs'
-
-bool 'Probe all LUNs on each SCSI device' CONFIG_SCSI_MULTI_LUN y
-
-comment 'SCSI low-level drivers'
-
-dep_tristate 'Adaptec AHA152X support' CONFIG_SCSI_AHA152X n $CONFIG_SCSI
-dep_tristate 'Adaptec AHA1542 support' CONFIG_SCSI_AHA1542 n $CONFIG_SCSI
-dep_tristate 'Adaptec AHA1740 support' CONFIG_SCSI_AHA1740 n $CONFIG_SCSI
-dep_tristate 'Adaptec AHA274X/284X/294X support' CONFIG_SCSI_AIC7XXX n $CONFIG_SCSI
-dep_tristate 'BusLogic SCSI support' CONFIG_SCSI_BUSLOGIC n $CONFIG_SCSI
-dep_tristate 'EATA-DMA (DPT, NEC, ATT, Olivetti) support' CONFIG_SCSI_EATA_DMA n $CONFIG_SCSI
-dep_tristate 'EATA-PIO (old DPT PM2001, PM2012A) support' CONFIG_SCSI_EATA_PIO n $CONFIG_SCSI
-dep_tristate 'UltraStor 14F/34F support' CONFIG_SCSI_U14_34F n $CONFIG_SCSI
-dep_tristate 'Future Domain 16xx SCSI support' CONFIG_SCSI_FUTURE_DOMAIN n $CONFIG_SCSI
-bool 'Generic NCR5380 SCSI support' CONFIG_SCSI_GENERIC_NCR5380 y
-if [ "$CONFIG_PCI" = "y" ]; then
-  dep_tristate 'NCR53c7,8xx SCSI support'  CONFIG_SCSI_NCR53C7xx y $CONFIG_SCSI
+if [ "$CONFIG_SCSI" != "n" ]; then
+  source drivers/scsi/Config.in
 fi
-dep_tristate 'Always IN2000 SCSI support (test release)' CONFIG_SCSI_IN2000 n $CONFIG_SCSI
-bool 'PAS16 SCSI support' CONFIG_SCSI_PAS16 n
-dep_tristate 'QLOGIC SCSI support' CONFIG_SCSI_QLOGIC n $CONFIG_SCSI
-dep_tristate 'Seagate ST-02 and Future Domain TMC-8xx SCSI support' CONFIG_SCSI_SEAGATE n $CONFIG_SCSI
-bool 'Trantor T128/T128F/T228 SCSI support' CONFIG_SCSI_T128 n
-dep_tristate 'UltraStor SCSI support' CONFIG_SCSI_ULTRASTOR n $CONFIG_SCSI
-dep_tristate '7000FASST SCSI support' CONFIG_SCSI_7000FASST n $CONFIG_SCSI
-dep_tristate 'EATA ISA/EISA (DPT PM2011/021/012/022/122/322) support' CONFIG_SCSI_EATA n $CONFIG_SCSI
-#dep_tristate 'SCSI debugging host adapter' CONFIG_SCSI_DEBUG n $CONFIG_SCSI
-fi
-
+endmenu
 
 if [ "$CONFIG_NET" = "y" ]; then
+  mainmenu_option next_comment
+  comment 'Network device support'
 
-comment 'Network device support'
-
-bool 'Network device support' CONFIG_NETDEVICES y
-if [ "$CONFIG_NETDEVICES" = "n" ]; then
-
-comment 'Skipping network driver configuration options...'
-
-else
-tristate 'Dummy net driver support' CONFIG_DUMMY y
-tristate 'SLIP (serial line) support' CONFIG_SLIP n
-if [ "$CONFIG_SLIP" != "n" ]; then
-  bool ' CSLIP compressed headers' CONFIG_SLIP_COMPRESSED y
-fi
-tristate 'PPP (point-to-point) support' CONFIG_PPP n
-if [ "$CONFIG_PPP" != "n" ]; then
-  bool ' 16 channels instead of 4' CONFIG_PPP_LOTS n
-fi
-if [ "$CONFIG_AX25" = "y" ]; then
-	bool 'Z8530 SCC kiss emulation driver for AX.25' CONFIG_SCC y
-else
-	bool 'Z8530 SCC kiss emulation driver for AX.25' CONFIG_SCC n
-fi
-tristate 'PLIP (parallel port) support' CONFIG_PLIP n
-tristate 'EQL (serial line load balancing) support' CONFIG_EQUALIZER n
-bool 'Do you want to be offered ALPHA test drivers' CONFIG_NET_ALPHA n
-bool 'Western Digital/SMC cards' CONFIG_NET_VENDOR_SMC n
-if [ "$CONFIG_NET_VENDOR_SMC" = "y" ]; then
-	tristate 'WD80*3 support' CONFIG_WD80x3 n
-	tristate 'SMC Ultra support' CONFIG_ULTRA n
-fi
-bool 'AMD LANCE and PCnet (AT1500 and NE2100) support' CONFIG_LANCE n
-bool '3COM cards' CONFIG_NET_VENDOR_3COM n
-if [ "$CONFIG_NET_VENDOR_3COM" = "y" ]; then
-	tristate '3c501 support' CONFIG_EL1 n
-	tristate '3c503 support' CONFIG_EL2 n
-	if [ "$CONFIG_NET_ALPHA" = "y" ]; then
-		tristate '3c505 support' CONFIG_ELPLUS n
-		tristate '3c507 support' CONFIG_EL16 n
-	fi
-	tristate '3c509/3c579 support' CONFIG_EL3 y
-fi
-bool 'Other ISA cards' CONFIG_NET_ISA n
-if [ "$CONFIG_NET_ISA" = "y" ]; then
-	tristate 'Cabletron E21xx support' CONFIG_E2100 n
-	tristate 'DEPCA support' CONFIG_DEPCA n
-	tristate 'EtherWorks 3 support' CONFIG_EWRK3 n
-	if [ "$CONFIG_NET_ALPHA" = "y" ]; then
-		bool 'SEEQ8005 support' CONFIG_SEEQ8005 n
-		tristate 'AT1700 support' CONFIG_AT1700 n
-		tristate 'EtherExpressPro support' CONFIG_EEXPRESS_PRO n
-		tristate 'EtherExpress support' CONFIG_EEXPRESS n
-		bool 'NI5210 support' CONFIG_NI52 n
-		bool 'NI6510 support' CONFIG_NI65 n
-		if [ "$CONFIG_AX25" = "y" ]; then
-			bool 'Ottawa PI and PI/2 support' CONFIG_PI y
-		fi
-		tristate 'WaveLAN support' CONFIG_WAVELAN n
-	fi
-	tristate 'HP PCLAN+ (27247B and 27252A) support' CONFIG_HPLAN_PLUS n
-	tristate 'HP PCLAN (27245 and other 27xxx series) support' CONFIG_HPLAN n
-	tristate 'HP 10/100VG PCLAN (ISA, EISA, PCI) support' CONFIG_HP100 n
-	tristate 'NE2000/NE1000 support' CONFIG_NE2000 n
-	bool 'SK_G16 support' CONFIG_SK_G16 n
-fi
-bool 'EISA, VLB, PCI and on board controllers' CONFIG_NET_EISA n
-if [ "$CONFIG_NET_EISA" = "y" ]; then
-	if [ "$CONFIG_NET_ALPHA" = "y" ]; then
-		tristate 'Ansel Communications EISA 3200 support' CONFIG_AC3200 n
-	fi
-	tristate 'Apricot Xen-II on board ethernet' CONFIG_APRICOT n
-	tristate 'DE425, DE434, DE435, DE500 support' CONFIG_DE4X5 n
-	tristate 'DEC 21040 PCI support' CONFIG_DEC_ELCP y
-	bool 'LPL T100V 100Mbs support' CONFIG_LPL_T100 n
-	bool 'PCnet32 (32 bit VLB and PCI LANCE) support' CONFIG_PCNET32 n
-	bool 'Zenith Z-Note support' CONFIG_ZNET n
-fi
-bool 'Pocket and portable adaptors' CONFIG_NET_POCKET n
-if [ "$CONFIG_NET_POCKET" = "y" ]; then
-	bool 'AT-LAN-TEC/RealTek pocket adaptor support' CONFIG_ATP n
-	tristate 'D-Link DE600 pocket adaptor support' CONFIG_DE600 n
-	tristate 'D-Link DE620 pocket adaptor support' CONFIG_DE620 n
-#	bool 'Silicom pocket adaptor support' CONFIG_SILICOM_PEA n
-#	bool 'WaveLAN PCMCIA support' CONFIG_WaveLAN n
-#	bool '3 Com 3c589 PCMCIA support' CONFIG_3C589 n
-fi
-bool 'Token Ring driver support' CONFIG_TR n
-if [ "$CONFIG_TR" = "y" ]; then
-	tristate 'IBM Tropic chipset based adaptor support' CONFIG_IBMTR y
-fi
-tristate 'Arcnet support' CONFIG_ARCNET n
-fi
+  bool 'Network device support' CONFIG_NETDEVICES
+  if [ "$CONFIG_NETDEVICES" = "y" ]; then
+    source drivers/net/Config.in
+  fi
+  endmenu
 fi
 
+mainmenu_option next_comment
+comment 'ISDN subsystem'
+
+tristate 'ISDN support' CONFIG_ISDN
+if [ "$CONFIG_ISDN" != "n" ]; then
+  source drivers/isdn/Config.in
+fi
+endmenu
+
+mainmenu_option next_comment
 comment 'CD-ROM drivers (not for SCSI or IDE/ATAPI drives)'
 
-bool 'Support non-SCSI/IDE/ATAPI drives' CONFIG_CD_NO_IDESCSI n
-if [ "$CONFIG_CD_NO_IDESCSI" = "y" ]; then
-  tristate 'Sony CDU31A/CDU33A CDROM support' CONFIG_CDU31A n
-  tristate 'Standard Mitsumi [no XA/Multisession] CDROM support' CONFIG_MCD n
-  tristate 'Experimental Mitsumi [XA/MultiSession] support' CONFIG_MCDX n
-  tristate 'Matsushita/Panasonic/Creative, Longshine, TEAC CDROM support' CONFIG_SBPCD n
-  if [ "$CONFIG_SBPCD" = "y" ]; then
-    bool 'Matsushita/Panasonic, ... second CDROM controller support' CONFIG_SBPCD2 n
-    if [ "$CONFIG_SBPCD2" = "y" ]; then
-      bool 'Matsushita/Panasonic, ... third CDROM controller support' CONFIG_SBPCD3 n
-      if [ "$CONFIG_SBPCD3" = "y" ]; then
-        bool 'Matsushita/Panasonic, ... fourth CDROM controller support' CONFIG_SBPCD4 n
-      fi
-    fi
-  fi
-  tristate 'Aztech/Orchid/Okano/Wearnes (non IDE) CDROM support' CONFIG_AZTCD n
-  tristate 'Sony CDU535 CDROM support' CONFIG_CDU535 n
-  tristate 'Goldstar R420 CDROM support' CONFIG_GSCD n
-  tristate 'Philips/LMS CM206 CDROM support' CONFIG_CM206 n
-  tristate 'Experimental Optics Storage DOLPHIN 8000AT CDROM support' CONFIG_OPTCD n
-  tristate 'Sanyo CDR-H94A CDROM support' CONFIG_SJCD n
-  bool 'ISP16/MAD16/Mozart soft configurable cdrom interface support' CONFIG_ISP16_CDI n
+bool 'Support non-SCSI/IDE/ATAPI CDROM drives' CONFIG_CD_NO_IDESCSI
+if [ "$CONFIG_CD_NO_IDESCSI" != "n" ]; then
+  source drivers/cdrom/Config.in
 fi
+endmenu
 
-comment 'Filesystems'
+source fs/Config.in
 
-tristate 'Standard (minix) fs support' CONFIG_MINIX_FS y
-tristate 'Extended fs support' CONFIG_EXT_FS y
-tristate 'Second extended fs support' CONFIG_EXT2_FS y
-tristate 'xiafs filesystem support' CONFIG_XIA_FS n
-tristate 'msdos fs support' CONFIG_MSDOS_FS n
-if [ "$CONFIG_MSDOS_FS" != "n" ]; then
-  tristate 'umsdos: Unix like fs on top of std MSDOS FAT fs' CONFIG_UMSDOS_FS n
-fi
-bool '/proc filesystem support' CONFIG_PROC_FS y
-if [ "$CONFIG_INET" = "y" ]; then
-  tristate 'NFS filesystem support' CONFIG_NFS_FS y
-fi
-tristate 'ISO9660 cdrom filesystem support' CONFIG_ISO9660_FS y
-tristate 'OS/2 HPFS filesystem support (read only)' CONFIG_HPFS_FS n
-tristate 'System V and Coherent filesystem support' CONFIG_SYSV_FS n
-tristate 'SMB filesystem (to mount WfW shares etc..) support' CONFIG_SMB_FS n
+source drivers/char/Config.in
 
-comment 'character devices'
-
-bool 'Cyclades async mux support' CONFIG_CYCLADES n
-bool 'Stallion multiport serial support' CONFIG_STALDRV n
-if [ "$CONFIG_STALDRV" = "y" ]; then
-  tristate '  Stallion EasyIO or EC8/32 support' CONFIG_STALLION n
-  tristate '  Stallion EC8/64, ONboard, Brumby support' CONFIG_ISTALLION n
-fi
-tristate 'Parallel printer support' CONFIG_PRINTER n
-tristate 'Logitech busmouse support' CONFIG_BUSMOUSE n
-tristate 'PS/2 mouse (aka "auxiliary device") support' CONFIG_PSMOUSE n
-if [ "$CONFIG_PSMOUSE" = "y" ]; then
-  bool 'C&T 82C710 mouse port support (as on TI Travelmate)' CONFIG_82C710_MOUSE y
-fi
-tristate 'Microsoft busmouse support' CONFIG_MS_BUSMOUSE n
-tristate 'ATIXL busmouse support' CONFIG_ATIXL_BUSMOUSE n
-
-
-bool 'QIC-02 tape support' CONFIG_QIC02_TAPE n
-if [ "$CONFIG_QIC02_TAPE" = "y" ]; then
-  bool 'Do you want runtime configuration for QIC-02' CONFIG_QIC02_DYNCONF y
-if [ "$CONFIG_QIC02_DYNCONF" != "y" ]; then
-
-comment '>>> Edit configuration parameters in ./include/linux/tpqic02.h!'
-
-else
-
-comment '>>> Setting runtime QIC-02 configuration is done with qic02conf'
-comment '>>> Which is available from ftp://ftp.funet.fi/pub/OS/Linux/BETA/QIC-02/'
-
-fi
-fi
-
-bool 'QIC-117 tape support' CONFIG_FTAPE n
-if [ "$CONFIG_FTAPE" = "y" ]; then
-  int ' number of ftape buffers' NR_FTAPE_BUFFERS 3
-fi
-
+mainmenu_option next_comment
 comment 'Sound'
 
-tristate 'Sound card support' CONFIG_SOUND y
+tristate 'Sound card support' CONFIG_SOUND
+if [ "$CONFIG_SOUND" != "n" ]; then
+  source drivers/sound/Config.in
+fi
+endmenu
 
+mainmenu_option next_comment
 comment 'Kernel hacking'
 
-#bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC n
-bool 'Kernel profiling support' CONFIG_PROFILE n
+#bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC
+bool 'Kernel profiling support' CONFIG_PROFILE
 if [ "$CONFIG_PROFILE" = "y" ]; then
   int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
 fi
-if [ "$CONFIG_SCSI" = "y" ]; then
-bool 'Verbose SCSI error reporting (kernel size +=12K)' CONFIG_SCSI_CONSTANTS y
-fi
+endmenu

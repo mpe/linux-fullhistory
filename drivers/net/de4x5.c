@@ -2642,7 +2642,9 @@ de4x5_alloc_rx_buff(struct device *dev, int index, int len)
 
     ret = lp->rx_skb[index];
     lp->rx_skb[index] = p;
-    skb_put(ret, len);
+
+    if ((unsigned long) ret > 1)
+	    skb_put(ret, len);
 
     return ret;
 

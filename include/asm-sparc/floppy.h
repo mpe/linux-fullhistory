@@ -282,6 +282,8 @@ static int sun_floppy_init(void)
 	char state[128];
 	int tnode, fd_node, num_regs;
 
+	use_virtual_dma = 1;
+	
 	FLOPPY_IRQ = 11;
 	/* Forget it if we aren't on a machine that could possibly
 	 * ever have a floppy drive.

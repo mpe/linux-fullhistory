@@ -25,7 +25,7 @@
 
 /* This instruction is not implemented on the PPC 603 */
 #define tlbia \
-	li	r4,32; \
+	li	r4,64; \
 	mtspr	CTR,r4; \
 	li	r4,0; \
 0:	tlbie	r4; \
@@ -44,6 +44,7 @@ _GLOBAL(_disable_interrupts)
 	li	r4,0		/* Need [unsigned] value of MSR_EE */
 	ori	r4,r4,MSR_EE	/* Set to turn off bit */
 	andc	r0,r0,r4	/* Clears bit in (r4) */
+	sync			/* Some chip revs have problems here... */
 	mtmsr	r0		/* Update machine state */
 	blr			/* Done */
 
@@ -55,6 +56,7 @@ _GLOBAL(_disable_interrupts)
 _GLOBAL(_enable_interrupts)
 	mfmsr	r0		/* Get current state */
 	rlwimi	r0,r3,16-1,32-16,32-16	/* Insert bit */
+	sync			/* Some chip revs have problems here... */
 	mtmsr	r0		/* Update machine state */
 	blr
 
@@ -73,6 +75,7 @@ _GLOBAL(__save_flags)
  *	__restore_flags(long val)
  */
 _GLOBAL(__restore_flags)
+	sync			/* Some chip revs have problems here... */
 	mtmsr	r3
 	isync
 	blr
@@ -87,6 +90,7 @@ _GLOBAL(cli)
 	li	r4,0		/* Need [unsigned] value of MSR_EE */
 	ori	r4,r4,MSR_EE	/* Set to turn off bit */
 	andc	r0,r0,r4	/* Clears bit in (r4) */
+	sync			/* Some chip revs have problems here... */
 	mtmsr	r0		/* Update machine state */
 	blr			/* Done */
 
@@ -97,6 +101,7 @@ _GLOBAL(cli)
 _GLOBAL(sti)
 	mfmsr	r0		/* Get current state */
 	ori	r0,r0,MSR_EE	/* Turn on 'EE' bit */
+	sync			/* Some chip revs have problems here... */
 	mtmsr	r0		/* Update machine state */
 	blr
 
@@ -114,6 +119,14 @@ _GLOBAL(_tlbia)
 _GLOBAL(_tlbie)
 	tlbie	r3
 	BUMP(__TLBIEs)
+	blr
+
+/*
+ * Fetch the current SR register
+ *   get_SR(int index)
+ */
+_GLOBAL(get_SR)
+	mfsrin	r3,r3
 	blr	
 
 /*
@@ -129,6 +142,52 @@ _GLOBAL(xchg_u32)
 	stwcx.	r4,0,r5		/* Update with new value */
 	bne-	10b		/* Retry if "reservation" (i.e. lock) lost */
 	blr
+
+/*
+ * Atomic add/sub/inc/dec operations
+ *
+ * void atomic_add(int c, int *v)
+ * void atomic_sub(int c, int *v)
+ * void atomic_inc(int *v)
+ * void atomic_dec(int *v)
+ * void atomic_dec_and_test(int *v)
+ */
+_GLOBAL(atomic_add)
+10:	lwarx	r5,0,r4		/* Fetch old value & reserve */
+	add	r5,r5,r3	/* Perform 'add' operation */
+	stwcx.	r5,0,r4		/* Update with new value */
+	bne-	10b		/* Retry if "reservation" (i.e. lock) lost */
+	blr
+_GLOBAL(atomic_sub)
+10:	lwarx	r5,0,r4		/* Fetch old value & reserve */
+	sub	r5,r5,r3	/* Perform 'add' operation */
+	stwcx.	r5,0,r4		/* Update with new value */
+	bne-	10b		/* Retry if "reservation" (i.e. lock) lost */
+	blr
+_GLOBAL(atomic_inc)
+10:	lwarx	r5,0,r3		/* Fetch old value & reserve */
+	addi	r5,r5,1		/* Perform 'add' operation */
+	stwcx.	r5,0,r3		/* Update with new value */
+	bne-	10b		/* Retry if "reservation" (i.e. lock) lost */
+	blr
+_GLOBAL(atomic_dec)
+10:	lwarx	r5,0,r3		/* Fetch old value & reserve */
+	subi	r5,r5,1		/* Perform 'add' operation */
+	stwcx.	r5,0,r3		/* Update with new value */
+	bne-	10b		/* Retry if "reservation" (i.e. lock) lost */
+	blr
+_GLOBAL(atomic_dec_and_test)
+10:	lwarx	r5,0,r3		/* Fetch old value & reserve */
+	subi	r5,r5,1		/* Perform 'add' operation */
+	stwcx.	r5,0,r3		/* Update with new value */
+	bne-	10b		/* Retry if "reservation" (i.e. lock) lost */
+	cmpi	0,r5,0		/* Return 'true' IFF 0 */
+	bne	15f
+	li	r3,1
+	blr
+15:	li	r3,0
+	blr	
+	
 
 /*
  * Delay for a specific # of "loops"
@@ -177,6 +236,29 @@ _GLOBAL(end_bh_atomic)
 	bne-	10b
 	blr
 
+/*
+ * I/O string operations
+ *
+ * insw(port, buf, len)
+ * outsw(port, buf, len)
+ */
+_GLOBAL(_insw)
+	mtctr	r5
+	subi	r4,r4,2
+00:	lhbrx	r5,0,r3
+	sthu	r5,2(r4)
+	bdnz	00b
+	blr
+
+_GLOBAL(_outsw)
+	mtctr	r5
+	subi	r4,r4,2
+00:	lhzu	r5,2(r4)
+	sthbrx	r5,0,r3	
+	bdnz	00b
+	blr	
+
+#if 0	
 /*
  *extern inline int find_first_zero_bit(void * vaddr, unsigned size)
  *{
@@ -281,6 +363,7 @@ _GLOBAL(find_next_zero_bit)
 	bgt	20b
 90:	mr	r3,r5		/* Compute result */	
 	blr
+#endif
  
 /*
  *
@@ -371,100 +454,36 @@ _GLOBAL(abs)
 	neg	r3,r3
 10:	blr
 
-/*
- * Compute IP checksums
- *   _ip_fast_csum(buf, len) -- Optimized for IP header
- *   _ip_compute_csum(buf, len)
- */
-
-_GLOBAL(_ip_fast_csum)
-	li	r0,0
-	addic	r0,r0,0		/* Clear initial carry */
-	lwz	r4,0(r3)
-	lwz	r5,4(r3)
-	adde	r0,r0,r4
-	lwz	r4,8(r3)
-	adde	r0,r0,r5
-	lwz	r5,12(r3)
-	adde	r0,r0,r4
-	lwz	r4,16(r3)
-	adde	r0,r0,r5
-	adde	r0,r0,r4
-	mr	r3,r0
-	andi.	r3,r3,0xFFFF
-	srwi	r0,r0,16
-	adde	r3,r3,r0
-	andis.	r0,r3,1
-	beq	10f
-	addi	r3,r3,1
-10:	not	r3,r3
-	andi.	r3,r3,0xFFFF
-	blr
-
-_GLOBAL(_ip_compute_csum)
-	li	r0,0
-	addic	r0,r0,0
-finish_ip_csum:	
-	subi	r3,r3,4
-	andi.	r5,r3,2		/* Align buffer to longword boundary */
-	beq	10f
-	lhz	r5,4(r3)
-	adde	r0,r0,r5
-	addi	r3,r3,2
-	subi	r4,r4,2
-10:	cmpi	0,r4,16		/* unrolled loop - 16 bytes at a time */
-	blt	20f
-	lwz	r5,4(r3)
-	lwz	r6,8(r3)
-	adde	r0,r0,r5
-	lwz	r5,12(r3)
-	adde	r0,r0,r6
-	lwzu	r6,16(r3)
-	adde	r0,r0,r5
-	adde	r0,r0,r6
-	subi	r4,r4,16
-	b	10b
-20:	cmpi	0,r4,4
-	blt	30f
-	lwzu	r5,4(r3)
-	adde	r0,r0,r5
-	subi	r4,r4,4
-	b	20b
-30:	cmpi	0,r4,2
-	blt	40f
-	lhz	r5,4(r3)
-	addi	r3,r3,2
-	adde	r0,r0,r5
-	subi	r4,r4,2
-40:	cmpi	0,r4,1
-	bne	50f
-	lbz	r5,4(r3)
-	slwi	r5,r5,8		/* Upper byte of word */
-	adde	r0,r0,r5
-50:	mr	r3,r0
-	andi.	r3,r3,0xFFFF
-	srwi	r0,r0,16
-	adde	r3,r3,r0
-	andis.	r0,r3,1
-	beq	60f
-	addi	r3,r3,1
-60:	not	r3,r3
-	andi.	r3,r3,0xFFFF
-	blr
-
-_GLOBAL(_udp_check)
-	addc	r0,r5,r6	/* Add in header fields */
-	adde	r0,r0,r7
-	b	finish_ip_csum	
-#if 0
-_GLOBAL(_tcp_check)
-	addc	r0,r5,r6	/* Add in header fields */
-	adde	r0,r0,r7
-	b	finish_ip_csum	
-#endif
 _GLOBAL(_get_SP)
 	mr	r3,r1		/* Close enough */
-	blr	
+	blr
+
+_GLOBAL(_get_SDR1)
+	mfspr	r3,SDR1
+	blr
+
+_GLOBAL(_get_SRx)
+	mfsrin	r3,r3
+	blr
+
+_GLOBAL(_get_PVR)
+	mfspr	r3,PVR
+	blr
+
+/*
+ * Create a kernel thread
+ *   __kernel_thread(flags, fn, arg)
+ */
+#define SYS_CLONE 	120
+_GLOBAL(__kernel_thread)
+__kernel_thread:
+	li	r0,SYS_CLONE
+	sc
+	cmpi	0,r3,0
+	bnelr
+	mtlr	r4
+	mr	r3,r5
+	blr
 
 /* Why isn't this a) automatic, b) written in 'C'? */	
 	.data
@@ -560,8 +579,7 @@ sys_call_table:
 	.long sys_uselib
 	.long sys_swapon
 	.long sys_reboot
-/*	.long sys_readdir*/
-	.long old_readdir
+	.long old_readdir		/* was sys_readdir */
 	.long sys_mmap			/* 90 */
 	.long sys_munmap
 	.long sys_truncate
@@ -617,11 +635,22 @@ sys_call_table:
 	.long sys_newselect
 	.long sys_flock
 	.long sys_msync
-        .space (NR_syscalls-144)*4
+	.long sys_readv		/* 145 */
+	.long sys_writev
+	.long sys_getsid
+	.long sys_fdatasync
+	.long sys_sysctl
+	.long sys_mlock		/* 150 */
+	.long sys_munlock
+	.long sys_mlockall
+	.long sys_munlockall
+	.long sys_sched_setparam
+	.long sys_sched_getparam   /* 155 */
+	.long sys_sched_setscheduler
+	.long sys_sched_getscheduler
+	.long sys_sched_yield
+	.long sys_sched_get_priority_max
+	.long sys_sched_get_priority_min  /* 160 */
+	.long sys_sched_rr_get_interval
+	.space (NR_syscalls-162)*4
 
-	.data
-#if 0
-	.globl	floppy_track_buffer
-floppy_track_buffer:
-	.space	512*2*38		/* Space for one entire cylinder! */	
-#endif

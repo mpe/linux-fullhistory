@@ -6,9 +6,13 @@
 #define BLOCKED 16
 #define SIGNAL 12
 #define KERNEL_STACK_PAGE 88
-#define TSS 504
+#define TSS 528
 #define KSP 0
 #define LAST_PC 72
+#define USER_STACK 76
+#define PT_REGS 340
+#define PF_TRACESYS 32
+#define TASK_FLAGS 20
 #define MMU_SEG0 8
 #define MMU_SEG1 12
 #define MMU_SEG2 16

@@ -213,13 +213,6 @@ static inline int __get_order(unsigned long size)
 static unsigned int fake_change = 0;
 static int initialising=1;
 
-#ifdef __sparc__
-/* We hold the FIFO configuration here.  We want to have Polling and
- * Implied Seek enabled on Sun controllers.
- */
-unsigned char fdc_cfg = 0;
-#endif
-
 static inline int TYPE(kdev_t x) {
 	return  (MINOR(x)>>2) & 0x1f;
 }
@@ -1184,15 +1177,10 @@ static int fdc_configure(void)
 {
 	/* Turn on FIFO */
 	output_byte(FD_CONFIGURE);
-#ifdef __sparc__ 
-	output_byte(0x64);	/* Motor off timeout */
-	output_byte(fdc_cfg | 0x0A);
-#else
 	if(need_more_output() != MORE_OUTPUT)
 		return 0;
 	output_byte(0);
 	output_byte(0x10 | (no_fifo & 0x20) | (fifo_depth & 0xf));
-#endif
 	output_byte(0);	/* pre-compensation from track 
 			   0 upwards */
 	return 1;
@@ -1234,12 +1222,7 @@ static void fdc_specify(void)
 		/*DPRINT("FIFO enabled\n");*/
 	}
 
-#ifdef __sparc__
-	/* If doing implied seeks, no specify necessary */
-	if(fdc_cfg&0x40)
-		return;
-#endif
-
+#ifndef __sparc__
 	switch (raw_cmd->rate & 0x03) {
 		case 3:
 			dtr = 1000;
@@ -1294,6 +1277,7 @@ static void fdc_specify(void)
 		output_byte(FDCS->spec1 = spec1);
 		output_byte(FDCS->spec2 = spec2);
 	}
+#endif
 } /* fdc_specify */
 
 /* Set the FDC's data transfer rate on behalf of the specified drive.
@@ -1571,15 +1555,6 @@ static void seek_floppy(void)
 			return;
 		}
 	}
-
-#ifdef __sparc__
-	if (fdc_cfg&0x40) {
-		/* Implied seeks being done... */
-		DRS->track = raw_cmd->track;
-		setup_rw_floppy();
-		return;
-	}
-#endif
 
 	SET_INTR(seek_interrupt);
 	output_byte(FD_SEEK);
@@ -3982,9 +3957,6 @@ int floppy_init(void)
 	blksize_size[MAJOR_NR] = floppy_blocksizes;
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	reschedule_timeout(MAXTIMEOUT, "floppy init", MAXTIMEOUT);
-#ifdef __sparc__
-	fdc_cfg = (0x40 | 0x10); /* ImplSeek+Polling+FIFO */
-#endif
 	config_types();
 
 	for (i = 0; i < N_FDC; i++) {

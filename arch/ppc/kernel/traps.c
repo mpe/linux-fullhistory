@@ -26,7 +26,7 @@
 #include <asm/system.h>
 #include <asm/io.h>
 
-#include <asm/ppc_machine.h>
+#include "ppc_machine.h"
 
 /*
  * Trap & Exception support
@@ -41,7 +41,7 @@ void
 _exception(int signr, struct pt_regs *regs)
 {
 	dump_regs(regs);
-	send_sig(signr, current, 1);
+	force_sig(signr, current);
 	if (!user_mode(regs))
 	{
 		printk("Failure in kernel at PC: %x, MSR: %x\n", regs->nip, regs->msr);
@@ -51,25 +51,27 @@ _exception(int signr, struct pt_regs *regs)
 
 MachineCheckException(struct pt_regs *regs)
 {
-	unsigned long *eagle_ip = (unsigned long *)0x80000CF8;
-	unsigned long *eagle_id = (unsigned long *)0x80000CFC;
 	printk("Machine check at PC: %x[%x], SR: %x\n", regs->nip, va_to_phys(regs->nip), regs->msr);
-#if 0	
-	*eagle_ip = 0xC0000080;  /* Memory error register */
-	printk("Error regs = %08X", *eagle_id);
-	*eagle_ip = 0xC4000080;  /* Memory error register */
-	printk("/%08X", *eagle_id);
-	*eagle_ip = 0xC8000080;  /* Memory error register */
-	printk("/%08X\n", *eagle_id);
-#endif
 	_exception(SIGSEGV, regs);	
 }
 
 ProgramCheckException(struct pt_regs *regs)
 {
 	printk("Program check at PC: %x[%x], SR: %x\n", regs->nip, va_to_phys(regs->nip), regs->msr);
-	while(1) ;
-	_exception(SIGILL, regs);
+	if (current->flags & PF_PTRACED)
+	{
+		_exception(SIGTRAP, regs);
+	} else
+	{
+		_exception(SIGILL, regs);
+	}
+}
+
+SingleStepException(struct pt_regs *regs)
+{
+	printk("Single step at PC: %x[%x], SR: %x\n", regs->nip, va_to_phys(regs->nip), regs->msr);
+	regs->msr &= ~MSR_SE;  /* Turn off 'trace' bit */
+	_exception(SIGTRAP, regs);	
 }
 
 FloatingPointCheckException(struct pt_regs *regs)
@@ -80,6 +82,9 @@ FloatingPointCheckException(struct pt_regs *regs)
 
 AlignmentException(struct pt_regs *regs)
 {
+	printk("Alignment error at PC: %x, SR: %x\n", regs->nip, regs->msr);
+	dump_regs(regs);
+	cnpause();
 	printk("Alignment error at PC: %x[%x], SR: %x\n", regs->nip, va_to_phys(regs->nip), regs->msr);
 	_exception(SIGBUS, regs);	
 }
@@ -95,7 +100,9 @@ dump_regs(struct pt_regs *regs)
 {
 	int i;
 	printk("NIP: %08X, MSR: %08X, XER: %08X, LR: %08X, FRAME: %08X\n", regs->nip, regs->msr, regs->xer, regs->link, regs);
+#if 0	
 	printk("HASH = %08X/%08X, MISS = %08X/%08X, CMP = %08X/%08X\n", regs->hash1, regs->hash2, regs->imiss, regs->dmiss, regs->icmp, regs->dcmp);
+#endif	
 	printk("TASK = %x[%d] '%s'\n", current, current->pid, current->comm);
 	for (i = 0;  i < 32;  i++)
 	{
@@ -109,12 +116,21 @@ dump_regs(struct pt_regs *regs)
 			printk("\n");
 		}
 	}
-	dump_buf(regs->nip, 32);
+#if 0	
+	if (regs->nip >= 0x1000)
+		dump_buf(regs->nip-32, 64);
 	dump_buf((regs->nip&0x0FFFFFFF)|KERNELBASE, 32);
+#endif
 }
 
 trace_syscall(struct pt_regs *regs)
 {
-	printk("Task: %08X(%d), PC: %08X/%08X, Syscall: %3d, Result: %d\n", current, current->pid, regs->nip, regs->link, regs->gpr[0], regs->gpr[3]);
+	static int count;
+	printk("Task: %08X(%d), PC: %08X/%08X, Syscall: %3d, Result: %s%d\n", current, current->pid, regs->nip, regs->link, regs->gpr[0], regs->ccr&0x10000000?"Error=":"", regs->gpr[3]);
+	if (++count == 20)
+	{
+		count = 0;
+		cnpause();
+	}
 }
 

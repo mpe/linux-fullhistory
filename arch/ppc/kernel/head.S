@@ -1,5 +1,6 @@
 #include "ppc_asm.tmpl"
 #include "ppc_defs.h"
+#include <linux/errno.h>
 
 #define SYNC() \
 	isync; \
@@ -14,7 +15,7 @@
  * Increment a [64 bit] statistic counter
  * Uses R2, R3
  */
-#define BUMP(ctr) /*\
+#define BUMP(ctr) \
 	lis	r2,ctr@h; \
 	ori	r2,r2,ctr@l; \
 	lwz	r3,4(r2); \
@@ -22,10 +23,10 @@
 	stw	r3,4(r2); \
 	lwz	r3,0(r2); \
 	addze	r3,r3; \
-	stw	r3,0(r2)*/
+	stw	r3,0(r2)
 
 /* The same as 'BUMP' but running unmapped (TLB code) */	
-#define BUMP_UNMAPPED(ctr) /*\
+#define BUMP_UNMAPPED(ctr) \
 	mfspr	r0,XER; \
 	lis	r2,ctr@h; \
 	ori	r2,r2,ctr@l; \
@@ -37,7 +38,7 @@
 	lwz	r3,0(r2); \
 	addze	r3,r3; \
 	mtspr	XER,r0; \
-	stw	r3,0(r2)*/
+	stw	r3,0(r2)
 
 /* These macros can be used to generate very raw traces of low-level */
 /* operations (where printf, etc. can't help).  All they provide is */
@@ -49,9 +50,9 @@
 /* gather some data without disturbing anything - Heisenberg are you watching? */
 
 /* CAUTION! Don't turn on more than one of these at once! */	
-/* #define DO_TRAP_TRACE   */
-/* #define DO_TLB_TRACE    */
-/* #define DO_RFI_TRACE   */
+/* #define DO_TRAP_TRACE  /* */
+/* #define DO_TLB_TRACE   /* */
+/* #define DO_RFI_TRACE   /* */
 
 #ifdef DO_RFI_TRACE
 #define DO_RFI_TRACE_UNMAPPED(mark) \
@@ -237,7 +238,7 @@
 
 /* This instruction is not implemented on the PPC 603 */
 #define tlbia \
-	li	r4,32; \
+	li	r4,64; \
 	mtspr	CTR,r4; \
 	lis	r4,0x9000; \
 0:	tlbie	r4; \
@@ -246,10 +247,10 @@
 
 /* Validate kernel stack - check for overflow */
 #define CHECK_STACK()
-#define _CHECK_STACK()\
+#define _CHECK_STACK() \
 	mtspr	SPR0,r3; \
-	lis	r2,current@ha; \
-	lwz	r2,current@l(r2); \
+	lis	r2,current_set@ha; \
+	lwz	r2,current_set@l(r2); \
 	lwz	r2,KERNEL_STACK_PAGE(r2); \
 	lis	r3,sys_stack@h; \
 	ori	r3,r3,sys_stack@l; \
@@ -308,7 +309,13 @@
 	stw	r2,_DAR(r1); \
 	mfspr	r2,DSISR; \
 	stw	r2,_DSISR(r1); \
-	mfspr	r2,HASH1; \
+	mfspr	r2,PVR;			/* Check for 603/603e */ \
+	srwi	r2,r2,16; \
+	cmpi	0,r2,3;			/* 603 */ \
+	beq	22f; \
+	cmpi	0,r2,6;			/* 603e */ \
+	bne	24f; \
+22:	mfspr	r2,HASH1; 		/* Note: these registers exist only on 603 */ \
 	stw	r2,_HASH1(r1); \
 	mfspr	r2,HASH2; \
 	stw	r2,_HASH2(r1); \
@@ -319,7 +326,8 @@
 	mfspr	r2,ICMP; \
 	stw	r2,_ICMP(r1); \
 	mfspr	r2,DCMP; \
-	stw	r2,_DCMP(r1)
+	stw	r2,_DCMP(r1); \
+24:	
 	
 #define SAVE_INT_REGS(mark) \
 	mtspr	SPR0,r1;	/* Save current stack pointer */ \
@@ -342,10 +350,15 @@
 	ori	r2,r2,MSR_|MSR_DR|MSR_IR; \
 	mtspr	SRR1,r2; \
 	rfi; \
-05:	lis	r2,current@ha; \
-	lwz	r2,current@l(r2); \
+05:	lis	r2,current_set@ha; \
+	lwz	r2,current_set@l(r2); \
 	mfspr	r1,SPR2; \
 	stw	r1,TSS+LAST_PC(r2); \
+	mfspr	r1,SPR0; \
+	stw	r1,TSS+USER_STACK(r2); \
+	lwz	r1,TSS+KSP(r2); \
+	subi	r1,r1,INT_FRAME_SIZE;	/* Make room for frame */ \
+	stw	r1,TSS+PT_REGS(r2); 	/* Save regs pointer for 'ptrace' */ \
 	lwz	r1,TSS+KSP(r2); \
 	b	20f; \
 10:	mfspr	r2,SPR2;	/* Restore CCR */ \
@@ -362,7 +375,7 @@
 	mtspr	SRR1,r2; \
 	SYNC(); \
 	rfi; \
-20:   SAVE_REGS(mark); \
+20:	SAVE_REGS(mark); \
 	CHECK_STACK()
 
 #define RETURN_FROM_INT(mark) \
@@ -370,8 +383,8 @@
 	li	r4,0; \
 	ori	r4,r4,MSR_EE; \
 	andc	r0,r0,r4; \
+	sync; 			/* Some chip revs need this... */ \
 	mtmsr	r0; \
-	SYNC(); \
 	lis	r2,intr_count@ha; /* Need to run 'bottom half' */ \
 	lwz	r3,intr_count@l(r2); \
 	cmpi	0,r3,0; \
@@ -392,13 +405,13 @@
 00:	lwz	r2,_MSR(r1); /* Returning to user mode? */ \
 	andi.	r2,r2,MSR_PR; \
 	beq+	10f;		/* no - no need to mess with stack */ \
-	lis	r2,kernel_pages_are_copyback@ha; \
+/*	lis	r2,kernel_pages_are_copyback@ha; \
 	lwz	r2,kernel_pages_are_copyback@l(r2); \
 	cmpi	0,r2,0; \
 	beq	05f; \
-	bl	_EXTERN(flush_instruction_cache); \
-05:	lis	r3,current@ha;	/* need to save kernel stack pointer */ \
-	lwz	r3,current@l(r3); \
+	bl	_EXTERN(flush_instruction_cache); */ \
+05:	lis	r3,current_set@ha;	/* need to save kernel stack pointer */ \
+	lwz	r3,current_set@l(r3); \
 	addi	r4,r1,INT_FRAME_SIZE;	/* size of frame */ \
 	stw	r4,TSS+KSP(r3); \
 	lwz	r4,STATE(r3);	/* If state != 0, can't run */ \
@@ -444,14 +457,59 @@
 	rfi
 
 _TEXT()
+/*
+ * This code may be executed by a bootstrap process.  If so, the
+ * purpose is to relocate the loaded image to it's final location
+ * in memory.
+ *    R3: End of image
+ *    R4: Start of image - 0x400
+ *   R11: Start of command line string
+ *   R12: End of command line string
+ *   R30: 'BeBx' if this is a BeBox
+ *
+ */
 	.globl	_start
-_start:
-	.globl  _stext
+	.globl	_stext
 _stext:
+_start:
+	addi	r4,r4,0x400	/* Point at start of image */
+	li	r5,0		/* Load address */
+	subi	r4,r4,4		/* Adjust for auto-increment */
+	subi	r5,r5,4
+	subi	r3,r3,4
+00:	lwzu	r0,4(r4)	/* Fast move */
+	stwu	r0,4(r5)
+	cmp	0,r3,r4
+	bne	00b
+	li	r5,0x100	/* Actual code starts here */
+	mtlr	r5
+	blr
 
 hang:
 	ori	r0,r0,0
 	b	hang
+
+/*
+ * BeBox CPU #1 vector & code
+ */	
+_ORG(0x0080)
+	.globl	BeBox_CPU1_vector
+BeBox_CPU1_vector:
+	.long	0
+BeBox_CPU1_reset:
+	li	r1,BeBox_CPU1_vector@l
+	li	r2,0
+	stw	r2,0(r1)
+00:	lwz	r2,0(r1)
+	cmpi	0,r2,0
+	bne	10f
+	li	r2,10000
+	mtctr	r2
+02:	nop
+	bdnz	02b
+	b	00b
+10:	mtlr	r1
+	blr	
 	
 _ORG(0x0100)
 
@@ -506,7 +564,8 @@ _ORG(0x0C00)
 	b	SystemCall
 
 _ORG(0x0D00)
-DEFAULT_TRAP(0x0D00)	
+	b	SingleStep
+
 _ORG(0x0E00)
 DEFAULT_TRAP(0x0E00)	
 _ORG(0x0F00)
@@ -649,7 +708,7 @@ _ORG(0x1500)
  * the only juncture [as far as the OS goes] where the data cache may
  * contain instructions, e.g. after a disk read.
  */
-#define NUM_CACHE_LINES 128*2
+#define NUM_CACHE_LINES 128*4
 #define CACHE_LINE_SIZE 32 
 cache_flush_buffer:
 	.space	NUM_CACHE_LINES*CACHE_LINE_SIZE	/* CAUTION! these need to match hardware */
@@ -658,12 +717,40 @@ cache_flush_buffer:
 _ORG(0x4000)
 #endif
 
+
 /*
  * Hardware reset [actually from bootstrap]
  * Initialize memory management & call secondary init
+ * Registers initialized by bootstrap:
+ *   R11: Start of command line string
+ *   R12: End of command line string
+ *   R30: 'BeBx' if this is a BeBox
  */	
 Reset:
 	lis	r7,0xF000		/* To mask upper 4 bits */
+#define IS_BE_BOX	0x42654278	/* 'BeBx' */
+	lis	r1,isBeBox@h
+	ori	r1,r1,isBeBox@l
+	andc	r1,r1,r7
+/* See if this is a CPU other than CPU#1 */
+/* This [currently] happens on the BeBox */
+	lwz	r2,0(r1)
+	cmpi	0,r2,0
+	bne	Reset_BeBox_CPU1
+/* Save machine type indicator */
+	li	r2,0
+	lis	r3,IS_BE_BOX>>16
+	ori	r3,r3,IS_BE_BOX&0xFFFF
+	cmp	0,r30,r3
+	bne	00f
+	li	r2,1
+	mr	r11,r28
+	mr	r12,r29
+	lis	r5,BeBox_CPU1_vector@h
+	ori	r5,r5,BeBox_CPU1_vector@l
+	andc	r5,r5,r7		/* Tell CPU #1 where to go */
+00:	stw	r2,0(r1)
+	stw	r30,4(r1)
 /* Copy argument string */
 	li	r0,0		/* Null terminate string */
 	stb	r0,0(r12)
@@ -723,6 +810,17 @@ Reset:
 	lwz	r0,4(r3)
 	mtspr	IBAT2L,r0
 	mtspr	DBAT2L,r0
+#if 0	
+	lis	r3,BAT3@h
+	ori	r3,r3,BAT3@l
+	andc	r3,r3,r7	/* make unmapped address */
+	lwz	r0,0(r3)
+	mtspr	IBAT3U,r0
+	mtspr	DBAT3U,r0
+	lwz	r0,4(r3)
+	mtspr	IBAT3L,r0
+	mtspr	DBAT3L,r0
+#endif	
 /* Now we can turn on the MMU */
 	mfmsr	r3
 	ori	r3,r3,MSR_DR|MSR_IR
@@ -736,7 +834,6 @@ DO_RFI_TRACE_UNMAPPED(0xDEAD0000)
 10:	bl	_EXTERN(MMU_init)	/* initialize MMU environment */
 DO_RFI_TRACE_MAPPED(0xDEAD0100)	
 /* Withdraw BAT2->RAM mapping */
-#if 1
 	lis	r7,0xF000		/* To mask upper 4 bits */
 	lis	r3,20f@h
 	ori	r3,r3,20f@l
@@ -750,7 +847,7 @@ DO_RFI_TRACE_MAPPED(0xDEAD0100)
 DO_RFI_TRACE_MAPPED(0xDEAD0200)	
 	SYNC
 	rfi
-20:
+20:	
 DO_RFI_TRACE_UNMAPPED(0xDEAD0400)	
 20:	lis	r3,BAT2@h
 	ori	r3,r3,BAT2@l
@@ -761,8 +858,6 @@ DO_RFI_TRACE_UNMAPPED(0xDEAD0400)
 	lwz	r0,4(r3)
 	mtspr	IBAT2L,r0
 	mtspr	DBAT2L,r0
-#endif
-
 /* Load up the kernel context */
 	lis	r2,init_task@h
 	ori	r2,r2,init_task@l
@@ -818,7 +913,6 @@ DO_RFI_TRACE_UNMAPPED(0xDEAD0500)
 	SYNC
 	rfi				/* enables MMU */
 30:
-DO_RFI_TRACE_MAPPED(0xDEAD0600)
 /* Turn on L1 Data Cache */
 	mfspr	r3,HID0		/* Caches are controlled by this register */
 	ori	r4,r3,(HID0_ICE|HID0_ICFI)
@@ -828,9 +922,79 @@ DO_RFI_TRACE_MAPPED(0xDEAD0600)
 	sync
 	mtspr	HID0,r4
 	mtspr	HID0,r3
-/* L1 cache enable */	
-	b	_EXTERN(start_kernel)		/* call main code */
+/* L1 cache enable */
+	mfspr	r2,PVR			/* Check for 603/603e */
+	srwi	r2,r2,16
+	cmpi	0,r2,4			/* 604 */
+	bne	40f
+	mfspr	r3,HID0			/* Turn on 604 specific features */
+	ori	r3,r3,(HID0_SIED|HID0_BHTE)
+	mtspr	HID0,r3
+40:	b	_EXTERN(start_kernel)		/* call main code */
 	.long	0		# Illegal!
+
+/*
+ * BeBox CPU #2 runs here
+ */
+Reset_BeBox_CPU1:	
+	lis	r1,CPU1_stack@h
+	ori	r1,r1,CPU1_stack@l
+	li	r2,0x0FFF	/* Mask stack address down to page boundary */
+	andc	r1,r1,r2
+	subi	r1,r1,INT_FRAME_SIZE	/* Padding for first frame */
+	lis	r30,CPU1_trace@h
+	ori	r30,r30,CPU1_trace@l
+	andc	r30,r30,r7
+	li	r5,1
+	stw	r5,0(r30)
+	li	r2,0		/* TOC pointer for nanokernel */
+	li	r0,MSR_		/* Make sure FPU enabled */
+	mtmsr	r0
+/* Initialize BAT registers */
+	lis	r3,BAT0@h
+	ori	r3,r3,BAT0@l
+	andc	r3,r3,r7	/* make unmapped address */
+	lwz	r0,0(r3)
+	mtspr	IBAT0U,r0
+	mtspr	DBAT0U,r0
+	lwz	r0,4(r3)
+	mtspr	IBAT0L,r0
+	mtspr	DBAT0L,r0
+	lis	r3,BAT1@h
+	ori	r3,r3,BAT1@l
+	andc	r3,r3,r7	/* make unmapped address */
+	lwz	r0,0(r3)
+	mtspr	IBAT1U,r0
+	mtspr	DBAT1U,r0
+	lwz	r0,4(r3)
+	mtspr	IBAT1L,r0
+	mtspr	DBAT1L,r0
+	lis	r3,TMP_BAT2@h
+	ori	r3,r3,TMP_BAT2@l
+	andc	r3,r3,r7	/* make unmapped address */
+	lwz	r0,0(r3)
+	mtspr	IBAT2U,r0
+	mtspr	DBAT2U,r0
+	lwz	r0,4(r3)
+	mtspr	IBAT2L,r0
+	mtspr	DBAT2L,r0
+/* Now we can turn on the MMU */
+	mfmsr	r3
+	ori	r3,r3,MSR_DR|MSR_IR
+	mtspr	SRR1,r3
+	lis	r3,10f@h
+	ori	r3,r3,10f@l
+	mtspr	SRR0,r3
+	li	r5,2
+	stw	r5,0(r30)
+	SYNC
+	rfi				/* enables MMU */
+10:
+	lis	r30,CPU1_trace@h
+	ori	r30,r30,CPU1_trace@l
+	li	r5,3
+	stw	r5,0(r30)
+	bl	_EXTERN(BeBox_CPU1)
 
 /*
  * Machine Check (Bus Errors, etc)
@@ -846,25 +1010,30 @@ MachineCheck:
  * Data Access exception
  */
 DataAccess:
-	TRACE_TRAP(0x0300)
+/*	TRACE_TRAP(0x0300) */
 	SAVE_INT_REGS(0x0300)
 	SAVE_PAGE_FAULT_REGS(0x0300)
 	BUMP(__Data_Page_Faults)
 	mr	r3,r1		/* Set pointer to saved regs */
 	bl	_EXTERN(DataAccessException)
+#if 0
+	bl	_EXTERN(flush_instruction_cache)
+#endif	
 	RETURN_FROM_INT(0x0300)
 
 /*
  * Instruction Access Exception
  */
 InstructionAccess:
-	TRACE_TRAP(0x0400)
+/*	TRACE_TRAP(0x0400) */
 	SAVE_INT_REGS(0x0400)
 	SAVE_PAGE_FAULT_REGS(0x0400)
 	BUMP(__Instruction_Page_Faults)
 	mr	r3,r1		/* Set pointer to saved regs */
 	bl	_EXTERN(InstructionAccessException)
+#if 0
 	bl	_EXTERN(flush_instruction_cache)
+#endif	
 	RETURN_FROM_INT(0x0400)
 
 /*
@@ -898,6 +1067,19 @@ ProgramCheck:
 	RETURN_FROM_INT(0x0700)
 
 /*
+ * Single Step Exception
+ */
+SingleStep:
+	SAVE_INT_REGS(0x0D00)
+	SAVE_PAGE_FAULT_REGS(0x0D00)
+	mr	r3,r1		/* Set pointer to saved regs */
+	bl	_EXTERN(SingleStepException)
+#if 0
+	bl	_EXTERN(flush_instruction_cache)
+#endif	
+	RETURN_FROM_INT(0x0D00)
+
+/*
  * Floating point [not available, etc]
  */
 FloatingPointCheck:	
@@ -909,8 +1091,9 @@ FloatingPointCheck:
 
 /*
  * System Call exception
- */	
+ */
 SystemCall:
+/*	TRACE_TRAP(0x0C00) */
 	SAVE_INT_REGS(0x0C00)
 	lwz	r2,_CCR(r1)	/* Clear SO bit in CR */
 	lis	r9,0x1000
@@ -923,11 +1106,15 @@ SystemCall:
 	cmpi	0,r3,0		/* Check for restarted system call */
 	bge	99f
 	b	20f
-10:	lis	r2,sys_call_table@h
+10:	lis	r2,current_set@ha
+	lwz	r2,current_set@l(r2)
+	lwz	r2,TASK_FLAGS(r2)
+	andi.	r2,r2,PF_TRACESYS
+	bne	50f
+	lis	r2,sys_call_table@h
 	ori	r2,r2,sys_call_table@l
 	slwi	r0,r0,2
 	lwzx	r2,r2,r0	/* Fetch system call handler [ptr] */
- 
 	mtlr	r2
 	mr	r9,r1
 	blrl			/* Call handler */
@@ -935,11 +1122,56 @@ SystemCall:
 	cmpi	0,r3,0
 	bge	30f
 	neg	r3,r3
-	lwz	r2,_CCR(r1)	/* Set SO bit in CR */
+	cmpi	0,r3,ERESTARTNOHAND
+	bne	22f
+	li	r3,EINTR
+22:	lwz	r2,_CCR(r1)	/* Set SO bit in CR */
 	oris	r2,r2,0x1000
 	stw	r2,_CCR(r1)
 30:	stw	r3,GPR3(r1)	/* Update return value */
+#if 0
+	mr	r3,r1
+	bl	_EXTERN(trace_syscall)
+#endif
+	b	99f
+/* Traced system call support */
+50:	bl	_EXTERN(syscall_trace)
+	lwz	r0,GPR0(r1)	/* Restore original registers */
+	lwz	r3,GPR3(r1)
+	lwz	r4,GPR4(r1)
+	lwz	r5,GPR5(r1)
+	lwz	r6,GPR6(r1)
+	lwz	r7,GPR7(r1)
+	lwz	r8,GPR8(r1)
+	lwz	r9,GPR9(r1)
+	lis	r2,sys_call_table@h
+	ori	r2,r2,sys_call_table@l
+	slwi	r0,r0,2
+	lwzx	r2,r2,r0	/* Fetch system call handler [ptr] */
+	mtlr	r2
+	mr	r9,r1
+	blrl			/* Call handler */
+	stw	r3,RESULT(r1)	/* Save result */	
+	cmpi	0,r3,0
+	bge	60f
+	neg	r3,r3
+	cmpi	0,r3,ERESTARTNOHAND
+	bne	52f
+	li	r3,EINTR
+52:	lwz	r2,_CCR(r1)	/* Set SO bit in CR */
+	oris	r2,r2,0x1000
+	stw	r2,_CCR(r1)
+60:	stw	r3,GPR3(r1)	/* Update return value */
+	bl	_EXTERN(syscall_trace)
 99:
+#if 0 /* This isn't needed here - already in RETURN_FROM_INT */
+	lis	r2,kernel_pages_are_copyback@ha
+	lwz	r2,kernel_pages_are_copyback@l(r2)
+	cmpi	0,r2,0
+	beq	00f
+	bl	_EXTERN(flush_instruction_cache)	/* Ensure cache coherency */
+00:
+#endif
 	RETURN_FROM_INT(0x0C00)
 
 /*
@@ -1205,6 +1437,7 @@ InstructionFetchError:
 	xoris	r0,r0,MSR_TGPR>>16
 	mtcrf	0x80,r3		/* Restore CR0 */
 	ori	r0,r0,MSR_FP	/* Need to keep FP enabled */
+	sync			/* Some chip revs have problems here... */
 	mtmsr	r0
 	b	InstructionAccess
 
@@ -1233,6 +1466,7 @@ WriteProtectError:
 	xoris	r0,r0,MSR_TGPR>>16
 	mtcrf	0x80,r3		/* Restore CR0 */
 	ori	r0,r0,MSR_FP	/* Need to keep FP enabled */
+	sync			/* Some chip revs have problems here... */
 	mtmsr	r0
 	b	DataAccess
 
@@ -1246,22 +1480,11 @@ _GLOBAL(flush_instruction_cache)
 	mfspr	r3,HID0	/* Caches are controlled by this register */
 	li	r4,0
 	ori	r4,r4,(HID0_ICE|HID0_ICFI)
+	or	r3,r3,r4	/* Need to enable+invalidate to clear */
+	mtspr	HID0,r3
 	andc	r3,r3,r4
-	isync
-	mtspr	HID0,r3		/* Disable cache */
-	isync
-	ori	r3,r3,HID0_ICFI
-	isync
-	mtspr	HID0,r3		/* Invalidate cache */
-	isync
-	andc	r3,r3,r4
-	isync
-	mtspr	HID0,r3		/* Invalidate (step 2) */
-	isync
-	ori	r3,r3,HID0_ICE
-	isync
-	mtspr	HID0,r3		/* Enable cache */
-	isync
+	ori	r3,r3,HID0_ICE	/* Enable cache */
+	mtspr	HID0,r3
 	mtlr	r5
 	blr
 
@@ -1284,6 +1507,23 @@ _GLOBAL(flush_data_cache)
 	addi	r3,r3,CACHE_LINE_SIZE	/* Next line, please */
 	bdnz	00b	
 10:	blr
+
+/*
+ * Flush a particular page from the DATA cache
+ * Note: this is necessary because the instruction cache does *not*
+ * snoop from the data cache.
+ *	void flush_page(void *page)
+ */
+_GLOBAL(flush_page)
+	li	r4,0x0FFF
+	andc	r3,r3,r4		/* Get page base address */
+	li	r4,4096/CACHE_LINE_SIZE	/* Number of lines in a page */
+	mtctr	r4
+00:	dcbf	0,r3			/* Clear line */
+	icbi	0,r3
+	addi	r3,r3,CACHE_LINE_SIZE
+	bdnz	00b
+	blr
 	
 /*
  * This routine switches between two different tasks.  The process
@@ -1348,6 +1588,7 @@ _GLOBAL(_switch)
 	mtsr	SR15,r0
 	tlbia				/* Invalidate entire TLB */
 	BUMP(__TLBIAs)
+	bl	_EXTERN(flush_instruction_cache)
 #ifdef TLB_STATS
 /* TEMP */
 	lis	r2,DataLoadTLB_trace_ptr@h
@@ -1368,8 +1609,10 @@ _GLOBAL(_switch)
 00:	stw	r4,0(r2)
 /* TEMP */	
 #endif
+#if 0
 	lwz	r2,_NIP(r1)	/* Force TLB/MMU hit */
 	lwz	r2,0(r2)
+#endif	
 	RETURN_FROM_INT(0xF000)
 	
 
@@ -1422,10 +1665,16 @@ check_trace:
 sdata:
 	.space	2*4096
 sys_stack:
+	.space	2*4096
+CPU1_stack:	
 
 	.globl	empty_zero_page
 empty_zero_page:
 	.space	4096
+
+	.globl	swapper_pg_dir
+swapper_pg_dir:
+	.space	4096	
 
 /*
  * This space gets a copy of optional info passed to us by the bootstrap
@@ -1495,3 +1744,4 @@ _RFI_DATA: .space	128*1024
 _RFI_ptr:  .long	_RFI_DATA
 	.text	
 #endif
+

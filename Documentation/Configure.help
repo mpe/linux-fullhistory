@@ -1086,7 +1086,7 @@ CONFIG_AX25
   use a low speed TNC (a Terminal Node Controller acts as a kind of
   modem connecting your computer's serial port to your radio's
   microphone input and speaker output) supporting the KISS protocol or
-  the various SCC cards that are supported by the Ottowa PI, the
+  the various SCC cards that are supported by the Ottawa PI, the
   Gracilis Packetwin and the generic Z8530 driver. Another option are
   the Baycom modem serial and parallel port hacks (supported by their
   own driver) and the other baycom cards (SCC) (supported by the Z8530
@@ -3511,7 +3511,7 @@ CONFIG_CS4232
 /dev/dsp and /dev/audio support
 CONFIG_AUDIO
   Answering N disables /dev/dsp and /dev/audio, the A/D and D/A
-  converter devices.  Answer Y only if you know you will not need
+  converter devices.  Answer N only if you know you will not need
   the option.  They are usually required.  Answer Y.
 
 MIDI interface support

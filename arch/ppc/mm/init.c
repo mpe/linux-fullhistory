@@ -5,7 +5,6 @@
  *  Ported to PPC by Gary Thomas
  */
 
-
 #include <linux/config.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -17,37 +16,18 @@
 #include <linux/ptrace.h>
 #include <linux/mman.h>
 #include <linux/mm.h>
+#include <linux/swap.h>
+
+#define SHOW_FAULTS
+#undef  SHOW_FAULTS
+
+#define SHOW_INVALIDATES
+#undef  SHOW_INVALIDATES
 
 #include <asm/pgtable.h>
 
+extern pgd_t swapper_pg_dir[1024*8];
 
-/* made this a static array since alpha and intel aren't.
-   thomas made it a dynamic array and had to add lots of stuff to other parts
-   of linux to make sure the pages were contiguous and such.  the static array
-   seems much easier
-   making it 8k for now.  will change later.
-      -- Cort
-   */
-pgd_t swapper_pg_dir[1024];
-/*pgd_t *swapper_pg_dir;*/
-
-pte *MMU_get_page(void);
-
-
-#if 0
-#include <asm/system.h>
-#include <asm/segment.h>
-#include <asm/mipsconfig.h>
-
-extern unsigned long pg0[1024];		/* page table for 0-4MB for everybody */
-#endif
-
-#ifdef CONFIG_DESKSTATION_TYNE
-extern void deskstation_tyne_dma_init(void);
-#endif
-#ifdef CONFIG_SOUND
-extern void sound_mem_init(void);
-#endif
 extern void die_if_kernel(char *,struct pt_regs *,long);
 extern void show_net_buffers(void);
 
@@ -113,13 +93,9 @@ pte_t __bad_page(void)
 
 unsigned long __zero_page(void)
 {
-#if 0
-	panic("__zero_page");
-#else	
 	extern char empty_zero_page[PAGE_SIZE];
 	bzero(empty_zero_page, PAGE_SIZE);
 	return (unsigned long) empty_zero_page;
-#endif	
 }
 
 void show_mem(void)
@@ -133,7 +109,7 @@ void show_mem(void)
 	i = high_memory >> PAGE_SHIFT;
 	while (i-- > 0) {
 		total++;
-                if (mem_map[i].reserved)
+		if (PageReserved(mem_map+i))
 			reserved++;
 		else if (!mem_map[i].count)
 			free++;
@@ -161,7 +137,6 @@ extern unsigned long free_area_init(unsigned long, unsigned long);
  */
 unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 {
-
 #if 0	
 	pgd_t * pg_dir;
 	pte_t * pg_table;
@@ -194,14 +169,13 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	cacheflush();
 #endif
 	invalidate();
-#endif
+#endif	
 	return free_area_init(start_mem, end_mem);
 }
 
 void mem_init(unsigned long start_mem, unsigned long end_mem)
 {
 	int codepages = 0;
-	int reservedpages = 0;
 	int datapages = 0;
 	unsigned long tmp;
 	extern int etext;
@@ -213,30 +187,14 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	start_mem = PAGE_ALIGN(start_mem);
 
 #if 0
-printk("Mem init - Start: %x, End: %x\n", start_mem, high_memory);
-#endif
-	while (start_mem < high_memory) {
-		mem_map[MAP_NR(start_mem)].reserved = 0;
-		start_mem += PAGE_SIZE;
-	}
-#ifdef CONFIG_DESKSTATION_TYNE
-	deskstation_tyne_dma_init();
-#endif
-#ifdef CONFIG_SOUND
-	sound_mem_init();
+_printk("Mem init - Start: %x, End: %x\n", start_mem, high_memory);
 #endif
 	for (tmp = KERNELBASE ; tmp < high_memory ; tmp += PAGE_SIZE)
 	{
-		if (mem_map[MAP_NR(tmp)].reserved)
+		if (tmp < start_mem)
 		{
-			/*
-			 * We don't have any reserved pages on the
-			 * MIPS systems supported until now
-			 */
-			if (0)
-			{
-				reservedpages++;
-			} else if (tmp < (unsigned long) &etext)
+			set_bit(PG_reserved, &mem_map[MAP_NR(tmp)].flags);
+			if (tmp < (unsigned long) &etext)
 			{
 				codepages++;
 			} else
@@ -245,15 +203,15 @@ printk("Mem init - Start: %x, End: %x\n", start_mem, high_memory);
 			}
 			continue;
 		}
+		clear_bit(PG_reserved, &mem_map[MAP_NR(tmp)].flags);
 		mem_map[MAP_NR(tmp)].count = 1;
 		free_page(tmp);
 	}
 	tmp = nr_free_pages << PAGE_SHIFT;
-	printk("Memory: %luk/%luk available (%dk kernel code, %dk reserved, %dk data)\n",
+	printk("Memory: %luk/%luk available (%dk kernel code, %dk data)\n",
 		tmp >> 10,
 		((int)high_memory - (int)KERNELBASE) >> 10,
 		codepages << (PAGE_SHIFT-10),
-		reservedpages << (PAGE_SHIFT-10),
 		datapages << (PAGE_SHIFT-10));
 	invalidate();
 	return;
@@ -261,26 +219,24 @@ printk("Mem init - Start: %x, End: %x\n", start_mem, high_memory);
 
 void si_meminfo(struct sysinfo *val)
 {
-#if 0	
 	int i;
 
-	i = high_memory >> PAGE_SHIFT;
+	i = ((int)high_memory & 0x00FFFFFF) >> PAGE_SHIFT;
 	val->totalram = 0;
 	val->sharedram = 0;
 	val->freeram = nr_free_pages << PAGE_SHIFT;
 	val->bufferram = buffermem;
 	while (i-- > 0)  {
-		if (mem_map[i] & MAP_PAGE_RESERVED)
+		if (PageReserved(mem_map+i))
 			continue;
 		val->totalram++;
-		if (!mem_map[i])
+		if (!mem_map[i].count)
 			continue;
-		val->sharedram += mem_map[i]-1;
+		val->sharedram += mem_map[i].count-1;
 	}
 	val->totalram <<= PAGE_SHIFT;
 	val->sharedram <<= PAGE_SHIFT;
 	return;
-#endif	
 }
 
 /* Kernel MMU setup & lowest level hardware support */
@@ -326,8 +282,6 @@ BAT BAT1 =
    };
 BAT BAT2 =
    {
-/* map kernel with bats 0 = yes */
-#if 1
    	{
    		0x00000000>>17, 	/* bepi */
    		BL_256M,		/* bl */
@@ -342,22 +296,6 @@ BAT BAT2 =
    		0,			/* g */
    		BPP_RW			/* pp */
    	}
-#else
-   	{
-   		0x90000000>>17, 	/* bepi */
-   		BL_256M,		/* bl */
-   		1,			/* vs */
-   		1,			/* vp */
-   	},
-   	{
-   		0x00000000>>17,		/* brpn */
-   		1,			/* w */
-   		0,			/* i (cache enabled) */
-   		0,			/* m */
-   		0,			/* g */
-   		BPP_RW			/* pp */
-   	}
-#endif
    };
 BAT BAT3 =
    {
@@ -380,13 +318,13 @@ BAT TMP_BAT2 =
    { /* 0x9XXXXXXX -> 0x0XXXXXXX */
    	{
    		0x90000000>>17, 	/* bepi */
-   		BL_256M,		/* bl */
+   		BL_16M,			/* bl */
    		1,			/* vs */
    		1,			/* vp */
    	},
    	{
    		0x00000000>>17,		/* brpn */
-   		1,			/* w */
+   		0,			/* w */
    		0,			/* i (cache enabled) */
    		0,			/* m */
    		0,			/* g */
@@ -397,13 +335,17 @@ BAT TMP_BAT2 =
 unsigned long _SDR1;		/* Hardware SDR1 image */
 PTE *Hash;
 int Hash_size, Hash_mask;
+unsigned long *end_of_DRAM;
 int cache_is_copyback = 1;
 int kernel_pages_are_copyback = 1;
+/* Note: these need to be in 'data' so they live over the boot */
+unsigned char *BeBox_IO_page = 0;
+unsigned long isBeBox[2] = {0, 0};
 
-#define NUM_MAPPINGS 8
+#define NUM_MAPPINGS 128
 struct
    {
-   	int va, pa, task;
+   	int va, pa, pg, task;
    } last_mappings[NUM_MAPPINGS];
 int next_mapping = 0;
 
@@ -460,13 +402,13 @@ MMU_get_item(struct item *hdr)
 
 extern char _start[], _end[];
  
-void MMU_init(void)
+MMU_init()
 {
 	int i, p;
 	SEGREG *segs;
-/*	_printk("MMU init - started\n");*/
+	_printk("MMU init - started\n");
 	find_end_of_memory();
-/*	_printk("  Start at 0x%08X, End at 0x%08X, Hash at 0x%08X\n", _start, _end, Hash);*/
+	_printk("  Start at 0x%08X, End at 0x%08X, Hash at 0x%08X\n", _start, _end, Hash);
 	_SDR1 = ((unsigned long)Hash & 0x00FFFFFF) | Hash_mask;
 	p = (int)mmu_pages;
 	p = (p + (MMU_PAGE_SIZE-1)) & ~(MMU_PAGE_SIZE-1);
@@ -477,11 +419,12 @@ void MMU_init(void)
 		p += MMU_PAGE_SIZE;
 	}
 	/* Force initial page tables */
-	/*swapper_pg_dir = (pgd_t *)MMU_get_page();*/
+#if 0	
+	swapper_pg_dir = (pgd_t *)MMU_get_page();
+#endif	
 	init_task.tss.pg_tables = (unsigned long *)swapper_pg_dir;
-
 	/* Segment registers */
-	segs = (SEGREG *)init_task.tss.segs;
+	segs = init_task.tss.segs;
 	for (i = 0;  i < 16;  i++)
 	{
 		segs[i].ks = 0;
@@ -489,12 +432,21 @@ void MMU_init(void)
 		segs[i].vsid = i;
 	}
 	/* Map kernel TEXT+DATA+BSS */
-#if 0	
-	for (i = (int)_start;  i <= (int)_end;  i += MMU_PAGE_SIZE)
-#else
+	end_of_DRAM = (unsigned long *)Hash;
+	/* Hard map in any special local resources */
+	if (isBeBox[0])
+	{
+		/* Map in one page for the BeBox motherboard I/O */
+		end_of_DRAM = (unsigned long *)((unsigned long)end_of_DRAM - MMU_PAGE_SIZE);
+#if 0		
+		BeBox_IO_page = (unsigned char *)0x7FFFF000;
+#endif
+		BeBox_IO_page = (unsigned char *)end_of_DRAM;
+		MMU_map_page(&init_task.tss, BeBox_IO_page, 0x7FFFF000, PAGE_KERNEL);
+		MMU_disable_cache_for_page(&init_task.tss, BeBox_IO_page);
+	}
 	/* Other parts of the kernel expect ALL RAM to be mapped */	
-	for (i = (int)_start;  i <= (int)Hash;  i += MMU_PAGE_SIZE)
-#endif	
+	for (i = (int)_start;  i < (int)end_of_DRAM;  i += MMU_PAGE_SIZE)
 	{
 		MMU_map_page(&init_task.tss, i, i & 0x00FFFFFF, PAGE_KERNEL);
 	}
@@ -503,26 +455,32 @@ void MMU_init(void)
 	{
 		MMU_map_page(&init_task.tss, i, i & 0x00FFFFFF, PAGE_KERNEL);
 	}
-/*	_printk("MMU init - done!\n");*/
+#if 0 /* I'm not sure this is necessary */
+	/* Clear all DRAM not explicitly used by kernel */
+	bzero(_end, (unsigned long)end_of_DRAM-(unsigned long)_end);
+#endif
+	_printk("MMU init - done!\n");
 }
 
 pte *
-MMU_get_page(void)
+MMU_get_page()
 {
 	pte *pg;
 	if ((pg = (pte *)MMU_get_item(&_free_pages)))
 	{
 		bzero((char *)pg, MMU_PAGE_SIZE);
 	}
-/*	_printk("MMU Allocate Page at %08X\n", pg);*/
+	_printk("MMU Allocate Page at %08X\n", pg);
 	return(pg);
 }
 
 MMU_map_page(struct thread_struct *tss, unsigned long va, unsigned long pa, int flags)
 {
 	pte *pd, *pg;
+#if 0
 if (va < (unsigned long)0x90000000)	
-  _printk("Thread: %x, Map VA: %08x -> PA: %08X, Flags: %x\n", tss, va, pa, flags);
+  printk("Thread: %x, Map VA: %08x -> PA: %08X, Flags: %x\n", tss, va, pa, flags);
+#endif
 	if ((pte **)tss->pg_tables == (pte **)NULL)
 	{ /* Allocate upper level page map */
 		(pte **)tss->pg_tables = (pte **)MMU_get_page();
@@ -533,6 +491,7 @@ if (va < (unsigned long)0x90000000)
 	}
 	/* Use upper 10 bits of VA to index the first level map */
 	pd = ((pte **)tss->pg_tables)[(va>>PD_SHIFT)&PD_MASK];
+	pd = (pte *)((int)pd & 0xFFFFF000);
 	if (pd == (pte *)NULL)
 	{ /* Need to allocate second-level table */
 		pd = (pte *)MMU_get_page();
@@ -559,15 +518,15 @@ MMU_hash_page(struct thread_struct *tss, unsigned long va, pte *pg)
 	PTE *_pte, *empty, *slot;
 	PTE *slot0, *slot1;
 	extern char _etext;
-
-
-/*	printk("hashing tss = %x va = %x pg = %x\n", tss, va, pg);*/
 /* TEMP */
+if (va < KERNELBASE)		
+{
 	last_mappings[next_mapping].va = va;
 	last_mappings[next_mapping].pa = pg?*(int *)pg:0;
-	last_mappings[next_mapping].task = current;
+	last_mappings[next_mapping].pg = pg;
+	last_mappings[next_mapping].task = current->pid;
 	if (++next_mapping == NUM_MAPPINGS) next_mapping = 0;
-
+}
 /* TEMP */	
 	page_index = ((int)va & 0x0FFFF000) >> 12;
 	segment = (unsigned int)va >> 28;
@@ -689,6 +648,7 @@ _printk("Map VA: %08X, Slot: %08X[%08X/%08X], H: %d\n", va, slot, slot0, slot1, 
 			} else
 			{ /* Read only page */
 				perms = PP_RWRX;
+				perms = PP_RXRX;
 			}
 		} else
 		{ /* Kernel pages */
@@ -697,7 +657,7 @@ _printk("Map VA: %08X, Slot: %08X[%08X/%08X], H: %d\n", va, slot, slot0, slot1, 
 		}
 #ifdef SHOW_FAULTS
 if (va < KERNELBASE)		
-_printk("VA: %08X, PA: %08X, Flags: %x, Perms: %d\n", va, pg->page_num<<12, pg->flags, perms);
+printk("VA: %08X, PA: %08X, Flags: %x, Perms: %d, Vsid: %x\n", va, pg->page_num<<12, pg->flags, perms, vsid);
 #endif
 		slot->pp = perms;
 		return (0);
@@ -708,10 +668,105 @@ _printk("VA: %08X, PA: %08X, Flags: %x, Perms: %d\n", va, pg->page_num<<12, pg->
 		if (slot->c) flags |= _PAGE_DIRTY;
 		slot->v = 0;
 #ifdef SHOW_FAULTS
-_printk("Pull VA: %08X, Flags: %x\n", va, flags);
+printk("Pull VA: %08X, Flags: %x\n", va, flags);
 #endif
 		return (flags);
 	}
+}
+
+/*
+ * Disable cache for a particular page
+ */
+MMU_disable_cache_for_page(struct thread_struct *tss, unsigned long va)
+{
+	int hash, page_index, segment, i, h, _h, api, vsid, perms;
+	PTE *_pte, *empty, *slot;
+	PTE *slot0, *slot1;
+	extern char _etext;
+	page_index = ((int)va & 0x0FFFF000) >> 12;
+	segment = (unsigned int)va >> 28;
+	api = page_index >> 10;
+	vsid = ((SEGREG *)tss->segs)[segment].vsid;
+	empty = slot = (PTE *)NULL;
+	for (_h = 0;  _h < 2;  _h++)
+	{
+		hash = page_index ^ vsid;		
+		if (_h)
+		{
+			hash = ~hash;  /* Secondary hash uses ones-complement */
+		}
+		hash &= 0x3FF | (Hash_mask << 10);
+		hash *= 8;  /* Eight entries / hash bucket */
+		_pte = &Hash[hash];
+		/* Save slot addresses in case we have to purge */
+		if (_h)
+		{
+			slot1 = _pte;
+		} else
+		{
+			slot0 = _pte;
+		}
+		for (i = 0;  i < 8;  i++, _pte++)
+		{
+			if (_pte->v && _pte->vsid == vsid && _pte->h == _h && _pte->api == api)
+			{ /* Found it! */
+				h = _h;
+				slot = _pte;
+				goto found_it;
+			}
+			if ((empty == (PTE *)NULL) && !_pte->v)
+			{
+				h = _h;
+				empty = _pte;
+			}
+		}
+	}
+found_it:	
+	_tlbie(va); /* Clear TLB */
+	slot->i = 1;
+	slot->m = 0;
+}
+
+/*
+ * Invalidate a hardware [hash] page table entry
+ * Note: this should never be called [currently] for kernel addresses.
+ */
+MMU_invalidate_page(struct mm_struct *mm, unsigned long va, pte *pg)
+{
+	int hash, page_index, segment, i, h, _h, api, vsid, perms;
+	PTE *_pte, *slot;
+	int flags = 0;
+	page_index = ((int)va & 0x0FFFF000) >> 12;
+	segment = (unsigned int)va >> 28;
+	api = page_index >> 10;
+	vsid = mm->context | segment;
+	slot = (PTE *)NULL;
+	for (_h = 0;  _h < 2;  _h++)
+	{
+		hash = page_index ^ vsid;		
+		if (_h)
+		{
+			hash = ~hash;  /* Secondary hash uses ones-complement */
+		}
+		hash &= 0x3FF | (Hash_mask << 10);
+		hash *= 8;  /* Eight entries / hash bucket */
+		_pte = &Hash[hash];
+		for (i = 0;  i < 8;  i++, _pte++)
+		{
+			if (_pte->v && _pte->vsid == vsid && _pte->h == _h && _pte->api == api)
+			{ /* Found it! */
+				_tlbie(va); /* Clear TLB */
+				if (_pte->r) flags |= _PAGE_ACCESSED;
+				if (_pte->c) flags |= _PAGE_DIRTY;
+				_pte->v = 0;
+#ifdef SHOW_FAULTS
+printk("Pull VA: %08X, Flags: %x\n", va, flags);
+#endif
+				return (flags);
+			}
+		}
+	}
+	return (flags);
 }
 
 /*
@@ -720,44 +775,208 @@ _printk("Pull VA: %08X, Flags: %x\n", va, flags);
 void
 invalidate(void)
 {
-  int i, j, flags;
-  unsigned long address;
-  pgd_t *pgd;
-  pte_t *_pte;
-#if 0
-  _tlbia();  /* Flush TLB entries */
+	int i, j, flags;
+	unsigned long address;
+	pgd_t *pgd;
+	pte_t *_pte;
+	static long _invalidates;
+#ifdef SHOW_INVALIDATES
+printk("invalidate()\n");
 #endif
-  pgd = pgd_offset(current->mm, 0);
-  if (!pgd) return;  /* No map? */
-  address = 0;
-  for (i = 0 ; (i < PTRS_PER_PGD) && (address < KERNELBASE); i++)
-  {
-    if (*(long *)pgd)
-    {
-      /* I know there are only two levels, but the macros don't */
-      _pte = pte_offset(pmd_offset(pgd,0),0);
-      if (_pte)
-      {
-	for (j = 0;  j < PTRS_PER_PTE;  j++)
+	_invalidates++;
+#if 0 /* Unnecessary */
+	_tlbia();  /* Flush TLB entries */
+#endif
+	pgd = pgd_offset(current->mm, 0);
+	if (!pgd) return;  /* No map? */
+	address = 0;
+	for (i = 0 ; (i < PTRS_PER_PGD) && (address < KERNELBASE); i++)
 	{
-	  if (pte_present(*_pte))
-	  {
-	    flags = MMU_hash_page(&current->tss, address, 0);
-	    ((pte *)_pte)->flags |= flags;
-	  }
-	  _pte++;
-	  address += PAGE_SIZE;
+		if (*(long *)pgd)
+		{
+			/* I know there are only two levels, but the macros don't */
+			_pte = pte_offset(pmd_offset(pgd,0),0);
+			if (_pte)
+			{
+				for (j = 0;  j < PTRS_PER_PTE;  j++)
+				{
+					if (pte_present(*_pte))
+					{
+						flags = MMU_hash_page(&current->tss, address, 0);
+						((pte *)_pte)->flags |= flags;
+					}
+					_pte++;
+					address += PAGE_SIZE;
+				}
+			} else
+			{
+				address += PAGE_SIZE*PTRS_PER_PTE;
+			}
+		} else
+		{
+			address += PAGE_SIZE*PTRS_PER_PTE;
+		}
+		pgd++;
 	}
-      } else
-      {
-	address += PAGE_SIZE*PTRS_PER_PTE;
-      }
-    } else
-    {
-      address += PAGE_SIZE*PTRS_PER_PTE;
-    }
-    pgd++;
-  }
+} 
+
+/*
+ * Invalidate the MMU [hardware] tables (for current task?)
+ */
+void
+flush_cache_mm(struct mm_struct *mm)
+{
+	int i, j, flags;
+	unsigned long address;
+	pgd_t *pgd;
+	pte_t *_pte;
+	static long _invalidates;
+#ifdef SHOW_INVALIDATES
+printk("invalidate_mm(%x)\n", mm);
+#endif
+if (!mm) return;	
+	_invalidates++;
+#if 0 /* Unnecessary */
+	_tlbia();  /* Flush TLB entries */
+#endif
+	pgd = pgd_offset(mm, 0);
+	if (!pgd) return;  /* No map? */
+	address = 0;
+	for (i = 0 ; (i < PTRS_PER_PGD) && (address < KERNELBASE); i++)
+	{
+		if (*(long *)pgd)
+		{
+			/* I know there are only two levels, but the macros don't */
+			_pte = pte_offset(pmd_offset(pgd,0),0);
+			if (_pte)
+			{
+				for (j = 0;  j < PTRS_PER_PTE;  j++)
+				{
+					if (pte_present(*_pte))
+					{
+						flags = MMU_invalidate_page(mm, address, 0);
+						((pte *)_pte)->flags |= flags;
+					}
+					_pte++;
+					address += PAGE_SIZE;
+				}
+			} else
+			{
+				address += PAGE_SIZE*PTRS_PER_PTE;
+			}
+		} else
+		{
+			address += PAGE_SIZE*PTRS_PER_PTE;
+		}
+		pgd++;
+	}
+} 
+
+/*
+ * Invalidate the MMU [hardware] tables (for current task?)
+ */
+void
+flush_cache_page(struct vm_area_struct *vma, long va)
+{
+	int i, j, flags;
+	unsigned long address;
+	pgd_t *pgd;
+	pte_t *_pte;
+	static long _invalidates;
+	struct mm_struct *mm = vma->vm_mm;
+#ifdef SHOW_INVALIDATES
+printk("invalidate_page(%x[%x], %x)\n", vma, mm, va);
+#endif
+if (!mm) return;  /* In case VMA lookup fails */	
+	_invalidates++;
+#if 0 /* Unnecessary */
+	_tlbia();  /* Flush TLB entries */
+#endif
+/* Note: this could be MUCH better */
+	pgd = pgd_offset(mm, 0);
+	if (!pgd) return;  /* No map? */
+	address = 0;
+	for (i = 0 ; (i < PTRS_PER_PGD) && (address < KERNELBASE); i++)
+	{
+		if (*(long *)pgd)
+		{
+			/* I know there are only two levels, but the macros don't */
+			_pte = pte_offset(pmd_offset(pgd,0),0);
+			if (_pte)
+			{
+				for (j = 0;  j < PTRS_PER_PTE;  j++)
+				{
+					if ((va == address) && pte_present(*_pte))
+					{
+						flags = MMU_invalidate_page(mm, address, 0);
+						((pte *)_pte)->flags |= flags;
+					}
+					_pte++;
+					address += PAGE_SIZE;
+				}
+			} else
+			{
+				address += PAGE_SIZE*PTRS_PER_PTE;
+			}
+		} else
+		{
+			address += PAGE_SIZE*PTRS_PER_PTE;
+		}
+		pgd++;
+	}
+} 
+
+/*
+ * Invalidate the MMU [hardware] tables (for current task?)
+ */
+void
+flush_cache_range(struct mm_struct *mm, unsigned long va_start, unsigned long va_end)
+{
+	int i, j, flags;
+	unsigned long address;
+	pgd_t *pgd;
+	pte_t *_pte;
+	static long _invalidates;
+#ifdef SHOW_INVALIDATES
+printk("invalidate_range(%x, %x, %x)\n", mm, va_start, va_end);
+#endif
+if (!mm) return;	
+	_invalidates++;
+#if 0 /* Unnecessary */
+	_tlbia();  /* Flush TLB entries */
+#endif
+/* Note: this could be MUCH better */
+	pgd = pgd_offset(mm, 0);
+	if (!pgd) return;  /* No map? */
+	address = 0;
+	for (i = 0 ; (i < PTRS_PER_PGD) && (address < KERNELBASE); i++)
+	{
+		if (*(long *)pgd)
+		{
+			/* I know there are only two levels, but the macros don't */
+			_pte = pte_offset(pmd_offset(pgd,0),0);
+			if (_pte)
+			{
+				for (j = 0;  j < PTRS_PER_PTE;  j++)
+				{
+					if ((va_start <= address) && (va_end > address) && pte_present(*_pte))
+					{
+						flags = MMU_invalidate_page(mm, address, 0);
+						((pte *)_pte)->flags |= flags;
+					}
+					_pte++;
+					address += PAGE_SIZE;
+				}
+			} else
+			{
+				address += PAGE_SIZE*PTRS_PER_PTE;
+			}
+		} else
+		{
+			address += PAGE_SIZE*PTRS_PER_PTE;
+		}
+		pgd++;
+	}
 } 
 
 void
@@ -766,4 +985,57 @@ cache_mode(char *str, int *ints)
 	cache_is_copyback = ints[0];
 }
 
+_verify_addr(long va)
+{
+	int hash, page_index, segment, i, h, _h, api, vsid, perms;
+	struct thread_struct *tss = &current->tss;
+	PTE *_pte, *empty, *slot;
+	PTE *slot0, *slot1;
+	page_index = ((int)va & 0x0FFFF000) >> 12;
+	segment = (unsigned int)va >> 28;
+	api = page_index >> 10;
+	vsid = ((SEGREG *)tss->segs)[segment].vsid;
+	empty = slot = (PTE *)NULL;
+	printk("Segment = %x/%x\n", *(long *)&tss->segs[segment], _get_SRx(segment));
+	for (_h = 0;  _h < 2;  _h++)
+	{
+		hash = page_index ^ vsid;		
+		if (_h)
+		{
+			hash = ~hash;  /* Secondary hash uses ones-complement */
+		}
+		hash &= 0x3FF | (Hash_mask << 10);
+		hash *= 8;  /* Eight entries / hash bucket */
+		_pte = &Hash[hash];
+		dump_buf(_pte, 64);
+		for (i = 0;  i < 8;  i++, _pte++)
+		{
+			if (_pte->v && _pte->vsid == vsid && _pte->h == _h && _pte->api == api)
+			{ /* Found it! */
+				h = _h;
+				slot = _pte;
+				printk("Found at %x\n", slot);
+				goto found_it;
+			}
+			if ((empty == (PTE *)NULL) && !_pte->v)
+			{
+				h = _h;
+				empty = _pte;
+			}
+		}
+	}
+found_it:	
+	cnpause();
+}
 
+flush_cache_all()
+{
+	printk("flush_cache_all()\n");
+	invalidate();
+}
+
+flush_tlb_all() {}
+flush_tlb_mm() {}
+flush_tlb_page() {}
+flush_tlb_range() {}
+flush_page_to_ram() {}

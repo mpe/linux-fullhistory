@@ -111,6 +111,7 @@
 #define _PAGE_ACCESSED	0x020
 #define _PAGE_DIRTY	0x040
 #define _PAGE_COW	0x200	/* implemented in software (one of the AVL bits) */
+#define _PAGE_NO_CACHE	0x400
 
 #define _PAGE_TABLE	(_PAGE_PRESENT | _PAGE_RW | _PAGE_USER | _PAGE_ACCESSED | _PAGE_DIRTY)
 #define _PAGE_CHG_MASK	(PAGE_MASK | _PAGE_ACCESSED | _PAGE_DIRTY)
@@ -120,6 +121,7 @@
 #define PAGE_COPY	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_ACCESSED | _PAGE_COW)
 #define PAGE_READONLY	__pgprot(_PAGE_PRESENT | _PAGE_USER | _PAGE_ACCESSED)
 #define PAGE_KERNEL	__pgprot(_PAGE_PRESENT | _PAGE_RW | _PAGE_DIRTY | _PAGE_ACCESSED)
+#define PAGE_KERNEL_NO_CACHE	__pgprot(_PAGE_NO_CACHE | _PAGE_PRESENT | _PAGE_RW | _PAGE_DIRTY | _PAGE_ACCESSED)
 
 /*
  * The i386 can't do page protection for execute, and considers that the same are read.
@@ -142,6 +144,28 @@
 #define __S101	PAGE_READONLY
 #define __S110	PAGE_SHARED
 #define __S111	PAGE_SHARED
+
+/*
+ * TLB invalidation:
+ *
+ *  - invalidate() invalidates the current mm struct TLBs
+ *  - invalidate_all() invalidates all processes TLBs
+ *  - invalidate_mm(mm) invalidates the specified mm context TLB's
+ *  - invalidate_page(mm, vmaddr) invalidates one page
+ *  - invalidate_range(mm, start, end) invalidates a range of pages
+ *
+ * FIXME: This could be done much better!
+ */
+
+#define invalidate_all() printk("invalidate_all()\n");invalidate()
+#if 0
+#define invalidate_mm(mm_struct) \
+do { if ((mm_struct) == current->mm) invalidate(); else printk("Can't invalidate_mm(%x)\n", mm_struct);} while (0)
+#define invalidate_page(mm_struct,addr) \
+do { if ((mm_struct) == current->mm) invalidate(); else printk("Can't invalidate_page(%x,%x)\n", mm_struct, addr);} while (0)
+#define invalidate_range(mm_struct,start,end) \
+do { if ((mm_struct) == current->mm) invalidate(); else printk("Can't invalidate_range(%x,%x,%x)\n", mm_struct, start, end);} while (0)
+#endif
 
 /*
  * Define this if things work differently on a i386 and a i486:
@@ -198,14 +222,18 @@ extern unsigned long high_memory;
 
 extern inline int pte_none(pte_t pte)		{ return !pte_val(pte); }
 extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & _PAGE_PRESENT; }
+#if 0
 extern inline int pte_inuse(pte_t *ptep)	{ return mem_map[MAP_NR(ptep)].reserved; }
 /*extern inline int pte_inuse(pte_t *ptep)	{ return mem_map[MAP_NR(ptep)] != 1; }*/
+#endif
 extern inline void pte_clear(pte_t *ptep)	{ pte_val(*ptep) = 0; }
+#if 0
 extern inline void pte_reuse(pte_t * ptep)
 {
 	if (!mem_map[MAP_NR(ptep)].reserved)
 		mem_map[MAP_NR(ptep)].count++;
 }
+#endif
 /*
    extern inline void pte_reuse(pte_t * ptep)
 {
@@ -228,8 +256,10 @@ extern inline void pmd_reuse(pmd_t * pmdp)	{ }
 extern inline int pgd_none(pgd_t pgd)		{ return 0; }
 extern inline int pgd_bad(pgd_t pgd)		{ return 0; }
 extern inline int pgd_present(pgd_t pgd)	{ return 1; }
+#if 0
 /*extern inline int pgd_inuse(pgd_t * pgdp)	{ return mem_map[MAP_NR(pgdp)] != 1; }*/
 extern inline int pgd_inuse(pgd_t *pgdp)	{ return mem_map[MAP_NR(pgdp)].reserved;  }
+#endif
 extern inline void pgd_clear(pgd_t * pgdp)	{ }
 
 /*
@@ -310,7 +340,6 @@ extern inline pte_t * pte_offset(pmd_t * dir, unsigned long address)
  */
 extern inline void pte_free_kernel(pte_t * pte)
 {
-	mem_map[MAP_NR(pte)].reserved = 1;
 	free_page((unsigned long) pte);
 }
 /*extern inline void pte_free_kernel(pte_t * pte)
@@ -391,7 +420,6 @@ extern inline pte_t * pte_alloc_kernel(pmd_t * pmd, unsigned long address)
 			if (page) {
 /*                                pmd_set(pmd,page);*/
 			pmd_val(*pmd) = _PAGE_TABLE | (unsigned long) page;
-				mem_map[MAP_NR(page)].reserved = 1;
 				return page + address;
 			}
 /*			pmd_set(pmd, BAD_PAGETABLE);*/

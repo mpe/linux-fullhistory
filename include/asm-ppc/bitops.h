@@ -22,7 +22,6 @@
 typedef unsigned long BITFIELD;
 
 extern __inline__ int set_bit(int nr, void * add)
-/*extern __inline__ int set_bit(int nr, BITFIELD * addr)*/
 {
        int	mask, oldbit;
   BITFIELD *addr = add;
@@ -38,8 +37,6 @@ extern __inline__ int set_bit(int nr, void * add)
 	return oldbit;
 }
 
-
-/*extern __inline__ int change_bit(int nr, BITFIELD *addr)*/
 extern __inline__ int change_bit(int nr, void *add)
 {
   	BITFIELD *addr = add;
@@ -53,8 +50,6 @@ extern __inline__ int change_bit(int nr, void *add)
 	return retval;
 }
 
-
-/*extern __inline__ int clear_bit(int nr, BITFIELD *addr2)*/
 extern __inline__ int clear_bit(int nr, void *add)
 {
         BITFIELD *addr = add;
@@ -69,7 +64,6 @@ extern __inline__ int clear_bit(int nr, void *add)
 }
 
 extern __inline__ int test_bit(int nr, void *add)
-/*extern __inline__ int test_bit(int nr, BITFIELD *addr)*/
 {
 	int	mask;
 	BITFIELD *addr = add;
@@ -78,7 +72,59 @@ extern __inline__ int test_bit(int nr, void *add)
 	mask = BIT(nr);
 	return ((mask & *addr) != 0);
 }
+#if 0
+extern __inline__ int find_first_zero_bit(void *add, int len)
+{
+	int	mask, nr, i;
+	BITFIELD *addr = add;
+	nr = 0;
+	while (len)
+	{
+		if (~*addr != 0)
+		{ /* Contains at least one zero */
+			for (i = 0;  i < 32;  i++, nr++)
+			{
+				mask = BIT(nr);
+				if ((mask & *addr) == 0)
+				{
+					return (nr);
+				}
+			}
+		}
+		len -= 32;
+		addr++;
+		nr += 32;
+	}
+	return (0);  /* Shouldn't happen */
+}
 
+extern __inline__ int find_next_zero_bit(void *add, int len, int nr)
+{
+	int	mask, i;
+	BITFIELD *addr = add;
+	addr += nr >> 5;
+	len -= nr;
+	while (len)
+	{
+		if (*addr != 0xFFFFFFFF)
+		{ /* Contains at least one zero */
+			for (i = 0;  i < 32;  i++, nr++)
+			{
+				mask = BIT(nr);
+				if ((mask & *addr) == 0)
+				{
+printk("Bit: %d(%d), Pat: %x\n", nr, nr&0x1F, *addr);					
+					return (nr);
+				}
+			}
+		}
+		len -= 32;
+		addr++;
+		nr += 32;
+	}
+	return (0);  /* Shouldn't happen */
+}
+#endif
 #endif /* _ASM_PPC_BITOPS_H */
 
 

@@ -565,7 +565,7 @@ return (0);
 
 
    /*
-    *    (Unb)Blank the screen
+    *    (Un)Blank the screen
     */
 
 void Cyber_blank(int blank)
@@ -663,7 +663,7 @@ Cyber_WaitQueue (0x8000);
 }
 
 /**************************************************************
- * Rectange Fill Solid
+ * Rectangle Fill Solid
  */
 void Cyber_RectFill (u_short x, u_short y, u_short width, u_short height,
                      u_short mode, u_short color)

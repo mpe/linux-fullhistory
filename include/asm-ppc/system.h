@@ -19,7 +19,7 @@ extern void _enable_interrupts(int);
 extern void bzero(void *, int);
 
 struct task_struct;
-extern void switch_to(struct task_struct *);
+extern void switch_to(struct task_struct *prev, struct task_struct *next);
 
 #define save_flags(flags) __save_flags(&(flags))
 #define restore_flags(flags) __restore_flags(flags)
