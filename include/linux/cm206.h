@@ -3,20 +3,23 @@
 */
 
 /* First, the cm260 stuff */
-/* The ports and irq used. If it is not defined, make it variable, 
-   and initialize them at some reasonable value */
+/* The ports and irq used. Although CM206_BASE and CM206_IRQ are defined
+   below, the values are not used unless autoprobing is turned off and 
+   no LILO boot options or module command line options are given. Change
+   these values to your own as last resort if autoprobing and options
+   don't work. */
 
 #define CM206_BASE 0x340
 #define CM206_IRQ 11
 
-#define r_data_status (CM206_BASE)
-#define r_uart_receive (CM206_BASE+0x2)
-#define r_fifo_output_buffer (CM206_BASE+0x4)
-#define r_line_status (CM206_BASE+0x6)
-#define r_data_control (CM206_BASE+0x8)
-#define r_uart_transmit (CM206_BASE+0xa)
-#define r_test_clock (CM206_BASE+0xc)
-#define r_test_control (CM206_BASE+0xe)
+#define r_data_status (cm206_base)
+#define r_uart_receive (cm206_base+0x2)
+#define r_fifo_output_buffer (cm206_base+0x4)
+#define r_line_status (cm206_base+0x6)
+#define r_data_control (cm206_base+0x8)
+#define r_uart_transmit (cm206_base+0xa)
+#define r_test_clock (cm206_base+0xc)
+#define r_test_control (cm206_base+0xe)
 
 /* the data_status flags */
 #define ds_ram_size 0x4000
@@ -123,4 +126,3 @@
 
 #define CM206CTL_GET_STAT 0x2000
 #define CM206CTL_GET_LAST_STAT 0x2001
-#define CM206_RESET_DRIVE 0x2002 /* use with care */

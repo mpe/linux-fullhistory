@@ -192,6 +192,8 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->state = TASK_UNINTERRUPTIBLE;
 	p->flags &= ~(PF_PTRACED|PF_TRACESYS);
 	p->pid = last_pid;
+	p->next_run = NULL;
+	p->prev_run = NULL;
 	p->p_pptr = p->p_opptr = current;
 	p->p_cptr = NULL;
 	p->signal = 0;

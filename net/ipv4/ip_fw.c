@@ -1483,7 +1483,7 @@ int ip_msqhst_procinfo(char *buffer, char **start, off_t offset, int length)
 		int timer_active = del_timer(&ms->timer);
 		if (!timer_active)
 			ms->timer.expires = 0;
-		len+=sprintf(buffer+len,"%s %08lX:%04X %08lX:%04X %04X %08lX %5d %lu\n",
+		len+=sprintf(buffer+len,"%s %08lX:%04X %08lX:%04X %04X %08X %5d %lu\n",
 			strProt[ms->protocol==IPPROTO_TCP],
 			ntohl(ms->src),ntohs(ms->sport),
 			ntohl(ms->dst),ntohs(ms->dport),

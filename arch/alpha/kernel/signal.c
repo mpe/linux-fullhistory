@@ -214,6 +214,9 @@ asmlinkage int do_signal(unsigned long oldmask,
 	unsigned long pc = 0;
 	unsigned long signr;
 	struct sigaction * sa;
+	extern ptrace_cancel_bpt (struct task_struct *child);
+
+	ptrace_cancel_bpt(current);	/* make sure single-step bpt is gone */
 
 	while ((signr = current->signal & mask) != 0) {
 		signr = ffz(~signr);

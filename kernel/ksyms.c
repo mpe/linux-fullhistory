@@ -386,9 +386,6 @@ struct symbol_table symbol_table = {
  	X(dispatch_scsi_info_ptr),
 	X(generic_proc_info),
  	X(scsi_devices),
- 	X(free_pages),
-    	X(print_msg),
-	X(print_status),
 	X(gendisk_head), /* Needed for sd.c */
 	X(resetup_one_dev), /* Needed for sd.c */
 #else

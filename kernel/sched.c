@@ -92,32 +92,77 @@ struct task_struct * task[NR_TASKS] = {&init_task, };
 
 struct kernel_stat kstat = { 0 };
 
+static inline void add_to_runqueue(struct task_struct * p)
+{
+#if 1	/* sanity tests */
+	if (p->next_run || p->prev_run) {
+		printk("task already on run-queue\n");
+		return;
+	}
+#endif
+	if (p->counter > current->counter + 3)
+		need_resched = 1;
+	nr_running++;
+	(p->next_run = init_task.next_run)->prev_run = p;
+	p->prev_run = &init_task;
+	init_task.next_run = p;
+}
+
+static inline void del_from_runqueue(struct task_struct * p)
+{
+	struct task_struct *next = p->next_run;
+	struct task_struct *prev = p->prev_run;
+
+#if 1	/* sanity tests */
+	if (!next || !prev) {
+		printk("task not on run-queue\n");
+		return;
+	}
+#endif
+	if (p == &init_task) {
+		printk("idle task may not sleep\n");
+		return;
+	}
+	nr_running--;
+	next->prev_run = prev;
+	prev->next_run = next;
+	p->next_run = NULL;
+	p->prev_run = NULL;
+}
+
 /*
  * Wake up a process. Put it on the run-queue if it's not
  * already there.  The "current" process is always on the
- * run-queue, and as such you're allowed to do the simpler
+ * run-queue (except when the actual re-schedule is in
+ * progress), and as such you're allowed to do the simpler
  * "current->state = TASK_RUNNING" to mark yourself runnable
  * without the overhead of this.
- *
- * (actually, the run-queue isn't implemented yet, so this
- * function is mostly a dummy one)
  */
 inline void wake_up_process(struct task_struct * p)
 {
-	long oldstate;
+	unsigned long flags;
 
-	oldstate = xchg(&p->state, TASK_RUNNING);
-	/* already on run-queue? */
-	if (oldstate == TASK_RUNNING || p == current)
-		return;
-	if (p->counter > current->counter + 3)
-		need_resched = 1;
+	save_flags(flags);
+	cli();
+	p->state = TASK_RUNNING;
+	if (!p->next_run)
+		add_to_runqueue(p);
+	restore_flags(flags);
+}
+
+static void process_timeout(unsigned long __data)
+{
+	struct task_struct * p = (struct task_struct *) __data;
+
+	p->timeout = 0;
+	wake_up_process(p);
 }
 
 /*
  *  'schedule()' is the scheduler function. It's a very simple and nice
  * scheduler: it's not perfect, but certainly works for most things.
- * The one thing you might take a look at is the signal-handler code here.
+ *
+ * The goto is "interesting".
  *
  *   NOTE!!  Task 0 is the 'idle' task, which gets called when no other
  * tasks can run. It can not be killed, and it cannot sleep. The 'state'
@@ -128,6 +173,7 @@ asmlinkage void schedule(void)
 	int c;
 	struct task_struct * p;
 	struct task_struct * next;
+	unsigned long timeout = 0;
 
 /* check alarm, wake up any interruptible tasks that have got a signal */
 
@@ -137,31 +183,39 @@ asmlinkage void schedule(void)
 	}
 	run_task_queue(&tq_scheduler);
 
-	if (current->state == TASK_INTERRUPTIBLE) {
-		if (current->signal & ~current->blocked)
-			current->state = TASK_RUNNING;
-	}
 	need_resched = 0;
-	nr_running = 0;
+	cli();
+	switch (current->state) {
+		case TASK_INTERRUPTIBLE:
+			if (current->signal & ~current->blocked)
+				goto makerunnable;
+			timeout = current->timeout;
+			if (timeout && (timeout <= jiffies)) {
+				current->timeout = 0;
+				timeout = 0;
+		makerunnable:
+				current->state = TASK_RUNNING;
+				break;
+			}
+		default:
+			del_from_runqueue(current);
+		case TASK_RUNNING:
+	}
+	p = init_task.next_run;
+	sti();
 
+/*
+ * Note! there may appear new tasks on the run-queue during this, as
+ * interrupts are enabled. However, they will be put on front of the
+ * list, so our list starting at "p" is essentially fixed.
+ */
 /* this is the scheduler proper: */
 	c = -1000;
 	next = &init_task;
-	for_each_task(p) {
-		switch (p->state) {
-			case TASK_INTERRUPTIBLE:
-				if (!p->timeout)
-					continue;
-				if (p->timeout > jiffies)
-					continue;
-				p->timeout = 0;
-				p->state = TASK_RUNNING;
-			/* fall through */
-			case TASK_RUNNING:
-				nr_running++;
-				if (p->counter > c)
-					c = p->counter, next = p;
-		}
+	while (p != &init_task) {
+		if (p->counter > c)
+			c = p->counter, next = p;
+		p = p->next_run;
 	}
 
 	/* if all runnable processes have "counter == 0", re-calculate counters */
@@ -169,10 +223,21 @@ asmlinkage void schedule(void)
 		for_each_task(p)
 			p->counter = (p->counter >> 1) + p->priority;
 	}
-	if (current == next)
-		return;
-	kstat.context_swtch++;
-	switch_to(next);
+	if (current != next) {
+		struct timer_list timer;
+
+		kstat.context_swtch++;
+		if (timeout) {
+			init_timer(&timer);
+			timer.expires = timeout - jiffies;
+			timer.data = (unsigned long) current;
+			timer.function = process_timeout;
+			add_timer(&timer);
+		}
+		switch_to(next);
+		if (timeout)
+			del_timer(&timer);
+	}
 }
 
 asmlinkage int sys_pause(void)

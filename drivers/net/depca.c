@@ -817,7 +817,7 @@ depca_start_xmit(struct sk_buff *skb, struct device *dev)
   /* Transmitter timeout, serious problems. */
   if (dev->tbusy) {
     int tickssofar = jiffies - dev->trans_start;
-    if (tickssofar < 100) {
+    if (tickssofar < 1*HZ) {
       status = -1;
     } else {
       printk("%s: transmit timed out, status %04x, resetting.\n",

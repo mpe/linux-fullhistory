@@ -6,7 +6,8 @@ cm206 in combination with the cm260 host adapter card.
 Features as of version 0.33
 ---------------------------
 - Full audio support, that is, both  workman, workbone and cdp work
-  now reasonably. Reading TOC still takes some time. 
+  now reasonably. Reading TOC still takes some time. xmcd has been
+  reported to run successfully. 
 - Made auto-probe code a little better, i hope
 
 Features as of version 0.28
@@ -41,12 +42,6 @@ options:
    autoprobing, which is the default. In that case you can move on to
    the next step.
 
-   If autoprobing does not work, you can hard-wire the default values
-   of the base port address (CM206_BASE) and interrupt request line
-   (CM206_IRQ) into the file ./linux/drivers/block/cm206.c. Uncomment
-   the defines of CM206_IRQ and CM206_BASE, and change there meaning
-   to the appropriate values, if necessary.
-
 Compiling the kernel
 --------------------
 1) move to /usr/src/linux and do a 
@@ -54,14 +49,14 @@ Compiling the kernel
 	make config
 
    If you have chosen for option (a), answer yes to CONFIG_CM206 and
-   CONFIG_ISO9660_FS (should be default).
+   CONFIG_ISO9660_FS.
 
    If you have chosen for option (b), answer yes to CONFIG_MODVERSIONS
    and no (!) to CONFIG_CM206 and CONFIG_ISO9660_FS. 
 
 2) then do a 
 	
-	make dep; make zImage; make modules
+	make dep; make clean; make zImage; make modules
 
 3) do the usual things to install a new image (backup the old one, run
    `rdev -R zImage 1', copy the new image in place, run lilo).  Might
@@ -82,8 +77,10 @@ line to be used, e.g.
 
 	insmod /usr/src/linux/modules/cm206.o cm206=0x300,11
 
-You may also have to install the file-system module `iso9660.o', if you
-didn't compile that into the kernel. If you use `tcsh' as shell, you
+The order of base port and irq line don't matter; you may specify only
+one, the other will have the value of the compiled-in default.  You
+may also have to install the file-system module `iso9660.o', if you
+didn't compile that into the kernel. (If you use `tcsh' as shell, you
 might consider defining
 
 	alias listinstalledmodules 'cat /proc/modules | awk \{print\$1\}'
@@ -92,7 +89,7 @@ might consider defining
 	alias insmod		'insmod /usr/src/linux/modules/\!:1 \!:2*'
 	complete insmod		'p/1/`listcompiledmodules`/'
 
-which makes typing insmod and rmmod somewhat easier. 
+which makes typing insmod and rmmod somewhat easier.)
 
 Using the driver as part of the kernel
 --------------------------------------
@@ -105,6 +102,15 @@ This assumes that your linux kernel image keyword is `linux'.
 If you may specify either IRQ (3--11) or base port (0x300--0x370),
 auto probing is turned off for both settings, thus setting the 
 other value to the compiled-in default.
+
+If module parameters and LILO config options don't work
+-------------------------------------------------------
+If autoprobing does not work, you can hard-wire the default values
+of the base port address (CM206_BASE) and interrupt request line
+(CM206_IRQ) into the file ./include/linux/cm206.h. Change
+the defines of CM206_IRQ and CM206_BASE.
+
+
 
 Mounting the cdrom
 ------------------

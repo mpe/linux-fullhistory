@@ -757,7 +757,7 @@ void scan_scsis (struct Scsi_Host * shpnt, unchar hardcoded,
     if(SDpnt != NULL)
 	scsi_init_free((char *) SDpnt, sizeof(Scsi_Device));
     
-    if(SDpnt != NULL)
+    if(SCpnt != NULL)
 	scsi_init_free((char *) SCpnt, sizeof(Scsi_Cmnd));
     
     /* If we allocated a buffer so we could do DMA, free it now */

@@ -1,7 +1,7 @@
                        Readme-File README.aztcd
    for Aztech CD-ROM CDA268-01A, ORCHID CD-3110, OKANO/WEARNES CDD110 
                           CD-ROM  Driver 
-                       Version 1.2 and newer
+                       Version 1.4 and newer
                    (for other drives see 6.-8.)
 
 NOTE: THIS DRIVER WILL WORK WITH THE CD-ROM DRIVES LISTED, WHICH HAVE
@@ -104,6 +104,8 @@ filesystem, you have to recompile your kernel:
   have to set up. If you have a soundcard, read chapter 4.2.
   Users of other drives should read chapter OTHER DRIVES of this file.
   You also can configure that address by LILO boot parameter aztcd=... 
+- There are some other points, which may be configured, e.g. auto-eject the
+  CD when umounting a drive, tray locking etc., see aztcd.h for details.
 - Build a new kernel, configure it for 'Aztech/Orchid/Okano/Wearnes support' 
   (if you want aztcd to be part of the kernel). Do not configure it for
   'Aztech... support', if you want to use aztcd as a run time loadable module. 
@@ -139,7 +141,9 @@ the source kernel version, from which you create the modules. So rebuild your
 kernel, if necessary. 
 
 Now edit the base address of your AZTECH interface card in
-/usr/src/linux/include/linux/aztcd.h to the appropriate value. Then change
+/usr/src/linux/include/linux/aztcd.h to the appropriate value. There are
+also some special features which may be configured, e.g. auto-eject a CD
+when unmounting the drive etc; see aztcd.h for details. Then change
 to /usr/src/linux and do a 
                     make modules  
 	            make modules_install
@@ -175,11 +179,12 @@ configured and mail me (see 6.) the appropriate information.
 
 5. KNOWN PROBLEMS, FUTURE DEVELOPMENTS
 5.1 MULTISESSION SUPPORT
-The driver does not support applications such as photo CD, multi session CD
-etc.. I do not plan to include the support for that in the driver, because I
-do not use such applications. If you are interested in that stuff and would
-like to extend the drivers capability on your own, please contact me, I'll
-support you as far as I can. 
+I have now (July 1995) started support of multisession CDs. Unfortunately I
+do neither have a multisession CD nor use appropriate applications, so I can
+program, but will not test it :-(. If you'd like to help me, please contact
+me. As of version 1.4 you can enable the multisession support in aztcd.h by
+setting AZT_MULTISESSION to 1. As I have not tested it, I don't know, if it
+works ...
 
 5.2 STATUS RECOGNITION
 The drive status recognition does not work correctly in all cases. Changing
@@ -210,7 +215,10 @@ might hang for some 30sec. So be patient, when using dosemu's CD-ROM support
 in combination with aztcd :-) ! Unfortunately up to now, I could not locate
 the root cause of that problem. It seems to be somewhere in the interaction
 of the kernel with dosemu's and aztcd's buffers. I appreciate any help on
-this subject !
+this subject ! 
+This problem has now (July 1995) been fixed by a modification to dosemu's
+CD-ROM driver, but it is unclear, with which version of dosemu this modi-
+fication will officially be included.
 
 6. BUG REPORTS
 Please send detailed bug reports and bug fixes via EMail to

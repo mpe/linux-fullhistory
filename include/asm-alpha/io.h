@@ -77,7 +77,7 @@ extern void _outl (unsigned int l,unsigned long port);
 # define outl(l,p) _outl((l),(p))
 #endif
 
-#endif /* __KERNEL__ */
+#endif /* !__KERNEL__ */
 
 /*
  * There are different version of the alpha motherboards: the
@@ -89,6 +89,8 @@ extern void _outl (unsigned int l,unsigned long port);
 #else
 #include <asm/jensen.h>
 #endif
+
+#ifdef __KERNEL__
 
 /*
  * String version of IO memory access ops:
@@ -122,5 +124,7 @@ extern void outsl (unsigned long port, void *dst, unsigned long count);
 #define memset_io(addr,c,len)		(memset_io)((unsigned long)(addr),(c),(len))
 #define memcpy_fromio(to,from,len)	(memcpy_fromio)((to),(unsigned long)(from),(len))
 #define memcpy_toio(to,from,len)	(memcpy_toio)((unsigned long)(to),(from),(len))
+
+#endif /* __KERNEL__ */
 
 #endif

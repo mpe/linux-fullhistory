@@ -167,7 +167,7 @@ static char *sg_malloc(int size)
     if (size<=4096)
 	return (char *) scsi_malloc(size);
 #ifdef SG_BIG_BUFF
-    if (size<SG_BIG_BUFF)
+    if (size<=SG_BIG_BUFF)
     {
 	while(big_inuse)
 	{

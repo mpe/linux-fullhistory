@@ -18,9 +18,6 @@
  * along with this program; see the file COPYING.  If not, write to
  * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * An alternate version of this driver with a BSD-style copyright can
- * be found on XXX.    
- *
  * Comments are started by `#' and continue to the end of the line; lines
  * may be of the form:
  *      <label>*

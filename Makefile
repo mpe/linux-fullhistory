@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 11
+SUBLEVEL = 12
 
 ARCH = i386
 
@@ -239,10 +239,8 @@ mrproper: clean
 	rm -f .version .config* config.in config.old
 	rm -f include/asm
 	rm -f .depend `find . -name .depend -print`
-ifdef CONFIG_MODVERSIONS
 	rm -f $(TOPDIR)/include/linux/modversions.h
 	rm -f $(TOPDIR)/include/linux/modules/*
-endif
 
 distclean: mrproper
 	rm -f core `find . -name '*.orig' -print`

@@ -85,6 +85,8 @@
  *	Dave Bonn,Alan Cox	:	Faster IP forwarding whenever possible.
  *		Alan Cox	:	Memory leaks, tramples, misc debugging.
  *		Alan Cox	:	Fixed multicast (by popular demand 8))
+ *		Alan Cox	:	Fixed forwarding (by even more popular demand 8))
+ *		Alan Cox	:	Fixed SNMP statistics [I think]
  *
  *  
  *
@@ -153,7 +155,7 @@ extern void sort_send(struct sock *sk);
 #ifdef CONFIG_IP_FORWARD
 struct ip_mib ip_statistics={1,64,};	/* Forwarding=Yes, Default TTL=64 */
 #else
-struct ip_mib ip_statistics={0,64,};	/* Forwarding=No, Default TTL=64 */
+struct ip_mib ip_statistics={2,64,};	/* Forwarding=No, Default TTL=64 */
 #endif
 
 /*
@@ -1139,7 +1141,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned lo
 	 */
 
 	dev2 = rt->rt_dev;
-
+	
 	/*
 	 *	In IP you never have to forward a frame on the interface that it 
 	 *	arrived upon. We now generate an ICMP HOST REDIRECT giving the route
@@ -1165,33 +1167,35 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned lo
 		if (!(is_frag&4) && fw_res==2)
 			ip_fw_masquerade(&skb, dev2);
 #endif
+		IS_SKB(skb);
 
 		if(skb_headroom(skb)<dev2->hard_header_len)
+		{
 			skb2 = alloc_skb(dev2->hard_header_len + skb->len + 15, GFP_ATOMIC);
-		else skb2=skb;
+			IS_SKB(skb2);
 		
-		/*
-		 *	This is rare and since IP is tolerant of network failures
-		 *	quite harmless.
-		 */
+			/*
+			 *	This is rare and since IP is tolerant of network failures
+			 *	quite harmless.
+			 */
 		
-		if (skb2 == NULL)
-		{
-			NETDEBUG(printk("\nIP: No memory available for IP forward\n"));
-			return -1;
-		}
+			if (skb2 == NULL)
+			{
+				NETDEBUG(printk("\nIP: No memory available for IP forward\n"));
+				return -1;
+			}
 		
+			/*
+			 *	Add the physical headers.
+			 */
 
-		/* Now build the MAC header. */
-		(void) ip_send(skb2, raddr, skb->len, dev2, dev2->pa_addr);
+		 	ip_send(skb2,raddr,skb->len,dev2,dev2->pa_addr);
 
-		/*
-		 *	We have to copy the bytes over as the new header wouldn't fit
-		 *	the old buffer. This should be very rare.
-		 */
-		 
-		if(skb2!=skb)
-		{
+			/*
+			 *	We have to copy the bytes over as the new header wouldn't fit
+			 *	the old buffer. This should be very rare.
+			 */		 
+		 	
 			ptr = skb_put(skb2,skb->len);
 			skb2->free = 1;
 			skb2->h.raw = ptr;
@@ -1201,9 +1205,23 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag, unsigned lo
 			 */
 			memcpy(ptr, skb->h.raw, skb->len);
 		}
+		else
+		{
+			/* 
+			 *	Build a new MAC header. 
+			 */
 
-		ip_statistics.IpForwDatagrams++;
-
+			skb2 = skb;		
+			skb2->dev=dev2;
+			skb->arp=1;
+			skb->raddr=raddr;
+			if(dev2->hard_header)
+			{
+				if(dev2->hard_header(skb, dev2, ETH_P_IP, NULL, NULL, skb->len)<0)
+					skb->arp=0;
+			}
+			ip_statistics.IpForwDatagrams++;
+		}
 		/*
 		 *	See if it needs fragmenting. Note in ip_rcv we tagged
 		 *	the fragment type. This must be right so that
@@ -2347,6 +2365,7 @@ int ip_build_xmit(struct sock *sk,
 	struct iphdr *iph;
 	int local=0;
 	struct device *dev;
+	int nfrags=0;
 	
 	ip_statistics.IpOutRequests++;
 
@@ -2437,7 +2456,10 @@ int ip_build_xmit(struct sock *sk,
 		int error;
 		struct sk_buff *skb=sock_alloc_send_skb(sk, length+20+15+dev->hard_header_len,0,&error);
 		if(skb==NULL)
+		{
+			ip_statistics.IpOutDiscards++;
 			return error;
+		}
 		skb->dev=dev;
 		skb->free=1;
 		skb->when=jiffies;
@@ -2555,8 +2577,13 @@ int ip_build_xmit(struct sock *sk,
 
 		skb = sock_alloc_send_skb(sk, fraglen+15, 0, &error);
 		if (skb == NULL)
+		{
+			ip_statistics.IpOutDiscards++;
+			if(nfrags>1)
+				ip_statistics.IpFragCreates++;			
 			return(error);
-
+		}
+		
 		/*
 		 *	Fill in the control structures
 		 */
@@ -2689,6 +2716,9 @@ int ip_build_xmit(struct sock *sk,
 				kfree_skb(skb, FREE_READ);
 		}
 #endif
+
+		nfrags++;
+		
 		/*
 		 *	BSD loops broadcasts
 		 */
@@ -2715,12 +2745,15 @@ int ip_build_xmit(struct sock *sk,
 			 */
 			 
 			ip_statistics.IpOutDiscards++;
+			if(nfrags>1)
+				ip_statistics.IpFragCreates+=nfrags;
 			kfree_skb(skb, FREE_WRITE);
 			return(0); /* lose rest of fragments */
 		}
 	} 
 	while (offset >= 0);
-	
+	if(nfrags>1)
+		ip_statistics.IpFragCreates+=nfrags;
 	return(0);
 }
     

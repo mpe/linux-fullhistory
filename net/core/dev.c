@@ -172,6 +172,7 @@ void dev_remove_pack(struct packet_type *pt)
 			return;
 		}
 	}
+	printk("dev_remove_pack: %p not found.\n", pt);
 }
 
 /*****************************************************************************************

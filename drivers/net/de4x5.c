@@ -213,7 +213,7 @@ static s32 de4x5_full_duplex = 0;
 #define MIN_DAT_SZ   	1               /* Minimum ethernet data length */
 #define PKT_HDR_LEN     14              /* Addresses and data length info */
 #define FAKE_FRAME_LEN  (MAX_PKT_SZ + 1)
-#define QUEUE_PKT_TIMEOUT (300)         /* Jiffies */
+#define QUEUE_PKT_TIMEOUT (3*HZ)        /* 3 second timeout */
 
 
 #define CRC_POLYNOMIAL_BE 0x04c11db7UL   /* Ethernet CRC, big endian */
@@ -916,7 +916,7 @@ de4x5_init(struct device *dev)
   outl(omr|OMR_ST, DE4X5_OMR);
 
   /* Poll for completion of setup frame (interrupts are disabled for now) */
-  for (j=0, i=jiffies;(i==jiffies) && (j==0);) {
+  for (j=0, i=jiffies;(i<=jiffies+HZ/100) && (j==0);) {
     if (lp->tx_ring[lp->tx_new].status >= 0) j=1;
   }
   outl(omr, DE4X5_OMR);                        /* Stop everything! */
@@ -973,7 +973,7 @@ de4x5_queue_pkt(struct sk_buff *skb, struct device *dev)
       status = -1;
     } else {
       if (de4x5_debug >= 1) {
-	printk("%s: transmit timed out, status %08x, tbusy:%d, lostMedia:%d tickssofar:%ld, resetting.\n",dev->name, inl(DE4X5_STS), dev->tbusy, lp->lostMedia, tickssofar);
+	printk("%s: transmit timed out, status %08x, tbusy:%ld, lostMedia:%d tickssofar:%ld, resetting.\n",dev->name, inl(DE4X5_STS), dev->tbusy, lp->lostMedia, tickssofar);
       }
 
       /* Stop and reset the TX and RX... */

@@ -83,7 +83,7 @@ SRCS := $(SRCS) scc.c
 endif
  
 
-all: char.a
+all: uni_hash_tbl.h char.a
 
 char.a: $(OBJS)
 	$(AR) rcs char.a $(OBJS)

@@ -300,10 +300,13 @@ undo_switch_stack:
 entUna:
 	lda $30,-256($30)
 	stq $0,0($30)
+	ldq $0,256($30)		/* get PS */
 	stq $1,8($30)
 	stq $2,16($30)
 	stq $3,24($30)
+	and $0,8,$0		/* user mode? */
 	stq $4,32($30)
+	bne $0,entUnaUser	/* yup -> do user-level unaligned fault */
 	stq $5,40($30)
 	stq $6,48($30)
 	stq $7,56($30)
@@ -363,6 +366,17 @@ entUna:
 	lda $30,256($30)
 	rti
 .end entUna
+
+.align 3
+.ent	entUnaUser
+entUnaUser:
+	ldq $0,0($30)			/* restore original $0 */
+	lda $30,256($30)		/* pop entUna's stack frame */
+	SAVE_ALL			/* setup normal kernel stack */
+	lda $27,do_entUnaUser
+	lda $26,ret_from_sys_call
+	jsr $31,($27),do_entUnaUser
+.end	entUnaUser
 
 .align 3
 .globl	sys_fork

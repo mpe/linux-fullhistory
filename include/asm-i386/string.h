@@ -12,7 +12,8 @@
  *
  *		Copyright (C) 1991, 1992 Linus Torvalds
  */
- 
+
+#define __HAVE_ARCH_STRCPY
 extern inline char * strcpy(char * dest,const char *src)
 {
 __asm__ __volatile__(
@@ -26,6 +27,7 @@ __asm__ __volatile__(
 return dest;
 }
 
+#define __HAVE_ARCH_STRNCPY
 extern inline char * strncpy(char * dest,const char *src,size_t count)
 {
 __asm__ __volatile__(
@@ -44,6 +46,7 @@ __asm__ __volatile__(
 return dest;
 }
 
+#define __HAVE_ARCH_STRCAT
 extern inline char * strcat(char * dest,const char * src)
 {
 __asm__ __volatile__(
@@ -60,6 +63,7 @@ __asm__ __volatile__(
 return dest;
 }
 
+#define __HAVE_ARCH_STRNCAT
 extern inline char * strncat(char * dest,const char * src,size_t count)
 {
 __asm__ __volatile__(
@@ -82,6 +86,7 @@ __asm__ __volatile__(
 return dest;
 }
 
+#define __HAVE_ARCH_STRCMP
 extern inline int strcmp(const char * cs,const char * ct)
 {
 register int __res;
@@ -101,6 +106,7 @@ __asm__ __volatile__(
 return __res;
 }
 
+#define __HAVE_ARCH_STRNCMP
 extern inline int strncmp(const char * cs,const char * ct,size_t count)
 {
 register int __res;
@@ -122,6 +128,7 @@ __asm__ __volatile__(
 return __res;
 }
 
+#define __HAVE_ARCH_STRCHR
 extern inline char * strchr(const char * s, int c)
 {
 register char * __res;
@@ -140,6 +147,7 @@ __asm__ __volatile__(
 return __res;
 }
 
+#define __HAVE_ARCH_STRRCHR
 extern inline char * strrchr(const char * s, int c)
 {
 register char * __res;
@@ -156,6 +164,7 @@ __asm__ __volatile__(
 return __res;
 }
 
+#define __HAVE_ARCH_STRSPN
 extern inline size_t strspn(const char * cs, const char * ct)
 {
 register char * __res;
@@ -181,6 +190,7 @@ __asm__ __volatile__(
 return __res-cs;
 }
 
+#define __HAVE_ARCH_STRCSPN
 extern inline size_t strcspn(const char * cs, const char * ct)
 {
 register char * __res;
@@ -206,6 +216,7 @@ __asm__ __volatile__(
 return __res-cs;
 }
 
+#define __HAVE_ARCH_STRPBRK
 extern inline char * strpbrk(const char * cs,const char * ct)
 {
 register char * __res;
@@ -234,6 +245,7 @@ __asm__ __volatile__(
 return __res;
 }
 
+#define __HAVE_ARCH_STRSTR
 extern inline char * strstr(const char * cs,const char * ct)
 {
 register char * __res;
@@ -262,6 +274,7 @@ __asm__ __volatile__(
 return __res;
 }
 
+#define __HAVE_ARCH_STRLEN
 extern inline size_t strlen(const char * s)
 {
 register int __res;
@@ -277,6 +290,7 @@ return __res;
 
 extern char * ___strtok;
 
+#define __HAVE_ARCH_STRTOK
 extern inline char * strtok(char * s,const char * ct)
 {
 register char * __res;
@@ -395,11 +409,13 @@ __asm__("cld\n\t" \
 #undef COMMON
 }
 
+#define __HAVE_ARCH_MEMCPY
 #define memcpy(t, f, n) \
 (__builtin_constant_p(n) ? \
  __constant_memcpy((t),(f),(n)) : \
  __memcpy((t),(f),(n)))
 
+#define __HAVE_ARCH_MEMMOVE
 extern inline void * memmove(void * dest,const void * src, size_t n)
 {
 if (dest<src)
@@ -426,6 +442,7 @@ return dest;
 
 #define memcmp __builtin_memcmp
 
+#define __HAVE_ARCH_MEMCHR
 extern inline void * memchr(const void * cs,int c,size_t count)
 {
 register void * __res;
@@ -532,6 +549,7 @@ __asm__("cld\n\t" \
  __constant_count_memset((s),(c),(count)) : \
  __memset_generic((s),(c),(count)))
 
+#define __HAVE_ARCH_MEMSET
 #define memset(s, c, count) \
 (__builtin_constant_p(c) ? \
  __constant_c_x_memset((s),(0x01010101UL*(unsigned char)c),(count)) : \
@@ -540,6 +558,7 @@ __asm__("cld\n\t" \
 /*
  * find the first occurrence of byte 'c', or 1 past the area if none
  */
+#define __HAVE_ARCH_MEMSCAN
 extern inline void * memscan(void * addr, int c, size_t size)
 {
 	if (!size)

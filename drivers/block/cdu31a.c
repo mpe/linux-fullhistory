@@ -325,6 +325,11 @@ static char *readahead_buffer = NULL; /* Used for 1024 byte blocksize. */
 static int readahead_dataleft = 0;
 static int readahead_bad = 0;
 
+/* Used to time a short period to abort an operation after the
+   drive has been idle for a while.  This keeps the light on
+   the drive from flashing for very long. */
+static struct timer_list cdu31a_abort_timer;
+
 
 /*
  * This routine returns 1 if the disk has been changed since the last
@@ -1096,6 +1101,14 @@ abort_read(void)
    readahead_bad = 0;
 }
 
+/* Called when the timer times out.  This will abort the
+   pending read operation. */
+static void
+handle_abort_timeout(unsigned long data)
+{
+   abort_read();
+}
+
 /* Actually get data and status from the drive. */
 static void
 input_data(char         *buffer,
@@ -1392,16 +1405,23 @@ do_cdu31a_request(void)
          {
             end_request(0);
          }
+         restore_flags(flags);
          return;
       }
    }
    sony_inuse = 1;
    has_cd_task = current;
-   restore_flags(flags);
+   sti();
 
    /* Get drive status before doing anything. */
    while (handle_sony_cd_attention())
       ;
+
+   /* If the timer is running, cancel it. */
+   if (cdu31a_abort_timer.next != NULL)
+   {
+      del_timer(&cdu31a_abort_timer);
+   }
 
    while (1)
    {
@@ -1573,14 +1593,20 @@ try_read_again:
    }
 
 end_do_cdu31a_request:
-#if 1
+#if 0
    /* After finished, cancel any pending operations. */
    abort_read();
+#else
+   /* Start a timer to time out after a while to disable
+      the read. */
+   cdu31a_abort_timer.expires = 200; /* Wait 2 seconds */
+   add_timer(&cdu31a_abort_timer);
 #endif
 
    has_cd_task = NULL;
    sony_inuse = 0;
    wake_up_interruptible(&sony_wait);
+   restore_flags(flags);
 }
 
 /* Copy overlapping buffers. */
@@ -2969,6 +2995,10 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
       mem_start += CD_FRAMESIZE_RAW;
       sony_toc = (struct s_sony_session_toc *) mem_start;
       mem_start += sizeof(struct s_sony_session_toc);
+
+      cdu31a_abort_timer.next = NULL;
+      cdu31a_abort_timer.prev = NULL;
+      cdu31a_abort_timer.function = handle_abort_timeout;
    }
 
 

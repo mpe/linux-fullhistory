@@ -531,6 +531,12 @@ int ptrace_cancel_bpt(struct task_struct *child)
 	int i, nsaved = child->debugreg[4];
 
 	child->debugreg[4] = 0;
+
+	if (nsaved > 2) {
+	    printk("ptrace_cancel_bpt: bogus nsaved: %d!\n", nsaved);
+	    nsaved = 2;
+	}
+
 	for (i = 0; i < nsaved; ++i) {
 		write_int(child, child->debugreg[i], child->debugreg[i + 2]);
 	}
@@ -550,65 +556,65 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data, int a4,
 	set_success(&regs,0);
 	if (request == PTRACE_TRACEME) {
 		/* are we already being traced? */
-	   if (current->flags & PF_PTRACED) {
-	      set_failure(&regs,-EPERM);
-	      return -EPERM;
-	   }
-	   /* set the ptrace bit in the process flags. */
-	   current->flags |= PF_PTRACED;
-	   return 0;
+		if (current->flags & PF_PTRACED) {
+			set_failure(&regs,-EPERM);
+			return -EPERM;
+		}
+		/* set the ptrace bit in the process flags. */
+		current->flags |= PF_PTRACED;
+		return 0;
 	}
-	if (pid == 1) {
-	   set_failure(&regs,-EPERM);
-	   return -EPERM;
+	if (pid == 1) {		/* you may not mess with init */
+		set_failure(&regs,-EPERM);
+		return -EPERM;
 	}
 	if (!(child = get_task(pid))) {
-	   set_failure(&regs,-ESRCH);
-	   return -ESRCH;
+		set_failure(&regs,-ESRCH);
+		return -ESRCH;
 	}
 	if (request == PTRACE_ATTACH) {
-	   if (child == current) {
-	      set_failure(&regs,-EPERM);
-	      return -EPERM;
-	   }
-	   if ((!child->dumpable ||
-		(current->uid != child->euid) ||
-		(current->uid != child->uid) ||
-		(current->gid != child->egid) ||
-		(current->gid != child->gid)) && !suser()) {
-	      set_failure(&regs,-EPERM);
-	      return -EPERM;
-	   }
-	   /* the same process cannot be attached many times */
-	   if (child->flags & PF_PTRACED) {
-	      set_failure(&regs,-EPERM);
-	      return -EPERM;
-	   }
-	   child->flags |= PF_PTRACED;
-	   if (child->p_pptr != current) {
-	      REMOVE_LINKS(child);
-	      child->p_pptr = current;
-	      SET_LINKS(child);
-	   }
-	   send_sig(SIGSTOP, child, 1);
-	   return 0;
+		if (child == current) {
+			set_failure(&regs,-EPERM);
+			return -EPERM;
+		}
+		if ((!child->dumpable ||
+		     (current->uid != child->euid) ||
+		     (current->uid != child->uid) ||
+		     (current->gid != child->egid) ||
+		     (current->gid != child->gid)) && !suser()) {
+			set_failure(&regs,-EPERM);
+			return -EPERM;
+		}
+		/* the same process cannot be attached many times */
+		if (child->flags & PF_PTRACED) {
+			set_failure(&regs,-EPERM);
+			return -EPERM;
+		}
+		child->flags |= PF_PTRACED;
+		if (child->p_pptr != current) {
+			REMOVE_LINKS(child);
+			child->p_pptr = current;
+			SET_LINKS(child);
+		}
+		send_sig(SIGSTOP, child, 1);
+		return 0;
 	}
 	if (!(child->flags & PF_PTRACED)) {
-	    DBG(DBG_MEM, ("child not traced\n"));
-	    set_failure(&regs,-ESRCH);
-	    return -ESRCH;
+		DBG(DBG_MEM, ("child not traced\n"));
+		set_failure(&regs,-ESRCH);
+		return -ESRCH;
 	}
 	if (child->state != TASK_STOPPED) {
-	   DBG(DBG_MEM, ("child process not stopped\n"));
-	   if (request != PTRACE_KILL) {
-	      set_failure(&regs,-ESRCH);
-	      return -ESRCH;
-	   }
+		DBG(DBG_MEM, ("child process not stopped\n"));
+		if (request != PTRACE_KILL) {
+			set_failure(&regs,-ESRCH);
+			return -ESRCH;
+		}
 	}
 	if (child->p_pptr != current) {
-	   DBG(DBG_MEM, ("child not parent of this process\n"));
-	   set_failure(&regs,-ESRCH);
-	   return -ESRCH;
+		DBG(DBG_MEM, ("child not parent of this process\n"));
+		set_failure(&regs,-ESRCH);
+		return -ESRCH;
 	}
 
 	switch (request) {
@@ -621,12 +627,11 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data, int a4,
 			DBG(DBG_MEM, ("doing request at addr 0x%lx\n",addr));
 			res = read_long(child, addr, &tmp);
 			if (res < 0) {
-			   set_failure(&regs,res);
-			   return res;
-			}
-			else {
-			   set_success(&regs,tmp);
-			   return 0;
+				set_failure(&regs,res);
+				return res;
+			} else {
+				set_success(&regs,tmp);
+				return 0;
 			}
 		}
 
@@ -636,21 +641,20 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data, int a4,
 			unsigned long tmp;
 
 			tmp = 0;  /* Default return condition */
-			if(addr==30) {
-			   /* stack pointer */
-			   tmp=child->tss.usp;
-			}
-			else {
+			if (addr == 30) {
+				/* stack pointer */
+				tmp=child->tss.usp;
+			} else {
 #ifdef DEBUG
-			   int reg=addr;
+				int reg = addr;
 #endif
-			   addr = offset_of_register(addr);
-			   if (addr < 0) {
-			      set_failure(&regs, -EIO);
-			      return -EIO;
-			   }
-			   tmp = get_stack_long(child, addr);
-			   DBG(DBG_MEM, ("%d = reg 0x%lx=tmp\n",reg,tmp));
+				addr = offset_of_register(addr);
+				if (addr < 0) {
+					set_failure(&regs, -EIO);
+					return -EIO;
+				}
+				tmp = get_stack_long(child, addr);
+				DBG(DBG_MEM, ("%d = reg 0x%lx=tmp\n",reg,tmp));
 			}
 			set_success(&regs,tmp);
 			return 0;
@@ -659,34 +663,34 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data, int a4,
       /* when I and D space are separate, this will have to be fixed. */
 		case PTRACE_POKETEXT: /* write the word at location addr. */
 		case PTRACE_POKEDATA: {
-			long res=write_long(child,addr,data);
-			if(res) {
-			   set_failure(&regs,res);
+			long res = write_long(child,addr,data);
+			if (res) {
+				set_failure(&regs,res);
 			}
 			return res;
 		}
 
 		case PTRACE_POKEUSR: /* write the specified register */
-		{
-		   long res;
-		   addr= offset_of_register(addr);
-		   if(addr < 0) {
-		      set_failure(&regs,-EIO);
-		      return -EIO;
-		   }
-		   res=put_stack_long(child,addr,data);
-		   if(res) {
-		      set_failure(&regs,res);
-		   }
-		   return res;
-		}
+		  {
+			  long res;
+			  addr = offset_of_register(addr);
+			  if(addr < 0) {
+				  set_failure(&regs,-EIO);
+				  return -EIO;
+			  }
+			  res = put_stack_long(child, addr, data);
+			  if (res) {
+				  set_failure(&regs,res);
+			  }
+			  return res;
+		  }
 
 		case PTRACE_SYSCALL: /* continue and stop at next 
 					(return from) syscall */
 		case PTRACE_CONT: { /* restart after signal. */
 			if ((unsigned long) data > NSIG) {
-			   set_failure(&regs,-EIO);
-			   return -EIO;
+				set_failure(&regs,-EIO);
+				return -EIO;
 			}
 			if (request == PTRACE_SYSCALL)
 				child->flags |= PF_TRACESYS;
@@ -694,12 +698,13 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data, int a4,
 				child->flags &= ~PF_TRACESYS;
 			child->exit_code = data;
 			wake_up_process(child);
+        /* make sure single-step breakpoint is gone. */
 			ptrace_cancel_bpt(child);
 			set_success(&regs,data);
 			return 0;
 		}
 
- /*
+/*
  * make the child exit.  Best I can do is send it a sigkill. 
  * perhaps it should be put in the status that it wants to 
  * exit.
@@ -707,14 +712,15 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data, int a4,
 		case PTRACE_KILL: {
 			wake_up_process(child);
 			child->exit_code = SIGKILL;
+        /* make sure single-step breakpoint is gone. */
 			ptrace_cancel_bpt(child);
 			return 0;
 		}
 
-		case PTRACE_SINGLESTEP: {  /* set the trap flag. */
+		case PTRACE_SINGLESTEP: {  /* execute signle instruction. */
 			if ((unsigned long) data > NSIG) {
-			   set_failure(&regs,-EIO);
-			   return -EIO;
+				set_failure(&regs,-EIO);
+				return -EIO;
 			}
 			res = set_bpt(child);
 			if (res < 0) {
@@ -723,14 +729,14 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data, int a4,
 			child->flags &= ~PF_TRACESYS;
 			wake_up_process(child);
 			child->exit_code = data;
-			/* give it a chance to run. */
+	/* give it a chance to run. */
 			return 0;
 		}
 
 		case PTRACE_DETACH: { /* detach a process that was attached. */
 			if ((unsigned long) data > NSIG) {
-			   set_failure(&regs,-EIO);
-			   return -EIO;
+				set_failure(&regs,-EIO);
+				return -EIO;
 			}
 			child->flags &= ~(PF_PTRACED|PF_TRACESYS);
 			wake_up_process(child);
@@ -738,17 +744,15 @@ asmlinkage long sys_ptrace(long request, long pid, long addr, long data, int a4,
 			REMOVE_LINKS(child);
 			child->p_pptr = child->p_opptr;
 			SET_LINKS(child);
-			/* make sure the single step bit is not set. */
+        /* make sure single-step breakpoint is gone. */
 			ptrace_cancel_bpt(child);
 			return 0;
 		}
 
 		default:
-		{
-		   set_failure(&regs,-EIO);
-		   return -EIO;
-		}
-	}
+		  set_failure(&regs,-EIO);
+		  return -EIO;
+	  }
 }
 
 asmlinkage void syscall_trace(void)

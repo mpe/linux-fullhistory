@@ -38,11 +38,12 @@ rif_cache rif_table[RIF_TABLE_SIZE]={ NULL, };
 #define RIF_CHECK_INTERVAL 60*HZ
 static struct timer_list rif_timer={ NULL,NULL,RIF_CHECK_INTERVAL,0L,rif_check_expire };
 
-int tr_header(unsigned char *buff, struct device *dev, unsigned short type,
-              void *daddr, void *saddr, unsigned len, struct sk_buff *skb) {
+int tr_header(struct sk_buff *skb, struct device *dev, unsigned short type,
+              void *daddr, void *saddr, unsigned len) 
+{
 
 	struct trh_hdr *trh=(struct trh_hdr *)skb_push(skb,dev->hard_header_len);
-	struct trllc *trllc=(struct trllc *)(buff+sizeof(struct trh_hdr));
+	struct trllc *trllc=(struct trllc *)(trh+1);
 
 	trh->ac=AC;
 	trh->fc=LLC_FRAME;
@@ -91,6 +92,8 @@ unsigned short tr_type_trans(struct sk_buff *skb, struct device *dev) {
 
 	struct trh_hdr *trh=(struct trh_hdr *)skb->data;
 	struct trllc *trllc=(struct trllc *)(skb->data+sizeof(struct trh_hdr));
+	
+	skb->mac.raw = skb->data;
 	
 	skb_pull(skb,dev->hard_header_len);
 	

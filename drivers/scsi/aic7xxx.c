@@ -18,9 +18,6 @@
  * along with this program; see the file COPYING.  If not, write to
  * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
  *
- * An alternate version of this driver with a BSD-style copyright can
- * be found on XXX.
- *
  * Sources include the Adaptec 1740 driver (aha1740.c), the Ultrastor 24F
  * driver (ultrastor.c), various Linux kernel source, the Adaptec EISA
  * config file (!adp7771.cfg), the Adaptec AHA-2740A Series User's Guide,

@@ -118,6 +118,16 @@ extern inline unsigned long xchg_u64(volatile long * m, unsigned long val)
 #define xchg(ptr,x) ((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))
 #define tas(ptr) (xchg((ptr),1))
 
+/*
+ * This function doesn't exist, so you'll get a linker error
+ * if something tries to do an invalid xchg().
+ *
+ * This only works if the compiler isn't horribly bad at optimizing.
+ * gcc-2.5.8 reportedly can't handle this, but as that doesn't work
+ * too well on the alpha anyway..
+ */
+extern void __xchg_called_with_bad_pointer(void);
+
 static inline unsigned long __xchg(unsigned long x, volatile void * ptr, int size)
 {
 	switch (size) {
@@ -126,7 +136,7 @@ static inline unsigned long __xchg(unsigned long x, volatile void * ptr, int siz
 		case 8:
 			return xchg_u64(ptr, x);
 	}
-	printk("Argh.. xchg() with unsupported size\n");
+	__xchg_called_with_bad_pointer();
 	return x;
 }
 

@@ -1,4 +1,5 @@
-/* $Id: aztcd.h,v 1.30 1995/07/04 08:28:17 root Exp $
+/* $Id: aztcd.h,v 1.40 1995/07/15 20:35:01 root Exp root $
+ *
  * Definitions for a AztechCD268 CD-ROM interface
  *	Copyright (C) 1994, 1995  Werner Zimmermann
  *
@@ -42,11 +43,17 @@
   don't want the auto-eject feature*/
 #define AZT_AUTO_EJECT          0
 
+/*Set this to 1, if you want multisession support. Be warned, this function has
+not been tested !!!*/
+#define AZT_MULTISESSION        0
+
+/*Set this to 1, if you want to use incompatible ioctls for reading in raw and
+  cooked mode */
+#define AZT_PRIVATE_IOCTLS      1
+
 /*---------------------------------------------------------------------------*/
 /*------------nothing to be configured below this line-----------------------*/
 
-/* use incompatible ioctls for reading in raw and cooked mode */
-#define AZT_PRIVATE_IOCTLS
 
 /* Increase this if you get lots of timeouts; if you get kernel panic, replace
    STEN_LOW_WAIT by STEN_LOW in the source code */
@@ -108,6 +115,10 @@
 
 #define MAX_TRACKS		104
 
+#define CD_DATA			0x01
+#define CD_AUDIO		0x02
+#define CD_XA                   (CD_DATA|CD_AUDIO)
+
 struct msf {
 	unsigned char	min;
 	unsigned char	sec;
@@ -124,6 +135,9 @@ struct azt_DiskInfo {
 	unsigned char	last;
 	struct msf	diskLength;
 	struct msf	firstTrack;
+        unsigned char   multi;
+        struct msf      lastTrack;
+        unsigned char   type;
 };
 
 struct azt_Toc {

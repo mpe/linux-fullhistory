@@ -33,7 +33,7 @@
 
 #include "pas.h"
 
-#if !defined(EXCLUDE_PAS) && !defined(EXCLUDE_MIDI) && defined(EXCLUDE_PRO_MIDI)
+#if !defined(EXCLUDE_PAS) && !defined(EXCLUDE_MIDI)
 
 static int      midi_busy = 0, input_opened = 0;
 static int      my_dev;

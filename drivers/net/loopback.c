@@ -101,6 +101,7 @@ static int loopback_xmit(struct sk_buff *skb, struct device *dev)
 	restore_flags(flags);
   
 	stats->tx_packets++;
+	stats->rx_packets++;
 
 	dev->tbusy = 0;
 

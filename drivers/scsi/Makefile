@@ -11,8 +11,10 @@
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 
+ifdef CONFIG_KERNEL_ELF
 # This is used for ELF - it needs to migrate or be moved.
 LD_RFLAG = -m elf_i386
+endif
 
 AHA152X	= -DDEBUG_AHA152X -DAUTOCONF -DSKIP_BIOSTEST -DIRQ=11
 

@@ -130,6 +130,9 @@ int get_cpuinfo(char *buffer)
 	};
 	struct percpu_struct *cpu;
 	unsigned int cpu_index, system_index;
+	extern struct unaligned_stat {
+		unsigned long count, va, pc;
+	} unaligned;
 #	define N(a)	(sizeof(a)/sizeof(a[0]))
 
 	cpu = (struct percpu_struct*)((char*)hwrpb + hwrpb->processor_offset);
@@ -151,7 +154,8 @@ int get_cpuinfo(char *buffer)
 		       "page size [bytes]\t: %ld\n"
 		       "phys. address bits\t: %ld\n"
 		       "max. addr. space #\t: %ld\n"
-		       "BogoMIPS\t\t: %lu.%02lu\n",
+		       "BogoMIPS\t\t: %lu.%02lu\n"
+		       "unaligned accesses\t: %ld (pc=%lx,va=%lx)\n",
 
 		       (cpu_index < N(cpu_name) ? cpu_name[cpu_index] : "Unknown"),
 		       cpu->variation, cpu->revision, (char*)cpu->serial_no,
@@ -164,6 +168,7 @@ int get_cpuinfo(char *buffer)
 		       hwrpb->pagesize,
 		       hwrpb->pa_bits,
 		       hwrpb->max_asn,
-		       loops_per_sec / 500000, (loops_per_sec / 5000) % 100);
+		       loops_per_sec / 500000, (loops_per_sec / 5000) % 100,
+		       unaligned.count, unaligned.pc, unaligned.va);
 #       undef N
 }

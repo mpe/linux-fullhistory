@@ -153,26 +153,15 @@ asmlinkage unsigned long sys_getxpid(int a0, int a1, int a2, int a3, int a4, int
 	return current->pid;
 }
 
-#define OSF_MAP_ANONYMOUS	0x0010
-#define OSF_MAP_FIXED		0x0100
-#define OSF_MAP_HASSEMAPHORE	0x0200
-#define OSF_MAP_INHERIT		0x0400
-#define OSF_MAP_UNALIGNED	0x0800
-
 asmlinkage unsigned long osf_mmap(unsigned long addr, unsigned long len,
-	unsigned long prot, unsigned long osf_flags, unsigned long fd,
+	unsigned long prot, unsigned long flags, unsigned long fd,
 	unsigned long off)
 {
 	struct file * file = NULL;
-	unsigned long flags = osf_flags & 0x0f;
 
-	if (osf_flags & (OSF_MAP_HASSEMAPHORE | OSF_MAP_INHERIT | OSF_MAP_UNALIGNED))
+	if (flags & (MAP_HASSEMAPHORE | MAP_INHERIT | MAP_UNALIGNED))
 		printk("%s: unimplemented OSF mmap flags %04lx\n", current->comm, osf_flags);
-	if (osf_flags & OSF_MAP_FIXED)
-		flags |= MAP_FIXED;
-	if (osf_flags & OSF_MAP_ANONYMOUS)
-		flags |= MAP_ANONYMOUS;
-	else {
+	if (!(flags & MAP_ANONYMOUS)) {
 		if (fd >= NR_OPEN || !(file = current->files->fd[fd]))
 			return -EBADF;
 	}

@@ -50,7 +50,7 @@
 #define __NR_vhangup		 76
 #define __NR_getgroups		 79
 #define __NR_setgroups		 80
-#define __NR_setpgid		 82
+#define __NR_setpgrp		 82
 #define __NR_setitimer		 83
 #define __NR_getitimer		 86
 #define __NR_gethostname	 87

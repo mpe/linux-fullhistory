@@ -18,9 +18,6 @@
  * along with this program; see the file COPYING.  If not, write to
  * the Free Software Foundation, 675 Mass Ave, Cambridge, MA 02139, USA.
  * 
- * An alternate version of this driver with a BSD-style copyright can
- * be found on XXX.    
- *
  * $Id: aic7xxx.h,v 1.18 1995/06/22 04:17:56 deang Exp $
  *-M*************************************************************************/
 #ifndef _aic7xxx_h

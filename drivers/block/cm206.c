@@ -53,6 +53,12 @@ History:
   1 jun 1995: 0.32 Removed probe_irq_on/off for module version.
  10 jun 1995: 0.33 Workman still behaves funny, but you should be
               able to eject and substitute another disc.
+
+ An adaption of 0.33 is included in linux-1.3.7 by Eberhard Moenkeberg
+
+ 18 jul 1996: 0.34 Patch by Heiko Eissfeldt included, mainly considering 
+              verify_area's in the ioctls. Some bugs introduced by 
+	      EM considering the base port and irq fixed. 
  * 
  * Parts of the code are based upon lmscd.c written by Kai Petzke,
  * sbpcd.c written by Eberhard Moenkeberg, and mcd.c by Martin
@@ -73,7 +79,7 @@ History:
  * - Philips/LMS cm260 product specification
  *
  *                       David van Leeuwen, david@tm.tno.nl.  */
-#define VERSION "0.33"
+#define VERSION "0.34"
 
 #ifdef MODULE			/* OK, so some of this is stolen */
 #include <linux/module.h>	
@@ -95,6 +101,7 @@ char kernel_version[]=UTS_RELEASE;
 #include <linux/timer.h>
 #include <linux/cdrom.h>
 #include <linux/ioport.h>
+#include <linux/mm.h>
 
 #include <asm/io.h>
 
@@ -108,9 +115,8 @@ char kernel_version[]=UTS_RELEASE;
 */
 static int auto_probe=1;	/* Yes, why not? */
 
-#define cm206_base cm206 /* for compatible "insmod" parameter passing */
 static int cm206_base = CM206_BASE;
-static int cm206_irq = CM206_IRQ; /* must directly follow cm206_base */
+static int cm206_irq = CM206_IRQ; 
 
 #undef DEBUG
 #undef DEBUG_SECTORS
@@ -674,10 +680,19 @@ static void do_cm206_request(void)
 int get_multi_session_info(struct cdrom_multisession * mssp)
 {
   if (!FIRST_TRACK) get_disc_status();
-  if (mssp && DISC_STATUS & cds_multi_session) { /* multi-session */
-    mssp->addr.lba = fsm2lba(&cd->disc_status[3]);
-    mssp->xa_flag = 1;		/* don't know */
-    mssp->addr_format = CDROM_LBA; /* too bad if fsm requested! */
+  if (mssp) {
+    if (DISC_STATUS & cds_multi_session) { /* multi-session */
+      if (mssp->addr_format == CDROM_LBA)
+      	mssp->addr.lba = fsm2lba(&cd->disc_status[3]);
+      else {
+      	mssp->addr.msf.frame = cd->disc_status[3];
+      	mssp->addr.msf.second = cd->disc_status[4];
+      	mssp->addr.msf.minute = cd->disc_status[5];
+      }
+      mssp->xa_flag = 1;
+    } else {
+      mssp->xa_flag = 0;
+    }
     return 1;
   }
   return 0;
@@ -889,33 +904,41 @@ static int cm206_ioctl(struct inode * inode, struct file * file,
 #endif    
   case CDROMMULTISESSION: {
     struct cdrom_multisession ms_info;
+    int st;
     stats(ioctl_multisession);
-    if (get_multi_session_info(&ms_info)) {
-      memcpy_tofs((struct cdrom_multisession *) arg, &ms_info, 
+
+    st=verify_area(VERIFY_WRITE, (void *) arg, 
+		   sizeof(struct cdrom_multisession));
+    if (st) return (st);
+    memcpy_fromfs(&ms_info, (struct cdrom_multisession *) arg,
 		  sizeof(struct cdrom_multisession));
-      return 0;
-    }
-    else return -cmd;
+    get_multi_session_info(&ms_info);
+    memcpy_tofs((struct cdrom_multisession *) arg, &ms_info, 
+		  sizeof(struct cdrom_multisession));
+    return 0;
   }
-  case CM206_RESET_DRIVE:
+  case CDROMRESET:		/* If needed, it's probably too late anyway */
     stop_read();
     reset_cm260();
     outw(dc_normal | dc_break | READ_AHEAD, r_data_control);
     udelay(1000);		/* 750 musec minimum */
     outw(dc_normal | READ_AHEAD, r_data_control);
-    cd->sector_last = -1;		/* flag no data buffered */
+    cd->sector_last = -1;	/* flag no data buffered */
     cd->adapter_last = -1;    
     return 0;
   }
+
   get_drive_status();
   if (cd->dsb & (dsb_drive_not_ready | dsb_tray_not_closed) )
     return -EAGAIN; 
+
   switch (cmd) {
   case CDROMREADTOCHDR: {
     struct cdrom_tochdr header;
-    get_drive_status();
-    if (cd->dsb & (dsb_drive_not_ready | dsb_tray_not_closed) )
-      return -EAGAIN; 
+    int st;
+
+    st=verify_area(VERIFY_WRITE, (void *) arg, sizeof(header));
+    if (st) return (st);
     if (read_toc_header(&header)) {
       memcpy_tofs((struct cdrom_tochdr *) arg, &header, sizeof(header));
       return 0;
@@ -924,6 +947,10 @@ static int cm206_ioctl(struct inode * inode, struct file * file,
   }
   case CDROMREADTOCENTRY: {	
     struct cdrom_tocentry entry;
+    int st;
+
+    st=verify_area(VERIFY_WRITE, (void *) arg, sizeof(entry));
+    if (st) return (st);
     memcpy_fromfs(&entry, (struct cdrom_tocentry *) arg, sizeof entry);
     get_toc_entry(&entry);
     memcpy_tofs((struct cdrom_tocentry *) arg, &entry, sizeof entry);
@@ -931,12 +958,20 @@ static int cm206_ioctl(struct inode * inode, struct file * file,
   }
   case CDROMPLAYMSF: {
     struct cdrom_msf msf;
+    int st;
+
+    st=verify_area(VERIFY_READ, (void *) arg, sizeof(msf));
+    if (st) return (st);
     memcpy_fromfs(&msf, (struct cdrom_mdf *) arg, sizeof msf);
     play_from_to_msf(&msf);
     return 0;
   }
   case CDROMPLAYTRKIND: {
     struct cdrom_ti track_index;
+    int st;
+
+    st=verify_area(VERIFY_READ, (void *) arg, sizeof(track_index));
+    if (st) return (st);
     memcpy_fromfs(&track_index, (struct cdrom_ti *) arg, sizeof(track_index));
     play_from_to_track(track_index.cdti_trk0, track_index.cdti_trk1);
     return 0;
@@ -970,6 +1005,10 @@ static int cm206_ioctl(struct inode * inode, struct file * file,
     return 0;
   case CDROMSUBCHNL: {
     struct cdrom_subchnl q;
+    int st;
+
+    st=verify_area(VERIFY_WRITE, (void *) arg, sizeof(q));
+    if (st) return (st);
     memcpy_fromfs(&q, (struct cdrom_subchnl *) arg, sizeof q);
     if (get_current_q(&q)) {
       memcpy_tofs((struct cdrom_subchnl *) arg, &q, sizeof q);
@@ -979,6 +1018,10 @@ static int cm206_ioctl(struct inode * inode, struct file * file,
   }
   case CDROM_GET_UPC: {
     uch upc[10];
+    int st;
+
+    st=verify_area(VERIFY_WRITE, (void *) arg, 8);
+    if (st) return (st);
     if (type_1_command(c_read_upc, 10, upc)) return -EIO;
     memcpy_tofs((uch *) arg, &upc[1], 8);
     return 0;
@@ -1081,14 +1124,36 @@ int probe_irq(int nr) {
 }
 #endif
 
-/* Wow is this piece of #ifdeffing ugly! */
 #ifdef MODULE
 #define OK  0
 #define ERROR  -EIO
-int init_module(void)
-#else
+
+static int cm206[2] = {0,0};	/* for compatible `insmod' parameter passing */
+void parse_options() 
+{
+  int i;
+  for (i=0; i<2; i++) {
+    if (0x300 <= cm206[i] && i<= 0x370 && cm206[i] % 0x10 == 0) {
+      cm206_base = cm206[i];
+      auto_probe=0;
+    }
+    else if (3 <= cm206[i] && cm206[i] <= 15) {
+      cm206_irq = cm206[i];
+      auto_probe=0;
+    }
+  }
+}
+
+#else MODULE
+
 #define OK  mem_start+size
 #define ERROR  mem_start
+
+#endif MODULE
+
+#ifdef MODULE
+int init_module(void)
+#else 
 unsigned long cm206_init(unsigned long mem_start, unsigned long mem_end)
 #endif
 {
@@ -1096,8 +1161,11 @@ unsigned long cm206_init(unsigned long mem_start, unsigned long mem_end)
   long int size=sizeof(struct cm206_struct);
 
   printk("cm206: v" VERSION);
-#if defined(MODULE) && !defined(AUTO_PROBE_MODULE)
-  auto_probe=0;
+#if defined(MODULE) 
+  parse_options();
+#if !defined(AUTO_PROBE_MODULE)
+   auto_probe=0;
+#endif
 #endif
   cm206_base = probe_base_port(auto_probe ? 0 : cm206_base);
   if (!cm206_base) {
@@ -1173,7 +1241,7 @@ void cleanup_module(void)
   cleanup(4);
   printk("cm206 removed\n");
 }
-
+      
 #else MODULE
 
 /* This setup function accepts either `auto' or numbers in the range
@@ -1181,9 +1249,7 @@ void cleanup_module(void)
 void cm206_setup(char *s, int *p)
 {
   int i;
-#ifdef AUTO_PROBE_MODULE
   if (!strcmp(s, "auto")) auto_probe=1;
-#endif
   for(i=1; i<=p[0]; i++) {
     if (0x300 <= p[i] && i<= 0x370 && p[i] % 0x10 == 0) {
       cm206_base = p[i];

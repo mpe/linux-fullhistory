@@ -1,5 +1,5 @@
-#define AZT_VERSION "1.30"
-/*      $Id: aztcd.c,v 1.30 1995/07/04 08:28:06 root Exp $
+#define AZT_VERSION "1.40"
+/*      $Id: aztcd.c,v 1.40 1995/07/15 20:35:15 root Exp root $
 	linux/drivers/block/aztcd.c - AztechCD268 CDROM driver
 
 	Copyright (C) 1994,1995 Werner Zimmermann (zimmerma@rz.fht-esslingen.de)
@@ -116,6 +116,10 @@
                 Werner Zimmermann, May 22, 95
 	V1.30   Auto-eject feature. Inspired by Franc Racis (racis@psu.edu)
 	        Werner Zimmermann, July 4, 95
+	V1.40   Started multisession support. Implementation copied from mcdx.c
+	        by Heiko Schlittermann. Not tested, as I do not have a multi-
+	        session CD. If you can test it, please contact me.
+	        Werner Zimmermann, July 15, 95
 	NOTE: 
 	Points marked with ??? are questionable !
 */
@@ -189,7 +193,7 @@ static int aztPresent = 0;
 static volatile int azt_transfer_is_active=0;
 
 static char azt_buf[2048*AZT_BUF_SIZ];  /*buffer for block size conversion*/
-#ifdef AZT_PRIVATE_IOCTLS
+#if AZT_PRIVATE_IOCTLS
 static char buf[2336];                  /*separate buffer for the ioctls*/
 #endif
 
@@ -364,7 +368,7 @@ static void aztCloseDoor(void)
 
 static void aztLockDoor(void)
 {
-#ifdef AZT_ALLOW_TRAY_LOCK
+#if AZT_ALLOW_TRAY_LOCK
   aztSendCmd(ACMD_LOCK);
   STEN_LOW;
 #endif
@@ -373,7 +377,7 @@ static void aztLockDoor(void)
 
 static void aztUnlockDoor(void)
 {
-#ifdef AZT_ALLOW_TRAY_LOCK
+#if AZT_ALLOW_TRAY_LOCK
   aztSendCmd(ACMD_UNLOCK);
   STEN_LOW;
 #endif
@@ -523,7 +527,7 @@ static int aztPlay(struct azt_Play_msf *arg)
 
 long azt_msf2hsg(struct msf *mp)
 { return azt_bcd2bin(mp -> frame) + azt_bcd2bin(mp -> sec) * 75
-		                  + azt_bcd2bin(mp -> min) * 4500 - 150;
+		                  + azt_bcd2bin(mp -> min) * 4500 - CD_BLOCK_OFFSET;
 }
 
 static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsigned long arg)
@@ -550,7 +554,7 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
 	{
 	case CDROMSTART:     /* Spin up the drive. Don't know, what to do,
 	                        at least close the tray */
-#ifdef AZT_PRIVATE_IOCTLS 
+#if AZT_PRIVATE_IOCTLS 
 	        if (aztSendCmd(ACMD_CLOSE)) RETURNM("aztcd_ioctl 4",-1);
 	        STEN_LOW_WAIT;
 #endif
@@ -585,6 +589,47 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
 		}
 		aztAudioStatus = CDROM_AUDIO_PLAY;
 		break;
+#if AZT_MULTISESSION
+	case CDROMMULTISESSION: /*multisession support -- not tested ???*/
+	        { struct cdrom_multisession ms;
+#ifdef AZT_DEBUG
+   		  printk("aztcd ioctl MULTISESSION\n");
+#endif
+		  st = verify_area(VERIFY_READ, (void*) arg, sizeof(struct cdrom_multisession));
+		  if (st) return st;
+		  memcpy_fromfs(&ms, (void*) arg, sizeof(struct cdrom_multisession));
+		  if (ms.addr_format == CDROM_MSF) 
+		     { ms.addr.msf.minute = azt_bcd2bin(DiskInfo.lastTrack.min);
+		       ms.addr.msf.second = azt_bcd2bin(DiskInfo.lastTrack.sec);
+		       ms.addr.msf.frame  = azt_bcd2bin(DiskInfo.lastTrack.frame);
+		     } 
+		  else if (ms.addr_format == CDROM_LBA)
+		       ms.addr.lba = azt_msf2hsg(&DiskInfo.lastTrack);
+		  else
+		       return -EINVAL;
+		  if (DiskInfo.type == CD_XA) 
+		     { ms.xa_flag = 0x01;   	/*XA-Disk*/
+		     }
+		  else
+		     { ms.xa_flag = 0x00;   
+		     }
+ 		  st = verify_area(VERIFY_WRITE, (void*) arg, sizeof(struct cdrom_multisession));
+		  if (st) return st;
+	  	  memcpy_tofs((void*) arg, &ms, sizeof(struct cdrom_multisession));
+#ifdef AZT_DEBUG 
+ 		  if (ms.addr_format == CDROM_MSF) 
+                      printk("aztcd multisession %d, %02x:%02x.%02x [%02x:%02x.%02x])\n",
+			      ms.xa_flag, ms.addr.msf.minute, ms.addr.msf.second, 
+			      ms.addr.msf.frame, DiskInfo.lastTrack.min,
+			      DiskInfo.lastTrack.sec, DiskInfo.lastTrack.frame);
+		  else
+		      printk("atzcd multisession %d, 0x%08x [%02x:%02x.%02x])\n",
+			      ms.xa_flag, ms.addr.lba, DiskInfo.lastTrack.min,
+			      DiskInfo.lastTrack.sec, DiskInfo.lastTrack.frame);
+#endif
+   		  return 0;
+		}
+#endif
 	case CDROMPLAYTRKIND:     /* Play a track.  This currently ignores index. */
 		st = verify_area(VERIFY_READ, (void *) arg, sizeof ti);
 		if (st) return st;
@@ -595,7 +640,7 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
 		{ return -EINVAL;
 		}
 		if (ti.cdti_trk1 > DiskInfo.last)
-		   ti. cdti_trk1 = DiskInfo.last;
+		    ti.cdti_trk1 = DiskInfo.last;
 		azt_Play.start = Toc[ti.cdti_trk0].diskTime;
 		azt_Play.end = Toc[ti.cdti_trk1 + 1].diskTime;
 #ifdef AZT_DEBUG
@@ -758,10 +803,10 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 	case CDROMREADMODE1: /*read data in mode 1 (2048 Bytes)*/
 	case CDROMREADMODE2: /*read data in mode 2 (2336 Bytes)*/
 /*Take care, the following code is not compatible with other CD-ROM drivers,
-  use it at your own risk with cdplay.c. Normally it is not activated, as 
-  AZT_PRIVATE_IOCTLS is not defined
+  use it at your own risk with cdplay.c. Set AZT_PRIVATE_IOCTLS to 0 in aztcd.h,
+  if you do not want to use it!
 */                  
-#ifdef AZT_PRIVATE_IOCTLS 
+#if AZT_PRIVATE_IOCTLS 
 		{ st = verify_area(VERIFY_READ,  (void *) arg, sizeof msf);
 		  if (st) return st;
 		  st = verify_area(VERIFY_WRITE, (void *) arg, sizeof buf);
@@ -1653,12 +1698,12 @@ static int aztGetDiskInfo()
   for (limit=300;limit>0;limit--)
    {  if (aztGetQChannelInfo(&qInfo)<0) RETURNM("aztGetDiskInfo 2",-1);
       if (qInfo.pointIndex==0xA0)   /*Number of FirstTrack*/
-	{ DiskInfo.first=qInfo.diskTime.min;
+	{ DiskInfo.first = qInfo.diskTime.min;
 	  DiskInfo.first = azt_bcd2bin(DiskInfo.first);
 	  test=test|0x01;
 	}
       if (qInfo.pointIndex==0xA1)   /*Number of LastTrack*/
-	{ DiskInfo.last=qInfo.diskTime.min;
+	{ DiskInfo.last  = qInfo.diskTime.min;
 	  DiskInfo.last  = azt_bcd2bin(DiskInfo.last);
 	  test=test|0x02;
 	}
@@ -1691,7 +1736,6 @@ printk("Disk Info: first %d last %d length %02x:%02x.%02x first %02x:%02x.%02x\n
   if (test!=0x0F) return -1;
   return 0;
 }
-
 
 /*
  * Read the table of contents (TOC)
@@ -1737,6 +1781,18 @@ static int aztGetToc()
 
 	Toc[DiskInfo.last + 1].diskTime = DiskInfo.diskLength;
 
+        DiskInfo.lastTrack.sec=2;
+        DiskInfo.type = 0; 
+        for (i=0;i<=DiskInfo.last;i++) /*Unterscheidung zw. Audio- und Datendisk???*/
+          { if ((Toc[i].ctrl_addr)==0x01)      
+                DiskInfo.type=DiskInfo.type|CD_AUDIO; 
+            if ((Toc[i].ctrl_addr)==0x41)
+                DiskInfo.type=DiskInfo.type|CD_DATA;     
+          }
+        DiskInfo.lastTrack.min  =Toc[DiskInfo.last].diskTime.min;
+	DiskInfo.lastTrack.sec  =Toc[DiskInfo.last].diskTime.sec;
+        DiskInfo.lastTrack.frame=Toc[DiskInfo.last].diskTime.frame;
+
 #ifdef AZT_DEBUG
 printk("aztcd: exiting aztGetToc  Time:%li\n",jiffies);
 for (i = 1; i <= DiskInfo.last+1; i++)
@@ -1749,6 +1805,19 @@ printk("i = %2d ctl-adr = %02X track %2d px %02X %02X:%02X.%02X    %02X:%02X.%02
 i, Toc[i].ctrl_addr, Toc[i].track, Toc[i].pointIndex,
 Toc[i].trackTime.min, Toc[i].trackTime.sec, Toc[i].trackTime.frame,
 Toc[i].diskTime.min, Toc[i].diskTime.sec, Toc[i].diskTime.frame);
+printk("\nDisk Info: first %d last %d length %02x:%02x.%02x first %02x:%02x.%02x last %02x:%02x.%02x type %02x\n",
+	DiskInfo.first,
+	DiskInfo.last,
+	DiskInfo.diskLength.min,
+	DiskInfo.diskLength.sec,
+	DiskInfo.diskLength.frame,
+	DiskInfo.firstTrack.min,
+	DiskInfo.firstTrack.sec,
+	DiskInfo.firstTrack.frame,
+	DiskInfo.lastTrack.min,
+	DiskInfo.lastTrack.sec,
+	DiskInfo.lastTrack.frame,
+        DiskInfo.type);
 #endif
 
 	return limit > 0 ? 0 : -1;

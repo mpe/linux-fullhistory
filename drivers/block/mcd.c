@@ -38,9 +38,28 @@
 	November 93 added code for FX001 S,D (single & double speed).
 	February 94 added code for broken M 5/6 series of 16-bit single speed.
 
-        0.4   Added support for loadable MODULEs, so mcd can now also be
-              loaded by insmod and removed by rmmod during runtime.
-              Werner Zimmermann (zimmerma@rz.fht-esslingen.de), Mar. 26, 95
+
+        0.4   
+        Added support for loadable MODULEs, so mcd can now also be loaded by 
+        insmod and removed by rmmod during runtime.
+        Werner Zimmermann (zimmerma@rz.fht-esslingen.de), Mar. 26, 95
+
+	0.5
+	I added code for FX001 D to drop from double speed to single speed 
+	when encountering errors... this helps with some "problematic" CD's
+	that are supposedly "OUT OF TOLERANCE" (but are really shitty presses!)
+	severly scratched, or possibly slightly warped! I have noticed that
+	the Mitsumi 2x/4x drives are just less tolerant and the firmware is 
+	not smart enough to drop speed,	so let's just kludge it with software!
+	****** THE 4X SPEED MITSUMI DRIVES HAVE THE SAME PROBLEM!!!!!! ******
+	Anyone want to "DONATE" one to me?! ;) I hear sometimes they are
+	even WORSE! ;)
+	** HINT... HINT... TAKE NOTES MITSUMI This could save some hassels with
+	certain "large" CD's that have data on the outside edge in your 
+	DOS DRIVERS .... Accuracy counts... speed is secondary ;)
+	17 June 95 Modifications By Andrew J. Kroll <ag784@freenet.buffalo.edu>
+	07 July 1995 Modifications by Andrew J. Kroll
+
 */
 
 #include <linux/config.h>
@@ -82,6 +101,24 @@
 static int mcd_sizes[] = { 0 };
 #endif
 
+/* I know putting defines in this file is probably stupid, but it should be */
+/* the only place that they are really needed... I HOPE! :) */
+
+/* How many sectors to read at 1x when an error at 2x speed occurs. */
+/* You can change this to anything from 2 to 32767, but 30 seems to */
+/* work best for me.  I have found that when the drive has problems */
+/* reading one sector, it will have troubles reading the next few.  */
+#define SINGLE_HOLD_SECTORS 30	
+
+#define MCMD_2X_READ 0xC1	/* Double Speed Read DON'T TOUCH! */
+
+/* I added A flag to drop to 1x speed if too many errors 0 = 1X ; 1 = 2X */
+static int mcdDouble = 0; 
+
+/* How many sectors to hold at 1x speed counter */
+static int mcd1xhold = 0;
+
+/* Is the drive connected properly and responding?? */
 static int mcdPresent = 0;
 
 #if 0
@@ -667,35 +704,71 @@ mcd_poll(void)
   int st;
 
 
-  if (mcd_error) {
-    if (mcd_error & 0xA5) {
+  if (mcd_error) 
+  {
+    if (mcd_error & 0xA5) 
+    {
       printk("mcd: I/O error 0x%02x", mcd_error);
       if (mcd_error & 0x80)
 	printk(" (Door open)");
       if (mcd_error & 0x20)
 	printk(" (Disk changed)");
       if (mcd_error & 0x04)
-	printk(" (Read error)");
+	{
+	printk(" (Read error)"); /* Bitch about the problem. */
+	
+	/* Time to get fancy! If at 2x speed and 1 error, drop to 1x speed! */
+	/* Interesting how it STAYS at MCD_RETRY_ATTEMPTS on first error! */
+	/* But I find that rather HANDY!!! */
+	/* Neat! it REALLY WORKS on those LOW QUALITY CD's!!! Smile! :) */
+	/* AJK [06/17/95] */
+	
+	/* Slap the CD down to single speed! */
+	if (mcdDouble == 1 && McdTries == MCD_RETRY_ATTEMPTS && MCMD_DATA_READ == MCMD_2X_READ) 
+		{
+		MCMD_DATA_READ = MCMD_PLAY_READ; /* Uhhh, Ummmm, muhuh-huh! */
+		mcd1xhold = SINGLE_HOLD_SECTORS; /* Hey Bevis! */
+		printk(" Speed now 1x");	 /* Pull my finger! */
+		}
+	}
       printk("\n");
       mcd_invalidate_buffers();
 #ifdef WARN_IF_READ_FAILURE
-      if (McdTries == 5)
+      if (McdTries == MCD_RETRY_ATTEMPTS)
 	printk("mcd: read of block %d failed\n", mcd_next_bn);
 #endif
-      if (!McdTries--) {
+      if (!McdTries--) 
+        {
+	/* Nuts! This cd is ready for recycling! */
+	/* When WAS the last time YOU cleaned it CORRECTLY?! */
 	printk("mcd: read of block %d failed, giving up\n", mcd_next_bn);
-	if (mcd_transfer_is_active) {
+	if (mcd_transfer_is_active) 
+	{
 	  McdTries = 0;
 	  goto ret;
 	}
 	if (CURRENT_VALID)
 	  end_request(0);
-	McdTries = 5;
+	McdTries = MCD_RETRY_ATTEMPTS;
       }
     }
     mcd_error = 0;
     mcd_state = MCD_S_STOP;
   }
+	/* Switch back to Double speed if enough GOOD sectors were read! */
+	
+	/* Are we a double speed with a crappy CD?! */
+    if (mcdDouble == 1 && McdTries == MCD_RETRY_ATTEMPTS && MCMD_DATA_READ == MCMD_PLAY_READ)
+    	{
+	/* We ARE a double speed and we ARE bitching! */
+	if (mcd1xhold == 0) /* Okay, Like are we STILL at single speed? */
+		{ /* We need to switch back to double speed now... */
+		MCMD_DATA_READ = MCMD_2X_READ; /* Uhhh... BACK You GO! */
+		printk("mcd: Switching back to 2X speed!\n"); /* Tell 'em! */
+		}
+	else mcd1xhold--; /* No?! Count down the good reads some more... */
+				/* and try, try again! */
+    	}
 
 
 
@@ -1183,10 +1256,16 @@ int init_module(void)
 #else
                 return -EIO;
 #endif
-	printk("Mitsumi status, type and version : %02X %c %x\n",
+	printk("Mitsumi status, type and version : %02X %c %x ",
 	       result[0],result[1],result[2]);
 
-	if (result[1] == 'D') MCMD_DATA_READ= 0xC1;
+     if (result[1] == 'D') 
+	{
+	printk("Double Speed CD ROM\n");
+	MCMD_DATA_READ = MCMD_2X_READ;
+        mcdDouble = 1; /* Added flag to drop to 1x speed if too many errors */
+        }
+       else printk("Single Speed CD ROM\n");
 
 	mcdVersion=result[2];
 

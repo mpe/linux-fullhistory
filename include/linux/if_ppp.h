@@ -193,7 +193,7 @@ struct ppp {
   struct tty_struct	*tty;		/* ptr to TTY structure		*/
   struct device		*dev;		/* easy for intr handling	*/
   struct slcompress	*slcomp;	/* for header compression	*/
-  __u32			last_xmit;	/* time of last transmission	*/
+  unsigned long		last_xmit;	/* time of last transmission	*/
 
   /* These are pointers to the malloc()ed frame buffers.
      These buffers are used while processing a packet.	If a packet

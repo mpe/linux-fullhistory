@@ -67,8 +67,6 @@ asmlinkage void do_entIF(unsigned long type, unsigned long a1, unsigned long a2,
 		if (ptrace_cancel_bpt(current)) {
 			regs.pc -= 4;	/* make pc point to former bpt */
 		}
-		if (current->flags & PF_PTRACED)
-		  current->blocked &= ~(1 << (SIGTRAP - 1));
 		send_sig(SIGTRAP, current, 1);
 		break;
 
@@ -90,9 +88,8 @@ asmlinkage void do_entIF(unsigned long type, unsigned long a1, unsigned long a2,
  * fp-regs), and it needs to have them in order for simpler access.
  *
  * Due to the non-standard register layout (and because we don't want
- * to handle floating-point regs), we disallow user-mode unaligned
- * accesses (we'd need to do "verify_area()" checking, as well as
- * do a full "ret_from_sys_call" return).
+ * to handle floating-point regs), user-mode unaligned accesses are
+ * handled separately by do_entUnaUser below.
  *
  * Oh, btw, we don't handle the "gp" register correctly, but if we fault
  * on a gp-register unaligned load/store, something is _very_ wrong
@@ -103,17 +100,24 @@ struct allregs {
 	unsigned long ps, pc, gp, a0, a1, a2;
 };
 
+struct unaligned_stat {
+	unsigned long count, va, pc;
+} unaligned;
+
 asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 	unsigned long a3, unsigned long a4, unsigned long a5,
 	struct allregs regs)
 {
 	static int cnt = 0;
 
-	if (regs.ps & 8)
-		do_exit(SIGSEGV);
 	if (++cnt < 5)
 		printk("Unaligned trap at %016lx: %p %lx %ld\n",
 			regs.pc, va, opcode, reg);
+
+	++unaligned.count;
+	unaligned.va = (unsigned long) va - 4;
+	unaligned.pc = regs.pc;
+
 	/* $16-$18 are PAL-saved, and are offset by 19 entries */
 	if (reg >= 16 && reg <= 18)
 		reg += 19;
@@ -134,6 +138,22 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 	printk("Bad unaligned kernel access at %016lx: %p %lx %ld\n",
 		regs.pc, va, opcode, reg);
 	do_exit(SIGSEGV);
+}
+
+/*
+ * Handle user-level unaligned fault.  For now, simply send a
+ * SIGSEGV---there should be little reason for users not wanting to
+ * fix their code instead.  Notice that we have the regular kernel
+ * stack layout here, so finding the appropriate registers is a little
+ * more difficult than in the kernel case.  Also, we'd need to do
+ * a "verify_area()" before accessing memory on behalf of the user.
+ */
+asmlinkage void do_entUnaUser(void *va, unsigned long opcode, unsigned long reg,
+			      unsigned long a3, unsigned long a4, unsigned long a5,
+			      struct pt_regs regs)
+{
+	regs.pc -= 4;	/* make pc point to faulting insn */
+	send_sig(SIGSEGV, current, 1);
 }
 
 /*

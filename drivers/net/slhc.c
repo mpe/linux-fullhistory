@@ -615,8 +615,8 @@ slhc_uncompress(struct slcompress *comp, unsigned char *icp, int isize)
 	cp += 20;
 
 	if (ip->ihl > 5) {
-	  memcpy(cp, cs->cs_ipopt, ((ip->ihl) - 5) * 4);
-	  cp += ((ip->ihl) - 5) * 4;
+	  memcpy(cp, cs->cs_ipopt, (ip->ihl - 5) * 4);
+	  cp += (ip->ihl - 5) * 4;
 	}
 
 	((struct iphdr *)icp)->check = ip_fast_csum(icp, ((struct iphdr*)icp)->ihl);
@@ -640,9 +640,7 @@ int
 slhc_remember(struct slcompress *comp, unsigned char *icp, int isize)
 {
 	register struct cstate *cs;
-	short ip_len;
-	struct iphdr *ip;
-	struct tcphdr *thp;
+	unsigned ihl;
 
 	unsigned char index;
 
@@ -651,23 +649,21 @@ slhc_remember(struct slcompress *comp, unsigned char *icp, int isize)
 		comp->sls_i_runt++;
 		return slhc_toss( comp );
 	}
-	/* Sneak a peek at the IP header's IHL field to find its length */
-	ip_len = (icp[0] & 0xf) << 2;
-	if(ip_len < 20){
+	/* Peek at the IP header's IHL field to find its length */
+	ihl = icp[0] & 0xf;
+	if(ihl < 20 / 4){
 		/* The IP header length field is too small */
 		comp->sls_i_runt++;
 		return slhc_toss( comp );
 	}
 	index = icp[9];
 	icp[9] = IPPROTO_TCP;
-	ip = (struct iphdr *) icp;
 
-	if (ip_fast_csum(icp, ip->ihl)) {
+	if (ip_fast_csum(icp, ihl)) {
 		/* Bad IP header checksum; discard */
 		comp->sls_i_badcheck++;
 		return slhc_toss( comp );
 	}
-	thp = (struct tcphdr *)(((unsigned char *)ip) + ip->ihl*4);
 	if(index > comp->rslot_limit) {
 		comp->sls_i_error++;
 		return slhc_toss(comp);
@@ -676,13 +672,13 @@ slhc_remember(struct slcompress *comp, unsigned char *icp, int isize)
 	/* Update local state */
 	cs = &comp->rstate[comp->recv_current = index];
 	comp->flags &=~ SLF_TOSS;
-	memcpy(&cs->cs_ip,ip,20);
-	memcpy(&cs->cs_tcp,thp,20);
-	if (ip->ihl > 5)
-	  memcpy(cs->cs_ipopt, ip+1, ((ip->ihl) - 5) * 4);
-	if (thp->doff > 5)
-	  memcpy(cs->cs_tcpopt, thp+1, ((thp->doff) - 5) * 4);
-	cs->cs_hsize = ip->ihl*2 + thp->doff*2;
+	memcpy(&cs->cs_ip,icp,20);
+	memcpy(&cs->cs_tcp,icp + ihl*4,20);
+	if (ihl > 5)
+	  memcpy(cs->cs_ipopt, icp + sizeof(struct iphdr), (ihl - 5) * 4);
+	if (cs->cs_tcp.doff > 5)
+	  memcpy(cs->cs_tcpopt, icp + ihl*4 + sizeof(struct tcphdr), (cs->cs_tcp.doff - 5) * 4);
+	cs->cs_hsize = ihl*2 + cs->cs_tcp.doff*2;
 	/* Put headers back on packet
 	 * Neither header checksum is recalculated
 	 */
