@@ -404,7 +404,7 @@ struct dvb_frontend* ves1820_attach(const struct ves1820_config* config,
 	return &state->frontend;
 
 error:
-	if (state) kfree(state);
+	kfree(state);
 	return NULL;
 }
 

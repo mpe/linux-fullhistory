@@ -476,7 +476,7 @@ struct dvb_frontend* cx22702_attach(const struct cx22702_config* config,
 	return &state->frontend;
 
 error:
-	if (state) kfree(state);
+	kfree(state);
 	return NULL;
 }
 

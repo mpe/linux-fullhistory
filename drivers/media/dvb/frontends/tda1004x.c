@@ -1097,7 +1097,7 @@ struct dvb_frontend* tda10045_attach(const struct tda1004x_config* config,
 	return &state->frontend;
 
 error:
-	if (state) kfree(state);
+	kfree(state);
 	return NULL;
 }
 

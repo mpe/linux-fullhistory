@@ -581,7 +581,7 @@ struct dvb_frontend* mt352_attach(const struct mt352_config* config,
 	return &state->frontend;
 
 error:
-	if (state) kfree(state);
+	kfree(state);
 	return NULL;
 }
 

@@ -885,8 +885,7 @@ struct dvb_frontend* dib3000mc_attach(const struct dib3000_config* config,
 	return &state->frontend;
 
 error:
-	if (state)
-		kfree(state);
+	kfree(state);
 	return NULL;
 }
 

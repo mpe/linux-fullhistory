@@ -497,7 +497,7 @@ struct dvb_frontend* ves1x93_attach(const struct ves1x93_config* config,
 	return &state->frontend;
 
 error:
-	if (state) kfree(state);
+	kfree(state);
 	return NULL;
 }
 

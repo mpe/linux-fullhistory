@@ -758,8 +758,7 @@ struct dvb_frontend *stv0297_attach(const struct stv0297_config *config,
 	return &state->frontend;
 
 error:
-	if (state)
-		kfree(state);
+	kfree(state);
 	return NULL;
 }
 

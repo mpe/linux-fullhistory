@@ -661,7 +661,7 @@ struct dvb_frontend* nxt2002_attach(const struct nxt2002_config* config,
 	return &state->frontend;
 
 error:
-	if (state) kfree(state);
+	kfree(state);
 	return NULL;
 }
 

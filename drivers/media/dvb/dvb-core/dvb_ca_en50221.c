@@ -1733,8 +1733,7 @@ int dvb_ca_en50221_init(struct dvb_adapter *dvb_adapter,
 	if (ca != NULL) {
 		if (ca->dvbdev != NULL)
 			dvb_unregister_device(ca->dvbdev);
-		if (ca->slot_info != NULL)
-			kfree(ca->slot_info);
+		kfree(ca->slot_info);
 		kfree(ca);
 	}
 	pubca->private = NULL;
