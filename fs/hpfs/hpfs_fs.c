@@ -192,7 +192,7 @@ static ssize_t hpfs_dir_read(struct file *filp, char *buf,
 			     size_t count, loff_t *ppos);
 static int hpfs_readdir(struct file *filp,
 			void *dirent, filldir_t filldir);
-static int hpfs_lookup(struct inode *, struct dentry *);
+static struct dentry *hpfs_lookup(struct inode *, struct dentry *);
 
 static const struct file_operations hpfs_dir_ops =
 {
@@ -1119,7 +1119,7 @@ static secno bplus_lookup(struct inode *inode, struct bplus_header *b,
  * the boondocks.)
  */
 
-static int hpfs_lookup(struct inode *dir, struct dentry *dentry)
+static struct dentry *hpfs_lookup(struct inode *dir, struct dentry *dentry)
 {
 	const char *name = dentry->d_name.name;
 	int len = dentry->d_name.len;
@@ -1128,14 +1128,6 @@ static int hpfs_lookup(struct inode *dir, struct dentry *dentry)
 	ino_t ino;
 	int retval;
 	struct quad_buffer_head qbh;
-
-	/* In case of madness */
-
-	retval = -ENOTDIR;
-	if (dir == 0)
-		goto out;
-	if (!S_ISDIR(dir->i_mode))
-		goto out;
 
 	/*
 	 * Read in the directory entry. "." is there under the name ^A^A .
@@ -1208,7 +1200,7 @@ static int hpfs_lookup(struct inode *dir, struct dentry *dentry)
 	brelse4(&qbh);
 
       out:
-	return retval;
+	return ERR_PTR(retval);
 }
 
 /*
@@ -1373,11 +1365,6 @@ static int hpfs_readdir(struct file *filp, void * dirent,
 	char * tempname;
 	long old_pos;
 	struct inode *inode = filp->f_dentry->d_inode;
-
-	if (inode == 0
-	    || inode->i_sb == 0
-	    || !S_ISDIR(inode->i_mode))
-		return -EBADF;
 
 	tempname = (char *) __get_free_page(GFP_KERNEL);
 	if (!tempname)

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Aug 16 00:59:29 1997
- * Modified at:   Fri Mar 26 14:24:09 1999
+ * Modified at:   Fri Apr 23 11:55:12 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>,
@@ -40,36 +40,40 @@
 
 #include <net/irda/irda_device.h>
 
-static int irlap_state_ndm    ( struct irlap_cb *self, IRLAP_EVENT event, 
-				struct sk_buff *skb, struct irlap_info *info);
-static int irlap_state_query  ( struct irlap_cb *self, IRLAP_EVENT event, 
-				struct sk_buff *skb, struct irlap_info *info);
-static int irlap_state_reply  ( struct irlap_cb *self, IRLAP_EVENT event, 
-				struct sk_buff *skb, struct irlap_info *info);
-static int irlap_state_conn   ( struct irlap_cb *self, IRLAP_EVENT event, 
-				struct sk_buff *skb, struct irlap_info *info);
-static int irlap_state_setup  ( struct irlap_cb *self, IRLAP_EVENT event, 
-				struct sk_buff *skb, struct irlap_info *info);
-static int irlap_state_offline( struct irlap_cb *self, IRLAP_EVENT event, 
-				struct sk_buff *skb, struct irlap_info *info);
-static int irlap_state_xmit_p ( struct irlap_cb *self, IRLAP_EVENT event, 
-				struct sk_buff *skb, struct irlap_info *info);
-static int irlap_state_pclose ( struct irlap_cb *self, IRLAP_EVENT event, 
-				struct sk_buff *skb, struct irlap_info *info);
-static int irlap_state_nrm_p  ( struct irlap_cb *self, IRLAP_EVENT event, 
-				struct sk_buff *skb, struct irlap_info *info);
+#if CONFIG_IRDA_FAST_RR
+int sysctl_fast_poll_increase = 50;
+#endif
+
+static int irlap_state_ndm    (struct irlap_cb *self, IRLAP_EVENT event, 
+			       struct sk_buff *skb, struct irlap_info *info);
+static int irlap_state_query  (struct irlap_cb *self, IRLAP_EVENT event, 
+			       struct sk_buff *skb, struct irlap_info *info);
+static int irlap_state_reply  (struct irlap_cb *self, IRLAP_EVENT event, 
+			       struct sk_buff *skb, struct irlap_info *info);
+static int irlap_state_conn   (struct irlap_cb *self, IRLAP_EVENT event, 
+			       struct sk_buff *skb, struct irlap_info *info);
+static int irlap_state_setup  (struct irlap_cb *self, IRLAP_EVENT event, 
+			       struct sk_buff *skb, struct irlap_info *info);
+static int irlap_state_offline(struct irlap_cb *self, IRLAP_EVENT event, 
+			       struct sk_buff *skb, struct irlap_info *info);
+static int irlap_state_xmit_p (struct irlap_cb *self, IRLAP_EVENT event, 
+			       struct sk_buff *skb, struct irlap_info *info);
+static int irlap_state_pclose (struct irlap_cb *self, IRLAP_EVENT event, 
+			       struct sk_buff *skb, struct irlap_info *info);
+static int irlap_state_nrm_p  (struct irlap_cb *self, IRLAP_EVENT event, 
+			       struct sk_buff *skb, struct irlap_info *info);
 static int irlap_state_reset_wait(struct irlap_cb *self, IRLAP_EVENT event, 
 				  struct sk_buff *skb, struct irlap_info *info);
-static int irlap_state_reset  ( struct irlap_cb *self, IRLAP_EVENT event, 
-				struct sk_buff *skb, struct irlap_info *info);
-static int irlap_state_nrm_s  ( struct irlap_cb *self, IRLAP_EVENT event, 
-				struct sk_buff *skb, struct irlap_info *info);
-static int irlap_state_xmit_s ( struct irlap_cb *self, IRLAP_EVENT event, 
-				struct sk_buff *skb, struct irlap_info *info);
-static int irlap_state_sclose ( struct irlap_cb *self, IRLAP_EVENT event, 
-				struct sk_buff *skb, struct irlap_info *info);
-static int irlap_state_reset_check( struct irlap_cb *, IRLAP_EVENT event, 
-				    struct sk_buff *, struct irlap_info *);
+static int irlap_state_reset  (struct irlap_cb *self, IRLAP_EVENT event, 
+			       struct sk_buff *skb, struct irlap_info *info);
+static int irlap_state_nrm_s  (struct irlap_cb *self, IRLAP_EVENT event, 
+			       struct sk_buff *skb, struct irlap_info *info);
+static int irlap_state_xmit_s (struct irlap_cb *self, IRLAP_EVENT event, 
+			       struct sk_buff *skb, struct irlap_info *info);
+static int irlap_state_sclose (struct irlap_cb *self, IRLAP_EVENT event, 
+			       struct sk_buff *skb, struct irlap_info *info);
+static int irlap_state_reset_check(struct irlap_cb *, IRLAP_EVENT event, 
+				   struct sk_buff *, struct irlap_info *);
 
 static const char *irlap_event[] = {
 	"DISCOVERY_REQUEST",
@@ -145,37 +149,37 @@ static int (*state[])( struct irlap_cb *self, IRLAP_EVENT event,
 /*
  * Function irda_poll_timer_expired (data)
  *
- *    
- *
+ *    Poll timer has expired. Normally we must now send a RR frame to the
+ *    remote device
  */
-static void irlap_poll_timer_expired( unsigned long data)
+static void irlap_poll_timer_expired(unsigned long data)
 {
 	struct irlap_cb *self = (struct irlap_cb *) data;
 	
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == LAP_MAGIC, return;);
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == LAP_MAGIC, return;);
 	
-	irlap_do_event( self, POLL_TIMER_EXPIRED, NULL, NULL);
+	irlap_do_event(self, POLL_TIMER_EXPIRED, NULL, NULL);
 }
 
-void irlap_start_poll_timer( struct irlap_cb *self, int timeout)
+void irlap_start_poll_timer(struct irlap_cb *self, int timeout)
 {
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == LAP_MAGIC, return;);
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == LAP_MAGIC, return;);
 
 #ifdef CONFIG_IRDA_FAST_RR
-	if ( skb_queue_len( &self->tx_list) == 0) {
-		if ( self->fast_RR == TRUE) {
+	if (skb_queue_len(&self->tx_list) == 0) {
+		if (self->fast_RR == TRUE) {
 			/*
 			 *  Assert that the fast poll timer has not reached the
 			 *  normal poll timer yet
 			 */
-			if ( self->fast_RR_timeout < timeout) {
+			if (self->fast_RR_timeout < timeout) {
 				/*
 				 *  FIXME: this should be a more configurable
 				 *         function
 				 */
-				self->fast_RR_timeout += 15;
+				self->fast_RR_timeout += (sysctl_fast_poll_increase * HZ/1000);
 
 				/* Use this fast(er) timeout instead */
 				timeout = self->fast_RR_timeout;
@@ -183,17 +187,20 @@ void irlap_start_poll_timer( struct irlap_cb *self, int timeout)
 		} else {
 			self->fast_RR = TRUE;
 
-			/* Start with just 1 ms */
-			self->fast_RR_timeout = 1;
-			timeout = 1;
+			/* Start with just 0 ms */
+			self->fast_RR_timeout = 0;
+			timeout = 0;
 		}
 	} else
 		self->fast_RR = FALSE;
 
-	DEBUG( 4, __FUNCTION__ "(), Timeout=%d\n", timeout);
+	DEBUG(4, __FUNCTION__ "(), Timeout=%d\n", timeout);
 #endif
-	irda_start_timer( &self->poll_timer, timeout, 
-			  (unsigned long) self, irlap_poll_timer_expired);
+	if (timeout == 0)
+		irlap_do_event(self, POLL_TIMER_EXPIRED, NULL, NULL);
+	else
+		irda_start_timer(&self->poll_timer, timeout, 
+				 (unsigned long) self, irlap_poll_timer_expired);
 }
 
 /*
@@ -338,25 +345,25 @@ static int irlap_state_ndm( struct irlap_cb *self, IRLAP_EVENT event,
 	case DISCOVERY_REQUEST:		
 		ASSERT( info != NULL, return -1;);
 
-	 	if ( irda_device_is_media_busy( self->irdev)) {
+	 	if (irda_device_is_media_busy(self->irdev)) {
  			DEBUG(0, __FUNCTION__ "(), media busy!\n"); 
 			/* irlap->log.condition = MEDIA_BUSY; */
 			
 			/* Always switch state before calling upper layers */
-			irlap_next_state( self, LAP_NDM); 
+			irlap_next_state(self, LAP_NDM); 
 			
 			/* This will make IrLMP try again */
- 			irlap_discovery_confirm( self, NULL);
+ 			irlap_discovery_confirm(self, NULL);
 			return 0;
 	 	} 
 		
 		self->S = info->S;
 		self->s = info->s;
-		irlap_send_discovery_xid_frame( self, info->S, info->s, TRUE,
-						info->discovery);
+		irlap_send_discovery_xid_frame(self, info->S, info->s, TRUE,
+					       info->discovery);
 		self->s++;
 
-		irlap_start_slot_timer( self, self->slot_timeout);
+		irlap_start_slot_timer(self, self->slot_timeout);
 		irlap_next_state(self, LAP_QUERY);
 		break;
 
@@ -440,38 +447,38 @@ static int irlap_state_query( struct irlap_cb *self, IRLAP_EVENT event,
 		irlap_next_state( self, LAP_QUERY); 
 		break;
 	case SLOT_TIMER_EXPIRED:
-		if ( self->s < self->S) {
-			irlap_send_discovery_xid_frame( self, self->S, 
-							self->s, TRUE,
-							self->discovery_cmd);
+		if (self->s < self->S) {
+			irlap_send_discovery_xid_frame(self, self->S, 
+						       self->s, TRUE,
+						       self->discovery_cmd);
 			self->s++;
-			irlap_start_slot_timer( self, self->slot_timeout);
+			irlap_start_slot_timer(self, self->slot_timeout);
 			
 			/* Keep state */
-			irlap_next_state( self, LAP_QUERY);
+			irlap_next_state(self, LAP_QUERY);
 		} else {
 			/* This is the final slot! */
-			irlap_send_discovery_xid_frame( self, self->S, 0xff, 
-							TRUE,
-							self->discovery_cmd);
+			irlap_send_discovery_xid_frame(self, self->S, 0xff, 
+						       TRUE,
+						       self->discovery_cmd);
 
 			/* Always switch state before calling upper layers */
-			irlap_next_state( self, LAP_NDM);
+			irlap_next_state(self, LAP_NDM);
 	
 			/*
 			 *  We are now finished with the discovery procedure, 
 			 *  so now we must return the results
 			 */
-			irlap_discovery_confirm( self, self->discovery_log);
+			irlap_discovery_confirm(self, self->discovery_log);
 		}
 		break;
 	default:
 		DEBUG(2, __FUNCTION__ "(), Unknown event %d, %s\n", event, 
 		      irlap_event[event]);
 
-		if ( skb != NULL) {
+		if (skb)
 			dev_kfree_skb( skb);
-		}
+
 		ret = -1;
 		break;
 	}
@@ -485,37 +492,37 @@ static int irlap_state_query( struct irlap_cb *self, IRLAP_EVENT event,
  *    are waiting for the right time slot to send a response XID frame
  * 
  */
-static int irlap_state_reply( struct irlap_cb *self, IRLAP_EVENT event, 
-			      struct sk_buff *skb, struct irlap_info *info) 
+static int irlap_state_reply(struct irlap_cb *self, IRLAP_EVENT event, 
+			     struct sk_buff *skb, struct irlap_info *info) 
 {
 	discovery_t *discovery_rsp;
 	int ret=0;
 
-	DEBUG( 4, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 
-	ASSERT( self != NULL, return -1;);
-	ASSERT( self->magic == LAP_MAGIC, return -1;);
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == LAP_MAGIC, return -1;);
 
-	switch( event) {
+	switch(event) {
 	case QUERY_TIMER_EXPIRED:
 		DEBUG(2, __FUNCTION__ "(), QUERY_TIMER_EXPIRED <%ld>\n",
 		      jiffies);
-		irlap_next_state( self, LAP_NDM);
+		irlap_next_state(self, LAP_NDM);
 		break;
 	case RECV_DISCOVERY_XID_CMD:
-		ASSERT( info != NULL, return -1;);
+		ASSERT(info != NULL, return -1;);
 		/*
 		 *  Last frame?
 		 */
-		if ( info->s == 0xff) {
-			del_timer( &self->query_timer);
+		if (info->s == 0xff) {
+			del_timer(&self->query_timer);
 			
 			/* info->log.condition = REMOTE; */
 
 			/* Always switch state before calling upper layers */
-			irlap_next_state( self, LAP_NDM);
+			irlap_next_state(self, LAP_NDM);
 
-			irlap_discovery_indication( self, info->discovery); 
+			irlap_discovery_indication(self, info->discovery); 
 		} else if ((info->s >= self->slot) && (!self->frame_sent)) {
 			discovery_rsp = irlmp_get_discovery_response();
 			discovery_rsp->daddr = info->daddr;
@@ -549,17 +556,17 @@ static int irlap_state_reply( struct irlap_cb *self, IRLAP_EVENT event,
  *    layer to accept or refuse connection 
  *
  */
-static int irlap_state_conn( struct irlap_cb *self, IRLAP_EVENT event, 
-			     struct sk_buff *skb, struct irlap_info *info) 
+static int irlap_state_conn(struct irlap_cb *self, IRLAP_EVENT event, 
+			    struct sk_buff *skb, struct irlap_info *info) 
 {
 	int ret = 0;
 
-	DEBUG( 4, __FUNCTION__ "(), event=%s\n", irlap_event[ event]);
+	DEBUG(4, __FUNCTION__ "(), event=%s\n", irlap_event[ event]);
 
-	ASSERT( self != NULL, return -1;);
-	ASSERT( self->magic == LAP_MAGIC, return -1;);
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == LAP_MAGIC, return -1;);
 
-	switch( event) {
+	switch (event) {
 	case CONNECT_RESPONSE:
 		skb_pull( skb, 11);
 
@@ -762,7 +769,7 @@ static int irlap_state_xmit_p( struct irlap_cb *self, IRLAP_EVENT event,
 	DEBUG( 4, __FUNCTION__ "(), event=%s, vs=%d, vr=%d", 
 	       irlap_event[ event], self->vs, self->vr); 
 		
-	switch( event) {
+	switch (event) {
 	case SEND_I_CMD:
 		ASSERT( skb != NULL, return -1;);
 		DEBUG( 4, __FUNCTION__ "(), Window=%d\n", self->window);
@@ -822,7 +829,7 @@ static int irlap_state_xmit_p( struct irlap_cb *self, IRLAP_EVENT event,
 		} else {
 			DEBUG( 4, __FUNCTION__ 
 			       "(), Unable to send! remote busy?\n");
-			skb_queue_head( &self->tx_list, skb);
+			skb_queue_head(&self->tx_list, skb);
 
 			/*
 			 *  The next ret is important, because it tells 
@@ -831,19 +838,19 @@ static int irlap_state_xmit_p( struct irlap_cb *self, IRLAP_EVENT event,
 			ret = -EPROTO;
 		}
 		break;
-	case DISCONNECT_REQUEST:
-		del_timer( &self->poll_timer);
-		irlap_wait_min_turn_around( self, &self->qos_tx);
-		irlap_send_disc_frame( self);
-		irlap_flush_all_queues( self);
-		irlap_start_final_timer( self, self->final_timeout);
-		self->retry_count = 0;
-		irlap_next_state( self, LAP_PCLOSE);
-		break;
 	case POLL_TIMER_EXPIRED:
-		irlap_send_rr_frame( self, CMD_FRAME);
-		irlap_start_final_timer( self, self->final_timeout);
-		irlap_next_state( self, LAP_NRM_P);
+		irlap_send_rr_frame(self, CMD_FRAME);
+		irlap_start_final_timer(self, self->final_timeout);
+		irlap_next_state(self, LAP_NRM_P);
+		break;
+	case DISCONNECT_REQUEST:
+		del_timer(&self->poll_timer);
+		irlap_wait_min_turn_around(self, &self->qos_tx);
+		irlap_send_disc_frame(self);
+		irlap_flush_all_queues(self);
+		irlap_start_final_timer(self, self->final_timeout);
+		self->retry_count = 0;
+		irlap_next_state(self, LAP_PCLOSE);
 		break;
 	default:
 		DEBUG(0, __FUNCTION__ "(), Unknown event %s\n", 
@@ -916,117 +923,18 @@ static int irlap_state_pclose( struct irlap_cb *self, IRLAP_EVENT event,
  *   transmit any frames and is expecting to receive frames only from the
  *   secondary to which transmission permissions has been given.
  */
-static int irlap_state_nrm_p( struct irlap_cb *self, IRLAP_EVENT event, 
-			      struct sk_buff *skb, struct irlap_info *info) 
+static int irlap_state_nrm_p(struct irlap_cb *self, IRLAP_EVENT event, 
+			     struct sk_buff *skb, struct irlap_info *info) 
 {
 	int ret = 0;
 	int ns_status;
 	int nr_status;
 
-	ASSERT( self != NULL, return -1;);
-	ASSERT( self->magic == LAP_MAGIC, return -1;);
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == LAP_MAGIC, return -1;);
 
-	switch( event) {
-	case RECV_RR_RSP:
-		DEBUG( 4, __FUNCTION__ "(), RECV_RR_FRAME: "
-		       "Retrans:%d, nr=%d, va=%d, vs=%d, vr=%d\n",
-		       self->retry_count, info->nr, self->va, self->vs, 
-		       self->vr);
-
-		ASSERT( info != NULL, return -1;);
-
-		/*  
-		 *  If you get a RR, the remote isn't busy anymore, 
-		 *  no matter what the NR 
-		 */
-		self->remote_busy = FALSE;
-
-		/* 
-		 *  Nr as expected? 
-		 */
-		ret = irlap_validate_nr_received( self, info->nr);
-		if ( ret == NR_EXPECTED) {	
-			/* Stop final timer */
-			del_timer( &self->final_timer);
-			
-			/* Update Nr received */
-			irlap_update_nr_received( self, info->nr);
-			
-			/*
-			 *  Got expected NR, so reset the retry_count. This 
-			 *  is not done by the IrLAP standard , which is 
-			 *  strange! DB.
-			 */
-			self->retry_count = 0;			
-			irlap_wait_min_turn_around( self, &self->qos_tx);
-
-			/* Start poll timer */
-			irlap_start_poll_timer( self, self->poll_timeout);
-
-			irlap_next_state( self, LAP_XMIT_P);
-		} else if ( ret == NR_UNEXPECTED) {
-			ASSERT( info != NULL, return -1;);	
-			/* 
-			 *  Unexpected nr! 
-			 */
-			
-			/* Update Nr received */
-			irlap_update_nr_received( self, info->nr);
-
-			DEBUG( 4, "RECV_RR_FRAME: Retrans:%d, nr=%d, va=%d, "
-			       "vs=%d, vr=%d\n",
-			       self->retry_count, info->nr, self->va, 
-			       self->vs, self->vr);
-			
-			/* Resend rejected frames */
-			irlap_resend_rejected_frames( self, CMD_FRAME);
-			
-			/*
-			 *  Start only if not running, DB
-			 *  TODO: Should this one be here?
-			 */
-			/* if ( !self->final_timer.prev) */
-/* 				irda_start_timer( FINAL_TIMER, self->final_timeout);  */
-
-			/* Keep state */
-			irlap_next_state( self, LAP_NRM_P);
-		} else if ( ret == NR_INVALID) {
-			DEBUG(1, "irlap_state_nrm_p: received RR with "
-			      "invalid nr !\n");
-			del_timer( &self->final_timer);
-
-			irlap_next_state( self, LAP_RESET_WAIT);
-
-			irlap_disconnect_indication( self, 
-						     LAP_RESET_INDICATION);
-			self->xmitflag = TRUE;
-		}
-		if (skb)
-			dev_kfree_skb( skb);
-		break;
-	case RECV_RNR_FRAME:
-		DEBUG( 4, "irlap_state_nrm_p: RECV_RNR_FRAME: Retrans:%d, "
-		       "nr=%d, va=%d, vs=%d, vr=%d\n",
-		       self->retry_count, info->nr, self->va, self->vs, 
-		       self->vr);
-
-		ASSERT( info != NULL, return -1;);
-
-		/* Stop final timer */
-		del_timer( &self->final_timer);
-		self->remote_busy = TRUE;
-
-		/* Update Nr received */
-		irlap_update_nr_received( self, info->nr);
-			
-		/* Start poll timer */
-		irlap_start_poll_timer( self, self->poll_timeout);
-
-		irlap_next_state( self, LAP_XMIT_P);
-
-		dev_kfree_skb( skb);
-		break;
-	case RECV_I_RSP:
+	switch (event) {
+	case RECV_I_RSP: /* Optimize for the common case */
 		/* FIXME: must check for remote_busy below */
 #ifdef CONFIG_IRDA_FAST_RR
 		/* 
@@ -1039,8 +947,8 @@ static int irlap_state_nrm_p( struct irlap_cb *self, IRLAP_EVENT event,
 
 		ASSERT( info != NULL, return -1;);
 
-		ns_status = irlap_validate_ns_received( self, info->ns);
-		nr_status = irlap_validate_nr_received( self, info->nr);
+		ns_status = irlap_validate_ns_received(self, info->ns);
+		nr_status = irlap_validate_nr_received(self, info->nr);
 
 		/* 
 		 *  Check for expected I(nformation) frame
@@ -1049,7 +957,7 @@ static int irlap_state_nrm_p( struct irlap_cb *self, IRLAP_EVENT event,
 			/* 
 			 *  poll bit cleared?
 			 */
-			if ( !info->pf) {
+			if (!info->pf) {
 				self->vr = (self->vr + 1) % 8;
 			
 				/* Update Nr received */
@@ -1058,16 +966,16 @@ static int irlap_state_nrm_p( struct irlap_cb *self, IRLAP_EVENT event,
 				self->ack_required = TRUE;
 				
 				/* Keep state, do not move this line */
-				irlap_next_state( self, LAP_NRM_P);
+				irlap_next_state(self, LAP_NRM_P);
 				
-				irlap_data_indication( self, skb);
+				irlap_data_indication(self, skb);
 			} else {
-				del_timer( &self->final_timer);
+				del_timer(&self->final_timer);
 
 				self->vr = (self->vr + 1) % 8;
 			
 				/* Update Nr received */
-				irlap_update_nr_received( self, info->nr);
+				irlap_update_nr_received(self, info->nr);
 		
 				/*  
 				 *  Got expected NR, so reset the
@@ -1077,13 +985,17 @@ static int irlap_state_nrm_p( struct irlap_cb *self, IRLAP_EVENT event,
 				self->retry_count = 0;
 				self->ack_required = TRUE;
 			
-				/* This is the last frame */
-				irlap_start_poll_timer( self, self->poll_timeout);
-				irlap_wait_min_turn_around( self, &self->qos_tx);
-				/* Do not move this line */
-				irlap_next_state( self, LAP_XMIT_P);
+				irlap_wait_min_turn_around(self, &self->qos_tx);
+				/* 
+				 * Important to switch state before calling
+				 * upper layers
+				 */
+				irlap_next_state(self, LAP_XMIT_P);
 			
-				irlap_data_indication( self, skb);
+				irlap_data_indication(self, skb);
+
+				/* This is the last frame */
+				irlap_start_poll_timer(self, self->poll_timeout);
 			}
 			break;
 			
@@ -1091,8 +1003,7 @@ static int irlap_state_nrm_p( struct irlap_cb *self, IRLAP_EVENT event,
 		/*
 		 *  Unexpected next to send (Ns)
 		 */
-		if (( ns_status == NS_UNEXPECTED) && 
-		    ( nr_status == NR_EXPECTED)) 
+		if ((ns_status == NS_UNEXPECTED) && (nr_status == NR_EXPECTED))
 		{
 			if ( !info->pf) {
 				irlap_update_nr_received( self, info->nr);
@@ -1125,8 +1036,7 @@ static int irlap_state_nrm_p( struct irlap_cb *self, IRLAP_EVENT event,
 		/* 
 		 *  Unexpected next to receive (Nr) 
 		 */
-		if (( ns_status == NS_EXPECTED) && 
-		    ( nr_status == NR_UNEXPECTED))
+		if ((ns_status == NS_EXPECTED) && (nr_status == NR_UNEXPECTED))
 		{
 			if ( info->pf) {
 				self->vr = (self->vr + 1) % 8;
@@ -1169,8 +1079,8 @@ static int irlap_state_nrm_p( struct irlap_cb *self, IRLAP_EVENT event,
 		 *  Unexpected next to send (Ns) and next to receive (Nr)
 		 *  Not documented by IrLAP!
 		 */
-		if (( ns_status == NS_UNEXPECTED) && 
-		    ( nr_status == NR_UNEXPECTED)) 
+		if ((ns_status == NS_UNEXPECTED) && 
+		    (nr_status == NR_UNEXPECTED)) 
 		{
 			DEBUG( 4, "IrLAP: unexpected nr and ns!\n");
 			if ( info->pf) {
@@ -1194,37 +1104,137 @@ static int irlap_state_nrm_p( struct irlap_cb *self, IRLAP_EVENT event,
 		/*
 		 *  Invalid NR or NS
 		 */
-		if (( nr_status == NR_INVALID) || ( ns_status == NS_INVALID)) {
-			if ( info->pf) {
-				del_timer( &self->final_timer);
+		if ((nr_status == NR_INVALID) || (ns_status == NS_INVALID)) {
+			if (info->pf) {
+				del_timer(&self->final_timer);
 				
-				irlap_next_state( self, LAP_RESET_WAIT);
+				irlap_next_state(self, LAP_RESET_WAIT);
 
-				irlap_disconnect_indication( self, LAP_RESET_INDICATION);
+				irlap_disconnect_indication(self, LAP_RESET_INDICATION);
 				self->xmitflag = TRUE;
 			} else {
-				del_timer( &self->final_timer);
+				del_timer(&self->final_timer);
 				
-				irlap_disconnect_indication( self, LAP_RESET_INDICATION);
+				irlap_disconnect_indication(self, LAP_RESET_INDICATION);
 				
 				self->xmitflag = FALSE;
 			}
 			break;
 		}
 		DEBUG(1, __FUNCTION__ "(), Not implemented!\n");
-		DEBUG(1, __FUNCTION__ "(), event=%s, ns_status=%d, nr_status=%d\n", 
-		       irlap_event[ event], ns_status, nr_status);
+		DEBUG(1, __FUNCTION__ 
+		      "(), event=%s, ns_status=%d, nr_status=%d\n", 
+		      irlap_event[ event], ns_status, nr_status);
 		break;
 	case RECV_UI_FRAME:
 		/*  poll bit cleared?  */
-		if ( !info->pf) {
-			irlap_unit_data_indication( self, skb);
-			irlap_next_state( self, LAP_NRM_P);
+		if (!info->pf) {
+			irlap_unit_data_indication(self, skb);
+			irlap_next_state(self, LAP_NRM_P);
 		} else {
-			del_timer( &self->final_timer);
-			irlap_unit_data_indication( self, skb);
-			irlap_start_poll_timer( self, self->poll_timeout);
+			del_timer(&self->final_timer);
+			irlap_unit_data_indication(self, skb);
+			irlap_start_poll_timer(self, self->poll_timeout);
 		}
+		break;
+	case RECV_RR_RSP:
+		DEBUG(4, __FUNCTION__ "(), RECV_RR_FRAME: "
+		      "Retrans:%d, nr=%d, va=%d, vs=%d, vr=%d\n",
+		      self->retry_count, info->nr, self->va, self->vs, 
+		      self->vr);
+
+		ASSERT(info != NULL, return -1;);
+
+		/*  
+		 *  If you get a RR, the remote isn't busy anymore, 
+		 *  no matter what the NR 
+		 */
+		self->remote_busy = FALSE;
+
+		/* 
+		 *  Nr as expected? 
+		 */
+		ret = irlap_validate_nr_received(self, info->nr);
+		if (ret == NR_EXPECTED) {	
+			/* Stop final timer */
+			del_timer(&self->final_timer);
+			
+			/* Update Nr received */
+			irlap_update_nr_received(self, info->nr);
+			
+			/*
+			 *  Got expected NR, so reset the retry_count. This 
+			 *  is not done by the IrLAP standard , which is 
+			 *  strange! DB.
+			 */
+			self->retry_count = 0;			
+			irlap_wait_min_turn_around(self, &self->qos_tx);
+
+			irlap_next_state(self, LAP_XMIT_P);
+
+			/* Start poll timer */
+			irlap_start_poll_timer(self, self->poll_timeout);
+		} else if (ret == NR_UNEXPECTED) {
+			ASSERT( info != NULL, return -1;);	
+			/* 
+			 *  Unexpected nr! 
+			 */
+			
+			/* Update Nr received */
+			irlap_update_nr_received( self, info->nr);
+
+			DEBUG( 4, "RECV_RR_FRAME: Retrans:%d, nr=%d, va=%d, "
+			       "vs=%d, vr=%d\n",
+			       self->retry_count, info->nr, self->va, 
+			       self->vs, self->vr);
+			
+			/* Resend rejected frames */
+			irlap_resend_rejected_frames( self, CMD_FRAME);
+			
+			/*
+			 *  Start only if not running, DB
+			 *  TODO: Should this one be here?
+			 */
+			/* if ( !self->final_timer.prev) */
+/* 				irda_start_timer( FINAL_TIMER, self->final_timeout);  */
+
+			/* Keep state */
+			irlap_next_state( self, LAP_NRM_P);
+		} else if (ret == NR_INVALID) {
+			DEBUG(1, "irlap_state_nrm_p: received RR with "
+			      "invalid nr !\n");
+			del_timer( &self->final_timer);
+
+			irlap_next_state( self, LAP_RESET_WAIT);
+
+			irlap_disconnect_indication( self, 
+						     LAP_RESET_INDICATION);
+			self->xmitflag = TRUE;
+		}
+		if (skb)
+			dev_kfree_skb( skb);
+		break;
+	case RECV_RNR_FRAME:
+		DEBUG( 4, "irlap_state_nrm_p: RECV_RNR_FRAME: Retrans:%d, "
+		       "nr=%d, va=%d, vs=%d, vr=%d\n",
+		       self->retry_count, info->nr, self->va, self->vs, 
+		       self->vr);
+
+		ASSERT( info != NULL, return -1;);
+
+		/* Stop final timer */
+		del_timer( &self->final_timer);
+		self->remote_busy = TRUE;
+
+		/* Update Nr received */
+		irlap_update_nr_received( self, info->nr);
+
+		irlap_next_state( self, LAP_XMIT_P);
+			
+		/* Start poll timer */
+		irlap_start_poll_timer( self, self->poll_timeout);
+
+		dev_kfree_skb( skb);
 		break;
 	case RECV_FRMR_RSP:
 		del_timer( &self->final_timer);
@@ -1322,8 +1332,8 @@ static int irlap_state_nrm_p( struct irlap_cb *self, IRLAP_EVENT event,
  *    awaiting reset of disconnect request.
  *
  */
-int irlap_state_reset_wait( struct irlap_cb *self, IRLAP_EVENT event, 
-			    struct sk_buff *skb, struct irlap_info *info)
+static int irlap_state_reset_wait(struct irlap_cb *self, IRLAP_EVENT event, 
+				  struct sk_buff *skb, struct irlap_info *info)
 {
 	int ret = 0;
 	
@@ -1368,19 +1378,19 @@ int irlap_state_reset_wait( struct irlap_cb *self, IRLAP_EVENT event,
  *    reply.
  *
  */
-int irlap_state_reset( struct irlap_cb *self, IRLAP_EVENT event, 
-		       struct sk_buff *skb, struct irlap_info *info)
+static int irlap_state_reset( struct irlap_cb *self, IRLAP_EVENT event, 
+			      struct sk_buff *skb, struct irlap_info *info)
 {
 	int ret = 0;
 	
-	DEBUG( 3, __FUNCTION__ "(), event = %s\n", irlap_event[event]);
+	DEBUG(3, __FUNCTION__ "(), event = %s\n", irlap_event[event]);
 	
-	ASSERT( self != NULL, return -1;);
-	ASSERT( self->magic == LAP_MAGIC, return -1;);
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == LAP_MAGIC, return -1;);
 	
-	switch( event) {
+	switch(event) {
 	case RECV_DISC_FRAME:
-		del_timer( &self->final_timer);
+		del_timer(&self->final_timer);
 
 		irlap_apply_default_connection_parameters( self);
 
@@ -1398,8 +1408,10 @@ int irlap_state_reset( struct irlap_cb *self, IRLAP_EVENT event,
 		irlap_reset_confirm();
 		
 		self->remote_busy = FALSE;
-		irlap_start_poll_timer( self, self->poll_timeout);
+
 		irlap_next_state( self, LAP_XMIT_P);
+
+		irlap_start_poll_timer( self, self->poll_timeout);
 		break;
 	case FINAL_TIMER_EXPIRED:
 		if ( self->retry_count < 3) {
@@ -1540,53 +1552,8 @@ static int irlap_state_nrm_s( struct irlap_cb *self, IRLAP_EVENT event,
 	ASSERT( self != NULL, return -1;);
 	ASSERT( self->magic == LAP_MAGIC, return -1;);
 
-	switch( event) {
-	case RECV_RR_CMD:
-		self->retry_count = 0;
-
-		/* 
-		 *  Nr as expected? 
-		 */
-		nr_status = irlap_validate_nr_received( self, info->nr);
-		if ( nr_status == NR_EXPECTED) {
-			if (( skb_queue_len( &self->tx_list) > 0) && 
-			    ( self->window > 0)) {
-				self->remote_busy = FALSE;
-				
-				/* Update Nr received */
-				irlap_update_nr_received( self, info->nr);
-				del_timer( &self->wd_timer);
-				
-				irlap_wait_min_turn_around( self, &self->qos_tx);
-				irlap_next_state( self, LAP_XMIT_S);
-			} else {			
-				self->remote_busy = FALSE;
-				/* Update Nr received */
-				irlap_update_nr_received( self, info->nr);
-				irlap_wait_min_turn_around( self, &self->qos_tx);
-				
-				irlap_send_rr_frame( self, RSP_FRAME);
-				
-				irlap_start_wd_timer( self, self->wd_timeout);
-				irlap_next_state( self, LAP_NRM_S);
-			}
-		} else if ( nr_status == NR_UNEXPECTED) {
-			self->remote_busy = FALSE;
-			irlap_update_nr_received( self, info->nr);
-			irlap_resend_rejected_frames( self, RSP_FRAME);
-
-			irlap_start_wd_timer( self, self->wd_timeout);
-
-			/* Keep state */
-			irlap_next_state( self, LAP_NRM_S); 
-		} else {
-			DEBUG(1, __FUNCTION__ "(), invalid nr not implemented!\n");
-		} 
-		if ( skb)
-			dev_kfree_skb( skb);
-
-		break;
-	case RECV_I_CMD:
+	switch(event) {
+	case RECV_I_CMD: /* Optimize for the common case */
 		/* FIXME: must check for remote_busy below */
 		DEBUG( 4, __FUNCTION__ "(), event=%s nr=%d, vs=%d, ns=%d, "
 		       "vr=%d, pf=%d\n", irlap_event[event], info->nr, 
@@ -1765,6 +1732,51 @@ static int irlap_state_nrm_s( struct irlap_cb *self, IRLAP_EVENT event,
 			}
 		}
 		break;
+	case RECV_RR_CMD:
+		self->retry_count = 0;
+
+		/* 
+		 *  Nr as expected? 
+		 */
+		nr_status = irlap_validate_nr_received( self, info->nr);
+		if ( nr_status == NR_EXPECTED) {
+			if (( skb_queue_len( &self->tx_list) > 0) && 
+			    ( self->window > 0)) {
+				self->remote_busy = FALSE;
+				
+				/* Update Nr received */
+				irlap_update_nr_received( self, info->nr);
+				del_timer( &self->wd_timer);
+				
+				irlap_wait_min_turn_around( self, &self->qos_tx);
+				irlap_next_state( self, LAP_XMIT_S);
+			} else {			
+				self->remote_busy = FALSE;
+				/* Update Nr received */
+				irlap_update_nr_received( self, info->nr);
+				irlap_wait_min_turn_around( self, &self->qos_tx);
+				
+				irlap_send_rr_frame( self, RSP_FRAME);
+				
+				irlap_start_wd_timer( self, self->wd_timeout);
+				irlap_next_state( self, LAP_NRM_S);
+			}
+		} else if ( nr_status == NR_UNEXPECTED) {
+			self->remote_busy = FALSE;
+			irlap_update_nr_received( self, info->nr);
+			irlap_resend_rejected_frames( self, RSP_FRAME);
+
+			irlap_start_wd_timer( self, self->wd_timeout);
+
+			/* Keep state */
+			irlap_next_state( self, LAP_NRM_S); 
+		} else {
+			DEBUG(1, __FUNCTION__ "(), invalid nr not implemented!\n");
+		} 
+		if ( skb)
+			dev_kfree_skb( skb);
+
+		break;
 	case RECV_SNRM_CMD:
 		del_timer( &self->wd_timer);
 		DEBUG(1, __FUNCTION__ "(), received SNRM cmd\n");
@@ -1897,7 +1909,3 @@ static int irlap_state_reset_check( struct irlap_cb *self, IRLAP_EVENT event,
 
 	return ret;
 }
-
-
-
-

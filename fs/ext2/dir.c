@@ -115,8 +115,6 @@ static int ext2_readdir(struct file * filp,
 	int err;
 	struct inode *inode = filp->f_dentry->d_inode;
 
-	if (!inode || !S_ISDIR(inode->i_mode))
-		return -EBADF;
 	sb = inode->i_sb;
 
 	stored = 0;

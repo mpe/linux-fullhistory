@@ -254,18 +254,8 @@ static inline int buffer_protected(struct buffer_head * bh)
 	return test_bit(BH_Protected, &bh->b_state);
 }
 
-/*
- * Deprecated - we don't keep per-buffer reference flags
- * any more.
- *
- * We _could_ try to update the page reference, but that
- * doesn't seem to really be worth it either. If we did,
- * it would look something like this:
- *
- *	#define buffer_page(bh)		(mem_map + MAP_NR((bh)->b_data))
- *	#define touch_buffer(bh)	set_bit(PG_referenced, &buffer_page(bh)->flags)
- */
-#define touch_buffer(bh)	do { } while (0)
+#define buffer_page(bh)		(mem_map + MAP_NR((bh)->b_data))
+#define touch_buffer(bh)	set_bit(PG_referenced, &buffer_page(bh)->flags)
 
 #include <linux/pipe_fs_i.h>
 #include <linux/minix_fs_i.h>
@@ -607,7 +597,7 @@ struct file_operations {
 struct inode_operations {
 	struct file_operations * default_file_ops;
 	int (*create) (struct inode *,struct dentry *,int);
-	int (*lookup) (struct inode *,struct dentry *);
+	struct dentry * (*lookup) (struct inode *,struct dentry *);
 	int (*link) (struct dentry *,struct inode *,struct dentry *);
 	int (*unlink) (struct inode *,struct dentry *);
 	int (*symlink) (struct inode *,struct dentry *,const char *);

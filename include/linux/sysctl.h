@@ -56,9 +56,15 @@ enum
 	CTL_PROC=4,		/* Process info */
 	CTL_FS=5,		/* Filesystems */
 	CTL_DEBUG=6,		/* Debugging */
-	CTL_DEV=7		/* Devices */
+	CTL_DEV=7,		/* Devices */
+	CTL_BUS=8		/* Buses */
 };
 
+/* CTL_BUS names: */
+enum
+{
+	BUS_ISA=1		/* ISA */
+};
 
 /* CTL_KERN names: */
 enum
@@ -133,9 +139,17 @@ enum
 	NET_IPV6=12,
 	NET_X25=13,
 	NET_TR=14,
-	NET_DECNET=15
+	NET_DECNET=15,
+	NET_ECONET=16
 };
 
+/* /proc/sys/bus/isa */
+enum
+{
+	BUS_ISA_MEM_BASE=1,
+	BUS_ISA_PORT_BASE=2,
+	BUS_ISA_PORT_SHIFT=3
+};
 
 /* /proc/sys/net/core */
 enum

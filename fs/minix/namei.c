@@ -116,7 +116,7 @@ struct dentry_operations minix_dentry_operations = {
 	0		/* compare */
 };
 
-int minix_lookup(struct inode * dir, struct dentry *dentry)
+struct dentry *minix_lookup(struct inode * dir, struct dentry *dentry)
 {
 	struct inode * inode = NULL;
 	struct minix_dir_entry * de;
@@ -132,10 +132,10 @@ int minix_lookup(struct inode * dir, struct dentry *dentry)
 		inode = iget(dir->i_sb, ino);
  
 		if (!inode)
-			return -EACCES;
+			return ERR_PTR(-EACCES);
 	}
 	d_add(dentry, inode);
-	return 0;
+	return NULL;
 }
 
 /*
@@ -221,8 +221,6 @@ int minix_create(struct inode * dir, struct dentry *dentry, int mode)
 	struct buffer_head * bh;
 	struct minix_dir_entry * de;
 
-	if (!dir)
-		return -ENOENT;
 	inode = minix_new_inode(dir);
 	if (!inode)
 		return -ENOSPC;
@@ -251,8 +249,6 @@ int minix_mknod(struct inode * dir, struct dentry *dentry, int mode, int rdev)
 	struct buffer_head * bh;
 	struct minix_dir_entry * de;
 
-	if (!dir)
-		return -ENOENT;
 	bh = minix_find_entry(dir, dentry->d_name.name,
 			      dentry->d_name.len, &de);
 	if (bh) {
@@ -298,8 +294,6 @@ int minix_mkdir(struct inode * dir, struct dentry *dentry, int mode)
 	struct minix_dir_entry * de;
 	struct minix_sb_info * info;
 
-	if (!dir || !dir->i_sb)
-		return -EINVAL;
 	info = &dir->i_sb->u.minix_sb;
 	bh = minix_find_entry(dir, dentry->d_name.name,
 			      dentry->d_name.len, &de);

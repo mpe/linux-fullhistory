@@ -842,7 +842,6 @@ static int openpromfs_readdir(struct file * filp, void * dirent, filldir_t filld
 	struct openpromfs_dev *d;
 	char buffer2[64];
 	
-	if (!inode || !S_ISDIR (inode->i_mode)) return -ENOTDIR;
 	ino = inode->i_ino;
 	i = filp->f_pos;
 	switch (i) {

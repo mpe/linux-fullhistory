@@ -68,8 +68,6 @@ static int minix_readdir(struct file * filp,
 	struct minix_sb_info * info;
 	struct inode *inode = filp->f_dentry->d_inode;
 
-	if (!inode || !inode->i_sb || !S_ISDIR(inode->i_mode))
-		return -EBADF;
 	info = &inode->i_sb->u.minix_sb;
 	if (filp->f_pos & (info->s_dirsize - 1))
 		return -EBADF;

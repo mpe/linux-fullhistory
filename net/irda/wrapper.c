@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      wrapper.c
- * Version:       1.0
+ * Version:       1.1
  * Description:   SIR wrapper layer
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Fri Mar 26 21:52:53 1999
+ * Modified at:   Wed Apr 21 12:45:55 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, 
@@ -34,9 +34,7 @@
 #include <net/irda/irlap_frame.h>
 #include <net/irda/irda_device.h>
 
-#define MIN_LENGTH 14
-
-inline static int stuff_byte( __u8 byte, __u8 *buf);
+inline static int stuff_byte(__u8 byte, __u8 *buf);
 
 /*
  * Function async_wrap (skb, *tx_buff)
@@ -44,17 +42,17 @@ inline static int stuff_byte( __u8 byte, __u8 *buf);
  *    Makes a new buffer with wrapping and stuffing, should check that 
  *    we don't get tx buffer overflow.
  */
-int async_wrap_skb( struct sk_buff *skb, __u8 *tx_buff, int buffsize)
+int async_wrap_skb(struct sk_buff *skb, __u8 *tx_buff, int buffsize)
 {
-	__u8 byte;
-	int i, n;
+ 	int i;
+	int n;
 	int xbofs;
 	union {
 		__u16 value;
 		__u8 bytes[2];
 	} fcs;
 
-	ASSERT( skb != NULL, return 0;);
+	ASSERT(skb != NULL, return 0;);
 
 	/* Initialize variables */
 	fcs.value = INIT_FCS;
@@ -72,33 +70,31 @@ int async_wrap_skb( struct sk_buff *skb, __u8 *tx_buff, int buffsize)
 	 */
 	if (((struct irlap_skb_cb *)(skb->cb))->magic != LAP_MAGIC) {
 		DEBUG(1, __FUNCTION__ "(), wrong magic in skb!\n");
-		xbofs = 11;
+		xbofs = 10;
 	} else
 		xbofs = ((struct irlap_skb_cb *)(skb->cb))->xbofs;
 
-	for (i=0; i<xbofs; i++) {
- 		tx_buff[n++] = XBOF; 
- 	}
-
+#if 0
+ 	for (i=0; i<xbofs; i++)
+  		tx_buff[n++] = XBOF;
+#else
+	memset(tx_buff+n, XBOF, xbofs);
+	n += xbofs;
+#endif
 	/* Start of packet character BOF */
 	tx_buff[n++] = BOF;
 
 	/* Insert frame and calc CRC */
 	for (i=0; i < skb->len; i++) {
-		byte = skb->data[i];
-		
 		/*
 		 *  Check for the possibility of tx buffer overflow. We use
 		 *  bufsize-5 since the maximum number of bytes that can be 
 		 *  transmitted after this point is 5.
 		 */
-		if ( n > buffsize-5) {
-			printk( KERN_WARNING 
-				"IrDA Wrapper: TX-buffer overflow!\n");
-			return n;
-		}
-		n+=stuff_byte( byte, tx_buff+n);
-		fcs.value = IR_FCS( fcs.value, byte);
+		ASSERT(n < (buffsize-5), return n;);
+
+		n += stuff_byte(skb->data[i], tx_buff+n);
+		fcs.value = IR_FCS(fcs.value, skb->data[i]);
 	}
 	
 	/* Insert CRC in little endian format (LSB first) */
@@ -111,7 +107,16 @@ int async_wrap_skb( struct sk_buff *skb, __u8 *tx_buff, int buffsize)
 	n += stuff_byte(fcs.bytes[0], tx_buff+n);
 #endif
 	tx_buff[n++] = EOF;
-	
+
+#if 0
+	{
+		int i;
+		
+		for (i=0;i<n;i++)
+			printk("%02x", tx_buff[i]);
+		printk("\n");
+	}
+#endif
 	return n;
 }
 
@@ -121,10 +126,10 @@ int async_wrap_skb( struct sk_buff *skb, __u8 *tx_buff, int buffsize)
  *    Got a frame, make a copy of it, and pass it up the stack!
  *
  */
-static inline void async_bump( struct irda_device *idev, __u8 *buf, int len)
+static inline void async_bump(struct irda_device *idev, __u8 *buf, int len)
 {
        	struct sk_buff *skb;
- 
+
 	skb = dev_alloc_skb(len+1);
 	if (!skb)  {
 		idev->stats.rx_dropped++;
@@ -132,18 +137,14 @@ static inline void async_bump( struct irda_device *idev, __u8 *buf, int len)
 	}
 
 	/*  Align IP header to 20 bytes */
-	skb_reserve( skb, 1);
+	skb_reserve(skb, 1);
 	
-	ASSERT( len-2 > 0, return;);
-
         /* Copy data without CRC */
-	skb_put( skb, len-2);
-	memcpy( skb->data, buf, len-2); 
+	memcpy(skb_put(skb, len-2), buf, len-2); 
 	
 	/* 
 	 *  Feed it to IrLAP layer 
 	 */
-	/* memcpy(skb_put(skb,count), ax->rbuff, count); */
 	skb->dev = &idev->netdev;
 	skb->mac.raw  = skb->data;
 	skb->protocol = htons(ETH_P_IRDA);
@@ -159,18 +160,18 @@ static inline void async_bump( struct irda_device *idev, __u8 *buf, int len)
  *    Parse and de-stuff frame received from the IR-port
  *
  */
-void async_unwrap_char( struct irda_device *idev, __u8 byte) 
+void async_unwrap_char(struct irda_device *idev, __u8 byte) 
 {
 	/* State machine for receiving frames */	   
-	switch( idev->rx_buff.state) {
+	switch (idev->rx_buff.state) {
 	case OUTSIDE_FRAME:
-		switch( byte) {
+		switch(byte) {
 		case BOF:
 			idev->rx_buff.state = BEGIN_FRAME;
 			idev->rx_buff.in_frame = TRUE;
 			break;
 		case XBOF:
-			idev->xbofs++;
+			/* idev->xbofs++; */
 			break;
 		case EOF:
 			irda_device_set_media_busy( idev, TRUE);
@@ -180,9 +181,8 @@ void async_unwrap_char( struct irda_device *idev, __u8 byte)
 		}
 		break;
 	case BEGIN_FRAME:
-		switch ( byte) {
+		switch (byte) {
 		case BOF:
-			
 			/* Continue */
 			break;
 		case CE:
@@ -198,28 +198,29 @@ void async_unwrap_char( struct irda_device *idev, __u8 byte)
 			break;
 		default:
 			/* Got first byte of frame */
-			idev->rx_buff.data[ idev->rx_buff.len++] = byte;
+			idev->rx_buff.data = idev->rx_buff.head;
+			idev->rx_buff.len = 0;
+
+			idev->rx_buff.data[idev->rx_buff.len++] = byte;
 			
-			idev->rx_buff.fcs = IR_FCS( INIT_FCS, byte);
+			idev->rx_buff.fcs = IR_FCS(INIT_FCS, byte);
 			idev->rx_buff.state = INSIDE_FRAME;
 			break;
 		}
 		break;
 	case LINK_ESCAPE:
-		switch ( byte) {
+		switch (byte) {
 		case BOF:
 			/* New frame? */
 			idev->rx_buff.state = BEGIN_FRAME;
-			idev->rx_buff.len = 0;
-			irda_device_set_media_busy( idev, TRUE);
+			irda_device_set_media_busy(idev, TRUE);
 			break;
 		case CE:
-			DEBUG( 4, "WARNING: State not defined\n");
+			DEBUG(4, "WARNING: State not defined\n");
 			break;
 		case EOF:
 			/* Abort frame */
 			idev->rx_buff.state = OUTSIDE_FRAME;
-			idev->rx_buff.len = 0;
 			break;
 		default:
 			/* 
@@ -227,28 +228,25 @@ void async_unwrap_char( struct irda_device *idev, __u8 byte)
 			 *  following CE, IrLAP p.114 
 			 */
 			byte ^= IR_TRANS;
-			if ( idev->rx_buff.len < idev->rx_buff.truesize)  {
-				idev->rx_buff.data[ idev->rx_buff.len++] = byte;
-			
+			if (idev->rx_buff.len < idev->rx_buff.truesize)  {
+				idev->rx_buff.data[idev->rx_buff.len++] = byte;
 				idev->rx_buff.fcs = IR_FCS(idev->rx_buff.fcs,
 							   byte);
 				idev->rx_buff.state = INSIDE_FRAME;
 			} else {
-				DEBUG( 1, __FUNCTION__ 
+				DEBUG(1, __FUNCTION__ 
 				       "(), Rx buffer overflow, aborting\n");
 				idev->rx_buff.state = OUTSIDE_FRAME;
-				idev->rx_buff.len = 0;
 			}
 			break;
 		}
 		break;
 	case INSIDE_FRAME:
-		switch ( byte) {
+		switch (byte) {
 		case BOF:
 			/* New frame? */
 			idev->rx_buff.state = BEGIN_FRAME;
-			idev->rx_buff.len = 0;
-			irda_device_set_media_busy( idev, TRUE);
+			irda_device_set_media_busy(idev, TRUE);
 			break;
 		case CE:
 			/* Stuffed char */
@@ -262,14 +260,12 @@ void async_unwrap_char( struct irda_device *idev, __u8 byte)
 			/* 
 			 *  Test FCS and deliver frame if it's good
 			 */			
-			if ( idev->rx_buff.fcs == GOOD_FCS) {
-				async_bump( idev, idev->rx_buff.data, 
-					    idev->rx_buff.len);
-				idev->rx_buff.len = 0;
+			if (idev->rx_buff.fcs == GOOD_FCS) {
+				async_bump(idev, idev->rx_buff.data, 
+					   idev->rx_buff.len);
 			} else {
 				/* Wrong CRC, discard frame!  */
-				irda_device_set_media_busy( idev, TRUE); 
-				idev->rx_buff.len = 0;
+				irda_device_set_media_busy(idev, TRUE); 
 
 				idev->stats.rx_errors++;
 				idev->stats.rx_crc_errors++;
@@ -277,16 +273,14 @@ void async_unwrap_char( struct irda_device *idev, __u8 byte)
 			break;
 		default:
 			/* Next byte of frame */
-			if ( idev->rx_buff.len < idev->rx_buff.truesize)  {
-				idev->rx_buff.data[ idev->rx_buff.len++] = byte;
-				
-				idev->rx_buff.fcs = IR_FCS( idev->rx_buff.fcs,
-							    byte);
+			if (idev->rx_buff.len < idev->rx_buff.truesize)  {
+				idev->rx_buff.data[idev->rx_buff.len++] = byte;
+				idev->rx_buff.fcs = IR_FCS(idev->rx_buff.fcs,
+							   byte);
 			} else {
-				DEBUG( 1, __FUNCTION__ 
-				       "(), Rx buffer overflow, aborting\n");
+				DEBUG(1, __FUNCTION__ 
+				      "(), Rx buffer overflow, aborting\n");
 				idev->rx_buff.state = OUTSIDE_FRAME;
-				idev->rx_buff.len = 0;
 			}
 			break;
 		}
@@ -301,9 +295,9 @@ void async_unwrap_char( struct irda_device *idev, __u8 byte)
  *    buf. The buffer must at all times be able to have two bytes inserted.
  * 
  */
-inline static int stuff_byte( __u8 byte, __u8 *buf) 
+inline static int stuff_byte(__u8 byte, __u8 *buf) 
 {
-	switch ( byte) {
+	switch (byte) {
 	case BOF: /* FALLTHROUGH */
 	case EOF: /* FALLTHROUGH */
 	case CE:

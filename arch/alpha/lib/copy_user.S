@@ -46,6 +46,8 @@
 	.globl __copy_user
 	.ent __copy_user
 __copy_user:
+	ldgp $29,0($27)			# we do exceptions -- we need the gp.
+	.prologue 1
 	and $6,7,$3
 	beq $0,$35
 	beq $3,$36

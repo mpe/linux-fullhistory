@@ -6,7 +6,7 @@
  * Status:        Stable.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 17 20:54:32 1997
- * Modified at:   Wed Apr  7 17:31:48 1999
+ * Modified at:   Fri Apr 23 09:13:24 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, 
@@ -719,8 +719,11 @@ void irlmp_do_discovery(int nslots)
  */
 void irlmp_discovery_request(int nslots)
 {
-
 	DEBUG(4, __FUNCTION__ "(), nslots=%d\n", nslots);
+
+	/* Check if user wants to override the default */
+	if (nslots == DISCOVERY_DEFAULT_SLOTS)
+		nslots = sysctl_discovery_slots;
 
 	/* 
 	 * If discovery is already running, then just return the current 
@@ -877,10 +880,8 @@ discovery_t *irlmp_get_discovery_response()
  *    Send some data to peer device
  *
  */
-void irlmp_data_request( struct lsap_cb *self, struct sk_buff *skb) 
+void irlmp_data_request(struct lsap_cb *self, struct sk_buff *skb) 
 {
- 	DEBUG(4, __FUNCTION__ "()\n"); 
-
 	ASSERT(skb != NULL, return;);
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == LMP_LSAP_MAGIC, return;);
@@ -898,14 +899,8 @@ void irlmp_data_request( struct lsap_cb *self, struct sk_buff *skb)
  *    Got data from LAP layer so pass it up to upper layer
  *
  */
-void irlmp_data_indication(struct lsap_cb *self, struct sk_buff *skb) 
+inline void irlmp_data_indication(struct lsap_cb *self, struct sk_buff *skb) 
 {
- 	DEBUG(4, __FUNCTION__ "()\n"); 
-
-	ASSERT(self != NULL, return;);
-	ASSERT(self->magic == LMP_LSAP_MAGIC, return;);
-	ASSERT(skb != NULL, return;);
-
 	/* Hide LMP header from layer above */
 	skb_pull(skb, LMP_HEADER);
 

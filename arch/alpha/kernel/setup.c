@@ -183,6 +183,11 @@ setup_arch(char **cmdline_p, unsigned long * memory_start_p,
 			vec = get_sysvec_byname(p+9);
 			continue;
 		}
+
+		if (strncmp(p, "cycle=", 6) == 0) {
+			est_cycle_freq = simple_strtol(p+6, NULL, 0);
+			continue;
+		}
 	}
 
 	/* Replace the command line, not that we've killed it with strtok.  */
@@ -721,8 +726,8 @@ int get_cpuinfo(char *buffer)
 		       (char*)cpu->serial_no,
 		       systype_name, sysvariation_name, hwrpb->sys_revision,
 		       (char*)hwrpb->ssn,
-		       hwrpb->cycle_freq ? : est_cycle_freq,
-		       hwrpb->cycle_freq ? "" : "est.",
+		       est_cycle_freq ? : hwrpb->cycle_freq,
+		       est_cycle_freq ? "est." : "",
 		       hwrpb->intr_freq / 4096,
 		       (100 * hwrpb->intr_freq / 4096) % 100,
 		       hwrpb->pagesize,

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Wed Apr  7 17:03:21 1999
+ * Modified at:   Thu Apr 22 23:13:47 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -112,9 +112,11 @@ struct proc_dir_entry proc_irlan = {
 void irlan_watchdog_timer_expired(unsigned long data)
 {
 	struct irmanager_event mgr_event;
-	struct irlan_cb *self = (struct irlan_cb *) data;
+	struct irlan_cb *self, *entry;
 	
-	DEBUG(2, __FUNCTION__ "()\n");
+	DEBUG(0, __FUNCTION__ "()\n");
+
+	self = (struct irlan_cb *) data;
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRLAN_MAGIC, return;);
@@ -132,147 +134,38 @@ void irlan_watchdog_timer_expired(unsigned long data)
 		 *  by the user.
 		 */
 		self->notify_irmanager = FALSE;
-	} else
-		irlan_close(self);
+	} else {
+		DEBUG(0, __FUNCTION__ "(), recycling instance!\n");
+		if (self->netdev_registered) {
+			DEBUG(0, __FUNCTION__ "(), removing netdev!\n");
+			unregister_netdev(&self->dev);
+			self->netdev_registered = FALSE;
+		}
+
+		/* Unbind from daddr */
+		entry = hashbin_remove(irlan, self->daddr, NULL);
+		ASSERT(entry == self, return;);
+
+		self->daddr = DEV_ADDR_ANY;
+		self->saddr = DEV_ADDR_ANY;
+
+		DEBUG(2, __FUNCTION__ "(), daddr=%08x\n", self->daddr);
+		hashbin_insert(irlan, (QUEUE*) self, self->daddr, NULL);
+	}
 }
 
+/*
+ * Function irlan_start_watchdog_timer (self, timeout)
+ *
+ *    
+ *
+ */
 void irlan_start_watchdog_timer(struct irlan_cb *self, int timeout)
 {
 	DEBUG(4, __FUNCTION__ "()\n");
 	
 	irda_start_timer(&self->watchdog_timer, timeout, (unsigned long) self,
 			 irlan_watchdog_timer_expired);
-}
-
-/*
- * Function irlan_eth_open (dev)
- *
- *    Network device has been opened by user
- *
- */
-static int irlan_eth_open(struct device *dev)
-{
-	struct irlan_cb *self;
-	
-	DEBUG(4, __FUNCTION__ "()\n");
-
-	ASSERT(dev != NULL, return -1;);
-
-	self = (struct irlan_cb *) dev->priv;
-
-	ASSERT(self != NULL, return -1;);
-
-	/* Ready to play! */
-/* 	dev->tbusy = 0; */ /* Wait until data link is ready */
-	dev->interrupt = 0;
-	dev->start = 1;
-
-	self->notify_irmanager = TRUE;
-
-	/* We are now open, so time to do some work */
-	irlan_client_wakeup(self, self->saddr, self->daddr);
-
-	MOD_INC_USE_COUNT;
-	
-	return 0;
-}
-
-/*
- * Function irlan_eth_close (dev)
- *
- *    Stop the ether network device, his function will usually be called by
- *    ifconfig down. We should now disconnect the link, We start the 
- *    close timer, so that the instance will be removed if we are unable
- *    to discover the remote device after the disconnect.
- */
-static int irlan_eth_close(struct device *dev)
-{
-	struct irlan_cb *self = (struct irlan_cb *) dev->priv;
-
-	DEBUG(4, __FUNCTION__ "()\n");
-	
-	/* Stop device */
-	dev->tbusy = 1;
-	dev->start = 0;
-
-	MOD_DEC_USE_COUNT;
-
-	irlan_close_data_channel(self);
-
-	irlan_close_tsaps(self);
-
-	irlan_do_client_event(self, IRLAN_LMP_DISCONNECT, NULL);
-	irlan_do_provider_event(self, IRLAN_LMP_DISCONNECT, NULL);	
-	
-	irlan_start_watchdog_timer(self, IRLAN_TIMEOUT);
-
-	/* Device closed by user! */
-	if (self->notify_irmanager)
-		self->notify_irmanager = FALSE;
-	else
-		self->notify_irmanager = TRUE;
-
-	return 0;
-}
-/*
- * Function irlan_eth_init (dev)
- *
- *    The network device initialization function.
- *
- */
-int irlan_eth_init(struct device *dev)
-{
-	struct irmanager_event mgr_event;
-	struct irlan_cb *self;
-
-	DEBUG(4, __FUNCTION__"()\n");
-
-	ASSERT(dev != NULL, return -1;);
-       
-	self = (struct irlan_cb *) dev->priv;
-
-	dev->open               = irlan_eth_open;
-	dev->stop               = irlan_eth_close;
-	dev->hard_start_xmit    = irlan_eth_xmit; 
-	dev->get_stats	        = irlan_eth_get_stats;
-	dev->set_multicast_list = irlan_eth_set_multicast_list;
-
-	dev->tbusy = 1;
-	
-	ether_setup(dev);
-	
-	dev->tx_queue_len = TTP_MAX_QUEUE;
-
-#if 0
-	/*  
-	 *  OK, since we are emulating an IrLAN sever we will have to give
-	 *  ourself an ethernet address!
-	 *  FIXME: this must be more dynamically
-	 */
-	dev->dev_addr[0] = 0x40;
-	dev->dev_addr[1] = 0x00;
-	dev->dev_addr[2] = 0x00;
-	dev->dev_addr[3] = 0x00;
-	dev->dev_addr[4] = 0x23;
-	dev->dev_addr[5] = 0x45;
-#endif
-	/* 
-	 * Network device has now been registered, so tell irmanager about
-	 * it, so it can be configured with network parameters
-	 */
-	mgr_event.event = EVENT_IRLAN_START;
-	sprintf(mgr_event.devname, "%s", self->ifname);
-	irmanager_notify(&mgr_event);
-
-	/* 
-	 * We set this so that we only notify once, since if 
-	 * configuration of the network device fails, the user
-	 * will have to sort it out first anyway. No need to 
-	 * try again.
-	 */
-	self->notify_irmanager = FALSE;
-
-	return 0;
 }
 
 /*
@@ -312,8 +205,12 @@ __initfunc(int irlan_init(void))
 	/* Start the first IrLAN instance */
  	new = irlan_open(DEV_ADDR_ANY, DEV_ADDR_ANY, FALSE);
 
+	irlan_open_data_tsap(new);
+ 	irlan_client_open_ctrl_tsap(new);
+	irlan_provider_open_ctrl_tsap(new);
+
 	/* Do some fast discovery! */
-	irlmp_discovery_request(8);
+	irlmp_discovery_request(DISCOVERY_DEFAULT_SLOTS);
 
 	return 0;
 }
@@ -345,7 +242,7 @@ int irlan_register_netdev(struct irlan_cb *self)
 {
 	int i=0;
 
-	DEBUG(4, __FUNCTION__ "()\n");
+	DEBUG(0, __FUNCTION__ "()\n");
 
 	/* Check if we should call the device eth<x> or irlan<x> */
 	if (!eth) {
@@ -416,10 +313,6 @@ struct irlan_cb *irlan_open(__u32 saddr, __u32 daddr, int netdev)
 	irlan_next_client_state(self, IRLAN_IDLE);
 	irlan_next_provider_state(self, IRLAN_IDLE);
 
-	irlan_open_data_tsap(self);
-  	irlan_provider_open_ctrl_tsap(self);
-	irlan_client_open_ctrl_tsap(self);
-
 	/* Register network device now, or wait until some later time? */
 	if (netdev)
 		irlan_register_netdev(self);
@@ -436,7 +329,7 @@ struct irlan_cb *irlan_open(__u32 saddr, __u32 daddr, int netdev)
  */
 static void __irlan_close(struct irlan_cb *self)
 {
-	DEBUG(2, __FUNCTION__ "()\n");
+	DEBUG(0, __FUNCTION__ "()\n");
 	
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRLAN_MAGIC, return;);
@@ -447,11 +340,13 @@ static void __irlan_close(struct irlan_cb *self)
 	/* Close all open connections and remove TSAPs */
 	irlan_close_tsaps(self);
 
-	if (self->netdev_registered)
+	if (self->netdev_registered) {
 		unregister_netdev(&self->dev);
+		self->netdev_registered = FALSE;
+	}
 	
 	self->magic = 0;
-	kfree(self);
+ 	kfree(self);
 }
 
 /*
@@ -464,7 +359,7 @@ void irlan_close(struct irlan_cb *self)
 {
 	struct irlan_cb *entry;
 	
-	DEBUG(2, __FUNCTION__ "()\n");
+	DEBUG(0, __FUNCTION__ "()\n");
 
         ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRLAN_MAGIC, return;);
@@ -572,7 +467,7 @@ void irlan_disconnect_indication(void *instance, void *sap, LM_REASON reason,
 
 	switch(reason) {
 	case LM_USER_REQUEST: /* User request */
-		irlan_close(self);
+		//irlan_close(self);
 		break;
 	case LM_LAP_DISCONNECT: /* Unexpected IrLAP disconnect */
 		irlan_start_watchdog_timer(self, IRLAN_TIMEOUT);
@@ -636,7 +531,7 @@ void irlan_open_data_tsap(struct irlan_cb *self)
 	self->stsap_sel_data = self->tsap_data->stsap_sel;
 }
 
-static void irlan_close_tsaps(struct irlan_cb *self)
+void irlan_close_tsaps(struct irlan_cb *self)
 {
 	DEBUG(4, __FUNCTION__ "()\n");
 
@@ -1122,12 +1017,12 @@ static int __irlan_insert_param(struct sk_buff *skb, char *param, int type,
 }
 
 /*
- * Function irlan_get_response_param (buf, param, value)
+ * Function irlan_extract_param (buf, name, value, len)
  *
  *    Extracts a single parameter name/value pair from buffer and updates
  *    the buffer pointer to point to the next name/value pair. 
  */
-int irlan_get_param(__u8 *buf, char *name, char *value, __u16 *len)
+int irlan_extract_param(__u8 *buf, char *name, char *value, __u16 *len)
 {
 	__u8 name_len;
 	__u16 val_len;
@@ -1274,6 +1169,20 @@ void print_ret_code(__u8 code)
 		printk(KERN_WARNING "Asynchronous status\n");
 		break;
 	}
+}
+
+void irlan_mod_inc_use_count(void)
+{
+#ifdef MODULE
+	MOD_INC_USE_COUNT;
+#endif
+}
+
+void irlan_mod_dec_use_count(void)
+{
+#ifdef MODULE
+	MOD_DEC_USE_COUNT;
+#endif
 }
 
 #ifdef MODULE

@@ -38,14 +38,13 @@ static void minix_delete_inode(struct inode *inode)
 	minix_free_inode(inode);
 }
 
-static void minix_commit_super (struct super_block * sb,
-			       struct minix_super_block * ms)
+static void minix_commit_super(struct super_block * sb)
 {
 	mark_buffer_dirty(sb->u.minix_sb.s_sbh, 1);
 	sb->s_dirt = 0;
 }
 
-static void minix_write_super (struct super_block * sb)
+static void minix_write_super(struct super_block * sb)
 {
 	struct minix_super_block * ms;
 
@@ -54,7 +53,7 @@ static void minix_write_super (struct super_block * sb)
 
 		if (ms->s_state & MINIX_VALID_FS)
 			ms->s_state &= ~MINIX_VALID_FS;
-		minix_commit_super (sb, ms);
+		minix_commit_super(sb);
 	}
 	sb->s_dirt = 0;
 }
@@ -106,7 +105,7 @@ static int minix_remount (struct super_block * sb, int * flags, char * data)
 		ms->s_state = sb->u.minix_sb.s_mount_state;
 		mark_buffer_dirty(sb->u.minix_sb.s_sbh, 1);
 		sb->s_dirt = 1;
-		minix_commit_super (sb, ms);
+		minix_commit_super(sb);
 	}
 	else {
 	  	/* Mount a partition which is read-only, read-write. */

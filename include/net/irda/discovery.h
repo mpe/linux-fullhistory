@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Apr  6 16:53:53 1999
- * Modified at:   Tue Apr  6 20:44:35 1999
+ * Modified at:   Thu Apr 22 11:04:56 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -37,6 +37,7 @@
 #include <net/irda/irqueue.h>
 
 #define DISCOVERY_EXPIRE_TIMEOUT 6*HZ
+#define DISCOVERY_DEFAULT_SLOTS  0
 
 /*
  * The DISCOVERY structure is used for both discovery requests and responses

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Nov  7 21:43:15 1998
- * Modified at:   Sat Apr  3 15:54:47 1999
+ * Modified at:   Tue Apr 20 11:11:39 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>
@@ -734,10 +734,9 @@ static int pc87108_hard_xmit( struct sk_buff *skb, struct device *dev)
 
 	/* Decide if we should use PIO or DMA transfer */
 	if ( idev->io.baudrate > 115200) {
-		memcpy( idev->tx_buff.data, skb->data, skb->len);
+		idev->tx_buff.data = idev->tx_buff.head;
+		memcpy(idev->tx_buff.data, skb->data, skb->len);
 		idev->tx_buff.len = skb->len;
-		idev->tx_buff.head = idev->tx_buff.data;
-		idev->tx_buff.offset = 0;
 
 		mtt = irda_get_mtt( skb);
 	        if ( mtt > 50) {
@@ -767,11 +766,10 @@ static int pc87108_hard_xmit( struct sk_buff *skb, struct device *dev)
 	     		pc87108_dma_write( idev, iobase);
 		}
         } else {
-	        idev->tx_buff.len = async_wrap_skb( skb, idev->tx_buff.data, 
-						    idev->tx_buff.truesize);
+	        idev->tx_buff.len = async_wrap_skb(skb, idev->tx_buff.data, 
+						   idev->tx_buff.truesize);
 		
-		idev->tx_buff.offset = 0;
-		idev->tx_buff.head = idev->tx_buff.data;
+		idev->tx_buff.data = idev->tx_buff.head;
 		
 		/* Add interrupt on tx low level (will fire immediately) */
 		switch_bank( iobase, BANK0);
@@ -945,8 +943,7 @@ static int pc87108_dma_receive(struct irda_device *idev)
 	
 	/* driver->media_busy = FALSE; */
 	idev->io.direction = IO_RECV;
-	idev->rx_buff.head = idev->rx_buff.data;
-	idev->rx_buff.offset = 0;
+	idev->rx_buff.data = idev->rx_buff.head;
 
 	/* Reset Rx FIFO. This will also flush the ST_FIFO */
 	outb(FCR_RXTH|FCR_TXTH|FCR_RXSR|FCR_FIFO_EN, iobase+FCR);
@@ -1024,42 +1021,41 @@ static int pc87108_dma_receive_complete( struct irda_device *idev, int iobase)
 				/* Skip frame */
 				idev->stats.rx_errors++;
 				
-				idev->rx_buff.offset  += len;
-				idev->rx_buff.head += len;
+				idev->rx_buff.data += len;
 			
-				if ( status & FRM_ST_MAX_LEN)
+				if (status & FRM_ST_MAX_LEN)
 					idev->stats.rx_length_errors++;
 				
-				if ( status & FRM_ST_PHY_ERR) 
+				if (status & FRM_ST_PHY_ERR) 
 					idev->stats.rx_frame_errors++;
 				
-				if ( status & FRM_ST_BAD_CRC) 
+				if (status & FRM_ST_BAD_CRC) 
 					idev->stats.rx_crc_errors++;
 			}
 			/* The errors below can be reported in both cases */
-			if ( status & FRM_ST_OVR1)
+			if (status & FRM_ST_OVR1)
 				idev->stats.rx_fifo_errors++;
 			
-			if ( status & FRM_ST_OVR2)
+			if (status & FRM_ST_OVR2)
 				idev->stats.rx_fifo_errors++;
 			
 		} else {
 			/* Check if we have transfered all data to memory */
-			if ( inb( iobase+LSR) & LSR_RXDA) {
+			if (inb(iobase+LSR) & LSR_RXDA) {
 				/* Put this entry back in fifo */
 				st_fifo->head--;
 				st_fifo->len++;
 				st_fifo->entries[st_fifo->head].status = status;
-				st_fifo->entries[ st_fifo->head].len = len;
+				st_fifo->entries[st_fifo->head].len = len;
 
 				/* Restore bank register */
-				outb( bank, iobase+BSR);
+				outb(bank, iobase+BSR);
 			
 				return FALSE; 	/* I'll be back! */
 			}
 
 			/* Should be OK then */			
-			skb = dev_alloc_skb( len+1);
+			skb = dev_alloc_skb(len+1);
 			if (skb == NULL)  {
 				printk( KERN_INFO __FUNCTION__ 
 					"(), memory squeeze, dropping frame.\n");
@@ -1070,20 +1066,19 @@ static int pc87108_dma_receive_complete( struct irda_device *idev, int iobase)
 			}
 			
 			/* Make sure IP header gets aligned */
-			skb_reserve( skb, 1); 
+			skb_reserve(skb, 1); 
 
 			/* Copy frame without CRC */
-			if ( idev->io.baudrate < 4000000) {
-				skb_put( skb, len-2);
-				memcpy( skb->data, idev->rx_buff.head, len-2);
+			if (idev->io.baudrate < 4000000) {
+				skb_put(skb, len-2);
+				memcpy(skb->data, idev->rx_buff.data, len-2);
 			} else {
-				skb_put( skb, len-4);
-				memcpy( skb->data, idev->rx_buff.head, len-4);
+				skb_put(skb, len-4);
+				memcpy(skb->data, idev->rx_buff.data, len-4);
 			}
 
 			/* Move to next frame */
-			idev->rx_buff.offset += len;
-			idev->rx_buff.head += len;
+			idev->rx_buff.data += len;
 			idev->stats.rx_packets++;
 
 			skb->dev = &idev->netdev;
@@ -1093,7 +1088,7 @@ static int pc87108_dma_receive_complete( struct irda_device *idev, int iobase)
 		}
 	}
 	/* Restore bank register */
-	outb( bank, iobase+BSR);
+	outb(bank, iobase+BSR);
 
 	return TRUE;
 }
@@ -1109,23 +1104,19 @@ static void pc87108_pio_receive( struct irda_device *idev)
 	__u8 byte = 0x00;
 	int iobase;
 
-	DEBUG( 4, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 
-	ASSERT( idev != NULL, return;);
-	ASSERT( idev->magic == IRDA_DEVICE_MAGIC, return;);
+	ASSERT(idev != NULL, return;);
+	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
 	
 	iobase = idev->io.iobase;
 	
-	if ( idev->rx_buff.len == 0) {
-		idev->rx_buff.head = idev->rx_buff.data;
-	}
-
 	/*  Receive all characters in Rx FIFO */
 	do {
-		byte = inb( iobase+RXD);
-		async_unwrap_char( idev, byte);
+		byte = inb(iobase+RXD);
+		async_unwrap_char(idev, byte);
 
-	} while ( inb( iobase+LSR) & LSR_RXDA); /* Data available */	
+	} while (inb(iobase+LSR) & LSR_RXDA); /* Data available */	
 }
 
 /*
@@ -1134,38 +1125,35 @@ static void pc87108_pio_receive( struct irda_device *idev)
  *    Handle SIR interrupt
  *
  */
-static __u8 pc87108_sir_interrupt( struct irda_device *idev, int eir)
+static __u8 pc87108_sir_interrupt(struct irda_device *idev, int eir)
 {
-	int len;
 	int actual;
 	__u8 new_ier = 0;
 
 	/* Transmit FIFO low on data */
 	if ( eir & EIR_TXLDL_EV) {
 		/* Write data left in transmit buffer */
-		len = idev->tx_buff.len - idev->tx_buff.offset;
-
-		ASSERT( len > 0, return 0;);
-		actual = pc87108_pio_write( idev->io.iobase, 
-					    idev->tx_buff.head, 
-					    len, idev->io.fifo_size);
-		idev->tx_buff.offset += actual;
-		idev->tx_buff.head += actual;
+		actual = pc87108_pio_write(idev->io.iobase, 
+					   idev->tx_buff.data, 
+					   idev->tx_buff.len, 
+					   idev->io.fifo_size);
+		idev->tx_buff.data += actual;
+		idev->tx_buff.len  -= actual;
 		
 		idev->io.direction = IO_XMIT;
-		ASSERT( actual <= len, return 0;);
 
 		/* Check if finished */
-		if ( actual == len) { 
-			DEBUG( 4, __FUNCTION__ "(), finished with frame!\n");
+		if (idev->tx_buff.len > 0)
+			new_ier |= IER_TXLDL_IE;
+		else { 
 			idev->netdev.tbusy = 0; /* Unlock */
 			idev->stats.tx_packets++;
-
+			
 		        mark_bh(NET_BH);	
 
 			new_ier |= IER_TXEMP_IE;
-		} else
-			new_ier |= IER_TXLDL_IE;
+		}
+			
 	}
 	/* Check if transmission has completed */
 	if ( eir & EIR_TXEMP_EV) {

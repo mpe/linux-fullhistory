@@ -28,7 +28,7 @@
 #define FIRST_PROCESS_ENTRY 256
 
 static int proc_root_readdir(struct file *, void *, filldir_t);
-static int proc_root_lookup(struct inode *,struct dentry *);
+static struct dentry *proc_root_lookup(struct inode *,struct dentry *);
 static int proc_unlink(struct inode *, struct dentry *);
 
 static unsigned char proc_alloc_map[PROC_NDYNAMIC / 8] = {0};
@@ -769,15 +769,11 @@ struct dentry_operations proc_dentry_operations =
  * Don't create negative dentries here, return -ENOENT by hand
  * instead.
  */
-int proc_lookup(struct inode * dir, struct dentry *dentry)
+struct dentry *proc_lookup(struct inode * dir, struct dentry *dentry)
 {
 	struct inode *inode;
 	struct proc_dir_entry * de;
 	int error;
-
-	error = -ENOTDIR;
-	if (!dir || !S_ISDIR(dir->i_mode))
-		goto out;
 
 	error = -ENOENT;
 	inode = NULL;
@@ -800,13 +796,12 @@ int proc_lookup(struct inode * dir, struct dentry *dentry)
 	if (inode) {
 		dentry->d_op = &proc_dentry_operations;
 		d_add(dentry, inode);
-		error = 0;
+		return NULL;
 	}
-out:
-	return error;
+	return ERR_PTR(error);
 }
 
-static int proc_root_lookup(struct inode * dir, struct dentry * dentry)
+static struct dentry *proc_root_lookup(struct inode * dir, struct dentry * dentry)
 {
 	unsigned int pid, c;
 	struct task_struct *p;
@@ -826,7 +821,7 @@ static int proc_root_lookup(struct inode * dir, struct dentry * dentry)
 	}
 
 	if (!proc_lookup(dir, dentry))
-		return 0;
+		return NULL;
 	
 	pid = 0;
 	name = dentry->d_name.name;
@@ -853,13 +848,13 @@ static int proc_root_lookup(struct inode * dir, struct dentry * dentry)
 		unsigned long ino = (pid << 16) + PROC_PID_INO;
 		inode = proc_get_inode(dir->i_sb, ino, &proc_pid);
 		if (!inode)
-			return -EINVAL;
+			return ERR_PTR(-EINVAL);
 		inode->i_flags|=S_IMMUTABLE;
 	}
 
 	dentry->d_op = &proc_dentry_operations;
 	d_add(dentry, inode);
-	return 0;
+	return NULL;
 }
 
 /*
@@ -879,8 +874,6 @@ int proc_readdir(struct file * filp,
 	int i;
 	struct inode *inode = filp->f_dentry->d_inode;
 
-	if (!inode || !S_ISDIR(inode->i_mode))
-		return -ENOTDIR;
 	ino = inode->i_ino;
 	de = (struct proc_dir_entry *) inode->u.generic_ip;
 	if (!de)

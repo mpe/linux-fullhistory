@@ -175,7 +175,7 @@ DRIVERS := $(DRIVERS) drivers/net/hamradio/hamradio.a
 endif
 
 ifeq ($(CONFIG_USB),y)
-DRIVERS := $(DRIVERS) drivers/uusbd/usb.a
+DRIVERS := $(DRIVERS) drivers/usb/usb.a
 endif
 
 ifeq ($(CONFIG_I2O),y)

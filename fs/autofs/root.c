@@ -16,7 +16,7 @@
 #include "autofs_i.h"
 
 static int autofs_root_readdir(struct file *,void *,filldir_t);
-static int autofs_root_lookup(struct inode *,struct dentry *);
+static struct dentry *autofs_root_lookup(struct inode *,struct dentry *);
 static int autofs_root_symlink(struct inode *,struct dentry *,const char *);
 static int autofs_root_unlink(struct inode *,struct dentry *);
 static int autofs_root_rmdir(struct inode *,struct dentry *);
@@ -209,7 +209,7 @@ static struct dentry_operations autofs_dentry_operations = {
 	NULL,			/* d_compare */
 };
 
-static int autofs_root_lookup(struct inode *dir, struct dentry *dentry)
+static struct dentry *autofs_root_lookup(struct inode *dir, struct dentry *dentry)
 {
 	struct autofs_sb_info *sbi;
 	int oz_mode;
@@ -217,11 +217,8 @@ static int autofs_root_lookup(struct inode *dir, struct dentry *dentry)
 	DPRINTK(("autofs_root_lookup: name = "));
 	autofs_say(dentry->d_name.name,dentry->d_name.len);
 
-	if (!S_ISDIR(dir->i_mode))
-		return -ENOTDIR;
-
 	if (dentry->d_name.len > NAME_MAX)
-		return -ENOENT;	/* File name too long to exist */
+		return ERR_PTR(-ENOENT);/* File name too long to exist */
 
 	sbi = autofs_sbi(dir->i_sb);
 
@@ -253,7 +250,7 @@ static int autofs_root_lookup(struct inode *dir, struct dentry *dentry)
 	 */
 	if (dentry->d_flags & DCACHE_AUTOFS_PENDING) {
 		if (signal_pending(current))
-			return -ERESTARTNOINTR;
+			return ERR_PTR(-ERESTARTNOINTR);
 	}
 
 	/*
@@ -263,9 +260,9 @@ static int autofs_root_lookup(struct inode *dir, struct dentry *dentry)
 	 * be OK for the operations we permit from an autofs.
 	 */
 	if ( dentry->d_inode && list_empty(&dentry->d_hash) )
-		return -ENOENT;
+		return ERR_PTR(-ENOENT);
 
-	return 0;
+	return NULL;
 }
 
 static int autofs_root_symlink(struct inode *dir, struct dentry *dentry, const char *symname)

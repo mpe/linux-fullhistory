@@ -518,8 +518,8 @@ static int irlpt_client_data_indication(void *instance, void *sap,
  *    Fixed to match changes in iriap.h, DB.
  *
  */
-void irlpt_client_get_value_confirm(__u16 obj_id, struct ias_value *value, 
-				    void *priv)
+void irlpt_client_get_value_confirm(int result, __u16 obj_id, 
+				    struct ias_value *value, void *priv)
 {
 	struct irlpt_info info;
 	struct irlpt_cb *self;
@@ -534,7 +534,7 @@ void irlpt_client_get_value_confirm(__u16 obj_id, struct ias_value *value,
 	ASSERT( self->magic == IRLPT_MAGIC, return;);
 
 	/* Check if request succeeded */
-	if ( !value) {
+	if (result != IAS_SUCCESS) {
 		DEBUG( 0, __FUNCTION__ "(), got NULL value!\n");
 		irlpt_client_do_event( self, IAS_PROVIDER_NOT_AVAIL, NULL, 
 				       &info);

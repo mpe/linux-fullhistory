@@ -62,8 +62,8 @@
    search the MCA slots until it finds a 3c523 with the specified
    parameters.
 
-   This driver should support multiple ethernet cards, but I can't test
-   that.  If someone would I'd greatly appreciate it.
+   This driver does support multiple ethernet cards when used as a module
+   (up to MAX_3C523_CARDS, the default being 4)
 
    This has been tested with both BNC and TP versions, internal and
    external transceivers.  Haven't tested with the 64K version (that I
@@ -76,7 +76,12 @@
    update to 1.3.59, incorporated multicast diffs from ni52.c
    Feb 15th, 1996
    added shared irq support
-
+   Apr 1999
+   added support for multiple cards when used as a module
+   added option to disable multicast as is causes problems
+       Ganesh Sittampalam <ganesh.sittampalam@magdalen.oxford.ac.uk>
+       Stuart Adamson <stuart.adamson@compsoc.net>
+	
    $Header: /fsys2/home/chrisb/linux-1.3.59-MCA/drivers/net/RCS/3c523.c,v 1.1 1996/02/05 01:53:46 chrisb Exp chrisb $
  */
 
@@ -107,6 +112,7 @@
 /*************************************************************************/
 #define DEBUG			/* debug on */
 #define SYSBUSVAL 0		/* 1 = 8 Bit, 0 = 16 bit - 3c523 only does 16 bit */
+#undef ELMC_MULTICAST		/* Disable multicast support as it is somewhat seriously broken at the moment */
 
 #define make32(ptr16) (p->memtop + (short) (ptr16) )
 #define make24(ptr32) ((char *) (ptr32) - p->base)
@@ -180,7 +186,9 @@ static int elmc_open(struct device *dev);
 static int elmc_close(struct device *dev);
 static int elmc_send_packet(struct sk_buff *, struct device *);
 static struct net_device_stats *elmc_get_stats(struct device *dev);
+#ifdef ELMC_MULTICAST
 static void set_multicast_list(struct device *dev);
+#endif
 
 /* helper-functions */
 static int init586(struct device *dev);
@@ -432,21 +440,19 @@ __initfunc(int elmc_probe(struct device *dev))
 	while (slot != -1) {
 		status = mca_read_stored_pos(slot, 2);
 
+		dev->irq=irq_table[(status & ELMC_STATUS_IRQ_SELECT) >> 6];
+		dev->base_addr=csr_table[(status & ELMC_STATUS_CSR_SELECT) >> 1];
+		
 		/*
 		   If we're trying to match a specified irq or IO address,
 		   we'll reject a match unless it's what we're looking for.
+		   Also reject it if the card is already in use.
 		 */
-		if (base_addr || irq) {
-			/* we're looking for a card at a particular place */
 
-			if (irq && irq != irq_table[(status & ELMC_STATUS_IRQ_SELECT) >> 6]) {
-				slot = mca_find_adapter(ELMC_MCA_ID, slot + 1);
-				continue;
-			}
-			if (base_addr && base_addr != csr_table[(status & ELMC_STATUS_CSR_SELECT) >> 1]) {
-				slot = mca_find_adapter(ELMC_MCA_ID, slot + 1);
-				continue;
-			}
+		if((irq && irq != dev->irq) || (base_addr && base_addr != dev->base_addr)
+		   || check_region(dev->base_addr,ELMC_IO_EXTENT)) {
+			slot = mca_find_adapter(ELMC_MCA_ID, slot + 1);
+			continue;
 		}
 		/* found what we're looking for... */
 		break;
@@ -476,9 +482,6 @@ __initfunc(int elmc_probe(struct device *dev))
 	/* revision is stored in the first 4 bits of the revision register */
 	revision = inb(dev->base_addr + ELMC_REVISION) & 0xf;
 
-	/* figure out our irq */
-	dev->irq = irq_table[(status & ELMC_STATUS_IRQ_SELECT) >> 6];
-
 	/* according to docs, we read the interrupt and write it back to
 	   the IRQ select register, since the POST might not configure the IRQ
 	   properly. */
@@ -496,9 +499,6 @@ __initfunc(int elmc_probe(struct device *dev))
 		mca_write_pos(slot, 3, 0x01);
 		break;
 	}
-
-	/* Our IO address? */
-	dev->base_addr = csr_table[(status & ELMC_STATUS_CSR_SELECT) >> 1];
 
 	request_region(dev->base_addr, ELMC_IO_EXTENT, "3c523");
 
@@ -565,7 +565,11 @@ __initfunc(int elmc_probe(struct device *dev))
 	dev->stop = &elmc_close;
 	dev->get_stats = &elmc_get_stats;
 	dev->hard_start_xmit = &elmc_send_packet;
+#ifdef ELMC_MULTICAST
 	dev->set_multicast_list = &set_multicast_list;
+#else
+	dev->set_multicast_list = NULL;
+#endif
 
 	ether_setup(dev);
 
@@ -576,6 +580,10 @@ __initfunc(int elmc_probe(struct device *dev))
 	/* note that we haven't actually requested the IRQ from the kernel.
 	   That gets done in elmc_open().  I'm not sure that's such a good idea,
 	   but it works, so I'll go with it. */
+
+#ifndef ELMC_MULTICAST
+        dev->flags&=~IFF_MULTICAST;     /* Multicast doesn't work */
+#endif
 
 	return 0;
 }
@@ -1210,6 +1218,7 @@ static struct net_device_stats *elmc_get_stats(struct device *dev)
  * Set MC list ..
  */
 
+#ifdef ELMC_MULTICAST
 static void set_multicast_list(struct device *dev)
 {
 	if (!dev->start) {
@@ -1222,60 +1231,85 @@ static void set_multicast_list(struct device *dev)
 	startrecv586(dev);
 	dev->start = 1;
 }
+#endif
 
 /*************************************************************************/
 
 #ifdef MODULE
 
-static char devicename[9] = {0,};
+/* Increase if needed ;) */
+#define MAX_3C523_CARDS 4
+/* I'm not sure where this magic 9 comes from */
+#define NAMELEN 9
 
-static struct device dev_elmc =
-{
-	devicename /*"3c523" */ , 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, elmc_probe
+static char devicenames[NAMELEN * MAX_3C523_CARDS] = {0,};
+
+static struct device dev_elmc[MAX_3C523_CARDS] =
+{	
+	{
+	NULL /*"3c523" */ , 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, NULL
+	},
 };
 
-static int irq = 0;
-static int io = 0;
-MODULE_PARM(irq, "i");
-MODULE_PARM(io, "i");
+static int irq[MAX_3C523_CARDS] = {0,};
+static int io[MAX_3C523_CARDS] = {0,};
+MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_3C523_CARDS) "i");
+MODULE_PARM(io, "1-" __MODULE_STRING(MAX_3C523_CARDS) "i");
 
 int init_module(void)
 {
-	struct device *dev = &dev_elmc;
+	int this_dev,found = 0;
 
-	dev->base_addr = io;
-	dev->irq = irq;
-	if (register_netdev(dev) != 0) {
-		return -EIO;
+	/* Loop until we either can't find any more cards, or we have MAX_3C523_CARDS */	
+	for(this_dev=0; this_dev<MAX_3C523_CARDS; this_dev++) 
+		{
+		struct device *dev = &dev_elmc[this_dev];
+		dev->name=devicenames+(NAMELEN*this_dev);
+		dev->irq=irq[this_dev];
+		dev->base_addr=io[this_dev];
+		dev->init=elmc_probe;
+		if(register_netdev(dev)!=0) {
+			if(io[this_dev]==0) break;
+			printk(KERN_WARNING "3c523.c: No 3c523 card found at io=%#x\n",io[this_dev]);
+		} else found++;
 	}
-	return 0;
+
+	if(found==0) {
+		if(io[0]==0) printk(KERN_NOTICE "3c523.c: No 3c523 cards found\n");
+		return -ENXIO;
+	} else return 0;
 }
 
 void cleanup_module(void)
 {
-	struct device *dev = &dev_elmc;
+	int this_dev;
+	for(this_dev=0; this_dev<MAX_3C523_CARDS; this_dev++) {
 
-	/* shutdown interrupts on the card */
-	elmc_id_reset586();
-	if (dev->irq != 0) {
-		/* this should be done by close, but if we failed to
-		   initialize properly something may have gotten hosed. */
-		free_irq(dev->irq, dev);
-		dev->irq = 0;
-	}
-	if (dev->base_addr != 0) {
-		release_region(dev->base_addr, ELMC_IO_EXTENT);
-		dev->base_addr = 0;
-	}
-	irq = 0;
-	io = 0;
-	unregister_netdev(dev);
+		struct device *dev = &dev_elmc[this_dev];
+		if(dev->priv) {
+			/* shutdown interrupts on the card */
+			elmc_id_reset586();
+			if (dev->irq != 0) {
+				/* this should be done by close, but if we failed to
+				   initialize properly something may have gotten hosed. */
+				free_irq(dev->irq, dev);
+				dev->irq = 0;
+			}
+			if (dev->base_addr != 0) {
+				release_region(dev->base_addr, ELMC_IO_EXTENT);
+				dev->base_addr = 0;
+			}
+			irq[this_dev] = 0;
+			io[this_dev] = 0;
+			unregister_netdev(dev);
 
-	mca_set_adapter_procfn(((struct priv *) (dev->priv))->slot,
+			mca_set_adapter_procfn(((struct priv *) (dev->priv))->slot,
 			       NULL, NULL);
 
-	kfree_s(dev->priv, sizeof(struct priv));
-	dev->priv = NULL;
+			kfree_s(dev->priv, sizeof(struct priv));
+			dev->priv = NULL;
+		}
+	}
 }
 
 #endif				/* MODULE */

@@ -27,7 +27,7 @@
 
 /*================ Forward declarations ================*/
 
-static int cap_lookup(struct inode *, struct dentry *);
+static struct dentry *cap_lookup(struct inode *, struct dentry *);
 static int cap_readdir(struct file *, void *, filldir_t);
 
 /*================ Global variables ================*/
@@ -147,17 +147,13 @@ struct inode_operations hfs_cap_rdir_inode_operations = {
  * inode corresponding to an entry in a directory, given the inode for
  * the directory and the name (and its length) of the entry.
  */
-static int cap_lookup(struct inode * dir, struct dentry *dentry)
+static struct dentry *cap_lookup(struct inode * dir, struct dentry *dentry)
 {
 	ino_t dtype;
 	struct hfs_name cname;
 	struct hfs_cat_entry *entry;
 	struct hfs_cat_key key;
 	struct inode *inode = NULL;
-
-	if (!dir || !S_ISDIR(dir->i_mode)) {
-		return -ENOENT;
-	}
 
 	dentry->d_op = &hfs_dentry_operations;
 	entry = HFS_I(dir)->entry;
@@ -207,7 +203,7 @@ static int cap_lookup(struct inode * dir, struct dentry *dentry)
 
 done:
 	d_add(dentry, inode);
-	return 0;
+	return NULL;
 }
 
 /*

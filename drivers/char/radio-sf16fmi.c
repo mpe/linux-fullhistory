@@ -4,6 +4,7 @@
  * (c) 1998 Petr Vandrovec, vandrove@vc.cvut.cz
  *
  * Fitted to new interface by Alan Cox <alan.cox@linux.org>
+ * Made working and cleaned up functions <mikael.hedin@irf.se>
  *
  * Notes on the hardware
  *
@@ -74,9 +75,10 @@ static inline void fmi_unmute(int port)
 	outb(0x08, port);
 }
 
-static inline int fmi_setfreq(struct fmi_device *dev, unsigned long freq)
+static inline int fmi_setfreq(struct fmi_device *dev)
 {
         int myport = dev->port;
+	unsigned long freq = dev->curfreq;
 	int i;
 	
 	outbits(16, RSF16_ENCODE(freq), myport);
@@ -158,7 +160,6 @@ static int fmi_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			v.flags=fmi->flags;
 			v.mode=VIDEO_MODE_AUTO;
 			v.signal = fmi_getsigstr(fmi);
-			strcpy(v.name, "FM");
 			if(copy_to_user(arg,&v, sizeof(v)))
 				return -EFAULT;
 			return 0;
@@ -192,8 +193,10 @@ static int fmi_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				tmp *= 1000;
 			if ( tmp<RSF16_MINFREQ || tmp>RSF16_MAXFREQ )
 			  return -EINVAL;
-			fmi->curfreq = tmp;
-			fmi_setfreq(fmi, fmi->curfreq);
+			/*rounding in steps of 800 to match th freq
+			  that will be used */
+			fmi->curfreq = (tmp/800)*800; 
+			fmi_setfreq(fmi);
 			return 0;
 		}
 		case VIDIOCGAUDIO:
@@ -205,7 +208,7 @@ static int fmi_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			v.treble=0;
 			v.flags=( (!fmi->curvol)*VIDEO_AUDIO_MUTE | VIDEO_AUDIO_MUTABLE);
 			strcpy(v.name, "Radio");
-			v.mode=VIDEO_SOUND_MONO;
+			v.mode=VIDEO_SOUND_STEREO;
 			v.balance=0;
 			v.step=0; /* No volume, just (un)mute */
 			if(copy_to_user(arg,&v, sizeof(v)))

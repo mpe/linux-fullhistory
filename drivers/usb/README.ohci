@@ -1,0 +1,8 @@
+April 24, 1999 04:37:42 PST
+
+Okay, I've written a lot more of the OHCI code and actually got it back to
+a compiling state now with all of the recent improvements to the way stuff
+is structured.  It is completely untested.
+
+- greg@electricrain.com
+

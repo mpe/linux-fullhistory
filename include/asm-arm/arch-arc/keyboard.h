@@ -19,11 +19,6 @@ extern unsigned char a5kkbd_sysrq_xlate[NR_SCANCODES];
 #define kbd_setkeycode(sc,kc)		(-EINVAL)
 #define kbd_getkeycode(sc)		(-EINVAL)
 
-/* Prototype: int kbd_pretranslate(scancode, raw_mode)
- * Returns  : 0 to ignore scancode
- */
-#define kbd_pretranslate(sc,rm)	(1)
-
 /* Prototype: int kbd_translate(scancode, *keycode, *up_flag, raw_mode)
  * Returns  : 0 to ignore scancode, *keycode set to keycode, *up_flag
  *            set to 0200 if scancode indicates release

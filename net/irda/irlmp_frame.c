@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Aug 19 02:09:59 1997
- * Modified at:   Tue Apr  6 18:31:11 1999
+ * Modified at:   Fri Apr 23 09:12:23 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>
@@ -34,30 +34,24 @@
 #include <net/irda/irlmp_frame.h>
 #include <net/irda/discovery.h>
 
-static struct lsap_cb *irlmp_find_lsap( struct lap_cb *self, __u8 dlsap, 
-					__u8 slsap, int status, hashbin_t *);
+static struct lsap_cb *irlmp_find_lsap(struct lap_cb *self, __u8 dlsap, 
+				       __u8 slsap, int status, hashbin_t *);
 
-inline void irlmp_send_data_pdu( struct lap_cb *self, __u8 dlsap, __u8 slsap,
-				 int expedited, struct sk_buff *skb)
+inline void irlmp_send_data_pdu(struct lap_cb *self, __u8 dlsap, __u8 slsap,
+				int expedited, struct sk_buff *skb)
 {
 	__u8 *frame;
-
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == LMP_LAP_MAGIC, return;);
-	ASSERT( skb != NULL, return;);
 
 	frame = skb->data;
 
 	frame[0] = dlsap;
 	frame[1] = slsap;
 
-	if ( expedited) {
+	if (expedited) {
 		DEBUG( 4, __FUNCTION__ "(), sending expedited data\n");
 		irlap_data_request( self->irlap, skb, FALSE);
-	} else {
-		DEBUG( 4, __FUNCTION__ "(), sending reliable data\n");
-		irlap_data_request( self->irlap, skb, TRUE);	
-	}
+	} else
+		irlap_data_request( self->irlap, skb, TRUE);
 }
 
 /*
@@ -98,18 +92,17 @@ void irlmp_send_lcf_pdu( struct lap_cb *self, __u8 dlsap, __u8 slsap,
  *    Used by IrLAP to pass received data frames to IrLMP layer
  *
  */
-void irlmp_link_data_indication( struct lap_cb *self, int reliable, 
-				 struct sk_buff *skb)
+void irlmp_link_data_indication(struct lap_cb *self, int reliable, 
+			        struct sk_buff *skb)
 {
-	__u8 *fp;
-	__u8  slsap_sel;   /* Source (this) LSAP address */
-	__u8  dlsap_sel;   /* Destination LSAP address */
 	struct lsap_cb *lsap;
+	__u8   slsap_sel;   /* Source (this) LSAP address */
+	__u8   dlsap_sel;   /* Destination LSAP address */
+	__u8   *fp;
 	
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == LMP_LAP_MAGIC, return;);
-	ASSERT( skb != NULL, return;);
-	ASSERT( skb->len > 2, return;);
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == LMP_LAP_MAGIC, return;);
+	ASSERT(skb->len > 2, return;);
 
 	fp = skb->data;
 
@@ -124,7 +117,7 @@ void irlmp_link_data_indication( struct lap_cb *self, int reliable,
 	 *  Check if this is an incoming connection, since we must deal with
 	 *  it in a different way than other established connections.
 	 */
-	if ((fp[0] & CONTROL_BIT) && ( fp[2] == CONNECT_CMD)) {
+	if ((fp[0] & CONTROL_BIT) && (fp[2] == CONNECT_CMD)) {
 		DEBUG(3,"Incoming connection, source LSAP=%d, dest LSAP=%d\n",
 		      slsap_sel, dlsap_sel);
 		
@@ -184,10 +177,17 @@ void irlmp_link_data_indication( struct lap_cb *self, int reliable,
 			break;
 		}
 	} else if (reliable == LAP_RELIABLE) {
-		/* Must be pure data */
-		irlmp_do_lsap_event( lsap, LM_DATA_INDICATION, skb);
+		/* Optimize and bypass the state machine if possible */
+		if (lsap->lsap_state == LSAP_DATA_TRANSFER_READY)
+			irlmp_data_indication(lsap, skb);
+		else
+			irlmp_do_lsap_event(lsap, LM_DATA_INDICATION, skb);
 	} else if (reliable == LAP_UNRELIABLE) {
-		irlmp_do_lsap_event( lsap, LM_UDATA_INDICATION, skb);
+		/* Optimize and bypass the state machine if possible */
+		if (lsap->lsap_state == LSAP_DATA_TRANSFER_READY)
+			irlmp_data_indication(lsap, skb);
+		else
+			irlmp_do_lsap_event(lsap, LM_UDATA_INDICATION, skb);
 	}
 }
 
@@ -297,8 +297,6 @@ void irlmp_link_discovery_confirm(struct lap_cb *self, hashbin_t *log)
 	irlmp_add_discovery_log(irlmp->cachelog, log);
       
 	irlmp_do_lap_event(self, LM_LAP_DISCOVERY_CONFIRM, NULL);
-
-	DEBUG( 4, __FUNCTION__ "() -->\n");
 }
 
 #ifdef CONFIG_IRDA_CACHE_LAST_LSAP
@@ -324,36 +322,31 @@ static struct lsap_cb *irlmp_find_lsap(struct lap_cb *self, __u8 dlsap_sel,
 {
 	struct lsap_cb *lsap;
 	
-	ASSERT( self != NULL, return NULL;);
-	ASSERT( self->magic == LMP_LAP_MAGIC, return NULL;);
-
 	/* 
 	 *  Optimize for the common case. We assume that the last frame
 	 *  received is in the same connection as the last one, so check in
 	 *  cache first to avoid the linear search
 	 */
 #ifdef CONFIG_IRDA_CACHE_LAST_LSAP
-	if (( irlmp->cache.valid) && 
-	    ( irlmp->cache.slsap_sel == slsap_sel) && 
-	    ( irlmp->cache.dlsap_sel == dlsap_sel)) 
+	if ((irlmp->cache.valid) && 
+	    (irlmp->cache.slsap_sel == slsap_sel) && 
+	    (irlmp->cache.dlsap_sel == dlsap_sel)) 
 	{
 		return (irlmp->cache.lsap);
 	}
 #endif
-	lsap = ( struct lsap_cb *) hashbin_get_first(queue);
-	while ( lsap != NULL) {
+	lsap = (struct lsap_cb *) hashbin_get_first(queue);
+	while (lsap != NULL) {
 		/* 
 		 *  If this is an incomming connection, then the destination 
 		 *  LSAP selector may have been specified as LM_ANY so that 
 		 *  any client can connect. In that case we only need to check
 		 *  if the source LSAP (in our view!) match!
 		 */
-		if (( status == CONNECT_CMD) && 
-		    ( lsap->slsap_sel == slsap_sel) &&      
-		    ( lsap->dlsap_sel == LSAP_ANY)) 
+		if ((status == CONNECT_CMD) && 
+		    (lsap->slsap_sel == slsap_sel) &&      
+		    (lsap->dlsap_sel == LSAP_ANY)) 
 		{
-			DEBUG( 4,"Incoming connection: Setting dlsap_sel=%d\n",
-			       dlsap_sel);
 			lsap->dlsap_sel = dlsap_sel;
 			
 #ifdef CONFIG_IRDA_CACHE_LAST_LSAP
@@ -364,15 +357,15 @@ static struct lsap_cb *irlmp_find_lsap(struct lap_cb *self, __u8 dlsap_sel,
 		/*
 		 *  Check if source LSAP and dest LSAP selectors match.
 		 */
-		if (( lsap->slsap_sel == slsap_sel) && 
-		    ( lsap->dlsap_sel == dlsap_sel)) 
+		if ((lsap->slsap_sel == slsap_sel) && 
+		    (lsap->dlsap_sel == dlsap_sel)) 
 		{
 #ifdef CONFIG_IRDA_CACHE_LAST_LSAP
-			irlmp_update_cache( lsap);
+			irlmp_update_cache(lsap);
 #endif
 			return lsap;
 		}
-		lsap = ( struct lsap_cb *) hashbin_get_next( queue);
+		lsap = ( struct lsap_cb *) hashbin_get_next(queue);
 	}
 
 	/* Sorry not found! */

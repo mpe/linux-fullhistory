@@ -90,9 +90,6 @@ affs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 
 	pr_debug("AFFS: readdir(ino=%lu,f_pos=%lu)\n",inode->i_ino,(unsigned long)filp->f_pos);
 
-	if (!inode || !S_ISDIR(inode->i_mode))
-		return -EBADF;
-
 	stored = 0;
 	dir_bh = NULL;
 	fh_bh  = NULL;

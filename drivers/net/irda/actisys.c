@@ -7,7 +7,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Oct 21 20:02:35 1998
- * Modified at:   Tue Feb  9 15:38:16 1999
+ * Modified at:   Mon Apr 12 11:56:35 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -234,8 +234,8 @@ static void actisys_init_qos( struct irda_device *idev, struct qos_info *qos)
 	/* Remove support for 38400 if this is not a 220L+ dongle */
 	if ( idev->io.dongle_id == ACTISYS_DONGLE)
 		qos->baud_rate.bits &= ~IR_38400;
-		
-	qos->min_turn_time.bits &= 0xfe; /* All except 0 ms */
+	
+	qos->min_turn_time.bits &= 0x40; /* Needs 0.01 ms */
 }
 
 #ifdef MODULE

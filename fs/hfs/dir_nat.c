@@ -29,7 +29,7 @@
 
 /*================ Forward declarations ================*/
 
-static int nat_lookup(struct inode *, struct dentry *);
+static struct dentry *nat_lookup(struct inode *, struct dentry *);
 static int nat_readdir(struct file *, void *, filldir_t);
 static int nat_rmdir(struct inode *, struct dentry *);
 static int nat_hdr_unlink(struct inode *, struct dentry *);
@@ -136,17 +136,13 @@ struct inode_operations hfs_nat_hdir_inode_operations = {
  * the inode corresponding to an entry in a directory, given the inode
  * for the directory and the name (and its length) of the entry.
  */
-static int nat_lookup(struct inode * dir, struct dentry *dentry)
+static struct dentry *nat_lookup(struct inode * dir, struct dentry *dentry)
 {
 	ino_t dtype;
 	struct hfs_name cname;
 	struct hfs_cat_entry *entry;
 	struct hfs_cat_key key;
 	struct inode *inode = NULL;
-
-	if (!dir || !S_ISDIR(dir->i_mode)) {
-		return -ENOENT;
-	}
 
 	dentry->d_op = &hfs_dentry_operations;
 	entry = HFS_I(dir)->entry;
@@ -199,7 +195,7 @@ static int nat_lookup(struct inode * dir, struct dentry *dentry)
 
 done:
 	d_add(dentry, inode);
-	return 0;
+	return NULL;
 }
 
 /*

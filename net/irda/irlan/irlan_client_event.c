@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Thu Feb  4 16:08:07 1999
+ * Modified at:   Thu Apr 22 12:23:22 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, 
@@ -226,7 +226,7 @@ static int irlan_client_state_info(struct irlan_cb *self, IRLAN_EVENT event,
 	case IRLAN_DATA_INDICATION:
 		ASSERT(skb != NULL, return -1;);
 	
-		irlan_client_extract_params(self, skb);
+		irlan_client_parse_response(self, skb);
 		
 		irlan_next_client_state(self, IRLAN_MEDIA);
 		
@@ -266,7 +266,7 @@ static int irlan_client_state_media(struct irlan_cb *self, IRLAN_EVENT event,
 
 	switch(event) {
 	case IRLAN_DATA_INDICATION:
-		irlan_client_extract_params(self, skb);
+		irlan_client_parse_response(self, skb);
 		irlan_open_data_channel(self);
 		irlan_next_client_state(self, IRLAN_OPEN);
 		break;
@@ -305,7 +305,7 @@ static int irlan_client_state_open(struct irlan_cb *self, IRLAN_EVENT event,
 
 	switch(event) {
 	case IRLAN_DATA_INDICATION:
-		irlan_client_extract_params(self, skb);
+		irlan_client_parse_response(self, skb);
 		
 		/*
 		 *  Check if we have got the remote TSAP for data 
@@ -336,11 +336,6 @@ static int irlan_client_state_open(struct irlan_cb *self, IRLAN_EVENT event,
 					      IRLAN_MTU, NULL);
 			
 			irlan_next_client_state(self, IRLAN_DATA);
-
-			if (self->client.start_new_provider) {
-				irlan_open(DEV_ADDR_ANY, DEV_ADDR_ANY, FALSE);
-				self->client.start_new_provider = FALSE;
-			}
 			break;
 		default:
 			DEBUG(2, __FUNCTION__ "(), unknown access type!\n");
@@ -468,7 +463,7 @@ static int irlan_client_state_data(struct irlan_cb *self, IRLAN_EVENT event,
 
 	switch(event) {
 	case IRLAN_DATA_INDICATION:
-		irlan_client_extract_params(self, skb);
+		irlan_client_parse_response(self, skb);
 		break;		
 	case IRLAN_LMP_DISCONNECT: /* FALLTHROUGH */
 	case IRLAN_LAP_DISCONNECT:

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Fri Mar 26 15:15:17 1999
+ * Modified at:   Fri Apr 23 09:51:15 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -219,12 +219,12 @@ int irlap_validate_ns_received( struct irlap_cb *, int ns);
 
 int  irlap_generate_rand_time_slot( int S, int s);
 void irlap_initiate_connection_state( struct irlap_cb *);
-void irlap_flush_all_queues( struct irlap_cb *);
-void irlap_change_speed( struct irlap_cb *, int);
-void irlap_wait_min_turn_around( struct irlap_cb *, struct qos_info *);
+void irlap_flush_all_queues(struct irlap_cb *);
+void irlap_change_speed(struct irlap_cb *, int);
+void irlap_wait_min_turn_around(struct irlap_cb *, struct qos_info *);
 
-void irlap_init_qos_capabilities( struct irlap_cb *, struct qos_info *);
-void irlap_apply_default_connection_parameters( struct irlap_cb *self);
-void irlap_apply_connection_parameters( struct irlap_cb *, struct qos_info *);
+void irlap_init_qos_capabilities(struct irlap_cb *, struct qos_info *);
+void irlap_apply_default_connection_parameters(struct irlap_cb *self);
+void irlap_apply_connection_parameters(struct irlap_cb *, struct qos_info *);
 
 #endif

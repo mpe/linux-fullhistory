@@ -23,7 +23,7 @@
 
 /*================ Forward declarations ================*/
 
-static int dbl_lookup(struct inode *, struct dentry *);
+static struct dentry *dbl_lookup(struct inode *, struct dentry *);
 static int dbl_readdir(struct file *, void *, filldir_t);
 static int dbl_create(struct inode *, struct dentry *, int);
 static int dbl_mkdir(struct inode *, struct dentry *, int);
@@ -130,16 +130,12 @@ static int is_hdr(struct inode *dir, const char *name, int len)
  * the inode for the directory and the name (and its length) of the
  * entry.
  */
-static int dbl_lookup(struct inode * dir, struct dentry *dentry)
+static struct dentry *dbl_lookup(struct inode * dir, struct dentry *dentry)
 {
 	struct hfs_name cname;
 	struct hfs_cat_entry *entry;
 	struct hfs_cat_key key;
 	struct inode *inode = NULL;
-
-	if (!dir || !S_ISDIR(dir->i_mode)) {
-		return -ENOENT;
-	}
 
 	dentry->d_op = &hfs_dentry_operations;
 	entry = HFS_I(dir)->entry;
@@ -173,7 +169,7 @@ static int dbl_lookup(struct inode * dir, struct dentry *dentry)
 	
 done:
 	d_add(dentry, inode);
-	return 0;
+	return NULL;
 }
 
 /*

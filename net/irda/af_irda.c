@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun May 31 10:12:43 1998
- * Modified at:   Wed Apr  7 17:32:27 1999
+ * Modified at:   Thu Apr 22 12:08:04 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       af_netroom.c, af_ax25.c, af_rose.c, af_x25.c etc.
  * 
@@ -39,6 +39,7 @@
 #include <net/irda/iriap.h>
 #include <net/irda/irias_object.h>
 #include <net/irda/irttp.h>
+#include <net/irda/discovery.h>
 
 extern int  irda_init(void);
 extern void irda_cleanup(void);
@@ -237,8 +238,8 @@ static void irda_flow_indication(void *instance, void *sap, LOCAL_FLOW flow)
  *    Got answer from remote LM-IAS
  *
  */
-static void irda_get_value_confirm(__u16 obj_id, struct ias_value *value, 
-				   void *priv)
+static void irda_get_value_confirm(int result, __u16 obj_id, 
+				   struct ias_value *value, void *priv)
 {
 	struct irda_sock *self;
 	
@@ -251,11 +252,14 @@ static void irda_get_value_confirm(__u16 obj_id, struct ias_value *value,
 		return;
 
 	/* Check if request succeeded */
-	if (!value) {
+	if (result != IAS_SUCCESS) {
 		DEBUG(0, __FUNCTION__ "(), IAS query failed!\n");
+
+		self->errno = result;
 
 		/* Wake up any processes waiting for result */
 		wake_up_interruptible(&self->ias_wait);
+
 		return;
 	}
 
@@ -673,7 +677,7 @@ static int irda_create(struct socket *sock, int protocol)
 	self->mask = 0xffff;
 	self->rx_flow = self->tx_flow = FLOW_START;
 	self->max_sdu_size_rx = SAR_DISABLE; /* Default value */
-	self->nslots = 6; /* Default for now */
+	self->nslots = DISCOVERY_DEFAULT_SLOTS;
 
 	/* Notify that we are using the irda module, so nobody removes it */
 	irda_mod_inc_use_count();
@@ -857,6 +861,12 @@ static int irda_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 	return copied;
 }
 
+/*
+ * Function irda_shutdown (sk, how)
+ *
+ *    
+ *
+ */
 static int irda_shutdown( struct socket *sk, int how)
 {
 	DEBUG( 0, __FUNCTION__ "()\n");
@@ -866,6 +876,12 @@ static int irda_shutdown( struct socket *sk, int how)
 }
 
 
+/*
+ * Function irda_poll (file, sock, wait)
+ *
+ *    
+ *
+ */
 unsigned int irda_poll(struct file *file, struct socket *sock, 
 		       struct poll_table_struct *wait)
 {

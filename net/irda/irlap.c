@@ -6,7 +6,7 @@
  * Status:        Stable.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Aug  4 20:40:53 1997
- * Modified at:   Tue Apr  6 21:07:08 1999
+ * Modified at:   Fri Apr 23 10:12:29 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, 
@@ -44,9 +44,9 @@
 #include <net/irda/irlap_comp.h>
 
 hashbin_t *irlap = NULL;
-int sysctl_slot_timeout = SLOT_TIMEOUT;
+int sysctl_slot_timeout = SLOT_TIMEOUT * 1000 / HZ;
 
-static void __irlap_close( struct irlap_cb *self);
+static void __irlap_close(struct irlap_cb *self);
 
 static char *lap_reasons[] = {
 	"ERROR, NOT USED",
@@ -301,27 +301,21 @@ void irlap_connect_confirm(struct irlap_cb *self, struct sk_buff *skb)
  *    IrLMP for further processing
  *
  */
-inline void irlap_data_indication( struct irlap_cb *self, struct sk_buff *skb) 
+inline void irlap_data_indication(struct irlap_cb *self, struct sk_buff *skb) 
 {
-	DEBUG( 4, __FUNCTION__ "()\n"); 
-
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == LAP_MAGIC, return;);
-	ASSERT( skb != NULL, return;);
-
 	/* Hide LAP header from IrLMP layer */
-	skb_pull( skb, LAP_ADDR_HEADER+LAP_CTRL_HEADER);
+	skb_pull(skb, LAP_ADDR_HEADER+LAP_CTRL_HEADER);
 
 #ifdef CONFIG_IRDA_COMPRESSION
-	if ( self->qos_tx.compression.value) {
-		skb = irlap_decompress_frame( self, skb);
-		if ( !skb) {
-			DEBUG( 1, __FUNCTION__ "(), Decompress error!\n");
+	if (self->qos_tx.compression.value) {
+		skb = irlap_decompress_frame(self, skb);
+		if (!skb) {
+			DEBUG(1, __FUNCTION__ "(), Decompress error!\n");
 			return;
 		}
 	}
 #endif
-	irlmp_link_data_indication( self->notify.instance, LAP_RELIABLE, skb);
+	irlmp_link_data_indication(self->notify.instance, LAP_RELIABLE, skb);
 }
 
 /*
@@ -515,22 +509,22 @@ void irlap_discovery_request(struct irlap_cb *self, discovery_t *discovery)
 		info.discovery = discovery;
 		
 		/* Check if the slot timeout is within limits */
-		if ( sysctl_slot_timeout < 2) {
-			DEBUG( 1, __FUNCTION__ 
-			       "(), to low value for slot timeout!\n");
-			sysctl_slot_timeout = 2;
+		if (sysctl_slot_timeout < 20) {
+			ERROR(__FUNCTION__ 
+			      "(), to low value for slot timeout!\n");
+			sysctl_slot_timeout = 20;
 		}
 		/* 
 		 * Highest value is actually 8, but we allow higher since
 		 * some devices seems to require it.
 		 */
-		if ( sysctl_slot_timeout > 16) {
-			DEBUG( 1, __FUNCTION__ 
-			       "(), to high value for slot timeout!\n");
-			sysctl_slot_timeout = 16;
+		if (sysctl_slot_timeout > 160) {
+			ERROR(__FUNCTION__ 
+			      "(), to high value for slot timeout!\n");
+			sysctl_slot_timeout = 160;
 		}
 
-		self->slot_timeout = sysctl_slot_timeout;
+		self->slot_timeout = sysctl_slot_timeout * HZ / 1000;
 		
 		irlap_do_event( self, DISCOVERY_REQUEST, NULL, &info);
 	} else { 
@@ -807,23 +801,17 @@ void irlap_wait_min_turn_around(struct irlap_cb *self, struct qos_info *qos)
 {
 	int usecs;
 	int speed;
-	int bytes = 0;
+	int bytes ;
 	
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == LAP_MAGIC, return;);
-	ASSERT( qos != NULL, return;);
-
 	/* Get QoS values.  */
 	speed = qos->baud_rate.value;
 	usecs = qos->min_turn_time.value;
 
 	/* No need to calculate XBOFs for speeds over 115200 bps */
-	if ( speed > 115200) {
+	if (speed > 115200) {
 		self->mtt_required = usecs;
 		return;
 	}
-	
-	DEBUG( 4, __FUNCTION__ "(), delay=%d usecs\n", usecs); 
 	
 	/*  
 	 *  Send additional BOF's for the next frame for the requested
@@ -832,8 +820,6 @@ void irlap_wait_min_turn_around(struct irlap_cb *self, struct qos_info *qos)
 	 */
 	bytes = speed * usecs / 10000000;
 
-	DEBUG( 4, __FUNCTION__ "(), xbofs delay = %d\n", bytes);
-	
 	self->xbofs_delay = bytes;
 }
 
@@ -1028,7 +1014,7 @@ void irlap_apply_default_connection_parameters( struct irlap_cb *self)
 	self->qos_tx.data_size.value = 64;
 	self->qos_tx.additional_bofs.value = 11;
 
-	irlap_flush_all_queues( self);
+	irlap_flush_all_queues(self);
 
 	self->disconnect_pending = FALSE;
 }
@@ -1079,11 +1065,10 @@ void irlap_apply_connection_parameters(struct irlap_cb *self,
 
 	/* 
 	 *  Initialize timeout values, some of the rules are listed on 
-	 *  page 92 in IrLAP. Divide by 10 since the kernel timers has a
-	 *  resolution of 10 ms.
+	 *  page 92 in IrLAP.
 	 */
-	self->poll_timeout = qos->max_turn_time.value / 10;
-	self->final_timeout = qos->max_turn_time.value / 10;
+	self->poll_timeout = qos->max_turn_time.value * HZ / 1000;
+	self->final_timeout = qos->max_turn_time.value * HZ / 1000;
 	self->wd_timeout = self->poll_timeout * 2;
 
 #ifdef CONFIG_IRDA_COMPRESSION

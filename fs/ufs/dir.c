@@ -43,13 +43,6 @@ ufs_readdir (struct file * filp, void * dirent, filldir_t filldir)
 	int de_reclen;
 	unsigned flags, swab;
 
-
-	/* Isn't that already done in the upper layer???
-	 * the VFS layer really needs some explicit documentation!
-	 */
-	if (!inode || !S_ISDIR(inode->i_mode))
-		return -EBADF;
-
 	sb = inode->i_sb;
 	swab = sb->u.ufs_sb.s_swab;
 	flags = sb->u.ufs_sb.s_flags;

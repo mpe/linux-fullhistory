@@ -1,12 +1,12 @@
 /*********************************************************************
  *                
  * Filename:      irda_device.c
- * Version:       0.4
+ * Version:       0.5
  * Description:   Abstract device driver layer and helper functions
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Wed Sep  2 20:22:08 1998
- * Modified at:   Wed Apr  7 17:16:54 1999
+ * Modified at:   Wed Apr 21 09:48:19 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -129,26 +129,28 @@ int irda_device_open(struct irda_device *self, char *name, void *priv)
 
 	/* Allocate memory if needed */
 	if (self->rx_buff.truesize > 0) {
-		self->rx_buff.data = ( __u8 *) kmalloc(self->rx_buff.truesize,
+		self->rx_buff.head = ( __u8 *) kmalloc(self->rx_buff.truesize,
 						       self->rx_buff.flags);
-		if (self->rx_buff.data == NULL)
+		if (self->rx_buff.head == NULL)
 			return -ENOMEM;
 
-		memset(self->rx_buff.data, 0, self->rx_buff.truesize);
+		memset(self->rx_buff.head, 0, self->rx_buff.truesize);
 	}
 	if (self->tx_buff.truesize > 0) {
-		self->tx_buff.data = ( __u8 *) kmalloc(self->tx_buff.truesize, 
+		self->tx_buff.head = ( __u8 *) kmalloc(self->tx_buff.truesize, 
 						       self->tx_buff.flags);
-		if (self->tx_buff.data == NULL)
+		if (self->tx_buff.head == NULL)
 			return -ENOMEM;
 
-		memset(self->tx_buff.data, 0, self->tx_buff.truesize);
+		memset(self->tx_buff.head, 0, self->tx_buff.truesize);
 	}
 	
       	self->magic = IRDA_DEVICE_MAGIC;
 
 	self->rx_buff.in_frame = FALSE;
 	self->rx_buff.state = OUTSIDE_FRAME;
+	self->tx_buff.data = self->tx_buff.head;
+	self->rx_buff.data = self->rx_buff.head;
 
 	/* Initialize timers */
 	init_timer(&self->media_busy_timer);	
@@ -184,7 +186,7 @@ int irda_device_open(struct irda_device *self, char *name, void *priv)
 	/* Open network device */
 	dev_open(&self->netdev);
 
-	printk("IrDA device %s registered.\n", self->name);
+	MESSAGE("IrDA: Registred device %s\n", self->name);
 
 	irda_device_set_media_busy(self, FALSE);
 
@@ -196,8 +198,6 @@ int irda_device_open(struct irda_device *self, char *name, void *priv)
         
 	/* It's now safe to initilize the saddr */
 	memcpy(self->netdev.dev_addr, &self->irlap->saddr, 4);
-
-	DEBUG(4, __FUNCTION__ "()->\n");
 
 	return 0;
 }
@@ -226,11 +226,11 @@ void __irda_device_close(struct irda_device *self)
 	/* Stop timers */
 	del_timer(&self->media_busy_timer);
 
-	if (self->tx_buff.data)
-		kfree(self->tx_buff.data);
+	if (self->tx_buff.head)
+		kfree(self->tx_buff.head);
 
-	if (self->rx_buff.data)
-		kfree(self->rx_buff.data);
+	if (self->rx_buff.head)
+		kfree(self->rx_buff.head);
 
 	self->magic = 0;
 }
@@ -463,26 +463,6 @@ int irda_device_txqueue_empty( struct irda_device *self)
 }
 
 /*
- * Function irda_get_mtt (skb)
- *
- *    Utility function for getting the minimum turnaround time out of 
- *    the skb, where it has been hidden in the cb field.
- */
-inline unsigned short irda_get_mtt(struct sk_buff *skb)
-{
-	unsigned short mtt;
-
-	if (((struct irlap_skb_cb *)(skb->cb))->magic != LAP_MAGIC)
-		mtt = 10000;
-	else
-		mtt = ((struct irlap_skb_cb *)(skb->cb))->mtt;
-
-	ASSERT(mtt <= 10000, return 10000;);
-	
-	return mtt;
-}
-
-/*
  * Function setup_dma (idev, buffer, count, mode)
  *
  *    Setup the DMA channel
@@ -561,7 +541,6 @@ int irda_device_proc_read(char *buf, char **start, off_t offset, int len,
 			       self->description);
 		
 		len += irda_device_print_flags(self, buf+len);
-
 		len += sprintf(buf+len, "\tbps\tmaxtt\tdsize\twinsize\taddbofs\tmintt\tldisc\n");
 		
 		len += sprintf(buf+len, "\t%d\t", 

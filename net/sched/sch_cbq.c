@@ -30,7 +30,6 @@
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/notifier.h>
-#include <linux/module.h>
 #include <net/ip.h>
 #include <net/route.h>
 #include <linux/skbuff.h>

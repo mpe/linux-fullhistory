@@ -215,7 +215,6 @@ static int ntfs_readdir(struct file* filp, void *dirent, filldir_t filldir)
 
 	ntfs_debug(DEBUG_OTHER, "ntfs_readdir ino %x mode %x\n",
 	       (unsigned)dir->i_ino,(unsigned int)dir->i_mode);
-	if(!dir || (dir->i_ino==0) || !S_ISDIR(dir->i_mode))return -EBADF;
 
 	ntfs_debug(DEBUG_OTHER, "readdir: Looking for file %x dircount %d\n",
 	       (unsigned)filp->f_pos,dir->i_count);
@@ -373,7 +372,7 @@ static int parse_options(ntfs_volume* vol,char *opt)
 	return 0;
 }
 			
-static int ntfs_lookup(struct inode *dir, struct dentry *d)
+static struct dentry *ntfs_lookup(struct inode *dir, struct dentry *d)
 {
 	struct inode *res=0;
 	char *item=0;
@@ -385,10 +384,10 @@ static int ntfs_lookup(struct inode *dir, struct dentry *d)
 	error=ntfs_decodeuni(NTFS_INO2VOL(dir),(char*)d->d_name.name,
 			     d->d_name.len,&walk.name,&walk.namelen);
 	if(error)
-		return error;
+		return ERR_PTR(-error);
 	item=ntfs_malloc(ITEM_SIZE);
 	if( !item )
-		return ENOMEM;
+		return ERR_PTR(-ENOMEM);
 	/* ntfs_getdir will place the directory entry into item,
 	   and the first long long is the MFT record number */
 	walk.type=BY_NAME;
@@ -402,7 +401,7 @@ static int ntfs_lookup(struct inode *dir, struct dentry *d)
 	ntfs_free(item);
 	ntfs_free(walk.name);
 	/* Always return success, the dcache will handle negative entries. */
-	return 0;
+	return NULL;
 }
 
 static struct file_operations ntfs_file_operations_nommap = {
@@ -829,7 +828,7 @@ static int ntfs_statfs(struct super_block *sb, struct statfs *sf, int bufsize)
 
 	error = ntfs_get_volumesize( NTFS_SB2VOL( sb ), &fs.f_blocks );
 	if( error )
-		return error;
+		return -error;
 	fs.f_bfree=ntfs_get_free_cluster_count(vol->bitmap);
 	fs.f_bavail=fs.f_bfree;
 

@@ -175,18 +175,6 @@ void umsdos_endlookup (struct inode *dir)
 
 #endif
 
-/*
- * Check whether we can delete from the directory.
- */
-static int is_sticky(struct inode *dir, int uid)
-{
-	return !((dir->i_mode & S_ISVTX) == 0 || 
-		current->fsuid == uid ||
-		current->fsuid == dir->i_uid ||
-		capable (CAP_FOWNER));
-}
-
-
 static int umsdos_nevercreat (struct inode *dir, struct dentry *dentry,
 				int errcod)
 {
@@ -696,9 +684,8 @@ Printk(("UMSDOS_link: hard link %s/%s, fake=%s\n",
 olddentry->d_parent->d_name.name, olddentry->d_name.name, old_info.fake.fname));
 
 	/* Do a real lookup to get the short name dentry */
-	temp = umsdos_lookup_dentry(olddentry->d_parent,
-					old_info.fake.fname, 
-					old_info.fake.len, 1);
+	temp = umsdos_covered(olddentry->d_parent, old_info.fake.fname, 
+					old_info.fake.len);
 	ret = PTR_ERR(temp);
 	if (IS_ERR(temp))
 		goto out_unlock;
@@ -784,15 +771,10 @@ int UMSDOS_mkdir (struct inode *dir, struct dentry *dentry, int mode)
 		goto out;
 
 	/* lookup the short name dentry */
-	temp = umsdos_lookup_dentry(dentry->d_parent, info.fake.fname, 
-					info.fake.len, 1);
+	temp = umsdos_covered(dentry->d_parent, info.fake.fname, info.fake.len);
 	ret = PTR_ERR(temp);
 	if (IS_ERR(temp))
 		goto out_remove;
-
-	/* Keep the short name dentry anonymous */ 
-	if (temp != dentry)
-		d_drop(temp);
 
 	/* Make sure the short name doesn't exist */
 	ret = -EEXIST;
@@ -812,16 +794,9 @@ dentry->d_parent->d_name.name, info.fake.fname);
 	inode = temp->d_inode;
 	down(&inode->i_sem);
 
-	/*
-	 * Note! The long and short name might be the same,
-	 * so check first before doing the instantiate ...
-	 */
-	if (dentry != temp) {
-if (dentry->d_inode)
-printk("umsdos_mkdir: dentry not negative!\n");
-		inode->i_count++;
-		d_instantiate(dentry, inode);
-	}
+	inode->i_count++;
+	d_instantiate(dentry, inode);
+
 	/* N.B. this should have an option to create the EMD ... */
 	umsdos_lookup_patch_new(dentry, &info);
 
@@ -921,20 +896,10 @@ demd->d_parent->d_name.name, demd->d_name.name, err);
 	umsdos_parse (dentry->d_name.name, dentry->d_name.len, &info);
 	/* Call findentry to complete the mangling */
 	umsdos_findentry (dentry->d_parent, &info, 2);
-	temp = umsdos_lookup_dentry(dentry->d_parent, info.fake.fname, 
-					info.fake.len, 1);
+	temp = umsdos_covered(dentry->d_parent, info.fake.fname, info.fake.len);
 	ret = PTR_ERR(temp);
 	if (IS_ERR(temp))
 		goto out;
-	/*
-	 * If the short name is an alias, dput() it now;
-	 * otherwise d_drop() it to keep it anonymous.
-	 */
-	if (temp == dentry)
-		dput(temp);
-	else
-		d_drop(temp);
-
 	/*
 	 * Attempt to remove the msdos name.
 	 */
@@ -951,8 +916,7 @@ printk("umsdos_rmdir: delentry %s failed, ret=%d\n", info.entry.name, ret);
 
 	/* dput() temp if we didn't do it above */
 out_dput:
-	if (temp != dentry)
-		dput(temp);
+	dput(temp);
 
 out:
 	Printk (("umsdos_rmdir %d\n", ret));
@@ -999,14 +963,6 @@ dentry->d_parent->d_name.name, dentry->d_name.name, ret);
 
 Printk (("UMSDOS_unlink %.*s ", info.fake.len, info.fake.fname));
 
-	ret = -EPERM;
-	/* check sticky bit */
-	if (is_sticky(dir, info.entry.uid)) {
-printk("umsdos_unlink: %s/%s is sticky\n",
-dentry->d_parent->d_name.name, dentry->d_name.name);
-		goto out_unlock;
-	}
-
 	/*
 	 * Note! If this is a hardlink and the names are aliased,
 	 * the short-name lookup will return the hardlink dentry.
@@ -1018,8 +974,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 	}
 
 	/* Do a real lookup to get the short name dentry */
-	temp = umsdos_lookup_dentry(dentry->d_parent, info.fake.fname, 
-					info.fake.len, 1);
+	temp = umsdos_covered(dentry->d_parent, info.fake.fname, info.fake.len);
 	ret = PTR_ERR(temp);
 	if (IS_ERR(temp))
 		goto out_unlock;
@@ -1031,13 +986,6 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 		link = umsdos_solve_hlink(dget(temp));
 	}
 
-	/*
-	 * If the short and long names are aliased,
-	 * dput() it now so the dentry isn't busy.
-	 */
-	if (temp == dentry)
-		dput(temp);
-
 	/* Delete the EMD entry */
 	ret = umsdos_delentry (dentry->d_parent, &info, 0);
 	if (ret && ret != -ENOENT) {
@@ -1046,7 +994,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name);
 		goto out_dput;
 	}
 
-	ret = msdos_unlink_umsdos (dir, temp);
+	ret = msdos_unlink(dir, temp);
 #ifdef UMSDOS_PARANOIA
 if (ret)
 printk("umsdos_unlink: %s/%s unlink failed, ret=%d\n",
@@ -1055,12 +1003,9 @@ temp->d_parent->d_name.name, temp->d_name.name, ret);
 
 	/* dput() temp if we didn't do it above */
 out_dput:
-	if (temp != dentry) {
-		d_drop(temp);
-		dput(temp);
-		if (!ret)
-			d_delete (dentry);
-	}
+	dput(temp);
+	if (!ret)
+		d_delete (dentry);
 
 out_unlock:
 	umsdos_unlockcreate (dir);

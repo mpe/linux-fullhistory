@@ -35,9 +35,6 @@ static int qnx4_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	blknum = inode->u.qnx4_i.i_first_xtnt.xtnt_blk - 1 +
 	    ((filp->f_pos >> 6) >> 3);
 
-	if (!inode || !inode->i_sb || !S_ISDIR(inode->i_mode)) {
-		return -EBADF;
-	}
 	QNX4DEBUG(("qnx4_readdir:i_size = %ld\n", (long) inode->i_size));
 	QNX4DEBUG(("filp->f_pos         = %ld\n", (long) filp->f_pos));
 	QNX4DEBUG(("BlkNum              = %ld\n", (long) blknum));

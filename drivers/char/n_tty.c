@@ -922,8 +922,14 @@ do_it_again:
 		}
 	}
 
-	if (down_interruptible(&tty->atomic_read))
-		return -ERESTARTSYS;
+	if (file->f_flags & O_NONBLOCK) {
+		if (down_trylock(&tty->atomic_read))
+			return -EAGAIN;
+	}
+	else {
+		if (down_interruptible(&tty->atomic_read))
+			return -ERESTARTSYS;
+	}
 
 	add_wait_queue(&tty->read_wait, &wait);
 	set_bit(TTY_DONT_FLIP, &tty->flags);

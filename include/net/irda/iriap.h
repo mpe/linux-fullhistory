@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Aug 21 00:02:07 1997
- * Modified at:   Mon Mar 22 13:15:04 1999
+ * Modified at:   Wed Apr 21 16:37:21 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -51,9 +51,10 @@
 #define IAS_SUCCESS        0
 #define IAS_CLASS_UNKNOWN  1
 #define IAS_ATTRIB_UNKNOWN 2
+#define IAS_DISCONNECT     10
 
-typedef void (*CONFIRM_CALLBACK)( __u16 obj_id, struct ias_value *value,
-				  void *priv);
+typedef void (*CONFIRM_CALLBACK)(int result, __u16 obj_id, 
+				 struct ias_value *value, void *priv);
 
 struct iriap_cb {
 	QUEUE queue; /* Must be first */

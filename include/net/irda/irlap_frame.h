@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Aug 19 10:27:26 1997
- * Modified at:   Fri Mar 26 14:10:53 1999
+ * Modified at:   Fri Apr 23 09:33:55 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -116,8 +116,6 @@ struct irlap_skb_cb {
 	int vs;    /* next frame to send */
 	int vr;    /* next frame to receive */
 };
-
-__inline__ void irlap_insert_mtt( struct irlap_cb *self, struct sk_buff *skb);
 
 void irlap_send_discovery_xid_frame( struct irlap_cb *, int S, __u8 s, 
 				     __u8 command, discovery_t *discovery);

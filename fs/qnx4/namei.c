@@ -108,7 +108,7 @@ static struct buffer_head *qnx4_find_entry(int len, struct inode *dir,
 	return NULL;
 }
 
-int qnx4_lookup(struct inode *dir, struct dentry *dentry)
+struct dentry * qnx4_lookup(struct inode *dir, struct dentry *dentry)
 {
 	int ino;
 	struct qnx4_inode_entry *de;
@@ -116,17 +116,10 @@ int qnx4_lookup(struct inode *dir, struct dentry *dentry)
 	struct buffer_head *bh;
 	const char *name = dentry->d_name.name;
 	int len = dentry->d_name.len;
-	struct inode *foundinode;
+	struct inode *foundinode = NULL;
 
-	if (!dir) {
-		return -EBADF;
-	}
-	if (!S_ISDIR(dir->i_mode)) {
-		return -EBADF;
-	}
-	if (!(bh = qnx4_find_entry(len, dir, name, &de, &ino))) {
-		return -ENOENT;
-	}
+	if (!(bh = qnx4_find_entry(len, dir, name, &de, &ino)))
+		goto out;
 	/* The entry is linked, let's get the real info */
 	if ((de->di_status & QNX4_FILE_LINK) == QNX4_FILE_LINK) {
 		lnk = (struct qnx4_link_info *) de;
@@ -137,11 +130,12 @@ int qnx4_lookup(struct inode *dir, struct dentry *dentry)
 
 	if ((foundinode = iget(dir->i_sb, ino)) == NULL) {
 		QNX4DEBUG(("qnx4: lookup->iget -> NULL\n"));
-		return -EACCES;
+		return ERR_PTR(-EACCES);
 	}
+out:
 	d_add(dentry, foundinode);
 
-	return 0;
+	return NULL;
 }
 
 #ifdef CONFIG_QNX4FS_RW

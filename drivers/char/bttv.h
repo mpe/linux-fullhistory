@@ -114,6 +114,7 @@ struct bttv
 	int type;            /* card type  */
 	int audio;           /* audio mode */
 	int audio_chip;
+	int fader_chip;
 	int radio;
 
 	u32 *risc_jmp;
@@ -222,6 +223,7 @@ struct bttv
 #define TDA9850            0x01
 #define TDA8425            0x02
 #define TDA9840            0x03
+#define TEA6300            0x04
 
 #define I2C_TSA5522        0xc2
 #define I2C_TDA9840	   0x84
@@ -230,6 +232,7 @@ struct bttv
 #define I2C_HAUPEE         0xa0
 #define I2C_STBEE          0xae
 #define I2C_VHX 	   0xc0
+#define I2C_TEA6300        0x80
 
 #define TDA9840_SW	   0x00
 #define TDA9840_LVADJ	   0x02
@@ -249,6 +252,12 @@ struct bttv
 #define TDA8425_BA         0x02
 #define TDA8425_TR         0x03
 #define TDA8425_S1         0x08
- 
+
+#define TEA6300_VL         0x00		/* volume control left */
+#define TEA6300_VR         0x01		/* volume control right */
+#define TEA6300_BA         0x02		/* bass control */
+#define TEA6300_TR         0x03		/* treble control */
+#define TEA6300_FA         0x04		/* fader control */
+#define TEA6300_SW         0x05		/* mute and source switch */
 
 #endif

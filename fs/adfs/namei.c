@@ -98,22 +98,22 @@ static int adfs_find_entry (struct inode *dir, const char * const name, int name
 	return 0;
 }
 
-int adfs_lookup (struct inode *dir, struct dentry *dentry)
+struct dentry *adfs_lookup (struct inode *dir, struct dentry *dentry)
 {
 	struct inode *inode = NULL;
 	struct adfs_idir_entry de;
 	unsigned long ino;
 
 	if (dentry->d_name.len > ADFS_NAME_LEN)
-		return -ENAMETOOLONG;
+		return ERR_PTR(-ENAMETOOLONG);
 
 	if (adfs_find_entry (dir, dentry->d_name.name, dentry->d_name.len, &de)) {
 		ino = de.inode_no;
 		inode = iget (dir->i_sb, ino);
 
 		if (!inode)
-			return -EACCES;
+			return ERR_PTR(-EACCES);
 	}
 	d_add(dentry, inode);
-	return 0;
+	return NULL;
 }

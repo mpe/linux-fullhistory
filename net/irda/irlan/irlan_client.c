@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Wed Apr  7 16:56:35 1999
+ * Modified at:   Thu Apr 22 23:03:55 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       skeleton.c by Donald Becker <becker@CESDIS.gsfc.nasa.gov>
  *                slip.c by Laurence Culhane, <loz@holmes.demon.co.uk>
@@ -30,7 +30,6 @@
 #include <linux/errno.h>
 #include <linux/init.h>
 #include <linux/netdevice.h>
-#include <linux/inetdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/if_arp.h>
 #include <net/arp.h>
@@ -106,7 +105,7 @@ void irlan_client_wakeup(struct irlan_cb *self, __u32 saddr, __u32 daddr)
 {
 	struct irmanager_event mgr_event;
 
-	DEBUG(2, __FUNCTION__ "()\n");
+	DEBUG(0, __FUNCTION__ "()\n");
 
 	ASSERT(self != NULL, return;);
 	ASSERT(self->magic == IRLAN_MAGIC, return;);
@@ -122,8 +121,8 @@ void irlan_client_wakeup(struct irlan_cb *self, __u32 saddr, __u32 daddr)
 	if (self->dev.start) {
 		/* Open TSAPs */
 		irlan_client_open_ctrl_tsap(self);
-		irlan_provider_open_ctrl_tsap(self);
-		irlan_open_data_tsap(self);
+ 		irlan_provider_open_ctrl_tsap(self);
+ 		irlan_open_data_tsap(self);
 		
 		irlan_do_client_event(self, IRLAN_DISCOVERY_INDICATION, NULL);
 	} else if (self->notify_irmanager) {
@@ -162,7 +161,7 @@ void irlan_client_discovery_indication(discovery_t *discovery)
 	struct irlan_cb *self, *entry;
 	__u32 saddr, daddr;
 	
-	DEBUG(2, __FUNCTION__"()\n");
+	DEBUG(0, __FUNCTION__"()\n");
 
 	ASSERT(irlan != NULL, return;);
 	ASSERT(discovery != NULL, return;);
@@ -171,8 +170,7 @@ void irlan_client_discovery_indication(discovery_t *discovery)
 	daddr = discovery->daddr;
 
 	/* 
-	 *  Check if we already have an instance for dealing with this 
-	 *  provider.
+	 *  Check if we already dealing with this provider.
 	 */
 	self = (struct irlan_cb *) hashbin_find(irlan, daddr, NULL);
       	if (self) {
@@ -190,7 +188,7 @@ void irlan_client_discovery_indication(discovery_t *discovery)
 	 */
 	self = hashbin_find(irlan, DEV_ADDR_ANY, NULL);
 	if (self) {
-		DEBUG(2, __FUNCTION__ "(), Found instance with DEV_ADDR_ANY!\n");
+		DEBUG(0, __FUNCTION__ "(), Found instance with DEV_ADDR_ANY!\n");
 		/*
 		 * Rehash instance, now we have a client (daddr) to serve.
 		 */
@@ -200,27 +198,16 @@ void irlan_client_discovery_indication(discovery_t *discovery)
 		self->daddr = daddr;
 		self->saddr = saddr;
 
-		DEBUG(2, __FUNCTION__ "(), daddr=%08x\n", self->daddr);
+		DEBUG(0, __FUNCTION__ "(), daddr=%08x\n", self->daddr);
 		hashbin_insert(irlan, (QUEUE*) self, self->daddr, NULL);
 		
 		/* Check if network device has been registered */
 		if (!self->netdev_registered)
 			irlan_register_netdev(self);
 		
-		/* Remember that we might have to start a new provider */
-		self->client.start_new_provider = TRUE;
-	} else {
-		DEBUG(2, __FUNCTION__ "(), Found none, starting new one!\n");
-		/* No instance available, so we have to start one! */
-		self = irlan_open(saddr, daddr, TRUE);
-		if (!self) {
-			DEBUG(2, __FUNCTION__ "(), irlan_open failed!\n");
-			return;
-		}
-		ASSERT( self != NULL, return;);
+		/* Restart watchdog timer */
+		irlan_start_watchdog_timer(self, IRLAN_TIMEOUT);
 	}
-	/* Restart watchdog timer */
-	irlan_start_watchdog_timer(self, IRLAN_TIMEOUT);
 }
 	
 /*
@@ -367,13 +354,12 @@ void irlan_client_reconnect_data_channel(struct irlan_cb *self)
 }
 
 /*
- * Function irlan_client_extract_params (skb)
+ * Function irlan_client_parse_response (self, skb)
  *
  *    Extract all parameters from received buffer, then feed them to 
  *    check_params for parsing
- *
  */
-void irlan_client_extract_params(struct irlan_cb *self, struct sk_buff *skb)
+void irlan_client_parse_response(struct irlan_cb *self, struct sk_buff *skb)
 {
 	__u8 *frame;
 	__u8 *ptr;
@@ -392,7 +378,7 @@ void irlan_client_extract_params(struct irlan_cb *self, struct sk_buff *skb)
 	ASSERT(self->magic == IRLAN_MAGIC, return;);
 	
 	if (!skb) {
-		DEBUG(2, __FUNCTION__ "(), Got NULL skb!\n");
+		ERROR( __FUNCTION__ "(), Got NULL skb!\n");
 		return;
 	}
 	frame = skb->data;
@@ -423,7 +409,7 @@ void irlan_client_extract_params(struct irlan_cb *self, struct sk_buff *skb)
 
 	/* For all parameters */
  	for (i=0; i<count;i++) {
-		ret = irlan_get_param(ptr, name, value, &val_len);
+		ret = irlan_extract_param(ptr, name, value, &val_len);
 		if (ret == -1) {
 			DEBUG(2, __FUNCTION__ "(), IrLAN, Error!\n");
 			break;
@@ -445,9 +431,6 @@ void irlan_client_extract_params(struct irlan_cb *self, struct sk_buff *skb)
 static void irlan_check_response_param(struct irlan_cb *self, char *param, 
 				       char *value, int val_len) 
 {
-#ifdef CONFIG_IRLAN_GRATUITOUS_ARP
-	struct in_device *in_dev;
-#endif
 	__u16 tmp_cpu; /* Temporary value in host order */
 	__u8 *bytes;
 	int i;
@@ -550,21 +533,6 @@ static void irlan_check_response_param(struct irlan_cb *self, char *param,
 		      bytes[5]);
 		for (i = 0; i < 6; i++) 
 			self->dev.dev_addr[i] = bytes[i];
-
-#ifdef CONFIG_IRLAN_GRATUITOUS_ARP
-		/* 
-		 * When we get a new MAC address do a gratuitous ARP. This
-		 * is useful if we have changed access points on the same
-		 * subnet.  
-		 */
-		DEBUG(4, "IrLAN: Sending gratuitous ARP\n");
-		in_dev = self->dev.ip_ptr;
-		arp_send(ARPOP_REQUEST, ETH_P_ARP, 
-			  in_dev->ifa_list->ifa_address,
-			  &self->dev, 
-			  in_dev->ifa_list->ifa_address,
-			  NULL, self->dev.dev_addr, NULL);
-#endif
 	}
 }
 
@@ -574,8 +542,8 @@ static void irlan_check_response_param(struct irlan_cb *self, char *param,
  *    Got results from remote LM-IAS
  *
  */
-void irlan_client_get_value_confirm(__u16 obj_id, struct ias_value *value,
-				    void *priv) 
+void irlan_client_get_value_confirm(int result, __u16 obj_id, 
+				    struct ias_value *value, void *priv) 
 {
 	struct irlan_cb *self;
 	
@@ -587,7 +555,7 @@ void irlan_client_get_value_confirm(__u16 obj_id, struct ias_value *value,
 	ASSERT(self->magic == IRLAN_MAGIC, return;);
 
 	/* Check if request succeeded */
-	if (!value) {
+	if (result != IAS_SUCCESS) {
 		DEBUG(2, __FUNCTION__ "(), got NULL value!\n");
 		irlan_do_client_event(self, IRLAN_IAS_PROVIDER_NOT_AVAIL, 
 				      NULL);

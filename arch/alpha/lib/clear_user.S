@@ -80,6 +80,7 @@ $tail:
 	ret	$31, ($28), 1	# .. e1 :
 
 __do_clear_user:
+	ldgp	$29,0($27)	# we do exceptions -- we need the gp.
 	and	$6, 7, $4	# e0    : find dest misalignment
 	beq	$0, $zerolength # .. e1 :
 	addq	$0, $4, $1	# e0    : bias counter

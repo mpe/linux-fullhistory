@@ -196,7 +196,7 @@ static int typhoon_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			v.flags = VIDEO_TUNER_LOW;
 			v.mode = VIDEO_MODE_AUTO;
 			v.signal = 0xFFFF;	/* We can't get the signal strength */
-			strcpy(v.tuner, "FM");
+			strcpy(v.name, "FM");
 			if (copy_to_user(arg, &v, sizeof(v)))
 				return -EFAULT;
 			return 0;

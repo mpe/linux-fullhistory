@@ -359,10 +359,8 @@ static int free_inodes(void)
 		found = 1;
 	}
 
-	if (found) {
+	if (found)
 		dispose_list(freeable);
-		found = 1;	/* silly compiler */
-	}
 
 	return found;
 }
@@ -750,7 +748,7 @@ int bmap(struct inode * inode, int block)
  * Initialize the hash tables and default
  * value for max inodes
  */
-#define MAX_INODE (12288)
+#define MAX_INODE (16384)
 
 void __init inode_init(void)
 {

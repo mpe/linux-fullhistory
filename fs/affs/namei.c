@@ -201,7 +201,7 @@ affs_find_entry(struct inode *dir, struct dentry *dentry, unsigned long *ino)
 	return bh;
 }
 
-int
+struct dentry *
 affs_lookup(struct inode *dir, struct dentry *dentry)
 {
 	unsigned long		 ino;
@@ -218,11 +218,11 @@ affs_lookup(struct inode *dir, struct dentry *dentry)
 		affs_brelse(bh);
 		inode = iget(dir->i_sb,ino);
 		if (!inode)
-			return -EACCES;
+			return ERR_PTR(-EACCES);
 	}
 	dentry->d_op = &affs_dentry_operations;
 	d_add(dentry,inode);
-	return 0;
+	return NULL;
 }
 
 int

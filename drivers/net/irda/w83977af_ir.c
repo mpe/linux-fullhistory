@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Paul VanderSpek
  * Created at:    Wed Nov  4 11:46:16 1998
- * Modified at:   Wed Apr  7 17:35:59 1999
+ * Modified at:   Tue Apr 20 11:15:00 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Corel Computer Corp.
@@ -482,8 +482,7 @@ int w83977af_hard_xmit( struct sk_buff *skb, struct device *dev)
 	if (idev->io.baudrate > 115200) {
 		memcpy(idev->tx_buff.data, skb->data, skb->len);
 		idev->tx_buff.len = skb->len;
-		idev->tx_buff.head = idev->tx_buff.data;
-		idev->tx_buff.offset = 0;
+		idev->tx_buff.data = idev->tx_buff.head;
 		
 		mtt = irda_get_mtt(skb);
 	        if (mtt > 50) {
@@ -512,20 +511,18 @@ int w83977af_hard_xmit( struct sk_buff *skb, struct device *dev)
 	     		w83977af_dma_write(idev, iobase);
 		}
 	} else {
+		idev->tx_buff.data = idev->tx_buff.head;
 		idev->tx_buff.len = async_wrap_skb(skb, idev->tx_buff.data, 
 						   idev->tx_buff.truesize);
 		
-		idev->tx_buff.offset = 0;
-		idev->tx_buff.head = idev->tx_buff.data;
-		
 		/* Add interrupt on tx low level (will fire immediately) */
-		switch_bank( iobase, SET0);
+		switch_bank(iobase, SET0);
 		outb(ICR_ETXTHI, iobase+ICR);
 	}
 	dev_kfree_skb(skb);
 
 	/* Restore set register */
-	outb( set, iobase+SSR);
+	outb(set, iobase+SSR);
 
 	return 0;
 }
@@ -594,9 +591,9 @@ static int w83977af_pio_write(int iobase, __u8 *buf, int len, int fifo_size)
 	}
 
 	/* Fill FIFO with current frame */
-	while (( fifo_size-- > 0) && (actual < len)) {
+	while ((fifo_size-- > 0) && (actual < len)) {
 		/* Transmit next byte */
-		outb( buf[actual++], iobase+TBR);
+		outb(buf[actual++], iobase+TBR);
 	}
         
 	DEBUG(4, __FUNCTION__ "(), fifo_size %d ; %d sent of %d\n", 
@@ -702,8 +699,7 @@ int w83977af_dma_receive(struct irda_device *idev)
 #endif
 	/* driver->media_busy = FALSE; */
 	idev->io.direction = IO_RECV;
-	idev->rx_buff.head = idev->rx_buff.data;
-	idev->rx_buff.offset = 0;
+	idev->rx_buff.data = idev->rx_buff.head;
 
 	/* 
 	 * Reset Rx FIFO. This will also flush the ST_FIFO, it's very 
@@ -751,30 +747,30 @@ int w83977af_dma_receive_complete(struct irda_device *idev)
 	__u8 set;
 	__u8 status;
 
-	DEBUG( 0, __FUNCTION__ "\n");
+	DEBUG(0, __FUNCTION__ "\n");
 
 	iobase = idev->io.iobase;
 
 	/* Save current set */
-	set = inb( iobase+SSR);
+	set = inb(iobase+SSR);
 	
 	iobase = idev->io.iobase;
 
 	switch_bank(iobase, SET5);
-	if ( prev.status & FS_FO_FSFDR) {
+	if (prev.status & FS_FO_FSFDR) {
 		status = prev.status;
 		len = prev.len;
-
+		
 		prev.status = 0;
 	} else {
-		status = inb( iobase+FS_FO);
-		len = inb( iobase+RFLFL);
-		len |= inb( iobase+RFLFH) << 8;
+		status = inb(iobase+FS_FO);
+		len = inb(iobase+RFLFL);
+		len |= inb(iobase+RFLFH) << 8;
 	}
 
-	while ( status & FS_FO_FSFDR) {
+	while (status & FS_FO_FSFDR) {
 		/* Check for errors */
-		if ( status & FS_FO_ERR_MSK) {
+		if (status & FS_FO_ERR_MSK) {
 			if ( status & FS_FO_LST_FR) {
 				/* Add number of lost frames to stats */
 				idev->stats.rx_errors += len;	
@@ -782,29 +778,28 @@ int w83977af_dma_receive_complete(struct irda_device *idev)
 				/* Skip frame */
 				idev->stats.rx_errors++;
 				
-				idev->rx_buff.offset += len;
-				idev->rx_buff.head   += len;
+				idev->rx_buff.data += len;
 				
-				if ( status & FS_FO_MX_LEX)
+				if (status & FS_FO_MX_LEX)
 					idev->stats.rx_length_errors++;
 				
-				if ( status & FS_FO_PHY_ERR) 
+				if (status & FS_FO_PHY_ERR) 
 					idev->stats.rx_frame_errors++;
 				
-				if ( status & FS_FO_CRC_ERR) 
+				if (status & FS_FO_CRC_ERR) 
 					idev->stats.rx_crc_errors++;
 			}
 			/* The errors below can be reported in both cases */
-			if ( status & FS_FO_RX_OV)
+			if (status & FS_FO_RX_OV)
 				idev->stats.rx_fifo_errors++;
 			
-			if ( status & FS_FO_FSF_OV)
+			if (status & FS_FO_FSF_OV)
 				idev->stats.rx_fifo_errors++;
 			
 		} else {
 			/* Check if we have transfered all data to memory */
 			switch_bank(iobase, SET0);
-			if ( inb( iobase+USR) & USR_RDR) {
+			if (inb(iobase+USR) & USR_RDR) {
 				/* Put this entry back in fifo */
 				prev.status = status;
 				prev.len = len;
@@ -815,31 +810,30 @@ int w83977af_dma_receive_complete(struct irda_device *idev)
 				return FALSE; 	/* I'll be back! */
 			}
 						
-			skb = dev_alloc_skb( len+1);
+			skb = dev_alloc_skb(len+1);
 			if (skb == NULL)  {
-				printk( KERN_INFO __FUNCTION__ 
-					"(), memory squeeze, dropping frame.\n");
+				printk(KERN_INFO __FUNCTION__ 
+				       "(), memory squeeze, dropping frame.\n");
 				/* Restore set register */
-				outb( set, iobase+SSR);
+				outb(set, iobase+SSR);
 
 				return FALSE;
 			}
 			
 			/*  Align to 20 bytes */
-			skb_reserve( skb, 1); 
+			skb_reserve(skb, 1); 
 			
 			/* Copy frame without CRC */
 			if ( idev->io.baudrate < 4000000) {
 				skb_put( skb, len-2);
-				memcpy( skb->data, idev->rx_buff.head, len-2);
+				memcpy( skb->data, idev->rx_buff.data, len-2);
 			} else {
 				skb_put( skb, len-4);
-				memcpy( skb->data, idev->rx_buff.head, len-4);
+				memcpy( skb->data, idev->rx_buff.data, len-4);
 			}
 
 			/* Move to next frame */
-			idev->rx_buff.offset += len;
-			idev->rx_buff.head += len;
+			idev->rx_buff.data += len;
 			
 			skb->dev = &idev->netdev;
 			skb->mac.raw  = skb->data;
@@ -854,7 +848,7 @@ int w83977af_dma_receive_complete(struct irda_device *idev)
 		len |= inb( iobase+RFLFH) << 8;
 	}
 	/* Restore set register */
-	outb( set, iobase+SSR);
+	outb(set, iobase+SSR);
 
 	return TRUE;
 }
@@ -865,28 +859,24 @@ int w83977af_dma_receive_complete(struct irda_device *idev)
  *    Receive all data in receiver FIFO
  *
  */
-static void w83977af_pio_receive( struct irda_device *idev) 
+static void w83977af_pio_receive(struct irda_device *idev) 
 {
 	__u8 byte = 0x00;
 	int iobase;
 
-	DEBUG( 4, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 
-	ASSERT( idev != NULL, return;);
-	ASSERT( idev->magic == IRDA_DEVICE_MAGIC, return;);
+	ASSERT(idev != NULL, return;);
+	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);
 	
 	iobase = idev->io.iobase;
 	
-	if ( idev->rx_buff.len == 0) {
-		idev->rx_buff.head = idev->rx_buff.data;
-	}
-
 	/*  Receive all characters in Rx FIFO */
 	do {
-		byte = inb( iobase+RBR);
-		async_unwrap_char( idev, byte);
+		byte = inb(iobase+RBR);
+		async_unwrap_char(idev, byte);
 
-	} while ( inb( iobase+USR) & USR_RDR); /* Data available */	
+	} while (inb(iobase+USR) & USR_RDR); /* Data available */	
 }
 
 /*
@@ -897,7 +887,6 @@ static void w83977af_pio_receive( struct irda_device *idev)
  */
 static __u8 w83977af_sir_interrupt(struct irda_device *idev, int isr)
 {
-	int len;
 	int actual;
 	__u8 new_icr = 0;
 
@@ -906,19 +895,19 @@ static __u8 w83977af_sir_interrupt(struct irda_device *idev, int isr)
 	/* Transmit FIFO low on data */
 	if (isr & ISR_TXTH_I) {
 		/* Write data left in transmit buffer */
-		len = idev->tx_buff.len - idev->tx_buff.offset;
-
-		ASSERT(len > 0, return 0;);
 		actual = w83977af_pio_write(idev->io.iobase, 
-					    idev->tx_buff.head, 
-					    len, idev->io.fifo_size);
-		idev->tx_buff.offset += actual;
-		idev->tx_buff.head += actual;
+					    idev->tx_buff.data, 
+					    idev->tx_buff.len, 
+					    idev->io.fifo_size);
+		idev->tx_buff.data += actual;
+		idev->tx_buff.len  -= actual;
 		
 		idev->io.direction = IO_XMIT;
-		ASSERT( actual <= len, return 0;);
+
 		/* Check if finished */
-		if ( actual == len) { 
+		if (idev->tx_buff.len > 0)
+			new_icr |= ICR_ETXTHI;
+		else { 
 			DEBUG( 4, __FUNCTION__ "(), finished with frame!\n");
 			idev->netdev.tbusy = 0; /* Unlock */
 			idev->stats.tx_packets++;
@@ -927,8 +916,8 @@ static __u8 w83977af_sir_interrupt(struct irda_device *idev, int isr)
 		        mark_bh(NET_BH);	
 
 			new_icr |= ICR_ETBREI;
-		} else
-			new_icr |= ICR_ETXTHI;
+		}
+		
 	}
 	/* Check if transmission has completed */
 	if (isr & ISR_TXEMP_I) {

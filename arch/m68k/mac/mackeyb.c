@@ -60,7 +60,7 @@ static void input_keycode(int, int);
 extern struct kbd_struct kbd_table[];
 
 extern void adb_bus_init(void);
-extern void handle_scancode(unsigned char);
+extern void handle_scancode(unsigned char, int);
 extern void put_queue(int);
 
 /* keyb */
@@ -387,7 +387,7 @@ input_keycode(int keycode, int repeat)
 		 */
 		switch (keycode) {
 		case 0x39:
-			handle_scancode(keycode);	/* down */
+			handle_scancode(keycode, 1);	/* down */
 			up_flag = 0x80;			/* see below ... */
 		 	mark_bh(KEYBOARD_BH);
 			break;
@@ -397,7 +397,7 @@ input_keycode(int keycode, int repeat)
 		}
 	}
 
-	handle_scancode(keycode + up_flag);
+	handle_scancode(keycode, !up_flag);
 }
 
 static void

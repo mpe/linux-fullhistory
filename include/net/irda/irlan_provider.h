@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Mon Mar  8 15:32:35 1999
+ * Modified at:   Thu Apr 22 14:29:16 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -46,12 +46,12 @@ void irlan_provider_connect_indication(void *instance, void *sap,
 void irlan_provider_connect_response(struct irlan_cb *, struct tsap_cb *);
 
 int irlan_parse_open_data_cmd(struct irlan_cb *self, struct sk_buff *skb);
-int irlan_provider_extract_params(struct irlan_cb *self, int cmd,
-				  struct sk_buff *skb);
+int irlan_provider_parse_command(struct irlan_cb *self, int cmd,
+				 struct sk_buff *skb);
 
 void irlan_provider_send_reply(struct irlan_cb *self, int command, 
 			       int ret_code);
-void irlan_provider_open_ctrl_tsap( struct irlan_cb *self);
+int irlan_provider_open_ctrl_tsap(struct irlan_cb *self);
 
 #endif
 

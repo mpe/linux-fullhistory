@@ -150,6 +150,8 @@ ntfs_extend_mft(ntfs_volume *vol)
 	ntfs_insert_fixups(buf,vol->blocksize);
 	io.param=buf;
 	io.size=vol->mft_recordsize;
+	io.fn_put = ntfs_put;
+	io.fn_get = ntfs_get;
 	error=ntfs_write_attr(vol->mft_ino,vol->at_data,0,
 			      (rcount-1)*vol->mft_recordsize,&io);
 	if(error)return error;

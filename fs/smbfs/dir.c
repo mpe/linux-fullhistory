@@ -22,7 +22,7 @@ static ssize_t smb_dir_read(struct file *, char *, size_t, loff_t *);
 static int smb_readdir(struct file *, void *, filldir_t);
 static int smb_dir_open(struct inode *, struct file *);
 
-static int smb_lookup(struct inode *, struct dentry *);
+static struct dentry *smb_lookup(struct inode *, struct dentry *);
 static int smb_create(struct inode *, struct dentry *, int);
 static int smb_mkdir(struct inode *, struct dentry *, int);
 static int smb_rmdir(struct inode *, struct dentry *);
@@ -324,7 +324,7 @@ smb_renew_times(struct dentry * dentry)
 	}
 }
 
-static int
+static struct dentry *
 smb_lookup(struct inode *dir, struct dentry *dentry)
 {
 	struct smb_fattr finfo;
@@ -360,7 +360,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, error);
 		}
 	}
 out:
-	return error;
+	return ERR_PTR(error);
 }
 
 /*

@@ -168,14 +168,14 @@ failure:
 	return NULL;
 }
 
-int ext2_lookup(struct inode * dir, struct dentry *dentry)
+struct dentry *ext2_lookup(struct inode * dir, struct dentry *dentry)
 {
 	struct inode * inode;
 	struct ext2_dir_entry_2 * de;
 	struct buffer_head * bh;
 
 	if (dentry->d_name.len > EXT2_NAME_LEN)
-		return -ENAMETOOLONG;
+		return ERR_PTR(-ENAMETOOLONG);
 
 	bh = ext2_find_entry (dir, dentry->d_name.name, dentry->d_name.len, &de);
 	inode = NULL;
@@ -185,10 +185,10 @@ int ext2_lookup(struct inode * dir, struct dentry *dentry)
 		inode = iget(dir->i_sb, ino);
 
 		if (!inode)
-			return -EACCES;
+			return ERR_PTR(-EACCES);
 	}
 	d_add(dentry, inode);
-	return 0;
+	return NULL;
 }
 
 /*

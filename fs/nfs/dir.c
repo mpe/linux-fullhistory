@@ -51,10 +51,9 @@ struct nfs_dirent {
 
 static int nfs_safe_remove(struct dentry *);
 
-static int nfs_dir_open(struct inode *, struct file *);
 static ssize_t nfs_dir_read(struct file *, char *, size_t, loff_t *);
 static int nfs_readdir(struct file *, void *, filldir_t);
-static int nfs_lookup(struct inode *, struct dentry *);
+static struct dentry *nfs_lookup(struct inode *, struct dentry *);
 static int nfs_create(struct inode *, struct dentry *, int);
 static int nfs_mkdir(struct inode *, struct dentry *, int);
 static int nfs_rmdir(struct inode *, struct dentry *);
@@ -73,7 +72,7 @@ static struct file_operations nfs_dir_operations = {
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
 	NULL,			/* mmap */
-	nfs_dir_open,		/* open - revalidate */
+	NULL,			/* no special open is needed */
 	NULL,			/* flush */
 	NULL,			/* no special release code */
 	NULL			/* fsync */
@@ -101,16 +100,6 @@ struct inode_operations nfs_dir_inode_operations = {
 	NULL,			/* updatepage */
 	nfs_revalidate,		/* revalidate */
 };
-
-static int
-nfs_dir_open(struct inode *dir, struct file *file)
-{
-	struct dentry *dentry = file->f_dentry;
-
-	dfprintk(VFS, "NFS: nfs_dir_open(%s/%s)\n",
-		dentry->d_parent->d_name.name, dentry->d_name.name);
-	return _nfs_revalidate_inode(NFS_DSERVER(dentry), dentry);
-}
 
 static ssize_t
 nfs_dir_read(struct file *filp, char *buf, size_t count, loff_t *ppos)
@@ -147,11 +136,6 @@ static int nfs_readdir(struct file *filp, void *dirent, filldir_t filldir)
 
 	dfprintk(VFS, "NFS: nfs_readdir(%s/%s)\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
-	result = -EBADF;
-	if (!inode || !S_ISDIR(inode->i_mode)) {
-		printk("nfs_readdir: inode is NULL or not a directory\n");
-		goto out;
-	}
 
 	result = nfs_revalidate_inode(NFS_DSERVER(dentry), dentry);
 	if (result < 0)
@@ -397,7 +381,6 @@ static int nfs_lookup_revalidate(struct dentry * dentry)
 {
 	struct dentry * parent = dentry->d_parent;
 	struct inode * inode = dentry->d_inode;
-	unsigned long time = jiffies - dentry->d_time;
 	int error;
 	struct nfs_fh fhandle;
 	struct nfs_fattr fattr;
@@ -406,31 +389,36 @@ static int nfs_lookup_revalidate(struct dentry * dentry)
 	 * If we don't have an inode, let's just assume
 	 * a 5-second "live" time for negative dentries.
 	 */
-	if (!inode) {
-		if (time < NFS_REVALIDATE_INTERVAL)
-			goto out_valid;
-		goto out_bad;
-	}
+	if (!inode)
+		goto do_lookup;
 
 	if (is_bad_inode(inode)) {
-#ifdef NFS_PARANOIA
-printk("nfs_lookup_validate: %s/%s has dud inode\n",
-parent->d_name.name, dentry->d_name.name);
-#endif
+		dfprintk(VFS, "nfs_lookup_validate: %s/%s has dud inode\n",
+			parent->d_name.name, dentry->d_name.name);
 		goto out_bad;
 	}
 
-	if (time < NFS_ATTRTIMEO(inode))
+	if (_nfs_revalidate_inode(NFS_DSERVER(dentry), dentry))
+		goto out_bad;
+
+	if (time_before(jiffies,dentry->d_time+NFS_ATTRTIMEO(inode)))
 		goto out_valid;
 
 	if (IS_ROOT(dentry))
 		goto out_valid;
 
+do_lookup:
 	/*
 	 * Do a new lookup and check the dentry attributes.
 	 */
 	error = nfs_proc_lookup(NFS_DSERVER(parent), NFS_FH(parent), 
 				dentry->d_name.name, &fhandle, &fattr);
+	if (dentry->d_inode == NULL) {
+		if (error == -ENOENT &&
+		    time_before(jiffies,dentry->d_time+NFS_REVALIDATE_INTERVAL))
+			goto out_valid;
+		goto out_bad;
+	}
 	if (error)
 		goto out_bad;
 
@@ -440,7 +428,7 @@ parent->d_name.name, dentry->d_name.name);
 
 	/* Filehandle matches? */
 	if (memcmp(dentry->d_fsdata, &fhandle, sizeof(struct nfs_fh))) {
-		if (dentry->d_count < 2 || nfs_revalidate(dentry))
+		if (dentry->d_count < 2)
 			goto out_bad;
 	}
 
@@ -451,6 +439,10 @@ parent->d_name.name, dentry->d_name.name);
 out_valid:
 	return 1;
 out_bad:
+	if (dentry->d_parent->d_inode)
+		nfs_invalidate_dircache(dentry->d_parent->d_inode);
+	if (inode && S_ISDIR(inode->i_mode))
+		nfs_invalidate_dircache(inode);
 	return 0;
 }
 
@@ -535,7 +527,7 @@ static void show_dentry(struct list_head * dlist)
 }
 #endif
 
-static int nfs_lookup(struct inode *dir, struct dentry * dentry)
+static struct dentry *nfs_lookup(struct inode *dir, struct dentry * dentry)
 {
 	struct inode *inode;
 	int error;
@@ -581,7 +573,7 @@ show_dentry(&inode->i_dentry);
 		}
 	}
 out:
-	return error;
+	return ERR_PTR(error);
 }
 
 /*
@@ -766,7 +758,7 @@ struct dentry *nfs_silly_lookup(struct dentry *parent, char *silly, int slen)
 {
 	struct qstr    sqstr;
 	struct dentry *sdentry;
-	int error;
+	struct dentry *res;
 
 	sqstr.name = silly;
 	sqstr.len  = slen;
@@ -776,10 +768,10 @@ struct dentry *nfs_silly_lookup(struct dentry *parent, char *silly, int slen)
 		sdentry = d_alloc(parent, &sqstr);
 		if (sdentry == NULL)
 			return ERR_PTR(-ENOMEM);
-		error = nfs_lookup(parent->d_inode, sdentry);
-		if (error) {
+		res = nfs_lookup(parent->d_inode, sdentry);
+		if (res) {
 			dput(sdentry);
-			return ERR_PTR(error);
+			return res;
 		}
 	}
 	return sdentry;

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Dec  9 21:13:12 1997
- * Modified at:   Tue Apr  6 20:31:08 1999
+ * Modified at:   Wed Apr 21 17:49:00 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -43,14 +43,15 @@
 #define ALIGN __attribute__((aligned))
 #define PACK __attribute__((packed))
 
-/* use 0 for production, 1 for verification, >2 for debug */
+
 #ifdef CONFIG_IRDA_DEBUG
 
 extern __u32 irda_debug;
 
-#define IRDA_DEBUG 0
+/* use 0 for production, 1 for verification, >2 for debug */
+#define IRDA_DEBUG_LEVEL 0
 
-#define DEBUG(n, args...) if (irda_debug >= (n)) printk( KERN_DEBUG args)
+#define DEBUG(n, args...) if (irda_debug >= (n)) printk(KERN_DEBUG args)
 #define ASSERT(expr, func) \
 if(!(expr)) { \
         printk( "Assertion failed! %s,%s,%s,line=%d\n",\
@@ -60,6 +61,12 @@ if(!(expr)) { \
 #define DEBUG(n, args...)
 #define ASSERT(expr, func)
 #endif /* CONFIG_IRDA_DEBUG */
+
+#define WARNING(args...) printk(KERN_WARNING args)
+#define MESSAGE(args...) printk(KERN_INFO args)
+#define ERROR(args...)   printk(KERN_ERR args)
+
+#define MSECS_TO_JIFFIES(ms) (ms*HZ/1000)
 
 /*
  *  Magic numbers used by Linux/IR. Random numbers which must be unique to 
@@ -111,6 +118,8 @@ struct irda_sock {
 	__u32 skey;           /* IrLMP service handle */
 
 	int nslots;           /* Number of slots to use for discovery */
+
+	int errno;
 
 	struct sock *sk;
 	struct wait_queue *ias_wait;       /* Wait for LM-IAS answer */

@@ -28,8 +28,12 @@
 #include <net/irda/irmod.h> 
 
 typedef enum {
-	COMM_DISCOVERY,
         COMM_IDLE,
+
+	COMM_DISCOVERY_WAIT,
+	COMM_QUERYPARAM_WAIT,
+	COMM_QUERYLSAP_WAIT,
+
 	COMM_WAITI,
 	COMM_WAITR,
 	COMM_CONN,
@@ -53,6 +57,12 @@ typedef enum {
 	IRCOMM_DATA_REQUEST,
 	LMP_DATA_INDICATION,
 	IRCOMM_CONTROL_REQUEST,
+	
+	DISCOVERY_INDICATION,
+	GOT_PARAMETERS,
+	GOT_LSAPSEL,
+	QUERYIAS_ERROR,
+
 } IRCOMM_EVENT;
 
 typedef enum {
@@ -172,6 +182,9 @@ struct ircomm_cb{
 
  	__u32 daddr;        /* Device address of the peer device */ 
 	__u32 saddr;
+	__u32 skey;
+	__u32 ckey;
+	int                 queryias_lock;
 	int                 ias_type;
 	int disconnect_priority; /* P_NORMAL or P_HIGH. see irttp.h */
 	struct notify_t notify;     /* container of callbacks */
@@ -206,6 +219,7 @@ struct ircomm_cb{
 	__u8 peer_port_type;
 
 	__u8 servicetype;    
+	__u8 peer_servicetype;    
 	__u8 data_format;   
 	__u8 peer_data_format;   
 	__u8 flow_ctrl;
@@ -241,8 +255,7 @@ struct ircomm_cb{
 
 
 
-int  ircomm_query_ias_and_connect(struct ircomm_cb *self, __u8 servicetype); 
-void ircomm_connect_request(struct ircomm_cb *self);
+void ircomm_connect_request(struct ircomm_cb *self, __u8 servicetype);
 void ircomm_connect_response(struct ircomm_cb *self, struct sk_buff *userdata,
 			     __u32 maxsdusize);
 void ircomm_disconnect_request(struct ircomm_cb *self,

@@ -228,7 +228,7 @@ isofs_find_entry(struct inode *dir, struct dentry *dentry, unsigned long *ino)
 	return retval;
 }
 
-int isofs_lookup(struct inode * dir, struct dentry * dentry)
+struct dentry *isofs_lookup(struct inode * dir, struct dentry * dentry)
 {
 	unsigned long ino;
 	struct buffer_head * bh;
@@ -237,12 +237,6 @@ int isofs_lookup(struct inode * dir, struct dentry * dentry)
 #ifdef DEBUG
 	printk("lookup: %x %s\n",dir->i_ino, dentry->d_name.name);
 #endif
-	if (!dir)
-		return -ENOENT;
-
-	if (!S_ISDIR(dir->i_mode))
-		return -ENOENT;
-
 	dentry->d_op = dir->i_sb->s_root->d_op;
 
 	bh = isofs_find_entry(dir, dentry, &ino);
@@ -253,8 +247,8 @@ int isofs_lookup(struct inode * dir, struct dentry * dentry)
 
 		inode = iget(dir->i_sb,ino);
 		if (!inode)
-			return -EACCES;
+			return ERR_PTR(-EACCES);
 	}
 	d_add(dentry, inode);
-	return 0;
+	return NULL;
 }

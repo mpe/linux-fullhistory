@@ -48,6 +48,7 @@
 #include <asm/spinlock.h>
 
 #include "z85230.h"
+#include "syncppp.h"
 
 
 static spinlock_t z8530_buffer_lock = SPIN_LOCK_UNLOCKED;

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 17 20:54:32 1997
- * Modified at:   Tue Apr  6 20:05:14 1999
+ * Modified at:   Fri Apr 23 09:15:07 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -202,12 +202,12 @@ int irlmp_update_client(__u32 handle, __u16 hint_mask,
 void irlmp_register_link(struct irlap_cb *, __u32 saddr, struct notify_t *);
 void irlmp_unregister_link(__u32 saddr);
 
-int  irlmp_connect_request( struct lsap_cb *, __u8 dlsap_sel, 
-			    __u32 saddr, __u32 daddr,
-			    struct qos_info *, struct sk_buff *);
-void irlmp_connect_indication( struct lsap_cb *self, struct sk_buff *skb);
-void irlmp_connect_response( struct lsap_cb *, struct sk_buff *);
-void irlmp_connect_confirm( struct lsap_cb *, struct sk_buff *);
+int  irlmp_connect_request(struct lsap_cb *, __u8 dlsap_sel, 
+			   __u32 saddr, __u32 daddr,
+			   struct qos_info *, struct sk_buff *);
+void irlmp_connect_indication(struct lsap_cb *self, struct sk_buff *skb);
+void irlmp_connect_response(struct lsap_cb *, struct sk_buff *);
+void irlmp_connect_confirm(struct lsap_cb *, struct sk_buff *);
 struct lsap_cb *irlmp_dup(struct lsap_cb *self, void *instance);
 
 void irlmp_disconnect_indication(struct lsap_cb *self, LM_REASON reason, 
@@ -219,17 +219,17 @@ void irlmp_discovery_request(int nslots);
 void irlmp_do_discovery(int nslots);
 discovery_t *irlmp_get_discovery_response(void);
 
-void irlmp_data_request( struct lsap_cb *, struct sk_buff *);
-void irlmp_udata_request( struct lsap_cb *, struct sk_buff *);
-void irlmp_data_indication( struct lsap_cb *, struct sk_buff *);
-void irlmp_udata_indication( struct lsap_cb *, struct sk_buff *);
+void irlmp_data_request(struct lsap_cb *, struct sk_buff *);
+inline void irlmp_udata_request(struct lsap_cb *, struct sk_buff *);
+inline void irlmp_data_indication(struct lsap_cb *, struct sk_buff *);
+inline void irlmp_udata_indication(struct lsap_cb *, struct sk_buff *);
 
 void irlmp_status_request(void);
-void irlmp_status_indication( LINK_STATUS link, LOCK_STATUS lock);
+void irlmp_status_indication(LINK_STATUS link, LOCK_STATUS lock);
 
-int  irlmp_slsap_inuse( __u8 slsap);
+int  irlmp_slsap_inuse(__u8 slsap);
 __u8 irlmp_find_free_slsap(void);
-LM_REASON irlmp_convert_lap_reason( LAP_REASON);
+LM_REASON irlmp_convert_lap_reason(LAP_REASON);
 
 __u32 irlmp_get_saddr(struct lsap_cb *self);
 __u32 irlmp_get_daddr(struct lsap_cb *self);

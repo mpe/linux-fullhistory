@@ -210,8 +210,8 @@ filp->f_dentry->d_name.name, entry.name);
 		/*
 		 * Do a real lookup on the short name.
 		 */
-		dret = umsdos_lookup_dentry(filp->f_dentry, info.fake.fname,
-						 info.fake.len, 1);
+		dret = umsdos_covered(filp->f_dentry, info.fake.fname,
+						 info.fake.len);
 		ret = PTR_ERR(dret);
 		if (IS_ERR(dret))
 			break;
@@ -459,7 +459,7 @@ int umsdos_is_pseudodos (struct inode *dir, struct dentry *dentry)
  * entry from the EMD file, and return ENOENT.
  */
 
-int umsdos_lookup_x (struct inode *dir, struct dentry *dentry, int nopseudo)
+struct dentry *umsdos_lookup_x (struct inode *dir, struct dentry *dentry, int nopseudo)
 {				
 	struct dentry *dret = NULL;
 	struct inode *inode;
@@ -500,8 +500,7 @@ Printk (("lookup %.*s pos %lu ret %d len %d ",
 info.fake.len, info.fake.fname, info.f_pos, ret, info.fake.len));
 
 	/* do a real lookup to get the short name ... */
-	dret = umsdos_lookup_dentry(dentry->d_parent, info.fake.fname,
-					info.fake.len, 1);
+	dret = umsdos_covered(dentry->d_parent, info.fake.fname, info.fake.len);
 	ret = PTR_ERR(dret);
 	if (IS_ERR(dret)) {
 printk("umsdos_lookup_x: %s/%s real lookup failed, ret=%d\n", 
@@ -563,7 +562,7 @@ out_dput:
 	dput(dret);
 out:
 	umsdos_endlookup (dir);
-	return ret;
+	return ERR_PTR(ret);
 
 out_remove:
 	printk(KERN_WARNING "UMSDOS:  entry %s/%s out of sync, erased\n",
@@ -581,19 +580,19 @@ out_remove:
  * Called by VFS; should fill dentry->d_inode via d_add.
  */
 
-int UMSDOS_lookup (struct inode *dir, struct dentry *dentry)
+struct dentry *UMSDOS_lookup (struct inode *dir, struct dentry *dentry)
 {
-	int ret;
+	struct dentry *ret;
 
 	ret = umsdos_lookup_x (dir, dentry, 0);
 
 	/* Create negative dentry if not found. */
-	if (ret == -ENOENT) {
+	if (ret == ERR_PTR(-ENOENT)) {
 		Printk ((KERN_DEBUG 
 			"UMSDOS_lookup: converting -ENOENT to negative\n"));
 		d_add (dentry, NULL);
 		dentry->d_op = &umsdos_dentry_operations;
-		ret = 0;
+		ret = NULL;
 	}
 	return ret;
 }
@@ -601,7 +600,6 @@ int UMSDOS_lookup (struct inode *dir, struct dentry *dentry)
 struct dentry *umsdos_covered(struct dentry *parent, char *name, int len)
 {
 	struct dentry *result, *dentry;
-	int error;
 	struct qstr qstr;
 
 	qstr.name = name;
@@ -610,19 +608,18 @@ struct dentry *umsdos_covered(struct dentry *parent, char *name, int len)
 	result = ERR_PTR(-ENOMEM);
 	dentry = d_alloc(parent, &qstr);
 	if (dentry) {
-		result = dentry;
 		/* XXXXXXXXXXXXXXXXXXX Race alert! */
-		error = UMSDOS_rlookup(parent->d_inode, result);
-		d_drop(result);
-		if (error)
+		result = UMSDOS_rlookup(parent->d_inode, dentry);
+		d_drop(dentry);
+		if (result)
 			goto out_fail;
+		return dentry;
 	}
 out:
 	return result;
 
 out_fail:
-	dput(result);
-	result = ERR_PTR(error);
+	dput(dentry);
 	goto out;
 }
 
@@ -636,7 +633,6 @@ struct dentry *umsdos_lookup_dentry(struct dentry *parent, char *name, int len,
 					int real)
 {
 	struct dentry *result, *dentry;
-	int error;
 	struct qstr qstr;
 
 	qstr.name = name;
@@ -647,20 +643,19 @@ struct dentry *umsdos_lookup_dentry(struct dentry *parent, char *name, int len,
 		result = ERR_PTR(-ENOMEM);
 		dentry = d_alloc(parent, &qstr);
 		if (dentry) {
-			result = dentry;
-			error = real ?
-				UMSDOS_rlookup(parent->d_inode, result) :
-				UMSDOS_lookup(parent->d_inode, result);
-			if (error)
+			result = real ?
+				UMSDOS_rlookup(parent->d_inode, dentry) :
+				UMSDOS_lookup(parent->d_inode, dentry);
+			if (result)
 				goto out_fail;
+			return dentry;
 		}
 	}
 out:
 	return result;
 
 out_fail:
-	dput(result);
-	result = ERR_PTR(error);
+	dput(dentry);
 	goto out;
 }
 

@@ -89,7 +89,7 @@ struct minix_dir_entry {
 
 #ifdef __KERNEL__
 
-extern int minix_lookup(struct inode * dir, struct dentry *dentry);
+extern struct dentry *minix_lookup(struct inode * dir, struct dentry *dentry);
 extern int minix_create(struct inode * dir, struct dentry *dentry, int mode);
 extern int minix_mkdir(struct inode * dir, struct dentry *dentry, int mode);
 extern int minix_rmdir(struct inode * dir, struct dentry *dentry);

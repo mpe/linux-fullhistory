@@ -1,7 +1,7 @@
 /*
  * This file define a set of standard wireless extensions
  *
- * Version :	6	18.2.99
+ * Version :	7	23.4.99
  *
  * Authors :	Jean Tourrilhes - HPLB - <jt@hplb.hpl.hp.com>
  */
@@ -85,7 +85,11 @@
  *
  * V5 to V6
  * --------
- *	- 802.11 support
+ *	- 802.11 support (ESSID ioctls)
+ *
+ * V6 to V7
+ * --------
+ *	- define IW_ESSID_MAX_SIZE and IW_MAX_AP
  */
 
 /* -------------------------- IOCTL LIST -------------------------- */
@@ -123,6 +127,7 @@
 /* As the ESSID is a string up to 32 bytes long, it doesn't fit within the
  * 'iwreq' structure, so we need to use the 'data' member to point to a
  * string in user space, like it is done for RANGE...
+ * The "flags" member indicate if the ESSID is active or not.
  */
 
 /* ------------------------- IOCTL STUFF ------------------------- */
@@ -168,6 +173,13 @@
 
 /* Maximum of address that you may set with SPY */
 #define IW_MAX_SPY		8
+
+/* Maximum of address that you may get in the
+   list of access points in range */
+#define IW_MAX_AP		8
+
+/* Maximum size of the ESSID string */
+#define IW_ESSID_MAX_SIZE	32
 
 /****************************** TYPES ******************************/
 
@@ -278,7 +290,7 @@ struct	iwreq
 			caddr_t	pointer;	/* Pointer to the data
 						 * (in user space) */
 			__u16	length;		/* fields or byte size */
-			__u16	flags;		/* Unused */
+			__u16	flags;		/* Optional params */
 		}	data;
 	}	u;
 };

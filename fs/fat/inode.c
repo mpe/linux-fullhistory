@@ -332,7 +332,6 @@ fat_read_super(struct super_block *sb, void *data, int silent)
 		fat_brelse (sb, bh);
 		goto out_no_bread;
 	}
-	set_blocksize(sb->s_dev, blksize);
 
 /*
  * The DOS3 partition size limit is *not* 32M as many people think.  
@@ -423,6 +422,7 @@ fat_read_super(struct super_block *sb, void *data, int silent)
 		    || !b->secs_track || !b->heads;
 	}
 	fat_brelse(sb, bh);
+	set_blocksize(sb->s_dev, blksize);
 	/*
 		This must be done after the brelse because the bh is a dummy
 		allocated by fat_bread (see buffer.c)

@@ -103,17 +103,12 @@ static struct buffer_head * sysv_find_entry(struct inode * dir,
 	return NULL;
 }
 
-int sysv_lookup(struct inode * dir, struct dentry * dentry)
+struct dentry *sysv_lookup(struct inode * dir, struct dentry * dentry)
 {
 	struct inode * inode = NULL;
 	struct sysv_dir_entry * de;
 	struct buffer_head * bh;
 
-	if (!dir)
-		return -ENOENT;
-	if (!S_ISDIR(dir->i_mode)) {
-		return -ENOENT;
-	}
 	bh = sysv_find_entry(dir, dentry->d_name.name, dentry->d_name.len, &de);
 
 	if (bh) {
@@ -122,10 +117,10 @@ int sysv_lookup(struct inode * dir, struct dentry * dentry)
 		inode = iget(dir->i_sb, ino);
 	
 		if (!inode) 
-			return -EACCES;
+			return ERR_PTR(-EACCES);
 	}
 	d_add(dentry, inode);
-	return 0;
+	return NULL;
 }
 
 /*
@@ -209,8 +204,6 @@ int sysv_create(struct inode * dir, struct dentry * dentry, int mode)
 	struct buffer_head * bh;
 	struct sysv_dir_entry * de;
 
-	if (!dir)
-		return -ENOENT;
 	inode = sysv_new_inode(dir);
 	if (!inode) 
 		return -ENOSPC;
@@ -239,8 +232,6 @@ int sysv_mknod(struct inode * dir, struct dentry * dentry, int mode, int rdev)
 	struct buffer_head * bh;
 	struct sysv_dir_entry * de;
 
-	if (!dir)
-		return -ENOENT;
 	bh = sysv_find_entry(dir, dentry->d_name.name,
 			     dentry->d_name.len, &de);
 	if (bh) {
@@ -286,8 +277,6 @@ int sysv_mkdir(struct inode * dir, struct dentry *dentry, int mode)
 	struct buffer_head * bh, *dir_block;
 	struct sysv_dir_entry * de;
 
-	if (!dir)
-		return -EINVAL;
 	bh = sysv_find_entry(dir, dentry->d_name.name,
                               dentry->d_name.len, &de);
 	if (bh) {

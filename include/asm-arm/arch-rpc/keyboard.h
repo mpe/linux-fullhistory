@@ -10,7 +10,6 @@
 
 #define NR_SCANCODES 128
 
-extern int ps2kbd_pretranslate(unsigned char scancode);
 extern int ps2kbd_translate(unsigned char scancode, unsigned char *keycode_p, char *up_flag_p);
 extern void ps2kbd_leds(unsigned char leds);
 extern void ps2kbd_init_hw(void);
@@ -18,11 +17,6 @@ extern unsigned char ps2kbd_sysrq_xlate[NR_SCANCODES];
 
 #define kbd_setkeycode(sc,kc)		(-EINVAL)
 #define kbd_getkeycode(sc)		(-EINVAL)
-
-/* Prototype: int kbd_pretranslate(scancode, raw_mode)
- * Returns  : 0 to ignore scancode
- */
-#define kbd_pretranslate(sc,rm)		ps2kbd_pretranslate(sc)
 
 /* Prototype: int kbd_translate(scancode, *keycode, *up_flag, raw_mode)
  * Returns  : 0 to ignore scancode, *keycode set to keycode, *up_flag

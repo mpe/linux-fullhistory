@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:31 1997
- * Modified at:   Thu Mar 25 10:27:08 1999
+ * Modified at:   Sat Apr 10 10:32:21 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, 
@@ -28,6 +28,7 @@
 #include <linux/init.h>
 
 #include <asm/byteorder.h>
+#include <asm/unaligned.h>
 
 #include <net/irda/irda.h>
 #include <net/irda/irmod.h>
@@ -639,7 +640,6 @@ int irttp_connect_request(struct tsap_cb *self, __u8 dtsap_sel,
 			  struct sk_buff *userdata) 
 {
 	struct sk_buff *skb;
-	__u16 tmp_be;
 	__u8 *frame;
 	__u8 n;
 	
@@ -703,8 +703,8 @@ int irttp_connect_request(struct tsap_cb *self, __u8 dtsap_sel,
 		frame[2] = 0x01; /* MaxSduSize */
 		frame[3] = 0x02; /* Value length */
 
-		tmp_be = cpu_to_be16((__u16) max_sdu_size);
-		memcpy(frame+4, &tmp_be, 2);
+		put_unaligned(cpu_to_be16((__u16) max_sdu_size), 
+			      (__u16 *)(frame+4));
 	} else {
 		/* Insert plain TTP header */
 		frame = skb_push(skb, TTP_HEADER);
@@ -728,11 +728,10 @@ void irttp_connect_confirm(void *instance, void *sap, struct qos_info *qos,
 			   __u32 max_seg_size, struct sk_buff *skb) 
 {
 	struct tsap_cb *self;
-	__u16 tmp_cpu;
-	__u8 *frame;
-	__u8 n;
 	int parameters;
+	__u8 *frame;
 	__u8 plen, pi, pl;
+	__u8 n;
 
 	DEBUG(4, __FUNCTION__ "()\n");
 	
@@ -770,14 +769,26 @@ void irttp_connect_confirm(void *instance, void *sap, struct qos_info *qos,
 		pi   = frame[2];
 		pl   = frame[3];
 
-		ASSERT(pl == 2, return;);
-
-		memcpy(&tmp_cpu, frame+4, 2); /* Align value */
-		be16_to_cpus(&tmp_cpu);       /* Convert to host order */
-		self->tx_max_sdu_size = tmp_cpu;
+		switch (pl) {
+		case 1:
+			self->tx_max_sdu_size = *(frame+4);
+			break;
+		case 2:
+			self->tx_max_sdu_size = 
+				be16_to_cpu(get_unaligned((__u16 *)(frame+4)));
+			break;
+		case 4:
+			self->tx_max_sdu_size = 
+				be32_to_cpu(get_unaligned((__u32 *)(frame+4)));
+			break;
+		default:
+			printk(KERN_ERR __FUNCTION__ 
+			       "() illegal value length for max_sdu_size!\n");
+			self->tx_max_sdu_size = 0;
+		};
 
 		DEBUG(4, __FUNCTION__ "(), RxMaxSduSize=%d\n", 
-		       self->tx_max_sdu_size);
+		      self->tx_max_sdu_size);
 	}
 	
 	DEBUG(4, __FUNCTION__ "() send=%d,avail=%d,remote=%d\n", 
@@ -804,11 +815,10 @@ void irttp_connect_indication(void *instance, void *sap,
 {
 	struct tsap_cb *self;
 	struct lsap_cb *lsap;
-	__u16 tmp_cpu;
-	__u8 *frame;
 	int parameters;
-	int n;
+	__u8 *frame;
 	__u8 plen, pi, pl;
+	__u8 n;
 
 	self = (struct tsap_cb *) instance;
 
@@ -817,9 +827,6 @@ void irttp_connect_indication(void *instance, void *sap,
  	ASSERT(skb != NULL, return;);
 
 	lsap = (struct lsap_cb *) sap;
-
-	/* FIXME: just remove this when we know its working */
-	ASSERT(max_seg_size == qos->data_size.value, return;);
 
 	self->max_seg_size = max_seg_size-LMP_HEADER-LAP_HEADER;
 
@@ -836,18 +843,31 @@ void irttp_connect_indication(void *instance, void *sap,
 	
 	parameters = frame[0] & 0x80;	
 	if (parameters) {
-		DEBUG(4, __FUNCTION__ "(), Contains parameters!\n");
+		DEBUG(3, __FUNCTION__ "(), Contains parameters!\n");
 		plen = frame[1];
 		pi   = frame[2];
 		pl   = frame[3];
 
-		ASSERT(pl == 2, return;);
+		switch (pl) {
+		case 1:
+			self->tx_max_sdu_size = *(frame+4);
+			break;
+		case 2:
+			self->tx_max_sdu_size = 
+				be16_to_cpu(get_unaligned((__u16 *)(frame+4)));
+			break;
+		case 4:
+			self->tx_max_sdu_size = 
+				be32_to_cpu(get_unaligned((__u32 *)(frame+4)));
+			break;
+		default:
+			printk(KERN_ERR __FUNCTION__ 
+			       "() illegal value length for max_sdu_size!\n");
+			self->tx_max_sdu_size = 0;
+		};
 
-		memcpy(&tmp_cpu, frame+4, 2); /* Align value */
-		be16_to_cpus(&tmp_cpu);       /* Convert to host order */
 
-		self->tx_max_sdu_size = tmp_cpu;
-		DEBUG(4, __FUNCTION__ "(), MaxSduSize=%d\n", 
+		DEBUG(3, __FUNCTION__ "(), MaxSduSize=%d\n", 
 		      self->tx_max_sdu_size);
 	}
 
@@ -873,7 +893,6 @@ void irttp_connect_response(struct tsap_cb *self, __u32 max_sdu_size,
 			    struct sk_buff *userdata)
 {
 	struct sk_buff *skb;
-	__u32 tmp_be;
 	__u8 *frame;
 	__u8 n;
 
@@ -932,8 +951,8 @@ void irttp_connect_response(struct tsap_cb *self, __u32 max_sdu_size,
 		frame[2] = 0x01; /* MaxSduSize */
 		frame[3] = 0x02; /* Value length */
 
-		tmp_be = cpu_to_be16((__u16)max_sdu_size);
-		memcpy(frame+4, &tmp_be, 2);
+		put_unaligned(cpu_to_be16((__u16) max_sdu_size), 
+			      (__u16 *)(frame+4));
 	} else {
 		/* Insert TTP header */
 		frame = skb_push(skb, TTP_HEADER);

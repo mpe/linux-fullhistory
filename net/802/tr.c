@@ -30,7 +30,6 @@
 #include <linux/trdevice.h>
 #include <linux/skbuff.h>
 #include <linux/errno.h>
-#include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/net.h>
 #include <linux/proc_fs.h>
@@ -67,6 +66,8 @@ struct rif_cache_s {
  */
  
 rif_cache rif_table[RIF_TABLE_SIZE]={ NULL, };
+
+static spinlock_t rif_lock = SPIN_LOCK_UNLOCKED;
 
 #define RIF_TIMEOUT 60*10*HZ
 #define RIF_CHECK_INTERVAL 60*HZ
@@ -230,6 +231,9 @@ static void tr_source_route(struct sk_buff *skb,struct trh_hdr *trh,struct devic
 	unsigned int hash;
 	rif_cache entry;
 	unsigned char *olddata;
+	unsigned long flags;
+	
+	spin_lock_irqsave(&rif_lock, flags);
 
 	/*
 	 *	Broadcasts are single route as stated in RFC 1042 
@@ -298,6 +302,8 @@ printk("source routing for %02X %02X %02X %02X %02X %02X\n",trh->daddr[0],
 	else 
 		slack = 18 - ((ntohs(trh->rcf) & TR_RCF_LEN_MASK)>>8);
 	olddata = skb->data;
+	spin_unlock_irqrestore(&rif_lock, flags);
+
 	skb_pull(skb, slack);
 	memmove(skb->data, olddata, sizeof(struct trh_hdr) - slack);
 }
@@ -312,7 +318,11 @@ static void tr_add_rif_info(struct trh_hdr *trh, struct device *dev)
 	int i;
 	unsigned int hash, rii_p = 0;
 	rif_cache entry;
+	unsigned long flags;
 
+
+	spin_lock_irqsave(&rif_lock, flags);
+	
 	/*
 	 *	Firstly see if the entry exists
 	 */
@@ -350,6 +360,7 @@ printk("adding rif_entry: addr:%02X:%02X:%02X:%02X:%02X:%02X rcf:%04X\n",
 		if(!entry) 
 		{
 			printk(KERN_DEBUG "tr.c: Couldn't malloc rif cache entry !\n");
+			spin_unlock_irqrestore(&rif_lock, flags);
 			return;
 		}
 
@@ -391,6 +402,7 @@ printk("updating rif_entry: addr:%02X:%02X:%02X:%02X:%02X:%02X rcf:%04X\n",
 		    }                                         
            	entry->last_used=jiffies;               
 	}
+	spin_unlock_irqrestore(&rif_lock, flags);
 }
 
 /*
@@ -402,9 +414,8 @@ static void rif_check_expire(unsigned long dummy)
 	int i;
 	unsigned long now=jiffies,flags;
 
-	save_flags(flags);
-	cli();
-
+	spin_lock_irqsave(&rif_lock, flags);
+	
 	for(i=0; i < RIF_TABLE_SIZE;i++) 
 	{
 		rif_cache entry, *pentry=rif_table+i;	
@@ -422,7 +433,8 @@ static void rif_check_expire(unsigned long dummy)
 				pentry=&entry->next;
 		}
 	}
-	restore_flags(flags);
+	
+	spin_unlock_irqrestore(&rif_lock, flags);
 
 	/*
 	 *	Reset the timer

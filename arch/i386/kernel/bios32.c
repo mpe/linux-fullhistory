@@ -1095,6 +1095,8 @@ static void __init pcibios_scan_buglist(struct pci_bus *b)
  * for buggy PCI BIOS'es :-[).
  */
 
+extern int skip_ioapic_setup;
+
 static void __init pcibios_fixup_devices(void)
 {
 	struct pci_dev *dev;
@@ -1147,6 +1149,7 @@ static void __init pcibios_fixup_devices(void)
 		/*
 		 * Recalculate IRQ numbers if we use the I/O APIC
 		 */
+		if(!skip_ioapic_setup)
 		{
 			int irq;
 			unsigned char pin;

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun May 24 22:12:06 1998
- * Modified at:   Mon Jan 25 13:55:54 1999
+ * Modified at:   Fri Apr 23 09:46:38 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997 Dag Brattli, All Rights Reserved.
@@ -36,6 +36,7 @@ enum { DISCOVERY=1, DEVNAME, COMPRESSION, DEBUG, SLOTS, SLOT_TIMEOUT };
 extern int sysctl_discovery;
 extern int sysctl_discovery_slots;
 extern int sysctl_slot_timeout;
+extern int sysctl_fast_poll_increase;
 int sysctl_compression = 0;
 extern char sysctl_devname[];
 
@@ -52,7 +53,11 @@ static ctl_table irda_table[] = {
 	{ COMPRESSION, "compression", &sysctl_compression,
 	  sizeof(int), 0644, NULL, &proc_dointvec },
 #ifdef CONFIG_IRDA_DEBUG
-	{ DEBUG, "debug", &irda_debug,
+        { DEBUG, "debug", &irda_debug,
+	  sizeof(int), 0644, NULL, &proc_dointvec },
+#endif
+#ifdef CONFIG_IRDA_FAST_RR
+        { SLOTS, "fast_poll_increase", &sysctl_fast_poll_increase,
 	  sizeof(int), 0644, NULL, &proc_dointvec },
 #endif
 	{ SLOTS, "discovery_slots", &sysctl_discovery_slots,

@@ -19,7 +19,7 @@
 #include <asm/uaccess.h>
 
 static int proc_readfd(struct file *, void *, filldir_t);
-static int proc_lookupfd(struct inode *, struct dentry *);
+static struct dentry *proc_lookupfd(struct inode *, struct dentry *);
 
 static struct file_operations proc_fd_operations = {
 	NULL,			/* lseek - default */
@@ -67,7 +67,7 @@ struct inode_operations proc_fd_inode_operations = {
  *
  * Thus just return -ENOENT instead.
  */
-static int proc_lookupfd(struct inode * dir, struct dentry * dentry)
+static struct dentry *proc_lookupfd(struct inode * dir, struct dentry * dentry)
 {
 	unsigned int ino, pid, fd, c;
 	struct task_struct * p;
@@ -77,13 +77,11 @@ static int proc_lookupfd(struct inode * dir, struct dentry * dentry)
 	int len, err;
 
 	err = -ENOENT;
-	if (!dir)
-		goto out;
 	ino = dir->i_ino;
 	pid = ino >> 16;
 	ino &= 0x0000ffff;
 
-	if (!pid || ino != PROC_PID_FD || !S_ISDIR(dir->i_mode))
+	if (!pid || ino != PROC_PID_FD)
 		goto out;
 
 	fd = 0;
@@ -121,10 +119,10 @@ static int proc_lookupfd(struct inode * dir, struct dentry * dentry)
 	if (inode) {
 		dentry->d_op = &proc_dentry_operations;
 		d_add(dentry, inode);
-		err = 0;
+		return NULL;
 	}
 out:
-	return err;
+	return ERR_PTR(err);
 }
 
 #define NUMBUF 10
@@ -136,10 +134,6 @@ static int proc_readfd(struct file * filp, void * dirent, filldir_t filldir)
 	unsigned int fd, pid, ino;
 	int retval;
 	char buf[NUMBUF];
-
-	retval = -EBADF;
-	if (!inode || !S_ISDIR(inode->i_mode))
-		goto out;
 
 	retval = 0;
 	ino = inode->i_ino;

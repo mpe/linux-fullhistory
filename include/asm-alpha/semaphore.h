@@ -53,24 +53,31 @@ extern inline void down(struct semaphore * sem)
 	   it's return address in $28.  The pv is loaded as usual.
 	   The gp is clobbered (in the module case) as usual.  */
 
+	/* This little bit of silliness is to get the GP loaded for
+	   a function that ordinarily wouldn't.  Otherwise we could
+	   have it done by the macro directly, which can be optimized
+	   the linker.  */
+	register void *pv __asm__("$27") = __down_failed;
+	
 	__asm__ __volatile__ (
 		"/* semaphore down operation */\n"
-		"1:	ldl_l	$27,%0\n"
-		"	subl	$27,1,$27\n"
-		"	mov	$27,$28\n"
-		"	stl_c	$28,%0\n"
+		"1:	ldl_l	$24,%1\n"
+		"	subl	$24,1,$24\n"
+		"	mov	$24,$28\n"
+		"	stl_c	$28,%1\n"
 		"	beq	$28,2f\n"
-		"	blt	$27,3f\n"
+		"	blt	$24,3f\n"
 		"4:	mb\n"
 		".section .text2,\"ax\"\n"
 		"2:	br	1b\n"
-		"3:	lda	$24,%0\n"
-		"	jsr	$28,__down_failed\n"
+		"3:	lda	$24,%1\n"
+		"	jsr	$28,($27),__down_failed\n"
 		"	ldgp	$29,0($28)\n"
 		"	br	4b\n"
 		".previous"
-		: : "m"(sem->count)
-		: "$24", "$27", "$28", "memory");
+		: "=r"(pv)
+		: "m"(sem->count), "r"(pv)
+		: "$24", "$28", "memory");
 }
 
 extern inline int down_interruptible(struct semaphore * sem)
@@ -81,27 +88,28 @@ extern inline int down_interruptible(struct semaphore * sem)
 	   value is in $24.  */
 
 	register int ret __asm__("$24");
+	register void *pv __asm__("$27") = __down_failed_interruptible;
 
 	__asm__ __volatile__ (
 		"/* semaphore down interruptible operation */\n"
-		"1:	ldl_l	$27,%1\n"
-		"	subl	$27,1,$27\n"
-		"	mov	$27,$28\n"
-		"	stl_c	$28,%1\n"
+		"1:	ldl_l	$24,%2\n"
+		"	subl	$24,1,$24\n"
+		"	mov	$24,$28\n"
+		"	stl_c	$28,%2\n"
 		"	beq	$28,2f\n"
-		"	blt	$27,3f\n"
+		"	blt	$24,3f\n"
 		"	mov	$31,%0\n"
 		"4:	mb\n"
 		".section .text2,\"ax\"\n"
 		"2:	br	1b\n"
-		"3:	lda	$24,%1\n"
-		"	jsr	$28,__down_failed_interruptible\n"
+		"3:	lda	$24,%2\n"
+		"	jsr	$28,($27),__down_failed_interruptible\n"
 		"	ldgp	$29,0($28)\n"
 		"	br	4b\n"
 		".previous"
-		: "=r"(ret)
-		: "m"(sem->count)
-		: "$27", "$28", "memory");
+		: "=r"(ret), "=r"(pv)
+		: "m"(sem->count), "r"(pv)
+		: "$28", "memory");
 
 	return ret;
 }
@@ -171,26 +179,29 @@ extern inline void up(struct semaphore * sem)
 	   it's return address in $28.  The pv is loaded as usual.
 	   The gp is clobbered (in the module case) as usual.  */
 
+	register void *pv __asm__("$27") = __up_wakeup;
+
 	__asm__ __volatile__ (
 		"/* semaphore up operation */\n"
 		"	mb\n"
-		"1:	ldl_l	$27,%0\n"
-		"	addl	$27,1,$27\n"
-		"	mov	$27,$28\n"
-		"	stl_c	$28,%0\n"
+		"1:	ldl_l	$24,%1\n"
+		"	addl	$24,1,$24\n"
+		"	mov	$24,$28\n"
+		"	stl_c	$28,%1\n"
 		"	beq	$28,2f\n"
 		"	mb\n"
 		"	ble	$27,3f\n"
 		"4:\n"
 		".section .text2,\"ax\"\n"
 		"2:	br	1b\n"
-		"3:	lda	$24,%0\n"
-		"	jsr	$28,__up_wakeup\n"
+		"3:	lda	$24,%1\n"
+		"	jsr	$28,($27),__up_wakeup\n"
 		"	ldgp	$29,0($28)\n"
 		"	br	4b\n"
 		".previous"
-		: : "m"(sem->count)
-		: "$24", "$27", "$28", "memory");
+		: "=r"(pv)
+		: "m"(sem->count), "r"(pv)
+		: "$24", "$28", "memory");
 }
 
 #endif

@@ -252,6 +252,22 @@ hipfound:				/* From the double loop above. */
 	return dev;
 }
 
+
+void unregister_hipdev(struct device *dev)
+{
+	int i;
+	rtnl_lock();
+	unregister_netdevice(dev);
+	for (i = 0; i < MAX_HIP_CARDS; ++i) {
+		if (hipdev_index[i] == dev) {
+			hipdev_index[i] = NULL;
+			break;
+		}
+	}
+	rtnl_unlock();
+}
+
+
 static int hippi_neigh_setup_dev(struct device *dev, struct neigh_parms *p)
 {
 	/* Never send broadcast/multicast ARP messages */

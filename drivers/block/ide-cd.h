@@ -334,13 +334,13 @@ struct atapi_capabilities_page {
 
 #if defined(__BIG_ENDIAN_BITFIELD)
 	__u8 reserved3           : 2;
-	/* Drive can fake writes */
-	__u8 test_write          : 1;
-	__u8 reserved3a          : 1;
-	/* Drive can write DVD-R discs */
-	__u8 dvd_r_write         : 1;
 	/* Drive can write DVD-RAM discs */
 	__u8 dvd_ram_write       : 1;
+	/* Drive can write DVD-R discs */
+	__u8 dvd_r_write         : 1;
+	__u8 reserved3a          : 1;
+	/* Drive can fake writes */
+	__u8 test_write          : 1;
 	/* Drive can write to CD-R/W (CD-E) discs (orange book, part III) */
 	__u8 cd_rw_write	 : 1; /* reserved in 1.2 */
 	/* Drive supports write to CD-R discs (orange book, part II) */
@@ -350,13 +350,13 @@ struct atapi_capabilities_page {
 	__u8 cd_r_write          : 1; /* reserved in 1.2 */
 	/* Drive can write to CD-R/W (CD-E) discs (orange book, part III) */
 	__u8 cd_rw_write	 : 1; /* reserved in 1.2 */
-	/* Drive can write DVD-RAM discs */
-	__u8 dvd_ram_write       : 1;
-	/* Drive can write DVD-R discs */
-	__u8 dvd_r_write         : 1;
-	__u8 reserved3a          : 1;
 	/* Drive can fake writes */
 	__u8 test_write          : 1;
+	__u8 reserved3a          : 1;
+	/* Drive can write DVD-R discs */
+	__u8 dvd_r_write         : 1;
+	/* Drive can write DVD-RAM discs */
+	__u8 dvd_ram_write       : 1;
 	__u8 reserved3           : 2;
 #else
 #error "Please fix <asm/byteorder.h>"

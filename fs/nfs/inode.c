@@ -37,6 +37,8 @@
 #define NFS_PARANOIA 1
 
 static struct inode * __nfs_fhget(struct super_block *, struct nfs_fattr *);
+static void nfs_zap_caches(struct inode *);
+static void nfs_invalidate_inode(struct inode *);
 
 static void nfs_read_inode(struct inode *);
 static void nfs_put_inode(struct inode *);
@@ -393,25 +395,61 @@ nfs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
  * could cause file corruption. But since the dentry
  * count is 0 and all pending IO for a dentry has been
  * flushed when the count went to 0, we're safe here.
+ * Also returns the number of unhashed dentries
  */
-void nfs_free_dentries(struct inode *inode)
+static int
+nfs_free_dentries(struct inode *inode)
 {
 	struct list_head *tmp, *head = &inode->i_dentry;
+	int unhashed;
 
 restart:
 	tmp = head;
+	unhashed = 0;
 	while ((tmp = tmp->next) != head) {
 		struct dentry *dentry = list_entry(tmp, struct dentry, d_alias);
-printk("nfs_free_dentries: found %s/%s, d_count=%d, hashed=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name,
-dentry->d_count, !list_empty(&dentry->d_hash));
+		dprintk("nfs_free_dentries: found %s/%s, d_count=%d, hashed=%d\n",
+			dentry->d_parent->d_name.name, dentry->d_name.name,
+			dentry->d_count, !list_empty(&dentry->d_hash));
 		if (!dentry->d_count) {
 			dget(dentry);
 			d_drop(dentry);
 			dput(dentry);
 			goto restart;
 		}
+		if (!list_empty(&dentry->d_hash))
+			unhashed++;
 	}
+	return unhashed;
+}
+
+/*
+ * Invalidate the local caches
+ */
+static void
+nfs_zap_caches(struct inode *inode)
+{
+	NFS_ATTRTIMEO(inode) = NFS_MINATTRTIMEO(inode);
+	NFS_CACHEINV(inode);
+
+	if (S_ISDIR(inode->i_mode))
+		nfs_invalidate_dircache(inode);
+	else
+		invalidate_inode_pages(inode);
+}
+
+/*
+ * Invalidate, but do not unhash, the inode
+ */
+static void
+nfs_invalidate_inode(struct inode *inode)
+{
+	umode_t save_mode = inode->i_mode;
+
+	make_bad_inode(inode);
+	inode->i_mode = save_mode;
+	nfs_inval(inode);
+	nfs_zap_caches(inode);
 }
 
 /*
@@ -513,7 +551,7 @@ static struct inode *
 __nfs_fhget(struct super_block *sb, struct nfs_fattr *fattr)
 {
 	struct inode *inode;
-	int max_count;
+	int max_count, stale_inode, unhashed = 0;
 
 retry:
 	inode = iget(sb, fattr->fileid);
@@ -532,27 +570,30 @@ retry:
 	 * as the inode may have become a different object.
 	 * (We can probably handle modes changes here, too.)
 	 */
+	stale_inode = inode->i_mode &&
+		      ((fattr->mode ^ inode->i_mode) & S_IFMT);
+	stale_inode |= inode->i_count && inode->i_count == unhashed;
 	max_count = S_ISDIR(fattr->mode) ? 1 : fattr->nlink;
-	if (inode->i_count > max_count) {
-printk("__nfs_fhget: inode %ld busy, i_count=%d, i_nlink=%d\n",
-inode->i_ino, inode->i_count, inode->i_nlink);
-		nfs_free_dentries(inode);
-		if (inode->i_count > max_count) {
-printk("__nfs_fhget: inode %ld still busy, i_count=%d\n",
-inode->i_ino, inode->i_count);
+	if (stale_inode || inode->i_count > max_count + unhashed) {
+		dprintk("__nfs_fhget: inode %ld busy, i_count=%d, i_nlink=%d\n",
+			inode->i_ino, inode->i_count, inode->i_nlink);
+		unhashed = nfs_free_dentries(inode);
+		if (stale_inode || inode->i_count > max_count + unhashed) {
+			printk("__nfs_fhget: inode %ld still busy, i_count=%d\n",
+				inode->i_ino, inode->i_count);
 			if (!list_empty(&inode->i_dentry)) {
 				struct dentry *dentry;
 				dentry = list_entry(inode->i_dentry.next,
 						 struct dentry, d_alias);
-printk("__nfs_fhget: killing %s/%s filehandle\n",
-dentry->d_parent->d_name.name, dentry->d_name.name);
-				memset(dentry->d_fsdata, 0, 
+				printk("__nfs_fhget: killing %s/%s filehandle\n",
+					dentry->d_parent->d_name.name,
+					dentry->d_name.name);
+				memset(dentry->d_fsdata, 0,
 					sizeof(struct nfs_fh));
-			} else
-				printk("NFS: inode %ld busy, no aliases?\n",
-					inode->i_ino);
-			make_bad_inode(inode);
+			}
 			remove_inode_hash(inode);
+			nfs_invalidate_inode(inode);
+			unhashed = 0;
 		}
 		iput(inode);
 		goto retry;
@@ -673,10 +714,9 @@ _nfs_revalidate_inode(struct nfs_server *server, struct dentry *dentry)
 		int error;
 		u32 *fh;
 		struct nfs_fh fhandle;
-#ifdef NFS_PARANOIA
-printk("nfs_revalidate_inode: %s/%s getattr failed, ino=%ld, error=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, inode->i_ino, status);
-#endif
+		dfprintk(PAGECACHE, "nfs_revalidate_inode: %s/%s getattr failed, ino=%ld, error=%d\n",
+			dentry->d_parent->d_name.name,
+			dentry->d_name.name, inode->i_ino, status);
 		if (status != -ESTALE)
 			goto out;
 		/*
@@ -684,26 +724,25 @@ dentry->d_parent->d_name.name, dentry->d_name.name, inode->i_ino, status);
 		 * and find out what the filehandle should be.
 		 */
 		fh = (u32 *) NFS_FH(dentry);
-		printk("NFS: bad fh %08x%08x%08x%08x%08x%08x%08x%08x\n",
+		dfprintk(PAGECACHE, "NFS: bad fh %08x%08x%08x%08x%08x%08x%08x%08x\n",
 			fh[0],fh[1],fh[2],fh[3],fh[4],fh[5],fh[6],fh[7]);
 		error = nfs_proc_lookup(server, NFS_FH(dentry->d_parent), 
 					dentry->d_name.name, &fhandle, &fattr);
 		if (error) {
-			printk("NFS: lookup failed, error=%d\n", error);
+			dfprintk(PAGECACHE, "NFS: lookup failed, error=%d\n", error);
 			goto out;
 		}
 		fh = (u32 *) &fhandle;
-		printk("            %08x%08x%08x%08x%08x%08x%08x%08x\n",
+		dfprintk(PAGECACHE, "            %08x%08x%08x%08x%08x%08x%08x%08x\n",
 			fh[0],fh[1],fh[2],fh[3],fh[4],fh[5],fh[6],fh[7]);
 		goto out;
 	}
 
 	status = nfs_refresh_inode(inode, &fattr);
 	if (status) {
-#ifdef NFS_PARANOIA
-printk("nfs_revalidate_inode: %s/%s refresh failed, ino=%ld, error=%d\n",
-dentry->d_parent->d_name.name, dentry->d_name.name, inode->i_ino, status);
-#endif
+		dfprintk(PAGECACHE, "nfs_revalidate_inode: %s/%s refresh failed, ino=%ld, error=%d\n",
+			dentry->d_parent->d_name.name,
+			dentry->d_name.name, inode->i_ino, status);
 		goto out;
 	}
 	dfprintk(PAGECACHE, "NFS: %s/%s revalidation complete\n",
@@ -809,29 +848,18 @@ out_changed:
 printk("nfs_refresh_inode: inode %ld mode changed, %07o to %07o\n",
 inode->i_ino, inode->i_mode, fattr->mode);
 #endif
-	fattr->mode = inode->i_mode; /* save mode */
-	make_bad_inode(inode);
-	nfs_inval(inode);
-	inode->i_mode = fattr->mode; /* restore mode */
 	/*
 	 * No need to worry about unhashing the dentry, as the
 	 * lookup validation will know that the inode is bad.
-	 * (But we fall through to invalidate the caches.)
 	 */
+	nfs_invalidate_inode(inode);
+	goto out;
 
 out_invalid:
-	/*
-	 * Invalidate the local caches
-	 */
 #ifdef NFS_DEBUG_VERBOSE
 printk("nfs_refresh_inode: invalidating %ld pages\n", inode->i_nrpages);
 #endif
-	if (!S_ISDIR(inode->i_mode))
-		invalidate_inode_pages(inode);
-	else
-		nfs_invalidate_dircache(inode);
-	NFS_CACHEINV(inode);
-	NFS_ATTRTIMEO(inode) = NFS_MINATTRTIMEO(inode);
+	nfs_zap_caches(inode);
 	goto out;
 }
 

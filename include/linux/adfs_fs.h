@@ -155,7 +155,7 @@ extern void adfs_read_inode (struct inode *inode);
 extern int adfs_map_lookup (struct super_block *sb, int frag_id, int offset);
 
 /* namei.c */
-extern int adfs_lookup (struct inode *dir, struct dentry *dentry);
+extern struct dentry *adfs_lookup (struct inode *dir, struct dentry *dentry);
 
 /* super.c */
 extern int init_adfs_fs (void);

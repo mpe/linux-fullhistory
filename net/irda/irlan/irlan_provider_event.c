@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Wed Feb  3 21:43:06 1999
+ * Modified at:   Thu Apr 22 10:46:28 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -108,8 +108,15 @@ static int irlan_provider_state_info(struct irlan_cb *self, IRLAN_EVENT event,
 	switch(event) {
 	case IRLAN_GET_INFO_CMD:
 		/* Be sure to use 802.3 in case of peer mode */
-		if (self->access_type == ACCESS_PEER)
+		if (self->access_type == ACCESS_PEER) {
 			self->media = MEDIA_802_3;
+			
+			/* Check if client has started yet */
+			if (self->client.state == IRLAN_IDLE) {
+				/* This should get the client going */
+				irlmp_discovery_request(8);
+			}
+		}
 
 		irlan_provider_send_reply(self, CMD_GET_PROVIDER_INFO, 
 					  RSP_SUCCESS);
@@ -165,7 +172,7 @@ static int irlan_provider_state_open(struct irlan_cb *self, IRLAN_EVENT event,
 
 	switch(event) {
 	case IRLAN_FILTER_CONFIG_CMD:
-		irlan_provider_extract_params(self, CMD_FILTER_OPERATION, skb);
+		irlan_provider_parse_command(self, CMD_FILTER_OPERATION, skb);
 		irlan_provider_send_reply(self, CMD_FILTER_OPERATION, 
 					  RSP_SUCCESS);
 		/* Keep state */
@@ -207,7 +214,7 @@ static int irlan_provider_state_data(struct irlan_cb *self, IRLAN_EVENT event,
 
 	switch(event) {
 	case IRLAN_FILTER_CONFIG_CMD:
-		irlan_provider_extract_params(self, CMD_FILTER_OPERATION, skb);
+		irlan_provider_parse_command(self, CMD_FILTER_OPERATION, skb);
 		irlan_provider_send_reply(self, CMD_FILTER_OPERATION, 
 					  RSP_SUCCESS);
 		break;

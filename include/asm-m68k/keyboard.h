@@ -27,11 +27,6 @@ static __inline__ int kbd_getkeycode(unsigned int scancode)
     return scancode > 127 ? -EINVAL : scancode;
 }
 
-static __inline__ int kbd_pretranslate(unsigned char scancode, char raw_mode)
-{
-    return 1;
-}
-
 static __inline__ int kbd_translate(unsigned char scancode,
 				    unsigned char *keycode, char raw_mode)
 {

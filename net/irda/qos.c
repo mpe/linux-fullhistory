@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Sep  9 00:00:26 1997
- * Modified at:   Mon Feb  1 09:56:21 1999
+ * Modified at:   Mon Apr 12 11:49:24 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -70,7 +70,7 @@ void irda_qos_compute_intersection( struct qos_info *qos, struct qos_info *new)
 	qos->compression.bits     &= new->compression.bits;
 #endif
 
-	irda_qos_bits_to_value( qos);
+	irda_qos_bits_to_value(qos);
 }
 
 /*

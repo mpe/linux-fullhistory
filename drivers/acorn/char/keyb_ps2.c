@@ -221,11 +221,6 @@ unsigned char ps2kbd_sysrq_xlate[] =
 };
 #endif
 
-int ps2kbd_pretranslate(unsigned char scancode)
-{
-	return 1;
-}
-
 int ps2kbd_translate(unsigned char scancode, unsigned char *keycode_p, char *uf_p)
 {
 	*uf_p = scancode & 0200;
@@ -235,7 +230,7 @@ int ps2kbd_translate(unsigned char scancode, unsigned char *keycode_p, char *uf_
 
 static void ps2kbd_key(unsigned int keycode, unsigned int up_flag)
 {
-	handle_scancode(keycode + (up_flag ? 0x80 : 0));
+	handle_scancode(keycode, !up_flag);
 }
 
 static inline void ps2kbd_sendbyte(unsigned char val)

@@ -28,7 +28,6 @@
 
 extern int mackbd_setkeycode(unsigned int scancode, unsigned int keycode);
 extern int mackbd_getkeycode(unsigned int scancode);
-extern int mackbd_pretranslate(unsigned char scancode, char raw_mode);
 extern int mackbd_translate(unsigned char scancode, unsigned char *keycode,
 			   char raw_mode);
 extern int mackbd_unexpected_up(unsigned char keycode);
@@ -37,7 +36,6 @@ extern void mackbd_init_hw(void);
 
 extern int pckbd_setkeycode(unsigned int scancode, unsigned int keycode);
 extern int pckbd_getkeycode(unsigned int scancode);
-extern int pckbd_pretranslate(unsigned char scancode, char raw_mode);
 extern int pckbd_translate(unsigned char scancode, unsigned char *keycode,
 			   char raw_mode);
 extern char pckbd_unexpected_up(unsigned char keycode);
@@ -82,23 +80,6 @@ static inline int kbd_getkeycode(unsigned int x)
 #endif
 	else
 		return mackbd_getkeycode(x);
-}
-
-static inline int kbd_pretranslate(unsigned char x,char y)
-{
-	if ( is_prep || (_machine == _MACH_mbx) )
-		return pckbd_pretranslate(x,y);
-	else if ( is_chrp )
-#ifndef CONFIG_MAC_KEYBOARD
-		return pckbd_pretranslate(x,y);
-#else
-		if ( adb_hardware == ADB_NONE )
-			return pckbd_pretranslate(x,y);
-		else
-			return mackbd_pretranslate(x,y);
-#endif
-	else
-		return mackbd_pretranslate(x,y);
 }
 
 static inline int kbd_translate(unsigned char keycode, unsigned char *keycodep,

@@ -17,7 +17,7 @@
 #include "devpts_i.h"
 
 static int devpts_root_readdir(struct file *,void *,filldir_t);
-static int devpts_root_lookup(struct inode *,struct dentry *);
+static struct dentry *devpts_root_lookup(struct inode *,struct dentry *);
 static int devpts_revalidate(struct dentry *);
 
 static struct file_operations devpts_root_operations = {
@@ -81,9 +81,6 @@ static int devpts_root_readdir(struct file *filp, void *dirent, filldir_t filldi
 	off_t nr;
 	char numbuf[16];
 
-	if (!inode || !S_ISDIR(inode->i_mode))
-		return -ENOTDIR;
-
 	nr = filp->f_pos;
 
 	switch(nr)
@@ -131,15 +128,12 @@ static int devpts_revalidate(struct dentry * dentry)
 	return ( sbi->inodes[dentry->d_inode->i_ino - 2] == dentry->d_inode );
 }
 
-static int devpts_root_lookup(struct inode * dir, struct dentry * dentry)
+static struct dentry *devpts_root_lookup(struct inode * dir, struct dentry * dentry)
 {
 	struct devpts_sb_info *sbi = SBI(dir->i_sb);
 	unsigned int entry;
 	int i;
 	const char *p;
-
-	if (!S_ISDIR(dir->i_mode))
-		return -ENOTDIR;
 
 	dentry->d_inode = NULL;	/* Assume failure */
 	dentry->d_op    = &devpts_dentry_operations;
@@ -147,26 +141,26 @@ static int devpts_root_lookup(struct inode * dir, struct dentry * dentry)
 	if ( dentry->d_name.len == 1 && dentry->d_name.name[0] == '0' ) {
 		entry = 0;
 	} else if ( dentry->d_name.len < 1 ) {
-		return 0;
+		return NULL;
 	} else {
 		p = dentry->d_name.name;
 		if ( *p < '1' || *p > '9' )
-			return 0;
+			return NULL;
 		entry = *p++ - '0';
 
 		for ( i = dentry->d_name.len-1 ; i ; i-- ) {
 			unsigned int nentry = *p++ - '0';
 			if ( nentry > 9 )
-				return 0;
+				return NULL;
 			nentry += entry * 10;
 			if (nentry < entry)
-				return 0;
+				return NULL;
 			entry = nentry;
 		}
 	}
 
 	if ( entry >= sbi->max_ptys )
-		return 0;
+		return NULL;
 
 	dentry->d_inode = sbi->inodes[entry];
 	if ( dentry->d_inode )
@@ -174,5 +168,5 @@ static int devpts_root_lookup(struct inode * dir, struct dentry * dentry)
 	
 	d_add(dentry, dentry->d_inode);
 
-	return 0;
+	return NULL;
 }

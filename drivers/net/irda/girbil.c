@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Feb  6 21:02:33 1999
- * Modified at:   Tue Feb  9 15:36:36 1999
+ * Modified at:   Sat Apr 10 19:53:12 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -195,7 +195,7 @@ void girbil_reset(struct irda_device *idev, int unused)
 {
 	struct irtty_cb *self;
 	struct tty_struct *tty;
-	__u8 control = GIRBIL_TXEN | GIRBIL_RXEN /* | GIRBIL_ECAN */;
+	__u8 control = GIRBIL_TXEN | GIRBIL_RXEN;
 
 	ASSERT(idev != NULL, return;);
 	ASSERT(idev->magic == IRDA_DEVICE_MAGIC, return;);

@@ -160,7 +160,7 @@ struct __large_struct { unsigned long buf[100]; };
 		: "=r"(__gu_val), "=r"(__gu_err)	\
 		: "m"(__m(addr)), "1"(__gu_err))
 
-#ifdef __HAVE_CPU_BWX
+#ifdef __alpha_bwx__
 /* Those lucky bastards with ev56 and later CPUs can do byte/word moves.  */
 
 #define __get_user_16(addr)				\
@@ -274,7 +274,7 @@ __asm__ __volatile__("1: stl %r2,%1\n"				\
 		: "=r"(__pu_err)				\
 		: "m"(__m(addr)), "rJ"(x), "0"(__pu_err))
 
-#ifdef __HAVE_CPU_BWX
+#ifdef __alpha_bwx__
 /* Those lucky bastards with ev56 and later CPUs can do byte/word moves.  */
 
 #define __put_user_16(x,addr)					\
@@ -363,15 +363,21 @@ extern void __copy_user(void);
 extern inline long
 __copy_tofrom_user_nocheck(void *to, const void *from, long len)
 {
+	/* This little bit of silliness is to get the GP loaded for
+	   a function that ordinarily wouldn't.  Otherwise we could
+	   have it done by the macro directly, which can be optimized
+	   the linker.  */
+	register void * pv __asm__("$27") = __copy_user;
+
 	register void * __cu_to __asm__("$6") = to;
 	register const void * __cu_from __asm__("$7") = from;
 	register long __cu_len __asm__("$0") = len;
 
 	__asm__ __volatile__(
-		"jsr $28,__copy_user"
-		: "=r" (__cu_len), "=r" (__cu_from), "=r" (__cu_to)
-		: "0" (__cu_len), "1" (__cu_from), "2" (__cu_to)
-		: "$1","$2","$3","$4","$5","$27","$28","memory");
+		"jsr $28,(%3),__copy_user\n\tldgp $29,0($28)"
+		: "=r" (__cu_len), "=r" (__cu_from), "=r" (__cu_to), "=r"(pv)
+		: "0" (__cu_len), "1" (__cu_from), "2" (__cu_to), "3"(pv)
+		: "$1","$2","$3","$4","$5","$28","memory");
 
 	return __cu_len;
 }
@@ -380,14 +386,17 @@ extern inline long
 __copy_tofrom_user(void *to, const void *from, long len, const void *validate)
 {
 	if (__access_ok((long)validate, len, get_fs())) {
+		register void * pv __asm__("$27") = __copy_user;
 		register void * __cu_to __asm__("$6") = to;
 		register const void * __cu_from __asm__("$7") = from;
 		register long __cu_len __asm__("$0") = len;
 		__asm__ __volatile__(
-			"jsr $28,__copy_user"
-			: "=r" (__cu_len), "=r" (__cu_from), "=r" (__cu_to)
-			: "0" (__cu_len), "1" (__cu_from), "2" (__cu_to)
-			: "$1","$2","$3","$4","$5","$27","$28","memory");
+			"jsr $28,(%3),__copy_user\n\tldgp $29,0($28)"
+			: "=r"(__cu_len), "=r"(__cu_from), "=r"(__cu_to),
+			  "=r" (pv)
+			: "0" (__cu_len), "1" (__cu_from), "2" (__cu_to), 
+			  "3" (pv)
+			: "$1","$2","$3","$4","$5","$28","memory");
 		len = __cu_len;
 	}
 	return len;
@@ -423,13 +432,19 @@ extern void __do_clear_user(void);
 extern inline long
 __clear_user(void *to, long len)
 {
+	/* This little bit of silliness is to get the GP loaded for
+	   a function that ordinarily wouldn't.  Otherwise we could
+	   have it done by the macro directly, which can be optimized
+	   the linker.  */
+	register void * pv __asm__("$27") = __do_clear_user;
+
 	register void * __cl_to __asm__("$6") = to;
 	register long __cl_len __asm__("$0") = len;
 	__asm__ __volatile__(
-		"jsr $28,__do_clear_user"
-		: "=r"(__cl_len), "=r"(__cl_to)
-		: "0"(__cl_len), "1"(__cl_to)
-		: "$1","$2","$3","$4","$5","$27","$28","memory");
+		"jsr $28,(%2),__do_clear_user\n\tldgp $29,0($28)"
+		: "=r"(__cl_len), "=r"(__cl_to), "=r"(pv)
+		: "0"(__cl_len), "1"(__cl_to), "2"(pv)
+		: "$1","$2","$3","$4","$5","$28","memory");
 	return __cl_len;
 }
 
@@ -437,13 +452,14 @@ extern inline long
 clear_user(void *to, long len)
 {
 	if (__access_ok((long)to, len, get_fs())) {
+		register void * pv __asm__("$27") = __do_clear_user;
 		register void * __cl_to __asm__("$6") = to;
 		register long __cl_len __asm__("$0") = len;
 		__asm__ __volatile__(
-			"jsr $28,__do_clear_user"
-			: "=r"(__cl_len), "=r"(__cl_to)
-			: "0"(__cl_len), "1"(__cl_to)
-			: "$1","$2","$3","$4","$5","$27","$28","memory");
+			"jsr $28,(%2),__do_clear_user\n\tldgp $29,0($28)"
+			: "=r"(__cl_len), "=r"(__cl_to), "=r"(pv)
+			: "0"(__cl_len), "1"(__cl_to), "2"(pv)
+			: "$1","$2","$3","$4","$5","$28","memory");
 		len = __cl_len;
 	}
 	return len;

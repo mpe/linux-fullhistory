@@ -100,6 +100,10 @@ static void debug(int debug_this, const char* fmt, ...)
 #else
 #define DEBUG(x)
 #endif
+
+static int blksize = 2048;
+static int hsecsize = 2048;
+
 
 /* Drive hardware/firmware characteristics
    Identifiers in accordance with Optics Storage documentation */
@@ -2061,6 +2065,8 @@ __initfunc(int optcd_init(void))
 		return -EIO;
 	}
 
+	hardsect_size[MAJOR_NR] = &hsecsize;
+	blksize_size[MAJOR_NR] = &blksize;
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	read_ahead[MAJOR_NR] = 4;
 	request_region(optcd_port, 4, "optcd");

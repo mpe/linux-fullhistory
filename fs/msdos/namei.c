@@ -250,7 +250,7 @@ out_fail:
 
 
 /***** Get inode using directory and name */
-int msdos_lookup(struct inode *dir,struct dentry *dentry)
+struct dentry *msdos_lookup(struct inode *dir,struct dentry *dentry)
 {
 	struct super_block *sb = dir->i_sb;
 	struct inode *inode = NULL;
@@ -292,7 +292,7 @@ add:
 	d_add(dentry, inode);
 	res = 0;
 out:
-	return res;
+	return ERR_PTR(res);
 }
 
 

@@ -189,7 +189,7 @@ int get_acorn_filename(struct iso_directory_record *, char *, struct inode *);
 
 extern int isofs_open(struct inode * inode, struct file * filp);
 extern void isofs_release(struct inode * inode, struct file * filp);
-extern int isofs_lookup(struct inode * dir, struct dentry *);
+extern struct dentry *isofs_lookup(struct inode * dir, struct dentry *);
 extern unsigned long isofs_count_free_inodes(struct super_block *sb);
 extern int isofs_new_block(int dev);
 extern int isofs_free_block(int dev, int block);

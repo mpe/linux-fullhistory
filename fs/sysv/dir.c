@@ -69,14 +69,12 @@ struct inode_operations sysv_dir_inode_operations = {
 static int sysv_readdir(struct file * filp, void * dirent, filldir_t filldir)
 {
 	struct inode *inode = filp->f_dentry->d_inode;
-	struct super_block * sb;
+	struct super_block * sb = inode->i_sb;
 	unsigned int offset,i;
 	struct buffer_head * bh;
 	char* bh_data;
 	struct sysv_dir_entry * de, sde;
 
-	if (!inode || !(sb = inode->i_sb) || !S_ISDIR(inode->i_mode))
-		return -EBADF;
 	if ((unsigned long)(filp->f_pos) % SYSV_DIRSIZE)
 		return -EBADF;
 	while (filp->f_pos < inode->i_size) {

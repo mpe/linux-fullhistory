@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Tue Apr  6 19:08:20 1999
+ * Modified at:   Thu Apr 22 14:28:52 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:       skeleton.c by Donald Becker <becker@CESDIS.gsfc.nasa.gov>
  *                slip.c by Laurence Culhane,   <loz@holmes.demon.co.uk>
@@ -129,7 +129,7 @@ void irlan_provider_connect_indication(void *instance, void *sap,
 	ASSERT(tsap == self->provider.tsap_ctrl,return;);
 	ASSERT(self->provider.state == IRLAN_IDLE, return;);
 
-	/* Check if this provider is unused */
+	/* Check if this provider is currently unused */
 	if (self->daddr == DEV_ADDR_ANY) {
 		/*
 		 * Rehash instance, now we have a client (daddr) to serve.
@@ -168,14 +168,6 @@ void irlan_provider_connect_indication(void *instance, void *sap,
 	if ((self->access_type == ACCESS_PEER) && 
 	    (self->client.state == IRLAN_IDLE))
 		irlan_client_wakeup(self, self->saddr, self->daddr);
-
-	/* 
-	 * This provider is now in use, so start a new provider instance to
-         * serve other clients. This will also change the LM-IAS entry so that
-	 * other clients don't try to connect to us, now that we are busy.
-	 */
-	new = irlan_open(DEV_ADDR_ANY, DEV_ADDR_ANY, FALSE);
-	self->client.start_new_provider = FALSE;
 }
 
 /*
@@ -231,20 +223,20 @@ int irlan_parse_open_data_cmd(struct irlan_cb *self, struct sk_buff *skb)
 {
 	int ret;
 	
-	ret = irlan_provider_extract_params(self, CMD_OPEN_DATA_CHANNEL, skb);
+	ret = irlan_provider_parse_command(self, CMD_OPEN_DATA_CHANNEL, skb);
 
 	return ret;
 }
 
 /*
- * Function extract_params (skb)
+ * Function parse_command (skb)
  *
  *    Extract all parameters from received buffer, then feed them to 
  *    check_params for parsing
  *
  */
-int irlan_provider_extract_params(struct irlan_cb *self, int cmd,
-				  struct sk_buff *skb) 
+int irlan_provider_parse_command(struct irlan_cb *self, int cmd,
+				 struct sk_buff *skb) 
 {
 	__u8 *frame;
 	__u8 *ptr;
@@ -285,7 +277,7 @@ int irlan_provider_extract_params(struct irlan_cb *self, int cmd,
 	
 	/* For all parameters */
  	for (i=0; i<count;i++) {
-		ret = irlan_get_param(ptr, name, value, &val_len);
+		ret = irlan_extract_param(ptr, name, value, &val_len);
 		if (ret < 0) {
 			DEBUG(2, __FUNCTION__ "(), IrLAN, Error!\n");
 			break;
@@ -394,19 +386,19 @@ void irlan_provider_send_reply(struct irlan_cb *self, int command,
  *    Register provider support so we can accept incomming connections.
  * 
  */
-void irlan_provider_open_ctrl_tsap(struct irlan_cb *self)
+int irlan_provider_open_ctrl_tsap(struct irlan_cb *self)
 {
 	struct notify_t notify;
 	struct tsap_cb *tsap;
 	
 	DEBUG(4, __FUNCTION__ "()\n");
 
-	ASSERT(self != NULL, return;);
-	ASSERT(self->magic == IRLAN_MAGIC, return;);
+	ASSERT(self != NULL, return -1;);
+	ASSERT(self->magic == IRLAN_MAGIC, return -1;);
 
 	/* Check if already open */
 	if (self->provider.tsap_ctrl)
-		return;
+		return -1;
 	
 	/*
 	 *  First register well known control TSAP
@@ -421,11 +413,13 @@ void irlan_provider_open_ctrl_tsap(struct irlan_cb *self)
 	tsap = irttp_open_tsap(LSAP_ANY, 1, &notify);
 	if (!tsap) {
 		DEBUG(2, __FUNCTION__ "(), Got no tsap!\n");
-		return;
+		return -1;
 	}
 	self->provider.tsap_ctrl = tsap;
 
 	/* Register with LM-IAS */
-	irlan_ias_register(self,tsap->stsap_sel);
+	irlan_ias_register(self, tsap->stsap_sel);
+
+	return 0;
 }
 

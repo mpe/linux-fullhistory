@@ -9,6 +9,7 @@
  *
  *  VFAT extensions by Gordon Chaffee <chaffee@plateau.cs.berkeley.edu>
  *  Merged with msdos fs by Henrik Storner <storner@osiris.ping.dk>
+ *  Plugged buffer overrun in readdir(). AV
  */
 
 #define ASC_LINUX_VERSION(V, P, S)	(((V) * 65536) + ((P) * 256) + (S))
@@ -59,6 +60,7 @@ struct file_operations fat_dir_operations = {
  * characters are a sort of uuencoded 16 bit Unicode value.  This lets
  * us do a full dump and restore of Unicode filenames.  We could get
  * into some trouble with long Unicode names, but ignore that right now.
+ * Ahem... Stack smashing in ring 0 isn't fun. Fixed.
  */
 static int
 uni16_to_x8(unsigned char *ascii, unsigned char *uni, int uni_xlate,
@@ -92,6 +94,11 @@ uni16_to_x8(unsigned char *ascii, unsigned char *uni, int uni_xlate,
 			} else {
 				*op++ = '?';
 			}
+		}
+		/* We have some slack there, so it's OK */
+		if (op>ascii+256) {
+			op = ascii + 256;
+			break;
 		}
 	}
 	*op = 0;
@@ -138,8 +145,6 @@ int fat_readdirx(
 	unsigned char *unicode = NULL;
 	struct nls_table *nls = MSDOS_SB(sb)->nls_io;
 
-	if (!inode || !S_ISDIR(inode->i_mode))
-		return -EBADF;
 /* Fake . and .. for the root directory. */
 	if (inode->i_ino == MSDOS_ROOT_INO) {
 		while (oldpos < 2) {
@@ -186,9 +191,17 @@ int fat_readdirx(
 			id = ds->id;
 			if (id & 0x40) {
 				slots = id & ~0x40;
-				long_slots = slots;
-				is_long = 1;
-				alias_checksum = ds->alias_checksum;
+				/*
+				 * Dirty, but not dirtier than the original,
+				 * and plugs the hole.
+				 */
+				if (slots > 20)
+					slots = 0;
+				else {
+					long_slots = slots;
+					is_long = 1;
+					alias_checksum = ds->alias_checksum;
+				}
 			}
 
 			get_new_entry = 1;

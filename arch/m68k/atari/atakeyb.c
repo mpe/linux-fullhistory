@@ -291,7 +291,7 @@ static void atakeyb_rep( unsigned long ignore )
 		atakeyb_rep_timer.prev = atakeyb_rep_timer.next = NULL;
 		add_timer( &atakeyb_rep_timer );
 
-		handle_scancode(rep_scancode);
+		handle_scancode(rep_scancode, 1);
 	}
 
 	atari_enable_irq( IRQ_MFP_ACIA );
@@ -448,7 +448,7 @@ static void keyboard_interrupt(int irq, void *dummy, struct pt_regs *fp)
 		    add_timer( &atakeyb_rep_timer );
 		}
 
-		handle_scancode(break_flag | scancode);
+		handle_scancode(scancode, !break_flag);
 		break;
 	    }
 	    break;

@@ -278,7 +278,6 @@ struct rr_regs {
 #define TRACE_ON_WHAT_BIT	0x00020000    /* Traces on */
 #define ONEM_BUF_WHAT_BIT	0x00040000    /* 1Meg vs 256K */
 #define CHAR_API_WHAT_BIT	0x00080000    /* Char API vs network only */
-#define MS_DOS_WHAT_BIT		0x00100000    /* MS_DOS */
 #define CMD_EVT_WHAT_BIT	0x00200000    /* Command event */
 #define LONG_TX_WHAT_BIT	0x00400000
 #define LONG_RX_WHAT_BIT	0x00800000
@@ -486,6 +485,63 @@ struct cmd {
 #define  SAME_IFIELD		0x80
 
 
+typedef struct {
+#if (BITS_PER_LONG == 64)
+	u64 addrlo;
+#else
+	u32 addrhi;
+	u32 addrlo;
+#endif
+} rraddr;
+
+
+static inline void set_rraddr(rraddr *ra, volatile void *addr)
+{
+	unsigned long baddr = virt_to_bus((void *)addr);
+#if (BITS_PER_LONG == 64)
+	ra->addrlo = baddr;
+#else
+    /* Don't bother setting zero every time */
+	ra->addrlo = baddr;
+#endif
+	mb();
+}
+
+
+static inline void set_rxaddr(struct rr_regs *regs, volatile void *addr)
+{
+	unsigned long baddr = virt_to_bus((void *)addr);
+#if (BITS_PER_LONG == 64) && defined(__LITTLE_ENDIAN)
+	writel(baddr & 0xffffffff, &regs->RxRingHi);
+	writel(baddr >> 32, &regs->RxRingLo);
+#elif (BITS_PER_LONG == 64)
+	writel(baddr >> 32, &regs->RxRingHi);
+	writel(baddr & 0xffffffff, &regs->RxRingLo);
+#else
+	writel(0, &regs->RxRingHi);
+	writel(baddr, &regs->RxRingLo);
+#endif
+	mb();
+}
+
+
+static inline void set_infoaddr(struct rr_regs *regs, volatile void *addr)
+{
+	unsigned long baddr = virt_to_bus((void *)addr);
+#if (BITS_PER_LONG == 64) && defined(__LITTLE_ENDIAN)
+	writel(baddr & 0xffffffff, &regs->InfoPtrHi);
+	writel(baddr >> 32, &regs->InfoPtrLo);
+#elif (BITS_PER_LONG == 64)
+	writel(baddr >> 32, &regs->InfoPtrHi);
+	writel(baddr & 0xffffffff, &regs->InfoPtrLo);
+#else
+	writel(0, &regs->InfoPtrHi);
+	writel(baddr, &regs->InfoPtrLo);
+#endif
+	mb();
+}
+
+
 /*
  * TX ring
  */
@@ -498,12 +554,7 @@ struct cmd {
 #define TX_RING_SIZE	(TX_RING_ENTRIES * sizeof(struct tx_desc))
 
 struct tx_desc{
-#if (BITS_PER_LONG == 64)
-	u64	addr;
-#else
-        u32	zero;
-	u32	addr;
-#endif
+	rraddr	addr;
 	u32	res;
 #ifdef __LITTLE_ENDIAN
 	u16	size;
@@ -525,12 +576,7 @@ struct tx_desc{
 #define RX_RING_SIZE	(RX_RING_ENTRIES * sizeof(struct rx_desc))
 
 struct rx_desc{
-#if (BITS_PER_LONG == 64)
-	u64	addr;
-#else
-        u32	zero;
-	u32	addr;
-#endif
+	rraddr	addr;
 	u32	res;
 #ifdef __LITTLE_ENDIAN
 	u16	size;
@@ -714,12 +760,7 @@ struct rr_stats {
  * This struct is shared with the NIC firmware.
  */
 struct ring_ctrl {
-#if (BITS_PER_LONG == 64)
-	u64	rngptr;
-#else
-	u32	zero;
-	u32	rngptr;
-#endif
+	rraddr	rngptr;
 #ifdef __LITTLE_ENDIAN
 	u16	entries;
 	u8	pad;
@@ -759,19 +800,19 @@ struct rr_private
 	struct rx_desc		rx_ring[RX_RING_ENTRIES];
 	struct tx_desc		tx_ring[TX_RING_ENTRIES];
 	struct event		evt_ring[EVT_RING_ENTRIES];
-	struct sk_buff		*tx_skbuff[TX_RING_ENTRIES];
 	struct sk_buff		*rx_skbuff[RX_RING_ENTRIES];
+	struct sk_buff		*tx_skbuff[TX_RING_ENTRIES];
 	struct rr_regs		*regs;		/* Register base */
 	struct ring_ctrl	*rx_ctrl;	/* Receive ring control */
 	struct rr_info		*info;		/* Shared info page */
+	struct device		*next;
 	spinlock_t		lock;
 	struct timer_list	timer;
 	u32			cur_rx, cur_cmd, cur_evt;
 	u32			dirty_rx, dirty_tx;
 	u32			tx_full;
+	u32			fw_rev;
 	short			fw_running;
-	u8			pci_bus;	/* PCI bus number */
-	u8			pci_dev_fun;	/* PCI device numbers */
 	char			name[24];	/* The assigned name */
 	struct net_device_stats stats;
 };
@@ -789,5 +830,11 @@ static int rr_start_xmit(struct sk_buff *skb, struct device *dev);
 static int rr_close(struct device *dev);
 static struct net_device_stats *rr_get_stats(struct device *dev);
 static int rr_ioctl(struct device *dev, struct ifreq *rq, int cmd);
+static unsigned int rr_read_eeprom(struct rr_private *rrpriv,
+				   unsigned long offset,
+				   unsigned char *buf,
+				   unsigned long length);
+static u32 rr_read_eeprom_word(struct rr_private *rrpriv, void * offset);
+static int rr_load_firmware(struct device *dev);
 
 #endif /* _RRUNNER_H_ */

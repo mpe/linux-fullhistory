@@ -188,7 +188,7 @@ static void amikeyb_rep(unsigned long ignore)
     amikeyb_rep_timer.expires = jiffies + key_repeat_rate;
     amikeyb_rep_timer.prev = amikeyb_rep_timer.next = NULL;
     add_timer(&amikeyb_rep_timer);
-    handle_scancode(rep_scancode);
+    handle_scancode(rep_scancode, 1);
 
     restore_flags(flags);
 }
@@ -243,8 +243,8 @@ static void keyboard_interrupt(int irq, void *dummy, struct pt_regs *fp)
 
     if (keycode == AMIKEY_CAPS) {
 	/* if the key is CAPS, fake a press/release. */
-	handle_scancode(AMIKEY_CAPS);
-	handle_scancode(BREAK_MASK | AMIKEY_CAPS);
+	handle_scancode(AMIKEY_CAPS, 1);
+	handle_scancode(AMIKEY_CAPS, 0);
     } else if (keycode < 0x78) {
 	/* handle repeat */
 	if (break_flag) {
@@ -257,7 +257,7 @@ static void keyboard_interrupt(int irq, void *dummy, struct pt_regs *fp)
 	    amikeyb_rep_timer.prev = amikeyb_rep_timer.next = NULL;
 	    add_timer(&amikeyb_rep_timer);
 	}
-	handle_scancode(scancode);
+	handle_scancode(scancode, !break_flag);
     } else
 	switch (keycode) {
 	    case 0x78:

@@ -7,7 +7,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sat Dec 26 10:59:03 1998
- * Modified at:   Sat Apr  3 15:54:41 1999
+ * Modified at:   Tue Apr 20 11:15:52 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -190,7 +190,7 @@ static int uircc_open(int i, unsigned int iobase, unsigned int iobase2,
 	
 	/* The only value we must override it the baudrate */
 	idev->qos.baud_rate.bits = IR_9600|IR_19200|IR_38400|IR_57600|
-		IR_115200|/*IR_576000|IR_1152000| */(IR_4000000 << 8);
+		IR_115200/*IR_576000|IR_1152000 |(IR_4000000 << 8)*/;
 
 	idev->qos.min_turn_time.bits = 0x0f;
 	irda_qos_bits_to_value(&idev->qos);
@@ -372,7 +372,7 @@ static void uircc_change_speed(struct irda_device *idev, int speed)
 		DEBUG(0, __FUNCTION__ "(), handling baud of 4000000\n");
 
 		/* Set self pole address */
-		outb(0x10, iobase+UIRCC_CR8);
+		//outb(0xfe, iobase+UIRCC_CR8);
 
 	 	/* outb(0x10, iobase+UIRCC_CR11); */
 		break;
@@ -443,8 +443,7 @@ static int uircc_hard_xmit(struct sk_buff *skb, struct device *dev)
 		skb->len++;
 
 	idev->tx_buff.len = skb->len;
-	idev->tx_buff.head = idev->tx_buff.data;
-	idev->tx_buff.offset = 0;
+	idev->tx_buff.data = idev->tx_buff.head;
 	
 	mtt = irda_get_mtt(skb);
 	
@@ -586,10 +585,14 @@ static int uircc_dma_receive(struct irda_device *idev)
 	outb(self->cr3, iobase+UIRCC_CR3);
 
 	/* Transmit reset (just in case) */
-	outb(UIRCC_CR0_XMIT_RST, iobase+UIRCC_CR0);
+	outb(UIRCC_CR0_XMIT_RST|0x17, iobase+UIRCC_CR0);
 
 	/* Set modem */
 	outb(0x08, iobase+UIRCC_CR10);
+
+	/* Enable receiving with CRC */
+	self->cr3 = (UIRCC_CR3_RECV_EN|UIRCC_CR3_RX_CRC_EN);
+	outb(self->cr3, iobase+UIRCC_CR3);
 
 	/* Make sure Rx DMA is set */
  	outb(UIRCC_CR1_RX_DMA|UIRCC_CR1_MUST_SET, iobase+UIRCC_CR1);
@@ -602,13 +605,13 @@ static int uircc_dma_receive(struct irda_device *idev)
 	
 	/* driver->media_busy = FALSE; */
 	idev->io.direction = IO_RECV;
-	idev->rx_buff.head = idev->rx_buff.data;
-	idev->rx_buff.offset = 0;
+	idev->rx_buff.data = idev->rx_buff.head;
 
+#if 0
 	/* Enable receiving with CRC */
 	self->cr3 = (UIRCC_CR3_RECV_EN|UIRCC_CR3_RX_CRC_EN);
 	outb(self->cr3, iobase+UIRCC_CR3);
-
+#endif
 	DEBUG(4, __FUNCTION__ "(), cr3=%#x\n", self->cr3);
 	
 	/* Address check? */
@@ -673,7 +676,7 @@ static int uircc_dma_receive_complete(struct irda_device *idev, int iobase)
 /* 	} */
 
 	skb_put(skb, len);
-	memcpy(skb->data, idev->rx_buff.head, len);
+	memcpy(skb->data, idev->rx_buff.data, len);
 	idev->stats.rx_packets++;
 
 	skb->dev = &idev->netdev;
@@ -737,7 +740,7 @@ static void uircc_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		uircc_dma_xmit_complete(idev, FALSE);
 		uircc_dma_receive(idev);
 
-		/* outb(0, iobase+UIRCC_CR2);  */
+		outb(0x0d, iobase+UIRCC_CR2);
 		break;
 	case UIRCC_SR3_TMR_OUT:
 		/* Disable timer */

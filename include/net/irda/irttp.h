@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:31 1997
- * Modified at:   Mon Mar 22 13:17:30 1999
+ * Modified at:   Sat Apr 10 10:19:56 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -93,7 +93,7 @@ struct tsap_cb {
 	__u32 rx_max_sdu_size; /* Max receive user data size */
 
 	int tx_sdu_busy;       /* TxSdu.busy */
-	int tx_max_sdu_size;   /* Max transmit user data size */
+	__u32 tx_max_sdu_size; /* Max transmit user data size */
 
 	int close_pend;        /* Close, but disconnect_pend */
 	int disconnect_pend;   /* Disconnect, but still data to send */

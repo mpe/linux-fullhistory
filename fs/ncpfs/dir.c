@@ -50,7 +50,7 @@ static ssize_t ncp_dir_read(struct file *, char *, size_t, loff_t *);
 static int ncp_readdir(struct file *, void *, filldir_t);
 
 static int ncp_create(struct inode *, struct dentry *, int);
-static int ncp_lookup(struct inode *, struct dentry *);
+static struct dentry *ncp_lookup(struct inode *, struct dentry *);
 static int ncp_unlink(struct inode *, struct dentry *);
 static int ncp_mkdir(struct inode *, struct dentry *, int);
 static int ncp_rmdir(struct inode *, struct dentry *);
@@ -440,11 +440,6 @@ static int ncp_readdir(struct file *filp, void *dirent, filldir_t filldir)
 	DDPRINTK(KERN_DEBUG "ncp_readdir: inode->i_ino = %ld, c_ino = %ld\n",
 		 inode->i_ino, c_ino);
 
-	result = -EBADF;
-	if (!inode || !S_ISDIR(inode->i_mode)) {
-		printk(KERN_WARNING "ncp_readdir: inode is NULL or not a directory\n");
-		goto out;
-	}
 	result = -EIO;
 	if (!ncp_conn_valid(server))
 		goto out;
@@ -744,7 +739,7 @@ out:
 	return result;
 }
 
-static int ncp_lookup(struct inode *dir, struct dentry *dentry)
+static struct dentry *ncp_lookup(struct inode *dir, struct dentry *dentry)
 {
 	struct ncp_server *server;
 	struct inode *inode = NULL;
@@ -754,11 +749,6 @@ static int ncp_lookup(struct inode *dir, struct dentry *dentry)
 	struct ncpfs_inode_info finfo;
 	__u8 __name[dentry->d_name.len + 1];
 
-	error =  -ENOENT;
-	if (!dir || !S_ISDIR(dir->i_mode)) {
-		printk(KERN_WARNING "ncp_lookup: inode is NULL or not a directory.\n");
-		goto finished;
-	}
 	server = NCP_SERVER(dir);
 
 	error = -EIO;
@@ -831,7 +821,7 @@ dentry->d_parent->d_name.name, __name, res);
 	   	if (res != 0) {
 			goto add_entry;
 		} else vol2io(server, finfo.nw_info.i.entryName,
-			      ncp_preserve_entry_case(dir,
+			      !ncp_preserve_entry_case(dir,
 			      finfo.nw_info.i.NSCreator));
 	}
 
@@ -854,7 +844,7 @@ finished:
 #ifdef NCPFS_PARANOIA
 printk(KERN_DEBUG "ncp_lookup: result=%d\n", error);
 #endif
-	return error;
+	return ERR_PTR(error);
 }
 
 /*
@@ -897,10 +887,6 @@ int ncp_create_new(struct inode *dir, struct dentry *dentry, int mode,
 printk(KERN_DEBUG "ncp_create_new: creating %s/%s, mode=%x\n",
 dentry->d_parent->d_name.name, dentry->d_name.name, mode);
 #endif
-	if (!dir || !S_ISDIR(dir->i_mode)) {
-		printk(KERN_WARNING "ncp_create_new: inode is NULL or not a directory\n");
-		return -ENOENT;
-	}
 	error = -EIO;
 	if (!ncp_conn_valid(NCP_SERVER(dir)))
 		goto out;
@@ -940,11 +926,6 @@ static int ncp_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 
 	DPRINTK(KERN_DEBUG "ncp_mkdir: making %s/%s\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
-	error = -ENOTDIR;
-	if (!dir || !S_ISDIR(dir->i_mode)) {
-		printk(KERN_WARNING "ncp_mkdir: inode is NULL or not a directory\n");
-		goto out;
-	}
 	error = -EIO;
 	if (!ncp_conn_valid(NCP_SERVER(dir)))
 		goto out;
@@ -971,13 +952,6 @@ static int ncp_rmdir(struct inode *dir, struct dentry *dentry)
 
 	DPRINTK(KERN_DEBUG "ncp_rmdir: removing %s/%s\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
-	
-	error = -ENOENT;
-	if (!dir || !S_ISDIR(dir->i_mode))
-	{
-		printk(KERN_WARNING "ncp_rmdir: inode is NULL or not a directory\n");
-		goto out;
-	}
 
 	error = -EIO;
 	if (!ncp_conn_valid(NCP_SERVER(dir)))
@@ -1030,11 +1004,6 @@ static int ncp_unlink(struct inode *dir, struct dentry *dentry)
 	DPRINTK(KERN_DEBUG "ncp_unlink: unlinking %s/%s\n",
 		dentry->d_parent->d_name.name, dentry->d_name.name);
 	
-	error = -ENOTDIR;
-	if (!dir || !S_ISDIR(dir->i_mode)) {
-		printk(KERN_WARNING "ncp_unlink: inode is NULL or not a directory\n");
-		goto out;
-	}
 	error = -EIO;
 	if (!ncp_conn_valid(NCP_SERVER(dir)))
 		goto out;
@@ -1102,15 +1071,6 @@ static int ncp_rename(struct inode *old_dir, struct dentry *old_dentry,
 		old_dentry->d_parent->d_name.name, old_dentry->d_name.name,
 		new_dentry->d_parent->d_name.name, new_dentry->d_name.name);
 
-	error = -ENOTDIR;
-	if (!old_dir || !S_ISDIR(old_dir->i_mode)) {
-		printk(KERN_WARNING "ncp_rename: old inode is NULL or not a directory\n");
-		goto out;
-	}
-	if (!new_dir || !S_ISDIR(new_dir->i_mode)) {
-		printk(KERN_WARNING "ncp_rename: new inode is NULL or not a directory\n");
-		goto out;
-	}
 	error = -EIO;
 	if (!ncp_conn_valid(NCP_SERVER(old_dir)))
 		goto out;

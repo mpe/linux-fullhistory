@@ -262,29 +262,22 @@ int do_acknowledge(unsigned char scancode)
 			return 0;
 		}
 	}
-	if(scancode == 0) {
-		prev_scancode = 0;
-		return 0;
-	}
-	return 1;
-}
-
-int pcikbd_pretranslate(unsigned char scancode, char raw_mode)
-{
-	if(scancode == 0xff) {
-		prev_scancode = 0;
-		return 0;
-	}
-	if(scancode == 0xe0 || scancode == 0xe1) {
-		prev_scancode = scancode;
-		return 0;
-	}
 	return 1;
 }
 
 int pcikbd_translate(unsigned char scancode, unsigned char *keycode,
 		     char raw_mode)
 {
+	static int prev_scancode = 0;
+
+	if (scancode == 0xe0 || scancode == 0xe1) {
+		prev_scancode = scancode;
+		return 0;
+	}
+	if (scancode == 0x00 || scancode == 0xff) {
+		prev_scancode = 0;
+		return 0;
+	}
 	if(prev_scancode) {
 		if(prev_scancode != 0xe0) {
 			if(prev_scancode == 0xe1 && scancode == 0x1d) {
@@ -338,7 +331,7 @@ pcikbd_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 			break;
 		scancode = pcikbd_inb(pcikbd_iobase + KBD_DATA_REG);
 		if((status & KBD_STAT_OBF) && do_acknowledge(scancode))
-			handle_scancode(scancode);
+			handle_scancode(scancode, !(scancode & 0x80));
 		status = pcikbd_inb(pcikbd_iobase + KBD_STATUS_REG);
 	} while(status & KBD_STAT_OBF);
 	mark_bh(KEYBOARD_BH);

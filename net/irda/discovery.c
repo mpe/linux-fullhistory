@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Tue Apr  6 15:33:50 1999
- * Modified at:   Tue Apr  6 20:26:46 1999
+ * Modified at:   Sun Apr 11 00:41:58 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1999 Dag Brattli, All Rights Reserved.
@@ -46,7 +46,7 @@ void irlmp_add_discovery(hashbin_t *cachelog, discovery_t *discovery)
 {
 	discovery_t *old;
 
-	DEBUG(2, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 
 	/* Check if we have discovered this device before */
 	old = hashbin_remove(cachelog, discovery->daddr, NULL);
@@ -67,7 +67,7 @@ void irlmp_add_discovery_log(hashbin_t *cachelog, hashbin_t *log)
 {
 	discovery_t *discovery;
 
-	DEBUG(2, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 
 	/*
 	 *  If log is missing this means that IrLAP was unable to perform the
@@ -100,7 +100,7 @@ void irlmp_expire_discoveries(hashbin_t *log, int saddr, int force)
 {
 	discovery_t *discovery, *curr;
 
-	DEBUG(3, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 
 	discovery = (discovery_t *) hashbin_get_first(log);
 	while (discovery != NULL) {

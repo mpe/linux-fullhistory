@@ -185,7 +185,7 @@ failed:
 	return NULL;
 }
 
-int ufs_lookup(struct inode * dir, struct dentry *dentry)
+struct dentry *ufs_lookup(struct inode * dir, struct dentry *dentry)
 {
 	struct super_block * sb;
 	struct inode * inode;
@@ -199,7 +199,7 @@ int ufs_lookup(struct inode * dir, struct dentry *dentry)
 	swab = sb->u.ufs_sb.s_swab;
 	
 	if (dentry->d_name.len > UFS_MAXNAMLEN)
-		return -ENAMETOOLONG;
+		return ERR_PTR(-ENAMETOOLONG);
 
 	bh = ufs_find_entry (dir, dentry->d_name.name, dentry->d_name.len, &de);
 	inode = NULL;
@@ -208,11 +208,11 @@ int ufs_lookup(struct inode * dir, struct dentry *dentry)
 		brelse (bh);
 		inode = iget(sb, ino);
 		if (!inode) 
-			return -EACCES;
+			return ERR_PTR(-EACCES);
 	}
 	d_add(dentry, inode);
 	UFSD(("EXIT\n"))
-	return 0;
+	return NULL;
 }
 
 /*

@@ -414,9 +414,9 @@ static void dn_keyb_process_key_event(unsigned char scancode) {
 	}
 	else if((scancode & (~BREAK_FLAG)) == DNKEY_CAPS) {
     	/* printk("handle_scancode: %02x\n",DNKEY_CAPS); */
-		handle_scancode(DNKEY_CAPS);
+		handle_scancode(DNKEY_CAPS, 1);
 		/*    printk("handle_scancode: %02x\n",BREAK_FLAG | DNKEY_CAPS); */
-		handle_scancode(BREAK_FLAG | DNKEY_CAPS);
+		handle_scancode(DNKEY_CAPS, 0);
 	}
 	else if( (scancode == DNKEY_REPEAT) && (prev_scancode < 0x7e) &&
    			!(prev_scancode==DNKEY_CTRL || prev_scancode==DNKEY_LSHIFT ||
@@ -424,13 +424,13 @@ static void dn_keyb_process_key_event(unsigned char scancode) {
        	  	prev_scancode==DNKEY_LALT || prev_scancode==DNKEY_RALT)) {
         		if(jiffies-lastkeypress > DNKEY_REPEAT_DELAY) {
 			/*    	printk("handle_scancode: %02x\n",prev_scancode); */
-           			handle_scancode(prev_scancode);
+           			handle_scancode(prev_scancode, 1);
 			  	}
 	   			lastscancode=prev_scancode;
   			}
   	else {
 	/*    	printk("handle_scancode: %02x\n",scancode);  */
-   			handle_scancode(scancode);
+   			handle_scancode(scancode & ~BREAK_FLAG, !(scancode & BREAK_FLAG));
    			lastkeypress=jiffies;
   	}
 }

@@ -41,13 +41,21 @@
 
 #include <net/irda/ircomm_common.h>
 
-static char *revision_date = "Tue Mar  2 02:03:58 1999";
+static char *revision_date = "Sun Apr 18 00:40:19 1999";
 
 
-static void ircomm_state_discovery(struct ircomm_cb *self,
-				   IRCOMM_EVENT event, struct sk_buff *skb );
 static void ircomm_state_idle( struct ircomm_cb *self, IRCOMM_EVENT event, 
 			       struct sk_buff *skb );
+
+static void ircomm_state_discoverywait( struct ircomm_cb *self, IRCOMM_EVENT event, 
+					struct sk_buff *skb );
+
+static void ircomm_state_queryparamwait( struct ircomm_cb *self, IRCOMM_EVENT event, 
+					 struct sk_buff *skb );
+
+static void ircomm_state_querylsapwait( struct ircomm_cb *self, IRCOMM_EVENT event, 
+					struct sk_buff *skb );
+
 static void ircomm_state_waiti( struct ircomm_cb *self, IRCOMM_EVENT event, 
 				struct sk_buff *skb );
 static void ircomm_state_waitr( struct ircomm_cb *self, IRCOMM_EVENT event, 
@@ -63,13 +71,14 @@ static void ircomm_tx_controlchannel(struct ircomm_cb *self );
 static int ircomm_proc_read(char *buf, char **start, off_t offset,
 			    int len, int unused);
 
+static void start_discovering(struct ircomm_cb *self);
 static void query_lsapsel(struct ircomm_cb * self);
-static void ircomm_getvalue_confirm( __u16 obj_id, struct ias_value *value, 
-				     void *priv);
+static void query_parameters(struct ircomm_cb *self);
+static void queryias_done(struct ircomm_cb *self);
+static void ircomm_getvalue_confirm(int result, __u16 obj_id, 
+				    struct ias_value *value, void *priv);
 
 
-static __u32 ckey;
-static __u32 skey;
 struct ircomm_cb *discovering_instance;
 
 /*
@@ -86,8 +95,12 @@ MODULE_PARM(ircomm_cs, "i");
 
 
 static char *ircommstate[] = {
-	"DISCOVERY",
 	"IDLE",
+
+	"DISCOVERY_WAIT",
+	"QUERYPARAM_WAIT",
+	"QUERYLSAP_WAIT",
+
 	"WAITI",
 	"WAITR",
 	"CONN",
@@ -126,6 +139,11 @@ static char *ircommevent[] = {
 	"IRCOMM_DATA_REQUEST",
 	"LMP_DATA_INDICATION",
 	"IRCOMM_CONTROL_REQUEST",
+
+	"DISCOVERY_INDICATION",
+	"GOT_PARAMETERS",
+	"GOT_LSAPSEL",
+	"QUERYIAS_ERROR",
 };
 
 #ifdef CONFIG_PROC_FS
@@ -141,8 +159,12 @@ struct proc_dir_entry proc_ircomm = {
 static void (*state[])( struct ircomm_cb *self, IRCOMM_EVENT event,
 			struct sk_buff *skb) = 
 {
-	ircomm_state_discovery,
 	ircomm_state_idle,
+
+	ircomm_state_discoverywait,
+	ircomm_state_queryparamwait,
+	ircomm_state_querylsapwait,
+
 	ircomm_state_waiti,
 	ircomm_state_waitr,
 	ircomm_state_conn,
@@ -376,6 +398,146 @@ static void ircomm_accept_flow_indication( void *instance, void *sap,
 
 }
 
+
+/*
+ * ircomm_discovery_indication()
+ *    Remote device is discovered, try query the remote IAS to see which
+ *    device it is, and which services it has.
+ */
+
+static void ircomm_discovery_indication(discovery_t *discovery)
+{
+	struct ircomm_cb *self;
+
+	self = discovering_instance;
+	if(self == NULL)
+		return;
+	ASSERT(self->magic == IRCOMM_MAGIC, return;);
+
+	self->daddr = discovery->daddr;
+	self->saddr = discovery->saddr;
+
+	DEBUG( 0, __FUNCTION__"():daddr=%08x\n", self->daddr);
+
+	ircomm_do_event(self, DISCOVERY_INDICATION, NULL);
+	return;
+}
+
+/*
+ * ircomm_getvalue_confirm()
+ * handler for iriap_getvaluebyclass_request() 
+ */
+static void ircomm_getvalue_confirm(int result, __u16 obj_id, 
+				    struct ias_value *value, void *priv)
+{
+	struct ircomm_cb *self = (struct ircomm_cb *) priv;
+	struct sk_buff *skb= NULL;
+	__u8 *frame;
+	__u8 servicetype = 0 ;
+	ASSERT( self != NULL, return;);
+	ASSERT( self->magic == IRCOMM_MAGIC, return;);
+
+	/* Check if request succeeded */
+	if (result != IAS_SUCCESS) {
+		DEBUG( 0, __FUNCTION__ "(), got NULL value!\n");
+		ircomm_do_event(self, QUERYIAS_ERROR, NULL);
+		return;
+	}
+
+	DEBUG(4, __FUNCTION__"():type(%d)\n", value->type);
+
+	self->ias_type = value->type;
+	switch(value->type){
+ 	case IAS_OCT_SEQ:
+		
+		DEBUG(4, __FUNCTION__"():got octet sequence:\n");
+#if 0
+		{
+			int i;
+			for ( i=0;i<value->len;i++)
+				printk("%02x",
+				       (__u8)(*(value->t.oct_seq + i)));
+			printk("\n");
+		}
+#endif
+		skb = dev_alloc_skb((value->len) + 2);
+		ASSERT(skb != NULL, ircomm_do_event(self, QUERYIAS_ERROR, NULL);return;);
+		frame = skb_put(skb,2);
+		/* MSB first */
+		frame[0] = ( value->len >> 8 ) & 0xff;
+		frame[1] = value->len & 0xff;
+		
+		frame = skb_put(skb,value->len);
+		memcpy(frame, value->t.oct_seq, value->len);
+		ircomm_parse_tuples(self, skb, IAS_PARAM);
+		kfree_skb(skb);
+
+		/* 
+		 * check if servicetype we want is available 
+		 */
+
+		DEBUG(0,__FUNCTION__"():peer capability is:\n");
+		DEBUG(0,"3wire raw: %s\n",
+		      ((self->peer_servicetype & THREE_WIRE_RAW) ? "yes":"no"));
+		DEBUG(0,"3wire    : %s\n",
+		      ((self->peer_servicetype & THREE_WIRE) ? "yes":"no"));
+		DEBUG(0,"9wire    : %s\n",
+		      ((self->peer_servicetype & NINE_WIRE) ? "yes":"no"));
+		DEBUG(0,"IEEE1284 : %s\n",
+		      ((self->peer_servicetype & CENTRONICS) ? "yes":"no"));
+
+		self->servicetype &= self->peer_servicetype;
+		if(!(self->servicetype)){
+			DEBUG(0,__FUNCTION__"(): servicetype mismatch!\n");
+			ircomm_do_event(self, QUERYIAS_ERROR, NULL);
+			break;
+		}
+
+		/*
+		 * then choose better one 
+		 */
+		if(self->servicetype & THREE_WIRE_RAW)
+			servicetype = THREE_WIRE_RAW;
+		if(self->servicetype & THREE_WIRE)
+			servicetype = THREE_WIRE;
+		if(self->servicetype & NINE_WIRE)
+			servicetype = NINE_WIRE;
+		if(self->servicetype & CENTRONICS)
+			servicetype = CENTRONICS;
+
+		self->servicetype = servicetype;
+
+		/* enter next state */
+		ircomm_do_event(self, GOT_PARAMETERS, NULL);
+		break;
+
+	case IAS_INTEGER:
+		/* LsapSel seems to be sent to me */	
+		DEBUG(0, __FUNCTION__"():got lsapsel = %d\n", value->t.integer);
+
+		if ( value->t.integer == -1){
+			DEBUG( 0, __FUNCTION__"():invalid value!\n");
+			ircomm_do_event(self, QUERYIAS_ERROR, NULL);
+			return;
+		}
+		self->dlsap = value->t.integer;
+		ircomm_do_event(self, GOT_LSAPSEL, NULL);
+		break;
+
+	case IAS_MISSING:
+		DEBUG( 0, __FUNCTION__":got IAS_MISSING\n");
+		ircomm_do_event(self, QUERYIAS_ERROR, NULL);
+		break;
+   
+	default:
+		DEBUG( 0, __FUNCTION__":got unknown (strange?)type!\n");
+		ircomm_do_event(self, QUERYIAS_ERROR, NULL);
+		break;
+	}
+}
+
+
+
 /* 
  * ----------------------------------------------------------------------
  * Impl. of actions (descrived in section 7.4 of the reference)
@@ -583,19 +745,6 @@ static void ircomm_next_state( struct ircomm_cb *self, IRCOMM_STATE state)
 }
 
 
-/* 
- * we currently need dummy (discovering) state for debugging,
- * which state is not defined in the reference.
- */
-
-static void ircomm_state_discovery( struct ircomm_cb *self,
-				    IRCOMM_EVENT event, struct sk_buff *skb )
-{
-	printk(KERN_ERR __FUNCTION__"():why call me? something is wrong..\n");
-	if(skb)
-		dev_kfree_skb( skb);
-}
-
 
 /*
  * ircomm_state_idle
@@ -607,8 +756,11 @@ static void ircomm_state_idle( struct ircomm_cb *self, IRCOMM_EVENT event,
 	switch(event){
 	case IRCOMM_CONNECT_REQUEST:
 
-		ircomm_next_state(self, COMM_WAITI);
-		issue_connect_request( self, skb );
+		/* ircomm_next_state(self, COMM_WAITI); */
+		/* issue_connect_request( self, skb ); */
+
+		ircomm_next_state(self, COMM_DISCOVERY_WAIT);
+		start_discovering(self);
 		break;
 		
 	case TTP_CONNECT_INDICATION:
@@ -623,6 +775,121 @@ static void ircomm_state_idle( struct ircomm_cb *self, IRCOMM_EVENT event,
  		/* connect_indication_three_wire_raw(); */
  		/* ircomm_next_state(self, COMM_WAITR); */
 		break;
+
+	default:
+		DEBUG(0,__FUNCTION__"():unknown event =%d(%s)\n",
+		      event, ircommevent[event]);
+	}
+}
+
+/*
+ * ircomm_state_discoverywait
+ */
+static void ircomm_state_discoverywait(struct ircomm_cb *self, IRCOMM_EVENT event, 
+				       struct sk_buff *skb )
+{
+	switch(event){
+
+	case TTP_CONNECT_INDICATION:
+
+		ircomm_next_state(self, COMM_WAITR);
+		queryias_done(self);
+		connect_indication( self, self->qos, skb);
+		break;
+
+	case DISCOVERY_INDICATION:
+		ircomm_next_state(self, COMM_QUERYPARAM_WAIT);
+		query_parameters(self);
+		break;
+
+	case IRCOMM_DISCONNECT_REQUEST:
+		ircomm_next_state(self, COMM_IDLE);
+		queryias_done(self);
+		break;
+
+	case QUERYIAS_ERROR:
+		ircomm_next_state(self, COMM_IDLE);
+		disconnect_indication(self, NULL);
+		queryias_done(self);
+		break;
+
+	default:
+		DEBUG(0,__FUNCTION__"():unknown event =%d(%s)\n",
+		      event, ircommevent[event]);
+	}
+}
+
+/*
+ * ircomm_state_queryparamwait
+ */
+
+static void ircomm_state_queryparamwait(struct ircomm_cb *self, IRCOMM_EVENT event, 
+					struct sk_buff *skb )
+{
+	switch(event){
+
+	case TTP_CONNECT_INDICATION:
+
+		ircomm_next_state(self, COMM_WAITR);
+		connect_indication( self, self->qos, skb);
+		break;
+
+	case GOT_PARAMETERS:
+		
+		ircomm_next_state(self, COMM_QUERYLSAP_WAIT);
+		query_lsapsel( self );
+		break;
+
+	case IRCOMM_DISCONNECT_REQUEST:
+		ircomm_next_state(self, COMM_IDLE);
+		queryias_done(self);
+		break;
+
+	case QUERYIAS_ERROR:
+		ircomm_next_state(self, COMM_IDLE);
+		disconnect_indication(self, NULL);
+		queryias_done(self);
+		break;
+
+	default:
+		DEBUG(0,__FUNCTION__"():unknown event =%d(%s)\n",
+		      event, ircommevent[event]);
+	}
+}
+
+/*
+ * ircomm_state_querylsapwait
+ */
+
+static void ircomm_state_querylsapwait(struct ircomm_cb *self, IRCOMM_EVENT event, 
+				       struct sk_buff *skb )
+{
+	switch(event){
+
+	case TTP_CONNECT_INDICATION:
+
+		ircomm_next_state(self, COMM_WAITR);
+		connect_indication( self, self->qos, skb);
+		break;
+
+	case GOT_LSAPSEL:
+		
+		ircomm_next_state(self, COMM_WAITI);
+		queryias_done(self);
+		issue_connect_request( self, skb );
+		break;
+
+	case IRCOMM_DISCONNECT_REQUEST:
+		ircomm_next_state(self, COMM_IDLE);
+		queryias_done(self);
+		break;
+
+	case QUERYIAS_ERROR:
+		ircomm_next_state(self, COMM_IDLE);
+		disconnect_indication(self, NULL);
+		queryias_done(self);
+		break;
+
 
 	default:
 		DEBUG(0,__FUNCTION__"():unknown event =%d(%s)\n",
@@ -688,11 +955,25 @@ static void ircomm_state_waitr(struct ircomm_cb *self, IRCOMM_EVENT event,
 	case IRCOMM_DISCONNECT_REQUEST:
 		ircomm_next_state(self, COMM_IDLE);
 		issue_disconnect_request(self, skb);
+		queryias_done(self);
 		break;
 
 	case TTP_DISCONNECT_INDICATION:
 		ircomm_next_state(self, COMM_IDLE);
 		disconnect_indication(self, skb);
+		break;
+
+	case DISCOVERY_INDICATION:
+		DEBUG(0, __FUNCTION__"():DISCOVERY_INDICATION\n");
+		queryias_done(self);
+		break;
+	case GOT_PARAMETERS:
+		DEBUG(0, __FUNCTION__"():GOT_PARAMETERS\n");
+		queryias_done(self);
+		break;
+	case GOT_LSAPSEL:
+		DEBUG(0, __FUNCTION__"():GOT_LSAPSEL\n");
+		queryias_done(self);
 		break;
 
 /* 	case LMP_DISCONNECT_INDICATION: */
@@ -732,16 +1013,32 @@ static void ircomm_state_conn(struct ircomm_cb *self, IRCOMM_EVENT event,
 	case IRCOMM_DISCONNECT_REQUEST:
 		ircomm_next_state(self, COMM_IDLE);
 		issue_disconnect_request(self, skb);
+		queryias_done(self);
 		break;
 /* 	case LM_DISCONNECT_INDICATION: */
 /* 		disconnect_indication(); */
 /* 		ircomm_next_state(self, COMM_IDLE); */
 /* 		break; */
+
+	case DISCOVERY_INDICATION:
+		DEBUG(0, __FUNCTION__"():DISCOVERY_INDICATION\n");
+		queryias_done(self);
+		break;
+	case GOT_PARAMETERS:
+		DEBUG(0, __FUNCTION__"():GOT_PARAMETERS\n");
+		queryias_done(self);
+		break;
+	case GOT_LSAPSEL:
+		DEBUG(0, __FUNCTION__"():GOT_LSAPSEL\n");
+		queryias_done(self);
+		break;
+
 	default:
 		DEBUG(0,"ircomm_state_conn:unknown event =%d(%s)\n",
 		      event, ircommevent[event]);
 	}
 }
+
 
 
 /*
@@ -751,172 +1048,97 @@ static void ircomm_state_conn(struct ircomm_cb *self, IRCOMM_EVENT event,
  *  ----------------------------------------------------------------------
  */
 
-int ircomm_query_ias_and_connect(struct ircomm_cb *self, __u8 servicetype)
+/* 
+ * start_discovering()
+ *
+ * start discovering and enter DISCOVERY_WAIT state
+ */
+
+static void start_discovering(struct ircomm_cb *self)
 {
-	int retval=0;
-	__u16 hints;
-
-	ASSERT( self != NULL, return -EFAULT;);
-	ASSERT( self->magic == IRCOMM_MAGIC, return -EFAULT;);
-	DEBUG(4,__FUNCTION__"():servicetype = %d\n",servicetype);
-
-	/*
-	 * wait if another instance is discovering now
-	 */  
-	if(discovering_instance){
-		interruptible_sleep_on( &self->discovery_wait);
-		if(signal_pending(current)){
-			return -EINTR; /* cought a signal */
-		}
-		if(self->state == COMM_CONN)
-			return 0;  /* got connected */
-	}
-	ASSERT(discovering_instance == NULL, return -EFAULT;);
-	discovering_instance = self;
+	__u16  hints; 
+	ASSERT( self != NULL, return;);
+	ASSERT( self->magic == IRCOMM_MAGIC, return;);
+	DEBUG(4,__FUNCTION__"():servicetype = %d\n",self->servicetype);
 	
-	/*
-	 * start discovering
-	 */
+
 	hints = irlmp_service_to_hint(S_COMM);
 
 	DEBUG(0,__FUNCTION__"():start discovering..\n");
 	switch (ircomm_cs) {
 	case 0:
-		skey = irlmp_register_service(hints);
-		ckey = irlmp_register_client(hints, ircomm_discovery_indication,
+		MOD_INC_USE_COUNT;
+		self->queryias_lock = 1;
+		discovering_instance = self;
+		self->skey = irlmp_register_service(hints);
+		self->ckey = irlmp_register_client(hints, ircomm_discovery_indication,
 					     NULL);
 		break;
 		
 	case 1:    /* client only */
+		MOD_INC_USE_COUNT;
+		self->queryias_lock = 1;
+		discovering_instance = self;
 		DEBUG( 0, __FUNCTION__"():client only mode\n");
-		ckey = irlmp_register_client(hints, ircomm_discovery_indication,
+		self->ckey = irlmp_register_client(hints, ircomm_discovery_indication,
 					     NULL);
 		break;
 
 	case 2:     /*  server only  */
 	default:
 		DEBUG( 0, __FUNCTION__"():server only mode\n");
-		skey = irlmp_register_service(hints);
+		self->skey = irlmp_register_service(hints);
 		discovering_instance = NULL;
-		return 0;
+		break;
 	}
+	
+	return;
+}
 
+/*
+ * queryias_done(self)
+ *
+ * called when discovery process got wrong results, completed, or terminated.
+ */
 
-	/*
-	 * waiting for discovery
-	 */
-	interruptible_sleep_on( &self->discovery_wait);
-	if(signal_pending(current)){
-		retval = -EINTR; goto bailout; /* cought a signal */
+static void queryias_done(struct ircomm_cb *self)
+{
+	DEBUG(0, __FUNCTION__"():\n");
+	if(self->queryias_lock){
+		self->queryias_lock = 0;
+		discovering_instance = NULL;
+		MOD_DEC_USE_COUNT;
+		irlmp_unregister_client(self->ckey);
 	}
-	if(self->state == COMM_CONN)
-		goto bailout;     /* got connected */
+	if(ircomm_cs != 1)
+		irlmp_unregister_service(self->skey);
+	return;
+}
 
-	/*
-	 * query Parameters field of IAS and waiting for answer
-	 */
 
-	self->servicetype = 0;
+
+static void query_parameters(struct ircomm_cb *self)
+{
+
 	DEBUG(0, __FUNCTION__"():querying IAS: Parameters..\n");
 	iriap_getvaluebyclass_request( "IrDA:IrCOMM", "Parameters",
 				       self->saddr, self->daddr,
 				       ircomm_getvalue_confirm, self );
+}
 
-	interruptible_sleep_on( &self->ias_wait);
-	if(signal_pending(current)){
-		retval = -EINTR; goto bailout; /* cought a signal */
+
+static void query_lsapsel(struct ircomm_cb * self)
+{
+	DEBUG(0, __FUNCTION__"():querying IAS: Lsapsel...\n");
+
+	if (!(self->servicetype & THREE_WIRE_RAW)) {
+		iriap_getvaluebyclass_request( 
+			"IrDA:IrCOMM", "IrDA:TinyTP:LsapSel",
+			self->saddr, self->daddr,
+			ircomm_getvalue_confirm, self );
+	} else {
+		DEBUG(0, __FUNCTION__ "THREE_WIRE_RAW is not implemented!\n");
 	}
-	if(self->state == COMM_CONN)
-		goto bailout;     /* got connected */
-
-
-	/* really got Parameters field? */
-	if(self->ias_type != IAS_OCT_SEQ){
-		retval = -EFAULT;
-		goto bailout;
-	}
-
-	/* 
-	 * check if servicetype we want is available 
-	 */
-	self->peer_cap = self->servicetype;
-
-	DEBUG(0,__FUNCTION__"():peer capability is:\n");
-	DEBUG(0,"3wire raw: %s\n",((self->servicetype & THREE_WIRE_RAW) ? "yes":"no"));
-	DEBUG(0,"3wire    : %s\n",((self->servicetype & THREE_WIRE) ? "yes":"no"));
-	DEBUG(0,"9wire    : %s\n",((self->servicetype & NINE_WIRE) ? "yes":"no"));
-	DEBUG(0,"IEEE1284 : %s\n",((self->servicetype & CENTRONICS) ? "yes":"no"));
-
-	self->servicetype &= servicetype;
-	if(!(self->servicetype)){
-		retval = -ENODEV;
-		goto bailout;
-	}
-
-	/*
-	 * then choose better one 
-	 */
-
-	if(self->servicetype & THREE_WIRE_RAW)
-		servicetype = THREE_WIRE_RAW;
-	if(self->servicetype & THREE_WIRE)
-		servicetype = THREE_WIRE;
-	if(self->servicetype & NINE_WIRE)
-		servicetype = NINE_WIRE;
-	if(self->servicetype & CENTRONICS)
-		servicetype = CENTRONICS;
-
-	self->servicetype = servicetype;
-#if 1
-	/*
-	 * waiting for discovery again 
-	 */
-	interruptible_sleep_on( &self->discovery_wait);
-	if(signal_pending(current)){
-		retval = -EINTR; goto bailout; /* cought a signal */
-	}
-	if(self->state == COMM_CONN)
-		goto bailout;     /* got connected */
-#endif
-	/*
-	 * query lsapsel field and waiting for answer
-	 */
-	query_lsapsel(self);
-	interruptible_sleep_on( &self->ias_wait);
-	if(signal_pending(current)){
-		retval = -EINTR; goto bailout; /* cought a signal */
-	}
-	if(self->state == COMM_CONN)
-		goto bailout;     /* got connected */
-
-	/* really got Lsapsel field? */
-	if(self->ias_type != IAS_INTEGER){
-		retval = -EFAULT;
-		goto bailout;
-	} 
-#if 1
-	/*
-	 * waiting for discovery again...
-	 */
-	interruptible_sleep_on( &self->discovery_wait);
-	if(signal_pending(current)){
-		retval = -EINTR; goto bailout; /* cought a signal */
-	}
-	if(self->state == COMM_CONN)
-		goto bailout;     /* got connected */
-#endif
-
-	/* succeed! ready to connect */
-	discovering_instance = NULL;
-	ircomm_connect_request(self);
-	return 0; 
-
- bailout:
-	/* failed.  not ready to connect */
-	discovering_instance = NULL;
-	irlmp_unregister_service(skey);
-	irlmp_unregister_client(ckey);
-	return retval;
 }
 
 /* 
@@ -926,7 +1148,7 @@ int ircomm_query_ias_and_connect(struct ircomm_cb *self, __u8 servicetype)
  */
 
 
-void ircomm_connect_request(struct ircomm_cb *self)
+void ircomm_connect_request(struct ircomm_cb *self, __u8 servicetype)
 {
 	/*
 	 * TODO:build a packet which contains "initial control parameters"
@@ -939,7 +1161,8 @@ void ircomm_connect_request(struct ircomm_cb *self)
 
 	DEBUG(0, __FUNCTION__"():sending connect_request...\n");
 
-	ircomm_control_request(self, SERVICETYPE); /*servictype*/
+	self->servicetype= servicetype;
+	/* ircomm_control_request(self, SERVICETYPE); */ /*servictype*/
 
 	self->maxsdusize = SAR_DISABLE;
 	ircomm_do_event( self, IRCOMM_CONNECT_REQUEST, NULL);
@@ -986,6 +1209,7 @@ void ircomm_disconnect_request(struct ircomm_cb *self,
 	ASSERT( self->magic == IRCOMM_MAGIC, return;);
 	DEBUG(0,__FUNCTION__"()\n");
 
+#if 0
 	/* unregister layer */
 	switch (ircomm_cs) {
 	case 1:    /* client only */
@@ -1001,6 +1225,7 @@ void ircomm_disconnect_request(struct ircomm_cb *self,
 		irlmp_unregister_service(skey);
 		break;
 	}
+#endif
 
 	self->disconnect_priority = priority;
 	if(priority != P_HIGH)
@@ -1353,7 +1578,7 @@ void ircomm_parse_tuples(struct ircomm_cb *self, struct sk_buff *skb, int type)
 			break;
 		
 		case SERVICETYPE:
-			self->servicetype = data[2];
+			self->peer_servicetype = data[2];
 			break;
 
 		case PORT_TYPE:
@@ -1480,128 +1705,6 @@ void ircomm_parse_tuples(struct ircomm_cb *self, struct sk_buff *skb, int type)
  * ----------------------------------------------------------------------
  */
 
-
-
-/*
- * ircomm_getvalue_confirm()
- * handler for iriap_getvaluebyclass_request() 
- */
-
-static void ircomm_getvalue_confirm( __u16 obj_id, struct ias_value *value,
-				     void *priv)
-{
-	struct ircomm_cb *self = (struct ircomm_cb *) priv;
-	struct sk_buff *skb= NULL;
-	__u8 *frame;
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == IRCOMM_MAGIC, return;);
-
-	/* Check if request succeeded */
-	if ( !value) {
-		DEBUG( 0, __FUNCTION__ "(), got NULL value!\n");
-		return;
-	}
-
-	DEBUG(4, __FUNCTION__"():type(%d)\n", value->type);
-
-	self->ias_type = value->type;
-	switch(value->type){
- 	case IAS_OCT_SEQ:
-		
-		DEBUG(4, __FUNCTION__"():got octet sequence:\n");
-#if 0
-		{
-			int i;
-			for ( i=0;i<value->len;i++)
-				printk("%02x",
-				       (__u8)(*(value->t.oct_seq + i)));
-			printk("\n");
-		}
-#endif
-		skb = dev_alloc_skb((value->len) + 2);
-		ASSERT(skb != NULL, return;);
-		frame = skb_put(skb,2);
-		/* MSB first */
-		frame[0] = ( value->len >> 8 ) & 0xff;
-		frame[1] = value->len & 0xff;
-		
-		frame = skb_put(skb,value->len);
-		memcpy(frame, value->t.oct_seq, value->len);
-		ircomm_parse_tuples(self, skb, IAS_PARAM);
-		kfree_skb(skb);
-
-		wake_up_interruptible( &self->ias_wait);
-		break;
-
-	case IAS_INTEGER:
-		/* LsapSel seems to be sent to me */	
-		DEBUG(0, __FUNCTION__"():got lsapsel = %d\n", value->t.integer);
-
-		if ( value->t.integer == -1){
-			DEBUG( 0, __FUNCTION__"():invalid value!\n");
-			return;
-		}
-
-		if(self->state == COMM_IDLE){
-			self->dlsap = value->t.integer;
-
-			wake_up_interruptible( &self->ias_wait);
-		}
-		break;
-
-	case IAS_MISSING:
-		DEBUG( 0, __FUNCTION__":got IAS_MISSING\n");
-		break;
-   
-	default:
-		DEBUG( 0, __FUNCTION__":got unknown (strange?)type!\n");
-		break;
-	}
-}
-
-
-/*
- * query_lsapsel()
- *    quering the remote IAS to ask which
- *    dlsap we should use
- */
-
-static void query_lsapsel(struct ircomm_cb * self)
-{
-	DEBUG(0, __FUNCTION__"():querying IAS: Lsapsel...\n");
-
-	if (!(self->servicetype & THREE_WIRE_RAW)) {
-		iriap_getvaluebyclass_request( 
-			"IrDA:IrCOMM", "IrDA:TinyTP:LsapSel",
-			self->saddr, self->daddr,
-			ircomm_getvalue_confirm, self );
-	} else {
-		DEBUG(0, __FUNCTION__ "THREE_WIRE_RAW is not implemented!\n");
-	}
-}
-
-/*
- * ircomm_discovery_indication()
- *    Remote device is discovered, try query the remote IAS to see which
- *    device it is, and which services it has.
- */
-
-static void ircomm_discovery_indication(discovery_t *discovery)
-{
-	struct ircomm_cb *self;
-
-	self = discovering_instance;
-	ASSERT(self != NULL, return;);
-	ASSERT(self->magic == IRCOMM_MAGIC, return;);
-
-	self->daddr = discovery->daddr;
-	self->saddr = discovery->saddr;
-
-	DEBUG( 0, __FUNCTION__"():daddr=%08x\n", self->daddr);
-
-	wake_up_interruptible( &self->discovery_wait);
-	return;
-}
 
 
 struct ircomm_cb * ircomm_open_instance( struct notify_t client_notify)

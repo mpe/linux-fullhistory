@@ -194,7 +194,7 @@ extern int console_loglevel;
 extern struct kbd_struct kbd_table[];
 extern struct wait_queue * keypress_wait;
 
-extern void handle_scancode(unsigned char);
+extern void handle_scancode(unsigned char, int);
 
 static struct adb_ids keyboard_ids;
 static struct adb_ids mouse_ids;
@@ -232,11 +232,6 @@ int mackbd_setkeycode(unsigned int scancode, unsigned int keycode)
 int mackbd_getkeycode(unsigned int scancode)
 {
 	return -EINVAL;
-}
-
-int mackbd_pretranslate(unsigned char scancode, char raw_mode)
-{
-	return 1;
 }
 
 int mackbd_translate(unsigned char keycode, unsigned char *keycodep,
@@ -338,8 +333,8 @@ input_keycode(int keycode, int repeat)
 		 switch (keycode) {
 		 /*case 0xb9:*/
 		 case 0x39:
-			handle_scancode(0x39);
-			handle_scancode(0xb9);
+			handle_scancode(0x39, 1);
+			handle_scancode(0x39, 0);
 		 	mark_bh(KEYBOARD_BH);
 		 	return;
 		 case 0x47:
@@ -349,7 +344,7 @@ input_keycode(int keycode, int repeat)
 		 }
 	}
 
-	handle_scancode(keycode + up_flag);
+	handle_scancode(keycode, !up_flag);
 }
 
 static void

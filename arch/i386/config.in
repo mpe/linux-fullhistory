@@ -168,6 +168,8 @@ endmenu
 
 source drivers/char/Config.in
 
+# source drivers/usb/Config.in
+
 source fs/Config.in
 
 if [ "$CONFIG_VT" = "y" ]; then

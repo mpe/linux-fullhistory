@@ -132,7 +132,6 @@ static ssize_t softdog_write(struct file *file, const char *data, size_t len, lo
 static int softdog_ioctl(struct inode *inode, struct file *file,
 	unsigned int cmd, unsigned long arg)
 {
-	int i;
 	static struct watchdog_info ident=
 	{
 		0,

@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Dec 15 13:55:39 1997
- * Modified at:   Mon Mar 29 09:06:52 1999
+ * Modified at:   Mon Apr 12 11:31:01 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1997 Dag Brattli, All Rights Reserved.
@@ -50,12 +50,12 @@ extern struct proc_dir_entry proc_irda;
 struct irda_cb irda; /* One global instance */
 
 #ifdef CONFIG_IRDA_DEBUG
-__u32 irda_debug = IRDA_DEBUG;
+__u32 irda_debug = IRDA_DEBUG_LEVEL;
 #endif
 
 extern void irda_proc_register(void);
 extern void irda_proc_unregister(void);
-extern int irda_sysctl_register(void);
+extern int  irda_sysctl_register(void);
 extern void irda_sysctl_unregister(void);
 
 extern void irda_proto_init(struct net_proto *pro);
@@ -265,22 +265,6 @@ void irda_cleanup(void)
 	irlmp_cleanup();
 }
 #endif /* MODULE */
-
-/*
- * Function irda_lock (lock)
- *
- *    Lock variable. Returns false if the lock is already set.
- *    
- */
-inline int irda_lock(int *lock) 
-{
-	if (test_and_set_bit( 0, (void *) lock))  {
-		DEBUG(3, __FUNCTION__ 
-		      "(), Trying to lock, already locked variable!\n");
-		return FALSE;
-        }  
-	return TRUE;
-}
 
 /*
  * Function irda_unlock (lock)

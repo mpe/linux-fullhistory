@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Thomas Davis, <ratbert@radiks.net>
  * Created at:    Sat Feb 21 18:54:38 1998
- * Modified at:   Tue Feb  9 15:36:47 1999
+ * Modified at:   Mon Apr 12 11:55:30 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * Sources:	  esi.c
  *
@@ -56,9 +56,9 @@ static struct dongle dongle = {
 	esi_qos_init,
 };
 
-__initfunc(void esi_init(void))
+__initfunc(int esi_init(void))
 {
-	irtty_register_dongle( &dongle);
+	return irtty_register_dongle(&dongle);
 }
 
 void esi_cleanup(void)
@@ -132,7 +132,7 @@ static void esi_change_speed( struct irda_device *idev, int baud)
 	}
 	/* Change speed of serial driver */
 	tty->termios->c_cflag = cflag;
-	tty->driver.set_termios( tty, &old_termios);
+	tty->driver.set_termios(tty, &old_termios);
 
 	irtty_set_dtr_rts(tty, dtr, rts);
 }
@@ -151,6 +151,7 @@ static void esi_reset( struct irda_device *idev, int unused)
 static void esi_qos_init( struct irda_device *idev, struct qos_info *qos)
 {
 	qos->baud_rate.bits &= IR_9600|IR_19200|IR_115200;
+	qos->min_turn_time.bits &= 0x01; /* Needs at least 10 ms */
 }
 
 #ifdef MODULE
@@ -163,8 +164,7 @@ static void esi_qos_init( struct irda_device *idev, struct qos_info *qos)
  */
 int init_module(void)
 {
-	esi_init();
-	return(0);
+	return esi_init();
 }
 
 /*

@@ -9,8 +9,8 @@ int  dummy_dir_read ( struct file *filp,
 char * umsdos_d_path(struct dentry *, char *, int);
 void umsdos_lookup_patch_new(struct dentry *, struct umsdos_info *);
 int umsdos_is_pseudodos (struct inode *dir, struct dentry *dentry);
-int umsdos_lookup_x ( struct inode *dir, struct dentry *dentry, int nopseudo);
-int UMSDOS_lookup(struct inode *, struct dentry *);
+struct dentry *umsdos_lookup_x ( struct inode *dir, struct dentry *dentry, int nopseudo);
+struct dentry *UMSDOS_lookup(struct inode *, struct dentry *);
 struct dentry *umsdos_lookup_dentry(struct dentry *, char *, int, int);
 struct dentry *umsdos_covered(struct dentry *, char *, int);
 
@@ -106,8 +106,8 @@ int UMSDOS_rename (struct inode *old_dir,
 		   struct dentry *new_dentry);
 
 /* rdir.c 22/03/95 03.31.42 */
-int umsdos_rlookup_x (struct inode *dir, struct dentry *dentry, int nopseudo);
-int UMSDOS_rlookup (struct inode *dir, struct dentry *dentry);
+struct dentry *umsdos_rlookup_x (struct inode *dir, struct dentry *dentry, int nopseudo);
+struct dentry *UMSDOS_rlookup (struct inode *dir, struct dentry *dentry);
 
 /* symlink.c 23/01/95 03.38.30 */
 

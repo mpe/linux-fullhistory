@@ -21,6 +21,9 @@
 #include <net/dst.h>
 #include <net/checksum.h>
 #include <linux/etherdevice.h>
+#ifdef CONFIG_HIPPI
+#include <linux/hippidevice.h>
+#endif
 #include <net/pkt_sched.h>
 
 #ifdef CONFIG_BRIDGE
@@ -45,6 +48,8 @@
 #include <linux/igmp.h>
 
 extern struct net_proto_family inet_family_ops;
+extern __u32 sysctl_wmem_max;
+extern __u32 sysctl_rmem_max;
 
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
 #include <linux/in6.h>
@@ -474,6 +479,15 @@ EXPORT_SYMBOL(tty_register_ldisc);
 EXPORT_SYMBOL(kill_fasync);
 
 EXPORT_SYMBOL(if_port_text);
+
+#ifdef CONFIG_HIPPI
+EXPORT_SYMBOL(hippi_type_trans);
+EXPORT_SYMBOL(init_hippi_dev);
+EXPORT_SYMBOL(unregister_hipdev);
+#endif
+
+EXPORT_SYMBOL(sysctl_wmem_max);
+EXPORT_SYMBOL(sysctl_rmem_max);
 
 #if defined(CONFIG_ATALK) || defined(CONFIG_ATALK_MODULE) 
 #include<linux/if_ltalk.h>

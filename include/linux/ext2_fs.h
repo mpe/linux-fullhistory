@@ -572,7 +572,7 @@ extern int ext2_ioctl (struct inode *, struct file *, unsigned int,
 
 /* namei.c */
 extern void ext2_release (struct inode *, struct file *);
-extern int ext2_lookup (struct inode *, struct dentry *);
+extern struct dentry *ext2_lookup (struct inode *, struct dentry *);
 extern int ext2_create (struct inode *,struct dentry *,int);
 extern int ext2_mkdir (struct inode *,struct dentry *,int);
 extern int ext2_rmdir (struct inode *,struct dentry *);

@@ -51,7 +51,7 @@ struct termios *irvtd_termios_locked[COMM_MAX_TTY];
 static int irvtd_refcount;
 struct irvtd_cb **irvtd = NULL;
 
-static char *revision_date = "Wed Mar 10 15:33:03 1999";
+static char *revision_date = "Sun Apr 18 17:31:53 1999";
 
 
 /*
@@ -74,6 +74,7 @@ void irvtd_stop(struct tty_struct *tty);
 void irvtd_start(struct tty_struct *tty);
 void irvtd_hangup(struct tty_struct *tty);
 void irvtd_flush_buffer(struct tty_struct *tty);
+void irvtd_flush_chars(struct tty_struct *tty);
 
 static void change_speed(struct irvtd_cb *driver);
 static void irvtd_write_to_tty( struct irvtd_cb *);
@@ -89,14 +90,6 @@ static int line_info(char *buf, struct irvtd_cb *driver);
 static int irvtd_read_proc(char *buf, char **start, off_t offset, int len,
 			   int *eof, void *unused);
 
-
-/*
- * ----------------------------------------------------------------------
- * 
- *
-
- * ----------------------------------------------------------------------
- */
 
 /*
  **********************************************************************
@@ -122,10 +115,12 @@ static void irvtd_write_to_tty( struct irvtd_cb *driver)
 	struct sk_buff *skb;
 	struct tty_struct *tty = driver->tty;
 	
+	if(driver->rx_disable)
+		return;
+
 	skb = skb_dequeue(&driver->rxbuff);
 	if(skb == NULL)
 		return; /* there's nothing */
-
 
 	/* 
 	 * we should parse controlchannel field here. 
@@ -244,6 +239,7 @@ static int irvtd_receive_data(void *instance, void *sap, struct sk_buff *skb)
 		irttp_flow_request(driver->comm->tsap, FLOW_STOP);
 		driver->ttp_stoprx = 1;
 	}
+	irvtd_write_to_tty(driver);
 	return 0;
 }
 
@@ -268,7 +264,7 @@ static void irvtd_start_timer( struct irvtd_cb *driver)
 	
 	driver->timer.data     = (unsigned long) driver;
 	driver->timer.function = &irvtd_timer_expired;
-	driver->timer.expires  = jiffies + (HZ / 20);  /* 50msec */
+	driver->timer.expires  = jiffies + (HZ / 5);  /* 200msec */
 	
 	add_timer( &driver->timer);
 }
@@ -282,13 +278,10 @@ static void irvtd_timer_expired(unsigned long data)
 	ASSERT(driver->magic == IRVTD_MAGIC,return;);
 	DEBUG(4, __FUNCTION__"()\n");
 
-	if(!(driver->tty->hw_stopped) && !(driver->tx_disable))
-		irvtd_send_data_request(driver);
+	irvtd_send_data_request(driver);
 
-	if(!(driver->rx_disable)){
-		irvtd_write_to_tty(driver);
-	}
-	
+	irvtd_write_to_tty(driver);
+
 	/* start our timer again and again */
 	irvtd_start_timer(driver);
 }
@@ -302,6 +295,8 @@ static void irvtd_send_data_request(struct irvtd_cb *driver)
 	ASSERT(skb != NULL,return;);
 	DEBUG(4, __FUNCTION__"()\n");
 
+	if(driver->tty->hw_stopped || driver->tx_disable)
+		return;
 	if(!skb->len)
 		return;   /* no data to send */
 
@@ -315,7 +310,7 @@ static void irvtd_send_data_request(struct irvtd_cb *driver)
 	}
 #endif
 
-	DEBUG(4, __FUNCTION__"():sending %d bytes\n",(int)skb->len );
+	DEBUG(1, __FUNCTION__"():sending %d octets\n",(int)skb->len );
 	driver->icount.tx += skb->len;
 	err = ircomm_data_request(driver->comm, driver->txbuff);
 	if (err){
@@ -327,7 +322,7 @@ static void irvtd_send_data_request(struct irvtd_cb *driver)
 	/* allocate a new frame */
 	skb = driver->txbuff = dev_alloc_skb(driver->comm->max_txbuff_size);
 	if (skb == NULL){
-		printk(__FUNCTION__"():flush_txbuff():alloc_skb failed!\n");
+		printk(__FUNCTION__"():alloc_skb failed!\n");
 	} else {
 		skb_reserve(skb, COMM_HEADER_SIZE);
 	}
@@ -369,9 +364,10 @@ void irvtd_connect_confirm(void *instance, void *sap, struct qos_info *qos,
 	/*
 	 * sending initial control parameters here
 	 */
-#if 1
 	if(driver->comm->servicetype ==	THREE_WIRE_RAW)
 		return;                /* do nothing */
+
+	driver->comm->dte |= (MCR_DTR | MCR_RTS | DELTA_DTR | DELTA_RTS);
 
 	ircomm_control_request(driver->comm, SERVICETYPE);
 	ircomm_control_request(driver->comm, DATA_RATE);
@@ -389,7 +385,6 @@ void irvtd_connect_confirm(void *instance, void *sap, struct qos_info *qos,
 		break;
 	default:
 	}
-#endif
 	
 	driver->tx_disable = 0;
 	wake_up_interruptible(&driver->open_wait);
@@ -414,15 +409,27 @@ void irvtd_connect_indication(void *instance, void *sap, struct qos_info *qos,
 
 	DEBUG(4,"irvtd_connect_indication:sending connect_response...\n");
 
-	/*TODO: connect_response should send initialcontrolparameters! TH*/
-
 	ircomm_connect_response(comm, NULL, SAR_DISABLE );
 
-	/*
-	 * set default value
-	 */
-	driver->msr |= (MSR_DCD|MSR_RI|MSR_DSR|MSR_CTS);
 	driver->tx_disable = 0;
+
+	/*
+	 * send initial control parameters
+	 */
+	if(driver->comm->servicetype ==	THREE_WIRE_RAW)
+		return;                /* do nothing */
+
+	driver->comm->dte |= (MCR_DTR | MCR_RTS | DELTA_DTR | DELTA_RTS);
+
+	switch(driver->comm->servicetype){
+	case NINE_WIRE:
+		ircomm_control_request(driver->comm, DTELINE_STATE);
+		break;
+	default:
+	}
+
+
+	driver->msr |= (MSR_DCD|MSR_RI|MSR_DSR|MSR_CTS);
 	wake_up_interruptible(&driver->open_wait);
 }
 
@@ -445,7 +452,13 @@ void irvtd_disconnect_indication(void *instance, void *sap , LM_REASON reason,
 	DEBUG(4,"irvtd_disconnect_indication:\n");
 
 	driver->tx_disable = 1;
-	driver->disconnect_pend = 1;
+	if(skb_queue_empty(&driver->rxbuff)){
+		/* disconnect */
+		driver->rx_disable = 1;
+		tty_hangup(driver->tty);
+	} else {
+		driver->disconnect_pend = 1;
+	}
 }
 
 /*
@@ -559,6 +572,12 @@ void irvtd_control_indication(void *instance, void *sap, IRCOMM_CMD cmd)
         }
 	break;
 
+	case FLOW_CONTROL:
+	case DATA_RATE:
+	case XON_XOFF_CHAR:
+	case DTELINE_STATE:
+		/* (maybe) nothing to do  */
+		break;
 	default:
 		DEBUG(0,__FUNCTION__"():PI = 0x%02x is not implemented\n",
 		      (int)driver->comm->pi);
@@ -624,19 +643,6 @@ static int irvtd_block_til_ready(struct tty_struct *tty, struct file * filp,
 	while (1) {
 		current->state = TASK_INTERRUPTIBLE;
 		
-		if (driver->comm->state == COMM_CONN){
-			/* 
-			 * signal DTR and RTS
-			 */
-			driver->comm->dte = driver->mcr |= (MCR_DTR  |
-							    MCR_RTS  |
-							    DELTA_DTR|
-							    DELTA_RTS );
-
-			ircomm_control_request(driver->comm, DTELINE_STATE);
-		}
-
-
 		if (tty_hung_up_p(filp) ||
 		    !(driver->flags & ASYNC_INITIALIZED)) {
 #ifdef DO_RESTART
@@ -755,7 +761,6 @@ static void change_speed(struct irvtd_cb *driver)
 
 static int irvtd_startup(struct irvtd_cb *driver)
 {
-	int retval = 0;
 	struct ias_object* obj;
 	struct notify_t irvtd_notify;
 
@@ -805,17 +810,13 @@ static int irvtd_startup(struct irvtd_cb *driver)
 	irias_insert_object( obj);
 
 	driver->flags |= ASYNC_INITIALIZED;
+
 	/*
 	 * discover a peer device
 	 *	   TODO: other servicetype(i.e. 3wire,3wireraw) support
 	 */
-	retval = ircomm_query_ias_and_connect(driver->comm, NINE_WIRE);
-	if(retval){
-		DEBUG(0, __FUNCTION__"(): ircomm_query_ias returns %d\n",
-		      retval);
-		return retval;
-	}
-
+	ircomm_connect_request(driver->comm, NINE_WIRE);
+	
 	/*
 	 * TODO:we have to initialize control-channel here!
 	 *   i.e.set something into RTS,CTS and so on....
@@ -931,7 +932,7 @@ static void irvtd_wait_until_sent(struct tty_struct *tty, int timeout)
 	ASSERT(driver->magic == IRVTD_MAGIC, return;);
 	ASSERT(driver->comm != NULL, return;);
 
-	DEBUG(0, __FUNCTION__"():\n");	
+	DEBUG(1, __FUNCTION__"():\n");	
 	if(!tty->closing)
 		return;   /* nothing to do */
 	
@@ -944,7 +945,7 @@ static void irvtd_wait_until_sent(struct tty_struct *tty, int timeout)
 	orig_jiffies = jiffies;
 
 	while (driver->comm->tsap->disconnect_pend) {
-		DEBUG(0, __FUNCTION__"():wait..\n");
+		DEBUG(1, __FUNCTION__"():wait..\n");
 		current->state = TASK_INTERRUPTIBLE;
 		current->counter = 0;	/* make us low-priority */
 		schedule_timeout(HZ);    /* 1sec */
@@ -964,7 +965,7 @@ static void irvtd_shutdown(struct irvtd_cb * driver)
 	if (!(driver->flags & ASYNC_INITIALIZED))
 		return;
 
-	DEBUG(0,__FUNCTION__"()\n");
+	DEBUG(1,__FUNCTION__"()\n");
 
 	/*
 	 * This comment is written in serial.c:
@@ -1017,7 +1018,7 @@ void irvtd_close(struct tty_struct * tty, struct file * filp)
 	int line;
 	unsigned long flags;
 
-	DEBUG(0, __FUNCTION__"():refcount= %d\n",irvtd_refcount);
+	DEBUG(1, __FUNCTION__"():refcount= %d\n",irvtd_refcount);
 
 	ASSERT(driver != NULL, return;);
 	ASSERT(driver->magic == IRVTD_MAGIC, return;);
@@ -1030,7 +1031,7 @@ void irvtd_close(struct tty_struct * tty, struct file * filp)
 		 * upper tty layer caught a HUP signal and called irvtd_hangup()
 		 * before. so we do nothing here.
 		 */
-		DEBUG(0, __FUNCTION__"():tty_hung_up_p.\n");
+		DEBUG(1, __FUNCTION__"():tty_hung_up_p.\n");
 		MOD_DEC_USE_COUNT;
 		restore_flags(flags);
 		return;
@@ -1142,7 +1143,6 @@ int irvtd_write(struct tty_struct * tty, int from_user,
 
 	DEBUG(4, __FUNCTION__"()\n");
 
-
 	save_flags(flags);
 	while(1){
 		cli();
@@ -1164,10 +1164,22 @@ int irvtd_write(struct tty_struct * tty, int from_user,
 		wrote += c;
 		count -= c;
 		buf += c;
+		irvtd_send_data_request(driver);
 	}
 	restore_flags(flags);
 	return (wrote);
 }
+
+void irvtd_flush_chars(struct tty_struct *tty)
+{
+	struct irvtd_cb *driver = (struct irvtd_cb *)tty->driver_data;
+	ASSERT( driver != NULL, return;);
+	ASSERT( driver->magic == IRVTD_MAGIC, return;);
+
+	DEBUG(4, __FUNCTION__"()\n");
+	irvtd_send_data_request(driver);
+}
+
 
 /*
  * Function irvtd_put_char (tty, ch)
@@ -1606,14 +1618,14 @@ void irvtd_set_termios(struct tty_struct *tty, struct termios * old_termios){
 
 static void irvtd_send_xchar(struct tty_struct *tty, char ch){
 
-	DEBUG(0, __FUNCTION__"():\n");
+	DEBUG(1, __FUNCTION__"():\n");
 	irvtd_put_char(tty, ch);
 }
 
 void irvtd_throttle(struct tty_struct *tty){
 	struct irvtd_cb *driver = (struct irvtd_cb *)tty->driver_data;
 
-	DEBUG(0, "irvtd_throttle:\n");
+	DEBUG(1, "irvtd_throttle:\n");
 
 	if (I_IXOFF(tty))
 		irvtd_put_char(tty, STOP_CHAR(tty));
@@ -1628,7 +1640,7 @@ void irvtd_throttle(struct tty_struct *tty){
 
 void irvtd_unthrottle(struct tty_struct *tty){
 	struct irvtd_cb *driver = (struct irvtd_cb *)tty->driver_data;
-	DEBUG(0, "irvtd_unthrottle:\n");
+	DEBUG(1, "irvtd_unthrottle:\n");
 
 	if (I_IXOFF(tty))
 		irvtd_put_char(tty, START_CHAR(tty));
@@ -1760,7 +1772,7 @@ int irvtd_register_ttydriver(void){
         irvtd_drv.close = irvtd_close;
         irvtd_drv.write = irvtd_write;
         irvtd_drv.put_char = irvtd_put_char;
-	irvtd_drv.flush_chars = NULL;
+	irvtd_drv.flush_chars = irvtd_flush_chars;
         irvtd_drv.write_room = irvtd_write_room;
 	irvtd_drv.chars_in_buffer = irvtd_chars_in_buffer; 
         irvtd_drv.flush_buffer = irvtd_flush_buffer;
@@ -1916,7 +1928,7 @@ __initfunc(int irvtd_init(void))
 		memset( irvtd[i], 0, sizeof(struct irvtd_cb));
 		irvtd[i]->magic = IRVTD_MAGIC;
 		irvtd[i]->line = i;
-		irvtd[i]->closing_wait = 30*HZ ;
+		irvtd[i]->closing_wait = 10*HZ ;
 		irvtd[i]->close_delay = 5*HZ/10 ; 
 	}
 

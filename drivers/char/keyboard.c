@@ -24,6 +24,7 @@
  */
 
 #include <linux/config.h>
+#include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/tty.h>
 #include <linux/tty_flip.h>
@@ -58,6 +59,8 @@
 #ifndef KBD_DEFLOCK
 #define KBD_DEFLOCK 0
 #endif
+
+EXPORT_SYMBOL(handle_scancode);
 
 extern void ctrl_alt_del(void);
 
@@ -190,15 +193,15 @@ int getkeycode(unsigned int scancode)
     return kbd_getkeycode(scancode);
 }
 
-void handle_scancode(unsigned char scancode)
+void handle_scancode(unsigned char scancode, int down)
 {
 	unsigned char keycode;
-	char up_flag;				 /* 0 or 0200 */
+	char up_flag = down ? 0 : 0200;
 	char raw_mode;
 
 	do_poke_blanked_console = 1;
 	mark_bh(CONSOLE_BH);
-	add_keyboard_randomness(scancode);
+	add_keyboard_randomness(scancode | up_flag);
 
 	tty = ttytab? ttytab[fg_console]: NULL;
 	if (tty && (!tty->driver_data)) {
@@ -213,20 +216,15 @@ void handle_scancode(unsigned char scancode)
 	}
 	kbd = kbd_table + fg_console;
 	if ((raw_mode = (kbd->kbdmode == VC_RAW))) {
- 		put_queue(scancode);
+		put_queue(scancode | up_flag);
 		/* we do not return yet, because we want to maintain
 		   the key_down array, so that we have the correct
 		   values when finishing RAW mode or when changing VT's */
- 	}
+	}
 
-	if (!kbd_pretranslate(scancode, raw_mode))
-	    return;
- 	/*
+	/*
 	 *  Convert scancode to keycode
- 	 */
-	up_flag = (scancode & 0200);
- 	scancode &= 0x7f;
-
+	 */
 	if (!kbd_translate(scancode, &keycode, raw_mode))
 	    return;
 
@@ -239,10 +237,10 @@ void handle_scancode(unsigned char scancode)
 
 	if (up_flag) {
 		rep = 0;
- 		if(!test_and_clear_bit(keycode, key_down))
+		if(!test_and_clear_bit(keycode, key_down))
 		    up_flag = kbd_unexpected_up(keycode);
 	} else
- 		rep = test_and_set_bit(keycode, key_down);
+		rep = test_and_set_bit(keycode, key_down);
 
 #ifdef CONFIG_MAGIC_SYSRQ		/* Handle the SysRq Hack */
 	if (keycode == SYSRQ_KEY) {
@@ -257,11 +255,11 @@ void handle_scancode(unsigned char scancode)
 
 	if (kbd->kbdmode == VC_MEDIUMRAW) {
 		/* soon keycodes will require more than one byte */
- 		put_queue(keycode + up_flag);
+		put_queue(keycode + up_flag);
 		raw_mode = 1;	/* Most key classes will be ignored */
- 	}
+	}
 
- 	/*
+	/*
 	 * Small change in philosophy: earlier we defined repetition by
 	 *	 rep = keycode == prev_keycode;
 	 *	 prev_keycode = keycode;
@@ -270,9 +268,9 @@ void handle_scancode(unsigned char scancode)
 	 */
 
 	/*
- 	 *  Repeat a key only if the input buffers are empty or the
- 	 *  characters get echoed locally. This makes key repeat usable
- 	 *  with slow applications and under heavy loads.
+	 *  Repeat a key only if the input buffers are empty or the
+	 *  characters get echoed locally. This makes key repeat usable
+	 *  with slow applications and under heavy loads.
 	 */
 	if (!rep ||
 	    (vc_kbd_mode(kbd,VC_REPEAT) && tty &&

@@ -60,7 +60,7 @@ extern void	affs_make_zones(struct super_block *sb);
 /* namei.c */
 
 extern int	affs_hash_name(const unsigned char *name, int len, int intl, int hashsize);
-extern int	affs_lookup(struct inode *dir, struct dentry *dentry);
+extern struct dentry *affs_lookup(struct inode *dir, struct dentry *dentry);
 extern int	affs_unlink(struct inode *dir, struct dentry *dentry);
 extern int	affs_create(struct inode *dir, struct dentry *dentry, int mode);
 extern int	affs_mkdir(struct inode *dir, struct dentry *dentry, int mode);

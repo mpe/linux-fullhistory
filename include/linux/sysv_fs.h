@@ -367,7 +367,7 @@ sv_bread (struct super_block *sb, kdev_t dev, unsigned int block)
  * Function prototypes
  */
 
-extern int sysv_lookup(struct inode * dir, struct dentry * dentry);
+extern struct dentry *sysv_lookup(struct inode * dir, struct dentry * dentry);
 extern int sysv_create(struct inode * dir, struct dentry * dentry, int mode);
 extern int sysv_mkdir(struct inode * dir, struct dentry * dentry, int mode);
 extern int sysv_rmdir(struct inode * dir, struct dentry * dentry);

@@ -540,7 +540,7 @@ extern struct buffer_head * ufs_getfrag (struct inode *, unsigned, int, int *);
 extern struct buffer_head * ufs_bread (struct inode *, unsigned, int, int *);
 
 /* namei.c */
-extern int ufs_lookup (struct inode *, struct dentry *);
+extern struct dentry *ufs_lookup (struct inode *, struct dentry *);
 extern int ufs_mkdir(struct inode *, struct dentry *, int);
 extern int ufs_rmdir (struct inode *, struct dentry *);
 extern int ufs_unlink (struct inode *, struct dentry *);

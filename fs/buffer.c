@@ -804,6 +804,7 @@ void __brelse(struct buffer_head * buf)
 	/* If dirty, mark the time this buffer should be written back. */
 	set_writetime(buf, 0);
 	refile_buffer(buf);
+	touch_buffer(buf);
 
 	if (buf->b_count) {
 		buf->b_count--;
@@ -839,7 +840,6 @@ struct buffer_head * bread(kdev_t dev, int block, int size)
 	struct buffer_head * bh;
 
 	bh = getblk(dev, block, size);
-	touch_buffer(bh);
 	if (buffer_uptodate(bh))
 		return bh;
 	ll_rw_block(READ, 1, &bh);
@@ -876,7 +876,6 @@ struct buffer_head * breada(kdev_t dev, int block, int bufsize,
 	bh = getblk(dev, block, bufsize);
 	index = BUFSIZE_INDEX(bh->b_size);
 
-	touch_buffer(bh);
 	if (buffer_uptodate(bh))
 		return(bh);   
 	else ll_rw_block(READ, 1, &bh);

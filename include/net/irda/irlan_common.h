@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Sun Aug 31 20:14:37 1997
- * Modified at:   Tue Apr  6 16:19:41 1999
+ * Modified at:   Thu Apr 22 14:30:37 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, All Rights Reserved.
@@ -121,7 +121,6 @@ struct irlan_client_cb {
 	int broadcast_open;
 
 	struct timer_list kick_timer;
-	int start_new_provider;
 };
 
 /*
@@ -183,6 +182,10 @@ struct irlan_cb {
 
 struct irlan_cb *irlan_open(__u32 saddr, __u32 daddr, int netdev);
 void irlan_close(struct irlan_cb *self);
+void irlan_close_tsaps(struct irlan_cb *self);
+void irlan_mod_inc_use_count(void);
+void irlan_mod_dec_use_count(void);
+
 int  irlan_register_netdev(struct irlan_cb *self);
 void irlan_ias_register(struct irlan_cb *self, __u8 tsap_sel);
 void irlan_start_watchdog_timer(struct irlan_cb *self, int timeout);
@@ -204,7 +207,7 @@ int irlan_insert_string_param(struct sk_buff *skb, char *param, char *value);
 int irlan_insert_array_param(struct sk_buff *skb, char *name, __u8 *value, 
 			     __u16 value_len);
 
-int irlan_get_param(__u8 *buf, char *name, char *value, __u16 *len);
+int irlan_extract_param(__u8 *buf, char *name, char *value, __u16 *len);
 void print_ret_code(__u8 code);
 
 extern hashbin_t *irlan;

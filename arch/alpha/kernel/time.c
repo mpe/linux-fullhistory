@@ -226,7 +226,7 @@ time_init(void)
 {
 	void (*irq_handler)(int, void *, struct pt_regs *);
 	unsigned int year, mon, day, hour, min, sec, cc1, cc2;
-	unsigned long cycle_freq;
+	unsigned long cycle_freq, diff, one_percent;
 
 	/*
 	 * The Linux interpretation of the CMOS clock register contents:
@@ -240,19 +240,30 @@ time_init(void)
 	/* Read cycle counter exactly on falling edge of update flag */
 	cc1 = rpcc();
 
-	/* If our cycle frequency isn't valid, go another round and give
-	   a guess at what it should be.  */
-	cycle_freq = hwrpb->cycle_freq;
-	if (cycle_freq == 0) {
-		printk("HWRPB cycle frequency bogus.  Estimating... ");
-
+	if (!est_cycle_freq) {
+		/* Sometimes the hwrpb->cycle_freq value is bogus. 
+	   	Go another round to check up on it and see.  */
 		do { } while (!(CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP));
 		do { } while (CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP);
 		cc2 = rpcc();
-		est_cycle_freq = cycle_freq = cc2 - cc1;
+		est_cycle_freq = cc2 - cc1;
 		cc1 = cc2;
+	}
 
-		printk("%lu Hz\n", cycle_freq);
+	/* If the given value is within 1% of what we calculated, 
+	   accept it.  Otherwise, use what we found.  */
+	cycle_freq = hwrpb->cycle_freq;
+	one_percent = cycle_freq / 100;
+	diff = cycle_freq - est_cycle_freq;
+	if (diff < 0)
+		diff = -diff;
+	if (diff > one_percent) {
+		cycle_freq = est_cycle_freq;
+		printk("HWRPB cycle frequency bogus.  Estimated %lu Hz\n",
+		       cycle_freq);
+	}
+	else {
+		est_cycle_freq = 0;
 	}
 
 	/* From John Bowman <bowman@math.ualberta.ca>: allow the values

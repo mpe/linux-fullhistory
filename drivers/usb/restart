@@ -1,0 +1,35 @@
+#!/bin/sh
+
+ME=`basename $0`
+
+#UMOD=`lsmod | grep '^bp-mouse' | grep -v grep`
+#if test "$UMOD"; then
+#  echo "$ME: removing bp-mouse.o"
+#  if ! rmmod bp-mouse; then
+#    echo "$ME: cannot remove bp-mouse.o"
+#    exit 1
+#  fi
+#fi
+
+UPID=`ps aux | grep uhci-control | grep -v grep | awk '{print $2}'`
+if test "$UPID"; then
+  echo "$ME: killing $UPID"
+  kill $UPID
+fi
+
+UMOD=`lsmod | grep '^usb-uhci' | grep -v grep`
+if test "$UMOD"; then
+  echo "$ME: removing usb-uhci.o"
+  sleep 1
+  if ! rmmod usb-uhci; then
+    echo "$ME: cannot remove usb-uhci.o"
+    exit 1
+  fi
+fi
+
+dmesg -c > /dev/null
+
+echo "$ME: starting usb-uhci.o"
+insmod -m usb-uhci.o > usb-uhci.map
+#echo "$ME: starting bp-mouse.o"
+#insmod -m bp-mouse.o > bp-mouse.map

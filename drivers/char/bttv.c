@@ -2853,6 +2853,16 @@ static void handle_chipset(void)
 }
 #endif
 
+static void init_tea6300(struct i2c_bus *bus) 
+{
+        I2CWrite(bus, I2C_TEA6300, TEA6300_VL, 0x35, 1); /* volume left 0dB  */
+        I2CWrite(bus, I2C_TEA6300, TEA6300_VR, 0x35, 1); /* volume right 0dB */
+        I2CWrite(bus, I2C_TEA6300, TEA6300_BA, 0x07, 1); /* bass 0dB         */
+        I2CWrite(bus, I2C_TEA6300, TEA6300_TR, 0x07, 1); /* treble 0dB       */
+        I2CWrite(bus, I2C_TEA6300, TEA6300_FA, 0x0f, 1); /* fader off        */
+        I2CWrite(bus, I2C_TEA6300, TEA6300_SW, 0x01, 1); /* mute off input A */
+}
+
 static void init_tda8425(struct i2c_bus *bus) 
 {
         I2CWrite(bus, I2C_TDA8425, TDA8425_VL, 0xFC, 1); /* volume left 0dB  */
@@ -2978,6 +2988,14 @@ static void idcard(int i)
                         break;
         }
         
+        if (I2CRead(&(btv->i2c), I2C_TEA6300) >=0)
+        {
+		printk(KERN_INFO "bttv%d: fader chip: TEA6300\n",btv->nr);
+		btv->audio_chip = TEA6300;
+		init_tea6300(&(btv->i2c));
+        } else
+		printk(KERN_INFO "bttv%d: NO fader chip: TEA6300\n",btv->nr);
+
 	printk(KERN_INFO "bttv%d: model: ",btv->nr);
 
 	sprintf(btv->video_dev.name,"BT%d",btv->id);

@@ -1,0 +1,8 @@
+#!/bin/sh
+
+killall uhci-control
+killall khubd
+
+sleep 1
+
+rmmod usb-uhci

@@ -31,6 +31,7 @@
 	.globl __strncpy_from_user
 	.ent __strncpy_from_user
 	.frame $30, 0, $26
+	.prologue 1
 
 	.align 3
 $aligned:
@@ -99,6 +100,7 @@ $a_eoc:
 	/*** The Function Entry Point ***/
 	.align 3
 __strncpy_from_user:
+	ldgp	$29, 0($27)	# we do exceptions -- we need the gp.
 
 	mov	a0, v0		# save the string start
 	beq	a2, $zerolength

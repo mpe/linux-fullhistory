@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Mon Dec 15 13:58:52 1997
- * Modified at:   Tue Mar 16 22:27:41 1999
+ * Modified at:   Fri Apr  9 11:13:39 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  *
  *     Copyright (c) 1998 Dag Brattli, All Rights Reserved.
@@ -101,7 +101,22 @@ struct irda_cb {
 int irmod_init_module(void);
 void irmod_cleanup_module(void);
 
-inline int irda_lock(int *lock);
+/*
+ * Function irda_lock (lock)
+ *
+ *    Lock variable. Returns false if the lock is already set.
+ *    
+ */
+static inline int irda_lock(int *lock) 
+{
+	if (test_and_set_bit( 0, (void *) lock))  {
+		DEBUG(3, __FUNCTION__ 
+		      "(), Trying to lock, already locked variable!\n");
+		return FALSE;
+        }  
+	return TRUE;
+}
+
 inline int irda_unlock(int *lock);
 
 void irda_notify_init(struct notify_t *notify);

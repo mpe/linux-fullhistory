@@ -6,7 +6,7 @@
  * Status:        Experimental.
  * Author:        Dag Brattli <dagb@cs.uit.no>
  * Created at:    Thu Aug 21 00:02:07 1997
- * Modified at:   Tue Mar 23 19:38:46 1999
+ * Modified at:   Fri Apr 23 09:57:12 1999
  * Modified by:   Dag Brattli <dagb@cs.uit.no>
  * 
  *     Copyright (c) 1998 Dag Brattli <dagb@cs.uit.no>, 
@@ -31,6 +31,7 @@
 #include <linux/irda.h>
 
 #include <asm/byteorder.h>
+#include <asm/unaligned.h>
 
 #include <net/irda/irda.h>
 #include <net/irda/irttp.h>
@@ -172,6 +173,7 @@ struct iriap_cb *iriap_open( __u8 slsap_sel, int mode)
 		DEBUG( 0, "iriap_open: Unable to allocated LSAP!\n");
 		return NULL;
 	}
+	slsap_sel = lsap->slsap_sel;
 	DEBUG( 4, __FUNCTION__ "(), source LSAP sel=%02x\n", slsap_sel);
 	
 	self->magic = IAS_MAGIC;
@@ -179,7 +181,7 @@ struct iriap_cb *iriap_open( __u8 slsap_sel, int mode)
 	self->slsap_sel = slsap_sel;
 	self->mode = mode;
 
-	/* init_timer( &self->watchdog_timer); */
+	init_timer( &self->watchdog_timer);
 
 	hashbin_insert( iriap, (QUEUE*) self, slsap_sel, NULL);
 	
@@ -204,7 +206,7 @@ static void __iriap_close( struct iriap_cb *self)
 	ASSERT( self != NULL, return;);
 	ASSERT( self->magic == IAS_MAGIC, return;);
 
-	/* del_timer( &self->watchdog_timer); */
+	del_timer( &self->watchdog_timer);
 
 	self->magic = 0;
 
@@ -258,7 +260,7 @@ static void iriap_disconnect_indication( void *instance, void *sap,
 
 	ASSERT( iriap != NULL, return;);
 
-	/* del_timer( &self->watchdog_timer); */
+	del_timer( &self->watchdog_timer);
 
 	if ( self->mode == IAS_CLIENT) {
 		DEBUG( 4, __FUNCTION__ "(), disconnect as client\n");
@@ -267,8 +269,8 @@ static void iriap_disconnect_indication( void *instance, void *sap,
 		 * Inform service user that the request failed by sending 
 		 * it a NULL value.
 		 */
-		if ( self->confirm)
- 			self->confirm( 0, NULL, self->priv);
+		if (self->confirm)
+ 			self->confirm(IAS_DISCONNECT, 0, NULL, self->priv);
 		
 		
 		iriap_do_client_event( self, IAP_LM_DISCONNECT_INDICATION, 
@@ -348,9 +350,9 @@ void iriap_getvalue(void)
  *    Retreive all values from attribute in all objects with given class
  *    name
  */
-void iriap_getvaluebyclass_request( char *name, char *attr, 
-				    __u32 saddr, __u32 daddr,
-				    CONFIRM_CALLBACK callback, void *priv)
+void iriap_getvaluebyclass_request(char *name, char *attr, 
+				   __u32 saddr, __u32 daddr,
+				   CONFIRM_CALLBACK callback, void *priv)
 {
 	struct sk_buff *skb;
 	struct iriap_cb *self;
@@ -358,9 +360,9 @@ void iriap_getvaluebyclass_request( char *name, char *attr,
 	int name_len, attr_len;
 	__u8 slsap = LSAP_ANY;  /* Source LSAP to use */
 
-	DEBUG( 4, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 	
-	self = iriap_open( slsap, IAS_CLIENT);
+	self = iriap_open(slsap, IAS_CLIENT);
 	if (!self)
 		return;
 
@@ -376,29 +378,29 @@ void iriap_getvaluebyclass_request( char *name, char *attr,
 	 */
 	self->operation = GET_VALUE_BY_CLASS; 
 
-	/* Give ourselves 7 secs to finish this operation */
-	/* iriap_start_watchdog_timer( self, 700); */
+	/* Give ourselves 10 secs to finish this operation */
+	iriap_start_watchdog_timer(self, 10*HZ);
 	
 	skb = dev_alloc_skb( 64);
 	if (!skb)
 		return;
 
-	name_len = strlen( name);
-	attr_len = strlen( attr);
+	name_len = strlen(name);
+	attr_len = strlen(attr);
 
 	/* Reserve space for MUX and LAP header */
- 	skb_reserve( skb, LMP_CONTROL_HEADER+LAP_HEADER);
-	skb_put( skb, 3+name_len+attr_len);
+ 	skb_reserve(skb, LMP_CONTROL_HEADER+LAP_HEADER);
+	skb_put(skb, 3+name_len+attr_len);
 	frame = skb->data;
 
 	/* Build frame */
 	frame[0] = IAP_LST | GET_VALUE_BY_CLASS;
 	frame[1] = name_len;                       /* Insert length of name */
-	memcpy( frame+2, name, name_len);          /* Insert name */
+	memcpy(frame+2, name, name_len);           /* Insert name */
 	frame[2+name_len] = attr_len;              /* Insert length of attr */
-	memcpy( frame+3+name_len, attr, attr_len); /* Insert attr */
+	memcpy(frame+3+name_len, attr, attr_len);  /* Insert attr */
 
-	iriap_do_client_event( self, IAP_CALL_REQUEST_GVBC, skb);
+	iriap_do_client_event(self, IAP_CALL_REQUEST_GVBC, skb);
 }
 
 /*
@@ -415,7 +417,6 @@ void iriap_getvaluebyclass_confirm(struct iriap_cb *self, struct sk_buff *skb)
 	int charset;
 	__u32 value_len;
 	__u32 tmp_cpu32;
-	__u16 tmp_cpu16;
 	__u16 obj_id;
 	__u16 len;
 	__u8  type;
@@ -430,14 +431,14 @@ void iriap_getvaluebyclass_confirm(struct iriap_cb *self, struct sk_buff *skb)
 	n = 2;
 
 	/* Get length, MSB first */
-	memcpy(&len, fp+n, 2); n += 2;
-	be16_to_cpus(&len); 
+	len = be16_to_cpu(get_unaligned((__u16 *)(fp+n))); n += 2;
 
 	DEBUG(4, __FUNCTION__ "(), len=%d\n", len);
 
 	/* Get object ID, MSB first */
-	memcpy(&obj_id, fp+n, 2); n += 2;
-	be16_to_cpus(&obj_id);
+	obj_id = be16_to_cpu(get_unaligned((__u16 *)(fp+n))); n += 2;
+/* 	memcpy(&obj_id, fp+n, 2); n += 2; */
+/* 	be16_to_cpus(&obj_id); */
 
 	type = fp[n++];
 	DEBUG( 4, __FUNCTION__ "(), Value type = %d\n", type);
@@ -484,9 +485,8 @@ void iriap_getvaluebyclass_confirm(struct iriap_cb *self, struct sk_buff *skb)
 		value = irias_new_string_value(fp+n);
 		break;
 	case IAS_OCT_SEQ:
-		memcpy(&tmp_cpu16, fp+n, 2);  n += 2;
-		be16_to_cpus(&tmp_cpu16);
-		value_len = tmp_cpu16;
+		value_len = be16_to_cpu(get_unaligned((__u16 *)(fp+n)));
+		n += 2;
 		
 		/* FIXME:should be 1024, but.... */
 		DEBUG(0, __FUNCTION__ "():octet sequence:len=%d\n", value_len);
@@ -499,11 +499,11 @@ void iriap_getvaluebyclass_confirm(struct iriap_cb *self, struct sk_buff *skb)
 		break;
 	}
 	
-	if (self->confirm)
-		self->confirm(obj_id, value, self->priv);
-	
 	/* Finished, close connection! */
 	iriap_disconnect_request(self);
+
+	if (self->confirm)
+		self->confirm(IAS_SUCCESS, obj_id, value, self->priv);
 }
 
 /*
@@ -550,7 +550,7 @@ void iriap_getvaluebyclass_response(struct iriap_cb *self, __u16 obj_id,
 	fp[n++] = ret_code;
 
 	/* Insert list length (MSB first) */
-	tmp_be16 = __constant_htons( 0x0001);
+	tmp_be16 = __constant_htons(0x0001);
 	memcpy(fp+n, &tmp_be16, 2);  n += 2; 
 
 	/* Insert object identifier ( MSB first) */
@@ -703,17 +703,17 @@ void iriap_connect_confirm(void *instance, void *sap, struct qos_info *qos,
 {
 	struct iriap_cb *self;
 	
-	self = ( struct iriap_cb *) instance;
+	self = (struct iriap_cb *) instance;
 
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == IAS_MAGIC, return;);
-	ASSERT( userdata != NULL, return;);
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == IAS_MAGIC, return;);
+	ASSERT(userdata != NULL, return;);
 	
-	DEBUG( 4, __FUNCTION__ "()\n");
+	DEBUG(4, __FUNCTION__ "()\n");
 	
 	/* del_timer( &self->watchdog_timer); */
 
-	iriap_do_client_event( self, IAP_LM_CONNECT_CONFIRM, userdata);
+	iriap_do_client_event(self, IAP_LM_CONNECT_CONFIRM, userdata);
 }
 
 /*
@@ -778,7 +778,7 @@ static int iriap_data_indication(void *instance, void *sap,
 	}
 
 	if (~opcode & IAP_ACK) {
-		DEBUG(0, __FUNCTION__ "() Got ack frame!\n");
+		DEBUG(2, __FUNCTION__ "() Got ack frame!\n");
 	/* 	return; */
 	}
 
@@ -797,9 +797,21 @@ static int iriap_data_indication(void *instance, void *sap,
 			break;
 		case IAS_CLASS_UNKNOWN:
 			printk(KERN_WARNING "IrIAP No such class!\n");
+			/* Finished, close connection! */
+			iriap_disconnect_request(self);
+
+			if (self->confirm)
+				self->confirm(IAS_CLASS_UNKNOWN, 0, NULL, 
+					      self->priv);
 			break;
 		case IAS_ATTRIB_UNKNOWN:
 			printk(KERN_WARNING "IrIAP No such attribute!\n");
+		       	/* Finished, close connection! */
+			iriap_disconnect_request(self);
+
+			if (self->confirm)
+				self->confirm(IAS_CLASS_UNKNOWN, 0, NULL, 
+					      self->priv);
 			break;
 		}
 		iriap_do_call_event( self, IAP_RECV_F_LST, skb);
@@ -854,18 +866,20 @@ void iriap_call_indication( struct iriap_cb *self, struct sk_buff *skb)
 	}
 }
 
+/*
+ * Function iriap_watchdog_timer_expired (data)
+ *
+ *    
+ *
+ */
 void iriap_watchdog_timer_expired( unsigned long data)
 {
 	struct iriap_cb *self = ( struct iriap_cb *) data;
 	
-	DEBUG( 0, __FUNCTION__ "()\n");
+	ASSERT(self != NULL, return;);
+	ASSERT(self->magic == IAS_MAGIC, return;);
 
-	return;
-
-	ASSERT( self != NULL, return;);
-	ASSERT( self->magic == IAS_MAGIC, return;);
-
-	DEBUG( 0, __FUNCTION__ "() Timeout! closing myself!\n");
+	DEBUG(0, __FUNCTION__ "() Timeout! closing myself!\n");
 	iriap_close( self);
 }
 

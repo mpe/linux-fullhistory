@@ -280,8 +280,6 @@ static int adfs_readdir (struct file *filp, void *dirent, filldir_t filldir)
 	unsigned long parent_object_id, dir_object_id;
 	int buffers, pos;
 
-	if (!inode || !S_ISDIR(inode->i_mode))
-		return -EBADF;
 	sb = inode->i_sb;
 
 	if (filp->f_pos > ADFS_NUM_DIR_ENTRIES + 2)

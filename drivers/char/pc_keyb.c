@@ -240,8 +240,6 @@ static unsigned char e0_keys[128] = {
   0, 0, 0, 0, 0, 0, 0, 0			      /* 0x78-0x7f */
 };
 
-static unsigned int prev_scancode = 0;   /* remember E0, E1 */
-
 int pckbd_setkeycode(unsigned int scancode, unsigned int keycode)
 {
 	if (scancode < SC_LIM || scancode > 255 || keycode > 127)
@@ -284,41 +282,28 @@ static int do_acknowledge(unsigned char scancode)
 		       scancode);
 #endif
 	}
-	if (scancode == 0) {
-#ifdef KBD_REPORT_ERR
-		printk(KERN_INFO "Keyboard buffer overflow\n");
-#endif
-		prev_scancode = 0;
-		return 0;
-	}
 	return 1;
-}
-
-int pckbd_pretranslate(unsigned char scancode, char raw_mode)
-{
-	if (scancode == 0xff) {
-		/* in scancode mode 1, my ESC key generates 0xff */
-		/* the calculator keys on a FOCUS 9000 generate 0xff */
-#ifndef KBD_IS_FOCUS_9000
-#ifdef KBD_REPORT_ERR
-		if (!raw_mode)
-		  printk(KERN_DEBUG "Keyboard error\n");
-#endif
-#endif
-		prev_scancode = 0;
-		return 0;
-	}
-
-	if (scancode == 0xe0 || scancode == 0xe1) {
-		prev_scancode = scancode;
-		return 0;
- 	}
- 	return 1;
 }
 
 int pckbd_translate(unsigned char scancode, unsigned char *keycode,
 		    char raw_mode)
 {
+	static int prev_scancode = 0;
+
+	/* special prefix scancodes.. */
+	if (scancode == 0xe0 || scancode == 0xe1) {
+		prev_scancode = scancode;
+		return 0;
+	}
+
+	/* 0xFF is sent by a few keyboards, ignore it. 0x00 is error */
+	if (scancode == 0x00 || scancode == 0xff) {
+		prev_scancode = 0;
+		return 0;
+	}
+
+	scancode &= 0x7f;
+
 	if (prev_scancode) {
 	  /*
 	   * usually it will be 0xe0, but a Pause key generates
@@ -452,7 +437,7 @@ static unsigned char handle_kbd_event(void)
 			handle_mouse_event(scancode);
 		} else {
 			if (do_acknowledge(scancode))
-				handle_scancode(scancode);
+				handle_scancode(scancode, !(scancode & 0x80));
 			mark_bh(KEYBOARD_BH);
 		}
 

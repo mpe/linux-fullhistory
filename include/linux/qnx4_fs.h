@@ -95,7 +95,7 @@ struct qnx4_super_block {
 #define QNX4DEBUG(X) (void) 0
 #endif
 
-extern int qnx4_lookup(struct inode *dir, struct dentry *dentry);
+extern struct dentry *qnx4_lookup(struct inode *dir, struct dentry *dentry);
 extern unsigned long qnx4_count_free_inodes(struct super_block *sb);
 extern unsigned long qnx4_count_free_blocks(struct super_block *sb);
 
