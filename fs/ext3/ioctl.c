@@ -156,7 +156,7 @@ flags_err:
 		if (test_opt(inode->i_sb, RESERVATION)
 			&& S_ISREG(inode->i_mode)
 			&& ei->i_rsv_window) {
-			rsv_window_size = atomic_read(&ei->i_rsv_window->rsv_goal_size);
+			rsv_window_size = ei->i_rsv_window->rsv_goal_size;
 			return put_user(rsv_window_size, (int __user *)arg);
 		}
 		return -ENOTTY;
@@ -186,8 +186,7 @@ flags_err:
 			ext3_alloc_init_reservation(inode);
 
 		if (ei->i_rsv_window)
-			atomic_set(&ei->i_rsv_window->rsv_goal_size,
-						rsv_window_size);
+			ei->i_rsv_window->rsv_goal_size = rsv_window_size;
 		up(&ei->truncate_sem);
 		return 0;
 	}

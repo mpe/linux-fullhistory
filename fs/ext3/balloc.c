@@ -250,7 +250,7 @@ static void rsv_window_remove(struct super_block *sb,
 {
 	rsv->rsv_start = EXT3_RESERVE_WINDOW_NOT_ALLOCATED;
 	rsv->rsv_end = EXT3_RESERVE_WINDOW_NOT_ALLOCATED;
-	atomic_set(&rsv->rsv_alloc_hit, 0);
+	rsv->rsv_alloc_hit = 0;
 	rb_erase(&rsv->rsv_node, &EXT3_SB(sb)->s_rsv_window_root);
 }
 
@@ -268,9 +268,8 @@ void ext3_alloc_init_reservation(struct inode *inode)
 	if (rsv) {
 		rsv->rsv_start = EXT3_RESERVE_WINDOW_NOT_ALLOCATED;
 		rsv->rsv_end = EXT3_RESERVE_WINDOW_NOT_ALLOCATED;
-		atomic_set(&rsv->rsv_goal_size, EXT3_DEFAULT_RESERVE_BLOCKS);
-		atomic_set(&rsv->rsv_alloc_hit, 0);
-		seqlock_init(&rsv->rsv_seqlock);
+		rsv->rsv_goal_size = EXT3_DEFAULT_RESERVE_BLOCKS;
+		rsv->rsv_alloc_hit = 0;
 	}
 	ei->i_rsv_window = rsv;
 }
@@ -856,7 +855,7 @@ static int alloc_new_reservation(struct ext3_reserve_window_node *my_rsv,
 	else
 		start_block = goal + group_first_block;
 
-	size = atomic_read(&my_rsv->rsv_goal_size);
+	size = my_rsv->rsv_goal_size;
 	if (!rsv_is_empty(&my_rsv->rsv_window)) {
 		/*
 		 * if the old reservation is cross group boundary
@@ -877,7 +876,7 @@ static int alloc_new_reservation(struct ext3_reserve_window_node *my_rsv,
 				(start_block >= my_rsv->rsv_start))
 			return -1;
 
-		if ((atomic_read(&my_rsv->rsv_alloc_hit) >
+		if ((my_rsv->rsv_alloc_hit >
 		     (my_rsv->rsv_end - my_rsv->rsv_start + 1) / 2)) {
 			/*
 			 * if we previously allocation hit ration is greater than half
@@ -887,7 +886,7 @@ static int alloc_new_reservation(struct ext3_reserve_window_node *my_rsv,
 			size = size * 2;
 			if (size > EXT3_MAX_RESERVE_BLOCKS)
 				size = EXT3_MAX_RESERVE_BLOCKS;
-			atomic_set(&my_rsv->rsv_goal_size, size);
+			my_rsv->rsv_goal_size= size;
 		}
 	}
 	/*
@@ -962,7 +961,7 @@ found_rsv_window:
 	}
 	my_rsv->rsv_start = reservable_space_start;
 	my_rsv->rsv_end = my_rsv->rsv_start + size - 1;
-	atomic_set(&my_rsv->rsv_alloc_hit, 0);
+	my_rsv->rsv_alloc_hit = 0;
 	if (my_rsv != prev_rsv)  {
 		ext3_rsv_window_add(sb, my_rsv);
 	}
@@ -1061,23 +1060,17 @@ ext3_try_to_allocate_with_rsv(struct super_block *sb, handle_t *handle,
 	 */
 	while (1) {
 		struct ext3_reserve_window rsv_copy;
-		unsigned int seq;
 
-		do {
-			seq = read_seqbegin(&my_rsv->rsv_seqlock);
-			rsv_copy._rsv_start = my_rsv->rsv_start;
-			rsv_copy._rsv_end = my_rsv->rsv_end;
-		} while (read_seqretry(&my_rsv->rsv_seqlock, seq));
+		rsv_copy._rsv_start = my_rsv->rsv_start;
+		rsv_copy._rsv_end = my_rsv->rsv_end;
 
 		if (rsv_is_empty(&rsv_copy) || (ret < 0) ||
 			!goal_in_my_reservation(&rsv_copy, goal, group, sb)) {
 			spin_lock(rsv_lock);
-			write_seqlock(&my_rsv->rsv_seqlock);
 			ret = alloc_new_reservation(my_rsv, goal, sb,
 							group, bitmap_bh);
 			rsv_copy._rsv_start = my_rsv->rsv_start;
 			rsv_copy._rsv_end = my_rsv->rsv_end;
-			write_sequnlock(&my_rsv->rsv_seqlock);
 			spin_unlock(rsv_lock);
 			if (ret < 0)
 				break;			/* failed */
@@ -1091,8 +1084,7 @@ ext3_try_to_allocate_with_rsv(struct super_block *sb, handle_t *handle,
 		ret = ext3_try_to_allocate(sb, handle, group, bitmap_bh, goal,
 					   &rsv_copy);
 		if (ret >= 0) {
-			if (!read_seqretry(&my_rsv->rsv_seqlock, seq))
-				atomic_inc(&my_rsv->rsv_alloc_hit);
+			my_rsv->rsv_alloc_hit++;
 			break;				/* succeed */
 		}
 	}
@@ -1202,7 +1194,7 @@ int ext3_new_block(handle_t *handle, struct inode *inode,
 	 * command EXT3_IOC_SETRSVSZ to set the window size to 0 to turn off
 	 * reservation on that particular file)
 	 */
-	if (rsv && ((windowsz = atomic_read(&rsv->rsv_goal_size)) > 0))
+	if (rsv && ((windowsz = rsv->rsv_goal_size) > 0))
 		my_rsv = rsv;
 
 	if (!ext3_has_free_blocks(sbi)) {
