@@ -125,12 +125,8 @@ int dibusb_dvb_init(struct usb_dibusb *dib)
 
 	urb_compl_count = 0;
 
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(2,6,4)
-    if ((ret = dvb_register_adapter(&dib->adapter, DRIVER_DESC)) < 0) {
-#else
-    if ((ret = dvb_register_adapter(&dib->adapter, DRIVER_DESC , 
+	if ((ret = dvb_register_adapter(&dib->adapter, DRIVER_DESC,
 			THIS_MODULE)) < 0) {
-#endif
 		deb_info("dvb_register_adapter failed: error %d", ret);
 		goto err;
 	}
