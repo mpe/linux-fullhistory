@@ -326,7 +326,7 @@ __EXTERN_INLINE unsigned int pyxis_inb(unsigned long addr)
 
 __EXTERN_INLINE void pyxis_outb(unsigned char b, unsigned long addr)
 {
-	unsigned int w;
+	unsigned long w;
 
 	w = __kernel_insbl(b, addr & 3);
 	*(vuip) ((addr << 5) + PYXIS_IO + 0x00) = w;
@@ -341,7 +341,7 @@ __EXTERN_INLINE unsigned int pyxis_inw(unsigned long addr)
 
 __EXTERN_INLINE void pyxis_outw(unsigned short b, unsigned long addr)
 {
-	unsigned int w;
+	unsigned long w;
 
 	w = __kernel_inswl(b, addr & 3);
 	*(vuip) ((addr << 5) + PYXIS_IO + 0x08) = w;

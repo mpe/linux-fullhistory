@@ -45,8 +45,12 @@ SECTIONS
   . = ALIGN(4096);
   __init_end = .;
 
+  . = ALIGN(32);
+  .data.cacheline_aligned : { *(.data.cacheline_aligned) }
+
   . = ALIGN(4096);
   .data.page_aligned : { *(.data.idt) }
+
 
   __bss_start = .;		/* BSS */
   .bss : {

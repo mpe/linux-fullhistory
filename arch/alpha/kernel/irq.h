@@ -21,3 +21,11 @@ extern void isa_device_interrupt(unsigned long vector, struct pt_regs * regs);
 extern void srm_device_interrupt(unsigned long vector, struct pt_regs * regs);
 
 extern void handle_irq(int irq, int ack, struct pt_regs * regs);
+
+#define RTC_IRQ    8
+#ifdef CONFIG_RTC
+#define TIMER_IRQ  0			 /* timer is the pit */
+#else
+#define TIMER_IRQ  RTC_IRQ		 /* timer is the rtc */
+#endif
+

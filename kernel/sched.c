@@ -12,6 +12,7 @@
  *  1998-12-24	Fixed a xtime SMP race (we need the xtime_lock rw spinlock to
  *		serialize accesses to xtime/lost_ticks).
  *				Copyright (C) 1998  Andrea Arcangeli
+ *  1998-12-28  Implemented better SMP scheduling by Ingo Molnar
  */
 
 /*
@@ -96,47 +97,110 @@ struct kernel_stat kstat = { 0 };
 
 void scheduling_functions_start_here(void) { }
 
+#ifdef __SMP__
+static void reschedule_idle_slow(struct task_struct * p)
+{
+/*
+ * (see reschedule_idle() for an explanation first ...)
+ *
+ * Pass #2
+ *
+ * We try to find another (idle) CPU for this woken-up process.
+ *
+ * On SMP, we mostly try to see if the CPU the task used
+ * to run on is idle.. but we will use another idle CPU too,
+ * at this point we already know that this CPU is not
+ * willing to reschedule in the near future.
+ *
+ * An idle CPU is definitely wasted, especially if this CPU is
+ * running long-timeslice processes. The following algorithm is
+ * pretty good at finding the best idle CPU to send this process
+ * to.
+ *
+ * [We can try to preempt low-priority processes on other CPUs in
+ * 2.3. Also we can try to use the avg_slice value to predict
+ * 'likely reschedule' events even on other CPUs.]
+ */
+	int best_cpu = p->processor, this_cpu = smp_processor_id();
+	struct task_struct **idle = task, *tsk, *target_tsk;
+	int i = smp_num_cpus;
+
+	target_tsk = NULL;
+	do {
+		tsk = *idle;
+		idle++;
+		if (tsk->has_cpu) {
+			if (tsk->processor == this_cpu)
+				continue;
+			target_tsk = tsk;
+			if (tsk->processor == best_cpu) {
+				/*
+				 * bingo, we couldnt get a better
+				 * CPU, activate it.
+				 */
+				goto send; /* this one helps GCC ... */
+			}
+		}
+	} while (--i > 0);
+
+	/*
+	 * found any idle CPU?
+	 */
+	if (target_tsk) {
+send:
+		target_tsk->need_resched = 1;
+		smp_send_reschedule(target_tsk->processor);
+		return;
+	}
+}
+#endif /* __SMP__ */
+
 static inline void reschedule_idle(struct task_struct * p)
 {
 
-	/*
-	 * For SMP, we try to see if the CPU the task used
-	 * to run on is idle..
-	 */
-#if 0
-	/*
-	 * Disable this for now. Ingo has some interesting
-	 * code that looks too complex, and I have some ideas,
-	 * but in the meantime.. One problem is that "wakeup()"
-	 * can be (and is) called before we've even initialized
-	 * SMP completely, so..
-	 */
-#ifdef __SMP__
-	int want_cpu = p->processor;
-
-	/*
-	 * Don't even try to find another CPU for us if the task
-	 * ran on this one before..
-	 */
-	if (want_cpu != smp_processor_id()) {
-		struct task_struct **idle = task;
-		int i = smp_num_cpus;
-
-		do {
-			struct task_struct *tsk = *idle;
-			idle++;
-			/* Something like this.. */
-			if (tsk->has_cpu && tsk->processor == want_cpu) {
-				tsk->need_resched = 1;
-				smp_send_reschedule(want_cpu);
-				return;
-			}
-		} while (--i > 0);
+	if (p->policy != SCHED_OTHER || p->counter > current->counter + 3) {
+		current->need_resched = 1;
+		return;
 	}
-#endif
-#endif
-	if (p->policy != SCHED_OTHER || p->counter > current->counter + 3)
-		current->need_resched = 1;	
+
+#ifdef __SMP__
+	/*
+	 * ("wakeup()" should not be called before we've initialized
+	 * SMP completely. [Linus, is there any exception to this?]
+	 * Basically a not-yet initialized SMP subsystem can be
+	 * considered as a not-yet working scheduler, simply dont use
+	 * it before it'd up and running ...)
+	 *
+	 * SMP rescheduling is done in 2 passes:
+	 *  - pass #1: faster: 'quick decisions'
+	 *  - pass #2: slower: 'lets try and find another CPU'
+	 */
+
+	/*
+	 * Pass #1
+	 *
+	 * There are two metrics here:
+	 *
+	 * first, a 'cutoff' interval, currently ~250 usecs on
+	 * x86 CPUs. If the current process has longer average
+	 * timeslices than this, then we utilize the idle CPU.
+	 *
+	 * second, if the wakeup comes from a process context,
+	 * then the two processes are 'related'. (they form a
+	 * 'gang')
+	 *
+	 * An idle CPU is almost always a bad thing, thus we skip
+	 * the idle-CPU utilization only if both these conditions
+	 * are true. (ie. a 'process-gang' rescheduling with rather
+	 * high frequency should stay on the same CPU).
+	 *
+	 * [We can switch to something more finegrained in 2.3.]
+	 */
+	if ((current->avg_slice < cacheflush_time) && !in_interrupt())
+		return;
+
+	reschedule_idle_slow(p);
+#endif /* __SMP__ */
 }
 
 /*
@@ -243,6 +307,8 @@ static void process_timeout(unsigned long __data)
 
 	wake_up_process(p);
 }
+
+int _PROC_CHANGE_PENALTY = 13;
 
 /*
  * This is the function that decides how desirable a process is..
@@ -489,6 +555,63 @@ signed long schedule_timeout(signed long timeout)
 }
 
 /*
+ * This one aligns per-CPU data on cacheline boundaries.
+ */
+static union {
+	struct schedule_data {
+		struct task_struct * prev;
+		long prevstate;
+		cycles_t last_schedule;
+	} schedule_data;
+	char __pad [L1_CACHE_BYTES];
+} aligned_data [NR_CPUS] __cacheline_aligned = { {{&init_task,0}}};
+
+
+static inline void __schedule_tail (void)
+{
+#ifdef __SMP__
+	struct schedule_data * sched_data;
+
+	/*
+	 * We might have switched CPUs:
+	 */
+	sched_data = & aligned_data[smp_processor_id()].schedule_data;
+
+	/*
+	 * Subtle. In the rare event that we got a wakeup to 'prev' just
+	 * during the reschedule (this is possible, the scheduler is pretty
+	 * parallel), we should do another reschedule in the next task's
+	 * context. schedule() will do the right thing next time around.
+	 * this is equivalent to 'delaying' the wakeup until the reschedule
+	 * has finished.
+	 */
+	if (sched_data->prev->state != sched_data->prevstate)
+		current->need_resched = 1;
+
+	/*
+	 * Release the previous process ...
+	 *
+	 * We have dropped all locks, and we must make sure that we
+	 * only mark the previous process as no longer having a CPU
+	 * after all other state has been seen by other CPU's. Thus
+	 * the memory barrier!
+	 */
+	mb();
+	sched_data->prev->has_cpu = 0;
+#endif /* __SMP__ */
+}
+
+/*
+ * schedule_tail() is getting called from the fork return path. This
+ * cleans up all remaining scheduler things, without impacting the
+ * common case.
+ */
+void schedule_tail (void)
+{
+	__schedule_tail();
+}
+
+/*
  *  'schedule()' is the scheduler function. It's a very simple and nice
  * scheduler: it's not perfect, but certainly works for most things.
  *
@@ -500,11 +623,18 @@ signed long schedule_timeout(signed long timeout)
  */
 asmlinkage void schedule(void)
 {
+	struct schedule_data * sched_data;
 	struct task_struct * prev, * next;
 	int this_cpu;
 
 	prev = current;
 	this_cpu = prev->processor;
+	/*
+	 * 'sched_data' is protected by the fact that we can run
+	 * only one process per CPU.
+	 */
+	sched_data = & aligned_data[this_cpu].schedule_data;
+
 	if (in_interrupt())
 		goto scheduling_in_interrupt;
 	release_kernel_lock(prev, this_cpu);
@@ -519,6 +649,7 @@ asmlinkage void schedule(void)
 
 	/* move an exhausted RR process to be last.. */
 	prev->need_resched = 0;
+
 	if (!prev->counter && prev->policy == SCHED_RR) {
 		prev->counter = prev->priority;
 		move_last_runqueue(prev);
@@ -534,6 +665,9 @@ asmlinkage void schedule(void)
 			del_from_runqueue(prev);
 		case TASK_RUNNING:
 	}
+
+	sched_data->prevstate = prev->state;
+
 	{
 		struct task_struct * p = init_task.next_run;
 		/*
@@ -580,34 +714,55 @@ asmlinkage void schedule(void)
 		}
 	}
 
+ 	/*
+ 	 * maintain the per-process 'average timeslice' value.
+ 	 * (this has to be recalculated even if we reschedule to
+ 	 * the same process) Currently this is only used on SMP:
+ 	 */
 #ifdef __SMP__
-	next->has_cpu = 1;
-#endif
+	{
+		cycles_t t, this_slice;
 
-	if (prev != next) {
-#ifdef __SMP__
-		next->processor = this_cpu;
-#endif
-		kstat.context_swtch++;
-		get_mmu_context(next);
-		switch_to(prev,next);
+		t = get_cycles();
+		this_slice = t - sched_data->last_schedule;
+		sched_data->last_schedule = t;
+
+		/*
+		 * Simple, exponentially fading average calculation:
+		 */
+		prev->avg_slice = this_slice + prev->avg_slice;
+		prev->avg_slice >>= 1;
 	}
 
-	spin_unlock(&scheduler_lock);
-
 	/*
-	 * At this point "prev" is "current", as we just
-	 * switched into it (from an even more "previous"
-	 * prev)
+	 * We drop the scheduler lock early (it's a global spinlock),
+	 * thus we have to lock the previous process from getting
+	 * rescheduled during switch_to().
 	 */
-	reacquire_kernel_lock(prev);
+	prev->has_cpu = 1;
+
+ 	next->has_cpu = 1;
+ 	next->processor = this_cpu;
+	spin_unlock(&scheduler_lock);
+#endif /* __SMP__ */
+ 	if (prev != next) {
+#ifdef __SMP__
+		sched_data->prev = prev;
+#endif
+	 	kstat.context_swtch++;
+		get_mmu_context(next);
+		switch_to(prev,next);
+
+		__schedule_tail();
+	}
+  
+	reacquire_kernel_lock(current);
 	return;
 
 scheduling_in_interrupt:
 	printk("Scheduling in interrupt\n");
 	*(int *)0 = 0;
 }
-
 
 rwlock_t waitqueue_lock = RW_LOCK_UNLOCKED;
 

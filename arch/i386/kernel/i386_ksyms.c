@@ -83,7 +83,6 @@ EXPORT_SYMBOL(__global_cli);
 EXPORT_SYMBOL(__global_sti);
 EXPORT_SYMBOL(__global_save_flags);
 EXPORT_SYMBOL(__global_restore_flags);
-EXPORT_SYMBOL(smp_message_pass);
 EXPORT_SYMBOL(mtrr_hook);
 #endif
 

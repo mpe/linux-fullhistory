@@ -164,6 +164,9 @@
 #include <asm/bitops.h>
 #include <asm/atomic.h>
 
+#include <asm/hardirq.h>
+#include "irq.h"
+
 #define MTRR_VERSION            "1.26 (19981001)"
 
 #define TRUE  1
@@ -612,7 +615,7 @@ static void do_all_cpus (void (*handler) (struct set_mtrr_context *ctxt,
     /*  Send a message to all other CPUs and wait for them to enter the
 	barrier  */
     atomic_set (&undone_count, smp_num_cpus - 1);
-    smp_message_pass (MSG_ALL_BUT_SELF, MSG_MTRR_CHANGE, 0, 0);
+    smp_send_mtrr();
     /*  Wait for it to be done  */
     timeout = jiffies + JIFFIE_TIMEOUT;
     while ( (atomic_read (&undone_count) > 0) &&

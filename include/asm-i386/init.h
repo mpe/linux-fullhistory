@@ -11,4 +11,7 @@
 #define __FINIT	.previous
 #define __INITDATA	.section	".data.init",#alloc,#write
 
+#define __cacheline_aligned __attribute__ \
+			 ((__section__ (".data.cacheline_aligned")))
+
 #endif

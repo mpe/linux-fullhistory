@@ -72,6 +72,8 @@ extern int setup_x86_irq(int, struct irqaction *);
 
 unsigned long cpu_hz;	/* Detected as we calibrate the TSC */
 
+cycles_t cacheflush_time;
+
 /* Number of usecs that the last interrupt was delayed */
 static int delay_at_last_interrupt;
 
@@ -96,7 +98,6 @@ static unsigned long do_fast_gettimeoffset(void)
 		:"=a" (eax), "=d" (edx));
 
 	/* .. relative to previous jiffy (32 bits is enough) */
-	edx = 0;
 	eax -= last_tsc_low;	/* tsc_low delta */
 
 	/*
@@ -110,11 +111,11 @@ static unsigned long do_fast_gettimeoffset(void)
 
 	__asm__("mull %2"
 		:"=a" (eax), "=d" (edx)
-		:"r" (fast_gettimeoffset_quotient),
-		 "0" (eax), "1" (edx));
+		:"g" (fast_gettimeoffset_quotient),
+		 "0" (eax));
 
 	/* our adjusted time offset in microseconds */
-	return edx + delay_at_last_interrupt;
+	return delay_at_last_interrupt + edx;
 }
 
 /* This function must be called with interrupts disabled 
@@ -240,17 +241,26 @@ void do_gettimeofday(struct timeval *tv)
 {
 	extern volatile unsigned long lost_ticks;
 	unsigned long flags;
+	unsigned long usec, sec;
 
 	read_lock_irqsave(&xtime_lock, flags);
-	*tv = xtime;
-	tv->tv_usec += do_gettimeoffset();
-	if (lost_ticks)
-		tv->tv_usec += lost_ticks * (1000000/HZ);
-	read_unlock_irqrestore(&xtime_lock, flags);
-	while (tv->tv_usec >= 1000000) {
-		tv->tv_usec -= 1000000;
-		tv->tv_sec++;
+	usec = do_gettimeoffset();
+	{
+		unsigned long lost = lost_ticks;
+		if (lost)
+			usec += lost * (1000000 / HZ);
 	}
+	sec = xtime.tv_sec;
+	usec += xtime.tv_usec;
+	read_unlock_irqrestore(&xtime_lock, flags);
+
+	while (usec >= 1000000) {
+		usec -= 1000000;
+		sec++;
+	}
+
+	tv->tv_sec = sec;
+	tv->tv_usec = usec;
 }
 
 void do_settimeofday(struct timeval *tv)
@@ -377,13 +387,6 @@ static inline void do_timer_interrupt(int irq, void *dev_id, struct pt_regs *reg
 		else
 			last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
 	}
-#if 0
-	/* As we return to user mode fire off the other CPU schedulers.. this is 
-	   basically because we don't yet share IRQ's around. This message is
-	   rigged to be safe on the 386 - basically it's a hack, so don't look
-	   closely for now.. */
-	smp_message_pass(MSG_ALL_BUT_SELF, MSG_RESCHEDULE, 0L, 0);
-#endif
 	    
 #ifdef CONFIG_MCA
 	if( MCA_bus ) {
@@ -639,5 +642,13 @@ __initfunc(void time_init(void))
 			printk("Detected %ld Hz processor.\n", cpu_hz);
 		}
 	}
+
+	/*
+	 * Rough estimation for SMP scheduling, this is the number of
+	 * cycles it takes for a fully memory-limited process to flush
+	 * the SMP-local cache.
+	 */
+	cacheflush_time = cpu_hz/10000;
+
 	setup_x86_irq(0, &irq0);
 }

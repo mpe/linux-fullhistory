@@ -3,12 +3,14 @@
  *	hosts.
  *
  *	(c) 1995 Alan Cox, CymruNET Ltd  <alan@cymru.net>
+ *	(c) 1998 Ingo Molnar
+ *
  *	Supported by Caldera http://www.caldera.com.
  *	Much of the core SMP work is based on previous work by Thomas Radke, to
  *	whom a great many thanks are extended.
  *
- *	Thanks to Intel for making available several different Pentium and
- *	Pentium Pro MP machines.
+ *	Thanks to Intel for making available several different Pentium,
+ *	Pentium Pro and Pentium-II/Xeon MP machines.
  *
  *	This code is released under the GNU public license version 2 or
  *	later.
@@ -26,6 +28,7 @@
  *		Ingo Molnar	:	Added APIC timers, based on code
  *					from Jose Renau
  *		Alan Cox	:	Added EBDA scanning
+ *		Ingo Molnar	:	various cleanups and rewrites
  */
 
 #include <linux/config.h>
@@ -41,6 +44,7 @@
 #include <asm/bitops.h>
 #include <asm/pgtable.h>
 #include <asm/io.h>
+#include <linux/io_trace.h>
 
 #ifdef CONFIG_MTRR
 #  include <asm/mtrr.h>
@@ -112,6 +116,12 @@ extern __inline int max(int a,int b)
 	return b;
 }
 
+/*
+ * function prototypes:
+ */
+static void cache_APIC_registers (void);
+
+
 static int smp_b_stepping = 0;				/* Set if we find a B stepping CPU			*/
 
 static int max_cpus = -1;				/* Setup configured maximum number of CPUs to activate	*/
@@ -131,18 +141,13 @@ unsigned long mp_ioapic_addr = 0xFEC00000;		/* Address of the I/O apic (not yet 
 unsigned char boot_cpu_id = 0;				/* Processor that is doing the boot up 			*/
 static int smp_activated = 0;				/* Tripped once we need to start cross invalidating 	*/
 int apic_version[NR_CPUS];				/* APIC version number					*/
-static volatile int smp_commenced=0;			/* Tripped when we start scheduling 		    	*/
+volatile int smp_commenced=0;			/* Tripped when we start scheduling 		    	*/
 unsigned long apic_retval;				/* Just debugging the assembler.. 			*/
-
-static volatile unsigned char smp_cpu_in_msg[NR_CPUS];	/* True if this processor is sending an IPI		*/
 
 volatile unsigned long kernel_counter=0;		/* Number of times the processor holds the lock		*/
 volatile unsigned long syscall_count=0;			/* Number of times the processor holds the syscall lock	*/
 
 volatile unsigned long ipi_count;			/* Number of IPIs delivered				*/
-
-volatile unsigned long  smp_proc_in_lock[NR_CPUS] = {0,};/* for computing process time */
-volatile int smp_process_available=0;
 
 const char lk_lockmsg[] = "lock from interrupt context at %p\n"; 
 
@@ -245,7 +250,7 @@ static int __init smp_read_mpc(struct mp_config_table *mpc)
 
 	if (memcmp(mpc->mpc_signature,MPC_SIGNATURE,4))
 	{
-		printk("Bad signature [%c%c%c%c].\n",
+		panic("SMP mptable: bad signature [%c%c%c%c]!\n",
 			mpc->mpc_signature[0],
 			mpc->mpc_signature[1],
 			mpc->mpc_signature[2],
@@ -254,7 +259,7 @@ static int __init smp_read_mpc(struct mp_config_table *mpc)
 	}
 	if (mpf_checksum((unsigned char *)mpc,mpc->mpc_length))
 	{
-		printk("Checksum error.\n");
+		panic("SMP mptable: checksum error!\n");
 		return 1;
 	}
 	if (mpc->mpc_spec!=0x01 && mpc->mpc_spec!=0x04)
@@ -760,11 +765,7 @@ void __init initialize_secondary(void)
 	/*
 	 * We don't actually need to load the full TSS,
 	 * basically just the stack pointer and the eip.
-	 *
-	 * Get the scheduler lock, because we're going
-	 * to release it as part of the "reschedule" return.
 	 */
-	spin_lock(&scheduler_lock);
 
 	asm volatile(
 		"movl %0,%%esp\n\t"
@@ -1165,6 +1166,7 @@ void __init smp_boot_cpus(void)
 		printk(KERN_WARNING "WARNING: SMP operation may be unreliable with B stepping processors.\n");
 	SMP_PRINTK(("Boot done.\n"));
 
+	cache_APIC_registers();
 	/*
 	 * Here we can be sure that there is an IO-APIC in the system. Let's
 	 * go and set it up:
@@ -1175,257 +1177,280 @@ void __init smp_boot_cpus(void)
 smp_done:
 }
 
-void send_IPI(int dest, int vector)
+
+/*
+ * the following functions deal with sending IPIs between CPUs.
+ *
+ * We use 'broadcast', CPU->CPU IPIs and self-IPIs too.
+ */
+
+
+/*
+ * Silly serialization to work around CPU bug in P5s.
+ * We can safely turn it off on a 686.
+ */
+#if defined(CONFIG_M686) & !defined(SMP_DEBUG)
+# define FORCE_APIC_SERIALIZATION 0
+#else
+# define FORCE_APIC_SERIALIZATION 1
+#endif
+
+static unsigned int cached_APIC_ICR;
+static unsigned int cached_APIC_ICR2;
+
+/*
+ * Caches reserved bits, APIC reads are (mildly) expensive
+ * and force otherwise unnecessary CPU synchronization.
+ *
+ * (We could cache other APIC registers too, but these are the
+ * main ones used in RL.)
+ */
+#define slow_ICR (apic_read(APIC_ICR) & ~0xFDFFF)
+#define slow_ICR2 (apic_read(APIC_ICR2) & 0x00FFFFFF)
+
+void cache_APIC_registers (void)
 {
-	unsigned long cfg;
+	cached_APIC_ICR = slow_ICR;
+	cached_APIC_ICR2 = slow_ICR2;
+	mb();
+}
+
+static inline unsigned int __get_ICR (void)
+{
+#if FORCE_APIC_SERIALIZATION
+	/*
+	 * Wait for the APIC to become ready - this should never occur. It's
+	 * a debugging check really.
+	 */
+	int count = 0;
+	unsigned int cfg;
+
+	IO_trace (IO_smp_wait_apic_start, 0, 0, 0, 0);
+	while (count < 1000)
+	{
+		cfg = slow_ICR;
+		if (!(cfg&(1<<12))) {
+			IO_trace (IO_smp_wait_apic_end, 0, 0, 0, 0);
+			if (count)
+				atomic_add(count, (atomic_t*)&ipi_count);
+			return cfg;
+		}
+		count++;
+		udelay(10);
+	}
+	printk("CPU #%d: previous IPI still not cleared after 10mS\n",
+			smp_processor_id());
+	return cfg;
+#else
+	return cached_APIC_ICR;
+#endif
+}
+
+static inline unsigned int __get_ICR2 (void)
+{
+#if FORCE_APIC_SERIALIZATION
+	return slow_ICR2;
+#else
+	return cached_APIC_ICR2;
+#endif
+}
+
+static inline int __prepare_ICR (unsigned int shortcut, int vector)
+{
+	unsigned int cfg;
+
+	cfg = __get_ICR();
+	cfg |= APIC_DEST_FIELD|APIC_DEST_DM_FIXED|shortcut|vector;
+
+	return cfg;
+}
+
+static inline int __prepare_ICR2 (unsigned int dest)
+{
+	unsigned int cfg;
+
+	cfg = __get_ICR2();
+	cfg |= SET_APIC_DEST_FIELD(dest);
+
+	return cfg;
+}
+
+static inline void __send_IPI_shortcut(unsigned int shortcut, int vector)
+{
+	unsigned int cfg;
+/*
+ * Subtle. In the case of the 'never do double writes' workaround we
+ * have to lock out interrupts to be safe. Otherwise it's just one
+ * single atomic write to the APIC, no need for cli/sti.
+ */
+#if FORCE_APIC_SERIALIZATION
 	unsigned long flags;
 
 	__save_flags(flags);
 	__cli();
+#endif
+
+	/*
+	 * No need to touch the target chip field
+	 */
+
+	cfg = __prepare_ICR(shortcut, vector);
+
+	/*
+	 * Send the IPI. The write to APIC_ICR fires this off.
+	 */
+
+	IO_trace (IO_smp_send_ipi, shortcut, vector, cfg, 0);
+	
+	apic_write(APIC_ICR, cfg);
+#if FORCE_APIC_SERIALIZATION
+	__restore_flags(flags);
+#endif
+}
+
+static inline void send_IPI_allbutself(int vector)
+{
+	__send_IPI_shortcut(APIC_DEST_ALLBUT, vector);
+}
+
+static inline void send_IPI_all(int vector)
+{
+	__send_IPI_shortcut(APIC_DEST_ALLINC, vector);
+}
+
+void send_IPI_self(int vector)
+{
+	__send_IPI_shortcut(APIC_DEST_SELF, vector);
+}
+
+static inline void send_IPI_single(int dest, int vector)
+{
+	unsigned long cfg;
+#if FORCE_APIC_SERIALIZATION
+	unsigned long flags;
+
+	__save_flags(flags);
+	__cli();
+#endif
 
 	/*
 	 * prepare target chip field
 	 */
 
-	cfg = apic_read(APIC_ICR2) & 0x00FFFFFF;
-	apic_write(APIC_ICR2, cfg|SET_APIC_DEST_FIELD(dest));
+	cfg = __prepare_ICR2(dest);
+	apic_write(APIC_ICR2, cfg);
 
-	cfg = apic_read(APIC_ICR);
-	cfg &= ~0xFDFFF;
-	cfg |= APIC_DEST_FIELD|APIC_DEST_DM_FIXED|vector;
-	cfg |= dest;
+	/*
+	 * program the ICR 
+	 */
+	cfg = __prepare_ICR(0, vector);
 	
 	/*
 	 * Send the IPI. The write to APIC_ICR fires this off.
 	 */
+
+	IO_trace (IO_smp_send_ipi, dest, vector, cfg, 0);
 	
 	apic_write(APIC_ICR, cfg);
+#if FORCE_APIC_SERIALIZATION
 	__restore_flags(flags);
+#endif
 }
 
 /*
- * A non wait message cannot pass data or CPU source info. This current setup
- * is only safe because the kernel lock owner is the only person who can send
- * a message.
- *
- * Wrapping this whole block in a spinlock is not the safe answer either. A
- * processor may get stuck with IRQs off waiting to send a message and thus
- * not replying to the person spinning for a reply.
- *
- * In the end flush tlb ought to be the NMI and a very short function
- * (to avoid the old IDE disk problems), and other messages sent with IRQs
- * enabled in a civilised fashion. That will also boost performance.
- */
-
-void smp_message_pass(int target, int msg, unsigned long data, int wait)
-{
-	unsigned long cfg;
-	unsigned long dest = 0;
-	unsigned long target_map;
-	int p=smp_processor_id();
-	int irq;
-	int ct=0;
-
-	/*
-	 *	During boot up send no messages
-	 */
-	
-	if (!smp_activated || !smp_commenced)
-		return;
-
-
-	/*
-	 *	Skip the reschedule if we are waiting to clear a
-	 *	message at this time. The reschedule cannot wait
-	 *	but is not critical.
-	 */
-
-	switch (msg) {
-		case MSG_RESCHEDULE:
-			irq = 0x30;
-			if (smp_cpu_in_msg[p])
-				return;
-			break;
-
-		case MSG_INVALIDATE_TLB:
-			/* make this a NMI some day */
-			irq = 0x31;
-			break;
-
-		case MSG_STOP_CPU:
-			irq = 0x40;
-			break;
-
-		case MSG_MTRR_CHANGE:
-			irq = 0x50;
-			break;
-
-		default:
-			printk("Unknown SMP message %d\n", msg);
-			return;
-	}
-
-	/*
-	 * Sanity check we don't re-enter this across CPUs.  Only the kernel
-	 * lock holder may send messages.  For a STOP_CPU we are bringing the
-	 * entire box to the fastest halt we can.  A reschedule carries
-	 * no data and can occur during a flush.  Guess what panic
-	 * I got to notice this bug.
-	 */
-	
-	/*
-	 *	We are busy.
-	 */
-	
-	smp_cpu_in_msg[p]++;
-
-/*	printk("SMP message pass #%d to %d of %d\n",
-		p, msg, target);*/
-
-	/*
-	 * Wait for the APIC to become ready - this should never occur. It's
-	 * a debugging check really.
-	 */
-	
-	while (ct<1000)
-	{
-		cfg=apic_read(APIC_ICR);
-		if (!(cfg&(1<<12)))
-			break;
-		ct++;
-		udelay(10);
-	}
-
-	/*
-	 *	Just pray... there is nothing more we can do
-	 */
-	
-	if (ct==1000)
-		printk("CPU #%d: previous IPI still not cleared after 10mS\n", p);
-
-	/*
-	 *	Set the target requirement
-	 */
-	
-	if (target==MSG_ALL_BUT_SELF)
-	{
-		dest=APIC_DEST_ALLBUT;
-		target_map=cpu_present_map;
-		cpu_callin_map[0]=(1<<p);
-	}
-	else if (target==MSG_ALL)
-	{
-		dest=APIC_DEST_ALLINC;
-		target_map=cpu_present_map;
-		cpu_callin_map[0]=0;
-	}
-	else
-	{
-		dest=0;
-		target_map=(1<<target);
-		cpu_callin_map[0]=0;
-	}
-
-	/*
-	 * Program the APIC to deliver the IPI
-	 */
-
-	send_IPI(dest,irq);
-
-	/*
-	 * Spin waiting for completion
-	 */
-	
-	switch(wait)
-	{
-		int stuck;
-		case 1:
-			stuck = 50000000;
-			while(cpu_callin_map[0]!=target_map) {
-				--stuck;
-				if (!stuck) {
-					printk("stuck on target_map IPI wait\n");
-					break;
-				}
-			}
-			break;
-		case 2:
-			stuck = 50000000;
-			/* Wait for invalidate map to clear */
-			while (smp_invalidate_needed) {
-				/* Take care of "crossing" invalidates */
-				if (test_bit(p, &smp_invalidate_needed))
-					clear_bit(p, &smp_invalidate_needed);
-				--stuck;
-				if (!stuck) {
-					printk("stuck on smp_invalidate_needed IPI wait (CPU#%d)\n",p);
-					break;
-				}
-			}
-			break;
-	}
-
-	/*
-	 *	Record our completion
-	 */
-	
-	smp_cpu_in_msg[p]--;
-}
-
-/*
- *	This is fraught with deadlocks. Linus does a flush tlb at a whim
- *	even with IRQs off. We have to avoid a pair of crossing flushes
- *	or we are doomed.  See the notes about smp_message_pass.
+ * This is fraught with deadlocks. Probably the situation is not that
+ * bad as in the early days of SMP, so we might ease some of the
+ * paranoia here.
  */
 
 void smp_flush_tlb(void)
 {
+	int cpu = smp_processor_id();
+	int stuck;
 	unsigned long flags;
 
-/*	printk("SMI-");*/
-
 	/*
-	 *	The assignment is safe because it's volatile so the compiler cannot reorder it,
-	 *	because the i586 has strict memory ordering and because only the kernel lock holder
-	 *	may issue a tlb flush. If you break any one of those three change this to an atomic
-	 *	bus locked or.
+	 * The assignment is safe because it's volatile so the
+	 * compiler cannot reorder it, because the i586 has
+	 * strict memory ordering and because only the kernel
+	 * lock holder may issue a tlb flush. If you break any
+	 * one of those three change this to an atomic bus
+	 * locked or.
 	 */
 
-	smp_invalidate_needed=cpu_present_map;
+	smp_invalidate_needed = cpu_present_map;
 
 	/*
-	 *	Processors spinning on the lock will see this IRQ late. The smp_invalidate_needed map will
-	 *	ensure they don't do a spurious flush tlb or miss one.
+	 * Processors spinning on some lock with IRQs disabled
+	 * will see this IRQ late. The smp_invalidate_needed
+	 * map will ensure they don't do a spurious flush tlb
+	 * or miss one.
 	 */
 	
 	__save_flags(flags);
 	__cli();
-	smp_message_pass(MSG_ALL_BUT_SELF, MSG_INVALIDATE_TLB, 0L, 2);
+
+	IO_trace (IO_smp_message, 0, 0, 0, 0);
+
+	send_IPI_allbutself(INVALIDATE_TLB_VECTOR);
+
+	/*
+	 * Spin waiting for completion
+	 */
+
+	stuck = 50000000;
+	while (smp_invalidate_needed) {
+		/*
+		 * Take care of "crossing" invalidates
+		 */
+		if (test_bit(cpu, &smp_invalidate_needed))
+			clear_bit(cpu, &smp_invalidate_needed);
+		--stuck;
+		if (!stuck) {
+			printk("stuck on TLB IPI wait (CPU#%d)\n",cpu);
+			break;
+		}
+	}
 
 	/*
 	 *	Flush the local TLB
 	 */
-	
 	local_flush_tlb();
 
 	__restore_flags(flags);
-
-	/*
-	 *	Completed.
-	 */
-	
-/*	printk("SMID\n");*/
 }
 
 
+/*
+ * this function sends a 'reschedule' IPI to another CPU.
+ * it goes straight through and wastes no time serializing
+ * anything. Worst case is that we lose a reschedule ...
+ */
+
 void smp_send_reschedule(int cpu)
 {
-	unsigned long flags;
+	send_IPI_single(cpu, RESCHEDULE_VECTOR);
+}
 
-	__save_flags(flags);
-	__cli();
-	smp_message_pass(cpu, MSG_RESCHEDULE, 0L, 0);
-	__restore_flags(flags);
+/*
+ * this function sends a 'stop' IPI to all other CPUs in the system.
+ * it goes straight through.
+ */
+
+void smp_send_stop(void)
+{
+	send_IPI_allbutself(STOP_CPU_VECTOR);
+}
+
+/*
+ * this function sends an 'reload MTRR state' IPI to all other CPUs
+ * in the system. it goes straight through, completion processing
+ * is done on the mttr.c level.
+ */
+
+void smp_send_mtrr(void)
+{
+	send_IPI_allbutself(MTRR_CHANGE_VECTOR);
 }
 
 /*
@@ -1531,6 +1556,9 @@ void smp_apic_timer_interrupt(struct pt_regs * regs)
  */
 asmlinkage void smp_reschedule_interrupt(void)
 {
+	IO_trace (IO_smp_reschedule, current->need_resched,
+			 current->priority, current->counter, 0);
+
 	ack_APIC_irq();
 }
 
@@ -1539,6 +1567,9 @@ asmlinkage void smp_reschedule_interrupt(void)
  */
 asmlinkage void smp_invalidate_interrupt(void)
 {
+	IO_trace (IO_smp_tlbflush,
+		 atomic_read((atomic_t *)&smp_invalidate_needed), 0, 0, 0);
+
 	if (test_and_clear_bit(smp_processor_id(), &smp_invalidate_needed))
 		local_flush_tlb();
 
@@ -1626,12 +1657,9 @@ void setup_APIC_timer(unsigned int clocks)
 	 * Unfortunately the local APIC timer cannot be set up into NMI
 	 * mode. With the IO APIC we can re-route the external timer
 	 * interrupt and broadcast it as an NMI to all CPUs, so no pain.
-	 *
-	 * NOTE: this trap vector (0x41) and the gate in
-	 * BUILD_SMP_TIMER_INTERRUPT should be the same ;)
 	 */
 	tmp_value = apic_read(APIC_LVTT);
-	lvtt1_value = APIC_LVT_TIMER_PERIODIC | 0x41;
+	lvtt1_value = APIC_LVT_TIMER_PERIODIC | LOCAL_TIMER_VECTOR;
 	apic_write(APIC_LVTT , lvtt1_value);
 
 	/*

@@ -3,7 +3,6 @@
 
 #include <linux/config.h>
 #include <asm/system.h>
-#include <asm/machvec.h>
 
 /* We don't use IO slowdowns on the Alpha, but.. */
 #define __SLOW_DOWN_IO	do { } while (0)
@@ -19,6 +18,7 @@
 #endif
 
 #ifdef __KERNEL__
+#include <asm/machvec.h>
 
 /*
  * We try to avoid hae updates (thus the cache), but when we
@@ -78,6 +78,7 @@ extern void _sethae (unsigned long addr);	/* cached version */
  * There are different chipsets to interface the Alpha CPUs to the world.
  */
 
+#ifdef __KERNEL__
 #ifdef CONFIG_ALPHA_GENERIC
 
 /* In a generic kernel, we always go through the machine vector.  */
@@ -147,6 +148,7 @@ extern void _sethae (unsigned long addr);	/* cached version */
 #undef __WANT_IO_DEF
 
 #endif /* GENERIC */
+#endif /* __KERNEL__ */
 
 /*
  * The convention used for inb/outb etc. is that names starting with
@@ -172,6 +174,7 @@ extern void		_writew(unsigned short b, unsigned long addr);
 extern void		_writel(unsigned int b, unsigned long addr);
 extern void		_writeq(unsigned long b, unsigned long addr);
 
+#ifdef __KERNEL__
 /*
  * The platform header files may define some of these macros to use
  * the inlined versions where appropriate.  These macros may also be
@@ -216,6 +219,27 @@ extern void		_writeq(unsigned long b, unsigned long addr);
 # define outl_p		outl
 #endif
 
+#else 
+
+/* Userspace declarations.  */
+
+extern unsigned int	inb (unsigned long port);
+extern unsigned int	inw (unsigned long port);
+extern unsigned int	inl (unsigned long port);
+extern void		outb (unsigned char b,unsigned long port);
+extern void		outw (unsigned short w,unsigned long port);
+extern void		outl (unsigned int l,unsigned long port);
+extern unsigned long	readb(unsigned long addr);
+extern unsigned long	readw(unsigned long addr);
+extern unsigned long	readl(unsigned long addr);
+extern void		writeb(unsigned char b, unsigned long addr);
+extern void		writew(unsigned short b, unsigned long addr);
+extern void		writel(unsigned int b, unsigned long addr);
+
+#endif /* __KERNEL__ */
+
+#ifdef __KERNEL__
+
 /*
  * The "address" in IO memory space is not clearly either an integer or a
  * pointer. We will accept both, thus the casts.
@@ -256,8 +280,6 @@ static inline void iounmap(void *addr)
 #ifndef writeq
 # define writeq(v,a)	_writeq((v),(unsigned long)(a))
 #endif
-
-#ifdef __KERNEL__
 
 /*
  * String version of IO memory access ops:

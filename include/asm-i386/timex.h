@@ -12,4 +12,22 @@
 	(1000000/CLOCK_TICK_FACTOR) / (CLOCK_TICK_RATE/CLOCK_TICK_FACTOR)) \
 		<< (SHIFT_SCALE-SHIFT_HZ)) / HZ)
 
+/*
+ * Standard way to access the cycle counter on i586+ CPUs.
+ * Currently only used on SMP.
+ */
+typedef unsigned long long cycles_t;
+
+extern cycles_t cacheflush_time;
+
+static inline cycles_t get_cycles (void)
+{
+	cycles_t value;
+
+	__asm__("rdtsc"
+		:"=a" (*(((int *)&value)+0)),
+		 "=d" (*(((int *)&value)+1)));
+	return value;
+}
+
 #endif

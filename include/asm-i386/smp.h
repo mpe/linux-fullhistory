@@ -185,10 +185,6 @@ extern inline int cpu_logical_map(int cpu)
 extern void smp_callin(void);
 extern void smp_boot_cpus(void);
 extern void smp_store_cpu_info(int id);		/* Store per CPU info (like the initial udelay numbers */
-extern void smp_message_pass(int target, int msg, unsigned long data, int wait);
-
-extern volatile unsigned long smp_proc_in_lock[NR_CPUS]; /* for computing process time */
-extern volatile int smp_process_available;
 
 /*
  *	APIC handlers: Note according to the Intel specification update
@@ -237,9 +233,7 @@ extern __inline int hard_smp_processor_id(void)
  *	processes are run.
  */
  
-#define PROC_CHANGE_PENALTY	10		/* Schedule penalty */
+#define PROC_CHANGE_PENALTY	15		/* Schedule penalty */
 
-#define SMP_FROM_INT		1
-#define SMP_FROM_SYSCALL	2
 #endif
 #endif

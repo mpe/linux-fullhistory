@@ -326,7 +326,7 @@ __EXTERN_INLINE unsigned int cia_inb(unsigned long addr)
 
 __EXTERN_INLINE void cia_outb(unsigned char b, unsigned long addr)
 {
-	unsigned int w = __kernel_insbl(b, addr & 3);
+	unsigned long w = __kernel_insbl(b, addr & 3);
 	*(vuip) ((addr << 5) + CIA_IO + 0x00) = w;
 	wmb();
 }
@@ -340,7 +340,7 @@ __EXTERN_INLINE unsigned int cia_inw(unsigned long addr)
 
 __EXTERN_INLINE void cia_outw(unsigned short b, unsigned long addr)
 {
-	unsigned int w = __kernel_inswl(b, addr & 3);
+	unsigned long w = __kernel_inswl(b, addr & 3);
 	*(vuip) ((addr << 5) + CIA_IO + 0x08) = w;
 	wmb();
 }

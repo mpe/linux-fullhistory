@@ -15,7 +15,7 @@ typedef struct { volatile int counter; } atomic_t;
 typedef struct { int counter; } atomic_t;
 #endif
 
-#define ATOMIC_INIT(i)	{ (i) }
+#define ATOMIC_INIT(i)	( (atomic_t) { (i) } )
 
 #define atomic_read(v)		((v)->counter)
 #define atomic_set(v,i)		((v)->counter = (i))

@@ -40,7 +40,28 @@ typedef struct {
 	unsigned int depth;			/* Disable depth for nested irq disables */
 } irq_desc_t;
 
-#define IRQ0_TRAP_VECTOR 0x51
+/*
+ * Special IRQ vectors used by the SMP architecture:
+ *
+ * (some of the following vectors are 'rare', they might be merged
+ *  into a single vector to save vector space. TLB, reschedule and
+ *  local APIC vectors are performance-critical.)
+ */
+#define RESCHEDULE_VECTOR	0x30
+#define INVALIDATE_TLB_VECTOR	0x31
+#define STOP_CPU_VECTOR		0x40
+#define LOCAL_TIMER_VECTOR	0x41
+#define MTRR_CHANGE_VECTOR	0x50
+
+/*
+ * First vector available to drivers: (vectors 0x51-0xfe)
+ */
+#define IRQ0_TRAP_VECTOR	0x51
+
+/*
+ * This IRQ should never happen, but we print a message nevertheless.
+ */
+#define SPURIOUS_APIC_VECTOR	0xff
 
 extern irq_desc_t irq_desc[NR_IRQS];
 extern int irq_vector[NR_IRQS];
@@ -56,17 +77,18 @@ extern int handle_IRQ_event(unsigned int, struct pt_regs *, struct irqaction *);
  * Interrupt entry/exit code at both C and assembly level
  */
 
-void mask_irq(unsigned int irq);
-void unmask_irq(unsigned int irq);
-void disable_8259A_irq(unsigned int irq);
-int i8259A_irq_pending(unsigned int irq);
-void ack_APIC_irq(void);
-void setup_IO_APIC(void);
-int IO_APIC_get_PCI_irq_vector(int bus, int slot, int fn);
-void make_8259A_irq(unsigned int irq);
-void send_IPI(int dest, int vector);
-void init_pic_mode(void);
-void print_IO_APIC(void);
+extern void mask_irq(unsigned int irq);
+extern void unmask_irq(unsigned int irq);
+extern void disable_8259A_irq(unsigned int irq);
+extern int i8259A_irq_pending(unsigned int irq);
+extern void ack_APIC_irq(void);
+extern void setup_IO_APIC(void);
+extern int IO_APIC_get_PCI_irq_vector(int bus, int slot, int fn);
+extern void make_8259A_irq(unsigned int irq);
+extern void FASTCALL(send_IPI_self(int vector));
+extern void smp_send_mtrr(void);
+extern void init_pic_mode(void);
+extern void print_IO_APIC(void);
 
 extern unsigned long long io_apic_irqs;
 

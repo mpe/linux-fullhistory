@@ -953,7 +953,7 @@ static inline void self_IPI(unsigned int irq)
 
 	if ((status & (IRQ_PENDING | IRQ_REPLAY)) == IRQ_PENDING) {
 		desc->status = status | IRQ_REPLAY;
-		send_IPI(APIC_DEST_SELF, IO_APIC_VECTOR(irq));
+		send_IPI_self(IO_APIC_VECTOR(irq));
 	}
 }
 

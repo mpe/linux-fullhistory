@@ -117,6 +117,7 @@ extern inline void disable_bh(int nr)
 {
 	bh_mask &= ~(1 << nr);
 	atomic_inc(&bh_mask_count[nr]);
+	synchronize_bh();
 }
 
 extern inline void enable_bh(int nr)

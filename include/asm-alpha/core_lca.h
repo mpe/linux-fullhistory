@@ -262,7 +262,7 @@ __EXTERN_INLINE unsigned int lca_inb(unsigned long addr)
 
 __EXTERN_INLINE void lca_outb(unsigned char b, unsigned long addr)
 {
-	unsigned int w;
+	unsigned long w;
 
 	w = __kernel_insbl(b, addr & 3);
 	*(vuip) ((addr << 5) + LCA_IO + 0x00) = w;
@@ -277,7 +277,7 @@ __EXTERN_INLINE unsigned int lca_inw(unsigned long addr)
 
 __EXTERN_INLINE void lca_outw(unsigned short b, unsigned long addr)
 {
-	unsigned int w;
+	unsigned long w;
 
 	w = __kernel_inswl(b, addr & 3);
 	*(vuip) ((addr << 5) + LCA_IO + 0x08) = w;
@@ -340,7 +340,7 @@ __EXTERN_INLINE unsigned long lca_readq(unsigned long addr)
 __EXTERN_INLINE void lca_writeb(unsigned char b, unsigned long addr)
 {
 	unsigned long msb;
-	unsigned int w;
+	unsigned long w;
 
 	if (addr >= (1UL << 24)) {
 		msb = addr & 0xf8000000;
@@ -354,7 +354,7 @@ __EXTERN_INLINE void lca_writeb(unsigned char b, unsigned long addr)
 __EXTERN_INLINE void lca_writew(unsigned short b, unsigned long addr)
 {
 	unsigned long msb;
-	unsigned int w;
+	unsigned long w;
 
 	if (addr >= (1UL << 24)) {
 		msb = addr & 0xf8000000;

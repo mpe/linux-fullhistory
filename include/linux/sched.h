@@ -11,6 +11,7 @@ extern unsigned long event;
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/times.h>
+#include <linux/timex.h>
 
 #include <asm/system.h>
 #include <asm/semaphore.h>
@@ -219,6 +220,7 @@ struct task_struct {
 /* various fields */
 	long counter;
 	long priority;
+	cycles_t avg_slice;
 /* SMP and runqueue state */
 	int has_cpu;
 	int processor;
@@ -336,7 +338,7 @@ struct task_struct {
  */
 #define INIT_TASK \
 /* state etc */	{ 0,0,0,KERNEL_DS,&default_exec_domain,0, \
-/* counter */	DEF_PRIORITY,DEF_PRIORITY, \
+/* counter */	DEF_PRIORITY,DEF_PRIORITY,0, \
 /* SMP */	0,0,0,-1, \
 /* schedlink */	&init_task,&init_task, &init_task, &init_task, \
 /* binfmt */	NULL, \

@@ -140,10 +140,17 @@ int cpu_idle(void *unused)
 	current->priority = 0;
 	current->counter = -100;
 	while(1) {
-		if (current_cpu_data.hlt_works_ok && !hlt_counter && !current->need_resched)
+		if (current_cpu_data.hlt_works_ok && !hlt_counter &&
+				 !current->need_resched)
 			__asm__("hlt");
-		schedule();
-		check_pgt_cache();
+		/*
+		 * although we are an idle CPU, we do not want to
+		 * get into the scheduler unnecessarily.
+		 */
+		if (current->need_resched) {
+			schedule();
+			check_pgt_cache();
+		}
 	}
 }
 

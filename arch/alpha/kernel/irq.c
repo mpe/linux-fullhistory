@@ -38,13 +38,6 @@ unsigned int local_irq_count[NR_CPUS];
 unsigned int local_bh_count[NR_CPUS];
 unsigned long hardirq_no[NR_CPUS];
 
-#define RTC_IRQ    8
-#ifdef CONFIG_RTC
-#define TIMER_IRQ  0        /* timer is the pit */
-#else
-#define TIMER_IRQ  RTC_IRQ  /* the timer is, in fact, the rtc */
-#endif
-
 #if NR_IRQS > 64
 #  error Unable to handle more than 64 irq levels.
 #endif

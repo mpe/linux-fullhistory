@@ -35,12 +35,7 @@
 #include <linux/timex.h>
 
 #include "proto.h"
-
-#ifdef CONFIG_RTC 
-#define TIMER_IRQ 0  /* using pit for timer */
-#else 
-#define TIMER_IRQ 8  /* using rtc for timer */
-#endif
+#include "irq.h"
 
 static int set_rtc_mmss(unsigned long);
 

@@ -1177,6 +1177,7 @@ asmlinkage void __init start_kernel(void)
 	 */
 	smp_init();
 	kernel_thread(init, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
+	current->need_resched = 1;
  	cpu_idle(NULL);
 }
 

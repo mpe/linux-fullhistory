@@ -92,6 +92,12 @@ ruffian_device_interrupt(unsigned long vector, struct pt_regs *regs)
 		i = ffz(~pld);
 		pld &= pld - 1; /* clear least bit set */
 		if (i == 7) { /* if ISA int */
+			/* Ruffian does not have the RTC connected to 
+			   the CPU timer interrupt.  Instead, it uses the
+			   PIT connected to IRQ 0.  So we must detect that
+			   and route that specifically to where we expected
+			   to find the timer interrupt come in.  */
+
 			/* Copy this code from isa_device_interrupt because
 			   we need to hook into int 0 for the timer.  I
 			   refuse to soil device_interrupt with ifdefs.  */
@@ -107,7 +113,7 @@ ruffian_device_interrupt(unsigned long vector, struct pt_regs *regs)
 			if (j == 7 && !(inb(0x20) & 0x80)) {
 				/* It's only a passive release... */
 			} else if (j == 0) {
-			  	handle_irq(8, -1, regs); /* fake it */
+			  	handle_irq(TIMER_IRQ, -1, regs);
 				ruffian_ack_irq(0);
 			} else {
 				handle_irq(j, j, regs);

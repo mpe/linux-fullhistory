@@ -153,10 +153,10 @@ ENTRY(lcall7)
 	ALIGN
 	.globl	ret_from_fork
 ret_from_fork:
-	GET_CURRENT(%ebx)
 #ifdef __SMP__
-	lock ; btrl $0, SYMBOL_NAME(scheduler_lock)
+	call SYMBOL_NAME(schedule_tail)
 #endif /* __SMP__ */
+	GET_CURRENT(%ebx)
 	jmp	ret_from_sys_call
 
 /*

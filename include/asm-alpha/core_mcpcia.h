@@ -264,7 +264,7 @@ __EXTERN_INLINE void mcpcia_outb(unsigned char b, unsigned long in_addr)
 {
 	unsigned long addr = in_addr & 0xffffffffUL;
 	unsigned long hose = (in_addr >> 32) & 3;
-	unsigned int w;
+	unsigned long w;
 
 	w = __kernel_insbl(b, addr & 3);
 	*(vuip) ((addr << 5) + MCPCIA_IO(hose) + 0x00) = w;
@@ -283,7 +283,7 @@ __EXTERN_INLINE void mcpcia_outw(unsigned short b, unsigned long in_addr)
 {
 	unsigned long addr = in_addr & 0xffffffffUL;
 	unsigned long hose = (in_addr >> 32) & 3;
-	unsigned int w;
+	unsigned long w;
 
 	w = __kernel_inswl(b, addr & 3);
 	*(vuip) ((addr << 5) + MCPCIA_IO(hose) + 0x08) = w;

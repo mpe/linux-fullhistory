@@ -378,7 +378,7 @@ __EXTERN_INLINE unsigned int t2_inw(unsigned long addr)
 
 __EXTERN_INLINE void t2_outw(unsigned short b, unsigned long addr)
 {
-	unsigned int w;
+	unsigned long w;
 
 	w = __kernel_inswl(b, addr & 3);
 	*(vuip) ((addr << 5) + T2_IO + 0x08) = w;
