@@ -626,6 +626,13 @@ static struct usb_driver ftdi_driver = {
 	.id_table =	id_table_combined,
 };
 
+static char *ftdi_chip_name[] = {
+	[SIO] = "SIO",	/* the serial part of FT8U100AX */
+	[FT8U232AM] = "FT8U232AM",
+	[FT232BM] = "FT232BM",
+	[FT2232C] = "FT2232C",
+};
+
 
 /* Constants for read urb and write urb */
 #define BUFSZ 512
@@ -1004,7 +1011,6 @@ static __u32 get_ftdi_divisor(struct usb_serial_port * port)
 	struct ftdi_private *priv = usb_get_serial_port_data(port);
 	__u32 div_value = 0;
 	int div_okay = 1;
-	char *chip_name = "";
 	int baud;
 
 	/*
@@ -1049,7 +1055,6 @@ static __u32 get_ftdi_divisor(struct usb_serial_port * port)
 	if (!baud) baud = 9600;	
 	switch(priv->chip_type) {
 	case SIO: /* SIO chip */
-		chip_name = "SIO";
 		switch(baud) {
 		case 300: div_value = ftdi_sio_b300; break;
 		case 600: div_value = ftdi_sio_b600; break;
@@ -1069,7 +1074,6 @@ static __u32 get_ftdi_divisor(struct usb_serial_port * port)
 		}
 		break;
 	case FT8U232AM: /* 8U232AM chip */
-		chip_name = "FT8U232AM";
 		if (baud <= 3000000) {
 			div_value = ftdi_232am_baud_to_divisor(baud);
 		} else {
@@ -1080,11 +1084,6 @@ static __u32 get_ftdi_divisor(struct usb_serial_port * port)
 		break;
 	case FT232BM: /* FT232BM chip */
 	case FT2232C: /* FT2232C chip */
-		if (priv->chip_type == FT2232C) {
-			chip_name = "FT2232C";
-		} else {
-			chip_name = "FT232BM";
-		}
 		if (baud <= 3000000) {
 			div_value = ftdi_232bm_baud_to_divisor(baud);
 		} else {
@@ -1097,7 +1096,8 @@ static __u32 get_ftdi_divisor(struct usb_serial_port * port)
 
 	if (div_okay) {
 		dbg("%s - Baud rate set to %d (divisor 0x%lX) on chip %s",
-			__FUNCTION__, baud, (unsigned long)div_value, chip_name);
+			__FUNCTION__, baud, (unsigned long)div_value,
+			ftdi_chip_name[priv->chip_type]);
 	}
 
 	return(div_value);
