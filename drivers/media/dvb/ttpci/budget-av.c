@@ -188,6 +188,7 @@ static int ciintf_slot_reset(struct dvb_ca_en50221 *ca, int slot)
 {
 	struct budget_av *budget_av = (struct budget_av *) ca->data;
 	struct saa7146_dev *saa = budget_av->budget.dev;
+	int max = 20;
 
 	if (slot != 0)
 		return -EINVAL;
@@ -199,7 +200,6 @@ static int ciintf_slot_reset(struct dvb_ca_en50221 *ca, int slot)
 	msleep(100);
 	saa7146_setgpio(saa, 0, SAA7146_GPIO_OUTLO);
 
-	int max = 20;
 	while (--max > 0 && ciintf_read_attribute_mem(ca, slot, 0) != 0x1d)
 		msleep(100);
 

@@ -175,8 +175,13 @@ static void dtt200u_fe_release(struct dvb_frontend* fe)
 static int dtt200u_pid_control(struct dvb_frontend *fe,int index, int pid,int onoff)
 {
 	struct dtt200u_fe_state *state = (struct dtt200u_fe_state*) fe->demodulator_priv;
+	u8 b_pid[4];
 	pid = onoff ? pid : 0;
-	u8 b_pid[4] = { 0x04, index, pid & 0xff, (pid >> 8) & 0xff };
+
+	b_pid[0] = 0x04;
+	b_pid[1] = index;
+	b_pid[2] = pid & 0xff;
+	b_pid[3] = (pid >> 8) & 0xff;
 
 	dibusb_write_usb(state->dib,b_pid,4);
 	return 0;

@@ -161,10 +161,10 @@ static int av7110_ir_write_proc(struct file *file, const char __user *buffer,
 
 int __init av7110_ir_init(void)
 {
+	static struct proc_dir_entry *e;
+
 	if (ir_initialized)
 		return 0;
-
-	static struct proc_dir_entry *e;
 
 	init_timer(&keyup_timer);
 	keyup_timer.data = 0;

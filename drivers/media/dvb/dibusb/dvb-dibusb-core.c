@@ -425,8 +425,8 @@ static struct dibusb_usb_device * dibusb_device_class_quirk(struct usb_device *u
 static struct dibusb_usb_device * dibusb_find_device (struct usb_device *udev,int *cold)
 {
 	int i,j;
-	*cold = -1;
 	struct dibusb_usb_device *dev = NULL;
+	*cold = -1;
 
 	for (i = 0; i < sizeof(dibusb_devices)/sizeof(struct dibusb_usb_device); i++) {
 		for (j = 0; j < DIBUSB_ID_MAX_NUM && dibusb_devices[i].cold_ids[j] != NULL; j++) {
