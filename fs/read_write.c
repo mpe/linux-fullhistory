@@ -6,9 +6,9 @@
 
 #include <errno.h>
 #include <sys/types.h>
-#include <sys/stat.h>
 #include <sys/dirent.h>
 
+#include <linux/stat.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/minix_fs.h>

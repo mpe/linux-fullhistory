@@ -24,7 +24,7 @@
 #define __NR_chmod		 15
 #define __NR_chown		 16
 #define __NR_break		 17
-#define __NR_stat		 18
+#define __NR_oldstat		 18
 #define __NR_lseek		 19
 #define __NR_getpid		 20
 #define __NR_mount		 21
@@ -34,7 +34,7 @@
 #define __NR_stime		 25
 #define __NR_ptrace		 26
 #define __NR_alarm		 27
-#define __NR_fstat		 28
+#define __NR_oldfstat		 28
 #define __NR_pause		 29
 #define __NR_utime		 30
 #define __NR_stty		 31
@@ -65,7 +65,7 @@
 #define __NR_mpx		 56
 #define __NR_setpgid		 57
 #define __NR_ulimit		 58
-#define __NR_uname		 59
+#define __NR_olduname		 59
 #define __NR_umask		 60
 #define __NR_chroot		 61
 #define __NR_ustat		 62
@@ -90,7 +90,7 @@
 #define __NR_setgroups		 81
 #define __NR_select		 82
 #define __NR_symlink		 83
-#define __NR_lstat		 84
+#define __NR_oldlstat		 84
 #define __NR_readlink		 85
 #define __NR_uselib		 86
 #define __NR_swapon		 87
@@ -102,10 +102,6 @@
 #define __NR_ftruncate		 93
 #define __NR_fchmod		 94
 #define __NR_fchown		 95
-/*
- * Not all of these are implemented yet, but these are the
- * numbers they will use.
- */
 #define __NR_getpriority	 96
 #define __NR_setpriority	 97
 #define __NR_profil		 98
@@ -114,11 +110,14 @@
 #define __NR_ioperm		101
 #define __NR_socketcall		102
 #define __NR_syslog		103
-
-extern int errno;
-
 #define __NR_setitimer		104
 #define __NR_getitimer		105
+#define __NR_stat		106
+#define __NR_lstat		107
+#define __NR_fstat		108
+#define __NR_uname		109
+
+extern int errno;
 
 /* XXX - _foo needs to be __foo, while __NR_bar could be _NR_bar. */
 #define _syscall0(type,name) \

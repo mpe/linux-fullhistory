@@ -716,6 +716,9 @@ void mem_init(long start_mem, long end_mem)
 {
 	int i;
 
+	end_mem &= 0xfffff000;
+	start_mem += 0xfff;
+	start_mem &= 0xfffff000;
 	swap_device = 0;
 	swap_file = NULL;
 	HIGH_MEMORY = end_mem;

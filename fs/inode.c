@@ -5,7 +5,7 @@
  */
 
 #include <linux/string.h>
-#include <sys/stat.h>
+#include <linux/stat.h>
 
 #include <linux/sched.h>
 #include <linux/kernel.h>

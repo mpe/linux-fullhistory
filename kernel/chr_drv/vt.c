@@ -24,9 +24,8 @@
  * console (vt and kd) routines, as defined by usl svr4 manual
  */
 
-struct vt_cons vt_cons[MAX_CONSOLES];
+struct vt_cons vt_cons[NR_CONSOLES];
 
-extern int NR_CONSOLES;
 extern unsigned char kleds;
 extern unsigned char kraw;
 extern unsigned char ke0;

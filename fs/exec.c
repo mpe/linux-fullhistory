@@ -20,7 +20,7 @@
 #include <signal.h>
 #include <errno.h>
 #include <linux/string.h>
-#include <sys/stat.h>
+#include <linux/stat.h>
 #include <sys/ptrace.h>
 #include <a.out.h>
 #include <fcntl.h>

@@ -8,7 +8,7 @@
  *	console.c
  *
  * This module implements the console io functions
- *	'void con_init(void)'
+ *	'long con_init(long)'
  *	'void con_write(struct tty_queue * queue)'
  * Hopefully this will be a rather complete VT102 implementation.
  *
@@ -77,8 +77,6 @@
 
 #define NPAR 16
 
-int NR_CONSOLES = 0;
-
 extern void vt_init(void);
 extern void keyboard_interrupt(void);
 extern void set_leds(void);
@@ -124,12 +122,12 @@ static struct {
 	unsigned char	vc_kbdmode;
 	char *		vc_translate;
 	/* additional information is in vt_kern.h */
-} vc_cons [MAX_CONSOLES];
+} vc_cons [NR_CONSOLES];
 
 #define MEM_BUFFER_SIZE (2*80*50*8) 
 
-unsigned short *vc_scrbuf[MAX_CONSOLES];
-unsigned short vc_scrmembuf[MEM_BUFFER_SIZE/2];
+unsigned short *vc_scrbuf[NR_CONSOLES];
+static unsigned short * vc_scrmembuf;
 static int console_blanked = 0;
 
 #define origin		(vc_cons[currcons].vc_origin)
@@ -577,7 +575,7 @@ void con_write(struct tty_struct * tty)
 
 	wake_up(&tty->write_q->proc_list);
 	currcons = tty - tty_table;
-	if (currcons >= MAX_CONSOLES) {
+	if (currcons >= NR_CONSOLES) {
 		printk("con_write: illegal tty\n\r");
 		return;
 	}
@@ -867,7 +865,7 @@ return s;
 }
 
 /*
- *  void con_init(void);
+ *  long con_init(long);
  *
  * This routine initalizes console interrupts, and does nothing
  * else. If you want the screen to clear, call tty_write with
@@ -876,7 +874,7 @@ return s;
  * Reads the information preserved by setup.s to determine the current display
  * type and sets everything accordingly.
  */
-void con_init(void)
+long con_init(long kmem_start)
 {
 	register unsigned char a;
 	char *display_desc = "????";
@@ -886,11 +884,14 @@ void con_init(void)
 	int orig_x = ORIG_X;
 	int orig_y = ORIG_Y;
 
+	vc_scrmembuf = (unsigned short *) kmem_start;
 	video_num_columns = ORIG_VIDEO_COLS;
 	video_size_row = video_num_columns * 2;
 	video_num_lines = ORIG_VIDEO_LINES;
 	video_page = ORIG_VIDEO_PAGE;
 	video_erase_char = 0x0720;
+	screen_size = (video_num_lines * video_size_row);
+	kmem_start += NR_CONSOLES * screen_size;
 	timer_table[BLANK_TIMER].fn = blank_screen;
 	timer_table[BLANK_TIMER].expires = 0;
 	if (blankinterval) {
@@ -947,13 +948,7 @@ void con_init(void)
 	
 	memsetw(vc_scrmembuf,video_erase_char,MEM_BUFFER_SIZE/2);
 	base = (long)vc_scrmembuf;
-	screen_size = (video_num_lines * video_size_row);
-	NR_CONSOLES = MEM_BUFFER_SIZE / screen_size;
-	if (NR_CONSOLES > MAX_CONSOLES)
-		NR_CONSOLES = MAX_CONSOLES;
-	if (!NR_CONSOLES)
-		NR_CONSOLES = 1;
-	
+
 	/* Initialize the variables used for scrolling (mostly EGA/VGA)	*/
 	
 	base = origin = video_mem_start = (long)vc_scrmembuf;
@@ -978,14 +973,14 @@ void con_init(void)
         vc_cons[0].vc_bold_attr = -1;
 
 	gotoxy(currcons,orig_x,orig_y);
-  	for (currcons = 1; currcons<NR_CONSOLES; currcons++) {
+  	for (currcons = 1 ; currcons < NR_CONSOLES ; currcons++) {
 		vc_cons[currcons] = vc_cons[0];
 		vt_cons[currcons] = vt_cons[0];
 		base += screen_size;
-		origin = video_mem_start = base;
+		x = y = 0;
+		pos = origin = video_mem_start = base;
 		scr_end = video_mem_end = base + screen_size;
 		vc_scrbuf[currcons] = (unsigned short *) origin;
-		gotoxy(currcons,0,0);
 	}
 	currcons = 0;	
 	
@@ -1002,6 +997,7 @@ void con_init(void)
 	a=inb_p(0x61);
 	outb_p(a|0x80,0x61);
 	outb_p(a,0x61);
+	return kmem_start;
 }
 
 void kbdsave(int new_console)
@@ -1108,7 +1104,7 @@ int do_screendump(int arg)
 
 	verify_area(buf,2+video_num_columns*video_num_lines);
 	currcons = get_fs_byte(buf+1);
-	if ((currcons<0) || (currcons>NR_CONSOLES))
+	if ((currcons<0) || (currcons>=NR_CONSOLES))
 		return -EIO;
 	put_fs_byte((char)(video_num_lines),buf++);	
 	put_fs_byte((char)(video_num_columns),buf++);

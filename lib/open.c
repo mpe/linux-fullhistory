@@ -5,7 +5,7 @@
  */
 
 #define __LIBRARY__
-#include <unistd.h>
+#include <linux/unistd.h>
 #include <stdarg.h>
 
 int open(const char * filename, int flag, ...)

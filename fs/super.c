@@ -11,11 +11,11 @@
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
 #include <linux/kernel.h>
+#include <linux/stat.h>
 #include <asm/system.h>
 #include <asm/segment.h>
 
 #include <errno.h>
-#include <sys/stat.h>
 
 int sync_dev(int dev);
 void wait_for_keypress(void);

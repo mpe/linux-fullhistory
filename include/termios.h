@@ -211,6 +211,10 @@ struct termios {
 #define	TCSADRAIN	1
 #define	TCSAFLUSH	2
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 extern speed_t cfgetispeed(struct termios *termios_p);
 extern speed_t cfgetospeed(struct termios *termios_p);
 extern int cfsetispeed(struct termios *termios_p, speed_t speed);
@@ -222,5 +226,9 @@ extern int tcgetattr(int fildes, struct termios *termios_p);
 extern int tcsendbreak(int fildes, int duration);
 extern int tcsetattr(int fildes, int optional_actions,
 	struct termios *termios_p);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

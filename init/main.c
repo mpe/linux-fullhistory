@@ -53,7 +53,7 @@ static char printbuf[1024];
 extern int vsprintf();
 extern void init(void);
 extern void blk_dev_init(void);
-extern void chr_dev_init(void);
+extern long chr_dev_init(long);
 extern void hd_init(void);
 extern void floppy_init(void);
 extern void sock_init(void);
@@ -165,11 +165,11 @@ void start_kernel(void)
 #ifdef RAMDISK
 	main_memory_start += rd_init(main_memory_start, RAMDISK*1024);
 #endif
-	mem_init(main_memory_start,memory_end);
 	trap_init();
 	sched_init();
-	chr_dev_init();
+	main_memory_start = chr_dev_init(main_memory_start);
 	blk_dev_init();
+	mem_init(main_memory_start,memory_end);
 	time_init();
 	printk("Linux version " UTS_RELEASE " " __DATE__ " " __TIME__ "\n");
 	buffer_init(buffer_memory_end);

@@ -10,6 +10,6 @@ extern struct vt_cons {
 	unsigned char	vc_kbdraw;
 	unsigned char	vc_kbde0;
 	unsigned char   vc_kbdleds;
-} vt_cons[MAX_CONSOLES];
+} vt_cons[NR_CONSOLES];
 
 #endif /* _VT_KERN_H */

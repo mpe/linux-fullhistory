@@ -10,8 +10,8 @@
  */
 
 #include <errno.h>
-#include <sys/stat.h>
 
+#include <linux/stat.h>
 #include <linux/mm.h>
 #include <linux/string.h>
 #include <linux/sched.h>

@@ -7,10 +7,10 @@
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
 #include <linux/tty.h>
+#include <linux/stat.h>
 
 #include <errno.h>
 #include <fcntl.h>
-#include <sys/stat.h>
 
 /*
  * Called every time a minix block special file is opened

@@ -9,9 +9,9 @@
 #include <sys/types.h>
 #include <utime.h>
 
-#include <sys/stat.h>
 #include <sys/vfs.h>
 
+#include <linux/stat.h>
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -141,8 +141,8 @@ int sys_access(const char * filename,int mode)
 	iput(inode);
 	if (current->uid == inode->i_uid)
 		res >>= 6;
-	else if (current->gid == inode->i_gid)
-		res >>= 6;
+	else if (in_group_p(inode->i_gid))
+		res >>= 3;
 	if ((res & 0007 & mode) == mode)
 		return 0;
 	/*

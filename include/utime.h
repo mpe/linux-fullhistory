@@ -8,6 +8,14 @@ struct utimbuf {
 	time_t modtime;
 };
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 extern int utime(const char *filename, struct utimbuf *times);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

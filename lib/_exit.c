@@ -5,7 +5,7 @@
  */
 
 #define __LIBRARY__
-#include <unistd.h>
+#include <linux/unistd.h>
 
 volatile void _exit(int exit_code)
 {

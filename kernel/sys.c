@@ -12,7 +12,7 @@
 #include <linux/config.h>
 #include <asm/segment.h>
 #include <sys/times.h>
-#include <sys/utsname.h>
+#include <linux/utsname.h>
 #include <sys/param.h>
 #include <sys/resource.h>
 #include <linux/string.h>
@@ -443,19 +443,34 @@ int in_group_p(gid_t grp)
 	return 0;
 }
 
-static struct utsname thisname = {
+static struct new_utsname thisname = {
 	UTS_SYSNAME, UTS_NODENAME, UTS_RELEASE, UTS_VERSION, UTS_MACHINE
 };
 
-int sys_uname(struct utsname * name)
+int sys_newuname(struct new_utsname * name)
 {
-	int i;
+	if (!name)
+		return -EFAULT;
+	verify_area(name, sizeof *name);
+	memcpy_tofs(name,&thisname,sizeof *name);
+	return 0;
+}
 
+int sys_uname(struct old_utsname * name)
+{
 	if (!name)
 		return -EINVAL;
 	verify_area(name,sizeof *name);
-	for(i=0;i<sizeof *name;i++)
-		put_fs_byte(((char *) &thisname)[i],i+(char *) name);
+	memcpy_tofs(&name->sysname,&thisname.sysname,__OLD_UTS_LEN);
+	put_fs_byte(0,name->sysname+__OLD_UTS_LEN);
+	memcpy_tofs(&name->nodename,&thisname.nodename,__OLD_UTS_LEN);
+	put_fs_byte(0,name->nodename+__OLD_UTS_LEN);
+	memcpy_tofs(&name->release,&thisname.release,__OLD_UTS_LEN);
+	put_fs_byte(0,name->release+__OLD_UTS_LEN);
+	memcpy_tofs(&name->version,&thisname.version,__OLD_UTS_LEN);
+	put_fs_byte(0,name->version+__OLD_UTS_LEN);
+	memcpy_tofs(&name->machine,&thisname.machine,__OLD_UTS_LEN);
+	put_fs_byte(0,name->machine+__OLD_UTS_LEN);
 	return 0;
 }
 
@@ -468,15 +483,13 @@ int sys_sethostname(char *name, int len)
 	
 	if (!suser())
 		return -EPERM;
-	if (len > MAXHOSTNAMELEN)
+	if (len > __NEW_UTS_LEN)
 		return -EINVAL;
 	for (i=0; i < len; i++) {
 		if ((thisname.nodename[i] = get_fs_byte(name+i)) == 0)
-			break;
+			return 0;
 	}
-	if (thisname.nodename[i]) {
-		thisname.nodename[i>MAXHOSTNAMELEN ? MAXHOSTNAMELEN : i] = 0;
-	}
+	thisname.nodename[__NEW_UTS_LEN] = 0;
 	return 0;
 }
 

@@ -16,7 +16,7 @@
 #include <fcntl.h>
 #include <errno.h>
 #include <const.h>
-#include <sys/stat.h>
+#include <linux/stat.h>
 
 struct inode * _namei(const char * filename, struct inode * base,
 	int follow_links);

@@ -3,11 +3,11 @@
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
+#include <linux/stat.h>
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <sys/socket.h>
 #include <sys/un.h>
-#include <sys/stat.h>
 #include <fcntl.h>
 #include <termios.h>
 #include "kern_sock.h"

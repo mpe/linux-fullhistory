@@ -48,8 +48,16 @@ struct flock {
 	pid_t l_pid;
 };
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 extern int creat(const char * filename,mode_t mode);
 extern int fcntl(int fildes,int cmd, ...);
 extern int open(const char * filename, int flags, ...);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif

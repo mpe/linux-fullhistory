@@ -8,12 +8,11 @@
 
 #include <errno.h>
 
-#include <sys/stat.h>
-
 #include <asm/segment.h>
 
 #include <linux/fs.h>
 #include <linux/minix_fs.h>
+#include <linux/stat.h>
 
 static int minix_readdir(struct inode *, struct file *, struct dirent *, int);
 

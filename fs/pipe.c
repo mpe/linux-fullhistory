@@ -150,6 +150,7 @@ int sys_pipe(unsigned long * fildes)
 	int fd[2];
 	int i,j;
 
+	verify_area(fildes,8);
 	j=0;
 	for(i=0;j<2 && i<NR_FILE;i++)
 		if (!file_table[i].f_count)

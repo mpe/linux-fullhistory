@@ -9,7 +9,7 @@
  *
  * This module implements the rs232 io functions
  *	void rs_write(struct tty_struct * queue);
- *	void rs_init(void);
+ *	long rs_init(long);
  * and all interrupts pertaining to serial IO.
  */
 
@@ -39,8 +39,7 @@ int port_table[] = {
 	PORT_UNKNOWN,
 	PORT_UNKNOWN,
 	PORT_UNKNOWN
-};
-	
+};	
 
 static void modem_status_intr(unsigned line, unsigned port, struct tty_struct * tty)
 {
@@ -48,11 +47,12 @@ static void modem_status_intr(unsigned line, unsigned port, struct tty_struct * 
 
 	if ((status & 0x88) == 0x08 && tty->pgrp > 0)
 		kill_pg(tty->pgrp,SIGHUP,1);
-
+#if 0
 	if ((status & 0x10) == 0x10)
 		tty->stopped = 0;
 	else
 		tty->stopped = 1;
+#endif
 }
 
 /*
@@ -89,17 +89,11 @@ static void send_intr(unsigned line, unsigned port, struct tty_struct * tty)
 
 static void receive_intr(unsigned line, unsigned port, struct tty_struct * tty)
 {
-	if (FULL(tty->read_q))
-		return;
-
-	outb_p((inb(port+4) & 0x0d), port+4);
-
-	do {
+	while (!FULL(tty->read_q)) {
+		if (!(inb(port+5) & 1))
+			break;
 		PUTCH(inb(port),tty->read_q);
-	} while ((inb(port+5) & 0x01 != 0) && !FULL(tty->read_q));
-
-	outb_p((inb(port+4) | 0x02), port+4);
-
+	};
 	timer_active |= (1<<(SER1_TIMER-1))<<line;
 }
 
@@ -145,7 +139,7 @@ void do_IRQ3(void)
 }
 
 /*
- * IRQ4 normally handles com1 and com2
+ * IRQ4 normally handles com1 and com3
  */
 void do_IRQ4(void)
 {
@@ -291,7 +285,7 @@ void serial_open(unsigned line)
 	sti();
 }
 
-void rs_init(void)
+long rs_init(long kmem_start)
 {
 /* SERx_TIMER timers are used for receiving: timeout is always 0 (immediate) */
 	timer_table[SER1_TIMER].fn = com1_timer;
@@ -318,6 +312,7 @@ void rs_init(void)
 	init(tty_table[66].read_q->data, 3);
 	init(tty_table[67].read_q->data, 4);
 	outb(inb_p(0x21)&0xE7,0x21);
+	return kmem_start;
 }
 
 /*

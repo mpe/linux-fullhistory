@@ -7,13 +7,13 @@
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
 #include <linux/kernel.h>
+#include <linux/string.h>
+#include <linux/stat.h>
 #include <asm/segment.h>
 
-#include <linux/string.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <const.h>
-#include <sys/stat.h>
 
 /*
  * comment out this line if you want names > MINIX_NAME_LEN chars to be

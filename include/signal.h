@@ -80,6 +80,10 @@ struct sigaction {
 	void (*sa_restorer)(void);
 };
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 void (*signal(int _sig, void (*_func)(int)))(int);
 int raise(int sig);
 int kill(pid_t pid, int sig);
@@ -92,5 +96,9 @@ int sigpending(sigset_t *set);
 int sigprocmask(int how, sigset_t *set, sigset_t *oldset);
 int sigsuspend(sigset_t *sigmask);
 int sigaction(int sig, struct sigaction *act, struct sigaction *oldact);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* _SIGNAL_H */

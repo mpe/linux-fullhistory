@@ -7,7 +7,7 @@
 #include <errno.h>
 #include <fcntl.h>
 
-#include <sys/stat.h>
+#include <linux/stat.h>
 
 #include <asm/segment.h>
 

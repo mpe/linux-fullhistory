@@ -10,11 +10,11 @@
 #include <linux/tty.h>
 #include <linux/sched.h>
 #include <linux/string.h>
+#include <linux/stat.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
 
-#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/time.h>
 

@@ -5,7 +5,7 @@
  */
 
 #define __LIBRARY__
-#include <unistd.h>
+#include <linux/unistd.h>
 #include <sys/time.h>
 
 _syscall2(int,getitimer,int,which,struct itimerval *,value)

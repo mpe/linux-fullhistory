@@ -6,8 +6,8 @@
 
 #include <linux/string.h>
 #include <errno.h>
-#include <sys/stat.h>
 
+#include <linux/stat.h>
 #include <linux/sched.h>
 
 int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)

@@ -260,6 +260,8 @@ int sys_ptrace(long request, long pid, long addr, long data)
 	}
 	if (!(child->flags & PF_PTRACED) || child->state != TASK_STOPPED)
 		return -ESRCH;
+	if (child->p_pptr != current)
+		return -ESRCH;
 
 	switch (request) {
 	/* when I and D space are seperate, these will need to be fixed. */
@@ -354,6 +356,9 @@ int sys_ptrace(long request, long pid, long addr, long data)
 			child->flags &= ~PF_PTRACED;
 			child->signal=0;
 			child->state = 0;
+			REMOVE_LINKS(child);
+			child->p_pptr = child->p_opptr;
+			SET_LINKS(child);
 			/* make sure the single step bit is not set. */
 			tmp = get_stack_long(child, 4*EFL-MAGICNUMBER) & ~TRAP_FLAG;
 			put_stack_long(child, 4*EFL-MAGICNUMBER,tmp);

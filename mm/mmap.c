@@ -3,7 +3,7 @@
  *
  * Written by obz.
  */
-#include <sys/stat.h>
+#include <linux/stat.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <asm/segment.h>

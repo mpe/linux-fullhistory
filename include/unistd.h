@@ -70,6 +70,10 @@
 /* XXX - illegal. */
 extern int errno;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* XXX - several non-POSIX functions here, and POSIX functions that are
  * supposed to be declared elsewhere.  Non-promotion of short types in
  * prototypes may cause trouble.  Arg names should be prefixed by
@@ -152,4 +156,9 @@ int setgroups(int gidsetlen, gid_t *gidset);
 int select(int width, fd_set * readfds, fd_set * writefds,
 	fd_set * exceptfds, struct timeval * timeout);
 int swapon(const char * specialfile);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

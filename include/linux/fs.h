@@ -88,17 +88,17 @@ struct buffer_head {
 };
 
 struct inode {
-	dev_t	i_dev;
-	ino_t	i_ino;
-	umode_t	i_mode;
-	nlink_t	i_nlink;
-	uid_t	i_uid;
-	gid_t	i_gid;
-	dev_t	i_rdev;
-	off_t	i_size;
-	time_t	i_atime;
-	time_t	i_mtime;
-	time_t	i_ctime;
+	dev_t		i_dev;
+	unsigned long	i_ino;
+	umode_t		i_mode;
+	nlink_t		i_nlink;
+	uid_t		i_uid;
+	gid_t		i_gid;
+	dev_t		i_rdev;
+	off_t		i_size;
+	time_t		i_atime;
+	time_t		i_mtime;
+	time_t		i_ctime;
 	unsigned long i_data[16];
 	struct inode_operations * i_op;
 	struct super_block * i_sb;

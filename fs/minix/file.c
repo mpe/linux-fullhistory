@@ -10,7 +10,6 @@
 #include <fcntl.h>
 
 #include <sys/dirent.h>
-#include <sys/stat.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -18,6 +17,7 @@
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
 #include <linux/kernel.h>
+#include <linux/stat.h>
 
 #define	NBUF	16
 
