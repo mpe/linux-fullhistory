@@ -4,8 +4,7 @@ Changes from version 0.4a to version 0.4b
 	- Clean up of balloc.c and ialloc.c.
 	- More consistency checks.
 	- Block preallocation added by Stephen Tweedie.
-	- Direct reads of directories disallowed if CONFIG_EXT2_FS_DIR_READ not
-	  defined.
+	- Direct reads of directories disallowed.
 	- Readahead implemented in readdir by Stephen Tweedie.
 	- Bugs in block and inodes allocation fixed.
 	- Readahead implemented in ext2_find_entry by Chip Salzenberg.

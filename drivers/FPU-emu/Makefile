@@ -4,14 +4,15 @@
 
 #DEBUG	= -DDEBUGGING
 DEBUG	=
+PARANOID = -DPARANOID
 REENTRANT	= -DREENTRANT_FPU
-CFLAGS	:= $(CFLAGS) -DPARANOID $(DEBUG) -fno-builtin
+CFLAGS	:= $(CFLAGS) $(PARANOID) $(DEBUG) -fno-builtin
 
 .c.o:
 	$(CC) $(CFLAGS) $(MATH_EMULATION) -c $<
 
 .S.o:
-	$(CC) -D__ASSEMBLER__ $(REENTRANT) -c $<
+	$(CC) -D__ASSEMBLER__ $(PARANOID) $(REENTRANT) -c $<
 
 .s.o:
 	$(CC) -c $<

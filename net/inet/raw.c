@@ -19,6 +19,10 @@
  *		Alan Cox	:	Checks sk->broadcast.
  *		Alan Cox	:	Uses skb_free_datagram/skb_copy_datagram
  *		Alan Cox	:	Raw passes ip options too
+ *		Alan Cox	:	Setsocketopt added
+ *		Alan Cox	:	Fixed error return for broadcasts
+ *		Alan Cox	:	Removed wake_up calls
+ *		Alan Cox	:	Use ttl/tos
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -76,7 +80,7 @@ raw_err (int err, unsigned char *header, unsigned long daddr,
   }
 
   sk->err = icmp_err_convert[err & 0xff].errno;
-  wake_up(sk->sleep);
+  sk->error_report(sk);
   
   return;
 }
@@ -123,7 +127,7 @@ raw_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
   }
   sk->rmem_alloc += skb->mem_len;
   skb_queue_tail(&sk->rqueue,skb);
-  wake_up(sk->sleep);
+  sk->data_ready(sk,skb->len);
   release_sock(sk);
   return(0);
 }
@@ -169,7 +173,7 @@ raw_sendto(struct sock *sk, unsigned char *from, int len,
   if (sin.sin_port == 0) sin.sin_port = sk->protocol;
   
   if (sk->broadcast == 0 && chk_addr(sin.sin_addr.s_addr)==IS_BROADCAST)
-  	return -ENETUNREACH;
+  	return -EACCES;
 
   sk->inuse = 1;
   skb = NULL;
@@ -214,7 +218,7 @@ raw_sendto(struct sock *sk, unsigned char *from, int len,
 
   tmp = sk->prot->build_header(skb, sk->saddr, 
 			       sin.sin_addr.s_addr, &dev,
-			       sk->protocol, sk->opt, skb->mem_len);
+			       sk->protocol, sk->opt, skb->mem_len, sk->ip_tos,sk->ip_ttl);
   if (tmp < 0) {
 	DPRINTF((DBG_RAW, "raw_sendto: error building ip header.\n"));
 	kfree_skb(skb,FREE_WRITE);
@@ -330,6 +334,13 @@ raw_recvfrom(struct sock *sk, unsigned char *to, int len,
 		return err;
 	put_fs_long(sizeof(*sin), addr_len);
   }
+  if(sin)
+  {
+  	err=verify_area(VERIFY_WRITE, sin, sizeof(*sin));
+	if(err)
+		return err;
+  }
+  
   err=verify_area(VERIFY_WRITE,to,len);
   if(err)
   	return err;
@@ -348,7 +359,6 @@ raw_recvfrom(struct sock *sk, unsigned char *to, int len,
 
 	addr.sin_family = AF_INET;
 	addr.sin_addr.s_addr = skb->daddr;
-	verify_area(VERIFY_WRITE, sin, sizeof(*sin));
 	memcpy_tofs(sin, &addr, sizeof(*sin));
   }
 
@@ -390,6 +400,8 @@ struct proto raw_prot = {
   NULL,
   raw_init,
   NULL,
+  ip_setsockopt,
+  ip_getsockopt,
   128,
   0,
   {NULL,},

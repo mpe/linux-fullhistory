@@ -35,6 +35,8 @@ struct unix_proto_data {
 	int		bp_head, bp_tail;
 	struct inode	*inode;
 	struct unix_proto_data	*peerupd;
+	struct wait_queue *wait;	/* Lock across page faults (FvK) */
+	int		lock_flag;
 };
 
 extern struct unix_proto_data unix_datas[NSOCKETS];

@@ -30,10 +30,11 @@
  *					bug no longer crashes it.
  *		Fred Van Kempen	: 	Net2e support for sk->broadcast.
  *		Alan Cox	:	Uses skb_free_datagram
+ *		Alan Cox	:	Added get/set sockopt support.
+ *		Alan Cox	:	Broadcasting without option set returns EACCES.
+ *		Alan Cox	:	No wakeup calls. Instead we now use the callbacks.
+ *		Alan Cox	:	Use ip_tos and ip_ttl
  *
- * To Do:
- *		Verify all the error codes from UDP operations match the
- *		BSD behaviour, since thats effectively the formal spec.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -114,7 +115,7 @@ sport=%d,dport=%d", err, header, daddr, saddr, protocol, (int)th->source,(int)th
   if (err < 0)		/* As per the calling spec */
   {
   	sk->err = -err;
-  	wake_up(sk->sleep);	/* User process wakes to see error */
+  	sk->error_report(sk);		/* User process wakes to see error */
   	return;
   }
   
@@ -130,7 +131,7 @@ sport=%d,dport=%d", err, header, daddr, saddr, protocol, (int)th->source,(int)th
   if (icmp_err_convert[err & 0xff].fatal && sk->state == TCP_ESTABLISHED) {
 	sk->err=ECONNREFUSED;
   }
-  wake_up(sk->sleep);
+  sk->error_report(sk);
 }
 
 
@@ -249,7 +250,7 @@ udp_send(struct sock *sk, struct sockaddr_in *sin,
   DPRINTF((DBG_UDP, "UDP: >> IP_Header: %X -> %X dev=%X prot=%X len=%d\n",
 			saddr, sin->sin_addr.s_addr, dev, IPPROTO_UDP, skb->mem_len));
   tmp = sk->prot->build_header(skb, saddr, sin->sin_addr.s_addr,
-			       &dev, IPPROTO_UDP, sk->opt, skb->mem_len);
+			       &dev, IPPROTO_UDP, sk->opt, skb->mem_len,sk->ip_tos,sk->ip_ttl);
   skb->sk=sk;	/* So memory is freed correctly */
 			    
   if (tmp < 0 ) {
@@ -335,7 +336,7 @@ udp_sendto(struct sock *sk, unsigned char *from, int len, int noblock,
   }
   
   if(!sk->broadcast && chk_addr(sin.sin_addr.s_addr)==IS_BROADCAST)
-    	return -ENETUNREACH;		/* Must turn broadcast on first */
+    	return -EACCES;			/* Must turn broadcast on first */
   sk->inuse = 1;
 
   /* Send the packet. */
@@ -522,7 +523,7 @@ udp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
   	return(-EAFNOSUPPORT);
 
   if(!sk->broadcast && chk_addr(sin.sin_addr.s_addr)==IS_BROADCAST)
-    	return -ENETUNREACH;		/* Must turn broadcast on first */
+    	return -EACCES;			/* Must turn broadcast on first */
   	
   sk->daddr = sin.sin_addr.s_addr;
   sk->dummy_th.dest = sin.sin_port;
@@ -604,8 +605,9 @@ udp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 
   skb->len = len - sizeof(*uh);
 
-  if (!sk->dead) wake_up(sk->sleep);
-
+  if (!sk->dead) 
+  	sk->data_ready(sk,skb->len);
+  	
   release_sock(sk);
   return(0);
 }
@@ -635,6 +637,8 @@ struct proto udp_prot = {
   udp_ioctl,
   NULL,
   NULL,
+  ip_setsockopt,
+  ip_getsockopt,
   128,
   0,
   {NULL,},

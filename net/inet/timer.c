@@ -141,7 +141,7 @@ net_timer (unsigned long data)
 	sk->state = TCP_CLOSE;
 	delete_timer (sk);
 	/* Kill the ARP entry in case the hardware has changed. */
-	arp_destroy (sk->daddr);
+	arp_destroy_maybe (sk->daddr);
 	if (!sk->dead)
 	  wake_up (sk->sleep);
 	sk->shutdown = SHUTDOWN_MASK;
@@ -167,7 +167,7 @@ net_timer (unsigned long data)
 	  if ((sk->state == TCP_ESTABLISHED && sk->retransmits && !(sk->retransmits & 7))
 	    || (sk->state != TCP_ESTABLISHED && sk->retransmits > TCP_RETR1)) {
 	    DPRINTF ((DBG_TMR, "timer.c TIME_WRITE time-out 1\n"));
-	    arp_destroy (sk->daddr);
+	    arp_destroy_maybe (sk->daddr);
 	    ip_route_check (sk->daddr);
 	  }
 	  if (sk->state != TCP_ESTABLISHED && sk->retransmits > TCP_RETR2) {
@@ -198,14 +198,14 @@ net_timer (unsigned long data)
 	if ((sk->state == TCP_ESTABLISHED && sk->retransmits && !(sk->retransmits & 7))
 	  || (sk->state != TCP_ESTABLISHED && sk->retransmits > TCP_RETR1)) {
 	  DPRINTF ((DBG_TMR, "timer.c TIME_KEEPOPEN time-out 1\n"));
-	  arp_destroy (sk->daddr);
+	  arp_destroy_maybe (sk->daddr);
 	  ip_route_check (sk->daddr);
 	  release_sock (sk);
 	  break;
 	}
 	if (sk->state != TCP_ESTABLISHED && sk->retransmits > TCP_RETR2) {
 	  DPRINTF ((DBG_TMR, "timer.c TIME_KEEPOPEN time-out 2\n"));
-	  arp_destroy (sk->daddr);
+	  arp_destroy_maybe (sk->daddr);
 	  sk->err = ETIMEDOUT;
 	  if (sk->state == TCP_FIN_WAIT1 || sk->state == TCP_FIN_WAIT2) {
 	    sk->state = TCP_TIME_WAIT;

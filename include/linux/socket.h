@@ -30,10 +30,14 @@ struct linger {
 #define AF_UNSPEC	0
 #define AF_UNIX		1
 #define AF_INET		2
+#define AF_AX25		3
+#define AF_IPX		4
 
 /* Protocol families, same as address families. */
 #define PF_UNIX		AF_UNIX
 #define PF_INET		AF_INET
+#define PF_AX25		AF_AX25
+#define PF_IPX		AF_IPX
 
 /* Flags we can use with send/ and recv. */
 #define MSG_OOB		1
@@ -41,6 +45,10 @@ struct linger {
 
 /* Setsockoptions(2) level. */
 #define SOL_SOCKET	1
+#define SOL_IP		2
+#define SOL_IPX		3
+#define SOL_AX25	4
+#define SOL_TCP		5
 
 /* For setsockoptions(2) */
 #define SO_DEBUG	1
@@ -56,6 +64,19 @@ struct linger {
 #define SO_NO_CHECK	11
 #define SO_PRIORITY	12
 #define SO_LINGER	13
+/* IP options */
+#define IP_TOS		1
+#define	IPTOS_LOWDELAY		0x10
+#define	IPTOS_THROUGHPUT	0x08
+#define	IPTOS_RELIABILITY	0x04
+#define IP_TTL		2
+/* IPX options */
+#define IPX_TYPE	1
+/* AX.25 options */
+#define AX25_WINDOW	1
+/* TCP options */
+#define TCP_MSS		1
+#define TCP_NODELAY	2
 
 /* The various priorities. */
 #define SOPRI_INTERACTIVE	0

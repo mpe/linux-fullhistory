@@ -14,6 +14,7 @@
  * Fixes:	
  *		Alan Cox	:	Generic queue usage.
  *		Gerhard Koerting:	ICMP addressing corrected
+ *		Alan Cox	:	Use tos/ttl settings
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -108,7 +109,7 @@ icmp_send(struct sk_buff *skb_in, int type, int code, struct device *dev)
 
   /* Build Layer 2-3 headers for message back to source. */
   offset = ip_build_header(skb, dev->pa_addr, iph->saddr,
-			   &dev, IPPROTO_ICMP, NULL, len);
+			   &dev, IPPROTO_ICMP, NULL, len, skb_in->ip_hdr->tos,255);
   if (offset < 0) {
 	skb->sk = NULL;
 	kfree_skb(skb, FREE_READ);
@@ -255,7 +256,7 @@ icmp_echo(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev,
 
   /* Build Layer 2-3 headers for message back to source */
   offset = ip_build_header(skb2, daddr, saddr, &dev,
-			 	IPPROTO_ICMP, opt, len);
+			 	IPPROTO_ICMP, opt, len, skb->ip_hdr->tos,255);
   if (offset < 0) {
 	printk("ICMP: Could not build IP Header for ICMP ECHO Response\n");
 	kfree_skb(skb2,FREE_WRITE);
@@ -319,7 +320,7 @@ icmp_address(struct icmphdr *icmph, struct sk_buff *skb, struct device *dev,
 
   /* Build Layer 2-3 headers for message back to source */
   offset = ip_build_header(skb2, daddr, saddr, &dev,
-			 	IPPROTO_ICMP, opt, len);
+			 	IPPROTO_ICMP, opt, len, skb->ip_hdr->tos,255);
   if (offset < 0) {
 	printk("ICMP: Could not build IP Header for ICMP ADDRESS Response\n");
 	kfree_skb(skb2,FREE_WRITE);

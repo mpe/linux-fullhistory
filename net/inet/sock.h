@@ -136,7 +136,11 @@ struct sock {
   char				ax25_retxqi;
   char				ax25_rrtimer;
   char				ax25_timer;
+  ax25_digi			*ax25_digipeat;
 #endif  
+/* IP 'private area' or will be eventually */
+  int				ip_ttl;		/* TTL setting */
+  int				ip_tos;		/* TOS */
   struct tcphdr			dummy_th;
 
   /* This part is used for the timeout functions (timer.c). */
@@ -145,6 +149,13 @@ struct sock {
 
   /* identd */
   struct socket			*socket;
+  
+  /* Callbacks */
+  void				(*state_change)(struct sock *sk);
+  void				(*data_ready)(struct sock *sk,int bytes);
+  void				(*write_space)(struct sock *sk);
+  void				(*error_report)(struct sock *sk);
+  
 };
 
 struct proto {
@@ -177,7 +188,7 @@ struct proto {
 					unsigned long saddr,
 					unsigned long daddr,
 					struct device **dev, int type,
-					struct options *opt, int len);
+					struct options *opt, int len, int tos, int ttl);
   int			(*connect)(struct sock *sk,
 				  struct sockaddr_in *usin, int addr_len);
   struct sock		*(*accept) (struct sock *sk, int flags);
@@ -197,6 +208,10 @@ struct proto {
 				 unsigned long arg);
   int			(*init)(struct sock *sk);
   void			(*shutdown)(struct sock *sk, int how);
+  int			(*setsockopt)(struct sock *sk, int level, int optname,
+  				 char *optval, int optlen);
+  int			(*getsockopt)(struct sock *sk, int level, int optname,
+  				char *optval, int *option);  	 
   unsigned short	max_header;
   unsigned long		retransmits;
   struct sock		*sock_array[SOCK_ARRAY_SIZE];
@@ -238,6 +253,8 @@ extern void			sock_rfree(struct sock *sk, void *mem,
 extern unsigned long		sock_rspace(struct sock *sk);
 extern unsigned long		sock_wspace(struct sock *sk);
 
+extern int			sock_setsockopt(struct sock *sk,int level,int op,char *optval,int optlen);
+extern int			sock_getsockopt(struct sock *sk,int level,int op,char *optval,int *optlen);
 
 /* declarations from timer.c */
 extern struct sock *timer_base;

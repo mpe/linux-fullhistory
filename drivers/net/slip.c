@@ -881,6 +881,37 @@ slip_open(struct tty_struct *tty)
   return(sl->line);
 }
 
+ 
+static struct enet_statistics *
+sl_get_stats(struct device *dev)
+{
+    static struct enet_statistics stats;
+    struct slip *sl;
+    struct slcompress *comp;
+
+    /* Find the correct SLIP channel to use. */
+    sl = &sl_ctrl[dev->base_addr];
+    if (! sl)
+      return NULL;
+
+    memset(&stats, 0, sizeof(struct enet_statistics));
+
+    stats.rx_packets = sl->rpacket;
+    stats.rx_over_errors = sl->roverrun;
+    stats.tx_packets = sl->spacket;
+    stats.tx_dropped = sl->sbusy;
+    stats.rx_errors = sl->errors;
+
+    comp = sl->slcomp;
+    if (comp) {
+      stats.rx_fifo_errors = comp->sls_i_compressed;
+      stats.rx_dropped = comp->sls_i_tossed;
+      stats.tx_fifo_errors = comp->sls_o_compressed;
+      stats.collisions = comp->sls_o_misses;
+    }
+
+    return (&stats);
+}
 
 /*
  * Close down a SLIP channel.
@@ -1193,6 +1224,7 @@ slip_init(struct device *dev)
   dev->hard_header	= sl_header;
   dev->add_arp		= sl_add_arp;
   dev->type_trans	= sl_type_trans;
+  dev->get_stats	= sl_get_stats;
 #ifdef HAVE_SET_MAC_ADDR
 #ifdef CONFIG_AX25
   dev->set_mac_address  = sl_set_mac_address;

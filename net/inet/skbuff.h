@@ -60,6 +60,7 @@ struct sk_buff {
 	ipx_packet	*ipx;
 #endif	
   } h;
+  struct iphdr		*ip_hdr;		/* For IPPROTO_RAW */
   unsigned long			mem_len;
   unsigned long 		len;
   unsigned long			fraglen;

@@ -48,6 +48,9 @@
  *		Alan Cox	:	SO_LINGER supported
  *		Alan Cox	:	Error reporting fixes
  *		Anonymous	:	inet_create tidied up (sk->reuse setting)
+ *		Alan Cox	:	inet sockets don't set sk->type!
+ *		Alan Cox	:	Split socket option code
+ *		Alan Cox	:	Callbacks
  *
  * To Fix:
  *
@@ -312,7 +315,7 @@ destroy_sock(struct sock *sk)
 
   	/* Incase it's sleeping somewhere. */
   	if (!sk->dead) 
-  		wake_up(sk->sleep);
+  		sk->write_space(sk);
 
   	remove_sock(sk);
   
@@ -471,203 +474,234 @@ inet_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
   }
 }
 
-
-static int
-inet_setsockopt(struct socket *sock, int level, int optname,
+/*
+ *	Set socket options on an inet socket.
+ */
+ 
+static int inet_setsockopt(struct socket *sock, int level, int optname,
 		    char *optval, int optlen)
 {
-  struct sock *sk;
-  int val;
-  int err;
-  struct linger ling;
-  
-  /* This should really pass things on to the other levels. */
-  if (level != SOL_SOCKET) return(-EOPNOTSUPP);
-
-  sk = (struct sock *) sock->data;
-  if (sk == NULL) {
-	printk("Warning: sock->data = NULL: %d\n" ,__LINE__);
-	return(0);
-  }
-  if (optval == NULL) return(-EINVAL);
-
-  err=verify_area(VERIFY_READ, optval, sizeof(int));
-  if(err)
-  	return err;
-  	
-  val = get_fs_long((unsigned long *)optval);
-  switch(optname) {
-	case SO_TYPE:
-	case SO_ERROR:
-	  	return(-ENOPROTOOPT);
-
-	case SO_DEBUG:	
-		sk->debug=val?1:0;
-	case SO_DONTROUTE:	/* Still to be implemented */
-		return(0);
-	case SO_BROADCAST:
-		sk->broadcast=val?1:0;
-		return 0;
-	case SO_SNDBUF:
-		if(val>32767)
-			val=32767;
-		if(val<256)
-			val=256;
-		sk->sndbuf=val;
-		return 0;
-	case SO_LINGER:
-		err=verify_area(VERIFY_READ,optval,sizeof(ling));
-		if(err)
-			return err;
-		memcpy_fromfs(&ling,optval,sizeof(ling));
-		if(ling.l_onoff==0)
-			sk->linger=0;
-		else
-		{
-			sk->lingertime=ling.l_linger;
-			sk->linger=1;
-		}
-		return 0;
-	case SO_RCVBUF:
-		if(val>32767)
-			val=32767;
-		if(val<256)
-			val=256;
-		sk->rcvbuf=val;
-		return(0);
-
-	case SO_REUSEADDR:
-		if (val) sk->reuse = 1;
-		  else sk->reuse = 0;
-		return(0);
-
-	case SO_KEEPALIVE:
-		if (val) sk->keepopen = 1;
-		  else sk->keepopen = 0;
-		return(0);
-
-	 case SO_OOBINLINE:
-		if (val) sk->urginline = 1;
-		  else sk->urginline = 0;
-		return(0);
-
-	 case SO_NO_CHECK:
-		if (val) sk->no_check = 1;
-		  else sk->no_check = 0;
-		return(0);
-
-	 case SO_PRIORITY:
-		if (val >= 0 && val < DEV_NUMBUFFS) {
-			sk->priority = val;
-		} else {
-			return(-EINVAL);
-		}
-		return(0);
-
-	default:
-	  	return(-ENOPROTOOPT);
-  }
+  	struct sock *sk = (struct sock *) sock->data;  
+	if (level == SOL_SOCKET)
+		return sock_setsockopt(sk,level,optname,optval,optlen);
+	if (sk->prot->setsockopt==NULL)
+		return(-EOPNOTSUPP);
+	else
+		return sk->prot->setsockopt(sk,level,optname,optval,optlen);
 }
 
 
-static int
-inet_getsockopt(struct socket *sock, int level, int optname,
+
+
+static int inet_getsockopt(struct socket *sock, int level, int optname,
 		    char *optval, int *optlen)
 {
-  struct sock *sk;
-  int val;
-  int err;
-  struct linger ling;
-  
-  /* This should really pass things on to the other levels. */
-  if (level != SOL_SOCKET) return(-EOPNOTSUPP);
-
-  sk = (struct sock *) sock->data;
-  if (sk == NULL) {
-	printk("Warning: sock->data = NULL: %d\n" ,__LINE__);
-	return(0);
-  }
-
-  switch(optname) {
-	case SO_DEBUG:		
-		val = sk->debug;
-		break;
-		
-	case SO_DONTROUTE:	/* One last option to implement */
-		val = 0;
-		break;
-		
-	case SO_BROADCAST:
-		val= sk->broadcast;
-		break;
-		
-	case SO_LINGER:
-		
-		err=verify_area(VERIFY_WRITE,optval,sizeof(ling));
-		if(err)
-			return err;
-		err=verify_area(VERIFY_WRITE,optlen,sizeof(int));
-		if(err)
-			return err;
-		put_fs_long(sizeof(ling),(unsigned long *)optlen);
-		ling.l_onoff=sk->linger;
-		ling.l_linger=sk->lingertime;
-		memcpy_tofs(optval,&ling,sizeof(ling));
-		return 0;
-		
-	case SO_SNDBUF:
-		val=sk->sndbuf;
-		break;
-		
-	case SO_RCVBUF:
-		val =sk->rcvbuf;
-		break;
-
-	case SO_REUSEADDR:
-		val = sk->reuse;
-		break;
-
-	case SO_KEEPALIVE:
-		val = sk->keepopen;
-		break;
-
-	case SO_TYPE:
-		if (sk->prot == &tcp_prot) val = SOCK_STREAM;
-		  else val = SOCK_DGRAM;
-		break;
-
-	case SO_ERROR:
-		val = sk->err;
-		sk->err = 0;
-		break;
-
-	case SO_OOBINLINE:
-		val = sk->urginline;
-		break;
-
-	case SO_NO_CHECK:
-		val = sk->no_check;
-		break;
-
-	case SO_PRIORITY:
-		val = sk->priority;
-		break;
-
-	default:
-		return(-ENOPROTOOPT);
-  }
-  err=verify_area(VERIFY_WRITE, optlen, sizeof(int));
-  if(err)
-  	return err;
-  put_fs_long(sizeof(int),(unsigned long *) optlen);
-
-  err=verify_area(VERIFY_WRITE, optval, sizeof(int));
-  if(err)
-  	return err;
-  put_fs_long(val,(unsigned long *)optval);
-
-  return(0);
+  	struct sock *sk = sock->data;  	
+  	if (level == SOL_SOCKET) 
+  		return sock_getsockopt(sk,level,optname,optval,optlen);
+  	if(sk->prot->getsockopt==NULL)  	
+  		return(-EOPNOTSUPP);
+  	else
+  		return sk->prot->getsockopt(sk,level,optname,optval,optlen);
 }
+
+/*
+ *	This is meant for all protocols to use and covers goings on
+ *	at the socket level. Everything here is generic.
+ */
+
+int sock_setsockopt(struct sock *sk, int level, int optname,
+		char *optval, int optlen)
+{
+	int val;
+	int err;
+	struct linger ling;
+
+  	if (optval == NULL) 
+  		return(-EINVAL);
+
+  	err=verify_area(VERIFY_READ, optval, sizeof(int));
+  	if(err)
+  		return err;
+  	
+  	val = get_fs_long((unsigned long *)optval);
+  	switch(optname) 
+  	{
+		case SO_TYPE:
+		case SO_ERROR:
+		  	return(-ENOPROTOOPT);
+
+		case SO_DEBUG:	
+			sk->debug=val?1:0;
+		case SO_DONTROUTE:	/* Still to be implemented */
+			return(0);
+		case SO_BROADCAST:
+			sk->broadcast=val?1:0;
+			return 0;
+		case SO_SNDBUF:
+			if(val>32767)
+				val=32767;
+			if(val<256)
+				val=256;
+			sk->sndbuf=val;
+			return 0;
+		case SO_LINGER:
+			err=verify_area(VERIFY_READ,optval,sizeof(ling));
+			if(err)
+				return err;
+			memcpy_fromfs(&ling,optval,sizeof(ling));
+			if(ling.l_onoff==0)
+				sk->linger=0;
+			else
+			{
+				sk->lingertime=ling.l_linger;
+				sk->linger=1;
+			}
+			return 0;
+		case SO_RCVBUF:
+			if(val>32767)
+				val=32767;
+			if(val<256)
+				val=256;
+			sk->rcvbuf=val;
+			return(0);
+
+		case SO_REUSEADDR:
+			if (val) 
+				sk->reuse = 1;
+			else 
+				sk->reuse = 0;
+			return(0);
+
+		case SO_KEEPALIVE:
+			if (val)
+				sk->keepopen = 1;
+			else 
+				sk->keepopen = 0;
+			return(0);
+
+	 	case SO_OOBINLINE:
+			if (val) 
+				sk->urginline = 1;
+			else 
+				sk->urginline = 0;
+			return(0);
+
+	 	case SO_NO_CHECK:
+			if (val) 
+				sk->no_check = 1;
+			else 
+				sk->no_check = 0;
+			return(0);
+
+		 case SO_PRIORITY:
+			if (val >= 0 && val < DEV_NUMBUFFS) 
+			{
+				sk->priority = val;
+			} 
+			else 
+			{
+				return(-EINVAL);
+			}
+			return(0);
+
+		default:
+		  	return(-ENOPROTOOPT);
+  	}
+}
+
+
+int sock_getsockopt(struct sock *sk, int level, int optname,
+		   char *optval, int *optlen)
+{		
+  	int val;
+  	int err;
+  	struct linger ling;
+
+  	switch(optname) 
+  	{
+		case SO_DEBUG:		
+			val = sk->debug;
+			break;
+		
+		case SO_DONTROUTE:	/* One last option to implement */
+			val = 0;
+			break;
+		
+		case SO_BROADCAST:
+			val= sk->broadcast;
+			break;
+		
+		case SO_LINGER:	
+			err=verify_area(VERIFY_WRITE,optval,sizeof(ling));
+			if(err)
+				return err;
+			err=verify_area(VERIFY_WRITE,optlen,sizeof(int));
+			if(err)
+				return err;
+			put_fs_long(sizeof(ling),(unsigned long *)optlen);
+			ling.l_onoff=sk->linger;
+			ling.l_linger=sk->lingertime;
+			memcpy_tofs(optval,&ling,sizeof(ling));
+			return 0;
+		
+		case SO_SNDBUF:
+			val=sk->sndbuf;
+			break;
+		
+		case SO_RCVBUF:
+			val =sk->rcvbuf;
+			break;
+
+		case SO_REUSEADDR:
+			val = sk->reuse;
+			break;
+
+		case SO_KEEPALIVE:
+			val = sk->keepopen;
+			break;
+
+		case SO_TYPE:
+			if (sk->prot == &tcp_prot) 
+				val = SOCK_STREAM;
+		  	else 
+		  		val = SOCK_DGRAM;
+			break;
+
+		case SO_ERROR:
+			val = sk->err;
+			sk->err = 0;
+			break;
+
+		case SO_OOBINLINE:
+			val = sk->urginline;
+			break;
+	
+		case SO_NO_CHECK:
+			val = sk->no_check;
+			break;
+
+		case SO_PRIORITY:
+			val = sk->priority;
+			break;
+
+		default:
+			return(-ENOPROTOOPT);
+	}
+	err=verify_area(VERIFY_WRITE, optlen, sizeof(int));
+	if(err)
+  		return err;
+  	put_fs_long(sizeof(int),(unsigned long *) optlen);
+
+  	err=verify_area(VERIFY_WRITE, optval, sizeof(int));
+  	if(err)
+  		return err;
+  	put_fs_long(val,(unsigned long *)optval);
+
+  	return(0);
+}
+
+
 
 
 static int
@@ -696,6 +730,23 @@ inet_listen(struct socket *sock, int backlog)
 	sk->state = TCP_LISTEN;
   }
   return(0);
+}
+
+/*
+ *	Default callbacks for user INET sockets. These just wake up
+ *	the user owning the socket.
+ */
+
+static void def_callback1(struct sock *sk)
+{
+	if(!sk->dead)
+		wake_up(sk->sleep);
+}
+
+static void def_callback2(struct sock *sk,int len)
+{
+	if(!sk->dead)
+		wake_up(sk->sleep);
 }
 
 
@@ -773,6 +824,7 @@ inet_create(struct socket *sock, int protocol)
 		return(-ESOCKTNOSUPPORT);
   }
   sk->socket = sock;
+  sk->type = sock->type;
   sk->protocol = protocol;
   sk->wmem_alloc = 0;
   sk->rmem_alloc = 0;
@@ -853,6 +905,14 @@ inet_create(struct socket *sock, int protocol)
   sk->dummy_th.urg = 0;
   sk->dummy_th.dest = 0;
 
+  sk->ip_tos=0;
+  sk->ip_ttl=64;
+  	
+  sk->state_change = def_callback1;
+  sk->data_ready = def_callback2;
+  sk->write_space = def_callback1;
+  sk->error_report = def_callback1;
+
   if (sk->num) {
 	/*
 	 * It assumes that any protocol which allows
@@ -893,7 +953,7 @@ inet_release(struct socket *sock, struct socket *peer)
   if (sk == NULL) return(0);
 
   DPRINTF((DBG_INET, "inet_release(sock = %X, peer = %X)\n", sock, peer));
-  wake_up(sk->sleep);
+  sk->state_change(sk);
 
   /* Start closing the connection.  This may take a while. */
   /*
@@ -1579,7 +1639,7 @@ sock_wfree(struct sock *sk, void *mem, unsigned long size)
 	sk->wmem_alloc -= size;
 
 	/* In case it might be waiting for more memory. */
-	if (!sk->dead) wake_up(sk->sleep);
+	if (!sk->dead) sk->write_space(sk);
 	if (sk->destroy && sk->wmem_alloc == 0 && sk->rmem_alloc == 0) {
 		DPRINTF((DBG_INET,
 			"recovered lost memory, sock = %X\n", sk));

@@ -36,6 +36,9 @@
  *		Alan Cox	:	skb->link3 maintained by letting the other xmit queue kill the packet.
  *		Alan Cox	:	Knows about type 3 devices (AX.25) using an AX.25 protocol ID not the ethernet
  *					one.
+ *		Dominik Kubla	:	Better checking
+ *		Tegge		:	Assorted corrections on cross port stuff
+ *		Alan Cox	:	ATF_PERM was backwards! - might be useful now (sigh)
  *
  * To Fix:
  *				:	arp response allocates an skbuff to send. However there is a perfectly
@@ -386,7 +389,7 @@ static struct arp_table *arp_lookup_proxy(unsigned long paddr)
 
 /* Delete an ARP mapping entry in the cache. */
 void
-arp_destroy(unsigned long paddr)
+arp_destructor(unsigned long paddr, int force)
 {
   struct arp_table *apt;
   struct arp_table **lapt;
@@ -406,6 +409,8 @@ arp_destroy(unsigned long paddr)
   lapt = &arp_tables[hash];
   while ((apt = *lapt) != NULL) {
 	if (apt->ip == paddr) {
+		if((apt->flags&ATF_PERM) && !force)
+			return;
 		*lapt = apt->next;
 		if(apt->flags&ATF_PUBL)
 			arp_proxies--;			
@@ -418,6 +423,23 @@ arp_destroy(unsigned long paddr)
   sti();
 }
 
+/*
+ *	Kill an entry - eg for ioctl()
+ */
+
+void arp_destroy(unsigned long paddr)
+{	
+	arp_destructor(paddr,1);
+}
+
+/*
+ *	Delete a possibly invalid entry (see timer.c)
+ */
+
+void arp_destroy_maybe(unsigned long paddr)
+{
+	arp_destructor(paddr,0);
+}
 
 /* Create an ARP entry.  The caller should check for duplicates! */
 static struct arp_table *
@@ -536,16 +558,16 @@ arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	return(0);
   }
 
-  /*
-   * A broadcast arp, ignore it
-   */
+/*
+ * A broadcast arp, ignore it
+ */
 
-  if((dst&0xFF)==0xFF)
+  if(chk_addr(dst)==IS_BROADCAST)
   {
 	kfree_skb(skb, FREE_READ);
 	return 0;
   }
-
+  
   memcpy(&dst, ptr + (arp->ar_hln * 2) + arp->ar_pln, arp->ar_pln);
   if ((addr_hint=chk_addr(dst)) != IS_MYADDR && arp_proxies==0) {
 	DPRINTF((DBG_ARP, "ARP: request was not for me!\n"));
@@ -654,8 +676,8 @@ arp_find(unsigned char *haddr, unsigned long paddr, struct device *dev,
 	 * just pretend we did not find it, and then arp_send will
 	 * verify the address for us.
 	 */
-        if ((!(apt->flags & ATF_PERM)) ||
-	    (!before(apt->last_used, jiffies+ARP_TIMEOUT) && apt->hlen != 0)) {
+        if ((apt->flags & ATF_PERM) ||
+	    (apt->last_used < jiffies+ARP_TIMEOUT && apt->hlen != 0)) {
 		apt->last_used = jiffies;
 		memcpy(haddr, apt->ha, dev->addr_len);
 		return(0);
@@ -814,6 +836,11 @@ arp_req_set(struct arpreq *req)
 		htype = ARPHRD_ETHER;
 		hlen = ETH_ALEN;
 		break;
+		case ARPHRD_AX25:
+			htype = ARPHRD_AX25;
+			hlen = 7;
+			break;
+		
 	default:
 		return(-EPFNOSUPPORT);
   }

@@ -1,7 +1,7 @@
 /*---------------------------------------------------------------------------+
  |  reg_norm.S                                                               |
  |                                                                           |
- | Copyright (C) 1992,1993                                                   |
+ | Copyright (C) 1992,1993,1994                                              |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
@@ -28,6 +28,17 @@ _normalize:
 	pushl	%ebx
 
 	movl	PARAM1,%ebx
+
+#ifdef PARANOID
+	cmpb	TW_Valid,TAG(%ebx)
+	je	L_ok
+
+	pushl	$0x220
+	call	_exception
+	addl	$4,%esp
+
+L_ok:
+#endif PARANOID
 
 	movl	SIGH(%ebx),%edx
 	movl	SIGL(%ebx),%eax
@@ -97,6 +108,17 @@ _normalize_nuo:
 	pushl	%ebx
 
 	movl	PARAM1,%ebx
+
+#ifdef PARANOID
+	cmpb	TW_Valid,TAG(%ebx)
+	je	L_ok_nuo
+
+	pushl	$0x221
+	call	_exception
+	addl	$4,%esp
+
+L_ok_nuo:
+#endif PARANOID
 
 	movl	SIGH(%ebx),%edx
 	movl	SIGL(%ebx),%eax

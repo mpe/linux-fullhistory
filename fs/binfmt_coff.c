@@ -38,6 +38,12 @@
  *       Al Longyear (longyear@sii.com)
  *       Removed erroneous code which mistakenly folded .data with .bss for
  *       a shared library. 
+ *
+ *     8 Janurary 1994
+ *       Al Longyear (longyear@sii.com)
+ *       Corrected problem with read of library section returning the byte
+ *       count rather than zero. This was a change between the pl12 and
+ *       pl14 kernels which slipped by me.
  */
 
 #include <linux/fs.h>
@@ -650,12 +656,21 @@ preload_library (struct linux_binprm *exe_bprm,
 			    buffer,                     /* Buffer for read   */
 			    nbytes);                    /* Byte count reqd.  */
 	    set_fs (old_fs);                         /* Restore the selector */
+/*
+ *  Check the result. The value returned is the byte count actaully read.
+ */
+	    if (status >= 0 && status != nbytes) {
+#ifdef COFF_DEBUG
+		printk ("read of lib section was short\n");
+#endif
+		status = -ENOEXEC;
+	    }
 	}
 /*
  *  At this point, go through the list of libraries in the data area.
  */
 	phdr = (COFF_SLIBHD *) buffer;
-	while (status == 0 && nbytes > COFF_SLIBSZ) {
+	while (status >= 0 && nbytes > COFF_SLIBSZ) {
 	    int entry_size  = COFF_LONG (phdr->sl_entsz)   * sizeof (long);
 	    int header_size = COFF_LONG (phdr->sl_pathndx) * sizeof (long);
 /*

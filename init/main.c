@@ -235,7 +235,7 @@ static void calibrate_delay(void)
 				 "r" (ticks),
 				 "0" (loops_per_sec)
 				:"dx");
-			printk("ok - %lu.%02lu BogoMips (tm)\n",
+			printk("ok - %lu.%02lu BogoMips\n",
 				loops_per_sec/500000,
 				(loops_per_sec/5000) % 100);
 			return;

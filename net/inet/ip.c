@@ -31,6 +31,9 @@
  *		Gerhard Koerting:	IP interface addressing fix.
  *		Linus Torvalds	:	More robustness checks
  *		Alan Cox	:	Even more checks: Still not as robust as it ought to be
+ *		Alan Cox	:	Save IP header pointer for later
+ *		Alan Cox	:	ip option setting
+ *		Alan Cox	:	Use ip_tos/ip_ttl settings
  *
  * To Fix:
  *		IP option processing is mostly not needed. ip_forward needs to know about routing rules
@@ -198,7 +201,7 @@ ip_send(struct sk_buff *skb, unsigned long daddr, int len, struct device *dev,
  */
 int
 ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long daddr,
-		struct device **dev, int type, struct options *opt, int len)
+		struct device **dev, int type, struct options *opt, int len, int tos, int ttl)
 {
   static struct options optmem;
   struct iphdr *iph;
@@ -256,9 +259,9 @@ ip_build_header(struct sk_buff *skb, unsigned long saddr, unsigned long daddr,
 
   iph = (struct iphdr *)buff;
   iph->version  = 4;
-  iph->tos      = 0;
+  iph->tos      = tos;
   iph->frag_off = 0;
-  iph->ttl      = 32;
+  iph->ttl      = ttl;
   iph->daddr    = daddr;
   iph->saddr    = saddr;
   iph->protocol = type;
@@ -1267,6 +1270,8 @@ ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
   }
   
   /* Point into the IP datagram, just past the header. */
+
+  skb->ip_hdr = iph;
   skb->h.raw += iph->ihl*4;
   hash = iph->protocol & (MAX_INET_PROTOS -1);
   for (ipprot = (struct inet_protocol *)inet_protos[hash];
@@ -1504,3 +1509,72 @@ int backoff(int n)
 	}
 }
 
+/*
+ *	Socket option code for IP. This is the end of the line after any TCP,UDP etc options on
+ *	an IP socket.
+ */
+ 
+int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int optlen)
+{
+	int val,err;
+	
+  	if (optval == NULL) 
+  		return(-EINVAL);
+
+  	err=verify_area(VERIFY_READ, optval, sizeof(int));
+  	if(err)
+  		return err;
+  	
+  	val = get_fs_long((unsigned long *)optval);
+
+	if(level!=SOL_IP)
+		return -EOPNOTSUPP;
+
+	switch(optname)
+	{
+		case IP_TOS:
+			if(val<0||val>255)
+				return -EINVAL;
+			sk->ip_tos=val;
+			return 0;
+		case IP_TTL:
+			if(val<1||val<255)
+				return -EINVAL;
+			sk->ip_ttl=val;
+			return 0;
+		/* IP_OPTIONS and friends go here eventually */
+		default:
+			return(-ENOPROTOOPT);
+	}
+}
+
+int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *optlen)
+{
+	int val,err;
+	
+	if(level!=SOL_IP)
+		return -EOPNOTSUPP;
+		
+	switch(optname)
+	{
+		case IP_TOS:
+			val=sk->ip_tos;
+			break;
+		case IP_TTL:
+			val=sk->ip_ttl;
+			break;
+		default:
+			return(-ENOPROTOOPT);
+	}
+	err=verify_area(VERIFY_WRITE, optlen, sizeof(int));
+	if(err)
+  		return err;
+  	put_fs_long(sizeof(int),(unsigned long *) optlen);
+
+  	err=verify_area(VERIFY_WRITE, optval, sizeof(int));
+  	if(err)
+  		return err;
+  	put_fs_long(val,(unsigned long *)optval);
+
+  	return(0);
+}

@@ -18,6 +18,7 @@
  *					added. Also fixed the peek/read crash
  *					from all old Linux datagram code.
  *		Alan Cox	:	Uses the improved datagram code.
+ *		Alan Cox	:	Added NULL's for socket options.
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -263,6 +264,8 @@ struct proto packet_prot = {
   datagram_select,
   NULL,
   packet_init,
+  NULL,
+  NULL,	/* No set/get socket options */
   NULL,
   128,
   0,

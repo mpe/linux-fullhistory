@@ -26,6 +26,10 @@
  *				a) actually works for all A/B nets
  *				b) doesn't forward off the same interface.
  *		Alan Cox:	Multiple extra protocols
+ *		Alan Cox:	Fixed ifconfig up of dud device setting the up flag
+ *		Alan Cox:	Fixed verify_area errors
+ *		Alan Cox:	Removed IP_SET_DEV as per Fred's comment. I hope this doesn't give
+ *				anything away 8)
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -709,9 +713,12 @@ dev_ifconf(char *arg)
   struct device *dev;
   char *pos;
   int len;
+  int err;
 
   /* Fetch the caller's info block. */
-  verify_area(VERIFY_WRITE, arg, sizeof(struct ifconf));
+  err=verify_area(VERIFY_WRITE, arg, sizeof(struct ifconf));
+  if(err)
+  	return err;
   memcpy_fromfs(&ifc, arg, sizeof(struct ifconf));
   len = ifc.ifc_len;
   pos = ifc.ifc_buf;
@@ -800,7 +807,9 @@ dev_ifsioc(void *arg, unsigned int getset)
   int ret;
 
   /* Fetch the caller's info block. */
-  verify_area(VERIFY_WRITE, arg, sizeof(struct ifreq));
+  int err=verify_area(VERIFY_WRITE, arg, sizeof(struct ifreq));
+  if(err)
+  	return err;
   memcpy_fromfs(&ifr, arg, sizeof(struct ifreq));
 
   /* See which interface the caller is talking about. */
@@ -827,8 +836,12 @@ dev_ifsioc(void *arg, unsigned int getset)
 		  if ((old_flags & IFF_UP) && ((dev->flags & IFF_UP) == 0)) {
 			ret = dev_close(dev);
 		  } else
+		  {
 		      ret = (! (old_flags & IFF_UP) && (dev->flags & IFF_UP))
 			? dev_open(dev) : 0;
+		      if(ret<0)
+		      	dev->flags&=~IFF_UP;	/* Didnt open so down the if */
+		  }
 	        }
 		break;
 	case SIOCGIFADDR:
@@ -946,55 +959,9 @@ dev_ioctl(unsigned int cmd, void *arg)
   int ret;
 
   switch(cmd) {
-  case IP_SET_DEV:
-      {	  /* Maintain backwards-compatibility, to be deleted for 1.00. */
-	  struct device *dev;
-	  /* The old 'struct ip_config'. */
-	  struct ip_config {
-	      char name[MAX_IP_NAME];
-	      unsigned long paddr, router, net,up:1,destroy:1;
-	  } ipc;
-	  int retval, loopback;
-
-	  printk("INET: Warning: old-style ioctl(IP_SET_DEV) called!\n");
-	  if (!suser())
-	      return (-EPERM);
-	  
-	  verify_area (VERIFY_WRITE, arg, sizeof (ipc));
-	  memcpy_fromfs(&ipc, arg, sizeof (ipc));
-	  ipc.name[MAX_IP_NAME-1] = 0;
-	  loopback = (strcmp(ipc.name, "loopback") == 0);
-	  dev = dev_get( loopback ? "lo" : ipc.name);
-	  if (dev == NULL)
-	      return -EINVAL;
-	  ipc.destroy = 0;
-	  dev->pa_addr = ipc.paddr;
-	  dev->family = AF_INET;
-	  dev->pa_mask = get_mask(dev->pa_addr);
-	  dev->pa_brdaddr = dev->pa_addr | ~dev->pa_mask;
-	  if (ipc.net != 0xffffffff) {
-	      dev->flags |= IFF_BROADCAST;
-	      dev->pa_brdaddr = ipc.net;
-	  }
-	  
-	  /* To be proper we should delete the route here. */
-	  if (ipc.up == 0)
-	      return (dev->flags & IFF_UP != 0) ? dev_close(dev) : 0;
-
-	  if ((dev->flags & IFF_UP) == 0
-	      && (retval = dev_open(dev)) != 0)
-	      return retval;
-	  printk("%s: adding HOST route of %8.8lx.\n", dev->name,
-		 htonl(ipc.paddr));
-	  rt_add(RTF_HOST, ipc.paddr, 0, 0, dev);
-	  if (ipc.router != 0 && ipc.router != -1) {
-	      rt_add(RTF_GATEWAY, ipc.paddr, 0, ipc.router, dev);
-	      printk("%s: adding GATEWAY route of %8.8lx.\n",
-		     dev->name, htonl(ipc.paddr));
-
-	  }
-	  return 0;
-      }
+	  case IP_SET_DEV:
+	      	  printk("Your network configuration program needs upgrading.\n");
+		  return -EINVAL;
 	case SIOCGIFCONF:
 		(void) dev_ifconf((char *) arg);
 		ret = 0;

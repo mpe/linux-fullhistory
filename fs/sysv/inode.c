@@ -316,7 +316,7 @@ struct super_block *sysv_read_super(struct super_block *sb,void *data,
 	sb->s_dev=0;
 	unlock_super(sb);
 	if (!silent)
-		printk("VFS: unable to read Xenix/SystemV/Coherent superblock\n");
+		printk("VFS: unable to read Xenix/SystemV/Coherent superblock on device %d/%d\n",MAJOR(dev),MINOR(dev));
 	return NULL;
 
 	ok:

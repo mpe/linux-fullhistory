@@ -274,7 +274,7 @@ static void ext2_setup_super (struct super_block * sb,
 		printk ("EXT2-fs warning: mounting fs with errors, "
 			"running e2fsck is recommended\n");
 	else if (es->s_max_mnt_count >= 0 &&
-	         es->s_mnt_count >= es->s_max_mnt_count)
+	         es->s_mnt_count >= (unsigned short) es->s_max_mnt_count)
 		printk ("EXT2-fs warning: maximal mount count reached, "
 			"running e2fsck is recommended\n");
 	if (!(sb->s_flags & MS_RDONLY)) {

@@ -68,7 +68,7 @@
 #define AUX_DISABLE_DEV	0xf5		/* disable aux device */
 #define AUX_RESET	0xff		/* reset aux device */
 
-#define MAX_RETRIES	30		/* some aux operations take long time*/
+#define MAX_RETRIES	60		/* some aux operations take long time*/
 #define AUX_IRQ		12
 #define AUX_BUF_SIZE	2048
 

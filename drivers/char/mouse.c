@@ -45,7 +45,7 @@ static int mouse_open(struct inode * inode, struct file * file)
 	                file->f_op = &bus_mouse_fops;
 	                break;
 #endif
-#if defined CONFIG_PSMOUSE || defined CONFIG_QUICKPORT_MOUSE
+#if defined CONFIG_PSMOUSE || defined CONFIG_82C710_MOUSE
 		case PSMOUSE_MINOR:
 	                file->f_op = &psaux_fops;
 	                break;
@@ -83,7 +83,7 @@ unsigned long mouse_init(unsigned long kmem_start)
 #ifdef CONFIG_BUSMOUSE
 	kmem_start = bus_mouse_init(kmem_start);
 #endif
-#if defined CONFIG_PSMOUSE || defined CONFIG_QUICKPORT_MOUSE
+#if defined CONFIG_PSMOUSE || defined CONFIG_82C710_MOUSE
 	kmem_start = psaux_init(kmem_start);
 #endif
 #ifdef CONFIG_MS_BUSMOUSE

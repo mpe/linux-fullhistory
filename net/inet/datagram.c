@@ -2,7 +2,7 @@
  *	SUCS	NET2 Debugged.
  *
  *	Generic datagram handling routines. These are generic for all protocols. Possibly a generic IP version on top
- *	of these would make sense. Not tonight however 8-). 
+ *	of these would make sense. Not tonight however 8-).
  *	This is used because UDP, RAW, PACKET and the to be released IPX layer all have identical select code and mostly
  *	identical recvfrom() code. So we share it here. The select was shared before but buried in udp.c so I moved it.
  *
@@ -13,6 +13,7 @@
  *		Alan Cox	:	Rewrote skb_read_datagram to avoid the skb_peek_copy stuff.
  *		Alan Cox	:	Added support for SOCK_SEQPACKET. IPX can no longer use the SO_TYPE hack but
  *					AX.25 now works right, and SPX is feasible.
+ *		Alan Cox	:	Fixed write select of non IP protocol crash.
  */
 
 #include <linux/config.h>
@@ -35,7 +36,7 @@
 #include "udp.h"
 #include "skbuff.h"
 #include "sock.h"
- 
+
 
 /*
  *	Get a datagram skbuff, understands the peeking, nonblocking wakeups and possible
@@ -46,16 +47,16 @@
  */
 
 struct sk_buff *skb_recv_datagram(struct sock *sk, unsigned flags, int noblock, int *err)
-{  
+{
 	struct sk_buff *skb;
-	
+
 	/* Socket is inuse - so the timer doesn't attack it */
 restart:
 	sk->inuse = 1;
-  	while(sk->rqueue == NULL) 	/* No data */
-  	{
-  		/* If we are shutdown then no more data is going to appear. We are done */
-		if (sk->shutdown & RCV_SHUTDOWN) 
+	while(sk->rqueue == NULL)	/* No data */
+	{
+		/* If we are shutdown then no more data is going to appear. We are done */
+		if (sk->shutdown & RCV_SHUTDOWN)
 		{
 			release_sock(sk);
 			*err=0;
@@ -69,7 +70,7 @@ restart:
 			sk->err=0;
 			return NULL;
 		}
-		
+
 		/* Sequenced packets can come disconnected. If so we report the problem */
 		if(sk->type==SOCK_SEQPACKET && sk->state!=TCP_ESTABLISHED)
 		{
@@ -77,24 +78,24 @@ restart:
 			*err=-ENOTCONN;
 			return NULL;
 		}
-		
+
 		/* User doesn't want to wait */
-		if (noblock) 
+		if (noblock)
 		{
 			release_sock(sk);
 			*err=-EAGAIN;
 			return NULL;
 		}
 		release_sock(sk);
-		
-		/* Interrupts off so that no packet arrives before we begin sleeping. 
+
+		/* Interrupts off so that no packet arrives before we begin sleeping.
 		   Otherwise we might miss our wake up */
 		cli();
-		if (sk->rqueue == NULL) 
+		if (sk->rqueue == NULL)
 		{
 			interruptible_sleep_on(sk->sleep);
 			/* Signals may need a restart of the syscall */
-			if (current->signal & ~current->blocked) 
+			if (current->signal & ~current->blocked)
 			{
 				sti();
 				*err=-ERESTARTSYS;
@@ -115,26 +116,26 @@ restart:
 	  }
 	  /* Again only user level code calls this function, so nothing interrupt level
 	     will suddenely eat the rqueue */
-	  if (!(flags & MSG_PEEK)) 
+	  if (!(flags & MSG_PEEK))
 	  {
-	  	skb=skb_dequeue(&sk->rqueue);
-	  	if(skb!=NULL)
-		  	skb->users++;
+		skb=skb_dequeue(&sk->rqueue);
+		if(skb!=NULL)
+			skb->users++;
 		else
 			goto restart;	/* Avoid race if someone beats us to the data */
 	  }
 	  else
 	  {
-	  	cli();
-	  	skb=skb_peek(&sk->rqueue);
-	  	if(skb!=NULL)
-	  		skb->users++;
-	  	sti();
-	  	if(skb==NULL)	/* shouldn't happen but .. */
-	  		*err=-EAGAIN;
+		cli();
+		skb=skb_peek(&sk->rqueue);
+		if(skb!=NULL)
+			skb->users++;
+		sti();
+		if(skb==NULL)	/* shouldn't happen but .. */
+			*err=-EAGAIN;
 	  }
 	  return skb;
-}	
+}
 
 void skb_free_datagram(struct sk_buff *skb)
 {
@@ -156,7 +157,7 @@ void skb_free_datagram(struct sk_buff *skb)
 
 void skb_copy_datagram(struct sk_buff *skb, int offset, char *to, int size)
 {
-	/* We will know all about the fraglist options to allow >4K receives 
+	/* We will know all about the fraglist options to allow >4K receives
 	   but not this release */
 	memcpy_tofs(to,skb->h.raw+offset,size);
 }
@@ -165,11 +166,11 @@ void skb_copy_datagram(struct sk_buff *skb, int offset, char *to, int size)
  *	Datagram select: Again totally generic. Moved from udp.c
  *	Now does seqpacket.
  */
- 
+
 int datagram_select(struct sock *sk, int sel_type, select_table *wait)
 {
 	select_wait(sk->sleep, wait);
-	switch(sel_type) 
+	switch(sel_type)
 	{
 		case SEL_IN:
 			if (sk->type==SOCK_SEQPACKET && sk->state==TCP_CLOSE)
@@ -177,7 +178,7 @@ int datagram_select(struct sock *sk, int sel_type, select_table *wait)
 				/* Connection closed: Wake up */
 				return(1);
 			}
-			if (sk->rqueue != NULL || sk->err != 0) 
+			if (sk->rqueue != NULL || sk->err != 0)
 			{	/* This appears to be consistent
 				   with other stacks */
 				return(1);
@@ -185,16 +186,20 @@ int datagram_select(struct sock *sk, int sel_type, select_table *wait)
 			return(0);
 
 		case SEL_OUT:
-			if (sk->prot->wspace(sk) >= MIN_WRITE_SPACE) 
+			if (sk->prot->wspace(sk) >= MIN_WRITE_SPACE)
+			{
+				return(1);
+			}
+			if (sk->prot==NULL && sk->sndbuf-sk->wmem_alloc >= MIN_WRITE_SPACE)
 			{
 				return(1);
 			}
 			return(0);
-	
+
 		case SEL_EX:
 			if (sk->err)
 				return(1); /* Socket has gone into error state (eg icmp error) */
 			return(0);
-  	}
- 	return(0);
+	}
+	return(0);
 }

@@ -65,7 +65,8 @@ void sysv_free_inode(struct inode * inode)
 		return;
 	}
 	if (!(bh = sysv_bread(sb, inode->i_dev, sb->sv_firstinodezone + ((ino-1) >> sb->sv_inodes_per_block_bits), &bh_data))) {
-		panic("sysv_free_inode: unable to read inode block"); /* FIXME: too severe? */
+		printk("sysv_free_inode: unable to read inode block on device %d/%d\n",MAJOR(inode->i_dev),MINOR(inode->i_dev));
+		clear_inode(inode);
 		return;
 	}
 	raw_inode = (struct sysv_inode *) bh_data + ((ino-1) & sb->sv_inodes_per_block_1);

@@ -17,7 +17,6 @@
 #include <asm/segment.h>
 #include <asm/system.h>
 
-#include <linux/autoconf.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
@@ -34,10 +33,7 @@
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
 
-#ifndef CONFIG_EXT2_FS_DIR_READ
-static
-#endif
-int ext2_file_read (struct inode *, struct file *, char *, int);
+static int ext2_file_read (struct inode *, struct file *, char *, int);
 static int ext2_file_write (struct inode *, struct file *, char *, int);
 static void ext2_release_file (struct inode *, struct file *);
 
@@ -76,10 +72,7 @@ struct inode_operations ext2_file_inode_operations = {
 	ext2_permission		/* permission */
 };
 
-#ifndef CONFIG_EXT2_FS_DIR_READ
-static
-#endif
-int ext2_file_read (struct inode * inode, struct file * filp,
+static int ext2_file_read (struct inode * inode, struct file * filp,
 		    char * buf, int count)
 {
 	int read, left, chars;
@@ -97,7 +90,7 @@ int ext2_file_read (struct inode * inode, struct file * filp,
 		return -EINVAL;
 	}
 	sb = inode->i_sb;
-	if (!S_ISREG(inode->i_mode) && !S_ISDIR(inode->i_mode)) {
+	if (!S_ISREG(inode->i_mode)) {
 		ext2_warning (sb, "ext2_file_read", "mode = %07o",
 			      inode->i_mode);
 		return -EINVAL;

@@ -4,16 +4,11 @@ It implements all of
   - SystemV/386 FS,
   - Coherent FS.
 
-This is version alpha 5.
+This is version beta 1.
 
 To install:
-* You need Linux 0.99.14.
-* Go to /usr/src/linux, unpack the tar file there, and patch the Linux source:
-    patch -p1 < sysvfs.cdif
-  To build the Linux kernel with the patches:
-    make config
-    make depend
-    make
+* Answer the 'System V and Coherent filesystem support' question with 'y'
+  when configuring the kernel.
 * To mount a disk or a partition, use
     mount [-r] -t sysv device mountpoint
   The file system type names

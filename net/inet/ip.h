@@ -69,7 +69,8 @@ extern int		ip_build_header(struct sk_buff *skb,
 					unsigned long saddr,
 					unsigned long daddr,
 					struct device **dev, int type,
-					struct options *opt, int len);
+					struct options *opt, int len,
+					int tos,int ttl);
 extern unsigned short	ip_compute_csum(unsigned char * buff, int len);
 extern int		ip_rcv(struct sk_buff *skb, struct device *dev,
 			       struct packet_type *pt);
@@ -77,5 +78,7 @@ extern void		ip_queue_xmit(struct sock *sk,
 				      struct device *dev, struct sk_buff *skb,
 				      int free);
 extern void		ip_retransmit(struct sock *sk, int all);
+extern int 		ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int optlen);
+extern int 		ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *optlen);
 
 #endif	/* _IP_H */

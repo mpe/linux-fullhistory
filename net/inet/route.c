@@ -121,21 +121,27 @@ void rt_flush(struct device *dev)
  * number of zero 8-bit net numbers, otherwise we use the "default"
  * masks judging by the destination address and our device netmask.
  */
+static inline unsigned long default_mask(unsigned long dst)
+{
+	dst = ntohl(dst);
+	if (IN_CLASSA(dst))
+		return htonl(IN_CLASSA_NET);
+	if (IN_CLASSB(dst))
+		return htonl(IN_CLASSB_NET);
+	return htonl(IN_CLASSC_NET);
+}
+
 static unsigned long guess_mask(unsigned long dst, struct device * dev)
 {
 	unsigned long mask = 0xffffffff;
 
+/* this is a rather ugly optimization: works only on little-endian machines */
 	while (mask & dst)
-		mask >>= 8;
+		mask <<= 8;
 	if (mask)
 		return ~mask;
-	dst = ntohl(dst);
-	if (IN_CLASSA(dst))
-		mask = htonl(IN_CLASSA_NET);
-	else if (IN_CLASSB(dst))
-		mask = htonl(IN_CLASSB_NET);
-	else
-		mask = htonl(IN_CLASSC_NET);
+/* ok, no more hacks.. */
+	mask = default_mask(dst);
 	if (dev->flags & IFF_POINTOPOINT)
 		return mask;
 	if ((dst ^ dev->pa_addr) & mask)

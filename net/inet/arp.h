@@ -59,5 +59,6 @@ extern void	arp_add_broad(unsigned long addr, struct device *dev);
 extern void	arp_queue(struct sk_buff *skb);
 extern int	arp_get_info(char *buffer);
 extern int	arp_ioctl(unsigned int cmd, void *arg);
+extern void	arp_destroy_maybe(unsigned long paddr);
 
 #endif	/* _ARP_H */

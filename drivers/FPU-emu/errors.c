@@ -3,7 +3,7 @@
  |                                                                           |
  |  The error handling functions for wm-FPU-emu                              |
  |                                                                           |
- | Copyright (C) 1992,1993                                                   |
+ | Copyright (C) 1992,1993,1994                                              |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
@@ -208,7 +208,7 @@ static struct {
 	      0x125  in fpu_trig.c
 	      0x126  in fpu_entry.c
 	      0x127  in poly_2xm1.c
-       0x2nn  in an *.s file:
+       0x2nn  in an *.S file:
               0x201  in reg_u_add.S, reg_round.S
               0x202  in reg_u_div.S
               0x203  in reg_u_div.S
@@ -227,6 +227,8 @@ static struct {
 	      0x216  in reg_round.S
 	      0x217  in reg_round.S
 	      0x218  in reg_round.S
+	      0x220  in reg_norm.S
+	      0x221  in reg_norm.S
  */
 
 void exception(int n)

@@ -16,32 +16,23 @@
 
 #include <asm/segment.h>
 
-#include <linux/autoconf.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/ext2_fs.h>
 #include <linux/sched.h>
 #include <linux/stat.h>
 
-#ifndef CONFIG_EXT2_FS_DIR_READ
 static int ext2_dir_read (struct inode * inode, struct file * filp,
 			    char * buf, int count)
 {
 	return -EISDIR;
 }
-#else
-int ext2_file_read (struct inode *, struct file *, char *, int);
-#endif
 
 static int ext2_readdir (struct inode *, struct file *, struct dirent *, int);
 
 static struct file_operations ext2_dir_operations = {
 	NULL,			/* lseek - default */
-#ifdef CONFIG_EXT2_FS_DIR_READ
-	ext2_file_read,		/* read */
-#else
 	ext2_dir_read,		/* read */
-#endif
 	NULL,			/* write - bad */
 	ext2_readdir,		/* readdir */
 	NULL,			/* select - default */

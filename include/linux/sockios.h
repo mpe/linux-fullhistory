@@ -28,7 +28,7 @@ struct ip_config {
   unsigned long	paddr;
   unsigned long	router;
   unsigned long	net;
-  unsigned int	up:1,destroy:1;
+  unsigned long	up:1,destroy:1;
 };
 #endif	/* FIXME: */
 

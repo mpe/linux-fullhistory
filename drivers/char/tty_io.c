@@ -1315,6 +1315,7 @@ static int tty_open(struct inode * inode, struct file * filp)
 	int major, minor;
 	int noctty, retval;
 
+retry_open:
 	minor = MINOR(inode->i_rdev);
 	major = MAJOR(inode->i_rdev);
 	noctty = filp->f_flags & O_NOCTTY;
@@ -1372,7 +1373,12 @@ static int tty_open(struct inode * inode, struct file * filp)
 #endif
 
 		release_dev(minor, filp);
-		return retval;
+		if (retval != -ERESTARTSYS)
+			return retval;
+		if (current->signal & ~current->blocked)
+			return retval;
+		schedule();
+		goto retry_open;
 	}
 	if (!noctty &&
 	    current->leader &&

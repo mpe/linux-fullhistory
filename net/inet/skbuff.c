@@ -13,7 +13,7 @@
  *					and memory leak hunting.
  *		Alan Cox	:	More generic kfree handler
  */
- 
+
 #include <linux/config.h>
 #include <linux/types.h>
 #include <linux/kernel.h>
@@ -44,14 +44,14 @@
 /*
  *	Resource tracking variables
  */
- 
+
 volatile unsigned long net_memory=0;
 volatile unsigned long net_skbcount=0;
 
 /*
  *	Debugging paranoia. Can go later when this crud stack works
- */ 
- 
+ */
+
 
 
 void skb_check(struct sk_buff *skb, int line, char *file)
@@ -81,20 +81,20 @@ void skb_check(struct sk_buff *skb, int line, char *file)
 /*
  *	Insert an sk_buff at the start of a list.
  */
-    
+
 void skb_queue_head(struct sk_buff *volatile* list,struct sk_buff *newsk)
 {
 	unsigned long flags;
-	
-	IS_SKB(newsk);	
+
+	IS_SKB(newsk);
 	if(newsk->list)
 		printk("Suspicious queue head: sk_buff on list!\n");
 	save_flags(flags);
 	cli();
 	newsk->list=list;
-	
+
 	newsk->next=*list;
-	
+
 	if(*list)
 		newsk->prev=(*list)->prev;
 	else
@@ -110,14 +110,14 @@ void skb_queue_head(struct sk_buff *volatile* list,struct sk_buff *newsk)
 /*
  *	Insert an sk_buff at the end of a list.
  */
- 
+
 void skb_queue_tail(struct sk_buff *volatile* list, struct sk_buff *newsk)
 {
 	unsigned long flags;
-	
+
 	if(newsk->list)
 		printk("Suspicious queue tail: sk_buff on list!\n");
-	
+
 	IS_SKB(newsk);
 	save_flags(flags);
 	cli();
@@ -137,7 +137,7 @@ void skb_queue_tail(struct sk_buff *volatile* list, struct sk_buff *newsk)
 		*list=newsk;
 	}
 	IS_SKB(newsk->prev);
-	IS_SKB(newsk->next);		
+	IS_SKB(newsk->next);
 	restore_flags(flags);
 
 }
@@ -146,21 +146,21 @@ void skb_queue_tail(struct sk_buff *volatile* list, struct sk_buff *newsk)
  *	Remove an sk_buff from a list. This routine is also interrupt safe
  *	so you can grab read and free buffers as another process adds them.
  */
- 
+
 struct sk_buff *skb_dequeue(struct sk_buff *volatile* list)
 {
 	long flags;
 	struct sk_buff *result;
-	
+
 	save_flags(flags);
 	cli();
-	
+
 	if(*list==NULL)
 	{
 		restore_flags(flags);
 		return(NULL);
 	}
-	
+
 	result=*list;
 	if(result->next==result)
 		*list=NULL;
@@ -173,7 +173,7 @@ struct sk_buff *skb_dequeue(struct sk_buff *volatile* list)
 
 	IS_SKB(result);
 	restore_flags(flags);
-	
+
 	if(result->list!=list)
 		printk("Dequeued packet has invalid list pointer\n");
 
@@ -186,19 +186,19 @@ struct sk_buff *skb_dequeue(struct sk_buff *volatile* list)
 /*
  *	Insert a packet before another one in a list.
  */
- 
+
 void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
 {
 	unsigned long flags;
 
 	IS_SKB(old);
 	IS_SKB(newsk);
-		
+
 	if(!old->list)
 		printk("insert before unlisted item!\n");
 	if(newsk->list)
 		printk("inserted item is already on a list.\n");
-		
+
 	save_flags(flags);
 	cli();
 	newsk->list=old->list;
@@ -206,18 +206,18 @@ void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
 	newsk->prev=old->prev;
 	newsk->next->prev=newsk;
 	newsk->prev->next=newsk;
-	
+
 	restore_flags(flags);
 }
 
 /*
  *	Place a packet after a given packet in a list.
  */
- 
+
 void skb_append(struct sk_buff *old, struct sk_buff *newsk)
 {
 	unsigned long flags;
-	
+
 	IS_SKB(old);
 	IS_SKB(newsk);
 
@@ -225,7 +225,7 @@ void skb_append(struct sk_buff *old, struct sk_buff *newsk)
 		printk("append before unlisted item!\n");
 	if(newsk->list)
 		printk("append item is already on a list.\n");
-		
+
 	save_flags(flags);
 	cli();
 	newsk->list=old->list;
@@ -233,7 +233,7 @@ void skb_append(struct sk_buff *old, struct sk_buff *newsk)
 	newsk->next=old->next;
 	newsk->next->prev=newsk;
 	newsk->prev->next=newsk;
-	
+
 	restore_flags(flags);
 }
 
@@ -243,7 +243,7 @@ void skb_append(struct sk_buff *old, struct sk_buff *newsk)
  *	MUST EXIST when you unlink. Thus a list must have its contents unlinked
  *	_FIRST_.
  */
- 
+
 void skb_unlink(struct sk_buff *skb)
 {
 	unsigned long flags;
@@ -251,7 +251,7 @@ void skb_unlink(struct sk_buff *skb)
 	cli();
 
 	IS_SKB(skb);
-	
+
 	if(skb->list)
 	{
 		skb->next->prev=skb->prev;
@@ -290,7 +290,7 @@ void skb_new_list_head(struct sk_buff *volatile* list)
 		while(skb!=*list);
 	}
 }
-			
+
 /*
  *	Peek an sk_buff. Unlike most other operations you _MUST_
  *	be careful with this one. A peek leaves the buffer on the
@@ -310,14 +310,14 @@ struct sk_buff *skb_peek(struct sk_buff *volatile* list)
  *	anyway. Only the memcpy of upto 4K with ints off is not
  *	as nice as I'd like.
  */
- 
+
 struct sk_buff *skb_peek_copy(struct sk_buff *volatile* list)
 {
 	struct sk_buff *orig,*newsk;
 	unsigned long flags;
 	unsigned int len;
 	/* Now for some games to avoid races */
-	
+
 	do
 	{
 		save_flags(flags);
@@ -336,7 +336,7 @@ struct sk_buff *skb_peek_copy(struct sk_buff *volatile* list)
 
 		if(newsk==NULL)		/* Oh dear... not to worry */
 			return NULL;
-	
+
 		save_flags(flags);
 		cli();
 		if(skb_peek(list)!=orig)	/* List changed go around another time */
@@ -349,7 +349,7 @@ struct sk_buff *skb_peek_copy(struct sk_buff *volatile* list)
 			kfree_skb(newsk, FREE_WRITE);
 			continue;
 		}
-		
+
 		IS_SKB(orig);
 		IS_SKB(newsk);
 		memcpy(newsk,orig,len);
@@ -364,11 +364,11 @@ struct sk_buff *skb_peek_copy(struct sk_buff *volatile* list)
 		newsk->free=1;
 	}
 	while(0);
-	
+
 	restore_flags(flags);
 	return(newsk);
-}	
-	
+}
+
 /*
  *	Free an sk_buff. This still knows about things it should
  *	not need to like protocols and sockets.
@@ -376,68 +376,68 @@ struct sk_buff *skb_peek_copy(struct sk_buff *volatile* list)
 
 void kfree_skb(struct sk_buff *skb, int rw)
 {
-  if (skb == NULL) {
-	printk("kfree_skb: skb = NULL\n");
-	return;
-  }
-  IS_SKB(skb);
-  if(skb->free == 2)
-  	printk("Warning: kfree_skb passed an skb that nobody set the free flag on!\n");
-  if(skb->list)
-  	printk("Warning: kfree_skb passed an skb still on a list.\n");
-  skb->magic = 0;
-  if (skb->sk) 
-  {
-        if(skb->sk->prot!=NULL)
-        {
-		if (rw)
-	     		skb->sk->prot->rfree(skb->sk, skb->mem_addr, skb->mem_len);
-	     	else
-	     		skb->sk->prot->wfree(skb->sk, skb->mem_addr, skb->mem_len);
+	if (skb == NULL) {
+		printk("kfree_skb: skb = NULL\n");
+		return;
+	}
+	IS_SKB(skb);
+	if(skb->free == 2)
+		printk("Warning: kfree_skb passed an skb that nobody set the free flag on!\n");
+	if(skb->list)
+		printk("Warning: kfree_skb passed an skb still on a list.\n");
+	skb->magic = 0;
+	if (skb->sk)
+	{
+	      if(skb->sk->prot!=NULL)
+	{
+			if (rw)
+				skb->sk->prot->rfree(skb->sk, skb->mem_addr, skb->mem_len);
+			else
+				skb->sk->prot->wfree(skb->sk, skb->mem_addr, skb->mem_len);
 
+		}
+		else
+		{
+			/* Non INET - default wmalloc/rmalloc handler */
+			if (rw)
+				skb->sk->rmem_alloc-=skb->mem_len;
+			else
+				skb->sk->wmem_alloc-=skb->mem_len;
+			if(!skb->sk->dead)
+			wake_up(skb->sk->sleep);
+			kfree_skbmem(skb->mem_addr,skb->mem_len);
+		}
 	}
 	else
-	{
-		/* Non INET - default wmalloc/rmalloc handler */
-		if (rw)
-			skb->sk->rmem_alloc-=skb->mem_len;
-		else
-			skb->sk->wmem_alloc-=skb->mem_len;
-		if(!skb->sk->dead)
-			wake_up(skb->sk->sleep);
-		kfree_skbmem(skb->mem_addr,skb->mem_len);
-	}
-  } 
-  else 
-	kfree_skbmem(skb->mem_addr, skb->mem_len);
+		kfree_skbmem(skb->mem_addr, skb->mem_len);
 }
 
 /*
  *	Allocate a new skbuff. We do this ourselves so we can fill in a few 'private'
  *	fields and also do memory statistics to find all the [BEEP] leaks.
  */
- 
+
  struct sk_buff *alloc_skb(unsigned int size,int priority)
  {
- 	struct sk_buff *skb=(struct sk_buff *)kmalloc(size,priority);
- 	if(skb==NULL)
- 		return NULL;
- 	skb->free= 2;	/* Invalid so we pick up forgetful users */
- 	skb->list= 0;	/* Not on a list */
- 	skb->truesize=size;
- 	skb->mem_len=size;
- 	skb->mem_addr=skb;
- 	skb->fraglist=NULL;
- 	net_memory+=size;
- 	net_skbcount++;
- 	skb->magic_debug_cookie=SK_GOOD_SKB;
- 	skb->users=0;
- 	return skb;
+	struct sk_buff *skb=(struct sk_buff *)kmalloc(size,priority);
+	if(skb==NULL)
+		return NULL;
+	skb->free= 2;	/* Invalid so we pick up forgetful users */
+	skb->list= 0;	/* Not on a list */
+	skb->truesize=size;
+	skb->mem_len=size;
+	skb->mem_addr=skb;
+	skb->fraglist=NULL;
+	net_memory+=size;
+	net_skbcount++;
+	skb->magic_debug_cookie=SK_GOOD_SKB;
+	skb->users=0;
+	return skb;
  }
 
 /*
  *	Free an skbuff by memory
- */ 	
+ */
 
 void kfree_skbmem(void *mem,unsigned size)
 {
@@ -451,4 +451,4 @@ void kfree_skbmem(void *mem,unsigned size)
 		net_memory-=size;
 	}
 }
- 
+

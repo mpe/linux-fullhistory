@@ -3,7 +3,7 @@
  |                                                                           |
  | Implementation of the FPU "transcendental" functions.                     |
  |                                                                           |
- | Copyright (C) 1992,1993                                                   |
+ | Copyright (C) 1992,1993,1994                                              |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
  |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
  |                                                                           |
@@ -88,9 +88,19 @@ static int trig_arg(FPU_REG *X, int even)
 	     128 bits precision. */
 	  significand(&tmp) = q + 1;
 	  tmp.exp = EXP_BIAS + 63;
+	  tmp.tag = TW_Valid;
 	  normalize(&tmp);
 	  reg_mul(&CONST_PI2extra, &tmp, &tmp, FULL_PRECISION);
 	  reg_add(X, &tmp,  X, FULL_PRECISION);
+	  if ( X->sign == SIGN_NEG )
+	    {
+	      /* CONST_PI2extra is negative, so the result of the addition
+		 can be negative. This means that the argument is actually
+		 in a different quadrant. The correction is always < pi/2,
+		 so it can't overflow into yet another quadrant. */
+	      X->sign = SIGN_POS;
+	      q++;
+	    }
 	}
 #endif BETTER_THAN_486
     }
@@ -107,9 +117,23 @@ static int trig_arg(FPU_REG *X, int even)
 	     128 bits precision. */
 	  significand(&tmp) = q;
 	  tmp.exp = EXP_BIAS + 63;
+	  tmp.tag = TW_Valid;
 	  normalize(&tmp);
 	  reg_mul(&CONST_PI2extra, &tmp, &tmp, FULL_PRECISION);
 	  reg_sub(X, &tmp, X, FULL_PRECISION);
+	  if ( (X->exp == CONST_PI2.exp) &&
+	      ((X->sigh > CONST_PI2.sigh)
+	       || ((X->sigh == CONST_PI2.sigh)
+		   && (X->sigl > CONST_PI2.sigl))) )
+	    {
+	      /* CONST_PI2extra is negative, so the result of the
+		 subtraction can be larger than pi/2. This means
+		 that the argument is actually in a different quadrant.
+		 The correction is always < pi/2, so it can't overflow
+		 into yet another quadrant. */
+	      reg_sub(&CONST_PI, X, X, FULL_PRECISION);
+	      q++;
+	    }
 	}
     }
 #endif BETTER_THAN_486

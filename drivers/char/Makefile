@@ -48,7 +48,7 @@ OBJS := $(OBJS) msbusmouse.o
 SRCS := $(SRCS) msbusmouse.c
 endif
 
-ifdef CONFIG_QUICKPORT_MOUSE
+ifdef CONFIG_82C710_MOUSE
 CONFIG_PSMOUSE = CONFIG_PSMOUSE
 endif
 
