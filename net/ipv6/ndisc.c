@@ -161,6 +161,9 @@ int ndisc_mc_map(struct in6_addr *addr, char *buf, struct net_device *dev, int d
 	case ARPHRD_FDDI:
 		ipv6_eth_mc_map(addr, buf);
 		return 0;
+	case ARPHRD_IEEE802_TR:
+		ipv6_tr_mc_map(addr,buf);
+		return 0;
 	default:
 		if (dir) {
 			memcpy(buf, dev->broadcast, dev->addr_len);
@@ -968,9 +971,22 @@ int ndisc_rcv(struct sk_buff *skb, unsigned long len)
 				   does DAD, otherwise we ignore solicitations
 				   until DAD timer expires.
 				 */
-				if (addr_type == IPV6_ADDR_ANY)
-					addrconf_dad_failure(ifp);
-				else
+				if (addr_type == IPV6_ADDR_ANY) {
+					if (dev->type == ARPHRD_IEEE802_TR) { 
+						unsigned char *sadr = skb->mac.raw ;
+						if (((sadr[8] &0x7f) != (dev->dev_addr[0] & 0x7f)) ||
+						(sadr[9] != dev->dev_addr[1]) ||
+						(sadr[10] != dev->dev_addr[2]) ||
+						(sadr[11] != dev->dev_addr[3]) ||
+						(sadr[12] != dev->dev_addr[4]) ||
+						(sadr[13] != dev->dev_addr[5])) 
+						{
+							addrconf_dad_failure(ifp) ; 
+						}
+					} else {
+						addrconf_dad_failure(ifp);
+					}
+				} else
 					in6_ifa_put(ifp);
 				return 0;
 			}

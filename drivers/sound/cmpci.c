@@ -2372,6 +2372,7 @@ int __init init_cmpci(void)
 		init_waitqueue_head(&s->midi.iwait);
 		init_waitqueue_head(&s->midi.owait);
 		init_MUTEX(&s->open_sem);
+		spin_lock_init(&s->lock);
 		s->magic = CM_MAGIC;
 		s->iobase = pcidev->resource[0].start;
 		s->iosynth = 0x388;

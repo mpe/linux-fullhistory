@@ -1320,6 +1320,8 @@ static inline void check_timer(void)
 	pin1 = find_timer_pin(mp_INT);
 	pin2 = find_timer_pin(mp_ExtINT);
 
+	printk("..TIMER: vector=%d pin1=%d pin2=%d\n", vector, pin1, pin2);
+
 	/*
 	 * Ok, does IRQ0 through the IOAPIC work?
 	 */

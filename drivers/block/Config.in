@@ -37,6 +37,9 @@ else
       if [ "$CONFIG_BLK_DEV_CMD640" = "y" ]; then
 	 bool '    CMD640 enhanced support' CONFIG_BLK_DEV_CMD640_ENHANCED
       fi
+      if [ "$CONFIG_ISAPNP" = "y" ]; then
+	 bool '  ISA-PNP EIDE support' CONFIG_BLK_DEV_ISAPNP
+      fi
       if [ "$CONFIG_PCI" = "y" ]; then
 	 bool '  RZ1000 chipset bugfix/support' CONFIG_BLK_DEV_RZ1000
 	 bool '  Generic PCI IDE chipset support' CONFIG_BLK_DEV_IDEPCI
@@ -53,12 +56,18 @@ else
 	    fi
 	    bool '    Boot off-board chipsets first support' CONFIG_BLK_DEV_OFFBOARD
 	    bool '    AEC6210 chipset support' CONFIG_BLK_DEV_AEC6210
-	       if [ "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" -a "$CONFIG_BLK_DEV_AEC6210" = "y" ]; then
-		  bool '      AEC6210 Tuning support (EXPERIMENTAL)' CONFIG_BLK_DEV_AEC6210_TUNING
-	       fi
+	    if [ "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" -a "$CONFIG_BLK_DEV_AEC6210" = "y" ]; then
+	       bool '      AEC6210 Tuning support (EXPERIMENTAL)' CONFIG_BLK_DEV_AEC6210_TUNING
+	    fi
+	    bool '    ALI M15x3 chipset support' CONFIG_BLK_DEV_ALI15X3
 	    if [ "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" ]; then
-	       bool '    ALI M15x3 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_ALI15X3
-	       bool '    CMD646 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_CMD646
+	       bool '    AMD Viper support (EXPERIMENTAL)' CONFIG_BLK_DEV_AMD7409
+	    fi
+	    bool '    CMD64X chipset support' CONFIG_BLK_DEV_CMD64X
+	    if [ "$CONFIG_BLK_DEV_CMD64X" = "y" -a "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y"  ]; then
+	       bool '      CMD64X chipset RAID support (EXPERIMENTAL) (WIP)' CONFIG_BLK_DEV_CMD64X_RAID
+	    fi
+	    if [ "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" ]; then
 	       bool '    CY82C693 chipset support (EXPERIMENTAL)' CONFIG_BLK_DEV_CY82C693
 	    fi
 	    if [ "$CONFIG_BLK_DEV_IDEDMA_PCI" = "y" ]; then
@@ -68,7 +77,8 @@ else
 	       fi
 	       bool '    HPT366 chipset support' CONFIG_BLK_DEV_HPT366
 	       if [ "$CONFIG_IDEDMA_PCI_EXPERIMENTAL" = "y" -a "$CONFIG_BLK_DEV_HPT366" = "y" ]; then
-		  bool '      HPT366 Fast Interrupt support (EXPERIMENTAL)' HPT366_FAST_IRQ_PREDICTION
+		  bool '      HPT366 Fast Interrupt support (EXPERIMENTAL) (WIP)' HPT366_FAST_IRQ_PREDICTION
+		  bool '      HPT366 mode three unsupported (EXPERIMENTAL) (WIP)' HPT366_MODE3
 	       fi
 	       if [ "$CONFIG_X86" = "y" ]; then
 		  bool '    Intel PIIXn chipsets support' CONFIG_BLK_DEV_PIIX
@@ -225,7 +235,9 @@ fi
 if [ "$CONFIG_IDE_CHIPSETS" = "y" -o \
      "$CONFIG_BLK_DEV_AEC6210" = "y" -o \
      "$CONFIG_BLK_DEV_ALI15X3" = "y" -o \
+     "$CONFIG_BLK_DEV_AMD7409" = "y" -o \
      "$CONFIG_BLK_DEV_CMD640" = "y" -o \
+     "$CONFIG_BLK_DEV_CMD64X" = "y" -o \
      "$CONFIG_BLK_DEV_CY82C693" = "y" -o \
      "$CONFIG_BLK_DEV_HPT34X" = "y" -o \
      "$CONFIG_BLK_DEV_HPT366" = "y" -o \

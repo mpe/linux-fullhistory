@@ -41,6 +41,7 @@
 #define DEVID_CMD640	((ide_pci_devid_t){PCI_VENDOR_ID_CMD,     PCI_DEVICE_ID_CMD_640})
 #define DEVID_CMD643	((ide_pci_devid_t){PCI_VENDOR_ID_CMD,     PCI_DEVICE_ID_CMD_643})
 #define DEVID_CMD646	((ide_pci_devid_t){PCI_VENDOR_ID_CMD,     PCI_DEVICE_ID_CMD_646})
+#define DEVID_CMD648	((ide_pci_devid_t){PCI_VENDOR_ID_CMD,     PCI_DEVICE_ID_CMD_648})
 #define DEVID_SIS5513	((ide_pci_devid_t){PCI_VENDOR_ID_SI,      PCI_DEVICE_ID_SI_5513})
 #define DEVID_OPTI621	((ide_pci_devid_t){PCI_VENDOR_ID_OPTI,    PCI_DEVICE_ID_OPTI_82C621})
 #define DEVID_OPTI621V	((ide_pci_devid_t){PCI_VENDOR_ID_OPTI,    PCI_DEVICE_ID_OPTI_82C558})
@@ -60,7 +61,7 @@
 #define DEVID_CY82C693	((ide_pci_devid_t){PCI_VENDOR_ID_CONTAQ,  PCI_DEVICE_ID_CONTAQ_82C693})
 #define DEVID_HINT	((ide_pci_devid_t){0x3388,                0x8013})
 #define DEVID_CX5530	((ide_pci_devid_t){PCI_VENDOR_ID_CYRIX,   PCI_DEVICE_ID_CYRIX_5530_IDE})
-#define DEVID_AMD7409	((ide_pci_devid_t){PCI_VENDOR_ID_AMD,     0x7409})
+#define DEVID_AMD7409	((ide_pci_devid_t){PCI_VENDOR_ID_AMD,     PCI_DEVICE_ID_AMD_VIPER_7409})
 
 #define	IDE_IGNORE	((void *)-1)
 
@@ -93,14 +94,31 @@ extern void ide_dmacapable_ali15x3(ide_hwif_t *, unsigned long);
 #define DMA_ALI15X3	NULL
 #endif
 
-#ifdef CONFIG_BLK_DEV_CMD646
-extern void ide_init_cmd646(ide_hwif_t *);
-#define INIT_CMD646	&ide_init_cmd646
+#ifdef CONFIG_BLK_DEV_AMD7409
+extern unsigned int ata66_amd7409(ide_hwif_t *);
+extern void ide_init_amd7409(ide_hwif_t *);
+#define ATA66_AMD7409	&ata66_amd7409
+#define INIT_AMD7409	&ide_init_amd7409
 #else
+#define ATA66_AMD7409	NULL
+#define INIT_AMD7409	NULL
+#endif
+
+#ifdef CONFIG_BLK_DEV_CMD64X
+extern unsigned int pci_init_cmd64x(struct pci_dev *, const char *);
+extern unsigned int ata66_cmd64x(ide_hwif_t *);
+extern void ide_init_cmd64x(ide_hwif_t *);
+extern void ide_dmacapable_cmd64x(ide_hwif_t *, unsigned long);
+#define PCI_CMD64X	&pci_init_cmd64x
+#define ATA66_CMD64X	&ata66_cmd64x
+#define INIT_CMD64X	&ide_init_cmd64x
+#else
+#define PCI_CMD64X	NULL
+#define ATA66_CMD64X	NULL
 #ifdef __sparc_v9__
-#define INIT_CMD646	IDE_IGNORE
+#define INIT_CMD64X	IDE_IGNORE
 #else
-#define INIT_CMD646	NULL
+#define INIT_CMD64X	NULL
 #endif
 #endif
 
@@ -128,6 +146,7 @@ extern void ide_init_hpt34x(ide_hwif_t *);
 
 #ifdef CONFIG_BLK_DEV_HPT366
 extern byte hpt363_shared_irq;
+extern byte hpt363_shared_pin;
 extern unsigned int pci_init_hpt366(struct pci_dev *, const char *);
 extern unsigned int ata66_hpt366(ide_hwif_t *);
 extern void ide_init_hpt366(ide_hwif_t *);
@@ -138,6 +157,7 @@ extern void ide_dmacapable_hpt366(ide_hwif_t *, unsigned long);
 #define DMA_HPT366	&ide_dmacapable_hpt366
 #else
 static byte hpt363_shared_irq = 0;
+static byte hpt363_shared_pin = 0;
 #define PCI_HPT366	NULL
 #define ATA66_HPT366	NULL
 #define INIT_HPT366	NULL
@@ -271,8 +291,9 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_CMD640,	"CMD640",	NULL,		NULL,		IDE_IGNORE,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
 	{DEVID_NS87410,	"NS87410",	NULL,		NULL,		NULL,		NULL,		{{0x43,0x08,0x08}, {0x47,0x08,0x08}}, 	ON_BOARD,	0 },
 	{DEVID_SIS5513,	"SIS5513",	PCI_SIS5513,	ATA66_SIS5513,	INIT_SIS5513,	NULL,		{{0x4a,0x02,0x02}, {0x4a,0x04,0x04}}, 	ON_BOARD,	0 },
-	{DEVID_CMD643,	"CMD643",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
-	{DEVID_CMD646,	"CMD646",	NULL,		NULL,		INIT_CMD646,	NULL,		{{0x00,0x00,0x00}, {0x51,0x80,0x80}}, 	ON_BOARD,	0 },
+	{DEVID_CMD643,	"CMD643",	PCI_CMD64X,	NULL,		INIT_CMD64X,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
+	{DEVID_CMD646,	"CMD646",	PCI_CMD64X,	NULL,		INIT_CMD64X,	NULL,		{{0x00,0x00,0x00}, {0x51,0x80,0x80}}, 	ON_BOARD,	0 },
+	{DEVID_CMD648,	"CMD648",	PCI_CMD64X,	ATA66_CMD64X,	INIT_CMD64X,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_HT6565,	"HT6565",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 },
 	{DEVID_OPTI621,	"OPTI621",	NULL,		NULL,		INIT_OPTI621,	NULL,		{{0x45,0x80,0x00}, {0x40,0x08,0x00}}, 	ON_BOARD,	0 },
 	{DEVID_OPTI621X,"OPTI621X",	NULL,		NULL,		INIT_OPTI621,	NULL,		{{0x45,0x80,0x00}, {0x40,0x08,0x00}}, 	ON_BOARD,	0 },
@@ -289,7 +310,7 @@ static ide_pci_device_t ide_pci_chipsets[] __initdata = {
 	{DEVID_CY82C693,"CY82C693",	PCI_CY82C693,	NULL,		INIT_CY82C693,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_HINT,	"HINT_IDE",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
 	{DEVID_CX5530,	"CX5530",	NULL,		NULL,		INIT_CX5530,	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
-	{DEVID_AMD7409,	"AMD7409",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}},	ON_BOARD,	0 },
+	{DEVID_AMD7409,	"AMD7409",	NULL,		ATA66_AMD7409,	INIT_AMD7409,	NULL,		{{0x40,0x01,0x01}, {0x40,0x02,0x02}},	ON_BOARD,	0 },
 	{IDE_PCI_DEVID_NULL, "PCI_IDE",	NULL,		NULL,		NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}}, 	ON_BOARD,	0 }};
 
 /*
@@ -496,6 +517,8 @@ check_if_enabled:
 		printk("%s: bad irq (%d): will probe later\n", d->name, pciirq);
 		pciirq = 0;
 	} else {
+		if (d->init_chipset)
+			(void) d->init_chipset(dev, d->name);
 #ifdef __sparc__
 		printk("%s: 100%% native mode on irq %s\n",
 		       d->name, __irq_itoa(pciirq));
@@ -642,8 +665,9 @@ static void __init hpt366_device_order_fixup (struct pci_dev *dev, ide_pci_devic
 		    (PCI_FUNC(findev->devfn) & 1)) {
 			dev2 = findev;
 			pci_read_config_byte(dev2, PCI_INTERRUPT_PIN, &pin2);
-			hpt363_shared_irq = (pin1 != pin2) ? 1 : 0;
-			if (hpt363_shared_irq) {
+			hpt363_shared_pin = (pin1 != pin2) ? 1 : 0;
+			hpt363_shared_irq = (dev->irq == dev2->irq) ? 1 : 0;
+			if (hpt363_shared_pin && hpt363_shared_irq) {
 				d->bootable = ON_BOARD;
 				printk("%s: onboard version of chipset, pin1=%d pin2=%d\n", d->name, pin1, pin2);
 			}
@@ -656,6 +680,15 @@ static void __init hpt366_device_order_fixup (struct pci_dev *dev, ide_pci_devic
 		return;
 	d2 = d;
 	printk("%s: IDE controller on PCI bus %02x dev %02x\n", d2->name, dev2->bus->number, dev2->devfn);
+	if (hpt363_shared_pin && !hpt363_shared_irq) {
+		printk("%s: IDE controller run unsupported mode three!!!\n", d2->name);
+#ifndef HPT366_MODE3
+		printk("%s: IDE controller report to <andre@suse.com>\n", d->name);
+		return;
+#else /* HPT366_MODE3 */
+		printk("%s: OVERRIDE IDE controller not advisable this mode!!!\n", d2->name);
+#endif /* HPT366_MODE3 */
+	}
 	ide_setup_pci_device(dev2, d2);
 }
 
@@ -663,7 +696,7 @@ static void __init hpt366_device_order_fixup (struct pci_dev *dev, ide_pci_devic
  * ide_scan_pcibus() gets invoked at boot time from ide.c.
  * It finds all PCI IDE controllers and calls ide_setup_pci_device for them.
  */
-void __init ide_scan_pcibus (void)
+void __init ide_forward_scan_pcibus (void)
 {
 	struct pci_dev		*dev;
 	ide_pci_devid_t		devid;
@@ -692,4 +725,41 @@ void __init ide_scan_pcibus (void)
 			ide_setup_pci_device(dev, d);
 		}
 	}
+}
+
+void __init ide_reverse_scan_pcibus (void)
+{
+	struct pci_dev		*dev;
+	ide_pci_devid_t		devid;
+	ide_pci_device_t	*d;
+
+	pci_for_each_dev_reverse(dev) {
+		devid.vid = dev->vendor;
+		devid.did = dev->device;
+		for (d = ide_pci_chipsets; d->devid.vid && !IDE_PCI_DEVID_EQ(d->devid, devid); ++d);
+		if (d->init_hwif == IDE_IGNORE)
+			printk("%s: ignored by ide_scan_pci_device() (uses own driver)\n", d->name);
+		else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_OPTI621V) && !(PCI_FUNC(dev->devfn) & 1))
+			continue;	/* OPTI Viper-M uses same devid for functions 0 and 1 */
+		else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_CY82C693) && (!(PCI_FUNC(dev->devfn) & 1) || !((dev->class >> 8) == PCI_CLASS_STORAGE_IDE)))
+			continue;	/* CY82C693 is more than only a IDE controller */
+		else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_UM8886A) && !(PCI_FUNC(dev->devfn) & 1))
+			continue;	/* UM8886A/BF pair */
+		else if (IDE_PCI_DEVID_EQ(d->devid, DEVID_HPT366))
+			hpt366_device_order_fixup(dev, d);
+		else if (!IDE_PCI_DEVID_EQ(d->devid, IDE_PCI_DEVID_NULL) || (dev->class >> 8) == PCI_CLASS_STORAGE_IDE) {
+			if (IDE_PCI_DEVID_EQ(d->devid, IDE_PCI_DEVID_NULL))
+				printk("%s: unknown IDE controller on PCI bus %02x device %02x, VID=%04x, DID=%04x\n",
+					d->name, dev->bus->number, dev->devfn, devid.vid, devid.did);
+			else
+				printk("%s: IDE controller on PCI bus %02x dev %02x\n", d->name, dev->bus->number, dev->devfn);
+			ide_setup_pci_device(dev, d);
+		}
+	}
+}
+
+void __init ide_scan_pcibus (int scan_direction)
+{
+	if (!scan_direction) ide_forward_scan_pcibus();
+		else ide_reverse_scan_pcibus();
 }

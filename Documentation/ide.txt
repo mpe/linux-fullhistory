@@ -1,4 +1,4 @@
-ide.txt -- Information regarding the Enhanced IDE drive in Linux 2.1/2.2
+ide.txt -- Information regarding the Enhanced IDE drive in Linux 2.2/2.3/2.4
 ===============================================================================
 
    +-----------------------------------------------------------------+

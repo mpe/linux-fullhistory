@@ -1783,6 +1783,7 @@ EXPORT_SYMBOL(usb_set_address);
 EXPORT_SYMBOL(usb_get_descriptor);
 EXPORT_SYMBOL(usb_get_class_descriptor);
 EXPORT_SYMBOL(__usb_get_extra_descriptor);
+EXPORT_SYMBOL(usb_get_device_descriptor);
 EXPORT_SYMBOL(usb_get_string);
 EXPORT_SYMBOL(usb_string);
 EXPORT_SYMBOL(usb_get_protocol);

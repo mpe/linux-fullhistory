@@ -17,7 +17,9 @@ tristate '  TEQL queue' CONFIG_NET_SCH_TEQL
 tristate '  TBF queue' CONFIG_NET_SCH_TBF
 tristate '  GRED queue' CONFIG_NET_SCH_GRED
 tristate '  Diffserv field marker' CONFIG_NET_SCH_DSMARK
-tristate '  Ingress Qdisc' CONFIG_NET_SCH_INGRESS
+if [ "$CONFIG_NETFILTER" = "y" ]; then
+   tristate '  Ingress Qdisc' CONFIG_NET_SCH_INGRESS
+fi
 bool '  QoS support' CONFIG_NET_QOS
 if [ "$CONFIG_NET_QOS" = "y" ]; then
    bool '    Rate estimator' CONFIG_NET_ESTIMATOR

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c		Version 6.21	November 9, 1999
+ *  linux/drivers/block/ide.c		Version 6.30	Dec 28, 1999
  *
  *  Copyright (C) 1994-1998  Linus Torvalds & authors (see below)
  */
@@ -108,6 +108,7 @@
  *			  Specifically Promise's PDC20262 chipset.
  * Version 6.21		Fixing/Fixed SMP spinlock issue with insight from an old
  *			  hat that clarified original low level driver design.
+ * Version 6.30		Added SMP support; fixed multmode issues.  -ml
  *
  *  Some additional driver compile-time options are in ./include/linux/ide.h
  *
@@ -116,8 +117,8 @@
  *
  */
 
-#define	REVISION	"Revision: 6.21"
-#define	VERSION		"Id: ide.c 6.21 1999/11/10"
+#define	REVISION	"Revision: 6.30"
+#define	VERSION		"Id: ide.c 6.30 1999/12/28"
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
 
@@ -168,6 +169,10 @@ static const byte	ide_hwif_to_major[] = { IDE0_MAJOR, IDE1_MAJOR,
 static int	idebus_parameter; /* holds the "idebus=" parameter */
 static int	system_bus_speed; /* holds what we think is VESA/PCI bus speed */
 static int	initializing;     /* set while initializing built-in drivers */
+
+#ifdef CONFIG_BLK_DEV_IDEPCI
+static int ide_scan_direction = 0;	/* HELLO, comment me!! */
+#endif /* CONFIG_BLK_DEV_IDEPCI */
 
 #if defined(__mc68000__) || defined(CONFIG_APUS)
 /*
@@ -556,6 +561,9 @@ void ide_geninit (struct gendisk *gd)
 
 		drive->part[0].nr_sects = current_capacity(drive);
 		if (!drive->present || (drive->media != ide_disk && drive->media != ide_floppy) ||
+#ifdef CONFIG_BLK_DEV_ISAPNP
+		    (drive->forced_geom && drive->noprobe) ||
+#endif /* CONFIG_BLK_DEV_ISAPNP */
 		    drive->driver == NULL || !drive->part[0].nr_sects)
 			drive->part[0].start_sect = -1; /* skip partition check */
 	}
@@ -669,7 +677,7 @@ static void pre_reset (ide_drive_t *drive)
  * (up to 30 seconds worstcase).  So, instead of busy-waiting here for it,
  * we set a timer to poll at 50ms intervals.
  */
-static ide_startstop_t do_reset1 (ide_drive_t *drive, int  do_not_try_atapi)
+static ide_startstop_t do_reset1 (ide_drive_t *drive, int do_not_try_atapi)
 {
 	unsigned int unit;
 	unsigned long flags;
@@ -1213,7 +1221,7 @@ repeat:
  * the driver.  This makes the driver much more friendlier to shared IRQs
  * than previous designs, while remaining 100% (?) SMP safe and capable.
  */
-static void ide_do_request (ide_hwgroup_t *hwgroup)
+static void ide_do_request (ide_hwgroup_t *hwgroup, int masked_irq)
 {
 	struct blk_dev_struct *bdev;
 	ide_drive_t	*drive;
@@ -1272,14 +1280,25 @@ static void ide_do_request (ide_hwgroup_t *hwgroup)
 		drive->service_start = jiffies;
 
 		bdev = &blk_dev[hwif->major];
-		if( bdev->request_queue.plugged )	/* FIXME: paranoia */
+		if ( bdev->request_queue.plugged )	/* FIXME: paranoia */
 			printk("%s: Huh? nuking plugged queue\n", drive->name);
 		bdev->request_queue.current_request = hwgroup->rq = drive->queue.current_request;
+		/*
+		 * Some systems have trouble with IDE IRQs arriving while
+		 * the driver is still setting things up.  So, here we disable
+		 * the IRQ used by this interface while the request is being started.
+		 * This may look bad at first, but pretty much the same thing
+		 * happens anyway when any interrupt comes in, IDE or otherwise
+		 *  -- the kernel masks the IRQ while it is being handled.
+		 */
+		if (hwif->irq != masked_irq)
+			disable_irq_nosync(hwif->irq);
 		spin_unlock(&io_request_lock);
-		if (!hwif->serialized)	/* play it safe with buggy hardware */
-			ide__sti();
+		ide__sti();	/* allow other IRQs while we start this request */
 		startstop = start_request(drive);
 		spin_lock_irq(&io_request_lock);
+		if (hwif->irq != masked_irq)
+			enable_irq(hwif->irq);
 		if (startstop == ide_stopped)
 			hwgroup->busy = 0;
 	}
@@ -1297,69 +1316,69 @@ request_queue_t *ide_get_queue (kdev_t dev)
 
 void do_ide0_request (request_queue_t *q)
 {
-	ide_do_request (ide_hwifs[0].hwgroup);
+	ide_do_request (ide_hwifs[0].hwgroup, 0);
 }
 
 #if MAX_HWIFS > 1
 void do_ide1_request (request_queue_t *q)
 {
-	ide_do_request (ide_hwifs[1].hwgroup);
+	ide_do_request (ide_hwifs[1].hwgroup, 0);
 }
 #endif /* MAX_HWIFS > 1 */
 
 #if MAX_HWIFS > 2
 void do_ide2_request (request_queue_t *q)
 {
-	ide_do_request (ide_hwifs[2].hwgroup);
+	ide_do_request (ide_hwifs[2].hwgroup, 0);
 }
 #endif /* MAX_HWIFS > 2 */
 
 #if MAX_HWIFS > 3
 void do_ide3_request (request_queue_t *q)
 {
-	ide_do_request (ide_hwifs[3].hwgroup);
+	ide_do_request (ide_hwifs[3].hwgroup, 0);
 }
 #endif /* MAX_HWIFS > 3 */
 
 #if MAX_HWIFS > 4
 void do_ide4_request (request_queue_t *q)
 {
-	ide_do_request (ide_hwifs[4].hwgroup);
+	ide_do_request (ide_hwifs[4].hwgroup, 0);
 }
 #endif /* MAX_HWIFS > 4 */
 
 #if MAX_HWIFS > 5
 void do_ide5_request (request_queue_t *q)
 {
-	ide_do_request (ide_hwifs[5].hwgroup);
+	ide_do_request (ide_hwifs[5].hwgroup, 0);
 }
 #endif /* MAX_HWIFS > 5 */
 
 #if MAX_HWIFS > 6
 void do_ide6_request (request_queue_t *q)
 {
-	ide_do_request (ide_hwifs[6].hwgroup);
+	ide_do_request (ide_hwifs[6].hwgroup, 0);
 }
 #endif /* MAX_HWIFS > 6 */
 
 #if MAX_HWIFS > 7
 void do_ide7_request (request_queue_t *q)
 {
-	ide_do_request (ide_hwifs[7].hwgroup);
+	ide_do_request (ide_hwifs[7].hwgroup, 0);
 }
 #endif /* MAX_HWIFS > 7 */
 
 #if MAX_HWIFS > 8
 void do_ide8_request (request_queue_t *q)
 {
-	ide_do_request (ide_hwifs[8].hwgroup);
+	ide_do_request (ide_hwifs[8].hwgroup, 0);
 }
 #endif /* MAX_HWIFS > 8 */
 
 #if MAX_HWIFS > 9
 void do_ide9_request (request_queue_t *q)
 {
-	ide_do_request (ide_hwifs[9].hwgroup);
+	ide_do_request (ide_hwifs[9].hwgroup, 0);
 }
 #endif /* MAX_HWIFS > 9 */
 
@@ -1445,7 +1464,7 @@ void ide_timer_expiry (unsigned long data)
 				hwgroup->busy = 0;
 		}
 	}
-	ide_do_request(hwgroup);
+	ide_do_request(hwgroup, 0);
 	spin_unlock_irqrestore(&io_request_lock, flags);
 }
 
@@ -1593,7 +1612,7 @@ void ide_intr (int irq, void *dev_id, struct pt_regs *regs)
 	if (startstop == ide_stopped) {
 		if (hwgroup->handler == NULL) {	/* paranoia */
 			hwgroup->busy = 0;
-			ide_do_request(hwgroup);
+			ide_do_request(hwgroup, hwif->irq);
 		} else {
 			printk("%s: ide_intr: huh? expected NULL handler on exit\n", drive->name);
 		}
@@ -1608,6 +1627,7 @@ void ide_intr (int irq, void *dev_id, struct pt_regs *regs)
 ide_drive_t *get_info_ptr (kdev_t i_rdev)
 {
 	int		major = MAJOR(i_rdev);
+	int		minor = MINOR(i_rdev) & PARTN_MASK;
 	unsigned int	h;
 
 	for (h = 0; h < MAX_HWIFS; ++h) {
@@ -1616,7 +1636,11 @@ ide_drive_t *get_info_ptr (kdev_t i_rdev)
 			unsigned unit = DEVICE_NR(i_rdev);
 			if (unit < MAX_DRIVES) {
 				ide_drive_t *drive = &hwif->drives[unit];
+#if 1
 				if (drive->present)
+#else
+				if ((drive->present) && (drive->part[minor].nr_sects))
+#endif
 					return drive;
 			}
 			break;
@@ -1698,7 +1722,7 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
 		rq->next = cur_rq->next;
 		cur_rq->next = rq;
 	}
-	ide_do_request(hwgroup);
+	ide_do_request(hwgroup, 0);
 	spin_unlock_irqrestore(&io_request_lock, flags);
 	if (action == ide_wait) {
 		down(&sem);			/* wait for it to be serviced */
@@ -2677,6 +2701,7 @@ static int __init match_parm (char *s, const char *keywords[], int vals[], int m
  *				for chipsets that are ATA-66 capable, but
  *				the ablity to bit test for detection is
  *				currently unknown.
+ * "ide=reverse"	: Formerly called to pci sub-system, but now local.
  *
  * "splitfifo=betweenChan"
  *			: FIFO Configuration of VIA 82c586(<nothing>,"A"or"B").
@@ -2726,6 +2751,14 @@ int __init ide_setup (char *s)
 		return 0;
 	}
 #endif /* CONFIG_BLK_DEV_IDEDOUBLER */
+
+#ifdef CONFIG_BLK_DEV_IDEPCI
+	if (!strcmp(s, "ide=reverse")) {
+		ide_scan_direction = 1;
+		printk("ide: Enabled support for IDE inverse scan order.\n");
+		return 0;
+	}
+#endif /* CONFIG_BLK_DEV_IDEPCI */
 
 	init_ide_data ();
 
@@ -3060,7 +3093,7 @@ static void __init probe_for_hwifs (void)
 	if (pci_present())
 	{
 #ifdef CONFIG_BLK_DEV_IDEPCI
-		ide_scan_pcibus();
+		ide_scan_pcibus(ide_scan_direction);
 #else
 #ifdef CONFIG_BLK_DEV_RZ1000
 		{

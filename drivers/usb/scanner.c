@@ -125,7 +125,7 @@ static struct hpscan_usb_data hpscan;
 MODULE_AUTHOR("David E. Nelson, dnelson@jump.net, http://www.jump.net/~dnelson");
 MODULE_DESCRIPTION("USB Scanner Driver");
 
-static __u16 vendor=0, product=0;
+static __u16 vendor=0x05f9, product=0xffff;
 MODULE_PARM(vendor, "i");
 MODULE_PARM_DESC(vendor, "User specified USB idVendor");
 

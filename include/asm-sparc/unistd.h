@@ -90,10 +90,10 @@
 #define __NR_setreuid32          72 /* Linux sparc32, vadvise under SunOS          */
 #define __NR_munmap              73 /* Common                                      */
 #define __NR_mprotect            74 /* Common                                      */
-#define __NR_setregid32          75 /* Linux sparc32, madvise under SunOS          */
+#define __NR_madvise             75 /* Common                                      */
 #define __NR_vhangup             76 /* Common                                      */
 #define __NR_truncate64		 77 /* Linux sparc32 Specific			   */
-#define __NR_getgroups32         78 /* Linux sparc32, mincore under SunOS          */
+#define __NR_mincore             78 /* Common                                      */
 #define __NR_getgroups           79 /* Common                                      */
 #define __NR_setgroups           80 /* Common                                      */
 #define __NR_getpgrp             81 /* Common                                      */
@@ -127,10 +127,10 @@
 #define __NR_getresuid32        109 /* Linux Specific, sigblock under SunOS	   */
 #define __NR_setresgid32        110 /* Linux Specific, sigsetmask under SunOS	   */
 #define __NR_getresgid32        111 /* Linux Specific, sigpause under SunOS	   */
-/* #define __NR_sigstack        112    SunOS Specific                              */
+#define __NR_setregid32         112 /* Linux sparc32, sigstack under SunOS         */
 #define __NR_recvmsg            113 /* Common                                      */
 #define __NR_sendmsg            114 /* Common                                      */
-/* #define __NR_vtrace          115    SunOS Specific                              */
+#define __NR_getgroups32        115 /* Linux sparc32, vtrace under SunOS           */
 #define __NR_gettimeofday       116 /* Common                                      */
 #define __NR_getrusage          117 /* Common                                      */
 #define __NR_getsockopt         118 /* Common                                      */

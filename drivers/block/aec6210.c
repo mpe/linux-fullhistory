@@ -287,8 +287,6 @@ void __init ide_init_aec6210 (ide_hwif_t *hwif)
 
 	if (hwif->dma_base) {
 		hwif->dmaproc = &aec6210_dmaproc;
-		hwif->drives[0].autotune = 0;
-		hwif->drives[1].autotune = 0;
 	} else {
 		hwif->drives[0].autotune = 1;
 		hwif->drives[1].autotune = 1;

@@ -670,6 +670,7 @@ static int ipv6_generate_eui64(u8 *eui, struct net_device *dev)
 {
 	switch (dev->type) {
 	case ARPHRD_ETHER:
+	case ARPHRD_IEEE802_TR:
 		if (dev->addr_len != ETH_ALEN)
 			return -1;
 		memcpy(eui, dev->dev_addr, 3);
@@ -1191,7 +1192,8 @@ static void addrconf_dev_config(struct net_device *dev)
 
 	ASSERT_RTNL();
 
-	if (dev->type != ARPHRD_ETHER) {
+	if ((dev->type != ARPHRD_ETHER)  && 
+	    (dev->type != ARPHRD_IEEE802_TR)) {
 		/* Alas, we support only Ethernet autoconfiguration. */
 		return;
 	}
@@ -1990,7 +1992,8 @@ void __init addrconf_init(void)
 		case ARPHRD_LOOPBACK:	
 			init_loopback(dev);
 			break;
-		case ARPHRD_ETHER:	
+		case ARPHRD_ETHER:
+		case ARPHRD_IEEE802_TR:	
 			addrconf_dev_config(dev);
 			break;
 		default:

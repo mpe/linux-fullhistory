@@ -431,17 +431,6 @@ CONFIG_BLK_DEV_IDECD
   say M here and read Documentation/modules.txt. The module will be
   called ide-cd.o.
 
-Include CD-Changer Reporting
-CONFIG_IDECD_SLOTS
-  If you have an IDE/ATAPI multi-slot cd-changer and you want
-  to report which slots have a disk present, say Y.  If you say Y
-  and there is no multi-slot cdrom present, this code is skipped.
-
-  This code could be the basis of multi-disk access based on
-  multi-mounts, but this is still pie-in-the-sky.
-
-  If unsure, say N.
-
 Include IDE/ATAPI TAPE support
 CONFIG_BLK_DEV_IDETAPE
   If you have an IDE tape drive using the ATAPI protocol, say Y.
@@ -450,6 +439,8 @@ CONFIG_BLK_DEV_IDETAPE
   can say N here.
 
   This now includes the OnStream DI-30 tape drive support.
+  Will not work with SCSI protocol, until there is support for the
+  SC-30 and SC-50 versions.
 
   If you say Y here, the tape drive will be identified at boot time
   along with other IDE devices, as "hdb" or "hdc", or something
@@ -489,6 +480,9 @@ CONFIG_BLK_DEV_IDESCSI
   and will allow you to use a SCSI device driver instead of a native
   ATAPI driver.
 
+  Must pass "hdx=scsi" per devices if you want the native EIDE sub-drivers
+  to skip over the native support.  This is required for use of CD-RW's.
+
   This is useful if you have an ATAPI device for which no native
   driver has been written (for example, an ATAPI PD-CD or CDR drive);
   you can then use this emulation together with an appropriate SCSI
@@ -502,6 +496,13 @@ CONFIG_BLK_DEV_IDESCSI
   into the kernel, the native support will be used.
 
   People with SCSI-only systems can say N here. If unsure, say N.
+
+ISA-PNP EIDE support
+CONFIG_BLK_DEV_ISAPNP
+  If you have an ISA EIDE card that is PnP and requires setup first
+  before scanning for devices, say Y here.
+
+  If unsure, say N.
 
 CMD640 chipset bugfix/support
 CONFIG_BLK_DEV_CMD640
@@ -634,7 +635,7 @@ CONFIG_BLK_DEV_AEC6210
 
   Please read the comments at the top of drivers/block/aec6210.c
 
-ALI M15x3 chipset support (EXPERIMENTAL)
+ALI M15x3 chipset support
 CONFIG_BLK_DEV_ALI15X3
   This driver ensures (U)DMA support for ALI 1543 and 1543C,
   1535, 1535D onboard chipsets.  It also tests for Simplex mode and
@@ -642,14 +643,29 @@ CONFIG_BLK_DEV_ALI15X3
 
   If you say Y here, you also need to say Y to "Use DMA by default
   when available", above.
-
   Please read the comments at the top of drivers/block/alim15x3.c
 
   If unsure, say N.
 
-CMD646 chipset support (EXPERIMENTAL)
-CONFIG_BLK_DEV_CMD646
-  Say Y here if you have an IDE controller which uses this chipset.
+AMD7409 chipset support (EXPERIMENTAL)
+CONFIG_BLK_DEV_AMD7409
+  This driver ensures (U)DMA support for AMD756 Viper chipset.
+
+  If you say Y here, you also need to say Y to "Use DMA by default
+  when available", above.
+  Please read the comments at the top of drivers/block/amd7409.c
+
+  If unsure, say N.
+
+CMD64X chipset support
+CONFIG_BLK_DEV_CMD64X
+  Say Y here if you have an IDE controller which uses any of these chipsets,
+  CMD643, CMD646, or CMD648.
+
+CMD64X chipset RAID support (EXPERIMENTAL) (WIP)
+CONFIG_BLK_DEV_CMD64X
+  Work in progress for hardware raid ata-33/66..........rev 7 minimum.
+  Say N for now.
 
 CY82C693 chipset support (EXPERIMENTAL)
 CONFIG_BLK_DEV_CY82C693
@@ -687,9 +703,14 @@ CONFIG_BLK_DEV_HPT366
 
   Please read the comments at the top of drivers/block/hpt366.c
 
-HPT366 Fast Interrupt support (EXPERIMENTAL)
+HPT366 Fast Interrupt support (EXPERIMENTAL) (WIP)
 HPT366_FAST_IRQ_PREDICTION
 
+  If unsure, say N.
+
+HPT366 mode three unsupported (EXPERIMENTAL) (WIP)
+HPT366_MODE3
+  This is an undocumented mode that the HA366 can default to in many cases.
   If unsure, say N.
 
 NS87415 support (EXPERIMENTAL)
@@ -713,7 +734,8 @@ CONFIG_BLK_DEV_PIIX
 
   Please read the comments at the top of drivers/block/piix.c
 
-  If unsure, say N.
+  Should also include "PIIXn Tuning support" CONFIG_BLK_DEV_PIIX_TUNING
+  If unsure, say Y.
 
 PIIXn Tuning support
 CONFIG_BLK_DEV_PIIX_TUNING
@@ -725,7 +747,7 @@ CONFIG_BLK_DEV_PIIX_TUNING
   Case 430HX/440FX PIIX3 need speed limits to reduce UDMA to DMA mode
   2 if the BIOS can not perform this task at initialization.
 
-  If unsure, say N.
+  If unsure, say Y.
 
 PROMISE PDC20246/PDC20262 support
 CONFIG_BLK_DEV_PDC202XX

@@ -1,42 +1,115 @@
-This serial driver currently only works with the Belkin and Peracom USB 
-Serial devices. It should also work for the Etek converter, but I do 
-not know the vendor id and device id of that device (if anyone does, 
-please let me know.)
+INTRODUCTION
 
-If your device is not compatible with the above models, you can try
-out the "generic" interface. This interface does not provide any type
-of control messages sent to the device, and does not support any kind
-of device flow control. All that is required of your device is that
-it has at least one bulk in endpoint, or one bulk out endpoint.
-To enable the driver to recognize your device, build the driver as
-a module and load it by the following invocation:
-	insmod usb-serial.o vendor=0x#### product=0x####
-where the #### is replaced with the hex representation of your device's
-vendor id and product id.
+  The USB serial driver currently supports a number of different USB to
+  serial converter products, as well as some devices that use a serial
+  interface from userspace to talk to the device.
 
-The driver can handle enumerating the device, and sending and receiving
-data from the converter. However, since I do not have a spec for the Belkin,
-Peracom, and eTek devices, and the raw dumps from the Win98 driver are 
-confusing, and eTek keeps giving me the run around, no control signals are 
-currently handled, and the data will most likely come through on a baud
-rate that you are not expecting. So if you have these devices, do not 
-expect the correct data to show up at either end. 
-
-The major number that the driver uses is 188 so to use the driver, create
-the following nodes:
-mknod /dev/ttyUSB0 c 188 0
-mknod /dev/ttyUSB1 c 188 1
-mknod /dev/ttyUSB2 c 188 2
-mknod /dev/ttyUSB3 c 188 3
-
-then plug in a device and use your friendly terminal program to see what
-happens.
-
-If anyone has any problems getting the device to enumerate, or data to 
-flow through it, please contact me.
+  See the individual product section below for specific information about
+  the different devices.
 
 
+CONFIGURATION
 
-greg k-h
+  Currently the driver can handle up to 16 different serial interfaces at
+  one time. Once more of the drivers become stable, this number will be
+  increased to the full 256. 
+
+  The major number that the driver uses is 188 so to use the driver,
+  create the following nodes:
+	mknod /dev/ttyUSB0 c 188 0
+	mknod /dev/ttyUSB1 c 188 1
+	mknod /dev/ttyUSB2 c 188 2
+	mknod /dev/ttyUSB3 c 188 3
+	mknod /dev/ttyUSB4 c 188 4
+	mknod /dev/ttyUSB5 c 188 5
+	mknod /dev/ttyUSB6 c 188 6
+	mknod /dev/ttyUSB7 c 188 7
+	mknod /dev/ttyUSB8 c 188 8
+	mknod /dev/ttyUSB9 c 188 9
+	mknod /dev/ttyUSB10 c 188 10
+	mknod /dev/ttyUSB11 c 188 11
+	mknod /dev/ttyUSB12 c 188 12
+	mknod /dev/ttyUSB13 c 188 13
+	mknod /dev/ttyUSB14 c 188 14
+	mknod /dev/ttyUSB15 c 188 15
+	mknod /dev/ttyUSB16 c 188 16
+
+
+SPECIFIC DEVICES SUPPORTED
+
+
+ConnectTech WhiteHEAT 4 port converter
+
+  ConnectTech has been very forthcoming with information about their
+  device, including providing a unit to test with. This driver will end up
+  being fully supported.
+
+Current status:
+  The device's firmware is downloaded on connection, but the use of a
+  special Anchor Chips extension is currently giving me problems.
+  This driver is not fully operational.
+
+
+HandSpring Visor USB docking station
+
+Current status:
+  Only when the Visor tries to connect to the host, does the docking
+  station show up as a valid USB device. When this happens, the device is
+  properly enumerated, assigned a port, and then communication _should_ be
+  possible. The driver cleans up properly when the device is removed, or
+  the connection is canceled on the Visor.
+  
+  I write _should_ because communication does not seem to work properly at
+  this time. I am in contact with the developers at HandSpring and am
+  working at getting this to work properly.
+
+  There is a webpage for this portion of the driver at 
+  http://milosch.net/visor/ and a project set up with mailing lists for
+  it at :
+  http://sourceforge.net/project/?group_id=1404
+
+
+Belkin single port serial converter
+Peracom single port serial converter
+
+Current status:
+  The driver can handle enumerating the device, and sending and receiving
+  data from the converter. However, since I do not have a spec for the
+  Belkin, Peracom, and eTek devices, and the raw dumps from the Win98
+  driver are confusing, and eTek refuses to provide documentation on their
+  protocol, no control signals are currently handled, and the data will
+  most likely come through on a baud rate that you are not expecting. So
+  if you have these devices, do not expect the correct data to show up at 
+  either end. 
+  
+
+Generic Serial driver
+
+  If your device is not one of the above listed devices, compatible with
+  the above models, you can try out the "generic" interface. This
+  interface does not provide any type of control messages sent to the
+  device, and does not support any kind of device flow control. All that
+  is required of your device is that it has at least one bulk in endpoint,
+  or one bulk out endpoint. 
+  
+  To enable the generic driver to recognize your device, build the driver
+  as a module and load it by the following invocation:
+	insmod usb-serial vendor=0x#### product=0x####
+  where the #### is replaced with the hex representation of your device's
+  vendor id and product id.
+
+  This driver has been successfully used to connect to the NetChip USB
+  development board, providing a way to develop USB firmware without
+  having to write a custom driver.
+
+
+CONTACT:
+
+  If anyone has any problems using this driver, with any of the above
+  specified products, please contact me, or join the Linux-USB mailing
+  list (information on joining the mailing list, as well as a link to its
+  searchable archive is at http://www.linux-usb.org/ )
+
+
+Greg Kroah-Hartman
 greg@kroah.com
-

@@ -952,10 +952,10 @@ static void hid_irq(struct urb *urb)
 static void hid_read_report(struct hid_device *hid, struct hid_report *report)
 {
 #if 0
-	int rlen = ((report->size - 1) >> 3) + 1 + report_enum->numbered;
+	int rlen = ((report->size - 1) >> 3) + 1 +  hid->report_enum[HID_INPUT_REPORT].numbered;
 	char rdata[rlen];
 	struct urb urb;
-	int read;
+	int read, j;
 
 	memset(&urb, 0, sizeof(struct urb));
 	memset(rdata, 0, rlen);
@@ -973,7 +973,7 @@ static void hid_read_report(struct hid_device *hid, struct hid_report *report)
 		for (j = 0; j < rlen; j++) printk(" %02x", rdata[j]);
 		printk("\n");
 #endif
-		continue;
+		return;
 	}
 
 	hid_irq(&urb);

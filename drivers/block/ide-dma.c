@@ -358,7 +358,7 @@ static int config_drive_for_dma (ide_drive_t *drive)
 			return hwif->dmaproc(ide_dma_off, drive);
 
 		/* Enable DMA on any drive that has UltraDMA (mode 3/4) enabled */
-		if ((id->field_valid & 4) && (hwif->udma_four) && (id->word93 & 0x2000))
+		if ((id->field_valid & 4) && (hwif->udma_four) && (id->hw_config & 0x2000))
 			if ((id->dma_ultra & (id->dma_ultra >> 11) & 3))
 				return hwif->dmaproc(ide_dma_on, drive);
 		/* Enable DMA on any drive that has UltraDMA (mode 0/1/2) enabled */

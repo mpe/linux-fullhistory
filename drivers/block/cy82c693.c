@@ -434,8 +434,6 @@ void __init ide_init_cy82c693(ide_hwif_t *hwif)
 	hwif->tuneproc = &cy82c693_tune_drive;
 	if (hwif->dma_base) {
 		hwif->dmaproc = &cy82c693_dmaproc;
-		hwif->drives[0].autotune = 0;
-		hwif->drives[1].autotune = 0;
 	} else {
 		hwif->drives[0].autotune = 1;
 		hwif->drives[1].autotune = 1;

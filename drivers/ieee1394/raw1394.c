@@ -724,7 +724,7 @@ static int dev_release(struct inode *inode, struct file *file)
         int done = 0, i;
 
         for (i = 0; i < 64; i++) {
-                if (fi->listen_channels & (1ULL < i)) {
+                if (fi->listen_channels & (1ULL << i)) {
                         hpsb_unlisten_channel(hl_handle, fi->host, i);
                 }
         }

@@ -42,6 +42,8 @@ struct isapnp_info_buffer {
 typedef struct isapnp_info_buffer isapnp_info_buffer_t;
 
 static struct proc_dir_entry *isapnp_proc_entry = NULL;
+static struct proc_dir_entry *isapnp_proc_bus_dir = NULL;
+static struct proc_dir_entry *isapnp_proc_devices_entry = NULL;
 
 static void isapnp_info_read(isapnp_info_buffer_t *buffer);
 static void isapnp_info_write(isapnp_info_buffer_t *buffer);
@@ -65,6 +67,18 @@ int isapnp_printf(isapnp_info_buffer_t * buffer, char *fmt,...)
 	buffer->curr += res;
 	buffer->size += res;
 	return res;
+}
+
+static void isapnp_devid(char *str, unsigned short vendor, unsigned short device)
+{
+	sprintf(str, "%c%c%c%x%x%x%x",
+			'A' + ((vendor >> 2) & 0x3f) - 1,
+			'A' + (((vendor & 3) << 3) | ((vendor >> 13) & 7)) - 1,
+			'A' + ((vendor >> 8) & 0x1f) - 1,
+			(device >> 4) & 0x0f,
+			device & 0x0f,
+			(device >> 12) & 0x0f,
+			(device >> 8) & 0x0f);
 }
 
 static loff_t isapnp_info_entry_lseek(struct file *file, loff_t offset, int orig)
@@ -186,17 +200,6 @@ static unsigned int isapnp_info_entry_poll(struct file *file, poll_table * wait)
 	return POLLIN | POLLRDNORM;
 }
 
-static int isapnp_info_entry_ioctl(struct inode *inode, struct file *file,
-				   unsigned int cmd, unsigned long arg)
-{
-	return -EINVAL;
-}
-
-static int isapnp_info_entry_mmap(struct file *file, struct vm_area_struct *vma)
-{
-	return -ENXIO;
-}
-
 static struct file_operations isapnp_info_entry_operations =
 {
 	isapnp_info_entry_lseek,	/* lseek */
@@ -204,8 +207,8 @@ static struct file_operations isapnp_info_entry_operations =
 	isapnp_info_entry_write,	/* write */
 	NULL,				/* readdir */
 	isapnp_info_entry_poll,		/* poll */
-	isapnp_info_entry_ioctl,	/* ioctl - default */
-	isapnp_info_entry_mmap,		/* mmap */
+	NULL,				/* ioctl - default */
+	NULL,				/* mmap */
 	isapnp_info_entry_open,		/* open */
 	NULL,				/* flush */
 	isapnp_info_entry_release,	/* release */
@@ -219,24 +222,210 @@ static struct inode_operations isapnp_info_entry_inode_operations =
 	&isapnp_info_entry_operations,	/* default sound info directory file-ops */
 };
 
-int __init isapnp_proc_init(void)
+static loff_t isapnp_proc_bus_lseek(struct file *file, loff_t off, int whence)
 {
-	struct proc_dir_entry *p;
+	loff_t new;
+	
+	switch (whence) {
+	case 0:
+		new = off;
+		break;
+	case 1:
+		new = file->f_pos + off;
+		break;
+	case 2:
+		new = 256 + off;
+		break;
+	default:
+		return -EINVAL;
+	}
+	if (new < 0 || new > 256)
+		return -EINVAL;
+	return (file->f_pos = new);
+}
 
-	isapnp_proc_entry = NULL;
-	p = create_proc_entry("isapnp", S_IFREG | S_IRUGO | S_IWUSR, &proc_root);
-	if (!p)
+static ssize_t isapnp_proc_bus_read(struct file *file, char *buf, size_t nbytes, loff_t *ppos)
+{
+	struct inode *ino = file->f_dentry->d_inode;
+	struct proc_dir_entry *dp = ino->u.generic_ip;
+	struct pci_dev *dev = dp->data;
+	int pos = *ppos;
+	int cnt, size = 256;
+
+	if (pos >= size)
+		return 0;
+	if (nbytes >= size)
+		nbytes = size;
+	if (pos + nbytes > size)
+		nbytes = size - pos;
+	cnt = nbytes;
+
+	if (!access_ok(VERIFY_WRITE, buf, cnt))
+		return -EINVAL;
+		
+	isapnp_cfg_begin(dev->bus->number, dev->devfn);
+	for ( ; pos < 256 && cnt > 0; pos++, buf++, cnt--) {
+		unsigned char val;
+		val = isapnp_read_byte(pos);
+		__put_user(val, buf);
+	}
+	isapnp_cfg_end();
+	
+	*ppos = pos;
+	return nbytes;
+}
+
+static struct file_operations isapnp_proc_bus_file_operations =
+{
+	isapnp_proc_bus_lseek,		/* lseek */
+	isapnp_proc_bus_read,		/* read */
+	NULL,				/* write */
+	NULL,				/* readdir */
+	NULL,				/* poll */
+	NULL,				/* ioctl - default */
+	NULL,				/* mmap */
+	NULL,				/* open */
+	NULL,				/* flush */
+	NULL,				/* release */
+	NULL,				/* can't fsync */
+	NULL,				/* fasync */
+	NULL,				/* lock */
+};
+
+static struct inode_operations isapnp_proc_bus_inode_operations =
+{
+	&isapnp_proc_bus_file_operations,
+};
+
+static int isapnp_proc_attach_device(struct pci_dev *dev)
+{
+	struct pci_bus *bus = dev->bus;
+	struct proc_dir_entry *de, *e;
+	char name[16];
+
+	if (!(de = bus->procdir)) {
+		sprintf(name, "%02x", bus->number);
+		de = bus->procdir = proc_mkdir(name, isapnp_proc_bus_dir);
+		if (!de)
+			return -ENOMEM;
+	}
+	sprintf(name, "%02x", dev->devfn);
+	e = dev->procent = create_proc_entry(name, S_IFREG | S_IRUGO, de);
+	if (!e)
 		return -ENOMEM;
-	p->ops = &isapnp_info_entry_inode_operations;
-	isapnp_proc_entry = p;
+	e->ops = &isapnp_proc_bus_inode_operations;
+	e->data = dev;
+	e->size = 256;
 	return 0;
 }
 
 #ifdef MODULE
-int isapnp_proc_done(void)
+static int __exit isapnp_proc_detach_device(struct pci_dev *dev)
 {
+	struct pci_bus *bus = dev->bus;
+	struct proc_dir_entry *de;
+	char name[16];
+
+	if (!(de = bus->procdir))
+		return -EINVAL;
+	sprintf(name, "%02x", dev->devfn);
+	remove_proc_entry(name, de);
+	return 0;
+}
+
+static int __exit isapnp_proc_detach_bus(struct pci_bus *bus)
+{
+	struct proc_dir_entry *de;
+	char name[16];
+
+	if (!(de = bus->procdir))
+		return -EINVAL;
+	sprintf(name, "%02x", bus->number);
+	remove_proc_entry(name, isapnp_proc_bus_dir);
+	return 0;
+}
+#endif
+
+static int isapnp_proc_read_devices(char *buf, char **start, off_t pos, int count)
+{
+	struct pci_dev *dev;
+	off_t at = 0;
+	int len, cnt, i;
+	
+	cnt = 0;
+	isapnp_for_each_dev(dev) {
+		char bus_id[8], device_id[8];
+	
+		isapnp_devid(bus_id, dev->bus->vendor, dev->bus->device);
+		isapnp_devid(device_id, dev->vendor, dev->device);
+		len = sprintf(buf, "%02x%02x\t%s%s\t",
+			dev->bus->number,
+			dev->devfn,
+			bus_id,
+			device_id);
+		isapnp_cfg_begin(dev->bus->number, dev->devfn);
+		len += sprintf(buf+len, "%02x", isapnp_read_byte(ISAPNP_CFG_ACTIVATE));
+		for (i = 0; i < 8; i++)
+			len += sprintf(buf+len, "%04x", isapnp_read_word(ISAPNP_CFG_PORT + (i << 1)));
+		for (i = 0; i < 2; i++)
+			len += sprintf(buf+len, "%04x", isapnp_read_word(ISAPNP_CFG_IRQ + (i << 1)));
+		for (i = 0; i < 2; i++)
+			len += sprintf(buf+len, "%04x", isapnp_read_word(ISAPNP_CFG_DMA + i));
+		for (i = 0; i < 4; i++)
+			len += sprintf(buf+len, "%08x", isapnp_read_dword(ISAPNP_CFG_MEM + (i << 3)));
+		isapnp_cfg_end();
+		buf[len++] = '\n';
+		at += len;
+		if (at >= pos) {
+			if (!*start) {
+				*start = buf + (pos - (at - len));
+				cnt = at - pos;
+			} else
+				cnt += len;
+			buf += len;
+		}
+	}
+	return (count > cnt) ? cnt : count;
+}
+
+int __init isapnp_proc_init(void)
+{
+	struct proc_dir_entry *p;
+	struct pci_dev *dev;
+
+	isapnp_proc_entry = NULL;
+	p = create_proc_entry("isapnp", S_IFREG | S_IRUGO | S_IWUSR, &proc_root);
+	if (p)
+		p->ops = &isapnp_info_entry_inode_operations;
+	isapnp_proc_entry = p;
+	isapnp_proc_bus_dir = proc_mkdir("isapnp", proc_bus);
+	isapnp_proc_devices_entry = create_proc_info_entry("devices", 0,
+							   isapnp_proc_bus_dir,
+							   isapnp_proc_read_devices);
+	isapnp_for_each_dev(dev) {
+		isapnp_proc_attach_device(dev);
+	}
+	return 0;
+}
+
+#ifdef MODULE
+int __exit isapnp_proc_done(void)
+{
+	struct pci_dev *dev;
+	struct pci_bus *card;
+
+	isapnp_for_each_dev(dev) {
+		isapnp_proc_detach_device(dev);
+	}
+	isapnp_for_each_card(card) {
+		isapnp_proc_detach_bus(card);
+	}
+	if (isapnp_proc_devices_entry)
+		remove_proc_entry("devices", isapnp_proc_devices_entry);
+	if (isapnp_proc_bus_dir)
+		remove_proc_entry("isapnp", proc_bus);
 	if (isapnp_proc_entry)
-		remove_proc_entry("isapnp",&proc_root);
+		remove_proc_entry("isapnp", &proc_root);
 	return 0;
 }
 #endif /* MODULE */
@@ -249,14 +438,7 @@ static void isapnp_print_devid(isapnp_info_buffer_t *buffer, unsigned short vend
 {
 	char tmp[8];
 	
-	sprintf(tmp, "%c%c%c%x%x%x%x",
-			'A' + ((vendor >> 2) & 0x3f) - 1,
-			'A' + (((vendor & 3) << 3) | ((vendor >> 13) & 7)) - 1,
-			'A' + ((vendor >> 8) & 0x1f) - 1,
-			(device >> 4) & 0x0f,
-			device & 0x0f,
-			(device >> 12) & 0x0f,
-			(device >> 8) & 0x0f);
+	isapnp_devid(tmp, vendor, device);
 	isapnp_printf(buffer, tmp);
 }
 

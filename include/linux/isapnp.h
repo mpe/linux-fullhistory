@@ -130,6 +130,8 @@ struct isapnp_resources {
 
 #if defined(CONFIG_ISAPNP) || defined(CONFIG_ISAPNP_MODULE)
 
+#define __ISAPNP__
+
 /* lowlevel configuration */
 int isapnp_present(void);
 int isapnp_cfg_begin(int csn, int device);

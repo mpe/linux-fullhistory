@@ -163,25 +163,37 @@ done:
 	bforget(bh);
 }
 
+static inline struct buffer_head *
+get_partition_table_block(struct gendisk *hd, int minor, int blocknr) {
+	kdev_t dev = MKDEV(hd->major, minor);
+	return bread(dev, blocknr, get_ptable_blocksize(dev));
+}
+
 #ifdef CONFIG_SOLARIS_X86_PARTITION
+
+/* james@bpgc.com: Solaris has a nasty indicator: 0x82 which also
+   indicates linux swap.  Be careful before believing this is Solaris. */
+
 static void
-solaris_x86_partition(struct gendisk *hd, kdev_t dev, long offset) {
+solaris_x86_partition(struct gendisk *hd, int minor) {
+	long offset = hd->part[minor].start_sect;
 
 	struct buffer_head *bh;
 	struct solaris_x86_vtoc *v;
 	struct solaris_x86_slice *s;
 	int i;
+	char buf[40];
 
-	if(!(bh = bread(dev, 0, get_ptable_blocksize(dev))))
+	if(!(bh = get_partition_table_block(hd, minor, 0)))
 		return;
 	v = (struct solaris_x86_vtoc *)(bh->b_data + 512);
 	if(v->v_sanity != SOLARIS_X86_VTOC_SANE) {
 		brelse(bh);
 		return;
 	}
-	printk(" <solaris:");
+	printk(" %s: <solaris:", disk_name(hd, minor, buf));
 	if(v->v_version != 1) {
-		printk("  cannot handle version %ld vtoc>", v->v_version);
+		printk("  cannot handle version %ld vtoc>\n", v->v_version);
 		brelse(bh);
 		return;
 	}
@@ -199,21 +211,21 @@ solaris_x86_partition(struct gendisk *hd, kdev_t dev, long offset) {
 		current_minor++;
 	}
 	brelse(bh);
-	printk(" >");
+	printk(" >\n");
 }
 #endif
 
 #ifdef CONFIG_BSD_DISKLABEL
-static void check_and_add_bsd_partition(struct gendisk *hd,
-					struct bsd_partition *bsd_p, kdev_t dev)
-{
+static void
+check_and_add_bsd_partition(struct gendisk *hd,
+			    struct bsd_partition *bsd_p, int minor) {
 	struct hd_struct *lin_p;
 		/* check relative position of partitions.  */
-	for (lin_p = hd->part + 1 + MINOR(dev);
-	     lin_p - hd->part - MINOR(dev) < current_minor; lin_p++) {
+	for (lin_p = hd->part + 1 + minor;
+	     lin_p - hd->part - minor < current_minor; lin_p++) {
 			/* no relationship -> try again */
-		if (lin_p->start_sect + lin_p->nr_sects <= bsd_p->p_offset 
-			|| lin_p->start_sect >= bsd_p->p_offset + bsd_p->p_size)
+		if (lin_p->start_sect + lin_p->nr_sects <= bsd_p->p_offset ||
+		    lin_p->start_sect >= bsd_p->p_offset + bsd_p->p_size)
 			continue;	
 			/* equal -> no need to add */
 		if (lin_p->start_sect == bsd_p->p_offset && 
@@ -244,26 +256,32 @@ static void check_and_add_bsd_partition(struct gendisk *hd,
 	add_gd_partition(hd, current_minor, bsd_p->p_offset, bsd_p->p_size);
 	current_minor++;
 }
+
 /* 
  * Create devices for BSD partitions listed in a disklabel, under a
  * dos-like partition. See extended_partition() for more information.
  */
-static void bsd_disklabel_partition(struct gendisk *hd, kdev_t dev, 
-   int max_partitions)
-{
+static void bsd_disklabel_partition(struct gendisk *hd, int minor, int type) {
 	struct buffer_head *bh;
 	struct bsd_disklabel *l;
 	struct bsd_partition *p;
+	int max_partitions;
 	int mask = (1 << hd->minor_shift) - 1;
+	char buf[40];
 
-	if (!(bh = bread(dev,0,get_ptable_blocksize(dev))))
+	if (!(bh = get_partition_table_block(hd, minor, 0)))
 		return;
 	l = (struct bsd_disklabel *) (bh->b_data+512);
 	if (l->d_magic != BSD_DISKMAGIC) {
 		brelse(bh);
 		return;
 	}
+	printk(" %s:", disk_name(hd, minor, buf));
+	printk((type == OPENBSD_PARTITION) ? " <openbsd:" :
+	       (type == NETBSD_PARTITION) ? " <netbsd:" : " <bsd:");
 
+	max_partitions = ((type == OPENBSD_PARTITION) ? OPENBSD_MAXPARTITIONS
+			                              : BSD_MAXPARTITIONS);
 	if (l->d_npartitions < max_partitions)
 		max_partitions = l->d_npartitions;
 	for (p = l->d_partitions; p - l->d_partitions <  max_partitions; p++) {
@@ -271,12 +289,13 @@ static void bsd_disklabel_partition(struct gendisk *hd, kdev_t dev,
 			break;
 
 		if (p->p_fstype != BSD_FS_UNUSED) 
-			check_and_add_bsd_partition(hd, p, dev);
+			check_and_add_bsd_partition(hd, p, minor);
 	}
 
 	/* Use bforget(), as we have changed the disk setup */
 	bforget(bh);
 
+	printk(" >\n");
 }
 #endif
 
@@ -285,14 +304,14 @@ static void bsd_disklabel_partition(struct gendisk *hd, kdev_t dev,
  * Create devices for Unixware partitions listed in a disklabel, under a
  * dos-like partition. See extended_partition() for more information.
  */
-static void unixware_partition(struct gendisk *hd, kdev_t dev)
-{
+static void unixware_partition(struct gendisk *hd, int minor) {
 	struct buffer_head *bh;
 	struct unixware_disklabel *l;
 	struct unixware_slice *p;
 	int mask = (1 << hd->minor_shift) - 1;
+	char buf[40];
 
-	if (!(bh = bread(dev, 14, get_ptable_blocksize(dev))))
+	if (!(bh = get_partition_table_block(hd, minor, 14)))
 		return;
 	l = (struct unixware_disklabel *) (bh->b_data+512);
 	if (le32_to_cpu(l->d_magic) != UNIXWARE_DISKMAGIC ||
@@ -300,7 +319,7 @@ static void unixware_partition(struct gendisk *hd, kdev_t dev)
 		brelse(bh);
 		return;
 	}
-	printk(" <unixware:");
+	printk(" %s: <unixware:", disk_name(hd, minor, buf));
 	p = &l->vtoc.v_slice[1];
 	/* I omit the 0th slice as it is the same as whole disk. */
 	while (p - &l->vtoc.v_slice[0] < UNIXWARE_NUMSLICE) {
@@ -308,30 +327,26 @@ static void unixware_partition(struct gendisk *hd, kdev_t dev)
 			break;
 
 		if (p->s_label != UNIXWARE_FS_UNUSED) {
-			add_gd_partition(hd, current_minor, START_SECT(p), NR_SECTS(p));
+			add_gd_partition(hd, current_minor, START_SECT(p),
+					 NR_SECTS(p));
 			current_minor++;
 		}
 		p++;
 	}
 	/* Use bforget, as we have changed the disk setup */
 	bforget(bh);
-	printk(" >");
+	printk(" >\n");
 }
 #endif
 
-int msdos_partition(struct gendisk *hd, kdev_t dev, unsigned long first_sector, int first_part_minor)
-{
+int msdos_partition(struct gendisk *hd, kdev_t dev,
+		    unsigned long first_sector, int first_part_minor) {
 	int i, minor = current_minor = first_part_minor;
 	struct buffer_head *bh;
 	struct partition *p;
 	unsigned char *data;
 	int mask = (1 << hd->minor_shift) - 1;
 	int sector_size = get_hardsect_size(dev) / 512;
-#ifdef CONFIG_BSD_DISKLABEL
-	/* no bsd disklabel as a default */
-	kdev_t bsd_kdev = 0;
-	int bsd_maxpart = BSD_MAXPARTITIONS;
-#endif
 #ifdef CONFIG_BLK_DEV_IDE
 	int tested_for_xlate = 0;
 
@@ -345,7 +360,7 @@ read_mbr:
 #ifdef CONFIG_BLK_DEV_IDE
 check_table:
 #endif
-	/* Use bforget(), because we have potentially changed the disk geometry */
+	/* Use bforget(), because we may have changed the disk geometry */
 	if (*(unsigned short *)  (0x1fe + data) != cpu_to_le16(MSDOS_LABEL_MAGIC)) {
 		bforget(bh);
 		return 0;
@@ -410,11 +425,16 @@ check_table:
 	}
 #endif	/* CONFIG_BLK_DEV_IDE */
 
+	/* Look for partitions in two passes:
+	   First find the primary partitions, and the DOS-type extended partitions.
+	   On the second pass look inside *BSD and Unixware and Solaris partitions. */
+
 	current_minor += 4;  /* first "extra" minor (for extended partitions) */
 	for (i=1 ; i<=4 ; minor++,i++,p++) {
 		if (!NR_SECTS(p))
 			continue;
-		add_gd_partition(hd, minor, first_sector+START_SECT(p)*sector_size, NR_SECTS(p)*sector_size);
+		add_gd_partition(hd, minor, first_sector+START_SECT(p)*sector_size,
+				 NR_SECTS(p)*sector_size);
 		if (is_extended_partition(p)) {
 			printk(" <");
 			/*
@@ -432,44 +452,8 @@ check_table:
 			if (hd->part[minor].nr_sects > 2)
 				hd->part[minor].nr_sects = 2;
 		}
-#ifdef CONFIG_BSD_DISKLABEL
-			/* tag first disklabel for late recognition */
-		if (SYS_IND(p) == BSD_PARTITION || SYS_IND(p) == NETBSD_PARTITION) {
-			printk("!");
-			if (!bsd_kdev)
-				bsd_kdev = MKDEV(hd->major, minor);
-		} else if (SYS_IND(p) == OPENBSD_PARTITION) {
-			printk("!");
-			if (!bsd_kdev) {
-				bsd_kdev = MKDEV(hd->major, minor);
-				bsd_maxpart = OPENBSD_MAXPARTITIONS;
-			}
-		}
-#endif
-#ifdef CONFIG_UNIXWARE_DISKLABEL
-		if (SYS_IND(p) == UNIXWARE_PARTITION)
-			unixware_partition(hd, MKDEV(hd->major, minor));
-#endif
-#ifdef CONFIG_SOLARIS_X86_PARTITION
-
-		/* james@bpgc.com: Solaris has a nasty indicator: 0x82
-		 * which also means linux swap.  For that reason, all
-		 * of the prints are done inside the
-		 * solaris_x86_partition routine */
-
-		if(SYS_IND(p) == SOLARIS_X86_PARTITION) {
-			solaris_x86_partition(hd, MKDEV(hd->major, minor),
-					      first_sector+START_SECT(p));
-		}
-#endif
 	}
-#ifdef CONFIG_BSD_DISKLABEL
-	if (bsd_kdev) {
-		printk(" <");
-		bsd_disklabel_partition(hd, bsd_kdev, bsd_maxpart);
-		printk(" >");
-	}
-#endif
+
 	/*
 	 *  Check for old-style Disk Manager partition table
 	 */
@@ -485,6 +469,29 @@ check_table:
 		}
 	}
 	printk("\n");
+
+	/* second pass - output for each on a separate line */
+	minor -= 4;
+	p = (struct partition *) (0x1be + data);
+	for (i=1 ; i<=4 ; minor++,i++,p++) {
+		if (!NR_SECTS(p))
+			continue;
+#ifdef CONFIG_BSD_DISKLABEL
+		if (SYS_IND(p) == BSD_PARTITION ||
+		    SYS_IND(p) == NETBSD_PARTITION ||
+		    SYS_IND(p) == OPENBSD_PARTITION)
+			bsd_disklabel_partition(hd, minor, SYS_IND(p));
+#endif
+#ifdef CONFIG_UNIXWARE_DISKLABEL
+		if (SYS_IND(p) == UNIXWARE_PARTITION)
+			unixware_partition(hd, minor);
+#endif
+#ifdef CONFIG_SOLARIS_X86_PARTITION
+		if(SYS_IND(p) == SOLARIS_X86_PARTITION)
+			solaris_x86_partition(hd, minor);
+#endif
+	}
+
 	bforget(bh);
 	return 1;
 }

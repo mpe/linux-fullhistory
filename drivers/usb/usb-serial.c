@@ -14,6 +14,17 @@
  *
  * See Documentation/usb-serial.txt for more information on using this driver.
  * 
+ * (01/13/2000) gkh
+ *	Fixed the vendor id for the generic driver to the one I meant it to be.
+ *
+ * (01/12/2000) gkh
+ *	Forget the version numbering...that's pretty useless...
+ *	Made the driver able to be compiled so that the user can select which
+ *	converter they want to use. This allows people who only want the Visor
+ *	support to not pay the memory size price of the WhiteHEAT.
+ *	Fixed bug where the generic driver (idVendor=0000 and idProduct=0000)
+ *	grabbed the root hub. Not good.
+ * 
  * version 0.4.0 (01/10/2000) gkh
  *	Added whiteheat.h containing the firmware for the ConnectTech WhiteHEAT
  *	device. Added startup function to allow firmware to be downloaded to
@@ -98,7 +109,7 @@ MODULE_AUTHOR("Greg Kroah-Hartman, greg@kroah.com, http://www.kroah.com/linux-us
 MODULE_DESCRIPTION("USB Serial Driver");
 
 #ifdef CONFIG_USB_SERIAL_GENERIC
-static __u16	vendor	= 0x05f7;
+static __u16	vendor	= 0x05f9;
 static __u16	product	= 0xffff;
 MODULE_PARM(vendor, "i");
 MODULE_PARM_DESC(vendor, "User specified USB idVendor");

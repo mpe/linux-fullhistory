@@ -2321,7 +2321,7 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 
 	if (drive->using_dma) {
 		if ((drive->id->field_valid & 4) &&
-		    (drive->id->word93 & 0x2000) &&
+		    (drive->id->hw_config & 0x2000) &&
 		    (HWIF(drive)->udma_four) &&
 		    (drive->id->dma_ultra & (drive->id->dma_ultra >> 11) & 3)) {
 			printk(", UDMA(66)");	/* UDMA BIOS-enabled! */

@@ -222,7 +222,7 @@ byte sis_proc = 0;
 extern char *ide_xfer_verbose (byte xfer_rate);
 
 /*
- * ((id->word93 & 0x2000) && (HWIF(drive)->udma_four))
+ * ((id->hw_config & 0x2000) && (HWIF(drive)->udma_four))
  */
 static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 {
@@ -235,7 +235,7 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 
 	byte speed		= 0x00, unmask = 0xE0, four_two = 0x00;
 	int drive_number	= ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
-	byte udma_66		= ((id->word93 & 0x2000) && (hwif->udma_four)) ? 1 : 0;
+	byte udma_66		= ((id->hw_config & 0x2000) && (hwif->udma_four)) ? 1 : 0;
 
 	if (host_dev) {
 		switch(host_dev->device) {
@@ -472,6 +472,7 @@ unsigned int __init pci_init_sis5513 (struct pci_dev *dev, const char *name)
 
 		host_dev = host;
 		printk(SiSHostChipInfo[i].name);
+		printk("\n");
 		if (SiSHostChipInfo[i].flags & SIS5513_FLAG_LATENCY) {
 			if (latency != 0x10)
 				pci_write_config_byte(dev, PCI_LATENCY_TIMER, 0x10);

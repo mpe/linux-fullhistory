@@ -200,7 +200,7 @@ static int piix_config_drive_for_dma (ide_drive_t *drive)
 	int			u_speed;
 
 	byte maslave		= hwif->channel ? 0x42 : 0x40;
-	byte udma_66		= ((id->word93 & 0x2000) && (hwif->udma_four)) ? 1 : 0;
+	byte udma_66		= ((id->hw_config & 0x2000) && (hwif->udma_four)) ? 1 : 0;
 	int ultra		= ((dev->device == PCI_DEVICE_ID_INTEL_82371AB) ||
 				   (dev->device == PCI_DEVICE_ID_INTEL_82801AA_1)) ? 1 : 0;
 	int ultra66		= (dev->device == PCI_DEVICE_ID_INTEL_82801AB_1) ? 1 :  0; 

@@ -546,8 +546,6 @@ void __init ide_init_via82cxxx (ide_hwif_t *hwif)
 	hwif->tuneproc = &via82cxxx_tune_drive;
 	if (hwif->dma_base) {
 		hwif->dmaproc = &via82cxxx_dmaproc;
-		hwif->drives[0].autotune = 0;
-		hwif->drives[1].autotune = 0;
 	} else {
 		hwif->autodma = 0;
 		hwif->drives[0].autotune = 1;

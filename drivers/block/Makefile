@@ -114,6 +114,10 @@ ifeq ($(CONFIG_BLK_DEV_ALI15X3),y)
 IDE_OBJS += alim15x3.o
 endif
 
+ifeq ($(CONFIG_BLK_DEV_AMD7409),y)
+IDE_OBJS += amd7409.o
+endif
+
 ifeq ($(CONFIG_BLK_DEV_BUDDHA),y)
 IDE_OBJS += buddha.o
 endif
@@ -122,8 +126,8 @@ ifeq ($(CONFIG_BLK_DEV_CMD640),y)
 IDE_OBJS += cmd640.o
 endif
 
-ifeq ($(CONFIG_BLK_DEV_CMD646),y)
-IDE_OBJS += cmd646.o
+ifeq ($(CONFIG_BLK_DEV_CMD64X),y)
+IDE_OBJS += cmd64x.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_CY82C693),y)

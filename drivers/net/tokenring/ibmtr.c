@@ -1651,7 +1651,7 @@ static void tr_rx(struct net_device *dev)
        	ti->tr_stats.rx_packets++;
 
 	skb->protocol = tr_type_trans(skb,dev);
- 	if (IPv4_p){ 
+ 	if (IPv4_p && (skb->protocol == ETH_P_IP)) { 
 		skb->csum      = chksum;
 		skb->ip_summed = 1;
 	}

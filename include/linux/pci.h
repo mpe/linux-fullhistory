@@ -492,6 +492,9 @@ int pci_assign_resource(struct pci_dev *dev, int i);
 #define pci_for_each_dev(dev) \
 	for(dev = pci_dev_g(pci_devices.next); dev != pci_dev_g(&pci_devices); dev = pci_dev_g(dev->global_list.next))
 
+#define pci_for_each_dev_reverse(dev) \
+	for(dev = pci_dev_g(pci_devices.prev); dev != pci_dev_g(&pci_devices); dev = pci_dev_g(dev->global_list.prev))
+
 /* Helper functions for low-level code (drivers/pci/setup.c) */
 
 int pci_claim_resource(struct pci_dev *, int);

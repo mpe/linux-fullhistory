@@ -513,17 +513,17 @@ read_proc_t proc_ide_read_geometry;
  */
 #define IDE_SUBDRIVER_VERSION	1
 
-typedef int	(ide_cleanup_proc)(ide_drive_t *);
-typedef ide_startstop_t (ide_do_request_proc)(ide_drive_t *, struct request *, unsigned long);
-typedef void	(ide_end_request_proc)(byte, ide_hwgroup_t *);
-typedef int 	(ide_ioctl_proc)(ide_drive_t *, struct inode *, struct file *, unsigned int, unsigned long);
-typedef int	(ide_open_proc)(struct inode *, struct file *, ide_drive_t *);
-typedef void 	(ide_release_proc)(struct inode *, struct file *, ide_drive_t *);
-typedef int	(ide_check_media_change_proc)(ide_drive_t *);
-typedef void	(ide_pre_reset_proc)(ide_drive_t *);
-typedef unsigned long (ide_capacity_proc)(ide_drive_t *);
-typedef ide_startstop_t (ide_special_proc)(ide_drive_t *);
-typedef void	(ide_setting_proc)(ide_drive_t *);
+typedef int		(ide_cleanup_proc)(ide_drive_t *);
+typedef ide_startstop_t	(ide_do_request_proc)(ide_drive_t *, struct request *, unsigned long);
+typedef void		(ide_end_request_proc)(byte, ide_hwgroup_t *);
+typedef int		(ide_ioctl_proc)(ide_drive_t *, struct inode *, struct file *, unsigned int, unsigned long);
+typedef int		(ide_open_proc)(struct inode *, struct file *, ide_drive_t *);
+typedef void		(ide_release_proc)(struct inode *, struct file *, ide_drive_t *);
+typedef int		(ide_check_media_change_proc)(ide_drive_t *);
+typedef void		(ide_pre_reset_proc)(ide_drive_t *);
+typedef unsigned long	(ide_capacity_proc)(ide_drive_t *);
+typedef ide_startstop_t	(ide_special_proc)(ide_drive_t *);
+typedef void		(ide_setting_proc)(ide_drive_t *);
 
 typedef struct ide_driver_s {
 	const char			*name;
@@ -831,7 +831,7 @@ int ide_replace_subdriver(ide_drive_t *drive, const char *driver);
 #endif /* CONFIG_BLK_DEV_OFFBOARD */
 
 unsigned long ide_find_free_region (unsigned short size) __init;
-void ide_scan_pcibus (void) __init;
+void ide_scan_pcibus (int scan_direction) __init;
 #endif
 #ifdef CONFIG_BLK_DEV_IDEDMA
 #define BAD_DMA_DRIVE		0

@@ -25,9 +25,9 @@
 #include <linux/list.h>
 
 
+#undef DEBUG_INGRESS
 
-
-#if 0  /* control */
+#ifdef DEBUG_INGRESS  /* control */
 #define DPRINTK(format,args...) printk(KERN_DEBUG format,##args)
 #else
 #define DPRINTK(format,args...)
@@ -56,7 +56,9 @@ struct ingress_qdisc_data {
 static int ingress_graft(struct Qdisc *sch,unsigned long arg,
     struct Qdisc *new,struct Qdisc **old)
 {
+#ifdef DEBUG_INGRESS
 	struct ingress_qdisc_data *p = PRIV(sch);
+#endif
 
 	DPRINTK("ingress_graft(sch %p,[qdisc %p],new %p,old %p)\n",
 		sch, p, new, old);
@@ -73,8 +75,9 @@ static struct Qdisc *ingress_leaf(struct Qdisc *sch, unsigned long arg)
 
 static unsigned long ingress_get(struct Qdisc *sch,u32 classid)
 {
+#ifdef DEBUG_INGRESS
 	struct ingress_qdisc_data *p = PRIV(sch);
-
+#endif
 	DPRINTK("ingress_get(sch %p,[qdisc %p],classid %x)\n", sch, p, classid);
 	return TC_H_MIN(classid) + 1;
 }
@@ -95,8 +98,9 @@ static void ingress_put(struct Qdisc *sch, unsigned long cl)
 static int ingress_change(struct Qdisc *sch, u32 classid, u32 parent,
     struct rtattr **tca, unsigned long *arg)
 {
+#ifdef DEBUG_INGRESS
 	struct ingress_qdisc_data *p = PRIV(sch);
-
+#endif
 	DPRINTK("ingress_change(sch %p,[qdisc %p],classid %x,parent %x),"
 		"arg 0x%lx\n", sch, p, classid, parent, *arg);
 	DPRINTK("No effect. sch_ingress doesnt maintain classes at the moment");
@@ -107,8 +111,9 @@ static int ingress_change(struct Qdisc *sch, u32 classid, u32 parent,
 
 static void ingress_walk(struct Qdisc *sch,struct qdisc_walker *walker)
 {
+#ifdef DEBUG_INGRESS
 	struct ingress_qdisc_data *p = PRIV(sch);
-
+#endif
 	DPRINTK("ingress_walk(sch %p,[qdisc %p],walker %p)\n", sch, p, walker);
 	DPRINTK("No effect. sch_ingress doesnt maintain classes at the moment");
 }
@@ -180,8 +185,9 @@ static int ingress_requeue(struct sk_buff *skb,struct Qdisc *sch)
 
 static int ingress_drop(struct Qdisc *sch)
 {
+#ifdef DEBUG_INGRESS
 	struct ingress_qdisc_data *p = PRIV(sch);
-
+#endif
 	DPRINTK("ingress_drop(sch %p,[qdisc %p])\n", sch, p);
 	return 0;
 }
@@ -217,7 +223,6 @@ used on the egress (might slow things for an iota)
 			
 	return fwres;
 }
-
 
 /* after iptables */
 static struct nf_hook_ops ing_ops =

@@ -18,7 +18,7 @@
  *   Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  *  Changelog:
- *  2000-01-01	Added ISAPnP quirks handling
+ *  2000-01-01	Added quirks handling for buggy hardware
  *		Peter Denison <peterd@pnd-pc.demon.co.uk>
  */
 
@@ -984,6 +984,7 @@ static int __init isapnp_build_device_list(void)
 		card->device = (header[3] << 8) | header[2];
 		card->serial = (header[7] << 24) | (header[6] << 16) | (header[5] << 8) | header[4];
 		isapnp_checksum_value = 0x00;
+		INIT_LIST_HEAD(&card->children);
 		INIT_LIST_HEAD(&card->devices);
 		isapnp_parse_resource_map(card);
 		if (isapnp_checksum_value != 0x00)
@@ -1185,10 +1186,11 @@ struct pci_dev *isapnp_find_dev(struct pci_bus *card,
 		struct list_head *list;
 
 		list = card->devices.next;
-		if (from)
+		if (from) {
 			list = from->bus_list.next;
-		if (from->bus != card)	/* something is wrong */
-			return NULL;
+			if (from->bus != card)	/* something is wrong */
+				return NULL;
+		}
 		while (list != &card->devices) {
 			int idx;
 			struct pci_dev *dev = pci_dev_b(list);
@@ -1765,8 +1767,8 @@ static int isapnp_valid_mem(struct isapnp_cfgtmp *cfg, int idx)
       	mem = cfg->mem[idx];
       	if (!mem)
       		return -EINVAL;
-      	value1 = &cfg->result.resource[idx].start;
-      	value2 = &cfg->result.resource[idx].end;
+      	value1 = &cfg->result.resource[idx + 8].start;
+      	value2 = &cfg->result.resource[idx + 8].end;
 	if (cfg->result.resource[idx + 8].flags & IORESOURCE_AUTO) {
 		cfg->result.resource[idx + 8].flags &= ~IORESOURCE_AUTO;
 		*value1 = mem->min;
@@ -1777,7 +1779,7 @@ static int isapnp_valid_mem(struct isapnp_cfgtmp *cfg, int idx)
 	do {
 		*value1 += mem->align;
 		*value2 = *value1 + mem->size - 1;
-		if (*value1 >= 8 || !mem->align) {
+		if (*value1 > mem->max || !mem->align) {
 			if (mem->res && mem->res->alt) {
 				if ((err = isapnp_alternative_switch(cfg, mem->res, mem->res->alt))<0)
 					return err;

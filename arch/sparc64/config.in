@@ -110,7 +110,7 @@ if [ "$CONFIG_PCI" = "y" ]; then
       define_bool CONFIG_IDEDMA_AUTO y
       define_bool CONFIG_IDEDMA_NEW_DRIVE_LISTINGS y
       define_bool CONFIG_BLK_DEV_NS87415 y
-      define_bool CONFIG_BLK_DEV_CMD646 y
+      define_bool CONFIG_BLK_DEV_CMD64X y
    fi
 fi
 

@@ -932,7 +932,6 @@ out:
 /*
  * Alters the mount flags of a mounted file system. Only the mount point
  * is used as a reference - file system type and the device are ignored.
- * FS-specific mount options can't be altered by remounting.
  */
 
 static int do_remount_sb(struct super_block *sb, int flags, char *data)

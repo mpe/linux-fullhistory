@@ -57,6 +57,10 @@ static void __init quirk_awe32_resources(struct pci_dev *dev)
 static struct isapnp_fixup isapnp_fixups[] __initdata = {
 	{ ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0021),
 		quirk_awe32_resources },
+	{ ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0022),
+		quirk_awe32_resources },
+	{ ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0023),
+		quirk_awe32_resources },
 	{ 0 }
 };
 
@@ -67,8 +71,8 @@ void isapnp_fixup_device(struct pci_dev *dev)
 	while (isapnp_fixups[i].vendor != 0) {
 		if ((isapnp_fixups[i].vendor == dev->vendor) &&
 		    (isapnp_fixups[i].device == dev->device)) {
-			printk(KERN_DEBUG "PnP: Calling quirk for %s\n",
-			       dev->slot_name);
+			printk(KERN_DEBUG "PnP: Calling quirk for %02x:%02x\n",
+			       dev->bus->number, dev->devfn);
 			isapnp_fixups[i].quirk_function(dev);
 		}
 		i++;

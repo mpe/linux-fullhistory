@@ -626,31 +626,6 @@ static int __init acpi_init_via(struct pci_dev *dev)
 	return 0;
 }
 
-static struct pci_simple_probe_entry acpi_devices[] __initdata =
-{
-	{PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371AB_3, 0, 0,
-	 acpi_init_piix4},
-	{PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C586_3, 0, 0,
-	 acpi_init_via},
-	{0,}
-};
-
-/*
- * Probe for matching PCI device
- */
-static int __init acpi_probe(struct pci_dev *dev,
-			     int match,
-			     const struct pci_simple_probe_entry *entry,
-			     void *data)
-{
-	if(entry->dev_data) {
-		typedef int (*init_fn)(struct pci_dev*);
-		init_fn init = (init_fn) entry->dev_data;
-		return (*init)(dev);
-	}
-	return -ENODEV;
-}
-
 /*
  * Handle an ACPI SCI (fixed or general purpose event)
  */
@@ -1244,6 +1219,34 @@ static int acpi_do_sleep(ctl_table *ctl,
 	return 0;
 }
 
+static struct acpi_device {
+	unsigned short vendor, device;
+	int (*init)(struct pci_dev *);
+} acpi_devices[] __initdata = {
+	{PCI_VENDOR_ID_INTEL, PCI_DEVICE_ID_INTEL_82371AB_3, acpi_init_piix4 },
+	{PCI_VENDOR_ID_VIA, PCI_DEVICE_ID_VIA_82C586_3, acpi_init_via },
+};
+
+#define NR_ACPI_DEVICES	(sizeof(acpi_devices)/sizeof(struct acpi_device))
+
+static int __init acpi_find_devices(void)
+{
+	struct pci_dev *dev;
+
+	pci_for_each_dev(dev) {
+		int i;
+
+		for (i = 0; i < NR_ACPI_DEVICES; i++) {
+			struct acpi_device *p = acpi_devices + i;
+
+			if (dev->vendor == p->vendor && dev->device == p->device)
+				return p->init(dev);
+		}
+	}
+	return -ENOENT;
+}
+
+
 /*
  * Initialize and enable ACPI
  */
@@ -1254,8 +1257,7 @@ static int __init acpi_init(void)
 	if (acpi_disabled)
 		return -ENODEV;
 
-	if (acpi_find_tables()
-	    && pci_simple_probe(acpi_devices, 0, acpi_probe, NULL) <= 0) {
+	if (acpi_find_tables() && acpi_find_devices()) {
 		// no ACPI tables and not a recognized ACPI chipset
 		return -ENODEV;
 	}

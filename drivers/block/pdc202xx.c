@@ -227,7 +227,7 @@ static int config_chipset_for_dma (ide_drive_t *drive, byte ultra)
 	unsigned short		EP;
 	byte CLKSPD		= IN_BYTE(high_16 + 0x11);
 	int drive_number	= ((hwif->channel ? 2 : 0) + (drive->select.b.unit & 0x01));
-	byte udma_66		= ((id->word93 & 0x2000) && (hwif->udma_four)) ? 1 : 0;
+	byte udma_66		= ((id->hw_config & 0x2000) && (hwif->udma_four)) ? 1 : 0;
 	byte udma_33		= ultra ? (inb(high_16 + 0x001f) & 1) : 0;
 
 	/*
@@ -661,8 +661,6 @@ void __init ide_init_pdc202xx (ide_hwif_t *hwif)
 
 	if (hwif->dma_base) {
 		hwif->dmaproc = &pdc202xx_dmaproc;
-		hwif->drives[0].autotune = 0;
-		hwif->drives[1].autotune = 0;
 	} else {
 		hwif->drives[0].autotune = 1;
 		hwif->drives[1].autotune = 1;

@@ -139,10 +139,20 @@ static ide_startstop_t read_intr (ide_drive_t *drive)
 	int i;
 	unsigned int msect, nsect;
 	struct request *rq;
-
+#if 0
 	if (!OK_STAT(stat=GET_STAT(),DATA_READY,BAD_R_STAT)) {
 		return ide_error(drive, "read_intr", stat);
 	}
+#else	/* new way for dealing with premature shared PCI interrupts */
+	if (!OK_STAT(stat=GET_STAT(),DATA_READY,BAD_R_STAT)) {
+		if (stat & (ERR_STAT|DRQ_STAT)) {
+			return ide_error(drive, "read_intr", stat);
+		}
+		/* no data yet, so wait for another interrupt */
+		ide_set_handler(drive, &read_intr, WAIT_CMD, NULL);
+		return ide_started;
+	}
+#endif
 	msect = drive->mult_count;
 	
 read_next:
@@ -163,7 +173,7 @@ read_next:
 	rq->buffer += nsect<<9;
 	rq->errors = 0;
 	i = (rq->nr_sectors -= nsect);
-	if ((rq->current_nr_sectors -= nsect) <= 0)
+	if (((long)(rq->current_nr_sectors -= nsect)) <= 0)
 		ide_end_request(1, HWGROUP(drive));
 	if (i > 0) {
 		if (msect)
@@ -198,7 +208,7 @@ static ide_startstop_t write_intr (ide_drive_t *drive)
 			rq->errors = 0;
 			i = --rq->nr_sectors;
 			--rq->current_nr_sectors;
-			if (rq->current_nr_sectors <= 0)
+			if (((long)rq->current_nr_sectors) <= 0)
 				ide_end_request(1, hwgroup);
 			if (i > 0) {
 				idedisk_output_data (drive, rq->buffer, SECTOR_WORDS);
@@ -207,8 +217,8 @@ static ide_startstop_t write_intr (ide_drive_t *drive)
 			}
                         return ide_stopped;
 		}
-                printk("%s: write_intr error2: nr_sectors=%ld, stat=0x%02x\n", drive->name, rq->nr_sectors, stat);
-        }
+		return ide_stopped;	/* the original code did this here (?) */
+	}
 	return ide_error(drive, "write_intr", stat);
 }
 
@@ -221,12 +231,22 @@ static ide_startstop_t write_intr (ide_drive_t *drive)
 int ide_multwrite (ide_drive_t *drive, unsigned int mcount)
 {
  	ide_hwgroup_t	*hwgroup= HWGROUP(drive);
+
+	/*
+	 *	This may look a bit odd, but remember wrq is a copy of the
+	 *	request not the original. The pointers are real however so the
+	 *	bh's are not copies. Remember that or bad stuff will happen
+	 *
+	 *	At the point we are called the drive has asked us for the
+	 *	data, and its our job to feed it, walking across bh boundaries
+	 *	if need be.
+	 */
+
  	struct request	*rq = &hwgroup->wrq;
 
   	do {
  		unsigned long flags;
   		unsigned int nsect = rq->current_nr_sectors;
-
 		if (nsect > mcount)
 			nsect = mcount;
 		mcount -= nsect;
@@ -241,9 +261,11 @@ int ide_multwrite (ide_drive_t *drive, unsigned int mcount)
 #ifdef CONFIG_BLK_DEV_PDC4030
 		rq->sector += nsect;
 #endif
-		if ((rq->nr_sectors -= nsect) <= 0) {
+		if (((long)(rq->nr_sectors -= nsect)) <= 0) {
+#ifdef DEBUG
 			printk("%s: multwrite: count=%d, current=%ld\n",
 				drive->name, nsect, rq->nr_sectors);
+#endif
 			spin_unlock_irqrestore(&io_request_lock, flags);
 			break;
 		}
@@ -253,11 +275,14 @@ int ide_multwrite (ide_drive_t *drive, unsigned int mcount)
 				rq->buffer             = rq->bh->b_data;
 			} else {
 				spin_unlock_irqrestore(&io_request_lock, flags);
-				printk("%s: buffer list corrupted\n", drive->name);
+				printk("%s: buffer list corrupted (%ld, %ld, %d)\n",
+					drive->name, rq->current_nr_sectors,
+					rq->nr_sectors, nsect);
 				ide_end_request(0, hwgroup);
 				return 1;
 			}
 		} else {
+			/* Fix the pointer.. we ate data */
 			rq->buffer += nsect << 9;
 		}
                 spin_unlock_irqrestore(&io_request_lock, flags);
@@ -277,6 +302,10 @@ static ide_startstop_t multwrite_intr (ide_drive_t *drive)
 
 	if (OK_STAT(stat=GET_STAT(),DRIVE_READY,drive->bad_wstat)) {
 		if (stat & DRQ_STAT) {
+			/*
+			 *	The drive wants data. Remember rq is the copy
+			 *	of the request
+			 */
 			if (rq->nr_sectors) {
 				if (ide_multwrite(drive, drive->mult_count))
 					return ide_stopped;
@@ -284,6 +313,10 @@ static ide_startstop_t multwrite_intr (ide_drive_t *drive)
 				return ide_started;
 			}
 		} else {
+			/*
+			 *	If the copy has all the blocks completed then
+			 *	we can end the original request.
+			 */
 			if (!rq->nr_sectors) {	/* all done? */
 				rq = hwgroup->rq;
 				for (i = rq->nr_sectors; i > 0;){
@@ -293,6 +326,7 @@ static ide_startstop_t multwrite_intr (ide_drive_t *drive)
 				return ide_stopped;
 			}
 		}
+		return ide_stopped;	/* the original code did this here (?) */
 	}
 	return ide_error(drive, "multwrite_intr", stat);
 }
@@ -302,13 +336,9 @@ static ide_startstop_t multwrite_intr (ide_drive_t *drive)
  */
 static ide_startstop_t set_multmode_intr (ide_drive_t *drive)
 {
-	byte stat = GET_STAT();
+	byte stat;
 
-#if 0
-	if (OK_STAT(stat,READY_STAT,BAD_STAT) || drive->mult_req == 0) {
-#else
-	if (OK_STAT(stat,READY_STAT,BAD_STAT)) {
-#endif
+	if (OK_STAT(stat=GET_STAT(),READY_STAT,BAD_STAT)) {
 		drive->mult_count = drive->mult_req;
 	} else {
 		drive->mult_req = drive->mult_count = 0;
@@ -323,11 +353,16 @@ static ide_startstop_t set_multmode_intr (ide_drive_t *drive)
  */
 static ide_startstop_t set_geometry_intr (ide_drive_t *drive)
 {
-	byte stat = GET_STAT();
+	byte stat;
 
-	if (!OK_STAT(stat,READY_STAT,BAD_STAT))
+	if (OK_STAT(stat=GET_STAT(),READY_STAT,BAD_STAT))
+		return ide_stopped;
+
+	if (stat & (ERR_STAT|DRQ_STAT))
 		return ide_error(drive, "set_geometry_intr", stat);
-	return ide_stopped;
+
+	ide_set_handler(drive, &set_geometry_intr, WAIT_CMD, NULL);
+	return ide_started;	
 }
 
 /*
@@ -419,6 +454,8 @@ static ide_startstop_t do_rw_disk (ide_drive_t *drive, struct request *rq, unsig
 			 * of data to be written.  If we hit an error (corrupted buffer list)
 			 * in ide_multwrite(), then we need to remove the handler/timer
 			 * before returning.  Fortunately, this NEVER happens (right?).
+			 *
+			 * Except when you get an error it seems...
 			 */
 			hwgroup->wrq = *rq; /* scratchpad */
 			ide_set_handler (drive, &multwrite_intr, WAIT_CMD, NULL);
@@ -772,7 +809,7 @@ static void idedisk_setup (ide_drive_t *drive)
 			drive->bios_cyl, drive->bios_head, drive->bios_sect);
 
 	if (drive->using_dma) {
-		if ((id->field_valid & 4) && (id->word93 & 0x2000) &&
+		if ((id->field_valid & 4) && (id->hw_config & 0x2000) &&
 		    (HWIF(drive)->udma_four) &&
 		    (id->dma_ultra & (id->dma_ultra >> 11) & 3)) {
 			printk(", UDMA(66)");	/* UDMA BIOS-enabled! */

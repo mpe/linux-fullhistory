@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/hpt366.c		Version 0.14	Dec. 13, 1999
+ * linux/drivers/block/hpt366.c		Version 0.15	Dec. 22, 1999
  *
  * Copyright (C) 1999			Andre Hedrick <andre@suse.com>
  * May be copied or modified under the terms of the GNU General Public License
@@ -30,6 +30,7 @@
 #include "ide_modes.h"
 
 const char *bad_ata66_4[] = {
+	"QUANTUM FIREBALLP KA9.1",
 	"WDC AC310200R",
 	NULL
 };
@@ -121,6 +122,7 @@ struct chipset_bus_clock_list_entry twenty_five_base [] = {
 
 extern char *ide_xfer_verbose (byte xfer_rate);
 byte hpt363_shared_irq = 0;
+byte hpt363_shared_pin = 0;
 
 static int check_in_drive_lists (ide_drive_t *drive, const char **list)
 {
@@ -421,34 +423,31 @@ no_dma_set:
 
 int hpt366_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 {
-#if 0
-	byte reg50h = 0, reg52h = 0;
-#endif
 	switch (func) {
 		case ide_dma_check:
 			return config_drive_xfer_rate(drive);
-#if 0
-		case ide_dma_lostirq:
-			pci_read_config_byte(HWIF(drive)->pci_dev, 0x52, &reg52h);
-			printk("%s: (ide_dma_lostirq) reg52h=0x%02x\n", drive->name, reg52h);
-			break;
 		case ide_dma_timeout:
-			(void) ide_dmaproc(ide_dma_off_quietly, drive);
-			pci_read_config_byte(HWIF(drive)->pci_dev, 0x52, &reg52h);
-			printk("%s: (ide_dma_timeout) reg52h=0x%02x\n", drive->name, reg52h);
-			if (reg52h & 0x04) {
+			/* ide_do_reset(drive); */
+
+			if (0) {
+				byte reg50h = 0, reg52h = 0;
+				(void) ide_dmaproc(ide_dma_off_quietly, drive);
 				pci_read_config_byte(HWIF(drive)->pci_dev, 0x50, &reg50h);
-				pci_write_config_byte(HWIF(drive)->pci_dev, 0x50, reg50h|0xff);
-				pci_write_config_byte(HWIF(drive)->pci_dev, 0x50, reg50h);
+				pci_read_config_byte(HWIF(drive)->pci_dev, 0x52, &reg52h);
+				printk("%s: (ide_dma_timeout) reg52h=0x%02x\n", drive->name, reg52h);
+				if (reg52h & 0x04) {
+					pci_read_config_byte(HWIF(drive)->pci_dev, 0x50, &reg50h);
+					pci_write_config_byte(HWIF(drive)->pci_dev, 0x50, reg50h|0xff);
+					pci_write_config_byte(HWIF(drive)->pci_dev, 0x50, reg50h);
+				}
+				pci_read_config_byte(HWIF(drive)->pci_dev, 0x50, &reg50h);
+				pci_read_config_byte(HWIF(drive)->pci_dev, 0x52, &reg52h);
+				printk("%s: (ide_dma_timeout) reg50h=0x%02x reg52h=0x%02x :: again\n", drive->name, reg50h, reg52h);
+				(void) ide_dmaproc(ide_dma_on, drive);
+				if (reg52h & 0x04)
+					(void) ide_dmaproc(ide_dma_off, drive);
 			}
-			pci_read_config_byte(HWIF(drive)->pci_dev, 0x50, &reg50h);
-			pci_read_config_byte(HWIF(drive)->pci_dev, 0x52, &reg52h);
-			printk("%s: (ide_dma_timeout) reg50h=0x%02x reg52h=0x%02x :: again\n", drive->name, reg50h, reg52h);
-			(void) ide_dmaproc(ide_dma_on, drive);
-			if (reg52h & 0x04)
-				(void) ide_dmaproc(ide_dma_off, drive);
-			return 1;
-#endif
+			break;
 		default:
 			break;
 	}
@@ -502,15 +501,15 @@ void __init ide_init_hpt366 (ide_hwif_t *hwif)
 		hwif->mate->mate = hwif;
 		hwif->serialized = hwif->mate->serialized = 1;
 	}
+
+	if ((PCI_FUNC(hwif->pci_dev->devfn) & 1) && (hpt363_shared_pin)) {
+
+	}
 #endif
 
 	hwif->tuneproc = &hpt366_tune_drive;
 	if (hwif->dma_base) {
 		hwif->dmaproc = &hpt366_dmaproc;
-#if 0
-		hwif->drives[0].autotune = 0;
-		hwif->drives[1].autotune = 0;
-#endif
 	} else {
 		hwif->autodma = 0;
 		hwif->drives[0].autotune = 1;

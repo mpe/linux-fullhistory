@@ -188,7 +188,7 @@ int ide_ata66_check (ide_drive_t *drive, int cmd, int nsect, int feature)
 			printk("%s: Speed warnings UDMA 3/4 is not functional.\n", HWIF(drive)->name);
 			return 1;
 		}
-		if ((drive->id->word93 & 0x2000) == 0) {
+		if ((drive->id->hw_config & 0x2000) == 0) {
 			printk("%s: Speed warnings UDMA 3/4 is not functional.\n", drive->name);
 			return 1;
 		}
@@ -212,6 +212,22 @@ int set_transfer (ide_drive_t *drive, int cmd, int nsect, int feature)
 		return 1;
 	return 0;
 }
+
+#if 0
+ide_startstop_t set_drive_speed_intr (ide_drive_t *drive)
+{
+	byte stat;
+
+	if (!OK_STAT(stat=GET_STAT(),READY_STAT,BAD_STAT))
+/*
+ *	if (!OK_STAT(stat=GET_STAT(),DRIVE_READY,BAD_STAT))
+ *	if (stat != DRIVE_READY)
+ */
+		(void) ide_dump_status(drive, "set_drive_speed_status", stat);
+
+	return ide_stopped;
+}
+#endif
 
 int ide_config_drive_speed (ide_drive_t *drive, byte speed)
 {
@@ -243,6 +259,10 @@ int ide_config_drive_speed (ide_drive_t *drive, byte speed)
 #endif
 
 	__restore_flags(flags);	/* local CPU only */
+
+#if 0
+	ide_set_handler(drive, &set_drive_speed_intr, WAIT_CMD, NULL);
+#endif
 
 	stat = GET_STAT();
 	if (stat != DRIVE_READY)

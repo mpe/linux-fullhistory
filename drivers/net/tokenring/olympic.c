@@ -204,7 +204,6 @@ static int __init olympic_scan(struct net_device *dev)
 
 			olympic_priv->olympic_ring_speed = ringspeed[card_no] ; 
 			olympic_priv->olympic_message_level = message_level[card_no] ; 
-			olympic_priv->olympic_multicast_set  = 0 ; 
 	
 			if(olympic_init(dev)==-1) {
 				unregister_netdevice(dev);
@@ -949,9 +948,11 @@ static void olympic_set_rx_mode(struct net_device *dev)
 {
 	struct olympic_private *olympic_priv = (struct olympic_private *) dev->priv ; 
    	__u8 *olympic_mmio = olympic_priv->olympic_mmio ; 
-	__u8 options = 0, set_mc_list = 0 ; 
-	__u8 *srb, *ata ;
+	__u8 options = 0; 
+	__u8 *srb;
 	struct dev_mc_list *dmi ; 
+	unsigned char dev_mc_address[4] ; 
+	int i ; 
 
 	writel(olympic_priv->srb,olympic_mmio+LAPA);
 	srb=olympic_priv->olympic_lap + (olympic_priv->srb & (~0xf800));
@@ -961,10 +962,6 @@ static void olympic_set_rx_mode(struct net_device *dev)
 		options |= (3<<5) ; /* All LLC and MAC frames, all through the main rx channel */  
 	else
 		options &= ~(3<<5) ; 
-
-	if (dev->mc_count) {  
-		set_mc_list = 1 ; 
-	}
 
 	/* Only issue the srb if there is a change in options */
 
@@ -988,60 +985,30 @@ static void olympic_set_rx_mode(struct net_device *dev)
 		return ;  
 	} 
 
-	if (set_mc_list ^ olympic_priv->olympic_multicast_set) { /* Multicast options have changed */ 
+	/* Set the functional addresses we need for multicast */
 
-		dmi = dev->mc_list ; 
+	dev_mc_address[0] = dev_mc_address[1] = dev_mc_address[2] = dev_mc_address[3] = 0 ; 
 
-		if (set_mc_list) { /* Turn multicast on */
-
-			/* RFC 1469 Says we must support using the functional address C0 00 00 04 00 00
-                         * We do this with a set functional address mask.
-			 */
-						
-			ata=olympic_priv->olympic_lap + (olympic_priv->olympic_addr_table_addr) ;
-			if (!(readb(ata+11) & 0x04)) { /* Hmmm, need to set the functional mask */ 
-				writeb(SRB_SET_FUNC_ADDRESS,srb+0);
-				writeb(0,srb+1);
-				writeb(OLYMPIC_CLEAR_RET_CODE,srb+2);
-				writeb(0,srb+3);
-				writeb(0,srb+4);
-				writeb(0,srb+5);
-				writeb(readb(ata+10),srb+6);
-				writeb(readb(ata+11)|4,srb+7);
-				writeb(readb(ata+12),srb+8);
-				writeb(readb(ata+13),srb+9);
-			
-				olympic_priv->srb_queued = 2 ; 
-				writel(LISR_SRB_CMD,olympic_mmio+LISR_SUM);
-
-				olympic_priv->olympic_multicast_set = 1 ;  
-			}    
-
-
-		} else { /* Turn multicast off */
-	
-			ata=olympic_priv->olympic_lap + (olympic_priv->olympic_addr_table_addr) ;
-			if ((readb(ata+11) & 0x04)) { /* Hmmm, need to reset the functional mask */ 
-				writeb(SRB_SET_FUNC_ADDRESS,srb+0);
-				writeb(0,srb+1);
-				writeb(OLYMPIC_CLEAR_RET_CODE,srb+2);
-				writeb(0,srb+3);
-				writeb(0,srb+4);
-				writeb(0,srb+5);
-				writeb(readb(ata+10),srb+6);
-				writeb(readb(ata+11) & ~4,srb+7);
-				writeb(readb(ata+12),srb+8);
-				writeb(readb(ata+13),srb+9);
-			
-				olympic_priv->srb_queued = 2 ; 
-				writel(LISR_SRB_CMD,olympic_mmio+LISR_SUM);	
-
-				olympic_priv->olympic_multicast_set = 0 ; 
-			}
-		} 		
-
+	for (i=0,dmi=dev->mc_list;i < dev->mc_count; i++,dmi = dmi->next) { 
+		dev_mc_address[0] |= dmi->dmi_addr[2] ; 
+		dev_mc_address[1] |= dmi->dmi_addr[3] ; 
+		dev_mc_address[2] |= dmi->dmi_addr[4] ; 
+		dev_mc_address[3] |= dmi->dmi_addr[5] ; 
 	}
 
+	writeb(SRB_SET_FUNC_ADDRESS,srb+0);
+	writeb(0,srb+1);
+	writeb(OLYMPIC_CLEAR_RET_CODE,srb+2);
+	writeb(0,srb+3);
+	writeb(0,srb+4);
+	writeb(0,srb+5);
+	writeb(dev_mc_address[0],srb+6);
+	writeb(dev_mc_address[1],srb+7);
+	writeb(dev_mc_address[2],srb+8);
+	writeb(dev_mc_address[3],srb+9);
+
+	olympic_priv->srb_queued = 2 ;
+	writel(LISR_SRB_CMD,olympic_mmio+LISR_SUM);
 
 }
 
@@ -1082,7 +1049,6 @@ static void olympic_srb_bh(struct net_device *dev)
 		case SRB_SET_GROUP_ADDRESS:
 			switch (readb(srb+2)) { 
 				case 0x00:
-					olympic_priv->olympic_multicast_set = 1 ; 
 					break ; 
 				case 0x01:
 					printk(KERN_WARNING "%s: Unrecognized srb command \n",dev->name) ; 
@@ -1110,7 +1076,6 @@ static void olympic_srb_bh(struct net_device *dev)
 		case SRB_RESET_GROUP_ADDRESS:
 			switch (readb(srb+2)) { 
 				case 0x00:
-					olympic_priv->olympic_multicast_set = 0 ; 
 					break ; 
 				case 0x01:
 					printk(KERN_WARNING "%s: Unrecognized srb command \n",dev->name) ; 

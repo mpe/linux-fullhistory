@@ -59,8 +59,8 @@
 #define WIN_CHECKPOWERMODE1	0xE5
 #define WIN_CHECKPOWERMODE2	0x98
 
-#define WIN_DOORLOCK		0xde	/* lock door on removable drives */
-#define WIN_DOORUNLOCK		0xdf	/* unlock door on removable drives */
+#define WIN_DOORLOCK		0xDE	/* lock door on removable drives */
+#define WIN_DOORUNLOCK		0xDF	/* unlock door on removable drives */
 
 #define WIN_MULTREAD		0xC4	/* read sectors using multiple mode */
 #define WIN_MULTWRITE		0xC5	/* write sectors using multiple mode */
@@ -68,20 +68,24 @@
 #define WIN_IDENTIFY		0xEC	/* ask drive to identify itself	*/
 #define WIN_IDENTIFY_DMA	0xEE	/* same as WIN_IDENTIFY, but DMA */
 #define WIN_SETFEATURES		0xEF	/* set special drive features */
-#define WIN_READDMA		0xc8	/* read sectors using DMA transfers */
-#define WIN_WRITEDMA		0xca	/* write sectors using DMA transfers */
+#define WIN_READDMA		0xC8	/* read sectors using DMA transfers */
+#define WIN_WRITEDMA		0xCA	/* write sectors using DMA transfers */
+
+#define WIN_QUEUED_SERVICE	0xA2	/* */
+#define WIN_READDMA_QUEUED	0xC7	/* read sectors using Queued DMA transfers */
+#define WIN_WRITEDMA_QUEUED	0xCC	/* write sectors using Queued DMA transfers */
 
 #define WIN_READ_BUFFER		0xE4	/* force read only 1 sector */
 #define WIN_WRITE_BUFFER	0xE8	/* force write only 1 sector */
 
-#define WIN_SMART		0xb0	/* self-monitoring and reporting */
+#define WIN_SMART		0xB0	/* self-monitoring and reporting */
 
 /* Additional drive command codes used by ATAPI devices. */
 #define WIN_PIDENTIFY		0xA1	/* identify ATAPI device	*/
 #define WIN_SRST		0x08	/* ATAPI soft reset command */
-#define WIN_PACKETCMD		0xa0	/* Send a packet command. */
+#define WIN_PACKETCMD		0xA0	/* Send a packet command. */
 
-#define EXABYTE_ENABLE_NEST	0xf0
+#define EXABYTE_ENABLE_NEST	0xF0
 
 /* WIN_SMART sub-commands */
 
@@ -227,32 +231,43 @@ struct hd_driveid {
 	unsigned short  eide_dma_time;	/* recommended mword dma cycle time (ns) */
 	unsigned short  eide_pio;       /* min cycle time (ns), no IORDY  */
 	unsigned short  eide_pio_iordy; /* min cycle time (ns), with IORDY */
-	unsigned short  word69;
-	unsigned short  word70;
+#if 0
+	unsigned short  words69_74[6];	/* reserved words 69-74 */
+#else
+	unsigned short  word69;		/* reserved (word 69) */
+	unsigned short  word70;		/* reserved (word 70) */
 	/* HDIO_GET_IDENTITY currently returns only words 0 through 70 */
-	unsigned short  word71;
-	unsigned short  word72;
-	unsigned short  word73;
-	unsigned short  word74;
-	unsigned short  word75;
-	unsigned short  word76;
-	unsigned short  word77;
-	unsigned short  word78;
-	unsigned short  word79;
-	unsigned short  word80;
-	unsigned short  word81;
-	unsigned short  command_sets;	/* bits 0:Smart 1:Security 2:Removable 3:PM */
-	unsigned short  word83;		/* bits 14:Smart Enabled 13:0 zero */
-	unsigned short  word84;
-	unsigned short  word85;
-	unsigned short  word86;
-	unsigned short  word87;
-	unsigned short  dma_ultra;
+	unsigned short  word71;		/* reserved (word 71) */
+	unsigned short  word72;		/* reserved (word 72) */
+	unsigned short  word73;		/* reserved (word 73) */
+	unsigned short  word74;		/* reserved (word 74) */
+#endif
+	unsigned short  queue_depth;	/*  */
+#if 0
+	unsigned short  words76_79[4];	/* reserved words 76-79 */
+#else
+	unsigned short  word76;		/* reserved (word 76) */
+	unsigned short  word77;		/* reserved (word 77) */
+	unsigned short  word78;		/* reserved (word 78) */
+	unsigned short  word79;		/* reserved (word 79) */
+#endif
+	unsigned short  major_rev_num;	/*  */
+	unsigned short  minor_rev_num;	/*  */
+	unsigned short  command_set_1;	/* bits 0:Smart 1:Security 2:Removable 3:PM */
+	unsigned short  command_set_2;	/* bits 14:Smart Enabled 13:0 zero */
+	unsigned short  cfsse;		/* command set-feature supported extensions */
+	unsigned short  cfs_enable_1;	/* command set-feature enabled */
+	unsigned short  cfs_enable_2;	/* command set-feature enabled */
+	unsigned short  csf_default;	/* command set-feature default */
+	unsigned short  dma_ultra;	/*  */
 	unsigned short	word89;		/* reserved (word 89) */
 	unsigned short	word90;		/* reserved (word 90) */
-	unsigned short	word91;		/* reserved (word 91) */
+	unsigned short	CurAPMvalues;	/* current APM values */
 	unsigned short	word92;		/* reserved (word 92) */
-	unsigned short	word93;		/* reserved (word 93) */
+	unsigned short	hw_config;	/* hardware config */
+#if 0
+	unsigned short  words94_126[34];/* reserved words 94-126 */
+#else
 	unsigned short	word94;		/* reserved (word 94) */
 	unsigned short	word95;		/* reserved (word 95) */
 	unsigned short	word96;		/* reserved (word 96) */
@@ -286,9 +301,27 @@ struct hd_driveid {
 	unsigned short	word124;	/* reserved (word 124) */
 	unsigned short	word125;	/* reserved (word 125) */
 	unsigned short	word126;	/* reserved (word 126) */
+#endif
 	unsigned short	word127;	/* reserved (word 127) */
-	unsigned short	security;	/* bits 0:support 1:enabled 2:locked 3:frozen */
-	unsigned short	reserved[127];
+	unsigned short	dlf;		/* device lock function
+					 * 15:9	reserved
+					 * 8	security level 1:max 0:high
+					 * 7:6	reserved
+					 * 5	enhanced erase
+					 * 4	expire
+					 * 3	frozen
+					 * 2	locked
+					 * 1	en/disabled
+					 * 0	capability
+					 */
+	unsigned short  csfo;		/* current set features options
+					 * 15:4	reserved
+					 * 3	auto reassign
+					 * 2	reverting
+					 * 1	read-look-ahead
+					 * 0	write cache
+					 */
+	unsigned short	reserved[126];
 };
 
 /*

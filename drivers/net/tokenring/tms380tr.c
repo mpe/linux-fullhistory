@@ -2470,7 +2470,8 @@ static void tms380tr_rcv_status_irq(struct net_device *dev)
 				tp->RplHead = SaveHead;
 				break;	/* Return to tms380tr_interrupt */
 			}
-
+#if 0	/* This might happen for multicast or broadcast packets.
+	   The upper layers are expected to handle this, not here */
 			/* Drop frames sent by myself */
 			if(tms380tr_chk_frame(dev, rpl->MData))
 			{
@@ -2480,6 +2481,7 @@ static void tms380tr_rcv_status_irq(struct net_device *dev)
 					dev_kfree_skb(rpl->Skb);
 			}
 			else
+#endif
 			{
 			  tms380tr_update_rcv_stats(tp,ReceiveDataPtr,Length);
 			  
