@@ -66,24 +66,7 @@ static struct proto_ops nr_proto_ops;
 
 static struct sock *nr_alloc_sock(void)
 {
-	nr_cb *nr;
-	struct sock *sk = sk_alloc(PF_NETROM, GFP_ATOMIC, 1, NULL);
-
-	if (!sk)
-		goto out;
-
-	nr = sk->sk_protinfo = kmalloc(sizeof(*nr), GFP_ATOMIC);
-	if (!nr)
-		goto frees;
-
-	memset(nr, 0x00, sizeof(*nr));
-	nr->sk = sk;
-out:
-	return sk;
-frees:
-	sk_free(sk);
-	sk = NULL;
-	goto out;
+	return  sk_alloc(PF_NETROM, GFP_ATOMIC, sizeof(struct nr_sock), NULL);
 }
 
 /*
@@ -169,7 +152,7 @@ static struct sock *nr_find_socket(unsigned char index, unsigned char id)
 
 	spin_lock_bh(&nr_list_lock);
 	sk_for_each(s, node, &nr_list) {
-		nr_cb *nr = nr_sk(s);
+		struct nr_sock *nr = nr_sk(s);
 		
 		if (nr->my_index == index && nr->my_id == id) {
 			bh_lock_sock(s);
@@ -193,7 +176,7 @@ static struct sock *nr_find_peer(unsigned char index, unsigned char id,
 
 	spin_lock_bh(&nr_list_lock);
 	sk_for_each(s, node, &nr_list) {
-		nr_cb *nr = nr_sk(s);
+		struct nr_sock *nr = nr_sk(s);
 		
 		if (nr->your_index == index && nr->your_id == id &&
 		    !ax25cmp(&nr->dest_addr, dest)) {
@@ -300,7 +283,7 @@ static int nr_setsockopt(struct socket *sock, int level, int optname,
 	char __user *optval, int optlen)
 {
 	struct sock *sk = sock->sk;
-	nr_cb *nr = nr_sk(sk);
+	struct nr_sock *nr = nr_sk(sk);
 	int opt;
 
 	if (level != SOL_NETROM)
@@ -352,7 +335,7 @@ static int nr_getsockopt(struct socket *sock, int level, int optname,
 	char __user *optval, int __user *optlen)
 {
 	struct sock *sk = sock->sk;
-	nr_cb *nr = nr_sk(sk);
+	struct nr_sock *nr = nr_sk(sk);
 	int val = 0;
 	int len; 
 
@@ -418,7 +401,7 @@ static int nr_listen(struct socket *sock, int backlog)
 static int nr_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
-	nr_cb *nr;
+	struct nr_sock *nr;
 
 	if (sock->type != SOCK_SEQPACKET || protocol != 0)
 		return -ESOCKTNOSUPPORT;
@@ -456,7 +439,7 @@ static int nr_create(struct socket *sock, int protocol)
 static struct sock *nr_make_new(struct sock *osk)
 {
 	struct sock *sk;
-	nr_cb *nr, *onr;
+	struct nr_sock *nr, *onr;
 
 	if (osk->sk_type != SOCK_SEQPACKET)
 		return NULL;
@@ -508,7 +491,7 @@ static struct sock *nr_make_new(struct sock *osk)
 static int nr_release(struct socket *sock)
 {
 	struct sock *sk = sock->sk;
-	nr_cb *nr;
+	struct nr_sock *nr;
 
 	if (sk == NULL) return 0;
 
@@ -556,7 +539,7 @@ static int nr_release(struct socket *sock)
 static int nr_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
 	struct sock *sk = sock->sk;
-	nr_cb *nr = nr_sk(sk);
+	struct nr_sock *nr = nr_sk(sk);
 	struct full_sockaddr_ax25 *addr = (struct full_sockaddr_ax25 *)uaddr;
 	struct net_device *dev;
 	ax25_address *user, *source;
@@ -625,7 +608,7 @@ static int nr_connect(struct socket *sock, struct sockaddr *uaddr,
 	int addr_len, int flags)
 {
 	struct sock *sk = sock->sk;
-	nr_cb *nr = nr_sk(sk);
+	struct nr_sock *nr = nr_sk(sk);
 	struct sockaddr_ax25 *addr = (struct sockaddr_ax25 *)uaddr;
 	ax25_address *user, *source = NULL;
 	struct net_device *dev;
@@ -822,7 +805,7 @@ static int nr_getname(struct socket *sock, struct sockaddr *uaddr,
 {
 	struct full_sockaddr_ax25 *sax = (struct full_sockaddr_ax25 *)uaddr;
 	struct sock *sk = sock->sk;
-	nr_cb *nr = nr_sk(sk);
+	struct nr_sock *nr = nr_sk(sk);
 
 	lock_sock(sk);
 	if (peer != 0) {
@@ -850,7 +833,7 @@ int nr_rx_frame(struct sk_buff *skb, struct net_device *dev)
 {
 	struct sock *sk;
 	struct sock *make;	
-	nr_cb *nr_make;
+	struct nr_sock *nr_make;
 	ax25_address *src, *dest, *user;
 	unsigned short circuit_index, circuit_id;
 	unsigned short peer_circuit_index, peer_circuit_id;
@@ -1015,7 +998,7 @@ static int nr_sendmsg(struct kiocb *iocb, struct socket *sock,
 		      struct msghdr *msg, size_t len)
 {
 	struct sock *sk = sock->sk;
-	nr_cb *nr = nr_sk(sk);
+	struct nr_sock *nr = nr_sk(sk);
 	struct sockaddr_ax25 *usax = (struct sockaddr_ax25 *)msg->msg_name;
 	int err;
 	struct sockaddr_ax25 sax;
@@ -1275,7 +1258,7 @@ static int nr_info_show(struct seq_file *seq, void *v)
 {
 	struct sock *s = v;
 	struct net_device *dev;
-	nr_cb *nr;
+	struct nr_sock *nr;
 	const char *devname;
 
 	if (v == SEQ_START_TOKEN)
