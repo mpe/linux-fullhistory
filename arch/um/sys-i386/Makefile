@@ -14,19 +14,16 @@ SYMLINKS = bitops.c semaphore.c highmem.c module.c
 # complete paths like $(src)/$f.
 clean-files := $(SYMLINKS)
 
-SYMLINKS := $(foreach f,$(SYMLINKS),$(src)/$f)
+targets += $(SYMLINKS)
+
+SYMLINKS := $(foreach f,$(SYMLINKS),$(obj)/$f)
 
 bitops.c-dir = lib
 semaphore.c-dir = kernel
 highmem.c-dir = mm
 module.c-dir = kernel
 
-define make_link
-	-rm -f $1
-	ln -sf $(srctree)/arch/i386/$($(notdir $1)-dir)/$(notdir $1) $1
-endef
-
-$(SYMLINKS): 
-	$(call make_link,$@)
+$(SYMLINKS): FORCE
+	$(call if_changed,make_link)
 
 subdir- := util
