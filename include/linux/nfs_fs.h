@@ -17,7 +17,7 @@
 /*
  * The readdir cache size controls how many directory entries are cached.
  * Its size is limited by the number of nfs_entry structures that can fit
- * in one 4096-byte page, currently 256.
+ * in one page, currently, the limit is 256 when using 4KB pages.
  */
 
 #define NFS_READDIR_CACHE_SIZE		64
@@ -26,8 +26,7 @@
 #define NFS_DEF_FILE_IO_BUFFER_SIZE	1024
 
 /*
- * The upper limit on timeouts for the exponential backoff algorithm
- * in tenths of a second.
+ * The upper limit on timeouts for the exponential backoff algorithm.
  */
 
 #define NFS_MAX_RPC_TIMEOUT		(6*HZ)

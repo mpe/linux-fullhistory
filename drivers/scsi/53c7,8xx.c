@@ -946,6 +946,8 @@ NCR53c7x0_init (struct Scsi_Host *host) {
     for (host->this_id = 0; tmp != 1; tmp >>=1, ++host->this_id);
 #else
     host->this_id = NCR53c7x0_read8(SCID_REG) & 15;
+    if (host->this_id == 0)
+	host->this_id = 7;	/* sanitize hostid---0 doesn't make sense */
     hostdata->this_id_mask = 1 << host->this_id;
 #endif
 
@@ -1879,7 +1881,7 @@ NCR53c8xx_run_tests (struct Scsi_Host *host) {
 	}
 
 	if (failed) {
-	    printk ("scsi%d : DSP = 0x%p (script at 0x%px, start at 0x%x)\n",
+	    printk ("scsi%d : DSP = 0x%p (script at 0x%p, start at 0x%x)\n",
 		host->host_no, bus_to_virt(NCR53c7x0_read32(DSP_REG)),
 		hostdata->script, start);
 	    printk ("scsi%d : DSPS = 0x%x\n", host->host_no,
@@ -5343,10 +5345,9 @@ print_insn (struct Scsi_Host *host, const u32 *insn,
      * to use vverify()?
      */
 
-    if ((unsigned long) insn < PAGE_SIZE || 
-	(unsigned long) insn > (high_memory - 8) || 
+    if (MAP_NR(insn) < 1 || MAP_NR(insn + 8) > MAP_NR(high_memory) || 
 	((((dcmd = (insn[0] >> 24) & 0xff) & DCMD_TYPE_MMI) == DCMD_TYPE_MMI) &&
-	(unsigned long) insn > (high_memory - 12))) {
+	MAP_NR(insn + 12) > MAP_NR(high_memory))) {
 	size = 0;
 	sprintf (buf, "%s%p: address out of range\n",
 	    prefix, insn);

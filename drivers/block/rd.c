@@ -258,7 +258,7 @@ void cleanup_module(void)
  * 	gzip
  */
 int
-identify_ramdisk_image(int device, struct file *fp, int start_block)
+identify_ramdisk_image(kdev_t device, struct file *fp, int start_block)
 {
 	const int size = 512;
 	struct minix_super_block *minixsb;
@@ -355,7 +355,7 @@ void rd_load()
 	struct inode inode, out_inode;
 	struct file infile, outfile;
 	unsigned short fs;
-	int device, ram_device;
+	kdev_t device, ram_device;
 	int nblocks, i;
 	char *buf;
 	unsigned short rotate = 0;
@@ -365,7 +365,7 @@ void rd_load()
 		return;
 	
 	device = ROOT_DEV;
-	ram_device = (MAJOR_NR << 8);
+	ram_device = MKDEV(MAJOR_NR, 0);
 
 	if (MAJOR(device) != FLOPPY_MAJOR) return;
 
@@ -440,7 +440,7 @@ void rd_load()
 
 successful_load:
 	invalidate_buffers(ROOT_DEV);
-	ROOT_DEV = (MAJOR_NR << 8);
+	ROOT_DEV = MKDEV(MAJOR_NR,0);
 
 done:
 	if (infile.f_op->release)

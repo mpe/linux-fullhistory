@@ -83,7 +83,6 @@ static int initialize_kbd(void);
 extern void poke_blanked_console(void);
 extern void ctrl_alt_del(void);
 extern void reset_vc(unsigned int new_console);
-extern void change_console(unsigned int new_console);
 extern void scrollback(int);
 extern void scrollfront(int);
 
@@ -101,8 +100,6 @@ static unsigned char k_down[NR_SHIFT] = {0, };
 #define BITS_PER_LONG (8*sizeof(unsigned long))
 static unsigned long key_down[256/BITS_PER_LONG] = { 0, };
 
-extern int last_console;
-static int want_console = -1;
 static int dead_key_next = 0;
 /* 
  * In order to retrieve the shift_state (for the mouse server), either
@@ -122,8 +119,6 @@ static struct tty_struct * tty = NULL;
 static volatile unsigned char reply_expected = 0;
 static volatile unsigned char acknowledge = 0;
 static volatile unsigned char resend = 0;
-/* used by kbd_bh - set by keyboard_interrupt */
-static volatile unsigned char do_poke_blanked_console = 0;
 
 extern void compute_shiftstate(void);
 
@@ -678,7 +673,7 @@ static void bare_num(void)
 static void lastcons(void)
 {
 	/* switch to the last used console, ChN */
-	want_console = last_console;
+	set_console(last_console);
 }
 
 static void decr_console(void)
@@ -691,7 +686,7 @@ static void decr_console(void)
 		if (vc_cons_allocated(i))
 			break;
 	}
-	want_console = i;
+	set_console(i);
 }
 
 static void incr_console(void)
@@ -704,7 +699,7 @@ static void incr_console(void)
 		if (vc_cons_allocated(i))
 			break;
 	}
-	want_console = i;
+	set_console(i);
 }
 
 static void send_intr(void)
@@ -853,7 +848,7 @@ static void do_cons(unsigned char value, char up_flag)
 {
 	if (up_flag)
 		return;
-	want_console = value;
+	set_console(value);
 }
 
 static void do_fn(unsigned char value, char up_flag)
@@ -1165,19 +1160,6 @@ static void kbd_bh(void * unused)
 		ledstate = leds;
 		if (!send_data(0xed) || !send_data(leds))
 			send_data(0xf4);	/* re-enable kbd if any errors */
-	}
-	if (want_console >= 0) {
-		if (want_console != fg_console) {
-			change_console(want_console);
-			/* we only changed when the console had already
-			   been allocated - a new console is not created
-			   in an interrupt routine */
-		}
-		want_console = -1;
-	}
-	if (do_poke_blanked_console) { /* do not unblank for a LED change */
-		do_poke_blanked_console = 0;
-		poke_blanked_console();
 	}
 }
 

@@ -131,6 +131,15 @@ asmlinkage int sys_ftruncate(unsigned int fd, unsigned long length)
 	return do_truncate(inode, length);
 }
 
+#ifndef __alpha__
+
+/*
+ * sys_utime() can be implemented in user-level using sys_utimes().
+ * Is this for backwards compatibility?  If so, why not move it
+ * into the appropriate arch directory (for those architectures that
+ * need it).
+ */
+
 /* If times==NULL, set access and modification to current time,
  * must be owner or have write permission.
  * Else, update from *times, must be owner or super user.
@@ -169,6 +178,8 @@ asmlinkage int sys_utime(char * filename, struct utimbuf * times)
 	iput(inode);
 	return error;
 }
+
+#endif
 
 /* If times==NULL, set access and modification to current time,
  * must be owner or have write permission.
@@ -540,10 +551,18 @@ asmlinkage int sys_open(const char * filename,int flags,int mode)
 	return error;
 }
 
+#ifndef __alpha__
+
+/*
+ * For backward compatibility?  Maybe this should be moved
+ * into arch/i386 instead?
+ */
 asmlinkage int sys_creat(const char * pathname, int mode)
 {
 	return sys_open(pathname, O_CREAT | O_WRONLY | O_TRUNC, mode);
 }
+
+#endif
 
 int close_fp(struct file *filp)
 {

@@ -338,7 +338,7 @@ unsigned long lca_init(unsigned long mem_start, unsigned long mem_end)
 
 void mem_error (unsigned long esr, unsigned long ear)
 {
-    printk("    %s %s error to %s occurred at address %x",
+    printk("    %s %s error to %s occurred at address %x\n",
 	   (esr & ESR_CEE) ? "Correctable" : ((esr & ESR_UEE) ? "Uncorrectable" : "A"),
 	   (esr & ESR_WRE) ? "write" : "read",
 	   (esr & ESR_SOR) ? "b-cache" : "memory",

@@ -43,7 +43,7 @@ ifdef CONFIG_KERNEL_ELF
 # You cannot compress a file and have the kernel uncompress it, it must
 # be stdin
 piggy.o:	$(SYSTEM)
-	tmppiggy=/tmp/$$.piggy; \
+	tmppiggy=/tmp/$$$$.piggy; \
 	rm -f $$tmppiggy $$tmppiggy.gz; \
 	$(OBJDUMP) $(OBJDUMP_FLAGS) -o $(IMAGE_OFFSET) $(SYSTEM) > $$tmppiggy; \
 	gzip -f -9 < $$tmppiggy > $$tmppiggy.gz; \

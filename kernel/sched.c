@@ -361,12 +361,20 @@ asmlinkage void schedule(void)
 	}
 }
 
+#ifndef __alpha__
+
+/*
+ * For backwards compatibility?  This can be done in libc so Alpha
+ * and all newer ports shouldn't need it.
+ */
 asmlinkage int sys_pause(void)
 {
 	current->state = TASK_INTERRUPTIBLE;
 	schedule();
 	return -ERESTARTNOHAND;
 }
+
+#endif
 
 /*
  * wake_up doesn't wake up stopped processes - they have to be awakened
@@ -881,6 +889,12 @@ void do_timer(struct pt_regs * regs)
 	sti();
 }
 
+#ifndef __alpha__
+
+/*
+ * For backwards compatibility?  This can be done in libc so Alpha
+ * and all newer ports shouldn't need it.
+ */
 asmlinkage unsigned int sys_alarm(unsigned int seconds)
 {
 	struct itimerval it_new, it_old;
@@ -898,6 +912,10 @@ asmlinkage unsigned int sys_alarm(unsigned int seconds)
 	return oldalarm;
 }
 
+/*
+ * The Alpha uses getxpid, getxuid, and getxgid instead.  Maybe this
+ * should be moved into arch/i386 instead?
+ */
 asmlinkage int sys_getpid(void)
 {
 	return current->pid;
@@ -928,6 +946,11 @@ asmlinkage int sys_getegid(void)
 	return current->egid;
 }
 
+/*
+ * This has been replaced by sys_setpriority.  Maybe it should be
+ * moved into the arch depedent tree for those ports that require
+ * it for backward compatibility?
+ */
 asmlinkage int sys_nice(int increment)
 {
 	unsigned long newprio;
@@ -961,6 +984,8 @@ asmlinkage int sys_nice(int increment)
 	current->priority = newprio;
 	return 0;
 }
+
+#endif
 
 static struct task_struct *find_process_by_pid(pid_t pid) {
 	struct task_struct *p, *q;

@@ -947,7 +947,7 @@ static int ax25_create(struct socket *sock, int protocol)
 	sk->sndbuf        = SK_WMEM_MAX;
 	sk->wmem_alloc    = 0;
 	sk->rmem_alloc    = 0;
-	sk->inuse         = 0;
+	sk->users         = 0;
 	sk->debug         = 0;
 	sk->destroy       = 0;
 	sk->prot          = NULL;	/* So we use default free mechanisms */
@@ -1020,7 +1020,7 @@ static struct sock *ax25_make_new(struct sock *osk, struct device *dev)
 	sk->sndbuf      = osk->sndbuf;
 	sk->wmem_alloc  = 0;
 	sk->rmem_alloc  = 0;
-	sk->inuse       = 0;
+	sk->users       = 0;
 	sk->ack_backlog = 0;
 	sk->destroy     = 0;
 	sk->prot        = NULL;	/* So we use default free mechanisms */
@@ -1988,7 +1988,7 @@ static int ax25_recvmsg(struct socket *sock, struct msghdr *msg, int size, int n
 		}
 	}
 
-	skb_free_datagram(skb);
+	skb_free_datagram(sk, skb);
 
 	return copied;
 }		

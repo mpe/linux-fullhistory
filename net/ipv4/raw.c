@@ -148,8 +148,7 @@ int raw_rcv(struct sock *sk, struct sk_buff *skb, struct device *dev, __u32 sadd
 	}
 
 	ip_statistics.IpInDelivers++;
-	release_sock(sk);
-	return(0);
+	return 0;
 }
 
 /*
@@ -342,8 +341,7 @@ int raw_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 		sin->sin_family = AF_INET;
 		sin->sin_addr.s_addr = skb->daddr;
 	}
-	skb_free_datagram(skb);
-	release_sock(sk);
+	skb_free_datagram(sk, skb);
 	return (copied);
 }
 

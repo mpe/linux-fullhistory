@@ -269,7 +269,8 @@ extern void tty_write_flush(struct tty_struct *);
 extern struct termios tty_std_termios;
 extern struct tty_struct * redirect;
 extern struct tty_ldisc ldiscs[];
-extern int fg_console;
+extern int fg_console, last_console, want_console;
+
 extern int kmsg_redirect;
 extern struct wait_queue * keypress_wait;
 

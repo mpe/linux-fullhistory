@@ -487,9 +487,11 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 		tosxor=f->fw_tosxor;
 	}
 	else
+	{
 		tosand=0xFF;
 		tosxor=0x00;
-
+	}
+	
 	if(opt != 1) 
 	{
 		if(policy&IP_FW_F_ACCEPT)
@@ -895,7 +897,7 @@ void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
  		}
  		else ms->timer.expires = jiffies+MASQUERADE_EXPIRE_TCP;
  
- 		tcp_send_check(th,iph->saddr,iph->daddr,size,skb->sk);
+ 		tcp_send_check(th,iph->saddr,iph->daddr,size,skb);
  	}
  	add_timer(&ms->timer);
  	ip_send_check(iph);
@@ -914,12 +916,12 @@ void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
   *	this function.
   */
 
-int ip_fw_demasquerade(struct sk_buff *skb_ptr)
+int ip_fw_demasquerade(struct sk_buff *skb)
 {
- 	struct iphdr	*iph = skb_ptr->h.iph;
+ 	struct iphdr	*iph = skb->h.iph;
  	unsigned short	*portptr;
  	struct ip_masq	*ms;
- 	struct tcphdr   *th = (struct tcphdr *)(skb_ptr->h.raw+(iph->ihl<<2));
+ 	struct tcphdr   *th = (struct tcphdr *)(skb->h.raw+(iph->ihl<<2));
  
  	if (iph->protocol!=IPPROTO_UDP && iph->protocol!=IPPROTO_TCP)
  		return 0;
@@ -954,7 +956,7 @@ int ip_fw_demasquerade(struct sk_buff *skb_ptr)
  		    portptr[1]==ms->mport)
  		{
  		
- 			int size = skb_ptr->len - ((unsigned char *)portptr - skb_ptr->h.raw);
+ 			int size = skb->len - ((unsigned char *)portptr - skb->h.raw);
  			iph->daddr = ms->src;
  			portptr[1] = ms->sport;
  			
@@ -1000,7 +1002,7 @@ int ip_fw_demasquerade(struct sk_buff *skb_ptr)
 #endif
 					}
 				}
- 				tcp_send_check((struct tcphdr *)portptr,iph->saddr,iph->daddr,size,skb_ptr->sk);
+ 				tcp_send_check((struct tcphdr *)portptr,iph->saddr,iph->daddr,size,skb);
  			}
  			ip_send_check(iph);
 #ifdef DEBUG_MASQ

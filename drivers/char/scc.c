@@ -2286,7 +2286,7 @@ scc_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned
 		
 		restore_flags(flags);
 			
-		put_user_long(result,(unsigned int *) arg);
+		put_user(result,(unsigned int *) arg);
 		return 0;
 	case TIOCMBIS:
 	case TIOCMBIC:
@@ -2301,7 +2301,7 @@ scc_ioctl(struct tty_struct *tty, struct file * file, unsigned int cmd, unsigned
 			scc->wreg[R5] &= ~RTS;
 			break;
 		case TIOCMSET:
-			value = get_user_long((unsigned int *) arg);
+			value = get_user((unsigned int *) arg);
 			
 			if(value & TIOCM_DTR)
 				scc->wreg[R5] |= DTR;

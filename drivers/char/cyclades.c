@@ -1310,7 +1310,7 @@ shutdown(struct cyclades_port * info)
      */
     save_flags(flags); cli();
 	if (info->xmit_buf){
-            unsigned long temp;
+            unsigned char * temp;
             temp = info->xmit_buf;
             info->xmit_buf = 0;
 	    free_page((unsigned long) temp);

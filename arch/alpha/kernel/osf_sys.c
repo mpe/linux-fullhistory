@@ -125,6 +125,17 @@ asmlinkage int osf_getdirentries(unsigned int fd, struct osf_dirent * dirent,
 	return count - buf.count;
 }
 
+asmlinkage int osf_getpriority(int which, int who)
+{
+	extern int sys_getpriority(int, int);
+	/*
+	 * Alpha syscall convention has no problem returning negative
+	 * values:
+	 */
+	return 20 - sys_getpriority(which, who);
+}
+
+
 /*
  * Heh. As documented by DEC..
  */

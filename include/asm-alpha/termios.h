@@ -241,7 +241,7 @@ struct termios {
 #define XTABS	01000000 /* Hmm.. Linux/i386 considers this part of TABDLY.. */
 
 /* c_cflag bit meaning */
-#define CBAUD	0000377
+#define CBAUD	0000017
 #define  B0	0000000		/* hang up */
 #define  B50	0000001
 #define  B75	0000002

@@ -104,3 +104,10 @@ WARNING: It is not recommended that you change any defines in lxdialog's
          header files.
 
 
+*** IMPORTANT, OPTIONAL ALTERNATE PERSONALITY AVAILABLE ***
+***                                                     ***
+If you prefer to have all of the kernel options listed in a single menu, 
+rather than the default multimenu hierarchy, you may edit the Menuconfig 
+script and change the line "single_menu_mode="  to "single_menu_mode=TRUE".  
+Don't forget to remove linux/.menuconfig.in afterwards.
+

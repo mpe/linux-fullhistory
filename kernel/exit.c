@@ -639,6 +639,8 @@ end_wait4:
 	return retval;
 }
 
+#ifndef __alpha__
+
 /*
  * sys_waitpid() remains for compatibility. waitpid() should be
  * implemented by calling sys_wait4() from libc.a.
@@ -647,3 +649,5 @@ asmlinkage int sys_waitpid(pid_t pid,unsigned int * stat_addr, int options)
 {
 	return sys_wait4(pid, stat_addr, options, NULL);
 }
+
+#endif

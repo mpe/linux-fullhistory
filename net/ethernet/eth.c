@@ -264,6 +264,9 @@ void eth_header_cache_update(struct hh_cache *hh, struct device *dev, unsigned c
  
 void eth_copy_and_sum(struct sk_buff *dest, unsigned char *src, int length, int base)
 {
+#ifdef CONFIG_IP_ROUTER
+	memcpy(dest->data,src,length);
+#else
 	struct ethhdr *eth;
 	struct iphdr *iph;
 	int ip_length;
@@ -292,4 +295,5 @@ void eth_copy_and_sum(struct sk_buff *dest, unsigned char *src, int length, int 
 
 	dest->csum=csum_partial_copy(src+sizeof(struct iphdr)+ETH_HLEN,dest->data+sizeof(struct iphdr)+ETH_HLEN,length,base);
 	dest->ip_summed=1;
+#endif	
 }

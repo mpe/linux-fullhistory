@@ -1032,6 +1032,7 @@ ipxitf_ioctl(unsigned int cmd, void *arg)
 			ipxif=ipxitf_find_using_phys(dev, ipx_map_frame_type(sipx->sipx_type));
 			if(ipxif==NULL)
 				return -EADDRNOTAVAIL;
+			sipx->sipx_family=AF_IPX;
 			sipx->sipx_network=ipxif->if_netnum;
 			memcpy(sipx->sipx_node, ipxif->if_node, sizeof(sipx->sipx_node));
 			memcpy_tofs(arg,&ifr,sizeof(ifr));
@@ -1601,7 +1602,7 @@ ipx_create(struct socket *sock, int protocol)
 	sk->sndbuf=SK_WMEM_MAX;
 	sk->wmem_alloc=0;
 	sk->rmem_alloc=0;
-	sk->inuse=0;
+	sk->users=0;
 	sk->shutdown=0;
 	sk->prot=NULL;	/* So we use default free mechanisms */
 	sk->err=0;
@@ -2050,7 +2051,7 @@ static int ipx_recvmsg(struct socket *sock, struct msghdr *msg, int size, int no
 		sipx->sipx_network=ipx->ipx_source.net;
 		sipx->sipx_type = ipx->ipx_type;
 	}
-	skb_free_datagram(skb);
+	skb_free_datagram(sk, skb);
 	return(truesize);
 }		
 

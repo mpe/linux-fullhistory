@@ -4,7 +4,7 @@
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
  *
- *	This code REQUIRES 1.2.1 or higher/ NET3.029
+ *	This code REQUIRES 1.3.61 or higher/ NET3.029
  *
  *	This module:
  *		This module is free software; you can redistribute it and/or
@@ -27,6 +27,8 @@
  *					it up from ax25_frames_acked().
  *			Joerg(DL1BKE)	DAMA needs KISS Fullduplex ON/OFF.
  *					Thus we have ax25_kiss_cmd() now... ;-)
+ *			Dave Brown(N2RJT)
+ *					Killed a silly bug in the DAMA code.
  */
 
 #include <linux/config.h>
@@ -345,11 +347,14 @@ unsigned char *ax25_parse_addr(unsigned char *buf, int len, ax25_address *src, a
 		}
 	}
 		
-	if (dama != NULL) *dama = ~(buf[13] & DAMA_FLAG);
+	if (dama != NULL) 
+		*dama = !(buf[13] & DAMA_FLAG);
 		
 	/* Copy to, from */
-	if (dest != NULL) memcpy(dest, buf + 0, AX25_ADDR_LEN);
-	if (src != NULL)  memcpy(src,  buf + 7, AX25_ADDR_LEN);
+	if (dest != NULL) 
+		memcpy(dest, buf + 0, AX25_ADDR_LEN);
+	if (src != NULL)  
+		memcpy(src,  buf + 7, AX25_ADDR_LEN);
 	buf += 2 * AX25_ADDR_LEN;
 	len -= 2 * AX25_ADDR_LEN;
 	digi->lastrepeat = -1;

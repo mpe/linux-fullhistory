@@ -574,10 +574,7 @@ void tcp_send_fin(struct sock *sk)
 	struct device *dev=NULL;
 	int tmp;
 		
-	release_sock(sk); /* in case the malloc sleeps. */
-	
 	buff = sock_wmalloc(sk, MAX_RESET_SIZE,1 , GFP_KERNEL);
-	sk->inuse = 1;
 
 	if (buff == NULL)
 	{
@@ -676,7 +673,6 @@ void tcp_send_synack(struct sock * newsk, struct sock * sk, struct sk_buff * skb
 		newsk->dead = 1;
 		newsk->state = TCP_CLOSE;
 		/* And this will destroy it */
-		release_sock(newsk);
 		kfree_skb(skb, FREE_READ);
 		tcp_statistics.TcpAttemptFails++;
 		return;
@@ -703,7 +699,6 @@ void tcp_send_synack(struct sock * newsk, struct sock * sk, struct sk_buff * skb
 		kfree_skb(buff,FREE_WRITE);
 		newsk->dead = 1;
 		newsk->state = TCP_CLOSE;
-		release_sock(newsk);
 		skb->sk = sk;
 		kfree_skb(skb, FREE_READ);
 		tcp_statistics.TcpAttemptFails++;
@@ -750,7 +745,6 @@ void tcp_send_synack(struct sock * newsk, struct sock * sk, struct sk_buff * skb
 	
 	skb_queue_tail(&sk->receive_queue,skb);
 	sk->ack_backlog++;
-	release_sock(newsk);
 	tcp_statistics.TcpOutSegs++;
 }
 

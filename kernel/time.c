@@ -34,6 +34,14 @@
  */
 struct timezone sys_tz = { 0, 0};
 
+#ifndef __alpha__
+
+/*
+ * sys_time() can be implemented in user-level using
+ * sys_gettimeofday().  Is this for backwards compatibility?  If so,
+ * why not move it into the appropriate arch directory (for those
+ * architectures that need it).
+ */
 asmlinkage int sys_time(int * tloc)
 {
 	int i;
@@ -48,6 +56,12 @@ asmlinkage int sys_time(int * tloc)
 	return i;
 }
 
+/*
+ * sys_stime() can be implemented in user-level using
+ * sys_settimeofday().  Is this for backwards compatibility?  If so,
+ * why not move it into the appropriate arch directory (for those
+ * architectures that need it).
+ */
 asmlinkage int sys_stime(int * tptr)
 {
 	int error, value;
@@ -67,6 +81,8 @@ asmlinkage int sys_stime(int * tptr)
 	sti();
 	return 0;
 }
+
+#endif
 
 asmlinkage int sys_gettimeofday(struct timeval *tv, struct timezone *tz)
 {

@@ -19,6 +19,13 @@
 
 #define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
 
+#ifndef __alpha__
+
+/*
+ * This call isn't used by all ports, in particular, the Alpha
+ * uses osf_sigprocmask instead.  Maybe it should be moved into
+ * arch-dependent dir?
+ */
 asmlinkage int sys_sigprocmask(int how, sigset_t *set, sigset_t *oset)
 {
 	sigset_t new_set, old_set = current->blocked;
@@ -52,6 +59,9 @@ asmlinkage int sys_sigprocmask(int how, sigset_t *set, sigset_t *oset)
 	return 0;
 }
 
+/*
+ * For backwards compatibility?  Functionality superseded by sigprocmask.
+ */
 asmlinkage int sys_sgetmask(void)
 {
 	return current->blocked;
@@ -64,6 +74,8 @@ asmlinkage int sys_ssetmask(int newmask)
 	current->blocked = newmask & _BLOCKABLE;
 	return old;
 }
+
+#endif
 
 asmlinkage int sys_sigpending(sigset_t *set)
 {
@@ -109,6 +121,10 @@ static inline void check_pending(int signum)
 	}	
 }
 
+#ifndef __alpha__
+/*
+ * For backwards compatibility?  Functionality superseded by sigaction.
+ */
 asmlinkage unsigned long sys_signal(int signum, __sighandler_t handler)
 {
 	int err;
@@ -131,6 +147,7 @@ asmlinkage unsigned long sys_signal(int signum, __sighandler_t handler)
 	check_pending(signum);
 	return (unsigned long) handler;
 }
+#endif
 
 asmlinkage int sys_sigaction(int signum, const struct sigaction * action,
 	struct sigaction * oldaction)

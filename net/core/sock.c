@@ -3,7 +3,7 @@
  *		operating system.  INET is implemented using the  BSD Socket
  *		interface as the means of communication with the user level.
  *
- *		Generic socket support routines. Memory allocators, sk->inuse/release
+ *		Generic socket support routines. Memory allocators, socket lock/release
  *		handler for protocols to use and generic option handler.
  *
  *
@@ -449,8 +449,6 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 	struct sk_buff *skb;
 	int err;
 
-	sk->inuse=1;
-		
 	do
 	{
 		if(sk->err!=0)
@@ -542,38 +540,35 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 }
 
 
-void release_sock(struct sock *sk)
+void __release_sock(struct sock *sk)
 {
 #ifdef CONFIG_INET
 	struct sk_buff *skb;
-#endif
 
-	/*
-	 * First, mark it not in use: this ensures that we will not
-	 * get any new backlog packets..
-	 */
-	sk->inuse = 0;
-
-#ifdef CONFIG_INET
 	if (!sk->prot)
 		return;
 		
 	/*
 	 *	This is only ever called from a user process context, hence
-	 *	(until fine grained SMP) its safe. sk->inuse must be volatile
+	 *	(until fine grained SMP) its safe. sk->users must be volatile
 	 *	so the compiler doesn't do anything unfortunate with it.
+	 *
+	 *	The "barrier()" stuff takes care of that. Note that the rcv
+	 *	function may not sleep, so "users" is not going to change there.
 	 */
 
 	/* See if we have any packets built up. */
 	while ((skb = __skb_dequeue(&sk->back_log)) != NULL) 
 	{
-		sk->inuse = 1;		/* Very important.. */
+		barrier();
+		sk->users = 1;
 		if (sk->prot->rcv) 
 			sk->prot->rcv(skb, skb->dev, (struct options*)skb->proto_priv,
 				 skb->saddr, skb->len, skb->daddr, 1,
 				/* Only used for/by raw sockets. */
 				(struct inet_protocol *)sk->pair); 
-		sk->inuse = 0;
+		sk->users = 0;
+		barrier();
 	}
 	if (sk->dead && sk->state == TCP_CLOSE) 
 	{

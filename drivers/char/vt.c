@@ -50,12 +50,13 @@ extern struct tty_driver console_driver;
 
 struct vt_struct *vt_cons[MAX_NR_CONSOLES];
 
+#ifndef __alpha__
 asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on);
+#endif
 
 extern int getkeycode(unsigned int scancode);
 extern int setkeycode(unsigned int scancode, unsigned int keycode);
 extern void compute_shiftstate(void);
-extern void change_console(unsigned int new_console);
 extern void complete_change_console(unsigned int new_console);
 extern int vt_waitactive(void);
 extern void do_blank_screen(int nopowersave);
@@ -249,6 +250,11 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 			put_user(KB_101, (char *) arg);
 		return i;
 
+#ifndef __alpha__
+		/*
+		 * These cannot be implemented on any machine that implements
+		 * ioperm() in user level (such as Alpha PCs).
+		 */
 	case KDADDIO:
 	case KDDELIO:
 		/*
@@ -263,6 +269,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 	case KDDISABIO:
 		return sys_ioperm(GPFIRST, GPNUM,
 				  (cmd == KDENABIO)) ? -ENXIO : 0;
+#endif
 
 	case KDSETMODE:
 		/*
@@ -774,7 +781,7 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 		i = vc_allocate(arg);
 		if (i)
 			return i;
-		change_console(arg);
+		set_console(arg);
 		return 0;
 
 	/*
@@ -832,7 +839,14 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 				i = vc_allocate(newvt);
 				if (i)
 					return i;
+				/*
+				 * When we actually do the console switch,
+				 * make sure we are atomic with respect to
+				 * other console switches..
+				 */
+				start_bh_atomic();
 				complete_change_console(newvt);
+				end_bh_atomic();
 			}
 		}
 

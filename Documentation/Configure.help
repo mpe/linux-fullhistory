@@ -297,9 +297,39 @@ CONFIG_MAX_16M
 
 Using SRM as bootloader
 CONFIG_ALPHA_SRM
-#####
-##### Don't know what this is about.
-#####
+  This selects whether the Linux kernel on an Alpha machines is being
+  booted through SRM (the DEC Unix firmware).  If you use MILO, answer
+  "no" here.  Except for Cabriolet and some other evaluation-board based
+  machines, this option has no effect and can be set to either value
+  with no ill effects.
+
+Kernel KGDB support
+CONFIG_KGDB
+  Selects whether kernel debugging via serial line should be enabled.
+  Enable this option only if you really plan on debugging the Linux
+  kernel.  If you enable this option, take a look at
+  arch/alpha/kernel/kgdb.c and search for SERIAL_LINE to find out
+  what serial port the kernel will use (either /dev/ttyS0 or
+  /dev/ttyS1).  Then, hook up a serial line to another machine
+  (must be another 64-bit machine when debugging a 64-bit kernel)
+  and start "gdb vmlinux" on that machine.  Then boot the kernel on
+  the target system with boot option "kgdb".  The kernel will display:
+     kgdb: stealing /dev/ttyS0 and initializing it to 38400 baud
+     kgdb: waiting for gdb to connect...
+  At this point, enter the following commands on the system running
+  gdb:
+     gdb> set remotebaud 38400
+     gdb> set target remote /dev/<whatever>
+  After a few seconds, gdb should respond with the usual prompt, showing
+  the source at which the kernel is currently executing.  You can now
+  use the normal gdb features such as breakpoints to debug the kernel.
+  WARNING: when CONFIG_KGDB is enabled, send a Ctrl-C character over
+  the serial line will drop the kernel into the debugger!
+
+Kernel tracing support
+CONFIG_KGDB_TRACING
+  Enabling this option allows to collect kernel execution traces.  Don't
+  try this at home!
 
 Echo console messages on /dev/ttyS1
 CONFIG_SERIAL_ECHO
@@ -310,9 +340,10 @@ CONFIG_SERIAL_ECHO
 
 TGA Console Support
 CONFIG_TGA_CONSOLE
-#####
-##### Has something to do with Alpha.
-#####
+  Many Alpha systems are shipped with a graphics card that implements the
+  TGA interface (much like the VGA standard, but older TGA adaptors are
+  *not* VGA compatible).  On such systems, this option needs to be enabled
+  such that the TGA driver rather than the standard VGA driver is used.
 
 PCI bios support
 CONFIG_PCI
@@ -457,7 +488,7 @@ CONFIG_KERNELD
   to be created as loadable modules, you also have the responsibility
   to load the corresponding module (via insmod/modprobe) before you
   use it.  If you select Y here, the kernel will take care of this
-  all by itself, together with a user level daemon; "kerneld".
+  all by itself, together with a user level daemon, "kerneld".
   Note that "kerneld" will also automatically unload all unused
   modules, so you don't have to use "rmmod" either.
   There are some other "kernel callouts" that will be available
@@ -523,6 +554,13 @@ CONFIG_IP_MULTICAST
   the programs lynx, netscape or Mosaic). Information about the
   multicast capabilities of the various network cards is contained in
   drivers/net/README.multicast. For most people, it's safe to say N.
+
+IP: optimize as router not host
+  Some Linux network drivers use a technique called copy and checksum
+  to optimize host performance. For a machine which is forwarding most
+  packets to another host this is however a loss. This parameter turns
+  off copy and checksum from devices. It may also do other changes in
+  future.
 
 IP: firewalling
 CONFIG_IP_FIREWALL

@@ -114,6 +114,10 @@
 #include <asm/irq.h>
 #include <asm/io.h>
 #include <asm/byteorder.h>
+#include <asm/segment.h>
+#ifdef __alpha__
+# include <asm/unaligned.h>
+#endif
 
 #include "ide.h"
 
@@ -192,19 +196,19 @@
    They generally do not change after initialization, unless we learn
    more about the drive from stuff failing. */
 struct ide_cd_config_flags {
-  unsigned drq_interrupt : 1; /* Device sends an interrupt when ready
+  __u8 drq_interrupt : 1; /* Device sends an interrupt when ready
                                  for a packet command. */
-  unsigned no_doorlock   : 1; /* Drive cannot lock the door. */
+  __u8 no_doorlock   : 1; /* Drive cannot lock the door. */
 #if ! STANDARD_ATAPI
-  unsigned no_playaudio12: 1; /* The PLAYAUDIO12 command is not supported. */
+  __u8 no_playaudio12: 1; /* The PLAYAUDIO12 command is not supported. */
  
-  unsigned no_lba_toc    : 1; /* Drive cannot return TOC info in LBA format. */
-  unsigned playmsf_uses_bcd : 1; /* Drive uses BCD in PLAYAUDIO_MSF. */
-  unsigned old_readcd    : 1; /* Drive uses old READ CD opcode. */
-  unsigned vertos_lossage: 1; /* Drive is a Vertos 300,
+  __u8 no_lba_toc    : 1; /* Drive cannot return TOC info in LBA format. */
+  __u8 playmsf_uses_bcd : 1; /* Drive uses BCD in PLAYAUDIO_MSF. */
+  __u8 old_readcd    : 1; /* Drive uses old READ CD opcode. */
+  __u8 vertos_lossage: 1; /* Drive is a Vertos 300,
 				 and likes to speak BCD. */
 #endif  /* not STANDARD_ATAPI */
-  unsigned reserved : 1;
+  __u8 reserved : 1;
 };
 #define CDROM_CONFIG_FLAGS(drive) ((struct ide_cd_config_flags *)&((drive)->bios_sect))
 
@@ -212,11 +216,11 @@ struct ide_cd_config_flags {
 /* State flags.  These give information about the current state of the
    drive, and will change during normal operation. */
 struct ide_cd_state_flags {
-  unsigned media_changed : 1; /* Driver has noticed a media change. */
-  unsigned toc_valid     : 1; /* Saved TOC information is current. */
-  unsigned door_locked   : 1; /* We think that the drive door is locked. */
-  unsigned eject_on_close: 1; /* Drive should eject when device is closed. */
-  unsigned reserved : 4;
+  __u8 media_changed : 1; /* Driver has noticed a media change. */
+  __u8 toc_valid     : 1; /* Saved TOC information is current. */
+  __u8 door_locked   : 1; /* We think that the drive door is locked. */
+  __u8 eject_on_close: 1; /* Drive should eject when device is closed. */
+  __u8 reserved : 4;
 };
 #define CDROM_STATE_FLAGS(drive)  ((struct ide_cd_state_flags *)&((drive)->bios_head))
 
@@ -1162,7 +1166,11 @@ static void cdrom_start_read_continuation (ide_drive_t *drive)
   pc.c[0] = READ_10;
   pc.c[7] = (nframes >> 8);
   pc.c[8] = (nframes & 0xff);
+#ifdef __alpha__
+  stl_u (htonl (frame), (unsigned int *) &pc.c[2]);
+#else
   *(int *)(&pc.c[2]) = htonl (frame);
+#endif
 
   /* Send the command to the drive and return. */
   (void) cdrom_transfer_packet_command (drive, pc.c, sizeof (pc.c),
@@ -1909,8 +1917,13 @@ cdrom_play_lba_range_play12 (ide_drive_t *drive, int lba_start, int lba_end,
   pc.sense_data = reqbuf;
 
   pc.c[0] = SCMD_PLAYAUDIO12;
+#ifdef __alpha__
+  stq_u(((long) htonl (lba_end - lba_start) << 32) | htonl(lba_start),
+	(unsigned long *) &pc.c[2]);
+#else
   *(int *)(&pc.c[2]) = htonl (lba_start);
   *(int *)(&pc.c[6]) = htonl (lba_end - lba_start);
+#endif
 
   return cdrom_queue_packet_command (drive, &pc);
 }
@@ -2081,7 +2094,11 @@ cdrom_read_block (ide_drive_t *drive, int format, int lba,
     pc.c[0] = READ_CD;
 
   pc.c[1] = (format << 2);
+#ifdef __alpha__
+  stl_u(htonl (lba), (unsigned int *) &pc.c[2]);
+#else
   *(int *)(&pc.c[2]) = htonl (lba);
+#endif
   pc.c[8] = 1;  /* one block */
   pc.c[9] = 0x10;
 

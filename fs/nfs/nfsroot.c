@@ -289,10 +289,8 @@ static int root_rarp_send(void)
 	struct device *dev;
 	int num = 0;
 
-#ifdef NFSROOT_DEBUG
+	/* always print this message so user knows what's going on... */
 	printk(KERN_NOTICE "NFS: Sending RARP request...\n");
-#endif
-
 	for (openp = open_base; openp != NULL; openp = openp->next) {
 		dev = openp->dev;
 		if (!(dev->flags & IFF_NOARP)) {

@@ -2587,7 +2587,7 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 			return -EPERM;
 		error = verify_area(VERIFY_READ, (int *) ioarg, sizeof(int));
 		if (error) return error;
-		c = get_user_long((int *) ioarg);
+		c = get_user((int *) ioarg);
 		if (c==0) {
 			QIC02_TAPE_DEBUG = 0;
 			return 0;
@@ -2619,7 +2619,7 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 		stp = (char *) &qic02_tape_dynconf;
 		argp = (char *) ioarg;
 		for (i=0; i<sizeof(qic02_tape_dynconf); i++) 
-			put_user_byte(*stp++, argp++);
+			put_user(*stp++, argp++);
 		return 0;
 
 	} else if (c == (MTIOCSETCONFIG & IOCCMD_MASK)) {
@@ -2646,7 +2646,7 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 		stp = (char *) &qic02_tape_dynconf;
 		argp = (char *) ioarg;
 		for (i=0; i<sizeof(qic02_tape_dynconf); i++)
-			*stp++ = get_user_byte(argp++);
+			*stp++ = get_user(argp++);
 		if (status_zombie==NO)
 			qic02_release_resources();	/* and go zombie */
 		if (update_ifc_masks(qic02_tape_dynconf.ifc_type))
@@ -2678,7 +2678,7 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 		stp = (char *) &operation;
 		argp = (char *) ioarg;
 		for (i=0; i<sizeof(operation); i++)
-			*stp++ = get_user_byte(argp++);
+			*stp++ = get_user(argp++);
 
 		/* ---note: mt_count is signed, negative seeks must be
 		 * ---	    translated to seeks in opposite direction!
@@ -2740,7 +2740,7 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 		stp = (char *) &ioctl_status;
 		argp = (char *) ioarg;
 		for (i=0; i<sizeof(ioctl_status); i++) 
-			put_user_byte(*stp++, argp++);
+			put_user(*stp++, argp++);
 		return 0;
 
 
@@ -2773,7 +2773,7 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 		stp = (char *) &ioctl_tell;
 		argp = (char *) ioarg;
 		for (i=0; i<sizeof(ioctl_tell); i++) 
-			put_user_byte(*stp++, argp++);
+			put_user(*stp++, argp++);
 		return 0;
 
 	} else

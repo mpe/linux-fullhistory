@@ -392,7 +392,7 @@ static int udp_sendto(struct sock *sk, const unsigned char *from, int len, int n
   	if(!sk->broadcast && ip_chk_addr(usin->sin_addr.s_addr)==IS_BROADCAST)
 	    	return -EACCES;			/* Must turn broadcast on first */
 
-	sk->inuse = 1;
+	lock_sock(sk);
 
 	/* Send the packet. */
 	tmp = udp_send(sk, usin, from, len, flags, saddr, noblock);
@@ -539,8 +539,7 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 		sin->sin_addr.s_addr = skb->daddr;
   	}
   
-  	skb_free_datagram(skb);
-  	release_sock(sk);
+  	skb_free_datagram(sk, skb);
   	return(copied);
 }
 
@@ -576,14 +575,13 @@ int udp_connect(struct sock *sk, struct sockaddr_in *usin, int addr_len)
 
 static void udp_close(struct sock *sk, int timeout)
 {
-	sk->inuse = 1;
+	lock_sock(sk);
 	sk->state = TCP_CLOSE;
 	if(uh_cache_sk==sk)
 		udp_cache_zap();
+	release_sock(sk);
 	if (sk->dead) 
 		destroy_sock(sk);
-	else
-		release_sock(sk);
 }
 
 
@@ -746,11 +744,9 @@ static int udp_deliver(struct sock *sk, struct udphdr *uh, struct sk_buff *skb, 
 		ip_statistics.IpInDelivers--;
 		skb->sk = NULL;
 		kfree_skb(skb, FREE_WRITE);
-		release_sock(sk);
 		return(0);
 	}
   	udp_statistics.UdpInDatagrams++;
-	release_sock(sk);
 	return(0);
 }
 

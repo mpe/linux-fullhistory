@@ -360,7 +360,8 @@ extern __inline__ void __skb_unlink(struct sk_buff *skb, struct sk_buff_head *li
 	skb->next = NULL;
 	skb->prev = NULL;
 	skb->list = NULL;
-	(next->prev = prev)->next = next;
+	next->prev = prev;
+	prev->next = next;
 }
 
 /*
@@ -444,7 +445,7 @@ extern struct sk_buff *		skb_recv_datagram(struct sock *sk,unsigned flags,int no
 extern int			datagram_select(struct sock *sk, int sel_type, select_table *wait);
 extern void			skb_copy_datagram(struct sk_buff *from, int offset, char *to,int size);
 extern void			skb_copy_datagram_iovec(struct sk_buff *from, int offset, struct iovec *to,int size);
-extern void			skb_free_datagram(struct sk_buff *skb);
+extern void			skb_free_datagram(struct sock * sk, struct sk_buff *skb);
 
 #endif	/* __KERNEL__ */
 #endif	/* _LINUX_SKBUFF_H */

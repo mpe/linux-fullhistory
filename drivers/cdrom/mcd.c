@@ -1611,10 +1611,7 @@ int init_module(void)
 }
 
 void cleanup_module(void)
-{ if (MOD_IN_USE)
-     { printk("mcd module in use - can't remove it.\n");
-       return;    
-     }
+{
   if ((unregister_blkdev(MAJOR_NR, "mcd") == -EINVAL))
      { printk("What's that: can't unregister mcd\n");
        return;    

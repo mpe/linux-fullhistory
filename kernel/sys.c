@@ -121,6 +121,14 @@ asmlinkage int sys_getpriority(int which, int who)
 	return max_prio;
 }
 
+#ifndef __alpha__
+
+/*
+ * Why do these exist?  Binary compatibility with some other standard?
+ * If so, maybe they should be moved into the appropriate arch
+ * directory.
+ */
+
 asmlinkage int sys_profil(void)
 {
 	return -ENOSYS;
@@ -150,6 +158,8 @@ asmlinkage int sys_prof(void)
 {
 	return -ENOSYS;
 }
+
+#endif
 
 extern void hard_reset_now(void);
 extern asmlinkage sys_kill(int, int);
@@ -268,6 +278,14 @@ asmlinkage int sys_acct(void)
 	return -ENOSYS;
 }
 
+#ifndef __alpha__
+
+/*
+ * Why do these exist?  Binary compatibility with some other standard?
+ * If so, maybe they should be moved into the appropriate arch
+ * directory.
+ */
+
 asmlinkage int sys_phys(void)
 {
 	return -ENOSYS;
@@ -292,6 +310,8 @@ asmlinkage int sys_old_syscall(void)
 {
 	return -ENOSYS;
 }
+
+#endif
 
 /*
  * Unprivileged users may change the real uid to the effective uid
@@ -645,6 +665,12 @@ asmlinkage int sys_newuname(struct new_utsname * name)
 	return error;
 }
 
+#ifndef __alpha__
+
+/*
+ * Move these to arch dependent dir since they are for
+ * backward compatiblity only?
+ */
 asmlinkage int sys_uname(struct old_utsname * name)
 {
 	int error;
@@ -686,6 +712,8 @@ asmlinkage int sys_olduname(struct oldold_utsname * name)
 	put_user(0,name->machine+__OLD_UTS_LEN);
 	return 0;
 }
+
+#endif
 
 asmlinkage int sys_sethostname(char *name, int len)
 {

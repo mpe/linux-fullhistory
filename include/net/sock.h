@@ -107,13 +107,12 @@ struct sock
 	__u32			fin_seq;
 	__u32			urg_seq;
 	__u32			urg_data;
-
+	int			users;			/* user count */
   /*
    *	Not all are volatile, but some are, so we
    * 	might as well say they all are.
    */
-	volatile char          	inuse,
-				dead,
+	volatile char		dead,
 				urginline,
 				intr,
 				blog,
@@ -343,12 +342,54 @@ struct proto
 #define RCV_SHUTDOWN	1
 #define SEND_SHUTDOWN	2
 
+/*
+ * Used by processes to "lock" a socket state, so that
+ * interrupts and bottom half handlers won't change it
+ * from under us. It essentially blocks any incoming
+ * packets, so that we won't get any new data or any
+ * packets that change the state of the socket.
+ *
+ * Note the 'barrier()' calls: gcc may not move a lock
+ * "downwards" or a unlock "upwards" when optimizing.
+ */
+extern void __release_sock(struct sock *sk);
+
+static inline void lock_sock(struct sock *sk)
+{
+#if 1
+/* debugging code: the test isn't even 100% correct, but it can catch bugs */
+/* Note that a double lock is ok in theory - it's just _usually_ a bug */
+	if (sk->users) {
+		__label__ here;
+		printk("double lock on socket at %p\n", &&here);
+here:
+	}
+#endif
+	sk->users++;
+	barrier();
+}
+
+static inline void release_sock(struct sock *sk)
+{
+	barrier();
+#if 1
+/* debugging code: remove me when ok */
+	if (sk->users == 0) {
+		__label__ here;
+		sk->users = 1;
+		printk("trying to unlock unlocked socket at %p\n", &&here);
+here:
+	}
+#endif
+	if (!--sk->users)
+		__release_sock(sk);
+}
+
 
 extern void			destroy_sock(struct sock *sk);
 extern unsigned short		get_new_socknum(struct proto *,
 						unsigned short);
 extern void			put_sock(unsigned short, struct sock *); 
-extern void			release_sock(struct sock *sk);
 extern struct sock		*get_sock(struct proto *, unsigned short,
 					  unsigned long, unsigned short,
 					  unsigned long);

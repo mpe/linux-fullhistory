@@ -5374,11 +5374,6 @@ void cleanup_module(void)
 {
 	int j;
 	
-	if (MOD_IN_USE)
-	{
-		msg(DBG_INF, "%s module in use - can't remove it.\n", major_name);
-		return;
-	}
 	if ((unregister_blkdev(MAJOR_NR, major_name) == -EINVAL))
 	{
 		msg(DBG_INF, "What's that: can't unregister %s.\n", major_name);

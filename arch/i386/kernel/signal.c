@@ -152,10 +152,16 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 	struct sigaction * sa;
 
 	while ((signr = current->signal & mask)) {
+		/*
+		 *	This stops gcc flipping out. Otherwise the assembler
+		 *	including volatiles for the inline function to get
+		 *	current combined with this gets it confused.
+		 */
+	        struct task_struct *t=current;
 		__asm__("bsf %3,%1\n\t"
 			"btrl %1,%0"
-			:"=m" (current->signal),"=r" (signr)
-			:"0" (current->signal), "1" (signr));
+			:"=m" (t->signal),"=r" (signr)
+			:"0" (t->signal), "1" (signr));
 		sa = current->sig->action + signr;
 		signr++;
 		if ((current->flags & PF_PTRACED) && signr != SIGKILL) {

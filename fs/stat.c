@@ -14,6 +14,12 @@
 
 #include <asm/segment.h>
 
+#ifndef __alpha__
+
+/*
+ * For backward compatibility?  Maybe this should be moved
+ * into arch/i386 instead?
+ */
 static void cp_old_stat(struct inode * inode, struct old_stat * statbuf)
 {
 	struct old_stat tmp;
@@ -35,6 +41,8 @@ static void cp_old_stat(struct inode * inode, struct old_stat * statbuf)
 	tmp.st_ctime = inode->i_ctime;
 	memcpy_tofs(statbuf,&tmp,sizeof(tmp));
 }
+
+#endif
 
 static void cp_new_stat(struct inode * inode, struct new_stat * statbuf)
 {
@@ -94,6 +102,11 @@ static void cp_new_stat(struct inode * inode, struct new_stat * statbuf)
 	memcpy_tofs(statbuf,&tmp,sizeof(tmp));
 }
 
+#ifndef __alpha__
+/*
+ * For backward compatibility?  Maybe this should be moved
+ * into arch/i386 instead?
+ */
 asmlinkage int sys_stat(char * filename, struct old_stat * statbuf)
 {
 	struct inode * inode;
@@ -109,6 +122,7 @@ asmlinkage int sys_stat(char * filename, struct old_stat * statbuf)
 	iput(inode);
 	return 0;
 }
+#endif
 
 asmlinkage int sys_newstat(char * filename, struct new_stat * statbuf)
 {
@@ -126,6 +140,12 @@ asmlinkage int sys_newstat(char * filename, struct new_stat * statbuf)
 	return 0;
 }
 
+#ifndef __alpha__
+
+/*
+ * For backward compatibility?  Maybe this should be moved
+ * into arch/i386 instead?
+ */
 asmlinkage int sys_lstat(char * filename, struct old_stat * statbuf)
 {
 	struct inode * inode;
@@ -141,6 +161,8 @@ asmlinkage int sys_lstat(char * filename, struct old_stat * statbuf)
 	iput(inode);
 	return 0;
 }
+
+#endif
 
 asmlinkage int sys_newlstat(char * filename, struct new_stat * statbuf)
 {
@@ -158,6 +180,12 @@ asmlinkage int sys_newlstat(char * filename, struct new_stat * statbuf)
 	return 0;
 }
 
+#ifndef __alpha__
+
+/*
+ * For backward compatibility?  Maybe this should be moved
+ * into arch/i386 instead?
+ */
 asmlinkage int sys_fstat(unsigned int fd, struct old_stat * statbuf)
 {
 	struct file * f;
@@ -172,6 +200,8 @@ asmlinkage int sys_fstat(unsigned int fd, struct old_stat * statbuf)
 	cp_old_stat(inode,statbuf);
 	return 0;
 }
+
+#endif
 
 asmlinkage int sys_newfstat(unsigned int fd, struct new_stat * statbuf)
 {

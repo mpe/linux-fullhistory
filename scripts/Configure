@@ -9,6 +9,15 @@
 #
 # Please send comments / questions / bug fixes to raymondc@microsoft.com.
 #
+#              ***** IMPORTANT COMPATABILITY NOTE ****
+# If configuration changes are made which might adversely effect 
+# Menuconfig or xconfig, please notify the respective authors so that 
+# those utilities can be updated in parallel.
+#
+# Menuconfig:  <roadcapw@cfw.com>
+# xconfig:     <apenwarr@foxnet.net>  <eric@aib.com>
+#              ****************************************
+#
 # Each line in the config file is a command.
 #
 # 050793 - use IFS='@' to get around a bug in a pre-version of bash-1.13
@@ -27,6 +36,9 @@
 #
 # 010296 Aaron Ucko (ucko@vax1.rockhurst.edu) - fix int and hex to accept
 # arbitrary ranges
+#
+# 150296 Dick Streefland (dicks@tasking.nl) - report new configuration
+# items and ask for a value even when doing a "make oldconfig"
 
 #
 # Make sure we're really running bash.
@@ -88,14 +100,15 @@ function help () {
 #
 # readln reads a line into $ans.
 #
-#	readln prompt default
+#	readln prompt default oldval
 #
 function readln () {
-	if [ "$DEFAULT" = "-d" ]; then
+	if [ "$DEFAULT" = "-d" -a -n "$3" ]; then
 		echo "$1"
 		ans=$2
 	else
 		echo -n "$1"
+		[ -z "$3" ] && echo -n "(NEW) "
 		IFS='@' read ans </dev/tty || exit 1
 		[ -z "$ans" ] && ans=$2
 	fi
@@ -143,7 +156,8 @@ function define_bool () {
 #	bool question define
 #
 function bool () {
-	def=$(eval echo "\${$2:-'n'}")
+	old=$(eval echo "\${$2}")
+	def=${old:-'n'}
 	case "$def" in
 	 "y" | "m") defprompt="Y/n/?"
 	      def="y"
@@ -152,7 +166,7 @@ function bool () {
 	      ;;
 	esac
 	while :; do
-	  readln "$1 ($2) [$defprompt] " "$def"
+	  readln "$1 ($2) [$defprompt] " "$def" "$old"
 	  case "$ans" in
 	    [yY] | [yY]es ) define_bool "$2" "y"
 			    break;;
@@ -173,7 +187,8 @@ function tristate () {
 	if [ "$CONFIG_MODULES" != "y" ]; then
 	  bool "$1" "$2"
 	else 
-	  def=$(eval echo "\${$2:-'n'}")
+	  old=$(eval echo "\${$2}")
+	  def=${old:-'n'}
 	  case "$def" in
 	   "y") defprompt="Y/m/n/?"
 		;;
@@ -183,7 +198,7 @@ function tristate () {
 		;;
 	  esac
 	  while :; do
-	    readln "$1 ($2) [$defprompt] " "$def"
+	    readln "$1 ($2) [$defprompt] " "$def" "$old"
 	    case "$ans" in
 	      [yY] | [yY]es ) define_bool "$2" "y"
 			      break ;;
@@ -199,17 +214,18 @@ function tristate () {
 }
 
 #
-# dep_tristate processes a tristate argument
+# dep_tristate processes a tristate argument that depends upon
+# another option.  If the option we depend upon is a module,
+# then the only allowable options are M or N.  If Y, then
+# this is a normal tristate.  This is used in cases where modules
+# are nested, and one module requires the presence of something
+# else in the kernel.
 #
-#	tristate question define default that depends upon
-#	another option.  If the option we depend upon is a module,
-#	then the only allowable options are M or N.  If Y, then
-#	this is a normal tristate.  This is used in cases where modules
-#	are nested, and one module requires the presence of something
-#	else in the kernel.
+#	tristate question define default
 #
 function dep_tristate () {
-	def=$(eval echo "\${$2:-'n'}")
+	old=$(eval echo "\${$2}")
+	def=${old:-'n'}
 	if [ "$3" = "n" ]; then
 		define_bool "$2" "n"
 	elif [ "$3" = "y" ]; then
@@ -224,7 +240,7 @@ function dep_tristate () {
 		      ;;
 		esac
 		while :; do
-		  readln "$1 ($2) [$defprompt] " "$def"
+		  readln "$1 ($2) [$defprompt] " "$def" "$old"
 		  case "$ans" in
 		      [nN] | [nN]o )  define_bool "$2" "n"
 				      break ;;
@@ -263,9 +279,10 @@ function define_int () {
 #	int question define default
 #
 function int () {
-	def=$(eval echo "\${$2:-$3}")
+	old=$(eval echo "\${$2}")
+	def=${old:-$3}
 	while :; do
-	  readln "$1 ($2) [$def] " "$def"
+	  readln "$1 ($2) [$def] " "$def" "$old"
 	  if expr "$ans" : '0$\|-?[1-9][0-9]*$' > /dev/null; then
 	    define_int "$2" "$ans"
 	    break
@@ -291,10 +308,11 @@ function define_hex () {
 #	hex question define default
 #
 function hex () {
-	def=$(eval echo "\${$2:-$3}")
+	old=$(eval echo "\${$2}")
+	def=${old:-$3}
 	def=${def#*[x,X]}
 	while :; do
-	  readln "$1 ($2) [$def] " "$def"
+	  readln "$1 ($2) [$def] " "$def" "$old"
 	  ans=${ans#*[x,X]}
 	 if expr "$ans" : '[0-9a-fA-F]+$' > /dev/null; then
 	   define_hex "$2" "$ans"
@@ -322,7 +340,8 @@ function hex () {
 function choice () {
 	question="$1"
 	choices="$2"
-	def="$3"
+	old=
+	def=$3
 
 	# determine default answer:
 	names=""
@@ -335,6 +354,7 @@ function choice () {
 			names="$1"
 		fi
 		if [ "$(eval echo \"\${$2}\")" = "y" ]; then
+			old=$1
 			def=$1
 		fi
 		shift; shift
@@ -343,7 +363,7 @@ function choice () {
 	val=""
 	while [ -z "$val" ]; do
 		ambg=n
-		readln "$question ($names) [$def] " "$def"
+		readln "$question ($names) [$def] " "$def" "$old"
 		ans=$(echo $ans | tr a-z A-Z)
 		set -- $choices
 		while [ -n "$1" ]; do

@@ -23,10 +23,11 @@ bool 'QIC-02 tape support' CONFIG_QIC02_TAPE
 if [ "$CONFIG_QIC02_TAPE" = "y" ]; then
   bool 'Do you want runtime configuration for QIC-02' CONFIG_QIC02_DYNCONF
   if [ "$CONFIG_QIC02_DYNCONF" != "y" ]; then
-    comment '>>> Edit configuration parameters in ./include/linux/tpqic02.h!'
+    comment 'Edit configuration parameters in ./include/linux/tpqic02.h!'
   else
-    comment '>>> Setting runtime QIC-02 configuration is done with qic02conf'
-    comment '>>> Which is available from ftp://ftp.funet.fi/pub/OS/Linux/BETA/QIC-02/'
+    comment 'Setting runtime QIC-02 configuration is done with qic02conf'
+    comment 'from the tpqic02-support package.  It is available at'
+    comment 'ftp://titus.cfw.com/pub/Linux/util/'
 fi
 fi
 bool 'Advanced Power Management BIOS support' CONFIG_APM

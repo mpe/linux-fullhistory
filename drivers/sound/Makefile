@@ -76,9 +76,9 @@ local.h:
 	@echo
 	@echo
 	@echo
-	@echo NOTE! Object file dependencies may not be up to date. Run
-	@echo make again if kernel/driver doesn't link properly. Restarting
-	@echo it now may save some time.
+	@echo "NOTE! Object file dependencies may not be up to date. Run"
+	@echo "make again if kernel/driver doesn't link properly. Restarting"
+	@echo "it now may save some time."
 	@echo
 	@echo
 
@@ -135,7 +135,7 @@ sound.o: local.h $(FIXEDOBJS) sound.a
 	$(LD) -r -o sound.o $(FIXEDOBJS) sound.a
 
 modules: local.h sound.o
-	ln -fs `pwd`/sound.o /usr/src/linux/modules/sound.o
+	ln -fs `pwd`/sound.o $(TOPDIR)/modules/sound.o
 
 
 #

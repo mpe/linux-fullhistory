@@ -66,8 +66,54 @@
 /*
  * Semaphores.
  */
+#if defined(__alpha__)
 
-#ifdef __i386__
+static __inline__ void ATOMIC_INCR(unsigned int * addr)
+{
+	unsigned tmp;
+
+	__asm__ __volatile__(
+		"1:\n\
+		 ldl_l %1,%2\n\
+		 addl  %1,1,%1\n\
+		 stl_c %1,%0\n\
+		 beq   %1,1b\n"
+		: "m=" (*addr), "r=&" (tmp)
+		: "m"(*addr));
+}
+
+static __inline__ void ATOMIC_DECR(unsigned int * addr)
+{
+	unsigned tmp;
+
+	__asm__ __volatile__(
+		"1:\n\
+		 ldl_l %1,%2\n\
+		 subl  %1,1,%1\n\
+		 stl_c %1,%0\n\
+		 beq   %1,1b\n"
+		: "m=" (*addr), "r=&" (tmp)
+		: "m"(*addr));
+}
+
+static __inline__ int ATOMIC_DECR_AND_CHECK (unsigned int * addr)
+{
+	unsigned tmp;
+	int result;
+
+	__asm__ __volatile__(
+		"1:\n\
+		 ldl_l %1,%3\n\
+		 subl  %1,1,%1\n\
+		 mov   %1,%2\n\
+		 stl_c %1,%0\n\
+		 beq   %1,1b\n"
+		: "m=" (*addr), "r=&" (tmp), "r=&"(result)
+		: "m"(*addr));
+	return result;
+}
+
+#elif defined(__i386__)
 #include <asm/bitops.h>
 
 extern __inline__ void ATOMIC_INCR(void * addr)
@@ -101,20 +147,20 @@ extern __inline__ unsigned long ATOMIC_DECR_AND_CHECK(void * addr)
 
 #else
 
-static __inline__ void ATOMIC_INCR(void * addr)
+static __inline__ void ATOMIC_INCR(unsigned int * addr)
 {
-	(*(__volatile__ unsigned long*)addr)++;
+	(*(__volatile__ unsigned int*)addr)++;
 }
 
-static __inline__ void ATOMIC_DECR(void * addr)
+static __inline__ void ATOMIC_DECR(unsigned int * addr)
 {
-	(*(__volatile__ unsigned long*)addr)--;
+	(*(__volatile__ unsigned int*)addr)--;
 }
 
-static __inline__ int ATOMIC_DECR_AND_CHECK (void * addr)
+static __inline__ int ATOMIC_DECR_AND_CHECK (unsigned int * addr)
 {
 	ATOMIC_DECR(addr);
-	return *(volatile unsigned long*)addr;
+	return *(volatile unsigned int*)addr;
 }
 
 #endif
@@ -127,8 +173,8 @@ struct rtable
 	__u32			rt_dst;
 	__u32			rt_src;
 	__u32			rt_gateway;
-	unsigned long		rt_refcnt;
-	unsigned long		rt_use;
+	unsigned		rt_refcnt;
+	unsigned		rt_use;
 	unsigned long		rt_window;
 	unsigned long		rt_lastuse;
 	struct hh_cache		*rt_hh;

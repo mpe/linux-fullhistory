@@ -132,6 +132,7 @@ extern void set_scrmem(int currcons, long offset);
 static void set_origin(int currcons);
 static void blank_screen(void);
 static void unblank_screen(void);
+extern void change_console(unsigned int);
 extern void poke_blanked_console(void);
 static void gotoxy(int currcons, int new_x, int new_y);
 static void save_cur(int currcons);
@@ -177,6 +178,8 @@ static unsigned short console_charmask = 0x0ff;
 
        unsigned short *vc_scrbuf[MAX_NR_CONSOLES];
 
+/* used by kbd_bh - set by keyboard_interrupt */
+       int do_poke_blanked_console = 0;
        int console_blanked = 0;
 static int blankinterval = 10*60*HZ;
 static int vesa_off_interval = 0;
@@ -1947,6 +1950,32 @@ static void con_setsize(unsigned long rows, unsigned long cols)
 }
 
 /*
+ * This is the console switching bottom half handler.
+ *
+ * Doing console switching in a bottom half handler allows
+ * us to do the switches asynchronously (needed when we want
+ * to switch due to a keyboard interrupt), while still giving
+ * us the option to easily disable it to avoid races when we
+ * need to write to the console.
+ */
+static void console_bh(void * unused)
+{
+	if (want_console >= 0) {
+		if (want_console != fg_console) {
+			change_console(want_console);
+			/* we only changed when the console had already
+			   been allocated - a new console is not created
+			   in an interrupt routine */
+		}
+		want_console = -1;
+	}
+	if (do_poke_blanked_console) { /* do not unblank for a LED change */
+		do_poke_blanked_console = 0;
+		poke_blanked_console();
+	}
+}
+
+/*
  *  unsigned long con_init(unsigned long);
  *
  * This routine initializes console interrupts, and does nothing
@@ -1994,7 +2023,6 @@ unsigned long con_init(unsigned long kmem_start)
 	con_setsize(ORIG_VIDEO_LINES, ORIG_VIDEO_COLS);
 	video_page = ORIG_VIDEO_PAGE; 			/* never used */
 	__scrollback_mode = 0 ;
-
 
 	timer_table[BLANK_TIMER].fn = blank_screen;
 	timer_table[BLANK_TIMER].expires = 0;
@@ -2072,6 +2100,9 @@ unsigned long con_init(unsigned long kmem_start)
 	 */
 	if (video_type != VIDEO_TYPE_TGAC)
 		register_console(console_print);
+
+	bh_base[CONSOLE_BH].routine = console_bh;
+	enable_bh(CONSOLE_BH);
 
 	return kmem_start;
 }

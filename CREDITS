@@ -869,6 +869,14 @@ D: Instigator, FHS standard
 D: Keeper of the Jargon File and curator of the Retrocomputing Museum
 D: Author, Emacs VC and GUD modes
 
+N: Bernhard Kaindl
+E: bartelt@computerhaus.at
+D: Author of a menu based configuration tool, kmenu, which 
+D: is the precedessor of 'make menuconfig' and 'make xconfig'.
+S: Tallak 95
+S: 8103 Rein
+S: Austria
+
 N: William E. Roadcap
 E: roadcapw@cfw.com
 W: http://www.cfw.com/~roadcapw

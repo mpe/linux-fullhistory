@@ -51,7 +51,7 @@ static int      audio_format[MAX_AUDIO_DEV];
 static int      local_conversion[MAX_AUDIO_DEV];
 
 static int
-set_format (int dev, int fmt)
+set_format (int dev, long fmt)
 {
   if (fmt != AFMT_QUERY)
     {
@@ -67,7 +67,7 @@ set_format (int dev, int fmt)
 	else
 	  fmt = AFMT_U8;	/* This is always supported */
 
-      audio_format[dev] = DMAbuf_ioctl (dev, SNDCTL_DSP_SETFMT, (caddr_t) fmt, 1);
+      audio_format[dev] = DMAbuf_ioctl (dev, SNDCTL_DSP_SETFMT, (caddr_t) (long) fmt, 1);
     }
 
   if (local_conversion[dev])	/* This shadows the HW format */
@@ -80,7 +80,7 @@ int
 audio_open (int dev, struct fileinfo *file)
 {
   int             ret;
-  int             bits;
+  long            bits;
   int             dev_type = dev & 0x0f;
   int             mode = file->mode & O_ACCMODE;
 

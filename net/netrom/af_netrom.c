@@ -440,7 +440,7 @@ static int nr_create(struct socket *sock, int protocol)
 	sk->sndbuf        = SK_WMEM_MAX;
 	sk->wmem_alloc    = 0;
 	sk->rmem_alloc    = 0;
-	sk->inuse         = 0;
+	sk->users         = 0;
 	sk->debug         = 0;
 	sk->destroy       = 0;
 	sk->prot          = NULL;	/* So we use default free mechanisms */
@@ -541,7 +541,7 @@ static struct sock *nr_make_new(struct sock *osk)
 	sk->sndbuf      = osk->sndbuf;
 	sk->wmem_alloc  = 0;
 	sk->rmem_alloc  = 0;
-	sk->inuse       = 0;
+	sk->users       = 0;
 	sk->ack_backlog = 0;
 	sk->destroy     = 0;
 	sk->prot        = NULL;	/* So we use default free mechanisms */
@@ -1156,10 +1156,10 @@ static int nr_recvmsg(struct socket *sock, struct msghdr *msg, int size, int nob
 		*addr_len = sizeof(*sax);
 	}
 
-	skb_free_datagram(skb);
+	skb_free_datagram(sk, skb);
 
 	return copied;
-}		
+}
 
 static int nr_shutdown(struct socket *sk, int how)
 {

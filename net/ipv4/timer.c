@@ -92,17 +92,13 @@ void net_timer (unsigned long data)
 	 * only process if socket is not in use
 	 */
 
-	cli();
-	if (sk->inuse || in_bh) 
+	if (sk->users)
 	{
 		sk->timer.expires = jiffies+10;
 		add_timer(&sk->timer);
 		sti();
 		return;
 	}
-
-	sk->inuse = 1;
-	sti();
 
 	/* Always see if we need to send an ack. */
 
@@ -121,7 +117,6 @@ void net_timer (unsigned long data)
 			if (! sk->dead || sk->state != TCP_CLOSE) 
 			{
 				printk ("non dead socket in time_done\n");
-				release_sock (sk);
 				break;
 			}
 			destroy_sock (sk);
@@ -137,10 +132,10 @@ void net_timer (unsigned long data)
 				sk->wmem_alloc++;	/* So it DOESN'T go away */
 				destroy_sock (sk);
 				sk->wmem_alloc--;	/* Might now have hit 0 - fall through and do it again if so */
-				sk->inuse = 0;	/* This will be ok, the destroy won't totally work */
+				sk->users = 0;	/* This will be ok, the destroy won't totally work */
 			}
 			if(sk->wmem_alloc==0 && sk->rmem_alloc==0)
-				destroy_sock(sk);	/* Socket gone, DON'T update sk->inuse! */
+				destroy_sock(sk);	/* Socket gone, DON'T update sk->users! */
 			break;
 
 		case TIME_CLOSE:
@@ -151,12 +146,10 @@ void net_timer (unsigned long data)
 				sk->state_change(sk);
 			sk->shutdown = SHUTDOWN_MASK;
 			reset_timer (sk, TIME_DESTROY, TCP_DONE_TIME);
-			release_sock (sk);
 			break;
 
 		default:
 			printk ("net_timer: timer expired - reason %d is unknown\n", why);
-			release_sock (sk);
 			break;
 	}
 }

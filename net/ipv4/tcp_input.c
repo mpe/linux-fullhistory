@@ -233,7 +233,6 @@ static int tcp_reset(struct sock *sk, struct sk_buff *skb)
 	if (!sk->dead) 
 		sk->state_change(sk);
 	kfree_skb(skb, FREE_READ);
-	release_sock(sk);
 	return(0);
 }
 
@@ -1309,7 +1308,7 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk,
 			 *	Optimisation: Duplicate frame or extension of previous frame from
 			 *	same sequence point (lost ack case).
 			 *	The frame contains duplicate data or replaces a previous frame
-			 *	discard the previous frame (safe as sk->inuse is set) and put
+			 *	discard the previous frame (safe as sk->users is set) and put
 			 *	the new one in its place.
 			 */
 			 
@@ -1624,17 +1623,13 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		skb->free = 1;
 		skb->saddr = daddr;
 		skb->daddr = saddr;
-	
+
 		/* We may need to add it to the backlog here. */
-		cli();
-		if (sk->inuse) 
+		if (sk->users) 
 		{
 			skb_queue_tail(&sk->back_log, skb);
-			sti();
 			return(0);
 		}
-		sk->inuse = 1;
-		sti();
 	}
 
 	/*
@@ -1696,7 +1691,6 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			if(th->rst || !th->syn || th->ack || ip_chk_addr(daddr)!=IS_MYADDR)
 			{
 				kfree_skb(skb, FREE_READ);
-				release_sock(sk);
 				return 0;
 			}
 		
@@ -1717,7 +1711,6 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			 *	Now TTCP is starting to use we ought to queue this data.
 			 */
 			 
-			release_sock(sk);
 			return 0;
 		}
 	
@@ -1729,7 +1722,6 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 		if (sk->state == TCP_SYN_RECV && th->syn && skb->seq+1 == sk->acked_seq)
 		{
 			kfree_skb(skb, FREE_READ);
-			release_sock(sk);
 			return 0;
 		}
 		
@@ -1753,7 +1745,6 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 					tcp_send_reset(daddr, saddr, th,
 						sk->prot, opt,dev,sk->ip_tos,sk->ip_ttl);
 					kfree_skb(skb, FREE_READ);
-					release_sock(sk);
 					return(0);
 				}
 				if(th->rst)
@@ -1766,7 +1757,6 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
                                         tcp_send_reset(daddr, saddr, th,
                                                 sk->prot, opt,dev,sk->ip_tos,sk->ip_ttl);
 					kfree_skb(skb, FREE_READ);
-					release_sock(sk);
 					return 0;
 				}
 				/*
@@ -1816,7 +1806,6 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 				}		
 				/* Discard junk segment */
 				kfree_skb(skb, FREE_READ);
-				release_sock(sk);
 				return 0;
 			}
 			/*
@@ -1829,6 +1818,11 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 *	BSD has a funny hack with TIME_WAIT and fast reuse of a port. There is
 	 *	a more complex suggestion for fixing these reuse issues in RFC1644
 	 *	but not yet ready for general use. Also see RFC1379.
+	 *
+	 *	Note the funny way we go back to the top of this function for
+	 *	this case ("goto try_next_socket").  That also takes care of
+	 *	checking "sk->users" for the new socket as well as doing all
+	 *	the normal tests on the packet.
 	 */
 	
 #define BSD_TIME_WAIT
@@ -1845,15 +1839,13 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			sk->err=ECONNRESET;
 			tcp_set_state(sk, TCP_CLOSE);
 			sk->shutdown = SHUTDOWN_MASK;
-			release_sock(sk);
 			sk=get_sock(&tcp_prot, th->dest, saddr, th->source, daddr);
+			/* this is not really correct: we should check sk->users */
 			if (sk && sk->state==TCP_LISTEN)
 			{
-				sk->inuse=1;
 				skb->sk = sk;
 				sk->rmem_alloc += skb->truesize;
 				tcp_conn_request(sk, skb, daddr, saddr,opt, dev,seq+128000);
-				release_sock(sk);
 				return 0;
 			}
 			kfree_skb(skb, FREE_READ);
@@ -1868,11 +1860,10 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 	 *	I have time to test it hard and look at what gcc outputs 
 	 */
 	
-	if (!tcp_sequence(sk, skb->seq, skb->end_seq))
+	if (!tcp_sequence(sk, skb->seq, skb->end_seq-th->syn))
 	{
 		bad_tcp_sequence(sk, th, len, opt, saddr, dev);
 		kfree_skb(skb, FREE_READ);
-		release_sock(sk);
 		return 0;
 	}
 
@@ -1907,7 +1898,6 @@ int tcp_rcv(struct sk_buff *skb, struct device *dev, struct options *opt,
 			tcp_send_reset(daddr, saddr, th,sk->prot, opt, dev,sk->ip_tos,sk->ip_ttl);
 		}
 		kfree_skb(skb, FREE_READ);
-		release_sock(sk);
 		return 0;
 	}
 	
@@ -1922,7 +1912,6 @@ rfc_step6:		/* I'll clean this up later */
 	if (sk->rmem_alloc  >= sk->rcvbuf) 
 	{
 		kfree_skb(skb, FREE_READ);
-		release_sock(sk);
 		return(0);
 	}
 
@@ -1944,7 +1933,6 @@ rfc_step6:		/* I'll clean this up later */
 	 *	And done
 	 */	
 	
-	release_sock(sk);
 	return 0;
 
 no_tcp_socket:

@@ -1100,7 +1100,7 @@ static int atalk_create(struct socket *sock, int protocol)
 	sk->pair=NULL;
 	sk->wmem_alloc=0;
 	sk->rmem_alloc=0;
-	sk->inuse=0;
+	sk->users=0;
 	sk->proc=0;
 	sk->priority=1;
 	sk->shutdown=0;
@@ -1740,7 +1740,7 @@ static int atalk_recvmsg(struct socket *sock, struct msghdr *msg, int size, int 
 		sat->sat_addr.s_node=ddp->deh_snode;
 		sat->sat_addr.s_net=ddp->deh_snet;
 	}
-	skb_free_datagram(skb);
+	skb_free_datagram(sk, skb);
 	return(copied);
 }		
 

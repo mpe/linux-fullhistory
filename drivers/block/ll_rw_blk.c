@@ -491,8 +491,9 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 	/* Verify requested block sizes.  */
 	for (i = 0; i < nr; i++) {
 		if (bh[i] && bh[i]->b_size != correct_size) {
-			printk(
-			"ll_rw_block: only %d-char blocks implemented (%lu)\n",
+			printk("ll_rw_block: device %s: "
+			       "only %d-char blocks implemented (%lu)\n",
+			       kdevname(bh[0]->b_dev),
 			       correct_size, bh[i]->b_size);
 			goto sorry;
 		}

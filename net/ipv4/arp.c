@@ -180,8 +180,8 @@ struct arp_table
 #define ARP_CONFIRM_INTERVAL	(300*HZ)
 #define ARP_CONFIRM_TIMEOUT	ARP_RES_TIME
 
-static unsigned long arp_lock;
-static unsigned long arp_bh_mask;
+static unsigned int arp_lock;
+static unsigned int arp_bh_mask;
 
 #define ARP_BH_BACKLOG	1
 

@@ -142,12 +142,6 @@ void setup_arch(char **cmdline_p,
 #endif
 }
 
-asmlinkage int sys_ioperm(unsigned long from, unsigned long num, int on)
-{
-	return -EIO;
-}
-
-
 /*
  * BUFFER is PAGE_SIZE bytes long.
  */

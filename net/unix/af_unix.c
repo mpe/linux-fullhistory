@@ -313,7 +313,7 @@ static int unix_create(struct socket *sock, int protocol)
 	sk->rcvbuf=SK_RMEM_MAX;
 	sk->sndbuf=SK_WMEM_MAX;
 	sk->allocation=GFP_KERNEL;
-	sk->inuse=0;
+	sk->users=0;
 	sk->bsdism=0;
 	sk->debug=0;
 	sk->prot=NULL;
@@ -728,7 +728,7 @@ static int unix_sendmsg(struct socket *sock, struct msghdr *msg, int len, int no
 		if(msg->msg_accrightslen == sizeof(int)) {
 			int fd;
 
-			fd = get_user_long(msg->msg_accrights);
+			fd = get_user((int *) msg->msg_accrights);
 			filp = file_from_fd(fd);
 			if(!filp)
 				return -EBADF;
@@ -873,7 +873,7 @@ static int stick_fd(struct file *filp, int *uaddr, int size)
 		current->files->fd[slot] = filp;
 		FD_CLR(slot, &current->files->close_on_exec);
 		/* need verify area here? */
-		put_user_long(slot, uaddr);
+		put_user(slot, uaddr);
 		return 0;
 	} 
 	return -EMFILE;

@@ -97,7 +97,7 @@ extern void *sys_call_table;
 #if	defined(CONFIG_ULTRA)	||	defined(CONFIG_WD80x3)		|| \
 	defined(CONFIG_EL2)	||	defined(CONFIG_NE2000)		|| \
 	defined(CONFIG_E2100)	||	defined(CONFIG_HPLAN_PLUS)	|| \
-	defined(CONFIG_HPLAN)	||	defined(CONFIG_AC3200)		
+	defined(CONFIG_HPLAN)	||	defined(CONFIG_AC3200)
 #include "../drivers/net/8390.h"
 #endif
 

@@ -924,7 +924,7 @@ int rt_cache_get_info(char *buffer, char **start, off_t offset, int length, int 
 				continue;
 			}
 					
-			sprintf(temp, "%s\t%08lX\t%08lX\t%02X\t%ld\t%lu\t%d\t%08lX\t%d\t%lu\t%u\t%ld\t%1d",
+			sprintf(temp, "%s\t%08lX\t%08lX\t%02X\t%d\t%u\t%d\t%08lX\t%d\t%lu\t%u\t%d\t%1d",
 				r->rt_dev->name, (unsigned long)r->rt_dst, (unsigned long)r->rt_gateway,
 				r->rt_flags, r->rt_refcnt, r->rt_use, 0,
 				(unsigned long)r->rt_src, (int)r->rt_mtu, r->rt_window, (int)r->rt_irtt, r->rt_hh ? r->rt_hh->hh_refcnt : -1, r->rt_hh ? r->rt_hh->hh_uptodate : 0);

@@ -19,7 +19,7 @@
 #define _S(nr) (1<<((nr)-1))
 #define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
 
-asmlinkage int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options);
+asmlinkage int sys_wait4(int, int *, int, struct rusage *);
 asmlinkage void ret_from_sys_call(void);
 asmlinkage int do_signal(unsigned long, struct pt_regs *, struct switch_stack *,
 	unsigned long, unsigned long);
@@ -251,7 +251,7 @@ asmlinkage int do_signal(unsigned long oldmask,
 			if (signr != SIGCHLD)
 				continue;
 			/* check for SIGCHLD: it's special */
-			while (sys_waitpid(-1,NULL,WNOHANG) > 0)
+			while (sys_wait4(-1, NULL, WNOHANG, NULL) > 0)
 				/* nothing */;
 			continue;
 		}

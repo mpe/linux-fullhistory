@@ -506,7 +506,7 @@ void set_blocksize(kdev_t dev, int size)
 	if (size > PAGE_SIZE)
 		size = 0;
 
-	switch(size) {
+	switch (size) {
 		default: panic("Invalid blocksize passed to set_blocksize");
 	        case 512: case 1024: case 2048: case 4096: case 8192: ;
 	}

@@ -67,6 +67,20 @@ extern int kbd_init(void);
 extern unsigned char getledstate(void);
 extern void setledstate(struct kbd_struct *kbd, unsigned int led);
 
+extern int do_poke_blanked_console;
+
+extern inline void show_console(void)
+{
+	do_poke_blanked_console = 1;
+	mark_bh(CONSOLE_BH);
+}
+
+extern inline void set_console(int nr)
+{
+	want_console = nr;
+	mark_bh(CONSOLE_BH);
+}
+
 extern inline void set_leds(void)
 {
 	mark_bh(KEYBOARD_BH);

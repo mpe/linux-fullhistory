@@ -95,12 +95,14 @@ struct tty_ldisc ldiscs[NR_LDISCS];	/* line disc dispatch table	*/
 /*
  * fg_console is the current virtual console,
  * last_console is the last used one,
+ * want_console is the console we want to switch to,
  * kmsg_redirect is the console for kernel messages,
  * redirect is the pseudo-tty that console output
  * is redirected to if asked by TIOCCONS.
  */
 int fg_console = 0;
 int last_console = 0;
+int want_console = -1;
 int kmsg_redirect = 0;
 struct tty_struct * redirect = NULL;
 struct wait_queue * keypress_wait = NULL;

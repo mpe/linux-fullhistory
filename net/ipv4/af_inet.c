@@ -291,7 +291,7 @@ void destroy_sock(struct sock *sk)
 {
 	struct sk_buff *skb;
 
-  	sk->inuse = 1;			/* just to be safe. */
+	lock_sock(sk);			/* just to be safe. */
 
   	remove_sock(sk);
   
@@ -425,7 +425,7 @@ void destroy_sock(struct sock *sk)
 		/* actually it can if an ack has just been sent. */
 		sk->destroy = 1;
 		sk->ack_backlog = 0;
-		sk->inuse = 0;
+		release_sock(sk);
 		reset_timer(sk, TIME_DESTROY, SOCK_DESTROY_TIME);
   	}
 }
@@ -816,7 +816,7 @@ static int inet_release(struct socket *sock, struct socket *peer)
 		sti();
 		sk->dead = 1;
 	}
-	sk->inuse = 1;
+	lock_sock(sk);
 
 	/* This will destroy it. */
 	sock->data = NULL;

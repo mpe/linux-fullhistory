@@ -104,7 +104,6 @@ int packet_rcv(struct sk_buff *skb, struct device *dev,  struct packet_type *pt)
 	{
 		skb->sk = NULL;
 		kfree_skb(skb, FREE_READ);
-		release_sock(sk);		
 		return 0;
 	}
 	/*
@@ -211,7 +210,7 @@ static void packet_close(struct sock *sk, int timeout)
 	 *	Stop more data and kill the socket off.
 	 */
 
-	sk->inuse = 1;
+	lock_sock(sk);
 	sk->state = TCP_CLOSE;
 
 	/*
@@ -444,13 +443,8 @@ int packet_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	 *	races and re-entrancy issues from us.
 	 */
 
-	skb_free_datagram(skb);
+	skb_free_datagram(sk, skb);
 
-	/*
-	 *	We are done.
-	 */
-	 
-	release_sock(sk);
 	return(copied);
 }
 

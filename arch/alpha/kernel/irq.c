@@ -577,6 +577,9 @@ int probe_irq_off(unsigned long irqs)
 		    (((unsigned long)cache_27)<<24));
 #endif
 	irqs &= irqmask & ~1;	/* always mask out irq 0---it's the unused timer */
+#ifdef CONFIG_ALPHA_P2K
+	irqs &= ~(1 << 8);	/* mask out irq 8 since that's the unused RTC input to PIC */
+#endif
 	if (!irqs)
 		return 0;
 	i = ffz(~irqs);
@@ -616,7 +619,7 @@ asmlinkage void do_entInt(unsigned long type, unsigned long vector, unsigned lon
 			return;
 		case 3:
 #if defined(CONFIG_ALPHA_JENSEN) || defined(CONFIG_ALPHA_NONAME) || \
-    defined(CONFIG_ALPHA_SRM)
+    defined(CONFIG_ALPHA_P2K) || defined(CONFIG_ALPHA_SRM)
 			srm_device_interrupt(vector, &regs);
 #elif NR_IRQS == 33
 			cabriolet_and_eb66p_device_interrupt(vector, &regs);

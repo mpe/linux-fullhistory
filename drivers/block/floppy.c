@@ -207,6 +207,7 @@ static inline int TYPE(kdev_t x) {
 static inline int DRIVE(kdev_t x) {
 	return (MINOR(x)&0x03) | ((MINOR(x)&0x80) >> 5);
 }
+#define ITYPE(x) (((x)>>2) & 0x1f)
 #define TOMINOR(x) ((x & 3) | ((x & 4) << 5))
 #define UNIT(x) ((x) & 0x03)		/* drive on fdc */
 #define FDC(x) (((x) & 0x04) >> 2)  /* fdc of drive */
@@ -3021,7 +3022,7 @@ static inline void clear_write_error(int drive)
 }
 
 static inline int set_geometry(unsigned int cmd, struct floppy_struct *g,
-			       int drive, int type, int device)
+			       int drive, int type, kdev_t device)
 {
 	int cnt;
 
@@ -3038,7 +3039,7 @@ static inline int set_geometry(unsigned int cmd, struct floppy_struct *g,
 			return -EPERM;
 		LOCK_FDC(drive,1);
 		for (cnt = 0; cnt < N_DRIVE; cnt++){
-			if (TYPE(drive_state[cnt].fd_device) == type &&
+			if (ITYPE(drive_state[cnt].fd_device) == type &&
 			    drive_state[cnt].fd_ref)
 				set_bit(drive, &fake_change);
 		}
@@ -3049,7 +3050,7 @@ static inline int set_geometry(unsigned int cmd, struct floppy_struct *g,
 				floppy_type[type].size>>1;
 		process_fd_request();
 		for (cnt = 0; cnt < N_DRIVE; cnt++){
-			if (TYPE(drive_state[cnt].fd_device) == type &&
+			if (ITYPE(drive_state[cnt].fd_device) == type &&
 			    drive_state[cnt].fd_ref)
 				check_disk_change(
 					MKDEV(FLOPPY_MAJOR,
@@ -3842,8 +3843,8 @@ int floppy_init(void)
 	}
 
 	for (i=0; i<256; i++)
-		if (TYPE(i))
-			floppy_sizes[i] = floppy_type[TYPE(i)].size >> 1;
+		if (ITYPE(i))
+			floppy_sizes[i] = floppy_type[ITYPE(i)].size >> 1;
 		else
 			floppy_sizes[i] = MAX_DISK_SIZE;
 

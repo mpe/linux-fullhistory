@@ -172,9 +172,17 @@ $(MX_OBJS): $(TOPDIR)/include/linux/modversions.h
 $(LX_OBJS) $(OX_OBJS): $(TOPDIR)/include/linux/modversions.h
 	$(CC) $(CFLAGS) -DMODVERSIONS -DEXPORT_SYMTAB -c $(@:.o=.c)
 
-dep fastdep $(M_OBJS): $(TOPDIR)/include/linux/modversions.h
+dep fastdep: $(TOPDIR)/include/linux/modversions.h
 
 endif
+$(M_OBJS): $(TOPDIR)/include/linux/modversions.h
+ifdef MAKING_MODULES
+$(O_OBJS) $(L_OBJS): $(TOPDIR)/include/linux/modversions.h
+endif
+# This is needed to ensure proper dependency for multipart modules such as
+# fs/ext.o.  (Otherwise, not all subobjects will be recompiled when
+# version information changes.)
+
 endif
 
 #

@@ -1,13 +1,6 @@
 #ifndef _ALPHA_UNISTD_H
 #define _ALPHA_UNISTD_H
 
-/*
- * ".long 131" is "PAL_callsys"..
- *
- * Duh, the alpha gcc compiler doesn't allow us to specify regs
- * yet. I'll have to see about this later..
- */
-
 #define __NR_exit		  1
 #define __NR_fork		  2
 #define __NR_read		  3
@@ -36,6 +29,7 @@
 #define __NR_open		 45
 #define __NR_getxgid		 47
 #define __NR_acct		 51
+#define __NR_sigpending		 52
 #define __NR_ioctl		 54
 #define __NR_symlink		 57
 #define __NR_readlink		 58
@@ -46,6 +40,7 @@
 #define __NR_getpagesize	 64
 #define __NR_stat		 67
 #define __NR_lstat		 68
+#define __NR_mmap		 71	/* OSF/1 mmap is superset of Linux */
 #define __NR_munmap		 73
 #define __NR_mprotect		 74
 #define __NR_madvise		 75
@@ -89,6 +84,7 @@
 #define __NR_rename		128
 #define __NR_truncate		129
 #define __NR_ftruncate		130
+#define __NR_flock		131
 #define __NR_setgid		132
 #define __NR_sendto		133
 #define __NR_shutdown		134
@@ -103,6 +99,7 @@
 #define __NR_quotactl		148
 #define __NR_getsockname	150
 #define __NR_sigaction		156
+#define __NR_setdomainname	166
 #define __NR_msgctl		200
 #define __NR_msgget		201
 #define __NR_msgrcv		202
@@ -114,10 +111,12 @@
 #define __NR_shmdt		211
 #define __NR_shmget		212
 
+#define __NR_msync		217
+
+#define __NR_getpgid		233
 #define __NR_getsid		234
 
-#define __NR_getsysinfo		256
-#define __NR_setsysinfo		257
+#define __NR_sysfs		254
 
 /*
  * Linux-specific system calls begin at 300
@@ -140,8 +139,35 @@
 #define __NR_munlock		315
 #define __NR_mlockall		316
 #define __NR_munlockall		317
+#define __NR_sysinfo		318
+#define __NR_sysctl		319
+#define __NR_idle		320
+#define __NR_umount		321
+#define __NR_swapon		322
+#define __NR_times		323
+#define __NR_personality	324
+#define __NR_setfsuid		325
+#define __NR_setfsgid		326
+#define __NR_ustat		327
+#define __NR_statfs		328
+#define __NR_fstatfs		329
+#define __NR_sched_setparam		330
+#define __NR_sched_getparam		331
+#define __NR_sched_setscheduler		332
+#define __NR_sched_getscheduler		333
+#define __NR_sched_yield		334
+#define __NR_sched_get_priority_max	335
+#define __NR_sched_get_priority_min	336
+#define __NR_sched_rr_get_interval	337
+#define __NR_afs_syscall		338
+#define __NR_uname			339
 
 #ifdef __LIBRARY__
+
+/*
+ * Duh, the alpha gcc compiler doesn't allow us to specify regs
+ * yet. I'll have to see about this later..
+ */
 
 /* XXX - _foo needs to be __foo, while __NR_bar could be _NR_bar. */
 #define _syscall0(type,name) \
@@ -274,10 +300,10 @@ static inline int sync(void)
 	return sys_sync();
 }
 
-extern int sys_waitpid(int, int *, int);
+extern int sys_wait4(int, int *, int, struct rusage *);
 static inline pid_t waitpid(int pid, int * wait_stat, int flags)
 {
-	return sys_waitpid(pid,wait_stat,flags);
+	return sys_wait4(pid, wait_stat, flags, NULL);
 }
 
 static inline pid_t wait(int * wait_stat)

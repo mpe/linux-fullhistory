@@ -17,6 +17,11 @@
 #else /* !MODVERSIONS */
 # define X(sym) { (void *) & sym, SYMBOL_NAME_STR(sym)}
 #endif /* MODVERSIONS */
+/*
+ * Some symbols always need to be unversioned.  This includes
+ * compiler generated calls to functions.
+ */
+#define XNOVERS(sym) { (void *) & sym, SYMBOL_NAME_STR(sym)}
 
 #define EMPTY {0,0}
 	0, 0, 0, {

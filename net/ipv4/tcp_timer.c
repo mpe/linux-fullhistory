@@ -139,7 +139,6 @@ static int tcp_write_timeout(struct sock *sk)
 		tcp_statistics.TcpAttemptFails++;	/* Is this right ??? - FIXME - */
 		tcp_set_state(sk,TCP_CLOSE);
 		/* Don't FIN, we got nothing back */
-		release_sock(sk);
 		return 0;
 	}
 	/*
@@ -167,12 +166,54 @@ static int tcp_write_timeout(struct sock *sk)
 			 *	Clean up time.
 			 */
 			tcp_set_state(sk, TCP_CLOSE);
-			release_sock(sk);
 			return 0;
 		}
 	}
 	return 1;
 }
+
+/*
+ *	It could be we got here because we needed to send an ack,
+ *	so we need to check for that and not just normal retransmit.
+ */
+static void tcp_time_write_timeout(struct sock * sk)
+{
+	struct sk_buff *skb;
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+	skb = sk->send_head;
+	if (!skb) {
+		if (sk->ack_backlog)
+			tcp_read_wakeup(sk);
+		restore_flags(flags);
+		return;
+	} 
+
+	/*
+	 *	Kicked by a delayed ack. Reset timer
+	 *	correctly now
+	 */
+	if (jiffies < skb->when + sk->rto) 
+	{
+		if (sk->ack_backlog)
+			tcp_read_wakeup(sk);
+		tcp_reset_xmit_timer (sk, TIME_WRITE, skb->when + sk->rto - jiffies);
+		restore_flags(flags);
+		return;
+	}
+
+	restore_flags(flags);
+	/*
+	 *	Retransmission
+	 */
+	sk->retransmits++;
+	sk->prot->retransmits++;
+	sk->prot->retransmit (sk, 0);
+	tcp_write_timeout(sk);
+}
+
 
 /*
  *	The TCP retransmit timer. This lacks a few small details.
@@ -200,19 +241,13 @@ void tcp_retransmit_timer(unsigned long data)
 	 *	Only process if socket is not in use
 	 */
 
-	cli();
-	if (sk->inuse || in_bh) 
+	if (sk->users) 
 	{
 		/* Try again in 1 second */
 		sk->retransmit_timer.expires = jiffies+HZ;
 		add_timer(&sk->retransmit_timer);
-		sti();
 		return;
 	}
-
-	sk->inuse = 1;
-	sti();
-
 
 	if (sk->ack_backlog && !sk->dead) 
 		sk->data_ready(sk,0);
@@ -221,72 +256,34 @@ void tcp_retransmit_timer(unsigned long data)
 
 	switch (why) 
 	{
-		/* Window probing */
-		case TIME_PROBE0:
-			tcp_send_probe0(sk);
-			tcp_write_timeout(sk);
-			break;
-		/* Retransmitting */
-		case TIME_WRITE:
-			/* It could be we got here because we needed to send an ack.
-			 * So we need to check for that.
-			 */
-		{
-			struct sk_buff *skb;
-			unsigned long flags;
+	/* Window probing */
+	case TIME_PROBE0:
+		tcp_send_probe0(sk);
+		tcp_write_timeout(sk);
+		break;
 
-			save_flags(flags);
-			cli();
-			skb = sk->send_head;
-			if (!skb) 
-			{
-				if (sk->ack_backlog)
-					tcp_read_wakeup(sk);
-				restore_flags(flags);
-			} 
-			else 
-			{
-				/*
-				 *	Kicked by a delayed ack. Reset timer
-				 *	correctly now
-				 */
-				if (jiffies < skb->when + sk->rto) 
-				{
-					if (sk->ack_backlog)
-						tcp_read_wakeup(sk);
-					tcp_reset_xmit_timer (sk, TIME_WRITE, skb->when + sk->rto - jiffies);
-					restore_flags(flags);
-					break;
-				}
-				restore_flags(flags);
-				/*
-				 *	Retransmission
-				 */
-				sk->retransmits++;
-				sk->prot->retransmits++;
-				sk->prot->retransmit (sk, 0);
-				tcp_write_timeout(sk);
-			}
-			break;
-		}
-		/* Sending Keepalives */
-		case TIME_KEEPOPEN:
-			/* 
-			 * this reset_timer() call is a hack, this is not
-			 * how KEEPOPEN is supposed to work.
-			 */
-			tcp_reset_xmit_timer (sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
+	/* Retransmitting */
+	case TIME_WRITE:
+		tcp_time_write_timeout(sk);
+		break;
 
-			/* Send something to keep the connection open. */
-			if (sk->prot->write_wakeup)
-				  sk->prot->write_wakeup (sk);
-			sk->retransmits++;
-			sk->prot->retransmits++;
-			tcp_write_timeout(sk);
-			break;
-		default:
-			printk ("rexmit_timer: timer expired - reason unknown\n");
-			break;
+	/* Sending Keepalives */
+	case TIME_KEEPOPEN:
+		/* 
+		 * this reset_timer() call is a hack, this is not
+		 * how KEEPOPEN is supposed to work.
+		 */
+		tcp_reset_xmit_timer (sk, TIME_KEEPOPEN, TCP_TIMEOUT_LEN);
+		/* Send something to keep the connection open. */
+		if (sk->prot->write_wakeup)
+			  sk->prot->write_wakeup (sk);
+		sk->retransmits++;
+		sk->prot->retransmits++;
+		tcp_write_timeout(sk);
+		break;
+
+	default:
+		printk ("rexmit_timer: timer expired - reason unknown\n");
+		break;
 	}
-	release_sock(sk);
 }

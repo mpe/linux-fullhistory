@@ -85,15 +85,35 @@ extern struct hwrpb_struct *hwrpb;
 static unsigned int	io_base	 = 64*KB;	/* <64KB are (E)ISA ports */
 static unsigned int	mem_base = 16*MB;	/* <16MB is ISA memory */
 
+/*
+ * Disable PCI device DEV so that it does not respond to I/O or memory
+ * accesses.
+ */
+static void disable_dev(struct pci_dev *dev)
+{
+	struct pci_bus *bus;
+	unsigned short cmd;
+
+	bus = dev->bus;
+	pcibios_read_config_word(bus->number, dev->devfn, PCI_COMMAND, &cmd);
+
+	/* hack, turn it off first... */
+	cmd &= (~PCI_COMMAND_IO & ~PCI_COMMAND_MEMORY & ~PCI_COMMAND_MASTER);
+	pcibios_write_config_word(bus->number, dev->devfn, PCI_COMMAND, cmd);
+}
+
 
 /*
  * Layout memory and I/O for a device:
  */
+#define MAX(val1, val2) ( ((val1) > (val2)) ? val1 : val2)
+
 static void layout_dev(struct pci_dev *dev)
 {
 	struct pci_bus *bus;
 	unsigned short cmd;
 	unsigned int base, mask, size, reg;
+	unsigned int alignto;
 
 	bus = dev->bus;
 	pcibios_read_config_word(bus->number, dev->devfn, PCI_COMMAND, &cmd);
@@ -110,6 +130,7 @@ static void layout_dev(struct pci_dev *dev)
 			/* this base-address register is unused */
 			continue;
 		}
+
 		/*
 		 * We've read the base address register back after
 		 * writing all ones and so now we must decode it.
@@ -123,7 +144,9 @@ static void layout_dev(struct pci_dev *dev)
 			base &= PCI_BASE_ADDRESS_IO_MASK;
 			mask = (~base << 1) | 0x1;
 			size = (mask & base) & 0xffffffff;
-			base = ALIGN(io_base, size);
+			/* align to multiple of size of minimum base */
+			alignto = MAX(0x400, size) ;
+			base = ALIGN(io_base, alignto );
 			io_base = base + size;
 			pcibios_write_config_dword(bus->number, dev->devfn, 
 						   reg, base | 0x1);
@@ -133,7 +156,6 @@ static void layout_dev(struct pci_dev *dev)
 			 * Memory space base address register.
 			 */
 			cmd |= PCI_COMMAND_MEMORY;
-
 			type = base & PCI_BASE_ADDRESS_MEM_TYPE_MASK;
 			base &= PCI_BASE_ADDRESS_MEM_MASK;
 			mask = (~base << 1) | 0x1;
@@ -183,7 +205,9 @@ static void layout_dev(struct pci_dev *dev)
 			 * address space must be accessed through
 			 * dense memory space only!
 			 */
-			base = ALIGN(mem_base, size);
+			/* align to multiple of size of minimum base */
+			alignto = MAX(0x1000, size) ;
+			base = ALIGN(mem_base, alignto);
 			if (size > 7 * 16*MB) {
 				printk("bios32 WARNING: slot %d, function %d "
 				       "requests  %dB of contiguous address "
@@ -192,15 +216,15 @@ static void layout_dev(struct pci_dev *dev)
 				       PCI_SLOT(dev->devfn),
 				       PCI_FUNC(dev->devfn), size);
 			} else {
-				if (((base / 16*MB) & 0x7) == 0) {
+				if (((base / (16*MB)) & 0x7) == 0) {
 					base &= ~(128*MB - 1);
 					base += 16*MB;
-					base  = ALIGN(base, size);
+					base  = ALIGN(base, alignto);
 				}
-				if (base / 128*MB != (base + size) / 128*MB) {
+				if (base / (128*MB) != (base + size) / (128*MB)) {
 					base &= ~(128*MB - 1);
 					base += (128 + 16)*MB;
-					base  = ALIGN(base, size);
+					base  = ALIGN(base, alignto);
 				}
 			}
 			mem_base = base + size;
@@ -222,6 +246,7 @@ static void layout_dev(struct pci_dev *dev)
 		 */
 		cmd |= PCI_COMMAND_IO;
 	}
+
 	pcibios_write_config_word(bus->number, dev->devfn, PCI_COMMAND,
 				  cmd | PCI_COMMAND_MASTER);
 }
@@ -242,6 +267,21 @@ static void layout_bus(struct pci_bus *bus)
 	 */
 	bio = io_base = ALIGN(io_base, 4*KB);
 	bmem = mem_base = ALIGN(mem_base, 1*MB);
+
+	/*
+	 * There are times when the PCI devices have already been
+	 * setup (e.g., by MILO or SRM).  In these cases there is a
+	 * window during which two devices may have an overlapping
+	 * address range.  To avoid this causing trouble, we first
+	 * turn off the I/O and memory address decoders for all PCI
+	 * devices.  They'll be re-enabled only once all address
+	 * decoders are programmed consistently.
+	 */
+	for (dev = bus->devices; dev; dev = dev->sibling) {
+		if (dev->class >> 16 != PCI_BASE_CLASS_BRIDGE) {
+		        disable_dev(dev) ;
+		}
+	}
 
 	/*
 	 * Allocate space to each device:
@@ -405,6 +445,7 @@ static inline void common_fixup(long min_idsel, long max_idsel, long irqs_per_sl
 {
 	struct pci_dev *dev;
 	unsigned char pin;
+
 	/*
 	 * Go through all devices, fixing up irqs as we see fit:
 	 */
@@ -489,6 +530,7 @@ static inline void cabriolet_fixup(void)
 		{   -1,   -1,   -1,    -1,    -1},	/* IdSel 8,  SIO         */
 		{ 16+3, 16+3, 16+8, 16+12, 16+16}       /* IdSel 9,  slot 3, J22 */
 	};
+
 	common_fixup(5, 9, 5, irq_tab, 0x398);
 }
 
@@ -549,9 +591,11 @@ static inline void eb66_and_eb64p_fixup(void)
 
 
 /*
- * Fixup configuration for Noname (AXPpci33) and Avanti (AlphaStation 240).
+ * Fixup configuration for all boards that route the PCI interrupts
+ * through the SIO PCI/ISA bridge.  This includes Noname (AXPpci33),
+ * Avanti (AlphaStation) and Kenetics's Platform 2000.
  */
-static inline void avanti_and_noname_fixup(void)
+static inline void sio_fixup(void)
 {
 	struct pci_dev *dev;
 	/*
@@ -573,16 +617,24 @@ static inline void avanti_and_noname_fixup(void)
 	 * driven at all).
 	 */
 	static const char pirq_tab[][5] = {
+#ifdef CONFIG_ALPHA_P2K
+		{ 0,  0, -1, -1, -1}, /* idsel  6 (53c810) */
+		{-1, -1, -1, -1, -1}, /* idsel  7 (SIO: PCI/ISA bridge) */
+		{ 1,  1,  2,  3,  0}, /* idsel  8 (slot A) */
+		{ 2,  2,  3,  0,  1}, /* idsel  9 (slot B) */
+		{-1, -1, -1, -1, -1}, /* idsel 10 (unused) */
+		{-1, -1, -1, -1, -1}, /* idsel 11 (unused) */
+		{ 3,  3, -1, -1, -1}, /* idsel 12 (CMD0646) */
+#else
 		{ 3,  3,  3,  3,  3}, /* idsel  6 (53c810) */ 
 		{-1, -1, -1, -1, -1}, /* idsel  7 (SIO: PCI/ISA bridge) */
-		{ 2,  2, -1, -1, -1}, /* idsel  8 (slot closest to ISA) */
+		{ 2,  2, -1, -1, -1}, /* idsel  8 (Noname hack: slot closest to ISA) */
 		{-1, -1, -1, -1, -1}, /* idsel  9 (unused) */
 		{-1, -1, -1, -1, -1}, /* idsel 10 (unused) */
-		{ 0,  0,  2,  1,  0}, /* idsel 11 (slot furthest from ISA) KN25_PCI_SLOT0 */
-		{ 1,  1,  0,  2,  1}, /* idsel 12 (middle slot) KN25_PCI_SLOT1 */
-#ifdef CONFIG_ALPHA_AVANTI
-		{ 1,  2,  1,  0,  2}, /* idsel 13 KN25_PCI_SLOT2 */
-#endif /* CONFIG_ALPHA_AVANTI */
+		{ 0,  0,  2,  1,  0}, /* idsel 11 KN25_PCI_SLOT0 */
+		{ 1,  1,  0,  2,  1}, /* idsel 12 KN25_PCI_SLOT1 */
+		{ 2,  2,  1,  0,  2}, /* idsel 13 KN25_PCI_SLOT2 */
+#endif
 	};
 	/*
 	 * route_tab selects irq routing in PCI/ISA bridge so that:
@@ -607,12 +659,17 @@ static inline void avanti_and_noname_fixup(void)
 	level_bits = 0;
 	for (dev = pci_devices; dev; dev = dev->next) {
 		dev->irq = 0;
-		if (dev->bus->number != 0 ||
-		    PCI_SLOT(dev->devfn) < 6 ||
+		if (dev->bus->number != 0) {
+			printk("bios32.sio_fixup: don't know how to fixup devices on bus %d\n",
+			       dev->bus->number);
+			continue;
+		}
+		if (PCI_SLOT(dev->devfn) < 6 ||
 		    PCI_SLOT(dev->devfn) >= 6 + sizeof(pirq_tab)/sizeof(pirq_tab[0]))
 		{
-			printk("bios32.avanti_and_noname_fixup: no dev on bus %d, slot %d!!\n",
-			       dev->bus->number, PCI_SLOT(dev->devfn));
+			printk("bios32.sio_fixup: "
+			       "weird, found device %04x:%04x in non-existent slot %d!!\n",
+			       dev->vendor, dev->device, PCI_SLOT(dev->devfn));
 			continue;
 		}
 		pcibios_read_config_byte(dev->bus->number, dev->devfn,
@@ -646,31 +703,10 @@ static inline void avanti_and_noname_fixup(void)
 	/*
 	 * Now, make all PCI interrupts level sensitive.  Notice:
 	 * these registers must be accessed byte-wise.  outw() doesn't
-	 * work, for some reason.
+	 * work.
 	 */
 	outb((level_bits >> 0) & 0xff, 0x4d0);
 	outb((level_bits >> 8) & 0xff, 0x4d1);
-
-#if PCI_MODIFY
-	{
-		unsigned char hostid;
-		/*
-		 * SRM console version X3.9 seems to reset the SCSI
-		 * host-id to 0 no matter what console environment
-		 * variable pka0_host_id is set to.  Thus, if the
-		 * host-id reads out as a zero, we set it to 7.  The
-		 * SCSI controller is on the motherboard on bus 0,
-		 * slot 6
-		 */
-		if (pcibios_read_config_byte(0, PCI_DEVFN(6, 0), 0x84, &hostid)
-		    == PCIBIOS_SUCCESSFUL && (hostid == 0))
-		{
-			pcibios_write_config_byte(0, PCI_DEVFN(6, 0),
-						  0x84, 7);
-		}
-	}
-#endif /* !PCI_MODIFY */
-
 	enable_ide(0x26e);
 }
 
@@ -691,9 +727,9 @@ unsigned long pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
 	/*
 	 * Now is the time to do all those dirty little deeds...
 	 */
-#if defined(CONFIG_ALPHA_NONAME) || defined(CONFIG_ALPHA_AVANTI)
-	avanti_and_noname_fixup();
-#elif defined(CONFIG_ALPHA_CABRIOLET)
+#if defined(CONFIG_ALPHA_NONAME) || defined(CONFIG_ALPHA_AVANTI) || defined(CONFIG_ALPHA_P2K)
+	sio_fixup();
+#elif defined(CONFIG_ALPHA_CABRIOLET) || defined(CONFIG_ALPHA_EB164)
 	cabriolet_fixup();
 #elif defined(CONFIG_ALPHA_EB66P)
 	eb66p_fixup();

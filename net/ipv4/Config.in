@@ -8,6 +8,7 @@ if [ "$CONFIG_FIREWALL" = "y" ]; then
 fi
 bool 'IP: accounting' CONFIG_IP_ACCT
 if [ "$CONFIG_IP_FORWARD" = "y" ]; then
+  bool 'IP: optimize as router not host' CONFIG_IP_ROUTER
   tristate 'IP: tunneling' CONFIG_NET_IPIP
   if [ "$CONFIG_IP_FIREWALL" = "y" ]; then
     bool 'IP: firewall packet logging' CONFIG_IP_FIREWALL_VERBOSE

@@ -1,11 +1,12 @@
 /*
- *	Intel MP v1.1 specification support routines for multi-pentium 
+ *	Intel MP v1.1/v1.4 specification support routines for multi-pentium 
  *	hosts.
  *
  *	(c) 1995 Alan Cox, CymruNET Ltd  <alan@cymru.net>
  *	Supported by Caldera http://www.caldera.com.
  *	Much of the core SMP work is based on previous work by Thomas Radke, to
  *	whom a great many thanks are extended.
+ *
  *
  *	This code is released under the GNU public license version 2 or
  *	later.
@@ -15,7 +16,7 @@
  *		Jose Renau	:	Handle single CPU case.
  *		Alan Cox	:	By repeated request 8) - Total BogoMIP report.
  *		Greg Wright	:	Fix for kernel stacks panic.
- *
+ *		Erich Boleyn	:	MP v1.4 and additional changes.
  */
 
 #include <linux/kernel.h>
@@ -33,13 +34,12 @@
 #include <asm/pgtable.h>
 #include <asm/smp.h>
 
-extern void *vremap(unsigned long offset, unsigned long size);	/* Linus hasnt put this in the headers yet */
-
 static int smp_found_config=0;				/* Have we found an SMP box 				*/
 
 unsigned long cpu_present_map = 0;			/* Bitmask of existing CPU's 				*/
 int smp_num_cpus;					/* Total count of live CPU's 				*/
 int smp_threads_ready=0;				/* Set when the idlers are all forked 			*/
+volatile unsigned long cpu_number_map[NR_CPUS];		/* which CPU maps to which logical number		*/
 volatile unsigned long cpu_callin_map[NR_CPUS] = {0,};	/* We always use 0 the rest is ready for parallel delivery */
 volatile unsigned long smp_invalidate_needed;		/* Used for the invalidate map thats also checked in the spinlock */
 struct cpuinfo_x86 cpu_data[NR_CPUS];			/* Per cpu bogomips and other parameters 		*/
@@ -49,8 +49,9 @@ unsigned char boot_cpu_id = 0;				/* Processor that is doing the boot up 			*/
 static unsigned char *kstack_base,*kstack_end;		/* Kernel stack list pointers 				*/
 static int smp_activated = 0;				/* Tripped once we need to start cross invalidating 	*/
 static volatile int smp_commenced=0;			/* Tripped when we start scheduling 		    	*/
-static unsigned char nlong=0;				/* Apparent value for boot CPU 				*/
-unsigned char *apic_reg=((unsigned char *)&nlong)-0x20;	/* Later set to the vremap() of the APIC 		*/
+unsigned long apic_addr=0xFEE00000;			/* Address of APIC (defaults to 0xFEE00000)		*/
+unsigned long nlong = 0;				/* dummy used for apic_reg address + 0x20		*/
+unsigned char *apic_reg=((unsigned char *)(&nlong))-0x20;/* Later set to the vremap() of the APIC 		*/
 unsigned long apic_retval;				/* Just debugging the assembler.. 			*/
 unsigned char *kernel_stacks[NR_CPUS];			/* Kernel stack pointers for CPU's (debugging)		*/
 
@@ -74,6 +75,14 @@ volatile unsigned long smp_idle_count[1+NR_CPUS]={0,};	/* Count idle ticks					*
 #endif
 #if defined (__SMP_PROF__)
 volatile unsigned long smp_idle_map=0;			/* Map for idle processors 				*/
+#endif
+
+/*#define SMP_DEBUG*/
+
+#ifdef SMP_DEBUG
+#define SMP_PRINTK(x)	printk x
+#else
+#define SMP_PRINTK(x)
 #endif
 
 
@@ -139,9 +148,9 @@ static int smp_read_mpc(struct mp_config_table *mpc)
 		printk("Checksum error.\n");
 		return 1;
 	}
-	if(mpc->mpc_spec!=0x01)
+	if(mpc->mpc_spec!=0x01 && mpc->mpc_spec!=0x04)
 	{
-		printk("Unsupported version (%d)\n",mpc->mpc_spec);
+		printk("Bad Config Table version (%d)!!\n",mpc->mpc_spec);
 		return 1;
 	}
 	memcpy(str,mpc->mpc_oem,8);
@@ -151,6 +160,9 @@ static int smp_read_mpc(struct mp_config_table *mpc)
 	str[12]=0;
 	printk("Product ID: %s ",str);
 	printk("APIC at: 0x%lX\n",mpc->mpc_lapic);
+
+	/* set the local APIC address */
+	apic_addr = mpc->mpc_lapic;
 	
 	/*
 	 *	Now process the configuration blocks.
@@ -173,6 +185,7 @@ static int smp_read_mpc(struct mp_config_table *mpc)
 							(m->mpc_cpufeature&
 								CPU_MODEL_MASK)>>4),
 						m->mpc_apicver);
+#ifdef SMP_DEBUG						
 					if(m->mpc_featureflag&(1<<0))
 						printk("    Floating point unit present.\n");
 					if(m->mpc_featureflag&(1<<7))
@@ -181,9 +194,10 @@ static int smp_read_mpc(struct mp_config_table *mpc)
 						printk("    64 bit compare & exchange supported.\n");
 					if(m->mpc_featureflag&(1<<9))
 						printk("    Internal APIC present.\n");
+#endif						
 					if(m->mpc_cpuflag&CPU_BOOTPROCESSOR)
 					{
-						printk("    Bootup CPU\n");
+						SMP_PRINTK(("    Bootup CPU\n"));
 						boot_cpu_id=m->mpc_apicid;
 						nlong = boot_cpu_id<<24;	/* Dummy 'self' for bootup */
 					}
@@ -205,9 +219,9 @@ static int smp_read_mpc(struct mp_config_table *mpc)
 					(struct mpc_config_bus *)mpt;
 				memcpy(str,m->mpc_bustype,6);
 				str[6]=0;
-				printk("Bus #%d is %s\n",
+				SMP_PRINTK(("Bus #%d is %s\n",
 					m->mpc_busid,
-					str);
+					str));
 				mpt+=sizeof(*m);
 				count+=sizeof(*m);
 				break; 
@@ -261,8 +275,8 @@ void smp_scan_config(unsigned long base, unsigned long length)
 	unsigned long *bp=(unsigned long *)base;
 	struct intel_mp_floating *mpf;
 	
-/*	printk("Scan SMP from %p for %ld bytes.\n",
-		bp,length);*/
+	SMP_PRINTK(("Scan SMP from %p for %ld bytes.\n",
+		bp,length));
 	if(sizeof(*mpf)!=16)
 		printk("Error: MPF size\n");
 	
@@ -273,11 +287,14 @@ void smp_scan_config(unsigned long base, unsigned long length)
 			mpf=(struct intel_mp_floating *)bp;
 			if(mpf->mpf_length==1 && 
 				!mpf_checksum((unsigned char *)bp,16) &&
-				mpf->mpf_specification==1)
+				(mpf->mpf_specification == 1
+				 || mpf->mpf_specification == 4) )
 			{
-				printk("Intel multiprocessing (MPv1.1) available.\n");
+				printk("Intel MultiProcessor Specification v1.%d\n", mpf->mpf_specification);
 				if(mpf->mpf_feature2&(1<<7))
-					printk("    IMCR and PIC mode supported.\n");
+					printk("    IMCR and PIC compatibility mode.\n");
+				else
+					printk("    Virtual Wire compatibility mode.\n");
 				smp_found_config=1;
 				/*
 				 *	Now see if we need to read further.
@@ -436,7 +453,7 @@ void smp_callin(void)
 	 *	Activate our APIC
 	 */
 	 
-/*	printk("CALLIN %d\n",smp_processor_id());*/
+	SMP_PRINTK(("CALLIN %d\n",smp_processor_id()));
  	l=apic_read(APIC_SPIV);
  	l|=(1<<8);		/* Enable */
  	apic_write(APIC_SPIV,l);
@@ -461,11 +478,12 @@ void smp_callin(void)
 	*(long *)0=1;		 OOPS... */
 	local_invalidate();
 	while(!smp_commenced);
+	if (cpu_number_map[cpuid] == -1)
+		while(1);
 	local_invalidate();
-/*	printk("Commenced..\n");*/
+	SMP_PRINTK(("Commenced..\n"));
 	
-	/* This assumes the processor id's are consecutive 0..n-1 -  FIXME */
-	load_TR(cpuid);
+	load_TR(cpu_number_map[cpuid]);
 /*	while(1);*/
 }
 
@@ -492,22 +510,42 @@ void smp_boot_cpus(void)
 	if(apic_reg == NULL)
 		panic("Unable to map local apic.\n");
 		
+#ifdef SMP_DEBUG		
+	{
+		int reg;
+
+		reg = apic_read(APIC_VERSION);
+		printk("Getting VERSION: %x\n", reg);
+
+		apic_write(APIC_VERSION, 0);
+		reg = apic_read(APIC_VERSION);
+		printk("Getting VERSION: %x\n", reg);
+
+		reg = apic_read(APIC_LVT0);
+		printk("Getting LVT0: %x\n", reg);
+
+		reg = apic_read(APIC_LVT1);
+		printk("Getting LVT1: %x\n", reg);
+	}
+#endif
+	
 	/*
 	 *	Now scan the cpu present map and fire up anything we find.
 	 */
-	 
 	 
 	kernel_stacks[boot_cpu_id]=(void *)init_user_stack;	/* Set up for boot processor first */
 
 	smp_store_cpu_info(boot_cpu_id);			/* Final full version of the data */
 	
 	active_kernel_processor=boot_cpu_id;
+
+	SMP_PRINTK(("CPU map: %lx\n", cpu_present_map));
 		
 	for(i=0;i<NR_CPUS;i++)
 	{
 		if((cpu_present_map&(1<<i)) && i!=boot_cpu_id)		/* Rebooting yourself is a bad move */
 		{
-			unsigned long cfg;
+			unsigned long cfg, send_status, accept_status;
 			int timeout;
 			
 			/*
@@ -519,7 +557,7 @@ void smp_boot_cpus(void)
 				panic("No memory for processor stacks.\n");
 			kernel_stacks[i]=stack;
 			install_trampoline(stack);
-			
+
 			printk("Booting processor %d stack %p: ",i,stack);			/* So we set whats up   */
 				
 			/*
@@ -530,65 +568,181 @@ void smp_boot_cpus(void)
 			cfg|=(1<<8);		/* Enable APIC */
 			apic_write(APIC_SPIV,cfg);
 			
-			for(timeout=0;timeout<50000;timeout++)
-			{
-				/*
-				 *	This gunge sends an IPI (Inter Processor Interrupt) to the
-				 *	processor we wish to wake. When the startup IPI is received
-				 *	the target CPU does a real mode jump to the stack base.
-				 *
-				 *	We do the following
-				 *
-				 *	Time 0	: Send a STARTUP IPI (This is all that is needed).
-				 *	Time 20000  : Send an INIT IPI for broken boards.
-				 *	Time 20001  : Send a second STARTUP IPI for broken boards.
-				 *
-				 *	We can't just do INIT/STARTUP - that breaks the correctly
-				 *	implemented ASUS boards.
-				 */
-			
-				if(timeout==20000)
-				{
-					cfg=apic_read(APIC_ICR2);
-					cfg&=0x00FFFFFF;
-					apic_write(APIC_ICR2, cfg|SET_APIC_DEST_FIELD(i));			/* Target chip     	*/
-					cfg=apic_read(APIC_ICR);
-					cfg&=~0xFDFFF	;							/* Clear bits 		*/
-					cfg|=APIC_DEST_DM_INIT;                                                 /* INIT the CPU         */
-					apic_write(APIC_ICR, cfg);                                              /* Kick the second      */
-					printk("\nBuggy motherboard ?, trying an INIT IPI: ");
-					udelay(10);                                                             /* Masses of time       */
-				}
-				if(timeout==0||timeout==20001)
-				{
-					cfg=apic_read(APIC_ICR);
-					cfg&=~0xFDFFF   ;                                                       /* Clear bits           */
-					cfg|=APIC_DEST_FIELD|APIC_DEST_DM_STARTUP|(((unsigned long)stack)>>12);	/* Boot on the stack 	*/		
-					apic_write(APIC_ICR, cfg);						/* Kick the second 	*/
-					udelay(10);								/* Masses of time 	*/
-					cfg=apic_read(APIC_ESR);
-					if(cfg&4)		/* Send accept error */
-						printk("Processor refused startup request.\n");
-				}
-				if(cpu_callin_map[0]&(1<<i))
-					break;				/* It has booted */
-				udelay(100);				/* Wait 5s total for a response */
+			/*
+			 *	This gunge runs the startup process for
+			 *	the targeted processor.
+			 */
+
+#ifdef EEK
+			SMP_PRINTK(("Setting warm reset code and vector.\n"));
+
+			CMOS_WRITE(0xa, 0xf);
+			*((volatile unsigned short *) 0x467) = (unsigned short)(stack>>4);
+			*((volatile unsigned short *) 0x469) = 0;
+#endif
+
+			apic_write(APIC_ESR, 0);
+			accept_status = (apic_read(APIC_ESR) & 0xEF);
+			send_status = 0;
+			accept_status = 0;
+
+			SMP_PRINTK(("Asserting INIT.\n"));
+
+			cfg=apic_read(APIC_ICR2);
+			cfg&=0x00FFFFFF;
+			apic_write(APIC_ICR2, cfg|SET_APIC_DEST_FIELD(i)); 			/* Target chip     	*/
+			cfg=apic_read(APIC_ICR);
+			cfg&=~0xCDFFF;								/* Clear bits 		*/
+			cfg|=0x0000c500;	/* Urgh.. fix for constants */
+			apic_write(APIC_ICR, cfg);						/* Send IPI */
+
+			timeout = 0;
+			do {
+				udelay(1000);
+				if ((send_status = (!(apic_read(APIC_ICR) & 0x00001000))))
+					break;
+			} while (timeout++ < 1000);
+
+#ifdef EEK2
+			if (send_status) {
+				apic_write(APIC_ESR, 0);
+				accept_status = (apic_read(APIC_ESR) & 0xEF);
 			}
-			if(cpu_callin_map[0]&(1<<i))
-				cpucount++;
+#endif
+
+			if (send_status && !accept_status)
+			{
+				SMP_PRINTK(("Deasserting INIT.\n"));
+			
+				cfg=apic_read(APIC_ICR2);
+				cfg&=0x00FFFFFF;
+				apic_write(APIC_ICR2, cfg|SET_APIC_DEST_FIELD(i));			/* Target chip     	*/
+				cfg=apic_read(APIC_ICR);
+				cfg&=~0xCDFFF;								/* Clear bits 		*/
+				cfg|=0x00008500;
+				apic_write(APIC_ICR, cfg);						/* Send IPI */
+
+				timeout = 0;
+				do {
+					udelay(1000);
+					if ((send_status = !(apic_read(APIC_ICR) & 0x00001000) ))
+						break;
+				} while (timeout++ < 1000);
+
+				if (send_status) {
+					udelay(1000000);
+					apic_write(APIC_ESR, 0);
+					accept_status = (apic_read(APIC_ESR) & 0xEF);
+				}
+			}
+
+			/*
+			 *	We currently assume an integrated
+			 *	APIC only, so STARTUP IPIs must be
+			 *	sent as well.
+			 */
+
+			if (send_status && !accept_status)
+			{
+				SMP_PRINTK(("Sending first STARTUP.\n"));
+			
+				/*
+				 *	First STARTUP IPI
+				 */
+
+				cfg=apic_read(APIC_ICR2);
+				cfg&=0x00FFFFFF;
+				apic_write(APIC_ICR2, cfg|SET_APIC_DEST_FIELD(i));			/* Target chip     	*/
+				cfg=apic_read(APIC_ICR);
+				cfg&=~0xCDFFF	;							/* Clear bits 		*/
+				cfg|=APIC_DEST_FIELD|APIC_DEST_DM_STARTUP|(((unsigned long)stack)>>12);	/* Boot on the stack 	*/		
+				apic_write(APIC_ICR, cfg);						/* Kick the second 	*/
+
+				timeout = 0;
+				do {
+					udelay(1000);
+					if ((send_status = !(apic_read(APIC_ICR) & 0x00001000)) )
+						break;
+				} while (timeout++ < 1000);
+
+				if (send_status) {
+					udelay(1000000);
+					apic_write(APIC_ESR, 0);
+					accept_status = (apic_read(APIC_ESR) & 0xEF);
+				}
+			}
+
+			if (send_status && !accept_status)
+			{
+				SMP_PRINTK(("Sending second STARTUP.\n"));
+			
+				/*
+				 *	Second STARTUP IPI
+				 */
+
+				cfg=apic_read(APIC_ICR2);
+				cfg&=0x00FFFFFF;
+				apic_write(APIC_ICR2, cfg|SET_APIC_DEST_FIELD(i));			/* Target chip     	*/
+				cfg=apic_read(APIC_ICR);
+				cfg&=~0xCDFFF	;							/* Clear bits 		*/
+				cfg|=APIC_DEST_FIELD|APIC_DEST_DM_STARTUP|(((unsigned long)stack)>>12);	/* Boot on the stack 	*/		
+				apic_write(APIC_ICR, cfg);						/* Kick the second 	*/
+
+				timeout = 0;
+				do {
+					udelay(1000);
+					if ((send_status = !(apic_read(APIC_ICR) & 0x00001000)))
+						break;
+				} while (timeout++ < 1000);
+
+				if (send_status) {
+					udelay(1000000);
+					apic_write(APIC_ESR, 0);
+					accept_status = (apic_read(APIC_ESR) & 0xEF);
+				}
+			}
+
+			if (!send_status)		/* APIC never delivered?? */
+				printk("APIC never delivered???\n");
+			else if (accept_status)		/* Send accept error */
+				printk("APIC delivery error (%lx).\n", accept_status);
 			else
 			{
-				/*
-				 *	At this point we should set up a BIOS warm start and try
-				 *	a RESTART IPI. The 486+82489 MP pair don't support STARTUP IPI's
-				 */
-				if(*((unsigned char *)8192)==0xA5)
-					printk("Stuck ??\n");
+				for(timeout=0;timeout<50000;timeout++)
+				{
+					if(cpu_callin_map[0]&(1<<i))
+						break;				/* It has booted */
+					udelay(100);				/* Wait 5s total for a response */
+				}
+				if(cpu_callin_map[0]&(1<<i))
+				{
+					cpucount++;
+					/* number CPUs logically, starting from 1 (BSP is 0) */
+					cpu_number_map[i] = cpucount;
+				}
 				else
-					printk("Not responding.\n");
-				cpu_present_map&=~(1<<i);
+				{
+					if(*((volatile unsigned char *)8192)==0xA5)
+						printk("Stuck ??\n");
+					else
+						printk("Not responding val=(%lx).\n", *((unsigned long *) stack));
+					cpu_present_map&=~(1<<i);
+					cpu_number_map[i] = -1;
+				}
 			}
+
+			/* mark "stuck" area as not stuck */
+			*((volatile unsigned long *)8192) = 0;
 		}
+		else if (i == boot_cpu_id)
+		{
+			cpu_number_map[i] = 0;
+		}
+		else
+		{
+			cpu_number_map[i] = -1;
+		}
+
 	}
 	/*
 	 *	Allow the user to impress friends.

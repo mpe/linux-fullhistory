@@ -36,11 +36,12 @@
 #define _IOC_READ	2U
 #define _IOC_WRITE	4U
 
-#define _IOC(dir,type,nr,size) \
-	(((dir)  << _IOC_DIRSHIFT) | \
-	 ((type) << _IOC_TYPESHIFT) | \
-	 ((nr)   << _IOC_NRSHIFT) | \
-	 ((size) << _IOC_SIZESHIFT))
+#define _IOC(dir,type,nr,size)			\
+	((__u32)				\
+	 (((dir)  << _IOC_DIRSHIFT) |		\
+	  ((type) << _IOC_TYPESHIFT) |		\
+	  ((nr)   << _IOC_NRSHIFT) |		\
+	  ((size) << _IOC_SIZESHIFT)))
 
 /* used to create numbers */
 #define _IO(type,nr)		_IOC(_IOC_NONE,(type),(nr),0)

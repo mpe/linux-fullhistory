@@ -29,14 +29,15 @@ fi
 
 choice 'Alpha system type' \
 	"Avanti		CONFIG_ALPHA_AVANTI		\
-	 Jensen		CONFIG_ALPHA_JENSEN		\
-	 Noname		CONFIG_ALPHA_NONAME		\
 	 Cabriolet	CONFIG_ALPHA_CABRIOLET		\
 	 EB66		CONFIG_ALPHA_EB66		\
 	 EB66+		CONFIG_ALPHA_EB66P		\
-	 EB64+		CONFIG_ALPHA_EB64P" Cabriolet
+	 EB64+		CONFIG_ALPHA_EB64P		\
+	 Jensen		CONFIG_ALPHA_JENSEN		\
+	 Noname		CONFIG_ALPHA_NONAME		\
+	 Platform2000	CONFIG_ALPHA_P2K" Cabriolet
 if [ "$CONFIG_ALPHA_NONAME" = "y" -o "$CONFIG_ALPHA_EB66" = "y" \
-	-o "$CONFIG_ALPHA_EB66P" = "y" ]
+	-o "$CONFIG_ALPHA_EB66P" = "y" -o "$CONFIG_ALPHA_P2K" = "y" ]
 then
 	define_bool CONFIG_PCI y
 	define_bool CONFIG_ALPHA_LCA y

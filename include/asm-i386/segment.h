@@ -80,52 +80,6 @@ static inline unsigned long __get_user(const void * y, int size)
 	}
 }
 
-/*
- * These are deprecated..
- */
-
-static inline unsigned char get_user_byte(const char * addr)
-{
-	return __get_user(addr,1);
-}
-
-#define get_fs_byte(addr) get_user_byte((char *)(addr))
-
-static inline unsigned short get_user_word(const short *addr)
-{
-	return __get_user(addr, 2);
-}
-
-#define get_fs_word(addr) get_user_word((short *)(addr))
-
-static inline unsigned long get_user_long(const int *addr)
-{
-	return __get_user(addr, 4);
-}
-
-#define get_fs_long(addr) get_user_long((int *)(addr))
-
-static inline void put_user_byte(char val,char *addr)
-{
-	__put_user(val, addr, 1);
-}
-
-#define put_fs_byte(x,addr) put_user_byte((x),(char *)(addr))
-
-static inline void put_user_word(short val,short * addr)
-{
-	__put_user(val, addr, 2);
-}
-
-#define put_fs_word(x,addr) put_user_word((x),(short *)(addr))
-
-static inline void put_user_long(unsigned long val,int * addr)
-{
-	__put_user(val, addr, 4);
-}
-
-#define put_fs_long(x,addr) put_user_long((x),(int *)(addr))
-
 static inline void __generic_memcpy_tofs(void * to, const void * from, unsigned long n)
 {
     __asm__ volatile
@@ -305,6 +259,54 @@ __asm__("cld\n\t" \
 (__builtin_constant_p(n) ? \
  __constant_memcpy_tofs((to),(from),(n)) : \
  __generic_memcpy_tofs((to),(from),(n)))
+
+/*
+ * These are deprecated..
+ *
+ * Use "put_user()" and "get_user()" with the proper pointer types instead.
+ */
+
+#define get_fs_byte(addr) __get_user((const unsigned char *)(addr),1)
+#define get_fs_word(addr) __get_user((const unsigned short *)(addr),2)
+#define get_fs_long(addr) __get_user((const unsigned int *)(addr),4)
+
+#define put_fs_byte(x,addr) __put_user((x),(unsigned char *)(addr),1)
+#define put_fs_word(x,addr) __put_user((x),(unsigned short *)(addr),2)
+#define put_fs_long(x,addr) __put_user((x),(unsigned int *)(addr),4)
+
+#ifdef WE_REALLY_WANT_TO_USE_A_BROKEN_INTERFACE
+
+static inline unsigned short get_user_word(const short *addr)
+{
+	return __get_user(addr, 2);
+}
+
+static inline unsigned char get_user_byte(const char * addr)
+{
+	return __get_user(addr,1);
+}
+
+static inline unsigned long get_user_long(const int *addr)
+{
+	return __get_user(addr, 4);
+}
+
+static inline void put_user_byte(char val,char *addr)
+{
+	__put_user(val, addr, 1);
+}
+
+static inline void put_user_word(short val,short * addr)
+{
+	__put_user(val, addr, 2);
+}
+
+static inline void put_user_long(unsigned long val,int * addr)
+{
+	__put_user(val, addr, 4);
+}
+
+#endif
 
 /*
  * Someone who knows GNU asm better than I should double check the following.

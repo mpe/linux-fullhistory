@@ -120,19 +120,20 @@ static unsigned int conf_read(unsigned long addr, unsigned char type1)
 	unsigned int stat0, value;
 	unsigned int haxr2 = 0; /* to keep gcc quiet */
 
-#ifdef CONFIG_ALPHA_AVANTI
+#ifdef CONFIG_ALPHA_SRM
+	/* some SRMs step on these registers during a machine check: */
 	register long s0 asm ("9");
 	register long s1 asm ("10");
 	register long s2 asm ("11");
 	register long s3 asm ("12");
 	register long s4 asm ("13");
 	register long s5 asm ("14");
-	asm volatile ("# %0" : "r="(s0));/* SRM X4.2 on Avanti steps on this */
-	asm volatile ("# %0" : "r="(s1));/* SRM X4.2 on Avanti steps on this */
-	asm volatile ("# %0" : "r="(s2));/* SRM X4.2 on Avanti steps on this */
-	asm volatile ("# %0" : "r="(s3));/* SRM X4.2 on Avanti steps on this */
-	asm volatile ("# %0" : "r="(s4));/* SRM X4.2 on Avanti steps on this */
-	asm volatile ("# %0" : "r="(s5));/* SRM X4.2 on Avanti steps on this */
+	asm volatile ("# %0" : "r="(s0));
+	asm volatile ("# %0" : "r="(s1));
+	asm volatile ("# %0" : "r="(s2));
+	asm volatile ("# %0" : "r="(s3));
+	asm volatile ("# %0" : "r="(s4));
+	asm volatile ("# %0" : "r="(s5));
 #endif
 
 	save_flags(flags);	/* avoid getting hit by machine check */
@@ -200,13 +201,14 @@ static unsigned int conf_read(unsigned long addr, unsigned char type1)
 		mb();
 	}
 	restore_flags(flags);
-#ifdef CONFIG_ALPHA_AVANTI
-	asm volatile ("# %0" :: "r"(s0));/* SRM X4.2 on Avanti steps on this */
-	asm volatile ("# %0" :: "r"(s1));/* SRM X4.2 on Avanti steps on this */
-	asm volatile ("# %0" :: "r"(s2));/* SRM X4.2 on Avanti steps on this */
-	asm volatile ("# %0" :: "r"(s3));/* SRM X4.2 on Avanti steps on this */
-	asm volatile ("# %0" :: "r"(s4));/* SRM X4.2 on Avanti steps on this */
-	asm volatile ("# %0" :: "r"(s5));/* SRM X4.2 on Avanti steps on this */
+#ifdef CONFIG_ALPHA_SRM
+	/* some SRMs step on these registers during a machine check: */
+	asm volatile ("# %0" :: "r"(s0));
+	asm volatile ("# %0" :: "r"(s1));
+	asm volatile ("# %0" :: "r"(s2));
+	asm volatile ("# %0" :: "r"(s3));
+	asm volatile ("# %0" :: "r"(s4));
+	asm volatile ("# %0" :: "r"(s5));
 #endif
 	return value;
 }

@@ -5,8 +5,8 @@
 # It was inspired by a desire to not have to hit <enter> 9 million times
 # or startup the X server just to change a single kernel parameter.  
 #
-# This script attempts to parses the configuration files, which are
-# scattered throughout the kernel source tree, and create a temporary
+# This script attempts to parse the configuration files, which are
+# scattered throughout the kernel source tree, and creates a temporary
 # set of mini scripts which are in turn used to create nested menus and
 # radiolists.
 #
@@ -22,6 +22,15 @@
 # Please send comments / questions / bug fixes to roadcapw@cfw.com
 #
 #----------------------------------------------------------------------------
+
+
+#
+# Change this to TRUE if you prefer all kernel options listed
+# in a single menu rather than the standard menu hierarchy.
+#
+# Don't forget to remove linux/.menuconfig.in
+#
+single_menu_mode=
 
 #
 # Make sure we're really running bash.
@@ -88,11 +97,8 @@ function menu_name () {
 # Additional comments are currently semi-supported
 #
 function comment () {
-	if [ "$comments_ok" ]
-	then
-		$DIALOG --backtitle "$backtitle" --msgbox "$*" 7 70
-		comments_ok=
-	fi
+	comment_ctr=$[ comment_ctr + 1 ]
+	echo -ne "': $comment_ctr' '--- $1' " >>submenu
 }
 
 #
@@ -153,7 +159,6 @@ function l_bool () {
 			
 		help "$1" "$4"
 	done
-	comments_ok=TRUE
 }
 
 #
@@ -192,7 +197,6 @@ function l_mod_bool() {
 			
 		help "$1" "$4"
 	done
-	comments_ok=TRUE
 }
 
 #
@@ -244,7 +248,6 @@ function l_tristate () {
 			
 		help "$1" "$5"
 	done
-	comments_ok=TRUE
 }
 
 #
@@ -296,29 +299,24 @@ function l_int () {
 			15 55 "$4" 2>dialog.out
 		then
 			answer="`cat dialog.out`"
+			answer="${answer:-$3}"
 
-			case "$answer" in
-			[1-9] |\
-			[1-9][0-9] |\
-			[1-9][0-9][0-9] |\
-			[1-9][0-9][0-9][0-9] |\
-			[1-9][0-9][0-9][0-9][0-9])\
+			if expr $answer : '0$\|-?[1-9][0-9]*$' >/dev/null
+			then
 				eval $2="$answer"
-				;;
-			*)	eval $2="$3"
+			else
+				eval $2="$3"
 				echo -en "\007"
 				${DIALOG} --backtitle "$backtitle" \
 					--infobox "You have made an invalid entry." 3 43
 				sleep 2
-				;;
-			esac
+			fi
 
 			break
 		fi
 
 		help "$1" "$2"
 	done
-	comments_ok=TRUE
 }
 
 
@@ -326,7 +324,7 @@ function l_int () {
 # Create a function which will call our local int function.
 # 
 function hex () {
-	eval $2=\${$2:-"$3"} x=\${$2#*[x,X]}
+	eval $2=\${$2:-"$3"} x=\${$2##*[x,X]}
 
 	echo -ne "'$2' '($x) $1' " >>submenu
 
@@ -345,29 +343,25 @@ function l_hex () {
 			15 55 "$4" 2>dialog.out
 		then
 			answer="`cat dialog.out`"
-			answer="${answer#*[x,X]}"
+			answer="${answer:-$3}"
+			answer="${answer##*[x,X]}"
 
-			case "$answer" in
-			[0-9,a-f,A-F] |\
-			[0-9,a-f,A-F][0-9,a-f,A-F] |\
-			[0-9,a-f,A-F][0-9,a-f,A-F][0-9,a-f,A-F] |\
-			[0-9,a-f,A-F][0-9,a-f,A-F][0-9,a-f,A-F][0-9,a-f,A-F])\
+			if expr $answer : '[0-9a-fA-F]+$' >/dev/null
+			then
 				eval $2="$answer"
-				;;
-			*)	eval $2="$3"
+			else
+				eval $2="$3"
 				echo -en "\007"
 				${DIALOG} --backtitle "$backtitle" \
 					--infobox "You have made an invalid entry." 3 43
 				sleep 2
-				;;
-			esac
+			fi
 
 			break
 		fi
 
 		help "$1" "$2"
 	done
-	comments_ok=TRUE
 }
 
 #
@@ -464,7 +458,6 @@ function l_choice () {
 		
 		shift ; shift
 	done
-	comments_ok=TRUE
 }
 
 
@@ -476,14 +469,14 @@ function l_choice () {
 # function is recursive.
 #
 function parse_config_files () {
+	if [ "_$single_menu_mode" = "_TRUE" ]
+	then
+		parse_single_menu $1
+		return
+	fi
+
 	while read command args
 	do
-		if [ "$command" != "comment" -a "$in_a_comment" ]
-		then
-			in_a_comment=
-			echo >>$submenu
-		fi
-
 		case $command in
 
 		#
@@ -508,13 +501,8 @@ function parse_config_files () {
 
 				submenu=$x
 				echo menu_name $args >$submenu
-
-			elif [ "$in_a_comment" ]
-			then
-				echo -n $args >> $submenu
 			else
-				in_a_comment=TRUE
-				echo -n comment $args >> $submenu
+				echo comment $args >> $submenu
 			fi
 			;;
 	
@@ -544,6 +532,39 @@ function parse_config_files () {
 }
 
 #
+# Parses configuration files into a single menu structure.
+#
+function parse_single_menu () {
+
+	while read command args
+	do
+		case $command in
+
+		mainmenu_option | \
+		endmenu)
+			: ;;
+
+		mainmenu_name)
+			echo menu_name "'Main Menu'" > submenu0
+			;;
+
+		\$MAKE) echo "yuck1 'Configure (You must do this!)' '$args'"\
+				>>$submenu
+			;;
+
+		source)
+			parse_single_menu "$args"
+			;;
+
+		'#'|'')  : ;;
+
+		*)	echo $command $args >> $submenu
+			;;
+		esac
+	done < $1
+}
+
+#
 # This is the menu tree's bootstrap.
 #
 # Executes a mini script to create a set of functions, one per configuration
@@ -551,10 +572,10 @@ function parse_config_files () {
 # call other mini scripts.
 #
 function activate_menu () {
-	comments_ok=
 
 	while true
 	do
+		comment_ctr=0
 		$1 "$default"		#Create the radiolists and dialog cmd
 		. radiolists		#Read in the dialog functions.
 
@@ -622,8 +643,8 @@ save_configuration () {
 
 	function hex () {
 		eval x=\${$2:-"$3"}
-		echo "$2=$x" 			>>$CONFIG
-		echo "#define $2 0x${x#*[x,X]}"	>>$CONFIG_H
+		echo "$2=$x" 			 >>$CONFIG
+		echo "#define $2 0x${x##*[x,X]}" >>$CONFIG_H
 	}
 
 	function define_bool () {
@@ -784,8 +805,6 @@ backtitle="Linux Kernel Configuration"
 DIALOG="./scripts/lxdialog/lxdialog"
 
 comment_is_option=
-in_a_comment=
-comments_ok=
 menu_no=0
 submenu=submenu0
 kernel_version="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}"

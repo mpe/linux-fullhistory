@@ -11,7 +11,6 @@
 #include <linux/mm.h>
 #include <linux/sched.h>
 #include <linux/tty.h>
-#include <linux/config.h>
 
 #include <asm/gentrap.h>
 #include <asm/segment.h>
@@ -220,6 +219,44 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
 }
 
 /*
+ * Convert an s-floating point value in memory format to the
+ * corresponding value in register format.  The exponent
+ * needs to be remapped to preserve non-finite values
+ * (infinities, not-a-numbers, denormals).
+ */
+static inline unsigned long s_mem_to_reg (unsigned long s_mem)
+{
+	unsigned long frac    = (s_mem >>  0) & 0x7fffff;
+	unsigned long sign    = (s_mem >> 31) & 0x1;
+	unsigned long exp_msb = (s_mem >> 30) & 0x1;
+	unsigned long exp_low = (s_mem >> 23) & 0x7f;
+	unsigned long exp;
+
+	exp = (exp_msb << 10) | exp_low;	/* common case */
+	if (exp_msb) {
+		if (exp_low == 0x7f) {
+			exp = 0x3ff;
+		}
+	} else {
+		if (exp_low == 0x00) {
+			exp = 0x000;
+		} else {
+			exp |= (0x7 << 8);
+		}
+	}
+	return (sign << 63) | (exp << 52) | (frac << 29);
+}
+
+/*
+ * Convert an s-floating point value in register format to the
+ * corresponding value in memory format.
+ */
+static inline unsigned long s_reg_to_mem (unsigned long s_reg)
+{
+	return ((s_reg >> 62) << 30) | ((s_reg << 5) >> 34);
+}
+
+/*
  * Handle user-level unaligned fault.  Handling user-level unaligned
  * faults is *extremely* slow and produces nasty messages.  A user
  * program *should* fix unaligned faults ASAP.
@@ -236,8 +273,7 @@ asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
  *
  * Sigh. We *do* have to handle some FP operations, because GCC will
  * uses them as temporary storage for integer memory to memory copies.
- * However, we need to deal with stt/ldt only as they are the only
- * fp load/stores that preserve the bit pattern.
+ * However, we need to deal with stt/ldt and sts/lds only.
  */
 asmlinkage void do_entUnaUser(void * va, unsigned long opcode, unsigned long reg,
 			      unsigned long * frame)
@@ -246,6 +282,8 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode, unsigned long reg
 	unsigned long *reg_addr, *pc_addr, usp, zero = 0;
 	static int cnt = 0;
 	static long last_time = 0;
+	extern void alpha_write_fp_reg (unsigned long reg, unsigned long val);
+	extern unsigned long alpha_read_fp_reg (unsigned long reg);
 
 	pc_addr = frame + 7 + 20 + 1;			/* pc in PAL frame */
 
@@ -265,7 +303,7 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode, unsigned long reg
 
 	dir = VERIFY_READ;
 	if (opcode & 0x4) {
-		/* it's a stl, stq, or stt */
+		/* it's a stl, stq, stt, or sts */
 		dir = VERIFY_WRITE;
 	}
 	size = 4;
@@ -307,13 +345,20 @@ asmlinkage void do_entUnaUser(void * va, unsigned long opcode, unsigned long reg
 	}
 
 	switch (opcode) {
-	      case 0x23: alpha_write_fp_reg(reg, ldq_u(va)); break; /* ldt */
-	      case 0x27: stq_u(alpha_read_fp_reg(reg), va);  break; /* stt */
+	      case 0x22:						/* lds */
+		alpha_write_fp_reg(reg, s_mem_to_reg(ldl_u(va)));
+		break;
+	      case 0x26:						/* lds */
+		alpha_write_fp_reg(reg, s_reg_to_mem(ldl_u(va)));
+		break;
 
-	      case 0x28: *reg_addr = (int) ldl_u(va);	     break; /* ldl */
-	      case 0x29: *reg_addr = ldq_u(va);		     break; /* ldq */
-	      case 0x2c: stl_u(*reg_addr, va);		     break; /* stl */
-	      case 0x2d: stq_u(*reg_addr, va);		     break; /* stq */
+	      case 0x23: alpha_write_fp_reg(reg, ldq_u(va)); break;	/* ldt */
+	      case 0x27: stq_u(alpha_read_fp_reg(reg), va);  break;	/* stt */
+
+	      case 0x28: *reg_addr = (int) ldl_u(va);	     break;	/* ldl */
+	      case 0x29: *reg_addr = ldq_u(va);		     break;	/* ldq */
+	      case 0x2c: stl_u(*reg_addr, va);		     break;	/* stl */
+	      case 0x2d: stq_u(*reg_addr, va);		     break;	/* stq */
 	      default:
 		*pc_addr -= 4;	/* make pc point to faulting insn */
 		send_sig(SIGBUS, current, 1);

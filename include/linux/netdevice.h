@@ -63,11 +63,11 @@ struct dev_mc_list
 struct hh_cache
 {
 	struct hh_cache *hh_next;
-	unsigned long	hh_refcnt;	/* number of users */
 	void		*hh_arp;	/* Opaque pointer, used by
 					 * any address resolution module,
 					 * not only ARP.
 					 */
+	unsigned int	hh_refcnt;	/* number of users */
 	unsigned short  hh_type;	/* protocol identifier, f.e ETH_P_IP */
 	char		hh_uptodate;	/* hh_data is valid */
 	char		hh_data[16];    /* cached hardware header */

@@ -42,106 +42,100 @@
 
 
 /*
+ * Wait for a packet..
+ *
+ * Interrupts off so that no packet arrives before we begin sleeping.
+ * Otherwise we might miss our wake up
+ */
+static inline void wait_for_packet(struct sock * sk)
+{
+	unsigned long flags;
+
+	release_sock(sk);
+	save_flags(flags);
+	cli();
+	if (skb_peek(&sk->receive_queue) == NULL)
+		interruptible_sleep_on(sk->sleep);
+	restore_flags(flags);
+	lock_sock(sk);
+}
+
+
+/*
  *	Get a datagram skbuff, understands the peeking, nonblocking wakeups and possible
  *	races. This replaces identical code in packet,raw and udp, as well as the IPX
  *	AX.25 and Appletalk. It also finally fixes the long standing peek and read
  *	race for datagram sockets. If you alter this routine remember it must be
  *	re-entrant.
+ *
+ *	This function will lock the socket if a skb is returned, so the caller
+ *	needs to unlock the socket in that case (usually by calling skb_free_datagram)
  */
 
 struct sk_buff *skb_recv_datagram(struct sock *sk, unsigned flags, int noblock, int *err)
 {
+	int error;
 	struct sk_buff *skb;
-	unsigned long intflags;
 
-	/* Socket is inuse - so the timer doesn't attack it */
-	save_flags(intflags);
+	lock_sock(sk);
 restart:
-	sk->inuse = 1;
 	while(skb_peek(&sk->receive_queue) == NULL)	/* No data */
 	{
-		/* If we are shutdown then no more data is going to appear. We are done */
-		if (sk->shutdown & RCV_SHUTDOWN)
-		{
-			release_sock(sk);
-			*err=0;
-			return NULL;
-		}
+		/* Socket errors? */
+		error = sock_error(sk);
+		if (error)
+			goto no_packet;
 
-		if(sk->err)
-		{
-			release_sock(sk);
-			*err=sock_error(sk);
-			restore_flags(intflags);
-			return NULL;
-		}
+		/* Socket shut down? */
+		if (sk->shutdown & RCV_SHUTDOWN)
+			goto no_packet;
 
 		/* Sequenced packets can come disconnected. If so we report the problem */
+		error = -ENOTCONN;
 		if(sk->type==SOCK_SEQPACKET && sk->state!=TCP_ESTABLISHED)
-		{
-			release_sock(sk);
-			*err=-ENOTCONN;
-			return NULL;
-		}
+			goto no_packet;
 
 		/* User doesn't want to wait */
+		error = -EAGAIN;
 		if (noblock)
-		{
-			release_sock(sk);
-			*err=-EAGAIN;
-			return NULL;
-		}
-		release_sock(sk);
+			goto no_packet;
 
-		/* Interrupts off so that no packet arrives before we begin sleeping.
-		   Otherwise we might miss our wake up */
-		cli();
-		if (skb_peek(&sk->receive_queue) == NULL)
-		{
-			interruptible_sleep_on(sk->sleep);
-			/* Signals may need a restart of the syscall */
-			if (current->signal & ~current->blocked)
-			{
-				restore_flags(intflags);;
-				*err=-ERESTARTSYS;
-				return(NULL);
-			}
-			if(sk->err != 0)	/* Error while waiting for packet
-						   eg an icmp sent earlier by the
-						   peer has finally turned up now */
-			{
-				*err = sock_error(sk);
-				restore_flags(intflags);
-				return NULL;
-			}
-		}
-		sk->inuse = 1;
-		restore_flags(intflags);
+		/* handle signals */
+		error = -ERESTARTSYS;
+		if (current->signal & ~current->blocked)
+			goto no_packet;
+
+		wait_for_packet(sk);
 	  }
-	  /* Again only user level code calls this function, so nothing interrupt level
-	     will suddenly eat the receive_queue */
-	  if (!(flags & MSG_PEEK))
-	  {
-		skb=skb_dequeue(&sk->receive_queue);
-		if(skb!=NULL)
-			skb->users++;
-		else
-			goto restart;	/* Avoid race if someone beats us to the data */
-	  }
-	  else
-	  {
+
+	/* Again only user level code calls this function, so nothing interrupt level
+	   will suddenly eat the receive_queue */
+	if (flags & MSG_PEEK)
+	{
+		unsigned long flags;
+		save_flags(flags);
 		cli();
 		skb=skb_peek(&sk->receive_queue);
 		if(skb!=NULL)
 			skb->users++;
-		restore_flags(intflags);
-		if(skb==NULL)	/* shouldn't happen but .. */
-			*err=-EAGAIN;
-	  }
-	  return skb;
+		restore_flags(flags);
+		if(skb==NULL)		/* shouldn't happen but .. */
+			goto restart;
+		return skb;
+	}
+	skb = skb_dequeue(&sk->receive_queue);
+	if (!skb)	/* Avoid race if someone beats us to the data */
+		goto restart;
+	skb->users++;
+	return skb;
+
+no_packet:
+	release_sock(sk);
+	*err = error;
+	return NULL;
 }
 
-void skb_free_datagram(struct sk_buff *skb)
+void skb_free_datagram(struct sock * sk, struct sk_buff *skb)
 {
 	unsigned long flags;
 
@@ -157,6 +151,7 @@ void skb_free_datagram(struct sk_buff *skb)
 	if(!skb->next && !skb->prev)	/* Been dequeued by someone - ie it's read */
 		kfree_skb(skb,FREE_READ);
 	restore_flags(flags);
+	release_sock(sk);
 }
 
 /*

@@ -27,9 +27,9 @@ static int menu_width, item_x;
  * Print menu item
  */
 static void
-print_item (WINDOW * win, const char *item, int choice, int selected)
+print_item (WINDOW * win, const char *item, int choice, int selected, int hotkey)
 {
-    int j, i;
+    int i, j;
 
     j = first_alpha(item);
 
@@ -40,8 +40,10 @@ print_item (WINDOW * win, const char *item, int choice, int selected)
 	waddch (win, ' ');
     wattrset (win, selected ? item_selected_attr : item_attr);
     mvwaddstr (win, choice, item_x, (char *)item);
-    wattrset (win, selected ? tag_key_selected_attr : tag_key_attr);
-    mvwaddch(win, choice, item_x+j, item[j]);
+    if (hotkey) {
+    	wattrset (win, selected ? tag_key_selected_attr : tag_key_attr);
+    	mvwaddch(win, choice, item_x+j, item[j]);
+    }
 }
 
 /*
@@ -174,8 +176,10 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
     }
 
     /* Print the menu */
-    for (i=0; i < max_choice; i++)
-	print_item (menu, items[(first_item + i) * 2 + 1], i, i == choice);
+    for (i=0; i < max_choice; i++) {
+	print_item (menu, items[(first_item + i) * 2 + 1], i, i == choice,
+                    (items[(first_item + i)*2][0] != ':'));
+    }
 
     wnoutrefresh (menu);
 
@@ -209,14 +213,15 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
 
 			if (menu_height > 1) {
 			    /* De-highlight current first item */
-			    print_item (menu, items[scroll * 2 + 1],
-					0, FALSE);
+			    print_item (menu, items[scroll*2+1], 0, FALSE,
+                                        (items[scroll*2][0] != ':'));
 			    scrollok (menu, TRUE);
 			    wscrl (menu, -1);
 			    scrollok (menu, FALSE);
 			}
 			scroll--;
-			print_item (menu, items[scroll * 2 + 1], 0, TRUE);
+			print_item (menu, items[scroll * 2 + 1], 0, TRUE,
+                                   (items[scroll*2][0] != ':'));
 			wnoutrefresh (menu);
 
     			print_arrows(dialog, choice, item_no, scroll,
@@ -235,15 +240,17 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
 			if (menu_height > 1) {
 			    /* De-highlight current last item */
 			    print_item (menu, items[(scroll + max_choice - 1)
-					   * 2 + 1], max_choice - 1, FALSE);
+					   * 2 + 1], max_choice - 1, FALSE,
+                                           (items[(scroll+max_choice-1)*2][0] != ':'));
 			    scrollok (menu, TRUE);
 			    scroll (menu);
 			    scrollok (menu, FALSE);
 			}
 			scroll++;
-			print_item (menu, 
-				    items[(scroll + max_choice - 1) * 2 + 1],
-				    max_choice - 1, TRUE);
+			print_item (menu, items[(scroll+max_choice-1)*2+1],
+				    max_choice-1, TRUE,
+                                    (items[(scroll+max_choice-1)*2][0] != ':'));
+
 			wnoutrefresh (menu);
 
     			print_arrows(dialog, choice, item_no, scroll,
@@ -259,13 +266,13 @@ dialog_menu (const char *title, const char *prompt, int height, int width,
 	    if (i != choice) {
 		/* De-highlight current item */
 		getyx (dialog, cur_y, cur_x);	/* Save cursor position */
-		print_item (menu, items[(scroll + choice) * 2 + 1],
-				choice, FALSE);
+		print_item (menu, items[(scroll+choice)*2+1], choice, FALSE,
+                                (items[(scroll+choice)*2][0] != ':'));
 
 		/* Highlight new item */
 		choice = i;
-		print_item (menu, items[(scroll + choice) * 2 + 1],
-				choice, TRUE);
+		print_item (menu, items[(scroll+choice)*2+1], choice, TRUE,
+                                (items[(scroll+choice)*2][0] != ':'));
 		wnoutrefresh (menu);
 		wmove (dialog, cur_y, cur_x);
 		wrefresh (dialog);
