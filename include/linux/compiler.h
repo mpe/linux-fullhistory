@@ -8,6 +8,7 @@
 # define __kernel	/* default address space */
 # define __safe		__attribute__((safe))
 # define __force	__attribute__((force))
+# define __nocast	__attribute__((nocast))
 # define __iomem	__attribute__((noderef, address_space(2)))
 # define __acquires(x)	__attribute__((context(0,1)))
 # define __releases(x)	__attribute__((context(1,0)))
@@ -21,6 +22,7 @@ extern void __chk_io_ptr(void __iomem *);
 # define __kernel
 # define __safe
 # define __force
+# define __nocast
 # define __iomem
 # define __chk_user_ptr(x) (void)0
 # define __chk_io_ptr(x) (void)0
