@@ -1524,7 +1524,7 @@ static int i810fb_suspend(struct pci_dev *dev, u32 state)
 		pci_disable_device(dev);
 	}
 	pci_save_state(dev);
-	pci_set_power_state(dev, state);
+	pci_set_power_state(dev, pci_choose_state(dev, state));
 
 	return 0;
 }
