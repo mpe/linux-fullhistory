@@ -116,6 +116,9 @@
 /* M32R SIO */
 #define PORT_M32R_SIO	68
 
+/*Digi jsm */
+#define PORT_JSM        65
+
 #ifdef __KERNEL__
 
 #include <linux/config.h>
