@@ -110,7 +110,7 @@ int reg_base;
 /* there are stored pio numbers from other calls of opti621_tune_drive */
 
 static void compute_pios(ide_drive_t *drive, byte pio)
-/* Store values into drive->timing_data
+/* Store values into drive->drive_data
  *	second_contr - 0 for primary controller, 1 for secondary
  *	slave_drive - 0 -> pio is for master, 1 -> pio is for slave
  *	pio - PIO mode for selected drive (for other we don't know)
@@ -119,17 +119,17 @@ static void compute_pios(ide_drive_t *drive, byte pio)
 	int d;
 	ide_hwif_t *hwif = HWIF(drive);
 
-	drive->timing_data = ide_get_best_pio_mode(drive, pio, OPTI621_MAX_PIO, NULL);
+	drive->drive_data = ide_get_best_pio_mode(drive, pio, OPTI621_MAX_PIO, NULL);
 	for (d = 0; d < 2; ++d) {
 		drive = &hwif->drives[d];
 		if (drive->present) {
-			if (drive->timing_data == PIO_DONT_KNOW)
-				drive->timing_data = ide_get_best_pio_mode(drive, 255, OPTI621_MAX_PIO, NULL);
+			if (drive->drive_data == PIO_DONT_KNOW)
+				drive->drive_data = ide_get_best_pio_mode(drive, 255, OPTI621_MAX_PIO, NULL);
 #ifdef OPTI621_DEBUG
-			printk("%s: Selected PIO mode %d\n", drive->name, drive->timing_data);
+			printk("%s: Selected PIO mode %d\n", drive->name, drive->drive_data);
 #endif
 		} else {
-			drive->timing_data = PIO_NOT_EXIST;
+			drive->drive_data = PIO_NOT_EXIST;
 		}
 	}
 }
@@ -192,7 +192,7 @@ static void compute_clocks(int pio, pio_clocks_t *clks)
 	  	clks->address_time = cmpt_clk(adr_setup, bus_speed);
 	     	clks->data_time = cmpt_clk(data_pls, bus_speed);
      		clks->recovery_time = cmpt_clk(ide_pio_timings[pio].cycle_time
-     			-adr_setup-data_pls, bus_speed);
+     			- adr_setup-data_pls, bus_speed);
      		if (clks->address_time<1) clks->address_time = 1;
      		if (clks->address_time>4) clks->address_time = 4;
      		if (clks->data_time<1) clks->data_time = 1;
@@ -220,10 +220,10 @@ static void opti621_tune_drive (ide_drive_t *drive, byte pio)
 	byte cycle1, cycle2, misc;
 	ide_hwif_t *hwif = HWIF(drive);
 
-	/* set drive->timing_data for both drives */
+	/* set drive->drive_data for both drives */
 	compute_pios(drive, pio);
- 	pio1 = hwif->drives[0].timing_data;
- 	pio2 = hwif->drives[1].timing_data;
+ 	pio1 = hwif->drives[0].drive_data;
+ 	pio2 = hwif->drives[1].drive_data;
 
 	compute_clocks(pio1, &first);
 	compute_clocks(pio2, &second);
@@ -274,11 +274,11 @@ static void opti621_tune_drive (ide_drive_t *drive, byte pio)
 }
 
 /*
- * ide_init_opti621() is Called from idedma.c once for each hwif found at boot.
+ * ide_init_opti621() is called once for each hwif found at boot.
  */
-void ide_init_opti621 (byte bus, byte fn, ide_hwif_t *hwif)
+void ide_init_opti621 (ide_hwif_t *hwif)
 {
-	hwif->drives[0].timing_data = PIO_DONT_KNOW;
-	hwif->drives[1].timing_data = PIO_DONT_KNOW;
+	hwif->drives[0].drive_data = PIO_DONT_KNOW;
+	hwif->drives[1].drive_data = PIO_DONT_KNOW;
 	hwif->tuneproc = &opti621_tune_drive;
 }

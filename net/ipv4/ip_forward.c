@@ -5,7 +5,7 @@
  *
  *		The IP forwarding functionality.
  *		
- * Version:	$Id: ip_forward.c,v 1.32 1997/10/24 17:16:06 kuznet Exp $
+ * Version:	$Id: ip_forward.c,v 1.33 1997/11/28 15:32:03 alan Exp $
  *
  * Authors:	see ip.c
  *
@@ -175,7 +175,16 @@ int ip_forward(struct sk_buff *skb)
 			 *	and skip the firewall checks
 			 */
 			if (iph->protocol == IPPROTO_ICMP) {
-				if ((fw_res = ip_fw_masq_icmp(&skb)) < 0) {
+				__u32 maddr;
+#ifdef CONFIG_IP_MASQUERADE_ICMP
+#define icmph ((struct icmphdr *)((char *)iph + (iph->ihl<<2)))
+			    if ((icmph->type==ICMP_DEST_UNREACH)||
+				(icmph->type==ICMP_SOURCE_QUENCH)||
+				(icmph->type==ICMP_TIME_EXCEEDED))
+			        {
+#endif
+				maddr = inet_select_addr(dev2, rt->rt_gateway, RT_SCOPE_UNIVERSE);
+			        if (fw_res = ip_fw_masq_icmp(&skb, maddr) < 0) {
 					kfree_skb(skb, FREE_READ);
 					return -1;
 				}
@@ -183,6 +192,9 @@ int ip_forward(struct sk_buff *skb)
 				if (fw_res)
 					/* ICMP matched - skip firewall */
 					goto skip_call_fw_firewall;
+#ifdef CONFIG_IP_MASQUERADE_ICMP
+			       }
+#endif				
 			}
 			if (rt->rt_flags&RTCF_MASQ)
 				goto skip_call_fw_firewall;
@@ -225,6 +237,12 @@ skip_call_fw_firewall:
 			if (ip_fw_masquerade(&skb, maddr) < 0) {
 				kfree_skb(skb, FREE_READ);
 				return -1;
+			} else {
+				/*
+				 *      Masquerader may have changed skb 
+				 */
+				iph = skb->nh.iph;
+				opt = &(IPCB(skb)->opt);
 			}
 		}
 #endif

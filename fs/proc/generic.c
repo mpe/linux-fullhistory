@@ -154,7 +154,7 @@ proc_file_read(struct file * file, char * buf, size_t nbytes, loff_t *ppos)
 			break;
 		}
 		
-		n -= copy_to_user(buf, start, n);
+		n -= copy_to_user(buf, start, n);	/* BUG ??? */
 		if (n == 0) {
 			if (retval == 0)
 				retval = -EFAULT;

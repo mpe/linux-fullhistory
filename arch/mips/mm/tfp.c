@@ -1,4 +1,4 @@
-/* $Id: tfp.c,v 1.2 1997/08/08 18:13:13 miguel Exp $
+/* $Id: tfp.c,v 1.2 1997/12/02 05:51:09 ralf Exp $
  * tfp.c: MMU and cache routines specific to the r8000 (TFP).
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)

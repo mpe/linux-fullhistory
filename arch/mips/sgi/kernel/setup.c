@@ -3,11 +3,8 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: setup.c,v 1.3 1997/08/08 18:13:22 miguel Exp $
+ * $Id: setup.c,v 1.5 1997/09/13 02:19:18 ralf Exp $
  */
-#ifndef __GOGOGO__
-#error "... about to fuckup your Indy?"
-#endif
 #include <linux/kernel.h>
 #include <linux/sched.h>
 
@@ -65,21 +62,6 @@ static void sgi_irq_setup(void)
 	sgint_init();
 }
 
-#if 0
-extern void register_console(void (*proc)(const char *));
-
-static void sgi_print(const char *p)
-{
-	char c;
-
-	while((c = *p++) != 0) {
-		if(c == '\n')
-			prom_putchar('\r');
-		prom_putchar(c);
-	}
-}
-#endif
-
 void sgi_setup(void)
 {
 	char *ctype;
@@ -91,8 +73,6 @@ void sgi_setup(void)
 	_machine_restart = sgi_machine_restart;
 	_machine_halt = sgi_machine_halt;
 	_machine_power_off = sgi_machine_power_off;
-
-	/* register_console(sgi_print); */
 
 	/* Init the INDY HPC I/O controller.  Need to call this before
 	 * fucking with the memory controller because it needs to know the

@@ -116,8 +116,8 @@
 #define GDB_FR_CP0_RANDOM	((GDB_FR_CP0_INDEX) + 4)	/* 75 */
 #define GDB_FR_CP0_ENTRYLO0	((GDB_FR_CP0_RANDOM) + 4)	/* 76 */
 #define GDB_FR_CP0_ENTRYLO1	((GDB_FR_CP0_ENTRYLO0) + 4)	/* 77 */
-#define GDB_FR_CP0_REG4		((GDB_FR_CP0_ENTRYLO1) + 4)	/* 78 */
-#define GDB_FR_CP0_PAGEMASK	((GDB_FR_CP0_REG4) + 4)		/* 79 */
+#define GDB_FR_CP0_CONTEXT	((GDB_FR_CP0_ENTRYLO1) + 4)	/* 78 */
+#define GDB_FR_CP0_PAGEMASK	((GDB_FR_CP0_CONTEXT) + 4)	/* 79 */
 #define GDB_FR_CP0_WIRED	((GDB_FR_CP0_PAGEMASK) + 4)	/* 80 */
 #define GDB_FR_CP0_REG7		((GDB_FR_CP0_WIRED) + 4)	/* 81 */
 #define GDB_FR_CP0_REG8		((GDB_FR_CP0_REG7) + 4)		/* 82 */
@@ -187,7 +187,7 @@ struct gdb_regs {
 	long	cp0_random;
 	long	cp0_entrylo0;
 	long	cp0_entrylo1;
-	long	cp0_reg4;
+	long	cp0_context;
 	long	cp0_pagemask;
 	long	cp0_wired;
 	long	cp0_reg7;

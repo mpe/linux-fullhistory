@@ -275,22 +275,20 @@ __asm__ __volatile__ ("movw %%dx,%%ax\n\t" \
 		((limit) & 0x0ffff); }
 
 #define _set_tssldt_desc(n,addr,limit,type) \
-__asm__ __volatile__ ("movw $" #limit ",%1\n\t" \
-	"movw %%ax,%2\n\t" \
+__asm__ __volatile__ ("movw %3,0(%2)\n\t" \
+	"movw %%ax,2(%2)\n\t" \
 	"rorl $16,%%eax\n\t" \
-	"movb %%al,%3\n\t" \
-	"movb $" type ",%4\n\t" \
-	"movb $0x00,%5\n\t" \
-	"movb %%ah,%6\n\t" \
+	"movb %%al,4(%2)\n\t" \
+	"movb %4,5(%2)\n\t" \
+	"movb $0,6(%2)\n\t" \
+	"movb %%ah,7(%2)\n\t" \
 	"rorl $16,%%eax" \
-	: /* no output */ \
-	:"a" (addr), "m" (*(n)), "m" (*(n+2)), "m" (*(n+4)), \
-	 "m" (*(n+5)), "m" (*(n+6)), "m" (*(n+7)) \
-	)
+	: "=m"(*(n)) : "a" (addr), "r"(n), "i"(limit), "i"(type))
 
-#define set_tss_desc(n,addr) _set_tssldt_desc(((char *) (n)),((int)(addr)),235,"0x89")
+#define set_tss_desc(n,addr) \
+	_set_tssldt_desc(((char *) (n)),((int)(addr)),235,0x89)
 #define set_ldt_desc(n,addr,size) \
-	_set_tssldt_desc(((char *) (n)),((int)(addr)),((size << 3) - 1),"0x82")
+	_set_tssldt_desc(((char *) (n)),((int)(addr)),((size << 3) - 1),0x82)
 
 /*
  * This is the ldt that every process will get unless we need

@@ -1,9 +1,9 @@
 /*---------------------------------------------------------------------------+
  |  fpu_asm.h                                                                |
  |                                                                           |
- | Copyright (C) 1992,1995                                                   |
+ | Copyright (C) 1992,1995,1997                                              |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail billm@jacobi.maths.monash.edu.au |
+ |                       Australia.  E-mail billm@suburbia.net               |
  |                                                                           |
  +---------------------------------------------------------------------------*/
 
@@ -19,13 +19,14 @@
 #define	PARAM2	12(%ebp)
 #define	PARAM3	16(%ebp)
 #define	PARAM4	20(%ebp)
+#define	PARAM5	24(%ebp)
+#define	PARAM6	28(%ebp)
+#define	PARAM7	32(%ebp)
 
-#define SIGL_OFFSET 8
-#define SIGN(x)	(x)
-#define	TAG(x)	1(x)
-#define	EXP(x)	4(x)
+#define SIGL_OFFSET 0
+#define	EXP(x)	8(x)
 #define SIG(x)	SIGL_OFFSET##(x)
 #define	SIGL(x)	SIGL_OFFSET##(x)
-#define	SIGH(x)	12(x)
+#define	SIGH(x)	4(x)
 
 #endif _FPU_ASM_H_

@@ -3,9 +3,9 @@
  |                                                                           |
  | Compute the base 2 log of a FPU_REG, using a polynomial approximation.    |
  |                                                                           |
- | Copyright (C) 1992,1993,1994                                              |
- |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
+ | Copyright (C) 1992,1993,1994,1997                                         |
+ |                  W. Metzenthen, 22 Parker St, Ormond, Vic 3163, Australia |
+ |                  E-mail   billm@suburbia.net                              |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -14,96 +14,101 @@
 #include "exception.h"
 #include "reg_constant.h"
 #include "fpu_emu.h"
+#include "fpu_system.h"
 #include "control_w.h"
 #include "poly.h"
 
 
-
-static void log2_kernel(FPU_REG const *arg,
+static void log2_kernel(FPU_REG const *arg, u_char argsign,
 			Xsig *accum_result, long int *expon);
 
 
 /*--- poly_l2() -------------------------------------------------------------+
  |   Base 2 logarithm by a polynomial approximation.                         |
  +---------------------------------------------------------------------------*/
-void	poly_l2(FPU_REG const *arg, FPU_REG const *y, FPU_REG *result)
+void	poly_l2(FPU_REG *st0_ptr, FPU_REG *st1_ptr, u_char st1_sign)
 {
   long int	       exponent, expon, expon_expon;
   Xsig                 accumulator, expon_accum, yaccum;
-  char		       sign;
+  u_char		       sign, argsign;
   FPU_REG              x;
+  int                  tag;
 
+  exponent = exponent16(st0_ptr);
 
-  exponent = arg->exp - EXP_BIAS;
-
-  /* From arg, make a number > sqrt(2)/2 and < sqrt(2) */
-  if ( arg->sigh > (unsigned)0xb504f334 )
+  /* From st0_ptr, make a number > sqrt(2)/2 and < sqrt(2) */
+  if ( st0_ptr->sigh > (unsigned)0xb504f334 )
     {
-      /* Treat as  sqrt(2)/2 < arg < 1 */
-      significand(&x) = - significand(arg);
-      x.sign = SIGN_NEG;
-      x.tag = TW_Valid;
-      x.exp = EXP_BIAS-1;
+      /* Treat as  sqrt(2)/2 < st0_ptr < 1 */
+      significand(&x) = - significand(st0_ptr);
+      setexponent16(&x, -1);
       exponent++;
-      normalize(&x);
+      argsign = SIGN_NEG;
     }
   else
     {
-      /* Treat as  1 <= arg < sqrt(2) */
-      x.sigh = arg->sigh - 0x80000000;
-      x.sigl = arg->sigl;
-      x.sign = SIGN_POS;
-      x.tag = TW_Valid;
-      x.exp = EXP_BIAS;
-      normalize(&x);
+      /* Treat as  1 <= st0_ptr < sqrt(2) */
+      x.sigh = st0_ptr->sigh - 0x80000000;
+      x.sigl = st0_ptr->sigl;
+      setexponent16(&x, 0);
+      argsign = SIGN_POS;
     }
+  tag = FPU_normalize_nuo(&x);
 
-  if ( x.tag == TW_Zero )
+  if ( tag == TAG_Zero )
     {
       expon = 0;
       accumulator.msw = accumulator.midw = accumulator.lsw = 0;
     }
   else
     {
-      log2_kernel(&x, &accumulator, &expon);
+      log2_kernel(&x, argsign, &accumulator, &expon);
     }
 
-  sign = exponent < 0;
-  if ( sign ) exponent = -exponent;
+  if ( exponent < 0 )
+    {
+      sign = SIGN_NEG;
+      exponent = -exponent;
+    }
+  else
+    sign = SIGN_POS;
   expon_accum.msw = exponent; expon_accum.midw = expon_accum.lsw = 0;
   if ( exponent )
     {
       expon_expon = 31 + norm_Xsig(&expon_accum);
       shr_Xsig(&accumulator, expon_expon - expon);
 
-      if ( sign ^ (x.sign == SIGN_NEG) )
+      if ( sign ^ argsign )
 	negate_Xsig(&accumulator);
       add_Xsig_Xsig(&accumulator, &expon_accum);
     }
   else
     {
       expon_expon = expon;
-      sign = x.sign;
+      sign = argsign;
     }
 
-  yaccum.lsw = 0; XSIG_LL(yaccum) = significand(y);
+  yaccum.lsw = 0; XSIG_LL(yaccum) = significand(st1_ptr);
   mul_Xsig_Xsig(&accumulator, &yaccum);
 
   expon_expon += round_Xsig(&accumulator);
 
   if ( accumulator.msw == 0 )
     {
-      reg_move(&CONST_Z, y);
-    }
-  else
-    {
-      result->exp = expon_expon + y->exp + 1;
-      significand(result) = XSIG_LL(accumulator);
-      result->tag = TW_Valid; /* set the tags to Valid */
-      result->sign = sign ^ y->sign;
+      FPU_copy_to_reg1(&CONST_Z, TAG_Zero);
+      return;
     }
 
+  significand(st1_ptr) = XSIG_LL(accumulator);
+  setexponent16(st1_ptr, expon_expon + exponent16(st1_ptr) + 1);
+
+  tag = FPU_round(st1_ptr, 1, 0, FULL_PRECISION, sign ^ st1_sign);
+  FPU_settagi(1, tag);
+
+  set_precision_flag_up();  /* 80486 appears to always do this */
+
   return;
+
 }
 
 
@@ -111,46 +116,61 @@ void	poly_l2(FPU_REG const *arg, FPU_REG const *y, FPU_REG *result)
  |   Base 2 logarithm by a polynomial approximation.                         |
  |   log2(x+1)                                                               |
  +---------------------------------------------------------------------------*/
-int	poly_l2p1(FPU_REG const *arg, FPU_REG const *y, FPU_REG *result)
+int	poly_l2p1(u_char sign0, u_char sign1,
+		  FPU_REG *st0_ptr, FPU_REG *st1_ptr, FPU_REG *dest)
 {
-  char                 sign;
-  long int             exponent;
-  Xsig                 accumulator, yaccum;
+  u_char             	tag;
+  long int        	exponent;
+  Xsig              	accumulator, yaccum;
 
-
-  sign = arg->sign;
-
-  if ( arg->exp < EXP_BIAS )
+  if ( exponent16(st0_ptr) < 0 )
     {
-      log2_kernel(arg, &accumulator, &exponent);
+      log2_kernel(st0_ptr, sign0, &accumulator, &exponent);
 
       yaccum.lsw = 0;
-      XSIG_LL(yaccum) = significand(y);
+      XSIG_LL(yaccum) = significand(st1_ptr);
       mul_Xsig_Xsig(&accumulator, &yaccum);
 
       exponent += round_Xsig(&accumulator);
 
-      result->exp = exponent + y->exp + 1;
-      significand(result) = XSIG_LL(accumulator);
-      result->tag = TW_Valid; /* set the tags to Valid */
-      result->sign = sign ^ y->sign;
+      exponent += exponent16(st1_ptr) + 1;
+      if ( exponent < EXP_WAY_UNDER ) exponent = EXP_WAY_UNDER;
 
-      return 0;
+      significand(dest) = XSIG_LL(accumulator);
+      setexponent16(dest, exponent);
+
+      tag = FPU_round(dest, 1, 0, FULL_PRECISION, sign0 ^ sign1);
+      FPU_settagi(1, tag);
+
+      if ( tag == TAG_Valid )
+	set_precision_flag_up();   /* 80486 appears to always do this */
     }
   else
     {
-      /* The magnitude of arg is far too large. */
-      reg_move(y, result);
-      if ( sign != SIGN_POS )
+      /* The magnitude of st0_ptr is far too large. */
+
+      if ( sign0 != SIGN_POS )
 	{
 	  /* Trying to get the log of a negative number. */
-	  return 1;
+#ifdef PECULIAR_486   /* Stupid 80486 doesn't worry about log(negative). */
+	  changesign(st1_ptr);
+#else
+	  if ( arith_invalid(1) < 0 )
+	    return 1;
+#endif PECULIAR_486
 	}
+
+      /* 80486 appears to do this */
+      if ( sign0 == SIGN_NEG )
+	set_precision_flag_down();
       else
-	{
-	  return 0;
-	}
+	set_precision_flag_up();
     }
+
+  if ( exponent(dest) <= EXP_UNDER )
+    EXCEPTION(EX_Underflow);
+
+  return 0;
 
 }
 
@@ -180,20 +200,17 @@ static const unsigned long leadterm = 0xb8000000;
  |   Base 2 logarithm by a polynomial approximation.                         |
  |   log2(x+1)                                                               |
  +---------------------------------------------------------------------------*/
-static void log2_kernel(FPU_REG const *arg, Xsig *accum_result,
+static void log2_kernel(FPU_REG const *arg, u_char argsign, Xsig *accum_result,
 			long int *expon)
 {
-  char                 sign;
   long int             exponent, adj;
   unsigned long long   Xsq;
   Xsig                 accumulator, Numer, Denom, argSignif, arg_signif;
 
-  sign = arg->sign;
-
-  exponent = arg->exp - EXP_BIAS;
+  exponent = exponent16(arg);
   Numer.lsw = Denom.lsw = 0;
   XSIG_LL(Numer) = XSIG_LL(Denom) = significand(arg);
-  if ( sign == SIGN_POS )
+  if ( argsign == SIGN_POS )
     {
       shr_Xsig(&Denom, 2 - (1 + exponent));
       Denom.msw |= 0x80000000;

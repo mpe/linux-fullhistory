@@ -10,17 +10,6 @@
 #ifndef __ASM_MIPS_MIPSCONFIG_H
 #define __ASM_MIPS_MIPSCONFIG_H
 
-/*
- * This is the virtual address to which all ports are being mapped.
- * Must be a value that can be load with a lui instruction.
- */
-#ifndef PORT_BASE
-#if !defined (__LANGUAGE_ASSEMBLY__)
-extern unsigned long port_base;
-#endif
-#define PORT_BASE port_base
-#endif
-
 /* Pgdir is 1 page mapped at 0xff800000. */
 #define TLBMAP			0xff800000
 

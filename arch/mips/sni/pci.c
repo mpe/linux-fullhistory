@@ -119,17 +119,14 @@ static int sni_rm200_pcibios_write_config_dword (unsigned char bus,
 	return PCIBIOS_SUCCESSFUL;
 }
 
-__initfunc(unsigned long sni_rm200_pcibios_init(unsigned long memory_start, unsigned long memory_end))
-{
-	_pcibios_fixup = sni_rm200_pcibios_fixup;
-	_pcibios_read_config_byte = sni_rm200_pcibios_read_config_byte;
-	_pcibios_read_config_word = sni_rm200_pcibios_read_config_word;
-	_pcibios_read_config_dword = sni_rm200_pcibios_read_config_dword;
-	_pcibios_write_config_byte = sni_rm200_pcibios_write_config_byte;
-	_pcibios_write_config_word = sni_rm200_pcibios_write_config_word;
-	_pcibios_write_config_dword = sni_rm200_pcibios_write_config_dword;
-
-	return memory_start;
-}
+struct pci_ops sni_pci_ops = {
+	sni_rm200_pcibios_fixup,
+	sni_rm200_pcibios_read_config_byte,
+	sni_rm200_pcibios_read_config_word,
+	sni_rm200_pcibios_read_config_dword,
+	sni_rm200_pcibios_write_config_byte,
+	sni_rm200_pcibios_write_config_word,
+	sni_rm200_pcibios_write_config_dword
+};
 
 #endif /* CONFIG_PCI */

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.31 1997/11/05 08:14:01 freitag Exp $
+ * Version:	$Id: tcp_timer.c,v 1.32 1997/12/08 07:03:29 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -43,6 +43,8 @@ struct tcp_sl_timer tcp_slt_array[TCP_SLT_MAX] = {
 	{ATOMIC_INIT(0), TCP_SYNACK_PERIOD, 0, tcp_syn_recv_timer},/* SYNACK	*/
 	{ATOMIC_INIT(0), TCP_KEEPALIVE_PERIOD, 0, tcp_keepalive}   /* KEEPALIVE	*/
 };
+
+const char timer_bug_msg[] = KERN_DEBUG "tcpbug: unknown timer value\n";
 
 /*
  * Using different timers for retransmit, delayed acks and probes
@@ -112,45 +114,6 @@ void tcp_reset_xmit_timer(struct sock *sk, int what, unsigned long when)
 	};
 }
 
-void tcp_clear_xmit_timer(struct sock *sk, int what)
-{
-	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
-
-	switch (what) {
-	case TIME_RETRANS:
-		del_timer(&tp->retransmit_timer);
-		break;
-	case TIME_DACK:
-		del_timer(&tp->delack_timer);
-		break;
-	case TIME_PROBE0:
-		del_timer(&tp->probe_timer);
-		break;	
-	default:
-		printk(KERN_DEBUG "bug: unknown timer value\n");
-	};
-}
-
-int tcp_timer_is_set(struct sock *sk, int what)
-{
-	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
-
-	switch (what) {
-	case TIME_RETRANS:
-		return tp->retransmit_timer.next != NULL;
-		break;
-	case TIME_DACK:
-		return tp->delack_timer.next != NULL;
-		break;
-	case TIME_PROBE0:
-		return tp->probe_timer.next != NULL;
-		break;	
-	default:
-		printk(KERN_DEBUG "bug: unknown timer value\n");
-	};
-	return 0;
-}
-
 void tcp_clear_xmit_timers(struct sock *sk)
 {	
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
@@ -158,6 +121,25 @@ void tcp_clear_xmit_timers(struct sock *sk)
 	del_timer(&tp->retransmit_timer);
 	del_timer(&tp->delack_timer);
 	del_timer(&tp->probe_timer);
+}
+
+static int tcp_write_err(struct sock *sk, int force)
+{
+	sk->err = sk->err_soft ? sk->err_soft : ETIMEDOUT;
+	sk->error_report(sk);
+	
+	tcp_clear_xmit_timers(sk);
+	
+	/* Time wait the socket. */
+	if (!force && (1<<sk->state) & (TCPF_FIN_WAIT1|TCPF_FIN_WAIT2|TCPF_CLOSING)) {
+		tcp_set_state(sk,TCP_TIME_WAIT);
+		tcp_reset_msl_timer (sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
+	} else {
+		/* Clean up time. */
+		tcp_set_state(sk, TCP_CLOSE);
+		return 0;
+	}
+	return 1;
 }
 
 /*
@@ -172,10 +154,7 @@ static int tcp_write_timeout(struct sock *sk)
 	 *	Look for a 'soft' timeout.
 	 */
 	if ((sk->state == TCP_ESTABLISHED &&
-
-	     /* Eric, what the heck is this doing?!?! */
-	     tp->retransmits && !(tp->retransmits & 7)) ||
-
+	     tp->retransmits && (tp->retransmits % TCP_QUICK_TRIES) == 0) ||
 	    (sk->state != TCP_ESTABLISHED && tp->retransmits > sysctl_tcp_retries1)) {
 		/*	Attempt to recover if arp has changed (unlikely!) or
 		 *	a route has shifted (not supported prior to 1.3).
@@ -185,42 +164,15 @@ static int tcp_write_timeout(struct sock *sk)
 	
 	/* Have we tried to SYN too many times (repent repent 8)) */
 	if(tp->retransmits > sysctl_tcp_syn_retries && sk->state==TCP_SYN_SENT) {
-		if(sk->err_soft)
-			sk->err=sk->err_soft;
-		else
-			sk->err=ETIMEDOUT;
-#ifdef TCP_DEBUG
-		printk(KERN_DEBUG "syn timeout\n");
-#endif
-
-		sk->error_report(sk);
-		tcp_clear_xmit_timers(sk);
-		tcp_statistics.TcpAttemptFails++;	/* Is this right ??? - FIXME - */
-		tcp_set_state(sk,TCP_CLOSE);
+		tcp_write_err(sk, 1);
 		/* Don't FIN, we got nothing back */
 		return 0;
 	}
 
 	/* Has it gone just too far? */
-	if (tp->retransmits > sysctl_tcp_retries2) {
-		if(sk->err_soft)
-			sk->err = sk->err_soft;
-		else
-			sk->err = ETIMEDOUT;
-		sk->error_report(sk);
+	if (tp->retransmits > sysctl_tcp_retries2) 
+		return tcp_write_err(sk, 0);
 
-		tcp_clear_xmit_timers(sk);
-
-		/* Time wait the socket. */
-		if ((1<<sk->state) & (TCPF_FIN_WAIT1|TCPF_FIN_WAIT2|TCPF_CLOSING)) {
-			tcp_set_state(sk,TCP_TIME_WAIT);
-			tcp_reset_msl_timer (sk, TIME_CLOSE, TCP_TIMEWAIT_LEN);
-		} else {
-			/* Clean up time. */
-			tcp_set_state(sk, TCP_CLOSE);
-			return 0;
-		}
-	}
 	return 1;
 }
 
@@ -251,7 +203,8 @@ void tcp_probe_timer(unsigned long data) {
 	}
 
 	/*
-	 *	*WARNING* RFC 1122 forbids this
+	 *	*WARNING* RFC 1122 forbids this 
+	 * 	It doesn't AFAIK, because we kill the retransmit timer -AK
 	 *	FIXME: We ought not to do it, Solaris 2.5 actually has fixing
 	 *	this behaviour in Solaris down as a bug fix. [AC]
 	 */

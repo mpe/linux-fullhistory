@@ -7,7 +7,7 @@
  *
  * Copyright (c) 1994, 1995, 1996, 1997 by Ralf Baechle
  *
- * $Id: string.h,v 1.4 1997/08/08 20:22:34 miguel Exp $
+ * $Id: string.h,v 1.3 1997/08/11 04:11:53 ralf Exp $
  */
 #ifndef __ASM_MIPS_STRING_H
 #define __ASM_MIPS_STRING_H
@@ -94,25 +94,25 @@ extern __inline__ int strcmp(__const__ char *__cs, __const__ char *__ct)
 #define __HAVE_ARCH_STRNCMP
 extern __inline__ int strncmp(__const__ char *__cs, __const__ char *__ct, size_t __count)
 {
-  char __res;
+  int __res;
 
   __asm__ __volatile__(
 	".set\tnoreorder\n\t"
 	".set\tnoat\n"
-       	"1:\tlbu\t%3,(%0)\n\t"
+	"1:\tlbu\t%3,(%0)\n\t"
 	"beqz\t%2,2f\n\t"
-        "lbu\t$1,(%1)\n\t"
-       	"subu\t%2,1\n\t"
-        "bne\t$1,%3,3f\n\t"
-        "addiu\t%0,1\n\t"
-        "bnez\t%3,1b\n\t"
-        "addiu\t%1,1\n"
+	"lbu\t$1,(%1)\n\t"
+	"subu\t%2,1\n\t"
+	"bne\t$1,%3,3f\n\t"
+	"addiu\t%0,1\n\t"
+	"bnez\t%3,1b\n\t"
+	"addiu\t%1,1\n"
 	"2:\tmove\t%3,$1\n"
 	"3:\tsubu\t%3,$1\n\t"
 	".set\tat\n\t"
 	".set\treorder"
-        : "=r" (__cs), "=r" (__ct), "=r" (__count), "=r" (__res)
-        : "0" (__cs), "1" (__ct), "2" (__count)
+	: "=r" (__cs), "=r" (__ct), "=r" (__count), "=r" (__res)
+	: "0" (__cs), "1" (__ct), "2" (__count)
 	: "$1");
 
   return __res;

@@ -41,6 +41,7 @@ zdisk:	zImage
 	fi
 
 dep:
+	$(CPP) -M *.[cS] > .depend
 
 clean:
 	rm -f zImage zImage.tmp mkboot

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.74 1997/10/30 23:52:27 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.76 1997/12/07 04:44:19 freitag Exp $
  *
  *		IPv4 specific functions
  *
@@ -40,6 +40,7 @@
  *					Added tail drop and some other bugfixes.
  *					Added new listen sematics (ifdefed by
  *					NEW_LISTEN for now)
+ *	Juan Jose Ciarlante:		ip_dynaddr bits
  */
 
 #include <linux/config.h>
@@ -47,6 +48,7 @@
 #include <linux/fcntl.h>
 #include <linux/random.h>
 #include <linux/ipsec.h>
+#include <linux/inet.h>
 
 #include <net/icmp.h>
 #include <net/tcp.h>
@@ -59,6 +61,7 @@ extern int sysctl_tcp_tsack;
 extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;
 extern int sysctl_tcp_syncookies;
+extern int sysctl_ip_dynaddr;
 
 /* Check TCP sequence numbers in ICMP packets. */
 #define ICMP_PARANOIA 1 
@@ -846,31 +849,6 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 		return; 
 	}
 
-	/* pointless, because we have no way to retry when sk is locked.
-	   But the socket should be really locked here for better interaction
-	   with the socket layer. This needs to be solved for SMP
-	   (I would prefer an "ICMP backlog").
-
-	   tcp_v4_err is called only from bh, so that lock_sock is pointless,
-	   even in commented form :-) --ANK
-	   
-	   Note "for SMP" ;) -AK
-
-	   Couple of notes about backlogging:
-	   - error_queue could be used for it.
-	   - could, but MUST NOT :-), because:
-	     a) it is not clear,
-	        who will process deferred messages.
-	     b) ICMP is not reliable by design, so that you can safely
-	        drop ICMP messages. Besides that, if ICMP really arrived
-		it is very unlikely, that socket is locked. 	--ANK
-
-            I don't think it's unlikely that sk is locked. With the 
-	    open_request stuff there is much more stress on the main
-	    LISTEN socket. I just want to make sure that all ICMP unreachables
-	    destroy unneeded open_requests as reliable as possible (for
-	    syn flood protection) -AK
-	*/
 	tp = &sk->tp_pinfo.af_tcp;
 #ifdef ICMP_PARANOIA
 	seq = ntohl(th->seq);
@@ -1617,10 +1595,31 @@ int tcp_v4_rebuild_header(struct sock *sk, struct sk_buff *skb)
 	struct iphdr *iph;
 	struct tcphdr *th;
 	int size;
+        int want_rewrite = sysctl_ip_dynaddr && sk->state == TCP_SYN_SENT;
 
 	/* Check route */
 
 	rt = (struct rtable*)skb->dst;
+
+	/* Force route checking if want_rewrite */
+	if (want_rewrite) {
+		int tmp;
+		__u32 old_saddr = rt->rt_src;
+
+		/* Query new route */
+		tmp = ip_route_connect(&rt, rt->rt_dst, 0, 
+					RT_TOS(sk->ip_tos)|(sk->localroute||0),
+					sk->bound_dev_if);
+
+		/* Only useful if different source addrs */
+		if (tmp == 0 || rt->rt_src != old_saddr ) {
+			dst_release(skb->dst);
+			skb->dst = &rt->u.dst;
+		} else {
+			want_rewrite = 0;
+			dst_release(&rt->u.dst);
+		}
+	} else 
 	if (rt->u.dst.obsolete) {
 		int err;
 		err = ip_route_output(&rt, rt->rt_dst, rt->rt_src, rt->key.tos, rt->key.oif);
@@ -1639,6 +1638,50 @@ int tcp_v4_rebuild_header(struct sock *sk, struct sk_buff *skb)
 	iph = skb->nh.iph;
 	th = skb->h.th;
 	size = skb->tail - skb->h.raw;
+
+        if (want_rewrite) {
+        	__u32 new_saddr = rt->rt_src;
+                
+                /*
+                 *	Ouch!, this should not happen.
+                 */
+                if (!sk->saddr || !sk->rcv_saddr) {
+                	printk(KERN_WARNING "tcp_v4_rebuild_header(): not valid sock addrs: saddr=%08lX rcv_saddr=%08lX\n",
+			       ntohl(sk->saddr), 
+			       ntohl(sk->rcv_saddr));
+                        return 0;
+                }
+
+		/*
+		 *	Maybe whe are in a skb chain loop and socket address has
+		 *	yet been 'damaged'.
+		 */
+
+		if (new_saddr != sk->saddr) {
+			if (sysctl_ip_dynaddr > 1) {
+				printk(KERN_INFO "tcp_v4_rebuild_header(): shifting sk->saddr from %d.%d.%d.%d to %d.%d.%d.%d\n",
+					NIPQUAD(sk->saddr), 
+					NIPQUAD(new_saddr));
+			}
+
+			sk->saddr = new_saddr;
+			sk->rcv_saddr = new_saddr;
+			/* sk->prot->rehash(sk); */
+			tcp_v4_rehash(sk);
+		} 
+
+		if (new_saddr != iph->saddr) {
+			if (sysctl_ip_dynaddr > 1) {
+				printk(KERN_INFO "tcp_v4_rebuild_header(): shifting iph->saddr from %d.%d.%d.%d to %d.%d.%d.%d\n",
+					NIPQUAD(iph->saddr), 
+					NIPQUAD(new_saddr));
+			}
+
+			iph->saddr = new_saddr;
+			ip_send_check(iph);
+		} 
+        
+        }
 
 	return 0;
 }

@@ -247,6 +247,11 @@ struct proc_dir_entry {
 	int deleted;		/* delete flag */
 };
 
+typedef	int (read_proc_t)(char *page, char **start, off_t off,
+			  int count, int *eof, void *data);
+typedef	int (write_proc_t)(struct file *file, const char *buffer,
+			   unsigned long count, void *data);
+
 extern int (* dispatch_scsi_info_ptr) (int ino, char *buffer, char **start,
 				off_t offset, int length, int inout);
 

@@ -1,4 +1,4 @@
-/* $Id: salone.c,v 1.1 1997/06/06 09:37:20 ralf Exp $
+/* $Id: salone.c,v 1.1.1.1 1997/06/01 03:16:40 ralf Exp $
  * salone.c: Routines to load into memory and execute stand-along
  *           program images using ARCS PROM firmware.
  *

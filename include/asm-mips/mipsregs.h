@@ -5,8 +5,10 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1994, 1995, 1996 by Ralf Baechle
+ * Copyright (C) 1994, 1995, 1996, 1997 by Ralf Baechle
  * Modified for further R[236]000 support by Paul M. Antoine, 1996.
+ *
+ * $Id: mipsregs.h,v 1.4 1997/09/20 19:02:46 root Exp $
  */
 #ifndef __ASM_MIPS_MIPSREGS_H
 #define __ASM_MIPS_MIPSREGS_H
@@ -160,7 +162,7 @@
  * Manipulate the status register.
  * Mostly used to access the interrupt bits.
  */
-#define BUILD_SET_CP0(name,register)                            \
+#define __BUILD_SET_CP0(name,register)                          \
 extern __inline__ unsigned int                                  \
 set_cp0_##name(unsigned int change, unsigned int new)           \
 {                                                               \
@@ -175,8 +177,9 @@ set_cp0_##name(unsigned int change, unsigned int new)           \
 	return res;                                             \
 }
 
-BUILD_SET_CP0(status,CP0_STATUS)
-BUILD_SET_CP0(cause,CP0_CAUSE)
+__BUILD_SET_CP0(status,CP0_STATUS)
+__BUILD_SET_CP0(cause,CP0_CAUSE)
+__BUILD_SET_CP0(config,CP0_CONFIG)
 
 #endif /* defined (__LANGUAGE_ASSEMBLY__) */
 
@@ -251,6 +254,22 @@ BUILD_SET_CP0(cause,CP0_CAUSE)
  * Status register bits available in all MIPS CPUs.
  */
 #define ST0_IM			0x0000ff00
+#define  STATUSB_IP0		8
+#define  STATUSF_IP0		(1   <<  8)
+#define  STATUSB_IP1		9
+#define  STATUSF_IP1		(1   <<  9)
+#define  STATUSB_IP2		10
+#define  STATUSF_IP2		(1   << 10)
+#define  STATUSB_IP3		11
+#define  STATUSF_IP3		(1   << 11)
+#define  STATUSB_IP4		12
+#define  STATUSF_IP4		(1   << 12)
+#define  STATUSB_IP5		13
+#define  STATUSF_IP5		(1   << 13)
+#define  STATUSB_IP6		14
+#define  STATUSF_IP6		(1   << 14)
+#define  STATUSB_IP7		15
+#define  STATUSF_IP7		(1   << 15)
 #define ST0_DE			0x00010000
 #define ST0_CE			0x00020000
 #define ST0_CH			0x00040000
@@ -290,6 +309,8 @@ BUILD_SET_CP0(cause,CP0_CAUSE)
 #define  CAUSEF_IP6		(1   << 14)
 #define  CAUSEB_IP7		15
 #define  CAUSEF_IP7		(1   << 15)
+#define  CAUSEB_IV		23
+#define  CAUSEF_IV		(1   << 23)
 #define  CAUSEB_CE		28
 #define  CAUSEF_CE		(3   << 28)
 #define  CAUSEB_BD		31
@@ -298,9 +319,18 @@ BUILD_SET_CP0(cause,CP0_CAUSE)
 /*
  * Bits in the coprozessor 0 config register.
  */
-#define CONFIG_DB		(1 <<  4)
-#define CONFIG_IB		(1 <<  5)
-#define CONFIG_SC		(1 << 17)
+#define CONFIG_CM_CACHABLE_NO_WA	0
+#define CONFIG_CM_CACHABLE_WA		1
+#define CONFIG_CM_UNCACHED		2
+#define CONFIG_CM_CACHABLE_NONCOHERENT	3
+#define CONFIG_CM_CACHABLE_CE		4
+#define CONFIG_CM_CACHABLE_COW		5
+#define CONFIG_CM_CACHABLE_CUW		6
+#define CONFIG_CM_CACHABLE_ACCELERATED	7
+#define CONFIG_CM_CMASK			7
+#define CONFIG_DB			(1 <<  4)
+#define CONFIG_IB			(1 <<  5)
+#define CONFIG_SC			(1 << 17)
 
 /*
  * R10000 performance counter definitions.

@@ -5,9 +5,9 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995, 1996, 1997 by Ralf Baechle
+ * Copyright (C) 1995, 1996 by Ralf Baechle
  *
- * $Id: syscalls.h,v 1.7 1997/08/08 18:12:32 miguel Exp $
+ * $Id: syscalls.h,v 1.6 1997/12/06 09:57:39 ralf Exp $
  */
 
 /*
@@ -35,7 +35,7 @@ SYS(sys_time, 1)
 SYS(sys_mknod, 3)
 SYS(sys_chmod, 2)				/* 4015 */
 SYS(sys_chown, 3)
-SYS(sys_break, 0)
+SYS(sys_ni_syscall, 0)
 SYS(sys_stat, 2)
 SYS(sys_lseek, 3)
 SYS(sys_getpid, 0)				/* 4020 */
@@ -49,11 +49,11 @@ SYS(sys_alarm, 1)
 SYS(sys_fstat, 2)
 SYS(sys_pause, 0)
 SYS(sys_utime, 2)				/* 4030 */
-SYS(sys_stty, 0)
-SYS(sys_gtty, 0)
+SYS(sys_ni_syscall, 0)
+SYS(sys_ni_syscall, 0)
 SYS(sys_access, 2)
 SYS(sys_nice, 1)
-SYS(sys_ftime, 0)				/* 4035 */
+SYS(sys_ni_syscall, 0)				/* 4035 */
 SYS(sys_sync, 0)
 SYS(sys_kill, 2)
 SYS(sys_rename, 2)
@@ -62,7 +62,7 @@ SYS(sys_rmdir, 1)				/* 4040 */
 SYS(sys_dup, 1)
 SYS(sys_pipe, 0)
 SYS(sys_times, 1)
-SYS(sys_prof, 0)
+SYS(sys_ni_syscall, 0)
 SYS(sys_brk, 1)					/* 4045 */
 SYS(sys_setgid, 1)
 SYS(sys_getgid, 0)
@@ -70,13 +70,13 @@ SYS(sys_signal, 2)
 SYS(sys_geteuid, 0)
 SYS(sys_getegid, 0)				/* 4050 */
 SYS(sys_acct, 0)
-SYS(sys_phys, 0)
-SYS(sys_lock, 0)
+SYS(sys_ni_syscall, 0)
+SYS(sys_ni_syscall, 0)
 SYS(sys_ioctl, 3)
 SYS(sys_fcntl, 3)				/* 4055 */
-SYS(sys_mpx, 2)
+SYS(sys_ni_syscall, 2)
 SYS(sys_setpgid, 2)
-SYS(sys_ulimit, 0)
+SYS(sys_ni_syscall, 0)
 SYS(sys_olduname, 1)
 SYS(sys_umask, 1)				/* 4060 */
 SYS(sys_chroot, 1)
@@ -116,7 +116,7 @@ SYS(sys_fchmod, 2)
 SYS(sys_fchown, 3)				/* 4095 */
 SYS(sys_getpriority, 2)
 SYS(sys_setpriority, 3)
-SYS(sys_profil, 0)
+SYS(sys_ni_syscall, 0)
 SYS(sys_statfs, 2)
 SYS(sys_fstatfs, 2)				/* 4100 */
 SYS(sys_ioperm, 3)
@@ -208,8 +208,6 @@ SYS(sys_getresuid, 3)
 SYS(sys_query_module, 5)
 SYS(sys_poll, 3)
 SYS(sys_nfsservctl, 3)
-SYS(sys_setresgid, 3)				/* 4190 */
-SYS(sys_getresgid, 3)
 SYS(sys_setresgid, 3)				/* 4190 */
 SYS(sys_getresgid, 3)
 SYS(sys_prctl, 5)

@@ -59,12 +59,15 @@ repeat:
 		goto repeat;
 	}
 	page = pte_page(*pgtable);
-/* this is a hack for non-kernel-mapped video buffers and similar */
+	/* This is a hack for non-kernel-mapped video buffers and similar */
 	if (MAP_NR(page) >= MAP_NR(high_memory))
 		return 0;
 	page += addr & ~PAGE_MASK;
+	/* We can't use flush_page_to_ram() since we're running in
+	 * another context ...
+	 */
+	flush_cache_all();
 	retval = *(unsigned long *) page;
-	flush_page_to_ram(page);
 	return retval;
 }
 
@@ -117,14 +120,17 @@ repeat:
 		handle_mm_fault(tsk, vma, addr, 1);
 		goto repeat;
 	}
-/* this is a hack for non-kernel-mapped video buffers and similar */
-	flush_cache_page(vma, addr);
-	if (MAP_NR(page) < MAP_NR(high_memory)) {
-		*(unsigned long *) (page + (addr & ~PAGE_MASK)) = data;
+	/* This is a hack for non-kernel-mapped video buffers and similar */
+	if (MAP_NR(page) < MAP_NR(high_memory))
+		flush_cache_page(vma, addr);
+	*(unsigned long *) (page + (addr & ~PAGE_MASK)) = data;
+	if (MAP_NR(page) < MAP_NR(high_memory))
 		flush_page_to_ram(page);
-	}
-/* we're bypassing pagetables, so we have to set the dirty bit ourselves */
-/* this should also re-instate whatever read-only mode there was before */
+	/*
+	 * We're bypassing pagetables, so we have to set the dirty bit
+	 * ourselves this should also re-instate whatever read-only mode
+	 * there was before
+	 */
 	set_pte(pgtable, pte_mkdirty(mk_pte(page, vma->vm_page_prot)));
 	flush_tlb_page(vma, addr);
 }
@@ -369,7 +375,7 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 				case 5:
 					tmp = child->tss.fpu.hard.control;
 					break;
-				case 6:
+				case 6:	/* implementation / version register */
 					tmp = 0;
 					break;
 				default:

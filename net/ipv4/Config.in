@@ -36,6 +36,12 @@ bool 'IP: accounting' CONFIG_IP_ACCT
 bool 'IP: masquerading' CONFIG_IP_MASQUERADE
 if [ "$CONFIG_IP_MASQUERADE" != "n" ]; then
   comment 'Protocol-specific masquerading support will be built as modules.'
+  bool 'IP: ICMP masquerading' CONFIG_IP_MASQUERADE_ICMP
+  comment 'Protocol-specific masquerading support will be built as modules.'
+  if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+    tristate 'IP: ipautofw masq support (EXPERIMENTAL)' CONFIG_IP_MASQUERADE_IPAUTOFW
+    tristate 'IP: ipportfw masq support (EXPERIMENTAL)' CONFIG_IP_MASQUERADE_IPPORTFW
+  fi
 fi
 bool 'IP: optimize as router not host' CONFIG_IP_ROUTER
 tristate 'IP: tunneling' CONFIG_NET_IPIP

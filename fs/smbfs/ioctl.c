@@ -11,6 +11,7 @@
 #include <linux/ioctl.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
+
 #include <linux/smb_fs.h>
 #include <linux/smb_mount.h>
 
@@ -20,29 +21,33 @@ int
 smb_ioctl(struct inode *inode, struct file *filp,
 	  unsigned int cmd, unsigned long arg)
 {
+	struct smb_sb_info *server = SMB_SERVER(inode);
 	int result = -EINVAL;
 
 	switch (cmd)
 	{
 	case SMB_IOC_GETMOUNTUID:
-		result = put_user(SMB_SERVER(inode)->mnt->mounted_uid,
-				(uid_t *) arg);
+		result = put_user(server->mnt->mounted_uid, (uid_t *) arg);
 		break;
 
 	case SMB_IOC_NEWCONN:
 	{
 		struct smb_conn_opt opt;
 
-		if (arg == 0)
-		{
-			/* The process offers a new connection upon SIGUSR1 */
-			result = smb_offerconn(SMB_SERVER(inode));
-		}
-		else
+		if (arg)
 		{
 			result = -EFAULT;
 			if (!copy_from_user(&opt, (void *)arg, sizeof(opt)))
-				result = smb_newconn(SMB_SERVER(inode), &opt);
+				result = smb_newconn(server, &opt);
+		}
+		else
+		{
+#if 0
+			/* obsolete option ... print a warning */
+			printk("SMBFS: ioctl deprecated, please upgrade "
+				"smbfs package\n");
+#endif
+			result = 0;
 		}
 		break;
 	}

@@ -1,4 +1,4 @@
-/* $Id: indyIRQ.S,v 1.1 1997/06/06 09:36:13 ralf Exp $
+/* $Id: indyIRQ.S,v 1.2 1997/09/20 19:20:14 root Exp $
  * indyIRQ.S: Interrupt exception dispatch code for FullHouse and
  *            Guiness.
  *
@@ -72,7 +72,7 @@
 	jal	indy_timer_interrupt
 	 nop				# delay slot
 
-	j	ret_from_sys_call
+	j	ret_from_irq
 	 nop				# delay slot
 
 1:
@@ -83,7 +83,7 @@
 	jal	indy_local0_irqdispatch
 	 move	a0, sp			# delay slot
 
-	j	ret_from_sys_call
+	j	ret_from_irq
 	 nop				# delay slot
 
 1:
@@ -95,7 +95,7 @@
 	jal	indy_local1_irqdispatch
 	 nop
 
-	j	ret_from_sys_call
+	j	ret_from_irq
 	 nop
 
 1:
@@ -107,7 +107,7 @@
 	jal	indy_buserror_irq
 	 nop
 
-	j	ret_from_sys_call
+	j	ret_from_irq
 	 nop
 
 1:
@@ -124,6 +124,6 @@
 	jal	indy_8254timer_irq
 	 nop
 1:
-	j	ret_from_sys_call
+	j	ret_from_irq
 	 nop
 	END(indyIRQ)

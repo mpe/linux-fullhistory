@@ -1,4 +1,4 @@
-/* $Id: r2300_scall.S,v 1.1 1997/06/06 09:33:00 ralf Exp $
+/* $Id: r2300_scall.S,v 1.1.1.1 1997/06/01 03:16:42 ralf Exp $
  * r2300_scall.S: R2000/R3000 specific code to handle system calls.
  *
  * Copyright (C) 1994, 1995, 1996 by Ralf Baechle and Andreas Busse

@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.40 1997/10/12 17:01:48 kuznet Exp $
+ * Version:	$Id: ip_output.c,v 1.41 1997/11/28 15:32:37 alan Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -69,6 +69,12 @@
 #include <linux/mroute.h>
 #include <linux/netlink.h>
 #include <linux/ipsec.h>
+
+/*
+ *      Shall we try to damage output packets if routing dev changes?
+ */
+
+int sysctl_ip_dynaddr = 0;
 
 static void __inline__ ip_ll_header_reserve(struct sk_buff *skb)
 {

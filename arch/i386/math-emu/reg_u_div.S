@@ -2,22 +2,24 @@
 /*---------------------------------------------------------------------------+
  |  reg_u_div.S                                                              |
  |                                                                           |
- | Core division routines                                                    |
+ | Divide one FPU_REG by another and put the result in a destination FPU_REG.|
  |                                                                           |
- | Copyright (C) 1992,1993,1995                                              |
- |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail billm@jacobi.maths.monash.edu.au |
+ | Copyright (C) 1992,1993,1995,1997                                         |
+ |                  W. Metzenthen, 22 Parker St, Ormond, Vic 3163, Australia |
+ |                  E-mail   billm@suburbia.net                              |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
 
 /*---------------------------------------------------------------------------+
- |  Kernel for the division routines.                                        |
- |                                                                           |
- |  void reg_u_div(FPU_REG *a, FPU_REG *a,                                   |
- |                 FPU_REG *dest, unsigned int control_word)                 |
+ | Call from C as:                                                           |
+ |    int FPU_u_div(FPU_REG *a, FPU_REG *b, FPU_REG *dest,                   |
+ |                unsigned int control_word, char *sign)                     |
  |                                                                           |
  |  Does not compute the destination exponent, but does adjust it.           |
+ |                                                                           |
+ |    Return value is the tag of the answer, or-ed with FPU_Exception if     |
+ |    one was raised, or -1 on internal error.                               |
  +---------------------------------------------------------------------------*/
 
 #include "exception.h"
@@ -67,9 +69,12 @@ FPU_ovfl_flag:
 	.byte	0
 #endif NON_REENTRANT_FPU
 
+#define REGA	PARAM1
+#define REGB	PARAM2
+#define DEST	PARAM3
 
 .text
-ENTRY(reg_u_div)
+ENTRY(FPU_u_div)
 	pushl	%ebp
 	movl	%esp,%ebp
 #ifndef NON_REENTRANT_FPU
@@ -80,32 +85,28 @@ ENTRY(reg_u_div)
 	pushl	%edi
 	pushl	%ebx
 
-	movl	PARAM1,%esi	/* pointer to num */
-	movl	PARAM2,%ebx	/* pointer to denom */
-	movl	PARAM3,%edi	/* pointer to answer */
+	movl	REGA,%esi
+	movl	REGB,%ebx
+	movl	DEST,%edi
 
-#ifdef DENORM_OPERAND
-	movl	EXP(%esi),%eax
-	cmpl	EXP_UNDER,%eax
-	jg	xOp1_not_denorm
+	movw	EXP(%esi),%dx
+	movw	EXP(%ebx),%ax
+	.byte	0x0f,0xbf,0xc0	/* movsx	%ax,%eax */
+	.byte	0x0f,0xbf,0xd2	/* movsx	%dx,%edx */
+	subl	%eax,%edx
+	addl	EXP_BIAS,%edx
 
-	call	SYMBOL_NAME(denormal_operand)
-	orl	%eax,%eax
-	jnz	fpu_Arith_exit
+	/* A denormal and a large number can cause an exponent underflow */
+	cmpl	EXP_WAY_UNDER,%edx
+	jg	xExp_not_underflow
 
-xOp1_not_denorm:
-	movl	EXP(%ebx),%eax
-	cmpl	EXP_UNDER,%eax
-	jg	xOp2_not_denorm
+	/* Set to a really low value allow correct handling */
+	movl	EXP_WAY_UNDER,%edx
 
-	call	SYMBOL_NAME(denormal_operand)
-	orl	%eax,%eax
-	jnz	fpu_Arith_exit
+xExp_not_underflow:
 
-xOp2_not_denorm:
-#endif DENORM_OPERAND
+	movw    %dx,EXP(%edi)
 
-ENTRY(divide_kernel)
 #ifdef PARANOID
 /*	testl	$0x80000000, SIGH(%esi)	// Dividend */
 /*	je	L_bugged */
@@ -147,7 +148,7 @@ L_no_adjust:
 
 	/* Do the shifting here */
 	/* increase the exponent */
-	incl	EXP(%edi)
+	incw	EXP(%edi)
 
 	/* shift the mantissa right one bit */
 	stc			/* To set the ms bit */
@@ -423,7 +424,7 @@ LRound_ovfl:
 	testb	$255,FPU_ovfl_flag	/* was the num > denom ? */
 	je	LRound_precision
 
-	incl	EXP(%edi)
+	incw	EXP(%edi)
 
 	/* shift the mantissa right one bit */
 	stc			/* Will set the ms bit */
@@ -433,7 +434,7 @@ LRound_ovfl:
 
 /* Round the result as required */
 LRound_precision:
-	decl	EXP(%edi)	/* binary point between 1st & 2nd bits */
+	decw	EXP(%edi)	/* binary point between 1st & 2nd bits */
 
 	movl	%eax,%edx
 	movl	FPU_result_1,%ebx
@@ -462,6 +463,7 @@ L_bugged_2:
 	jmp	L_exit
 
 L_exit:
+	movl	$-1,%eax
 	popl	%ebx
 	popl	%edi
 	popl	%esi

@@ -17,6 +17,7 @@
 #include <linux/ioport.h>
 #include <linux/init.h>
 #include <linux/kbd_ll.h>
+#include <linux/delay.h>
 
 #include <asm/keyboard.h>
 #include <asm/bitops.h>
@@ -195,16 +196,21 @@ static volatile unsigned char resend = 0;
 
 /*
  *	Wait for keyboard controller input buffer is empty.
+ *
+ *	Don't use 'jiffies' so that we don't depend on
+ *	interrupts..
  */
 
 static inline void kb_wait(void)
 {
-	unsigned long start = jiffies;
+	unsigned long timeout = KBC_TIMEOUT;
 
 	do {
 		if (! (inb_p(KBD_STATUS_REG) & KBD_STAT_IBF))
 			return;
-	} while (jiffies - start < KBC_TIMEOUT);
+		udelay(1000);
+		timeout--;
+	} while (timeout);
 #ifdef KBD_REPORT_TIMEOUTS
 	printk(KERN_WARNING "Keyboard timed out\n");
 #endif
@@ -534,29 +540,34 @@ static void keyboard_interrupt(int irq, void *dev_id, struct pt_regs *regs)
  * send_data sends a character to the keyboard and waits
  * for an acknowledge, possibly retrying if asked to. Returns
  * the success status.
+ *
+ * Don't use 'jiffies', so that we don't depend on interrupts
  */
 static int send_data(unsigned char data)
 {
 	int retries = 3;
-	unsigned long start;
 
 	do {
+		unsigned long timeout = KBD_TIMEOUT;
+
 		kb_wait();
 		acknowledge = 0;
 		resend = 0;
 		reply_expected = 1;
 		outb_p(data, KBD_DATA_REG);
-		start = jiffies;
-		do {
+		for (;;) {
 			if (acknowledge)
 				return 1;
-			if (jiffies - start >= KBD_TIMEOUT) {
+			if (resend)
+				break;
+			udelay(1000);
+			if (!--timeout) {
 #ifdef KBD_REPORT_TIMEOUTS
 				printk(KERN_WARNING "Keyboard timeout\n");
 #endif
 				return 0;
 			}
-		} while (!resend);
+		}
 	} while (retries-- > 0);
 #ifdef KBD_REPORT_TIMEOUTS
 	printk(KERN_WARNING "keyboard: Too many NACKs -- noisy kbd cable?\n");

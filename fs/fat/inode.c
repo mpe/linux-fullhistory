@@ -117,6 +117,16 @@ inode->i_ino, inode->i_count);
 
 void fat_delete_inode(struct inode *inode)
 {
+	/*
+	 * Make sure there are no active dependencies ...
+	 */
+	if (MSDOS_I(inode)->i_old)
+		printk("fat_delete_inode: inode %ld, old=%p??\n",
+			inode->i_ino, MSDOS_I(inode)->i_old);
+	if (MSDOS_I(inode)->i_oldlink)
+		printk("fat_delete_inode: inode %ld, oldlink=%p??\n",
+			inode->i_ino, MSDOS_I(inode)->i_oldlink);
+
 	fat_cache_inval_inode(inode);
 	inode->i_size = 0;
 	fat_truncate(inode);

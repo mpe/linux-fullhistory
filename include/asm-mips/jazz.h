@@ -8,6 +8,8 @@
  * Copyright (C) 1995 by Andreas Busse and Ralf Baechle
  *
  * This file is a mess. It really needs some reorganisation!
+ *
+ * $Id: jazz.h,v 1.5 1997/12/01 21:26:48 ralf Exp $
  */
 #ifndef __ASM_MIPS_JAZZ_H 
 #define __ASM_MIPS_JAZZ_H 
@@ -183,8 +185,8 @@ typedef struct {
 /*
  * JAZZ interrupt control registers
  */
-#define JAZZ_IO_IRQ_SOURCE      0xe0100000
-#define JAZZ_IO_IRQ_ENABLE      0xe0100002
+#define JAZZ_IO_IRQ_SOURCE      0xe0010000
+#define JAZZ_IO_IRQ_ENABLE      0xe0010002
 
 /*
  * JAZZ interrupt enable bits
@@ -205,12 +207,12 @@ typedef struct {
  */
 #define JAZZ_TIMER_IRQ          0
 #define JAZZ_KEYBOARD_IRQ       1
-#define JAZZ_ETHERNET_IRQ       13
-#define JAZZ_SERIAL1_IRQ        3
-#define JAZZ_SERIAL2_IRQ        4
-#define JAZZ_PARALLEL_IRQ       5
 #define JAZZ_FLOPPY_IRQ         6 /* needs to be consistent with floppy driver! */
-#define JAZZ_SCSI_INTERRUPT     12
+#define JAZZ_SCSI_IRQ           16
+#define JAZZ_ETHERNET_IRQ       17
+#define JAZZ_SERIAL1_IRQ        18
+#define JAZZ_SERIAL2_IRQ        19
+#define JAZZ_PARALLEL_IRQ       20
 
 /*
  * JAZZ DMA Channels

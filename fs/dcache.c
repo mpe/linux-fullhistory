@@ -744,6 +744,42 @@ char * d_path(struct dentry *dentry, char *buffer, int buflen)
 	return retval;
 }
 
+/*
+ * Check whether a dentry already exists for the given name,
+ * and return the inode number if it has an inode.
+ *
+ * This routine is used to post-process directory listings for
+ * filesystems using synthetic inode numbers, and is necessary
+ * to keep getcwd() working.
+ */
+ino_t find_inode_number(struct dentry *dir, struct qstr *name)
+{
+	struct dentry * dentry;
+	ino_t ino = 0;
+
+	/*
+	 * Check for a fs-specific hash function. Note that we must
+	 * calculate the standard hash first, as the d_op->d_hash()
+	 * routine may choose to leave the hash value unchanged.
+	 */
+	name->hash = full_name_hash(name->name, name->len);
+	if (dir->d_op && dir->d_op->d_hash)
+	{
+		if (dir->d_op->d_hash(dir, name) != 0)
+			goto out;
+	}
+
+	dentry = d_lookup(dir, name);
+	if (dentry)
+	{
+		if (dentry->d_inode)
+			ino = dentry->d_inode->i_ino;
+		dput(dentry);
+	}
+out:
+	return ino;
+}
+
 __initfunc(void dcache_init(void))
 {
 	int i;

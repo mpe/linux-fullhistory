@@ -1,5 +1,3 @@
-#warning "Needs new networking merges before it will work"
-#if 0
 /*
  *	ipddp.c: IP-over-DDP driver for Linux
  *
@@ -309,4 +307,3 @@ void cleanup_module(void)
 }
 
 #endif /* MODULE */
-#endif

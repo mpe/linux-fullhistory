@@ -10,8 +10,11 @@
 #include <asm/offset.h>
 
 #define SAVE_ALL                                         \
+		.set	push;                            \
+		.set	reorder;                         \
 		mfc0	k0, CP0_STATUS;                  \
 		sll	k0, 3;     /* extract cu0 bit */ \
+		.set	pop;                             \
 		bltz	k0, 8f;                          \
 		 move	k1, sp;                          \
 		/* Called from user mode, new stack. */  \
@@ -68,7 +71,10 @@
  * that a modified IE mask will be nullified.
  */
 #define RESTORE_ALL                                      \
+		.set	push;                            \
+		.set	reorder;                         \
 		mfc0	t0, CP0_STATUS;                  \
+		.set	pop;                             \
 		ori	t0, 0x1f;                        \
 		xori	t0, 0x1f;                        \
 		mtc0	t0, CP0_STATUS;                  \

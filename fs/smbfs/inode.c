@@ -55,12 +55,12 @@ static struct super_operations smb_sops =
 unsigned long
 smb_invent_inos(unsigned long n)
 {
-	static unsigned long ino = 1;
+	static unsigned long ino = 2;
 
 	if (ino + 2*n < ino)
 	{
 		/* wrap around */
-		ino += n;
+		ino = 2;
 	}
 	ino += n;
 	return ino;
@@ -93,6 +93,7 @@ smb_get_inode_attr(struct inode *inode, struct smb_fattr *fattr)
 	memset(fattr, 0, sizeof(struct smb_fattr));
 	fattr->f_mode	= inode->i_mode;
 	fattr->f_nlink	= inode->i_nlink;
+	fattr->f_ino	= inode->i_ino;
 	fattr->f_uid	= inode->i_uid;
 	fattr->f_gid	= inode->i_gid;
 	fattr->f_rdev	= inode->i_rdev;
@@ -102,6 +103,15 @@ smb_get_inode_attr(struct inode *inode, struct smb_fattr *fattr)
 	fattr->f_atime	= inode->i_atime;
 	fattr->f_blksize= inode->i_blksize;
 	fattr->f_blocks	= inode->i_blocks;
+
+	fattr->attr	= inode->u.smbfs_i.attr;
+	/*
+	 * Keep the attributes in sync with the inode permissions.
+	 */
+	if (fattr->f_mode & S_IWUSR)
+		fattr->attr &= ~aRONLY;
+	else
+		fattr->attr |= aRONLY;
 }
 
 static void
@@ -112,12 +122,21 @@ smb_set_inode_attr(struct inode *inode, struct smb_fattr *fattr)
 	inode->i_uid	= fattr->f_uid;
 	inode->i_gid	= fattr->f_gid;
 	inode->i_rdev	= fattr->f_rdev;
-	inode->i_size	= fattr->f_size;
-	inode->i_mtime	= fattr->f_mtime;
 	inode->i_ctime	= fattr->f_ctime;
-	inode->i_atime	= fattr->f_atime;
 	inode->i_blksize= fattr->f_blksize;
 	inode->i_blocks = fattr->f_blocks;
+	/*
+	 * Don't change the size and mtime/atime fields
+	 * if we're writing to the file.
+	 */
+	if (!(inode->u.smbfs_i.cache_valid & SMB_F_LOCALWRITE))
+	{
+		inode->i_size  = fattr->f_size;
+		inode->i_mtime = fattr->f_mtime;
+		inode->i_atime = fattr->f_atime;
+	}
+
+	inode->u.smbfs_i.attr = fattr->attr;
 	/*
 	 * Update the "last time refreshed" field for revalidation.
 	 */
@@ -177,9 +196,9 @@ smb_revalidate_inode(struct inode *inode)
 	 * If this is a file opened with write permissions,
 	 * the inode will be up-to-date.
 	 */
-	if (S_ISREG(inode->i_mode) && smb_is_open(inode)) {
-		if (inode->u.smbfs_i.access == SMB_O_RDWR ||
-		    inode->u.smbfs_i.access == SMB_O_WRONLY)
+	if (S_ISREG(inode->i_mode) && smb_is_open(inode))
+	{
+		if (inode->u.smbfs_i.access != SMB_O_RDONLY)
 			goto out;
 	}
 
@@ -237,15 +256,7 @@ smb_refresh_inode(struct inode *inode)
 		goto out;
 	}
 
-	/*
-	 * Kludge alert ... for some reason we can't get attributes
-	 * for the root directory, so just return success.
-	 */
-	error = 0;
-	if (IS_ROOT(dentry))
-		goto out;
-
-	error = smb_proc_getattr(dentry->d_parent, &(dentry->d_name), &fattr);
+	error = smb_proc_getattr(dentry, &fattr);
 	if (!error)
 	{
 		smb_renew_times(dentry);
@@ -261,12 +272,8 @@ smb_refresh_inode(struct inode *inode)
 			 * Big trouble! The inode has become a new object,
 			 * so any operations attempted on it are invalid.
 			 *
-			 * Take a couple of steps to limit damage:
-			 * (1) Mark the inode as bad so that subsequent
-			 *     lookup validations will fail.
-			 * (2) Clear i_nlink so the inode will be released
-			 *     at iput() time. (Unhash it as well?)
-			 * We also invalidate the caches for good measure.
+			 * To limit damage, mark the inode as bad so that
+			 * subsequent lookup validations will fail.
 			 */
 #ifdef SMBFS_PARANOIA
 printk("smb_refresh_inode: %s/%s changed mode, %07o to %07o\n",
@@ -354,7 +361,7 @@ smb_put_super(struct super_block *sb)
 	}
 
 	if (server->conn_pid)
-	       kill_proc(server->conn_pid, SIGTERM, 0);
+	       kill_proc(server->conn_pid, SIGTERM, 1);
 
 	kfree(server->mnt);
 	if (server->packet)
@@ -487,7 +494,8 @@ smb_notify_change(struct inode *inode, struct iattr *attr)
 	struct smb_sb_info *server = SMB_SERVER(inode);
 	struct dentry *dentry = inode->u.smbfs_i.dentry;
 	unsigned int mask = (S_IFREG | S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO);
-	int error, refresh = 0;
+	int error, changed, refresh = 0;
+	struct smb_fattr fattr;
 
 	error = -EIO;
 	if (!dentry)
@@ -515,14 +523,14 @@ smb_notify_change(struct inode *inode, struct iattr *attr)
 
 	if ((attr->ia_valid & ATTR_SIZE) != 0)
 	{
-		error = smb_open(dentry, O_WRONLY);
-		if (error)
-			goto out;
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_notify_change: changing %s/%s, old size=%ld, new size=%ld\n",
 dentry->d_parent->d_name.name, dentry->d_name.name,
 (long) inode->i_size, (long) attr->ia_size);
 #endif
+		error = smb_open(dentry, O_WRONLY);
+		if (error)
+			goto out;
 		error = smb_proc_trunc(server, inode->u.smbfs_i.fileid,
 					 attr->ia_size);
 		if (error)
@@ -531,31 +539,75 @@ dentry->d_parent->d_name.name, dentry->d_name.name,
 		 * We don't implement an i_op->truncate operation,
 		 * so we have to update the page cache here.
 		 */
-		if (attr->ia_size < inode->i_size) {
+		if (attr->ia_size < inode->i_size)
+		{
 			truncate_inode_pages(inode, attr->ia_size);
 			inode->i_size = attr->ia_size;
 		}
 		refresh = 1;
 	}
 
-	if ((attr->ia_valid & (ATTR_CTIME | ATTR_MTIME | ATTR_ATIME)) != 0)
+	/*
+	 * Initialize the fattr and check for changed fields.
+	 * Note: CTIME under SMB is creation time rather than
+	 * change time, so we don't attempt to change it.
+	 */
+	smb_get_inode_attr(inode, &fattr);
+
+	changed = 0;
+	if ((attr->ia_valid & ATTR_MTIME) != 0)
 	{
-		struct smb_fattr fattr;
-
-		smb_get_inode_attr(inode, &fattr);
-		if ((attr->ia_valid & ATTR_CTIME) != 0)
-			fattr.f_ctime = attr->ia_ctime;
-
-		if ((attr->ia_valid & ATTR_MTIME) != 0)
-			fattr.f_mtime = attr->ia_mtime;
-
-		if ((attr->ia_valid & ATTR_ATIME) != 0)
-			fattr.f_atime = attr->ia_atime;
-
-		error = smb_proc_setattr(server, dentry, &fattr);
+		fattr.f_mtime = attr->ia_mtime;
+		changed = 1;
+	}
+	if ((attr->ia_valid & ATTR_ATIME) != 0)
+	{
+		fattr.f_atime = attr->ia_atime;
+		/* Earlier protocols don't have an access time */
+		if (server->opt.protocol >= SMB_PROTOCOL_LANMAN2)
+			changed = 1;
+	}
+	if (changed)
+	{
+		error = smb_proc_settime(dentry, &fattr);
 		if (error)
 			goto out;
 		refresh = 1;
+	}
+
+	/*
+	 * Check for mode changes ... we're extremely limited in
+	 * what can be set for SMB servers: just the read-only bit.
+	 */
+	if ((attr->ia_valid & ATTR_MODE) != 0)
+	{
+#ifdef SMBFS_DEBUG_VERBOSE
+printk("smb_notify_change: %s/%s mode change, old=%x, new=%lx\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, fattr.f_mode,attr->ia_mode);
+#endif
+		changed = 0;
+		if (attr->ia_mode & S_IWUSR)
+		{
+			if (fattr.attr & aRONLY)
+			{
+				fattr.attr &= ~aRONLY;
+				changed = 1;
+			}
+		} else
+		{
+			if (!(fattr.attr & aRONLY))
+			{
+				fattr.attr |= aRONLY;
+				changed = 1;
+			}
+		}
+		if (changed)
+		{
+			error = smb_proc_setattr(dentry, &fattr);
+			if (error)
+				goto out;
+			refresh = 1;
+		}
 	}
 	error = 0;
 

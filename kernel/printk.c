@@ -109,7 +109,7 @@ __initfunc(void console_setup(char *str, int *ints))
  */
 asmlinkage int sys_syslog(int type, char * buf, int len)
 {
-	unsigned long i, j, count;
+	unsigned long i, j, count, flags;
 	int do_clear = 0;
 	char c;
 	int error = -EPERM;
@@ -170,12 +170,19 @@ asmlinkage int sys_syslog(int type, char * buf, int len)
 		error = verify_area(VERIFY_WRITE,buf,len);
 		if (error)
 			goto out;
+		/*
+		 * The logged_chars, log_start, and log_size values may
+		 * change from an interrupt, so we disable interrupts.
+		 */
+		__save_flags(flags);
+		__cli();
 		count = len;
 		if (count > LOG_BUF_LEN)
 			count = LOG_BUF_LEN;
 		if (count > logged_chars)
 			count = logged_chars;
 		j = log_start + log_size - count;
+		__restore_flags(flags);
 		for (i = 0; i < count; i++) {
 			c = *((char *) log_buf+(j++ & (LOG_BUF_LEN-1)));
 			__put_user(c, buf++);

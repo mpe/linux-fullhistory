@@ -1,4 +1,4 @@
-/* $Id: tags.c,v 1.1 1997/06/06 09:37:22 ralf Exp $
+/* $Id: tags.c,v 1.1.1.1 1997/06/01 03:16:40 ralf Exp $
  * tags.c: Initialize the arch tags the way the MIPS kernel setup
  *         expects.
  *

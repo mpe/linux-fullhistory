@@ -202,6 +202,7 @@ EXPORT_SYMBOL(put_cached_page);
 EXPORT_SYMBOL(prune_dcache);
 EXPORT_SYMBOL(shrink_dcache_sb);
 EXPORT_SYMBOL(shrink_dcache_parent);
+EXPORT_SYMBOL(find_inode_number);
 
 #if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
 EXPORT_SYMBOL(do_nfsservctl);
@@ -239,6 +240,7 @@ EXPORT_SYMBOL(make_request);
 EXPORT_SYMBOL(tq_disk);
 EXPORT_SYMBOL(efind_buffer);
 EXPORT_SYMBOL(init_buffer);
+EXPORT_SYMBOL(max_sectors);
 
 /* tty routines */
 EXPORT_SYMBOL(tty_hangup);

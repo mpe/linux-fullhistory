@@ -252,13 +252,6 @@ static __inline__ unsigned long __xchg(unsigned long x, volatile void * ptr, int
 	return x;
 }
 
-extern unsigned long IRQ_vectors[32];
-extern unsigned long exception_handlers[32];
-
-#define set_int_vector(n,addr) \
-	IRQ_vectors[n] = (unsigned long) (addr)
-
-#define set_except_vector(n,addr) \
-	exception_handlers[n] = (unsigned long) (addr)
+extern void set_except_vector(int n, void *addr);
 
 #endif /* __ASM_MIPS_SYSTEM_H */

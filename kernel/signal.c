@@ -118,14 +118,15 @@ printk("SIG dequeue (%s:%d): %d ", current->comm, current->pid,
 
 	case 2: if ((x = s[0] &~ m[0]) != 0)
 			sig = 1;
-		else if ((x = s[1] &~ m[0]) != 0)
+		else if ((x = s[1] &~ m[1]) != 0)
 			sig = _NSIG_BPW + 1;
 		else
 			break;
 		sig += ffz(~x);
 		break;
 
-	case 1: if ((x = *s &~ *m) != 0) sig = ffz(~x) + 1;
+	case 1: if ((x = *s &~ *m) != 0)
+			sig = ffz(~x) + 1;
 		break;
 	}
 

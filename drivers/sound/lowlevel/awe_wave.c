@@ -564,7 +564,7 @@ int attach_awe(void)
 	synth_devs[my_dev] = &awe_operations;
 
 #ifdef CONFIG_AWE32_MIXER
-	if ((my_mixerdev=sound_alloc_mixerdev())==-1) {
+	if ((my_mixerdev=sound_alloc_mixerdev())!=-1) {
 		mixer_devs[my_mixerdev] = &awe_mixer_operations;
 	}
 #endif

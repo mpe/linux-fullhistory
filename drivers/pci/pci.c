@@ -154,8 +154,8 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( PCTECH,		PCTECH_RZ1001,  "RZ1001 (buggy?)"),
 	DEVICE( DPT,		DPT,		"SmartCache/Raid"),
 	DEVICE( OPTI,		OPTI_92C178,	"92C178"),
-	DEVICE( OPTI,		OPTI_82C557,	"82C557"),
-	DEVICE( OPTI,		OPTI_82C558,	"82C558"),
+	DEVICE( OPTI,		OPTI_82C557,	"82C557 Viper-M"),
+	DEVICE( OPTI,		OPTI_82C558,	"82C558 Viper-M ISA+IDE"),
 	DEVICE( OPTI,		OPTI_82C621,	"82C621"),
 	DEVICE( OPTI,		OPTI_82C700,	"82C700"),
 	DEVICE( OPTI,		OPTI_82C701,	"82C701 FireStar Plus"),
@@ -393,15 +393,15 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( INTEL,		INTEL_82865,	"82865"),
 	DEVICE( INTEL,		INTEL_82557,	"82557"),
 	DEVICE( INTEL,		INTEL_82437,	"82437"),
-	DEVICE( INTEL,		INTEL_82371_0,	"82371 Triton PIIX"),
-	DEVICE( INTEL,		INTEL_82371_1,	"82371 Triton PIIX"),
+	DEVICE( INTEL,		INTEL_82371FB_0,"82371FB PIIX ISA"),
+	DEVICE( INTEL,		INTEL_82371FB_1,"82371FB PIIX IDE"),
 	DEVICE( INTEL,		INTEL_82371MX,	"430MX - 82371MX MPIIX"),
 	DEVICE( INTEL,		INTEL_82437MX,	"430MX - 82437MX MTSC"),
 	DEVICE( INTEL,		INTEL_82441,	"82441FX Natoma"),
 	DEVICE( INTEL,		INTEL_82439,	"82439HX Triton II"),
-	DEVICE(	INTEL,		INTEL_82371SB_0,"82371SB Natoma/Triton II PIIX3"),
-	DEVICE(	INTEL,		INTEL_82371SB_1,"82371SB Natoma/Triton II PIIX3"),
-	DEVICE( INTEL,		INTEL_82371SB_2,"82371SB Natoma/Triton II PIIX3"),
+	DEVICE(	INTEL,		INTEL_82371SB_0,"82371SB PIIX3 ISA"),
+	DEVICE(	INTEL,		INTEL_82371SB_1,"82371SB PIIX3 IDE"),
+	DEVICE( INTEL,		INTEL_82371SB_2,"82371SB PIIX3 USB"),
 	DEVICE( INTEL,		INTEL_82437VX,	"82437VX Triton II"),
 	DEVICE( INTEL,		INTEL_82439TX,	"82439TX"),
 	DEVICE( INTEL,		INTEL_82371AB_0,"82371AB PIIX4 ISA"),
@@ -554,11 +554,11 @@ const char *pci_strclass (unsigned int class)
 	      case PCI_CLASS_NOT_DEFINED:		return "Non-VGA device";
 	      case PCI_CLASS_NOT_DEFINED_VGA:		return "VGA compatible device";
 
-	      case PCI_CLASS_STORAGE_SCSI:		return "SCSI storage controller";
-	      case PCI_CLASS_STORAGE_IDE:		return "IDE interface";
+	      case PCI_CLASS_STORAGE_SCSI:		return "SCSI bus controller";
+	      case PCI_CLASS_STORAGE_IDE:		return "IDE controller";
 	      case PCI_CLASS_STORAGE_FLOPPY:		return "Floppy disk controller";
 	      case PCI_CLASS_STORAGE_IPI:		return "IPI bus controller";
-	      case PCI_CLASS_STORAGE_RAID:		return "RAID bus controller";
+	      case PCI_CLASS_STORAGE_RAID:		return "RAID controller";
 	      case PCI_CLASS_STORAGE_OTHER:		return "Unknown mass storage controller";
 
 	      case PCI_CLASS_NETWORK_ETHERNET:		return "Ethernet controller";
@@ -907,7 +907,7 @@ static int sprint_dev_config(struct pci_dev *dev, char *buf, int size)
 		if (len + 40 > size) {
 			return -1;
 		}
-		len += sprintf(buf + len, "IRQ %x.  ", dev->irq);
+		len += sprintf(buf + len, "IRQ %d.  ", dev->irq);
 	}
 
 	if (dev->master) {

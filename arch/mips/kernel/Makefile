@@ -18,6 +18,10 @@ O_OBJS	:= branch.o process.o signal.o entry.o traps.o ptrace.o vm86.o \
 	   r2300_misc.o r2300_scall.o r2300_fpu.o r6000_fpu.o unaligned.o
 OX_OBJS := mips_ksyms.o
 
+ifdef CONFIG_MIPS_FPE_MODULE
+M_OBJS += fpe.o
+endif
+
 #
 # SGI's have very different interrupt/timer hardware.
 #
@@ -29,7 +33,7 @@ endif
 # Do we want to be able to execute IRIX elf binaries?
 #
 ifdef CONFIG_BINFMT_IRIX
-O_OBJS += irixelf.o irixioctl.o irixsig.o sysirix.o
+O_OBJS += irixelf.o irixioctl.o irixsig.o sysirix.o irixinv.o
 endif
 
 #

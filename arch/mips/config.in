@@ -21,17 +21,29 @@ if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
 fi
 bool 'Support for Mips Magnum 4000' CONFIG_MIPS_MAGNUM_4000
 bool 'Support for Olivetti M700-10' CONFIG_OLIVETTI_M700
+if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+  bool 'Support for SGI workstations' CONFIG_SGI
+  if [ "$CONFIG_SGI" = "y" ]; then
+    bool 'Support for SGI graphic devices' CONFIG_SGI_GRAPHICS
+    define_bool CONFIG_UMISC y
+  fi
+fi
+bool 'Support for SNI RM200 PCI' CONFIG_SNI_RM200_PCI
+
+#
+# Select some configuration options automatically for certain systems.
+#
+unset CONFIG_PCI
+unset CONFIG_MIPS_JAZZ
+unset CONFIG_VIDEO_G364
+
+if [ "$CONFIG_ALGOR_P4032" = "y" ]; then
+	define_bool CONFIG_PCI y
+fi
 if [ "$CONFIG_MIPS_MAGNUM_4000" = "y" -o \
      "$CONFIG_OLIVETTI_M700" = "y" ]; then
        define_bool CONFIG_VIDEO_G364 y
 fi
-if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  bool 'Support for SGI workstations' CONFIG_SGI
-  if [ "$CONFIG_SGI" = "y" ]; then
-     bool 'Support for SGI graphic devices' CONFIG_SGI_GRAPHICS
-  fi
-fi
-bool 'Support for SNI RM200 PCI' CONFIG_SNI_RM200_PCI
 if [ "$CONFIG_DESKSTATION_RPC44" = "y" -o \
      "$CONFIG_DESKSTATION_TYNE" = "y" ]; then
 	define_bool CONFIG_MIPS_ARC y
@@ -41,9 +53,7 @@ if [ "$CONFIG_ACER_PICA_61" = "y" -o \
      "$CONFIG_MIPS_MAGNUM_4000" = "y" ]; then
 	define_bool CONFIG_MIPS_JAZZ y
 fi
-unset CONFIG_PCI
-if [ "$CONFIG_SNI_RM200_PCI" = "y" -o \
-     "$CONFIG_ALGOR_P4032" = "y" ]; then
+if [ "$CONFIG_SNI_RM200_PCI" = "y" ]; then
 	define_bool CONFIG_PCI y
 fi
 endmenu
@@ -57,6 +67,7 @@ choice 'CPU type' \
 	 R4300 CONFIG_CPU_R4300	\
 	 R4x00 CONFIG_CPU_R4X00	\
 	 R5000 CONFIG_CPU_R5000	\
+	 R56x0 CONFIG_CPU_NEVADA \
 	 R8000 CONFIG_CPU_R8000	\
 	 R10000 CONFIG_CPU_R10000" R4x00
 endmenu
@@ -70,22 +81,25 @@ else
   define_bool CONFIG_ELF_KERNEL y
   bool 'Generate little endian code' CONFIG_CPU_LITTLE_ENDIAN
 fi
+
 if [ "$CONFIG_CPU_LITTLE_ENDIAN" = "n" ]; then
   define_bool CONFIG_BINFMT_IRIX y
   define_bool CONFIG_FORWARD_KEYBOARD y
 fi
-define_bool CONFIG_BINFMT_ELF y
 define_bool CONFIG_BINFMT_AOUT n
+define_bool CONFIG_BINFMT_ELF y
+tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
   tristate 'Kernel support for MISC binaries' CONFIG_BINFMT_MISC
   tristate 'Kernel support for JAVA binaries (obsolete)' CONFIG_BINFMT_JAVA
 fi
+
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'Sysctl support' CONFIG_SYSCTL
 
 if [ "$CONFIG_SGI" != "y" ]; then
-  tristate 'Parallel port support' CONFIG_PNP_PARPORT
+  tristate 'Parallel port support' CONFIG_PARPORT
 fi
 
 endmenu
@@ -179,17 +193,6 @@ if [ "$CONFIG_SGI" != "y" ]; then
 	endmenu
 fi
 
-# Conditionally compile in the Uniform CD-ROM driver
-if [ "$CONFIG_BLK_DEV_SR" = "y" ]; then
-  define_bool CONFIG_CDROM y
-else
-  if [ "$CONFIG_BLK_DEV_SR" = "m" ]; then
-    define_bool CONFIG_CDROM m
-  else
-    define_bool CONFIG_CDROM n
-  fi
-fi
-
 source fs/Config.in
 
 source fs/nls/Config.in
@@ -222,11 +225,13 @@ mainmenu_option next_comment
 comment 'Kernel hacking'
 
 #bool 'Debug kmalloc/kfree' CONFIG_DEBUG_MALLOC
+bool 'Are you using a crosscompiler' CONFIG_CROSSCOMPILE
+if [ "$CONFIG_MODULES" = "y" ]; then
+  bool ' Build fp execption handler module' CONFIG_MIPS_FPE_MODULE
+fi
 bool 'Remote GDB kernel debugging' CONFIG_REMOTE_DEBUG
 bool 'Kernel profiling support' CONFIG_PROFILE
 if [ "$CONFIG_PROFILE" = "y" ]; then
   int ' Profile shift count' CONFIG_PROFILE_SHIFT 2
 fi
 endmenu
-
-define_bool CONFIG_VGA_CONSOLE y

@@ -3,9 +3,9 @@
  |                                                                           |
  | The entry functions for wm-FPU-emu                                        |
  |                                                                           |
- | Copyright (C) 1992,1993,1994,1996                                         |
+ | Copyright (C) 1992,1993,1994,1996,1997                                    |
  |                  W. Metzenthen, 22 Parker St, Ormond, Vic 3163, Australia |
- |                  E-mail   billm@jacobi.maths.monash.edu.au                |
+ |                  E-mail   billm@suburbia.net                              |
  |                                                                           |
  | See the files "README" and "COPYING" for further copyright and warranty   |
  | information.                                                              |
@@ -54,27 +54,27 @@
 #define _df_d8_ fstp_i    /* unofficial code (1f) */
 
 static FUNC const st_instr_table[64] = {
-  fadd__,   fld_i_,  __BAD__, __BAD__, fadd_i,  ffree_,  faddp_,  _df_c0_,
-  fmul__,   fxch_i,  __BAD__, __BAD__, fmul_i,  _dd_c8_, fmulp_,  _df_c8_,
-  fcom_st,  fp_nop,  __BAD__, __BAD__, _dc_d0_, fst_i_,  _de_d0_, _df_d0_,
-  fcompst,  _d9_d8_, __BAD__, __BAD__, _dc_d8_, fstp_i,  fcompp,  _df_d8_,
-  fsub__,   fp_etc,  __BAD__, finit_,  fsubri,  fucom_,  fsubrp,  fstsw_,
-  fsubr_,   fconst,  fucompp, __BAD__, fsub_i,  fucomp,  fsubp_,  __BAD__,
-  fdiv__,   trig_a,  __BAD__, __BAD__, fdivri,  __BAD__, fdivrp,  __BAD__,
-  fdivr_,   trig_b,  __BAD__, __BAD__, fdiv_i,  __BAD__, fdivp_,  __BAD__,
+  fadd__,   fld_i_,     __BAD__, __BAD__, fadd_i,  ffree_,  faddp_,  _df_c0_,
+  fmul__,   fxch_i,     __BAD__, __BAD__, fmul_i,  _dd_c8_, fmulp_,  _df_c8_,
+  fcom_st,  fp_nop,     __BAD__, __BAD__, _dc_d0_, fst_i_,  _de_d0_, _df_d0_,
+  fcompst,  _d9_d8_,    __BAD__, __BAD__, _dc_d8_, fstp_i,  fcompp,  _df_d8_,
+  fsub__,   FPU_etc,    __BAD__, finit_,  fsubri,  fucom_,  fsubrp,  fstsw_,
+  fsubr_,   fconst,     fucompp, __BAD__, fsub_i,  fucomp,  fsubp_,  __BAD__,
+  fdiv__,   FPU_triga,  __BAD__, __BAD__, fdivri,  __BAD__, fdivrp,  __BAD__,
+  fdivr_,   FPU_trigb,  __BAD__, __BAD__, fdiv_i,  __BAD__, fdivp_,  __BAD__,
 };
 
 #else     /* Support only documented FPU op-codes */
 
 static FUNC const st_instr_table[64] = {
-  fadd__,   fld_i_,  __BAD__, __BAD__, fadd_i,  ffree_,  faddp_,  __BAD__,
-  fmul__,   fxch_i,  __BAD__, __BAD__, fmul_i,  __BAD__, fmulp_,  __BAD__,
-  fcom_st,  fp_nop,  __BAD__, __BAD__, __BAD__, fst_i_,  __BAD__, __BAD__,
-  fcompst,  __BAD__, __BAD__, __BAD__, __BAD__, fstp_i,  fcompp,  __BAD__,
-  fsub__,   fp_etc,  __BAD__, finit_,  fsubri,  fucom_,  fsubrp,  fstsw_,
-  fsubr_,   fconst,  fucompp, __BAD__, fsub_i,  fucomp,  fsubp_,  __BAD__,
-  fdiv__,   trig_a,  __BAD__, __BAD__, fdivri,  __BAD__, fdivrp,  __BAD__,
-  fdivr_,   trig_b,  __BAD__, __BAD__, fdiv_i,  __BAD__, fdivp_,  __BAD__,
+  fadd__,   fld_i_,     __BAD__, __BAD__, fadd_i,  ffree_,  faddp_,  __BAD__,
+  fmul__,   fxch_i,     __BAD__, __BAD__, fmul_i,  __BAD__, fmulp_,  __BAD__,
+  fcom_st,  fp_nop,     __BAD__, __BAD__, __BAD__, fst_i_,  __BAD__, __BAD__,
+  fcompst,  __BAD__,    __BAD__, __BAD__, __BAD__, fstp_i,  fcompp,  __BAD__,
+  fsub__,   FPU_etc,    __BAD__, finit_,  fsubri,  fucom_,  fsubrp,  fstsw_,
+  fsubr_,   fconst,     fucompp, __BAD__, fsub_i,  fucomp,  fsubp_,  __BAD__,
+  fdiv__,   FPU_triga,  __BAD__, __BAD__, fdivri,  __BAD__, fdivrp,  __BAD__,
+  fdivr_,   FPU_trigb,  __BAD__, __BAD__, fdiv_i,  __BAD__, fdivp_,  __BAD__,
 };
 
 #endif NO_UNDOC_CODE
@@ -95,7 +95,7 @@ static FUNC const st_instr_table[64] = {
 
 /* Un-documented FPU op-codes supported by default. (see above) */
 
-static unsigned char const type_table[64] = {
+static u_char const type_table[64] = {
   _REGI_, _NONE_, _null_, _null_, _REGIi, _REGi_, _REGIp, _REGi_,
   _REGI_, _REGIn, _null_, _null_, _REGIi, _REGI_, _REGIp, _REGI_,
   _REGIc, _NONE_, _null_, _null_, _REGIc, _REG0_, _REGIc, _REG0_,
@@ -108,7 +108,7 @@ static unsigned char const type_table[64] = {
 
 #else     /* Support only documented FPU op-codes */
 
-static unsigned char const type_table[64] = {
+static u_char const type_table[64] = {
   _REGI_, _NONE_, _null_, _null_, _REGIi, _REGi_, _REGIp, _null_,
   _REGI_, _REGIn, _null_, _null_, _REGIi, _null_, _REGIp, _null_,
   _REGIc, _NONE_, _null_, _null_, _null_, _REG0_, _null_, _null_,
@@ -123,26 +123,26 @@ static unsigned char const type_table[64] = {
 
 
 #ifdef RE_ENTRANT_CHECKING
-char emulating=0;
+u_char emulating=0;
 #endif RE_ENTRANT_CHECKING
 
-static int valid_prefix(unsigned char *Byte, unsigned char **fpu_eip,
+static int valid_prefix(u_char *Byte, u_char **fpu_eip,
 			overrides *override);
 
 asmlinkage void math_emulate(long arg)
 {
-  unsigned char  FPU_modrm, byte1;
+  u_char  FPU_modrm, byte1;
   unsigned short code;
   fpu_addr_modes addr_modes;
   int unmasked;
   FPU_REG loaded_data;
+  FPU_REG *st0_ptr;
+  u_char	  loaded_tag, st0_tag;
   void *data_address;
   struct address data_sel_off;
   struct address entry_sel_off;
   unsigned long code_base = 0;
   unsigned long code_limit = 0;  /* Initialized to stop compiler warnings */
-  char	       st0_tag;
-  FPU_REG      *st0_ptr;
   struct desc_struct code_descriptor;
 
 #ifdef RE_ENTRANT_CHECKING
@@ -155,15 +155,6 @@ asmlinkage void math_emulate(long arg)
 
   if (!current->used_math)
     {
-      int i;
-      for ( i = 0; i < 8; i++ )
-	{
-	  /* Make sure that the registers are compatible
-	     with the assumptions of the emulator. */
-	  if ( !((regs[i].exp == EXP_UNDER) && (regs[i].sigh == 0)
-		 && (regs[i].sigl == 0)) )
-	    regs[i].sigh |= 0x80000000;
-	}
       finit();
       current->used_math = 1;
     }
@@ -221,7 +212,7 @@ asmlinkage void math_emulate(long arg)
   if (current->flags & PF_PTRACED)
     FPU_lookahead = 0;
 
-  if ( !valid_prefix(&byte1, (unsigned char **)&FPU_EIP,
+  if ( !valid_prefix(&byte1, (u_char **)&FPU_EIP,
 		     &addr_modes.override) )
     {
       RE_ENTRANT_CHECK_OFF;
@@ -264,7 +255,7 @@ do_another_FPU_instruction:
 
   RE_ENTRANT_CHECK_OFF;
   FPU_code_verify_area(1);
-  get_user(FPU_modrm, (unsigned char *) FPU_EIP);
+  FPU_get_user(FPU_modrm, (u_char *) FPU_EIP);
   RE_ENTRANT_CHECK_ON;
   FPU_EIP++;
 
@@ -287,6 +278,7 @@ do_another_FPU_instruction:
 	   *  interrupts here.
 	   */
 	do_the_FPU_interrupt:
+
 	  FPU_EIP = FPU_ORIG_EIP;	/* Point to current FPU instruction. */
 
 	  RE_ENTRANT_CHECK_OFF;
@@ -309,11 +301,11 @@ do_another_FPU_instruction:
 
       if ( (addr_modes.default_mode & SIXTEEN)
 	  ^ (addr_modes.override.address_size == ADDR_SIZE_PREFIX) )
-	data_address = get_address_16(FPU_modrm, &FPU_EIP, &data_sel_off,
-				      addr_modes);
+	data_address = FPU_get_address_16(FPU_modrm, &FPU_EIP, &data_sel_off,
+					  addr_modes);
       else
-	data_address = get_address(FPU_modrm, &FPU_EIP, &data_sel_off,
-				   addr_modes);
+	data_address = FPU_get_address(FPU_modrm, &FPU_EIP, &data_sel_off,
+				       addr_modes);
 
       if ( addr_modes.default_mode )
 	{
@@ -326,7 +318,7 @@ do_another_FPU_instruction:
 	  unsigned short status1 = partial_status;
 
 	  st0_ptr = &st(0);
-	  st0_tag = st0_ptr->tag;
+	  st0_tag = FPU_gettag0();
 
 	  /* Stack underflow has priority */
 	  if ( NOT_EMPTY_ST0 )
@@ -342,29 +334,34 @@ do_another_FPU_instruction:
 	      switch ( (byte1 >> 1) & 3 )
 		{
 		case 0:
-		  unmasked = reg_load_single((float *)data_address,
+		  unmasked = FPU_load_single((float *)data_address,
 					     &loaded_data);
+		  loaded_tag = unmasked & 0xff;
+		  unmasked &= ~0xff;
 		  break;
 		case 1:
-		  reg_load_int32((long *)data_address, &loaded_data);
+		  loaded_tag = FPU_load_int32((long *)data_address, &loaded_data);
 		  break;
 		case 2:
-		  unmasked = reg_load_double((double *)data_address,
+		  unmasked = FPU_load_double((double *)data_address,
 					     &loaded_data);
+		  loaded_tag = unmasked & 0xff;
+		  unmasked &= ~0xff;
 		  break;
 		case 3:
-		  reg_load_int16((short *)data_address, &loaded_data);
+		default:  /* Used here to suppress gcc warnings. */
+		  loaded_tag = FPU_load_int16((short *)data_address, &loaded_data);
 		  break;
 		}
-	      
+
 	      /* No more access to user memory, it is safe
 		 to use static data now */
 
 	      /* NaN operands have the next priority. */
 	      /* We have to delay looking at st(0) until after
 		 loading the data, because that data might contain an SNaN */
-	      if ( (st0_tag == TW_NaN) ||
-		  (loaded_data.tag == TW_NaN) )
+	      if ( ((st0_tag == TAG_Special) && isNaN(st0_ptr)) ||
+		  ((loaded_tag == TAG_Special) && isNaN(&loaded_data)) )
 		{
 		  /* Restore the status word; we might have loaded a
 		     denormal. */
@@ -375,22 +372,22 @@ do_another_FPU_instruction:
 		      EXCEPTION(EX_Invalid);
 		      setcc(SW_C3 | SW_C2 | SW_C0);
 		      if ( (FPU_modrm & 0x08) && (control_word & CW_Invalid) )
-			pop();             /* fcomp, masked, so we pop. */
+			FPU_pop();             /* fcomp, masked, so we pop. */
 		    }
 		  else
 		    {
+		      if ( loaded_tag == TAG_Special )
+			loaded_tag = FPU_Special(&loaded_data);
 #ifdef PECULIAR_486
 		      /* This is not really needed, but gives behaviour
 			 identical to an 80486 */
 		      if ( (FPU_modrm & 0x28) == 0x20 )
 			/* fdiv or fsub */
-			real_2op_NaN(&loaded_data, st0_ptr,
-				     st0_ptr);
+			real_2op_NaN(&loaded_data, loaded_tag, 0, &loaded_data);
 		      else
 #endif PECULIAR_486
 			/* fadd, fdivr, fmul, or fsubr */
-			real_2op_NaN(st0_ptr, &loaded_data,
-				     st0_ptr);
+			real_2op_NaN(&loaded_data, loaded_tag, 0, st0_ptr);
 		    }
 		  goto reg_mem_instr_done;
 		}
@@ -401,11 +398,13 @@ do_another_FPU_instruction:
 		  if ( (FPU_modrm & 0x38) == 0x38 )
 		    {
 		      /* fdivr */
-		      if ( (st0_tag == TW_Zero) &&
-			  (loaded_data.tag == TW_Valid) )
+		      if ( (st0_tag == TAG_Zero) &&
+			   ((loaded_tag == TAG_Valid)
+			    || (loaded_tag == TAG_Special
+				&& isdenormal(&loaded_data))) )
 			{
-			  if ( divide_by_zero(loaded_data.sign,
-					      st0_ptr) )
+			  if ( FPU_divide_by_zero(0, getsign(&loaded_data))
+			       < 0 )
 			    {
 			      /* We use the fact here that the unmasked
 				 exception in the loaded data was for a
@@ -414,6 +413,8 @@ do_another_FPU_instruction:
 			      partial_status &= ~SW_Denorm_Op;
 			      partial_status |= status1 & SW_Denorm_Op;
 			    }
+			  else
+			    setsign(st0_ptr, getsign(&loaded_data));
 			}
 		    }
 		  goto reg_mem_instr_done;
@@ -423,43 +424,38 @@ do_another_FPU_instruction:
 		{
 		case 0:         /* fadd */
 		  clear_C1();
-		  reg_add(st0_ptr, &loaded_data, st0_ptr,
-			  control_word);
+		  FPU_add(&loaded_data, loaded_tag, 0, control_word);
 		  break;
 		case 1:         /* fmul */
 		  clear_C1();
-		  reg_mul(st0_ptr, &loaded_data, st0_ptr,
-			  control_word);
+		  FPU_mul(&loaded_data, loaded_tag, 0, control_word);
 		  break;
 		case 2:         /* fcom */
-		  compare_st_data(&loaded_data);
+		  FPU_compare_st_data(&loaded_data, loaded_tag);
 		  break;
 		case 3:         /* fcomp */
-		  if ( !compare_st_data(&loaded_data) && !unmasked )
-		    pop();
+		  if ( !FPU_compare_st_data(&loaded_data, loaded_tag)
+		       && !unmasked )
+		    FPU_pop();
 		  break;
 		case 4:         /* fsub */
 		  clear_C1();
-		  reg_sub(st0_ptr, &loaded_data, st0_ptr,
-			  control_word);
+		  FPU_sub(LOADED|loaded_tag, (int)&loaded_data, control_word);
 		  break;
 		case 5:         /* fsubr */
 		  clear_C1();
-		  reg_sub(&loaded_data, st0_ptr, st0_ptr,
-			  control_word);
+		  FPU_sub(REV|LOADED|loaded_tag, (int)&loaded_data, control_word);
 		  break;
 		case 6:         /* fdiv */
 		  clear_C1();
-		  reg_div(st0_ptr, &loaded_data, st0_ptr,
-			  control_word);
+		  FPU_div(LOADED|loaded_tag, (int)&loaded_data, control_word);
 		  break;
 		case 7:         /* fdivr */
 		  clear_C1();
-		  if ( st0_tag == TW_Zero )
+		  if ( st0_tag == TAG_Zero )
 		    partial_status = status1;  /* Undo any denorm tag,
-					       zero-divide has priority. */
-		  reg_div(&loaded_data, st0_ptr, st0_ptr,
-			  control_word);
+						  zero-divide has priority. */
+		  FPU_div(REV|LOADED|loaded_tag, (int)&loaded_data, control_word);
 		  break;
 		}
 	    }
@@ -471,10 +467,10 @@ do_another_FPU_instruction:
 		  EXCEPTION(EX_StackUnder);
 		  setcc(SW_C3 | SW_C2 | SW_C0);
 		  if ( (FPU_modrm & 0x08) && (control_word & CW_Invalid) )
-		    pop();             /* fcomp */
+		    FPU_pop();             /* fcomp */
 		}
 	      else
-		stack_underflow();
+		FPU_stack_underflow();
 	    }
 	reg_mem_instr_done:
 	  operand_address = data_sel_off;
@@ -482,8 +478,8 @@ do_another_FPU_instruction:
       else
 	{
 	  if ( !(no_ip_update =
-		 load_store_instr(((FPU_modrm & 0x38) | (byte1 & 6)) >> 1,
-				  addr_modes, data_address)) )
+		 FPU_load_store(((FPU_modrm & 0x38) | (byte1 & 6)) >> 1,
+				addr_modes, data_address)) )
 	    {
 	      operand_address = data_sel_off;
 	    }
@@ -493,7 +489,7 @@ do_another_FPU_instruction:
   else
     {
       /* None of these instructions access user memory */
-      unsigned char instr_index = (FPU_modrm & 0x38) | (byte1 & 7);
+      u_char instr_index = (FPU_modrm & 0x38) | (byte1 & 7);
 
 #ifdef PECULIAR_486
       /* This is supposed to be undefined, but a real 80486 seems
@@ -503,7 +499,7 @@ do_another_FPU_instruction:
 #endif PECULIAR_486
 
       st0_ptr = &st(0);
-      st0_tag = st0_ptr->tag;
+      st0_tag = FPU_gettag0();
       switch ( type_table[(int) instr_index] )
 	{
 	case _NONE_:   /* also _REGIc: _REGIn */
@@ -511,28 +507,28 @@ do_another_FPU_instruction:
 	case _REG0_:
 	  if ( !NOT_EMPTY_ST0 )
 	    {
-	      stack_underflow();
+	      FPU_stack_underflow();
 	      goto FPU_instruction_done;
 	    }
 	  break;
 	case _REGIi:
 	  if ( !NOT_EMPTY_ST0 || !NOT_EMPTY(FPU_rm) )
 	    {
-	      stack_underflow_i(FPU_rm);
+	      FPU_stack_underflow_i(FPU_rm);
 	      goto FPU_instruction_done;
 	    }
 	  break;
 	case _REGIp:
 	  if ( !NOT_EMPTY_ST0 || !NOT_EMPTY(FPU_rm) )
 	    {
-	      stack_underflow_pop(FPU_rm);
+	      FPU_stack_underflow_pop(FPU_rm);
 	      goto FPU_instruction_done;
 	    }
 	  break;
 	case _REGI_:
 	  if ( !NOT_EMPTY_ST0 || !NOT_EMPTY(FPU_rm) )
 	    {
-	      stack_underflow();
+	      FPU_stack_underflow();
 	      goto FPU_instruction_done;
 	    }
 	  break;
@@ -558,14 +554,14 @@ FPU_fwait_done:
 
 #ifdef DEBUG
   RE_ENTRANT_CHECK_OFF;
-  emu_printall();
+  FPU_printall();
   RE_ENTRANT_CHECK_ON;
 #endif DEBUG
 
   if (FPU_lookahead && !need_resched)
     {
       FPU_ORIG_EIP = FPU_EIP - code_base;
-      if ( valid_prefix(&byte1, (unsigned char **)&FPU_EIP,
+      if ( valid_prefix(&byte1, (u_char **)&FPU_EIP,
 			&addr_modes.override) )
 	goto do_another_FPU_instruction;
     }
@@ -581,17 +577,17 @@ FPU_fwait_done:
    all prefix bytes, further changes are needed in the emulator code
    which accesses user address space. Access to separate segments is
    important for msdos emulation. */
-static int valid_prefix(unsigned char *Byte, unsigned char **fpu_eip,
+static int valid_prefix(u_char *Byte, u_char **fpu_eip,
 			overrides *override)
 {
-  unsigned char byte;
-  unsigned char *ip = *fpu_eip;
+  u_char byte;
+  u_char *ip = *fpu_eip;
 
   *override = (overrides) { 0, 0, PREFIX_DEFAULT };       /* defaults */
 
   RE_ENTRANT_CHECK_OFF;
   FPU_code_verify_area(1);
-  get_user(byte, ip);
+  FPU_get_user(byte, ip);
   RE_ENTRANT_CHECK_ON;
 
   while ( 1 )
@@ -637,7 +633,7 @@ static int valid_prefix(unsigned char *Byte, unsigned char **fpu_eip,
 	  ip++;
 	  RE_ENTRANT_CHECK_OFF;
 	  FPU_code_verify_area(1);
-	  get_user(byte, ip);
+	  FPU_get_user(byte, ip);
 	  RE_ENTRANT_CHECK_ON;
 	  break;
 	case FWAIT_OPCODE:
@@ -677,19 +673,79 @@ void math_abort(struct info * info, unsigned int signal)
 
 
 
-void restore_i387_soft(struct _fpstate *buf)
-{
-  fpu_addr_modes addr_modes = {{ 0, 0, PREFIX_DEFAULT }, 0};
+#define S387 ((struct i387_soft_struct *)s387)
+#define sstatus_word() \
+  ((S387->swd & ~SW_Top & 0xffff) | ((S387->ftop << SW_Top_Shift) & SW_Top))
 
-  frstor(addr_modes, (char *)buf);
+void restore_i387_soft(void *s387, struct _fpstate *buf)
+{
+  u_char *d = (u_char *)buf;
+  int offset, other, i, tags, regnr, tag, newtop;
+
+  RE_ENTRANT_CHECK_OFF;
+  FPU_verify_area(VERIFY_READ, d, 7*4 + 8*10);
+  __copy_from_user(&S387->cwd, d, 7*4);
+  RE_ENTRANT_CHECK_ON;
+
+  d += 7*4;
+
+  S387->ftop = (S387->swd >> SW_Top_Shift) & 7;
+  offset = (S387->ftop & 7) * 10;
+  other = 80 - offset;
+
+  RE_ENTRANT_CHECK_OFF;
+  /* Copy all registers in stack order. */
+  __copy_from_user(((u_char *)&S387->st_space)+offset, d, other);
+  if ( offset )
+    __copy_from_user((u_char *)&S387->st_space, d+other, offset);
+  RE_ENTRANT_CHECK_ON;
+
+  /* The tags may need to be corrected now. */
+  tags = S387->twd;
+  newtop = S387->ftop;
+  for ( i = 0; i < 8; i++ )
+    {
+      regnr = (i+newtop) & 7;
+      if ( ((tags >> ((regnr & 7)*2)) & 3) != TAG_Empty )
+	{
+	  /* The loaded data over-rides all other cases. */
+	  tag = FPU_tagof((FPU_REG *)((u_char *)S387->st_space + 10*regnr));
+	  tags &= ~(3 << (regnr*2));
+	  tags |= (tag & 3) << (regnr*2);
+	}
+    }
+  S387->twd = tags;
+
 }
 
 
-struct _fpstate * save_i387_soft(struct _fpstate * buf)
+struct _fpstate * save_i387_soft(void *s387, struct _fpstate * buf)
 {
-  fpu_addr_modes addr_modes = {{ 0, 0, PREFIX_DEFAULT }, 0};
+  u_char *d = (u_char *)buf;
+  int offset = (S387->ftop & 7) * 10, other = 80 - offset;
 
-  fsave(addr_modes, (char *)buf);
+  RE_ENTRANT_CHECK_OFF;
+  FPU_verify_area(VERIFY_WRITE, d, 7*4 + 8*10);
+#ifdef PECULIAR_486
+  S387->cwd &= ~0xe080;
+  /* An 80486 sets all the reserved bits to 1. */
+  S387->cwd |= 0xffff0000;
+  S387->swd = sstatus_word() | 0xffff0000;
+  S387->twd |= 0xffff0000;
+  S387->fcs |= 0xf8000000;
+  S387->fos |= 0xffff0000;
+#endif PECULIAR_486
+  __copy_to_user(d, &S387->cwd, 7*4);
+  RE_ENTRANT_CHECK_ON;
+
+  d += 7*4;
+
+  RE_ENTRANT_CHECK_OFF;
+  /* Copy all registers in stack order. */
+  __copy_to_user(d, ((u_char *)&S387->st_space)+offset, other);
+  if ( offset )
+    __copy_to_user(d+other, (u_char *)&S387->st_space, offset);
+  RE_ENTRANT_CHECK_ON;
 
   return buf;
 }

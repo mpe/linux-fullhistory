@@ -2,7 +2,7 @@
 /*
  * linux/drivers/block/ide-cd.c
  * Copyright (C) 1994, 1995, 1996  scott snyder  <snyder@fnald0.fnal.gov>
- * Copyright (C) 1996, 1997  Erik Andersen <andersee@debian.org>
+ * Copyright (C) 1996-1998  Erik Andersen <andersee@debian.org>
  * May be copied or modified under the terms of the GNU General Public
  * License.  See linux/COPYING for more information.
  *
@@ -27,13 +27,6 @@
  *     unless you have a patch to fix it.  I am working on it...)
  * -Implement ide_cdrom_select_speed using the generic cdrom interface
  * -Fix ide_cdrom_reset so that it works (it does nothing right now)
- * -When trying to mount a cdrom with the tray open, you get an billion
- *     "tray open or drive not ready" messages until the tray gets closed.
- *     This is because ide-cd does not properly return drive_status immediatly,
- *     but instead waits for the drive to close first (bad, bad, bad)
- *     and keeps on trying, and failing...  This bug was revealed by the 
- *     recent changes to the Uniform CD-ROm driver, and I havn't had a 
- *     chance to fix it yet.
  *
  * MOSTLY DONE LIST:
  *  Query the drive to find what features are available
@@ -185,7 +178,12 @@
  *                        Added identifier so new Sanyo CD-changer works
  *                        Better detection if door locking isn't supported
  *
+ * 4.06  Dec 17, 1997  -- fixed endless "tray open" messages  -ml
+ * 4.07  Dec 17, 1997  -- fallback to set pc->stat on "tray open"
+ *
  *************************************************************************/
+
+#define IDECD_VERSION "4.07"
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -194,11 +192,8 @@
 #include <linux/delay.h>
 #include <linux/timer.h>
 #include <linux/malloc.h>
-#include <linux/ioport.h>
 #include <linux/interrupt.h>
-#include <linux/blkdev.h>
 #include <linux/errno.h>
-#include <linux/hdreg.h>
 #include <linux/cdrom.h>
 #include <asm/irq.h>
 #include <asm/io.h>
@@ -418,7 +413,8 @@ static void cdrom_end_request (int uptodate, ide_drive_t *drive)
 					  (struct packet_command *)
 					  	pc->sense_data);
 	}
-
+	if (rq->cmd == READ && !rq->current_nr_sectors)
+		uptodate = 1;
 	ide_end_request (uptodate, HWGROUP(drive));
 }
 
@@ -443,7 +439,7 @@ static int cdrom_decode_status (ide_drive_t *drive, int good_stat,
 	sense_key = err >> 4;
 
 	if (rq == NULL)
-		printk ("%s : missing request in cdrom_decode_status\n",
+		printk ("%s: missing request in cdrom_decode_status\n",
 			drive->name);
 	else {
 		cmd = rq->cmd;
@@ -477,16 +473,13 @@ static int cdrom_decode_status (ide_drive_t *drive, int good_stat,
 				   because workman constantly polls the drive
 				   with this command, and we don't want
 				   to uselessly fill up the syslog. */
-				if (pc->c[0] != SCMD_READ_SUBCHANNEL) {
+				if (pc->c[0] != SCMD_READ_SUBCHANNEL)
 					printk ("%s: tray open or drive not ready\n",
 						drive->name);
-					return 1;
-				}
 			} else if (sense_key == UNIT_ATTENTION) {
 				/* Check for media change. */
 				cdrom_saw_media_change (drive);
-				printk (" %s: media changed\n", drive->name);
-				return 0;
+				printk ("%s: media changed\n", drive->name);
 			} else {
 				/* Otherwise, print an error. */
 				ide_dump_status (drive, "packet command error",
@@ -521,7 +514,7 @@ static int cdrom_decode_status (ide_drive_t *drive, int good_stat,
 				cdrom_saw_media_change (drive);
 
 				/* Fail the request. */
-				printk ("%s : tray open\n", drive->name);
+				printk ("%s: tray open\n", drive->name);
 				cdrom_end_request (0, drive);
 			} else if (sense_key == UNIT_ATTENTION) {
 				/* Media change. */
@@ -591,7 +584,6 @@ static int cdrom_start_packet_command (ide_drive_t *drive, int xferlen,
 	if (info->dma)
 		(void) (HWIF(drive)->dmaproc(ide_dma_begin, drive));
 
-
 	if (CDROM_CONFIG_FLAGS (drive)->drq_interrupt) {
 		ide_set_handler (drive, handler, WAIT_CMD);
 		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG); /* packet command */
@@ -619,7 +611,8 @@ static int cdrom_transfer_packet_command (ide_drive_t *drive,
 		int stat_dum;
 
 		/* Check for errors. */
-		if (cdrom_decode_status (drive, DRQ_STAT, &stat_dum)) return 1;
+		if (cdrom_decode_status (drive, DRQ_STAT, &stat_dum))
+			return 1;
 	} else {
 		/* Otherwise, we must wait for DRQ to get set. */
 		if (ide_wait_stat (drive, DRQ_STAT, BUSY_STAT, WAIT_READY))
@@ -746,12 +739,12 @@ static void cdrom_read_intr (ide_drive_t *drive)
 	/* Check for errors. */
 	if (dma) {
 		info->dma = 0;
-		if ((dma_error = HWIF(drive)->dmaproc(ide_dma_status_bad, drive)))
+		if ((dma_error = HWIF(drive)->dmaproc(ide_dma_end, drive)))
 			HWIF(drive)->dmaproc(ide_dma_off, drive);
-		(void) (HWIF(drive)->dmaproc(ide_dma_abort, drive));
 	}
 
-	if (cdrom_decode_status (drive, 0, &stat)) return;
+	if (cdrom_decode_status (drive, 0, &stat))
+		return;
  
 	if (dma) {
 		if (!dma_error) {
@@ -763,7 +756,6 @@ static void cdrom_read_intr (ide_drive_t *drive)
 			ide_error (drive, "dma error", stat);
 		return;
 	}
-
 
 	/* Read the interrupt reason and the transfer length. */
 	ireason = IN_BYTE (IDE_NSECTOR_REG);
@@ -779,7 +771,6 @@ static void cdrom_read_intr (ide_drive_t *drive)
 			cdrom_end_request (0, drive);
 		} else
 			cdrom_end_request (1, drive);
-
 		return;
 	}
 
@@ -990,7 +981,8 @@ static void cdrom_seek_intr (ide_drive_t *drive)
 	int stat;
 	static int retry = 10;
 
-	if (cdrom_decode_status (drive, 0, &stat)) return;
+	if (cdrom_decode_status (drive, 0, &stat))
+		return;
 	CDROM_CONFIG_FLAGS(drive)->seeking = 1;
 
 	if (retry && jiffies - info->start_seek > IDECD_SEEK_TIMER) {
@@ -1088,7 +1080,8 @@ static void cdrom_pc_intr (ide_drive_t *drive)
 	struct packet_command *pc = (struct packet_command *)rq->buffer;
 
 	/* Check for errors. */
-	if (cdrom_decode_status (drive, 0, &stat)) return;
+	if (cdrom_decode_status (drive, 0, &stat))
+		return;
 
 	/* Read the interrupt reason and the transfer length. */
 	ireason = IN_BYTE (IDE_NSECTOR_REG);
@@ -1251,8 +1244,11 @@ int cdrom_queue_packet_command (ide_drive_t *drive, struct packet_command *pc)
 		ide_init_drive_cmd (&req);
 		req.cmd = PACKET_COMMAND;
 		req.buffer = (char *)pc;
-		(void) ide_do_drive_cmd (drive, &req, ide_wait);
-
+		if (ide_do_drive_cmd (drive, &req, ide_wait)) {
+			printk("%s: do_drive_cmd returned stat=%02x,err=%02x\n",
+				drive->name, req.buffer[0], req.buffer[1]);
+			/* FIXME: we should probably abort/retry or something */
+		}
 		if (pc->stat != 0) {
 			/* The request failed.  Retry if it was due to a unit
 			   attention status
@@ -2692,7 +2688,7 @@ static int ide_cdrom_register (ide_drive_t *drive, int nslots)
 static
 int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 {
-	int stat, nslots;
+	int stat, nslots, attempts = 3;
  	struct {
 		char pad[8];
 		struct atapi_capabilities_page cap;
@@ -2703,14 +2699,15 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 	if (CDROM_CONFIG_FLAGS (drive)->nec260)
 		return nslots;
 
-	stat = cdrom_mode_sense (drive, PAGE_CAPABILITIES, 0,
-				 (char *)&buf, sizeof (buf), NULL);
-	if (stat)
-		return nslots;
+	do {	/* we seem to get stat=0x01,err=0x00 the first time (??) */
+		if (attempts-- <= 0)
+			return 0;
+		stat = cdrom_mode_sense (drive, PAGE_CAPABILITIES, 0,
+				 	(char *)&buf, sizeof (buf), NULL);
+	} while (stat);
 
 	if (buf.cap.lock == 0)
 		CDROM_CONFIG_FLAGS (drive)->no_doorlock = 1;
-
 	if (buf.cap.cd_r_write)
 		CDROM_CONFIG_FLAGS (drive)->cd_r = 1;
 	if (buf.cap.cd_rw_write)
@@ -2737,11 +2734,15 @@ int ide_cdrom_probe_capabilities (ide_drive_t *drive)
 		}
 	}
 
-	CDROM_STATE_FLAGS (drive)->curent_speed  = ntohs(buf.cap.curspeed)/176;
-	CDROM_CONFIG_FLAGS (drive)->max_speed = ntohs(buf.cap.maxspeed)/176;
+	if (drive->id && drive->id->model[0]) {
+		CDROM_STATE_FLAGS (drive)->current_speed  = (ntohs(buf.cap.curspeed) + (176/2)) / 176;
+		CDROM_CONFIG_FLAGS (drive)->max_speed = (ntohs(buf.cap.maxspeed) + (176/2)) / 176;
+	} else {  /* no-name ACERs (AOpen) have it backwards */
+		CDROM_STATE_FLAGS (drive)->current_speed  = (((unsigned int)buf.cap.curspeed) + (176/2)) / 176;
+		CDROM_CONFIG_FLAGS (drive)->max_speed = (((unsigned int)buf.cap.maxspeed) + (176/2)) / 176;
+	}
 
-        stat=0;
-        printk ("%s: ATAPI %dx CDROM", 
+        printk ("%s: ATAPI %dX CDROM", 
         	drive->name, CDROM_CONFIG_FLAGS (drive)->max_speed);
         if (CDROM_CONFIG_FLAGS (drive)->cd_r|CDROM_CONFIG_FLAGS (drive)->cd_rw) 
         	printk (" CD%s%s", 
@@ -2827,7 +2828,7 @@ int ide_cdrom_setup (ide_drive_t *drive)
 
 		else if (strcmp (drive->id->model,
 				 "NEC CD-ROM DRIVE:260") == 0 &&
-			 strcmp (drive->id->fw_rev, "1.01") == 0) {
+			 strncmp (drive->id->fw_rev, "1.01", 4) == 0) { /* FIXME */
 			/* Old NEC260 (not R).
 			   This drive was released before the 1.2 version
 			   of the spec. */
@@ -2838,7 +2839,7 @@ int ide_cdrom_setup (ide_drive_t *drive)
 		}
 
 		else if (strcmp (drive->id->model, "WEARNES CDD-120") == 0 &&
-			 strcmp (drive->id->fw_rev, "A1.1") == 0) {
+			 strncmp (drive->id->fw_rev, "A1.1", 4) == 0) { /* FIXME */
 			/* Wearnes */
 			CDROM_CONFIG_FLAGS (drive)->playmsf_as_bcd = 1;
 			CDROM_CONFIG_FLAGS (drive)->subchan_as_bcd = 1;
@@ -2936,21 +2937,23 @@ static ide_module_t ide_cdrom_module = {
 };
 
 static ide_driver_t ide_cdrom_driver = {
+	"ide-cdrom",			/* name */
+	IDECD_VERSION,			/* version */
 	ide_cdrom,			/* media */
 	0,				/* busy */
 	1,				/* supports_dma */
 	1,				/* supports_dsc_overlap */
 	ide_cdrom_cleanup,		/* cleanup */
 	ide_do_rw_cdrom,		/* do_request */
-	NULL,				/* ??? or perhaps
-	cdrom_end_request? */
+	NULL,				/* ??? or perhaps cdrom_end_request? */
 	ide_cdrom_ioctl,		/* ioctl */
 	ide_cdrom_open,			/* open */
 	ide_cdrom_release,		/* release */
 	ide_cdrom_check_media_change,	/* media_change */
 	NULL,				/* pre_reset */
 	NULL,				/* capacity */
-	NULL				/* special */
+	NULL,				/* special */
+	NULL				/* proc */
 };
 
 

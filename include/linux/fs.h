@@ -138,6 +138,10 @@ extern int max_files, nr_files, nr_free_files;
 #define BLKFLSBUF  _IO(0x12,97)	/* flush buffer cache */
 #define BLKRASET   _IO(0x12,98)	/* Set read ahead for block device */
 #define BLKRAGET   _IO(0x12,99)	/* get current read ahead setting */
+#define BLKFRASET  _IO(0x12,100)/* set filesystem (mm/filemap.c) read-ahead */
+#define BLKFRAGET  _IO(0x12,101)/* get filesystem (mm/filemap.c) read-ahead */
+#define BLKSECTSET _IO(0x12,102)/* set max sectors per request (ll_rw_blk.c) */
+#define BLKSECTGET _IO(0x12,103)/* get max sectors per request (ll_rw_blk.c) */
 
 #define BMAP_IOCTL 1		/* obsolete - kept for compatibility */
 #define FIBMAP	   _IO(0x00,1)	/* bmap access */
@@ -709,6 +713,7 @@ extern void put_write_access(struct inode *inode);
 extern struct dentry * open_namei(const char * pathname, int flag, int mode);
 extern struct dentry * do_mknod(const char * filename, int mode, dev_t dev);
 extern int do_pipe(int *);
+extern ino_t find_inode_number(struct dentry *, struct qstr *);
 
 /*
  * Kernel pointers have redundant information, so we can use a

@@ -4,9 +4,9 @@
  |                                                                           |
  | Core multiplication routine                                               |
  |                                                                           |
- | Copyright (C) 1992,1993,1995                                              |
- |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail billm@jacobi.maths.monash.edu.au |
+ | Copyright (C) 1992,1993,1995,1997                                         |
+ |                  W. Metzenthen, 22 Parker St, Ormond, Vic 3163, Australia |
+ |                  E-mail   billm@suburbia.net                              |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -15,7 +15,7 @@
  |   Basic multiplication routine.                                           |
  |   Does not check the resulting exponent for overflow/underflow            |
  |                                                                           |
- |   reg_u_mul(FPU_REG *a, FPU_REG *b, FPU_REG *c, unsigned int cw);         |
+ |   FPU_u_mul(FPU_REG *a, FPU_REG *b, FPU_REG *c, unsigned int cw);         |
  |                                                                           |
  |   Internal working is at approx 128 bits.                                 |
  |   Result is rounded to nearest 53 or 64 bits, using "nearest or even".    |
@@ -44,7 +44,7 @@ FPU_accum_1:
 
 
 .text
-ENTRY(reg_u_mul)
+ENTRY(FPU_u_mul)
 	pushl	%ebp
 	movl	%esp,%ebp
 #ifndef NON_REENTRANT_FPU
@@ -64,27 +64,6 @@ ENTRY(reg_u_mul)
 	testl	$0x80000000,SIGH(%edi)
 	jz	L_bugged
 #endif PARANOID
-
-#ifdef DENORM_OPERAND
-	movl	EXP(%esi),%eax
-	cmpl	EXP_UNDER,%eax
-	jg	xOp1_not_denorm
-
-	call	SYMBOL_NAME(denormal_operand)
-	orl	%eax,%eax
-	jnz	fpu_Arith_exit
-
-xOp1_not_denorm:
-	movl	EXP(%edi),%eax
-	cmpl	EXP_UNDER,%eax
-	jg	xOp2_not_denorm
-
-	call	SYMBOL_NAME(denormal_operand)
-	orl	%eax,%eax
-	jnz	fpu_Arith_exit
-
-xOp2_not_denorm:
-#endif DENORM_OPERAND
 
 	xorl	%ecx,%ecx
 	xorl	%ebx,%ebx
@@ -111,13 +90,22 @@ xOp2_not_denorm:
 	addl	%eax,%ebx
 	adcl	%edx,%ecx
 
-	movl	EXP(%esi),%eax	/* Compute the exponent */
-	addl	EXP(%edi),%eax
+	/* Get the sum of the exponents. */
+	movl	PARAM6,%eax
 	subl	EXP_BIAS-1,%eax
+
+	/* Two denormals can cause an exponent underflow */
+	cmpl	EXP_WAY_UNDER,%eax
+	jg	Exp_not_underflow
+
+	/* Set to a really low value allow correct handling */
+	movl	EXP_WAY_UNDER,%eax
+
+Exp_not_underflow:
 
 /*  Have now finished with the sources */
 	movl	PARAM3,%edi	/* Point to the destination */
-	movl	%eax,EXP(%edi)
+	movw	%ax,EXP(%edi)
 
 /*  Now make sure that the result is normalized */
 	testl	$0x80000000,%ecx
@@ -128,7 +116,7 @@ xOp2_not_denorm:
 	rcll	$1,FPU_accum_1
 	rcll	$1,%ebx
 	rcll	$1,%ecx
-	decl	EXP(%edi)
+	decw	EXP(%edi)
 
 LResult_Normalised:
 	movl	FPU_accum_0,%eax

@@ -5,40 +5,20 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995, 1996 by Ralf Baechle
+ * Copyright (C) 1995, 1996, 1997 by Ralf Baechle
+ *
+ * $Id: signal.h,v 1.2 1997/09/07 05:27:50 ralf Exp $
  */
 #ifndef __ASM_MIPS_SIGNAL_H
+#define __ASM_MIPS_SIGNAL_H
 
 #include <asm/sgidefs.h>
 
-/* Any one of these symbols __need_* means that GNU libc
-   wants us just to define one data type.  So don't define
-   the symbols that indicate this file's entire job has been done.  */
-#if !defined(__need_signums) && !defined(__need_fake_sigfuns) && \
-    !defined(__need__nsig)
-#define __ASM_MIPS_SIGNAL_H
-#endif
-
-#ifdef __ASM_MIPS_SIGNAL_H
 typedef unsigned long sigset_t;
-#endif /* __ASM_MIPS_SIGNAL_H */
 
-#if !defined (___nsig_defined) && \
-    (defined (__ASM_MIPS_SIGNAL_H) || defined (__need__nsig))
-#define ___nsig_defined
-#define _NSIG		65
-#endif
-#undef __need__nsig
-#ifdef __KERNEL__
+#define _NSIG		32
 #define NSIG		_NSIG
-#endif
 
-#if !defined (__signums_defined) && \
-    (defined (__ASM_MIPS_SIGNAL_H) || defined (__need_signums))
-#define __signums_defined
-/*
- * For 1.3.0 Linux/MIPS changed the signal numbers to be compatible the ABI.
- */
 #define SIGHUP		 1	/* Hangup (POSIX).  */
 #define SIGINT		 2	/* Interrupt (ANSI).  */
 #define SIGQUIT		 3	/* Quit (POSIX).  */
@@ -73,10 +53,7 @@ typedef unsigned long sigset_t;
 #define SIGPROF		29	/* Profiling alarm clock (4.2 BSD).  */
 #define SIGXCPU		30	/* CPU limit exceeded (4.2 BSD).  */
 #define SIGXFSZ		31	/* File size limit exceeded (4.2 BSD).  */
-#endif /* need signums */
-#undef __need_signums
 
-#ifdef __ASM_MIPS_SIGNAL_H
 /*
  * sa_flags values: SA_STACK is not currently supported, but will allow the
  * usage of signal stacks by using the (now obsolete) sa_restorer field in
@@ -113,24 +90,14 @@ typedef unsigned long sigset_t;
 #define SIG_SETMASK32	256	/* Goodie from SGI for BSD compatibility:
 				   set only the low 32 bit of the sigset.  */
 
-#ifndef __sighandler_t_defined
-#define __sighandler_t_defined
 /* Type of a signal handler.  */
 typedef void (*__sighandler_t)(int);
-#endif
-#endif
 
-#if !defined (__fake_sigfuns_defined) && \
-    (defined (__ASM_MIPS_SIGNAL_H) || defined (__need_fake_sigfuns))
-#define __fake_sigfuns_defined
 /* Fake signal functions */
 #define SIG_DFL	((__sighandler_t)0)	/* default signal handling */
 #define SIG_IGN	((__sighandler_t)1)	/* ignore signal */
 #define SIG_ERR	((__sighandler_t)-1)	/* error return from signal */
-#endif
-#undef __need_fake_sigfuns
 
-#ifdef __ASM_MIPS_SIGNAL_H
 struct sigaction {
 	unsigned int	sa_flags;
 	__sighandler_t	sa_handler;
@@ -173,6 +140,5 @@ struct sigaction {
 #define _BRK_THREADBP	11	/* For threads, user bp (used by debuggers) */
 #define BRK_MULOVF	1023	/* Multiply overflow */
 #endif /* defined (__KERNEL__) || defined (__USE_MISC) */
-#endif /* defined (__ASM_MIPS_SIGNAL_H) */
 
 #endif /* !defined (__ASM_MIPS_SIGNAL_H) */

@@ -1,23 +1,15 @@
 /*---------------------------------------------------------------------------+
  |  fpu_emu.h                                                                |
  |                                                                           |
- | Copyright (C) 1992,1993,1994                                              |
+ | Copyright (C) 1992,1993,1994,1997                                         |
  |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
+ |                       Australia.  E-mail   billm@suburbia.net             |
  |                                                                           |
  +---------------------------------------------------------------------------*/
 
 
 #ifndef _FPU_EMU_H_
 #define _FPU_EMU_H_
-
-/*
- * Define DENORM_OPERAND to make the emulator detect denormals
- * and use the denormal flag of the status word. Note: this only
- * affects the flag and corresponding interrupt, the emulator
- * will always generate denormals and operate upon them as required.
- */
-#define DENORM_OPERAND
 
 /*
  * Define PECULIAR_486 to get a closer approximation to 80486 behaviour,
@@ -38,28 +30,51 @@
 #define EXP_BIAS	Const(0)
 #define EXP_OVER	Const(0x4000)    /* smallest invalid large exponent */
 #define	EXP_UNDER	Const(-0x3fff)   /* largest invalid small exponent */
+#define EXP_WAY_UNDER   Const(-0x6000)   /* Below the smallest denormal, but
+					    still a 16 bit nr. */
 #define EXP_Infinity    EXP_OVER
 #define EXP_NaN         EXP_OVER
 
-#define SIGN_POS	Const(0)
-#define SIGN_NEG	Const(1)
+#define EXTENDED_Ebias Const(0x3fff)
+#define EXTENDED_Emin (-0x3ffe)  /* smallest valid exponent */
 
-/* Keep the order TW_Valid, TW_Zero, TW_Denormal */
-#define TW_Valid	Const(0)	/* valid */
-#define TW_Zero		Const(1)	/* zero */
+#define SIGN_POS	Const(0)
+#define SIGN_NEG	Const(0x80)
+
+#define SIGN_Positive	Const(0)
+#define SIGN_Negative	Const(0x8000)
+
+
+/* Keep the order TAG_Valid, TAG_Zero, TW_Denormal */
 /* The following fold to 2 (Special) in the Tag Word */
-/* #define TW_Denormal     Const(4) */       /* De-normal */
+#define TW_Denormal     Const(4)        /* De-normal */
 #define TW_Infinity	Const(5)	/* + or - infinity */
 #define	TW_NaN		Const(6)	/* Not a Number */
+#define	TW_Unsupported	Const(7)	/* Not supported by an 80486 */
 
-#define TW_Empty	Const(7)	/* empty */
+#define TAG_Valid	Const(0)	/* valid */
+#define TAG_Zero	Const(1)	/* zero */
+#define TAG_Special	Const(2)	/* De-normal, + or - infinity,
+					   or Not a Number */
+#define TAG_Empty	Const(3)	/* empty */
+
+#define LOADED_DATA	Const(10101)	/* Special st() number to identify
+					   loaded data (not on stack). */
+
+/* A few flags (must be >= 0x10). */
+#define REV             0x10
+#define DEST_RM         0x20
+#define LOADED          0x40
+
+#define FPU_Exception   Const(0x80000000)   /* Added to tag returns. */
 
 
 #ifndef __ASSEMBLY__
 
-#include <asm/sigcontext.h>	/* for struct _fpstate */
-#include <asm/math_emu.h>
+#include "fpu_system.h"
 
+#include <asm/sigcontext.h>   /* for struct _fpstate */
+#include <asm/math_emu.h>
 #include <linux/linkage.h>
 
 /*
@@ -67,7 +82,7 @@
  */
 
 #ifdef RE_ENTRANT_CHECKING
-extern char emulating;
+extern u_char emulating;
 #  define RE_ENTRANT_CHECK_OFF emulating = 0
 #  define RE_ENTRANT_CHECK_ON emulating = 1
 #else
@@ -97,18 +112,24 @@ extern char emulating;
 
 struct address {
   unsigned int offset;
-  unsigned short selector;
-  unsigned short opcode:11,
-		 empty:5;
+  unsigned int selector:16;
+  unsigned int opcode:11;
+  unsigned int empty:5;
 };
+struct fpu__reg {
+  unsigned sigl;
+  unsigned sigh;
+  short exp;
+};
+
 typedef void (*FUNC)(void);
-typedef struct fpu_reg FPU_REG;
-typedef void (*FUNC_ST0)(FPU_REG *st0_ptr);
-typedef struct { unsigned char address_size, operand_size, segment; }
+typedef struct fpu__reg FPU_REG;
+typedef void (*FUNC_ST0)(FPU_REG *st0_ptr, u_char st0_tag);
+typedef struct { u_char address_size, operand_size, segment; }
         overrides;
 /* This structure is 32 bits: */
 typedef struct { overrides override;
-		 unsigned char default_mode; } fpu_addr_modes;
+		 u_char default_mode; } fpu_addr_modes;
 /* PROTECTED has a restricted meaning in the emulator; it is used
    to signal that the emulator needs to do special things to ensure
    that protection is respected in a segmented model. */
@@ -117,27 +138,50 @@ typedef struct { overrides override;
 #define VM86      SIXTEEN
 #define PM16      (SIXTEEN | PROTECTED)
 #define SEG32     PROTECTED
-extern unsigned char const data_sizes_16[32];
+extern u_char const data_sizes_16[32];
 
-#define	st(x)	( regs[((top+x) &7 )] )
+#define register_base ((u_char *) registers )
+#define fpu_register(x)  ( * ((FPU_REG *)( register_base + 10 * (x & 7) )) )
+#define	st(x)      ( * ((FPU_REG *)( register_base + 10 * ((top+x) & 7) )) )
 
-#define	STACK_OVERFLOW	(st_new_ptr = &st(-1), st_new_ptr->tag != TW_Empty)
-#define	NOT_EMPTY(i)	(st(i).tag != TW_Empty)
-#define	NOT_EMPTY_ST0	(st0_tag ^ TW_Empty)
+#define	STACK_OVERFLOW	(FPU_stackoverflow(&st_new_ptr))
+#define	NOT_EMPTY(i)	(!FPU_empty_i(i))
 
-#define pop()	{ regs[(top++ & 7 )].tag = TW_Empty; }
-#define poppop() { regs[((top + 1) & 7 )].tag \
-		     = regs[(top & 7 )].tag = TW_Empty; \
-		   top += 2; }
+#define	NOT_EMPTY_ST0	(st0_tag ^ TAG_Empty)
+
+#define poppop() { FPU_pop(); FPU_pop(); }
 
 /* push() does not affect the tags */
 #define push()	{ top--; }
 
+#define signbyte(a) (((u_char *)(a))[9])
+#define getsign(a) (signbyte(a) & 0x80)
+#define setsign(a,b) { if (b) signbyte(a) |= 0x80; else signbyte(a) &= 0x7f; }
+#define copysign(a,b) { if (getsign(a)) signbyte(b) |= 0x80; \
+                        else signbyte(b) &= 0x7f; }
+#define changesign(a) { signbyte(a) ^= 0x80; }
+#define setpositive(a) { signbyte(a) &= 0x7f; }
+#define setnegative(a) { signbyte(a) |= 0x80; }
+#define signpositive(a) ( (signbyte(a) & 0x80) == 0 )
+#define signnegative(a) (signbyte(a) & 0x80)
 
-#define reg_move(x, y) { \
-		 *(short *)&((y)->sign) = *(const short *)&((x)->sign); \
-		 *(long *)&((y)->exp) = *(const long *)&((x)->exp); \
-		 *(long long *)&((y)->sigl) = *(const long long *)&((x)->sigl); }
+#include "fpu_proto.h"
+
+static inline void reg_copy(FPU_REG const *x, FPU_REG *y)
+{
+  *(short *)&(y->exp) = *(const short *)&(x->exp); 
+  *(long long *)&(y->sigl) = *(const long long *)&(x->sigl);
+}
+
+#define exponent(x)  (((*(short *)&((x)->exp)) & 0x7fff) - EXTENDED_Ebias)
+#define setexponentpos(x,y) { (*(short *)&((x)->exp)) = \
+  ((y) + EXTENDED_Ebias) & 0x7fff; }
+#define exponent16(x)         (*(short *)&((x)->exp))
+#define setexponent16(x,y)  { (*(short *)&((x)->exp)) = (y); }
+#define addexponent(x,y)    { (*(short *)&((x)->exp)) += (y); }
+#define stdexp(x)           { (*(short *)&((x)->exp)) += EXTENDED_Ebias; }
+
+#define isdenormal(ptr)   (exponent(ptr) == EXP_BIAS+EXP_UNDER)
 
 #define significand(x) ( ((unsigned long long *)&((x)->sigl))[0] )
 
@@ -145,24 +189,26 @@ extern unsigned char const data_sizes_16[32];
 /*----- Prototypes for functions written in assembler -----*/
 /* extern void reg_move(FPU_REG *a, FPU_REG *b); */
 
-asmlinkage void normalize(FPU_REG *x);
-asmlinkage void normalize_nuo(FPU_REG *x);
-asmlinkage int reg_div(FPU_REG const *arg1, FPU_REG const *arg2,
-		       FPU_REG *answ, unsigned int control_w);
-asmlinkage int reg_u_sub(FPU_REG const *arg1, FPU_REG const *arg2,
-			 FPU_REG *answ, unsigned int control_w);
-asmlinkage int reg_u_mul(FPU_REG const *arg1, FPU_REG const *arg2,
-			 FPU_REG *answ, unsigned int control_w);
-asmlinkage int reg_u_div(FPU_REG const *arg1, FPU_REG const *arg2,
-			 FPU_REG *answ, unsigned int control_w);
-asmlinkage int reg_u_add(FPU_REG const *arg1, FPU_REG const *arg2,
-			 FPU_REG *answ, unsigned int control_w);
-asmlinkage int wm_sqrt(FPU_REG *n, unsigned int control_w);
-asmlinkage unsigned	shrx(void *l, unsigned x);
-asmlinkage unsigned	shrxs(void *v, unsigned x);
-asmlinkage unsigned long div_small(unsigned long long *x, unsigned long y);
-asmlinkage void round_reg(FPU_REG *arg, unsigned int extent,
-		      unsigned int control_w);
+asmlinkage int FPU_normalize(FPU_REG *x);
+asmlinkage int FPU_normalize_nuo(FPU_REG *x);
+asmlinkage int FPU_u_sub(FPU_REG const *arg1, FPU_REG const *arg2,
+			 FPU_REG *answ, unsigned int control_w, u_char sign,
+			 int expa, int expb);
+asmlinkage int FPU_u_mul(FPU_REG const *arg1, FPU_REG const *arg2,
+			 FPU_REG *answ, unsigned int control_w, u_char sign,
+			 int expon);
+asmlinkage int FPU_u_div(FPU_REG const *arg1, FPU_REG const *arg2,
+			 FPU_REG *answ, unsigned int control_w, u_char sign);
+asmlinkage int FPU_u_add(FPU_REG const *arg1, FPU_REG const *arg2,
+			 FPU_REG *answ, unsigned int control_w, u_char sign,
+			 int expa, int expb);
+asmlinkage int wm_sqrt(FPU_REG *n, int dummy1, int dummy2,
+		       unsigned int control_w, u_char sign);
+asmlinkage unsigned	FPU_shrx(void *l, unsigned x);
+asmlinkage unsigned	FPU_shrxs(void *v, unsigned x);
+asmlinkage unsigned long FPU_div_small(unsigned long long *x, unsigned long y);
+asmlinkage int FPU_round(FPU_REG *arg, unsigned int extent, int dummy,
+			 unsigned int control_w, u_char sign);
 
 #ifndef MAKING_PROTO
 #include "fpu_proto.h"

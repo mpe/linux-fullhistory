@@ -13,6 +13,7 @@
  *					csum_..._fromiovecend.
  *		Andi Kleen	:	fixed error handling for 2.1
  *		Alexey Kuznetsov:	2.1 optimisations
+ *		Andi Kleen	:	Fix csum*fromiovecend for IPv6.
  */
 
 
@@ -196,7 +197,7 @@ int memcpy_fromiovecend(unsigned char *kdata, struct iovec *iov, int offset,
 
 int csum_partial_copy_fromiovecend(unsigned char *kdata, 
 				   struct iovec *iov, int offset, 
-				   int len, int *csump)
+				   unsigned int len, int *csump)
 {
 	int partial_cnt = 0;
 	int err = 0;
@@ -238,7 +239,15 @@ int csum_partial_copy_fromiovecend(unsigned char *kdata,
 	while (len>0)
 	{
 		u8 *base = iov->iov_base;
-		int copy = min(len, iov->iov_len);
+		unsigned int copy = min(len, iov->iov_len);
+
+		/* FIXME: more sanity checking is needed here, because
+                 * the iovs are copied from the user.
+		 */
+		if (base == NULL) {
+			printk(KERN_DEBUG "%s: iov too short\n",current->comm);
+			return -EINVAL;
+		}
 		
 		/* There is a remnant from previous iov. */
 		if (partial_cnt)
@@ -276,6 +285,9 @@ int csum_partial_copy_fromiovecend(unsigned char *kdata,
 				err |= copy_from_user(kdata+copy, base + copy, partial_cnt);
 			}
 		}
+
+		if (copy == 0)
+			break;
 
 		csum = csum_partial_copy_from_user(base, kdata, copy, csum, &err);
 		len   -= copy + partial_cnt;

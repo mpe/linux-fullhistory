@@ -28,9 +28,9 @@ Bugs in the present implementation:
 
 
 Please report any bugs and suggestions to
-  Bruno Haible <haible@ma2s2.mathematik.uni-karlsruhe.de> or
-  Pascal Haible <haible@izfm.uni-stuttgart.de> .
-
+  Bruno Haible <haible@ma2s2.mathematik.uni-karlsruhe.de>
+  Pascal Haible <haible@izfm.uni-stuttgart.de>
+  Krzysztof G. Baranowski <kgb@manjak.knm.org.pl>
 
 Bruno Haible
 <haible@ma2s2.mathematik.uni-karlsruhe.de>

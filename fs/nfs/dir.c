@@ -471,11 +471,11 @@ void nfs_renew_times(struct dentry * dentry)
 
 static int nfs_lookup(struct inode *dir, struct dentry * dentry)
 {
+	int len = dentry->d_name.len;
 	struct inode *inode;
+	int error;
 	struct nfs_fh fhandle;
 	struct nfs_fattr fattr;
-	int len = dentry->d_name.len;
-	int error;
 
 	dfprintk(VFS, "NFS: lookup(%x/%ld, %.*s)\n",
 			dir->i_dev, dir->i_ino, len, dentry->d_name.name);
@@ -516,10 +516,38 @@ out:
 }
 
 /*
+ * Attempt to patch up certain errors following a create or
+ * mkdir operation. We clear the original error if the new
+ * lookup succeeds and has the correct mode.
+ */
+static int nfs_fixup(struct inode *dir, struct dentry *dentry, int mode,
+		struct nfs_fh *fhandle, struct nfs_fattr *fattr, int error)
+{
+	int newerr;
+
+#ifdef NFS_PARANOIA
+printk("nfs_fixup: %s/%s, error=%d, mode=%x\n",
+dentry->d_parent->d_name.name, dentry->d_name.name, error, mode);
+#endif
+	if (error == -EEXIST) {
+		newerr = nfs_proc_lookup(NFS_SERVER(dir), NFS_FH(dir), 
+					dentry->d_name.name, fhandle, fattr);
+		if (!newerr) {
+#ifdef NFS_PARANOIA
+printk("nfs_fixup: lookup OK, got mode=%x, want mode=%x\n", fattr->mode, mode);
+#endif
+			if ((fattr->mode & S_IFMT) == (mode & S_IFMT))
+				error = 0;
+		}
+	}
+	return error;
+}
+
+/*
  * Code common to create, mkdir, and mknod.
  */
-static int nfs_instantiate(struct dentry *dentry, struct nfs_fattr *fattr,
-				struct nfs_fh *fhandle)
+static int nfs_instantiate(struct dentry *dentry, struct nfs_fh *fhandle,
+				struct nfs_fattr *fattr)
 {
 	struct inode *inode;
 	int error = -EACCES;
@@ -545,12 +573,12 @@ inode->i_ino, inode->i_count, inode->i_nlink);
  * that the operation succeeded on the server, but an error in the
  * reply path made it appear to have failed.
  */
-static int nfs_create(struct inode *dir, struct dentry * dentry, int mode)
+static int nfs_create(struct inode *dir, struct dentry *dentry, int mode)
 {
+	int error;
 	struct nfs_sattr sattr;
 	struct nfs_fattr fattr;
 	struct nfs_fh fhandle;
-	int error;
 
 	dfprintk(VFS, "NFS: create(%x/%ld, %s\n",
 				dir->i_dev, dir->i_ino, dentry->d_name.name);
@@ -574,9 +602,11 @@ static int nfs_create(struct inode *dir, struct dentry * dentry, int mode)
 	nfs_invalidate_dircache(dir);
 	error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dir),
 			dentry->d_name.name, &sattr, &fhandle, &fattr);
+	if (error)
+		error = nfs_fixup(dir, dentry, mode, &fhandle, &fattr, error);
 	if (!error)
-		error = nfs_instantiate(dentry, &fattr, &fhandle);
-	else
+		error = nfs_instantiate(dentry, &fhandle, &fattr);
+	if (error)
 		d_drop(dentry);
 out:
 	return error;
@@ -587,10 +617,10 @@ out:
  */
 static int nfs_mknod(struct inode *dir, struct dentry *dentry, int mode, int rdev)
 {
+	int error;
 	struct nfs_sattr sattr;
 	struct nfs_fattr fattr;
 	struct nfs_fh fhandle;
-	int error;
 
 	dfprintk(VFS, "NFS: mknod(%x/%ld, %s\n",
 				dir->i_dev, dir->i_ino, dentry->d_name.name);
@@ -612,9 +642,11 @@ static int nfs_mknod(struct inode *dir, struct dentry *dentry, int mode, int rde
 	nfs_invalidate_dircache(dir);
 	error = nfs_proc_create(NFS_SERVER(dir), NFS_FH(dir),
 				dentry->d_name.name, &sattr, &fhandle, &fattr);
+	if (error)
+		error = nfs_fixup(dir, dentry, mode, &fhandle, &fattr, error);
 	if (!error)
-		error = nfs_instantiate(dentry, &fattr, &fhandle);
-	else
+		error = nfs_instantiate(dentry, &fhandle, &fattr);
+	if (error)
 		d_drop(dentry);
 	return error;
 }
@@ -624,10 +656,10 @@ static int nfs_mknod(struct inode *dir, struct dentry *dentry, int mode, int rde
  */
 static int nfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 {
+	int error;
 	struct nfs_sattr sattr;
 	struct nfs_fattr fattr;
 	struct nfs_fh fhandle;
-	int error;
 
 	dfprintk(VFS, "NFS: mkdir(%x/%ld, %s\n",
 				dir->i_dev, dir->i_ino, dentry->d_name.name);
@@ -640,6 +672,8 @@ static int nfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	if (dentry->d_name.len > NFS_MAXNAMLEN)
 		return -ENAMETOOLONG;
 
+	/* For some reason mode doesn't have the S_IFDIR flag ... */
+	mode |= S_IFDIR;
 	sattr.mode = mode;
 	sattr.uid = sattr.gid = sattr.size = (unsigned) -1;
 	sattr.atime.seconds = sattr.mtime.seconds = (unsigned) -1;
@@ -647,6 +681,8 @@ static int nfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	nfs_invalidate_dircache(dir);
 	error = nfs_proc_mkdir(NFS_SERVER(dir), NFS_FH(dir),
 				dentry->d_name.name, &sattr, &fhandle, &fattr);
+	if (error)
+		error = nfs_fixup(dir, dentry, mode, &fhandle, &fattr, error);
 	if (!error) {
 		/*
 		 * Some AIX servers reportedly fail to fill out the fattr.
@@ -660,8 +696,9 @@ static int nfs_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 					fattr.mode);
 			goto drop;
 		}
-		error = nfs_instantiate(dentry, &fattr, &fhandle);
-	} else {
+		error = nfs_instantiate(dentry, &fhandle, &fattr);
+	}
+	if (error) {
 	drop:
 		d_drop(dentry);
 	}
@@ -858,11 +895,8 @@ out:
  * Remove a file after making sure there are no pending writes,
  * and after checking that the file has only one user. 
  *
- * Updating inode->i_nlink here rather than waiting for the next
- * nfs_refresh_inode() is not merely cosmetic; once an object has
- * been deleted, we want to get rid of the inode locally.  The NFS
- * server may reuse the fileid for a new inode, and we don't want
- * that to be confused with this inode.
+ * We update inode->i_nlink and free the inode prior to the operation
+ * to avoid possible races if the server reuses the inode.
  */
 static int nfs_safe_remove(struct dentry *dentry)
 {
@@ -870,6 +904,7 @@ static int nfs_safe_remove(struct dentry *dentry)
 	struct inode *inode = dentry->d_inode;
 	int error, rehash = 0;
 		
+	/* N.B. not needed now that d_delete is done in advance? */
 	error = -EBUSY;
 	if (inode) {
 		if (NFS_WRITEBACK(inode)) {
@@ -897,7 +932,7 @@ dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);
 		goto out;
 	}
 #ifdef NFS_PARANOIA
-if (inode && inode->i_count > 1)
+if (inode && inode->i_count > inode->i_nlink)
 printk("nfs_safe_remove: %s/%s inode busy?? i_count=%d, i_nlink=%d\n",
 dentry->d_parent->d_name.name, dentry->d_name.name,
 inode->i_count, inode->i_nlink);

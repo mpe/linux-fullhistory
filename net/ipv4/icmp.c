@@ -3,7 +3,7 @@
  *	
  *		Alan Cox, <alan@cymru.net>
  *
- *	Version: $Id: icmp.c,v 1.35 1997/10/19 18:17:13 freitag Exp $
+ *	Version: $Id: icmp.c,v 1.36 1997/12/04 03:42:03 freitag Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -44,7 +44,7 @@
  *					and moved all kfree_skb() up to
  *					icmp_rcv.
  *		Andi Kleen	:	Move the rate limit bookkeeping
- *					into the dest entry and use a tocken
+ *					into the dest entry and use a token
  *					bucket filter (thanks to ANK). Make
  *					the rates sysctl configurable.
  *
@@ -549,7 +549,8 @@ void icmp_send(struct sk_buff *skb_in, int type, int code, unsigned long info)
 	/* XXX: use a more aggressive expire for routes created by 
 	 * this call (not longer than the rate limit timeout). 
 	 * It could be also worthwhile to not put them into ipv4
-	 * fast routing cache at first.
+	 * fast routing cache at first. Otherwise an attacker can
+	 * grow the routing table.
 	 */
 	if (ip_route_output(&rt, iph->saddr, saddr, RT_TOS(tos), 0))
 		return;
@@ -1021,8 +1022,11 @@ static unsigned long dummy;
 
 /* 
  * 	Configurable rate limits.
- *	Send at most one packets per time.
  *	Someone should check if these default values are correct.
+ *	Note that these values interact with the routing cache GC timeout.
+ *	If you chose them too high they won't take effect, because the
+ *	dst_entry gets expired too early. The same should happen when
+ *	the cache grows too big.
  */
 int sysctl_icmp_sourcequench_time = 1*HZ; 
 int sysctl_icmp_destunreach_time = 1*HZ;

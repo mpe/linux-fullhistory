@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-floppy.c	Version 0.5 - ALPHA	Feb  21, 1997
+ * linux/drivers/block/ide-floppy.c	Version 0.8		Feb  21, 1997
  *
  * Copyright (C) 1996, 1997 Gadi Oxman <gadio@netvision.net.il>
  */
@@ -21,7 +21,14 @@
  *                       Use the minimum of the LBA and CHS capacities.
  *                       Avoid hwgroup->rq == NULL on the last irq.
  *                       Fix potential null dereferencing with DEBUG_LOG.
+ * Ver 0.8   Dec  7 97   Increase irq timeout from 10 to 50 seconds.
+ *                       Add media write-protect detection.
+ *                       Issue START command only if TEST UNIT READY fails.
+ *                       Add work-around for IOMEGA ZIP revision 21.D.
+ *                       Remove idefloppy_get_capabilities().
  */
+
+#define IDEFLOPPY_VERSION "0.8"
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -31,12 +38,9 @@
 #include <linux/delay.h>
 #include <linux/timer.h>
 #include <linux/mm.h>
-#include <linux/ioport.h>
 #include <linux/interrupt.h>
 #include <linux/major.h>
-#include <linux/blkdev.h>
 #include <linux/errno.h>
-#include <linux/hdreg.h>
 #include <linux/genhd.h>
 #include <linux/malloc.h>
 
@@ -58,6 +62,11 @@
 #define IDEFLOPPY_DEBUG_LOG		0
 #define IDEFLOPPY_DEBUG_INFO		0
 #define IDEFLOPPY_DEBUG_BUGS		1
+
+/*
+ *	Some drives require a longer irq timeout.
+ */
+#define IDEFLOPPY_WAIT_CMD		(5 * WAIT_CMD)
 
 /*
  *	After each failed packet command we issue a request sense command
@@ -191,6 +200,7 @@ typedef struct {
 	int blocks, block_size, bs_factor;			/* Current format */
 	idefloppy_capacity_descriptor_t capacity;		/* Last format capacity */
 	idefloppy_flexible_disk_page_t flexible_disk_page;	/* Copy of the flexible disk page */
+	int wp;							/* Write protect */
 
 	unsigned int flags;			/* Status/Action flags */
 } idefloppy_floppy_t;
@@ -683,13 +693,12 @@ static void idefloppy_pc_intr (ide_drive_t *drive)
 
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	if (test_bit (PC_DMA_IN_PROGRESS, &pc->flags)) {
-		if (HWIF(drive)->dmaproc(ide_dma_status_bad, drive)) {
+		if (HWIF(drive)->dmaproc(ide_dma_end, drive)) {
 			set_bit (PC_DMA_ERROR, &pc->flags);
 		} else {
 			pc->actually_transferred=pc->request_transfer;
 			idefloppy_update_buffers (drive, pc);
 		}
-		(void) (HWIF(drive)->dmaproc(ide_dma_abort, drive));	/* End DMA */
 #if IDEFLOPPY_DEBUG_LOG
 		printk (KERN_INFO "ide-floppy: DMA finished\n");
 #endif /* IDEFLOPPY_DEBUG_LOG */
@@ -728,8 +737,7 @@ static void idefloppy_pc_intr (ide_drive_t *drive)
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	if (test_and_clear_bit (PC_DMA_IN_PROGRESS, &pc->flags)) {
 		printk (KERN_ERR "ide-floppy: The floppy wants to issue more interrupts in DMA mode\n");
-		printk (KERN_ERR "ide-floppy: DMA disabled, reverting to PIO\n");
-		HWIF(drive)->dmaproc(ide_dma_off, drive);
+		(void) HWIF(drive)->dmaproc(ide_dma_off, drive);
 		ide_do_reset (drive);
 		return;
 	}
@@ -755,7 +763,7 @@ static void idefloppy_pc_intr (ide_drive_t *drive)
 			if (temp > pc->buffer_size) {
 				printk (KERN_ERR "ide-floppy: The floppy wants to send us more data than expected - discarding data\n");
 				idefloppy_discard_data (drive,bcount.all);
-				ide_set_handler (drive,&idefloppy_pc_intr,WAIT_CMD);
+				ide_set_handler (drive,&idefloppy_pc_intr,IDEFLOPPY_WAIT_CMD);
 				return;
 			}
 #if IDEFLOPPY_DEBUG_LOG
@@ -777,7 +785,7 @@ static void idefloppy_pc_intr (ide_drive_t *drive)
 	pc->actually_transferred+=bcount.all;				/* Update the current position */
 	pc->current_position+=bcount.all;
 
-	ide_set_handler (drive,&idefloppy_pc_intr,WAIT_CMD);		/* And set the interrupt handler again */
+	ide_set_handler (drive,&idefloppy_pc_intr,IDEFLOPPY_WAIT_CMD);		/* And set the interrupt handler again */
 }
 
 static void idefloppy_transfer_pc (ide_drive_t *drive)
@@ -795,7 +803,7 @@ static void idefloppy_transfer_pc (ide_drive_t *drive)
 		ide_do_reset (drive);
 		return;
 	}
-	ide_set_handler (drive, &idefloppy_pc_intr, WAIT_CMD);	/* Set the interrupt routine */
+	ide_set_handler (drive, &idefloppy_pc_intr, IDEFLOPPY_WAIT_CMD);	/* Set the interrupt routine */
 	atapi_output_bytes (drive, floppy->pc->c, 12);		/* Send the actual packet */
 }
 
@@ -843,8 +851,7 @@ static void idefloppy_issue_pc (ide_drive_t *drive, idefloppy_pc_t *pc)
 
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	if (test_and_clear_bit (PC_DMA_ERROR, &pc->flags)) {
-		printk (KERN_WARNING "ide-floppy: DMA disabled, reverting to PIO\n");
-		HWIF(drive)->dmaproc(ide_dma_off, drive);
+		(void) HWIF(drive)->dmaproc(ide_dma_off, drive);
 	}
 	if (test_bit (PC_DMA_RECOMMENDED, &pc->flags) && drive->using_dma)
 		dma_ok=!HWIF(drive)->dmaproc(test_bit (PC_WRITING, &pc->flags) ? ide_dma_write : ide_dma_read, drive);
@@ -864,7 +871,7 @@ static void idefloppy_issue_pc (ide_drive_t *drive, idefloppy_pc_t *pc)
 #endif /* CONFIG_BLK_DEV_IDEDMA */
 
 	if (test_bit (IDEFLOPPY_DRQ_INTERRUPT, &floppy->flags)) {
-		ide_set_handler (drive, &idefloppy_transfer_pc, WAIT_CMD);
+		ide_set_handler (drive, &idefloppy_transfer_pc, IDEFLOPPY_WAIT_CMD);
 		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG);		/* Issue the packet command */
 	} else {
 		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG);
@@ -932,6 +939,12 @@ static void idefloppy_create_start_stop_cmd (idefloppy_pc_t *pc, int start)
 	idefloppy_init_pc (pc);
 	pc->c[0] = IDEFLOPPY_START_STOP_CMD;
 	pc->c[4] = start;
+}
+
+static void idefloppy_create_test_unit_ready_cmd(idefloppy_pc_t *pc)
+{
+	idefloppy_init_pc(pc);
+	pc->c[0] = IDEFLOPPY_TEST_UNIT_READY_CMD;
 }
 
 static void idefloppy_create_rw_cmd (idefloppy_floppy_t *floppy, idefloppy_pc_t *pc, struct request *rq, unsigned long sector)
@@ -1041,6 +1054,7 @@ static int idefloppy_get_flexible_disk_page (ide_drive_t *drive)
 		return 1;
 	}
 	header = (idefloppy_mode_parameter_header_t *) pc.buffer;
+	floppy->wp = header->wp;
 	page = (idefloppy_flexible_disk_page_t *) (header + 1);
 
 	page->transfer_rate = ntohs (page->transfer_rate);
@@ -1144,13 +1158,21 @@ static int idefloppy_open (struct inode *inode, struct file *filp, ide_drive_t *
 
 	MOD_INC_USE_COUNT;
 	if (drive->usage == 1) {
-		idefloppy_create_start_stop_cmd (&pc, 1);
-		(void) idefloppy_queue_pc_tail (drive, &pc);
+		idefloppy_create_test_unit_ready_cmd(&pc);
+		if (idefloppy_queue_pc_tail(drive, &pc)) {
+			idefloppy_create_start_stop_cmd (&pc, 1);
+			(void) idefloppy_queue_pc_tail (drive, &pc);
+		}
 		if (idefloppy_get_capacity (drive)) {
 			drive->usage--;
 			MOD_DEC_USE_COUNT;
 			return -EIO;
 		}
+		if (floppy->wp && (filp->f_mode & 2)) {
+			drive->usage--;
+			MOD_DEC_USE_COUNT;
+			return -EROFS;
+		}		
 		set_bit (IDEFLOPPY_MEDIA_CHANGED, &floppy->flags);
 		idefloppy_create_prevent_cmd (&pc, 1);
 		(void) idefloppy_queue_pc_tail (drive, &pc);
@@ -1243,9 +1265,9 @@ static int idefloppy_identify_device (ide_drive_t *drive,struct hd_driveid *id)
 		default: sprintf (buffer, "Reserved");break;
 	}
 	printk (KERN_INFO "Command Packet Size: %s\n", buffer);
-	printk (KERN_INFO "Model: %s\n",id->model);
-	printk (KERN_INFO "Firmware Revision: %s\n",id->fw_rev);
-	printk (KERN_INFO "Serial Number: %s\n",id->serial_no);
+	printk (KERN_INFO "Model: %.40s\n",id->model);
+	printk (KERN_INFO "Firmware Revision: %.8s\n",id->fw_rev);
+	printk (KERN_INFO "Serial Number: %.20s\n",id->serial_no);
 	printk (KERN_INFO "Write buffer size(?): %d bytes\n",id->buf_size*512);
 	printk (KERN_INFO "DMA: %s",id->capability & 0x01 ? "Yes\n":"No\n");
 	printk (KERN_INFO "LBA: %s",id->capability & 0x02 ? "Yes\n":"No\n");
@@ -1306,51 +1328,13 @@ static int idefloppy_identify_device (ide_drive_t *drive,struct hd_driveid *id)
 }
 
 /*
- *	idefloppy_get_capabilities asks the floppy about its various
- *	parameters.
- */
-static void idefloppy_get_capabilities (ide_drive_t *drive)
-{
-	idefloppy_pc_t pc;
-	idefloppy_mode_parameter_header_t *header;
-	idefloppy_capabilities_page_t *capabilities;
-	
-	idefloppy_create_mode_sense_cmd (&pc, IDEFLOPPY_CAPABILITIES_PAGE, MODE_SENSE_CURRENT);
-	if (idefloppy_queue_pc_tail (drive,&pc)) {
-		printk (KERN_ERR "ide-floppy: Can't get drive capabilities\n");
-		return;
-	}
-	header = (idefloppy_mode_parameter_header_t *) pc.buffer;
-	capabilities = (idefloppy_capabilities_page_t *) (header + 1);
-
-	if (!capabilities->sflp)
-		printk (KERN_INFO "%s: Warning - system floppy device bit is not set\n", drive->name);
-
-#if IDEFLOPPY_DEBUG_INFO
-	printk (KERN_INFO "Dumping the results of the MODE SENSE packet command\n");
-	printk (KERN_INFO "Mode Parameter Header:\n");
-	printk (KERN_INFO "Mode Data Length - %d\n",header->mode_data_length);
-	printk (KERN_INFO "Medium Type - %d\n",header->medium_type);
-	printk (KERN_INFO "WP - %d\n",header->wp);
-
-	printk (KERN_INFO "Capabilities Page:\n");
-	printk (KERN_INFO "Page code - %d\n",capabilities->page_code);
-	printk (KERN_INFO "Page length - %d\n",capabilities->page_length);
-	printk (KERN_INFO "PS - %d\n",capabilities->ps);
-	printk (KERN_INFO "System Floppy Type device - %s\n",capabilities->sflp ? "Yes":"No");
-	printk (KERN_INFO "Supports Reporting progress of Format - %s\n",capabilities->srfp ? "Yes":"No");
-	printk (KERN_INFO "Non CD Optical device - %s\n",capabilities->ncd ? "Yes":"No");
-	printk (KERN_INFO "Multiple LUN support - %s\n",capabilities->sml ? "Yes":"No");
-	printk (KERN_INFO "Total LUN supported - %s\n",capabilities->tlun ? "Yes":"No");
-#endif /* IDEFLOPPY_DEBUG_INFO */
-}
-
-/*
  *	Driver initialization.
  */
 static void idefloppy_setup (ide_drive_t *drive, idefloppy_floppy_t *floppy)
 {
 	struct idefloppy_id_gcw gcw;
+	int major = HWIF(drive)->major, i;
+	int minor = drive->select.b.unit << PARTN_BITS;
 
 	*((unsigned short *) &gcw) = drive->id->config;
 	drive->driver_data = floppy;
@@ -1360,8 +1344,12 @@ static void idefloppy_setup (ide_drive_t *drive, idefloppy_floppy_t *floppy)
 	floppy->pc = floppy->pc_stack;
 	if (gcw.drq_type == 1)
 		set_bit (IDEFLOPPY_DRQ_INTERRUPT, &floppy->flags);
+	if (strcmp(drive->id->model, "IOMEGA ZIP 100 ATAPI") == 0 &&
+	    strcmp(drive->id->fw_rev, "21.D") == 0) {
+		for (i = 0; i < 1 << PARTN_BITS; i++)
+			max_sectors[major][minor + i] = 64;
+	}
 
-	idefloppy_get_capabilities (drive);
 	(void) idefloppy_get_capacity (drive);
 }
 
@@ -1387,6 +1375,8 @@ static ide_module_t idefloppy_module = {
  *	IDE subdriver functions, registered with ide.c
  */
 static ide_driver_t idefloppy_driver = {
+	"ide-floppy",		/* name */
+	IDEFLOPPY_VERSION,	/* version */
 	ide_floppy,		/* media */
 	0,			/* busy */
 	1,			/* supports_dma */
@@ -1400,7 +1390,8 @@ static ide_driver_t idefloppy_driver = {
 	idefloppy_media_change,	/* media_change */
 	NULL,			/* pre_reset */
 	idefloppy_capacity,	/* capacity */
-	NULL			/* special */
+	NULL,			/* special */
+	NULL			/* proc */
 };
 
 /*

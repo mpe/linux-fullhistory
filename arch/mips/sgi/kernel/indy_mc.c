@@ -1,4 +1,4 @@
-/* $Id: indy_mc.c,v 1.1 1997/06/06 09:36:24 ralf Exp $
+/* $Id: indy_mc.c,v 1.1.1.1 1997/06/01 03:16:40 ralf Exp $
  * indy_mc.c: Routines for manipulating the INDY memory controller.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)

@@ -397,10 +397,6 @@ smb_receive(struct smb_sb_info *server)
 	{
 		int new_len = smb_round_length(len + 4);
 
-#ifdef SMBFS_PARANOIA
-printk("smb_receive: Increase packet size from %d to %d\n",
-server->packet_size, new_len);
-#endif
 		result = -ENOMEM;
 		packet = smb_vmalloc(new_len);
 		if (packet == NULL)
@@ -655,6 +651,17 @@ smb_request(struct smb_sb_info *server)
 	}
 	if (result < 0)
 		goto bad_conn;
+	/*
+	 * Check for fatal server errors ...
+	 */
+	if (server->rcls) {
+		int error = smb_errno(server);
+		if (error == EBADSLT) {
+			printk("smb_request: tree ID invalid\n");
+			result = error;
+			goto bad_conn;
+		}
+	}
 
 out:
 	pr_debug("smb_request: result = %d\n", result);
@@ -827,6 +834,17 @@ smb_trans2_request(struct smb_sb_info *server, __u16 trans2_command,
 	}
 	if (result < 0)
 		goto bad_conn;
+	/*
+	 * Check for fatal server errors ...
+	 */
+	if (server->rcls) {
+		int error = smb_errno(server);
+		if (error == EBADSLT) {
+			printk("smb_request: tree ID invalid\n");
+			result = error;
+			goto bad_conn;
+		}
+	}
 
 out:
 	return result;

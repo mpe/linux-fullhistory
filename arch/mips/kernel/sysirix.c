@@ -1,4 +1,4 @@
-/* $Id: sysirix.c,v 1.4 1997/08/08 18:12:35 miguel Exp $
+/* $Id: sysirix.c,v 1.6 1997/12/06 11:29:29 ralf Exp $
  * sysirix.c: IRIX system call emulation.
  *
  * Copyright (C) 1996 David S. Miller
@@ -26,7 +26,7 @@
 #include <asm/pgtable.h>
 #include <asm/uaccess.h>
 
-/* 2,300 lines of complete and utter shit coming up... */
+/* 2,358 lines of complete and utter shit coming up... */
 
 /* The sysmp commands supported thus far. */
 #define MP_PGSIZE           14 /* Return system page size in v1. */
@@ -751,8 +751,6 @@ asmlinkage int irix_fstatfs(unsigned int fd, struct irix_statfs *buf)
 	}
 	error = 0;
 
-dput_and_out:
-	dput(dentry);
 out:
 	unlock_kernel();
 	return error;
@@ -1516,8 +1514,6 @@ asmlinkage int irix_fstatvfs(int fd, struct irix_statvfs *buf)
 
 	error = 0;
 
-dput_and_out:
-	dput(dentry);
 out:
 	unlock_kernel();
 	return error;
@@ -1881,8 +1877,6 @@ asmlinkage int irix_fstatvfs64(int fd, struct irix_statvfs *buf)
 
 	error = 0;
 
-dput_and_out:
-	dput(dentry);
 out:
 	unlock_kernel();
 	return error;
@@ -2023,7 +2017,7 @@ asmlinkage int irix_ngetdents(unsigned int fd, void * dirent, unsigned int count
 	buf.count = count;
 	buf.error = 0;
 
-	error = file->f_op->readdir(inode, file, &buf, irix_filldir32);
+	error = file->f_op->readdir(file, &buf, irix_filldir32);
 	if (error < 0)
 		goto out;
 	lastdirent = buf.previous;
@@ -2135,7 +2129,7 @@ asmlinkage int irix_getdents64(int fd, void *dirent, int cnt)
 	buf.previous = NULL;
 	buf.count = cnt;
 	buf.error = 0;
-	error = file->f_op->readdir(inode, file, &buf, irix_filldir64);
+	error = file->f_op->readdir(file, &buf, irix_filldir64);
 	if (error < 0)
 		goto out;
 	lastdirent = buf.previous;
@@ -2198,7 +2192,7 @@ asmlinkage int irix_ngetdents64(int fd, void *dirent, int cnt, int *eob)
 	buf.previous = NULL;
 	buf.count = cnt;
 	buf.error = 0;
-	error = file->f_op->readdir(inode, file, &buf, irix_filldir64);
+	error = file->f_op->readdir(file, &buf, irix_filldir64);
 	if (error < 0)
 		goto out;
 	lastdirent = buf.previous;

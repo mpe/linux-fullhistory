@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1996, 1997 by Ralf Baechle
  *
- * $Id: hw-access.c,v 1.2 1997/08/08 18:11:57 miguel Exp $
+ * $Id: hw-access.c,v 1.3 1997/07/29 17:46:42 ralf Exp $
  */
 #include <linux/config.h>
 #include <linux/delay.h>
@@ -46,69 +46,69 @@ fd_outb(unsigned char value, unsigned int port)
  * How to access the floppy DMA functions.
  */
 static void
-fd_enable_dma(void)
+fd_enable_dma(int channel)
 {
-	enable_dma(FLOPPY_DMA);
+	enable_dma(channel);
 }
 
 static void
-fd_disable_dma(void)
+fd_disable_dma(int channel)
 {
-	disable_dma(FLOPPY_DMA);
+	disable_dma(int channel);
 }
 
 static int
-fd_request_dma(void)
+fd_request_dma(int channel)
 {
-	return request_dma(FLOPPY_DMA, "floppy");
+	return request_dma(channel, "floppy");
 }
 
 static void
-fd_free_dma(void)
+fd_free_dma(int channel)
 {
-	free_dma(FLOPPY_DMA);
+	free_dma(channel);
 }
 
 static void
-fd_clear_dma_ff(void)
+fd_clear_dma_ff(int channel)
 {
-	clear_dma_ff(FLOPPY_DMA);
+	clear_dma_ff(channel);
 }
 
 static void
-fd_set_dma_mode(char mode)
+fd_set_dma_mode(int channel, char mode)
 {
-	set_dma_mode(FLOPPY_DMA, mode);
+	set_dma_mode(channel, mode);
 }
 
 static void
-fd_set_dma_addr(unsigned int addr)
+fd_set_dma_addr(int channel, unsigned int addr)
 {
-	set_dma_addr(FLOPPY_DMA, addr);
+	set_dma_addr(channel, addr);
 }
 
 static void
-fd_set_dma_count(unsigned int count)
+fd_set_dma_count(int channel, unsigned int count)
 {
-	set_dma_count(FLOPPY_DMA, count);
+	set_dma_count(channel, count);
 }
 
 static int
-fd_get_dma_residue(void)
+fd_get_dma_residue(int channel)
 {
-	return get_dma_residue(FLOPPY_DMA);
+	return get_dma_residue(channel);
 }
 
 static void
-fd_enable_irq(void)
+fd_enable_irq(int irq)
 {
-	enable_irq(FLOPPY_IRQ);
+	enable_irq(irq);
 }
 
 static void
-fd_disable_irq(void)
+fd_disable_irq(int irq)
 {
-	disable_irq(FLOPPY_IRQ);
+	disable_irq(irq);
 }
 
 void

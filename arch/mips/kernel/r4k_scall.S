@@ -1,4 +1,4 @@
-/* $Id: r4k_scall.S,v 1.1 1997/06/06 09:33:08 ralf Exp $
+/* $Id: r4k_scall.S,v 1.1.1.1 1997/06/01 03:16:43 ralf Exp $
  * r4k_scall.S: R4xx0 specific code to handle system calls.
  *
  * Copyright (C) 1994, 1995, 1996 by Ralf Baechle and Andreas Busse

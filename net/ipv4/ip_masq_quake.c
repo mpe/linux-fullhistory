@@ -11,6 +11,7 @@
  *      Harald Hoyer            :       Unofficial Quake Specs found at 
  *                                 http://www.gamers.org/dEngine/quake/spec/ 
  *      Harald Hoyer            :       Check for QUAKE-STRING
+ *	Juan Jose Ciarlante	:  litl bits for 2.1
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -73,7 +74,7 @@ masq_quake_done_1 (struct ip_masq_app *mapp, struct ip_masq *ms)
 }
 
 int
-masq_quake_in (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb_p)
+masq_quake_in (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb_p, __u32 maddr)
 {
 	struct sk_buff *skb;
 	struct iphdr *iph;
@@ -234,7 +235,8 @@ masq_quake_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **s
 
 	  memcpy(&udp_port, data, 2);
 	  
-	  n_ms = ip_masq_new(maddr, IPPROTO_UDP,
+	  n_ms = ip_masq_new(IPPROTO_UDP,
+			     maddr, 0,
 			     ms->saddr, htons(udp_port),
 			     ms->daddr, ms->dport,
 			     0);
@@ -248,6 +250,10 @@ masq_quake_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **s
 #endif
 	  udp_port = ntohs(n_ms->mport);
 	  memcpy(data, &udp_port, 2);
+
+	  ip_masq_listen(n_ms);
+	  ip_masq_control_add(n_ms, ms);
+	  ip_masq_put(n_ms);
 
 	  break;
 	}

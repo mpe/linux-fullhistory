@@ -13,6 +13,7 @@ struct llc_struct
 { 
 	char eye[4];			/* To recognize llc area in dump */
 	int retry_count;		/* LLC link state variables */
+	unsigned char name[9];		/* name of this llc instance */
 	unsigned char s_flag;
 	unsigned char p_flag;
 	unsigned char f_flag;
@@ -68,9 +69,7 @@ struct llc_struct
 	char * client_data;		/* Pointer to clients context */
 	unsigned char local_sap;
 	unsigned char remote_sap ;
-	char remote_mac[MAX_ADDR_LEN];  /* MAC address of remote session partner */
-	int  remote_mac_len;		/* Actual length of mac address */
-	int  mac_offset;		/* Source mac offset in skb */ 
+	char remote_mac[MAX_ADDR_LEN];  /* MAC address of remote session partner */ 
 	struct device *dev;		/* Device we are attached to */
 		     
 	unsigned char llc_mode;		/* See doc 7.1 on p70 */
@@ -132,3 +131,5 @@ void		llc_test_request(llcptr lp, int data_len, char *pdu_data);
 
 int		register_cl2llc_client(llcptr llc, const char *device, void (*ops)(llcptr), u8 *rmac, u8 ssap, u8 dsap);
 void		unregister_cl2llc_client(llcptr lp);
+int 		llc_mac_data_indicate(llcptr lp, struct sk_buff *skb );
+

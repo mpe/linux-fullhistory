@@ -16,6 +16,7 @@
 #define GFX_IS_MANAGED       (GFX_BASE + 5)
 
 #define GFX_MAPALL           (GFX_BASE + 10)
+#define GFX_LABEL            (GFX_BASE + 11)
 
 #define GFX_INFO_NAME_SIZE  16
 #define GFX_INFO_LABEL_SIZE 16

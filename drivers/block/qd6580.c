@@ -65,4 +65,5 @@ void init_qd6580 (void)
 	ide_hwifs[0].tuneproc = &tune_qd6580;
 	ide_hwifs[0].mate = &ide_hwifs[1];
 	ide_hwifs[1].mate = &ide_hwifs[0];
+	ide_hwifs[1].channel = 1;
 }

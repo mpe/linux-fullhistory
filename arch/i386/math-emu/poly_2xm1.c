@@ -3,9 +3,9 @@
  |                                                                           |
  | Function to compute 2^x-1 by a polynomial approximation.                  |
  |                                                                           |
- | Copyright (C) 1992,1993,1994                                              |
- |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
+ | Copyright (C) 1992,1993,1994,1997                                         |
+ |                  W. Metzenthen, 22 Parker St, Ormond, Vic 3163, Australia |
+ |                  E-mail   billm@suburbia.net                              |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -13,6 +13,7 @@
 #include "exception.h"
 #include "reg_constant.h"
 #include "fpu_emu.h"
+#include "fpu_system.h"
 #include "control_w.h"
 #include "poly.h"
 
@@ -48,20 +49,19 @@ static const Xsig *shiftterm[] = { &shiftterm0, &shiftterm1,
 
 
 /*--- poly_2xm1() -----------------------------------------------------------+
- | Requires an argument which is TW_Valid and < 1.                           |
+ | Requires st(0) which is TAG_Valid and < 1.                                |
  +---------------------------------------------------------------------------*/
-int	poly_2xm1(FPU_REG const *arg, FPU_REG *result)
+int	poly_2xm1(u_char sign, FPU_REG *arg, FPU_REG *result)
 {
-  long int               exponent, shift;
-  unsigned long long     Xll;
-  Xsig                   accumulator, Denom, argSignif;
+  long int              exponent, shift;
+  unsigned long long    Xll;
+  Xsig                  accumulator, Denom, argSignif;
+  u_char                tag;
 
-
-  exponent = arg->exp - EXP_BIAS;
+  exponent = exponent16(arg);
 
 #ifdef PARANOID
-  if (   (exponent >= 0)    	/* Don't want a |number| >= 1.0 */
-      || (arg->tag != TW_Valid) )
+  if ( exponent >= 0 )    	/* Don't want a |number| >= 1.0 */
     {
       /* Number negative, too large, or not Valid. */
       EXCEPTION(EX_INTERNAL|0x127);
@@ -94,7 +94,7 @@ int	poly_2xm1(FPU_REG const *arg, FPU_REG *result)
   if ( exponent < -2 )
     {
       /* Shift the argument right by the required places. */
-      if ( shrx(&Xll, -2-exponent) >= 0x80000000U )
+      if ( FPU_shrx(&Xll, -2-exponent) >= 0x80000000U )
 	Xll++;	/* round up */
     }
 
@@ -118,7 +118,7 @@ int	poly_2xm1(FPU_REG const *arg, FPU_REG *result)
       exponent = 1;
     }
 
-  if ( arg->sign != SIGN_POS )
+  if ( sign != SIGN_POS )
     {
       /* The argument is negative, use the identity:
 	     f(-x) = -f(x) / (1 + f(x))
@@ -142,10 +142,14 @@ int	poly_2xm1(FPU_REG const *arg, FPU_REG *result)
   /* Convert to 64 bit signed-compatible */
   exponent += round_Xsig(&accumulator);
 
+  result = &st(0);
   significand(result) = XSIG_LL(accumulator);
-  result->tag = TW_Valid;
-  result->exp = exponent + EXP_BIAS;
-  result->sign = arg->sign;
+  setexponent16(result, exponent);
+
+  tag = FPU_round(result, 1, 0, FULL_PRECISION, sign);
+
+  setsign(result, sign);
+  FPU_settag0(tag);
 
   return 0;
 

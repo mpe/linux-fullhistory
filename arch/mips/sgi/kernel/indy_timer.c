@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: indy_timer.c,v 1.2 1997/06/30 15:53:04 ralf Exp $
+ * $Id: indy_timer.c,v 1.3 1997/08/11 04:37:09 ralf Exp $
  */
 
 #include <linux/errno.h>
@@ -101,10 +101,12 @@ static long last_rtc_update = 0;
 
 void indy_timer_interrupt(struct pt_regs *regs)
 {
+	int irq = 7;
+
 	/* Ack timer and compute new compare. */
 	r4k_cur = (read_32bit_cp0_register(CP0_COUNT) + r4k_offset);
 	ack_r4ktimer(r4k_cur);
-	kstat.interrupts[7]++;
+	kstat.interrupts[irq]++;
 	do_timer(regs);
 
 	/* We update the Dallas time of day approx. every 11 minutes,
@@ -272,10 +274,15 @@ void indy_timer_init(void)
 
 void indy_8254timer_irq(void)
 {
-	kstat.interrupts[4]++;
+	int cpu = smp_processor_id();
+	int irq = 4;
+
+	irq_enter(cpu, irq);
+	kstat.interrupts[irq]++;
 	printk("indy_8254timer_irq: Whoops, should not have gotten this IRQ\n");
 	prom_getchar();
 	prom_imode();
+	irq_exit(cpu, irq);
 }
 
 void do_gettimeofday(struct timeval *tv)

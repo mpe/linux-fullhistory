@@ -1,4 +1,4 @@
-/* $Id: env.c,v 1.1 1997/06/06 09:36:59 ralf Exp $
+/* $Id: env.c,v 1.1.1.1 1997/06/01 03:16:40 ralf Exp $
  * env.c: ARCS environment variable routines.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)

@@ -76,9 +76,8 @@ struct i387_soft_struct {
 	long	fcs;
 	long	foo;
 	long	fos;
-	long    top;
-	struct fpu_reg	regs[8];	/* 8*16 bytes for each FP-reg = 128 bytes */
-	unsigned char	lookahead;
+	long	st_space[20];	/* 8*10 bytes for each FP-reg = 80 bytes */
+	unsigned char	ftop, changed, lookahead, no_update, rm, alimit;
 	struct info	*info;
 	unsigned long	entry_eip;
 };

@@ -6,6 +6,8 @@
  * for more details.
  *
  * Copyright (C) 1996, 1997 by Ralf Baechle
+ *
+ * $Id: setup.c,v 1.5 1997/12/01 16:19:12 ralf Exp $
  */
 #include <asm/ptrace.h>
 #include <linux/ioport.h>
@@ -54,7 +56,7 @@ __initfunc(static void sni_irq_setup(void))
 	 * I don't know how to handle the debug button interrupt, so
 	 * don't use this button yet or bad things happen ...
 	 */
-	set_cp0_status(ST0_IM, IE_IRQ0);
+	set_cp0_status(ST0_IM, IE_IRQ1 | IE_IRQ4);
 }
 
 void (*board_time_init)(struct irqaction *irq);
@@ -69,8 +71,7 @@ __initfunc(static void sni_rm200_pci_time_init(struct irqaction *irq))
 }
 
 unsigned char aux_device_present;
-extern unsigned long sni_rm200_pcibios_init (unsigned long memory_start,
-                                             unsigned long memory_end);
+extern struct pci_ops sni_pci_ops;
 extern unsigned char sni_map_isa_cache;
 
 /*
@@ -81,7 +82,7 @@ static inline void sni_pcimt_detect(void)
 	char boardtype[80];
 	unsigned char csmsr;
 	char *p = boardtype;
-	int asic;
+	unsigned int asic, cacheconf;
 
 	csmsr = *(volatile unsigned char *)PCIMT_CSMSR;
 
@@ -93,6 +94,30 @@ static inline void sni_pcimt_detect(void)
 	asic = (csmsr & 0x08) ? asic : !asic;
 	p += sprintf(p, ", ASIC PCI Rev %s", asic ? "1.0" : "1.1");
 	printk("%s.\n", boardtype);
+
+	cacheconf = *(volatile unsigned int *)PCIMT_CACHECONF;
+	switch(cacheconf & 7) {
+	case 0:
+		printk("Secondary cache disabled\n");
+		break;
+	case 1:
+		printk("256kb secondary cache\n");
+		break;
+	case 2:
+		printk("512kb secondary cache\n");
+		break;
+	case 3:
+		printk("1mb secondary cache\n");
+		break;
+	case 4:
+		printk("2mb secondary cache\n");
+		break;
+	case 5:
+		printk("4mb secondary cache\n");
+		break;
+	default:
+		panic("invalid secondary cache size\n");
+	}
 }
 	
 __initfunc(void sni_rm200_pci_setup(void))
@@ -128,7 +153,7 @@ __initfunc(void sni_rm200_pci_setup(void))
 	irq_setup = sni_irq_setup;
 	fd_cacheflush = sni_fd_cacheflush;	// Will go away
 	feature = &sni_rm200_pci_feature;
-	port_base = SNI_PORT_BASE;
+	mips_io_port_base = SNI_PORT_BASE;
 	keyboard_setup = sni_rm200_keyboard_setup;
 
 	/*
@@ -157,5 +182,5 @@ __initfunc(void sni_rm200_pci_setup(void))
 	 * the I/O port space ...
 	 */
 	request_region(0xcfc,0x04,"PCI config data");
-	_pcibios_init = sni_rm200_pcibios_init;
+	pci_ops = &sni_pci_ops;
 }

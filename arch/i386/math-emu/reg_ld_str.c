@@ -3,9 +3,9 @@
  |                                                                           |
  | All of the functions which transfer data between user memory and FPU_REGs.|
  |                                                                           |
- | Copyright (C) 1992,1993,1994,1996                                         |
+ | Copyright (C) 1992,1993,1994,1996,1997                                    |
  |                  W. Metzenthen, 22 Parker St, Ormond, Vic 3163, Australia |
- |                  E-mail   billm@jacobi.maths.monash.edu.au                |
+ |                  E-mail   billm@suburbia.net                              |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -17,18 +17,16 @@
  |    other processes using the emulator while swapping is in progress.      |
  +---------------------------------------------------------------------------*/
 
+#include "fpu_emu.h"
+
 #include <asm/uaccess.h>
 
 #include "fpu_system.h"
 #include "exception.h"
 #include "reg_constant.h"
-#include "fpu_emu.h"
 #include "control_w.h"
 #include "status_w.h"
 
-
-#define EXTENDED_Ebias 0x3fff
-#define EXTENDED_Emin (-0x3ffe)  /* smallest valid exponent */
 
 #define DOUBLE_Emax 1023         /* largest valid exponent */
 #define DOUBLE_Ebias 1023
@@ -38,123 +36,85 @@
 #define SINGLE_Ebias 127
 #define SINGLE_Emin (-126)       /* smallest valid exponent */
 
-static void write_to_extended(FPU_REG *rp, char *d);
 
-
-/* Get a long double from user memory */
-int reg_load_extended(long double *s, FPU_REG *loaded_data)
+static u_char normalize_no_excep(FPU_REG *r, int exp, int sign)
 {
-  unsigned long sigl, sigh, exp;
+  u_char tag;
 
-  RE_ENTRANT_CHECK_OFF;
-  FPU_verify_area(VERIFY_READ, s, 10);
-  get_user(sigl, (unsigned long *) s);
-  get_user(sigh, 1 + (unsigned long *) s);
-  get_user(exp, 4 + (unsigned short *) s);
-  RE_ENTRANT_CHECK_ON;
+  setexponent16(r, exp);
 
-  loaded_data->tag = TW_Valid;   /* Default */
-  loaded_data->sigl = sigl;
-  loaded_data->sigh = sigh;
-  if (exp & 0x8000)
-    loaded_data->sign = SIGN_NEG;
-  else
-    loaded_data->sign = SIGN_POS;
-  exp &= 0x7fff;
-  loaded_data->exp = exp - EXTENDED_Ebias + EXP_BIAS;
+  tag = FPU_normalize_nuo(r);
+  stdexp(r);
+  if ( sign )
+    setnegative(r);
 
+  return tag;
+}
+
+
+int FPU_tagof(FPU_REG *ptr)
+{
+  int exp;
+
+  exp = exponent16(ptr) & 0x7fff;
   if ( exp == 0 )
     {
-      if ( !(sigh | sigl) )
+      if ( !(ptr->sigh | ptr->sigl) )
 	{
-	  loaded_data->tag = TW_Zero;
-	  return 0;
+	  return TAG_Zero;
 	}
       /* The number is a de-normal or pseudodenormal. */
-      if (sigh & 0x80000000)
-	{
-	  /* Is a pseudodenormal. */
-	  /* Convert it for internal use. */
-	  /* This is non-80486 behaviour because the number
-	     loses its 'denormal' identity. */
-	  loaded_data->exp++;
-	  return 1;
-	}
-      else
-	{
-	  /* Is a denormal. */
-	  /* Convert it for internal use. */
-	  loaded_data->exp++;
-	  normalize_nuo(loaded_data);
-	  return 0;
-	}
+      return TAG_Special;
     }
-  else if ( exp == 0x7fff )
+
+  if ( exp == 0x7fff )
     {
-      if ( !((sigh ^ 0x80000000) | sigl) )
-	{
-	  /* Matches the bit pattern for Infinity. */
-	  loaded_data->exp = EXP_Infinity;
-	  loaded_data->tag = TW_Infinity;
-	  return 0;
-	}
-
-      loaded_data->exp = EXP_NaN;
-      loaded_data->tag = TW_NaN;
-      if ( !(sigh & 0x80000000) )
-	{
-	  /* NaNs have the ms bit set to 1. */
-	  /* This is therefore an Unsupported NaN data type. */
-	  /* This is non 80486 behaviour */
-	  /* This should generate an Invalid Operand exception
-	     later, so we convert it to a SNaN */
-	  loaded_data->sigh = 0x80000000;
-	  loaded_data->sigl = 0x00000001;
-	  loaded_data->sign = SIGN_NEG;
-	  return 1;
-	}
-      return 0;
+      /* Is an Infinity, a NaN, or an unsupported data type. */
+      return TAG_Special;
     }
 
-  if ( !(sigh & 0x80000000) )
+  if ( !(ptr->sigh & 0x80000000) )
     {
       /* Unsupported data type. */
       /* Valid numbers have the ms bit set to 1. */
       /* Unnormal. */
-      /* Convert it for internal use. */
-      /* This is non-80486 behaviour */
-      /* This should generate an Invalid Operand exception
-	 later, so we convert it to a SNaN */
-      loaded_data->sigh = 0x80000000;
-      loaded_data->sigl = 0x00000001;
-      loaded_data->sign = SIGN_NEG;
-      loaded_data->exp = EXP_NaN;
-      loaded_data->tag = TW_NaN;
-      return 1;
+      return TAG_Special;
     }
-  return 0;
+
+  return TAG_Valid;
+}
+
+
+/* Get a long double from user memory */
+int FPU_load_extended(long double *s, int stnr)
+{
+  FPU_REG *sti_ptr = &st(stnr);
+
+  RE_ENTRANT_CHECK_OFF;
+  FPU_verify_area(VERIFY_READ, s, 10);
+  __copy_from_user(sti_ptr, s, 10);
+  RE_ENTRANT_CHECK_ON;
+
+  return FPU_tagof(sti_ptr);
 }
 
 
 /* Get a double from user memory */
-int reg_load_double(double *dfloat, FPU_REG *loaded_data)
+int FPU_load_double(double *dfloat, FPU_REG *loaded_data)
 {
-  int exp;
+  int exp, tag, negative;
   unsigned m64, l64;
 
   RE_ENTRANT_CHECK_OFF;
   FPU_verify_area(VERIFY_READ, dfloat, 8);
-  get_user(m64, 1 + (unsigned long *) dfloat);
-  get_user(l64, (unsigned long *) dfloat);
+  FPU_get_user(m64, 1 + (unsigned long *) dfloat);
+  FPU_get_user(l64, (unsigned long *) dfloat);
   RE_ENTRANT_CHECK_ON;
 
-  if (m64 & 0x80000000)
-    loaded_data->sign = SIGN_NEG;
-  else
-    loaded_data->sign = SIGN_POS;
-  exp = ((m64 & 0x7ff00000) >> 20) - DOUBLE_Ebias;
+  negative = (m64 & 0x80000000) ? SIGN_Negative : SIGN_Positive;
+  exp = ((m64 & 0x7ff00000) >> 20) - DOUBLE_Ebias + EXTENDED_Ebias;
   m64 &= 0xfffff;
-  if (exp > DOUBLE_Emax)
+  if ( exp > DOUBLE_Emax + EXTENDED_Ebias )
     {
       /* Infinity or NaN */
       if ((m64 == 0) && (l64 == 0))
@@ -162,93 +122,87 @@ int reg_load_double(double *dfloat, FPU_REG *loaded_data)
 	  /* +- infinity */
 	  loaded_data->sigh = 0x80000000;
 	  loaded_data->sigl = 0x00000000;
-	  loaded_data->exp = EXP_Infinity;
-	  loaded_data->tag = TW_Infinity;
-	  return 0;
+	  exp = EXP_Infinity + EXTENDED_Ebias;
+	  tag = TAG_Special;
 	}
       else
 	{
 	  /* Must be a signaling or quiet NaN */
-	  loaded_data->exp = EXP_NaN;
-	  loaded_data->tag = TW_NaN;
+	  exp = EXP_NaN + EXTENDED_Ebias;
 	  loaded_data->sigh = (m64 << 11) | 0x80000000;
 	  loaded_data->sigh |= l64 >> 21;
 	  loaded_data->sigl = l64 << 11;
-	  return 0; /* The calling function must look for NaNs */
+	  tag = TAG_Special;    /* The calling function must look for NaNs */
 	}
     }
-  else if ( exp < DOUBLE_Emin )
+  else if ( exp < DOUBLE_Emin + EXTENDED_Ebias )
     {
       /* Zero or de-normal */
       if ((m64 == 0) && (l64 == 0))
 	{
 	  /* Zero */
-	  int c = loaded_data->sign;
-	  reg_move(&CONST_Z, loaded_data);
-	  loaded_data->sign = c;
-	  return 0;
+	  reg_copy(&CONST_Z, loaded_data);
+	  exp = 0;
+	  tag = TAG_Zero;
 	}
       else
 	{
 	  /* De-normal */
-	  loaded_data->exp = DOUBLE_Emin + EXP_BIAS;
-	  loaded_data->tag = TW_Valid;
 	  loaded_data->sigh = m64 << 11;
 	  loaded_data->sigh |= l64 >> 21;
 	  loaded_data->sigl = l64 << 11;
-	  normalize_nuo(loaded_data);
-	  return denormal_operand();
+
+	  return normalize_no_excep(loaded_data, DOUBLE_Emin, negative)
+	    | (denormal_operand() < 0 ? FPU_Exception : 0);
 	}
     }
   else
     {
-      loaded_data->exp = exp + EXP_BIAS;
-      loaded_data->tag = TW_Valid;
       loaded_data->sigh = (m64 << 11) | 0x80000000;
       loaded_data->sigh |= l64 >> 21;
       loaded_data->sigl = l64 << 11;
 
-      return 0;
+      tag = TAG_Valid;
     }
+
+  setexponent16(loaded_data, exp | negative);
+
+  return tag;
 }
 
 
 /* Get a float from user memory */
-int reg_load_single(float *single, FPU_REG *loaded_data)
+int FPU_load_single(float *single, FPU_REG *loaded_data)
 {
   unsigned m32;
-  int exp;
+  int exp, tag, negative;
 
   RE_ENTRANT_CHECK_OFF;
   FPU_verify_area(VERIFY_READ, single, 4);
-  get_user(m32, (unsigned long *) single);
+  FPU_get_user(m32, (unsigned long *) single);
   RE_ENTRANT_CHECK_ON;
 
-  if (m32 & 0x80000000)
-    loaded_data->sign = SIGN_NEG;
-  else
-    loaded_data->sign = SIGN_POS;
+  negative = (m32 & 0x80000000) ? SIGN_Negative : SIGN_Positive;
+
   if (!(m32 & 0x7fffffff))
     {
       /* Zero */
-      int c = loaded_data->sign;
-      reg_move(&CONST_Z, loaded_data);
-      loaded_data->sign = c;
-      return 0;
+      reg_copy(&CONST_Z, loaded_data);
+      addexponent(loaded_data, negative);
+      return TAG_Zero;
     }
-  exp = ((m32 & 0x7f800000) >> 23) - SINGLE_Ebias;
+  exp = ((m32 & 0x7f800000) >> 23) - SINGLE_Ebias + EXTENDED_Ebias;
   m32 = (m32 & 0x7fffff) << 8;
-  if ( exp < SINGLE_Emin )
+  if ( exp < SINGLE_Emin + EXTENDED_Ebias )
     {
       /* De-normals */
-      loaded_data->exp = SINGLE_Emin + EXP_BIAS;
-      loaded_data->tag = TW_Valid;
       loaded_data->sigh = m32;
       loaded_data->sigl = 0;
-      normalize_nuo(loaded_data);
-      return denormal_operand();
+
+      return normalize_no_excep(loaded_data, SINGLE_Emin, negative)
+	| (denormal_operand() < 0 ? FPU_Exception : 0);
     }
-  else if ( exp > SINGLE_Emax )
+  else if ( exp > SINGLE_Emax + EXTENDED_Ebias )
     {
     /* Infinity or NaN */
       if ( m32 == 0 )
@@ -256,36 +210,37 @@ int reg_load_single(float *single, FPU_REG *loaded_data)
 	  /* +- infinity */
 	  loaded_data->sigh = 0x80000000;
 	  loaded_data->sigl = 0x00000000;
-	  loaded_data->exp = EXP_Infinity;
-	  loaded_data->tag = TW_Infinity;
-	  return 0;
+	  exp = EXP_Infinity + EXTENDED_Ebias;
+	  tag = TAG_Special;
 	}
       else
 	{
 	  /* Must be a signaling or quiet NaN */
-	  loaded_data->exp = EXP_NaN;
-	  loaded_data->tag = TW_NaN;
+	  exp = EXP_NaN + EXTENDED_Ebias;
 	  loaded_data->sigh = m32 | 0x80000000;
 	  loaded_data->sigl = 0;
-	  return 0; /* The calling function must look for NaNs */
+	  tag = TAG_Special;  /* The calling function must look for NaNs */
 	}
     }
   else
     {
-      loaded_data->exp = exp + EXP_BIAS;
       loaded_data->sigh = m32 | 0x80000000;
       loaded_data->sigl = 0;
-      loaded_data->tag = TW_Valid;
-      return 0;
+      tag = TAG_Valid;
     }
+
+  setexponent16(loaded_data, exp | negative);  /* Set the sign. */
+
+  return tag;
 }
 
 
 /* Get a long long from user memory */
-void reg_load_int64(long long *_s, FPU_REG *loaded_data)
+int FPU_load_int64(long long *_s)
 {
-  int e;
   long long s;
+  int sign;
+  FPU_REG *st0_ptr = &st(0);
 
   RE_ENTRANT_CHECK_OFF;
   FPU_verify_area(VERIFY_READ, _s, 8);
@@ -293,93 +248,91 @@ void reg_load_int64(long long *_s, FPU_REG *loaded_data)
   RE_ENTRANT_CHECK_ON;
 
   if (s == 0)
-    { reg_move(&CONST_Z, loaded_data); return; }
+    {
+      reg_copy(&CONST_Z, st0_ptr);
+      return TAG_Zero;
+    }
 
   if (s > 0)
-    loaded_data->sign = SIGN_POS;
+    sign = SIGN_Positive;
   else
   {
     s = -s;
-    loaded_data->sign = SIGN_NEG;
+    sign = SIGN_Negative;
   }
 
-  e = EXP_BIAS + 63;
-  significand(loaded_data) = s;
-  loaded_data->exp = e;
-  loaded_data->tag = TW_Valid;
-  normalize_nuo(loaded_data);
+  significand(st0_ptr) = s;
+
+  return normalize_no_excep(st0_ptr, 63, sign);
 }
 
 
 /* Get a long from user memory */
-void reg_load_int32(long *_s, FPU_REG *loaded_data)
+int FPU_load_int32(long *_s, FPU_REG *loaded_data)
 {
   long s;
-  int e;
+  int negative;
 
   RE_ENTRANT_CHECK_OFF;
   FPU_verify_area(VERIFY_READ, _s, 4);
-  get_user(s, _s);
+  FPU_get_user(s, _s);
   RE_ENTRANT_CHECK_ON;
 
   if (s == 0)
-    { reg_move(&CONST_Z, loaded_data); return; }
+    { reg_copy(&CONST_Z, loaded_data); return TAG_Zero; }
 
   if (s > 0)
-    loaded_data->sign = SIGN_POS;
+    negative = SIGN_Positive;
   else
-  {
-    s = -s;
-    loaded_data->sign = SIGN_NEG;
-  }
+    {
+      s = -s;
+      negative = SIGN_Negative;
+    }
 
-  e = EXP_BIAS + 31;
   loaded_data->sigh = s;
   loaded_data->sigl = 0;
-  loaded_data->exp = e;
-  loaded_data->tag = TW_Valid;
-  normalize_nuo(loaded_data);
+
+  return normalize_no_excep(loaded_data, 31, negative);
 }
 
 
 /* Get a short from user memory */
-void reg_load_int16(short *_s, FPU_REG *loaded_data)
+int FPU_load_int16(short *_s, FPU_REG *loaded_data)
 {
-  int s, e;
+  int s, negative;
 
   RE_ENTRANT_CHECK_OFF;
   FPU_verify_area(VERIFY_READ, _s, 2);
   /* Cast as short to get the sign extended. */
-  get_user(s, _s);
+  FPU_get_user(s, _s);
   RE_ENTRANT_CHECK_ON;
 
   if (s == 0)
-    { reg_move(&CONST_Z, loaded_data); return; }
+    { reg_copy(&CONST_Z, loaded_data); return TAG_Zero; }
 
   if (s > 0)
-    loaded_data->sign = SIGN_POS;
+    negative = SIGN_Positive;
   else
-  {
-    s = -s;
-    loaded_data->sign = SIGN_NEG;
-  }
+    {
+      s = -s;
+      negative = SIGN_Negative;
+    }
 
-  e = EXP_BIAS + 15;
   loaded_data->sigh = s << 16;
-
   loaded_data->sigl = 0;
-  loaded_data->exp = e;
-  loaded_data->tag = TW_Valid;
-  normalize_nuo(loaded_data);
+
+  return normalize_no_excep(loaded_data, 15, negative);
 }
 
 
 /* Get a packed bcd array from user memory */
-void reg_load_bcd(char *s, FPU_REG *loaded_data)
+int FPU_load_bcd(u_char *s)
 {
+  FPU_REG *st0_ptr = &st(0);
   int pos;
-  unsigned char bcd;
+  u_char bcd;
   long long l=0;
+  int sign;
 
   RE_ENTRANT_CHECK_OFF;
   FPU_verify_area(VERIFY_READ, s, 10);
@@ -388,7 +341,7 @@ void reg_load_bcd(char *s, FPU_REG *loaded_data)
     {
       l *= 10;
       RE_ENTRANT_CHECK_OFF;
-      get_user(bcd, (unsigned char *) s+pos);
+      FPU_get_user(bcd, (u_char *) s+pos);
       RE_ENTRANT_CHECK_ON;
       l += bcd >> 4;
       l *= 10;
@@ -396,32 +349,27 @@ void reg_load_bcd(char *s, FPU_REG *loaded_data)
     }
  
   RE_ENTRANT_CHECK_OFF;
-  {
-    unsigned char sign;
-    get_user(sign, (unsigned char *) s+9);
-    loaded_data->sign = (sign & 0x80) ? SIGN_NEG : SIGN_POS;
-  }
+  FPU_get_user(sign, (u_char *) s+9);
+  sign = sign & 0x80 ? SIGN_Negative : SIGN_Positive;
   RE_ENTRANT_CHECK_ON;
 
-  if (l == 0)
+  if ( l == 0 )
     {
-      char sign = loaded_data->sign;
-      reg_move(&CONST_Z, loaded_data);
-      loaded_data->sign = sign;
+      reg_copy(&CONST_Z, st0_ptr);
+      addexponent(st0_ptr, sign);   /* Set the sign. */
+      return TAG_Zero;
     }
   else
     {
-      significand(loaded_data) = l;
-      loaded_data->exp = EXP_BIAS + 63;
-      loaded_data->tag = TW_Valid;
-      normalize_nuo(loaded_data);
+      significand(st0_ptr) = l;
+      return normalize_no_excep(st0_ptr, 63, sign);
     }
 }
 
 /*===========================================================================*/
 
 /* Put a long double into user memory */
-int reg_store_extended(long double *d, FPU_REG *st0_ptr)
+int FPU_store_extended(FPU_REG *st0_ptr, u_char st0_tag, long double *d)
 {
   /*
     The only exception raised by an attempt to store to an
@@ -429,12 +377,16 @@ int reg_store_extended(long double *d, FPU_REG *st0_ptr)
     attempting to store from an empty register.
    */
 
-  if ( st0_ptr->tag != TW_Empty )
+  if ( st0_tag != TAG_Empty )
     {
       RE_ENTRANT_CHECK_OFF;
       FPU_verify_area(VERIFY_WRITE, d, 10);
+
+      FPU_put_user(st0_ptr->sigl, (unsigned long *) d);
+      FPU_put_user(st0_ptr->sigh, (unsigned long *) ((u_char *)d + 4));
+      FPU_put_user(exponent16(st0_ptr), (unsigned short *) ((u_char *)d + 8));
       RE_ENTRANT_CHECK_ON;
-      write_to_extended(st0_ptr, (char *) d);
+
       return 1;
     }
 
@@ -446,9 +398,9 @@ int reg_store_extended(long double *d, FPU_REG *st0_ptr)
       /* Put out the QNaN indefinite */
       RE_ENTRANT_CHECK_OFF;
       FPU_verify_area(VERIFY_WRITE,d,10);
-      put_user(0, (unsigned long *) d);
-      put_user(0xc0000000, 1 + (unsigned long *) d);
-      put_user(0xffff, 4 + (short *) d);
+      FPU_put_user(0, (unsigned long *) d);
+      FPU_put_user(0xc0000000, 1 + (unsigned long *) d);
+      FPU_put_user(0xffff, 4 + (short *) d);
       RE_ENTRANT_CHECK_ON;
       return 1;
     }
@@ -459,38 +411,26 @@ int reg_store_extended(long double *d, FPU_REG *st0_ptr)
 
 
 /* Put a double into user memory */
-int reg_store_double(double *dfloat, FPU_REG *st0_ptr)
+int FPU_store_double(FPU_REG *st0_ptr, u_char st0_tag, double *dfloat)
 {
   unsigned long l[2];
   unsigned long increment = 0;	/* avoid gcc warnings */
-  char st0_tag = st0_ptr->tag;
+  int precision_loss;
+  int exp;
+  FPU_REG tmp;
 
-  if (st0_tag == TW_Valid)
+  if ( st0_tag == TAG_Valid )
     {
-      int precision_loss;
-      int exp;
-      FPU_REG tmp;
-
-      reg_move(st0_ptr, &tmp);
-      exp = tmp.exp - EXP_BIAS;
+      reg_copy(st0_ptr, &tmp);
+      exp = exponent(&tmp);
 
       if ( exp < DOUBLE_Emin )     /* It may be a denormal */
 	{
-	  /* A denormal will always underflow. */
-#ifndef PECULIAR_486
-	  /* An 80486 is supposed to be able to generate
-	     a denormal exception here, but... */
-	  if ( st0_ptr->exp <= EXP_UNDER )
-	    {
-	      /* Underflow has priority. */
-	      if ( control_word & CW_Underflow )
-		denormal_operand();
-	    }
-#endif PECULIAR_486
+	  addexponent(&tmp, -DOUBLE_Emin + 52);  /* largest exp to be 51 */
 
-	  tmp.exp += -DOUBLE_Emin + 52;  /* largest exp to be 51 */
+	denormal_arg:
 
-	  if ( (precision_loss = round_to_int(&tmp)) )
+	  if ( (precision_loss = FPU_round_to_int(&tmp, st0_tag)) )
 	    {
 #ifdef PECULIAR_486
 	      /* Did it round to a non-denormal ? */
@@ -527,10 +467,10 @@ int reg_store_double(double *dfloat, FPU_REG *st0_ptr)
 		    ((tmp.sigl & 0xc00) == 0xc00);            /* odd -> even */
 		  break;
 		case RC_DOWN:   /* towards -infinity */
-		  increment = (tmp.sign == SIGN_POS) ? 0 : tmp.sigl & 0x7ff;
+		  increment = signpositive(&tmp) ? 0 : tmp.sigl & 0x7ff;
 		  break;
 		case RC_UP:     /* towards +infinity */
-		  increment = (tmp.sign == SIGN_POS) ? tmp.sigl & 0x7ff : 0;
+		  increment = signpositive(&tmp) ? tmp.sigl & 0x7ff : 0;
 		  break;
 		case RC_CHOP:
 		  increment = 0;
@@ -601,33 +541,64 @@ int reg_store_double(double *dfloat, FPU_REG *st0_ptr)
 	    }
 	}
     }
-  else if (st0_tag == TW_Zero)
+  else if (st0_tag == TAG_Zero)
     {
       /* Number is zero */
       l[0] = 0;
       l[1] = 0;
     }
-  else if (st0_tag == TW_Infinity)
+  else if ( st0_tag == TAG_Special )
     {
-      l[0] = 0;
-      l[1] = 0x7ff00000;
-    }
-  else if (st0_tag == TW_NaN)
-    {
-      /* See if we can get a valid NaN from the FPU_REG */
-      l[0] = (st0_ptr->sigl >> 11) | (st0_ptr->sigh << 21);
-      l[1] = ((st0_ptr->sigh >> 11) & 0xfffff);
-      if ( !(st0_ptr->sigh & 0x40000000) )
+      st0_tag = FPU_Special(st0_ptr);
+      if ( st0_tag == TW_Denormal )
 	{
-	  /* It is a signalling NaN */
-	  EXCEPTION(EX_Invalid);
-	  if ( !(control_word & CW_Invalid) )
-	    return 0;
-	  l[1] |= (0x40000000 >> 11);
+	  /* A denormal will always underflow. */
+#ifndef PECULIAR_486
+	  /* An 80486 is supposed to be able to generate
+	     a denormal exception here, but... */
+	  /* Underflow has priority. */
+	  if ( control_word & CW_Underflow )
+	    denormal_operand();
+#endif PECULIAR_486
+	  reg_copy(st0_ptr, &tmp);
+	  goto denormal_arg;
 	}
-      l[1] |= 0x7ff00000;
+      else if (st0_tag == TW_Infinity)
+	{
+	  l[0] = 0;
+	  l[1] = 0x7ff00000;
+	}
+      else if (st0_tag == TW_NaN)
+	{
+	  /* Is it really a NaN ? */
+	  if ( (exponent(st0_ptr) == EXP_OVER)
+	       && (st0_ptr->sigh & 0x80000000) )
+	    {
+	      /* See if we can get a valid NaN from the FPU_REG */
+	      l[0] = (st0_ptr->sigl >> 11) | (st0_ptr->sigh << 21);
+	      l[1] = ((st0_ptr->sigh >> 11) & 0xfffff);
+	      if ( !(st0_ptr->sigh & 0x40000000) )
+		{
+		  /* It is a signalling NaN */
+		  EXCEPTION(EX_Invalid);
+		  if ( !(control_word & CW_Invalid) )
+		    return 0;
+		  l[1] |= (0x40000000 >> 11);
+		}
+	      l[1] |= 0x7ff00000;
+	    }
+	  else
+	    {
+	      /* It is an unsupported data type */
+	      EXCEPTION(EX_Invalid);
+	      if ( !(control_word & CW_Invalid) )
+		return 0;
+	      l[0] = 0;
+	      l[1] = 0xfff80000;
+	    }
+	}
     }
-  else if ( st0_tag == TW_Empty )
+  else if ( st0_tag == TAG_Empty )
     {
       /* Empty register (stack underflow) */
       EXCEPTION(EX_StackUnder);
@@ -637,21 +608,21 @@ int reg_store_double(double *dfloat, FPU_REG *st0_ptr)
 	  /* Put out the QNaN indefinite */
 	  RE_ENTRANT_CHECK_OFF;
 	  FPU_verify_area(VERIFY_WRITE,(void *)dfloat,8);
-	  put_user(0, (unsigned long *) dfloat);
-	  put_user(0xfff80000, 1 + (unsigned long *) dfloat);
+	  FPU_put_user(0, (unsigned long *) dfloat);
+	  FPU_put_user(0xfff80000, 1 + (unsigned long *) dfloat);
 	  RE_ENTRANT_CHECK_ON;
 	  return 1;
 	}
       else
 	return 0;
     }
-  if ( st0_ptr->sign )
+  if ( getsign(st0_ptr) )
     l[1] |= 0x80000000;
 
   RE_ENTRANT_CHECK_OFF;
   FPU_verify_area(VERIFY_WRITE,(void *)dfloat,8);
-  put_user(l[0], (unsigned long *)dfloat);
-  put_user(l[1], 1 + (unsigned long *)dfloat);
+  FPU_put_user(l[0], (unsigned long *)dfloat);
+  FPU_put_user(l[1], 1 + (unsigned long *)dfloat);
   RE_ENTRANT_CHECK_ON;
 
   return 1;
@@ -659,38 +630,27 @@ int reg_store_double(double *dfloat, FPU_REG *st0_ptr)
 
 
 /* Put a float into user memory */
-int reg_store_single(float *single, FPU_REG *st0_ptr)
+int FPU_store_single(FPU_REG *st0_ptr, u_char st0_tag, float *single)
 {
   long templ;
   unsigned long increment = 0;     	/* avoid gcc warnings */
-  char st0_tag = st0_ptr->tag;
+  int precision_loss;
+  int exp;
+  FPU_REG tmp;
 
-  if (st0_tag == TW_Valid)
+  if ( st0_tag == TAG_Valid )
     {
-      int precision_loss;
-      int exp;
-      FPU_REG tmp;
 
-      reg_move(st0_ptr, &tmp);
-      exp = tmp.exp - EXP_BIAS;
+      reg_copy(st0_ptr, &tmp);
+      exp = exponent(&tmp);
 
       if ( exp < SINGLE_Emin )
 	{
-	  /* A denormal will always underflow. */
-#ifndef PECULIAR_486
-	  /* An 80486 is supposed to be able to generate
-	     a denormal exception here, but... */
-	  if ( st0_ptr->exp <= EXP_UNDER )
-	    {
-	      /* Underflow has priority. */
-	      if ( control_word & CW_Underflow )
-		denormal_operand();
-	    }
-#endif PECULIAR_486
+	  addexponent(&tmp, -SINGLE_Emin + 23);  /* largest exp to be 22 */
 
-	  tmp.exp += -SINGLE_Emin + 23;  /* largest exp to be 22 */
+	denormal_arg:
 
-	  if ( (precision_loss = round_to_int(&tmp)) )
+	  if ( (precision_loss = FPU_round_to_int(&tmp, st0_tag)) )
 	    {
 #ifdef PECULIAR_486
 	      /* Did it round to a non-denormal ? */
@@ -704,15 +664,15 @@ int reg_store_single(float *single, FPU_REG *st0_ptr)
 		  EXCEPTION(EX_Underflow);
 		  /* This is a special case: see sec 16.2.5.1 of
 		     the 80486 book */
-		  if ( !(control_word & EX_Underflow) )
+		  if ( !(control_word & CW_Underflow) )
 		    return 0;
 		}
 	      EXCEPTION(precision_loss);
-	      if ( !(control_word & EX_Precision) )
+	      if ( !(control_word & CW_Precision) )
 		return 0;
 	    }
 	  templ = tmp.sigl;
-	}
+      }
       else
 	{
 	  if ( tmp.sigl | (tmp.sigh & 0x000000ff) )
@@ -726,15 +686,15 @@ int reg_store_single(float *single, FPU_REG *st0_ptr)
 		case RC_RND:
 		  increment = ((sigh & 0xff) > 0x80)       /* more than half */
 		    || (((sigh & 0xff) == 0x80) && sigl)   /* more than half */
-		      || ((sigh & 0x180) == 0x180);        /* round to even */
+		    || ((sigh & 0x180) == 0x180);        /* round to even */
 		  break;
 		case RC_DOWN:   /* towards -infinity */
-		  increment = (tmp.sign == SIGN_POS)
-		              ? 0 : (sigl | (sigh & 0xff));
+		  increment = signpositive(&tmp)
+		    ? 0 : (sigl | (sigh & 0xff));
 		  break;
 		case RC_UP:     /* towards +infinity */
-		  increment = (tmp.sign == SIGN_POS)
-		              ? (sigl | (sigh & 0xff)) : 0;
+		  increment = signpositive(&tmp)
+		    ? (sigl | (sigh & 0xff)) : 0;
 		  break;
 		case RC_CHOP:
 		  increment = 0;
@@ -767,7 +727,7 @@ int reg_store_single(float *single, FPU_REG *st0_ptr)
 	    }
 	  else
 	    precision_loss = 0;
-
+      
 	  templ = (tmp.sigh >> 8) & 0x007fffff;
 
 	  if ( exp > SINGLE_Emax )
@@ -798,29 +758,66 @@ int reg_store_single(float *single, FPU_REG *st0_ptr)
 	    }
 	}
     }
-  else if (st0_tag == TW_Zero)
+  else if (st0_tag == TAG_Zero)
     {
       templ = 0;
     }
-  else if (st0_tag == TW_Infinity)
+  else if ( st0_tag == TAG_Special )
     {
-      templ = 0x7f800000;
-    }
-  else if (st0_tag == TW_NaN)
-    {
-      /* See if we can get a valid NaN from the FPU_REG */
-      templ = st0_ptr->sigh >> 8;
-      if ( !(st0_ptr->sigh & 0x40000000) )
+      st0_tag = FPU_Special(st0_ptr);
+      if (st0_tag == TW_Denormal)
 	{
-	  /* It is a signalling NaN */
-	  EXCEPTION(EX_Invalid);
-	  if ( !(control_word & CW_Invalid) )
-	    return 0;
-	  templ |= (0x40000000 >> 8);
+	  reg_copy(st0_ptr, &tmp);
+
+	  /* A denormal will always underflow. */
+#ifndef PECULIAR_486
+	  /* An 80486 is supposed to be able to generate
+	     a denormal exception here, but... */
+	  /* Underflow has priority. */
+	  if ( control_word & CW_Underflow )
+	    denormal_operand();
+#endif PECULIAR_486
+	  goto denormal_arg;
 	}
-      templ |= 0x7f800000;
+      else if (st0_tag == TW_Infinity)
+	{
+	  templ = 0x7f800000;
+	}
+      else if (st0_tag == TW_NaN)
+	{
+	  /* Is it really a NaN ? */
+	  if ( (exponent(st0_ptr) == EXP_OVER) && (st0_ptr->sigh & 0x80000000) )
+	    {
+	      /* See if we can get a valid NaN from the FPU_REG */
+	      templ = st0_ptr->sigh >> 8;
+	      if ( !(st0_ptr->sigh & 0x40000000) )
+		{
+		  /* It is a signalling NaN */
+		  EXCEPTION(EX_Invalid);
+		  if ( !(control_word & CW_Invalid) )
+		    return 0;
+		  templ |= (0x40000000 >> 8);
+		}
+	      templ |= 0x7f800000;
+	    }
+	  else
+	    {
+	      /* It is an unsupported data type */
+	      EXCEPTION(EX_Invalid);
+	      if ( !(control_word & CW_Invalid) )
+		return 0;
+	      templ = 0xffc00000;
+	    }
+	}
+#ifdef PARANOID
+      else
+	{
+	  EXCEPTION(EX_INTERNAL|0x164);
+	  return 0;
+	}
+#endif
     }
-  else if ( st0_tag == TW_Empty )
+  else if ( st0_tag == TAG_Empty )
     {
       /* Empty register (stack underflow) */
       EXCEPTION(EX_StackUnder);
@@ -830,7 +827,7 @@ int reg_store_single(float *single, FPU_REG *st0_ptr)
 	  /* Put out the QNaN indefinite */
 	  RE_ENTRANT_CHECK_OFF;
 	  FPU_verify_area(VERIFY_WRITE,(void *)single,4);
-	  put_user(0xffc00000, (unsigned long *) single);
+	  FPU_put_user(0xffc00000, (unsigned long *) single);
 	  RE_ENTRANT_CHECK_ON;
 	  return 1;
 	}
@@ -844,12 +841,12 @@ int reg_store_single(float *single, FPU_REG *st0_ptr)
       return 0;
     }
 #endif
-  if (st0_ptr->sign)
+  if ( getsign(st0_ptr) )
     templ |= 0x80000000;
 
   RE_ENTRANT_CHECK_OFF;
   FPU_verify_area(VERIFY_WRITE,(void *)single,4);
-  put_user(templ,(unsigned long *) single);
+  FPU_put_user(templ,(unsigned long *) single);
   RE_ENTRANT_CHECK_ON;
 
   return 1;
@@ -857,34 +854,37 @@ int reg_store_single(float *single, FPU_REG *st0_ptr)
 
 
 /* Put a long long into user memory */
-int reg_store_int64(long long *d, FPU_REG *st0_ptr)
+int FPU_store_int64(FPU_REG *st0_ptr, u_char st0_tag, long long *d)
 {
   FPU_REG t;
   long long tll;
   int precision_loss;
-  char st0_tag = st0_ptr->tag;
 
-  if ( st0_tag == TW_Empty )
+  if ( st0_tag == TAG_Empty )
     {
       /* Empty register (stack underflow) */
       EXCEPTION(EX_StackUnder);
       goto invalid_operand;
     }
-  else if ( (st0_tag == TW_Infinity) ||
-	   (st0_tag == TW_NaN) )
+  else if ( st0_tag == TAG_Special )
     {
-      EXCEPTION(EX_Invalid);
-      goto invalid_operand;
+      st0_tag = FPU_Special(st0_ptr);
+      if ( (st0_tag == TW_Infinity) ||
+	   (st0_tag == TW_NaN) )
+	{
+	  EXCEPTION(EX_Invalid);
+	  goto invalid_operand;
+	}
     }
 
-  reg_move(st0_ptr, &t);
-  precision_loss = round_to_int(&t);
+  reg_copy(st0_ptr, &t);
+  precision_loss = FPU_round_to_int(&t, st0_tag);
   ((long *)&tll)[0] = t.sigl;
   ((long *)&tll)[1] = t.sigh;
   if ( (precision_loss == 1) ||
       ((t.sigh & 0x80000000) &&
        !((t.sigh == 0x80000000) && (t.sigl == 0) &&
-	 (t.sign == SIGN_NEG))) )
+	 signnegative(&t))) )
     {
       EXCEPTION(EX_Invalid);
       /* This is a special case: see sec 16.2.5.1 of the 80486 book */
@@ -901,7 +901,7 @@ int reg_store_int64(long long *d, FPU_REG *st0_ptr)
     {
       if ( precision_loss )
 	set_precision_flag(precision_loss);
-      if ( t.sign )
+      if ( signnegative(&t) )
 	tll = - tll;
     }
 
@@ -915,30 +915,33 @@ int reg_store_int64(long long *d, FPU_REG *st0_ptr)
 
 
 /* Put a long into user memory */
-int reg_store_int32(long *d, FPU_REG *st0_ptr)
+int FPU_store_int32(FPU_REG *st0_ptr, u_char st0_tag, long *d)
 {
   FPU_REG t;
   int precision_loss;
-  char st0_tag = st0_ptr->tag;
 
-  if ( st0_tag == TW_Empty )
+  if ( st0_tag == TAG_Empty )
     {
       /* Empty register (stack underflow) */
       EXCEPTION(EX_StackUnder);
       goto invalid_operand;
     }
-  else if ( (st0_tag == TW_Infinity) ||
-	   (st0_tag == TW_NaN) )
+  else if ( st0_tag == TAG_Special )
     {
-      EXCEPTION(EX_Invalid);
-      goto invalid_operand;
+      st0_tag = FPU_Special(st0_ptr);
+      if ( (st0_tag == TW_Infinity) ||
+	   (st0_tag == TW_NaN) )
+	{
+	  EXCEPTION(EX_Invalid);
+	  goto invalid_operand;
+	}
     }
 
-  reg_move(st0_ptr, &t);
-  precision_loss = round_to_int(&t);
+  reg_copy(st0_ptr, &t);
+  precision_loss = FPU_round_to_int(&t, st0_tag);
   if (t.sigh ||
       ((t.sigl & 0x80000000) &&
-       !((t.sigl == 0x80000000) && (t.sign == SIGN_NEG))) )
+       !((t.sigl == 0x80000000) && signnegative(&t))) )
     {
       EXCEPTION(EX_Invalid);
       /* This is a special case: see sec 16.2.5.1 of the 80486 book */
@@ -955,13 +958,13 @@ int reg_store_int32(long *d, FPU_REG *st0_ptr)
     {
       if ( precision_loss )
 	set_precision_flag(precision_loss);
-      if ( t.sign )
+      if ( signnegative(&t) )
 	t.sigl = -(long)t.sigl;
     }
 
   RE_ENTRANT_CHECK_OFF;
   FPU_verify_area(VERIFY_WRITE,d,4);
-  put_user(t.sigl, (unsigned long *) d);
+  FPU_put_user(t.sigl, (unsigned long *) d);
   RE_ENTRANT_CHECK_ON;
 
   return 1;
@@ -969,30 +972,33 @@ int reg_store_int32(long *d, FPU_REG *st0_ptr)
 
 
 /* Put a short into user memory */
-int reg_store_int16(short *d, FPU_REG *st0_ptr)
+int FPU_store_int16(FPU_REG *st0_ptr, u_char st0_tag, short *d)
 {
   FPU_REG t;
   int precision_loss;
-  char st0_tag = st0_ptr->tag;
 
-  if ( st0_tag == TW_Empty )
+  if ( st0_tag == TAG_Empty )
     {
       /* Empty register (stack underflow) */
       EXCEPTION(EX_StackUnder);
       goto invalid_operand;
     }
-  else if ( (st0_tag == TW_Infinity) ||
-	   (st0_tag == TW_NaN) )
+  else if ( st0_tag == TAG_Special )
     {
-      EXCEPTION(EX_Invalid);
-      goto invalid_operand;
+      st0_tag = FPU_Special(st0_ptr);
+      if ( (st0_tag == TW_Infinity) ||
+	   (st0_tag == TW_NaN) )
+	{
+	  EXCEPTION(EX_Invalid);
+	  goto invalid_operand;
+	}
     }
 
-  reg_move(st0_ptr, &t);
-  precision_loss = round_to_int(&t);
+  reg_copy(st0_ptr, &t);
+  precision_loss = FPU_round_to_int(&t, st0_tag);
   if (t.sigh ||
       ((t.sigl & 0xffff8000) &&
-       !((t.sigl == 0x8000) && (t.sign == SIGN_NEG))) )
+       !((t.sigl == 0x8000) && signnegative(&t))) )
     {
       EXCEPTION(EX_Invalid);
       /* This is a special case: see sec 16.2.5.1 of the 80486 book */
@@ -1009,13 +1015,13 @@ int reg_store_int16(short *d, FPU_REG *st0_ptr)
     {
       if ( precision_loss )
 	set_precision_flag(precision_loss);
-      if ( t.sign )
+      if ( signnegative(&t) )
 	t.sigl = -t.sigl;
     }
 
   RE_ENTRANT_CHECK_OFF;
   FPU_verify_area(VERIFY_WRITE,d,2);
-  put_user((short)t.sigl,(short *) d);
+  FPU_put_user((short)t.sigl,(short *) d);
   RE_ENTRANT_CHECK_ON;
 
   return 1;
@@ -1023,24 +1029,33 @@ int reg_store_int16(short *d, FPU_REG *st0_ptr)
 
 
 /* Put a packed bcd array into user memory */
-int reg_store_bcd(char *d, FPU_REG *st0_ptr)
+int FPU_store_bcd(FPU_REG *st0_ptr, u_char st0_tag, u_char *d)
 {
   FPU_REG t;
   unsigned long long ll;
-  unsigned char b;
+  u_char b;
   int i, precision_loss;
-  unsigned char sign = (st0_ptr->sign == SIGN_NEG) ? 0x80 : 0;
-  char st0_tag = st0_ptr->tag;
+  u_char sign = (getsign(st0_ptr) == SIGN_NEG) ? 0x80 : 0;
 
-  if ( st0_tag == TW_Empty )
+  if ( st0_tag == TAG_Empty )
     {
       /* Empty register (stack underflow) */
       EXCEPTION(EX_StackUnder);
       goto invalid_operand;
     }
+  else if ( st0_tag == TAG_Special )
+    {
+      st0_tag = FPU_Special(st0_ptr);
+      if ( (st0_tag == TW_Infinity) ||
+	   (st0_tag == TW_NaN) )
+	{
+	  EXCEPTION(EX_Invalid);
+	  goto invalid_operand;
+	}
+    }
 
-  reg_move(st0_ptr, &t);
-  precision_loss = round_to_int(&t);
+  reg_copy(st0_ptr, &t);
+  precision_loss = FPU_round_to_int(&t, st0_tag);
   ll = significand(&t);
 
   /* Check for overflow, by comparing with 999999999999999999 decimal. */
@@ -1056,10 +1071,10 @@ int reg_store_bcd(char *d, FPU_REG *st0_ptr)
 	  RE_ENTRANT_CHECK_OFF;
 	  FPU_verify_area(VERIFY_WRITE,d,10);
 	  for ( i = 0; i < 7; i++)
-	    put_user(0, (unsigned char *) d+i); /* These bytes "undefined" */
-	  put_user(0xc0, (unsigned char *) d+7); /* This byte "undefined" */
-	  put_user(0xff, (unsigned char *) d+8);
-	  put_user(0xff, (unsigned char *) d+9);
+	    FPU_put_user(0, (u_char *) d+i); /* These bytes "undefined" */
+	  FPU_put_user(0xc0, (u_char *) d+7); /* This byte "undefined" */
+	  FPU_put_user(0xff, (u_char *) d+8);
+	  FPU_put_user(0xff, (u_char *) d+9);
 	  RE_ENTRANT_CHECK_ON;
 	  return 1;
 	}
@@ -1077,14 +1092,14 @@ int reg_store_bcd(char *d, FPU_REG *st0_ptr)
   RE_ENTRANT_CHECK_ON;
   for ( i = 0; i < 9; i++)
     {
-      b = div_small(&ll, 10);
-      b |= (div_small(&ll, 10)) << 4;
+      b = FPU_div_small(&ll, 10);
+      b |= (FPU_div_small(&ll, 10)) << 4;
       RE_ENTRANT_CHECK_OFF;
-      put_user(b,(unsigned char *) d+i);
+      FPU_put_user(b,(u_char *) d+i);
       RE_ENTRANT_CHECK_ON;
     }
   RE_ENTRANT_CHECK_OFF;
-  put_user(sign,(unsigned char *) d+9);
+  FPU_put_user(sign,(u_char *) d+9);
   RE_ENTRANT_CHECK_ON;
 
   return 1;
@@ -1100,25 +1115,25 @@ int reg_store_bcd(char *d, FPU_REG *st0_ptr)
 /* Overflow is signalled by a non-zero return value (in eax).
    In the case of overflow, the returned significand always has the
    largest possible value */
-int round_to_int(FPU_REG *r)
+int FPU_round_to_int(FPU_REG *r, u_char tag)
 {
-  char     very_big;
+  u_char     very_big;
   unsigned eax;
 
-  if (r->tag == TW_Zero)
+  if (tag == TAG_Zero)
     {
       /* Make sure that zero is returned */
       significand(r) = 0;
       return 0;        /* o.k. */
     }
-  
-  if (r->exp > EXP_BIAS + 63)
+
+  if (exponent(r) > 63)
     {
       r->sigl = r->sigh = ~0;      /* The largest representable number */
       return 1;        /* overflow */
     }
 
-  eax = shrxs(&r->sigl, EXP_BIAS + 63 - r->exp);
+  eax = FPU_shrxs(&r->sigl, 63 - exponent(r));
   very_big = !(~(r->sigh) | ~(r->sigl));  /* test for 0xfff...fff */
 #define	half_or_more	(eax & 0x80000000)
 #define	frac_part	(eax)
@@ -1135,7 +1150,7 @@ int round_to_int(FPU_REG *r)
 	}
       break;
     case RC_DOWN:
-      if (frac_part && r->sign)
+      if (frac_part && getsign(r))
 	{
 	  if ( very_big ) return 1;        /* overflow */
 	  significand(r) ++;
@@ -1143,7 +1158,7 @@ int round_to_int(FPU_REG *r)
 	}
       break;
     case RC_UP:
-      if (frac_part && !r->sign)
+      if (frac_part && !getsign(r))
 	{
 	  if ( very_big ) return 1;        /* overflow */
 	  significand(r) ++;
@@ -1160,10 +1175,10 @@ int round_to_int(FPU_REG *r)
 
 /*===========================================================================*/
 
-char *fldenv(fpu_addr_modes addr_modes, char *s)
+u_char *fldenv(fpu_addr_modes addr_modes, u_char *s)
 {
   unsigned short tag_word = 0;
-  unsigned char tag;
+  u_char tag;
   int i;
 
   if ( (addr_modes.default_mode == VM86) ||
@@ -1172,13 +1187,13 @@ char *fldenv(fpu_addr_modes addr_modes, char *s)
     {
       RE_ENTRANT_CHECK_OFF;
       FPU_verify_area(VERIFY_READ, s, 0x0e);
-      get_user(control_word, (unsigned short *) s);
-      get_user(partial_status, (unsigned short *) (s+2));
-      get_user(tag_word, (unsigned short *) (s+4));
-      get_user(instruction_address.offset, (unsigned short *) (s+6));
-      get_user(instruction_address.selector, (unsigned short *) (s+8));
-      get_user(operand_address.offset, (unsigned short *) (s+0x0a));
-      get_user(operand_address.selector, (unsigned short *) (s+0x0c));
+      FPU_get_user(control_word, (unsigned short *) s);
+      FPU_get_user(partial_status, (unsigned short *) (s+2));
+      FPU_get_user(tag_word, (unsigned short *) (s+4));
+      FPU_get_user(instruction_address.offset, (unsigned short *) (s+6));
+      FPU_get_user(instruction_address.selector, (unsigned short *) (s+8));
+      FPU_get_user(operand_address.offset, (unsigned short *) (s+0x0a));
+      FPU_get_user(operand_address.selector, (unsigned short *) (s+0x0c));
       RE_ENTRANT_CHECK_ON;
       s += 0x0e;
       if ( addr_modes.default_mode == VM86 )
@@ -1192,14 +1207,14 @@ char *fldenv(fpu_addr_modes addr_modes, char *s)
     {
       RE_ENTRANT_CHECK_OFF;
       FPU_verify_area(VERIFY_READ, s, 0x1c);
-      get_user(control_word, (unsigned short *) s);
-      get_user(partial_status, (unsigned short *) (s+4));
-      get_user(tag_word, (unsigned short *) (s+8));
-      get_user(instruction_address.offset, (unsigned long *) (s+0x0c));
-      get_user(instruction_address.selector, (unsigned short *) (s+0x10));
-      get_user(instruction_address.opcode, (unsigned short *) (s+0x12));
-      get_user(operand_address.offset, (unsigned long *) (s+0x14));
-      get_user(operand_address.selector, (unsigned long *) (s+0x18));
+      FPU_get_user(control_word, (unsigned short *) s);
+      FPU_get_user(partial_status, (unsigned short *) (s+4));
+      FPU_get_user(tag_word, (unsigned short *) (s+8));
+      FPU_get_user(instruction_address.offset, (unsigned long *) (s+0x0c));
+      FPU_get_user(instruction_address.selector, (unsigned short *) (s+0x10));
+      FPU_get_user(instruction_address.opcode, (unsigned short *) (s+0x12));
+      FPU_get_user(operand_address.offset, (unsigned long *) (s+0x14));
+      FPU_get_user(operand_address.selector, (unsigned long *) (s+0x18));
       RE_ENTRANT_CHECK_ON;
       s += 0x1c;
     }
@@ -1220,29 +1235,28 @@ char *fldenv(fpu_addr_modes addr_modes, char *s)
       tag = tag_word & 3;
       tag_word >>= 2;
 
-      if ( tag == 3 )
+      if ( tag == TAG_Empty )
 	/* New tag is empty.  Accept it */
-	regs[i].tag = TW_Empty;
-      else if ( regs[i].tag == TW_Empty )
+	FPU_settag(i, TAG_Empty);
+      else if ( FPU_gettag(i) == TAG_Empty )
 	{
 	  /* Old tag is empty and new tag is not empty.  New tag is determined
 	     by old reg contents */
-	  if ( regs[i].exp == EXP_BIAS - EXTENDED_Ebias )
+	  if ( exponent(&fpu_register(i)) == - EXTENDED_Ebias )
 	    {
-	      if ( !(regs[i].sigl | regs[i].sigh) )
-		regs[i].tag = TW_Zero;
+	      if ( !(fpu_register(i).sigl | fpu_register(i).sigh) )
+		FPU_settag(i, TAG_Zero);
 	      else
-		regs[i].tag = TW_Valid;
+		FPU_settag(i, TAG_Special);
 	    }
-	  else if ( regs[i].exp == 0x7fff + EXP_BIAS - EXTENDED_Ebias )
+	  else if ( exponent(&fpu_register(i)) == 0x7fff - EXTENDED_Ebias )
 	    {
-	      if ( !((regs[i].sigh & ~0x80000000) | regs[i].sigl) )
-		regs[i].tag = TW_Infinity;
-	      else
-		regs[i].tag = TW_NaN;
+	      FPU_settag(i, TAG_Special);
 	    }
+	  else if ( fpu_register(i).sigh & 0x80000000 )
+	    FPU_settag(i, TAG_Valid);
 	  else
-	    regs[i].tag = TW_Valid;
+	    FPU_settag(i, TAG_Special);   /* An Un-normal */
   	}
       /* Else old tag is not empty and new tag is not empty.  Old tag
 	 remains correct */
@@ -1252,56 +1266,32 @@ char *fldenv(fpu_addr_modes addr_modes, char *s)
 }
 
 
-void frstor(fpu_addr_modes addr_modes, char *data_address)
+void frstor(fpu_addr_modes addr_modes, u_char *data_address)
 {
-  int i, stnr;
-  unsigned char tag;
-  char *s = fldenv(addr_modes, data_address);
+  int i, regnr;
+  u_char *s = fldenv(addr_modes, data_address);
+  int offset = (top & 7) * 10, other = 80 - offset;
+
+  /* Copy all registers in stack order. */
+  RE_ENTRANT_CHECK_OFF;
+  FPU_verify_area(VERIFY_READ,s,80);
+  __copy_from_user(register_base+offset, s, other);
+  if ( offset )
+    __copy_from_user(register_base, s+other, offset);
+  RE_ENTRANT_CHECK_ON;
 
   for ( i = 0; i < 8; i++ )
     {
-      /* Load each register. */
-      stnr = (i+top) & 7;
-      tag = regs[stnr].tag;   /* Derived from the fldenv() loaded tag word. */
-      reg_load_extended((long double *)(s+i*10), &regs[stnr]);
-      if ( tag == TW_Empty )  /* The loaded data over-rides all other cases. */
-	regs[stnr].tag = tag;
+      regnr = (i+top) & 7;
+      if ( FPU_gettag(regnr) != TAG_Empty )
+	/* The loaded data over-rides all other cases. */
+	FPU_settag(regnr, FPU_tagof(&st(i)));
     }
 
 }
 
 
-unsigned short tag_word(void)
-{
-  unsigned short word = 0;
-  unsigned char tag;
-  int i;
-
-  for ( i = 7; i >= 0; i-- )
-    {
-      switch ( tag = regs[i].tag )
-	{
-	case TW_Valid:
-	  if ( regs[i].exp <= (EXP_BIAS - EXTENDED_Ebias) )
-	    tag = 2;
-	  break;
-	case TW_Infinity:
-	case TW_NaN:
-	  tag = 2;
-	  break;
-	case TW_Empty:
-	  tag = 3;
-	  break;
-	  /* TW_Zero already has the correct value */
-	}
-      word <<= 2;
-      word |= tag;
-    }
-  return word;
-}
-
-
-char *fstenv(fpu_addr_modes addr_modes, char *d)
+u_char *fstenv(fpu_addr_modes addr_modes, u_char *d)
 {
   if ( (addr_modes.default_mode == VM86) ||
       ((addr_modes.default_mode == PM16)
@@ -1310,25 +1300,25 @@ char *fstenv(fpu_addr_modes addr_modes, char *d)
       RE_ENTRANT_CHECK_OFF;
       FPU_verify_area(VERIFY_WRITE,d,14);
 #ifdef PECULIAR_486
-      put_user(control_word & ~0xe080, (unsigned long *) d);
+      FPU_put_user(control_word & ~0xe080, (unsigned long *) d);
 #else
-      put_user(control_word, (unsigned short *) d);
+      FPU_put_user(control_word, (unsigned short *) d);
 #endif PECULIAR_486
-      put_user(status_word(), (unsigned short *) (d+2));
-      put_user(tag_word(), (unsigned short *) (d+4));
-      put_user(instruction_address.offset, (unsigned short *) (d+6));
-      put_user(operand_address.offset, (unsigned short *) (d+0x0a));
+      FPU_put_user(status_word(), (unsigned short *) (d+2));
+      FPU_put_user(fpu_tag_word, (unsigned short *) (d+4));
+      FPU_put_user(instruction_address.offset, (unsigned short *) (d+6));
+      FPU_put_user(operand_address.offset, (unsigned short *) (d+0x0a));
       if ( addr_modes.default_mode == VM86 )
 	{
-	  put_user((instruction_address.offset & 0xf0000) >> 4,
+	  FPU_put_user((instruction_address.offset & 0xf0000) >> 4,
 		      (unsigned short *) (d+8));
-	  put_user((operand_address.offset & 0xf0000) >> 4,
+	  FPU_put_user((operand_address.offset & 0xf0000) >> 4,
 		      (unsigned short *) (d+0x0c));
 	}
       else
 	{
-	  put_user(instruction_address.selector, (unsigned short *) (d+8));
-	  put_user(operand_address.selector, (unsigned short *) (d+0x0c));
+	  FPU_put_user(instruction_address.selector, (unsigned short *) (d+8));
+	  FPU_put_user(operand_address.selector, (unsigned short *) (d+0x0c));
 	}
       RE_ENTRANT_CHECK_ON;
       d += 0x0e;
@@ -1336,28 +1326,17 @@ char *fstenv(fpu_addr_modes addr_modes, char *d)
   else
     {
       RE_ENTRANT_CHECK_OFF;
-      FPU_verify_area(VERIFY_WRITE,d,28);
+      FPU_verify_area(VERIFY_WRITE, d, 7*4);
 #ifdef PECULIAR_486
+      control_word &= ~0xe080;
       /* An 80486 sets all the reserved bits to 1. */
-      put_user(0xffff0040 | (control_word & ~0xe080), (unsigned long *) d);
-      put_user(0xffff0000 | status_word(), (unsigned long *) (d+4));
-      put_user(0xffff0000 | tag_word(), (unsigned long *) (d+8));
-#else
-      put_user(control_word, (unsigned short *) d);
-      put_user(status_word(), (unsigned short *) (d+4));
-      put_user(tag_word(), (unsigned short *) (d+8));
+      control_word |= 0xffff0000;
+      partial_status = status_word() | 0xffff0000;
+      fpu_tag_word |= 0xffff0000;
+      I387.soft.fcs |= 0xf8000000;
+      I387.soft.fos |= 0xffff0000;
 #endif PECULIAR_486
-      put_user(instruction_address.offset, (unsigned long *) (d+0x0c));
-      put_user(instruction_address.selector, (unsigned short *) (d+0x10));
-      put_user(instruction_address.opcode, (unsigned short *) (d+0x12));
-      put_user(operand_address.offset, (unsigned long *) (d+0x14));
-#ifdef PECULIAR_486
-      /* An 80486 sets all the reserved bits to 1. */
-      put_user(operand_address.selector, (unsigned short *) (d+0x18));
-      put_user(0xffff, (unsigned short *) (d+0x1a));
-#else
-      put_user(operand_address.selector, (unsigned long *) (d+0x18));
-#endif PECULIAR_486
+      __copy_to_user(d, &control_word, 7*4);
       RE_ENTRANT_CHECK_ON;
       d += 0x1c;
     }
@@ -1369,84 +1348,23 @@ char *fstenv(fpu_addr_modes addr_modes, char *d)
 }
 
 
-void fsave(fpu_addr_modes addr_modes, char *data_address)
+void fsave(fpu_addr_modes addr_modes, u_char *data_address)
 {
-  char *d;
-  int i;
+  u_char *d;
+  int offset = (top & 7) * 10, other = 80 - offset;
 
   d = fstenv(addr_modes, data_address);
+
   RE_ENTRANT_CHECK_OFF;
   FPU_verify_area(VERIFY_WRITE,d,80);
+
+  /* Copy all registers in stack order. */
+  __copy_to_user(d, register_base+offset, other);
+  if ( offset )
+    __copy_to_user(d+other, register_base, offset);
   RE_ENTRANT_CHECK_ON;
-  for ( i = 0; i < 8; i++ )
-    write_to_extended(&regs[(top + i) & 7], d + 10 * i);
 
   finit();
-
 }
 
 /*===========================================================================*/
-
-/*
-  A call to this function must be preceded by a call to
-  FPU_verify_area() to verify access to the 10 bytes at d
-  */
-static void write_to_extended(FPU_REG *rp, char *d)
-{
-  long e;
-  FPU_REG tmp;
-  
-  e = rp->exp - EXP_BIAS + EXTENDED_Ebias;
-
-#ifdef PARANOID
-  switch ( rp->tag )
-    {
-    case TW_Zero:
-      if ( rp->sigh | rp->sigl | e )
-	EXCEPTION(EX_INTERNAL | 0x160);
-      break;
-    case TW_Infinity:
-    case TW_NaN:
-      if ( (e ^ 0x7fff) | !(rp->sigh & 0x80000000) )
-	EXCEPTION(EX_INTERNAL | 0x161);
-      break;
-    default:
-      if (e > 0x7fff || e < -63)
-	EXCEPTION(EX_INTERNAL | 0x162);
-    }
-#endif PARANOID
-
-  /*
-    All numbers except denormals are stored internally in a
-    format which is compatible with the extended real number
-    format.
-   */
-  if ( e > 0 )
-    {
-      /* just copy the reg */
-      RE_ENTRANT_CHECK_OFF;
-      put_user(rp->sigl, (unsigned long *) d);
-      put_user(rp->sigh, (unsigned long *) (d + 4));
-      RE_ENTRANT_CHECK_ON;
-    }
-  else
-    {
-      /*
-	The number is a de-normal stored as a normal using our
-	extra exponent range, or is Zero.
-	Convert it back to a de-normal, or leave it as Zero.
-       */
-      reg_move(rp, &tmp);
-      tmp.exp += -EXTENDED_Emin + 63;  /* largest exp to be 63 */
-      round_to_int(&tmp);
-      e = 0;
-      RE_ENTRANT_CHECK_OFF;
-      put_user(tmp.sigl, (unsigned long *) d);
-      put_user(tmp.sigh, (unsigned long *) (d + 4));
-      RE_ENTRANT_CHECK_ON;
-    }
-  e |= rp->sign == SIGN_POS ? 0 : 0x8000;
-  RE_ENTRANT_CHECK_OFF;
-  put_user(e, (unsigned short *) (d + 8));
-  RE_ENTRANT_CHECK_ON;
-}

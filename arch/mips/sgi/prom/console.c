@@ -1,4 +1,4 @@
-/* $Id: console.c,v 1.1 1997/06/06 09:36:56 ralf Exp $
+/* $Id: console.c,v 1.1.1.1 1997/06/01 03:16:40 ralf Exp $
  * console.c: SGI arcs console code.
  *
  * Copyright (C) 1996 David S. Miller (dm@sgi.com)

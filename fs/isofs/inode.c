@@ -283,7 +283,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	struct iso_supplementary_descriptor *sec = NULL;
 	struct iso_volume_descriptor  * vdp;
 	unsigned int			vol_desc_start;
-
+	struct inode		      * inode;
 
 
 	MOD_INC_USE_COUNT;
@@ -384,7 +384,6 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 		    sec = (struct iso_supplementary_descriptor *)vdp;
 		    if (sec->escape[0] == 0x25 && sec->escape[1] == 0x2f) {
 			if (opt.joliet == 'y') {
-			    opt.rock = 'n';
 			    if (sec->escape[2] == 0x40) {
 				joliet_level = 1;
 			    } else if (sec->escape[2] == 0x43) {
@@ -418,16 +417,12 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 
 	s->u.isofs_sb.s_joliet_level = joliet_level;
 
-#ifdef CONFIG_JOLIET
-	if (joliet_level) {
-	    /* Note: In theory, it is possible to have Rock Ridge
-	     * extensions mixed with Joliet. All character strings
-	     * would just be saved as Unicode. Until someone sees such
-	     * a disc, do not allow the two to be mixed
+	if (joliet_level && opt.rock == 'n') {
+	    /* This is the case of Joliet with the norock mount flag.
+	     * A disc with both Joliet and Rock Ridge is handled later
 	     */
 	    pri = (struct iso_primary_descriptor *) sec;
 	}
-#endif
 
 	if(high_sierra){
 	  rootp = (struct iso_directory_record *) h_pri->root_directory_record;
@@ -486,11 +481,6 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	      goto out;
 	  }
 
-	/* RDE: data zone now byte offset! */
-
-	s->u.isofs_sb.s_firstdatazone = ((isonum_733 (rootp->extent) +
-					   isonum_711 (rootp->ext_attr_length))
-					 << s -> u.isofs_sb.s_log_zone_size);
 	s->s_magic = ISOFS_SUPER_MAGIC;
 
 	/* The CDROM is read-only, has no nodes (devices) on it, and since
@@ -502,14 +492,18 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 
 	brelse(bh);
 	
+	/* RDE: data zone now byte offset! */
+
+	s->u.isofs_sb.s_firstdatazone = ((isonum_733 (rootp->extent) +
+					   isonum_711 (rootp->ext_attr_length))
+					 << s -> u.isofs_sb.s_log_zone_size);
 #ifndef BEQUIET
 	printk(KERN_DEBUG "Max size:%ld   Log zone size:%ld\n",
 	       s->u.isofs_sb.s_max_size,
 	       1UL << s->u.isofs_sb.s_log_zone_size);
 	printk(KERN_DEBUG "First datazone:%ld   Root inode number %d\n",
 	       s->u.isofs_sb.s_firstdatazone >> s -> u.isofs_sb.s_log_zone_size,
-	       (isonum_733(rootp->extent) + isonum_711(rootp->ext_attr_length))
-			<< s -> u.isofs_sb.s_log_zone_size);
+	       s->u.isofs_sb.s_firstdatazone);
 	if(high_sierra) printk(KERN_DEBUG "Disc in High Sierra format.\n");
 #endif
 	unlock_super(s);
@@ -549,8 +543,9 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 #endif
 	  }
 
-#ifdef CONFIG_JOLIET
 	s->u.isofs_sb.s_nls_iocharset = NULL;
+
+#ifdef CONFIG_JOLIET
 	if (joliet_level == 0) {
 		if (opt.iocharset) {
 			kfree(opt.iocharset);
@@ -574,7 +569,7 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	s->s_dev = dev;
 	s->s_op = &isofs_sops;
 	s->u.isofs_sb.s_mapping = opt.map;
-	s->u.isofs_sb.s_rock = (opt.rock == 'y' ? 1 : 0);
+	s->u.isofs_sb.s_rock = (opt.rock == 'y' ? 2 : 0);
 	s->u.isofs_sb.s_name_check = opt.check;
 	s->u.isofs_sb.s_conversion = opt.conversion;
 	s->u.isofs_sb.s_cruft = opt.cruft;
@@ -589,9 +584,30 @@ struct super_block *isofs_read_super(struct super_block *s,void *data,
 	s->u.isofs_sb.s_mode = opt.mode & 0777;
 	s->s_blocksize = opt.blocksize;
 	s->s_blocksize_bits = blocksize_bits;
-	s->s_root = d_alloc_root(iget(s, (isonum_733(rootp->extent) +
-			    isonum_711(rootp->ext_attr_length))
-				<< s -> u.isofs_sb.s_log_zone_size), NULL);
+	inode = iget(s, s->u.isofs_sb.s_firstdatazone);
+
+	/*
+	 * If this disk has both Rock Ridge and Joliet on it, then we
+	 * want to use Rock Ridge by default.  This can be overridden
+	 * by using the norock mount option.  There is still one other
+	 * possibility that is not taken into account: a Rock Ridge
+	 * CD with Unicode names.  Until someone sees such a beast, it
+	 * will not be supported.
+	 */
+	if (joliet_level && opt.rock == 'y' && s->u.isofs_sb.s_rock != 1) {
+		iput(inode);
+		pri = (struct iso_primary_descriptor *) sec;
+		rootp = (struct iso_directory_record *)
+			pri->root_directory_record;
+		s->u.isofs_sb.s_firstdatazone =
+			((isonum_733 (rootp->extent) +
+			  isonum_711 (rootp->ext_attr_length))
+			 << s -> u.isofs_sb.s_log_zone_size);
+		inode = iget(s, s->u.isofs_sb.s_firstdatazone);
+		s->u.isofs_sb.s_rock = 0;
+	}
+
+	s->s_root = d_alloc_root(inode, NULL);
 	unlock_super(s);
 
 	if (!(s->s_root)) {

@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.33 1997/10/24 17:16:08 kuznet Exp $
+ * Version:	$Id: route.c,v 1.34 1997/12/04 03:42:22 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1000,6 +1000,8 @@ int ip_route_input_slow(struct sk_buff *skb, u32 daddr, u32 saddr,
 	rth->u.dst.pmtu	= res.fi->fib_mtu ? : out_dev->dev->mtu;
 	rth->u.dst.window=res.fi->fib_window ? : 0;
 	rth->u.dst.rtt	= res.fi->fib_rtt ? : TCP_TIMEOUT_INIT;
+	rth->u.dst.rate_last = rth->u.dst.rate_tokens = 0; 
+
 	if (FIB_RES_GW(res) && FIB_RES_NH(res).nh_scope == RT_SCOPE_LINK)
 		rth->rt_gateway	= FIB_RES_GW(res);
 
@@ -1370,6 +1372,7 @@ make_route:
 		rth->u.dst.window=0;
 		rth->u.dst.rtt	= TCP_TIMEOUT_INIT;
 	}
+	rth->u.dst.rate_last = rth->u.dst.rate_tokens = 0; 
 	rth->rt_flags = flags;
         rth->rt_type = res.type;
 	hash = rt_hash_code(daddr, saddr^(oif<<5), tos);

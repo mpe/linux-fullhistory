@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.1 1997/06/06 09:37:26 ralf Exp $
+/* $Id: time.c,v 1.1.1.1 1997/06/01 03:16:40 ralf Exp $
  * time.c: Extracting time information from ARCS prom.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)

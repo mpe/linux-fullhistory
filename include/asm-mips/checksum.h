@@ -5,9 +5,7 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995, 1996, 1997 by Ralf Baechle
- *
- * $Id: checksum.h,v 1.5 1997/08/08 20:22:28 miguel Exp $
+ * Copyright (C) 1995 by Ralf Baechle
  */
 #ifndef __ASM_MIPS_CHECKSUM_H
 #define __ASM_MIPS_CHECKSUM_H
@@ -167,10 +165,7 @@ static inline unsigned short int csum_tcpudp_magic(unsigned long saddr,
  */
 static inline unsigned short ip_compute_csum(unsigned char * buff, int len)
 {
-	unsigned int sum;
-
-	sum = csum_partial(buff, len, 0);
-	return csum_fold(sum);
+	return csum_fold(csum_partial(buff, len, 0));
 }
 
 #define _HAVE_ARCH_IPV6_CSUM

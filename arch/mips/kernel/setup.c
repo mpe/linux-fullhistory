@@ -4,6 +4,8 @@
  *  Copyright (C) 1995  Linus Torvalds
  *  Copyright (C) 1995, 1996  Ralf Baechle
  *  Copyright (C) 1996  Stoned Elipot
+ *
+ * $Id: setup.c,v 1.5 1997/12/06 08:55:42 ralf Exp $
  */
 #include <linux/config.h>
 #include <linux/errno.h>
@@ -57,6 +59,11 @@ void (*fd_cacheflush)(const void *addr, size_t size);
  * pipeline and reduces the power consumption of the CPU very much.
  */
 char wait_available;
+
+/*
+ * Do we have a cyclecounter available?
+ */
+char cyclecounter_available;
 
 /*
  * There are several bus types available for MIPS machines.  "RISC PC"
@@ -120,6 +127,12 @@ static char command_line[CL_SIZE] = { 0, };
 void (*irq_setup)(void);
 
 /*
+ * mips_io_port_base is the begin of the address space to which x86 style
+ * I/O ports are mapped.
+ */
+unsigned long mips_io_port_base;
+
+/*
  * isa_slot_offset is the address where E(ISA) busaddress 0 is is mapped
  * for the processor.
  */
@@ -168,9 +181,10 @@ __initfunc(void setup_arch(char **cmdline_p,
 		break;
 #endif
 #if defined(CONFIG_MIPS_ARC) 
-/* Perhaps arch/mips/deskstation should be renommed arch/mips/arc.
- * For now CONFIG_MIPS_ARC means DeskStation. -Stoned.
- */
+	/*
+	 * Perhaps arch/mips/deskstation should be renamed to arch/mips/arc.
+	 * For now CONFIG_MIPS_ARC means DeskStation. -Stoned.
+	 */
 	case MACH_GROUP_ARC:
 		deskstation_setup();
 		break;
@@ -196,9 +210,6 @@ __initfunc(void setup_arch(char **cmdline_p,
 
 	atag = bi_TagFind(tag_drive_info);
 	memcpy(&drive_info, TAGVALPTR(atag), atag->size);
-#if 0
-	aux_device_present = AUX_DEVICE_INFO;
-#endif
 
 	memory_end = mips_memory_upper;
 	/*

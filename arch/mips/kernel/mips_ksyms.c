@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1996, 1997 by Ralf Baechle
  *
- * $Id: mips_ksyms.c,v 1.2 1997/08/08 18:12:26 miguel Exp $
+ * $Id: mips_ksyms.c,v 1.4 1997/08/11 04:17:18 ralf Exp $
  */
 #include <linux/config.h>
 #include <linux/module.h>
@@ -62,12 +62,38 @@ EXPORT_SYMBOL(csum_partial_copy);
  */
 EXPORT_SYMBOL(flush_page_to_ram);
 EXPORT_SYMBOL(fd_cacheflush);
+EXPORT_SYMBOL(flush_cache_all);
 
 /*
  * Base address of ports for Intel style I/O.
  */
-EXPORT_SYMBOL(port_base);
+EXPORT_SYMBOL(mips_io_port_base);
+
+/*
+ * Architecture specific stuff.
+ */
+#ifdef CONFIG_MIPS_JAZZ
+EXPORT_SYMBOL(vdma_alloc);
+EXPORT_SYMBOL(vdma_free);
+EXPORT_SYMBOL(vdma_log2phys);
+#endif
 
 #ifdef CONFIG_SGI
 EXPORT_SYMBOL(hpc3c0);
+#endif
+
+/*
+ * Kernel hacking ...
+ */
+#include <asm/branch.h>
+#include <linux/sched.h>
+
+int register_fpe(void (*handler)(struct pt_regs *regs, unsigned int fcr31));
+int unregister_fpe(void (*handler)(struct pt_regs *regs, unsigned int fcr31));
+
+#ifdef CONFIG_MIPS_FPE_MODULE
+EXPORT_SYMBOL(force_sig);
+EXPORT_SYMBOL(__compute_return_epc);
+EXPORT_SYMBOL(register_fpe);
+EXPORT_SYMBOL(unregister_fpe);
 #endif

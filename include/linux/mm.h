@@ -144,7 +144,6 @@ typedef struct page {
 #define PageLocked(page)	(test_bit(PG_locked, &(page)->flags))
 #define PageError(page)		(test_bit(PG_error, &(page)->flags))
 #define PageReferenced(page)	(test_bit(PG_referenced, &(page)->flags))
-#define PageDirty(page)		(test_bit(PG_dirty, &(page)->flags))
 #define PageUptodate(page)	(test_bit(PG_uptodate, &(page)->flags))
 #define PageFreeAfter(page)	(test_bit(PG_free_after, &(page)->flags))
 #define PageDecrAfter(page)	(test_bit(PG_decr_after, &(page)->flags))

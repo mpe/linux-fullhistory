@@ -168,6 +168,7 @@ extern int nfs_lock(struct file *file, int cmd, struct file_lock *fl);
  * linux/fs/nfs/write.c
  */
 extern int  nfs_writepage(struct inode *, struct page *);
+extern int  nfs_check_failed_request(struct inode *);
 extern int  nfs_check_error(struct inode *);
 extern int  nfs_flush_dirty_pages(struct inode *, pid_t, off_t, off_t);
 extern int  nfs_truncate_dirty_pages(struct inode *, unsigned long);

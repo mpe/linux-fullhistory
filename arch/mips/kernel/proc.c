@@ -5,11 +5,12 @@
  */
 #include <linux/delay.h>
 #include <linux/kernel.h>
+#include <linux/sched.h>
 #include <asm/bootinfo.h>
 #include <asm/mipsregs.h>
+#include <asm/processor.h>
+#include <asm/watch.h>
 
-unsigned long dflushes = 0;
-unsigned long iflushes = 0;
 unsigned long unaligned_instructions;
 
 /*
@@ -27,8 +28,15 @@ int get_cpuinfo(char *buffer)
 	const char *mach_dec_names[] = GROUP_DEC_NAMES;
 	const char *mach_arc_names[] = GROUP_ARC_NAMES;
 	const char *mach_sni_rm_names[] = GROUP_SNI_RM_NAMES;
-	const char **mach_group_to_name[] = { mach_unknown_names, mach_jazz_names,
-					    mach_dec_names, mach_arc_names, mach_sni_rm_names};
+	const char *mach_acn_names[] = GROUP_ACN_NAMES;
+	const char *mach_sgi_names[] = GROUP_SGI_NAMES;
+	const char **mach_group_to_name[] = { mach_unknown_names,
+	                                      mach_jazz_names,
+	                                      mach_dec_names,
+	                                      mach_arc_names,
+	                                      mach_sni_rm_names,
+	                                      mach_acn_names,
+	                                      mach_sgi_names };
 	unsigned int version = read_32bit_cp0_register(CP0_PRID);
 	int len;
 
@@ -51,12 +59,16 @@ int get_cpuinfo(char *buffer)
 #if defined (__MIPSEL__)
 	len += sprintf(buffer + len, "byteorder\t\t: little endian\n");
 #endif
-	len += sprintf(buffer + len, "D-cache flushes\t\t: %lu\n",
-		       dflushes);
-	len += sprintf(buffer + len, "I-cache flushes\t\t: %lu\n",
-		       iflushes);
 	len += sprintf(buffer + len, "unaligned accesses\t: %lu\n",
 		       unaligned_instructions);
+	len += sprintf(buffer + len, "wait instruction\t: %s\n",
+	               wait_available ? "yes" : "no");
+	len += sprintf(buffer + len, "microsecond timers\t: %s\n",
+	               cyclecounter_available ? "yes" : "no");
+	len += sprintf(buffer + len, "extra interrupt vector\t: %s\n",
+	               dedicated_iv_available ? "yes" : "no");
+	len += sprintf(buffer + len, "hardware watchpoint\t: %s\n",
+	               watch_available ? "yes" : "no");
 
 	return len;
 }

@@ -6,6 +6,8 @@
  * for more details.
  *
  * Copyright (C) 1994, 1995 by Ralf Baechle
+ *
+ * $Id: entry.S,v 1.4 1997/09/20 19:20:13 root Exp $
  */
 
 /*
@@ -38,24 +40,18 @@
 		.set	noreorder
 		.set	mips3
 		.align 4
-/* XXX cli/sti ??? */
 handle_bottom_half:
-		mfc0	s3,CP0_STATUS		# Enable IRQs
-		ori	t0,s3, 0x1f
-		xori	t0,0x1e
-
 		jal	do_bottom_half
-		 mtc0	t0,CP0_STATUS
-
+		 nop
 		b	9f
-		 mtc0	s3,CP0_STATUS		# Restore old IRQ state
+		 nop
 
-reschedule:
-		jal	schedule 
+reschedule:	jal	schedule 
 		 nop
 
 EXPORT(ret_from_sys_call)
-		 lw	t0,bh_mask
+EXPORT(ret_from_irq)
+		lw	t0,bh_mask
 		lw	t1,bh_active		# unused delay slot
 		and	t0,t1
 		bnez	t0,handle_bottom_half
@@ -80,63 +76,14 @@ EXPORT(ret_from_sys_call)
 		jal	do_signal
 		 move	a1,sp
 
-		.set	noat
-EXPORT(return)
+EXPORT(return)	.set	noat
 		RESTORE_ALL
 		eret
 		.set	at
 
 /*
- * Beware: interrupt, fast_interrupt and bad_interrupt have unusual
- * calling conventions to speedup the mess.
- *
- * a0 - interrupt number
- * s2 - destroyed
- * return values:
- * v0 - return routine
+ * Common spurious interrupt handler.
  */
-		.text
-		.set	at
-		.align	5
-NESTED(interrupt, PT_SIZE, sp)
-		move	s2,ra
-		mfc0	t0,CP0_STATUS			# enable IRQs
-		ori	t0,0x1f
-		xori	t0,0x1e
-		mtc0	t0,CP0_STATUS
-
-		jal	do_IRQ
-		 move	a1,sp
-
-		mfc0	t0,CP0_STATUS			# disable IRQs
-		ori	t0,1
-		xori	t0,1
-		mtc0	t0,CP0_STATUS
-		.set	reorder
-		la	v0,ret_from_sys_call
-		jr	s2
-		.set	noreorder
-		END(interrupt)
-
-		.align	5
-NESTED(fast_interrupt, PT_SIZE, sp)
-		move	s2,ra
-		jal	do_fast_IRQ
-		 nop
-
-		.set	reorder
-		la	v0,return
-		jr	s2
-		.set	noreorder
-		END(fast_interrupt)
-
-		/*
-		 * Don't return & unblock the pic
-		 */
-LEAF(bad_interrupt)
-		j	return
-		END(bad_interrupt)
-
 		.text
 		.align  5
 LEAF(spurious_interrupt)
@@ -146,10 +93,8 @@ LEAF(spurious_interrupt)
 		 */
 		lui     t1,%hi(spurious_count)
 		lw      t0,%lo(spurious_count)(t1)
-		la      v0,return
 		addiu   t0,1
-
-		jr      ra
+		j	ret_from_irq
 		 sw      t0,%lo(spurious_count)(t1)
 		END(spurious_interrupt)
 
@@ -169,7 +114,7 @@ LEAF(spurious_interrupt)
 		REG_S	t0,PT_BVADDR(sp);
 #define __BUILD_silent(exception)
 
-#define fmt "Got %s at %016Lx.\n"
+#define fmt "Got %s at %08lx.\n"
 
 #define __BUILD_verbose(exception)                                      \
 		la	a1,8f;                                          \
@@ -218,21 +163,6 @@ EXPORT(exception_count_##exception);                                    \
 		BUILD_HANDLER(watch,watch,none,verbose)		/* #23 */
 		BUILD_HANDLER(vced,vced,none,verbose)		/* #31 */
 		BUILD_HANDLER(reserved,reserved,none,verbose)	/* others */
-
-/*
- * Exception handler table with 32 entries.
- * This might be extended to handle software exceptions
- */
-		.bss
-		.align	PTRLOG
-EXPORT(exception_handlers)
-		.fill	32,PTRSIZE,0
-
-/*
- * Interrupt handler table with 16 entries.
- */
-EXPORT(IRQ_vectors)
-		.fill	16,PTRSIZE,0
 
 /*
  * Table of syscalls

@@ -2,24 +2,26 @@
 /*---------------------------------------------------------------------------+
  |  reg_u_add.S                                                              |
  |                                                                           |
- | Add two valid (TW_Valid) FPU_REG numbers, of the same sign, and put the   |
+ | Add two valid (TAG_Valid) FPU_REG numbers, of the same sign, and put the  |
  |   result in a destination FPU_REG.                                        |
  |                                                                           |
- | Copyright (C) 1992,1993,1995                                              |
- |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail billm@jacobi.maths.monash.edu.au |
+ | Copyright (C) 1992,1993,1995,1997                                         |
+ |                  W. Metzenthen, 22 Parker St, Ormond, Vic 3163, Australia |
+ |                  E-mail   billm@suburbia.net                              |
  |                                                                           |
  | Call from C as:                                                           |
- |   void reg_u_add(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,             |
+ |   int  FPU_u_add(FPU_REG *arg1, FPU_REG *arg2, FPU_REG *answ,             |
  |                                                int control_w)             |
+ |    Return value is the tag of the answer, or-ed with FPU_Exception if     |
+ |    one was raised, or -1 on internal error.                               |
  |                                                                           |
  +---------------------------------------------------------------------------*/
 
 /*
- |    Kernel addition routine reg_u_add(reg *arg1, reg *arg2, reg *answ).
- |    Takes two valid reg f.p. numbers (TW_Valid), which are
+ |    Kernel addition routine FPU_u_add(reg *arg1, reg *arg2, reg *answ).
+ |    Takes two valid reg f.p. numbers (TAG_Valid), which are
  |    treated as unsigned numbers,
- |    and returns their sum as a TW_Valid or TW_S f.p. number.
+ |    and returns their sum as a TAG_Valid or TAG_Special f.p. number.
  |    The returned number is normalized.
  |    Basic checks are performed if PARANOID is defined.
  */
@@ -29,7 +31,7 @@
 #include "control_w.h"
 
 .text
-ENTRY(reg_u_add)
+ENTRY(FPU_u_add)
 	pushl	%ebp
 	movl	%esp,%ebp
 	pushl	%esi
@@ -39,27 +41,9 @@ ENTRY(reg_u_add)
 	movl	PARAM1,%esi		/* source 1 */
 	movl	PARAM2,%edi		/* source 2 */
 
-#ifdef DENORM_OPERAND
-	cmpl	EXP_UNDER,EXP(%esi)
-	jg	xOp1_not_denorm
-
-	call	SYMBOL_NAME(denormal_operand)
-	orl	%eax,%eax
-	jnz	fpu_Arith_exit
-
-xOp1_not_denorm:
-	cmpl	EXP_UNDER,EXP(%edi)
-	jg	xOp2_not_denorm
-
-	call	SYMBOL_NAME(denormal_operand)
-	orl	%eax,%eax
-	jnz	fpu_Arith_exit
-
-xOp2_not_denorm:
-#endif DENORM_OPERAND
-
-	movl	EXP(%esi),%ecx
-	subl	EXP(%edi),%ecx		/* exp1 - exp2 */
+	movl	PARAM6,%ecx
+	movl	%ecx,%edx
+	subl	PARAM7,%ecx			/* exp1 - exp2 */
 	jge	L_arg1_larger
 
 	/* num1 is smaller */
@@ -67,6 +51,7 @@ xOp2_not_denorm:
 	movl	SIGH(%esi),%eax
 
 	movl	%edi,%esi
+	movl	PARAM7,%edx
 	negw	%cx
 	jmp	L_accum_loaded
 
@@ -77,12 +62,7 @@ L_arg1_larger:
 
 L_accum_loaded:
 	movl	PARAM3,%edi		/* destination */
-/*	movb	SIGN(%esi),%dl
-	movb	%dl,SIGN(%edi) */	/* Copy the sign from the first arg */
-
-
-	movl	EXP(%esi),%edx
-	movl	%edx,EXP(%edi)		/* Copy exponent to destination */
+	movw	%dx,EXP(%edi)		/* Copy exponent to destination */
 
 	xorl	%edx,%edx		/* clear the extension */
 
@@ -162,7 +142,7 @@ L_shift_done:
 	orl	$1,%edx
 
 L_no_bit_lost:
-	incl	EXP(%edi)
+	incw	EXP(%edi)
 
 L_round_the_result:
 	jmp	fpu_reg_round	/* Round the result */
@@ -175,9 +155,8 @@ L_bugged:
 	pushl	EX_INTERNAL|0x201
 	call	EXCEPTION
 	pop	%ebx
+	movl	$-1,%eax
 	jmp	L_exit
-#endif PARANOID
-
 
 L_exit:
 	popl	%ebx
@@ -185,3 +164,4 @@ L_exit:
 	popl	%esi
 	leave
 	ret
+#endif PARANOID

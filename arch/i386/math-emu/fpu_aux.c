@@ -3,9 +3,9 @@
  |                                                                           |
  | Code to implement some of the FPU auxiliary instructions.                 |
  |                                                                           |
- | Copyright (C) 1992,1993,1994                                              |
- |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
+ | Copyright (C) 1992,1993,1994,1997                                         |
+ |                  W. Metzenthen, 22 Parker St, Ormond, Vic 3163, Australia |
+ |                  E-mail   billm@suburbia.net                              |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -32,15 +32,11 @@ void fclex(void)
 /* Needs to be externally visible */
 void finit()
 {
-  int r;
   control_word = 0x037f;
   partial_status = 0;
   top = 0;            /* We don't keep top in the status word internally. */
-  for (r = 0; r < 8; r++)
-    {
-      regs[r].tag = TW_Empty;
-    }
-  /* The behaviour is different to that detailed in
+  fpu_tag_word = 0xffff;
+  /* The behaviour is different from that detailed in
      Section 15.1.6 of the Intel manual */
   operand_address.offset = 0;
   operand_address.selector = 0;
@@ -99,19 +95,27 @@ void fp_nop()
 void fld_i_()
 {
   FPU_REG *st_new_ptr;
+  int i;
+  u_char tag;
 
   if ( STACK_OVERFLOW )
-    { stack_overflow(); return; }
+    { FPU_stack_overflow(); return; }
 
   /* fld st(i) */
-  if ( NOT_EMPTY(FPU_rm) )
-    { reg_move(&st(FPU_rm), st_new_ptr); push(); }
+  i = FPU_rm;
+  if ( NOT_EMPTY(i) )
+    {
+      reg_copy(&st(i), st_new_ptr);
+      tag = FPU_gettagi(i);
+      push();
+      FPU_settag0(tag);
+    }
   else
     {
       if ( control_word & CW_Invalid )
 	{
 	  /* The masked response */
-	  stack_underflow();
+	  FPU_stack_underflow();
 	}
       else
 	EXCEPTION(EX_StackUnder);
@@ -124,61 +128,77 @@ void fxch_i()
 {
   /* fxch st(i) */
   FPU_REG t;
-  register FPU_REG *sti_ptr = &st(FPU_rm), *st0_ptr = &st(0);
+  int i = FPU_rm;
+  FPU_REG *st0_ptr = &st(0), *sti_ptr = &st(i);
+  long tag_word = fpu_tag_word;
+  int regnr = top & 7, regnri = ((regnr + i) & 7);
+  u_char st0_tag = (tag_word >> (regnr*2)) & 3;
+  u_char sti_tag = (tag_word >> (regnri*2)) & 3;
 
-  if ( st0_ptr->tag == TW_Empty )
+  if ( st0_tag == TAG_Empty )
     {
-      if ( sti_ptr->tag == TW_Empty )
+      if ( sti_tag == TAG_Empty )
 	{
-	  stack_underflow();
-	  stack_underflow_i(FPU_rm);
+	  FPU_stack_underflow();
+	  FPU_stack_underflow_i(i);
 	  return;
 	}
       if ( control_word & CW_Invalid )
-	reg_move(sti_ptr, st0_ptr);   /* Masked response */
-      stack_underflow_i(FPU_rm);
+	{
+	  /* Masked response */
+	  FPU_copy_to_reg0(sti_ptr, sti_tag);
+	}
+      FPU_stack_underflow_i(i);
       return;
     }
-  if ( sti_ptr->tag == TW_Empty )
+  if ( sti_tag == TAG_Empty )
     {
       if ( control_word & CW_Invalid )
-	reg_move(st0_ptr, sti_ptr);   /* Masked response */
-      stack_underflow();
+	{
+	  /* Masked response */
+	  FPU_copy_to_regi(st0_ptr, st0_tag, i);
+	}
+      FPU_stack_underflow();
       return;
     }
   clear_C1();
-  reg_move(st0_ptr, &t);
-  reg_move(sti_ptr, st0_ptr);
-  reg_move(&t, sti_ptr);
+
+  reg_copy(st0_ptr, &t);
+  reg_copy(sti_ptr, st0_ptr);
+  reg_copy(&t, sti_ptr);
+
+  tag_word &= ~(3 << (regnr*2)) & ~(3 << (regnri*2));
+  tag_word |= (sti_tag << (regnr*2)) | (st0_tag << (regnri*2));
+  fpu_tag_word = tag_word;
 }
 
 
 void ffree_()
 {
   /* ffree st(i) */
-  st(FPU_rm).tag = TW_Empty;
+  FPU_settagi(FPU_rm, TAG_Empty);
 }
 
 
 void ffreep()
 {
   /* ffree st(i) + pop - unofficial code */
-  st(FPU_rm).tag = TW_Empty;
-  pop();
+  FPU_settagi(FPU_rm, TAG_Empty);
+  FPU_pop();
 }
 
 
 void fst_i_()
 {
   /* fst st(i) */
-  reg_move(&st(0), &st(FPU_rm));
+  FPU_copy_to_regi(&st(0), FPU_gettag0(), FPU_rm);
 }
 
 
 void fstp_i()
 {
   /* fstp st(i) */
-  reg_move(&st(0), &st(FPU_rm));
-  pop();
+  FPU_copy_to_regi(&st(0), FPU_gettag0(), FPU_rm);
+  FPU_pop();
 }
 

@@ -407,11 +407,11 @@ do_ade(struct pt_regs *regs)
 {
 	register_t pc = regs->cp0_epc;
 	register_t badvaddr __attribute__ ((unused)) = regs->cp0_badvaddr;
-	char *adels;
+	char adels;
 
 	lock_kernel();
 	adels = (((regs->cp0_cause & CAUSEF_EXCCODE) >>
-                  CAUSEB_EXCCODE) == 4) ? "adel" : "ades";
+                  CAUSEB_EXCCODE) == 4) ? 'l' : 's';
 
 #ifdef CONF_NO_UNALIGNED_KERNEL_ACCESS
 	/*
@@ -420,13 +420,8 @@ do_ade(struct pt_regs *regs)
 	 */
 	if (kernel_address(badvaddr) && !user_mode(regs)) {
 		show_regs(regs);
-#ifdef __mips64
-		panic("Caught %s exception in kernel mode accessing %016Lx.",
-                      adels, badvaddr);
-#else
-		panic("Caught %s exception in kernel mode accessing %08lx.",
-                      adels, badvaddr);
-#endif
+		panic("Caught adel%c exception in kernel mode accessing %08lx.",
+		      adels, badvaddr);
 	}
 #endif /* CONF_NO_UNALIGNED_KERNEL_ACCESS */
 
@@ -435,15 +430,9 @@ do_ade(struct pt_regs *regs)
 		register_t logpc = pc;
 		if (regs->cp0_cause & CAUSEF_BD)
 			logpc += 4;
-#ifdef __mips64
 		printk(KERN_DEBUG
-		       "Caught %s in '%s' at 0x%016Lx accessing 0x%016Lx.\n",
+		       "Caught adel%c in '%s' at 0x%08lx accessing 0x%08lx.\n",
 		       adels, current->comm, logpc, regs->cp0_badvaddr);
-#else
-		printk(KERN_DEBUG
-		       "Caught %s in '%s' at 0x%08lx accessing 0x%08lx.\n",
-		       adels, current->comm, logpc, regs->cp0_badvaddr);
-#endif
 	}
 #endif /* CONF_LOG_UNALIGNED_ACCESSES */
 

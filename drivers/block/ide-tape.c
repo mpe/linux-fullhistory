@@ -1,5 +1,5 @@
 /*
- * linux/drivers/block/ide-tape.c	Version 1.11 - BETA	Dec   2, 1996
+ * linux/drivers/block/ide-tape.c	Version 1.12		Dec   7, 1997
  *
  * Copyright (C) 1995, 1996 Gadi Oxman <gadio@netvision.net.il>
  *
@@ -206,6 +206,11 @@
  *                       Use ide_stall_queue() for DSC overlap.
  *                       Use the maximum speed rather than the current speed
  *                        to compute the request service time.
+ * Ver 1.12  Dec  7 97   Fix random memory overwriting and/or last block data
+ *                        corruption, which could occur if the total number
+ *                        of bytes written to the tape was not an integral
+ *                        number of tape blocks.
+ *                       Add support for INTERRUPT DRQ devices.
  *
  * Here are some words from the first releases of hd.c, which are quoted
  * in ide.c and apply here as well:
@@ -315,6 +320,8 @@
  *		sharing a (fast) ATA-2 disk with any (slow) new ATAPI device.
  */
 
+#define IDETAPE_VERSION "1.12"
+
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/types.h>
@@ -323,12 +330,9 @@
 #include <linux/delay.h>
 #include <linux/timer.h>
 #include <linux/mm.h>
-#include <linux/ioport.h>
 #include <linux/interrupt.h>
 #include <linux/major.h>
-#include <linux/blkdev.h>
 #include <linux/errno.h>
-#include <linux/hdreg.h>
 #include <linux/genhd.h>
 #include <linux/malloc.h>
 
@@ -692,6 +696,7 @@ typedef struct {
 #define IDETAPE_PIPELINE_ERROR		3	/* Error detected in a pipeline stage */
 #define IDETAPE_DETECT_BS		4	/* Attempt to auto-detect the current user block size */
 #define IDETAPE_FILEMARK		5	/* Currently on a filemark */
+#define IDETAPE_DRQ_INTERRUPT		6	/* DRQ interrupt device */
 
 /*
  *	Supported ATAPI tape drives packet commands
@@ -1152,11 +1157,6 @@ static void idetape_postpone_request (ide_drive_t *drive)
  */
 static void idetape_queue_pc_head (ide_drive_t *drive,idetape_pc_t *pc,struct request *rq)
 {
-	unsigned int major = HWIF(drive)->major;
-	struct blk_dev_struct *bdev = &blk_dev[major];
-
-	bdev->current_request=HWGROUP (drive)->rq;		/* Since we may have taken it out */
-
 	ide_init_drive_cmd (rq);
 	rq->buffer = (char *) pc;
 	rq->cmd = IDETAPE_PC_RQ1;
@@ -1542,15 +1542,11 @@ static void idetape_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 	ide_drive_t *drive = hwgroup->drive;
 	struct request *rq = hwgroup->rq;
 	idetape_tape_t *tape = drive->driver_data;
-	unsigned int major = HWIF(drive)->major;
-	struct blk_dev_struct *bdev = &blk_dev[major];
 	int error;
 
 #if IDETAPE_DEBUG_LOG
 	printk (KERN_INFO "Reached idetape_end_request\n");
 #endif /* IDETAPE_DEBUG_LOG */
-
-	bdev->current_request=rq;			/* Since we may have taken it out */
 
 	switch (uptodate) {
 		case 0:	error = IDETAPE_ERROR_GENERAL; break;
@@ -1723,18 +1719,23 @@ static void idetape_pc_intr (ide_drive_t *drive)
 
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	if (test_bit (PC_DMA_IN_PROGRESS, &pc->flags)) {
-		if (HWIF(drive)->dmaproc(ide_dma_status_bad, drive)) {
-			set_bit (PC_DMA_ERROR, &pc->flags);
+		if (HWIF(drive)->dmaproc(ide_dma_end, drive)) {
 			/*
-			 *	We will currently correct the following in
-			 *	idetape_analyze_error.
+			 * A DMA error is sometimes expected. For example,
+			 * if the tape is crossing a filemark during a
+			 * READ command, it will issue an irq and position
+			 * itself before the filemark, so that only a partial
+			 * data transfer will occur (which causes the DMA
+			 * error). In that case, we will later ask the tape
+			 * how much bytes of the original request were
+			 * actually transferred (we can't receive that
+			 * information from the DMA engine on most chipsets).
 			 */
-			pc->actually_transferred=HWIF(drive)->dmaproc(ide_dma_transferred, drive);
+			set_bit (PC_DMA_ERROR, &pc->flags);
 		} else {
 			pc->actually_transferred=pc->request_transfer;
 			idetape_update_buffers (pc);
 		}
-		(void) (HWIF(drive)->dmaproc(ide_dma_abort, drive));	/* End DMA */
 #if IDETAPE_DEBUG_LOG
 		printk (KERN_INFO "ide-tape: DMA finished\n");
 #endif /* IDETAPE_DEBUG_LOG */
@@ -1780,7 +1781,7 @@ static void idetape_pc_intr (ide_drive_t *drive)
 	if (test_and_clear_bit (PC_DMA_IN_PROGRESS, &pc->flags)) {
 		printk (KERN_ERR "ide-tape: The tape wants to issue more interrupts in DMA mode\n");
 		printk (KERN_ERR "ide-tape: DMA disabled, reverting to PIO\n");
-		HWIF(drive)->dmaproc(ide_dma_off, drive);
+		(void) HWIF(drive)->dmaproc(ide_dma_off, drive);
 		ide_do_reset (drive);
 		return;
 	}
@@ -1873,11 +1874,31 @@ static void idetape_pc_intr (ide_drive_t *drive)
  *		we will handle the next request.
  *
  */
+
+static void idetape_transfer_pc(ide_drive_t *drive)
+{
+	idetape_tape_t *tape = drive->driver_data;
+	idetape_pc_t *pc = tape->pc;
+	idetape_ireason_reg_t ireason;
+
+	if (ide_wait_stat (drive,DRQ_STAT,BUSY_STAT,WAIT_READY)) {
+		printk (KERN_ERR "ide-tape: Strange, packet command initiated yet DRQ isn't asserted\n");
+		return;
+	}
+	ireason.all=IN_BYTE (IDE_IREASON_REG);
+	if (!ireason.b.cod || ireason.b.io) {
+		printk (KERN_ERR "ide-tape: (IO,CoD) != (0,1) while issuing a packet command\n");
+		ide_do_reset (drive);
+		return;
+	}
+	ide_set_handler(drive, &idetape_pc_intr, WAIT_CMD);	/* Set the interrupt routine */
+	atapi_output_bytes (drive,pc->c,12);			/* Send the actual packet */
+}
+
 static void idetape_issue_packet_command (ide_drive_t *drive, idetape_pc_t *pc)
 {
 	idetape_tape_t *tape = drive->driver_data;
 	idetape_bcount_reg_t bcount;
-	idetape_ireason_reg_t ireason;
 	int dma_ok=0;
 
 #if IDETAPE_DEBUG_BUGS
@@ -1918,7 +1939,7 @@ static void idetape_issue_packet_command (ide_drive_t *drive, idetape_pc_t *pc)
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	if (test_and_clear_bit (PC_DMA_ERROR, &pc->flags)) {
 		printk (KERN_WARNING "ide-tape: DMA disabled, reverting to PIO\n");
-		HWIF(drive)->dmaproc(ide_dma_off, drive);
+		(void) HWIF(drive)->dmaproc(ide_dma_off, drive);
 	}
 	if (test_bit (PC_DMA_RECOMMENDED, &pc->flags) && drive->using_dma)
 		dma_ok=!HWIF(drive)->dmaproc(test_bit (PC_WRITING, &pc->flags) ? ide_dma_write : ide_dma_read, drive);
@@ -1929,35 +1950,19 @@ static void idetape_issue_packet_command (ide_drive_t *drive, idetape_pc_t *pc)
 	OUT_BYTE (bcount.b.high,IDE_BCOUNTH_REG);
 	OUT_BYTE (bcount.b.low,IDE_BCOUNTL_REG);
 	OUT_BYTE (drive->select.all,IDE_SELECT_REG);
-
-	ide_set_handler (drive, &idetape_pc_intr, WAIT_CMD);		/* Set the interrupt routine */
-	OUT_BYTE (WIN_PACKETCMD,IDE_COMMAND_REG);			/* Issue the packet command */
-
-	if (ide_wait_stat (drive,DRQ_STAT,BUSY_STAT,WAIT_READY)) { 	/* Wait for DRQ to be ready - Assuming Accelerated DRQ */
-		/*
-		 *	We currently only support tape drives which report
-		 *	accelerated DRQ assertion. For this case, specs
-		 *	allow up to 50us. We really shouldn't get here.
-		 *
-		 *	??? Still needs to think what to do if we reach
-		 *	here anyway.
-		 */
-		printk (KERN_ERR "ide-tape: Strange, packet command initiated yet DRQ isn't asserted\n");
-		return;
-	}
-	ireason.all=IN_BYTE (IDE_IREASON_REG);
-	if (!ireason.b.cod || ireason.b.io) {
-		printk (KERN_ERR "ide-tape: (IO,CoD) != (0,1) while issuing a packet command\n");
-		ide_do_reset (drive);
-		return;
-	}
-	atapi_output_bytes (drive,pc->c,12);			/* Send the actual packet */
 #ifdef CONFIG_BLK_DEV_IDEDMA
 	if (dma_ok) {						/* Begin DMA, if necessary */
 		set_bit (PC_DMA_IN_PROGRESS, &pc->flags);
 		(void) (HWIF(drive)->dmaproc(ide_dma_begin, drive));
 	}
 #endif /* CONFIG_BLK_DEV_IDEDMA */
+	if (test_bit(IDETAPE_DRQ_INTERRUPT, &tape->flags)) {
+		ide_set_handler(drive, &idetape_transfer_pc, WAIT_CMD);
+		OUT_BYTE(WIN_PACKETCMD, IDE_COMMAND_REG);
+	} else {
+		OUT_BYTE(WIN_PACKETCMD, IDE_COMMAND_REG);
+		idetape_transfer_pc(drive);
+	}
 }
 
 static void idetape_media_access_finished (ide_drive_t *drive)
@@ -2179,7 +2184,6 @@ static void idetape_do_request (ide_drive_t *drive, struct request *rq, unsigned
 {
 	idetape_tape_t *tape = drive->driver_data;
 	idetape_pc_t *pc;
-	struct blk_dev_struct *bdev = &blk_dev[HWIF(drive)->major];
 	struct request *postponed_rq = tape->postponed_rq;
 	idetape_status_reg_t status;
 
@@ -2196,32 +2200,6 @@ static void idetape_do_request (ide_drive_t *drive, struct request *rq, unsigned
 		ide_end_request (0,HWGROUP (drive));			/* Let the common code handle it */
 		return;
 	}
-
-	/*
-	 *	This is an important point. We will try to remove our request
-	 *	from the block device request queue while we service the
-	 *	request. Note that the request must be returned to
-	 *	bdev->current_request before the next call to
-	 *	ide_end_drive_cmd or ide_do_drive_cmd to conform with the
-	 *	normal behavior of the IDE driver, which leaves the active
-	 *	request in bdev->current_request during I/O.
-	 *
-	 *	This will eliminate fragmentation of disk/cdrom requests
-	 *	around a tape request, now that we are using ide_next to
-	 *	insert pending pipeline requests, since we have only one
-	 *	ide-tape.c data request in the device request queue, and
-	 *	thus once removed, ll_rw_blk.c will only see requests from
-	 *	the other device.
-	 *
-	 *	The potential fragmentation inefficiency was pointed to me
-	 *	by Mark Lord.
-	 *
-	 *	Uhuh.. the following "fix" is actually not entirely correct.
-	 *	Some day we should probably move to a per device request
-	 *	queue, rather than per interface.
-	 */
-	if (rq->next != NULL && rq->rq_dev != rq->next->rq_dev)
-		bdev->current_request=rq->next;
 
 	/*
 	 *	Retry a failed packet command
@@ -2612,8 +2590,8 @@ static void idetape_empty_write_pipeline (ide_drive_t *drive)
 		if (tape->merge_stage_size % tape->tape_block_size) {
 			blocks++;
 			i = tape->tape_block_size - tape->merge_stage_size % tape->tape_block_size;
-			memset (tape->merge_stage->bh->b_data + tape->merge_stage->bh->b_count, 0, i);
-			tape->merge_stage->bh->b_count += i;
+			memset (tape->bh->b_data + tape->bh->b_count, 0, i);
+			tape->bh->b_count += i;
 		}
 		(void) idetape_add_chrdev_write_request (drive, blocks);
 		tape->merge_stage_size = 0;
@@ -3378,9 +3356,9 @@ static int idetape_identify_device (ide_drive_t *drive,struct hd_driveid *id)
 		case 1: printk (KERN_INFO "16 bytes\n");break;
 		default: printk (KERN_INFO "Reserved\n");break;
 	}
-	printk (KERN_INFO "Model: %s\n",id->model);
-	printk (KERN_INFO "Firmware Revision: %s\n",id->fw_rev);
-	printk (KERN_INFO "Serial Number: %s\n",id->serial_no);
+	printk (KERN_INFO "Model: %.40s\n",id->model);
+	printk (KERN_INFO "Firmware Revision: %.8s\n",id->fw_rev);
+	printk (KERN_INFO "Serial Number: %.20s\n",id->serial_no);
 	printk (KERN_INFO "Write buffer size: %d bytes\n",id->buf_size*512);
 	printk (KERN_INFO "DMA: %s",id->capability & 0x01 ? "Yes\n":"No\n");
 	printk (KERN_INFO "LBA: %s",id->capability & 0x02 ? "Yes\n":"No\n");
@@ -3532,6 +3510,7 @@ static void idetape_setup (ide_drive_t *drive, idetape_tape_t *tape, int minor)
 	ide_hwif_t *hwif = HWIF(drive);
 	unsigned long t1, tmid, tn, t;
 	u16 speed;
+	struct idetape_id_gcw gcw;
 
 	drive->driver_data = tape;
 	drive->ready_stat = 0;			/* An ATAPI device ignores DRDY */
@@ -3543,6 +3522,9 @@ static void idetape_setup (ide_drive_t *drive, idetape_tape_t *tape, int minor)
 	tape->chrdev_direction = idetape_direction_none;
 	tape->pc = tape->pc_stack;
 	tape->max_stages = IDETAPE_MIN_PIPELINE_STAGES;
+	*((unsigned short *) &gcw) = drive->id->config;
+	if (gcw.drq_type == 1)
+		set_bit(IDETAPE_DRQ_INTERRUPT, &tape->flags);
 
 	idetape_get_mode_sense_results (drive);
 
@@ -3635,6 +3617,8 @@ static ide_module_t idetape_module = {
  *	IDE subdriver functions, registered with ide.c
  */
 static ide_driver_t idetape_driver = {
+	"ide-tape",		/* name */
+	IDETAPE_VERSION,	/* version */
 	ide_tape,		/* media */
 	1,			/* busy */
 	1,			/* supports_dma */
@@ -3648,7 +3632,8 @@ static ide_driver_t idetape_driver = {
 	NULL,			/* media_change */
 	idetape_pre_reset,	/* pre_reset */
 	NULL,			/* capacity */
-	NULL			/* special */
+	NULL,			/* special */
+	NULL			/* proc */
 };
 
 /*

@@ -4,6 +4,8 @@
  * Copyright (C) 1994  Waldorf Electronics
  * written by Ralf Baechle
  * Modified further for R[236]000 compatibility by Paul M. Antoine
+ *
+ * $Id: processor.h,v 1.5 1997/12/01 16:48:39 ralf Exp $
  */
 #ifndef __ASM_MIPS_PROCESSOR_H
 #define __ASM_MIPS_PROCESSOR_H
@@ -15,9 +17,11 @@
 #include <asm/system.h>
 
 /*
- * System setup and hardware bug flags..
+ * System setup and hardware flags..
  */
 extern char wait_available;		/* only available on R4[26]00 */
+extern char cyclecounter_available;	/* only available from R4000 upwards. */
+extern char dedicated_iv_available;	/* some embedded MIPS like Nevada */
 
 /*
  * Bus types (default is ISA, but people can check others with these..)
@@ -77,6 +81,10 @@ union mips_fpu_union {
 	{{0,},} \
 }
 
+typedef struct {
+	unsigned long seg;
+} mm_segment_t;
+
 /*
  * If you change thread_struct remember to change the #defines below too!
  */
@@ -101,7 +109,7 @@ struct thread_struct {
 #define MF_FIXADE 1			/* Fix address errors in software */
 #define MF_LOGADE 2			/* Log address errors to syslog */
 	unsigned long mflags;
-	int current_ds;
+	mm_segment_t current_ds;
 	unsigned long irix_trampoline;  /* Wheee... */
 	unsigned long irix_oldctx;
 };
@@ -128,7 +136,7 @@ struct thread_struct {
 	/* \
 	 * Other stuff associated with the process \
 	 */ \
-	0, 0, 0, (unsigned long)&init_task_union + KERNEL_STACK_SIZE - 8, \
+	0, 0, 0, (unsigned long)&init_task_union + KERNEL_STACK_SIZE - 32, \
 	(unsigned long) swapper_pg_dir, \
 	/* \
 	 * For now the default is to fix address errors \
@@ -150,7 +158,13 @@ extern void release_thread(struct task_struct *);
  */
 extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 {
-	return ((struct pt_regs *)(long)t->reg29)->cp0_epc;
+	extern void ret_from_sys_call(void);
+
+	/* New born processes are a special case */
+	if (t->reg31 == (unsigned long) ret_from_sys_call)
+		return t->reg31;
+
+	return ((unsigned long*)t->reg29)[17];
 }
 
 /*
@@ -161,7 +175,8 @@ extern void start_thread(struct pt_regs * regs, unsigned long pc, unsigned long 
 /*
  * Does the process account for user or for system time?
  */
-#define USES_USER_TIME(regs) (!((regs)->cp0_status & 0x18))
+extern int (*running_in_user_mode)(void);
+#define USES_USER_TIME(regs) running_in_user_mode()
 
 /* Allocation and freeing of basic task resources. */
 /*

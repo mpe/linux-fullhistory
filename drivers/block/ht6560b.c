@@ -155,7 +155,6 @@ static void ht6560b_selectproc (ide_drive_t *drive)
 		printk("ht6560b: %s: select=%#x timing=%#x\n", drive->name, t, timing);
 #endif
 	}
-	OUT_BYTE(drive->select.all,IDE_SELECT_REG);
 }
 
 /*
@@ -229,6 +228,7 @@ void init_ht6560b (void)
 			ide_hwifs[1].serialized = 1;
 			ide_hwifs[0].mate = &ide_hwifs[1];
 			ide_hwifs[1].mate = &ide_hwifs[0];
+			ide_hwifs[1].channel = 1;
 		} else
 			printk("\nht6560b: not found\n");
 	}

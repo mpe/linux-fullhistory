@@ -2,6 +2,8 @@
  * linux/include/asm-mips/namei.h
  *
  * Included from linux/fs/namei.c
+ *
+ * $Id: namei.h,v 1.6 1997/09/18 07:59:31 root Exp $
  */
 #ifndef __ASM_MIPS_NAMEI_H
 #define __ASM_MIPS_NAMEI_H
@@ -14,7 +16,6 @@
 static inline struct dentry *
 __mips_lookup_dentry(const char *name, int follow_link)
 {
-	int error;
 	struct dentry *base;
 
 	if (current->personality != PER_IRIX32)

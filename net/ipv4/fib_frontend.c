@@ -259,7 +259,7 @@ int ip_rt_ioctl(unsigned int cmd, void *arg)
 		if (copy_from_user(&r, arg, sizeof(struct rtentry)))
 			return -EFAULT;
 		rtnl_lock();
-		err = fib_convert_rtentry(cmd, &req.nlh, &req.rtm, &rta, arg);
+		err = fib_convert_rtentry(cmd, &req.nlh, &req.rtm, &rta, &r);
 		if (err == 0) {
 			if (cmd == SIOCDELRT) {
 				struct fib_table *tb = fib_get_table(req.rtm.rtm_table);

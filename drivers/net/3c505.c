@@ -323,7 +323,7 @@ inline static void adapter_reset(struct device *dev)
  * never happen in theory, but seems to occur occasionally if the card gets
  * prodded at the wrong time.
  */
-static inline void check_dma(struct device *dev)
+static inline void check_3c505_dma(struct device *dev)
 {
 	elp_device *adapter = dev->priv;
 	if (adapter->dmaing && (jiffies > (adapter->current_dma.start_time + 10))) {
@@ -406,7 +406,7 @@ static int send_pcb(struct device *dev, pcb_struct * pcb)
 	int timeout;
 	elp_device *adapter = dev->priv;
 
-	check_dma(dev);
+	check_3c505_dma(dev);
 
 	if (adapter->dmaing && adapter->current_dma.direction == 0)
 		return FALSE;
@@ -723,7 +723,7 @@ static void elp_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr)
 			}
 		} else {
 			/* has one timed out? */
-			check_dma(dev);
+			check_3c505_dma(dev);
 		}
 
 		sti();
@@ -1088,7 +1088,7 @@ static int elp_start_xmit(struct sk_buff *skb, struct device *dev)
 		return 1;
 	}
 
-	check_dma(dev);
+	check_3c505_dma(dev);
 
 	/*
 	 * if the transmitter is still busy, we have a transmit timeout...

@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.1 1997/06/06 09:36:39 ralf Exp $
+/* $Id: time.c,v 1.1.1.1 1997/06/01 03:16:40 ralf Exp $
  * time.c: Generic SGI time_init() code, this will dispatch to the
  *         appropriate per-architecture time/counter init code.
  *

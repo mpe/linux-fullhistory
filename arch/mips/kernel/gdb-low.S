@@ -4,6 +4,8 @@
  * gdb-low.S contains the low-level trap handler for the GDB stub.
  *
  * Copyright (C) 1995 Andreas Busse
+ *
+ * $Id: gdb-low.S,v 1.3 1997/12/02 05:51:05 ralf Exp $
  */
 
 #include <linux/sys.h>
@@ -40,7 +42,7 @@
 		sw	v0,GDB_FR_REG2(sp)
 
 /*
- * first save the CP0 and special registers
+ * First save the CP0 and special registers
  */
 
 		mfc0	v0,CP0_STATUS
@@ -93,12 +95,12 @@
 		sw	fp,GDB_FR_REG30(sp)
 		sw	ra,GDB_FR_REG31(sp)
 
-		STI				/* disable interrupts */
+		CLI				/* disable interrupts */
 		
 /*
  * Followed by the floating point registers
  */
-		mfc0	v0,CP0_STATUS		/* check if the FPU is enabled */
+		mfc0	v0,CP0_STATUS		/* FPU enabled? */
 		srl	v0,v0,16
 		andi	v0,v0,(ST0_CU1 >> 16)
 
@@ -148,7 +150,7 @@
 		sw	v0,GDB_FR_FIR(sp)
 
 /*
- * current stack frame ptr
+ * Current stack frame ptr
  */
 
 2:
@@ -166,6 +168,8 @@
 		sw	v0,GDB_FR_CP0_ENTRYLO0(sp)
 		mfc0	v0,CP0_ENTRYLO1
 		sw	v0,GDB_FR_CP0_ENTRYLO1(sp)
+		mfc0	v0,CP0_CONTEXT
+		sw	v0,GDB_FR_CP0_CONTEXT(sp)
 		mfc0	v0,CP0_PAGEMASK
 		sw	v0,GDB_FR_CP0_PAGEMASK(sp)
 		mfc0	v0,CP0_WIRED
@@ -178,7 +182,7 @@
 		.set	at
 
 /*
- * continue with the higher level handler
+ * Continue with the higher level handler
  */
 
 		move	a0,sp
@@ -187,7 +191,7 @@
 		 nop
 
 /*
- * restore all writable registers, in reverse order
+ * Restore all writable registers, in reverse order
  */
 
 		.set	noat
@@ -203,7 +207,10 @@
 		lw	v0,GDB_FR_CP0_ENTRYLO0(sp)
 		lw	v1,GDB_FR_CP0_INDEX(sp)
 		mtc0	v0,CP0_ENTRYLO0
+		lw	v0,GDB_FR_CP0_CONTEXT(sp)
 		mtc0	v1,CP0_INDEX
+		mtc0	v0,CP0_CONTEXT
+		
 
 /*
  * Next, the floating point registers
@@ -298,9 +305,9 @@
 		lw	$1,GDB_FR_REG1(sp)
 		lw	sp,GDB_FR_REG29(sp)		/* Deallocate stack */
 
+		.set	mips3
 		eret
+		.set	mips0
 		.set	at
 		.set	reorder
 		END(trap_low)
-
-/* end of file gdb-low.S */

@@ -4,17 +4,11 @@
  * This file is subject to the terms and conditions of the GNU General Public
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
- */
-
-/*
- * 'traps.c' handles hardware traps and faults after we have saved some
- * state in 'asm.s'. Currently mostly a debugging-aid, will be extended
- * to mainly kill the offending process (probably by giving it a signal,
- * but possibly by killing it outright if necessary).
  *
- * FIXME: This is the place for a fpu emulator.
- *
+ * Copyright 1994, 1995, 1996, 1997 by Ralf Baechle
  * Modified for R3000 by Paul M. Antoine, 1995, 1996
+ *
+ * $Id: traps.c,v 1.7 1997/12/01 16:33:28 ralf Exp $
  */
 #include <linux/config.h>
 #include <linux/init.h>
@@ -78,8 +72,8 @@ extern asmlinkage void handle_reserved(void);
 
 static char *cpu_names[] = CPU_NAMES;
 
-unsigned long page_colour_mask;
-unsigned int watch_available = 0;
+char watch_available = 0;
+char dedicated_iv_available = 0;
 
 void (*ibe_board_handler)(struct pt_regs *regs);
 void (*dbe_board_handler)(struct pt_regs *regs);
@@ -182,7 +176,7 @@ void die_if_kernel(const char * str, struct pt_regs * regs, long err)
 		return;
 #endif
 #if (_MIPS_ISA == _MIPS_ISA_MIPS3) || (_MIPS_ISA == _MIPS_ISA_MIPS4)
-	if (!(regs->cp0_status & 0x18))
+	if (regs->cp0_status & ST0_KSU == KSU_USER)
 		return;
 #endif
 	console_verbose();
@@ -196,8 +190,6 @@ static void default_be_board_handler(struct pt_regs *regs)
 	/*
 	 * Assume it would be too dangerous to continue ...
 	 */
-	printk ("BE HANDLER\n");
-	show_regs (regs);
 	force_sig(SIGBUS, current);
 }
 
@@ -228,8 +220,34 @@ out:
 	unlock_kernel();
 }
 
+#ifdef CONFIG_MIPS_FPE_MODULE
+static void (*fpe_handler)(struct pt_regs *regs, unsigned int fcr31);
+
+/*
+ * Register_fpe/unregister_fpe are for debugging purposes only.  To make
+ * this hack work a bit better there is no error checking.
+ */
+int register_fpe(void (*handler)(struct pt_regs *regs, unsigned int fcr31))
+{
+	fpe_handler = handler;
+	return 0;
+}
+
+int unregister_fpe(void (*handler)(struct pt_regs *regs, unsigned int fcr31))
+{
+	fpe_handler = NULL;
+	return 0;
+}
+#endif
+
 void do_fpe(struct pt_regs *regs, unsigned int fcr31)
 {
+#ifdef CONFIG_MIPS_FPE_MODULE
+	if (fpe_handler != NULL) {
+		fpe_handler(regs, fcr31);
+		return;
+	}
+#endif
 	lock_kernel();
 #ifdef CONF_DEBUG_EXCEPTIONS
 	show_regs(regs);
@@ -408,6 +426,40 @@ static inline void watch_init(unsigned long cputype)
 	}
 }
 
+/*
+ * Some MIPS CPUs have a dedicated interrupt vector which reduces the
+ * interrupt processing overhead.  Use it where available.
+ * FIXME: more CPUs than just the Nevada have this feature.
+ */
+static inline void setup_dedicated_int(void)
+{
+	extern void except_vec4(void);
+	switch(mips_cputype) {
+	case CPU_NEVADA:
+		memcpy((void *)(KSEG0 + 0x200), except_vec4, 8);
+		set_cp0_cause(CAUSEF_IV, CAUSEF_IV);
+		dedicated_iv_available = 1;
+	}
+}
+
+unsigned long exception_handlers[32];
+
+/*
+ * As a side effect of the way this is implemented we're limited
+ * to interrupt handlers in the address range from
+ * KSEG0 <= x < KSEG0 + 256mb on the Nevada.  Oh well ...
+ */
+void set_except_vector(int n, void *addr)
+{
+	unsigned handler = (unsigned long) addr;
+	exception_handlers[n] = handler;
+	if (n == 0 && dedicated_iv_available) {
+		*(volatile u32 *)(KSEG0+0x200) = 0x08000000 |
+		                                 (0x03ffffff & (handler >> 2));
+		flush_icache_range(KSEG0+0x200, KSEG0 + 0x204);
+	}
+}
+
 typedef asmlinkage int (*syscall_t)(void *a0,...);
 asmlinkage int (*do_syscalls)(struct pt_regs *regs, syscall_t fun, int narg);
 extern asmlinkage int r4k_do_syscalls(struct pt_regs *regs,
@@ -430,7 +482,8 @@ extern asmlinkage void r2300_resume(void *tsk);
 
 __initfunc(void trap_init(void))
 {
-	extern char except_vec0_r4000, except_vec0_r4600, except_vec0_r2300;
+	extern char except_vec0_nevada, except_vec0_r4000;
+	extern char except_vec0_r4600, except_vec0_r2300;
 	extern char except_vec1_generic, except_vec2_generic;
 	extern char except_vec3_generic, except_vec3_r4000;
 	unsigned long i;
@@ -452,9 +505,11 @@ __initfunc(void trap_init(void))
 		set_except_vector(i, handle_reserved);
 
 	/*
-	 * Only some CPUs have the watch exception.
+	 * Only some CPUs have the watch exceptions or a dedicated
+	 * interrupt vector.
 	 */
 	watch_init(mips_cputype);
+	setup_dedicated_int();
 
 	/*
 	 * Handling the following exceptions depends mostly of the cpu type
@@ -467,11 +522,6 @@ __initfunc(void trap_init(void))
 		 */
 		write_32bit_cp0_register(CP0_FRAMEMASK, 0);
 		set_cp0_status(ST0_XX, ST0_XX);
-		/*
-		 * Actually this mask stands for only 16k cache.  This is
-		 * correct since the R10000 has multiple ways in it's cache.
-		 */
-		page_colour_mask = 0x3000;
 		/*
 		 * The R10k might even work for Linux/MIPS - but we're paranoid
 		 * and refuse to run until this is tested on real silicon
@@ -494,10 +544,13 @@ __initfunc(void trap_init(void))
      /* case CPU_R4640: */
 	case CPU_R4600:
         case CPU_R5000:
-		if(mips_cputype != CPU_R4600)
-			memcpy((void *)KSEG0, &except_vec0_r4000, 0x80);
-		else
+        case CPU_NEVADA:
+		if(mips_cputype == CPU_NEVADA) {
+			memcpy((void *)KSEG0, &except_vec0_nevada, 0x80);
+		} else if (mips_cputype == CPU_R4600)
 			memcpy((void *)KSEG0, &except_vec0_r4600, 0x80);
+		else
+			memcpy((void *)KSEG0, &except_vec0_r4000, 0x80);
 
 		/*
 		 * The idea is that this special r4000 general exception
@@ -532,15 +585,8 @@ __initfunc(void trap_init(void))
 		set_except_vector(12, handle_ov);
 		set_except_vector(13, handle_tr);
 		set_except_vector(15, handle_fpe);
-
-		/*
-		 * Compute mask for page_colour().  This is based on the
-		 * size of the data cache.
-		 */
-		i = read_32bit_cp0_register(CP0_CONFIG);
-		i = (i >> 26) & 7;
-		page_colour_mask = 1 << (12 + i);
 		break;
+
 	case CPU_R6000:
 	case CPU_R6000A:
 		save_fp_context = r6000_save_fp_context;
@@ -552,6 +598,7 @@ __initfunc(void trap_init(void))
 		 * unaligned ldc1/sdc1 exception.  The handlers have not been
 		 * written yet.  Well, anyway there is no R6000 machine on the
 		 * current list of targets for Linux/MIPS.
+		 * (Duh, crap, there is someone with a tripple R6k machine)
 		 */
 		set_except_vector(14, handle_mc);
 		set_except_vector(15, handle_ndc);
@@ -559,9 +606,6 @@ __initfunc(void trap_init(void))
 	case CPU_R2000:
 	case CPU_R3000:
 	case CPU_R3000A:
-		/*
-		 * Actually don't know about these, but let's guess - PMA
-		 */
 		memcpy((void *)KSEG0, &except_vec0_r2300, 0x80);
 		do_syscalls = r2300_do_syscalls;
 		save_fp_context = r2300_save_fp_context;
@@ -589,20 +633,6 @@ __initfunc(void trap_init(void))
 		set_except_vector(12, handle_ov);
 		set_except_vector(13, handle_tr);
 		set_except_vector(15, handle_fpe);
-
-		/*
-		 * Compute mask for page_colour().  This is based on the
-		 * size of the data cache.  Does the size of the icache
-		 * need to be accounted for?
-		 *
-		 * FIXME: is any of this necessary for the R3000, which
-		 *        doesn't have a config register?
-		 *        (No, the R2000, R3000 family has a physical indexed
-		 *        cache and doesn't need this braindamage.)
-		i = read_32bit_cp0_register(CP0_CONFIG);
-		i = (i >> 26) & 7;
-		page_colour_mask = 1 << (12 + i);
-		 */
 		break;
 	case CPU_R3041:
 	case CPU_R3051:
@@ -619,5 +649,5 @@ __initfunc(void trap_init(void))
 	default:
 		panic("Unknown CPU type");
 	}
-	flush_cache_all();
+	flush_icache_range(KSEG0, KSEG0 + 0x200);
 }

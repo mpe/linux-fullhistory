@@ -1,7 +1,9 @@
 /*
  * Deskstation rPC44/Tyne specific interrupt handler code
  *
- * Copyright (C) 1994, 1995, 1996 by Ralf Baechle
+ * Copyright (C) 1994, 1995, 1996, 1997 by Ralf Baechle
+ *
+ * $Id: int-handler.S,v 1.3 1997/09/20 19:20:09 root Exp $
  */
 #include <asm/asm.h>
 #include <asm/mipsconfig.h>
@@ -9,7 +11,7 @@
 #include <asm/regdef.h>
 #include <asm/stackframe.h>
 
-#error "FIXME - PORT_BASE is defined to port_base which breaks this file"
+#error "FIXME - PORT_BASE is defined to mips_io_port_base which breaks this file"
 
 		.text
 		.set	noreorder
@@ -43,12 +45,8 @@
 		/*
 		 * Now call the real handler
 		 */
-		la	t3,IRQ_vectors
-		sll	t2,a0,PTRLOG
-		addu	t3,t2
-		LONG_L	t3,(t3)
-		jalr	t3
-		nop					# delay slot
+		jal	do_IRQ
+		 move	a1,sp
 		/*
 		 * Unblock first pic
 		 */
@@ -57,7 +55,7 @@
 		nor	s1,zero,s1
 		and	t1,s1
 		sb	t1,%lo(cache_21)(s4)
-		jr	v0
+		j	ret_from_irq
 		sb	t1,%lo(PORT_BASE+0x21)(s0)	# delay slot
 
 		/*
@@ -85,13 +83,8 @@ poll_second:	li	a0,0x0f
 		/*
 		 * Now call the real handler
 		 */
-		la	t3,IRQ_vectors
-		addiu	a0,8
-		sll	t2,a0,PTRLOG
-		addu	t3,t2
-		LONG_L	t3,(t3)
-		jalr	t3
-		nop					# delay slot
+		jal	do_IRQ
+		 nop
 		/*
 		 * Unblock second pic
 		 */
@@ -100,12 +93,12 @@ poll_second:	li	a0,0x0f
 		nor	s1,zero,s1
 		and	t1,t1,s1
 		sb	t1,%lo(cache_A1)(s4)
-		jr	v0
-		sb	t1,%lo(PORT_BASE+0xa1)(s0)	# delay slot
+		j	ret_from_irq
+		 sb	t1,%lo(PORT_BASE+0xa1)(s0)
 
 /*
  * "Jump extender" to reach spurious_interrupt
  */
 3:		j	spurious_interrupt
-		nop					# delay slot
+		 nop
 		END(deskstation_handle_int)

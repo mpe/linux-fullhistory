@@ -207,22 +207,22 @@ static int do_isofs_readdir(struct inode *inode, struct file *filp,
 			}
 		}
 
-#ifdef CONFIG_JOLIET
-		if (inode->i_sb->u.isofs_sb.s_joliet_level) {
-			len = get_joliet_filename(de, inode, tmpname);
-			p = tmpname;
-		} else 
-#endif
-		/* if not joliet */ {
-			map = 1;
-			if (inode->i_sb->u.isofs_sb.s_rock) {
-				len = get_rock_ridge_filename(de, tmpname, inode);
-				if (len != 0) {
-					p = tmpname;
-					map = 0;
-				}
+		map = 1;
+		if (inode->i_sb->u.isofs_sb.s_rock) {
+			len = get_rock_ridge_filename(de, tmpname, inode);
+			if (len != 0) {
+				p = tmpname;
+				map = 0;
 			}
-			if (map) {
+		}
+		if (map) {
+#ifdef CONFIG_JOLIET
+			if (inode->i_sb->u.isofs_sb.s_joliet_level) {
+				len = get_joliet_filename(de, inode, tmpname);
+				p = tmpname;
+			} else
+#endif
+			{
 				if (inode->i_sb->u.isofs_sb.s_mapping == 'n') {
 					len = isofs_name_translate(de->name, de->name_len[0],
 								   tmpname);

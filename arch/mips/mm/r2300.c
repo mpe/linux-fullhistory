@@ -3,7 +3,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: r2300.c,v 1.3 1997/08/08 18:13:06 miguel Exp $
+ * $Id: r2300.c,v 1.3 1997/12/02 05:51:08 ralf Exp $
  */
 
 #include <linux/kernel.h>

@@ -4,7 +4,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *  Copyright (C) 1994, 1995, 1996  Ralf Baechle
  *
- * $Id: signal.c,v 1.8 1997/08/08 18:12:30 miguel Exp $
+ * $Id: signal.c,v 1.8 1997/12/01 16:26:34 ralf Exp $
  */
 #include <linux/config.h>
 #include <linux/sched.h>
@@ -42,7 +42,7 @@ asmlinkage int sys_sigsuspend(struct pt_regs *regs)
 	unsigned long mask;
 	sigset_t *uset, set;
 
-	uset = (sigset_t *)(long) regs->regs[4];
+	uset = (sigset_t *) regs->regs[4];
 	if (get_user(set, uset))
 		return -EFAULT;
 
@@ -64,6 +64,8 @@ asmlinkage int sys_sigsuspend(struct pt_regs *regs)
 asmlinkage int sys_sigreturn(struct pt_regs *regs)
 {
 	struct sigcontext *context;
+	unsigned long blocked;
+	long long reg;
 	int i;
 
 	context = (struct sigcontext *)(long) regs->regs[29];
@@ -71,36 +73,26 @@ asmlinkage int sys_sigreturn(struct pt_regs *regs)
 	    (regs->regs[29] & (SZREG - 1)))
 		goto badframe;
 
-	current->blocked = context->sc_sigset & _BLOCKABLE; /* XXX */
-	regs->cp0_epc = context->sc_pc; /* XXX */
+	__get_user(blocked, &context->sc_sigset);
+	current->blocked = blocked & _BLOCKABLE;
+	__get_user(regs->cp0_epc, &context->sc_pc);
 
-/*
- * Disabled because we only use the lower 32 bit of the registers.
- */
-#if 0
 	/*
-	 * We only allow user processes in 64bit mode (n32, 64 bit ABI) to
-	 * restore the upper half of registers.
+	 * Restore all integer registers.
 	 */
-	if (read_32bit_cp0_register(CP0_STATUS) & ST0_UX) {
-		for(i = 31;i >= 0;i--)
-			__get_user(regs->regs[i], &context->sc_regs[i]);
-		__get_user(regs->hi, &context->sc_mdhi);
-		__get_user(regs->lo, &context->sc_mdlo);
-	} else
-#endif
-	{
-		long long reg;
-		for(i = 31;i >= 0;i--) {
-			__get_user(reg, &context->sc_regs[i]);
-			regs->regs[i] = (int) reg;
-		}
-		__get_user(reg, &context->sc_mdhi);
-		regs->hi = (int) reg;
-		__get_user(reg, &context->sc_mdlo);
-		regs->lo = (int) reg;
+	for(i = 31;i >= 0;i--) {
+		__get_user(reg, &context->sc_regs[i]);
+		regs->regs[i] = (int) reg;
 	}
+	__get_user(reg, &context->sc_mdhi);
+	regs->hi = (int) reg;
+	__get_user(reg, &context->sc_mdlo);
+	regs->lo = (int) reg;
 
+	/*
+	 * FP depends on what FPU in what mode we have.  Best done in
+	 * Assembler ...
+	 */
 	restore_fp_context(context);
 
 	/*
@@ -182,7 +174,7 @@ static void setup_frame(struct sigaction * sa, struct pt_regs *regs,
 	 * Set up the return code ...
 	 *
 	 *         .set    noreorder
-	 *         addiu   sp,24
+	 *         addiu   sp,0x20
 	 *         li      v0,__NR_sigreturn
 	 *         syscall
 	 *         .set    reorder
@@ -391,4 +383,14 @@ asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs)
 asmlinkage unsigned long sys_signal(int signum, __sighandler_t handler)
 {
 	return -ENOSYS;
+}
+
+/*
+ * Compatibility syscall.  Can be replaced in libc.
+ */
+asmlinkage int sys_pause(void)
+{
+	current->state = TASK_INTERRUPTIBLE;
+	schedule();
+	return -ERESTARTNOHAND;
 }

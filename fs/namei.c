@@ -73,6 +73,10 @@
  * and in the old Linux semantics.
  */
 
+/* [16-Dec-97 Kevin Buhr] For security reasons, we change some symlink
+ * semantics.  See the comments in "open_namei" and "do_link" below.
+ */
+
 static char * quicklist = NULL;
 static int quickcount = 0;
 struct semaphore quicklock = MUTEX;
@@ -530,7 +534,13 @@ struct dentry * open_namei(const char * pathname, int flag, int mode)
 	mode &= S_IALLUGO & ~current->fs->umask;
 	mode |= S_IFREG;
 
-	dentry = lookup_dentry(pathname, NULL, 1);
+	/* 
+	 * Special case: O_CREAT|O_EXCL on a dangling symlink should
+	 * give EEXIST for security reasons.  While inconsistent, this
+	 * is the same scheme used by, for example, Solaris 2.5.1.  --KAB
+	 */
+	dentry = lookup_dentry(pathname, NULL,
+			       (flag & (O_CREAT|O_EXCL)) != (O_CREAT|O_EXCL));
 	if (IS_ERR(dentry))
 		return dentry;
 
@@ -731,7 +741,7 @@ static inline int do_mkdir(const char * pathname, int mode)
 	struct dentry *dir;
 	struct dentry *dentry;
 
-	dentry = lookup_dentry(pathname, NULL, 1);
+	dentry = lookup_dentry(pathname, NULL, 0);
 	error = PTR_ERR(dentry);
 	if (IS_ERR(dentry))
 		goto exit;
@@ -1010,7 +1020,16 @@ static inline int do_link(const char * oldname, const char * newname)
 	if (IS_ERR(old_dentry))
 		goto exit;
 
-	new_dentry = lookup_dentry(newname, NULL, 1);
+	/*
+	 * Hardlinks are often used in delicate situations.  We avoid
+	 * security-related surprises by not following symlinks on the
+	 * newname.  We *do* follow them on the oldname.  This is
+	 * the same as Digital Unix 4.0, for example.
+	 *
+	 * Solaris 2.5.1 is similar, but for a laugh try linking from
+	 * a dangling symlink.                              --KAB
+	 */
+	new_dentry = lookup_dentry(newname, NULL, 0);
 	error = PTR_ERR(new_dentry);
 	if (IS_ERR(new_dentry))
 		goto exit_old;

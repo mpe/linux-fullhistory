@@ -126,7 +126,8 @@ struct ip_fw
 #define IP_FW_IN		1
 #define IP_FW_OUT		2
 #define IP_FW_ACCT		3
-#define IP_FW_CHAINS		4	/* total number of ip_fw chains */
+#define IP_FW_MASQ		4
+#define IP_FW_CHAINS		5	/* total number of ip_fw chains */
 
 #define IP_FW_INSERT		(IP_FW_BASE_CTL)
 #define IP_FW_APPEND		(IP_FW_BASE_CTL+1)
@@ -167,6 +168,11 @@ struct ip_fw
 #define IP_ACCT_FLUSH		(IP_FW_FLUSH  | (IP_FW_ACCT << IP_FW_SHIFT))
 #define IP_ACCT_ZERO		(IP_FW_ZERO   | (IP_FW_ACCT << IP_FW_SHIFT))
 
+#define IP_FW_MASQ_INSERT	(IP_FW_INSERT | (IP_FW_MASQ << IP_FW_SHIFT))
+#define IP_FW_MASQ_ADD		(IP_FW_APPEND | (IP_FW_MASQ << IP_FW_SHIFT))
+#define IP_FW_MASQ_DEL		(IP_FW_DELETE | (IP_FW_MASQ << IP_FW_SHIFT))
+#define IP_FW_MASQ_FLUSH  	(IP_FW_FLUSH  | (IP_FW_MASQ << IP_FW_SHIFT))
+
 struct ip_fwpkt
 {
 	struct iphdr fwp_iph;			/* IP header */
@@ -177,6 +183,20 @@ struct ip_fwpkt
 	} fwp_protoh;
 	struct in_addr fwp_via;			/* interface address */
 	char           fwp_vianame[IFNAMSIZ];	/* interface name */
+};
+
+#define IP_FW_MASQCTL_MAX 256
+#define IP_MASQ_MOD_NMAX  32
+
+struct ip_fw_masqctl
+{
+	int mctl_action;
+	union {
+		struct {
+			char name[IP_MASQ_MOD_NMAX];
+			char data[1];
+		} mod;
+	} u;
 };
 
 /*
@@ -211,9 +231,13 @@ extern int ip_fw_ctl(int, void *, int);
 extern struct ip_fw *ip_acct_chain;
 extern int ip_acct_ctl(int, void *, int);
 #endif
+#ifdef CONFIG_IP_MASQUERADE
+extern int ip_masq_ctl(int, void *, int);
+#endif
 
 extern int ip_fw_chk(struct iphdr *, struct device *, __u16 *, struct ip_fw *, int, int);
 extern void ip_fw_init(void);
 #endif /* KERNEL */
+
 
 #endif /* _IP_FW_H */

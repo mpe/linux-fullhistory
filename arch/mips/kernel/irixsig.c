@@ -1,4 +1,4 @@
-/* $Id: irixsig.c,v 1.4 1997/08/08 18:12:21 miguel Exp $
+/* $Id: irixsig.c,v 1.5 1997/12/06 09:57:38 ralf Exp $
  * irixsig.c: WHEEE, IRIX signals!  YOW, am I compatable or what?!?!
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)

@@ -9,10 +9,10 @@
  *
  *  sysv/namei.c
  *  Copyright (C) 1993  Bruno Haible
- */
-/*
-  7 Dec 1997 - updated to use dentries by Krzysztof G. Baranowski
-	       <kgb@manjak.knm.org.pl>
+ *
+ *
+ *  Revised: 15 Dec 1997 by Krzysztof G. Baranowski <kgb@manjak.knm.org.pl>
+ *    Driver updated to use dentries.
  */
 	 
 
@@ -107,7 +107,6 @@ static struct buffer_head * sysv_find_entry(struct inode * dir,
 
 int sysv_lookup(struct inode * dir, struct dentry * dentry)
 {
-	int ino;
 	struct inode * inode = NULL;
 	struct sysv_dir_entry * de;
 	struct buffer_head * bh;
@@ -117,16 +116,16 @@ int sysv_lookup(struct inode * dir, struct dentry * dentry)
 	if (!S_ISDIR(dir->i_mode)) {
 		return -ENOENT;
 	}
-	if (!(bh = sysv_find_entry(dir, dentry->d_name.name, 
-				   dentry->d_name.len, &de))) {
-		return -ENOENT;
-	}
-	ino = de->inode;
-	brelse(bh);
-	inode = iget(dir->i_sb,ino);
+	bh = sysv_find_entry(dir, dentry->d_name.name, dentry->d_name.len, &de);
+
+	if (bh) {
+		int ino = de->inode;
+		brelse(bh);
+		inode = iget(dir->i_sb,ino);
 	
-	if (!inode) 
-		return -EACCES;
+		if (!inode) 
+			return -EACCES;
+	}
 	d_add(dentry, inode);
 	return 0;
 }
@@ -302,9 +301,8 @@ int sysv_mkdir(struct inode * dir, struct dentry *dentry, int mode)
 		brelse(bh);
 		return -EEXIST;
 	}
-	if (dir->i_nlink >= dir->i_sb->sv_link_max) {
+	if (dir->i_nlink >= dir->i_sb->sv_link_max) 
 		return -EMLINK;
-	}
 	inode = sysv_new_inode(dir);
 	if (!inode)
 		return -ENOSPC;
@@ -595,6 +593,7 @@ int sysv_link(struct inode * oldinode, struct inode * dir,
 	error = sysv_add_entry(dir, dentry->d_name.name,
                                dentry->d_name.len, &bh, &de);
 	if (error) {
+		brelse(bh);
 		return error;
 	}
 	de->inode = oldinode->i_ino;
@@ -652,8 +651,6 @@ try_again:
 	brelse(old_bh);
 	brelse(new_bh);
 	brelse(dir_bh);
-	iput(old_inode);
-	iput(new_inode);
 	current->counter = 0;
 	schedule();
 start_up:
@@ -759,15 +756,12 @@ start_up:
 			mark_inode_dirty(new_dir);
 		}
 	}
+	d_move(old_dentry, new_dentry);
 	retval = 0;
 end_rename:
 	brelse(dir_bh);
 	brelse(old_bh);
 	brelse(new_bh);
-	iput(old_inode);
-	iput(new_inode);
-	iput(old_dir);
-	iput(new_dir);
 	return retval;
 }
 

@@ -13,6 +13,7 @@ extern const char *idescsi_info (struct Scsi_Host *host);
 extern int idescsi_queue (Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *));
 extern int idescsi_abort (Scsi_Cmnd *cmd);
 extern int idescsi_reset (Scsi_Cmnd *cmd, unsigned int resetflags);
+extern int idescsi_bios (Disk *disk, kdev_t dev, int *parm);
 
 #define IDESCSI								\
 {	NULL,			/* next		*/			\
@@ -28,7 +29,7 @@ extern int idescsi_reset (Scsi_Cmnd *cmd, unsigned int resetflags);
 	idescsi_abort,		/* abort	*/			\
 	idescsi_reset,		/* reset	*/			\
 	NULL,			/* slave_attach	*/			\
-	NULL,			/* bios_param	*/			\
+	idescsi_bios,		/* bios_param	*/			\
 	10,			/* can_queue	*/			\
 	-1,			/* this_id	*/			\
 	256,			/* sg_tablesize	*/			\

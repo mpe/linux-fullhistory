@@ -72,9 +72,7 @@ static void promise_selectproc (ide_drive_t *drive)
 {
 	unsigned int number;
 
-	OUT_BYTE(drive->select.all,IDE_SELECT_REG);
-	udelay(1);	/* paranoia */
-	number = ((HWIF(drive)->is_pdc4030_2)<<1) + drive->select.b.unit;
+	number = (HWIF(drive)->channel << 1) + drive->select.b.unit;
 	OUT_BYTE(number,IDE_FEATURE_REG);
 }
 
@@ -134,7 +132,7 @@ int init_pdc4030 (void)
 
 	drive = &hwif->drives[0];
 	second_hwif = &ide_hwifs[hwif->index+1];
-	if(hwif->is_pdc4030_2) /* we've already been found ! */
+	if(hwif->chipset == ide_pdc4030) /* we've already been found ! */
 	    return 1;
 
 	if(IN_BYTE(IDE_NSECTOR_REG) == 0xFF || IN_BYTE(IDE_SECTOR_REG) == 0xFF)
@@ -172,6 +170,7 @@ int init_pdc4030 (void)
 	hwif->chipset     = second_hwif->chipset    = ide_pdc4030;
 	hwif->mate        = second_hwif;
 	second_hwif->mate = hwif;
+	second_hwif->channel = 1;
 	hwif->selectproc  = second_hwif->selectproc = &promise_selectproc;
 /* Shift the remaining interfaces down by one */
 	for (i=MAX_HWIFS-1 ; i > hwif->index+1 ; i--) {
@@ -182,7 +181,6 @@ int init_pdc4030 (void)
 		h->io_ports[IDE_CONTROL_OFFSET] = (h-1)->io_ports[IDE_CONTROL_OFFSET];
 		h->noprobe = (h-1)->noprobe;
 	}
-	second_hwif->is_pdc4030_2 = 1;
 	ide_init_hwif_ports(second_hwif->io_ports, hwif->io_ports[IDE_DATA_OFFSET], NULL);
 	second_hwif->io_ports[IDE_CONTROL_OFFSET] = hwif->io_ports[IDE_CONTROL_OFFSET];
 	second_hwif->irq = hwif->irq;

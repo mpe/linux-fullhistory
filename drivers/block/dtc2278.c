@@ -127,4 +127,5 @@ void init_dtc2278 (void)
 	ide_hwifs[1].drives[1].no_unmask = 1;
 	ide_hwifs[0].mate = &ide_hwifs[1];
 	ide_hwifs[1].mate = &ide_hwifs[0];
+	ide_hwifs[1].channel = 1;
 }

@@ -279,6 +279,12 @@ M:	andersee@debian.org
 L:	linux-kernel@vger.rutgers.edu
 S:	Maintained
 
+IDE/ATAPI TAPE/FLOPPY DRIVERS
+P:	Gadi Oxman
+M:	Gadi Oxman <gadio@netvision.net.il>
+L:	linux-kernel@vger.rutgers.edu
+S:	Maintained
+
 ISDN SUBSYSTEM
 P:	Fritz Elfert
 M:	fritz@wuemaus.franken.de
@@ -549,6 +555,11 @@ S:	Maintained
 NETWORK BLOCK DEVICE
 P:	Pavel Machek
 M:	pavel@atrey.karlin.mff.cuni.cz
+S:	Maintained
+
+SYSV FILESYSTEM
+P:	Krzysztof G. Baranowski
+M:	kgb@manjak.knm.org.pl
 S:	Maintained
 
 REST:

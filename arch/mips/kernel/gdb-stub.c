@@ -12,7 +12,7 @@
  *
  *  Copyright (C) 1995 Andreas Busse
  *
- * $Id: gdb-stub.c,v 1.5 1997/08/08 18:12:15 miguel Exp $
+ * $Id: gdb-stub.c,v 1.4 1997/12/02 05:51:06 ralf Exp $
  */
 
 /*
@@ -77,6 +77,7 @@
 #include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/gdb-stub.h>
+#include <asm/inst.h>
 
 /*
  * external low-level support routines
@@ -450,6 +451,122 @@ void show_gdbregs(struct gdb_regs * regs)
 #endif /* dead code */
 
 /*
+ * We single-step by setting breakpoints. When an exception
+ * is handled, we need to restore the instructions hoisted
+ * when the breakpoints were set.
+ *
+ * This is where we save the original instructions.
+ */
+static struct gdb_bp_save {
+	unsigned int addr;
+        unsigned int val;
+} step_bp[2];
+
+#define BP 0x0000000d  /* break opcode */
+
+/*
+ * Set breakpoint instructions for single stepping.
+ */
+static void single_step(struct gdb_regs *regs)
+{
+	union mips_instruction insn;
+	unsigned int targ;
+	int is_branch, is_cond, i;
+
+	targ = regs->cp0_epc;
+	insn.word = *(unsigned int *)targ;
+	is_branch = is_cond = 0;
+
+	switch (insn.i_format.opcode) {
+	/*
+	 * jr and jalr are in r_format format.
+	 */
+	case spec_op:
+		switch (insn.r_format.func) {
+		case jalr_op:
+		case jr_op:
+			targ = *(&regs->reg0 + insn.r_format.rs);
+			is_branch = 1;
+			break;
+		}
+		break;
+
+	/*
+	 * This group contains:
+	 * bltz_op, bgez_op, bltzl_op, bgezl_op,
+	 * bltzal_op, bgezal_op, bltzall_op, bgezall_op.
+	 */
+	case bcond_op:
+		is_branch = is_cond = 1;
+		targ += 4 + (insn.i_format.simmediate << 2);
+		break;
+
+	/*
+	 * These are unconditional and in j_format.
+	 */
+	case jal_op:
+	case j_op:
+		is_branch = 1;
+		targ += 4;
+		targ >>= 28;
+		targ <<= 28;
+		targ |= (insn.j_format.target << 2);
+		break;
+
+	/*
+	 * These are conditional.
+	 */
+	case beq_op:
+	case beql_op:
+	case bne_op:
+	case bnel_op:
+	case blez_op:
+	case blezl_op:
+	case bgtz_op:
+	case bgtzl_op:
+	case cop0_op:
+	case cop1_op:
+	case cop2_op:
+	case cop1x_op:
+		is_branch = is_cond = 1;
+		targ += 4 + (insn.i_format.simmediate << 2);
+		break;
+	}
+				
+	if (is_branch) {
+		i = 0;
+		if (is_cond && targ != (regs->cp0_epc + 8)) {
+			step_bp[i].addr = regs->cp0_epc + 8;
+			step_bp[i++].val = *(unsigned *)(regs->cp0_epc + 8);
+			*(unsigned *)(regs->cp0_epc + 8) = BP;
+		}
+		step_bp[i].addr = targ;
+		step_bp[i].val  = *(unsigned *)targ;
+		*(unsigned *)targ = BP;
+	} else {
+		step_bp[0].addr = regs->cp0_epc + 4;
+		step_bp[0].val  = *(unsigned *)(regs->cp0_epc + 4);
+		*(unsigned *)(regs->cp0_epc + 4) = BP;
+	}
+}
+
+/*
+ *  If asynchronously interrupted by gdb, then we need to set a breakpoint
+ *  at the interrupted instruction so that we wind up stopped with a 
+ *  reasonable stack frame.
+ */
+static struct gdb_bp_save async_bp;
+
+void set_async_breakpoint(unsigned int epc)
+{
+	async_bp.addr = epc;
+	async_bp.val  = *(unsigned *)epc;
+	*(unsigned *)epc = BP;
+	flush_cache_all();
+}
+
+
+/*
  * This function does all command processing for interfacing to gdb.  It
  * returns 1 if you should skip the instruction at the trap address, 0
  * otherwise.
@@ -489,6 +606,30 @@ void handle_exception (struct gdb_regs *regs)
 	 */
 	if (trap == 9 && regs->cp0_epc == (unsigned long)breakinst)		
 		regs->cp0_epc += 4;
+
+	/*
+	 * If we were single_stepping, restore the opcodes hoisted
+	 * for the breakpoint[s].
+	 */
+	if (step_bp[0].addr) {
+		*(unsigned *)step_bp[0].addr = step_bp[0].val;
+		step_bp[0].addr = 0;
+		    
+		if (step_bp[1].addr) {
+			*(unsigned *)step_bp[1].addr = step_bp[1].val;
+			step_bp[1].addr = 0;
+		}
+	}
+
+	/*
+	 * If we were interrupted asynchronously by gdb, then a
+	 * breakpoint was set at the EPC of the interrupt so
+	 * that we'd wind up here with an interesting stack frame.
+	 */
+	if (async_bp.addr) {
+		*(unsigned *)async_bp.addr = async_bp.val;
+		async_bp.addr = 0;
+	}
 
 	stack = (long *)regs->reg29;			/* stack ptr */
 	sigval = computeSignal(trap);
@@ -670,11 +811,16 @@ void handle_exception (struct gdb_regs *regs)
 
 		/*
 		 * Step to next instruction
-		 * FIXME: Needs to be written
 		 */
 		case 's':
-			strcpy (output_buffer, "S01");
-			break;
+			/*
+			 * There is no single step insn in the MIPS ISA, so we
+			 * use breakpoints and continue, instead.
+			 */
+			single_step(regs);
+			flush_cache_all();
+			return;
+			/* NOTREACHED */
 
 		/*
 		 * Set baud rate (bBB)

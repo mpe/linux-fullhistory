@@ -15,7 +15,7 @@
 /*
  * Load quad unaligned.
  */
-extern __inline__ unsigned long ldq_u(unsigned long long * __addr)
+extern __inline__ unsigned long ldq_u(const unsigned long long * __addr)
 {
 	unsigned long long __res;
 
@@ -29,7 +29,7 @@ extern __inline__ unsigned long ldq_u(unsigned long long * __addr)
 /*
  * Load long unaligned.
  */
-extern __inline__ unsigned long ldl_u(unsigned int * __addr)
+extern __inline__ unsigned long ldl_u(const unsigned int * __addr)
 {
 	unsigned long __res;
 
@@ -43,7 +43,7 @@ extern __inline__ unsigned long ldl_u(unsigned int * __addr)
 /*
  * Load word unaligned.
  */
-extern __inline__ unsigned long ldw_u(unsigned short * __addr)
+extern __inline__ unsigned long ldw_u(const unsigned short * __addr)
 {
 	unsigned long __res;
 
@@ -90,12 +90,50 @@ extern __inline__ void stw_u(unsigned long __val, unsigned short * __addr)
 		 "r" (__addr));
 }
 
-#define get_unaligned(ptr) \
-  ({ __typeof__(*(ptr)) __tmp; memcpy(&__tmp, (ptr), sizeof(*(ptr))); __tmp; })
+extern inline unsigned long __get_unaligned(const void *ptr, size_t size)
+{
+	unsigned long val;
+	switch (size) {
+	      case 1:
+		val = *(const unsigned char *)ptr;
+		break;
+	      case 2:
+		val = ldw_u((const unsigned short *)ptr);
+		break;
+	      case 4:
+		val = ldl_u((const unsigned int *)ptr);
+		break;
+	      case 8:
+		val = ldq_u((const unsigned long long *)ptr);
+		break;
+	}
+	return val;
+}
 
-#define put_unaligned(val, ptr)				\
-  ({ __typeof__(*(ptr)) __tmp = (val);			\
-     memcpy((ptr), &__tmp, sizeof(*(ptr)));		\
-     (void)0; })
+extern inline void __put_unaligned(unsigned long val, void *ptr, size_t size)
+{
+	switch (size) {
+	      case 1:
+		*(unsigned char *)ptr = (val);
+	        break;
+	      case 2:
+		stw_u(val, (unsigned short *)ptr);
+		break;
+	      case 4:
+		stl_u(val, (unsigned int *)ptr);
+		break;
+	      case 8:
+		stq_u(val, (unsigned long long *)ptr);
+		break;
+	}
+}
+
+/* 
+ * The main single-value unaligned transfer routines.
+ */
+#define get_unaligned(ptr) \
+	((__typeof__(*(ptr)))__get_unaligned((ptr), sizeof(*(ptr))))
+#define put_unaligned(x,ptr) \
+	__put_unaligned((unsigned long)(x), (ptr), sizeof(*(ptr)))
 
 #endif /* __ASM_MIPS_UNALIGNED_H */

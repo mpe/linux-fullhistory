@@ -119,11 +119,11 @@ struct ide_cd_config_flags {
 	__u8 cd_rw            : 1; /* Drive can write to CD-R/W media . */
 	__u8 supp_disc_present: 1; /* Changer can report exact contents
 				      of slots. */
-	__u8 max_speed        : 4; /* Max speed of the drive */
 	__u8 seeking          : 1; /* Seeking in progress */
 	__u8 reserved         : 6;
+	byte max_speed; 	   /* Max speed of the drive */
 };
-#define CDROM_CONFIG_FLAGS(drive) ((struct ide_cd_config_flags *)&((drive)->bios_cyl))
+#define CDROM_CONFIG_FLAGS(drive) (&(((struct cdrom_info *)(drive->driver_data))->config_flags))
 
  
 /* State flags.  These give information about the current state of the
@@ -133,10 +133,10 @@ struct ide_cd_state_flags {
 	__u8 toc_valid     : 1; /* Saved TOC information is current. */
 	__u8 door_locked   : 1; /* We think that the drive door is locked. */
 	__u8 sanyo_slot    : 2; /* Sanyo 3 CD changer support */
-	__u8 curent_speed  : 4; /* Current speed of the drive */
 	__u8 reserved      : 3;
+	byte current_speed;	/* Current speed of the drive */
 };
-#define CDROM_STATE_FLAGS(drive)  ((struct ide_cd_state_flags *)&((drive)->bios_head))
+#define CDROM_STATE_FLAGS(drive) (&(((struct cdrom_info *)(drive->driver_data))->state_flags))
 
 
 struct atapi_request_sense {
@@ -385,6 +385,8 @@ struct cdrom_info {
 	/* Buffer to hold mechanism status and changer slot table. */
 	struct atapi_changer_info *changer_info;
 
+	struct ide_cd_config_flags	config_flags;
+	struct ide_cd_state_flags	state_flags;
 
         /* Per-device info needed by cdrom.c generic driver. */
         struct cdrom_device_info devinfo;

@@ -248,11 +248,13 @@ CONFIG_BLK_DEV_IDETAPE
 
 Include IDE/ATAPI FLOPPY support
 CONFIG_BLK_DEV_IDEFLOPPY
-  If you have an IDE floppy drive which uses the ATAPI protocol, say
-  Y. Chances are that you don't, because these animals are rare.
+  If you have an IDE floppy drive which uses the ATAPI protocol, say Y.
   ATAPI is a new protocol used by IDE CDROM/tape/floppy drives,
-  similar to the SCSI protocol.  At boot time, the FLOPPY drive will
-  be identified along with other IDE devices, as "hdb" or "hdc", or
+  similar to the SCSI protocol.  IDE floppy drives include the
+  LS-120 and the ATAPI ZIP (ATAPI PD-CD/CDR drives are not supported
+  by this driver; support for PD-CD/CDR drives is available through
+  the SCSI emulation). At boot time, the FLOPPY drive will be
+  identified along with other IDE devices, as "hdb" or "hdc", or
   something similar. If you want to compile the driver as a module ( =
   code which can be inserted in and removed from the running kernel
   whenever you want), say M here and read Documentation/modules.txt.
@@ -263,10 +265,11 @@ CONFIG_BLK_DEV_IDESCSI
   This will provide SCSI host adapter emulation for IDE ATAPI devices,
   and will allow you to use a SCSI device driver instead of a native
   ATAPI driver. This is useful if you have an ATAPI device for which
-  no native driver has been written; you can then use this emulation
-  together with an appropriate SCSI device driver. If both this SCSI
-  emulation and native ATAPI support are compiled into the kernel, the
-  native support will be used.  Normally, say N.
+  no native driver has been written (for example, an ATAPI PD-CD or
+  CDR drive); you can then use this emulation together with an
+  appropriate SCSI device driver. If both this SCSI emulation and
+  native ATAPI support are compiled into the kernel, the native
+  support will be used.  Normally, say N.
 
 CMD640 chipset bugfix/support
 CONFIG_BLK_DEV_CMD640
@@ -303,17 +306,24 @@ CONFIG_BLK_DEV_RZ1000
   Linux.  This may slow disk throughput by a few percent, but at least
   things will operate 100% reliably. If unsure, say Y.
 
-Intel 82371 PIIX (Triton I/II), VIA VP-1 DMA support
+Generic PCI IDE chipset support
+CONFIG_BLK_DEV_IDEPCI
+  Enable this for PCI systems which use IDE drive(s).
+  This option helps the IDE driver to automatically detect and
+  configure all PCI-based IDE interfaces in your system.
+  It is safe to say Y to this question.
+
+Generic PCI bus-master DMA support
 CONFIG_BLK_DEV_IDEDMA
-  If your PCI system uses IDE drive(s) (as opposed to SCSI, say)
-  and is capable of bus-master DMA operation (most Pentium PCI
-  systems), you will want to enable this option to allow use of 
-  bus-mastering DMA data transfers. Read the comments at the
-  beginning of drivers/block/idedma.c and Documentation/ide.txt.
-  You can get the latest version of the hdparm utility via 
-  ftp (user: anonymous) from
-  sunsite.unc.edu/pub/Linux/kernel/patches/diskdrives/; it is
-  used to tune your harddisk. 
+  If your PCI IDE controller is capable of bus-master DMA
+  (Direct Memory Access) transfers (most newer systems),
+  then you will want to enable this option to reduce CPU overhead.
+  With this option, Linux will automatically enable DMA transfers
+  in most cases, noting this with "DMA" appended to the drive
+  identification info.  You can also use the "hdparm" utility to
+  enable DMA for drives which were not enabled automatically.
+  You can get the latest version of the hdparm utility via anonymous
+  FTP from sunsite.unc.edu/pub/Linux/system/hardware/
   It is safe to say Y to this question.
 
 Other IDE chipset support
@@ -370,6 +380,12 @@ CONFIG_BLK_DEV_OPTI621
   This driver allows use of hdparm to change the PIO timings
   for drives attached to an OPTi MIDE controller.
   Please read the comments at the top of drivers/block/opti621.c.
+
+NS87415 support (EXPERIMENTAL)
+CONFIG_BLK_DEV_NS87415
+  This driver adds detection and support for the NS87415 chip
+  (used in SPARC64, among others).
+  Please read the comments at the top of drivers/block/ns87415.c.
 
 QDI QD6580 support
 CONFIG_BLK_DEV_QD6580
@@ -875,31 +891,8 @@ CONFIG_BINFMT_AOUT
 
 Kernel support for JAVA binaries
 CONFIG_BINFMT_JAVA
-  JAVA(tm) is an object oriented programming language developed by
-  SUN; JAVA programs are compiled into "JAVA bytecode" binaries which
-  can then be interpreted by run time systems on many different
-  operating systems.  These JAVA binaries are becoming a universal
-  executable format. If you want to execute JAVA binaries, read the
-  Java on Linux HOWTO, available via ftp (user: anonymous) at
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. You will then need to install
-  the run time system contained in the Java Developers Kit (JDK) as
-  described in the HOWTO. This is completely independent of the Linux
-  kernel and you do NOT need to say Y here for this to work.
-  Saying Y here allows you to execute a JAVA bytecode binary just like
-  any other Linux program: by simply typing in its name. (You also
-  need to have the JDK installed for this to work).  As more and more
-  Java programs become available, the use for this will gradually
-  increase. You can even execute HTML files containing JAVA applets (=
-  JAVA binaries) if those files start with the string
-  "<!--applet-->". If you want to use this, say Y here and read
-  Documentation/java.txt. If you disable this option it will reduce
-  your kernel by about 4kB. This is not much and by itself does not
-  warrant removing support. However its removal is a good idea if you
-  do not have the JDK installed. You may answer M for module support
-  and later load the module when you install the JDK or find an
-  interesting Java program that you can't live without. The module
-  will be called binfmt_java.o. If you don't know what to answer at
-  this point then answer Y.
+  This option is obsolete. Use binfmt_misc instead. It is more 
+  flexible. 
 
 Kernel support for Linux/Intel ELF binaries
 CONFIG_BINFMT_EM86
@@ -1331,6 +1324,37 @@ CONFIG_IP_MASQUERADE
   automatically be compiled. Modules are pieces of code which can be
   inserted in and removed from the running kernel whenever you want;
   read Documentation/modules.txt for details.
+
+IP: ICMP masquerading
+CONFIG_IP_MASQUERADE_ICMP
+  The basic masquerade code described for CONFIG_IP_MASQUERADE only
+  handles TCP or UDP packets (and ICMP errors for existing 
+  connections).  This option adds additional support for masquerading
+  ICMP packets, such as ping or the probes used by the Windows 95
+  tracert program.
+  If you want this, say Y.
+
+IP: ipautofw masquerade support
+CONFIG_IP_MASQUERADE_IPAUTOFW (Experimental)
+  ipautofw is a program by Richard Lynch allowing additional
+  support for masquerading protocols which do not (as yet)
+  have additional protocol helpers.  
+  Information and source for ipautofw is available from
+  ftp://ftp.netis.com/pub/members/rlynch/
+  The ipautofw code is still under development and so is currently
+  marked EXPERIMENTAL.
+  If you want this, say Y.
+
+IP: ipportfw masquerade support
+CONFIG_IP_MASQUERADE_IPPORTFW
+  ipportfw is an addition to IP Masquerading written by Steven Clarke
+  to allow some forwarding of packets from outside to inside a
+  firewall on given ports. Information and source for ipportfw is
+  available from
+  http://www.monmouth.demon.co.uk/ipsubs/portforwarding.html
+  The portfw code is still under development and so is currently
+  marked EXPERIMENTAL.
+  If you want this, say Y.
 
 IP: always defragment 
 CONFIG_IP_ALWAYS_DEFRAG

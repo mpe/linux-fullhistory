@@ -1,4 +1,4 @@
-/* $Id: r6000.c,v 1.2 1997/08/08 18:13:11 miguel Exp $
+/* $Id: r6000.c,v 1.2 1997/12/02 05:51:08 ralf Exp $
  * r6000.c: MMU and cache routines for the R6000 processors.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)

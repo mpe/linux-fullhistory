@@ -16,6 +16,7 @@
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
+#include <asm/processor.h>
 
 /*
  * does not yet catch signals sent when the child dies.
@@ -560,6 +561,102 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 			ret = 0;
 			goto out;
 		}
+
+		case PTRACE_GETREGS: { /* Get all gp regs from the child. */
+		  	if (!access_ok(VERIFY_WRITE, (unsigned *)data,
+				       17*sizeof(long)))
+			  {
+			    ret = -EIO;
+			    goto out;
+			  }
+			for ( i = 0; i < 17*sizeof(long); i += sizeof(long) )
+			  {
+			    __put_user(getreg(child, i),(unsigned long *) data);
+			    data += sizeof(long);
+			  }
+			ret = 0;
+			goto out;
+		  };
+
+		case PTRACE_SETREGS: { /* Set all gp regs in the child. */
+			unsigned long tmp;
+		  	if (!access_ok(VERIFY_READ, (unsigned *)data,
+				       17*sizeof(long)))
+			  {
+			    ret = -EIO;
+			    goto out;
+			  }
+			for ( i = 0; i < 17*sizeof(long); i += sizeof(long) )
+			  {
+			    __get_user(tmp, (unsigned long *) data);
+			    putreg(child, i, tmp);
+			    data += sizeof(long);
+			  }
+			ret = 0;
+			goto out;
+		  };
+
+		case PTRACE_GETFPREGS: { /* Get the child FPU state. */
+			if (!access_ok(VERIFY_WRITE, (unsigned *)data,
+				       sizeof(struct user_i387_struct)))
+			  {
+			    ret = -EIO;
+			    goto out;
+			  }
+			ret = 0;
+			if ( !child->used_math ) {
+			  /* Simulate an empty FPU. */
+			  child->tss.i387.hard.cwd = 0xffff037f;
+			  child->tss.i387.hard.swd = 0xffff0000;
+			  child->tss.i387.hard.twd = 0xffffffff;
+			}
+#ifdef CONFIG_MATH_EMULATION
+			if ( hard_math ) {
+#endif
+			  if (last_task_used_math == child) {
+			    clts();
+			    __asm__("fnsave %0; fwait":"=m" (child->tss.i387.hard));
+			    last_task_used_math = NULL;
+			    stts();
+			  }
+			  __copy_to_user((void *)data, &child->tss.i387.hard,
+					 sizeof(struct user_i387_struct));
+#ifdef CONFIG_MATH_EMULATION
+			} else {
+			  save_i387_soft(&child->tss.i387.soft,
+					 (struct _fpstate *)data);
+			}
+#endif
+			goto out;
+		  };
+
+		case PTRACE_SETFPREGS: { /* Set the child FPU state. */
+			if (!access_ok(VERIFY_READ, (unsigned *)data,
+				       sizeof(struct user_i387_struct)))
+			  {
+			    ret = -EIO;
+			    goto out;
+			  }
+			child->used_math = 1;
+#ifdef CONFIG_MATH_EMULATION
+			if ( hard_math ) {
+#endif
+			  if (last_task_used_math == child) {
+			    /* Discard the state of the FPU */
+			    last_task_used_math = NULL;
+			  }
+			  __copy_from_user(&child->tss.i387.hard, (void *)data,
+					   sizeof(struct user_i387_struct));
+			  child->flags &= ~PF_USEDFPU;
+#ifdef CONFIG_MATH_EMULATION
+			} else {
+			  restore_i387_soft(&child->tss.i387.soft,
+					    (struct _fpstate *)data);
+			}
+#endif
+			ret = 0;
+			goto out;
+		  };
 
 		default:
 			ret = -EIO;

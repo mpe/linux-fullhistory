@@ -1,3 +1,9 @@
+/*
+ * $Id: socket.h,v 1.4 1997/12/06 20:32:40 ralf Exp $
+ */
+/*
+ * $Id: socket.h,v 1.4 1997/12/06 23:55:49 ralf Exp $
+ */
 #ifndef __ASM_MIPS_SOCKET_H
 #define __ASM_MIPS_SOCKET_H
 
@@ -47,20 +53,19 @@ To add: #define SO_REUSEPORT 0x0200	/* Allow local address and port reuse.  */
 #define SO_SECURITY_ENCRYPTION_TRANSPORT	23
 #define SO_SECURITY_ENCRYPTION_NETWORK		24
 
+#define SO_BINDTODEVICE		25
+
 /* Types of sockets.  */
-enum __socket_type
-{
-  SOCK_DGRAM = 1,               /* Connectionless, unreliable datagrams
-                                   of fixed maximum length.  */
-  SOCK_STREAM = 2,              /* Sequenced, reliable, connection-based
-                                   byte streams.  */
-  SOCK_RAW = 3,                 /* Raw protocol interface.  */
-  SOCK_RDM = 4,                 /* Reliably-delivered messages.  */
-  SOCK_SEQPACKET = 5,           /* Sequenced, reliable, connection-based,
-                                   datagrams of fixed maximum length.  */
-  SOCK_PACKET = 10,		/* linux specific way of getting packets at
+#define SOCK_DGRAM 1		/* Connectionless, unreliable datagrams
+				   of fixed maximum length.  */
+#define SOCK_STREAM 2		/* Sequenced, reliable, connection-based
+				   byte streams.  */
+#define SOCK_RAW 3		/* Raw protocol interface.  */
+#define SOCK_RDM 4		/* Reliably-delivered messages.  */
+#define SOCK_SEQPACKET 5	/* Sequenced, reliable, connection-based,
+				   datagrams of fixed maximum length.  */
+#define SOCK_PACKET 10		/* Linux specific way of getting packets at
 				   the dev level.  For writing rarp and
 				   other similar things on the user level.  */
-};
 
 #endif /* __ASM_MIPS_SOCKET_H */

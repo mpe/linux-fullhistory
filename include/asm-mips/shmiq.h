@@ -174,13 +174,43 @@ typedef struct {
 	char *nothing_for_now;
 } idevInfo;
 
+#define IDEV_KEYMAP_NAME_LEN 15
+
 typedef struct {
-        char name [16];
+        char name[IDEV_KEYMAP_NAME_LEN+1];
 } idevKeymapDesc;
 
-#define IDEVINITDEVICE		_IOW('i', 51, unsigned int)
-#define IDEVGETDEVICEDESC	_IOWR('i', 0, idevDesc)
-#define IDEVGETKEYMAPDESC	_IOWR('i', 2, idevKeymapDesc)
+/* The valuator definition */
+typedef struct {
+        unsigned        hwMinRes;
+        unsigned        hwMaxRes;
+        int             hwMinVal;
+        int             hwMaxVal;
+	
+        unsigned char   possibleModes;
+#define IDEV_ABSOLUTE           0x0
+#define IDEV_RELATIVE           0x1
+#define IDEV_EITHER             0x2
+	
+        unsigned char   mode;	/* One of: IDEV_ABSOLUTE, IDEV_RELATIVE */
+	
+        unsigned short  resolution;
+        int             minVal;
+        int             maxVal;
+} idevValuatorDesc;
+
+/* This is used to query a specific valuator with the IDEVGETVALUATORDESC ioctl */
+typedef struct {
+        short                   valNum;
+        unsigned short          flags;
+        idevValuatorDesc        desc;
+} idevGetSetValDesc;
+
+#define IDEVGETDEVICEDESC	_IOWR('i', 0,  idevDesc)
+#define IDEVGETVALUATORDESC     _IOWR('i', 1,  idevGetSetValDesc)
+#define IDEVGETKEYMAPDESC	_IOWR('i', 2,  idevKeymapDesc)
+#define IDEVINITDEVICE		_IOW ('i', 51, unsigned int)
+
 
 #ifdef __KERNEL__
 

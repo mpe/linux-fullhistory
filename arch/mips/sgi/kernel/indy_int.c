@@ -4,7 +4,7 @@
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: indy_int.c,v 1.2 1997/06/30 15:53:01 ralf Exp $
+ * $Id: indy_int.c,v 1.4 1997/09/20 19:20:15 root Exp $
  */
 #include <linux/config.h>
 
@@ -260,13 +260,6 @@ int get_irq_list(char *buf)
 
 atomic_t __mips_bh_counter;
 
-#ifdef __SMP__
-#error Send superfluous SMP boxes to ralf@uni-koblenz.de
-#else
-#define irq_enter(cpu, irq)     (++local_irq_count[cpu])
-#define irq_exit(cpu, irq)      (--local_irq_count[cpu])
-#endif
-
 /*
  * do_IRQ handles IRQ's that have been installed without the
  * SA_INTERRUPT flag: it uses the full signal-handling return
@@ -276,43 +269,49 @@ atomic_t __mips_bh_counter;
  */
 asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 {
-	struct irqaction * action = *(irq + irq_action);
+	struct irqaction *action;
+	int do_random, cpu;
 
-	lock_kernel();
+	cpu = smp_processor_id();
+	irq_enter(cpu, irq);
 	kstat.interrupts[irq]++;
+
 	printk("Got irq %d, press a key.", irq);
 	prom_getchar();
 	romvec->imode();
-        while (action) {
-		if (action->flags & SA_SAMPLE_RANDOM)
-			add_interrupt_randomness(irq);
-		action->handler(irq, action->dev_id, regs);
-		action = action->next;
-        }
-	unlock_kernel();
-}
 
-/*
- * do_fast_IRQ handles IRQ's that don't need the fancy interrupt return
- * stuff - the handler is also running with interrupts disabled unless
- * it explicitly enables them later.
- */
-asmlinkage void do_fast_IRQ(int irq)
-{
-	struct irqaction * action = *(irq + irq_action);
+	/*
+	 * mask and ack quickly, we don't want the irq controller
+	 * thinking we're snobs just because some other CPU has
+	 * disabled global interrupts (we have already done the
+	 * INT_ACK cycles, it's too late to try to pretend to the
+	 * controller that we aren't taking the interrupt).
+	 *
+	 * Commented out because we've already done this in the
+	 * machinespecific part of the handler.  It's reasonable to
+	 * do this here in a highlevel language though because that way
+	 * we could get rid of a good part of duplicated code ...
+	 */
+        /* mask_and_ack_irq(irq); */
 
-	lock_kernel();
-	printk("Got irq %d, press a key.", irq);
-	prom_getchar();
-	romvec->imode();
-	kstat.interrupts[irq]++;
-        while (action) {
-		if (action->flags & SA_SAMPLE_RANDOM)
+	action = *(irq + irq_action);
+	if (action) {
+		if (!(action->flags & SA_INTERRUPT))
+			__sti();
+		action = *(irq + irq_action);
+		do_random = 0;
+		do {
+			do_random |= action->flags;
+			action->handler(irq, action->dev_id, regs);
+			action = action->next;
+		} while (action);
+		if (do_random & SA_SAMPLE_RANDOM)
 			add_interrupt_randomness(irq);
-		action->handler(irq, action->dev_id, NULL);
-		action = action->next;
-        }
-	unlock_kernel();
+		__cli();
+	}
+	irq_exit(cpu, irq);
+
+	/* unmasking and bottom half handling is done magically for us. */
 }
 
 int request_local_irq(unsigned int lirq, void (*func)(int, void *, struct pt_regs *),
@@ -419,10 +418,6 @@ void free_irq(unsigned int irq, void *dev_id)
 
 void init_IRQ(void)
 {
-	int i;
-
-	for (i = 0; i < 16 ; i++)
-		set_int_vector(i, 0);
 	irq_setup();
 }
 
@@ -431,7 +426,7 @@ void indy_local0_irqdispatch(struct pt_regs *regs)
 	struct irqaction *action;
 	unsigned char mask = ioc_icontrol->istat0;
 	unsigned char mask2 = 0;
-	int irq;
+	int irq, cpu = smp_processor_id();;
 
 	mask &= ioc_icontrol->imask0;
 	if(mask & ISTAT0_LIO2) {
@@ -443,13 +438,11 @@ void indy_local0_irqdispatch(struct pt_regs *regs)
 		irq = lc0msk_to_irqnr[mask];
 		action = local_irq_action[irq];
 	}
-#if 0
-	printk("local0_dispatch: got irq %d mask %2x mask2 %2x\n",
-	       irq, mask, mask2);
-	prom_getchar();
-#endif
+
+	irq_enter(cpu, irq);
 	kstat.interrupts[irq + 16]++;
 	action->handler(irq, action->dev_id, regs);
+	irq_exit(cpu, irq);
 }
 
 void indy_local1_irqdispatch(struct pt_regs *regs)
@@ -457,7 +450,7 @@ void indy_local1_irqdispatch(struct pt_regs *regs)
 	struct irqaction *action;
 	unsigned char mask = ioc_icontrol->istat1;
 	unsigned char mask2 = 0;
-	int irq;
+	int irq, cpu = smp_processor_id();;
 
 	mask &= ioc_icontrol->imask1;
 	if(mask & ISTAT1_LIO3) {
@@ -470,23 +463,24 @@ void indy_local1_irqdispatch(struct pt_regs *regs)
 		irq = lc1msk_to_irqnr[mask];
 		action = local_irq_action[irq];
 	}
-#if 0
-	printk("local1_dispatch: got irq %d mask %2x mask2 %2x\n",
-	       irq, mask, mask2);
-	prom_getchar();
-#endif
+	irq_enter(cpu, irq);
 	kstat.interrupts[irq + 24]++;
 	action->handler(irq, action->dev_id, regs);
+	irq_exit(cpu, irq);
 }
 
 void indy_buserror_irq(struct pt_regs *regs)
 {
-	kstat.interrupts[6]++;
+	int cpu = smp_processor_id();
+	int irq = 6;
+
+	irq_enter(cpu, irq);
+	kstat.interrupts[irq]++;
 	printk("Got a bus error IRQ, shouldn't happen yet\n");
 	show_regs(regs);
 	printk("Spinning...\n");
-	while(1)
-		;
+	while(1);
+	irq_exit(cpu, irq);
 }
 
 /* Misc. crap just to keep the kernel linking... */

@@ -30,6 +30,7 @@
 #include <linux/consolemap.h>
 #include <linux/selection.h>
 #include <linux/console_struct.h>
+#include <linux/init.h>
 
 #include <asm/io.h>
 #include <asm/system.h>
@@ -94,18 +95,6 @@ unsigned char g364_font[] = {
 #include "g364.fnt"
 };
 
-u32 g364_cursor[256] = {
-  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-  0xffff0000,0,0,0,0xffff0000,0,0,0,0xffff0000,0,0,0,0,0,0,0,
-  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,
-  0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-};
-
 #ifdef CONFIG_REMOTE_DEBUG
 /* #define DEBUG_G364 */
 
@@ -127,8 +116,8 @@ void g364_clear_screen(void);
 
 int cursor_initialised=0;
 
-unsigned long
-con_type_init(unsigned long kmem_start, const char **display_desc)
+__initfunc(unsigned long
+con_type_init(unsigned long kmem_start, const char **display_desc))
 {
         can_do_color = 1;
 
@@ -146,7 +135,8 @@ con_type_init(unsigned long kmem_start, const char **display_desc)
 	return kmem_start;
 }
 
-con_type_init_finish(void)
+__initfunc(void
+con_type_init_finish(void))
 {
 }
 
@@ -164,19 +154,31 @@ __set_origin(unsigned short offset)
 void
 hide_cursor(void)
 {
-/*	*(unsigned int *) CTLA_REG &= ~CURS_TOGGLE; */
+	*(unsigned int *) CTLA_REG |= CURS_TOGGLE;
 }
 
 void
 init_g364_cursor(void)
 {
 	volatile unsigned int *ptr = (unsigned int *) CURS_PAL_REG;
+        int i;
 
         *ptr |= 0x00ffffff;
 	ptr[2] |= 0x00ffffff;
 	ptr[4] |= 0x00ffffff;
 
-	memcpy((unsigned int *)CURS_PAT_REG, &g364_cursor, 1024);
+        /*
+	 * first set the whole cursor to transparent
+	 */
+        for (i = 0; i < 512; i++)
+	        *(unsigned short *)(CURS_PAT_REG+i*8) = 0;
+
+        /*
+	 * switch the last to lines to cursor palette 3
+	 * we assume here, that FONTSIZE_X is 8
+	 */
+        *(unsigned short *)(CURS_PAT_REG + (FONTSIZE_Y-2)*64) = 0xffff;
+        *(unsigned short *)(CURS_PAT_REG + (FONTSIZE_Y-1)*64) = 0xffff;			    
 	cursor_initialised = 1;
 }
 
@@ -186,15 +188,29 @@ init_g364_cursor(void)
 void
 set_cursor(int currcons)
 {
-/*
+        unsigned int idx, xt, yt, row, col;
+    
 	if (!cursor_initialised)
 		init_g364_cursor();
 
-	if (console_blanked)
+	if (currcons != fg_console || console_blanked || vcmode == KD_GRAPHICS)
 		return;
 
-	*(unsigned int *) CTLA_REG |= CURS_TOGGLE;
-*/
+	*(unsigned int *) CTLA_REG &= ~CURS_TOGGLE;
+    
+        if (__real_origin != __origin)
+	        __set_origin (__real_origin);
+    
+        if (deccm) {
+	    idx = (pos - video_mem_base) >> 1;
+	    col = idx % video_num_columns;
+	    row = (idx - col) / video_num_columns;
+	    
+	    xt = col * FONTSIZE_X;
+	    yt = row * FONTSIZE_Y;
+	    *(unsigned int *)CURS_POS_REG = (xt << 12) | yt;
+	} else
+	       hide_cursor();
 }
 
 /*

@@ -70,4 +70,6 @@ extern int * hardsect_size[MAX_BLKDEV];
 
 extern int * max_readahead[MAX_BLKDEV];
 
+extern int * max_sectors[MAX_BLKDEV];
+
 #endif

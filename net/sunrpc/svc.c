@@ -21,6 +21,7 @@
 #include <linux/sunrpc/clnt.h>
 
 #define RPCDBG_FACILITY	RPCDBG_SVCDSP
+#define RPC_PARANOIA 1
 
 /*
  * Create an RPC service
@@ -162,8 +163,9 @@ svc_exit_thread(struct svc_rqst *rqstp)
 }
 
 /*
- * Register an RPC service with the local portmapper. To
- * unregister a service, call this routine with proto and port == 0.
+ * Register an RPC service with the local portmapper.
+ * To unregister a service, call this routine with 
+ * proto and port == 0.
  */
 int
 svc_register(struct svc_serv *serv, int proto, unsigned short port)
@@ -196,7 +198,7 @@ svc_register(struct svc_serv *serv, int proto, unsigned short port)
 			continue;
 		error = rpc_register(progp->pg_prog, i, proto, port, &dummy);
 		if (error < 0)
-			return error;
+			break;
 		if (port && !dummy) {
 			error = -EACCES;
 			break;
@@ -246,14 +248,8 @@ svc_process(struct svc_serv *serv, struct svc_rqst *rqstp)
 		serv->sv_stats->rpcbadfmt++;
 		goto dropit;			/* drop request */
 	}
-	if (vers != 2) {		/* RPC version number */
-		serv->sv_stats->rpcbadfmt++;
-		resp->buf[-1] = xdr_one;	/* REJECT */
-		svc_putlong(resp, xdr_zero);	/* RPC_MISMATCH */
-		svc_putlong(resp, xdr_two);	/* Only RPCv2 supported */
-		svc_putlong(resp, xdr_two);
-		goto error;
-	}
+	if (vers != 2)		/* RPC version number */
+		goto err_bad_rpc;
 
 	rqstp->rq_prog = prog = ntohl(*bufp++);	/* program number */
 	rqstp->rq_vers = vers = ntohl(*bufp++);	/* version number */
@@ -269,50 +265,23 @@ svc_process(struct svc_serv *serv, struct svc_rqst *rqstp)
 	 */
 	svc_authenticate(rqstp, &rpc_stat, &auth_stat);
 
-	if (rpc_stat != rpc_success) {
-		serv->sv_stats->rpcbadfmt++;
-		svc_putlong(resp, rpc_garbage_args);
-		goto error;
-	}
+	if (rpc_stat != rpc_success)
+		goto err_garbage;
 
-	if (auth_stat != rpc_auth_ok) {
-		dprintk("svc: authentication failed (%ld)\n", ntohl(auth_stat));
-		serv->sv_stats->rpcbadauth++;
-		resp->buf[-1] = xdr_one;	/* REJECT */
-		svc_putlong(resp, xdr_one);	/* AUTH_ERROR */
-		svc_putlong(resp, auth_stat);	/* status */
-		goto error;
-		return svc_send(rqstp);
-	}
+	if (auth_stat != rpc_auth_ok)
+		goto err_bad_auth;
 
 	progp = serv->sv_program;
-	if (prog != progp->pg_prog) {
-		dprintk("svc: unknown program %d (me %d)\n", prog, progp->pg_prog);
-		serv->sv_stats->rpcbadfmt++;
-		svc_putlong(resp, rpc_prog_unavail);
-		goto error;
-		return svc_send(rqstp);
-	}
+	if (prog != progp->pg_prog)
+		goto err_bad_prog;
 
 	versp = progp->pg_vers[vers];
-	if (!versp || vers >= progp->pg_nvers) {
-		dprintk("svc: unknown version (%d)\n", vers);
-		serv->sv_stats->rpcbadfmt++;
-		svc_putlong(resp, rpc_prog_mismatch);
-		svc_putlong(resp, htonl(progp->pg_lovers));
-		svc_putlong(resp, htonl(progp->pg_hivers));
-		goto error;
-		return svc_send(rqstp);
-	}
+	if (!versp || vers >= progp->pg_nvers)
+		goto err_bad_vers;
 
 	procp = versp->vs_proc + proc;
-	if (proc >= versp->vs_nproc || !procp->pc_func) {
-		dprintk("svc: unknown procedure (%d)\n", proc);
-		serv->sv_stats->rpcbadfmt++;
-		svc_putlong(resp, rpc_proc_unavail);
-		goto error;
-		return svc_send(rqstp);
-	}
+	if (proc >= versp->vs_nproc || !procp->pc_func)
+		goto err_unknown;
 	rqstp->rq_server   = serv;
 	rqstp->rq_procinfo = procp;
 
@@ -334,16 +303,10 @@ svc_process(struct svc_serv *serv, struct svc_rqst *rqstp)
 	if (!versp->vs_dispatch) {
 		/* Decode arguments */
 		xdr = procp->pc_decode;
-		if (xdr && !xdr(rqstp, rqstp->rq_argbuf.buf, rqstp->rq_argp)) {
-			dprintk("svc: failed to decode args\n");
-			serv->sv_stats->rpcbadfmt++;
-			svc_putlong(resp, rpc_garbage_args);
-			goto error;
-		}
+		if (xdr && !xdr(rqstp, rqstp->rq_argbuf.buf, rqstp->rq_argp))
+			goto err_garbage;
 
-		*statp = procp->pc_func(rqstp,
-					rqstp->rq_argp,
-					rqstp->rq_resp);
+		*statp = procp->pc_func(rqstp, rqstp->rq_argp, rqstp->rq_resp);
 
 		/* Encode reply */
 		if (*statp == rpc_success && (xdr = procp->pc_encode)
@@ -373,6 +336,55 @@ dropit:
 	dprintk("svc: svc_process dropit\n");
 	svc_drop(rqstp);
 	return 0;
+
+err_bad_rpc:
+	serv->sv_stats->rpcbadfmt++;
+	resp->buf[-1] = xdr_one;	/* REJECT */
+	svc_putlong(resp, xdr_zero);	/* RPC_MISMATCH */
+	svc_putlong(resp, xdr_two);	/* Only RPCv2 supported */
+	svc_putlong(resp, xdr_two);
+	goto error;
+
+err_bad_auth:
+	dprintk("svc: authentication failed (%ld)\n", ntohl(auth_stat));
+	serv->sv_stats->rpcbadauth++;
+	resp->buf[-1] = xdr_one;	/* REJECT */
+	svc_putlong(resp, xdr_one);	/* AUTH_ERROR */
+	svc_putlong(resp, auth_stat);	/* status */
+	goto error;
+
+err_bad_prog:
+#ifdef RPC_PARANOIA
+	printk("svc: unknown program %d (me %d)\n", prog, progp->pg_prog);
+#endif
+	serv->sv_stats->rpcbadfmt++;
+	svc_putlong(resp, rpc_prog_unavail);
+	goto error;
+
+err_bad_vers:
+#ifdef RPC_PARANOIA
+	printk("svc: unknown version (%d)\n", vers);
+#endif
+	serv->sv_stats->rpcbadfmt++;
+	svc_putlong(resp, rpc_prog_mismatch);
+	svc_putlong(resp, htonl(progp->pg_lovers));
+	svc_putlong(resp, htonl(progp->pg_hivers));
+	goto error;
+
+err_unknown:
+#ifdef RPC_PARANOIA
+	printk("svc: unknown procedure (%d)\n", proc);
+#endif
+	serv->sv_stats->rpcbadfmt++;
+	svc_putlong(resp, rpc_proc_unavail);
+	goto error;
+
+err_garbage:
+#ifdef RPC_PARANOIA
+	printk("svc: failed to decode args\n");
+#endif
+	serv->sv_stats->rpcbadfmt++;
+	svc_putlong(resp, rpc_garbage_args);
 
 error:
 	return svc_send(rqstp);

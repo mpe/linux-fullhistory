@@ -6,6 +6,8 @@
  * for more details.
  *
  * Copyright (C) 1995, 1996, 1997 by Ralf Baechle
+ *
+ * $Id: hw-access.c,v 1.4 1997/07/29 17:46:45 ralf Exp $
  */
 #include <linux/delay.h>
 #include <linux/linkage.h>
@@ -40,64 +42,64 @@ fd_outb(unsigned char value, unsigned int port)
  * How to access the floppy DMA functions.
  */
 static void
-fd_enable_dma(void)
+fd_enable_dma(int channel)
 {
 	vdma_enable(JAZZ_FLOPPY_DMA);
 }
 
 static void
-fd_disable_dma(void)
+fd_disable_dma(int channel)
 {
 	vdma_disable(JAZZ_FLOPPY_DMA);
 }
 
 static int
-fd_request_dma(void)
+fd_request_dma(int channel)
 {
 	return 0;
 }
 
 static void
-fd_free_dma(void)
+fd_free_dma(int channel)
 {
 }
 
 static void
-fd_clear_dma_ff(void)
+fd_clear_dma_ff(int channel)
 {
 }
 
 static void
-fd_set_dma_mode(char mode)
+fd_set_dma_mode(int channel, char mode)
 {
 	vdma_set_mode(JAZZ_FLOPPY_DMA, mode);
 }
 
 static void
-fd_set_dma_addr(unsigned int a)
+fd_set_dma_addr(int channel, unsigned int a)
 {
 	vdma_set_addr(JAZZ_FLOPPY_DMA, vdma_phys2log(PHYSADDR(a)));
 }
 
 static void
-fd_set_dma_count(unsigned int count)
+fd_set_dma_count(int channel, unsigned int count)
 {
 	vdma_set_count(JAZZ_FLOPPY_DMA, count);
 }
 
 static int
-fd_get_dma_residue(void)
+fd_get_dma_residue(int channel)
 {
 	return vdma_get_residue(JAZZ_FLOPPY_DMA);
 }
 
 static void
-fd_enable_irq(void)
+fd_enable_irq(int irq)
 {
 }
 
 static void
-fd_disable_irq(void)
+fd_disable_irq(int irq)
 {
 }
 
@@ -148,7 +150,8 @@ struct feature jazz_feature = {
 	rtc_write_data
 };
 
-static volatile keyboard_hardware *jazz_kh = (keyboard_hardware *)JAZZ_KEYBOARD_ADDRESS;
+static volatile keyboard_hardware *jazz_kh = 
+	(keyboard_hardware *) JAZZ_KEYBOARD_ADDRESS;
 
 static unsigned char jazz_read_input(void)
 {
@@ -177,5 +180,4 @@ void jazz_keyboard_setup(void)
 	kbd_write_command = jazz_write_command;
 	kbd_read_status = jazz_read_status;
 	request_region(0x60, 16, "keyboard");
-        r4030_write_reg16(JAZZ_IO_IRQ_ENABLE, r4030_read_reg16(JAZZ_IO_IRQ_ENABLE) | JAZZ_IE_KEYBOARD);
 }

@@ -826,13 +826,14 @@ static inline int do_load_irix_library(int fd)
 
 	/* Seek to the beginning of the file. */
 	if (file->f_op->llseek) {
-		if ((error = file->f_op->llseek(inode, file, 0, 0)) != 0)
+		if ((error = file->f_op->llseek(file, 0, 0)) != 0)
 			return -ENOEXEC;
 	} else
 		file->f_pos = 0;
 
 	set_fs(KERNEL_DS);
-	error = file->f_op->read(inode, file, (char *) &elf_ex, sizeof(elf_ex));
+	error = file->f_op->read(file, (char *) &elf_ex, sizeof(elf_ex),
+	                         &file->f_pos);
 	set_fs(USER_DS);
 	if (error != sizeof(elf_ex))
 		return -ENOEXEC;
@@ -987,13 +988,13 @@ unsigned long irix_mapelf(int fd, struct elf_phdr *user_phdrp, int cnt)
  */
 static int dump_write(struct file *file, const void *addr, int nr)
 {
-	return file->f_op->write(file->f_dentry->d_inode, file, addr, nr) == nr;
+	return file->f_op->write(file, addr, nr, &file->f_pos) == nr;
 }
 
 static int dump_seek(struct file *file, off_t off)
 {
 	if (file->f_op->llseek) {
-		if (file->f_op->llseek(file->f_dentry->d_inode, file, off, 0) != off)
+		if (file->f_op->llseek(file, off, 0) != off)
 			return 0;
 	} else
 		file->f_pos = off;

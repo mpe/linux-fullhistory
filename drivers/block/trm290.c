@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/trm290.c	Version 1.00  December 3, 1997
+ *  linux/drivers/block/trm290.c	Version 1.01  December 5, 1997
  *
  *  Copyright (c) 1997-1998  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License
@@ -34,18 +34,20 @@
  * The configuration registers are addressed in normal I/O port space
  * and are used as follows:
  *
- * 0x3df2 when WRITTEN: chiptest register (byte, write-only)
+ * trm290_base depends on jumper settings, and is probed for by ide-dma.c
+ *
+ * trm290_base+2 when WRITTEN: chiptest register (byte, write-only)
  *	bit7 must always be written as "1"
  *	bits6-2 undefined
  *	bit1 1=legacy_compatible_mode, 0=native_pci_mode
  *	bit0 1=test_mode, 0=normal(default)
  *
- * 0x3df2 when READ: status register (byte, read-only)
+ * trm290_base+2 when READ: status register (byte, read-only)
  *	bits7-2 undefined
  *	bit1 channel0 busmaster interrupt status 0=none, 1=asserted
  *	bit0 channel0 interrupt status 0=none, 1=asserted
  *
- * 0x3df3 Interrupt mask register
+ * trm290_base+3 Interrupt mask register
  *	bits7-5 undefined
  *	bit4 legacy_header: 1=present, 0=absent
  *	bit3 channel1 busmaster interrupt status 0=none, 1=asserted (read only)
@@ -53,7 +55,7 @@
  *	bit1 channel1 interrupt mask: 1=masked, 0=unmasked(default)
  *	bit0 channel0 interrupt mask: 1=masked, 0=unmasked(default)
  *
- * 0x3df1 "CPR" Config Pointer Register (byte)
+ * trm290_base+1 "CPR" Config Pointer Register (byte)
  *	bit7 1=autoincrement CPR bits 2-0 after each access of CDR
  *	bit6 1=min. 1 wait-state posted write cycle (default), 0=0 wait-state
  *	bit5 0=enabled master burst access (default), 1=disable  (write only)
@@ -61,7 +63,7 @@
  *	bit3 0=primary IDE channel, 1=secondary IDE channel
  *	bits2-0 register index for accesses through CDR port
  *
- * 0x3df0 "CDR" Config Data Register (word)
+ * trm290_base+0 "CDR" Config Data Register (word)
  *	two sets of seven config registers,
  *	selected by CPR bit 3 (channel) and CPR bits 2-0 (index 0 to 6),
  *	each index defined below:
@@ -130,98 +132,137 @@
 #include <linux/blkdev.h>
 #include <linux/init.h>
 #include <linux/hdreg.h>
+#include <linux/pci.h>
+#include <linux/bios32.h>
+#include <linux/delay.h>
+
 #include <asm/io.h>
 
 #include "ide.h"
 
-static void select_dma_or_pio(ide_hwif_t *hwif, int dma)
+static void trm290_prepare_drive (ide_drive_t *drive, unsigned int use_dma)
 {
-	static int previous[2] = {-1,-1};
+	ide_hwif_t *hwif = HWIF(drive);
+	unsigned int reg;
 	unsigned long flags;
 
-	if (previous[hwif->pci_port] != dma) {
-		unsigned short cfg1 = dma ? 0xa3 : 0x21;
-		previous[hwif->pci_port] = dma;
-		save_flags(flags);
-		cli();
-		outb(0x51|(hwif->pci_port<<3),0x3df1);
-		outw(cfg1,0x3df0);
-		restore_flags(flags);
+	/* select PIO or DMA */
+	reg = use_dma ? (0x21 | 0x82) : (0x21 & ~0x82);
+
+	save_flags(flags);
+	cli();
+
+	if (reg != hwif->select_data) {
+		hwif->select_data = reg;
+		outb(0x51|(hwif->channel<<3), hwif->config_data+1);	/* set PIO/DMA */
+		outw(reg & 0xff, hwif->config_data);
 	}
+
+	/* enable IRQ if not probing */
+	if (drive->present) {
+		reg = inw(hwif->config_data+3) & 0x13;
+		reg &= ~(1 << hwif->channel);
+		outw(reg, hwif->config_data+3);
+	}
+
+	restore_flags(flags);
 }
 
-/*
- * trm290_dma_intr() is the handler for trm290 disk read/write DMA interrupts
- */
-static void trm290_dma_intr (ide_drive_t *drive)
+static void trm290_selectproc (ide_drive_t *drive)
 {
-	byte stat;
-	int i;
-	struct request *rq = HWGROUP(drive)->rq;
-
-	stat = GET_STAT();	/* get drive status */
-	if (OK_STAT(stat,DRIVE_READY,drive->bad_wstat|DRQ_STAT)) {
-		unsigned short dma_stat = inw(HWIF(drive)->dma_base + 2);
-		if (dma_stat == 0x00ff) {
-			rq = HWGROUP(drive)->rq;
-			for (i = rq->nr_sectors; i > 0;) {
-				i -= rq->current_nr_sectors;
-				ide_end_request(1, HWGROUP(drive));
-			}
-			return;
-		}
-		printk("%s: bad trm290 DMA status: 0x%04x\n", drive->name, dma_stat);
-	}
-	sti();
-	ide_error(drive, "dma_intr", stat);
+	trm290_prepare_drive(drive, drive->using_dma);
 }
 
 static int trm290_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 {
 	ide_hwif_t *hwif = HWIF(drive);
-	unsigned int count, reading = 1 << 1;
+	unsigned int count, reading = 2, writing = 0;
 
-	if (drive->media == ide_disk) {
-		switch (func) {
-			case ide_dma_write:
-				reading = 0;
+	switch (func) {
+		case ide_dma_write:
+			reading = 0;
+			writing = 1;
 #ifdef TRM290_NO_DMA_WRITES
-				break;	/* always use PIO for writes */
+			break;	/* always use PIO for writes */
 #endif
-			case ide_dma_read:
-				if (!(count = ide_build_dmatable(drive)))
-					break;		/* try PIO instead of DMA */
-				select_dma_or_pio(hwif, 1);	/* select DMA mode */
-				outl_p(virt_to_bus(hwif->dmatable)|reading, hwif->dma_base);
-				outw((count * 2) - 1, hwif->dma_base+2); /* start DMA */
-				ide_set_handler(drive, &trm290_dma_intr, WAIT_CMD);
-				OUT_BYTE(reading ? WIN_READDMA : WIN_WRITEDMA, IDE_COMMAND_REG);
+		case ide_dma_read:
+			if (!(count = ide_build_dmatable(drive)))
+				break;		/* try PIO instead of DMA */
+			trm290_prepare_drive(drive, 1);	/* select DMA xfer */
+			outl(virt_to_bus(hwif->dmatable)|reading|writing, hwif->dma_base);
+			outw((count * 2) - 1, hwif->dma_base+2); /* start DMA */
+			if (drive->media != ide_disk)
 				return 0;
-			default:
-				return ide_dmaproc(func, drive);
-		}
+			ide_set_handler(drive, &ide_dma_intr, WAIT_CMD);
+			OUT_BYTE(reading ? WIN_READDMA : WIN_WRITEDMA, IDE_COMMAND_REG);
+		case ide_dma_begin:
+			return 0;
+		case ide_dma_end:
+			return (inw(hwif->dma_base+2) != 0x00ff);
+		default:
+			return ide_dmaproc(func, drive);
 	}
-	select_dma_or_pio(hwif, 0);	/* force PIO mode for this operation */
+	trm290_prepare_drive(drive, 0);	/* select PIO xfer */
 	return 1;
-}
-
-static void trm290_selectproc (ide_drive_t *drive)
-{
-	ide_hwif_t *hwif = HWIF(drive);
-
-	select_dma_or_pio(hwif, drive->using_dma);
-	OUT_BYTE(drive->select.all, hwif->io_ports[IDE_SELECT_OFFSET]);
 }
 
 /*
  * Invoked from ide-dma.c at boot time.
  */
-__initfunc(void ide_init_trm290 (byte bus, byte fn, ide_hwif_t *hwif))
+__initfunc(void ide_init_trm290 (ide_hwif_t *hwif))
 {
+	unsigned int cfgbase = 0;
+	unsigned long flags;
+	byte reg, progif;
+
 	hwif->chipset = ide_trm290;
-	hwif->selectproc = trm290_selectproc;
-	hwif->drives[0].autotune = 2;	/* play it safe */
-	hwif->drives[1].autotune = 2;	/* play it safe */
-	ide_setup_dma(hwif, hwif->pci_port ? 0x3d74 : 0x3df4, 2);
+	if (!pcibios_read_config_byte(hwif->pci_bus, hwif->pci_fn, 0x09, &progif) && (progif & 5)
+	 && !pcibios_read_config_dword(hwif->pci_bus, hwif->pci_fn, 0x20, &cfgbase) && cfgbase)
+	{
+		hwif->config_data = cfgbase & ~1;
+		printk("TRM290: chip config base at 0x%04x\n", hwif->config_data);
+	} else {
+		hwif->config_data = 0x3df4;
+		printk("TRM290: using default config base at 0x%04x\n", hwif->config_data);
+	}
+
+	save_flags(flags);
+	cli();
+	/* put config reg into first byte of hwif->select_data */
+	outb(0x51|(hwif->channel<<3), hwif->config_data+1);
+	hwif->select_data = 0x21;			/* select PIO as default */
+	outb(hwif->select_data, hwif->config_data);
+	reg = inb(hwif->config_data+3);			/* get IRQ info */
+	reg = (reg & 0x10) | 0x03;			/* mask IRQs for both ports */
+	outb(reg, hwif->config_data+3);
+	restore_flags(flags);
+
+	if ((reg & 0x10))
+		hwif->irq = hwif->channel ? 15 : 14;	/* legacy mode */
+	else if (!hwif->irq && hwif->mate && hwif->mate->irq)
+		hwif->irq = hwif->mate->irq;		/* sharing IRQ with mate */
+	ide_setup_dma(hwif, (hwif->channel ? hwif->config_data ^ 0x0080 : hwif->config_data) + 4, 2);
 	hwif->dmaproc = &trm290_dmaproc;
+	hwif->selectproc = &trm290_selectproc;
+	hwif->no_autodma = 1;				/* play it safe for now */
+#if 1
+	{
+		/*
+		 * My trm290-based card doesn't seem to work with all possible values
+		 * for the control basereg, so this kludge ensures that we use only
+		 * values that are known to work.  Ugh.		-ml
+		 */
+		unsigned short old, compat = hwif->channel ? 0x374 : 0x3f4;
+		static unsigned short next_offset = 0;
+
+		outb(0x54|(hwif->channel<<3), hwif->config_data+1);
+		old = inw(hwif->config_data) & ~1;
+		if (old != compat && inb(old+2) == 0xff) {
+			compat += (next_offset += 0x400);	/* leave lower 10 bits untouched */
+			hwif->io_ports[IDE_CONTROL_OFFSET] = compat + 2;	/* FIXME: should do a check_region */
+			outw(compat|1, hwif->config_data);
+			printk("%s: control basereg workaround: old=0x%04x, new=0x%04x\n", hwif->name, old, inw(hwif->config_data) & ~1);
+		}
+	}
+#endif
 }

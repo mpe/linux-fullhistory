@@ -306,9 +306,9 @@ smb_file_write(struct file *file, const char *buf, size_t count, loff_t *ppos)
 	ssize_t	result;
 
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_file_write: file %s/%s, count=%lu@%lu\n",
+printk("smb_file_write: file %s/%s, count=%lu@%lu, pages=%ld\n",
 dentry->d_parent->d_name.name, dentry->d_name.name,
-(unsigned long) count, (unsigned long) *ppos);
+(unsigned long) count, (unsigned long) *ppos, inode->i_nrpages);
 #endif
 
 	result = smb_revalidate_inode(inode);

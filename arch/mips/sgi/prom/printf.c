@@ -1,4 +1,4 @@
-/* $Id: printf.c,v 1.1 1997/06/06 09:37:17 ralf Exp $
+/* $Id: printf.c,v 1.1.1.1 1997/06/01 03:16:40 ralf Exp $
  * printf.c: Putting things on the screen using SGI arcs
  *           PROM facilities.
  *

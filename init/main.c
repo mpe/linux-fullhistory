@@ -105,6 +105,9 @@ extern void com90xx_setup(char *str, int *ints);
 extern void decnet_setup(char *str, int *ints);
 #endif
 extern void xd_setup(char *str, int *ints);
+#ifdef CONFIG_BLK_DEV_IDE
+extern void ide_setup(char *);
+#endif
 #ifdef CONFIG_BLK_DEV_EZ
 extern void ez_setup(char *str, int *ints);
 #endif

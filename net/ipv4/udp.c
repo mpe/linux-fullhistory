@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.44 1997/10/15 19:56:35 freitag Exp $
+ * Version:	$Id: udp.c,v 1.45 1997/12/04 03:55:17 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -53,6 +53,8 @@
  *					Last socket cache retained as it
  *					does have a high hit rate.
  *		Olaf Kirch	:	Don't linearise iovec on sendmsg.
+ *		Andi Kleen	:	Some cleanups, cache destination entry
+ *					for connect. 
  *
  *
  *		This program is free software; you can redistribute it and/or
@@ -69,7 +71,7 @@
      MUST pass IP options from IP -> application (OK)
      MUST allow application to specify IP options (OK)
    4.1.3.3 (ICMP Messages)
-     MUST pass ICMP error messages to application (OK)
+     MUST pass ICMP error messages to application (OK -- except when SO_BSDCOMPAT is set)
    4.1.3.4 (UDP Checksums)
      MUST provide facility for checksumming (OK)
      MAY allow application to control checksumming (OK)
@@ -78,12 +80,10 @@
    4.1.3.5 (UDP Multihoming)
      MUST allow application to specify source address (OK)
      SHOULD be able to communicate the chosen src addr up to application
-       when application doesn't choose (NOT YET - doesn't seem to be in the BSD API)
-       [Does opening a SOCK_PACKET and snooping your output count 8)]
+       when application doesn't choose (DOES - use recvmsg cmsgs)
    4.1.3.6 (Invalid Addresses)
      MUST discard invalid source addresses (OK -- done in the new routing code)
-     MUST only send datagrams with one of our addresses (NOT YET - ought to be OK )
-   950728 -- MS
+     MUST only send datagrams with one of our addresses (OK)
 */
 
 #include <asm/system.h>
@@ -459,8 +459,6 @@ static inline struct sock *udp_v4_mcast_next(struct sock *sk,
   	return s;
 }
 
-#define min(a,b)	((a)<(b)?(a):(b))
-
 /*
  * This routine is called by the ICMP module when it gets some
  * sort of error condition.  If err < 0 then the socket should
@@ -497,33 +495,27 @@ void udp_err(struct sk_buff *skb, unsigned char *dp, int len)
 			kfree_skb(skb2, FREE_READ);
 	}
   	
-	if (type == ICMP_SOURCE_QUENCH) {
-#if 0 /* FIXME:	If you check the rest of the code, this is a NOP!
-       * 	Someone figure out what we were trying to be doing
-       * 	here.  Besides, cong_window is a TCP thing and thus
-       * 	I moved it out of normal sock and into tcp_opt.
-       */
-		/* Slow down! */
-		if (sk->cong_window > 1) 
-			sk->cong_window = sk->cong_window/2;
-#endif
+	switch (type) {
+	case ICMP_SOURCE_QUENCH:
 		return;
-	}
-
-	if (type == ICMP_PARAMETERPROB)
-	{
+	case ICMP_PARAMETERPROB:
 		sk->err = EPROTO;
 		sk->error_report(sk);
 		return;
-	}
-
-	if (type == ICMP_DEST_UNREACH && code == ICMP_FRAG_NEEDED)
-	{
-		if (sk->ip_pmtudisc != IP_PMTUDISC_DONT) {
-			sk->err = EMSGSIZE;
-			sk->error_report(sk);
+	case ICMP_DEST_UNREACH:
+		if (code == ICMP_FRAG_NEEDED) { /* Path MTU discovery */
+			if (sk->ip_pmtudisc != IP_PMTUDISC_DONT) {
+				/* 
+				 * There should be really a way to pass the
+				 * discovered MTU value back to the user (the
+				 * ICMP layer did all the work for us)
+				 */
+				sk->err = EMSGSIZE;
+				sk->error_report(sk);
+			}
+			return;
 		}
-		return;
+		break;
 	}
 			
 	/*
@@ -622,8 +614,8 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	int ulen = len + sizeof(struct udphdr);
 	struct ipcm_cookie ipc;
 	struct udpfakehdr ufh;
-	struct rtable *rt;
-	int free = 0;
+	struct rtable *rt = NULL;
+	int free = 0, localroute = 0;
 	u32 daddr;
 	u8  tos;
 	int err;
@@ -635,11 +627,12 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	 *	Check the flags.
 	 */
 
-	if (msg->msg_flags&MSG_OOB)		/* Mirror BSD error message compatibility */
+	if (msg->msg_flags&MSG_OOB)	/* Mirror BSD error message compatibility */
 		return -EOPNOTSUPP;
 
 	if (msg->msg_flags&~(MSG_DONTROUTE|MSG_DONTWAIT))
 	  	return -EINVAL;
+
 
 	/*
 	 *	Get and verify the address. 
@@ -660,11 +653,13 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 		ufh.uh.dest = usin->sin_port;
 		if (ufh.uh.dest == 0)
 			return -EINVAL;
+		/* XXX: is a one-behind cache for the dst_entry worth it? */
 	} else {
 		if (sk->state != TCP_ESTABLISHED)
 			return -EINVAL;
 		ufh.daddr = sk->daddr;
 		ufh.uh.dest = sk->dummy_th.dest;
+		rt = (struct rtable *)sk->dst_cache;
   	}
 
 	ipc.addr = sk->saddr;
@@ -688,9 +683,13 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 			return -EINVAL;
 		daddr = ipc.opt->faddr;
 	}
-	tos = RT_TOS(sk->ip_tos) | (sk->localroute || (msg->msg_flags&MSG_DONTROUTE) ||
-				    (ipc.opt && ipc.opt->is_strictroute));
-
+	tos = RT_TOS(sk->ip_tos);
+	if (sk->localroute || (msg->msg_flags&MSG_DONTROUTE) || 
+	    (ipc.opt && ipc.opt->is_strictroute)) {
+		tos |= 1;
+		rt = NULL; /* sorry */
+	}
+		
 	if (MULTICAST(daddr)) {
 		if (!ipc.oif)
 			ipc.oif = sk->ip_mc_index;
@@ -698,17 +697,15 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 			ufh.saddr = sk->ip_mc_addr;
 	}
 
-	err = ip_route_output(&rt, daddr, ufh.saddr, tos, ipc.oif);
+	if (rt == NULL) {
+		err = ip_route_output(&rt, daddr, ufh.saddr, tos, ipc.oif);
+		if (err) 
+			goto out;
+		localroute = 1;
 
-	if (err) {
-		if (free) kfree(ipc.opt);
-		return err;
-	}
-
-	if (rt->rt_flags&RTCF_BROADCAST && !sk->broadcast) {
-		if (free) kfree(ipc.opt);
-		ip_rt_put(rt);
-		return -EACCES;
+		err = -EACCES;
+		if (rt->rt_flags&RTCF_BROADCAST && !sk->broadcast) 
+			goto out;
 	}
 
 	ufh.saddr = rt->rt_src;
@@ -727,15 +724,13 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	/* violation above. -- MS */
 
 	lock_sock(sk);
-	if (sk->no_check)
-		err = ip_build_xmit(sk, udp_getfrag_nosum, &ufh, ulen, 
-				    &ipc, rt, msg->msg_flags);
-	else
-		err = ip_build_xmit(sk, udp_getfrag, &ufh, ulen, 
-				    &ipc, rt, msg->msg_flags);
-	ip_rt_put(rt);
+	err = ip_build_xmit(sk,sk->no_check ? udp_getfrag_nosum : udp_getfrag,
+			    &ufh, ulen, &ipc, rt, msg->msg_flags);
 	release_sock(sk);
 
+out:
+	if (localroute)
+		ip_rt_put(rt);
 	if (free)
 		kfree(ipc.opt);
 	if (!err) {
@@ -776,7 +771,7 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 				 * of this packet since that is all
 				 * that will be read.
 				 */
-				amount = skb->len-sizeof(struct udphdr);
+				amount = skb->tail - skb->h.raw;
 			}
 			return put_user(amount, (int *)arg);
 		}
@@ -905,6 +900,9 @@ int udp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	if (usin->sin_family && usin->sin_family != AF_INET) 
 	  	return(-EAFNOSUPPORT);
 
+	dst_release(sk->dst_cache);
+	sk->dst_cache = NULL;
+
 	err = ip_route_connect(&rt, usin->sin_addr.s_addr, sk->saddr,
 			       sk->ip_tos|sk->localroute, sk->bound_dev_if);
 	if (err)
@@ -920,9 +918,11 @@ int udp_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	sk->daddr = rt->rt_dst;
 	sk->dummy_th.dest = usin->sin_port;
 	sk->state = TCP_ESTABLISHED;
+
 	if(uh_cache_sk == sk)
 		uh_cache_sk = NULL;
-	ip_rt_put(rt);
+
+	sk->dst_cache = &rt->u.dst;
 	return(0);
 }
 
@@ -1073,13 +1073,6 @@ int udp_rcv(struct sk_buff *skb, unsigned short len)
 		kfree_skb(skb, FREE_WRITE);
 		return(0);
 	}
-
-	/* RFC1122 warning: According to 4.1.3.6, we MUST discard any */
-	/* datagram which has an invalid source address, either here or */
-	/* in IP. */
-	/* Right now, IP isn't doing it, and neither is UDP. It's on the */
-	/* FIXME list for IP, though, so I wouldn't worry about it. */
-	/* (That's the Right Place to do it, IMHO.) -- MS */
 
 	if (uh->check &&
 	    (((skb->ip_summed==CHECKSUM_HW)&&udp_check(uh,len,saddr,daddr,skb->csum)) ||

@@ -87,6 +87,18 @@ int * hardsect_size[MAX_BLKDEV] = { NULL, NULL, };
  */
 int * max_readahead[MAX_BLKDEV] = { NULL, NULL, };
 
+/*
+ * Max number of sectors per request
+ */
+int * max_sectors[MAX_BLKDEV] = { NULL, NULL, };
+
+static inline int get_max_sectors(kdev_t dev)
+{
+	if (!max_sectors[MAJOR(dev)])
+		return 244;	/* 254? */
+	return max_sectors[MAJOR(dev)][MINOR(dev)];
+}
+
 static inline struct request **get_queue(kdev_t dev)
 {
 	int major = MAJOR(dev);
@@ -300,9 +312,7 @@ void add_request(struct blk_dev_struct * dev, struct request * req)
 	sti();
 }
 
-#define MAX_SECTORS 244
-
-static inline void attempt_merge (struct request *req)
+static inline void attempt_merge (struct request *req, int max_sectors)
 {
 	struct request *next = req->next;
 
@@ -310,7 +320,7 @@ static inline void attempt_merge (struct request *req)
 		return;
 	if (req->sector + req->nr_sectors != next->sector)
 		return;
-	if (next->sem || req->cmd != next->cmd || req->rq_dev != next->rq_dev || req->nr_sectors + next->nr_sectors >= MAX_SECTORS)
+	if (next->sem || req->cmd != next->cmd || req->rq_dev != next->rq_dev || req->nr_sectors + next->nr_sectors > max_sectors)
 		return;
 	req->bhtail->b_reqnext = next->bh;
 	req->bhtail = next->bhtail;
@@ -324,7 +334,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 {
 	unsigned int sector, count;
 	struct request * req;
-	int rw_ahead, max_req;
+	int rw_ahead, max_req, max_sectors;
 
 	count = bh->b_size >> 9;
 	sector = bh->b_rsector;
@@ -391,6 +401,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 	/*
 	 * Try to coalesce the new request with old requests
 	 */
+	max_sectors = get_max_sectors(bh->b_rdev);
 	cli();
 	req = *get_queue(bh->b_rdev);
 	if (!req) {
@@ -428,7 +439,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 				continue;
 			if (req->cmd != rw)
 				continue;
-			if (req->nr_sectors >= MAX_SECTORS)
+			if (req->nr_sectors + count > max_sectors)
 				continue;
 			if (req->rq_dev != bh->b_rdev)
 				continue;
@@ -438,7 +449,7 @@ void make_request(int major,int rw, struct buffer_head * bh)
 				req->bhtail = bh;
 			    	req->nr_sectors += count;
 				/* Can we now merge this req with the next? */
-				attempt_merge(req);
+				attempt_merge(req, max_sectors);
 			/* or to the beginning? */
 			} else if (req->sector - count == sector) {
 			    	bh->b_reqnext = req->bh;
@@ -684,6 +695,7 @@ __initfunc(int blk_dev_init(void))
 	}
 	memset(ro_bits,0,sizeof(ro_bits));
 	memset(max_readahead, 0, sizeof(max_readahead));
+	memset(max_sectors, 0, sizeof(max_sectors));
 #ifdef CONFIG_AMIGA_Z2RAM
 	z2_init();
 #endif

@@ -1,4 +1,4 @@
-/* $Id: sgialib.h,v 1.1 1997/06/06 09:39:56 ralf Exp $
+/* $Id: sgialib.h,v 1.1.1.1 1997/06/01 03:17:13 ralf Exp $
  * sgialib.h: SGI ARCS firmware interface library for the Linux kernel.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)

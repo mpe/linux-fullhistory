@@ -62,7 +62,8 @@ extern void fh_update(struct svc_fh*);
 struct raparms {
 	struct raparms		*p_next;
 	unsigned int		p_count;
-	struct dentry		*p_dentry;
+	ino_t			p_ino;
+	dev_t			p_dev;
 	unsigned long		p_reada,
 				p_ramax,
 				p_raend,
@@ -316,29 +317,27 @@ nfsd_sync(struct inode *inode, struct file *filp)
 }
 
 /*
- * Obtain the readahead parameters for the given file
- *
- * N.B. is raparm cache for a file cleared when the file closes??
- * (dentry might be reused later.)
+ * Obtain the readahead parameters for the file
+ * specified by (dev, ino).
  */
 static inline struct raparms *
-nfsd_get_raparms(struct dentry *dentry)
+nfsd_get_raparms(dev_t dev, ino_t ino)
 {
 	struct raparms	*ra, **rap, **frap = NULL;
 
 	for (rap = &raparm_cache; (ra = *rap); rap = &ra->p_next) {
-		if (ra->p_dentry != dentry) {
-			if (ra->p_count == 0)
-				frap = rap;
-		} else
+		if (ra->p_ino == ino && ra->p_dev == dev)
 			goto found;
+		if (ra->p_count == 0)
+			frap = rap;
 	}
 	if (!frap)
 		return NULL;
 	rap = frap;
 	ra = *frap;
 	memset(ra, 0, sizeof(*ra));
-	ra->p_dentry = dentry;
+	ra->p_dev = dev;
+	ra->p_ino = ino;
 found:
 	if (rap != &raparm_cache) {
 		*rap = ra->p_next;
@@ -359,23 +358,20 @@ nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset, char *buf,
 						unsigned long *count)
 {
 	struct raparms	*ra;
-	struct dentry	*dentry;
-	struct inode	*inode;
-	struct file	file;
 	mm_segment_t	oldfs;
 	int		err;
+	struct file	file;
 
-	if ((err = nfsd_open(rqstp, fhp, S_IFREG, OPEN_READ, &file)) != 0)
-		return err;
-	dentry = file.f_dentry;
-	inode = dentry->d_inode;
-	if (!file.f_op->read) {
-		nfsd_close(&file);
-		return nfserr_perm;
-	}
+	err = nfsd_open(rqstp, fhp, S_IFREG, OPEN_READ, &file);
+	if (err)
+		goto out;
+	err = nfserr_perm;
+	if (!file.f_op->read)
+		goto out_close;
 
 	/* Get readahead parameters */
-	if ((ra = nfsd_get_raparms(dentry)) != NULL) {
+	ra = nfsd_get_raparms(fhp->fh_handle.fh_dev, fhp->fh_handle.fh_ino);
+	if (ra) {
 		file.f_reada = ra->p_reada;
 		file.f_ramax = ra->p_ramax;
 		file.f_raend = ra->p_raend;
@@ -401,12 +397,15 @@ nfsd_read(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset, char *buf,
 		ra->p_count -= 1;
 	}
 
+	if (err >= 0) {
+		*count = err;
+		err = 0;
+	} else 
+		err = nfserrno(-err);
+out_close:
 	nfsd_close(&file);
-
-	if (err < 0)
-		return nfserrno(-err);
-	*count = err;
-	return 0;
+out:
+	return err;
 }
 
 /*
@@ -423,16 +422,16 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	struct dentry		*dentry;
 	struct inode		*inode;
 	mm_segment_t		oldfs;
-	int			err;
+	int			err = 0;
 
 	if (!cnt)
-		return 0;
-	if ((err = nfsd_open(rqstp, fhp, S_IFREG, OPEN_WRITE, &file)) != 0)
-		return err;
-	if (!file.f_op->write) {
-		nfsd_close(&file);
-		return nfserr_perm;
-	}
+		goto out;
+	err = nfsd_open(rqstp, fhp, S_IFREG, OPEN_WRITE, &file);
+	if (err)
+		goto out;
+	err = nfserr_perm;
+	if (!file.f_op->write)
+		goto out_close;
 
 	dentry = file.f_dentry;
 	inode = dentry->d_inode;
@@ -507,10 +506,15 @@ nfsd_write(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 		last_dev = inode->i_dev;
 	}
 
-	nfsd_close(&file);
-
 	dprintk("nfsd: write complete\n");
-	return (err < 0)? nfserrno(-err) : 0;
+	if (err >= 0)
+		err = 0;
+	else 
+		err = nfserrno(-err);
+out_close:
+	nfsd_close(&file);
+out:
+	return err;
 }
 
 /*
@@ -824,20 +828,27 @@ out:
 	return err;
 }
 
-/* More "hidden treasure" from the generic VFS. -DaveM */
-/* N.B. VFS double_down was modified to fix a bug ... should use VFS one */
+/*
+ * This follows the model of double_lock() in the VFS.
+ */
 static inline void nfsd_double_down(struct semaphore *s1, struct semaphore *s2)
 {
-	if((unsigned long) s1 < (unsigned long) s2) {
-		down(s1);
-		down(s2);
-	} else if(s1 == s2) {
-		down(s1);
-		atomic_dec(&s1->count);
-	} else {
-		down(s2);
+	if (s1 != s2) {
+		if ((unsigned long) s1 < (unsigned long) s2) {
+			struct semaphore *tmp = s1;
+			s1 = s2;
+			s2 = tmp;
+		}
 		down(s1);
 	}
+	down(s2);
+}
+
+static inline void nfsd_double_up(struct semaphore *s1, struct semaphore *s2)
+{
+	up(s1);
+	if (s1 != s2)
+		up(s2);
 }
 
 /*
@@ -866,43 +877,47 @@ nfsd_rename(struct svc_rqst *rqstp, struct svc_fh *ffhp, char *fname, int flen,
 	tdir = tdentry->d_inode;
 
 	/* N.B. We shouldn't need this ... dentry layer handles it */
+	err = nfserr_perm;
 	if (!flen || (fname[0] == '.' && 
 	    (flen == 1 || (flen == 2 && fname[1] == '.'))) ||
 	    !tlen || (tname[0] == '.' && 
 	    (tlen == 1 || (tlen == 2 && tname[1] == '.'))))
-		return nfserr_perm;
+		goto out;
+
+	err = -EXDEV;
+	if (fdir->i_dev != tdir->i_dev)
+		goto out_nfserr;
+	err = -EPERM;
+	if (!fdir->i_op || !fdir->i_op->rename)
+		goto out_nfserr;
 
 	odentry = lookup_dentry(fname, dget(fdentry), 0);
 	err = PTR_ERR(odentry);
 	if (IS_ERR(odentry))
-		goto out_no_unlock;
+		goto out_nfserr;
 
 	ndentry = lookup_dentry(tname, dget(tdentry), 0);
 	err = PTR_ERR(ndentry);
 	if (IS_ERR(ndentry))
 		goto out_dput_old;
 
-	/* N.B. check this ... problems in locking?? */
+	/*
+	 * Lock the parent directories.
+	 */
 	nfsd_double_down(&tdir->i_sem, &fdir->i_sem);
-	err = -EXDEV;
-	if (fdir->i_dev != tdir->i_dev)
-		goto out_unlock;
-	err = -EPERM;
-	if (!fdir->i_op || !fdir->i_op->rename)
-		goto out_unlock;
+	/* N.B. check for parent changes after locking?? */
+
 	err = fdir->i_op->rename(fdir, odentry, tdir, ndentry);
 	if (!err && EX_ISSYNC(tfhp->fh_export)) {
 		write_inode_now(fdir);
 		write_inode_now(tdir);
 	}
-out_unlock:
-	up(&tdir->i_sem);
-	up(&fdir->i_sem);
-
+	nfsd_double_up(&tdir->i_sem, &fdir->i_sem);
 	dput(ndentry);
+
 out_dput_old:
 	dput(odentry);
-out_no_unlock:
+out_nfserr:
 	if (err)
 		err = nfserrno(-err);
 out:

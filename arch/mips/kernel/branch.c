@@ -16,8 +16,7 @@
 #include <asm/uaccess.h>
 
 /*
- * Compute the return address and do emulate branch and instruction
- * simulation, if required.
+ * Compute the return address and do emulate branch simulation, if required.
  */
 int __compute_return_epc(struct pt_regs *regs)
 {
@@ -162,14 +161,12 @@ int __compute_return_epc(struct pt_regs *regs)
 
 	/*
 	 * And now the FPA/cp1 branch instructions.
-	 *
-	 * FIXME: This will silently fail for MIPS IV cop1 branches with
-	 *        the cc field != 0.
 	 */
 	case cop1_op:
 		asm ("cfc1\t%0,$31":"=r" (fcr31));
 		bit = (insn.i_format.rt >> 2);
-		bit += bit ? 24 : 23;
+		bit += (bit != 0);
+		bit += 23;
 		switch (insn.i_format.rt) {
 		case 0:	/* bc1f */
 		case 2:	/* bc1fl */

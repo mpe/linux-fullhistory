@@ -156,7 +156,6 @@ static inline void restore_i387_hard(struct _fpstate *buf)
 		stts();
 	}
 #endif
-	current->used_math = 1;
 	current->flags &= ~PF_USEDFPU;
 	__copy_from_user(&current->tss.i387.hard, buf, sizeof(*buf));
 }
@@ -169,8 +168,9 @@ static inline void restore_i387(struct _fpstate *buf)
 	if (hard_math)
 		restore_i387_hard(buf);
 	else
-		restore_i387_soft(buf);
+		restore_i387_soft(&current->tss.i387.soft, buf);
 #endif
+	current->used_math = 1;
 }
 
 static int
@@ -309,7 +309,6 @@ static inline struct _fpstate * save_i387_hard(struct _fpstate * buf)
 #endif
 	current->tss.i387.hard.status = current->tss.i387.hard.swd;
 	copy_to_user(buf, &current->tss.i387.hard, sizeof(*buf));
-	current->used_math = 0;
 	return buf;
 }
 
@@ -318,10 +317,16 @@ static struct _fpstate * save_i387(struct _fpstate *buf)
 	if (!current->used_math)
 		return NULL;
 
+	/* This will cause a "finit" to be triggered by the next
+	   attempted FPU operation by the 'current' process.
+	   */
+	current->used_math = 0;
+
 #ifndef CONFIG_MATH_EMULATION
 	return save_i387_hard(buf);
 #else
-	return hard_math ? save_i387_hard(buf) : save_i387_soft(buf);
+	return hard_math ? save_i387_hard(buf)
+	  : save_i387_soft(&current->tss.i387.soft, buf);
 #endif
 }
 

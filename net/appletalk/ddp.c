@@ -56,7 +56,7 @@
 #include <linux/if_ether.h>
 #include <linux/notifier.h>
 #include <linux/netdevice.h>
-/*#include <linux/inetdevice.h> -- coming soon */
+#include <linux/inetdevice.h>
 #include <linux/route.h>
 #include <linux/inet.h>
 #include <linux/etherdevice.h>
@@ -1843,11 +1843,9 @@ static int atalk_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 		case SIOCGIFMTU:
 		case SIOCGIFCONF:
 		case SIOCADDMULTI:
-		case SIOCDELMULTI:		
+		case SIOCDELMULTI:
 		case SIOCGIFCOUNT:
-#if 0			/* Also coming in the IP merge */
 		case SIOCGIFINDEX:
-#endif		
 		case SIOCGIFNAME:
 			return ((dev_ioctl(cmd,(void *) arg)));
 

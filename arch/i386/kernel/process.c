@@ -40,6 +40,10 @@
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/ldt.h>
+#include <asm/processor.h>
+#ifdef CONFIG_MATH_EMULATION
+#include <asm/math_emu.h>
+#endif
 
 #ifdef __SMP__
 asmlinkage void ret_from_smpfork(void) __asm__("ret_from_smpfork");
@@ -525,19 +529,16 @@ int dump_fpu (struct pt_regs * regs, struct user_i387_struct* fpu)
 {
 	int fpvalid;
 
-/* Flag indicating the math stuff is valid. We don't support this for the
-   soft-float routines yet */
-	if (hard_math) {
-		if ((fpvalid = current->used_math) != 0) {
-			if (last_task_used_math == current)
-				__asm__("clts ; fnsave %0": :"m" (*fpu));
+	if ((fpvalid = current->used_math) != 0) {
+		if (hard_math) {
+		  if (last_task_used_math == current) {
+			  __asm__("clts ; fsave %0; fwait": :"m" (*fpu));
+		  }
 			else
 				memcpy(fpu,&current->tss.i387.hard,sizeof(*fpu));
+		} else {
+			memcpy(fpu,&current->tss.i387.hard,sizeof(*fpu));
 		}
-	} else {
-		/* we should dump the emulator state here, but we need to
-		   convert it into standard 387 format first.. */
-		fpvalid = 0;
 	}
 
 	return fpvalid;

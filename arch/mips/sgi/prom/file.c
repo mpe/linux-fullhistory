@@ -1,4 +1,4 @@
-/* $Id: file.c,v 1.1 1997/06/06 09:37:03 ralf Exp $
+/* $Id: file.c,v 1.1.1.1 1997/06/01 03:16:40 ralf Exp $
  * file.c: ARCS firmware interface to files.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)

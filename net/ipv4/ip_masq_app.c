@@ -39,13 +39,6 @@
 #include <linux/proc_fs.h>
 #include <net/ip_masq.h>
 
-static const char *strProt[] = {"UDP","TCP"};
-
-static __inline__ const char * masq_proto_name(unsigned proto)
-{
-        return strProt[proto==IPPROTO_TCP];
-}
-
 #define IP_MASQ_APP_TAB_SIZE  16 /* must be power of 2 */
 
 #define IP_MASQ_APP_HASH(proto, port) ((port^proto) & (IP_MASQ_APP_TAB_SIZE-1))
@@ -74,7 +67,7 @@ int register_ip_masq_app(struct ip_masq_app *mapp, unsigned short proto, __u16 p
         unsigned long flags;
         unsigned hash;
         if (!mapp) {
-                printk(KERN_ERR "register_ip_masq_app(): NULL arg\n");
+                IP_MASQ_ERR("register_ip_masq_app(): NULL arg\n");
                 return -EINVAL;
         }
         mapp->type = IP_MASQ_APP_TYPE(proto, port);
@@ -100,14 +93,14 @@ int unregister_ip_masq_app(struct ip_masq_app *mapp)
         unsigned hash;
         unsigned long flags;
         if (!mapp) {
-                printk(KERN_ERR "unregister_ip_masq_app(): NULL arg\n");
+                IP_MASQ_ERR("unregister_ip_masq_app(): NULL arg\n");
                 return -EINVAL;
         }
         /*
          * only allow unregistration if it has no attachments
          */
         if (mapp->n_attach)  {
-                printk(KERN_ERR "unregister_ip_masq_app(): has %d attachments. failed\n",
+                IP_MASQ_ERR("unregister_ip_masq_app(): has %d attachments. failed\n",
                        mapp->n_attach);
                 return -EINVAL;
         }
@@ -123,7 +116,7 @@ int unregister_ip_masq_app(struct ip_masq_app *mapp)
                 }
 
         restore_flags(flags);
-        printk(KERN_ERR "unregister_ip_masq_app(proto=%s,port=%u): not hashed!\n",
+        IP_MASQ_ERR("unregister_ip_masq_app(proto=%s,port=%u): not hashed!\n",
                masq_proto_name(IP_MASQ_APP_PROTO(mapp->type)), IP_MASQ_APP_PORT(mapp->type));
         return -EINVAL;
 }
@@ -165,7 +158,7 @@ static __inline__ int ip_masq_app_bind_chg(struct ip_masq_app *mapp, int delta)
         n_at = mapp->n_attach + delta;
         if (n_at < 0) {
                 restore_flags(flags);
-                printk(KERN_ERR "ip_masq_app: tried to set n_attach < 0 for (proto=%s,port==%d) ip_masq_app object.\n",
+                IP_MASQ_ERR("ip_masq_app: tried to set n_attach < 0 for (proto=%s,port==%d) ip_masq_app object.\n",
                        masq_proto_name(IP_MASQ_APP_PROTO(mapp->type)),
                        IP_MASQ_APP_PORT(mapp->type));
                 return -1;
@@ -183,14 +176,26 @@ static __inline__ int ip_masq_app_bind_chg(struct ip_masq_app *mapp, int delta)
 struct ip_masq_app * ip_masq_bind_app(struct ip_masq *ms)
 {
         struct ip_masq_app * mapp;
+
+	if (ms->protocol != IPPROTO_TCP && ms->protocol != IPPROTO_UDP)
+		return NULL;
+
         mapp = ip_masq_app_get(ms->protocol, ms->dport);
+
+#if 0000
+/* #ifdef CONFIG_IP_MASQUERADE_IPAUTOFW */
+	if (mapp == NULL)
+		mapp = ip_masq_app_get(ms->protocol, ms->sport);
+/* #endif */
+#endif
+
         if (mapp != NULL) {
                 /*
                  *	don't allow binding if already bound
                  */
 
                 if (ms->app != NULL) {
-                        printk(KERN_ERR "ip_masq_bind_app() called for already bound object.\n");
+                        IP_MASQ_ERR("ip_masq_bind_app() called for already bound object.\n");
                         return ms->app;
                 }
 
@@ -209,6 +214,10 @@ int ip_masq_unbind_app(struct ip_masq *ms)
 {
         struct ip_masq_app * mapp;
         mapp = ms->app;
+
+	if (ms->protocol != IPPROTO_TCP && ms->protocol != IPPROTO_UDP)
+		return 0;
+
         if (mapp != NULL) {
                 if (mapp->masq_done_1) mapp->masq_done_1(mapp, ms);
                 ms->app = NULL;
@@ -236,14 +245,10 @@ static __inline__ void masq_fix_seq(const struct ip_masq_seq *ms_seq, struct tcp
 	if (ms_seq->delta || ms_seq->previous_delta) {
 		if(after(seq,ms_seq->init_seq) ) {
 			th->seq = htonl(seq + ms_seq->delta);
-#if DEBUG_CONFIG_IP_MASQ_APP
-			printk("masq_fix_seq() : added delta (%d) to seq\n",ms_seq->delta);
-#endif
+			IP_MASQ_DEBUG(1, "masq_fix_seq() : added delta (%d) to seq\n",ms_seq->delta);
 		} else {
 			th->seq = htonl(seq + ms_seq->previous_delta);
-#if DEBUG_CONFIG_IP_MASQ_APP
-	 		printk("masq_fix_seq() : added previous_delta (%d) to seq\n",ms_seq->previous_delta);
-#endif
+			IP_MASQ_DEBUG(1, "masq_fix_seq() : added previous_delta (%d) to seq\n",ms_seq->previous_delta);
 		}
 	}
 
@@ -269,14 +274,11 @@ static __inline__ void masq_fix_ack_seq(const struct ip_masq_seq *ms_seq, struct
         if (ms_seq->delta || ms_seq->previous_delta) {
                 if(after(ack_seq,ms_seq->init_seq)) {
                         th->ack_seq = htonl(ack_seq-ms_seq->delta);
-#if DEBUG_CONFIG_IP_MASQ_APP
-                        printk("masq_fix_ack_seq() : subtracted delta (%d) from ack_seq\n",ms_seq->delta);
-#endif
+                        IP_MASQ_DEBUG(1, "masq_fix_ack_seq() : subtracted delta (%d) from ack_seq\n",ms_seq->delta);
+
                 } else {
                         th->ack_seq = htonl(ack_seq-ms_seq->previous_delta);
-#if DEBUG_CONFIG_IP_MASQ_APP
-                        printk("masq_fix_ack_seq() : subtracted previous_delta (%d) from ack_seq\n",ms_seq->previous_delta);
-#endif
+                        IP_MASQ_DEBUG(1, "masq_fix_ack_seq() : subtracted previous_delta (%d) from ack_seq\n",ms_seq->previous_delta);
                 }
         }
 
@@ -369,7 +371,7 @@ int ip_masq_app_pkt_out(struct ip_masq *ms, struct sk_buff **skb_p, __u32 maddr)
  *	returns (new - old) skb->len diff.
  */
 
-int ip_masq_app_pkt_in(struct ip_masq *ms, struct sk_buff **skb_p)
+int ip_masq_app_pkt_in(struct ip_masq *ms, struct sk_buff **skb_p, __u32 maddr)
 {
         struct ip_masq_app * mapp;
         struct iphdr *iph;
@@ -414,7 +416,7 @@ int ip_masq_app_pkt_in(struct ip_masq *ms, struct sk_buff **skb_p)
         if ( mapp->pkt_in == NULL )
                 return 0;
 
-        diff = mapp->pkt_in(mapp, ms, skb_p);
+        diff = mapp->pkt_in(mapp, ms, skb_p, maddr);
 
         /*
          *	Update ip_masq seq stuff if len has changed.
@@ -529,7 +531,7 @@ static struct sk_buff * skb_replace(struct sk_buff *skb, int pri, char *o_buf, i
 
                 n_skb = alloc_skb(MAX_HEADER + skb->len + diff, pri);
                 if (n_skb == NULL) {
-                        printk(KERN_ERR "skb_replace(): no room left (from %p)\n",
+                        IP_MASQ_ERR("skb_replace(): no room left (from %p)\n",
                                __builtin_return_address(0));
                         return skb;
 
@@ -589,9 +591,7 @@ struct sk_buff * ip_masq_skb_replace(struct sk_buff *skb, int pri, char *o_buf, 
         if (diff)
         {
                 struct iphdr *iph;
-#if DEBUG_CONFIG_IP_MASQ_APP
-                printk("masq_skb_replace(): pkt resized for %d bytes (len=%ld)\n", diff, skb->len);
-#endif
+                IP_MASQ_DEBUG(1, "masq_skb_replace(): pkt resized for %d bytes (len=%d)\n", diff, skb->len);
                 /*
                  * 	update ip header
                  */

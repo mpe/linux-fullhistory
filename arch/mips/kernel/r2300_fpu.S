@@ -10,7 +10,7 @@
  * Multi-arch abstraction and asm macros for easier reading:
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
  *
- * $Id: r2300_fpu.S,v 1.2 1997/06/25 16:57:15 ralf Exp $
+ * $Id: r2300_fpu.S,v 1.3 1997/12/01 16:54:20 ralf Exp $
  */
 #include <asm/asm.h>
 #include <asm/fpregdef.h>
@@ -30,7 +30,7 @@
 	 nop
 
 	cfc1	t0,fcr31
-	/* Store the 16 odd double precision registers */
+	/* Store the 32 single precision registers */
 	swc1	$f0,(SC_FPREGS+0)(a0)
 	swc1	$f1,(SC_FPREGS+8)(a0)
 	swc1	$f2,(SC_FPREGS+16)(a0)
@@ -76,7 +76,8 @@
 	.set	macro
 	END(r2300_save_fp_context)
 
-/* Restore fpu state:
+/*
+ * Restore fpu state:
  *  - fp gp registers
  *  - cp1 status/control register
  *
@@ -91,7 +92,6 @@
 	bgez	t0,1f
 	 nop
 
-	bgez	t0,1f
 	 lw	t0,SC_FPC_CSR(a0)
 	/* Restore the 16 odd double precision registers only
 	 * when enabled in the cp0 status register.

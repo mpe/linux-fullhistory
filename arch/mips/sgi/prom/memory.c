@@ -1,4 +1,4 @@
-/* $Id: memory.c,v 1.1 1997/06/06 09:37:10 ralf Exp $
+/* $Id: memory.c,v 1.1.1.1 1997/06/01 03:16:40 ralf Exp $
  * memory.c: PROM library functions for acquiring/using memory descriptors
  *           given to us from the ARCS firmware.
  *

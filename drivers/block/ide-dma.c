@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide-dma.c	Version 4.06  December 3, 1997
+ *  linux/drivers/block/ide-dma.c	Version 4.07  December 5, 1997
  *
  *  Copyright (c) 1995-1998  Mark Lord
  *  May be copied or modified under the terms of the GNU General Public License
@@ -49,9 +49,8 @@
  * available from ftp://ftp.intel.com/pub/bios/10004bs0.exe
  * (thanks to Glen Morrell <glen@spin.Stanford.edu> for researching this).
  *
- * Thanks to "Christopher J. Reimer" <reimer@doe.carleton.ca> for fixing the
- * problem with some (all?) ACER motherboards/BIOSs.  Hopefully the fix
- * still works here (?).
+ * Thanks to "Christopher J. Reimer" <reimer@doe.carleton.ca> for
+ * fixing the problem with the BIOS on some Acer motherboards.
  *
  * Thanks to "Benoit Poulot-Cazajous" <poulot@chorus.fr> for testing
  * "TX" chipset compatibility and for providing patches for the "TX" chipset.
@@ -69,16 +68,12 @@
 #include <linux/kernel.h>
 #include <linux/timer.h>
 #include <linux/mm.h>
-#include <linux/ioport.h>
 #include <linux/interrupt.h>
-#include <linux/blkdev.h>
-#include <linux/hdreg.h>
 #include <linux/pci.h>
 #include <linux/bios32.h>
-#include <linux/init.h>
 
 #include <asm/io.h>
-#include <asm/dma.h>
+#include <asm/irq.h>
 
 #include "ide.h"
 
@@ -110,23 +105,19 @@ const char *good_dma_drives[] = {"Micropolis 2112A",
 #define PRD_BYTES	8
 #define PRD_ENTRIES	(PAGE_SIZE / (2 * PRD_BYTES))
 
-static int config_drive_for_dma (ide_drive_t *);
-
 /*
  * dma_intr() is the handler for disk read/write DMA interrupts
  */
-static void dma_intr (ide_drive_t *drive)
+void ide_dma_intr (ide_drive_t *drive)
 {
-	byte stat, dma_stat;
 	int i;
-	struct request *rq = HWGROUP(drive)->rq;
-	unsigned short dma_base = HWIF(drive)->dma_base;
+	byte stat, dma_stat;
 
-	dma_stat = inb(dma_base+2);		/* get DMA status */
-	outb(inb(dma_base)&~1, dma_base);	/* stop DMA operation */
+	dma_stat = HWIF(drive)->dmaproc(ide_dma_end, drive);
 	stat = GET_STAT();			/* get drive status */
 	if (OK_STAT(stat,DRIVE_READY,drive->bad_wstat|DRQ_STAT)) {
-		if ((dma_stat & 7) == 4) {	/* verify good DMA status */
+		if (!dma_stat) {
+			struct request *rq = HWGROUP(drive)->rq;
 			rq = HWGROUP(drive)->rq;
 			for (i = rq->nr_sectors; i > 0;) {
 				i -= rq->current_nr_sectors;
@@ -134,7 +125,7 @@ static void dma_intr (ide_drive_t *drive)
 			}
 			return;
 		}
-		printk("%s: bad DMA status: 0x%02x\n", drive->name, dma_stat);
+		printk("%s: dma_intr: bad DMA status\n", drive->name);
 	}
 	sti();
 	ide_error(drive, "dma_intr", stat);
@@ -195,23 +186,46 @@ int ide_build_dmatable (ide_drive_t *drive)
 				unsigned long xcount, bcount = 0x10000 - (addr & 0xffff);
 				if (bcount > size)
 					bcount = size;
-				*table++ = addr;
+				*table++ = cpu_to_le32(addr);
 				xcount = bcount & 0xffff;
 				if (is_trm290_chipset)
 					xcount = ((xcount >> 2) - 1) << 16;
-				*table++ = xcount;
+				*table++ = cpu_to_le32(xcount);
 				addr += bcount;
 				size -= bcount;
 			}
 		}
 	} while (bh != NULL);
-	if (count) {
-		if (!is_trm290_chipset)
-			*--table |= 0x80000000;	/* set End-Of-Table (EOT) bit */
-		return count;
+	if (!count)
+		printk("%s: empty DMA table?\n", drive->name);
+	else if (!is_trm290_chipset)
+		*--table |= cpu_to_le32(0x80000000);	/* set End-Of-Table (EOT) bit */
+	return count;
+}
+
+static int config_drive_for_dma (ide_drive_t *drive)
+{
+	const char **list;
+	struct hd_driveid *id = drive->id;
+	ide_hwif_t *hwif = HWIF(drive);
+
+	if (id && (id->capability & 1) && !HWIF(drive)->no_autodma) {
+		/* Enable DMA on any drive that has UltraDMA (mode 0/1/2) enabled */
+		if (id->field_valid & 4)	/* UltraDMA */
+			if  ((id->dma_ultra & (id->dma_ultra >> 8) & 7))
+				return hwif->dmaproc(ide_dma_on, drive);
+		/* Enable DMA on any drive that has mode2 DMA (multi or single) enabled */
+		if (id->field_valid & 2)	/* regular DMA */
+			if  ((id->dma_mword & 0x404) == 0x404 || (id->dma_1word & 0x404) == 0x404)
+				return hwif->dmaproc(ide_dma_on, drive);
+		/* Consult the list of known "good" drives */
+		list = good_dma_drives;
+		while (*list) {
+			if (!strcmp(*list++,id->model))
+				return hwif->dmaproc(ide_dma_on, drive);
+		}
 	}
-	printk("%s: empty DMA table?\n", drive->name);
-	return 0;
+	return hwif->dmaproc(ide_dma_off_quietly, drive);
 }
 
 /*
@@ -233,7 +247,7 @@ int ide_build_dmatable (ide_drive_t *drive)
 int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 {
 	ide_hwif_t *hwif = HWIF(drive);
-	unsigned long dma_base = hwif->dma_base;
+	unsigned int dma_base = hwif->dma_base;
 	unsigned int count, reading = 0;
 
 	switch (func) {
@@ -243,21 +257,8 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 		case ide_dma_on:
 			drive->using_dma = (func == ide_dma_on);
 			return 0;
-		case ide_dma_abort:
-			outb(inb(dma_base)&~1, dma_base);	/* stop DMA */
-			return 0;
 		case ide_dma_check:
 			return config_drive_for_dma (drive);
-		case ide_dma_status_bad:
-			return ((inb(dma_base+2) & 7) != 4);	/* verify good DMA status */
-		case ide_dma_transferred:
-			return 0; /* NOT IMPLEMENTED: number of bytes actually transferred */
-		case ide_dma_begin:
-			outb(inb(dma_base)|1, dma_base);	/* begin DMA */
-			return 0;
-		default:
-			printk("ide_dmaproc: unsupported func: %d\n", func);
-			return 1;
 		case ide_dma_read:
 			reading = 1 << 3;
 		case ide_dma_write:
@@ -268,50 +269,37 @@ int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive)
 			outb(inb(dma_base+2)|0x06, dma_base+2);		/* clear status bits */
 			if (drive->media != ide_disk)
 				return 0;
-			ide_set_handler(drive, &dma_intr, WAIT_CMD);	/* issue cmd to drive */
+			ide_set_handler(drive, &ide_dma_intr, WAIT_CMD);/* issue cmd to drive */
 			OUT_BYTE(reading ? WIN_READDMA : WIN_WRITEDMA, IDE_COMMAND_REG);
-			outb(inb(dma_base)|1, dma_base);		/* begin DMA */
+		case ide_dma_begin:
+			outb(inb(dma_base)|1, dma_base);		/* start DMA */
 			return 0;
-	}
-}
-
-static int config_drive_for_dma (ide_drive_t *drive)
-{
-	const char **list;
-	struct hd_driveid *id = drive->id;
-	ide_hwif_t *hwif = HWIF(drive);
-
-	if (id && (id->capability & 1)) {
-		/* Enable DMA on any drive that has UltraDMA (mode 0/1/2) enabled */
-		if (id->field_valid & 4)	/* UltraDMA */
-			if  ((id->dma_ultra & (id->dma_ultra >> 8) & 7))
-				return hwif->dmaproc(ide_dma_on, drive);
-		/* Enable DMA on any drive that has mode2 DMA (multi or single) enabled */
-		if (id->field_valid & 2)	/* regular DMA */
-			if  ((id->dma_mword & 0x404) == 0x404 || (id->dma_1word & 0x404) == 0x404)
-				return hwif->dmaproc(ide_dma_on, drive);
-		/* Consult the list of known "good" drives */
-		list = good_dma_drives;
-		while (*list) {
-			if (!strcmp(*list++,id->model))
-				return hwif->dmaproc(ide_dma_on, drive);
+		case ide_dma_end: /* returns 1 on error, 0 otherwise */
+		{
+			byte dma_stat = inb(dma_base+2);
+			int rc = (dma_stat & 7) != 4;
+			outb(inb(dma_base)&~1, dma_base);		/* stop DMA */
+			outb(dma_stat|6, dma_base+2);	/* clear the INTR & ERROR bits */
+			return rc;	/* verify good DMA status */
 		}
+		default:
+			printk("ide_dmaproc: unsupported func: %d\n", func);
+			return 1;
 	}
-	return hwif->dmaproc(ide_dma_off_quietly, drive);
 }
 
-void ide_setup_dma (ide_hwif_t *hwif, unsigned short dmabase, unsigned int num_ports)
+void ide_setup_dma (ide_hwif_t *hwif, unsigned int dma_base, unsigned int num_ports) /* __init */
 {
 	static unsigned long dmatable = 0;
 	static unsigned leftover = 0;
 
-	printk("    %s: BM-DMA at 0x%04x-0x%04x", hwif->name, dmabase, dmabase + num_ports - 1);
-	if (check_region(dmabase, num_ports)) {
+	printk("    %s: BM-DMA at 0x%04x-0x%04x", hwif->name, dma_base, dma_base + num_ports - 1);
+	if (check_region(dma_base, num_ports)) {
 		printk(" -- ERROR, PORT ADDRESSES ALREADY IN USE\n");
 		return;
 	}
-	request_region(dmabase, num_ports, hwif->name);
-	hwif->dma_base = dmabase;
+	request_region(dma_base, num_ports, hwif->name);
+	hwif->dma_base = dma_base;
 	if (leftover < (PRD_ENTRIES * PRD_BYTES)) {
 		/*
 		 * The BM-DMA uses full 32bit addr, so we can
@@ -328,87 +316,18 @@ void ide_setup_dma (ide_hwif_t *hwif, unsigned short dmabase, unsigned int num_p
 		dmatable += (PRD_ENTRIES * PRD_BYTES);
 		leftover -= (PRD_ENTRIES * PRD_BYTES);
 		hwif->dmaproc = &ide_dmaproc;
+
 		if (hwif->chipset != ide_trm290) {
-			byte dma_stat = inb(dmabase+2);
-			printk(", BIOS DMA settings: %s:%s %s:%s",
-		 	 hwif->drives[0].name, (dma_stat & 0x20) ? "yes" : "no ",
-		 	 hwif->drives[1].name, (dma_stat & 0x40) ? "yes" : "no");
+			byte dma_stat = inb(dma_base+2);
+			printk(", BIOS settings: %s:%s, %s:%s",
+		 	 hwif->drives[0].name, (dma_stat & 0x20) ? "DMA" : "pio",
+		 	 hwif->drives[1].name, (dma_stat & 0x40) ? "DMA" : "pio");
 		}
 		printk("\n");
 	}
 }
 
-#ifdef CONFIG_BLK_DEV_TRM290
-extern void ide_init_trm290(byte, byte, ide_hwif_t *);
-#define INIT_TRM290 (&ide_init_trm290)
-#else
-#define INIT_TRM290 (NULL)
-#endif	/* CONFIG_BLK_DEV_TRM290 */
-
-#ifdef CONFIG_BLK_DEV_OPTI621
-extern void ide_init_opti621(byte, byte, ide_hwif_t *);
-#define INIT_OPTI (&ide_init_opti621)
-#else
-#define INIT_OPTI (NULL)
-#endif	/* CONFIG_BLK_DEV_OPTI621 */
-
-#define DEVID_PIIX	(PCI_VENDOR_ID_INTEL  |(PCI_DEVICE_ID_INTEL_82371_1   <<16))
-#define DEVID_PIIX3	(PCI_VENDOR_ID_INTEL  |(PCI_DEVICE_ID_INTEL_82371SB_1 <<16))
-#define DEVID_PIIX4	(PCI_VENDOR_ID_INTEL  |(PCI_DEVICE_ID_INTEL_82371AB   <<16))
-#define DEVID_VP_IDE 	(PCI_VENDOR_ID_VIA    |(PCI_DEVICE_ID_VIA_82C586_1    <<16))
-#define DEVID_PDC20246	(PCI_VENDOR_ID_PROMISE|(PCI_DEVICE_ID_PROMISE_20246   <<16))
-#define DEVID_RZ1000	(PCI_VENDOR_ID_PCTECH |(PCI_DEVICE_ID_PCTECH_RZ1000   <<16))
-#define DEVID_RZ1001	(PCI_VENDOR_ID_PCTECH |(PCI_DEVICE_ID_PCTECH_RZ1001   <<16))
-#define DEVID_CMD640	(PCI_VENDOR_ID_CMD    |(PCI_DEVICE_ID_CMD_640         <<16))
-#define DEVID_CMD646	(PCI_VENDOR_ID_CMD    |(PCI_DEVICE_ID_CMD_646         <<16))
-#define DEVID_SIS5513	(PCI_VENDOR_ID_SI     |(PCI_DEVICE_ID_SI_5513         <<16))
-#define DEVID_OPTI	(PCI_VENDOR_ID_OPTI   |(PCI_DEVICE_ID_OPTI_82C621     <<16))
-#define DEVID_OPTI2	(PCI_VENDOR_ID_OPTI   |(0xd568 /* from datasheets */  <<16))
-#define DEVID_TRM290	(PCI_VENDOR_ID_TEKRAM |(PCI_DEVICE_ID_TEKRAM_DC290    <<16))
-#define DEVID_NS87410	(PCI_VENDOR_ID_NS     |(PCI_DEVICE_ID_NS_87410        <<16))
-#define DEVID_HT6565	(PCI_VENDOR_ID_HOLTEK |(PCI_DEVICE_ID_HOLTEK_6565     <<16))
-
-typedef struct ide_pci_enablebit_s {
-	byte	reg;	/* byte pci reg holding the enable-bit */
-	byte	mask;	/* mask to isolate the enable-bit */
-	byte	val;	/* value of masked reg when "enabled" */
-} ide_pci_enablebit_t;
-
-typedef struct ide_pci_device_s {
-	unsigned int		id;
-	const char		*name;
-	void 			(*init_hwif)(byte bus, byte fn, ide_hwif_t *hwif);
-	ide_pci_enablebit_t	enablebits[2];
-} ide_pci_device_t;
-
-static ide_pci_device_t ide_pci_chipsets[] = {
-	{DEVID_PIIX,	"PIIX",		NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}} },
-	{DEVID_PIIX3,	"PIIX3",	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}} },
-	{DEVID_PIIX4,	"PIIX4",	NULL,		{{0x41,0x80,0x80}, {0x43,0x80,0x80}} },
-	{DEVID_VP_IDE,	"VP_IDE",	NULL,		{{0x40,0x02,0x02}, {0x40,0x01,0x01}} },
-	{DEVID_PDC20246,"PDC20246",	NULL,		{{0x50,0x02,0x02}, {0x50,0x04,0x04}} },
-	{DEVID_RZ1000,	NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}} },
-	{DEVID_RZ1001,	NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}} },
-	{DEVID_CMD640,	NULL,		NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}} },
-	{DEVID_OPTI,	"OPTI",		INIT_OPTI,	{{0x45,0x80,0x00}, {0x40,0x08,0x00}} },
-	{DEVID_OPTI2,	"OPTI2",	INIT_OPTI,	{{0x45,0x80,0x00}, {0x40,0x08,0x00}} },
-	{DEVID_SIS5513,	"SIS5513",	NULL,		{{0x4a,0x02,0x02}, {0x4a,0x04,0x04}} },
-	{DEVID_CMD646,	"CMD646",	NULL,		{{0x00,0x00,0x00}, {0x51,0x80,0x80}} },
-	{DEVID_TRM290,	"TRM290",	INIT_TRM290,	{{0x00,0x00,0x00}, {0x00,0x00,0x00}} },
-	{DEVID_NS87410,	"NS87410",	NULL,		{{0x43,0x08,0x08}, {0x47,0x08,0x08}} },
-	{DEVID_HT6565,	"HT6565",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}} },
-	{0,		"PCI_IDE",	NULL,		{{0x00,0x00,0x00}, {0x00,0x00,0x00}} }};
-
-__initfunc(static ide_pci_device_t *lookup_devid(unsigned int devid))
-{
-	ide_pci_device_t *d = ide_pci_chipsets;
-	while (d->id && d->id != devid)
-		++d;
-	return d;
-}
-
-/* The next two functions were stolen from cmd640.c, with
-   a few modifications  */
+/* The next two functions were stolen from cmd640.c, with a few modifications  */
 
 __initfunc(static void write_pcicfg_dword (byte fn, unsigned short reg, long val))
 {
@@ -435,244 +354,50 @@ __initfunc(static long read_pcicfg_dword (byte fn, unsigned short reg))
 }
 
 /*
- * Search for an (apparently) unused block of I/O space
- * of "size" bytes in length.
+ * Fetch the DMA Bus-Master-I/O-Base-Address (BMIBA) from PCI space:
  */
-__initfunc(static short find_free_region (unsigned short size))
+unsigned int ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, const char *name) /* __init */
 {
-	unsigned short i, base = 0xe800;
-	for (base = 0xe800; base > 0; base -= 0x800) {
-		if (!check_region(base,size)) {
-			for (i = 0; i < size; i++) {
-				if (inb(base+i) != 0xff)
-					goto next;
-			}
-			return base;	/* success */
-		}
-	next:
-	}
-	return 0;	/* failure */
-}
+	unsigned int new, dma_base = 0;
+	byte bus = hwif->pci_bus, fn = hwif->pci_fn;
 
-/*
- * Fetch the Bus-Master I/O Base-Address (BMIBA) from PCI space:
- */
-__initfunc(static unsigned int ide_get_or_set_bmiba (byte bus, byte fn, const char *name))
-{
-	unsigned int bmiba = 0;
-	unsigned short base;
-	int rc;
-
-	if ((rc = pcibios_read_config_dword(bus, fn, 0x20, &bmiba))) {
-		printk("%s: failed to read BMIBA\n", name);
-	} else if ((bmiba &= 0xfff0) == 0) {
-	        printk("%s: BMIBA is invalid (0x%04x, BIOS problem)\n", name, bmiba);
-		base = find_free_region(16);
-	        if (base) {
-			printk("%s: setting BMIBA to 0x%04x\n", name, base);
-			pcibios_write_config_dword(bus, fn, 0x20, base | 1);
-			pcibios_read_config_dword(bus, fn, 0x20, &bmiba);
-			bmiba &= 0xfff0;
-			if (bmiba != base) {
+	if (hwif->mate && hwif->mate->dma_base) {
+		dma_base = hwif->mate->dma_base - (hwif->channel ? 0 : 8);
+	} else if (pcibios_read_config_dword(bus, fn, 0x20, &dma_base)) {
+		printk("%s: failed to read dma_base\n", name);
+		dma_base = 0;
+	} else if ((dma_base &= ~0xf) == 0 || dma_base == ~0xf) {
+		printk("%s: dma_base is invalid (0x%04x, BIOS problem)\n", name, dma_base);
+		new = ide_find_free_region(16 + extra);
+		hwif->no_autodma = 1;	/* default DMA off if we had to configure it here */
+		if (new) {
+			printk("%s: setting dma_base to 0x%04x\n", name, new);
+			new |= 1;
+			(void) pcibios_write_config_dword(bus, fn, 0x20, new);
+			(void) pcibios_read_config_dword(bus, fn, 0x20, &dma_base);
+			if (dma_base != new) {
 				if (bus == 0) {
 					printk("%s: operation failed, bypassing BIOS to try again\n", name);
-					write_pcicfg_dword(fn, 0x20, base | 1);
-					bmiba = read_pcicfg_dword(fn, 0x20) & 0xfff0;
+					write_pcicfg_dword(fn, 0x20, new);
+					dma_base = read_pcicfg_dword(fn, 0x20);
 				}
-				if (bmiba != base) {
+				if (dma_base != new) {
 					printk("%s: operation failed, DMA disabled\n", name);
-					bmiba = 0;
+					dma_base = 0;
 				}
 			}
+			dma_base &= ~0xf;
 		}
 	}
-	return bmiba;
-}
-
-/*
- * Match a PCI IDE port against an entry in ide_hwifs[],
- * based on io_base port if possible.
- */
-__initfunc(ide_hwif_t *ide_match_hwif (unsigned int io_base))
-{
-	int h;
-	ide_hwif_t *hwif;
-
-	/*
-	 * Look for a hwif with matching io_base specified using
-	 * parameters to ide_setup().
-	 */
-	for (h = 0; h < MAX_HWIFS; ++h) {
-		hwif = &ide_hwifs[h];
-		if (hwif->io_ports[IDE_DATA_OFFSET] == io_base) {
-			if (hwif->chipset == ide_generic)
-				return hwif; /* a perfect match */
+	if (dma_base) {
+		if (extra) /* PDC20246 */
+			request_region(dma_base+16, extra, name);
+		dma_base += hwif->channel ? 8 : 0;
+		if (inb(dma_base+2) & 0x80) {
+			printk("%s: simplex device:  DMA disabled\n", name);
+			dma_base = 0;
 		}
 	}
-	/*
-	 * Look for a hwif with matching io_base default value.
-	 * If chipset is "ide_unknown", then claim that hwif slot.
-	 * Otherwise, some other chipset has already claimed it..  :(
-	 */
-	for (h = 0; h < MAX_HWIFS; ++h) {
-		hwif = &ide_hwifs[h];
-		if (hwif->io_ports[IDE_DATA_OFFSET] == io_base) {
-			if (hwif->chipset == ide_unknown)
-				return hwif; /* match */
-			return NULL;	/* already claimed */
-		}
-	}
-	/*
-	 * Okay, there is no hwif matching our io_base,
-	 * so we'll just claim an unassigned slot.
-	 * Give preference to claiming ide2/ide3 before ide0/ide1,
-	 * just in case there's another interface yet-to-be-scanned
-	 * which uses ports 1f0/170 (the ide0/ide1 defaults).
-	 */
-	for (h = 0; h < MAX_HWIFS; ++h) {
-		int hwifs[] = {2,3,1,0}; /* assign 3rd/4th before 1st/2nd */
-		hwif = &ide_hwifs[hwifs[h]];
-		if (hwif->chipset == ide_unknown)
-			return hwif;	/* pick an unused entry */
-	}
-	return NULL;
-}
-				
-/*
- * ide_setup_pci_device() looks at the primary/secondary interfaces
- * on a PCI IDE device and, if they are enabled, prepares the IDE driver
- * for use with them.  This generic code works for most PCI chipsets.
- *
- * One thing that is not standardized is the location of the
- * primary/secondary interface "enable/disable" bits.  For chipsets that
- * we "know" about, this information is in the ide_pci_device_t struct;
- * for all other chipsets, we just assume both interfaces are enabled.
- */
-__initfunc(static void ide_setup_pci_device (byte bus, byte fn, unsigned int bmiba, ide_pci_device_t *d))
-{
-	unsigned int port, at_least_one_hwif_enabled = 0;
-	unsigned short base = 0, ctl = 0;
-	byte tmp = 0;
-	ide_hwif_t *hwif, *mate = NULL;
-
-	for (port = 0; port <= 1; ++port) {
-		ide_pci_enablebit_t *e = &(d->enablebits[port]);
-		if (e->reg) {
-			if (pcibios_read_config_byte(bus, fn, e->reg, &tmp)) {
-				printk("%s: unable to read pci reg 0x%x\n", d->name, e->reg);
-			} else if ((tmp & e->mask) != e->val)
-				continue;	/* port not enabled */
-		}
-		if (pcibios_read_config_word(bus, fn, 0x14+(port*8), &ctl))
-			ctl = 0;
-		if ((ctl &= 0xfffc) == 0)
-			ctl = 0x3f4 ^ (port << 7);
-		if (pcibios_read_config_word(bus, fn, 0x10+(port*8), &base))
-			base = 0;
-		if ((base &= 0xfff8) == 0)
-			base = 0x1F0 ^ (port << 7);
-		if ((hwif = ide_match_hwif(base)) == NULL) {
-			printk("%s: no room in hwif table for port %d\n", d->name, port);
-			continue;
-		}
-		hwif->chipset = ide_pci;
-		hwif->pci_port = port;
-		if (mate) {
-			hwif->mate = mate;
-			mate->mate = hwif;
-		}
-		mate = hwif;	/* for next iteration */
-		if (hwif->io_ports[IDE_DATA_OFFSET] != base) {
-			ide_init_hwif_ports(hwif->io_ports, base, NULL);
-			hwif->io_ports[IDE_CONTROL_OFFSET] = ctl + 2;
-		}
-		if (bmiba) {
-			if ((inb(bmiba+2) & 0x80)) {	/* simplex DMA only? */
-				printk("%s: simplex device:  DMA disabled\n", d->name);
-			} else {	/* supports simultaneous DMA on both channels */
-				ide_setup_dma(hwif, bmiba + (8 * port), 8);
-			}
-		}
-		if (d->id) {  /* For "known" chipsets, allow other irqs during i/o */
-			hwif->drives[0].unmask = 1;
-			hwif->drives[1].unmask = 1;
-		}
-		if (d->init_hwif)  /* Call chipset-specific routine for each enabled hwif */
-			d->init_hwif(bus, fn, hwif);
-		at_least_one_hwif_enabled = 1;
-	}
-	if (!at_least_one_hwif_enabled)
-		printk("%s: neither IDE port enabled (BIOS)\n", d->name);
-}
-
-/*
- * ide_scan_pci_device() examines all functions of a PCI device,
- * looking for IDE interfaces and/or devices in ide_pci_chipsets[].
- */
-__initfunc(static inline void ide_scan_pci_device (unsigned int bus, unsigned int fn))
-{
-	unsigned int devid, ccode;
-	unsigned short pcicmd, class;
-	ide_pci_device_t *d;
-	byte hedt, progif;
-
-	if (pcibios_read_config_byte(bus, fn, 0x0e, &hedt))
-		hedt = 0;
-	do {
-		if (pcibios_read_config_dword(bus, fn, 0x00, &devid)
-		 || devid == 0xffffffff
-		 || pcibios_read_config_dword(bus, fn, 0x08, &ccode))
-			return;
-		d = lookup_devid(devid);
-		if (d->name == NULL)	/* some chips (cmd640, rz1000) are handled elsewhere */
-			continue;
-		progif = (ccode >> 8) & 0xff;
-		class = ccode >> 16;
-		if (d->id || class == PCI_CLASS_STORAGE_IDE) {
-			if (d->id)
-				printk("%s: IDE device on PCI bus %d function %d\n", d->name, bus, fn);
-			else
-				printk("%s: unknown IDE device on PCI bus %d function %d, VID=%04x, DID=%04x\n",
-					d->name, bus, fn, devid & 0xffff, devid >> 16);
-			/*
-	 		 * See if IDE ports are enabled
-	 		 */
-			if (pcibios_read_config_word(bus, fn, 0x04, &pcicmd)) {
-				printk("%s: error accessing PCICMD\n", d->name);
-			} else if ((pcicmd & 1) == 0) {
-				printk("%s: device disabled (BIOS)\n", d->name);
-			} else {
-				unsigned int bmiba = 0;
-				/*
-			 	 * Check for Bus-Master DMA capability
-			 	 */
-				if (d->id == DEVID_PDC20246 || (class == PCI_CLASS_STORAGE_IDE && (progif & 0x80))) {
-					if ((!(pcicmd & 4) || !(bmiba = ide_get_or_set_bmiba(bus, fn, d->name)))) {
-						printk("%s: Bus-Master DMA disabled (BIOS), pcicmd=0x%04x, progif=0x%02x, bmiba=0x%04x\n", d->name, pcicmd, progif, bmiba);
-					}
-				}
-				/*
-				 * Setup the IDE ports
-				 */
-				ide_setup_pci_device(bus, fn, bmiba, d);
-			}
-		}
-	} while (hedt == 0x80 && (++fn & 7));
-}
-
-/*
- * ide_scan_pcibus() gets invoked at boot time from ide.c
- */
-__initfunc(void ide_scan_pcibus (void))
-{
-	unsigned int bus, dev;
-
-	if (!pcibios_present())
-		return;
-	for (bus = 0; bus <= 255; ++bus) {
-		for (dev = 0; dev <= 31; ++dev) {
-			ide_scan_pci_device(bus, dev << 3);
-		}
-	}
+	return dma_base;
 }
 

@@ -5,7 +5,7 @@
  *
  *		The IP to API glue.
  *		
- * Version:	$Id: ip_sockglue.c,v 1.28 1997/11/17 17:36:08 kuznet Exp $
+ * Version:	$Id: ip_sockglue.c,v 1.29 1997/11/28 15:32:39 alan Exp $
  *
  * Authors:	see ip.c
  *
@@ -229,7 +229,10 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 	int val=0,err;
 #if defined(CONFIG_IP_FIREWALL) || defined(CONFIG_IP_ACCT)
 	struct ip_fw tmp_fw;
-#endif	
+#endif
+#ifdef CONFIG_IP_MASQUERADE
+	char masq_ctl[IP_FW_MASQCTL_MAX];
+#endif
 
 	if(optlen>=sizeof(int)) {
 		if(get_user(val, (int *) optval))
@@ -462,6 +465,20 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			if(copy_from_user(&tmp_fw,optval,optlen))
 				return -EFAULT;
 			err=ip_fw_ctl(optname, &tmp_fw,optlen);
+			return -err;	/* -0 is 0 after all */
+			
+#endif
+#ifdef CONFIG_IP_MASQUERADE
+		case IP_FW_MASQ_ADD:
+		case IP_FW_MASQ_DEL:
+		case IP_FW_MASQ_FLUSH:
+			if(!suser())
+				return -EPERM;
+			if(optlen>sizeof(masq_ctl) || optlen<1)
+				return -EINVAL;
+			if(copy_from_user(masq_ctl,optval,optlen))
+				return -EFAULT;
+			err=ip_masq_ctl(optname, masq_ctl,optlen);
 			return -err;	/* -0 is 0 after all */
 			
 #endif

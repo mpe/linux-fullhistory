@@ -5,7 +5,9 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (C) 1995
+ * Copyright (C) 1995, 1996, 1997 Ralf Baechle
+ *
+ * $Id: floppy.h,v 1.3 1997/09/07 03:59:02 ralf Exp $
  */
 #ifndef __ASM_MIPS_FLOPPY_H
 #define __ASM_MIPS_FLOPPY_H
@@ -20,26 +22,29 @@
 #define fd_inb(port)			feature->fd_inb(port)
 #define fd_outb(value,port)		feature->fd_outb(value,port)
 
-#define fd_enable_dma()			feature->fd_enable_dma()
-#define fd_disable_dma()		feature->fd_disable_dma()
-#define fd_request_dma()		feature->fd_request_dma()
-#define fd_free_dma()			feature->fd_free_dma()
-#define fd_clear_dma_ff()		feature->fd_clear_dma_ff()
-#define fd_set_dma_mode(mode)		feature->fd_set_dma_mode(mode)
-#define fd_set_dma_addr(addr)		feature->fd_set_dma_addr(virt_to_bus(addr))
-#define fd_set_dma_count(count)		feature->fd_set_dma_count(count)
-#define fd_get_dma_residue()		feature->fd_get_dma_residue()
-#define fd_enable_irq()			feature->fd_enable_irq()
-#define fd_disable_irq()		feature->fd_disable_irq()
-#define fd_request_irq()        request_irq(FLOPPY_IRQ, floppy_interrupt, \
-					    SA_INTERRUPT|SA_SAMPLE_RANDOM, \
-				            "floppy", NULL)
-#define fd_free_irq()           free_irq(FLOPPY_IRQ, NULL);
+#define fd_enable_dma(channel)		feature->fd_enable_dma(channel)
+#define fd_disable_dma(channel)		feature->fd_disable_dma(channel)
+#define fd_request_dma(channel)		feature->fd_request_dma(channel)
+#define fd_free_dma(channel)		feature->fd_free_dma(channel)
+#define fd_clear_dma_ff(channel)	feature->fd_clear_dma_ff(channel)
+#define fd_set_dma_mode(channel, mode)	feature->fd_set_dma_mode(channel, mode)
+#define fd_set_dma_addr(channel, addr)	feature->fd_set_dma_addr(channel, \
+					         virt_to_bus(addr))
+#define fd_set_dma_count(channel,count)	feature->fd_set_dma_count(channel,count)
+#define fd_get_dma_residue(channel)	feature->fd_get_dma_residue(channel)
+
+#define fd_enable_irq(irq)		feature->fd_enable_irq(irq)
+#define fd_disable_irq(irq)		feature->fd_disable_irq(irq)
+#define fd_request_irq(irq)		request_irq(irq, floppy_interrupt, \
+						    SA_INTERRUPT \
+					            | SA_SAMPLE_RANDOM, \
+				                    "floppy", NULL)
+#define fd_free_irq(irq)		free_irq(irq, NULL);
 
 #define MAX_BUFFER_SECTORS 24
 
 /* Pure 2^n version of get_order */
-extern __inline__ int __get_order(unsigned long size)
+extern inline int __get_order(unsigned long size)
 {
 	int order;
 
@@ -52,7 +57,7 @@ extern __inline__ int __get_order(unsigned long size)
 	return order;
 }
 
-extern __inline__ unsigned long mips_dma_mem_alloc(unsigned long size)
+extern inline unsigned long mips_dma_mem_alloc(unsigned long size)
 {
 	int order = __get_order(size);
 	unsigned long mem;
@@ -67,11 +72,11 @@ extern __inline__ unsigned long mips_dma_mem_alloc(unsigned long size)
 	return mem;
 }
 
-extern __inline__ void mips_dma_mem_free(unsigned long addr, unsigned long size)
+extern inline void mips_dma_mem_free(unsigned long addr, unsigned long size)
 {       
 #ifdef CONFIG_MIPS_JAZZ
         if (mips_machgroup == MACH_GROUP_JAZZ)
-		vdma_free(vdma_phys2log(PHYSADDR(addr)));
+		vdma_free(PHYSADDR(addr));
 #endif
 	free_pages(addr, __get_order(size));	
 }

@@ -7,10 +7,15 @@
  */
 
 #include <linux/config.h>
+#include <linux/init.h>
+#include <linux/ioport.h>
+#include <linux/hdreg.h>
+#include <linux/blkdev.h>
+#include <linux/proc_fs.h>
 #include <asm/ide.h>
 
 /*
- * This is the multiple IDE interface driver, as evolved from hd.c.  
+ * This is the multiple IDE interface driver, as evolved from hd.c.
  * It supports up to four IDE interfaces, on one or more IRQs (usually 14 & 15).
  * There can be up to two drives per interface, as per the ATA-2 spec.
  *
@@ -22,7 +27,7 @@
 
 /******************************************************************************
  * IDE driver configuration options (play with these as desired):
- * 
+ *
  * REALLY_SLOW_IO can be defined in ide.c and ide-cd.c, if necessary
  */
 #undef REALLY_FAST_IO			/* define if ide ports are perfect */
@@ -164,18 +169,13 @@ typedef unsigned char	byte;	/* used everywhere */
 #define WAIT_CMD	(10*HZ)	/* 10sec  - maximum wait for an IRQ to happen */
 #define WAIT_MIN_SLEEP	(2*HZ/100)	/* 20msec - minimum sleep time */
 
-#if defined(CONFIG_BLK_DEV_HT6560B) || defined(CONFIG_BLK_DEV_PDC4030) || defined(CONFIG_BLK_DEV_TRM290)
 #define SELECT_DRIVE(hwif,drive)				\
 {								\
 	if (hwif->selectproc)					\
 		hwif->selectproc(drive);			\
-	else							\
-		OUT_BYTE((drive)->select.all, hwif->io_ports[IDE_SELECT_OFFSET]); \
+	OUT_BYTE((drive)->select.all, hwif->io_ports[IDE_SELECT_OFFSET]); \
 }
-#else
-#define SELECT_DRIVE(hwif,drive)  OUT_BYTE((drive)->select.all, hwif->io_ports[IDE_SELECT_OFFSET]);
-#endif	/* CONFIG_BLK_DEV_HT6560B || CONFIG_BLK_DEV_PDC4030 */
-		
+
 /*
  * Now for the data we need to maintain per-drive:  ide_drive_t
  */
@@ -244,7 +244,7 @@ typedef struct ide_drive_s {
 	byte		bios_sect;	/* BIOS/fdisk/LILO sectors per track */
 	unsigned short	bios_cyl;	/* BIOS/fdisk/LILO number of cyls */
 	unsigned short	cyl;		/* "real" number of cyls */
-	unsigned int	timing_data;	/* for use by tuneproc()'s */
+	unsigned int	drive_data;	/* for use by tuneproc/selectproc as needed */
 	void		  *hwif;	/* actually (ide_hwif_t *) */
 	struct wait_queue *wqueue;	/* used to wait for drive in open() */
 	struct hd_driveid *id;		/* drive model identification info */
@@ -252,6 +252,7 @@ typedef struct ide_drive_s {
 	char		name[4];	/* drive name, such as "hda" */
 	void 		*driver;	/* (ide_driver_t *) */
 	void		*driver_data;	/* extra driver data */
+	struct proc_dir_entry *proc;	/* /proc/ide/ directory entry */
 	} ide_drive_t;
 
 /*
@@ -265,12 +266,9 @@ typedef struct ide_drive_s {
  * Returns 1 if DMA read/write could not be started, in which case the caller
  * should either try again later, or revert to PIO for the current request.
  */
-typedef enum {	ide_dma_read = 0,	ide_dma_write = 1,
-		ide_dma_abort = 2,	ide_dma_check = 3,
-		ide_dma_status_bad = 4,	ide_dma_transferred = 5,
-		ide_dma_begin = 6,	ide_dma_on = 7,
-		ide_dma_off = 8,	ide_dma_off_quietly = 9 }
-	ide_dma_action_t;
+typedef enum {	ide_dma_read,	ide_dma_write,	ide_dma_begin,	ide_dma_end,
+		ide_dma_check,	ide_dma_on,	ide_dma_off,	ide_dma_off_quietly
+	} ide_dma_action_t;
 
 typedef int (ide_dmaproc_t)(ide_dma_action_t, ide_drive_t *);
 
@@ -289,7 +287,7 @@ typedef int (ide_dmaproc_t)(ide_dma_action_t, ide_drive_t *);
 typedef void (ide_tuneproc_t)(ide_drive_t *, byte);
 
 /*
- * This is used to provide HT6560B & PDC4030 & TRM290 interface support.
+ * This is used to provide support for strange interfaces
  */
 typedef void (ide_selectproc_t) (ide_drive_t *);
 
@@ -301,8 +299,16 @@ typedef enum {	ide_unknown,	ide_generic,	ide_pci,
 		ide_cmd640,	ide_dtc2278,	ide_ali14xx,
 		ide_qd6580,	ide_umc8672,	ide_ht6560b,
 		ide_pdc4030,	ide_rz1000,	ide_trm290,
-		ide_4drives }
-	hwif_chipset_t;
+		ide_4drives
+	} hwif_chipset_t;
+
+typedef struct ide_pci_devid_s {
+	unsigned short	vid;
+	unsigned short	did;
+} ide_pci_devid_t;
+
+#define IDE_PCI_DEVID_NULL	((ide_pci_devid_t){0,0})
+#define IDE_PCI_DEVID_EQ(a,b)	(a.vid == b.vid && a.did == b.did)
 
 typedef struct hwif_s {
 	struct hwif_s	*next;		/* for linked-list in ide_hwgroup_t */
@@ -311,13 +317,14 @@ typedef struct hwif_s {
 	ide_drive_t	drives[MAX_DRIVES];	/* drive info */
 	struct gendisk	*gd;		/* gendisk structure */
 	ide_tuneproc_t	*tuneproc;	/* routine to tune PIO mode for drives */
-#if defined(CONFIG_BLK_DEV_HT6560B) || defined(CONFIG_BLK_DEV_PDC4030) || defined(CONFIG_BLK_DEV_TRM290)
 	ide_selectproc_t *selectproc;	/* tweaks hardware to select drive */
-#endif
 	ide_dmaproc_t	*dmaproc;	/* dma read/write/abort routine */
 	unsigned long	*dmatable;	/* dma physical region descriptor table */
 	struct hwif_s	*mate;		/* other hwif from same PCI chip */
-	unsigned short	dma_base;	/* base addr for dma ports (triton) */
+	unsigned int	dma_base;	/* base addr for dma ports */
+	unsigned int	config_data;	/* for use by chipset-specific code */
+	unsigned int	select_data;	/* for use by chipset-specific code */
+	struct proc_dir_entry *proc;	/* /proc/ide/ directory entry */
 	int		irq;		/* our irq number */
 	byte		major;		/* our major number */
 	char 		name[6];	/* name of interface, eg. "ide0" */
@@ -327,11 +334,12 @@ typedef struct hwif_s {
 	unsigned	present    : 1;	/* this interface exists */
 	unsigned	serialized : 1;	/* serialized operation with mate hwif */
 	unsigned	sharing_irq: 1;	/* 1 = sharing irq with another hwif */
-#ifdef CONFIG_BLK_DEV_PDC4030
-	unsigned	is_pdc4030_2: 1;/* 2nd i/f on pdc4030 */
-#endif /* CONFIG_BLK_DEV_PDC4030 */
-	unsigned	reset      : 1; /* reset after probe */
-	unsigned	pci_port   : 1; /* for dual-port chips: 0=primary, 1=secondary */
+	unsigned	reset      : 1;	/* reset after probe */
+	unsigned	no_autodma : 1;	/* don't automatically enable DMA at boot */
+	byte		channel;	/* for dual-port chips: 0=primary, 1=secondary */
+	byte		pci_bus;	/* for pci chipsets */
+	byte		pci_fn;		/* for pci chipsets */
+	ide_pci_devid_t	pci_devid;	/* for pci chipsets: {VID,DID} */
 #if (DISK_RECOVERY_TIME > 0)
 	unsigned long	last_time;	/* time when previous rq was done */
 #endif
@@ -354,6 +362,20 @@ typedef struct hwgroup_s {
 	} ide_hwgroup_t;
 
 /*
+ * /proc/ide interface
+ */
+typedef struct {
+	char *name;
+	read_proc_t *read_proc;
+	write_proc_t *write_proc;
+} ide_proc_entry_t;
+
+void proc_ide_init(void);
+void ide_add_proc_entries(ide_drive_t *drive, ide_proc_entry_t *p);
+void ide_remove_proc_entries(ide_drive_t *drive, ide_proc_entry_t *p);
+read_proc_t proc_ide_read_geometry;
+
+/*
  * Subdrivers support.
  */
 #define IDE_SUBDRIVER_VERSION	1
@@ -370,6 +392,8 @@ typedef unsigned long (ide_capacity_proc)(ide_drive_t *);
 typedef void	(ide_special_proc)(ide_drive_t *);
 
 typedef struct ide_driver_s {
+	const char			*name;
+	const char			*version;
 	byte				media;
 	unsigned busy			: 1;
 	unsigned supports_dma		: 1;
@@ -384,6 +408,7 @@ typedef struct ide_driver_s {
 	ide_pre_reset_proc		*pre_reset;
 	ide_capacity_proc		*capacity;
 	ide_special_proc		*special;
+	ide_proc_entry_t		*proc;
 	} ide_driver_t;
 
 #define DRIVER(drive)		((ide_driver_t *)((drive)->driver))
@@ -406,7 +431,7 @@ typedef struct ide_module_s {
 /*
  * ide_hwifs[] is the master data structure used to keep track
  * of just about everything in ide.c.  Whenever possible, routines
- * should be using pointers to a drive (ide_drive_t *) or 
+ * should be using pointers to a drive (ide_drive_t *) or
  * pointers to a hwif (ide_hwif_t *), rather than indexing this
  * structure directly (the allocation/layout may change!).
  *
@@ -529,7 +554,7 @@ typedef enum
  * If action is ide_next, then the rq is queued immediately after
  * the currently-being-processed-request (if any), and the function
  * returns without waiting for the new rq to be completed.  As above,
- * This is VERY DANGEROUS, and is intended for careful use by the 
+ * This is VERY DANGEROUS, and is intended for careful use by the
  * ATAPI tape/cdrom driver code.
  *
  * If action is ide_end, then the rq is queued at the end of the
@@ -538,7 +563,7 @@ typedef enum
  * use by the ATAPI tape/cdrom driver code.
  */
 int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t action);
- 
+
 /*
  * Clean up after success/failure of an explicit drive cmd.
  * stat/err are used only when (HWGROUP(drive)->rq->cmd == IDE_DRIVE_CMD).
@@ -613,10 +638,16 @@ ide_drive_t *ide_scan_devices (byte media, ide_driver_t *driver, int n);
 int ide_register_subdriver (ide_drive_t *drive, ide_driver_t *driver, int version);
 int ide_unregister_subdriver (ide_drive_t *drive);
 
+#ifdef CONFIG_BLK_DEV_IDEPCI
+unsigned int ide_find_free_region (unsigned short size) __init;
+void ide_scan_pcibus (void) __init;
+#endif
 #ifdef CONFIG_BLK_DEV_IDEDMA
 int ide_build_dmatable (ide_drive_t *drive);
+void ide_dma_intr  (ide_drive_t *drive);
 int ide_dmaproc (ide_dma_action_t func, ide_drive_t *drive);
-void ide_setup_dma (ide_hwif_t *hwif, unsigned short dmabase, unsigned int num_ports);
+void ide_setup_dma (ide_hwif_t *hwif, unsigned int dmabase, unsigned int num_ports) __init;
+unsigned int ide_get_or_set_dma_base (ide_hwif_t *hwif, int extra, const char *name) __init;
 #endif
 
 #ifdef CONFIG_BLK_DEV_IDE

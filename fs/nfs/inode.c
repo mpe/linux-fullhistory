@@ -35,9 +35,6 @@
 #define NFSDBG_FACILITY		NFSDBG_VFS
 #define NFS_PARANOIA 1
 
-extern void nfs_invalidate_dircache_sb(struct super_block *);
-extern int  check_failed_request(struct inode *);
-
 static void nfs_read_inode(struct inode *);
 static void nfs_put_inode(struct inode *);
 static void nfs_delete_inode(struct inode *);
@@ -99,8 +96,9 @@ nfs_delete_inode(struct inode * inode)
 	 */
 	if (NFS_WRITEBACK(inode) != NULL) {
 		unsigned long timeout = jiffies + 5*HZ;
-		printk("NFS: inode %ld, invalidating pending RPC requests\n",
-			inode->i_ino);
+#ifdef NFS_DEBUG_VERBOSE
+printk("nfs_delete_inode: inode %ld has pending RPC requests\n", inode->i_ino);
+#endif
 		nfs_invalidate_pages(inode);
 		while (NFS_WRITEBACK(inode) != NULL && jiffies < timeout) {
 			current->state = TASK_INTERRUPTIBLE;
@@ -112,7 +110,7 @@ nfs_delete_inode(struct inode * inode)
 			printk("NFS: Arghhh, stuck RPC requests!\n");
 	}
 
-	failed = check_failed_request(inode);
+	failed = nfs_check_failed_request(inode);
 	if (failed)
 		printk("NFS: inode %ld had %d failed requests\n",
 			inode->i_ino, failed);
@@ -355,8 +353,6 @@ nfs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
  * instead of inode number.  We use this technique instead of using
  * the vfs read_inode function because there is no way to pass the
  * file handle or current attributes into the read_inode function.
- * We just have to be careful not to subvert iget's special handling
- * of mount points.
  */
 struct inode *
 nfs_fhget(struct super_block *sb, struct nfs_fh *fhandle,
@@ -422,8 +418,10 @@ printk("nfs_fhget: impossible\n");
 		inode->i_size  = fattr->size;
 		inode->i_mtime = fattr->mtime.seconds;
 		NFS_OLDMTIME(inode) = fattr->mtime.seconds;
+		*NFS_FH(inode) = *fhandle;
 	}
-	*NFS_FH(inode) = *fhandle;
+	if (memcmp(NFS_FH(inode), fhandle, sizeof(struct nfs_fh)))
+		printk("nfs_fhget: fhandle changed!\n");
 	nfs_refresh_inode(inode, fattr);
 	dprintk("NFS: fhget(%x/%ld ct=%d)\n",
 		inode->i_dev, inode->i_ino,

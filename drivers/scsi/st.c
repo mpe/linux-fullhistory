@@ -580,6 +580,7 @@ scsi_tape_open(struct inode * inode, struct file * filp)
       STp->buffer = st_buffers[i];
     (STp->buffer)->in_use = 1;
     (STp->buffer)->writing = 0;
+    (STp->buffer)->last_result_fatal = 0;
 
     flags = filp->f_flags;
     STp->write_prot = ((flags & O_ACCMODE) == O_RDONLY);

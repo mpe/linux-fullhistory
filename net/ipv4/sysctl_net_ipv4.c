@@ -1,7 +1,7 @@
 /*
  * sysctl_net_ipv4.c: sysctl interface to net IPV4 subsystem.
  *
- * $Id: sysctl_net_ipv4.c,v 1.21 1997/10/17 01:21:18 davem Exp $
+ * $Id: sysctl_net_ipv4.c,v 1.22 1997/11/28 15:32:42 alan Exp $
  *
  * Begun April 1, 1996, Mike Shaver.
  * Added /proc/sys/net/ipv4 directory entry (empty =) ). [MS]
@@ -46,6 +46,12 @@ extern int sysctl_icmp_echo_ignore_broadcasts;
 extern int sysctl_ipfrag_low_thresh;
 extern int sysctl_ipfrag_high_thresh; 
 extern int sysctl_ipfrag_time;
+
+/* From ip_output.c */
+extern int sysctl_ip_dynaddr;
+
+/* From ip_masq.c */
+extern int sysctl_ip_masq_debug;
 
 extern int sysctl_tcp_cong_avoidance;
 extern int sysctl_tcp_hoe_retransmits;
@@ -198,6 +204,12 @@ ctl_table ipv4_table[] = {
 	 &sysctl_ipfrag_high_thresh, sizeof(int), 0644, NULL, &proc_dointvec},
 	{NET_IPV4_IPFRAG_LOW_THRESH, "ipfrag_low_thresh",
 	 &sysctl_ipfrag_low_thresh, sizeof(int), 0644, NULL, &proc_dointvec},
+	{NET_IPV4_IP_DYNADDR, "ip_dynaddr",
+	 &sysctl_ip_dynaddr, sizeof(int), 0644, NULL, &proc_dointvec},
+#ifdef CONFIG_IP_MASQUERADE
+	{NET_IPV4_IP_MASQ_DEBUG, "ip_masq_debug",
+	 &sysctl_ip_masq_debug, sizeof(int), 0644, NULL, &proc_dointvec},
+#endif
 	{NET_IPV4_IPFRAG_TIME, "ipfrag_time",
 	 &sysctl_ipfrag_time, sizeof(int), 0644, NULL, &proc_dointvec_jiffies},
 	{NET_IPV4_TCP_MAX_KA_PROBES, "tcp_max_ka_probes",

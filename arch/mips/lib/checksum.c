@@ -14,7 +14,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
- * $Id: checksum.c,v 1.5 1997/08/08 18:12:51 miguel Exp $
+ * $Id: checksum.c,v 1.2 1997/07/29 18:37:35 ralf Exp $
  */
 #include <net/checksum.h>
 #include <linux/types.h>

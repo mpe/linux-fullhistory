@@ -173,56 +173,60 @@ static int msdos_find(struct inode *dir,const char *name,int len,
 	return fat_scan(dir,msdos_name,bh,de,ino,scantype);
 }
 
-
+/*
+ * Compute the hash for the msdos name corresponding to the dentry.
+ * Note: if the name is invalid, we leave the hash code unchanged so
+ * that the existing dentry can be used. The msdos fs routines will
+ * return ENOENT or EINVAL as appropriate.
+ */
 static int msdos_hash(struct dentry *dentry, struct qstr *qstr)
 {
-	unsigned long hash;
-	char msdos_name[MSDOS_NAME];
+	struct fat_mount_options *options = & (MSDOS_SB(dentry->d_sb)->options);
 	int error;
-	int i;
-	struct fat_mount_options *options = 
-		& (MSDOS_SB(dentry->d_inode->i_sb)->options);
+	char msdos_name[MSDOS_NAME];
 	
-	error = msdos_format_name(options->name_check,
-				  qstr->name, qstr->len, msdos_name,1,
-				  options->dotsOK);
-	if(error)
-		return error;
-	hash = init_name_hash();
-	for(i=0; i< MSDOS_NAME; i++)
-		hash = partial_name_hash(msdos_name[i], hash);
-	qstr->hash = end_name_hash(hash);
+	error = msdos_format_name(options->name_check, qstr->name, qstr->len,
+					msdos_name, 1, options->dotsOK);
+	if (!error)
+		qstr->hash = full_name_hash(msdos_name, MSDOS_NAME);
 	return 0;
 }
 
-
-static int msdos_cmp(struct dentry *dentry,       
-		     struct qstr *a, struct qstr *b)
+/*
+ * Compare two msdos names. If either of the names are invalid,
+ * we fall back to doing the standard name comparison.
+ */
+static int msdos_cmp(struct dentry *dentry, struct qstr *a, struct qstr *b)
 {
-	char a_msdos_name[MSDOS_NAME],b_msdos_name[MSDOS_NAME];
+	struct fat_mount_options *options = & (MSDOS_SB(dentry->d_sb)->options);
 	int error;
-	struct fat_mount_options *options = 
-		& (MSDOS_SB(dentry->d_inode->i_sb)->options);
+	char a_msdos_name[MSDOS_NAME], b_msdos_name[MSDOS_NAME];
 
-	error = msdos_format_name(options->name_check,
-				  a->name, a->len, a_msdos_name,1,
-				  options->dotsOK);
-	if(error)
-		return error;
-	error = msdos_format_name(options->name_check,
-				  b->name, b->len, b_msdos_name,1,
-				  options->dotsOK);
-	if(error)
-		return error;
+	error = msdos_format_name(options->name_check, a->name, a->len,
+					a_msdos_name, 1, options->dotsOK);
+	if (error)
+		goto old_compare;
+	error = msdos_format_name(options->name_check, b->name, b->len,
+					b_msdos_name, 1, options->dotsOK);
+	if (error)
+		goto old_compare;
+	error = memcmp(a_msdos_name, b_msdos_name, MSDOS_NAME);
+out:
+	return error;
 
-	return memcmp(a_msdos_name, b_msdos_name, MSDOS_NAME);
+old_compare:
+	error = 1;
+	if (a->len == b->len)
+		error = memcmp(a->name, b->name, a->len);
+	goto out;
 }
 
 
 static struct dentry_operations msdos_dentry_operations = {
-	0, 		/* d_revalidate */
+	NULL, 		/* d_revalidate */
 	msdos_hash,
-	msdos_cmp
+	msdos_cmp,
+	NULL		/* d_delete */
 };
 
 struct super_block *msdos_read_super(struct super_block *sb,void *data, int silent)
@@ -233,14 +237,16 @@ struct super_block *msdos_read_super(struct super_block *sb,void *data, int sile
 
 	MSDOS_SB(sb)->options.isvfat = 0;
 	sb->s_op = &msdos_sops;
-	res =  fat_read_super(sb, data, silent);
-	if (res == NULL) {
-		sb->s_dev = 0;
-		MOD_DEC_USE_COUNT;
-		return NULL;
-	}
+	res = fat_read_super(sb, data, silent);
+	if (res == NULL)
+		goto out_fail;
 	sb->s_root->d_op = &msdos_dentry_operations;
 	return res;
+
+out_fail:
+	sb->s_dev = 0;
+	MOD_DEC_USE_COUNT;
+	return NULL;
 }
 
 
@@ -290,11 +296,14 @@ int msdos_lookup(struct inode *dir,struct dentry *dentry)
 	PRINTK (("msdos_lookup 6\n"));
 	while (MSDOS_I(inode)->i_old) {
 		next = MSDOS_I(inode)->i_old;
+#ifdef MSDOS_PARANOIA
+printk("msdos_lookup: ino %ld, old ino=%ld\n", inode->i_ino, next->i_ino);
+if (MSDOS_I(next)->i_depend != inode)
+printk("msdos_lookup: depend=%p, inode=%p??\n", MSDOS_I(next)->i_depend, inode);
+#endif
+		next->i_count++;
 		iput(inode);
-		if (!(inode = iget(next->i_sb,next->i_ino))) {
-			fat_fs_panic(dir->i_sb,"msdos_lookup: Can't happen");
-			return -ENOENT; /* N.B. Maybe ENOMEM is better? */
-		}
+		inode = next;
 	}
 	PRINTK (("msdos_lookup 7\n"));
 	d_add(dentry, inode);

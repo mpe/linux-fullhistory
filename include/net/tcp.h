@@ -181,6 +181,9 @@ static __inline__ void tcp_sk_unbindify(struct sock *sk)
 				 * to be no checksum			*/
 
 #define TCP_SYNACK_PERIOD	(HZ/2)
+#define TCP_QUICK_TRIES		8  /* How often we try to retransmit, until
+				    * we tell the LL layer that it is something
+				    * wrong (e.g. that it can expire redirects) */
 
 /*
  *	TCP option
@@ -462,8 +465,6 @@ extern int tcp_chkaddr(struct sk_buff *);
 /* tcp_timer.c */
 #define     tcp_reset_msl_timer(x,y,z)	net_reset_timer(x,y,z)
 extern void tcp_reset_xmit_timer(struct sock *, int, unsigned long);
-extern void tcp_clear_xmit_timer(struct sock *, int);
-extern int  tcp_timer_is_set(struct sock *, int);
 extern void tcp_init_xmit_timers(struct sock *);
 extern void tcp_clear_xmit_timers(struct sock *);
 
@@ -743,5 +744,50 @@ extern __inline__ void tcp_dec_slow_timer(int timer)
 
 	atomic_dec(&slt->count);
 }
+
+extern const char timer_bug_msg[];
+
+static inline void tcp_clear_xmit_timer(struct sock *sk, int what)
+{
+	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
+	struct timer_list *timer;
+	
+	switch (what) {
+	case TIME_RETRANS:
+		timer = &tp->retransmit_timer;
+		break;
+	case TIME_DACK:
+		timer = &tp->delack_timer;
+		break;
+	case TIME_PROBE0:
+		timer = &tp->probe_timer;
+		break;	
+	default:
+		printk(timer_bug_msg);
+		return;
+	};
+	del_timer(timer);
+}
+
+static inline int tcp_timer_is_set(struct sock *sk, int what)
+{
+	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
+
+	switch (what) {
+	case TIME_RETRANS:
+		return tp->retransmit_timer.next != NULL;
+		break;
+	case TIME_DACK:
+		return tp->delack_timer.next != NULL;
+		break;
+	case TIME_PROBE0:
+		return tp->probe_timer.next != NULL;
+		break;	
+	default:
+		printk(timer_bug_msg);
+	};
+	return 0;
+}
+
 
 #endif	/* _TCP_H */

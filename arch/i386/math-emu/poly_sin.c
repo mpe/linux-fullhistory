@@ -4,9 +4,9 @@
  |  Computation of an approximation of the sin function and the cosine       |
  |  function by a polynomial.                                                |
  |                                                                           |
- | Copyright (C) 1992,1993,1994                                              |
- |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
+ | Copyright (C) 1992,1993,1994,1997                                         |
+ |                  W. Metzenthen, 22 Parker St, Ormond, Vic 3163, Australia |
+ |                  E-mail   billm@suburbia.net                              |
  |                                                                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
@@ -15,6 +15,7 @@
 #include "exception.h"
 #include "reg_constant.h"
 #include "fpu_emu.h"
+#include "fpu_system.h"
 #include "control_w.h"
 #include "poly.h"
 
@@ -62,35 +63,26 @@ static const unsigned long long neg_terms_h[N_COEFF_NH] =
 /*--- poly_sine() -----------------------------------------------------------+
  |                                                                           |
  +---------------------------------------------------------------------------*/
-void	poly_sine(FPU_REG const *arg, FPU_REG *result)
+void	poly_sine(FPU_REG *st0_ptr)
 {
   int                 exponent, echange;
   Xsig                accumulator, argSqrd, argTo4;
   unsigned long       fix_up, adj;
   unsigned long long  fixed_arg;
+  FPU_REG	      result;
 
-
-#ifdef PARANOID
-  if ( arg->tag == TW_Zero )
-    {
-      /* Return 0.0 */
-      reg_move(&CONST_Z, result);
-      return;
-    }
-#endif PARANOID
-
-  exponent = arg->exp - EXP_BIAS;
+  exponent = exponent(st0_ptr);
 
   accumulator.lsw = accumulator.midw = accumulator.msw = 0;
 
   /* Split into two ranges, for arguments below and above 1.0 */
   /* The boundary between upper and lower is approx 0.88309101259 */
-  if ( (exponent < -1) || ((exponent == -1) && (arg->sigh <= 0xe21240aa)) )
+  if ( (exponent < -1) || ((exponent == -1) && (st0_ptr->sigh <= 0xe21240aa)) )
     {
       /* The argument is <= 0.88309101259 */
 
-      argSqrd.msw = arg->sigh; argSqrd.midw = arg->sigl; argSqrd.lsw = 0;
-      mul64_Xsig(&argSqrd, &significand(arg));
+      argSqrd.msw = st0_ptr->sigh; argSqrd.midw = st0_ptr->sigl; argSqrd.lsw = 0;
+      mul64_Xsig(&argSqrd, &significand(st0_ptr));
       shr_Xsig(&argSqrd, 2*(-1-exponent));
       argTo4.msw = argSqrd.msw; argTo4.midw = argSqrd.midw;
       argTo4.lsw = argSqrd.lsw;
@@ -107,29 +99,29 @@ void	poly_sine(FPU_REG const *arg, FPU_REG *result)
       shr_Xsig(&accumulator, 2);    /* Divide by four */
       accumulator.msw |= 0x80000000;  /* Add 1.0 */
 
-      mul64_Xsig(&accumulator, &significand(arg));
-      mul64_Xsig(&accumulator, &significand(arg));
-      mul64_Xsig(&accumulator, &significand(arg));
+      mul64_Xsig(&accumulator, &significand(st0_ptr));
+      mul64_Xsig(&accumulator, &significand(st0_ptr));
+      mul64_Xsig(&accumulator, &significand(st0_ptr));
 
       /* Divide by four, FPU_REG compatible, etc */
-      exponent = 3*exponent + EXP_BIAS;
+      exponent = 3*exponent;
 
       /* The minimum exponent difference is 3 */
-      shr_Xsig(&accumulator, arg->exp - exponent);
+      shr_Xsig(&accumulator, exponent(st0_ptr) - exponent);
 
       negate_Xsig(&accumulator);
-      XSIG_LL(accumulator) += significand(arg);
+      XSIG_LL(accumulator) += significand(st0_ptr);
 
       echange = round_Xsig(&accumulator);
 
-      result->exp = arg->exp + echange;
+      setexponentpos(&result, exponent(st0_ptr) + echange);
     }
   else
     {
       /* The argument is > 0.88309101259 */
-      /* We use sin(arg) = cos(pi/2-arg) */
+      /* We use sin(st(0)) = cos(pi/2-st(0)) */
 
-      fixed_arg = significand(arg);
+      fixed_arg = significand(st0_ptr);
 
       if ( exponent == 0 )
 	{
@@ -192,16 +184,16 @@ void	poly_sine(FPU_REG const *arg, FPU_REG *result)
 
       echange = round_Xsig(&accumulator);
 
-      result->exp = EXP_BIAS - 1 + echange;
+      setexponentpos(&result, echange - 1);
     }
 
-  significand(result) = XSIG_LL(accumulator);
-  result->tag = TW_Valid;
-  result->sign = arg->sign;
+  significand(&result) = XSIG_LL(accumulator);
+  setsign(&result, getsign(st0_ptr));
+  FPU_copy_to_reg0(&result, TAG_Valid);
 
 #ifdef PARANOID
-  if ( (result->exp >= EXP_BIAS)
-      && (significand(result) > 0x8000000000000000LL) )
+  if ( (exponent(&result) >= 0)
+      && (significand(&result) > 0x8000000000000000LL) )
     {
       EXCEPTION(EX_INTERNAL|0x150);
     }
@@ -214,42 +206,36 @@ void	poly_sine(FPU_REG const *arg, FPU_REG *result)
 /*--- poly_cos() ------------------------------------------------------------+
  |                                                                           |
  +---------------------------------------------------------------------------*/
-void	poly_cos(FPU_REG const *arg, FPU_REG *result)
+void	poly_cos(FPU_REG *st0_ptr)
 {
+  FPU_REG	      result;
   long int            exponent, exp2, echange;
   Xsig                accumulator, argSqrd, fix_up, argTo4;
   unsigned long       adj;
   unsigned long long  fixed_arg;
 
-
 #ifdef PARANOID
-  if ( arg->tag == TW_Zero )
-    {
-      /* Return 1.0 */
-      reg_move(&CONST_1, result);
-      return;
-    }
-
-  if ( (arg->exp > EXP_BIAS)
-      || ((arg->exp == EXP_BIAS)
-	  && (significand(arg) > 0xc90fdaa22168c234LL)) )
+  if ( (exponent(st0_ptr) > 0)
+      || ((exponent(st0_ptr) == 0)
+	  && (significand(st0_ptr) > 0xc90fdaa22168c234LL)) )
     {
       EXCEPTION(EX_Invalid);
-      reg_move(&CONST_QNaN, result);
+      FPU_copy_to_reg0(&CONST_QNaN, TAG_Special);
       return;
     }
 #endif PARANOID
 
-  exponent = arg->exp - EXP_BIAS;
+  exponent = exponent(st0_ptr);
 
   accumulator.lsw = accumulator.midw = accumulator.msw = 0;
 
-  if ( (exponent < -1) || ((exponent == -1) && (arg->sigh <= 0xb00d6f54)) )
+  if ( (exponent < -1) || ((exponent == -1) && (st0_ptr->sigh <= 0xb00d6f54)) )
     {
       /* arg is < 0.687705 */
 
-      argSqrd.msw = arg->sigh; argSqrd.midw = arg->sigl; argSqrd.lsw = 0;
-      mul64_Xsig(&argSqrd, &significand(arg));
+      argSqrd.msw = st0_ptr->sigh; argSqrd.midw = st0_ptr->sigl;
+      argSqrd.lsw = 0;
+      mul64_Xsig(&argSqrd, &significand(st0_ptr));
 
       if ( exponent < -1 )
 	{
@@ -270,8 +256,8 @@ void	poly_cos(FPU_REG const *arg, FPU_REG *result)
 		      N_COEFF_PH-1);
       negate_Xsig(&accumulator);
 
-      mul64_Xsig(&accumulator, &significand(arg));
-      mul64_Xsig(&accumulator, &significand(arg));
+      mul64_Xsig(&accumulator, &significand(st0_ptr));
+      mul64_Xsig(&accumulator, &significand(st0_ptr));
       shr_Xsig(&accumulator, -2*(1+exponent));
 
       shr_Xsig(&accumulator, 3);
@@ -290,20 +276,20 @@ void	poly_cos(FPU_REG const *arg, FPU_REG *result)
       if ( accumulator.msw == 0 )
 	{
 	  /* The result is 1.0 */
-	  reg_move(&CONST_1, result);
+	  FPU_copy_to_reg0(&CONST_1, TAG_Valid);
+	  return;
 	}
       else
 	{
-	  significand(result) = XSIG_LL(accumulator);
+	  significand(&result) = XSIG_LL(accumulator);
       
 	  /* will be a valid positive nr with expon = -1 */
-	  *(short *)&(result->sign) = 0;
-	  result->exp = EXP_BIAS - 1;
+	  setexponentpos(&result, -1);
 	}
     }
   else
     {
-      fixed_arg = significand(arg);
+      fixed_arg = significand(st0_ptr);
 
       if ( exponent == 0 )
 	{
@@ -392,14 +378,15 @@ void	poly_cos(FPU_REG const *arg, FPU_REG *result)
 
       echange = round_Xsig(&accumulator);
 
-      result->exp = exp2 + EXP_BIAS + echange;
-      *(short *)&(result->sign) = 0;      /* Is a valid positive nr */
-      significand(result) = XSIG_LL(accumulator);
+      setexponentpos(&result, exp2 + echange);
+      significand(&result) = XSIG_LL(accumulator);
     }
 
+  FPU_copy_to_reg0(&result, TAG_Valid);
+
 #ifdef PARANOID
-  if ( (result->exp >= EXP_BIAS)
-      && (significand(result) > 0x8000000000000000LL) )
+  if ( (exponent(&result) >= 0)
+      && (significand(&result) > 0x8000000000000000LL) )
     {
       EXCEPTION(EX_INTERNAL|0x151);
     }

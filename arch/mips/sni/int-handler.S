@@ -2,6 +2,8 @@
  * SNI RM200 PCI specific interrupt handler code.
  *
  * Copyright (C) 1994 - 1997 by Ralf Baechle
+ *
+ * $Id: int-handler.S,v 1.3 1997/12/01 16:39:24 ralf Exp $
  */
 #include <asm/asm.h>
 #include <linux/config.h>
@@ -18,18 +20,77 @@
 		SAVE_ALL
 		REG_S	sp,PT_OR2(sp)
 		CLI
-		/*
-		 * Asume we received an interrupt from the PCI ASIC.
-		 */
 		.set	at
-		lui	s0,%hi(SNI_PORT_BASE)
+
+		lb	t0,led_cache
+		addiu	t0,1
+		sb	t0,led_cache
+		sb	t0,PCIMT_CSLED
+		.data
+led_cache:	.byte	0
+		.text
+
+		mfc0	t0,CP0_STATUS
+		mfc0	t1,CP0_CAUSE
+		and	t0,t1
+
+		 andi	t1,t0,0x0800			# hardware interrupt 1
+		bnez	t1,hwint1
+		 andi	t1,t0,0x4000			# hardware interrupt 4
+		bnez	t1,eth_int
+
+		 andi	t1,t0,0x1000			# hardware interrupt 2
+		bnez	t1,hwint2
+		 andi	t1,t0,0x2000			# hardware interrupt 3
+		bnez	t1,hwint3
+		 andi	t1,t0,0x8000			# hardware interrupt 5
+		bnez	t1,hwint5
+		 andi	t1,t0,0x0400			# hardware interrupt 0
+		bnez	t1,hwint0
+		 nop
+
+		j	spurious_interrupt		# Nothing up ...
+		 nop
+
+ ##############################################################################
+
+swint0:		PANIC("swint0")
+swint1:		PANIC("swint1")
+
+ /* ------------------------------------------------------------------------ */
+
+hwint1:		lbu	t0,PCIMT_CSITPEND
+
+		 andi	t1,t0,0x20
+		bnez	t1,eisa_int
+
+#ifdef CONFIG_SCSI_NCR53C8XX
+		 andi	t1,t0,0x40
+		beqz	t1,scsi_int
+#endif
+		 nop
+
+		j	spurious_interrupt
+		 nop
+
+ /* ------------------------------------------------------------------------ */
+
+hwint0:		lbu	t0,PCIMT_CSITPEND
+
+		 andi	t1,t0,0x01
+		beqz	t1,int2
+
+go_spurious:	j	spurious_interrupt		# we got fooled
+		 nop
+
+eisa_int:	lui	s0,%hi(SNI_PORT_BASE)
 		li	a0,0x0f
 		sb	a0,%lo(SNI_PORT_BASE+0x20)(s0)	# poll command
 		lb	a0,%lo(SNI_PORT_BASE+0x20)(s0)	# read result
 		bgtz	a0,poll_second
-		andi	a0,7
+		 andi	a0,7
 		beq	a0,2,poll_second		# cascade?
-		li	s1,1				# delay slot
+		 li	s1,1
 		/*
 		 * Acknowledge first pic
 		 */
@@ -45,12 +106,8 @@
 		/*
 		 * Now call the real handler
 		 */
-		la	t3,IRQ_vectors
-		sll	t2,a0,PTRLOG
-		addu	t3,t2
-		LONG_L	t3,(t3)
-		jalr	t3
-		nop					# delay slot
+		jal	do_IRQ
+		 move	a1,sp
 		/*
 		 * Unblock first pic
 		 */
@@ -59,8 +116,8 @@
 		nor	s1,zero,s1
 		and	t1,s1
 		sb	t1,%lo(cache_21)(s4)
-		jr	v0
-		sb	t1,%lo(SNI_PORT_BASE+0x21)(s0)	# delay slot
+		j	ret_from_irq
+		 sb	t1,%lo(SNI_PORT_BASE+0x21)(s0)
 
 		/*
 		 * Cascade interrupt from second PIC
@@ -69,8 +126,8 @@
 poll_second:	li	a0,0x0f
 		sb	a0,%lo(SNI_PORT_BASE+0xa0)(s0)	# poll command
 		lb	a0,%lo(SNI_PORT_BASE+0xa0)(s0)	# read result
-		bgtz	a0,3f
-		andi	a0,7
+		bgtz	a0,go_spurious
+		 andi	a0,7
 		/*
 		 * Acknowledge second pic
 		 */
@@ -87,13 +144,9 @@ poll_second:	li	a0,0x0f
 		/*
 		 * Now call the real handler
 		 */
-		la	t3,IRQ_vectors
 		addiu	a0,8
-		sll	t2,a0,PTRLOG
-		addu	t3,t2
-		LONG_L	t3,(t3)
-		jalr	t3
-		nop					# delay slot
+		jal	do_IRQ
+		 move	a1,sp
 		/*
 		 * Unblock second pic
 		 */
@@ -103,72 +156,49 @@ poll_second:	li	a0,0x0f
 		nor	s1,zero,s1
 		and	t1,t1,s1
 		sb	t1,%lo(cache_A1)(s4)
-		jr	v0
-		sb	t1,%lo(SNI_PORT_BASE+0xa1)(s0)	# delay slot
-
-/*
- * FIXME:  This is definatly wrong but I'll have to do it this way
- *         'till I get more hardware info.
- * XXX: Apparently the Lance is attached to interrupt #5.
- */
-#ifdef CONFIG_PCNET32
-
-/*
- * FIXME: detect this address
- */
-#define LANCE_BASE 0xbb000100
-
-/* Offsets from base I/O address. */
-#define LANCE_DATA 0x10
-#define LANCE_ADDR 0x12
-#define LANCE_RESET 0x14
-#define LANCE_BUS_IF 0x16
-#define LANCE_TOTAL_SIZE 0x18
+		j	ret_from_irq
+		 sb	t1,%lo(SNI_PORT_BASE+0xa1)(s0)
 
 /*
  * ... check if we were interrupted by the Lance ...
  */
-3:		lh	s0,LANCE_BASE+LANCE_ADDR
-		sh	zero,LANCE_BASE+LANCE_ADDR
-		lh	t1,LANCE_BASE+LANCE_DATA
-		andi	t2,t1,0x80
-		beqz	t1,3f				# no Lance interrupt?
-		mfc0	t0,CP0_STATUS			# delay slot
-		ori	t0,0x041f
-		xori	t0,0x041e
+eth_int:	mfc0	s0,CP0_STATUS
+		ori	t0,s0,0x4000
+		xori	t0,0x4000
 		mtc0	t0,CP0_STATUS
+
 		li	a0,PCIMT_IRQ_ETHERNET
 		jal	do_IRQ
-		 move	a1,sp				# delay slot
-		sh	s0,LANCE_BASE+LANCE_ADDR
-		mfc0	t0,CP0_STATUS
-		ori	t0,0x0401
-		xori	t0,0x0001
-		mtc0	t0,CP0_STATUS
-		j	ret_from_sys_call
-		nop					# delay slot
+		 move	a1,sp
 
-#endif /* CONFIG_PCNET32 */
+		mtc0	s0,CP0_STATUS
+
+		j	ret_from_irq
+		 nop
 
 #ifdef CONFIG_SCSI_NCR53C8XX
 
 /*
  * ... check if we were interrupted by the NCR ...
  */
-3:		lb	t0,PCIMT_CSITPEND
-		andi	t0,0x40
-		bnez	t0,3f				# bit 6 == 0 -> SCSI IRQ
-		nop					# delay slot
-		jal	do_fast_IRQ
-		li	a0,PCIMT_IRQ_SCSI		# delay slot
-		j	return
-		nop					# delay slot
+scsi_int:	li	a0,PCIMT_IRQ_SCSI
+		jal	do_IRQ
+		 move	a1,sp
+		j	ret_from_irq
+		 nop
 
 #endif /* CONFIG_SCSI_NCR53C8XX */
 
-/*
- * "Jump extender" to reach spurious_interrupt
- */
-3:		j	spurious_interrupt
-		nop					# delay slot
+pci_int:	PANIC("Received PCI interrupt but no handler yet ...\n")
+1:		j	1b
+		 nop
+
+int2:		PANIC("Received int2 but no handler yet ...\n")
+1:		j	1b
+		 nop
+
+hwint2:		PANIC("hwint2 and no handler yet")
+hwint3:		PANIC("hwint3 and no handler yet")
+hwint5:		PANIC("hwint5 and no handler yet")
+
 		END(sni_rm200_pci_handle_int)

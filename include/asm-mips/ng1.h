@@ -24,3 +24,51 @@ struct ng1_info {
         u8 bt445rev;
         u8 paneltype;
 };
+
+#define GFX_NAME_NEWPORT "NG1"
+
+/* ioctls */
+#define NG1_SET_CURSOR_HOTSPOT 21001
+struct ng1_set_cursor_hotspot {
+	unsigned short xhot;
+        unsigned short yhot;
+};
+
+#define NG1_SETDISPLAYMODE     21006
+struct ng1_setdisplaymode_args {
+        int wid;
+        unsigned int mode;
+};
+
+#define NG1_SETGAMMARAMP0      21007
+struct ng1_setgammaramp_args {
+        unsigned char red   [256];
+        unsigned char green [256];
+        unsigned char blue  [256];
+};
+
+
+
+#define GFX_NAME_NEWPORT "NG1"
+
+/* ioctls */
+#define NG1_SET_CURSOR_HOTSPOT 21001
+struct ng1_set_cursor_hotspot {
+	unsigned short xhot;
+        unsigned short yhot;
+};
+
+#define NG1_SETDISPLAYMODE     21006
+struct ng1_setdisplaymode_args {
+        int wid;
+        unsigned int mode;
+};
+
+#define NG1_SETGAMMARAMP0      21007
+struct ng1_setgammaramp_args {
+        unsigned char red   [256];
+        unsigned char green [256];
+        unsigned char blue  [256];
+};
+
+

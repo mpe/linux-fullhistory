@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1996, 1997 by Ralf Baechle
  *
- * $Id: setup.c,v 1.2 1997/08/08 18:11:59 miguel Exp $
+ * $Id: setup.c,v 1.2 1997/07/23 17:40:54 ralf Exp $
  */
 #include <linux/config.h>
 #include <linux/init.h>

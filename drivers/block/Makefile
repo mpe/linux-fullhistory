@@ -79,11 +79,17 @@ L_OBJS += hd.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_IDE),y)
-LX_OBJS += ide.o
-L_OBJS += ide-probe.o
+  LX_OBJS += ide.o
+  ifeq ($(CONFIG_PROC_FS),y)
+    L_OBJS += ide-proc.o
+  endif
+  L_OBJS += ide-probe.o
 else
   ifeq ($(CONFIG_BLK_DEV_IDE),m)
   MX_OBJS += ide.o
+  ifeq ($(CONFIG_PROC_FS),y)
+    M_OBJS += ide-proc.o
+  endif
   M_OBJS += ide-probe.o
   endif
 endif
@@ -94,6 +100,10 @@ endif
 
 ifeq ($(CONFIG_BLK_DEV_CMD640),y)
 L_OBJS += cmd640.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_IDEPCI),y)
+L_OBJS += ide-pci.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_IDEDMA),y)
@@ -135,6 +145,10 @@ endif
 
 ifeq ($(CONFIG_BLK_DEV_OPTI621),y)
 L_OBJS += opti621.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_NS87415),y)
+L_OBJS += ns87415.o
 endif
 
 ifeq ($(CONFIG_BLK_DEV_IDEDISK),y)

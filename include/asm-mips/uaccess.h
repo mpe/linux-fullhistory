@@ -7,7 +7,7 @@
  *
  * Copyright (C) 1996, 1997 by Ralf Baechle
  *
- * $Id: uaccess.h,v 1.4 1997/07/01 08:23:56 ralf Exp $
+ * $Id: uaccess.h,v 1.5 1997/12/01 16:44:08 ralf Exp $
  */
 #ifndef __ASM_MIPS_UACCESS_H
 #define __ASM_MIPS_UACCESS_H
@@ -321,23 +321,23 @@ if (copy_from_user(to,from,n)) \
 	void *__cu_end; \
 	__asm__ __volatile__( \
 		".set\tnoreorder\n\t" \
-		"1:\tsb\t$0,(%0)\n\t" \
+		"1:\taddiu\t%0,1\n" \
 		"bne\t%0,%1,1b\n\t" \
-		"addiu\t%0,1\n" \
+		"sb\t$0,-1(%0)\n\t" \
 		"2:\t.set\treorder\n\t" \
 		".section\t.fixup,\"ax\"\n" \
 		"3:\t.set\tnoat\n\t" \
-		"la\t$1,2b\n\t" \
-		"jr\t$1\n\t" \
+		"subu\t%0,1\n\t" \
+		"j\t2b\n\t" \
 		".set\tat\n\t" \
 		".previous\n\t" \
 		".section\t__ex_table,\"a\"\n\t" \
 		STR(PTR)"\t1b,3b\n\t" \
 		".previous" \
 		:"=r" (addr), "=r" (__cu_end) \
-		:"0" (addr), "1" (addr + size - 1), "i" (-EFAULT) \
+		:"0" (addr), "1" (addr + size), "i" (-EFAULT) \
 		:"$1","memory"); \
-		size = __cu_end - (addr) - 1; \
+		size = __cu_end - (addr); \
 })
 
 #define clear_user(addr,n) ({ \

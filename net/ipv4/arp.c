@@ -1,6 +1,6 @@
 /* linux/net/inet/arp.c
  *
- * Version:	$Id: arp.c,v 1.56 1997/11/24 12:51:47 freitag Exp $
+ * Version:	$Id: arp.c,v 1.57 1997/12/09 16:11:30 jes Exp $
  *
  * Copyright (C) 1994 by Florian  La Roche
  *
@@ -1532,7 +1532,8 @@ int arp_req_set(struct arpreq *r, struct device * dev)
 		int err;
 
 		if ((r->arp_flags & ATF_PERM) && !(r->arp_flags & ATF_COM))
-			return -EINVAL;
+			r->arp_flags |= ATF_COM;
+
 		err = ip_route_output(&rt, ip, 0, 1, dev ? dev->ifindex : 0);
 		if (err)
 			return err;

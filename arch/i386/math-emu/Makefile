@@ -12,17 +12,22 @@ CFLAGS	:= $(CFLAGS) $(PARANOID) $(DEBUG) -fno-builtin $(MATH_EMULATION)
 .S.o:
 	$(CC) -D__ASSEMBLY__ $(PARANOID) -c $<
 
-L_OBJS =fpu_entry.o div_small.o errors.o \
-	fpu_arith.o fpu_aux.o fpu_etc.o fpu_trig.o \
+# From 'C' language sources:
+C_OBJS =fpu_entry.o errors.o \
+	fpu_arith.o fpu_aux.o fpu_etc.o fpu_tags.o fpu_trig.o \
 	load_store.o get_address.o \
 	poly_atan.o poly_l2.o poly_2xm1.o poly_sin.o poly_tan.o \
-	reg_add_sub.o reg_compare.o reg_constant.o reg_ld_str.o \
-	reg_div.o reg_mul.o reg_norm.o \
-	reg_u_add.o reg_u_div.o reg_u_mul.o reg_u_sub.o \
-	reg_round.o \
+	reg_add_sub.o reg_compare.o reg_constant.o reg_convert.o \
+	reg_ld_str.o reg_divide.o reg_mul.o
+
+# From 80x86 assembler sources:
+A_OBJS =reg_u_add.o reg_u_div.o reg_u_mul.o reg_u_sub.o \
+	div_small.o reg_norm.o reg_round.o \
 	wm_shrx.o wm_sqrt.o \
 	div_Xsig.o polynom_Xsig.o round_Xsig.o \
 	shr_Xsig.o mul_Xsig.o
+
+L_OBJS =$(C_OBJS) $(A_OBJS)
 
 include $(TOPDIR)/Rules.make
 

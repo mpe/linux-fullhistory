@@ -8,7 +8,7 @@
 #elif defined (__MIPSEL__)
 #  include <linux/byteorder/little_endian.h>
 #else
-#  error What's that? MIPS, but neither MIPSEB, nor MIPSEL???
+#  error "MIPS, but neither __MIPSEB__, nor __MIPSEL__???"
 #endif
 
 #endif /* _MIPS_BYTEORDER_H */

@@ -5,10 +5,13 @@
  * License.  See the file "COPYING" in the main directory of this archive
  * for more details.
  *
- * Copyright (c) 1994, 1995, 1996  Ralf Baechle
+ * Copyright (c) 1994 - 1997  Ralf Baechle (ralf@gnu.org)
  */
 #ifndef __ASM_MIPS_BITOPS_H
 #define __ASM_MIPS_BITOPS_H
+
+#include <linux/types.h>
+#include <linux/byteorder/swab.h>		/* sigh ... */
 
 #ifdef __KERNEL__
 
@@ -466,11 +469,6 @@ extern __inline__ int ext2_test_bit(int nr, const void * addr)
 
 #define ext2_find_first_zero_bit(addr, size) \
         ext2_find_next_zero_bit((addr), (size), 0)
-
-static __inline__ unsigned long __swab32(unsigned long val)
-{
-	return ((val>>24)|((val>>8)&0xff00)|((val<<8)&0xff0000)|(val<<24));
-}
 
 extern __inline__ unsigned long ext2_find_next_zero_bit(void *addr, unsigned long size, unsigned long offset)
 {

@@ -30,6 +30,7 @@
  *		code bits, and added compatibility to 2.1.x.
  * 970912       Enabled board on open and disable on close.
  * 971107	Took account of recent VFS changes (broke read).
+ * 971210       Disable board on initialisation in case board already ticking.
  */
 
 #include <linux/module.h>
@@ -578,6 +579,12 @@ __initfunc(int pcwatchdog_init(void))
 	debug_off();
 
 	pcwd_showprevstate();
+
+	/*  Disable the board  */
+	if (revision == PCWD_REVISION_C) {
+		outb_p(0xA5, current_readport + 3);
+		outb_p(0xA5, current_readport + 3);
+	}
 
 	if (revision == PCWD_REVISION_A)
 		request_region(current_readport, 2, "PCWD Rev.A (Berkshire)");

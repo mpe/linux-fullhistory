@@ -3,17 +3,8 @@
 
 #include <asm/sigcontext.h>
 
-void restore_i387_soft(struct _fpstate *buf);
-struct _fpstate * save_i387_soft(struct _fpstate * buf);
-
-struct fpu_reg {
-	char sign;
-	char tag;
-	long exp;
-	unsigned sigl;
-	unsigned sigh;
-};
-
+void restore_i387_soft(void *s387, struct _fpstate *buf);
+struct _fpstate * save_i387_soft(void *s387, struct _fpstate * buf);
 
 /* This structure matches the layout of the data saved to the stack
    following a device-not-present interrupt, part of it saved
@@ -42,5 +33,4 @@ struct info {
 	long ___vm86_fs;
 	long ___vm86_gs;
 };
-
 #endif

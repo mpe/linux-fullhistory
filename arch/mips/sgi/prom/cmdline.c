@@ -1,4 +1,4 @@
-/* $Id: cmdline.c,v 1.1 1997/06/06 09:36:53 ralf Exp $
+/* $Id: cmdline.c,v 1.2 1997/12/02 05:51:09 ralf Exp $
  * cmdline.c: Kernel command line creation using ARCS argc/argv.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
@@ -52,6 +52,8 @@ void prom_init_cmdline(void)
 	pic_cont:
 		actr++;
 	}
+	if (cp != &(arcs_cmdline[0])) /* get rid of trailing space */
+		--cp;
 	*cp = '\0';
 
 #ifdef DEBUG_CMDLINE

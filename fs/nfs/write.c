@@ -68,8 +68,6 @@
 
 #define NFSDBG_FACILITY		NFSDBG_PAGECACHE
 
-int check_failed_request(struct inode *);
-
 static void			nfs_wback_lock(struct rpc_task *task);
 static void			nfs_wback_result(struct rpc_task *task);
 
@@ -331,7 +329,7 @@ remove_failed_request(struct nfs_wreq * req)
  * Find and release all failed requests for this inode.
  */
 int
-check_failed_request(struct inode * inode)
+nfs_check_failed_request(struct inode * inode)
 {
 	struct nfs_wreq * req;
 	int found = 0;
@@ -496,8 +494,7 @@ wait_on_write_request(struct nfs_wreq *req)
 	}
 	remove_wait_queue(&page->wait, &wait);
 	current->state = TASK_RUNNING;
-	if (atomic_read(&page->count) == 1)
-		printk("NFS: page unused while waiting\n");
+	/* N.B. page may have been unused, so we must use free_page() */
 	free_page(page_address(page));
 	return retval;
 }

@@ -1,7 +1,9 @@
-/* $Id: loadmmu.c,v 1.2 1997/08/08 18:13:05 miguel Exp $
+/*
  * loadmmu.c: Setup cpu/cache specific function ptrs at boot time.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)
+ *
+ * $Id: loadmmu.c,v 1.4 1997/12/02 05:51:07 ralf Exp $
  */
 
 #include <linux/kernel.h>
@@ -26,6 +28,10 @@ void (*flush_cache_range)(struct mm_struct *mm, unsigned long start,
 void (*flush_cache_page)(struct vm_area_struct *vma, unsigned long page);
 void (*flush_cache_sigtramp)(unsigned long addr);
 void (*flush_page_to_ram)(unsigned long page);
+
+/* DMA cache operations. */
+void (*flush_cache_pre_dma_out)(unsigned long start, unsigned long size);
+void (*flush_cache_post_dma_in)(unsigned long start, unsigned long size);
 
 /* TLB operations. */
 void (*flush_tlb_all)(void);
@@ -76,6 +82,7 @@ void loadmmu(void)
 	case CPU_R4700:
 	case CPU_R5000:
 	case CPU_R5000A:
+	case CPU_NEVADA:
 		printk("Loading R4000 MMU routines.\n");
 		ld_mmu_r4xx0();
 		break;

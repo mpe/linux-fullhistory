@@ -10,6 +10,8 @@
  * TODO:  Implement the compatibility syscalls.
  *        Don't waste that much memory for empty entries in the syscall
  *        table.
+ *
+ * $Id: syscall.c,v 1.4 1997/09/18 07:57:30 root Exp $
  */
 #undef CONF_PRINT_SYSCALLS
 #undef CONF_DEBUG_IRIX
@@ -21,6 +23,7 @@
 #include <linux/smp_lock.h>
 #include <linux/mman.h>
 #include <linux/sched.h>
+#include <linux/utsname.h>
 #include <linux/unistd.h>
 #include <asm/branch.h>
 #include <asm/ptrace.h>
@@ -83,15 +86,17 @@ asmlinkage int sys_idle(void)
 	current->counter = -100;
 	for (;;) {
 		/*
-		 * R4[236]00 have wait, R4[04]00 don't.
+		 * R4[36]00 have wait, R4[04]00 don't.
 		 * FIXME: We should save power by reducing the clock where
-		 *        possible.  Should help alot for battery powered
-		 *        R4200/4300i systems.
+		 *        possible.  Thiss will cut down the power consuption
+		 *        of R4200 systems to about 1/16th of normal, the
+		 *        same for logic clocked with the processor generated
+		 *        clocks.
 		 */
-		if (wait_available && !resched_needed())
+		if (wait_available && !need_resched)
 			__asm__(".set\tmips3\n\t"
 				"wait\n\t"
-				".set\tmips0\n\t");
+				".set\tmips0");
 		run_task_queue(&tq_scheduler);
 		schedule();
 	}
@@ -145,6 +150,43 @@ asmlinkage int sys_execve(struct pt_regs *regs)
 
 out:
 	unlock_kernel();
+	return error;
+}
+
+/*
+ * Compacrapability ...
+ */
+asmlinkage int sys_uname(struct old_utsname * name)
+{
+	if (name && !copy_to_user(name, &system_utsname, sizeof (*name)))
+		return 0;
+	return -EFAULT;
+}
+
+/*
+ * Compacrapability ...
+ */
+asmlinkage int sys_olduname(struct oldold_utsname * name)
+{
+	int error;
+
+	if (!name)
+		return -EFAULT;
+	if (!access_ok(VERIFY_WRITE,name,sizeof(struct oldold_utsname)))
+		return -EFAULT;
+  
+	error = __copy_to_user(&name->sysname,&system_utsname.sysname,__OLD_UTS_LEN);
+	error -= __put_user(0,name->sysname+__OLD_UTS_LEN);
+	error -= __copy_to_user(&name->nodename,&system_utsname.nodename,__OLD_UTS_LEN);
+	error -= __put_user(0,name->nodename+__OLD_UTS_LEN);
+	error -= __copy_to_user(&name->release,&system_utsname.release,__OLD_UTS_LEN);
+	error -= __put_user(0,name->release+__OLD_UTS_LEN);
+	error -= __copy_to_user(&name->version,&system_utsname.version,__OLD_UTS_LEN);
+	error -= __put_user(0,name->version+__OLD_UTS_LEN);
+	error -= __copy_to_user(&name->machine,&system_utsname.machine,__OLD_UTS_LEN);
+	error = __put_user(0,name->machine+__OLD_UTS_LEN);
+	error = error ? -EFAULT : 0;
+
 	return error;
 }
 

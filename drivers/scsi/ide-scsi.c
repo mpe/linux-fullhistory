@@ -1,5 +1,5 @@
 /*
- * linux/drivers/scsi/ide-scsi.c	Version 0.2 - ALPHA	Jan  26, 1997
+ * linux/drivers/scsi/ide-scsi.c	Version 0.4		Dec   7, 1997
  *
  * Copyright (C) 1996, 1997 Gadi Oxman <gadio@netvision.net.il>
  */
@@ -15,8 +15,12 @@
  *                        of MODE_SENSE_6/MODE_SELECT_6 for cdroms. Thanks
  *                        to Janos Farkas for pointing this out.
  *                       Avoid using bitfields in structures for m68k.
- *                       Added Scather/Gather and DMA support.
+ *                       Added Scatter/Gather and DMA support.
+ * Ver 0.4   Dec  7 97   Add support for ATAPI PD/CD drives.
+ *                       Use variable timeout for each command.
  */
+
+#define IDESCSI_VERSION "0.4"
 
 #include <linux/module.h>
 #include <linux/types.h>
@@ -49,11 +53,12 @@ typedef struct idescsi_pc_s {
 	struct request *rq;			/* The corresponding request */
 	byte *buffer;				/* Data buffer */
 	byte *current_position;			/* Pointer into the above buffer */
-	struct scatterlist *sg;			/* Scather gather table */
+	struct scatterlist *sg;			/* Scatter gather table */
 	int b_count;				/* Bytes transferred from current entry */
 	Scsi_Cmnd *scsi_cmd;			/* SCSI command */
 	void (*done)(Scsi_Cmnd *);		/* Scsi completion routine */
 	unsigned int flags;			/* Status/Action flags */
+	unsigned long timeout;			/* Command timeout */
 } idescsi_pc_t;
 
 /*
@@ -149,7 +154,7 @@ static inline void idescsi_transform_pc1 (ide_drive_t *drive, idescsi_pc_t *pc)
 	int i;
 
 	if (drive->media == ide_cdrom) {
-		if (c[0] == READ_6) {
+		if (c[0] == READ_6 || c[0] == WRITE_6) {
 			c[8] = c[4];		c[5] = c[3];		c[4] = c[2];
 			c[3] = c[1] & 0x1f;	c[2] = 0;		c[1] &= 0xe0;
 			c[0] = READ_10;
@@ -226,6 +231,11 @@ static void idescsi_end_request (byte uptodate, ide_hwgroup_t *hwgroup)
 	scsi->pc = NULL;
 }
 
+static inline unsigned long get_timeout(idescsi_pc_t *pc)
+{
+	return IDE_MAX(WAIT_CMD, pc->timeout - jiffies);
+}
+
 /*
  *	Our interrupt handler.
  */
@@ -247,7 +257,7 @@ static void idescsi_pc_intr (ide_drive_t *drive)
 		printk ("ide-scsi: %s: DMA complete\n", drive->name);
 #endif /* IDESCSI_DEBUG_LOG */
 		pc->actually_transferred=pc->request_transfer;
-		(void) (HWIF(drive)->dmaproc(ide_dma_abort, drive));
+		(void) (HWIF(drive)->dmaproc(ide_dma_end, drive));
 	}
 
 	status = GET_STAT();						/* Clear the interrupt */
@@ -276,7 +286,7 @@ static void idescsi_pc_intr (ide_drive_t *drive)
 			if (temp > pc->buffer_size) {
 				printk (KERN_ERR "ide-scsi: The scsi wants to send us more data than expected - discarding data\n");
 				idescsi_discard_data (drive,bcount);
-				ide_set_handler (drive,&idescsi_pc_intr,WAIT_CMD);
+				ide_set_handler(drive, &idescsi_pc_intr, get_timeout(pc));
 				return;
 			}
 #if IDESCSI_DEBUG_LOG
@@ -298,12 +308,13 @@ static void idescsi_pc_intr (ide_drive_t *drive)
 	pc->actually_transferred+=bcount;				/* Update the current position */
 	pc->current_position+=bcount;
 
-	ide_set_handler (drive,&idescsi_pc_intr,WAIT_CMD);		/* And set the interrupt handler again */
+	ide_set_handler(drive, &idescsi_pc_intr, get_timeout(pc));	/* And set the interrupt handler again */
 }
 
 static void idescsi_transfer_pc (ide_drive_t *drive)
 {
 	idescsi_scsi_t *scsi = drive->driver_data;
+	idescsi_pc_t *pc = scsi->pc;
 	byte ireason;
 
 	if (ide_wait_stat (drive,DRQ_STAT,BUSY_STAT,WAIT_READY)) {
@@ -316,8 +327,8 @@ static void idescsi_transfer_pc (ide_drive_t *drive)
 		ide_do_reset (drive);
 		return;
 	}
-	ide_set_handler (drive, &idescsi_pc_intr, WAIT_CMD);	/* Set the interrupt routine */
-	atapi_output_bytes (drive, scsi->pc->c, 12);		/* Send the actual packet */
+	ide_set_handler(drive, &idescsi_pc_intr, get_timeout(pc));	/* Set the interrupt routine */
+	atapi_output_bytes (drive, scsi->pc->c, 12);			/* Send the actual packet */
 }
 
 /*
@@ -349,7 +360,7 @@ static void idescsi_issue_pc (ide_drive_t *drive, idescsi_pc_t *pc)
 		(void) (HWIF(drive)->dmaproc(ide_dma_begin, drive));
 	}
 	if (test_bit (IDESCSI_DRQ_INTERRUPT, &scsi->flags)) {
-		ide_set_handler (drive, &idescsi_transfer_pc, WAIT_CMD);
+		ide_set_handler (drive, &idescsi_transfer_pc, get_timeout(pc));
 		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG);		/* Issue the packet command */
 	} else {
 		OUT_BYTE (WIN_PACKETCMD, IDE_COMMAND_REG);
@@ -426,6 +437,8 @@ static ide_module_t idescsi_module = {
  *	IDE subdriver functions, registered with ide.c
  */
 static ide_driver_t idescsi_driver = {
+	"ide-scsi",		/* name */
+	IDESCSI_VERSION,	/* version */
 	ide_scsi,		/* media */
 	0,			/* busy */
 	1,			/* supports_dma */
@@ -439,7 +452,8 @@ static ide_driver_t idescsi_driver = {
 	NULL,			/* media_change */
 	NULL,			/* pre_reset */
 	NULL,			/* capacity */
-	NULL			/* special */
+	NULL,			/* special */
+	NULL			/* proc */
 };
 
 static struct proc_dir_entry idescsi_proc_dir = {PROC_SCSI_IDESCSI, 8, "ide-scsi", S_IFDIR | S_IRUGO | S_IXUGO, 2};
@@ -555,7 +569,7 @@ static inline struct buffer_head *idescsi_dma_bh (ide_drive_t *drive, idescsi_pc
 	int segments = pc->scsi_cmd->use_sg;
 	struct scatterlist *sg = pc->scsi_cmd->request_buffer;
 
-	if (!drive->using_dma || pc->request_transfer % 1024)
+	if (!drive->using_dma || !pc->request_transfer || pc->request_transfer % 1024)
 		return NULL;
 	if (idescsi_set_direction(pc))
 		return NULL;
@@ -619,6 +633,7 @@ int idescsi_queue (Scsi_Cmnd *cmd, void (*done)(Scsi_Cmnd *))
 	pc->request_transfer = pc->buffer_size = cmd->request_bufflen;
 	pc->scsi_cmd = cmd;
 	pc->done = done;
+	pc->timeout = jiffies + cmd->timeout_per_command;
 	idescsi_transform_pc1 (drive, pc);
 
 	ide_init_drive_cmd (rq);
@@ -643,6 +658,18 @@ int idescsi_abort (Scsi_Cmnd *cmd)
 int idescsi_reset (Scsi_Cmnd *cmd, unsigned int resetflags)
 {
 	return SCSI_RESET_PUNT;
+}
+
+int idescsi_bios (Disk *disk, kdev_t dev, int *parm)
+{
+	ide_drive_t *drive = idescsi_drives[disk->device->id];
+
+	if (drive->cyl && drive->head && drive->sect) {
+		parm[0] = drive->head;
+		parm[1] = drive->sect;
+		parm[2] = drive->cyl;
+	}
+	return 0;
 }
 
 #ifdef MODULE

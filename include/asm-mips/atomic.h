@@ -11,7 +11,7 @@
  *
  * Copyright (C) 1996 by Ralf Baechle
  *
- * $Id: atomic.h,v 1.2 1997/06/25 19:10:33 ralf Exp $
+ * $Id: atomic.h,v 1.2 1997/06/20 03:05:12 ralf Exp $
  */
 #ifndef __ASM_MIPS_ATOMIC_H
 #define __ASM_MIPS_ATOMIC_H
@@ -99,7 +99,7 @@ extern __inline__ int atomic_sub_return(int i, atomic_t * v)
  * on us. We need to use _exactly_ the address the user gave us,
  * not some alias that contains the same information.
  */
-#define __atomic_fool_gcc(x) (*(struct { int a[100]; } *)x)
+#define __atomic_fool_gcc(x) (*(volatile struct { int a[100]; } *)x)
 
 extern __inline__ void atomic_add(int i, volatile atomic_t * v)
 {

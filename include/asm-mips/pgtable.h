@@ -16,7 +16,6 @@
  *  - flush_cache_page(mm, vmaddr) flushes a single page
  *  - flush_cache_range(mm, start, end) flushes a range of pages
  *  - flush_page_to_ram(page) write back kernel page to ram
- *
  */
 extern void (*flush_cache_all)(void);
 extern void (*flush_cache_mm)(struct mm_struct *mm);
@@ -25,7 +24,13 @@ extern void (*flush_cache_range)(struct mm_struct *mm, unsigned long start,
 extern void (*flush_cache_page)(struct vm_area_struct *vma, unsigned long page);
 extern void (*flush_cache_sigtramp)(unsigned long addr);
 extern void (*flush_page_to_ram)(unsigned long page);
-#define flush_icache_range(start, end)		do { } while (0)
+#define flush_icache_range(start, end) flush_cache_all()
+
+/*
+ * Prototype of the DMA related cacheflushing stuff.
+ */
+extern void (*flush_cache_pre_dma_out)(unsigned long start, unsigned long size);
+extern void (*flush_cache_post_dma_in)(unsigned long start, unsigned long size);
 
 /* TLB flushing:
  *

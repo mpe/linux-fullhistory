@@ -1,3 +1,6 @@
+/*
+ * $Id: elf.h,v 1.4 1997/12/16 05:36:40 ralf Exp $
+ */
 #ifndef __ASM_MIPS_ELF_H
 #define __ASM_MIPS_ELF_H
 

@@ -32,6 +32,26 @@
  */
 
 /*
+ * On MIPS I/O ports are memory mapped, so we access them using normal
+ * load/store instructions. mips_io_port_base is the virtual address to
+ * which all ports are being mapped.  For sake of efficiency some code
+ * assumes that this is an address that can be loaded with a single lui
+ * instruction, so the lower 16 bits must be zero.  Should be true on
+ * on any sane architecture; generic code does not use this assumption.
+ */
+extern unsigned long mips_io_port_base;
+
+/*
+ * On MIPS I/O ports are memory mapped, so we access them using normal
+ * load/store instructions. mips_io_port_base is the virtual address to
+ * which all ports are being mapped.  For sake of efficiency some code
+ * assumes that this is an address that can be loaded with a single lui
+ * instruction, so the lower 16 bits must be zero.  Should be true on
+ * on any sane architecture; generic code does not use this assumption.
+ */
+extern unsigned long mips_io_port_base;
+
+/*
  * Thanks to James van Artsdalen for a better timing-fix than
  * the two short jumps: using outb's to a nonexistent port seems
  * to guarantee better timings even on fast machines.
@@ -46,7 +66,7 @@
 #define __SLOW_DOWN_IO \
 	__asm__ __volatile__( \
 		"sb\t$0,0x80(%0)" \
-		: : "r" (PORT_BASE));
+		: : "r" (mips_io_port_base));
 
 #ifdef CONF_SLOWDOWN_IO
 #ifdef REALLY_SLOW_IO
@@ -176,11 +196,11 @@ extern inline void __out##s(unsigned int value, unsigned int port) {
 __asm__ __volatile__ ("s" #m "\t%0,%1(%2)"
 
 #define __OUT(m,s) \
-__OUT1(s) __OUT2(m) : : "r" (value), "i" (0), "r" (PORT_BASE+port)); } \
-__OUT1(s##c) __OUT2(m) : : "r" (value), "ir" (port), "r" (PORT_BASE)); } \
-__OUT1(s##_p) __OUT2(m) : : "r" (value), "i" (0), "r" (PORT_BASE+port)); \
+__OUT1(s) __OUT2(m) : : "r" (value), "i" (0), "r" (mips_io_port_base+port)); } \
+__OUT1(s##c) __OUT2(m) : : "r" (value), "ir" (port), "r" (mips_io_port_base)); } \
+__OUT1(s##_p) __OUT2(m) : : "r" (value), "i" (0), "r" (mips_io_port_base+port)); \
 	SLOW_DOWN_IO; } \
-__OUT1(s##c_p) __OUT2(m) : : "r" (value), "ir" (port), "r" (PORT_BASE)); \
+__OUT1(s##c_p) __OUT2(m) : : "r" (value), "ir" (port), "r" (mips_io_port_base)); \
 	SLOW_DOWN_IO; }
 
 #define __IN1(t,s) \
@@ -193,10 +213,10 @@ extern __inline__ t __in##s(unsigned int port) { t _v;
 __asm__ __volatile__ ("l" #m "\t%0,%1(%2)"
 
 #define __IN(t,m,s) \
-__IN1(t,s) __IN2(m) : "=r" (_v) : "i" (0), "r" (PORT_BASE+port)); return _v; } \
-__IN1(t,s##c) __IN2(m) : "=r" (_v) : "ir" (port), "r" (PORT_BASE)); return _v; } \
-__IN1(t,s##_p) __IN2(m) : "=r" (_v) : "i" (0), "r" (PORT_BASE+port)); SLOW_DOWN_IO; return _v; } \
-__IN1(t,s##c_p) __IN2(m) : "=r" (_v) : "ir" (port), "r" (PORT_BASE)); SLOW_DOWN_IO; return _v; }
+__IN1(t,s) __IN2(m) : "=r" (_v) : "i" (0), "r" (mips_io_port_base+port)); return _v; } \
+__IN1(t,s##c) __IN2(m) : "=r" (_v) : "ir" (port), "r" (mips_io_port_base)); return _v; } \
+__IN1(t,s##_p) __IN2(m) : "=r" (_v) : "i" (0), "r" (mips_io_port_base+port)); SLOW_DOWN_IO; return _v; } \
+__IN1(t,s##c_p) __IN2(m) : "=r" (_v) : "ir" (port), "r" (mips_io_port_base)); SLOW_DOWN_IO; return _v; }
 
 #define __INS1(s) \
 extern inline void __ins##s(unsigned int port, void * addr, unsigned long count) {
@@ -217,11 +237,11 @@ __asm__ __volatile__ ( \
 #define __INS(m,s,i) \
 __INS1(s) __INS2(m) \
 	: "=r" (addr), "=r" (count) \
-	: "0" (addr), "1" (count), "i" (0), "r" (PORT_BASE+port), "I" (i) \
+	: "0" (addr), "1" (count), "i" (0), "r" (mips_io_port_base+port), "I" (i) \
 	: "$1");} \
 __INS1(s##c) __INS2(m) \
 	: "=r" (addr), "=r" (count) \
-	: "0" (addr), "1" (count), "ir" (port), "r" (PORT_BASE), "I" (i) \
+	: "0" (addr), "1" (count), "ir" (port), "r" (mips_io_port_base), "I" (i) \
 	: "$1");}
 
 #define __OUTS1(s) \
@@ -243,11 +263,11 @@ __asm__ __volatile__ ( \
 #define __OUTS(m,s,i) \
 __OUTS1(s) __OUTS2(m) \
 	: "=r" (addr), "=r" (count) \
-	: "0" (addr), "1" (count), "i" (0), "r" (PORT_BASE+port), "I" (i) \
+	: "0" (addr), "1" (count), "i" (0), "r" (mips_io_port_base+port), "I" (i) \
 	: "$1");} \
 __OUTS1(s##c) __OUTS2(m) \
 	: "=r" (addr), "=r" (count) \
-	: "0" (addr), "1" (count), "ir" (port), "r" (PORT_BASE), "I" (i) \
+	: "0" (addr), "1" (count), "ir" (port), "r" (mips_io_port_base), "I" (i) \
 	: "$1");}
 
 __IN(unsigned char,b,b)

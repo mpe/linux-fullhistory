@@ -3,10 +3,11 @@
  |                                                                           |
  | Multiply one FPU_REG by another, put the result in a destination FPU_REG. |
  |                                                                           |
- | Copyright (C) 1992,1993                                                   |
- |                       W. Metzenthen, 22 Parker St, Ormond, Vic 3163,      |
- |                       Australia.  E-mail   billm@vaxc.cc.monash.edu.au    |
+ | Copyright (C) 1992,1993,1997                                              |
+ |                  W. Metzenthen, 22 Parker St, Ormond, Vic 3163, Australia |
+ |                  E-mail   billm@suburbia.net                              |
  |                                                                           |
+ | Returns the tag of the result if no exceptions or errors occured.         |
  |                                                                           |
  +---------------------------------------------------------------------------*/
 
@@ -14,92 +15,117 @@
  | The destination may be any FPU_REG, including one of the source FPU_REGs. |
  +---------------------------------------------------------------------------*/
 
+#include "fpu_emu.h"
 #include "exception.h"
 #include "reg_constant.h"
-#include "fpu_emu.h"
 #include "fpu_system.h"
 
 
+/*
+  Multiply two registers to give a register result.
+  The sources are st(deststnr) and (b,tagb,signb).
+  The destination is st(deststnr).
+  */
 /* This routine must be called with non-empty source registers */
-int reg_mul(FPU_REG const *a, FPU_REG const *b,
-	    FPU_REG *dest, unsigned int control_w)
+int FPU_mul(FPU_REG const *b, u_char tagb, int deststnr, int control_w)
 {
-  char saved_sign = dest->sign;
-  char sign = (a->sign ^ b->sign);
+  FPU_REG *a = &st(deststnr);
+  FPU_REG *dest = a;
+  u_char taga = FPU_gettagi(deststnr);
+  u_char saved_sign = getsign(dest);
+  u_char sign = (getsign(a) ^ getsign(b));
+  int tag;
 
-  if (!(a->tag | b->tag))
+
+  if ( !(taga | tagb) )
     {
       /* Both regs Valid, this should be the most common case. */
-      dest->sign = sign;
-      if ( reg_u_mul(a, b, dest, control_w) )
+
+      tag = FPU_u_mul(a, b, dest, control_w, sign, exponent(a) + exponent(b));
+      if ( tag < 0 )
 	{
-	  dest->sign = saved_sign;
-	  return 1;
+	  setsign(dest, saved_sign);
+	  return tag;
 	}
-      return 0;
+      FPU_settagi(deststnr, tag);
+      return tag;
     }
-  else if ((a->tag <= TW_Zero) && (b->tag <= TW_Zero))
+
+  if ( taga == TAG_Special )
+    taga = FPU_Special(a);
+  if ( tagb == TAG_Special )
+    tagb = FPU_Special(b);
+
+  if ( ((taga == TAG_Valid) && (tagb == TW_Denormal))
+	    || ((taga == TW_Denormal) && (tagb == TAG_Valid))
+	    || ((taga == TW_Denormal) && (tagb == TW_Denormal)) )
     {
-#ifdef DENORM_OPERAND
-      if ( ((b->tag == TW_Valid) && (b->exp <= EXP_UNDER)) ||
-	  ((a->tag == TW_Valid) && (a->exp <= EXP_UNDER)) )
+      FPU_REG x, y;
+      if ( denormal_operand() < 0 )
+	return FPU_Exception;
+
+      FPU_to_exp16(a, &x);
+      FPU_to_exp16(b, &y);
+      tag = FPU_u_mul(&x, &y, dest, control_w, sign,
+		      exponent16(&x) + exponent16(&y));
+      if ( tag < 0 )
 	{
-	  if ( denormal_operand() ) return 1;
+	  setsign(dest, saved_sign);
+	  return tag;
 	}
-#endif DENORM_OPERAND
+      FPU_settagi(deststnr, tag);
+      return tag;
+    }
+  else if ( (taga <= TW_Denormal) && (tagb <= TW_Denormal) )
+    {
+      if ( ((tagb == TW_Denormal) || (taga == TW_Denormal))
+	   && (denormal_operand() < 0) )
+	return FPU_Exception;
+
       /* Must have either both arguments == zero, or
 	 one valid and the other zero.
 	 The result is therefore zero. */
-      reg_move(&CONST_Z, dest);
+      FPU_copy_to_regi(&CONST_Z, TAG_Zero, deststnr);
       /* The 80486 book says that the answer is +0, but a real
 	 80486 behaves this way.
 	 IEEE-754 apparently says it should be this way. */
-      dest->sign = sign;
-      return 0;
+      setsign(dest, sign);
+      return TAG_Zero;
     }
+      /* Must have infinities, NaNs, etc */
+  else if ( (taga == TW_NaN) || (tagb == TW_NaN) )
+    {
+      return real_2op_NaN(b, tagb, deststnr, &st(0));
+    }
+  else if ( ((taga == TW_Infinity) && (tagb == TAG_Zero))
+	    || ((tagb == TW_Infinity) && (taga == TAG_Zero)) )
+    {
+      return arith_invalid(deststnr);  /* Zero*Infinity is invalid */
+    }
+  else if ( ((taga == TW_Denormal) || (tagb == TW_Denormal))
+	    && (denormal_operand() < 0) )
+    {
+      return FPU_Exception;
+    }
+  else if (taga == TW_Infinity)
+    {
+      FPU_copy_to_regi(a, TAG_Special, deststnr);
+      setsign(dest, sign);
+      return TAG_Special;
+    }
+  else if (tagb == TW_Infinity)
+    {
+      FPU_copy_to_regi(b, TAG_Special, deststnr);
+      setsign(dest, sign);
+      return TAG_Special;
+    }
+
+#ifdef PARANOID
   else
     {
-      /* Must have infinities, NaNs, etc */
-      if ( (a->tag == TW_NaN) || (b->tag == TW_NaN) )
-	{ return real_2op_NaN(a, b, dest); }
-      else if (a->tag == TW_Infinity)
-	{
-	  if (b->tag == TW_Zero)
-	    { return arith_invalid(dest); }  /* Zero*Infinity is invalid */
-	  else
-	    {
-#ifdef DENORM_OPERAND
-	      if ( (b->tag == TW_Valid) && (b->exp <= EXP_UNDER) &&
-		  denormal_operand() )
-		return 1;
-#endif DENORM_OPERAND
-	      reg_move(a, dest);
-	      dest->sign = sign;
-	    }
-	  return 0;
-	}
-      else if (b->tag == TW_Infinity)
-	{
-	  if (a->tag == TW_Zero)
-	    { return arith_invalid(dest); }  /* Zero*Infinity is invalid */
-	  else
-	    {
-#ifdef DENORM_OPERAND
-	      if ( (a->tag == TW_Valid) && (a->exp <= EXP_UNDER) &&
-		  denormal_operand() )
-		return 1;
-#endif DENORM_OPERAND
-	      reg_move(b, dest);
-	      dest->sign = sign;
-	    }
-	  return 0;
-	}
-#ifdef PARANOID
-      else
-	{
-	  EXCEPTION(EX_INTERNAL|0x102);
-	  return 1;
-	}
-#endif PARANOID
+      EXCEPTION(EX_INTERNAL|0x102);
+      return FPU_Exception;
     }
+#endif PARANOID
+
 }

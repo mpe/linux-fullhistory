@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: addrconf.c,v 1.28 1997/11/05 20:20:43 kuznet Exp $
+ *	$Id: addrconf.c,v 1.30 1997/12/09 17:12:47 freitag Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -18,6 +18,8 @@
  *
  *	Janos Farkas			:	delete timer on ifdown
  *	<chexum@bankinf.banki.hu>
+ *	Andi Kleen			:	kill doube kfree on module
+ *						unload.
  */
 
 #include <linux/config.h>
@@ -1045,7 +1047,6 @@ int addrconf_notify(struct notifier_block *this, unsigned long event,
 	return NOTIFY_OK;
 }
 
-
 static int addrconf_ifdown(struct device *dev)
 {
 	struct inet6_dev *idev, **bidev;
@@ -1067,6 +1068,8 @@ static int addrconf_ifdown(struct device *dev)
 
 	if (idev == NULL) {
 		end_bh_atomic();
+
+		printk(KERN_DEBUG "addrconf_ifdown: invalid device %p\n",dev);
 		return -ENODEV;
 	}
 
@@ -1403,13 +1406,10 @@ void addrconf_cleanup(void)
 	 */
 
 	for (i=0; i < IN6_ADDR_HSIZE; i++) {
-		for (idev = inet6_dev_lst[i]; idev; ) {
-			struct inet6_dev *back;
-
+		struct inet6_dev *next;
+		for (idev = inet6_dev_lst[i]; idev; idev = next) {
+			next = idev->next;
 			addrconf_ifdown(idev->dev);	
-			back = idev;
-			idev = idev->next;
-			kfree(back);
 		}
 	}
 

@@ -265,7 +265,7 @@ static char *version =
 
 
 /* Macro to slow down io between EEPROM clock transitions */
-#define eeprom_slow_io() do { int _i = 40; while(--_i > 0) { __SLOW_DOWN_IO; }}while(0)
+#define eeprom_slow_io() 	udelay(100)	/* FIXME: smaller but right value here */
 
 /* Jumperless Configuration Register (BMPR19) */
 #define JUMPERLESS_CONFIG      19

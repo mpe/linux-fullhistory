@@ -10,38 +10,14 @@
  *
  * This is the IDE/ATA disk driver, as evolved from hd.c and ide.c.
  *
- *  From hd.c:
- *  |
- *  | It traverses the request-list, using interrupts to jump between functions.
- *  | As nearly all functions can be called within interrupts, we may not sleep.
- *  | Special care is recommended.  Have Fun!
- *  |
- *  | modified by Drew Eckhardt to check nr of hd's from the CMOS.
- *  |
- *  | Thanks to Branko Lankester, lankeste@fwi.uva.nl, who found a bug
- *  | in the early extended-partition checks and added DM partitions.
- *  |
- *  | Early work on error handling by Mika Liljeberg (liljeber@cs.Helsinki.FI).
- *  |
- *  | IRQ-unmask, drive-id, multiple-mode, support for ">16 heads",
- *  | and general streamlining by Mark Lord (mlord@pobox.com).
- *
- *  October, 1994 -- Complete line-by-line overhaul for linux 1.1.x, by:
- *
- *	Mark Lord	(mlord@pobox.com)		(IDE Perf.Pkg)
- *	Delman Lee	(delman@mipg.upenn.edu)		("Mr. atdisk2")
- *	Scott Snyder	(snyder@fnald0.fnal.gov)	(ATAPI IDE cd-rom)
- *
- *  This was a rewrite of just about everything from hd.c, though some original
- *  code is still sprinkled about.  Think of it as a major evolution, with
- *  inspiration from lots of linux users, esp.  hamish@zot.apana.org.au
- *
  * Version 1.00		move disk only code from ide.c to ide-disk.c
  *			support optional byte-swapping of all data
  * Version 1.01		fix previous byte-swapping code
  * Verions 1.02		remove ", LBA" from drive identification msgs
  * Verions 1.03		fix display of id->buf_size for big-endian
  */
+
+#define IDEDISK_VERSION	"1.03"
 
 #undef REALLY_SLOW_IO		/* most systems can safely undef this */
 
@@ -52,12 +28,9 @@
 #include <linux/kernel.h>
 #include <linux/timer.h>
 #include <linux/mm.h>
-#include <linux/ioport.h>
 #include <linux/interrupt.h>
 #include <linux/major.h>
-#include <linux/blkdev.h>
 #include <linux/errno.h>
-#include <linux/hdreg.h>
 #include <linux/genhd.h>
 #include <linux/malloc.h>
 #include <linux/delay.h>
@@ -319,7 +292,7 @@ static void do_rw_disk (ide_drive_t *drive, struct request *rq, unsigned long bl
 	OUT_BYTE(rq->nr_sectors,IDE_NSECTOR_REG);
 #ifdef CONFIG_BLK_DEV_PDC4030
 	if (IS_PDC4030_DRIVE) {
-		if (hwif->is_pdc4030_2 || rq->cmd == READ) {
+		if (hwif->channel != 0 || rq->cmd == READ) {
 			use_pdc4030_io = 1;
 		}
 	}
@@ -494,6 +467,11 @@ static void idedisk_pre_reset (ide_drive_t *drive)
 		drive->special.b.set_multmode = 1;
 }
 
+static ide_proc_entry_t idedisk_proc[] = {
+	{ "geometry", proc_ide_read_geometry, NULL },
+	{ NULL, NULL, NULL }
+};
+
 int idedisk_init (void);
 static ide_module_t idedisk_module = {
 	IDE_DRIVER_MODULE,
@@ -505,6 +483,8 @@ static ide_module_t idedisk_module = {
  *	IDE subdriver functions, registered with ide.c
  */
 static ide_driver_t idedisk_driver = {
+	"ide-disk",		/* name */
+	IDEDISK_VERSION,	/* version */
 	ide_disk,		/* media */
 	0,			/* busy */
 	1,			/* supports_dma */
@@ -518,26 +498,13 @@ static ide_driver_t idedisk_driver = {
 	idedisk_media_change,	/* media_change */
 	idedisk_pre_reset,	/* pre_reset */
 	idedisk_capacity,	/* capacity */
-	idedisk_special		/* special */
+	idedisk_special,	/* special */
+	idedisk_proc		/* proc */
 };
 
 static int idedisk_cleanup (ide_drive_t *drive)
 {
 	return ide_unregister_subdriver(drive);
-}
-
-static int idedisk_identify_device (ide_drive_t *drive)
-{
-	struct hd_driveid *id = drive->id;
-	
-	if (id == NULL)
-		return 0;
-
-	/* SunDisk drives: force one unit */
-	if (id->model[0] == 'S' && id->model[1] == 'u' && (drive->select.all & (1<<4)))
-		return 1;
-
-	return 0;
 }
 
 static void idedisk_setup (ide_drive_t *drive)
@@ -554,7 +521,7 @@ static void idedisk_setup (ide_drive_t *drive)
 			drive->removable = 1;
 	}
 
-	/* SunDisk drives: treat as non-removable */
+	/* SunDisk drives: treat as non-removable;   can mess up non-Sun systems!  FIXME */
 	if (id->model[0] == 'S' && id->model[1] == 'u')
 		drive->removable = 0;
 
@@ -634,8 +601,12 @@ int idedisk_init (void)
 	
 	MOD_INC_USE_COUNT;
 	while ((drive = ide_scan_devices (ide_disk, NULL, failed++)) != NULL) {
-		if (idedisk_identify_device (drive))
+
+		/* SunDisk drives: ignore "second" drive;   can mess up non-Sun systems!  FIXME */
+		struct hd_driveid *id = drive->id;
+		if (id && id->model[0] == 'S' && id->model[1] == 'u' && drive->select.b.unit)
 			continue;
+
 		if (ide_register_subdriver (drive, &idedisk_driver, IDE_SUBDRIVER_VERSION)) {
 			printk (KERN_ERR "ide-disk: %s: Failed to register the driver with ide.c\n", drive->name);
 			continue;

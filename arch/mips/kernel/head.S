@@ -7,6 +7,8 @@
  *  Further modifications by David S. Miller
  *
  *  Head.S contains the MIPS exception handler and startup code.
+ *
+ * $Id: head.S,v 1.10 1997/11/13 12:55:29 ralf Exp $
  */
 #include <linux/config.h>
 #include <linux/tasks.h>
@@ -27,8 +29,10 @@
 	/*
 	 * Reserved space for exception handlers.
 	 * Necessary for machines which link their kernels at KSEG0.
+	 * FIXME: We could overwrite some of the useless handlers
+	 * with those actually being used.
 	 */
-	.fill	512
+	.fill	520
 /*	
  * This is space for the interrupt handlers.
  * After trap_init() they are located at virtual address KSEG0.
@@ -93,6 +97,34 @@
 	eret
 	END(except_vec0_r4600)
 
+	/* TLB refill, EXL == 0, R4xx0, non-R4600 version */
+	.set	noreorder
+	.set	noat
+	LEAF(except_vec0_nevada)
+	.set	mips3
+	mfc0	k0, CP0_BADVADDR		# Get faulting address
+	_GET_CURRENT(k1)			# get current task ptr
+	srl	k0, k0, 22			# get pgd only bits
+	lw	k1, THREAD_PGDIR(k1)		# get task pg_dir
+	sll	k0, k0, 2
+	addu	k1, k1, k0			# add in pgd offset
+	lw	k1, (k1)
+	mfc0	k0, CP0_CONTEXT			# get context reg
+	srl	k0, k0, 1			# get pte offset
+	and	k0, k0, 0xff8
+	addu	k1, k1, k0			# add in offset
+	lw	k0, 0(k1)			# get even pte
+	lw	k1, 4(k1)			# get odd pte
+	srl	k0, k0, 6			# convert to entrylo0
+	mtc0	k0, CP0_ENTRYLO0		# load it
+	srl	k1, k1, 6			# convert to entrylo1
+	mtc0	k1, CP0_ENTRYLO1		# load it
+	tlbwr					# write random tlb entry
+	nop
+	nop
+	eret					# return from trap
+	END(except_vec0_nevada)
+
 	/* TLB refill, EXL == 0, R4[40]00/R5000 badvaddr hwbug version */
 	LEAF(except_vec0_r45k_bvahwbug)
 	.set	mips3
@@ -109,6 +141,7 @@
 	addu	k1, k1, k0
 	lw	k0, 0(k1)
 	lw	k1, 4(k1)
+	nop				/* XXX */
 	tlbp
 	srl	k0, k0, 6
 	mtc0	k0, CP0_ENTRYLO0
@@ -139,6 +172,7 @@
 	addu	k1, k1, k0
 	lw	k0, 0(k1)
 	lw	k1, 4(k1)
+	nop				/* XXX */
 	tlbp
 	srl	k0, k0, 6
 	mtc0	k0, CP0_ENTRYLO0
@@ -199,6 +233,7 @@
 	addu	k1, k1, k0
 	lw	k0, 0(k1)
 	lw	k1, 4(k1)
+	nop				/* XXX */
 	tlbp
 	srl	k0, k0, 6
 	mtc0	zero, CP0_ENTRYLO0
@@ -309,6 +344,17 @@
 	END(except_vec3_generic)
 	.set	at
 
+	/*
+	 * Special interrupt vector for embedded MIPS.  This is a
+	 * dedicated interrupt vector which reduces interrupt processing
+	 * overhead.  The jump instruction will be inserted here at
+	 * initialization time.  This handler may only be 8 bytes in size!
+	 */
+	NESTED(except_vec4, 0, sp)
+1:	j	1b			/* Dummy, will be replaced */
+	 nop
+	END(except_vec4)
+
 /*
  * Kernel entry point
  */
@@ -350,6 +396,7 @@ probe_done:
 	jal	sgi_sysinit
 	 nop
 #endif
+
 	/* Get the very one tags we need early in the boot process */
 	nop
 	jal	bi_EarlySnarf
@@ -357,13 +404,10 @@ probe_done:
 #ifndef CONFIG_SGI
 	/* Clear BSS first so that there are no surprises... */
 	la	t0, _edata
-	la	t1, (_end - 4)
-	sw	zero, (t0)
-1:
-	addiu	t0, 4
+	la	t1, _end
+1:	addiu	t0, 1
 	bne	t0, t1, 1b
-	 sw	zero, (t0)
-	nop
+	sb	zero, -1(t0)
 #endif
 	/*
 	 * Determine the mmu/cache attached to this machine,
@@ -400,8 +444,9 @@ probe_done:
 	/*
 	 * Stack for kernel and init
 	 */
-9:	la	sp, init_task_union+(KERNEL_STACK_SIZE-4*SZREG)
-	sw	sp, kernelsp
+9:	la	t0, init_task_union+KERNEL_STACK_SIZE-32
+	sw	t0, kernelsp
+	subu	sp, t0, 4*SZREG
 
 	/* Disable coprocessors */
 	mfc0	t0, CP0_STATUS
@@ -601,6 +646,14 @@ LEAF(wire_mappings_r3000)
 	 nop
 
 	li	t2, CPU_R5000
+	b	probe_done
+	 sw	t2, (t3)
+1:
+	li	t2, PRID_IMP_NEVADA
+	bne	t1, t2, 1f
+	 nop
+
+	li	t2, CPU_NEVADA
 	b	probe_done
 	 sw	t2, (t3)
 1:

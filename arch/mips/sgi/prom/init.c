@@ -1,4 +1,4 @@
-/* $Id: init.c,v 1.1 1997/06/06 09:37:06 ralf Exp $
+/* $Id: init.c,v 1.1.1.1 1997/06/01 03:16:40 ralf Exp $
  * init.c: PROM library initialisation code.
  *
  * Copyright (C) 1996 David S. Miller (dm@engr.sgi.com)

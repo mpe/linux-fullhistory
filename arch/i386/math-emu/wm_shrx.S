@@ -9,9 +9,9 @@
  |                       Australia.  E-mail billm@jacobi.maths.monash.edu.au |
  |                                                                           |
  | Call from C as:                                                           |
- |   unsigned shrx(void *arg1, unsigned arg2)                                |
+ |   unsigned FPU_shrx(void *arg1, unsigned arg2)                            |
  | and                                                                       |
- |   unsigned shrxs(void *arg1, unsigned arg2)                               |
+ |   unsigned FPU_shrxs(void *arg1, unsigned arg2)                           |
  |                                                                           |
  +---------------------------------------------------------------------------*/
 
@@ -19,7 +19,7 @@
 
 .text
 /*---------------------------------------------------------------------------+
- |   unsigned shrx(void *arg1, unsigned arg2)                                |
+ |   unsigned FPU_shrx(void *arg1, unsigned arg2)                            |
  |                                                                           |
  |   Extended shift right function.                                          |
  |   Fastest for small shifts.                                               |
@@ -32,7 +32,7 @@
  |   Results returned in the 64 bit arg and eax.                             |
  +---------------------------------------------------------------------------*/
 
-ENTRY(shrx)
+ENTRY(FPU_shrx)
 	push	%ebp
 	movl	%esp,%ebp
 	pushl	%esi
@@ -95,7 +95,7 @@ L_more_than_95:
 
 
 /*---------------------------------------------------------------------------+
- |   unsigned shrxs(void *arg1, unsigned arg2)                               |
+ |   unsigned FPU_shrxs(void *arg1, unsigned arg2)                           |
  |                                                                           |
  |   Extended shift right function (optimized for small floating point       |
  |   integers).                                                              |
@@ -110,7 +110,7 @@ L_more_than_95:
  |   part which has been shifted out of the arg.                             |
  |   Results returned in the 64 bit arg and eax.                             |
  +---------------------------------------------------------------------------*/
-ENTRY(shrxs)
+ENTRY(FPU_shrxs)
 	push	%ebp
 	movl	%esp,%ebp
 	pushl	%esi
