@@ -39,8 +39,6 @@ static int q40fb_get_cmap(struct fb_cmap *cmap,int kspc,int con,
 			 struct fb_info *info);
 static int q40fb_set_cmap(struct fb_cmap *cmap,int kspc,int con,
 			 struct fb_info *info);
-static int q40fb_pan_display(struct fb_var_screeninfo *var, int con,
-			    struct fb_info *info);
 static int q40fb_ioctl(struct inode *inode, struct file *file,
 		      unsigned int cmd, unsigned long arg, int con,
 		      struct fb_info *info);
@@ -60,7 +58,6 @@ static struct fb_ops q40fb_ops = {
 	fb_set_var:	q40fb_set_var,
 	fb_get_cmap:	q40fb_get_cmap,
 	fb_set_cmap:	q40fb_set_cmap,
-	fb_pan_display:	q40fb_pan_display,
 	fb_ioctl:	q40fb_ioctl,
 };
 
@@ -252,15 +249,6 @@ static int q40fb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 
 	return -EINVAL;
 #endif
-}
-
-static int q40fb_pan_display(struct fb_var_screeninfo *var, int con,
-			    struct fb_info *info)
-{
-	printk(KERN_ERR "panning not supported\n");
-
-	return -EINVAL;
-
 }
 
 static int q40fb_ioctl(struct inode *inode, struct file *file,

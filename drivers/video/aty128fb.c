@@ -325,8 +325,6 @@ static int aty128fb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			struct fb_info *info);
 static int aty128fb_pan_display(struct fb_var_screeninfo *var, int con,
 			   struct fb_info *fb);
-static int aty128fb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-		     u_long arg, int con, struct fb_info *info);
 static int aty128fb_rasterimg(struct fb_info *info, int start);
 
 
@@ -418,7 +416,6 @@ static struct fb_ops aty128fb_ops = {
 	fb_get_cmap:	aty128fb_get_cmap,
 	fb_set_cmap:	aty128fb_set_cmap,
 	fb_pan_display:	aty128fb_pan_display,
-	fb_ioctl:	aty128fb_ioctl,
 	fb_rasterimg:	aty128fb_rasterimg,
 };
 
@@ -1585,17 +1582,6 @@ aty128fb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 	fb_copy_cmap(cmap, &disp->cmap, kspc ? 0 : 1);
 
     return 0;                
-}
-
-    /*
-     *  Frame Buffer Specific ioctls
-     */
-
-static int
-aty128fb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-		     u_long arg, int con, struct fb_info *info)
-{
-    return -EINVAL;
 }
 
 

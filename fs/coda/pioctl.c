@@ -85,7 +85,7 @@ static int coda_pioctl(struct inode * inode, struct file * filp,
 	        target_inode = nd.dentry->d_inode;
 	}
 	
-	CDEBUG(D_PIOCTL, "target ino: 0x%ld, dev: 0x%d\n",
+	CDEBUG(D_PIOCTL, "target ino: 0x%ld, dev: 0x%x\n",
 	       target_inode->i_ino, target_inode->i_dev);
 
 	/* return if it is not a Coda inode */

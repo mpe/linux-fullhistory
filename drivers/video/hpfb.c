@@ -225,13 +225,6 @@ static void topcat_blit(int x0, int y0, int x1, int y1, int w, int h)
 	writeb(fb_bitmask, fb_regs + WMOVE);
 }
 
-static int hpfb_ioctl(struct inode *inode, struct file *file, 
-		       unsigned int cmd, unsigned long arg, int con,
-		       struct fb_info *info)
-{
-	return -EINVAL;
-}
-
 static int hpfb_switch(int con, struct fb_info *info)
 {
 	do_fb_set_var(&fb_display[con].var,1);
@@ -279,7 +272,6 @@ static struct fb_ops hpfb_ops = {
 	fb_set_var:	hpfb_set_var,
 	fb_get_cmap:	hpfb_get_cmap,
 	fb_set_cmap:	hpfb_set_cmap,
-	fb_ioctl:	hpfb_ioctl,
 };
 
 #define TOPCAT_FBOMSB	0x5d

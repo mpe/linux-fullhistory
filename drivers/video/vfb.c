@@ -92,8 +92,6 @@ static int vfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			struct fb_info *info);
 static int vfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			struct fb_info *info);
-static int vfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-		     u_long arg, int con, struct fb_info *info);
 
 
     /*
@@ -129,7 +127,6 @@ static struct fb_ops vfb_ops = {
 	fb_get_cmap:	vfb_get_cmap,
 	fb_set_cmap:	vfb_set_cmap,
 	fb_pan_display:	vfb_pan_display,
-	fb_ioctl:	vfb_ioctl,
 };
 
     /*
@@ -374,17 +371,6 @@ static int vfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
     else
 	fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
     return 0;
-}
-
-
-    /*
-     *  Virtual Frame Buffer Specific ioctls
-     */
-
-static int vfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-		     u_long arg, int con, struct fb_info *info)
-{
-    return -EINVAL;
 }
 
 

@@ -76,14 +76,10 @@ static int sun3fb_get_var(struct fb_var_screeninfo *var, int con,
 			struct fb_info *info);
 static int sun3fb_set_var(struct fb_var_screeninfo *var, int con,
 			struct fb_info *info);
-static int sun3fb_pan_display(struct fb_var_screeninfo *var, int con,
-			struct fb_info *info);
 static int sun3fb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			struct fb_info *info);
 static int sun3fb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			struct fb_info *info);
-static int sun3fb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-			    u_long arg, int con, struct fb_info *info);
 static void sun3fb_cursor(struct display *p, int mode, int x, int y);
 static void sun3fb_clear_margin(struct display *p, int s);
 			    
@@ -114,8 +110,6 @@ static struct fb_ops sun3fb_ops = {
 	fb_set_var:	sun3fb_set_var,
 	fb_get_cmap:	sun3fb_get_cmap,
 	fb_set_cmap:	sun3fb_set_cmap,
-	fb_pan_display:	sun3fb_pan_display,
-	fb_ioctl:	sun3fb_ioctl,
 };
 
 static void sun3fb_clear_margin(struct display *p, int s)
@@ -231,21 +225,6 @@ static int sun3fb_set_var(struct fb_var_screeninfo *var, int con,
 }
 
     /*
-     *  Pan or Wrap the Display
-     *
-     *  This call looks only at xoffset, yoffset and the FB_VMODE_YWRAP flag
-     */
-
-static int sun3fb_pan_display(struct fb_var_screeninfo *var, int con,
-			      struct fb_info *info)
-{
-	if (var->xoffset || var->yoffset)
-		return -EINVAL;
-	else
-		return 0;
-}
-
-    /*
      *  Hardware cursor
      */
      
@@ -349,12 +328,6 @@ static int sun3fb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 	} else
 		fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
 	return 0;
-}
-
-static int sun3fb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-			u_long arg, int con, struct fb_info *info)
-{
-	return -EINVAL;
 }
 
     /*

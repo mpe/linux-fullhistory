@@ -251,10 +251,6 @@ static int cyberfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			    struct fb_info *info);
 static int cyberfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			    struct fb_info *info);
-static int cyberfb_pan_display(struct fb_var_screeninfo *var, int con,
-			       struct fb_info *info);
-static int cyberfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-			 u_long arg, int con, struct fb_info *info);
 
 /*
  *    Interface to the low level console driver
@@ -1007,30 +1003,6 @@ static int cyberfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 }
 
 
-/*
- *    Pan or Wrap the Display
- *
- *    This call looks only at xoffset, yoffset and the FB_VMODE_YWRAP flag
- */
-
-static int cyberfb_pan_display(struct fb_var_screeninfo *var, int con,
-			       struct fb_info *info)
-{
-	return -EINVAL;
-}
-
-
-/*
-    *	 Cybervision Frame Buffer Specific ioctls
-    */
-
-static int cyberfb_ioctl(struct inode *inode, struct file *file,
-			 u_int cmd, u_long arg, int con, struct fb_info *info)
-{
-	return -EINVAL;
-}
-
-
 static struct fb_ops cyberfb_ops = {
 	owner:		THIS_MODULE,
 	fb_get_fix:	cyberfb_get_fix,
@@ -1038,8 +1010,6 @@ static struct fb_ops cyberfb_ops = {
 	fb_set_var:	cyberfb_set_var,
 	fb_get_cmap:	cyberfb_get_cmap,
 	fb_set_cmap:	cyberfb_set_cmap,
-	fb_pan_display:	cyberfb_pan_display,
-	fb_ioctl:	cyberfb_ioctl,
 };
 
 int __init cyberfb_setup(char *options)

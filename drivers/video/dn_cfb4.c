@@ -121,10 +121,6 @@ static int dn_fb_get_cmap(struct fb_cmap *cmap,int kspc,int con,
 			  struct fb_info *info);
 static int dn_fb_set_cmap(struct fb_cmap *cmap,int kspc,int con,
 			  struct fb_info *info);
-static int dn_fb_pan_display(struct fb_var_screeninfo *var, int con,
-			     struct fb_info *info);
-static int dn_fb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
-		       unsigned long arg, int con, struct fb_info *info);
 
 static int dnfbcon_switch(int con,struct fb_info *info);
 static int dnfbcon_updatevar(int con,struct fb_info *info);
@@ -141,8 +137,6 @@ static struct fb_ops dn_fb_ops = {
 	fb_set_var:	dn_fb_set_var,
 	fb_get_cmap:	dn_fb_get_cmap,
 	fb_set_cmap:	dn_fb_set_cmap,
-	fb_pan_display:	dn_fb_pan_display,
-	fb_ioctl:	dn_fb_ioctl,
 };
 
 static int currcon=0;
@@ -261,24 +255,6 @@ static int dn_fb_set_cmap(struct fb_cmap *cmap,int kspc,int con,
 			  struct fb_info *info) {
 
 	printk("set cmap not supported\n");
-
-	return -EINVAL;
-
-}
-
-static int dn_fb_pan_display(struct fb_var_screeninfo *var, int con,
-			     struct fb_info *info) {
-
-	printk("panning not supported\n");
-
-	return -EINVAL;
-
-}
-
-static int dn_fb_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
-		    unsigned long arg, int con, struct fb_info *info) {
-
-	printk("no IOCTLs as of yet.\n");
 
 	return -EINVAL;
 

@@ -947,7 +947,7 @@ smb_proc_read(struct dentry *dentry, off_t offset, int count, char *data)
 {
 	struct smb_sb_info *server = server_from_dentry(dentry);
 	__u16 returned_count, data_len;
-	char *buf;
+	unsigned char *buf;
 	int result;
 
 	smb_lock_server(server);
@@ -965,10 +965,19 @@ smb_proc_read(struct dentry *dentry, off_t offset, int count, char *data)
 
 	buf = SMB_BUF(server->packet);
 	data_len = WVAL(buf, 1);
+
+	/* we can NOT simply trust the data_len given by the server ... */
+	if (data_len > server->packet_size - (buf+3 - server->packet)) {
+		printk(KERN_ERR "smb_proc_read: invalid data length!! "
+		       "%d > %d - (%p - %p)\n",
+		       data_len, server->packet_size, buf+3, server->packet);
+		result = -EIO;
+		goto out;
+	}
+
 	memcpy(data, buf+3, data_len);
 
-	if (returned_count != data_len)
-	{
+	if (returned_count != data_len) {
 		printk(KERN_NOTICE "smb_proc_read: returned != data_len\n");
 		printk(KERN_NOTICE "smb_proc_read: ret_c=%d, data_len=%d\n",
 		       returned_count, data_len);
@@ -1288,9 +1297,8 @@ smb_decode_dirent(struct smb_sb_info *server, __u8 *p,
 	entry->name = p + 9;
 	len = strlen(entry->name);
 	if (len > 12)
-	{
 		len = 12;
-	}
+
 	/*
 	 * Trim trailing blanks for Pathworks servers
 	 */
@@ -1298,8 +1306,7 @@ smb_decode_dirent(struct smb_sb_info *server, __u8 *p,
 		len--;
 	entry->len = len;
 
-	switch (server->opt.case_handling)
-	{
+	switch (server->opt.case_handling) {
 	case SMB_CASE_UPPER:
 		str_upper(entry->name, len);
 		break;
@@ -1309,7 +1316,7 @@ smb_decode_dirent(struct smb_sb_info *server, __u8 *p,
 	default:
 		break;
 	}
-	DEBUG1("len=%d, name=%s\n", len, entry->name);
+	DEBUG1("len=%d, name=%.*s\n", len, len, entry->name);
 	return p + 22;
 }
 
@@ -1321,7 +1328,7 @@ static int
 smb_proc_readdir_short(struct smb_sb_info *server, struct dentry *dir, int fpos,
 		       void *cachep)
 {
-	char *p;
+	unsigned char *p;
 	int result;
 	int i, first, entries_seen, entries;
 	int entries_asked = (server->opt.max_xmit - 100) / SMB_DIRINFO_SIZE;
@@ -1329,26 +1336,25 @@ smb_proc_readdir_short(struct smb_sb_info *server, struct dentry *dir, int fpos,
 	__u16 count;
 	char status[SMB_STATUS_SIZE];
 	static struct qstr mask = { "*.*", 3, 0 };
+	unsigned char *last_status;
 
 	VERBOSE("%s/%s, pos=%d\n", DENTRY_PATH(dir), fpos);
 
 	smb_lock_server(server);
 
 	/* N.B. We need to reinitialize the cache to restart */
-      retry:
+retry:
 	smb_init_dircache(cachep);
 	first = 1;
 	entries = 0;
 	entries_seen = 2; /* implicit . and .. */
 
-	while (1)
-	{
+	while (1) {
 		p = smb_setup_header(server, SMBsearch, 2, 0);
 		WSET(server->packet, smb_vwv0, entries_asked);
 		WSET(server->packet, smb_vwv1, aDIR);
 		*p++ = 4;
-		if (first == 1)
-		{
+		if (first == 1) {
 			p = smb_encode_path(server, p, dir, &mask);
 			*p++ = 5;
 			WSET(p, 0, 0);
@@ -1366,8 +1372,7 @@ smb_proc_readdir_short(struct smb_sb_info *server, struct dentry *dir, int fpos,
 		smb_setup_bcc(server, p);
 
 		result = smb_request_ok(server, SMBsearch, 1, -1);
-		if (result < 0)
-		{
+		if (result < 0) {
 			if ((server->rcls == ERRDOS) && 
 			    (server->err  == ERRnofiles))
 				break;
@@ -1386,28 +1391,39 @@ smb_proc_readdir_short(struct smb_sb_info *server, struct dentry *dir, int fpos,
 			goto unlock_return;
 		p += 7;
 
+
+		/* Make sure the response fits in the buffer. Fixed sized 
+		   entries means we don't have to check in the decode loop. */
+
+		last_status = SMB_BUF(server->packet) + 3 + (count - 1) *
+			SMB_DIRINFO_SIZE;
+
+		if (last_status + SMB_DIRINFO_SIZE >=
+		    server->packet + server->packet_size) {
+			printk(KERN_ERR "smb_proc_readdir_short: "
+			       "last dir entry outside buffer! "
+			       "%d@%p  %d@%p\n", SMB_DIRINFO_SIZE, last_status,
+			       server->packet_size, server->packet);
+			goto unlock_return;
+		}
+
 		/* Read the last entry into the status field. */
-		memcpy(status,
-		       SMB_BUF(server->packet) + 3 +
-		       (count - 1) * SMB_DIRINFO_SIZE,
-		       SMB_STATUS_SIZE);
+		memcpy(status, last_status, SMB_STATUS_SIZE);
+
 
 		/* Now we are ready to parse smb directory entries. */
 
-		for (i = 0; i < count; i++)
-		{
+		for (i = 0; i < count; i++) {
 			struct cache_dirent this_ent, *entry = &this_ent;
 
 			p = smb_decode_dirent(server, p, entry);
-			if (entries_seen == 2 && entry->name[0] == '.')
-			{
+			if (entries_seen == 2 && entry->name[0] == '.') {
 				if (entry->len == 1)
 					continue;
 				if (entry->name[1] == '.' && entry->len == 2)
 					continue;
 			}
-			if (entries_seen >= fpos)
-			{
+			if (entries_seen >= fpos) {
 				DEBUG1("fpos=%u\n", entries_seen);
 				smb_add_to_cache(cachep, entry, entries_seen);
 				entries++;
@@ -1420,7 +1436,7 @@ smb_proc_readdir_short(struct smb_sb_info *server, struct dentry *dir, int fpos,
 	}
 	result = entries;
 
-    unlock_return:
+unlock_return:
 	smb_unlock_server(server);
 	return result;
 }
@@ -1511,7 +1527,8 @@ static int
 smb_proc_readdir_long(struct smb_sb_info *server, struct dentry *dir, int fpos,
 		      void *cachep)
 {
-	char *p, *mask, *lastname, *param = server->temp_buf;
+	unsigned char *p;
+	char *mask, *lastname, *param = server->temp_buf;
 	__u16 command;
 	int first, entries, entries_seen;
 
@@ -1539,7 +1556,7 @@ smb_proc_readdir_long(struct smb_sb_info *server, struct dentry *dir, int fpos,
 
 	smb_lock_server(server);
 
-      retry:
+retry:
 	/*
 	 * Encode the initial path
 	 */
@@ -1665,6 +1682,17 @@ smb_proc_readdir_long(struct smb_sb_info *server, struct dentry *dir, int fpos,
 		for (i = 0; i < ff_searchcount; i++) {
 			struct cache_dirent this_ent, *entry = &this_ent;
 
+			/* make sure we stay within the buffer */
+			if (p >= resp_data + resp_data_len) {
+				printk(KERN_ERR "smb_proc_readdir_long: "
+				       "dirent pointer outside buffer! "
+				       "%p  %d@%p  %d@%p\n",
+				       p, resp_data_len, resp_data,
+				       server->packet_size, server->packet);
+				result = -EIO; /* always a comm. error? */
+				goto unlock_return;
+			}
+
 			p = smb_decode_long_dirent(server, p, entry,
 							info_level);
 
@@ -1688,6 +1716,7 @@ smb_proc_readdir_long(struct smb_sb_info *server, struct dentry *dir, int fpos,
 		loop_count = 0;
 	}
 
+unlock_return:
 	smb_unlock_server(server);
 	return entries;
 }

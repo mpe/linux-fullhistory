@@ -1828,7 +1828,7 @@ static int open_tx(struct atm_vcc *vcc)
 		vc->acr = cellrate_to_float(iadev->LineRate);  
                 if (vcc->qos.txtp.pcr > 0) 
                    vc->acr = cellrate_to_float(vcc->qos.txtp.pcr);  
-                IF_UBR(printk("UBR: txtp.pcr = 0x%d f_rate = 0x%x\n", 
+                IF_UBR(printk("UBR: txtp.pcr = 0x%x f_rate = 0x%x\n", 
                                              vcc->qos.txtp.max_pcr,vc->acr);)
 	}  
 	else if (vcc->qos.txtp.traffic_class == ATM_ABR)  

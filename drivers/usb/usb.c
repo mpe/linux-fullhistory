@@ -607,6 +607,11 @@ static void call_policy (char *verb, struct usb_device *dev)
 		dbg ("In_interrupt");
 		return;
 	}
+	if (!current->fs->root) {
+		/* statically linked USB is initted rather early */
+		dbg ("call_policy %s, num %d -- no FS yet", verb, dev->devnum);
+		return;
+	}
 	if (dev->devnum < 0) {
 		dbg ("device already deleted ??");
 		return;
@@ -691,7 +696,7 @@ static void call_policy (char *verb, struct usb_device *dev)
 
 	/* NOTE: user mode daemons can call the agents too */
 
-	dbg ("kusbd: %s %s", argv [0], argv [1]);
+	dbg ("kusbd: %s %s %d", argv [0], verb, dev->devnum);
 	value = call_usermodehelper (argv [0], argv, envp);
 	kfree (buf);
 	kfree (envp);
@@ -732,8 +737,10 @@ static void usb_find_drivers(struct usb_device *dev)
 		dbg("unhandled interfaces on device");
 
 	if (!claimed) {
-		warn("USB device %d is not claimed by any active driver.",
-			dev->devnum);
+		warn("USB device %d (prod/vend 0x%x/0x%x) is not claimed by any active driver.",
+			dev->devnum,
+			dev->descriptor.idVendor,
+			dev->descriptor.idProduct);
 #ifdef DEBUG
 		usb_show_device(dev);
 #endif

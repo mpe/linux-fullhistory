@@ -181,6 +181,13 @@ static int __devinit add_pci_socket(int nr, struct pci_dev *dev, struct pci_sock
 	return socket->op->open(socket);
 }
 
+void cardbus_register(pci_socket_t *socket)
+{
+	int nr = socket - pci_socket_array;
+
+	socket->pcmcia_socket = pcmcia_register_socket(nr, &pci_socket_operations, 1);
+}
+
 static int __devinit
 cardbus_probe (struct pci_dev *dev, const struct pci_device_id *id)
 {
@@ -189,10 +196,6 @@ cardbus_probe (struct pci_dev *dev, const struct pci_device_id *id)
 	for (s = 0; s < MAX_SOCKETS; s++) {
 		if (pci_socket_array [s].dev == 0) {
 			add_pci_socket (s, dev, &yenta_operations);
-			pci_socket_array [s].pcmcia_socket =
-				pcmcia_register_socket (s,
-					&pci_socket_operations,
-					1);
 			return 0;
 		}
 	}

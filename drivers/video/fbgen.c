@@ -190,17 +190,6 @@ int fbgen_pan_display(struct fb_var_screeninfo *var, int con,
 }
 
 
-    /*
-     *  Frame Buffer Specific ioctls
-     */
-
-int fbgen_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
-		unsigned long arg, int con, struct fb_info *info)
-{
-    return -EINVAL;
-}
-
-
 /* ---- Helper functions --------------------------------------------------- */
 
 

@@ -103,8 +103,6 @@ static int g364fb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			   struct fb_info *info);
 static int g364fb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			   struct fb_info *info);
-static int g364fb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-			u_long arg, int con, struct fb_info *info);
 
 
 /*
@@ -134,7 +132,6 @@ static struct fb_ops g364fb_ops = {
 	fb_get_cmap:	g364fb_get_cmap,
 	fb_set_cmap:	g364fb_set_cmap,
 	fb_pan_display:	g364fb_pan_display,
-	fb_ioctl:	g364fb_ioctl,
 };
 
 
@@ -274,13 +271,6 @@ static int g364fb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
     } else
 	fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
     return 0;
-}
-
-
-static int g364fb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-			u_long arg, int con, struct fb_info *info)
-{
-    return -EINVAL;
 }
 
 

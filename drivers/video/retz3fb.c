@@ -277,11 +277,6 @@ static int retz3fb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			    struct fb_info *info);
 static int retz3fb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			    struct fb_info *info);
-static int retz3fb_pan_display(struct fb_var_screeninfo *var, int con,
-			       struct fb_info *info);
-static int retz3fb_ioctl(struct inode *inode, struct file *file,
-			 unsigned int cmd, unsigned long arg, int con,
-			 struct fb_info *info);
 
 
 /*
@@ -1338,31 +1333,6 @@ static int retz3fb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 }
 
 
-/*
- *    Pan or Wrap the Display
- *
- *    This call looks only at xoffset, yoffset and the FB_VMODE_YWRAP flag
- */
-
-static int retz3fb_pan_display(struct fb_var_screeninfo *var, int con,
-				struct fb_info *info)
-{
-	return -EINVAL;
-}
-
-
-/*
- *    RetinaZ3 Frame Buffer Specific ioctls
- */
-
-static int retz3fb_ioctl(struct inode *inode, struct file *file,
-                         unsigned int cmd, unsigned long arg, int con,
-                         struct fb_info *info)
-{
-	return -EINVAL;
-}
-
-
 static struct fb_ops retz3fb_ops = {
 	owner:		THIS_MODULE,
 	fb_get_fix:	retz3fb_get_fix,
@@ -1370,8 +1340,6 @@ static struct fb_ops retz3fb_ops = {
 	fb_set_var:	retz3fb_set_var,
 	fb_get_cmap:	retz3fb_get_cmap,
 	fb_set_cmap:	retz3fb_set_cmap,
-	fb_pan_display:	retz3fb_pan_display,
-	fb_ioctl:	retz3fb_ioctl,
 };
 
 

@@ -685,20 +685,6 @@ repeat:
 			return NULL;
 		}
 	}
-	*err = -EFBIG;
-
-	/* Check file limits.. */
-	{
-		unsigned long limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
-		if (limit < RLIM_INFINITY) {
-			limit >>= sb->sv_block_size_bits;
-			if (new_block >= limit) {
-				send_sig(SIGXFSZ, current, 0);
-				*err = -EFBIG;
-				return NULL;
-			}
-		}
-	}
 
 	tmp = sysv_new_block(sb);
 	if (!tmp) {
@@ -742,7 +728,6 @@ static struct buffer_head *block_getblk(struct inode *inode,
 	u32 tmp, block;
 	sysv_zone_t *p;
 	struct buffer_head * result;
-	unsigned long limit;
 
 	result = NULL;
 	if (!bh)
@@ -768,16 +753,6 @@ repeat:
 			goto repeat;
 		} else {
 			*phys = tmp;
-			goto out;
-		}
-	}
-	*err = -EFBIG;
-
-	limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
-	if (limit < RLIM_INFINITY) {
-		limit >>= sb->sv_block_size_bits;
-		if (new_block >= limit) {
-			send_sig(SIGXFSZ, current, 0);
 			goto out;
 		}
 	}

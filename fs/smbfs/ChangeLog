@@ -1,5 +1,9 @@
 ChangeLog for smbfs.
 
+2000-07-25 Urban Widmark <urban@svenskatest.se>
+
+	* proc.c: fix 3 places where bad server responses could cause an Oops.
+
 2000-07-15 Urban Widmark <urban@svenskatest.se>
 
 	* *.c: more debug (%.*s) & indent fixes

@@ -673,13 +673,6 @@ static int vga16fb_pan_display(struct fb_var_screeninfo *var, int con,
 	return 0;
 }
 
-static int vga16fb_ioctl(struct inode *inode, struct file *file,
-		       unsigned int cmd, unsigned long arg, int con,
-		       struct fb_info *info)
-{
-	return -EINVAL;
-}
-
 static struct fb_ops vga16fb_ops = {
 	owner:		THIS_MODULE,
 	fb_get_fix:	vga16fb_get_fix,
@@ -688,7 +681,6 @@ static struct fb_ops vga16fb_ops = {
 	fb_get_cmap:	vga16fb_get_cmap,
 	fb_set_cmap:	vga16fb_set_cmap,
 	fb_pan_display:	vga16fb_pan_display,
-	fb_ioctl:	vga16fb_ioctl,
 };
 
 int vga16fb_setup(char *options)

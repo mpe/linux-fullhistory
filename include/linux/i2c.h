@@ -29,6 +29,7 @@
 #define I2C_H
 
 #include <linux/i2c-id.h>	/* id values of adapters et. al. 	*/
+#include <linux/types.h>
 
 
 struct i2c_msg;
@@ -49,7 +50,6 @@ struct i2c_msg;
 #else
 #include <asm/semaphore.h>
 #endif
-#include <linux/types.h>
 #include <linux/config.h>
 
 /* --- General options ------------------------------------------------	*/
@@ -371,7 +371,6 @@ extern int i2c_check_functionality (struct i2c_adapter *adap, u32 func);
 
 #endif /* __KERNEL__ */
 
-#include <linux/types.h>
 /*
  * I2C Message - used for pure i2c transaction, also from /dev interface
  */

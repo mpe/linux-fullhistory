@@ -472,9 +472,6 @@ int clgenfb_setup (char *options);
 
 static int clgenfb_open (struct fb_info *info, int user);
 static int clgenfb_release (struct fb_info *info, int user);
-static int clgenfb_ioctl (struct inode *inode, struct file *file,
-		   unsigned int cmd, unsigned long arg, int con,
-		   struct fb_info *info);
 #if defined(CONFIG_FB_OF)
 int clgen_of_init (struct device_node *dp);
 #endif
@@ -490,7 +487,6 @@ static struct fb_ops clgenfb_ops = {
 	fb_get_cmap:	fbgen_get_cmap,
 	fb_set_cmap:	fbgen_set_cmap,
 	fb_pan_display:	fbgen_pan_display,
-	fb_ioctl:	clgenfb_ioctl,
 };
 
 /*--- Hardware Specific Routines -------------------------------------------*/
@@ -646,16 +642,6 @@ static int clgenfb_release (struct fb_info *info, int user)
 	return 0;
 }
 
-/*--- handle /dev/fbx ioctl calls ------------------------------------------*/
-static int clgenfb_ioctl (struct inode *inode, struct file *file,
-		   unsigned int cmd, unsigned long arg, int con,
-		   struct fb_info *info)
-{
-	DPRINTK ("ENTER\n");
-	/* Nothing exciting here... */
-	DPRINTK ("EXIT\n");
-	return -EINVAL;
-}
 /**** END   Interface used by the World *************************************/
 /****************************************************************************/
 /**** BEGIN Hardware specific Routines **************************************/

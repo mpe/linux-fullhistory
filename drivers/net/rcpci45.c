@@ -1139,19 +1139,19 @@ static int RCioctl(struct net_device *dev, struct ifreq *rq, int cmd)
             printk("RC SETSPEED\n");
             RCUD_SETSPEED = &RCuser.RCUS_SETSPEED;
             RCSetLinkSpeed(pDpa->id, (U16) RCUD_SETSPEED->LinkSpeedCode);
-            printk("RC New speed = 0x%d\n", RCUD_SETSPEED->LinkSpeedCode);
+            printk("RC New speed = 0x%x\n", RCUD_SETSPEED->LinkSpeedCode);
             break;
         case RCUC_SETPROM:
             printk("RC SETPROM\n");
             RCUD_SETPROM = &RCuser.RCUS_SETPROM;
             RCSetPromiscuousMode(pDpa->id,(U16)RCUD_SETPROM->PromMode);
-            printk("RC New prom mode = 0x%d\n", RCUD_SETPROM->PromMode);
+            printk("RC New prom mode = 0x%x\n", RCUD_SETPROM->PromMode);
             break;
         case RCUC_SETBROADCAST:
             printk("RC SETBROADCAST\n");
             RCUD_SETBROADCAST = &RCuser.RCUS_SETBROADCAST;
             RCSetBroadcastMode(pDpa->id,(U16)RCUD_SETBROADCAST->BroadcastMode);
-            printk("RC New broadcast mode = 0x%d\n", RCUD_SETBROADCAST->BroadcastMode);
+            printk("RC New broadcast mode = 0x%x\n", RCUD_SETBROADCAST->BroadcastMode);
             break;
         default:
             printk("RC command default\n");

@@ -75,7 +75,7 @@ int default_fat_access(struct super_block *sb,int nr,int new_value)
 		/* Fscking Microsoft marketing department. Their "32" is 28. */
 		next &= 0xfffffff;
 		if (next >= 0xffffff7) next = -1;
-		PRINTK(("fat_bread: 0x%x, nr=0x%x, first=0x%x, next=0x%d\n", b, nr, first, next));
+		PRINTK(("fat_bread: 0x%x, nr=0x%x, first=0x%x, next=0x%x\n", b, nr, first, next));
 
 	} else if (MSDOS_SB(sb)->fat_bits == 16) {
 		p_first = p_last = NULL; /* GCC needs that stuff */

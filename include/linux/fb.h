@@ -280,10 +280,10 @@ struct fb_ops {
     /* set colormap */
     int (*fb_set_cmap)(struct fb_cmap *cmap, int kspc, int con,
 		       struct fb_info *info);
-    /* pan display */
+    /* pan display (optional) */
     int (*fb_pan_display)(struct fb_var_screeninfo *var, int con,
 			  struct fb_info *info);
-    /* perform fb specific ioctl */
+    /* perform fb specific ioctl (optional) */
     int (*fb_ioctl)(struct inode *inode, struct file *file, unsigned int cmd,
 		    unsigned long arg, int con, struct fb_info *info);
     /* perform fb specific mmap */
@@ -384,9 +384,6 @@ extern int fbgen_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			  struct fb_info *info);
 extern int fbgen_pan_display(struct fb_var_screeninfo *var, int con,
 			     struct fb_info *info);
-extern int fbgen_ioctl(struct inode *inode, struct file *file,
-		       unsigned int cmd, unsigned long arg, int con,
-		       struct fb_info *info);
 
     /*
      *  Helper functions

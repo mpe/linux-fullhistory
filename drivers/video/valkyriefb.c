@@ -123,14 +123,10 @@ static int valkyrie_get_var(struct fb_var_screeninfo *var, int con,
 			 struct fb_info *info);
 static int valkyrie_set_var(struct fb_var_screeninfo *var, int con,
 			 struct fb_info *info);
-static int valkyrie_pan_display(struct fb_var_screeninfo *var, int con,
-			     struct fb_info *info);
 static int valkyrie_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			  struct fb_info *info);
 static int valkyrie_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			  struct fb_info *info);
-static int valkyrie_ioctl(struct inode *inode, struct file *file, u_int cmd,
-		       u_long arg, int con, struct fb_info *info);
 
 static int read_valkyrie_sense(struct fb_info_valkyrie *p);
 static inline int valkyrie_vram_reqd(int video_mode, int color_mode);
@@ -155,8 +151,6 @@ static struct fb_ops valkyriefb_ops = {
 	fb_set_var:	valkyrie_set_var,
 	fb_get_cmap:	valkyrie_get_cmap,
 	fb_set_cmap:	valkyrie_set_cmap,
-	fb_pan_display:	valkyrie_pan_display,
-	fb_ioctl:	valkyrie_ioctl,
 };
 
 static int valkyriefb_getcolreg(u_int regno, u_int *red, u_int *green,
@@ -239,14 +233,6 @@ static int valkyrie_set_var(struct fb_var_screeninfo *var, int con,
 	return 0;
 }
 
-static int valkyrie_pan_display(struct fb_var_screeninfo *var, int con,
-			     struct fb_info *info)
-{
-	if (var->xoffset != 0 || var->yoffset != 0)
-		return -EINVAL;
-	return 0;
-}
-
 static int valkyrie_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			  struct fb_info *info)
 {
@@ -283,12 +269,6 @@ static int valkyrie_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 	}
 	fb_copy_cmap(cmap, &disp->cmap, kspc ? 0 : 1);
 	return 0;
-}
-
-static int valkyrie_ioctl(struct inode *inode, struct file *file, u_int cmd,
-		       u_long arg, int con, struct fb_info *info)
-{
-	return -EINVAL;
 }
 
 static int valkyriefb_switch(int con, struct fb_info *fb)

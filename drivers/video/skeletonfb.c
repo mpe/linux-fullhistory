@@ -390,7 +390,7 @@ static struct fb_ops xxxfb_ops = {
 	fb_get_cmap:	fbgen_get_cmap,
 	fb_set_cmap:	fbgen_set_cmap,
 	fb_pan_display:	fbgen_pan_display,
-	fb_ioctl:	fbgen_ioctl,
+	fb_ioctl:	xxxfb_ioctl,   /* optional */
 };
 
 

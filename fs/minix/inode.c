@@ -505,20 +505,6 @@ repeat:
 			return NULL;
 		}
 	}
-	*err = -EFBIG;
-
-	/* Check file limits.. */
-	{
-		unsigned long limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
-		if (limit < RLIM_INFINITY) {
-			limit >>= BLOCK_SIZE_BITS;
-			if (new_block >= limit) {
-				send_sig(SIGXFSZ, current, 0);
-				*err = -EFBIG;
-				return NULL;
-			}
-		}
-	}
 
 	tmp = minix_new_block(inode);
 	if (!tmp) {
@@ -564,7 +550,6 @@ static struct buffer_head * V1_block_getblk(struct inode * inode,
 	int tmp;
 	unsigned short *p;
 	struct buffer_head * result;
-	unsigned long limit;
 
 	result = NULL;
 	if (!bh)
@@ -587,16 +572,6 @@ repeat:
 			goto repeat;
 		} else {
 			*phys = tmp;
-			goto out;
-		}
-	}
-	*err = -EFBIG;
-
-	limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
-	if (limit < RLIM_INFINITY) {
-		limit >>= BLOCK_SIZE_BITS;
-		if (new_block >= limit) {
-			send_sig(SIGXFSZ, current, 0);
 			goto out;
 		}
 	}
@@ -741,20 +716,6 @@ repeat:
 			return NULL;
 		}
 	}
-	*err = -EFBIG;
-
-	/* Check file limits.. */
-	{
-		unsigned long limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
-		if (limit < RLIM_INFINITY) {
-			limit >>= BLOCK_SIZE_BITS;
-			if (new_block >= limit) {
-				send_sig(SIGXFSZ, current, 0);
-				*err = -EFBIG;
-				return NULL;
-			}
-		}
-	}
 
 	tmp = minix_new_block(inode);
 	if (!tmp) {
@@ -800,7 +761,6 @@ static struct buffer_head * V2_block_getblk(struct inode * inode,
 	int tmp;
 	unsigned int *p;
 	struct buffer_head * result;
-	unsigned long limit;
 
 	result = NULL;
 	if (!bh)
@@ -823,16 +783,6 @@ repeat:
 			goto repeat;
 		} else {
 			*phys = tmp;
-			goto out;
-		}
-	}
-	*err = -EFBIG;
-
-	limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
-	if (limit < RLIM_INFINITY) {
-		limit >>= BLOCK_SIZE_BITS;
-		if (new_block >= limit) {
-			send_sig(SIGXFSZ, current, 0);
 			goto out;
 		}
 	}

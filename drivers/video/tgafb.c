@@ -279,8 +279,6 @@ static int tgafb_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 		u_int *transp, struct fb_info *info);
 static int tgafb_setcolreg(u_int regno, u_int red, u_int green, u_int blue, 
 		u_int transp, struct fb_info *info);
-static int tgafb_pan_display(const struct fb_var_screeninfo *var,
-		struct fb_info_gen *info);
 static int tgafb_blank(int blank, struct fb_info_gen *info);
 static void tgafb_set_disp(const void *fb_par, struct display *disp, 
 		struct fb_info_gen *info);
@@ -780,16 +778,6 @@ static void tgafb_update_palette(void)
 #endif
 
 
-static int tgafb_pan_display(const struct fb_var_screeninfo *var, 
-	                             struct fb_info_gen *info)
-{
-    if (var->xoffset || var->yoffset)
-	return -EINVAL;
-    else
-	return 0;
-}
-
-
 static int tgafb_blank(int blank, struct fb_info_gen *info)
 {
     static int tga_vesa_blanked = 0;
@@ -869,7 +857,7 @@ static void tgafb_set_disp(const void *fb_par, struct display *disp,
 
 struct fbgen_hwswitch tgafb_hwswitch = {
     tgafb_detect, tgafb_encode_fix, tgafb_decode_var, tgafb_encode_var, tgafb_get_par,
-    tgafb_set_par, tgafb_getcolreg, tgafb_setcolreg, tgafb_pan_display, tgafb_blank, 
+    tgafb_set_par, tgafb_getcolreg, tgafb_setcolreg, NULL, tgafb_blank, 
     tgafb_set_disp
 };
 
@@ -890,8 +878,6 @@ static struct fb_ops tgafb_ops = {
 	fb_set_var:	fbgen_set_var,
 	fb_get_cmap:	fbgen_get_cmap,
 	fb_set_cmap:	tgafb_set_cmap,
-	fb_pan_display:	fbgen_pan_display,
-	fb_ioctl:	fbgen_ioctl,
 };
 
 

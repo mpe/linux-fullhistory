@@ -107,14 +107,10 @@ static int platinum_get_var(struct fb_var_screeninfo *var, int con,
 			    struct fb_info *fb);
 static int platinum_set_var(struct fb_var_screeninfo *var, int con,
 			    struct fb_info *fb);
-static int platinum_pan_display(struct fb_var_screeninfo *var, int con,
-				struct fb_info *fb);
 static int platinum_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			     struct fb_info *info);
 static int platinum_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			     struct fb_info *info);
-static int platinum_ioctl(struct inode *inode, struct file *file, u_int cmd,
-			  u_long arg, int con, struct fb_info *info);
 
 
 /*
@@ -170,8 +166,6 @@ static struct fb_ops platinumfb_ops = {
 	fb_set_var:	platinum_set_var,
 	fb_get_cmap:	platinum_get_cmap,
 	fb_set_cmap:	platinum_set_cmap,
-	fb_pan_display:	platinum_pan_display,
-	fb_ioctl:	platinum_ioctl,
 };
 
 static int platinum_get_fix(struct fb_fix_screeninfo *fix, int con,
@@ -299,20 +293,6 @@ static int platinum_set_var(struct fb_var_screeninfo *var, int con,
 	return 0;
 }
 
-static int platinum_pan_display(struct fb_var_screeninfo *var, int con,
-				struct fb_info *info)
-{
-    /*
-     *  Pan (or wrap, depending on the `vmode' field) the display using the
-     *  `xoffset' and `yoffset' fields of the `var' structure.
-     *  If the values don't fit, return -EINVAL.
-     */
-
-	if (var->xoffset != 0 || var->yoffset != 0)
-		return -EINVAL;
-	return 0;
-}
-
 static int platinum_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			     struct fb_info *info)
 {
@@ -350,13 +330,6 @@ static int platinum_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 	else
 		fb_copy_cmap(cmap, &disp->cmap, kspc ? 0 : 1);
 	return 0;
-}
-
-static int platinum_ioctl(struct inode *inode, struct file *file, u_int cmd,
-			  u_long arg, int con, struct fb_info *info)
-{
-	printk(KERN_ERR "platinum_ioctl not yet implemented\n");
-	return -EINVAL;
 }
 
 static int platinum_switch(int con, struct fb_info *fb)

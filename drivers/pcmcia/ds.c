@@ -878,7 +878,14 @@ int __init init_pcmcia_ds(void)
     int i, ret;
     
     DEBUG(0, "%s\n", version);
-    
+ 
+    /*
+     * Ugly. But we want to wait for the socket threads to have started up.
+     * We really should let the drivers themselves drive some of this..
+     */
+    current->state = TASK_INTERRUPTIBLE;
+    schedule_timeout(HZ/10);
+
     pcmcia_get_card_services_info(&serv);
     if (serv.Revision != CS_RELEASE_CODE) {
 	printk(KERN_NOTICE "ds: Card Services release does not match!\n");

@@ -1225,7 +1225,6 @@ jffs_file_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
 	struct jffs_node *node;
 	struct dentry *dentry = filp->f_dentry; 
 	struct inode *inode = dentry->d_inode; 
-	unsigned long limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
 	int written = 0;
 	loff_t pos;
 	int err;
@@ -1282,22 +1281,6 @@ jffs_file_write(struct file *filp, const char *buf, size_t count, loff_t *ppos)
 	if (filp->f_flags & O_APPEND)
 		pos = inode->i_size;
 
-
-	/*
-	 * Check whether we've reached the file size limit.
-	 */
-	err = -EFBIG;
-	if (limit != RLIM_INFINITY) {
-		if (pos >= limit) {
-			send_sig(SIGXFSZ, current, 0);
-			goto out;
-		}
-		if (count > limit - pos) {
-			send_sig(SIGXFSZ, current, 0);
-			count = limit - pos;
-		}
-	}
-	
 	/* Things are going to be written so we could allocate and
 	   initialize the necessary data structures now.  */
 	if (!(node = (struct jffs_node *) kmalloc(sizeof(struct jffs_node),

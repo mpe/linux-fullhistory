@@ -89,8 +89,6 @@ static int s3trio_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			   struct fb_info *info);
 static int s3trio_pan_display(struct fb_var_screeninfo *var, int con,
 			      struct fb_info *info);
-static int s3trio_ioctl(struct inode *inode, struct file *file, u_int cmd,
-			u_long arg, int con, struct fb_info *info);
 
 
     /*
@@ -146,7 +144,6 @@ static struct fb_ops s3trio_ops = {
 	fb_get_cmap:	s3trio_get_cmap,
 	fb_set_cmap:	s3trio_set_cmap,
 	fb_pan_display:	s3trio_pan_display,
-	fb_ioctl:	s3trio_ioctl,
 };
 
     /*
@@ -263,12 +260,6 @@ static int s3trio_set_cmap(struct fb_cmap *cmap, int kspc, int con,
     return 0;
 }
 
-
-static int s3trio_ioctl(struct inode *inode, struct file *file, u_int cmd,
-			u_long arg, int con, struct fb_info *info)
-{
-    return -EINVAL;
-}
 
 int __init s3triofb_init(void)
 {

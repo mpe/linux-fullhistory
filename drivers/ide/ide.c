@@ -2561,7 +2561,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 			byte args[4], *argbuf = args;
 			byte xfer_rate = 0;
 			int argsize = 4;
-			if (!capable(CAP_SYS_ADMIN)) return -EACCES;
+			if (!capable(CAP_SYS_ADMIN) || !capable(CAP_SYS_RAWIO)) return -EACCES;
 			if (NULL == (void *) arg)
 				return ide_do_drive_cmd(drive, &rq, ide_wait);
 			if (copy_from_user(args, (void *)arg, 4))
@@ -2599,7 +2599,7 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 		{
 			byte args[7], *argbuf = args;
 			int argsize = 7;
-			if (!capable(CAP_SYS_ADMIN)) return -EACCES;
+			if (!capable(CAP_SYS_ADMIN) || !capable(CAP_SYS_RAWIO)) return -EACCES;
 			if (copy_from_user(args, (void *)arg, 7))
 				return -EFAULT;
 			err = ide_wait_cmd_task(drive, argbuf);

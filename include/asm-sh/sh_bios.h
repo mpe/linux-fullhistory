@@ -7,8 +7,6 @@
  * usually from within the early stages of kernel boot.
  */
 
-#include <config/sh/standard/bios.h>
-
 
 extern void sh_bios_console_write(const char *buf, unsigned int len);
 extern void sh_bios_char_out(char ch);

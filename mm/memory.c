@@ -939,9 +939,10 @@ void vmtruncate(struct inode * inode, loff_t offset)
 	unsigned long partial, pgoff;
 	struct vm_area_struct * mpnt;
 	struct address_space *mapping = inode->i_mapping;
+	unsigned long limit;
 
 	if (inode->i_size < offset)
-		goto out;
+		goto do_expand;
 	inode->i_size = offset;
 	truncate_inode_pages(mapping, offset);
 	spin_lock(&mapping->i_shared_lock);
@@ -986,11 +987,29 @@ void vmtruncate(struct inode * inode, loff_t offset)
 	} while ((mpnt = mpnt->vm_next_share) != NULL);
 out_unlock:
 	spin_unlock(&mapping->i_shared_lock);
-out:
 	/* this should go into ->truncate */
 	inode->i_size = offset;
 	if (inode->i_op && inode->i_op->truncate)
 		inode->i_op->truncate(inode);
+	return;
+
+do_expand:
+	limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
+	if (limit != RLIM_INFINITY) {
+		if (inode->i_size >= limit) {
+			send_sig(SIGXFSZ, current, 0);
+			goto out;
+		}
+		if (offset > limit) {
+			send_sig(SIGXFSZ, current, 0);
+			offset = limit;
+		}
+	}
+	inode->i_size = offset;
+	if (inode->i_op && inode->i_op->truncate)
+		inode->i_op->truncate(inode);
+out:
+	return;
 }
 
 

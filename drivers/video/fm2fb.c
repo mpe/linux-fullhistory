@@ -189,14 +189,10 @@ static int fm2fb_get_var(struct fb_var_screeninfo *var, int con,
 			 struct fb_info *info);
 static int fm2fb_set_var(struct fb_var_screeninfo *var, int con,
 			 struct fb_info *info);
-static int fm2fb_pan_display(struct fb_var_screeninfo *var, int con,
-			     struct fb_info *info);
 static int fm2fb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			  struct fb_info *info);
 static int fm2fb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			  struct fb_info *info);
-static int fm2fb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-		       u_long arg, int con, struct fb_info *info);
 
 
     /*
@@ -227,8 +223,6 @@ static struct fb_ops fm2fb_ops = {
 	fb_set_var:	fm2fb_set_var,
 	fb_get_cmap:	fm2fb_get_cmap,
 	fb_set_cmap:	fm2fb_set_cmap,
-	fb_pan_display:	fm2fb_pan_display,
-	fb_ioctl:	fm2fb_ioctl,
 };
 
     /*
@@ -293,21 +287,6 @@ static int fm2fb_set_var(struct fb_var_screeninfo *var, int con,
 
 
     /*
-     *  Pan or Wrap the Display
-     *
-     *  This call looks only at xoffset, yoffset and the FB_VMODE_YWRAP flag
-     */
-
-static int fm2fb_pan_display(struct fb_var_screeninfo *var, int con,
-			     struct fb_info *info)
-{
-    if (var->xoffset || var->yoffset)
-	return -EINVAL;
-    else
-	return 0;
-}
-
-    /*
      *  Get the Colormap
      */
 
@@ -342,13 +321,6 @@ static int fm2fb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
     } else
 	fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
     return 0;
-}
-
-
-static int fm2fb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-		       u_long arg, int con, struct fb_info *info)
-{
-    return -EINVAL;
 }
 
 

@@ -434,8 +434,6 @@ static int sisfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			  struct fb_info *info);
 static int sisfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			  struct fb_info *info);
-static int sisfb_pan_display(struct fb_var_screeninfo *var, int con,
-			     struct fb_info *info);
 static int sisfb_ioctl(struct inode *inode, struct file *file,
 		       unsigned int cmd, unsigned long arg, int con,
 		       struct fb_info *info);
@@ -2598,17 +2596,6 @@ static int sisfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 	return 0;
 }
 
-/*
- *    Pan or Wrap the Display
- */
-
-static int sisfb_pan_display(struct fb_var_screeninfo *var, int con,
-			     struct fb_info *info)
-{
-	/* not support virtual screen yet */
-	return -EINVAL;
-}
-
 static int sisfb_ioctl(struct inode *inode, struct file *file,
 		       unsigned int cmd, unsigned long arg, int con,
 		       struct fb_info *info)
@@ -2694,7 +2681,6 @@ static struct fb_ops sisfb_ops = {
 	fb_set_var:	sisfb_set_var,
 	fb_get_cmap:	sisfb_get_cmap,
 	fb_set_cmap:	sisfb_set_cmap,
-	fb_pan_display:	sisfb_pan_display,
 	fb_ioctl:	sisfb_ioctl,
 	fb_mmap:	sisfb_mmap,
 };

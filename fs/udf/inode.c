@@ -508,23 +508,6 @@ static struct buffer_head * inode_getblk(struct inode * inode, long block,
 	}
 	udf_release_data(cbh);
 
-	*err = -EFBIG;
-
-	/* Check file limits.. */
-	{
-		unsigned long limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
-		if (limit < RLIM_INFINITY)
-		{
-			limit >>= inode->i_sb->s_blocksize_bits;
-			if (block >= limit)
-			{
-				send_sig(SIGXFSZ, current, 0);
-				*err = -EFBIG;
-				return NULL;
-			}
-		}
-	}
-
 	/* if the current extent is not recorded but allocated, get the
 		block in the extent corresponding to the requested block */
 	if ((laarr[c].extLength >> 30) == EXTENT_NOT_RECORDED_ALLOCATED)

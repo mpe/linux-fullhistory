@@ -308,10 +308,6 @@ static int virgefb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			    struct fb_info *info);
 static int virgefb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			    struct fb_info *info);
-static int virgefb_pan_display(struct fb_var_screeninfo *var, int con,
-			       struct fb_info *info);
-static int virgefb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-                         u_long arg, int con, struct fb_info *info);
 
 
 /*
@@ -1072,30 +1068,6 @@ static int virgefb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 }
 
 
-/*
- *    Pan or Wrap the Display
- *
- *    This call looks only at xoffset, yoffset and the FB_VMODE_YWRAP flag
- */
-
-static int virgefb_pan_display(struct fb_var_screeninfo *var, int con,
-			       struct fb_info *info)
-{
-	return(-EINVAL);
-}
-
-
-/*
- *	 Cybervision Frame Buffer Specific ioctls
- */
-
-static int virgefb_ioctl(struct inode *inode, struct file *file,
-			 u_int cmd, u_long arg, int con, struct fb_info *info)
-{
-	return(-EINVAL);
-}
-
-
 static struct fb_ops virgefb_ops = {
 	owner:		THIS_MODULE,
 	fb_get_fix:	virgefb_get_fix,
@@ -1103,8 +1075,6 @@ static struct fb_ops virgefb_ops = {
 	fb_set_var:	virgefb_set_var,
 	fb_get_cmap:	virgefb_get_cmap,
 	fb_set_cmap:	virgefb_set_cmap,
-	fb_pan_display:	virgefb_pan_display,
-	fb_ioctl:	virgefb_ioctl,
 };
 
 

@@ -438,13 +438,6 @@ static int vesafb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 	return 0;
 }
 
-static int vesafb_ioctl(struct inode *inode, struct file *file,
-		       unsigned int cmd, unsigned long arg, int con,
-		       struct fb_info *info)
-{
-	return -EINVAL;
-}
-
 static struct fb_ops vesafb_ops = {
 	owner:		THIS_MODULE,
 	fb_get_fix:	vesafb_get_fix,
@@ -453,7 +446,6 @@ static struct fb_ops vesafb_ops = {
 	fb_get_cmap:	vesafb_get_cmap,
 	fb_set_cmap:	vesafb_set_cmap,
 	fb_pan_display:	vesafb_pan_display,
-	fb_ioctl:	vesafb_ioctl,
 };
 
 int vesafb_setup(char *options)

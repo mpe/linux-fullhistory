@@ -142,7 +142,7 @@ extern unsigned long cpu_hz;
 #define EXT_MEM_K (*(unsigned short *) (PARAM+2))
 #define ALT_MEM_K (*(unsigned long *) (PARAM+0x1e0))
 #define E820_MAP_NR (*(char*) (PARAM+E820NR))
-#define E820_MAP    ((unsigned long *) (PARAM+E820MAP))
+#define E820_MAP    ((struct e820entry *) (PARAM+E820MAP))
 #define APM_BIOS_INFO (*(struct apm_bios_info *) (PARAM+0x40))
 #define DRIVE_INFO (*(struct drive_info_struct *) (PARAM+0x80))
 #define SYS_DESC_TABLE (*(struct sys_desc_table_struct*)(PARAM+0xa0))
@@ -424,6 +424,57 @@ static void __init print_e820_map(void)
 }
 
 /*
+ * Copy the BIOS e820 map into a safe place.
+ *
+ * Sanity-check it while we're at it..
+ *
+ * If we're lucky and live on a modern system, the setup code
+ * will have given us a memory map that we can use to properly
+ * set up memory.  If we aren't, we'll fake a memory map.
+ *
+ * We check to see that the memory map contains at least 2 elements
+ * before we'll use it, because the detection code in setup.S may
+ * not be perfect and most every PC known to man has two memory
+ * regions: one from 0 to 640k, and one from 1mb up.  (The IBM
+ * thinkpad 560x, for example, does not cooperate with the memory
+ * detection code.)
+ */
+static int __init copy_e820_map(struct e820entry * biosmap, int nr_map)
+{
+	/* Only one memory region (or negative)? Ignore it */
+	if (nr_map < 2)
+		return -1;
+
+	do {
+		unsigned long long start = biosmap->addr;
+		unsigned long long size = biosmap->size;
+		unsigned long long end = start + size;
+		long type = biosmap->type;
+
+		/* Overflow in 64 bits? Ignore the memory map. */
+		if (start > end)
+			return -1;
+
+		/*
+		 * Some BIOSes claim RAM in the 640k - 1M region.
+		 * Not right. Fix it up.
+		 */
+		if (type == E820_RAM) {
+			if (start < 0x100000 && end > 0xA0000) {
+				if (start < 0xA0000)
+					add_memory_region(start, 0xA0000-start, type);
+				if (end < 0x100000)
+					continue;
+				start = 0x100000;
+				size = end - start;
+			}
+		}
+		add_memory_region(start, size, type);
+	} while (biosmap++,--nr_map);
+	return 0;
+}
+
+/*
  * Do NOT EVER look at the BIOS memory size location.
  * It does not work on many machines.
  */
@@ -432,33 +483,17 @@ static void __init print_e820_map(void)
 void __init setup_memory_region(void)
 {
 	/*
-	 * If we're lucky and live on a modern system, the setup code
-	 * will have given us a memory map that we can use to properly
-	 * set up memory.  If we aren't, we'll fake a memory map.
+	 * Try to copy the BIOS-supplied E820-map.
 	 *
-	 * We check to see that the memory map contains at least 2 elements
-	 * before we'll use it, because the detection code in setup.S may
-	 * not be perfect and most every PC known to man has two memory
-	 * regions: one from 0 to 640k, and one from 1mb up.  (The IBM
-	 * thinkpad 560x, for example, does not cooperate with the memory
-	 * detection code.)
+	 * Otherwise fake a memory map; one section from 0k->640k,
+	 * the next section from 1mb->appropriate_mem_k
 	 */
-	if (E820_MAP_NR > 1) {
-		/* got a memory map; copy it into a safe place.
-		 */
-		e820.nr_map = E820_MAP_NR;
-		if (e820.nr_map > E820MAX)
-			e820.nr_map = E820MAX;
-		memcpy(e820.map, E820_MAP, e820.nr_map * sizeof e820.map[0]);
-	}
-	else {
-		/* otherwise fake a memory map; one section from 0k->640k,
-		 * the next section from 1mb->appropriate_mem_k
-		 */
+	if (copy_e820_map(E820_MAP, E820_MAP_NR) < 0) {
 		unsigned long mem_size;
 
 		mem_size = (ALT_MEM_K < EXT_MEM_K) ? EXT_MEM_K : ALT_MEM_K;
 
+		e820.nr_map = 0;
 		add_memory_region(0, LOWMEMSIZE(), E820_RAM);
 		add_memory_region(HIGH_MEMORY, mem_size << 10, E820_RAM);
   	}

@@ -97,14 +97,10 @@ static int sgivwfb_get_var(struct fb_var_screeninfo *var, int con,
 			   struct fb_info *info);
 static int sgivwfb_set_var(struct fb_var_screeninfo *var, int con,
 			   struct fb_info *info);
-static int sgivwfb_pan_display(struct fb_var_screeninfo *var, int con,
-			       struct fb_info *info);
 static int sgivwfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			    struct fb_info *info);
 static int sgivwfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			    struct fb_info *info);
-static int sgivwfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-			 u_long arg, int con, struct fb_info *info);
 static int sgivwfb_mmap(struct fb_info *info, struct file *file,
                         struct vm_area_struct *vma);
 
@@ -115,8 +111,6 @@ static struct fb_ops sgivwfb_ops = {
 	fb_set_var:	sgivwfb_set_var,
 	fb_get_cmap:	sgivwfb_get_cmap,
 	fb_set_cmap:	sgivwfb_set_cmap,
-	fb_pan_display:	sgivwfb_pan_display,
-	fb_ioctl:	sgivwfb_ioctl,
 	fb_mmap:	sgivwfb_mmap,
 };
 
@@ -805,39 +799,6 @@ static int sgivwfb_set_var(struct fb_var_screeninfo *var, int con,
 }
 
 /*
- *  Pan or Wrap the Display
- *
- *  This call looks only at xoffset, yoffset and the FB_VMODE_YWRAP flag
- */
-
-static int sgivwfb_pan_display(struct fb_var_screeninfo *var, int con,
-			       struct fb_info *info)
-{
-#if 0
-  if (var->vmode & FB_VMODE_YWRAP) {
-    if (var->yoffset < 0 ||
-	var->yoffset >= fb_display[con].var.yres_virtual ||
-	var->xoffset)
-      return -EINVAL;
-  } else {
-    if (var->xoffset+fb_display[con].var.xres >
-	fb_display[con].var.xres_virtual ||
-	var->yoffset+fb_display[con].var.yres >
-	fb_display[con].var.yres_virtual)
-      return -EINVAL;
-  }
-  fb_display[con].var.xoffset = var->xoffset;
-  fb_display[con].var.yoffset = var->yoffset;
-  if (var->vmode & FB_VMODE_YWRAP)
-    fb_display[con].var.vmode |= FB_VMODE_YWRAP;
-  else
-    fb_display[con].var.vmode &= ~FB_VMODE_YWRAP;
-  return 0;
-#endif
-  return -EINVAL;
-}
-
-/*
  *  Get the Colormap
  */
 static int sgivwfb_get_cmap(struct fb_cmap *cmap, int kspc, int con,
@@ -871,15 +832,6 @@ static int sgivwfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
   else
     fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
   return 0;
-}
-
-/*
- *  Virtual Frame Buffer Specific ioctls
- */
-static int sgivwfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-			 u_long arg, int con, struct fb_info *info)
-{
-  return -EINVAL;
 }
 
 static int sgivwfb_mmap(struct fb_info *info, struct file *file,

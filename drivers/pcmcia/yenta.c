@@ -470,35 +470,15 @@ static void yenta_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 /*
- * Watch a socket every second (and possibly in a
- * more timely manner if the state change interrupt
- * works..)
+ * Only probe "regular" interrupts, don't
+ * touch dangerous spots like the mouse irq,
+ * because there are mice that apparently
+ * get really confused if they get fondled
+ * too intimately.
+ *
+ * Default to 11, 10, 9, 7, 6, 5, 4, 3.
  */
-static int yenta_socket_thread(void * data)
-{
-	pci_socket_t * socket = (pci_socket_t *) data;
-	DECLARE_WAITQUEUE(wait, current);
-
-	daemonize();
-	strcpy(current->comm, "CardBus Watcher");
-
-	do {
-		unsigned int events = socket->events | yenta_events(socket);
-
-		if (events) {
-			socket->events = 0;
-			if (socket->handler)
-				socket->handler(socket->info, events);
-		}
-
-		current->state = TASK_INTERRUPTIBLE;
-		add_wait_queue(&socket->wait, &wait);
-		if (!socket->events)
-			schedule_timeout(HZ);
-		remove_wait_queue(&socket->wait, &wait);
-	} while (!signal_pending(current));
-	return 0;
-}
+static u32 isa_interrupts = 0x0ef8;
 
 static unsigned int yenta_probe_irq(pci_socket_t *socket, u32 isa_irq_mask)
 {
@@ -540,6 +520,61 @@ static unsigned int yenta_probe_irq(pci_socket_t *socket, u32 isa_irq_mask)
 	return mask;
 }
 
+/*
+ * Set static data that doesn't need re-initializing..
+ */
+static void yenta_get_socket_capabilities(pci_socket_t *socket, u32 isa_irq_mask)
+{
+	socket->cap.features |= SS_CAP_PAGE_REGS | SS_CAP_PCCARD | SS_CAP_CARDBUS;
+	socket->cap.map_size = 0x1000;
+	socket->cap.pci_irq = socket->cb_irq;
+	socket->cap.irq_mask = yenta_probe_irq(socket, isa_irq_mask);
+	socket->cap.cb_dev = socket->dev;
+	socket->cap.bus = NULL;
+
+	printk("Yenta IRQ list %04x, PCI irq%d\n", socket->cap.irq_mask, socket->cb_irq);
+}
+
+extern void cardbus_register(pci_socket_t *socket);
+
+/*
+ * Watch a socket every second (and possibly in a
+ * more timely manner if the state change interrupt
+ * works..)
+ */
+static int yenta_socket_thread(void * data)
+{
+	pci_socket_t * socket = (pci_socket_t *) data;
+	DECLARE_WAITQUEUE(wait, current);
+
+	daemonize();
+	strcpy(current->comm, "CardBus Watcher");
+
+	/* Figure out what the dang thing can do for the PCMCIA layer... */
+	yenta_get_socket_capabilities(socket, isa_interrupts);
+	printk("Socket status: %08x\n", cb_readl(socket, CB_SOCKET_STATE));
+
+	/* Register it with the pcmcia layer.. */
+	cardbus_register(socket);
+
+	do {
+		unsigned int events = socket->events | yenta_events(socket);
+
+		if (events) {
+			socket->events = 0;
+			if (socket->handler)
+				socket->handler(socket->info, events);
+		}
+
+		current->state = TASK_INTERRUPTIBLE;
+		add_wait_queue(&socket->wait, &wait);
+		if (!socket->events)
+			schedule_timeout(HZ);
+		remove_wait_queue(&socket->wait, &wait);
+	} while (!signal_pending(current));
+	return 0;
+}
+
 static void yenta_clear_maps(pci_socket_t *socket)
 {
 	int i;
@@ -558,8 +593,10 @@ static void yenta_clear_maps(pci_socket_t *socket)
 	}
 }
 
-/* Called at resume and initialization events */
-static int yenta_init(pci_socket_t *socket)
+/*
+ * Initialize the standard cardbus registers
+ */
+static int yenta_config_init(pci_socket_t *socket)
 {
 	u16 bridge;
 	struct pci_dev *dev = socket->dev;
@@ -600,7 +637,12 @@ static int yenta_init(pci_socket_t *socket)
 
 	/* Redo card voltage interrogation */
 	cb_writel(socket, CB_SOCKET_FORCE, CB_CVSTEST);
+}
 
+/* Called at resume and initialization events */
+static int yenta_init(pci_socket_t *socket)
+{
+	yenta_config_init(socket);
 	yenta_clear_maps(socket);
 	return 0;
 }
@@ -622,21 +664,6 @@ static int yenta_suspend(pci_socket_t *socket)
 	 */
 
 	return 0;
-}
-
-/*
- * Set static data that doesn't need re-initializing..
- */
-static void yenta_get_socket_capabilities(pci_socket_t *socket, u32 isa_irq_mask)
-{
-	socket->cap.features |= SS_CAP_PAGE_REGS | SS_CAP_PCCARD | SS_CAP_CARDBUS;
-	socket->cap.map_size = 0x1000;
-	socket->cap.pci_irq = socket->cb_irq;
-	socket->cap.irq_mask = yenta_probe_irq(socket, isa_irq_mask);
-	socket->cap.cb_dev = socket->dev;
-	socket->cap.bus = NULL;
-
-	printk("Yenta IRQ list %04x, PCI irq%d\n", socket->cap.irq_mask, socket->cb_irq);
 }
 
 static void yenta_allocate_res(pci_socket_t *socket, int nr, unsigned type)
@@ -742,17 +769,6 @@ static struct cardbus_override_struct {
 #define NR_OVERRIDES (sizeof(cardbus_override)/sizeof(struct cardbus_override_struct))
 
 /*
- * Only probe "regular" interrupts, don't
- * touch dangerous spots like the mouse irq,
- * because there are mice that apparently
- * get really confused if they get fondled
- * too intimately.
- *
- * Default to 11, 10, 9, 7, 6, 5, 4, 3.
- */
-static u32 isa_interrupts = 0x0ef8;
-
-/*
  * Initialize a cardbus controller. Make sure we have a usable
  * interrupt, and that we can map the cardbus area. Fill in the
  * socket information structure..
@@ -780,6 +796,8 @@ static int yenta_open(pci_socket_t *socket)
 	if (!socket->base)
 		return -1;
 
+	yenta_config_init(socket);
+
 	/* Disable all events */
 	cb_writel(socket, CB_SOCKET_MASK, 0x0);
 
@@ -802,11 +820,7 @@ static int yenta_open(pci_socket_t *socket)
 		}
 	}
 
-	/* Figure out what the dang thing can do for the PCMCIA layer... */
-	yenta_get_socket_capabilities(socket, isa_interrupts);
-
 	kernel_thread(yenta_socket_thread, socket, CLONE_FS | CLONE_FILES | CLONE_SIGHAND);
-	printk("Socket status: %08x\n", cb_readl(socket, CB_SOCKET_STATE));
 	return 0;
 }
 

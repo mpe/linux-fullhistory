@@ -830,19 +830,6 @@ static int macfb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 	return 0;
 }
 
-static int macfb_ioctl(struct inode *inode, struct file *file,
-		       unsigned int cmd, unsigned long arg, int con,
-		       struct fb_info *info)
-{
-	return -EINVAL;
-}
-
-static int macfb_pan_display(struct fb_var_screeninfo *var, int con,
-			     struct fb_info *info)
-{
-	return -EINVAL;
-}
-
 static struct fb_ops macfb_ops = {
 	owner:		THIS_MODULE,
 	fb_get_fix:	macfb_get_fix,
@@ -850,8 +837,6 @@ static struct fb_ops macfb_ops = {
 	fb_set_var:	macfb_set_var,
 	fb_get_cmap:	macfb_get_cmap,
 	fb_set_cmap:	macfb_set_cmap,
-	fb_pan_display:	macfb_pan_display,
-	fb_ioctl:	macfb_ioctl,
 };
 
 void macfb_setup(char *options, int *ints)

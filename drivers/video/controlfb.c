@@ -122,8 +122,6 @@ static int control_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			  struct fb_info *info);
 static int control_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			  struct fb_info *info);
-static int control_ioctl(struct inode *inode, struct file *file, u_int cmd,
-		       u_long arg, int con, struct fb_info *info);
 
 
 static int controlfb_getcolreg(u_int regno, u_int *red, u_int *green,
@@ -175,7 +173,6 @@ static struct fb_ops controlfb_ops = {
 	fb_get_cmap:	control_get_cmap,
 	fb_set_cmap:	control_set_cmap,
 	fb_pan_display:	control_pan_display,
-	fb_ioctl:	control_ioctl,
 };
 
 
@@ -329,12 +326,6 @@ static int control_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 		return fb_set_cmap(cmap, kspc, controlfb_setcolreg, info);
 	fb_copy_cmap(cmap, &disp->cmap, kspc ? 0 : 1);
 	return 0;
-}
-
-static int control_ioctl(struct inode *inode, struct file *file, u_int cmd,
-		       u_long arg, int con, struct fb_info *info)
-{
-	return -EINVAL;
 }
 
 /********************  End of controlfb_ops implementation  ********************/

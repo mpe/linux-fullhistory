@@ -186,7 +186,6 @@ static struct buffer_head * ufs_inode_getfrag (struct inode *inode,
 	struct super_block * sb;
 	struct ufs_sb_private_info * uspi;
 	struct buffer_head * result;
-	unsigned long limit;
 	unsigned block, blockoff, lastfrag, lastblock, lastblockoff;
 	unsigned tmp, goal;
 	u32 * p, * p2;
@@ -218,16 +217,6 @@ repeat:
 			goto repeat;
 		} else {
 			*phys = tmp;
-			return NULL;
-		}
-	}
-	*err = -EFBIG;
-
-	limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
-	if (limit < RLIM_INFINITY) {
-		limit >>= sb->s_blocksize_bits;
-		if (new_fragment >= limit) {
-			send_sig(SIGXFSZ, current, 0);
 			return NULL;
 		}
 	}
@@ -348,19 +337,7 @@ repeat:
 			goto out;
 		}
 	}
-	*err = -EFBIG;
 
-	{
-		unsigned long limit = current->rlim[RLIMIT_FSIZE].rlim_cur;
-		if (limit < RLIM_INFINITY) {
-			limit >>= sb->s_blocksize_bits;
-			if (new_fragment >= limit) {
-				brelse (bh);
-				send_sig(SIGXFSZ, current, 0);
-				return NULL;
-			}
-		}
-	}
 	if (block && (tmp = SWAB32(((u32*)bh->b_data)[block-1]) + uspi->s_fpb))
 		goal = tmp + uspi->s_fpb;
 	else

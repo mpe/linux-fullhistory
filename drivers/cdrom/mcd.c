@@ -1218,7 +1218,7 @@ int __init mcd_init(void)
 	outb(MCMD_GET_VERSION,MCDPORT(0));
 	for(count=0;count<3;count++)
 		if(getValue(result+count)) {
-			printk("mitsumi get version failed at 0x%d\n",
+			printk("mitsumi get version failed at 0x%x\n",
 			       mcd_port);
                         cleanup(1);
                         return -EIO;

@@ -967,14 +967,6 @@ cyber2000fb_pan_display(struct fb_var_screeninfo *var, int con,
 }
 
 
-static int
-cyber2000fb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-		  u_long arg, int con, struct fb_info *info)
-{
-	return -EINVAL;
-}
-
-
 /*
  *    Update the `var' structure (called by fbcon.c)
  *
@@ -1122,7 +1114,6 @@ static struct fb_ops cyber2000fb_ops = {
 	fb_set_var:	cyber2000fb_set_var,
 	fb_set_cmap:	cyber2000fb_set_cmap,
 	fb_pan_display:	cyber2000fb_pan_display,
-	fb_ioctl:	cyber2000fb_ioctl,
 	fb_get_fix:	gen_get_fix,
 	fb_get_var:	gen_get_var,
 	fb_get_cmap:	gen_get_cmap,

@@ -2,361 +2,773 @@
  * Network device driver for the GMAC ethernet controller on
  * Apple G4 Powermacs.
  *
- * Copyright (C) 2000 Paul Mackerras.
+ * Copyright (C) 2000 Paul Mackerras & Ben. Herrenschmidt
+ * 
+ * portions based on sunhme.c by David S. Miller
+ * 
  */
 
 #include <linux/module.h>
+
+#include <linux/config.h>
 #include <linux/kernel.h>
+#include <linux/sched.h>
+#include <linux/types.h>
+#include <linux/fcntl.h>
+#include <linux/interrupt.h>
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
 #include <linux/delay.h>
 #include <linux/string.h>
 #include <linux/timer.h>
 #include <linux/init.h>
+#include <linux/pci.h>
 #include <asm/prom.h>
 #include <asm/io.h>
 #include <asm/pgtable.h>
+#include <asm/feature.h>
+
 #include "gmac.h"
 
 #define DEBUG_PHY
 
-#define NTX		32		/* must be power of 2 */
-#define NRX		32		/* must be power of 2 */
-#define RX_BUFLEN	(ETH_FRAME_LEN + 8)
+/* Driver version 1.1, kernel 2.4.x */
+#define GMAC_VERSION	"v1.1k4"
 
-struct gmac_dma_desc {
-	unsigned int	cmd;
-	unsigned int	status;
-	unsigned int	address;	/* phys addr, low 32 bits */
-	unsigned int	hi_addr;
-};
-
-/* Bits in cmd */
-#define RX_OWN	0x80000000		/* 1 = owned by chip */
-#define TX_SOP	0x80000000
-#define TX_EOP	0x40000000
-
-struct gmac {
-	volatile unsigned int *regs;	/* hardware registers, virtual addr */
-	volatile unsigned int *sysregs;
-	unsigned long	desc_page;	/* page for DMA descriptors */
-	volatile struct gmac_dma_desc *rxring;
-	struct sk_buff	*rx_buff[NRX];
-	int		next_rx;
-	volatile struct gmac_dma_desc *txring;
-	struct sk_buff	*tx_buff[NTX];
-	int		next_tx;
-	int		tx_gone;
-	unsigned char	tx_full;
-	int		phy_addr;
-	int		full_duplex;
-	struct net_device_stats stats;
-	struct net_device *next_gmac;
-};
-
-#define GM_OUT(r, v)	out_le32(gm->regs + (r)/4, (v))
-#define GM_IN(r)	in_le32(gm->regs + (r)/4)
-#define GM_BIS(r, v)	GM_OUT((r), GM_IN(r) | (v))
-#define GM_BIC(r, v)	GM_OUT((r), GM_IN(r) & ~(v))
-
-#define PHY_B5400	0x6040
-#define PHY_B5201	0x6212
-
-static unsigned char dummy_buf[RX_BUFLEN+2];
+static unsigned char dummy_buf[RX_BUF_ALLOC_SIZE + RX_OFFSET + GMAC_BUFFER_ALIGN];
 static struct net_device *gmacs = NULL;
 
 /* Prototypes */
 static int mii_read(struct gmac *gm, int phy, int r);
 static int mii_write(struct gmac *gm, int phy, int r, int v);
-static void powerup_transceiver(struct gmac *gm);
-static int gmac_reset(struct net_device *dev);
+static void mii_poll_start(struct gmac *gm);
+static void mii_poll_stop(struct gmac *gm);
+static void mii_interrupt(struct gmac *gm);
+static int mii_lookup_and_reset(struct gmac *gm);
+static void mii_setup_phy(struct gmac *gm);
+
+static void gmac_set_power(struct gmac *gm, int power_up);
+static int gmac_powerup_and_reset(struct net_device *dev);
+static void gmac_set_duplex_mode(struct gmac *gm, int full_duplex);
 static void gmac_mac_init(struct gmac *gm, unsigned char *mac_addr);
-static void gmac_init_rings(struct gmac *gm);
+static void gmac_init_rings(struct gmac *gm, int from_irq);
 static void gmac_start_dma(struct gmac *gm);
+static void gmac_stop_dma(struct gmac *gm);
+static void gmac_set_multicast(struct net_device *dev);
 static int gmac_open(struct net_device *dev);
 static int gmac_close(struct net_device *dev);
+static void gmac_tx_timeout(struct net_device *dev);
 static int gmac_xmit_start(struct sk_buff *skb, struct net_device *dev);
-static int gmac_tx_cleanup(struct gmac *gm);
+static void gmac_tx_cleanup(struct net_device *dev, int force_cleanup);
 static void gmac_receive(struct net_device *dev);
 static void gmac_interrupt(int irq, void *dev_id, struct pt_regs *regs);
 static struct net_device_stats *gmac_stats(struct net_device *dev);
 static int gmac_probe(void);
 static void gmac_probe1(struct device_node *gmac);
 
-/* Stuff for talking to the physical-layer chip */
+extern int pci_device_loc(struct device_node *dev, unsigned char *bus_ptr,
+		   unsigned char *devfn_ptr);
+
+/*
+ * Read via the mii interface from a PHY register
+ */
 static int
 mii_read(struct gmac *gm, int phy, int r)
 {
 	int timeout;
 
-	GM_OUT(MIFFRAME, 0x60020000 | (phy << 23) | (r << 18));
+	GM_OUT(GM_MIF_FRAME_CTL_DATA,
+		(0x01 << GM_MIF_FRAME_START_SHIFT) |
+		(0x02 << GM_MIF_FRAME_OPCODE_SHIFT) |
+		GM_MIF_FRAME_TURNAROUND_HI |
+		(phy << GM_MIF_FRAME_PHY_ADDR_SHIFT) |
+		(r << GM_MIF_FRAME_REG_ADDR_SHIFT));
+		
 	for (timeout = 1000; timeout > 0; --timeout) {
 		udelay(20);
-		if (GM_IN(MIFFRAME) & 0x10000)
-			return GM_IN(MIFFRAME) & 0xffff;
+		if (GM_IN(GM_MIF_FRAME_CTL_DATA) & GM_MIF_FRAME_TURNAROUND_LO)
+			return GM_IN(GM_MIF_FRAME_CTL_DATA) & GM_MIF_FRAME_DATA_MASK;
 	}
 	return -1;
 }
 
+/*
+ * Write on the mii interface to a PHY register
+ */
 static int
 mii_write(struct gmac *gm, int phy, int r, int v)
 {
 	int timeout;
 
-	GM_OUT(MIFFRAME, 0x50020000 | (phy << 23) | (r << 18) | (v & 0xffff));
+	GM_OUT(GM_MIF_FRAME_CTL_DATA,
+		(0x01 << GM_MIF_FRAME_START_SHIFT) |
+		(0x01 << GM_MIF_FRAME_OPCODE_SHIFT) |
+		GM_MIF_FRAME_TURNAROUND_HI |
+		(phy << GM_MIF_FRAME_PHY_ADDR_SHIFT) |
+		(r << GM_MIF_FRAME_REG_ADDR_SHIFT) |
+		(v & GM_MIF_FRAME_DATA_MASK));
+
 	for (timeout = 1000; timeout > 0; --timeout) {
 		udelay(20);
-		if (GM_IN(MIFFRAME) & 0x10000)
+		if (GM_IN(GM_MIF_FRAME_CTL_DATA) & GM_MIF_FRAME_TURNAROUND_LO)
 			return 0;
 	}
 	return -1;
 }
 
+/*
+ * Start MIF autopolling of the PHY status register
+ */
 static void 
 mii_poll_start(struct gmac *gm)
 {
 	unsigned int tmp;
 	
 	/* Start the MIF polling on the external transceiver. */
-	tmp = GM_IN(MIFCONFIG);
-	tmp &= ~(GMAC_MIF_CFGPR_MASK | GMAC_MIF_CFGPD_MASK);
-	tmp |= ((gm->phy_addr & 0x1f) << GMAC_MIF_CFGPD_SHIFT);
-	tmp |= (0x19 << GMAC_MIF_CFGPR_SHIFT);
-	tmp |= GMAC_MIF_CFGPE;
-	GM_OUT(MIFCONFIG, tmp);
+	tmp = GM_IN(GM_MIF_CFG);
+	tmp &= ~(GM_MIF_CFGPR_MASK | GM_MIF_CFGPD_MASK);
+	tmp |= ((gm->phy_addr & 0x1f) << GM_MIF_CFGPD_SHIFT);
+	tmp |= (MII_SR << GM_MIF_CFGPR_SHIFT);
+	tmp |= GM_MIF_CFGPE;
+	GM_OUT(GM_MIF_CFG, tmp);
 
 	/* Let the bits set. */
-	udelay(GMAC_MIF_POLL_DELAY);
+	udelay(GM_MIF_POLL_DELAY);
 
-	GM_OUT(MIFINTMASK, 0xffc0);
+	GM_OUT(GM_MIF_IRQ_MASK, 0xffc0);
 }
 
+/*
+ * Stop MIF autopolling of the PHY status register
+ */
 static void 
 mii_poll_stop(struct gmac *gm)
 {
-	GM_OUT(MIFINTMASK, 0xffff);
-	GM_BIC(MIFCONFIG, GMAC_MIF_CFGPE);
-	udelay(GMAC_MIF_POLL_DELAY);
+	GM_OUT(GM_MIF_IRQ_MASK, 0xffff);
+	GM_BIC(GM_MIF_CFG, GM_MIF_CFGPE);
+	udelay(GM_MIF_POLL_DELAY);
 }
 
+/*
+ * Called when the MIF detect a change of the PHY status
+ * 
+ * handles monitoring the link and updating GMAC with the correct
+ * duplex mode.
+ * 
+ * Note: Are we missing status changes ? In this case, we'll have to
+ * a timer and control the autoneg. process more closely. Also, we may
+ * want to stop rx and tx side when the link is down.
+ */
 static void
 mii_interrupt(struct gmac *gm)
 {
-	unsigned long	flags;
 	int		phy_status;
+	int		lpar_ability;
 	
-	save_flags(flags);
-	cli();
-
 	mii_poll_stop(gm);
 
 	/* May the status change before polling is re-enabled ? */
 	mii_poll_start(gm);
 	
 	/* We read the Auxilliary Status Summary register */
-	phy_status = mii_read(gm, gm->phy_addr, 0x19);
+	phy_status = mii_read(gm, gm->phy_addr, MII_SR);
+	if ((phy_status ^ gm->phy_status) & (MII_SR_ASSC | MII_SR_LKS)) {
+		int		full_duplex;
+		int		link_100;
 #ifdef DEBUG_PHY
-	printk("mii_interrupt, phy_status: %x\n", phy_status);
+		printk("Link state change, phy_status: 0x%04x\n", phy_status);
 #endif
-	/* Auto-neg. complete ? */
-	if (phy_status & 0x8000) {
-		int full_duplex = 0;
-		switch((phy_status >> 8) & 0x7) {
-			case 2:
-			case 5:
-				full_duplex = 1;
-				break;
-		}
-		if (full_duplex != gm->full_duplex) {
-			GM_BIC(TXMAC_CONFIG, 1);
-			udelay(200);
-			if (full_duplex) {
-				printk("full duplex active\n");
-				GM_OUT(TXMAC_CONFIG, 6);
-				GM_OUT(XIF_CONFIG, 1);
-			} else {
-				printk("half duplex active\n");
-				GM_OUT(TXMAC_CONFIG, 0);
-				GM_OUT(XIF_CONFIG, 5);
-			}
-			GM_BIS(TXMAC_CONFIG, 1);
+		gm->phy_status = phy_status;
+
+		lpar_ability = mii_read(gm, gm->phy_addr, MII_ANLPA);
+		if (lpar_ability & MII_ANLPA_PAUS)
+			GM_BIS(GM_MAC_CTRL_CONFIG, GM_MAC_CTRL_CONF_SND_PAUSE_EN);
+		else
+			GM_BIC(GM_MAC_CTRL_CONFIG, GM_MAC_CTRL_CONF_SND_PAUSE_EN);
+
+		/* Link ? For now we handle only the 5201 PHY */
+		if ((phy_status & MII_SR_LKS) && (phy_status & MII_SR_ASSC)) {
+		    if (gm->phy_type == PHY_B5201) {
+		    	int aux_stat = mii_read(gm, gm->phy_addr, MII_BCM5201_AUXCTLSTATUS);
+#ifdef DEBUG_PHY
+			printk("    Link up ! BCM5201 aux_stat: 0x%04x\n", aux_stat);
+#endif
+		    	full_duplex = ((aux_stat & MII_BCM5201_AUXCTLSTATUS_DUPLEX) != 0);
+		    	link_100 = ((aux_stat & MII_BCM5201_AUXCTLSTATUS_SPEED) != 0);
+		    } else {
+		    	full_duplex = 1;
+		    	link_100 = 1;
+		    }
+#ifdef DEBUG_PHY
+		    printk("    full_duplex: %d, speed: %s\n", full_duplex,
+		    	link_100 ? "100" : "10");
+#endif
+		    if (full_duplex != gm->full_duplex) {
 			gm->full_duplex = full_duplex;
+			gmac_set_duplex_mode(gm, gm->full_duplex);
+			gmac_start_dma(gm);
+		    }
+		} else if (!(phy_status & MII_SR_LKS)) {
+#ifdef DEBUG_PHY
+		    printk("    Link down !\n");
+#endif
 		}
 	}
-
-	restore_flags(flags);
 }
 
-static void
-powerup_transceiver(struct gmac *gm)
-{
-	int phytype = mii_read(gm, 0, 3);
-#ifdef DEBUG_PHY
-	int i;
-#endif	
-	switch (phytype) {
-	case PHY_B5400:
-		mii_write(gm, 0, 0, mii_read(gm, 0, 0) & ~0x800);
-		mii_write(gm, 31, 30, mii_read(gm, 31, 30) & ~8);
-		break;
-	case PHY_B5201:
-		mii_write(gm, 0, 30, mii_read(gm, 0, 30) & ~8);
-		break;
-	default:
-		printk(KERN_ERR "GMAC: unknown PHY type %x\n", phytype);
-	}
-	/* Check this */
-	gm->phy_addr = 0;
-	gm->full_duplex = 0;
-
-#ifdef DEBUG_PHY
-	printk("PHY regs:\n");
-	for (i=0; i<0x20; i++) {
-		printk("%04x ", mii_read(gm, 0, i)); 
-		if ((i % 4) == 3)
-			printk("\n");
-	}
-#endif
-}
-
+/*
+ * Lookup for a PHY on the mii interface and reset it
+ */
 static int
-gmac_reset(struct net_device *dev)
+mii_lookup_and_reset(struct gmac *gm)
+{
+	int	i, timeout;
+	int	mii_status, mii_control;
+
+	/* Find the PHY */
+	gm->phy_addr = -1;
+	gm->phy_type = PHY_UNKNOWN;
+	
+	for(i=31; i>0; --i) {
+		mii_control = mii_read(gm, i, MII_CR);
+		mii_status = mii_read(gm, i, MII_SR);
+		if (mii_control != -1  && mii_status != -1 &&
+			(mii_control != 0xffff || mii_status != 0xffff))
+			break;
+	}
+	gm->phy_addr = i;
+	if (gm->phy_addr < 0)
+		return 0;
+
+	/* Reset it */
+	mii_write(gm, gm->phy_addr, MII_CR, mii_control | MII_CR_RST);
+	mdelay(10);
+	for (timeout = 100; timeout > 0; --timeout) {
+		mii_control = mii_read(gm, gm->phy_addr, MII_CR);
+		if (mii_control == -1) {
+			printk(KERN_ERR "%s PHY died after reset !\n",
+				gm->dev->name);
+			goto fail;
+		}
+		if ((mii_control & MII_CR_RST) == 0)
+			break;
+		mdelay(10);
+	}
+	if (mii_control & MII_CR_RST) {
+		printk(KERN_ERR "%s PHY reset timeout !\n", gm->dev->name);
+		goto fail;
+	}
+	mii_write(gm, gm->phy_addr, MII_CR, mii_control & ~MII_CR_ISOL);
+
+	/* Read the PHY ID */
+	gm->phy_id = (mii_read(gm, gm->phy_addr, MII_ID0) << 16) |
+		mii_read(gm, gm->phy_addr, MII_ID1);
+#ifdef DEBUG_PHY
+	printk("%s PHY ID: 0x%08x\n", gm->dev->name, gm->phy_id);
+#endif
+	if ((gm->phy_id & MII_BCM5400_MASK) == MII_BCM5400_ID) {
+		gm->phy_type = PHY_B5400;
+		printk(KERN_ERR "%s Warning ! Unsupported BCM5400 PHY !\n",
+			gm->dev->name);
+	} else if ((gm->phy_id & MII_BCM5201_MASK) == MII_BCM5201_ID) {
+		gm->phy_type = PHY_B5201;
+	} else {
+		printk(KERN_ERR "%s: Warning ! Unknown PHY ID 0x%08x !\n",
+			gm->dev->name, gm->phy_id);
+	}
+
+	return 1;
+	
+fail:
+	gm->phy_addr = -1;
+	return 0;
+}
+
+/* 
+ * Setup the PHY autonegociation parameters
+ * 
+ * Code to force the PHY duplex mode and speed should be
+ * added here
+ */
+static void
+mii_setup_phy(struct gmac *gm)
+{
+	int data;
+	
+	/* Stop auto-negociation */
+	data = mii_read(gm, gm->phy_addr, MII_CR);
+	mii_write(gm, gm->phy_addr, MII_CR, data & ~MII_CR_ASSE);
+
+	/* Set advertisement to 10/100 and Half/Full duplex
+	 * (full capabilities) */
+	data = mii_read(gm, gm->phy_addr, MII_ANA);
+	data |= MII_ANA_TXAM | MII_ANA_FDAM | MII_ANA_10M;
+	mii_write(gm, gm->phy_addr, MII_ANA, data);
+	
+	/* Restart auto-negociation */
+	data = mii_read(gm, gm->phy_addr, MII_CR);
+	data |= MII_CR_ASSE;
+	mii_write(gm, gm->phy_addr, MII_CR, data);
+	data |= MII_CR_RAN;
+	mii_write(gm, gm->phy_addr, MII_CR, data);
+}
+
+/* 
+ * Turn On/Off the gmac cell inside Uni-N
+ * 
+ * ToDo: Add code to support powering down of the PHY.
+ */
+static void
+gmac_set_power(struct gmac *gm, int power_up)
+{
+	if (power_up) {
+		feature_set_gmac_power(gm->of_node, 1);
+		if (gm->pci_devfn != 0xff) {
+			u16 cmd;
+			
+			/*
+			 * Make sure PCI is correctly configured
+			 *
+			 * We use old pci_bios versions of the function since, by
+			 * default, gmac is not powered up, and so will be absent
+			 * from the kernel initial PCI lookup. 
+			 * 
+			 * Should be replaced by 2.4 new PCI mecanisms and really
+			 * regiser the device.
+			 */
+			pcibios_read_config_word(gm->pci_bus, gm->pci_devfn,
+				PCI_COMMAND, &cmd);
+			cmd |= PCI_COMMAND_MEMORY | PCI_COMMAND_MASTER | PCI_COMMAND_INVALIDATE;
+	    		pcibios_write_config_word(gm->pci_bus, gm->pci_devfn,
+	    			PCI_COMMAND, cmd);
+	    		pcibios_write_config_byte(gm->pci_bus, gm->pci_devfn,
+	    			PCI_LATENCY_TIMER, 16);
+	    		pcibios_write_config_byte(gm->pci_bus, gm->pci_devfn,
+	    			PCI_CACHE_LINE_SIZE, 8);
+		}
+	} else {
+		/* FIXME: Add PHY power down */
+		gm->phy_type = 0;
+		feature_set_gmac_power(gm->of_node, 0);
+	}
+}
+
+/*
+ * Makes sure the GMAC cell is powered up, and reset it
+ */
+static int
+gmac_powerup_and_reset(struct net_device *dev)
 {
 	struct gmac *gm = (struct gmac *) dev->priv;
 	int timeout;
-
+	
 	/* turn on GB clock */
-	out_le32(gm->sysregs + 0x20/4, in_le32(gm->sysregs + 0x20/4) | 2);
-	udelay(10);
-	GM_OUT(SW_RESET, 3);
+	gmac_set_power(gm, 1);
+	/* Perform a software reset */
+	GM_OUT(GM_RESET, GM_RESET_TX | GM_RESET_RX);
 	for (timeout = 100; timeout > 0; --timeout) {
 		mdelay(10);
-		if ((GM_IN(SW_RESET) & 3) == 0)
+		if ((GM_IN(GM_RESET) & (GM_RESET_TX | GM_RESET_RX)) == 0) {
+			/* Mask out all chips interrupts */
+			GM_OUT(GM_IRQ_MASK, 0xffffffff);
 			return 0;
+		}
 	}
-	printk(KERN_ERR "GMAC: reset failed!\n");
+	printk(KERN_ERR "%s reset failed!\n", dev->name);
+	gmac_set_power(gm, 0);
 	return -1;
 }
 
+/*
+ * Set the MAC duplex mode.
+ * 
+ * Side effect: stops Tx MAC
+ */
+static void
+gmac_set_duplex_mode(struct gmac *gm, int full_duplex)
+{
+	/* Stop Tx MAC */
+	GM_BIC(GM_MAC_TX_CONFIG, GM_MAC_TX_CONF_ENABLE);
+	while(GM_IN(GM_MAC_TX_CONFIG) & GM_MAC_TX_CONF_ENABLE)
+		;
+	
+	if (full_duplex) {
+		GM_BIS(GM_MAC_TX_CONFIG, GM_MAC_TX_CONF_IGNORE_CARRIER
+			| GM_MAC_TX_CONF_IGNORE_COLL);
+		GM_BIC(GM_MAC_XIF_CONFIG, GM_MAC_XIF_CONF_DISABLE_ECHO);
+	} else {
+		GM_BIC(GM_MAC_TX_CONFIG, GM_MAC_TX_CONF_IGNORE_CARRIER
+			| GM_MAC_TX_CONF_IGNORE_COLL);
+		GM_BIS(GM_MAC_XIF_CONFIG, GM_MAC_XIF_CONF_DISABLE_ECHO);
+	}
+}
+
+/*
+ * Initialize a bunch of registers to put the chip into a known
+ * and hopefully happy state
+ */
 static void
 gmac_mac_init(struct gmac *gm, unsigned char *mac_addr)
 {
-	int i;
+	int i, fifo_size;
 
-	GM_OUT(RANSEED, 937);
-	GM_OUT(DATAPATHMODE, 4);
-	mii_write(gm, 0, 0, 0x1000);
-	GM_OUT(TXDMA_CONFIG, 0xffc00);
-	GM_OUT(RXDMA_CONFIG, 0);
-	GM_OUT(MACPAUSE, 0x1bf0);
-	GM_OUT(IPG0, 0);
-	GM_OUT(IPG1, 8);
-	GM_OUT(IPG2, 4);
-	GM_OUT(MINFRAMESIZE, 64);
-	GM_OUT(MAXFRAMESIZE, 2000);
-	GM_OUT(PASIZE, 7);
-	GM_OUT(JAMSIZE, 4);
-	GM_OUT(ATTEMPT_LIMIT, 16);
-	GM_OUT(SLOTTIME, 64);
-	GM_OUT(MACCNTL_TYPE, 0x8808);
-	GM_OUT(MAC_ADDR_0, (mac_addr[4] << 8) + mac_addr[5]);
-	GM_OUT(MAC_ADDR_1, (mac_addr[2] << 8) + mac_addr[3]);
-	GM_OUT(MAC_ADDR_2, (mac_addr[0] << 8) + mac_addr[1]);
-	GM_OUT(MAC_ADDR_3, 0);
-	GM_OUT(MAC_ADDR_4, 0);
-	GM_OUT(MAC_ADDR_5, 0);
-	GM_OUT(MAC_ADDR_6, 0x0180);
-	GM_OUT(MAC_ADDR_7, 0xc200);
-	GM_OUT(MAC_ADDR_8, 0x0001);
-	GM_OUT(MAC_ADDR_FILTER_0, 0);
-	GM_OUT(MAC_ADDR_FILTER_1, 0);
-	GM_OUT(MAC_ADDR_FILTER_2, 0);
-	GM_OUT(MAC_ADDR_FILTER_MASK21, 0);
-	GM_OUT(MAC_ADDR_FILTER_MASK0, 0);
+	/* Set random seed to low bits of MAC address */
+	GM_OUT(GM_MAC_RANDOM_SEED, mac_addr[5] | (mac_addr[4] << 8));
+	
+	/* Configure the data path mode to MII/GII */
+	GM_OUT(GM_PCS_DATAPATH_MODE, GM_PCS_DATAPATH_MII);
+	
+	/* Configure XIF to MII mode. Full duplex led is set
+	 * by Apple, so...
+	 */
+	GM_OUT(GM_MAC_XIF_CONFIG, GM_MAC_XIF_CONF_TX_MII_OUT_EN
+		| GM_MAC_XIF_CONF_FULL_DPLX_LED);
+
+	/* Mask out all MAC interrupts */
+	GM_OUT(GM_MAC_TX_MASK, 0xffff);
+	GM_OUT(GM_MAC_RX_MASK, 0xffff);
+	GM_OUT(GM_MAC_CTRLSTAT_MASK, 0xff);
+	
+	/* Setup bits of MAC */
+	GM_OUT(GM_MAC_SND_PAUSE, GM_MAC_SND_PAUSE_DEFAULT);
+	GM_OUT(GM_MAC_CTRL_CONFIG, GM_MAC_CTRL_CONF_RCV_PAUSE_EN);
+	
+	/* Configure GEM DMA */
+	GM_OUT(GM_GCONF, GM_GCONF_BURST_SZ |
+		(31 << GM_GCONF_TXDMA_LIMIT_SHIFT) |
+		(31 << GM_GCONF_RXDMA_LIMIT_SHIFT));
+	GM_OUT(GM_TX_CONF,
+		(GM_TX_CONF_FIFO_THR_DEFAULT << GM_TX_CONF_FIFO_THR_SHIFT) |
+		NTX_CONF);
+
+	/* 34 byte offset for checksum computation.  This works because ip_input() will clear out
+	 * the skb->csum and skb->ip_summed fields and recompute the csum if IP options are
+	 * present in the header.  34 == (ethernet header len) + sizeof(struct iphdr)
+ 	*/
+	GM_OUT(GM_RX_CONF,
+		(RX_OFFSET << GM_RX_CONF_FBYTE_OFF_SHIFT) |
+		(0x22 << GM_RX_CONF_CHK_START_SHIFT) |
+		(GM_RX_CONF_DMA_THR_DEFAULT << GM_RX_CONF_DMA_THR_SHIFT) |
+		NRX_CONF);
+
+	/* Configure other bits of MAC */
+	GM_OUT(GM_MAC_INTR_PKT_GAP0, GM_MAC_INTR_PKT_GAP0_DEFAULT);
+	GM_OUT(GM_MAC_INTR_PKT_GAP1, GM_MAC_INTR_PKT_GAP1_DEFAULT);
+	GM_OUT(GM_MAC_INTR_PKT_GAP2, GM_MAC_INTR_PKT_GAP2_DEFAULT);
+	GM_OUT(GM_MAC_MIN_FRAME_SIZE, GM_MAC_MIN_FRAME_SIZE_DEFAULT);
+	GM_OUT(GM_MAC_MAX_FRAME_SIZE, GM_MAC_MAX_FRAME_SIZE_DEFAULT);
+	GM_OUT(GM_MAC_PREAMBLE_LEN, GM_MAC_PREAMBLE_LEN_DEFAULT);
+	GM_OUT(GM_MAC_JAM_SIZE, GM_MAC_JAM_SIZE_DEFAULT);
+	GM_OUT(GM_MAC_ATTEMPT_LIMIT, GM_MAC_ATTEMPT_LIMIT_DEFAULT);
+	GM_OUT(GM_MAC_SLOT_TIME, GM_MAC_SLOT_TIME_DEFAULT);
+	GM_OUT(GM_MAC_CONTROL_TYPE, GM_MAC_CONTROL_TYPE_DEFAULT);
+	
+	/* Setup MAC addresses, clear filters, clear hash table */
+	GM_OUT(GM_MAC_ADDR_NORMAL0, (mac_addr[4] << 8) + mac_addr[5]);
+	GM_OUT(GM_MAC_ADDR_NORMAL1, (mac_addr[2] << 8) + mac_addr[3]);
+	GM_OUT(GM_MAC_ADDR_NORMAL2, (mac_addr[0] << 8) + mac_addr[1]);
+	GM_OUT(GM_MAC_ADDR_ALT0, 0);
+	GM_OUT(GM_MAC_ADDR_ALT1, 0);
+	GM_OUT(GM_MAC_ADDR_ALT2, 0);
+	GM_OUT(GM_MAC_ADDR_CTRL0, 0x0001);
+	GM_OUT(GM_MAC_ADDR_CTRL1, 0xc200);
+	GM_OUT(GM_MAC_ADDR_CTRL2, 0x0180);
+	GM_OUT(GM_MAC_ADDR_FILTER0, 0);
+	GM_OUT(GM_MAC_ADDR_FILTER1, 0);
+	GM_OUT(GM_MAC_ADDR_FILTER2, 0);
+	GM_OUT(GM_MAC_ADDR_FILTER_MASK1_2, 0);
+	GM_OUT(GM_MAC_ADDR_FILTER_MASK0, 0);
 	for (i = 0; i < 27; ++i)
-		GM_OUT(MAC_HASHTABLE + i, 0);
-	GM_OUT(MACCNTL_CONFIG, 0);
+		GM_OUT(GM_MAC_ADDR_FILTER_HASH0 + i, 0);
+	
+	/* Clear stat counters */
+	GM_OUT(GM_MAC_COLLISION_CTR, 0);
+	GM_OUT(GM_MAC_FIRST_COLLISION_CTR, 0);
+	GM_OUT(GM_MAC_EXCS_COLLISION_CTR, 0);
+	GM_OUT(GM_MAC_LATE_COLLISION_CTR, 0);
+	GM_OUT(GM_MAC_DEFER_TIMER_COUNTER, 0);
+	GM_OUT(GM_MAC_PEAK_ATTEMPTS, 0);
+	GM_OUT(GM_MAC_RX_FRAME_CTR, 0);
+	GM_OUT(GM_MAC_RX_LEN_ERR_CTR, 0);
+	GM_OUT(GM_MAC_RX_ALIGN_ERR_CTR, 0);
+	GM_OUT(GM_MAC_RX_CRC_ERR_CTR, 0);
+	GM_OUT(GM_MAC_RX_CODE_VIOLATION_CTR, 0);
+	
 	/* default to half duplex */
-	GM_OUT(TXMAC_CONFIG, 0);
-	GM_OUT(XIF_CONFIG, 5);
+	GM_OUT(GM_MAC_TX_CONFIG, 0);
+	GM_OUT(GM_MAC_RX_CONFIG, 0);
+	gmac_set_duplex_mode(gm, gm->full_duplex);
+	
+	/* Setup pause thresholds */
+	fifo_size = GM_IN(GM_RX_FIFO_SIZE);
+	GM_OUT(GM_RX_PTH,
+		((fifo_size - ((GM_MAC_MAX_FRAME_SIZE_ALIGN + 8) * 2 / GM_RX_PTH_UNITS))
+			<< GM_RX_PTH_OFF_SHIFT) |
+		((fifo_size - ((GM_MAC_MAX_FRAME_SIZE_ALIGN + 8) * 3 / GM_RX_PTH_UNITS))
+			<< GM_RX_PTH_ON_SHIFT));
+		
+	/* Setup interrupt blanking */
+	if (GM_IN(GM_BIF_CFG) & GM_BIF_CFG_M66EN)
+		GM_OUT(GM_RX_BLANK, (5 << GM_RX_BLANK_INTR_PACKETS_SHIFT)
+			| (8 << GM_RX_BLANK_INTR_TIME_SHIFT));
+	else
+		GM_OUT(GM_RX_BLANK, (5 << GM_RX_BLANK_INTR_PACKETS_SHIFT)
+			| (4 << GM_RX_BLANK_INTR_TIME_SHIFT));	
 }
 
+/*
+ * Fill the Rx and Tx rings with good initial values, alloc
+ * fresh Rx skb's.
+ */
 static void
-gmac_init_rings(struct gmac *gm)
+gmac_init_rings(struct gmac *gm, int from_irq)
 {
 	int i;
 	struct sk_buff *skb;
 	unsigned char *data;
 	struct gmac_dma_desc *ring;
+	int gfp_flags = GFP_KERNEL;
+
+	if (from_irq || in_interrupt())
+		gfp_flags = GFP_ATOMIC;
 
 	/* init rx ring */
 	ring = (struct gmac_dma_desc *) gm->rxring;
 	memset(ring, 0, NRX * sizeof(struct gmac_dma_desc));
 	for (i = 0; i < NRX; ++i, ++ring) {
 		data = dummy_buf;
-		gm->rx_buff[i] = skb = dev_alloc_skb(RX_BUFLEN + 2);
+		gm->rx_buff[i] = skb = gmac_alloc_skb(RX_BUF_ALLOC_SIZE, gfp_flags);
 		if (skb != 0) {
-			/*skb_reserve(skb, 2);*/
-			data = skb->data;
+			skb->dev = gm->dev;
+			skb_put(skb, ETH_FRAME_LEN + RX_OFFSET);
+			skb_reserve(skb, RX_OFFSET);
+			data = skb->data - RX_OFFSET;
 		}
-		st_le32(&ring->address, virt_to_bus(data));
-		st_le32(&ring->cmd, RX_OWN);
+		st_le32(&ring->lo_addr, virt_to_bus(data));
+		st_le32(&ring->size, RX_SZ_OWN | ((RX_BUF_ALLOC_SIZE-RX_OFFSET) << RX_SZ_SHIFT));
 	}
 
 	/* init tx ring */
 	ring = (struct gmac_dma_desc *) gm->txring;
-	memset(ring, 0, NRX * sizeof(struct gmac_dma_desc));
+	memset(ring, 0, NTX * sizeof(struct gmac_dma_desc));
+
+	gm->next_rx = 0;
+	gm->next_tx = 0;
+	gm->tx_gone = 0;
 
 	/* set pointers in chip */
 	mb();
-	GM_OUT(RXDMA_BASE_HIGH, 0);
-	GM_OUT(RXDMA_BASE_LOW, virt_to_bus(gm->rxring));
-	GM_OUT(TXDMA_BASE_HIGH, 0);
-	GM_OUT(TXDMA_BASE_LOW, virt_to_bus(gm->txring));
+	GM_OUT(GM_RX_DESC_HI, 0);
+	GM_OUT(GM_RX_DESC_LO, virt_to_bus(gm->rxring));
+	GM_OUT(GM_TX_DESC_HI, 0);
+	GM_OUT(GM_TX_DESC_LO, virt_to_bus(gm->txring));
 }
 
+/*
+ * Start the Tx and Rx DMA engines and enable interrupts
+ * 
+ * Note: The various mdelay(20); come from Darwin implentation. Some
+ * tests (doc ?) are needed to replace those with something more intrusive.
+ */
 static void
 gmac_start_dma(struct gmac *gm)
 {
-	GM_BIS(RXDMA_CONFIG, 1);
-	GM_BIS(RXMAC_CONFIG, 1);
-	GM_OUT(RXDMA_KICK, NRX);
-	GM_BIS(TXDMA_CONFIG, 1);
-	GM_BIS(TXMAC_CONFIG, 1);
+	/* Enable Tx and Rx */
+	GM_BIS(GM_TX_CONF, GM_TX_CONF_DMA_EN);
+	mdelay(20);
+	GM_BIS(GM_RX_CONF, GM_RX_CONF_DMA_EN);
+	mdelay(20);
+	GM_BIS(GM_MAC_RX_CONFIG, GM_MAC_RX_CONF_ENABLE);
+	mdelay(20);
+	GM_BIS(GM_MAC_TX_CONFIG, GM_MAC_TX_CONF_ENABLE);
+	mdelay(20);
+	/* Kick the receiver and enable interrupts */
+	GM_OUT(GM_RX_KICK, NRX);
+	GM_BIC(GM_IRQ_MASK, 	GM_IRQ_TX_INT_ME |
+				GM_IRQ_TX_ALL |
+				GM_IRQ_RX_DONE |
+				GM_IRQ_RX_TAG_ERR |
+				GM_IRQ_MAC_RX |
+				GM_IRQ_MIF |
+				GM_IRQ_BUS_ERROR);
 }
 
-static int gmac_open(struct net_device *dev)
+/*
+ * Stop the Tx and Rx DMA engines after disabling interrupts
+ * 
+ * Note: The various mdelay(20); come from Darwin implentation. Some
+ * tests (doc ?) are needed to replace those with something more intrusive.
+ */
+static void
+gmac_stop_dma(struct gmac *gm)
+{
+	/* disable interrupts */
+	GM_OUT(GM_IRQ_MASK, 0xffffffff);
+	/* Enable Tx and Rx */
+	GM_BIC(GM_TX_CONF, GM_TX_CONF_DMA_EN);
+	mdelay(20);
+	GM_BIC(GM_RX_CONF, GM_RX_CONF_DMA_EN);
+	mdelay(20);
+	GM_BIC(GM_MAC_RX_CONFIG, GM_MAC_RX_CONF_ENABLE);
+	mdelay(20);
+	GM_BIC(GM_MAC_TX_CONFIG, GM_MAC_TX_CONF_ENABLE);
+	mdelay(20);
+}
+
+/*
+ * Configure promisc mode and setup multicast hash table
+ * filter
+ */
+#define CRC_POLY	0xedb88320
+static void
+gmac_set_multicast(struct net_device *dev)
+{
+	struct gmac *gm = (struct gmac *) dev->priv;
+	struct dev_mc_list *dmi = dev->mc_list;
+	int i,j,k,b;
+	unsigned long crc;
+	int multicast_hash = 0;
+	int multicast_all = 0;
+	int promisc = 0;
+	
+
+	/* Lock out others. */
+	netif_stop_queue(dev);
+
+
+	if (dev->flags & IFF_PROMISC)
+		promisc = 1;
+	else if ((dev->flags & IFF_ALLMULTI) /* || (dev->mc_count > XXX) */) {
+		multicast_all = 1;
+	} else {
+		u16 hash_table[16];
+
+		for(i = 0; i < 16; i++)
+			hash_table[i] = 0;
+
+	    	for (i = 0; i < dev->mc_count; i++) {
+			crc = ~0;
+			for (j = 0; j < 6; ++j) {
+			    b = dmi->dmi_addr[j];
+			    for (k = 0; k < 8; ++k) {
+				if ((crc ^ b) & 1)
+				    crc = (crc >> 1) ^ CRC_POLY;
+				else
+				    crc >>= 1;
+				b >>= 1;
+			    }
+			}
+			j = crc >> 24;	/* bit number in multicast_filter */
+			hash_table[j >> 4] |= 1 << (15 - (j & 0xf));
+			dmi = dmi->next;
+	    	}
+
+	    	for (i = 0; i < 16; i++)
+	    		GM_OUT(GM_MAC_ADDR_FILTER_HASH0 + (i*4), hash_table[i]);
+		GM_BIS(GM_MAC_RX_CONFIG, GM_MAC_RX_CONF_HASH_ENABLE);
+	    	multicast_hash = 1;
+	}
+
+	if (promisc)
+		GM_BIS(GM_MAC_RX_CONFIG, GM_MAC_RX_CONF_RX_ALL);
+	else
+		GM_BIC(GM_MAC_RX_CONFIG, GM_MAC_RX_CONF_RX_ALL);
+
+	if (multicast_hash)
+		GM_BIS(GM_MAC_RX_CONFIG, GM_MAC_RX_CONF_HASH_ENABLE);
+	else
+		GM_BIC(GM_MAC_RX_CONFIG, GM_MAC_RX_CONF_HASH_ENABLE);
+
+	if (multicast_all)
+		GM_BIS(GM_MAC_RX_CONFIG, GM_MAC_RX_CONF_RX_ALL_MULTI);
+	else
+		GM_BIC(GM_MAC_RX_CONFIG, GM_MAC_RX_CONF_RX_ALL_MULTI);
+	
+	/* Let us get going again. */
+	netif_wake_queue(dev);
+}
+
+/*
+ * Open the interface
+ */
+static int
+gmac_open(struct net_device *dev)
 {
 	struct gmac *gm = (struct gmac *) dev->priv;
 
-	if (gmac_reset(dev))
-		return -EIO;
-
 	MOD_INC_USE_COUNT;
 
-	powerup_transceiver(gm);
+	/* Power up and reset chip */
+	if (gmac_powerup_and_reset(dev)) {
+		MOD_DEC_USE_COUNT;
+		return -EIO;
+	}
+
+	/* Get our interrupt */
+	if (request_irq(dev->irq, gmac_interrupt, 0, dev->name, dev)) {
+		printk(KERN_ERR "%s can't get irq %d\n", dev->name, dev->irq);
+		MOD_DEC_USE_COUNT;
+		return -EAGAIN;
+	}
+
+	gm->full_duplex = 0;
+	gm->phy_status = 0;
+	
+	/* Find a PHY */
+	if (!mii_lookup_and_reset(gm))
+		printk(KERN_WARNING "%s WARNING ! Can't find PHY\n", dev->name);
+
+	/* Configure the PHY */
+	mii_setup_phy(gm);
+	
+	/* Initialize the descriptor rings */
+	gmac_init_rings(gm, 0);
+
+	/* Initialize the MAC */
 	gmac_mac_init(gm, dev->dev_addr);
-	gmac_init_rings(gm);
-	gmac_start_dma(gm);
+	
+	/* Initialize the multicast tables & promisc mode if any */
+	gmac_set_multicast(dev);
+	
+	/*
+	 * Check out PHY status and start auto-poll
+	 * 
+	 * Note: do this before enabling interrutps
+	 */
 	mii_interrupt(gm);
 
-	GM_OUT(INTR_DISABLE, 0xfffdffe8);
+	/* Start the chip */
+	gmac_start_dma(gm);
+
+	gm->opened = 1;
 
 	return 0;
 }
 
-static int gmac_close(struct net_device *dev)
+/* 
+ * Close the interface
+ */
+static int
+gmac_close(struct net_device *dev)
 {
 	struct gmac *gm = (struct gmac *) dev->priv;
 	int i;
 
+	gm->opened = 0;
+
+	/* Stop chip and interrupts */
+	gmac_stop_dma(gm);
+
+	/* Stop polling PHY */
 	mii_poll_stop(gm);
+
+	/* Free interrupt */
+	free_irq(dev->irq, dev);
 	
-	GM_BIC(RXDMA_CONFIG, 1);
-	GM_BIC(RXMAC_CONFIG, 1);
-	GM_BIC(TXDMA_CONFIG, 1);
-	GM_BIC(TXMAC_CONFIG, 1);
-	GM_OUT(INTR_DISABLE, ~0U);
+	/* Shut down chip */
+	gmac_set_power(gm, 0);
+
+	/* Empty rings of any remaining gremlins */
 	for (i = 0; i < NRX; ++i) {
 		if (gm->rx_buff[i] != 0) {
 			dev_kfree_skb(gm->rx_buff[i]);
@@ -374,153 +786,370 @@ static int gmac_close(struct net_device *dev)
 	return 0;
 }
 
-static int gmac_xmit_start(struct sk_buff *skb, struct net_device *dev)
+/*
+ * Handle a transmit timeout
+ */
+static void
+gmac_tx_timeout(struct net_device *dev)
+{
+	struct gmac *gm = (struct gmac *) dev->priv;
+	int i, timeout;
+	
+	printk (KERN_ERR "%s: transmit timed out, resetting\n", dev->name);
+
+	spin_lock_irq(&gm->lock);
+
+	/* Stop chip */
+	gmac_stop_dma(gm);
+	/* Empty Tx ring of any remaining gremlins */
+	gmac_tx_cleanup(dev, 1);
+	/* Empty Rx ring of any remaining gremlins */
+	for (i = 0; i < NRX; ++i) {
+		if (gm->rx_buff[i] != 0) {
+			dev_kfree_skb_irq(gm->rx_buff[i]);
+			gm->rx_buff[i] = 0;
+		}
+	}
+	/* Perform a software reset */
+	GM_OUT(GM_RESET, GM_RESET_TX | GM_RESET_RX);
+	for (timeout = 100; timeout > 0; --timeout) {
+		mdelay(10);
+		if ((GM_IN(GM_RESET) & (GM_RESET_TX | GM_RESET_RX)) == 0) {
+			/* Mask out all chips interrupts */
+			GM_OUT(GM_IRQ_MASK, 0xffffffff);
+			break;
+		}
+	}
+	if (!timeout)
+		printk(KERN_ERR "%s reset chip failed !\n", dev->name);
+	/* Create fresh rings */
+	gmac_init_rings(gm, 1);
+	/* re-initialize the MAC */
+	gmac_mac_init(gm, dev->dev_addr);	
+	/* re-initialize the multicast tables & promisc mode if any */
+	gmac_set_multicast(dev);
+	/* Restart PHY auto-poll */
+	mii_interrupt(gm);
+	/* Restart chip */
+	gmac_start_dma(gm);
+	
+	spin_unlock_irq(&gm->lock);
+
+	netif_wake_queue(dev);
+}
+
+/*
+ * Add a packet to the transmit ring
+ */
+static int
+gmac_xmit_start(struct sk_buff *skb, struct net_device *dev)
 {
 	struct gmac *gm = (struct gmac *) dev->priv;
 	volatile struct gmac_dma_desc *dp;
-	unsigned long flags;
 	int i;
 
-	save_flags(flags); cli();
+	spin_lock_irq(&gm->lock);
+
 	i = gm->next_tx;
 	if (gm->tx_buff[i] != 0) {
-		/* buffer is full, can't send this packet at the moment */
+		/* 
+		 * Buffer is full, can't send this packet at the moment
+		 * 
+		 * Can this ever happen in 2.4 ?
+		 */
 		netif_stop_queue(dev);
-		gm->tx_full = 1;
-		restore_flags(flags);
+		spin_unlock_irq(&gm->lock);
 		return 1;
 	}
 	gm->next_tx = (i + 1) & (NTX - 1);
 	gm->tx_buff[i] = skb;
-	restore_flags(flags);
-
+	
 	dp = &gm->txring[i];
-	dp->status = 0;
+	/* FIXME: Interrupt on all packet for now, change this to every N packet,
+	 * with N to be adjusted
+	 */
+	dp->flags = TX_FL_INTERRUPT;
 	dp->hi_addr = 0;
-	st_le32(&dp->address, virt_to_bus(skb->data));
+	st_le32(&dp->lo_addr, virt_to_bus(skb->data));
 	mb();
-	st_le32(&dp->cmd, TX_SOP | TX_EOP | skb->len);
+	st_le32(&dp->size, TX_SZ_SOP | TX_SZ_EOP | skb->len);
 	mb();
 
-	GM_OUT(TXDMA_KICK, gm->next_tx);
+	GM_OUT(GM_TX_KICK, gm->next_tx);
+
+	if (gm->tx_buff[gm->next_tx] != 0)
+		netif_stop_queue(dev);
+
+	spin_unlock_irq(&gm->lock);
+
+	dev->trans_start = jiffies;
 
 	return 0;
 }
 
-static int gmac_tx_cleanup(struct gmac *gm)
+/*
+ * Handle servicing of the transmit ring by deallocating used
+ * Tx packets and restoring flow control when necessary
+ */
+static void
+gmac_tx_cleanup(struct net_device *dev, int force_cleanup)
 {
-	int i = gm->tx_gone;
+	struct gmac *gm = (struct gmac *) dev->priv;
 	volatile struct gmac_dma_desc *dp;
 	struct sk_buff *skb;
-	int ret = 0;
-	int gone = GM_IN(TXDMA_COMPLETE);
+	int gone, i;
 
-	while (i != gone) {
+	i = gm->tx_gone;
+	gone = GM_IN(GM_TX_COMP);
+	
+	while (force_cleanup || i != gone) {
 		skb = gm->tx_buff[i];
 		if (skb == NULL)
 			break;
 		dp = &gm->txring[i];
-		gm->stats.tx_bytes += skb->len;
-		++gm->stats.tx_packets;
+		if (force_cleanup)
+			++gm->stats.tx_errors;
+		else {
+			++gm->stats.tx_packets;
+			gm->stats.tx_bytes += skb->len;
+		}
 		gm->tx_buff[i] = NULL;
 		dev_kfree_skb_irq(skb);
 		if (++i >= NTX)
 			i = 0;
 	}
-	if (i != gm->tx_gone) {
-		ret = gm->tx_full;
-		gm->tx_gone = i;
-		gm->tx_full = 0;
-	}
-	return ret;
+	gm->tx_gone = i;
+
+	if (!force_cleanup && netif_queue_stopped(dev) &&
+	    (gm->tx_buff[gm->next_tx] == 0))
+		netif_wake_queue(dev);
+
+	spin_unlock(&gm->lock);
 }
 
-static void gmac_receive(struct net_device *dev)
+/*
+ * Handle servicing of receive ring
+ */
+static void
+gmac_receive(struct net_device *dev)
 {
 	struct gmac *gm = (struct gmac *) dev->priv;
 	int i = gm->next_rx;
 	volatile struct gmac_dma_desc *dp;
-	struct sk_buff *skb;
-	int len;
+	struct sk_buff *skb, *new_skb;
+	int len, flags, drop, last;
 	unsigned char *data;
+	u16 csum;
 
+	last = -1;
 	for (;;) {
 		dp = &gm->rxring[i];
-		if (ld_le32(&dp->cmd) & RX_OWN)
+		/* Buffer not yet filled, no more Rx buffers to handle */
+		if (ld_le32(&dp->size) & RX_SZ_OWN)
 			break;
-		len = (ld_le32(&dp->cmd) >> 16) & 0x7fff;
+		/* Get packet length, flags, etc... */
+		len = (ld_le32(&dp->size) >> 16) & 0x7fff;
+		flags = ld_le32(&dp->flags);
 		skb = gm->rx_buff[i];
-		if (skb == 0) {
-			++gm->stats.rx_dropped;
-		} else if (ld_le32(&dp->status) & 0x40000000) {
+		drop = 0;
+		new_skb = NULL;
+		csum = ld_le32(&dp->size) & RX_SZ_CKSUM_MASK;
+		
+		/* Handle errors */
+		if ((len < ETH_ZLEN)||(flags & RX_FL_CRC_ERROR)||(!skb)) {
 			++gm->stats.rx_errors;
-			dev_kfree_skb_irq(skb);
+			if (len < ETH_ZLEN)
+				++gm->stats.rx_length_errors;
+			if (flags & RX_FL_CRC_ERROR)
+				++gm->stats.rx_crc_errors;
+			if (!skb) {
+				++gm->stats.rx_dropped;
+				skb = gmac_alloc_skb(RX_BUF_ALLOC_SIZE, GFP_ATOMIC);
+				if (skb) {
+					gm->rx_buff[i] = skb;
+			    		skb->dev = dev;
+			    		skb_put(skb, ETH_FRAME_LEN + RX_OFFSET);
+			    		skb_reserve(skb, RX_OFFSET);
+				}
+			}
+			drop = 1;
 		} else {
-			skb_put(skb, len);
-			skb->dev = dev;
+			/* Large packet, alloc a new skb for the ring */
+			if (len > RX_COPY_THRESHOLD) {
+			    new_skb = gmac_alloc_skb(RX_BUF_ALLOC_SIZE, GFP_ATOMIC);
+			    if(!new_skb) {
+			    	printk(KERN_INFO "%s: Out of SKBs in Rx, packet dropped !\n",
+			    		dev->name);
+			    	drop = 1;
+			    	++gm->stats.rx_dropped;
+			    	goto finish;
+			    }
+
+			    gm->rx_buff[i] = new_skb;
+			    new_skb->dev = dev;
+			    skb_put(new_skb, ETH_FRAME_LEN + RX_OFFSET);
+			    skb_reserve(new_skb, RX_OFFSET);
+			    skb_trim(skb, len);
+			} else {
+			    /* Small packet, copy it to a new small skb */
+			    struct sk_buff *copy_skb = dev_alloc_skb(len + RX_OFFSET);
+
+			    if(!copy_skb) {
+				printk(KERN_INFO "%s: Out of SKBs in Rx, packet dropped !\n",
+					dev->name);
+				drop = 1;
+				++gm->stats.rx_dropped;
+			    	goto finish;
+			    }
+
+			    copy_skb->dev = dev;
+			    skb_reserve(copy_skb, RX_OFFSET);
+			    skb_put(copy_skb, len);
+			    memcpy(copy_skb->data, skb->data, len);
+
+			    new_skb = skb;
+			    skb = copy_skb;
+			}
+		}
+	finish:
+		/* Need to drop packet ? */
+		if (drop) {
+			new_skb = skb;
+			skb = NULL;
+		}
+		
+		/* Put back ring entry */
+		data = new_skb ? (new_skb->data - RX_OFFSET) : dummy_buf;
+		dp->hi_addr = 0;
+		st_le32(&dp->lo_addr, virt_to_bus(data));
+		mb();
+		st_le32(&dp->size, RX_SZ_OWN | ((RX_BUF_ALLOC_SIZE-RX_OFFSET) << RX_SZ_SHIFT));
+		
+		/* Got Rx packet ? */
+		if (skb) {
+			/* Yes, baby, keep that hot ;) */
+			if(!(csum ^ 0xffff))
+				skb->ip_summed = CHECKSUM_UNNECESSARY;
+			else
+				skb->ip_summed = CHECKSUM_NONE;
+			skb->ip_summed = CHECKSUM_NONE;
 			skb->protocol = eth_type_trans(skb, dev);
 			netif_rx(skb);
 			gm->stats.rx_bytes += skb->len;
 			++gm->stats.rx_packets;
 		}
-		data = dummy_buf;
-		gm->rx_buff[i] = skb = dev_alloc_skb(RX_BUFLEN + 2);
-		if (skb != 0) {
-			/*skb_reserve(skb, 2);*/
-			data = skb->data;
-		}
-		st_le32(&dp->address, virt_to_bus(data));
-		dp->hi_addr = 0;
-		mb();
-		st_le32(&dp->cmd, RX_OWN);
+		
+		last = i;
 		if (++i >= NRX)
 			i = 0;
 	}
 	gm->next_rx = i;
+	if (last >= 0) {
+		mb();
+		GM_OUT(GM_RX_KICK, last & 0xfffffffc);
+	}
 }
 
-static void gmac_interrupt(int irq, void *dev_id, struct pt_regs *regs)
+/*
+ * Service chip interrupts
+ */
+static void
+gmac_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	struct net_device *dev = (struct net_device *) dev_id;
 	struct gmac *gm = (struct gmac *) dev->priv;
 	unsigned int status;
 
-	status = GM_IN(INTR_STATUS);
-	GM_OUT(INTR_ACK, status);
+	status = GM_IN(GM_IRQ_STATUS);
+	if (status & (GM_IRQ_BUS_ERROR | GM_IRQ_MIF))
+		GM_OUT(GM_IRQ_ACK, status & (GM_IRQ_BUS_ERROR | GM_IRQ_MIF));
 	
-	if (status & GMAC_IRQ_MIF)
+	if (status & (GM_IRQ_RX_TAG_ERR | GM_IRQ_BUS_ERROR)) {
+		printk(KERN_ERR "%s: IRQ Error status: 0x%08x\n",
+			dev->name, status);
+	}
+	
+	if (status & GM_IRQ_MIF) {
+		spin_lock(&gm->lock);
 		mii_interrupt(gm);
-	gmac_receive(dev);
-	if (gmac_tx_cleanup(gm))
-		netif_wake_queue(dev);
+		spin_unlock(&gm->lock);
+	}
+	
+	if (status & GM_IRQ_RX_DONE) {
+		spin_lock(&gm->lock);
+		gmac_receive(dev);
+		spin_unlock(&gm->lock);
+	}
+		
+	if (status & (GM_IRQ_TX_INT_ME | GM_IRQ_TX_ALL)) {
+		spin_lock(&gm->lock);
+		gmac_tx_cleanup(dev, 0);
+		spin_unlock(&gm->lock);
+	}
 }
 
-static struct net_device_stats *gmac_stats(struct net_device *dev)
+/*
+ * Retreive some error stats from chip and return them
+ * to above layer
+ */
+static struct net_device_stats *
+gmac_stats(struct net_device *dev)
 {
 	struct gmac *gm = (struct gmac *) dev->priv;
+	struct net_device_stats *stats = &gm->stats;
 
-	return &gm->stats;
+	if (gm && gm->opened) {
+		stats->rx_crc_errors += GM_IN(GM_MAC_RX_CRC_ERR_CTR);
+		GM_OUT(GM_MAC_RX_CRC_ERR_CTR, 0);
+
+		stats->rx_frame_errors += GM_IN(GM_MAC_RX_ALIGN_ERR_CTR);
+		GM_OUT(GM_MAC_RX_ALIGN_ERR_CTR, 0);
+
+		stats->rx_length_errors += GM_IN(GM_MAC_RX_LEN_ERR_CTR);
+		GM_OUT(GM_MAC_RX_LEN_ERR_CTR, 0);
+
+		stats->tx_aborted_errors += GM_IN(GM_MAC_EXCS_COLLISION_CTR);
+
+		stats->collisions +=
+			(GM_IN(GM_MAC_EXCS_COLLISION_CTR) +
+			 GM_IN(GM_MAC_LATE_COLLISION_CTR));
+		GM_OUT(GM_MAC_EXCS_COLLISION_CTR, 0);
+		GM_OUT(GM_MAC_LATE_COLLISION_CTR, 0);
+	}
+
+	return stats;
 }
 
-static int __init gmac_probe(void)
+static int __init
+gmac_probe(void)
 {
 	struct device_node *gmac;
 
+	/* We bump use count during probe since get_free_page can sleep
+	 * which can be a race condition if module is unloaded at this
+	 * point.
+	 */
+	MOD_INC_USE_COUNT;
+	
 	/*
-	 * We could (and maybe should) do this using PCI scanning
-	 * for vendor/net_device ID 0x106b/0x21.
+	 * We don't use PCI scanning on pmac since the GMAC cell is disabled
+	 * by default, and thus absent from kernel original PCI probing.
 	 */
 	for (gmac = find_compatible_devices("network", "gmac"); gmac != 0;
 	     gmac = gmac->next)
 		gmac_probe1(gmac);
 
+
+	MOD_DEC_USE_COUNT;
+
 	return 0;
 }
 
-static void gmac_probe1(struct device_node *gmac)
+static void
+gmac_probe1(struct device_node *gmac)
 {
 	struct gmac *gm;
-	unsigned long descpage;
+	unsigned long tx_descpage, rx_descpage;
 	unsigned char *addr;
 	struct net_device *dev;
 	int i;
@@ -538,9 +1167,15 @@ static void gmac_probe1(struct device_node *gmac)
 		return;
 	}
 
-	descpage = get_free_page(GFP_KERNEL);
-	if (descpage == 0) {
-		printk(KERN_ERR "GMAC: can't get a page for descriptors\n");
+	tx_descpage = get_free_page(GFP_KERNEL);
+	if (tx_descpage == 0) {
+		printk(KERN_ERR "GMAC: can't get a page for tx descriptors\n");
+		return;
+	}
+	rx_descpage = get_free_page(GFP_KERNEL);
+	if (rx_descpage == 0) {
+		printk(KERN_ERR "GMAC: can't get a page for rx descriptors\n");
+		free_page(tx_descpage);
 		return;
 	}
 
@@ -551,32 +1186,39 @@ static void gmac_probe1(struct device_node *gmac)
 	dev->base_addr = gmac->addrs[0].address;
 	gm->regs = (volatile unsigned int *)
 		ioremap(gmac->addrs[0].address, 0x10000);
-	gm->sysregs = (volatile unsigned int *) ioremap(0xf8000000, 0x1000);
 	dev->irq = gmac->intrs[0].line;
+	gm->dev = dev;
+
+	if (pci_device_loc(gmac, &gm->pci_bus, &gm->pci_devfn)) {
+		gm->pci_bus = gm->pci_devfn = 0xff;
+		printk(KERN_ERR "Can't locate GMAC PCI entry\n");
+	}
 
 	printk(KERN_INFO "%s: GMAC at", dev->name);
 	for (i = 0; i < 6; ++i) {
 		dev->dev_addr[i] = addr[i];
 		printk("%c%.2x", (i? ':': ' '), addr[i]);
 	}
-	printk("\n");
+	printk(", driver " GMAC_VERSION "\n");
 
-	gm->desc_page = descpage;
-	gm->rxring = (volatile struct gmac_dma_desc *) descpage;
-	gm->txring = (volatile struct gmac_dma_desc *) (descpage + 0x800);
+	gm->tx_desc_page = tx_descpage;
+	gm->rx_desc_page = rx_descpage;
+	gm->rxring = (volatile struct gmac_dma_desc *) rx_descpage;
+	gm->txring = (volatile struct gmac_dma_desc *) tx_descpage;
 
 	gm->phy_addr = 0;
-	
+	gm->opened = 0;
+
 	dev->open = gmac_open;
 	dev->stop = gmac_close;
 	dev->hard_start_xmit = gmac_xmit_start;
 	dev->get_stats = gmac_stats;
+	dev->set_multicast_list = &gmac_set_multicast;
+	dev->tx_timeout = &gmac_tx_timeout;
+	dev->watchdog_timeo = 5*HZ;
 
 	ether_setup(dev);
-
-	if (request_irq(dev->irq, gmac_interrupt, 0, "GMAC", dev))
-		printk(KERN_ERR "GMAC: can't get irq %d\n", dev->irq);
-
+	
 	gm->next_gmac = gmacs;
 	gmacs = dev;
 }
@@ -591,10 +1233,10 @@ static void __exit gmac_cleanup_module(void)
 
 	while ((dev = gmacs) != NULL) {
 		gm = (struct gmac *) dev->priv;
-		gmacs = gm->next_gmac;
-		free_irq(dev->irq, dev);
-		free_page(gm->desc_page);
 		unregister_netdev(dev);
+		free_page(gm->tx_desc_page);
+		free_page(gm->rx_desc_page);
+		gmacs = gm->next_gmac;
 		kfree(dev);
 	}
 }

@@ -462,8 +462,8 @@ static void __init parse_options(char *line)
 		} else {
 			if (args >= MAX_INIT_ARGS)
 				break;
-                        if(*line)
-			argv_init[++args] = line;
+			if (*line)
+				argv_init[++args] = line;
 		}
 	}
 	argv_init[args+1] = NULL;

@@ -431,19 +431,6 @@ static int igafb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
         return 0;
 }
 
-static int igafb_pan_display(struct fb_var_screeninfo *var, int con,
-                             struct fb_info *info)
-{
-        /* no panning */
-        return -EINVAL;
-}
-
-static int igafb_ioctl(struct inode *inode, struct file *file, u_int cmd,
-		       u_long arg, int con, struct fb_info *info)
-{
-	return -EINVAL;
-}
-
 /*
  * Framebuffer option structure
  */
@@ -454,8 +441,6 @@ static struct fb_ops igafb_ops = {
 	fb_set_var:	igafb_set_var,
 	fb_get_cmap:	igafb_get_cmap,
 	fb_set_cmap:	igafb_set_cmap,
-	fb_pan_display:	igafb_pan_display,
-	fb_ioctl:	igafb_ioctl,
 #ifdef __sparc__
 	fb_mmap:	igafb_mmap,
 #endif

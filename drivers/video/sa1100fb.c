@@ -158,13 +158,10 @@ static struct sa1100fb_lcd_reg lcd_shadow;
 
 
 static int  sa1100fb_get_fix(struct fb_fix_screeninfo *fix, int con, struct fb_info *info);
-static int  sa1100fb_ioctl(struct inode *ino, struct file *file, unsigned int cmd,
-	       		  unsigned long arg, int con, struct fb_info *info);
 static int  sa1100fb_get_var(struct fb_var_screeninfo *var, int con, struct fb_info *info);
 static int  sa1100fb_set_var(struct fb_var_screeninfo *var, int con, struct fb_info *info);
 static int  sa1100fb_get_cmap(struct fb_cmap *cmap, int kspc, int con, struct fb_info *info);
 static int  sa1100fb_set_cmap(struct fb_cmap *cmap, int kspc, int con, struct fb_info *info);
-static int  sa1100fb_pan_display(struct fb_var_screeninfo *var, int con, struct fb_info *info);
  
 static int  sa1100fb_switch(int con, struct fb_info *info);
 static void sa1100fb_blank(int blank, struct fb_info *info);
@@ -180,8 +177,6 @@ static struct fb_ops sa1100fb_ops = {
 	fb_set_var:	sa1100fb_set_var,
 	fb_get_cmap:	sa1100fb_get_cmap,
 	fb_set_cmap:	sa1100fb_set_cmap,
-	fb_pan_display:	sa1100fb_pan_display,
-	fb_ioctl:	sa1100fb_ioctl,
 };
 
 
@@ -1095,15 +1090,6 @@ static void sa1100fb_enable_lcd_controller(void)
 	restore_flags(flags);
 }
 
-static int
-sa1100fb_pan_display(struct fb_var_screeninfo *var, int con,
-		    struct fb_info *info)
-{
-	DPRINTK("entered\n");
-	return -EINVAL;
-}
-
-
 /*
  * sa1100fb_blank():
  *	Blank the display by setting all palette values to zero.  Note, the 
@@ -1216,14 +1202,4 @@ int __init sa1100fb_setup(char *options)
 {
 	return 0;
 }
-
-
-
-static int
-sa1100fb_ioctl(struct inode *ino, struct file *file, unsigned int cmd,
-	      unsigned long arg, int con, struct fb_info *info)
-{
-	return -ENOIOCTLCMD;
-}
-
 
