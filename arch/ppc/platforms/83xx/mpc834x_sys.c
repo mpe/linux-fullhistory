@@ -143,7 +143,6 @@ mpc834x_sys_show_cpuinfo(struct seq_file *m)
 	pvid = mfspr(SPRN_PVR);
 	svid = mfspr(SPRN_SVR);
 
-	seq_printf(m, "chip\t\t: MPC%s\n", cur_ppc_sys_spec->ppc_sys_name);
 	seq_printf(m, "Vendor\t\t: Freescale Inc.\n");
 	seq_printf(m, "Machine\t\t: mpc%s sys\n", cur_ppc_sys_spec->ppc_sys_name);
 	seq_printf(m, "core clock\t: %d MHz\n"

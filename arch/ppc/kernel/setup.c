@@ -41,6 +41,10 @@
 #include <asm/xmon.h>
 #include <asm/ocp.h>
 
+#if defined(CONFIG_85xx) || defined(CONFIG_83xx)
+#include <asm/ppc_sys.h>
+#endif
+
 #if defined CONFIG_KGDB
 #include <asm/kgdb.h>
 #endif
@@ -245,6 +249,12 @@ int show_cpuinfo(struct seq_file *m, void *v)
 
 	seq_printf(m, "bogomips\t: %lu.%02lu\n",
 		   lpj / (500000/HZ), (lpj / (5000/HZ)) % 100);
+
+#if defined(CONFIG_85xx) || defined(CONFIG_83xx)
+	if (cur_ppc_sys_spec->ppc_sys_name)
+		seq_printf(m, "chipset\t\t: %s\n",
+			cur_ppc_sys_spec->ppc_sys_name);
+#endif
 
 #ifdef CONFIG_SMP
 	seq_printf(m, "\n");
