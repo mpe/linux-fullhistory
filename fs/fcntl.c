@@ -37,6 +37,8 @@ static int dupfd(unsigned int fd, unsigned int arg)
 
 int sys_dup2(unsigned int oldfd, unsigned int newfd)
 {
+	if (oldfd >= NR_OPEN || !current->filp[oldfd])
+		return -EBADF;
 	if (newfd == oldfd)
 		return newfd;
 	sys_close(newfd);

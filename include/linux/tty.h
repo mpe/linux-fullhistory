@@ -195,6 +195,8 @@ extern void serial_open(unsigned int line);
 void copy_to_cooked(struct tty_struct * tty);
 
 void update_screen(int new_console);
+void blank_screen(void);
+void unblank_screen(void);
 
 int kill_pg(int pgrp, int sig, int priv);
    

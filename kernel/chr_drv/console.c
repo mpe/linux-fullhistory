@@ -56,9 +56,6 @@
 	INIT_C_CC \
 }
 
-static void blank_screen(void);
-static void unblank_screen(void);
-
 /*
  * These are set up by the setup-routine at boot-time:
  */
@@ -223,7 +220,7 @@ static inline void set_origin(int currcons)
 {
 	if (video_type != VIDEO_TYPE_EGAC && video_type != VIDEO_TYPE_EGAM)
 		return;
-	if (currcons != fg_console)
+	if (currcons != fg_console || vt_cons[currcons].vt_mode == KD_GRAPHICS)
 		return;
 	cli();
 	outb_p(12, video_port_reg);
@@ -584,10 +581,6 @@ void con_write(struct tty_struct * tty)
 		printk("con_write: illegal tty\n\r");
 		return;
 	}
-	if (vt_cons[currcons].vt_mode == KD_GRAPHICS) {
-		flush(tty->write_q);
-		return;			/* no output in graphics mode */
-	}
 	while (!tty->stopped &&	(c = GETCH(tty->write_q)) >= 0) {
 		if (c == 24 || c == 26)
 			state = ESnormal;
@@ -834,8 +827,10 @@ void con_write(struct tty_struct * tty)
 				state = ESnormal;
 		}
 	}
-	set_cursor(currcons);
 	timer_active &= ~(1<<BLANK_TIMER);
+	if (vt_cons[currcons].vt_mode == KD_GRAPHICS)
+		return;
+	set_cursor(currcons);
 	if (currcons == fg_console)
 		if (console_blanked) {
 			timer_table[BLANK_TIMER].expires = 0;
@@ -1129,8 +1124,6 @@ void console_print(const char * b)
 
 	if (currcons<0 || currcons>=NR_CONSOLES)
 		currcons = 0;
-	if (vt_cons[currcons].vt_mode == KD_GRAPHICS)
-		return;	/* no output in graphics mode */
 	while (c = *(b++)) {
 		if (c == 10) {
 			cr(currcons);

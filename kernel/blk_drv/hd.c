@@ -424,7 +424,12 @@ static void bad_rw_intr(void)
 		return;
 	if (++CURRENT->errors >= MAX_ERRORS)
 		if (CURRENT->bh && CURRENT->nr_sectors > 2) {
-			CURRENT->nr_sectors &= ~1;
+			CURRENT->nr_sectors--;
+			CURRENT->sector++;
+			if (CURRENT->nr_sectors & 1) {
+				CURRENT->nr_sectors--;
+				CURRENT->sector++;
+			}
 			next_buffer(0);
 		} else
 			end_request(0);
@@ -530,7 +535,12 @@ static void hd_times_out(void)
 	cli();
 	if (++CURRENT->errors >= MAX_ERRORS)
 		if (CURRENT->bh && CURRENT->nr_sectors > 2) {
-			CURRENT->nr_sectors &= ~1;
+			CURRENT->nr_sectors--;
+			CURRENT->sector++;
+			if (CURRENT->nr_sectors & 1) {
+				CURRENT->nr_sectors--;
+				CURRENT->sector++;
+			}
 			next_buffer(0);
 		} else
 			end_request(0);
