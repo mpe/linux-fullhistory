@@ -750,14 +750,13 @@ static int dn_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 
 	rv = -EINVAL;
 	lock_sock(sk);
-	if (sk->sk_zapped) {
+	if (sock_flag(sk, SOCK_ZAPPED)) {
 		memcpy(&scp->addr, saddr, addr_len);
-		sk->sk_zapped = 0;
+		sock_reset_flag(sk, SOCK_ZAPPED);
 
 		rv = dn_hash_sock(sk);
-		if (rv) {
-			sk->sk_zapped = 1;
-		}
+		if (rv)
+			sock_set_flag(sk, SOCK_ZAPPED);
 	}
 	release_sock(sk);
 
@@ -771,7 +770,7 @@ static int dn_auto_bind(struct socket *sock)
 	struct dn_scp *scp = DN_SK(sk);
 	int rv;
 
-	sk->sk_zapped = 0;
+	sock_reset_flag(sk, SOCK_ZAPPED);
 
 	scp->addr.sdn_flags  = 0;
 	scp->addr.sdn_objnum = 0;
@@ -795,9 +794,8 @@ static int dn_auto_bind(struct socket *sock)
 	rv = dn_dev_bind_default((dn_address *)scp->addr.sdn_add.a_addr);
 	if (rv == 0) {
 		rv = dn_hash_sock(sk);
-		if (rv) {
-			sk->sk_zapped = 1;
-		}
+		if (rv)
+			sock_set_flag(sk, SOCK_ZAPPED);
 	}
 
 	return rv;
@@ -813,7 +811,7 @@ static int dn_confirm_accept(struct sock *sk, long *timeo, int allocation)
 		return -EINVAL;
 
 	scp->state = DN_CC;
-	scp->segsize_loc = dst_path_metric(__sk_dst_get(sk), RTAX_ADVMSS);
+	scp->segsize_loc = dst_metric(__sk_dst_get(sk), RTAX_ADVMSS);
 	dn_send_conn_conf(sk, allocation);
 
 	prepare_to_wait(sk->sk_sleep, &wait, TASK_INTERRUPTIBLE);
@@ -922,7 +920,7 @@ static int __dn_connect(struct sock *sk, struct sockaddr_dn *addr, int addrlen, 
 	if (addr->sdn_flags & SDF_WILD)
 		goto out;
 
-	if (sk->sk_zapped) {
+	if (sock_flag(sk, SOCK_ZAPPED)) {
 		err = dn_auto_bind(sk->sk_socket);
 		if (err)
 			goto out;
@@ -942,7 +940,7 @@ static int __dn_connect(struct sock *sk, struct sockaddr_dn *addr, int addrlen, 
 	sk->sk_route_caps = sk->sk_dst_cache->dev->features;
 	sock->state = SS_CONNECTING;
 	scp->state = DN_CI;
-	scp->segsize_loc = dst_path_metric(sk->sk_dst_cache, RTAX_ADVMSS);
+	scp->segsize_loc = dst_metric(sk->sk_dst_cache, RTAX_ADVMSS);
 
 	dn_nsp_send_conninit(sk, NSP_CI);
 	err = -EINPROGRESS;
@@ -1141,7 +1139,7 @@ static int dn_accept(struct socket *sock, struct socket *newsock, int flags)
 	lock_sock(newsk);
 	err = dn_hash_sock(newsk);
 	if (err == 0) {
-		newsk->sk_zapped = 0;
+		sock_reset_flag(newsk, SOCK_ZAPPED);
 		dn_send_conn_ack(newsk);
 
 		/*
@@ -1259,7 +1257,7 @@ static int dn_listen(struct socket *sock, int backlog)
 
 	lock_sock(sk);
 
-	if (sk->sk_zapped)
+	if (sock_flag(sk, SOCK_ZAPPED))
 		goto out;
 
 	if ((DN_SK(sk)->state != DN_O) || (sk->sk_state == TCP_LISTEN))
@@ -1671,7 +1669,7 @@ static int dn_recvmsg(struct kiocb *iocb, struct socket *sock,
 
 	lock_sock(sk);
 
-	if (sk->sk_zapped) {
+	if (sock_flag(sk, SOCK_ZAPPED)) {
 		rv = -EADDRNOTAVAIL;
 		goto out;
 	}

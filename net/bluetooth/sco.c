@@ -352,7 +352,7 @@ static void sco_sock_cleanup_listen(struct sock *parent)
 	}
 
 	parent->sk_state  = BT_CLOSED;
-	parent->sk_zapped = 1;
+	sock_set_flag(sk, SOCK_ZAPPED);
 }
 
 /* Kill socket (only if zapped and orphan)
@@ -360,7 +360,7 @@ static void sco_sock_cleanup_listen(struct sock *parent)
  */
 static void sco_sock_kill(struct sock *sk)
 {
-	if (!sk->sk_zapped || sk->sk_socket)
+	if (!sock_flag(sk, SOCK_ZAPPED) || sk->sk_socket)
 		return;
 
 	BT_DBG("sk %p state %d", sk, sk->sk_state);
@@ -399,7 +399,7 @@ static void sco_sock_close(struct sock *sk)
 		break;
 
 	default:
-		sk->sk_zapped = 1;
+		sock_set_flag(sk, SOCK_ZAPPED);
 		break;
 	};
 
@@ -420,14 +420,21 @@ static struct sock *sco_sock_alloc(struct socket *sock, int proto, int prio)
 {
 	struct sock *sk;
 
-	sk = bt_sock_alloc(sock, proto, sizeof(struct sco_pinfo), prio);
+	sk = sk_alloc(PF_BLUETOOTH, prio, sizeof(struct sco_pinfo), NULL);
 	if (!sk)
 		return NULL;
+
+	sock_init_data(sock, sk);
+	INIT_LIST_HEAD(&bt_sk(sk)->accept_q);
 
 	sk_set_owner(sk, THIS_MODULE);
 
 	sk->sk_destruct = sco_sock_destruct;
 	sk->sk_sndtimeo = SCO_CONN_TIMEOUT;
+
+	sock_reset_flag(sk, SOCK_ZAPPED);
+
+	sk->sk_protocol = proto;
 	sk->sk_state    = BT_OPEN;
 
 	sco_sock_init_timer(sk);
@@ -778,7 +785,7 @@ static void sco_chan_del(struct sock *sk, int err)
 	sk->sk_err   = err;
 	sk->sk_state_change(sk);
 
-	sk->sk_zapped = 1;
+	sock_set_flag(sk, SOCK_ZAPPED);
 }
 
 static void sco_conn_ready(struct sco_conn *conn)

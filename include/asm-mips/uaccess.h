@@ -258,7 +258,8 @@ struct __large_struct { unsigned long buf[100]; };
 									\
 	might_sleep();							\
 	__gu_addr = (long) (ptr);					\
-	__gu_err = verify_area(VERIFY_READ, (void *) __gu_addr, size);	\
+	__gu_err = access_ok(VERIFY_READ, (void *) __gu_addr, size)	\
+				? 0 : -EFAULT;				\
 									\
 	if (likely(!__gu_err)) {					\
 		switch (size) {						\
@@ -353,7 +354,8 @@ extern void __get_user_unknown(void);
 	might_sleep();							\
 	__pu_val = (x);							\
 	__pu_addr = (long) (ptr);					\
-	__pu_err = verify_area(VERIFY_WRITE, (void *) __pu_addr, size);	\
+	__pu_err = access_ok(VERIFY_WRITE, (void *) __pu_addr, size)	\
+				? 0 : -EFAULT;				\
 									\
 	if (likely(!__pu_err)) {					\
 		switch (size) {						\

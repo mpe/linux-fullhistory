@@ -135,11 +135,6 @@ haveOF:
 			 */
 #endif
 
-#ifdef	CONFIG_MV64X60
-	/* mv64x60 specific hook to do things like moving register base, etc. */
-	bl	mv64x60_init
-#endif
-
 	/* Get the load address.
 	*/
 	subi	r3, r3, 4	/* Get the actual IP, not NIP */

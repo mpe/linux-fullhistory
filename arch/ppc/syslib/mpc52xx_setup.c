@@ -39,7 +39,8 @@ static int core_mult[] = {		/* CPU Frequency multiplier, taken    */
 void
 mpc52xx_restart(char *cmd)
 {
-	struct mpc52xx_gpt* gpt0 = (struct mpc52xx_gpt*) MPC52xx_GPTx(0);
+	struct mpc52xx_gpt __iomem *gpt0 =
+		(struct mpc52xx_gpt __iomem *) MPC52xx_GPTx(0);
 
 	local_irq_disable();
 
@@ -102,7 +103,7 @@ mpc52xx_map_io(void)
 #endif
 
 static void
-mpc52xx_psc_putc(struct mpc52xx_psc * psc, unsigned char c)
+mpc52xx_psc_putc(struct mpc52xx_psc __iomem *psc, unsigned char c)
 {
 	while (!(in_be16(&psc->mpc52xx_psc_status) &
 	         MPC52xx_PSC_SR_TXRDY));
@@ -112,8 +113,9 @@ mpc52xx_psc_putc(struct mpc52xx_psc * psc, unsigned char c)
 void
 mpc52xx_progress(char *s, unsigned short hex)
 {
-	struct mpc52xx_psc *psc = (struct mpc52xx_psc *)MPC52xx_CONSOLE;
 	char c;
+	struct mpc52xx_psc __iomem *psc =
+		(struct mpc52xx_psc __iomem *)MPC52xx_CONSOLE;
 
 	while ((c = *s++) != 0) {
 		if (c == '\n')
@@ -138,11 +140,11 @@ mpc52xx_find_end_of_memory(void)
 	 * else get size from sdram config registers
 	 */
 	if (ramsize == 0) {
-		struct mpc52xx_mmap_ctl *mmap_ctl;
+		struct mpc52xx_mmap_ctl __iomem *mmap_ctl;
 		u32 sdram_config_0, sdram_config_1;
 
 		/* Temp BAT2 mapping active when this is called ! */
-		mmap_ctl = (struct mpc52xx_mmap_ctl*) MPC52xx_MMAP_CTL;
+		mmap_ctl = (struct mpc52xx_mmap_ctl __iomem *) MPC52xx_MMAP_CTL;
 
 		sdram_config_0 = in_be32(&mmap_ctl->sdram0);
 		sdram_config_1 = in_be32(&mmap_ctl->sdram1);
@@ -169,13 +171,11 @@ mpc52xx_calibrate_decr(void)
 	/* if bootloader didn't pass bus frequencies, calculate them */
 	if (xlbfreq == 0) {
 		/* Get RTC & Clock manager modules */
-		struct mpc52xx_rtc *rtc;
-		struct mpc52xx_cdm *cdm;
+		struct mpc52xx_rtc __iomem *rtc;
+		struct mpc52xx_cdm __iomem *cdm;
 
-		rtc = (struct mpc52xx_rtc*)
-			ioremap(MPC52xx_RTC, sizeof(struct mpc52xx_rtc));
-		cdm = (struct mpc52xx_cdm*)
-			ioremap(MPC52xx_CDM, sizeof(struct mpc52xx_cdm));
+		rtc = ioremap(MPC52xx_RTC, sizeof(struct mpc52xx_rtc));
+		cdm = ioremap(MPC52xx_CDM, sizeof(struct mpc52xx_cdm));
 
 		if ((rtc==NULL) || (cdm==NULL))
 			panic("Can't ioremap RTC/CDM while computing bus freq");
@@ -212,8 +212,8 @@ mpc52xx_calibrate_decr(void)
 		__res.bi_pcifreq = pcifreq;
 
 		/* Release mapping */
-		iounmap((void*)rtc);
-		iounmap((void*)cdm);
+		iounmap(rtc);
+		iounmap(cdm);
 	}
 
 	divisor = 4;

@@ -168,8 +168,17 @@ void account_ticks(struct pt_regs *regs)
 	__u32 ticks, xticks;
 
 	/* Calculate how many ticks have passed. */
-	if (S390_lowcore.int_clock < S390_lowcore.jiffy_timer)
+	if (S390_lowcore.int_clock < S390_lowcore.jiffy_timer) {
+		/*
+		 * We have to program the clock comparator even if
+		 * no tick has passed. That happens if e.g. an i/o
+		 * interrupt wakes up an idle processor that has
+		 * switched off its hz timer.
+		 */
+		tmp = S390_lowcore.jiffy_timer + CPU_DEVIATION;
+		asm volatile ("SCKC %0" : : "m" (tmp));
 		return;
+	}
 	tmp = S390_lowcore.int_clock - S390_lowcore.jiffy_timer;
 	if (tmp >= 2*CLK_TICKS_PER_JIFFY) {  /* more than two ticks ? */
 		ticks = __div(tmp, CLK_TICKS_PER_JIFFY) + 1;

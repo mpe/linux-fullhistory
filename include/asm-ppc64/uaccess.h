@@ -120,6 +120,7 @@ extern long __put_user_bad(void);
 #define __put_user_nocheck(x,ptr,size)				\
 ({								\
 	long __pu_err;						\
+	might_sleep();						\
 	__chk_user_ptr(ptr);					\
 	__put_user_size((x),(ptr),(size),__pu_err,-EFAULT);	\
 	__pu_err;						\
@@ -129,6 +130,7 @@ extern long __put_user_bad(void);
 ({									\
 	long __pu_err = -EFAULT;					\
 	void __user *__pu_addr = (ptr);					\
+	might_sleep();							\
 	if (access_ok(VERIFY_WRITE,__pu_addr,size))			\
 		__put_user_size((x),__pu_addr,(size),__pu_err,-EFAULT);	\
 	__pu_err;							\
@@ -136,7 +138,6 @@ extern long __put_user_bad(void);
 
 #define __put_user_size(x,ptr,size,retval,errret)			\
 do {									\
-	might_sleep();							\
 	retval = 0;							\
 	switch (size) {							\
 	  case 1: __put_user_asm(x,ptr,retval,"stb",errret); break;	\
@@ -171,6 +172,7 @@ do {									\
 #define __get_user_nocheck(x,ptr,size)				\
 ({								\
 	long __gu_err, __gu_val;				\
+	might_sleep();						\
 	__get_user_size(__gu_val,(ptr),(size),__gu_err,-EFAULT);\
 	(x) = (__typeof__(*(ptr)))__gu_val;			\
 	__gu_err;						\
@@ -180,6 +182,7 @@ do {									\
 ({									\
 	long __gu_err = -EFAULT, __gu_val = 0;				\
 	const __typeof__(*(ptr)) __user *__gu_addr = (ptr);		\
+	might_sleep();							\
 	if (access_ok(VERIFY_READ,__gu_addr,size))			\
 		__get_user_size(__gu_val,__gu_addr,(size),__gu_err,-EFAULT);\
 	(x) = (__typeof__(*(ptr)))__gu_val;				\
@@ -190,7 +193,6 @@ extern long __get_user_bad(void);
 
 #define __get_user_size(x,ptr,size,retval,errret)			\
 do {									\
-	might_sleep();							\
 	retval = 0;							\
 	__chk_user_ptr(ptr);						\
 	switch (size) {							\
@@ -224,9 +226,8 @@ extern unsigned long __copy_tofrom_user(void __user *to, const void __user *from
 					unsigned long size);
 
 static inline unsigned long
-__copy_from_user(void *to, const void __user *from, unsigned long n)
+__copy_from_user_inatomic(void *to, const void __user *from, unsigned long n)
 {
-	might_sleep();
 	if (__builtin_constant_p(n)) {
 		unsigned long ret;
 
@@ -249,9 +250,15 @@ __copy_from_user(void *to, const void __user *from, unsigned long n)
 }
 
 static inline unsigned long
-__copy_to_user(void __user *to, const void *from, unsigned long n)
+__copy_from_user(void *to, const void __user *from, unsigned long n)
 {
 	might_sleep();
+	return __copy_from_user_inatomic(to, from, n);
+}
+
+static inline unsigned long
+__copy_to_user_inatomic(void __user *to, const void *from, unsigned long n)
+{
 	if (__builtin_constant_p(n)) {
 		unsigned long ret;
 
@@ -273,6 +280,13 @@ __copy_to_user(void __user *to, const void *from, unsigned long n)
 	return __copy_tofrom_user(to, (__force const void __user *) from, n);
 }
 
+static inline unsigned long
+__copy_to_user(void __user *to, const void *from, unsigned long n)
+{
+	might_sleep();
+	return __copy_to_user_inatomic(to, from, n);
+}
+
 #define __copy_in_user(to, from, size) \
 	__copy_tofrom_user((to), (from), (size))
 
@@ -284,9 +298,6 @@ extern unsigned long copy_in_user(void __user *to, const void __user *from,
 				  unsigned long n);
 
 extern unsigned long __clear_user(void __user *addr, unsigned long size);
-
-#define __copy_to_user_inatomic __copy_to_user
-#define __copy_from_user_inatomic __copy_from_user
 
 static inline unsigned long
 clear_user(void __user *addr, unsigned long size)

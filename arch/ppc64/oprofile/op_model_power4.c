@@ -224,7 +224,7 @@ static unsigned long get_pc(struct pt_regs *regs)
 	if (mmcra & MMCRA_SIPR)
 		return pc;
 
-#ifdef CONFIG_PPC_PSERIES
+#ifdef CONFIG_PPC_RTAS
 	/* Were we in RTAS? */
 	if (pc >= rtas.base && pc < (rtas.base + rtas.size))
 		/* function descriptor madness */

@@ -80,7 +80,7 @@ ev64260_get_cpu_speed(void)
 {
 	unsigned long	pvr, hid1, pll_ext;
 
-	pvr = SPRN_VER(mfspr(SPRN_PVR));
+	pvr = PVR_VER(mfspr(SPRN_PVR));
 
 	if (pvr != PVR_VER(PVR_7450)) {
 		hid1 = mfspr(SPRN_HID1) >> 28;
@@ -422,8 +422,8 @@ ev64260_platform_notify(struct device *dev)
 		char	*bus_id;
 		void	((*rtn)(struct platform_device *pdev));
 	} dev_map[] = {
-		{ MPSC_CTLR_NAME "0", ev64260_fixup_mpsc_pdata },
-		{ MPSC_CTLR_NAME "1", ev64260_fixup_mpsc_pdata },
+		{ MPSC_CTLR_NAME ".0", ev64260_fixup_mpsc_pdata },
+		{ MPSC_CTLR_NAME ".1", ev64260_fixup_mpsc_pdata },
 	};
 	struct platform_device	*pdev;
 	int	i;

@@ -669,6 +669,42 @@ static void __init ppc7d_fixup_eth_pdata(struct platform_device *pdev)
 }
 #endif
 
+#if defined(CONFIG_I2C_MV64XXX)
+static void __init
+ppc7d_fixup_i2c_pdata(struct platform_device *pdev)
+{
+	struct mv64xxx_i2c_pdata *pdata;
+	int i;
+
+	pdata = pdev->dev.platform_data;
+	if (pdata == NULL) {
+		pdata = kmalloc(sizeof(*pdata), GFP_KERNEL);
+		if (pdata == NULL)
+			return;
+
+		memset(pdata, 0, sizeof(*pdata));
+		pdev->dev.platform_data = pdata;
+	}
+
+	/* divisors M=8, N=3 for 100kHz I2C from 133MHz system clock */
+	pdata->freq_m = 8;
+	pdata->freq_n = 3;
+	pdata->timeout = 500;
+	pdata->retries = 3;
+
+	/* Adjust IRQ by mv64360_irq_base */
+	for (i = 0; i < pdev->num_resources; i++) {
+		struct resource *r = &pdev->resource[i];
+
+		if (r->flags & IORESOURCE_IRQ) {
+			r->start += mv64360_irq_base;
+			r->end += mv64360_irq_base;
+			pr_debug("%s, uses IRQ %d\n", pdev->name, (int) r->start);
+		}
+	}
+}
+#endif
+
 static int __init ppc7d_platform_notify(struct device *dev)
 {
 	static struct {
@@ -676,13 +712,16 @@ static int __init ppc7d_platform_notify(struct device *dev)
 		void ((*rtn) (struct platform_device * pdev));
 	} dev_map[] = {
 #if defined(CONFIG_SERIAL_MPSC)
-		{ MPSC_CTLR_NAME "0", ppc7d_fixup_mpsc_pdata },
-		{ MPSC_CTLR_NAME "1", ppc7d_fixup_mpsc_pdata },
+		{ MPSC_CTLR_NAME ".0", ppc7d_fixup_mpsc_pdata },
+		{ MPSC_CTLR_NAME ".1", ppc7d_fixup_mpsc_pdata },
 #endif
 #if defined(CONFIG_MV643XX_ETH)
-		{ MV643XX_ETH_NAME "0", ppc7d_fixup_eth_pdata },
-		{ MV643XX_ETH_NAME "1", ppc7d_fixup_eth_pdata },
-		{ MV643XX_ETH_NAME "2", ppc7d_fixup_eth_pdata },
+		{ MV643XX_ETH_NAME ".0", ppc7d_fixup_eth_pdata },
+		{ MV643XX_ETH_NAME ".1", ppc7d_fixup_eth_pdata },
+		{ MV643XX_ETH_NAME ".2", ppc7d_fixup_eth_pdata },
+#endif
+#if defined(CONFIG_I2C_MV64XXX)
+		{ MV64XXX_I2C_CTLR_NAME ".0", ppc7d_fixup_i2c_pdata },
 #endif
 	};
 	struct platform_device *pdev;
@@ -1162,7 +1201,7 @@ static void __init ppc7d_setup_arch(void)
 
 	/* Disable ethernet. It might have been setup by the bootrom */
 	for (port = 0; port < 3; port++)
-		mv64x60_write(&bh, MV64340_ETH_RECEIVE_QUEUE_COMMAND_REG(port),
+		mv64x60_write(&bh, MV643XX_ETH_RECEIVE_QUEUE_COMMAND_REG(port),
 			      0x0000ff00);
 
 	/* Clear queue pointers to ensure they are all initialized,
@@ -1172,25 +1211,25 @@ static void __init ppc7d_setup_arch(void)
 	 */
 	for (port = 0; port < 3; port++) {
 		mv64x60_write(&bh,
-			      MV64340_ETH_RX_CURRENT_QUEUE_DESC_PTR_1(port),
+			      MV643XX_ETH_RX_CURRENT_QUEUE_DESC_PTR_1(port),
 			      0x00000000);
 		mv64x60_write(&bh,
-			      MV64340_ETH_RX_CURRENT_QUEUE_DESC_PTR_2(port),
+			      MV643XX_ETH_RX_CURRENT_QUEUE_DESC_PTR_2(port),
 			      0x00000000);
 		mv64x60_write(&bh,
-			      MV64340_ETH_RX_CURRENT_QUEUE_DESC_PTR_3(port),
+			      MV643XX_ETH_RX_CURRENT_QUEUE_DESC_PTR_3(port),
 			      0x00000000);
 		mv64x60_write(&bh,
-			      MV64340_ETH_RX_CURRENT_QUEUE_DESC_PTR_4(port),
+			      MV643XX_ETH_RX_CURRENT_QUEUE_DESC_PTR_4(port),
 			      0x00000000);
 		mv64x60_write(&bh,
-			      MV64340_ETH_RX_CURRENT_QUEUE_DESC_PTR_5(port),
+			      MV643XX_ETH_RX_CURRENT_QUEUE_DESC_PTR_5(port),
 			      0x00000000);
 		mv64x60_write(&bh,
-			      MV64340_ETH_RX_CURRENT_QUEUE_DESC_PTR_6(port),
+			      MV643XX_ETH_RX_CURRENT_QUEUE_DESC_PTR_6(port),
 			      0x00000000);
 		mv64x60_write(&bh,
-			      MV64340_ETH_RX_CURRENT_QUEUE_DESC_PTR_7(port),
+			      MV643XX_ETH_RX_CURRENT_QUEUE_DESC_PTR_7(port),
 			      0x00000000);
 	}
 
@@ -1363,7 +1402,8 @@ void __init platform_init(unsigned long r3, unsigned long r4, unsigned long r5,
 
 	ppc_md.pcibios_fixup_bus = ppc7d_pci_fixup_bus;
 
-#if defined(CONFIG_SERIAL_MPSC) || defined(CONFIG_MV643XX_ETH)
+#if defined(CONFIG_SERIAL_MPSC) || defined(CONFIG_MV643XX_ETH) || \
+    defined(CONFIG_I2C_MV64XXX)
 	platform_notify = ppc7d_platform_notify;
 #endif
 
@@ -1405,4 +1445,8 @@ void __init platform_init(unsigned long r3, unsigned long r4, unsigned long r5,
 	rev_num = (val8 & PPC7D_CPLD_BOARD_REVISION_NUMBER_MASK) >> 5;
 	if (rev_num <= 1)
 		ppc7d_has_alma = 1;
+
+#ifdef DEBUG
+	console_printk[0] = 8;
+#endif
 }

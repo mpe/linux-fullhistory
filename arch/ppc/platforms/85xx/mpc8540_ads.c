@@ -109,7 +109,7 @@ mpc8540ads_setup_arch(void)
 	memcpy(pdata->mac_addr, binfo->bi_enet1addr, 6);
 
 	pdata = (struct gianfar_platform_data *) ppc_sys_get_pdata(MPC85xx_FEC);
-	pdata->board_flags = FSL_GIANFAR_BRD_HAS_PHY_INTR;
+	pdata->board_flags = 0;
 	pdata->interruptPHY = MPC85xx_IRQ_EXT5;
 	pdata->phyid = 3;
 	/* fixup phy address */
