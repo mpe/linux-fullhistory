@@ -649,9 +649,11 @@ ccw_device_offline_notoper(struct ccw_device *cdev, enum dev_event dev_event)
 
 	cdev->private->state = DEV_STATE_NOT_OPER;
 	sch = to_subchannel(cdev->dev.parent);
-	device_unregister(&sch->dev);
-	sch->schib.pmcw.intparm = 0;
-	cio_modify(sch);
+	if (get_device(&cdev->dev)) {
+		PREPARE_WORK(&cdev->private->kick_work,
+			     ccw_device_call_sch_unregister, (void *)cdev);
+		queue_work(ccw_device_work, &cdev->private->kick_work);
+	}
 	wake_up(&cdev->private->wait_q);
 }
 
@@ -678,9 +680,11 @@ ccw_device_online_notoper(struct ccw_device *cdev, enum dev_event dev_event)
 		// FIXME: not-oper indication to device driver ?
 		ccw_device_call_handler(cdev);
 	}
-	device_unregister(&sch->dev);
-	sch->schib.pmcw.intparm = 0;
-	cio_modify(sch);
+	if (get_device(&cdev->dev)) {
+		PREPARE_WORK(&cdev->private->kick_work,
+			     ccw_device_call_sch_unregister, (void *)cdev);
+		queue_work(ccw_device_work, &cdev->private->kick_work);
+	}
 	wake_up(&cdev->private->wait_q);
 }
 
