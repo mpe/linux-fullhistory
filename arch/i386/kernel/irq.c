@@ -709,7 +709,7 @@ void enable_irq(unsigned int irq)
 	spin_lock_irqsave(&irq_controller_lock, flags);
 	switch (irq_desc[irq].depth) {
 	case 1:
-		irq_desc[irq].status &= ~IRQ_DISABLED;
+		irq_desc[irq].status &= ~(IRQ_DISABLED | IRQ_INPROGRESS);
 		irq_desc[irq].handler->enable(irq);
 		/* fall throught */
 	default:

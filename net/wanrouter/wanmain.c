@@ -27,6 +27,9 @@
 * May 17, 1998  K. Baranowski	Fixed SNAP encapsulation in wan_encapsulate
 * Dec 15, 1998  Arnaldo Melo    support for firmwares of up to 128000 bytes
 *                               check wandev->setup return value
+* Dec 22, 1998  Arnaldo Melo    vmalloc/vfree used in device_setup to allocate
+*                               kernel memory and copy configuration data to
+*                               kernel space (for big firmwares)
 *****************************************************************************/
 
 #include <linux/stddef.h>	/* offsetof(), etc. */
@@ -34,6 +37,7 @@
 #include <linux/kernel.h>
 #include <linux/module.h>	/* support for loadable modules */
 #include <linux/malloc.h>	/* kmalloc(), kfree() */
+#include <linux/vmalloc.h>      /* vmalloc(), vfree() */
 #include <linux/mm.h>		/* verify_area(), etc. */
 #include <linux/string.h>	/* inline mem*, str* functions */
 #include <asm/segment.h>	/* kernel <-> user copy */
@@ -464,7 +468,7 @@ static int device_setup (wan_device_t* wandev, wandev_conf_t* u_conf)
 		if(conf->data_size > 128000 || conf->data_size < 0){
 			goto bail;
 		}
-		data = kmalloc(conf->data_size, GFP_KERNEL);
+		data = vmalloc(conf->data_size);
 		if (data)
 		{
 			if(!copy_from_user(data, conf->data, conf->data_size))
@@ -474,9 +478,8 @@ static int device_setup (wan_device_t* wandev, wandev_conf_t* u_conf)
 			}
 			else 
 				err = -ENOBUFS;
+			vfree(data);
 		}
-		if (data)
-			kfree(data);
 	}
 bail:
 	kfree(conf);
