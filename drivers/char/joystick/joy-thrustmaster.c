@@ -39,12 +39,12 @@
 #include <linux/module.h>
 #include <linux/string.h>
 
-#define JS_TM_MAX_START		200
-#define JS_TM_MAX_STROBE	15
+#define JS_TM_MAX_START		400
+#define JS_TM_MAX_STROBE	25
 #define JS_TM_MAX_LENGTH	13
 
 #define JS_TM_MODE_M3DI		1
-#define JS_TM_MODE_3DRP		2
+#define JS_TM_MODE_3DRP		3
 #define JS_TM_MODE_WCS3		4
 
 #define JS_TM_MODE_MAX		5	/* Last mode + 1 */
@@ -73,7 +73,7 @@ struct js_tm_info {
 	unsigned char mode;
 };
 
-static int js_tm_id_to_def[JS_TM_MODE_MAX] = {0x00, 0x42, 0x22, 0x00, 0x00};
+static int js_tm_id_to_def[JS_TM_MODE_MAX] = {0x00, 0x42, 0x00, 0x22, 0x00};
 
 /*
  * js_tm_read_packet() reads a ThrustMaster packet.
@@ -120,6 +120,7 @@ static int js_tm_read_packet(int io, unsigned char *data)
 					i++;
 				}
 			} else {					/* Start bit */
+				data[i] = 0;
 				error |= ~v & 1;
 				j++;
 			}
@@ -251,10 +252,10 @@ static void __init js_tm_init_corr(int num_axes, int mode, int **axes, struct js
 static struct js_port __init *js_tm_probe(int io, struct js_port *port)
 {
 	struct js_tm_info info;
-	char *names[JS_TM_MODE_MAX] = { NULL, "ThrustMaster Millenium 3D Inceptor",
-						"ThrustMaster Rage 3D Gamepad", NULL, "ThrustMaster WCS III" };
-	char axes[JS_TM_MODE_MAX] = { 0, 6, 2, 0, 0 };
-	char buttons[JS_TM_MODE_MAX] = { 0, 5, 10, 0, 0 };
+	char *names[JS_TM_MODE_MAX] = { NULL, "ThrustMaster Millenium 3D Inceptor", NULL,
+						"ThrustMaster Rage 3D Gamepad", "ThrustMaster WCS III" };
+	char axes[JS_TM_MODE_MAX] = { 0, 6, 0, 2, 0 };
+	char buttons[JS_TM_MODE_MAX] = { 0, 5, 0, 10, 0 };
 
 	unsigned char data[JS_TM_MAX_LENGTH];
 	unsigned char u;
@@ -320,7 +321,7 @@ void cleanup_module(void)
 {
 	struct js_tm_info *info;
 
-	while (js_tm_port) {
+	while (js_tm_port != NULL) {
 		js_unregister_device(js_tm_port->devs[0]);
 		info = js_tm_port->info;
 		release_region(info->io, 1);

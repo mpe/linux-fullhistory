@@ -452,7 +452,7 @@ int minix_rmdir(struct inode * dir, struct dentry *dentry)
 		retval = -ENOENT;
 		goto end_rmdir;
 	}
-	if (dentry->d_count > 1) {
+	if (!list_empty(&dentry->d_hash)) {
 		retval = -EBUSY;
 		goto end_rmdir;
 	}

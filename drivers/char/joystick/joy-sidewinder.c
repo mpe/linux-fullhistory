@@ -88,6 +88,11 @@ static void __init js_sw_init_digital(int io)
 	} while (delays[i++]);
 	__restore_flags(flags);
 
+	for (i = 0; i < 4; i++) {
+		udelay(300);
+		outb(0xff, io);
+	}
+
 	return;
 }
 
@@ -137,19 +142,21 @@ static int js_sw_read_packet(int io, int l1, int l2, int strobe, __u64 *data)
 	__restore_flags(flags);
 
 	*data = 0;
-	t = i;
 
-	if (t == l1) {
+	if (i == l1) {
+		t = i > 64 ? 64 : i;
 		for (i = 0; i < t; i++)
 			*data |= (__u64) (buf[i] & 1) << i;
 		return t;
 	}
-	if (t == l2) {
+	if (i == l2) {
+		t = i > 22 ? 22 : i;
 		for (i = 0; i < t; i++)
 			*data |= (__u64) buf[i] << (3 * i);
 		return t * 3;
 	}
-	return t;
+
+	return i;
 }
 
 /*
@@ -199,7 +206,7 @@ static int js_sw_read(void *xinfo, int **axes, int **buttons)
 				i = js_sw_read_packet(info->io, -1, 22, JS_SW_EXT_STROBE, &data);
 			} else {
 				i = js_sw_read_packet(info->io, 64, 66, JS_SW_EXT_STROBE, &data);
-				if (i == 192) info->optimize = 1;
+				if (i == 198) info->optimize = 1;
 			}
 
 			if (i < 60) {
@@ -456,9 +463,9 @@ void cleanup_module(void)
 	int i;
 	struct js_sw_info *info;
 
-	while (js_sw_port) {
+	while (js_sw_port != NULL) {
 		for (i = 0; i < js_sw_port->ndevs; i++)
-			if (js_sw_port->devs[i])
+			if (js_sw_port->devs[i] != NULL)
 				js_unregister_device(js_sw_port->devs[i]);
 		info = js_sw_port->info;
 		release_region(info->io, 1);

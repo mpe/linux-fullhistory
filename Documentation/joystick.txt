@@ -1,4 +1,4 @@
-		     Linux Joystick driver v1.2.12
+		     Linux Joystick driver v1.2.13
 	       (c) 1996-1998 Vojtech Pavlik <vojtech@ucw.cz>
 ----------------------------------------------------------------------------
 
@@ -30,10 +30,11 @@ in the package: See the file COPYING.
   The joystick driver for Linux provides support for a variety of joysticks
 and similar devices.
 
-  These currently include various analog joysticks (both variable resistor
-based and microswitch+resistor based), following IBM PC joystick standard,
-with extensions like additional hats and buttons compatible with CH
-Flightstick Pro, ThrustMaster FCS or 6 and 8 button gamepads.
+  These currently include various analog joysticks and gamepads (both
+variable resistor based and microswitch+resistor based), following IBM PC
+joystick standard, with extensions like additional hats and buttons
+compatible with CH Flightstick Pro, ThrustMaster FCS or 6 and 8 button
+gamepads.
 
   In addition to these it also supports some of the new PC joysticks that
 use proprietary digital protocols to communicate over the gameport,
@@ -54,13 +55,23 @@ Amiga linux port.
 this driver can't make complete use of, I'm very interested in hearing about
 them. Bug reports and success stories are also welcome.
 
-  The joystick package is available at the following FTP site:
+  The joystick package is available at the following FTP sites:
 
-	ftp://atrey.karlin.mff.cuni.cz/pub/linux/joystick/joystick-1.2.x.tar.gz
+	ftp://atrey.karlin.mff.cuni.cz/pub/linux/joystick/
+	ftp://artax.karlin.mff.cuni.cz/pub/linux/joystick/
+
+  The joystick driver is also included in the Linux 2.1 kernels:
+
+	ftp://linux.kernel.org/pub/linux/kernel/v2.1/
 
   And a homepage of the driver is at:
 
 	http://atrey.karlin.mff.cuni.cz/~vojtech/joystick/
+	http://artax.karlin.mff.cuni.cz/~vojtech/joystick/
+
+  A mirror of the homepage is at:
+
+	http://www.trylinux.com/projects/joystick/
 
   There is also a mailing list for the driver at:
 
@@ -70,27 +81,42 @@ send "subscribe linux-joystick Your Name" to subscribe to it.
 
 2. Usage
 ~~~~~~~~
-  To use the driver as a standalone module, without patching the kernel, you
-first need to edit the Makefile to meet your needs (namely whether you use
-MODVERSIONS). Then you compile the driver by typing
+  You could have obtained this driver in two different ways - either in the
+joystick package or in the kernel. Because, for successful usage of the
+joysticks, the utilities in the package are useful, maybe necessary, and
+definitely recommended, I suggest you getting the package at some of the
+above mentioned locations. The rest of this file assumes you have it.
+
+2.1 Compiling the driver package
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  To compile the utilities in the joystick package, and the driver itself,
+as a standalone module, you first unpack the package, and then edit the
+Makefile to meet your needs (namely whether are you using versioned
+modules). Then you compile it
 
 	make
 
-  And after compiling you first
+  And after that you install it
 
-	insmod joystick.o
+	make install
 
-  and then
+  In case you have not used the driver before, you'll need to create the
+joystick device files in /dev so that applications can use them:
 
-	insmod joy-something.o
+	make devs
 
-  where 'something' is the type of your joystick. See below for more precise
-explanation. Of course, you can insmod more than one hardware specific
-module at once, if you have more than one joystick installed.
+  For manual creation of the joystick devices, check the
+Documentation/devices.txt file in the Linux source tree.
 
-  If you want to have the driver compiled into your kernel, you first need
-to patch the kernel, so that it contains the current driver version. You do
-that with a command: 
+  Should you not want to mess with the kernel, and just use the driver
+standalone, as modules, skip the next two sections, proceeding right to 2.4,
+because all you need is already done.
+
+2.2 Patching the kernel
+~~~~~~~~~~~~~~~~~~~~~~~
+  If you already have the most recent joystick driver in your kernel, skip
+this section. If not, you need to patch the kernel, so that it contains the
+current driver version.  You do that with a command: 
 
 	patch -Esp1 < /usr/src/joystick-1.2.x/kernel-2.x.y.diff
 
@@ -98,29 +124,101 @@ in
 
 	/usr/src/linux
 
+2.3 Compiling the kernel
+~~~~~~~~~~~~~~~~~~~~~~~~
   To compile joystick support into the kernel, use the kernel configuration
 scripts, and answer 'Y' to Joystick support and also to at least one of the
-hardware specific options.
+hardware specific options. After doing something like
+
+	make bzlilo
+
+  you are done with the driver installation. Just reboot and the driver
+should find all the connected joysticks. Read the notes about the hardware
+specific drivers later in this file, though.
 
   You can also compile the driver as modules, answering 'M' to all joystick
 support you want to have modules for. It is possible to have the main
 joystick driver compiled into the kernel and the hardware dependent drivers
-as modules.
+as modules. After you compile the modules 
 
-  After you're done with installation of the driver itself, you'll need to
-create the joystick device files in /dev so that applications can use them.
-This is done by typing
+	make modules
 
-	make devs
+  And install them
 
-in the joystick driver's directory. For manual creation of the joystick
-devices, check the Documentation/devices.txt file in the Linux source tree.
+	make modules_install
 
-2.1 Analog joysticks
+ you're set, and can proceed to the next step.
+
+2.4 Inserting the modules into the kernel
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  After installing the modules you'll first need to insert the generic
+joystick driver module into the kernel
+
+	insmod joystick
+
+  and then one or more of the hardware specific modules
+
+	insmod joy-something
+
+  where 'something' is the type of your joystick. See below for more precise
+explanation.
+
+2.5 Verifying that it works
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  For testing the joystick driver functionality, there is the jstest
+program. You run it by typing:
+
+	jstest /dev/js0
+
+  And it should show a line with the joystick values, which update as you
+move the stick, and press its buttons. The axes should all be zero when the
+joystick is in the center position. They should not jitter by themselves to
+other close values, and they also should be steady in any other position of
+the stick. They should have the full range from -32767 to 32767. If all this
+is met, then it's all fine, and you can play the games. :)
+
+  If it's not, then there might be a problem. Try to calibrate the joystick,
+and if it still doesn't work, read the drivers section of this file, the
+troubleshooting section, and the FAQ.
+
+2.6. Calibration
+~~~~~~~~~~~~~~~~
+  For most joysticks you won't need any manual calibration, since the
+joystick should be autocalibrated by the driver automagically. However, with
+some analog joysticks, that either do not use linear resistors, or if you
+want better precision, you can use the jscal program
+
+	jscal -c /dev/js0
+
+ included in the joystick package to set better correction coefficients than
+what the driver would choose itself.
+
+  After calibrating the joystick you can verify if you like the new
+calibration using the jstest command, and if you do, you then can save the
+correction coefficients into a file
+
+	jscal -s /dev/js0 > /etc/joystick.cal
+
+  And add a line to your rc script executing that file
+
+	source /etc/joystick.cal
+
+  This way, after the next reboot your joystick will remain calibrated. You
+can also add the jscal -s line to your shutdown script.
+
+
+3. HW specific driver information
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In this section each of the separate hardware specific drivers is described.
+
+3.1 Analog joysticks
 ~~~~~~~~~~~~~~~~~~~~
-  The joy-analog.c uses the standard analog inputs of the gameport, and
-thus supports all standard joysticks. However the only types that can be
-autodetected are:
+  The joy-analog.c uses the standard analog inputs of the gameport, and thus
+supports all standard joysticks and gamepads. It also supports extensions
+like additional hats and buttons compatible with CH Flightstick Pro,
+ThrustMaster FCS or 6 and 8 button gamepads. 
+
+  However the only types that can be autodetected are:
 
 * 2-axis, 4-button joystick
 * 3-axis, 4-button joystick
@@ -204,7 +302,7 @@ Using this method you'd get a command line:
   And it would do the same as the above explained command line. Use
 whichever way you like best.
 
-2.2 Microsoft SideWinder and Genius Digital joysticks
+3.2 Microsoft SideWinder and Genius Digital joysticks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   SideWinder and Genius Digital joysticks are supported by the
 joy-sidewinder.c module. All currently supported joysticks:
@@ -221,7 +319,7 @@ joy-sidewinder.c module. All currently supported joysticks:
 by the analog driver described above. SideWinder FreeStyle Pro and
 SideWinder Force Feedback Wheel are not supported yet.
 
-2.3 Logitech Digital joysticks
+3.3 Logitech Digital joysticks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   Logitech Digital joysticks are supported by the joy-logitech.c module. It
 currently supports these devices:
@@ -239,24 +337,25 @@ serial port and is not supported yet. Logitech Wingman Force, Wingman
 Formula, Wingman Formula Force, Wingman Gamepad, Wingman Interceptor are USB
 joysticks, with optional serial port connection, and are not supported yet.
 
-2.4 Gravis GrIP
+3.4 Gravis GrIP
 ~~~~~~~~~~~~~~~
   Gravis GrIP gamepads are supported by the joy-gravis.c module. It
-currently supports only:
+currently supports:
 
 * Gravis GamePad Pro
 * Gravis Xterminator
+* Gravis Blackhawk Digital
 
-  Both the pads are be autodetected, and you can even use any combination of
-up to two these pads either chained together or using an Y-cable on a single
+  All these pads are autodetected, and you can even use any combination of
+up to two of these pads either chained together or using an Y-cable on a single
 gameport.
 
-  Gravis Blackhawk Digital, and GrIP MultiPort pads are not supported yet.
 GrIP MultiPort support is in the works. Gravis Xcalibur, ArcadeXtreme,
 GamePad Pro/M are joysticks/pads that probably never reached mass
-production. 
+production. Gravis Stinger is a serial device and hopefully will be
+supported in the future.
 
-2.5 FPGaming A3D and MadCatz A3D
+3.5 FPGaming A3D and MadCatz A3D
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   The Assasin 3D protocol created by FPGaming, is used both by FPGaming
 themselves and is licensed to MadCatz. A3D devices are supported by the
@@ -274,22 +373,22 @@ which has the same syntax as js_an for the analog driver.
   The trackball support is far from perfect at this stage of development,
 but should be well usable.
 
-2.6 ThrustMaster DirectConnect (BSP)
+3.6 ThrustMaster DirectConnect (BSP)
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   The TM DirectConnect (BSP) protocol is supported by the joy-thrustmaster.c
 module. It currently supports:
 
 * ThrustMaster Millenium 3D Inceptor
 * ThrustMaster 3D Rage Pad
-* ThrustMaster Weapon Control System III
 
-  All these drvices are autodetected, and thus no parameters to the module
+  Both these drvices are autodetected, and thus no parameters to the module
 are needed.
 
-  The only tested device was the Millenium. Rage Pad might work, and
-WCS III won't, because important parts of code for that are missing.
+  The Millenium and Rage Pad should work fine now. TM WCS III won't work,
+because important parts of code for that are missing. I'm not sure if it was
+ever mass produced.
 
-2.7 PDPI Lightning 4 gamecards
+3.7 PDPI Lightning 4 gamecards
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
   PDPI Lightning 4 gamecards are supported by the joy-lightning.c module.
 This driver is only for analog joysticks connected to the card - if you want
@@ -321,7 +420,7 @@ port the joystick is attached to:
   See the description of analog joystick driver for explanations of m0 and
 n0 values.
 
-2.8 Amiga
+3.8 Amiga
 ~~~~~~~~~
   Amiga joysticks, connected to an Amiga, are supported by the joy-amiga.c
 driver. Since they can't be autodetected, the driver has a command line.
@@ -339,11 +438,11 @@ the Amiga.
   No more joystick types are supported now, but that should change in the
 future if I get an Amiga in the reach of my fingers.
 
-2.9 Game console and 8-bit pads and joysticks
+3.9 Game console and 8-bit pads and joysticks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 See joystick-parport.txt for more info.
 
-3. Troubleshooting
+4. Troubleshooting
 ~~~~~~~~~~~~~~~~~~
   There is quite a high probability that you run into some problems. For
 testing whether the driver works, if in doubt, use the jstest utility in
@@ -359,7 +458,8 @@ please use the joydump utility first. It's created just by typing
 
 	make joydump.o
 
-  in the driver's directory. It is run then by typing
+  in the directory where you unpacked the joystick package. It is run then
+by typing
 
 	insmod joydump.o
 
@@ -370,7 +470,7 @@ with your problem report.
 
   Oh, and read the FAQ! :)
 
-4. FAQ
+5. FAQ
 ~~~~~~
  Q: The driver doesn't find any joysticks connected to my soundcard with the
 message "joy-something: no joysticks found" and "joy-something.o:
@@ -420,14 +520,9 @@ PC?
   A: Yes, it is possible, but it'll burn your serial port or the pad. It
 won't work, of course.
 
-5. Calibration
-~~~~~~~~~~~~~~
-  For most joysticks you won't need any manual calibration, since the
-joystick should be autocalibrated by the driver automagically. However, with
-some analog joysticks, that either do not use linear resistors, or if you
-want better precision, you can use the jscal program included in the
-joystick package to set better correction coefficients than what the driver
-would choose itself.
+  Q: My joystick doesnt work with Quake / Quake 2. What's the cause?
+  A: Quake / Quake 2 don't support joystick. Use joy2key to simulate keypresses
+for them.
 
 6. Programming Interface
 ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -449,27 +544,27 @@ the driver provides up to 32.
   Thanks to the following people who contributed code, ideas or specifications
 to the joystick driver development:
 
-  0.1-0.5	Arthur C. Smith		<asmith@cbnewsd.att.com>
-  0.5		Eyal Lebedinsky		<eyal@eyal.emu.id.au>
-  0.6		Jeff Tranter		<tranter@software.mitel.com>
-  0.7		Carlos Puchol		<cpg@cs.utexas.edu>
-  0.7.1-0.8	Matt Rhoten		<mrhoten@oz.net>
-  0.7.3		Dan Fandrich		<dan@fch.wimsey.bc.ca>
-  0.7.3		Sverker Wilberg		<sverkerw@manila.docs.uu.se>
-  0.8		Hal Maney		<maney@norden.com>
-  0.8		Bernd Schmidt		<crux@pool.informatik.rwth-aachen.de>
-  0.9		Alan Cox		<alan@lxorguk.ukuu.org.uk>
-  1.1.0		John Markus Bjorndalen	<johnm@cs.uit.no>
-  1.1.0		Boris Muehmer		<mhs@cybernet-ag.de>
-  1.1.0		Robert W. Grubbs	<rwgrubbs@vt.edu>
-  1.1.0		Pete Chown		<pete.chown@skygate.co.uk>
-  1.1.0		Benji York		<benji@cookeville.com>
-  1.1.3		Leslie F. Donaldson	<donaldlf@cs.rose-hulman.edu>
-  1.2.0		Eng-Jon Ong		<ongej@dcs.qmw.ac.uk>
-  1.2.8		Ragnar Hojland Espinosa	<ragnar@lightside.ddns.org>
-  1.1.0-1.2.9	Brian Gerst		<bgerst@quark.vpplus.com>
-  1.2.3-1.2.12	Andree Borrmann		<a.borrmann@tu-bs.de>
-  0.9.0-1.2.12	Vojtech Pavlik		<vojtech@ucw.cz>
+	Arthur C. Smith		<asmith@cbnewsd.att.com>
+	Eyal Lebedinsky		<eyal@eyal.emu.id.au>
+	Jeff Tranter		<tranter@software.mitel.com>
+	Carlos Puchol		<cpg@cs.utexas.edu>
+	Matt Rhoten		<mrhoten@oz.net>
+	Dan Fandrich		<dan@fch.wimsey.bc.ca>
+	Sverker Wilberg		<sverkerw@manila.docs.uu.se>
+	Hal Maney		<maney@norden.com>
+	Bernd Schmidt		<crux@pool.informatik.rwth-aachen.de>
+	Alan Cox		<alan@lxorguk.ukuu.org.uk>
+	John Markus Bjorndalen	<johnm@cs.uit.no>
+	Boris Muehmer		<mhs@cybernet-ag.de>
+	Robert W. Grubbs	<rwgrubbs@vt.edu>
+	Pete Chown		<pete.chown@skygate.co.uk>
+	Benji York		<benji@cookeville.com>
+	Leslie F. Donaldson	<donaldlf@cs.rose-hulman.edu>
+	Eng-Jon Ong		<ongej@dcs.qmw.ac.uk>
+	Ragnar Hojland Espinosa	<ragnar@lightside.ddns.org>
+	Brian Gerst		<bgerst@quark.vpplus.com>
+	Andree Borrmann		<a.borrmann@tu-bs.de>
+	Martin Giguere		<zefrench@hotmail.com>
 
   If you think you should be in this list and are not, it's possible that
 I forgot to include you - contact me and I'll correct the error. :)
@@ -506,14 +601,7 @@ about their hardware .... :(
 
 9. To do
 ~~~~~~~~
-  Sooner or later I'll do these:
-
-		Fix possible races at open/close
-		Fix possible read/timer races
-		Make the driver SMP-friendly
-		Support joysticks on Linux/m68k/Atari
-		Support joysticks on Linux/FM-TOWNS (?)
-		Support even more joystick types
+  See the TODO file for the list of things planned.
 
 10. Current driver status
 ~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -545,6 +633,7 @@ joy-db9.c:		Multi1 stick		- OK
 			Sega Saturn pad		- unknown
 joy-gravis.c		Gravis GamePad Pro	- OK
 			Gravis Xterminator	- OK
+			Gravis Blackhawk Digital- OK
 joy-lightning.c		PDPI Lightning 4	- OK
 joy-logitech.c		WingMan Extreme Digital	- OK
 			CyberMan 2		- OK
@@ -555,8 +644,7 @@ joy-sidewinder.c	SW 3D Pro		- OK
 			SW PP			- OK
 			SW FFP			- OK
 joy-thrustmaster.c	Millenium 3D Inceptor	- OK
-			3D-Rage pad		- unknown
-			WCS III			- incomplete
+			3D-Rage Pad		- OK
 joy-turbografx.c	Multi1 stick		- OK
 
 Please help me and send me success / failure reports for the drivers,

@@ -1422,6 +1422,8 @@ static int vfat_rmdir_free_ino(struct inode *dir,struct buffer_head *bh,
 	if (dir->i_dev != dentry->d_inode->i_dev || dir == dentry->d_inode) {
 		return -EBUSY;
 	}
+	if (!list_empty(&dentry->d_hash))
+		return -EBUSY;
 
 	res = vfat_empty(dentry->d_inode);
 	if (res) {
@@ -1508,18 +1510,16 @@ static void drop_replace_inodes(struct dentry *dentry, struct inode *inode)
 			tmp = next;
 			next = tmp->next;
 			alias = list_entry(tmp, struct dentry, d_alias);
+			if (alias == dentry)
+				continue;
+
 			if (inode) {
 				list_del(&alias->d_alias);
 				iput(alias->d_inode);
 				d_instantiate(alias, inode);
-				/* dentry is already accounted for */
-				if (alias != dentry) {
-					inode->i_count++;
-				}
+				inode->i_count++;
 			}
-			if (alias != dentry) {
-				d_drop(alias);
-			}
+			d_drop(alias);
 		}
 	}
 }
@@ -1551,10 +1551,12 @@ int vfat_rmdir(struct inode *dir,struct dentry* dentry)
 {
 	int res;
 	PRINTK1(("vfat_rmdir: dentry=%p, inode=%p\n", dentry, dentry->d_inode));
-	res = vfat_rmdirx(dir, dentry);
-	if (res >= 0) {
-		drop_replace_inodes(dentry, NULL);
-		d_delete(dentry);
+
+	res = -EBUSY;
+	if (list_empty(&dentry->d_hash)) {
+		res = vfat_rmdirx(dir, dentry);
+		if (res >= 0)
+			drop_replace_inodes(dentry, NULL);
 	}
 	return res;
 }

@@ -156,11 +156,8 @@ static int UMSDOS_rrmdir ( struct inode *dir, struct dentry *dentry)
 		goto out;
 
 	ret = -EBUSY;
-	if (dentry->d_count > 1) {
-		shrink_dcache_parent(dentry);
-		if (dentry->d_count > 1)
-			goto out;
-	}
+	if (!list_empty(&dentry->d_hash))
+		goto out;
 
 	ret = msdos_rmdir (dir, dentry);
 	if (ret != -ENOTEMPTY)

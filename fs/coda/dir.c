@@ -520,7 +520,7 @@ int coda_rmdir(struct inode *dir, struct dentry *de)
         struct coda_inode_info *dircnp;
 	const char *name = de->d_name.name;
 	int len = de->d_name.len;
-        int error, rehash = 0;
+        int error;
 
 	ENTRY;
 	coda_vfs_stat.rmdir++;
@@ -535,24 +535,13 @@ int coda_rmdir(struct inode *dir, struct dentry *de)
 	if (len > CFS_MAXNAMLEN)
 		return -ENAMETOOLONG;
 
-	error = -EBUSY;
-	if (de->d_count > 1) {
-		/* Attempt to shrink child dentries ... */
-		shrink_dcache_parent(de);
-		if (de->d_count > 1)
-			return error;
-	}
-	/* Drop the dentry to force a new lookup */
-	if (!list_empty(&de->d_hash)) {
-		d_drop(de);
-		rehash = 1;
-	}
+	if (!list_empty(&de->d_hash))
+		return -EBUSY;
 
 	/* update i_nlink and free the inode before unlinking;
 	   if rmdir fails a new lookup set i_nlink right.*/
 	if (de->d_inode->i_nlink)
 		de->d_inode->i_nlink --;
-	d_delete(de);
 
 	error = venus_rmdir(dir->i_sb, &(dircnp->c_fid), name, len);
 
@@ -560,10 +549,6 @@ int coda_rmdir(struct inode *dir, struct dentry *de)
                 CDEBUG(D_INODE, "upc returned error %d\n", error);
                 return error;
         }
-
-	if (rehash)
-		d_add(de, NULL);
-	/* XXX how can mtime be set? */
 
         return 0;
 }

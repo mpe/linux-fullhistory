@@ -43,6 +43,7 @@
 #define JS_GR_STROBE_GPP	75
 
 #define JS_GR_MODE_XT		2
+#define JS_GR_MODE_BD		3
 #define JS_GR_LENGTH_XT		4
 #define JS_GR_STROBE_XT		30
 #define JS_GR_MAX_CHUNKS_XT	10	
@@ -189,15 +190,32 @@ static int js_gr_read(void *xinfo, int **axes, int **buttons)
 
 				axes[i][0] =       (data[0] >> 2) & 0x3f;
 				axes[i][1] = 63 - ((data[0] >> 8) & 0x3f);
-				axes[i][2] = (data[1] >> 2) & 0x3f;
-				axes[i][3] = (data[1] >> 8) & 0x3f;
-				axes[i][4] = (data[2] >> 8) & 0x3f;
+				axes[i][2] =       (data[1] >> 2) & 0x3f;
+				axes[i][3] =       (data[1] >> 8) & 0x3f;
+				axes[i][4] =       (data[2] >> 8) & 0x3f;
+
 				axes[i][5] = ((data[2] >> 1) & 1) - ( data[2]       & 1);
 				axes[i][6] = ((data[2] >> 2) & 1) - ((data[2] >> 3) & 1);
 				axes[i][7] = ((data[2] >> 5) & 1) - ((data[2] >> 4) & 1);
 				axes[i][8] = ((data[2] >> 6) & 1) - ((data[2] >> 7) & 1);
 
 				buttons[i][0] = (data[3] >> 3) & 0x7ff;
+
+				break;
+
+			case JS_GR_MODE_BD:
+
+				if (js_gr_xt_read_packet(info->io, (i << 1) + 4, data)) return -1;
+
+				axes[i][0] =       (data[0] >> 2) & 0x3f;
+				axes[i][1] = 63 - ((data[0] >> 8) & 0x3f);
+				axes[i][2] =       (data[2] >> 8) & 0x3f;
+
+				axes[i][3] = ((data[2] >> 1) & 1) - ( data[2]       & 1);
+				axes[i][4] = ((data[2] >> 2) & 1) - ((data[2] >> 3) & 1);
+
+				buttons[i][0] = ((data[3] >> 6) & 0x01) | ((data[3] >> 3) & 0x06)
+					      | ((data[3] >> 4) & 0x18);
 
 				break;
 
@@ -276,6 +294,28 @@ static void __init js_gr_init_corr(int mode, struct js_corr *corr)
 
 			break;
 
+		case JS_GR_MODE_BD:
+
+			for (i = 0; i < 3; i++) {
+				corr[i].type = JS_CORR_BROKEN;
+				corr[i].prec = 0;
+				corr[i].coef[0] = 31 - 4;
+				corr[i].coef[1] = 32 + 4;
+				corr[i].coef[2] = (1 << 29) / (32 - 14);
+				corr[i].coef[3] = (1 << 29) / (32 - 14);
+			}
+
+			for (i = 3; i < 5; i++) {
+				corr[i].type = JS_CORR_BROKEN;
+				corr[i].prec = 0;
+				corr[i].coef[0] = 0;
+				corr[i].coef[1] = 0;
+				corr[i].coef[2] = (1 << 29);
+				corr[i].coef[3] = (1 << 29);
+			}
+			
+			break;
+
 	}
 }
 
@@ -286,9 +326,9 @@ static void __init js_gr_init_corr(int mode, struct js_corr *corr)
 static struct js_port __init *js_gr_probe(int io, struct js_port *port)
 {
 	struct js_gr_info info;
-	char *names[] = { NULL, "Gravis GamePad Pro", "Gravis Xterminator" };
-	char axes[] = { 0, 2, 9 };
-	char buttons[] = { 0, 10, 11 };
+	char *names[] = { NULL, "Gravis GamePad Pro", "Gravis Xterminator", "Gravis Blackhawk Digital"};
+	char axes[] = { 0, 2, 9, 5};
+	char buttons[] = { 0, 10, 11, 5};
 	unsigned int data[JS_GR_LENGTH_XT];
 	int i;
 
@@ -298,7 +338,12 @@ static struct js_port __init *js_gr_probe(int io, struct js_port *port)
 
 	for (i = 0; i < 2; i++) {
 		if (!js_gr_gpp_read_packet(io, (i << 1) + 4, data)) info.mode[i] = JS_GR_MODE_GPP;
-		if (!js_gr_xt_read_packet(io, (i << 1) + 4, data)) info.mode[i] = JS_GR_MODE_XT;
+		if (!js_gr_xt_read_packet(io, (i << 1) + 4, data)) {
+			if ((data[3] & 7) == 7)
+				info.mode[i] = JS_GR_MODE_XT;
+			if ((data[3] & 7) == 0)
+				info.mode[i] = JS_GR_MODE_BD;
+		}
 	}
 
 	if (!info.mode[0] && !info.mode[1]) return port;
@@ -344,9 +389,9 @@ void cleanup_module(void)
 	int i;
 	struct js_gr_info *info;
 
-	while (js_gr_port) {
+	while (js_gr_port != NULL) {
 		for (i = 0; i < js_gr_port->ndevs; i++)
-			if (js_gr_port->devs[i])
+			if (js_gr_port->devs[i] != NULL)
 				js_unregister_device(js_gr_port->devs[i]);
 		info = js_gr_port->info;
 		release_region(info->io, 1);

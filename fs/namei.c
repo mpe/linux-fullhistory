@@ -881,7 +881,6 @@ static inline int do_rmdir(const char * name)
 	error = -ENOENT;
 	if (!dentry->d_inode)
 		goto exit;
-
 	/*
 	 * The dentry->d_count stuff confuses d_delete() enough to
 	 * not kill the inode from under us while it is locked. This
@@ -919,8 +918,29 @@ static inline int do_rmdir(const char * name)
 
 	DQUOT_INIT(dir->d_inode);
 
-	if (dentry->d_count > 1)
+	/*
+	 * We try to drop the dentry early: we should have
+	 * a usage count of 2 if we're the only user of this
+	 * dentry, and if that is true (possibly after pruning
+	 * the dcache), then we drop the dentry now.
+	 *
+	 * A low-level filesystem can, if it choses, legally
+	 * do a
+	 *
+	 *	if (!list_empty(&dentry->d_hash))
+	 *		return -EBUSY;
+	 *
+	 * if it cannot handle the case of removing a directory
+	 * that is still in use by something else..
+	 */
+	switch (dentry->d_count) {
+	default:
 		shrink_dcache_parent(dentry);
+		if (dentry->d_count != 2)
+			break;
+	case 2:
+		d_drop(dentry);
+	}
 
 	error = dir->d_inode->i_op->rmdir(dir->d_inode, dentry);
 

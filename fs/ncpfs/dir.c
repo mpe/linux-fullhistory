@@ -24,11 +24,6 @@
 #include <linux/ncp_fs.h>
 #include "ncplib_kernel.h"
 
-#ifndef shrink_dcache_parent
-#define shrink_dcache_parent(dentry) shrink_dcache_sb((dentry)->d_sb)
-#endif
-
-
 struct ncp_dirent {
 	struct nw_info_struct i;
 	struct nw_search_sequence s;	/* given back for i */
@@ -999,17 +994,14 @@ static int ncp_rmdir(struct inode *dir, struct dentry *dentry)
 		printk(KERN_WARNING "ncp_rmdir: inode is NULL or not a directory\n");
 		goto out;
 	}
+
 	error = -EIO;
 	if (!ncp_conn_valid(NCP_SERVER(dir)))
 		goto out;
 
-	if (dentry->d_count > 1)
-	{
-		shrink_dcache_parent(dentry);
-		error = -EBUSY;
-		if (dentry->d_count > 1)
-			goto out;
-	}
+	error = -EBUSY;
+	if (!list_empty(&dentry->d_hash))
+		goto out;
 
 	strncpy(_name, dentry->d_name.name, dentry->d_name.len);
 	_name[dentry->d_name.len] = '\0';
@@ -1023,7 +1015,6 @@ static int ncp_rmdir(struct inode *dir, struct dentry *dentry)
 	if (!result)
 	{
 		ncp_invalid_dir_cache(dir);
-		d_delete(dentry);
 		error = 0;
     	}
 out:

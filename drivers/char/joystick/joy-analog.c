@@ -195,9 +195,9 @@ void cleanup_module(void)
 	int i;
 	struct js_an_info *info;
 
-	while (js_an_port) {
+	while (js_an_port != NULL) {
 		for (i = 0; i < js_an_port->ndevs; i++)
-			if (js_an_port->devs[i])
+			if (js_an_port->devs[i] != NULL)
 				js_unregister_device(js_an_port->devs[i]);
 		info = js_an_port->info;
 		release_region(info->io, 1);

@@ -479,22 +479,15 @@ smb_rmdir(struct inode *dir, struct dentry *dentry)
 	smb_close(inode);
 
 	/*
-	 * Prune any child dentries so this dentry can become negative.
+	 * Check that nobody else is using the directory..
 	 */
-	if (dentry->d_count > 1) {
-		shrink_dcache_parent(dentry);
-		error = -EBUSY;
-		if (dentry->d_count > 1)
-			goto out;
- 	}
+	error = -EBUSY;
+	if (!list_empty(&dentry->d_hash))
+		goto out;
 
 	smb_invalid_dir_cache(dir);
 	error = smb_proc_rmdir(dentry);
-	if (!error)
-	{
-		smb_renew_times(dentry);
-		d_delete(dentry);
-	}
+
 out:
 	return error;
 }

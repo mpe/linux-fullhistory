@@ -373,9 +373,9 @@ void cleanup_module(void)
 	struct js_console_info *info;
 	int i;
 
-	while (js_console_port) {
+	while (js_console_port != NULL) {
 		for (i = 0; i < js_console_port->ndevs; i++)
-			if (js_console_port->devs[i])
+			if (js_console_port->devs[i] != NULL)
 				js_unregister_device(js_console_port->devs[i]);
 		info = js_console_port->info;
 #ifdef USE_PARPORT
@@ -428,11 +428,11 @@ static struct js_port __init *js_console_probe(int *config, struct js_port *port
 		struct parport *pp;
 
 		if (config[0] > 0x10)
-			for (pp=parport_enumerate(); pp && (pp->base!=config[0]); pp=pp->next);
+			for (pp=parport_enumerate(); pp != NULL && (pp->base!=config[0]); pp=pp->next);
 		else
-			for (pp=parport_enumerate(); pp && (config[0]>0); pp=pp->next) config[0]--;
+			for (pp=parport_enumerate(); pp != NULL && (config[0]>0); pp=pp->next) config[0]--;
 
-		if (!pp) {
+		if (pp == NULL) {
 			printk(KERN_ERR "joy-console: no such parport\n");
 			return port;
 		}

@@ -374,13 +374,11 @@ affs_rmdir(struct inode *dir, struct dentry *dentry)
 	/*
 	 * Make sure the directory is empty and the dentry isn't busy.
 	 */
-	if (dentry->d_count > 1)
-		shrink_dcache_parent(dentry);
 	retval = -ENOTEMPTY;
 	if (!empty_dir(bh,AFFS_I2HSIZE(inode)))
 		goto rmdir_done;
 	retval = -EBUSY;
-	if (dentry->d_count > 1)
+	if (!list_empty(&dentry->d_hash))
 		goto rmdir_done;
 
 	if ((retval = affs_remove_header(bh,inode)) < 0)

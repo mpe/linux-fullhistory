@@ -506,14 +506,14 @@ more joysticks/pads.
 ~~~~~~~~~~~~~~~~~~~~
   The joy-turbografx.c driver uses a very simple kernel/module command line:
 
-	js_tg=port,count
+	js_tg=port,js1,js2,js3,js4,js5,js6,js7
 
   Where 'port' is either the address of the parallel port the interface is
 connected to (eg. 0x378), or, if you are using the parport driver of 2.1+
 Linux kernels, the number of the parport interface (eg. 0 for parport0).
 
-  'Count' is the number of Multisystem, 1-button joysticks connected to the
-interface.
+  'jsX' is the number of buttons the Multisystem joysticks connected to the
+interface ports 1-7 have. For a standard multisystem joystick, this is 1.
 
   Should you want to use more than one of these interfaces at once, you can
 use js_tg_2 and js_tg_3 as additional command line parameters for two more

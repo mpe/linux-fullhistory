@@ -32,6 +32,7 @@
 
 #include <asm/io.h>
 #include <asm/system.h>
+#include <asm/segment.h>
 #include <linux/config.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
@@ -456,14 +457,14 @@ static void js_do_timer(unsigned long data)
 	struct js_dev *curd = js_dev;
 	unsigned long flags;
 
-	while (curp) {
+	while (curp != NULL) {
 		curp->read(curp->info, curp->axes, curp->buttons);
 		curp = curp->next;
 	}
 
 	spin_lock_irqsave(&js_lock, flags);
 
-	while (curd) {
+	while (curd != NULL) {
 		if (data) {
 			js_process_data(curd);
 			js_sync_buff(curd);
@@ -643,12 +644,12 @@ static int js_read(struct inode *inode, struct file *file, char *buf, int count)
 	if (orig_tail == jd->tail) {
 		new_tail = curl->tail;
 		curl = jd->list;
-		while (curl && curl->tail != jd->tail) {
+		while (curl != NULL && curl->tail != jd->tail) {
 			if (ROT(jd->bhead, new_tail, curl->tail) ||
 				(jd->bhead == curl->tail)) new_tail = curl->tail;
 			curl = curl->next;
 		}
-		if (!curl) jd->tail = new_tail;
+		if (curl == NULL) jd->tail = new_tail;
 	}
 
 	spin_unlock_irqrestore(&js_lock, flags);
@@ -855,42 +856,51 @@ static int js_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 
 static int js_open(struct inode *inode, struct file *file)
 {
-	struct js_list *curl;
+	struct js_list *curl, *new;
 	struct js_dev *jd = js_dev;
 	int i = MINOR(inode->i_rdev);
 	unsigned long flags;
-	int result;
+	int result; 
 
 	if (MAJOR(inode->i_rdev) != JOYSTICK_MAJOR)
 		return -EINVAL;
 
-	while (i > 0 && jd) {
+	spin_lock_irqsave(&js_lock, flags);
+
+	while (i > 0 && jd != NULL) {
 		jd = jd->next;
 		i--;
 	}
 
-	if (!jd) return -ENODEV;
+	spin_unlock_irqrestore(&js_lock, flags);
+
+	if (jd == NULL) return -ENODEV;
 
 	if ((result = jd->open(jd))) return result;
 
 	MOD_INC_USE_COUNT;
 	if (!js_use_count++) js_do_timer(0);
 
-	curl = jd->list;
+	if ((new = kmalloc(sizeof(struct js_list), GFP_KERNEL)) != NULL) {
 
-	spin_lock_irqsave(&js_lock, flags);
+		spin_lock_irqsave(&js_lock, flags);
 
-	jd->list = kmalloc(sizeof(struct js_list), GFP_KERNEL);
-	jd->list->next = curl;
-	jd->list->dev = jd;
-	jd->list->startup = 0;
-	jd->list->tail = GOB(jd->bhead);
+		curl = jd->list;
 
-	spin_unlock_irqrestore(&js_lock, flags);
+		jd->list = new;
+		jd->list->next = curl;
+		jd->list->dev = jd;
+		jd->list->startup = 0;
+		jd->list->tail = GOB(jd->bhead);
+		file->private_data = jd->list;
 
-	file->private_data = jd->list;
+		spin_unlock_irqrestore(&js_lock, flags);
 
-	return 0;
+	} else {
+		result = -ENOMEM;
+	}
+
+	return result;
 }
 
 /*
@@ -915,11 +925,11 @@ static void js_release(struct inode *inode, struct file *file)
 	while (*curp && (*curp != curl)) curp = &((*curp)->next);
 	*curp = (*curp)->next;
 
-	if (jd->list)
+	if (jd->list != NULL)
 	if (curl->tail == jd->tail) {
 		curl = jd->list;
 		new_tail = curl->tail;
-		while (curl && curl->tail != jd->tail) {
+		while (curl != NULL && curl->tail != jd->tail) {
 			if (ROT(jd->bhead, new_tail, curl->tail) ||
 			       (jd->bhead == curl->tail)) new_tail = curl->tail;
 			curl = curl->next;
@@ -957,7 +967,7 @@ static void js_dump_mem(void)
 	printk(",--- Dumping Devices:\n");
 	printk("| js_dev = %x\n", (int) js_dev);
 
-	while (curd) {
+	while (curd != NULL) {
 		printk("|  %s-device %x, next %x axes %d, buttons %d, port %x - %#x\n",
 			curd->next ? "|":"`",
 			(int) curd, (int) curd->next, curd->num_axes, curd->num_buttons, (int) curd->port, curd->port->io);
@@ -967,7 +977,7 @@ static void js_dump_mem(void)
 	printk(">--- Dumping ports:\n");
 	printk("| js_port = %x\n", (int) js_port);
 
-	while (curp) {
+	while (curp != NULL) {
 		printk("|  %s-port %x, next %x, io %#x, devices %d\n",
 			curp->next ? "|":"`",
 			(int) curp, (int) curp->next, curp->io, curp->ndevs);
@@ -995,34 +1005,38 @@ struct js_port *js_register_port(struct js_port *port,
 {
 	struct js_port **ptrp = &js_port;
 	struct js_port *curp;
+	void *all;
 	int i;
 	unsigned long flags;
 
-	spin_lock_irqsave(&js_lock, flags);
+	if ((all = kmalloc(sizeof(struct js_port) + 4 * devs * sizeof(void*) + infos, GFP_KERNEL)) == NULL)
+		return NULL;
 
-	while (*ptrp) ptrp=&((*ptrp)->next);
-	*ptrp = curp = kmalloc(sizeof(struct js_port), GFP_KERNEL);
+	curp = all;
 
 	curp->next = NULL;
 	curp->prev = port;
 	curp->read = read;
 	curp->ndevs = devs;
 
-	curp->devs = kmalloc(devs * sizeof(struct js_dev*), GFP_KERNEL);
+	curp->devs = all += sizeof(struct js_port);
+	for (i = 0; i < devs; i++) curp->devs[i] = NULL;
 
-	for (i = 0; i < devs; i++)
-		curp->devs[i] = NULL;
-
-	curp->axes = kmalloc(devs * sizeof(int*), GFP_KERNEL);
-	curp->buttons = kmalloc(devs * sizeof(int*), GFP_KERNEL);
-	curp->corr = kmalloc(devs * sizeof(struct js_corr*), GFP_KERNEL);
+	curp->axes = all += devs * sizeof(void*);
+	curp->buttons = (void*) all += devs * sizeof(void*);
+	curp->corr = all += devs * sizeof(void*);
 
 	if (infos) {
-		curp->info = kmalloc(infos, GFP_KERNEL);
+		curp->info = all += devs * sizeof(void*); 
 		memcpy(curp->info, info, infos);
 	} else {
 		curp->info = NULL;
 	}
+
+	spin_lock_irqsave(&js_lock, flags);
+
+	while (*ptrp != NULL) ptrp=&((*ptrp)->next);
+	*ptrp = curp;
 
 	spin_unlock_irqrestore(&js_lock, flags);
 
@@ -1037,18 +1051,13 @@ struct js_port *js_unregister_port(struct js_port *port)
 
 	spin_lock_irqsave(&js_lock, flags);
 
-	while (*curp && (*curp != port)) curp = &((*curp)->next);
+	while (*curp != NULL && (*curp != port)) curp = &((*curp)->next);
 	*curp = (*curp)->next;
 
-	prev = port->prev;
-	kfree(port->devs);
-	kfree(port->axes);
-	kfree(port->buttons);
-	kfree(port->corr);
-	if (port->info) kfree(port->info);
-	kfree(port);
-
 	spin_unlock_irqrestore(&js_lock, flags);
+
+	prev = port->prev;
+	kfree(port);
 
 	return prev;
 }
@@ -1058,17 +1067,16 @@ int js_register_device(struct js_port *port, int number, int axes, int buttons, 
 {
 	struct js_dev **ptrd = &js_dev;
 	struct js_dev *curd;
+	void *all;
 	int i = 0;
 	unsigned long flags;
 
-	spin_lock_irqsave(&js_lock, flags);
+	if ((all = kmalloc(sizeof(struct js_dev) + 2 * axes * sizeof(int) +
+			2 * (((buttons - 1) >> 5) + 1) * sizeof(int) +
+			axes * sizeof(struct js_corr) + strlen(name) + 1, GFP_KERNEL)) == NULL)
+		return -1;
 
-	while (*ptrd) {
-		ptrd=&(*ptrd)->next;
-		i++;
-	}
-
-	*ptrd = curd = kmalloc(sizeof(struct js_dev), GFP_KERNEL);
+	curd = all;
 
 	curd->next = NULL;
 	curd->list = NULL;
@@ -1083,19 +1091,24 @@ int js_register_device(struct js_port *port, int number, int axes, int buttons, 
 	curd->num_axes = axes;
 	curd->num_buttons = buttons;
 
-	curd->name = kmalloc(strlen(name) + 1, GFP_KERNEL);
-	strcpy(curd->name, name);
+	curd->cur.axes = all += sizeof(struct js_dev);
+	curd->cur.buttons = all += axes * sizeof(int);
+	curd->new.axes = all += (((buttons - 1) >> 5) + 1) * sizeof(int);
+	curd->new.buttons = all += axes * sizeof(int);
+	curd->corr = all += (((buttons -1 ) >> 5) + 1) * sizeof(int);
 
-	curd->cur.axes = kmalloc(axes * sizeof(int), GFP_KERNEL);
-	curd->cur.buttons = kmalloc((((buttons - 1) >> 5) + 1) * sizeof(int), GFP_KERNEL);
-	curd->new.axes = kmalloc(axes * sizeof(int), GFP_KERNEL);
-	curd->new.buttons = kmalloc((((buttons -1 ) >> 5) + 1) * sizeof(int), GFP_KERNEL);
-	curd->corr = kmalloc(axes * sizeof(struct js_corr), GFP_KERNEL);
+	curd->name = all += axes * sizeof(struct js_corr);
+	strcpy(curd->name, name);
 
 	port->devs[number] = curd;
 	port->axes[number] = curd->new.axes;
 	port->buttons[number] = curd->new.buttons;
 	port->corr[number] = curd->corr;
+
+	spin_lock_irqsave(&js_lock, flags);
+
+	while (*ptrd != NULL) { ptrd=&(*ptrd)->next; i++; }
+	*ptrd = curd;
 
 	spin_unlock_irqrestore(&js_lock, flags);	
 
@@ -1109,17 +1122,11 @@ void js_unregister_device(struct js_dev *dev)
 
 	spin_lock_irqsave(&js_lock, flags);
 
-	while (*curd && (*curd != dev)) curd = &((*curd)->next);
+	while (*curd != NULL && (*curd != dev)) curd = &((*curd)->next);
 	*curd = (*curd)->next;
 
 	spin_unlock_irqrestore(&js_lock, flags);	
 
-	kfree(dev->cur.axes);
-	kfree(dev->new.axes);
-	kfree(dev->cur.buttons);
-	kfree(dev->new.buttons);
-	kfree(dev->corr);
-	kfree(dev->name);
 	kfree(dev);
 }
 

@@ -148,8 +148,8 @@ int __init js_am_init(void)
 #ifdef MODULE
 void cleanup_module(void)
 {
-	while (js_am_port) {
-		if (js_am_port->devs[0])
+	while (js_am_port != NULL) {
+		if (js_am_port->devs[0] != NULL)
 			js_unregister_device(js_am_port->devs[0]);
 		js_am_port = js_unregister_port(js_am_port);
 	}

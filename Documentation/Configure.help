@@ -8492,13 +8492,14 @@ CONFIG_JOYSTICK
   The module will be called joystick.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
-Classic PC analog joysticks
+Classic PC analog joysticks and gamepads
 CONFIG_JOY_ANALOG
   Say Y here if you have an analog joystick or gamepad that connects
   to the PC gameport. This supports many different types, including
-  joysticks with throttle control, and with CHF / FCS / 6-button
-  extensions. For more information on how to use the driver please
-  read Documentation/joystick.txt
+  joysticks with throttle control, with rudders, or with extensions
+  like additional hats and buttons compatible with CH Flightstick Pro,
+  ThrustMaster FCS or 6 and 8 button gamepads. For more information on
+  how to use the driver please read Documentation/joystick.txt
 
 FPGaming and MadCatz A3D controllers
 CONFIG_JOY_ASSASIN
@@ -8506,25 +8507,26 @@ CONFIG_JOY_ASSASIN
   MadCatz Panther XL. For more information on how to use the driver
   please read Documentation/joystick.txt
 
-Gravis GrIP gamepads
+Gravis GrIP joysticks and gamepads
 CONFIG_JOY_GRAVIS
-  Say Y here if you have a Gravis GamePad Pro. For more information
-  on how to use the driver please read Documentation/joystick.txt
+  Say Y here if you have a Gravis GamePad Pro, Gravis Xterminator or
+  Gravis Blackhawk Digital. For more information on how to use the
+  driver please read Documentation/joystick.txt
 
-PDPI Lightning L4 gamecards
+PDPI Lightning 4 gamecards
 CONFIG_JOY_LIGHTNING
-  Say Y here if you have a PDPI Lightning L4 gamecard and an analog
+  Say Y here if you have a PDPI Lightning 4 gamecard and an analog
   joystick or gamepad connected to it. For more information on how to
   use the driver please read Documentation/joystick.txt
 
-Logitech Digital joysticks
+Logitech Digital joysticks and gamepads
 CONFIG_JOY_LOGITECH
   Say Y here if you have a Logitech WingMan Extreme Digital,
   Logitech ThunderPad Digital or Logitech CyberMan 2. For more
   information on how to use the driver please read
   Documentation/joystick.txt
 
-Microsoft SideWinder, Genius Digital joysticks
+Microsoft SideWinder, Genius Digital joysticks and gamepads
 CONFIG_JOY_SIDEWINDER
   Say Y here if you have a Microsoft SideWinder 3d Pro, Microsoft
   SideWinder Precision Pro, Microsoft SideWinder Force Feedback Pro,
@@ -8532,34 +8534,35 @@ CONFIG_JOY_SIDEWINDER
   more information on how to use the driver please read
   Documentation/joystick.txt
 
-ThrustMaster DirectConnect (BSP) joysticks
+ThrustMaster DirectConnect joysticks and gamepads
 CONFIG_JOY_THRUSTMASTER
-  Say Y here if you have a ThrustMaster Millenium 3D Inceptor,
-  ThrustMaster 3D Rage Pad, or ThrustMaster WCS III. For more
-  information on how to use the driver please read
-  Documentation/joystick.txt
+  Say Y here if you have a ThrustMaster Millenium 3D Inceptor or a
+  ThrustMaster 3D Rage Pad. For more information on how to use the
+  driver please read Documentation/joystick.txt
 
-NES, SNES, PSX, Multisystem gamepads
+NES, SNES, PSX, Multisystem joysticks and gamepads
 CONFIG_JOY_CONSOLE
   Say Y here if you have a Nintendo Entertainment System gamepad,
   Super Nintendo Entertainment System gamepad, Sony PlayStation
   gamepad or a Multisystem -- Atari, Amiga, Commodore, Amstrad CPC
   joystick. For more information on how to use the driver please read
-  Documentation/joystick.txt
+  Documentation/joystick.txt and Documentation/joystick-parport.txt
 
-Sega, Multisystem gamepads
+Sega, Multisystem joysticks and gamepads
 CONFIG_JOY_DB9
   Say Y here if you have a Sega Master System gamepad, Sega Genesis
   gamepad, Sega Saturn gamepad, or a Multisystem -- Atari, Amiga,
   Commodore, Amstrad CPC joystick. For more information on how to use
-  the driver please read Documentation/joystick.txt
+  the driver please read Documentation/joystick.txt and
+  Documentation/joystick-parport.txt
 
 TurboGraFX Multisystem joystick interface
 CONFIG_JOY_TURBOGRAFX
   Say Y here if you have the TurboGraFX interface by Steffen Schwenke,
   and want to use it with Multiststem -- Atari, Amiga, Commodore,
   Amstrad CPC joystick. For more information on how to use the driver
-  please read Documentation/joystick-parport.txt
+  please read Documentation/joystick-parport.txt and
+  Documentation/joystick-parport.txt
 
 Amiga joysticks
 CONFIG_JOY_AMIGA

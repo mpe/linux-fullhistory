@@ -38,8 +38,8 @@
 
 MODULE_AUTHOR("Andree Borrmann <A.Borrmann@tu-bs.de>");
 MODULE_PARM(js_db9, "2i");
-MODULE_PARM(js_db9_2, "0-2i");
-MODULE_PARM(js_db9_3, "0-2i");
+MODULE_PARM(js_db9_2, "2i");
+MODULE_PARM(js_db9_3, "2i");
 
 #define JS_MULTI_STICK	0x01
 #define JS_MULTI2_STICK 0x02
@@ -228,42 +228,6 @@ static int js_db9_read(void *xinfo, int **axes, int **buttons)
 }
 
 /*
- * js_db9_enable_ps2() enables PS/2 capabilities on a parallel port and
- * switches data lines to input mode. We should use parport_change_mode() for
- * that if parport present - unfortunately that does nothing and only contains
- * a FIXME comment.
- */
-
-static inline void js_db9_enable_ps2(struct js_db9_info *info)
-{
-#ifdef USE_PARPORT
-	int io = info->port->port->base;
-#else
-	int io = info->port;
-#endif
-
-	outb(0x35,io+0x402);		/* enable PS/2 mode: */
-	outb(JS_DB9_NORMAL,io+2);	/* reverse direction, enable Select signal: */
-}
-
-/*
- * js_db9_disable_ps2() disables PS/2 capabilities on a parallel port
- * and restores it to standard mode.
- */
-
-static inline void js_db9_disable_ps2(struct js_db9_info *info)
-{
-#ifdef USE_PARPORT
-	int io = info->port->port->base;
-#else
-	int io = info->port;
-#endif
-
-	outb(0,io+2);		/* normal direction */
-	outb(0x15,io+0x402);	/* enable normal mode */
-}
-
-/*
  * open callback: claim parport.
  */
 
@@ -275,7 +239,9 @@ int js_db9_open(struct js_dev *dev)
 #ifdef USE_PARPORT
 		if (parport_claim(info->port)) return -EBUSY;
 #endif
-		js_db9_enable_ps2(info);
+
+		JS_PAR_ECTRL_OUT(0x35,info->port);		/* enable PS/2 mode: */
+		JS_PAR_CTRL_OUT(JS_DB9_NORMAL,info->port);	/* reverse direction, enable Select signal */
 	}
 		
 	MOD_INC_USE_COUNT;
@@ -293,7 +259,10 @@ int js_db9_close(struct js_dev *dev)
 	MOD_DEC_USE_COUNT;
 
 	if (!MOD_IN_USE) {
-		js_db9_disable_ps2(info);
+
+		JS_PAR_CTRL_OUT(0x00,info->port);	/* normal direction */
+		JS_PAR_ECTRL_OUT(0x15,info->port);	/* enable normal mode */
+
 #ifdef USE_PARPORT
 		parport_release(info->port);
 #endif
@@ -306,7 +275,7 @@ void cleanup_module(void)
 {
 	struct js_db9_info *info;
 
-	while (js_db9_port) {
+	while (js_db9_port != NULL) {
 		js_unregister_device(js_db9_port->devs[0]);
 		info = js_db9_port->info;
 #ifdef USE_PARPORT
@@ -359,11 +328,11 @@ static struct js_port __init *js_db9_probe(int *config, struct js_port *port)
 		struct parport *pp;
 
 		if (config[0] > 0x10)
-			for (pp=parport_enumerate(); pp && (pp->base!=config[0]); pp=pp->next);
+			for (pp=parport_enumerate(); pp != NULL && (pp->base!=config[0]); pp=pp->next);
 		else
-			for (pp=parport_enumerate(); pp && (config[0]>0); pp=pp->next) config[0]--;
+			for (pp=parport_enumerate(); pp != NULL && (config[0]>0); pp=pp->next) config[0]--;
 
-		if (!pp) {
+		if (pp == NULL) {
 			printk(KERN_ERR "joy-db9: no such parport\n");
 			return port;
 		}

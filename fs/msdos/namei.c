@@ -452,8 +452,7 @@ int msdos_rmdir(struct inode *dir, struct dentry *dentry)
 	if (res)
 		goto rmdir_done;
 	res = -EBUSY;
-	shrink_dcache_parent(dentry);
-	if (dentry->d_count > 1) {
+	if (!list_empty(&dentry->d_hash)) {
 #ifdef MSDOS_DEBUG
 printk("msdos_rmdir: %s/%s busy, d_count=%d\n",
 dentry->d_parent->d_name.name, dentry->d_name.name, dentry->d_count);

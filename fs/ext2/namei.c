@@ -661,27 +661,11 @@ int ext2_rmdir (struct inode * dir, struct dentry *dentry)
 	if (le32_to_cpu(de->inode) != inode->i_ino)
 		goto end_rmdir;
 
-	/*
-	 * Prune any child dentries so that this dentry becomes negative.
-	 */
-	if (dentry->d_count > 1)
-		shrink_dcache_parent(dentry);
-
 	if (!empty_dir (inode))
 		retval = -ENOTEMPTY;
 	else if (le32_to_cpu(de->inode) != inode->i_ino)
 		retval = -ENOENT;
 	else {
-		if (dentry->d_count > 1) {
-		/*
-		 * Are we deleting the last instance of a busy directory?
-		 * Better clean up if so.
-		 *
-		 * Make directory empty (it will be truncated when finally
-		 * dereferenced).  This also inhibits ext2_add_entry.
-		 */
-			inode->i_size = 0;
-		}
 		retval = ext2_delete_entry (de, bh);
 		dir->i_version = ++event;
 	}
@@ -698,6 +682,7 @@ int ext2_rmdir (struct inode * dir, struct dentry *dentry)
 			      inode->i_nlink);
 	inode->i_version = ++event;
 	inode->i_nlink = 0;
+	inode->i_size = 0;
 	mark_inode_dirty(inode);
 	dir->i_nlink--;
 	inode->i_ctime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;

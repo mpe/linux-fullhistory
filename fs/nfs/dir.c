@@ -721,7 +721,7 @@ out:
  */
 static int nfs_rmdir(struct inode *dir, struct dentry *dentry)
 {
-	int error, rehash = 0;
+	int error;
 
 	dfprintk(VFS, "NFS: rmdir(%x/%ld, %s\n",
 		dir->i_dev, dir->i_ino, dentry->d_name.name);
@@ -731,39 +731,24 @@ static int nfs_rmdir(struct inode *dir, struct dentry *dentry)
 		goto out;
 
 	error = -EBUSY;
-	if (dentry->d_count > 1) {
-		/* Attempt to shrink child dentries ... */
-		shrink_dcache_parent(dentry);
-		if (dentry->d_count > 1)
-			goto out;
-	}
+	if (!list_empty(&dentry->d_hash))
+		goto out;
+
 #ifdef NFS_PARANOIA
 if (dentry->d_inode->i_count > 1)
 printk("nfs_rmdir: %s/%s inode busy?? i_count=%d, i_nlink=%d\n",
 dentry->d_parent->d_name.name, dentry->d_name.name,
 dentry->d_inode->i_count, dentry->d_inode->i_nlink);
 #endif
-	/*
-	 * Unhash the dentry while we remove the directory.
-	 */
-	if (!list_empty(&dentry->d_hash)) {
-		d_drop(dentry);
-		rehash = 1;
-	}
+
 	/*
 	 * Update i_nlink and free the inode before unlinking.
 	 */
 	if (dentry->d_inode->i_nlink)
 		dentry->d_inode->i_nlink --;
-	d_delete(dentry);
 	nfs_invalidate_dircache(dir);
 	error = nfs_proc_rmdir(NFS_SERVER(dir), NFS_FH(dentry->d_parent),
 				dentry->d_name.name);
-	if (!error) {
-		if (rehash)
-			d_add(dentry, NULL);
-		nfs_renew_times(dentry);
-	}
 out:
 	return error;
 }

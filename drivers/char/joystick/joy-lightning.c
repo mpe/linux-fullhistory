@@ -352,9 +352,9 @@ void cleanup_module(void)
 	int cal[4] = {59, 59, 59, 59};
 	struct js_l4_info *info;
 
-	while (js_l4_port) {
+	while (js_l4_port != NULL) {
 		for (i = 0; i < js_l4_port->ndevs; i++)
-			if (js_l4_port->devs[i])
+			if (js_l4_port->devs[i] != NULL)
 				js_unregister_device(js_l4_port->devs[i]);
 		info = js_l4_port->info;
 		js_l4_setcal(info->port, cal);
