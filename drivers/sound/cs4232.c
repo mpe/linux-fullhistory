@@ -84,7 +84,7 @@ static unsigned char crystal_key[] =	/* A 32 byte magic key sequence */
 int
 probe_cs4232 (struct address_info *hw_config)
 {
-  int             i;
+  int             i, n;
   int             base = hw_config->io_base, irq = hw_config->irq;
   int             dma1 = hw_config->dma, dma2 = hw_config->dma2;
 
@@ -112,65 +112,76 @@ probe_cs4232 (struct address_info *hw_config)
  */
 
 /*
+ * Repeat initialization few times since it doesn't always succeed in
+ * first time.
+ */
+
+  for (n = 0; n < 4; n++)
+    {
+/*
  * Wake up the card by sending a 32 byte Crystal key to the key port.
  */
-  for (i = 0; i < 32; i++)
-    CS_OUT (crystal_key[i]);
+      for (i = 0; i < 32; i++)
+	CS_OUT (crystal_key[i]);
 
 /*
  * Now set the CSN (Card Select Number).
  */
 
-  CS_OUT2 (0x06, CSN_NUM);
+      CS_OUT2 (0x06, CSN_NUM);
 
 
 /*
  * Then set some config bytes. First logical device 0 
  */
 
-  CS_OUT2 (0x15, 0x00);		/* Select logical device 0 (WSS/SB/FM) */
-  CS_OUT3 (0x47, (base >> 8) & 0xff, base & 0xff);	/* WSSbase */
+      CS_OUT2 (0x15, 0x00);	/* Select logical device 0 (WSS/SB/FM) */
+      CS_OUT3 (0x47, (base >> 8) & 0xff, base & 0xff);	/* WSSbase */
 
-  if (check_region (0x388, 4))	/* Not free */
-    CS_OUT3 (0x48, 0x00, 0x00)	/* FMbase off */
-      else
-    CS_OUT3 (0x48, 0x03, 0x88);	/* FMbase 0x388 */
+      if (check_region (0x388, 4))	/* Not free */
+	CS_OUT3 (0x48, 0x00, 0x00)	/* FMbase off */
+	  else
+	CS_OUT3 (0x48, 0x03, 0x88);	/* FMbase 0x388 */
 
-  CS_OUT3 (0x42, 0x00, 0x00);	/* SBbase off */
-  CS_OUT2 (0x22, irq);		/* SB+WSS IRQ */
-  CS_OUT2 (0x2a, dma1);		/* SB+WSS DMA */
+      CS_OUT3 (0x42, 0x00, 0x00);	/* SBbase off */
+      CS_OUT2 (0x22, irq);	/* SB+WSS IRQ */
+      CS_OUT2 (0x2a, dma1);	/* SB+WSS DMA */
 
-  if (dma2 != -1)
-    CS_OUT2 (0x25, dma2)	/* WSS DMA2 */
-      else
-    CS_OUT2 (0x25, 4);		/* No WSS DMA2 */
+      if (dma2 != -1)
+	CS_OUT2 (0x25, dma2)	/* WSS DMA2 */
+	  else
+	CS_OUT2 (0x25, 4);	/* No WSS DMA2 */
 
-  CS_OUT2 (0x33, 0x01);		/* Activate logical dev 0 */
+      CS_OUT2 (0x33, 0x01);	/* Activate logical dev 0 */
 
 /*
  * Initialize logical device 3 (MPU)
  */
 
 #if (defined(CONFIG_MPU401) || defined(CONFIG_MPU_EMU)) && defined(CONFIG_MIDI)
-  if (mpu_base != 0 && mpu_irq != 0)
-    {
-      CS_OUT2 (0x15, 0x03);	/* Select logical device 3 (MPU) */
-      CS_OUT3 (0x47, (mpu_base >> 8) & 0xff, mpu_base & 0xff);	/* MPUbase */
-      CS_OUT2 (0x22, mpu_irq);	/* MPU IRQ */
-      CS_OUT2 (0x33, 0x01);	/* Activate logical dev 3 */
-    }
+      if (mpu_base != 0 && mpu_irq != 0)
+	{
+	  CS_OUT2 (0x15, 0x03);	/* Select logical device 3 (MPU) */
+	  CS_OUT3 (0x47, (mpu_base >> 8) & 0xff, mpu_base & 0xff);	/* MPUbase */
+	  CS_OUT2 (0x22, mpu_irq);	/* MPU IRQ */
+	  CS_OUT2 (0x33, 0x01);	/* Activate logical dev 3 */
+	}
 #endif
 
 /*
  * Finally activate the chip
  */
-  CS_OUT (0x79);
+      CS_OUT (0x79);
 
 /*
  * Then try to detect the codec part of the chip
  */
 
-  return ad1848_detect (hw_config->io_base, NULL, hw_config->osp);
+      if (ad1848_detect (hw_config->io_base, NULL, hw_config->osp))
+	return 1;
+    }
+
+  return 0;
 }
 
 long

@@ -141,7 +141,7 @@ int dialog_menu (const char *title, const char *prompt, int height, int width,
 		const char * const * items);
 int dialog_checklist (const char *title, const char *prompt, int height,
 		int width, int list_height, int item_no,
-		const char * const * items, int flag, int separate_output);
+		const char * const * items, int flag);
 extern unsigned char dialog_input_result[];
 int dialog_inputbox (const char *title, const char *prompt, int height,
 		int width, const char *init);

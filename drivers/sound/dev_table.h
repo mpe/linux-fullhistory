@@ -95,6 +95,7 @@ struct dma_buffparms {
 #define DMA_RESTART	0x00000002
 #define DMA_ACTIVE	0x00000004
 #define DMA_STARTED	0x00000008
+#define DMA_EMPTY	0x00000010	
 #define DMA_ALLOC_DONE	0x00000020
 
 	int      open_mode;
@@ -148,6 +149,7 @@ struct audio_operations {
 #define NEEDS_RESTART		1
 #define DMA_AUTOMODE		2
 #define DMA_DUPLEX		4
+#define DMA_PSEUDO_AUTOMODE	8
 	int  format_mask;	/* Bitmask for supported audio formats */
 	void *devc;		/* Driver specific info */
 	int (*open) (int dev, int mode);
@@ -342,6 +344,9 @@ struct sound_timer_operations {
 		{"TRXPRO", 0, SNDCARD_TRXPRO, "MediaTriX AudioTriX Pro",	attach_trix_wss, probe_trix_wss, unload_trix_wss},
 		{"TRXPROSB", 0, SNDCARD_TRXPRO_SB, "AudioTriX (SB mode)",	attach_trix_sb, probe_trix_sb, unload_trix_sb},
 		{"TRXPROMPU", 0, SNDCARD_TRXPRO_MPU, "AudioTriX MIDI",	attach_trix_mpu, probe_trix_mpu, unload_trix_mpu},
+#endif
+#ifdef CONFIG_PNP
+		{"AD1848", 0, 500, "SoundPort",	attach_pnp_ad1848, probe_pnp_ad1848, unload_pnp_ad1848},
 #endif
 		{NULL, 0, 0,		"*?*",			NULL, NULL, NULL}
 	};

@@ -109,7 +109,7 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 		}
 		ll_rw_swap_file(rw,swapf->i_dev, zones, i,buf);
 	} else
-		printk("re_swap_page: no swap file or device\n");
+		printk("rw_swap_page: no swap file or device\n");
 	if (offset && !clear_bit(offset,p->swap_lockmap))
 		printk("rw_swap_page: lock already cleared\n");
 	wake_up(&lock_queue);

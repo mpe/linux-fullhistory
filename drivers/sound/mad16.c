@@ -428,12 +428,6 @@ attach_mad16 (long mem_start, struct address_info *hw_config)
 	{
 	  dma2_bit = 0x04;	/* Enable capture DMA */
 
-	  /* Change SB DMA so that it doesn't conflict with codec's DMAs */
-
-	  if (dma == 3)
-	    mad_write (MC3_PORT, (mad_read (MC3_PORT) & ~0x30) | 0x00);		/*DMA1 */
-	  else
-	    mad_write (MC3_PORT, (mad_read (MC3_PORT) & ~0x30) | 0x20);		/*DMA3 */
 	}
       else
 	{

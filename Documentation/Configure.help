@@ -1759,9 +1759,14 @@ NI5210 support
 CONFIG_NI52
   If you have a network (ethernet) card of this type, say Y and read
   the Ethernet-HOWTO, available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO. If you plan to use more than
-  one network card under linux, read the Multiple-Ethernet-mini-HOWTO,
-  available from sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO. This driver is also available
+  as a module ( = code which can be inserted in and removed from the
+  running kernel whenever you want). If you want to compile it as a
+  module, say M here and read Documentation/modules.txt as well as
+  Documentation/networking/net-modules.txt. If you plan to use more
+  than one network card under linux, read the
+  Multiple-Ethernet-mini-HOWTO, available from
+  sunsite.unc.edu:/pub/Linux/docs/HOWTO/mini.
 
 NI6510 support
 CONFIG_NI65
@@ -2447,6 +2452,18 @@ CONFIG_NCP_FS
   running kernel whenever you want), say M here and read
   Documentation/modules.txt.
 
+Standard/generic serial support
+CONFIG_SERIAL
+  This selects whether you want to include the driver for the
+  standard (0x3F8, 0x2F8, etc.) serial ports. Most people will
+  say "y" here, so that they can use serial mice, modems and
+  similar devices. People who might say "n" here are those that
+  are setting up dedicated ethernet WWW/ftp servers, or users
+  that have one of the various bus mice instead of a serial mouse.
+  Note that the Cyclades and Stallion drivers do not need this
+  driver built in for them to work. They are completely independent
+  of each other.
+
 Cyclades async mux support
 CONFIG_CYCLADES
   This is a card which gives you many serial ports. You would need
@@ -2742,6 +2759,51 @@ CONFIG_PROFILE_SHIFT
   executed instructions get recorded in /proc/profile. But since you
   enabled "Kernel profiling support", you must be a kernel hacker and
   hence you know what this is about :-)
+
+ISDN subsystem
+CONFIG_ISDN
+  This allows you to use an ISDN-card for networking connections and as
+  dialin/out device. The isdn-tty's have a builtin AT-compatible modem
+  emulator. Network devices support autodial, channel-bundling, callback
+  and caller-authentication without having a daemon running. A reduced T.70
+  protocol is supported with tty's suitable for german BTX. Currently Cards
+  by Teles and compatibles and ICN are supported. On D-Channel, the protocols
+  EDSS1 and 1TR6 are supported. See Documentation/isdn/README for more
+  information.
+
+Support synchronous PPP
+CONFIG_ISDN_PPP
+  This enables synchronous PPP via ISDN. This protocol is used by Cisco
+  or Sun for example. You will need a special version of pppd (called ipppd)
+  for using this feature. See Documentation/isdn/README.syncppp for more
+  information.
+
+Sypport generic MP (RFC 1717)
+CONFIG_ISDN_MPP
+  With synchronous PPP enabled, it is possible to increase throughput by
+  bundling several ISDN-connections, using this protocol. See
+  Documentation/isdn/README.syncppp for more information.
+
+Use VJ-compression with synchronous PPP
+CONFIG_ISDN_PPP_VJ
+  This enables Van Jacobson headercompression for synchronous PPP.
+
+ICN B1 and B2 support
+CONFIG_ISDN_DRV_ICN
+  This enables support for two kinds of ISDN-cards made by a german company
+  called ICN. 1B is the standard version for a single ISDN line with two
+  B-channels, 2B supports two ISDN lines. For running this card, additional
+  firmware is necessary, which has to be downloaded into the card using
+  a utility which is distributed separately.
+  See Documentation/isdn/README and README.icn for more information.
+
+Teles, NICCY1016PC, Creatix support
+CONFIG_ISDN_DRV_TELES
+  This enables support for the Teles ISDN-cards S0-16.0, S0-16.3, S0-8 and
+  many compatibles. By default, the driver is configured to support
+  a 16.0-type using EDSS1-protocol. See Documentation/isdn/README
+  on how to configure it using 16.3, a different D-channel protocol, or
+  non-standard irq/port/shmem settings.
 
 # need an empty line after last entry, for sed script in Configure.
 

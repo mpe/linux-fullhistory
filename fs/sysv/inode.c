@@ -536,14 +536,15 @@ void sysv_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 {
 	struct statfs tmp;
 
-	tmp.f_type = sb->s_magic;
-	tmp.f_bsize = sb->sv_block_size;
-	tmp.f_blocks = sb->sv_ndatazones;
-	tmp.f_bfree = sysv_count_free_blocks(sb);
-	tmp.f_bavail = tmp.f_bfree;
-	tmp.f_files = sb->sv_ninodes;
-	tmp.f_ffree = sysv_count_free_inodes(sb);
+	tmp.f_type = sb->s_magic;			/* type of filesystem */
+	tmp.f_bsize = sb->sv_block_size;		/* block size */
+	tmp.f_blocks = sb->sv_ndatazones;		/* total data blocks in file system */
+	tmp.f_bfree = sysv_count_free_blocks(sb);	/* free blocks in fs */
+	tmp.f_bavail = tmp.f_bfree;			/* free blocks available to non-superuser */
+	tmp.f_files = sb->sv_ninodes;			/* total file nodes in file system */
+	tmp.f_ffree = sysv_count_free_inodes(sb);	/* free file nodes in fs */
 	tmp.f_namelen = SYSV_NAMELEN;
+	/* Don't know what value to put in tmp.f_fsid */ /* file system id */
 	memcpy_tofs(buf, &tmp, bufsiz);
 }
 

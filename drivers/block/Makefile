@@ -19,6 +19,7 @@ L_TARGET := block.a
 L_OBJS   := ll_rw_blk.o genhd.o 
 M_OBJS   :=
 MOD_LIST_NAME := BLOCK_MODULES
+LX_OBJS :=
 
 ifeq ($(CONFIG_BLK_DEV_FD),y)
 L_OBJS += floppy.o
@@ -94,6 +95,47 @@ endif
 
 ifeq ($(CONFIG_BLK_DEV_XD),y)
 L_OBJS += xd.o
+endif
+
+ifeq ($(CONFIG_BLK_DEV_MD),y)
+LX_OBJS += md.o
+
+ifeq ($(CONFIG_MD_LINEAR),y)
+L_OBJS += linear.o
+else
+  ifeq ($(CONFIG_MD_LINEAR),m)
+  M_OBJS += linear.o
+  endif
+endif
+
+ifeq ($(CONFIG_MD_STRIPED),y)
+L_OBJS += raid0.o
+else
+  ifeq ($(CONFIG_MD_STRIPED),m)
+  M_OBJS += raid0.o
+  endif
+endif
+
+#ifeq ($(CONFIG_MD_RAID1),y)
+#L_OBJS += raid1.o
+#else
+#  ifeq ($(CONFIG_MD_SUPPORT_RAID1),y)
+#    ifeq ($(CONFIG_MD_RAID1),m)
+#    M_OBJS += raid1.o
+#    endif
+#  endif
+#endif
+#
+#ifeq ($(CONFIG_MD_RAID5),y)
+#L_OBJS += raid5.o
+#else
+#  ifeq ($(CONFIG_MD_SUPPORT_RAID5),y)
+#    ifeq ($(CONFIG_MD_RAID5),m)
+#    M_OBJS += raid5.o
+#    endif
+#  endif
+#endif
+
 endif
 
 include $(TOPDIR)/Rules.make

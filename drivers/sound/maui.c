@@ -55,20 +55,67 @@ static int     *maui_osp;
 static int      (*orig_load_patch) (int dev, int format, const char *addr,
 				 int offs, int count, int pmgr_flag) = NULL;
 
-static int
-maui_read (void)
-{
-  int             timeout;
+static wait_handle *maui_sleeper = NULL;
+static volatile struct snd_wait maui_sleep_flag =
+{0};
 
-  for (timeout = 0; timeout < 1000000; timeout++)
+static int
+maui_wait (int mask)
+{
+  int             i;
+
+/*
+ * Perform a short initial wait without sleeping
+ */
+
+  for (i = 0; i < 100; i++)
     {
-      if (inb (HOST_STAT_PORT) & STAT_RX_AVAIL)
+      if (inb (HOST_STAT_PORT) & mask)
 	{
-	  return inb (HOST_DATA_PORT);
+	  return 1;
 	}
     }
 
-  printk ("Maui: Receive timeout\n");
+/*
+ * Wait up to 15 seconds with sleeping
+ */
+
+  for (i = 0; i < 150; i++)
+    {
+      if (inb (HOST_STAT_PORT) & mask)
+	{
+	  return 1;
+	}
+
+
+      {
+	unsigned long   tl;
+
+	if (HZ / 10)
+	  current_set_timeout (tl = jiffies + (HZ / 10));
+	else
+	  tl = (unsigned long) -1;
+	maui_sleep_flag.mode = WK_SLEEP;
+	module_interruptible_sleep_on (&maui_sleeper);
+	if (!(maui_sleep_flag.mode & WK_WAKEUP))
+	  {
+	    if (jiffies >= tl)
+	      maui_sleep_flag.mode |= WK_TIMEOUT;
+	  }
+	maui_sleep_flag.mode &= ~WK_SLEEP;
+      };
+      if (current_got_fatal_signal ())
+	return 0;
+    }
+
+  return 0;
+}
+
+static int
+maui_read (void)
+{
+  if (maui_wait (STAT_RX_AVAIL))
+    return inb (HOST_DATA_PORT);
 
   return -1;
 }
@@ -76,17 +123,11 @@ maui_read (void)
 static int
 maui_write (unsigned char data)
 {
-  int             timeout;
-
-  for (timeout = 0; timeout < 10000000; timeout++)
+  if (maui_wait (STAT_TX_AVAIL))
     {
-      if (inb (HOST_STAT_PORT) & STAT_TX_AVAIL)
-	{
-	  outb (data, HOST_DATA_PORT);
-	  return 1;
-	}
+      outb (data, HOST_DATA_PORT);
+      return 1;
     }
-
   printk ("Maui: Write timeout\n");
 
   return 0;
@@ -169,7 +210,7 @@ int
 probe_maui (struct address_info *hw_config)
 {
   int             i;
-  int             tmp1, tmp2;
+  int             tmp1, tmp2, ret;
 
   if (check_region (hw_config->io_base, 8))
     return 0;
@@ -180,14 +221,23 @@ probe_maui (struct address_info *hw_config)
   if (snd_set_irq_handler (hw_config->irq, mauiintr, "Maui", maui_osp) < 0)
     return 0;
 
+  maui_sleep_flag.mode = WK_NONE;
 
   if (!maui_write (0xCF))	/* Report hardware version */
     {
+      printk ("No WaveFront firmware detected (card uninitialized?)\n");
       snd_release_irq (hw_config->irq);
       return 0;
     }
 
   if ((tmp1 = maui_read ()) == -1 || (tmp2 = maui_read ()) == -1)
+    {
+      printk ("No WaveFront firmware detected (card uninitialized?)\n");
+      snd_release_irq (hw_config->irq);
+      return 0;
+    }
+
+  if (tmp1 == 0xff || tmp2 == 0xff)
     {
       snd_release_irq (hw_config->irq);
       return 0;
@@ -214,13 +264,16 @@ probe_maui (struct address_info *hw_config)
   if (trace_init)
     printk ("Available DRAM %dk\n", tmp1 / 1024);
 
-  request_region (hw_config->io_base + 2, 6, "Maui");
-
   for (i = 0; i < 1000; i++)
     if (probe_mpu401 (hw_config))
       break;
 
-  return probe_mpu401 (hw_config);
+  ret = probe_mpu401 (hw_config);
+
+  if (ret)
+    request_region (hw_config->io_base + 2, 6, "Maui");
+
+  return ret;
 }
 
 long

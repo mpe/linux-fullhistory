@@ -1,8 +1,11 @@
 /*
- *	 PnP support is not included in this driver version.
+ *	 PnP soundcard support is not included in this version.
+ *
  *       AEDSP16 will not work without significant changes.
+ *
+ *       SB Pro and SB16 drivers are always enabled together with SB.
  */
-#define DISABLED_OPTIONS 	(B(OPT_PNP)|B(OPT_AEDSP16))
+#define DISABLED_OPTIONS 	(B(OPT_PNP)|B(OPT_AEDSP16)|B(OPT_SBPRO)|B(OPT_SB16))
 /*
  * sound/configure.c  - Configuration program for the Linux Sound Driver
  */
@@ -159,7 +162,7 @@ hw_entry        hw_table[] =
 char           *questions[] =
 {
   "ProAudioSpectrum 16 support",
-  "SoundBlaster support",
+  "SoundBlaster (SB, SBPro, SB16, clones) support",
   "Generic OPL2/OPL3 FM synthesizer support",
   "Gravis Ultrasound support",
   "MPU-401 support (NOT for SB16)",
@@ -476,6 +479,20 @@ use_old_config (char *filename)
 	  if (strcmp (tmp, "KERNEL_SOUNDCARD") == 0)
 	    continue;
 
+	  if (strcmp (tmp, "JAZZ_DMA16") == 0)	/* Rename it (hack) */
+	    {
+	      printf ("#define SB_DMA2 %s\n",
+		      &buf[18]);
+	      continue;
+	    }
+
+	  if (strcmp (tmp, "SB16_DMA") == 0)	/* Rename it (hack) */
+	    {
+	      printf ("#define SB_DMA2 %s\n",
+		      &buf[16]);
+	      continue;
+	    }
+
 	  tmp[8] = 0;		/* Truncate the string */
 	  if (strcmp (tmp, "EXCLUDE_") == 0)
 	    continue;		/* Skip excludes */
@@ -679,6 +696,13 @@ ask_parameters (void)
 	       "Do you have to use this switch with DOS (Y/n) ?");
       if (think_positively (0))
 	printf ("#define BROKEN_BUS_CLOCK\n");
+
+      fprintf (stderr, "PAS16 has SoundBlaster emulation. You should disable\n"
+	       "this feature if you have another SB compatible card\n"
+	       "on the machine\n"
+	       "Do you want to disable SB emulation of PAS16 (y/N) ?");
+      if (think_positively (0))
+	printf ("#define DISABLE_SB_EMULATION\n");
     }
 
 
@@ -1340,6 +1364,9 @@ main (int argc, char *argv[])
 	  printf ("#define INCLUDE_TRIX_BOOT\n");
 	}
     }
+
+  if (selected_options & B (OPT_SB))
+    selected_options |= B (OPT_SBPRO) | B (OPT_SB16);
 
   if (!(selected_options & ANY_DEVS))
     {

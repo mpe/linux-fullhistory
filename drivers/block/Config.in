@@ -37,4 +37,9 @@ if [ "$CONFIG_BLK_DEV_HD_IDE" = "y" -o "$CONFIG_BLK_DEV_HD_ONLY" = "y" ]; then
 fi
 
 bool 'XT harddisk support' CONFIG_BLK_DEV_XD
+bool 'Multiple devices driver support' CONFIG_BLK_DEV_MD
+if [ "$CONFIG_BLK_DEV_MD" = "y" ]; then
+  tristate '   Linear (append) mode' CONFIG_MD_LINEAR
+  tristate '   RAID-0 (striping) mode' CONFIG_MD_STRIPED
+fi
 endmenu

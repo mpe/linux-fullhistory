@@ -216,7 +216,7 @@ struct device *dev_get(const char *name)
 
 extern __inline__ void dev_load(const char *name)
 {
-        char *sptr;
+        const char *sptr;
  
         if(!dev_get(name)) {
 #ifdef CONFIG_NET_ALIAS
@@ -1317,6 +1317,7 @@ int dev_ioctl(unsigned int cmd, void *arg)
  *
  */
 extern int lance_init(void);
+extern int ni65_init(void);
 extern int pi_init(void);
 extern int dec21040_init(void);
 
@@ -1337,6 +1338,9 @@ int net_dev_init(void)
 	 */
 #if defined(CONFIG_LANCE)
 	lance_init();
+#endif
+#if defined(CONFIG_NI65)
+        ni65_init();
 #endif
 #if defined(CONFIG_PI)
 	pi_init();

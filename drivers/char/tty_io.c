@@ -1823,7 +1823,9 @@ int tty_init(void)
 	if (sizeof(struct tty_struct) > PAGE_SIZE)
 		panic("size of tty structure > PAGE_SIZE!");
 	kbd_init();
+#ifdef CONFIG_SERIAL
 	rs_init();
+#endif
 #ifdef CONFIG_SCC
 	scc_init();
 #endif

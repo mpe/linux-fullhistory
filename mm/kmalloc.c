@@ -19,6 +19,8 @@
 #include <asm/system.h>
 #include <asm/dma.h>
 
+/* Define this is you want slow routines that try to trip errors */
+#undef SADISTIC_KMALLOC
 
 /* Private flags. */
 
@@ -270,6 +272,9 @@ found_it:
 	sizes[order].nbytesmalloced += size;
 	p->bh_flags = type;	/* As of now this block is officially in use */
 	p->bh_length = size;
+#ifdef SADISTIC_KMALLOC
+	memset(p+1, 0xf0, size);
+#endif
 	return p + 1;		/* Pointer arithmetic: increments past header */
 }
 
@@ -302,6 +307,9 @@ void kfree(void *ptr)
 	}
 	size = p->bh_length;
 	p->bh_flags = MF_FREE;	/* As of now this block is officially free */
+#ifdef SADISTIC_KMALLOC
+	memset(p+1, 0xe0, size);
+#endif
 	save_flags(flags);
 	cli();
 	p->bh_next = page->firstfree;

@@ -2,6 +2,16 @@
 #define _I386_STRING_H_
 
 /*
+ * On a 486 or Pentium, we are better off not using the
+ * byte string operations. But on a 386 or a PPro the
+ * byte string ops are faster than doing it by hand
+ * (MUCH faster on a Pentium).
+ */
+#if CPU == 486 || CPU == 586
+#include <asm/string-486.h>
+#else
+
+/*
  * This string-include defines all string functions as inline
  * functions. Use gcc. It also assumes ds=es=data space, this should be
  * normal. Most of the string-functions are rather heavily hand-optimized,
@@ -590,4 +600,5 @@ extern inline void * memscan(void * addr, int c, size_t size)
 	return addr;
 }
 
+#endif
 #endif

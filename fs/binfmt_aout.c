@@ -415,10 +415,13 @@ do_load_aout_library(int fd)
 		return error;
 	len = PAGE_ALIGN(ex.a_text + ex.a_data);
 	bss = ex.a_text + ex.a_data + ex.a_bss;
-	if (bss > len)
-		do_mmap(NULL, start_addr + len, bss-len,
-			PROT_READ|PROT_WRITE|PROT_EXEC,
-			MAP_PRIVATE|MAP_FIXED, 0);
+	if (bss > len) {
+		error = do_mmap(NULL, start_addr + len, bss-len,
+				PROT_READ|PROT_WRITE|PROT_EXEC,
+				MAP_PRIVATE|MAP_FIXED, 0);
+		if (error != start_addr + len)
+			return error;
+	}
 	return 0;
 }
 

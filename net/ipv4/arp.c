@@ -51,6 +51,7 @@
  *					of host down events.
  *		Alan Cox	:	Missing unlock in device events.
  *		Eckes		:	ARP ioctl control errors.
+ *		Alexey Kuznetsov:	Arp free fix.
  */
 
 /* RFC1122 Status:
@@ -331,6 +332,7 @@ static void arp_free_entry(struct arp_table *entry)
 	{
 		next = hh->hh_next;
 		hh->hh_arp = NULL;
+		hh->hh_uptodate = 0;
 		if (!--hh->hh_refcnt)
 			kfree_s(hh, sizeof(struct(struct hh_cache)));
 	}

@@ -82,6 +82,7 @@ opl_devinfo;
 
 static struct opl_devinfo *devc = NULL;
 
+static int      force_opl3_mode = 0;
 
 static int      detected_model;
 
@@ -93,7 +94,7 @@ static int      opl3_kill_note (int dev, int voice, int note, int velocity);
 void
 enable_opl3_mode (int left, int right, int both)
 {
-  /* NOP */
+  force_opl3_mode = 1;
 }
 
 static void
@@ -254,7 +255,7 @@ opl3_detect (int ioaddr, int *osp)
    * There is a FM chicp in this address. Detect the type (OPL2 to OPL4)
    */
 
-  if (signature == 0x06)	/* OPL2 */
+  if (signature == 0x06 && !force_opl3_mode)	/* OPL2 */
     {
       detected_model = 2;
     }

@@ -346,7 +346,7 @@ int try_to_free_page(int priority, unsigned long limit, int wait)
 			if (swap_out(i, limit, wait))
 				return 1;
 			state = 0;
-		} while(i--);
+		} while (i--);
 	}
 	return 0;
 }

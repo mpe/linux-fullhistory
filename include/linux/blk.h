@@ -6,6 +6,13 @@
 #include <linux/config.h>
 
 /*
+ * NR_REQUEST is the number of entries in the request-queue.
+ * NOTE that writes may use only the low 2/3 of these: reads
+ * take precedence.
+ */
+#define NR_REQUEST	64
+
+/*
  * This is used in the elevator algorithm.  We don't prioritise reads
  * over writes any more --- although reads are more time-critical than
  * writes, by treating them equally we increase filesystem throughput.
@@ -19,7 +26,7 @@
  * These will have to be changed to be aware of different buffer
  * sizes etc.. It actually needs a major cleanup.
  */
-#ifdef IDE_DRIVER
+#if defined(IDE_DRIVER) || defined(MD_DRIVER)
 #define SECTOR_MASK ((BLOCK_SIZE >> 9) - 1)
 #else
 #define SECTOR_MASK (blksize_size[MAJOR_NR] &&     \
@@ -72,6 +79,12 @@ extern int ide_init(void);
 #ifdef CONFIG_BLK_DEV_XD
 extern int xd_init(void);
 #endif
+#ifdef CONFIG_BLK_DEV_LOOP
+extern int loop_init(void);
+#endif
+#ifdef CONFIG_BLK_DEV_MD
+extern int md_init(void);
+#endif CONFIG_BLK_DEV_MD
 
 extern void set_device_ro(kdev_t dev,int flag);
 void add_blkdev_randomness(int major);
@@ -143,6 +156,19 @@ static void floppy_off(unsigned int nr);
 #define DEVICE_NR(device) (MINOR(device) >> 4)
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
+
+/* Kludge to use the same number for both char and block major numbers */
+#elif  (MAJOR_NR == MD_MAJOR) && defined(MD_DRIVER)
+
+#ifndef MD_PERSONALITY
+
+#define DEVICE_NAME "Multiple devices driver"
+#define DEVICE_REQUEST do_md_request
+#define DEVICE_NR(device) (MINOR(device))
+#define DEVICE_ON(device)
+#define DEVICE_OFF(device)
+
+#endif
 
 #elif (MAJOR_NR == SCSI_TAPE_MAJOR)
 
@@ -277,7 +303,7 @@ static void floppy_off(unsigned int nr);
 
 #endif /* MAJOR_NR == whatever */
 
-#if (MAJOR_NR != SCSI_TAPE_MAJOR) && !defined(IDE_DRIVER)
+#if ((MAJOR_NR != SCSI_TAPE_MAJOR) && !defined(IDE_DRIVER) && !defined(MD_DRIVER))
 
 #ifndef CURRENT
 #define CURRENT (blk_dev[MAJOR_NR].current_request)
@@ -309,8 +335,10 @@ else \
 
 #endif /* DEVICE_TIMEOUT */
 
+#ifndef MD_PERSONALITY
 static void (DEVICE_REQUEST)(void);
-
+#endif
+  
 #ifdef DEVICE_INTR
 #define CLEAR_INTR SET_INTR(NULL)
 #else
@@ -334,7 +362,7 @@ static void (DEVICE_REQUEST)(void);
 /* end_request() - SCSI devices have their own version */
 /*               - IDE drivers have their own copy too */
 
-#if ! SCSI_MAJOR(MAJOR_NR)
+#if ! SCSI_MAJOR(MAJOR_NR) || (defined(MD_DRIVER) && !defined(MD_PERSONALITY))
 
 #if defined(IDE_DRIVER) && !defined(_IDE_C) /* shared copy for IDE modules */
 void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup);
@@ -343,6 +371,8 @@ void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup);
 #ifdef IDE_DRIVER
 void ide_end_request(byte uptodate, ide_hwgroup_t *hwgroup) {
 	struct request *req = hwgroup->rq;
+#elif defined(MD_DRIVER)
+static void end_request (int uptodate, struct request * req) {
 #else
 static void end_request(int uptodate) {
 	struct request *req = CURRENT;
@@ -380,7 +410,7 @@ static void end_request(int uptodate) {
 #ifdef IDE_DRIVER
 	blk_dev[MAJOR(req->rq_dev)].current_request = req->next;
 	hwgroup->rq = NULL;
-#else
+#elif !defined(MD_DRIVER)
 	DEVICE_OFF(req->rq_dev);
 	CURRENT = req->next;
 #endif /* IDE_DRIVER */
@@ -391,6 +421,36 @@ static void end_request(int uptodate) {
 }
 #endif /* defined(IDE_DRIVER) && !defined(_IDE_C) */
 #endif /* ! SCSI_MAJOR(MAJOR_NR) */
+
+#ifdef MD_PERSONALITY
+extern inline void end_redirect (struct request *req)
+{
+  struct buffer_head * bh;
+
+  req->errors = 0;
+  
+  if ((bh = req->bh) != NULL)
+  {
+    req->bh = bh->b_reqnext;
+    bh->b_reqnext = NULL;
+    
+    if ((bh = req->bh) != NULL)
+    {
+      req->sector += req->current_nr_sectors;
+      req->current_nr_sectors = bh->b_size >> 9;
+      
+      if (req->nr_sectors < req->current_nr_sectors)
+      {
+	req->nr_sectors = req->current_nr_sectors;
+	printk("end_redirect : buffer-list destroyed\n");
+      }
+      
+      req->buffer = bh->b_data;
+      return;
+    }
+  }
+}
+#endif /* MD_PERSONALITY */
 
 #endif /* defined(MAJOR_NR) || defined(IDE_DRIVER) */
 

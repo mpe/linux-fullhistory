@@ -710,7 +710,7 @@ init_module(void)
 {
 	dev_3c509.base_addr = io;
 	dev_3c509.irq       = irq;
-	if (!EISA_bus) {
+	if (!EISA_bus && !io) {
 		printk("3c509: WARNING! Module load-time probing works reliably only for EISA-bus!\n");
 	}
 	if (register_netdev(&dev_3c509) != 0)

@@ -111,9 +111,19 @@ attach_gus_card (long mem_start, struct address_info *hw_config)
 int
 probe_gus (struct address_info *hw_config)
 {
-  int             io_addr;
+  int             io_addr, irq;
 
   gus_osp = hw_config->osp;
+
+  irq = hw_config->irq;
+
+  if (hw_config->card_subtype == 0)	/* GUS/MAX/ACE */
+    if (irq != 3 && irq != 5 && irq != 7 && irq != 9 &&
+	irq != 11 && irq != 12 && irq != 15)
+      {
+	printk ("GUS: Unsupported IRQ %d\n", irq);
+	return 0;
+      }
 
   if (!check_region (hw_config->io_base, 16))
     if (!check_region (hw_config->io_base + 0x100, 16))

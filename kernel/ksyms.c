@@ -226,11 +226,11 @@ struct symbol_table symbol_table = {
 	X(bmap),
 	X(sync_dev),
 	X(get_blkfops),
-	
+#ifdef CONFIG_SERIAL	
 	/* Module creation of serial units */
 	X(register_serial),
 	X(unregister_serial),
-
+#endif
 	/* tty routines */
 	X(tty_hangup),
 	X(tty_wait_until_sent),

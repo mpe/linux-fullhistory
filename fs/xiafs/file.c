@@ -17,6 +17,7 @@
 #include <linux/fcntl.h>
 #include <linux/stat.h>
 #include <linux/locks.h>
+#include <linux/pagemap.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -234,13 +235,14 @@ xiafs_file_write(struct inode * inode, struct file * filp, const char * buf, int
 	    }
 	}
 	cp = (pos & (XIAFS_ZSIZE(inode->i_sb)-1)) + bh->b_data;
+	memcpy_fromfs(cp,buf,c);
+	update_vm_cache(inode,pos,cp,c);
 	pos += c;
 	if (pos > inode->i_size) {
 	    inode->i_size = pos;
 	    inode->i_dirt = 1;
 	}
 	written += c;
-	memcpy_fromfs(cp,buf,c);
 	buf += c;
 	mark_buffer_uptodate(bh, 1);
 	mark_buffer_dirty(bh, 0);

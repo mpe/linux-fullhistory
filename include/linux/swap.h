@@ -80,8 +80,6 @@ extern void swap_free(unsigned long);
  */
 #define SHM_SWP_TYPE 0x40
 
-extern void shm_no_page (ulong *);
-
 /*
  * swap cache stuff (in linux/mm/swap_state.c)
  */

@@ -24,8 +24,8 @@
  * SUCH DAMAGE.
  */
 
-#define SOUND_VERSION	301
-#define VOXWARE
+#define SOUND_VERSION	350
+#define UNIX_SOUND_SYSTEM
 
 #include <sys/ioctl.h>
 
@@ -597,6 +597,7 @@ typedef struct audio_buf_info {
 							/* Sometimes it's a DSP */
 							/* but usually not */
 #	define DSP_CAP_TRIGGER		0x00001000	/* Supports SETTRIGGER */
+#	define DSP_CAP_MMAP		0x00002000	/* Supports mmap() */
 
 #define SNDCTL_DSP_GETTRIGGER		_IOR ('P',16, int)
 #define SNDCTL_DSP_SETTRIGGER		_IOW ('P',16, int)
@@ -730,17 +731,17 @@ typedef struct copr_msg {
 /* Not counted to SOUND_MIXER_NRDEVICES, but use the same number space */
 #define SOUND_ONOFF_MIN		28
 #define SOUND_ONOFF_MAX		30
-#define SOUND_MIXER_MUTE	28	/* 0 or 1 */
-#define SOUND_MIXER_LOUD	30	/* 0 or 1 */
 
 /* Note!	Number 31 cannot be used since the sign bit is reserved */
 
 
 /*
- * SOUND_MIXER_ENHANCE is an unsupported and undocumented call which
- * will be removed from the API in future.
+ * The following unsupported macros will be removed from the API in near
+ * future.
  */
 #define SOUND_MIXER_ENHANCE	29	/* Enhanced stereo (0, 40, 60 or 80) */
+#define SOUND_MIXER_MUTE	28	/* 0 or 1 */
+#define SOUND_MIXER_LOUD	30	/* 0 or 1 */
 
 
 

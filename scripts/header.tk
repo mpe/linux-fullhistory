@@ -87,8 +87,7 @@ proc maybe_exit { w } {
 	label $w.bm -bitmap questhead
 	pack  $w.bm -pady 10 -side top -padx 10
 	message $w.m -width 400 -aspect 300 \
-		-text "Changes will be lost.  Are you sure?"  -relief raised \
-		-fg black
+		-text "Changes will be lost.  Are you sure?"  -relief raised
 	pack  $w.m -pady 10 -side top -padx 10
 	wm title $w "Are you sure?" 
 
@@ -115,7 +114,7 @@ proc read_config_file { w } {
 		toplevel $w -class Dialog
 		message $w.m -width 400 -aspect 300 -text \
 			"Unable to read file $loadfile" \
-			 -relief raised -fg black
+			 -relief raised 
 		label $w.bm -bitmap error
 		pack $w.bm $w.m -pady 10 -side top -padx 10
 		wm title $w "Oops" 
@@ -143,7 +142,7 @@ proc write_config_file  { w } {
 		toplevel $w -class Dialog
 		message $w.m -width 400 -aspect 300 -text \
 			"Unable to write file $loadfile" \
-			 -relief raised -fg black
+			 -relief raised 
 		label $w.bm -bitmap error
 		pack $w.bm $w.m -pady 10 -side top -padx 10
 		wm title $w "Oops" 
@@ -303,17 +302,17 @@ proc dohelp {w varname }  {
 	if { $found == 0 } then {
 		if { $filefound == 0 } then {
 		message $w.m -width 750 -aspect 300 -text \
-			"No help available - unable to open file Documentation/Configure.help.  This file is available from http://math-www.uni-paderborn.de/~axel/config_help.html or ftp://sunsite.unc.edu/pub/Linux/kernel/config/krnl_cnfg_hlp_1.X.XX.tgz"  -relief raised -fg black
+			"No help available - unable to open file Documentation/Configure.help.  This file is available from http://math-www.uni-paderborn.de/~axel/config_help.html or ftp://sunsite.unc.edu/pub/Linux/kernel/config/krnl_cnfg_hlp_1.X.XX.tgz"  -relief raised 
 		} else {
 		message $w.m -width 400 -aspect 300 -text \
-			"No help available for $varname"  -relief raised -fg black
+			"No help available for $varname"  -relief raised 
 		}
 		label $w.bm -bitmap error
 		pack $w.bm $w.m -pady 10 -side top -padx 10
 		wm title $w "RTFM" 
 	} else {
 		message $w.m -width 400 -aspect 300 -text $message \
-			 -relief raised -fg black
+			 -relief raised 
 		label $w.bm -bitmap info
 		pack $w.bm $w.m -pady 10 -side top -padx 10
 		wm title $w "Configuration help" 
@@ -334,7 +333,7 @@ proc wrapup {w }  {
 	catch {destroy $w}
 	toplevel $w -class Dialog
 	message $w.m -width 400 -aspect 300 -text \
-		"The linux kernel is now hopefully configured for your setup. Check the top-level Makefile for additional configuration, and do a 'make dep ; make clean' if you want to be sure all the files are correctly re-made."  -relief raised -fg black
+		"The linux kernel is now hopefully configured for your setup. Check the top-level Makefile for additional configuration, and do a 'make dep ; make clean' if you want to be sure all the files are correctly re-made."  -relief raised 
 	label $w.bm -bitmap info
 	pack $w.bm $w.m -pady 10 -side top -padx 10
 	wm title $w "Kernel build instructions" 

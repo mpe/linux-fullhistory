@@ -19,9 +19,6 @@
 
 /* enable / disable parts of driver by define / undef */
 #define	MULTISESSION		/* multisession support (ALPHA) */
-#define	PROBE_ISP16		/* ISP16 interface card probing */
-/* ISP16 probing can also be suppressed with kernel command line option
-   'noisp16', or with insmod parameter 'noisp16=1'. */
 
 
 /* Change 0 to 1 to debug various parts of the driver */
@@ -35,8 +32,9 @@
 #define	DEBUG_VFS	0	/* VFS interface */
 
 
-/* Various timeout loop repetition counts. Don't touch unless you know
-   what you're doing. */
+/* Don't touch these unless you know what you're doing. */
+
+/* Various timeout loop repetition counts. */
 #define BUSY_TIMEOUT		10000000	/* for busy wait */
 #define FAST_TIMEOUT		100000		/* ibid. for probing */
 #define SLEEP_TIMEOUT		3000		/* for timer wait */
@@ -44,5 +42,11 @@
 #define READ_TIMEOUT		3000		/* for poll wait */
 #define STOP_TIMEOUT		1000		/* for poll wait */
 #define RESET_WAIT		1000		/* busy wait at drive reset */
+
+/* # of buffer for block size conversion. 6 is optimal for my setup (P75),
+   giving 280 kb/s, with 0.4% CPU usage. Experiment to find your optimal
+   setting */
+#define N_BUFS		6
+
 
 #endif _LINUX_OPTCD_H

@@ -1,0 +1,61 @@
+You can get the ICN-ISDN-card from:
+
+Thinking Objects Software GmbH
+Obere Heerbergstr. 17
+97078 Würzburg
+Tel: +49 931 2877950
+Fax: +49 931 2877951
+
+email uhl@think.de
+WWW   http:/www.think.de
+
+
+The card communicates with the PC by two interfaces:
+  1. A range of 4 successive port-addresses, whos base address can be 
+     configured with the switches.
+  2. A memory window with 16KB-256KB size, which can be setup in 16k steps
+     over the whole range of 16MB. Isdn4linux only uses a 16k window.
+     The base address of the window can be configured when loading
+     the lowlevel-module (see README).
+
+Setting up the IO-address dipswitches for the ICN-ISDN-card:
+
+  Two types of cards exist, one with dip-switches and one with
+  hook-switches.
+
+  1. Setting for the card with hook-switches:
+
+     (0 = switch closed, 1 = switch open)
+
+     S3 S2 S1  Basie-address
+      0  0  0  0x300
+      0  0  1  0x310
+      0  1  0  0x320 (Default for isdn4linux)
+      0  1  1  0x330
+      1  0  0  0x340
+      1  0  1  0x350
+      1  1  0  0x360
+      1  1  1  NOT ALLOWED!
+    
+  2. Setting for the card with dip-switches:
+
+     (0 = switch closed, 1 = switch open)
+
+     S1 S2 S3 S4  Basis-Adresse
+      0  0  0  0  0x300
+      0  0  0  1  0x310
+      0  0  1  0  0x320 (Default for isdn4linux)
+      0  0  1  1  0x330
+      0  1  0  0  0x340
+      0  1  0  1  0x350
+      0  1  1  0  0x360
+      0  1  1  1  NOT ALLOWED!
+      1  0  0  0  0x308
+      1  0  0  1  0x318
+      1  0  1  0  0x328
+      1  0  1  1  0x338
+      1  1  0  0  0x348
+      1  1  0  1  0x358
+      1  1  1  0  0x368
+      1  1  1  1  NOT ALLOWED!
+

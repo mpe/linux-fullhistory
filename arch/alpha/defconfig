@@ -176,6 +176,7 @@ CONFIG_ISO9660_FS=y
 #
 # Character devices
 #
+CONFIG_SERIAL=y
 # CONFIG_CYCLADES is not set
 # CONFIG_STALDRV is not set
 # CONFIG_PRINTER is not set

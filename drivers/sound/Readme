@@ -1,5 +1,5 @@
 
-Version 3.5-beta2 release notes
+Version 3.5-beta6 release notes
 -------------------------------
 
 IMPORTANT! This version of the driver is compatible only with Linux versions
@@ -38,7 +38,7 @@ them are still on my mailbox and they should be included in versions
 after v3.5 (I will not add aditional features before v3.5 is ready).
 
    ====================================================
--  THIS VERSION ____REQUIRES____ Linux 1.3.58 OR LATER.
+-  THIS VERSION ____REQUIRES____ Linux 1.3.64 OR LATER.
    ====================================================
 
 -  THIS VERSION MAY NOT WORK WITH Linux VERSIONS RELEASED
@@ -46,7 +46,7 @@ after v3.5 (I will not add aditional features before v3.5 is ready).
    your kernel version, please use the sound driver version
    included in your kernel.
 
-You will need the snd-util-3.0.tar.gz and snd-data-0.1.tar.Z
+You may need the snd-util-3.5.tar.gz and snd-data-0.1.tar.Z
 packages to use this driver. They should be in the same
 ftp site or BBS from where you got this driver. For
 example at nic.funet.fi:pub/OS/Linux/*.
@@ -139,6 +139,7 @@ contributors. (I could have forgotten some names.)
 	Davor Jadrijevic MAD16 support
 	Gregor Hoffleit	Mozart support
 	Riccardo Facchetti Audio Excel DSP 16 (aedsp16) support
+	James Hightower Spotting a tiny but important bug in CS423x support.
 
 There are propably many other names missing. If you have sent me some
 patches and your name is not in the above list, please inform me.

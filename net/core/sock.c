@@ -520,8 +520,6 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 			if (sk->wmem_alloc + size >= sk->sndbuf) 
 #endif
 			{
-				if (sk->wmem_alloc < 0)
-				  printk("sock.c: Look where I am %ld<%ld\n", tmp, sk->wmem_alloc);
 				sk->socket->flags &= ~SO_NOSPACE;
 				interruptible_sleep_on(sk->sleep);
 				if (current->signal & ~current->blocked) 

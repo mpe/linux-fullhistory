@@ -67,7 +67,7 @@ set_format (int dev, long fmt)
 	else
 	  fmt = AFMT_U8;	/* This is always supported */
 
-      audio_format[dev] = DMAbuf_ioctl (dev, SNDCTL_DSP_SETFMT, (caddr_t) (long) fmt, 1);
+      audio_format[dev] = DMAbuf_ioctl (dev, SNDCTL_DSP_SETFMT, (caddr_t) fmt, 1);
     }
 
   if (local_conversion[dev])	/* This shadows the HW format */
@@ -144,6 +144,9 @@ audio_release (int dev, struct fileinfo *file)
 
   dev = dev >> 4;
   mode = file->mode & O_ACCMODE;
+
+  audio_devs[dev]->dmap_out->closing = 1;
+  audio_devs[dev]->dmap_in->closing = 1;
 
   sync_output (dev);
 
@@ -366,7 +369,7 @@ audio_ioctl (int dev, struct fileinfo *file,
 	break;
 
       case SNDCTL_DSP_GETFMTS:
-	return snd_ioctl_return ((int *) arg, audio_devs[dev]->format_mask);
+	return snd_ioctl_return ((int *) arg, audio_devs[dev]->format_mask | AFMT_MU_LAW);
 	break;
 
       case SNDCTL_DSP_SETFMT:
@@ -429,6 +432,8 @@ audio_ioctl (int dev, struct fileinfo *file,
 
 	  if (audio_devs[dev]->trigger)		/* Supports SETTRIGGER */
 	    info |= DSP_CAP_TRIGGER;
+
+	  info |= DSP_CAP_MMAP;
 
 	  memcpy_tofs ((&((char *) arg)[0]), (char *) &info, sizeof (info));
 	  return 0;

@@ -1,0 +1,609 @@
+
+Description of the Interface between Linklevel an Harwarelevel
+  of isdn4linux:
+
+
+  The Communication between Linklevel (LL) and Hardwarelevel (HL)
+  is based on the struct isdn_if (defined in isdnif.h).
+
+  An HL-driver can register itself at LL by calling the function
+  register_isdn() with a pointer to that struct. Prior to that, it has
+  to preset some of the fields of isdn_if. The LL sets the rest of
+  the fields. All further communication is done via callbacks using
+  the funtion-pointers defined in isdn_if.
+
+  ATTENTION, CHANGES since version 0.6 are marked with   "***CHANGE0.6"!
+  ATTENTION, CHANGES since version 0.7 are marked with   "***CHANGE0.7"!
+  ATTENTION, CHANGES since version 0.71 are marked with  "***CHANGE0.7.1"!
+
+1. Description of the fields of isdn_if:
+
+  int channels;
+
+    This field has to be set by the HL-driver to the number of channels
+    supported prior to calling register_isdn(). Upon return of the call,
+    the LL puts an id there, which has to be used by the HL-driver when
+    invoking the other callbacks.
+
+  int maxbufsize;
+
+    ***CHANGE0.6: New since this version.
+
+    Also to be preset by the HL-driver. With this value the HL-driver
+    tells to the LL the maximum size of a data-packet it will accept. 
+
+  unsigned long features;
+
+    To be preset by the HL-driver. Using this field, the HL-driver
+    announces the features supported. At the moment this is limited to
+    report the supported layer2 and layer3-protocols. For setting this
+    field the constants ISDN_FEATURE..., declared in isdnif.h have to be
+    used.
+
+    ***CHANGE0.7.1: The line type (1TR6, EDSS1) has to be set.
+
+  unsigned short hl_hdrlen;
+
+    ***CHANGED.7.4: New field.
+
+    To be preset by the HL-driver, if it supports sk_buff's. The driver
+    should put here the amount of additional space needed in sk-buff's for
+    it's internal purposes. Drivers not supporting sk_buff's should put
+    initialize this field to 0.
+
+  void (*rcvcallb)(int, int, u_char*, int);
+
+    This field will be set by LL. The HL-driver delivers received data-
+    packets by calling this function.
+
+    Parameter:
+      int    driver-Id
+      int    Channel-number locally to the driver. (starting with 0)
+      u_char Pointer to received data. (in kernel-space)
+      int    length of data-packet.
+
+  void (*rcvcallb_skb)(int, int, struct sk_buff *)
+
+    ***CHANGED.7.4: New field.
+
+    This field will be set by LL. The HL-driver delivers received data-
+    packets by calling this function. Upon calling, the HL-driver must
+    already have it's private data pulled off the head of the sk_buff.
+
+    Parameter:
+      int              driver-Id
+      int              Channel-number locally to the driver. (starting with 0)
+      struct sk_buff * Pointer to sk_buff, containing received data.
+
+  int (*statcallb)(isdn_ctrl*);
+
+    This field will be set by LL. This function has to be called by the
+    HL-driver for signaling status-changes or other events to the LL.
+
+    Parameter:
+      isdn_ctrl*
+
+      The struct isdn_ctrl also defined in isdn_if. The exact meaning of it's
+      fields is described together with the descriptions of the possible
+      events. Here is only a short description of the fields:
+
+        driver  = driver Id.
+        command = event-type. (one of the constants ISDN_STAT_...)
+        arg     = depends on event-type.
+        num     = depends on event-type.
+
+    Returnvalue:
+      0 on success, else -1
+
+  int (*command)(isdn_ctrl*);
+
+    This field has to be preset by the HL-driver. It points to a function,
+    to be called by LL to perform functions like dialing, B-channel
+    setup, etc. The exact meaning of the parameters is described with the
+    descriptions of the possible commands.
+
+    Parameter:
+      isdn_ctrl*
+        driver  = driver-Id
+        command = command to perform. (one of the constants ISDN_CMD_...)
+        arg     = depends on command.
+        num     = depends on command.
+    
+    Returnvalue:
+      >=0 on success, else error-code (-ENODEV etc.)
+
+  int (*writebuf)(int, int, u_char*, int, int);
+
+    This field has to be preset by the HL-driver. The given funtion will
+    be called by the LL for delivering data to be send via B-Channel.
+
+    Parameter:
+      int     driver-Id ***CHANGE.7.4: New parameter.
+      int     channel-number locally to the HL-driver. (starts with 0)
+      u_char* pointer to data.
+      int     length of data-packet.
+      int     flag: 0 = call from within kernel-space. (HL-driver must use
+                        memcpy, may NOT use schedule())
+                    1 = call from user-space. (HL-driver must use
+                        memcpy_fromfs, use of schedule() allowed)
+
+    Returnvalue:
+      Length of data accepted on success, else error-code (-EINVAL on
+      oversized packets etc.)
+
+  int (*writebuf_skb)(int, int, struct sk_buff *)
+
+    ***CHANGED.7.4: New field.
+
+    This field has to be preset by the HL-driver. The given function will
+    be called by the LL for delivering data to be send via B-Channel.
+
+ 
+    Parameter:
+      int              driver-Id ***CHANGE.7.4: New parameter.
+      int              channel-number locally to the HL-driver. (starts with 0)
+      struct sk_buff * Pointer to sk_buff containing data to be send via
+                       B-channel.
+
+    Returnvalue:
+      Length of data accepted on success, else error-code (-EINVAL on
+      oversized packets etc.)
+
+NOTE on writebuf and writebuf_skb:
+    The HL-driver may initialize one of the field's to NULL, in which case
+    the LL will call the non-NULL function only.
+
+  int (*writecmd)(u_char*, int, int);
+
+    This field has to be preset by the HL-driver. The given function will be
+    called to perform write-requests on /dev/isdnctrl (i.e. sending commands
+    to the card) The data-format is hardware-specific. This function is
+    intended for debugging only. It is not necessary for normal operation
+    and never will be called by the tty-emulation- or network-code. If
+    this functin is not supported, the driver has to set NULL here.
+
+    Parameter:
+      u_char* pointer to data.
+      int     length of data.
+      int     flag: 0 = call from within kernel-space. (HL-driver must use
+                        memcpy, may NOT use schedule())
+                    1 = call from user-space. (HL-driver must use
+                        memcpy_fromfs, use of schedule() allowed)
+
+    Returnvalue:
+      Length of data accepted on success, else error-code (-EINVAL etc.)
+
+  int (*readstat)(u_char*, int, int);
+
+    This field has to be preset by the HL-driver. The given function will be
+    called to perform read-requests on /dev/isdnctrl (i.e. reading repies
+    from the card) The data-format is hardware-specific. This function is
+    intended for debugging only. It is not necessary for normal operation
+    and never will be called by the tty-emulation- or network-code. If
+    this functin is not supported, the driver has to set NULL here.
+
+    Parameter:
+      u_char* pointer to data.
+      int     length of data.
+      int     flag: 0 = call from within kernel-space. (HL-driver must use
+                        memcpy, may NOT use schedule())
+                    1 = call from user-space. (HL-driver must use
+                        memcpy_fromfs, use of schedule() allowed)
+
+    Returnvalue:
+      Length of data on success, else error-code (-EINVAL etc.)
+
+  char id[20];
+       ***CHANGE0.7: New since this version.
+
+   This string has to be preset by the HL-driver. It's purpose is for
+   identification of the driver by the user. Eg.: it is shown in the
+   status-info of /dev/isdninfo. Furthermore it is used as Id for binding
+   net-interfaces to a specific channel. If a string of length zero is
+   given, upon return, isdn4linux will replace it by a generic name. (line0,
+   line1 etc.) It is recommended, to make this string configurabele during
+   module-load-time. (copy a global variable to this string.) For doing that,
+   modules 1.2.8 or newer are necessary.
+
+2. Description of the commands, a HL-driver has to support:
+
+   All commands will be performed by calling the funtion command() described
+   above from within the LL. The field command of the struct-parameter will
+   contain the desired command, the field driver always is set to the
+   apropriate driver-Id.
+
+   Until now, the following commands are defined:
+
+
+   ISDN_CMD_IOCTL:
+
+     This command is intended for performing ioctl-calls for configuring
+     hardware or similar purposes (setting port-adresses, loading firmware
+     etc.) For this purpose, in the LL all ioctl-calls with an argument
+     >= ISDN_IOCTL_DRVIOCTL (0x100) will be handed transparently to this
+     function after substracting 0x100 and placing the result in arg.
+     Example:
+       If a userlevel-program calls ioctl(0x101,...) the function gets
+       called with the field command set to 1.
+
+     Parameter:
+       driver  = driver-Id.
+       command = ISDN_CMD_IOCTL
+       arg     = Original ioctl-cmd - ISDN_IOCTL_DRVIOCTL
+       num     = first bytes filled with (unsigned long)arg
+   
+     Returnvalue:
+       Depending on driver.
+
+  
+  ISDN_CMD_DIAL:
+
+    This command is used to tell the HL-driver it should dial a given
+    number.
+
+    Parameter:
+      driver      = driver-Id.
+      command     = ISDN_CMD_DIAL
+      arg         = channel-number locally to the driver. (starting with 0)
+      num         = An ASCII-String containing the number to dial, the own
+                    EAZ or MSN, the Service-Indicator and the Additional
+                    Info. Format:
+                    "%s,%s,%d,%d" RemotePhoneNumber,EazOrMsn,SI,AI
+                    If the Line has been designed as SPV (a special german
+                    feature, meaning semi-leased-line) the number has to
+                    start with an "S".
+      ***CHANGE0.6: In previous versions the EAZ has been given in the
+                    highbyte of arg.
+    ***CHANGE0.7.1: New since this version: ServiceIndicator and AddInfo.
+
+  ISDN_CMD_ACCEPTD:
+
+    With this command, the HL-driver is told to accept a D-Channel-setup.
+    (Response to an incoming call)
+
+    Parameter:
+      driver      = driver-Id.
+      command     = ISDN_CMD_ACCEPTD
+      arg         = channel-number locally to the driver. (starting with 0)
+      num         = unused.
+
+  ISDN_CMD_ACCEPTB:
+
+    With this command, the HL-driver is told to perform a B-Channel-setup.
+    (after establishing D-Channel-Connection)
+
+    Parameter:
+      driver      = driver-Id.
+      command     = ISDN_CMD_ACCEPTB
+      arg         = channel-number locally to the driver. (starting with 0)
+      num         = unused.
+
+  ISDN_CMD_HANGUP:
+
+    With this command, the HL-driver is told to hangup (B-Channel if
+    established first, then D-Channel). This command is also used for
+    actively rejecting an incoming call.
+
+    Parameter:
+      driver      = driver-Id.
+      command     = ISDN_CMD_HANGUP
+      arg         = channel-number locally to the driver. (starting with 0)
+      num         = unused.
+
+  ISDN_CMD_CLREAZ:
+
+    With this command, the HL-driver is told not to signal incoming
+    calls to the LL.
+
+    Parameter:
+      driver      = driver-Id.
+      command     = ISDN_CMD_CLREAZ
+      arg         = channel-number locally to the driver. (starting with 0)
+      num         = unused.
+
+  ISDN_CMD_SETEAZ:
+
+    With this command, the HL-driver is told to signal incoming calls for
+    the given EAZs/MSNs to the LL.
+
+    Parameter:
+      driver      = driver-Id.
+      command     = ISDN_CMD_SETEAZ
+      arg         = channel-number locally to the driver. (starting with 0)
+      num         = ASCII-String, containing the desired EAZ's/MSN's
+                    (comma-separated). If an empty String is given, the
+                    HL-driver should respond to ALL incoming calls,
+                    regardless of the destination-adress.
+      ***CHANGE0.6: New since this version the "empty-string"-feature.
+
+  ISDN_CMD_GETEAZ: (currently unused)
+
+    With this command, the HL-driver is told to report the current setting
+    given with ISDN_CMD_SETEAZ.
+
+    Parameter:
+      driver      = driver-Id.
+      command     = ISDN_CMD_GETEAZ
+      arg         = channel-number locally to the driver. (starting with 0)
+      num         = ASCII-String, containing the current EAZ's/MSN's
+
+  ISDN_CMD_SETSIL: (currently unused)
+
+    With this command, the HL-driver is told to signal only incoming
+    calls with the given Service-Indicators.
+
+    Parameter:
+      driver      = driver-Id.
+      command     = ISDN_CMD_SETSIL
+      arg         = channel-number locally to the driver. (starting with 0)
+      num         = ASCII-String, containing the desired Service-Indicators.
+
+  ISDN_CMD_GETSIL: (currently unused)
+
+    With this command, the HL-driver is told to return the current
+    Service-Indicators it will respond to.
+
+    Parameter:
+      driver      = driver-Id.
+      command     = ISDN_CMD_SETSIL
+      arg         = channel-number locally to the driver. (starting with 0)
+      num         = ASCII-String, containing the current Service-Indicators.
+
+  ISDN_CMD_SETL2:
+
+    With this command, the HL-driver is told to select the given Layer-2-
+    protocol. This command is issued by the LL prior to ISDN_CMD_DIAL or
+    ISDN_CMD_ACCEPTD.
+
+
+    Parameter:
+      driver      = driver-Id.
+      command     = ISDN_CMD_SETL2
+      arg         = channel-number locally to the driver. (starting with 0)
+                    logical or'ed with (protocol-Id << 8)
+                    protocol-Id is one of the constants ISDN_PROTO_L2...
+      num         = unused.
+
+  ISDN_CMD_GETL2: (currently unused)
+
+    With this command, the HL-driver is told to return the current
+    setting of the Layer-2-protocol.
+
+    Parameter:
+      driver      = driver-Id.
+      command     = ISDN_CMD_GETL2
+      arg         = channel-number locally to the driver. (starting with 0)
+      num         = unused.
+    Returnvalue:
+      current protocol-Id (one of the constants ISDN_L2_PROTO)
+
+  ISDN_CMD_SETL3:
+
+    With this command, the HL-driver is told to select the given Layer-3-
+    protocol. This command is issued by the LL prior to ISDN_CMD_DIAL or
+    ISDN_CMD_ACCEPTD.
+
+
+    Parameter:
+      driver      = driver-Id.
+      command     = ISDN_CMD_SETL3
+      arg         = channel-number locally to the driver. (starting with 0)
+                    logical or'ed with (protocol-Id << 8)
+                    protocol-Id is one of the constants ISDN_PROTO_L3...
+      num         = unused.
+
+  ISDN_CMD_GETL2: (currently unused)
+
+    With this command, the HL-driver is told to return the current
+    setting of the Layer-3-protocol.
+
+    Parameter:
+      driver      = driver-Id.
+      command     = ISDN_CMD_GETL3
+      arg         = channel-number locally to the driver. (starting with 0)
+      num         = unused.
+    Returnvalue:
+      current protocol-Id (one of the constants ISDN_L3_PROTO)
+
+  ISDN_CMD_LOCK:
+
+    With this command the HL-driver is told, that it will be used by the
+    LL and therefore may not be unloaded. The HL-driver should use
+    MOD_INC_USE_COUNT to tell that to the kernel.
+
+    Parameter:
+      driver      = driver-Id.
+      command     = ISDN_CMD_LOCK
+      arg         = unused.
+      num         = unused.
+
+  ISDN_CMD_UNLOCK:
+
+    With this command the HL-driver is told, that it is no more used by the
+    LL and therefore may be unloaded. The HL-driver should use
+    DEC_INC_USE_COUNT to tell that to the kernel.
+
+    Parameter:
+      driver      = driver-Id.
+      command     = ISDN_CMD_UNLOCK
+      arg         = unused.
+      num         = unused.
+
+3. Description of the events to be signaled by the HL-driver to th LL.
+
+  All status-changes are signaled via calling the previously described
+  function statcallb(). The field command of the struct isdn_cmd has
+  to be set by the HL-driver with the apropriate Status-Id (event-number).
+  The field arg has to be set to the channel-number (locally to the driver,
+  starting with 0) to which this event applies. (Exception: STAVAIL-event)
+
+  Until now, the following Status-Ids are defined:
+
+  ISDN_STAT_AVAIL:
+
+    With this call, the HL-driver signals the availability of new data
+    for readstat(). Used only for debugging-purposes, see description
+    of readstat().
+
+    Parameter:
+      driver      = driver-Id
+      command     = ISDN_STAT_STAVAIL
+      arg         = length of available data.
+      num         = unused.
+
+  ISDN_STAT_ICALL:
+
+    With this call, the HL-driver signals an incoming call to the LL.
+
+    Parameter:
+      driver      = driver-Id
+      command     = ISDN_STAT_ICALL
+      arg         = channel-number, locally to the driver. (starting with 0)
+      num         = ASCII-String in the following format:
+                    "%s,%d,%d,%s",CallerNumber,ServiceIndicator,AddInfo,
+                    CalledNumber.
+
+  ISDN_STAT_RUN:
+
+    With this call, the HL-driver signals availability of the ISDN-card.
+    (after initializing, loading firmware)
+
+    Parameter:
+      driver      = driver-Id
+      command     = ISDN_STAT_RUN
+      arg         = unused.
+      num         = unused.
+
+  ISDN_STAT_STOP:
+
+    With this call, the HL-driver signals unavailability of the ISDN-card.
+    (before unloading, while resetting/reconfiguring the card)
+
+    Parameter:
+      driver      = driver-Id
+      command     = ISDN_STAT_STOP
+      arg         = unused.
+      num         = unused.
+
+  ISDN_STAT_DCONN:
+
+   With this call, the HL-driver signals the successful establishement of
+   a D-Channel-connection. (Response to ISDN_CMD_ACCEPTD or ISDN_CMD_DIAL)
+
+    Parameter:
+      driver      = driver-Id
+      command     = ISDN_STAT_DCONN
+      arg         = channel-number, locally to the driver. (starting with 0)
+      num         = unused.
+
+  ISDN_STAT_BCONN:
+
+   With this call, the HL-driver signals the successful establishement of
+   a B-Channel-connection. (Response to ISDN_CMD_ACCEPTB or because the
+   remote-station has initiated establishement)
+
+    Parameter:
+      driver      = driver-Id
+      command     = ISDN_STAT_BCONN
+      arg         = channel-number, locally to the driver. (starting with 0)
+      num         = unused.
+
+  ISDN_STAT_DHUP:
+
+   With this call, the HL-driver signals the shutdown of a
+   D-Channel-connection. This could be a response to a prior ISDN_CMD_HANGUP,
+   or caused by a remote-hangup or if the remote-station has actively
+   rejected a call.
+
+    Parameter:
+      driver      = driver-Id
+      command     = ISDN_STAT_DHUP
+      arg         = channel-number, locally to the driver. (starting with 0)
+      num         = unused.
+
+  ISDN_STAT_BHUP:
+
+   With this call, the HL-driver signals the shutdown of a
+   B-Channel-connection. This could be a response to a prior ISDN_CMD_HANGUP,
+   or caused by a remote-hangup.
+
+    Parameter:
+      driver      = driver-Id
+      command     = ISDN_STAT_BHUP
+      arg         = channel-number, locally to the driver. (starting with 0)
+      num         = unused.
+
+  ISDN_STAT_CINF:
+
+   With this call, the HL-driver delivers charge-unit information to the
+   LL.
+
+    Parameter:
+      driver      = driver-Id
+      command     = ISDN_STAT_CINF
+      arg         = channel-number, locally to the driver. (starting with 0)
+      num         = ASCII string containing charge-units (digits only).
+
+  ISDN_STAT_LOAD: (currently unused)
+
+  ISDN_STAT_UNLOAD:
+
+   With this call, the HL-driver signals that it will be unloaded now. This
+   tells the LL to release all corresponding data-structures.
+
+    Parameter:
+      driver      = driver-Id
+      command     = ISDN_STAT_UNLOAD
+      arg         = unused.
+      num         = unused.
+
+  ISDN_STAT_BSENT:
+
+    With this call the HL-driver signals the delivery of a data-packet.
+    This callback is used by the network-interfaces only, tty-Emulation
+    does not need this call.
+
+    Parameter:
+      driver      = driver-Id
+      command     = ISDN_STAT_BSENT
+      arg         = channel-number, locally to the driver. (starting with 0)
+      num         = unused.
+
+  ISDN_STAT_NODCH:
+
+    With this call, the driver has to respond to a prior ISDN_CMD_DIAL, if
+    no D-Channel is available.
+
+    Parameter:
+      driver      = driver-Id
+      command     = ISDN_STAT_NODCH
+      arg         = channel-number, locally to the driver. (starting with 0)
+      num         = unused.
+
+  ISDN_STAT_ADDCH: (currently unused)
+
+    This call is planned for HL-drivers, which are unable to check card-type
+    or numbers of supported channels before they have loaded any firmware
+    using ioctl. Those HL-driver simply set the channel-parameter to zero
+    or a minimum channel-number when registering, and later if they know
+    the real amount, perform this call, allocating additional channels.
+
+    Parameter:
+      driver      = driver-Id
+      command     = ISDN_STAT_ADDCH
+      arg         = to be defined.
+      num         = to be defined.
+
+  ISDN_STAT_CAUSE:
+
+    With this call, the HL-driver delivers CAUSE-messages to the LL.
+    Currently the LL does not use this messages. Their contents is simply
+    logged via kernel-messages. Therefore, currently the format of the
+    messages is currently completely free. However they should be printable.
+
+    Parameter:
+      driver      = driver-Id
+      command     = ISDN_STAT_NODCH
+      arg         = channel-number, locally to the driver. (starting with 0)
+      num         = ASCII string containing CAUSE-message.
+

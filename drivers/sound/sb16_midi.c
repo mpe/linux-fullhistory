@@ -40,7 +40,7 @@
 #define	STATPORT   (sb16midi_base+1)
 
 extern int     *sb_osp;
-static int      sb16midi_base = 0x330;
+static int      sb16midi_base = 0;
 
 static int 
 sb16midi_status (void)
@@ -100,6 +100,9 @@ sb16midi_input_loop (void)
 void
 sb16midiintr (int unit)
 {
+  if (sb16midi_base == 0)
+    return;
+
   if (input_avail ())
     sb16midi_input_loop ();
 }

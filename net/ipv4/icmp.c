@@ -17,6 +17,7 @@
  *		Mike Shaver	:	RFC1122 checks.
  *		Alan Cox	:	Multicast ping reply as self.
  *		Alan Cox	:	Fix atomicity lockup in ip_build_xmit call
+ *		Alan Cox	:	Added 216,128 byte paths to the MTU code.
  *
  *
  *
@@ -356,8 +357,8 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 			case ICMP_HOST_UNREACH:
 				break;
 			case ICMP_PROT_UNREACH:
-				printk(KERN_INFO "ICMP: %s:%d: protocol unreachable.\n",
-					in_ntoa(iph->daddr), ntohs(iph->protocol));
+/*				printk(KERN_INFO "ICMP: %s:%d: protocol unreachable.\n",
+					in_ntoa(iph->daddr), ntohs(iph->protocol));*/
 				break;
 			case ICMP_PORT_UNREACH:
 				break;
@@ -396,7 +397,18 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, struct devi
 						new_mtu = 576;
 					else if (old_mtu > 296)
 						new_mtu = 296;
+					/*
+					 *	These two are not from the RFC but
+					 *	are needed for AMPRnet AX.25 paths.
+					 */
+					else if (old_mtu > 216)
+						old_mtu = 216;
+					else if (old_mtu > 128)
+						old_mtu = 128;
 					else
+					/*
+					 *	Despair..
+					 */
 						new_mtu = 68;
 				}
 				/*

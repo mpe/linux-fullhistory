@@ -207,12 +207,12 @@ extern void smp_store_cpu_info(int id);		/* Store per cpu info (like the initial
 
 extern __inline void apic_write(unsigned long reg, unsigned long v)
 {
-	*((unsigned long *)(apic_reg+reg))=v;
+	*((volatile unsigned long *)(apic_reg+reg))=v;
 }
 
 extern __inline unsigned long apic_read(unsigned long reg)
 {
-	return *((unsigned long *)(apic_reg+reg));
+	return *((volatile unsigned long *)(apic_reg+reg));
 }
 
 /*

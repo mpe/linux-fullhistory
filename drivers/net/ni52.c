@@ -4,9 +4,13 @@
  * This is an extension to the Linux operating system, and is covered by the
  * same Gnu Public License that covers that work.
  * 
- * Alphacode 0.62 (95/01/19) for Linux 1.1.82 (or later)
- * Copyrights (c) 1994,1995 by M.Hipp (Michael.Hipp@student.uni-tuebingen.de)
+ * Alphacode 0.80 (96/02/19) for Linux 1.3.66 (or later)
+ * Copyrights (c) 1994,1995,1996 by M.Hipp (Michael.Hipp@student.uni-tuebingen.de)
  *    [feel free to mail ....]
+ *
+ * when using as module: (no autoprobing!)
+ *   compile with: gcc -D__KERNEL__ -DMODULE -O2 -c ni52.c
+ *   run with e.g: insmod ni52.o io=0x360 irq=9 memstart=0xd0000 memend=0xd4000
  *
  * CAN YOU PLEASE REPORT ME YOUR PERFORMANCE EXPERIENCES !!.
  * 
@@ -18,7 +22,8 @@
  *   maybe the ni5210-card revision and the i82586 version
  *
  * autoprobe for: base_addr: 0x300,0x280,0x360,0x320,0x340
- *                mem_start: 0xc8000,0xd0000,0xd4000,0xd8000 (8K and 16K)
+ *                mem_start: 0xd0000,0xd2000,0xc8000,0xca000,0xd4000,0xd6000,
+ *                           0xd8000,0xcc000,0xce000,0xda000,0xdc000
  *
  * sources:
  *   skeleton.c from Donald Becker
@@ -33,13 +38,15 @@
  *   The internal sysbus seems to be slow. So we often lose packets because of
  *   overruns while receiving from a fast remote host. 
  *   This can slow down TCP connections. Maybe the newer ni5210 cards are better.
+ *   my experinece is, that if a machine sends with more then about 500-600K/s
+ *   the fifo/sysbus overflows.
  * 
  * IMPORTANT NOTE:
  *   On fast networks, it's a (very) good idea to have 16K shared memory. With
  *   8K, we can store only 4 receive frames, so it can (easily) happen that a remote 
  *   machine 'overruns' our system.
  *
- * Known i82586 bugs (I'm sure, there are many more!):
+ * Known i82586/card problems (I'm sure, there are many more!):
  *   Running the NOP-mode, the i82586 sometimes seems to forget to report
  *   every xmit-interrupt until we restart the CU.
  *   Another MAJOR bug is, that the RU sometimes seems to ignore the EL-Bit 
@@ -48,12 +55,22 @@
  *   usually used) RBD and begins to fill it. (Maybe, this happens only if 
  *   the last buffer from the previous RFD fits exact into the queue and
  *   the next RFD can't fetch an initial RBD. Anyone knows more? )
+ *
+ * results from ftp performance tests with Linux 1.2.5 
+ *   send and receive about 350-400 KByte/s (peak up to 460 kbytes/s)
+ *   sending in NOP-mode: peak performance up to 530K/s (but better don't run this mode)
  */
 
 /*
+ * 19.Feb.96: more Mcast changes, module support (MH)
+ *
  * 18.Nov.95: Mcast changes (AC).
  *
- * 19.Jan.95: verified (MH)
+ * 23.April.95: fixed(?) receiving problems by configuring a RFD more
+ *              than the number of RBD's. Can maybe cause other problems. 
+ * 18.April.95: Added MODULE support (MH)
+ * 17.April.95: MC related changes in init586() and set_multicast_list().
+ *              removed use of 'jiffies' in init586() (MH)
  *
  * 19.Sep.94: Added Multicast support (not tested yet) (MH)
  * 
@@ -78,9 +95,16 @@
  *
  * < 30.Sep.93: first versions 
  */
- 
+
+static int debuglevel = 0; /* debug-printk 0: off 1: a few 2: more */
+static int automatic_resume = 0; /* experimental .. better should be zero */
+static int rfdadd = 0; /* rfdadd=1 may be better for 8K MEM cards */
+static int fifo=0x8;	/* don't change */
+
+/* #define REALLY_SLOW_IO */
+
+#include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/sched.h>
 #include <linux/string.h>
 #include <linux/errno.h>
 #include <linux/ioport.h>
@@ -101,6 +125,8 @@
 
 #define ni_attn586()  {outb(0,dev->base_addr+NI52_ATTENTION);}
 #define ni_reset586() {outb(0,dev->base_addr+NI52_RESET);}
+#define ni_disint()   {outb(0,dev->base_addr+NI52_INTDIS);}
+#define ni_enaint()   {outb(0,dev->base_addr+NI52_INTENA);}
 
 #define make32(ptr16) (p->memtop + (short) (ptr16) )
 #define make24(ptr32) ((char *) (ptr32) - p->base)
@@ -118,7 +144,7 @@ sizeof(rfd) = 24; sizeof(rbd) = 12;
 sizeof(tbd) = 8; sizeof(transmit_cmd) = 16;
 sizeof(nop_cmd) = 8; 
 
-  * if you don't know the driver, better do not change this values: */
+  * if you don't know the driver, better do not change these values: */
 
 #define RECV_BUFF_SIZE 1524 /* slightly oversized */
 #define XMIT_BUFF_SIZE 1524 /* slightly oversized */
@@ -129,35 +155,37 @@ sizeof(nop_cmd) = 8;
 
 /**************************************************************************/
 
-#define DELAY(x) {int i=jiffies; \
-                  if(loops_per_sec == 1) \
-                     while(i+(x)>jiffies); \
-                  else \
-                     __delay((loops_per_sec>>5)*x); \
-                 }
-
-/* a much shorter delay: */
+/* different DELAYs */
+#define DELAY(x) __delay((loops_per_sec>>5)*(x)); 
 #define DELAY_16(); { __delay( (loops_per_sec>>16)+1 ); }
+#define DELAY_18(); { __delay( (loops_per_sec>>18)+1 ); }
 
 /* wait for command with timeout: */
 #define WAIT_4_SCB_CMD() { int i; \
-  for(i=0;i<1024;i++) { \
-    if(!p->scb->cmd) break; \
-    DELAY_16(); \
-    if(i == 1023) { \
-      printk("%s: scb_cmd timed out .. resetting i82586\n",dev->name); \
-      ni_reset586(); } } }
+  for(i=0;i<16384;i++) { \
+    if(!p->scb->cmd_cuc) break; \
+    DELAY_18(); \
+    if(i == 16383) { \
+      printk("%s: scb_cmd timed out: %04x,%04x .. disabeling i82586!!\n",dev->name,p->scb->cmd_cuc,p->scb->cus); \
+       if(!p->reseted) { p->reseted = 1; ni_reset586(); } } } }
 
+#define WAIT_4_SCB_CMD_RUC() { int i; \
+  for(i=0;i<16384;i++) { \
+    if(!p->scb->cmd_ruc) break; \
+    DELAY_18(); \
+    if(i == 16383) { \
+      printk("%s: scb_cmd (ruc) timed out: %04x,%04x .. disabeling i82586!!\n",dev->name,p->scb->cmd_ruc,p->scb->rus); \
+       if(!p->reseted) { p->reseted = 1; ni_reset586(); } } } }
+
+#define WAIT_4_STAT_COMPL(addr) { int i; \
+   for(i=0;i<32767;i++) { \
+     if((addr)->cmd_status & STAT_COMPL) break; \
+     DELAY_16(); DELAY_16(); } }
 
 #define NI52_TOTAL_SIZE 16
 #define NI52_ADDR0 0x02
 #define NI52_ADDR1 0x07
 #define NI52_ADDR2 0x01
-
-#ifndef HAVE_PORTRESERVE
-#define check_region(ioaddr, size)              0
-#define request_region(ioaddr, size,name)    do ; while (0)
-#endif
 
 static int     ni52_probe1(struct device *dev,int ioaddr);
 static void    ni52_interrupt(int irq,struct pt_regs *reg_ptr);
@@ -166,6 +194,9 @@ static int     ni52_close(struct device *dev);
 static int     ni52_send_packet(struct sk_buff *,struct device *);
 static struct  enet_statistics *ni52_get_stats(struct device *dev);
 static void    set_multicast_list(struct device *dev);
+#if 0
+static void    ni52_dump(struct device *,void *);
+#endif
 
 /* helper-functions */
 static int     init586(struct device *dev);
@@ -182,6 +213,7 @@ struct priv
   struct enet_statistics stats;
   unsigned long base;
   char *memtop;
+  int lock,reseted;
   volatile struct rfd_struct  *rfd_last,*rfd_top,*rfd_first;
   volatile struct scp_struct  *scp;  /* volatile is important */
   volatile struct iscp_struct *iscp; /* volatile is important */
@@ -198,20 +230,20 @@ struct priv
   volatile int    xmit_count,xmit_last;
 };
 
-
 /**********************************************
  * close device 
  */
-
 static int ni52_close(struct device *dev)
 {
   free_irq(dev->irq);
-  irq2dev_map[dev->irq] = 0;
+  irq2dev_map[dev->irq] = NULL;
 
   ni_reset586(); /* the hard way to stop the receiver */
 
   dev->start = 0;
   dev->tbusy = 0;
+
+  MOD_DEC_USE_COUNT;
 
   return 0;
 }
@@ -219,15 +251,16 @@ static int ni52_close(struct device *dev)
 /**********************************************
  * open device 
  */
-
 static int ni52_open(struct device *dev)
 {
+  ni_disint();
   alloc586(dev);
   init586(dev);  
   startrecv586(dev);
+  ni_enaint();
 
-  if(request_irq(dev->irq, &ni52_interrupt,0,"ni52")) 
-  {    
+  if(request_irq(dev->irq, &ni52_interrupt,0,"ni5210")) 
+  {
     ni_reset586();
     return -EAGAIN;
   }  
@@ -237,16 +270,18 @@ static int ni52_open(struct device *dev)
   dev->tbusy = 0;
   dev->start = 1;
 
+  MOD_INC_USE_COUNT;
+
   return 0; /* most done by init */
 }
 
 /**********************************************
  * Check to see if there's an 82586 out there. 
  */
-
 static int check586(struct device *dev,char *where,unsigned size)
 {
-  struct priv *p = (struct priv *) dev->priv;
+  struct priv pb;
+  struct priv *p = /* (struct priv *) dev->priv*/ &pb;
   char *iscp_addrs[2];
   int i;
 
@@ -254,7 +289,12 @@ static int check586(struct device *dev,char *where,unsigned size)
   p->memtop = where + size;
   p->scp = (struct scp_struct *)(p->base + SCP_DEFAULT_ADDRESS);
   memset((char *)p->scp,0, sizeof(struct scp_struct));
+  for(i=0;i<sizeof(struct scp_struct);i++) /* memory was writeable? */
+    if(((char *)p->scp)[i])
+      return 0;
   p->scp->sysbus = SYSBUSVAL;        /* 1 = 8Bit-Bus, 0 = 16 Bit */
+  if(p->scp->sysbus != SYSBUSVAL)
+    return 0;
   
   iscp_addrs[0] = where;
   iscp_addrs[1]= (char *) p->scp - sizeof(struct iscp_struct);
@@ -269,7 +309,7 @@ static int check586(struct device *dev,char *where,unsigned size)
 
     ni_reset586();
     ni_attn586();
-    DELAY(2);	/* wait a while... */
+    DELAY(1);	/* wait a while... */
 
     if(p->iscp->busy) /* i82586 clears 'busy' after successful init */
       return 0;
@@ -280,13 +320,12 @@ static int check586(struct device *dev,char *where,unsigned size)
 /******************************************************************
  * set iscp at the right place, called by ni52_probe1 and open586. 
  */
-
 void alloc586(struct device *dev)
 {
   struct priv *p =  (struct priv *) dev->priv; 
 
   ni_reset586();
-  DELAY(2);
+  DELAY(1);
 
   p->scp  = (struct scp_struct *)  (p->base + SCP_DEFAULT_ADDRESS);
   p->scb  = (struct scb_struct *)  (dev->mem_start);
@@ -303,10 +342,12 @@ void alloc586(struct device *dev)
   ni_reset586();
   ni_attn586();
 
-  DELAY(2); 
+  DELAY(1); 
 
   if(p->iscp->busy)
     printk("%s: Init-Problems (alloc).\n",dev->name);
+
+  p->reseted = 0;
 
   memset((char *)p->scb,0,sizeof(struct scb_struct));
 }
@@ -314,10 +355,12 @@ void alloc586(struct device *dev)
 /**********************************************
  * probe the ni5210-card
  */
-
 int ni52_probe(struct device *dev)
 {
-  int *port, ports[] = {0x300, 0x280, 0x360 , 0x320 , 0x340, 0};
+#ifndef MODULE
+  int *port;
+  static int ports[] = {0x300, 0x280, 0x360 , 0x320 , 0x340, 0};
+#endif
   int base_addr = dev->base_addr;
 
   if (base_addr > 0x1ff)		/* Check a single specified location. */
@@ -327,6 +370,9 @@ int ni52_probe(struct device *dev)
   else if (base_addr > 0)		/* Don't probe at all. */
     return ENXIO;
 
+#ifdef MODULE
+  printk("%s: no autoprobing allowed for modules.\n",dev->name);
+#else
   for (port = ports; *port; port++) {
     int ioaddr = *port;
     if (check_region(ioaddr, NI52_TOTAL_SIZE))
@@ -340,35 +386,57 @@ int ni52_probe(struct device *dev)
       return 0;
   }
 
+#ifdef FULL_IO_PROBE
+  for(dev->base_addr=0x200;dev->base_addr<0x400;dev->base_addr+=8)
+  {
+    int ioaddr = dev->base_addr;
+    if (check_region(ioaddr, NI52_TOTAL_SIZE))
+      continue;
+    if( !(inb(ioaddr+NI52_MAGIC1) == NI52_MAGICVAL1) || 
+        !(inb(ioaddr+NI52_MAGIC2) == NI52_MAGICVAL2))
+      continue;
+    if (ni52_probe1(dev, ioaddr) == 0)
+      return 0;    
+  }
+#endif
+
+#endif
+
   dev->base_addr = base_addr;
   return ENODEV;
 }
 
 static int ni52_probe1(struct device *dev,int ioaddr)
 {
-  long memaddrs[] = { 0xd0000,0xd2000,0xc8000,0xca000,0xd4000,0xd6000,0xd8000, 0 };
   int i,size;
 
   for(i=0;i<ETH_ALEN;i++)
     dev->dev_addr[i] = inb(dev->base_addr+i);
 
   if(dev->dev_addr[0] != NI52_ADDR0 || dev->dev_addr[1] != NI52_ADDR1
-                                    || dev->dev_addr[2] != NI52_ADDR2)
+     || dev->dev_addr[2] != NI52_ADDR2)
     return ENODEV;
 
-  printk("%s: Ni52 found at %#3lx, ",dev->name,dev->base_addr);
+  printk("%s: NI5210 found at %#3lx, ",dev->name,dev->base_addr);
 
-  request_region(ioaddr,NI52_TOTAL_SIZE,"ni52");
-
-  dev->priv = (void *) kmalloc(sizeof(struct priv),GFP_KERNEL); 
-                                  /* warning: we don't free it on errors */
-  if (dev->priv == NULL)
-     return -ENOMEM;
-  memset((char *) dev->priv,0,sizeof(struct priv));
+  request_region(ioaddr,NI52_TOTAL_SIZE,"ni5210");
 
   /* 
    * check (or search) IO-Memory, 8K and 16K
    */
+#ifdef MODULE
+  size = dev->mem_end - dev->mem_start;
+  if(size != 0x2000 && size != 0x4000)
+  {
+    printk("\n%s: Illegal memory size %d. Allowed is 0x2000 or 0x4000 bytes.\n",dev->name,size);
+    return ENODEV;
+  }
+  if(!check586(dev,(char *) dev->mem_start,size))
+  {
+    printk("?memcheck, Can't find memory at 0x%lx with size %d!\n",dev->mem_start,size);
+    return ENODEV;
+  }
+#else
   if(dev->mem_start != 0) /* no auto-mem-probe */
   {
     size = 0x4000; /* check for 16K mem */
@@ -382,7 +450,9 @@ static int ni52_probe1(struct device *dev,int ioaddr)
   }
   else  
   {
-    for(i=0;;i++)
+   static long memaddrs[] = { 0xc8000,0xca000,0xcc000,0xce000,0xd0000,0xd2000,
+                              0xd4000,0xd6000,0xd8000,0xda000,0xdc000, 0 };
+   for(i=0;;i++)
     {
       if(!memaddrs[i]) {
         printk("?memprobe, Can't find io-memory!\n");
@@ -398,7 +468,18 @@ static int ni52_probe1(struct device *dev,int ioaddr)
     }
   }
   dev->mem_end = dev->mem_start + size; /* set mem_end showed by 'ifconfig' */
+#endif
+
+  dev->priv = (void *) kmalloc(sizeof(struct priv),GFP_KERNEL); 
+  if(dev->priv == NULL)
+  {
+    printk("%s: Ooops .. can't allocate private driver memory.\n",dev->name);
+    return -ENOMEM;
+  }
+                                  /* warning: we don't free it on errors */
+  memset((char *) dev->priv,0,sizeof(struct priv));
   
+  ((struct priv *) (dev->priv))->memtop = (char *) dev->mem_start + size;
   ((struct priv *) (dev->priv))->base =  dev->mem_start + size - 0x01000000;
   alloc586(dev);
 
@@ -420,11 +501,13 @@ static int ni52_probe1(struct device *dev,int ioaddr)
       printk("?autoirq, Failed to detect IRQ line!\n"); 
       return 1;
     }
+    printk("IRQ %d (autodetected).\n",dev->irq);
   }
-  else if(dev->irq == 2) 
-    dev->irq = 9;
-
-  printk("IRQ %d.\n",dev->irq);
+  else  {
+    if(dev->irq == 2)
+      dev->irq = 9;
+    printk("IRQ %d (assigned and not checked!).\n",dev->irq);
+  }
 
   dev->open            = &ni52_open;
   dev->stop            = &ni52_close;
@@ -451,7 +534,6 @@ static int ni52_probe1(struct device *dev,int ioaddr)
 static int init586(struct device *dev)
 {
   void *ptr;
-  unsigned long s;
   int i,result=0;
   struct priv *p = (struct priv *) dev->priv;
   volatile struct configure_cmd_struct  *cfg_cmd;
@@ -469,7 +551,7 @@ static int init586(struct device *dev)
   cfg_cmd->cmd_link   = 0xffff;
 
   cfg_cmd->byte_cnt   = 0x0a; /* number of cfg bytes */
-  cfg_cmd->fifo       = 0x08; /* fifo-limit (8=tx:32/rx:64) */
+  cfg_cmd->fifo       = fifo; /* fifo-limit (8=tx:32/rx:64) */
   cfg_cmd->sav_bf     = 0x40; /* hold or discard bad recv frames (bit 7) */
   cfg_cmd->adr_len    = 0x2e; /* addr_len |!src_insert |pre-len |loopback */
   cfg_cmd->priority   = 0x00;
@@ -477,25 +559,31 @@ static int init586(struct device *dev)
   cfg_cmd->time_low   = 0x00;
   cfg_cmd->time_high  = 0xf2;
   cfg_cmd->promisc    = 0;
-  if(dev->flags&(IFF_ALLMULTI|IFF_PROMISC))
+  if(dev->flags & IFF_ALLMULTI) {
+    int len = ((char *) p->iscp - (char *) ptr - 8) / 6;
+    if(num_addrs > len)  {
+      printk("%s: switching to promisc. mode\n",dev->name);
+      dev->flags|=IFF_PROMISC;
+    }
+  }
+  if(dev->flags&IFF_PROMISC)
   {
-	cfg_cmd->promisc=1;
-	dev->flags|=IFF_PROMISC;
+       cfg_cmd->promisc=1;
+       dev->flags|=IFF_PROMISC;
   }
   cfg_cmd->carr_coll  = 0x00;
  
   p->scb->cbl_offset = make16(cfg_cmd);
+  p->scb->cmd_ruc = 0;
 
-  p->scb->cmd = CUC_START; /* cmd.-unit start */
+  p->scb->cmd_cuc = CUC_START; /* cmd.-unit start */
   ni_attn586();
- 
-  s = jiffies; /* warning: only active with interrupts on !! */
-  while(!(cfg_cmd->cmd_status & STAT_COMPL)) 
-    if(jiffies-s > 30) break;
+
+  WAIT_4_STAT_COMPL(cfg_cmd);
 
   if((cfg_cmd->cmd_status & (STAT_OK|STAT_COMPL)) != (STAT_COMPL|STAT_OK))
   {
-    printk("%s (ni52): configure command failed: %x\n",dev->name,cfg_cmd->cmd_status);
+    printk("%s: configure command failed: %x\n",dev->name,cfg_cmd->cmd_status);
     return 1; 
   }
 
@@ -512,12 +600,10 @@ static int init586(struct device *dev)
 
   p->scb->cbl_offset = make16(ias_cmd);
 
-  p->scb->cmd = CUC_START; /* cmd.-unit start */
+  p->scb->cmd_cuc = CUC_START; /* cmd.-unit start */
   ni_attn586();
 
-  s = jiffies;
-  while(!(ias_cmd->cmd_status & STAT_COMPL)) 
-    if(jiffies-s > 30) break;
+  WAIT_4_STAT_COMPL(ias_cmd);
 
   if((ias_cmd->cmd_status & (STAT_OK|STAT_COMPL)) != (STAT_OK|STAT_COMPL)) {
     printk("%s (ni52): individual address setup command failed: %04x\n",dev->name,ias_cmd->cmd_status);
@@ -535,28 +621,27 @@ static int init586(struct device *dev)
   tdr_cmd->status      = 0;
 
   p->scb->cbl_offset = make16(tdr_cmd);
-
-  p->scb->cmd = CUC_START; /* cmd.-unit start */
+  p->scb->cmd_cuc = CUC_START; /* cmd.-unit start */
   ni_attn586();
 
-  s = jiffies; 
-  while(!(tdr_cmd->cmd_status & STAT_COMPL))
-    if(jiffies - s > 30) {
-      printk("%s: Problems while running the TDR.\n",dev->name);
-      result = 1;
-    }
+  WAIT_4_STAT_COMPL(tdr_cmd);
 
-  if(!result)
+  if(!(tdr_cmd->cmd_status & STAT_COMPL))
   {
-    DELAY(2); /* wait for result */
+    printk("%s: Problems while running the TDR.\n",dev->name);
+  }
+  else
+  {
+    DELAY_16(); /* wait for result */
     result = tdr_cmd->status;
 
-    p->scb->cmd = p->scb->status & STAT_MASK;
+    p->scb->cmd_cuc = p->scb->cus & STAT_MASK;
     ni_attn586(); /* ack the interrupts */
 
-    if(result & TDR_LNK_OK) ;
+    if(result & TDR_LNK_OK) 
+      ;
     else if(result & TDR_XCVR_PRB)
-      printk("%s: TDR: Transceiver problem!\n",dev->name);
+      printk("%s: TDR: Transceiver problem. Check the cable(s)!\n",dev->name);
     else if(result & TDR_ET_OPN)
       printk("%s: TDR: No correct termination %d clocks away.\n",dev->name,result & TDR_TIMEMASK);
     else if(result & TDR_ET_SRT) 
@@ -567,12 +652,30 @@ static int init586(struct device *dev)
     else
       printk("%s: TDR: Unknown status %04x\n",dev->name,result);
   }
- 
-   /* 
-    * ack interrupts 
-    */
-  p->scb->cmd = p->scb->status & STAT_MASK;
-  ni_attn586();
+
+  /*
+   * Multicast setup
+   */
+  if(num_addrs && !(dev->flags & IFF_PROMISC) )
+  {
+    mc_cmd = (struct mcsetup_cmd_struct *) ptr;
+    mc_cmd->cmd_status = 0;
+    mc_cmd->cmd_cmd = CMD_MCSETUP | CMD_LAST;
+    mc_cmd->cmd_link = 0xffff;
+    mc_cmd->mc_cnt = num_addrs * 6;
+
+    for(i=0;i<num_addrs;i++,dmi=dmi->next)
+      memcpy((char *) mc_cmd->mc_list[i], dmi->dmi_addr,6);
+
+    p->scb->cbl_offset = make16(mc_cmd);
+    p->scb->cmd_cuc = CUC_START;
+    ni_attn586();
+
+    WAIT_4_STAT_COMPL(mc_cmd);
+
+    if( (mc_cmd->cmd_status & (STAT_COMPL|STAT_OK)) != (STAT_COMPL|STAT_OK) )
+      printk("%s: Can't apply multicast-address-list.\n",dev->name);
+  }
 
    /*
     * alloc nop/xmit-cmds
@@ -586,8 +689,6 @@ static int init586(struct device *dev)
     p->nop_cmds[i]->cmd_link   = make16((p->nop_cmds[i]));
     ptr = (char *) ptr + sizeof(struct nop_cmd_struct);
   }
-  p->xmit_cmds[0] = (struct transmit_cmd_struct *)ptr; /* transmit cmd/buff 0 */
-  ptr = (char *) ptr + sizeof(struct transmit_cmd_struct);
 #else
   for(i=0;i<NUM_XMIT_BUFFS;i++)
   {
@@ -596,59 +697,18 @@ static int init586(struct device *dev)
     p->nop_cmds[i]->cmd_status = 0;
     p->nop_cmds[i]->cmd_link   = make16((p->nop_cmds[i]));
     ptr = (char *) ptr + sizeof(struct nop_cmd_struct);
-    p->xmit_cmds[i] = (struct transmit_cmd_struct *)ptr; /*transmit cmd/buff 0*/
-    ptr = (char *) ptr + sizeof(struct transmit_cmd_struct);
   }
 #endif
 
   ptr = alloc_rfa(dev,(void *)ptr); /* init receive-frame-area */ 
-
-  /* 
-   * Multicast setup
-   */
-  
-  if(dev->mc_count)
-  { /* I don't understand this: do we really need memory after the init? */
-    int len = ((char *) p->iscp - (char *) ptr - 8) / 6;
-    if(len <= 0)
-    {
-      printk("%s: Ooooops, no memory for MC-Setup!\n",dev->name);
-    }
-    else
-    {
-      if(len < num_addrs)
-      {
-      	/* BUG - should go ALLMULTI in this case */
-        num_addrs = len;
-        printk("%s: Sorry, can only apply %d MC-Address(es).\n",dev->name,num_addrs);
-      }
-      mc_cmd = (struct mcsetup_cmd_struct *) ptr;
-      mc_cmd->cmd_status = 0;
-      mc_cmd->cmd_cmd = CMD_MCSETUP | CMD_LAST;
-      mc_cmd->cmd_link = 0xffff;
-      mc_cmd->mc_cnt = num_addrs * 6;
-      for(i=0;i<num_addrs;i++)
-      {
-		memcpy((char *) mc_cmd->mc_list[i], dmi->dmi_addr,6);
-		dmi=dmi->next;
-      }
-      p->scb->cbl_offset = make16(mc_cmd);
-      p->scb->cmd = CUC_START;
-      ni_attn586();
-      s = jiffies;
-      while(!(mc_cmd->cmd_status & STAT_COMPL))
-        if(jiffies - s > 30)
-          break;
-      if(!(mc_cmd->cmd_status & STAT_COMPL))
-        printk("%s: Can't apply multicast-address-list.\n",dev->name);
-    }
-  }
 
   /*
    * alloc xmit-buffs / init xmit_cmds
    */
   for(i=0;i<NUM_XMIT_BUFFS;i++)
   {
+    p->xmit_cmds[i] = (struct transmit_cmd_struct *)ptr; /*transmit cmd/buff 0*/
+    ptr = (char *) ptr + sizeof(struct transmit_cmd_struct);
     p->xmit_cbuffs[i] = (char *)ptr; /* char-buffs */
     ptr = (char *) ptr + XMIT_BUFF_SIZE;
     p->xmit_buffs[i] = (struct tbd_struct *)ptr; /* TBD */
@@ -660,6 +720,7 @@ static int init586(struct device *dev)
     }   
     memset((char *)(p->xmit_cmds[i]) ,0, sizeof(struct transmit_cmd_struct));
     memset((char *)(p->xmit_buffs[i]),0, sizeof(struct tbd_struct));
+    p->xmit_cmds[i]->cmd_link = make16(p->nop_cmds[(i+1)%NUM_XMIT_BUFFS]);
     p->xmit_cmds[i]->cmd_status = STAT_COMPL;
     p->xmit_cmds[i]->cmd_cmd = CMD_XMIT | CMD_INT;
     p->xmit_cmds[i]->tbd_offset = make16((p->xmit_buffs[i]));
@@ -674,17 +735,26 @@ static int init586(struct device *dev)
 #endif
 
    /*
-    * 'start transmitter' (nop-loop)
+    * 'start transmitter'
     */
 #ifndef NO_NOPCOMMANDS
   p->scb->cbl_offset = make16(p->nop_cmds[0]);
-  p->scb->cmd = CUC_START;
+  p->scb->cmd_cuc = CUC_START;
   ni_attn586();
   WAIT_4_SCB_CMD();
 #else
-  p->xmit_cmds[0]->cmd_link = 0xffff;
-  p->xmit_cmds[0]->cmd_cmd  = CMD_XMIT | CMD_LAST | CMD_INT;
+  p->xmit_cmds[0]->cmd_link = make16(p->xmit_cmds[0]);
+  p->xmit_cmds[0]->cmd_cmd  = CMD_XMIT | CMD_SUSPEND | CMD_INT;
 #endif
+
+  /*
+   * ack. interrupts
+   */
+  p->scb->cmd_cuc = p->scb->cus & STAT_MASK;
+  ni_attn586();
+  DELAY_16();
+
+  ni_enaint();
 
   return 0;
 }
@@ -701,20 +771,22 @@ static void *alloc_rfa(struct device *dev,void *ptr)
   int i;
   struct priv *p = (struct priv *) dev->priv;
 
-  memset((char *) rfd,0,sizeof(struct rfd_struct)*p->num_recv_buffs);
+  memset((char *) rfd,0,sizeof(struct rfd_struct)*(p->num_recv_buffs+rfdadd));
   p->rfd_first = rfd;
 
-  for(i = 0; i < p->num_recv_buffs; i++)
-    rfd[i].next = make16(rfd + (i+1) % p->num_recv_buffs);
-  rfd[p->num_recv_buffs-1].last = RFD_SUSP;   /* RU suspend */
+  for(i = 0; i < (p->num_recv_buffs+rfdadd); i++) {
+    rfd[i].next = make16(rfd + (i+1) % (p->num_recv_buffs+rfdadd) );
+    rfd[i].rbd_offset = 0xffff;
+  }
+  rfd[p->num_recv_buffs-1+rfdadd].last = RFD_SUSP;   /* RU suspend */
 
-  ptr = (void *) (rfd + p->num_recv_buffs);
+  ptr = (void *) (rfd + (p->num_recv_buffs + rfdadd) );
 
   rbd = (struct rbd_struct *) ptr;
   ptr = (void *) (rbd + p->num_recv_buffs);
 
    /* clr descriptors */
-  memset((char *) rbd,0,sizeof(struct rbd_struct)*p->num_recv_buffs);
+  memset((char *) rbd,0,sizeof(struct rbd_struct)*(p->num_recv_buffs));
 
   for(i=0;i<p->num_recv_buffs;i++)
   {
@@ -725,7 +797,7 @@ static void *alloc_rfa(struct device *dev,void *ptr)
   }
 
   p->rfd_top  = p->rfd_first;
-  p->rfd_last = p->rfd_first + p->num_recv_buffs - 1;
+  p->rfd_last = p->rfd_first + (p->num_recv_buffs - 1 + rfdadd);
 
   p->scb->rfa_offset		= make16(p->rfd_first);
   p->rfd_first->rbd_offset	= make16(rbd);
@@ -742,53 +814,72 @@ static void ni52_interrupt(int irq,struct pt_regs *reg_ptr)
 {
   struct device *dev = (struct device *) irq2dev_map[irq];
   unsigned short stat;
+  int cnt=0;
   struct priv *p;
 
-  if (dev == NULL) {
-    printk ("ni52-interrupt: irq %d for unknown device.\n",(int) -(((struct pt_regs *)reg_ptr)->orig_eax+2));
+  if (!dev) {
+    printk ("ni5210-interrupt: irq %d for unknown device.\n",irq);
     return;
   }
   p = (struct priv *) dev->priv;
 
+  if(debuglevel > 1)
+    printk("I");
+
   dev->interrupt = 1;
 
-  while((stat=p->scb->status & STAT_MASK))
-  {
-    p->scb->cmd = stat;
-    ni_attn586(); /* ack inter. */
+  WAIT_4_SCB_CMD(); /* wait for last command  */
 
-   if(stat & STAT_CX)    /* command with I-bit set complete */
-      ni52_xmt_int(dev);
+  while((stat=p->scb->cus & STAT_MASK))
+  {
+    p->scb->cmd_cuc = stat;
+    ni_attn586();
 
     if(stat & STAT_FR)   /* received a frame */
       ni52_rcv_int(dev);
+
+    if(stat & STAT_RNR) /* RU went 'not ready' */
+    {
+      printk("(R)");
+      if(p->scb->rus & RU_SUSPEND) /* special case: RU_SUSPEND */
+      {
+        WAIT_4_SCB_CMD();
+        p->scb->cmd_ruc = RUC_RESUME;
+        ni_attn586();
+        WAIT_4_SCB_CMD_RUC();
+      }
+      else
+      {
+        printk("%s: Receiver-Unit went 'NOT READY': %04x/%02x.\n",dev->name,(int) stat,(int) p->scb->rus);
+        ni52_rnr_int(dev); 
+      }
+    }
+
+    if(stat & STAT_CX)    /* command with I-bit set complete */
+       ni52_xmt_int(dev);
 
 #ifndef NO_NOPCOMMANDS
     if(stat & STAT_CNA)  /* CU went 'not ready' */
     {
       if(dev->start)
-        printk("%s: oops! CU has left active state. stat: %04x/%04x.\n",dev->name,(int) stat,(int) p->scb->status);
+        printk("%s: oops! CU has left active state. stat: %04x/%02x.\n",dev->name,(int) stat,(int) p->scb->cus);
     }
 #endif
 
-    if(stat & STAT_RNR) /* RU went 'not ready' */
-    {
-      if(p->scb->status & RU_SUSPEND) /* special case: RU_SUSPEND */
-      {
-        WAIT_4_SCB_CMD();
-        p->scb->cmd = RUC_RESUME;
-        ni_attn586();
-      }
-      else
-      {
-        printk("%s: Receiver-Unit went 'NOT READY': %04x/%04x.\n",dev->name,(int) stat,(int) p->scb->status);
-        ni52_rnr_int(dev); 
-      }
-    }
+    if(debuglevel > 1)
+      printk("%d",cnt++);
+
     WAIT_4_SCB_CMD(); /* wait for ack. (ni52_xmt_int can be faster than ack!!) */
-    if(p->scb->cmd)   /* timed out? */
+    if(p->scb->cmd_cuc)   /* timed out? */
+    {
+      printk("%s: Acknowledge timed out.\n",dev->name);
+      ni_disint();
       break;
+    }
   }
+
+  if(debuglevel > 1)
+    printk("i");
 
   dev->interrupt = 0;
 }
@@ -799,17 +890,20 @@ static void ni52_interrupt(int irq,struct pt_regs *reg_ptr)
 
 static void ni52_rcv_int(struct device *dev)
 {
-  int status;
+  int status,cnt=0;
   unsigned short totlen;
   struct sk_buff *skb;
   struct rbd_struct *rbd;
   struct priv *p = (struct priv *) dev->priv;
 
-  for(;(status = p->rfd_top->status) & STAT_COMPL;)
+  if(debuglevel > 0)
+    printk("R");
+
+  for(;(status = p->rfd_top->stat_high) & RFD_COMPL;)
   {
       rbd = (struct rbd_struct *) make32(p->rfd_top->rbd_offset);
 
-      if(status & STAT_OK) /* frame received without error? */
+      if(status & RFD_OK) /* frame received without error? */
       {
         if( (totlen = rbd->status) & RBD_LAST) /* the first and the last buffer? */
         {
@@ -819,8 +913,9 @@ static void ni52_rcv_int(struct device *dev)
           if(skb != NULL)
           {
             skb->dev = dev;
-            skb_reserve(skb,2);		/* 16 byte alignment */
-            memcpy(skb_put(skb,totlen),(char *) p->base+(unsigned long) rbd->buffer, totlen);
+            skb_reserve(skb,2);
+            skb_put(skb,totlen);
+            eth_copy_and_sum(skb,(char *) p->base+(unsigned long) rbd->buffer,totlen,0);
             skb->protocol=eth_type_trans(skb,dev);
             netif_rx(skb);
             p->stats.rx_packets++;
@@ -830,25 +925,90 @@ static void ni52_rcv_int(struct device *dev)
         }
         else
         {
-          printk("%s: received oversized frame.\n",dev->name);
+          int rstat;
+             /* free all RBD's until RBD_LAST is set */
+          totlen = 0;
+          while(!((rstat=rbd->status) & RBD_LAST))
+          {
+            totlen += rstat & RBD_MASK;
+            if(!rstat)
+            {
+              printk("%s: Whoops .. no end mark in RBD list\n",dev->name);
+              break;
+            }
+            rbd->status = 0;
+            rbd = (struct rbd_struct *) make32(rbd->next);
+          }
+          totlen += rstat & RBD_MASK;
+          rbd->status = 0;
+          printk("%s: received oversized frame! length: %d\n",dev->name,totlen);
           p->stats.rx_dropped++;
-        }
+       }
       }
       else /* frame !(ok), only with 'save-bad-frames' */
       {
         printk("%s: oops! rfd-error-status: %04x\n",dev->name,status);
         p->stats.rx_errors++;
       }
-      p->rfd_top->status = 0;
-      p->rfd_top->last = RFD_SUSP;
-      p->rfd_last->last = 0;        /* delete RU_SUSP  */
+      p->rfd_top->stat_high = 0;
+      p->rfd_top->last = RFD_SUSP; /* maybe exchange by RFD_LAST */
+      p->rfd_top->rbd_offset = 0xffff;
+      p->rfd_last->last = 0;        /* delete RFD_SUSP  */
       p->rfd_last = p->rfd_top;
       p->rfd_top = (struct rfd_struct *) make32(p->rfd_top->next); /* step to next RFD */
+      p->scb->rfa_offset = make16(p->rfd_top);
+
+      if(debuglevel > 0)
+        printk("%d",cnt++);
   }
+
+  if(automatic_resume)
+  {
+    WAIT_4_SCB_CMD();
+    p->scb->cmd_ruc = RUC_RESUME;
+    ni_attn586();
+    WAIT_4_SCB_CMD_RUC();
+  }
+
+#ifdef WAIT_4_BUSY
+  {
+    int i;
+    for(i=0;i<1024;i++)
+    {
+      if(p->rfd_top->status)
+        break;
+      DELAY_16();
+      if(i == 1023)
+        printk("%s: RU hasn't fetched next RFD (not busy/complete)\n",dev->name);
+    }
+  }
+#endif
+
+#ifdef 0
+  if(!at_least_one)
+  { 
+    int i;
+    volatile struct rfd_struct *rfds=p->rfd_top;
+    volatile struct rbd_struct *rbds;
+    printk("%s: received a FC intr. without having a frame: %04x %d\n",dev->name,status,old_at_least);
+    for(i=0;i< (p->num_recv_buffs+4);i++)
+    {
+      rbds = (struct rbd_struct *) make32(rfds->rbd_offset);
+      printk("%04x:%04x ",rfds->status,rbds->status);
+      rfds = (struct rfd_struct *) make32(rfds->next);
+    }
+    printk("\nerrs: %04x %04x stat: %04x\n",(int)p->scb->rsc_errs,(int)p->scb->ovrn_errs,(int)p->scb->status);
+    printk("\nerrs: %04x %04x rus: %02x, cus: %02x\n",(int)p->scb->rsc_errs,(int)p->scb->ovrn_errs,(int)p->scb->rus,(int)p->scb->cus);  
+  }
+  old_at_least = at_least_one;
+#endif
+
+  if(debuglevel > 0)
+    printk("r");
 }
 
 /**********************************************************
- * handle 'Receiver went not ready'. 
+ * handle 'Receiver went not ready'.
  */
 
 static void ni52_rnr_int(struct device *dev)
@@ -857,15 +1017,16 @@ static void ni52_rnr_int(struct device *dev)
 
   p->stats.rx_errors++;
 
-  WAIT_4_SCB_CMD();    /* wait for the last cmd */
-  p->scb->cmd = RUC_ABORT; /* usually the RU is in the 'no resource'-state .. abort it now. */
+  WAIT_4_SCB_CMD();    /* wait for the last cmd, WAIT_4_FULLSTAT?? */
+  p->scb->cmd_ruc = RUC_ABORT; /* usually the RU is in the 'no resource'-state .. abort it now. */
   ni_attn586(); 
-  WAIT_4_SCB_CMD();    /* wait for accept cmd. */
+  WAIT_4_SCB_CMD_RUC();    /* wait for accept cmd. */
 
   alloc_rfa(dev,(char *)p->rfd_first);
+/* maybe add a check here, before restarting the RU */
   startrecv586(dev); /* restart RU */
 
-  printk("%s: Receive-Unit restarted. Status: %04x\n",dev->name,p->scb->status);
+  printk("%s: Receive-Unit restarted. Status: %04x\n",dev->name,p->scb->rus);
 
 }
 
@@ -877,6 +1038,9 @@ static void ni52_xmt_int(struct device *dev)
 {
   int status;
   struct priv *p = (struct priv *) dev->priv;
+
+  if(debuglevel > 0)
+    printk("X");
 
   status = p->xmit_cmds[p->xmit_last]->cmd_status;
   if(!(status & STAT_COMPL))
@@ -910,7 +1074,7 @@ static void ni52_xmt_int(struct device *dev)
     } 
   }
 
-#if (NUM_XMIT_BUFFS != 1)
+#if (NUM_XMIT_BUFFS > 1)
   if( (++p->xmit_last) == NUM_XMIT_BUFFS) 
     p->xmit_last = 0;
 #endif
@@ -927,10 +1091,12 @@ static void startrecv586(struct device *dev)
 {
   struct priv *p = (struct priv *) dev->priv;
 
+  WAIT_4_SCB_CMD();
+  WAIT_4_SCB_CMD_RUC();
   p->scb->rfa_offset = make16(p->rfd_first);
-  p->scb->cmd = RUC_START;
+  p->scb->cmd_ruc = RUC_START;
   ni_attn586();		/* start cmd. */
-  WAIT_4_SCB_CMD();	/* wait for accept cmd. (no timeout!!) */
+  WAIT_4_SCB_CMD_RUC();	/* wait for accept cmd. (no timeout!!) */
 }
 
 /******************************************************
@@ -951,28 +1117,31 @@ static int ni52_send_packet(struct sk_buff *skb, struct device *dev)
     if (tickssofar < 5)
       return 1;
 
-    if(p->scb->status & CU_ACTIVE) /* COMMAND-UNIT active? */
+#ifndef NO_NOPCOMMANDS
+    if(p->scb->cus & CU_ACTIVE) /* COMMAND-UNIT active? */
     {
       dev->tbusy = 0;
 #ifdef DEBUG
       printk("%s: strange ... timeout with CU active?!?\n",dev->name);
       printk("%s: X0: %04x N0: %04x N1: %04x %d\n",dev->name,(int)p->xmit_cmds[0]->cmd_status,(int)p->nop_cmds[0]->cmd_status,(int)p->nop_cmds[1]->cmd_status,(int)p->nop_point);
 #endif
-      p->scb->cmd = CUC_ABORT;
+      p->scb->cmd_cuc = CUC_ABORT;
       ni_attn586();
       WAIT_4_SCB_CMD();
       p->scb->cbl_offset = make16(p->nop_cmds[p->nop_point]);
-      p->scb->cmd = CUC_START;
+      p->scb->cmd_cuc = CUC_START;
       ni_attn586();
       WAIT_4_SCB_CMD();
       dev->trans_start = jiffies;
       return 0;
     }
     else
+#endif
     {
 #ifdef DEBUG
-      printk("%s: xmitter timed out, try to restart! stat: %04x\n",dev->name,p->scb->status);
+      printk("%s: xmitter timed out, try to restart! stat: %02x\n",dev->name,p->scb->cus);
       printk("%s: command-stats: %04x %04x\n",dev->name,p->xmit_cmds[0]->cmd_status,p->xmit_cmds[1]->cmd_status);
+      printk("%s: check, whether you set the right interrupt number!\n",dev->name);
 #endif
       ni52_close(dev);
       ni52_open(dev);
@@ -995,8 +1164,16 @@ static int ni52_send_packet(struct sk_buff *skb, struct device *dev)
     return 0;
   }
 
-  if (set_bit(0, (void*)&dev->tbusy) != 0)
-     printk("%s: Transmitter access conflict.\n", dev->name);
+  if (set_bit(0, (void*)&dev->tbusy)) {
+    printk("%s: Transmitter access conflict.\n", dev->name);
+    return 1;
+  }
+#if(NUM_XMIT_BUFFS > 1)
+  else if(set_bit(0,(void *) &p->lock)) {
+    printk("%s: Queue was locked\n",dev->name);
+    return 1;
+  }
+#endif
   else
   {
     memcpy((char *)p->xmit_cbuffs[p->xmit_count],(char *)(skb->data),skb->len);
@@ -1004,19 +1181,34 @@ static int ni52_send_packet(struct sk_buff *skb, struct device *dev)
 
 #if (NUM_XMIT_BUFFS == 1)
 #  ifdef NO_NOPCOMMANDS
+
+#ifdef DEBUG
+    if(p->scb->cus & CU_ACTIVE)
+    {
+      printk("%s: Hmmm .. CU is still running and we wanna send a new packet.\n",dev->name);
+      printk("%s: stat: %04x %04x\n",dev->name,p->scb->cus,p->xmit_cmds[0]->cmd_status);
+    }
+#endif
+
     p->xmit_buffs[0]->size = TBD_LAST | len;
     for(i=0;i<16;i++)
     {
-      p->scb->cbl_offset = make16(p->xmit_cmds[0]);
-      p->scb->cmd = CUC_START;
       p->xmit_cmds[0]->cmd_status = 0;
+      WAIT_4_SCB_CMD();
+      if( (p->scb->cus & CU_STATUS) == CU_SUSPEND)
+        p->scb->cmd_cuc = CUC_RESUME;
+      else
+      {
+        p->scb->cbl_offset = make16(p->xmit_cmds[0]);
+        p->scb->cmd_cuc = CUC_START;
+      }
 
       ni_attn586();
       dev->trans_start = jiffies;
       if(!i)
         dev_kfree_skb(skb,FREE_WRITE);
       WAIT_4_SCB_CMD();
-      if( (p->scb->status & CU_ACTIVE)) /* test it, because CU sometimes doesn't start immediately */
+      if( (p->scb->cus & CU_ACTIVE)) /* test it, because CU sometimes doesn't start immediately */
         break;
       if(p->xmit_cmds[0]->cmd_status)
         break;
@@ -1042,18 +1234,23 @@ static int ni52_send_packet(struct sk_buff *skb, struct device *dev)
       next_nop = 0;
 
     p->xmit_cmds[p->xmit_count]->cmd_status  = 0;
-    p->xmit_cmds[p->xmit_count]->cmd_link = p->nop_cmds[next_nop]->cmd_link 
-                                          = make16((p->nop_cmds[next_nop]));
+	/* linkpointer of xmit-command allready points to next nop cmd */
+    p->nop_cmds[next_nop]->cmd_link = make16((p->nop_cmds[next_nop]));
     p->nop_cmds[next_nop]->cmd_status = 0;
 
     p->nop_cmds[p->xmit_count]->cmd_link = make16((p->xmit_cmds[p->xmit_count]));
     dev->trans_start = jiffies;
     p->xmit_count = next_nop;
-  
-    cli();
-    if(p->xmit_count != p->xmit_last)
-      dev->tbusy = 0;
-    sti();
+ 
+    {
+      long flags; 
+      save_flags(flags);
+      cli();
+      if(p->xmit_count != p->xmit_last)
+        dev->tbusy = 0;
+      p->lock = 0;
+      restore_flags(flags);
+    }
     dev_kfree_skb(skb,FREE_WRITE);
 #endif
   }
@@ -1070,13 +1267,13 @@ static struct enet_statistics *ni52_get_stats(struct device *dev)
   unsigned short crc,aln,rsc,ovrn;
 
   crc = p->scb->crc_errs; /* get error-statistic from the ni82586 */
-  p->scb->crc_errs -= crc;
+  p->scb->crc_errs = 0;
   aln = p->scb->aln_errs;
-  p->scb->aln_errs -= aln;
+  p->scb->aln_errs = 0;
   rsc = p->scb->rsc_errs;
-  p->scb->rsc_errs -= rsc;
+  p->scb->rsc_errs = 0;
   ovrn = p->scb->ovrn_errs;
-  p->scb->ovrn_errs -= ovrn;
+  p->scb->ovrn_errs = 0;
 
   p->stats.rx_crc_errors += crc;
   p->stats.rx_fifo_errors += ovrn;
@@ -1089,7 +1286,6 @@ static struct enet_statistics *ni52_get_stats(struct device *dev)
 /********************************************************
  * Set MC list ..  
  */
-
 static void set_multicast_list(struct device *dev)
 {
   if(!dev->start)
@@ -1099,12 +1295,92 @@ static void set_multicast_list(struct device *dev)
   }
 
   dev->start = 0;
+
+  ni_disint();
   alloc586(dev);
   init586(dev);  
   startrecv586(dev);
+  ni_enaint();
+
   dev->start = 1;
 }
+
+#ifdef MODULE
+static struct device dev_ni52 = {
+  "        ",  /* "ni5210": device name inserted by net_init.c */
+  0, 0, 0, 0,
+  0x300, 9,   /* I/O address, IRQ */
+  0, 0, 0, NULL, ni52_probe };
+
+/* set: io,irq,memstart,memend or set it when calling insmod */
+int irq=9;
+int io=0x300;
+long memstart=0; /* e.g 0xd0000 */
+long memend=0;   /* e.g 0xd4000 */
+
+int init_module(void)
+{
+  if(io <= 0x0 || !memend || !memstart || irq < 2) {
+    printk("ni52: Autoprobing not allowed for modules.\nni52: Set symbols 'io' 'irq' 'memstart' and 'memend'\n");
+    return -ENODEV;
+  }
+  dev_ni52.irq = irq;
+  dev_ni52.base_addr = io;
+  dev_ni52.mem_end = memend;
+  dev_ni52.mem_start = memstart;
+  if (register_netdev(&dev_ni52) != 0)
+    return -EIO;
+  return 0;
+}
+
+void cleanup_module(void)
+{
+  release_region(dev_ni52.base_addr, NI52_TOTAL_SIZE);
+  kfree(dev_ni52.priv);
+  dev_ni52.priv = NULL;
+  unregister_netdev(&dev_ni52);
+}
+#endif /* MODULE */
+
+#if 0
+/*
+ * DUMP .. we expect a not running CMD unit and enough space
+ */
+void ni52_dump(struct device *dev,void *ptr)
+{
+  struct priv *p = (struct priv *) dev->priv;
+  struct dump_cmd_struct *dump_cmd = (struct dump_cmd_struct *) ptr;
+  int i;
+
+  p->scb->cmd_cuc = CUC_ABORT;
+  ni_attn586();
+  WAIT_4_SCB_CMD();
+  WAIT_4_SCB_CMD_RUC();
+
+  dump_cmd->cmd_status = 0;
+  dump_cmd->cmd_cmd = CMD_DUMP | CMD_LAST;
+  dump_cmd->dump_offset = make16((dump_cmd + 1));
+  dump_cmd->cmd_link = 0xffff;
+
+  p->scb->cbl_offset = make16(dump_cmd);
+  p->scb->cmd_cuc = CUC_START;
+  ni_attn586();
+  WAIT_4_STAT_COMPL(dump_cmd);
+
+  if( (dump_cmd->cmd_status & (STAT_COMPL|STAT_OK)) != (STAT_COMPL|STAT_OK) )
+        printk("%s: Can't get dump information.\n",dev->name);
+
+  for(i=0;i<170;i++) {
+    printk("%02x ",(int) ((unsigned char *) (dump_cmd + 1))[i]);
+    if(i % 24 == 23)
+      printk("\n");
+  }
+  printk("\n");
+}
+#endif
 
 /*
  * END: linux/drivers/net/ni52.c 
  */
+
+

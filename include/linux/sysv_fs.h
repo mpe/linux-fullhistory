@@ -316,8 +316,6 @@ struct sysv_dir_entry {
 #define SYSV_DIRSIZE	sizeof(struct sysv_dir_entry)	/* size of every directory entry */
 
 
-#ifdef __KERNEL__
-
 /* Operations */
 /* ========== */
 
@@ -334,6 +332,8 @@ struct sysv_dir_entry {
 #define SYSV4_SUPER_MAGIC	(SYSV_MAGIC_BASE+FSTYPE_SYSV4)
 #define SYSV2_SUPER_MAGIC	(SYSV_MAGIC_BASE+FSTYPE_SYSV2)
 #define COH_SUPER_MAGIC		(SYSV_MAGIC_BASE+FSTYPE_COH)
+
+#ifdef __KERNEL__
 
 /* sv_get_hash_table(sb,dev,block) is equivalent to  get_hash_table(dev,block,block_size)  */
 static inline struct buffer_head *

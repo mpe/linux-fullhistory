@@ -44,25 +44,24 @@ static volatile struct snd_wait out_sleep_flag[MAX_AUDIO_DEV] =
 {
   {0}};
 
+#define NEUTRAL8	0x80
+#define NEUTRAL16	0x00
+
 static int      ndmaps = 0;
 
 #define MAX_DMAP (MAX_AUDIO_DEV*2)
 
 static struct dma_buffparms dmaps[MAX_DMAP] =
 {
-  {0}};				/*
+  {0}};
 
-				   * Primitive way to allocate
-				   * such a large array.
-				   * Needs dynamic run-time alloction.
-				 */
 static int      space_in_queue (int dev);
 
 static void     dma_reset_output (int dev);
 static void     dma_reset_input (int dev);
 
 static void
-reorganize_buffers (int dev, struct dma_buffparms *dmap)
+reorganize_buffers (int dev, struct dma_buffparms *dmap, int recording)
 {
   /*
    * This routine breaks the physical device buffers to logical ones.
@@ -81,9 +80,9 @@ reorganize_buffers (int dev, struct dma_buffparms *dmap)
       sz = dsp_dev->ioctl (dev, SOUND_PCM_READ_BITS, 0, 1);
 
       if (sz == 8)
-	dmap->neutral_byte = 0x80;
+	dmap->neutral_byte = NEUTRAL8;
       else
-	dmap->neutral_byte = 0x00;
+	dmap->neutral_byte = NEUTRAL16;
 
       if (sr < 1 || nc < 1 || sz < 1)
 	{
@@ -118,11 +117,13 @@ reorganize_buffers (int dev, struct dma_buffparms *dmap)
  */
 
       if (dmap->subdivision == 0)	/* Not already set */
-#ifdef V35A9_COMPATIBLE
-	dmap->subdivision = 1;	/* Init to the default value */
-#else
-	dmap->subdivision = 4;	/* Init to the default value */
+	{
+	  dmap->subdivision = 1;	/* Init to the default value */
+#ifndef V35A9_COMPATIBLE
+	  if (recording)
+	    dmap->subdivision = 4;	/* Use shorter fragments when recording */
 #endif
+	}
 
       bsz /= dmap->subdivision;
 
@@ -155,12 +156,16 @@ reorganize_buffers (int dev, struct dma_buffparms *dmap)
   dmap->nbufs = n;
   dmap->bytes_in_use = n * bsz;
 
+  memset (dmap->raw_buf,
+	  dmap->neutral_byte,
+	  dmap->bytes_in_use);
+
   for (i = 0; i < dmap->nbufs; i++)
     {
       dmap->counts[i] = 0;
     }
 
-  dmap->flags |= DMA_ALLOC_DONE;
+  dmap->flags |= DMA_ALLOC_DONE | DMA_EMPTY;
 }
 
 static void
@@ -182,7 +187,7 @@ dma_init_buffers (int dev, struct dma_buffparms *dmap)
 
   dmap->dma_mode = DMODE_NONE;
   dmap->mapping_flags = 0;
-  dmap->neutral_byte = 0x80;
+  dmap->neutral_byte = NEUTRAL8;
   dmap->cfrag = -1;
   dmap->closing = 0;
 }
@@ -320,7 +325,7 @@ dma_reset_output (int dev)
   restore_flags (flags);
 
   dma_init_buffers (dev, audio_devs[dev]->dmap_out);
-  reorganize_buffers (dev, audio_devs[dev]->dmap_out);
+  reorganize_buffers (dev, audio_devs[dev]->dmap_out, 0);
 }
 
 static void
@@ -338,7 +343,7 @@ dma_reset_input (int dev)
   restore_flags (flags);
 
   dma_init_buffers (dev, audio_devs[dev]->dmap_in);
-  reorganize_buffers (dev, audio_devs[dev]->dmap_in);
+  reorganize_buffers (dev, audio_devs[dev]->dmap_in, 1);
 }
 
 static int
@@ -354,8 +359,10 @@ dma_sync (int dev)
       save_flags (flags);
       cli ();
 
+      audio_devs[dev]->dmap_out->underrun_count = 0;
       while (!current_got_fatal_signal ()
-	     && audio_devs[dev]->dmap_out->qlen)
+	     && audio_devs[dev]->dmap_out->qlen
+	     && audio_devs[dev]->dmap_out->underrun_count == 0)
 	{
 
 	  {
@@ -472,7 +479,7 @@ activate_recording (int dev, struct dma_buffparms *dmap)
     }
 
   if (!(dmap->flags & DMA_ALLOC_DONE))
-    reorganize_buffers (dev, dmap);
+    reorganize_buffers (dev, dmap, 1);
 
   if (!dmap->dma_mode)
     {
@@ -517,7 +524,7 @@ DMAbuf_getrdbuffer (int dev, char **buf, int *len, int dontblock)
     }
   else if (!dmap->qlen)
     {
-      int             timeout;
+      int             tmout;
 
       if ((err = activate_recording (dev, dmap)) < 0)
 	{
@@ -541,16 +548,16 @@ DMAbuf_getrdbuffer (int dev, char **buf, int *len, int dontblock)
 	}
 
       if (!audio_devs[dev]->go)
-	timeout = 0;
+	tmout = 0;
       else
-	timeout = 2 * HZ;
+	tmout = 2 * HZ;
 
 
       {
 	unsigned long   tl;
 
-	if (timeout)
-	  current_set_timeout (tl = jiffies + (timeout));
+	if (tmout)
+	  current_set_timeout (tl = jiffies + (tmout));
 	else
 	  tl = (unsigned long) -1;
 	in_sleep_flag[dev].mode = WK_SLEEP;
@@ -709,6 +716,7 @@ get_buffer_pointer (int dev, int chan, struct dma_buffparms *dmap)
     }
 }
 
+
 int
 DMAbuf_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 {
@@ -730,7 +738,7 @@ DMAbuf_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 
     case SNDCTL_DSP_GETBLKSIZE:
       if (!(dmap_out->flags & DMA_ALLOC_DONE))
-	reorganize_buffers (dev, dmap_out);
+	reorganize_buffers (dev, dmap_out, 0);
 
       return snd_ioctl_return ((int *) arg, dmap_out->fragment_size);
       break;
@@ -784,7 +792,7 @@ DMAbuf_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 	    return -EINVAL;
 
 	  if (!(dmap->flags & DMA_ALLOC_DONE))
-	    reorganize_buffers (dev, dmap);
+	    reorganize_buffers (dev, dmap, (cmd == SNDCTL_DSP_GETISPACE));
 
 	  info->fragstotal = dmap->nbufs;
 
@@ -846,8 +854,16 @@ DMAbuf_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 
 	if ((changed & bits) & PCM_ENABLE_INPUT && audio_devs[dev]->go)
 	  {
+	    int             err;
+
 	    if (!(dmap_in->flags & DMA_ALLOC_DONE))
-	      reorganize_buffers (dev, dmap_in);
+	      {
+		reorganize_buffers (dev, dmap_in, 1);
+	      }
+
+	    if ((err = audio_devs[dev]->prepare_for_input (dev,
+			       dmap_in->fragment_size, dmap_in->nbufs)) < 0)
+	      return -err;
 
 	    activate_recording (dev, dmap_in);
 	  }
@@ -856,8 +872,16 @@ DMAbuf_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 	    dmap_out->mapping_flags & DMA_MAP_MAPPED &&
 	    audio_devs[dev]->go)
 	  {
+	    int             err;
+
 	    if (!(dmap_out->flags & DMA_ALLOC_DONE))
-	      reorganize_buffers (dev, dmap_out);
+	      {
+		reorganize_buffers (dev, dmap_out, 0);
+	      }
+
+	    if ((err = audio_devs[dev]->prepare_for_output (dev,
+			     dmap_out->fragment_size, dmap_out->nbufs)) < 0)
+	      return -err;
 
 	    dmap_out->counts[dmap_out->qhead] = dmap_out->fragment_size;
 	    DMAbuf_start_output (dev, 0, dmap_out->fragment_size);
@@ -1009,10 +1033,10 @@ DMAbuf_getwrbuffer (int dev, char **buf, int *size, int dontblock)
       dma_reset_output (dev);
     }
 
-  dmap->flags &= ~DMA_RESTART;
+  dmap->flags &= ~(DMA_RESTART | DMA_EMPTY);
 
   if (!(dmap->flags & DMA_ALLOC_DONE))
-    reorganize_buffers (dev, dmap);
+    reorganize_buffers (dev, dmap, 0);
 
   if (!dmap->dma_mode)
     {
@@ -1031,7 +1055,7 @@ DMAbuf_getwrbuffer (int dev, char **buf, int *size, int dontblock)
   while (!space_in_queue (dev) &&
 	 !abort)
     {
-      int             timeout;
+      int             tmout;
 
       if (dontblock)
 	{
@@ -1050,16 +1074,16 @@ DMAbuf_getwrbuffer (int dev, char **buf, int *size, int dontblock)
        * Wait for free space
        */
       if (!audio_devs[dev]->go)
-	timeout = 0;
+	tmout = 0;
       else
-	timeout = 2 * HZ;
+	tmout = 2 * HZ;
 
 
       {
 	unsigned long   tl;
 
-	if (timeout)
-	  current_set_timeout (tl = jiffies + (timeout));
+	if (tmout)
+	  current_set_timeout (tl = jiffies + (tmout));
 	else
 	  tl = (unsigned long) -1;
 	out_sleep_flag[dev].mode = WK_SLEEP;
@@ -1094,11 +1118,6 @@ DMAbuf_getwrbuffer (int dev, char **buf, int *size, int dontblock)
 
   *buf = dmap->raw_buf + dmap->qtail * dmap->fragment_size;
   *size = dmap->fragment_size;
-#if 1
-  memset (*buf,
-          dmap->neutral_byte,
-          *size);
-#endif
   dmap->counts[dmap->qtail] = 0;
 
   return dmap->qtail;
@@ -1160,6 +1179,14 @@ DMAbuf_start_output (int dev, int buff_no, int l)
 		dev, dmap->qlen, dmap->nbufs);
 
       dmap->counts[dmap->qtail] = l;
+      if (l < dmap->fragment_size)
+	{
+	  int             p = dmap->fragment_size * dmap->qtail;
+
+	  memset (dmap->raw_buf + p + l,
+		  dmap->neutral_byte,
+		  dmap->fragment_size - l);
+	}
 
       if ((l != dmap->fragment_size) &&
 	  ((audio_devs[dev]->flags & DMA_AUTOMODE) &&
@@ -1266,6 +1293,41 @@ DMAbuf_init (long mem_start)
   return mem_start;
 }
 
+static void
+polish_buffers (struct dma_buffparms *dmap)
+{
+  int             i;
+
+  if (dmap->cfrag < 0)
+    {
+      memset (dmap->raw_buf,
+	      dmap->neutral_byte,
+	      dmap->bytes_in_use);
+      return;
+    }
+
+  for (i = 0; i < dmap->nbufs; i++)
+    {
+      int             p, l;
+
+      p = dmap->fragment_size * i;
+
+      if (i == dmap->cfrag)
+	{
+	  l = dmap->fragment_size - dmap->counts[i];
+	}
+      else
+	l = dmap->fragment_size;
+
+      if (l)
+	{
+	  memset (dmap->raw_buf + p,
+		  dmap->neutral_byte,
+		  l);
+	}
+    }
+}
+
 void
 DMAbuf_outputintr (int dev, int event_type)
 {
@@ -1291,12 +1353,6 @@ DMAbuf_outputintr (int dev, int event_type)
   if (dmap->mapping_flags & DMA_MAP_MAPPED)
     {
       /* mmapped access */
-      int             p;
-
-      p = dmap->fragment_size * dmap->qhead;
-      memset (dmap->raw_buf + p,
-	      dmap->neutral_byte,
-	      dmap->fragment_size);
 
       dmap->qhead = (dmap->qhead + 1) % dmap->nbufs;
       dmap->qlen++;		/* Yes increment it (don't decrement) */
@@ -1334,17 +1390,19 @@ DMAbuf_outputintr (int dev, int event_type)
 	  /* Ignore underrun. Just move the tail pointer forward and go */
 	  if (dmap->closing)
 	    {
+	      polish_buffers (dmap);
 	      audio_devs[dev]->halt_xfer (dev);
 	    }
 	  else
 	    {
 	      dmap->qlen++;
-	      dmap->cfrag = -1;
 	      dmap->qtail = (dmap->qtail + 1) % dmap->nbufs;
 
-	      memset (audio_devs[dev]->dmap_out->raw_buf,
-		      audio_devs[dev]->dmap_out->neutral_byte,
-		      audio_devs[dev]->dmap_out->bytes_in_use);
+	      if (!(dmap->flags & DMA_EMPTY))
+		polish_buffers (dmap);
+
+	      dmap->cfrag = -1;
+	      dmap->flags |= DMA_EMPTY;
 	    }
 	}
 

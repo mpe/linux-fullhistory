@@ -36,13 +36,16 @@ do
     fi
 
     echo "Applying $patch..."
-    gunzip -dc $patchdir/$patch | patch -p1 -s -E -d $sourcedir
-# used to be patch -p1 -s -E -f -d $sourcedir
-    if [ "`find $sourcedir -name \*.rej -print`" ]
+    if (gunzip -dc $patchdir/$patch | grep -v '^\\' | patch -p1 -s -E -d $sourcedir)
+    then
+        echo "Patch failed.  Clean up yourself."
+        break
+    fi
+    if [ "`find $sourcedir '(' -name '*.rej' -o -name '.*.rej' ')' -print`" ]
     then
         echo "Aborting.  Reject files found."
         break
     fi
     # Remove backup files
-    find $sourcedir -name \*.orig -print | xargs rm -f
+    find $sourcedir '(' -name '*.orig' -o -name '.*.orig' ')' -print | xargs rm -f
 done

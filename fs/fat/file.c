@@ -14,6 +14,7 @@
 #include <linux/fcntl.h>
 #include <linux/stat.h>
 #include <linux/string.h>
+#include <linux/pagemap.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -345,6 +346,7 @@ int fat_file_write(
 			}
 			written -= left;
 		}
+		update_vm_cache(inode, filp->f_pos, bh->b_data + (filp->f_pos & (SECTOR_SIZE-1)), written);
 		filp->f_pos += written;
 		if (filp->f_pos > inode->i_size) {
 			inode->i_size = filp->f_pos;

@@ -1,26 +1,19 @@
 This is the README file for the Optics Storage 8000 AT CDROM device driver.
 
-The driver contains code to enable an ISP16 interface if it finds one.  It
-didn't originally (although this README erroneously said so), because I think
-this kind of code should go into its own module. But having to use a hack all
-the time in order to use a part of the standard kernel started to annoy me, so
-I copied the ISP16 code by Eric van der Maarel (maarel@marin.nl) from Vadim
-Model's Sanyo sjcd driver. I'll remove it again from this driver when we have
-some common way to talk to ISP16 interfaces.
+This is the driver for the so-called 'DOLPHIN' drive, with the 34-pin
+Sony-compatible interface. For the IDE-compatible Optics Storage 8001
+drive, you will want the ATAPI CDROM driver. If you have a drive that
+works with this driver, and that doesn't report itself as DOLPHIN,
+please drop me a mail.
 
-My original configuration code for the ISP-16 card can get found at
+The support for multisession CDs is in ALPHA stage. If you use it,
+please mail me your experiences. Multisession support can be disables
+at compile time.
+
+You can find some older versions of the driver at
       dutette.et.tudelft.nl:/pub/linux/
 and at Eberhard's mirror
       ftp.gwdg.de:/pub/linux/cdrom/drivers/optics/
-
-Much more elaborate information can be found at ftp:rbrf.msk.su,
-where Vadim Model (vadim@rbrf.msk.su) has made available an ISP16
-device driver.
-Vadim's directory is
-      rbrf.msk.su:/linux/mediamagic/
-and Eberhard is holding a mirror at
-      ftp.gwdg.de:/pub/linux/cdrom/drivers/sanyo/
-
 
 Before you can use the driver, you have to create the device file once:
  # mknod /dev/optcd0 b 17 0
@@ -36,15 +29,28 @@ or
  # insmod /usr/src/linux/modules/optcd.o optcd=0x340
 with the matching address value of your interface card.
 
-I have tried the module with several 1.2.x kernel versions, and it seems to
-work, as far as I tested. It also seems to work for several 1.3.x versions.
-If you use it, I'd appreciate success/failure reports. If you find a bug,
-try recompiling the driver with some strategically chosen #undef DEBUG_...'s
-changed into #defines (you'll find them in .../include/linux/optcd.h) and
-include the messages generated in your bug report. Good luck.
+The driver employs a number of buffers to do read-ahead and block size
+conversion. The number of buffers is configurable in optcd.h, and has
+influence on the driver performance. For my machine (a P75), 6 buffers
+seems optimal, as can be seen from this table:
 
-I have inserted code to support multisession. It works for me, although
-it is very slow during disk detection. At this time multisession support
-is to be considered experimental. Please mail me your experiences.
+#bufs	kb/s	%cpu
+1	97	0.1
+2	191	0.3
+3	188	0.2
+4	246	0.3
+5	189	19
+6	280	0.4
+7	281	7.0
+8	246	2.8
+16	281	3.4
+
+If you get a throughput significantly below 300 kb/s, try tweaking
+N_BUFS, and don't forget to mail me your results!
+
+I'd appreciate success/failure reports. If you find a bug, try
+recompiling the driver with some strategically chosen debug options
+(these can be found in optcd.h) and include the messages generated in
+your bug report. Good luck.
 
 Leo Spiekman (spiekman@dutette.et.tudelft.nl)

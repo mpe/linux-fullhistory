@@ -95,7 +95,7 @@ int hex2hex(char *source, char *target, char *varline)
 
 
 	fprintf(outf, "/*\n *\t Computer generated file. Do not edit.\n */\n");
-        fprintf(outf, "static int %s_len = %d\n", l);
+        fprintf(outf, "static int %s_len = %d\n", varline, l);
 	fprintf(outf, "static unsigned char %s[] = {\n", varline);
 
 	for (i=0;i<l;i++)

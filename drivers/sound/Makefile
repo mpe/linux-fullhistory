@@ -25,9 +25,15 @@ OBJS   = audio.o dmabuf.o sb_dsp.o \
 	 mad16.o mad16_sb_midi.o cs4232.o maui.o
 endif
 
+ifndef TOPDIR
+TOPDIR=/usr/src/linux
+endif
+
 
 build:
+	@echo Compiling modularized sound driver
 	@make sound.o
+	@echo Sound module compiled.
 
 install:	sound.o
 	cp sound.o $(MODULEDIR)

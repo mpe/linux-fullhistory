@@ -3,6 +3,7 @@
  *
  * Begun 24 March 1995, Stephen Tweedie
  * Added /proc support, Dec 1995
+ * Added bdflush entry and intvec min/max checking, 2/23/96, Tom Dyas.
  */
 
 #include <linux/config.h>
@@ -81,6 +82,8 @@ static void register_proc_table(ctl_table *, struct proc_dir_entry *);
 static void unregister_proc_table(ctl_table *, struct proc_dir_entry *);
 #endif
 
+extern int bdf_prm[], bdflush_min[], bdflush_max[];
+
 static int do_securelevel_strategy (ctl_table *, int *, int, void *, size_t *,
 				    void *, size_t, void **);
 
@@ -123,6 +126,9 @@ static ctl_table vm_table[] = {
 	 &kswapd_ctl, sizeof(kswapd_ctl), 0600, NULL, &proc_dointvec},
 	{VM_FREEPG, "freepages", 
 	 &min_free_pages, 3*sizeof(int), 0600, NULL, &proc_dointvec},
+	{VM_BDFLUSH, "bdflush", &bdf_prm, 9*sizeof(int), 0600, NULL,
+	 &proc_dointvec_minmax, &sysctl_intvec, NULL,
+	 &bdflush_min, &bdflush_max},
 	{0}
 };
 
@@ -582,6 +588,88 @@ int proc_dointvec(ctl_table *table, int write, struct file *filp,
 	return 0;
 }
 
+int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
+		  void *buffer, size_t *lenp)
+{
+	int *i, *min, *max, vleft, first=1, len, left, neg, val;
+	#define TMPBUFLEN 20
+	char buf[TMPBUFLEN], *p;
+	
+	if (!table->data || !table->maxlen || !*lenp ||
+	    (filp->f_pos && !write)) {
+		*lenp = 0;
+		return 0;
+	}
+	
+	i = (int *) table->data;
+	min = (int *) table->extra1;
+	max = (int *) table->extra2;
+	vleft = table->maxlen / sizeof(int);
+	left = *lenp;
+	
+	for (; left && vleft--; i++, first=0) {
+		if (write) {
+			while (left && isspace(get_user((char *) buffer)))
+				left--, ((char *) buffer)++;
+			if (!left)
+				break;
+			neg = 0;
+			len = left;
+			if (len > TMPBUFLEN-1)
+				len = TMPBUFLEN-1;
+			memcpy_fromfs(buf, buffer, len);
+			buf[len] = 0;
+			p = buf;
+			if (*p == '-' && left > 1) {
+				neg = 1;
+				left--, p++;
+			}
+			if (*p < '0' || *p > '9')
+				break;
+			val = simple_strtoul(p, &p, 0);
+			len = p-buf;
+			if ((len < left) && *p && !isspace(*p))
+				break;
+			if (neg)
+				val = -val;
+			buffer += len;
+			left -= len;
+
+			if (min && val < *min++)
+				continue;
+			if (max && val > *max++)
+				continue;
+			*i = val;
+		} else {
+			p = buf;
+			if (!first)
+				*p++ = '\t';
+			sprintf(p, "%d", *i);
+			len = strlen(buf);
+			if (len > left)
+				len = left;
+			memcpy_tofs(buffer, buf, len);
+			left -= len;
+			buffer += len;
+		}
+	}
+
+	if (!write && !first && left) {
+		put_user('\n', (char *) buffer);
+		left--, buffer++;
+	}
+	if (write) {
+		p = (char *) buffer;
+		while (left && isspace(get_user(p++)))
+			left--;
+	}
+	if (write && first)
+		return -EINVAL;
+	*lenp -= left;
+	filp->f_pos += *lenp;
+	return 0;
+}
+
 #else /* CONFIG_PROC_FS */
 
 int proc_dostring(ctl_table *table, int write, struct file *filp,
@@ -592,6 +680,12 @@ int proc_dostring(ctl_table *table, int write, struct file *filp,
 
 int proc_dointvec(ctl_table *table, int write, struct file *filp,
 		  void *buffer, size_t *lenp)
+{
+	return -ENOSYS;
+}
+
+int proc_dointvec_minmax(ctl_table *table, int write, struct file *filp,
+		    void *buffer, size_t *lenp)
 {
 	return -ENOSYS;
 }
@@ -631,6 +725,43 @@ int sysctl_string(ctl_table *table, int *name, int nlen,
 		if (len == table->maxlen)
 			len--;
 		((char *) table->data)[len] = 0;
+	}
+	return 0;
+}
+
+/*
+ * This function makes sure that all of the integers in the vector
+ * are between the minimum and maximum values given in the arrays
+ * table->extra1 and table->extra2, respectively.
+ */
+int sysctl_intvec(ctl_table *table, int *name, int nlen,
+		void *oldval, size_t *oldlenp,
+		void *newval, size_t newlen, void **context)
+{
+	int i, length, *vec, *min, *max;
+
+	if (newval && newlen) {
+		if (newlen % sizeof(int) != 0)
+			return -EINVAL;
+
+		if (!table->extra1 && !table->extra2)
+			return 0;
+
+		if (newlen > table->maxlen)
+			newlen = table->maxlen;
+		length = newlen / sizeof(int);
+
+		vec = (int *) newval;
+		min = (int *) table->extra1;
+		max = (int *) table->extra2;
+
+		for (i = 0; i < length; i++) {
+			int value = get_user(vec + i);
+			if (min && value < min[i])
+				return -EINVAL;
+			if (max && value > max[i])
+				return -EINVAL;
+		}
 	}
 	return 0;
 }

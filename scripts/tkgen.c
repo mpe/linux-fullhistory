@@ -196,7 +196,7 @@ generate_if(struct kconfig * item,
       break;
     case tok_int:
       printf("} then { ");
-      printf(".menu%d.config.f.x%d.x configure -state normal -fore black; ", menu_num, line_num);
+      printf(".menu%d.config.f.x%d.x configure -state normal; ", menu_num, line_num);
       printf(".menu%d.config.f.x%d.l configure -state normal; ", menu_num, line_num);
       printf("} else { ");
       printf(".menu%d.config.f.x%d.x configure -state disabled -fore gray60;", menu_num, line_num );

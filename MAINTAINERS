@@ -102,6 +102,12 @@ M:	smp-patches@lxorguk.ukuu.org.uk
 L:	linux-smp@vger.rutgers.edu
 S:	Maintained
 
+SPARC:
+P:	David S. Miller
+M:	davem@caip.rutgers.edu
+L:	sparclinux@vger.rutgers.edu
+S:	Maintained
+
 REST:
 P:	Linus Torvalds
 S:	Buried alive in email

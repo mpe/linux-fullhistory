@@ -4,6 +4,39 @@ Configuring version 3.5 (for Linux) with some most common soundcards
 NOTE! This document may contain some error. Please inform me
       if you find any mistakes.
 
+Cards that are not (fully) supported by this driver
+---------------------------------------------------
+
+There are many soundcards which don't work with this driver
+version (v3.5). Support for some of them is expected to be
+available during/after summer 1996 (in version 3.6). Please check
+http://personal.eunet.fi/pp/voxware for latest news. Please don't
+mail me and ask about these cards. The unsupported cards are:
+
+	- All PnP soundcards (SB PnP, GUS PnP, Soundscape PnP etc.)
+		(SB PnP in first 3.6-alpha version (Apr?), GUS PnP bit later,
+		Soundscape PnP propably much later, others ???).
+	- Mwave soundcards and motherboards
+		(Version 3.6 or 3.7. Depends on how fast I get a Mwave
+		card and suitable documents for it).
+	- Emu8k (SB 32/AWE)
+		(Propably not before Nov/Dec 96. I know the unofficial
+		AWE programmers guide so don't send me more copies of it).
+	- Diamond Edge 3D
+		(ASAP. In practice this may take relatively long time).
+	- Compaq Deskpro
+		(Version 3.6???)
+	- Miro soundcards
+		(Early 3.6-alpha versions)
+	- OPTi 82C930 based soundcards
+		(Early 3.6-alpha versions?)
+	- Sound Galaxy Washington/Waverider
+		(3.6-alpha versions. Can't promise the waverider synth).
+	- TB Maui
+		(v3.6)
+	- Yamaha OPL4 (on cards having _RAM_ for samples)
+		(Late 96?. Works as OPL3 with current driver versions)
+
 Read this before trying to configure the driver
 -----------------------------------------------
 
@@ -130,7 +163,6 @@ MAD16 and Mozart based cards
 Audio Excell DSP16 
 	Support for this card is made by Riccardo Faccetti
 	(riccardo@cdc8g5.cdc.polimi.it). See aedsp16.c for more info.
-	(This driver is not functional in 3.5 versions of this driver).
 	
 Crystal CS4232 based cards such as AcerMagic S23 and many PC motherboards.
 	CS4232 is a PnP multimedia chip which contains a CS3231A codec,

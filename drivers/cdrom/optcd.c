@@ -1,5 +1,5 @@
 /*	linux/drivers/cdrom/optcd.c - Optics Storage 8000 AT CDROM driver
-	$Id: optcd.c,v 1.20 1996/01/17 19:44:39 root Exp root $
+	$Id: optcd.c,v 1.29 1996/02/22 22:38:30 root Exp $
 
 	Copyright (C) 1995 Leo Spiekman (spiekman@dutette.et.tudelft.nl)
 
@@ -536,13 +536,15 @@ static void bin2bcd(struct cdrom_msf *msf)
 
 
 /* Linear block address to minute, second, frame form */
+#define CD_FPM	(CD_SECS * CD_FRAMES)	/* frames per minute */
+
 static void lba2msf(int lba, struct cdrom_msf *msf)
 {
 	DEBUG((DEBUG_CONV, "lba2msf %d", lba));
 	lba += CD_MSF_OFFSET;
-	msf->cdmsf_min0 = lba / 4500; lba %= 4500;
-	msf->cdmsf_sec0 = lba / 75;
-	msf->cdmsf_frame0 = lba % 75;
+	msf->cdmsf_min0 = lba / CD_FPM; lba %= CD_FPM;
+	msf->cdmsf_sec0 = lba / CD_FRAMES;
+	msf->cdmsf_frame0 = lba % CD_FRAMES;
 	msf->cdmsf_min1 = 0;
 	msf->cdmsf_sec1 = 0;
 	msf->cdmsf_frame1 = 0;
@@ -558,27 +560,17 @@ inline static u_char bcd2bin(u_char bcd)
 }
 
 
-union cd_addr {
-	struct {
-		u_char  minute;
-		u_char  second;
-		u_char  frame;
-	} msf;
-	int     lba;
-};
-
-
-static void msf2lba(union cd_addr *addr)
+static void msf2lba(union cdrom_addr *addr)
 {
-	addr->lba = addr->msf.minute * 4500
-	            + addr->msf.second * 75
+	addr->lba = addr->msf.minute * CD_FPM
+	            + addr->msf.second * CD_FRAMES
 	            + addr->msf.frame - CD_MSF_OFFSET;
 }
 
 
 /* Minute, second, frame address BCD to binary or to linear address,
    depending on MODE */
-static void msf_bcd2bin(union cd_addr *addr)
+static void msf_bcd2bin(union cdrom_addr *addr)
 {
 	addr->msf.minute = bcd2bin(addr->msf.minute);
 	addr->msf.second = bcd2bin(addr->msf.second);
@@ -590,6 +582,7 @@ static void msf_bcd2bin(union cd_addr *addr)
 
 static int audio_status = CDROM_AUDIO_NO_STATUS;
 static char toc_uptodate = 0;
+static char disk_changed = 1;
 
 /* Get drive status, flagging completion of audio play and disk changes. */
 static int drive_status(void)
@@ -610,6 +603,7 @@ static int drive_status(void)
 
 	if (status & ST_DSK_CHG) {
 		toc_uptodate = 0;
+		disk_changed = 1;
 		audio_status = CDROM_AUDIO_NO_STATUS;
 	}
 
@@ -687,11 +681,11 @@ static int get_q_channel(struct cdrom_subchnl *qp)
 	DEBUG((DEBUG_TOC, "%02x %02x %02x %02x %02x %02x %02x %02x %02x %02x",
 		d1, d2, d3, d4, d5, d6, d7, d8, d9, d10));
 
-	msf_bcd2bin((union cd_addr *)/*%%*/&qp->cdsc_absaddr);
-	msf_bcd2bin((union cd_addr *)/*%%*/&qp->cdsc_reladdr);
+	msf_bcd2bin(&qp->cdsc_absaddr);
+	msf_bcd2bin(&qp->cdsc_reladdr);
 	if (qp->cdsc_format == CDROM_LBA) {
-		msf2lba((union cd_addr *)/*%%*/&qp->cdsc_absaddr);
-		msf2lba((union cd_addr *)/*%%*/&qp->cdsc_reladdr);
+		msf2lba(&qp->cdsc_absaddr);
+		msf2lba(&qp->cdsc_reladdr);
 	}
 
 	return 0;
@@ -705,24 +699,18 @@ static int get_q_channel(struct cdrom_subchnl *qp)
 #define ERR_TOC_MISSINGENTRY	0x121
 
 
-struct msf {
-	u_char  minute;
-	u_char  second;
-	u_char  frame;
-};
-
 struct cdrom_disk_info {
-	unsigned char	first;
-	unsigned char	last;
-	struct msf	disk_length;
-	struct msf	first_track;
+	unsigned char		first;
+	unsigned char		last;
+	struct cdrom_msf0	disk_length;
+	struct cdrom_msf0	first_track;
 	/* Multisession info: */
-	unsigned char	next;
-	struct msf	next_session;
-	struct msf	last_session;
-	unsigned char	multi;
-	unsigned char	xa;
-	unsigned char	audio;
+	unsigned char		next;
+	struct cdrom_msf0	next_session;
+	struct cdrom_msf0	last_session;
+	unsigned char		multi;
+	unsigned char		xa;
+	unsigned char		audio;
 };
 static struct cdrom_disk_info disk_info;
 
@@ -980,15 +968,10 @@ static int update_toc(void)
 	 && CURRENT -> cmd == READ && CURRENT -> sector != -1)
 
 
-#define BLOCKSIZE	2048
-#define BLOCKSIZE_RAW	2336
-#define BLOCKSIZE_ALL	2646
-#define N_BUFS		16
+/* Buffers for block size conversion. */
 #define NOBUF		-1
 
-
-/* Buffer for block size conversion. */
-static char buf[BLOCKSIZE * N_BUFS];
+static char buf[CD_FRAMESIZE * N_BUFS];
 static volatile int buf_bn[N_BUFS], next_bn;
 static volatile int buf_in = 0, buf_out = NOBUF;
 
@@ -1066,13 +1049,28 @@ static volatile long state_n = 0;
 #endif
 
 
+/* Used as mutex to keep do_optcd_request (and other processes calling
+   ioctl) out while some process is inside a VFS call.
+   Reverse is accomplished by checking if state = S_IDLE upon entry
+   of opt_ioctl and opt_media_change. */
+static int in_vfs = 0;
+
+
 static volatile int transfer_is_active = 0;
 static volatile int error = 0;	/* %% do something with this?? */
 static int tries;		/* ibid?? */
+static int timeout = 0;
+
+static struct timer_list req_timer = {NULL, NULL, 0, 0, NULL};
+
+#define SET_REQ_TIMER(func, jifs) \
+	req_timer.expires = jiffies+(jifs); \
+	req_timer.function = (void *) (func); \
+	add_timer(&req_timer);
+#define CLEAR_REQ_TIMER	del_timer(&req_timer)
 
 static void poll(void)
 {
-	static int timeout;
 	static volatile int read_count = 1;
 	int flags;
 	int loop_again = 1;
@@ -1117,8 +1115,14 @@ static void poll(void)
 		case S_IDLE:
 			return;
 		case S_START:
-			if (send_cmd(COMDRVST))
+			if (in_vfs)
+				break;
+			if (send_cmd(COMDRVST)) {
+				state = S_IDLE;
+				while (CURRENT_VALID)
+					end_request(0);
 				return;
+			}
 			state = S_READ;
 			timeout = READ_TIMEOUT;
 			break;
@@ -1136,14 +1140,10 @@ static void poll(void)
 			skip = 0;
 			if ((status & ST_DOOR_OPEN) || (status & ST_DRVERR)) {
 				toc_uptodate = 0;
+				opt_invalidate_buffers();
 				printk((status & ST_DOOR_OPEN)
 				       ? "optcd: door open\n"
 				       : "optcd: disk removed\n");
-				if (transfer_is_active) {
-					state = S_START;
-					loop_again = 1;
-					break;
-				}
 				state = S_IDLE;
 				while (CURRENT_VALID)
 					end_request(0);
@@ -1237,8 +1237,8 @@ static void poll(void)
 						break;
 					}
 					fetch_data(buf+
-					    BLOCKSIZE*buf_in,
-					    BLOCKSIZE);
+					    CD_FRAMESIZE*buf_in,
+					    CD_FRAMESIZE);
 					read_count--;
 
 					DEBUG((DEBUG_REQUEST,
@@ -1290,8 +1290,12 @@ static void poll(void)
 				printk("optcd: discard data=%x frames\n",
 					read_count);
 			flush_data();
-			if (send_cmd(COMDRVST))
+			if (send_cmd(COMDRVST)) {
+				state = S_IDLE;
+				while (CURRENT_VALID)
+					end_request(0);
 				return;
+			}
 			state = S_STOPPING;
 			timeout = STOP_TIMEOUT;
 			break;
@@ -1327,11 +1331,15 @@ static void poll(void)
 	if (!timeout--) {
 		printk("optcd: timeout in state %d\n", state);
 		state = S_STOP;
-		if (exec_cmd(COMSTOP) < 0)
+		if (exec_cmd(COMSTOP) < 0) {
+			state = S_IDLE;
+			while (CURRENT_VALID)
+				end_request(0);
 			return;
+		}
 	}
 
-	SET_TIMER(poll, HZ/100);
+	SET_REQ_TIMER(poll, HZ/100);
 }
 
 
@@ -1366,9 +1374,10 @@ static void do_optcd_request(void)
 				}
 				/* Start state machine */
 				state = S_START;
+				timeout = READ_TIMEOUT;
 				tries = 5;
 				/* %% why not start right away?? */
-				SET_TIMER(poll, HZ/100);
+				SET_REQ_TIMER(poll, HZ/100);
 			}
 			break;
 		}
@@ -1536,7 +1545,7 @@ static int cdromreadtocentry(unsigned long arg)
 	/* %% What should go into entry.cdte_datamode? */
 
 	if (entry.cdte_format == CDROM_LBA)
-		msf2lba((union cd_addr *)/*%%*/&entry.cdte_addr);
+		msf2lba(&entry.cdte_addr);
 	else if (entry.cdte_format != CDROM_MSF)
 		return -EINVAL;
 
@@ -1604,7 +1613,7 @@ static int cdromread(unsigned long arg, int blocksize, int cmd)
 {
 	int status;
 	struct cdrom_msf msf;
-	char buf[BLOCKSIZE_ALL];
+	char buf[CD_FRAMESIZE_RAWER];
 
 	status = verify_area(VERIFY_READ, (void *) arg, sizeof msf);
 	if (status)
@@ -1674,7 +1683,7 @@ static int cdrommultisession(unsigned long arg)
 	   && ms.addr_format != CDROM_MSF)
 		return -EINVAL;
 	if (ms.addr_format == CDROM_LBA)
-		msf2lba((union cd_addr *)/*%%*/&ms.addr);
+		msf2lba(&ms.addr);
 
 	ms.xa_flag = disk_info.xa;
 
@@ -1710,6 +1719,7 @@ static int cdromreset(void)
 	}
 
 	toc_uptodate = 0;
+	disk_changed = 1;
 	opt_invalidate_buffers();
 	audio_status = CDROM_AUDIO_NO_STATUS;
 
@@ -1724,7 +1734,7 @@ static int cdromreset(void)
 static int opt_ioctl(struct inode *ip, struct file *fp,
                      unsigned int cmd, unsigned long arg)
 {
-	int err;
+	int status, err, retval = 0;
 
 	DEBUG((DEBUG_VFS, "starting opt_ioctl"));
 
@@ -1734,86 +1744,118 @@ static int opt_ioctl(struct inode *ip, struct file *fp,
 	if (cmd == CDROMRESET)
 		return cdromreset();
 
-	if (state != S_IDLE)
+	/* is do_optcd_request or another ioctl busy? */
+	if (state != S_IDLE || in_vfs)
 		return -EBUSY;
 
-	err = drive_status();
-	if (err < 0) {
-		DEBUG((DEBUG_VFS, "drive_status: %02x", -err));
+	in_vfs = 1;
+
+	status = drive_status();
+	if (status < 0) {
+		DEBUG((DEBUG_VFS, "drive_status: %02x", -status));
+		in_vfs = 0;
 		return -EIO;
 	}
+
+	if (status & ST_DOOR_OPEN)
+		switch (cmd) {	/* Actions that can be taken with door open */
+		case CDROMCLOSETRAY:
+			/* We do this before trying to read the toc. */
+			err = exec_cmd(COMCLOSE);
+			if (err < 0) {
+				DEBUG((DEBUG_VFS,
+				       "exec_cmd COMCLOSE: %02x", -err));
+				in_vfs = 0;
+				return -EIO;
+			}
+			break;
+		default:	in_vfs = 0;
+				return -EBUSY;
+		}
+
 	err = update_toc();
 	if (err < 0) {
 		DEBUG((DEBUG_VFS, "update_toc: %02x", -err));
+		in_vfs = 0;
 		return -EIO;
 	}
 
 	DEBUG((DEBUG_VFS, "ioctl cmd 0x%x", cmd));
 
 	switch (cmd) {
-	case CDROMPAUSE:	return cdrompause();
-	case CDROMRESUME:	return cdromresume();
-	case CDROMPLAYMSF:	return cdromplaymsf(arg);
-	case CDROMPLAYTRKIND:	return cdromplaytrkind(arg);
-	case CDROMREADTOCHDR:	return cdromreadtochdr(arg);
-	case CDROMREADTOCENTRY:	return cdromreadtocentry(arg);
+	case CDROMPAUSE:	retval = cdrompause(); break;
+	case CDROMRESUME:	retval = cdromresume(); break;
+	case CDROMPLAYMSF:	retval = cdromplaymsf(arg); break;
+	case CDROMPLAYTRKIND:	retval = cdromplaytrkind(arg); break;
+	case CDROMREADTOCHDR:	retval = cdromreadtochdr(arg); break;
+	case CDROMREADTOCENTRY:	retval = cdromreadtocentry(arg); break;
 
 	case CDROMSTOP:		err = exec_cmd(COMSTOP);
 				if (err < 0) {
 					DEBUG((DEBUG_VFS,
 						"exec_cmd COMSTOP: %02x",
 						-err));
-					return -EIO;
-				}
-				audio_status = CDROM_AUDIO_NO_STATUS;
+					retval = -EIO;
+				} else
+					audio_status = CDROM_AUDIO_NO_STATUS;
 				break;
-	case CDROMSTART:	err = exec_cmd(COMCLOSE);  /* What else? */
-				if (err < 0) {
-					DEBUG((DEBUG_VFS,
-						"exec_cmd COMCLOSE: %02x",
-						-err));
-					return -EIO;
-				}
-				break;
+	case CDROMSTART:	break;	/* This is a no-op */
 	case CDROMEJECT:	err = exec_cmd(COMUNLOCK);
 				if (err < 0) {
 					DEBUG((DEBUG_VFS,
 						"exec_cmd COMUNLOCK: %02x",
 						-err));
-					return -EIO;
+					retval = -EIO;
+					break;
 				}
 				err = exec_cmd(COMOPEN);
 				if (err < 0) {
 					DEBUG((DEBUG_VFS,
 						"exec_cmd COMOPEN: %02x",
 						-err));
-					return -EIO;
+					retval = -EIO;
 				}
 				break;
 
-	case CDROMVOLCTRL:	return cdromvolctrl(arg);
-	case CDROMSUBCHNL:	return cdromsubchnl(arg);
+	case CDROMVOLCTRL:	retval = cdromvolctrl(arg); break;
+	case CDROMSUBCHNL:	retval = cdromsubchnl(arg); break;
 
-	case CDROMREADAUDIO:	return -EINVAL; /* not implemented */
+	/* The drive detects the mode and automatically delivers the
+	   correct 2048 bytes, so we don't need these IOCTLs */
+	case CDROMREADMODE2:	retval = -EINVAL; break;
+	case CDROMREADMODE1:	retval = -EINVAL; break;
+
+	/* Drive doesn't support reading audio */
+	case CDROMREADAUDIO:	retval = -EINVAL; break;
+
 	case CDROMEJECT_SW:	auto_eject = (char) arg;
 				break;
 
 #ifdef MULTISESSION
-	case CDROMMULTISESSION:	return cdrommultisession(arg);
+	case CDROMMULTISESSION:	retval = cdrommultisession(arg); break;
 #endif
 
-	case CDROM_GET_UPC:	return -EINVAL; /* not implemented */
-	case CDROMVOLREAD:	return -EINVAL; /* not implemented */
+	case CDROM_GET_UPC:	retval = -EINVAL; break; /* not implemented */
+	case CDROMVOLREAD:	retval = -EINVAL; break; /* not implemented */
 
 	case CDROMREADRAW:
-			return cdromread(arg, BLOCKSIZE_RAW, COMREADRAW);
+			/* this drive delivers 2340 bytes in raw mode */
+			retval = cdromread(arg, CD_FRAMESIZE_RAW1, COMREADRAW);
+			break;
 	case CDROMREADCOOKED:
-			return cdromread(arg, BLOCKSIZE, COMREAD);
-	case CDROMSEEK:		return cdromseek(arg);
-	case CDROMPLAYBLK:	return -EINVAL; /* not implemented */
-	default:		return -EINVAL;
+			retval = cdromread(arg, CD_FRAMESIZE, COMREAD);
+			break;
+	case CDROMREADALL:
+			retval = cdromread(arg, CD_FRAMESIZE_RAWER, COMREADALL);
+			break;
+
+	case CDROMSEEK:		retval = cdromseek(arg); break;
+	case CDROMPLAYBLK:	retval = -EINVAL; break; /* not implemented */
+	case CDROMCLOSETRAY:	break;	/* The action was taken earlier */
+	default:		retval = -EINVAL;
 	}
-	return 0;
+	in_vfs = 0;
+	return retval;
 }
 
 
@@ -1824,31 +1866,24 @@ static int opt_open(struct inode *ip, struct file *fp)
 {
 	DEBUG((DEBUG_VFS, "starting opt_open"));
 
-	if (!open_count++ && state == S_IDLE) {
+	if (!open_count && state == S_IDLE) {
 		int status;
 
+		toc_uptodate = 0;
 		opt_invalidate_buffers();
+
+		status = exec_cmd(COMCLOSE);	/* close door */
+		if (status < 0) {
+			DEBUG((DEBUG_VFS, "exec_cmd COMCLOSE: %02x", -status));
+		}
+
 		status = drive_status();
 		if (status < 0) {
 			DEBUG((DEBUG_VFS, "drive_status: %02x", -status));
 			return -EIO;
 		}
 		DEBUG((DEBUG_VFS, "status: %02x", status));
-		if (status & ST_DOOR_OPEN) {
-			status = exec_cmd(COMCLOSE);	/* close door */
-			if (status < 0) {
-				DEBUG((DEBUG_VFS,
-					"exec_cmd COMCLOSE: %02x", -status));
-			}
-			status = drive_status();	/* try again */
-			if (status < 0) {
-				DEBUG((DEBUG_VFS,
-					"drive_status: %02x", -status));
-				return -EIO;
-			}
-			DEBUG((DEBUG_VFS, "status: %02x", status));
-		}
-		if (status & (ST_DOOR_OPEN|ST_DRVERR)) {
+		if ((status & ST_DOOR_OPEN) || (status & ST_DRVERR)) {
 			printk("optcd: no disk or door open\n");
 			return -EIO;
 		}
@@ -1859,8 +1894,14 @@ static int opt_open(struct inode *ip, struct file *fp)
 		status = update_toc();	/* Read table of contents */
 		if (status < 0)	{
 			DEBUG((DEBUG_VFS, "update_toc: %02x", -status));
+	 		status = exec_cmd(COMUNLOCK);	/* Unlock door */
+			if (status < 0) {
+				DEBUG((DEBUG_VFS,
+				       "exec_cmd COMUNLOCK: %02x", -status));
+			}
 			return -EIO;
 		}
+		open_count++;
 	}
 	MOD_INC_USE_COUNT;
 
@@ -1880,6 +1921,7 @@ static void opt_release(struct inode *ip, struct file *fp)
 		ip, ip -> i_rdev, fp));
 
 	if (!--open_count) {
+		toc_uptodate = 0;
 		opt_invalidate_buffers();
 		sync_dev(ip -> i_rdev);
 		invalidate_buffers(ip -> i_rdev);
@@ -1892,8 +1934,23 @@ static void opt_release(struct inode *ip, struct file *fp)
 			DEBUG((DEBUG_VFS, "exec_cmd COMOPEN: %02x", -status));
 		}
 		CLEAR_TIMER;
+		CLEAR_REQ_TIMER;
 	}
 	MOD_DEC_USE_COUNT;
+}
+
+
+/* Check if disk has been changed */
+static int opt_media_change(kdev_t dev)
+{
+	DEBUG((DEBUG_VFS, "executing opt_media_change"));
+	DEBUG((DEBUG_VFS, "dev: 0x%x; disk_changed = %d\n", dev, disk_changed));
+
+	if (disk_changed) {
+		disk_changed = 0;
+		return 1;
+	}
+	return 0;
 }
 
 /* Driver initialisation */
@@ -1939,19 +1996,19 @@ static int version_ok(void)
 
 
 static struct file_operations opt_fops = {
-	NULL,		/* lseek - default */
-	block_read,	/* read - general block-dev read */
-	block_write,	/* write - general block-dev write */
-	NULL,		/* readdir - bad */
-	NULL,		/* select */
-	opt_ioctl,	/* ioctl */
-	NULL,		/* mmap */
-	opt_open,	/* open */
-	opt_release,	/* release */
-	NULL,		/* fsync */
-	NULL,		/* fasync */
-	NULL,		/* media change */
-	NULL		/* revalidate */
+	NULL,			/* lseek - default */
+	block_read,		/* read - general block-dev read */
+	block_write,		/* write - general block-dev write */
+	NULL,			/* readdir - bad */
+	NULL,			/* select */
+	opt_ioctl,		/* ioctl */
+	NULL,			/* mmap */
+	opt_open,		/* open */
+	opt_release,		/* release */
+	NULL,			/* fsync */
+	NULL,			/* fasync */
+	opt_media_change,	/* media change */
+	NULL			/* revalidate */
 };
 
 

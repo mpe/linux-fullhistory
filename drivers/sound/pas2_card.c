@@ -261,7 +261,7 @@ config_pas_hw (struct address_info *hw_config)
   mix_write (P_M_MV508_ADDRESS | 5, PARALLEL_MIXER);
   mix_write (5, PARALLEL_MIXER);
 
-#if defined(CONFIG_SB_EMULATION) && defined(CONFIG_SB)
+#if !defined(DISABLE_SB_EMULATION) && defined(CONFIG_SB)
 
   {
     struct address_info *sb_config;
@@ -386,7 +386,7 @@ attach_pas_card (long mem_start, struct address_info *hw_config)
 	  mem_start = pas_pcm_init (mem_start, hw_config);
 #endif
 
-#if defined(CONFIG_SB_EMULATION) && defined(CONFIG_SB)
+#if !defined(DISABLE_SB_EMULATION) && defined(CONFIG_SB)
 
 	  sb_dsp_disable_midi ();	/*
 					 * The SB emulation don't support *

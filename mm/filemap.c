@@ -293,19 +293,24 @@ repeat:
  * This is a generic file read routine, and uses the
  * inode->i_op->readpage() function for the actual low-level
  * stuff.
+ *
+ * This is really ugly. But the goto's actually try to clarify some
+ * of the logic when it comes to error handling etc.
  */
 #define MAX_READAHEAD (PAGE_SIZE*4)
 int generic_file_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
-	int read = 0;
-	unsigned long pos;
-	unsigned long page_cache = 0;
+	int error, read;
+	unsigned long pos, page_cache;
 	
 	if (count <= 0)
 		return 0;
+	error = 0;
+	read = 0;
+	page_cache = 0;
 
 	pos = filp->f_pos;
-	do {
+	for (;;) {
 		struct page *page;
 		unsigned long offset, addr, nr;
 
@@ -324,14 +329,14 @@ int generic_file_read(struct inode * inode, struct file * filp, char * buf, int 
 		 * Ok, it wasn't cached, so we need to create a new
 		 * page..
 		 */
-		if (!page_cache) {
-			page_cache = __get_free_page(GFP_KERNEL);
-			if (!page_cache) {
-				if (!read)
-					read = -ENOMEM;
-				break;
-			}
-		}
+		if (page_cache)
+			goto new_page;
+
+		error = -ENOMEM;
+		page_cache = __get_free_page(GFP_KERNEL);
+		if (!page_cache)
+			break;
+		error = 0;
 
 		/*
 		 * That could have slept, so we need to check again..
@@ -339,22 +344,8 @@ int generic_file_read(struct inode * inode, struct file * filp, char * buf, int 
 		if (pos >= inode->i_size)
 			break;
 		page = find_page(inode, pos & PAGE_MASK);
-		if (page)
-			goto found_page;
-
-		/*
-		 * Ok, add the new page to the hash-queues...
-		 */
-		page = mem_map + MAP_NR(page_cache);
-		page_cache = 0;
-		page->count++;
-		page->uptodate = 0;
-		page->error = 0;
-		page->offset = pos & PAGE_MASK;
-		add_page_to_inode_queue(inode, page);
-		add_page_to_hash_queue(inode, page);
-
-		inode->i_op->readpage(inode, page);
+		if (!page)
+			goto new_page;
 
 found_page:
 		addr = page_address(page);
@@ -369,15 +360,20 @@ found_page:
 		 *  - if "f_reada" is set
 		 */
 		if (page->locked) {
-			if (nr < count || filp->f_reada) {
-				unsigned long ahead = 0;
-				do {
-					ahead += PAGE_SIZE;
-					page_cache = try_to_read_ahead(inode, pos + ahead, page_cache);
-				} while (ahead < MAX_READAHEAD);
+			unsigned long max_ahead, ahead;
+
+			max_ahead = count - nr;
+			if (filp->f_reada || max_ahead > MAX_READAHEAD)
+				max_ahead = MAX_READAHEAD;
+			ahead = 0;
+			while (ahead < max_ahead) {
+				ahead += PAGE_SIZE;
+				page_cache = try_to_read_ahead(inode, pos + ahead, page_cache);
 			}
 			__wait_on_page(page);
 		}
+		if (!page->uptodate)
+			goto read_page;
 		if (nr > inode->i_size - pos)
 			nr = inode->i_size - pos;
 		memcpy_tofs(buf, (void *) (addr + offset), nr);
@@ -386,7 +382,40 @@ found_page:
 		pos += nr;
 		read += nr;
 		count -= nr;
-	} while (count);
+		if (count)
+			continue;
+		break;
+	
+
+new_page:
+		/*
+		 * Ok, add the new page to the hash-queues...
+		 */
+		addr = page_cache;
+		page = mem_map + MAP_NR(page_cache);
+		page_cache = 0;
+		page->count++;
+		page->uptodate = 0;
+		page->error = 0;
+		page->offset = pos & PAGE_MASK;
+		add_page_to_inode_queue(inode, page);
+		add_page_to_hash_queue(inode, page);
+
+		/*
+		 * Error handling is tricky. If we get a read error,
+		 * the cached page stays in the cache (but uptodate=0),
+		 * and the next process that accesses it will try to
+		 * re-read it. This is needed for NFS etc, where the
+		 * identity of the reader can decide if we can read the
+		 * page or not..
+		 */
+read_page:
+		error = inode->i_op->readpage(inode, page);
+		if (!error)
+			goto found_page;
+		free_page(addr);
+		break;
+	}
 
 	filp->f_pos = pos;
 	filp->f_reada = 1;
@@ -396,6 +425,8 @@ found_page:
 		inode->i_atime = CURRENT_TIME;
 		inode->i_dirt = 1;
 	}
+	if (!read)
+		read = error;
 	return read;
 }
 

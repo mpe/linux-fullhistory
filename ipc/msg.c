@@ -189,14 +189,15 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 	while (!nmsg) {
 		if (msq->msg_perm.seq != (unsigned int) msqid / MSGMNI)
 			return -EIDRM;
-		if ((msgflg & IPC_KERNELD) == 0)
+		if ((msgflg & IPC_KERNELD) == 0) {
 			/*
 			 * Non-root processes may receive from kerneld! 
 			 * i.e. no permission check if called from the kernel
 			 * otoh we don't want user level non-root snoopers...
 			 */
-		if (ipcperms (ipcp, S_IRUGO))
-			return -EACCES;
+			if (ipcperms (ipcp, S_IRUGO))
+				return -EACCES;
+		}
 		if (msgtyp == 0) 
 			nmsg = msq->msg_first;
 		else if (msgtyp > 0) {

@@ -60,7 +60,8 @@ struct __sysctl_args {
 #define VM_SWAPCTL	1	/* struct: Set vm swapping control */
 #define VM_KSWAPD	2	/* struct: control background pagout */
 #define VM_FREEPG	3	/* struct: Set free page thresholds */
-#define VM_MAXID	4
+#define VM_BDFLUSH	4	/* struct: Control buffer cache flushing */
+#define VM_MAXID	5
 
 /* CTL_NET names: */
 
@@ -91,6 +92,8 @@ extern int proc_dostring(ctl_table *, int, struct file *,
 			 void *, size_t *);
 extern int proc_dointvec(ctl_table *, int, struct file *,
 			 void *, size_t *);
+extern int proc_dointvec_minmax(ctl_table *, int, struct file *,
+				void *, size_t *);
 
 extern int do_sysctl (int *name, int nlen,
 		      void *oldval, size_t *oldlenp,
@@ -102,6 +105,7 @@ extern int do_sysctl_strategy (ctl_table *table,
 			       void *newval, size_t newlen, void ** context);
 
 extern ctl_handler sysctl_string;
+extern ctl_handler sysctl_intvec;
 
 extern int do_string (
 	void *oldval, size_t *oldlenp, void *newval, size_t newlen,
@@ -163,6 +167,8 @@ struct ctl_table
 	proc_handler *proc_handler;	/* Callback for text formatting */
 	ctl_handler *strategy;		/* Callback function for all r/w */
 	struct proc_dir_entry *de;	/* /proc control block */
+	void *extra1;
+	void *extra2;
 };
 
 /* struct ctl_table_header is used to maintain dynamic lists of

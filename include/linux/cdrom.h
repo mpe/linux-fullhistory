@@ -27,6 +27,8 @@
 /* most drives don't deliver everything: */
 #define CD_FRAMESIZE_RAW1 (CD_FRAMESIZE_RAW-CD_SYNC_SIZE) /* 2340 */
 #define CD_FRAMESIZE_RAW0 (CD_FRAMESIZE_RAW-CD_SYNC_SIZE-CD_HEAD_SIZE) /* 2336 */
+/* Optics drive also has a 'read all' mode: */
+#define CD_FRAMESIZE_RAWER 2646 /* bytes per frame */
 
 #define CD_EDC_SIZE         4 /* bytes EDC per most raw data frame types */
 #define CD_ZERO_SIZE        8 /* bytes zero per yellow book mode 1 frame */
@@ -96,22 +98,26 @@ struct cdrom_tochdr
 	u_char	cdth_trk1;	/* end track */
 };
 
+struct cdrom_msf0		/* address in MSF format */
+{
+	u_char	minute;
+	u_char	second;
+	u_char	frame;
+};
+
+union cdrom_addr		/* address in either MSF or logical format */
+{
+	struct cdrom_msf0	msf;
+	int			lba;
+};
+
 struct cdrom_tocentry 
 {
 	u_char	cdte_track;
 	u_char	cdte_adr	:4;
 	u_char	cdte_ctrl	:4;
 	u_char	cdte_format;
-	union
-	{
-		struct
-		{
-			u_char	minute;
-			u_char	second;
-			u_char	frame;
-		} msf;
-		int	lba;
-	} cdte_addr;
+	union cdrom_addr cdte_addr;
 	u_char	cdte_datamode;
 };
 
@@ -139,26 +145,8 @@ struct cdrom_subchnl
 	u_char	cdsc_ctrl:	4;
 	u_char	cdsc_trk;
 	u_char	cdsc_ind;
-	union
-	{
-		struct 			
-		{
-			u_char	minute;
-			u_char	second;
-			u_char	frame;
-		} msf;
-		int	lba;
-	} cdsc_absaddr;
-	union 
-	{
-		struct 
-		{
-			u_char	minute;
-			u_char	second;
-			u_char	frame;
-		} msf;
-		int	lba;
-	} cdsc_reladdr;
+	union cdrom_addr cdsc_absaddr;
+	union cdrom_addr cdsc_reladdr;
 };
 
 /*
@@ -192,16 +180,7 @@ struct cdrom_read
  */
 struct cdrom_read_audio
 {
-	union
-	{
-		struct 			
-		{
-			u_char minute;
-			u_char second;
-			u_char frame;
-		} msf;
-		int	lba;
-	} addr; /* frame address */
+	union cdrom_addr addr; /* frame address */
 	u_char addr_format; /* CDROM_LBA or CDROM_MSF */
 	int nframes; /* number of 2352-byte-frames to read at once, limited by the drivers */
 	u_char *buf; /* frame buffer (size: nframes*2352 bytes) */
@@ -214,16 +193,7 @@ struct cdrom_read_audio
  */
 struct cdrom_multisession
 {
-	union
-	{
-		struct 			
-		{
-			u_char minute;
-			u_char second;
-			u_char frame;
-		} msf;
-		int lba;
-	} addr; /* frame address: start-of-last-session (not the new "frame 16"!)*/
+	union cdrom_addr addr; /* frame address: start-of-last-session (not the new "frame 16"!)*/
 	u_char xa_flag; /* 1: "is XA disk" */
 	u_char addr_format; /* CDROM_LBA or CDROM_MSF */
 };
@@ -286,7 +256,7 @@ struct cdrom_multisession
 					/* (struct cdrom_volctrl) */
 
 /* 
- * these ioctls are used in aztcd.c
+ * these ioctls are used in aztcd.c and optcd.c
  */
 #define CDROMREADRAW		0x5314	/* read data in raw mode */
 #define CDROMREADCOOKED		0x5315	/* read data in cooked mode */
@@ -296,6 +266,12 @@ struct cdrom_multisession
  * for playing audio in logical block addressing mode
  */
 #define CDROMPLAYBLK		0x5317	/* (struct cdrom_blk) */
+
+/* 
+ * these ioctls are used in optcd.c
+ */
+#define CDROMREADALL		0x5318	/* read all 2646 bytes */
+#define CDROMCLOSETRAY		0x5319	/* pendant of CDROMEJECT */
 
 
 /*

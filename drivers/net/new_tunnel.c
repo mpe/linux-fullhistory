@@ -357,7 +357,8 @@ int tunnel_init(struct device *dev)
 	dev->mtu		= 1500-tunnel_hlen; 	/* eth_mtu */
 	dev->addr_len		= 0;		/* Is this only for ARP? */
 	dev->tx_queue_len	= 2;		/* Small queue */
-											it should all run through */
+
+	/* it should all run through */
 	memset(dev->broadcast,0xFF, ETH_ALEN);
 
 	/* New-style flags. */

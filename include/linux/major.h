@@ -26,7 +26,7 @@
  *  6 - lp
  *  7 - /dev/vcs*
  *  8 -                        scsi disk
- *  9 - scsi tape
+ *  9 - scsi tape              multiple devices driver
  * 10 - mice
  * 11 -                        scsi cdrom
  * 12 - qic02 tape
@@ -67,6 +67,7 @@
 #define VCS_MAJOR	7
 #define SCSI_DISK_MAJOR	8
 #define SCSI_TAPE_MAJOR	9
+#define MD_MAJOR        9
 #define MOUSE_MAJOR	10
 #define SCSI_CDROM_MAJOR 11
 #define QIC02_TAPE_MAJOR 12

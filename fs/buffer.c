@@ -72,13 +72,16 @@ int buffermem = 0;
 int nr_buffer_heads = 0;
 extern int *blksize_size[];
 
-/* Here is the parameter block for the bdflush process. */
+/* Here is the parameter block for the bdflush process. If you add or
+ * remove any of the parameters, make sure to update kernel/sysctl.c.
+ */
+
 static void wakeup_bdflush(int);
 
 #define N_PARAM 9
 #define LAV
 
-static union bdflush_param{
+union bdflush_param{
 	struct {
 		int nfract;  /* Percentage of buffer cache dirty to 
 				activate bdflush */
@@ -109,8 +112,8 @@ static union bdflush_param{
 
 
 /* These are the min and max parameter values that we will allow to be assigned */
-static int bdflush_min[N_PARAM] = {  0,  10,    5,   25,  0,   100,   100, 1, 1};
-static int bdflush_max[N_PARAM] = {100,5000, 2000, 2000,100, 60000, 60000, 2047, 5};
+int bdflush_min[N_PARAM] = {  0,  10,    5,   60,  0,   100,   100, 1, 1};
+int bdflush_max[N_PARAM] = {100,5000, 2000, 2000,100, 60000, 60000, 2047, 5};
 
 /*
  * Rewrote the wait-routines to use the "new" wait-queue functionality,
@@ -1250,11 +1253,6 @@ int generic_readpage(struct inode * inode, struct page * page)
 
 	address = page_address(page);
 	page->count++;
-	wait_on_page(page);
-	if (page->uptodate) {
-		free_page(address);
-		return 0;
-	}
 	page->locked = 1;
 	
 	i = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;

@@ -78,23 +78,23 @@
  * transmit status (2) (valid if XMIT_ERR == 1)
  */
 
-#define XMIT_RTRY 	0x0200  /* Failed after 16 retransmissions  */
-#define XMIT_LCAR 	0x0400  /* Loss of Carrier */
+#define XMIT_TDRMASK    0x03ff  /* time-domain-reflectometer-value */
+#define XMIT_RTRY 	0x0400  /* Failed after 16 retransmissions  */
+#define XMIT_LCAR 	0x0800  /* Loss of Carrier */
 #define XMIT_LCOL 	0x1000  /* Late collision */
 #define XMIT_RESERV 	0x2000  /* Reserved */
 #define XMIT_UFLO 	0x4000  /* Underflow (late memory) */
 #define XMIT_BUFF 	0x8000  /* Buffering error (no ENP) */
-#define XMIT_TDRMASK    0x003f  /* time-domain-reflectometer-value */
 
 struct init_block 
 {
   unsigned short mode;
   unsigned char eaddr[6];
   unsigned char filter[8];
-  unsigned short rrplow;   /* receive ring pointer (align 8) */
-  unsigned short rrphigh;  /* bit 13-15: number of rmd's (power of 2) */
-  unsigned short trplow;   /* transmit ring pointer (align 8) */
-  unsigned short trphigh;  /* bit 13-15: number of tmd's (power of 2) */
+  /* bit 29-31: number of rmd's (power of 2) */
+  unsigned long rrp;   /* receive ring pointer (align 8) */
+  /* bit 29-31: number of tmd's (power of 2) */
+  unsigned long trp;   /* transmit ring pointer (align 8) */
 };
 
 struct rmd /* Receive Message Descriptor */

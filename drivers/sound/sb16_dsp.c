@@ -536,7 +536,7 @@ sb16_dsp_detect (struct address_info *hw_config)
     {
       Jazz16_set_dma16 (hw_config->dma);
       sb16_dsp_ok = 1;
-      return 0;
+      return 1;
     }
 
   if (!(sb_config = sound_getconf (SNDCARD_SB)))
@@ -580,6 +580,10 @@ sb16_dsp_detect (struct address_info *hw_config)
 void
 unload_sb16 (struct address_info *hw_config)
 {
+  extern int      Jazz16_detected;
+
+  if (Jazz16_detected)
+    return;
 
   sound_free_dma (dma8);
 

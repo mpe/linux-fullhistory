@@ -21,6 +21,7 @@
 #include <linux/stat.h>
 #include <linux/string.h>
 #include <linux/locks.h>
+#include <linux/pagemap.h>
 
 #include <asm/segment.h>
 
@@ -248,13 +249,14 @@ static int sysv_file_write(struct inode * inode, struct file * filp, const char 
 		}
 		/* now either c==sb->sv_block_size or buffer_uptodate(bh) */
 		p = (pos & sb->sv_block_size_1) + bh->b_data;
+		memcpy_fromfs(p, buf, c);
+		update_vm_cache(inode, pos, p, c);
 		pos += c;
 		if (pos > inode->i_size) {
 			inode->i_size = pos;
 			inode->i_dirt = 1;
 		}
 		written += c;
-		memcpy_fromfs(p,buf,c);
 		buf += c;
 		mark_buffer_uptodate(bh, 1);
 		mark_buffer_dirty(bh, 0);

@@ -4,6 +4,7 @@
 mainmenu_option next_comment
 comment 'Character devices'
 
+bool 'Standard/generic serial support' CONFIG_SERIAL
 tristate 'Cyclades async mux support' CONFIG_CYCLADES
 bool 'Stallion multiport serial support' CONFIG_STALDRV
 if [ "$CONFIG_STALDRV" = "y" ]; then

@@ -1,5 +1,28 @@
-Changelog for version 3.5-beta2
+Changelog for version 3.5-beta7
 -------------------------------
+
+Since 3.5-beta6
+- Fixed bugs in mmap() support.
+- Minor changes to Maui driver.
+
+Since 3.5-beta5
+- Fixed crash after recording with ESS688. It's generally a good
+  idea to stop inbound DMA transfers before freeing the memory
+  buffer. 
+- Fixed handling of AD1845 codec (for example Shuttle Sound System).
+- Few other fixes.
+
+Since 3.5-beta4
+- Fixed bug in handling of uninitialized instruments with GUS.
+
+Since 3.5-beta3
+- Few changes which decrease popping at end/beginning of audio playback.
+
+Since 3.5-beta2
+- Removed MAD16+CS4231 hack made in previous version since it didn't
+  help.
+- Fixed the above bug in proper way and in proper place. Many thanks
+  to James Hightower.
 
 Since 3.5-beta1
 - Bugfixes.

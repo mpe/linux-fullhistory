@@ -240,10 +240,10 @@ static void packet_close(struct sock *sk, unsigned long timeout)
 }
 
 /*
- *	Attach a packer hook to a device.
+ *	Attach a packet hook to a device.
  */
 
-int packet_attach(struct sock *sk)
+int packet_attach(struct sock *sk, struct device *dev)
 {
 	struct packet_type *p = (struct packet_type *) kmalloc(sizeof(*p), GFP_KERNEL);
 	if (p == NULL) 
@@ -252,7 +252,7 @@ int packet_attach(struct sock *sk)
 	p->func = packet_rcv;
 	p->type = sk->num;
 	p->data = (void *)sk;
-	p->dev = NULL;
+	p->dev = dev;
 	dev_add_pack(p);
    
 	/*
@@ -260,6 +260,7 @@ int packet_attach(struct sock *sk)
 	 */
    
 	sk->protinfo.af_packet.prot_hook = p;
+	sk->protinfo.af_packet.bound_dev = dev;
 	return 0;	
 }
  
@@ -269,7 +270,8 @@ int packet_attach(struct sock *sk)
 
 static int packet_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
-	char dev[15];
+	char name[15];
+	struct device *dev;
 	
 	/*
 	 *	Check legality
@@ -277,8 +279,8 @@ static int packet_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	 
 	if(addr_len!=sizeof(struct sockaddr))
 		return -EINVAL;
-	strncpy(dev,uaddr->sa_data,14);
-	dev[14]=0;
+	strncpy(name,uaddr->sa_data,14);
+	name[14]=0;
 	
 	/*
 	 *	Lock the device chain while we sanity check
@@ -286,12 +288,14 @@ static int packet_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	 */
 	 
 	dev_lock_list();
-	if((sk->protinfo.af_packet.bound_dev=dev_get(dev))==NULL)
+	dev=dev_get(name);
+	if(dev==NULL)
 	{
 		dev_unlock_list();
 		return -ENODEV;
 	}
-	if(!(sk->protinfo.af_packet.bound_dev->flags&IFF_UP))
+	
+	if(!(dev->flags&IFF_UP))
 	{
 		dev_unlock_list();
 		return -ENETDOWN;
@@ -301,20 +305,28 @@ static int packet_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	 *	Perform the request.
 	 */
 	 
-	memcpy(sk->protinfo.af_packet.device_name,dev,15);
+	memcpy(sk->protinfo.af_packet.device_name,name,15);
+	
+	/*
+	 *	Rewrite an existing hook if present.
+	 */
+	 
 	if(sk->protinfo.af_packet.prot_hook)
+	{
 		dev_remove_pack(sk->protinfo.af_packet.prot_hook);
+		sk->protinfo.af_packet.prot_hook->dev=dev;
+		sk->protinfo.af_packet.bound_dev=dev;
+		dev_add_pack(sk->protinfo.af_packet.prot_hook);
+	}
 	else
 	{
-		int err=packet_attach(sk);
+		int err=packet_attach(sk, dev);
 		if(err)
 		{
 			dev_unlock_list();
 			return err;
 		}
 	}
-	sk->protinfo.af_packet.prot_hook->dev=sk->protinfo.af_packet.bound_dev;
-	dev_add_pack(sk->protinfo.af_packet.prot_hook);
 	/*
 	 *	Now the notifier is set up right this lot is safe.
 	 */
@@ -354,7 +366,7 @@ static int packet_init(struct sock *sk)
 	 *	Attach a protocol block
 	 */
 	 
-	int err=packet_attach(sk);
+	int err=packet_attach(sk, NULL);
 	if(err)
 		return err;
 		

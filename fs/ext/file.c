@@ -22,6 +22,7 @@
 #include <linux/fcntl.h>
 #include <linux/stat.h>
 #include <linux/locks.h>
+#include <linux/pagemap.h>
 
 #define	NBUF	32
 
@@ -241,13 +242,14 @@ static int ext_file_write(struct inode * inode, struct file * filp, const char *
 			}
 		}
 		p = (pos % BLOCK_SIZE) + bh->b_data;
+		memcpy_fromfs(p,buf,c);
+		update_vm_cache(inode, pos, p, c);
 		pos += c;
 		if (pos > inode->i_size) {
 			inode->i_size = pos;
 			inode->i_dirt = 1;
 		}
 		written += c;
-		memcpy_fromfs(p,buf,c);
 		buf += c;
 		mark_buffer_uptodate(bh, 1);
 		mark_buffer_dirty(bh, 0);

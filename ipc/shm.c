@@ -351,7 +351,7 @@ asmlinkage int sys_shmctl (int shmid, int cmd, struct shmid_ds *buf)
  * The per process internal structure for managing segments is
  * `struct vm_area_struct'.
  * A shmat will add to and shmdt will remove from the list.
- * shmd->vm_task	the attacher
+ * shmd->vm_mm		the attacher
  * shmd->vm_start	virt addr of attach, multiple of SHMLBA
  * shmd->vm_end		multiple of SHMLBA
  * shmd->vm_next	next attach for task
@@ -765,7 +765,7 @@ int shm_swap (int prio, unsigned long limit)
 		mem_map[MAP_NR(pte_page(pte))].count--;
 		if (shmd->vm_mm->rss > 0)
 			shmd->vm_mm->rss--;
-		invalidate_range(shmd->vm_mm, shmd->vm_start, shmd->vm_end);
+		invalidate_page(shmd, tmp);
 	    /* continue looping through circular list */
 	    } while (0);
 	    if ((shmd = shmd->vm_next_share) == shp->attaches)

@@ -19,6 +19,18 @@ CONFIG_8390_MODULE  :=
 CONFIG_SLHC_BUILTIN :=
 CONFIG_SLHC_MODULE  :=
 
+ifeq ($(CONFIG_ISDN),y)
+  ifeq ($(CONFIG_ISDN_PPP),y)
+    CONFIG_SLHC_BUILTIN = y
+  endif
+else
+  ifeq ($(CONFIG_ISDN),m)
+    ifeq ($(CONFIG_ISDN_PPP),y)
+      CONFIG_SLHC_MODULE = y
+    endif
+  endif
+endif
+
 ifeq ($(CONFIG_SEEQ8005),y)
 L_OBJS += seeq8005.o
 endif
@@ -292,6 +304,10 @@ endif
 
 ifeq ($(CONFIG_NI52),y)
 L_OBJS += ni52.o
+else
+  ifeq ($(CONFIG_NI52),m)
+  M_OBJS += ni52.o
+  endif
 endif
 
 ifeq ($(CONFIG_NI65),y)

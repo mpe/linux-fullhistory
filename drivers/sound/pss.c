@@ -749,6 +749,7 @@ probe_pss_mss (struct address_info *hw_config)
        timeout < 100000 && (inb (hw_config->io_base + 3) & 0x3f) != 0x04;
        timeout++);
 
+  outb (0x0b, hw_config->io_base + 4);	/* Required by some cards */
   return probe_ms_sound (hw_config);
 }
 

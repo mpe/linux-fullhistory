@@ -72,11 +72,13 @@ Ioctl	Include File		Comments
 0x03	linux/hdreg.h
 0x04	linux/umsdos_fs.h
 0x06	linux/lp.h
+0x09	linux/md.h
 0x12	linux/fs.h
 0x20	linux/cm206.h
 0x22	linux/scc.h
 'A'	linux/apm_bios.h
 'C'	linux/soundcard.h
+'I'	linux/isdn.h
 'K'	linux/kd.h
 'M'	linux/soundcard.h
 'P'	linux/soundcard.h

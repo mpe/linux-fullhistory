@@ -380,10 +380,10 @@ S: The Netherlands
 
 N: Bruno Haible
 E: haible@ma2s2.mathematik.uni-karlsruhe.de
-D: Unified SysV FS based on Xenix FS (part of standard kernel since 0.99.15)
-S: Augartenstrasse 40
-S: D - 76137 Karlsruhe
-S: Germany
+D: SysV FS, shm swapping, memory management fixes
+S: 17 rue Danton
+S: F - 94270 Le Kremlin-Bicêtre
+S: France
 
 N: Greg Hankins
 E: gregh@cc.gatech.edu
@@ -983,6 +983,13 @@ S: MS 352, Fermilab
 S: Post Office Box 500
 S: Batavia, Illinois 60510
 S: USA
+
+N: Leo Spiekman
+E: spiekman@et.tudelft.nl
+D: Optics Storage 8000AT cdrom driver
+W: http://dutettk.et.tudelft.nl/~spiekman
+S: Utrecht
+S: The Netherlands
 
 N: Drew Sullivan
 E: drew@lethe.north.net

@@ -56,8 +56,8 @@ function extract_help () {
      var=$(echo "$1"|sed 's/[][\/.^$*]/\\&/g')
      #now pick out the right help text:
      text=$(sed -n "/^$var[ 	]*\$/,\${
-                        /^$var[ 	]*\$/b
-                        /^#.*/b;/^[ 	]*\$/q
+                        /^$var[ 	]*\$/d
+                        /^#.*/d;/^[ 	]*\$/q
                         p
                     }" Documentation/Configure.help)
 

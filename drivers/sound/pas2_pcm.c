@@ -57,6 +57,7 @@ static unsigned long pcm_count = 0;
 static unsigned short pcm_bitsok = 8;	/* mask of OK bits */
 static int      pcm_busy = 0;
 static int      my_devnum = 0;
+static int      open_mode = 0;
 
 int
 pcm_set_speed (int arg)
@@ -258,6 +259,7 @@ pas_pcm_open (int dev, int mode)
 
 
   pcm_count = 0;
+  open_mode = mode;
 
   return 0;
 }
@@ -322,7 +324,6 @@ pas_pcm_output_block (int dev, unsigned long buf, int count,
       pcm_count = count;
     }
   pas_write (pas_read (FILTER_FREQUENCY) | F_F_PCM_BUFFER_COUNTER | F_F_PCM_RATE_COUNTER, FILTER_FREQUENCY);
-  pas_write (pas_read (PCM_CONTROL) | P_C_PCM_ENABLE | P_C_PCM_DAC_MODE, PCM_CONTROL);
 
   pcm_mode = PCM_DAC;
 
@@ -369,9 +370,27 @@ pas_pcm_start_input (int dev, unsigned long buf, int count,
       pcm_count = count;
     }
   pas_write (pas_read (FILTER_FREQUENCY) | F_F_PCM_BUFFER_COUNTER | F_F_PCM_RATE_COUNTER, FILTER_FREQUENCY);
-  pas_write ((pas_read (PCM_CONTROL) | P_C_PCM_ENABLE) & ~P_C_PCM_DAC_MODE, PCM_CONTROL);
 
   pcm_mode = PCM_ADC;
+
+  restore_flags (flags);
+}
+
+static void
+pas_pcm_trigger (int dev, int state)
+{
+  unsigned long   flags;
+
+  save_flags (flags);
+  cli ();
+  state &= open_mode;
+
+  if (state & PCM_ENABLE_OUTPUT)
+    pas_write (pas_read (PCM_CONTROL) | P_C_PCM_ENABLE | P_C_PCM_DAC_MODE, PCM_CONTROL);
+  else if (state & PCM_ENABLE_INPUT)
+    pas_write ((pas_read (PCM_CONTROL) | P_C_PCM_ENABLE) & ~P_C_PCM_DAC_MODE, PCM_CONTROL);
+  else
+    pas_write (pas_read (PCM_CONTROL) & ~P_C_PCM_ENABLE, PCM_CONTROL);
 
   restore_flags (flags);
 }
@@ -381,6 +400,7 @@ pas_pcm_prepare_for_input (int dev, int bsize, int bcount)
 {
   return 0;
 }
+
 static int
 pas_pcm_prepare_for_output (int dev, int bsize, int bcount)
 {
@@ -403,7 +423,10 @@ static struct audio_operations pas_pcm_operations =
   pas_pcm_reset,
   pas_pcm_reset,
   NULL,
-  NULL
+  NULL,
+  NULL,
+  NULL,
+  pas_pcm_trigger
 };
 
 long

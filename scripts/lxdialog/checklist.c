@@ -332,11 +332,7 @@ dialog_checklist (const char *title, const char *prompt, int height, int width,
 		for (i = 0; i < item_no; i++) {
 		    if (status[i]) {
 			if (flag == FLAG_CHECK) {
-			    if (separate_output) {
-				fprintf (stderr, "%s\n", items[i * 3]);
-			    } else {
-				fprintf (stderr, "\"%s\" ", items[i * 3]);
-			    }
+			    fprintf (stderr, "\"%s\" ", items[i * 3]);
 			} else {
 			    fprintf (stderr, "%s", items[i * 3]);
 			}

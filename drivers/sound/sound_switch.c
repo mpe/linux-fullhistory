@@ -387,11 +387,9 @@ sound_write_sw (int dev, struct fileinfo *file, const char *buf, int count)
       return MIDIbuf_write (dev, file, buf, count);
 #endif
 
-    default:
-      return -EPERM;
     }
 
-  return count;
+  return -EPERM;
 }
 
 int
@@ -569,9 +567,6 @@ sound_ioctl_sw (int dev, struct fileinfo *file,
       break;
 #endif
 
-    default:
-      return -EPERM;
-      break;
     }
 
   return -EPERM;

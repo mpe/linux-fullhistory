@@ -62,7 +62,7 @@ struct loop_info {
 #define LO_CRYPT_NONE	0
 #define LO_CRYPT_XOR	1
 #define LO_CRYPT_DES	2
-#define LO_CRYPT_IDEA	5
+#define LO_CRYPT_IDEA	3
 #define MAX_LO_CRYPT	4
 
 /*

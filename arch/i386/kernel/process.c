@@ -328,16 +328,15 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 	dump->magic = CMAGIC;
 	dump->start_code = 0;
 	dump->start_stack = regs->esp & ~(PAGE_SIZE - 1);
-	dump->u_tsize = ((unsigned long) current->mm->end_code) >> 12;
-	dump->u_dsize = ((unsigned long) (current->mm->brk + (PAGE_SIZE-1))) >> 12;
+	dump->u_tsize = ((unsigned long) current->mm->end_code) >> PAGE_SHIFT;
+	dump->u_dsize = ((unsigned long) (current->mm->brk + (PAGE_SIZE-1))) >> PAGE_SHIFT;
 	dump->u_dsize -= dump->u_tsize;
 	dump->u_ssize = 0;
 	for (i = 0; i < 8; i++)
 		dump->u_debugreg[i] = current->debugreg[i];  
 
-	if (dump->start_stack < TASK_SIZE) {
-		dump->u_ssize = ((unsigned long) (TASK_SIZE - dump->start_stack)) >> 12;
-	}
+	if (dump->start_stack < TASK_SIZE)
+		dump->u_ssize = ((unsigned long) (TASK_SIZE - dump->start_stack)) >> PAGE_SHIFT;
 
 	dump->regs = *regs;
 

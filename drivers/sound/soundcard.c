@@ -34,6 +34,7 @@
 #include <linux/major.h>
 
 static int      chrdev_registered = 0;
+static int      sound_major = SOUND_MAJOR;
 
 static int      is_unloading = 0;
 
@@ -143,6 +144,7 @@ sound_release (inode_handle * inode, file_handle * file)
 
   dev = inode_get_rdev (inode);
   dev = MINOR (dev);
+
   files[dev].flags = file_get_flags (file);
 
   sound_release_sw (dev, &files[dev]);
@@ -336,7 +338,7 @@ void
 soundcard_init (void)
 {
 #ifndef MODULE
-  module_register_chrdev (SOUND_MAJOR, "sound", &sound_fops);
+  module_register_chrdev (sound_major, "sound", &sound_fops);
   chrdev_registered = 1;
 #endif
 
@@ -344,7 +346,6 @@ soundcard_init (void)
 
   sndtable_init (0);		/* Initialize call tables and
 				   * detect cards */
-
 
   if (sndtable_get_cardcount () == 0)
     return;			/* No cards detected */
@@ -380,7 +381,7 @@ free_all_irqs (void)
   for (i = 0; i < 31; i++)
     if (irqs & (1ul << i))
       {
-	printk ("Sound warning: IRQ%d was left allocated. Fixed.\n", i);
+	printk ("Sound warning: IRQ%d was left allocated - fixed.\n", i);
 	snd_release_irq (i);
       }
   irqs = 0;
@@ -419,7 +420,7 @@ init_module (void)
   if (i)
     sound_setup ("sound=", ints);
 
-  err = module_register_chrdev (SOUND_MAJOR, "sound", &sound_fops);
+  err = module_register_chrdev (sound_major, "sound", &sound_fops);
   if (err)
     {
       printk ("sound: driver already loaded/included in kernel\n");
@@ -448,7 +449,7 @@ cleanup_module (void)
       int             i;
 
       if (chrdev_registered)
-	module_unregister_chrdev (SOUND_MAJOR, "sound");
+	module_unregister_chrdev (sound_major, "sound");
 
 #ifdef CONFIG_SEQUENCER
       sound_stop_timer ();
@@ -463,10 +464,9 @@ cleanup_module (void)
       for (i = 0; i < 8; i++)
 	if (dma_alloc_map[i] != DMA_MAP_UNAVAIL)
 	  {
-	    printk ("Sound: Hmm, DMA%d was left allocated\n", i);
+	    printk ("Sound: Hmm, DMA%d was left allocated - fixed\n", i);
 	    sound_free_dma (i);
 	  }
-
     }
 }
 #endif
@@ -627,7 +627,7 @@ sound_alloc_dmap (int dev, struct dma_buffparms *dmap, int chan)
   dmap->raw_buf = NULL;
 
   if (debugmem)
-    printk ("sound: buffsize%d %lu\n", dev, audio_devs[dev]->buffsize);
+    printk ("sound: buffsize[%d] = %lu\n", dev, audio_devs[dev]->buffsize);
 
   audio_devs[dev]->buffsize = dma_buffsize;
 
@@ -742,7 +742,7 @@ conf_printf (char *name, struct address_info *hw_config)
   printk ("<%s> at 0x%03x", name, hw_config->io_base);
 
   if (hw_config->irq)
-    printk (" irq %d", hw_config->irq);
+    printk (" irq %d", (hw_config->irq > 0) ? hw_config->irq : -hw_config->irq);
 
   if (hw_config->dma != -1 || hw_config->dma2 != -1)
     {
@@ -763,7 +763,7 @@ conf_printf2 (char *name, int base, int irq, int dma, int dma2)
   printk ("<%s> at 0x%03x", name, base);
 
   if (irq)
-    printk (" irq %d", irq);
+    printk (" irq %d", (irq > 0) ? irq : -irq);
 
   if (dma != -1 || dma2 != -1)
     {

@@ -9,6 +9,9 @@
  * Copyright 1995 Linus Torvalds
  */
 
+#include <linux/mm.h>
+#include <linux/fs.h>
+
 static inline unsigned long page_address(struct page * page)
 {
 	return PAGE_OFFSET + PAGE_SIZE*(page - mem_map);
@@ -45,12 +48,13 @@ static inline struct page * find_page(struct inode * inode, unsigned long offset
 {
 	struct page *page;
 	unsigned long flags;
-	
+
 	for (page = page_hash(inode, offset); page ; page = page->next_hash) {
 		if (page->inode != inode)
 			continue;
 		if (page->offset != offset)
 			continue;
+		/* Found the page. */
 		save_flags(flags);
 		cli();
 		page->referenced = 1;

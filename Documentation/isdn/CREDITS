@@ -1,0 +1,42 @@
+
+I want to thank all who contributed to this project and especially to:
+(in alphabetical order)
+
+Thomas Bogendörfer (tsbogend@bigbug.franken.de)
+  Tester, lots of bugfixes and hints.
+
+Alan Cox ()
+  For help getting into standard-kernel.
+
+Volker Götz (volker@oops.franken.de)
+  For contribution of man-pages, the imontty-tool and a perfect
+  maintaining of the mailing-list at hub-wue.
+
+Michael Hipp (Michael.Hipp@student.uni-tuebingen.de)
+  For his Sync-PPP-code.
+
+Karsten Keil (isdn4@temic-ech.spacenet.de)
+  For adding 1TR6-support to the Teles-driver.
+
+Michael Knigge (knick@cove.han.de)
+  For contributing the imon-tool
+
+Andreas Kool (akool@Kool.f.EUnet.de)
+  For contribution of the isdnlog/isdnrep-tool
+
+Pedro Roque Marques
+  For lot of new ideas and writing a new driver coming soon.
+
+Jan den Ouden (denouden@groovin.xs4all.nl)
+  For contribution of the teles-driver
+
+Max Riegel (riegel@max.franken.de)
+  For making the ICN hardware-documentation and test-equipment available.
+
+Gerhard 'Fido' Schneider (fido@wuff.franken.de)
+  For heavy-duty-beta-testing with his BBS ;)
+
+Thomas Uhl (uhl@hn-net.de)
+  For distributing the cards.
+  For pushing me to work ;-)
+

@@ -61,8 +61,11 @@ int block_write(struct inode * inode, struct file * filp, const char * buf, int 
 	else
 		size = INT_MAX;
 	while (count>0) {
-		if (block >= size)
+		if (block >= size) {
+			if (!written)
+				written = -ENOSPC;
 			return written;
+		}
 		chars = blocksize - offset;
 		if (chars > count)
 			chars=count;

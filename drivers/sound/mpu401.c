@@ -1089,7 +1089,10 @@ attach_mpu401 (long mem_start, struct address_info *hw_config)
     {
       /* Verify the hardware again */
       if (!reset_mpu401 (devc))
-	return mem_start;
+	{
+	  printk ("MPU401: Device didn't respond\n");
+	  return mem_start;
+	}
 
       if (!devc->shared_irq)
 	if (snd_set_irq_handler (devc->irq, mpuintr, "mpu401", devc->osp) < 0)

@@ -431,6 +431,7 @@ int zeromap_page_range(unsigned long address, unsigned long size, pgprot_t prot)
 {
 	int error = 0;
 	pgd_t * dir;
+	unsigned long beg = address;
 	unsigned long end = address + size;
 	pte_t zero_pte;
 
@@ -447,7 +448,7 @@ int zeromap_page_range(unsigned long address, unsigned long size, pgprot_t prot)
 		address = (address + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
-	invalidate_range(current->mm, end - size, end);
+	invalidate_range(current->mm, beg, end);
 	return error;
 }
 
@@ -502,6 +503,7 @@ int remap_page_range(unsigned long from, unsigned long offset, unsigned long siz
 {
 	int error = 0;
 	pgd_t * dir;
+	unsigned long beg = from;
 	unsigned long end = from + size;
 
 	offset -= from;
@@ -517,7 +519,7 @@ int remap_page_range(unsigned long from, unsigned long offset, unsigned long siz
 		from = (from + PGDIR_SIZE) & PGDIR_MASK;
 		dir++;
 	}
-	invalidate_range(current->mm, from - size, from);
+	invalidate_range(current->mm, beg, from);
 	return error;
 }
 

@@ -24,12 +24,7 @@
 /*
  * The request-struct contains all necessary data
  * to load a nr of sectors into memory
- *
- * NR_REQUEST is the number of entries in the request-queue.
- * NOTE that writes may use only the low 2/3 of these: reads
- * take precedence.
  */
-#define NR_REQUEST	64
 static struct request all_requests[NR_REQUEST];
 
 /*
@@ -232,11 +227,15 @@ static inline void drive_stat_acct(int cmd, unsigned long nr_sectors, short disk
  * By this point, req->cmd is always either READ/WRITE, never READA/WRITEA,
  * which is important for drive_stat_acct() above.
  */
-static void add_request(struct blk_dev_struct * dev, struct request * req)
+
+struct semaphore request_lock = MUTEX;
+
+void add_request(struct blk_dev_struct * dev, struct request * req)
 {
 	struct request * tmp;
 	short		 disk_index;
 
+	down (&request_lock);
 	switch (MAJOR(req->rq_dev)) {
 		case SCSI_DISK_MAJOR:
 			disk_index = (MINOR(req->rq_dev) & 0x0070) >> 4;
@@ -257,10 +256,11 @@ static void add_request(struct blk_dev_struct * dev, struct request * req)
 
 	req->next = NULL;
 	cli();
-	if (req->bh)
+	if (req->bh && req->bh->b_dev==req->bh->b_rdev)
 		mark_buffer_clean(req->bh);
 	if (!(tmp = dev->current_request)) {
 		dev->current_request = req;
+		up (&request_lock);
 		(dev->request_fn)();
 		sti();
 		return;
@@ -274,8 +274,9 @@ static void add_request(struct blk_dev_struct * dev, struct request * req)
 	req->next = tmp->next;
 	tmp->next = req;
 
+	up (&request_lock);
 /* for SCSI devices, call request_fn unconditionally */
-	if (scsi_major(MAJOR(req->rq_dev)))
+	if (scsi_major(MAJOR(req->rq_dev)) && MAJOR(req->rq_dev)!=MD_MAJOR)
 		(dev->request_fn)();
 
 	sti();
@@ -338,6 +339,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 
 /* look for a free request. */
 	cli();
+	down (&request_lock);
 
 /* The scsi disk and cdrom drivers completely remove the request
  * from the queue when they start processing an entry.  For this reason
@@ -345,6 +347,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
  */
 	if ((   major == IDE0_MAJOR	/* same as HD_MAJOR */
 	     || major == IDE1_MAJOR
+	     || major == MD_MAJOR
 	     || major == FLOPPY_MAJOR
 	     || major == SCSI_DISK_MAJOR
 	     || major == SCSI_CDROM_MAJOR
@@ -354,6 +357,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	{
 		if (major != SCSI_DISK_MAJOR && major != SCSI_CDROM_MAJOR)
 			req = req->next;
+
 		while (req) {
 			if (req->rq_dev == bh->b_dev &&
 			    !req->sem &&
@@ -365,6 +369,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 				req->bhtail = bh;
 				req->nr_sectors += count;
 				mark_buffer_clean(bh);
+				up (&request_lock);
 				sti();
 				return;
 			}
@@ -382,6 +387,7 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 			    	req->sector = sector;
 				mark_buffer_clean(bh);
 			    	req->bh = bh;
+				up (&request_lock);
 			    	sti();
 			    	return;
 			}    
@@ -390,6 +396,8 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 		}
 	}
 
+	up (&request_lock);
+	
 /* find an unused request. */
 	req = get_request(max_req, bh->b_dev);
 	sti();
@@ -416,6 +424,15 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	req->next = NULL;
 	add_request(major+blk_dev,req);
 }
+
+#ifdef CONFIG_BLK_DEV_MD
+
+struct request *get_md_request (int max_req, kdev_t dev)
+{
+  return (get_request_wait (max_req, dev));
+}
+
+#endif
 
 /*
  * Swap partitions are now read via brw_page.  ll_rw_page is an
@@ -515,6 +532,10 @@ void ll_rw_block(int rw, int nr, struct buffer_head * bh[])
 	for (i = 0; i < nr; i++) {
 		if (bh[i]) {
 			set_bit(BH_Req, &bh[i]->b_state);
+
+			/* Md needs this for error recovery */
+			bh[i]->b_rdev = bh[i]->b_dev;
+
 			make_request(major, rw, bh[i]);
 		}
 	}
@@ -658,5 +679,8 @@ int blk_dev_init(void)
 #ifdef CONFIG_SJCD
 	sjcd_init();
 #endif CONFIG_SJCD
+#ifdef CONFIG_BLK_DEV_MD
+	md_init();
+#endif CONFIG_BLK_DEV_MD
 	return 0;
 }

@@ -36,6 +36,8 @@
 
 static int      uart6850_base = 0x330;
 
+static int     *uart6850_osp;
+
 #define	DATAPORT   (uart6850_base)
 #define	COMDPORT   (uart6850_base+1)
 #define	STATPORT   (uart6850_base+1)
@@ -77,8 +79,6 @@ static int      my_dev;
 static int      reset_uart6850 (void);
 static void     (*midi_input_intr) (int dev, unsigned char data);
 static void     poll_uart6850 (unsigned long dummy);
-
-static int     *uart6850_osp;
 
 
 static struct timer_list uart6850_timer =

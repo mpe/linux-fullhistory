@@ -9,7 +9,7 @@
 
 SUB_DIRS     := block char net #streams
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) pci scsi sound cdrom
+ALL_SUB_DIRS := $(SUB_DIRS) pci scsi sound cdrom isdn
 
 ifdef CONFIG_PCI
 SUB_DIRS += pci
@@ -37,6 +37,15 @@ endif
 ifdef CONFIG_CD_NO_IDESCSI
 SUB_DIRS += cdrom
 MOD_SUB_DIRS += cdrom
+endif
+
+ifeq ($(CONFIG_ISDN),y)
+SUB_DIRS += isdn
+MOD_SUB_DIRS += isdn
+else
+  ifeq ($(CONFIG_ISDN),m)
+  MOD_SUB_DIRS += isdn
+  endif
 endif
 
 include $(TOPDIR)/Rules.make

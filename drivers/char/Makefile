@@ -16,9 +16,13 @@ FONTMAPFILE = cp437.uni
 
 L_TARGET := char.a
 M_OBJS   :=
-L_OBJS   := tty_io.o n_tty.o console.o keyboard.o serial.o \
+L_OBJS   := tty_io.o n_tty.o console.o keyboard.o \
 	tty_ioctl.o pty.o vt.o mem.o vc_screen.o random.o \
 	defkeymap.o consolemap.o selection.o
+
+ifeq ($(CONFIG_SERIAL),y)
+L_OBJS += serial.o
+endif
 
 ifeq ($(CONFIG_CYCLADES),y)
 L_OBJS += cyclades.o

@@ -854,8 +854,8 @@ static int get_statm(int pid, char * buffer)
  * f_pos = (number of the vma in the task->mm->mmap list) * MAPS_LINE_LENGTH
  *         + (index into the line)
  */
-#define MAPS_LINE_FORMAT	  "%08lx-%08lx %s %08lx %02x:%02x %lu\n"
-#define MAPS_LINE_MAX	49 /* sum of 8  1  8  1 4 1 8  1  2 1  2 1 10 1 */
+#define MAPS_LINE_FORMAT	  "%08lx-%08lx %s %08lx %s %lu\n"
+#define MAPS_LINE_MAX	49 /* sum of 8  1  8  1 4 1 8 1 5 1 10 1 */
 
 static int read_maps (int pid, struct file * file, char * buf, int count)
 {
@@ -909,7 +909,7 @@ static int read_maps (int pid, struct file * file, char * buf, int count)
 
 		len = sprintf(line, MAPS_LINE_FORMAT,
 			      map->vm_start, map->vm_end, str, map->vm_offset,
-			      MAJOR(dev),MINOR(dev), ino);
+			      kdevname(dev), ino);
 
 		if (column >= len) {
 			column = 0; /* continue with next line at column 0 */
@@ -958,6 +958,7 @@ extern int get_irq_list(char *);
 extern int get_dma_list(char *);
 extern int get_cpuinfo(char *);
 extern int get_pci_list(char*);
+extern int get_md_status (char *);
 #ifdef __SMP_PROF__
 extern int get_smp_prof_list(char *);
 #endif
@@ -1015,6 +1016,10 @@ static int get_root_array(char * page, int type, char **start, off_t offset, int
 
 		case PROC_IOPORTS:
 			return get_ioport_list(page);
+#ifdef CONFIG_BLK_DEV_MD
+	        case PROC_MD:
+			return get_md_status(page);
+#endif
 #ifdef CONFIG_APM
 		case PROC_APM:
 			return apm_proc(page);

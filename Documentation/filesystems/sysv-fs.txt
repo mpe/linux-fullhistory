@@ -28,7 +28,7 @@ Bugs in the present implementation:
 
 
 Please report any bugs and suggestions to
-  Bruno Haible <haible@ma2s2.mathematik.uni-karlsruhde.de> or
+  Bruno Haible <haible@ma2s2.mathematik.uni-karlsruhe.de> or
   Pascal Haible <haible@izfm.uni-stuttgart.de> .
 
 

@@ -13,10 +13,9 @@
 #include <linux/types.h>
 #include <linux/ptrace.h>
 #include <linux/mman.h>
+#include <linux/mm.h>
 
 #include <asm/system.h>
-
-extern unsigned long high_memory;
 
 static int check_one_table(struct pde * page_dir)
 {

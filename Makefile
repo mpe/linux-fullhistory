@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 68
+SUBLEVEL = 69
 
 ARCH = i386
 
@@ -129,6 +129,10 @@ DRIVERS		=drivers/block/block.a \
 		 drivers/net/net.a
 LIBS		=$(TOPDIR)/lib/lib.a
 SUBDIRS		=kernel drivers mm fs net ipc lib
+
+ifeq ($(CONFIG_ISDN),y)
+DRIVERS	:= $(DRIVERS) drivers/isdn/isdn.a
+endif
 
 ifdef CONFIG_CD_NO_IDESCSI
 DRIVERS := $(DRIVERS) drivers/cdrom/cdrom.a
@@ -339,7 +343,7 @@ distclean: mrproper
 
 
 backup: mrproper
-	cd .. && tar cf - linux | gzip -9 > backup.gz
+	cd .. && tar cf - linux/ | gzip -9 > backup.gz
 	sync
 
 dep-files: archdep .hdepend include/linux/version.h

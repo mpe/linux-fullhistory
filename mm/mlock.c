@@ -106,12 +106,6 @@ static int mlock_fixup(struct vm_area_struct * vma,
 	if (newflags == vma->vm_flags)
 		return 0;
 
-	/* keep track of amount of locked VM */
-	pages = (end - start) >> PAGE_SHIFT;
-	if (!(newflags & VM_LOCKED))
-		pages = -pages;
-	vma->vm_mm->locked_vm += pages;
-
 	if (start == vma->vm_start) {
 		if (end == vma->vm_end)
 			retval = mlock_fixup_all(vma, newflags);
@@ -123,12 +117,19 @@ static int mlock_fixup(struct vm_area_struct * vma,
 		else
 			retval = mlock_fixup_middle(vma, start, end, newflags);
 	}
-	if (!retval && (newflags & VM_LOCKED)) {
-		while (start < end) {
-			char c = get_user((char *) start);
-			__asm__ __volatile__("": :"r" (c));
-			start += PAGE_SIZE;
-		}
+	if (!retval) {
+		/* keep track of amount of locked VM */
+		pages = (end - start) >> PAGE_SHIFT;
+		if (!(newflags & VM_LOCKED))
+			pages = -pages;
+		vma->vm_mm->locked_vm += pages;
+
+		if (newflags & VM_LOCKED)
+			while (start < end) {
+				char c = get_user((char *) start);
+				__asm__ __volatile__("": :"r" (c));
+				start += PAGE_SIZE;
+			}
 	}
 	return retval;
 }

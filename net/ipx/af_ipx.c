@@ -39,6 +39,8 @@
  *	Revision 0.31:	New sk_buffs. This still needs a lot of testing. <Alan Cox>
  *	Revision 0.32:  Using sock_alloc_send_skb, firewall hooks. <Alan Cox>
  *			Supports sendmsg/recvmsg
+ *	Revision 0.33:	Internal network support, routing changes, uses a
+ *			protocol private area for ipx data.
  *
  * 	Portions Copyright (c) 1995 Caldera, Inc. <greg@caldera.com>
  *	Neither Greg Page nor Caldera, Inc. admit liability nor provide 
@@ -143,7 +145,7 @@ ipx_remove_socket(ipx_socket *sk)
 	cli();
 	
 	/* Determine interface with which socket is associated */
-	intrfc = sk->ipx_intrfc;
+	intrfc = sk->protinfo.af_ipx.intrfc;
 	if (intrfc == NULL) {
 		restore_flags(flags);
 		return;
@@ -234,7 +236,7 @@ ipxitf_insert_socket(ipx_interface *intrfc, ipx_socket *sk)
 {
 	ipx_socket	*s;
 
-	sk->ipx_intrfc = intrfc;
+	sk->protinfo.af_ipx.intrfc = intrfc;
 	sk->next = NULL;
 	if (intrfc->if_sklist == NULL) {
 		intrfc->if_sklist = sk;
@@ -251,7 +253,7 @@ ipxitf_find_socket(ipx_interface *intrfc, unsigned short port)
 	ipx_socket	*s;
 
 	for (s=intrfc->if_sklist; 
-		(s != NULL) && (s->ipx_port != port); 
+		(s != NULL) && (s->protinfo.af_ipx.port != port); 
 		s=s->next)
 		;
 
@@ -268,8 +270,8 @@ ipxitf_find_internal_socket(ipx_interface *intrfc,
 
 	while (s != NULL)
 	{
-		if (   (s->ipx_port == port)
-		    && (memcmp(node, s->ipx_node, IPX_NODE_LEN) == 0))
+		if (   (s->protinfo.af_ipx.port == port)
+		    && (memcmp(node, s->protinfo.af_ipx.node, IPX_NODE_LEN) == 0))
 		{
 			break;
 		}
@@ -294,8 +296,8 @@ ipxitf_down(ipx_interface *intrfc)
 	for (s = intrfc->if_sklist; s != NULL; ) {
 		s->err = ENOLINK;
 		s->error_report(s);
-		s->ipx_intrfc = NULL;
-		s->ipx_port = 0;
+		s->protinfo.af_ipx.intrfc = NULL;
+		s->protinfo.af_ipx.port = 0;
 		s->zapped=1;	/* Indicates it is no longer bound */
 		t = s;
 		s = s->next;
@@ -378,9 +380,9 @@ ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy)
 
 	while (s != NULL)
 	{
-		if (   (s->ipx_port == ipx->ipx_dest.sock)
+		if (   (s->protinfo.af_ipx.port == ipx->ipx_dest.sock)
 		    && (   is_broadcast
-			|| (memcmp(ipx->ipx_dest.node, s->ipx_node,
+			|| (memcmp(ipx->ipx_dest.node, s->protinfo.af_ipx.node,
 				   IPX_NODE_LEN) == 0)))
 		{
 			/* We found a socket to which to send */
@@ -1200,11 +1202,11 @@ static int ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, struc
 	ipx->ipx_type=usipx->sipx_type;
 	skb->h.raw = (unsigned char *)ipx;
 
-	ipx->ipx_source.net = sk->ipx_intrfc->if_netnum;
+	ipx->ipx_source.net = sk->protinfo.af_ipx.intrfc->if_netnum;
 #ifdef CONFIG_IPX_INTERN
-	memcpy(ipx->ipx_source.node, sk->ipx_node, IPX_NODE_LEN);
+	memcpy(ipx->ipx_source.node, sk->protinfo.af_ipx.node, IPX_NODE_LEN);
 #else
-	if ((err = ntohs(sk->ipx_port)) == 0x453 || err == 0x452)  
+	if ((err = ntohs(sk->protinfo.af_ipx.port)) == 0x453 || err == 0x452)  
 	{
 		/* RIP/SAP special handling for mars_nwe */
 		ipx->ipx_source.net = intrfc->if_netnum;
@@ -1212,11 +1214,11 @@ static int ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, struc
 	}
 	else
 	{
-		ipx->ipx_source.net = sk->ipx_intrfc->if_netnum;
-		memcpy(ipx->ipx_source.node, sk->ipx_intrfc->if_node, IPX_NODE_LEN);
+		ipx->ipx_source.net = sk->protinfo.af_ipx.intrfc->if_netnum;
+		memcpy(ipx->ipx_source.node, sk->protinfo.af_ipx.intrfc->if_node, IPX_NODE_LEN);
 	}
 #endif
-	ipx->ipx_source.sock = sk->ipx_port;
+	ipx->ipx_source.sock = sk->protinfo.af_ipx.port;
 	ipx->ipx_dest.net=usipx->sipx_network;
 	memcpy(ipx->ipx_dest.node,usipx->sipx_node,IPX_NODE_LEN);
 	ipx->ipx_dest.sock=usipx->sipx_port;
@@ -1384,25 +1386,31 @@ static int ipx_get_info(char *buffer, char **start, off_t offset,
 			len += sprintf(buffer+len,
 				       "%08lX:%02X%02X%02X%02X%02X%02X:%04X  ", 
 				       htonl(s->ipx_intrfc->if_netnum),
-				       s->ipx_node[0], s->ipx_node[1], 
-				       s->ipx_node[2], s->ipx_node[3], 
-				       s->ipx_node[4], s->ipx_node[5],
-				       htons(s->ipx_port));
+				       s->protinfo.af_ipx.node[0],
+				       s->protinfo.af_ipx.node[1], 
+				       s->protinfo.af_ipx.node[2], 
+				       s->protinfo.af_ipx.node[3], 
+				       s->protinfo.af_ipx.node[4], 
+				       s->protinfo.af_ipx.node[5],
+				       htons(s->protinfo.af_ipx.port));
 #else
 			len += sprintf(buffer+len,"%08lX:%04X  ", 
 				       htonl(i->if_netnum),
-				       htons(s->ipx_port));
+				       htons(s->protinfo.af_ipx.port));
 #endif
 			if (s->state!=TCP_ESTABLISHED) {
 				len += sprintf(buffer+len, "%-28s", "Not_Connected");
 			} else {
 				len += sprintf (buffer+len,
 					"%08lX:%02X%02X%02X%02X%02X%02X:%04X  ", 
-					htonl(s->ipx_dest_addr.net),
-					s->ipx_dest_addr.node[0], s->ipx_dest_addr.node[1], 
-					s->ipx_dest_addr.node[2], s->ipx_dest_addr.node[3], 
-					s->ipx_dest_addr.node[4], s->ipx_dest_addr.node[5],
-					htons(s->ipx_dest_addr.sock));
+					htonl(s->protinfo.af_ipx.dest_addr.net),
+					s->protinfo.af_ipx.dest_addr.node[0],
+					s->protinfo.af_ipx.dest_addr.node[1], 
+					s->protinfo.af_ipx.dest_addr.node[2],
+					s->protinfo.af_ipx.dest_addr.node[3], 
+					s->protinfo.af_ipx.dest_addr.node[4],
+					s->protinfo.af_ipx.dest_addr.node[5],
+					htons(s->protinfo.af_ipx.dest_addr.sock));
 			}
 			len += sprintf (buffer+len,"%08lX  %08lX  ", 
 				s->wmem_alloc, s->rmem_alloc);
@@ -1506,7 +1514,7 @@ static int ipx_setsockopt(struct socket *sock, int level, int optname, char *opt
 			switch(optname)
 			{
 				case IPX_TYPE:
-					sk->ipx_type=opt;
+					sk->protinfo.af_ipx.type=opt;
 					return 0;
 				default:
 					return -EOPNOTSUPP;
@@ -1537,7 +1545,7 @@ static int ipx_getsockopt(struct socket *sock, int level, int optname,
 			switch(optname)
 			{
 				case IPX_TYPE:
-					val=sk->ipx_type;
+					val=sk->protinfo.af_ipx.type;
 					break;
 				default:
 					return -ENOPROTOOPT;
@@ -1613,12 +1621,13 @@ ipx_create(struct socket *sock, int protocol)
 	sk->state=TCP_CLOSE;
 	sk->socket=sock;
 	sk->type=sock->type;
-	sk->ipx_type=0;		/* General user level IPX */
-	sk->ipx_ncp_server = NULL;
+	sk->protinfo.af_ipx.type=0;		/* General user level IPX */
 	sk->debug=0;
-	sk->ipx_intrfc = NULL;
-	memset(&sk->ipx_dest_addr,'\0',sizeof(sk->ipx_dest_addr));
-	sk->ipx_port = 0;
+	sk->protinfo.af_ipx.intrfc = NULL;
+	memset(&sk->protinfo.af_ipx.dest_addr,'\0',
+		sizeof(sk->protinfo.af_ipx.dest_addr));
+	sk->protinfo.af_ipx.port = 0;
+	sk->protinfo.af_ipx.ncp_server = 0;
 	sk->mtu=IPX_MTU;
 	
 	if(sock!=NULL)
@@ -1699,7 +1708,7 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
 	if(ntohs(addr->sipx_port)<IPX_MIN_EPHEMERAL_SOCKET && !suser())
 		return -EPERM;	/* protect IPX system stuff like routing/sap */
 
-	sk->ipx_port=addr->sipx_port;
+	sk->protinfo.af_ipx.port=addr->sipx_port;
 
 #ifdef CONFIG_IPX_INTERN
 	if (intrfc == ipx_internal_net)
@@ -1716,15 +1725,16 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
 		}
 		if (memcmp(addr->sipx_node, ipx_this_node, IPX_NODE_LEN) == 0)
 		{
-			memcpy(sk->ipx_node, intrfc->if_node,
+			memcpy(sk->protinfo.af_ipx.node, intrfc->if_node,
 			       IPX_NODE_LEN);
 		}
 		else
 		{
-			memcpy(sk->ipx_node, addr->sipx_node, IPX_NODE_LEN);
+			memcpy(sk->protinfo.af_ipx.node, addr->sipx_node, IPX_NODE_LEN);
 		}
-		if (ipxitf_find_internal_socket(intrfc, sk->ipx_node,
-						sk->ipx_port) != NULL)
+		if (ipxitf_find_internal_socket(intrfc, 
+			sk->protinfo.af_ipx.node, 
+			sk->protinfo.af_ipx.port) != NULL)
 		{
 			if(sk->debug)
 				printk("IPX: bind failed because port %X in"
@@ -1739,7 +1749,8 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
 		 * with the ipx routing ioctl()
 		 */
 
-		memcpy(sk->ipx_node, intrfc->if_node, IPX_NODE_LEN);
+		memcpy(sk->protinfo.af_ipx.node, intrfc->if_node, 
+			IPX_NODE_LEN);
 		
 		if(ipxitf_find_socket(intrfc, addr->sipx_port)!=NULL) {
 			if(sk->debug)
@@ -1783,7 +1794,7 @@ static int ipx_connect(struct socket *sock, struct sockaddr *uaddr,
 		return(-EINVAL);
 	addr=(struct sockaddr_ipx *)uaddr;
 	
-	if(sk->ipx_port==0)
+	if(sk->protinfo.af_ipx.port==0)
 	/* put the autobinding in */
 	{
 		struct sockaddr_ipx uaddr;
@@ -1792,7 +1803,7 @@ static int ipx_connect(struct socket *sock, struct sockaddr *uaddr,
 		uaddr.sipx_port = 0;
 		uaddr.sipx_network = 0L;
 #ifdef CONFIG_IPX_INTERN
-		memcpy(uaddr.sipx_node, sk->ipx_intrfc->if_node,
+		memcpy(uaddr.sipx_node, sk->protinfo.af_ipx.intrfc->if_node,
 		       IPX_NODE_LEN);
 #endif
 		ret = ipx_bind (sock, (struct sockaddr *)&uaddr,
@@ -1802,10 +1813,11 @@ static int ipx_connect(struct socket *sock, struct sockaddr *uaddr,
 	
 	if(ipxrtr_lookup(addr->sipx_network)==NULL)
 		return -ENETUNREACH;
-	sk->ipx_dest_addr.net=addr->sipx_network;
-	sk->ipx_dest_addr.sock=addr->sipx_port;
-	memcpy(sk->ipx_dest_addr.node,addr->sipx_node,IPX_NODE_LEN);
-	sk->ipx_type=addr->sipx_type;
+	sk->protinfo.af_ipx.dest_addr.net=addr->sipx_network;
+	sk->protinfo.af_ipx.dest_addr.sock=addr->sipx_port;
+	memcpy(sk->protinfo.af_ipx.dest_addr.node,
+		addr->sipx_node,IPX_NODE_LEN);
+	sk->protinfo.af_ipx.type=addr->sipx_type;
 	sock->state = SS_CONNECTED;
 	sk->state=TCP_ESTABLISHED;
 	return 0;
@@ -1837,29 +1849,29 @@ static int ipx_getname(struct socket *sock, struct sockaddr *uaddr,
 	if(peer) {
 		if(sk->state!=TCP_ESTABLISHED)
 			return -ENOTCONN;
-		addr=&sk->ipx_dest_addr;
+		addr=&sk->protinfo.af_ipx.dest_addr;
 		sipx.sipx_network = addr->net;
 		memcpy(sipx.sipx_node,addr->node,IPX_NODE_LEN);
 		sipx.sipx_port = addr->sock;
 	} else {
-		if (sk->ipx_intrfc != NULL) {
-			sipx.sipx_network = sk->ipx_intrfc->if_netnum;
+		if (sk->protinfo.af_ipx.intrfc != NULL) {
+			sipx.sipx_network = sk->protinfo.af_ipx.intrfc->if_netnum;
 #ifdef CONFIG_IPX_INTERN
-			memcpy(sipx.sipx_node, sk->ipx_node, IPX_NODE_LEN);
+			memcpy(sipx.sipx_node, sk->protinfo.af_ipx.node, IPX_NODE_LEN);
 #else
-			memcpy(sipx.sipx_node, sk->ipx_intrfc->if_node,
-			       IPX_NODE_LEN);
+			memcpy(sipx.sipx_node, 
+				sk->protinfo.af_ipx.intrfc->if_node, IPX_NODE_LEN);
 #endif
 
 		} else {
 			sipx.sipx_network = 0L;
 			memset(sipx.sipx_node, '\0', IPX_NODE_LEN);
 		}
-		sipx.sipx_port = sk->ipx_port;
+		sipx.sipx_port = sk->protinfo.af_ipx.port;
 	}
 		
 	sipx.sipx_family = AF_IPX;
-	sipx.sipx_type = sk->ipx_type;
+	sipx.sipx_type = sk->protinfo.af_ipx.type;
 	memcpy(uaddr,&sipx,sizeof(sipx));
 	return 0;
 }
@@ -1974,7 +1986,7 @@ static int ipx_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nob
 		
 	if(usipx) 
 	{
-		if(sk->ipx_port == 0) 
+		if(sk->protinfo.af_ipx.port == 0) 
 		{
 			struct sockaddr_ipx uaddr;
 			int ret;
@@ -1982,8 +1994,8 @@ static int ipx_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nob
 			uaddr.sipx_port = 0;
 			uaddr.sipx_network = 0L; 
 #ifdef CONFIG_IPX_INTERN
-			memcpy(uaddr.sipx_node, sk->ipx_intrfc->if_node,
-			       IPX_NODE_LEN);
+			memcpy(uaddr.sipx_node, sk->protinfo.af_ipx.intrfc
+				->if_node, IPX_NODE_LEN);
 #endif
 			ret = ipx_bind (sock, (struct sockaddr *)&uaddr,
 					sizeof(struct sockaddr_ipx));
@@ -2001,10 +2013,10 @@ static int ipx_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nob
 			return -ENOTCONN;
 		usipx=&local_sipx;
 		usipx->sipx_family=AF_IPX;
-		usipx->sipx_type=sk->ipx_type;
-		usipx->sipx_port=sk->ipx_dest_addr.sock;
-		usipx->sipx_network=sk->ipx_dest_addr.net;
-		memcpy(usipx->sipx_node,sk->ipx_dest_addr.node,IPX_NODE_LEN);
+		usipx->sipx_type=sk->protinfo.af_ipx.type;
+		usipx->sipx_port=sk->protinfo.af_ipx.dest_addr.sock;
+		usipx->sipx_network=sk->protinfo.af_ipx.dest_addr.net;
+		memcpy(usipx->sipx_node,sk->protinfo.af_ipx.dest_addr.node,IPX_NODE_LEN);
 	}
 	
 	retval = ipxrtr_route_packet(sk, usipx, msg->msg_iov, len);

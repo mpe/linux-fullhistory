@@ -8,7 +8,6 @@
  */
 
 #include <linux/errno.h>
-#include <linux/ctype.h>
 #include <linux/string.h>
 #include <linux/kernel.h>
 #include <linux/umsdos_fs.h>

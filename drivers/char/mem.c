@@ -25,6 +25,9 @@
 #ifdef CONFIG_SOUND
 void soundcard_init(void);
 #endif
+#ifdef CONFIG_ISDN
+void isdn_init(void);
+#endif
 
 static int read_ram(struct inode * inode, struct file * file, char * buf, int count)
 {
@@ -393,6 +396,9 @@ int chr_dev_init(void)
 #endif
 #if CONFIG_QIC02_TAPE
 	qic02_tape_init();
+#endif
+#if CONFIG_ISDN
+	isdn_init();
 #endif
 	return 0;
 }

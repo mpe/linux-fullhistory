@@ -471,8 +471,7 @@ static void slip_write_wakeup(struct tty_struct *tty)
 		 * transmission of another packet */
 		sl->tx_packets++;
 		tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
-		if (test_bit(0, (void *) &sl->dev->tbusy)) /* add by VSV */
-			sl_unlock(sl);
+		sl_unlock(sl);
 		mark_bh(NET_BH);
 		return;
 	}
@@ -803,6 +802,13 @@ slip_close(struct tty_struct *tty)
 	
 	tty->disc_data = 0;
 	sl->tty = NULL;
+	/* VSV = very important to remove timers */
+#ifdef CONFIG_SLIP_SMART
+	if (sl->keepalive)
+		(void)del_timer (&sl->keepalive_timer);
+	if (sl->outfill)
+		(void)del_timer (&sl->outfill_timer);
+#endif
 	sl_free(sl);
 	unregister_netdev(sl->dev);
 	MOD_DEC_USE_COUNT;
@@ -1116,7 +1122,7 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 	/* VSV changes start here */
         case SIOCSKEEPALIVE:
                 if (sl->keepalive)
-                        del_timer (&sl->keepalive_timer);
+                        (void)del_timer (&sl->keepalive_timer);
 		err = verify_area(VERIFY_READ, arg, sizeof(int));
 		if (err)  {
 			return -err;
@@ -1329,7 +1335,9 @@ cleanup_module(void)
 	{
 		for (i = 0; i < slip_maxdev; i++)  
 		{
-			if (slip_ctrls[i] != NULL) 
+			if (slip_ctrls[i]->dev.start)
+			/* VSV = if dev->start==0, then device
+			unregistred while close proc. */ 
 			{
 				unregister_netdev(&(slip_ctrls[i]->dev));
 				kfree(slip_ctrls[i]);
@@ -1355,7 +1363,7 @@ static void sl_outfill(unsigned long sls)
 {
 	struct slip *sl=(struct slip *)sls;
 
-	if(sls==NULL)
+	if(sls==0L)
 		return;
 
 	if(sl->outfill)
@@ -1372,7 +1380,6 @@ static void sl_outfill(unsigned long sls)
 			if (!test_bit(0, (void *) &sl->dev->tbusy))
 			{ 
 				/* if device busy no outfill */
-				sl->tty->flags |= (1 << TTY_DO_WRITE_WAKEUP);
 				sl->tty->driver.write(sl->tty, 0, &s, 1);
 			}
 		}

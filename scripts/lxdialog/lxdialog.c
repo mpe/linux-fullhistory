@@ -23,8 +23,6 @@
 
 static void Usage (const char *name);
 
-static int separate_output = 0;
-
 typedef int (jumperFn) (const char *title, int argc, const char * const * argv);
 
 struct Mode {
@@ -87,9 +85,6 @@ main (int argc, const char * const * argv)
                 backtitle = argv[offset + 2];
                 offset += 2;
             }
-	} else if (!strcmp (argv[offset + 1], "--separate-output")) {
-	    separate_output = 1;
-	    offset++;
 	} else if (!strcmp (argv[offset + 1], "--clear")) {
 	    if (clear_screen) {	/* Hey, "--clear" can't appear twice! */
 		Usage (argv[0]);
@@ -153,7 +148,7 @@ Usage (const char *name)
 \n* Display dialog boxes from shell scripts *\
 \n\
 \nUsage: %s --clear\
-\n       %s [--title <title>] [--separate-output] [--backtitle <backtitle>] --clear <Box options>\
+\n       %s [--title <title>] [--backtitle <backtitle>] --clear <Box options>\
 \n\
 \nBox options:\
 \n\
@@ -182,14 +177,14 @@ int
 j_checklist (const char *t, int ac, const char * const * av)
 {
     return dialog_checklist (t, av[2], atoi (av[3]), atoi (av[4]),
-	atoi (av[5]), (ac - 6) / 3, av + 6, FLAG_CHECK, separate_output);
+	atoi (av[5]), (ac - 6) / 3, av + 6, FLAG_CHECK);
 }
 
 int
 j_radiolist (const char *t, int ac, const char * const * av)
 {
     return dialog_checklist (t, av[2], atoi (av[3]), atoi (av[4]),
-	atoi (av[5]), (ac - 6) / 3, av + 6, FLAG_RADIO, separate_output);
+	atoi (av[5]), (ac - 6) / 3, av + 6, FLAG_RADIO);
 }
 
 int

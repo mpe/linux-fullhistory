@@ -18,6 +18,9 @@
  *		Matthew Dillon, <dillon@apollo.west.oic.com>
  *		Arnt Gulbrandsen, <agulbra@nvg.unit.no>
  *		Jorge Cwik, <jorge@laser.satlink.net>
+ *
+ * FIXES
+ *		Pedro Roque	:	Double ACK bug
  */
 
 #include <linux/config.h>
@@ -1420,19 +1423,21 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk,
 			 *      - must send at least every 2 full sized packets
 			 */
 			if (!sk->delay_acks ||
-			    sk->ack_backlog >= sk->max_ack_backlog || 
+			    /* sk->ack_backlog >= sk->max_ack_backlog || */
 			    sk->bytes_rcv > sk->max_unacked || th->fin ||
 			    sk->ato > HZ/2 ||
 			    tcp_raise_window(sk)) {
-	/*			tcp_send_ack(sk->sent_seq, sk->acked_seq,sk,th, saddr); */
+				tcp_send_ack(sk->sent_seq, sk->acked_seq,sk,th, saddr);
 			}
 			else 
-			{
+			{	
 				sk->ack_backlog++;
-				
+			
 				if(sk->debug)				
 					printk("Ack queued.\n");
+				
 				tcp_reset_xmit_timer(sk, TIME_WRITE, sk->ato);
+				
 			}
 		}
 	}
@@ -1475,11 +1480,7 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk,
 		}
 		tcp_send_ack(sk->sent_seq, sk->acked_seq, sk, th, saddr);
 		sk->ack_backlog++;
-		tcp_reset_xmit_timer(sk, TIME_WRITE, min(sk->ato, 0.5 * HZ));
-	}
-	else
-	{
-		tcp_send_ack(sk->sent_seq, sk->acked_seq, sk, th, saddr);
+		tcp_reset_xmit_timer(sk, TIME_WRITE, min(sk->ato, HZ/2));
 	}
 
 	/*

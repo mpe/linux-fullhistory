@@ -13,7 +13,6 @@
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/string.h>
-#include <linux/ctype.h>
 #include <linux/major.h>
 #include <linux/blkdev.h>
 #include <linux/fs.h>

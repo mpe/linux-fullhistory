@@ -245,6 +245,7 @@ void ext2_free_inode (struct inode * inode)
 		mark_buffer_dirty(bh2, 1);
 		es->s_free_inodes_count++;
 		mark_buffer_dirty(sb->u.ext2_sb.s_sbh, 1);
+		inode->i_dirt = 0;
 		set_inode_dtime (inode, gdp);
 	}
 	mark_buffer_dirty(bh, 1);

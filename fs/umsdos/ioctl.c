@@ -68,7 +68,7 @@ int UMSDOS_ioctl_dir (
 		Well, not all case require write access, but it simplify the code
 		and let's face it, there is only one client (umssync) for all this
 	*/
-	if (err = verify_area(VERIFY_WRITE,(void*)data,sizeof(struct umsdos_ioctl)) < 0){
+	if ((err = verify_area(VERIFY_WRITE,(void*)data,sizeof(struct umsdos_ioctl))) < 0) {
 		ret = err;
 	}else if (current->euid == 0
 		|| cmd == UMSDOS_GETVERSION){

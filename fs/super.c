@@ -458,7 +458,7 @@ static struct super_block * read_super(kdev_t dev,const char *name,int flags,
  * filesystems which don't use real block-devices.  -- jrs
  */
 
-static char unnamed_dev_in_use[256/8] = { 0, };
+static unsigned int unnamed_dev_in_use[256/32] = { 0, };
 
 kdev_t get_unnamed_dev(void)
 {
@@ -636,7 +636,10 @@ int do_mount(kdev_t dev, const char * dev_name, const char * dir_name, const cha
 		return -EBUSY;
 	}
 	vfsmnt = add_vfsmnt(dev, dev_name, dir_name);
-	vfsmnt->mnt_sb = sb;
+	if (vfsmnt) {
+		vfsmnt->mnt_sb = sb;
+		vfsmnt->mnt_flags = flags;
+	}
 	sb->s_covered = dir_i;
 	dir_i->i_mount = sb->s_mounted;
 	return 0;		/* we don't iput(dir_i) - see umount */

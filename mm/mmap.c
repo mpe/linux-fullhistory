@@ -208,18 +208,13 @@ unsigned long get_unmapped_area(unsigned long addr, unsigned long len)
 		addr = TASK_SIZE / 3;
 	addr = PAGE_ALIGN(addr);
 
-	for (vmm = current->mm->mmap; ; vmm = vmm->vm_next) {
+	for (vmm = find_vma(current, addr); ; vmm = vmm->vm_next) {
+		/* At this point:  (!vmm || addr < vmm->vm_end). */
 		if (TASK_SIZE - len < addr)
 			return 0;
-		if (!vmm)
+		if (!vmm || addr + len <= vmm->vm_start)
 			return addr;
-		if (addr > vmm->vm_end)
-			continue;
-		if (addr + len > vmm->vm_start) {
-			addr = vmm->vm_end;
-			continue;
-		}
-		return addr;
+		addr = vmm->vm_end;
 	}
 }
 

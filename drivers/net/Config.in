@@ -42,7 +42,7 @@ if [ "$CONFIG_NET_ISA" = "y" ]; then
     tristate 'AT1700 support' CONFIG_AT1700
     tristate 'EtherExpressPro support' CONFIG_EEXPRESS_PRO
     tristate 'EtherExpress support' CONFIG_EEXPRESS
-    bool 'NI5210 support' CONFIG_NI52
+    tristate 'NI5210 support' CONFIG_NI52
     bool 'NI6510 support' CONFIG_NI65
     tristate 'WaveLAN support' CONFIG_WAVELAN
     tristate 'ICL EtherTeam 16i/32 support' CONFIG_ETH16I

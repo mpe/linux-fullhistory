@@ -55,6 +55,7 @@ typedef struct
     int             dual_dma;	/* 1, when two DMA channels allocated */
     unsigned char   MCE_bit;
     unsigned char   saved_regs[16];
+    int             debug_flag;
 
     int             speed;
     unsigned char   speed_bits;
@@ -562,6 +563,7 @@ ad1848_open (int dev, int mode)
 
   devc = (ad1848_info *) audio_devs[dev]->devc;
 
+
   save_flags (flags);
   cli ();
   if (devc->opened)
@@ -663,7 +665,7 @@ set_speed (ad1848_info * devc, int arg)
 	arg = 50000;
 
       devc->speed = arg;
-      devc->speed_bits = speed_table[selected].bits;
+      devc->speed_bits = speed_table[3].bits;
       return devc->speed;
     }
 
@@ -864,6 +866,7 @@ ad1848_output_block (int dev, unsigned long buf, int count, int intrflag, int dm
 
   if (dma_restart)
     {
+      ad_write (devc, 9, ad_read (devc, 9) & ~0x01);	/* Playback disable */
       /* ad1848_halt (dev); */
       DMAbuf_start_dma (dev, buf, count, DMA_MODE_WRITE);
     }
@@ -871,7 +874,6 @@ ad1848_output_block (int dev, unsigned long buf, int count, int intrflag, int dm
   ad_write (devc, 15, (unsigned char) (cnt & 0xff));
   ad_write (devc, 14, (unsigned char) ((cnt >> 8) & 0xff));
 
-  /* ad_write (devc, 9, ad_read (devc, 9) | 0x01); *//* Playback enable */
   ad_unmute (devc);
 
   devc->xfer_count = cnt;
@@ -916,6 +918,7 @@ ad1848_start_input (int dev, unsigned long buf, int count, int intrflag, int dma
   if (dma_restart)
     {
       /* ad1848_halt (dev); */
+      ad_write (devc, 9, ad_read (devc, 9) & ~0x02);	/* Capture disable */
       DMAbuf_start_dma (dev, buf, count, DMA_MODE_READ);
     }
 
@@ -931,7 +934,6 @@ ad1848_start_input (int dev, unsigned long buf, int count, int intrflag, int dma
       ad_write (devc, 30, (unsigned char) ((cnt >> 8) & 0xff));
     }
 
-  /*  ad_write (devc, 9, ad_read (devc, 9) | 0x02); *//* Capture enable */
   ad_unmute (devc);
 
   devc->xfer_count = cnt;
@@ -966,7 +968,9 @@ ad1848_prepare_for_IO (int dev, int bsize, int bcount)
       ad_write (devc, 23, devc->speed & 0xff);	/* Speed LSB */
     }
 
-  if (fs == (old_fs = ad_read (devc, 8)))	/* No change */
+  old_fs = ad_read (devc, 8);
+
+  if (fs == old_fs)		/* No change */
     {
       restore_flags (flags);
       devc->xfer_count = 0;
@@ -974,6 +978,7 @@ ad1848_prepare_for_IO (int dev, int bsize, int bcount)
     }
 
   ad_enter_MCE (devc);		/* Enables changes to the format select reg */
+
   ad_write (devc, 8, fs);
   /*
    * Write to I8 starts resyncronization. Wait until it completes.
@@ -1027,6 +1032,7 @@ ad1848_halt (int dev)
   unsigned long   flags;
   int             timeout;
 
+
   save_flags (flags);
   cli ();
 
@@ -1035,16 +1041,16 @@ ad1848_halt (int dev)
   ad_write (devc, 9, ad_read (devc, 9) & ~0x03);	/* Stop DMA */
   ad_write (devc, 9, ad_read (devc, 9) & ~0x03);	/* Stop DMA */
 
-  ad_write (devc, 15, 0);	/* Clear DMA counter */
+  ad_write (devc, 15, 4);	/* Clear DMA counter */
   ad_write (devc, 14, 0);	/* Clear DMA counter */
 
   if (devc->mode != MD_1848)
     {
-      ad_write (devc, 30, 0);	/* Clear DMA counter */
+      ad_write (devc, 30, 4);	/* Clear DMA counter */
       ad_write (devc, 31, 0);	/* Clear DMA counter */
     }
 
-  for (timeout = 0; timeout < 1000 && !(inb (io_Status (devc)) & 0x80);
+  for (timeout = 0; timeout < 10000 && !(inb (io_Status (devc)) & 0x80);
        timeout++);		/* Wait for interrupt */
 
   ad_write (devc, 9, ad_read (devc, 9) & ~0x03);	/* Stop DMA */
@@ -1076,6 +1082,9 @@ ad1848_halt_input (int dev)
   ad_write (devc, 9, ad_read (devc, 9) & ~0x02);	/* Stop capture */
 
 
+  outb (0, io_Status (devc));	/* Clear interrupt status */
+  outb (0, io_Status (devc));	/* Clear interrupt status */
+
   devc->irq_mode &= ~PCM_ENABLE_INPUT;
 
   restore_flags (flags);
@@ -1099,6 +1108,9 @@ ad1848_halt_output (int dev)
   ad_mute (devc);
   ad_write (devc, 9, ad_read (devc, 9) & ~0x01);	/* Stop playback */
 
+
+  outb (0, io_Status (devc));	/* Clear interrupt status */
+  outb (0, io_Status (devc));	/* Clear interrupt status */
 
   devc->irq_mode &= ~PCM_ENABLE_OUTPUT;
 
@@ -1160,6 +1172,7 @@ ad1848_detect (int io_base, int *ad_flags, int *osp)
   devc->chip_name = "AD1848";
   devc->mode = MD_1848;		/* AD1848 or CS4248 */
   devc->osp = osp;
+  devc->debug_flag = 0;
 
   /*
      * Check that the I/O address is in use.
@@ -1434,11 +1447,9 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
       for (i = 16; i < 32; i++)
 	ad_write (devc, i, init_values[i]);
 
-      if (devc->mode == MD_4231A || devc->mode == MD_4232)
-	ad_write (devc, 9, init_values[9] | 0x18);	/* Enable full calibration */
 
       if (devc->mode == MD_1845)
-	ad_write (devc, 27, init_values[27] | 0x08);	/* Alternate freq select enabled */
+	ad_write (devc, 27, ad_read (devc, 27) | 0x08);		/* Alternate freq select enabled */
     }
   else
     {
@@ -1464,7 +1475,7 @@ ad1848_init (char *name, int io_base, int irq, int dma_playback, int dma_capture
       if (irq > 0)
 	{
 	  audio_devs[my_dev]->devc = devc;
-	  irq2dev[irq] = my_dev;
+	  irq2dev[irq] = devc->dev_no = my_dev;
 	  if (snd_set_irq_handler (devc->irq, ad1848_interrupt,
 				   audio_devs[my_dev]->name,
 				   devc->osp) < 0)
@@ -1549,7 +1560,7 @@ ad1848_unload (int io_base, int irq, int dma_playback, int dma_capture, int shar
   int             i, dev = 0;
   ad1848_info    *devc = NULL;
 
-  for (i = 0; devc == NULL && nr_ad1848_devs; i++)
+  for (i = 0; devc == NULL && i < nr_ad1848_devs; i++)
     if (dev_info[i].base == io_base)
       {
 	devc = &dev_info[i];

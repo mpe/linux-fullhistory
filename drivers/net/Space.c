@@ -174,9 +174,6 @@ ethif_probe(struct device *dev)
 #ifdef CONFIG_NI52
 	&& ni52_probe(dev)
 #endif
-#ifdef CONFIG_NI65
-	&& ni65_probe(dev)
-#endif
 	&& 1 ) {
 	return 1;	/* -ENODEV or -EAGAIN would be more accurate. */
     }

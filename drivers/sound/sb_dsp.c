@@ -71,7 +71,7 @@ int             sb_dsp_ok = 0;	/*
 				 * initialization  *  */
 static int      midi_disabled = 0;
 int             sb_dsp_highspeed = 0;
-int             sbc_major = 1, sbc_minor = 0;
+int             sbc_major = 0, sbc_minor = 0;
 static int      dsp_stereo = 0;
 static int      dsp_current_speed = DSP_DEFAULT_SPEED;
 static int      sb16 = 0;
@@ -292,7 +292,7 @@ dsp_speaker (char state)
 static int
 ess_speed (int speed)
 {
-  int             rate;
+  int             divider;
   unsigned char   bits = 0;
 
   if (speed < 4000)
@@ -303,20 +303,27 @@ ess_speed (int speed)
   if (speed > 22000)
     {
       bits = 0x80;
-      rate = 256 - (795500 + speed / 2) / speed;
-      speed = 795500 / (256 - rate);
+      divider = 256 - (795500 + speed / 2) / speed;
+      dsp_current_speed = 795500 / (256 - divider);
     }
   else
     {
-      rate = 128 - (397700 + speed / 2) / speed;
-      speed = 397700 / (128 - rate);
+      divider = 128 - (397700 + speed / 2) / speed;
+      dsp_current_speed = 397700 / (128 - divider);
     }
 
-  bits |= (unsigned char) rate;
+  bits |= (unsigned char) divider;
   ess_write (0xa1, bits);
 
-  dsp_current_speed = speed;
-  return speed;
+/*
+ * Set filter divider register
+ */
+
+  speed = (speed * 9) / 20;	/* Set filter rolloff to 90% of speed/2 */
+  divider = 256 - 7160000 / (speed * 82);
+  ess_write (0xa2, divider);
+
+  return dsp_current_speed;
 }
 
 static int
@@ -481,10 +488,10 @@ actually_output_block (int dev, unsigned long buf, int nr_bytes,
 
   if (AudioDrive)
     {
-      int             c = 0xffff - nr_bytes;	/* ES1688 increments the count */
+      short           c = -nr_bytes;
 
-      ess_write (0xa4, (unsigned char) (c & 0xff));
-      ess_write (0xa5, (unsigned char) ((c >> 8) & 0xff));
+      ess_write (0xa4, (unsigned char) ((unsigned short) c & 0xff));
+      ess_write (0xa5, (unsigned char) (((unsigned short) c >> 8) & 0xff));
 
       ess_write (0xb8, ess_read (0xb8) | 0x01);		/* Go */
     }
@@ -571,10 +578,10 @@ actually_start_input (int dev, unsigned long buf, int nr_bytes, int intrflag,
 
   if (AudioDrive)
     {
-      int             c = 0xffff - nr_bytes;	/* ES1688 increments the count */
+      short           c = -nr_bytes;
 
-      ess_write (0xa4, (unsigned char) (c & 0xff));
-      ess_write (0xa5, (unsigned char) ((c >> 8) & 0xff));
+      ess_write (0xa4, (unsigned char) ((unsigned short) c & 0xff));
+      ess_write (0xa5, (unsigned char) (((unsigned short) c >> 8) & 0xff));
 
       ess_write (0xb8, ess_read (0xb8) | 0x01);		/* Go */
     }
@@ -798,6 +805,8 @@ sb_dsp_prepare_for_output (int dev, int bsize, int bcount)
 static void
 sb_dsp_halt_xfer (int dev)
 {
+  if (AudioDrive)
+    sb_reset_dsp ();
 }
 
 static int
@@ -884,6 +893,9 @@ sb_dsp_close (int dev)
 	sound_close_dma (dma16);
     }
 
+  if (AudioDrive)
+    sb_reset_dsp ();
+
   /* DMAbuf_close_dma (dev); */
   sb_free_irq ();
   /* sb_dsp_command (0xd4); */
@@ -923,7 +935,7 @@ sb_dsp_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
     {
     case SOUND_PCM_WRITE_RATE:
       if (local)
-	return dsp_speed ((long) arg);
+	return dsp_speed ((int) arg);
       return snd_ioctl_return ((int *) arg, dsp_speed (get_fs_long ((long *) arg)));
       break;
 
@@ -935,7 +947,7 @@ sb_dsp_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 
     case SOUND_PCM_WRITE_CHANNELS:
       if (local)
-	return dsp_set_stereo ((long) arg - 1) + 1;
+	return dsp_set_stereo ((int) arg - 1) + 1;
       return snd_ioctl_return ((int *) arg, dsp_set_stereo (get_fs_long ((long *) arg) - 1) + 1);
       break;
 
@@ -947,7 +959,7 @@ sb_dsp_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
 
     case SNDCTL_DSP_STEREO:
       if (local)
-	return dsp_set_stereo ((long) arg);
+	return dsp_set_stereo ((int) arg);
       return snd_ioctl_return ((int *) arg, dsp_set_stereo (get_fs_long ((long *) arg)));
       break;
 
@@ -956,7 +968,7 @@ sb_dsp_ioctl (int dev, unsigned int cmd, caddr_t arg, int local)
        */
     case SNDCTL_DSP_SETFMT:
       if (local)
-	return dsp_set_bits ((long) arg);
+	return dsp_set_bits ((int) arg);
       return snd_ioctl_return ((int *) arg, dsp_set_bits (get_fs_long ((long *) arg)));
       break;
 
@@ -1214,15 +1226,15 @@ initialize_ProSonic16 (void)
 int
 sb_dsp_detect (struct address_info *hw_config)
 {
-  sbc_base = hw_config->io_base;
-  sbc_irq = hw_config->irq;
-  sbc_dma = hw_config->dma;
-  sb_osp = hw_config->osp;
-
   if (sb_dsp_ok)
     return 0;			/*
 				 * Already initialized
 				 */
+
+  sbc_base = hw_config->io_base;
+  sbc_irq = hw_config->irq;
+  sbc_dma = hw_config->dma;
+  sb_osp = hw_config->osp;
   dma8 = dma16 = hw_config->dma;
 
   if (sb_reset_dsp ())
@@ -1273,7 +1285,6 @@ ess_init (int ess_minor)	/* ESS1688 Initialization */
   unsigned char   cfg, irq_bits = 0, dma_bits = 0;
 
   AudioDrive = 1;
-  sb_no_recording = 1;		/* Temporary kludge */
 
   if (ess_minor >= 8)		/* ESS1688 doesn't support SB MIDI */
     midi_disabled = 1;
@@ -1466,7 +1477,8 @@ sb_dsp_init (long mem_start, struct address_info *hw_config)
 
   int             mixer_type = 0;
 
-  dsp_get_vers (hw_config);
+  if (sbc_major == 0)
+    dsp_get_vers (hw_config);
 
   if (sbc_major == 0)
     {

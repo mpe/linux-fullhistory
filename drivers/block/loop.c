@@ -29,7 +29,7 @@
 #include "des.h"
 #endif
 
-#define DEFAULT_MAJOR_NR 28
+#define DEFAULT_MAJOR_NR 10
 int loop_major = DEFAULT_MAJOR_NR;
 #define MAJOR_NR loop_major	/* not necessarily constant */
 
@@ -225,15 +225,8 @@ repeat:
 			brelse(bh);
 			goto error_out;
 		}
-		if (CURRENT->cmd == WRITE) {
-			set_bit(BH_Dirty, &bh->b_state);
-			ll_rw_block(WRITE, 1, &bh);
-			wait_on_buffer(bh);
-			if (buffer_dirty(bh)) {
-				brelse(bh);
-				goto error_out;
-			}
-		}
+		if (CURRENT->cmd == WRITE)
+			mark_buffer_dirty(bh, 1);
 		brelse(bh);
 		dest_addr += size;
 		len -= size;
@@ -280,7 +273,7 @@ static int loop_clr_fd(struct loop_device *lo, kdev_t dev)
 		return -ENXIO;
 	if (lo->lo_refcnt > 1)
 		return -EBUSY;
-	lo->lo_inode->i_count--;
+	iput(lo->lo_inode);
 	lo->lo_device = 0;
 	lo->lo_inode = NULL;
 	lo->lo_encrypt_type = 0;
@@ -288,6 +281,7 @@ static int loop_clr_fd(struct loop_device *lo, kdev_t dev)
 	lo->lo_encrypt_key_size = 0;
 	memset(lo->lo_encrypt_key, 0, LO_KEY_SIZE);
 	memset(lo->lo_name, 0, LO_NAME_SIZE);
+	loop_sizes[lo->lo_number] = 0;
 	invalidate_buffers(dev);
 	return 0;
 }

@@ -103,16 +103,16 @@ static int nfs_fsync(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static inline void do_read_nfs(struct inode * inode, char * buf, unsigned long pos)
+static inline int do_read_nfs(struct inode * inode, struct page * page,
+	char * buf, unsigned long pos)
 {
-	int refresh = 0;
+	int result, refresh = 0;
 	int count = PAGE_SIZE;
 	int rsize = NFS_SERVER(inode)->rsize;
 	struct nfs_fattr fattr;
 
+	page->locked = 1;
 	do {
-		int result;
-
 		if (count < rsize)
 			rsize = count;
 		result = nfs_proc_read(NFS_SERVER(inode), NFS_FH(inode), 
@@ -128,28 +128,26 @@ static inline void do_read_nfs(struct inode * inode, char * buf, unsigned long p
 	} while (count);
 
 	memset(buf, 0, count);
-	if (refresh)
+	if (refresh) {
 		nfs_refresh_inode(inode, &fattr);
+		result = 0;
+		page->uptodate = 1;
+	}
+	page->locked = 0;
+	wake_up(&page->wait);
+	return result;
 }
 
 static int nfs_readpage(struct inode * inode, struct page * page)
 {
+	int error;
 	unsigned long address;
 
 	address = page_address(page);
 	page->count++;
-	wait_on_page(page);
-	if (page->uptodate) {
-		free_page(address);
-		return 0;
-	}
-	page->locked = 1;
-	do_read_nfs(inode, (char *) address, page->offset);
-	page->locked = 0;
-	page->uptodate = 1;
-	wake_up(&page->wait);
+	error = do_read_nfs(inode, page, (char *) address, page->offset);
 	free_page(address);
-	return 0;
+	return error;
 }
 
 static int nfs_file_write(struct inode *inode, struct file *file, const char *buf,

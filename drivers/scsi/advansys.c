@@ -1,4 +1,4 @@
-/* $Id: advansys.c,v 1.11 1996/01/16 22:39:19 bobf Exp bobf $ */
+/* $Id: advansys.c,v 1.12 1996/02/23 20:48:27 bobf Exp bobf $ */
 /*
  * advansys.c - Linux Host Driver for AdvanSys SCSI Adapters
  * 
@@ -14,16 +14,16 @@
  * bobf@advansys.com (Bob Frey)
  */
 
-/* The driver has been tested with Linux 1.2.1 and 1.3.57 kernels. */
-#define ASC_VERSION "1.2"	/* AdvanSys Driver Version */
+/* The driver has been tested with Linux v1.2.1 and v1.3.57 kernels. */
+#define ASC_VERSION "1.3"	/* AdvanSys Driver Version */
 
 /*
 
   Documentation for the AdvanSys Driver
 
   A. Adapters Supported by this Driver
-  B. Linux 1.2.X - Directions for Adding the AdvanSys Driver
-  C. Linux 1.3.X - Directions for Adding the AdvanSys Driver
+  B. Linux v1.2.X - Directions for Adding the AdvanSys Driver
+  C. Linux v1.3.X - Directions for Adding the AdvanSys Driver
   D. Source Comments
   E. Driver Compile Time Options and Debugging
   F. Driver LILO Option
@@ -67,7 +67,11 @@
        no BIOS so it cannot control a boot device, but it can control
        any secondary devices.
  
-  B. Linux 1.2.X - Directions for Adding the AdvanSys Driver
+  B. Linux v1.2.X - Directions for Adding the AdvanSys Driver
+
+     These directions apply to v1.2.1. For versions that follow v1.2.1
+     but precede v1.3.57 some of the changes for Linux v1.3.X listed
+     below may need to be modified or included.
  
      There are two source files: advansys.h and advansys.c. Copy
      both of these files to the directory /usr/src/linux/drivers/scsi.
@@ -114,9 +118,9 @@
              { "advansys=", advansys_setup },
           #endif
 
-     5. If you have the HP 4020i CD-R driver and Linux 1.2.X you should
+     5. If you have the HP 4020i CD-R driver and Linux v1.2.X you should
         add a fix to the CD-ROM target driver. This fix will allow
-        you to mount CDs with the iso9660 file system. Linux 1.3.X
+        you to mount CDs with the iso9660 file system. Linux v1.3.X
         already has this fix. In the file /usr/src/linux/drivers/scsi/sr.c
         and function get_sectorsize() after the line:
 
@@ -133,7 +137,11 @@
         'make modules_install'. Use 'insmod' and 'rmmod' to install
         and remove advansys.o.
  
-  C. Linux 1.3.X - Directions for Adding the AdvanSys Driver
+  C. Linux v1.3.X - Directions for Adding the AdvanSys Driver
+
+     These directions apply to v1.3.57. For versions that precede v1.3.57
+     some of these changes may need to be modified or eliminated. Beginning
+     with v1.3.58 this driver is included with the Linux distribution.
 
      There are two source files: advansys.h and advansys.c. Copy
      both of these files to the directory /usr/src/linux/drivers/scsi.
@@ -253,7 +261,7 @@
         The following command line will look for an adapter at 0x330
         and set the debug level to 2.
 
-           linux advansys=0x330,0x0,0x0,0x0,0xdeb2
+           linux advansys=0x330,0,0,0,0xdeb2
 
         If the driver is built as a loadable module this variable can be
         defined when the driver is loaded. The following insmod command
@@ -281,14 +289,14 @@
  
      2. ADVANSYS_STATS - enable statistics and tracing
  
-        For Linux 1.2.X if ADVANSYS_STATS_1_2_PRINT is defined every
+        For Linux v1.2.X if ADVANSYS_STATS_1_2_PRINT is defined every
         10,000 I/O operations the driver will print statistics to the
         console. This value can be changed by modifying the constant
         used in advansys_queuecommand(). ADVANSYS_STATS_1_2_PRINT is
         off by default.
 
-        For Linux 1.3.X statistics can be accessed by reading the
-        /proc/scsi/advansys/[0-9] files.
+        For Linux v1.3.X statistics can be accessed by reading the
+        /proc/scsi/advansys/[0-(ASC_NUM_BOARD_SUPPORTED-1)] files.
 
         Note: these statistics are currently maintained on a global driver
         basis and not per board.
@@ -340,7 +348,17 @@
             recognized on some PCI motherboards.
          3. Add support for the ABP-5140 PnP ISA card.
          4. Fix check condition return status.
-         5. Add conditionally compiled code for Linux 1.3.X.
+         5. Add conditionally compiled code for Linux v1.3.X.
+
+     2/23/96 1.3:
+         1. Fix problem in advansys_biosparam() that resulted in the
+            wrong drive geometry being returned for drives > 1GB with
+            extended translation enabled.
+         2. Add additional tracing during device initialization.
+         3. Change code that only applies to ISA PnP adapter.
+         4. Eliminate 'make dep' warning.
+         5. Try to fix problem with handling resets by increasing their
+            timeout value.
         
   H. Known Problems or Issues
 
@@ -357,13 +375,20 @@
         the timeout value. This gives the driver more time to perform
         its own initialization for the board and each device. The timeout
         value is only changed on the first scsi command for each device
-        and never thereafter.
+        and never thereafter. The same change is made for reset commands.
+
+     3. The driver occasionally enters a loop handling reset requests. It
+        isn't clear yet whether this is a bug in the upper or mid-level
+        scsi modules or in this driver.
 
   I. Credits
 
-     Nathan Hartwell (mage@cdc3.cdc.net) provided the directions and
-     and basis for the Linux 1.3.X changes which were included in the
+     Nathan Hartwell <mage@cdc3.cdc.net> provided the directions and
+     and basis for the Linux v1.3.X changes which were included in the
      1.2 release.
+
+     Thomas E Zerucha <zerucha@shell.portal.com> pointed out the bug
+     in advansys_biosparam() which was fixed the 1.3 release.
 
   J. AdvanSys Contact Information
  
@@ -389,7 +414,7 @@
  */
 
 /*
- * The driver can be used in Linux 1.2.X or 1.3.X.
+ * The driver can be used in Linux v1.2.X or v1.3.X.
  */
 #if !defined(LINUX_1_2) && !defined(LINUX_1_3)
 #ifndef LINUX_VERSION_CODE
@@ -407,12 +432,11 @@
  * --- Linux Include Files 
  */
 
-#ifdef MODULE
 #ifdef LINUX_1_3
-#include <linux/autoconf.h>
-#endif /* LINUX_1_3 */ 
+#ifdef MODULE
 #include <linux/module.h>
 #endif /* MODULE */
+#endif /* LINUX_1_3 */
 #include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -421,7 +445,6 @@
 #include <linux/ioport.h>
 #include <linux/delay.h>
 #include <linux/malloc.h>
-#include <linux/config.h>
 #ifdef LINUX_1_3
 #include <linux/proc_fs.h>
 #endif /* LINUX_1_3 */ 
@@ -2569,7 +2592,7 @@ STATIC int 		interrupts_enabled(void);
 
 #ifdef LINUX_1_3
 /*
- * advansys_proc_info() - /proc/scsi/advansys/[0-ASC_NUM_BOARD_SUPPORTED]
+ * advansys_proc_info() - /proc/scsi/advansys/[0-(ASC_NUM_BOARD_SUPPORTED-1)]
  *
  * *buffer: I/O buffer
  * **start: if inout == FALSE pointer into buffer where user read should start
@@ -3192,10 +3215,10 @@ advansys_info(struct Scsi_Host *shp)
 /*
  * advansys_command()
  *
- * Polled-I/O. Apparently host driver shouldn't return until
+ * Polled-I/O. Apparently host drivers shouldn't return until
  * command is finished.
  *
- * XXX - Can host driver block here instead of spinning on command status?
+ * XXX - Can host drivers block here instead of spinning on command status?
  */
 int
 advansys_command(Scsi_Cmnd *scp)
@@ -3230,7 +3253,7 @@ advansys_queuecommand(Scsi_Cmnd *scp, void (*done)(Scsi_Cmnd *))
 #ifdef LINUX_1_2
 	/*
 	 * For LINUX_1_3, if statistics are enabled they can be accessed
-	 * by reading /proc/scsi/advansys/[0-9].
+	 * by reading /proc/scsi/advansys/[0-(ASC_NUM_BOARD_SUPPORTED-1)].
 	 */
 #ifdef ADVANSYS_STATS_1_2_PRINT
 	/* Display statistics every 10000 commands. */
@@ -3366,18 +3389,24 @@ advansys_reset(Scsi_Cmnd *scp)
 				tscp->scsi_done(tscp);
 			}
 		}
+		/*
+		 * XXX - Host drivers should not modify the timeout field.
+		 * Allow the SCSI bus reset more time to complete.
+		 */
+		scp->timeout += 2000;	/* Add 5 seconds to the request timeout. */
+
 		/* Must enable interrupts for AscResetSB() */
 		sti();
 		boardp = &ASC_BOARD(scp->host)->board;
 		scp->result = HOST_BYTE(DID_RESET);
 		switch (AscResetSB(boardp)) {
 		case ASC_TRUE:
-			ASC_DBG(1, "advansys_abort: AscResetSB() TRUE\n");
+			ASC_DBG(1, "advansys_reset: AscResetSB() TRUE\n");
 			ret = SCSI_RESET_SUCCESS;
 			break;
 		case ASC_ERROR:
 		default:
-			ASC_DBG(1, "advansys_abort: AscResetSB() ERROR\n");
+			ASC_DBG(1, "advansys_reset: AscResetSB() ERROR\n");
 			ret = SCSI_RESET_ERROR;
 			break;
 		}
@@ -3410,7 +3439,7 @@ advansys_biosparam(Disk *dp, kdev_t dep, int ip[])
 	if ((ASC_BOARD(dp->device->host)->board.dvc_cntl & ASC_CNTL_BIOS_GT_1GB) &&
 		dp->capacity > 0x200000) {
 			ip[0] = 255;
-			ip[1] = 64;
+			ip[1] = 63;
 	} else {
 			ip[0] = 64;
 			ip[1] = 32;
@@ -7926,7 +7955,7 @@ AscInitFromEEP(
 			(asc_dvc->cfg->pci_device_id == ASC_PCI_DEVICE_ID_REV_B)) {
 			asc_dvc->pci_fix_asyn_xfer = ASC_ALL_DEVICE_BIT_SET;
 		}
-	} else if (asc_dvc->bus_type & ASC_IS_ISAPNP) {
+	} else if ((asc_dvc->bus_type & ASC_IS_ISAPNP) == ASC_IS_ISAPNP) {
 
 		if (AscGetChipVersion(iop_base, asc_dvc->bus_type)
 			== ASC_CHIP_VER_ASYN_BUG) {
@@ -8447,10 +8476,27 @@ AscInitPollTarget(
 			AscDispInquiry(tid_no, lun, inq);
 #endif
 
+			ASC_DBG_PRT_INQUIRY(2, inq, sizeof(ASC_SCSI_INQUIRY));
+
 			if (lun == 0) {
 
+				ASC_DBG1(2, "AscInitPollTarget: vendor_id: \"%.8s\"\n",
+					inq->vendor_id);
+				ASC_DBG1(2, "AscInitPollTarget: product_id: \"%.16s\"\n",
+					inq->product_id);
+				ASC_DBG1(2, "AscInitPollTarget: product_rev_level: \"%.4s\"\n",
+					inq->product_rev_level);
+
+				ASC_DBG1(2, "AscInitPollTarget: byte3.rsp_data_fmt %x\n",
+					inq->byte3.rsp_data_fmt);
+				ASC_DBG1(2, "AscInitPollTarget: byte3.ansi_apr_ver %x\n",
+					inq->byte2.ansi_apr_ver);
+					
 				if ((inq->byte3.rsp_data_fmt >= 2) ||
 					(inq->byte2.ansi_apr_ver >= 2)) {
+
+					ASC_DBG1(2, "AscInitPollTarget: byte7.CmdQue %x\n",
+						inq->byte7.CmdQue);
 
 					if (inq->byte7.CmdQue) {
 						asc_dvc->cfg->can_tagged_qng |= tid_bits;
@@ -8460,6 +8506,9 @@ AscInitPollTarget(
 							  asc_dvc->cfg->max_tag_qng[tid_no];
 						}
 					}
+					ASC_DBG1(2, "AscInitPollTarget: byte7.Sync %x\n",
+						inq->byte7.Sync);
+
 					if (!inq->byte7.Sync) {
 
 						asc_dvc->init_sdtr &= ~tid_bits;

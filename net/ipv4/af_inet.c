@@ -1162,7 +1162,7 @@ static int inet_shutdown(struct socket *sock, int how)
 		return(-EINVAL);
 	if (sock->state == SS_CONNECTING && sk->state == TCP_ESTABLISHED)
 		sock->state = SS_CONNECTED;
-	if (!tcp_connected(sk->state)) 
+	if (!sk || !tcp_connected(sk->state)) 
 		return(-ENOTCONN);
 	sk->shutdown |= how;
 	if (sk->prot->shutdown)

@@ -866,7 +866,7 @@ play_event (unsigned char *q)
     case SEQ_WAIT:
       delay = (unsigned int *) q;	/*
 					 * Bytes 1 to 3 are containing the *
-					 * delay in jiffies
+					 * delay in 'ticks'
 					 */
       *delay = (*delay >> 8) & 0xffffff;
 
@@ -1097,22 +1097,8 @@ sequencer_open (int dev, struct fileinfo *file)
 
   if (dev)			/* Patch manager device */
     {
-      int             err;
-
       printk ("Patch manager interface is currently broken. Sorry\n");
       return -ENXIO;
-
-      dev--;
-
-      if (dev >= MAX_SYNTH_DEV)
-	return -ENXIO;
-      if (pmgr_present[dev])
-	return -EBUSY;
-      if ((err = pmgr_open (dev)) < 0)
-	return err;
-
-      pmgr_present[dev] = 1;
-      return err;
     }
 
   save_flags (flags);

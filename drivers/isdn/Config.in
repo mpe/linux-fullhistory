@@ -1,0 +1,12 @@
+#
+# ISDN device configuration
+#
+if [ "$CONFIG_INET" != "n" ]; then
+  bool 'Support synchronous PPP' CONFIG_ISDN_PPP
+  if [ "$CONFIG_ISDN_PPP" != "n" ]; then
+    bool 'Use VJ-compression with synchronous PPP' CONFIG_ISDN_PPP_VJ
+    bool 'Support generic MP (RFC 1717)' CONFIG_ISDN_MPP
+  fi
+fi
+dep_tristate 'Teles/NICCY1016PC/Creatix support' CONFIG_ISDN_DRV_TELES $CONFIG_ISDN
+dep_tristate 'ICN B1 and B2 support' CONFIG_ISDN_DRV_ICN $CONFIG_ISDN

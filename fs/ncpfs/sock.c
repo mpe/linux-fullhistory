@@ -257,7 +257,7 @@ ncp_msg_data_ready(struct sock *sk, int len)
 			ntohs(sender.sipx_port),
 			packet_buf[0], packet_buf[1]);
 
-		ncp_trigger_message(sk->ipx_ncp_server);
+		ncp_trigger_message(sk->protinfo.ipx.ncp_server);
 
 		set_fs(fs);
 	}
@@ -306,7 +306,7 @@ ncp_catch_message(struct ncp_server *server)
         }
 
         sk->data_ready = ncp_msg_data_ready;
-	sk->ipx_ncp_server = server;
+	sk->protinfo.ipx.ncp_server = server;
         return 0;
 }
                 

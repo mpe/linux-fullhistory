@@ -116,6 +116,12 @@ static void ramdisk_start_setup(char *str, int *ints);
 static void load_ramdisk(char *str, int *ints);
 static void prompt_ramdisk(char *str, int *ints);
 #endif CONFIG_BLK_DEV_RAM
+#ifdef CONFIG_ISDN_DRV_ICN
+extern void icn_setup(char *str, int *ints);
+#endif
+#ifdef CONFIG_ISDN_DRV_TELES
+extern void teles_setup(char *str, int *ints);
+#endif
 
 #if defined(CONFIG_SYSVIPC) || defined(CONFIG_KERNELD)
 extern void ipc_init(void);
@@ -297,6 +303,12 @@ struct {
 #endif CONFIG_ISP16_CDI
 #ifdef CONFIG_SOUND
 	{ "sound=", sound_setup },
+#endif
+#ifdef CONFIG_ISDN_DRV_ICN
+	{ "icn=", icn_setup },
+#endif
+#ifdef CONFIG_ISDN_DRV_TELES
+	{ "teles=", teles_setup },
 #endif
 	{ 0, 0 }
 };

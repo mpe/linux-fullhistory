@@ -941,7 +941,7 @@ guswave_set_instr (int dev, int voice, int instr_no)
   sample_no = patch_table[instr_no];
   patch_map[voice] = -1;
 
-  if (sample_no < 0)
+  if (sample_no == NOT_SAMPLE)
     {
       printk ("GUS: Undefined patch %d for voice %d\n", instr_no, voice);
       return -EINVAL;		/* Patch not defined */
@@ -2557,7 +2557,7 @@ guswave_patchmgr (int dev, struct patmgr_info *rec)
 
 	  rec->data.data8[i] = 0;
 
-	  while (ptr >= 0 && ptr < free_sample)
+	  while (ptr >= 0 && ptr < free_sample && ptr != NOT_SAMPLE)
 	    {
 	      rec->data.data8[i]++;
 	      ptr = samples[ptr].key;	/* Follow link */
@@ -2572,7 +2572,7 @@ guswave_patchmgr (int dev, struct patmgr_info *rec)
 
 	n = 0;
 
-	while (ptr >= 0 && ptr < free_sample)
+	while (ptr >= 0 && ptr < free_sample && ptr != NOT_SAMPLE)
 	  {
 	    rec->data.data32[n++] = ptr;
 	    ptr = samples[ptr].key;	/* Follow link */

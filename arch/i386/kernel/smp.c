@@ -27,6 +27,7 @@
 #include <linux/mm.h>
 #include <linux/kernel_stat.h>
 #include <linux/delay.h>
+#include <linux/mc146818rtc.h>
 #include <asm/i82489.h>
 #include <linux/smp.h>
 #include <asm/pgtable.h>
@@ -469,7 +470,7 @@ void smp_callin(void)
 	/*
 	 *	Allow the master to continue.
 	 */	
-	set_bit(cpuid, &cpu_callin_map[0]);
+	set_bit(cpuid, (unsigned long *)&cpu_callin_map[0]);
 	/*
 	 *	Until we are ready for SMP scheduling
 	 */
@@ -573,21 +574,38 @@ void smp_boot_cpus(void)
 			 *	the targeted processor.
 			 */
 
-#ifdef EEK
 			SMP_PRINTK(("Setting warm reset code and vector.\n"));
 
+			/*
+			 *	Needed to boot a 486 board.
+			 */
+			 
 			CMOS_WRITE(0xa, 0xf);
-			*((volatile unsigned short *) 0x467) = (unsigned short)(stack>>4);
+			pg0[0]=7;
+			*((volatile unsigned short *) 0x467) = ((unsigned long)stack)>>4;
 			*((volatile unsigned short *) 0x469) = 0;
-#endif
+			pg0[0]= pte_val(mk_pte(0, PAGE_READONLY));
+
+			/*
+			 *	Clean up the errors
+			 */
 
 			apic_write(APIC_ESR, 0);
 			accept_status = (apic_read(APIC_ESR) & 0xEF);
+			
+			/*
+			 *	Status is now clean
+			 */
+			 
 			send_status = 0;
 			accept_status = 0;
 
 			SMP_PRINTK(("Asserting INIT.\n"));
 
+			/*
+			 *	Turn INIT on
+			 */
+			 
 			cfg=apic_read(APIC_ICR2);
 			cfg&=0x00FFFFFF;
 			apic_write(APIC_ICR2, cfg|SET_APIC_DEST_FIELD(i)); 			/* Target chip     	*/
@@ -610,6 +628,10 @@ void smp_boot_cpus(void)
 			}
 #endif
 
+			/*
+			 *	And off again
+			 */
+			 
 			if (send_status && !accept_status)
 			{
 				SMP_PRINTK(("Deasserting INIT.\n"));
@@ -706,7 +728,6 @@ void smp_boot_cpus(void)
 				printk("APIC never delivered???\n");
 			else if (accept_status)		/* Send accept error */
 				printk("APIC delivery error (%lx).\n", accept_status);
-			else
 			{
 				for(timeout=0;timeout<50000;timeout++)
 				{
@@ -1096,9 +1117,9 @@ void smp_message_irq(int cpl, struct pt_regs *regs)
 		 */
 		 
 		case MSG_INVALIDATE_TLB:
-			if(clear_bit(i,&smp_invalidate_needed))
+			if(clear_bit(i,(unsigned long *)&smp_invalidate_needed))
 				local_invalidate();
-			set_bit(i, &cpu_callin_map[0]);
+			set_bit(i, (unsigned long *)&cpu_callin_map[0]);
 			cpu_callin_map[0]|=1<<smp_processor_id();
 			break;
 			

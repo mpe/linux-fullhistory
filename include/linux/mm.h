@@ -239,8 +239,8 @@ extern void truncate_inode_pages(struct inode *, unsigned long);
 
 #define GFP_LEVEL_MASK 0xf
 
-#define avl_empty	(struct vm_area_struct *) NULL
-
+/* vma is the first one with  address < vma->vm_end,
+ * and even  address < vma->vm_start. Have to extend vma. */
 static inline int expand_stack(struct vm_area_struct * vma, unsigned long address)
 {
 	unsigned long grow;
@@ -256,6 +256,8 @@ static inline int expand_stack(struct vm_area_struct * vma, unsigned long addres
 		vma->vm_mm->locked_vm += grow >> PAGE_SHIFT;
 	return 0;
 }
+
+#define avl_empty	(struct vm_area_struct *) NULL
 
 /* Look up the first VMA which satisfies  addr < vm_end,  NULL if none. */
 static inline struct vm_area_struct * find_vma (struct task_struct * task, unsigned long addr)

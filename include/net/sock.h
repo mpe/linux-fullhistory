@@ -86,7 +86,61 @@ struct inet_packet_opt
 	char			device_name[15];
 };
 
+/*
+ *	Once the IPX ncpd patches are in these are going into protinfo
+ */
 
+#ifdef CONFIG_IPX 
+struct ipx_opt
+{
+	ipx_address		dest_addr;
+	ipx_interface		*intrfc;
+	unsigned short		port;
+#ifdef CONFIG_IPX_INTERN
+	unsigned char           node[IPX_NODE_LEN];
+#endif
+	unsigned short		type;
+/* 
+ * To handle asynchronous messages from the NetWare server, we have to
+ * know the connection this socket belongs to. 
+ */
+	struct ncp_server       *ncp_server;
+	
+};
+#endif
+
+#ifdef CONFIG_NUTCP
+struct tcp_opt
+{
+/*
+ *	RFC793 variables by their proper names. This means you can
+ *	read the code and the spec side by side (and laugh ...)
+ *	See RFC793 and RFC1122. The RFC writes these in capitals.
+ */
+ 	__u32	rcv_nxt;	/* What we want to receive next 	*/
+ 	__u32	rcv_up;		/* The urgent point (may not be valid) 	*/
+ 	__u32	rcv_wnd;	/* Current receiver window		*/
+ 	__u32	snd_nxt;	/* Next sequence we send		*/
+ 	__u32	snd_una;	/* First byte we want an ack for	*/
+	__u32	snd_up;		/* Outgoing urgent pointer		*/
+	__u32	snd_wl1;	/* Sequence for window update		*/
+	__u32	snd_wl2;	/* Ack sequence for update		*/
+/*
+ *	Slow start and congestion control (see also Nagle, and Karn & Partridge)
+ */
+ 	__u32	snd_cwnd;	/* Sending congestion window		*/
+ 	__u32	snd_ssthresh;	/* Slow start size threshold		*/
+/*
+ *	Timers used by the TCP protocol layer
+ */
+ 	struct timer_list	delack_timer;		/* Ack delay 	*/
+ 	struct timer_list	idle_timer;		/* Idle watch 	*/
+ 	struct timer_list	completion_timer;	/* Up/Down timer */
+ 	struct timer_list	probe_timer;		/* Probes	*/
+ 	struct timer_list	retransmit_timer;	/* Resend (no ack) */
+};
+#endif
+ 	
 /*
  * This structure really needs to be cleaned up.
  * Most of it is for TCP, and not used by any of
@@ -190,24 +244,6 @@ struct sock
 	unsigned short		sndbuf;
 	unsigned short		type;
 	unsigned char		localroute;	/* Route locally only */
-#ifdef CONFIG_IPX
-/*
- *	Once the IPX ncpd patches are in these are going into protinfo
- */
-	ipx_address		ipx_dest_addr;
-	ipx_interface		*ipx_intrfc;
-	unsigned short		ipx_port;
-
-/* To handle asynchronous messages from the NetWare server, we have to
- * know the connection this socket belongs to. Sorry to blow up this
- * structure even more. */
-	struct ncp_server       *ipx_ncp_server;
-
-#ifdef CONFIG_IPX_INTERN
-	unsigned char           ipx_node[IPX_NODE_LEN];
-#endif
-	unsigned short		ipx_type;
-#endif
 #ifdef CONFIG_AX25
 	ax25_cb			*ax25;
 #ifdef CONFIG_NETROM
@@ -226,8 +262,14 @@ struct sock
 #ifdef CONFIG_ATALK
 		struct atalk_sock	af_at;
 #endif
+#ifdef CONFIG_IPX
+		struct ipx_opt		af_ipx;
+#endif		
 #ifdef CONFIG_INET
 		struct inet_packet_opt  af_packet;
+#ifdef CONFIG_NUTCP		
+		struct tcp_opt		af_tcp;
+#endif		
 #endif
 	} protinfo;  		
 
@@ -331,18 +373,18 @@ struct proto
 #define TIME_DESTROY	4
 #define TIME_DONE	5	/* Used to absorb those last few packets */
 #define TIME_PROBE0	6
+
 /*
  *	About 10 seconds 
  */
-#define SOCK_DESTROY_TIME (10*HZ)
 
+#define SOCK_DESTROY_TIME (10*HZ)
 
 /*
  *	Sockets 0-1023 can't be bound too unless you are superuser 
  */
  
 #define PROT_SOCK	1024
-
 
 #define SHUTDOWN_MASK	3
 #define RCV_SHUTDOWN	1

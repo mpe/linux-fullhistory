@@ -275,13 +275,13 @@ smw_mixer_set (int dev, int value)
       levels[dev] = left | (right << 8);
 
       /* Set left bass and treble values */
-      val = ((levels[SOUND_MIXER_TREBLE] & 0xff) * 16 / 100) << 4;
-      val |= ((levels[SOUND_MIXER_BASS] & 0xff) * 16 / 100) & 0x0f;
+      val = ((levels[SOUND_MIXER_TREBLE] & 0xff) * 16 / (unsigned) 100) << 4;
+      val |= ((levels[SOUND_MIXER_BASS] & 0xff) * 16 / (unsigned) 100) & 0x0f;
       sb_setmixer (0x0d, val);
 
       /* Set right bass and treble values */
-      val = (((levels[SOUND_MIXER_TREBLE] >> 8) & 0xff) * 16 / 100) << 4;
-      val |= (((levels[SOUND_MIXER_BASS] >> 8) & 0xff) * 16 / 100) & 0x0f;
+      val = (((levels[SOUND_MIXER_TREBLE] >> 8) & 0xff) * 16 / (unsigned) 100) << 4;
+      val |= (((levels[SOUND_MIXER_BASS] >> 8) & 0xff) * 16 / (unsigned) 100) & 0x0f;
       sb_setmixer (0x0e, val);
       break;
 
