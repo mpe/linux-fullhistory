@@ -42,7 +42,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@storm.net$>$}
-\date{Last revised: January 5, 1996}
+\date{Last revised: February 3, 1996}
 \maketitle
 %
 \noindent
@@ -146,8 +146,8 @@ an unreasonable effort.
 \major{  }{}{block}{MCA ESDI hard disk}
 \major{37}{}{char }{IDE tape}
 \major{38}{}{char }{Myricom PCI Myrinet board}
-\major{39}{}{char }{Reserved for ncpfs $<$lendecke@namu01.gwdg.de$>$}
-\major{40}{--41}{}{Unallocated}
+\major{39}{--40}{}{Unallocated}
+\major{41}{}{char}{Yet Another Micro Monitor}
 \major{42}{}{}{Demo/sample use}
 \major{43}{}{char }{isdn4linux virtual modem}
 \major{44}{}{char }{isdn4linux virtual modem -- alternate devices}
@@ -858,11 +858,12 @@ packet I/O''.  The board is also accessible as a regular {\file eth}
 networking device.
 
 \begin{devicelist}
-\major{39}{}{char }{Reserved for ncpfs $<$lendecke@namu01.gwdg.de$>$}
+\major{39}{--40}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}
-\major{40}{--41}{}{Unallocated}
+\major{41}{}{char }{Yet Another Micro Monitor}
+	\minor{0}{/dev/yamm}{Yet Another Micro Monitor}
 \end{devicelist}
 
 \begin{devicelist}

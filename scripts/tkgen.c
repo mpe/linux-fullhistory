@@ -4,8 +4,10 @@
  * Eric Youngdale
  * 10/95
  *
- * 1995 01 04 - Aesthetic improvements by Avery Pennarun
+ * 1996 01 04 - Avery Pennarun - Aesthetic improvements
  *              <apenwarr@foxnet.net>
+ *
+ * 1996 01 24 - Avery Pennarun - Bugfixes and more aesthetics
  */
 #include <stdio.h>
 #include "tkparse.h"
@@ -44,7 +46,27 @@ static start_proc(char * label, int menu_num, int flag)
   printf("\tmessage $w.m -width 400 -aspect 300 -background grey -text \\\n");
   printf("\t\t\"%s\"  -relief raised -bg grey\n",label);
   printf("\tpack $w.m -pady 10 -side top -padx 10\n");
-  printf("\twm title $w \"%s\" \n\n\n", label);
+  printf("\twm title $w \"%s\" \n\n", label);
+  
+  printf("\tframe $w.topline -relief ridge -borderwidth 2 -height 2\n");
+  printf("\tpack $w.topline -side top -fill x\n\n");
+  
+  printf("\tframe $w.config\n");
+  printf("\tpack $w.config -fill y -expand on\n\n");
+  
+  printf("\tscrollbar $w.config.vscroll -command \"$w.config.canvas yview\"\n");
+  printf("\tpack $w.config.vscroll -side right -fill y\n\n");
+  
+  printf("\tframe $w.botline -relief ridge -borderwidth 2 -height 2\n");
+  printf("\tpack $w.botline -side top -fill x\n\n");
+  
+  printf("\tcanvas $w.config.canvas -height 1\\\n"
+  	 "\t\t-relief flat -borderwidth 0 -yscrollcommand \"$w.config.vscroll set\" \\\n"
+  	 "\t\t-width [expr [winfo screenwidth .] * 1 / 2] \n");
+  printf("\tframe $w.config.f\n");
+  printf("\tpack $w.config.canvas -side right -fill y\n");
+  
+  printf("\n\n");
 }
 
 /*
@@ -174,11 +196,11 @@ generate_if(struct kconfig * item,
       break;
     case tok_int:
       printf("} then { ");
-      printf(".menu%d.x%d.x configure -state normal; ", menu_num, line_num);
-      printf(".menu%d.x%d.l configure -state normal; ", menu_num, line_num);
+      printf(".menu%d.config.f.x%d.x configure -state normal -fore black; ", menu_num, line_num);
+      printf(".menu%d.config.f.x%d.l configure -state normal; ", menu_num, line_num);
       printf("} else { ");
-      printf(".menu%d.x%d.x configure -state disabled;", menu_num, line_num );
-      printf(".menu%d.x%d.l configure -state disabled;", menu_num, line_num );
+      printf(".menu%d.config.f.x%d.x configure -state disabled -fore gray60;", menu_num, line_num );
+      printf(".menu%d.config.f.x%d.l configure -state disabled;", menu_num, line_num );
       printf("}\n");
       break;
     case tok_bool:
@@ -186,7 +208,7 @@ generate_if(struct kconfig * item,
       /*
        * If a bool is just a button, then use this definition.
        */
-      printf("} then { .menu%d.x%d configure -state normal } else { .menu%d.x%d configure -state disabled }\n",
+      printf("} then { .menu%d.config.f.x%d configure -state normal } else { .menu%d.config.f.x%d configure -state disabled }\n",
 	     menu_num, line_num,
 	     menu_num, line_num );
 #else
@@ -194,14 +216,14 @@ generate_if(struct kconfig * item,
        * If a bool is a radiobutton, then use this instead.
        */
       printf("} then { ");
-      printf(".menu%d.x%d.y configure -state normal;",menu_num, line_num);
-      printf(".menu%d.x%d.n configure -state normal;",menu_num, line_num);
-      printf(".menu%d.x%d.l configure -state normal;",menu_num, line_num);
+      printf(".menu%d.config.f.x%d.y configure -state normal;",menu_num, line_num);
+      printf(".menu%d.config.f.x%d.n configure -state normal;",menu_num, line_num);
+      printf(".menu%d.config.f.x%d.l configure -state normal;",menu_num, line_num);
       printf("set %s [expr $%s&15];", item->optionname, item->optionname);
       printf("} else { ");
-      printf(".menu%d.x%d.y configure -state disabled;",menu_num, line_num);
-      printf(".menu%d.x%d.n configure -state disabled;",menu_num, line_num);
-      printf(".menu%d.x%d.l configure -state disabled;",menu_num, line_num);
+      printf(".menu%d.config.f.x%d.y configure -state disabled;",menu_num, line_num);
+      printf(".menu%d.config.f.x%d.n configure -state disabled;",menu_num, line_num);
+      printf(".menu%d.config.f.x%d.l configure -state disabled;",menu_num, line_num);
       printf("set %s [expr $%s|16];", item->optionname, item->optionname);
       printf("}\n");
 #endif
@@ -211,30 +233,31 @@ generate_if(struct kconfig * item,
       printf("} then { ");
       if( item->tok == tok_dep_tristate )
 	{
+	  printf("global %s;", item->depend.str);
 	  printf("if { $%s == 2 } then {", item->depend.str);
-	  printf(".menu%d.x%d.y configure -state disabled;",menu_num, line_num);
+	  printf(".menu%d.config.f.x%d.y configure -state disabled;",menu_num, line_num);
 	  printf("} else {");
-	  printf(".menu%d.x%d.y configure -state normal;",menu_num, line_num);
+	  printf(".menu%d.config.f.x%d.y configure -state normal;",menu_num, line_num);
 	  printf("}; ");
 	}
       else
 	{
-	  printf(".menu%d.x%d.y configure -state normal;",menu_num, line_num);
+	  printf(".menu%d.config.f.x%d.y configure -state normal;",menu_num, line_num);
 	}
       
-      printf(".menu%d.x%d.n configure -state normal;",menu_num, line_num);
-      printf(".menu%d.x%d.m configure -state normal;",menu_num, line_num);
-      printf(".menu%d.x%d.l configure -state normal;",menu_num, line_num);
+      printf(".menu%d.config.f.x%d.n configure -state normal;",menu_num, line_num);
+      printf(".menu%d.config.f.x%d.m configure -state normal;",menu_num, line_num);
+      printf(".menu%d.config.f.x%d.l configure -state normal;",menu_num, line_num);
       /*
        * Or in a bit to the variable - this causes all of the radiobuttons
        * to be deselected (i.e. not be red).
        */
       printf("set %s [expr $%s&15];", item->optionname, item->optionname);
       printf("} else { ");
-      printf(".menu%d.x%d.y configure -state disabled;",menu_num, line_num);
-      printf(".menu%d.x%d.n configure -state disabled;",menu_num, line_num);
-      printf(".menu%d.x%d.m configure -state disabled;",menu_num, line_num);
-      printf(".menu%d.x%d.l configure -state disabled;",menu_num, line_num);
+      printf(".menu%d.config.f.x%d.y configure -state disabled;",menu_num, line_num);
+      printf(".menu%d.config.f.x%d.n configure -state disabled;",menu_num, line_num);
+      printf(".menu%d.config.f.x%d.m configure -state disabled;",menu_num, line_num);
+      printf(".menu%d.config.f.x%d.l configure -state disabled;",menu_num, line_num);
       /*
        * Clear the disable bit - this causes the correct radiobutton
        * to appear selected (i.e. turn red).
@@ -403,12 +426,45 @@ static end_proc(int menu_num, int first, int last)
   printf("\t\t-width 15 -command \"destroy $w; focus $oldFocus; update_mainmenu $w\"\n");
 
   printf("\tpack $w.f.back $w.f.next $w.f.prev -side left -expand on\n");
-  printf("\tpack $w.f -pady 10 -side top -anchor w -fill x -expand on\n");
+  printf("\tpack $w.f -pady 10 -side bottom -anchor w -fill x\n");
   printf("\tfocus $w\n");
-  printf("\tupdate_menu%d $w\n", menu_num);
+  printf("\tupdate_menu%d $w.config.f\n", menu_num);
   printf("\tglobal winx; global winy\n");
   printf("\tset winx [expr [winfo x .]+30]; set winy [expr [winfo y .]+30]\n");
   printf("\twm geometry $w +$winx+$winy\n");
+  printf("\twm resizable $w no yes\n\n");
+  
+  /*
+   * Now that the whole window is in place, we need to wait for an "update"
+   * so we can tell the canvas what its virtual size should be.
+   *
+   * Unfortunately, this causes some ugly screen-flashing because the whole
+   * window is drawn, and then it is immediately resized.  It seems
+   * unavoidable, though, since "frame" objects won't tell us their size
+   * until after an update, and "canvas" objects can't automatically pack
+   * around frames.  Sigh.
+   */
+  printf("\tupdate idletasks\n");
+  printf("\t$w.config.canvas create window 0 0 -anchor nw -window $w.config.f\n\n");
+  printf("\t$w.config.canvas configure \\\n"
+  	 "\t\t-width [expr [winfo reqwidth $w.config.f] + 1]\\\n"
+  	 "\t\t-scrollregion \"-1 -1 [expr [winfo reqwidth $w.config.f] + 1] \\\n"
+  	 "\t\t\t [expr [winfo reqheight $w.config.f] + 1]\"\n\n");
+  	 
+  /*
+   * If the whole canvas will fit in 3/4 of the screen height, do it;
+   * otherwise, resize to around 1/2 the screen and let us scroll.
+   */
+  printf("\tset winy [expr [winfo reqh $w] - [winfo reqh $w.config.canvas]]\n");
+  printf("\tset scry [expr [winfo screenh $w] / 2]\n");
+  printf("\tset maxy [expr [winfo screenh $w] * 3 / 4]\n");
+  printf("\tset canvtotal [expr [winfo reqh $w.config.f] + 2]\n");
+  printf("\tif [expr $winy + $canvtotal < $maxy] {\n"
+  	 "\t\t$w.config.canvas configure -height $canvtotal\n"
+  	 "\t} else {\n"
+  	 "\t\t$w.config.canvas configure -height [expr $scry - $winy]\n"
+  	 "\t}\n");
+  
   printf("}\n\n\n");
 
   /*
@@ -460,7 +516,8 @@ static end_proc(int menu_num, int first, int last)
 	   */
 	  if(cfg->tok == tok_dep_tristate)
 	    {
-	      printf("\tif {$%s == 2 } then { .menu3.x5.y configure -state normal} else { .menu3.x5.y configure -state disabled}\n",cfg->depend.str,
+	      printf("\tglobal %s;", cfg->depend.str);
+	      printf("\tif {$%s == 2 } then { .menu%d.config.f.x%d.y configure -state disabled } else { .menu%d.config.f.x%d.y configure -state normal}\n",cfg->depend.str,
 		     menu_num, cfg->menu_line,
 		     menu_num, cfg->menu_line);
 	      
@@ -511,6 +568,7 @@ static int find_menu_size(struct kconfig *cfg,
       }
   }
 
+#ifdef OLD_SPLIT_MENUS
   /*
    * Now figure out how many items go on each page.
    */
@@ -518,6 +576,10 @@ static int find_menu_size(struct kconfig *cfg,
   while(tot / div > 15) div++;
   *menu_max = cfg->menu_number + div - 1;
   *menu_maxlines = (tot + div -1) / div;
+#else
+  *menu_max = cfg->menu_number;
+  *menu_maxlines = tot;
+#endif
 }
 
 /*
@@ -633,7 +695,7 @@ dump_tk_script(struct kconfig *scfg)
 	      start_proc(menulabel, cfg->menu_number, FALSE);
 	      menu_num = cfg->menu_number;
 	    }
-	  printf("\tbool $w %d %d \"%s\" %s\n",
+	  printf("\tbool $w.config.f %d %d \"%s\" %s\n",
 		 cfg->menu_number,
 		 cfg->menu_line,
 		 cfg->label,
@@ -641,12 +703,12 @@ dump_tk_script(struct kconfig *scfg)
 	  break;
 
 	case tok_choice:
-	  printf("\t$w.x%d.x.menu add radiobutton -label \"%s\" -variable %s -value %d -command \"update_menu%d .menu%d\"\n",
+	  printf("\t$w.config.f.x%d.x.menu add radiobutton -label \"%s\" -variable %s -value %d -command \"update_menu%d .menu%d.config.f\"\n",
 		 cfg1->menu_line,
 		 cfg->label,
 		 cfg1->optionname,
 		 cfg->choice_value,
-		 cfg->menu_number, cfg->menu_number);
+		 cfg1->menu_number, cfg1->menu_number);
 	  break;
 	case tok_choose:
 	  if( cfg->menu_number != menu_num )
@@ -656,18 +718,18 @@ dump_tk_script(struct kconfig *scfg)
 	      menu_num = cfg->menu_number;
 	    }
 #if 0
-	  printf("\tmenubutton $w.line%d -text \"%s\" -menu $w.line%d.menu \\\n",
+	  printf("\tmenubutton $w.config.f.line%d -text \"%s\" -menu $w.config.f.line%d.menu \\\n",
 		 cfg->menu_line, cfg->label, cfg->menu_line);
 	  printf("\t	-relief raised -width 35\n");
-	  printf("\tpack $w.line%d -anchor w\n", cfg->menu_line);
-	  printf("\tmenu $w.line%d.menu\n", cfg->menu_line);
+	  printf("\tpack $w.config.f.line%d -anchor w\n", cfg->menu_line);
+	  printf("\tmenu $w.config.f.line%d.menu\n", cfg->menu_line);
 #else
-	  printf("\tminimenu $w %d %d \"%s\" %s\n",
+	  printf("\tminimenu $w.config.f %d %d \"%s\" %s\n",
 	  	cfg->menu_number,
 	  	cfg->menu_line,
 	  	cfg->label,
 	  	cfg->optionname);
-	  printf("\tmenu $w.x%d.x.menu\n", cfg->menu_line);
+	  printf("\tmenu $w.config.f.x%d.x.menu\n", cfg->menu_line);
 #endif
 	  cfg1 = cfg;
 	  break;
@@ -678,7 +740,7 @@ dump_tk_script(struct kconfig *scfg)
 	      start_proc(menulabel, cfg->menu_number, FALSE);
 	      menu_num = cfg->menu_number;
 	    }
-	  printf("\ttristate $w %d %d \"%s\" %s\n",
+	  printf("\ttristate $w.config.f %d %d \"%s\" %s\n",
 		 cfg->menu_number,
 		 cfg->menu_line,
 		 cfg->label,
@@ -691,7 +753,7 @@ dump_tk_script(struct kconfig *scfg)
 	      start_proc(menulabel, cfg->menu_number, FALSE);
 	      menu_num = cfg->menu_number;
 	    }
-	  printf("\tdep_tristate $w %d %d \"%s\" %s\n",
+	  printf("\tdep_tristate $w.config.f %d %d \"%s\" %s\n",
 		 cfg->menu_number,
 		 cfg->menu_line,
 		 cfg->label,
@@ -705,7 +767,7 @@ dump_tk_script(struct kconfig *scfg)
 	      start_proc(menulabel, cfg->menu_number, FALSE);
 	      menu_num = cfg->menu_number;
 	    }
-	  printf("\tint $w %d %d \"%s\" %s\n",
+	  printf("\tint $w.config.f %d %d \"%s\" %s\n",
 		 cfg->menu_number,
 		 cfg->menu_line,
 		 cfg->label,
@@ -718,7 +780,7 @@ dump_tk_script(struct kconfig *scfg)
 	      start_proc(menulabel, cfg->menu_number, FALSE);
 	      menu_num = cfg->menu_number;
 	    }
-	  printf("\tdo_sound $w %d %d\n",
+	  printf("\tdo_sound $w.config.f %d %d\n",
 		 cfg->menu_number,
 		 cfg->menu_line);
 	  break;
@@ -743,9 +805,9 @@ dump_tk_script(struct kconfig *scfg)
   printf("\tdo_make -C drivers/sound config\n");
   printf("\techo check_sound_config %d\n",menu_num);
 #endif
-  printf("\tlabel $w.m0 -bitmap error\n");
-  printf("\tmessage $w.m1 -width 400 -aspect 300 -text \"The sound drivers cannot as of yet be configured via the X-based interface\" -relief raised\n");
-  printf("\tpack $w.m0 $w.m1 -side top -pady 10 -expand on\n");
+  printf("\tlabel $w.config.f.m0 -bitmap error\n");
+  printf("\tmessage $w.config.f.m1 -width 400 -aspect 300 -text \"The sound drivers cannot as of yet be configured via the X-based interface\" -relief raised\n");
+  printf("\tpack $w.config.f.m0 $w.config.f.m1 -side top -pady 10 -expand on\n");
   /*
    * Close out the last menu.
    */
@@ -856,11 +918,16 @@ dump_tk_script(struct kconfig *scfg)
 	    {
 	      if(cfg->tok == tok_dep_tristate)
 		{
-		  printf("\tif {$%s == 2 } then { write_variable $cfg $autocfg %s $%s %s } else { write_variable $cfg $autocfg %s $notset $notmod }\n",
+		  printf("\tif {$%s == 2 } then {\n"
+		  	 "\t\twrite_variable $cfg $autocfg %s $notset $notmod\n"
+		  	 "\t} else {\n"
+		  	 "\t\twrite_variable $cfg $autocfg %s $%s %s\n"
+		  	 "\t}\n",
+		  	 cfg->depend.str,
 			 cfg->optionname,
 			 cfg->optionname,
-			 cfg->depend.str,
-			 cfg->optionname);
+			 cfg->optionname,
+			 cfg->depend.str);
 		}
 	      else if(cfg->tok == tok_comment)
 		{

@@ -32,7 +32,7 @@ int umsdos_file_read_kmem(
 	int ret;
 	int old_fs = get_fs();	
 	set_fs (KERNEL_DS);
-	ret = msdos_file_read(inode,filp,buf,count);
+	ret = fat_file_read(inode,filp,buf,count);
 	set_fs (old_fs);
 	return ret;
 }
@@ -48,7 +48,7 @@ int umsdos_file_write_kmem(
 	int ret;
 	int old_fs = get_fs();
 	set_fs (KERNEL_DS);
-	ret = msdos_file_write(inode,filp,buf,count);
+	ret = fat_file_write(inode,filp,buf,count);
 	set_fs (old_fs);
 	return ret;
 }

@@ -248,37 +248,34 @@ int nfs_notify_change(struct inode *inode, struct iattr *attr)
 	struct nfs_fattr fattr;
 	int error;
 
+	sattr.mode = (unsigned) -1;
 	if (attr->ia_valid & ATTR_MODE) 
 		sattr.mode = attr->ia_mode;
-	else
-		sattr.mode = (unsigned) -1;
 
+	sattr.uid = (unsigned) -1;
 	if (attr->ia_valid & ATTR_UID)
 		sattr.uid = attr->ia_uid;
-	else
-		sattr.uid = (unsigned) -1;
 
+	sattr.gid = (unsigned) -1;
 	if (attr->ia_valid & ATTR_GID)
 		sattr.gid = attr->ia_gid;
-	else
-		sattr.gid = (unsigned) -1;
 
+
+	sattr.size = (unsigned) -1;
 	if (attr->ia_valid & ATTR_SIZE)
 		sattr.size = S_ISREG(inode->i_mode) ? attr->ia_size : -1;
-	else
-		sattr.size = (unsigned) -1;
 
-	if (attr->ia_valid & ATTR_MTIME_SET) {
+	sattr.mtime.seconds = sattr.mtime.useconds = (unsigned) -1;
+	if (attr->ia_valid & ATTR_MTIME) {
 		sattr.mtime.seconds = attr->ia_mtime;
 		sattr.mtime.useconds = 0;
-	} else 
-		sattr.mtime.seconds = sattr.mtime.useconds = (unsigned) -1;
+	}
 
-	if (attr->ia_valid & ATTR_ATIME_SET) {
+	sattr.atime.seconds = sattr.atime.useconds = (unsigned) -1;
+	if (attr->ia_valid & ATTR_ATIME) {
 		sattr.atime.seconds = attr->ia_atime;
 		sattr.atime.useconds = 0;
-	} else
-		sattr.atime.seconds = sattr.atime.useconds = (unsigned) -1;
+	}
 
 	error = nfs_proc_setattr(NFS_SERVER(inode), NFS_FH(inode),
 		&sattr, &fattr);

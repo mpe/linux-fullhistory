@@ -36,6 +36,10 @@
 static unsigned char cache_21 = 0xff;
 static unsigned char cache_A1 = 0xff;
 
+#ifdef __SMP_PROF__
+static unsigned int int_count[NR_CPUS][NR_IRQS] = {{0},};
+#endif
+
 void disable_irq(unsigned int irq_nr)
 {
 	unsigned long flags;
@@ -188,14 +192,77 @@ int get_irq_list(char *buf)
 /*
  *	Linus - should you add NMI counts here ?????
  */
-#ifdef __SMP__
+#ifdef __SMP_PROF__
 	len+=sprintf(buf+len, "IPI: %8lu received\n",
 		ipi_count);
-	len+=sprintf(buf+len, "LCK: %8lu spins\n",
-		smp_spins);
 #endif		
 	return len;
 }
+
+#ifdef __SMP_PROF__
+
+int get_smp_prof_list(char *buf) {
+        int i,j, len = 0;
+        struct irqaction * action = irq_action;
+        unsigned long sum_spins = 0;
+        unsigned long sum_spins_syscall = 0;
+        unsigned long sum_spins_sys_idle = 0;
+        unsigned long sum_smp_idle_count = 0;
+
+        for (i=0;i<=smp_num_cpus;i++) {
+          sum_spins+=smp_spins[i];
+          sum_spins_syscall+=smp_spins_syscall[i];
+          sum_spins_sys_idle+=smp_spins_sys_idle[i];
+          sum_smp_idle_count+=smp_idle_count[i];
+        }
+
+	len += sprintf(buf+len,"CPUS: %10i \n", 
+		0==smp_num_cpus?1:smp_num_cpus);
+        len += sprintf(buf+len,"            SUM ");
+        for (i=0;i<smp_num_cpus;i++)
+          len += sprintf(buf+len,"        P%1d ",i);
+        len += sprintf(buf+len,"\n");
+        for (i = 0 ; i < NR_IRQS ; i++, action++) {
+                if (!action->handler)
+                        continue;
+                len += sprintf(buf+len, "%3d: %10d ",
+                        i, kstat.interrupts[i]);
+                for (j=0;j<smp_num_cpus;j++)
+                  len+=sprintf(buf+len, "%10d ",int_count[j][i]);
+                len += sprintf(buf+len, "%c %s\n",
+                        (action->flags & SA_INTERRUPT) ? '+' : ' ',
+                        action->name);
+        }
+        len+=sprintf(buf+len, "LCK: %10lu",
+                sum_spins);
+        for (i=0;i<smp_num_cpus;i++)
+          len+=sprintf(buf+len," %10lu",smp_spins[i]);
+        len +=sprintf(buf+len,"   spins from int\n");
+
+        len+=sprintf(buf+len, "LCK: %10lu",
+                sum_spins_syscall);
+        for (i=0;i<smp_num_cpus;i++)
+          len+=sprintf(buf+len," %10lu",smp_spins_syscall[i]);
+        len +=sprintf(buf+len,"   spins from syscall\n");
+
+        len+=sprintf(buf+len, "LCK: %10lu",
+                sum_spins_sys_idle);
+        for (i=0;i<smp_num_cpus;i++)
+          len+=sprintf(buf+len," %10lu",smp_spins_sys_idle[i]);
+        len +=sprintf(buf+len,"   spins from sysidle\n");
+        len+=sprintf(buf+len,"IDLE %10lu",sum_smp_idle_count);
+        for (i=0;i<smp_num_cpus;i++)
+          len+=sprintf(buf+len," %10lu",smp_idle_count[i]);
+        len +=sprintf(buf+len,"   idle ticks\n");
+
+        len+=sprintf(buf+len, "IPI: %10lu   received\n",
+                ipi_count);
+
+        return len;
+}
+#endif 
+
+
 
 /*
  * do_IRQ handles IRQ's that have been installed without the
@@ -213,6 +280,9 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 #endif
 
 	kstat.interrupts[irq]++;
+#ifdef __SMP_PROF__
+        int_count[smp_processor_id()][irq]++;
+#endif
 	if (action->flags & SA_SAMPLE_RANDOM)
 		add_interrupt_randomness(irq);
 	action->handler(irq, regs);
@@ -233,6 +303,9 @@ asmlinkage void do_fast_IRQ(int irq)
 #endif
 
 	kstat.interrupts[irq]++;
+#ifdef __SMP_PROF__
+        int_count[smp_processor_id()][irq]++;
+#endif
 	if (action->flags & SA_SAMPLE_RANDOM)
 		add_interrupt_randomness(irq);
 	action->handler(irq, NULL);

@@ -168,7 +168,7 @@ function bool () {
 #	tristate question define
 #
 function tristate () {
-        if [ "$MODULES" != "y" ]; then
+        if [ "$CONFIG_MODULES" != "y" ]; then
           bool "$1" "$2"
         else 
 	  def=$(eval echo "\${$2:-'n'}")

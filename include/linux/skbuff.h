@@ -28,73 +28,81 @@
 #define FREE_WRITE	0
 
 
-struct sk_buff_head {
-  struct sk_buff		* volatile next;
-  struct sk_buff		* volatile prev;
+struct sk_buff_head 
+{
+	struct sk_buff	* volatile next;
+	struct sk_buff	* volatile prev;
+	__u32		qlen;		/* Must be same length as a pointer
+					   for using debugging */
 #if CONFIG_SKB_CHECK
-  int				magic_debug_cookie;
+	int		magic_debug_cookie;
 #endif
 };
 
 
-struct sk_buff {
-  struct sk_buff		* volatile next;	/* Next buffer in list */
-  struct sk_buff		* volatile prev;	/* Previous buffer in list */
+struct sk_buff 
+{
+	struct sk_buff	* volatile next;	/* Next buffer in list 				*/
+	struct sk_buff	* volatile prev;	/* Previous buffer in list 			*/
+	struct sk_buff_head * list;		/* List we are on				*/
 #if CONFIG_SKB_CHECK
-  int				magic_debug_cookie;
+	int		magic_debug_cookie;
 #endif
-  struct sk_buff		* volatile link3;	/* Link for IP protocol level buffer chains 	*/
-  struct sock			*sk;			/* Socket we are owned by 			*/
-  volatile unsigned long	when;			/* used to compute rtt's			*/
-  struct timeval		stamp;			/* Time we arrived				*/
-  struct device			*dev;			/* Device we arrived on/are leaving by		*/
-  union {
-	struct tcphdr	*th;
-	struct ethhdr	*eth;
-	struct iphdr	*iph;
-	struct udphdr	*uh;
-	unsigned char	*raw;
-  } h;
+	struct sk_buff	* volatile link3;	/* Link for IP protocol level buffer chains 	*/
+	struct sock	*sk;			/* Socket we are owned by 			*/
+	unsigned long	when;			/* used to compute rtt's			*/
+	struct timeval	stamp;			/* Time we arrived				*/
+	struct device	*dev;			/* Device we arrived on/are leaving by		*/
+	union 
+	{
+		struct tcphdr	*th;
+		struct ethhdr	*eth;
+		struct iphdr	*iph;
+		struct udphdr	*uh;
+		unsigned char	*raw;
+	} h;
   
-  union {						/* As yet incomplete physical layer views 	*/
-  	unsigned char 		*raw;
-  	struct ethhdr		*ethernet;
-  } mac;
+	union 
+	{	
+		/* As yet incomplete physical layer views */
+	  	unsigned char 	*raw;
+	  	struct ethhdr	*ethernet;
+	} mac;
   
-  struct iphdr			*ip_hdr;		/* For IPPROTO_RAW 				*/
-  unsigned long 		len;			/* Length of actual data			*/
-  unsigned long			csum;			/* Checksum 					*/
-  __u32				saddr;			/* IP source address				*/
-  __u32				daddr;			/* IP target address				*/
-  __u32				raddr;			/* IP next hop address				*/
-  __u32				seq;			/* TCP sequence number				*/
-  __u32				end_seq;		/* seq [+ fin] [+ syn] + datalen		*/
-  __u32				ack_seq;		/* TCP ack sequence number			*/
-  unsigned char			proto_priv[16];	        /* Protocol private data			*/
-  volatile char 		acked,			/* Are we acked ?				*/
-				used,			/* Are we in use ?				*/
-				free,			/* How to free this buffer			*/
-				arp;			/* Has IP/ARP resolution finished		*/
-  unsigned char			tries,			/* Times tried					*/
-  				lock,			/* Are we locked ?				*/
-  				localroute,		/* Local routing asserted for this frame	*/
-  				pkt_type,		/* Packet class					*/
-  				ip_summed;		/* Driver fed us an IP checksum			*/
-#define PACKET_HOST		0			/* To us					*/
-#define PACKET_BROADCAST	1			/* To all					*/
-#define PACKET_MULTICAST	2			/* To group					*/
-#define PACKET_OTHERHOST	3			/* To someone else 				*/
-  unsigned short		users;			/* User count - see datagram.c,tcp.c 		*/
-  unsigned short		protocol;		/* Packet protocol from driver. 		*/
-  unsigned short		truesize;		/* Buffer size 					*/
+	struct iphdr	*ip_hdr;		/* For IPPROTO_RAW 				*/
+	unsigned long 	len;			/* Length of actual data			*/
+	unsigned long	csum;			/* Checksum 					*/
+	__u32		saddr;			/* IP source address				*/
+	__u32		daddr;			/* IP target address				*/
+	__u32		raddr;			/* IP next hop address				*/
+	__u32		seq;			/* TCP sequence number				*/
+	__u32		end_seq;		/* seq [+ fin] [+ syn] + datalen		*/
+	__u32		ack_seq;		/* TCP ack sequence number			*/
+	unsigned char	proto_priv[16];	        /* Protocol private data			*/
+	volatile char 	acked,			/* Are we acked ?				*/
+			used,			/* Are we in use ?				*/
+			free,			/* How to free this buffer			*/
+			arp;			/* Has IP/ARP resolution finished		*/
+	unsigned char	tries,			/* Times tried					*/
+  			lock,			/* Are we locked ?				*/
+  			localroute,		/* Local routing asserted for this frame	*/
+  			pkt_type,		/* Packet class					*/
+  			ip_summed;		/* Driver fed us an IP checksum			*/
+#define PACKET_HOST		0		/* To us					*/
+#define PACKET_BROADCAST	1		/* To all					*/
+#define PACKET_MULTICAST	2		/* To group					*/
+#define PACKET_OTHERHOST	3		/* To someone else 				*/
+	unsigned short	users;			/* User count - see datagram.c,tcp.c 		*/
+	unsigned short	protocol;		/* Packet protocol from driver. 		*/
+	unsigned short	truesize;		/* Buffer size 					*/
 
-  int				count;			/* reference count				*/
-  struct sk_buff		*data_skb;		/* Link to the actual data skb			*/
-  unsigned char			*head;			/* Head of buffer 				*/
-  unsigned char			*data;			/* Data head pointer				*/
-  unsigned char			*tail;			/* Tail pointer					*/
-  unsigned char 		*end;			/* End pointer					*/
-  void 				(*destructor)(struct sk_buff *this);	/* Destruct function		*/
+	int		count;			/* reference count				*/
+	struct sk_buff	*data_skb;		/* Link to the actual data skb			*/
+	unsigned char	*head;			/* Head of buffer 				*/
+	unsigned char	*data;			/* Data head pointer				*/
+	unsigned char	*tail;			/* Tail pointer					*/
+	unsigned char 	*end;			/* End pointer					*/
+	void 		(*destructor)(struct sk_buff *this);	/* Destruct function		*/
 };
 
 #ifdef CONFIG_SKB_LARGE
@@ -129,11 +137,13 @@ extern struct sk_buff *		skb_dequeue(struct sk_buff_head *list);
 extern void 			skb_insert(struct sk_buff *old,struct sk_buff *newsk);
 extern void			skb_append(struct sk_buff *old,struct sk_buff *newsk);
 extern void			skb_unlink(struct sk_buff *buf);
+extern __u32			skb_queue_len(struct sk_buff_head *list);
 extern struct sk_buff *		skb_peek_copy(struct sk_buff_head *list);
 extern struct sk_buff *		alloc_skb(unsigned int size, int priority);
 extern struct sk_buff *		dev_alloc_skb(unsigned int size);
 extern void			kfree_skbmem(struct sk_buff *skb);
 extern struct sk_buff *		skb_clone(struct sk_buff *skb, int priority);
+extern struct sk_buff *		skb_copy(struct sk_buff *skb, int priority);
 extern void			skb_device_lock(struct sk_buff *skb);
 extern void			skb_device_unlock(struct sk_buff *skb);
 extern void			dev_kfree_skb(struct sk_buff *skb, int mode);
@@ -152,10 +162,19 @@ extern void 			skb_trim(struct sk_buff *skb, int len);
  *	list and someone else may run off with it. For an interrupt
  *	type system cli() peek the buffer copy the data and sti();
  */
-static __inline__ struct sk_buff *skb_peek(struct sk_buff_head *list_)
+extern __inline__ struct sk_buff *skb_peek(struct sk_buff_head *list_)
 {
 	struct sk_buff *list = (struct sk_buff *)list_;
 	return (list->next != list)? list->next : NULL;
+}
+
+/*
+ *	Return the length of an sk_buff queue
+ */
+ 
+extern __inline__ __u32 skb_queue_len(struct sk_buff_head *list_)
+{
+	return(list_->qlen);
 }
 
 #if CONFIG_SKB_CHECK
@@ -170,6 +189,7 @@ extern __inline__ void skb_queue_head_init(struct sk_buff_head *list)
 {
 	list->prev = (struct sk_buff *)list;
 	list->next = (struct sk_buff *)list;
+	list->qlen = 0;
 }
 
 /*
@@ -187,6 +207,8 @@ extern __inline__ void skb_queue_head(struct sk_buff_head *list_,struct sk_buff 
 	newsk->prev = list;
 	newsk->next->prev = newsk;
 	newsk->prev->next = newsk;
+	newsk->list = list_;
+	list_->qlen++;
 	restore_flags(flags);
 }
 
@@ -207,7 +229,8 @@ extern __inline__ void skb_queue_tail(struct sk_buff_head *list_, struct sk_buff
 
 	newsk->next->prev = newsk;
 	newsk->prev->next = newsk;
-
+	newsk->list=list_;
+	list_->qlen++;
 	restore_flags(flags);
 }
 
@@ -241,6 +264,8 @@ extern __inline__ struct sk_buff *skb_dequeue(struct sk_buff_head *list_)
 		result->next = NULL;
 		result->prev = NULL;
 
+		list_->qlen--;
+		result->list=NULL;
 		restore_flags(flags);
 
 		return result;
@@ -261,7 +286,8 @@ extern __inline__ void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
 	newsk->prev = old->prev;
 	old->prev = newsk;
 	newsk->prev->next = newsk;
-
+	newsk->list = old->list;
+	newsk->list->qlen++;
 	restore_flags(flags);
 }
 
@@ -280,6 +306,8 @@ extern __inline__ void skb_append(struct sk_buff *old, struct sk_buff *newsk)
 	newsk->next = old->next;
 	newsk->next->prev = newsk;
 	old->next = newsk;
+	newsk->list = old->list;
+	newsk->list->qlen++;
 
 	restore_flags(flags);
 }
@@ -298,12 +326,14 @@ extern __inline__ void skb_unlink(struct sk_buff *skb)
 	save_flags(flags);
 	cli();
 
-	if(skb->prev && skb->next)
+	if(skb->list)
 	{
+		skb->list->qlen--;
 		skb->next->prev = skb->prev;
 		skb->prev->next = skb->next;
 		skb->next = NULL;
 		skb->prev = NULL;
+		skb->list = NULL;
 	}
 	restore_flags(flags);
 }

@@ -21,9 +21,9 @@ o	Cache last socket for TCP			[TESTED]
 o	Routing cache (only in ip_build_header so far)	[TESTED]
 ------->>>>>  ALPHA 001  <<<<<----------
 o	eql load balancing driver.			[TESTED]
-o	Token ring drivers.				[NOW WORK APPARENTLY]
+o	Token ring drivers.				[TESTED]
 o	IPIP and tunnels				[TESTED]
-o	Fix ethernet/token ring promisc broadcast error [QUICK TEST]
+o	Fix ethernet/token ring promisc broadcast error [TESTED]
 	(pkt_type set to OTHERHOST in error).
 o	Fixed bug in the routing caches			[TESTED]
 o	Protocol header cache support			[TESTED]
@@ -46,7 +46,7 @@ o	IP build xmit fragment fixes			[TESTED]
 o	TCP SWS probe fix				[TESTED]
 o	Appletalk DDP					[TESTED]
 o	IP firewall bug fixed				[TESTED]
-o	IP masquerade ftp port spoof			[NOW WORKS]
+o	IP masquerade ftp port spoof			[TESTED]
 o	gcc 2.6.3 -O3 fix for checksum assembler	[TESTED]
 o	/proc support shows both timers			[TESTED]
 o	TCP irtt support				[TESTED]
@@ -84,7 +84,7 @@ o	IP Firewall accounting zero bug			[TESTED]
 ////////////////////////////1.3.0/////////////////////////// 
 
 
-o	Merged loadable firewall code			[NOW IN (1.3.38)]
+o	Merged loadable firewall code			[TESTED]
 o	New buffers used totally non optimally		[TESTED]
 o	Fast ip_forwarding (needs changing)		[NOW INCLUDED IN 1.3.15]
 o	Fixed connection hang bug in new SWS code	[TESTED]
@@ -149,7 +149,7 @@ o	Appletalk works nicely				[CHECKED]
 o	Fast IP forwarding part 1 works			[CHECKED]
 
 ------->>>>>   1.3.15  <<<<<---------
-o	Mike Shaver has started RFC1122 verification	[IN PROGRESS]
+o	Mike Shaver has started RFC1122 verification	[DONE]
 o	Minor bug fixes					[TESTED]
 
 ------->>>> 1.3.16 <<<--------
@@ -184,9 +184,9 @@ o	IP_HDRINCL					[TESTED]
 o	IP firewalling spoofing protection		[TESTED]
 o	IGMP bug fixes and workarounds			[TESTED]
 o	IFF_ALLMULTI protocol layer support		[TESTED]
-o	First parts of IP multicast routing code	[IN]
+o	First parts of IP multicast routing code	[TESTED]
 o	Generate BSD ENETDOWN errors			[TESTED]
-o	Clean device unload bug<Walter Wolfgang>	[NOW WORKS]
+o	Clean device unload bug<Walter Wolfgang>	[TESTED]
 
 -------->>>>> 1.3.24 <<<<<-------
 
@@ -201,7 +201,7 @@ o	Sendmsg verify_iovec bugfix			[TESTED]
 o	ARP PERM is really permanent now <Craig>	[TESTED]
 o	IPIP tunnels work fully we hope			[UMM...]
 o	Closing socket change (Marc Tamsky)		[TESTED]
-o	RFC1122 verification of tcp.c <Mike Shaver>	[IN]
+o	RFC1122 verification of tcp.c <Mike Shaver>	[DONE]
 
 -------->>>>> 1.3.26 <<<<<-------
 
@@ -271,12 +271,12 @@ o	bind() for SOCK_PACKET				[IN]
 o	set_mac_addr fixed up				[TESTED]
 o	BSD SIOCSIFADDR, AF_UNSPEC behaviour		[TESTED]
 o	Updated this list				[OK]
-o	Massive ARP/cache/routing rewrite [ANK]		[IN]
+o	Massive ARP/cache/routing rewrite [ANK]		[TESTED]
 o	AX.25 connect return fixed in using sock_error	[TESTED]
 o	Proper netlink device major(36)			[TESTED]
 o	First parts of the SKIP support			[IN, not useful]
 o	TCP ICMP (SOSS should work again)		[TESTED]
-o	IPFW support for TOS changing (Al Longyear)	[IN]
+o	IPFW support for TOS changing (Al Longyear)	[TESTED]
 o	DECNET PPP test code [Steve]			[IN]
 o	NFS root	[Miguel/Gero]			[TESTED]
 o	Path MTU discovery [ANK]			[TESTED]
@@ -296,9 +296,9 @@ o	Faster buffer copy/clone [Linus]		[TESTED]
 -------->>>>> 1.3.46 <<<<<<--------
 
 o	AX.25/NetROM fixes/changes [John Naylor]	[TESTED]
-o	Further attempts to fix the IPX memory bug	[IN]
-o	ARP fixes (Assorted)				[IN]
-o	Driver fixes for multicast lists		[IN]
+o	Further attempts to fix the IPX memory bug	[NOW FIXED]
+o	ARP fixes (Assorted)				[TESTED]
+o	Driver fixes for multicast lists		[TESTED]
 
 -------->>>>> 1.3.48 <<<<<<--------
 
@@ -306,21 +306,36 @@ o	IPalias						[TESTED]
 
 -------->>>>> 1.3.50 <<<<<<--------
 
-o	TCP soft error support				[IN]
+o	TCP soft error support				[TESTED]
 o	Further 3c501 tweaking				[TESTED]
-o	Still trying to make IPX work right		[IN]
-o	Trap faulty boxes sending IGMP using 0.0.0.0	[IN]
-o	Only allow SMBFS selection with IP configured	[IN]
+o	Still trying to make IPX work right		[TESTED]
+o	Trap faulty boxes sending IGMP using 0.0.0.0	[TESTED]
+o	Only allow SMBFS selection with IP configured	[TESTED]
 o	Packetwin driver [Craig]			[IN]
-o	Net alias changes [Juan]			[IN]
+o	Net alias changes [Juan]			[TESTED]
 
 -------->>>>> 1.3.53 <<<<<<--------
 
-o	Missing htons() in ip_build_xmit [Mike Kilburn]	[IN]
-o	Missing protocol type set in appletalk		[IN]
-o	Net alias changes/documentation [Juan Ciarlante][IN]
-o	Set protocol type on IPX sends [Various]	[IN]
-o	Lance driver packet length sanity check		[IN]
+o	Missing htons() in ip_build_xmit [Mike Kilburn]	[TESTED]
+o	Missing protocol type set in appletalk		[TESTED]
+o	Net alias changes/documentation [Juan Ciarlante][TESTED]
+o	Set protocol type on IPX sends [Various]	[TESTED]
+o	Lance driver packet length sanity check		[TESTED]
+
+-------->>>>> 1.3.60 <<<<<<--------
+
+o	Fixed NFS notice message			[IN]
+o	Extra ETH_P_xx types				[IN]
+o	Added skb_copy					[IN]
+o	AX.25 unlock bug fix [Joerg]			[IN]
+o	Disabled buggy kerneld support			[IN]
+o	Removed dev_rint				[IN]
+o	Fixed bind checking				[IN]
+o	ARP changes [Bernd]				[IN]
+o	IPX memory leak fix [Martin]			[IN]
+o	Net builds without /proc [Paul]			[IN]
+o	IP multicast races removed			[IN]
+o	Device queue length limits and packet discarder [IN]
 
 ---------- Things I thought Linus had for a while and not merged ----------------
 
@@ -343,12 +358,9 @@ o	SPARC patches [Dave] [partly in]
 
 --------------- Things That Need Doing Before 1.4 ------------------
 
-o	Forwarding queue control (+ fairness algorithms ??)
-o	IP forward flow control.
-o	IPX memory leak ?????				[Done with luck]
 o	Clean up RAW AX.25 sockets.			[Sorted by skb_clone change]
 o	Finish IPIP bug fixes				[Done hopefully]
-o	Multicast routing				[STARTED BITS]
+o	Multicast routing				[Nearly right]
 o	PPP/IPX
 o	IPX for Lwared
 o	SKIP						[Available in user mode]
@@ -360,21 +372,19 @@ o	AF_UNIX fd passing
 
 o	signal interrupting a unix domain connect can occasionally hang the 
 	machine ??
-o	IPX has a memory accounting bug.		[HOPE DONE]
 o	TCP socket cache gets things wrong very very occasionally under high 
 	load.						[TRYING THINGS]
 o	AX.25/NetROM needs more locking.
-o	IP mroute code Oopses still.			[WAITING DIFF]
-o	Lance driver in a few rare systems is causing crashes in copy/checksum.
-o	NFS logs an error (-512) when interrupted.
 o	NFS flow control is needed with the new multirequest NFS support.
 o	Need to be able to turn off the intelligent arp refreshing as its not so
 	hot over AX.25 and upsets some people with very dumb ISDN bridges.
+o	Matti Arnio's TCP problem.
+o	Should unix domain connect never block ?
+o	Sort out kerneld getting things right.
 
 0.2
 ---
 o	Fast checksum/copy on outgoing TCP
-o	Better TCP window handling [Pedro Roque]
 o	Add tty support to sonix driver.
 o	PPP for Sonix ISDN.
 o	Screend loadable firewall module
@@ -389,9 +399,7 @@ o	SPARC merge
 
 0.3
 ---
-o	Merge the layered protocol support.		[ABANDONED TOO SLOW]
 o	802.2 Class 2 services (eg netbios).
-o	Multidrop KISS					[NOW AVAILABLE IN USER MODE]
 
 Possible projects for victim^H^H^H^H^Holunteers
 
@@ -416,7 +424,7 @@ used yet. Basically ack frames are held back 1/10th of a second in the hope
 that two acks can be merged into one or for interactive use the ack can
 piggyback on the next character typed (great improvement on 2400 baud
 modems). Johannes Stille did some work on this about 0.99.13 but it never
-got merged in.
+got merged in. [Pedro Roque]
 
 7.	One on my tempting project list. Add an extra (unofficial - but so
 is SLIP6) SLIP mode that does packet data compression [maybe use the code
@@ -424,7 +432,7 @@ from term].
 
 9.	Implementing streams. Not as a blind slow SYS5.4 style copy but actually
 working out how to do it so it runs like greased lightning. Quite a big
-problem.
+problem. [See the LiS project]
 
 10.	Frame Relay/WAN/ISDN drivers [I'm working on the sonix EuroISDN board
 driver but thats for an internal project and its general release is still
@@ -452,7 +460,7 @@ their hands. [Provisionally taken]
 [Taken]
 
 20.	SKIP IP security using ENskip-0.10 - started
-[Me]
+[Abandoned]
 
 21.	T/TCP support.
 
@@ -462,5 +470,3 @@ kernel logger that is reliable. There is now a loadable module allowing
 use of gdb on the kernel (no breakpoints though!). No magic involved.
 
 Alan
-
-

@@ -121,6 +121,8 @@ static ctl_table vm_table[] = {
 	 &swap_control, sizeof(swap_control_t), 0600, NULL, &proc_dointvec},
 	{VM_KSWAPD, "kswapd", 
 	 &kswapd_ctl, sizeof(kswapd_ctl), 0600, NULL, &proc_dointvec},
+	{VM_FREEPG, "freepages", 
+	 &min_free_pages, 3*sizeof(int), 0600, NULL, &proc_dointvec},
 	{0}
 };
 

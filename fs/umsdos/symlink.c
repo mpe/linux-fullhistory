@@ -103,7 +103,7 @@ static int UMSDOS_readlink(struct inode * inode, char * buffer, int buflen)
 {
 	int ret = -EINVAL;
 	if (S_ISLNK(inode->i_mode)) {
-		ret = umsdos_readlink_x (inode,buffer,msdos_file_read,buflen);
+		ret = umsdos_readlink_x (inode,buffer,fat_file_read,buflen);
 	}
 	PRINTK (("readlink %d %x bufsiz %d\n",ret,inode->i_mode,buflen));
 	iput(inode);

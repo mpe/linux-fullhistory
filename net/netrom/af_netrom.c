@@ -60,12 +60,6 @@
 #include <net/arp.h>
 #include <linux/if_arp.h>
 
-/************************************************************************\
-*									*
-*			Handlers for the socket list			*
-*									*
-\************************************************************************/
-
 struct nr_parms_struct nr_default;
 
 static unsigned short circuit = 0x101;
@@ -278,19 +272,14 @@ void nr_destroy_socket(struct sock *sk)	/* Not static as its used by the timer *
 	restore_flags(flags);
 }
 
-/*******************************************************************************************************************\
-*													            *
-* Handling for system calls applied via the various interfaces to a NET/ROM socket object		    	    *
-*														    *
-\*******************************************************************************************************************/
+/*
+ *	Handling for system calls applied via the various interfaces to a
+ *	NET/ROM socket object.
+ */
  
 static int nr_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
-	switch(cmd)
-	{
-		default:
-			return(-EINVAL);
-	}
+	return -EINVAL;
 }
 
 static int nr_setsockopt(struct socket *sock, int level, int optname,
@@ -686,14 +675,6 @@ static int nr_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	if (addr_len != sizeof(struct sockaddr_ax25) && addr_len != sizeof(struct full_sockaddr_ax25))
 		return -EINVAL;
 
-#ifdef DONTDO
-	if (nr_find_listener(&addr->fsa_ax25.sax25_call, sk->type) != NULL) {
-		if (sk->debug)
-			printk("NET/ROM: bind failed: in use\n");
-		return -EADDRINUSE;
-	}
-#endif
-
 	if ((dev = nr_dev_get(&addr->fsa_ax25.sax25_call)) == NULL) {
 		if (sk->debug)
 			printk("NET/ROM: bind failed: invalid node callsign\n");
@@ -759,11 +740,11 @@ static int nr_connect(struct socket *sock, struct sockaddr *uaddr,
 	if (addr_len != sizeof(struct sockaddr_ax25))
 		return -EINVAL;
 
-	if ((dev = nr_dev_first()) == NULL)
-		return -ENETUNREACH;
-		
 	if (sk->zapped) {	/* Must bind first - autobinding in this may or may not work */
 		sk->zapped = 0;
+
+		if ((dev = nr_dev_first()) == NULL)
+			return -ENETUNREACH;
 
 		source = (ax25_address *)dev->dev_addr;
 
@@ -852,8 +833,10 @@ static int nr_accept(struct socket *sock, struct socket *newsock, int flags)
 	if (sk->state != TCP_LISTEN)
 		return -EINVAL;
 		
-	/* The write queue this time is holding sockets ready to use
-	   hooked into the SABM we saved */
+	/*
+	 *	The write queue this time is holding sockets ready to use
+	 *	hooked into the SABM we saved
+	 */
 	do {
 		cli();
 		if ((skb = skb_dequeue(&sk->receive_queue)) == NULL) {

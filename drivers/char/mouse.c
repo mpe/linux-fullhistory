@@ -14,6 +14,9 @@
  * of the mouse drivers, as they are now completely independent. Linus.
  *
  * Support for loadable modules. 8-Sep-95 Philip Blundell <pjb27@cam.ac.uk>
+ *
+ * Fixed a failing symbol register to free the device registration
+ *		Alan Cox <alan@lxorguk.ukuu.org.uk> 21-Jan-96
  */
 
 #include <linux/module.h>
@@ -137,5 +140,10 @@ int mouse_init(void)
 		return -EIO;
 	}
 
-	return register_symtab(&mouse_syms);
+	if(register_symtab(&mouse_syms)!=0)
+	{
+		unregister_chrdev(MOUSE_MAJOR, "mouse");
+		return -EIO;
+	}
+	return 0;
 }

@@ -59,6 +59,7 @@ int UMSDOS_ioctl_dir (
 	unsigned long data)
 {
 	int ret = -EPERM;
+	int err;
 	/* #Specification: ioctl / acces
 		Only root (effective id) is allowed to do IOCTL on directory
 		in UMSDOS. EPERM is returned for other user.
@@ -67,8 +68,8 @@ int UMSDOS_ioctl_dir (
 		Well, not all case require write access, but it simplify the code
 		and let's face it, there is only one client (umssync) for all this
 	*/
-	if (verify_area(VERIFY_WRITE,(void*)data,sizeof(struct umsdos_ioctl)) < 0){
-		ret = -EFAULT;
+	if (err = verify_area(VERIFY_WRITE,(void*)data,sizeof(struct umsdos_ioctl)) < 0){
+		ret = err;
 	}else if (current->euid == 0
 		|| cmd == UMSDOS_GETVERSION){
 		struct umsdos_ioctl *idata = (struct umsdos_ioctl *)data;
@@ -118,7 +119,7 @@ int UMSDOS_ioctl_dir (
 			struct UMSDOS_DIR_ONCE bufk;
 			bufk.count = 0;
 			bufk.ent = &idata->dos_dirent;
-			msdos_readdir(dir,filp,&bufk,umsdos_ioctl_fill);
+			fat_readdir(dir,filp,&bufk,umsdos_ioctl_fill);
 			ret = bufk.count == 1 ? 1 : 0;
 		}else if (cmd == UMSDOS_READDIR_EMD){
 			/* #Specification: ioctl / UMSDOS_READDIR_EMD

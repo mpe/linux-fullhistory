@@ -236,6 +236,7 @@ static inline int buffer_protected(struct buffer_head * bh)
 #define ATTR_CTIME	64
 #define ATTR_ATIME_SET	128
 #define ATTR_MTIME_SET	256
+#define ATTR_FORCE	512	/* Not a change, but a change it */
 
 /*
  * This is the Inode Attributes structure, used for notify_change().  It
@@ -627,6 +628,10 @@ extern inline struct inode * iget(struct super_block * sb,int nr)
 {
 	return __iget(sb, nr, 1);
 }
+
+/* kludge to get SCSI modules working */
+#include <linux/minix_fs.h>
+#include <linux/minix_fs_sb.h>
 
 #endif /* __KERNEL__ */
 

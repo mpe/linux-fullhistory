@@ -1,3 +1,15 @@
+Wed Jan 10 10:08:00 1996    <tytso@rsts-11.mit.edu>
+
+	* serial.c (block_til_ready): Remove race condition which happened
+		if a hangup condition happened during the setup of the
+		UART, before rs_open() called block_til_ready().  This
+		caused the info->count counter to be erroneously
+		decremented.
+
+	* serial.c (startup, rs_open): Remove race condition that could
+		cuase a memory leak of one page.  (Fortunately, both race
+		conditions were relatively rare in practice.)
+
 Tue Dec  5 13:21:27 1995    <tytso@rsts-11.mit.edu>
 
 	* serial.c (check_modem_status, rs_ioctl): Support the new

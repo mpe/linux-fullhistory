@@ -7,18 +7,13 @@
 #
 # Note 2! The CFLAGS definitions are now in the main makefile...
 
-AS86    =as86 -0 -a
-AS386	=as86 -3
-LD86    =ld86 -0
-
-
 #.S.s:
 #	$(CPP) -D__ASSEMBLY__ -traditional $< -o $*.s
 
 ifdef SMP
 
 .S.o:
-	$(CC) -D__ASSEMBLY__ -D__SMP__ -traditional -c $< -o $*.o
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c $< -o $*.o
 else
 .S.o:
 	$(CC) -D__ASSEMBLY__ -traditional -c $< -o $*.o

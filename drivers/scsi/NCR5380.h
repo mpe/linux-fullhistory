@@ -29,9 +29,7 @@
 #define NCR5380_H
 
 #define NCR5380_PUBLIC_RELEASE 6
-#ifdef NCR53C400
-#define NCR53C400_PUBLIC_RELEASE 1
-#endif
+#define NCR53C400_PUBLIC_RELEASE 2
 
 #define NDEBUG_ARBITRATION	0x1
 #define NDEBUG_AUTOSENSE	0x2
@@ -53,6 +51,9 @@
 #define NDEBUG_LAST_BYTE_SENT	0x20000
 #define NDEBUG_RESTART_SELECT	0x40000
 #define NDEBUG_EXTENDED		0x80000
+#define NDEBUG_C400_PREAD	0x100000
+#define NDEBUG_C400_PWRITE	0x200000
+#define NDEBUG_LISTS		0x400000
 
 /* 
  * The contents of the OUTPUT DATA register are asserted on the bus when
@@ -158,31 +159,32 @@
 /* Write any value to this register to start an ini mode DMA receive */
 #define START_DMA_INITIATOR_RECEIVE_REG 7	/* wo */
 
-#ifdef NCR53C400
-#define C400_CONTROL_STATUS_REG                -8      /* rw */
+#define C400_CONTROL_STATUS_REG NCR53C400_register_offset-8      /* rw */
 
 #define CSR_RESET              0x80    /* wo  Resets 53c400 */
 #define CSR_53C80_REG          0x80    /* ro  5380 registers busy */
 #define CSR_TRANS_DIR          0x40    /* rw  Data transfer direction */
 #define CSR_SCSI_BUFF_INTR     0x20    /* rw  Enable int on transfer ready */
 #define CSR_53C80_INTR         0x10    /* rw  Enable 53c80 interrupts */
-#define CSR_SHARED_INTR                0x08    /* rw  Interrupt sharing */
+#define CSR_SHARED_INTR        0x08    /* rw  Interrupt sharing */
 #define CSR_HOST_BUF_NOT_RDY   0x04    /* ro  Is Host buffer ready */
 #define CSR_SCSI_BUF_RDY       0x02    /* ro  SCSI buffer read */
 #define CSR_GATED_53C80_IRQ    0x01    /* ro  Last block xferred */
 
+#if 0
 #define CSR_BASE CSR_SCSI_BUFF_INTR | CSR_53C80_INTR
+#else
+#define CSR_BASE CSR_53C80_INTR
+#endif
 
 /* Number of 128-byte blocks to be transferred */
-#define C400_CLOCK_COUNTER_REG         -7      /* rw */
+#define C400_BLOCK_COUNTER_REG   NCR53C400_register_offset-7      /* rw */
 
 /* Resume transfer after disconnect */
-#define C400_RESUME_TRANSFER_REG       -6      /* wo */
+#define C400_RESUME_TRANSFER_REG NCR53C400_register_offset-6      /* wo */
 
 /* Access to host buffer stack */
-#define C400_HOST_BUFFER                       -4      /* rw */
-
-#endif /* NCR53C400 */
+#define C400_HOST_BUFFER         NCR53C400_register_offset-4      /* rw */
 
 
 /* Note : PHASE_* macros are based on the values of the STATUS register */
@@ -237,6 +239,7 @@
 #define FLAG_HAS_LAST_BYTE_SENT		1	/* NCR53c81 or better */
 #define FLAG_CHECK_LAST_BYTE_SENT	2	/* Only test once */
 #define FLAG_NCR53C400			4	/* NCR53c400 */
+#define FLAG_NO_PSEUDO_DMA		8	/* Inhibit DMA */
 
 #ifndef ASM
 struct NCR5380_hostdata {
@@ -275,6 +278,8 @@ static void NCR5380_information_transfer (struct Scsi_Host *instance);
 static void NCR5380_intr (int irq, struct pt_regs * regs);
 static void NCR5380_main (void);
 static void NCR5380_print_options (struct Scsi_Host *instance);
+static void NCR5380_print_phase (struct Scsi_Host *instance);
+static void NCR5380_print (struct Scsi_Host *instance);
 #ifndef NCR5380_abort
 static
 #endif

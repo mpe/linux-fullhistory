@@ -333,6 +333,12 @@ void proc_root_init(void)
 		PROC_INTERRUPTS, 10,"interrupts",
 		S_IFREG | S_IRUGO, 1, 0, 0,
 	});
+#ifdef __SMP_PROF__
+	proc_register(&proc_root, &(struct proc_dir_entry) {
+		PROC_SMP_PROF, 3,"smp",
+		S_IFREG | S_IRUGO, 1, 0, 0,
+	});
+#endif 
 	proc_register(&proc_root, &(struct proc_dir_entry) {
 		PROC_FILESYSTEMS, 11,"filesystems",
 		S_IFREG | S_IRUGO, 1, 0, 0,

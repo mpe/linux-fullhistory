@@ -24,7 +24,7 @@ extern __inline void lock_kernel(void)
 			break;
 		do 
 		{
-			smp_spins++;
+			smp_spins[smp_processor_id()]++;
 			/*
 			 *	Doing test_bit here doesn't lock the bus 
 			 */

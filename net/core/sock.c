@@ -67,6 +67,7 @@
  *		Alan Cox	:	Added optimistic memory grabbing for AF_UNIX throughput.
  *		Alan Cox	:	Allocator for a socket is settable.
  *		Alan Cox	:	SO_ERROR includes soft errors.
+ *		Alan Cox	:	Allow NULL arguments on some SO_ opts
  *
  * To Fix:
  *
@@ -125,6 +126,19 @@ int sock_setsockopt(struct sock *sk, int level, int optname,
 	int err;
 	struct linger ling;
 
+	/*
+	 *	Options without arguments
+	 */
+
+#ifdef SO_DONTLINGER		/* Compatibility item... */
+	switch(optname)
+	{
+		case SO_DONTLINGER:
+			sk->linger=0;
+			return 0;
+	}
+#endif	
+		
   	if (optval == NULL) 
   		return(-EINVAL);
 
@@ -508,7 +522,7 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size, unsigne
 			if (sk->wmem_alloc + size >= sk->sndbuf) 
 #endif
 			{
-				if (sk->wmem_alloc <= 0)
+				if (sk->wmem_alloc < 0)
 				  printk("sock.c: Look where I am %ld<%ld\n", tmp, sk->wmem_alloc);
 				sk->socket->flags &= ~SO_NOSPACE;
 				interruptible_sleep_on(sk->sleep);

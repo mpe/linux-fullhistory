@@ -331,6 +331,13 @@ asmlinkage void schedule(void)
 	 next->last_processor = this_cpu;
 	 
 #endif	 
+#ifdef __SMP_PROF__ 
+        /* mark processor running an idle thread */
+        if (0==next->pid)
+                set_bit(this_cpu,&smp_idle_map);
+        else
+                clear_bit(this_cpu,&smp_idle_map);
+#endif
 	if (current != next) {
 		struct timer_list timer;
 
@@ -742,6 +749,9 @@ void do_timer(struct pt_regs * regs)
 	unsigned long mask;
 	struct timer_struct *tp;
 	long ltemp, psecs;
+#ifdef  __SMP_PROF__
+        int cpu,i;
+#endif
 
 	/* Advance the phase, once it gets to one microsecond, then
 	 * advance the tick more.
@@ -790,6 +800,12 @@ void do_timer(struct pt_regs * regs)
 
 	jiffies++;
 	calc_load();
+#ifdef  __SMP_PROF__
+        smp_idle_count[NR_CPUS]++;    /* count timer ticks */
+        cpu = smp_processor_id();
+        for (i=0;i<(0==smp_num_cpus?1:smp_num_cpus);i++) 
+        	if (test_bit(i,&smp_idle_map)) smp_idle_count[i]++;
+#endif
 	if (user_mode(regs)) {
 		current->utime++;
 		if (current->pid) {
@@ -970,7 +986,7 @@ static int setscheduler(pid_t pid, int policy,
 
 	error = verify_area(VERIFY_READ, param, sizeof(struct sched_param));
 	if (error)
-		return -EINVAL;
+		return error;
         memcpy_fromfs(&lp, param, sizeof(struct sched_param));
 
 	p = find_process_by_pid(pid);
@@ -1041,7 +1057,7 @@ asmlinkage int sys_sched_getparam(pid_t pid, struct sched_param *param)
 
 	error = verify_area(VERIFY_WRITE, param, sizeof(struct sched_param));
 	if (error)
-		return -EINVAL;
+		return error;
 
 	p = find_process_by_pid(pid);
 	if (!p)
@@ -1092,7 +1108,7 @@ asmlinkage int sys_sched_rr_get_interval(pid_t pid, struct timespec *interval)
 
 	error = verify_area(VERIFY_WRITE, interval, sizeof(struct timespec));
 	if (error)
-		return -EINVAL;
+		return error;
 	
 	t.tv_sec = 0;
 	t.tv_nsec = 0;   /* <-- Linus, please fill correct value in here */

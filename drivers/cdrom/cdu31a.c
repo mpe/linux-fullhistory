@@ -1959,6 +1959,7 @@ read_subcode(void)
 static int
 sony_get_subchnl_info(long arg)
 {
+   int err;
    struct cdrom_subchnl schi;
 
 
@@ -1972,8 +1973,9 @@ sony_get_subchnl_info(long arg)
       return -EIO;
    }
 
-   verify_area(VERIFY_READ, (char *) arg, sizeof(schi));
-   verify_area(VERIFY_WRITE, (char *) arg, sizeof(schi));
+   err = verify_area(VERIFY_READ, (char *) arg, sizeof(schi)) ||
+         verify_area(VERIFY_WRITE, (char *) arg, sizeof(schi));
+   if (err) return err;
 
    memcpy_fromfs(&schi, (char *) arg, sizeof(schi));
    

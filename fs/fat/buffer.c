@@ -10,7 +10,7 @@
 #include <linux/fs.h>
 #include <linux/msdos_fs.h>
 
-struct buffer_head *msdos_bread (
+struct buffer_head *fat_bread (
 	struct super_block *sb,
 	int block)
 {
@@ -63,7 +63,7 @@ struct buffer_head *msdos_bread (
 	}
 	return ret;
 }
-struct buffer_head *msdos_getblk (
+struct buffer_head *fat_getblk (
 	struct super_block *sb,
 	int block)
 {
@@ -77,12 +77,12 @@ struct buffer_head *msdos_getblk (
 			There is a possibility to optimize this when writing large
 			chunk by making sure we are filling large block. Volunteer ?
 		*/
-		ret = msdos_bread (sb,block);
+		ret = fat_bread (sb,block);
 	}
 	return ret;
 }
 
-void msdos_brelse (
+void fat_brelse (
 	struct super_block *sb,
 	struct buffer_head *bh)
 {
@@ -92,14 +92,14 @@ void msdos_brelse (
 		}else{
 			brelse (bh->b_next);
 			/* We can free the dummy because a new one is allocated at
-				each msdos_getblk() and msdos_bread().
+				each fat_getblk() and fat_bread().
 			*/
 			kfree (bh);
 		}
 	}
 }
 	
-void msdos_mark_buffer_dirty (
+void fat_mark_buffer_dirty (
 	struct super_block *sb,
 	struct buffer_head *bh,
 	int dirty_val)
@@ -110,7 +110,7 @@ void msdos_mark_buffer_dirty (
 	mark_buffer_dirty (bh,dirty_val);
 }
 
-void msdos_set_uptodate (
+void fat_set_uptodate (
 	struct super_block *sb,
 	struct buffer_head *bh,
 	int val)
@@ -120,7 +120,7 @@ void msdos_set_uptodate (
 	}
 	mark_buffer_uptodate(bh, val);
 }
-int msdos_is_uptodate (
+int fat_is_uptodate (
 	struct super_block *sb,
 	struct buffer_head *bh)
 {
@@ -130,7 +130,7 @@ int msdos_is_uptodate (
 	return buffer_uptodate(bh);
 }
 
-void msdos_ll_rw_block (
+void fat_ll_rw_block (
 	struct super_block *sb,
 	int opr,
 	int nbreq,

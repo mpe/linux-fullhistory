@@ -968,7 +968,8 @@ int arcnet_reset(struct device *dev)
 }
 
 
-/* Setup a struct device for ARCnet.  This should really be in net_init.c
+/*
+ * Setup a struct device for ARCnet.  This should really be in net_init.c
  * but since there are three different ARCnet devices ANYWAY... <gargle>
  *
  * Actually, the whole idea of having all this kernel-dependent stuff (ie.
@@ -976,23 +977,25 @@ int arcnet_reset(struct device *dev)
  *
  * Intelligent defaults?!  Nah.
  */
+
 void arcnet_setup(struct device *dev)
 {
 	int i;
 	for (i=0; i<DEV_NUMBUFFS; i++)
 		skb_queue_head_init(&dev->buffs[i]);
 
-	dev->broadcast[0]=0x00;	/* broadcasts on ARCnet are address 0 */
-	dev->addr_len=1;
-	dev->type=ARPHRD_ARCNET;
+	dev->broadcast[0]	= 0x00;	/* broadcasts on ARCnet are address 0 */
+	dev->addr_len		= 1;
+	dev->type		= ARPHRD_ARCNET;
+	dev->tx_queue_len 	= 30;	/* Fairly long queue, arcnet is quite speedy */
 
 	/* New-style flags. */
-	dev->flags	= IFF_BROADCAST;
-	dev->family	= AF_INET;
-	dev->pa_addr	= 0;
-	dev->pa_brdaddr = 0;
-	dev->pa_mask	= 0;
-	dev->pa_alen	= 4;
+	dev->flags		= IFF_BROADCAST;
+	dev->family		= AF_INET;
+	dev->pa_addr		= 0;
+	dev->pa_brdaddr 	= 0;
+	dev->pa_mask		= 0;
+	dev->pa_alen		= 4;
 }
 
 

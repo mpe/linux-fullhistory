@@ -1040,6 +1040,7 @@ void ip_netlink_msg(unsigned long msg, __u32 daddr, __u32 gw, __u32 mask, short 
 	struct sockaddr_in *s;
 	if(skb==NULL)
 		return;
+	skb->free=1;
 	nrt=(struct netlink_rtinfo *)skb_put(skb, sizeof(struct netlink_rtinfo));
 	nrt->rtmsg_type=msg;
 	s=(struct sockaddr_in *)&nrt->rtmsg_dst;

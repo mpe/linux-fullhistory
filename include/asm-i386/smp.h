@@ -180,7 +180,6 @@ extern unsigned char *kernel_stacks[NR_CPUS];
 extern unsigned char boot_cpu_id;
 extern unsigned long cpu_present_map;
 extern volatile unsigned long smp_invalidate_needed;
-extern volatile unsigned long smp_spins;
 extern void smp_invalidate(void);
 extern volatile unsigned long kernel_flag, kernel_counter;
 extern volatile unsigned char active_kernel_processor;

@@ -9,10 +9,13 @@ tristate 'Standard (minix) fs support' CONFIG_MINIX_FS
 tristate 'Extended fs support' CONFIG_EXT_FS
 tristate 'Second extended fs support' CONFIG_EXT2_FS
 tristate 'xiafs filesystem support' CONFIG_XIA_FS
-tristate 'msdos fs support' CONFIG_MSDOS_FS
-if [ "$CONFIG_MSDOS_FS" != "n" ]; then
-  tristate 'umsdos: Unix like fs on top of std MSDOS FAT fs' CONFIG_UMSDOS_FS
-fi
+
+# msdos filesystems
+tristate 'DOS FAT fs support' CONFIG_FAT_FS
+dep_tristate 'Old MSDOS fs support' CONFIG_MSDOS_FS $CONFIG_FAT_FS
+dep_tristate 'vfat (Windows-95) fs support' CONFIG_VFAT_FS $CONFIG_FAT_FS
+dep_tristate 'umsdos: Unix like fs on top of std MSDOS FAT fs' CONFIG_UMSDOS_FS $CONFIG_MSDOS_FS
+
 bool '/proc filesystem support' CONFIG_PROC_FS
 if [ "$CONFIG_INET" = "y" ]; then
   tristate 'NFS filesystem support' CONFIG_NFS_FS

@@ -130,6 +130,10 @@ asmlinkage int sys_idle(void)
 {
 	if(current->pid != 0)
 		return -EPERM;
+#ifdef __SMP_PROF__
+	smp_spins_sys_idle[smp_processor_id()]+=
+	  smp_spins_syscall_cur[smp_processor_id()];
+#endif
 	current->counter= -100;
 	schedule();
 	return 0;

@@ -53,6 +53,8 @@ typedef struct swapstat_v1
 typedef swapstat_v1 swapstat_t;
 extern swapstat_t swapstats;
 
+extern int min_free_pages, free_pages_low, free_pages_high;
+
 #define SC_VERSION	1
 #define SC_MAX_VERSION	1
 

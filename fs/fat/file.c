@@ -26,10 +26,10 @@
 #define PRINTK(x)
 #define Printk(x) printk x
 
-static struct file_operations msdos_file_operations = {
+static struct file_operations fat_file_operations = {
 	NULL,			/* lseek - default */
-	msdos_file_read,	/* read */
-	msdos_file_write,	/* write */
+	fat_file_read,		/* read */
+	fat_file_write,		/* write */
 	NULL,			/* readdir - bad */
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
@@ -39,8 +39,8 @@ static struct file_operations msdos_file_operations = {
 	file_fsync		/* fsync */
 };
 
-struct inode_operations msdos_file_inode_operations = {
-	&msdos_file_operations,	/* default file operations */
+struct inode_operations fat_file_inode_operations = {
+	&fat_file_operations,	/* default file operations */
 	NULL,			/* create */
 	NULL,			/* lookup */
 	NULL,			/* link */
@@ -54,8 +54,8 @@ struct inode_operations msdos_file_inode_operations = {
 	NULL,			/* follow_link */
 	generic_readpage,	/* readpage */
 	NULL,			/* writepage */
-	msdos_bmap,		/* bmap */
-	msdos_truncate,		/* truncate */
+	fat_bmap,		/* bmap */
+	fat_truncate,		/* truncate */
 	NULL,			/* permission */
 	NULL			/* smap */
 };
@@ -65,14 +65,14 @@ struct inode_operations msdos_file_inode_operations = {
 	used since it allocate extra buffer. generic_mmap is used for
 	normal device (512 bytes hardware sectors).
 */
-static struct file_operations msdos_file_operations_1024 = {
+static struct file_operations fat_file_operations_1024 = {
 	NULL,			/* lseek - default */
-	msdos_file_read,	/* read */
-	msdos_file_write,	/* write */
+	fat_file_read,		/* read */
+	fat_file_write,		/* write */
 	NULL,			/* readdir - bad */
 	NULL,			/* select - default */
 	NULL,			/* ioctl - default */
-	msdos_mmap,		/* mmap */
+	fat_mmap,		/* mmap */
 	NULL,			/* no special open is needed */
 	NULL,			/* release */
 	file_fsync		/* fsync */
@@ -87,8 +87,8 @@ static struct file_operations msdos_file_operations_1024 = {
 	memory. So swap file is difficult (not available right now)
 	on those devices. Off course, Ext2 does not have this problem.
 */
-struct inode_operations msdos_file_inode_operations_1024 = {
-	&msdos_file_operations_1024,	/* default file operations */
+struct inode_operations fat_file_inode_operations_1024 = {
+	&fat_file_operations_1024,	/* default file operations */
 	NULL,			/* create */
 	NULL,			/* lookup */
 	NULL,			/* link */
@@ -103,13 +103,13 @@ struct inode_operations msdos_file_inode_operations_1024 = {
 	NULL,			/* readpage */
 	NULL,			/* writepage */
 	NULL,			/* bmap */
-	msdos_truncate,		/* truncate */
+	fat_truncate,		/* truncate */
 	NULL,			/* permission */
 	NULL			/* smap */
 };
 
 #define MSDOS_PREFETCH	32
-struct msdos_pre {
+struct fat_pre {
 	int file_sector;/* Next sector to read in the prefetch table */
 			/* This is relative to the file, not the disk */
 	struct buffer_head *bhlist[MSDOS_PREFETCH];	/* All buffers needed */
@@ -119,9 +119,9 @@ struct msdos_pre {
 /*
 	Order the prefetch of more sectors.
 */
-static void msdos_prefetch (
+static void fat_prefetch (
 	struct inode *inode,
-	struct msdos_pre *pre,
+	struct fat_pre *pre,
 	int nb)		/* How many must be prefetch at once */
 {
 	struct super_block *sb = inode->i_sb;
@@ -130,7 +130,7 @@ static void msdos_prefetch (
 	int nbreq=0;			/* Number of buffers in bhreq */
 	int i;
 	for (i=0; i<nb; i++){
-		int sector = msdos_smap(inode,pre->file_sector);
+		int sector = fat_smap(inode,pre->file_sector);
 		if (sector != 0){
 			struct buffer_head *bh;
 			PRINTK (("fsector2 %d -> %d\n",pre->file_sector-1,sector));
@@ -138,19 +138,19 @@ static void msdos_prefetch (
 			bh = getblk(inode->i_dev,sector,SECTOR_SIZE);
 			if (bh == NULL)	break;
 			pre->bhlist[pre->nblist++] = bh;
-			if (!msdos_is_uptodate(sb,bh)) bhreq[nbreq++] = bh;
+			if (!fat_is_uptodate(sb,bh)) bhreq[nbreq++] = bh;
 		}else{
 			break;
 		}
 	}
-	if (nbreq > 0) msdos_ll_rw_block (sb,READ,nbreq,bhreq);
+	if (nbreq > 0) fat_ll_rw_block (sb,READ,nbreq,bhreq);
 	for (i=pre->nblist; i<MSDOS_PREFETCH; i++) pre->bhlist[i] = NULL;
 }
 
 /*
 	Read a file into user space
 */
-int msdos_file_read(
+int fat_file_read(
 	struct inode *inode,
 	struct file *filp,
 	char *buf,
@@ -161,16 +161,16 @@ int msdos_file_read(
 	char *end   = buf + count;
 	int i;
 	int left_in_file;
-	struct msdos_pre pre;
+	struct fat_pre pre;
 		
 
 	if (!inode) {
-		printk("msdos_file_read: inode = NULL\n");
+		printk("fat_file_read: inode = NULL\n");
 		return -EINVAL;
 	}
 	/* S_ISLNK allows for UMSDOS. Should never happen for normal MSDOS */
 	if (!S_ISREG(inode->i_mode) && !S_ISLNK(inode->i_mode)) {
-		printk("msdos_file_read: mode = %07o\n",inode->i_mode);
+		printk("fat_file_read: mode = %07o\n",inode->i_mode);
 		return -EINVAL;
 	}
 	if (filp->f_pos >= inode->i_size || count <= 0) return 0;
@@ -205,7 +205,7 @@ int msdos_file_read(
 		}
 		if (to_reada > MSDOS_PREFETCH) to_reada = MSDOS_PREFETCH;
 		pre.nblist = 0;
-		msdos_prefetch (inode,&pre,to_reada);
+		fat_prefetch (inode,&pre,to_reada);
 	}
 	pre.nolist = 0;
 	PRINTK (("count %d ahead %d nblist %d\n",count,read_ahead[MAJOR(inode->i_dev)],pre.nblist));
@@ -221,12 +221,12 @@ int msdos_file_read(
 			memcpy (pre.bhlist,pre.bhlist+MSDOS_PREFETCH/2
 				,(MSDOS_PREFETCH/2)*sizeof(pre.bhlist[0]));
 			pre.nblist -= MSDOS_PREFETCH/2;
-			msdos_prefetch (inode,&pre,MSDOS_PREFETCH/2);
+			fat_prefetch (inode,&pre,MSDOS_PREFETCH/2);
 			pre.nolist = 0;
 		}
 		PRINTK (("file_read pos %ld nblist %d %d %d\n",filp->f_pos,pre.nblist,pre.fetched,count));
 		wait_on_buffer(bh);
-		if (!msdos_is_uptodate(sb,bh)){
+		if (!fat_is_uptodate(sb,bh)){
 			/* read error  ? */
 			brelse (bh);
 			break;
@@ -264,7 +264,7 @@ int msdos_file_read(
 /*
 	Write to a file either from user space
 */
-int msdos_file_write(
+int fat_file_write(
 	struct inode *inode,
 	struct file *filp,
 	const char *buf,
@@ -279,12 +279,12 @@ int msdos_file_write(
 	int binary_mode = MSDOS_I(inode)->i_binary;
 
 	if (!inode) {
-		printk("msdos_file_write: inode = NULL\n");
+		printk("fat_file_write: inode = NULL\n");
 		return -EINVAL;
 	}
 	/* S_ISLNK allows for UMSDOS. Should never happen for normal MSDOS */
 	if (!S_ISREG(inode->i_mode) && !S_ISLNK(inode->i_mode)) {
-		printk("msdos_file_write: mode = %07o\n",inode->i_mode);
+		printk("fat_file_write: mode = %07o\n",inode->i_mode);
 		return -EINVAL;
 	}
 	/* system files are immutable */
@@ -297,10 +297,10 @@ int msdos_file_write(
 	if (count <= 0) return 0;
 	error = carry = 0;
 	for (start = buf; count || carry; count -= size) {
-		while (!(sector = msdos_smap(inode,filp->f_pos >> SECTOR_BITS)))
-			if ((error = msdos_add_cluster(inode)) < 0) break;
+		while (!(sector = fat_smap(inode,filp->f_pos >> SECTOR_BITS)))
+			if ((error = fat_add_cluster(inode)) < 0) break;
 		if (error) {
-			msdos_truncate(inode);
+			fat_truncate(inode);
 			break;
 		}
 		offset = filp->f_pos & (SECTOR_SIZE-1);
@@ -350,7 +350,7 @@ int msdos_file_write(
 			inode->i_size = filp->f_pos;
 			inode->i_dirt = 1;
 		}
-		msdos_set_uptodate(sb,bh,1);
+		fat_set_uptodate(sb,bh,1);
 		mark_buffer_dirty(bh, 0);
 		brelse(bh);
 	}
@@ -362,7 +362,7 @@ int msdos_file_write(
 	return buf-start;
 }
 
-void msdos_truncate(struct inode *inode)
+void fat_truncate(struct inode *inode)
 {
 	int cluster;
 

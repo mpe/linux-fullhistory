@@ -5,6 +5,7 @@
 #define __NO_VERSION__
 #include <linux/module.h>
 #include <linux/config.h>
+#ifdef CONFIG_MODULES
 
 #include <linux/sched.h>
 #include <linux/timer.h>
@@ -59,6 +60,7 @@ struct symbol_table scsi_symbol_table = {
     X(kernel_scsi_ioctl),
     X(need_isa_buffer),
     X(request_queueable),
+    X(print_Scsi_Cmnd),
 #if defined(CONFIG_PROC_FS)
     X(proc_print_scsidevice),
 #endif
@@ -76,3 +78,4 @@ struct symbol_table scsi_symbol_table = {
      */
 #include <linux/symtab_end.h>
 };
+#endif

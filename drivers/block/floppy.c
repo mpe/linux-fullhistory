@@ -3248,6 +3248,14 @@ static int fd_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 			return 0;
 
 		case FDFMTBEG:
+			LOCK_FDC(drive,1);
+			CALL(poll_drive(1, FD_RAW_NEED_DISK));
+			ret = UDRS->flags;
+			process_fd_request();
+			if(ret & FD_VERIFY)
+				return -ENODEV;
+			if(!(ret & FD_DISK_WRITABLE))
+				return -EROFS;
 			return 0;
 		case FDFMTTRK:
 			if (UDRS->fd_ref != 1)
@@ -3671,30 +3679,33 @@ static char get_fdc_version(void)
 		return FDC_82077;	/* Revised 82077AA passes all the tests */
 	}
 	switch (reply_buffer[0] >> 5) {
-	case 0x0:
-		output_byte(FD_SAVE);
-		r = result();
-		if (r != 17) {
-			printk("FDC %d init: SAVE: unexpected return of %d bytes.\n",fdc,r);
-			return FDC_UNKNOWN;
-		}
-		if (!(reply_buffer[0] & 0x40)) {
-			printk("FDC %d is a 3Volt 82078SL.\n",fdc);
+		case 0x0:
+			output_byte(FD_SAVE);
+			r = result();
+			if (r != 17) {
+				printk("FDC %d init: SAVE: unexpected return of %d bytes.\n", fdc, r);
+				return FDC_UNKNOWN;
+			}
+			if (!(reply_buffer[0] & 0x40)) {
+				printk("FDC %d is a 3Volt 82078SL.\n",fdc);
+				return FDC_82078;
+			}
+			/* Either a 82078-1 or a 82078SL running at 5Volt */
+			printk("FDC %d is a 82078-1.\n",fdc);
+			return FDC_82078_1;
+		case 0x1:
+			printk("FDC %d is a 44pin 82078\n",fdc);
 			return FDC_82078;
-		}
-		/* Either a 82078-1 or a 82078SL running at 5Volt */
-		printk("FDC %d is a 82078-1.\n",fdc);
-		return FDC_82078_1;
-	case 0x1:
-		printk("FDC %d is a 44pin 82078\n",fdc);
-		return FDC_82078;
-	case 0x3:
-		printk("FDC %d is a National Semiconductor PC87306\n",fdc);
-		return FDC_87306;
-	default:
-		printk("FDC %d init: Unknown 82077 variant, PARTID = %d.\n",
-		       fdc, reply_buffer[0] >> 5);
-		return FDC_82077_UNKN;
+		case 0x2:
+			printk("FDC %d is a S82078B\n", fdc);
+			return FDC_S82078B;
+		case 0x3:
+			printk("FDC %d is a National Semiconductor PC87306\n", fdc);
+			return FDC_87306;
+		default:
+			printk("FDC %d init: 82077 variant with PARTID=%d.\n",
+			       fdc, reply_buffer[0] >> 5);
+			return FDC_82077_UNKN;
 	}
 } /* get_fdc_version */
 

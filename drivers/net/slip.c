@@ -1022,7 +1022,7 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 	 case SIOCGIFNAME:
 		err = verify_area(VERIFY_WRITE, arg, strlen(sl->dev->name) + 1);
 		if (err)  {
-			return -err;
+			return err;
 		}
 		memcpy_tofs(arg, sl->dev->name, strlen(sl->dev->name) + 1);
 		return 0;
@@ -1030,7 +1030,7 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 	case SIOCGIFENCAP:
 		err = verify_area(VERIFY_WRITE, arg, sizeof(int));
 		if (err)  {
-			return -err;
+			return err;
 		}
 		put_user(sl->mode, (int *)arg);
 		return 0;
@@ -1038,7 +1038,7 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 	case SIOCSIFENCAP:
 		err = verify_area(VERIFY_READ, arg, sizeof(int));
 		if (err)  {
-			return -err;
+			return err;
 		}
 		tmp = get_user((int *)arg);
 #ifndef SL_INCLUDE_CSLIP
@@ -1205,6 +1205,7 @@ slip_init(struct device *dev)
 	dev->hard_header_len	= 0;
 	dev->addr_len		= 0;
 	dev->type		= ARPHRD_SLIP + SL_MODE_DEFAULT;
+	dev->tx_queue_len	= 10;
 #ifdef CONFIG_AX25
 	if (sl->dev->type == 260) {
 		sl->dev->type = ARPHRD_AX25;

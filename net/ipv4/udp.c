@@ -429,7 +429,7 @@ static int udp_sendmsg(struct sock *sk, struct msghdr *msg, int len, int noblock
 			return -ENOBUFS;
 		memcpy_fromiovec(buf, msg->msg_iov, len);
 		fs=get_fs();
-		set_fs(get_fs());
+		set_fs(get_ds());
 		err=udp_sendto(sk,buf,len, noblock, flags, msg->msg_name, msg->msg_namelen);
 		set_fs(fs);
 		kfree_s(buf,len);
@@ -474,7 +474,7 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 				 * of this packet since that is all
 				 * that will be read.
 				 */
-				amount = skb->len;
+				amount = skb->len-sizeof(struct udphdr);
 			}
 			err=verify_area(VERIFY_WRITE,(void *)arg,
 						sizeof(unsigned long));

@@ -278,7 +278,7 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, int len, int noblock
 			return -ENOBUFS;
 		memcpy_fromiovec(buf, msg->msg_iov, len);
 		fs=get_fs();
-		set_fs(get_fs());
+		set_fs(get_ds());
 		err=raw_sendto(sk,buf,len, noblock, flags, msg->msg_name, msg->msg_namelen);
 		set_fs(fs);
 		kfree_s(buf,len);

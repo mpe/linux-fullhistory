@@ -15,8 +15,9 @@
  *	herein by reference. The driver is provided without warranty or 
  *	support.
  *
- *	Release 0.04.
+ *	Release 0.05.
  *
+ *	Some changes by Dave Gregorich to fix modularisation and minor bugs.
  */
 
 #include <linux/config.h>
@@ -110,7 +111,7 @@ static int wdt_lseek(struct inode *inode, struct file *file, off_t offset,
 	return -ESPIPE;
 }
 
-static int wdt_write(struct inode *inode, struct file *file, char *buf, int count)
+static int wdt_write(struct inode *inode, struct file *file, const char *buf, int count)
 {
 	/* Write a watchdog value */
 	inb_p(WDT_DC);
@@ -138,7 +139,7 @@ static int wdt_read(struct inode *inode, struct file *file, char *buf, int count
 				return err;
 			c*=11;
 			c/=15;
-			cp=c;
+			cp=c+7;
 			memcpy_tofs(buf,&cp,1);
 			return 1;
 		default:
@@ -217,12 +218,14 @@ static struct mouse wdt_mouse=
 	&wdt_fops
 };
 
+#ifdef CONFIG_WDT_501
 static struct mouse temp_mouse=
 {
 	TEMP_MINOR,
 	"temperature",
 	&wdt_fops
 };
+#endif
 
 #ifdef MODULE
 
@@ -263,7 +266,9 @@ int wdt_init(void)
 		return -EIO;
 	}
 	mouse_register(&wdt_mouse);
+#ifdef CONFIG_WDT_501	
 	mouse_register(&temp_mouse);
+#endif	
 	request_region(io, 8, "wdt501");
 	return 0;
 }

@@ -254,6 +254,7 @@ usage()
 int
 main(int argc, char** argv)
 {
+    char c;
     program_name = (argc--, *argv++);
 
     NameList names;
@@ -280,9 +281,9 @@ main(int argc, char** argv)
 	cin >> buffer;
 	if (strequ(buffer, "EIP:") && names.valid()) {
 	    cin >> ::hex >> eip_addr;
-	    cin >> buffer[0];
+	    cin >> c >> c >> c;
 	    cin >> ::hex >> eip_addr;
-	    cin >> buffer;
+	    cin >> c >> c >> buffer;
 	    if (!strequ(buffer, "EFLAGS:")) {
 		clog << "Please strip the line-prefixes and rerun " << program_name << endl;
 		exit(1);
@@ -292,7 +293,9 @@ main(int argc, char** argv)
 		cout << ">>EIP: " << *ksym << endl;
 	} else if (strequ(buffer, "Trace:") && names.valid()) {
 	    long address;
-	    while ((cin >> ::hex >> address) && address > 0xc) {
+	    while ((cin >> buffer) && 
+		   (sscanf(buffer, " [<%x>]", &address) == 1) &&
+		   address > 0xc) {
 		cout << "Trace: ";
 		KSym* ksym = names.find(address);
 		if (ksym)

@@ -1660,7 +1660,7 @@ static int arp_req_set(struct arpreq *r, struct device * dev)
 	u32 ip;
 
 	/*
-	 *	Find out about the hardware type.
+	 *	Extract destination.
 	 */
 	
 	si = (struct sockaddr_in *) &r->arp_pa;
@@ -1680,8 +1680,16 @@ static int arp_req_set(struct arpreq *r, struct device * dev)
 		ip_rt_put(rt);
 	}
 
-	if (!dev)	/* this is can only be NULL if ATF_PUBL is not set */
+	/* good guess about the device if it isn't a ATF_PUBL entry */
+	if (!dev) {
+		if (dev1->flags&(IFF_LOOPBACK|IFF_NOARP))
+			return -ENODEV;
 		dev = dev1;
+	}
+
+	/* this needs to be checked only for dev=dev1 but it doesnt hurt */	
+	if (r->arp_ha.sa_family != dev->type)	
+		return -EINVAL;
 		
 	if (((r->arp_flags & ATF_PUBL) && dev == dev1) ||
 	    (!(r->arp_flags & ATF_PUBL) && dev != dev1))
@@ -1997,11 +2005,13 @@ void arp_init (void)
 	/* Register for device down reports */
 	register_netdevice_notifier(&arp_dev_notifier);
 
+#ifdef CONFIG_PROC_FS
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_ARP, 3, "arp",
 		S_IFREG | S_IRUGO, 1, 0, 0,
 		0, &proc_net_inode_operations,
 		arp_get_info
 	});
+#endif
 }
 

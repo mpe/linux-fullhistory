@@ -2,8 +2,10 @@
  *  linux/fs/msdos/inode.c
  *
  *  Written 1992,1993 by Werner Almesberger
+ *  VFAT extensions by Gordon Chaffee, merged with msdos fs by Henrik Storner
  */
 
+#define __NO_VERSION__
 #include <linux/module.h>
 
 #include <linux/msdos_fs.h>
@@ -19,20 +21,23 @@
 #include <linux/locks.h>
 
 #include "msbuffer.h"
+#include "tables.h"
 
 #include <asm/segment.h>
 
-void msdos_put_inode(struct inode *inode)
+
+
+void fat_put_inode(struct inode *inode)
 {
 	struct inode *depend;
 	struct super_block *sb;
 
 	if (inode->i_nlink) {
-		if (MSDOS_I(inode)->i_busy) cache_inval_inode(inode);
+		if (MSDOS_I(inode)->i_busy) fat_cache_inval_inode(inode);
 		return;
 	}
 	inode->i_size = 0;
-	msdos_truncate(inode);
+	fat_truncate(inode);
 	depend = MSDOS_I(inode)->i_depend;
 	sb = inode->i_sb;
 	clear_inode(inode);
@@ -40,7 +45,7 @@ void msdos_put_inode(struct inode *inode)
 		if (MSDOS_I(depend)->i_old != inode) {
 			printk("Invalid link (0x%p): expected 0x%p, got 0x%p\n",
 			    depend, inode, MSDOS_I(depend)->i_old);
-			fs_panic(sb,"...");
+			fat_fs_panic(sb,"...");
 			return;
 		}
 		MSDOS_I(depend)->i_old = NULL;
@@ -49,9 +54,9 @@ void msdos_put_inode(struct inode *inode)
 }
 
 
-void msdos_put_super(struct super_block *sb)
+void fat_put_super(struct super_block *sb)
 {
-	cache_inval_dev(sb->s_dev);
+	fat_cache_inval_dev(sb->s_dev);
 	set_blocksize (sb->s_dev,BLOCK_SIZE);
 	lock_super(sb);
 	sb->s_dev = 0;
@@ -61,21 +66,9 @@ void msdos_put_super(struct super_block *sb)
 }
 
 
-static struct super_operations msdos_sops = { 
-	msdos_read_inode,
-	msdos_notify_change,
-	msdos_write_inode,
-	msdos_put_inode,
-	msdos_put_super,
-	NULL, /* added in 0.96c */
-	msdos_statfs,
-	NULL
-};
-
-
 static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
     gid_t *gid,int *umask,int *debug,int *fat,int *quiet,
-	int *blksize, char *dotsOK)
+	int *blksize, char *dotsOK, char *sys_immutable)
 {
 	char *this_char,*value;
 
@@ -85,7 +78,7 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
 	*uid = current->uid;
 	*gid = current->gid;
 	*umask = current->fs->umask;
-	*debug = *fat = *quiet = 0;
+	*debug = *fat = *quiet = *sys_immutable = 0;
 	if (!options) return 1;
 	for (this_char = strtok(options,","); this_char; this_char = strtok(NULL,",")) {
 		if ((value = strchr(this_char,'=')) != NULL)
@@ -161,6 +154,11 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
 				printk ("MSDOS FS: Invalid blocksize (512 or 1024)\n");
 			}
 		}
+		else if (!strcmp(this_char,"sys_immutable")) {
+			if (value)
+				return 0;
+			*sys_immutable = 1;
+		}
 		else return 1;
 	}
 	return 1;
@@ -169,14 +167,13 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
 
 /* Read the super block of an MS-DOS FS. */
 
-struct super_block *msdos_read_super(struct super_block *sb,void *data,
-				     int silent)
+struct super_block *fat_read_super(struct super_block *sb,void *data, int silent)
 {
 	struct buffer_head *bh;
 	struct msdos_boot_sector *b;
 	int data_sectors,logical_sector_size,sector_mult,fat_clusters=0;
 	int debug,error,fat,quiet;
-	char check,conversion,dotsOK;
+	char check,conversion,dotsOK,sys_immutable;
 	uid_t uid;
 	gid_t gid;
 	int umask;
@@ -190,7 +187,7 @@ struct super_block *msdos_read_super(struct super_block *sb,void *data,
 		}
 	}
 	if (!parse_options((char *) data,&check,&conversion,&uid,&gid,&umask,
-	    &debug,&fat,&quiet,&blksize,&dotsOK)
+	    &debug,&fat,&quiet,&blksize,&dotsOK,&sys_immutable)
 		|| (blksize != 512 && blksize != 1024)) {
 		sb->s_dev = 0;
 		MOD_DEC_USE_COUNT;
@@ -203,10 +200,10 @@ struct super_block *msdos_read_super(struct super_block *sb,void *data,
 	set_blocksize(sb->s_dev, 1024);
 	bh = bread(sb->s_dev, 0, 1024);
 	unlock_super(sb);
-	if (bh == NULL || !msdos_is_uptodate(sb,bh)) {
+	if (bh == NULL || !fat_is_uptodate(sb,bh)) {
 		brelse (bh);
 		sb->s_dev = 0;
-		printk("MSDOS bread failed\n");
+		printk("FAT bread failed\n");
 		MOD_DEC_USE_COUNT;
 		return NULL;
 	}
@@ -262,7 +259,7 @@ struct super_block *msdos_read_super(struct super_block *sb,void *data,
 	brelse(bh);
 	/*
 		This must be done after the brelse because the bh is a dummy
-		allocated by msdos_bread (see buffer.c)
+		allocated by fat_bread (see buffer.c)
 	*/
 	sb->s_blocksize = blksize;	/* Using this small block size solve the */
 				/* the misfit with buffer cache and cluster */
@@ -297,12 +294,14 @@ struct super_block *msdos_read_super(struct super_block *sb,void *data,
 	MSDOS_SB(sb)->name_check = check;
 	MSDOS_SB(sb)->conversion = conversion;
 	/* set up enough so that it can read an inode */
-	sb->s_op = &msdos_sops;
 	MSDOS_SB(sb)->fs_uid = uid;
 	MSDOS_SB(sb)->fs_gid = gid;
 	MSDOS_SB(sb)->fs_umask = umask;
 	MSDOS_SB(sb)->quiet = quiet;
 	MSDOS_SB(sb)->dotsOK = dotsOK;
+	MSDOS_SB(sb)->sys_immutable = sys_immutable;
+	MSDOS_SB(sb)->vfat = 0;   /* vfat_read_super sets this */
+	MSDOS_SB(sb)->umsdos = 0; /* umsdos_read_super will set this */
 	MSDOS_SB(sb)->free_clusters = -1; /* don't know yet */
 	MSDOS_SB(sb)->fat_wait = NULL;
 	MSDOS_SB(sb)->fat_lock = 0;
@@ -317,7 +316,7 @@ struct super_block *msdos_read_super(struct super_block *sb,void *data,
 }
 
 
-void msdos_statfs(struct super_block *sb,struct statfs *buf, int bufsiz)
+void fat_statfs(struct super_block *sb,struct statfs *buf, int bufsiz)
 {
 	int free,nr;
 	struct statfs tmp;
@@ -344,7 +343,7 @@ void msdos_statfs(struct super_block *sb,struct statfs *buf, int bufsiz)
 }
 
 
-int msdos_bmap(struct inode *inode,int block)
+int fat_bmap(struct inode *inode,int block)
 {
 	struct msdos_sb_info *sb;
 	int cluster,offset;
@@ -360,7 +359,7 @@ int msdos_bmap(struct inode *inode,int block)
 }
 
 
-void msdos_read_inode(struct inode *inode)
+void fat_read_inode(struct inode *inode, struct inode_operations *fs_dir_inode_ops)
 {
 	struct super_block *sb = inode->i_sb;
 	struct buffer_head *bh;
@@ -376,8 +375,8 @@ void msdos_read_inode(struct inode *inode)
 	if (inode->i_ino == MSDOS_ROOT_INO) {
 		inode->i_mode = (S_IRWXUGO & ~MSDOS_SB(inode->i_sb)->fs_umask) |
 		    S_IFDIR;
-		inode->i_op = &msdos_dir_inode_operations;
-		inode->i_nlink = msdos_subdirs(inode)+2;
+		inode->i_op = fs_dir_inode_ops;
+		inode->i_nlink = fat_subdirs(inode)+2;
 		    /* subdirs (neither . nor ..) plus . and "self" */
 		inode->i_size = MSDOS_SB(inode->i_sb)->dir_entries*
 		    sizeof(struct msdos_dir_entry);
@@ -394,16 +393,17 @@ void msdos_read_inode(struct inode *inode)
 	    SECTOR_SIZE))) {
 		printk("dev = %s, ino = %ld\n",
 		       kdevname(inode->i_dev), inode->i_ino);
-		panic("msdos_read_inode: unable to read i-node block");
+		panic("fat_read_inode: unable to read i-node block");
 	}
 	raw_entry = &((struct msdos_dir_entry *) (bh->b_data))
 	    [inode->i_ino & (MSDOS_DPB-1)];
 	if ((raw_entry->attr & ATTR_DIR) && !IS_FREE(raw_entry->name)) {
 		inode->i_mode = MSDOS_MKMODE(raw_entry->attr,S_IRWXUGO &
 		    ~MSDOS_SB(inode->i_sb)->fs_umask) | S_IFDIR;
-		inode->i_op = &msdos_dir_inode_operations;
+		inode->i_op = fs_dir_inode_ops;
+
 		MSDOS_I(inode)->i_start = CF_LE_W(raw_entry->start);
-		inode->i_nlink = msdos_subdirs(inode);
+		inode->i_nlink = fat_subdirs(inode);
 		    /* includes .., compensating for "self" */
 #ifdef DEBUG
 		if (!inode->i_nlink) {
@@ -426,15 +426,16 @@ void msdos_read_inode(struct inode *inode)
 		inode->i_mode = MSDOS_MKMODE(raw_entry->attr,
 		    (IS_NOEXEC(inode) ? S_IRUGO|S_IWUGO : S_IRWXUGO)
 		    & ~MSDOS_SB(inode->i_sb)->fs_umask) | S_IFREG;
-		inode->i_op = sb->s_blocksize == 1024
-			? &msdos_file_inode_operations_1024
-			: &msdos_file_inode_operations;
+		inode->i_op = (sb->s_blocksize == 1024)
+			? &fat_file_inode_operations_1024
+			: &fat_file_inode_operations;
 		MSDOS_I(inode)->i_start = CF_LE_W(raw_entry->start);
 		inode->i_nlink = 1;
 		inode->i_size = CF_LE_L(raw_entry->size);
 	}
 	if(raw_entry->attr & ATTR_SYS)
-		inode->i_flags |= S_IMMUTABLE;
+		if (MSDOS_I(inode)->sys_immutable)
+			inode->i_flags |= S_IMMUTABLE;
 	MSDOS_I(inode)->i_binary = is_binary(MSDOS_SB(inode->i_sb)->conversion,
 	    raw_entry->ext);
 	MSDOS_I(inode)->i_attrs = raw_entry->attr & ATTR_UNUSED;
@@ -442,13 +443,17 @@ void msdos_read_inode(struct inode *inode)
 	inode->i_blksize = MSDOS_SB(inode->i_sb)->cluster_size*SECTOR_SIZE;
 	inode->i_blocks = (inode->i_size+inode->i_blksize-1)/
 	    inode->i_blksize*MSDOS_SB(inode->i_sb)->cluster_size;
-	inode->i_mtime = inode->i_atime = inode->i_ctime =
+	inode->i_mtime = inode->i_atime =
 	    date_dos2unix(CF_LE_W(raw_entry->time),CF_LE_W(raw_entry->date));
+	inode->i_ctime =
+		MSDOS_SB(inode->i_sb)->vfat
+		? date_dos2unix(CF_LE_W(raw_entry->ctime),CF_LE_W(raw_entry->cdate))
+		: inode->i_mtime;
 	brelse(bh);
 }
 
 
-void msdos_write_inode(struct inode *inode)
+void fat_write_inode(struct inode *inode)
 {
 	struct super_block *sb = inode->i_sb;
 	struct buffer_head *bh;
@@ -475,15 +480,20 @@ void msdos_write_inode(struct inode *inode)
 	raw_entry->attr |= MSDOS_MKATTR(inode->i_mode) |
 	    MSDOS_I(inode)->i_attrs;
 	raw_entry->start = CT_LE_L(MSDOS_I(inode)->i_start);
-	date_unix2dos(inode->i_mtime,&raw_entry->time,&raw_entry->date);
+	fat_date_unix2dos(inode->i_mtime,&raw_entry->time,&raw_entry->date);
 	raw_entry->time = CT_LE_W(raw_entry->time);
 	raw_entry->date = CT_LE_W(raw_entry->date);
+	if (MSDOS_SB(sb)->vfat) {
+		fat_date_unix2dos(inode->i_ctime,&raw_entry->ctime,&raw_entry->cdate);
+		raw_entry->ctime = CT_LE_W(raw_entry->ctime);
+		raw_entry->cdate = CT_LE_W(raw_entry->cdate);
+	}
 	mark_buffer_dirty(bh, 1);
 	brelse(bh);
 }
 
 
-int msdos_notify_change(struct inode * inode,struct iattr * attr)
+int fat_notify_change(struct inode * inode,struct iattr * attr)
 {
 	int error;
 
@@ -515,61 +525,18 @@ int msdos_notify_change(struct inode * inode,struct iattr * attr)
 	return 0;
 }
 
-static struct symbol_table msdos_syms = {
-/* Should this be surrounded with "#ifdef CONFIG_MODULES" ? */
-#include <linux/symtab_begin.h>
-	/*
-	 * Support for umsdos fs
-	 *
-	 * These symbols are _always_ exported, in case someone
-	 * wants to install the umsdos module later.
-	 */
-	X(msdos_bmap),
-	X(msdos_create),
-	X(msdos_file_read),
-	X(msdos_file_write),
-	X(msdos_lookup),
-	X(msdos_mkdir),
-	X(msdos_mmap),
-	X(msdos_put_inode),
-	X(msdos_put_super),
-	X(msdos_read_inode),
-	X(msdos_read_super),
-	X(msdos_readdir),
-	X(msdos_rename),
-	X(msdos_rmdir),
-	X(msdos_smap),
-	X(msdos_statfs),
-	X(msdos_truncate),
-	X(msdos_unlink),
-	X(msdos_unlink_umsdos),
-	X(msdos_write_inode),
-#include <linux/symtab_end.h>
-};
-
-static struct file_system_type msdos_fs_type = {
-	msdos_read_super, "msdos", 1, NULL
-};
-
-int init_msdos_fs(void)
-{
-	int status;
-
-	if ((status = register_filesystem(&msdos_fs_type)) == 0)
-		status = register_symtab(&msdos_syms);
-	return status;
-}
 
 #ifdef MODULE
 int init_module(void)
 {
-	return init_msdos_fs();
+	return init_fat_fs();
 }
+
 
 void cleanup_module(void)
 {
-	unregister_filesystem(&msdos_fs_type);
+	/* Nothing to be done, really! */
+	return;
 }
-
 #endif
 

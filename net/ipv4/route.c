@@ -39,7 +39,7 @@
  *					routing caches and better behaviour.
  *		
  *		Olaf Erb	:	irtt wasnt being copied right.
- *		Bjorn Ekwall	:	Added KERNELD hack for autodialling
+ *		Bjorn Ekwall	:	Kerneld route support.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -1498,11 +1498,21 @@ struct rtable * ip_rt_slow_route (__u32 daddr, int local)
 
 	if (!f || (fi->fib_flags & RTF_REJECT))
 	{
+#ifdef CONFIG_KERNELD	
+		char wanted_route[20];
+#endif		
 #if RT_CACHE_DEBUG >= 2
 		printk("rt_route failed @%08x\n", daddr);
 #endif
 		ip_rt_unlock();
 		kfree_s(rth, sizeof(struct rtable));
+#ifdef CONFIG_KERNELD		
+		daddr=ntohl(daddr);
+		sprintf(wanted_route, "%d.%d.%d.%d",
+			(int)(daddr >> 24) & 0xff, (int)(daddr >> 16) & 0xff,
+			(int)(daddr >> 8) & 0xff, (int)daddr & 0xff);
+		kerneld_route(wanted_route); 	/* Dynamic route request */
+#endif		
 		return NULL;
 	}
 
@@ -1517,7 +1527,7 @@ struct rtable * ip_rt_slow_route (__u32 daddr, int local)
 			fi = f->fib_info;
 		}
 	}
-
+	
 	if (!f)
 	{
 		ip_rt_unlock();
@@ -1565,12 +1575,7 @@ void ip_rt_put(struct rtable * rt)
 		ATOMIC_DECR(&rt->rt_refcnt);
 }
 
-#ifdef CONFIG_KERNELD
-static struct rtable * real_ip_rt_route
-#else
-struct rtable * ip_rt_route
-#endif
-	(__u32 daddr, int local)
+struct rtable * ip_rt_route(__u32 daddr, int local)
 {
 	struct rtable * rth;
 
@@ -1589,28 +1594,6 @@ struct rtable * ip_rt_route
 	}
 	return ip_rt_slow_route (daddr, local);
 }
-
-#ifdef CONFIG_KERNELD
-struct rtable * ip_rt_route(__u32 daddr, int local)
-{
-	struct rtable *rt;
-	char wanted_route[20];
-	long ipaddr = ntohl(daddr);
-
-	if ((rt = real_ip_rt_route(daddr, local)) == NULL) {
-		sprintf(wanted_route, "%d.%d.%d.%d",
-			(int)(ipaddr >> 24) & 0xff, (int)(ipaddr >> 16) & 0xff,
-			(int)(ipaddr >> 8) & 0xff, (int)ipaddr & 0xff);
-		/* Not good while forwarding a packet... see ipc/msg.c */
-		kerneld_route(wanted_route); /* perhaps a ppp-connection? */
-		/* Try again */
-		rt = real_ip_rt_route(daddr, local);
-	}
-
-	return rt;
-}
-#endif
-
 
 /*
  *	Process a route add request from the user, or from a kernel

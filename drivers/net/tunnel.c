@@ -82,10 +82,11 @@ int tunnel_init(struct device *dev)
 	dev->stop = &tunnel_close;
 #endif
 	/* Now stomp the bits that are different */
-	dev->type = ARPHRD_TUNNEL; /* IP tunnel hardware type (Linux 1.1.89) */
+	dev->type = ARPHRD_TUNNEL; 	/* IP tunnel hardware type (Linux 1.1.89) */
 	dev->flags |= IFF_NOARP;
-	dev->flags |= IFF_LOOPBACK; /* Why doesn't tunnel work without this? [ should do now - AC]*/
+	dev->flags |= IFF_LOOPBACK; 	/* Why doesn't tunnel work without this? [ should do now - AC]*/
 	dev->addr_len=0;
+	dev->tx_queue_len=2;		/* Small queue - it should all run through */
 	dev->hard_header_len=0;
 	dev->hard_header=NULL;
 	dev->header_cache_bind=NULL;

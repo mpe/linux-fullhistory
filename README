@@ -105,6 +105,11 @@ CONFIGURING the kernel:
    needs bash to work: it will search for bash in $BASH, /bin/bash and
    /bin/sh (in that order), so hopefully one of those is correct. 
 
+ - Alternate configuration commands are:
+	"make menuconfig"  Text based color menus, radiolists & dialogs.
+	"make xconfig"     X windows based configuration tool.
+   
+
 	NOTES on "make config":
 	- having unnecessary drivers will make the kernel bigger, and can
 	  under some circumstances lead to problems: probing for a

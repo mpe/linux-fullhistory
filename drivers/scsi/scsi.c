@@ -82,8 +82,9 @@ static int scan_scsis_single (int channel,int dev,int lun,int * max_scsi_dev ,
                  struct Scsi_Host *shpnt, char * scsi_result);
 void scsi_build_commandblocks(Scsi_Device * SDpnt);
 
+#ifdef CONFIG_MODULES
 extern struct symbol_table scsi_symbol_table;
-
+#endif
 
 static FreeSectorBitmap * dma_malloc_freelist = NULL;
 static int scsi_need_isa_bounce_buffers;
@@ -2331,7 +2332,9 @@ int scsi_dev_init(void)
     timer_table[SCSI_TIMER].fn = scsi_main_timeout;
     timer_table[SCSI_TIMER].expires = 0;
 
+#ifdef CONFIG_MODULES
     register_symtab(&scsi_symbol_table);
+#endif    
 
     /* Register the /proc/scsi/scsi entry */
 #if CONFIG_PROC_FS 

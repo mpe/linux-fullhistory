@@ -110,6 +110,8 @@
 #define FDC_82077_UNKN	0x53	/* Unknown 82077 variant */
 #define FDC_82078	0x60	/* 44pin 82078 or 64pin 82078SL */
 #define FDC_82078_1	0x61	/* 82078-1 (2Mbps fdc) */
+#define FDC_S82078B	0x62	/* S82078B (first seen on Adaptec AVA-2825 VLB
+				 * SCSI/EIDE/Floppy controller) */
 #define FDC_87306	0x63	/* National Semiconductor PC 87306 */
 
 /*

@@ -149,6 +149,9 @@ struct sock
 	__u32			rcv_saddr;	/* Bound address */
 	unsigned short		max_unacked;
 	unsigned short		window;
+	__u32                   lastwin_seq;    /* sequence number when we last updated the window we offer */
+	volatile unsigned long  ato;            /* ack timeout */
+	volatile unsigned long  lrcvtime;       /* jiffies at last rcv */
 	unsigned short		bytes_rcv;
 /*
  *	mss is min(mtu, max_window) 
@@ -195,6 +198,9 @@ struct sock
 	ipx_address		ipx_dest_addr;
 	ipx_interface		*ipx_intrfc;
 	unsigned short		ipx_port;
+#ifdef CONFIG_IPX_INTERN
+	unsigned char           ipx_node[IPX_NODE_LEN];
+#endif
 	unsigned short		ipx_type;
 #endif
 #ifdef CONFIG_AX25

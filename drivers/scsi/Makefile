@@ -20,6 +20,9 @@ SCSI_SRCS = $(wildcard $(L_OBJS:%.o=%.c))
 
 AHA152X	= -DDEBUG_AHA152X -DAUTOCONF
 
+.SUFFIXES:
+.SUFFIXES: .c .o .h .a
+
 ifeq (${CFLAGS},)
 CFLAGS = -D__KERNEL__=1 \
 	-DMODULE -Wall -Wstrict-prototypes -I. -I../../include \
@@ -183,8 +186,10 @@ endif
 
 ifeq ($(CONFIG_SCSI_GENERIC_NCR5380),y)
 L_OBJS += g_NCR5380.o
+EXTRA_CFLAGS = -DGENERIC_NCR5380_OVERRIDE="{{(NCR5380_map_type)0x350,5,0, BOARD_NCR53C400}};"
 else
   ifeq ($(CONFIG_SCSI_GENERIC_NCR5380),m)
+  EXTRA_CFLAGS = -DGENERIC_NCR5380_OVERRIDE="{{(NCR5380_map_type)0x350,5,0, BOARD_NCR53C400}};"
   M_OBJS += g_NCR5380.o
   endif
 endif

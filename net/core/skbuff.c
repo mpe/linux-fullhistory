@@ -10,6 +10,8 @@
  *	Richard Kooijman	:	Timestamp fixes.
  *		Alan Cox	:	Changed buffer format.
  *		Alan Cox	:	destructor hook for AF_UNIX etc.
+ *		Linus Torvalds	:	Better skb_clone.
+ *		Alan Cox	:	Added skb_copy.
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -190,6 +192,7 @@ void skb_queue_head_init(struct sk_buff_head *list)
 {
 	list->prev = (struct sk_buff *)list;
 	list->next = (struct sk_buff *)list;
+	list->qlen = 0;
 	list->magic_debug_cookie = SK_HEAD_SKB;
 }
 
@@ -215,6 +218,8 @@ void skb_queue_head(struct sk_buff_head *list_,struct sk_buff *newsk)
 
 	newsk->next->prev = newsk;
 	newsk->prev->next = newsk;
+	newsk->list = list_;
+	list_->qlen++;
 
 	restore_flags(flags);
 }
@@ -240,6 +245,9 @@ void skb_queue_tail(struct sk_buff_head *list_, struct sk_buff *newsk)
 
 	newsk->next->prev = newsk;
 	newsk->prev->next = newsk;
+	
+	newsk->list = list_;
+	list_->qlen++;
 
 	restore_flags(flags);
 }
@@ -271,7 +279,9 @@ struct sk_buff *skb_dequeue(struct sk_buff_head *list_)
 
 	result->next = NULL;
 	result->prev = NULL;
-
+	list_->qlen--;
+	result->list = NULL;
+	
 	restore_flags(flags);
 
 	IS_SKB(result);
@@ -299,6 +309,8 @@ void skb_insert(struct sk_buff *old, struct sk_buff *newsk)
 	newsk->prev = old->prev;
 	old->prev = newsk;
 	newsk->prev->next = newsk;
+	newsk->list = old->list;
+	newsk->list->qlen++;
 
 	restore_flags(flags);
 }
@@ -325,6 +337,8 @@ void skb_append(struct sk_buff *old, struct sk_buff *newsk)
 	newsk->next = old->next;
 	newsk->next->prev = newsk;
 	old->next = newsk;
+	newsk->list = old->list;
+	newsk->list->qlen++;
 
 	restore_flags(flags);
 }
@@ -344,12 +358,14 @@ void skb_unlink(struct sk_buff *skb)
 
 	IS_SKB(skb);
 
-	if(skb->prev && skb->next)
+	if(skb->list)
 	{
+		skb->list->qlen--;
 		skb->next->prev = skb->prev;
 		skb->prev->next = skb->next;
 		skb->next = NULL;
 		skb->prev = NULL;
+		skb->list = NULL;
 	}
 #ifdef PARANOID_BUGHUNT_MODE	/* This is legal but we sometimes want to watch it */
 	else
@@ -458,7 +474,7 @@ void kfree_skb(struct sk_buff *skb, int rw)
   	if (skb->free == 2)
 		printk("Warning: kfree_skb passed an skb that nobody set the free flag on! (from %p)\n",
 			__builtin_return_address(0));
-	if (skb->next)
+	if (skb->list)
 	 	printk("Warning: kfree_skb passed an skb still on a list (from %p).\n",
 			__builtin_return_address(0));
 
@@ -549,8 +565,8 @@ struct sk_buff *alloc_skb(unsigned int size,int priority)
 	skb->free = 2;	/* Invalid so we pick up forgetful users */
 	skb->lock = 0;
 	skb->pkt_type = PACKET_HOST;	/* Default type */
-	skb->prev = skb->next = NULL;
-	skb->link3 = NULL;
+	skb->prev = skb->next = skb->link3 = NULL;
+	skb->list = NULL;
 	skb->sk = NULL;
 	skb->truesize=size;
 	skb->localroute=0;
@@ -604,7 +620,7 @@ void kfree_skbmem(struct sk_buff *skb)
  *	Duplicate an sk_buff. The new one is not owned by a socket or locked
  *	and will be freed on deletion.
  */
-#if 1
+
 struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 {
 	struct sk_buff *n;
@@ -626,17 +642,37 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 	restore_flags(flags);
 	n->data_skb = skb;
 	n->next = n->prev = n->link3 = NULL;
+	n->list = NULL;
 	n->sk = NULL;
 	n->truesize = sizeof(*n);
 	n->free = 1;
 	n->tries = 0;
 	n->lock = 0;
 	n->users = 0;
+	n->h.raw=skb->h.raw;
+	n->mac.raw=skb->mac.raw;
+	n->dev=skb->dev;
+	n->ip_hdr=skb->ip_hdr;
+	n->saddr=skb->saddr;
+	n->daddr=skb->daddr;
+	n->raddr=skb->raddr;
+	n->seq=skb->seq;
+	n->end_seq=skb->end_seq;
+	n->ack_seq=skb->ack_seq;
+	n->acked=skb->acked;
+	memcpy(n->proto_priv, skb->proto_priv, sizeof(skb->proto_priv));
+	n->used=skb->used;
+	n->arp=skb->arp;
+	n->pkt_type=skb->pkt_type;
+	n->stamp=skb->stamp;
 	return n;
 }
-#else
-/* this is slower, and copies the whole data area */
-struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
+
+/*
+ *	This is slower, and copies the whole data area 
+ */
+ 
+struct sk_buff *skb_copy(struct sk_buff *skb, int priority)
 {
 	struct sk_buff *n;
 	unsigned long offset;
@@ -664,6 +700,7 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 	/* Copy the bytes */
 	memcpy(n->head,skb->head,skb->end-skb->head);
 	n->link3=NULL;
+	n->list=NULL;
 	n->sk=NULL;
 	n->when=skb->when;
 	n->dev=skb->dev;
@@ -673,9 +710,9 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 	n->saddr=skb->saddr;
 	n->daddr=skb->daddr;
 	n->raddr=skb->raddr;
-	n->raddr=skb->seq;
-	n->raddr=skb->end_seq;
-	n->raddr=skb->ack_seq;
+	n->seq=skb->seq;
+	n->end_seq=skb->end_seq;
+	n->ack_seq=skb->ack_seq;
 	n->acked=skb->acked;
 	memcpy(n->proto_priv, skb->proto_priv, sizeof(skb->proto_priv));
 	n->used=skb->used;
@@ -690,7 +727,6 @@ struct sk_buff *skb_clone(struct sk_buff *skb, int priority)
 	IS_SKB(n);
 	return n;
 }
-#endif
 
 /*
  *     Skbuff device locking

@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 59
+SUBLEVEL = 60
 
 ARCH = i386
 
@@ -12,6 +12,9 @@ ARCH = i386
 # NOTE! SMP is experimental. See the file Documentation/SMP.txt
 #
 # SMP = 1
+#
+# SMP profiling options
+# SMP_PROF = 1
 
 .EXPORT_ALL_VARIABLES:
 
@@ -20,17 +23,22 @@ CONFIG_SHELL := $(shell if [ -x "$$BASH" ]; then echo $$BASH; \
 	  else echo sh; fi ; fi)
 TOPDIR	:= $(shell if [ "$$PWD" != "" ]; then echo $$PWD; else pwd; fi)
 
-HPATH   = $(TOPDIR)/include
-AS	=as
-LD	=ld
-HOSTCC	=gcc -I$(HPATH)
-CC	=gcc -D__KERNEL__ -I$(HPATH)
-MAKE	=make
+HPATH   	= $(TOPDIR)/include
+
+HOSTCC  	=gcc -I$(HPATH)
+HOSTCFLAGS	=
+
+CROSS_COMPILE 	=
+
+AS	=$(CROSS_COMPILE)as
+LD	=$(CROSS_COMPILE)ld
+CC	=$(CROSS_COMPILE)gcc -D__KERNEL__ -I$(HPATH)
 CPP	=$(CC) -E
-AR	=ar
-NM	=nm
-STRIP	=strip
-AWK	=awk
+AR	=$(CROSS_COMPILE)ar
+NM	=$(CROSS_COMPILE)nm
+STRIP	=$(CROSS_COMPILE)strip
+MAKE	=make
+AWK	=gawk
 
 all:	do-it-all
 
@@ -88,7 +96,7 @@ SVGA_MODE=	-DSVGA_MODE=NORMAL_VGA
 # standard CFLAGS
 #
 
-CFLAGS = -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer
+CFLAGS = -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -fno-strength-reduce
 
 ifdef CONFIG_CPP
 CFLAGS := $(CFLAGS) -x c++
@@ -96,6 +104,12 @@ endif
 
 ifdef SMP
 CFLAGS += -D__SMP__
+AFLAGS += -D__SMP__
+
+ifdef SMP_PROF
+CFLAGS += -D__SMP_PROF__
+AFLAGS += -D__SMP_PROF__
+endif
 endif
 
 #
@@ -137,9 +151,9 @@ include arch/$(ARCH)/Makefile
 ifdef SMP
 
 .S.s:
-	$(CC) -D__ASSEMBLY__ -D__SMP__ -traditional -E -o $*.s $<
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -E -o $*.s $<
 .S.o:
-	$(CC) -D__ASSEMBLY__ -D__SMP__ -traditional -c -o $*.o $<
+	$(CC) -D__ASSEMBLY__ $(AFLAGS) -traditional -c -o $*.o $<
 
 else
 
@@ -174,6 +188,11 @@ oldconfig: symlinks
 xconfig: symlinks
 	$(MAKE) -C scripts kconfig.tk
 	wish -f scripts/kconfig.tk
+
+menuconfig: include/linux/version.h symlinks 
+	$(MAKE) -C scripts/lxdialog all
+	$(CONFIG_SHELL) scripts/Menuconfig arch/$(ARCH)/config.in
+	
 
 config: symlinks
 	$(CONFIG_SHELL) scripts/Configure arch/$(ARCH)/config.in
@@ -288,11 +307,12 @@ endif
 
 clean:	archclean
 	rm -f kernel/ksyms.lst include/linux/compile.h
-	rm -f core `find . -name '*.[oas]' -print`
+	rm -f core `find . -name '*.[oas]' ! -regex '.*lxdialog' -print`
 	rm -f core `find . -type f -name 'core' -print`
 	rm -f vmlinux System.map
 	rm -f .tmp* drivers/sound/configure
 	rm -fr modules/*
+	rm -f submenu*
 
 mrproper: clean
 	rm -f include/linux/autoconf.h include/linux/version.h
@@ -301,11 +321,14 @@ mrproper: clean
 	rm -f drivers/char/uni_hash.tbl drivers/char/conmakehash
 	rm -f .version .config* config.in config.old
 	rm -f scripts/tkparse scripts/kconfig.tk scripts/kconfig.tmp
+	rm -f scripts/lxdialog/*.o scripts/lxdialog/lxdialog
+	rm -f .menuconfig.in
 	rm -f include/asm
 	rm -f .depend `find . -name .depend -print`
 	rm -f .hdepend
 	rm -f $(TOPDIR)/include/linux/modversions.h
 	rm -f $(TOPDIR)/include/linux/modules/*
+	
 
 distclean: mrproper
 	rm -f core `find . \( -name '*.orig' -o -name '*~' -o -name '*.bak' \

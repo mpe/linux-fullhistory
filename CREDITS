@@ -715,8 +715,8 @@ S: East Brunswick, New Jersey 08816
 S: USA
 
 N: Rick Miller
-E: rick@digalogsys.com
-D: Linux Device Registrar (Major/minor numbers), "au-play", "bwBASIC"
+E: rdmiller@execpc.com
+D: Original Linux Device Registrar (Major/minor numbers), au-play, bwBASIC
 S: S78 W16203 Woods Road
 S: Muskego, Wisconsin 53150
 S: USA
@@ -810,7 +810,9 @@ D: IPX development and support
 
 N: Avery Pennarun
 E: apenwarr@foxnet.net
-D: ARCnet driver, various small changes
+D: ARCnet driver
+D: "make xconfig" improvements
+D: Various minor hacking
 S: RR #5, 497 Pole Line Road
 S: Thunder Bay, Ontario
 S: CANADA P7C 5M9

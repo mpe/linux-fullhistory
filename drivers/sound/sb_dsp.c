@@ -1313,6 +1313,7 @@ ess_init (void)			/* ESS1688 Initialization */
   sb_setmixer (0x40, cfg | 0x03);
 }
 
+#ifdef CONFIG_MIDI
 void
 ess_midi_init (struct address_info *hw_config)	/* called from sb16_midi.c */
 {
@@ -1360,6 +1361,7 @@ ess_midi_init (struct address_info *hw_config)	/* called from sb16_midi.c */
 
   sb_setmixer (0x40, cfg);
 }
+#endif
 
 void
 Jazz16_midi_init (struct address_info *hw_config)

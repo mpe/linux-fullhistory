@@ -803,7 +803,13 @@ restart_interp:
 			break;
 #ifdef CONFIG_KERNELD
 		}else{
+#define printable(c) (((c)=='\t') || ((c)=='\n') || (0x20<=(c) && (c)<=0x7e))
 			char modname[20];
+			if (printable(bprm.buf[0]) &&
+			    printable(bprm.buf[1]) &&
+			    printable(bprm.buf[2]) &&
+			    printable(bprm.buf[3]))
+				break; /* -ENOEXEC */
 			sprintf(modname, "binfmt-%hd", *(short*)(&bprm.buf));
 			request_module(modname);
 #endif

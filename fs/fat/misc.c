@@ -29,11 +29,11 @@ static char bin_extensions[] =
 
 
 /*
- * fs_panic reports a severe file system problem and sets the file system
+ * fat_fs_panic reports a severe file system problem and sets the file system
  * read-only. The file system can be made writable again by remounting it.
  */
 
-void fs_panic(struct super_block *s,const char *msg)
+void fat_fs_panic(struct super_block *s,const char *msg)
 {
 	int not_ro;
 
@@ -80,14 +80,14 @@ static struct wait_queue *creation_wait = NULL;
 static creation_lock = 0;
 
 
-void lock_creation(void)
+void fat_lock_creation(void)
 {
 	while (creation_lock) sleep_on(&creation_wait);
 	creation_lock = 1;
 }
 
 
-void unlock_creation(void)
+void fat_unlock_creation(void)
 {
 	creation_lock = 0;
 	wake_up(&creation_wait);
@@ -109,11 +109,11 @@ void unlock_fat(struct super_block *sb)
 
 
 /*
- * msdos_add_cluster tries to allocate a new cluster and adds it to the file
+ * fat_add_cluster tries to allocate a new cluster and adds it to the file
  * represented by inode. The cluster is zero-initialized.
  */
 
-int msdos_add_cluster(struct inode *inode)
+int fat_add_cluster(struct inode *inode)
 {
 	struct super_block *sb = inode->i_sb;
 	int count,nr,limit,last,curr,sector,last_sector,file_cluster;
@@ -168,7 +168,7 @@ printk("set to %x\n",fat_access(inode->i_sb,nr,-1));
 			file_cluster++;
 			if (!(curr = fat_access(inode->i_sb,
 			    last = curr,-1))) {
-				fs_panic(inode->i_sb,"File without EOF");
+				fat_fs_panic(inode->i_sb,"File without EOF");
 				return -ENOSPC;
 			}
 		}
@@ -195,7 +195,7 @@ if (last) printk("next set to %d\n",fat_access(inode->i_sb,last,-1));
 			printk("getblk failed\n");
 		else {
 			memset(bh->b_data,0,SECTOR_SIZE);
-			msdos_set_uptodate(sb,bh,1);
+			fat_set_uptodate(sb,bh,1);
 			mark_buffer_dirty(bh, 1);
 			brelse(bh);
 		}
@@ -209,7 +209,7 @@ if (last) printk("next set to %d\n",fat_access(inode->i_sb,last,-1));
 	inode->i_blocks += cluster_size;
 	if (S_ISDIR(inode->i_mode)) {
 		if (inode->i_size & (SECTOR_SIZE-1)) {
-			fs_panic(inode->i_sb,"Odd directory size");
+			fat_fs_panic(inode->i_sb,"Odd directory size");
 			inode->i_size = (inode->i_size+SECTOR_SIZE) &
 			    ~(SECTOR_SIZE-1);
 		}
@@ -251,7 +251,7 @@ int date_dos2unix(unsigned short time,unsigned short date)
 
 /* Convert linear UNIX date to a MS-DOS time/date pair. */
 
-void date_unix2dos(int unix_date,unsigned short *time,
+void fat_date_unix2dos(int unix_date,unsigned short *time,
     unsigned short *date)
 {
 	int day,year,nl_day,month;
@@ -280,7 +280,7 @@ void date_unix2dos(int unix_date,unsigned short *time,
    non-NULL, it is brelse'd before. Pos is incremented. The buffer header is
    returned in bh. */
 
-int msdos_get_entry(struct inode *dir, loff_t *pos,struct buffer_head **bh,
+int fat_get_entry(struct inode *dir, loff_t *pos,struct buffer_head **bh,
     struct msdos_dir_entry **de)
 {
 	struct super_block *sb = dir->i_sb;
@@ -289,7 +289,7 @@ int msdos_get_entry(struct inode *dir, loff_t *pos,struct buffer_head **bh,
 	while (1) {
 		offset = *pos;
 		PRINTK (("get_entry offset %d\n",offset));
-		if ((sector = msdos_smap(dir,offset >> SECTOR_BITS)) == -1)
+		if ((sector = fat_smap(dir,offset >> SECTOR_BITS)) == -1)
 			return -1;
 		PRINTK (("get_entry sector %d %p\n",sector,*bh));
 		if (!sector)
@@ -446,7 +446,7 @@ static int raw_scan_nonroot(struct super_block *sb,int start,const char *name,
 				return cluster;
 		}
 		if (!(start = fat_access(sb,start,-1))) {
-			fs_panic(sb,"FAT error");
+			fat_fs_panic(sb,"FAT error");
 			break;
 		}
 #ifdef DEBUG
@@ -477,48 +477,48 @@ static int raw_scan(struct super_block *sb, int start, const char *name,
 
 
 /*
- * msdos_parent_ino returns the inode number of the parent directory of dir.
- * File creation has to be deferred while msdos_parent_ino is running to
+ * fat_parent_ino returns the inode number of the parent directory of dir.
+ * File creation has to be deferred while fat_parent_ino is running to
  * prevent renames.
  */
 
-int msdos_parent_ino(struct inode *dir,int locked)
+int fat_parent_ino(struct inode *dir,int locked)
 {
 	static int zero = 0;
 	int error,curr,prev,nr;
 
 	if (!S_ISDIR(dir->i_mode)) panic("Non-directory fed to m_p_i");
 	if (dir->i_ino == MSDOS_ROOT_INO) return dir->i_ino;
-	if (!locked) lock_creation(); /* prevent renames */
+	if (!locked) fat_lock_creation(); /* prevent renames */
 	if ((curr = raw_scan(dir->i_sb,MSDOS_I(dir)->i_start,MSDOS_DOTDOT,
 	    &zero,NULL,NULL,NULL,SCAN_ANY)) < 0) {
-		if (!locked) unlock_creation();
+		if (!locked) fat_unlock_creation();
 		return curr;
 	}
 	if (!curr) nr = MSDOS_ROOT_INO;
 	else {
 		if ((prev = raw_scan(dir->i_sb,curr,MSDOS_DOTDOT,&zero,NULL,
 		    NULL,NULL,SCAN_ANY)) < 0) {
-			if (!locked) unlock_creation();
+			if (!locked) fat_unlock_creation();
 			return prev;
 		}
 		if ((error = raw_scan(dir->i_sb,prev,NULL,&curr,&nr,NULL,
 		    NULL,SCAN_ANY)) < 0) {
-			if (!locked) unlock_creation();
+			if (!locked) fat_unlock_creation();
 			return error;
 		}
 	}
-	if (!locked) unlock_creation();
+	if (!locked) fat_unlock_creation();
 	return nr;
 }
 
 
 /*
- * msdos_subdirs counts the number of sub-directories of dir. It can be run
+ * fat_subdirs counts the number of sub-directories of dir. It can be run
  * on directories being created.
  */
 
-int msdos_subdirs(struct inode *dir)
+int fat_subdirs(struct inode *dir)
 {
 	int count;
 
@@ -539,7 +539,7 @@ int msdos_subdirs(struct inode *dir)
  * for an empty directory slot (name is NULL). Returns an error code or zero.
  */
 
-int msdos_scan(struct inode *dir,const char *name,struct buffer_head **res_bh,
+int fat_scan(struct inode *dir,const char *name,struct buffer_head **res_bh,
     struct msdos_dir_entry **res_de,int *ino, char scantype)
 {
 	int res;

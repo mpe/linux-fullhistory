@@ -8,15 +8,12 @@
 # Copyright (C) 1994 by Linus Torvalds
 #
 
-AS86    =as86 -0 -a
-LD86    =ld86 -0
-
 ifdef CONFIG_KERNEL_ELF
-CFLAGS := $(CFLAGS) -D__BFD__
+HOSTCFLAGS := $(HOSTCFLAGS) -D__BFD__
 endif
 
 ifdef SMP
-CFLAGS := $(CFLAGS) -D__SMP__
+HOSTCFLAGS := $(HOSTCFLAGS) -D__SMP__
 endif
 
 zImage: $(CONFIGURE) bootsect setup compressed/vmlinux tools/build
@@ -45,7 +42,7 @@ install: $(CONFIGURE) zImage
 	sh ./install.sh $(VERSION).$(PATCHLEVEL).$(SUBLEVEL) zImage $(TOPDIR)/System.map "$(INSTALL_PATH)"
 
 tools/build: tools/build.c
-	$(HOSTCC) $(CFLAGS) -o $@ $< -I$(TOPDIR)/include
+	$(HOSTCC) $(HOSTCFLAGS) -o $@ $< -I$(TOPDIR)/include
 
 setup: setup.o
 	$(LD86) -s -o $@ $<

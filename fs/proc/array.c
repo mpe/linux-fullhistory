@@ -782,6 +782,9 @@ extern int get_irq_list(char *);
 extern int get_dma_list(char *);
 extern int get_cpuinfo(char *);
 extern int get_pci_list(char*);
+#ifdef __SMP_PROF__
+extern int get_smp_prof_list(char *);
+#endif
 
 static int get_root_array(char * page, int type, char **start, off_t offset, int length)
 {
@@ -839,6 +842,10 @@ static int get_root_array(char * page, int type, char **start, off_t offset, int
 #ifdef CONFIG_APM
 		case PROC_APM:
 			return apm_proc(page);
+#endif
+#ifdef __SMP_PROF__
+		case PROC_SMP_PROF:
+			return get_smp_prof_list(page);
 #endif
 		case PROC_CMDLINE:
 			return get_cmdline(page);

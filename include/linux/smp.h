@@ -15,7 +15,18 @@ extern void smp_callin(void);			/* Processor call in. Must hold processors until
 extern void smp_commence(void);			/* Multiprocessors may now schedule */
 extern int smp_num_cpus;
 extern int smp_threads_ready;			/* True once the per process idle is forked */
-extern volatile unsigned long smp_spins;	/* Count of spins */
+#ifdef __SMP_PROF__
+extern volatile unsigned long smp_spins[NR_CPUS];	/* count of interrupt spins */
+extern volatile unsigned long smp_spins_sys_idle[];	/* count of idle spins */
+extern volatile unsigned long smp_spins_syscall[];	/* count of syscall spins */
+extern volatile unsigned long smp_spins_syscall_cur[];	/* count of syscall spins for the current
+							   call */
+extern volatile unsigned long smp_idle_count[1+NR_CPUS];/* count idle ticks */
+extern volatile unsigned long smp_idle_map;		/* map with idle cpus */
+#else
+exern volatile unsigned long smp_spins;
+#endif
+
 
 extern volatile unsigned long smp_msg_data;
 extern volatile int smp_src_cpu;

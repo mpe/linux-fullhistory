@@ -126,8 +126,8 @@ typedef struct sk_buff	     sk_buff;
 #define PPP_LQR 0xc025  /* Link Quality Reporting Protocol */
 #endif
 
-static int ppp_register_compressor (struct compressor *cp);
-static void ppp_unregister_compressor (struct compressor *cp);
+int ppp_register_compressor (struct compressor *cp);
+void ppp_unregister_compressor (struct compressor *cp);
 
 /*
  * Local functions
@@ -480,7 +480,8 @@ ppp_init_dev (struct device *dev)
 	dev->do_ioctl         = ppp_dev_ioctl;
 	dev->addr_len         = 0;
 	dev->type             = ARPHRD_PPP;
-
+	dev->tx_queue_len     = 10;
+	
 	for (indx = 0; indx < DEV_NUMBUFFS; indx++)
 		skb_queue_head_init (&dev->buffs[indx]);
 
@@ -3465,7 +3466,7 @@ static struct compressor *find_compressor (int type)
 	return (struct compressor *) 0;
 }
 
-static int ppp_register_compressor (struct compressor *cp)
+int ppp_register_compressor (struct compressor *cp)
 {
 	struct compressor_link *new;
 	unsigned long flags;
@@ -3492,7 +3493,7 @@ static int ppp_register_compressor (struct compressor *cp)
 	return 0;
 }
 
-static void ppp_unregister_compressor (struct compressor *cp)
+void ppp_unregister_compressor (struct compressor *cp)
 {
 	struct compressor_link *prev = (struct compressor_link *) 0;
 	struct compressor_link *lnk;

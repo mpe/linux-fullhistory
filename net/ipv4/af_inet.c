@@ -46,6 +46,8 @@
  *		Germano Caronni	:	Assorted small races.
  *		Alan Cox	:	sendmsg/recvmsg basic support.
  *		Alan Cox	:	Only sendmsg/recvmsg now supported.
+ *		Alan Cox	:	Locked down bind (see security list).
+ *		Alan Cox	:	Loosened bind a little.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -665,7 +667,8 @@ static int inet_create(struct socket *sock, int protocol)
 
 	/* this is how many unacked bytes we will accept for this socket.  */
 	sk->max_unacked = 2048; /* needs to be at most 2 full packets. */
-
+	sk->delay_acks = 1;
+	sk->max_ack_backlog = SOMAXCONN;
 	skb_queue_head_init(&sk->write_queue);
 	skb_queue_head_init(&sk->receive_queue);
 	sk->mtu = 576;
@@ -872,7 +875,7 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 		 *      used by get_sock_*(), and saddr is used for transmit.
 		 *
 		 *      In the BSD API these are the same except where it
-		 *      would be illegal to use (multicast/broadcast) in
+		 *      would be illegal to use them (multicast/broadcast) in
 		 *      which case the sending device address is used.
 		 */
 		sk->rcv_saddr = addr->sin_addr.s_addr;
@@ -888,19 +891,49 @@ static int inet_bind(struct socket *sock, struct sockaddr *uaddr,
 		for(sk2 = sk->prot->sock_array[snum & (SOCK_ARRAY_SIZE -1)];
 					sk2 != NULL; sk2 = sk2->next) 
 		{
-		/* should be below! */
+			/*
+			 *	Hash collision or real match ?
+			 */
+			 
 			if (sk2->num != snum) 
 				continue;
+				
+			/*
+			 *	Either bind on the port is wildcard means
+			 *	they will overlap and thus be in error
+			 */			
+			 
+			if (!sk2->rcv_saddr || !sk->rcv_saddr)
+			{
+				/*
+				 *	Allow only if both are setting reuse.
+				 */
+				if(sk2->reuse && sk->reuse)
+					continue;
+				sti();
+				return(-EADDRINUSE);
+			}
+
+			/*
+			 *	Two binds match ?
+			 */
+
+			if (sk2->rcv_saddr != sk->rcv_saddr) 
+				continue;
+			/*
+			 *	Reusable port ?
+			 */
+
 			if (!sk->reuse)
 			{
 				sti();
 				return(-EADDRINUSE);
 			}
 			
-			if (sk2->num != snum) 
-				continue;		/* more than one */
-			if (sk2->rcv_saddr != sk->rcv_saddr) 
-				continue;	/* socket per slot ! -FB */
+			/*
+			 *	Reuse ?
+			 */
+			 
 			if (!sk2->reuse || sk2->state==TCP_LISTEN) 
 			{
 				sti();
@@ -1540,9 +1573,15 @@ void inet_proto_init(struct net_proto *pro)
 #if defined(CONFIG_IP_ALIAS)
 	ip_alias_init();
 #endif
+
+#ifdef CONFIG_INET_RARP
+	rarp_ioctl_hook = rarp_ioctl;
+#endif
 	/*
 	 *	Create all the /proc entries.
 	 */
+
+#ifdef CONFIG_PROC_FS
 
 #ifdef CONFIG_INET_RARP
 	proc_net_register(&(struct proc_dir_entry) {
@@ -1551,8 +1590,8 @@ void inet_proto_init(struct net_proto *pro)
 		0, &proc_net_inode_operations,
 		rarp_get_info
 	});
-	rarp_ioctl_hook = rarp_ioctl;
-#endif
+#endif		/* RARP */
+
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_RAW, 3, "raw",
 		S_IFREG | S_IRUGO, 1, 0, 0,
@@ -1595,4 +1634,5 @@ void inet_proto_init(struct net_proto *pro)
 		0, &proc_net_inode_operations,
 		rt_cache_get_info
 	});
+#endif		/* CONFIG_PROC_FS */
 }

@@ -68,7 +68,7 @@ int do_truncate(struct inode *inode, unsigned long length)
 
 	down(&inode->i_sem);
 	newattrs.ia_size = length;
-	newattrs.ia_valid = ATTR_SIZE | ATTR_CTIME | ATTR_MTIME;
+	newattrs.ia_valid = ATTR_SIZE | ATTR_CTIME;
 	error = notify_change(inode, &newattrs);
 	if (!error) {
 		/* truncate virtual mappings of this file */
@@ -386,7 +386,7 @@ asmlinkage int sys_fchown(unsigned int fd, uid_t user, gid_t group)
 		newattrs.ia_valid |= ATTR_MODE;
 	}
 	inode->i_dirt = 1;
-	if (inode->i_sb->dq_op) {
+	if (inode->i_sb && inode->i_sb->dq_op) {
 		inode->i_sb->dq_op->initialize(inode, -1);
 		if (inode->i_sb->dq_op->transfer(inode, &newattrs, 0))
 			return -EDQUOT;

@@ -25,9 +25,13 @@
 
 ifdef CONFIG_KERNEL_ELF
 
-LD=ld -m elf_i386
+LD=$(CROSS_COMPILE)ld -m elf_i386
 CPP=$(CC) -E -D__ELF__
-OBJDUMP =objdump
+OBJDUMP =$(CROSS_COMPILE)objdump
+ENCAPS=$(CROSS_COMPILE)encaps
+AS86    =$(CROSS_COMPILE)as86 -0 -a
+AS386   =$(CROSS_COMPILE)as86 -3
+LD86    =$(CROSS_COMPILE)ld86 -0
 OBJDUMP_FLAGS=-k -q 
 ZLDFLAGS=-e startup_32 
 LDFLAGS=-e stext

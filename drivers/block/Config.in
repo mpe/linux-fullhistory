@@ -2,7 +2,7 @@
 # Block device driver configuration
 #
 mainmenu_option next_comment
-comment 'block devices'
+comment 'Block devices'
 
 tristate 'Normal floppy disk support' CONFIG_BLK_DEV_FD
 tristate 'RAM disk support' CONFIG_BLK_DEV_RAM

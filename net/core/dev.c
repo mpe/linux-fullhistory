@@ -41,7 +41,8 @@
  *		Rudi Cilibrasi	:	Pass the right thing to set_mac_address()
  *		Dave Miller	:	32bit quantity for the device lock to make it work out
  *					on a Sparc.
- *		Bjorn Ekwall	:	Added KERNELD hack
+ *		Bjorn Ekwall	:	Added KERNELD hack.
+ *		Alan Cox	:	Cleaned up the backlog initialise.
  *
  */
 
@@ -69,6 +70,7 @@
 #include <linux/skbuff.h>
 #include <net/sock.h>
 #include <net/arp.h>
+#include <net/slhc.h>
 #include <linux/proc_fs.h>
 #include <linux/stat.h>
 #ifdef CONFIG_NET_ALIAS
@@ -103,13 +105,7 @@ struct notifier_block *netdev_chain=NULL;
  *	queue in the bottom half handler.
  */
 
-static struct sk_buff_head backlog = 
-{
-	(struct sk_buff *)&backlog, (struct sk_buff *)&backlog
-#if CONFIG_SKB_CHECK
-	,SK_HEAD_SKB
-#endif
-};
+static struct sk_buff_head backlog;
 
 /* 
  *	We don't overdo the queue or we will thrash memory badly.
@@ -207,17 +203,23 @@ struct device *dev_get(const char *name)
 		if (strcmp(dev->name, name) == 0)
 			return(dev);
 	}
+	return NULL;
+}
+	
+/*
+ *	Find and possibly load an interface.
+ */
+ 
 #ifdef CONFIG_KERNELD
-	if (request_module(name) == 0)
-		for (dev = dev_base; dev != NULL; dev = dev->next) {
-			if (strcmp(dev->name, name) == 0)
-				return(dev);
-		}
-#endif
-	return(NULL);
+
+extern __inline__ void dev_load(const char *name)
+{
+	if(!dev_get(name))
+		request_module(name);
 }
 
-
+#endif
+ 
 /*
  *	Prepare an interface for use. 
  */
@@ -316,8 +318,6 @@ int unregister_netdevice_notifier(struct notifier_block *nb)
 	return notifier_chain_unregister(&netdev_chain,nb);
 }
 
-
-
 /*
  *	Send (or queue for sending) a packet. 
  *
@@ -388,6 +388,15 @@ void dev_queue_xmit(struct sk_buff *skb, struct device *dev, int pri)
 	if (!where)	 	/* Always keep order. It helps other hosts
 					   far more than it costs us */
 	{
+		/*
+		 *	Check we are not overruning the device queue length.
+		 */
+		 
+		if(skb_queue_len(dev->buffs + pri) > dev->tx_queue_len)
+		{
+			dev_kfree_skb(skb, FREE_WRITE);
+			return;
+		}
 		skb_queue_tail(dev->buffs + pri,skb);
 		skb_device_unlock(skb);		/* Buffer is on the device queue and can be freed safely */
 		skb = skb_dequeue(dev->buffs + pri);
@@ -451,6 +460,7 @@ void netif_rx(struct sk_buff *skb)
 	 *	when freed. These will be updated later as the frames get
 	 *	owners.
 	 */
+
 	skb->sk = NULL;
 	skb->free = 1;
 	if(skb->stamp.tv_sec==0)
@@ -492,93 +502,6 @@ void netif_rx(struct sk_buff *skb)
 #endif
 	return;
 }
-
-
-/*
- *	The old interface to fetch a packet from a device driver.
- *	This function is the base level entry point for all drivers that
- *	want to send a packet to the upper (protocol) levels.  It takes
- *	care of de-multiplexing the packet to the various modules based
- *	on their protocol ID.
- *
- *	Return values:	1 <- exit I can't do any more
- *			0 <- feed me more (i.e. "done", "OK"). 
- *
- *	This function is OBSOLETE and should not be used by any new
- *	device.
- */
-
-int dev_rint(unsigned char *buff, long len, int flags, struct device *dev)
-{
-	static int dropping = 0;
-	struct sk_buff *skb = NULL;
-	unsigned char *to;
-	int amount, left;
-	int len2;
-
-	if (dev == NULL || buff == NULL || len <= 0) 
-		return(1);
-
-	if (flags & IN_SKBUFF) 
-	{
-		skb = (struct sk_buff *) buff;
-	}
-	else
-	{
-		if (dropping) 
-		{
-			if (skb_peek(&backlog) != NULL)
-				return(1);
-			printk("INET: dev_rint: no longer dropping packets.\n");
-			dropping = 0;
-		}
-
-		skb = alloc_skb(len, GFP_ATOMIC);
-		if (skb == NULL) 
-		{
-			printk("dev_rint: packet dropped on %s (no memory) !\n",
-			       dev->name);
-			dropping = 1;
-			return(1);
-		}
-
-		/* 
-		 *	First we copy the packet into a buffer, and save it for later. We
-		 *	in effect handle the incoming data as if it were from a circular buffer
-		 */
-
-		to = skb_put(skb,len);
-		left = len;
-
-		len2 = len;
-		while (len2 > 0) 
-		{
-			amount = min(len2, (unsigned long) dev->rmem_end -
-						(unsigned long) buff);
-			memcpy(to, buff, amount);
-			len2 -= amount;
-			left -= amount;
-			buff += amount;
-			to += amount;
-			if ((unsigned long) buff == dev->rmem_end)
-				buff = (unsigned char *) dev->rmem_start;
-		}
-	}
-
-	/*
-	 *	Tag the frame and kick it to the proper receive routine
-	 */
-	 
-	skb->dev = dev;
-	skb->free = 1;
-
-	netif_rx(skb);
-	/*
-	 *	OK, all done. 
-	 */
-	return(0);
-}
-
 
 /*
  *	This routine causes all interfaces to try to send some data. 
@@ -781,7 +704,7 @@ void dev_tint(struct device *dev)
 	unsigned long flags;
 	
 	/*
-	 * aliases do not trasmit (by now :)
+	 * aliases do not transmit (for now :) )
 	 */
 
 #ifdef CONFIG_NET_ALIAS
@@ -909,6 +832,7 @@ static int dev_ifconf(char *arg)
  *	in detail.
  */
 
+#ifdef CONFIG_PROC_FS
 static int sprintf_stats(char *buffer, struct device *dev)
 {
 	struct enet_statistics *stats = (dev->get_stats ? dev->get_stats(dev): NULL);
@@ -975,6 +899,7 @@ int dev_get_info(char *buffer, char **start, off_t offset, int length, int dummy
 		len=length;		/* Ending slop */
 	return len;
 }
+#endif	/* CONFIG_PROC_FS */
 
 
 /*
@@ -1024,12 +949,16 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 	 *	only allow alias creation/deletion if (getset==SIOCSIFADDR)
 	 *
 	 */
+	 
+#ifdef CONFIG_KERNELD
+	dev_load(ifr.ifr_name);
+#endif	
 
 #ifdef CONFIG_NET_ALIAS
 	if ((dev = net_alias_dev_get(ifr.ifr_name, getset == SIOCSIFADDR, &err, NULL, NULL)) == NULL)
 		return(err);
 #else
-	if ((dev = dev_get(ifr.ifr_name)) == NULL) 
+	if ((dev = dev_get(ifr.ifr_name)) == NULL) 	
 		return(-ENODEV);
 #endif
 	switch(getset) 
@@ -1388,6 +1317,12 @@ int net_dev_init(void)
 	struct device *dev, **dp;
 
 	/*
+	 *	Initialise the packet receive queue.
+	 */
+	 
+	skb_queue_head_init(&backlog);
+	
+	/*
 	 * This is VeryUgly(tm).
 	 *
 	 * Some devices want to be initialized eary..
@@ -1403,6 +1338,13 @@ int net_dev_init(void)
 #endif
 #if defined(CONFIG_DEC_ELCP)
 	dec21040_init();
+#endif	
+	/*
+	 *	SLHC if present needs attaching so other people see it
+	 *	even if not opened.
+	 */
+#if defined(CONFIG_SLIP_COMPRESSED) || defined(CONFIG_PPP)
+	slhc_install();
 #endif	
 
 	/*
@@ -1433,12 +1375,14 @@ int net_dev_init(void)
 		}
 	}
 
+#ifdef CONFIG_PROC_FS
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_DEV, 3, "dev",
 		S_IFREG | S_IRUGO, 1, 0, 0,
 		0, &proc_net_inode_operations,
 		dev_get_info
 	});
+#endif
 
 	/*	
 	 *	Initialise net_alias engine 

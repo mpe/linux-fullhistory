@@ -308,13 +308,13 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	if(iph->frag_off)
 	{
 		if (iph->frag_off & htons(IP_MF))
-			is_frag|=1;
+			is_frag|=IPFWD_FRAGMENT;
 		/*
 		 *	Last fragment ?
 		 */
 	
 		if (iph->frag_off & htons(IP_OFFSET))
-			is_frag|=2;
+			is_frag|=IPFWD_LASTFRAG;
 	}
 	
 	/*
@@ -416,7 +416,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		if (ip_fw_demasquerade(skb)) 
 		{
 			struct iphdr *iph=skb->h.iph;
-			if (ip_forward(skb, dev, is_frag|4, iph->daddr))
+			if (ip_forward(skb, dev, is_frag|IPFWD_MASQUERADED, iph->daddr))
 				kfree_skb(skb, FREE_WRITE);
 			return(0);
 		}

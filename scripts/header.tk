@@ -5,7 +5,7 @@ set winx 100
 set winy 200
 
 #
-# Define some macros we will need to parse the kmenu-config.dat file.
+# Define some macros we will need to parse the config.in file.
 #
 proc mainmenu_name { text } {
 	message .header.message -width 400 -relief raised -bg grey -text "$text"
@@ -230,12 +230,12 @@ proc toggle_switch {w mnum line text variable} {
 proc bool {w mnum line text variable} {
 	toggle_switch $w $mnum $line $text $variable
 	$w.x$line.m configure -state disabled
-	pack $w.x$line -anchor w -padx 15 -fill both -expand on
+	pack $w.x$line -anchor w -fill both -expand on
 }
 
 proc tristate {w mnum line text variable } {
 	toggle_switch $w $mnum $line $text $variable
-	pack $w.x$line -anchor w -padx 15 -fill both -expand on
+	pack $w.x$line -anchor w -fill both -expand on
 }
 
 proc dep_tristate {w mnum line text variable } {
@@ -248,7 +248,7 @@ proc int { w mnum line text variable } {
 	entry $w.x$line.x -width 15 -relief sunken -borderwidth 2 \
 		-textvariable $variable
 	pack $w.x$line.x -anchor w -side right -fill y
-	pack $w.x$line -anchor w -padx 15 -fill both -expand on
+	pack $w.x$line -anchor w -fill both -expand on
 }
 
 proc minimenu { w mnum line text variable } {
@@ -257,7 +257,7 @@ proc minimenu { w mnum line text variable } {
 	menubutton $w.x$line.x -text "Choose..." -menu $w.x$line.x.menu \
 		-relief raised -width 15
 	pack $w.x$line.x -anchor w -side right -fill y
-	pack $w.x$line -anchor w -padx 15 -fill both -expand on
+	pack $w.x$line -anchor w -fill both -expand on
 }
 
 proc comment {w line text } {

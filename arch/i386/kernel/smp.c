@@ -63,9 +63,19 @@ volatile unsigned long kernel_flag=0;			/* Kernel spinlock 					*/
 volatile unsigned char active_kernel_processor = NO_PROC_ID;	/* Processor holding kernel spinlock		*/
 volatile unsigned long kernel_counter=0;		/* Number of times the processor holds the lock		*/
 volatile unsigned long syscall_count=0;			/* Number of times the processor holds the syscall lock	*/
-volatile unsigned long smp_spins=0;			/* Count of cycles wasted to spinning			*/
 
 volatile unsigned long ipi_count;			/* Number of IPI's delivered				*/
+#ifdef __SMP_PROF__
+volatile unsigned long smp_spins[NR_CPUS]={0};          /* Count interrupt spins 				*/
+volatile unsigned long smp_spins_syscall[NR_CPUS]={0};  /* Count syscall spins                   		*/
+volatile unsigned long smp_spins_syscall_cur[NR_CPUS]={0};/* Count spins for the actual syscall                 */
+volatile unsigned long smp_spins_sys_idle[NR_CPUS]={0}; /* Count spins for sys_idle 				*/
+volatile unsigned long smp_idle_count[1+NR_CPUS]={0,};	/* Count idle ticks					*/
+#endif
+#if defined (__SMP_PROF__)
+volatile unsigned long smp_idle_map=0;			/* Map for idle processors 				*/
+#endif
+
 
 /* 
  *	Checksum an MP configuration block.
@@ -473,8 +483,10 @@ void smp_boot_cpus(void)
 	/*
 	 *	Map the local APIC into kernel space
 	 */
-	
-	apic_reg = vremap(0xFEE00000,4096);
+
+	/* Mapping on non-Intel conforming platforms is a bad move. */
+	if (1<cpu_present_map)	
+		apic_reg = vremap(0xFEE00000,4096);
 	
 	
 	if(apic_reg == NULL)
@@ -518,45 +530,63 @@ void smp_boot_cpus(void)
 			cfg|=(1<<8);		/* Enable APIC */
 			apic_write(APIC_SPIV,cfg);
 			
-			/*
-			 *	This gunge sends an IPI (Inter Processor Interrupt) to the
-			 *	processor we wish to wake. When the startup IPI is received
-			 *	the target CPU does a real mode jump to the stack base.
-			 */
-			
-			cfg=apic_read(APIC_ICR2);
-			cfg&=0x00FFFFFF;
-			apic_write(APIC_ICR2, cfg|SET_APIC_DEST_FIELD(i));			/* Target chip     	*/
-			cfg=apic_read(APIC_ICR);
-			cfg&=~0xFDFFF	;							/* Clear bits 		*/
-			cfg|=APIC_DEST_FIELD|APIC_DEST_DM_STARTUP|(((unsigned long)stack)>>12);	/* Boot on the stack 	*/		
-			apic_write(APIC_ICR, cfg);						/* Kick the second 	*/
-			udelay(10);								/* Masses of time 	*/
-			cfg=apic_read(APIC_ESR);
-			if(cfg&4)		/* Send accept error */
-				printk("Processor refused startup request.\n");
-			else
+			for(timeout=0;timeout<50000;timeout++)
 			{
-				for(timeout=0;timeout<50000;timeout++)
+				/*
+				 *	This gunge sends an IPI (Inter Processor Interrupt) to the
+				 *	processor we wish to wake. When the startup IPI is received
+				 *	the target CPU does a real mode jump to the stack base.
+				 *
+				 *	We do the following
+				 *
+				 *	Time 0	: Send a STARTUP IPI (This is all that is needed).
+				 *	Time 20000  : Send an INIT IPI for broken boards.
+				 *	Time 20001  : Send a second STARTUP IPI for broken boards.
+				 *
+				 *	We can't just do INIT/STARTUP - that breaks the correctly
+				 *	implemented ASUS boards.
+				 */
+			
+				if(timeout==20000)
 				{
-					if(cpu_callin_map[0]&(1<<i))
-						break;				/* It has booted */
-					udelay(100);				/* Wait 5s total for a response */
+					cfg=apic_read(APIC_ICR2);
+					cfg&=0x00FFFFFF;
+					apic_write(APIC_ICR2, cfg|SET_APIC_DEST_FIELD(i));			/* Target chip     	*/
+					cfg=apic_read(APIC_ICR);
+					cfg&=~0xFDFFF	;							/* Clear bits 		*/
+					cfg|=APIC_DEST_DM_INIT;                                                 /* INIT the CPU         */
+					apic_write(APIC_ICR, cfg);                                              /* Kick the second      */
+					printk("\nBuggy motherboard ?, trying an INIT IPI: ");
+					udelay(10);                                                             /* Masses of time       */
+				}
+				if(timeout==0||timeout==20001)
+				{
+					cfg=apic_read(APIC_ICR);
+					cfg&=~0xFDFFF   ;                                                       /* Clear bits           */
+					cfg|=APIC_DEST_FIELD|APIC_DEST_DM_STARTUP|(((unsigned long)stack)>>12);	/* Boot on the stack 	*/		
+					apic_write(APIC_ICR, cfg);						/* Kick the second 	*/
+					udelay(10);								/* Masses of time 	*/
+					cfg=apic_read(APIC_ESR);
+					if(cfg&4)		/* Send accept error */
+						printk("Processor refused startup request.\n");
 				}
 				if(cpu_callin_map[0]&(1<<i))
-					cpucount++;
+					break;				/* It has booted */
+				udelay(100);				/* Wait 5s total for a response */
+			}
+			if(cpu_callin_map[0]&(1<<i))
+				cpucount++;
+			else
+			{
+				/*
+				 *	At this point we should set up a BIOS warm start and try
+				 *	a RESTART IPI. The 486+82489 MP pair don't support STARTUP IPI's
+				 */
+				if(*((unsigned char *)8192)==0xA5)
+					printk("Stuck ??\n");
 				else
-				{
-					/*
-					 *	At this point we should set up a BIOS warm start and try
-					 *	a RESTART IPI. The 486+82489 MP pair don't support STARTUP IPI's
-					 */
-					if(*((unsigned char *)8192)==0xA5)
-						printk("Stuck ??\n");
-					else
-						printk("Not responding.\n");
-					cpu_present_map&=~(1<<i);
-				}
+					printk("Not responding.\n");
+				cpu_present_map&=~(1<<i);
 			}
 		}
 	}
@@ -797,13 +827,14 @@ void smp_invalidate(void)
 
 void smp_reschedule_irq(int cpl, struct pt_regs *regs)
 {
+#ifdef DEBUGGING_SMP_RESCHED
 	static int ct=0;
 	if(ct==0)
 	{
 		printk("Beginning scheduling on CPU#%d\n",smp_processor_id());
 		ct=1;
 	}
-	
+#endif	
 	if(smp_processor_id()!=active_kernel_processor)
 		panic("SMP Reschedule on CPU #%d, but #%d is active.\n",
 			smp_processor_id(), active_kernel_processor);

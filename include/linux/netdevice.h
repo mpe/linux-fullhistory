@@ -49,7 +49,7 @@
 #define IS_MULTICAST	5		/* Multicast IP address */
 
 /*
- *	We tag these structures with multicasts.
+ *	We tag multicasts with these structures.
  */
  
 struct dev_mc_list
@@ -147,6 +147,7 @@ struct device
   int			 mc_count;	/* Number of installed mcasts	*/
   
   struct ip_mc_list	 *ip_mc_list;	/* IP multicast filter chain    */
+  __u32			tx_queue_len;	/* Max frames per queue allowed */
     
   /* For load balancing driver pair support */
   
@@ -155,7 +156,6 @@ struct device
   struct net_alias_info		*alias_info;	/* main dev alias info */
   struct net_alias		*my_alias;	/* alias devs */
   
-
   /* Pointer to the interface buffers. */
   struct sk_buff_head	  buffs[DEV_NUMBUFFS];
 
@@ -227,9 +227,6 @@ extern void		dev_queue_xmit(struct sk_buff *skb, struct device *dev,
 				       int pri);
 #define HAVE_NETIF_RX 1
 extern void		netif_rx(struct sk_buff *skb);
-/* The old interface to netif_rx(). */
-extern int		dev_rint(unsigned char *buff, long len, int flags,
-				 struct device * dev);
 extern void		dev_transmit(void);
 extern int		in_net_bh(void);
 extern void		net_bh(void *tmp);

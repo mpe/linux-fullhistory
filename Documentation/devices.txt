@@ -2,7 +2,7 @@
 
 	     Maintained by H. Peter Anvin <hpa@storm.net>
 
-		    Last revised: January 5, 1996
+		    Last revised: February 3, 1996
 
 This list is the successor to Rick Miller's Linux Device List, which
 he stopped maintaining when he lost network access in 1993.  It is a
@@ -581,9 +581,10 @@ an unreasonable effort.
 		and "user level packet I/O."  This board is also
 		accessible as a standard networking "eth" device.
 
- 39		Reserved for ncpfs <lendecke@namu01.gwdg.de>
+ 39-40		UNALLOCATED
 
- 40-41		UNALLOCATED
+ 41		Yet Another Micro Monitor
+		  0 = /dev/yamm		Yet Another Micro Monitor
 
  42		Demo/sample use
 

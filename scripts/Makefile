@@ -1,4 +1,4 @@
-HOSTCFLAGS=-g
+# HOSTCFLAGS:=$(HOSTCFLAGS) -g
 HEADER=header.tk
 TAIL=tail.tk
 
@@ -12,7 +12,7 @@ kconfig.tk: ../arch/${ARCH}/config.in tkparse ${HEADER} ${TAIL}
 	cat ${HEADER} >> ./kconfig.tk
 	cat kconfig.tmp >> kconfig.tk
 	rm -f kconfig.tmp
-	echo "set defaults \"arch/${ARCH}/config.in\"" >> kconfig.tk
+	echo "set defaults \"arch/${ARCH}/defconfig\"" >> kconfig.tk
 	cat ${TAIL} >> kconfig.tk
 	chmod 755 kconfig.tk
 

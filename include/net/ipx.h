@@ -23,6 +23,7 @@ typedef struct
 } ipx_address;
 
 #define ipx_broadcast_node	"\377\377\377\377\377\377"
+#define ipx_this_node           "\0\0\0\0\0\0"
 
 typedef struct ipx_packet
 {

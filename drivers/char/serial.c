@@ -887,23 +887,32 @@ static int startup(struct async_struct * info)
 	unsigned long flags;
 	int	retval;
 	void (*handler)(int, struct pt_regs *);
+	unsigned long page;
 
-	if (info->flags & ASYNC_INITIALIZED)
+	page = get_free_page(GFP_KERNEL);
+	if (!page)
+		return -ENOMEM;
+
+	
+	save_flags(flags); cli();
+
+	if (info->flags & ASYNC_INITIALIZED) {
+		free_page(page);
+		restore_flags(flags);
 		return 0;
+	}
 
 	if (!info->port || !info->type) {
 		if (info->tty)
 			set_bit(TTY_IO_ERROR, &info->tty->flags);
+		free_page(page);
+		restore_flags(flags);
 		return 0;
 	}
-
-	if (!info->xmit_buf) {
-		info->xmit_buf = (unsigned char *) get_free_page(GFP_KERNEL);
-		if (!info->xmit_buf)
-			return -ENOMEM;
-	}
-
-	save_flags(flags); cli();
+	if (info->xmit_buf)
+		free_page(page);
+	else
+		info->xmit_buf = (unsigned char *) page;
 
 #ifdef SERIAL_DEBUG_OPEN
 	printk("starting up ttys%d (irq %d)...", info->line, info->irq);
@@ -2207,7 +2216,8 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 	 * If the device is in the middle of being closed, then block
 	 * until it's done, and then try again.
 	 */
-	if (info->flags & ASYNC_CLOSING) {
+	if (tty_hung_up_p(filp) ||
+	    (info->flags & ASYNC_CLOSING)) {
 		interruptible_sleep_on(&info->close_wait);
 #ifdef SERIAL_DO_RESTART
 		if (info->flags & ASYNC_HUP_NOTIFY)
@@ -2271,7 +2281,10 @@ static int block_til_ready(struct tty_struct *tty, struct file * filp,
 	printk("block_til_ready before block: ttys%d, count = %d\n",
 	       info->line, info->count);
 #endif
-	info->count--;
+	cli();
+	if (!tty_hung_up_p(filp)) 
+		info->count--;
+	sti();
 	info->blocked_open++;
 	while (1) {
 		cli();
@@ -2333,6 +2346,7 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 {
 	struct async_struct	*info;
 	int 			retval, line;
+	unsigned long		page;
 
 	line = MINOR(tty->device) - tty->driver.minor_start;
 	if ((line < 0) || (line >= NR_PORTS))
@@ -2350,9 +2364,13 @@ int rs_open(struct tty_struct *tty, struct file * filp)
 	info->tty = tty;
 
 	if (!tmp_buf) {
-		tmp_buf = (unsigned char *) get_free_page(GFP_KERNEL);
-		if (!tmp_buf)
+		page = get_free_page(GFP_KERNEL);
+		if (!page)
 			return -ENOMEM;
+		if (tmp_buf)
+			free_page(page);
+		else
+			tmp_buf = (unsigned char *) page;
 	}
 	
 	/*

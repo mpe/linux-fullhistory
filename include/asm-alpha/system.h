@@ -50,7 +50,7 @@ extern unsigned long rdusp(void);
 extern unsigned long rdmces (void);
 extern void wrmces (unsigned long);
 
-#define halt() __asm__ __volatile__(".long 0");
+#define halt() __asm__ __volatile__ ("call_pal %0" : : "i" (PAL_halt) : "memory")
 
 extern void alpha_switch_to(unsigned long pctxp);
 

@@ -1,7 +1,7 @@
 /*
  *  ncp_fs_i.h
  *
- *  Copyright (C) 1995 by Paal-Kr. Engstad and Volker Lendecke
+ *  Copyright (C) 1995 Volker Lendecke
  *
  */
 

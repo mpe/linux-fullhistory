@@ -35,6 +35,9 @@ enum root_directory_inos {
 	PROC_DMA,	
 	PROC_IOPORTS,
 	PROC_APM,
+#ifdef __SMP_PROF__
+	PROC_SMP_PROF,
+#endif
 	PROC_PROFILE, /* whether enabled or not */
 	PROC_CMDLINE,
 	PROC_SYS
@@ -163,6 +166,9 @@ struct proc_dir_entry {
 	struct proc_dir_entry *next, *parent, *subdir;
 	void *data;
 };
+
+extern int (* dispatch_scsi_info_ptr) (int ino, char *buffer, char **start,
+				off_t offset, int length, int inout);
 
 extern struct proc_dir_entry proc_root;
 extern struct proc_dir_entry proc_net;

@@ -138,19 +138,23 @@ asmlinkage int sys_write(unsigned int fd,char * buf,unsigned int count)
 	error = verify_area(VERIFY_READ,buf,count);
 	if (error)
 		return error;
+	/*
+	 * If data has been written to the file, remove the setuid and
+	 * the setgid bits. We do it anyway otherwise there is an
+	 * extremely exploitable race - does your OS get it right |->
+	 *
+	 * Set ATTR_FORCE so it will always be changed.
+	 */
+	if (!suser() && (inode->i_mode & (S_ISUID | S_ISGID))) {
+		struct iattr newattrs;
+		newattrs.ia_mode = inode->i_mode & ~(S_ISUID | S_ISGID);
+		newattrs.ia_valid = ATTR_CTIME | ATTR_MODE | ATTR_FORCE;
+		notify_change(inode, &newattrs);
+	}
+
 	down(&inode->i_sem);
 	written = file->f_op->write(inode,file,buf,count);
 	up(&inode->i_sem);
-	/*
-	 * If data has been written to the file, remove the setuid and
-	 * the setgid bits
-	 */
-	if (written > 0 && !suser() && (inode->i_mode & (S_ISUID | S_ISGID))) {
-		struct iattr newattrs;
-		newattrs.ia_mode = inode->i_mode & ~(S_ISUID | S_ISGID);
-		newattrs.ia_valid = ATTR_MODE;
-		notify_change(inode, &newattrs);
-	}
 	return written;
 }
 

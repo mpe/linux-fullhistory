@@ -492,8 +492,8 @@ void isofs_read_inode(struct inode * inode)
 	inode->i_size = isonum_733 (raw_inode->size);
 
 	/* There are defective discs out there - we do this to protect
-	   ourselves.  A cdrom will never contain more than 700Mb */
-	if((inode->i_size < 0 || inode->i_size > 700000000) &&
+	   ourselves.  A cdrom will never contain more than 800Mb */
+	if((inode->i_size < 0 || inode->i_size > 800000000) &&
 	    inode->i_sb->u.isofs_sb.s_cruft == 'n') {
 	  printk("Warning: defective cdrom.  Enabling \"cruft\" mount option.\n");
 	  inode->i_sb->u.isofs_sb.s_cruft = 'y';

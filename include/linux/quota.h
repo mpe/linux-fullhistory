@@ -70,6 +70,8 @@
 #define USRQUOTA  0		/* element used for user quotas */
 #define GRPQUOTA  1		/* element used for group quotas */
 
+#include <linux/mount.h>
+
 /*
  * Definitions for the default names of the quotas files.
  */

@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 030
+ *	AX.25 release 031
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -25,6 +25,8 @@
  *					Added fragmentation support.
  *			Darryl(G7LED)	Added function ax25_requeue_frames() to split
  *					it up from ax25_frames_acked().
+ *			Joerg(DL1BKE)	DAMA needs KISS Fullduplex ON/OFF.
+ *					Thus we have ax25_kiss_cmd() now... ;-)
  */
 
 #include <linux/config.h>
@@ -94,6 +96,8 @@ void ax25_frames_acked(ax25_cb *ax25, unsigned short nr)
 			skb->free = 1;
 			kfree_skb(skb, FREE_WRITE);
 			ax25->va = (ax25->va + 1) % ax25->modulus;
+			if (ax25->dama_slave)		/* dl1bke 960120 */
+				ax25->n2count = 0;
 		}
 	}
 }
@@ -324,7 +328,7 @@ void ax25_calculate_rtt(ax25_cb *ax25)
  *	Given an AX.25 address pull of to, from, digi list, command/response and the start of data
  *
  */
-unsigned char *ax25_parse_addr(unsigned char *buf, int len, ax25_address *src, ax25_address *dest, ax25_digi *digi, int *flags)
+unsigned char *ax25_parse_addr(unsigned char *buf, int len, ax25_address *src, ax25_address *dest, ax25_digi *digi, int *flags, int *dama)
 {
 	int d = 0;
 	
@@ -340,6 +344,8 @@ unsigned char *ax25_parse_addr(unsigned char *buf, int len, ax25_address *src, a
 			*flags = C_RESPONSE;
 		}
 	}
+		
+	if (dama != NULL) *dama = ~(buf[13] & DAMA_FLAG);
 		
 	/* Copy to, from */
 	if (dest != NULL) memcpy(dest, buf + 0, AX25_ADDR_LEN);
@@ -460,6 +466,61 @@ void ax25_digi_invert(ax25_digi *in, ax25_digi *out)
 
 	/* Finish off */
 	out->lastrepeat = 0;
+}
+
+void ax25_kiss_cmd(ax25_cb * ax25, unsigned char cmd, unsigned char param)
+{
+	struct sk_buff *skb;
+	unsigned char *p;
+	
+	if (ax25->device == NULL)
+		return;
+
+	if ((skb = alloc_skb(2, GFP_ATOMIC)) == NULL)
+		return;
+		
+	skb->free = 1;
+	skb->arp = 1;
+	
+	if (ax25->sk != NULL)
+	{
+		skb->sk = ax25->sk;
+		ax25->sk->wmem_alloc += skb->truesize;
+	}
+	
+	skb->protocol = htons(ETH_P_AX25);
+	
+	p = skb_put(skb, 2);
+	
+	*p++=cmd;
+	*p  =param;
+	
+	dev_queue_xmit(skb, ax25->device, SOPRI_NORMAL);	
+}
+
+void ax25_dama_on(ax25_cb *ax25)
+{
+	int count = ax25_dev_is_dama_slave(ax25->device);
+
+	if (count == 0)
+	{
+		if (ax25->sk && ax25->sk->debug)
+			printk("DAMA on\n");
+		ax25_kiss_cmd(ax25, 5, 1);
+	}
+}
+
+void ax25_dama_off(ax25_cb *ax25)
+{
+	int count = ax25_dev_is_dama_slave(ax25->device);
+	
+	
+	if (count == 0)
+	{
+		if (ax25->sk && ax25->sk->debug)
+			printk("DAMA off\n");
+		ax25_kiss_cmd(ax25, 5, 0);
+	}
 }
 
 #endif

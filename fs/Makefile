@@ -16,8 +16,8 @@ O_OBJS    = open.o read_write.o inode.o devices.o file_table.o buffer.o \
 		dcache.o $(BINFMTS) 
 
 MOD_LIST_NAME := FS_MODULES
-ALL_SUB_DIRS = minix ext ext2 msdos proc isofs nfs xiafs umsdos hpfs sysv \
-		smbfs ncpfs
+ALL_SUB_DIRS = minix ext ext2 fat msdos vfat proc isofs nfs xiafs umsdos \
+		hpfs sysv smbfs ncpfs
 
 ifeq ($(CONFIG_QUOTA),y)
 O_OBJS += dquot.o
@@ -49,11 +49,27 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_FAT_FS),y)
+SUB_DIRS += fat
+else
+  ifeq ($(CONFIG_MSDOS_FS),m)
+  MOD_SUB_DIRS += fat
+  endif
+endif
+
 ifeq ($(CONFIG_MSDOS_FS),y)
 SUB_DIRS += msdos
 else
   ifeq ($(CONFIG_MSDOS_FS),m)
   MOD_SUB_DIRS += msdos
+  endif
+endif
+
+ifeq ($(CONFIG_VFAT_FS),y)
+SUB_DIRS += vfat
+else
+  ifeq ($(CONFIG_VFAT_FS),m)
+  MOD_SUB_DIRS += vfat
   endif
 endif
 

@@ -24,6 +24,8 @@
  *		Wilfred Mollenvanger 7/7/1995.
  *	TCP attack protection.
  *		Alan Cox 25/8/95, based on information from bugtraq.
+ *	ICMP type printk, IP_FW_F_APPEND
+ *		Bernd Eckenfels 1996-01-31
  *
  * Masquerading functionality
  *
@@ -441,7 +443,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 				case IPPROTO_UDP:
 					printk("UDP ");
 				case IPPROTO_ICMP:
-					printk("ICMP ");
+					printk("ICMP:%d ",icmp_type);
 					break;
 				default:
 					printk("p=%d ",ip->protocol);
@@ -1082,6 +1084,10 @@ static int add_to_chain(struct ip_fw *volatile* chainptr, struct ip_fw *frwl,int
 		chtmp_prev=NULL;
 		for (chtmp=*chainptr;chtmp!=NULL;chtmp=chtmp->fw_next) 
 		{
+			if (ftmp->fw_flg & IP_FW_F_APPEND) {
+				chtmp_prev=chtmp;
+				continue;
+			}
 			addb4=0;
 			newkind=ftmp->fw_flg & IP_FW_F_KIND;
 			oldkind=chtmp->fw_flg & IP_FW_F_KIND;

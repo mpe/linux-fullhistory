@@ -36,7 +36,8 @@ do
     fi
 
     echo "Applying $patch..."
-    gunzip -dc $patchdir/$patch | patch -p1 -s -E -f -d $sourcedir
+    gunzip -dc $patchdir/$patch | patch -p1 -s -E -d $sourcedir
+# used to be patch -p1 -s -E -f -d $sourcedir
     if [ "`find $sourcedir -name \*.rej -print`" ]
     then
         echo "Aborting.  Reject files found."

@@ -39,7 +39,7 @@ static int timer_alive = 0;
  *	If the timer expires..
  */
  
-static void watchdog_fire(long data)
+static void watchdog_fire(unsigned long data)
 {
 	extern void hard_reset_now(void);
 	hard_reset_now();

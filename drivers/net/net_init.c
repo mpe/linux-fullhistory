@@ -166,18 +166,18 @@ void ether_setup(struct device *dev)
 	}
 
 	dev->hard_header	= eth_header;
-	dev->rebuild_header = eth_rebuild_header;
-	dev->set_mac_address = eth_mac_addr;
-	dev->header_cache_bind = eth_header_cache_bind;
-	dev->header_cache_update = eth_header_cache_update;
+	dev->rebuild_header 	= eth_rebuild_header;
+	dev->set_mac_address 	= eth_mac_addr;
+	dev->header_cache_bind 	= eth_header_cache_bind;
+	dev->header_cache_update= eth_header_cache_update;
 
 	dev->type		= ARPHRD_ETHER;
-	dev->hard_header_len = ETH_HLEN;
+	dev->hard_header_len 	= ETH_HLEN;
 	dev->mtu		= 1500; /* eth_mtu */
-	dev->addr_len	= ETH_ALEN;
-	for (i = 0; i < ETH_ALEN; i++) {
-		dev->broadcast[i]=0xff;
-	}
+	dev->addr_len		= ETH_ALEN;
+	dev->tx_queue_len	= 100;	/* Ethernet wants good queues */	
+	
+	memset(dev->broadcast,0xFF, ETH_ALEN);
 
 	/* New-style flags. */
 	dev->flags		= IFF_BROADCAST|IFF_MULTICAST;
@@ -199,15 +199,15 @@ void tr_setup(struct device *dev)
 		skb_queue_head_init(&dev->buffs[i]);
 
 	dev->hard_header	= tr_header;
-	dev->rebuild_header = tr_rebuild_header;
+	dev->rebuild_header 	= tr_rebuild_header;
 
 	dev->type		= ARPHRD_IEEE802;
-	dev->hard_header_len = TR_HLEN;
+	dev->hard_header_len 	= TR_HLEN;
 	dev->mtu		= 2000; /* bug in fragmenter...*/
-	dev->addr_len	= TR_ALEN;
-	for (i = 0; i < TR_ALEN; i++) {
-		dev->broadcast[i]=0xff;
-	}
+	dev->addr_len		= TR_ALEN;
+	dev->tx_queue_len	= 100;	/* Long queues on tr */
+	
+	memset(dev->broadcast,0xFF, TR_ALEN);
 
 	/* New-style flags. */
 	dev->flags		= IFF_BROADCAST;
@@ -306,18 +306,18 @@ void unregister_netdev(struct device *dev)
 	 */
 #ifdef CONFIG_NET_ALIAS		
 	if (dev_base == dev)
-	  dev_base = net_alias_nextdev(dev);
+		dev_base = net_alias_nextdev(dev);
 	else
 	{
-	    while(d && (net_alias_nextdev(d) != dev)) /* skip aliases */
-		    d = net_alias_nextdev(d);
+		while(d && (net_alias_nextdev(d) != dev)) /* skip aliases */
+			d = net_alias_nextdev(d);
 	  
-	    if (d && (net_alias_nextdev(d) == dev))
+		if (d && (net_alias_nextdev(d) == dev))
 		{
-    /*
-	 * 	critical: bypass by consider devices as blocks (maindev+aliases)
-	 */
-		    net_alias_nextdev_set(d, net_alias_nextdev(dev)); 
+			/*
+			 * 	Critical: Bypass by consider devices as blocks (maindev+aliases)
+			 */
+			net_alias_nextdev_set(d, net_alias_nextdev(dev)); 
 		}
 #else
 	if (dev_base == dev)
@@ -326,7 +326,7 @@ void unregister_netdev(struct device *dev)
 	{
 		while (d && (d->next != dev))
 			d = d->next;
-			
+		
 		if (d && (d->next == dev)) 
 		{
 			d->next = dev->next;
@@ -350,13 +350,15 @@ void unregister_netdev(struct device *dev)
 
 	restore_flags(flags);
 
-	/* You can i.e use a interfaces in a route though it is not up.
-	   We call close_dev (which is changed: it will down a device even if
-	   dev->flags==0 (but it will not call dev->stop if IFF_UP
-	   is not set).
-	   This will call notifier_call_chain(&netdev_chain, NETDEV_DOWN, dev),
-	   dev_mc_discard(dev), ....
-	*/
+	/*
+	 *	You can i.e use a interfaces in a route though it is not up.
+	 *	We call close_dev (which is changed: it will down a device even if
+	 *	dev->flags==0 (but it will not call dev->stop if IFF_UP
+	 *	is not set).
+	 *	This will call notifier_call_chain(&netdev_chain, NETDEV_DOWN, dev),
+	 *	dev_mc_discard(dev), ....
+	 */
+	 
 	dev_close(dev);
 }
 

@@ -172,7 +172,7 @@ d) Compress the contents of the ramdisk. The level of compression
 
 e) Put the kernel onto the floppy
 
-	cat zImage > /dev/fd0
+	dd if=zImage of=/dev/fd0 bs=1k
 
 f) Put the ramdisk image onto the floppy, after the kernel. Use an offset
    that is slightly larger than the kernel, so that you can put another
@@ -181,7 +181,7 @@ f) Put the ramdisk image onto the floppy, after the kernel. Use an offset
    size would be reasonable. Make sure offset+size of ram_image.gz is
    not larger than the total space on your floppy (usually 1440kB).
 
-	dd if=/tmp/ram_image.gz of=/dev/fd0 bs=1k skip=400
+	dd if=/tmp/ram_image.gz of=/dev/fd0 bs=1k seek=400
 
 g) Use "rdev" to set the boot device, ramdisk offset, prompt flag, etc.
    For ramdisk_start=400, load_ramdisk=1, ramdisk_start=400, one would

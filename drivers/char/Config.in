@@ -2,7 +2,7 @@
 # Character device configuration
 #
 mainmenu_option next_comment
-comment 'character devices'
+comment 'Character devices'
 
 tristate 'Cyclades async mux support' CONFIG_CYCLADES
 bool 'Stallion multiport serial support' CONFIG_STALDRV
@@ -37,8 +37,8 @@ if [ "$CONFIG_APM" = "y" ]; then
   bool '   Enable console blanking using APM' CONFIG_APM_DISPLAY_BLANK
 fi
 bool 'Watchdog Timer Support'	CONFIG_WATCHDOG
-if [ "$CONFIG_WATCHDOG" = "y" ]; then
-  bool '   WDT Watchdog timer' CONFIG_WDT
+if [ "$CONFIG_WATCHDOG" != "n" ]; then
+  tristate '   WDT Watchdog timer' CONFIG_WDT
   if [ "$CONFIG_WDT" = "y" ]; then
      bool '       WDT501 features' CONFIG_WDT_501
      if [ "$CONFIG_WDT_501" = "y" ]; then

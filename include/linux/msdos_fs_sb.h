@@ -23,6 +23,9 @@ struct msdos_sb_info {
 	int prev_free; /* previously returned free cluster number */
 	int free_clusters; /* -1 if undefined */
 	char dotsOK;
+	char sys_immutable; /* system files are immutable */
+	int vfat; /* 0=no vfat long filename support, 1=vfat support */
+	int umsdos; /* 1 if mounted by umsdos, 0 if not */
 };
 
 #endif

@@ -1,0 +1,901 @@
+#! /bin/sh
+#
+# This script is used to configure the linux kernel.
+#
+# It was inspired by a desire to not have to hit <enter> 9 million times
+# or startup the X server just to change a single kernel parameter.  
+#
+# This script attempts to parses the configuration files, which are
+# scattered throughout the kernel source tree, and create a temporary
+# set of mini scripts which are in turn used to create nested menus and
+# radiolists.
+#
+# It uses a very modified/mutilated version of the "dialog" utility
+# written by Savio Lam (lam836@cs.cuhk.hk). Savio is not responsible
+# for this script or the version of dialog used by this script.
+# Please do not contact him with questions. The official version of 
+# dialog is available at sunsite.unc.edu or a sunsite mirror.
+#
+# Portions of this script were borrowed from the original Configure
+# script used in linux-1.3.55.
+#
+# Please send comments / questions / bug fixes to roadcapw@cfw.com
+#
+#----------------------------------------------------------------------------
+
+#
+# Make sure we're really running bash.
+#
+[ -z "$BASH" ] && { echo "Configure requires bash" 1>&2; exit 1; }
+
+#
+# Cache function definitions
+#
+set -h
+
+#
+# Extract available help for an option from Configure.help
+# and send it to standard output.
+#
+# Most of this function was borrowed from the original kernel
+# Configure script.
+#
+function extract_help () {
+  if [ -f Documentation/Configure.help ]
+  then
+     #first escape regexp special characters in the argument:
+     var=$(echo "$1"|sed 's/[][\/.^$*]/\\&/g')
+     #now pick out the right help text:
+     text=$(sed -n "/^$var[ 	]*\$/,\${
+                        /^$var[ 	]*\$/b
+                        /^#.*/b;/^[ 	]*\$/q
+                        p
+                    }" Documentation/Configure.help)
+
+     if [ -z "$text" ]
+     then
+	  echo "There is no help available for this setting."
+     else
+	  echo "$text"
+     fi
+  else
+	 echo "There is no help available for this setting."
+  fi
+}
+
+#
+# Activate a help dialog.
+#
+function help () {
+	extract_help $2 >help.out
+	$DIALOG --backtitle "$backtitle" --title "$1" --textbox help.out 20 75
+	rm help.out
+}
+
+
+#
+# Init temporary scripts for the current menu.
+#
+function menu_name () {
+	echo -ne "$DIALOG --title '$1'\
+			--backtitle '$backtitle' \
+			--menu '$menu_instructions' \
+			21 75 11 '$default' " >submenu
+	>radiolists
+}
+
+#
+# Additional comments are currently semi-supported
+#
+function comment () {
+	if [ "$comments_ok" ]
+	then
+		$DIALOG --backtitle "$backtitle" --msgbox "$*" 7 70
+		comments_ok=
+	fi
+}
+
+#
+# Don't need this yet, but we don't want to puke either.
+#
+function define_bool () {
+	:	
+}
+
+#
+# Add a submenu option to the menu currently under construction.
+#
+function submenu () {
+	echo -ne "'activate_menu $2' '$1  --->' " >>submenu
+}
+
+#
+# This is to handle the Sound configuration.
+#
+function yuck1 () {
+	echo -ne "'clear ; $MAKE $2' '$1' " >>submenu
+}
+
+#
+# Create a boolean (Yes/No) function for our current menu
+# which calls our local bool function.
+#
+function bool () {
+	eval $2=\${$2:-'n'}  x=\$$2
+
+	case $x in
+	y|m) yes='ON' no='OFF' flag="*"
+	   ;;
+	n) yes='OFF' no='ON' flag=" "
+	   ;;
+	esac
+
+	echo -ne "'$2' '($flag) $1' " >>submenu
+
+	echo -e "function $2 () { l_bool '$1' '$yes' '$no' '$2' }\n" \
+		>>radiolists
+}
+
+#
+# Handle a boolean (Yes/No) option.
+#
+function l_bool () {
+	while true
+	do
+		if $DIALOG --title "$1" \
+			--backtitle "$backtitle" \
+			--radiolist "$radiolist_instructions" 12 70 2 \
+			'y' 'Yes' $2 'n' 'No' $3 2>dialog.out
+		then
+			eval $4=`cat dialog.out`
+			break
+		fi
+			
+		help "$1" "$4"
+	done
+	comments_ok=TRUE
+}
+
+#
+# Same as bool() except options are (Module/No)
+#
+function mod_bool () {
+	eval $2=\${$2:-'n'}  x=\$$2
+
+	case $x in
+	m) module='ON'  no='OFF' flag='M'
+	   ;;
+	*) module='OFF' no='ON'  flag=' '
+	   ;;
+	esac
+
+	echo -ne "'$2' '($flag) $1' " >>submenu
+
+	echo -e "function $2 () { l_mod_bool '$1' '$module' '$no' '$2' }\n" \
+		>>radiolists
+}
+
+#
+# Same as l_bool() except options are (Module/No)
+#
+function l_mod_bool() {
+	while true
+	do
+		if $DIALOG --title "$1" \
+			--backtitle "$backtitle" \
+			--radiolist "$radiolist_instructions" 12 70 2 \
+			'm' 'Module' $2 'n' 'No' $3 2>dialog.out
+		then
+			eval $4=`cat dialog.out`
+			break
+		fi
+			
+		help "$1" "$4"
+	done
+	comments_ok=TRUE
+}
+
+#
+# Create a tristate (Yes/No/Module) radiolist function
+# which calls our local tristate function.
+#
+# Collapses to a boolean (Yes/No) if module support is disabled.
+#
+function tristate () {
+	if [ "$CONFIG_MODULES" != "y" ]
+	then
+		bool "$1" "$2"
+	else
+		eval $2=\${$2:-'n'}  x=\$$2
+	
+		case $x in
+		y) yes='ON'  no='OFF' module='OFF' flag="*"
+   		;;
+		m) yes='OFF' no='OFF' module='ON' flag="M"
+   		;;
+		*) yes='OFF' no='ON'  module='OFF' flag=" "
+   		;;
+		esac
+	
+		echo -ne "'$2' '($flag) $1' " >>submenu
+	
+		echo -e "
+		function $2 () { \
+			l_tristate '$1' '$yes' '$no' '$module' '$2'
+		}"  >>radiolists
+	fi
+}
+
+#
+# Handle a tristate (Yes/No/Module) option.
+#
+function l_tristate () {
+	while true
+	do
+		if $DIALOG --title "$1" \
+			--backtitle "$backtitle" \
+			--radiolist "$radiolist_instructions" 13 70 3 \
+			'y' 'Yes' $2 'n' 'No' $3 'm' 'Module' $4 \
+			2>dialog.out
+		then
+			eval $5=`cat dialog.out`
+			break
+		fi
+			
+		help "$1" "$5"
+	done
+	comments_ok=TRUE
+}
+
+#
+# Create a tristate radiolist function which is dependent on
+# another kernel configuration option.
+#
+# Quote from the original configure script:
+#
+#       If the option we depend upon is a module,
+#       then the only allowable options are M or N.  If Y, then
+#       this is a normal tristate.  This is used in cases where modules
+#       are nested, and one module requires the presence of something
+#       else in the kernel.
+#
+function dep_tristate () {
+	if [ "$CONFIG_MODULES" != "y" ]
+	then
+		bool "$1" "$2"
+	else
+		if  eval [ "_$3" != "_m" ]
+		then
+			tristate "$1" "$2" $3
+		else
+			mod_bool "$1" "$2"
+		fi
+	fi
+}
+
+#
+# Create a function which will call our local int function.
+# 
+function int () {
+	eval $2=\${$2:-"$3"} x=\$$2
+
+	echo -ne "'$2' '($x) $1' " >>submenu
+
+	echo -e "function $2 () { l_int '$1' '$2' '$3' '$x' }\n" >>radiolists
+}
+
+#
+# Create a dialog for entering an integer into a kernel option.
+#
+function l_int () {
+	while true
+	do
+		if $DIALOG --title "$1" \
+			--backtitle "$backtitle" \
+			--inputbox "$inputbox_instructions_int" \
+			15 55 "$4" 2>dialog.out
+		then
+			answer="`cat dialog.out`"
+
+			case "$answer" in
+			[1-9] |\
+			[1-9][0-9] |\
+			[1-9][0-9][0-9] |\
+			[1-9][0-9][0-9][0-9] |\
+			[1-9][0-9][0-9][0-9][0-9])\
+				eval $2="$answer"
+				;;
+			*)	eval $2="$3"
+				echo -en "\007"
+				${DIALOG} --backtitle "$backtitle" \
+					--infobox "You have made an invalid entry." 3 43
+				sleep 2
+				;;
+			esac
+
+			break
+		fi
+
+		help "$1" "$2"
+	done
+	comments_ok=TRUE
+}
+
+
+#
+# Create a function which will call our local int function.
+# 
+function hex () {
+	eval $2=\${$2:-"$3"} x=\${$2#*[x,X]}
+
+	echo -ne "'$2' '($x) $1' " >>submenu
+
+	echo -e "function $2 () { l_hex '$1' '$2' '$3' '$x' }\n" >>radiolists
+}
+
+#
+# Create a dialog for entering a hexidecimal into a kernel option.
+#
+function l_hex () {
+	while true
+	do
+		if $DIALOG --title "$1" \
+			--backtitle "$backtitle" \
+			--inputbox "$inputbox_instructions_hex" \
+			15 55 "$4" 2>dialog.out
+		then
+			answer="`cat dialog.out`"
+			answer="${answer#*[x,X]}"
+
+			case "$answer" in
+			[0-9,a-f,A-F] |\
+			[0-9,a-f,A-F][0-9,a-f,A-F] |\
+			[0-9,a-f,A-F][0-9,a-f,A-F][0-9,a-f,A-F] |\
+			[0-9,a-f,A-F][0-9,a-f,A-F][0-9,a-f,A-F][0-9,a-f,A-F])\
+				eval $2="$answer"
+				;;
+			*)	eval $2="$3"
+				echo -en "\007"
+				${DIALOG} --backtitle "$backtitle" \
+					--infobox "You have made an invalid entry." 3 43
+				sleep 2
+				;;
+			esac
+
+			break
+		fi
+
+		help "$1" "$2"
+	done
+	comments_ok=TRUE
+}
+
+#
+# Create a function which will call our local One-of-Many choice list.
+#
+function choice () {
+	#
+	# Need to remember params cause the're gonna get reset.
+	#
+	title=$1
+	choices=$2
+	default=$3
+	current=
+
+	#
+	# Find out if one of the choices is already set.
+	# If it's not then make it the default.
+	#
+	set -- $choices
+	firstchoice=$2
+
+	while [ -n "$2" ]
+	do
+		if eval [ "_\$$2" = "_y" ]
+		then
+			current=$1
+			break
+		fi
+		shift ; shift
+	done
+
+	: ${current:=$default}
+
+	echo -ne "'$firstchoice' '($current) $title' " >>submenu
+
+	echo -e "
+	function $firstchoice () {
+		l_choice '$title' \"$choices\" $current
+	}\n" >>radiolists
+}
+
+
+function l_choice () {
+	#
+	# Need to remember params cause the're gonna get reset.
+	#
+	title="$1"
+	choices="$2"
+	current="$3"
+
+	#
+	# Scan current value of choices and set radiolist switches.
+	#
+	list=
+	set -- $choices
+	firstchoice=$2
+	while [ -n "$2" ]
+	do
+		case "$1" in
+		"$current")	list="$list $2 $1 ON "  ;;
+		*)		list="$list $2 $1 OFF " ;;
+		esac
+			
+		shift ; shift
+	done
+
+	while true
+	do
+		if $DIALOG --title "$title" \
+			--backtitle "$backtitle" \
+			--radiolist "$radiolist_instructions" \
+			22 70 11 $list 2>dialog.out
+		then
+			choice=`cat dialog.out`
+			break
+		fi
+
+		help "$title" "$firstchoice"
+	done
+
+	#
+	# Now set the boolean value of each option base on
+	# the selection made from the radiolist.
+	#
+	set -- $choices
+	while [ -n "$2" ]
+	do
+		if [ "$2" = "$choice" ]
+		then
+			eval $2="y"
+		else
+			eval $2="n"
+		fi
+		
+		shift ; shift
+	done
+	comments_ok=TRUE
+}
+
+
+#
+# Now parse the configuration files and create our mini scripts.
+# Each script represents a separate menu which when taken together
+# form a linked menu tree.  Since one configuration file
+# may source another elsewhere in the kernel source tree, this 
+# function is recursive.
+#
+function parse_config_files () {
+	while read command args
+	do
+		if [ "$command" != "comment" -a "$in_a_comment" ]
+		then
+			in_a_comment=
+			echo >>$submenu
+		fi
+
+		case $command in
+
+		#
+		# Will it ever happen that mainmenu_option will be followed
+		# by anything other then "next_comment"?  This assumes not..
+		#
+		mainmenu_option) 
+			comment_is_option=TRUE
+			;;
+
+		comment)
+			if [ "$comment_is_option" ]
+			then
+				comment_is_option=
+
+				stack="$submenu$stack"
+
+				menu_no=$[menu_no + 1]
+				x="submenu$menu_no"
+
+				echo "submenu $args $x" >> $submenu
+
+				submenu=$x
+				echo menu_name $args >$submenu
+
+			elif [ "$in_a_comment" ]
+			then
+				echo -n $args >> $submenu
+			else
+				in_a_comment=TRUE
+				echo -n comment $args >> $submenu
+			fi
+			;;
+	
+		endmenu)
+			submenu="${stack%%*}"
+			stack="${stack#*}"
+			;;
+
+		mainmenu_name)
+			echo menu_name "'Main Menu'" > submenu0
+			;;
+
+		\$MAKE) echo "yuck1 'Configure (You must do this!)' '$args'"\
+				>>$submenu
+			;;
+
+		source)
+			parse_config_files "$args"
+			;;
+
+		'#'|'')  : ;;
+
+		*)	echo $command $args >> $submenu
+			;;
+		esac
+	done < $1
+}
+
+#
+# This is the menu tree's bootstrap.
+#
+# Executes a mini script to create a set of functions, one per configuration
+# option.  These functions will in turn execute dialog commands or recursively
+# call other mini scripts.
+#
+function activate_menu () {
+	comments_ok=
+
+	while true
+	do
+		$1 "$default"		#Create the radiolists and dialog cmd
+		. radiolists		#Read in the dialog functions.
+
+		. submenu 2>dialog.out	#Activate this menu
+
+		case "$?" in
+		0)
+			defaults="`cat dialog.out`$defaults"  #pseudo stack
+			source dialog.out
+			default="${defaults%%*}" defaults="${defaults#*}"
+			;;
+		2)	
+			read selection <dialog.out
+			default="${selection##* }"
+			case "$selection" in
+			*"-->"*) : ;;
+			*)	 eval help $selection ;;
+			esac
+			;;
+		255|1)
+			break
+			;;
+		esac
+	done
+}
+
+#
+# Just what it says.
+#
+save_configuration () {
+	${DIALOG} --backtitle "$backtitle" \
+		  --infobox "Saving your new kernel configuration..."  3 43
+
+	#
+	# Now, let's redefine the configuration functions for final
+	# output to the config files.
+	#
+	function bool () {
+		eval define_bool "$2" "\${$2:-n}"
+	}
+
+	function tristate () {
+		eval define_bool "$2" "\${$2:-n}"
+	}
+
+	function dep_tristate () {
+		eval x=\${$2:-n}
+		if eval [ "_$3" != "_m" ]
+		then
+			tristate "$1" "$2"
+		else
+			if [ "$x" = "y" ]
+			then
+				x="m"
+			fi
+			define_bool "$2" "$x"
+		fi
+	}
+
+	function int () {
+		eval x=\${$2:-"$3"}
+		echo "$2=$x" 		>>$CONFIG
+		echo "#define $2 ($x)"	>>$CONFIG_H
+	}
+
+	function hex () {
+		eval x=\${$2:-"$3"}
+		echo "$2=$x" 			>>$CONFIG
+		echo "#define $2 0x${x#*[x,X]}"	>>$CONFIG_H
+	}
+
+	function define_bool () {
+   		case "$2" in
+         	y)
+                	echo "$1=y" 		>>$CONFIG
+                	echo "#define $1 1"	>>$CONFIG_H
+                	;;
+
+         	m)
+			if [ "$CONFIG_MODULES" = "y" ]
+			then
+                		echo "$1=m"		>>$CONFIG
+                		echo "#undef  $1"	>>$CONFIG_H
+			else
+                		echo "$1=y" 		>>$CONFIG
+                		echo "#define $1 1"	>>$CONFIG_H
+			fi
+                	;;
+
+         	n)
+                	echo "# $1 is not set"	>>$CONFIG
+                	echo "#undef  $1"	>>$CONFIG_H
+                	;;
+        	esac
+	}
+
+	function choice () {
+		#
+		# Find the first choice that's already set to 'y'
+		#
+		choices="$2"
+		default="$3"
+		current=
+
+		set -- $choices
+		while [ -n "$2" ]
+		do
+			if eval [ "_\$$2" = "_y" ]
+			then
+				current=$1
+				break
+			fi
+			shift ; shift
+		done
+
+		#
+		# Use the default if none were set.  
+		#
+		: ${current:=$default}
+
+		#
+		# Then extract the actual option from the list of choices.
+		#
+		current=${choices#*$current} ; set $current
+
+		define_bool "$1" "y"
+	}
+
+	function mainmenu_name () {
+		:
+	}
+
+	function mainmenu_option () {
+		comment_is_option=TRUE
+	}
+
+	function endmenu () {
+		:
+	}
+
+	function comment () {
+		if [ "$comment_is_option" ]
+		then
+			comment_is_option=
+			echo        >>$CONFIG
+			echo "#"    >>$CONFIG
+			echo "# $1" >>$CONFIG
+			echo "#"    >>$CONFIG
+
+			echo         >>$CONFIG_H
+			echo "/*"    >>$CONFIG_H
+			echo " * $1" >>$CONFIG_H
+			echo " */"   >>$CONFIG_H
+		fi
+	}
+
+	#
+	# This will hopfully prevent the sound configuration from
+	# running again.  (blagh!)
+	#
+	MAKE=:
+
+	CONFIG=.tmpconfig
+	CONFIG_H=.tmpconfig.h
+
+	echo "#" >$CONFIG
+	echo "# Automatically generated by make menuconfig: don't edit" >>$CONFIG
+	echo "#" >>$CONFIG
+
+	echo "/*" >$CONFIG_H
+	echo " * Automatically generated by make menuconfig: don't edit" >>$CONFIG_H
+	echo " */" >>$CONFIG_H
+	
+	. $CONFIG_IN
+
+	if [ -f .config ]
+	then
+		rm -f .config.old
+		mv .config .config.old
+	fi
+	mv .tmpconfig .config
+	mv .tmpconfig.h include/linux/autoconf.h
+}
+
+#
+# Remove temporary files
+#
+cleanup () {
+	cleanup1
+	cleanup2
+}
+
+cleanup1 () {
+	rm -f submenu* radiolists dialog.out help.out
+}
+
+cleanup2 () {
+	rm -f .tmpconfig .tmpconfig.h
+}
+
+
+menu_instructions="\
+Arrow keys navigate the menu.  \
+Highlighted letters are shortcuts. \
+Select an item with <Space Bar> or <Enter>. \
+When finished press <E> or <X> or <Esc>.  \
+(*) indicates an option will be compiled into the kernel.  \
+(M) indicates an option will be compiled as a module."
+
+radiolist_instructions="\
+Use the arrow keys to navigate this radiolist or \
+press the first letter of the item you wish to select \
+followed by the <SPACE BAR>.
+Press <H> for additional information about this option."
+
+inputbox_instructions_int="\
+Please enter a decimal value between 1 and 9999. \
+Fractions will not be accepted.  \
+Use the <TAB> key to move from the input field to buttons below it."
+
+inputbox_instructions_hex="\
+Please enter a hexidecimal value. \
+Use the <TAB> key to move from the input field to buttons below it."
+
+backtitle="Linux Kernel Configuration"
+
+DIALOG="./scripts/lxdialog/lxdialog"
+
+comment_is_option=
+in_a_comment=
+comments_ok=
+menu_no=0
+submenu=submenu0
+kernel_version="${VERSION}.${PATCHLEVEL}.${SUBLEVEL}"
+
+trap "cleanup ; rm -f .menuconfig.in ; exit 1" 1 2 15
+
+#
+# Locate default files.
+#
+DEFAULT=""
+if [ "$1" = "-d" ] ; then
+	DEFAULT="-d"
+	shift
+fi
+
+CONFIG_IN=./config.in
+if [ "$1" != "" ] ; then
+	CONFIG_IN=$1
+fi
+
+DEFAULTS=arch/$ARCH/defconfig
+if [ -f .config ]; then
+  DEFAULTS=.config
+fi
+
+if [ -f $DEFAULTS ]; then
+  echo "#"
+  echo "# Using defaults found in" $DEFAULTS
+  echo "#"
+  . $DEFAULTS
+else
+  echo "#"
+  echo "# No defaults found"
+  echo "#"
+fi
+
+
+#
+# Convert the configuration files into our mini scripts.
+# Then put all the mini scripts into a single file which should
+# stick around and act as a cache until the kernel release changes
+# or "make mrproper".
+#
+if [ -e .menuconfig.in ]
+then
+	read x <.menuconfig.in
+	if [ "$x" != "# $kernel_version" ]
+	then
+		rm -f .menuconfig.in
+	fi
+fi
+
+if [ ! -e .menuconfig.in ]
+then
+	$DIALOG	--backtitle "$backtitle" \
+		--infobox "Compiling configuration script..." 3 40
+
+	rm -f submenu*
+	parse_config_files $CONFIG_IN
+
+	#
+	# For handling Sound configuration. (Yuk!)
+	#
+	echo '$MAKE $*' >submenu999
+
+	echo "# $kernel_version" >.menuconfig.in
+
+	for i in submenu*
+	do
+		echo "function $i () {"
+		echo 'default=$1'
+		cat $i
+		echo -e "}\n\n"
+	done >> .menuconfig.in
+
+	rm -f submenu*
+fi
+
+source .menuconfig.in
+
+#
+# Start the ball rolling from the top.
+#
+activate_menu submenu0
+
+#
+# We're done with the menu scripts.  Get rid of them.
+#
+cleanup1
+
+#
+# Confirm and Save
+#
+if $DIALOG --backtitle "$backtitle" \
+	   --yesno "Do you wish to save your new kernel configuration?" 5 60
+	   
+then
+	save_configuration
+
+	$DIALOG --backtitle "$backtitle" --infobox "\
+The linux kernel is now hopefully configured for your setup.  \
+Check the top-level Makefile for additional configuration, \
+and do a 'make dep ; make clean' if you want to be sure all \
+the files are correctly re-made." 7 60
+else
+	$DIALOG --backtitle "$backtitle" \
+		--infobox "Your new configuration was not saved." 3 42 
+	
+fi
+
+
+exit 0
+

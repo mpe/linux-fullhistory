@@ -8,6 +8,9 @@
  * bottom_half handler need not be re-entrant.
  */
 
+#define INCLUDE_INLINE_FUNCS
+#include <linux/tqueue.h>
+
 #include <linux/ptrace.h>
 #include <linux/errno.h>
 #include <linux/kernel_stat.h>
@@ -21,8 +24,6 @@
 #include <asm/irq.h>
 #include <asm/bitops.h>
 
-#define INCLUDE_INLINE_FUNCS
-#include <linux/tqueue.h>
 
 unsigned long intr_count = 0;
 

@@ -44,20 +44,20 @@ void UMSDOS_put_inode(struct inode *inode)
 	if (inode != NULL && inode == pseudo_root){
 		printk ("Umsdos: Oops releasing pseudo_root. Notify jacques@solucorp.qc.ca\n");
 	}
-	msdos_put_inode(inode);
+	fat_put_inode(inode);
 }
 
 
 void UMSDOS_put_super(struct super_block *sb)
 {
-	msdos_put_super(sb);
+	fat_put_super(sb);
 	MOD_DEC_USE_COUNT;
 }
 
 
 void UMSDOS_statfs(struct super_block *sb,struct statfs *buf, int bufsiz)
 {
-	msdos_statfs(sb,buf,bufsiz);
+	fat_statfs(sb,buf,bufsiz);
 }
 
 
@@ -257,7 +257,7 @@ void UMSDOS_write_inode(struct inode *inode)
 	struct iattr newattrs;
 
 	PRINTK (("UMSDOS_write_inode emd %d\n",inode->u.umsdos_i.i_emd_owner));
-	msdos_write_inode(inode);
+	fat_write_inode(inode);
 	newattrs.ia_mtime = inode->i_mtime;
 	newattrs.ia_atime = inode->i_atime;
 	newattrs.ia_ctime = inode->i_ctime;
@@ -400,11 +400,12 @@ struct super_block *UMSDOS_read_super(
 	*/
 	struct super_block *sb;
 	MOD_INC_USE_COUNT;
-	sb = msdos_read_super(s,data,silent);
+	sb = fat_read_super(s,data,silent);
 	printk ("UMSDOS Beta 0.6 (compatibility level %d.%d, fast msdos)\n"
 		,UMSDOS_VERSION,UMSDOS_RELEASE);
 	if (sb != NULL){
 		MSDOS_SB(sb)->dotsOK = 0;  /* disable hidden==dotfile */
+		MSDOS_SB(sb)->umsdos = 1;  /* Tell fat-support we're umsdos */
 		sb->s_op = &umsdos_sops;
 		PRINTK (("umsdos_read_super %p\n",sb->s_mounted));
 		umsdos_setup_dir_inode (sb->s_mounted);
@@ -494,13 +495,14 @@ struct super_block *UMSDOS_read_super(
 }
 
 
+
 static struct file_system_type umsdos_fs_type = {
 	UMSDOS_read_super, "umsdos", 1, NULL
 };
 
 int init_umsdos_fs(void)
 {
-        return register_filesystem(&umsdos_fs_type);
+	return register_filesystem(&umsdos_fs_type);
 }
 
 #ifdef MODULE

@@ -436,7 +436,7 @@ int packet_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	if (saddr) 
 	{
 		saddr->sa_family = skb->dev->type;
-		memcpy(saddr->sa_data,skb->dev->name, 14);
+		strncpy(saddr->sa_data,skb->dev->name, 15);
 	}
 	
 	/*

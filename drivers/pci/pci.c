@@ -70,6 +70,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( CIRRUS,		CIRRUS_5434_4,	"GD 5434"),
 	DEVICE( CIRRUS,		CIRRUS_5434_8,	"GD 5434"),
 	DEVICE( CIRRUS,		CIRRUS_5436,	"GD 5436"),
+	DEVICE( CIRRUS,		CIRRUS_6205,	"GD 6205"),
 	DEVICE( CIRRUS,		CIRRUS_6729,	"CL 6729"),
 	DEVICE( CIRRUS,		CIRRUS_7542,	"CL 7542"),
 	DEVICE( CIRRUS,		CIRRUS_7543,	"CL 7543"),
@@ -105,6 +106,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( BUSLOGIC,	BUSLOGIC_930,	"BT-930"),
 	DEVICE( PROMISE,	PROMISE_5300,	"DC5030"),
 	DEVICE( N9,		N9_I128,	"Imagine 128"),
+	DEVICE( N9,		N9_I128_2,	"Imagine 128v2"),
 	DEVICE( UMC,		UMC_UM8673F,	"UM8673F"),
 	BRIDGE( UMC,		UMC_UM8891A,	"UM8891A", 		0x01),
 	DEVICE( UMC,		UMC_UM8886BF,	"UM8886BF"),
@@ -138,14 +140,18 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( ASP,		ASP_ABP940,	"ABP940"),
 	DEVICE( IMS,		IMS_8849,	"8849"),
 	DEVICE( TEKRAM2,	TEKRAM2_690c,	"DC690c"),
+	DEVICE( INTERG,		INTERG_1680,	"IGA-1680"),
 	DEVICE( REALTEK,	REALTEK_8029,	"8029"),
+	DEVICE( INIT,		INIT_320P,	"320 P"),
 	DEVICE( VIA,		VIA_82C505,	"VT 82C505"),
 	DEVICE( VIA,		VIA_82C561,	"VT 82C561"),
 	DEVICE( VIA,		VIA_82C576,	"VT 82C576 3V"),
+	DEVICE( VIA,		VIA_82C416,	"VT 82C416MV"),
 	DEVICE( VORTEX,		VORTEX_GDT,	"GDT 6000b"),
 	DEVICE( EF,		EF_ATM_FPGA,		"155P-MF1 (FPGA)"),
 	DEVICE( EF,		EF_ATM_ASIC,	"155P-MF1 (ASIC)"),
 	DEVICE( IMAGINGTECH,	IMAGINGTECH_ICPCI, "MVC IC-PCI"),
+	DEVICE( FORE,		FORE_PCA200PC, "PCA-200PC"),
 	DEVICE( PLX,		PLX_9060,	"PCI9060 i960 bridge"),
 	DEVICE( ALLIANCE,	ALLIANCE_PROMOTIO, "Promotion-6410"),
 	DEVICE( ALLIANCE,	ALLIANCE_PROVIDEO, "Provideo"),
@@ -217,7 +223,7 @@ struct optimization_type {
 	const char	*off;
 	const char	*on;
 } bridge_optimization[] = {
-	{"Cache L2",			"write trough",	"write back"},
+	{"Cache L2",			"write through",	"write back"},
 	{"CPU-PCI posted write",	"off",		"on"},
 	{"CPU-Memory posted write",	"off",		"on"},
 	{"PCI-Memory posted write",	"off",		"on"},
@@ -409,11 +415,13 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_PCTECH:	return "PCTECH";
 	      case PCI_VENDOR_ID_DPT:		return "DPT";
 	      case PCI_VENDOR_ID_OPTI:		return "OPTI";
+	      case PCI_VENDOR_ID_SGS:		return "SGS Thomson";
 	      case PCI_VENDOR_ID_BUSLOGIC:	return "BusLogic";
 	      case PCI_VENDOR_ID_PROMISE:	return "Promise Technology";
 	      case PCI_VENDOR_ID_N9:		return "Number Nine";
 	      case PCI_VENDOR_ID_UMC:		return "UMC";
 	      case PCI_VENDOR_ID_X:		return "X TECHNOLOGY";
+	      case PCI_VENDOR_ID_NEXGEN:	return "Nexgen";
 	      case PCI_VENDOR_ID_QLOGIC:	return "Q Logic";
 	      case PCI_VENDOR_ID_LEADTEK:	return "Leadtek Research";
 	      case PCI_VENDOR_ID_CONTAQ:	return "Contaq";
@@ -430,10 +438,13 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_IMS:		return "IMS";
 	      case PCI_VENDOR_ID_TEKRAM2:	return "Tekram";
 	      case PCI_VENDOR_ID_AMCC:		return "AMCC";
+	      case PCI_VENDOR_ID_INTERG:	return "Intergraphics";
 	      case PCI_VENDOR_ID_REALTEK:	return "Realtek";
+	      case PCI_VENDOR_ID_INIT:		return "Initio Corp";
 	      case PCI_VENDOR_ID_VIA:		return "VIA Technologies";
 	      case PCI_VENDOR_ID_VORTEX:	return "VORTEX";
 	      case PCI_VENDOR_ID_EF:		return "Efficient Networks";
+	      case PCI_VENDOR_ID_FORE:		return "Fore Systems";
 	      case PCI_VENDOR_ID_IMAGINGTECH:	return "Imaging Technology";
 	      case PCI_VENDOR_ID_PLX:		return "PLX";
 	      case PCI_VENDOR_ID_ALLIANCE:	return "Alliance";

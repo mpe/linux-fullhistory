@@ -34,6 +34,11 @@
 #define ATTR_NONE    0 /* no attribute bits */
 #define ATTR_UNUSED  (ATTR_VOLUME | ATTR_ARCH | ATTR_SYS | ATTR_HIDDEN)
 	/* attribute bits that are copied "as is" */
+#define ATTR_EXT     (ATTR_RO | ATTR_HIDDEN | ATTR_SYS | ATTR_VOLUME)
+	/* bits that are used by the Windows 95/Windows NT extended FAT */
+
+#define CASE_LOWER_BASE 8	/* base is lower case */
+#define CASE_LOWER_EXT  16	/* extension is lower case */
 
 #define SCAN_ANY     0  /* either hidden or not */
 #define SCAN_HID     1  /* only hidden */
@@ -51,6 +56,8 @@
 #define MSDOS_I(i) (&((i)->u.msdos_i))
 
 #define MSDOS_NAME 11 /* maximum name length */
+#define MSDOS_LONGNAME 256 /* maximum name length */
+#define MSDOS_SLOTS 21  /* max # of slots needed for short and long names */
 #define MSDOS_DOT    ".          " /* ".", padded to MSDOS_NAME chars */
 #define MSDOS_DOTDOT "..         " /* "..", padded to MSDOS_NAME chars */
 
@@ -90,9 +97,35 @@ struct msdos_boot_sector {
 struct msdos_dir_entry {
 	__s8	name[8],ext[3];	/* name and extension */
 	__u8	attr;		/* attribute bits */
-	__u8	unused[10];
+	__u8    lcase;		/* Case for base and extension */
+	__u8	ctime_ms;	/* Creation time, milliseconds */
+	__u16	ctime;		/* Creation time */
+	__u16	cdate;		/* Creation date */
+	__u16	adate;		/* Last access date */
+	__u8    unused[2];
 	__u16	time,date,start;/* time, date and first cluster */
 	__u32	size;		/* file size (in bytes) */
+};
+
+/* Up to 13 characters of the name */
+struct msdos_dir_slot {
+	__u8    id;		/* sequence number for slot */
+	__u8    name0_4[10];	/* first 5 characters in name */
+	__u8    attr;		/* attribute byte */
+	__u8    reserved;	/* always 0 */
+	__u8    alias_checksum;	/* checksum for 8.3 alias */
+	__u8    name5_10[12];	/* 6 more characters in name */
+	__u8    start[2];	/* starting cluster number */
+	__u8    name11_12[4];	/* last 2 characters in name */
+};
+
+struct slot_info {
+	int is_long;		       /* was the found entry long */
+	int long_slots;		       /* number of long slots in filename */
+	int total_slots;	       /* total slots (long and short) */
+	loff_t longname_offset;	       /* dir offset for longname start */
+	loff_t shortname_offset;       /* dir offset for shortname start */
+	int ino;		       /* ino for the file */
 };
 
 struct fat_cache {
@@ -113,81 +146,91 @@ struct fat_cache {
 /* Convert the UNIX mode to MS-DOS attribute bits. */
 #define MSDOS_MKATTR(m) ((m & S_IWUGO) ? ATTR_NONE : ATTR_RO)
 
+
 #ifdef __KERNEL__
 
 /* misc.c */
-
-extern void fs_panic(struct super_block *s,const char *msg);
 extern int is_binary(char conversion,char *extension);
-extern void lock_creation(void);
-extern void unlock_creation(void);
 extern void lock_fat(struct super_block *sb);
 extern void unlock_fat(struct super_block *sb);
-extern int msdos_add_cluster(struct inode *inode);
+extern int fat_add_cluster(struct inode *inode);
 extern int date_dos2unix(__u16 time, __u16 date);
-extern void date_unix2dos(int unix_date,__u16 *time, __u16 *date);
-extern int msdos_get_entry(struct inode *dir,loff_t *pos,struct buffer_head **bh,
-    struct msdos_dir_entry **de);
-extern int msdos_scan(struct inode *dir,const char *name,struct buffer_head **res_bh,
-    struct msdos_dir_entry **res_de,int *ino,char scantype);
-extern int msdos_parent_ino(struct inode *dir,int locked);
-extern int msdos_subdirs(struct inode *dir);
+extern void fat_fs_panic(struct super_block *s,const char *msg);
+extern void fat_lock_creation(void);
+extern void fat_unlock_creation(void);
+extern void fat_date_unix2dos(int unix_date,__u16 *time, __u16 *date);
+extern int fat_get_entry(struct inode *dir,loff_t *pos,struct buffer_head **bh,
+			 struct msdos_dir_entry **de);
+extern int fat_scan(struct inode *dir,const char *name,struct buffer_head **res_bh,
+		    struct msdos_dir_entry **res_de,int *ino,char scantype);
+extern int fat_parent_ino(struct inode *dir,int locked);
+extern int fat_subdirs(struct inode *dir);
 
 /* fat.c */
-
 extern int fat_access(struct super_block *sb,int nr,int new_value);
-extern int msdos_smap(struct inode *inode,int sector);
+extern int fat_smap(struct inode *inode,int sector);
 extern int fat_free(struct inode *inode,int skip);
+void fat_cache_inval_inode(struct inode *inode);
+void fat_cache_inval_dev(kdev_t device);
 extern void cache_init(void);
 void cache_lookup(struct inode *inode,int cluster,int *f_clu,int *d_clu);
 void cache_add(struct inode *inode,int f_clu,int d_clu);
-void cache_inval_inode(struct inode *inode);
-void cache_inval_dev(kdev_t device);
 int get_cluster(struct inode *inode,int cluster);
 
-/* namei.c */
+/* inode.c */
+extern int fat_bmap(struct inode *inode,int block);
+extern int fat_notify_change(struct inode *,struct iattr *);
+extern void fat_put_inode(struct inode *inode);
+extern void fat_put_super(struct super_block *sb);
+extern void fat_read_inode(struct inode *inode, struct inode_operations *dir_ops);
+extern struct super_block *fat_read_super(struct super_block *s, void *data, int silent);
+extern void fat_statfs(struct super_block *sb,struct statfs *buf, int);
+extern void fat_write_inode(struct inode *inode);
 
-extern int msdos_lookup(struct inode *dir,const char *name,int len,
-                        struct inode **result);
+/* dir.c */
+extern struct file_operations fat_dir_operations;
+extern int fat_readdir(struct inode *inode, struct file *filp,
+		       void *dirent, filldir_t);
+extern int fat_dir_ioctl(struct inode * inode, struct file * filp,
+			 unsigned int cmd, unsigned long arg);
+
+/* file.c */
+extern struct inode_operations fat_file_inode_operations;
+extern struct inode_operations fat_file_inode_operations_1024;
+extern int fat_file_read(struct inode *, struct file *, char *, int);
+extern int fat_file_write(struct inode *, struct file *, const char *, int);
+extern void fat_truncate(struct inode *inode);
+
+/* mmap.c */
+extern int fat_mmap(struct inode *, struct file *, struct vm_area_struct *);
+
+
+/* vfat.c */
+extern int init_vfat_fs(void);
+
+
+/* msdosfs_syms.c */
+extern int init_msdos_fs(void);
+extern struct file_system_type msdos_fs_type;
+
+/* msdos.c */
+extern struct super_block *msdos_read_super(struct super_block *sb,void *data, int silent);
+
+/* msdos.c - these are for Umsdos */
+extern void msdos_read_inode(struct inode *inode);
+extern int msdos_lookup(struct inode *dir,const char *name,int len, 
+			struct inode **result);
 extern int msdos_create(struct inode *dir,const char *name,int len,int mode,
-	struct inode **result);
-extern int msdos_mkdir(struct inode *dir,const char *name,int len,int mode);
+			struct inode **result);
 extern int msdos_rmdir(struct inode *dir,const char *name,int len);
+extern int msdos_mkdir(struct inode *dir,const char *name,int len,int mode);
 extern int msdos_unlink(struct inode *dir,const char *name,int len);
 extern int msdos_unlink_umsdos(struct inode *dir,const char *name,int len);
 extern int msdos_rename(struct inode *old_dir,const char *old_name,int old_len,
-	struct inode *new_dir,const char *new_name,int new_len);
+			struct inode *new_dir,const char *new_name,int new_len);
 
-/* inode.c */
-
-extern void msdos_put_inode(struct inode *inode);
-extern void msdos_put_super(struct super_block *sb);
-extern struct super_block *msdos_read_super(struct super_block *s,
-					    void *data,int);
-extern int init_msdos_fs(void);
-extern void msdos_statfs(struct super_block *sb,struct statfs *buf, int);
-extern int msdos_bmap(struct inode *inode,int block);
-extern void msdos_read_inode(struct inode *inode);
-extern void msdos_write_inode(struct inode *inode);
-extern int msdos_notify_change(struct inode *,struct iattr *);
-
-/* dir.c */
-
-extern struct inode_operations msdos_dir_inode_operations;
-extern int msdos_readdir (struct inode *inode, struct file *filp,
-	void *dirent, filldir_t);
-/* file.c */
-
-extern struct inode_operations msdos_file_inode_operations;
-extern struct inode_operations msdos_file_inode_operations_1024;
-extern int msdos_file_read(struct inode *, struct file *, char *, int);
-extern int msdos_file_write(struct inode *, struct file *, const char *, int);
-extern struct inode_operations msdos_file_inode_operations_no_bmap;
-
-extern void msdos_truncate(struct inode *inode);
-
-/* mmap.c */
-extern int msdos_mmap(struct inode *, struct file *, struct vm_area_struct *);
+/* fatfs_syms.c */
+extern int init_fat_fs(void);
 
 #endif /* __KERNEL__ */
 

@@ -152,7 +152,7 @@ static int umsdos_readdir_x(
 		bufk.dirbuf = dirbuf;
 		bufk.filldir = filldir;
 		bufk.count = 0;
-		ret = msdos_readdir(dir,filp,&bufk,umsdos_dir_once);
+		ret = fat_readdir(dir,filp,&bufk,umsdos_dir_once);
 		if (last_f_pos > 0 && filp->f_pos > last_f_pos) filp->f_pos = UMSDOS_SPECIAL_DIRFPOS;
 		if (u_entry != NULL) u_entry->flags = 0;
 	}else{
@@ -446,7 +446,7 @@ static int umsdos_dir_search (
 		memcpy (d->entry->name,name,name_len);
 		d->entry->name[name_len] = '\0';
 		d->entry->name_len = name_len;
-		ret = 1;	/* So msdos_readdir will terminate */
+		ret = 1;	/* So fat_readdir will terminate */
 	}
 	return ret;
 }
@@ -484,7 +484,7 @@ int umsdos_inode2entry (
 			filp.f_pos = 0;
 			bufk.entry = entry;
 			bufk.search_ino = inode->i_ino;
-			msdos_readdir (dir,&filp,&bufk,umsdos_dir_search);
+			fat_readdir (dir,&filp,&bufk,umsdos_dir_search);
 			if (bufk.found){
 				ret = 0;
 				inode->u.umsdos_i.i_dir_owner = dir->i_ino;

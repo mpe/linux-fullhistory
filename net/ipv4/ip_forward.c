@@ -105,7 +105,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 	 */
 
 	
-	if(!(is_frag&4))
+	if(!(is_frag&IPFWD_MASQUERADED))
 	{
 		fw_res=call_fw_firewall(PF_INET, skb, skb->h.iph);
 		switch (fw_res) {
@@ -153,7 +153,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 	}
 
 #ifdef CONFIG_IP_MROUTE
-	if(!(is_frag&8))
+	if(!(is_frag&IPFWD_MULTICASTING))
 	{
 #endif	
 		/*
@@ -219,7 +219,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 		 */
 		dev2=skb->dev;
 		raddr=skb->raddr;
-		if(is_frag&16)		/* VIFF_TUNNEL mode */
+		if(is_frag&IPFWD_MULTITUNNEL)	/* VIFF_TUNNEL mode */
 			encap=20;
 		rt=NULL;
 	}
@@ -238,7 +238,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 		 * If this fragment needs masquerading, make it so...
 		 * (Dont masquerade de-masqueraded fragments)
 		 */
-		if (!(is_frag&4) && fw_res==FW_MASQUERADE)
+		if (!(is_frag&IPFWD_MASQUERADED) && fw_res==FW_MASQUERADE)
 			ip_fw_masquerade(&skb, dev2);
 #endif
 		IS_SKB(skb);
@@ -280,7 +280,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 			 */
 			skb2->protocol=htons(ETH_P_IP);
 #ifdef CONFIG_IP_MROUTE
-			if(is_frag&16)
+			if(is_frag&IPFWD_MULTITUNNEL)
 			{
 				skb_reserve(skb,(encap+dev->hard_header_len+15)&~15);	/* 16 byte aligned IP headers are good */
 				ip_encap(skb2,skb->len, dev2, raddr);
@@ -314,7 +314,7 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 			skb2 = skb;		
 			skb2->dev=dev2;
 #ifdef CONFIG_IP_MROUTE
-			if(is_frag&16)
+			if(is_frag&IPFWD_MULTITUNNEL)
 				ip_encap(skb,skb->len, dev2, raddr);
 			else
 			{

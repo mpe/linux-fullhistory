@@ -17,6 +17,7 @@
  *		Alan Cox		:	Moved at. to protinfo in
  *						socket.
  *		Alan Cox		:	Added firewall hooks.
+ *		Alan Cox		:	Supports new ARPHRD_LOOPBACK
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -714,7 +715,7 @@ int atif_ioctl(int cmd, void *arg)
 				return -EPERM;
 			if(sa->sat_family!=AF_APPLETALK)
 				return -EINVAL;
-			if(dev->type!=ARPHRD_ETHER)
+			if(dev->type!=ARPHRD_ETHER&&dev->type!=ARPHRD_LOOPBACK)
 				return -EPROTONOSUPPORT;
 			nr=(struct netrange *)&sa->sat_zero[0];
 			if(nr->nr_phase!=2)
@@ -1032,6 +1033,7 @@ static int atalk_getsockopt(struct socket *sock, int level, int optname,
 		return err;
 	put_user(sizeof(int),optlen);
 	err=verify_area(VERIFY_WRITE,optval,sizeof(int));
+	if (err) return err;
 	put_user(val,optval);
 	return(0);
 }

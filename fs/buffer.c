@@ -1228,7 +1228,13 @@ int generic_readpage(struct inode * inode, struct page * page)
 	int *p, nr[PAGE_SIZE/512];
 	int i;
 
+	address = page_address(page);
+	page->count++;
 	wait_on_page(page);
+	if (page->uptodate) {
+		free_page(address);
+		return 0;
+	}
 	page->locked = 1;
 	
 	i = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;
@@ -1242,8 +1248,6 @@ int generic_readpage(struct inode * inode, struct page * page)
 	} while (i > 0);
 
 	/* IO start */
-	page->count++;
-	address = page_address(page);
 	brw_page(READ, address, inode->i_dev, nr, inode->i_sb->s_blocksize, 1);
 	free_page(address);
 	return 0;

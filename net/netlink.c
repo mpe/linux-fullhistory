@@ -72,6 +72,7 @@ static int netlink_write(struct inode * inode, struct file * file, const char * 
 	unsigned int minor = MINOR(inode->i_rdev);
 	struct sk_buff *skb;
 	skb=alloc_skb(count, GFP_KERNEL);
+	skb->free=1;
 	memcpy_fromfs(skb_put(skb,count),buf, count);
 	return (netlink_handler[minor])(skb);
 }

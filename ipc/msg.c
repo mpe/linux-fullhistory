@@ -102,7 +102,8 @@ static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg
 	}
 	
 	/* allocate message header and text space*/ 
-	msgh = (struct msg *) kmalloc (sizeof(*msgh) + msgsz, GFP_USER);
+	msgh = (struct msg *) kmalloc (sizeof(*msgh) + msgsz,
+		(intr_count ? GFP_ATOMIC : GFP_USER));
 	if (!msgh)
 		return -ENOMEM;
 	msgh->msg_spot = (char *) (msgh + 1);
@@ -605,6 +606,13 @@ int kerneld_send(int msgtype, int ret_size, int msgsz,
 	struct kerneld_msg kmsp = { msgtype, 0, (char *)text };
 	int msgflg = S_IRUSR | S_IWUSR | IPC_KERNELD | MSG_NOERROR;
 
+	if (kerneld_msqid == -1)
+		return -ENODEV;
+
+	/* Do not wait for an answer at interrupt-time! */
+	if (intr_count)
+		ret_size &= ~KERNELD_WAIT;
+
 	msgsz += sizeof(long);
 	if (ret_size & KERNELD_WAIT) {
 		if (++id <= 0)
@@ -612,22 +620,9 @@ int kerneld_send(int msgtype, int ret_size, int msgsz,
 		kmsp.id = id;
 	}
 
-	if (kerneld_msqid == -1)
-		return -ENODEV;
-
 	status = real_msgsnd(kerneld_msqid, (struct msgbuf *)&kmsp, msgsz, msgflg);
 	if ((status >= 0) && (ret_size & KERNELD_WAIT)) {
 		ret_size &= ~KERNELD_WAIT;
-		if (intr_count) {
-			/*
-			 * Do not wait for an answer at interrupt-time!
-			 * OK, so fake it...
-			 * If the kerneld request failed in user-space
-			 * we will find out eventually, and retry again!
-			 */
-			return 0; /* i.e. say that it worked... */
-		}
-		/* else */
 		kmsp.text = (char *)ret_val;
 		status = real_msgrcv(kerneld_msqid, (struct msgbuf *)&kmsp,
 				sizeof(long) + ((ret_val)?ret_size:0),

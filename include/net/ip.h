@@ -46,7 +46,8 @@ extern void		ip_mc_dropsocket(struct sock *);
 extern void		ip_mc_dropdevice(struct device *dev);
 extern int		ip_mc_procinfo(char *, char **, off_t, int, int);
 #endif
- 
+
+#include <net/ip_forward.h> 
 
 /* Describe an IP fragment. */
 struct ipfrag 

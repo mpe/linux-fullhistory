@@ -5,31 +5,34 @@
 /*
  * Attention! This file contains user-serviceable parts!
  * I recommend to make use of it...
+ * If you feel helpless, look into linux/Documentation/cdrom/sbpcd
+ * (good idea anyway, at least before mailing me).
  *
  * The definitions for the first controller can get overridden by
  * the kernel command line ("lilo boot option").
  * Examples:
- *                                 sbpcd=0x230,SoundBlaster
- *                             or
  *                                 sbpcd=0x300,LaserMate
  *                             or
+ *                                 sbpcd=0x230,SoundBlaster
+ *                             or
  *                                 sbpcd=0x338,SoundScape
+ *                             or
+ *                                 sbpcd=0x2C0,Teac16bit
  *
  * If sbpcd gets used as a module, you can load it with
- *     insmod /usr/src/linux/modules/sbpcd.o sbpcd=0x230,1
+ *     insmod sbpcd.o sbpcd=0x300,0
  * or
- *     insmod /usr/src/linux/modules/sbpcd.o sbpcd=0x300,0
+ *     insmod sbpcd.o sbpcd=0x230,1
  * or
- *     insmod /usr/src/linux/modules/sbpcd.o sbpcd=0x338,2
+ *     insmod sbpcd.o sbpcd=0x338,2
+ * or
+ *     insmod sbpcd.o sbpcd=0x2C0,3
  * respective to override the configured address and type.
  */
 
 /*
  * define your CDROM port base address as CDROM_PORT
  * and specify the type of your interface card as SBPRO.
- *
- * Read linux/drivers/block/README.sbpcd if you are in doubt about the
- * type of your interface card (you should do that anyway).
  *
  * address:
  * ========
@@ -54,14 +57,13 @@
  * set SBPRO to 0 for "compatible" soundcards and
  *                for "poor" (no sound) interface cards.
  * set SBPRO to 2 for Ensonic SoundScape or SPEA Media FX cards
+ * set SBPRO to 3 for Teac 16bit interface cards
  *
  * Almost all "compatible" sound boards need to set SBPRO to 0.
  * If SBPRO is set wrong, the drives will get found - but any
  * data access will give errors (audio access will work).
- * The "OmniCD" no-sound interface card from CreativeLabs needs SBPRO 1.
- *
- * mail to emoenke@gwdg.de if you have a "compatible" sound card which
- * in fact needs to set SBPRO to 1 (not any known at time).
+ * The "OmniCD" no-sound interface card from CreativeLabs and most Teac
+ * interface cards need SBPRO 1.
  *
  * sound base:
  * ===========
@@ -85,7 +87,7 @@
 #define SOUND_BASE 0x000 /* <-----------<< sound address of this card or 0   */
 #endif
 #if !(SBPCD_ISSUE-3)     /* ===================== third interface board: === */
-#define CDROM_PORT 0x634 /* <-----------<< port address                      */
+#define CDROM_PORT 0x630 /* <-----------<< port address                      */
 #define SBPRO      1     /* <-----------<< interface type                    */
 #define MAX_DRIVES 4     /* set to 1 if the card does not use "drive select" */
 #define SOUND_BASE 0x240 /* <-----------<< sound address of this card or 0   */
@@ -101,7 +103,7 @@
  * some more or less user dependent definitions - service them!
  */
 
-/* Set this to 0 after you have configured your interface definitions right. */
+/* Set this to 0 once you have configured your interface definitions right. */
 #define DISTRIBUTION 1
 
 #if DISTRIBUTION
@@ -137,6 +139,9 @@
 #define SPEA_TEST 0
 #define TEST_STI 0
 #undef PATH_CHECK
+#ifndef SOUND_BASE
+#define SOUND_BASE 0
+#endif
 /*==========================================================================*/
 /*
  * DDI interface definitions
@@ -427,6 +432,8 @@
 
 /*==========================================================================*/
 
+#define MIXER_addr SOUND_BASE+4 /* sound card's address register */
+#define MIXER_data SOUND_BASE+5 /* sound card's data register */
 #define MIXER_CD_Volume	0x28	/* internal SB Pro register address */
 
 /*==========================================================================*/

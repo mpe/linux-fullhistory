@@ -1,8 +1,8 @@
-This README belongs to release 4.1 or newer of the SoundBlaster Pro
-(Matsushita, Kotobuki, Panasonic, CreativeLabs, Longshine and TEAC)
+This README belongs to release 4.2 or newer of the SoundBlaster Pro
+(Matsushita, Kotobuki, Panasonic, CreativeLabs, Longshine and Teac)
 CD-ROM driver for Linux.
 
-Sbpcd really, really is NOT for ANY IDE/ATAPI drive!
+sbpcd really, really is NOT for ANY IDE/ATAPI drive!
 Not even if you have an "original" SoundBlaster card with an IDE interface!
 So, you better have a look into README.ide if your port address is 0x1F0,
 0x170, 0x1E8, 0x168 or similar.
@@ -46,7 +46,7 @@ playing audio should work, data access will result in errors. I need qualified
 feedback about the bugs within the data functions or a drive (I never saw a
 CD200).
 
-The quad-speed TEAC CD-55A drive is supported, but still does not reach "full
+The quad-speed Teac CD-55A drive is supported, but still does not reach "full
 speed". The data rate already reaches 500 kB/sec if you set SBP_BUFFER_FRAMES
 to 64 (it is not recommended to do that for normal "file access" usage, but it
 can speed up things a lot if you use something like "dd" to read from the
@@ -69,7 +69,7 @@ the IDE/ATAPI user questions disappear).
 
 This driver will work with the soundcard interfaces (SB Pro, SB 16, Galaxy,
 SoundFX, Mozart, MAD16 ...) and with the "no-sound" cards (Panasonic CI-101P,
-LaserMate, WDH-7001C, Longshine LCS-6853, TEAC ...).
+LaserMate, WDH-7001C, Longshine LCS-6853, Teac ...).
 
 It works with the "configurable" interface "Sequoia S-1000", too, which is 
 used on the Spea Media FX and Ensonic Soundscape sound cards. You have to
@@ -92,15 +92,18 @@ The interface type has to get configured in /usr/include/linux/sbpcd.h,
 because the register layout is different between the "SoundBlaster" and the
 "LaserMate" type.
 
-I got a report that the TEAC interface card "I/F E117098" is of type
+I got a report that the Teac interface card "I/F E117098" is of type
 "SoundBlaster" (i.e. you have to set SBPRO to 1) even with the addresses
 0x300 and above. This is unusual, and it can't get covered by the auto
 probing scheme.
+The Teac 16-bit interface cards (like P/N E950228-00A, default address 0x2C0)
+need the SBPRO 3 setup.
+
 If auto-probing found the drive, the address is correct. The reported type
 may be wrong. A "mount" will give success only if the interface type is set
 right. Playing audio should work with a wrong set interface type, too.
 
-With some TEAC and some CD200 drives I have seen interface cards which seem
+With some Teac and some CD200 drives I have seen interface cards which seem
 to lack the "drive select" lines; always drive 0 gets addressed. To avoid
 "mirror drives" (four drives detected where you only have one) with such
 interface cards, set MAX_DRIVES to 1 and jumper your drive to ID 0 (if
@@ -166,7 +169,7 @@ convert photo CD image files and Gerd Knorr's viewing utility.
 
 The transfer rate will reach 150 kB/sec with CR-52x drives, 300 kB/sec with
 CR-56x drives, and currently not more than 500 kB/sec (usually less than
-250 kB/sec) with the TEAC quad speed drives.
+250 kB/sec) with the Teac quad speed drives.
 XA (PhotoCD) disks with "old" drives give only 50 kB/sec.
 
 This release consists of
@@ -193,7 +196,8 @@ To install:
           Most "compatible" sound cards (almost all "non-CreativeLabs" cards)
           need "SBPRO 0".
           The "no-sound" board from OmniCd needs the "SBPRO 1" setup.
-          Possibly some TEAC "no-sound" boards need the "SBPRO 1" setup.
+          The Teac 8-bit "no-sound" boards need the "SBPRO 1" setup.
+          The Teac 16-bit "no-sound" boards need the "SBPRO 3" setup.
           All other "no-sound" boards need the "SBPRO 0" setup.
           The Spea Media FX and Ensoniq SoundScape cards need "SBPRO 2".
           sbpcd.c holds some examples in its auto-probe list.
@@ -204,14 +208,17 @@ To install:
       a4. Set DISTRIBUTION to 0.
    b. Additionally for 2.a1 and 2.a2, the setup may be done during
       boot time (via the "kernel command line" or "LILO option"):
-          sbpcd=0x230,SoundBlaster
-      or
           sbpcd=0x320,LaserMate
       or
+          sbpcd=0x230,SoundBlaster
+      or
           sbpcd=0x338,SoundScape
+      or
+          sbpcd=0x2C0,Teac16bit
       This is especially useful if you install a fresh distribution.
       If the second parameter is a number, it gets taken as the type
-      setting; 0 is "LaserMate", 1 is "SoundBlaster", 2 is "SoundScape".
+      setting; 0 is "LaserMate", 1 is "SoundBlaster", 2 is "SoundScape",
+      3 is "Teac16bit".
       So, for example
           sbpcd=0x230,1
       is equivalent to

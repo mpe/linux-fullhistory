@@ -148,18 +148,31 @@ ENOSYS = 38
 
 */
 
+#ifndef __SMP_PROF__
+
+#define SMP_PROF_A
+#define SMP_PROF_B 
+
+#else
+
+#define SMP_PROF_A movl $0,SYMBOL_NAME(smp_spins_syscall_cur)(,%eax,4);
+#define SMP_PROF_B incl SYMBOL_NAME(smp_spins_syscall)(,%eax,4); \
+        incl SYMBOL_NAME(smp_spins_syscall_cur)(,%eax,4);
+#endif
+
 #define	ENTER_KERNEL \
 	pushl %eax; \
 	pushl %edx; \
 	pushfl; \
 	cli; \
 	GET_PROCESSOR_ID \
+	SMP_PROF_A \
 1:	lock; \
 	btsl $0, SYMBOL_NAME(kernel_flag); \
 	jnc 3f; \
 	cmpb SYMBOL_NAME(active_kernel_processor), %al; \
 	je 4f; \
-2:	incl SYMBOL_NAME(smp_spins); \
+2:	SMP_PROF_B \
 	btl %al, SYMBOL_NAME(smp_invalidate_needed); \
 	jnc 5f; \
 	lock; \

@@ -31,6 +31,7 @@ static struct {
 
 struct swap_info_struct swap_info[MAX_SWAPFILES];
 
+
 static inline int scan_swap_map(struct swap_info_struct *si)
 {
 	int offset;
@@ -85,16 +86,20 @@ unsigned long get_swap_page(void)
 		p = &swap_info[type];
 		if ((p->flags & SWP_WRITEOK) == SWP_WRITEOK) {
 			offset = scan_swap_map(p);
-			if (!offset)
-				continue;
-			entry = SWP_ENTRY(type,offset);
-			type = swap_info[type].next;
-			if (type < 0 || p->prio != swap_info[type].prio) {
-				swap_list.next = swap_list.head;
-			} else {
-				swap_list.next = type;
+			if (offset) {
+				entry = SWP_ENTRY(type,offset);
+				type = swap_info[type].next;
+				if (type < 0 ||
+					p->prio != swap_info[type].prio) 
+				{
+						swap_list.next = swap_list.head;
+				}
+				else
+				{
+					swap_list.next = type;
+				}
+				return entry;
 			}
-			return entry;
 		}
 		type = p->next;
 		if (!wrapped) {

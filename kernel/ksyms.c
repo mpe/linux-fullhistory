@@ -41,7 +41,9 @@
 #include <linux/mount.h>
 #include <linux/pagemap.h>
 #include <linux/sysctl.h>
+#include <linux/skbuff.h>
 #include <linux/genhd.h>
+#include <linux/swap.h>
 
 extern unsigned char aux_device_present, kbd_read_mask;
 
@@ -50,7 +52,6 @@ extern unsigned char aux_device_present, kbd_read_mask;
 #include <linux/net.h>
 #include <linux/netdevice.h>
 #include <linux/firewall.h>
-
 #include <linux/trdevice.h>
 
 #ifdef CONFIG_AX25
@@ -64,6 +65,7 @@ extern unsigned char aux_device_present, kbd_read_mask;
 #include <net/ip.h>
 #include <net/udp.h>
 #include <net/tcp.h>
+#include <net/icmp.h>
 #include <net/route.h>
 #include <linux/net_alias.h>
 #endif
@@ -197,6 +199,7 @@ struct symbol_table symbol_table = {
 	X(__bforget),
 	X(ll_rw_block),
 	X(__wait_on_buffer),
+	X(mark_buffer_uptodate),
 	X(unlock_buffer),
 	X(dcache_lookup),
 	X(dcache_add),
@@ -204,6 +207,7 @@ struct symbol_table symbol_table = {
 	X(add_blkdev_randomness),
 	X(generic_file_read),
 	X(generic_readpage),
+	X(mark_buffer_uptodate),
 
 	/* device registration */
 	X(register_chrdev),
@@ -352,6 +356,8 @@ struct symbol_table symbol_table = {
 	X(rarp_ioctl_hook),
 	X(init_etherdev),
 	X(ip_rt_route),
+	X(icmp_send),
+	X(ip_options_compile),
 	X(ip_rt_put),
 	X(arp_send),
 #ifdef CONFIG_IP_FORWARD
@@ -395,10 +401,10 @@ struct symbol_table symbol_table = {
 	X(eth_copy_and_sum),
 	X(alloc_skb),
 	X(kfree_skb),
+	X(skb_clone),
 	X(dev_alloc_skb),
 	X(dev_kfree_skb),
 	X(netif_rx),
-	X(dev_rint),
 	X(dev_tint),
 	X(irq2dev_map),
 	X(dev_add_pack),
@@ -412,6 +418,9 @@ struct symbol_table symbol_table = {
 	X(n_tty_ioctl),
 	X(tty_register_ldisc),
 	X(kill_fasync),
+#ifdef CONFIG_FIREWALL
+	X(call_in_firewall),
+#endif
 #endif
 #ifndef CONFIG_SCSI
 	/*
@@ -431,9 +440,11 @@ struct symbol_table symbol_table = {
 	X(file_fsync),
 	X(clear_inode),
 	X(refile_buffer),
+	X(nr_async_pages),
 	X(___strtok),
 	X(init_fifo),
 	X(super_blocks),
+	X(reuse_list),
 	X(chrdev_inode_operations),
 	X(blkdev_inode_operations),
 	X(read_ahead),

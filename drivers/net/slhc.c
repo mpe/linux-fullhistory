@@ -91,7 +91,6 @@ static long decode(unsigned char **cpp);
 static unsigned char * put16(unsigned char *cp, unsigned short x);
 static unsigned short pull16(unsigned char **cpp);
 static void export_slhc_syms(void);
-static has_exported = 0;
 
 /* Initialize compression data structure
  *	slots must be in range 0 to 255 (zero meaning no compression)
@@ -102,9 +101,6 @@ slhc_init(int rslots, int tslots)
 	register short i;
 	register struct cstate *ts;
 	struct slcompress *comp;
-
-	if (!has_exported)
-		export_slhc_syms();
 
 	comp = (struct slcompress *)kmalloc(sizeof(struct slcompress),
 					    GFP_KERNEL);
@@ -748,7 +744,6 @@ static struct symbol_table slhc_syms = {
 static void export_slhc_syms(void)
 {
 	register_symtab(&slhc_syms);
-	has_exported = 1;
 }
 
 #ifdef MODULE
@@ -764,5 +759,11 @@ void cleanup_module(void)
 {
 	return;
 }
-#endif /* MODULE */
+#else /* MODULE */
+
+void slhc_install(void)
+{
+	export_slhc_syms();
+}
+#endif
 #endif /* CONFIG_INET */

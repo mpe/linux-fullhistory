@@ -129,6 +129,14 @@ extern void enable_irq(unsigned int);
 
 #ifdef	__SMP__
 
+#ifndef __SMP_PROF__
+#define SMP_PROF_INT_SPINS 
+#define SMP_PROF_IPI_CNT 
+#else
+#define SMP_PROF_INT_SPINS "incl "SYMBOL_NAME_STR(smp_spins)"(,%eax,4)\n\t"
+#define SMP_PROF_IPI_CNT "incl "SYMBOL_NAME_STR(ipi_count)"\n\t" 
+#endif
+
 #define GET_PROCESSOR_ID \
 	"movl "SYMBOL_NAME_STR(apic_reg)", %edx\n\t" \
 	"movl 32(%edx), %eax\n\t" \
@@ -148,7 +156,7 @@ extern void enable_irq(unsigned int);
 	"cmpb "SYMBOL_NAME_STR(active_kernel_processor)", %al\n\t" \
 	"je 4f\n\t" \
 	"2: " \
-	"incl "SYMBOL_NAME_STR(smp_spins)"\n\t" \
+        SMP_PROF_INT_SPINS \
 	"btl %al, "SYMBOL_NAME_STR(smp_invalidate_needed)"\n\t" \
 	"jnc 5f\n\t" \
 	"lock\n\t" \
@@ -261,7 +269,7 @@ SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
 SYMBOL_NAME_STR(fast_IRQ) #nr "_interrupt:\n\t" \
 	SAVE_MOST \
 	ACK_##chip(mask) \
-	"incl "SYMBOL_NAME_STR(ipi_count)"\n\t" \
+	SMP_PROF_IPI_CNT \
 	"pushl $" #nr "\n\t" \
 	"call "SYMBOL_NAME_STR(do_fast_IRQ)"\n\t" \
 	"addl $4,%esp\n\t" \

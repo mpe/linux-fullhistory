@@ -2585,7 +2585,8 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 	if (c == DDIOCSDBG) {
 		if (!suser())
 			return -EPERM;
-		verify_area(VERIFY_READ, (int *) ioarg, sizeof(int));
+		error = verify_area(VERIFY_READ, (int *) ioarg, sizeof(int));
+		if (error) return error;
 		c = get_user_long((int *) ioarg);
 		if (c==0) {
 			QIC02_TAPE_DEBUG = 0;

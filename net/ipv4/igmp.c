@@ -46,6 +46,11 @@
  *		Tsu-Sheng Tsao		if the specified time expired.
  *		Alan Cox	:	Stop IGMP from 0.0.0.0 being accepted.
  *		Alan Cox	:	Use GFP_ATOMIC in the right places.
+ *		Christian Daudt :	igmp timer wasn't set for local group
+ *					memberships but was being deleted, 
+ *					which caused a "del_timer() called 
+ *					from %p with timer not initialized\n"
+ *					message (960131).
  */
 
 
@@ -188,8 +193,13 @@ static	struct	ip_router_info	*igmp_set_mrouter_info(struct device *dev,int type,
 
 static void igmp_stop_timer(struct ip_mc_list *im)
 {
-	del_timer(&im->timer);
-	im->tm_running=0;
+  if (im->tm_running) {
+    del_timer(&im->timer);
+    im->tm_running=0;
+  }
+  else {
+    printk("igmp_stop_timer() called with timer not running by %p\n",__builtin_return_address(0));
+  }
 }
 
 extern __inline__ int random(void)
@@ -271,9 +281,15 @@ static void igmp_init_timer(struct ip_mc_list *im)
 static void igmp_heard_report(struct device *dev, unsigned long address)
 {
 	struct ip_mc_list *im;
-	for(im=dev->ip_mc_list;im!=NULL;im=im->next)
-		if(im->multiaddr==address)
-			igmp_stop_timer(im);
+
+	if ((address & IGMP_LOCAL_GROUP_MASK) != IGMP_LOCAL_GROUP) {
+	  /* Timers are only set for non-local groups */
+	  for(im=dev->ip_mc_list;im!=NULL;im=im->next) {
+	    if(im->multiaddr==address) {
+	      igmp_stop_timer(im);
+	    }
+	  }
+	}
 }
 
 static void igmp_heard_query(struct device *dev,unsigned char max_resp_time)

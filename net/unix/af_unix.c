@@ -38,6 +38,7 @@
  *	socketpair(...SOCK_RAW..) doesnt panic the kernel.
  */
 
+#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
 #include <linux/signal.h>
@@ -971,6 +972,7 @@ static int unix_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	return(0);
 }
 
+#ifdef CONFIG_PROC_FS
 static int unix_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	off_t pos=0;
@@ -1010,6 +1012,7 @@ static int unix_get_info(char *buffer, char **start, off_t offset, int length, i
 		len=length;
 	return len;
 }
+#endif
 
 static struct proto_ops unix_proto_ops = {
 	AF_UNIX,
@@ -1038,12 +1041,14 @@ void unix_proto_init(struct net_proto *pro)
 {
 	printk("NET3: Unix domain sockets 0.10 BETA for Linux NET3.033.\n");
 	sock_register(unix_proto_ops.family, &unix_proto_ops);
+#ifdef CONFIG_PROC_FS
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_UNIX,  4, "unix",
 		S_IFREG | S_IRUGO, 1, 0, 0,
 		0, &proc_net_inode_operations,
 		unix_get_info
 	});
+#endif
 }
 /*
  * Local variables:

@@ -16,7 +16,7 @@
 #define _SCSI_H
 
 /*
- * Some of the public constants are being movedd to this file.
+ * Some of the public constants are being moved to this file.
  * We include it here so that what came from where is transparent.
  */
 #include <linux/scsi.h>

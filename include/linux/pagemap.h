@@ -1,6 +1,8 @@
 #ifndef _LINUX_PAGEMAP_H
 #define _LINUX_PAGEMAP_H
 
+#include <asm/system.h>
+
 /*
  * Page-mapping primitive inline functions
  *
@@ -42,14 +44,18 @@ static inline unsigned long _page_hashfn(struct inode * inode, unsigned long off
 static inline struct page * find_page(struct inode * inode, unsigned long offset)
 {
 	struct page *page;
-
+	unsigned long flags;
+	
 	for (page = page_hash(inode, offset); page ; page = page->next_hash) {
 		if (page->inode != inode)
 			continue;
 		if (page->offset != offset)
 			continue;
+		save_flags(flags);
+		cli();
 		page->referenced = 1;
 		page->count++;
+		restore_flags(flags);
 		break;
 	}
 	return page;

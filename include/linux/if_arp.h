@@ -43,6 +43,7 @@
 #define ARPHRD_TUNNEL6	769		/* IPIP6 tunnel			*/
 #define ARPHRD_FRAD	770		/* Frame Relay			*/
 #define ARPHRD_SKIP	771		/* SKIP vif			*/
+#define ARPHRD_LOOPBACK	772		/* Loopback device		*/
 
 /* ARP protocol opcodes. */
 #define	ARPOP_REQUEST	1		/* ARP request			*/

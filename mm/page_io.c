@@ -105,7 +105,6 @@ void rw_swap_page(int rw, unsigned long entry, char * buf, int wait)
 			for (i=0, j=0; j< PAGE_SIZE ; i++, j +=swapf->i_sb->s_blocksize)
 				if (!(zones[i] = bmap(swapf,block++))) {
 					printk("rw_swap_page: bad swap file\n");
-					return;
 				}
 		}
 		ll_rw_swap_file(rw,swapf->i_dev, zones, i,buf);

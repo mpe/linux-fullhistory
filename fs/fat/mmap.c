@@ -24,7 +24,7 @@
 /*
  * Fill in the supplied page for mmap
  */
-static unsigned long msdos_file_mmap_nopage(
+static unsigned long fat_file_mmap_nopage(
 	struct vm_area_struct * area,
 	unsigned long address,
 	int error_code)
@@ -59,7 +59,7 @@ static unsigned long msdos_file_mmap_nopage(
 		{
 			unsigned long cur_fs = get_fs();
 			set_fs (KERNEL_DS);
-			cur_read = msdos_file_read (inode,&filp,(char*)page
+			cur_read = fat_file_read (inode,&filp,(char*)page
 				,need_read);
 			set_fs (cur_fs);
 		}
@@ -74,14 +74,14 @@ static unsigned long msdos_file_mmap_nopage(
 	return page;
 }
 
-struct vm_operations_struct msdos_file_mmap = {
+struct vm_operations_struct fat_file_mmap = {
 	NULL,			/* open */
 	NULL,			/* close */
 	NULL,			/* unmap */
 	NULL,			/* protect */
 	NULL,			/* sync */
 	NULL,			/* advise */
-	msdos_file_mmap_nopage,	/* nopage */
+	fat_file_mmap_nopage,	/* nopage */
 	NULL,			/* wppage */
 	NULL,			/* swapout */
 	NULL,			/* swapin */
@@ -91,7 +91,7 @@ struct vm_operations_struct msdos_file_mmap = {
  * This is used for a general mmap of an msdos file
  * Returns 0 if ok, or a negative error code if not.
  */
-int msdos_mmap(struct inode * inode, struct file * file, struct vm_area_struct * vma)
+int fat_mmap(struct inode * inode, struct file * file, struct vm_area_struct * vma)
 {
 	if (vma->vm_flags & VM_SHARED)	/* only PAGE_COW or read-only supported now */
 		return -EINVAL;
@@ -106,7 +106,7 @@ int msdos_mmap(struct inode * inode, struct file * file, struct vm_area_struct *
 
 	vma->vm_inode = inode;
 	inode->i_count++;
-	vma->vm_ops = &msdos_file_mmap;
+	vma->vm_ops = &fat_file_mmap;
 	return 0;
 }
 

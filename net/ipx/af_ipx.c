@@ -258,6 +258,27 @@ ipxitf_find_socket(ipx_interface *intrfc, unsigned short port)
 	return s;
 }
 
+#ifdef CONFIG_IPX_INTERN
+
+static ipx_socket *
+ipxitf_find_internal_socket(ipx_interface *intrfc,
+			    unsigned char *node, unsigned short port)
+{
+	ipx_socket *s = intrfc->if_sklist;
+
+	while (s != NULL)
+	{
+		if (   (s->ipx_port == port)
+		    && (memcmp(node, s->ipx_node, IPX_NODE_LEN) == 0))
+		{
+			break;
+		}
+		s = s->next;
+	}
+	return s;
+}	
+#endif
+
 static void ipxrtr_del_routes(ipx_interface *);
 
 static void
@@ -331,12 +352,8 @@ static int ipxitf_def_skb_handler(struct sock *sock, struct sk_buff *skb)
 	if((retval = sock_queue_rcv_skb(sock, skb))<0) 
 	{
 		/*
-	 	 *	We do a FREE_WRITE here because this indicates how
-	 	 *	to treat the socket with which the packet is 
-	 	 *	associated.  If this packet is associated with a
-	 	 *	socket at all, it must be the originator of the 
-	 	 *	packet.   Incoming packets will have no socket 
-		 *	associated with them at this point.
+		 * skb->sk is NULL here, so FREE_WRITE does not hurt
+		 * the sending socket.
 	 	 */
 		kfree_skb(skb,FREE_WRITE);
 	}
@@ -344,12 +361,76 @@ static int ipxitf_def_skb_handler(struct sock *sock, struct sk_buff *skb)
 }
 
 /*
- *	On input if skb->sk is set the buffer is a socket sending. We need to ensure the
- *	accounting is kept right in these cases. At the moment the socket write queue is
- *	charged for the memory.
+ * On input skb->sk is NULL. Nobody is charged for the memory.
  */
- 
-static int ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy) 
+
+#ifdef CONFIG_IPX_INTERN
+static int
+ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy) 
+{
+	ipx_packet	*ipx = (ipx_packet *)(skb->h.raw);
+	ipx_socket	*s;
+
+	int is_broadcast = (memcmp(ipx->ipx_dest.node, ipx_broadcast_node,
+				   IPX_NODE_LEN) == 0);
+
+	s = intrfc->if_sklist;
+
+	while (s != NULL)
+	{
+		if (   (s->ipx_port == ipx->ipx_dest.sock)
+		    && (   is_broadcast
+			|| (memcmp(ipx->ipx_dest.node, s->ipx_node,
+				   IPX_NODE_LEN) == 0)))
+		{
+			/* We found a socket to which to send */
+			struct sk_buff *skb1;
+
+			if (copy != 0)
+			{
+				skb1 = skb_clone(skb, GFP_ATOMIC);
+				if (skb1 != NULL)
+				{
+					skb1->arp = skb1->free = 1;
+				}
+				else
+				{
+					return -ENOMEM;
+				}
+			}
+			else
+			{
+				skb1 = skb;
+				copy = 1; /* skb may only be used once */
+			}
+			ipxitf_def_skb_handler(s, skb1);
+
+			if (intrfc != ipx_internal_net)
+			{
+				/* on an external interface, at most
+                                 * one socket can listen.
+				 */
+				break;
+			}
+		}
+		s = s->next;
+	}
+
+	if (copy == 0)
+	{
+		/* skb was solely for us, and we did not make a copy,
+		 * so free it. FREE_WRITE does not hurt, because
+		 * skb->sk is NULL here.
+		 */
+		kfree_skb(skb, FREE_WRITE);
+	}
+	return 0;
+}
+
+#else
+
+static int
+ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int copy) 
 {
 	ipx_packet	*ipx = (ipx_packet *)(skb->h.raw);
 	ipx_socket	*sock1 = NULL, *sock2 = NULL;
@@ -444,6 +525,7 @@ static int ipxitf_demux_socket(ipx_interface *intrfc, struct sk_buff *skb, int c
 
 	return 0;
 }
+#endif
 
 static struct sk_buff *
 ipxitf_adjust_skbuff(ipx_interface *intrfc, struct sk_buff *skb)
@@ -508,7 +590,10 @@ static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 			 *	Don't charge sender
 			 */
 			if(skb->sk)
+			{
 				skb->sk->wmem_alloc-=skb->truesize;
+				skb->sk=NULL;
+			}
 			/*
 			 *	Will charge receiver
 			 */
@@ -520,7 +605,10 @@ static int ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 		if (memcmp(ipx_broadcast_node, node, IPX_NODE_LEN) == 0) 
 		{
 			if (!send_to_wire && skb->sk)
+			{
 				skb->sk->wmem_alloc-=skb->truesize;
+				skb->sk=NULL;
+			}
 			ipxitf_demux_socket(intrfc, skb, send_to_wire);
 			if (!send_to_wire) 
 				return 0;
@@ -995,6 +1083,8 @@ ipxrtr_add_route(unsigned long network, ipx_interface *intrfc, unsigned char *no
 		rt->ir_next=ipx_routes;
 		ipx_routes=rt;
 	}
+	else if (intrfc == ipx_internal_net)
+		return(-EINVAL);
 
 	rt->ir_net = network;
 	rt->ir_intrfc = intrfc;
@@ -1110,7 +1200,21 @@ static int ipxrtr_route_packet(ipx_socket *sk, struct sockaddr_ipx *usipx, struc
 	skb->h.raw = (unsigned char *)ipx;
 
 	ipx->ipx_source.net = sk->ipx_intrfc->if_netnum;
-	memcpy(ipx->ipx_source.node, sk->ipx_intrfc->if_node, IPX_NODE_LEN);
+#ifdef CONFIG_IPX_INTERN
+	memcpy(ipx->ipx_source.node, sk->ipx_node, IPX_NODE_LEN);
+#else
+	if ((err = ntohs(sk->ipx_port)) == 0x453 || err == 0x452)  
+	{
+		/* RIP/SAP special handling for mars_nwe */
+		ipx->ipx_source.net = intrfc->if_netnum;
+		memcpy(ipx->ipx_source.node, intrfc->if_node, IPX_NODE_LEN);
+	}
+	else
+	{
+		ipx->ipx_source.net = sk->ipx_intrfc->if_netnum;
+		memcpy(ipx->ipx_source.node, sk->ipx_intrfc->if_node, IPX_NODE_LEN);
+	}
+#endif
 	ipx->ipx_source.sock = sk->ipx_port;
 	ipx->ipx_dest.net=usipx->sipx_network;
 	memcpy(ipx->ipx_dest.node,usipx->sipx_node,IPX_NODE_LEN);
@@ -1221,7 +1325,7 @@ static int ipx_interface_get_info(char *buffer, char **start, off_t offset,
 	off_t begin=0;
 
 	/* Theory.. Keep printing in the same place until we pass offset */
-	
+
 	len += sprintf (buffer,"%-11s%-15s%-9s%-11s%s\n", "Network", 
 		"Node_Address", "Primary", "Device", "Frame_Type");
 	for (i = ipx_interfaces; i != NULL; i = i->if_next) {
@@ -1265,15 +1369,29 @@ static int ipx_get_info(char *buffer, char **start, off_t offset,
 	off_t begin=0;
 
 	/* Theory.. Keep printing in the same place until we pass offset */
-	
+
+#ifdef CONFIG_IPX_INTERN	
+	len += sprintf (buffer,"%-28s%-28s%-10s%-10s%-7s%s\n", "Local_Address", 
+#else
 	len += sprintf (buffer,"%-15s%-28s%-10s%-10s%-7s%s\n", "Local_Address", 
+#endif
 			"Remote_Address", "Tx_Queue", "Rx_Queue", 
 			"State", "Uid");
 	for (i = ipx_interfaces; i != NULL; i = i->if_next) {
 		for (s = i->if_sklist; s != NULL; s = s->next) {
-			len += sprintf (buffer+len,"%08lX:%04X  ", 
-				htonl(i->if_netnum),
-				htons(s->ipx_port));
+#ifdef CONFIG_IPX_INTERN
+			len += sprintf(buffer+len,
+				       "%08lX:%02X%02X%02X%02X%02X%02X:%04X  ", 
+				       htonl(s->ipx_intrfc->if_netnum),
+				       s->ipx_node[0], s->ipx_node[1], 
+				       s->ipx_node[2], s->ipx_node[3], 
+				       s->ipx_node[4], s->ipx_node[5],
+				       htons(s->ipx_port));
+#else
+			len += sprintf(buffer+len,"%08lX:%04X  ", 
+				       htonl(i->if_netnum),
+				       htons(s->ipx_port));
+#endif
 			if (s->state!=TCP_ESTABLISHED) {
 				len += sprintf(buffer+len, "%-28s", "Not_Connected");
 			} else {
@@ -1436,6 +1554,7 @@ static int ipx_getsockopt(struct socket *sock, int level, int optname,
 		return err;
 	put_fs_long(sizeof(int),(unsigned long *)optlen);
 	err=verify_area(VERIFY_WRITE,optval,sizeof(int));
+	if (err) return err;
 	put_fs_long(val,(unsigned long *)optval);
 	return(0);
 }
@@ -1577,7 +1696,59 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
 
 	if(ntohs(addr->sipx_port)<IPX_MIN_EPHEMERAL_SOCKET && !suser())
 		return -EPERM;	/* protect IPX system stuff like routing/sap */
-	
+
+	sk->ipx_port=addr->sipx_port;
+
+#ifdef CONFIG_IPX_INTERN
+	if (intrfc == ipx_internal_net)
+	{
+		/* The source address is to be set explicitly if the
+		 * socket is to be bound on the internal network. If a
+		 * node number 0 was specified, the default is used.
+		 */
+
+		if (memcmp(addr->sipx_node, ipx_broadcast_node,
+			   IPX_NODE_LEN) == 0)
+		{
+			return -EINVAL;
+		}
+		if (memcmp(addr->sipx_node, ipx_this_node, IPX_NODE_LEN) == 0)
+		{
+			memcpy(sk->ipx_node, intrfc->if_node,
+			       IPX_NODE_LEN);
+		}
+		else
+		{
+			memcpy(sk->ipx_node, addr->sipx_node, IPX_NODE_LEN);
+		}
+		if (ipxitf_find_internal_socket(intrfc, sk->ipx_node,
+						sk->ipx_port) != NULL)
+		{
+			if(sk->debug)
+				printk("IPX: bind failed because port %X in"
+				       " use.\n", (int)addr->sipx_port);
+			return -EADDRINUSE;
+		}
+	}
+	else
+	{
+		/* Source addresses are easy. It must be our
+		 * network:node pair for an interface routed to IPX
+		 * with the ipx routing ioctl()
+		 */
+
+		memcpy(sk->ipx_node, intrfc->if_node, IPX_NODE_LEN);
+		
+		if(ipxitf_find_socket(intrfc, addr->sipx_port)!=NULL) {
+			if(sk->debug)
+				printk("IPX: bind failed because port %X in"
+				       " use.\n", (int)addr->sipx_port);
+			return -EADDRINUSE;	   
+		}
+	}
+
+#else
+
 	/* Source addresses are easy. It must be our network:node pair for
 	   an interface routed to IPX with the ipx routing ioctl() */
 
@@ -1588,7 +1759,8 @@ static int ipx_bind(struct socket *sock, struct sockaddr *uaddr,int addr_len)
 		return -EADDRINUSE;	   
 	}
 
-	sk->ipx_port=addr->sipx_port;
+#endif
+
 	ipxitf_insert_socket(intrfc, sk);
 	sk->zapped=0;
 	if(sk->debug)
@@ -1616,8 +1788,13 @@ static int ipx_connect(struct socket *sock, struct sockaddr *uaddr,
 		int ret;
 	
 		uaddr.sipx_port = 0;
-		uaddr.sipx_network = 0L; 
-		ret = ipx_bind (sock, (struct sockaddr *)&uaddr, sizeof(struct sockaddr_ipx));
+		uaddr.sipx_network = 0L;
+#ifdef CONFIG_IPX_INTERN
+		memcpy(uaddr.sipx_node, sk->ipx_intrfc->if_node,
+		       IPX_NODE_LEN);
+#endif
+		ret = ipx_bind (sock, (struct sockaddr *)&uaddr,
+				sizeof(struct sockaddr_ipx));
 		if (ret != 0) return (ret);
 	}
 	
@@ -1665,8 +1842,13 @@ static int ipx_getname(struct socket *sock, struct sockaddr *uaddr,
 	} else {
 		if (sk->ipx_intrfc != NULL) {
 			sipx.sipx_network = sk->ipx_intrfc->if_netnum;
+#ifdef CONFIG_IPX_INTERN
+			memcpy(sipx.sipx_node, sk->ipx_node, IPX_NODE_LEN);
+#else
 			memcpy(sipx.sipx_node, sk->ipx_intrfc->if_node,
-				IPX_NODE_LEN);
+			       IPX_NODE_LEN);
+#endif
+
 		} else {
 			sipx.sipx_network = 0L;
 			memset(sipx.sipx_node, '\0', IPX_NODE_LEN);
@@ -1797,7 +1979,12 @@ static int ipx_sendmsg(struct socket *sock, struct msghdr *msg, int len, int nob
 
 			uaddr.sipx_port = 0;
 			uaddr.sipx_network = 0L; 
-			ret = ipx_bind (sock, (struct sockaddr *)&uaddr, sizeof(struct sockaddr_ipx));
+#ifdef CONFIG_IPX_INTERN
+			memcpy(uaddr.sipx_node, sk->ipx_intrfc->if_node,
+			       IPX_NODE_LEN);
+#endif
+			ret = ipx_bind (sock, (struct sockaddr *)&uaddr,
+					sizeof(struct sockaddr_ipx));
 			if (ret != 0) return ret;
 		}
 
@@ -1901,7 +2088,7 @@ static int ipx_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg)
 			struct sk_buff *skb;
 			/* These two are safe on a single CPU system as only user tasks fiddle here */
 			if((skb=skb_peek(&sk->receive_queue))!=NULL)
-				amount=skb->len;
+				amount=skb->len-sizeof(struct ipx_packet);
 			err=verify_area(VERIFY_WRITE,(void *)arg,sizeof(unsigned long));
 			if(err)
 				return err;

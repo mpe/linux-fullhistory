@@ -396,7 +396,17 @@ int open_namei(const char * pathname, int flag, int mode,
 		iput(inode);
 		return error;
 	}
-	if (S_ISBLK(inode->i_mode) || S_ISCHR(inode->i_mode)) {
+	if (S_ISFIFO(inode->i_mode) || S_ISSOCK(inode->i_mode)) {
+		/*
+		 * 2-Feb-1995 Bruce Perens <Bruce@Pixar.com>
+		 * Allow opens of Unix domain sockets and FIFOs for write on
+		 * read-only filesystems. Their data does not live on the disk.
+		 *
+		 * If there was something like IS_NODEV(inode) for
+		 * pipes and/or sockets I'd check it here.
+		 */
+	}
+	else if (S_ISBLK(inode->i_mode) || S_ISCHR(inode->i_mode)) {
 		if (IS_NODEV(inode)) {
 			iput(inode);
 			return -EACCES;

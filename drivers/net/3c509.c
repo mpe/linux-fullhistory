@@ -640,15 +640,15 @@ static void set_multicast_list(struct device *dev)
 			printk("%s: Setting Rx mode to %d addresses.\n", dev->name, dev->mc_count);
 		}
 	}
-	if (dev->mc_count || (dev->flags&IFF_ALLMULTI)) 
-	{
-		outw(SetRxFilter|RxStation|RxMulticast|RxBroadcast, ioaddr + EL3_CMD);
-	} 
-	else if (dev->flags&IFF_PROMISC) 
+	if (dev->flags&IFF_PROMISC) 
 	{
 		outw(SetRxFilter | RxStation | RxMulticast | RxBroadcast | RxProm,
 			 ioaddr + EL3_CMD);
 	}
+	else if (dev->mc_count || (dev->flags&IFF_ALLMULTI)) 
+	{
+		outw(SetRxFilter|RxStation|RxMulticast|RxBroadcast, ioaddr + EL3_CMD);
+	} 
 	else
 		outw(SetRxFilter | RxStation | RxBroadcast, ioaddr + EL3_CMD);
 }

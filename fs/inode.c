@@ -244,6 +244,13 @@ static inline void read_inode(struct inode * inode)
 /* POSIX UID/GID verification for setting inode attributes */
 int inode_change_ok(struct inode *inode, struct iattr *attr)
 {
+	/*
+	 *	If force is set do it anyway.
+	 */
+	 
+	if (attr->ia_valid & ATTR_FORCE)
+		return 0;
+
 	/* Make sure a caller can chown */
 	if ((attr->ia_valid & ATTR_UID) &&
 	    (current->fsuid != inode->i_uid ||
@@ -273,8 +280,6 @@ int inode_change_ok(struct inode *inode, struct iattr *attr)
 	if ((attr->ia_valid & ATTR_MTIME_SET) &&
 	    ((current->fsuid != inode->i_uid) && !fsuser()))
 		return -EPERM;
-
-
 	return 0;
 }
 
@@ -315,13 +320,12 @@ int notify_change(struct inode * inode, struct iattr *attr)
 {
 	int retval;
 
-	if (attr->ia_valid & (ATTR_ATIME | ATTR_MTIME | ATTR_CTIME)) {
-		unsigned long now = CURRENT_TIME;
+	attr->ia_ctime = CURRENT_TIME;
+	if (attr->ia_valid & (ATTR_ATIME | ATTR_MTIME)) {
 		if (!(attr->ia_valid & ATTR_ATIME_SET))
-			attr->ia_atime = now;
+			attr->ia_atime = attr->ia_ctime;
 		if (!(attr->ia_valid & ATTR_MTIME_SET))
-			attr->ia_mtime = now;
-		attr->ia_ctime = now;
+			attr->ia_mtime = attr->ia_ctime;
 	}
 
 	if (inode->i_sb && inode->i_sb->s_op  &&

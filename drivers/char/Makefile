@@ -98,6 +98,16 @@ M = y
 # This is not modularized, so if configured then "mouse.c" will be resident
 endif
 
+ifeq ($(CONFIG_WDT),y)
+M = y
+L_OBJS += wdt.o
+else
+  ifeq ($(CONFIG_WDT),m)
+    M_OBJS += wdt.o
+    MM = m
+  endif
+endif
+
 ifdef CONFIG_QIC02_TAPE
 L_OBJS += tpqic02.o 
 endif

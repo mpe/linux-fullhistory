@@ -141,7 +141,8 @@ int loopback_init(struct device *dev)
 	dev->hard_header	= eth_header;
 	dev->hard_header_len	= ETH_HLEN;		/* 14			*/
 	dev->addr_len		= ETH_ALEN;		/* 6			*/
-	dev->type		= ARPHRD_ETHER;		/* 0x0001		*/
+	dev->tx_queue_len	= 50000;		/* No limit on loopback */
+	dev->type		= ARPHRD_LOOPBACK;	/* 0x0001		*/
 	dev->rebuild_header	= eth_rebuild_header;
 	dev->open		= loopback_open;
 	dev->flags		= IFF_LOOPBACK|IFF_BROADCAST;

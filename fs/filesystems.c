@@ -59,12 +59,20 @@ asmlinkage int sys_setup(void)
 	init_minix_fs();
 #endif
 
-#ifdef CONFIG_UMSDOS_FS
-	init_umsdos_fs();
+#ifdef CONFIG_FAT_FS
+	init_fat_fs();
 #endif
 
 #ifdef CONFIG_MSDOS_FS
 	init_msdos_fs();
+#endif
+
+#ifdef CONFIG_VFAT_FS
+	init_vfat_fs();
+#endif
+
+#ifdef CONFIG_UMSDOS_FS
+	init_umsdos_fs();
 #endif
 
 #ifdef CONFIG_PROC_FS

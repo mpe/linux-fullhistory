@@ -1,20 +1,19 @@
 /*
- *  sbpcd.c   CD-ROM device driver for the whole family of IDE-style
- *            Kotobuki/Matsushita/Panasonic CR-5xx drives for
- *            SoundBlaster ("Pro" or "16 ASP" or compatible) cards
- *            and for "no-sound" interfaces like Lasermate and the
- *            Panasonic CI-101P.
+ *  sbpcd.c   CD-ROM device driver for the whole family of traditional,
+ *            non-ATAPI IDE-style Matsushita/Panasonic CR-5xx drives.
+ *            Works with SoundBlaster compatible cards and with "no-sound"
+ *            interface cards like Lasermate, Panasonic CI-101P, Teac, ...
  *            Also for the Longshine LCS-7260 drive.
  *            Also for the IBM "External ISA CD-Rom" drive.
- *            Also for the CreativeLabs CD200 drive (but I still need some
- *            detailed bug reports).
+ *            Also for the CreativeLabs CD200 drive.
  *            Also for the TEAC CD-55A drive.
- *            Not for Sanyo drives (but sjcd is there...).
- *            Not for any other Funai drives than E2550UA (="CD200" with "F").
- *            Not for Vertos drives yet.
+ *            Also for the ECS-AT "Vertos 100" drive.
+ *            Not for Sanyo drives (but for the H94A, sjcd is there...).
+ *            Not for any other Funai drives than the CD200 types
+ *            (sometimes labelled E2550UA or MK4015 or E2880UA).
  */
 
-#define VERSION "v4.1 Eberhard Moenkeberg <emoenke@gwdg.de>"
+#define VERSION "v4.2 Eberhard Moenkeberg <emoenke@gwdg.de>"
 
 /*   Copyright (C) 1993, 1994, 1995  Eberhard Moenkeberg <emoenke@gwdg.de>
  *
@@ -62,7 +61,7 @@
  *       Flow control should be exact now.
  *       Don't occupy the SbPro IRQ line (not needed either); will
  *       live together with Hannu Savolainen's sndkit now.
- *	 Speeded up data transfer to 150 kB/sec, with help from Kai
+ *       Speeded up data transfer to 150 kB/sec, with help from Kai
  *       Makisara, the "provider" of the "mt" tape utility.
  *       Give "SpinUp" command if necessary.
  *       First steps to support up to 4 drives (but currently only one).
@@ -264,13 +263,24 @@
  *       to the Longshine LCS-7260. Give feedback if you can - I never saw
  *       such a drive, and I have no specs.
  *
+ *  4.2  Support for Teac 16-bit interface cards. Can't get auto-detected,
+ *       so you have to jumper your card to 0x2C0. Still not 100% - come
+ *       in contact if you can give qualified feedback.
+ *       Use loglevel KERN_NOTICE with printk(). If you get annoyed by a
+ *       flood of unwanted messages and the accompanied delay, try to read
+ *       my documentation. Especially the Linux CDROM drivers have to do an
+ *       important job for the newcomers, so the "distributed" version has
+ *       to fit some special needs. Since generations, the flood of messages
+ *       is user-configurable (even at runtime), but to get aware of this, one
+ *       needs a special mental quality: the ability to read.
+ *       
+ *
  *  TODO
  *
  *     disk change detection
  *     synchronize multi-activity
  *        (data + audio + ioctl + disk change, multiple drives)
  *     implement "read all subchannel data" (96 bytes per frame)
- *     check if CDROMPLAYMSF can cause a hang
  *
  *     special thanks to Kai Makisara (kai.makisara@vtt.fi) for his fine
  *     elaborated speed-up experiments (and the fabulous results!), for
@@ -372,6 +382,7 @@ static int sbpcd[] =
 	0x300, 0, /* CI-101P (default), WDH-7001C (default),
 		     Galaxy (default), Reveal (one default) */
 	0x250, 1, /* OmniCD default, Soundblaster Pro and 16 */
+	0x2C0, 3, /* Teac 16-bit cards */
 	0x260, 1, /* OmniCD */
 	0x320, 0, /* Lasermate, CI-101P, WDH-7001C, Galaxy, Reveal (other default),
 		     Longshine LCS-6853 (default) */
@@ -496,10 +507,11 @@ static int sbpcd_debug = ((1<<DBG_INF) |
 static int sbpcd_ioaddr = CDROM_PORT;	/* default I/O base address */
 static int sbpro_type = SBPRO;
 static unsigned char setup_done = 0;
+static unsigned char f_16bit = 0;
+static unsigned char do_16bit = 0;
 static int CDo_command, CDo_reset;
 static int CDo_sel_i_d, CDo_enable;
 static int CDi_info, CDi_status, CDi_data;
-static int MIXER_addr, MIXER_data;
 static struct cdrom_msf msf;
 static struct cdrom_ti ti;
 static struct cdrom_tochdr tochdr;
@@ -519,6 +531,8 @@ static const char *str_sp = "SPEA";
 static const char *str_sp_l = "spea";
 static const char *str_ss = "SoundScape";
 static const char *str_ss_l = "soundscape";
+static const char *str_t16 = "Teac16bit";
+static const char *str_t16_l = "teac16bit";
 const char *type;
 
 #if !(SBPCD_ISSUE-1)
@@ -721,7 +735,7 @@ static void msg(int level, const char *fmt, ...)
 	
 	msgnum++;
 	if (msgnum>99) msgnum=0;
-	sprintf(buf, KERN_INFO "%s-%d [%02d]:  ", major_name, d, msgnum);
+	sprintf(buf, KERN_NOTICE "%s-%d [%02d]:  ", major_name, d, msgnum);
 	va_start(args, fmt);
 	vsprintf(&buf[18], fmt, args);
 	va_end(args);
@@ -1202,10 +1216,12 @@ static int cmd_out_T(void)
 {
 #undef CMDT_TRIES
 #define CMDT_TRIES 1000
+#define TEST_FALSE_FF 1
 	
 	static int cc_DriveReset(void);
-	int i, j, l, ntries;
-	
+	int i, j, l=0, m, ntries;
+	long flags;
+
 	D_S[d].error_state=0;
 	D_S[d].b3=0;
 	D_S[d].b4=0;
@@ -1217,6 +1233,12 @@ static int cmd_out_T(void)
 	OUT(CDo_sel_i_d,0);
 	OUT(CDo_enable,D_S[d].drv_sel);
 	i=inb(CDi_status);
+	do_16bit=0;
+	if ((f_16bit)&&(!(i&0x80)))
+	{
+		do_16bit=1;
+		msg(DBG_TEA,"cmd_out_T: do_16bit set.\n");
+	}
 	if (!(i&s_not_result_ready))
 	do
 	{
@@ -1226,15 +1248,13 @@ static int cmd_out_T(void)
 		msg(DBG_TEA,"cmd_out_T: spurious !s_not_result_ready. (%02X)\n", j);
 	}
 	while (!(i&s_not_result_ready));
-	cli();
+	save_flags(flags); cli();
 	for (i=0;i<10;i++) OUT(CDo_command,drvcmd[i]);
-	sti();
+	restore_flags(flags);
 	for (ntries=CMDT_TRIES;ntries>0;ntries--)
 	{
-		if (drvcmd[0]==CMDT_READ_VER) sbp_sleep(HZ);
-#if 1
-		OUT(CDo_sel_i_d,0);
-#endif
+		if (drvcmd[0]==CMDT_READ_VER) sbp_sleep(HZ); /* fixme */
+		OUT(CDo_sel_i_d,1);
 		i=inb(CDi_status);
 		if (!(i&s_not_data_ready)) /* f.e. CMDT_DISKINFO */
 		{
@@ -1244,10 +1264,24 @@ static int cmd_out_T(void)
 			{
 				l=0;
 				do
-				{
-					infobuf[l++]=inb(CDi_data);
-					i=inb(CDi_status);
-				}
+                                {
+                                        if (do_16bit)
+                                        {
+                                                i=inw(CDi_data);
+                                                infobuf[l++]=i&0x0ff;
+                                                infobuf[l++]=i>>8;
+#if TEST_FALSE_FF
+                                                if ((l==2)&&(infobuf[0]==0x0ff))
+                                                {
+                                                        infobuf[0]=infobuf[1];
+                                                        l=1;
+                                                        msg(DBG_TEA,"cmd_out_T: do_16bit: false first byte!\n");
+                                                }
+#endif TEST_FALSE_FF
+                                        }
+                                        else infobuf[l++]=inb(CDi_data);
+                                        i=inb(CDi_status);
+                                }
 				while (!(i&s_not_data_ready));
 				for (j=0;j<l;j++) sprintf(&msgbuf[j*3]," %02X",infobuf[j]);
 				msgbuf[j*3]=0;
@@ -1255,16 +1289,18 @@ static int cmd_out_T(void)
 			}
 			else
 			{
-				msg(DBG_TEA,"cmd_out_T: data response with cmd_%02X !!!!!!!!!!!!!!!!!!!!\n", drvcmd[0]);
+				msg(DBG_TEA,"cmd_out_T: data response with cmd_%02X!\n",
+                                    drvcmd[0]);
 				j=0;
 				do
 				{
-					i=inb(CDi_data);
-					j++;
-					i=inb(CDi_status);
+                                        if (do_16bit) i=inw(CDi_data);
+                                        else i=inb(CDi_data);
+                                        j++;
+                                        i=inb(CDi_status);
 				}
 				while (!(i&s_not_data_ready));
-				msg(DBG_TEA,"cmd_out_T: data response: discarded %d bytes.\n", j);
+				msg(DBG_TEA,"cmd_out_T: data response: discarded %d bytes/words.\n", j);
 				fatal_err++;
 			}
 		}
@@ -1272,17 +1308,23 @@ static int cmd_out_T(void)
 		if (!(i&s_not_result_ready))
 		{
 			OUT(CDo_sel_i_d,0);
-			l=0;
+			if (drvcmd[0]==CMDT_DISKINFO) m=l;
+			else m=0;
 			do
 			{
-				infobuf[l++]=inb(CDi_info);
+				infobuf[m++]=inb(CDi_info);
 				i=inb(CDi_status);
 			}
 			while (!(i&s_not_result_ready));
-			for (j=0;j<l;j++) sprintf(&msgbuf[j*3]," %02X",infobuf[j]);
+			for (j=0;j<m;j++) sprintf(&msgbuf[j*3]," %02X",infobuf[j]);
 			msgbuf[j*3]=0;
 			msg(DBG_CMD,"cmd_out_T info response:%s\n", msgbuf);
-			if (infobuf[0]!=0x02) return (l); /* info length */
+			if (drvcmd[0]==CMDT_DISKINFO)
+                        {
+                                infobuf[0]=infobuf[l];
+                                if (infobuf[0]!=0x02) return (l); /* data length */
+                        }
+			else if (infobuf[0]!=0x02) return (m); /* info length */
 			do
 			{
 				++recursion;
@@ -1578,7 +1620,7 @@ static int cc_SetSpeed(u_char speed, u_char x1, u_char x2)
 {
 	int i;
 	
-	if (fam0LV_drive) return (-3);
+	if (fam0LV_drive) return (0);
 	clr_cmdbuf();
 	response_count=0;
 	if (fam1_drive)
@@ -2506,6 +2548,7 @@ static int cc_ReadTocDescr(void)
 	}
 	i=cmd_out();
 	if (i<0) return (i);
+	if ((famT_drive)&&(i<response_count)) return (-100-i);
 	if ((fam1_drive)||(fam2_drive)||(fam0LV_drive))
 		D_S[d].xa_byte=infobuf[0];
 	if (fam2_drive)
@@ -2620,6 +2663,7 @@ static int cc_ReadTocEntry(int num)
 	}
 	i=cmd_out();
 	if (i<0) return (i);
+	if ((famT_drive)&&(i<response_count)) return (-100-i);
 	if ((fam1_drive)||(fam0LV_drive))
 	{
 		D_S[d].TocEnt_nixbyte=infobuf[0];
@@ -2846,6 +2890,7 @@ static int cc_CheckMultiSession(void)
 		drvcmd[9]=0x40;
 		i=cmd_out();
 		if (i<0) return (i);
+		if (i<response_count) return (-100-i);
 		D_S[d].first_session=infobuf[2];
 		D_S[d].last_session=infobuf[3];
 		D_S[d].track_of_last_session=infobuf[6];
@@ -2970,7 +3015,8 @@ static void ask_mail(void)
 {
 	int i;
 	
-	msg(DBG_INF, "please mail the following lines to emoenke@gwdg.de:\n");
+	msg(DBG_INF, "please mail the following lines to emoenke@gwdg.de\n");
+	msg(DBG_INF, "(don't mail if you are not using the actual kernel):\n");
 	msg(DBG_INF, "%s\n", VERSION);
 	msg(DBG_INF, "address %03X, type %s, drive %s (ID %d)\n",
 	    CDo_command, type, D_S[d].drive_model, D_S[d].drv_id);
@@ -4190,7 +4236,10 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 			{
 			}
 			msg(DBG_AUD,"read_audio: before giving \"read\" command.\n");
-			for (i=0;i<7;i++) OUT(CDo_command,drvcmd[i]);
+			flags_cmd_out=f_putcmd;
+			response_count=0;
+			i=cmd_out();
+			if (i<0) msg(DBG_INF,"error giving READ AUDIO command: %0d\n", i);
 			sbp_sleep(0);
 			msg(DBG_AUD,"read_audio: after giving \"read\" command.\n");
 			for (frame=1;frame<2 && !error_flag; frame++)
@@ -4228,7 +4277,8 @@ static int sbpcd_ioctl(struct inode *inode, struct file *file, u_int cmd,
 				error_flag=0;
 				p = D_S[d].aud_buf;
 				if (sbpro_type==1) OUT(CDo_sel_i_d,1);
-				insb(CDi_data, p, read_audio.nframes*CD_FRAMESIZE_RAW);
+				if (do_16bit) insw(CDi_data, p, read_audio.nframes*(CD_FRAMESIZE_RAW>>1));
+				else insb(CDi_data, p, read_audio.nframes*CD_FRAMESIZE_RAW);
 				if (sbpro_type==1) OUT(CDo_sel_i_d,0);
 				data_retrying = 0;
 			}
@@ -4544,17 +4594,10 @@ static void sbp_read_cmd(void)
 		drvcmd[7]=(D_S[d].sbp_read_frames>>8)&0x0ff;
 		drvcmd[8]=D_S[d].sbp_read_frames&0x0ff;
 	}
-#ifdef OLD
-	SBPCD_CLI;
-	for (i=0;i<7;i++) OUT(CDo_command,drvcmd[i]);
-	if (famT_drive) for (i=7;i<10;i++) OUT(CDo_command,drvcmd[i]);
-	SBPCD_STI;
-#else
 	flags_cmd_out=f_putcmd;
 	response_count=0;
 	i=cmd_out();
 	if (i<0) msg(DBG_INF,"error giving READ command: %0d\n", i);
-#endif OLD
 	return;
 }
 /*==========================================================================*/
@@ -4653,9 +4696,14 @@ static int sbp_data(void)
 		msg(DBG_000, "sbp_data: beginning to read.\n");
 		p = D_S[d].sbp_buf + frame *  CD_FRAMESIZE;
 		if (sbpro_type==1) OUT(CDo_sel_i_d,1);
-		if (cmd_type==READ_M2) insb(CDi_data, xa_head_buf, CD_XA_HEAD);
-		insb(CDi_data, p, CD_FRAMESIZE);
-		if (cmd_type==READ_M2) insb(CDi_data, xa_tail_buf, CD_XA_TAIL);
+		if (cmd_type==READ_M2)
+                        if (do_16bit) insw(CDi_data, xa_head_buf, CD_XA_HEAD>>1);
+                        else insb(CDi_data, xa_head_buf, CD_XA_HEAD);
+		if (do_16bit) insw(CDi_data, p, CD_FRAMESIZE>>1);
+		else insb(CDi_data, p, CD_FRAMESIZE);
+		if (cmd_type==READ_M2)
+                        if (do_16bit) insw(CDi_data, xa_tail_buf, CD_XA_TAIL>>1);
+                        else insb(CDi_data, xa_tail_buf, CD_XA_TAIL);
 		D_S[d].sbp_current++;
 		if (sbpro_type==1) OUT(CDo_sel_i_d,0);
 		if (cmd_type==READ_M2)
@@ -4689,12 +4737,13 @@ static int sbp_data(void)
 				j=0;
 				do
 				{
-					i=inb(CDi_data);
+					if (do_16bit) i=inw(CDi_data);
+					else i=inb(CDi_data);
 					j++;
 					i=inb(CDi_status);
 				}
 				while (!(i&s_not_data_ready));
-				msg(DBG_TEA, "=============too much data (%d bytes)=================.\n", j);
+				msg(DBG_TEA, "==========too much data (%d bytes/words)==============.\n", j);
 			}
 			if (!(i&s_not_result_ready))
 			{
@@ -4981,7 +5030,9 @@ static struct file_operations sbpcd_fops =
  *             or
  *                 sbpcd=0x300,LaserMate
  *             or
- *                 sbpcd=0x330,SoundScape
+ *                 sbpcd=0x338,SoundScape
+ *             or
+ *                 sbpcd=0x2C0,Teac16bit
  *
  * (upper/lower case sensitive here - but all-lowercase is ok!!!).
  *
@@ -5001,12 +5052,14 @@ void sbpcd_setup(const char *s, int *p)
 	msg(DBG_INI,"sbpcd_setup called with %04X,%s\n",p[1], s);
 	sbpro_type=0; /* default: "LaserMate" */
 	if (p[0]>1) sbpro_type=p[2];
-	if (!strcmp(s,str_sb)) sbpro_type=1;
+	else if (!strcmp(s,str_sb)) sbpro_type=1;
 	else if (!strcmp(s,str_sb_l)) sbpro_type=1;
 	else if (!strcmp(s,str_sp)) sbpro_type=2;
 	else if (!strcmp(s,str_sp_l)) sbpro_type=2;
 	else if (!strcmp(s,str_ss)) sbpro_type=2;
 	else if (!strcmp(s,str_ss_l)) sbpro_type=2;
+	else if (!strcmp(s,str_t16)) sbpro_type=3;
+	else if (!strcmp(s,str_t16_l)) sbpro_type=3;
 	if (p[0]>0) sbpcd_ioaddr=p[1];
 	
 	CDo_command=sbpcd_ioaddr;
@@ -5015,11 +5068,15 @@ void sbpcd_setup(const char *s, int *p)
 	CDo_sel_i_d=sbpcd_ioaddr+1;
 	CDo_reset=sbpcd_ioaddr+2;
 	CDo_enable=sbpcd_ioaddr+3; 
-	if (sbpro_type==1)
+	f_16bit=0;
+	if ((sbpro_type==1)||(sbpro_type==3))
 	{
-		MIXER_addr=sbpcd_ioaddr-0x10+0x04;
-		MIXER_data=sbpcd_ioaddr-0x10+0x05;
 		CDi_data=sbpcd_ioaddr;
+		if (sbpro_type==3)
+                {
+                        f_16bit=1;
+                        sbpro_type=1;
+                }
 	}
 	else CDi_data=sbpcd_ioaddr+2;
 }
@@ -5142,6 +5199,7 @@ int SBPCD_INIT(void)
 		}
 		if (sbpcd[port_index+1]==2) type=str_sp;
 		else if (sbpcd[port_index+1]==1) type=str_sb;
+		else if (sbpcd[port_index+1]==3) type=str_t16;
 		else type=str_lm;
 		sbpcd_setup(type, addr);
 #if DISTRIBUTION
@@ -5239,19 +5297,12 @@ int SBPCD_INIT(void)
 	
 	/*
 	 * Turn on the CD audio channels.
-	 * For "compatible" soundcards (with "SBPRO 0" or "SBPRO 2"), the addresses
-	 * are obtained from SOUND_BASE (see sbpcd.h).
+	 * The addresses are obtained from SOUND_BASE (see sbpcd.h).
 	 */
-	if ((sbpro_type==1) || (SOUND_BASE))
-	{
-		if (sbpro_type!=1)
-		{
-			MIXER_addr=SOUND_BASE+0x04; /* sound card's address register */
-			MIXER_data=SOUND_BASE+0x05; /* sound card's data register */
-		}
-		OUT(MIXER_addr,MIXER_CD_Volume); /* select SB Pro mixer register */
-		OUT(MIXER_data,0xCC); /* one nibble per channel, max. value: 0xFF */
-	}
+#if SOUND_BASE
+	OUT(MIXER_addr,MIXER_CD_Volume); /* select SB Pro mixer register */
+	OUT(MIXER_data,0xCC); /* one nibble per channel, max. value: 0xFF */
+#endif SOUND_BASE
 	
 	if (register_blkdev(MAJOR_NR, major_name, &sbpcd_fops) != 0)
 	{

@@ -9,7 +9,11 @@ bool 'TCP/IP networking' CONFIG_INET
 if [ "$CONFIG_INET" = "y" ]; then
   source net/ipv4/Config.in
 fi
+comment ' '
 bool 'The IPX protocol' CONFIG_IPX
+if [ "$CONFIG_IPX" = "y" ]; then
+  bool 'Full internal IPX network' CONFIG_IPX_INTERN
+fi
 bool 'Appletalk DDP' CONFIG_ATALK
 bool 'Amateur Radio AX.25 Level 2' CONFIG_AX25
 if [ "$CONFIG_AX25" = "y" ]; then

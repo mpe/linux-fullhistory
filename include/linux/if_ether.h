@@ -56,6 +56,8 @@
 #define ETH_P_802_2	0x0004		/* 802.2 frames 		*/
 #define ETH_P_SNAP	0x0005		/* Internal only		*/
 #define ETH_P_DDCMP     0x0006          /* DEC DDCMP: Internal only     */
+#define ETH_P_WAN_PPP   0x0007          /* Dummy type for WAN PPP frames*/
+#define ETH_P_PPP_MP    0x0008          /* Dummy type for PPP MP frames */
 
 /* This is an Ethernet frame header. */
 struct ethhdr {

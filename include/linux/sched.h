@@ -22,6 +22,8 @@ extern unsigned long event;
 #include <asm/page.h>
 
 #include <linux/smp.h>
+#include <linux/tty.h>
+#include <linux/sem.h>
 
 /*
  * cloning flags:

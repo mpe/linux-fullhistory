@@ -90,6 +90,8 @@ int shrink_mmap(int priority, unsigned long limit)
 	priority = (limit<<2) >> priority;
 	page = mem_map + clock;
 	while (priority-- > 0) {
+		if (page->locked)
+		    goto next;
 		/* First of all, regenerate the page's referenced bit
                    from any buffers in the page */
 		bh = buffer_pages[MAP_NR(page_address(page))];
@@ -113,7 +115,7 @@ int shrink_mmap(int priority, unsigned long limit)
 			page->referenced = 1;
 		else if (page->referenced)
 			page->referenced = 0;
-		else if (page->count && !page->locked) {
+		else if (page->count) {
 			/* The page is an old, unshared page --- try
                            to discard it. */
 			if (page->inode) {
@@ -125,6 +127,7 @@ int shrink_mmap(int priority, unsigned long limit)
 			if (bh && try_to_free_buffer(bh, &bh, 6))
 				return 1;
 		}
+next:
 		page++;
 		clock++;
 		if (clock >= limit) {
@@ -136,7 +139,7 @@ int shrink_mmap(int priority, unsigned long limit)
 }
 
 /*
- * This is called from try_to_swap_out() when we try to egt rid of some
+ * This is called from try_to_swap_out() when we try to get rid of some
  * pages..  If we're unmapping the last occurrence of this page, we also
  * free it from the page hash-queues etc, as we don't want to keep it
  * in-core unnecessarily.

@@ -13,6 +13,7 @@
  *	Fixes:
  *	Michael Chastain	:	Incorrect size of copying.
  *	Alan Cox		:	Added the cache manager code
+ *	Alan Cox		:	Fixed the clone/copy bug and device race.
  *
  *	Status:
  *		Cache manager under test. Forwarding in vague test mode
@@ -704,14 +705,18 @@ static void ipmr_queue_xmit(struct sk_buff *skb, struct vif_device *vif, struct 
 	__u32 raddr=skb->raddr;
 	if(vif->flags&VIFF_TUNNEL)
 	{
-		tunnel=16;
+		tunnel=IPFWD_MULTITUNNEL;
 		raddr=vif->remote;
 	}
 	vif->pkt_out++;
 	vif->bytes_out+=skb->len;
 	skb->dev=vif->dev;
 	skb->raddr=skb->h.iph->daddr;
-	if(ip_forward(skb, in_dev, frag|8|tunnel, raddr)==-1)
+	/*
+	 *	If the vif went down as we were forwarding.. just throw the
+	 *	frame.
+	 */
+	if(vif->dev==NULL || ip_forward(skb, in_dev, frag|IPFWD_MULTICASTING|tunnel, raddr)==-1)
 		kfree_skb(skb, FREE_WRITE);
 }
 
@@ -757,7 +762,11 @@ void ipmr_forward(struct sk_buff *skb, int is_frag)
 		 	{
 		 		if(psend!=-1)
 		 		{
-		 			skb2=skb_clone(skb, GFP_ATOMIC);
+		 			/*
+		 			 *	May get variant mac headers
+		 			 *	so must copy -- boo hoo.
+		 			 */
+		 			skb2=skb_copy(skb, GFP_ATOMIC);
 		 			if(skb2)
 		 			{
 		 				skb2->free=1;
@@ -899,7 +908,7 @@ done:
  
 void ip_mr_init(void)
 {
-	printk("Linux IP multicast router 0.04-might-work 8)\n");
+	printk("Linux IP multicast router 0.05-maybe-works 8)\n");
 	register_netdevice_notifier(&ip_mr_notifier);
 	proc_net_register(&(struct proc_dir_entry) {
 		PROC_NET_IPMR_VIF, 9 ,"ip_mr_vif",

@@ -47,7 +47,7 @@ piggy.o:	$(SYSTEM)
 	rm -f $$tmppiggy $$tmppiggy.gz; \
 	$(OBJDUMP) $(OBJDUMP_FLAGS) -o $(IMAGE_OFFSET) $(SYSTEM) > $$tmppiggy; \
 	gzip -f -9 < $$tmppiggy > $$tmppiggy.gz; \
-	encaps $(TARGET) piggy.o $$tmppiggy.gz $(INPUT_DATA) $(INPUT_LEN); \
+	$(ENCAPS) $(TARGET) piggy.o $$tmppiggy.gz $(INPUT_DATA) $(INPUT_LEN); \
 	rm -f $$tmppiggy $$tmppiggy.gz
 else
 

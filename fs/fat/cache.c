@@ -1,5 +1,5 @@
 /*
- *  linux/fs/msdos/fat.c
+ *  linux/fs/msdos/cache.c
  *
  *  Written 1992,1993 by Werner Almesberger
  */
@@ -172,7 +172,7 @@ printk("cache add: <%s,%d> %d (%d)\n", kdevname(inode->i_dev),
 		    && walk->file_cluster == f_clu) {
 			if (walk->disk_cluster != d_clu) {
 				printk("FAT cache corruption");
-				cache_inval_inode(inode);
+				fat_cache_inval_inode(inode);
 				return;
 			}
 			/* update LRU */
@@ -201,7 +201,7 @@ list_cache();
 /* Cache invalidation occurs rarely, thus the LRU chain is not updated. It
    fixes itself after a while. */
 
-void cache_inval_inode(struct inode *inode)
+void fat_cache_inval_inode(struct inode *inode)
 {
 	struct fat_cache *walk;
 
@@ -212,7 +212,7 @@ void cache_inval_inode(struct inode *inode)
 }
 
 
-void cache_inval_dev(kdev_t device)
+void fat_cache_inval_dev(kdev_t device)
 {
 	struct fat_cache *walk;
 
@@ -239,7 +239,7 @@ int get_cluster(struct inode *inode,int cluster)
 }
 
 
-int msdos_smap(struct inode *inode,int sector)
+int fat_smap(struct inode *inode,int sector)
 {
 	struct msdos_sb_info *sb;
 	int cluster,offset;
@@ -284,7 +284,7 @@ int fat_free(struct inode *inode,int skip)
 	lock_fat(inode->i_sb);
 	while (nr != -1) {
 		if (!(nr = fat_access(inode->i_sb,nr,0))) {
-			fs_panic(inode->i_sb,"fat_free: deleting beyond EOF");
+			fat_fs_panic(inode->i_sb,"fat_free: deleting beyond EOF");
 			break;
 		}
 		if (MSDOS_SB(inode->i_sb)->free_clusters != -1)
@@ -292,6 +292,6 @@ int fat_free(struct inode *inode,int skip)
 		inode->i_blocks -= MSDOS_SB(inode->i_sb)->cluster_size;
 	}
 	unlock_fat(inode->i_sb);
-	cache_inval_inode(inode);
+	fat_cache_inval_inode(inode);
 	return 0;
 }

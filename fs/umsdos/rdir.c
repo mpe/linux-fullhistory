@@ -72,7 +72,7 @@ static int UMSDOS_rreaddir (
 	bufk.real_root = pseudo_root != NULL
 		&& dir == dir->i_sb->s_mounted
 		&& dir == pseudo_root->i_sb->s_mounted;
-	return msdos_readdir(dir,filp,&bufk,rdir_filldir);
+	return fat_readdir(dir,filp,&bufk,rdir_filldir);
 }
 
 /*

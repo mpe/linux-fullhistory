@@ -79,6 +79,59 @@ static inline void invalidate_range(struct mm_struct *mm,
 #define local_invalidate() \
 	__invalidate()
 
+
+#undef CLEVER_SMP_INVALIDATE
+#ifdef CLEVER_SMP_INVALIDATE
+
+/*
+ *	Smarter SMP invalidation macros. 
+ *		c/o Linus Torvalds.
+ *
+ *	These mean you can really definitely utterly forget about
+ *	writing to user space from interrupts. (Its not allowed anyway).
+ *
+ *	Doesn't currently work as Linus makes invalidate calls before
+ *	stuff like current/current->mm are setup properly
+ */
+ 
+static inline void invalidate_current_task(void)
+{
+	if (current->mm->count == 1)	/* just one copy of this mm */
+		local_invalidate();	/* and that's us, so.. */
+	else
+		smp_invalidate();
+}
+
+#define invalidate() invalidate_current_task()
+
+#define invalidate_all() smp_invalidate()
+
+static inline void invalidate_mm(struct mm_struct * mm)
+{
+	if (mm == current->mm && mm->count == 1)
+		local_invalidate();
+	else
+		smp_invalidate();
+}
+
+static inline void invalidate_page(struct vm_area_struct * vma,
+	unsigned long va)
+{
+	if (vma->vm_mm == current->mm && current->mm->count == 1)
+		__invalidate_one(va);
+	else
+		smp_invalidate();
+}
+
+static inline void invalidate_range(struct mm_struct * mm,
+	unsigned long start, unsigned long end)
+{
+	invalidate_mm(mm);
+}
+
+
+#else
+
 #define invalidate() \
 	smp_invalidate()
 
@@ -100,7 +153,7 @@ static inline void invalidate_range(struct mm_struct *mm,
 {
 	invalidate();
 }
-
+#endif
 #endif
 
 

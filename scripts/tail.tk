@@ -33,9 +33,11 @@ if { [file readable .config] == 1} then {
 update_mainmenu .f0
 
 button .f0_bot.r.save -text "Save and Exit" -width 25 -command {
-	writeconfig .config include/linux/autoconf.h; wrapup .wrap }
+	writeconfig .config include/linux/autoconf.h; wrapup .wrap } \
+	-activebackground green
 
-button .f0_bot.r.quit -text "Quit Without Saving" -command { maybe_exit .maybe } -width 25 \
+button .f0_bot.r.quit -text "Quit Without Saving" -width 25 \
+	-command { maybe_exit .maybe } \
 	-activebackground red -activeforeground white
 
 button .f0_bot.l.store -text "Store Configuration to File" -width 25 -command {
