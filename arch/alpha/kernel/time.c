@@ -32,7 +32,7 @@ static int set_rtc_mmss(unsigned long);
  * timer_interrupt() needs to keep up the real-time clock,
  * as well as call the "do_timer()" routine every clocktick
  */
-static void timer_interrupt(int irq, struct pt_regs * regs)
+void timer_interrupt(struct pt_regs * regs)
 {
 	/* last time the cmos clock got updated */
 	static long last_rtc_update=0;
@@ -130,8 +130,6 @@ void time_init(void)
 		year += 100;
 	xtime.tv_sec = mktime(year, mon, day, hour, min, sec);
 	xtime.tv_usec = 0;
-	if (request_irq(TIMER_IRQ, timer_interrupt, 0, "timer") != 0)
-		panic("Could not allocate timer IRQ!");
 }
 
 /*

@@ -290,6 +290,9 @@ void lca_machine_check (unsigned long vector, unsigned long la, struct pt_regs *
 	printk("esr=%lx, ear=%lx, ioc_stat0=%lx, ioc_stat1=%lx\n",
 	       *(unsigned long*)LCA_MEM_ESR, *(unsigned long*)LCA_MEM_EAR,
 	       *(unsigned long*)LCA_IOC_STAT0, *(unsigned long*)LCA_IOC_STAT1);
+#ifdef CONFIG_ALPHA_NONAME
+	printk("NMMI status & control (0x61)=%02x\n", inb(0x61));
+#endif
 }
 
 #endif /* CONFIG_ALPHA_LCA */

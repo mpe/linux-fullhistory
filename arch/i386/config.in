@@ -40,6 +40,7 @@ fi
 #if [ "$CONFIG_M586" = "n" ]; then
 bool 'Use -m486 flag for 486-specific optimizations' CONFIG_M486 y
 #fi
+bool 'SMP Kernel (experimental - gcc2.5.8 only: see Documentation/SMP.txt)' CONFIG_SMP n
 
 comment 'Loadable module support'
 bool 'Set version information on all symbols for modules' CONFIG_MODVERSIONS n
@@ -74,6 +75,7 @@ bool 'Amateur Radio AX.25 Level 2' CONFIG_AX25 n
 if [ "$CONFIG_AX25" = "y" ]; then
   bool 'Amateur Radio NET/ROM' CONFIG_NETROM n
 fi
+bool 'Kernel/User network link driver(ALPHA)' CONFIG_NETLINK n
 fi
 
 comment 'SCSI support'

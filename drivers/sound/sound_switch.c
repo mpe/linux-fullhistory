@@ -58,9 +58,7 @@ put_status (char *s)
 {
   int             l;
 
-  for (l = 0; l < 256, s[l]; l++);	/*
-					 * l=strlen(s);
-					 */
+  l = strnlen(s, 256);
 
   if (status_len + l >= 4000)
     return 0;

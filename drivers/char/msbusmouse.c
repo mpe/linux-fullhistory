@@ -39,6 +39,7 @@
 #endif
 
 #include <linux/kernel.h>
+#include <linux/ioport.h>
 #include <linux/sched.h>
 #include <linux/busmouse.h>
 #include <linux/signal.h>
@@ -188,6 +189,10 @@ unsigned long ms_bus_mouse_init(unsigned long kmem_start)
 	mouse.buttons = 0x80;
 	mouse.dx = mouse.dy = 0;
 	mouse.wait = NULL;
+
+	if (check_region(MS_MSE_CONTROL_PORT, 0x04))
+		return -ENODEV;
+
 	if (inb_p(MS_MSE_SIGNATURE_PORT) == 0xde) {
 
 		mse_byte = inb_p(MS_MSE_SIGNATURE_PORT);
@@ -210,6 +215,7 @@ unsigned long ms_bus_mouse_init(unsigned long kmem_start)
 #endif
 	}
 	MS_MSE_INT_OFF();
+	request_region(MS_MSE_CONTROL_PORT, 0x04, "MS Busmouse");
 	printk("Microsoft BusMouse detected and installed.\n");
 	mouse_register(&ms_bus_mouse);
 #ifdef MODULE
@@ -224,7 +230,10 @@ void cleanup_module(void)
 {
 	if (MOD_IN_USE)
 		printk("msbusmouse: in use, remove delayed\n");
-	mouse_deregister(&ms_bus_mouse);
+	else {
+		mouse_deregister(&ms_bus_mouse);
+		release_region(MS_MSE_CONTROL_PORT, 0x04);
+	}
 }
 #endif
 

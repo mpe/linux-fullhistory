@@ -26,7 +26,7 @@
 extern long soundcard_init(long mem_start);
 #endif
 
-static int read_ram(struct inode * inode, struct file * file,char * buf, int count)
+static int read_ram(struct inode * inode, struct file * file, char * buf, int count)
 {
 	return -EIO;
 }
@@ -36,11 +36,12 @@ static int write_ram(struct inode * inode, struct file * file, const char * buf,
 	return -EIO;
 }
 
-static int read_mem(struct inode * inode, struct file * file,char * buf, int count)
+static int read_mem(struct inode * inode, struct file * file, char * buf, int count)
 {
 	unsigned long p = file->f_pos;
 	int read;
 
+	p += PAGE_OFFSET;
 	if (count < 0)
 		return -EINVAL;
 	if (MAP_NR(p) >= MAP_NR(high_memory))
@@ -48,24 +49,27 @@ static int read_mem(struct inode * inode, struct file * file,char * buf, int cou
 	if (count > high_memory - p)
 		count = high_memory - p;
 	read = 0;
-	while (p < PAGE_SIZE && count > 0) {
+#if defined(__i386__)		/* we don't have page 0 mapped on x86.. */
+	while (p < PAGE_OFFSET + PAGE_SIZE && count > 0) {
 		put_user(0,buf);
 		buf++;
 		p++;
 		count--;
 		read++;
 	}
-	memcpy_tofs(buf,(void *) p,count);
+#endif
+	memcpy_tofs(buf, (void *) p, count);
 	read += count;
 	file->f_pos += read;
 	return read;
 }
 
-static int write_mem(struct inode * inode, struct file * file,const char * buf, int count)
+static int write_mem(struct inode * inode, struct file * file, const char * buf, int count)
 {
 	unsigned long p = file->f_pos;
 	int written;
 
+	p += PAGE_OFFSET;
 	if (count < 0)
 		return -EINVAL;
 	if (MAP_NR(p) >= MAP_NR(high_memory))
@@ -73,14 +77,16 @@ static int write_mem(struct inode * inode, struct file * file,const char * buf, 
 	if (count > high_memory - p)
 		count = high_memory - p;
 	written = 0;
-	while (p < PAGE_SIZE && count > 0) {
+#if defined(__i386__)		/* we don't have page 0 mapped on x86.. */
+	while (PAGE_OFFSET + p < PAGE_SIZE && count > 0) {
 		/* Hmm. Do something? */
 		buf++;
 		p++;
 		count--;
 		written++;
 	}
-	memcpy_fromfs((void *) p,buf,count);
+#endif
+	memcpy_fromfs((void *) p, buf, count);
 	written += count;
 	file->f_pos += written;
 	return count;
@@ -121,7 +127,7 @@ static int read_kmem(struct inode *inode, struct file *file, char *buf, int coun
 	return read1 + read2;
 }
 
-static int read_port(struct inode * inode,struct file * file,char * buf, int count)
+static int read_port(struct inode * inode, struct file * file,char * buf, int count)
 {
 	unsigned int i = file->f_pos;
 	char * tmp = buf;
@@ -135,7 +141,7 @@ static int read_port(struct inode * inode,struct file * file,char * buf, int cou
 	return tmp-buf;
 }
 
-static int write_port(struct inode * inode,struct file * file,const char * buf, int count)
+static int write_port(struct inode * inode, struct file * file, const char * buf, int count)
 {
 	unsigned int i = file->f_pos;
 	const char * tmp = buf;
@@ -149,17 +155,17 @@ static int write_port(struct inode * inode,struct file * file,const char * buf, 
 	return tmp-buf;
 }
 
-static int read_null(struct inode * node,struct file * file,char * buf,int count)
+static int read_null(struct inode * node, struct file * file, char * buf, int count)
 {
 	return 0;
 }
 
-static int write_null(struct inode * inode,struct file * file, const char * buf, int count)
+static int write_null(struct inode * inode, struct file * file, const char * buf, int count)
 {
 	return count;
 }
 
-static int read_zero(struct inode * node,struct file * file,char * buf,int count)
+static int read_zero(struct inode * node, struct file * file, char * buf, int count)
 {
 	int left;
 
@@ -179,12 +185,12 @@ static int mmap_zero(struct inode * inode, struct file * file, struct vm_area_st
 	return 0;
 }
 
-static int read_full(struct inode * node,struct file * file,char * buf,int count)
+static int read_full(struct inode * node, struct file * file, char * buf,int count)
 {
 	return count;
 }
 
-static int write_full(struct inode * inode,struct file * file, const char * buf, int count)
+static int write_full(struct inode * inode, struct file * file, const char * buf, int count)
 {
 	return -ENOSPC;
 }
@@ -199,7 +205,7 @@ static int null_lseek(struct inode * inode, struct file * file, off_t offset, in
 	return file->f_pos=0;
 }
 /*
- * The memory devices use the full 32 bits of the offset, and so we cannot
+ * The memory devices use the full 32/64 bits of the offset, and so we cannot
  * check against negative addresses: they are ok. The return value is weird,
  * though, in that case (0).
  *

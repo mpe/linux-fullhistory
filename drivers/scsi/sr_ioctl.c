@@ -158,7 +158,31 @@ int sr_ioctl(struct inode * inode, struct file * file, unsigned int cmd, unsigne
 	result = do_ioctl(target, sr_cmd, NULL, 255);
 	return result;
     }
+
+    case CDROMPLAYBLK:
+    {
+	struct cdrom_blk blk;
+
+        err = verify_area (VERIFY_READ, (void *) arg, sizeof (blk));
+        if (err) return err;
+
+	memcpy_fromfs(&blk, (void *) arg, sizeof(blk));
 	
+	sr_cmd[0] = SCMD_PLAYAUDIO10;
+	sr_cmd[1] = scsi_CDs[target].device->lun << 5;
+	sr_cmd[2] = blk.from >> 24;
+	sr_cmd[3] = blk.from >> 16;
+	sr_cmd[4] = blk.from >> 8;
+	sr_cmd[5] = blk.from;
+	sr_cmd[6] = 0;
+	sr_cmd[7] = blk.len >> 8;
+	sr_cmd[8] = blk.len;
+	sr_cmd[9] = 0;
+	
+	result = do_ioctl(target, sr_cmd, NULL, 255);
+	return result;
+    }
+		
     case CDROMPLAYTRKIND:
     {
 	struct cdrom_ti ti;

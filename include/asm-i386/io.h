@@ -78,6 +78,12 @@ extern inline void * phys_to_virt(unsigned long address)
 #define memcpy_toio(a,b,c)	memcpy((void *)(a),(b),(c))
 
 /*
+ * Again, i386 does not require mem IO specific function.
+ */
+
+#define eth_io_copy_and_sum(a,b,c,d)	eth_copy_and_sum((a),(void *)(b),(c),(d))
+
+/*
  * Talk about misusing macros..
  */
 

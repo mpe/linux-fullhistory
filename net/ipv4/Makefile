@@ -17,8 +17,10 @@ M_OBJS :=
 
 ifeq ($(CONFIG_INET_RARP),y)
 IPV4_OBJS += rarp.o
-elifeq ($(CONFIG_INET_RARP),m)
-M_OBJS += rarp.o
+else
+  ifeq ($(CONFIG_INET_RARP),m)
+  M_OBJS += rarp.o
+  endif
 endif
 
 ifeq ($(CONFIG_NET_IPIP),y)

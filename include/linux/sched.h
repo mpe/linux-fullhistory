@@ -1,6 +1,8 @@
 #ifndef _LINUX_SCHED_H
 #define _LINUX_SCHED_H
 
+#include <linux/config.h>
+
 /*
  * define DEBUG if you want the wait-queues to have some extra
  * debugging code. It's not normally used, but might catch some
@@ -20,6 +22,8 @@ extern unsigned long event;
 #include <linux/kernel.h>
 #include <asm/system.h>
 #include <asm/page.h>
+
+#include <linux/smp.h>
 
 /*
  * cloning flags:
@@ -215,6 +219,10 @@ struct task_struct {
 	struct mm_struct *mm;
 /* signal handlers */
 	struct signal_struct *sig;
+#ifdef CONFIG_SMP
+	int processor;
+	int lock_depth;		/* Lock depth. We can context swithc in and out of holding a syscall kernel lock... */	
+#endif	
 };
 
 /*
@@ -227,6 +235,8 @@ struct task_struct {
 
 #define PF_STARTING	0x00000100	/* being created */
 #define PF_EXITING	0x00000200	/* getting shut down */
+
+#define PF_USEDFPU	0x00100000	/* Process used the FPU this quantum (SMP only) */
 
 /*
  * Limit the stack by to some sane default: root can always
@@ -275,7 +285,12 @@ extern struct   mm_struct init_mm;
 extern struct task_struct init_task;
 extern struct task_struct *task[NR_TASKS];
 extern struct task_struct *last_task_used_math;
-extern struct task_struct *current;
+extern struct task_struct *current_set[NR_CPUS];
+/*
+ *	On a single processor system this comes out as current_set[0] when cpp
+ *	has finished with it, which gcc will optimise away.
+ */
+#define current (current_set[smp_processor_id()])	/* Current on this processor */
 extern unsigned long volatile jiffies;
 extern unsigned long itimer_ticks;
 extern unsigned long itimer_next;

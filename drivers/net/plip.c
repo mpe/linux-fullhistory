@@ -1,4 +1,4 @@
-/* $Id: plip.c,v 1.14 1995/09/18 04:57:24 gniibe Exp $ */
+/* $Id: plip.c,v 1.15 1995/10/03 01:47:09 gniibe Exp $ */
 /* PLIP: A parallel port "network" driver for Linux. */
 /* This driver is for parallel port with 5-bit cable (LapLink (R) cable). */
 /*
@@ -24,6 +24,8 @@
  *		Niibe Yutaka
  *		  - Module initialization.  You can specify I/O addr and IRQ:
  *			# insmod plip.o io=0x3bc irq=7
+ *		  - MTU fix.
+ *		  - Make sure other end is OK, before sending a packet.
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -45,6 +47,10 @@
  *     So, this PLIP can't communicate the PLIP of Linux v1.0.
  */
 
+/*
+ *     To use with DOS box, please do (Turn on ARP switch):
+ *	# ifconfig plip[0-2] arp
+ */
 static const char *version = "NET3 PLIP version 2.1 gniibe@mri.co.jp\n";
 
 /*
@@ -534,7 +540,8 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 		if (plip_receive(nibble_timeout, status_addr,
 				 &rcv->nibble, &rcv->length.b.msb))
 			return TIMEOUT;
-		if (rcv->length.h > dev->mtu || rcv->length.h < 8) {
+		if (rcv->length.h > dev->mtu + dev->hard_header_len
+		    || rcv->length.h < 8) {
 			printk("%s: bogus packet size %d.\n", dev->name, rcv->length.h);
 			return ERROR;
 		}
@@ -672,6 +679,9 @@ plip_send_packet(struct device *dev, struct net_local *nl,
 
 	switch (snd->state) {
 	case PLIP_PK_TRIGGER:
+		if ((inb(PAR_STATUS(dev)) & 0xf8) != 0x80)
+			return TIMEOUT;
+
 		/* Trigger remote rx interrupt. */
 		outb(0x08, data_addr);
 		cx = nl->trigger;
@@ -894,7 +904,7 @@ plip_tx_packet(struct sk_buff *skb, struct device *dev)
 		return 1;
 	}
 
-	if (skb->len > dev->mtu) {
+	if (skb->len > dev->mtu + dev->hard_header_len) {
 		printk("%s: packet too big, %d.\n", dev->name, (int)skb->len);
 		dev->tbusy = 0;
 		return 0;

@@ -196,31 +196,29 @@ static void icmp_out_count(int type)
  
 static void icmp_glue_bits(const void *p, __u32 saddr, char *to, unsigned int offset, unsigned int fraglen)
 {
-	struct icmp_bxm *icmp_param=(struct icmp_bxm *)p;
+	struct icmp_bxm *icmp_param = (struct icmp_bxm *)p;
 	struct icmphdr *icmph;
-	if(offset)
+	unsigned long csum;
+
+	if (offset) {
 		icmp_param->csum=csum_partial_copy(icmp_param->data_ptr+offset-sizeof(struct icmphdr), 
 				to, fraglen,icmp_param->csum);
-	else
-	{
-#ifdef CSUM_FOLD_WORKS
-		/*
-		 *	Need this fixed to make multifragment ICMP's work again.
-		 */
-		icmp_param->csum=csum_partial_copy((void *)&icmp_param->icmph, to, sizeof(struct icmphdr),
-			icmp_param->csum);
-		icmp_param->csum=csum_partial_copy(icmp_param->data_ptr, to+sizeof(struct icmphdr),
-				fraglen-sizeof(struct icmphdr), icmp_param->csum);
-		icmph=(struct icmphdr *)to;
-		icmph->checksum = csum_fold(icmp_param->csum);
-#else
-		memcpy(to, &icmp_param->icmph, sizeof(struct icmphdr));
-		memcpy(to+sizeof(struct icmphdr), icmp_param->data_ptr, fraglen-sizeof(struct icmphdr));
-		icmph=(struct icmphdr *)to;
-		icmph->checksum=ip_compute_csum(to, fraglen);
-#endif
-				
+		return;
 	}
+
+	/*
+	 *	First fragment includes header. Note that we've done
+	 *	the other fragments first, so that we get the checksum
+	 *	for the whole packet here.
+	 */
+	csum = csum_partial_copy((void *)&icmp_param->icmph,
+		to, sizeof(struct icmphdr), 
+		icmp_param->csum);
+	csum = csum_partial_copy(icmp_param->data_ptr,
+		to+sizeof(struct icmphdr),
+		fraglen-sizeof(struct icmphdr), csum);
+	icmph=(struct icmphdr *)to;
+	icmph->checksum = csum_fold(csum);
 }
  
 /*
@@ -231,6 +229,7 @@ static void icmp_build_xmit(struct icmp_bxm *icmp_param, __u32 saddr, __u32 dadd
 {
 	struct sock *sk=icmp_socket.data;
 	icmp_param->icmph.checksum=0;
+	icmp_param->csum=0;
 	icmp_out_count(icmp_param->icmph.type);
 	ip_build_xmit(sk, icmp_glue_bits, icmp_param, 
 		icmp_param->data_len+sizeof(struct icmphdr),
@@ -698,10 +697,12 @@ static struct icmp_control icmp_pointers[19] = {
 void icmp_init(struct proto_ops *ops)
 {
 	struct sock *sk;
+	int err;
 	icmp_socket.type=SOCK_RAW;
 	icmp_socket.ops=ops;
-	if(ops->create(&icmp_socket, IPPROTO_ICMP)<0)
-		panic("Failed to create the ICMP control socket.\n");
+	if((err=ops->create(&icmp_socket, IPPROTO_ICMP))<0)
+		panic("Failed to create the ICMP control socket (%d,%d,%p,%p).\n", -err,
+			current->euid, current, &init_task);
 	sk=icmp_socket.data;
 	sk->allocation=GFP_ATOMIC;
 	sk->num = 256;			/* Don't receive any data */

@@ -9,6 +9,7 @@
  */
 
 .text
+#include <linux/config.h>
 #include <linux/tasks.h>
 #include <linux/fd.h>
 #include <linux/linkage.h>
@@ -32,7 +33,22 @@ startup_32:
 	mov %ax,%es
 	mov %ax,%fs
 	mov %ax,%gs
+#ifdef CONFIG_SMP
+	orw  %bx,%bx
+	jz  1f				/* Initial CPU cleans BSS */
+/*
+ *	Set up the stack
+ */
+	mov %ax,%ss
+	xorl %eax,%eax
+	movw %cx, %ax
+	movl %eax,%esp
+	pushl $0
+	popfl
+	jmp checkCPUtype
+1:
 	lss stack_start,%esp
+#endif CONFIG_SMP
 /*
  * Clear BSS first so that there are no surprises...
  */
@@ -84,6 +100,10 @@ startup_32:
 	rep
 	movsb
 1:
+#ifdef CONFIG_SMP
+checkCPUtype:
+#endif
+
 /* check if it is 486 or 386. */
 /*
  * XXX - this does a lot of unnecessary setup.  Alignment checks don't
@@ -150,7 +170,32 @@ is386:	pushl %ecx		# restore original EFLAGS
 	orl $2,%eax		# set MP
 2:	movl %eax,%cr0
 	call check_x87
+#ifdef CONFIG_SMP
+	movb ready,%eax
+	orb %eax,%eax
+	jz 3f	
+	movl $ SYMBOL_NAME(swapper_pg_dir), %eax
+	movl %eax, %cr3
+#ifdef GAS_KNOWS_CR4
+	movl %cr4,%eax
+	orl $16,%eax
+	movl %eax,%cr4
+#else
+	.byte 0x0f,0x20,0xe0
+	orl $16,%eax
+	.byte 0x0f,0x22,0xe0
+#endif
+	movl %cr0, %eax
+	orl $0x80000000, %eax
+	movl %eax, %cr0
+	jmp 4f
+#endif
+3:
 	call setup_paging
+#ifdef CONFIG_SMP
+	incb ready
+#endif
+4:
 	lgdt gdt_descr
 	lidt idt_descr
 	ljmp $(KERNEL_CS),$1f
@@ -159,7 +204,12 @@ is386:	pushl %ecx		# restore original EFLAGS
 	mov %ax,%es
 	mov %ax,%fs
 	mov %ax,%gs
-	lss stack_start,%esp
+#ifdef CONFIG_SMP
+	movl $(KERNEL_DS), %eax
+	mov  %ax,%ss		# Reload the stack pointer (segment only)
+#else
+	lss stack_start,%esp	# Load processor stack
+#endif
 	xorl %eax,%eax
 	lldt %ax
 	pushl %eax		# These are the parameters to main :-)
@@ -170,6 +220,10 @@ is386:	pushl %ecx		# restore original EFLAGS
 L6:
 	jmp L6			# main should never return here, but
 				# just in case, we know what happens.
+
+#ifdef CONFIG_SMP
+ready:	.byte 0
+#endif
 
 /*
  * We depend on ET to be correct. This checks for 287/387.

@@ -293,11 +293,14 @@ unsigned long loops_per_sec = (1<<12);
    better than 1% */
 #define LPS_PREC 8
 
-static void calibrate_delay(void)
+void calibrate_delay(void)
 {
 	int ticks;
 	int loopbit;
 	int lps_precision = LPS_PREC;
+#ifdef CONFIG_SMP
+	loops_per_sec = (1<<12);
+#endif		
 
 	printk("Calibrating delay loop.. ");
 	while (loops_per_sec <<= 1) {
@@ -418,9 +421,76 @@ extern void setup_arch(char **, unsigned long *, unsigned long *);
 
 static char init_stack[PAGE_SIZE];
 
+#ifdef CONFIG_SMP
+/*
+ *	Activate a secondary processor.
+ */
+ 
+asmlinkage void start_secondary(void)
+{
+	trap_init();
+	init_IRQ();
+	smp_callin();
+	for(;;)
+		idle();
+}
+
+/*
+ *	Called by CPU#0 to activate the rest.
+ */
+ 
+static void smp_init(void)
+{
+	int i=0;
+	smp_boot_cpus();
+	
+	/*
+	 *	Create the slave init tasks. At this point
+	 *	fork will create them all ask task 0
+	 */
+
+	for(i=1;i<smp_num_cpus;i++)
+	{
+		fork();
+		/* We are forking multiple process 0's. This makes it harder
+		   to tell them apart than we would like ;) */
+		if(current!=task[0])
+		{
+			for(;;)
+				idle();
+		}
+		/*
+		 *	Assume linear processor numbering
+		 */
+		current_set[i]=task[i];
+		current_set[i]->processor=i;
+	}
+	smp_threads_ready=1;
+	smp_commence();
+}		
+	
+#endif
+
+/*
+ *	Activate the first processor.
+ */
+ 
 asmlinkage void start_kernel(void)
 {
 	char * command_line;
+
+/*
+ *	This little check will move.
+ */
+
+#ifdef CONFIG_SMP	
+	static int first_cpu=1;
+	
+	if(!first_cpu)
+		start_secondary();
+	first_cpu=0;
+	
+#endif	
 /*
  * Interrupts are still disabled. Do necessary setups, then
  * enable them
@@ -477,7 +547,9 @@ asmlinkage void start_kernel(void)
 	check_bugs();
 
 	printk(linux_banner);
-
+#ifdef CONFIG_SMP	
+	smp_init();
+#endif
 	/* we count on the clone going ok */
 	if (!clone(CLONE_VM, init_stack+sizeof(init_stack)))
 		init();

@@ -1121,7 +1121,7 @@ NCR53c8x0_init_fixup (struct Scsi_Host *host) {
      * hostdata structure rather than in the RELATIVE area of the 
      * SCRIPTS.
      */
-    
+
 
     patch_abs_rwri_data (hostdata->script, 0, dmode_memory_to_memory, tmp);
     patch_abs_rwri_data (hostdata->script, 0, dmode_memory_to_ncr, memory_to_ncr);

@@ -44,8 +44,14 @@
  * Testing was done with an ASUS P55TP4XE/100 system and the following drives:
  *
  *   Quantum Fireball 1080A (1Gig w/83kB buffer), DMA mode2, PIO mode4.
- *	- DMA mode2 works fine (7.4MB/sec), despite the tiny on-drive buffer.
+ *	- DMA mode2 works well (7.4MB/sec), despite the tiny on-drive buffer.
  *	- This drive also does PIO mode4, at about the same speed as DMA mode2.
+ *	  An awesome drive for the price!
+ *
+ *   Fujitsu M1606TA (1Gig w/256kB buffer), DMA mode2, PIO mode4.
+ *	- DMA mode2 gives horrible performance (1.6MB/sec), despite the good
+ *	  size of the on-drive buffer and a boasted 10ms average access time.
+ *	- PIO mode4 was better, but peaked at a mere 4.5MB/sec.
  *
  *   Micropolis MC2112A (1Gig w/508kB buffer), drive pre-dates EIDE and ATA2.
  *	- DMA works fine (2.2MB/sec), probably due to the large on-drive buffer.

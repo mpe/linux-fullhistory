@@ -426,16 +426,19 @@ static void add_timer_randomness(struct random_bucket *r,
 
 #if defined (__i386__)
 	/*
-	 * On a 386, read the high resolution timer.  We assume that
-	 * this gives us 2 bits of randomness.  XXX This needs
+	 * On a Pentium, read the cycle counter. We assume that
+	 * this gives us 8 bits of randomness.  XXX This needs
 	 * investigation.
-	 */ 
-	outb_p(0x00, 0x43);	/* latch the count ASAP */
-	add_entropy_byte(r, inb_p(0x40), 1);
-	add_entropy_byte(r, inb(0x40), 1);
-	r->entropy_count += 2;
-	if (r->entropy_count > r->bit_length)
-		r->entropy_count = r->bit_length;
+	 */
+	if (x86_capability & 16) {
+		unsigned long low, high;
+		__asm__(".byte 0x0f,0x31"
+			:"=a" (low), "=d" (high));
+		add_entropy_byte(r, low, 1);
+		r->entropy_count += 8;
+		if (r->entropy_count > r->bit_length)
+			r->entropy_count = r->bit_length;
+	}
 #endif
 }
 

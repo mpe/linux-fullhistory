@@ -881,7 +881,7 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
     }
     
     /* if gc->DMA_valid it must be an ISA HBA and we have to register it */
-    dma_channel = 0xff;
+    dma_channel = BUSMASTER;
     if (gc->DMA_valid) {
 	if (request_dma(dma_channel = (8 - gc->DMA_channel) & 7, "eata_dma")) {
 	    printk("Unable to allocate DMA channel %d for ISA HBA at %#.4x.\n",
@@ -1025,8 +1025,9 @@ short register_HBA(u32 base, struct get_conf *gc, Scsi_Host_Template * tpnt,
 
     hd->channel = gc->MAX_CHAN;	    
     sh->max_channel = gc->MAX_CHAN; 
+    sh->unique_id = base;
     sh->base = (char *) base;
-    sh->io_port = (u16) base;
+    sh->io_port = base;
     sh->n_io_port = 9;
     sh->irq = gc->IRQ;
     sh->dma_channel = dma_channel;
@@ -1318,7 +1319,7 @@ int eata_detect(Scsi_Host_Template * tpnt)
 		   SD(HBA_ptr)->EATA_revision, (SD(HBA_ptr)->bustype == 'P')? 
 		   "PCI ":(SD(HBA_ptr)->bustype == 'E')?"EISA":"ISA ",
 		   (u32) HBA_ptr->base, HBA_ptr->irq);
-	    if(HBA_ptr->dma_channel != 0xff)
+	    if(HBA_ptr->dma_channel != BUSMASTER)
 		printk("   %2x ", HBA_ptr->dma_channel);
 	    else
 		printk("  %s", "BMST");

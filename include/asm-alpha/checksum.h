@@ -55,4 +55,15 @@ unsigned int csum_partial_copy( const char *src, char *dst, int len, int sum);
 
 extern unsigned short ip_compute_csum(unsigned char * buff, int len);
 
+/*
+ *	Fold a partial checksum without adding pseudo headers
+ */
+
+static inline unsigned short csum_fold(unsigned int sum)
+{
+	sum = (sum & 0xffff) + (sum >> 16);
+	sum = (sum & 0xffff) + (sum >> 16);
+	return ~sum;
+}
+
 #endif

@@ -60,6 +60,8 @@ typedef unsigned long pgprot_t;
  *
  * ..but the i386 has somewhat limited invalidation capabilities.
  */
+ 
+#ifndef CONFIG_SMP
 #define invalidate() \
 __asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3": : :"ax")
 
@@ -68,6 +70,14 @@ __asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3": : :"ax")
 do { if ((task)->mm == current->mm) invalidate(); } while (0)
 #define invalidate_page(task,addr) \
 do { if ((task)->mm == current->mm) invalidate(); } while (0)
+
+#else
+#include <asm/smp.h>
+#define local_invalidate() \
+__asm__ __volatile__("movl %%cr3,%%eax\n\tmovl %%eax,%%cr3": : :"ax")
+#define invalidate() \
+	smp_invalidate();
+#endif
 
 /* Certain architectures need to do special things when pte's
  * within a page table are directly modified.  Thus, the following

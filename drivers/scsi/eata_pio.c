@@ -783,11 +783,12 @@ int register_pio_HBA(long base, struct get_conf *gc, Scsi_Host_Template * tpnt)
     SD(sh)->hostid=gc->scsi_id[3];
     SD(sh)->devflags=1<<gc->scsi_id[3];
     SD(sh)->moresupport=gc->MORE_support;
+    sh->unique_id = base;
     sh->base = (char *) base;
-    sh->io_port = (ushort) base;
+    sh->io_port = base;
     sh->n_io_port = 8;
     sh->irq = gc->IRQ;
-    sh->dma_channel = 0xfe;  /* PIO */
+    sh->dma_channel = PIO;
     sh->this_id = gc->scsi_id[3];
     sh->can_queue = 1;
     sh->cmd_per_lun = 1;

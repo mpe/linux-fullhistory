@@ -103,20 +103,17 @@ static inline unsigned short int csum_tcpudp_magic(unsigned long saddr,
  *	Fold a partial checksum without adding pseudo headers
  */
 
-static inline unsigned short int csum_fold(unsigned int sum)
+static inline unsigned int csum_fold(unsigned int sum)
 {
- 	__asm__("
- 		movl %0, %1
- 		shrl $16, %1
- 		addw %w1, %w0
- 		adcl $0, %0
- 		notl %0
- 		"
- 		: "=&r" (sum)
- 		: "0" (sum)
- 	);
- 	return sum;
- }
+	__asm__("
+		addl %1, %0
+		adcl $0xffff, %0
+		"
+		: "=r" (sum)
+		: "r" (sum << 16), "0" (sum & 0xffff0000)
+	);
+	return (~sum) >> 16;
+}
  
 /*
  * this routine is used for miscellaneous IP-like checksums, mainly

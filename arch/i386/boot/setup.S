@@ -344,6 +344,7 @@ end_move:
 	lmsw	ax		! This is it!
 	jmp	flush_instr
 flush_instr:
+	mov	bx,#0		! Flag to indicate a boot
 	jmpi	0x1000,KERNEL_CS	! jmp offset 1000 of segment 0x10 (cs)
 
 ! This routine checks that the keyboard command queue is empty

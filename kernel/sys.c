@@ -173,7 +173,7 @@ void ctrl_alt_del(void)
 	if (C_A_D)
 		hard_reset_now();
 	else
-		send_sig(SIGINT,task[1],1);
+		kill_proc(1, SIGINT, 1);
 }
 	
 

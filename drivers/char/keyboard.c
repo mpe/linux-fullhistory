@@ -1186,6 +1186,11 @@ unsigned long kbd_init(unsigned long kmem_start)
 	request_irq(KEYBOARD_IRQ, keyboard_interrupt, 0, "keyboard");
 	request_region(0x60,16,"kbd");
 #ifdef __alpha__
+	/* if there is an input byte left, eat it up: */
+	if (inb(0x64) & 0x01) {
+	    inb(0x60);
+	}
+
 	/* enable keyboard interrupts, PC/AT mode */
 	kb_wait();
 	outb(0x60,0x64);	/* write PS/2 Mode Register */

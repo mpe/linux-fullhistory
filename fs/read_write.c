@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/mm.h>
+#include <linux/uio.h>
 
 #include <asm/segment.h>
 
@@ -148,4 +149,93 @@ asmlinkage int sys_write(unsigned int fd,char * buf,unsigned int count)
 		notify_change(inode, &newattrs);
 	}
 	return written;
+}
+
+/*
+ * OSF/1 (and SunOS) readv/writev emulation.
+ *
+ * NOTE! This is not really the way it should be done,
+ * but it should be good enough for TCP connections,
+ * notably X11 ;-)
+ */
+asmlinkage int sys_readv(unsigned long fd, const struct iovec * vector, long count)
+{
+	int retval;
+	struct file * file;
+	struct inode * inode;
+
+	if (fd >= NR_OPEN || !(file = current->files->fd[fd]) || !(inode = file->f_inode))
+		return -EBADF;
+	if (!(file->f_mode & 1))
+		return -EBADF;
+	if (!file->f_op || !file->f_op->read)
+		return -EINVAL;
+	if (!count)
+		return 0;
+	retval = verify_area(VERIFY_READ, vector, count*sizeof(*vector));
+	if (retval)
+		return retval;
+
+	while (count > 0) {
+		void * base;
+		int len, nr;
+
+		base = get_user(&vector->iov_base);
+		len = get_user(&vector->iov_len);
+		vector++;
+		count--;
+		nr = verify_area(VERIFY_WRITE, base, len);
+		if (!nr)
+			nr = file->f_op->read(inode, file, base, len);
+		if (nr < 0) {
+			if (retval)
+				return retval;
+			return nr;
+		}
+		retval += nr;
+		if (nr != len)
+			break;
+	}
+	return retval;
+}
+
+asmlinkage int sys_writev(unsigned long fd, const struct iovec * vector, long count)
+{
+	int retval;
+	struct file * file;
+	struct inode * inode;
+
+	if (fd >= NR_OPEN || !(file = current->files->fd[fd]) || !(inode = file->f_inode))
+		return -EBADF;
+	if (!(file->f_mode & 2))
+		return -EBADF;
+	if (!file->f_op || !file->f_op->write)
+		return -EINVAL;
+	if (!count)
+		return 0;
+	retval = verify_area(VERIFY_READ, vector, count*sizeof(*vector));
+	if (retval)
+		return retval;
+
+	while (count > 0) {
+		void * base;
+		int len, nr;
+
+		base = get_user(&vector->iov_base);
+		len = get_user(&vector->iov_len);
+		vector++;
+		count--;
+		nr = verify_area(VERIFY_READ, base, len);
+		if (!nr)
+			nr = file->f_op->write(inode, file, base, len);
+		if (nr < 0) {
+			if (retval)
+				return retval;
+			return nr;
+		}
+		retval += nr;
+		if (nr != len)
+			break;
+	}
+	return retval;
 }

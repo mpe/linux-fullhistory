@@ -127,6 +127,14 @@ extern void outsl (unsigned long port, void *dst, unsigned long count);
 #define memcpy_fromio(to,from,len)	(memcpy_fromio)((to),(unsigned long)(from),(len))
 #define memcpy_toio(to,from,len)	(memcpy_toio)((unsigned long)(to),(from),(len))
 
+/*
+ * XXX - We don't have csum_partial_copy_fromio() yet, so we cheat here and 
+ * just copy it. The net code will then do the checksum later. Presently 
+ * only used by some shared memory 8390 ethernet cards anyway.
+ */
+
+#define eth_io_copy_and_sum(skb,src,len,unused)	memcpy_fromio((skb)->data,(src),(len))
+
 #endif /* __KERNEL__ */
 
 #endif

@@ -8,6 +8,7 @@
  * This file handles the architecture-dependent parts of process handling..
  */
 
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -24,6 +25,8 @@
 #include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/io.h>
+#include <linux/smp.h>
+
 
 asmlinkage void ret_from_sys_call(void) __asm__("ret_from_sys_call");
 
@@ -45,12 +48,40 @@ void enable_hlt(void)
 asmlinkage int sys_idle(void)
 {
 	if (current->pid != 0)
+	{
+	/*	printk("Wrong process idled\n");	SMP bug check */
 		return -EPERM;
-
+	}
+#ifdef CONFIG_SMP
+	/*
+	 *	SMP locking sanity checker
+	 */
+	if(smp_processor_id()!=active_kernel_processor)
+		panic("CPU is %d, kernel CPU is %d in sys_idle!\n",
+			smp_processor_id(), active_kernel_processor);
+	if(syscall_count!=1)
+		printk("sys_idle: syscall count is not 1 (%ld)\n", syscall_count);
+	if(kernel_counter!=1)
+	{
+		printk("CPU %d, sys_idle, kernel_counter is %ld\n", smp_processor_id(), kernel_counter);
+		if(!kernel_counter)
+			panic("kernel locking botch");
+	}
+	/*
+	 *	Until we have C unlocking done
+	 */
+	current->counter = -100;
+	schedule();
+	return 0;
+#endif	
 	/* endless idle loop with no priority at all */
 	current->counter = -100;
 	for (;;) {
+#ifdef CONFIG_SMP
+		if (cpu_data[smp_processor_id()].hlt_works_ok && !hlt_counter && !need_resched)
+#else	
 		if (hlt_works_ok && !hlt_counter && !need_resched)
+#endif		
 			__asm__("hlt");
 		schedule();
 	}

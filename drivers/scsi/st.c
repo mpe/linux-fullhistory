@@ -11,7 +11,7 @@
   Copyright 1992, 1993, 1994, 1995 Kai Makisara
 		 email Kai.Makisara@metla.fi
 
-  Last modified: Mon Sep 25 19:52:16 1995 by root@kai.makisara.fi
+  Last modified: Sat Sep 30 15:54:57 1995 by root@kai.makisara.fi
   Some small formal changes - aeb, 950809
 */
 #ifdef MODULE
@@ -684,6 +684,8 @@ scsi_tape_close(struct inode * inode, struct file * filp)
 	if (!SCpnt)
 	  return;
 
+	SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+
 	if ((STp->buffer)->last_result_fatal != 0)
 	  printk("st%d: Error on write filemark.\n", dev);
 	else {
@@ -693,7 +695,6 @@ scsi_tape_close(struct inode * inode, struct file * filp)
 	  if (STp->two_fm)
 	    back_over_eof(STp);
 	}
-	SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
       }
 
 #if DEBUG
@@ -972,7 +973,7 @@ st_write(struct inode * inode, struct file * filp, const char * buf, int count)
 		   (STp->buffer)->writing,
 		   st_sleep_done, ST_TIMEOUT, MAX_WRITE_RETRIES);
     }
-    else
+    else if (SCpnt != NULL)
       SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
 
     STp->at_sm &= (total != 0);
@@ -1192,7 +1193,8 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
       }
       else if (STp->eof != ST_NOEOF) {
 	STp->eof_hit = 1;
-	SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+	if (SCpnt != NULL)
+	  SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
 	if (total == 0 && STp->eof == ST_FM) {
 	  STp->eof = ST_NOEOF;
 	  STp->drv_block = 0;
@@ -1211,7 +1213,8 @@ st_read(struct inode * inode, struct file * filp, char * buf, int count)
 
     } /* for (total = 0; total < count; ) */
 
-    SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
+    if (SCpnt != NULL)
+      SCpnt->request.rq_status = RQ_INACTIVE;  /* Mark as not busy */
 
     return total;
 }
@@ -1734,7 +1737,7 @@ st_int_ioctl(struct inode * inode,struct file * file,
 st_ioctl(struct inode * inode,struct file * file,
 	 unsigned int cmd_in, unsigned long arg)
 {
-   int i, cmd, result;
+   int i, cmd_nr, cmd_type, result;
    struct mtop mtc;
    struct mtpos mt_pos;
    unsigned char scmd[10];
@@ -1759,10 +1762,10 @@ st_ioctl(struct inode * inode,struct file * file,
        return scsi_ioctl(STp->device, cmd_in, (void *) arg);
      }
    
-   cmd = cmd_in & IOCCMD_MASK;
-   if (cmd == (MTIOCTOP & IOCCMD_MASK)) {
-
-     if (((cmd_in & IOCSIZE_MASK) >> IOCSIZE_SHIFT) != sizeof(mtc))
+   cmd_type = _IOC_TYPE(cmd_in);
+   cmd_nr   = _IOC_NR(cmd_in);
+   if (cmd_type == _IOC_TYPE(MTIOCTOP) && cmd_nr == _IOC_NR(MTIOCTOP)) {
+     if (_IOC_SIZE(cmd_in) != sizeof(mtc))
        return (-EINVAL);
 
      i = verify_area(VERIFY_READ, (void *)arg, sizeof(mtc));
@@ -1816,9 +1819,9 @@ st_ioctl(struct inode * inode,struct file * file,
      else
        return st_int_ioctl(inode, file, mtc.mt_op, mtc.mt_count);
    }
-   else if (cmd == (MTIOCGET & IOCCMD_MASK)) {
+   else if (cmd_type == _IOC_TYPE(MTIOCGET) && cmd_nr == _IOC_NR(MTIOCGET)) {
 
-     if (((cmd_in & IOCSIZE_MASK) >> IOCSIZE_SHIFT) != sizeof(struct mtget))
+     if (_IOC_SIZE(cmd_in) != sizeof(struct mtget))
        return (-EINVAL);
      i = verify_area(VERIFY_WRITE, (void *)arg, sizeof(struct mtget));
      if (i)
@@ -1869,14 +1872,14 @@ st_ioctl(struct inode * inode,struct file * file,
      (STp->mt_status)->mt_erreg = 0;  /* Clear after read */
      return 0;
    }
-   else if (cmd == (MTIOCPOS & IOCCMD_MASK)) {
+   else if (cmd_type == _IOC_TYPE(MTIOCPOS) && cmd_nr == _IOC_NR(MTIOCPOS)) {
      if (STp->ready != ST_READY)
        return (-EIO);
 #if DEBUG
      if (debugging)
        printk("st%d: get tape position.\n", dev);
 #endif
-     if (((cmd_in & IOCSIZE_MASK) >> IOCSIZE_SHIFT) != sizeof(struct mtpos))
+     if (_IOC_SIZE(cmd_in) != sizeof(struct mtpos))
        return (-EINVAL);
 
      i = flush_buffer(inode, file, 0);

@@ -15,6 +15,7 @@
  * Naturally it's not a 1:1 relation, but there are similarities.
  */
 
+#include <linux/config.h>
 #include <linux/ptrace.h>
 #include <linux/errno.h>
 #include <linux/kernel_stat.h>
@@ -29,6 +30,7 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/bitops.h>
+#include <asm/smp.h>
 
 #define CR0_NE 32
 
@@ -103,19 +105,29 @@ BUILD_IRQ(SECOND,9,0x02)
 BUILD_IRQ(SECOND,10,0x04)
 BUILD_IRQ(SECOND,11,0x08)
 BUILD_IRQ(SECOND,12,0x10)
+#ifdef CONFIG_SMP
+BUILD_MSGIRQ(SECOND,13,0x20)
+#else
 BUILD_IRQ(SECOND,13,0x20)
+#endif
 BUILD_IRQ(SECOND,14,0x40)
 BUILD_IRQ(SECOND,15,0x80)
+#ifdef CONFIG_SMP
+BUILD_RESCHEDIRQ(16)
+#endif
 
 /*
  * Pointers to the low-level handlers: first the general ones, then the
  * fast ones, then the bad ones.
  */
-static void (*interrupt[16])(void) = {
+static void (*interrupt[17])(void) = {
 	IRQ0_interrupt, IRQ1_interrupt, IRQ2_interrupt, IRQ3_interrupt,
 	IRQ4_interrupt, IRQ5_interrupt, IRQ6_interrupt, IRQ7_interrupt,
 	IRQ8_interrupt, IRQ9_interrupt, IRQ10_interrupt, IRQ11_interrupt,
-	IRQ12_interrupt, IRQ13_interrupt, IRQ14_interrupt, IRQ15_interrupt
+	IRQ12_interrupt, IRQ13_interrupt, IRQ14_interrupt, IRQ15_interrupt	
+#ifdef CONFIG_SMP	
+	,IRQ16_interrupt
+#endif
 };
 
 static void (*fast_interrupt[16])(void) = {
@@ -169,11 +181,20 @@ int get_irq_list(char *buf)
 	for (i = 0 ; i < 16 ; i++, action++) {
 		if (!action->handler)
 			continue;
-		len += sprintf(buf+len, "%2d: %8d %c %s\n",
+		len += sprintf(buf+len, "%3d: %8d %c %s\n",
 			i, kstat.interrupts[i],
 			(action->flags & SA_INTERRUPT) ? '+' : ' ',
 			action->name);
 	}
+/*
+ *	Linus - should you add NMI counts here ?????
+ */
+#ifdef CONFIG_SMP
+	len+=sprintf(buf+len, "IPI: %8lu received\n",
+		ipi_count);
+	len+=sprintf(buf+len, "LCK: %8lu spins\n",
+		smp_spins);
+#endif		
 	return len;
 }
 
@@ -187,6 +208,10 @@ int get_irq_list(char *buf)
 asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 {
 	struct irqaction * action = irq + irq_action;
+#ifdef CONFIG_SMP
+	if(smp_threads_ready && active_kernel_processor!=smp_processor_id())
+		panic("IRQ %d: active processor set wrongly(%d not %d).\n", irq, active_kernel_processor, smp_processor_id());
+#endif
 
 	kstat.interrupts[irq]++;
 #ifdef CONFIG_RANDOM
@@ -204,6 +229,11 @@ asmlinkage void do_IRQ(int irq, struct pt_regs * regs)
 asmlinkage void do_fast_IRQ(int irq)
 {
 	struct irqaction * action = irq + irq_action;
+#ifdef CONFIG_SMP
+	/* IRQ 13 is allowed - thats an invalidate */
+	if(smp_threads_ready && active_kernel_processor!=smp_processor_id() && irq!=13)
+		panic("fast_IRQ %d: active processor set wrongly(%d not %d).\n", irq, active_kernel_processor, smp_processor_id());
+#endif
 
 	kstat.interrupts[irq]++;
 #ifdef CONFIG_RANDOM
@@ -283,6 +313,8 @@ void free_irq(unsigned int irq)
 	restore_flags(flags);
 }
 
+#ifndef CONFIG_SMP
+
 /*
  * Note that on a 486, we don't want to do a SIGFPE on a irq13
  * as the irq is unreliable, and exception 16 works correctly
@@ -294,6 +326,8 @@ void free_irq(unsigned int irq)
  * leads to races. IBM designers who came up with it should
  * be shot.
  */
+ 
+
 static void math_error_irq(int cpl, struct pt_regs *regs)
 {
 	outb(0,0xF0);
@@ -301,6 +335,8 @@ static void math_error_irq(int cpl, struct pt_regs *regs)
 		return;
 	math_error();
 }
+
+#endif
 
 static void no_action(int cpl, struct pt_regs * regs) { }
 
@@ -359,6 +395,10 @@ int probe_irq_off (unsigned long irqs)
 void init_IRQ(void)
 {
 	int i;
+	static unsigned char smptrap=0;
+	if(smptrap)
+		return;
+	smptrap=1;
 
 	/* set the clock to 100 Hz */
 	outb_p(0x34,0x43);		/* binary, mode 2, LSB/MSB, ch 0 */
@@ -366,10 +406,20 @@ void init_IRQ(void)
 	outb(LATCH >> 8 , 0x40);	/* MSB */
 	for (i = 0; i < 16 ; i++)
 		set_intr_gate(0x20+i,bad_interrupt[i]);
+	/* This bit is a hack because we don't send timer messages to all processors yet */
+	/* It has to here .. it doesnt work if you put it down the bottom - assembler explodes 8) */
+#ifdef CONFIG_SMP	
+	set_intr_gate(0x20+i, interrupt[i]);	/* IRQ '16' - IPI for rescheduling */
+#endif	
 	if (request_irq(2, no_action, SA_INTERRUPT, "cascade"))
-		printk("Unable to get IRQ2 for cascade\n");
+		printk("Unable to get IRQ2 for cascade.\n");
+#ifndef CONFIG_SMP		
 	if (request_irq(13,math_error_irq, 0, "math error"))
-		printk("Unable to get IRQ13 for math-error handler\n");
+		printk("Unable to get IRQ13 for math-error handler.\n");
+#else
+	if (request_irq(13, smp_message_irq, SA_INTERRUPT, "IPI"))
+		printk("Unable to get IRQ13 for IPI.\n");
+#endif				
 	request_region(0x20,0x20,"pic1");
 	request_region(0xa0,0x20,"pic2");
 } 

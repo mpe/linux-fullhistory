@@ -6,6 +6,7 @@
 
 #undef DEBUG_PROC_TREE
 
+#include <linux/config.h>
 #include <linux/wait.h>
 #include <linux/errno.h>
 #include <linux/signal.h>
@@ -72,7 +73,7 @@ int send_sig(unsigned long sig,struct task_struct * p,int priv)
 
 void notify_parent(struct task_struct * tsk)
 {
-	if (tsk->p_pptr == task[1])
+	if (tsk->p_pptr == task[smp_num_cpus])		/* Init */
 		tsk->exit_signal = SIGCHLD;
 	send_sig(tsk->exit_signal, tsk->p_pptr, 1);
 	wake_up_interruptible(&tsk->p_pptr->wait_chldexit);
@@ -349,8 +350,8 @@ static void forget_original_parent(struct task_struct * father)
 
 	for_each_task(p) {
 		if (p->p_opptr == father)
-			if (task[1])
-				p->p_opptr = task[1];
+			if (task[smp_num_cpus])	/* init */
+				p->p_opptr = task[smp_num_cpus];
 			else
 				p->p_opptr = task[0];
 	}
@@ -457,8 +458,8 @@ static void exit_notify(void)
 		current->p_cptr = p->p_osptr;
 		p->p_ysptr = NULL;
 		p->flags &= ~(PF_PTRACED|PF_TRACESYS);
-		if (task[1] && task[1] != current)
-			p->p_pptr = task[1];
+		if (task[smp_num_cpus] && task[smp_num_cpus] != current) /* init */
+			p->p_pptr = task[smp_num_cpus];
 		else
 			p->p_pptr = task[0];
 		p->p_osptr = p->p_pptr->p_cptr;

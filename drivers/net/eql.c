@@ -25,7 +25,7 @@ static const char *version =
  * Inspirations:
  *   The Harried and Overworked Alan Cox
  * Conspiracies:
- *   The Alan Cox and Arisian plot to get someone else to do the code, which
+ *   The Alan Cox and Mike McLagan plot to get someone else to do the code, which
  *   turned out to be me.
  */
 

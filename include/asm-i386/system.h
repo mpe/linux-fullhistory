@@ -47,9 +47,62 @@ __asm__("str %%ax\n\t" \
  *
  * It also reloads the debug regs if necessary..
  */
+
+ 
+#ifdef CONFIG_SMP
+	/*
+	 *	Keep the lock depth straight. If we switch on an interrupt from
+	 *	kernel->user task we need to lose a depth, and if we switch the
+	 *	other way we need to gain a depth. Same layer switches come out
+	 *	the same.
+	 *
+	 *	We spot a switch in user mode because the kernel counter is the
+	 *	same as the interrupt counter depth. (We never switch during the
+	 *	message/invalidate IPI).
+	 *
+	 *	We fsave/fwait so that an exception goes off at the right time
+	 *	(as a call from the fsave or fwait in effect) rather than to
+	 *	the wrong process.
+	 */
+
+#define switch_to(tsk) do { \
+	cli();\
+	if(current->flags&PF_USEDFPU) \
+	{ \
+		__asm__ __volatile__("fnsave %0":"=m" (current->tss.i387.hard)); \
+		__asm__ __volatile__("fwait"); \
+		current->flags&=~PF_USEDFPU;	 \
+	} \
+	current->lock_depth=syscall_count; \
+	kernel_counter+=next->lock_depth-current->lock_depth; \
+	syscall_count=next->lock_depth; \
+__asm__("pushl %%edx\n\t" \
+	"movl "SYMBOL_NAME_STR(apic_reg)",%%edx\n\t" \
+	"movl 0x20(%%edx), %%edx\n\t" \
+	"shrl $22,%%edx\n\t" \
+	"and  $0x3C,%%edx\n\t" \
+	"xchgl %%ecx,"SYMBOL_NAME_STR(current_set)"(,%%edx)\n\t" \
+	"popl %%edx\n\t" \
+	"ljmp %0\n\t" \
+	"sti\n\t" \
+	: /* no output */ \
+	:"m" (*(((char *)&tsk->tss.tr)-4)), \
+	 "c" (tsk) \
+	:"cx"); \
+	/* Now maybe reload the debug registers */ \
+	if(current->debugreg[7]){ \
+		loaddebug(0); \
+		loaddebug(1); \
+		loaddebug(2); \
+		loaddebug(3); \
+		loaddebug(6); \
+	} \
+} while (0)
+
+#else
 #define switch_to(tsk) do { \
 __asm__("cli\n\t" \
-	"xchgl %%ecx,"SYMBOL_NAME_STR(current)"\n\t" \
+	"xchgl %%ecx,"SYMBOL_NAME_STR(current_set)"\n\t" \
 	"ljmp %0\n\t" \
 	"sti\n\t" \
 	"cmpl %%ecx,"SYMBOL_NAME_STR(last_task_used_math)"\n\t" \
@@ -69,6 +122,7 @@ __asm__("cli\n\t" \
 		loaddebug(6); \
 	} \
 } while (0)
+#endif
 
 #define _set_base(addr,base) \
 __asm__("movw %%dx,%0\n\t" \

@@ -19,6 +19,8 @@
   Changelog:
 
   Paul Gortmaker	: remove set_bit lock, other cleanups.
+  Paul Gortmaker	: add ei_get_8390_hdr() so we can pass skb's to 
+			  ei_block_input() for eth_io_copy_and_sum().
 
   */
 
@@ -70,15 +72,18 @@ static const char *version =
 					  int start_page)
 		Write the COUNT bytes of BUF to the packet buffer at START_PAGE.  The
 		"page" value uses the 8390's 256-byte pages.
-	int block_input(struct device *dev, int count, char *buf, int ring_offset)
-		Read COUNT bytes from the packet buffer into BUF.  Start reading from
-		RING_OFFSET, the address as the 8390 sees it.  The first read will
-		always be the 4 byte, page aligned 8390 header.  *If* there is a
+	void get_8390_hdr(struct device *dev, struct e8390_hdr *hdr, int ring_page)
+		Read the 4 byte, page aligned 8390 header. *If* there is a
 		subsequent read, it will be of the rest of the packet.
+	void block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
+		Read COUNT bytes from the packet buffer into the skb data area. Start 
+		reading from RING_OFFSET, the address as the 8390 sees it.  This will always
+		follow the read of the 8390 header. 
 */
 #define ei_reset_8390 (ei_local->reset_8390)
 #define ei_block_output (ei_local->block_output)
 #define ei_block_input (ei_local->block_input)
+#define ei_get_8390_hdr (ei_local->get_8390_hdr)
 
 /* use 0 for production, 1 for verification, >2 for debug */
 #ifdef EI_DEBUG
@@ -152,17 +157,16 @@ static int ei_start_xmit(struct sk_buff *skb, struct device *dev)
 			printk("%s: xmit on stopped card\n", dev->name);
 			return 1;
 		}
-		printk(KERN_DEBUG "%s: transmit timed out, TX status %#2x, ISR %#2x.\n",
-			   dev->name, txsr, isr);
-		/* Does the 8390 thinks it has posted an interrupt? */
-		if (isr)
-			printk(KERN_DEBUG "%s: Possible IRQ conflict on IRQ%d?\n", dev->name, dev->irq);
-		else {
-			/* The 8390 probably hasn't gotten on the cable yet. */
-			printk(KERN_DEBUG "%s: Possible network cable problem?\n", dev->name);
-			if(ei_local->stat.tx_packets==0)
-				ei_local->interface_num ^= 1; 	/* Try a different xcvr.  */
+
+		printk(KERN_DEBUG "%s: Tx timed out, %s TSR=%#2x, ISR=%#2x, t=%d.\n",
+		   dev->name, (txsr & ENTSR_ABT) ? "excess collisions." :
+		   (isr) ? "lost interrupt?" : "cable problem?", txsr, isr, tickssofar);
+
+		if (!isr && !ei_local->stat.tx_packets) {
+		   /* The 8390 probably hasn't gotten on the cable yet. */
+		   ei_local->interface_num ^= 1;   /* Try a different xcvr.  */
 		}
+
 		/* Try to restart the card.  Perhaps the user has fixed something. */
 		ei_reset_8390(dev);
 		NS8390_init(dev, 1);
@@ -312,7 +316,7 @@ void ei_interrupt(int irq, struct pt_regs * regs)
 
 		/* Ignore any RDC interrupts that make it back to here. */
 		if (interrupts & ENISR_RDC) {
-				outb_p(ENISR_RDC, e8390_base + EN0_ISR);
+			outb_p(ENISR_RDC, e8390_base + EN0_ISR);
 		}
 
 		outb_p(E8390_NODMA+E8390_PAGE0+E8390_START, e8390_base + E8390_CMD);
@@ -431,10 +435,9 @@ static void ei_receive(struct device *dev)
 			break;				/* Done for now */
 		
 		current_offset = this_frame << 8;
-		ei_block_input(dev, sizeof(rx_frame), (char *)&rx_frame,
-					   current_offset);
+		ei_get_8390_hdr(dev, &rx_frame, this_frame);
 		
-		pkt_len = rx_frame.count - sizeof(rx_frame);
+		pkt_len = rx_frame.count - sizeof(struct e8390_pkt_hdr);
 		
 		next_frame = this_frame + 1 + ((pkt_len+4)>>8);
 		
@@ -470,9 +473,8 @@ static void ei_receive(struct device *dev)
 			} else {
 				skb_reserve(skb,2);	/* IP headers on 16 byte boundaries */
 				skb->dev = dev;
-				
-				ei_block_input(dev, pkt_len, skb_put(skb,pkt_len),
-							   current_offset + sizeof(rx_frame));
+				skb_put(skb, pkt_len);	/* Make room */
+				ei_block_input(dev, pkt_len, skb, current_offset + sizeof(rx_frame));
 				skb->protocol=eth_type_trans(skb,dev);
 				netif_rx(skb);
 				ei_local->stat.rx_packets++;
@@ -533,7 +535,7 @@ static void ei_rx_overrun(struct device *dev)
 	   easy way of timing something in that range, so we use 'jiffies' as
 	   a sanity check. */
     while ((inb_p(e8390_base+EN0_ISR) & ENISR_RESET) == 0)
-		if (jiffies - reset_start_time > 1) {
+		if (jiffies - reset_start_time > 2*HZ/100) {
 			printk("%s: reset did not complete at ei_rx_overrun.\n",
 				   dev->name);
 			NS8390_init(dev, 1);
@@ -576,7 +578,7 @@ static void set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 {
     short ioaddr = dev->base_addr;
     
-    if (num_addrs > 0) {
+    if (num_addrs > 0 || num_addrs == -2) {
 		/* The multicast-accept list is initialized to accept-all, and we
 		   rely on higher-level filtering for now. */
 		outb_p(E8390_RXCONFIG | 0x08, ioaddr + EN0_RXCR);

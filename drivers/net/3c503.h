@@ -6,6 +6,12 @@
 #define EL2H (dev->base_addr + 0x400)
 #define EL2L (dev->base_addr)
 
+/* Vendor unique hardware addr. prefix. 3Com has 2 because they ran
+   out of available addresses on the first one... */
+
+#define OLD_3COM_ID	0x02608c
+#define NEW_3COM_ID	0x0020af
+
 /* Shared memory management parameters */
 
 #define EL2SM_START_PG	(0x20)	/* First page of TX buffer */

@@ -88,7 +88,7 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 	this_sector = first_sector;
 
 	while (1) {
-		if ((current_minor & mask) >= hd->max_p)
+		if ((current_minor & mask) == 0)
 			return;
 		if (!(bh = bread(dev,0,1024)))
 			return;
@@ -134,7 +134,7 @@ static void extended_partition(struct gendisk *hd, kdev_t dev)
 
 		    add_partition(hd, current_minor, this_sector+p->start_sect, p->nr_sects);
 		    current_minor++;
-		    if ((current_minor & mask) >= hd->max_p)
+		    if ((current_minor & mask) == 0)
 		      goto done;
 		}
 		/*
@@ -254,8 +254,6 @@ check_table:
 		if (!p->nr_sects)
 			continue;
 		add_partition(hd, minor, first_sector+p->start_sect, p->nr_sects);
-		if ((current_minor & 0x3f) >= 60)
-			continue;
 		if (p->sys_ind == EXTENDED_PARTITION) {
 			printk(" <");
 			/*
@@ -280,7 +278,7 @@ check_table:
 		p = (struct partition *) (0x1be + data);
 		for (i = 4 ; i < 16 ; i++, current_minor++) {
 			p--;
-			if ((current_minor & mask) >= mask-2)
+			if ((current_minor & mask) == 0)
 				break;
 			if (!(p->start_sect && p->nr_sects))
 				continue;
@@ -299,6 +297,7 @@ check_table:
 static int osf_partition(struct gendisk *hd, unsigned int dev, unsigned long first_sector)
 {
 	int i;
+	int mask = (1 << hd->minor_shift) - 1;
 	struct buffer_head *bh;
 	struct disklabel {
 		u32 d_magic;
@@ -351,6 +350,8 @@ static int osf_partition(struct gendisk *hd, unsigned int dev, unsigned long fir
 		return 0;
 	}
 	for (i = 0 ; i < label->d_npartitions; i++, partition++) {
+		if ((current_minor & mask) == 0)
+		        break;
 		if (partition->p_size)
 			add_partition(hd, current_minor,
 				first_sector+partition->p_offset,

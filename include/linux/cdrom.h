@@ -65,6 +65,13 @@
  * CDROM IOCTL structures
  */
 
+struct cdrom_blk 
+{
+	unsigned from;
+	unsigned short len;
+};
+
+
 struct cdrom_msf 
 {
 	u_char	cdmsf_min0;	/* start minute */
@@ -285,7 +292,10 @@ struct cdrom_multisession
 #define CDROMREADCOOKED		0x5315	/* read data in cooked mode */
 #define CDROMSEEK		0x5316  /*seek msf address*/
   
-
+/*
+ * for playing audio in logical block addressing mode
+ */
+#define CDROMPLAYBLK		0x5317	/* (struct cdrom_blk) */
 
 /*
  * CD-ROM-specific SCSI command opcodes

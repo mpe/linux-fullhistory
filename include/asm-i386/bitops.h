@@ -13,6 +13,14 @@
  * bit 0 is the LSB of addr; bit 32 is the LSB of (addr+1).
  */
 
+#include <linux/config.h>
+
+#ifdef CONFIG_SMP
+#define LOCK_PREFIX "lock ; "
+#else
+#define LOCK_PREFIX ""
+#endif
+
 /*
  * Some hacks to defeat gcc over-optimizations..
  */
@@ -23,7 +31,8 @@ extern __inline__ int set_bit(int nr, void * addr)
 {
 	int oldbit;
 
-	__asm__ __volatile__("btsl %2,%1\n\tsbbl %0,%0"
+	__asm__ __volatile__(LOCK_PREFIX
+		"btsl %2,%1\n\tsbbl %0,%0"
 		:"=r" (oldbit),"=m" (ADDR)
 		:"ir" (nr));
 	return oldbit;
@@ -33,7 +42,8 @@ extern __inline__ int clear_bit(int nr, void * addr)
 {
 	int oldbit;
 
-	__asm__ __volatile__("btrl %2,%1\n\tsbbl %0,%0"
+	__asm__ __volatile__(LOCK_PREFIX
+		"btrl %2,%1\n\tsbbl %0,%0"
 		:"=r" (oldbit),"=m" (ADDR)
 		:"ir" (nr));
 	return oldbit;
@@ -43,7 +53,8 @@ extern __inline__ int change_bit(int nr, void * addr)
 {
 	int oldbit;
 
-	__asm__ __volatile__("btcl %2,%1\n\tsbbl %0,%0"
+	__asm__ __volatile__(LOCK_PREFIX
+		"btcl %2,%1\n\tsbbl %0,%0"
 		:"=r" (oldbit),"=m" (ADDR)
 		:"ir" (nr));
 	return oldbit;

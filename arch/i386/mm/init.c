@@ -15,6 +15,7 @@
 #include <linux/ptrace.h>
 #include <linux/mman.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
 
 #include <asm/system.h>
 #include <asm/segment.h>
@@ -111,9 +112,26 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
  * and SMM (for laptops with [34]86/SL chips) may need it.  It is read
  * and write protected to detect null pointer references in the
  * kernel.
+ * It may also hold the MP configuration table when we are booting SMP.
  */
 #if 0
 	memset((void *) 0, 0, PAGE_SIZE);
+#endif
+#ifdef CONFIG_SMP
+	smp_scan_config(0x0,0x400);	/* Scan the bottom 1K for a signature */
+	/*
+	 *	FIXME: Linux assumes you have 640K of base ram.. this continues
+	 *	the error...
+	 */
+	smp_scan_config(639*0x400,0x400);	/* Scan the top 1K of base RAM */
+	smp_scan_config(0xF0000,0x10000);	/* Scan the 64K of bios */
+	/*
+	 *	If it is an SMP machine we should know now, unless the configuration
+	 *	is in an EISA/MCA bus machine with an extended bios data area. I don't
+	 *	have such a machine so someone else can fill in the check of the EBDA
+	 *	here.
+	 */
+/*	smp_alloc_memory(8192); */
 #endif
 #ifdef CONFIG_TEST_VERIFY_AREA
 	wp_works_ok = 0;
@@ -123,6 +141,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 	pg_dir = swapper_pg_dir;
 	while (address < end_mem) {
 #ifdef CONFIG_PENTIUM_MM
+#ifndef CONFIG_SMP
 		if (address <= end_mem + 4*1024*1024 &&
 		    (x86_capability & 8)) {
 #ifdef GAS_KNOWS_CR4
@@ -143,6 +162,7 @@ unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
 			address += 4*1024*1024;
 			continue;
 		}
+#endif
 #endif
 		/* map the memory at virtual addr 0xC0000000 */
 		pg_table = (pte_t *) (PAGE_MASK & pgd_val(pg_dir[768]));
@@ -184,6 +204,14 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 
 	/* mark usable pages in the mem_map[] */
 	start_low_mem = PAGE_ALIGN(start_low_mem);
+
+#ifdef CONFIG_SMP
+	/*
+	 * But first pinch a few for the stack/trampoline stuff
+	 */
+	start_low_mem += PAGE_SIZE;				/* 32bit startup code */
+	start_low_mem = smp_alloc_memory(start_low_mem); 	/* AP processor stacks */
+#endif
 	start_mem = PAGE_ALIGN(start_mem);
 
 	/*

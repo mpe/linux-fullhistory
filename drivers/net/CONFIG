@@ -9,15 +9,14 @@
 #
 #  CONFIG_WD80x3	The Western Digital (SMC) WD80x3 driver
 #	WD_SHMEM=xxx	Forces the address of the shared memory
-#	WD_no_mapout	Don't map out the shared memory (faster, but
-#			your machine may not warm-boot).
 #  CONFIG_NE2000	The NE-[12]000 clone driver.
 #	PACKETBUF_MEMSIZE  Allows an extra-large packet buffer to be
 #			used.  Usually pointless under Linux.
 #	show_all_SAPROM  Show the entire address PROM, not just the
 #			ethernet address, during boot.
 #	CONFIG_NE_RW_BUGFIX  Patch an obscure bug with a version of the 8390.
-#	CONFIG_NE_SANITY ??
+#	CONFIG_NE_SANITY Double check the internal card xfer address
+#			against the driver's value. Useful for debugging.
 #  CONFIG_HPLAN		The HP-LAN driver (for 8390-based boards only).
 #	rw_bugfix	Fix the same obscure bug.
 #  CONFIG_EL2		The 3c503 EtherLink II driver

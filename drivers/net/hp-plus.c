@@ -101,14 +101,18 @@ int hpp_probe1(struct device *dev, int ioaddr);
 static void hpp_reset_8390(struct device *dev);
 static int hpp_open(struct device *dev);
 static int hpp_close(struct device *dev);
-static int hpp_mem_block_input(struct device *dev, int count,
-						  char *buf, int ring_offset);
+static void hpp_mem_block_input(struct device *dev, int count,
+						  struct sk_buff *skb, int ring_offset);
 static void hpp_mem_block_output(struct device *dev, int count,
 							const unsigned char *buf, const start_page);
-static int hpp_io_block_input(struct device *dev, int count,
-						  char *buf, int ring_offset);
+static void hpp_mem_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
+						  int ring_page);
+static void hpp_io_block_input(struct device *dev, int count,
+						  struct sk_buff *skb, int ring_offset);
 static void hpp_io_block_output(struct device *dev, int count,
 							const unsigned char *buf, const start_page);
+static void hpp_io_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
+						  int ring_page);
 
 
 /*	Probe a list of addresses for an HP LAN+ adaptor.
@@ -221,11 +225,13 @@ int hpp_probe1(struct device *dev, int ioaddr)
 	ei_status.reset_8390 = &hpp_reset_8390;
 	ei_status.block_input = &hpp_io_block_input;
 	ei_status.block_output = &hpp_io_block_output;
+	ei_status.get_8390_hdr = &hpp_io_get_8390_hdr;
 
 	/* Check if the memory_enable flag is set in the option register. */
 	if (mem_start) {
 		ei_status.block_input = &hpp_mem_block_input;
 		ei_status.block_output = &hpp_mem_block_output;
+		ei_status.get_8390_hdr = &hpp_mem_get_8390_hdr;
 		dev->mem_start = mem_start;
 		dev->rmem_start = dev->mem_start + TX_2X_PAGES*256;
 		dev->mem_end = dev->rmem_end
@@ -307,23 +313,49 @@ hpp_reset_8390(struct device *dev)
 	return;
 }
 
-/* Block input and output, similar to the Crynwr packet driver.
+/* The programmed-I/O version of reading the 4 byte 8390 specific header.
    Note that transfer with the EtherTwist+ must be on word boundaries. */
 
-static int
-hpp_io_block_input(struct device *dev, int count, char *buf, int ring_offset)
+static void
+hpp_io_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
 	int ioaddr = dev->base_addr - NIC_OFFSET;
+
+	outw((ring_page<<8), ioaddr + HPP_IN_ADDR);
+	insw(ioaddr + HP_DATAPORT, hdr, sizeof(struct e8390_pkt_hdr)>>1);
+}
+
+/* Block input and output, similar to the Crynwr packet driver. */
+
+static void
+hpp_io_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
+{
+	int ioaddr = dev->base_addr - NIC_OFFSET;
+	char *buf = skb->data;
 
 	outw(ring_offset, ioaddr + HPP_IN_ADDR);
 	insw(ioaddr + HP_DATAPORT, buf, count>>1);
 	if (count & 0x01)
         buf[count-1] = inw(ioaddr + HP_DATAPORT);
-	return ring_offset + count;
 }
 
-static int
-hpp_mem_block_input(struct device *dev, int count, char *buf, int ring_offset)
+/* The corresponding shared memory versions of the above 2 functions. */
+
+static void
+hpp_mem_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+{
+	int ioaddr = dev->base_addr - NIC_OFFSET;
+	int option_reg = inw(ioaddr + HPP_OPTION);
+
+	outw((ring_page<<8), ioaddr + HPP_IN_ADDR);
+	outw(option_reg & ~(MemDisable + BootROMEnb), ioaddr + HPP_OPTION);
+	memcpy_fromio(hdr, dev->mem_start, sizeof(struct e8390_pkt_hdr));
+	outw(option_reg, ioaddr + HPP_OPTION);
+	hdr->count = (hdr->count + 3) & ~3;	/* Round up allocation. */
+}
+
+static void
+hpp_mem_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
 {
 	int ioaddr = dev->base_addr - NIC_OFFSET;
 	int option_reg = inw(ioaddr + HPP_OPTION);
@@ -331,11 +363,13 @@ hpp_mem_block_input(struct device *dev, int count, char *buf, int ring_offset)
 	outw(ring_offset, ioaddr + HPP_IN_ADDR);
 
 	outw(option_reg & ~(MemDisable + BootROMEnb), ioaddr + HPP_OPTION);
-	/* Caution: this relies on 8390.c rounding up allocations! */
-	memcpy(buf, (char*)dev->mem_start,  (count + 3) & ~3);
-	outw(option_reg, ioaddr + HPP_OPTION);
 
-	return ring_offset + count;
+	/* Caution: this relies on get_8390_hdr() rounding up count!
+	   Also note that we *can't* use eth_io_copy_and_sum() because
+	   it will not always copy "count" bytes (e.g. padded IP).  */
+
+	memcpy_fromio(skb->data, dev->mem_start, count);
+	outw(option_reg, ioaddr + HPP_OPTION);
 }
 
 /* A special note: we *must* always transfer >=16 bit words.
@@ -359,7 +393,7 @@ hpp_mem_block_output(struct device *dev, int count,
 
 	outw(start_page << 8, ioaddr + HPP_OUT_ADDR);
 	outw(option_reg & ~(MemDisable + BootROMEnb), ioaddr + HPP_OPTION);
-	memcpy((char *)dev->mem_start, buf, (count + 3) & ~3);
+	memcpy_toio(dev->mem_start, buf, (count + 3) & ~3);
 	outw(option_reg, ioaddr + HPP_OPTION);
 
 	return;

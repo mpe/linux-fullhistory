@@ -11,6 +11,6 @@ MOD_SUB_DIRS := ipv4
 ALL_SUB_DIRS := 802 ax25 core ethernet ipv4 ipx unix appletalk netrom
 SUB_DIRS     := $(ALL_SUB_DIRS)
 L_TARGET     := network.a
-L_OBJS	     := socket.o protocols.o $(join $(SUB_DIRS),$(SUB_DIRS:%=/%.o))
+L_OBJS	     := socket.o protocols.o netlink.o $(join $(SUB_DIRS),$(SUB_DIRS:%=/%.o))
 
 include $(TOPDIR)/Rules.make

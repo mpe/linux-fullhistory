@@ -64,6 +64,8 @@
 #include <linux/netdevice.h>
 #include <linux/proc_fs.h>
 
+#include <net/netlink.h>
+
 #include <asm/system.h>
 #include <asm/segment.h>
 
@@ -1285,13 +1287,21 @@ void sock_init(void)
 {
 	int i;
 
-	printk("Swansea University Computer Society NET3.031 Snap #1 for Linux 1.3.25\n");
+	printk("Swansea University Computer Society NET3.031 Snap #3 for Linux 1.3.30\n");
 
 	/*
 	 *	Initialize all address (protocol) families. 
 	 */
 	 
 	for (i = 0; i < NPROTO; ++i) pops[i] = NULL;
+	
+	/*
+	 *	The netlink device handler may be needed early.
+	 */
+
+#ifdef CONFIG_NETLINK
+	init_netlink();
+#endif		 
 
 	/*
 	 *	Initialize the protocols module. 

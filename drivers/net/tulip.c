@@ -696,7 +696,7 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 	short ioaddr = dev->base_addr;
 	int csr6 = inl(ioaddr + CSR6) & ~0x00D5;
 
-	if (num_addrs > 15) {
+	if (num_addrs > 15 || num_addrs == -2) {
 		/* Too many to filter perfectly -- accept all multicasts. */
 		outl(csr6 | 0x0080, ioaddr + CSR6);
 	} else if (num_addrs < 0) {			/* Set promiscuous. */

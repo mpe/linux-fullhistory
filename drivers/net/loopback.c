@@ -14,6 +14,7 @@
  *		Alan Cox	:	Fixed oddments for NET3.014
  *		Alan Cox	:	Rejig for NET3.029 snap #3
  *		Alan Cox	: 	Fixed NET3.029 bugs and sped up
+ *		Larry McVoy	:	Tiny tweak to double performance
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License

@@ -90,6 +90,7 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
     int	  size, len = 0;
     off_t begin = 0;
     off_t pos = 0;
+    scd = NULL;
 
     HBA_ptr = first_HBA;
     for (i = 1; i <= registered_HBAs; i++) {
@@ -135,8 +136,8 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
     len += size; 
     pos = begin + len;
     
-    if(SD(HBA_ptr)->bustype == IS_EISA) {
-	if (HBA_ptr->dma_channel == 0xff)
+    if(SD(HBA_ptr)->broken_INQUIRY == TRUE) {
+	if (HBA_ptr->dma_channel == BUSMASTER)
 	    size = sprintf(buffer + len, "DMA: BUSMASTER\n");
 	else
 	    size = sprintf(buffer + len, "DMA: %d\n", HBA_ptr->dma_channel);
@@ -146,6 +147,7 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 	size = sprintf(buffer + len, "Base IO : %#.4x\n", (u32) HBA_ptr->base);
 	len += size; 
 	pos = begin + len;
+
 	size = sprintf(buffer + len, "Host Bus: EISA\n"); 
 	len += size; 
 	pos = begin + len;
@@ -456,6 +458,7 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 	    goto stop_output;
     }
 
+#if 0
     scd = scsi_devices;
     
     size = sprintf(buffer+len,"Attached devices: %s\n", (scd)?"":"none");
@@ -477,6 +480,7 @@ int eata_proc_info(char *buffer, char **start, off_t offset, int length,
 	}
 	scd = scd->next;
     }
+#endif
     
  stop_output:
     DBG(DBG_PROC, printk("2pos: %ld offset: %ld len: %d\n", pos, offset, len));

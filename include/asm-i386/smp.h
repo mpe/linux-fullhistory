@@ -1,6 +1,7 @@
 #ifndef __ASM_SMP_H
 #define __ASM_SMP_H
 
+#ifdef CONFIG_SMP
 #ifndef ASSEMBLY
 
 #include <asm/i82489.h>
@@ -165,7 +166,7 @@ struct cpuinfo_x86
 };
 
 
-extern struct cpuinfo_x86 cpu_data[NR_PROCS];
+extern struct cpuinfo_x86 cpu_data[NR_CPUS];
 
 /*
  *	Private routines/data
@@ -174,7 +175,7 @@ extern struct cpuinfo_x86 cpu_data[NR_PROCS];
 extern void smp_scan_config(unsigned long, unsigned long);
 extern unsigned long smp_alloc_memory(unsigned long mem_base);
 extern unsigned char *apic_reg;
-extern unsigned char *kernel_stacks[NR_PROCS];
+extern unsigned char *kernel_stacks[NR_CPUS];
 extern unsigned char boot_cpu_id;
 extern unsigned long cpu_present_map;
 extern void smp_invalidate(void);
@@ -227,5 +228,5 @@ extern __inline int smp_processor_id(void)
 #endif /* !ASSEMBLY */
 
 #define NO_PROC_ID		0xFF		/* No processor magic marker */
-
+#endif
 #endif

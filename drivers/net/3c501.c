@@ -654,6 +654,7 @@ el1_get_stats(struct device *dev)
 }
 
 /* Set or clear the multicast filter for this adaptor.
+   num_addrs == -2	All multicast hosts
    num_addrs == -1	Promiscuous mode, receive all packets
    num_addrs == 0	Normal mode, clear multicast list
    num_addrs > 0	Multicast mode, receive normal and MC packets, and do
@@ -664,8 +665,8 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 {
     int ioaddr = dev->base_addr;
 
-    if (num_addrs > 0) {
-	outb(RX_MULT, RX_CMD);
+    if (num_addrs > 0 || num_addrs==-2) {
+	outb(RX_MULT, RX_CMD);	/* Multicast or all multicast is the same */
 	inb(RX_STATUS);		/* Clear status. */
     } else if (num_addrs < 0) {
 	outb(RX_PROM, RX_CMD);

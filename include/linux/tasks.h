@@ -5,7 +5,11 @@
  * This is the maximum nr of tasks - change it if you need to
  */
  
-#define NR_PROCS	32		/* Max processors that can be running */
+#ifdef CONFIG_SMP
+#define NR_CPUS	32		/* Max processors that can be running in SMP */
+#else
+#define NR_CPUS 1
+#endif
 
 #define NR_TASKS	512
 

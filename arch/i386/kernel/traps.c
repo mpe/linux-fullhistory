@@ -10,6 +10,7 @@
  * to mainly kill the offending process (probably by giving it a signal,
  * but possibly by killing it outright if necessary).
  */
+#include <linux/config.h>
 #include <linux/head.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -111,6 +112,7 @@ int kstack_depth_to_print = 24;
 	}
 	console_verbose();
 	printk("%s: %04lx\n", str, err & 0xffff);
+	printk("CPU:    %d\n", smp_processor_id());
 	printk("EIP:    %04x:%08lx\nEFLAGS: %08lx\n", 0xffff & regs->cs,regs->eip,regs->eflags);
 	printk("eax: %08lx   ebx: %08lx   ecx: %08lx   edx: %08lx\n",
 		regs->eax, regs->ebx, regs->ecx, regs->edx);
@@ -190,11 +192,15 @@ asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 
 asmlinkage void do_nmi(struct pt_regs * regs, long error_code)
 {
+#ifdef CONFIG_SMP_NMI_INVAL
+	smp_invalidate_rcv();
+#else
 #ifndef CONFIG_IGNORE_NMI
 	printk("Uhhuh. NMI received. Dazed and confused, but trying to continue\n");
 	printk("You probably have a hardware problem with your RAM chips or a\n");
 	printk("power saving mode enabled.\n");
 #endif	
+#endif
 }
 
 asmlinkage void do_debug(struct pt_regs * regs, long error_code)
@@ -236,7 +242,19 @@ asmlinkage void do_debug(struct pt_regs * regs, long error_code)
 void math_error(void)
 {
 	struct i387_hard_struct * env;
-
+#ifdef CONFIG_SMP
+	env=&current->tss.i387.hard;
+	send_sig(SIGFPE, current, 1);
+	/*
+	 *	Save the info for the exception handler
+	 */
+	__asm__ __volatile__("fnsave %0":"=m" (*env));
+	current->flags&=~PF_USEDFPU;
+	/*
+	 *	Cause a trap if they use the FPU again.
+	 */
+	stts();
+#else
 	clts();
 	if (!last_task_used_math) {
 		__asm__("fnclex");
@@ -253,6 +271,7 @@ void math_error(void)
 	env->fos = env->twd;
 	env->swd &= 0xffff3800;
 	env->twd = 0xffffffff;
+#endif	
 }
 
 asmlinkage void do_coprocessor_error(struct pt_regs * regs, long error_code)
@@ -270,6 +289,30 @@ asmlinkage void do_coprocessor_error(struct pt_regs * regs, long error_code)
  */
 asmlinkage void math_state_restore(void)
 {
+#ifdef CONFIG_SMP
+/*
+ *	SMP is actually simpler than uniprocessor for once. Because
+ *	we can't pull the delayed FPU switching trick Linus does
+ *	we simply have to do the restore each context switch and
+ *	set the flag. switch_to() will always save the state in
+ *	case we swap processors. We also don't use the coprocessor
+ *	timer - IRQ 13 mode isnt used with SMP machines (thank god).
+ *
+ *	If this actually works it will be a miracle however
+ */
+	__asm__ __volatile__("clts");		/* Allow maths ops (or we recurse) */
+	if(current->used_math)
+		__asm__("frstor %0": :"m" (current->tss.i387));
+	else
+	{
+		/*
+		 *	Our first FPU usage, clean the chip.
+		 */
+		__asm__("fninit");
+		current->used_math = 1;
+	}
+	current->flags|=PF_USEDFPU;		/* So we fnsave on switch_to() */
+#else
 	__asm__ __volatile__("clts");
 	if (last_task_used_math == current)
 		return;
@@ -287,6 +330,7 @@ asmlinkage void math_state_restore(void)
 		current->used_math=1;
 	}
 	timer_active &= ~(1<<COPRO_TIMER);
+#endif	
 }
 
 #ifndef CONFIG_MATH_EMULATION
@@ -305,7 +349,15 @@ void trap_init(void)
 {
 	int i;
 	struct desc_struct * p;
-
+	static int smptrap=0;
+	
+	if(smptrap)
+	{
+		__asm__("pushfl ; andl $0xffffbfff,(%esp) ; popfl");
+		load_ldt(0);
+		return;
+	}
+	smptrap++;
 	if (strncmp((char*)0x0FFFD9, "EISA", 4) == 0)
 		EISA_bus = 1;
 	set_call_gate(&default_ldt,lcall7);

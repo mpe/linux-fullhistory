@@ -19,7 +19,7 @@
 	station address region, and the low three bits of next outb() *address*
 	is used	as the write value for that register.  Either someone wasn't
 	too used to dem bit en bites, or they were trying to obfuscate the
-	programming	interface.
+	programming interface.
 
 	There is an additional complication when setting the window on the packet
 	buffer.  You must first do a read into the packet buffer region with the
@@ -48,6 +48,7 @@ static const char *version =
 #include <linux/ioport.h>
 
 #include <linux/netdevice.h>
+#include <linux/etherdevice.h>
 #include "8390.h"
 
 static int e21_probe_list[] = {0x300, 0x280, 0x380, 0x220, 0};
@@ -99,10 +100,13 @@ int e21_probe1(struct device *dev, int ioaddr);
 
 static int e21_open(struct device *dev);
 static void e21_reset_8390(struct device *dev);
-static int e21_block_input(struct device *dev, int count,
-						   char *buf, int ring_offset);
+static void e21_block_input(struct device *dev, int count,
+						   struct sk_buff *skb, int ring_offset);
 static void e21_block_output(struct device *dev, int count,
 							 const unsigned char *buf, const start_page);
+static void e21_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
+							int ring_page);
+
 static int e21_close(struct device *dev);
 
 
@@ -189,7 +193,7 @@ int e21_probe1(struct device *dev, int ioaddr)
 	ei_status.tx_start_page = E21_TX_START_PG;
 	ei_status.rx_start_page = E21_RX_START_PG;
 	ei_status.stop_page = E21_RX_STOP_PG;
-    ei_status.saved_irq = dev->irq;
+	ei_status.saved_irq = dev->irq;
 
 	/* Check the media port used.  The port can be passed in on the
 	   low mem_end bits. */
@@ -227,6 +231,7 @@ int e21_probe1(struct device *dev, int ioaddr)
 	ei_status.reset_8390 = &e21_reset_8390;
 	ei_status.block_input = &e21_block_input;
 	ei_status.block_output = &e21_block_output;
+	ei_status.get_8390_hdr = &e21_get_8390_hdr;
 	dev->open = &e21_open;
 	dev->stop = &e21_close;
 	NS8390_init(dev, 0);
@@ -277,28 +282,40 @@ e21_reset_8390(struct device *dev)
 	return;
 }
 
-/*  Block input and output are easy on shared memory ethercards.
-	The E21xx makes block_input() especially easy by wrapping the top
-	ring buffer to the bottom automatically. */
-static int
-e21_block_input(struct device *dev, int count, char *buf, int ring_offset)
+/* Grab the 8390 specific header. We put the 2k window so the header page
+   appears at the start of the shared memory. */
+
+static void
+e21_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
+
 	short ioaddr = dev->base_addr;
 	char *shared_mem = (char *)dev->mem_start;
-	int start_page = (ring_offset>>8);
 
-	mem_on(ioaddr, shared_mem, start_page);
+	mem_on(ioaddr, shared_mem, ring_page);
 
-	/* We'll always get a 4 byte header read first. */
-	if (count == 4)
-		((int*)buf)[0] = ((int*)shared_mem)[0];
-	else
-		memcpy(buf, shared_mem + (ring_offset & 0xff), count);
+	memcpy_fromio(hdr, shared_mem, sizeof(struct e8390_pkt_hdr));
 
 	/* Turn off memory access: we would need to reprogram the window anyway. */
 	mem_off(ioaddr);
 
-	return 0;
+}
+
+/*  Block input and output are easy on shared memory ethercards.
+	The E21xx makes block_input() especially easy by wrapping the top
+	ring buffer to the bottom automatically. */
+static void
+e21_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
+{
+	short ioaddr = dev->base_addr;
+	char *shared_mem = (char *)dev->mem_start;
+
+	mem_on(ioaddr, shared_mem, (ring_offset>>8));
+
+	/* Packet is always in one chunk -- we can copy + cksum. */
+	eth_io_copy_and_sum(skb, dev->mem_start + (ring_offset & 0xff), count, 0);
+
+	mem_off(ioaddr);
 }
 
 static void
@@ -310,10 +327,10 @@ e21_block_output(struct device *dev, int count, const unsigned char *buf,
 
 	/* Set the shared memory window start by doing a read, with the low address
 	   bits specifying the starting page. */
-	*(shared_mem + start_page);
+	readb(shared_mem + start_page);
 	mem_on(ioaddr, shared_mem, start_page);
 
-	memcpy((char*)shared_mem, buf, count);
+	memcpy_toio(shared_mem, buf, count);
 	mem_off(ioaddr);
 }
 

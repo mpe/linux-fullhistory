@@ -509,6 +509,8 @@ static __inline__ void tcp_set_state(struct sock *sk, int state)
 	sk->state=state;
 	if(state==TCP_ESTABLISHED)
 		tcp_statistics.TcpCurrEstab++;
+	if(sk->state==TCP_CLOSE)
+		tcp_cache_zap();
 }
 
 /*

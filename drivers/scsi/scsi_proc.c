@@ -265,8 +265,8 @@ void proc_print_scsidevice(Scsi_Device *scd, char *buffer, int *size, int len)
     int x, y = *size;
     
     y = sprintf(buffer + len, 
-		    "Channel: %02d Id: %02d Lun: %02d\n  Vendor: ",
-		    scd->channel, scd->id, scd->lun);
+		    "Host: scsi%d Channel: %02d Id: %02d Lun: %02d\n  Vendor: ",
+		    scd->host->host_no, scd->channel, scd->id, scd->lun);
     for (x = 0; x < 8; x++) {
 	if (scd->vendor[x] >= 0x20)
 	    y += sprintf(buffer + len + y, "%c", scd->vendor[x]);

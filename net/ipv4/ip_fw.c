@@ -40,6 +40,7 @@
  *	Alan Cox		:	Fixed an error in the merge.
  *	Thomas Quinot		:	Fixed port spoofing.
  *	Alan Cox		:	Cleaned up retransmits in spoofing.
+ *	Alan Cox		:	Cleaned up length setting.
  *
  *	All the real work was done by .....
  *
@@ -266,7 +267,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 		case IPPROTO_TCP:
 			dprintf1("TCP ");
 			/* ports stay 0 if it is not the first fragment */
-			if (offset!=0) {
+			if (!offset) {
 				src_port=ntohs(tcp->source);
 				dst_port=ntohs(tcp->dest);
 				if(tcp->ack)
@@ -281,7 +282,7 @@ int ip_fw_chk(struct iphdr *ip, struct device *rif, struct ip_fw *chain, int pol
 		case IPPROTO_UDP:
 			dprintf1("UDP ");
 			/* ports stay 0 if it is not the first fragment */
-			if (offset!=0) {
+			if (!offset) {
 				src_port=ntohs(udp->source);
 				dst_port=ntohs(udp->dest);
 			}
@@ -700,6 +701,12 @@ static struct sk_buff *revamp(struct sk_buff *skb, struct device *dev, struct ip
 /* 		skb2->h.raw = &skb2->data[skb->h.raw - skb->data];*/
 		skb2->h.raw = skb2->data + (skb->h.raw - skb->data);
 		iph=skb2->h.iph;
+		/*
+		 *	Mend the IP header too
+		 */
+		iph->tot_len = htons(diff+ntohs(iph->tot_len));
+		iph->check = 0;
+		iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
  
  		/*
  		 *	Copy the packet data into the new buffer.

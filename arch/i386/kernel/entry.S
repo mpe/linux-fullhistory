@@ -41,8 +41,11 @@
  */
 
 #include <linux/sys.h>
+#include <linux/config.h>
 #include <linux/linkage.h>
 #include <asm/segment.h>
+#define ASSEMBLY
+#include <asm/smp.h>
 
 EBX		= 0x00
 ECX		= 0x04
@@ -102,13 +105,89 @@ ENOSYS = 38
 	movl $(USER_DS),%edx; \
 	mov %dx,%fs;
 
+#ifdef	CONFIG_SMP
+
+#define GET_PROCESSOR_ID \
+	movl SYMBOL_NAME(apic_reg), %edx; \
+	movl 32(%edx), %eax;\
+	movl %eax,SYMBOL_NAME(apic_retval); \
+	shrl $24,%eax; \
+	andb $0x0F,%al;
+
+/*
+ *	Get the processor ID multiplied by 4
+ */
+
+#define GET_PROCESSOR_OFFSET(x) \
+	movl SYMBOL_NAME(apic_reg), x ; \
+	movl 32( x ), x ; \
+	shrl $22, x ; \
+	andl $0x3C, x ;
+
+/* macro LEAVE_KERNEL decrements kernel_counter and resets kernel_flag and
+   saves processor variables if zero */
+#define	LEAVE_KERNEL \
+	pushfl; \
+	cli; \
+	decl SYMBOL_NAME(syscall_count); \
+	decl SYMBOL_NAME(kernel_counter); \
+	jnz 1f;	\
+	movb $(NO_PROC_ID), SYMBOL_NAME(active_kernel_processor); \
+	lock; \
+	btrl $0, SYMBOL_NAME(kernel_flag); \
+1:	popfl;
+
+/* macro ENTER_KERNEL waits for entering the kernel, increments
+   kernel_counter, and reloads the processor variables if necessary
+   uses : %eax, %edx (pushed and popped) 
+
+   Note: We go to great pains to minimise the number of locked operations.
+   We want to spin without locking, and lock when we attempt an update.
+   The pentium has a MESI cache so the spin without lock will exit when
+   another CPU write invalidates our cache, and the lock is avoided when
+   possible so we don't play ping-pong games with the cache line.
+
+*/
+
+#define	ENTER_KERNEL \
+	pushl %eax; \
+	pushl %edx; \
+	pushfl; \
+	cli; \
+	GET_PROCESSOR_ID \
+1:	lock; \
+	btsl $0, SYMBOL_NAME(kernel_flag); \
+	jnc 3f; \
+	cmpb SYMBOL_NAME(active_kernel_processor), %al; \
+	je 4f; \
+2:	incl SYMBOL_NAME(smp_spins); \
+	btl %al, SYMBOL_NAME(smp_invalidate_needed); \
+	jnc 5f; \
+	lock; \
+	btrl %al, SYMBOL_NAME(smp_invalidate_needed); \
+	jnc 5f; \
+	movl %cr3,%edx; \
+	movl %edx,%cr3; \
+5:	btl $0, SYMBOL_NAME(kernel_flag); \
+	jc 2b; \
+	jmp 1b; \
+3:	movb %al, SYMBOL_NAME(active_kernel_processor); \
+4:	incl SYMBOL_NAME(kernel_counter); \
+	incl SYMBOL_NAME(syscall_count); \
+	popfl; \
+	popl %edx; \
+	popl %eax;
+
+
 #define RESTORE_ALL \
 	cmpw $(KERNEL_CS),CS(%esp); \
 	je 1f;   \
-	movl SYMBOL_NAME(current),%eax; \
+	GET_PROCESSOR_OFFSET(%edx) \
+	movl SYMBOL_NAME(current_set)(,%edx), %eax ; ; \
 	movl dbgreg7(%eax),%ebx; \
 	movl %ebx,%db7;	\
-1:	popl %ebx; \
+1:	LEAVE_KERNEL \
+	popl %ebx; \
 	popl %ecx; \
 	popl %edx; \
 	popl %esi; \
@@ -122,10 +201,38 @@ ENOSYS = 38
 	addl $4,%esp; \
 	iret
 
+#else
+
+#define RESTORE_ALL \
+	cmpw $(KERNEL_CS),CS(%esp); \
+	je 1f;   \
+	movl SYMBOL_NAME(current_set),%eax; \
+	movl dbgreg7(%eax),%ebx; \
+	movl %ebx,%db7;	\
+1:	\
+	popl %ebx; \
+	popl %ecx; \
+	popl %edx; \
+	popl %esi; \
+	popl %edi; \
+	popl %ebp; \
+	popl %eax; \
+	pop %ds; \
+	pop %es; \
+	pop %fs; \
+	pop %gs; \
+	addl $4,%esp; \
+	iret
+#endif
+
+
 ENTRY(lcall7)
 	pushfl			# We get a different stack layout with call gates,
 	pushl %eax		# which has to be cleaned up later..
 	SAVE_ALL
+#ifdef CONFIG_SMP
+	ENTER_KERNEL
+#endif
 	movl EIP(%esp),%eax	# due to call gates, this is eflags, not eip..
 	movl CS(%esp),%edx	# this is eip..
 	movl EFLAGS(%esp),%ecx	# and this is cs..
@@ -133,7 +240,12 @@ ENTRY(lcall7)
 	movl %edx,EIP(%esp)	# Now we move them to their "normal" places
 	movl %ecx,CS(%esp)	#
 	movl %esp,%eax
-	movl SYMBOL_NAME(current),%edx
+#ifdef CONFIG_SMP
+	GET_PROCESSOR_OFFSET(%edx)	# Processor offset into edx
+	movl SYMBOL_NAME(current_set)(,%edx),%edx
+#else
+	movl SYMBOL_NAME(current_set),%edx
+#endif
 	pushl %eax
 	movl exec_domain(%edx),%edx	# Get the execution domain
 	movl 4(%edx),%edx	# Get the lcall7 handler for the domain
@@ -153,18 +265,26 @@ handle_bottom_half:
 	ALIGN
 reschedule:
 	pushl $ret_from_sys_call
-	jmp SYMBOL_NAME(schedule)
+	jmp SYMBOL_NAME(schedule)    # test
 
 ENTRY(system_call)
 	pushl %eax			# save orig_eax
 	SAVE_ALL
+#ifdef CONFIG_SMP
+	ENTER_KERNEL
+#endif
 	movl $-ENOSYS,EAX(%esp)
 	cmpl $(NR_syscalls),%eax
 	jae ret_from_sys_call
 	movl SYMBOL_NAME(sys_call_table)(,%eax,4),%eax
 	testl %eax,%eax
 	je ret_from_sys_call
-	movl SYMBOL_NAME(current),%ebx
+#ifdef CONFIG_SMP
+	GET_PROCESSOR_OFFSET(%edx)
+	movl SYMBOL_NAME(current_set)(,%edx),%ebx
+#else
+	movl SYMBOL_NAME(current_set),%ebx
+#endif
 	andl $~CF_MASK,EFLAGS(%esp)	# clear carry - assume no errors
 	movl $0,errno(%ebx)
 	movl %db6,%edx
@@ -184,7 +304,12 @@ ENTRY(system_call)
 	movl ORIG_EAX(%esp),%eax
 	call SYMBOL_NAME(sys_call_table)(,%eax,4)
 	movl %eax,EAX(%esp)		# save the return value
-	movl SYMBOL_NAME(current),%eax
+#ifdef CONFIG_SMP
+	GET_PROCESSOR_OFFSET(%eax)
+	movl SYMBOL_NAME(current_set)(,%eax),%eax
+#else
+	movl SYMBOL_NAME(current_set),%eax
+#endif
 	movl errno(%eax),%edx
 	negl %edx
 	je 1f
@@ -211,7 +336,12 @@ ret_from_sys_call:
 	movl %eax,EFLAGS(%esp)		# stupid
 	cmpl $0,SYMBOL_NAME(need_resched)
 	jne reschedule
-	movl SYMBOL_NAME(current),%eax
+#ifdef CONFIG_SMP
+	GET_PROCESSOR_OFFSET(%eax)
+	movl SYMBOL_NAME(current_set)(,%eax), %eax
+#else
+	movl SYMBOL_NAME(current_set),%eax
+#endif
 	cmpl SYMBOL_NAME(task),%eax	# task[0] cannot have signals
 	je 2f
 	cmpl $0,state(%eax)		# state
@@ -277,8 +407,16 @@ error_code:
 	mov %dx,%es
 	movl $(USER_DS),%edx
 	mov %dx,%fs
+#ifdef CONFIG_SMP
+	ENTER_KERNEL
+#endif
 	pushl %eax
-	movl SYMBOL_NAME(current),%eax
+#ifdef CONFIG_SMP
+	GET_PROCESSOR_OFFSET(%eax)
+	movl SYMBOL_NAME(current_set)(,%eax), %eax
+#else
+	movl SYMBOL_NAME(current_set),%eax
+#endif
 	movl %db6,%edx
 	movl %edx,dbgreg6(%eax)  # save current hardware debugging status
 	popl %eax
@@ -294,6 +432,9 @@ ENTRY(coprocessor_error)
 ENTRY(device_not_available)
 	pushl $-1		# mark this as an int
 	SAVE_ALL
+#ifdef CONFIG_SMP
+	ENTER_KERNEL
+#endif
 	pushl $ret_from_sys_call
 	movl %cr0,%eax
 	testl $0x4,%eax			# EM (math emulation bit)
@@ -518,4 +659,6 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_select)
 	.long SYMBOL_NAME(sys_flock)
 	.long SYMBOL_NAME(sys_msync)
-	.space (NR_syscalls-144)*4
+	.long SYMBOL_NAME(sys_readv)		/* 145 */
+	.long SYMBOL_NAME(sys_writev)
+	.space (NR_syscalls-146)*4

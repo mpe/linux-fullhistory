@@ -1325,7 +1325,7 @@ int revalidate_scsidisk(kdev_t dev, int maxusage){
          * Reset the blocksize for everything so that we can read
          * the partition table.
          */
-        blksize_size[MAJOR_NR][i] = 1024;
+        blksize_size[MAJOR_NR][minor] = 1024;
     };
     
 #ifdef MAYBE_REINIT

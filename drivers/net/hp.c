@@ -60,10 +60,13 @@ int hp_probe(struct device *dev);
 int hp_probe1(struct device *dev, int ioaddr);
 
 static void hp_reset_8390(struct device *dev);
-static int hp_block_input(struct device *dev, int count,
-						  char *buf, int ring_offset);
+static void hp_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
+					int ring_page);
+static void hp_block_input(struct device *dev, int count,
+					struct sk_buff *skb , int ring_offset);
 static void hp_block_output(struct device *dev, int count,
 							const unsigned char *buf, const start_page);
+
 static void hp_init_card(struct device *dev);
 
 /* The map from IRQ number to HP_CONFIGURE register setting. */
@@ -184,6 +187,7 @@ int hp_probe1(struct device *dev, int ioaddr)
 	ei_status.stop_page = wordmode ? HP_16BSTOP_PG : HP_8BSTOP_PG;
 
 	ei_status.reset_8390 = &hp_reset_8390;
+	ei_status.get_8390_hdr = &hp_get_8390_hdr;
 	ei_status.block_input = &hp_block_input;
 	ei_status.block_output = &hp_block_output;
 	hp_init_card(dev);
@@ -214,17 +218,40 @@ hp_reset_8390(struct device *dev)
 	return;
 }
 
-/* Block input and output, similar to the Crynwr packet driver.	 If you
+static void
+hp_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+{
+	int nic_base = dev->base_addr;
+	int saved_config = inb_p(nic_base - NIC_OFFSET + HP_CONFIGURE);
+
+	outb_p(saved_config | HP_DATAON, nic_base - NIC_OFFSET + HP_CONFIGURE);
+	outb_p(E8390_NODMA+E8390_PAGE0+E8390_START, nic_base);
+	outb_p(sizeof(struct e8390_pkt_hdr), nic_base + EN0_RCNTLO);
+	outb_p(0, nic_base + EN0_RCNTHI);
+	outb_p(0, nic_base + EN0_RSARLO);	/* On page boundary */
+	outb_p(ring_page, nic_base + EN0_RSARHI);
+	outb_p(E8390_RREAD+E8390_START, nic_base);
+
+	if (ei_status.word16) 
+	  insw(nic_base - NIC_OFFSET + HP_DATAPORT, hdr, sizeof(struct e8390_pkt_hdr)>>1);
+	else 
+	  insb(nic_base - NIC_OFFSET + HP_DATAPORT, hdr, sizeof(struct e8390_pkt_hdr));
+
+	outb_p(saved_config & (~HP_DATAON), nic_base - NIC_OFFSET + HP_CONFIGURE);
+}
+	
+/* Block input and output, similar to the Crynwr packet driver. If you are
    porting to a new ethercard look at the packet driver source for hints.
    The HP LAN doesn't use shared memory -- we put the packet
    out through the "remote DMA" dataport. */
 
-static int
-hp_block_input(struct device *dev, int count, char *buf, int ring_offset)
+static void
+hp_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
 {
 	int nic_base = dev->base_addr;
 	int saved_config = inb_p(nic_base - NIC_OFFSET + HP_CONFIGURE);
 	int xfer_count = count;
+	char *buf = skb->data;
 
 	outb_p(saved_config | HP_DATAON, nic_base - NIC_OFFSET + HP_CONFIGURE);
 	outb_p(E8390_NODMA+E8390_PAGE0+E8390_START, nic_base);
@@ -251,7 +278,6 @@ hp_block_input(struct device *dev, int count, char *buf, int ring_offset)
 			   dev->name, ring_offset + xfer_count, addr);
 	}
 	outb_p(saved_config & (~HP_DATAON), nic_base - NIC_OFFSET + HP_CONFIGURE);
-	return ring_offset + count;
 }
 
 static void

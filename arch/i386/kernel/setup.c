@@ -26,6 +26,7 @@
 
 #include <asm/segment.h>
 #include <asm/system.h>
+#include <asm/smp.h>
 
 /*
  * Tell us the machine setup..
@@ -83,6 +84,13 @@ void setup_arch(char **cmdline_p,
 	unsigned long memory_start, memory_end;
 	char c = ' ', *to = command_line, *from = COMMAND_LINE;
 	int len = 0;
+	static unsigned char smptrap=0;
+
+	if(smptrap==1)
+	{
+		return;
+	}
+	smptrap=1;
 
  	ROOT_DEV = to_kdev_t(ORIG_ROOT_DEV);
  	drive_info = DRIVE_INFO;
@@ -148,9 +156,10 @@ int get_cpuinfo(char * buffer)
 {
 	static const char *model[2][9]={{"DX","SX","DX/2","4","SX/2","6",
 				"DX/2-WB","DX/4"},
-			{"Pentium 60/66","Pentium 90/100","3",
+			{"Pentium 60/66","Pentium 75+","3",
 				"4","5","6","7","8"}};
 	char mask[2];
+#ifndef CONFIG_SMP	
 	mask[0] = x86_mask+'@';
 	mask[1] = '\0';
 	return sprintf(buffer,"cpu\t\t: %c86\n"
@@ -188,4 +197,90 @@ int get_cpuinfo(char * buffer)
 			      x86_capability & 256 ? "yes" : "no",
 		              loops_per_sec/500000, (loops_per_sec/5000) % 100
 			      );
+#else
+	char *bp=buffer;
+	int i;	
+	bp+=sprintf(bp,"cpu\t\t: ");
+	for(i=0;i<32;i++)
+		if(cpu_present_map&(1<<i))
+			bp+=sprintf(bp,"%c86             ",cpu_data[i].x86+'0');
+	bp+=sprintf(bp,"\nmodel\t\t: ");
+	for(i=0;i<32;i++)
+		if(cpu_present_map&(1<<i))
+			bp+=sprintf(bp,"%-16s",cpu_data[i].x86_model?
+					model[cpu_data[i].x86-4][cpu_data[i].x86_model-1]:"Unknown");
+	bp+=sprintf(bp,"\nmask\t\t: ");
+	for(i=0;i<32;i++)
+		if(cpu_present_map&(1<<i))
+		{
+			mask[0] = cpu_data[i].x86_mask+'@';
+			mask[1] = '\0';		
+			bp+=sprintf(bp,"%-16s", cpu_data[i].x86_mask ? mask : "Unknown");
+		}
+	bp+=sprintf(bp,"\nvid\t\t: ");
+	for(i=0;i<32;i++)
+		if(cpu_present_map&(1<<i))
+			bp+=sprintf(bp,"%-16s", cpu_data[i].x86_vendor_id);
+	bp+=sprintf(bp,"\nfdiv_bug\t: ");
+	for(i=0;i<32;i++)
+		if(cpu_present_map&(1<<i))
+			bp+=sprintf(bp,"%-16s", cpu_data[i].fdiv_bug?"yes":"no");
+	bp+=sprintf(bp,"\nmath\t\t: ");
+	for(i=0;i<32;i++)
+		if(cpu_present_map&(1<<i))
+			bp+=sprintf(bp,"%-16s", cpu_data[i].hard_math?"yes":"no");
+	bp+=sprintf(bp,"\nhlt\t\t: ");
+	for(i=0;i<32;i++)
+		if(cpu_present_map&(1<<i))
+			bp+=sprintf(bp,"%-16s", cpu_data[i].hlt_works_ok?"yes":"no");
+	bp+=sprintf(bp,"\nwp\t\t: ");
+	for(i=0;i<32;i++)
+		if(cpu_present_map&(1<<i))
+			bp+=sprintf(bp,"%-16s", cpu_data[i].wp_works_ok?"yes":"no");
+	bp+=sprintf(bp,"\nIntegrated NPU\t: ");
+	for(i=0;i<32;i++)
+		if(cpu_present_map&(1<<i))
+			bp+=sprintf(bp,"%-16s", cpu_data[i].x86_capability&1?"yes":"no");
+	bp+=sprintf(bp,"\nEnhanced VM86\t: ");
+	for(i=0;i<32;i++)
+		if(cpu_present_map&(1<<i))
+			bp+=sprintf(bp,"%-16s", cpu_data[i].x86_capability&2?"yes":"no");
+	bp+=sprintf(bp,"\nIO Breakpoints\t: ");
+	for(i=0;i<32;i++)
+		if(cpu_present_map&(1<<i))
+			bp+=sprintf(bp,"%-16s", (cpu_data[i].x86_capability&4)?"yes":"no");
+	bp+=sprintf(bp,"\n4MB Pages\t: ");
+	for(i=0;i<32;i++)
+		if(cpu_present_map&(1<<i))
+			bp+=sprintf(bp,"%-16s", (cpu_data[i].x86_capability)&8?"yes":"no");
+	bp+=sprintf(bp,"\nTS Counters\t: ");
+	for(i=0;i<32;i++)
+		if(cpu_present_map&(1<<i))
+			bp+=sprintf(bp,"%-16s", (cpu_data[i].x86_capability&16)?"yes":"no");
+	bp+=sprintf(bp,"\nPentium MSR\t: ");
+	for(i=0;i<32;i++)
+		if(cpu_present_map&(1<<i))
+			bp+=sprintf(bp,"%-16s", (cpu_data[i].x86_capability&32)?"yes":"no");
+	bp+=sprintf(bp,"\nMach. Ch. Exep.\t: ");
+	for(i=0;i<32;i++)
+		if(cpu_present_map&(1<<i))
+			bp+=sprintf(bp,"%-16s", (cpu_data[i].x86_capability&128)?"yes":"no");
+	bp+=sprintf(bp,"\nCMPXCHG8B\t: ");
+	for(i=0;i<32;i++)
+		if(cpu_present_map&(1<<i))
+			bp+=sprintf(bp,"%-16s", (cpu_data[i].x86_capability&256)?"yes":"no");
+	bp+=sprintf(bp,"\nBogoMips\t: ");
+	for(i=0;i<32;i++)
+	{
+		char tmp[17];
+		if(cpu_present_map&(1<<i))
+		{
+			sprintf(tmp,"%lu.%02lu",cpu_data[i].udelay_val/500000L,
+						   (cpu_data[i].udelay_val/5000L)%100);
+			bp+=sprintf(bp,"%-16s",tmp);
+		}
+	}
+	*bp++='\n';
+	return bp-buffer;
+#endif			      
 }

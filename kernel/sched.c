@@ -26,6 +26,7 @@
 #include <linux/tqueue.h>
 #include <linux/resource.h>
 #include <linux/mm.h>
+#include <linux/smp.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -88,7 +89,7 @@ struct task_struct init_task = INIT_TASK;
 
 unsigned long volatile jiffies=0;
 
-struct task_struct *current = &init_task;
+struct task_struct *current_set[NR_CPUS];
 struct task_struct *last_task_used_math = NULL;
 
 struct task_struct * task[NR_TASKS] = {&init_task, };
@@ -181,6 +182,12 @@ asmlinkage void schedule(void)
 	struct task_struct * p;
 	struct task_struct * next;
 	unsigned long timeout = 0;
+	
+#ifdef CONFIG_SMP_DEBUG
+	int proc=smp_processor_id();
+	if(active_kernel_processor!=proc)
+		panic("active kernel processor set wrongly! %d not %d\n", active_kernel_processor,proc);
+#endif
 
 /* check alarm, wake up any interruptible tasks that have got a signal */
 
@@ -210,6 +217,13 @@ asmlinkage void schedule(void)
 	}
 	p = init_task.next_run;
 	sti();
+	
+#ifdef CONFIG_SMP
+	/*
+	 *	This is safe as we do not permit re-entry of schedule()
+	 */
+	current->processor = NO_PROC_ID;	
+#endif	
 
 /*
  * Note! there may appear new tasks on the run-queue during this, as
@@ -220,6 +234,13 @@ asmlinkage void schedule(void)
 	c = -1000;
 	next = &init_task;
 	while (p != &init_task) {
+#ifdef CONFIG_SMP	
+		/* We are not permitted to run a task someone else is running */
+		if (p->processor != NO_PROC_ID) {
+			p = p->next_run;
+			continue;
+		}
+#endif		
 		if (p->counter > c)
 			c = p->counter, next = p;
 		p = p->next_run;
@@ -230,6 +251,20 @@ asmlinkage void schedule(void)
 		for_each_task(p)
 			p->counter = (p->counter >> 1) + p->priority;
 	}
+#ifdef CONFIG_SMP	
+	
+	/*
+	 *	Context switching between two idle threads is pointless.
+	 */
+	if(!current->pid && !next->pid)
+		next=current;
+	/*
+	 *	Allocate process to CPU
+	 */
+	 
+	 next->processor = smp_processor_id();
+	 
+#endif	 
 	if (current != next) {
 		struct timer_list timer;
 
@@ -446,6 +481,9 @@ static unsigned long count_active_tasks(void)
 			   (*p)->state == TASK_UNINTERRUPTIBLE ||
 			   (*p)->state == TASK_SWAPPING))
 			nr += FIXED_1;
+#ifdef CONFIG_SMP
+	nr-=(smp_num_cpus-1)*FIXED_1;
+#endif			
 	return nr;
 }
 
@@ -651,8 +689,7 @@ void do_timer(struct pt_regs * regs)
 	} else
 		xtime.tv_usec += tick + time_adjust_step;
 
-	if (time_adjust)
-	{
+	if (time_adjust) {
 	    /* We are doing an adjtime thing. 
 	     *
 	     * Modify the value of the tick for next time.
@@ -685,7 +722,7 @@ void do_timer(struct pt_regs * regs)
 	calc_load();
 	if (user_mode(regs)) {
 		current->utime++;
-		if (current != task[0]) {
+		if (current->pid) {
 			if (current->priority < 15)
 				kstat.cpu_nice++;
 			else
@@ -698,9 +735,9 @@ void do_timer(struct pt_regs * regs)
 		}
 	} else {
 		current->stime++;
-		if(current != task[0])
+		if(current->pid)
 			kstat.cpu_system++;
-		if (prof_buffer && current != task[0]) {
+		if (prof_buffer && current->pid) {
 			extern int _stext;
 			unsigned long ip = instruction_pointer(regs);
 			ip -= (unsigned long) &_stext;
@@ -727,7 +764,7 @@ void do_timer(struct pt_regs * regs)
 			send_sig(SIGXCPU, current, 1);
 	}
 
-	if (current != task[0] && 0 > --current->counter) {
+	if (current->pid && 0 > --current->counter) {
 		current->counter = 0;
 		need_resched = 1;
 	}
@@ -875,6 +912,15 @@ void show_state(void)
 
 void sched_init(void)
 {
+	/*
+	 *	We have to do a little magic to get the first
+	 *	process right in SMP mode.
+	 */
+	int cpu=smp_processor_id();
+	current_set[cpu]=&init_task;
+#ifdef CONFIG_SMP	
+	init_task.processor=cpu;
+#endif
 	bh_base[TIMER_BH].routine = timer_bh;
 	bh_base[TQUEUE_BH].routine = tqueue_bh;
 	bh_base[IMMEDIATE_BH].routine = immediate_bh;

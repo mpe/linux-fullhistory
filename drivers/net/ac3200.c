@@ -29,6 +29,7 @@ static const char *version =
 #include <asm/io.h>
 
 #include <linux/netdevice.h>
+#include <linux/etherdevice.h>
 #include "8390.h"
 
 /* Offsets from the base address. */
@@ -72,10 +73,13 @@ static int ac_probe1(int ioaddr, struct device *dev);
 
 static int ac_open(struct device *dev);
 static void ac_reset_8390(struct device *dev);
-static int ac_block_input(struct device *dev, int count,
-						  char *buf, int ring_offset);
+static void ac_block_input(struct device *dev, int count,
+					struct sk_buff *skb, int ring_offset);
 static void ac_block_output(struct device *dev, const int count,
 							const unsigned char *buf, const int start_page);
+static void ac_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
+					int ring_page);
+
 static int ac_close_card(struct device *dev);
 
 
@@ -195,6 +199,7 @@ static int ac_probe1(int ioaddr, struct device *dev)
 	ei_status.reset_8390 = &ac_reset_8390;
 	ei_status.block_input = &ac_block_input;
 	ei_status.block_output = &ac_block_output;
+	ei_status.get_8390_hdr = &ac_get_8390_hdr;
 
 	dev->open = &ac_open;
 	dev->stop = &ac_close_card;
@@ -237,33 +242,43 @@ static void ac_reset_8390(struct device *dev)
 	return;
 }
 
+/* Grab the 8390 specific header. Similar to the block_input routine, but
+   we don't need to be concerned with ring wrap as the header will be at
+   the start of a page, so we optimize accordingly. */
+
+static void
+ac_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+{
+	unsigned long hdr_start = dev->mem_start + ((ring_page - AC_START_PG)<<8);
+	memcpy_fromio(hdr, hdr_start, sizeof(struct e8390_pkt_hdr));
+}
+
 /*  Block input and output are easy on shared memory ethercards, the only
 	complication is when the ring buffer wraps. */
 
-static int ac_block_input(struct device *dev, int count, char *buf,
+static void ac_block_input(struct device *dev, int count, struct sk_buff *skb,
 						  int ring_offset)
 {
-	long xfer_start = dev->mem_start + ring_offset - (AC_START_PG<<8);
+	unsigned long xfer_start = dev->mem_start + ring_offset - (AC_START_PG<<8);
 
 	if (xfer_start + count > dev->rmem_end) {
 		/* We must wrap the input move. */
 		int semi_count = dev->rmem_end - xfer_start;
-		memcpy(buf, (char*)xfer_start, semi_count);
+		memcpy_fromio(skb->data, xfer_start, semi_count);
 		count -= semi_count;
-		memcpy(buf + semi_count, (char *)dev->rmem_start, count);
-		return dev->rmem_start + count;
+		memcpy_fromio(skb->data + semi_count, dev->rmem_start, count);
+	} else {
+		/* Packet is in one chunk -- we can copy + cksum. */
+		eth_io_copy_and_sum(skb, xfer_start, count, 0);
 	}
-	memcpy(buf, (char*)xfer_start, count);
-
-	return ring_offset + count;
 }
 
 static void ac_block_output(struct device *dev, int count,
 							const unsigned char *buf, int start_page)
 {
-	long shmem = dev->mem_start + ((start_page - AC_START_PG)<<8);
+	unsigned long shmem = dev->mem_start + ((start_page - AC_START_PG)<<8);
 
-	memcpy((unsigned char *)shmem, buf, count);
+	memcpy_toio(shmem, buf, count);
 }
 
 static int ac_close_card(struct device *dev)

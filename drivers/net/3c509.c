@@ -262,7 +262,7 @@ int el3_probe(struct device *dev)
 	dev->stop = &el3_close;
 	dev->get_stats = &el3_get_stats;
 #ifdef HAVE_MULTICAST
-		dev->set_multicast_list = &set_multicast_list;
+	dev->set_multicast_list = &set_multicast_list;
 #endif
 
 	/* Fill in the generic fields of the device structure. */
@@ -652,7 +652,7 @@ set_multicast_list(struct device *dev, int num_addrs, void *addrs)
 			printk("%s: Setting Rx mode to %d addresses.\n", dev->name, num_addrs);
 		}
 	}
-	if (num_addrs > 0) {
+	if (num_addrs > 0 || num_addrs == -2) {
 		outw(SetRxFilter|RxStation|RxMulticast|RxBroadcast, ioaddr + EL3_CMD);
 	} else if (num_addrs < 0) {
 		outw(SetRxFilter | RxStation | RxMulticast | RxBroadcast | RxProm,

@@ -11,6 +11,7 @@
  * management can be a bitch. See 'mm/mm.c': 'copy_page_tables()'
  */
 
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -20,6 +21,7 @@
 #include <linux/ptrace.h>
 #include <linux/malloc.h>
 #include <linux/ldt.h>
+#include <linux/smp.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -40,15 +42,17 @@ static int find_empty_process(void)
 			return -EAGAIN;
 	}
 repeat:
-	if ((++last_pid) & 0xffff8000)
-		last_pid=1;
+	if(smp_threads_ready) {
+		if ((++last_pid) & 0xffff8000)
+			last_pid=1;
+	}
 	this_user_tasks = 0;
 	for_each_task (p) {
 		if (p->uid == current->uid)
 			this_user_tasks++;
-		if (p->pid == last_pid ||
+		if (smp_threads_ready && (p->pid == last_pid ||
 		    p->pgrp == last_pid ||
-		    p->session == last_pid)
+		    p->session == last_pid))
 			goto repeat;
 	}
 	if (this_user_tasks > current->rlim[RLIMIT_NPROC].rlim_cur)
@@ -224,6 +228,10 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->tty_old_pgrp = 0;
 	p->utime = p->stime = 0;
 	p->cutime = p->cstime = 0;
+#ifdef CONFIG_SMP
+	p->processor = NO_PROC_ID;
+	p->lock_depth = 1;
+#endif
 	p->start_time = jiffies;
 	task[nr] = p;
 	SET_LINKS(p);

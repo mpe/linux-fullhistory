@@ -26,6 +26,8 @@
 #include <linux/mm.h>
 #include <linux/timex.h>
 
+#include <asm/segment.h>
+
 /* 
  * The timezone where the local system is located.  Used as a default by some
  * programs who obtain this value by using gettimeofday.

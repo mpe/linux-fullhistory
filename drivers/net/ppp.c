@@ -746,7 +746,7 @@ static void ppp_write_wakeup(struct tty_struct *tty)
 	ppp->stats.sbytes += actual;
 	if (actual == count) {
 		ppp->xtail = 0;
-		tty->flags &= ~TTY_DO_WRITE_WAKEUP;
+		tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
 
 		ppp_output_done(ppp);
 	} else {

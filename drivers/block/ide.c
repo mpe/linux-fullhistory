@@ -149,10 +149,9 @@
  *  Driver compile-time options are in ide.h
  *
  *  To do, in likely order of completion:
- *	- figure out why Mitsumi ATAPI cdroms are having trouble..
  *	- add ioctls to get/set interface timings on cmd640, ht6560b, triton
  *	- modify kernel to obtain BIOS geometry for drives on 2nd/3rd/4th i/f
- *	- improved CMD support:  probably handing this off to someone else
+ *	- improved CMD support:  handed this off to someone else
  *	- find someone to work on IDE *tape drive* support
  */
 

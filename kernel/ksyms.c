@@ -273,7 +273,10 @@ struct symbol_table symbol_table = {
 	X(sleep_on),
 	X(interruptible_sleep_on),
 	X(schedule),
-	X(current),
+	X(current_set),
+#if defined(__i386__) && defined(CONFIG_SMP)
+	X(apic_reg),		/* Needed internally for the I386 inlines */
+#endif	
 	X(jiffies),
 	X(xtime),
 	X(loops_per_sec),

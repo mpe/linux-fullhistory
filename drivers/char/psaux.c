@@ -499,7 +499,6 @@ unsigned long psaux_init(unsigned long kmem_start)
 		printk("PS/2 auxiliary pointing device detected -- driver installed.\n");
 	 	aux_present = 1;
 		kbd_read_mask = AUX_OBUF_FULL;
-		mouse_register(&psaux_mouse);
 	} else {
 #ifdef MODULE
 		return -EIO;
@@ -507,6 +506,7 @@ unsigned long psaux_init(unsigned long kmem_start)
 		return kmem_start;              /* No mouse at all */
 #endif
 	}
+	mouse_register(&psaux_mouse);
 	queue = (struct aux_queue *) kmem_start;
 	kmem_start += sizeof (struct aux_queue);
 	memset(queue, 0, sizeof(*queue));

@@ -77,6 +77,8 @@
 #define __NR_gettimeofday	116
 #define __NR_getrusage		117
 #define __NR_getsockopt		118
+#define __NR_readv		120
+#define __NR_writev		121
 #define __NR_settimeofday	122
 #define __NR_fchown		123
 #define __NR_fchmod		124
@@ -126,7 +128,7 @@
 #define __NR_syslog		310
 #define __NR_reboot		311
 #define __NR_clone		312
-
+#define __NR_uselib		313
 
 #ifdef __LIBRARY__
 

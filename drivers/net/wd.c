@@ -45,8 +45,10 @@ int wd_probe1(struct device *dev, int ioaddr);
 
 static int wd_open(struct device *dev);
 static void wd_reset_8390(struct device *dev);
-static int wd_block_input(struct device *dev, int count,
-						  char *buf, int ring_offset);
+static void wd_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
+						int ring_page);
+static void wd_block_input(struct device *dev, int count,
+						  struct sk_buff *skb, int ring_offset);
 static void wd_block_output(struct device *dev, int count,
 							const unsigned char *buf, const start_page);
 static int wd_close_card(struct device *dev);
@@ -261,6 +263,7 @@ int wd_probe1(struct device *dev, int ioaddr)
 	ei_status.reset_8390 = &wd_reset_8390;
 	ei_status.block_input = &wd_block_input;
 	ei_status.block_output = &wd_block_output;
+	ei_status.get_8390_hdr = &wd_get_8390_hdr;
 	dev->open = &wd_open;
 	dev->stop = &wd_close_card;
 	NS8390_init(dev, 0);
@@ -316,40 +319,50 @@ wd_reset_8390(struct device *dev)
 	return;
 }
 
+/* Grab the 8390 specific header. Similar to the block_input routine, but
+   we don't need to be concerned with ring wrap as the header will be at
+   the start of a page, so we optimize accordingly. */
+
+static void
+wd_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+{
+
+	int wd_cmdreg = dev->base_addr - WD_NIC_OFFSET; /* WD_CMDREG */
+	unsigned long hdr_start = dev->mem_start + ((ring_page - WD_START_PG)<<8);
+
+	/* We'll always get a 4 byte header read followed by a packet read, so
+	   we enable 16 bit mode before the header, and disable after the body. */
+	if (ei_status.word16)
+		outb(ISA16 | ei_status.reg5, wd_cmdreg+WD_CMDREG5);
+
+	memcpy_fromio(hdr, hdr_start, sizeof(struct e8390_pkt_hdr));
+}
+
 /* Block input and output are easy on shared memory ethercards, and trivial
    on the Western digital card where there is no choice of how to do it.
    The only complications are that the ring buffer wraps, and need to map
    switch between 8- and 16-bit modes. */
 
-static int
-wd_block_input(struct device *dev, int count, char *buf, int ring_offset)
+static void
+wd_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
 {
 	int wd_cmdreg = dev->base_addr - WD_NIC_OFFSET; /* WD_CMDREG */
-	long xfer_start = dev->mem_start + ring_offset - (WD_START_PG<<8);
-
-	/* We'll always get a 4 byte header read followed by a packet read, so
-	   we enable 16 bit mode before the header, and disable after the body. */
-	if (count == 4) {
-		if (ei_status.word16)
-			outb(ISA16 | ei_status.reg5, wd_cmdreg+WD_CMDREG5);
-		((int*)buf)[0] = ((int*)xfer_start)[0];
-		return 0;
-	}
+	unsigned long xfer_start = dev->mem_start + ring_offset - (WD_START_PG<<8);
 
 	if (xfer_start + count > dev->rmem_end) {
 		/* We must wrap the input move. */
 		int semi_count = dev->rmem_end - xfer_start;
-		memcpy(buf, (char *)xfer_start, semi_count);
+		memcpy_fromio(skb->data, xfer_start, semi_count);
 		count -= semi_count;
-		memcpy(buf + semi_count, (char *)dev->rmem_start, count);
-	} else
-		memcpy(buf, (char *)xfer_start, count);
+		memcpy_fromio(skb->data + semi_count, dev->rmem_start, count);
+	} else {
+		/* Packet is in one chunk -- we can copy + cksum. */
+		eth_io_copy_and_sum(skb, xfer_start, count, 0);
+	}
 
 	/* Turn off 16 bit access so that reboot works.	 ISA brain-damage */
 	if (ei_status.word16)
 		outb(ei_status.reg5, wd_cmdreg+WD_CMDREG5);
-
-	return 0;
 }
 
 static void
@@ -363,10 +376,10 @@ wd_block_output(struct device *dev, int count, const unsigned char *buf,
 	if (ei_status.word16) {
 		/* Turn on and off 16 bit access so that reboot works. */
 		outb(ISA16 | ei_status.reg5, wd_cmdreg+WD_CMDREG5);
-		memcpy((char *)shmem, buf, count);
+		memcpy_toio(shmem, buf, count);
 		outb(ei_status.reg5, wd_cmdreg+WD_CMDREG5);
 	} else
-		memcpy((char *)shmem, buf, count);
+		memcpy_toio(shmem, buf, count);
 }
 
 

@@ -71,8 +71,10 @@ static void el2_reset_8390(struct device *dev);
 static void el2_init_card(struct device *dev);
 static void el2_block_output(struct device *dev, int count,
 			     const unsigned char *buf, const start_page);
-static int el2_block_input(struct device *dev, int count, char *buf,
+static void el2_block_input(struct device *dev, int count, struct sk_buff *skb,
 			   int ring_offset);
+static void el2_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
+			 int ring_page);
 
 
 /* This routine probes for a memory-mapped 3c503 board by looking for
@@ -148,6 +150,7 @@ el2_probe1(struct device *dev, int ioaddr)
 {
     int i, iobase_reg, membase_reg, saved_406;
     static unsigned version_printed = 0;
+    unsigned long vendor_id;
 
     /* Reset and/or avoid any lurking NE2000 */
     if (inb(ioaddr + 0x408) == 0xff) {
@@ -167,11 +170,11 @@ el2_probe1(struct device *dev, int ioaddr)
     saved_406 = inb_p(ioaddr + 0x406);
     outb_p(ECNTRL_RESET|ECNTRL_THIN, ioaddr + 0x406); /* Reset it... */
     outb_p(ECNTRL_THIN, ioaddr + 0x406);
-    /* Map the station addr PROM into the lower I/O ports. */
+    /* Map the station addr PROM into the lower I/O ports. We now check
+       for both the old and new 3Com prefix */
     outb(ECNTRL_SAPROM|ECNTRL_THIN, ioaddr + 0x406);
-    if (   inb(ioaddr + 0) != 0x02
-	|| inb(ioaddr + 1) != 0x60
-	|| inb(ioaddr + 2) != 0x8c) {
+    vendor_id = inb(ioaddr)*0x10000 + inb(ioaddr + 1)*0x100 + inb(ioaddr + 2);
+    if ((vendor_id != OLD_3COM_ID) && (vendor_id != NEW_3COM_ID)) {
 	/* Restore the register we frobbed. */
 	outb(saved_406, ioaddr + 0x406);
 	return ENODEV;
@@ -250,6 +253,7 @@ el2_probe1(struct device *dev, int ioaddr)
     ei_status.rx_start_page = EL2SM_START_PG + TX_PAGES;
     ei_status.stop_page = EL2SM_STOP_PG;
     ei_status.reset_8390 = &el2_reset_8390;
+    ei_status.get_8390_hdr = &el2_get_8390_hdr;
     ei_status.block_input = &el2_block_input;
     ei_status.block_output = &el2_block_output;
 
@@ -268,7 +272,7 @@ el2_probe1(struct device *dev, int ioaddr)
     dev->stop = &el2_close;
 
     if (dev->mem_start)
-	printk("\n%s: %s with shared memory at %#6lx-%#6lx,\n",
+	printk("\n%s: %s with shared memory at %#6lx-%#6lx.\n",
 	       dev->name, ei_status.name, dev->mem_start, dev->mem_end-1);
     else
 	printk("\n%s: %s using programmed I/O (REJUMPER for SHARED MEMORY).\n",
@@ -388,12 +392,9 @@ el2_block_output(struct device *dev, int count,
     outb(EGACFR_NORM, E33G_GACFR);	/* Enable RAM and interrupts. */
 
     if (dev->mem_start) {	/* Shared memory transfer */
-	void *dest_addr = (void *)(dev->mem_start +
-	    ((start_page - ei_status.tx_start_page) << 8));
-	memcpy(dest_addr, buf, count);
-	if (ei_debug > 2  &&  memcmp(dest_addr, buf, count))
-	    printk("%s: 3c503 send_packet() bad memory copy @ %#5x.\n",
-		   dev->name, (int) dest_addr);
+	unsigned long dest_addr = dev->mem_start +
+	    ((start_page - ei_status.tx_start_page) << 8);
+	memcpy_toio(dest_addr, buf, count);
 	return;
     }
     /* No shared memory, put the packet out the slow way. */
@@ -420,9 +421,34 @@ el2_block_output(struct device *dev, int count,
     return;
 }
 
+/* Read the 4 byte, page aligned 8390 specific header. */
+static void
+el2_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+{
+    unsigned int i;
+    unsigned long hdr_start = dev->mem_start + ((ring_page - EL2SM_START_PG)<<8);
+
+    if (dev->mem_start) {       /* Use the shared memory. */
+	memcpy_fromio(hdr, hdr_start, sizeof(struct e8390_pkt_hdr));
+	return;
+    }
+
+    /* No shared memory, use programmed I/O. Ugh. */
+    outb(0, E33G_DMAAL);
+    outb_p(ring_page & 0xff, E33G_DMAAH);
+    outb_p((ei_status.interface_num == 0 ? ECNTRL_THIN : ECNTRL_AUI) | ECNTRL_INPUT
+	   | ECNTRL_START, E33G_CNTRL);
+
+    /* Header is less than 8 bytes, so we can ignore the FIFO. */
+    for(i = 0; i < sizeof(struct e8390_pkt_hdr); i++)
+	((char *)(hdr))[i] = inb_p(E33G_FIFOH);
+
+    outb_p(ei_status.interface_num == 0 ? ECNTRL_THIN : ECNTRL_AUI, E33G_CNTRL);
+}
+
 /* Returns the new ring pointer. */
-static int
-el2_block_input(struct device *dev, int count, char *buf, int ring_offset)
+static void
+el2_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
 {
     int boguscount = 0;
     int end_of_ring = dev->rmem_end;
@@ -434,13 +460,14 @@ el2_block_input(struct device *dev, int count, char *buf, int ring_offset)
 	if (dev->mem_start + ring_offset + count > end_of_ring) {
 	    /* We must wrap the input move. */
 	    int semi_count = end_of_ring - (dev->mem_start + ring_offset);
-	    memcpy(buf, (char *)dev->mem_start + ring_offset, semi_count);
+	    memcpy_fromio(skb->data, dev->mem_start + ring_offset, semi_count);
 	    count -= semi_count;
-	    memcpy(buf + semi_count, (char *)dev->rmem_start, count);
-	    return dev->rmem_start + count;
+	    memcpy_fromio(skb->data + semi_count, dev->rmem_start, count);
+	} else {
+		/* Packet is in one chunk -- we can copy + cksum. */
+		eth_io_copy_and_sum(skb, dev->mem_start + ring_offset, count, 0);
 	}
-	memcpy(buf, (char *)dev->mem_start + ring_offset, count);
-	return ring_offset + count;
+	return;
     }
     /* No shared memory, use programmed I/O. */
     outb(ring_offset & 0xff, E33G_DMAAL);
@@ -459,10 +486,9 @@ el2_block_input(struct device *dev, int count, char *buf, int ring_offset)
 		    boguscount = 0;
 		    break;
 		}
-	buf[i] = inb_p(E33G_FIFOH);
+	(skb->data)[i] = inb_p(E33G_FIFOH);
     }
     outb_p(ei_status.interface_num == 0 ? ECNTRL_THIN : ECNTRL_AUI, E33G_CNTRL);
-    return 0;
 }
 #ifdef MODULE
 char kernel_version[] = UTS_RELEASE;

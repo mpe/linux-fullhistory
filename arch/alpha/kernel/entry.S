@@ -590,7 +590,7 @@ sys_call_table:
 	.quad sys_setsockopt, sys_listen, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, sys_sigsuspend, do_entSys, do_entSys, do_entSys
 	.quad do_entSys, sys_gettimeofday, sys_getrusage, sys_getsockopt, do_entSys
-	.quad do_entSys, do_entSys, sys_settimeofday, sys_fchown, sys_fchmod
+	.quad sys_readv, sys_writev, sys_settimeofday, sys_fchown, sys_fchmod
 	.quad sys_recvfrom, sys_setreuid, sys_setregid, sys_rename, sys_truncate
 	.quad sys_ftruncate, do_entSys, sys_setgid, sys_sendto, sys_shutdown
 	.quad sys_socketpair, sys_mkdir, sys_rmdir, sys_utimes, do_entSys
@@ -629,6 +629,6 @@ sys_call_table:
 /* linux-specific system calls start at 300 */
 /*300*/	.quad sys_bdflush, sys_sethae, sys_mount, sys_adjtimex, sys_swapoff
 	.quad sys_getdents, sys_create_module, sys_init_module, sys_delete_module, sys_get_kernel_syms
-	.quad sys_syslog, sys_reboot, sys_clone, do_entSys, do_entSys
+	.quad sys_syslog, sys_reboot, sys_clone, sys_uselib, do_entSys
 	.quad do_entSys, do_entSys, do_entSys, do_entSys, do_entSys
 

@@ -93,6 +93,8 @@
  *	Werner Almesberger	:	Zero fragment bug
  *		Alan Cox	:	RAW IP frame length bug
  *		Alan Cox	:	Outgoing firewall on build_xmit
+ *		A.N.Kuznetsov	:	IP_OPTIONS support throughout the kernel
+ *		Alan Cox	:	Multicast routing hooks
  *
  *  
  *
@@ -1466,6 +1468,50 @@ static void ip_fragment(struct sock *sk, struct sk_buff *skb, struct device *dev
 
 
 #ifdef CONFIG_IP_FORWARD
+#ifdef CONFIG_IP_MROUTE
+
+/*
+ * 	Encapsulate a packet by attaching a valid IPIP header to it.
+ *	This avoids tunnel drivers and other mess and gives us the speed so
+ *	important for multicast video.
+ */
+ 
+static void ip_encap(struct sk_buff *skb, int len, struct device *out, __u32 daddr)
+{
+	/*
+	 *	There is space for the IPIP header and MAC left.
+	 *
+	 *	Firstly push down and install the IPIP header.
+	 */
+	struct iphdr *iph=(struct iphdr *)skb_push(skb,sizeof(struct iphdr));
+	if(len>65515)
+		len=65515;
+	iph->version	= 	4;
+	iph->tos	=	skb->ip_hdr->tos;
+	iph->ttl	=	skb->ip_hdr->ttl;
+	iph->frag_off	=	0;
+	iph->daddr	=	daddr;
+	iph->saddr	=	out->pa_addr;
+	iph->protocol	=	IPPROTO_IPIP;
+	iph->ihl	=	5;
+	iph->tot_len	=	htons(skb->len);
+	iph->id		=	htons(ip_id_count++);
+	ip_send_check(iph);
+
+	skb->dev = out;
+	skb->arp = 1;
+	skb->raddr=daddr;
+	/*
+	 *	Now add the physical header (driver will push it down).
+	 */
+	if (out->hard_header && out->hard_header(skb, out, ETH_P_IP, NULL, NULL, len)<0)
+			skb->arp=0;
+	/*
+	 *	Read to queue for transmission.
+	 */
+}
+
+#endif
 
 /*
  *	Forward an IP datagram to its next destination.
@@ -1485,7 +1531,8 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 	int fw_res = 0;		/* Forwarding result */	
 #ifdef CONFIG_IP_MASQUERADE	
 	struct sk_buff *skb_in = skb;	/* So we can remember if the masquerader did some swaps */
-#endif	
+#endif
+	int encap = 0;		/* Encap length */
 	
 	/* 
 	 *	See if we are allowed to forward this.
@@ -1542,83 +1589,86 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 		return -1;
 	}
 
-	/*
-	 * OK, the packet is still valid.  Fetch its destination address,
-	 * and give it to the IP sender for further processing.
-	 */
-
-	rt = ip_rt_route(target_addr, NULL, NULL);
-	if (rt == NULL)
+#ifdef CONFIG_IP_MROUTE
+	if(!(is_frag&8))
 	{
+#endif	
 		/*
-		 *	Tell the sender its packet cannot be delivered. Again
-		 *	ICMP is screened later.
-		 */
-		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_NET_UNREACH, 0, dev);
-		return -1;
-	}
-
-
-	/*
-	 * Gosh.  Not only is the packet valid; we even know how to
-	 * forward it onto its final destination.  Can we say this
-	 * is being plain lucky?
-	 * If the router told us that there is no GW, use the dest.
-	 * IP address itself- we seem to be connected directly...
-	 */
-
-	raddr = rt->rt_gateway;
-
-	if (raddr != 0)
-	{
-		/*
-		 *	Strict routing permits no gatewaying
+		 * OK, the packet is still valid.  Fetch its destination address,
+		 * and give it to the IP sender for further processing.
 		 */
 
-	        if (opt->is_strictroute)
-		{
-			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_SR_FAILED, 0, dev);
-			return -1;
-		}
-	
-		/*
-		 *	There is a gateway so find the correct route for it.
-		 *	Gateways cannot in turn be gatewayed.
-		 */
-
-#if 0
-		rt = ip_rt_route(raddr, NULL, NULL);
+		rt = ip_rt_route(target_addr, NULL, NULL);
 		if (rt == NULL)
 		{
 			/*
-			 *	Tell the sender its packet cannot be delivered...
+			 *	Tell the sender its packet cannot be delivered. Again
+			 *	ICMP is screened later.
 			 */
-			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0, dev);
+			icmp_send(skb, ICMP_DEST_UNREACH, ICMP_NET_UNREACH, 0, dev);
 			return -1;
 		}
-		if (rt->rt_gateway != 0)
-			raddr = rt->rt_gateway;
+	
+	
+		/*
+		 * Gosh.  Not only is the packet valid; we even know how to
+		 * forward it onto its final destination.  Can we say this
+		 * is being plain lucky?
+		 * If the router told us that there is no GW, use the dest.
+		 * IP address itself- we seem to be connected directly...
+		 */
+
+		raddr = rt->rt_gateway;
+	
+		if (raddr != 0)
+		{
+			/*
+			 *	Strict routing permits no gatewaying
+			 */
+	
+		        if (opt->is_strictroute)
+			{
+				icmp_send(skb, ICMP_DEST_UNREACH, ICMP_SR_FAILED, 0, dev);
+				return -1;
+			}
+		
+			/*
+			 *	There is a gateway so find the correct route for it.
+			 *	Gateways cannot in turn be gatewayed.
+			 */
+		}
+		else
+			raddr = target_addr;
+
+		/*
+		 *	Having picked a route we can now send the frame out.
+		 */
+
+		dev2 = rt->rt_dev;
+		/*
+		 *	In IP you never have to forward a frame on the interface that it 
+		 *	arrived upon. We now generate an ICMP HOST REDIRECT giving the route
+		 *	we calculated.
+		 */
+#ifndef CONFIG_IP_NO_ICMP_REDIRECT
+		if (dev == dev2 && !((iph->saddr^iph->daddr)&dev->pa_mask) &&
+		    (rt->rt_flags&RTF_MODIFIED) && !opt->srr)
+			icmp_send(skb, ICMP_REDIRECT, ICMP_REDIR_HOST, raddr, dev);
 #endif
+#ifdef CONFIG_IP_MROUTE
 	}
 	else
-		raddr = target_addr;
-
-	/*
-	 *	Having picked a route we can now send the frame out.
-	 */
-
-	dev2 = rt->rt_dev;
+	{
+		/*
+		 *	Multicast route forward. Routing is already done
+		 */
+		dev2=skb->dev;
+		raddr=skb->raddr;
+		if(is_frag&16)		/* VIFF_TUNNEL mode */
+			encap=20;
+	}
+#endif	
 	
-	/*
-	 *	In IP you never have to forward a frame on the interface that it 
-	 *	arrived upon. We now generate an ICMP HOST REDIRECT giving the route
-	 *	we calculated.
-	 */
-#ifndef CONFIG_IP_NO_ICMP_REDIRECT
-	if (dev == dev2 && !((iph->saddr^iph->daddr)&dev->pa_mask) &&
-	    (rt->rt_flags&RTF_MODIFIED) && !opt->srr)
-		icmp_send(skb, ICMP_REDIRECT, ICMP_REDIR_HOST, raddr, dev);
-#endif		
 
 	/*
 	 * We now may allocate a new buffer, and copy the datagram into it.
@@ -1637,17 +1687,21 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 #endif
 		IS_SKB(skb);
 
-		if (skb->len > dev2->mtu && (ntohs(iph->frag_off) & IP_DF)) {
+		if (skb->len+encap > dev2->mtu && (ntohs(iph->frag_off) & IP_DF)) {
 		  ip_statistics.IpFragFails++;
 		  icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED, dev2->mtu, dev);
 		  return -1;
 		}
 
+#ifdef CONFIG_IP_MROUTE
+		if(skb_headroom(skb)-encap<dev2->hard_header_len)
+		{
+			skb2 = alloc_skb(dev2->hard_header_len + skb->len + encap + 15, GFP_ATOMIC);
+#else
 		if(skb_headroom(skb)<dev2->hard_header_len)
 		{
 			skb2 = alloc_skb(dev2->hard_header_len + skb->len + 15, GFP_ATOMIC);
-			IS_SKB(skb2);
-		
+#endif		
 			/*
 			 *	This is rare and since IP is tolerant of network failures
 			 *	quite harmless.
@@ -1659,11 +1713,19 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 				return -1;
 			}
 		
+			IS_SKB(skb2);
 			/*
 			 *	Add the physical headers.
 			 */
-
-		 	ip_send(skb2,raddr,skb->len,dev2,dev2->pa_addr);
+#ifdef CONFIG_IP_MROUTE
+			if(is_frag&16)
+			{
+				skb_reserve(skb,(encap+dev->hard_header_len+15)&~15);	/* 16 byte aligned IP headers are good */
+				ip_encap(skb2,skb->len, dev2, raddr);
+			}
+			else
+#endif			
+		 		ip_send(skb2,raddr,skb->len,dev2,dev2->pa_addr);
 
 			/*
 			 *	We have to copy the bytes over as the new header wouldn't fit
@@ -1689,13 +1751,22 @@ int ip_forward(struct sk_buff *skb, struct device *dev, int is_frag,
 
 			skb2 = skb;		
 			skb2->dev=dev2;
-			skb->arp=1;
-			skb->raddr=raddr;
-			if(dev2->hard_header)
+#ifdef CONFIG_IP_MROUTE
+			if(is_frag&16)
+				ip_encap(skb,skb->len, dev2, raddr);
+			else
 			{
-				if(dev2->hard_header(skb, dev2, ETH_P_IP, NULL, NULL, skb->len)<0)
-					skb->arp=0;
-			}
+#endif
+				skb->arp=1;
+				skb->raddr=raddr;
+				if(dev2->hard_header)
+				{
+					if(dev2->hard_header(skb, dev2, ETH_P_IP, NULL, NULL, skb->len)<0)
+						skb->arp=0;
+				}
+#ifdef CONFIG_IP_MROUTE
+			}				
+#endif			
 			ip_statistics.IpForwDatagrams++;
 		}
 
@@ -1825,6 +1896,9 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 #ifdef CONFIG_IP_FIREWALL
 	int err;
 #endif	
+#ifdef CONFIG_IP_MROUTE
+	int mroute_pkt=0;
+#endif	
 
 #ifdef CONFIG_NET_IPV6
 	/* 
@@ -1944,9 +2018,11 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			for ( srrptr=optptr[2], srrspace = optptr[1];
 			      srrptr <= srrspace;
 			      srrptr += 4
-			     ) {
+			     ) 
+			{
 				int brd2;
-				if (srrptr + 3 > srrspace) {
+				if (srrptr + 3 > srrspace) 
+				{
 					icmp_send(skb, ICMP_PARAMETERPROB, 0, opt->srr+2,
 						  skb->dev);
 					kfree_skb(skb, FREE_WRITE);
@@ -1954,21 +2030,26 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 				}
 				memcpy(&nexthop, &optptr[srrptr-1], 4);
 				if ((brd2 = ip_chk_addr(nexthop)) == 0)
-				  break;
-				if (brd2 != IS_MYADDR) {
-/* ANK: should we implement weak tunneling of multicasts?
- *	Are they obsolete? DVMRP specs (RFC-1075) is old enough...
- */
+					break;
+				if (brd2 != IS_MYADDR) 
+				{
+
+					/*
+					 *	ANK: should we implement weak tunneling of multicasts?
+					 *	Are they obsolete? DVMRP specs (RFC-1075) is old enough...
+					 *	[They are obsolete]
+					 */
 					kfree_skb(skb, FREE_WRITE);
 					return -EINVAL;
 				}
 			}
-			if (srrptr <= srrspace) {
+			if (srrptr <= srrspace) 
+			{
 				opt->srr_is_hit = 1;
 				opt->is_changed = 1;
 #ifdef CONFIG_IP_FORWARD
 				if (ip_forward(skb, dev, is_frag, nexthop))
-				  kfree_skb(skb, FREE_WRITE);
+					kfree_skb(skb, FREE_WRITE);
 #else
 				ip_statistics.IpInAddrErrors++;
 				kfree_skb(skb, FREE_WRITE);
@@ -2041,6 +2122,15 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		skb->ip_hdr = iph;
 		skb->h.raw += iph->ihl*4;
 
+#ifdef CONFIG_IP_MROUTE		
+		/*
+		 *	Check the state on multicast routing (multicast and not 224.0.0.z)
+		 */
+		 
+		if(brd==IS_MULTICAST && (iph->daddr&htonl(0xFFFFFF00))!=htonl(0xE0000000))
+			mroute_pkt=1;
+
+#endif
 		/*
 		 *	Deliver to raw sockets. This is fun as to avoid copies we want to make no surplus copies.
 		 *
@@ -2102,7 +2192,11 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 			*	raw delivery wait for that
 			*/
 	
+#ifdef CONFIG_IP_MROUTE
+			if (ipprot->copy || raw_sk || mroute_pkt)
+#else	
 			if (ipprot->copy || raw_sk)
+#endif			
 			{
 				skb2 = skb_clone(skb, GFP_ATOMIC);
 				if(skb2==NULL)
@@ -2132,6 +2226,30 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 		 *	ICMP reply messages get queued up for transmission...)
 		 */
 
+#ifdef CONFIG_IP_MROUTE		 
+		/*
+		 *	Forward the last copy to the multicast router. If
+		 *	there is a pending raw deliery however make a copy
+		 *	and forward that.
+		 */
+		 
+		if(mroute_pkt)
+		{
+			flag=1;
+			if(raw_sk==NULL)
+				ipmr_forward(skb, is_frag);
+			else
+			{
+				struct sk_buff *skb2=skb_clone(skb, GFP_ATOMIC);
+				if(skb2)
+				{
+					skb2->free=1;
+					ipmr_forward(skb2, is_frag);
+				}
+			}
+		}
+#endif		
+
 		if(raw_sk!=NULL)	/* Shift to last raw user */
 			raw_rcv(raw_sk, skb, dev, iph->saddr, iph->daddr);
 		else if (!flag)		/* Free and report errors */
@@ -2145,7 +2263,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	}
 
 	/*
-	 *	Do any IP forwarding required.
+	 *	Do any unicast IP forwarding required.
 	 */
 	
 	/*
@@ -2266,14 +2384,7 @@ void ip_queue_xmit(struct sock *sk, struct device *dev,
 	 *	header length problem
 	 */
 
-#if 0
-	ptr = skb->data;
-	ptr += dev->hard_header_len;
-	iph = (struct iphdr *)ptr;	
-	skb->ip_hdr = iph;
-#else
 	iph = skb->ip_hdr;
-#endif
 	iph->tot_len = ntohs(skb->len-(((unsigned char *)iph)-skb->data));
 
 #ifdef CONFIG_IP_FIREWALL

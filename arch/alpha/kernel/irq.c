@@ -24,6 +24,8 @@
 #include <asm/bitops.h>
 #include <asm/dma.h>
 
+extern void timer_interrupt(struct pt_regs * regs);
+
 static unsigned char cache_21 = 0xff;
 static unsigned char cache_A1 = 0xff;
 
@@ -223,6 +225,9 @@ int request_irq(unsigned int irq, void (*handler)(int, struct pt_regs *),
 
 	if (irq >= NR_IRQS)
 		return -EINVAL;
+	/* don't accept requests for irq #0 */
+	if (!irq)
+		return -EINVAL;
 	action = irq + irq_action;
 	if (action->handler)
 		return -EBUSY;
@@ -282,12 +287,16 @@ static void unexpected_irq(int irq, struct pt_regs * regs)
 		if (irq_action[i].handler)
 			printk("[%s:%d] ", irq_action[i].name, i);
 	printk("\n");
+#if defined(CONFIG_ALPHA_JENSEN)
 	printk("64=%02x, 60=%02x, 3fa=%02x 2fa=%02x\n",
 		inb(0x64), inb(0x60), inb(0x3fa), inb(0x2fa));
 	outb(0x0c, 0x3fc);
 	outb(0x0c, 0x2fc);
 	outb(0,0x61);
 	outb(0,0x461);
+#elif defined(CONFIG_ALPHA_NONAME)
+	printk("61=%02x, 64=%02x, 60=%02x\n", inb(0x61), inb(0x64), inb(0x60));
+#endif
 }
 
 static inline void handle_irq(int irq, struct pt_regs * regs)
@@ -563,8 +572,7 @@ asmlinkage void do_entInt(unsigned long type, unsigned long vector, unsigned lon
 			printk("Interprocessor interrupt? You must be kidding\n");
 			break;
 		case 1:
-			/* timer interrupt.. */
-			handle_irq(0, &regs);
+			timer_interrupt(&regs);
 			return;
 		case 2:
 			machine_check(vector, la_ptr, &regs);

@@ -5,6 +5,8 @@
  *	linux/include/asm/irq.h
  *
  *	(C) 1992, 1993 Linus Torvalds
+ *
+ *	IRQ/IPI changes taken from work by Thomas Radke <tomsoft@informatik.tu-chemnitz.de>
  */
 
 #include <linux/linkage.h>
@@ -124,6 +126,174 @@ extern void enable_irq(unsigned int);
 #define IRQ_NAME(nr) IRQ_NAME2(IRQ##nr)
 #define FAST_IRQ_NAME(nr) IRQ_NAME2(fast_IRQ##nr)
 #define BAD_IRQ_NAME(nr) IRQ_NAME2(bad_IRQ##nr)
+
+#ifdef	CONFIG_SMP
+
+#define GET_PROCESSOR_ID \
+	"movl "SYMBOL_NAME_STR(apic_reg)", %edx\n\t" \
+	"movl 32(%edx), %eax\n\t" \
+	"shrl $24,%eax\n\t" \
+	"andb $0x0F,%al\n"
+	
+#define	ENTER_KERNEL \
+	"pushl %eax\n\t" \
+	"pushl %edx\n\t" \
+	"pushfl\n\t" \
+	"cli\n\t" \
+	GET_PROCESSOR_ID \
+	"1: " \
+	"lock\n\t" \
+	"btsl $0, "SYMBOL_NAME_STR(kernel_flag)"\n\t" \
+	"jnc 3f\n\t" \
+	"cmpb "SYMBOL_NAME_STR(active_kernel_processor)", %al\n\t" \
+	"je 4f\n\t" \
+	"2: " \
+	"incl "SYMBOL_NAME_STR(smp_spins)"\n\t" \
+	"btl %al, "SYMBOL_NAME_STR(smp_invalidate_needed)"\n\t" \
+	"jnc 5f\n\t" \
+	"lock\n\t" \
+	"btrl %al, "SYMBOL_NAME_STR(smp_invalidate_needed)"\n\t" \
+	"jnc 5f\n\t" \
+	"movl %cr3,%edx\n\t" \
+	"movl %edx,%cr3\n" \
+	"5: btl $0, "SYMBOL_NAME_STR(kernel_flag)"\n\t" \
+	"jc 2b\n\t" \
+	"jmp 1b\n\t" \
+	"3: " \
+	"movb %al, "SYMBOL_NAME_STR(active_kernel_processor)"\n\t" \
+	"4: " \
+	"incl "SYMBOL_NAME_STR(kernel_counter)"\n\t" \
+	"popfl\n\t" \
+	"popl %edx\n\t" \
+	"popl %eax\n\t"
+
+#define	LEAVE_KERNEL \
+	"pushfl\n\t" \
+	"cli\n\t" \
+	"decl "SYMBOL_NAME_STR(kernel_counter)"\n\t" \
+	"jnz 1f\n\t" \
+	"movb $" STR (NO_PROC_ID) ", "SYMBOL_NAME_STR(active_kernel_processor)"\n\t" \
+	"lock\n\t" \
+	"btrl $0, "SYMBOL_NAME_STR(kernel_flag)"\n\t" \
+	"1: " \
+	"popfl\n\t"
+	
+	
+/*
+ *	the syscall count inc is a gross hack because ret_from_syscall is used by both irq and
+ *	syscall return paths (urghh).
+ */
+ 
+#define BUILD_IRQ(chip,nr,mask) \
+asmlinkage void IRQ_NAME(nr); \
+asmlinkage void FAST_IRQ_NAME(nr); \
+asmlinkage void BAD_IRQ_NAME(nr); \
+__asm__( \
+"\n"__ALIGN_STR"\n" \
+SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
+	"pushl $-"#nr"-2\n\t" \
+	SAVE_ALL \
+	ENTER_KERNEL \
+	ACK_##chip(mask) \
+	"incl "SYMBOL_NAME_STR(intr_count)"\n\t"\
+	"sti\n\t" \
+	"movl %esp,%ebx\n\t" \
+	"pushl %ebx\n\t" \
+	"pushl $" #nr "\n\t" \
+	"call "SYMBOL_NAME_STR(do_IRQ)"\n\t" \
+	"addl $8,%esp\n\t" \
+	"cli\n\t" \
+	UNBLK_##chip(mask) \
+	"decl "SYMBOL_NAME_STR(intr_count)"\n\t" \
+	"incl "SYMBOL_NAME_STR(syscall_count)"\n\t" \
+	"jmp ret_from_sys_call\n" \
+"\n"__ALIGN_STR"\n" \
+SYMBOL_NAME_STR(fast_IRQ) #nr "_interrupt:\n\t" \
+	SAVE_MOST \
+	ENTER_KERNEL \
+	ACK_##chip(mask) \
+	"incl "SYMBOL_NAME_STR(intr_count)"\n\t" \
+	"pushl $" #nr "\n\t" \
+	"call "SYMBOL_NAME_STR(do_fast_IRQ)"\n\t" \
+	"addl $4,%esp\n\t" \
+	"cli\n\t" \
+	UNBLK_##chip(mask) \
+	"decl "SYMBOL_NAME_STR(intr_count)"\n\t" \
+	LEAVE_KERNEL \
+	RESTORE_MOST \
+"\n"__ALIGN_STR"\n" \
+SYMBOL_NAME_STR(bad_IRQ) #nr "_interrupt:\n\t" \
+	SAVE_MOST \
+	ENTER_KERNEL \
+	ACK_##chip(mask) \
+	LEAVE_KERNEL \
+	RESTORE_MOST);
+	
+	
+/*
+ *	Message pass must be a fast IRQ..
+ */
+
+#define BUILD_MSGIRQ(chip,nr,mask) \
+asmlinkage void IRQ_NAME(nr); \
+asmlinkage void FAST_IRQ_NAME(nr); \
+asmlinkage void BAD_IRQ_NAME(nr); \
+__asm__( \
+"\n"__ALIGN_STR"\n" \
+SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
+	"pushl $-"#nr"-2\n\t" \
+	SAVE_ALL \
+	ENTER_KERNEL \
+	ACK_##chip(mask) \
+	"incl "SYMBOL_NAME_STR(intr_count)"\n\t"\
+	"sti\n\t" \
+	"movl %esp,%ebx\n\t" \
+	"pushl %ebx\n\t" \
+	"pushl $" #nr "\n\t" \
+	"call "SYMBOL_NAME_STR(do_IRQ)"\n\t" \
+	"addl $8,%esp\n\t" \
+	"cli\n\t" \
+	UNBLK_##chip(mask) \
+	"decl "SYMBOL_NAME_STR(intr_count)"\n\t" \
+	"incl "SYMBOL_NAME_STR(syscall_count)"\n\t" \
+	"jmp ret_from_sys_call\n" \
+"\n"__ALIGN_STR"\n" \
+SYMBOL_NAME_STR(fast_IRQ) #nr "_interrupt:\n\t" \
+	SAVE_MOST \
+	ACK_##chip(mask) \
+	"incl "SYMBOL_NAME_STR(ipi_count)"\n\t" \
+	"pushl $" #nr "\n\t" \
+	"call "SYMBOL_NAME_STR(do_fast_IRQ)"\n\t" \
+	"addl $4,%esp\n\t" \
+	"cli\n\t" \
+	UNBLK_##chip(mask) \
+	RESTORE_MOST \
+"\n"__ALIGN_STR"\n" \
+SYMBOL_NAME_STR(bad_IRQ) #nr "_interrupt:\n\t" \
+	SAVE_MOST \
+	ACK_##chip(mask) \
+	RESTORE_MOST);
+
+#define BUILD_RESCHEDIRQ(nr) \
+asmlinkage void IRQ_NAME(nr); \
+__asm__( \
+"\n"__ALIGN_STR"\n" \
+SYMBOL_NAME_STR(IRQ) #nr "_interrupt:\n\t" \
+	"pushl $-"#nr"-2\n\t" \
+	SAVE_ALL \
+	ENTER_KERNEL \
+	"incl "SYMBOL_NAME_STR(intr_count)"\n\t"\
+	"sti\n\t" \
+	"movl %esp,%ebx\n\t" \
+	"pushl %ebx\n\t" \
+	"pushl $" #nr "\n\t" \
+	"call "SYMBOL_NAME_STR(smp_reschedule_irq)"\n\t" \
+	"addl $8,%esp\n\t" \
+	"cli\n\t" \
+	"decl "SYMBOL_NAME_STR(intr_count)"\n\t" \
+	"incl "SYMBOL_NAME_STR(syscall_count)"\n\t" \
+	"jmp ret_from_sys_call\n");
+#else
 	
 #define BUILD_IRQ(chip,nr,mask) \
 asmlinkage void IRQ_NAME(nr); \
@@ -164,4 +334,5 @@ SYMBOL_NAME_STR(bad_IRQ) #nr "_interrupt:\n\t" \
 	ACK_##chip(mask) \
 	RESTORE_MOST);
 
+#endif
 #endif

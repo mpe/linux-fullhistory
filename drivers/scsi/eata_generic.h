@@ -40,6 +40,9 @@
 
 #define BROKEN_INQUIRY	1
 
+#define BUSMASTER       0xff
+#define PIO             0xfe
+
 #define EATA_SIGNATURE	0x45415441     /* BIG ENDIAN coded "EATA" sig.	 */
 #define EATA_CP_SIZE	44
 

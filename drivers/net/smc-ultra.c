@@ -66,8 +66,10 @@ int ultra_probe1(struct device *dev, int ioaddr);
 
 static int ultra_open(struct device *dev);
 static void ultra_reset_8390(struct device *dev);
-static int ultra_block_input(struct device *dev, int count,
-						  char *buf, int ring_offset);
+static void ultra_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, 
+						int ring_page);
+static void ultra_block_input(struct device *dev, int count,
+						  struct sk_buff *skb, int ring_offset);
 static void ultra_block_output(struct device *dev, int count,
 							const unsigned char *buf, const start_page);
 static int ultra_close_card(struct device *dev);
@@ -211,6 +213,7 @@ int ultra_probe1(struct device *dev, int ioaddr)
 	ei_status.reset_8390 = &ultra_reset_8390;
 	ei_status.block_input = &ultra_block_input;
 	ei_status.block_output = &ultra_block_output;
+	ei_status.get_8390_hdr = &ultra_get_8390_hdr;
 	dev->open = &ultra_open;
 	dev->stop = &ultra_close_card;
 	NS8390_init(dev, 0);
@@ -253,44 +256,56 @@ ultra_reset_8390(struct device *dev)
 	return;
 }
 
+/* Grab the 8390 specific header. Similar to the block_input routine, but
+   we don't need to be concerned with ring wrap as the header will be at
+   the start of a page, so we optimize accordingly. */
+
+static void
+ultra_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
+{
+
+	unsigned long hdr_start = dev->mem_start + ((ring_page - START_PG)<<8);
+
+	outb(ULTRA_MEMENB, dev->base_addr - ULTRA_NIC_OFFSET);	/* shmem on */
+	memcpy_fromio(hdr, hdr_start, sizeof(struct e8390_pkt_hdr));
+	outb(0x00, dev->base_addr - ULTRA_NIC_OFFSET); /* shmem off */
+}
+
 /* Block input and output are easy on shared memory ethercards, the only
    complication is when the ring buffer wraps. */
 
-static int
-ultra_block_input(struct device *dev, int count, char *buf, int ring_offset)
+static void
+ultra_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
 {
-	void *xfer_start = (void *)(dev->mem_start + ring_offset
-								- (START_PG<<8));
+	unsigned long xfer_start = dev->mem_start + ring_offset - (START_PG<<8);
 
 	/* Enable shared memory. */
 	outb(ULTRA_MEMENB, dev->base_addr - ULTRA_NIC_OFFSET);
 
-	if (xfer_start + count > (void*) dev->rmem_end) {
+	if (xfer_start + count > dev->rmem_end) {
 		/* We must wrap the input move. */
-		int semi_count = (void*)dev->rmem_end - xfer_start;
-		memcpy(buf, xfer_start, semi_count);
+		int semi_count = dev->rmem_end - xfer_start;
+		memcpy_fromio(skb->data, xfer_start, semi_count);
 		count -= semi_count;
-		memcpy(buf + semi_count, (char *)dev->rmem_start, count);
-		outb(0x00, dev->base_addr - ULTRA_NIC_OFFSET); /* Disable memory. */
-		return dev->rmem_start + count;
+		memcpy_fromio(skb->data + semi_count, dev->rmem_start, count);
+	} else {
+		/* Packet is in one chunk -- we can copy + cksum. */
+		eth_io_copy_and_sum(skb, xfer_start, count, 0);
 	}
-	memcpy(buf, xfer_start, count);
 
-	outb(0x00, dev->base_addr - ULTRA_NIC_OFFSET); /* Disable memory. */
-	return ring_offset + count;
+	outb(0x00, dev->base_addr - ULTRA_NIC_OFFSET);	/* Disable memory. */
 }
 
 static void
 ultra_block_output(struct device *dev, int count, const unsigned char *buf,
 				int start_page)
 {
-	unsigned char *shmem
-		= (unsigned char *)dev->mem_start + ((start_page - START_PG)<<8);
+	unsigned long shmem = dev->mem_start + ((start_page - START_PG)<<8);
 
 	/* Enable shared memory. */
 	outb(ULTRA_MEMENB, dev->base_addr - ULTRA_NIC_OFFSET);
 
-	memcpy(shmem, buf, count);
+	memcpy_toio(shmem, buf, count);
 
 	outb(0x00, dev->base_addr - ULTRA_NIC_OFFSET); /* Disable memory. */
 }

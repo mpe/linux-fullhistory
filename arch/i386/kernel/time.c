@@ -26,104 +26,58 @@
 
 #define TIMER_IRQ 0
 
-static int set_rtc_mmss(unsigned long);
+/* Cycle counter value at the previous timer interrupt.. */
+static unsigned long long last_timer_cc = 0;
+static unsigned long long init_timer_cc = 0;
 
-/*
- * timer_interrupt() needs to keep up the real-time clock,
- * as well as call the "do_timer()" routine every clocktick
- */
-static void timer_interrupt(int irq, struct pt_regs * regs)
+static unsigned long do_fast_gettimeoffset(void)
 {
-	/* last time the cmos clock got updated */
-	static long last_rtc_update=0;
+	unsigned long time_low, time_high;
+	unsigned long quotient, remainder;
 
-	do_timer(regs);
+	/* Get last timer tick in absolute kernel time */
+	__asm__("subl %2,%0\n\t"
+		"sbbl %3,%1"
+		:"=r" (time_low), "=r" (time_high)
+		:"m" (*(0+(long *)&init_timer_cc)),
+		 "m" (*(1+(long *)&init_timer_cc)),
+		 "0" (*(0+(long *)&last_timer_cc)),
+		 "1" (*(1+(long *)&last_timer_cc)));
+	/*
+	 * Divide the 64-bit time with the 32-bit jiffy counter,
+	 * getting the quotient in clocks.
+	 *
+	 * Giving quotient = "average internal clocks per jiffy"
+	 */
+	__asm__("divl %2"
+		:"=a" (quotient), "=d" (remainder)
+		:"r" (jiffies),
+		 "0" (time_low), "1" (time_high));
+
+	/* Read the time counter */
+	__asm__(".byte 0x0f,0x31"
+		:"=a" (time_low), "=d" (time_high));
+
+	/* .. relative to previous jiffy (32 bits is enough) */
+	time_low -= (unsigned long) last_timer_cc;
 
 	/*
-	 * If we have an externally synchronized Linux clock, then update
-	 * CMOS clock accordingly every ~11 minutes. Set_rtc_mmss() has to be
-	 * called as close as possible to 500 ms before the new second starts.
+	 * Time offset = (1000000/HZ * remainder) / quotient.
 	 */
-	if (time_state != TIME_BAD && xtime.tv_sec > last_rtc_update + 660 &&
-	    xtime.tv_usec > 500000 - (tick >> 1) &&
-	    xtime.tv_usec < 500000 + (tick >> 1))
-	  if (set_rtc_mmss(xtime.tv_sec) == 0)
-	    last_rtc_update = xtime.tv_sec;
-	  else
-	    last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
-}
+	__asm__("mull %1\n\t"
+		"divl %2"
+		:"=a" (quotient), "=d" (remainder)
+		:"r" (quotient),
+		 "0" (time_low), "1" (1000000/HZ));
 
-/* Converts Gregorian date to seconds since 1970-01-01 00:00:00.
- * Assumes input in normal date format, i.e. 1980-12-31 23:59:59
- * => year=1980, mon=12, day=31, hour=23, min=59, sec=59.
- *
- * [For the Julian calendar (which was used in Russia before 1917,
- * Britain & colonies before 1752, anywhere else before 1582,
- * and is still in use by some communities) leave out the
- * -year/100+year/400 terms, and add 10.]
- *
- * This algorithm was first published by Gauss (I think).
- *
- * WARNING: this function will overflow on 2106-02-07 06:28:16 on
- * machines were long is 32-bit! (However, as time_t is signed, we
- * will already get problems at other places on 2038-01-19 03:14:08)
- */
-static inline unsigned long mktime(unsigned int year, unsigned int mon,
-	unsigned int day, unsigned int hour,
-	unsigned int min, unsigned int sec)
-{
-	if (0 >= (int) (mon -= 2)) {	/* 1..12 -> 11,12,1..10 */
-		mon += 12;	/* Puts Feb last since it has leap day */
-		year -= 1;
-	}
-	return (((
-	    (unsigned long)(year/4 - year/100 + year/400 + 367*mon/12 + day) +
-	      year*365 - 719499
-	    )*24 + hour /* now have hours */
-	   )*60 + min /* now have minutes */
-	  )*60 + sec; /* finally seconds */
-}
-
-void time_init(void)
-{
-	unsigned int year, mon, day, hour, min, sec;
-	int i;
-
-	/* The Linux interpretation of the CMOS clock register contents:
-	 * When the Update-In-Progress (UIP) flag goes from 1 to 0, the
-	 * RTC registers show the second which has precisely just started.
-	 * Let's hope other operating systems interpret the RTC the same way.
+	/*
+	 * Due to rounding errors (and jiffies inconsistencies),
+	 * we need to check the result so that we'll get a timer
+	 * that is monotonous.
 	 */
-	/* read RTC exactly on falling edge of update flag */
-	for (i = 0 ; i < 1000000 ; i++)	/* may take up to 1 second... */
-		if (CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP)
-			break;
-	for (i = 0 ; i < 1000000 ; i++)	/* must try at least 2.228 ms */
-		if (!(CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP))
-			break;
-	do { /* Isn't this overkill ? UIP above should guarantee consistency */
-		sec = CMOS_READ(RTC_SECONDS);
-		min = CMOS_READ(RTC_MINUTES);
-		hour = CMOS_READ(RTC_HOURS);
-		day = CMOS_READ(RTC_DAY_OF_MONTH);
-		mon = CMOS_READ(RTC_MONTH);
-		year = CMOS_READ(RTC_YEAR);
-	} while (sec != CMOS_READ(RTC_SECONDS));
-	if (!(CMOS_READ(RTC_CONTROL) & RTC_DM_BINARY) || RTC_ALWAYS_BCD)
-	  {
-	    BCD_TO_BIN(sec);
-	    BCD_TO_BIN(min);
-	    BCD_TO_BIN(hour);
-	    BCD_TO_BIN(day);
-	    BCD_TO_BIN(mon);
-	    BCD_TO_BIN(year);
-	  }
-	if ((year += 1900) < 1970)
-		year += 100;
-	xtime.tv_sec = mktime(year, mon, day, hour, min, sec);
-	xtime.tv_usec = 0;
-	if (request_irq(TIMER_IRQ, timer_interrupt, 0, "timer") != 0)
-		panic("Could not allocate timer IRQ!");
+	if (quotient >= 1000000/HZ)
+		quotient = 1000000/HZ-1;
+	return quotient;
 }
 
 /* This function must be called with interrupts disabled 
@@ -160,7 +114,7 @@ void time_init(void)
 
 #define TICK_SIZE tick
 
-static inline unsigned long do_gettimeoffset(void)
+static unsigned long do_slow_gettimeoffset(void)
 {
 	int count;
 	unsigned long offset = 0;
@@ -180,6 +134,8 @@ static inline unsigned long do_gettimeoffset(void)
 	count = (count + LATCH/2) / LATCH;
 	return offset + count;
 }
+
+static unsigned long (*do_gettimeoffset)(void) = do_slow_gettimeoffset;
 
 /*
  * This version of gettimeofday has near microsecond resolution.
@@ -279,4 +235,134 @@ static int set_rtc_mmss(unsigned long nowtime)
 	CMOS_WRITE(save_freq_select, RTC_FREQ_SELECT);
 
 	return retval;
+}
+
+/* last time the cmos clock got updated */
+static long last_rtc_update = 0;
+
+/*
+ * timer_interrupt() needs to keep up the real-time clock,
+ * as well as call the "do_timer()" routine every clocktick
+ */
+static inline void timer_interrupt(int irq, struct pt_regs * regs)
+{
+	do_timer(regs);
+
+	/*
+	 * If we have an externally synchronized Linux clock, then update
+	 * CMOS clock accordingly every ~11 minutes. Set_rtc_mmss() has to be
+	 * called as close as possible to 500 ms before the new second starts.
+	 */
+	if (time_state != TIME_BAD && xtime.tv_sec > last_rtc_update + 660 &&
+	    xtime.tv_usec > 500000 - (tick >> 1) &&
+	    xtime.tv_usec < 500000 + (tick >> 1))
+	  if (set_rtc_mmss(xtime.tv_sec) == 0)
+	    last_rtc_update = xtime.tv_sec;
+	  else
+	    last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
+	/* As we return to user mode fire off the other CPU schedulers.. this is 
+	   basically because we don't yet share IRQ's around. This message is
+	   rigged to be safe on the 386 - basically its a hack, so don't look
+	   closely for now.. */
+	smp_message_pass(MSG_ALL_BUT_SELF, MSG_RESCHEDULE, 0L, 0); 
+	    
+}
+
+/*
+ * This is the same as the above, except we _also_ save the current
+ * cycle counter value at the time of the timer interrupt, so that
+ * we later on can estimate the time of day more exactly.
+ */
+static void pentium_timer_interrupt(int irq, struct pt_regs * regs)
+{
+	/* read Pentium cycle counter */
+	__asm__(".byte 0x0f,0x31"
+		:"=a" (((unsigned long *) &last_timer_cc)[0]),
+		 "=d" (((unsigned long *) &last_timer_cc)[1]));
+	timer_interrupt(irq, regs);
+}
+
+/* Converts Gregorian date to seconds since 1970-01-01 00:00:00.
+ * Assumes input in normal date format, i.e. 1980-12-31 23:59:59
+ * => year=1980, mon=12, day=31, hour=23, min=59, sec=59.
+ *
+ * [For the Julian calendar (which was used in Russia before 1917,
+ * Britain & colonies before 1752, anywhere else before 1582,
+ * and is still in use by some communities) leave out the
+ * -year/100+year/400 terms, and add 10.]
+ *
+ * This algorithm was first published by Gauss (I think).
+ *
+ * WARNING: this function will overflow on 2106-02-07 06:28:16 on
+ * machines were long is 32-bit! (However, as time_t is signed, we
+ * will already get problems at other places on 2038-01-19 03:14:08)
+ */
+static inline unsigned long mktime(unsigned int year, unsigned int mon,
+	unsigned int day, unsigned int hour,
+	unsigned int min, unsigned int sec)
+{
+	if (0 >= (int) (mon -= 2)) {	/* 1..12 -> 11,12,1..10 */
+		mon += 12;	/* Puts Feb last since it has leap day */
+		year -= 1;
+	}
+	return (((
+	    (unsigned long)(year/4 - year/100 + year/400 + 367*mon/12 + day) +
+	      year*365 - 719499
+	    )*24 + hour /* now have hours */
+	   )*60 + min /* now have minutes */
+	  )*60 + sec; /* finally seconds */
+}
+
+void time_init(void)
+{
+	void (*irq_handler)(int, struct pt_regs *);
+	unsigned int year, mon, day, hour, min, sec;
+	int i;
+
+	/* The Linux interpretation of the CMOS clock register contents:
+	 * When the Update-In-Progress (UIP) flag goes from 1 to 0, the
+	 * RTC registers show the second which has precisely just started.
+	 * Let's hope other operating systems interpret the RTC the same way.
+	 */
+	/* read RTC exactly on falling edge of update flag */
+	for (i = 0 ; i < 1000000 ; i++)	/* may take up to 1 second... */
+		if (CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP)
+			break;
+	for (i = 0 ; i < 1000000 ; i++)	/* must try at least 2.228 ms */
+		if (!(CMOS_READ(RTC_FREQ_SELECT) & RTC_UIP))
+			break;
+	do { /* Isn't this overkill ? UIP above should guarantee consistency */
+		sec = CMOS_READ(RTC_SECONDS);
+		min = CMOS_READ(RTC_MINUTES);
+		hour = CMOS_READ(RTC_HOURS);
+		day = CMOS_READ(RTC_DAY_OF_MONTH);
+		mon = CMOS_READ(RTC_MONTH);
+		year = CMOS_READ(RTC_YEAR);
+	} while (sec != CMOS_READ(RTC_SECONDS));
+	if (!(CMOS_READ(RTC_CONTROL) & RTC_DM_BINARY) || RTC_ALWAYS_BCD)
+	  {
+	    BCD_TO_BIN(sec);
+	    BCD_TO_BIN(min);
+	    BCD_TO_BIN(hour);
+	    BCD_TO_BIN(day);
+	    BCD_TO_BIN(mon);
+	    BCD_TO_BIN(year);
+	  }
+	if ((year += 1900) < 1970)
+		year += 100;
+	xtime.tv_sec = mktime(year, mon, day, hour, min, sec);
+	xtime.tv_usec = 0;
+
+	/* If we have the CPU hardware time counters, use them */
+	irq_handler = timer_interrupt;	
+	if (x86_capability & 16) {
+		irq_handler = pentium_timer_interrupt;
+		do_gettimeoffset = do_fast_gettimeoffset;
+		/* read Pentium cycle counter */
+		__asm__(".byte 0x0f,0x31"
+			:"=a" (((unsigned long *) &init_timer_cc)[0]),
+			 "=d" (((unsigned long *) &init_timer_cc)[1]));
+	}
+	if (request_irq(TIMER_IRQ, irq_handler, 0, "timer") != 0)
+		panic("Could not allocate timer IRQ!");
 }

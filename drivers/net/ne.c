@@ -73,6 +73,7 @@ bad_clone_list[] = {
     {"NE1000","NE2000-invalid", {0x00, 0x00, 0xd8}}, /* Ancient real NE1000. */
     {"NN1000", "NN2000",  {0x08, 0x03, 0x08}}, /* Outlaw no-name clone. */
     {"4-DIM8","4-DIM16", {0x00,0x00,0x4d,}},  /* Outlaw 4-Dimension cards. */
+    {"Con-Intl_8", "Con-Intl_16", {0x00, 0x00, 0x24}}, /* Connect Int'nl */
     {0,}
 };
 #endif
@@ -92,8 +93,10 @@ int ne_probe(struct device *dev);
 static int ne_probe1(struct device *dev, int ioaddr);
 
 static void ne_reset_8390(struct device *dev);
-static int ne_block_input(struct device *dev, int count,
-			  char *buf, int ring_offset);
+static void ne_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
+			  int ring_page);
+static void ne_block_input(struct device *dev, int count,
+			  struct sk_buff *skb, int ring_offset);
 static void ne_block_output(struct device *dev, const int count,
 		const unsigned char *buf, const int start_page);
 
@@ -181,14 +184,12 @@ static int ne_probe1(struct device *dev, int ioaddr)
 	/* DON'T change these to inb_p/outb_p or reset will fail on clones. */
 	outb(inb(ioaddr + NE_RESET), ioaddr + NE_RESET);
 
-	/* wait 20 ms for the dust to settle. */
-	while (jiffies - reset_start_time < 2*HZ/100) 
-		barrier();
+	while ((inb_p(ioaddr + EN0_ISR) & ENISR_RESET) == 0)
+		if (jiffies - reset_start_time > 2*HZ/100) {
+			printk(" not found (no reset ack).\n");
+			return ENODEV;
+		}
 
-	if ((inb_p(ioaddr+EN0_ISR) & ENISR_RESET) == 0) {
-		printk(" not found (no reset ack).\n");
-		return ENODEV;
-	}
 	outb_p(0xff, ioaddr + EN0_ISR);		/* Ack all intr. */
     }
 
@@ -338,6 +339,7 @@ static int ne_probe1(struct device *dev, int ioaddr)
     ei_status.reset_8390 = &ne_reset_8390;
     ei_status.block_input = &ne_block_input;
     ei_status.block_output = &ne_block_output;
+    ei_status.get_8390_hdr = &ne_get_8390_hdr;
     NS8390_init(dev, 0);
     return 0;
 }
@@ -366,27 +368,63 @@ ne_reset_8390(struct device *dev)
     outb_p(ENISR_RESET, NE_BASE + EN0_ISR);	/* Ack intr. */
 }
 
-/* Block input and output, similar to the Crynwr packet driver.  If you
-   are porting to a new ethercard, look at the packet driver source for hints.
-   The NEx000 doesn't share it on-board packet memory -- you have to put
-   the packet out through the "remote DMA" dataport using outb. */
+/* Grab the 8390 specific header. Similar to the block_input routine, but
+   we don't need to be concerned with ring wrap as the header will be at
+   the start of a page, so we optimize accordingly. */
 
-static int
-ne_block_input(struct device *dev, int count, char *buf, int ring_offset)
+static void
+ne_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 {
+
     int nic_base = dev->base_addr;
-#ifdef CONFIG_NE_SANITY
-    int xfer_count = count;
-#endif
 
     /* This *shouldn't* happen. If it does, it's the last thing you'll see */
     if (ei_status.dmaing) {
-	if (ei_debug > 0)
-	    printk("%s: DMAing conflict in ne_block_input "
-		   "[DMAstat:%d][irqlock:%d][intr:%d].\n",
-		   dev->name, ei_status.dmaing, ei_status.irqlock,
-		   dev->interrupt);
-	return 0;
+	printk("%s: DMAing conflict in ne_get_8390_hdr "
+	   "[DMAstat:%d][irqlock:%d][intr:%d].\n",
+	   dev->name, ei_status.dmaing, ei_status.irqlock,
+	   dev->interrupt);
+	return;
+    }
+
+    ei_status.dmaing |= 0x01;
+    outb_p(E8390_NODMA+E8390_PAGE0+E8390_START, nic_base+ NE_CMD);
+    outb_p(sizeof(struct e8390_pkt_hdr), nic_base + EN0_RCNTLO);
+    outb_p(0, nic_base + EN0_RCNTHI);
+    outb_p(0, nic_base + EN0_RSARLO);		/* On page boundary */
+    outb_p(ring_page, nic_base + EN0_RSARHI);
+    outb_p(E8390_RREAD+E8390_START, nic_base + NE_CMD);
+
+    if (ei_status.word16)
+	insw(NE_BASE + NE_DATAPORT, hdr, sizeof(struct e8390_pkt_hdr)>>1);
+    else
+	insb(NE_BASE + NE_DATAPORT, hdr, sizeof(struct e8390_pkt_hdr));
+
+    outb_p(ENISR_RDC, nic_base + EN0_ISR);	/* Ack intr. */
+    ei_status.dmaing &= ~0x01;
+}
+
+/* Block input and output, similar to the Crynwr packet driver.  If you
+   are porting to a new ethercard, look at the packet driver source for hints.
+   The NEx000 doesn't share the on-board packet memory -- you have to put
+   the packet out through the "remote DMA" dataport using outb. */
+
+static void
+ne_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_offset)
+{
+#ifdef CONFIG_NE_SANITY
+    int xfer_count = count;
+#endif
+    int nic_base = dev->base_addr;
+    char *buf = skb->data;
+
+    /* This *shouldn't* happen. If it does, it's the last thing you'll see */
+    if (ei_status.dmaing) {
+	printk("%s: DMAing conflict in ne_block_input "
+	   "[DMAstat:%d][irqlock:%d][intr:%d].\n",
+	   dev->name, ei_status.dmaing, ei_status.irqlock,
+	   dev->interrupt);
+	return;
     }
     ei_status.dmaing |= 0x01;
     outb_p(E8390_NODMA+E8390_PAGE0+E8390_START, nic_base+ NE_CMD);
@@ -431,7 +469,6 @@ ne_block_input(struct device *dev, int count, char *buf, int ring_offset)
 #endif
     outb_p(ENISR_RDC, nic_base + EN0_ISR);	/* Ack intr. */
     ei_status.dmaing &= ~0x01;
-    return ring_offset + count;
 }
 
 static void
@@ -452,11 +489,10 @@ ne_block_output(struct device *dev, int count,
 
     /* This *shouldn't* happen. If it does, it's the last thing you'll see */
     if (ei_status.dmaing) {
-	if (ei_debug > 0)
-	    printk("%s: DMAing conflict in ne_block_output."
-		   "[DMAstat:%d][irqlock:%d][intr:%d]\n",
-		   dev->name, ei_status.dmaing, ei_status.irqlock,
-		   dev->interrupt);
+	printk("%s: DMAing conflict in ne_block_output."
+	   "[DMAstat:%d][irqlock:%d][intr:%d]\n",
+	   dev->name, ei_status.dmaing, ei_status.irqlock,
+	   dev->interrupt);
 	return;
     }
     ei_status.dmaing |= 0x01;

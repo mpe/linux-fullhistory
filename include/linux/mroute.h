@@ -1,5 +1,6 @@
 #ifndef __LINUX_MROUTE_H
 #define __LINUX_MROUTE_H
+
 /*
  *	Based on the MROUTING 3.5 defines primarily to keep
  *	source compatibility with BSD.
@@ -117,19 +118,53 @@ extern int ip_mroute_setsockopt(struct sock *, int, char *, int);
 extern int ip_mroute_getsockopt(struct sock *, int, char *, int *);
 extern int ipmr_ioctl(struct sock *sk, int cmd, unsigned long arg);
 extern void mroute_close(struct sock *sk);
+extern void ipmr_forward(struct sk_buff *skb, int is_frag);
 
 
 struct vif_device
 {
-	struct device *dev;		/* Device we are using */
-	struct route *rt_cache;		/* Tunnel route cache */
-	unsigned long bytes_in,bytes_out;
-	unsigned long pkt_in,pkt_out;	/* Statistics */
-	unsigned long rate_limit;	/* Traffic shaping (NI) */
-	unsigned char threshold;	/* TTL threshold */
-	unsigned short flags;		/* Control flags */
-	unsigned long local,remote;	/* Addresses (remote for tunnels) */
+	struct device 	*dev;			/* Device we are using */
+	struct route 	*rt_cache;		/* Tunnel route cache */
+	unsigned long	bytes_in,bytes_out;
+	unsigned long	pkt_in,pkt_out;		/* Statistics 			*/
+	unsigned long	rate_limit;		/* Traffic shaping (NI) 	*/
+	unsigned char	threshold;		/* TTL threshold 		*/
+	unsigned short	flags;			/* Control flags 		*/
+	unsigned long	local,remote;		/* Addresses(remote for tunnels)*/
 };
 
+struct mfc_cache 
+{
+	struct mfc_cache *next;			/* Next entry on cache line 	*/
+	__u32 mfc_mcastgrp;			/* Group the entry belongs to 	*/
+	__u32 mfc_origin;			/* Source of packet 		*/
+	vifi_t mfc_parent;			/* Source interface		*/
+	struct timer_list mfc_timer;		/* Expiry timer			*/
+	int mfc_flags;				/* Flags on line		*/
+	struct sk_buff_head mfc_unresolved;	/* Unresolved buffers		*/
+	int mfc_queuelen;			/* Unresolved buffer counter	*/
+	unsigned char mfc_ttls[MAXVIFS];	/* TTL thresholds		*/
+};
+
+#define MFC_QUEUED		1
+#define MFC_RESOLVED		2
+
+
+#define MFC_LINES		64
+
+#ifdef __BIG_ENDIAN
+#define MFC_HASH(a,b)	((((a)>>24)^((b)>>26))&(MFC_LINES-1))
+#else
+#define MFC_HASH(a,b)	(((a)^((b)>>2))&(MFC_LINES-1))
+#endif		
+
 #endif
+
+/*
+ *	Pseudo messages used by mrouted
+ */
+
+#define IGMPMSG_NOCACHE		1		/* Kernel cache fill request to mrouted */
+#define IGMPMSG_WRONGVIF	2		/* For PIM assert processing (unused) */
+
 #endif
