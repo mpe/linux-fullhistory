@@ -86,7 +86,7 @@ static struct uart_port mpc52xx_uart_ports[MPC52xx_PSC_MAXNUM];
 	 *        the console_init
 	 */
 
-#define PSC(port) ((struct mpc52xx_psc *)((port)->membase))
+#define PSC(port) ((struct mpc52xx_psc __iomem *)((port)->membase))
 
 
 /* Forward declaration of the interruption handling routine */
@@ -190,7 +190,7 @@ mpc52xx_uart_break_ctl(struct uart_port *port, int ctl)
 static int
 mpc52xx_uart_startup(struct uart_port *port)
 {
-	struct mpc52xx_psc *psc = PSC(port);
+	struct mpc52xx_psc __iomem *psc = PSC(port);
 
 	/* Reset/activate the port, clear and enable interrupts */
 	out_8(&psc->command,MPC52xx_PSC_RST_RX);
@@ -217,7 +217,7 @@ mpc52xx_uart_startup(struct uart_port *port)
 static void
 mpc52xx_uart_shutdown(struct uart_port *port)
 {
-	struct mpc52xx_psc *psc = PSC(port);
+	struct mpc52xx_psc __iomem *psc = PSC(port);
 	
 	/* Shut down the port, interrupt and all */
 	out_8(&psc->command,MPC52xx_PSC_RST_RX);
@@ -231,7 +231,7 @@ static void
 mpc52xx_uart_set_termios(struct uart_port *port, struct termios *new,
                          struct termios *old)
 {
-	struct mpc52xx_psc *psc = PSC(port);
+	struct mpc52xx_psc __iomem *psc = PSC(port);
 	unsigned long flags;
 	unsigned char mr1, mr2;
 	unsigned short ctr;
@@ -562,7 +562,7 @@ static void __init
 mpc52xx_console_get_options(struct uart_port *port,
                             int *baud, int *parity, int *bits, int *flow)
 {
-	struct mpc52xx_psc *psc = PSC(port);
+	struct mpc52xx_psc __iomem *psc = PSC(port);
 	unsigned char mr1;
 
 	/* Read the mode registers */
@@ -592,7 +592,7 @@ static void
 mpc52xx_console_write(struct console *co, const char *s, unsigned int count)
 {
 	struct uart_port *port = &mpc52xx_uart_ports[co->index];
-	struct mpc52xx_psc *psc = PSC(port);
+	struct mpc52xx_psc __iomem *psc = PSC(port);
 	unsigned int i, j;
 	
 	/* Disable interrupts */

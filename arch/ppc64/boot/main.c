@@ -112,7 +112,7 @@ void start(unsigned long a1, unsigned long a2, void *promptr)
 	if (getprop(chosen_handle, "stdin", &stdin, sizeof(stdin)) != 4)
 		exit();
 
-	printf("zImage starting: loaded at 0x%x\n\r", (unsigned)_start);
+	printf("\n\rzImage starting: loaded at 0x%x\n\r", (unsigned)_start);
 
 	/*
 	 * Now we try to claim some memory for the kernel itself
@@ -151,7 +151,7 @@ void start(unsigned long a1, unsigned long a2, void *promptr)
 		printf("initial ramdisk moving 0x%lx <- 0x%lx (%lx bytes)\n\r",
 		       initrd.addr, (unsigned long)_initrd_start, initrd.size);
 		memmove((void *)initrd.addr, (void *)_initrd_start, initrd.size);
-		printf("initrd head: 0x%lx\n", *((u32 *)initrd.addr));
+		printf("initrd head: 0x%lx\n\r", *((u32 *)initrd.addr));
 	}
 
 	/* Eventually gunzip the kernel */

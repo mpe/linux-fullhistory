@@ -1027,20 +1027,16 @@ static int __init inet_init(void)
 	}
 
 	rc = sk_alloc_slab(&tcp_prot, "tcp_sock");
-	if (rc) {
-		sk_alloc_slab_error(&tcp_prot);
+	if (rc)
 		goto out;
-	}
+
 	rc = sk_alloc_slab(&udp_prot, "udp_sock");
-	if (rc) {
-		sk_alloc_slab_error(&udp_prot);
+	if (rc)
 		goto out_tcp_free_slab;
-	}
+
 	rc = sk_alloc_slab(&raw_prot, "raw_sock");
-	if (rc) {
-		sk_alloc_slab_error(&raw_prot);
+	if (rc)
 		goto out_udp_free_slab;
-	}
 
 	/*
 	 *	Tell SOCKET that we are alive... 

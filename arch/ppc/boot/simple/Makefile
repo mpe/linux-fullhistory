@@ -49,7 +49,7 @@ clear_L2_L3	:= $(srctree)/$(boot)/simple/clear.S
 #----------------------------------------------------------------------------
       zimage-$(CONFIG_CPCI690)		:= zImage-STRIPELF
 zimageinitrd-$(CONFIG_CPCI690)		:= zImage.initrd-STRIPELF
-     extra.o-$(CONFIG_CPCI690)		:= misc-cpci690.o mv64x60_stub.o
+     extra.o-$(CONFIG_CPCI690)		:= misc-cpci690.o
          end-$(CONFIG_CPCI690)		:= cpci690
    cacheflag-$(CONFIG_CPCI690)		:= -include $(clear_L2_L3)
 
@@ -94,11 +94,11 @@ zimageinitrd-$(CONFIG_GEMINI)		:= zImage.initrd-STRIPELF
          end-$(CONFIG_K2)		:= k2
    cacheflag-$(CONFIG_K2)		:= -include $(clear_L2_L3)
 
-     extra.o-$(CONFIG_KATANA)		:= misc-katana.o mv64x60_stub.o
+     extra.o-$(CONFIG_KATANA)		:= misc-katana.o
          end-$(CONFIG_KATANA)		:= katana
    cacheflag-$(CONFIG_KATANA)		:= -include $(clear_L2_L3)
 
-     extra.o-$(CONFIG_RADSTONE_PPC7D)	:= misc-radstone_ppc7d.o mv64x60_stub.o
+     extra.o-$(CONFIG_RADSTONE_PPC7D)	:= misc-radstone_ppc7d.o
          end-$(CONFIG_RADSTONE_PPC7D)	:= radstone_ppc7d
    cacheflag-$(CONFIG_RADSTONE_PPC7D)	:= -include $(clear_L2_L3)
 

@@ -250,6 +250,7 @@ enum rtattr_type_t
 	RTA_FLOW,
 	RTA_CACHEINFO,
 	RTA_SESSION,
+	RTA_MP_ALGO,
 	__RTA_MAX
 };
 

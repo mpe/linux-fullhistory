@@ -2022,10 +2022,11 @@ static struct feature_table_entry g5_features[]  __pmacdata = {
 #endif /* CONFIG_POWER4 */
 
 static struct pmac_mb_def pmac_mb_defs[] __pmacdata = {
-	/* Warning: ordering is important as some models may claim
-	 * beeing compatible with several types
-	 */
 #ifndef CONFIG_POWER4
+	/*
+	 * Desktops
+	 */
+
 	{	"AAPL,8500",			"PowerMac 8500/8600",
 		PMAC_TYPE_PSURGE,		NULL,
 		0
@@ -2058,14 +2059,6 @@ static struct pmac_mb_def pmac_mb_defs[] __pmacdata = {
 		PMAC_TYPE_GAZELLE,		NULL,
 		0
 	},
-	{	"AAPL,3400/2400",		"PowerBook 3400",
-		PMAC_TYPE_HOOPER,		ohare_features,
-		PMAC_MB_CAN_SLEEP | PMAC_MB_MOBILE
-	},
-	{	"AAPL,3500",			"PowerBook 3500",
-		PMAC_TYPE_KANGA,		ohare_features,
-		PMAC_MB_CAN_SLEEP | PMAC_MB_MOBILE
-	},
 	{	"AAPL,Gossamer",		"PowerMac G3 (Gossamer)",
 		PMAC_TYPE_GOSSAMER,		heathrow_desktop_features,
 		0
@@ -2073,42 +2066,6 @@ static struct pmac_mb_def pmac_mb_defs[] __pmacdata = {
 	{	"AAPL,PowerMac G3",		"PowerMac G3 (Silk)",
 		PMAC_TYPE_SILK,			heathrow_desktop_features,
 		0
-	},
-	{	"AAPL,PowerBook1998",		"PowerBook Wallstreet",
-		PMAC_TYPE_WALLSTREET,		heathrow_laptop_features,
-		PMAC_MB_CAN_SLEEP | PMAC_MB_MOBILE
-	},
-	{	"PowerBook1,1",			"PowerBook 101 (Lombard)",
-		PMAC_TYPE_101_PBOOK,		paddington_features,
-		PMAC_MB_MAY_SLEEP | PMAC_MB_MOBILE
-	},
-	{	"iMac,1",			"iMac (first generation)",
-		PMAC_TYPE_ORIG_IMAC,		paddington_features,
-		0
-	},
-	{	"PowerMac4,1",			"iMac \"Flower Power\"",
-		PMAC_TYPE_PANGEA_IMAC,		pangea_features,
-		PMAC_MB_MAY_SLEEP
-	},
-	{	"PowerBook4,3",			"iBook 2 rev. 2",
-		PMAC_TYPE_IBOOK2,		pangea_features,
-		PMAC_MB_MAY_SLEEP | PMAC_MB_HAS_FW_POWER | PMAC_MB_MOBILE
-	},
-	{	"PowerBook4,2",			"iBook 2",
-		PMAC_TYPE_IBOOK2,		pangea_features,
-		PMAC_MB_MAY_SLEEP | PMAC_MB_HAS_FW_POWER | PMAC_MB_MOBILE
-	},
-	{	"PowerBook4,1",			"iBook 2",
-		PMAC_TYPE_IBOOK2,		pangea_features,
-		PMAC_MB_MAY_SLEEP | PMAC_MB_HAS_FW_POWER | PMAC_MB_MOBILE
-	},
-	{	"PowerMac4,4",			"eMac",
-		PMAC_TYPE_EMAC,			core99_features,
-		PMAC_MB_MAY_SLEEP
-	},
-	{	"PowerMac4,2",			"Flat panel iMac",
-		PMAC_TYPE_FLAT_PANEL_IMAC,	pangea_features,
-		PMAC_MB_CAN_SLEEP
 	},
 	{	"PowerMac1,1",			"Blue&White G3",
 		PMAC_TYPE_YOSEMITE,		paddington_features,
@@ -2118,9 +2075,13 @@ static struct pmac_mb_def pmac_mb_defs[] __pmacdata = {
 		PMAC_TYPE_YIKES,		paddington_features,
 		0
 	},
-	{	"PowerBook2,1",			"iBook (first generation)",
-		PMAC_TYPE_ORIG_IBOOK,		core99_features,
-		PMAC_MB_CAN_SLEEP | PMAC_MB_OLD_CORE99 | PMAC_MB_MOBILE
+	{	"PowerMac2,1",			"iMac FireWire",
+		PMAC_TYPE_FW_IMAC,		core99_features,
+		PMAC_MB_MAY_SLEEP | PMAC_MB_OLD_CORE99
+	},
+	{	"PowerMac2,2",			"iMac FireWire",
+		PMAC_TYPE_FW_IMAC,		core99_features,
+		PMAC_MB_MAY_SLEEP | PMAC_MB_OLD_CORE99
 	},
 	{	"PowerMac3,1",			"PowerMac G4 AGP Graphics",
 		PMAC_TYPE_SAWTOOTH,		core99_features,
@@ -2134,23 +2095,6 @@ static struct pmac_mb_def pmac_mb_defs[] __pmacdata = {
 		PMAC_TYPE_SAWTOOTH,		core99_features,
 		PMAC_MB_MAY_SLEEP | PMAC_MB_OLD_CORE99
 	},
-	{	"PowerMac2,1",			"iMac FireWire",
-		PMAC_TYPE_FW_IMAC,		core99_features,
-		PMAC_MB_MAY_SLEEP | PMAC_MB_OLD_CORE99
-	},
-	{	"PowerMac2,2",			"iMac FireWire",
-		PMAC_TYPE_FW_IMAC,		core99_features,
-		PMAC_MB_MAY_SLEEP | PMAC_MB_OLD_CORE99
-	},
-	{	"PowerBook2,2",			"iBook FireWire",
-		PMAC_TYPE_FW_IBOOK,		core99_features,
-		PMAC_MB_MAY_SLEEP | PMAC_MB_HAS_FW_POWER |
-		PMAC_MB_OLD_CORE99 | PMAC_MB_MOBILE
-	},
-	{	"PowerMac5,1",			"PowerMac G4 Cube",
-		PMAC_TYPE_CUBE,			core99_features,
-		PMAC_MB_MAY_SLEEP | PMAC_MB_OLD_CORE99
-	},
 	{	"PowerMac3,4",			"PowerMac G4 Silver",
 		PMAC_TYPE_QUICKSILVER,		core99_features,
 		PMAC_MB_MAY_SLEEP
@@ -2158,6 +2102,89 @@ static struct pmac_mb_def pmac_mb_defs[] __pmacdata = {
 	{	"PowerMac3,5",			"PowerMac G4 Silver",
 		PMAC_TYPE_QUICKSILVER,		core99_features,
 		PMAC_MB_MAY_SLEEP
+	},
+	{	"PowerMac3,6",			"PowerMac G4 Windtunnel",
+		PMAC_TYPE_WINDTUNNEL,		core99_features,
+		PMAC_MB_MAY_SLEEP,
+	},
+	{	"PowerMac4,1",			"iMac \"Flower Power\"",
+		PMAC_TYPE_PANGEA_IMAC,		pangea_features,
+		PMAC_MB_MAY_SLEEP
+	},
+	{	"PowerMac4,2",			"Flat panel iMac",
+		PMAC_TYPE_FLAT_PANEL_IMAC,	pangea_features,
+		PMAC_MB_CAN_SLEEP
+	},
+	{	"PowerMac4,4",			"eMac",
+		PMAC_TYPE_EMAC,			core99_features,
+		PMAC_MB_MAY_SLEEP
+	},
+	{	"PowerMac5,1",			"PowerMac G4 Cube",
+		PMAC_TYPE_CUBE,			core99_features,
+		PMAC_MB_MAY_SLEEP | PMAC_MB_OLD_CORE99
+	},
+	{	"PowerMac6,1",			"Flat panel iMac",
+		PMAC_TYPE_UNKNOWN_INTREPID,	intrepid_features,
+		PMAC_MB_MAY_SLEEP,
+	},
+	{	"PowerMac6,3",			"Flat panel iMac",
+		PMAC_TYPE_UNKNOWN_INTREPID,	intrepid_features,
+		PMAC_MB_MAY_SLEEP,
+	},
+	{	"PowerMac6,4",			"eMac",
+		PMAC_TYPE_UNKNOWN_INTREPID,	intrepid_features,
+		PMAC_MB_MAY_SLEEP,
+	},
+	{	"PowerMac10,1",			"Mac mini",
+		PMAC_TYPE_UNKNOWN_INTREPID,	intrepid_features,
+		PMAC_MB_MAY_SLEEP | PMAC_MB_HAS_FW_POWER,
+	},
+	{	"iMac,1",			"iMac (first generation)",
+		PMAC_TYPE_ORIG_IMAC,		paddington_features,
+		0
+	},
+
+	/*
+	 * Xserve's
+	 */
+
+	{	"RackMac1,1",			"XServe",
+		PMAC_TYPE_RACKMAC,		rackmac_features,
+		0,
+	},
+	{	"RackMac1,2",			"XServe rev. 2",
+		PMAC_TYPE_RACKMAC,		rackmac_features,
+		0,
+	},
+
+	/*
+	 * Laptops
+	 */
+
+	{	"AAPL,3400/2400",		"PowerBook 3400",
+		PMAC_TYPE_HOOPER,		ohare_features,
+		PMAC_MB_CAN_SLEEP | PMAC_MB_MOBILE
+	},
+	{	"AAPL,3500",			"PowerBook 3500",
+		PMAC_TYPE_KANGA,		ohare_features,
+		PMAC_MB_CAN_SLEEP | PMAC_MB_MOBILE
+	},
+	{	"AAPL,PowerBook1998",		"PowerBook Wallstreet",
+		PMAC_TYPE_WALLSTREET,		heathrow_laptop_features,
+		PMAC_MB_CAN_SLEEP | PMAC_MB_MOBILE
+	},
+	{	"PowerBook1,1",			"PowerBook 101 (Lombard)",
+		PMAC_TYPE_101_PBOOK,		paddington_features,
+		PMAC_MB_MAY_SLEEP | PMAC_MB_MOBILE
+	},
+	{	"PowerBook2,1",			"iBook (first generation)",
+		PMAC_TYPE_ORIG_IBOOK,		core99_features,
+		PMAC_MB_CAN_SLEEP | PMAC_MB_OLD_CORE99 | PMAC_MB_MOBILE
+	},
+	{	"PowerBook2,2",			"iBook FireWire",
+		PMAC_TYPE_FW_IBOOK,		core99_features,
+		PMAC_MB_MAY_SLEEP | PMAC_MB_HAS_FW_POWER |
+		PMAC_MB_OLD_CORE99 | PMAC_MB_MOBILE
 	},
 	{	"PowerBook3,1",			"PowerBook Pismo",
 		PMAC_TYPE_PISMO,		core99_features,
@@ -2180,17 +2207,17 @@ static struct pmac_mb_def pmac_mb_defs[] __pmacdata = {
 		PMAC_TYPE_TITANIUM4,		core99_features,
 		PMAC_MB_MAY_SLEEP | PMAC_MB_HAS_FW_POWER | PMAC_MB_MOBILE
 	},
-	{	"RackMac1,1",			"XServe",
-		PMAC_TYPE_RACKMAC,		rackmac_features,
-		0,
+	{	"PowerBook4,1",			"iBook 2",
+		PMAC_TYPE_IBOOK2,		pangea_features,
+		PMAC_MB_MAY_SLEEP | PMAC_MB_HAS_FW_POWER | PMAC_MB_MOBILE
 	},
-	{	"RackMac1,2",			"XServe rev. 2",
-		PMAC_TYPE_RACKMAC,		rackmac_features,
-		0,
+	{	"PowerBook4,2",			"iBook 2",
+		PMAC_TYPE_IBOOK2,		pangea_features,
+		PMAC_MB_MAY_SLEEP | PMAC_MB_HAS_FW_POWER | PMAC_MB_MOBILE
 	},
-	{	"PowerMac3,6",			"PowerMac G4 Windtunnel",
-		PMAC_TYPE_WINDTUNNEL,		core99_features,
-		PMAC_MB_MAY_SLEEP,
+	{	"PowerBook4,3",			"iBook 2 rev. 2",
+		PMAC_TYPE_IBOOK2,		pangea_features,
+		PMAC_MB_MAY_SLEEP | PMAC_MB_HAS_FW_POWER | PMAC_MB_MOBILE
 	},
 	{	"PowerBook5,1",			"PowerBook G4 17\"",
 		PMAC_TYPE_UNKNOWN_INTREPID,	intrepid_features,
@@ -2212,6 +2239,14 @@ static struct pmac_mb_def pmac_mb_defs[] __pmacdata = {
 		PMAC_TYPE_UNKNOWN_INTREPID,	intrepid_features,
 		PMAC_MB_MAY_SLEEP | PMAC_MB_HAS_FW_POWER | PMAC_MB_MOBILE,
 	},
+	{	"PowerBook5,6",			"PowerBook G4 15\"",
+		PMAC_TYPE_UNKNOWN_INTREPID,	intrepid_features,
+		PMAC_MB_MAY_SLEEP | PMAC_MB_HAS_FW_POWER | PMAC_MB_MOBILE,
+	},
+	{	"PowerBook5,7",			"PowerBook G4 17\"",
+		PMAC_TYPE_UNKNOWN_INTREPID,	intrepid_features,
+		PMAC_MB_MAY_SLEEP | PMAC_MB_HAS_FW_POWER | PMAC_MB_MOBILE,
+	},
 	{	"PowerBook6,1",			"PowerBook G4 12\"",
 		PMAC_TYPE_UNKNOWN_INTREPID,	intrepid_features,
 		PMAC_MB_MAY_SLEEP | PMAC_MB_HAS_FW_POWER | PMAC_MB_MOBILE,
@@ -2229,6 +2264,10 @@ static struct pmac_mb_def pmac_mb_defs[] __pmacdata = {
 		PMAC_MB_MAY_SLEEP | PMAC_MB_HAS_FW_POWER | PMAC_MB_MOBILE,
 	},
 	{	"PowerBook6,5",			"iBook G4",
+		PMAC_TYPE_UNKNOWN_INTREPID,	intrepid_features,
+		PMAC_MB_MAY_SLEEP | PMAC_MB_HAS_FW_POWER | PMAC_MB_MOBILE,
+	},
+	{	"PowerBook6,8",			"PowerBook G4 12\"",
 		PMAC_TYPE_UNKNOWN_INTREPID,	intrepid_features,
 		PMAC_MB_MAY_SLEEP | PMAC_MB_HAS_FW_POWER | PMAC_MB_MOBILE,
 	},

@@ -80,9 +80,6 @@ static inline int kprobe_handler(struct pt_regs *regs)
 	int ret = 0;
 	unsigned int *addr = (unsigned int *)regs->nip;
 
-	/* We're in an interrupt, but this is clear and BUG()-safe. */
-	preempt_disable();
-
 	/* Check we're not actually recursing */
 	if (kprobe_running()) {
 		/* We *are* holding lock here, so this is safe.
@@ -139,10 +136,14 @@ static inline int kprobe_handler(struct pt_regs *regs)
 ss_probe:
 	prepare_singlestep(p, regs);
 	kprobe_status = KPROBE_HIT_SS;
+	/*
+	 * This preempt_disable() matches the preempt_enable_no_resched()
+	 * in post_kprobe_handler().
+	 */
+	preempt_disable();
 	return 1;
 
 no_kprobe:
-	preempt_enable_no_resched();
 	return ret;
 }
 
@@ -215,27 +216,35 @@ int kprobe_exceptions_notify(struct notifier_block *self, unsigned long val,
 			     void *data)
 {
 	struct die_args *args = (struct die_args *)data;
+	int ret = NOTIFY_DONE;
+
+	/*
+	 * Interrupts are not disabled here.  We need to disable
+	 * preemption, because kprobe_running() uses smp_processor_id().
+	 */
+	preempt_disable();
 	switch (val) {
 	case DIE_IABR_MATCH:
 	case DIE_DABR_MATCH:
 	case DIE_BPT:
 		if (kprobe_handler(args->regs))
-			return NOTIFY_STOP;
+			ret = NOTIFY_STOP;
 		break;
 	case DIE_SSTEP:
 		if (post_kprobe_handler(args->regs))
-			return NOTIFY_STOP;
+			ret = NOTIFY_STOP;
 		break;
 	case DIE_GPF:
 	case DIE_PAGE_FAULT:
 		if (kprobe_running() &&
 		    kprobe_fault_handler(args->regs, args->trapnr))
-			return NOTIFY_STOP;
+			ret = NOTIFY_STOP;
 		break;
 	default:
 		break;
 	}
-	return NOTIFY_DONE;
+	preempt_enable();
+	return ret;
 }
 
 int setjmp_pre_handler(struct kprobe *p, struct pt_regs *regs)
@@ -253,7 +262,6 @@ int setjmp_pre_handler(struct kprobe *p, struct pt_regs *regs)
 
 void jprobe_return(void)
 {
-	preempt_enable_no_resched();
 	asm volatile("trap" ::: "memory");
 }
 

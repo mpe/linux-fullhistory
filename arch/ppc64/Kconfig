@@ -255,16 +255,21 @@ config MSCHUNKS
 
 
 config PPC_RTAS
-	bool "Proc interface to RTAS"
+	bool
 	depends on PPC_PSERIES
+	default y
+
+config RTAS_PROC
+	bool "Proc interface to RTAS"
+	depends on PPC_RTAS
 
 config RTAS_FLASH
 	tristate "Firmware flash interface"
-	depends on PPC_RTAS
+	depends on RTAS_PROC
 
 config SCANLOG
 	tristate "Scanlog dump interface"
-	depends on PPC_RTAS
+	depends on RTAS_PROC && PPC_PSERIES
 
 config LPARCFG
 	tristate "LPAR Configuration Data"

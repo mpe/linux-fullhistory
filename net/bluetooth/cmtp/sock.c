@@ -167,8 +167,10 @@ static int cmtp_sock_create(struct socket *sock, int protocol)
 	if (sock->type != SOCK_RAW)
 		return -ESOCKTNOSUPPORT;
 
-	if (!(sk = bt_sock_alloc(sock, PF_BLUETOOTH, 0, GFP_KERNEL)))
+	if (!(sk = sk_alloc(PF_BLUETOOTH, GFP_KERNEL, sizeof(struct bt_sock), NULL)))
 		return -ENOMEM;
+
+	sock_init_data(sock, sk);
 
 	sk_set_owner(sk, THIS_MODULE);
 
@@ -176,8 +178,10 @@ static int cmtp_sock_create(struct socket *sock, int protocol)
 
 	sock->state = SS_UNCONNECTED;
 
-	sk->sk_destruct = NULL;
+	sock_reset_flag(sk, SOCK_ZAPPED);
+
 	sk->sk_protocol = protocol;
+	sk->sk_state    = BT_OPEN;
 
 	return 0;
 }

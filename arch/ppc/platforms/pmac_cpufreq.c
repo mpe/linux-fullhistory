@@ -464,20 +464,22 @@ static int __pmac pmac_cpufreq_init_7447A(struct device_node *cpunode)
 	u32 *reg;
 	struct cpufreq_driver *driver = &pmac_cpufreq_driver;
 
-	/* OF only reports the high frequency */
-	hi_freq = cur_freq;
-	low_freq = cur_freq/2;
-	driver->get = dfs_get_cpu_speed;
-	cur_freq = driver->get(0);
-
+	/* Look for voltage GPIO */
 	volt_gpio_np = of_find_node_by_name(NULL, "cpu-vcore-select");
+	reg = (u32 *)get_property(volt_gpio_np, "reg", NULL);
+	voltage_gpio = *reg;
 	if (!volt_gpio_np){
 		printk(KERN_ERR "cpufreq: missing cpu-vcore-select gpio\n");
 		return 1;
 	}
 
-	reg = (u32 *)get_property(volt_gpio_np, "reg", NULL);
-	voltage_gpio = *reg;
+	/* OF only reports the high frequency */
+	hi_freq = cur_freq;
+	low_freq = cur_freq/2;
+
+	/* Read actual frequency from CPU */
+	driver->get = dfs_get_cpu_speed;
+	cur_freq = driver->get(0);
 	set_speed_proc = dfs_set_cpu_speed;
 
 	return 0;
@@ -492,7 +494,7 @@ static int __pmac pmac_cpufreq_init_7447A(struct device_node *cpunode)
  *  - iBook2 500/600 (PMU based, 400Mhz & 500/600Mhz)
  *  - iBook2 700 (CPU based, 400Mhz & 700Mhz, support low voltage)
  *  - Recent MacRISC3 laptops
- *  - iBook G4s and PowerBook G4s with 7447A CPUs
+ *  - All new machines with 7447A CPUs
  */
 static int __init pmac_cpufreq_setup(void)
 {
@@ -513,11 +515,10 @@ static int __init pmac_cpufreq_setup(void)
 		goto out;
 	cur_freq = (*value) / 1000;
 
-	/*  Check for 7447A based iBook G4 or PowerBook */
-	if (machine_is_compatible("PowerBook6,5") ||
-	    machine_is_compatible("PowerBook6,4") ||
-	    machine_is_compatible("PowerBook5,5") ||
-	    machine_is_compatible("PowerBook5,4")) {
+	/*  Check for 7447A based MacRISC3 */
+	if (machine_is_compatible("MacRISC3") &&
+	    get_property(cpunode, "dynamic-power-step", NULL) &&
+	    PVR_VER(mfspr(SPRN_PVR)) == 0x8003) {
 		pmac_cpufreq_init_7447A(cpunode);
 	/* Check for other MacRISC3 machines */
 	} else if (machine_is_compatible("PowerBook3,4") ||
