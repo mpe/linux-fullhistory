@@ -425,7 +425,7 @@ static struct sk_buff *
 ipxitf_adjust_skbuff(ipx_interface *intrfc, struct sk_buff *skb)
 {
 	struct sk_buff	*skb2;
-	int	in_offset = skb->h.raw - skb->data;
+	int	in_offset = skb->h.raw - skb->head;
 	int	out_offset = intrfc->if_ipx_offset;
 #if 0
 	char	*oldraw;
@@ -532,6 +532,12 @@ ipxitf_send(ipx_interface *intrfc, struct sk_buff *skb, char *node)
 		 */
 		skb->sk->wmem_alloc += skb->truesize;
 	}
+
+#if 0
+	/* Now log the packet just before transmission */
+	dump_pkt("IPX snd:", (ipx_packet *)skb->h.raw);
+	dump_data("ETH hdr:", skb->data, skb->h.raw - skb->data);
+#endif
 
 	/* Send it out */
 	dev_queue_xmit(skb, dev, SOPRI_NORMAL);
@@ -1588,20 +1594,31 @@ static int ipx_getname(struct socket *sock, struct sockaddr *uaddr,
 /*
  * User to dump IPX packets (debugging)
  */
-void dump_data(char *str,unsigned char *d) {
+void dump_data(char *str,unsigned char *d, int len) {
   static char h2c[] = "0123456789ABCDEF";
   int l,i;
   char *p, b[64];
-  for (l=0;l<16;l++) {
+  for (l=0;len > 0 && l<16;l++) {
     p = b;
-    for (i=0; i < 8 ; i++) {
-      *(p++) = h2c[d[i] & 0x0f];
-      *(p++) = h2c[(d[i] >> 4) & 0x0f];
+    for (i=0; i < 8 ; i++, --len) {
+	  if (len > 0) {
+	      *(p++) = h2c[(d[i] >> 4) & 0x0f];
+	      *(p++) = h2c[d[i] & 0x0f];
+	  }
+	  else {
+	      *(p++) = ' ';
+	      *(p++) = ' ';
+	  }
       *(p++) = ' ';
     }
     *(p++) = '-';
     *(p++) = ' ';
-    for (i=0; i < 8 ; i++)  *(p++) = ' '<= d[i] && d[i]<'\177' ? d[i] : '.';
+	len += 8;
+    for (i=0; i < 8 ; i++, --len)
+		if (len > 0)
+			*(p++) = ' '<= d[i] && d[i]<'\177' ? d[i] : '.';
+		else
+			*(p++) = ' ';
     *p = '\000';
     d += i;
     printk("%s-%04X: %s\n",str,l*8,b);
@@ -1623,8 +1640,10 @@ void dump_hdr(char *str,ipx_packet *p) {
 }
 
 void dump_pkt(char *str,ipx_packet *p) {
+  int len = ntohs(p->ipx_pktsize);
   dump_hdr(str,p);
-  dump_data(str,(unsigned char *)p);
+  if (len > 30)
+	  dump_data(str,(unsigned char *)p + 30, len - 30);
 }
 #endif
 

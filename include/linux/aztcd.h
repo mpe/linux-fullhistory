@@ -1,4 +1,4 @@
-/* $Id: aztcd.h,v 1.40 1995/07/15 20:35:01 root Exp root $
+/* $Id: aztcd.h,v 1.50 1995/07/29 20:31:32 root Exp $
  *
  * Definitions for a AztechCD268 CD-ROM interface
  *	Copyright (C) 1994, 1995  Werner Zimmermann
@@ -45,7 +45,7 @@
 
 /*Set this to 1, if you want multisession support. Be warned, this function has
 not been tested !!!*/
-#define AZT_MULTISESSION        0
+#define AZT_MULTISESSION        1
 
 /*Set this to 1, if you want to use incompatible ioctls for reading in raw and
   cooked mode */
@@ -76,10 +76,11 @@ not been tested !!!*/
 #endif
 
 /* status bits */
-#define AST_CMD_CHECK		0x80		/* command error */
-#define AST_DSK_CHG		0x20		/* disk removed or changed */
-#define AST_NOT_READY		0x02		/* no disk in the drive */
-#define AST_DOOR_OPEN		0x40		/* door is open */
+#define AST_CMD_CHECK		0x80		/* 1 = command error */
+#define AST_DOOR_OPEN		0x40		/* 1 = door is open */
+#define AST_NOT_READY		0x20		/* 1 = no disk in the drive */
+#define AST_DSK_CHG		0x02		/* 1 = disk removed or changed */
+#define AST_MODE                0x01            /* 0=MODE1, 1=MODE2 */
 #define AST_MODE_BITS		0x1C		/* Mode Bits */
 #define AST_INITIAL		0x0C		/* initial, only valid ... */
 #define AST_BUSY		0x04		/* now playing, only valid
@@ -97,7 +98,7 @@ not been tested !!!*/
 /* commands */
 #define ACMD_SOFT_RESET		0x10		/* reset drive */
 #define ACMD_PLAY_READ		0x20		/* read data track in cooked mode */
-#define ACMD_DATA_READ_RAW      0x21		/* reading in raw mode*/
+#define ACMD_PLAY_READ_RAW      0x21		/* reading in raw mode*/
 #define ACMD_SEEK_TO_LEADIN     0x31		/* seek to leadin track*/
 #define ACMD_GET_ERROR		0x40		/* get error code */
 #define ACMD_GET_STATUS		0x41		/* get status */
@@ -111,13 +112,9 @@ not been tested !!!*/
 #define ACMD_PLAY_AUDIO		0x90		/* play audio track */
 #define ACMD_SET_VOLUME		0x93		/* set audio level */
 #define ACMD_GET_VERSION	0xA0		/* get firmware version */
-#define ACMD_SET_MODE		0xA1		/* set drive mode */
+#define ACMD_SET_DISK_TYPE	0xA1		/* set disk data mode */
 
 #define MAX_TRACKS		104
-
-#define CD_DATA			0x01
-#define CD_AUDIO		0x02
-#define CD_XA                   (CD_DATA|CD_AUDIO)
 
 struct msf {
 	unsigned char	min;
@@ -137,7 +134,8 @@ struct azt_DiskInfo {
 	struct msf	firstTrack;
         unsigned char   multi;
         struct msf      lastTrack;
-        unsigned char   type;
+        unsigned char   xa;
+        unsigned char   audio;
 };
 
 struct azt_Toc {

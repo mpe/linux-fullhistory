@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 029
+ *	AX.25 release 030
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -21,6 +21,8 @@
  *	History
  *	AX.25 029	Alan(GW4PTS)	Switched to KA9Q constant names. Removed
  *					old BSD code.
+ *	AX.25 030	Jonathan(G4KLX)	Added support for extended AX.25.
+ *					Added fragmentation support.
  */
 
 #include <linux/config.h>
@@ -49,9 +51,9 @@
 /* #define	NO_BACKOFF	*/
 
 /*
- * This routine purges the input queue of frames.
+ *	This routine purges all the queues of frames.
  */
-void ax25_clear_tx_queue(ax25_cb *ax25)
+void ax25_clear_queues(ax25_cb *ax25)
 {
 	struct sk_buff *skb;
 
@@ -63,6 +65,14 @@ void ax25_clear_tx_queue(ax25_cb *ax25)
 	while ((skb = skb_dequeue(&ax25->ack_queue)) != NULL) {
 		skb->free = 1;
 		kfree_skb(skb, FREE_WRITE);
+	}
+
+	while ((skb = skb_dequeue(&ax25->reseq_queue)) != NULL) {
+		kfree_skb(skb, FREE_READ);
+	}
+
+	while ((skb = skb_dequeue(&ax25->frag_queue)) != NULL) {
+		kfree_skb(skb, FREE_READ);
 	}
 }
 
@@ -83,7 +93,7 @@ void ax25_frames_acked(ax25_cb *ax25, unsigned short nr)
 		        skb = skb_dequeue(&ax25->ack_queue);
 			skb->free = 1;
 			kfree_skb(skb, FREE_WRITE);
-			ax25->va = (ax25->va + 1) % MODULUS;
+			ax25->va = (ax25->va + 1) % ax25->modulus;
 		}
 	}
 
@@ -111,7 +121,7 @@ int ax25_validate_nr(ax25_cb *ax25, unsigned short nr)
 
 	while (vc != ax25->vs) {
 		if (nr == vc) return 1;
-		vc = (vc + 1) % MODULUS;
+		vc = (vc + 1) % ax25->modulus;
 	}
 	
 	if (nr == ax25->vs) return 1;
@@ -119,16 +129,51 @@ int ax25_validate_nr(ax25_cb *ax25, unsigned short nr)
 	return 0;
 }
 
-int ax25_decode(unsigned char *frame)
+/*
+ *	This routine is the centralised routine for parsing the control
+ *	information for the different frame formats.
+ */
+int ax25_decode(ax25_cb *ax25, struct sk_buff *skb, int *ns, int *nr, int *pf)
 {
+	unsigned char *frame;
 	int frametype = ILLEGAL;
 
-	if ((frame[0] & S) == 0)
-		frametype = I;		/* I frame - carries NR/NS/PF */
-	else if ((frame[0] & U) == 1) 	/* S frame - take out PF/NR */
-		frametype = frame[0] & 0x0F;
-	else if ((frame[0] & U) == 3) 	/* U frame - take out PF */
-		frametype = frame[0] & ~PF;
+	frame = skb->data;
+	*ns = *nr = *pf = 0;
+
+	if (ax25->modulus == MODULUS) {
+		if ((frame[0] & S) == 0) {
+			frametype = I;			/* I frame - carries NR/NS/PF */
+			*ns = (frame[0] >> 1) & 0x07;
+			*nr = (frame[0] >> 5) & 0x07;
+			*pf = frame[0] & PF;
+		} else if ((frame[0] & U) == 1) { 	/* S frame - take out PF/NR */
+			frametype = frame[0] & 0x0F;
+			*nr = (frame[0] >> 5) & 0x07;
+			*pf = frame[0] & PF;
+		} else if ((frame[0] & U) == 3) { 	/* U frame - take out PF */
+			frametype = frame[0] & ~PF;
+			*pf = frame[0] & PF;
+		}
+		skb_pull(skb, 1);
+	} else {
+		if ((frame[0] & S) == 0) {
+			frametype = I;			/* I frame - carries NR/NS/PF */
+			*ns = (frame[0] >> 1) & 0x7F;
+			*nr = (frame[1] >> 1) & 0x7F;
+			*pf = frame[1] & EPF;
+			skb_pull(skb, 2);
+		} else if ((frame[0] & U) == 1) { 	/* S frame - take out PF/NR */
+			frametype = frame[0] & 0x0F;
+			*nr = (frame[1] >> 1) & 0x7F;
+			*pf = frame[1] & EPF;
+			skb_pull(skb, 2);
+		} else if ((frame[0] & U) == 3) { 	/* U frame - take out PF */
+			frametype = frame[0] & ~PF;
+			*pf = frame[0] & PF;
+			skb_pull(skb, 1);
+		}
+	}
 
 	return frametype;
 }
@@ -138,7 +183,7 @@ int ax25_decode(unsigned char *frame)
  *	command or  response  for  the remote machine ( eg. RR, UA etc. ). 
  *	Only supervisory or unnumbered frames are processed.
  */
-void ax25_send_control(ax25_cb *ax25, int frametype, int type)
+void ax25_send_control(ax25_cb *ax25, int frametype, int poll_bit, int type)
 {
 	struct sk_buff *skb;
 	unsigned char  *dptr;
@@ -147,7 +192,7 @@ void ax25_send_control(ax25_cb *ax25, int frametype, int type)
 	if ((dev = ax25->device) == NULL)
 		return;	/* Route died */
 
-	if ((skb = alloc_skb(AX25_BPQ_HEADER_LEN + size_ax25_addr(ax25->digipeat) + 1, GFP_ATOMIC)) == NULL)
+	if ((skb = alloc_skb(AX25_BPQ_HEADER_LEN + size_ax25_addr(ax25->digipeat) + 2, GFP_ATOMIC)) == NULL)
 		return;
 
 	skb_reserve(skb, AX25_BPQ_HEADER_LEN + size_ax25_addr(ax25->digipeat));
@@ -158,12 +203,24 @@ void ax25_send_control(ax25_cb *ax25, int frametype, int type)
 	}
 
 	/* Assume a response - address structure for DTE */
-	dptr = skb_put(skb, 1);
-	
-	if ((frametype & U) == S)		/* S frames carry NR */
-		frametype |= (ax25->vr << 5);
-
-	*dptr = frametype;
+	if (ax25->modulus == MODULUS) {
+		dptr = skb_put(skb, 1);
+		*dptr = frametype;
+		*dptr |= (poll_bit) ? PF : 0;
+		if ((frametype & U) == S)		/* S frames carry NR */
+			*dptr |= (ax25->vr << 5);
+	} else {
+		if ((frametype & U) == U) {
+			dptr = skb_put(skb, 1);
+			*dptr = frametype;
+			*dptr |= (poll_bit) ? PF : 0;
+		} else {
+			dptr = skb_put(skb, 2);
+			dptr[0] = frametype;
+			dptr[1] = (ax25->vr << 1);
+			dptr[1] |= (poll_bit) ? EPF : 0;
+		}
+	}
 
 	skb->free = 1;
 
@@ -201,7 +258,7 @@ void ax25_return_dm(struct device *dev, ax25_address *src, ax25_address *dest, a
 	 */
 
 	dptr  = skb_push(skb, size_ax25_addr(digi));
-	dptr += build_ax25_addr(dptr, dest, src, &retdigi, C_RESPONSE);
+	dptr += build_ax25_addr(dptr, dest, src, &retdigi, C_RESPONSE, MODULUS);
 
 	skb->arp  = 1;
 	skb->free = 1;
@@ -217,9 +274,12 @@ unsigned short ax25_calculate_t1(ax25_cb *ax25)
 #ifndef NO_BACKOFF
 	int n, t = 2;
 
-	if (ax25->backoff)
+	if (ax25->backoff) {
 		for (n = 0; n < ax25->n2count; n++)
 			t *= 2;
+
+		if (t > 8) t = 8;
+	}
 
 	return t * ax25->rtt;
 #else
@@ -249,7 +309,6 @@ void ax25_calculate_rtt(ax25_cb *ax25)
  *	Given an AX.25 address pull of to, from, digi list, command/response and the start of data
  *
  */
-
 unsigned char *ax25_parse_addr(unsigned char *buf, int len, ax25_address *src, ax25_address *dest, ax25_digi *digi, int *flags)
 {
 	int d = 0;
@@ -302,28 +361,32 @@ unsigned char *ax25_parse_addr(unsigned char *buf, int len, ax25_address *src, a
 /*
  *	Assemble an AX.25 header from the bits
  */
-		
-int build_ax25_addr(unsigned char *buf, ax25_address *src, ax25_address *dest, ax25_digi *d, int flag)
+int build_ax25_addr(unsigned char *buf, ax25_address *src, ax25_address *dest, ax25_digi *d, int flag, int modulus)
 {
 	int len = 0;
 	int ct  = 0;
 
 	memcpy(buf, dest, AX25_ADDR_LEN);
-	
-	if (flag != C_COMMAND && flag != C_RESPONSE)
-		printk("build_ax25_addr: Bogus flag %d\n!", flag);
 	buf[6] &= ~(LAPB_E | LAPB_C);
-	buf[6] |= SSID_SPARE;
+	buf[6] |= SSSID_SPARE;
 
 	if (flag == C_COMMAND) buf[6] |= LAPB_C;
 
 	buf += AX25_ADDR_LEN;
 	len += AX25_ADDR_LEN;
+
 	memcpy(buf, src, AX25_ADDR_LEN);
 	buf[6] &= ~(LAPB_E | LAPB_C);
-	buf[6] |= SSID_SPARE;
+	buf[6] &= ~SSSID_SPARE;
+
+	if (modulus == MODULUS) {
+		buf[6] |= SSSID_SPARE;
+	} else {
+		buf[6] |= ESSID_SPARE;
+	}
 
 	if (flag == C_RESPONSE) buf[6] |= LAPB_C;
+
 	/*
 	 *	Fast path the normal digiless path
 	 */
@@ -342,7 +405,7 @@ int build_ax25_addr(unsigned char *buf, ax25_address *src, ax25_address *dest, a
 		else
 			buf[6] &= ~AX25_REPEATED;
 		buf[6] &= ~LAPB_E;
-		buf[6] |= SSID_SPARE;
+		buf[6] |= SSSID_SPARE;
 
 		buf += AX25_ADDR_LEN;
 		len += AX25_ADDR_LEN;
@@ -365,7 +428,6 @@ int size_ax25_addr(ax25_digi *dp)
 /* 
  *	Reverse Digipeat List. May not pass both parameters as same struct
  */	
-
 void ax25_digi_invert(ax25_digi *in, ax25_digi *out)
 {
 	int ct = 0;

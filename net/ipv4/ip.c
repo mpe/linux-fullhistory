@@ -523,7 +523,7 @@ static struct ipq *ip_create(struct sk_buff *skb, struct iphdr *iph, struct devi
 	qp->dev = dev;
 
 	/* Start a timer for this entry. */
-	qp->timer.expires = IP_FRAG_TIME;		/* about 30 seconds	*/
+	qp->timer.expires = jiffies + IP_FRAG_TIME;	/* about 30 seconds	*/
 	qp->timer.data = (unsigned long) qp;		/* pointer to queue	*/
 	qp->timer.function = ip_expire;			/* expire function	*/
 	add_timer(&qp->timer);
@@ -682,7 +682,7 @@ static struct sk_buff *ip_defrag(struct iphdr *iph, struct sk_buff *skb, struct 
 	if (qp != NULL)
 	{
 		del_timer(&qp->timer);
-		qp->timer.expires = IP_FRAG_TIME;	/* about 30 seconds */
+		qp->timer.expires = jiffies + IP_FRAG_TIME;	/* about 30 seconds */
 		qp->timer.data = (unsigned long) qp;	/* pointer to queue */
 		qp->timer.function = ip_expire;		/* expire function */
 		add_timer(&qp->timer);
@@ -1974,7 +1974,7 @@ int ip_mc_procinfo(char *buffer, char **start, off_t offset, int length)
                                 len+=sprintf(buffer+len,
 					"\t\t\t%08lX %5d %d:%08lX\n",
                                         im->multiaddr, im->users,
-					im->tm_running, im->timer.expires);
+					im->tm_running, im->timer.expires-jiffies);
                                 pos=begin+len;
                                 if(pos<offset)
                                 {

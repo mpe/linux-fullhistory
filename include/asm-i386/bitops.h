@@ -66,7 +66,7 @@ extern __inline__ int test_bit(int nr, void * addr)
 /*
  * Find-bit routines..
  */
-extern inline int find_first_zero_bit(void * addr, unsigned size)
+extern __inline__ int find_first_zero_bit(void * addr, unsigned size)
 {
 	int res;
 
@@ -90,7 +90,7 @@ extern inline int find_first_zero_bit(void * addr, unsigned size)
 	return res;
 }
 
-extern inline int find_next_zero_bit (void * addr, int size, int offset)
+extern __inline__ int find_next_zero_bit (void * addr, int size, int offset)
 {
 	unsigned long * p = ((unsigned long *) addr) + (offset >> 5);
 	int set = 0, bit = offset & 31, res;
@@ -122,7 +122,7 @@ extern inline int find_next_zero_bit (void * addr, int size, int offset)
  * ffz = Find First Zero in word. Undefined if no zero exists,
  * so code should check against ~0UL first..
  */
-extern inline unsigned long ffz(unsigned long word)
+extern __inline__ unsigned long ffz(unsigned long word)
 {
 	__asm__("bsfl %1,%0"
 		:"=r" (word)

@@ -51,15 +51,6 @@ struct lp_struct lp_table[] = {
    (status & (LP_PBUSY|LP_POUTPA|LP_PSELECD|LP_PERRORP)) == \
       (LP_PBUSY|LP_PSELECD|LP_PERRORP) 
 
-/* Allow old versions of tunelp to continue to work */
-#define OLD_LPCHAR   0x0001
-#define OLD_LPTIME   0x0002
-#define OLD_LPABORT  0x0004
-#define OLD_LPSETIRQ 0x0005
-#define OLD_LPGETIRQ 0x0006
-#define OLD_LPWAIT   0x0008
-#define OLD_IOCTL_MAX 8
-
 /* 
  * All my debugging code assumes that you debug with only one printer at
  * a time. RWWH
@@ -406,19 +397,13 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 		return -ENODEV;
 	if ((LP_F(minor) & LP_EXIST) == 0)
 		return -ENODEV;
-	if (cmd <= OLD_IOCTL_MAX)
-		printk(KERN_NOTICE "lp%d: warning: obsolete ioctl %#x (perhaps you need a new tunelp)\n",
-		    minor, cmd);
 	switch ( cmd ) {
-		case OLD_LPTIME:
 		case LPTIME:
 			LP_TIME(minor) = arg;
 			break;
-		case OLD_LPCHAR:
 		case LPCHAR:
 			LP_CHAR(minor) = arg;
 			break;
-		case OLD_LPABORT:
 		case LPABORT:
 			if (arg)
 				LP_F(minor) |= LP_ABORT;
@@ -437,11 +422,9 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 			else
 				LP_F(minor) &= ~LP_CAREFUL;
 			break;
-		case OLD_LPWAIT:
 		case LPWAIT:
 			LP_WAIT(minor) = arg;
 			break;
-		case OLD_LPSETIRQ:
 		case LPSETIRQ: {
 			int oldirq;
 			int newirq = arg;
@@ -485,9 +468,6 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 			lp_reset(minor);
 			break;
 		}
-		case OLD_LPGETIRQ:
-			retval = LP_IRQ(minor);
-			break;
 		case LPGETIRQ:
 			retval = verify_area(VERIFY_WRITE, (void *) arg,
 			    sizeof(int));

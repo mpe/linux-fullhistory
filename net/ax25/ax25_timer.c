@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 029
+ *	AX.25 release 030
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -63,7 +63,7 @@ void ax25_set_timer(ax25_cb *ax25)
 	ax25->timer.data     = (unsigned long)ax25;
 	ax25->timer.function = &ax25_timer;
 
-	ax25->timer.expires = 10;
+	ax25->timer.expires = jiffies + 10;
 	add_timer(&ax25->timer);
 }
 
@@ -78,7 +78,7 @@ static void ax25_reset_timer(ax25_cb *ax25)
 
 	ax25->timer.data     = (unsigned long)ax25;
 	ax25->timer.function = &ax25_timer;
-	ax25->timer.expires  = 10;
+	ax25->timer.expires  = jiffies + 10;
 	add_timer(&ax25->timer);
 }
 
@@ -111,7 +111,7 @@ static void ax25_timer(unsigned long param)
 			if (ax25->sk != NULL) {
 				if (ax25->sk->rmem_alloc < (ax25->sk->rcvbuf / 2) && (ax25->condition & OWN_RX_BUSY_CONDITION)) {
 					ax25->condition &= ~OWN_RX_BUSY_CONDITION;
-					ax25_send_control(ax25, RR, C_RESPONSE);
+					ax25_send_control(ax25, RR, POLLOFF, C_RESPONSE);
 					ax25->condition &= ~ACK_PENDING_CONDITION;
 					break;
 				}
@@ -152,21 +152,30 @@ static void ax25_timer(unsigned long param)
 	switch (ax25->state) {
 		case AX25_STATE_1: 
 			if (ax25->n2count == ax25->n2) {
+				if (ax25->modulus == MODULUS) {
 #ifdef CONFIG_NETROM
-				nr_link_failed(&ax25->dest_addr, ax25->device);
+					nr_link_failed(&ax25->dest_addr, ax25->device);
 #endif
-				ax25_clear_tx_queue(ax25);
-				ax25->state = AX25_STATE_0;
-				if (ax25->sk != NULL) {
-					ax25->sk->state = TCP_CLOSE;
-					ax25->sk->err   = ETIMEDOUT;
-					if (!ax25->sk->dead)
-						ax25->sk->state_change(ax25->sk);
-					ax25->sk->dead  = 1;
+					ax25_clear_queues(ax25);
+					ax25->state = AX25_STATE_0;
+					if (ax25->sk != NULL) {
+						ax25->sk->state = TCP_CLOSE;
+						ax25->sk->err   = ETIMEDOUT;
+						if (!ax25->sk->dead)
+							ax25->sk->state_change(ax25->sk);
+						ax25->sk->dead  = 1;
+					}
+				} else {
+					ax25->modulus = MODULUS;
+					ax25->n2count = 0;
 				}
 			} else {
 				ax25->n2count++;
-				ax25_send_control(ax25, SABM | PF, C_COMMAND);
+				if (ax25->modulus == MODULUS) {
+					ax25_send_control(ax25, SABM, POLLON, C_COMMAND);
+				} else {
+					ax25_send_control(ax25, SABME, POLLON, C_COMMAND);
+				}
 			}
 			break;
 
@@ -175,7 +184,7 @@ static void ax25_timer(unsigned long param)
 #ifdef CONFIG_NETROM
 				nr_link_failed(&ax25->dest_addr, ax25->device);
 #endif
-				ax25_clear_tx_queue(ax25);
+				ax25_clear_queues(ax25);
 				ax25->state = AX25_STATE_0;
 				if (ax25->sk != NULL) {
 					ax25->sk->state = TCP_CLOSE;
@@ -186,7 +195,7 @@ static void ax25_timer(unsigned long param)
 				}
 			} else {
 				ax25->n2count++;
-				ax25_send_control(ax25, DISC | PF, C_COMMAND);
+				ax25_send_control(ax25, DISC, POLLON, C_COMMAND);
 			}
 			break;
 
@@ -201,8 +210,8 @@ static void ax25_timer(unsigned long param)
 #ifdef CONFIG_NETROM
 				nr_link_failed(&ax25->dest_addr, ax25->device);
 #endif
-				ax25_clear_tx_queue(ax25);
-				ax25_send_control(ax25, DM | PF, C_RESPONSE);
+				ax25_clear_queues(ax25);
+				ax25_send_control(ax25, DM, POLLON, C_RESPONSE);
 				ax25->state = AX25_STATE_0;
 				if (ax25->sk != NULL) {
 					ax25->sk->state = TCP_CLOSE;

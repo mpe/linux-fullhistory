@@ -191,8 +191,8 @@ static struct sjcd_stat statistic;
  */
 static struct timer_list sjcd_delay_timer = { NULL, NULL, 0, 0, NULL };
 
-#define SJCD_SET_TIMER( func, jiffies )           \
-    ( sjcd_delay_timer.expires = jiffies,         \
+#define SJCD_SET_TIMER( func, tmout )           \
+    ( sjcd_delay_timer.expires = jiffies+tmout,         \
       sjcd_delay_timer.function = ( void * )func, \
       add_timer( &sjcd_delay_timer ) )
 

@@ -58,7 +58,7 @@ void nr_set_timer(struct sock *sk)
 	sk->timer.data     = (unsigned long)sk;
 	sk->timer.function = &nr_timer;
 
-	sk->timer.expires = 10;
+	sk->timer.expires = jiffies+10;
 	add_timer(&sk->timer);
 }
 
@@ -73,7 +73,7 @@ static void nr_reset_timer(struct sock *sk)
 
 	sk->timer.data     = (unsigned long)sk;
 	sk->timer.function = &nr_timer;
-	sk->timer.expires  = 10;
+	sk->timer.expires  = jiffies+10;
 	add_timer(&sk->timer);
 }
 
@@ -140,7 +140,7 @@ static void nr_timer(unsigned long param)
 	switch (sk->nr->state) {
 		case NR_STATE_1: 
 			if (sk->nr->n2count == sk->nr->n2) {
-				nr_clear_tx_queue(sk);
+				nr_clear_queues(sk);
 				sk->nr->state = NR_STATE_0;
 				sk->state     = TCP_CLOSE;
 				sk->err       = ETIMEDOUT;
@@ -155,7 +155,7 @@ static void nr_timer(unsigned long param)
 
 		case NR_STATE_2:
 			if (sk->nr->n2count == sk->nr->n2) {
-				nr_clear_tx_queue(sk);
+				nr_clear_queues(sk);
 				sk->nr->state = NR_STATE_0;
 				sk->state     = TCP_CLOSE;
 				sk->err       = ETIMEDOUT;
@@ -170,7 +170,7 @@ static void nr_timer(unsigned long param)
 
 		case NR_STATE_3:
 			if (sk->nr->n2count == sk->nr->n2) {
-				nr_clear_tx_queue(sk);
+				nr_clear_queues(sk);
 				sk->nr->state = NR_STATE_0;
 				sk->state     = TCP_CLOSE;
 				sk->err       = ETIMEDOUT;

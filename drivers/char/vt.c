@@ -169,7 +169,7 @@ kd_mksound(unsigned int count, unsigned int ticks)
 		outb((count >> 8) & 0xff, 0x42);
 
 		if (ticks) {
-			sound_timer.expires = ticks;
+			sound_timer.expires = jiffies+ticks;
 			add_timer(&sound_timer);
 		}
 	} else

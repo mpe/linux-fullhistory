@@ -1,5 +1,5 @@
-#define AZT_VERSION "1.40"
-/*      $Id: aztcd.c,v 1.40 1995/07/15 20:35:15 root Exp root $
+#define AZT_VERSION "1.50"
+/*      $Id: aztcd.c,v 1.50 1995/07/28 16:43:59 root Exp root $
 	linux/drivers/block/aztcd.c - AztechCD268 CDROM driver
 
 	Copyright (C) 1994,1995 Werner Zimmermann (zimmerma@rz.fht-esslingen.de)
@@ -120,6 +120,10 @@
 	        by Heiko Schlittermann. Not tested, as I do not have a multi-
 	        session CD. If you can test it, please contact me.
 	        Werner Zimmermann, July 15, 95
+        V1.50   Implementation of ioctl CDROMRESET, continued multisession, began
+                XA, but still untested. Heavy modifications to drive status de-
+                tection.
+                Werner Zimmermann, July 25, 95
 	NOTE: 
 	Points marked with ??? are questionable !
 */
@@ -160,8 +164,8 @@
 
 #include <linux/aztcd.h>
 
-#define SET_TIMER(func, jifs)   delay_timer.expires = jifs; \
-                                delay_timer.function = (void *) func; \
+#define SET_TIMER(func, jifs)   delay_timer.expires = jiffies + (jifs); \
+                                delay_timer.function = (void *) (func); \
                                 add_timer(&delay_timer); 
 
 #define CLEAR_TIMER             del_timer(&delay_timer);
@@ -189,20 +193,21 @@ static int aztPresent = 0;
 
 #define AFL_STATUSorDATA (AFL_STATUS | AFL_DATA)
 #define AZT_BUF_SIZ 16
+#define CD_XA_HEAD_SUBHEAD CD_XA_HEAD+8
 
 static volatile int azt_transfer_is_active=0;
 
-static char azt_buf[2048*AZT_BUF_SIZ];  /*buffer for block size conversion*/
+static char azt_buf[CD_FRAMESIZE_RAW*AZT_BUF_SIZ];/*buffer for block size conversion*/
 #if AZT_PRIVATE_IOCTLS
-static char buf[2336];                  /*separate buffer for the ioctls*/
+static char buf[CD_FRAMESIZE_RAW];              /*separate buffer for the ioctls*/
 #endif
 
 static volatile int azt_buf_bn[AZT_BUF_SIZ], azt_next_bn;
 static volatile int azt_buf_in, azt_buf_out = -1;
 static volatile int azt_error=0;
 static int azt_open_count=0;
-enum azt_state_e {
-  AZT_S_IDLE,    /* 0 */
+enum azt_state_e 
+{ AZT_S_IDLE,    /* 0 */
   AZT_S_START,   /* 1 */
   AZT_S_MODE,    /* 2 */
   AZT_S_READ,    /* 3 */
@@ -215,9 +220,14 @@ static volatile enum azt_state_e azt_state = AZT_S_IDLE;
 static volatile enum azt_state_e azt_state_old = AZT_S_STOP;  
 static volatile int azt_st_old = 0;
 #endif
+enum azt_read_modes 
+{ AZT_MODE_0,     /*read mode for audio disks, not supported by Aztech firmware*/
+  AZT_MODE_1,     /*read mode for normal CD-ROMs*/
+  AZT_MODE_2      /*read mode for XA CD-ROMs*/
+};
+static volatile enum azt_read_modes azt_read_mode = AZT_MODE_1;
 
 static int azt_mode = -1;
-static int ACMD_DATA_READ= ACMD_PLAY_READ;
 static volatile int azt_read_count = 1;
 
 #define READ_TIMEOUT 3000
@@ -458,6 +468,39 @@ static int sendAztCmd(int cmd, struct azt_Play_msf *params)
    RETURNM("sendAztCmd",-1);
 }
 
+/* Send a Set Disk Type command
+   does not seem to work with Aztech drives, behavior is completely indepen-
+   dent on which mode is set ???
+*/
+static int aztSetDiskType(int type)
+{  unsigned char data;
+   int retry;
+
+#ifdef AZT_DEBUG
+   printk("aztcd: set disk type command: type= %i\n",type);
+#endif
+   for (retry=0;retry<AZT_RETRY_ATTEMPTS;retry++)
+     { aztSendCmd(ACMD_SET_DISK_TYPE);
+       outb(type,CMD_PORT);
+       STEN_LOW;
+       data=inb(DATA_PORT);
+       if (data==AFL_PA_OK)     /*PA_OK ?*/
+	 { azt_read_mode=type;
+	   return 0;            
+	 }  
+       if (data==AFL_PA_ERR)
+	 { STEN_LOW;
+	   data=inb(DATA_PORT);
+	   printk("### Error 1 aztcd: aztSetDiskType %x Error Code %x\n",type,data);
+	 }
+     }
+   if (retry>=AZT_RETRY_ATTEMPTS)
+     { printk("### Error 2 aztcd: aztSetDiskType %x\n ",type);
+       azt_error=0xA5;
+     }
+   RETURNM("aztSetDiskType",-1);
+}
+
 
 /* 
  * Checking if the media has been changed not yet implemented
@@ -503,15 +546,14 @@ static int getAztStatus(void)
 	 }
 
 	if (((st&AST_MODE_BITS)!=AST_BUSY) && (aztAudioStatus == CDROM_AUDIO_PLAY))
-		/* XXX might be an error? look at q-channel? */
-		aztAudioStatus = CDROM_AUDIO_COMPLETED;
+	   /* XXX might be an error? look at q-channel? */
+	   aztAudioStatus = CDROM_AUDIO_COMPLETED;
 
-	if (st & AST_DSK_CHG)
-	{
-		aztDiskChanged = 1;
-		aztTocUpToDate = 0;
-		aztAudioStatus = CDROM_AUDIO_NO_STATUS;
-	}
+	if ((st & AST_DSK_CHG)||(st & AST_NOT_READY))
+	 { aztDiskChanged = 1;
+	   aztTocUpToDate = 0;
+	   aztAudioStatus = CDROM_AUDIO_NO_STATUS;
+	 }
 	return st;
 }
 
@@ -543,10 +585,11 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
 
 #ifdef AZT_DEBUG
 	printk("aztcd: starting aztcd_ioctl - Command:%x   Time: %li\n",cmd, jiffies);
+        printk("aztcd Status %x\n", getAztStatus());
 #endif
 	if (!ip) RETURNM("aztcd_ioctl 1",-EINVAL);
 	if (getAztStatus()<0) RETURNM("aztcd_ioctl 2", -EIO);
-	if (!aztTocUpToDate)
+	if ((!aztTocUpToDate)||(aztDiskChanged))
 	{ if ((i=aztUpdateToc())<0) RETURNM("aztcd_ioctl 3", i); /* error reading TOC */
 	}
 
@@ -607,12 +650,7 @@ static int aztcd_ioctl(struct inode *ip, struct file *fp, unsigned int cmd, unsi
 		       ms.addr.lba = azt_msf2hsg(&DiskInfo.lastTrack);
 		  else
 		       return -EINVAL;
-		  if (DiskInfo.type == CD_XA) 
-		     { ms.xa_flag = 0x01;   	/*XA-Disk*/
-		     }
-		  else
-		     { ms.xa_flag = 0x00;   
-		     }
+		  ms.xa_flag = DiskInfo.xa;
  		  st = verify_area(VERIFY_WRITE, (void*) arg, sizeof(struct cdrom_multisession));
 		  if (st) return st;
 	  	  memcpy_tofs((void*) arg, &ms, sizeof(struct cdrom_multisession));
@@ -704,7 +742,7 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 		st = verify_area(VERIFY_WRITE, (void *) arg, sizeof entry);
 		if (st) return st;
 		memcpy_fromfs(&entry, (void *) arg, sizeof entry);
-		if (!aztTocUpToDate) aztGetDiskInfo();
+		if ((!aztTocUpToDate)||aztDiskChanged) aztUpdateToc();
 		if (entry.cdte_track == CDROM_LEADOUT)
 		  tocPtr = &Toc[DiskInfo.last + 1];   /* ??? */
 		else if (entry.cdte_track > DiskInfo.last
@@ -800,13 +838,20 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 	case CDROMEJECT_SW:
 		azt_auto_eject = (char) arg;
 		break;	
-	case CDROMREADMODE1: /*read data in mode 1 (2048 Bytes)*/
-	case CDROMREADMODE2: /*read data in mode 2 (2336 Bytes)*/
+        case CDROMRESET:
+        	outb(ACMD_SOFT_RESET,CMD_PORT);   /*send reset*/
+	        STEN_LOW;
+	        if (inb(DATA_PORT)!=AFL_OP_OK)    /*OP_OK?*/
+	          { printk("aztcd: AZTECH CD-ROM drive does not respond\n");
+                  }
+                break;
 /*Take care, the following code is not compatible with other CD-ROM drivers,
   use it at your own risk with cdplay.c. Set AZT_PRIVATE_IOCTLS to 0 in aztcd.h,
   if you do not want to use it!
 */                  
 #if AZT_PRIVATE_IOCTLS 
+	case CDROMREADCOOKED: /*read data in mode 1 (2048 Bytes)*/
+	case CDROMREADRAW:    /*read data in mode 2 (2336 Bytes)*/
 		{ st = verify_area(VERIFY_READ,  (void *) arg, sizeof msf);
 		  if (st) return st;
 		  st = verify_area(VERIFY_WRITE, (void *) arg, sizeof buf);
@@ -825,21 +870,28 @@ azt_Play.end.min, azt_Play.end.sec, azt_Play.end.frame);
 		  azt_Play.end.min = msf.cdmsf_min1;
 		  azt_Play.end.sec = msf.cdmsf_sec1;
 		  azt_Play.end.frame = msf.cdmsf_frame1;
-		  if (cmd==CDROMREADMODE1)
-		  { sendAztCmd(ACMD_DATA_READ, &azt_Play);
+		  if (cmd==CDROMREADCOOKED)
+		  { sendAztCmd(ACMD_PLAY_READ, &azt_Play);
 		    DTEN_LOW;
-		    insb(DATA_PORT,buf,2048);
-		    memcpy_tofs((void *) arg, &buf, 2048);
+		    insb(DATA_PORT,buf,CD_FRAMESIZE);
+		    memcpy_tofs((void *) arg, &buf, CD_FRAMESIZE);
 		  }
-		  else /*CDROMREADMODE2*/
-		  { sendAztCmd(ACMD_DATA_READ_RAW, &azt_Play);
+		  else /*CDROMREADRAW*/
+		  { sendAztCmd(ACMD_PLAY_READ_RAW, &azt_Play);
 		    DTEN_LOW;
-		    insb(DATA_PORT,buf,2336);
-		    memcpy_tofs((void *) arg, &buf, 2336);
+		    insb(DATA_PORT,buf,CD_FRAMESIZE_RAW);
+		    memcpy_tofs((void *) arg, &buf, CD_FRAMESIZE_RAW);
 		  }
 		 } 
-#endif  /*end of incompatible code*/               
-		break;
+                break;
+#endif /*end of incompatible code*/       
+        case CDROMREADMODE0: /*set read data in mode 0, does not work with my drive*/
+                printk ("aztcd Status %x\n", getAztStatus());
+                return aztSetDiskType(AZT_MODE_0);
+	case CDROMREADMODE1: /*set read data in mode 1*/
+                return aztSetDiskType(AZT_MODE_1);
+	case CDROMREADMODE2: /*set read data in mode 2*/
+                return aztSetDiskType(AZT_MODE_2);	    
 	default:
 		return -EINVAL;
 	}
@@ -895,6 +947,11 @@ static void do_aztcd_request(void)
 #ifdef AZT_TEST
   printk(" do_aztcd_request(%ld+%ld) Time:%li\n", CURRENT -> sector, CURRENT -> nr_sectors,jiffies);
 #endif
+  if (DiskInfo.audio) 
+    { printk("aztcd: Error, tried to mount an Audio CD\n");
+      end_request(0);
+      return;
+    }
   azt_transfer_is_active = 1;
   while (CURRENT_VALID) {
     if (CURRENT->bh) {
@@ -907,7 +964,7 @@ static void do_aztcd_request(void)
     } else {
       azt_buf_out = -1;         /* Want to read a block not in buffer */
       if (azt_state == AZT_S_IDLE) {
-	if (!aztTocUpToDate) {
+	if ((!aztTocUpToDate)||aztDiskChanged) {
 	  if (aztUpdateToc() < 0) {
 	    while (CURRENT_VALID)
 	      end_request(0);
@@ -927,7 +984,6 @@ static void do_aztcd_request(void)
 	  azt_next_bn, azt_buf_in, azt_buf_out, azt_buf_bn[azt_buf_in]);
   printk(" do_aztcd_request ends  Time:%li\n",jiffies);
 #endif
-
 }
 
 static void azt_poll(void)
@@ -944,10 +1000,10 @@ static void azt_poll(void)
 	azt_invalidate_buffers();
 #ifdef WARN_IF_READ_FAILURE
 	if (AztTries == 5)
-	  printk("aztcd: read of block %d failed - maybe audio disk?\n", azt_next_bn);
+	  printk("aztcd: Read of Block %d Failed - Maybe Audio Disk?\n", azt_next_bn);
 #endif
 	if (!AztTries--) {
-	  printk("aztcd: read of block %d failed, maybe audio disk? Giving up\n", azt_next_bn);
+	  printk("aztcd: Read of Block %d Failed, Maybe Audio Disk? Giving up\n", azt_next_bn);
 	  if (azt_transfer_is_active) {
 	    AztTries = 0;
 	    loop_ctl = 0;
@@ -996,10 +1052,12 @@ static void azt_poll(void)
 #endif
 	  if (!skip) {
 	    if ((st = aztStatus()) != -1) {
-	      if (st & AST_DSK_CHG) {
+	      if ((st & AST_DSK_CHG)||(st & AST_NOT_READY)) {
 		aztDiskChanged = 1;
 		aztTocUpToDate = 0;
 		azt_invalidate_buffers();
+		end_request(0);
+		printk("aztcd: Disk Changed or Not Ready 1 - Unmount Disk!\n");
 	      }
 	    } else break;
 	  }
@@ -1008,6 +1066,8 @@ static void azt_poll(void)
 	  if ((st & AST_DOOR_OPEN)||(st & AST_NOT_READY)) {
 	    aztDiskChanged = 1;
 	    aztTocUpToDate = 0;
+            printk("aztcd: Disk Changed or Not Ready 2 - Unmount Disk!\n");
+            end_request(0);
 	    printk((st & AST_DOOR_OPEN) ? "aztcd: door open\n" : "aztcd: disk removed\n");
 	    if (azt_transfer_is_active) {
 	      azt_state = AZT_S_START;
@@ -1042,10 +1102,12 @@ static void azt_poll(void)
 #endif
 	  if (!skip) {
 	      if ((st = aztStatus()) != -1) {
-		if (st & AST_DSK_CHG) {
+		if ((st & AST_DSK_CHG)||(st & AST_NOT_READY)) {
 		aztDiskChanged = 1;
 		aztTocUpToDate = 0;
 		azt_invalidate_buffers();
+		printk("aztcd: Disk Changed or Not Ready 3 - Unmount Disk!\n");
+                end_request(0);               
 		}
 	      } else break;
 	  } 
@@ -1081,7 +1143,12 @@ static void azt_poll(void)
 	    printk("azt_next_bn:%x  azt_buf_in:%x azt_buf_out:%x  azt_buf_bn:%x\n", \
 		    azt_next_bn, azt_buf_in, azt_buf_out, azt_buf_bn[azt_buf_in]);
 #endif 
-	    sendAztCmd(ACMD_DATA_READ, &msf);
+            if (azt_read_mode==AZT_MODE_2)
+               { sendAztCmd(ACMD_PLAY_READ_RAW, &msf); /*XA disks in raw mode*/
+               }
+            else
+               { sendAztCmd(ACMD_PLAY_READ, &msf);     /*others in cooked mode*/
+               }
 	    azt_state = AZT_S_DATA;
 	    AztTimeout = READ_TIMEOUT;
 	  } else {
@@ -1112,12 +1179,8 @@ static void azt_poll(void)
 		printk("---AFL_DATA st:%x\n",st);
 	      }
 #endif
-#ifdef WARN_IF_READ_FAILURE
-	      if (AztTries == 5)
-		printk("aztcd: read of block %d failed - maybe audio disk?\n", azt_next_bn);
-#endif
 	      if (!AztTries--) {
-		printk("aztcd: read of block %d failed, maybe audio disk ? Giving up\n", azt_next_bn);
+		printk("aztcd: Read of Block %d Failed, Maybe Audio Disk ? Giving up\n", azt_next_bn);
 		if (azt_transfer_is_active) {
 		  AztTries = 0;
 		  break;
@@ -1175,7 +1238,20 @@ static void azt_poll(void)
 		    end_request(1);  /*should we have here (1) or (0)? */
 		  }
 		 else
-		  { insb(DATA_PORT, azt_buf + 2048 * azt_buf_in, 2048);
+		  { if (azt_read_mode==AZT_MODE_2)
+		       { if (DiskInfo.xa) /*With XA disks skip head and tail*/
+		            { unsigned char tmp_buf[CD_XA_TAIL];
+		              insb(DATA_PORT, tmp_buf , CD_XA_HEAD_SUBHEAD);
+		              insb(DATA_PORT, azt_buf + CD_FRAMESIZE * azt_buf_in, CD_FRAMESIZE);
+		              insb(DATA_PORT, tmp_buf , CD_XA_TAIL);
+                            }
+                         else   
+		            { insb(DATA_PORT, azt_buf + CD_FRAMESIZE_RAW * azt_buf_in, CD_FRAMESIZE_RAW);
+		            }
+		       }
+		    else
+		       { insb(DATA_PORT, azt_buf + CD_FRAMESIZE * azt_buf_in, CD_FRAMESIZE);
+                       }
 		    azt_read_count--;
 #ifdef AZT_TEST3
 		    printk("AZT_S_DATA; ---I've read data- read_count: %d\n",azt_read_count);
@@ -1227,9 +1303,10 @@ static void azt_poll(void)
 	  while (azt_read_count!=0) {
 	    int i;
 	    if ( !(inb(STATUS_PORT) & AFL_DATA) ) {
-	      for (i=0; i<2048; i++) {
-		inb(DATA_PORT);
-	      }
+	      if (azt_read_mode==AZT_MODE_2)
+	         for (i=0; i<CD_FRAMESIZE_RAW; i++) inb(DATA_PORT);
+	      else   
+	         for (i=0; i<CD_FRAMESIZE; i++) inb(DATA_PORT);
 	    }
 	    azt_read_count--;
 	  }  
@@ -1249,10 +1326,12 @@ static void azt_poll(void)
 	  if ((st = aztStatus()) == -1 && AztTimeout)
 	    break;
 
-	  if ((st != -1) && (st & AST_DSK_CHG)) {
+	  if ((st != -1) && ((st & AST_DSK_CHG)||(st & AST_NOT_READY))) {
 	    aztDiskChanged = 1;
 	    aztTocUpToDate = 0;
 	    azt_invalidate_buffers();
+	    printk("aztcd: Disk Changed or Not Ready 4 - Unmount Disk!\n");
+	    end_request(0);
 	  }
 
 
@@ -1324,34 +1403,46 @@ int aztcd_open(struct inode *ip, struct file *fp)
 	if (aztPresent == 0)
 		return -ENXIO;                  /* no hardware */
 
-	if (!azt_open_count && azt_state == AZT_S_IDLE) {
+	if (!azt_open_count && azt_state == AZT_S_IDLE) 
+	  { azt_invalidate_buffers();
 
-	azt_invalidate_buffers();
+	    st = getAztStatus();                    /* check drive status */
+	    if (st == -1) return -EIO;              /* drive doesn't respond */
 
-	st = getAztStatus();                       /* check drive status */
-	if (st == -1)
-		return -EIO;                    /* drive doesn't respond */
+            if (st & AST_DOOR_OPEN)
+               { /* close door, then get the status again. */
+	         printk("aztcd: Door Open?\n");
+                 aztCloseDoor();     
+                 st = getAztStatus();
+               }        
 
-        if (st&AST_DOOR_OPEN)
-          {
-            /* close door, then get the status again. */
-            aztCloseDoor();     
-            st = getAztStatus();
-          }        
+	    if ((st & AST_NOT_READY) || (st & AST_DSK_CHG)) /*no disk in drive or changed*/
+	       { printk("aztcd: No Disk in Drive or Disk Changed?\n");
+/*	         return -EIO;
+*/	       }
 
-	if ((st&AST_DOOR_OPEN)||(st&AST_NOT_READY)) /* no disk in drive or door open*/
-	{       /* Door should be closed, probably no disk in drive */
-		printk("aztcd: no disk in drive or door open\n");
-		return -EIO;
-	}
+	    if (aztUpdateToc() < 0)	return -EIO;
 
-	if (aztUpdateToc() < 0)
-		return -EIO;
+/*          Detect XA disks. XA disks will be read in raw mode, others not
+	      --> must set read command to read raw       --> to be done ???
+*/          if (aztSetDiskType(DiskInfo.xa ? AZT_MODE_2 : AZT_MODE_1)) return -EIO;
+            if (DiskInfo.xa) printk("aztcd: XA support not yet tested - please mail 'zimmerma@rz.fht-esslingen.de'\n");
 
-	}
+            /* audio detection was already done in aztGetToc */
+	    if (DiskInfo.audio) 
+	       { printk(("aztcd: Audio-CD found\n"));
+	       } 
+	    else 
+	       { printk("aztcd: %s%s CD-ROM found\n",
+	  	         DiskInfo.xa    ? "XA " : "",
+			 DiskInfo.multi ? "Multi Session" : "Single Session");
+	       }
+	  }
 	++azt_open_count;
         MOD_INC_USE_COUNT;
 	aztLockDoor();
+
+
 #ifdef AZT_DEBUG
 	printk("aztcd: exiting aztcd_open\n");
 #endif
@@ -1418,9 +1509,9 @@ int init_module(void)
           return -EIO;
 #endif	  
 	}
-	printk("Aztech CD-ROM Init: Aztech, Orchid, Okano, Wearnes CD-ROM Driver\n");
-	printk("Aztech CD-ROM Init: (C) 1994,1995 Werner Zimmermann\n");
-	printk("Aztech CD-ROM Init: DriverVersion=%s  BaseAddress=0x%x \n",AZT_VERSION,azt_port);
+	printk("aztcd: Aztech, Orchid, Okano, Wearnes CD-ROM Driver\n");
+	printk("aztcd: (C) 1994,1995 Werner Zimmermann\n");
+	printk("aztcd: DriverVersion=%s  BaseAddress=0x%x \n",AZT_VERSION,azt_port);
 
 	if (check_region(azt_port, 4)) {
 	  printk("aztcd: conflict, I/O port (%X) already used\n",
@@ -1508,25 +1599,25 @@ int init_module(void)
 	 }
 	if (count>30) max_count=30;  /*print max.30 chars of the version string*/
 	else          max_count=count;
-	printk("Aztech CD-ROM Init: FirmwareVersion=");
+	printk("aztcd: FirmwareVersion=");
 	for (count=1;count<max_count;count++) printk("%c",result[count]);
 	printk("<<<\n");
 
 	if ((result[1]=='A')&&(result[2]=='Z')&&(result[3]=='T'))
-	 { printk("Aztech CD-ROM Init: AZTECH drive detected\n"); /*AZTECH*/    
+	 { printk("aztcd: AZTECH drive detected\n"); /*AZTECH*/    
 	 }
 	else if ((result[2]=='C')&&(result[3]=='D')&&(result[4]=='D'))
-	 { printk("Aztech CD-ROM Init: ORCHID or WEARNES drive detected\n"); /*ORCHID or WEARNES*/
+	 { printk("aztcd: ORCHID or WEARNES drive detected\n"); /*ORCHID or WEARNES*/
 	 }
 	else                                               /*OTHERS or none*/
-	 { printk("Aztech CD-ROM Init: : unknown drive or firmware version detected\n");
+	 { printk("aztcd: : unknown drive or firmware version detected\n");
 	   printk("                      azt may not run stable, if you want to try anyhow,\n");
 	   printk("                      boot with: aztcd=base_address,0x79\n");
 	   if ((azt_cont!=0x79))     
-	     { printk("Aztech CD-ROM Init: FirmwareVersion=");
+	     { printk("aztcd: FirmwareVersion=");
 	       for (count=1;count<5;count++) printk("%c",result[count]);
 	       printk("\n");
-	       printk("Aztech CD-ROM Init: Aborted\n");
+	       printk("aztcd: Aborted\n");
 #ifndef MODULE
 	       return (mem_start);
 #else
@@ -1552,7 +1643,7 @@ int init_module(void)
 	azt_invalidate_buffers();
 	aztPresent = 1;
 	aztCloseDoor();
-	printk("Aztech CD-ROM Init: End\n");
+	printk("aztcd: End Init\n");
 #ifndef MODULE
 	return (mem_start);
 #else
@@ -1781,17 +1872,23 @@ static int aztGetToc()
 
 	Toc[DiskInfo.last + 1].diskTime = DiskInfo.diskLength;
 
-        DiskInfo.lastTrack.sec=2;
-        DiskInfo.type = 0; 
-        for (i=0;i<=DiskInfo.last;i++) /*Unterscheidung zw. Audio- und Datendisk???*/
-          { if ((Toc[i].ctrl_addr)==0x01)      
-                DiskInfo.type=DiskInfo.type|CD_AUDIO; 
-            if ((Toc[i].ctrl_addr)==0x41)
-                DiskInfo.type=DiskInfo.type|CD_DATA;     
-          }
+/*support for XA and multisession CDs not yet working  ???*/
+        DiskInfo.multi = 0;     /*how to get this info ???*/
+        if (!DiskInfo.multi) DiskInfo.lastTrack.sec=2;
+        i = getAztStatus();
+  	DiskInfo.xa    = i & AST_MODE; /* I doubt this will work ??? */
         DiskInfo.lastTrack.min  =Toc[DiskInfo.last].diskTime.min;
 	DiskInfo.lastTrack.sec  =Toc[DiskInfo.last].diskTime.sec;
         DiskInfo.lastTrack.frame=Toc[DiskInfo.last].diskTime.frame;
+
+        /*try to detect audio disks; with my Aztech drive there is no audio
+          status bit, so I use the copy protection bit of the first track. If
+          this track is copy protected (copy bit = 0), I assume, it's an audio 
+          disk. ???*/
+        if (!(Toc[DiskInfo.first].ctrl_addr & 0x40)) 
+           DiskInfo.audio=1;
+        else 
+           DiskInfo.audio=0;
 
 #ifdef AZT_DEBUG
 printk("aztcd: exiting aztGetToc  Time:%li\n",jiffies);
@@ -1805,7 +1902,7 @@ printk("i = %2d ctl-adr = %02X track %2d px %02X %02X:%02X.%02X    %02X:%02X.%02
 i, Toc[i].ctrl_addr, Toc[i].track, Toc[i].pointIndex,
 Toc[i].trackTime.min, Toc[i].trackTime.sec, Toc[i].trackTime.frame,
 Toc[i].diskTime.min, Toc[i].diskTime.sec, Toc[i].diskTime.frame);
-printk("\nDisk Info: first %d last %d length %02x:%02x.%02x first %02x:%02x.%02x last %02x:%02x.%02x type %02x\n",
+printk("\nDisk Info: first %d last %d length %02x:%02x.%02x first %02x:%02x.%02x last %02x:%02x.%02x type %02x %02x\n",
 	DiskInfo.first,
 	DiskInfo.last,
 	DiskInfo.diskLength.min,
@@ -1817,7 +1914,8 @@ printk("\nDisk Info: first %d last %d length %02x:%02x.%02x first %02x:%02x.%02x
 	DiskInfo.lastTrack.min,
 	DiskInfo.lastTrack.sec,
 	DiskInfo.lastTrack.frame,
-        DiskInfo.type);
+        DiskInfo.xa,
+        DiskInfo.audio);
 #endif
 
 	return limit > 0 ? 0 : -1;

@@ -1,5 +1,5 @@
 /*
- *  linux/drivers/block/ide.c	Version 4.00  Jul 10, 1995
+ *  linux/drivers/block/ide.c	Version 4.11  Jul 29, 1995
  *
  *  Copyright (C) 1994, 1995  Linus Torvalds & authors (see below)
  */
@@ -91,6 +91,10 @@
  *			add transparent support for DiskManager-6.0x "Dynamic
  *			 Disk Overlay" (DDO), most of this in in genhd.c
  *			eliminate "multiple mode turned off" message at boot
+ *  Version 4.10	fix bug in ioctl for "hdparm -c3"
+ *			fix DM6:DDO support -- now works with LILO, fdisk, ...
+ *			don't treat some naughty WD drives as removeable
+ *  Version 4.11	updated DM6 support using info provided by OnTrack
  *
  *  To do:
  *	- add support for alternative IDE port addresses
@@ -278,6 +282,8 @@ static uint probe_dtc2278 = 0;
  * For fast indexing, sizeof(ide_dev_t) = 32 = power_of_2;
  * Everything is carefully aligned on appropriate boundaries,
  *  and several fields are placed for optimal (gcc) access.
+ *
+ * Ugh.  Actually, we're two bytes over (34 bytes).. gotta fix this someday.
  */
 typedef enum {disk, cdrom} dev_type;
 
@@ -322,6 +328,7 @@ typedef struct {
 	const char *name;
 	struct hd_driveid *id;
 	struct wait_queue *wqueue;
+	byte sect0, removeable;
 	} ide_dev_t;
 
 /*
@@ -1153,7 +1160,7 @@ repeat:
 		end_request(0, HWIF);
 		goto repeat;
 	}
-	block += ide_hd[HWIF][minor].start_sect;
+	block += ide_hd[HWIF][minor].start_sect + dev->sect0;
 #if (DISK_RECOVERY_TIME > 0)
 	while ((read_timer() - ide_lastreq[HWIF]) < DISK_RECOVERY_TIME);
 #endif
@@ -1334,9 +1341,11 @@ static ide_dev_t *get_info_ptr (int i_rdev)
 
 	if (drive < MAX_DRIVES) {
 		switch (MAJOR(i_rdev)) {
+#ifndef CONFIG_BLK_DEV_HD
 			case IDE0_MAJOR:	dev = &ide_dev[0][drive];
 						if (dev->present) return dev;
 						break;
+#endif /* CONFIG_BLK_DEV_HD */
 			case IDE1_MAJOR:	dev = &ide_dev[1][drive];
 						if (dev->present) return dev;
 						break;
@@ -1358,12 +1367,12 @@ static int ide_open(struct inode * inode, struct file * filp)
 		sleep_on(&dev->wqueue);
 	dev->usage++;
 	restore_flags(flags);
-	if (dev->id && (dev->id->config & (1<<7)))	/* for removeable disks */
-		check_disk_change(inode->i_rdev);
 #ifdef CONFIG_BLK_DEV_IDECD
 	if (dev->type == cdrom)
 		return cdrom_open (inode, filp, dev);
 #endif	/* CONFIG_BLK_DEV_IDECD */
+	if (dev->removeable)	/* for disks */
+		check_disk_change(inode->i_rdev);
 	return 0;
 }
 
@@ -1567,9 +1576,12 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 		case HDIO_SET_KEEPSETTINGS:
 		case HDIO_SET_UNMASKINTR:
 		case HDIO_SET_NOWERR:
+			if (arg > 1)
+				return -EINVAL;
 		case HDIO_SET_CHIPSET:
-			if (!suser()) return -EACCES;
-			if ((arg > 1) || (MINOR(inode->i_rdev) & PARTN_MASK))
+			if (!suser())
+				return -EACCES;
+			if ((MINOR(inode->i_rdev) & PARTN_MASK))
 				return -EINVAL;
 			save_flags(flags);
 			cli();
@@ -1654,7 +1666,7 @@ static int ide_check_media_change (dev_t full_dev)
 	if (dev->type == cdrom)
 		return cdrom_check_media_change (dev);
 #endif	/* CONFIG_BLK_DEV_IDECD */
-	if (dev->id && (dev->id->config & (1<<7))) /* for removeable disks */
+	if (dev->removeable) /* for disks */
 		return 1;	/* always assume it was changed */
 	return 0;
 }
@@ -1763,10 +1775,17 @@ static void do_identify (ide_dev_t *dev, byte cmd)
 			printk(" UNKNOWN device\n");
 		dev->type = cdrom;	/* until we do it "correctly" above */
 		dev->present = 1;
+		dev->removeable = 1;
 #else
 		printk(unsupported);
 #endif	/* CONFIG_BLK_DEV_IDECD */
 		return;
+	}
+
+	/* check for removeable disks (eg. SYQUEST), ignore 'WD' drives */
+	if (id->config & (1<<7)) {	/* removeable disk ? */
+		if (id->model[0] != 'W' || id->model[1] != 'D')
+			dev->removeable = 1;
 	}
 
 	dev->type = disk;
@@ -2159,20 +2178,36 @@ void hdd_setup(char *str, int *ints)
 	ide_setup (str, ints);
 }
 
-
-void ide_xlate_1024 (dev_t full_dev)
+int ide_xlate_1024 (dev_t full_dev, int need_offset, char *msg)
 {
 	ide_dev_t *dev;
+	byte head_vals[] = {4, 8, 16, 32, 64, 128, 255, 0}, *heads = head_vals;
+	unsigned long capacity;
 
-	if ((dev = get_info_ptr(full_dev)) != NULL) {
-		dev->bios_cyl -= 1;		/* keeps fdisk sane */
-		while (dev->bios_cyl > 1024) {
-			if (dev->bios_head > 32)
-				return;
-			dev->bios_head *= 2;
-			dev->bios_cyl  /= 2;
-		}
+	if ((dev = get_info_ptr(full_dev)) == NULL && dev->id == NULL)
+		return 0;
+
+	dev->cyl  = dev->bios_cyl   = dev->id->cyls;
+	dev->head = dev->bios_head  = dev->id->heads;
+	dev->sect = dev->bios_sect  = dev->id->sectors; 
+	dev->special.b.set_geometry = 1;
+
+	capacity = dev->bios_cyl * dev->bios_head * dev->bios_sect / 63;
+	dev->bios_sect = 63;
+	do {
+		dev->bios_head = *heads;
+		dev->bios_cyl = capacity / dev->bios_head;
+	} while (dev->bios_cyl >= 1024 && *++heads);
+	if (need_offset) {
+		dev->sect0 = 63;
+		capacity -= 1;
+		dev->bios_cyl = capacity / dev->bios_head;
 	}
+	capacity = dev->bios_cyl * dev->bios_head * dev->bios_sect;
+	ide_capacity[DEV_HWIF][dev->select.b.drive] = capacity;
+	ide_hd[DEV_HWIF][MINOR(full_dev)].nr_sects  = capacity;
+	printk("%s [+%d,%d/%d/%d]", msg, dev->sect0, dev->bios_cyl, dev->bios_head, dev->bios_sect);
+	return 1;
 }
 
 #ifndef CONFIG_BLK_DEV_HD
@@ -2243,6 +2278,8 @@ static void init_ide_data (byte hwif)
 		dev->special.b.recalibrate	= 1;
 		dev->special.b.set_geometry	= 1;
 		dev->keep_settings		= 0;
+		dev->sect0			= 0;
+		dev->removeable			= 0;
 		ide_hd[hwif][drive<<PARTN_BITS].start_sect = 0;
 		dev->name = ide_devname[hwif][drive];
 		if (!dev->bad_wstat)

@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 029
+ *	AX.25 release 030
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 

@@ -12,13 +12,16 @@
 
 /*
  *  Support for DiskManager v6.0x added by Mark Lord (mlord@bnr.ca)
- *  with hints from uwe@eas.iis.fhg.de (us3@irz.inf.tu-dresden.de).
+ *  with information provided by OnTrack.  This now works for linux fdisk
+ *  and LILO, as well as loadlin and bootln.  Note that disks other than
+ *  /dev/hda *must* have a "DOS" type 0x51 partition in the first slot (hda1).
  */
 
 #include <linux/fs.h>
 #include <linux/genhd.h>
 #include <linux/kernel.h>
 #include <linux/major.h>
+#include <linux/config.h>
 
 struct gendisk *gendisk_head = NULL;
 
@@ -110,17 +113,14 @@ done:
 
 static int msdos_partition(struct gendisk *hd, unsigned int dev, unsigned long first_sector)
 {
-	int i, minor = current_minor, found_dm6 = 0;
+	int i, minor = current_minor, tested_for_dm6 = 0;
 	struct buffer_head *bh;
 	struct partition *p;
 	int mask = (1 << hd->minor_shift) - 1;
-#ifdef CONFIG_BLK_DEV_IDE
-	extern void ide_xlate_1024(dev_t);
-#endif
 
 read_mbr:
 	if (!(bh = bread(dev,0,1024))) {
-		printk("unable to read partition table\n");
+		printk(" unable to read partition table\n");
 		return -1;
 	}
 	if (*(unsigned short *)  (0x1fe + bh->b_data) != 0xAA55) {
@@ -129,47 +129,50 @@ read_mbr:
 	}
 	p = (struct partition *) (0x1be + bh->b_data);
 
-	/*
-	 *  Check for Disk Manager v6.0x "Dynamic Disk Overlay" (DDO)
-	 */
-	if (p->sys_ind == DM6_PARTITION && !found_dm6++)
-	{
-		printk(" [DM6:DDO]");
-		/*
-		 * Everything is offset by one track (p->end_sector sectors),
-		 * and a translated geometry is used to reduce the number
-		 * of apparent cylinders to 1024 or less.
-		 *
-		 * For complete compatibility with linux fdisk, we do:
-		 *  1. tell the driver to offset *everything* by one track,
-		 *  2. reduce the apparent disk capacity by one track,
-		 *  3. adjust the geometry reported by HDIO_GETGEO (for fdisk),
-		 *	(does nothing if not an IDE drive, but that's okay).
-		 *  4. invalidate our in-memory copy of block zero,
-		 *  5. restart the partition table hunt from scratch.
-		 */
-		first_sector                    += p->end_sector;
-		hd->part[MINOR(dev)].start_sect += p->end_sector;
-		hd->part[MINOR(dev)].nr_sects   -= p->end_sector;
 #ifdef CONFIG_BLK_DEV_IDE
-		ide_xlate_1024(dev);	/* harmless if not an IDE drive */
-#endif
-		bh->b_dirt = 0;		/* prevent re-use of this block */
-		bh->b_uptodate = 0;
-		bh->b_req = 0;
-		brelse(bh);
-		goto read_mbr;
-	}
-
 	/*
-	 *  Check for Disk Manager v6.0x DDO on a secondary drive (?)
+	 *  Check for Disk Manager v6.0x with geometry translation
 	 */
-	if (p->sys_ind == DM6_AUXPARTITION) {
-		printk(" [DM6]");
-#ifdef CONFIG_BLK_DEV_IDE
-		ide_xlate_1024(dev);	/* harmless if not an IDE drive */
-#endif
+	if (!tested_for_dm6++) {	/* only check for DM6 *once* */
+		extern int ide_xlate_1024(dev_t, int, char *);
+		/* check for DM6 with Dynamic Drive Overlay (DDO) */
+		if (p->sys_ind == DM6_PARTITION) {
+			/*
+			 * Everything on the disk is offset by 63 sectors,
+			 * including a "new" MBR with its own partition table,
+			 * and the remainder of the disk must be accessed using
+			 * a translated geometry that reduces the number of 
+			 * apparent cylinders to less than 1024 if possible.
+			 *
+			 * ide_xlate_1024() will take care of the necessary
+			 * adjustments to fool fdisk/LILO and partition check.
+			 */
+			if (ide_xlate_1024(dev,1," [DM6:DDO]")) {
+				bh->b_dirt = 0;	/* force re-read of MBR block */
+				bh->b_uptodate = 0;
+				bh->b_req = 0;
+				brelse(bh);
+				goto read_mbr;	/* start over with new MBR */
+			}
+		} else {
+			/* look for DM6 signature in MBR, courtesy of OnTrack */
+			unsigned int sig = *(unsigned short *)(bh->b_data + 2);
+			if (sig <= 0x1ae
+			 && *(unsigned short *)(bh->b_data + sig) == 0x55AA
+			 && (1 & *(unsigned char *)(bh->b_data + sig + 2)) ) 
+			{
+				(void)ide_xlate_1024(dev,0," [DM6:MBR]");
+			} else {
+				/* look for DM6 AUX partition type in slot 1 */
+				if (p->sys_ind == DM6_AUX1PARTITION
+				 || p->sys_ind == DM6_AUX3PARTITION)
+				{
+					(void)ide_xlate_1024(dev,0," [DM6:AUX]");
+				}
+			}
+		}
 	}
+#endif	/* CONFIG_BLK_DEV_IDE */
 
 	current_minor += 4;  /* first "extra" minor (for extended partitions) */
 	for (i=1 ; i<=4 ; minor++,i++,p++) {
@@ -303,7 +306,7 @@ static void check_partition(struct gendisk *hd, unsigned int dev)
 	if (osf_partition(hd, dev, first_sector))
 		return;
 #endif
-	printk("unknown partition table\n");
+	printk(" unknown partition table\n");
 }
 
 /* This function is used to re-read partition tables for removable disks.

@@ -38,7 +38,7 @@ static int _getitimer(int which, struct itimerval *value)
 		interval = current->it_real_incr;
 		val = 0;
 		if (del_timer(&current->real_timer)) {
-			val = current->real_timer.expires;
+			val = current->real_timer.expires-jiffies;
 			add_timer(&current->real_timer);
 			if (val <= 0)
 				val = interval;
@@ -83,7 +83,7 @@ void it_real_fn(unsigned long __data)
 
 	send_sig(SIGALRM, p, 1);
 	if (p->it_real_incr) {
-		p->real_timer.expires = p->it_real_incr;
+		p->real_timer.expires = jiffies+p->it_real_incr;
 		add_timer(&p->real_timer);
 	}
 }
@@ -101,7 +101,7 @@ int _setitimer(int which, struct itimerval *value, struct itimerval *ovalue)
 		case ITIMER_REAL:
 			del_timer(&current->real_timer);
 			if (j) {
-				current->real_timer.expires = j;
+				current->real_timer.expires = jiffies+j;
 				add_timer(&current->real_timer);
 			}
 			current->it_real_value = j;

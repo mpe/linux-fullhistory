@@ -627,7 +627,7 @@ static void tok_interrupt (int irq, struct pt_regs *regs)
 						DPRINTK("open failed: ret_code = %02X, retrying\n",open_response->ret_code);
 					}
 					if(ti->open_status!=FAILURE) {
-						tr_timer.expires=TR_RETRY_INTERVAL;
+						tr_timer.expires=jiffies+TR_RETRY_INTERVAL;
 						tr_timer.data=(unsigned long)dev;
 						tr_timer.next=tr_timer.prev=NULL;
 						add_timer(&tr_timer);
@@ -642,7 +642,7 @@ static void tok_interrupt (int irq, struct pt_regs *regs)
 					struct dlc_open_sap *open_sap=(struct dlc_open_sap *)ti->srb;
 					if(open_sap->ret_code) {
 						DPRINTK("open_sap failed: ret_code = %02X,retrying\n",open_sap->ret_code);
-						tr_timer.expires=TR_RETRY_INTERVAL;
+						tr_timer.expires=jiffies+TR_RETRY_INTERVAL;
 						tr_timer.data=(unsigned long)dev;
 						tr_timer.next=tr_timer.prev=NULL;
 						add_timer(&tr_timer);
@@ -724,7 +724,7 @@ skip_reset:
 					if(ring_status & (SIGNAL_LOSS + LOBE_FAULT)) {
 						DPRINTK("Signal loss/Lobe fault\n");
 						DPRINTK("We try to reopen the adapter.\n");	
-						tr_timer.expires=TR_RETRY_INTERVAL;
+						tr_timer.expires=jiffies+TR_RETRY_INTERVAL;
 						tr_timer.data=(unsigned long)dev;
 						tr_timer.next=tr_timer.prev=NULL;
 						add_timer(&tr_timer);

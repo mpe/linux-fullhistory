@@ -1,7 +1,8 @@
+$Id: README.aztcd,v 1.50 1995/07/29 20:33:35 root Exp root $
                        Readme-File README.aztcd
    for Aztech CD-ROM CDA268-01A, ORCHID CD-3110, OKANO/WEARNES CDD110 
                           CD-ROM  Driver 
-                       Version 1.4 and newer
+                       Version 1.5 and newer
                    (for other drives see 6.-8.)
 
 NOTE: THIS DRIVER WILL WORK WITH THE CD-ROM DRIVES LISTED, WHICH HAVE
@@ -487,7 +488,7 @@ should try before, how to restore from a backup copy)!
 Werner Zimmermann
 Fachhochschule fuer Technik Esslingen
 (EMail: zimmerma@rz.fht-esslingen.de)
-Mar 24, 1995
+July 26, 1995
 
 ---------------------------------------------------------------------------
 APPENDIX: Source code of cdplay.c
@@ -496,7 +497,7 @@ APPENDIX: Source code of cdplay.c
 
    Copyright 1994, 1995 Werner Zimmermann (zimmerma@rz.fht-esslingen.de)
 
-This program originally was written to test the audio functions of the
+This programm originally was written to test the audio functions of the
 AZTECH.CDROM-driver, but it should work with every CD-ROM drive. Before 
 using it, you should set a symlink from /dev/cdrom to your real CDROM
 device.
@@ -510,6 +511,7 @@ History:  V0.1  W.Zimmermann: First release. Nov. 8, 1994
           V0.5  W.Zimmermann: clean 'scanf' commands without compiler warnings
                               Jan. 6, 1995
           V0.6  W.Zimmermann: volume control (still experimental). Jan. 24, 1995
+          V0.7  W.Zimmermann: read raw modified. July 26, 95
 */
 
 #include <stdio.h>
@@ -522,7 +524,7 @@ History:  V0.1  W.Zimmermann: First release. Nov. 8, 1994
 #include <linux/aztcd.h>
 
 void help(void)
-{ printf("Available Commands:  STOP         s      EJECT        e       QUIT         q\n");
+{ printf("Available Commands:  STOP         s      EJECT/CLOSE  e       QUIT         q\n");
   printf("                     PLAY TRACK   t      PAUSE        p       RESUME       r\n");
   printf("                     NEXT TRACK   n      REPEAT LAST  l       HELP         h\n");
   printf("                     SUB CHANNEL  c      TRACK INFO   i       PLAY AT      a\n");
@@ -539,11 +541,11 @@ int main(void)
   struct cdrom_tocentry entry;
   struct cdrom_msf      msf;
   union  { struct cdrom_msf msf;
-           unsigned char buf[2336];
+           unsigned char buf[CD_FRAMESIZE_RAW];
          } azt;
   struct cdrom_volctrl  volctrl;
 
-  printf("\nMini-Audio CD-Player V0.6   (C) 1994,1995  W.Zimmermann\n");
+  printf("\nMini-Audio CD-Player V0.7   (C) 1994,1995  W.Zimmermann\n");
   handle=open("/dev/cdrom",O_RDWR);
   ioctl(handle,CDROMRESUME);
   
@@ -559,7 +561,7 @@ int main(void)
           switch (command)
             { case 'e':   cmd=CDROMEJECT;
                           ioctl(handle,cmd);
-                          break;
+                          break;  
               case 'p':   if (!ini)
                              { printf("Command not allowed - play track first\n");
                              }
@@ -578,10 +580,8 @@ int main(void)
                           break;
               case 's':   cmd=CDROMPAUSE;
                           if (ioctl(handle,cmd)) printf("Drive error or already stopped\n");
-                          ini=0;
                           cmd=CDROMSTOP;
                           if (ioctl(handle,cmd)) printf("Drive error\n");
-                          ini=0;
                           break;
               case 't':   cmd=CDROMREADTOCHDR;
                           if (ioctl(handle,cmd,&tocHdr)) printf("Drive Error\n");
@@ -675,7 +675,7 @@ int main(void)
                             }
                           break;
               case 'a':   cmd=CDROMPLAYMSF;
-                          printf("Address (min:sec:frame)  ");
+                          printf("Adress (min:sec:frame)  ");
                           scanf("%d:%d:%d",&arg1,&arg2,&arg3);
                           msf.cdmsf_min0  =arg1;
                           msf.cdmsf_sec0  =arg2;
@@ -686,12 +686,12 @@ int main(void)
                           msf.cdmsf_sec1=00;
                           msf.cdmsf_frame1=00;
                           if (ioctl(handle,cmd,&msf)) 
-                           { printf("Drive error or invalid address\n");
+                           { printf("Drive error or invalid adress\n");
                            }
                           break;
 #ifdef AZT_PRIVATE_IOCTLS /*not supported by every CDROM driver*/
-              case 'd':   cmd=CDROMREADMODE1;
-                          printf("Address (min:sec:frame)  ");
+              case 'd':   cmd=CDROMREADCOOKED;
+                          printf("Adress (min:sec:frame)  ");
                           scanf("%d:%d:%d",&arg1,&arg2,&arg3);
                           azt.msf.cdmsf_min0  =arg1;
                           azt.msf.cdmsf_sec0  =arg2;
@@ -699,7 +699,7 @@ int main(void)
                           if (azt.msf.cdmsf_sec0  > 59) azt.msf.cdmsf_sec0  =59;
                           if (azt.msf.cdmsf_frame0> 74) azt.msf.cdmsf_frame0=74;
                           if (ioctl(handle,cmd,&azt.msf)) 
-                           { printf("Drive error, invalid address or unsupported command\n");
+                           { printf("Drive error, invalid adress or unsupported command\n");
                            }
                           k=0;
                           getchar();
@@ -723,8 +723,8 @@ int main(void)
                               }
                            } 
                           break;
-              case 'w':   cmd=CDROMREADMODE2;
-                          printf("Address (min:sec:frame)  ");
+              case 'w':   cmd=CDROMREADRAW;
+                          printf("Adress (min:sec:frame)  ");
                           scanf("%d:%d:%d",&arg1,&arg2,&arg3);
                           azt.msf.cdmsf_min0  =arg1;
                           azt.msf.cdmsf_sec0  =arg2;
@@ -732,10 +732,10 @@ int main(void)
                           if (azt.msf.cdmsf_sec0  > 59) azt.msf.cdmsf_sec0  =59;
                           if (azt.msf.cdmsf_frame0> 74) azt.msf.cdmsf_frame0=74;
                           if (ioctl(handle,cmd,&azt)) 
-                           { printf("Drive error, invalid address or unsupported command\n");
+                           { printf("Drive error, invalid adress or unsupported command\n");
                            }
                           k=0;
-                          for (i=0;i<146;i++)
+                          for (i=0;i<147;i++)
                            { printf("%4d:",i*16);
                              for (j=0;j<16;j++)
                                { printf("%2x ",azt.buf[i*16+j]);
@@ -779,4 +779,3 @@ int main(void)
     }
   return 0;
 }
-

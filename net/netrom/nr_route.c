@@ -53,6 +53,7 @@
 #include <net/netrom.h>
 
 static int nr_neigh_no = 1;
+static int nr_route_on = 1;
 
 static struct nr_node  *nr_node_list  = NULL;
 static struct nr_neigh *nr_neigh_list = NULL;
@@ -564,6 +565,7 @@ int nr_rt_ioctl(unsigned int cmd, void *arg)
 	struct nr_route_struct nr_route;
 	struct device *dev;
 	int err;
+	long opt = 0;
 
 	switch (cmd) {
 
@@ -606,6 +608,13 @@ int nr_rt_ioctl(unsigned int cmd, void *arg)
 
 		case SIOCNRDECOBS:
 			return nr_dec_obs();
+			
+		case SIOCNRRTCTL:
+			if ((err = verify_area(VERIFY_READ, arg, sizeof(int))) != 0)
+				return err;
+			opt = get_fs_long((void *)arg);
+			nr_route_on = opt ? 1 : 0;
+			return 0;
 	}
 
 	return 0;
@@ -651,6 +660,9 @@ int nr_route_frame(struct sk_buff *skb, ax25_cb *ax25)
 
 	if ((dev = nr_dev_get(nr_dest)) != NULL)	/* Its for me */
 		return nr_rx_frame(skb, dev);
+
+	if (!nr_route_on && ax25 != NULL)
+		return 0;
 
 	/* Its Time-To-Live has expired */
 	if (--skb->data[14] == 0)

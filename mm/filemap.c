@@ -81,6 +81,7 @@ static void filemap_sync_page(struct vm_area_struct * vma,
 		return;
 	}
 	inode = vma->vm_inode;
+	offset += vma->vm_offset;
 	multi_bmap(inode, offset, nr, inode->i_sb->s_blocksize_bits);
 	bwrite_page(page, inode->i_dev, nr, inode->i_sb->s_blocksize);
 }

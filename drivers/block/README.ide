@@ -27,10 +27,11 @@ Major features of ide.c & ide-cd.c:
 		- use kernel command line option:  hda=dtc2278
 	- run-time selectable 32bit interface support (using hdparm-2.3)
 
-NEW!	- support for DiskManager 6.0x "Dynamic Disk Overlay" (experimental)
 NEW!	- support for drives with a stuck WRERR_STAT bit
 NEW!	- support for removeable devices
 
+NEW!	- transparent support for DiskManager 6.0x and "Dynamic Disk Overlay"
+		- works with Linux fdisk, LILO, loadlin, bootln, etc..
 
 ***
 
@@ -267,7 +268,7 @@ software" refers to DOS, the BIOS, and LILO, as described previously.
 Western Digital ships a "DiskManager 6.03" diskette with all of their big
 hard drives.  Use BIOS translation instead of this if possible, as it is a
 more generally compatible method of achieving the same results (DOS access
-to the entire disk).  However, if you must use DiskManager, it should now
-work with Linux 1.3.x in most cases.  Let me know if you still have trouble.
+to the entire disk).  However, if you must use DiskManager, it now works
+with Linux 1.3.x in most cases.  Let me know if you still have trouble.
 
 mlord@bnr.ca

@@ -9,12 +9,8 @@ p8023_datalink_header(struct datalink_proto *dl,
 		struct sk_buff *skb, unsigned char *dest_node)
 {
 	struct device	*dev = skb->dev;
-	unsigned long	len = skb->len;
-	unsigned long	hard_len = dev->hard_header_len;
-
-	dev->hard_header(skb, dev, len - hard_len,
-			dest_node, NULL, len - hard_len);
-	skb->h.raw = skb->data + hard_len;
+	
+	dev->hard_header(skb, dev, ETH_P_802_3, dest_node, NULL, skb->len);
 }
 
 struct datalink_proto *

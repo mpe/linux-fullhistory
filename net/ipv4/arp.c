@@ -232,7 +232,7 @@ static void arp_check_expire(unsigned long dummy)
 	 */
 
 	del_timer(&arp_timer);
-	arp_timer.expires = ARP_CHECK_INTERVAL;
+	arp_timer.expires = jiffies + ARP_CHECK_INTERVAL;
 	add_timer(&arp_timer);
 }
 
@@ -411,7 +411,7 @@ static void arp_expire_request (unsigned long arg)
 
 		/* Set new timer. */
 		del_timer(&entry->timer);
-		entry->timer.expires = ARP_RES_TIME;
+		entry->timer.expires = jiffies + ARP_RES_TIME;
 		add_timer(&entry->timer);
 		restore_flags(flags);
 		arp_send(ARPOP_REQUEST, ETH_P_ARP, ip, dev, dev->pa_addr, 
@@ -962,7 +962,7 @@ int arp_find(unsigned char *haddr, u32 paddr, struct device *dev,
 		init_timer(&entry->timer);
 		entry->timer.function = arp_expire_request;
 		entry->timer.data = (unsigned long)entry;
-		entry->timer.expires = ARP_RES_TIME;
+		entry->timer.expires = jiffies + ARP_RES_TIME;
 		arp_tables[hash] = entry;
 		add_timer(&entry->timer);
 		entry->retries = ARP_MAX_TRIES;

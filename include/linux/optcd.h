@@ -135,8 +135,8 @@
 #define RESET_WAIT		1000
 
 #define SET_TIMER(func, jifs) \
-	delay_timer.expires = jifs; \
-	delay_timer.function = (void *) func; \
+	delay_timer.expires = jiffies+(jifs); \
+	delay_timer.function = (void *) (func); \
 	add_timer(&delay_timer);
 #define CLEAR_TIMER		del_timer(&delay_timer)
 

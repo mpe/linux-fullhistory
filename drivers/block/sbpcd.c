@@ -757,7 +757,7 @@ static void sbp_sleep(u_int time)
 	if (current == task[0]) 
 	{
 		del_timer(&delay_timer);
-		delay_timer.expires=time;
+		delay_timer.expires=jiffies+time;
 		timed_out_delay=0;
 		add_timer(&delay_timer);
 		while (!timed_out_delay) ;
@@ -2945,7 +2945,7 @@ static void check_datarate(void)
 #if 1
 	del_timer(&delay_timer);
 #endif
-	delay_timer.expires=110;
+	delay_timer.expires=jiffies+110;
 	timed_out_delay=0;
 	add_timer(&delay_timer);
 	msg(DBG_TIM,"delay timer started (110).\n");
@@ -4579,7 +4579,7 @@ static int sbp_data(void)
 		SBPCD_CLI;
 		
 		del_timer(&data_timer);
-		data_timer.expires=max_latency;
+		data_timer.expires=jiffies+max_latency;
 		timed_out_data=0;
 		add_timer(&data_timer);
 		while (!timed_out_data) 

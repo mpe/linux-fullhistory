@@ -596,7 +596,7 @@ static void reset_xmit_timer(struct sock *sk, int why, unsigned long when)
 		when=3;
 		printk("Error: Negative timer in xmit_timer\n");
 	}
-	sk->retransmit_timer.expires=when;
+	sk->retransmit_timer.expires=jiffies+when;
 	add_timer(&sk->retransmit_timer);
 }
 
@@ -749,7 +749,7 @@ static void retransmit_timer(unsigned long data)
 	if (sk->inuse || in_bh) 
 	{
 		/* Try again in 1 second */
-		sk->retransmit_timer.expires = HZ;
+		sk->retransmit_timer.expires = jiffies+HZ;
 		add_timer(&sk->retransmit_timer);
 		sti();
 		return;
@@ -1302,7 +1302,7 @@ void tcp_enqueue_partial(struct sk_buff * skb, struct sock * sk)
 	/*
 	 *	Wait up to 1 second for the buffer to fill.
 	 */
-	sk->partial_timer.expires = HZ;
+	sk->partial_timer.expires = jiffies+HZ;
 	sk->partial_timer.function = (void (*)(unsigned long)) tcp_send_partial;
 	sk->partial_timer.data = (unsigned long) sk;
 	add_timer(&sk->partial_timer);
@@ -1956,7 +1956,7 @@ static void cleanup_rbuf(struct sock *sk)
 		{
 			/* Force it to send an ack soon. */
 			int was_active = del_timer(&sk->retransmit_timer);
-			if (!was_active || TCP_ACK_TIME < sk->timer.expires) 
+			if (!was_active || jiffies+TCP_ACK_TIME < sk->timer.expires) 
 			{
 				reset_xmit_timer(sk, TIME_WRITE, TCP_ACK_TIME);
 			} 

@@ -79,14 +79,14 @@ static int nr_header(struct sk_buff *skb, struct device *dev, unsigned short typ
 	memcpy(buff, (saddr != NULL) ? saddr : dev->dev_addr, dev->addr_len);
 	buff[6] &= ~LAPB_C;
 	buff[6] &= ~LAPB_E;
-	buff[6] |= SSID_SPARE;
+	buff[6] |= SSSID_SPARE;
 	buff    += AX25_ADDR_LEN;
 
 	if (daddr != NULL)
 		memcpy(buff, daddr, dev->addr_len);
 	buff[6] &= ~LAPB_C;
 	buff[6] |= LAPB_E;
-	buff[6] |= SSID_SPARE;
+	buff[6] |= SSSID_SPARE;
 	buff    += AX25_ADDR_LEN;
 
 	*buff++ = nr_default.ttl;
@@ -119,12 +119,12 @@ static int nr_rebuild_header(void *buff, struct device *dev,
 
 	bp[6] &= ~LAPB_C;
 	bp[6] &= ~LAPB_E;
-	bp[6] |= SSID_SPARE;
+	bp[6] |= SSSID_SPARE;
 	bp    += AX25_ADDR_LEN;
 	
 	bp[6] &= ~LAPB_C;
 	bp[6] |= LAPB_E;
-	bp[6] |= SSID_SPARE;
+	bp[6] |= SSSID_SPARE;
 
 	if (!nr_route_frame(skb, NULL)) {
 		skb->free = 1;

@@ -183,7 +183,7 @@ asmlinkage void schedule(void)
 
 	if (intr_count) {
 		printk("Aiee: scheduling in interrupt\n");
-		intr_count = 0;
+		return;
 	}
 	run_task_queue(&tq_scheduler);
 
@@ -233,7 +233,7 @@ asmlinkage void schedule(void)
 		kstat.context_swtch++;
 		if (timeout) {
 			init_timer(&timer);
-			timer.expires = timeout - jiffies;
+			timer.expires = timeout;
 			timer.data = (unsigned long) current;
 			timer.function = process_timeout;
 			add_timer(&timer);
@@ -369,7 +369,6 @@ void add_timer(struct timer_list * timer)
 	}
 #endif
 	p = &timer_head;
-	timer->expires += jiffies;
 	save_flags(flags);
 	cli();
 	do {
@@ -397,7 +396,6 @@ int del_timer(struct timer_list * timer)
 			timer->prev->next = timer->next;
 			timer->next = timer->prev = NULL;
 			restore_flags(flags);
-			timer->expires -= jiffies;
 			return 1;
 		}
 	}
@@ -414,7 +412,6 @@ int del_timer(struct timer_list * timer)
 		timer->prev->next = timer->next;
 		timer->next = timer->prev = NULL;
 		restore_flags(flags);
-		timer->expires -= jiffies;
 		return 1;
 	}
 	restore_flags(flags);

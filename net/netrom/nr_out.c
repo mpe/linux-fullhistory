@@ -14,6 +14,7 @@
  *
  *	History
  *	NET/ROM 001	Jonathan(G4KLX)	Cloned from ax25_out.c
+ *	NET/ROM 003	Jonathan(G4KLX)	Added NET/ROM fragmentation.
  */
 
 #include <linux/config.h>
@@ -40,19 +41,64 @@
 #include <linux/interrupt.h>
 #include <net/netrom.h>
 
-int nr_output(struct sock *sk, struct sk_buff *skb)
+/*
+ *	This is where all NET/ROM frames pass, except for IP-over-NET/ROM which
+ *	cannot be fragmented in this manner.
+ */
+void nr_output(struct sock *sk, struct sk_buff *skb)
 {
-	skb_queue_tail(&sk->write_queue, skb);	/* Throw it on the queue */
+	struct sk_buff *skbn;
+	unsigned char transport[NR_TRANSPORT_LEN];
+	int err, frontlen, len, mtu;
+
+	mtu = sk->nr->device->mtu;
+	
+	if (skb->len - NR_TRANSPORT_LEN > mtu) {
+		/* Save a copy of the Transport Header */
+		memcpy(transport, skb->data, NR_TRANSPORT_LEN);
+		skb_pull(skb, NR_TRANSPORT_LEN);
+
+		frontlen = skb_headroom(skb);
+
+		while (skb->len > 0) {
+			if ((skbn = sock_alloc_send_skb(sk, frontlen + mtu, 0, &err)) == NULL)
+				return;
+
+			skbn->sk   = sk;
+			skbn->free = 1;
+			skbn->arp  = 1;
+
+			skb_reserve(skbn, frontlen);
+
+			len = (mtu > skb->len) ? skb->len : mtu;
+
+			/* Copy the user data */
+			memcpy(skb_put(skbn, len), skb->data, len);
+			skb_pull(skb, len);
+
+			/* Duplicate the Transport Header */
+			skb_push(skbn, NR_TRANSPORT_LEN);
+			memcpy(skbn->data, transport, NR_TRANSPORT_LEN);
+
+			if (skb->len > 0)
+				skbn->data[4] |= NR_MORE_FLAG;
+		
+			skb_queue_tail(&sk->write_queue, skbn); /* Throw it on the queue */
+		}
+		
+		skb->free = 1;
+		kfree_skb(skb, FREE_WRITE);
+	} else {
+		skb_queue_tail(&sk->write_queue, skb);		/* Throw it on the queue */
+	}
 
 	if (sk->nr->state == NR_STATE_3)
 		nr_kick(sk);
-
-	return 0;
 }
 
 /* 
- *  This procedure is passed a buffer descriptor for an iframe. It builds
- *  the rest of the control part of the frame and then writes it out.
+ *	This procedure is passed a buffer descriptor for an iframe. It builds
+ *	the rest of the control part of the frame and then writes it out.
  */
 static void nr_send_iframe(struct sock *sk, struct sk_buff *skb)
 {
@@ -61,6 +107,9 @@ static void nr_send_iframe(struct sock *sk, struct sk_buff *skb)
 
 	skb->data[2] = sk->nr->vs;
 	skb->data[3] = sk->nr->vr;
+
+	if (sk->nr->condition & OWN_RX_BUSY_CONDITION)
+		skb->data[4] |= NR_CHOKE_FLAG;
 
 	nr_transmit_buffer(sk, skb);	
 }
@@ -154,13 +203,13 @@ void nr_transmit_buffer(struct sock *sk, struct sk_buff *skb)
 	memcpy(dptr, &sk->nr->source_addr, sizeof(ax25_address));
 	dptr[6] &= ~LAPB_C;
 	dptr[6] &= ~LAPB_E;
-	dptr[6] |= SSID_SPARE;
+	dptr[6] |= SSSID_SPARE;
 	dptr += AX25_ADDR_LEN;
 
 	memcpy(dptr, &sk->nr->dest_addr,   sizeof(ax25_address));
 	dptr[6] &= ~LAPB_C;
 	dptr[6] |= LAPB_E;
-	dptr[6] |= SSID_SPARE;
+	dptr[6] |= SSSID_SPARE;
 	dptr += AX25_ADDR_LEN;
 
 	*dptr++ = nr_default.ttl;
@@ -207,10 +256,10 @@ void nr_enquiry_response(struct sock *sk)
 	int frametype = NR_INFOACK;
 	
 	if (sk->nr->condition & OWN_RX_BUSY_CONDITION) {
-		frametype += NR_CHOKE_FLAG;
+		frametype |= NR_CHOKE_FLAG;
 	} else {
 		if (skb_peek(&sk->nr->reseq_queue) != NULL) {
-			frametype += NR_NAK_FLAG;
+			frametype |= NR_NAK_FLAG;
 		}
 	}
 	

@@ -424,4 +424,8 @@ struct cdrom_multisession
 #define	CDROMVOLREAD		0x5313 /* let the drive tell its volume setting */
 					/* (struct cdrom_volctrl) */
 
+#define CDROMREADMODE0          0x5314  /*read data in audio mode*/
+#define CDROMREADRAW            0x5315  /*read data in raw mode*/
+#define CDROMREADCOOKED         0x5316  /*read data in cooked mode*/
+
 #endif  _LINUX_CDROM_H

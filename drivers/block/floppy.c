@@ -599,10 +599,10 @@ static void reschedule_timeout(int drive, char *message, int marg)
 		drive = current_drive;
 	del_timer(&fd_timeout);
 	if (drive < 0 || drive > N_DRIVE) {
-		fd_timeout.expires = 2000;
+		fd_timeout.expires = jiffies + 20*HZ;
 		drive=0;
 	} else
-		fd_timeout.expires = UDP->timeout;
+		fd_timeout.expires = jiffies + UDP->timeout;
 	add_timer(&fd_timeout);
 	if (UDP->flags & FD_DEBUG){
 		DPRINT("reschedule timeout ");
@@ -671,7 +671,7 @@ static int disk_change(int drive)
 	if (UDP->flags & FD_BROKEN_DCL)
 		return UTESTF(FD_DISK_CHANGED);
 	if( (inb_p(FD_DIR) ^ UDP->flags) & 0x80){
-		USETF(FD_VERIFY); /* verify write protection */		
+		USETF(FD_VERIFY); /* verify write protection */
 		if(UDRS->maxblock){
 			/* mark it changed */
 			USETF(FD_DISK_CHANGED);
@@ -714,9 +714,9 @@ static int set_dor(int fdc, char mask, char data)
 		if(is_selected(olddor, unit) && !is_selected(newdor,unit)){
 			drive = REVDRIVE(fdc,unit);
 #ifdef DCL_DEBUG
-	if (UDP->flags & FD_DEBUG){
-		DPRINT("calling disk change from set_dor\n");
-	}
+			if (UDP->flags & FD_DEBUG){
+				DPRINT("calling disk change from set_dor\n");
+			}
 #endif
 			disk_change(drive);
 		}
@@ -858,7 +858,7 @@ static void floppy_off(unsigned int drive)
 		delta = jiffies - UDRS->first_read_date + HZ -
 			UDP->spindown_offset;
 		delta = (( delta * UDP->rps) % HZ ) / UDP->rps;
-		motor_off_timer[drive].expires = UDP->spindown - delta;
+		motor_off_timer[drive].expires = jiffies + UDP->spindown - delta;
 	}
 	add_timer(motor_off_timer+drive);
 }
@@ -908,7 +908,7 @@ static void fd_watchdog(void)
 	} else {		
 		del_timer(&fd_timer);
 		fd_timer.function = (timeout_fn) fd_watchdog;
-		fd_timer.expires = 10;
+		fd_timer.expires = jiffies + 10;
 		add_timer(&fd_timer);
 	}
 }
@@ -932,7 +932,7 @@ static int wait_for_completion(int delay, timeout_fn function)
 	if ( jiffies < delay ){
 		del_timer(&fd_timer);
 		fd_timer.function = function;
-		fd_timer.expires = delay  - jiffies;
+		fd_timer.expires = delay;
 		add_timer(&fd_timer);
 		return 1;
 	}
@@ -1730,7 +1730,7 @@ void show_floppy(void)
 		printk("fd_timer.function=%p\n", fd_timer.function);
 	if(fd_timeout.prev){
 		printk("timer_table=%p\n",fd_timeout.function);
-		printk("expires=%ld\n",fd_timeout.expires);
+		printk("expires=%ld\n",fd_timeout.expires-jiffies);
 		printk("now=%ld\n",jiffies);
 	}
 	printk("cont=%p\n", cont);
@@ -2730,7 +2730,8 @@ static struct cont_t poll_cont={
 	generic_failure,
 	generic_done };
 
-static int poll_drive(int interruptible, int flag){
+static int poll_drive(int interruptible, int flag)
+{
 	int ret;
 	/* no auto-sense, just clear dcl */
 	raw_cmd.flags= flag;
@@ -3311,7 +3312,7 @@ static int check_floppy_change(dev_t dev)
 		return 0;
 	}
 
-	if (UTESTF(FD_DISK_CHANGED))
+	if (UTESTF(FD_DISK_CHANGED) || UTESTF(FD_VERIFY))
 		return 1;
 
 	if(UDRS->last_checked + UDP->checkfreq < jiffies){
@@ -3319,8 +3320,9 @@ static int check_floppy_change(dev_t dev)
 		poll_drive(0,0);
 		process_fd_request();
 	}
-		
+
 	if(UTESTF(FD_DISK_CHANGED) ||
+	   UTESTF(FD_VERIFY) ||
 	   test_bit(drive, &fake_change) ||
 	   (!TYPE(dev) && !current_type[drive]))
 		return 1;
@@ -3338,9 +3340,12 @@ static int floppy_revalidate(dev_t dev)
 	int drive=DRIVE(dev);
 	int cf;
 
-	if(UTESTF(FD_DISK_CHANGED) || test_bit(drive, &fake_change) || NO_GEOM){
+	if(UTESTF(FD_DISK_CHANGED) || 
+	   UTESTF(FD_VERIFY) ||
+	   test_bit(drive, &fake_change) || 
+	   NO_GEOM){
 		lock_fdc(drive,0);
-		cf = UTESTF(FD_DISK_CHANGED);
+		cf = UTESTF(FD_DISK_CHANGED) || UTESTF(FD_VERIFY);
 		if(! (cf || test_bit(drive, &fake_change) || NO_GEOM)){
 			process_fd_request(); /*already done by another thread*/
 			return 0;
@@ -3556,7 +3561,7 @@ void floppy_setup(char *str, int *ints)
 			return;
 		}
 	}
-	DPRINT1("unknown floppy option %s\n", str);
+	DPRINT1("unknown floppy option [%s]\n", str);
 	DPRINT("allowed options are:");
 	for(i=0; i< ARRAY_SIZE(config_params); i++)
 		printk(" %s",config_params[i].name);
@@ -3759,44 +3764,51 @@ static void floppy_release_irq_and_dma(void)
 
 extern char *get_options(char *str, int *ints);
 
-#if 0
-/* assuming that insmod is compiled as a.out binary using a shared
-   C library ... */
-int ENVIRON = 0x60090b34;
-
-static void
-mod_setup(char *name,
-	  void (*setup)(char *, int *)) {
-	char **environ,*env,*ptr,c,i;
-	char line[100];
+static void mod_setup(char *pattern, void (*setup)(char *, int *))
+{
+	int i;
+	char c;
+	int j;
+	int match;
+	char buffer[100];
 	int ints[11];
+	int length = strlen(pattern)+1;
 
-	environ = (char **) get_fs_long( ENVIRON );
-	
-	while((env = (char *)get_fs_long(environ))){
-		for(i=0; i<strlen(name); i++)
-			if ( (char) get_fs_byte(env++) != name[i] )
+	match=0;
+	j=1;
+
+	for(i=current->mm->env_start; 
+	    i< current->mm->env_end; 
+	    i ++){
+		c= get_fs_byte(i);
+		if(match){
+			if(j==99)
+				c='\0';
+			buffer[j] = c;
+			if(!c || c == ' ' || c == '\t'){
+				if(j){
+					buffer[j] = '\0';
+					setup(get_options(buffer,ints),ints);
+				}
+				j=0;
+			} else
+				j++;
+			if(!c)
 				break;
-		if(i == strlen(name)){
-			ptr=line;
-			while(ptr < line+99){
-			        c = (char)get_fs_byte(env++);
-				if ( c== ' ' || !c ){
-					*ptr='\0';
-					if(ptr!=line)
-						setup(get_options(line,ints),
-						      ints);
-					ptr=line;
-					if (!c)
-						break;
-				} else
-					*ptr++ = c;
-			}
+			continue;
 		}
-		environ++;
+		if( (!j && !c) ||
+		   ( j && c == pattern[j-1]))
+			j++;
+		else
+			j=0;
+		if(j==length){
+			match=1;
+			j=0;
+		}
 	}
 }
-#endif
+
 
 #ifdef __cplusplus
 extern "C" {
@@ -3806,8 +3818,7 @@ int init_module(void)
 	int ret;
 	printk("inserting floppy driver for %s\n", kernel_version);
 
-	/*mod_setup("floppy=", floppy_setup);*/
-	/* Can't do that any more, insmod is now ELF */
+	mod_setup("floppy=", floppy_setup);
 
 	ret = floppy_init();
 	return 0;

@@ -232,10 +232,23 @@ probe_mad16 (struct address_info *hw_config)
       if (!detect_mad16 ())
 	return 0;
 
-      printk ("mad16.c: A 82C929 detected???\n");
+      printk ("mad16.c: 82C929 detected???\n");
     }
   else
-    printk ("mad16.c: A 82C928 or Mozart detected???\n");
+    {
+      unsigned char model;
+
+      if (((model=mad_read (MC3_PORT)) & 0x03) == 0x03)
+	{
+	  printk ("mad16.c: Mozart detected???\n");
+	  board_type = MOZART;
+	}
+      else
+	{
+	  printk ("mad16.c: 82C928 detected???\n");
+	  board_type = C928;
+	}
+    }
 
   for (i = 0xf8d; i <= 0xf93; i++)
     DDB (printk ("port %03x = %03x\n", i, mad_read (i)));

@@ -72,7 +72,7 @@ void reset_timer (struct sock *t, int timeout, unsigned long len)
 	if ((int) len < 0)	/* prevent close to infinite timers. THEY _DO_ */
 		len = 3;	/* happen (negative values ?) - don't ask me why ! -FB */
 #endif
-	t->timer.expires = len;
+	t->timer.expires = jiffies+len;
 	add_timer (&t->timer);
 }
 
@@ -95,7 +95,7 @@ void net_timer (unsigned long data)
 	cli();
 	if (sk->inuse || in_bh) 
 	{
-		sk->timer.expires = 10;
+		sk->timer.expires = jiffies+10;
 		add_timer(&sk->timer);
 		sti();
 		return;

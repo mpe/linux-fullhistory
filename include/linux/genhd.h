@@ -18,7 +18,8 @@
 #define EXTENDED_PARTITION 5
 
 #define DM6_PARTITION		0x54	/* has DDO: use xlated geom & offset */
-#define DM6_AUXPARTITION	0x51	/* no DDO:  use xlated geom */
+#define DM6_AUX1PARTITION	0x51	/* no DDO:  use xlated geom */
+#define DM6_AUX3PARTITION	0x53	/* no DDO:  use xlated geom */
 	
 struct partition {
 	unsigned char boot_ind;		/* 0x80 - active */

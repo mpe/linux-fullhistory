@@ -302,7 +302,7 @@ void cm206_timeout(unsigned long who)
 int sleep_or_timeout(struct wait_queue ** wait, int timeout)
 {
   cd->timer.data=(unsigned long) wait;
-  cd->timer.expires = timeout;
+  cd->timer.expires = jiffies + timeout;
   add_timer(&cd->timer);
   interruptible_sleep_on(wait);
   del_timer(&cd->timer);

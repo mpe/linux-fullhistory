@@ -74,11 +74,7 @@ int snap_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
  
 static void snap_datalink_header(struct datalink_proto *dl, struct sk_buff *skb, unsigned char *dest_node)
 {
-	unsigned char	*rawp;
-
-	rawp = skb_push(skb,5);
-	memcpy(rawp,dl->type,5);
-	skb->h.raw = rawp+5;
+	memcpy(skb_push(skb,5),dl->type,5);
 	snap_dl->datalink_header(snap_dl, skb, dest_node);
 }
 

@@ -18,6 +18,7 @@
  *			Jonathan(G4KLX)	Complete bind re-think.
  *			Alan(GW4PTS)	Trivial tweaks into new format.
  *	NET/ROM	003	Jonathan(G4KLX)	Added G8BPQ extensions.
+ *					Added NET/ROM routing ioctl.
  *
  *	To do:
  *		Fix non-blocking connect failure.
@@ -96,6 +97,27 @@ static void nr_remove_socket(struct sock *sk)
 }
 
 /*
+ *	Kill all bound sockets on a dropped device.
+ */
+static void nr_kill_by_device(struct device *dev)
+{
+	struct sock *s;
+	
+	for (s = nr_list; s != NULL; s = s->next) {
+		if (s->nr->device == dev) {
+			s->nr->state  = NR_STATE_0;
+			s->nr->device = NULL;
+			s->state = TCP_CLOSE;
+			s->err   = ENETUNREACH;
+			s->state_change(s);
+			s->dead  = 1;
+		}
+	}
+
+	nr_rt_device_down(dev);
+}
+
+/*
  *	Handle device status changes.
  */
 static int nr_device_event(unsigned long event, void *ptr)
@@ -103,7 +125,7 @@ static int nr_device_event(unsigned long event, void *ptr)
 	if (event != NETDEV_DOWN)
 		return NOTIFY_DONE;
 		
-	nr_rt_device_down(ptr);
+	nr_kill_by_device(ptr);
 	
 	return NOTIFY_DONE;
 }
@@ -223,7 +245,7 @@ void nr_destroy_socket(struct sock *sk)	/* Not static as its used by the timer *
 	del_timer(&sk->timer);
 	
 	nr_remove_socket(sk);
-	nr_clear_tx_queue(sk);	/* Flush the send queue */
+	nr_clear_queues(sk);		/* Flush the queues */
 	
 	while ((skb = skb_dequeue(&sk->receive_queue)) != NULL) {
 		if (skb->sk != sk) {			/* A pending connection */
@@ -237,7 +259,7 @@ void nr_destroy_socket(struct sock *sk)	/* Not static as its used by the timer *
 	
 	if (sk->wmem_alloc || sk->rmem_alloc) { /* Defer: outstanding buffers */
 		init_timer(&sk->timer);
-		sk->timer.expires  = 10 * HZ;
+		sk->timer.expires  = jiffies + 10 * HZ;
 		sk->timer.function = nr_destroy_timer;
 		sk->timer.data     = (unsigned long)sk;
 		add_timer(&sk->timer);
@@ -446,6 +468,7 @@ static int nr_create(struct socket *sock, int protocol)
 
 	skb_queue_head_init(&nr->ack_queue);
 	skb_queue_head_init(&nr->reseq_queue);
+	skb_queue_head_init(&nr->frag_queue);
 
 	nr->my_index = 0;
 	nr->my_id    = 0;
@@ -471,7 +494,9 @@ static int nr_create(struct socket *sock, int protocol)
 	nr->my_id      = 0;
 
 	nr->bpqext     = 1;
+	nr->fraglen    = 0;
 	nr->state      = NR_STATE_0;
+	nr->device     = NULL;
 
 	memset(&nr->source_addr, '\0', sizeof(ax25_address));
 	memset(&nr->user_addr,   '\0', sizeof(ax25_address));
@@ -514,7 +539,6 @@ static struct sock *nr_make_new(struct sock *osk)
 
 	init_timer(&sk->timer);
 
-	sk->rmem_alloc  = 0;
 	sk->dead        = 0;
 	sk->next        = NULL;
 	sk->priority    = osk->priority;
@@ -545,13 +569,16 @@ static struct sock *nr_make_new(struct sock *osk)
 
 	skb_queue_head_init(&nr->ack_queue);
 	skb_queue_head_init(&nr->reseq_queue);
+	skb_queue_head_init(&nr->frag_queue);
 
 	nr->rtt      = osk->nr->rtt;
 	nr->t1       = osk->nr->t1;
 	nr->t2       = osk->nr->t2;
 	nr->n2       = osk->nr->n2;
 
+	nr->device   = osk->nr->device;
 	nr->bpqext   = osk->nr->bpqext;
+	nr->fraglen  = 0;
 
 	nr->t1timer  = 0;
 	nr->t2timer  = 0;
@@ -606,7 +633,7 @@ static int nr_release(struct socket *sock, struct socket *peer)
 				break;			
 
 			case NR_STATE_3:
-				nr_clear_tx_queue(sk);
+				nr_clear_queues(sk);
 				sk->nr->n2count = 0;
 				nr_write_internal(sk, NR_DISCREQ);
 				sk->nr->t1timer = sk->nr->t1 = nr_calculate_t1(sk);
@@ -635,6 +662,7 @@ static int nr_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
 	struct sock *sk;
 	struct full_sockaddr_ax25 *addr = (struct full_sockaddr_ax25 *)uaddr;
+	struct device *dev;
 	ax25_address *user, *source;
 	
 	sk = (struct sock *)sock->data;
@@ -653,7 +681,7 @@ static int nr_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	}
 #endif
 
-	if (nr_dev_get(&addr->fsa_ax25.sax25_call) == NULL) {
+	if ((dev = nr_dev_get(&addr->fsa_ax25.sax25_call)) == NULL) {
 		if (sk->debug)
 			printk("NET/ROM: bind failed: invalid node callsign\n");
 		return -EADDRNOTAVAIL;
@@ -680,6 +708,7 @@ static int nr_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		memcpy(&sk->nr->source_addr, source, sizeof(ax25_address));
 	}
 
+	sk->nr->device = dev;
 	nr_insert_socket(sk);
 
 	sk->zapped = 0;
@@ -999,6 +1028,9 @@ static int nr_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 
 	if (sk->zapped)
 		return -EADDRNOTAVAIL;
+
+	if (sk->nr->device == NULL)
+		return -ENETUNREACH;
 		
 	if (usax) {
 		if (addr_len < sizeof(sax))
@@ -1022,7 +1054,7 @@ static int nr_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 	if (sk->debug)
 		printk("NET/ROM: sendto: building packet.\n");
 
-	size = len + AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + 2 + NR_NETWORK_LEN + NR_TRANSPORT_LEN;
+	size = len + AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + 3 + NR_NETWORK_LEN + NR_TRANSPORT_LEN;
 
 	if ((skb = sock_alloc_send_skb(sk, size, 0, &err)) == NULL)
 		return err;
@@ -1218,6 +1250,7 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCADDRT:
 		case SIOCDELRT:
 		case SIOCNRDECOBS:
+		case SIOCNRRTCTL:
 			if (!suser()) return -EPERM;
 			return nr_rt_ioctl(cmd, (void *)arg);
 
@@ -1254,22 +1287,29 @@ static int nr_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 int nr_get_info(char *buffer, char **start, off_t offset, int length)
 {
 	struct sock *s;
+	struct device *dev;
+	char *devname;
 	int len = 0;
 	off_t pos = 0;
 	off_t begin = 0;
   
 	cli();
 
-	len += sprintf(buffer, "user_addr dest_node src_node    my  your  st vs vr va    t1     t2    n2  rtt wnd Snd-Q Rcv-Q\n");
+	len += sprintf(buffer, "user_addr dest_node src_node  dev    my  your  st vs vr va    t1     t2    n2  rtt wnd Snd-Q Rcv-Q\n");
 
 	for (s = nr_list; s != NULL; s = s->next) {
+		if ((dev = s->nr->device) == NULL)
+			devname = "???";
+		else
+			devname = dev->name;
+	
 		len += sprintf(buffer + len, "%-9s ",
 			ax2asc(&s->nr->user_addr));
 		len += sprintf(buffer + len, "%-9s ",
 			ax2asc(&s->nr->dest_addr));
-		len += sprintf(buffer + len, "%-9s %02X/%02X %02X/%02X %2d %2d %2d %2d %3d/%03d %2d/%02d %2d/%02d %3d %3d %5ld %5ld\n",
+		len += sprintf(buffer + len, "%-9s %-3s  %02X/%02X %02X/%02X %2d %2d %2d %2d %3d/%03d %2d/%02d %2d/%02d %3d %3d %5ld %5ld\n",
 			ax2asc(&s->nr->source_addr),
-			s->nr->my_index, s->nr->my_id,
+			devname, s->nr->my_index, s->nr->my_id,
 			s->nr->your_index, s->nr->your_id,
 			s->nr->state,
 			s->nr->vs, s->nr->vr, s->nr->va,

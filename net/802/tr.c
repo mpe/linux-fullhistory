@@ -236,7 +236,7 @@ static void rif_check_expire(unsigned long dummy) {
 	restore_flags(flags);
 
 	del_timer(&rif_timer);
-	rif_timer.expires=RIF_CHECK_INTERVAL;
+	rif_timer.expires=jiffies+RIF_CHECK_INTERVAL;
 	add_timer(&rif_timer);
 
 }

@@ -222,7 +222,7 @@ eql_init(struct device *dev)
 
   init_timer (&eql->timer);
   eql->timer.data     = (unsigned long) dev->priv;
-  eql->timer.expires  = EQL_DEFAULT_RESCHED_IVAL;
+  eql->timer.expires  = jiffies+EQL_DEFAULT_RESCHED_IVAL;
   eql->timer.function = &eql_timer;
   eql->timer_on       = 0;
 
@@ -1160,7 +1160,7 @@ eql_timer(unsigned long param)
 
   if (eql->timer_on != 0) 
     {
-      eql->timer.expires = EQL_DEFAULT_RESCHED_IVAL;
+      eql->timer.expires = jiffies+EQL_DEFAULT_RESCHED_IVAL;
       add_timer (&eql->timer);
     }
 }

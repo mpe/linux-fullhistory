@@ -117,6 +117,7 @@
 #define SNDCTL_SEQ_NRMIDIS		_IOR ('Q',11, int)
 #define SNDCTL_MIDI_INFO		_IOWR('Q',12, struct midi_info)
 #define SNDCTL_SEQ_THRESHOLD		_IOW ('Q',13, int)
+#define SNDCTL_SEQ_TRESHOLD		SNDCTL_SEQ_THRESHOLD	/* there was once a typo */
 #define SNDCTL_SYNTH_MEMAVL		_IOWR('Q',14, int)	/* in=dev#, out=memsize */
 #define SNDCTL_FM_4OP_ENABLE		_IOW ('Q',15, int)	/* in=dev# */
 #define SNDCTL_PMGR_ACCESS		_IOWR('Q',16, struct patmgr_info)

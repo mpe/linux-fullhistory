@@ -461,6 +461,13 @@ Adding the second or third MPU interfaces must be done manually by
 editing sound/local.h (after running the config program). Add defines for
 MPU2_BASE & MPU2_IRQ (and MPU3_BASE & MPU3_IRQ) to the file.
 
+CAUTION!
+
+The default I/O base of Adaptec AHA-1542 SCSI controller is 0x330 which
+is also the default of the MPU401 driver. Don't configure the sound driver to
+use 0x330 as the MPU401 base if you have a AHA1542. The kernel will not boot
+if you make this mistake.
+
 PSS
 ---
 
@@ -598,6 +605,9 @@ There are some other OPTi chips which may be used in soundcards such as
 82C930 and MAC32. These chips are not supported by VoxWare yet. Please
 contact me if you have a soundcard which uses these chips.
 
+Some MAD16 based cards may cause feedback, whistle or terrible noise if the
+line3 mixer channel is turned too high.
+
 MV Jazz (ProSonic)
 ------------------
 
@@ -628,7 +638,8 @@ code to be loaded to the microcontroller. The file is usually called
 MIDI0001.BIN and it's located in the DOS/Windows driver directory. The file
 may also be called as TSUNAMI.BIN or something else (older cards?).
 
-The OPL4 synth will be riunaccessible without loading the microcontroller code.
+The OPL4 synth will be inaccessible without loading the microcontroller code.
+Also remember to enable MPU401 support if you want to use the OPL4 mode.
 
 NOTE!	Don't answer 'y' when the driver asks about SM Games support
 	(the next question after the MIDI0001.BIN name). However
@@ -673,7 +684,23 @@ models are based on the MAD16 chip which is supported by VoxWare.
 Audio Excel DSP16
 -----------------
 
-See aedsp16.c.
+See comments in aedsp16.c.
+
+
+PCMCIA cards
+------------
+
+Sorry, can't help. Some cards may work and some don't.
+
+TI TM4000M notebooks
+--------------------
+
+These computers have a built in sound support based on the Jazz chipset.
+Look at the instructions for MV Jazz (above). It's also important to note
+that there is something wrong with the mouse port and sound at least on
+some TM models. Don't enable the "C&T 82C710 mouse port support" when
+configuring Linux. Having it enabled is likely to cause mysterious problems
+and kernel failures when sound is used.
 
 Others?
 -------

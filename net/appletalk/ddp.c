@@ -199,7 +199,7 @@ static void atalk_destroy_socket(atalk_socket *sk)
 		 *	Someone is using our buffers still.. defer
 		 */
 		init_timer(&sk->timer);
-		sk->timer.expires=10*HZ;
+		sk->timer.expires=jiffies+10*HZ;
 		sk->timer.function=atalk_destroy_timer;
 		sk->timer.data = (unsigned long)sk;
 		add_timer(&sk->timer);

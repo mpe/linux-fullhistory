@@ -155,7 +155,7 @@ struct snd_wait {
  */
 
 #define ACTIVATE_TIMER(name, proc, time) \
-  {name.expires = time; \
+  {name.expires = jiffies+(time); \
   add_timer (&name);}
 
 #define INB	inb

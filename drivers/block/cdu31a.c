@@ -160,6 +160,17 @@
  *                4, but I think that is a mistake.
  */
 
+#include <linux/major.h>
+#include <linux/config.h>
+
+#ifdef MODULE
+# include <linux/module.h>
+# include <linux/version.h>
+# ifndef CONFIG_MODVERSIONS
+    char kernel_version[]= UTS_RELEASE;
+# endif
+#endif
+
 #include <linux/errno.h>
 #include <linux/signal.h>
 #include <linux/sched.h>
@@ -237,7 +248,7 @@ static unsigned int sony_blocks_left = 0; /* Number of 512 byte blocks left
 
 /* The base I/O address of the Sony Interface.  This is a variable (not a
    #define) so it can be easily changed via some future ioctl() */
-static unsigned short sony_cd_base_io = 0;
+static unsigned short cdu31a_port = 0;
 
 /*
  * The following are I/O addresses of the various registers for the drive.  The
@@ -267,15 +278,15 @@ static unsigned int sony_usage = 0;        /* How many processes have the
 static int sony_pas_init = 0;		   /* Initialize the Pro-Audio
 					      Spectrum card? */
 
-static struct s_sony_session_toc *sony_toc; /* Points to the
+static struct s_sony_session_toc sony_toc;  /* Holds the
 					       table of
 					       contents. */
 
 static int sony_toc_read = 0;		   /* Has the TOC been read for
 					      the drive? */
 
-static struct s_sony_subcode * volatile last_sony_subcode; /* Points to the last
-                                                    subcode address read */
+static struct s_sony_subcode last_sony_subcode; /* Points to the last
+                                                   subcode address read */
 
 static volatile int sony_inuse = 0;  /* Is the drive in use?  Only one operation
 					at a time allowed */
@@ -305,7 +316,7 @@ static unsigned volatile char cur_pos_msf[3] = { 0, 0, 0 };
 static unsigned volatile char final_pos_msf[3] = { 0, 0, 0 };
 
 /* What IRQ is the drive using?  0 if none. */
-static int irq_used = 0;
+static int cdu31a_irq = 0;
 
 /* The interrupt handler will wake this queue up when it gets an
    interrupts. */
@@ -321,7 +332,7 @@ static char disk_changed;
 /* Variable for using the readahead buffer.  The readahead buffer
    is used for raw sector reads and for blocksizes that are smaller
    than 2048 bytes. */
-static char *readahead_buffer = NULL; /* Used for 1024 byte blocksize. */
+static char readahead_buffer[CD_FRAMESIZE_RAW];
 static int readahead_dataleft = 0;
 static int readahead_bad = 0;
 
@@ -329,6 +340,11 @@ static int readahead_bad = 0;
    drive has been idle for a while.  This keeps the light on
    the drive from flashing for very long. */
 static struct timer_list cdu31a_abort_timer;
+
+/* Marks if the timeout has started an abort read.  This is used
+   on entry to the drive to tell the code to read out the status
+   from the abort read. */
+static int abort_read_started = 0;
 
 
 /*
@@ -387,7 +403,7 @@ sony_sleep(void)
 {
    unsigned long flags;
 
-   if (irq_used <= 0)
+   if (cdu31a_irq <= 0)
    {
       current->state = TASK_INTERRUPTIBLE;
       current->timeout = jiffies;
@@ -799,13 +815,14 @@ do_sony_cd_cmd(unsigned char cmd,
    {
       recursive_call = 1;
    }
-   restore_flags(flags);
 
    num_retries = 0;
 retry_cd_operation:
 
    while (handle_sony_cd_attention())
       ;
+
+   sti();
    
    retry_count = jiffies + SONY_JIFFIES_TIMEOUT;
    while ((retry_count > jiffies) && (is_busy()))
@@ -851,6 +868,8 @@ retry_cd_operation:
       sony_inuse = 0;
       wake_up_interruptible(&sony_wait);
    }
+
+   restore_flags(flags);
 }
 
 
@@ -868,9 +887,26 @@ handle_sony_cd_attention(void)
 {
    unsigned char atten_code;
    static int num_consecutive_attentions = 0;
+   volatile int val;
 
 
-   if (is_attention())
+   if (abort_read_started)
+   {
+      while (is_result_reg_not_empty())
+      {
+         val = read_result_register();
+      }
+      clear_data_ready();
+      clear_result_ready();
+      /* Clear out the data */
+      while (is_data_requested())
+      {
+         val = read_data_register();
+      }
+      abort_read_started = 0;
+      return(1);
+   }
+   else if (is_attention())
    {
       if (num_consecutive_attentions > CDU31A_MAX_CONSECUTIVE_ATTENTIONS)
       {
@@ -1018,9 +1054,9 @@ start_request(unsigned int sector,
     * If the full read-ahead would go beyond the end of the media, trim
     * it back to read just till the end of the media.
     */
-   else if ((sector + nsect) >= sony_toc->lead_out_start_lba)
+   else if ((sector + nsect) >= sony_toc.lead_out_start_lba)
    {
-      read_size = sony_toc->lead_out_start_lba - sector;
+      read_size = sony_toc.lead_out_start_lba - sector;
    }
    /* Read the full readahead amount. */
    else
@@ -1106,7 +1142,22 @@ abort_read(void)
 static void
 handle_abort_timeout(unsigned long data)
 {
-   abort_read();
+   /* If it is in use, ignore it. */
+   if (!sony_inuse)
+   {
+      /* We can't use abort_read(), because it will sleep
+         or schedule in the timer interrupt.  Just start
+         the operation, finish it on the next access to
+         the drive. */
+      clear_result_ready();
+      clear_param_reg();
+      write_cmd(SONY_ABORT_CMD);
+
+      sony_blocks_left = 0;
+      readahead_dataleft = 0;
+      readahead_bad = 0;
+      abort_read_started = 1;
+   }
 }
 
 /* Actually get data and status from the drive. */
@@ -1411,11 +1462,12 @@ do_cdu31a_request(void)
    }
    sony_inuse = 1;
    has_cd_task = current;
-   sti();
 
    /* Get drive status before doing anything. */
    while (handle_sony_cd_attention())
       ;
+
+   sti();
 
    /* If the timer is running, cancel it. */
    if (cdu31a_abort_timer.next != NULL)
@@ -1478,7 +1530,7 @@ cdu31a_request_startover:
       if (block < 80)
       {
 	 /* Offset the request into the session. */
-	 block += (sony_toc->start_track_lba * 4);
+	 block += (sony_toc.start_track_lba * 4);
       }
 
       switch(CURRENT->cmd)
@@ -1489,20 +1541,20 @@ cdu31a_request_startover:
           * the media, return an error.
           */
 #if 0
-	 if ((block / 4) < sony_toc->start_track_lba)
+	 if ((block / 4) < sony_toc.start_track_lba)
 	 {
             printk("CDU31A: Request before beginning of media\n");
             end_request(0);
             goto cdu31a_request_startover;
 	 }
 #endif
-         if ((block / 4) >= sony_toc->lead_out_start_lba)
+         if ((block / 4) >= sony_toc.lead_out_start_lba)
          {
             printk("CDU31A: Request past end of media\n");
             end_request(0);
             goto cdu31a_request_startover;
          }
-         if (((block + nblock) / 4) >= sony_toc->lead_out_start_lba)
+         if (((block + nblock) / 4) >= sony_toc.lead_out_start_lba)
          {
             printk("CDU31A: Request past end of media\n");
             end_request(0);
@@ -1599,7 +1651,7 @@ end_do_cdu31a_request:
 #else
    /* Start a timer to time out after a while to disable
       the read. */
-   cdu31a_abort_timer.expires = 200; /* Wait 2 seconds */
+   cdu31a_abort_timer.expires = jiffies + 2*HZ; /* Wait 2 seconds */
    add_timer(&cdu31a_abort_timer);
 #endif
 
@@ -1694,9 +1746,9 @@ sony_get_toc(void)
       do_sony_cd_cmd(SONY_REQ_TOC_DATA_SPEC_CMD,
 		     parms,
 		     1, 
-		     (unsigned char *) sony_toc, 
+		     (unsigned char *) &sony_toc, 
 		     &res_size);
-      if ((res_size < 2) || ((sony_toc->exec_status[0] & 0xf0) == 0x20))
+      if ((res_size < 2) || ((sony_toc.exec_status[0] & 0xf0) == 0x20))
       {
 	 /* An error reading the TOC.  Return without sony_toc_read
 	    set. */
@@ -1707,57 +1759,57 @@ sony_get_toc(void)
 
       /* For points that do not exist, move the data over them
 	 to the right location. */
-      if (sony_toc->pointb0 != 0xb0)
+      if (sony_toc.pointb0 != 0xb0)
       {
-	 mcovlp(((char *) sony_toc) + 27,
-		((char *) sony_toc) + 18,
+	 mcovlp(((char *) &sony_toc) + 27,
+		((char *) &sony_toc) + 18,
 		res_size - 18);
 	 res_size += 9;
       }
-      if (sony_toc->pointb1 != 0xb1)
+      if (sony_toc.pointb1 != 0xb1)
       {
-	 mcovlp(((char *) sony_toc) + 36,
-		((char *) sony_toc) + 27,
+	 mcovlp(((char *) &sony_toc) + 36,
+		((char *) &sony_toc) + 27,
 		res_size - 27);
 	 res_size += 9;
       }
-      if (sony_toc->pointb2 != 0xb2)
+      if (sony_toc.pointb2 != 0xb2)
       {
-	 mcovlp(((char *) sony_toc) + 45,
-		((char *) sony_toc) + 36,
+	 mcovlp(((char *) &sony_toc) + 45,
+		((char *) &sony_toc) + 36,
 		res_size - 36);
 	 res_size += 9;
       }
-      if (sony_toc->pointb3 != 0xb3)
+      if (sony_toc.pointb3 != 0xb3)
       {
-	 mcovlp(((char *) sony_toc) + 54,
-		((char *) sony_toc) + 45,
+	 mcovlp(((char *) &sony_toc) + 54,
+		((char *) &sony_toc) + 45,
 		res_size - 45);
 	 res_size += 9;
       }
-      if (sony_toc->pointb4 != 0xb4)
+      if (sony_toc.pointb4 != 0xb4)
       {
-	 mcovlp(((char *) sony_toc) + 63,
-		((char *) sony_toc) + 54,
+	 mcovlp(((char *) &sony_toc) + 63,
+		((char *) &sony_toc) + 54,
 		res_size - 54);
 	 res_size += 9;
       }
-      if (sony_toc->pointc0 != 0xc0)
+      if (sony_toc.pointc0 != 0xc0)
       {
-	 mcovlp(((char *) sony_toc) + 72,
-		((char *) sony_toc) + 63,
+	 mcovlp(((char *) &sony_toc) + 72,
+		((char *) &sony_toc) + 63,
 		res_size - 63);
 	 res_size += 9;
       }
 
-      sony_toc->start_track_lba = msf_to_log(sony_toc->tracks[0].track_start_msf);
-      sony_toc->lead_out_start_lba = msf_to_log(sony_toc->lead_out_start_msf);
+      sony_toc.start_track_lba = msf_to_log(sony_toc.tracks[0].track_start_msf);
+      sony_toc.lead_out_start_lba = msf_to_log(sony_toc.lead_out_start_msf);
 
 #if DEBUG
    printk("Disk session %d, start track: %d, stop track: %d\n",
 	  session,
-	  sony_toc->start_track_lba,
-	  sony_toc->lead_out_start_lba);
+	  sony_toc.start_track_lba,
+	  sony_toc.lead_out_start_lba);
 #endif
    }
 #if DEBUG
@@ -1776,10 +1828,10 @@ find_track(int track)
    int num_tracks;
 
 
-   num_tracks = sony_toc->last_track_num - sony_toc->first_track_num + 1;
+   num_tracks = sony_toc.last_track_num - sony_toc.first_track_num + 1;
    for (i = 0; i < num_tracks; i++)
    {
-      if (sony_toc->tracks[i].track == track)
+      if (sony_toc.tracks[i].track == track)
       {
          return i;
       }
@@ -1801,12 +1853,12 @@ read_subcode(void)
    do_sony_cd_cmd(SONY_REQ_SUBCODE_ADDRESS_CMD,
                   NULL,
                   0, 
-                  (unsigned char *) last_sony_subcode, 
+                  (unsigned char *) &last_sony_subcode, 
                   &res_size);
-   if ((res_size < 2) || ((last_sony_subcode->exec_status[0] & 0xf0) == 0x20))
+   if ((res_size < 2) || ((last_sony_subcode.exec_status[0] & 0xf0) == 0x20))
    {
       printk("Sony CDROM error 0x%2.2x (read_subcode)\n",
-             last_sony_subcode->exec_status[1]);
+             last_sony_subcode.exec_status[1]);
       return -EIO;
    }
 
@@ -1868,24 +1920,24 @@ sony_get_subchnl_info(long arg)
    }
 
    schi.cdsc_audiostatus = sony_audio_status;
-   schi.cdsc_adr = last_sony_subcode->address;
-   schi.cdsc_ctrl = last_sony_subcode->control;
-   schi.cdsc_trk = bcd_to_int(last_sony_subcode->track_num);
-   schi.cdsc_ind = bcd_to_int(last_sony_subcode->index_num);
+   schi.cdsc_adr = last_sony_subcode.address;
+   schi.cdsc_ctrl = last_sony_subcode.control;
+   schi.cdsc_trk = bcd_to_int(last_sony_subcode.track_num);
+   schi.cdsc_ind = bcd_to_int(last_sony_subcode.index_num);
    if (schi.cdsc_format == CDROM_MSF)
    {
-      schi.cdsc_absaddr.msf.minute = bcd_to_int(last_sony_subcode->abs_msf[0]);
-      schi.cdsc_absaddr.msf.second = bcd_to_int(last_sony_subcode->abs_msf[1]);
-      schi.cdsc_absaddr.msf.frame = bcd_to_int(last_sony_subcode->abs_msf[2]);
+      schi.cdsc_absaddr.msf.minute = bcd_to_int(last_sony_subcode.abs_msf[0]);
+      schi.cdsc_absaddr.msf.second = bcd_to_int(last_sony_subcode.abs_msf[1]);
+      schi.cdsc_absaddr.msf.frame = bcd_to_int(last_sony_subcode.abs_msf[2]);
 
-      schi.cdsc_reladdr.msf.minute = bcd_to_int(last_sony_subcode->rel_msf[0]);
-      schi.cdsc_reladdr.msf.second = bcd_to_int(last_sony_subcode->rel_msf[1]);
-      schi.cdsc_reladdr.msf.frame = bcd_to_int(last_sony_subcode->rel_msf[2]);
+      schi.cdsc_reladdr.msf.minute = bcd_to_int(last_sony_subcode.rel_msf[0]);
+      schi.cdsc_reladdr.msf.second = bcd_to_int(last_sony_subcode.rel_msf[1]);
+      schi.cdsc_reladdr.msf.frame = bcd_to_int(last_sony_subcode.rel_msf[2]);
    }
    else if (schi.cdsc_format == CDROM_LBA)
    {
-      schi.cdsc_absaddr.lba = msf_to_log(last_sony_subcode->abs_msf);
-      schi.cdsc_reladdr.lba = msf_to_log(last_sony_subcode->rel_msf);
+      schi.cdsc_absaddr.lba = msf_to_log(last_sony_subcode.abs_msf);
+      schi.cdsc_reladdr.lba = msf_to_log(last_sony_subcode.rel_msf);
    }
    
    memcpy_tofs((char *) arg, &schi, sizeof(schi));
@@ -2217,12 +2269,13 @@ exit_read_audio:
    return(retval);
 }
 
-/*
- * The big ugly ioctl handler.
- */
- 
-static int do_sony_cd_cmd_chk(char *name, unsigned char cmd, unsigned char *params, unsigned int num_params,
-		unsigned char *result_buffer, unsigned int *result_size)
+static int
+do_sony_cd_cmd_chk(char *name,
+                   unsigned char cmd,
+                   unsigned char *params,
+                   unsigned int num_params,
+		   unsigned char *result_buffer,
+                   unsigned int *result_size)
 {      
       do_sony_cd_cmd(cmd, params, num_params, result_buffer, result_size);
       if ((*result_size < 2) || ((result_buffer[0] & 0xf0) == 0x20))
@@ -2233,6 +2286,9 @@ static int do_sony_cd_cmd_chk(char *name, unsigned char cmd, unsigned char *para
       return 0;
 }
  
+/*
+ * The big ugly ioctl handler.
+ */
 static int scd_ioctl(struct inode *inode,
           struct file  *file,
           unsigned int  cmd,
@@ -2274,9 +2330,9 @@ static int scd_ioctl(struct inode *inode,
       {
          return -EIO;
       }
-      cur_pos_msf[0] = last_sony_subcode->abs_msf[0];
-      cur_pos_msf[1] = last_sony_subcode->abs_msf[1];
-      cur_pos_msf[2] = last_sony_subcode->abs_msf[2];
+      cur_pos_msf[0] = last_sony_subcode.abs_msf[0];
+      cur_pos_msf[1] = last_sony_subcode.abs_msf[1];
+      cur_pos_msf[2] = last_sony_subcode.abs_msf[2];
       sony_audio_status = CDROM_AUDIO_PAUSED;
       return 0;
       break;
@@ -2340,8 +2396,8 @@ static int scd_ioctl(struct inode *inode,
          i=verify_area(VERIFY_WRITE, hdr, sizeof(*hdr));
          if(i<0)
          	return i;
-         loc_hdr.cdth_trk0 = bcd_to_int(sony_toc->first_track_num);
-         loc_hdr.cdth_trk1 = bcd_to_int(sony_toc->last_track_num);
+         loc_hdr.cdth_trk0 = bcd_to_int(sony_toc.first_track_num);
+         loc_hdr.cdth_trk1 = bcd_to_int(sony_toc.last_track_num);
          memcpy_tofs(hdr, &loc_hdr, sizeof(*hdr));
       }
       return 0;
@@ -2372,9 +2428,9 @@ static int scd_ioctl(struct inode *inode,
          /* Lead out is handled separately since it is special. */
          if (loc_entry.cdte_track == CDROM_LEADOUT)
          {
-            loc_entry.cdte_adr = sony_toc->address2;
-            loc_entry.cdte_ctrl = sony_toc->control2;
-            msf_val = sony_toc->lead_out_start_msf;
+            loc_entry.cdte_adr = sony_toc.address2;
+            loc_entry.cdte_ctrl = sony_toc.control2;
+            msf_val = sony_toc.lead_out_start_msf;
          }
          else
          {
@@ -2384,9 +2440,9 @@ static int scd_ioctl(struct inode *inode,
                return -EINVAL;
             }
             
-            loc_entry.cdte_adr = sony_toc->tracks[track_idx].address;
-            loc_entry.cdte_ctrl = sony_toc->tracks[track_idx].control;
-            msf_val = sony_toc->tracks[track_idx].track_start_msf;
+            loc_entry.cdte_adr = sony_toc.tracks[track_idx].address;
+            loc_entry.cdte_ctrl = sony_toc.tracks[track_idx].control;
+            msf_val = sony_toc.tracks[track_idx].track_start_msf;
          }
          
          /* Logical buffer address or MSF format requested? */
@@ -2421,8 +2477,8 @@ static int scd_ioctl(struct inode *inode,
          	return i;
          
          memcpy_fromfs(&ti, (char *) arg, sizeof(ti));
-         if (   (ti.cdti_trk0 < sony_toc->first_track_num)
-             || (ti.cdti_trk0 > sony_toc->last_track_num)
+         if (   (ti.cdti_trk0 < sony_toc.first_track_num)
+             || (ti.cdti_trk0 > sony_toc.last_track_num)
              || (ti.cdti_trk1 < ti.cdti_trk0))
          {
             return -EINVAL;
@@ -2433,17 +2489,17 @@ static int scd_ioctl(struct inode *inode,
          {
             return -EINVAL;
          }
-         params[1] = sony_toc->tracks[track_idx].track_start_msf[0];
-         params[2] = sony_toc->tracks[track_idx].track_start_msf[1];
-         params[3] = sony_toc->tracks[track_idx].track_start_msf[2];
+         params[1] = sony_toc.tracks[track_idx].track_start_msf[0];
+         params[2] = sony_toc.tracks[track_idx].track_start_msf[1];
+         params[3] = sony_toc.tracks[track_idx].track_start_msf[2];
          
          /*
           * If we want to stop after the last track, use the lead-out
           * MSF to do that.
           */
-         if (ti.cdti_trk1 >= bcd_to_int(sony_toc->last_track_num))
+         if (ti.cdti_trk1 >= bcd_to_int(sony_toc.last_track_num))
          {
-            log_to_msf(msf_to_log(sony_toc->lead_out_start_msf)-1,
+            log_to_msf(msf_to_log(sony_toc.lead_out_start_msf)-1,
                        &(params[4]));
          }
          else
@@ -2453,7 +2509,7 @@ static int scd_ioctl(struct inode *inode,
             {
                return -EINVAL;
             }
-            log_to_msf(msf_to_log(sony_toc->tracks[track_idx].track_start_msf)-1,
+            log_to_msf(msf_to_log(sony_toc.tracks[track_idx].track_start_msf)-1,
                        &(params[4]));
          }
          params[0] = 0x03;
@@ -2525,8 +2581,8 @@ static int scd_ioctl(struct inode *inode,
 
          if (ra.addr_format == CDROM_LBA)
          {
-            if (   (ra.addr.lba >= sony_toc->lead_out_start_lba)
-                || (ra.addr.lba + ra.nframes >= sony_toc->lead_out_start_lba))
+            if (   (ra.addr.lba >= sony_toc.lead_out_start_lba)
+                || (ra.addr.lba + ra.nframes >= sony_toc.lead_out_start_lba))
             {
                return -EINVAL;
             }
@@ -2543,8 +2599,8 @@ static int scd_ioctl(struct inode *inode,
             ra.addr.lba = (  (ra.addr.msf.minute * 4500)
                            + (ra.addr.msf.second * 75)
                            + ra.addr.msf.frame);
-            if (   (ra.addr.lba >= sony_toc->lead_out_start_lba)
-                || (ra.addr.lba + ra.nframes >= sony_toc->lead_out_start_lba))
+            if (   (ra.addr.lba >= sony_toc.lead_out_start_lba)
+                || (ra.addr.lba + ra.nframes >= sony_toc.lead_out_start_lba))
             {
                return -EINVAL;
             }
@@ -2638,7 +2694,7 @@ respinup_on_open:
 
       /* For XA on the CDU31A only, we have to do special reads.
          The CDU33A handles XA automagically. */
-      if (   (sony_toc->disk_type == SONY_XA_DISK_TYPE)
+      if (   (sony_toc.disk_type == SONY_XA_DISK_TYPE)
           && (!is_double_speed))
       {
          params[0] = SONY_SD_DECODE_PARAM;
@@ -2743,17 +2799,17 @@ get_drive_configuration(unsigned short base_io,
 
 
    /* Set the base address */
-   sony_cd_base_io = base_io;
+   cdu31a_port = base_io;
 
    /* Set up all the register locations */
-   sony_cd_cmd_reg = sony_cd_base_io + SONY_CMD_REG_OFFSET;
-   sony_cd_param_reg = sony_cd_base_io + SONY_PARAM_REG_OFFSET;
-   sony_cd_write_reg = sony_cd_base_io + SONY_WRITE_REG_OFFSET;
-   sony_cd_control_reg = sony_cd_base_io + SONY_CONTROL_REG_OFFSET;
-   sony_cd_status_reg = sony_cd_base_io + SONY_STATUS_REG_OFFSET;
-   sony_cd_result_reg = sony_cd_base_io + SONY_RESULT_REG_OFFSET;
-   sony_cd_read_reg = sony_cd_base_io + SONY_READ_REG_OFFSET;
-   sony_cd_fifost_reg = sony_cd_base_io + SONY_FIFOST_REG_OFFSET;
+   sony_cd_cmd_reg = cdu31a_port + SONY_CMD_REG_OFFSET;
+   sony_cd_param_reg = cdu31a_port + SONY_PARAM_REG_OFFSET;
+   sony_cd_write_reg = cdu31a_port + SONY_WRITE_REG_OFFSET;
+   sony_cd_control_reg = cdu31a_port + SONY_CONTROL_REG_OFFSET;
+   sony_cd_status_reg = cdu31a_port + SONY_STATUS_REG_OFFSET;
+   sony_cd_result_reg = cdu31a_port + SONY_RESULT_REG_OFFSET;
+   sony_cd_read_reg = cdu31a_port + SONY_READ_REG_OFFSET;
+   sony_cd_fifost_reg = cdu31a_port + SONY_FIFOST_REG_OFFSET;
 
    /*
     * Check to see if anything exists at the status register location.
@@ -2806,11 +2862,11 @@ cdu31a_setup(char *strings,
 {
    if (ints[0] > 0)
    {
-      sony_cd_base_io = ints[1];
+      cdu31a_port = ints[1];
    }
    if (ints[0] > 1)
    {
-      irq_used = ints[2];
+      cdu31a_irq = ints[2];
    }
    if ((strings != NULL) && (*strings != '\0'))
    {
@@ -2830,8 +2886,13 @@ static int cdu31a_block_size;
 /*
  * Initialize the driver.
  */
+#ifndef MODULE
 unsigned long
 cdu31a_init(unsigned long mem_start, unsigned long mem_end)
+#else
+int
+init_module(void)
+#endif
 {
    struct s_sony_drive_config drive_config;
    unsigned int res_size;
@@ -2856,15 +2917,15 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
    drive_found = 0;
 
    /* Setting the base I/O address to 0xffff will disable it. */
-   if (sony_cd_base_io == 0xffff)
+   if (cdu31a_port == 0xffff)
    {
    }
-   else if (sony_cd_base_io != 0)
+   else if (cdu31a_port != 0)
    {
-      tmp_irq = irq_used; /* Need IRQ 0 because we can't sleep here. */
-      irq_used = 0;
+      tmp_irq = cdu31a_irq; /* Need IRQ 0 because we can't sleep here. */
+      cdu31a_irq = 0;
 
-      get_drive_configuration(sony_cd_base_io,
+      get_drive_configuration(cdu31a_port,
 			      drive_config.exec_status,
 			      &res_size);
       if ((res_size > 2) && ((drive_config.exec_status[0] & 0xf0) == 0x00))
@@ -2872,11 +2933,11 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
 	 drive_found = 1;
       }
 
-      irq_used = tmp_irq;
+      cdu31a_irq = tmp_irq;
    }
    else
    {
-      irq_used = 0;
+      cdu31a_irq = 0;
       i = 0;
       while (   (cdu31a_addresses[i].base != 0)
 	     && (!drive_found))
@@ -2891,7 +2952,7 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
 	 if ((res_size > 2) && ((drive_config.exec_status[0] & 0xf0) == 0x00))
 	 {
 	    drive_found = 1;
-	    irq_used = cdu31a_addresses[i].int_num;
+	    cdu31a_irq = cdu31a_addresses[i].int_num;
 	 }
 	 else
 	 {
@@ -2902,12 +2963,16 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
 
    if (drive_found)
    {
-      request_region(sony_cd_base_io, 4,"cdu31a");
+      request_region(cdu31a_port, 4,"cdu31a");
       
       if (register_blkdev(MAJOR_NR,"cdu31a",&scd_fops))
       {
 	 printk("Unable to get major %d for CDU-31a\n", MAJOR_NR);
+#ifdef MODULE
+	 return -EIO;
+#else
 	 return mem_start;
+#endif
       }
 
       if (SONY_HWC_DOUBLE_SPEED(drive_config))
@@ -2915,35 +2980,19 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
 	 is_double_speed = 1;
       }
 
-      /* A negative irq_used will attempt an autoirq. */
-      if (irq_used < 0)
-      {
-	 autoirq_setup(0);
-	 enable_interrupts();
-	 reset_drive();
-	 tmp_irq = autoirq_report(10);
-	 disable_interrupts();
-	 
-         irq_used = 0;
-	 set_drive_params();
-	 irq_used = tmp_irq;
-      }
-      else
-      {
-         tmp_irq = irq_used; /* Need IRQ 0 because we can't sleep here. */
-         irq_used = 0;
+      tmp_irq = cdu31a_irq; /* Need IRQ 0 because we can't sleep here. */
+      cdu31a_irq = 0;
 
-	 set_drive_params();
+      set_drive_params();
 
-         irq_used = tmp_irq;
-      }
+      cdu31a_irq = tmp_irq;
       
-      if (irq_used > 0)
+      if (cdu31a_irq > 0)
       {
-	 if (request_irq(irq_used, cdu31a_interrupt, SA_INTERRUPT, "cdu31a"))
+	 if (request_irq(cdu31a_irq, cdu31a_interrupt, SA_INTERRUPT, "cdu31a"))
 	 {
-	    printk("Unable to grab IRQ%d for the CDU31A driver\n", irq_used);
-	    irq_used = 0;
+	    printk("Unable to grab IRQ%d for the CDU31A driver\n", cdu31a_irq);
+	    cdu31a_irq = 0;
 	 }
       }
       
@@ -2977,9 +3026,9 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
       {
 	 printk(", double speed");
       }
-      if (irq_used > 0)
+      if (cdu31a_irq > 0)
       {
-	 printk(", irq %d", irq_used);
+	 printk(", irq %d", cdu31a_irq);
       }
       printk("\n");
 
@@ -2989,13 +3038,6 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
       /* use 'mount -o block=2048' */
       blksize_size[MAJOR_NR] = &cdu31a_block_size;
       
-      last_sony_subcode = (struct s_sony_subcode *) mem_start;
-      mem_start += sizeof(*last_sony_subcode);
-      readahead_buffer = (unsigned char *) mem_start;
-      mem_start += CD_FRAMESIZE_RAW;
-      sony_toc = (struct s_sony_session_toc *) mem_start;
-      mem_start += sizeof(struct s_sony_session_toc);
-
       cdu31a_abort_timer.next = NULL;
       cdu31a_abort_timer.prev = NULL;
       cdu31a_abort_timer.function = handle_abort_timeout;
@@ -3004,5 +3046,36 @@ cdu31a_init(unsigned long mem_start, unsigned long mem_end)
 
    disk_changed = 1;
    
+#ifdef MODULE
+   if (drive_found)
+   {
+      return(0);
+   }
+   else
+   {
+      return -EIO;
+   }
+#else
    return mem_start;
+#endif
 }
+
+#ifdef MODULE
+void
+cleanup_module(void)
+{
+   if (sony_usage != 0)
+   {
+      printk("cdu31a module in use - can't remove it.\n");
+      return;
+   }
+
+   if ((unregister_blkdev(MAJOR_NR, "cdu31a") == -EINVAL))    
+   {
+      printk("Can't unregister cdu31a\n");
+      return;
+   }
+   release_region(cdu31a_port,4);
+   printk("cdu31a module released.\n");
+}   
+#endif MODULE

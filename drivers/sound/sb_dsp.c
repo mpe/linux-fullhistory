@@ -854,10 +854,10 @@ sb_dsp_reset (int dev)
 
 
 #ifndef MPU_BASE		/* take default values if not specified */
-#define MPU_BASE 0x330
+#define MPU_BASE 0
 #endif
 #ifndef MPU_IRQ
-#define MPU_IRQ 9
+#define MPU_IRQ 0
 #endif
 
 unsigned int

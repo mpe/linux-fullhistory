@@ -579,7 +579,7 @@ static struct sk_buff *revamp(struct sk_buff *skb, struct device *dev, struct ip
 		ms->sport    = htons(port);	/* derived from PORT cmd */
 		ms->dst      = iph->daddr;
 		ms->dport    = htons(20);	/* ftp-data */
-		ms->timer.expires = MASQUERADE_EXPIRE_TCP_FIN;
+		ms->timer.expires = jiffies+MASQUERADE_EXPIRE_TCP_FIN;
 		add_timer(&ms->timer);
 
 		/*
@@ -724,7 +724,7 @@ void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
  	 
  	if (iph->protocol==IPPROTO_UDP) 
  	{
- 		ms->timer.expires = MASQUERADE_EXPIRE_UDP;
+ 		ms->timer.expires = jiffies+MASQUERADE_EXPIRE_UDP;
  		recalc_check((struct udphdr *)portptr,iph->saddr,iph->daddr,size);
  	}
  	else 
@@ -744,10 +744,10 @@ void ip_fw_masquerade(struct sk_buff **skb_ptr, struct device *dev)
  		 */
  		if (ms->sawfin || th->fin) 
  		{
- 			ms->timer.expires = MASQUERADE_EXPIRE_TCP_FIN;
+ 			ms->timer.expires = jiffies+MASQUERADE_EXPIRE_TCP_FIN;
  			ms->sawfin = 1;
  		}
- 		else ms->timer.expires = MASQUERADE_EXPIRE_TCP;
+ 		else ms->timer.expires = jiffies+MASQUERADE_EXPIRE_TCP;
  
  		tcp_send_check(th,iph->saddr,iph->daddr,size,skb->sk);
  	}
@@ -1482,13 +1482,13 @@ int ip_msqhst_procinfo(char *buffer, char **start, off_t offset, int length)
 	{
 		int timer_active = del_timer(&ms->timer);
 		if (!timer_active)
-			ms->timer.expires = 0;
+			ms->timer.expires = jiffies;
 		len+=sprintf(buffer+len,"%s %08lX:%04X %08lX:%04X %04X %08X %5d %lu\n",
 			strProt[ms->protocol==IPPROTO_TCP],
 			ntohl(ms->src),ntohs(ms->sport),
 			ntohl(ms->dst),ntohs(ms->dport),
 			ntohs(ms->mport),
-			ms->init_seq,ms->delta,ms->timer.expires);
+			ms->init_seq,ms->delta,ms->timer.expires-jiffies);
 		if (timer_active)
 			add_timer(&ms->timer);
 

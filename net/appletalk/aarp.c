@@ -362,9 +362,9 @@ static void aarp_expire_timeout(unsigned long unused)
 	}
 	del_timer(&aarp_timer);
 	if(unresolved_count==0)
-		aarp_timer.expires=AARP_EXPIRY_TIME;
+		aarp_timer.expires=jiffies+AARP_EXPIRY_TIME;
 	else
-		aarp_timer.expires=AARP_TICK_TIME;
+		aarp_timer.expires=jiffies+AARP_TICK_TIME;
 	add_timer(&aarp_timer);
 }
 
@@ -523,7 +523,7 @@ int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, vo
 	if(unresolved_count==1)
 	{
 		del_timer(&aarp_timer);
-		aarp_timer.expires=AARP_TICK_TIME;
+		aarp_timer.expires=jiffies+AARP_TICK_TIME;
 		add_timer(&aarp_timer);
 	}
 	/*
@@ -667,7 +667,7 @@ static int aarp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type 
 			if(unresolved_count==0)
 			{
 				del_timer(&aarp_timer);
-				aarp_timer.expires=AARP_EXPIRY_TIME;
+				aarp_timer.expires=jiffies+AARP_EXPIRY_TIME;
 				add_timer(&aarp_timer);
 			}
 			break;
@@ -718,7 +718,7 @@ void aarp_proto_init(void)
 	init_timer(&aarp_timer);
 	aarp_timer.function=aarp_expire_timeout;
 	aarp_timer.data=0;
-	aarp_timer.expires=AARP_EXPIRY_TIME;
+	aarp_timer.expires=jiffies+AARP_EXPIRY_TIME;
 	add_timer(&aarp_timer);
 	register_netdevice_notifier(&aarp_notifier);
 }

@@ -1824,7 +1824,7 @@ wavelan_watchdog(unsigned long a)
 		return;
 	}
 
-	lp->watchdog.expires = WATCHDOG_JIFFIES;
+	lp->watchdog.expires = jiffies+WATCHDOG_JIFFIES;
 	add_timer(&lp->watchdog);
 
 	if (jiffies - dev->trans_start < WATCHDOG_JIFFIES)

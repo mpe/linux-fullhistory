@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 029
+ *	AX.25 release 030
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -22,6 +22,8 @@
  *	AX.25 028a	Jonathan(G4KLX)	New state machine based on SDL diagrams.
  *	AX.25 029	Alan(GW4PTS)	Switched to KA9Q constant names.
  *			Jonathan(G4KLX)	Only poll when window is full.
+ *	AX.25 030	Jonathan(G4KLX)	Added fragmentation to ax25_output.
+ *					Added support for extended AX.25.
  */
 
 #include <linux/config.h>
@@ -47,14 +49,67 @@
 #include <linux/mm.h>
 #include <linux/interrupt.h>
 
-int ax25_output(ax25_cb *ax25, struct sk_buff *skb)
+/*
+ * All outgoing AX.25 I frames pass via this routine. Therefore this is
+ * where the fragmentation of frames takes place.
+ */
+void ax25_output(ax25_cb *ax25, struct sk_buff *skb)
 {
-	skb_queue_tail(&ax25->write_queue, skb);	/* Throw it on the queue */
+	struct sk_buff *skbn;
+	unsigned char *p;
+	int err, frontlen, mtu, len, fragno, first = 1;
+	
+	mtu = ax25->device->mtu;
+	
+	if (skb->len > mtu) {
+		mtu -= 2;		/* Allow for fragment control info */
+		
+		fragno = skb->len / mtu;
+		if (skb->len % mtu == 0) fragno--;
+
+		frontlen = skb_headroom(skb);	/* Address space + CTRL */
+
+		while (skb->len > 0) {
+			if (skb->sk != NULL) {
+				if ((skbn = sock_alloc_send_skb(skb->sk, mtu + 2 + frontlen, 0, &err)) == NULL)
+					return;
+			} else {
+				if ((skbn = alloc_skb(mtu + 2 + frontlen, GFP_ATOMIC)) == NULL)
+					return;
+			}
+
+			skbn->sk   = skb->sk;
+			skbn->free = 1;
+			skbn->arp  = 1;
+
+			skb_reserve(skbn, frontlen + 2);
+
+			len = (mtu > skb->len) ? skb->len : mtu;
+			
+			memcpy(skb_put(skbn, len), skb->data, len);
+			skb_pull(skb, len);
+
+			p = skb_push(skbn, 2);
+
+			*p++ = AX25_P_SEGMENT;
+
+			*p = fragno--;
+			if (first) {
+				*p |= SEG_FIRST;
+				first = 0;
+			}
+
+			skb_queue_tail(&ax25->write_queue, skbn); /* Throw it on the queue */
+		}
+		
+		skb->free = 1;
+		kfree_skb(skb, FREE_WRITE);
+	} else {
+		skb_queue_tail(&ax25->write_queue, skb);	  /* Throw it on the queue */
+	}
 
 	if (ax25->state == AX25_STATE_3 || ax25->state == AX25_STATE_4)
 		ax25_kick(ax25);
-
-	return 0;
 }
 
 /* 
@@ -67,13 +122,22 @@ static void ax25_send_iframe(ax25_cb *ax25, struct sk_buff *skb, int poll_bit)
 
 	if (skb == NULL)
 		return;
-	
-	frame = skb_push(skb, 1);	/* KISS + header */
 
-	*frame = I;
-	*frame |= poll_bit;
-	*frame |= (ax25->vr << 5);
-	*frame |= (ax25->vs << 1);
+	if (ax25->modulus == MODULUS) {
+		frame = skb_push(skb, 1);
+
+		*frame = I;
+		*frame |= (poll_bit) ? PF : 0;
+		*frame |= (ax25->vr << 5);
+		*frame |= (ax25->vs << 1);
+	} else {
+		frame = skb_push(skb, 2);
+
+		frame[0] = I;
+		frame[0] |= (ax25->vs << 1);
+		frame[1] = (poll_bit) ? EPF : 0;
+		frame[1] |= (ax25->vr << 1);
+	}
 
 	ax25_transmit_buffer(ax25, skb, C_COMMAND);	
 }
@@ -87,7 +151,7 @@ void ax25_kick(ax25_cb *ax25)
 	del_timer(&ax25->timer);
 
 	start = (skb_peek(&ax25->ack_queue) == NULL) ? ax25->va : ax25->vs;
-	end   = (ax25->va + ax25->window) % MODULUS;
+	end   = (ax25->va + ax25->window) % ax25->modulus;
 
 	if (!(ax25->condition & PEER_RX_BUSY_CONDITION) &&
 	    start != end                                   &&
@@ -111,7 +175,7 @@ void ax25_kick(ax25_cb *ax25)
 				return;
 			}
 
-			next = (ax25->vs + 1) % MODULUS;
+			next = (ax25->vs + 1) % ax25->modulus;
 #ifdef notdef
 			last = (next == end) || skb_peek(&ax25->write_queue) == NULL;
 #else
@@ -120,7 +184,7 @@ void ax25_kick(ax25_cb *ax25)
 			/*
 			 * Transmit the frame copy.
 			 */
-			ax25_send_iframe(ax25, skbn, (last) ? PF : 0);
+			ax25_send_iframe(ax25, skbn, (last) ? POLLON : POLLOFF);
 
 			ax25->vs = next;
 
@@ -167,7 +231,7 @@ void ax25_transmit_buffer(ax25_cb *ax25, struct sk_buff *skb, int type)
 	}
 
 	ptr = skb_push(skb, size_ax25_addr(ax25->digipeat));
-	build_ax25_addr(ptr, &ax25->source_addr, &ax25->dest_addr, ax25->digipeat, type);
+	build_ax25_addr(ptr, &ax25->source_addr, &ax25->dest_addr, ax25->digipeat, type, ax25->modulus);
 
 	skb->arp = 1;
 
@@ -189,8 +253,12 @@ void ax25_establish_data_link(ax25_cb *ax25)
 	ax25->condition = 0x00;
 	ax25->n2count   = 0;
 
-	ax25_send_control(ax25, SABM | PF, C_COMMAND);
-
+	if (ax25->modulus == MODULUS) {
+		ax25_send_control(ax25, SABM, POLLON, C_COMMAND);
+	} else {
+		ax25_send_control(ax25, SABME, POLLON, C_COMMAND);
+	}
+	
 	ax25->t3timer = 0;
 	ax25->t2timer = 0;
 	ax25->t1timer = ax25->t1 = ax25_calculate_t1(ax25);
@@ -199,9 +267,9 @@ void ax25_establish_data_link(ax25_cb *ax25)
 void ax25_transmit_enquiry(ax25_cb *ax25)
 {
 	if (ax25->condition & OWN_RX_BUSY_CONDITION)
-		ax25_send_control(ax25, RNR | PF, C_COMMAND);
+		ax25_send_control(ax25, RNR, POLLON, C_COMMAND);
 	else
-		ax25_send_control(ax25, RR | PF, C_COMMAND);
+		ax25_send_control(ax25, RR, POLLON, C_COMMAND);
 
 	ax25->condition &= ~ACK_PENDING_CONDITION;
 
@@ -211,9 +279,9 @@ void ax25_transmit_enquiry(ax25_cb *ax25)
 void ax25_enquiry_response(ax25_cb *ax25)
 {
 	if (ax25->condition & OWN_RX_BUSY_CONDITION)
-		ax25_send_control(ax25, RNR | PF, C_RESPONSE);
+		ax25_send_control(ax25, RNR, POLLON, C_RESPONSE);
 	else
-		ax25_send_control(ax25, RR | PF, C_RESPONSE);
+		ax25_send_control(ax25, RR, POLLON, C_RESPONSE);
 
 	ax25->condition &= ~ACK_PENDING_CONDITION;
 }

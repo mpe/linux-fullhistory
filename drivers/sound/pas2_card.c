@@ -252,11 +252,14 @@ config_pas_hw (struct address_info *hw_config)
 								 * rate * of
 								 * 17.897 kHz
 								 */
-
+#if 1
+    pas_write (8, PRESCALE_DIVIDER);
+#else
   if (pas_model == PAS_16 || pas_model == PAS_16D)
     pas_write (8, PRESCALE_DIVIDER);
   else
     pas_write (0, PRESCALE_DIVIDER);
+#endif
 
   mix_write (P_M_MV508_ADDRESS | 5, PARALLEL_MIXER);
   mix_write (5, PARALLEL_MIXER);

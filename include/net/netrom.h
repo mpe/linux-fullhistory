@@ -45,6 +45,7 @@
 
 typedef struct {
 	ax25_address		user_addr, source_addr, dest_addr;
+	struct device		*device;
 	unsigned char		my_index,    my_id;
 	unsigned char		your_index,  your_id;
 	unsigned char		state, bpqext;
@@ -53,7 +54,10 @@ typedef struct {
 	unsigned char		n2, n2count;
 	unsigned short		t1, t2, rtt;
 	unsigned short		t1timer, t2timer, t4timer;
-	struct sk_buff_head	ack_queue, reseq_queue;
+	unsigned short		fraglen;
+	struct sk_buff_head	ack_queue;
+	struct sk_buff_head	reseq_queue;
+	struct sk_buff_head	frag_queue;
 	struct sock		*sk;		/* Backlink to socket */
 } nr_cb;
 
@@ -99,7 +103,7 @@ extern int  nr_init(struct device *);
 extern int  nr_process_rx_frame(struct sock *, struct sk_buff *);
 
 /* nr_out.c */
-extern int  nr_output(struct sock *, struct sk_buff *);
+extern void nr_output(struct sock *, struct sk_buff *);
 extern void nr_send_nak_frame(struct sock *);
 extern void nr_kick(struct sock *);
 extern void nr_transmit_buffer(struct sock *, struct sk_buff *);
@@ -119,7 +123,7 @@ extern int  nr_nodes_get_info(char *, char **, off_t, int);
 extern int  nr_neigh_get_info(char *, char **, off_t, int);
 
 /* nr_subr.c */
-extern void nr_clear_tx_queue(struct sock *);
+extern void nr_clear_queues(struct sock *);
 extern void nr_frames_acked(struct sock *, unsigned short);
 extern void nr_requeue_frames(struct sock *);
 extern int  nr_validate_nr(struct sock *, unsigned short);

@@ -248,7 +248,7 @@ static int atp_probe1(struct device *dev, short ioaddr)
 
 #ifdef TIMED_CHECKER
 	del_timer(&atp_timer);
-	atp_timer.expires = TIMED_CHECKER;
+	atp_timer.expires = jiffies + TIMED_CHECKER;
 	atp_timed_dev = dev;
 	add_timer(&atp_timer);
 #endif
@@ -585,7 +585,7 @@ net_interrupt(int irq, struct pt_regs * regs)
 			write_reg_byte(ioaddr, PAR0 + i, dev->dev_addr[i]);
 #ifdef TIMED_CHECKER
 		del_timer(&atp_timer);
-		atp_timer.expires = TIMED_CHECKER;
+		atp_timer.expires = jiffies + TIMED_CHECKER;
 		add_timer(&atp_timer);
 #endif
 	}
@@ -635,7 +635,7 @@ static void atp_timed_checker(unsigned long ignored)
 #endif
 	}
   del_timer(&atp_timer);
-  atp_timer.expires = TIMED_CHECKER;
+  atp_timer.expires = jiffies + TIMED_CHECKER;
   add_timer(&atp_timer);
 }
 #endif

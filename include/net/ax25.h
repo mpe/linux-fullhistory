@@ -19,12 +19,17 @@
 #define AX25_P_ARP	0xCD
 #define AX25_P_TEXT 	0xF0
 #define AX25_P_NETROM 	0xCF
+#define	AX25_P_SEGMENT	0x08
 
-#define LAPB_UI	0x03
-#define LAPB_C	0x80
-#define LAPB_E	0x01
+#define	SEG_REM		0x7F
+#define	SEG_FIRST	0x80
 
-#define SSID_SPARE	0x60		/* Unused bits (DAMA bit and spare must be 1) */
+#define LAPB_UI		0x03
+#define LAPB_C		0x80
+#define LAPB_E		0x01
+
+#define SSSID_SPARE	0x60	/* Unused bits in SSID for standard AX.25 */
+#define ESSID_SPARE	0x20	/* Unused bits in SSID for extended AX.25 */
 
 #define AX25_REPEATED	0x80
 
@@ -74,11 +79,13 @@
 #define	UA	0x63	/* Unnumbered acknowledge */
 #define	FRMR	0x87	/* Frame reject */
 #define	UI	0x03	/* Unnumbered information */
-#define	PF	0x10	/* Poll/final bit */
+#define	PF	0x10	/* Poll/final bit for standard AX.25 */
+#define	EPF	0x01	/* Poll/final bit for extended AX.25 */
 
 #define ILLEGAL	0x100	/* Impossible to be a real frame type */
 
-#define	MMASK	7	/* Mask for modulo-8 sequence numbers */
+#define	POLLOFF		0
+#define	POLLON		1
 
 /* AX25 L2 C-bit */
 
@@ -99,8 +106,8 @@
 #define DEFAULT_T3	(300 * PR_SLOWHZ)	/*  Idle supervision   - 300 seconds */
 #define DEFAULT_N2	10			/*  Number of retries */
 #define	DEFAULT_WINDOW	2			/*  Default window size	*/
-#define MODULUS 	8
-#define MAX_WINDOW_SIZE 7			/*  Maximum window allowable */
+#define MODULUS 	8			/*  Standard AX.25 modulus */
+#define	EMODULUS	128			/*  Extended AX.25 modulus */
 
 typedef struct ax25_uid_assoc {
 	struct ax25_uid_assoc *next;
@@ -119,15 +126,18 @@ typedef struct ax25_cb {
 	struct ax25_cb		*next;
 	ax25_address		source_addr, dest_addr;
 	struct device		*device;
-	unsigned char		state;
+	unsigned char		state, modulus;
 	unsigned short		vs, vr, va;
 	unsigned char		condition, backoff;
 	unsigned char		n2, n2count;
 	unsigned short		t1, t2, t3, rtt;
 	unsigned short		t1timer, t2timer, t3timer;
+	unsigned short		fragno, fraglen;
 	ax25_digi		*digipeat;
 	struct sk_buff_head	write_queue;
+	struct sk_buff_head	reseq_queue;
 	struct sk_buff_head	ack_queue;
+	struct sk_buff_head	frag_queue;
 	unsigned char		window;
 	struct timer_list	timer;
 	struct sock		*sk;		/* Backlink to socket */
@@ -154,7 +164,7 @@ extern void ax25_queue_xmit(struct sk_buff *, struct device *, int);
 extern int  ax25_process_rx_frame(ax25_cb *, struct sk_buff *, int);
 
 /* ax25_out.c */
-extern int  ax25_output(ax25_cb *, struct sk_buff *);
+extern void ax25_output(ax25_cb *, struct sk_buff *);
 extern void ax25_kick(ax25_cb *);
 extern void ax25_transmit_buffer(ax25_cb *, struct sk_buff *, int);
 extern void ax25_nr_error_recovery(ax25_cb *);
@@ -174,17 +184,17 @@ extern void ax25_ip_mode_set(ax25_address *, struct device *, char);
 extern char ax25_ip_mode_get(ax25_address *, struct device *);
 
 /* ax25_subr.c */
-extern void ax25_clear_tx_queue(ax25_cb *);
+extern void ax25_clear_queues(ax25_cb *);
 extern void ax25_frames_acked(ax25_cb *, unsigned short);
 extern int  ax25_validate_nr(ax25_cb *, unsigned short);
-extern int  ax25_decode(unsigned char *);
-extern void ax25_send_control(ax25_cb *, int, int);
+extern int  ax25_decode(ax25_cb *, struct sk_buff *, int *, int *, int *);
+extern void ax25_send_control(ax25_cb *, int, int, int);
 extern unsigned short ax25_calculate_t1(ax25_cb *);
 extern void ax25_calculate_rtt(ax25_cb *);
 extern unsigned char *ax25_parse_addr(unsigned char *, int, ax25_address *,
 	ax25_address *, ax25_digi *, int *);
 extern int  build_ax25_addr(unsigned char *, ax25_address *, ax25_address *,
-	ax25_digi *, int);
+	ax25_digi *, int, int);
 extern int  size_ax25_addr(ax25_digi *);
 extern void ax25_digi_invert(ax25_digi *, ax25_digi *);
 extern void ax25_return_dm(struct device *, ax25_address *, ax25_address *, ax25_digi *);

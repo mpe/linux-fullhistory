@@ -69,7 +69,7 @@ extern __inline__ void igmp_start_timer(struct ip_mc_list *im)
 	if(im->tm_running)
 		return;
 	tv=random()%(10*HZ);		/* Pick a number any number 8) */
-	im->timer.expires=tv;
+	im->timer.expires=jiffies+tv;
 	im->tm_running=1;
 	add_timer(&im->timer);
 }

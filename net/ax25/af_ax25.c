@@ -1,5 +1,5 @@
 /*
- *	AX.25 release 029
+ *	AX.25 release 030
  *
  *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
  *	releases, misbehave and/or generally screw up. It might even work. 
@@ -58,7 +58,9 @@
  *			Alan(GW4PTS)		Missed suser() on axassociate checks
  *	AX.25 030	Alan(GW4PTS)		Added variable length headers.
  *			Jonathan(G4KLX)		Added BPQ Ethernet interface.
- *			Steven(GW7RRM)
+ *			Steven(GW7RRM)		Added digi-peating control ioctl.
+ *						Added extended AX.25 support.
+ *						Added AX.25 frame segmentation.
  *
  *	To do:
  *		Support use as digipeater, including an on/off ioctl
@@ -97,6 +99,8 @@
 
 #include <net/ip.h>
 #include <net/arp.h>
+
+static int ax25_digi_on = 1;
 
 #define	CONFIG_AX25_XDIGI	/* Cross port (band) digi stuff */
 
@@ -197,6 +201,7 @@ static void ax25_kill_by_device(struct device *dev)
 	
 	for (s = ax25_list; s != NULL; s = s->next) {
 		if (s->device == dev) {
+			s->state  = AX25_STATE_0;
 			s->device = NULL;
 			if (s->sk != NULL) {
 				s->sk->state = TCP_CLOSE;
@@ -388,7 +393,7 @@ void ax25_destroy_socket(ax25_cb *ax25)	/* Not static as its used by the timer *
 	del_timer(&ax25->timer);
 	
 	ax25_remove_socket(ax25);
-	ax25_clear_tx_queue(ax25);	/* Flush the send queue */
+	ax25_clear_queues(ax25);	/* Flush the queues */
 	
 	if (ax25->sk != NULL) {
 		while ((skb = skb_dequeue(&ax25->sk->receive_queue)) != NULL) {
@@ -410,7 +415,7 @@ void ax25_destroy_socket(ax25_cb *ax25)	/* Not static as its used by the timer *
 	if (ax25->sk != NULL) {
 		if (ax25->sk->wmem_alloc || ax25->sk->rmem_alloc) { /* Defer: outstanding buffers */
 			init_timer(&ax25->timer);
-			ax25->timer.expires  = 10 * HZ;
+			ax25->timer.expires  = jiffies + 10 * HZ;
 			ax25->timer.function = ax25_destroy_timer;
 			ax25->timer.data     = (unsigned long)ax25;
 			add_timer(&ax25->timer);
@@ -502,7 +507,9 @@ static ax25_cb *ax25_create_cb(void)
 		return NULL;
 
 	skb_queue_head_init(&ax25->write_queue);
+	skb_queue_head_init(&ax25->frag_queue);
 	skb_queue_head_init(&ax25->ack_queue);
+	skb_queue_head_init(&ax25->reseq_queue);
 
 	init_timer(&ax25->timer);
 
@@ -512,6 +519,9 @@ static ax25_cb *ax25_create_cb(void)
 	ax25->n2      = DEFAULT_N2;
 	ax25->t3      = DEFAULT_T3;
 
+	ax25->modulus   = MODULUS;
+	ax25->fragno    = 0;
+	ax25->fraglen   = 0;
 	ax25->backoff   = 1;
 	ax25->condition = 0x00;
 	ax25->t1timer   = 0;
@@ -656,8 +666,13 @@ static int ax25_setsockopt(struct socket *sock, int level, int optname,
 
 	switch (optname) {
 		case AX25_WINDOW:
-			if (opt < 1 || opt > 7)
-				return -EINVAL;
+			if (sk->ax25->modulus == MODULUS) {
+				if (opt < 1 || opt > 7)
+					return -EINVAL;
+			} else {
+				if (opt < 1 || opt > 63)
+					return -EINVAL;
+			}
 			sk->ax25->window = opt;
 			return 0;
 
@@ -687,6 +702,10 @@ static int ax25_setsockopt(struct socket *sock, int level, int optname,
 
 		case AX25_BACKOFF:
 			sk->ax25->backoff = opt ? 1 : 0;
+			return 0;
+
+		case AX25_EXTSEQ:
+			sk->ax25->modulus = opt ? EMODULUS : MODULUS;
 			return 0;
 
 		default:
@@ -733,6 +752,10 @@ static int ax25_getsockopt(struct socket *sock, int level, int optname,
 		case AX25_BACKOFF:
 			val = sk->ax25->backoff;
 			break;
+
+		case AX25_EXTSEQ:
+			val = (sk->ax25->modulus == EMODULUS);
+			return 0;
 
 		default:
 			return -ENOPROTOOPT;
@@ -907,6 +930,7 @@ static struct sock *ax25_make_new(struct sock *osk, struct device *dev)
 	sk->write_space  = def_callback1;
 	sk->error_report = def_callback1;
 
+	ax25->modulus = osk->ax25->modulus;
 	ax25->backoff = osk->ax25->backoff;
 	ax25->rtt     = osk->ax25->rtt;
 	ax25->t1      = osk->ax25->t1;
@@ -955,7 +979,7 @@ static int ax25_release(struct socket *sock, struct socket *peer)
 				break;
 
 			case AX25_STATE_1:
-				ax25_send_control(sk->ax25, DISC | PF, C_COMMAND);
+				ax25_send_control(sk->ax25, DISC, POLLON, C_COMMAND);
 				sk->ax25->state = AX25_STATE_0;
 				sk->dead        = 1;
 				sk->state_change(sk);
@@ -963,7 +987,7 @@ static int ax25_release(struct socket *sock, struct socket *peer)
 				break;
 
 			case AX25_STATE_2:
-				ax25_send_control(sk->ax25, DM | PF, C_RESPONSE);
+				ax25_send_control(sk->ax25, DM, POLLON, C_RESPONSE);
 				sk->ax25->state = AX25_STATE_0;
 				sk->dead        = 1;
 				sk->state_change(sk);
@@ -972,9 +996,9 @@ static int ax25_release(struct socket *sock, struct socket *peer)
 
 			case AX25_STATE_3:
 			case AX25_STATE_4:
-				ax25_clear_tx_queue(sk->ax25);
+				ax25_clear_queues(sk->ax25);
 				sk->ax25->n2count = 0;
-				ax25_send_control(sk->ax25, DISC | PF, C_COMMAND);
+				ax25_send_control(sk->ax25, DISC, POLLON, C_COMMAND);
 				sk->ax25->t3timer = 0;
 				sk->ax25->t1timer = sk->ax25->t1 = ax25_calculate_t1(sk->ax25);
 				sk->ax25->state   = AX25_STATE_2;
@@ -1306,9 +1330,13 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 				dev = dev_scan;
 			}
 #endif
-			build_ax25_addr(skb->data, &src, &dest, &dp, type);
+			build_ax25_addr(skb->data, &src, &dest, &dp, type, MODULUS);
 			skb->arp = 1;
-			ax25_queue_xmit(skb, dev, SOPRI_NORMAL);			
+			if (ax25_digi_on) {
+				ax25_queue_xmit(skb, dev, SOPRI_NORMAL);
+			} else {
+				kfree_skb(skb, FREE_READ);
+			}
 		} else {
 			kfree_skb(skb, FREE_READ);
 		}
@@ -1398,12 +1426,12 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 		return 0;
 	}
 
-	if ((*skb->data & 0xEF) != SABM) {
+	if ((*skb->data & ~PF) != SABM && (*skb->data & ~PF) != SABME) {
 		/*
 		 *	Never reply to a DM. Also ignore any connects for
 		 *	addresses that are not our interfaces and not a socket.
 		 */
-		if ((*skb->data & 0xEF) != DM && mine)
+		if ((*skb->data & ~PF) != DM && mine)
 			ax25_return_dm(dev, &src, &dest, &dp);
 
 		kfree_skb(skb, FREE_READ);
@@ -1471,9 +1499,15 @@ static int ax25_rcv(struct sk_buff *skb, struct device *dev, ax25_address *dev_a
 		ax25_digi_invert(&dp, ax25->digipeat);
 	}
 
+	if ((*skb->data & ~PF) == SABME) {
+		ax25->modulus = EMODULUS;
+	} else {
+		ax25->modulus = MODULUS;
+	}
+
 	ax25->device = dev;
 	
-	ax25_send_control(ax25, UA | PF, C_RESPONSE);
+	ax25_send_control(ax25, UA, POLLON, C_RESPONSE);
 
 	ax25->t3timer = ax25->t3;
 	ax25->state   = AX25_STATE_3;
@@ -1524,10 +1558,10 @@ static int bpq_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *
 		return 0;
 	}
 
-	len = skb->data[14] + skb->data[15] * 256 - 5;
+	len = skb->data[0] + skb->data[1] * 256 - 5;
 
-	skb_pull(skb, AX25_BPQ_HEADER_LEN);	/* Remove the BPQ Header */
-	skb_trim(skb, len);			/* Set the length of the data */
+	skb_pull(skb, 2);	/* Remove the length bytes */
+	skb_trim(skb, len);	/* Set the length of the data */
 
 	return ax25_rcv(skb, dev, &port_call, ptype);
 }
@@ -1618,7 +1652,7 @@ static int ax25_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 		printk("AX.25: sendto: building packet.\n");
 
 	/* Assume the worst case */
-	size = len + 2 + size_ax25_addr(dp) + AX25_BPQ_HEADER_LEN;
+	size = len + 3 + size_ax25_addr(dp) + AX25_BPQ_HEADER_LEN;
 
 	if ((skb = sock_alloc_send_skb(sk, size, 0, &err)) == NULL)
 		return err;
@@ -1662,7 +1696,7 @@ static int ax25_sendto(struct socket *sock, void *ubuf, int len, int noblock,
 		}
 
 		/* Build an AX.25 header */
-		asmptr += (lv = build_ax25_addr(asmptr, &sk->ax25->source_addr, &sax.sax25_call, dp, C_COMMAND));
+		asmptr += (lv = build_ax25_addr(asmptr, &sk->ax25->source_addr, &sax.sax25_call, dp, C_COMMAND, MODULUS));
 
 		if (sk->debug)
 			printk("Built header (%d bytes)\n",lv);
@@ -1716,7 +1750,7 @@ static int ax25_recvfrom(struct socket *sock, void *ubuf, int size, int noblock,
 	if (sk->type == SOCK_SEQPACKET) {
 		if (sk->state != TCP_ESTABLISHED)
 			return -ENOTCONN;
-		bias = 2;
+		bias = 1;
 	}
 
 	/* Now we can treat all alike */
@@ -1843,6 +1877,15 @@ static int ax25_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			ax25_uid_policy = amount;
 			return 0;
 
+		case SIOCAX25DIGCTL:
+			if ((err = verify_area(VERIFY_READ, (void *)arg, sizeof(int))) != 0)
+				return err;
+			if (!suser())
+				return -EPERM;
+			amount = get_fs_long((void *)arg);
+			ax25_digi_on = amount ? 1 : 0;
+			return 0;
+
 		case SIOCGIFADDR:
 		case SIOCSIFADDR:
 		case SIOCGIFDSTADDR:
@@ -1874,7 +1917,7 @@ int ax25_get_info(char *buffer, char **start, off_t offset, int length)
   
 	cli();
 
-	len += sprintf(buffer, "dest_addr src_addr  dev  st vs vr va    t1     t2     t3     n2  rtt wnd Snd-Q Rcv-Q\n");
+	len += sprintf(buffer, "dest_addr src_addr  dev  st  vs  vr  va    t1     t2     t3     n2  rtt wnd Snd-Q Rcv-Q\n");
 
 	for (ax25 = ax25_list; ax25 != NULL; ax25 = ax25->next) {
 		if ((dev = ax25->device) == NULL)
@@ -1884,7 +1927,7 @@ int ax25_get_info(char *buffer, char **start, off_t offset, int length)
 
 		len += sprintf(buffer + len, "%-9s ",
 			ax2asc(&ax25->dest_addr));
-		len += sprintf(buffer + len, "%-9s %-4s %2d %2d %2d %2d %3d/%03d %2d/%02d %3d/%03d %2d/%02d %3d %3d",
+		len += sprintf(buffer + len, "%-9s %-4s %2d %3d %3d %3d %3d/%03d %2d/%02d %3d/%03d %2d/%02d %3d %3d",
 			ax2asc(&ax25->source_addr), devname,
 			ax25->state,
 			ax25->vs, ax25->vr, ax25->va,
@@ -2050,7 +2093,7 @@ int ax25_encapsulate(struct sk_buff *skb, struct device *dev, unsigned short typ
 
   	buff[6] &= ~LAPB_C;
   	buff[6] &= ~LAPB_E;
-  	buff[6] |= SSID_SPARE;
+  	buff[6] |= SSSID_SPARE;
   	buff += AX25_ADDR_LEN;
 
   	if (saddr != NULL)
@@ -2060,7 +2103,7 @@ int ax25_encapsulate(struct sk_buff *skb, struct device *dev, unsigned short typ
 
   	buff[6] &= ~LAPB_C;
   	buff[6] |= LAPB_E;
-  	buff[6] |= SSID_SPARE;
+  	buff[6] |= SSSID_SPARE;
   	buff   += AX25_ADDR_LEN;
 
   	*buff++ = LAPB_UI;	/* UI */
@@ -2105,11 +2148,11 @@ int ax25_rebuild_header(unsigned char *bp, struct device *dev, unsigned long des
 
   	bp[7]  &= ~LAPB_C;
   	bp[7]  &= ~LAPB_E;
-  	bp[7]  |= SSID_SPARE;
+  	bp[7]  |= SSSID_SPARE;
 
   	bp[14] &= ~LAPB_C;
   	bp[14] |= LAPB_E;
-  	bp[14] |= SSID_SPARE;
+  	bp[14] |= SSSID_SPARE;
 
   	return 0;
 }	

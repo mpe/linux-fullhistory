@@ -12,13 +12,15 @@
  * Changed to prevent keyboard lockups on AST Power Exec.
  * 28Jul93  Brad Bosch - brad@lachman.com
  *
- * Modified by Johan Myreen (jempandora.pp.fi) 04Aug93
+ * Modified by Johan Myreen (jem@pandora.pp.fi) 04Aug93
  *   to include support for QuickPort mouse.
  *
  * Changed references to "QuickPort" with "82C710" since "QuickPort"
  * is not what this driver is all about -- QuickPort is just a
  * connector type, and this driver is for the mouse port on the Chips
  * & Technologies 82C710 interface chip. 15Nov93 jem@pandora.pp.fi
+ *
+ * Added support for SIGIO. 28Jul95 jem@pandora.pp.fi
  */
 
 /* Uncomment the following line if your mouse needs initialization. */
@@ -30,6 +32,7 @@
 #include <linux/fcntl.h>
 #include <linux/errno.h>
 #include <linux/timer.h>
+#include <linux/malloc.h>
 
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -95,6 +98,7 @@ struct aux_queue {
 	unsigned long head;
 	unsigned long tail;
 	struct wait_queue *proc_list;
+	struct fasync_struct *fasync;
 	unsigned char buf[AUX_BUF_SIZE];
 };
 
@@ -104,6 +108,7 @@ static int aux_busy = 0;
 static int aux_present = 0;
 static int poll_aux_status(void);
 static int poll_aux_status_nosleep(void);
+static int fasync_aux(struct inode *inode, struct file *filp, int on);
 
 #ifdef CONFIG_82C710_MOUSE
 static int qp_present = 0;
@@ -122,9 +127,9 @@ static int probe_qp(void);
 
 static void aux_write_dev(int val)
 {
-	poll_aux_status_nosleep();
+	poll_aux_status();
 	outb_p(AUX_MAGIC_WRITE,AUX_COMMAND);	/* write magic cookie */
-	poll_aux_status_nosleep();
+	poll_aux_status();
 	outb_p(val,AUX_OUTPUT_PORT);		/* write data */
 }
 
@@ -137,7 +142,10 @@ static int aux_write_ack(int val)
 {
         int retries = 0;
 
-	aux_write_dev(val);		/* write the value to the device */
+	poll_aux_status_nosleep();
+	outb_p(AUX_MAGIC_WRITE,AUX_COMMAND);
+	poll_aux_status_nosleep();
+	outb_p(val,AUX_OUTPUT_PORT);
 	poll_aux_status_nosleep();
 
 	if ((inb(AUX_STATUS) & AUX_OBUF_FULL) == AUX_OBUF_FULL)
@@ -199,6 +207,8 @@ static void aux_interrupt(int cpl, struct pt_regs * regs)
 	}
 	queue->head = head;
 	aux_ready = 1;
+	if (queue->fasync)
+		kill_fasync(queue->fasync, SIGIO);
 	wake_up_interruptible(&queue->proc_list);
 }
 
@@ -220,6 +230,8 @@ static void qp_interrupt(int cpl, struct pt_regs * regs)
 	}
 	queue->head = head;
 	aux_ready = 1;
+	if (queue->fasync)
+		kill_fasync(queue->fasync, SIGIO);
 	wake_up_interruptible(&queue->proc_list);
 }
 #endif
@@ -227,14 +239,12 @@ static void qp_interrupt(int cpl, struct pt_regs * regs)
 
 static void release_aux(struct inode * inode, struct file * file)
 {
-#ifndef __alpha__
-	aux_write_dev(AUX_DISABLE_DEV);		/* disable aux device */
-#endif
 	aux_write_cmd(AUX_INTS_OFF);		/* disable controller ints */
 	poll_aux_status();
 	outb_p(AUX_DISABLE,AUX_COMMAND);      	/* Disable Aux device */
 	poll_aux_status();
 	free_irq(AUX_IRQ);
+	fasync_aux(inode, file, 0);
 	aux_busy = 0;
 }
 
@@ -250,9 +260,42 @@ static void release_qp(struct inode * inode, struct file * file)
 	if (!poll_qp_status())
 	        printk("Warning: Mouse device busy in release_qp()\n");
 	free_irq(QP_IRQ);
+	fasync_aux(inode, file, 0);
 	qp_busy = 0;
 }
 #endif
+
+static int fasync_aux(struct inode *inode, struct file *filp, int on)
+{
+	struct fasync_struct *fa, *prev;
+
+	for (fa = queue->fasync, prev = 0; fa; prev= fa, fa = fa->fa_next) {
+		if (fa->fa_file == filp)
+			break;
+	}
+
+	if (on) {
+		if (fa)
+		    return 0;
+		fa = (struct fasync_struct *)kmalloc(sizeof(struct fasync_struct), GFP_KERNEL);
+		if (!fa)
+			return -ENOMEM;
+		fa->magic = FASYNC_MAGIC;
+		fa->fa_file = filp;
+		fa->fa_next = queue->fasync;
+		queue->fasync = fa;
+	}
+	else {
+		if (!fa)
+			return 0;
+		if (prev)
+			prev->fa_next = fa->fa_next;
+		else
+			queue->fasync = fa->fa_next;
+		kfree_s(fa, sizeof(struct fasync_struct));
+	}
+	return 0;	
+}
 
 /*
  * Install interrupt handler.
@@ -426,6 +469,8 @@ struct file_operations psaux_fops = {
 	NULL,		/* mmap */
 	open_aux,
 	release_aux,
+	NULL,
+	fasync_aux
 };
 
 
@@ -470,7 +515,10 @@ unsigned long psaux_init(unsigned long kmem_start)
 	        poll_aux_status_nosleep();
 #endif /* INITIALIZE_DEVICE */
         	outb_p(AUX_DISABLE,AUX_COMMAND);   /* Disable Aux device */
-	        aux_write_cmd(AUX_INTS_OFF);    /* disable controller ints */
+		poll_aux_status_nosleep();
+		outb_p(AUX_CMD_WRITE,AUX_COMMAND);
+		poll_aux_status_nosleep();             /* Disable interrupts */
+		outb_p(AUX_INTS_OFF, AUX_OUTPUT_PORT); /*  on the controller */
 	}
 	return kmem_start;
 }

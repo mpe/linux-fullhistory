@@ -42,9 +42,9 @@
 #include <net/netrom.h>
 
 /*
- * This routine purges the input queue of frames.
+ *	This routine purges all of the queues of frames.
  */
-void nr_clear_tx_queue(struct sock *sk)
+void nr_clear_queues(struct sock *sk)
 {
 	struct sk_buff *skb;
 
@@ -61,7 +61,10 @@ void nr_clear_tx_queue(struct sock *sk)
 	}
 
 	while ((skb = skb_dequeue(&sk->nr->reseq_queue)) != NULL) {
-		skb->free = 1;
+		kfree_skb(skb, FREE_READ);
+	}
+
+	while ((skb = skb_dequeue(&sk->nr->frag_queue)) != NULL) {
 		kfree_skb(skb, FREE_READ);
 	}
 }
@@ -153,7 +156,7 @@ void nr_write_internal(struct sock *sk, int frametype)
 	unsigned char  *dptr;
 	int len, timeout;
 
-	len = AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + 2 + NR_NETWORK_LEN + NR_TRANSPORT_LEN;
+	len = AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + 3 + NR_NETWORK_LEN + NR_TRANSPORT_LEN;
 	
 	switch (frametype & 0x0F) {
 		case NR_CONNREQ:
@@ -194,12 +197,12 @@ void nr_write_internal(struct sock *sk, int frametype)
 			memcpy(dptr, &sk->nr->user_addr, sizeof(ax25_address));
 			dptr[6] &= ~LAPB_C;
 			dptr[6] &= ~LAPB_E;
-			dptr[6] |= SSID_SPARE;
+			dptr[6] |= SSSID_SPARE;
 			dptr    += AX25_ADDR_LEN;
 			memcpy(dptr, &sk->nr->source_addr, sizeof(ax25_address));
 			dptr[6] &= ~LAPB_C;
 			dptr[6] &= ~LAPB_E;
-			dptr[6] |= SSID_SPARE;
+			dptr[6] |= SSSID_SPARE;
 			dptr    += AX25_ADDR_LEN;
 			*dptr++  = timeout % 256;
 			*dptr++  = timeout / 256;
@@ -248,7 +251,7 @@ void nr_transmit_dm(struct sk_buff *skb)
 	unsigned char *dptr;
 	int len;
 
-	len = AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + 2 + NR_NETWORK_LEN + NR_TRANSPORT_LEN + 1;
+	len = AX25_BPQ_HEADER_LEN + AX25_MAX_HEADER_LEN + 3 + NR_NETWORK_LEN + NR_TRANSPORT_LEN + 1;
 
 	if ((skbn = alloc_skb(len, GFP_ATOMIC)) == NULL)
 		return;
@@ -260,13 +263,13 @@ void nr_transmit_dm(struct sk_buff *skb)
 	memcpy(dptr, skb->data + 7, AX25_ADDR_LEN);
 	dptr[6] &= ~LAPB_C;
 	dptr[6] &= ~LAPB_E;
-	dptr[6] |= SSID_SPARE;
+	dptr[6] |= SSSID_SPARE;
 	dptr += AX25_ADDR_LEN;
 	
 	memcpy(dptr, skb->data + 0, AX25_ADDR_LEN);
 	dptr[6] &= ~LAPB_C;
 	dptr[6] |= LAPB_E;
-	dptr[6] |= SSID_SPARE;
+	dptr[6] |= SSSID_SPARE;
 	dptr += AX25_ADDR_LEN;
 
 	*dptr++ = nr_default.ttl;
@@ -275,7 +278,7 @@ void nr_transmit_dm(struct sk_buff *skb)
 	*dptr++ = skb->data[16];
 	*dptr++ = 0;
 	*dptr++ = 0;
-	*dptr++ = NR_CONNACK + NR_CHOKE_FLAG;
+	*dptr++ = NR_CONNACK | NR_CHOKE_FLAG;
 	*dptr++ = 0;
 
 	skbn->free = 1;
@@ -294,6 +297,8 @@ unsigned short nr_calculate_t1(struct sock *sk)
 	
 	for (t = 2, n = 0; n < sk->nr->n2count; n++)
 		t *= 2;
+
+	if (t > 8) t = 8;
 
 	return t * sk->nr->rtt;
 }

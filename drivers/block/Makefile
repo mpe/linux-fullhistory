@@ -30,9 +30,18 @@ else
 BLOCK_MODULE_OBJS := $(MODULES) floppy.o
 endif
 
+ifdef CONFIG_AZTCD
+OBJS := $(OBJS) aztcd.o
+SRCS := $(SRCS) aztcd.c
+else
+BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) aztcd.o
+endif #CONFIG_AZTCD
+
 ifdef CONFIG_CDU31A
 OBJS := $(OBJS) cdu31a.o
 SRCS := $(SRCS) cdu31a.c
+else
+BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) cdu31a.o
 endif #CONFIG_CDU31A
 
 ifdef CONFIG_MCD
@@ -70,13 +79,6 @@ ifdef CONFIG_SBPCD4
 OBJS := $(OBJS) sbpcd4.o
 SRCS := $(SRCS) sbpcd4.c
 endif #CONFIG_SBPCD4
-
-ifdef CONFIG_AZTCD
-OBJS := $(OBJS) aztcd.o
-SRCS := $(SRCS) aztcd.c
-else
-BLOCK_MODULE_OBJS := $(BLOCK_MODULE_OBJS) aztcd.o
-endif #CONFIG_AZTCD
 
 ifdef CONFIG_CDU535
 OBJS := $(OBJS) sonycd535.o
