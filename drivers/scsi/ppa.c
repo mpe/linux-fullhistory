@@ -48,7 +48,6 @@ typedef struct {
 }
 
 #include  "ppa.h"
-#include <linux/parport.h>
 
 #define NO_HOSTS 4
 static ppa_struct ppa_hosts[NO_HOSTS] =

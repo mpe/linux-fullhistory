@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.64 1999/03/23 21:21:13 davem Exp $
+ * Version:	$Id: route.c,v 1.65 1999/03/25 10:04:35 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -338,11 +338,11 @@ static void rt_run_flush(unsigned long dummy)
 
 	rt_deadline = 0;
 
-	net_serialize_enter();
+	start_bh_atomic();
 	for (i=0; i<RT_HASH_DIVISOR; i++) {
 		if ((rth = xchg(&rt_hash_table[i], NULL)) == NULL)
 			continue;
-		net_serialize_leave();
+		end_bh_atomic();
 
 		for (; rth; rth=next) {
 			next = rth->u.rt_next;
@@ -350,9 +350,9 @@ static void rt_run_flush(unsigned long dummy)
 			rt_free(rth);
 		}
 
-		net_serialize_enter();
+		start_bh_atomic();
 	}
-	net_serialize_leave();
+	end_bh_atomic();
 }
   
 void rt_cache_flush(int delay)

@@ -33,8 +33,6 @@
 #define MIN(a,b) (((a)<(b))?(a):(b))
 #define MAX(a,b) (((a)>(b))?(a):(b))
 
-#include <linux/fs.h>
-#include <linux/qnx4_fs.h>
 
 static int qnx4_readpage(struct file *file, struct page *page);
 

@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.59 1999/03/12 13:30:21 jj Exp $
+/* $Id: ioctl32.c,v 1.60 1999/03/22 10:40:54 jj Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -577,8 +577,7 @@ static int fb_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long arg)
 			cmap.transp = kmalloc(cmap.len * sizeof(__u16), GFP_KERNEL);
 			if (!cmap.transp)
 				goto out;
-		} else
-			cmap.transp = NULL;
+		}
 			
 		if (cmd == FBIOGETCMAP)
 			break;

@@ -356,7 +356,7 @@ static int atif_probe_device(struct atalk_iface *atif)
 	/*
 	 * Scan the networks.
 	 */
-
+	atif->status |= ATIF_PROBE;
 	for(netct = 0; netct <= netrange; netct++)
 	{
 		/*
@@ -374,8 +374,10 @@ static int atif_probe_device(struct atalk_iface *atif)
 				 */
 				aarp_probe_network(atif);
 
-				if(!(atif->status & ATIF_PROBE_FAIL))
+				if(!(atif->status & ATIF_PROBE_FAIL)) {
+					atif->status &= ~ATIF_PROBE;
 					return (0);
+				}
 			}
 			atif->status &= ~ATIF_PROBE_FAIL;
 		}
@@ -383,7 +385,7 @@ static int atif_probe_device(struct atalk_iface *atif)
 		if(probe_net > ntohs(atif->nets.nr_lastnet))
 			probe_net = ntohs(atif->nets.nr_firstnet);
 	}
-
+	atif->status &= ~ATIF_PROBE;
 	return (-EADDRINUSE);	/* Network is full... */
 }
 

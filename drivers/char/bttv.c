@@ -3751,6 +3751,8 @@ static void release_bttv(void)
 
 #ifdef MODULE
 
+EXPORT_NO_SYMBOLS;
+
 int init_module(void)
 {
 #else

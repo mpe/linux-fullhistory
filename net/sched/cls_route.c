@@ -329,9 +329,9 @@ static int route4_delete(struct tcf_proto *tp, unsigned long arg)
 		if (*fp == f) {
 			unsigned long cl;
 
-			net_serialize_enter();
 			*fp = f->next;
-			net_serialize_leave();
+			synchronize_bh();
+
 			route4_reset_fastmap(head, f->id);
 
 			if ((cl = cls_set_class(&f->res.class, 0)) != 0)
@@ -349,9 +349,9 @@ static int route4_delete(struct tcf_proto *tp, unsigned long arg)
 					return 0;
 
 			/* OK, session has no flows */
-			net_serialize_enter();
 			head->table[to_hash(h)] = NULL;
-			net_serialize_leave();
+			synchronize_bh();
+
 			kfree(b);
 			return 0;
 		}
@@ -394,9 +394,10 @@ static int route4_change(struct tcf_proto *tp, unsigned long base,
 #ifdef CONFIG_NET_CLS_POLICE
 		if (tb[TCA_ROUTE4_POLICE-1]) {
 			struct tcf_police *police = tcf_police_locate(tb[TCA_ROUTE4_POLICE-1], tca[TCA_RATE-1]);
-			net_serialize_enter();
+
 			police = xchg(&f->police, police);
-			net_serialize_leave();
+			synchronize_bh();
+
 			tcf_police_release(police);
 		}
 #endif
@@ -410,9 +411,9 @@ static int route4_change(struct tcf_proto *tp, unsigned long base,
 		if (head == NULL)
 			return -ENOBUFS;
 		memset(head, 0, sizeof(struct route4_head));
-		net_serialize_enter();
+
 		tp->root = head;
-		net_serialize_leave();
+		synchronize_bh();
 	}
 
 	f = kmalloc(sizeof(struct route4_filter), GFP_KERNEL);
@@ -473,9 +474,9 @@ static int route4_change(struct tcf_proto *tp, unsigned long base,
 		if (b == NULL)
 			goto errout;
 		memset(b, 0, sizeof(*b));
-		net_serialize_enter();
+
 		head->table[h1] = b;
-		net_serialize_leave();
+		synchronize_bh();
 	}
 	f->bkt = b;
 
@@ -495,9 +496,9 @@ static int route4_change(struct tcf_proto *tp, unsigned long base,
 #endif
 
 	f->next = f1;
-	net_serialize_enter();
+	wmb();
 	*ins_f = f;
-	net_serialize_leave();
+
 	route4_reset_fastmap(head, f->id);
 	*arg = (unsigned long)f;
 	return 0;

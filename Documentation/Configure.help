@@ -8042,15 +8042,14 @@ CONFIG_PRINTER
   removed from the running kernel whenever you want), say M here and
   read Documentation/modules.txt. The module will be called lp.o. 
 
-  If you have several parallel ports, you should specify the base
-  address for the port to be used by the printer with the "lp" kernel
-  command line option. (Try "man bootparam" or see the documentation
-  of your boot loader (lilo or loadlin) about how to pass options to
-  the kernel at boot time. The lilo procedure is also explained in the
-  SCSI-HOWTO, available via FTP (user: anonymous) in
-  ftp://metalab.unc.edu/pub/Linux/docs/HOWTO.) The standard base
-  addresses as well as the syntax of the "lp" command line option can
-  be found in drivers/char/lp.c.
+  If you have several parallel ports, you can specify which ports to
+  use with the "lp" kernel command line option. (Try "man bootparam"
+  or see the documentation of your boot loader (lilo or loadlin)
+  about how to pass options to the kernel at boot time. The lilo
+  procedure is also explained in the SCSI-HOWTO, available via FTP
+  (user: anonymous) in ftp://metalab.unc.edu/pub/Linux/docs/HOWTO.)
+  The syntax of the "lp" command line option can be found in
+  drivers/char/lp.c.
 
   If you have more than 3 printers, you need to increase the LP_NO
   variable in lp.c.

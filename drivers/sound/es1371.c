@@ -54,6 +54,10 @@
  *                     Don't wake up app until there are fragsize bytes to read/write
  *    06.01.99   0.8   remove the silly SA_INTERRUPT flag.
  *                     hopefully killed the egcs section type conflict
+ *    12.03.99   0.9   cinfo.blocks should be reset after GETxPTR ioctl.
+ *                     reported by Johan Maes <joma@telindus.be>
+ *    22.03.99   0.10  return EAGAIN instead of EBUSY when O_NONBLOCK
+ *                     read/write cannot be executed
  *
  */
 
@@ -1542,7 +1546,7 @@ static ssize_t es1371_read(struct file *file, char *buffer, size_t count, loff_t
 		if (cnt <= 0) {
 			start_adc(s);
 			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EBUSY;
+				return ret ? ret : -EAGAIN;
 			interruptible_sleep_on(&s->dma_adc.wait);
 			if (signal_pending(current))
 				return ret ? ret : -ERESTARTSYS;
@@ -1597,7 +1601,7 @@ static ssize_t es1371_write(struct file *file, const char *buffer, size_t count,
 		if (cnt <= 0) {
 			start_dac2(s);
 			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EBUSY;
+				return ret ? ret : -EAGAIN;
 			interruptible_sleep_on(&s->dma_dac2.wait);
 			if (signal_pending(current))
 				return ret ? ret : -ERESTARTSYS;
@@ -1897,7 +1901,7 @@ static int es1371_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 		spin_lock_irqsave(&s->lock, flags);
 		es1371_update_ptr(s);
                 cinfo.bytes = s->dma_adc.total_bytes;
-                cinfo.blocks = s->dma_adc.total_bytes >> s->dma_adc.fragshift;
+                cinfo.blocks = s->dma_adc.count >> s->dma_adc.fragshift;
                 cinfo.ptr = s->dma_adc.hwptr;
 		if (s->dma_adc.mapped)
 			s->dma_adc.count &= s->dma_adc.fragsize-1;
@@ -1910,7 +1914,7 @@ static int es1371_ioctl(struct inode *inode, struct file *file, unsigned int cmd
 		spin_lock_irqsave(&s->lock, flags);
 		es1371_update_ptr(s);
                 cinfo.bytes = s->dma_dac2.total_bytes;
-                cinfo.blocks = s->dma_dac2.total_bytes >> s->dma_dac2.fragshift;
+                cinfo.blocks = s->dma_dac2.count >> s->dma_dac2.fragshift;
                 cinfo.ptr = s->dma_dac2.hwptr;
 		if (s->dma_dac2.mapped)
 			s->dma_dac2.count &= s->dma_dac2.fragsize-1;
@@ -2108,7 +2112,7 @@ static ssize_t es1371_write_dac(struct file *file, const char *buffer, size_t co
 		if (cnt <= 0) {
 			start_dac1(s);
 			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EBUSY;
+				return ret ? ret : -EAGAIN;
 			interruptible_sleep_on(&s->dma_dac1.wait);
 			if (signal_pending(current))
 				return ret ? ret : -ERESTARTSYS;
@@ -2301,7 +2305,7 @@ static int es1371_ioctl_dac(struct inode *inode, struct file *file, unsigned int
 		spin_lock_irqsave(&s->lock, flags);
 		es1371_update_ptr(s);
                 cinfo.bytes = s->dma_dac1.total_bytes;
-                cinfo.blocks = s->dma_dac1.total_bytes >> s->dma_dac1.fragshift;
+                cinfo.blocks = s->dma_dac1.count >> s->dma_dac1.fragshift;
                 cinfo.ptr = s->dma_dac1.hwptr;
 		if (s->dma_dac1.mapped)
 			s->dma_dac1.count &= s->dma_dac1.fragsize-1;
@@ -2455,7 +2459,7 @@ static ssize_t es1371_midi_read(struct file *file, char *buffer, size_t count, l
 			cnt = count;
 		if (cnt <= 0) {
 			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EBUSY;
+				return ret ? ret : -EAGAIN;
 			interruptible_sleep_on(&s->midi.iwait);
 			if (signal_pending(current))
 				return ret ? ret : -ERESTARTSYS;
@@ -2502,7 +2506,7 @@ static ssize_t es1371_midi_write(struct file *file, const char *buffer, size_t c
 			cnt = count;
 		if (cnt <= 0) {
 			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EBUSY;
+				return ret ? ret : -EAGAIN;
 			interruptible_sleep_on(&s->midi.owait);
 			if (signal_pending(current))
 				return ret ? ret : -ERESTARTSYS;
@@ -2708,7 +2712,7 @@ __initfunc(int init_es1371(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1371: version v0.8 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1371: version v0.10 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1371, pcidev))) {
 		if (pcidev->base_address[0] == 0 || 

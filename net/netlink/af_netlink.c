@@ -747,9 +747,9 @@ void netlink_detach(int unit)
 {
 	struct socket *sock = netlink_kernel[unit];
 
-	net_serialize_enter();
 	netlink_kernel[unit] = NULL;
-	net_serialize_leave();
+	synchronize_bh();
+
 	sock_release(sock);
 }
 

@@ -8,7 +8,7 @@
  *	the older version didn't come out right using gcc 2.5.8, the newer one
  *	seems to fall out with gcc 2.6.2.
  *
- *	Version: $Id: igmp.c,v 1.29 1999/03/21 05:22:36 davem Exp $
+ *	Version: $Id: igmp.c,v 1.30 1999/03/25 10:04:10 davem Exp $
  *
  *	Authors:
  *		Alan Cox <Alan.Cox@linux.org>
@@ -463,9 +463,9 @@ int ip_mc_dec_group(struct in_device *in_dev, u32 addr)
 	for (ip=&in_dev->mc_list; (i=*ip)!=NULL; ip=&i->next) {
 		if (i->multiaddr==addr) {
 			if (--i->users == 0) {
-				net_serialize_enter();
 				*ip = i->next;
-				net_serialize_leave();
+				synchronize_bh();
+
 				igmp_group_dropped(i);
 				if (in_dev->dev->flags & IFF_UP)
 					ip_rt_multicast_event(in_dev);
@@ -613,9 +613,10 @@ int ip_mc_leave_group(struct sock *sk, struct ip_mreqn *imr)
 			struct in_device *in_dev;
 			if (--iml->count)
 				return 0;
-			net_serialize_enter();
+
 			*imlp = iml->next;
-			net_serialize_leave();
+			synchronize_bh();
+
 			in_dev = inetdev_by_index(iml->multi.imr_ifindex);
 			if (in_dev)
 				ip_mc_dec_group(in_dev, imr->imr_multiaddr.s_addr);

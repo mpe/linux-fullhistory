@@ -3592,7 +3592,7 @@ static void config_types(void)
 	/* read drive info out of physical CMOS */
 	drive=0;
 	if (!UDP->cmos)
-		UDP->cmos= FLOPPY0_TYPE;
+		UDP->cmos = FLOPPY0_TYPE;
 	drive=1;
 	if (!UDP->cmos && FLOPPY1_TYPE)
 		UDP->cmos = FLOPPY1_TYPE;
@@ -3601,26 +3601,31 @@ static void config_types(void)
 	/* additional physical CMOS drive detection should go here */
 
 	for (drive=0; drive < N_DRIVE; drive++){
-		if (UDP->cmos >= 16)
-			UDP->cmos = 0;
-		if (UDP->cmos >= 0 && UDP->cmos <= NUMBER(default_drive_params))
-			memcpy((char *) UDP,
-			       (char *) (&default_drive_params[(int)UDP->cmos].params),
-			       sizeof(struct floppy_drive_params));
-		if (UDP->cmos){
-			if (first)
-				printk(KERN_INFO "Floppy drive(s): ");
-			else
-				printk(", ");
-			first=0;
-			if (UDP->cmos > 0){
+		unsigned int type = UDP->cmos;
+		struct floppy_drive_params *params;
+		const char *name = NULL;
+		static char temparea[32];
+
+		if (type < NUMBER(default_drive_params)) {
+			params = &default_drive_params[type].params;
+			if (type) {
+				name = default_drive_params[type].name;
 				allowed_drive_mask |= 1 << drive;
-				printk("fd%d is %s", drive,
-				       default_drive_params[(int)UDP->cmos].name);
-			} else
-				printk("fd%d is unknown type %d",drive,
-				       UDP->cmos);
+			}
+		} else {
+			params = &default_drive_params[0].params;
+			sprintf(temparea, "unknown type %d (usb?)", type);
+			name = temparea;
 		}
+		if (name) {
+			const char * prepend = ",";
+			if (first) {
+				prepend = KERN_INFO "Floppy drive(s):";
+				first = 0;
+			}
+			printk("%s fd%d is %s", prepend, drive, name);
+		}
+		*UDP = *params;
 	}
 	if (!first)
 		printk("\n");
@@ -4020,11 +4025,6 @@ __initfunc(static void set_cmos(int *ints, int dummy, int dummy2))
 	}
 	if (current_drive >= 4 && !FDC2)
 		FDC2 = 0x370;
-	if (ints[2] <= 0 || 
-	    (ints[2] >= NUMBER(default_drive_params) && ints[2] != 16)){
-		DPRINT("bad CMOS code %d\n", ints[2]);
-		return;
-	}
 	DP->cmos = ints[2];
 	DPRINT("setting CMOS code to %d\n", ints[2]);
 }

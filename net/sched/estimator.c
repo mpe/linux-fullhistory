@@ -171,9 +171,10 @@ void qdisc_kill_estimator(struct tc_stats *stats)
 				pest = &est->next;
 				continue;
 			}
-			net_serialize_enter();
+
 			*pest = est->next;
-			net_serialize_leave();
+			synchronize_bh();
+
 			kfree(est);
 			killed++;
 		}

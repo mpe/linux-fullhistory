@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.85 1999/03/21 05:22:28 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.86 1999/03/25 00:38:15 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -661,6 +661,7 @@ sock_error:
 		lock_sock(sk);  
 		tcp_set_state(sk, TCP_CLOSE);
 		release_sock(sk); 
+		sk->zapped = 0;
 	}
 	sock->state = SS_UNCONNECTED;
 	return sock_error(sk);

@@ -986,11 +986,41 @@ void close_bwqcam(struct qcam_device *qcam)
 	kfree(qcam);
 }
 
+/* The parport parameter controls which parports will be scanned.
+ * Scanning all parports causes some printers to print a garbage page.
+ *       -- March 14, 1999  Billy Donahue <billy@escape.com> */
+#ifdef MODULE
+static char *parport[MAX_CAMS] = { NULL, };
+MODULE_PARM(parport, "1-" __MODULE_STRING(MAX_CAMS) "s");
+#endif
+
 #ifdef MODULE
 int init_module(void)
 {
 	struct parport *port;
-
+	int n;
+	if(parport[0] && strncmp(parport[0], "auto", 4)){
+		/* user gave parport parameters */
+		for(n=0; parport[n] && n<MAX_CAMS; n++){
+			char *ep;
+			unsigned long r;
+			r = simple_strtoul(parport[n], &ep, 0);
+			if(ep == parport[n]){
+				printk(KERN_ERR
+					"bw-qcam: bad port specifier \"%s\"\n",
+					parport[n]);
+				continue;
+			}
+			for (port=parport_enumerate(); port; port=port->next){
+				if(r!=port->number)
+					continue;
+				init_bwqcam(port);
+				break;
+			}
+		}
+		return (num_cams)?0:-ENODEV;
+	} 
+	/* no parameter or "auto" */
 	for (port = parport_enumerate(); port; port=port->next)
 		init_bwqcam(port);
 

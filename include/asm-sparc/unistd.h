@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.53 1999/02/21 02:34:54 anton Exp $ */
+/* $Id: unistd.h,v 1.54 1999/03/25 00:40:12 davem Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 
@@ -428,6 +428,8 @@ static __inline__ _syscall0(int,pause)
 static __inline__ _syscall0(int,sync)
 static __inline__ _syscall0(pid_t,setsid)
 static __inline__ _syscall3(int,write,int,fd,__const__ char *,buf,off_t,count)
+static __inline__ _syscall3(int,read,int,fd,char *,buf,off_t,count)
+static __inline__ _syscall3(off_t,lseek,int,fd,off_t,offset,int,count)
 static __inline__ _syscall1(int,dup,int,fd)
 static __inline__ _syscall3(int,execve,__const__ char *,file,char **,argv,char **,envp)
 static __inline__ _syscall3(int,open,__const__ char *,file,int,flag,int,mode)

@@ -52,6 +52,7 @@ extern void hippi_net_init(void);
 void hippi_setup(struct device *dev);
 
 extern struct device *init_hippi_dev(struct device *, int);
+extern void unregister_hipdev(struct device *dev);
 #endif
 
 #endif	/* _LINUX_HIPPIDEVICE_H */

@@ -5,7 +5,7 @@
  *
  *		IPv4 FIB: lookup engine and maintenance routines.
  *
- * Version:	$Id: fib_hash.c,v 1.7 1999/03/21 05:22:32 davem Exp $
+ * Version:	$Id: fib_hash.c,v 1.8 1999/03/25 10:04:17 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -566,9 +566,8 @@ replace:
 	if (del_fp) {
 		f = *del_fp;
 		/* Unlink replaced node */
-		net_serialize_enter();
 		*del_fp = f->fn_next;
-		net_serialize_leave();
+		synchronize_bh();
 
 		if (!(f->fn_state&FN_S_ZOMBIE))
 			rtmsg_fib(RTM_DELROUTE, f, z, tb->tb_id, n, req);
@@ -656,9 +655,8 @@ FTprint("tb(%d)_delete: %d %08x/%d %d\n", tb->tb_id, r->rtm_type, rta->rta_dst ?
 		rtmsg_fib(RTM_DELROUTE, f, z, tb->tb_id, n, req);
 
 		if (matched != 1) {
-			net_serialize_enter();
 			*del_fp = f->fn_next;
-			net_serialize_leave();
+			synchronize_bh();
 
 			if (f->fn_state&FN_S_ACCESSED)
 				rt_cache_flush(-1);
@@ -689,9 +687,8 @@ fn_flush_list(struct fib_node ** fp, int z, struct fn_hash *table)
 		struct fib_info *fi = FIB_INFO(f);
 
 		if (fi && ((f->fn_state&FN_S_ZOMBIE) || (fi->fib_flags&RTNH_F_DEAD))) {
-			net_serialize_enter();
 			*fp = f->fn_next;
-			net_serialize_leave();
+			synchronize_bh();
 
 			fn_free_node(f);
 			found++;

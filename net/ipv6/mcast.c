@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: mcast.c,v 1.18 1999/03/21 05:22:55 davem Exp $
+ *	$Id: mcast.c,v 1.19 1999/03/25 10:04:50 davem Exp $
  *
  *	Based on linux/ipv4/igmp.c and linux/ipv4/ip_sockglue.c 
  *
@@ -132,9 +132,10 @@ int ipv6_sock_mc_drop(struct sock *sk, int ifindex, struct in6_addr *addr)
 		if (mc_lst->ifindex == ifindex &&
 		    ipv6_addr_cmp(&mc_lst->addr, addr) == 0) {
 			struct device *dev;
-			net_serialize_enter();
+
 			*lnk = mc_lst->next;
-			net_serialize_leave();
+			synchronize_bh();
+
 			if ((dev = dev_get_by_index(ifindex)) != NULL)
 				ipv6_dev_mc_dec(dev, &mc_lst->addr);
 			sock_kfree_s(sk, mc_lst, sizeof(*mc_lst));
@@ -254,9 +255,8 @@ static void ipv6_mca_remove(struct device *dev, struct ifmcaddr6 *ma)
 		
 		for (lnk = &idev->mc_list; (iter = *lnk) != NULL; lnk = &iter->if_next) {
 			if (iter == ma) {
-				net_serialize_enter();
 				*lnk = iter->if_next;
-				net_serialize_leave();
+				synchronize_bh();
 				return;
 			}
 		}
@@ -277,9 +277,10 @@ int ipv6_dev_mc_dec(struct device *dev, struct in6_addr *addr)
 		if (ipv6_addr_cmp(&ma->mca_addr, addr) == 0 && ma->dev == dev) {
 			if (atomic_dec_and_test(&ma->mca_users)) {
 				igmp6_group_dropped(ma);
-				net_serialize_enter();
+
 				*lnk = ma->next;
-				net_serialize_leave();
+				synchronize_bh();
+
 				ipv6_mca_remove(dev, ma);
 				kfree(ma);
 			}
@@ -595,9 +596,8 @@ void ipv6_mc_destroy_dev(struct inet6_dev *idev)
 
 		for (lnk = &inet6_mcast_lst[hash]; *lnk; lnk = &(*lnk)->next) {
 			if (*lnk == i) {
-				net_serialize_enter();
 				*lnk = i->next;
-				net_serialize_leave();
+				synchronize_bh();
 				break;
 			}
 		}

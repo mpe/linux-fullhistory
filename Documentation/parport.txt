@@ -87,7 +87,7 @@ Files in /proc
 If you have configured the /proc filesystem into your kernel, you will
 see a new directory entry: /proc/parport.  In there will be a
 directory entry for each parallel port for which parport is
-configured.  In each of those directories are three files describing
+configured.  In each of those directories are four files describing
 that parallel port.  For example:
 
 File:				Contents:

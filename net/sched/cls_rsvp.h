@@ -149,7 +149,7 @@ static int rsvp_classify(struct sk_buff *skb, struct tcf_proto *tp,
 	struct iphdr *nhptr = skb->nh.iph;
 #endif
 
-#if !defined( __i386__) && !defined(__m68k__)
+#if !defined( __i386__) && !defined(__mc68000__)
 	if ((unsigned long)nhptr & 3)
 		return -1;
 #endif
@@ -309,9 +309,9 @@ static int rsvp_delete(struct tcf_proto *tp, unsigned long arg)
 		if (*fp == f) {
 			unsigned long cl;
 
-			net_serialize_enter();
+
 			*fp = f->next;
-			net_serialize_leave();
+			synchronize_bh();
 
 			if ((cl = cls_set_class(&f->res.class, 0)) != 0)
 				tp->q->ops->cl_ops->unbind_tcf(tp->q, cl);
@@ -332,9 +332,9 @@ static int rsvp_delete(struct tcf_proto *tp, unsigned long arg)
 			for (sp = &((struct rsvp_head*)tp->root)->ht[h&0xFF];
 			     *sp; sp = &(*sp)->next) {
 				if (*sp == s) {
-					net_serialize_enter();
 					*sp = s->next;
-					net_serialize_leave();
+					synchronize_bh();
+
 					kfree(s);
 					return 0;
 				}
@@ -453,9 +453,10 @@ static int rsvp_change(struct tcf_proto *tp, unsigned long base,
 #ifdef CONFIG_NET_CLS_POLICE
 		if (tb[TCA_RSVP_POLICE-1]) {
 			struct tcf_police *police = tcf_police_locate(tb[TCA_RSVP_POLICE-1], tca[TCA_RATE-1]);
-			net_serialize_enter();
+
 			police = xchg(&f->police, police);
-			net_serialize_leave();
+			synchronize_bh();
+
 			tcf_police_release(police);
 		}
 #endif
@@ -545,9 +546,9 @@ insert:
 				if (((*fp)->spi.mask&f->spi.mask) != f->spi.mask)
 					break;
 			f->next = *fp;
-			net_serialize_enter();
+			wmb();
 			*fp = f;
-			net_serialize_leave();
+
 			*arg = (unsigned long)f;
 			return 0;
 		}
@@ -569,9 +570,8 @@ insert:
 			break;
 	}
 	s->next = *sp;
-	net_serialize_enter();
+	wmb();
 	*sp = s;
-	net_serialize_leave();
 	
 	goto insert;
 

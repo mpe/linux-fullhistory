@@ -51,6 +51,10 @@
  *    16.12.98   0.9   Fix a few f_file & FMODE_ bugs
  *    06.01.99   0.10  remove the silly SA_INTERRUPT flag.
  *                     hopefully killed the egcs section type conflict
+ *    12.03.99   0.11  cinfo.blocks should be reset after GETxPTR ioctl.
+ *                     reported by Johan Maes <joma@telindus.be>
+ *    22.03.99   0.12  return EAGAIN instead of EBUSY when O_NONBLOCK
+ *                     read/write cannot be executed
  *
  */
 
@@ -1293,7 +1297,7 @@ static ssize_t sv_read(struct file *file, char *buffer, size_t count, loff_t *pp
 		if (cnt <= 0) {
 			start_adc(s);
 			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EBUSY;
+				return ret ? ret : -EAGAIN;
 			interruptible_sleep_on(&s->dma_adc.wait);
 			if (signal_pending(current))
 				return ret ? ret : -ERESTARTSYS;
@@ -1353,7 +1357,7 @@ static ssize_t sv_write(struct file *file, const char *buffer, size_t count, lof
 		if (cnt <= 0) {
 			start_dac(s);
 			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EBUSY;
+				return ret ? ret : -EAGAIN;
 			interruptible_sleep_on(&s->dma_dac.wait);
 			if (signal_pending(current))
 				return ret ? ret : -ERESTARTSYS;
@@ -1646,7 +1650,7 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 		spin_lock_irqsave(&s->lock, flags);
 		sv_update_ptr(s);
                 cinfo.bytes = s->dma_adc.total_bytes;
-                cinfo.blocks = s->dma_adc.total_bytes >> s->dma_adc.fragshift;
+                cinfo.blocks = s->dma_adc.count >> s->dma_adc.fragshift;
                 cinfo.ptr = s->dma_adc.hwptr;
 		if (s->dma_adc.mapped)
 			s->dma_adc.count &= s->dma_adc.fragsize-1;
@@ -1659,7 +1663,7 @@ static int sv_ioctl(struct inode *inode, struct file *file, unsigned int cmd, un
 		spin_lock_irqsave(&s->lock, flags);
 		sv_update_ptr(s);
                 cinfo.bytes = s->dma_dac.total_bytes;
-                cinfo.blocks = s->dma_dac.total_bytes >> s->dma_dac.fragshift;
+                cinfo.blocks = s->dma_dac.count >> s->dma_dac.fragshift;
                 cinfo.ptr = s->dma_dac.hwptr;
 		if (s->dma_dac.mapped)
 			s->dma_dac.count &= s->dma_dac.fragsize-1;
@@ -1839,7 +1843,7 @@ static ssize_t sv_midi_read(struct file *file, char *buffer, size_t count, loff_
 			cnt = count;
 		if (cnt <= 0) {
 			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EBUSY;
+				return ret ? ret : -EAGAIN;
 			interruptible_sleep_on(&s->midi.iwait);
 			if (signal_pending(current))
 				return ret ? ret : -ERESTARTSYS;
@@ -1886,7 +1890,7 @@ static ssize_t sv_midi_write(struct file *file, const char *buffer, size_t count
 			cnt = count;
 		if (cnt <= 0) {
 			if (file->f_flags & O_NONBLOCK)
-				return ret ? ret : -EBUSY;
+				return ret ? ret : -EAGAIN;
 			interruptible_sleep_on(&s->midi.owait);
 			if (signal_pending(current))
 				return ret ? ret : -ERESTARTSYS;
@@ -2271,7 +2275,7 @@ __initfunc(int init_sonicvibes(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "sv: version v0.10 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "sv: version v0.12 time " __TIME__ " " __DATE__ "\n");
 #if 0
 	if (!(wavetable_mem = __get_free_pages(GFP_KERNEL, 20-PAGE_SHIFT)))
 		printk(KERN_INFO "sv: cannot allocate 1MB of contiguous nonpageable memory for wavetable data\n");

@@ -5,7 +5,7 @@
  *
  *		The IP to API glue.
  *		
- * Version:	$Id: ip_sockglue.c,v 1.40 1999/03/21 05:22:42 davem Exp $
+ * Version:	$Id: ip_sockglue.c,v 1.41 1999/03/25 10:04:29 davem Exp $
  *
  * Authors:	see ip.c
  *
@@ -209,9 +209,9 @@ int ip_ra_control(struct sock *sk, unsigned char on, void (*destructor)(struct s
 					kfree(new_ra);
 				return -EADDRINUSE;
 			}
-			net_serialize_enter();
 			*rap = ra->next;
-			net_serialize_leave();
+			synchronize_bh();
+
 			if (ra->destructor)
 				ra->destructor(sk);
 			kfree(ra);
@@ -222,10 +222,11 @@ int ip_ra_control(struct sock *sk, unsigned char on, void (*destructor)(struct s
 		return -ENOBUFS;
 	new_ra->sk = sk;
 	new_ra->destructor = destructor;
+
 	new_ra->next = ra;
-	net_serialize_enter();
+	wmb();
 	*rap = new_ra;
-	net_serialize_leave();
+
 	return 0;
 }
 

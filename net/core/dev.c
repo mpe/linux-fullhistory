@@ -232,9 +232,8 @@ void dev_remove_pack(struct packet_type *pt)
 	{
 		if(pt==(*pt1))
 		{
-			net_serialize_enter();
 			*pt1=pt->next;
-			net_serialize_leave();
+			synchronize_bh();
 #ifdef CONFIG_NET_FASTROUTE
 			if (pt->data)
 				netdev_fastroute_obstacles--;
@@ -1823,9 +1822,8 @@ int unregister_netdevice(struct device *dev)
 	/* And unlink it from device chain. */
 	for (dp = &dev_base; (d=*dp) != NULL; dp=&d->next) {
 		if (d == dev) {
-			net_serialize_enter();
 			*dp = d->next;
-			net_serialize_leave();
+			synchronize_bh();
 			d->next = NULL;
 
 			if (dev->destructor)
@@ -1986,9 +1984,8 @@ __initfunc(int net_dev_init(void))
 			/*
 			 *	It failed to come up. Unhook it.
 			 */
-			net_serialize_enter();
 			*dp = dev->next;
-			net_serialize_leave();
+			synchronize_bh();
 		} 
 		else
 		{

@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *	Alexey Kuznetsov	<kuznet@ms2.inr.ac.ru>
  *
- *	$Id: sit.c,v 1.30 1999/03/21 05:22:58 davem Exp $
+ *	$Id: sit.c,v 1.31 1999/03/25 10:04:55 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -118,9 +118,8 @@ static void ipip6_tunnel_unlink(struct ip_tunnel *t)
 
 	for (tp = ipip6_bucket(t); *tp; tp = &(*tp)->next) {
 		if (t == *tp) {
-			net_serialize_enter();
 			*tp = t->next;
-			net_serialize_leave();
+			synchronize_bh();
 			break;
 		}
 	}
@@ -130,10 +129,9 @@ static void ipip6_tunnel_link(struct ip_tunnel *t)
 {
 	struct ip_tunnel **tp = ipip6_bucket(t);
 
-	net_serialize_enter();
 	t->next = *tp;
+	wmb();
 	*tp = t;
-	net_serialize_leave();
 }
 
 struct ip_tunnel * ipip6_tunnel_locate(struct ip_tunnel_parm *parms, int create)
@@ -200,9 +198,8 @@ failed:
 static void ipip6_tunnel_destroy(struct device *dev)
 {
 	if (dev == &ipip6_fb_tunnel_dev) {
-		net_serialize_enter();
 		tunnels_wc[0] = NULL;
-		net_serialize_leave();
+		synchronize_bh();
 		return;
 	} else {
 		ipip6_tunnel_unlink((struct ip_tunnel*)dev->priv);

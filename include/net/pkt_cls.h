@@ -79,9 +79,8 @@ extern __inline__ int tc_classify(struct sk_buff *skb, struct tcf_proto *tp, str
 
 extern __inline__ unsigned long cls_set_class(unsigned long *clp, unsigned long cl)
 {
-	net_serialize_enter();
 	cl = xchg(clp, cl);
-	net_serialize_leave();
+	synchronize_bh();
 	return cl;
 }
 

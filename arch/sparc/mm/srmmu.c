@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.184 1999/03/20 22:02:03 davem Exp $
+/* $Id: srmmu.c,v 1.185 1999/03/24 11:42:35 davem Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -817,19 +817,11 @@ static inline void free_context(int context)
 
 static void srmmu_switch_to_context(struct task_struct *tsk)
 {
-	int set = 0;
-
 	if(tsk->mm->context == NO_CONTEXT) {
 		alloc_context(tsk->mm);
-		flush_cache_mm(tsk->mm);
 		ctxd_set(&srmmu_context_table[tsk->mm->context], tsk->mm->pgd);
-		flush_tlb_mm(tsk->mm);
-		set = 1;
-	} else if(tsk->mm != current->mm)
-		set = 1;
-
-	if(set != 0)
-		srmmu_set_context(tsk->mm->context);
+	}
+	srmmu_set_context(tsk->mm->context);
 }
 
 static void srmmu_init_new_context(struct mm_struct *mm)
@@ -1353,7 +1345,7 @@ static void hypersparc_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp)
 static void viking_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp) 
 {
 	if(pgdp != swapper_pg_dir)
-		viking_flush_page((unsigned long)pgdp);
+		flush_chunk((unsigned long)pgdp);
 	if(tsk->mm->context != NO_CONTEXT &&
 	   tsk->mm->pgd != pgdp) {
 		flush_cache_mm(tsk->mm);
@@ -1402,8 +1394,6 @@ skip_flush:
 
 static void hypersparc_switch_to_context(struct task_struct *tsk)
 {
-	int set = 0;
-
 	if(tsk->mm->context == NO_CONTEXT) {
 		ctxd_t *ctxp;
 
@@ -1411,14 +1401,9 @@ static void hypersparc_switch_to_context(struct task_struct *tsk)
 		ctxp = &srmmu_context_table[tsk->mm->context];
 		srmmu_set_entry((pte_t *)ctxp, __pte((SRMMU_ET_PTD | (srmmu_v2p((unsigned long) tsk->mm->pgd) >> 4))));
 		hypersparc_flush_page_to_ram((unsigned long)ctxp);
-		set = 1;
-	} else if(tsk->mm != current->mm)
-		set = 1;
-
-	if(set != 0) {
-		hyper_flush_whole_icache();
-		srmmu_set_context(tsk->mm->context);
 	}
+	hyper_flush_whole_icache();
+	srmmu_set_context(tsk->mm->context);
 }
 
 static void hypersparc_init_new_context(struct mm_struct *mm)
@@ -2739,11 +2724,10 @@ __initfunc(static void init_viking(void))
 		BTFIXUPSET_CALL(flush_page_for_dma, viking_flush_page_for_dma, BTFIXUPCALL_NOP);
 	}
 
-	/* flush_cache_* are nops */
-	BTFIXUPSET_CALL(flush_cache_all, viking_flush_cache_all, BTFIXUPCALL_NOP);
-	BTFIXUPSET_CALL(flush_cache_mm, viking_flush_cache_mm, BTFIXUPCALL_NOP);
-	BTFIXUPSET_CALL(flush_cache_page, viking_flush_cache_page, BTFIXUPCALL_NOP);
-	BTFIXUPSET_CALL(flush_cache_range, viking_flush_cache_range, BTFIXUPCALL_NOP);
+	BTFIXUPSET_CALL(flush_cache_all, viking_flush_cache_all, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_mm, viking_flush_cache_mm, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_page, viking_flush_cache_page, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_range, viking_flush_cache_range, BTFIXUPCALL_NORM);
 
 #ifdef __SMP__
 	if (sparc_cpu_model == sun4d) {

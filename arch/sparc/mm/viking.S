@@ -1,4 +1,4 @@
-/* $Id: viking.S,v 1.12 1999/02/23 13:23:50 jj Exp $
+/* $Id: viking.S,v 1.13 1999/03/24 11:42:32 davem Exp $
  * viking.S: High speed Viking cache/mmu operations
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -67,7 +67,7 @@ viking_flush_chunk:
 	clr	%o1			! set counter, 0 - 127
 	sethi	%hi(KERNBASE + PAGE_SIZE - 0x80000000), %o3
 	sethi	%hi(0x80000000), %o4
-	sethi	%hi(VIKING_PTAG_VALID | VIKING_PTAG_DIRTY), %o5
+	sethi	%hi(VIKING_PTAG_VALID), %o5
 	sethi	%hi(2*PAGE_SIZE), %o0
 	sethi	%hi(PAGE_SIZE), %g7
 	clr	%o2			! block counter, 0 - 3
@@ -80,15 +80,12 @@ viking_flush_chunk:
 	or	%g5, %g4, %g5
 	ldda	[%g5] ASI_M_DATAC_TAG, %g2
 	cmp	%g3, %g1		! ptag == ppage?
-	bne,a	7f
+	bne	7f
 	 inc	%o2
 
-	and	%g2, %o5, %g3		! ptag VALID and DIRTY?
-	cmp	%g3, %o5
-	bne,a	7f
-	 inc	%o2
-
-	add	%g4, %o3, %g2		! (KERNBASE + PAGE_SIZE) | (set << 5)
+	andcc	%g2, %o5, %g0		! ptag VALID?
+	be	7f
+	 add	%g4, %o3, %g2		! (KERNBASE + PAGE_SIZE) | (set << 5)
 	ld	[%g2], %g3
 	ld	[%g2 + %g7], %g3
 	add	%g2, %o0, %g2
@@ -99,18 +96,15 @@ viking_flush_chunk:
 	ld	[%g2 + %g7], %g3
 	add	%g2, %o0, %g2
 	ld	[%g2], %g3
-	ld	[%g2 + %g7], %g3
-
 	b	8f
-	 inc	%o1
+	 ld	[%g2 + %g7], %g3
 
 7:
 	cmp	%o2, 3
 	ble	6b
 	 sll	%o2, 26, %g5			! block << 26
 
-	inc	%o1
-8:
+8:	inc	%o1
 	cmp	%o1, 0x7f
 	ble	5b
 	 clr	%o2
@@ -148,10 +142,33 @@ viking_mxcc_flush_chunk:
 	retl
 	 nop
 
-viking_flush_cache_all:
+#define WINDOW_FLUSH(tmp1, tmp2)					\
+	mov	0, tmp1;						\
+98:	ld	[%g6 + AOFF_task_tss + AOFF_thread_uwinmask], tmp2;	\
+	orcc	%g0, tmp2, %g0;						\
+	add	tmp1, 1, tmp1;						\
+	bne	98b;							\
+	 save	%sp, -64, %sp;						\
+99:	subcc	tmp1, 1, tmp1;						\
+	bne	99b;							\
+	 restore %g0, %g0, %g0;
+
+viking_flush_cache_page:
+#ifndef __SMP__
+	ld	[%o0 + 0x0], %o0		/* XXX vma->vm_mm, GROSS XXX */
+#endif
 viking_flush_cache_mm:
 viking_flush_cache_range:
-viking_flush_cache_page:
+#ifndef __SMP__
+	ld	[%o0 + AOFF_mm_context], %g1
+	cmp	%g1, -1
+	bne	viking_flush_cache_all
+	 nop
+	b,a	viking_flush_cache_out
+#endif
+viking_flush_cache_all:
+	WINDOW_FLUSH(%g4, %g5)
+viking_flush_cache_out:
 	retl
 	 nop
 

@@ -226,9 +226,9 @@ static int tc_ctl_tfilter(struct sk_buff *skb, struct nlmsghdr *n, void *arg)
 
 	if (fh == 0) {
 		if (n->nlmsg_type == RTM_DELTFILTER && t->tcm_handle == 0) {
-			net_serialize_enter();
 			*back = tp->next;
-			net_serialize_leave();
+			synchronize_bh();
+
 			tp->ops->destroy(tp);
 			kfree(tp);
 			err = 0;

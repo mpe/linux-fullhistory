@@ -195,9 +195,9 @@ static int prio_tune(struct Qdisc *sch, struct rtattr *opt)
 			struct Qdisc *child;
 			child = qdisc_create_dflt(sch->dev, &pfifo_qdisc_ops);
 			if (child) {
-				net_serialize_enter();
 				child = xchg(&q->queues[band], child);
-				net_serialize_leave();
+				synchronize_bh();
+
 				if (child != &noop_qdisc)
 					qdisc_destroy(child);
 			}

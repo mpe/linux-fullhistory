@@ -1,7 +1,7 @@
 /*
  *	Linux NET3:	IP/IP protocol decoder. 
  *
- *	Version: $Id: ipip.c,v 1.25 1999/03/21 05:22:43 davem Exp $
+ *	Version: $Id: ipip.c,v 1.26 1999/03/25 10:04:32 davem Exp $
  *
  *	Authors:
  *		Sam Lantinga (slouken@cs.ucdavis.edu)  02/01/95
@@ -182,9 +182,8 @@ static void ipip_tunnel_unlink(struct ip_tunnel *t)
 
 	for (tp = ipip_bucket(t); *tp; tp = &(*tp)->next) {
 		if (t == *tp) {
-			net_serialize_enter();
 			*tp = t->next;
-			net_serialize_leave();
+			synchronize_bh();
 			break;
 		}
 	}
@@ -194,10 +193,9 @@ static void ipip_tunnel_link(struct ip_tunnel *t)
 {
 	struct ip_tunnel **tp = ipip_bucket(t);
 
-	net_serialize_enter();
 	t->next = *tp;
+	wmb();
 	*tp = t;
-	net_serialize_leave();
 }
 
 struct ip_tunnel * ipip_tunnel_locate(struct ip_tunnel_parm *parms, int create)
@@ -265,9 +263,8 @@ failed:
 static void ipip_tunnel_destroy(struct device *dev)
 {
 	if (dev == &ipip_fb_tunnel_dev) {
-		net_serialize_enter();
 		tunnels_wc[0] = NULL;
-		net_serialize_leave();
+		synchronize_bh();
 	} else {
 		ipip_tunnel_unlink((struct ip_tunnel*)dev->priv);
 		kfree(dev);

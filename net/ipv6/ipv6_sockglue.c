@@ -7,7 +7,7 @@
  *
  *	Based on linux/net/ipv4/ip_sockglue.c
  *
- *	$Id: ipv6_sockglue.c,v 1.25 1999/03/21 05:22:54 davem Exp $
+ *	$Id: ipv6_sockglue.c,v 1.26 1999/03/25 10:04:53 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -86,9 +86,10 @@ int ip6_ra_control(struct sock *sk, int sel, void (*destructor)(struct sock *))
 					kfree(new_ra);
 				return -EADDRINUSE;
 			}
-			net_serialize_enter();
+
 			*rap = ra->next;
-			net_serialize_leave();
+			synchronize_bh();
+
 			if (ra->destructor)
 				ra->destructor(sk);
 			kfree(ra);

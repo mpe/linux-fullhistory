@@ -66,6 +66,13 @@
 #define ARPHRD_ASH	781		/* Nexus 64Mbps Ash		*/
 #define ARPHRD_ECONET	782		/* Acorn Econet			*/
 #define ARPHRD_IRDA 	783		/* Linux/IR			*/
+/* ARP works differently on different FC media .. so  */
+#define ARPHRD_FCPP	784		/* Point to point fibrechanel	*/
+#define ARPHRD_FCAL	785		/* Fibrechannel arbitrated loop */
+#define ARPHRD_FCPL	786		/* Fibrechannel public loop	*/
+#define ARPHRD_FCFABRIC	786		/* Fibrechannel fabric		*/
+	/* 787->799 reserved for fibrechannel media types */
+
 
 /* ARP protocol opcodes. */
 #define	ARPOP_REQUEST	1		/* ARP request			*/

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: addrconf.c,v 1.47 1999/03/21 05:22:50 davem Exp $
+ *	$Id: addrconf.c,v 1.48 1999/03/25 10:04:43 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -340,9 +340,9 @@ static void ipv6_del_addr(struct inet6_ifaddr *ifp)
 
 	for (; iter; iter = iter->lst_next) {
 		if (iter == ifp) {
-			net_serialize_enter();
 			*back = ifp->lst_next;
-			net_serialize_leave();
+			synchronize_bh();
+
 			ifp->lst_next = NULL;
 			break;
 		}
@@ -354,9 +354,9 @@ static void ipv6_del_addr(struct inet6_ifaddr *ifp)
 
 	for (; iter; iter = iter->if_next) {
 		if (iter == ifp) {
-			net_serialize_enter();
 			*back = ifp->if_next;
-			net_serialize_leave();
+			synchronize_bh();
+
 			ifp->if_next = NULL;
 			break;
 		}

@@ -73,6 +73,7 @@ extern int adb_mouse_init(void);
 extern void watchdog_init(void);
 extern void wdt_init(void);
 extern void acq_init(void);
+extern void dtlk_init(void);
 extern void pcwatchdog_init(void);
 extern int rtc_init(void);
 extern int rtc_DP8570A_init(void);

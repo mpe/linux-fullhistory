@@ -114,7 +114,7 @@ static int u32_classify(struct sk_buff *skb, struct tcf_proto *tp, struct tcf_re
 	int sel = 0;
 	int i;
 
-#if !defined(__i386__) && !defined(__m68k__)
+#if !defined(__i386__) && !defined(__mc68000__)
 	if ((unsigned long)ptr & 3)
 		return -1;
 #endif
@@ -326,9 +326,8 @@ static int u32_delete_key(struct tcf_proto *tp, struct tc_u_knode* key)
 	if (ht) {
 		for (kp = &ht->ht[TC_U32_HASH(key->handle)]; *kp; kp = &(*kp)->next) {
 			if (*kp == key) {
-				net_serialize_enter();
 				*kp = key->next;
-				net_serialize_leave();
+				synchronize_bh();
 
 				u32_destroy_key(tp, key);
 				return 0;
@@ -346,9 +345,9 @@ static void u32_clear_hnode(struct tcf_proto *tp, struct tc_u_hnode *ht)
 
 	for (h=0; h<=ht->divisor; h++) {
 		while ((n = ht->ht[h]) != NULL) {
-			net_serialize_enter();
 			ht->ht[h] = n->next;
-			net_serialize_leave();
+			synchronize_bh();
+
 			u32_destroy_key(tp, n);
 		}
 	}
@@ -466,9 +465,8 @@ static int u32_set_parms(struct Qdisc *q, unsigned long base,
 			ht_down->refcnt++;
 		}
 
-		net_serialize_enter();
 		ht_down = xchg(&n->ht_down, ht_down);
-		net_serialize_leave();
+		synchronize_bh();
 
 		if (ht_down)
 			ht_down->refcnt--;
@@ -484,9 +482,10 @@ static int u32_set_parms(struct Qdisc *q, unsigned long base,
 #ifdef CONFIG_NET_CLS_POLICE
 	if (tb[TCA_U32_POLICE-1]) {
 		struct tcf_police *police = tcf_police_locate(tb[TCA_U32_POLICE-1], est);
-		net_serialize_enter();
+
 		police = xchg(&n->police, police);
-		net_serialize_leave();
+		synchronize_bh();
+
 		tcf_police_release(police);
 	}
 #endif
@@ -588,10 +587,11 @@ static int u32_change(struct tcf_proto *tp, unsigned long base, u32 handle,
 		for (ins = &ht->ht[TC_U32_HASH(handle)]; *ins; ins = &(*ins)->next)
 			if (TC_U32_NODE(handle) < TC_U32_NODE((*ins)->handle))
 				break;
-		net_serialize_enter();
+
 		n->next = *ins;
+		wmb();
 		*ins = n;
-		net_serialize_leave();
+
 		*arg = (unsigned long)n;
 		return 0;
 	}

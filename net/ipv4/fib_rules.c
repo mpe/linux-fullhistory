@@ -5,7 +5,7 @@
  *
  *		IPv4 Forwarding Information Base: policy rules.
  *
- * Version:	$Id: fib_rules.c,v 1.8 1999/03/21 05:22:33 davem Exp $
+ * Version:	$Id: fib_rules.c,v 1.9 1999/03/25 10:04:23 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -101,9 +101,10 @@ int inet_rtm_delrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 		    (!rtm->rtm_table || (r && rtm->rtm_table == r->r_table))) {
 			if (r == &local_rule)
 				return -EPERM;
-			net_serialize_enter();
+
 			*rp = r->r_next;
-			net_serialize_leave();
+			synchronize_bh();
+
 			if (r != &default_rule && r != &main_rule)
 				kfree(r);
 			return 0;

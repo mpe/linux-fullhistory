@@ -337,9 +337,8 @@ int pneigh_delete(struct neigh_table *tbl, const void *pkey, struct device *dev)
 
 	for (np = &tbl->phash_buckets[hash_val]; (n=*np) != NULL; np = &n->next) {
 		if (memcmp(n->key, pkey, key_len) == 0 && n->dev == dev) {
-			net_serialize_enter();
 			*np = n->next;
-			net_serialize_leave();
+			synchronize_bh();
 			if (tbl->pdestructor)
 				tbl->pdestructor(n);
 			kfree(n);
@@ -358,9 +357,8 @@ static int pneigh_ifdown(struct neigh_table *tbl, struct device *dev)
 		np = &tbl->phash_buckets[h]; 
 		for (np = &tbl->phash_buckets[h]; (n=*np) != NULL; np = &n->next) {
 			if (n->dev == dev || dev == NULL) {
-				net_serialize_enter();
 				*np = n->next;
-				net_serialize_leave();
+				synchronize_bh();
 				if (tbl->pdestructor)
 					tbl->pdestructor(n);
 				kfree(n);
@@ -963,9 +961,8 @@ void neigh_parms_release(struct neigh_table *tbl, struct neigh_parms *parms)
 		return;
 	for (p = &tbl->parms.next; *p; p = &(*p)->next) {
 		if (*p == parms) {
-			net_serialize_enter();
 			*p = parms->next;
-			net_serialize_leave();
+			synchronize_bh();
 #ifdef CONFIG_SYSCTL
 			neigh_sysctl_unregister(parms);
 #endif
@@ -1014,9 +1011,8 @@ int neigh_table_clear(struct neigh_table *tbl)
 		printk(KERN_CRIT "neighbour leakage\n");
 	for (tp = &neigh_tables; *tp; tp = &(*tp)->next) {
 		if (*tp == tbl) {
-			net_serialize_enter();
 			*tp = tbl->next;
-			net_serialize_leave();
+			synchronize_bh();
 			break;
 		}
 	}

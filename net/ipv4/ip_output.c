@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.66 1999/03/21 05:22:41 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.67 1999/03/25 00:43:00 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -350,7 +350,7 @@ fragment:
 		   into account). Actually, tcp should make it. --ANK (980801)
 		 */
 		iph->frag_off |= __constant_htons(IP_DF);
-		printk(KERN_DEBUG "sending pkt_too_big to self\n");
+		NETDEBUG(printk(KERN_DEBUG "sending pkt_too_big to self\n"));
 
 		/* icmp_send is not reenterable, so that bh_atomic... --ANK */
 		start_bh_atomic();

@@ -1,7 +1,7 @@
 /*
  *	NET3	IP device support routines.
  *
- *	Version: $Id: devinet.c,v 1.26 1999/03/21 05:22:31 davem Exp $
+ *	Version: $Id: devinet.c,v 1.27 1999/03/25 10:04:06 davem Exp $
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -138,9 +138,8 @@ static void inetdev_destroy(struct in_device *in_dev)
 #ifdef CONFIG_SYSCTL
 	devinet_sysctl_unregister(&in_dev->cnf);
 #endif
-	net_serialize_enter();
 	in_dev->dev->ip_ptr = NULL;
-	net_serialize_leave();
+	synchronize_bh();
 	neigh_parms_release(&arp_tbl, in_dev->arp_parms);
 	kfree(in_dev);
 }
@@ -174,9 +173,8 @@ inet_del_ifa(struct in_device *in_dev, struct in_ifaddr **ifap, int destroy)
 				ifap1 = &ifa->ifa_next;
 				continue;
 			}
-			net_serialize_enter();
 			*ifap1 = ifa->ifa_next;
-			net_serialize_leave();
+			synchronize_bh();
 
 			rtmsg_ifa(RTM_DELADDR, ifa);
 			notifier_call_chain(&inetaddr_chain, NETDEV_DOWN, ifa);
@@ -186,9 +184,8 @@ inet_del_ifa(struct in_device *in_dev, struct in_ifaddr **ifap, int destroy)
 
 	/* 2. Unlink it */
 
-	net_serialize_enter();
 	*ifap = ifa1->ifa_next;
-	net_serialize_leave();
+	synchronize_bh();
 
 	/* 3. Announce address deletion */
 
@@ -244,9 +241,8 @@ inet_insert_ifa(struct in_device *in_dev, struct in_ifaddr *ifa)
 	}
 
 	ifa->ifa_next = *ifap;
-	net_serialize_enter();
+	wmb();
 	*ifap = ifa;
-	net_serialize_leave();
 
 	/* Send message first, then call notifier.
 	   Notifier will trigger FIB update, so that

@@ -57,33 +57,39 @@ kmem_cache_t *uid_cachep;
 
 #define uidhashfn(uid)	(((uid >> 8) ^ uid) & (UIDHASH_SZ - 1))
 
+/*
+ * These routines must be called with the uidhash spinlock held!
+ */
 static inline void uid_hash_insert(struct user_struct *up, unsigned int hashent)
 {
-	spin_lock(&uidhash_lock);
 	if((up->next = uidhash[hashent]) != NULL)
 		uidhash[hashent]->pprev = &up->next;
 	up->pprev = &uidhash[hashent];
 	uidhash[hashent] = up;
-	spin_unlock(&uidhash_lock);
 }
 
 static inline void uid_hash_remove(struct user_struct *up)
 {
-	spin_lock(&uidhash_lock);
 	if(up->next)
 		up->next->pprev = up->pprev;
 	*up->pprev = up->next;
-	spin_unlock(&uidhash_lock);
 }
 
-static inline struct user_struct *uid_find(unsigned short uid, unsigned int hashent)
+static inline struct user_struct *uid_hash_find(unsigned short uid, unsigned int hashent)
 {
-	struct user_struct *up;
+	struct user_struct *up, *next;
 
-	spin_lock(&uidhash_lock);
-	for(up = uidhash[hashent]; (up && up->uid != uid); up = up->next)
-		;
-	spin_unlock(&uidhash_lock);
+	next = uidhash[hashent];
+	for (;;) {
+		up = next;
+		if (next) {
+			next = up->next;
+			if (up->uid != uid)
+				continue;
+			atomic_inc(&up->count);
+		}
+		break;
+	}
 	return up;
 }
 
@@ -94,7 +100,9 @@ void free_uid(struct task_struct *p)
 	if (up) {
 		p->user = NULL;
 		if (atomic_dec_and_test(&up->count)) {
+			spin_lock(&uidhash_lock);
 			uid_hash_remove(up);
+			spin_unlock(&uidhash_lock);
 			kmem_cache_free(uid_cachep, up);
 		}
 	}
@@ -103,20 +111,37 @@ void free_uid(struct task_struct *p)
 int alloc_uid(struct task_struct *p)
 {
 	unsigned int hashent = uidhashfn(p->uid);
-	struct user_struct *up = uid_find(p->uid, hashent);
+	struct user_struct *up;
 
-	p->user = up;
+	spin_lock(&uidhash_lock);
+	up = uid_hash_find(p->uid, hashent);
+	spin_unlock(&uidhash_lock);
+
 	if (!up) {
-		up = kmem_cache_alloc(uid_cachep, SLAB_KERNEL);
-		if (!up)
-			return -EAGAIN;
-		p->user = up;
-		up->uid = p->uid;
-		atomic_set(&up->count, 0);
-		uid_hash_insert(up, hashent);
-	}
+		struct user_struct *new;
 
-	atomic_inc(&up->count);
+		new = kmem_cache_alloc(uid_cachep, SLAB_KERNEL);
+		if (!new)
+			return -EAGAIN;
+		new->uid = p->uid;
+		atomic_set(&new->count, 1);
+
+		/*
+		 * Before adding this, check whether we raced
+		 * on adding the same user already..
+		 */
+		spin_lock(&uidhash_lock);
+		up = uid_hash_find(p->uid, hashent);
+		if (up) {
+			kmem_cache_free(uid_cachep, new);
+		} else {
+			uid_hash_insert(new, hashent);
+			up = new;
+		}
+		spin_unlock(&uidhash_lock);
+
+	}
+	p->user = up;
 	return 0;
 }
 

@@ -9,7 +9,7 @@
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  *
- *	Version: $Id: ipmr.c,v 1.39 1999/03/21 05:22:44 davem Exp $
+ *	Version: $Id: ipmr.c,v 1.40 1999/03/25 10:04:25 davem Exp $
  *
  *	Fixes:
  *	Michael Chastain	:	Incorrect size of copying.
@@ -661,9 +661,10 @@ static void mrtsock_destruct(struct sock *sk)
 {
 	if (sk == mroute_socket) {
 		ipv4_devconf.mc_forwarding = 0;
-		net_serialize_enter();
+
 		mroute_socket=NULL;
-		net_serialize_leave();
+		synchronize_bh();
+
 		mroute_close(sk);
 	}
 }

@@ -48,7 +48,6 @@
 #include <linux/string.h>
 #include <linux/parport.h>
 #include <linux/bitops.h>
-#include <linux/sched.h>
 #include <asm/system.h>
 #include <asm/io.h>
 #include <asm/processor.h>

@@ -127,7 +127,7 @@ nlm_delete_file(struct nlm_file *file)
 			kfree(file);
 			return;
 		}
-		fp = &file->f_next;
+		fp = &f->f_next;
 	}
 
 	printk(KERN_WARNING "lockd: attempt to release unknown file!\n");

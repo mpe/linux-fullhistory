@@ -27,7 +27,7 @@
 #define inode_dirindex(idx)	(((idx) & 0xff) * 26 - 21)
 
 #define frag_id(x)		(((x) >> 8) & 0x7fff)
-#define off(x)			(((x) & 0xff) ? ((x) & 0xff) - 1 : 0)
+#define off(x)			(((x) & 0xff) ? (((x) & 0xff) - 1) << sb->u.adfs_sb.s_dr->log2sharesize : 0)
 
 static inline int adfs_inode_validate_no (struct super_block *sb, unsigned int inode_no)
 {
@@ -83,11 +83,20 @@ int adfs_bmap (struct inode *inode, int block)
 		return 0;
 	}
 
+	if (block < 0) {
+		adfs_error(sb, "adfs_bmap", "block(%d) < 0", block);
+		return 0;
+	}
+
+	if (block > inode->i_blocks)
+		return 0;
+
+	block += off(inode->u.adfs_i.file_id);
+
 	if (frag_id(inode->u.adfs_i.file_id) == ADFS_ROOT_FRAG)
-		blk = sb->u.adfs_sb.s_map_block + off(inode_frag (inode->i_ino)) + block;
+		blk = sb->u.adfs_sb.s_map_block + block;
 	else
-		blk = adfs_map_lookup (sb, frag_id(inode->u.adfs_i.file_id),
-				       off (inode->u.adfs_i.file_id) + block);
+		blk = adfs_map_lookup (sb, frag_id(inode->u.adfs_i.file_id), block);
 	return blk;
 }
 
@@ -105,13 +114,13 @@ unsigned int adfs_parent_bmap (struct inode *inode, int block)
 
 	fragment = inode_frag (inode->i_ino);
 	if (frag_id (fragment) == ADFS_ROOT_FRAG)
-		blk = sb->u.adfs_sb.s_map_block + off (fragment) + block;
+		blk = sb->u.adfs_sb.s_map_block + off(fragment) + block;
 	else
-		blk = adfs_map_lookup (sb, frag_id (fragment), off (fragment) + block);
+		blk = adfs_map_lookup (sb, frag_id (fragment), off(fragment) + block);
 	return blk;	
 }
 
-static int adfs_atts2mode (unsigned char mode, unsigned int filetype)
+static int adfs_atts2mode(struct super_block *sb, unsigned char mode, unsigned int filetype)
 {
 	int omode = 0;
 
@@ -120,24 +129,29 @@ static int adfs_atts2mode (unsigned char mode, unsigned int filetype)
 				S_IRGRP|S_IWGRP|S_IXGRP|
 				S_IROTH|S_IWOTH|S_IXOTH;
 	} else {
-		if (mode & ADFS_NDA_DIRECTORY)
-			omode |= S_IFDIR|S_IRUSR|S_IXUSR|S_IXGRP|S_IXOTH;
-		else
+		if (mode & ADFS_NDA_DIRECTORY) {
+			omode |= S_IRUGO & sb->u.adfs_sb.s_owner_mask;
+			omode |= S_IFDIR|S_IXUSR|S_IXGRP|S_IXOTH;
+		} else
 			omode |= S_IFREG;
+
 		if (mode & ADFS_NDA_OWNER_READ) {
-			omode |= S_IRUSR;
+			omode |= S_IRUGO & sb->u.adfs_sb.s_owner_mask;
 			if (filetype == 0xfe6 /* UnixExec */)
-				omode |= S_IXUSR;
+				omode |= S_IXUGO & sb->u.adfs_sb.s_owner_mask;
 		}
+
 		if (mode & ADFS_NDA_OWNER_WRITE)
-			omode |= S_IWUSR;
+			omode |= S_IWUGO & sb->u.adfs_sb.s_owner_mask;
+
 		if (mode & ADFS_NDA_PUBLIC_READ) {
-			omode |= S_IRGRP | S_IROTH;
-			if (filetype == 0xfe6)
-				omode |= S_IXGRP | S_IXOTH;
+			omode |= S_IRUGO & sb->u.adfs_sb.s_other_mask;
+			if (filetype == 0xfe6 /* UnixExec */)
+				omode |= S_IXUGO & sb->u.adfs_sb.s_other_mask;
 		}
+
 		if (mode & ADFS_NDA_PUBLIC_WRITE)
-			omode |= S_IWGRP | S_IWOTH;
+			omode |= S_IWUGO & sb->u.adfs_sb.s_other_mask;
 	}
 	return omode;
 }
@@ -150,8 +164,8 @@ void adfs_read_inode (struct inode *inode)
 	int buffers;
 
 	sb = inode->i_sb;
-	inode->i_uid = 0;
-	inode->i_gid = 0;
+	inode->i_uid = sb->u.adfs_sb.s_uid;
+	inode->i_gid = sb->u.adfs_sb.s_gid;
 	inode->i_version = ++event;
 
 	if (adfs_inode_validate_no (sb, inode->i_ino & 0xffffff00)) {
@@ -186,7 +200,7 @@ void adfs_read_inode (struct inode *inode)
 			goto bad;
 		}
 		adfs_dir_free (bh, buffers);
-		inode->i_mode	 = adfs_atts2mode (ide.mode, ide.filetype);
+		inode->i_mode	 = adfs_atts2mode(sb, ide.mode, ide.filetype);
 		inode->i_nlink	 = 2;
 		inode->i_size    = ide.size;
 		inode->i_blksize = PAGE_SIZE;
@@ -204,13 +218,5 @@ void adfs_read_inode (struct inode *inode)
 	return;
 
 bad:
-	inode->i_mode	 = 0;
-	inode->i_nlink	 = 1;
-	inode->i_size    = 0;
-	inode->i_blksize = 0;
-	inode->i_blocks  = 0;
-	inode->i_mtime   =
-	inode->i_atime   =
-	inode->i_ctime   = 0;
-	inode->i_op	 = NULL;
+	make_bad_inode(inode);
 }

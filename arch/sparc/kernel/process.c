@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.132 1999/03/22 02:12:13 davem Exp $
+/*  $Id: process.c,v 1.133 1999/03/24 11:42:30 davem Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -517,9 +517,16 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
 	p->tss.kregs = childregs;
 
 	if(regs->psr & PSR_PS) {
-		childregs->u_regs[UREG_FP] = p->tss.ksp;
+		new_stack = (struct reg_window *)
+			((((unsigned long)p) +
+			  (TASK_UNION_SIZE)) -
+			 (REGWIN_SZ));
+		childregs->u_regs[UREG_FP] = (unsigned long) new_stack;
 		p->tss.flags |= SPARC_FLAG_KTHREAD;
 		p->tss.current_ds = KERNEL_DS;
+		memcpy((void *)new_stack,
+		       (void *)regs->u_regs[UREG_FP],
+		       sizeof(struct reg_window));
 		childregs->u_regs[UREG_G6] = (unsigned long) p;
 	} else {
 		childregs->u_regs[UREG_FP] = sp;

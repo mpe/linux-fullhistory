@@ -157,9 +157,8 @@ static int fw_delete(struct tcf_proto *tp, unsigned long arg)
 		if (*fp == f) {
 			unsigned long cl;
 
-			net_serialize_enter();
 			*fp = f->next;
-			net_serialize_leave();
+			synchronize_bh();
 
 			if ((cl = cls_set_class(&f->res.class, 0)) != 0)
 				tp->q->ops->cl_ops->unbind_tcf(tp->q, cl);
@@ -207,9 +206,10 @@ static int fw_change(struct tcf_proto *tp, unsigned long base,
 #ifdef CONFIG_NET_CLS_POLICE
 		if (tb[TCA_FW_POLICE-1]) {
 			struct tcf_police *police = tcf_police_locate(tb[TCA_FW_POLICE-1], tca[TCA_RATE-1]);
-			net_serialize_enter();
+
 			police = xchg(&f->police, police);
-			net_serialize_leave();
+			synchronize_bh();
+
 			tcf_police_release(police);
 		}
 #endif
@@ -224,9 +224,9 @@ static int fw_change(struct tcf_proto *tp, unsigned long base,
 		if (head == NULL)
 			return -ENOBUFS;
 		memset(head, 0, sizeof(*head));
-		net_serialize_enter();
+
 		tp->root = head;
-		net_serialize_leave();
+		synchronize_bh();
 	}
 
 	f = kmalloc(sizeof(struct fw_filter), GFP_KERNEL);
@@ -250,9 +250,9 @@ static int fw_change(struct tcf_proto *tp, unsigned long base,
 #endif
 
 	f->next = head->ht[fw_hash(handle)];
-	net_serialize_enter();
+	wmb();
 	head->ht[fw_hash(handle)] = f;
-	net_serialize_leave();
+
 	*arg = (unsigned long)f;
 	return 0;
 
@@ -303,7 +303,11 @@ static int fw_dump(struct tcf_proto *tp, unsigned long fh,
 
 	t->tcm_handle = f->id;
 
-	if (!f->res.classid && !f->police)
+       if (!f->res.classid
+#ifdef CONFIG_NET_CLS_POLICE
+           && !f->police
+#endif
+           )
 		return skb->len;
 
 	rta = (struct rtattr*)b;

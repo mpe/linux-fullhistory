@@ -158,8 +158,6 @@ repeat:
 
 static int rd_ioctl(struct inode *inode, struct file *file, unsigned int cmd, unsigned long arg)
 {
-	int err;
-	
 	if (!inode || !inode->i_rdev) 	
 		return -EINVAL;
 

@@ -94,7 +94,7 @@ static int do_ncp_rpc_call(struct ncp_server *server, int size)
 	poll_table wait_table;
 	struct poll_table_entry entry;
 	int init_timeout, max_timeout;
-	int timeout; long tmp_timeout;
+	int timeout;
 	int retrans;
 	int major_timeout_seen;
 	int acknowledge_seen;

@@ -211,10 +211,9 @@ static void ipgre_tunnel_link(struct ip_tunnel *t)
 {
 	struct ip_tunnel **tp = ipgre_bucket(t);
 
-	net_serialize_enter();
 	t->next = *tp;
+	wmb();
 	*tp = t;
-	net_serialize_leave();
 }
 
 static void ipgre_tunnel_unlink(struct ip_tunnel *t)
@@ -223,9 +222,8 @@ static void ipgre_tunnel_unlink(struct ip_tunnel *t)
 
 	for (tp = ipgre_bucket(t); *tp; tp = &(*tp)->next) {
 		if (t == *tp) {
-			net_serialize_enter();
 			*tp = t->next;
-			net_serialize_leave();
+			synchronize_bh();
 			break;
 		}
 	}

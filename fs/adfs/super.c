@@ -21,25 +21,26 @@
 
 #include <stdarg.h>
 
-static void adfs_put_super (struct super_block *sb);
-static int adfs_statfs (struct super_block *sb, struct statfs *buf, int bufsiz);
-void adfs_read_inode (struct inode *inode);
+static void adfs_put_super(struct super_block *sb);
+static int adfs_remount(struct super_block *sb, int *flags, char *data);
+static int adfs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz);
+void adfs_read_inode(struct inode *inode);
 
-void adfs_error (struct super_block *sb, const char *function, const char *fmt, ...)
+void adfs_error(struct super_block *sb, const char *function, const char *fmt, ...)
 {
 	char error_buf[128];
 	va_list args;
 
-	va_start (args, fmt);
-	vsprintf (error_buf, fmt, args);
-	va_end (args);
+	va_start(args, fmt);
+	vsprintf(error_buf, fmt, args);
+	va_end(args);
 
-	printk (KERN_CRIT "ADFS-fs error (device %s)%s%s: %s\n",
-		kdevname (sb->s_dev), function ? ": " : "",
+	printk(KERN_CRIT "ADFS-fs error (device %s)%s%s: %s\n",
+		kdevname(sb->s_dev), function ? ": " : "",
 		function ? function : "", error_buf);
 }
 
-unsigned char adfs_calccrosscheck (struct super_block *sb, char *map)
+static unsigned char adfs_calczonecheck(struct super_block *sb, char *map)
 {
 	unsigned int v0, v1, v2, v3;
 	int i;
@@ -63,7 +64,7 @@ unsigned char adfs_calccrosscheck (struct super_block *sb, char *map)
 	return v0 ^ v1 ^ v2 ^ v3;
 }
 
-static int adfs_checkmap (struct super_block *sb)
+static int adfs_checkmap(struct super_block *sb)
 {
 	unsigned char crosscheck = 0, zonecheck = 1;
 	int i;
@@ -72,14 +73,14 @@ static int adfs_checkmap (struct super_block *sb)
 		char *map;
 
 		map = sb->u.adfs_sb.s_map[i]->b_data;
-		if (adfs_calccrosscheck (sb, map) != map[0]) {
-			adfs_error (sb, "adfs_checkmap", "zone %d fails zonecheck", i);
+		if (adfs_calczonecheck(sb, map) != map[0]) {
+			adfs_error(sb, "adfs_checkmap", "zone %d fails zonecheck", i);
 			zonecheck = 0;
 		}
 		crosscheck ^= map[3];
 	}
 	if (crosscheck != 0xff)
-		adfs_error (sb, "adfs_checkmap", "crosscheck != 0xff");
+		adfs_error(sb, "adfs_checkmap", "crosscheck != 0xff");
 	return crosscheck == 0xff && zonecheck;
 }
 
@@ -92,21 +93,73 @@ static struct super_operations adfs_sops = {
 	adfs_put_super,
 	NULL,
 	adfs_statfs,
-	NULL
+	adfs_remount
 };
 
-static void adfs_put_super (struct super_block *sb)
+static void adfs_put_super(struct super_block *sb)
 {
 	int i;
 
 	for (i = 0; i < sb->u.adfs_sb.s_map_size; i++)
-		brelse (sb->u.adfs_sb.s_map[i]);
-	kfree (sb->u.adfs_sb.s_map);
-	brelse (sb->u.adfs_sb.s_sbh);
+		brelse(sb->u.adfs_sb.s_map[i]);
+	kfree(sb->u.adfs_sb.s_map);
+	brelse(sb->u.adfs_sb.s_sbh);
 	MOD_DEC_USE_COUNT;
 }
 
-struct super_block *adfs_read_super (struct super_block *sb, void *data, int silent)
+static int parse_options(struct super_block *sb, char *options)
+{
+	char *value, *opt;
+
+	if (!options)
+		return 0;
+
+	for (opt = strtok(options, ","); opt != NULL; opt = strtok(NULL, ",")) {
+		value = strchr(opt, '=');
+		if (value)
+			*value++ = '\0';
+
+		if (!strcmp(opt, "uid")) {	/* owner of all files */
+			if (!value || !*value)
+				return -EINVAL;
+			sb->u.adfs_sb.s_uid = simple_strtoul(value, &value, 0);
+			if (*value)
+				return -EINVAL;
+		} else
+		if (!strcmp(opt, "gid")) {	/* group owner of all files */
+			if (!value || !*value)
+				return -EINVAL;
+			sb->u.adfs_sb.s_gid = simple_strtoul(value, &value, 0);
+			if (*value)
+				return -EINVAL;
+		} else
+		if (!strcmp(opt, "ownmask")) {	/* owner permission mask */
+			if (!value || !*value)
+				return -EINVAL;
+			sb->u.adfs_sb.s_owner_mask = simple_strtoul(value, &value, 8);
+			if (*value)
+				return -EINVAL;
+		} else
+		if (!strcmp(opt, "othmask")) {	/* others permission mask */
+			if (!value || !*value)
+				return -EINVAL;
+			sb->u.adfs_sb.s_other_mask = simple_strtoul(value, &value, 8);
+			if (*value)
+				return -EINVAL;
+		} else {			/* eh? say again. */
+			printk("ADFS-fs: unrecognised mount option %s\n", opt);
+			return -EINVAL;
+		}
+	}
+	return 0;
+}
+
+static int adfs_remount(struct super_block *sb, int *flags, char *data)
+{
+	return parse_options(sb, data);
+}
+
+struct super_block *adfs_read_super(struct super_block *sb, void *data, int silent)
 {
 	struct adfs_discrecord *dr;
 	struct buffer_head *bh;
@@ -114,28 +167,30 @@ struct super_block *adfs_read_super (struct super_block *sb, void *data, int sil
 	kdev_t dev = sb->s_dev;
 	int i, j;
 
+	/* set default options */
+	sb->u.adfs_sb.s_uid = 0;
+	sb->u.adfs_sb.s_gid = 0;
+	sb->u.adfs_sb.s_owner_mask = S_IRWXU;
+	sb->u.adfs_sb.s_other_mask = S_IRWXG | S_IRWXO;
+
+	if (parse_options(sb, data))
+		goto error;
+
 	MOD_INC_USE_COUNT;
-	lock_super (sb);
-	set_blocksize (dev, BLOCK_SIZE);
-	if (!(bh = bread (dev, ADFS_DISCRECORD / BLOCK_SIZE, BLOCK_SIZE))) {
-		unlock_super (sb);
-		adfs_error (sb, NULL, "unable to read superblock");
-		MOD_DEC_USE_COUNT;
-		return NULL;
+	lock_super(sb);
+	set_blocksize(dev, BLOCK_SIZE);
+	if (!(bh = bread(dev, ADFS_DISCRECORD / BLOCK_SIZE, BLOCK_SIZE))) {
+		adfs_error(sb, NULL, "unable to read superblock");
+		goto error_unlock;
 	}
 
 	b_data = bh->b_data + (ADFS_DISCRECORD % BLOCK_SIZE);
 
-	if (adfs_checkbblk (b_data)) {
+	if (adfs_checkbblk(b_data)) {
 		if (!silent)
-			printk ("VFS: Can't find an adfs filesystem on dev "
+			printk("VFS: Can't find an adfs filesystem on dev "
 				"%s.\n", kdevname(dev));
-failed_mount:
-		unlock_super (sb);
-		if (bh)
-			brelse (bh);
-		MOD_DEC_USE_COUNT;
-		return NULL;
+		goto error_free_bh;
 	}
 	dr = (struct adfs_discrecord *)(b_data + ADFS_DR_OFFSET);
 
@@ -145,26 +200,26 @@ failed_mount:
 	    (sb->s_blocksize == 512 || sb->s_blocksize == 1024 ||
 	     sb->s_blocksize == 2048 || sb->s_blocksize == 4096)) {
 
-		brelse (bh);
-		set_blocksize (dev, sb->s_blocksize);
-		bh = bread (dev, ADFS_DISCRECORD / sb->s_blocksize, sb->s_blocksize);
+		brelse(bh);
+		set_blocksize(dev, sb->s_blocksize);
+		bh = bread(dev, ADFS_DISCRECORD / sb->s_blocksize, sb->s_blocksize);
 		if (!bh) {
-			adfs_error (sb, NULL, "couldn't read superblock on "
+			adfs_error(sb, NULL, "couldn't read superblock on "
 				"2nd try.");
-			goto failed_mount;
+			goto error_unlock;
 		}
 		b_data = bh->b_data + (ADFS_DISCRECORD % sb->s_blocksize);
-		if (adfs_checkbblk (b_data)) {
-			adfs_error (sb, NULL, "disc record mismatch, very weird!");
-			goto failed_mount;
+		if (adfs_checkbblk(b_data)) {
+			adfs_error(sb, NULL, "disc record mismatch, very weird!");
+			goto error_free_bh;
 		}
 		dr = (struct adfs_discrecord *)(b_data + ADFS_DR_OFFSET);
 	}
 	if (sb->s_blocksize != bh->b_size) {
 		if (!silent)
-			printk (KERN_ERR "VFS: Unsupported blocksize on dev "
-				"%s.\n", kdevname (dev));
-		goto failed_mount;
+			printk(KERN_ERR "VFS: Unsupported blocksize on dev "
+				"%s.\n", kdevname(dev));
+		goto error_free_bh;
 	}
 	/* blocksize on this device should now be set to the adfs log2secsize */
 
@@ -202,71 +257,81 @@ failed_mount:
 	else
 		sb->u.adfs_sb.s_map_block >>= -sb->u.adfs_sb.s_map2blk;
 
-	printk (KERN_DEBUG "ADFS: zone size %d, IDs per zone %d, map address %X size %d sectors\n",
+	printk(KERN_DEBUG "ADFS: zone size %d, IDs per zone %d, map address %X size %d sectors\n",
 		sb->u.adfs_sb.s_zone_size, sb->u.adfs_sb.s_ids_per_zone,
 		sb->u.adfs_sb.s_map_block, sb->u.adfs_sb.s_map_size);
-	printk (KERN_DEBUG "ADFS: sector size %d, map bit size %d\n",
-		1 << dr->log2secsize, 1 << dr->log2bpmb);
+	printk(KERN_DEBUG "ADFS: sector size %d, map bit size %d, share size %d\n",
+		1 << dr->log2secsize, 1 << dr->log2bpmb,
+		1 << (dr->log2secsize + dr->log2sharesize));
 
 	sb->s_magic = ADFS_SUPER_MAGIC;
-	sb->s_flags |= MS_RDONLY;	/* we don't support writing yet */
 
-	sb->u.adfs_sb.s_map = kmalloc (sb->u.adfs_sb.s_map_size *
-				sizeof (struct buffer_head *), GFP_KERNEL);
+	sb->u.adfs_sb.s_map = kmalloc(sb->u.adfs_sb.s_map_size *
+				sizeof(struct buffer_head *), GFP_KERNEL);
 	if (sb->u.adfs_sb.s_map == NULL) {
-		adfs_error (sb, NULL, "not enough memory");
-		goto failed_mount;
+		adfs_error(sb, NULL, "not enough memory");
+		goto error_free_bh;
 	}
 
 	for (i = 0; i < sb->u.adfs_sb.s_map_size; i++) {
-		sb->u.adfs_sb.s_map[i] = bread (dev,
+		sb->u.adfs_sb.s_map[i] = bread(dev,
 						sb->u.adfs_sb.s_map_block + i,
 						sb->s_blocksize);
 		if (!sb->u.adfs_sb.s_map[i]) {
 			for (j = 0; j < i; j++)
-				brelse (sb->u.adfs_sb.s_map[j]);
-			kfree (sb->u.adfs_sb.s_map);
-			adfs_error (sb, NULL, "unable to read map");
-			goto failed_mount;
+				brelse(sb->u.adfs_sb.s_map[j]);
+			kfree(sb->u.adfs_sb.s_map);
+			adfs_error(sb, NULL, "unable to read map");
+			goto error_free_bh;
 		}
 	}
-	if (!adfs_checkmap (sb)) {
+	if (!adfs_checkmap(sb)) {
 		for (i = 0; i < sb->u.adfs_sb.s_map_size; i++)
-			brelse (sb->u.adfs_sb.s_map[i]);
-		adfs_error (sb, NULL, "map corrupted");
-		goto failed_mount;
+			brelse(sb->u.adfs_sb.s_map[i]);
+		adfs_error(sb, NULL, "map corrupted");
+		goto error_free_bh;
 	}
 
 	dr = (struct adfs_discrecord *)(sb->u.adfs_sb.s_map[0]->b_data + 4);
-	unlock_super (sb);
+	unlock_super(sb);
 
 	/*
 	 * set up enough so that it can read an inode
 	 */
 	sb->s_op = &adfs_sops;
-	sb->u.adfs_sb.s_root = adfs_inode_generate (dr->root, 0);
+	sb->u.adfs_sb.s_root = adfs_inode_generate(dr->root, 0);
 	sb->s_root = d_alloc_root(iget(sb, sb->u.adfs_sb.s_root), NULL);
 
 	if (!sb->s_root) {
-		sb->s_dev = 0;
 		for (i = 0; i < sb->u.adfs_sb.s_map_size; i++)
-			brelse (sb->u.adfs_sb.s_map[i]);
-		brelse (bh);
-		adfs_error (sb, NULL, "get root inode failed\n");
-		MOD_DEC_USE_COUNT;
-		return NULL;
+			brelse(sb->u.adfs_sb.s_map[i]);
+		brelse(bh);
+		adfs_error(sb, NULL, "get root inode failed\n");
+		goto error_dec_use;
 	}
 	return sb;
+
+error_free_bh:
+	if (bh)
+		brelse(bh);
+error_unlock:
+	unlock_super(sb);
+error_dec_use:
+	MOD_DEC_USE_COUNT;
+error:
+	sb->s_dev = 0;
+	return NULL;
 }
 
-static int adfs_statfs (struct super_block *sb, struct statfs *buf, int bufsiz)
+static int adfs_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 {
 	struct statfs tmp;
 	const unsigned int nidlen = sb->u.adfs_sb.s_idlen + 1;
 
 	tmp.f_type = ADFS_SUPER_MAGIC;
 	tmp.f_bsize = sb->s_blocksize;
-	tmp.f_blocks = (sb->u.adfs_sb.s_dr->disc_size) >> (sb->s_blocksize_bits);
+	tmp.f_blocks = sb->u.adfs_sb.s_dr->disc_size_high << (32 - sb->s_blocksize_bits) |
+		       sb->u.adfs_sb.s_dr->disc_size >> sb->s_blocksize_bits;
 	tmp.f_files = tmp.f_blocks >> nidlen;
 	{
 		unsigned int i, j = 0;
@@ -305,35 +370,35 @@ static int adfs_statfs (struct super_block *sb, struct statfs *buf, int bufsiz)
 				if (freelink <= nidlen) break;
 			} while (mapindex < 8 * sb->s_blocksize);
 			if (mapindex > 8 * sb->s_blocksize)
-				adfs_error (sb, NULL, "oversized free fragment\n");
+				adfs_error(sb, NULL, "oversized free fragment\n");
 			else if (freelink)
-				adfs_error (sb, NULL, "undersized free fragment\n");
+				adfs_error(sb, NULL, "undersized free fragment\n");
 		}
 		tmp.f_bfree = tmp.f_bavail = j <<
 			(sb->u.adfs_sb.s_dr->log2bpmb - sb->s_blocksize_bits);
 	}
 	tmp.f_ffree = tmp.f_bfree >> nidlen;
 	tmp.f_namelen = ADFS_NAME_LEN;
-	return copy_to_user (buf, &tmp, bufsiz) ? -EFAULT : 0;
+	return copy_to_user(buf, &tmp, bufsiz) ? -EFAULT : 0;
 }
 
 static struct file_system_type adfs_fs_type = {
 	"adfs", FS_REQUIRES_DEV, adfs_read_super, NULL
 };
 
-__initfunc(int init_adfs_fs (void))
+__initfunc(int init_adfs_fs(void))
 {
-	return register_filesystem (&adfs_fs_type);
+	return register_filesystem(&adfs_fs_type);
 }
 
 #ifdef MODULE
-int init_module (void)
+int init_module(void)
 {
 	return init_adfs_fs();
 }
 
-void cleanup_module (void)
+void cleanup_module(void)
 {
-	unregister_filesystem (&adfs_fs_type);
+	unregister_filesystem(&adfs_fs_type);
 }
 #endif

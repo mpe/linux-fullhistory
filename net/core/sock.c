@@ -7,7 +7,7 @@
  *		handler for protocols to use and generic option handler.
  *
  *
- * Version:	$Id: sock.c,v 1.77 1999/03/21 05:22:26 davem Exp $
+ * Version:	$Id: sock.c,v 1.78 1999/03/25 10:03:55 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -346,9 +346,8 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 
 				filter = sk->filter;
 
-				net_serialize_enter();
 				sk->filter = NULL;
-				net_serialize_leave();
+				synchronize_bh();
 				
 				if (filter)
 					sk_filter_release(sk, filter);
