@@ -254,10 +254,12 @@ struct task_struct {
 /* various fields */
 	struct task_struct *next_task, *prev_task;
 	struct sigaction sigaction[32];
+	unsigned long * signal_map;
+	unsigned long * signal_invmap;
 	unsigned long saved_kernel_stack;
 	unsigned long kernel_stack_page;
 	int exit_code, exit_signal;
-	int elf_executable:1;
+	unsigned long personality;
 	int dumpable:1;
 	int did_exec:1;
 	int pid,pgrp,session,leader;
@@ -323,7 +325,7 @@ struct task_struct {
 /* state etc */	{ 0,15,15,0,0,0,0, \
 /* debugregs */ { 0, },            \
 /* schedlink */	&init_task,&init_task, \
-/* signals */	{{ 0, },}, \
+/* signals */	{{ 0, },}, ident_map, ident_map, \
 /* stack */	0,(unsigned long) &init_kernel_stack, \
 /* ec,brk... */	0,0,0,0,0, \
 /* pid etc.. */	0,0,0,0, \

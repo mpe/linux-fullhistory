@@ -881,9 +881,9 @@ mcd_init(unsigned long mem_start, unsigned long mem_end)
 
 	/* don't get the IRQ until we know for sure the drive is there */
 
-	if (irqaction(MCD_INTR_NR,  &mcd_sigaction))
+	if (irqaction(mcd_irq,  &mcd_sigaction))
 	{
-		printk("mcd: Unable to get IRQ%d for Mitsumi CD-ROM\n", MCD_INTR_NR);
+		printk("mcd: Unable to get IRQ%d for Mitsumi CD-ROM\n", mcd_irq);
 		return mem_start;
 	}
 	snarf_region(mcd_port, 4);

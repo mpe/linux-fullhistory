@@ -135,7 +135,9 @@ asmlinkage int sys_signal(int signum, unsigned long handler)
 {
 	struct sigaction tmp;
 
-	if (signum<1 || signum>32 || signum==SIGKILL || signum==SIGSTOP)
+	if (signum<1 || signum>32)
+		return -EINVAL;
+	if (signum==SIGKILL || signum==SIGSTOP)
 		return -EINVAL;
 	if (handler >= TASK_SIZE)
 		return -EFAULT;
@@ -154,7 +156,9 @@ asmlinkage int sys_sigaction(int signum, const struct sigaction * action,
 {
 	struct sigaction new_sa, *p;
 
-	if (signum<1 || signum>32 || signum==SIGKILL || signum==SIGSTOP)
+	if (signum<1 || signum>32)
+		return -EINVAL;
+	if (signum==SIGKILL || signum==SIGSTOP)
 		return -EINVAL;
 	p = signum - 1 + current->sigaction;
 	if (action) {
@@ -242,7 +246,7 @@ static void setup_frame(struct sigaction * sa, unsigned long ** fp, unsigned lon
 		do_exit(SIGSEGV);
 /* set up the "normal" stack seen by the signal handler (iBCS2) */
 	put_fs_long(__CODE,frame);
-	put_fs_long(signr, frame+1);
+	put_fs_long(current->signal_invmap[signr], frame+1);
 	put_fs_long(regs->gs, frame+2);
 	put_fs_long(regs->fs, frame+3);
 	put_fs_long(regs->es, frame+4);

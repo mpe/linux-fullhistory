@@ -53,6 +53,47 @@ asmlinkage int sys_brk(unsigned long);
 
 extern void shm_exit (void);
 
+static int load_aout_binary(struct linux_binprm *, struct pt_regs * regs);
+static int load_aout_library(int fd);
+
+/*
+ * Here are the actual binaries that will be accepted:
+ * add more with "register_binfmt()"..
+ */
+static struct linux_binfmt aout_format = { NULL, load_aout_binary, load_aout_library };
+static struct linux_binfmt *formats = &aout_format;
+
+int register_binfmt(struct linux_binfmt * fmt)
+{
+	struct linux_binfmt ** tmp = &formats;
+
+	if (!fmt)
+		return -EINVAL;
+	if (fmt->next)
+		return -EBUSY;
+	while (*tmp) {
+		if (fmt == *tmp)
+			return -EBUSY;
+		tmp = &(*tmp)->next;
+	}
+	*tmp = fmt;
+	return 0;	
+}
+
+int unregister_binfmt(struct linux_binfmt * fmt)
+{
+	struct linux_binfmt ** tmp = &formats;
+
+	while (*tmp) {
+		if (fmt == *tmp) {
+			*tmp = fmt->next;
+			return 0;
+		}
+		tmp = &(*tmp)->next;
+	}
+	return -EINVAL;
+}
+
 int open_inode(struct inode * inode, int mode)
 {
 	int error, fd;
@@ -247,14 +288,14 @@ asmlinkage int sys_uselib(const char * library)
 	file = current->files->fd[fd];
 	retval = -ENOEXEC;
 	if (file && file->f_inode && file->f_op && file->f_op->read) {
-		fmt = formats;
-		do {
+		for (fmt = formats ; fmt ; fmt = fmt->next) {
 			int (*fn)(int) = fmt->load_shlib;
 			if (!fn)
 				break;
 			retval = fn(fd);
-			fmt++;
-		} while (retval == -ENOEXEC);
+			if (retval != -ENOEXEC)
+				break;
+		}
 	}
 	sys_close(fd);
   	return retval;
@@ -530,13 +571,13 @@ void flush_old_exec(struct linux_binprm * bprm)
 	if (last_task_used_math == current)
 		last_task_used_math = NULL;
 	current->used_math = 0;
-	current->elf_executable = 0;
+	current->personality = 0;
 }
 
 /*
  * sys_execve() executes a new program.
  */
-static int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs)
+int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs)
 {
 	struct linux_binprm bprm;
 	struct linux_binfmt * fmt;
@@ -684,8 +725,7 @@ restart_interp:
 	}
 
 	bprm.sh_bang = sh_bang;
-	fmt = formats;
-	do {
+	for (fmt = formats ; fmt ; fmt = fmt->next) {
 		int (*fn)(struct linux_binprm *, struct pt_regs *) = fmt->load_binary;
 		if (!fn)
 			break;
@@ -695,8 +735,9 @@ restart_interp:
 			current->did_exec = 1;
 			return 0;
 		}
-		fmt++;
-	} while (retval == -ENOEXEC);
+		if (retval != -ENOEXEC)
+			break;
+	}
 exec_error2:
 	iput(bprm.inode);
 exec_error1:
@@ -721,39 +762,6 @@ asmlinkage int sys_execve(struct pt_regs regs)
 	return error;
 }
 
-/*
- * These are  the prototypes for the  functions in the  dispatch table, as
- * well as the  dispatch  table itself.
- */
-
-extern int load_aout_binary(struct linux_binprm *,
-			    struct pt_regs * regs);
-extern int load_aout_library(int fd);
-
-#ifdef CONFIG_BINFMT_ELF
-extern int load_elf_binary(struct linux_binprm *,
-			    struct pt_regs * regs);
-extern int load_elf_library(int fd);
-#endif
-
-#ifdef CONFIG_BINFMT_COFF
-extern int load_coff_binary(struct linux_binprm *,
-			    struct pt_regs * regs);
-extern int load_coff_library(int fd);
-#endif
-
-/* Here are the actual binaries that will be accepted  */
-struct linux_binfmt formats[] = {
-	{load_aout_binary, load_aout_library},
-#ifdef CONFIG_BINFMT_ELF
-	{load_elf_binary, load_elf_library},
-#endif
-#ifdef CONFIG_BINFMT_COFF
-	{load_coff_binary, load_coff_library},
-#endif
-	{NULL, NULL}
-};
-
 static void set_brk(unsigned long start, unsigned long end)
 {
 	start = PAGE_ALIGN(start);
@@ -770,7 +778,7 @@ static void set_brk(unsigned long start, unsigned long end)
  * libraries.  There is no binary dependent code anywhere else.
  */
 
-int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
+static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 {
 	struct exec ex;
 	struct file * file;
@@ -868,7 +876,7 @@ beyond_if:
 }
 
 
-int load_aout_library(int fd)
+static int load_aout_library(int fd)
 {
         struct file * file;
 	struct exec ex;

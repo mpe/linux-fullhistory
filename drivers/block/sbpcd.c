@@ -123,7 +123,6 @@
 #include <linux/signal.h>
 #endif SBPCD_USE_IRQ
 
-#include <linux/ddi.h>
 #include <linux/major.h> 
 
 #include <asm/system.h>
@@ -141,6 +140,11 @@
 #ifndef CONFIG_ISO9660_FS
 #error "SBPCD: \"make config\" again. File system iso9660 is necessary."
 #endif
+
+/*
+ * This may come back some day..
+ */
+#define DDIOCSDBG	0x9000
 
 /*
  * still testing around...

@@ -3,7 +3,6 @@
 #include "datalink.h"
 #include <linux/mm.h>
 #include <linux/in.h>
-#include <linux/ddi.h>
 
 static struct datalink_proto *p8022_list = NULL;
 

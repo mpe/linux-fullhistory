@@ -40,13 +40,6 @@ ifdef CONFIG_HPFS_FS
 FS_SUBDIRS := $(FS_SUBDIRS) hpfs
 endif
 
-ifdef CONFIG_BINFMT_ELF
-BINFMTS := $(BINFMTS) binfmt_elf.o
-endif
-ifdef CONFIG_BINFMT_COFF
-BINFMTS := $(BINFMTS) binfmt_coff.o
-endif
-
 .c.s:
 	$(CC) $(CFLAGS) -S $<
 .c.o:

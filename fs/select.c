@@ -3,6 +3,11 @@
  *
  * Created for Linux based loosely upon Mathius Lattner's minix
  * patches by Peter MacDonald. Heavily edited by Linus.
+ *
+ *  4 February 1994
+ *     COFF/ELF binary emulation. If the process has the STICKY_TIMEOUTS
+ *     flag set in its personality we do *not* modify the given timeout
+ *     parameter to reflect time remaining.
  */
 
 #include <linux/types.h>
@@ -14,6 +19,7 @@
 #include <linux/stat.h>
 #include <linux/signal.h>
 #include <linux/errno.h>
+#include <linux/personality.h>
 
 #include <asm/segment.h>
 #include <asm/system.h>
@@ -235,7 +241,7 @@ asmlinkage int sys_select( unsigned long *buffer )
 	else
 		timeout = 0;
 	current->timeout = 0;
-	if (tvp) {
+	if (tvp && !(current->personality & STICKY_TIMEOUTS)) {
 		put_fs_long(timeout/HZ, (unsigned long *) &tvp->tv_sec);
 		timeout %= HZ;
 		timeout *= (1000000/HZ);

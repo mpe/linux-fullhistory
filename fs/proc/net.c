@@ -280,6 +280,8 @@ static int proc_readnet(struct inode * inode, struct file * file,
  		 *	the start pointer and we know the length.. 
 		 */
 
+		if (length <= 0)
+			break;
 		/*
  		 *	Copy the bytes
 		 */

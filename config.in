@@ -17,7 +17,9 @@ if [ "$CONFIG_NET" = "y" ]; then
 comment 'Networking options'
 bool 'TCP/IP networking' CONFIG_INET y
 if [ "$CONFIG_INET" "=" "y" ]; then
+bool 'IP forwarding/gatewaying' CONFIG_IP_FORWARD n
 comment '(it is safe to leave these untouched)'
+bool 'PC/TCP compatibility mode' CONFIG_INET_PCTCP n
 bool 'Reverse ARP' CONFIG_INET_RARP n
 bool 'Assume subnets are local' CONFIG_INET_SNARL y
 bool 'Disable NAGLE algorithm (normally enabled)' CONFIG_TCP_NAGLE_OFF n
@@ -25,11 +27,6 @@ fi
 bool 'The IPX protocol' CONFIG_IPX y
 #bool 'Amateur Radio AX.25 Level 2' CONFIG_AX25 n
 fi
-
-comment 'Program binary formats'
-
-bool 'Elf executables' CONFIG_BINFMT_ELF y
-bool 'COFF executables' CONFIG_BINFMT_COFF y
 
 comment 'SCSI support'
 
@@ -78,7 +75,7 @@ if [ "$CONFIG_SLIP" = "y" ]; then
   bool ' CSLIP compressed headers' SL_COMPRESSED y
 #  bool ' SLIP debugging on' SL_DUMP y
 fi
-#bool 'PPP (point-to-point) support' CONFIG_PPP n
+bool 'PPP (point-to-point) support' CONFIG_PPP n
 bool 'Load balancing support (very experimental)' CONFIG_SLAVE_BALANCING n
 bool 'PLIP (parallel port) support' CONFIG_PLIP n
 bool 'NE2000/NE1000 support' CONFIG_NE2000 n
