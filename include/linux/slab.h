@@ -61,7 +61,7 @@ extern kmem_cache_t *kmem_cache_create(const char *, size_t, size_t, unsigned lo
 				       void (*)(void *, kmem_cache_t *, unsigned long));
 extern int kmem_cache_destroy(kmem_cache_t *);
 extern int kmem_cache_shrink(kmem_cache_t *);
-extern void *kmem_cache_alloc(kmem_cache_t *, int);
+extern void *kmem_cache_alloc(kmem_cache_t *, unsigned int __nocast);
 #ifdef CONFIG_NUMA
 extern void *kmem_cache_alloc_node(kmem_cache_t *, int);
 #else
@@ -80,9 +80,9 @@ struct cache_sizes {
 	kmem_cache_t	*cs_dmacachep;
 };
 extern struct cache_sizes malloc_sizes[];
-extern void *__kmalloc(size_t, int);
+extern void *__kmalloc(size_t, unsigned int __nocast);
 
-static inline void *kmalloc(size_t size, int flags)
+static inline void *kmalloc(size_t size, unsigned int __nocast flags)
 {
 	if (__builtin_constant_p(size)) {
 		int i = 0;
@@ -105,7 +105,7 @@ found:
 	return __kmalloc(size, flags);
 }
 
-extern void *kcalloc(size_t, size_t, int);
+extern void *kcalloc(size_t, size_t, unsigned int __nocast);
 extern void kfree(const void *);
 extern unsigned int ksize(const void *);
 

@@ -389,7 +389,7 @@ void *vmap(struct page **pages, unsigned int count,
 
 EXPORT_SYMBOL(vmap);
 
-void *__vmalloc_area(struct vm_struct *area, int gfp_mask, pgprot_t prot)
+void *__vmalloc_area(struct vm_struct *area, unsigned int __nocast gfp_mask, pgprot_t prot)
 {
 	struct page **pages;
 	unsigned int nr_pages, array_size, i;
@@ -440,7 +440,7 @@ fail:
  *	allocator with @gfp_mask flags.  Map them into contiguous
  *	kernel virtual space, using a pagetable protection of @prot.
  */
-void *__vmalloc(unsigned long size, int gfp_mask, pgprot_t prot)
+void *__vmalloc(unsigned long size, unsigned int __nocast gfp_mask, pgprot_t prot)
 {
 	struct vm_struct *area;
 

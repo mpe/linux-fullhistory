@@ -219,7 +219,7 @@ static int pkt_grow_pktlist(struct pktcdvd_device *pd, int nr_packets)
 	return 1;
 }
 
-static void *pkt_rb_alloc(int gfp_mask, void *data)
+static void *pkt_rb_alloc(unsigned int __nocast gfp_mask, void *data)
 {
 	return kmalloc(sizeof(struct pkt_rb_node), gfp_mask);
 }
@@ -2054,7 +2054,7 @@ static int pkt_close(struct inode *inode, struct file *file)
 }
 
 
-static void *psd_pool_alloc(int gfp_mask, void *data)
+static void *psd_pool_alloc(unsigned int __nocast gfp_mask, void *data)
 {
 	return kmalloc(sizeof(struct packet_stacked_data), gfp_mask);
 }

@@ -648,7 +648,7 @@ get_vma_policy(struct vm_area_struct *vma, unsigned long addr)
 }
 
 /* Return a zonelist representing a mempolicy */
-static struct zonelist *zonelist_policy(unsigned gfp, struct mempolicy *policy)
+static struct zonelist *zonelist_policy(unsigned int __nocast gfp, struct mempolicy *policy)
 {
 	int nd;
 
@@ -712,7 +712,7 @@ static unsigned offset_il_node(struct mempolicy *pol,
 
 /* Allocate a page in interleaved policy.
    Own path because it needs to do special accounting. */
-static struct page *alloc_page_interleave(unsigned gfp, unsigned order, unsigned nid)
+static struct page *alloc_page_interleave(unsigned int __nocast gfp, unsigned order, unsigned nid)
 {
 	struct zonelist *zl;
 	struct page *page;
@@ -750,7 +750,7 @@ static struct page *alloc_page_interleave(unsigned gfp, unsigned order, unsigned
  *	Should be called with the mm_sem of the vma hold.
  */
 struct page *
-alloc_page_vma(unsigned gfp, struct vm_area_struct *vma, unsigned long addr)
+alloc_page_vma(unsigned int __nocast gfp, struct vm_area_struct *vma, unsigned long addr)
 {
 	struct mempolicy *pol = get_vma_policy(vma, addr);
 
@@ -789,7 +789,7 @@ alloc_page_vma(unsigned gfp, struct vm_area_struct *vma, unsigned long addr)
  *	interrupt context and apply the current process NUMA policy.
  *	Returns NULL when no page can be allocated.
  */
-struct page *alloc_pages_current(unsigned gfp, unsigned order)
+struct page *alloc_pages_current(unsigned int __nocast gfp, unsigned order)
 {
 	struct mempolicy *pol = current->mempolicy;
 

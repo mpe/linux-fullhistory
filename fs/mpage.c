@@ -98,7 +98,8 @@ struct bio *mpage_bio_submit(int rw, struct bio *bio)
 
 static struct bio *
 mpage_alloc(struct block_device *bdev,
-		sector_t first_sector, int nr_vecs, int gfp_flags)
+		sector_t first_sector, int nr_vecs,
+		unsigned int __nocast gfp_flags)
 {
 	struct bio *bio;
 

@@ -888,7 +888,7 @@ __initcall(cpucache_init);
  * did not request dmaable memory, we might get it, but that
  * would be relatively rare and ignorable.
  */
-static void *kmem_getpages(kmem_cache_t *cachep, int flags, int nodeid)
+static void *kmem_getpages(kmem_cache_t *cachep, unsigned int __nocast flags, int nodeid)
 {
 	struct page *page;
 	void *addr;
@@ -1678,7 +1678,7 @@ EXPORT_SYMBOL(kmem_cache_destroy);
 
 /* Get the memory for a slab management obj. */
 static struct slab* alloc_slabmgmt (kmem_cache_t *cachep,
-			void *objp, int colour_off, int local_flags)
+			void *objp, int colour_off, unsigned int __nocast local_flags)
 {
 	struct slab *slabp;
 	
@@ -1749,7 +1749,7 @@ static void cache_init_objs (kmem_cache_t * cachep,
 	slabp->free = 0;
 }
 
-static void kmem_flagcheck(kmem_cache_t *cachep, int flags)
+static void kmem_flagcheck(kmem_cache_t *cachep, unsigned int flags)
 {
 	if (flags & SLAB_DMA) {
 		if (!(cachep->gfpflags & GFP_DMA))
@@ -1779,12 +1779,12 @@ static void set_slab_attr(kmem_cache_t *cachep, struct slab *slabp, void *objp)
  * Grow (by 1) the number of slabs within a cache.  This is called by
  * kmem_cache_alloc() when there are no active objs left in a cache.
  */
-static int cache_grow (kmem_cache_t * cachep, int flags, int nodeid)
+static int cache_grow (kmem_cache_t * cachep, unsigned int __nocast flags, int nodeid)
 {
 	struct slab	*slabp;
 	void		*objp;
 	size_t		 offset;
-	int		 local_flags;
+	unsigned int	 local_flags;
 	unsigned long	 ctor_flags;
 
 	/* Be lazy and only check for valid flags here,
@@ -1982,7 +1982,7 @@ bad:
 #define check_slabp(x,y) do { } while(0)
 #endif
 
-static void* cache_alloc_refill(kmem_cache_t* cachep, int flags)
+static void* cache_alloc_refill(kmem_cache_t* cachep, unsigned int __nocast flags)
 {
 	int batchcount;
 	struct kmem_list3 *l3;
@@ -2079,7 +2079,7 @@ alloc_done:
 }
 
 static inline void
-cache_alloc_debugcheck_before(kmem_cache_t *cachep, int flags)
+cache_alloc_debugcheck_before(kmem_cache_t *cachep, unsigned int __nocast flags)
 {
 	might_sleep_if(flags & __GFP_WAIT);
 #if DEBUG
@@ -2134,7 +2134,7 @@ cache_alloc_debugcheck_after(kmem_cache_t *cachep,
 #endif
 
 
-static inline void * __cache_alloc (kmem_cache_t *cachep, int flags)
+static inline void * __cache_alloc (kmem_cache_t *cachep, unsigned int __nocast flags)
 {
 	unsigned long save_flags;
 	void* objp;
@@ -2296,7 +2296,7 @@ static inline void __cache_free (kmem_cache_t *cachep, void* objp)
  * Allocate an object from this cache.  The flags are only relevant
  * if the cache has no available objects.
  */
-void * kmem_cache_alloc (kmem_cache_t *cachep, int flags)
+void * kmem_cache_alloc (kmem_cache_t *cachep, unsigned int __nocast flags)
 {
 	return __cache_alloc(cachep, flags);
 }
@@ -2453,7 +2453,7 @@ EXPORT_SYMBOL(kmem_cache_alloc_node);
  * platforms.  For example, on i386, it means that the memory must come
  * from the first 16MB.
  */
-void * __kmalloc (size_t size, int flags)
+void * __kmalloc (size_t size, unsigned int __nocast flags)
 {
 	struct cache_sizes *csizep = malloc_sizes;
 
@@ -2545,7 +2545,7 @@ EXPORT_SYMBOL(kmem_cache_free);
  * @size: element size.
  * @flags: the type of memory to allocate.
  */
-void *kcalloc(size_t n, size_t size, int flags)
+void *kcalloc(size_t n, size_t size, unsigned int __nocast flags)
 {
 	void *ret = NULL;
 

@@ -514,7 +514,7 @@ void iommu_unmap_single(struct iommu_table *tbl, dma_addr_t dma_handle,
  * to the dma address (mapping) of the first page.
  */
 void *iommu_alloc_coherent(struct iommu_table *tbl, size_t size,
-		dma_addr_t *dma_handle, int flag)
+		dma_addr_t *dma_handle, unsigned int __nocast flag)
 {
 	void *ret = NULL;
 	dma_addr_t mapping;

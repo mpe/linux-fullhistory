@@ -253,7 +253,7 @@ static struct mm_struct *oom_kill_process(struct task_struct *p)
  * OR try to be smart about which process to kill. Note that we
  * don't have to be perfect here, we just have to be good.
  */
-void out_of_memory(int gfp_mask)
+void out_of_memory(unsigned int __nocast gfp_mask)
 {
 	struct mm_struct *mm = NULL;
 	task_t * p;

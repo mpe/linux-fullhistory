@@ -666,7 +666,7 @@ struct page *
 grab_cache_page_nowait(struct address_space *mapping, unsigned long index)
 {
 	struct page *page = find_get_page(mapping, index);
-	int gfp_mask;
+	unsigned int gfp_mask;
 
 	if (page) {
 		if (!TestSetPageLocked(page))
