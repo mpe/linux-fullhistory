@@ -140,6 +140,7 @@ void copy_thread(int nr, unsigned long clone_flags, unsigned long usp,
 	p->tss.usp = usp;
 	p->tss.ksp = (unsigned long) childstack;
 	p->tss.flags = 1;
+	p->mm->context = 0;
 }
 
 /*

@@ -25,12 +25,14 @@
 #include <asm/system.h>
 
 /*
- * Fill in the supplied page for mmap
+ * Return a page for mmap. We need to start using the page cache,
+ * because otherwise we can't share pages between processes..
  */
 static unsigned long nfs_file_mmap_nopage(struct vm_area_struct * area,
-	unsigned long address, unsigned long page, int no_share)
+	unsigned long address, int no_share)
 {
 	struct inode * inode = area->vm_inode;
+	unsigned long page;
 	unsigned int clear;
 	unsigned long tmp;
 	int n;
@@ -38,6 +40,9 @@ static unsigned long nfs_file_mmap_nopage(struct vm_area_struct * area,
 	int pos;
 	struct nfs_fattr fattr;
 
+	page = __get_free_page(GFP_KERNEL);
+	if (!page)
+		return page;
 	address &= PAGE_MASK;
 	pos = address - area->vm_start + area->vm_offset;
 

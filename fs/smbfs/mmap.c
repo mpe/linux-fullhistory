@@ -25,15 +25,19 @@
  */
 static unsigned long 
 smb_file_mmap_nopage(struct vm_area_struct * area,
-		     unsigned long address, unsigned long page, int no_share)
+		     unsigned long address, int no_share)
 {
 	struct inode * inode = area->vm_inode;
+	unsigned long page;
 	unsigned int clear;
 	unsigned long tmp;
 	int n;
 	int i;
 	int pos;
 
+	page = __get_free_page(GFP_KERNEL);
+	if (!page)
+		return 0;
 	address &= PAGE_MASK;
 	pos = address - area->vm_start + area->vm_offset;
 

@@ -59,6 +59,8 @@ extern void alpha_switch_to(unsigned long pctxp);
 	alpha_switch_to((unsigned long) &(p)->tss - 0xfffffc0000000000); \
 } while (0)
 
+extern void imb(void);
+
 #define mb() \
 __asm__ __volatile__("mb": : :"memory")
 
@@ -96,6 +98,17 @@ __old_ipl; })
 #define sti()			setipl(0)
 #define save_flags(flags)	do { flags = getipl(); } while (0)
 #define restore_flags(flags)	setipl(flags)
+
+/*
+ * TB routines..
+ */
+extern void tbi(long type, ...);
+
+#define tbisi(x)	tbi(1,(x))
+#define tbisd(x)	tbi(2,(x))
+#define tbis(x)		tbi(3,(x))
+#define tbiap()		tbi(-1)
+#define tbia()		tbi(-2)
 
 /*
  * Give prototypes to shut up gcc.

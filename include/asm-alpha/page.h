@@ -51,7 +51,7 @@ typedef unsigned long pgprot_t;
 /* to align the pointer to the (next) page boundary */
 #define PAGE_ALIGN(addr)		(((addr)+PAGE_SIZE-1)&PAGE_MASK)
 
-#define PAGE_OFFSET		0xFFFFFC0000000000
+#define PAGE_OFFSET		0xFFFFFC0000000000UL
 #define MAP_NR(addr)		((((unsigned long) (addr)) - PAGE_OFFSET) >> PAGE_SHIFT)
 
 #endif /* __KERNEL__ */

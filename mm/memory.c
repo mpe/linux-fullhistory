@@ -905,21 +905,19 @@ void do_no_page(struct task_struct * tsk, struct vm_area_struct * vma,
 		get_empty_page(tsk, vma, page_table);
 		return;
 	}
-	page = __get_free_page(GFP_KERNEL);
-	if (!page) {
-		oom(tsk);
-		put_page(page_table, BAD_PAGE);
-		return;
-	}
 	++tsk->maj_flt;
 	++vma->vm_mm->rss;
 	/*
-	 * The fourth argument is "no_share", which tells the low-level code
+	 * The third argument is "no_share", which tells the low-level code
 	 * to copy, not share the page even if sharing is possible.  It's
 	 * essentially an early COW detection 
 	 */
-	page = vma->vm_ops->nopage(vma, address, page,
-		write_access && !(vma->vm_flags & VM_SHARED));
+	page = vma->vm_ops->nopage(vma, address, write_access && !(vma->vm_flags & VM_SHARED));
+	if (!page) {
+		send_sig(SIGBUS, current, 1);
+		put_page(page_table, BAD_PAGE);
+		return;
+	}
 	/*
 	 * This silly early PAGE_DIRTY setting removes a race
 	 * due to the bad i386 page protection. But it's valid

@@ -1099,7 +1099,7 @@ static int bread_page(unsigned long address, kdev_t dev, int b[], int size)
  */
 int generic_readpage(struct inode * inode, struct page * page)
 {
-	unsigned long block;
+	unsigned long block, address;
 	int *p, nr[PAGE_SIZE/512];
 	int i;
 
@@ -1113,10 +1113,20 @@ int generic_readpage(struct inode * inode, struct page * page)
 		p++;
 	} while (i > 0);
 
-	/* We should make this asynchronous, but this is good enough for now.. */
-	bread_page(page_address(page), inode->i_dev, nr, inode->i_sb->s_blocksize);
+	/*
+	 * We should make this asynchronous, but this is good enough for now..
+	 */
+
+	/* IO start */
+	page->count++;
+	address = page_address(page);
+	bread_page(address, inode->i_dev, nr, inode->i_sb->s_blocksize);
+
+	/* IO ready (this part should be in the "page ready callback" function) */
 	page->uptodate = 1;
 	wake_up(&page->wait);
+	free_page(address);
+
 	return 0;
 }
 

@@ -757,7 +757,7 @@ asmlinkage int sys_link(const char * oldname, const char * newname)
 	char * to;
 	struct inode * oldinode;
 
-	error = namei(oldname, &oldinode);
+	error = lnamei(oldname, &oldinode);
 	if (error)
 		return error;
 	error = getname(newname,&to);

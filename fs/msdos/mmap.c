@@ -27,14 +27,17 @@
 static unsigned long msdos_file_mmap_nopage(
 	struct vm_area_struct * area,
 	unsigned long address,
-	unsigned long page,
 	int error_code)
 {
 	struct inode * inode = area->vm_inode;
+	unsigned long page;
 	unsigned int clear;
 	int pos;
 	long gap;	/* distance from eof to pos */
 
+	page = __get_free_page(GFP_KERNEL);
+	if (!page)
+		return page;
 	address &= PAGE_MASK;
 	pos = address - area->vm_start + area->vm_offset;
 

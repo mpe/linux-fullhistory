@@ -88,7 +88,7 @@ int shrink_mmap(int priority, unsigned long limit)
 			if (page->count != 1)
 				age |= PAGE_AGE_VALUE << 1;
 			page->age = age >> 1;
-			if (age <= PAGE_AGE_VALUE/2) {
+			if (age < PAGE_AGE_VALUE) {
 				remove_page_from_hash_queue(page);
 				remove_page_from_inode_queue(page);
 				free_page(page_address(page));
@@ -147,51 +147,47 @@ void update_vm_cache(struct inode * inode, unsigned long pos, const char * buf, 
 }
 
 /*
- * Find a cached page and wait for it to become up-to-date, return
- * the page address.
- *
- * If no cached page can be found, create one using the supplied
- * new page instead (and return zero to indicate that we used the
- * supplied page in doing so).
- */
-static unsigned long fill_page(struct inode * inode, unsigned long offset, unsigned long newpage)
-{
-	struct page * page;
-
-	page = find_page(inode, offset);
-	if (page) {
-		if (!page->uptodate)
-			sleep_on(&page->wait);
-		return page_address(page);
-	}
-	page = mem_map + MAP_NR(newpage);
-	page->count++;
-	page->uptodate = 0;
-	page->error = 0;
-	page->offset = offset;
-	add_page_to_inode_queue(inode, page);
-	add_page_to_hash_queue(inode, page);
-	inode->i_op->readpage(inode, page);
-	page->uptodate = 1;
-	wake_up(&page->wait);
-	return 0;
-}
-
-/*
  * Try to read ahead in the file. "page_cache" is a potentially free page
  * that we could use for the cache (if it is 0 we can try to create one,
  * this is all overlapped with the IO on the previous page finishing anyway)
  */
 static unsigned long try_to_read_ahead(struct inode * inode, unsigned long offset, unsigned long page_cache)
 {
-	if (!page_cache)
+	struct page * page;
+
+	if (!page_cache) {
 		page_cache = __get_free_page(GFP_KERNEL);
+		if (!page_cache)
+			return 0;
+	}
+#ifdef readahead_makes_sense_due_to_asynchronous_reads
 	offset = (offset + PAGE_SIZE) & PAGE_MASK;
+	page = find_page(inode, offset);
+	if (page) {
+		page->count--;
+		return page_cache;
+	}
 	/*
-	 * read-ahead is not implemented yet, but this is
-	 * where we should start..
+	 * Ok, add the new page to the hash-queues...
 	 */
+	page = mem_map + MAP_NR(page_cache);
+	page->count++;
+	page->uptodate = 0;
+	page->error = 0;
+	page->offset = offset;
+	add_page_to_inode_queue(inode, page);
+	add_page_to_hash_queue(inode, page);
+
+	/* 
+	 * And start IO on it..
+	 * (this should be asynchronous, but currently isn't)
+	 */
+	inode->i_op->readpage(inode, page);
+	free_page(page_cache);
+	return 0;
+#else
 	return page_cache;
+#endif
 }
 
 /*
@@ -294,41 +290,63 @@ found_page:
 }
 
 /*
+ * Find a cached page and wait for it to become up-to-date, return
+ * the page address.
+ */
+static inline unsigned long fill_page(struct inode * inode, unsigned long offset)
+{
+	struct page * page;
+	unsigned long new_page;
+
+	page = find_page(inode, offset);
+	if (page)
+		goto found_page;
+	new_page = __get_free_page(GFP_KERNEL);
+	page = find_page(inode, offset);
+	if (page) {
+		if (new_page)
+			free_page(new_page);
+		goto found_page;
+	}
+	if (!new_page)
+		return 0;
+	page = mem_map + MAP_NR(new_page);
+	new_page = 0;
+	page->count++;
+	page->uptodate = 0;
+	page->error = 0;
+	page->offset = offset;
+	add_page_to_inode_queue(inode, page);
+	add_page_to_hash_queue(inode, page);
+	inode->i_op->readpage(inode, page);
+found_page:
+	if (!page->uptodate)
+		sleep_on(&page->wait);
+	return page_address(page);
+}
+
+/*
  * Semantics for shared and private memory areas are different past the end
  * of the file. A shared mapping past the last page of the file is an error
  * and results in a SIBGUS, while a private mapping just maps in a zero page.
  */
-static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long address,
-	unsigned long page, int no_share)
+static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long address, int no_share)
 {
 	unsigned long offset;
 	struct inode * inode = area->vm_inode;
-	unsigned long new_page;
+	unsigned long page;
 
 	offset = (address & PAGE_MASK) - area->vm_start + area->vm_offset;
 	if (offset >= inode->i_size && (area->vm_flags & VM_SHARED) && area->vm_mm == current->mm)
-		send_sig(SIGBUS, current, 1);
+		return 0;
 
-	new_page = fill_page(inode, offset, page);
-	if (new_page) {
-		if (no_share) {
-			memcpy((void *) page, (void *) new_page, PAGE_SIZE);
-			free_page(new_page);
-			return page;
-		}
+	page = fill_page(inode, offset);
+	if (page && no_share) {
+		unsigned long new_page = __get_free_page(GFP_KERNEL);
+		if (new_page)
+			memcpy((void *) new_page, (void *) page, PAGE_SIZE);
 		free_page(page);
 		return new_page;
-	}
-
-	if (no_share) {
-		new_page = __get_free_page(GFP_USER);
-		if (!new_page) {
-			oom(current);
-			new_page = pte_page(BAD_PAGE);
-		}
-		memcpy((void *) new_page, (void *) page, PAGE_SIZE);
-		free_page(page);
-		page = new_page;
 	}
 	return page;
 }

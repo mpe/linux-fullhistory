@@ -9,13 +9,7 @@
  * in <asm/page.h> (currently 8192).
  */
 
-extern void tbi(long type, ...);
-
-#define tbisi(x)	tbi(1,(x))
-#define tbisd(x)	tbi(2,(x))
-#define tbis(x)		tbi(3,(x))
-#define tbiap()		tbi(-1)
-#define tbia()		tbi(-2)
+#include <asm/system.h>
 
 /*
  * Invalidate current user mapping.

@@ -22,6 +22,7 @@
 #include <linux/swap.h>
 #include <linux/fs.h>
 #include <linux/swapctl.h>
+#include <linux/pagemap.h>
 
 #include <asm/dma.h>
 #include <asm/system.h> /* for cli()/sti() */
@@ -420,17 +421,19 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 	pte_t pte;
 	unsigned long entry;
 	unsigned long page;
+	struct page * page_map;
 
 	pte = *page_table;
 	if (!pte_present(pte))
 		return 0;
 	page = pte_page(pte);
-	if (page >= high_memory)
+	if (MAP_NR(page) >= MAP_NR(high_memory))
 		return 0;
 	if (page >= limit)
 		return 0;
 
-	if (mem_map[MAP_NR(page)].reserved)
+	page_map = mem_map + MAP_NR(page);
+	if (page_map->reserved)
 		return 0;
 	/* Deal with page aging.  Pages age from being unused; they
 	 * rejuvinate on being accessed.  Only swap old pages (age==0
@@ -438,11 +441,10 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 	if ((pte_dirty(pte) && delete_from_swap_cache(page)) 
 	    || pte_young(pte))  {
 		set_pte(page_table, pte_mkold(pte));
-		touch_page(page);
+		page_age_update(page_map, 1);
 		return 0;
 	}	
-	age_page(page);
-	if (age_of(page))
+	if (page_age_update(page_map, pte_young(pte)))
 		return 0;
 	if (pte_dirty(pte)) {
 		if (vma->vm_ops && vma->vm_ops->swapout) {
@@ -451,7 +453,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 			if (vma->vm_ops->swapout(vma, address - vma->vm_start + vma->vm_offset, page_table))
 				kill_proc(pid, SIGBUS, 1);
 		} else {
-			if (mem_map[MAP_NR(page)].count != 1)
+			if (page_map->count != 1)
 				return 0;
 			if (!(entry = get_swap_page()))
 				return 0;
@@ -465,7 +467,7 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 		return 1;	/* we slept: the process may not exist any more */
 	}
         if ((entry = find_in_swap_cache(page)))  {
-		if (mem_map[MAP_NR(page)].count != 1) {
+		if (page_map->count != 1) {
 			set_pte(page_table, pte_mkdirty(pte));
 			printk("Aiee.. duplicated cached swap-cache entry\n");
 			return 0;

@@ -7,16 +7,38 @@
  * Copyright (C) 1996, Linus Torvalds
  */
 
-#include <asm/pgtable.h>
+#include <linux/config.h>
+#include <asm/system.h>
 
 /*
- * The maximum ASN's the processor supports. On the EV4 this doesn't
- * matter as the pal-code doesn't use the ASNs anyway, on the EV5
+ * The maximum ASN's the processor supports.  On the EV4 this is 63
+ * but the PAL-code doesn't actually use this information.  On the
  * EV5 this is 127.
+ *
+ * On the EV4, the ASNs are more-or-less useless anyway, as they are
+ * only used as a icache tag, not for TB entries.  On the EV5 ASN's
+ * also validate the TB entries, and thus make a lot more sense.
+ *
+ * The EV4 ASN's don't even match the architecture manual, ugh.  And
+ * I quote: "If a processor implements address space numbers (ASNs),
+ * and the old PTE has the Address Space Match (ASM) bit clear (ASNs
+ * in use) and the Valid bit set, then entries can also effectively be
+ * made coherent by assigning a new, unused ASN to the currently
+ * running process and not reusing the previous ASN before calling the
+ * appropriate PALcode routine to invalidate the translation buffer
+ * (TB)". 
+ *
+ * In short, the EV4 has a "kind of" ASN capability, but it doesn't actually
+ * work correctly and can thus not be used (explaining the lack of PAL-code
+ * support).
  */
+#ifdef CONFIG_EV5
 #define MAX_ASN 127
+#else
+#define MAX_ASN 63
+#endif
 
-#define ASN_VERSION_SHIFT 32
+#define ASN_VERSION_SHIFT 16
 #define ASN_VERSION_MASK ((~0UL) << ASN_VERSION_SHIFT)
 #define ASN_FIRST_VERSION (1UL << ASN_VERSION_SHIFT)
 
@@ -33,6 +55,7 @@
  */
 extern inline void get_mmu_context(struct task_struct *p)
 {
+#ifdef CONFIG_EV5
 	static unsigned long asn_cache = ASN_FIRST_VERSION;
 	struct mm_struct * mm = p->mm;
 	unsigned long asn = mm->context;
@@ -44,7 +67,7 @@ extern inline void get_mmu_context(struct task_struct *p)
 		/* check if it's legal.. */
 		if ((asn & ~ASN_VERSION_MASK) > MAX_ASN) {
 			/* start a new version, invalidate all old asn's */
-			tbiap();
+			tbiap(); imb();
 			asn_cache = (asn_cache & ASN_VERSION_MASK) + ASN_FIRST_VERSION;
 			if (!asn_cache)
 				asn_cache = ASN_FIRST_VERSION;
@@ -53,6 +76,7 @@ extern inline void get_mmu_context(struct task_struct *p)
 		mm->context = asn;			/* full version + asn */
 		p->tss.asn = asn & ~ASN_VERSION_MASK;	/* just asn */
 	}
+#endif
 }
 
 #endif
