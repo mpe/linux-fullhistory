@@ -94,7 +94,7 @@ struct slot {
 				/* dn has phb info */
 	struct pci_dev *bridge;	/* slot's pci_dev in pci_devices */
 	union {
-		struct list_head pci_funcs; /* pci_devs in PCI slot */ 
+		struct list_head *pci_devs; /* pci_devs in PCI slot */
 		struct vio_dev *vio_dev; /* vio_dev in VIO slot */
 	} dev;
 	struct hotplug_slot *hotplug_slot;
