@@ -27,7 +27,6 @@
 #include <linux/spinlock.h>
 #include <linux/types.h>
 #include <linux/pci.h>
-#include <linux/proc_fs.h>
 #include <linux/stringify.h>
 #include <linux/delay.h>
 #include <linux/initrd.h>
@@ -1575,84 +1574,6 @@ void of_node_put(struct device_node *node)
 }
 EXPORT_SYMBOL(of_node_put);
 
-/**
- *	derive_parent - basically like dirname(1)
- *	@path:  the full_name of a node to be added to the tree
- *
- *	Returns the node which should be the parent of the node
- *	described by path.  E.g., for path = "/foo/bar", returns
- *	the node with full_name = "/foo".
- */
-static struct device_node *derive_parent(const char *path)
-{
-	struct device_node *parent = NULL;
-	char *parent_path = "/";
-	size_t parent_path_len = strrchr(path, '/') - path + 1;
-
-	/* reject if path is "/" */
-	if (!strcmp(path, "/"))
-		return NULL;
-
-	if (strrchr(path, '/') != path) {
-		parent_path = kmalloc(parent_path_len, GFP_KERNEL);
-		if (!parent_path)
-			return NULL;
-		strlcpy(parent_path, path, parent_path_len);
-	}
-	parent = of_find_node_by_path(parent_path);
-	if (strcmp(parent_path, "/"))
-		kfree(parent_path);
-	return parent;
-}
-
-/*
- * Routines for "runtime" addition and removal of device tree nodes.
- */
-#ifdef CONFIG_PROC_DEVICETREE
-/*
- * Add a node to /proc/device-tree.
- */
-static void add_node_proc_entries(struct device_node *np)
-{
-	struct proc_dir_entry *ent;
-
-	ent = proc_mkdir(strrchr(np->full_name, '/') + 1, np->parent->pde);
-	if (ent)
-		proc_device_tree_add_node(np, ent);
-}
-
-static void remove_node_proc_entries(struct device_node *np)
-{
-	struct property *pp = np->properties;
-	struct device_node *parent = np->parent;
-
-	while (pp) {
-		remove_proc_entry(pp->name, np->pde);
-		pp = pp->next;
-	}
-
-	/* Assuming that symlinks have the same parent directory as
-	 * np->pde.
-	 */
-	if (np->name_link)
-		remove_proc_entry(np->name_link->name, parent->pde);
-	if (np->addr_link)
-		remove_proc_entry(np->addr_link->name, parent->pde);
-	if (np->pde)
-		remove_proc_entry(np->pde->name, parent->pde);
-}
-#else /* !CONFIG_PROC_DEVICETREE */
-static void add_node_proc_entries(struct device_node *np)
-{
-	return;
-}
-
-static void remove_node_proc_entries(struct device_node *np)
-{
-	return;
-}
-#endif /* CONFIG_PROC_DEVICETREE */
-
 /*
  * Fix up the uninitialized fields in a new device node:
  * name, type, n_addrs, addrs, n_intrs, intrs, and pci-specific fields
@@ -1710,43 +1631,18 @@ out:
 }
 
 /*
- * Given a path and a property list, construct an OF device node, add
- * it to the device tree and global list, and place it in
- * /proc/device-tree.  This function may sleep.
+ * Plug a device node into the tree and global list.
  */
-int of_add_node(const char *path, struct property *proplist)
+void of_attach_node(struct device_node *np)
 {
-	struct device_node *np;
-	int err = 0;
+	int err;
 
-	np = kmalloc(sizeof(struct device_node), GFP_KERNEL);
-	if (!np)
-		return -ENOMEM;
-
-	memset(np, 0, sizeof(*np));
-
-	np->full_name = kmalloc(strlen(path) + 1, GFP_KERNEL);
-	if (!np->full_name) {
-		kfree(np);
-		return -ENOMEM;
-	}
-	strcpy(np->full_name, path);
-
-	np->properties = proplist;
-	OF_MARK_DYNAMIC(np);
-	kref_init(&np->kref);
-	of_node_get(np);
-	np->parent = derive_parent(path);
-	if (!np->parent) {
-		kfree(np);
-		return -EINVAL; /* could also be ENOMEM, though */
-	}
-
+	/* This use of finish_node will be moved to a notifier so
+	 * the error code can be used.
+	 */
 	err = finish_node(np, NULL, of_finish_dynamic_node, 0, 0, 0);
-	if (err < 0) {
-		kfree(np);
-		return err;
-	}
+	if (err < 0)
+		return;
 
 	write_lock(&devtree_lock);
 	np->sibling = np->parent->child;
@@ -1754,21 +1650,6 @@ int of_add_node(const char *path, struct property *proplist)
 	np->parent->child = np;
 	allnodes = np;
 	write_unlock(&devtree_lock);
-
-	add_node_proc_entries(np);
-
-	of_node_put(np->parent);
-	of_node_put(np);
-	return 0;
-}
-
-/*
- * Prepare an OF node for removal from system
- */
-static void of_cleanup_node(struct device_node *np)
-{
-	if (np->iommu_table && get_property(np, "ibm,dma-window", NULL))
-		iommu_free_table(np);
 }
 
 /*
@@ -1776,23 +1657,14 @@ static void of_cleanup_node(struct device_node *np)
  * a reference to the node.  The memory associated with the node
  * is not freed until its refcount goes to zero.
  */
-int of_remove_node(struct device_node *np)
+void of_detach_node(const struct device_node *np)
 {
-	struct device_node *parent, *child;
-
-	parent = of_get_parent(np);
-	if (!parent)
-		return -EINVAL;
-
-	if ((child = of_get_next_child(np, NULL))) {
-		of_node_put(child);
-		return -EBUSY;
-	}
-
-	of_cleanup_node(np);
+	struct device_node *parent;
 
 	write_lock(&devtree_lock);
-	remove_node_proc_entries(np);
+
+	parent = np->parent;
+
 	if (allnodes == np)
 		allnodes = np->allnext;
 	else {
@@ -1814,10 +1686,8 @@ int of_remove_node(struct device_node *np)
 			;
 		prevsib->sibling = np->sibling;
 	}
+
 	write_unlock(&devtree_lock);
-	of_node_put(parent);
-	of_node_put(np); /* Must decrement the refcount */
-	return 0;
 }
 
 /*
