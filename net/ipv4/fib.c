@@ -66,7 +66,7 @@ static struct fib_info 	*fib_info_list;
 
 static int fib_stamp;
 
-int rtmsg_process(struct nlmsghdr *n, struct in_rtmsg *r);
+static int rtmsg_process(struct nlmsghdr *n, struct in_rtmsg *r);
 
 
 #ifdef CONFIG_RTNETLINK
@@ -119,7 +119,7 @@ static void rtmsg_dev(unsigned long type, struct device *dev, struct nlmsghdr *n
 static struct wait_queue *fib_wait;
 atomic_t fib_users;
 
-void fib_lock(void)
+static void fib_lock(void)
 {
 	while (fib_users)
 		sleep_on(&fib_wait);
@@ -127,7 +127,7 @@ void fib_lock(void)
 	dev_lock_list();
 }
 
-void fib_unlock(void)
+static void fib_unlock(void)
 {
 	dev_unlock_list();
 	if (atomic_dec_and_test(&fib_users)) {
@@ -496,7 +496,7 @@ fib_lookup(struct fib_result *res, u32 daddr, u32 src, u8 tos,
 		struct fib_zone * fz;
 
 		if (((src^cl->cl_src) & cl->cl_srcmask) ||
-		    ((dst^cl->cl_dst) & cl->cl_dstmask) ||
+		    ((daddr^cl->cl_dst) & cl->cl_dstmask) ||
 		    (cl->cl_tos && cl->cl_tos != tos) ||
 		    (cl->cl_dev && cl->cl_dev != devin))
 			continue;
@@ -561,7 +561,7 @@ static int fib_autopublish(int op, struct fib_node *f, int logmask)
 	((struct sockaddr_in*)&r.arp_pa)->sin_family = AF_INET;
 	((struct sockaddr_in*)&r.arp_pa)->sin_addr.s_addr = addr;
 	((struct sockaddr_in*)&r.arp_netmask)->sin_family = AF_INET;
-	((struct sockaddr_in*)&r.arp_netmask)->sin_addr.s_addr = fib_netmask(logmask);
+	((struct sockaddr_in*)&r.arp_netmask)->sin_addr.s_addr = fib_mask(logmask);
 
 	if (op)
 		return arp_req_set(&r, NULL);
@@ -570,7 +570,8 @@ static int fib_autopublish(int op, struct fib_node *f, int logmask)
 
 	for (f1 = fz_hash(f->fib_key, fz); f1; f1=f1->fib_next)	{
 		if (f->fib_key != f1->fib_key || f1->fib_flag ||
-		    f->fib_info->fib_flags != f1->fib_info->fib_flags)
+		    (!RT_LOCALADDR(f1->fib_info->fib_flags) &&
+		     !(f1->fib_info->fib_flags&RTF_NAT)))
 			continue;
 		return 0;
 	}
@@ -1032,6 +1033,8 @@ static int fib_flush_list(struct fib_node ** fp, struct device *dev,
 		cli();
 		*fp = f->fib_next;
 		sti();
+		if (class == &local_class)
+			fib_autopublish(0, f, logmask);
 #ifdef CONFIG_RTNETLINK
 		if (rt_nl_flags&RTCTL_FLUSH)
 		    rtmsg_fib(RTMSG_DELROUTE, f, logmask, class, 0);
@@ -1397,7 +1400,7 @@ done:
 
 #endif
 
-int rtmsg_process(struct nlmsghdr *n, struct in_rtmsg *r)
+static int rtmsg_process(struct nlmsghdr *n, struct in_rtmsg *r)
 {
 	unsigned long cmd=n->nlmsg_type;
 	struct device * dev = NULL;
@@ -1414,7 +1417,7 @@ int rtmsg_process(struct nlmsghdr *n, struct in_rtmsg *r)
 	/* Reject/throw directives have no interface/gateway specification */
 
 	if (r->rtmsg_flags & (RTF_REJECT|RTF_THROW)) {
-		r->rtmsg_device[0] = 0;
+		r->rtmsg_ifindex = 0;
 		r->rtmsg_gateway.s_addr = 0;
 		r->rtmsg_flags &= ~RTF_GATEWAY;
 	}
@@ -1430,8 +1433,8 @@ int rtmsg_process(struct nlmsghdr *n, struct in_rtmsg *r)
 	if (cmd == RTMSG_DELROUTE)
 		r->rtmsg_flags &= RTF_FIB;
 
-	if (r->rtmsg_device[0]) {
-		dev = dev_get(r->rtmsg_device);
+	if (r->rtmsg_ifindex) {
+		dev = dev_get_by_index(r->rtmsg_ifindex);
 		if (!dev) {
 			rtmsg_ack(n, ENODEV);
 			return -ENODEV;
@@ -1525,8 +1528,8 @@ static int rtrulemsg_process(struct nlmsghdr *n, struct in_rtrulemsg *r)
 	    (r->rtrmsg_tos & ~IPTOS_TOS_MASK))
 		return -EINVAL;
 
-	if (r->rtrmsg_device[0]) {
-		dev = dev_get(r->rtrmsg_device);
+	if (r->rtrmsg_ifindex) {
+		dev = dev_get_by_index(r->rtrmsg_ifindex);
 		if (!dev)
 			return -ENODEV;
 		if (dev->family != AF_INET)
@@ -1574,9 +1577,18 @@ static int get_rt_from_user(struct in_rtmsg *rtm, void *arg)
 	err = copy_from_user(&r, arg, sizeof(struct rtentry));
 	if (err)
 		return -EFAULT;
-	if (r.rt_dev)
-		if (copy_from_user(&rtm->rtmsg_device, r.rt_dev, 15))
+	if (r.rt_dev) {
+		struct device *dev;
+		char   devname[16];
+
+		if (copy_from_user(devname, r.rt_dev, 15))
 			return -EFAULT;
+		devname[15] = 0;
+		dev = dev_get(devname);
+		if (!dev)
+			return -ENODEV;
+		rtm->rtmsg_ifindex = dev->ifindex;
+	}
 
 	rtm->rtmsg_flags = r.rt_flags;
 
@@ -1740,9 +1752,7 @@ rtmsg_fib(unsigned long type, struct fib_node *f, int logmask,
 			r->rtmsg_mtu = fi->fib_mtu;
 			r->rtmsg_window = fi->fib_window;
 			r->rtmsg_rtt = fi->fib_irtt;
-			memset(r->rtmsg_device, 0, sizeof(r->rtmsg_device));
-			if (fi->fib_dev)
-				strcpy(r->rtmsg_device, fi->fib_dev->name);
+			r->rtmsg_ifindex = fi->fib_dev ? fi->fib_dev->ifindex : 0;
 		}
 	}
 	end_bh_atomic();
@@ -1777,7 +1787,8 @@ rtmsg_dev(unsigned long type, struct device *dev, struct nlmsghdr *n)
 		r->ifmsg_mtu = dev->mtu;
 		r->ifmsg_metric = dev->metric;
 		r->ifmsg_prefixlen = 32 - fib_logmask(dev->pa_mask);
-		strcpy(r->ifmsg_device, dev->name);
+		r->ifmsg_index = dev->ifindex;
+		strcpy(r->ifmsg_name, dev->name);
 	}
 	end_bh_atomic();
 }
@@ -1866,6 +1877,28 @@ static int fib_magic(int op, unsigned flags, u32 dst, u32 mask, struct device *d
 		(&r, dev, (flags&RTF_LOCAL) ? &local_class : &main_class, &n);
 }
 
+static void ip_rt_del_broadcasts(struct device *dev)
+{
+	u32 net = dev->pa_addr&dev->pa_mask;
+
+	fib_magic(RTMSG_DELROUTE, RTF_IFBRD, dev->pa_brdaddr, ~0, dev);
+	fib_magic(RTMSG_DELROUTE, RTF_IFBRD, net, ~0, dev);
+	fib_magic(RTMSG_DELROUTE, RTF_IFBRD, net|~dev->pa_mask, ~0, dev);
+}
+
+static void ip_rt_add_broadcasts(struct device *dev, u32 brd, u32 mask)
+{
+	u32 net = dev->pa_addr&mask;
+
+	if (dev->flags&IFF_BROADCAST)
+		fib_magic(RTMSG_NEWROUTE, RTF_IFBRD, brd, ~0, dev);
+
+	if (net && !(mask&htonl(1))) {
+		fib_magic(RTMSG_NEWROUTE, RTF_IFBRD, net, ~0, dev);
+		fib_magic(RTMSG_NEWROUTE, RTF_IFBRD, net|~mask, ~0, dev);
+	}
+}
+
 void ip_rt_change_broadcast(struct device *dev, u32 new_brd)
 {
 	fib_lock();
@@ -1875,7 +1908,7 @@ void ip_rt_change_broadcast(struct device *dev, u32 new_brd)
 		fib_magic(RTMSG_DELROUTE, RTF_IFBRD, dev->pa_brdaddr, ~0, dev);
 		rtmsg_dev(RTMSG_DELDEVICE, dev, NULL);
 		rtmsg_dev(RTMSG_NEWDEVICE, dev, NULL);
-		fib_magic(RTMSG_NEWROUTE, RTF_IFBRD, new_brd, ~0, dev);
+		ip_rt_add_broadcasts(dev, new_brd, dev->pa_mask);
 	}
 	fib_unlock();
 }
@@ -1908,22 +1941,19 @@ void ip_rt_change_netmask(struct device *dev, u32 mask)
 	}
 	net = dev->pa_addr&dev->pa_mask;
 	fib_magic(RTMSG_DELROUTE, RTF_IFPREFIX, net, dev->pa_mask, dev);
-	fib_magic(RTMSG_DELROUTE, RTF_IFBRD, net, ~0, dev);
-	fib_magic(RTMSG_DELROUTE, RTF_IFBRD, net|~dev->pa_mask, ~0, dev);
+	ip_rt_del_broadcasts(dev);
 	if (mask != 0xFFFFFFFF && dev->flags&IFF_POINTOPOINT)
 		fib_magic(RTMSG_DELROUTE, RTF_IFPREFIX, dev->pa_dstaddr, ~0, dev);
 	rtmsg_dev(RTMSG_DELDEVICE, dev, NULL);
 
-	dev->flags &= ~IFF_POINTOPOINT;
+	if (mask != 0xFFFFFFFF)
+		dev->flags &= ~IFF_POINTOPOINT;
 
 	rtmsg_dev(RTMSG_NEWDEVICE, dev, NULL);
 	net = dev->pa_addr&mask;
 	if (net)
 		fib_magic(RTMSG_NEWROUTE, RTF_IFPREFIX, net, mask, dev);
-	if (net && mask != 0xFFFFFFFF) {
-		fib_magic(RTMSG_NEWROUTE, RTF_IFBRD, net, ~0, dev);
-		fib_magic(RTMSG_NEWROUTE, RTF_IFBRD, net|~mask, ~0, dev);
-	}
+	ip_rt_add_broadcasts(dev, dev->pa_addr, mask);
 	fib_unlock();
 }
 
@@ -1947,8 +1977,7 @@ int ip_rt_event(int event, struct device *dev)
 		else {
 			u32 net = dev->pa_addr&dev->pa_mask;
 			fib_magic(RTMSG_DELROUTE, RTF_IFPREFIX, net, dev->pa_mask, dev);
-			fib_magic(RTMSG_DELROUTE, RTF_IFBRD, net, ~0, dev);
-			fib_magic(RTMSG_DELROUTE, RTF_IFBRD, net|~dev->pa_mask, ~0, dev);
+			ip_rt_del_broadcasts(dev);
 		}
 		rtmsg_dev(RTMSG_DELDEVICE, dev, NULL);
 	}
@@ -1971,14 +2000,12 @@ int ip_rt_event(int event, struct device *dev)
 		if (dev->flags&IFF_POINTOPOINT) {
 			if (dev->pa_dstaddr && dev->type != ARPHRD_TUNNEL)
 				fib_magic(RTMSG_NEWROUTE, RTF_IFPREFIX, dev->pa_dstaddr, ~0, dev);
-		} else if (dev->pa_addr&dev->pa_mask) {
+		} else {
 			u32 net = dev->pa_addr&dev->pa_mask;
 
-			fib_magic(RTMSG_NEWROUTE, RTF_IFPREFIX, net, dev->pa_mask, dev);
-			if (dev->pa_mask != 0xFFFFFFFF) {
-				fib_magic(RTMSG_NEWROUTE, RTF_IFBRD, net, ~0, dev);
-				fib_magic(RTMSG_NEWROUTE, RTF_IFBRD, net|~dev->pa_mask, ~0, dev);
-			}
+			if (net)
+				fib_magic(RTMSG_NEWROUTE, RTF_IFPREFIX, net, dev->pa_mask, dev);
+			ip_rt_add_broadcasts(dev, dev->pa_brdaddr, dev->pa_mask);
 		}
 		fib_magic(RTMSG_NEWROUTE, RTF_IFLOCAL, dev->pa_addr, ~0, dev);
 		if (dev == &loopback_dev) {
@@ -1992,9 +2019,9 @@ int ip_rt_event(int event, struct device *dev)
 					  mask, dev);
 			}
 		}
-		if (dev->flags&IFF_BROADCAST)
-			fib_magic(RTMSG_NEWROUTE, RTF_IFBRD, dev->pa_brdaddr, ~0, dev);
 	}
+	if (event == NETDEV_CHANGEMTU || event == NETDEV_CHANGEADDR)
+		rtmsg_dev(RTMSG_NEWDEVICE, dev, NULL);
 	fib_unlock();
 	return NOTIFY_DONE;
 }

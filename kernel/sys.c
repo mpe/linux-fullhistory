@@ -182,7 +182,7 @@ extern void hard_reset_now(void);
 #ifdef __sparc__
 extern void halt_now(void);
 #endif
-extern asmlinkage sys_kill(int, int);
+extern asmlinkage int sys_kill(int, int);
 
 /*
  * Reboot system call: for obvious reasons only root may call it,

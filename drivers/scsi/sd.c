@@ -77,7 +77,7 @@ extern int sd_ioctl(struct inode *, struct file *, unsigned int, unsigned long);
 static int check_scsidisk_media_change(kdev_t);
 static int fop_revalidate_scsidisk(kdev_t);
 
-static sd_init_onedisk(int);
+static int sd_init_onedisk(int);
 
 static void requeue_sd_request (Scsi_Cmnd * SCpnt);
 

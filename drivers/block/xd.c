@@ -29,6 +29,7 @@
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <linux/genhd.h>
+#include <linux/hdreg.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -250,77 +251,75 @@ static void do_xd_request (void)
 /* xd_ioctl: handle device ioctl's */
 static int xd_ioctl (struct inode *inode,struct file *file,u_int cmd,u_long arg)
 {
-	XD_GEOMETRY *geometry = (XD_GEOMETRY *) arg;
-	int dev = DEVICE_NR(inode->i_rdev),err;
+	int dev;
 
-	if (inode && (dev < xd_drives))
-		switch (cmd) {
-			case HDIO_GETGEO:
-				if (arg) {
-					if ((err = verify_area(VERIFY_WRITE,geometry,sizeof(*geometry))))
-						return (err);
-					put_user(xd_info[dev].heads, &geometry->heads);
-					put_user(xd_info[dev].sectors, &geometry->sectors);
-					put_user(xd_info[dev].cylinders, &geometry->cylinders);
-					put_user(xd[MINOR(inode->i_rdev)].start_sect,&geometry->start);
+	if ((!inode) || !(inode->i_rdev))
+		return -EINVAL;
+ 	dev = DEVICE_NR(inode->i_rdev);
 
-					return (0);
-				}
-				break;
-			case BLKRASET:
-				if(!suser())
-					return -EACCES;
-				if(!(inode->i_rdev))
-					return -EINVAL;
-				if(arg > 0xff)
-					return -EINVAL;
-				read_ahead[MAJOR(inode->i_rdev)] = arg;
-				return 0;
-			case BLKGETSIZE:
-				if (arg) {
-					if ((err = verify_area(VERIFY_WRITE,(long *) arg,sizeof(long))))
-						return (err);
-					put_user(xd[MINOR(inode->i_rdev)].nr_sects,(long *) arg);
-
-					return (0);
-				}
-				break;
-			case BLKFLSBUF:
-				if(!suser())  return -EACCES;
-				if(!(inode->i_rdev))
-					return -EINVAL;
-				fsync_dev(inode->i_rdev);
-				invalidate_buffers(inode->i_rdev);
-				return 0;
-				
-			case BLKRRPART:
-				return (xd_reread_partitions(inode->i_rdev));
-			RO_IOCTLS(inode->i_rdev,arg);
+	if (dev >= xd_drives) return -EINVAL;
+	switch (cmd) {
+		case HDIO_GETGEO:
+		{
+			struct hd_geometry *geometry = (struct hd_geometry *) arg;
+			if (!geometry) return -EINVAL;
+			if(put_user(xd_info[dev].heads, (char *) &geometry->heads)
+		 	|| put_user(xd_info[dev].sectors, (char *) &geometry->sectors)
+			|| put_user(xd_info[dev].cylinders, (short *) &geometry->cylinders)
+			|| put_user(xd[MINOR(inode->i_rdev)].start_sect,
+				(unsigned long *) &geometry->start))
+				return -EFAULT;
+			return 0;
 		}
-	return (-EINVAL);
+		case BLKRASET:
+			if(!suser()) return -EACCES;
+			if(arg > 0xff) return -EINVAL;
+			read_ahead[MAJOR(inode->i_rdev)] = arg;
+			return 0;
+		case BLKGETSIZE:
+			if (!arg) return -EINVAL;
+			put_user(xd[MINOR(inode->i_rdev)].nr_sects,(long *) arg);
+			return 0;
+		case BLKFLSBUF:   /* Return devices size */
+			if(!suser())  return -EACCES;
+			fsync_dev(inode->i_rdev);
+			invalidate_buffers(inode->i_rdev);
+			return 0;
+		case BLKRRPART:
+			return xd_reread_partitions(inode->i_rdev);
+		RO_IOCTLS(inode->i_rdev,arg);
+		default:
+			return -EINVAL;
+	}
 }
 
 /* xd_release: release the device */
 static void xd_release (struct inode *inode, struct file *file)
 {
-	int dev = DEVICE_NR(inode->i_rdev);
+	int target;
 
-	if (dev < xd_drives) {
+	target= DEVICE_NR(inode->i_rdev);
+	if (target < xd_drives) {
 		sync_dev(inode->i_rdev);
-		xd_access[dev]--;
+		xd_access[target]--;
 	}
 }
 
 /* xd_reread_partitions: rereads the partition table from a drive */
 static int xd_reread_partitions(kdev_t dev)
 {
-	int target = DEVICE_NR(dev);
-	int start = target << xd_gendisk.minor_shift;
+	int target;
+	int start;
 	int partition;
+	
+	target = DEVICE_NR(dev);
+ 	start = target << xd_gendisk.minor_shift;
 
-	cli(); xd_valid[target] = (xd_access[target] != 1); sti();
+	cli();
+	xd_valid[target] = (xd_access[target] != 1);
+        sti();
 	if (xd_valid[target])
-		return (-EBUSY);
+		return -EBUSY;
 
 	for (partition = xd_gendisk.max_p - 1; partition >= 0; partition--) {
 		int minor = (start | partition);
@@ -338,7 +337,7 @@ static int xd_reread_partitions(kdev_t dev)
 	xd_valid[target] = 1;
 	wake_up(&xd_wait_open);
 
-	return (0);
+	return 0;
 }
 
 /* xd_readwrite: handle a read/write request */

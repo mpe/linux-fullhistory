@@ -70,15 +70,9 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
      if [ "$CONFIG_WDT_501" = "y" ]; then
          bool '       Fan Tachometer' CONFIG_WDT_501_FAN
      fi
-  else
-     tristate '   Software Watchdog' CONFIG_SOFT_WATCHDOG
   fi
+  tristate '   Software Watchdog' CONFIG_SOFT_WATCHDOG
   tristate '   Berkshire Products PC Watchdog' CONFIG_PCWATCHDOG
-  if [ "$CONFIG_PCWATCHDOG" != "n" ]; then
-      bool '       Support for Revision A cards' CONFIG_PCWD_REV_A
-      bool '       Support for Revision C cards' CONFIG_PCWD_REV_C
-      bool '       Show card state on reset' CONFIG_PCWD_SHOW_PREVSTAT
-  fi
 fi
 bool 'Enhanced Real Time Clock Support' CONFIG_RTC
 endmenu

@@ -275,6 +275,7 @@ static int net_alias_devsetup(struct net_alias *alias,
 	dev->init = net_alias_devinit;
 	dev->hard_start_xmit = net_alias_hard_start_xmit;
 	dev->flags = main_dev->flags & NET_ALIAS_IFF_MASK & ~IFF_UP;
+	dev->ifindex = dev_new_index();
 
 	/*
 	 *	Only makes sense if same family (arguable)

@@ -72,6 +72,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( DEC,		DEC_TULIP_PLUS,	"DC21041"),
 	DEVICE( DEC,		DEC_21052,	"DC21052"),
 	DEVICE( DEC,		DEC_21152,	"DC21152"),
+	DEVICE( CIRRUS,		CIRRUS_7548,	"GD 7548"),
 	DEVICE( CIRRUS,		CIRRUS_5430,	"GD 5430"),
 	DEVICE( CIRRUS,		CIRRUS_5434_4,	"GD 5434"),
 	DEVICE( CIRRUS,		CIRRUS_5434_8,	"GD 5434"),
@@ -158,6 +159,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( AL,		AL_M1511,	"M1511"),
 	DEVICE( AL,		AL_M1513,	"M1513"),
 	DEVICE( AL,		AL_M4803,	"M4803"),
+	DEVICE( NEOMAGIC,       NEOMAGIC_MAGICGRAPH_NM2070,     "Magicgraph NM2070"),
 	DEVICE( ASP,		ASP_ABP940,	"ABP940"),
 	DEVICE( CERN,		CERN_SPSB_PMC,	"STAR/RD24 SCI-PCI (PMC)"),
 	DEVICE( CERN,		CERN_SPSB_PCI,	"STAR/RD24 SCI-PCI (PMC)"),
@@ -165,6 +167,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( TEKRAM2,	TEKRAM2_690c,	"DC690c"),
 	DEVICE( AMCC,		AMCC_MYRINET,	"Myrinet PCI (M2-PCI-32)"),
 	DEVICE( INTERG,		INTERG_1680,	"IGA-1680"),
+	DEVICE( INTERG,         INTERG_1682,    "IGA-1682"),
 	DEVICE( REALTEK,	REALTEK_8029,	"8029"),
 	DEVICE( INIT,		INIT_320P,	"320 P"),
 	DEVICE( VIA,		VIA_82C505,	"VT 82C505"),
@@ -242,6 +245,8 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( INTEL,		INTEL_82437,	"82437"),
 	DEVICE( INTEL,		INTEL_82371_0,	"82371 Triton PIIX"),
 	DEVICE( INTEL,		INTEL_82371_1,	"82371 Triton PIIX"),
+	DEVICE( INTEL,		INTEL_430MX_0,	"Triton I"),
+	DEVICE( INTEL,		INTEL_430MX_1,	"Triton I"),
 	DEVICE( INTEL,		INTEL_82441,	"82441FX Natoma"),
 	DEVICE( INTEL,		INTEL_82439,	"82439HX Triton II"),
 	DEVICE(	INTEL,		INTEL_82371SB_0,"82371SB Natoma/Triton II PIIX3"),
@@ -506,6 +511,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_WINBOND:	return "Winbond";
 	      case PCI_VENDOR_ID_3COM:		return "3Com";
 	      case PCI_VENDOR_ID_AL:		return "Acer Labs";
+	      case PCI_VENDOR_ID_NEOMAGIC:	return "Neomagic";
 	      case PCI_VENDOR_ID_ASP:		return "Advanced System Products";
 	      case PCI_VENDOR_ID_CERN:		return "CERN";
 	      case PCI_VENDOR_ID_IMS:		return "IMS";

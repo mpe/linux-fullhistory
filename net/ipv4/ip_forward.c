@@ -205,7 +205,7 @@ skip_call_fw_firewall:
 		}
 #endif
 
-		if (skb_headroom(skb) < dev2->hard_header_len) {
+		if (skb_headroom(skb) < dev2->hard_header_len || skb_cloned(skb)) {
 			struct sk_buff *skb2;
 			skb2 = skb_realloc_headroom(skb, (dev2->hard_header_len + 15)&~15);
 			kfree_skb(skb, FREE_WRITE);

@@ -1,22 +1,23 @@
 /*
  * These are the public elements of the Linux kernel X.25 implementation.
  */
- 
+
 #ifndef	X25_KERNEL_H
 #define	X25_KERNEL_H
 
 #define PF_X25			AF_X25
 
-#define	SIOCX25SETSUBSCR	(SIOCPROTOPRIVATE + 0)
+#define	SIOCX25GSUBSCRIP	(SIOCPROTOPRIVATE + 0)
+#define	SIOCX25SSUBSCRIP	(SIOCPROTOPRIVATE + 1)
+#define	SIOCX25GFACILITIES	(SIOCPROTOPRIVATE + 2)
+#define	SIOCX25SFACILITIES	(SIOCPROTOPRIVATE + 3)
+#define	SIOCX25GCALLUSERDATA	(SIOCPROTOPRIVATE + 4)
+#define	SIOCX25SCALLUSERDATA	(SIOCPROTOPRIVATE + 5)
 
 /*
  *	Values for {get,set}sockopt.
  */
 #define	X25_QBITINCL		1
-#define	X25_PACKET_SIZE		10
-#define	X25_WINDOW_SIZE		11
-#define	X25_THROUGHPUT_SPEED	12
-#define	X25_REVERSE_CHARGE	13
 
 /*
  *	X.25 Packet Size values.
@@ -93,6 +94,24 @@ struct x25_route_struct {
 	x25_address	address;
 	unsigned int	sigdigits;
 	char		device[200];
+};
+
+/*
+ *	Facilities structure.
+ */
+struct x25_facilities {
+	unsigned int	winsize_in, winsize_out;
+	unsigned int	pacsize_in, pacsize_out;
+	unsigned int	throughput;
+	unsigned int	reverse;
+};
+
+/*
+ *	Call User Data structure.
+ */
+struct x25_calluserdata {
+	unsigned int	cudlength;
+	unsigned char	cuddata[128];
 };
 
 #endif

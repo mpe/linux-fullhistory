@@ -49,7 +49,8 @@ General Information
    <CTRL><ALT><DEL> now performs a cold reboot instead of a warm reboot
 for increased hardware compatibility.  If you want a warm reboot and
 know it works on your hardware, add a "reboot=warm" command line option
-in Lilo.
+in Lilo. A small number of machines need "reboot=bios" to reboot via the 
+BIOS.
 
 Libc
 ====
@@ -128,15 +129,18 @@ How to know the version of the installed programs
 installed programs and libraries.  The SysVinit version display
 requires that you be logged in as root.
 
+Binutils: ld -v
 Gnu C: gcc -v or gcc --version
+Kbd: loadkeys -h
+Ld.so:  ldd -v
 Libc: ls -l /lib/libc.so.*
 Libc++: ls -l /usr/lib/libg++.so.*
-Ld.so:  ldd-v
-Binutils: ld -v
-modules: insmod -V
+modules: /sbin/insmod -V
+mount: mount --version
 procps: ps --version
-SysVinit: cat /proc/`cat /var/run/klogd.pid`/environ|strings|awk '$1 ~
-/INIT_VERSION/ {print}'
+SysVinit: (must be logged in as root)
+    strings `egrep -li INIT_VERSION=sysvinit- /proc/*/environ | head -1` | \
+    egrep -i INIT_VERSION=sysvinit-
 RPM:  rpm --version
 
 Where to get the files

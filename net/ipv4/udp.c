@@ -375,8 +375,8 @@ static int udp_sendto(struct sock *sk, const unsigned char *from, int len,
 	tos = RT_TOS(sk->ip_tos) | (sk->localroute || (msg->msg_flags&MSG_DONTROUTE) ||
 				    (ipc.opt && ipc.opt->is_strictroute));
 
-	if (MULTICAST(daddr) && sk->ip_mc_name[0] && dev == NULL)
-		err = ip_route_output_dev(&rt, daddr, ufh.saddr, tos, sk->ip_mc_name);
+	if (MULTICAST(daddr) && sk->ip_mc_index && dev == NULL)
+		err = ip_route_output_dev(&rt, daddr, ufh.saddr, tos, sk->ip_mc_index);
 	else
 		err = ip_route_output(&rt, daddr, ufh.saddr, tos, dev);
 

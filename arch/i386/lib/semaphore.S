@@ -7,21 +7,26 @@
 #include <linux/linkage.h>
 
 /*
- * "down_failed" is called with the eventual return address
- * in %eax, and the address of the semaphore in %ecx. We need
- * to call "__down()", and then re-try until we succeed..
+ * The semaphore operations have a special calling sequence that
+ * allow us to do a simpler in-line version of them. These routines
+ * need to convert that sequence back into the C sequence when
+ * there is contention on the semaphore.
  */
 ENTRY(__down_failed)
 	pushl %eax	/* return address */
 	pushl %edx	/* save %edx */
-1:	pushl %ecx	/* save %ecx (and argument) */
+	pushl %ecx	/* save %ecx (and argument) */
 	call SYMBOL_NAME(__down)
 	popl %ecx	/* restore %ecx (count on __down not changing it) */
-#ifdef __SMP__
-	lock
-#endif
-	decl (%ecx)
-	js 1b
+	popl %edx	/* restore %edx */
+	ret
+
+ENTRY(__down_failed_interruptible)
+	pushl %eax	/* return address */
+	pushl %edx	/* save %edx */
+	pushl %ecx	/* save %ecx (and argument) */
+	call SYMBOL_NAME(__down_interruptible)
+	popl %ecx	/* restore %ecx (count on __down_interruptible not changing it) */
 	popl %edx	/* restore %edx */
 	ret
 

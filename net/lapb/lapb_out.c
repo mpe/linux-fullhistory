@@ -52,18 +52,22 @@ static void lapb_send_iframe(lapb_cb *lapb, struct sk_buff *skb, int poll_bit)
 	if (lapb->mode & LAPB_EXTENDED) {
 		frame = skb_push(skb, 2);
 
-		frame[0] = I;
+		frame[0] = LAPB_I;
 		frame[0] |= (lapb->vs << 1);
 		frame[1] = (poll_bit) ? LAPB_EPF : 0;
 		frame[1] |= (lapb->vr << 1);
 	} else {
 		frame = skb_push(skb, 1);
 
-		*frame = I;
+		*frame = LAPB_I;
 		*frame |= (poll_bit) ? LAPB_SPF : 0;
 		*frame |= (lapb->vr << 5);
 		*frame |= (lapb->vs << 1);
 	}
+
+#if LAPB_DEBUG > 1
+	printk(KERN_DEBUG "lapb: (%p) S%d TX I(%d) S%d R%d\n", lapb->token, lapb->state, poll_bit, lapb->vs, lapb->vr);
+#endif
 
 	lapb_transmit_buffer(lapb, skb, LAPB_COMMAND);	
 }
@@ -71,8 +75,7 @@ static void lapb_send_iframe(lapb_cb *lapb, struct sk_buff *skb, int poll_bit)
 void lapb_kick(lapb_cb *lapb)
 {
 	struct sk_buff *skb, *skbn;
-	int modulus, last = 1;
-	unsigned short start, end, next;
+	unsigned short modulus, start, end;
 
 	del_timer(&lapb->timer);
 
@@ -81,7 +84,7 @@ void lapb_kick(lapb_cb *lapb)
 	start = (skb_peek(&lapb->ack_queue) == NULL) ? lapb->va : lapb->vs;
 	end   = (lapb->va + lapb->window) % modulus;
 
-	if (!(lapb->condition & PEER_RX_BUSY_CONDITION) &&
+	if (!(lapb->condition & LAPB_PEER_RX_BUSY_CONDITION) &&
 	    start != end                                &&
 	    skb_peek(&lapb->write_queue) != NULL) {
 
@@ -98,28 +101,23 @@ void lapb_kick(lapb_cb *lapb)
 				break;
 			}
 
-			next = (lapb->vs + 1) % modulus;
-#ifdef notdef
-			last = (next == end) || skb_peek(&lapb->write_queue) == NULL;
-#else
-			last = (next == end);
-#endif
+			if (skb->sk != NULL)
+				skb_set_owner_w(skbn, skb->sk);
+
 			/*
 			 * Transmit the frame copy.
 			 */
-			lapb_send_iframe(lapb, skbn, POLLOFF);
+			lapb_send_iframe(lapb, skbn, LAPB_POLLOFF);
 
-			lapb->vs = next;
+			lapb->vs = (lapb->vs + 1) % modulus;
 
 			/*
 			 * Requeue the original data frame.
 			 */
 			skb_queue_tail(&lapb->ack_queue, skb);
-#ifdef notdef
-		} while (!last);
-#else
-		} while (!last && (skb = skb_dequeue(&lapb->write_queue)) != NULL);
-#endif
+
+		} while (lapb->vs != end && (skb = skb_dequeue(&lapb->write_queue)) != NULL);
+
 		lapb->condition &= ~LAPB_ACK_PENDING_CONDITION;
 
 		if (lapb->t1timer == 0)
@@ -183,14 +181,14 @@ void lapb_establish_data_link(lapb_cb *lapb)
 #if LAPB_DEBUG > 1
 		printk(KERN_DEBUG "lapb: (%p) S%d TX SABME(1)\n", lapb->token, lapb->state);
 #endif
-		lapb_send_control(lapb, SABME, POLLON, LAPB_COMMAND);
+		lapb_send_control(lapb, LAPB_SABME, LAPB_POLLON, LAPB_COMMAND);
 	} else {
 #if LAPB_DEBUG > 1
 		printk(KERN_DEBUG "lapb: (%p) S%d TX SABM(1)\n", lapb->token, lapb->state);
 #endif
-		lapb_send_control(lapb, SABM, POLLON, LAPB_COMMAND);
+		lapb_send_control(lapb, LAPB_SABM, LAPB_POLLON, LAPB_COMMAND);
 	}
-	
+
 	lapb->t2timer = 0;
 	lapb->t1timer = lapb->t1;
 }
@@ -201,20 +199,20 @@ void lapb_transmit_enquiry(lapb_cb *lapb)
 	printk(KERN_DEBUG "lapb: (%p) S%d TX RR(1) R%d\n", lapb->token, lapb->state, lapb->vr);
 #endif
 
-	lapb_send_control(lapb, RR, POLLON, C_COMMAND);
+	lapb_send_control(lapb, LAPB_RR, LAPB_POLLON, LAPB_COMMAND);
 
 	lapb->condition &= ~LAPB_ACK_PENDING_CONDITION;
 
 	lapb->t1timer = lapb->t1;
 }
- 	
+
 void lapb_enquiry_response(lapb_cb *lapb)
 {
 #if LAPB_DEBUG > 1
 	printk(KERN_DEBUG "lapb: (%p) S%d TX RR(1) R%d\n", lapb->token, lapb->state, lapb->vr);
 #endif
 
-	lapb_send_control(lapb, RR, POLLON, LAPB_RESPONSE);
+	lapb_send_control(lapb, LAPB_RR, LAPB_POLLON, LAPB_RESPONSE);
 
 	lapb->condition &= ~LAPB_ACK_PENDING_CONDITION;
 }
@@ -225,7 +223,7 @@ void lapb_timeout_response(lapb_cb *lapb)
 	printk(KERN_DEBUG "lapb: (%p) S%d TX RR(0) R%d\n", lapb->token, lapb->state, lapb->vr);
 #endif
 
-	lapb_send_control(lapb, RR, POLLOFF, LAPB_RESPONSE);
+	lapb_send_control(lapb, LAPB_RR, LAPB_POLLOFF, LAPB_RESPONSE);
 
 	lapb->condition &= ~LAPB_ACK_PENDING_CONDITION;
 }

@@ -116,6 +116,6 @@ extern void lapb_set_timer(lapb_cb *);
  *	2 = Packets I/O and State Changes
  *	3 = Hex dumps, Packets I/O and State Changes.
  */
-#define	LAPB_DEBUG	2
+#define	LAPB_DEBUG	0
 
 #endif

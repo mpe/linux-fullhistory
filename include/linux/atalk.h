@@ -88,7 +88,7 @@ struct ddpehdr
 };
 
 /*
- *	Unused (and currently unsupported)
+ *	Short form header
  */
  
 struct ddpshdr
@@ -134,7 +134,16 @@ struct elapaarp
 extern struct datalink_proto *ddp_dl, *aarp_dl;
 extern void aarp_proto_init(void);
 /* Inter module exports */
-extern struct atalk_iface *atalk_find_dev(struct device *dev);
+
+/*
+ *	Give a device find its atif control structure
+ */
+
+extern __inline__ struct atalk_iface *atalk_find_dev(struct device *dev)
+{
+	return dev->atalk_ptr;
+}
+
 extern struct at_addr *atalk_find_dev_addr(struct device *dev);
 extern int aarp_send_ddp(struct device *dev,struct sk_buff *skb, struct at_addr *sa, void *hwaddr);
 extern void aarp_send_probe(struct device *dev, struct at_addr *addr);

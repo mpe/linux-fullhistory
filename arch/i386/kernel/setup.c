@@ -142,16 +142,16 @@ void setup_arch(char **cmdline_p,
 		BIOS_revision = SYS_DESC_TABLE.table[2];
 	}
 	aux_device_present = AUX_DEVICE_INFO;
+#ifdef STANDARD_MEMORY_BIOS_CALL
 	memory_end = (1<<20) + (EXT_MEM_K<<10);
+#else
+	memory_end = (1<<20) + (EXT_MEM_K*64L*1024L);	/* 64kb chunks */
+#endif
 	memory_end &= PAGE_MASK;
 #ifdef CONFIG_BLK_DEV_RAM
 	rd_image_start = RAMDISK_FLAGS & RAMDISK_IMAGE_START_MASK;
 	rd_prompt = ((RAMDISK_FLAGS & RAMDISK_PROMPT_FLAG) != 0);
 	rd_doload = ((RAMDISK_FLAGS & RAMDISK_LOAD_FLAG) != 0);
-#endif
-#ifdef CONFIG_MAX_16M
-	if (memory_end > 16*1024*1024)
-		memory_end = 16*1024*1024;
 #endif
 	if (!MOUNT_ROOT_RDONLY)
 		root_mountflags &= ~MS_RDONLY;

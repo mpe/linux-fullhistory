@@ -18,6 +18,8 @@
 #define _NET_ALIAS_H
 
 #include <linux/config.h>
+
+#ifdef CONFIG_NET_ALIAS
 #include <linux/types.h>
 #include <linux/if.h>
 #include <linux/netdevice.h>
@@ -173,5 +175,13 @@ extern struct device * net_alias_dev_rcv_sel(struct device *main_dev, struct soc
 extern struct device * net_alias_dev_rcv_sel32(struct device *main_dev, int family, __u32 src, __u32 dst);
 
 
+
+#else
+
+#define net_alias_is(a)		0
+#define net_alias_main_dev(dev)	(dev)
+#define net_alias_has(dev)	0
+
+#endif
 
 #endif  /* _NET_ALIAS_H */

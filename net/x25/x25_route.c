@@ -15,7 +15,7 @@
  *	History
  *	X.25 001	Jonathan Naylor	Started coding.
  */
- 
+
 #include <linux/config.h>
 #if defined(CONFIG_X25) || defined(CONFIG_X25_MODULE)
 #include <linux/errno.h>
@@ -72,7 +72,7 @@ static int x25_add_route(x25_address *address, unsigned int sigdigits, struct de
 	x25_route->next = x25_route_list;
 	x25_route_list  = x25_route;
 	restore_flags(flags);
-		
+
 	return 0;
 }
 
@@ -80,7 +80,7 @@ static void x25_remove_route(struct x25_route *x25_route)
 {
 	struct x25_route *s;
 	unsigned long flags;
-	
+
 	save_flags(flags);
 	cli();
 
@@ -108,7 +108,7 @@ static void x25_remove_route(struct x25_route *x25_route)
 static int x25_del_route(x25_address *address, unsigned int sigdigits, struct device *dev)
 {
 	struct x25_route *x25_route;
-	
+
 	for (x25_route = x25_route_list; x25_route != NULL; x25_route = x25_route->next) {
 		if (memcmp(&x25_route->address, address, sigdigits) == 0 && x25_route->sigdigits == sigdigits && x25_route->dev == dev) {
 			x25_remove_route(x25_route);
@@ -129,7 +129,7 @@ void x25_route_device_down(struct device *dev)
 	while (x25_route != NULL) {
 		route     = x25_route;
 		x25_route = x25_route->next;
-		
+
 		if (route->dev == dev)
 			x25_remove_route(route);
 	}
@@ -161,7 +161,7 @@ struct device *x25_dev_get(char *devname)
 struct device *x25_get_route(x25_address *addr)
 {
 	struct x25_route *route, *use = NULL;
-	
+
 	for (route = x25_route_list; route != NULL; route = route->next) {
 		if (memcmp(&route->address, addr, route->sigdigits) == 0) {
 			if (use == NULL) {
@@ -236,7 +236,7 @@ int x25_routes_get_info(char *buffer, char **start, off_t offset, int length, in
 			len   = 0;
 			begin = pos;
 		}
-		
+
 		if (pos > offset + length)
 			break;
 	}
@@ -263,7 +263,7 @@ void x25_route_free(void)
 	while (x25_route != NULL) {
 		route     = x25_route;
 		x25_route = x25_route->next;
-		
+
 		x25_remove_route(route);
 	}
 }

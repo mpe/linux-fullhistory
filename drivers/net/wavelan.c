@@ -4017,8 +4017,8 @@ wavelan_config(device *	dev)
  * We follow the example in drivers/net/ne.c.)
  * (called in "Space.c")
  */
-extern int
-wavelan_probe(device *	dev)
+ 
+int wavelan_probe(device *	dev)
 {
   short		base_addr;
   mac_addr	mac;		/* Mac address (check wavelan existence) */

@@ -108,15 +108,35 @@ INSTALLING the kernel:
 
    You should now have the sources correctly installed.
 
+SOFTWARE REQUIREMENTS
+
+   Compiling and running the 2.1.x kernels requires up-to-date
+   versions of various software packages.  Consult
+   ./Documentation/Changes for the minimum version numbers required
+   and how to get updates for these packages.  Beware that using
+   excessively old versions of these packages can cause indirect
+   errors that are very difficult to track down, so don't assume that
+   you can just update packages when obvious problems arise during
+   build or operation.
+
 CONFIGURING the kernel:
 
  - Do a "make config" to configure the basic kernel.  "make config"
    needs bash to work: it will search for bash in $BASH, /bin/bash and
    /bin/sh (in that order), so hopefully one of those is correct. 
 
+   (Do not skip this step even if you are only upgrading one minor
+   version.  New configuration options are added in each release, and
+   odd problems will turn up if the configuration files are not set up
+   as expected.  If you want to carry your existing configuration to a
+   new version with minimal work, use "make oldconfig", which will
+   only ask you for the answers to new questions.)
+
  - Alternate configuration commands are:
 	"make menuconfig"  Text based color menus, radiolists & dialogs.
 	"make xconfig"     X windows based configuration tool.
+	"make oldconfig"   Default all questions based on the contents of
+			   your existing ./.config file.
    
 	NOTES on "make config":
 	- having unnecessary drivers will make the kernel bigger, and can
@@ -134,8 +154,8 @@ CONFIGURING the kernel:
 	  bigger or slower kernel (or both), and can even make the kernel
 	  less stable by configuring some routines to actively try to
 	  break bad code to find kernel problems (kmalloc()).  Thus you
-	  should probably answer 'n' to the questions for a "production"
-	  kernel. 
+	  should probably answer 'n' to the questions for
+          "development", "experimental", or "debugging" features.
 
  - Check the top Makefile for further site-dependent configuration
    (default SVGA mode etc). 

@@ -48,7 +48,7 @@ static void nr_timer(unsigned long);
 void nr_set_timer(struct sock *sk)
 {
 	unsigned long flags;
-	
+
 	save_flags(flags);
 	cli();
 	del_timer(&sk->timer);
@@ -65,7 +65,7 @@ void nr_set_timer(struct sock *sk)
 static void nr_reset_timer(struct sock *sk)
 {
 	unsigned long flags;
-	
+
 	save_flags(flags);
 	cli();
 	del_timer(&sk->timer);
@@ -102,11 +102,11 @@ static void nr_timer(unsigned long param)
 			/*
 			 * Check for the state of the receive buffer.
 			 */
-			if (sk->rmem_alloc < (sk->rcvbuf / 2) && (sk->protinfo.nr->condition & OWN_RX_BUSY_CONDITION)) {
-				sk->protinfo.nr->condition &= ~OWN_RX_BUSY_CONDITION;
-				nr_write_internal(sk, NR_INFOACK);
-				sk->protinfo.nr->condition &= ~ACK_PENDING_CONDITION;
+			if (sk->rmem_alloc < (sk->rcvbuf / 2) && (sk->protinfo.nr->condition & NR_COND_OWN_RX_BUSY)) {
+				sk->protinfo.nr->condition &= ~NR_COND_OWN_RX_BUSY;
+				sk->protinfo.nr->condition &= ~NR_COND_ACK_PENDING;
 				sk->protinfo.nr->vl         = sk->protinfo.nr->vr;
+				nr_write_internal(sk, NR_INFOACK);
 				break;
 			}
 			/*
@@ -121,15 +121,15 @@ static void nr_timer(unsigned long param)
 
 	if (sk->protinfo.nr->t2timer > 0 && --sk->protinfo.nr->t2timer == 0) {
 		if (sk->protinfo.nr->state == NR_STATE_3) {
-			if (sk->protinfo.nr->condition & ACK_PENDING_CONDITION) {
-				sk->protinfo.nr->condition &= ~ACK_PENDING_CONDITION;
+			if (sk->protinfo.nr->condition & NR_COND_ACK_PENDING) {
+				sk->protinfo.nr->condition &= ~NR_COND_ACK_PENDING;
 				nr_enquiry_response(sk);
 			}
 		}
 	}
 
 	if (sk->protinfo.nr->t4timer > 0 && --sk->protinfo.nr->t4timer == 0) {
-		sk->protinfo.nr->condition &= ~PEER_RX_BUSY_CONDITION;
+		sk->protinfo.nr->condition &= ~NR_COND_PEER_RX_BUSY;
 	}
 
 	if (sk->protinfo.nr->t1timer == 0 || --sk->protinfo.nr->t1timer > 0) {

@@ -232,9 +232,40 @@ loader_panic_mess:
 loader_ok:
 ! Get memory size (extended mem, kB)
 
+#ifdef STANDARD_MEMORY_BIOS_CALL
 	mov	ah,#0x88
 	int	0x15
 	mov	[2],ax
+#else
+	push	ax
+	push	cx
+	push	dx
+	mov	ax,#0xe801
+	int	0x15
+	jc	oldstylemem
+
+! memory size is (ax+(64*bx)) * 1024; we store bx+(ax/64)
+
+	mov	[2],bx		! store extended memory size
+	xor	dx,dx
+	mov	cx,#64		! convert lower memory size from K into
+	div	cx		! 64k chunks.
+
+	add	[2],ax		! add lower memory into total size.
+	jmp	gotmem
+
+oldstylemem:
+	mov	ah,#0x88
+	int	0x15
+	mov	cx,#64		! got memory size in kbytes, so we need to
+	xor	dx,dx		! adjust to 64k chunks for the system.
+	div	cx
+	mov	[2],ax
+gotmem:
+	pop	dx
+	pop	cx
+	pop	ax
+#endif
 
 ! Set the keyboard repeat rate to the max
 

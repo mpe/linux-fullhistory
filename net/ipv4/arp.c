@@ -572,7 +572,7 @@ static int arp_force_expire(void)
 	unsigned long now = jiffies;
 	int result = 0;
 
-	static last_index;
+	static int last_index;
 
 	if (last_index >= ARP_TABLE_SIZE)
 		last_index = 0;
@@ -1000,33 +1000,6 @@ static __inline__ struct arp_table *arp_lookup(u32 paddr, struct device * dev)
 			return entry;
 	return NULL;
 }
-
-/*
- *	Find an arp mapping in the cache. If not found, return false.
- */
-
-int arp_query(unsigned char *haddr, u32 paddr, struct device * dev)
-{
-	struct arp_table *entry;
-
-	start_bh_atomic();
-
-	entry = arp_lookup(paddr, dev);
-
-	if (entry != NULL)
-	{
-		entry->u.dst.lastuse = jiffies;
-		if (entry->flags & ATF_COM)
-		{
-			memcpy(haddr, entry->ha, dev->addr_len);
-			end_bh_atomic();
-			return 1;
-		}
-	}
-	end_bh_atomic();
-	return 0;
-}
-
 
 static int arp_set_predefined(int addr_hint, unsigned char * haddr, u32 paddr, struct device * dev)
 {

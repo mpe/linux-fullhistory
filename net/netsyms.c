@@ -66,6 +66,10 @@ extern void destroy_EII_client(struct datalink_proto *);
 extern void destroy_8023_client(struct datalink_proto *);
 #endif
 
+#ifdef CONFIG_ATALK_MODULE
+#include <net/sock.h>
+#endif
+
 extern char *skb_push_errstr;
 extern char *skb_put_errstr;
 
@@ -87,6 +91,7 @@ EXPORT_SYMBOL(sk_alloc);
 EXPORT_SYMBOL(sk_free);
 EXPORT_SYMBOL(sock_wake_async);
 EXPORT_SYMBOL(sock_alloc_send_skb);
+EXPORT_SYMBOL(sock_no_fcntl);
 EXPORT_SYMBOL(sock_rfree);
 EXPORT_SYMBOL(sock_wfree);
 EXPORT_SYMBOL(skb_recv_datagram);
@@ -107,6 +112,11 @@ EXPORT_SYMBOL(make_EII_client);
 EXPORT_SYMBOL(destroy_EII_client);
 #endif
 
+#ifdef CONFIG_ATALK_MODULE
+EXPORT_SYMBOL(sklist_destroy_socket);
+EXPORT_SYMBOL(sklist_insert_socket);
+#endif
+
 #ifdef CONFIG_INET
 /* Internet layer registration */
 EXPORT_SYMBOL(get_new_socknum);
@@ -124,10 +134,6 @@ EXPORT_SYMBOL(ip_send_check);
 EXPORT_SYMBOL(ip_fragment);
 EXPORT_SYMBOL(ip_dev_find_tunnel);
 EXPORT_SYMBOL(inet_family_ops);
-
-#ifdef CONFIG_IP_FORWARD
-EXPORT_SYMBOL(ip_forward);
-#endif
 
 #ifdef CONFIG_IPV6_MODULE
 /* inet functions common to v4 and v6 */
@@ -245,7 +251,6 @@ EXPORT_SYMBOL(unregister_netdev);
 EXPORT_SYMBOL(ether_setup);
 EXPORT_SYMBOL(eth_type_trans);
 EXPORT_SYMBOL(eth_copy_and_sum);
-EXPORT_SYMBOL(arp_query);
 EXPORT_SYMBOL(alloc_skb);
 EXPORT_SYMBOL(__kfree_skb);
 EXPORT_SYMBOL(skb_clone);

@@ -920,7 +920,7 @@ int wic_rebuild_header(struct sk_buff *skb)
 
 	for (i=0; i < ETH_ALEN - sizeof(unsigned long); i++)
 		eth->h_dest[i] = 0xfc;
-	memcpy(&(eth->h_dest[i]), &dst, sizeof(unsigned long));
+	memcpy(&(eth->h_dest[i]), &skb->daddr, 4);
 	return 0;
 }
 

@@ -232,7 +232,7 @@ static void lapb_state2_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 			printk(KERN_DEBUG "lapb: (%p) S2 RX DISC(%d)\n", lapb->token, pf);
 			printk(KERN_DEBUG "lapb: (%p) S2 TX UA(%d)\n", lapb->token, pf);
 #endif
-			lapb_send_control(lapb, LAPB_UA, pf, C_RESPONSE);
+			lapb_send_control(lapb, LAPB_UA, pf, LAPB_RESPONSE);
 			break;
 
 		case LAPB_UA:
@@ -386,7 +386,7 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 				lapb->state = LAPB_STATE_1;
 			}
 			break;
-			
+
 		case LAPB_RR:
 #if LAPB_DEBUG > 1
 			printk(KERN_DEBUG "lapb: (%p) S3 RX RR(%d) R%d\n", lapb->token, pf, nr);
@@ -403,7 +403,7 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 				lapb->state = LAPB_STATE_1;
 			}
 			break;
-				
+
 		case LAPB_REJ:
 #if LAPB_DEBUG > 1
 			printk(KERN_DEBUG "lapb: (%p) S3 RX REJ(%d) R%d\n", lapb->token, pf, nr);
@@ -422,13 +422,11 @@ static void lapb_state3_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 				lapb->state = LAPB_STATE_1;
 			}
 			break;
-			
+
 		case LAPB_I:
 #if LAPB_DEBUG > 1
 			printk(KERN_DEBUG "lapb: (%p) S3 RX I(%d) S%d R%d\n", lapb->token, pf, ns, nr);
 #endif
-			if (type != LAPB_COMMAND)
-				break;
 			if (!lapb_validate_nr(lapb, nr)) {
 #if LAPB_DEBUG > 0
 				printk(KERN_DEBUG "lapb: (%p) S3 -> S1\n", lapb->token);
@@ -613,7 +611,7 @@ static void lapb_state4_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 				lapb->state = LAPB_STATE_1;
 			}
 			break;
-			
+
 		case LAPB_RR:
 #if LAPB_DEBUG > 1
 			printk(KERN_DEBUG "lapb: (%p) S4 RX RR(%d) R%d\n", lapb->token, pf, nr);
@@ -700,8 +698,6 @@ static void lapb_state4_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 #if LAPB_DEBUG > 1
 			printk(KERN_DEBUG "lapb: (%p) S4 RX I(%d) S%d R%d\n", lapb->token, pf, ns, nr);
 #endif
-			if (type != LAPB_COMMAND)
-				break;
 			if (!lapb_validate_nr(lapb, nr)) {
 #if LAPB_DEBUG > 0
 				printk(KERN_DEBUG "lapb: (%p) S4 -> S1\n", lapb->token);
@@ -737,7 +733,7 @@ static void lapb_state4_machine(lapb_cb *lapb, struct sk_buff *skb, int frametyp
 				}
 			}
 			break;
-		
+
 		case LAPB_FRMR:
 		case LAPB_ILLEGAL:
 #if LAPB_DEBUG > 1
@@ -765,7 +761,7 @@ int lapb_data_received(void *token, struct sk_buff *skb)
 {
 	int frametype, ns, nr, pf, type;
 	lapb_cb *lapb;
-	
+
 	if ((lapb = lapb_tokentostruct(token)) == NULL)
 		return LAPB_BADTOKEN;
 

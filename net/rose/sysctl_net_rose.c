@@ -10,12 +10,12 @@
 #include <net/ax25.h>
 #include <net/rose.h>
 
-static int min_timer[] = {1 * PR_SLOWHZ};
-static int max_timer[] = {300 * PR_SLOWHZ};
-static int min_idle[]  = {0 * PR_SLOWHZ};
-static int max_idle[]  = {65535 * PR_SLOWHZ};
+static int min_timer[] = {1 * ROSE_SLOWHZ};
+static int max_timer[] = {300 * ROSE_SLOWHZ};
+static int min_idle[]  = {0 * ROSE_SLOWHZ};
+static int max_idle[]  = {65535 * ROSE_SLOWHZ};
 static int min_route[] = {0};
-static int max_route[] = {0};
+static int max_route[] = {1};
 
 static struct ctl_table_header *rose_table_header;
 

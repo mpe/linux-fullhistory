@@ -15,7 +15,7 @@
  *	History
  *	X.25 001	Jonathan Naylor	Started coding.
  */
- 
+
 #include <linux/config.h>
 #if defined(CONFIG_X25) || defined(CONFIG_X25_MODULE)
 #include <linux/errno.h>
@@ -46,68 +46,17 @@ void x25_clear_queues(struct sock *sk)
 {
 	struct sk_buff *skb;
 
-	while ((skb = skb_dequeue(&sk->write_queue)) != NULL) {
-		skb->sk = sk;
+	while ((skb = skb_dequeue(&sk->write_queue)) != NULL)
 		kfree_skb(skb, FREE_WRITE);
-	}
 
-	while ((skb = skb_dequeue(&sk->protinfo.x25->ack_queue)) != NULL) {
-		skb->sk = sk;
-		kfree_skb(skb, FREE_WRITE);
-	}
-
-	while ((skb = skb_dequeue(&sk->protinfo.x25->interrupt_queue)) != NULL) {
-		skb->sk = sk;
-		kfree_skb(skb, FREE_WRITE);
-	}
-
-	while ((skb = skb_dequeue(&sk->protinfo.x25->fragment_queue)) != NULL) {
-		skb->sk = sk;
+	while ((skb = skb_dequeue(&sk->protinfo.x25->interrupt_in_queue)) != NULL)
 		kfree_skb(skb, FREE_READ);
-	}
-}
 
-/*
- * This routine purges the input queue of those frames that have been
- * acknowledged. This replaces the boxes labelled "V(a) <- N(r)" on the
- * SDL diagram.
- */
-void x25_frames_acked(struct sock *sk, unsigned short nr)
-{
-	struct sk_buff *skb;
-	int modulus;
-	
-	modulus = (sk->protinfo.x25->neighbour->extended) ? X25_EMODULUS : X25_SMODULUS;
+	while ((skb = skb_dequeue(&sk->protinfo.x25->interrupt_out_queue)) != NULL)
+		kfree_skb(skb, FREE_WRITE);
 
-	/*
-	 * Remove all the ack-ed frames from the ack queue.
-	 */
-	if (sk->protinfo.x25->va != nr) {
-		while (skb_peek(&sk->protinfo.x25->ack_queue) != NULL && sk->protinfo.x25->va != nr) {
-		        skb     = skb_dequeue(&sk->protinfo.x25->ack_queue);
-		        skb->sk = sk;
-			kfree_skb(skb, FREE_WRITE);
-			sk->protinfo.x25->va = (sk->protinfo.x25->va + 1) % modulus;
-		}
-	}
-}
-
-/*
- * Requeue all the un-ack-ed frames on the output queue to be picked
- * up by x25_kick called from the timer. This arrangement handles the
- * possibility of an empty output queue.
- */
-void x25_requeue_frames(struct sock *sk)
-{
-	struct sk_buff *skb, *skb_prev = NULL;
-
-	while ((skb = skb_dequeue(&sk->protinfo.x25->ack_queue)) != NULL) {
-		if (skb_prev == NULL)
-			skb_queue_head(&sk->write_queue, skb);
-		else
-			skb_append(skb_prev, skb);
-		skb_prev = skb;
-	}
+	while ((skb = skb_dequeue(&sk->protinfo.x25->fragment_queue)) != NULL)
+		kfree_skb(skb, FREE_READ);
 }
 
 /*
@@ -125,7 +74,7 @@ int x25_validate_nr(struct sock *sk, unsigned short nr)
 		if (nr == vc) return 1;
 		vc = (vc + 1) % modulus;
 	}
-	
+
 	if (nr == sk->protinfo.x25->vs) return 1;
 
 	return 0;
@@ -151,13 +100,13 @@ void x25_write_internal(struct sock *sk, int frametype)
 
 	/*
 	 *	Adjust frame size.
-	 */	
+	 */
 	switch (frametype) {
 		case X25_CALL_REQUEST:
-			len += 1 + X25_ADDR_LEN + X25_MAX_FAC_LEN;
+			len += 1 + X25_ADDR_LEN + X25_MAX_FAC_LEN + X25_MAX_CUD_LEN;
 			break;
 		case X25_CALL_ACCEPTED:
-			len += 1 + X25_MAX_FAC_LEN;
+			len += 1 + X25_MAX_FAC_LEN + X25_MAX_CUD_LEN;
 			break;
 		case X25_CLEAR_REQUEST:
 		case X25_RESET_REQUEST:
@@ -174,7 +123,7 @@ void x25_write_internal(struct sock *sk, int frametype)
 			printk(KERN_ERR "X.25: invalid frame type %02X\n", frametype);
 			return;
 	}
-	
+
 	if ((skb = alloc_skb(len, GFP_ATOMIC)) == NULL)
 		return;
 
@@ -182,7 +131,7 @@ void x25_write_internal(struct sock *sk, int frametype)
 	 *	Space for Ethernet and 802.2 LLC headers.
 	 */
 	skb_reserve(skb, X25_MAX_L2_LEN);
-	
+
 	/*
 	 *	Make space for the GFI and LCI, and fill them in.
 	 */
@@ -203,7 +152,7 @@ void x25_write_internal(struct sock *sk, int frametype)
 	 *	Now fill in the frame type specific information.
 	 */
 	switch (frametype) {
-	
+
 		case X25_CALL_REQUEST:
 			dptr    = skb_put(skb, 1);
 			*dptr++ = X25_CALL_REQUEST;
@@ -213,6 +162,9 @@ void x25_write_internal(struct sock *sk, int frametype)
 			len     = x25_create_facilities(facilities, &sk->protinfo.x25->facilities);
 			dptr    = skb_put(skb, len);
 			memcpy(dptr, facilities, len);
+			dptr = skb_put(skb, sk->protinfo.x25->calluserdata.cudlength);
+			memcpy(dptr, sk->protinfo.x25->calluserdata.cuddata, sk->protinfo.x25->calluserdata.cudlength);
+			sk->protinfo.x25->calluserdata.cudlength = 0;
 			break;
 
 		case X25_CALL_ACCEPTED:
@@ -222,6 +174,9 @@ void x25_write_internal(struct sock *sk, int frametype)
 			len     = x25_create_facilities(facilities, &sk->protinfo.x25->facilities);
 			dptr    = skb_put(skb, len);
 			memcpy(dptr, facilities, len);
+			dptr = skb_put(skb, sk->protinfo.x25->calluserdata.cudlength);
+			memcpy(dptr, sk->protinfo.x25->calluserdata.cuddata, sk->protinfo.x25->calluserdata.cudlength);
+			sk->protinfo.x25->calluserdata.cudlength = 0;
 			break;
 
 		case X25_CLEAR_REQUEST:
@@ -245,7 +200,7 @@ void x25_write_internal(struct sock *sk, int frametype)
 				*dptr++ |= (sk->protinfo.x25->vr << 5) & 0xE0;
 			}
 			break;
-		
+
 		case X25_CLEAR_CONFIRMATION:
 		case X25_INTERRUPT_CONFIRMATION:
 		case X25_RESET_CONFIRMATION:
@@ -263,9 +218,9 @@ void x25_write_internal(struct sock *sk, int frametype)
 int x25_decode(struct sock *sk, struct sk_buff *skb, int *ns, int *nr, int *q, int *d, int *m)
 {
 	unsigned char *frame;
-	
+
 	frame = skb->data;
-	
+
 	*ns = *nr = *q = *d = *m = 0;
 
 	switch (frame[2]) {
@@ -322,7 +277,7 @@ int x25_decode(struct sock *sk, struct sk_buff *skb, int *ns, int *nr, int *q, i
 	}
 
 	printk(KERN_DEBUG "X.25: invalid PLP frame %02X %02X %02X\n", frame[0], frame[1], frame[2]);
-	
+
 	return X25_ILLEGAL;
 }
 
@@ -335,10 +290,7 @@ int x25_parse_facilities(struct sk_buff *skb, struct x25_facilities *facilities)
 	unsigned int len;
 	unsigned char *p = skb->data;
 
-	facilities->window_size = -1;
-	facilities->packet_size = -1;
-	facilities->throughput  = -1;
-	facilities->reverse     = -1;
+	memset(facilities, 0x00, sizeof(struct x25_facilities));
 
 	len = *p++;
 
@@ -359,14 +311,16 @@ int x25_parse_facilities(struct sk_buff *skb, struct x25_facilities *facilities)
 				p   += 2;
 				len -= 2;
 				break;
-				
+
 			case X25_FAC_CLASS_B:
 				switch (*p) {
 					case X25_FAC_PACKET_SIZE:
-						facilities->packet_size = p[1];
+						facilities->pacsize_in  = p[1];
+						facilities->pacsize_out = p[2];
 						break;
 					case X25_FAC_WINDOW_SIZE:
-						facilities->window_size = p[1];
+						facilities->winsize_in  = p[1];
+						facilities->winsize_out = p[2];
 						break;
 					default:
 						printk(KERN_DEBUG "X.25: unknown facility %02X, values %02X, %02X\n", p[0], p[1], p[2]);
@@ -381,7 +335,7 @@ int x25_parse_facilities(struct sk_buff *skb, struct x25_facilities *facilities)
 				p   += 4;
 				len -= 4;
 				break;
-				
+
 			case X25_FAC_CLASS_D:
 				printk(KERN_DEBUG "X.25: unknown facility %02X, length %d, values %02X, %02X, %02X, %02X\n", p[0], p[1], p[2], p[3], p[4], p[5]);
 				p   += p[1] + 2;
@@ -401,31 +355,31 @@ int x25_create_facilities(unsigned char *buffer, struct x25_facilities *faciliti
 	unsigned char *p = buffer + 1;
 	int len;
 
-	if (facilities->reverse != -1) {
+	if (facilities->reverse != 0) {
 		*p++ = X25_FAC_REVERSE;
 		*p++ = (facilities->reverse) ? 0x01 : 0x00;
 	}
 
-	if (facilities->throughput != -1) {
+	if (facilities->throughput != 0) {
 		*p++ = X25_FAC_THROUGHPUT;
 		*p++ = facilities->throughput;
 	}
 
-	if (facilities->packet_size != -1) {
+	if (facilities->pacsize_in != 0 || facilities->pacsize_out != 0) {
 		*p++ = X25_FAC_PACKET_SIZE;
-		*p++ = facilities->packet_size;
-		*p++ = facilities->packet_size;
+		*p++ = (facilities->pacsize_in  == 0) ? facilities->pacsize_out : facilities->pacsize_in;
+		*p++ = (facilities->pacsize_out == 0) ? facilities->pacsize_in  : facilities->pacsize_out;
 	}
 
-	if (facilities->window_size != -1) {
+	if (facilities->winsize_in != 0 || facilities->winsize_out != 0) {
 		*p++ = X25_FAC_WINDOW_SIZE;
-		*p++ = facilities->window_size;
-		*p++ = facilities->window_size;
+		*p++ = (facilities->winsize_in  == 0) ? facilities->winsize_out : facilities->winsize_in;
+		*p++ = (facilities->winsize_out == 0) ? facilities->winsize_in  : facilities->winsize_out;
 	}
 
 	len       = p - buffer;
 	buffer[0] = len - 1;
-	
+
 	return len;
 }
 

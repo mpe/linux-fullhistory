@@ -17,6 +17,7 @@
 #include <linux/mm.h>
 
 #include <asm/uaccess.h>
+#include <asm/unaligned.h>
 
 #define ACC_MODE(x) ("\000\004\002\006"[(x)&O_ACCMODE])
 
@@ -162,7 +163,7 @@ int lookup(struct inode * dir,const char * name, int len,
 		return -ENOENT;
 /* check permissions before traversing mount-points */
 	perm = permission(dir,MAY_EXEC);
-	if (len==2 && name[0] == '.' && name[1] == '.') {
+	if (len==2 && get_unaligned((u16 *) name) == 0x2e2e) {
 		if (dir == current->fs->root) {
 			*result = dir;
 			return 0;
@@ -215,7 +216,7 @@ int follow_link(struct inode * dir, struct inode * inode,
 static int dir_namei(const char *pathname, int *namelen, const char **name,
                      struct inode * base, struct inode **res_inode)
 {
-	char c;
+	unsigned char c;
 	const char * thisname;
 	int len,error;
 	struct inode * inode;

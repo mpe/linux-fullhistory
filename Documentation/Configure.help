@@ -550,27 +550,6 @@ CONFIG_ALPHA_XL
   Machine") (as opposed to Mustang (AS200), M3 (AS250) or Avanti
   (AS400)), say Y, otherwise N.
 
-Limit memory to low 16MB
-CONFIG_MAX_16M
-  This is for some buggy motherboards which cannot properly deal with
-  the memory above 16MB. If you have more than 16MB of RAM and
-  experience weird problems, you might want to try Y, everyone else
-  says N. Note for machines with more that 64MB of RAM: in order for
-  the kernel to be able to use the memory above 64MB, pass the command
-  line option "mem=XXXM" (where XXX is the memory size in megabytes)
-  to your kernel during boot time. See the documentation of your boot
-  loader (lilo or loadlin) about how to pass options to the
-  kernel. The lilo procedure is also explained in the SCSI-HOWTO,
-  available via ftp (user: anonymous) in
-  sunsite.unc.edu:/pub/Linux/docs/HOWTO.  You also need at least 512kB
-  of RAM cache if you have more than 64MB of RAM.  Some other things
-  to try when experiencing seemingly random, "weird" problems: 1)
-  passing the "no-hlt" option to the kernel 2) passing the "no-387"
-  option to the kernel 3) passing the "mem=4M" option to the kernel
-  (thereby disabling all but the first 4M of RAM) 4) disabling the
-  cache from your BIOS settings 5) exchanging RAM chips 6) exchanging
-  the motherboard.
-
 Using SRM as bootloader
 CONFIG_ALPHA_SRM
   There are two different types of booting firmware on Alphas: SRM,

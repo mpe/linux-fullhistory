@@ -145,6 +145,7 @@ struct device
 	 *	Some hardware also needs these fields, but they are not
 	 *	part of the usual set specified in Space.c.
 	 */
+
 	unsigned char		if_port;	/* Selectable AUI, TP,..*/
 	unsigned char		dma;		/* DMA channel		*/
 
@@ -155,9 +156,7 @@ struct device
 	 */
 	 
 	struct enet_statistics* (*get_stats)(struct device *dev);
-#ifdef CONFIG_NET_RADIO
 	struct iw_statistics*	(*get_wireless_stats)(struct device *dev);
-#endif
 
 	/*
 	 * This marks the end of the "visible" part of the structure. All
@@ -194,7 +193,6 @@ struct device
   
 	struct ip_mc_list	*ip_mc_list;	/* IP multicast filter chain    */
 	unsigned		ip_flags;	/* IP layer control flags	*/
-	__u8			hash;		/* Hashing index 		*/	
 	__u32			tx_queue_len;	/* Max frames per queue allowed */
     
 	/* For load balancing driver pair support */
@@ -203,7 +201,12 @@ struct device
 	struct device		*slave;		/* Slave device		*/
 	struct net_alias_info	*alias_info;	/* main dev alias info	*/
 	struct net_alias	*my_alias;	/* alias devs		*/
-  
+
+	/* Protocol specific pointers */
+	
+	void 			*atalk_ptr;	/* Appletalk link 	*/
+	void			*ip_ptr;	/* Not used yet 	*/  
+
 	/* Pointer to the interface buffers.	*/
 	struct sk_buff_head	buffs[DEV_NUMBUFFS];
 
@@ -322,31 +325,6 @@ extern __inline__ void dev_lock_wait(void)
 		schedule();
 }
 
-/* NOTE: about to be replaced with if_index */
-
-extern __inline__ __u8 dev_hash_name(char *name)
-{
-	__u8 hash = 0;
-	__u8 *p;
-	for (p=name; *p; p++)
-		hash ^= *p;
-	return hash;
-}
-
-extern __inline__ __u8 dev_hash_mc_name(char *name)
-{
-	int i;
-	__u8 hash = 0;
-	unsigned *p = (unsigned*)name;
-	for (i=0; i<MAX_ADDR_LEN/sizeof(unsigned); i++) {
-		unsigned h = p[i];
-		h ^= (h>>16);
-		h ^= (h>>8);
-		hash ^= h;
-	}
-	return hash;
-}
-
 /*
  *	Buffer initialisation function. This used to appear in all the
  *	drivers but is now an inline in case we ever want to change the
@@ -384,6 +362,8 @@ extern void		dev_mc_add(struct device *dev, void *addr, int alen, int newonly);
 extern void		dev_mc_discard(struct device *dev);
 /* Load a device via the kerneld */
 extern void		dev_load(const char *name);
+extern int		dev_new_index(void);
+extern struct device *	dev_get_by_index(int ifindex);
 
 #endif /* __KERNEL__ */
 

@@ -285,7 +285,7 @@ int get_smp_prof_list(char *buf) {
 		for (j=0;j<smp_num_cpus;j++)
 			len+=sprintf(buf+len, "%10d ",
 				int_count[cpu_logical_map[j]][i]);
-		len += sprintf(buf+len, "%c %s\n",
+		len += sprintf(buf+len, "%c %s",
 			(action->flags & SA_INTERRUPT) ? '+' : ' ',
 			action->name);
 		for (action=action->next; action; action = action->next) {
@@ -293,6 +293,7 @@ int get_smp_prof_list(char *buf) {
 				(action->flags & SA_INTERRUPT) ? " +" : "",
 				action->name);
 		}
+		len += sprintf(buf+len, "\n");
 	}
 	len+=sprintf(buf+len, "LCK: %10lu",
 		sum_spins);

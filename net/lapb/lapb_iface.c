@@ -63,7 +63,7 @@ static void lapb_remove_cb(lapb_cb *lapb)
 {
 	lapb_cb *s;
 	unsigned long flags;
-	
+
 	save_flags(flags);
 	cli();
 
@@ -152,7 +152,7 @@ int lapb_register(void *token, struct lapb_register_struct *callbacks)
 
 	if (lapb_tokentostruct(token) != NULL)
 		return LAPB_BADTOKEN;
-	
+
 	if ((lapb = lapb_create_cb()) == NULL)
 		return LAPB_NOMEM;
 
@@ -160,7 +160,7 @@ int lapb_register(void *token, struct lapb_register_struct *callbacks)
 	lapb->callbacks = *callbacks;
 
 	lapb_insert_cb(lapb);
-		
+
 	return LAPB_OK;
 }
 
@@ -176,7 +176,7 @@ int lapb_unregister(void *token)
 	lapb_remove_cb(lapb);
 
 	lapb_free_cb(lapb);
-		
+
 	return LAPB_OK;
 }
 
@@ -224,7 +224,7 @@ int lapb_setparms(void *token, struct lapb_parms_struct *parms)
 			if (parms->window < 1 || parms->window > 7)
 				return LAPB_INVALUE;
 		}
-	
+
 		lapb->mode   = parms->mode;
 		lapb->window = parms->window;
 

@@ -11,17 +11,20 @@ The following watchdog drivers are currently implemented:
 	ICS	WDT501-P (no fan tachometer)
 	ICS	WDT500-P
 	Software Only
+	Berkshire Products PC Watchdog Revision A & C (by Ken Hollis)
 
-All four interfaces provide /dev/watchdog, which when open must be written
-to within a minute or the machine will reboot. Each write delays the reboot
-time another minute. In the case of the software watchdog the ability to 
+
+All five interfaces provide /dev/watchdog, which when open must be written
+to within a timeout or the machine will reboot. Each write delays the reboot
+time another timeout. In the case of the software watchdog the ability to 
 reboot will depend on the state of the machines and interrupts. The hardware
 boards physically pull the machine down off their own onboard timers and
 will reboot from almost anything.
 
 A second temperature monitoring interface is available on the WDT501P cards
-and provides /dev/temperature. This is the machine internal temperature in
-degrees farenheit. Each read returns a single byte giving the temperature.
+and some Berkshire cards. This provides /dev/temperature. This is the machine 
+internal temperature in degrees farenheit. Each read returns a single byte 
+giving the temperature.
 
 The third interface logs kernel messages on additional alert events.
 
@@ -29,16 +32,20 @@ Both software and hardware watchdog drivers are available in the standard
 kernel. If you are using the software watchdog, you probably also want
 to use "panic=60" as a boot argument as well.
 
+The wdt card cannot be safely probed for. Instead you need to pass
+wdt=ioaddr,irq as a boot parameter - eg "wdt=0x240,11".
+
 Features
 --------
-		WDT501P		WDT500P		Software
-Reboot Timer	   X               X                X
-External Reboot	   X	           X                o
-Temperature	   X		   o		    o
-Fan Speed          X		   o		    o
-Power Under	   X               o                o
-Power Over         X               o                o
-Overheat           X               o                o
+		WDT501P		WDT500P		Software	Berkshire
+Reboot Timer	   X               X                X		    X
+External Reboot	   X	           X                o		    o
+I/O Port Monitor   o		   o		    o		    X
+Temperature	   X		   o		    o               X
+Fan Speed          X		   o		    o               o
+Power Under	   X               o                o               o
+Power Over         X               o                o               o
+Overheat           X               o                o               o
 
 The external event interfaces on the WDT boards are not currently supported.
 Minor numbers are however allocated for it.
@@ -81,3 +88,5 @@ Industrial Computer Source
 San Diego, CA     
 
 and please mention Linux when enquiring.
+
+For full information about the PCWD cards see the pcwd-watchdog.txt document.

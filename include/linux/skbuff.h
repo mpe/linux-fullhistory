@@ -199,10 +199,27 @@ extern __inline__ void kfree_skb(struct sk_buff *skb, int rw)
 		__kfree_skb(skb);
 }
 
+extern __inline__ int skb_cloned(struct sk_buff *skb)
+{
+	return (skb->data_skb->count != 1);
+}
+
+extern __inline__ int skb_shared(struct sk_buff *skb)
+{
+	return (skb->users != 1);
+}
+
+/*
+ *	Copy shared buffers into a new sk_buff. We effectively do COW on
+ *	packets to handle cases where we have a local reader and forward
+ *	and a couple of other messy ones. The normal one is tcpdumping
+ *	a packet thats being forwarded.
+ */
+ 
 extern __inline__ struct sk_buff *skb_unshare(struct sk_buff *skb, int pri, int dir)
 {
 	struct sk_buff *nskb;
-	if(skb->users==1)
+	if(!skb_cloned(skb))
 		return skb;
 	nskb=skb_copy(skb, pri);
 	kfree_skb(skb, dir);	/* Free our shared copy */
@@ -215,6 +232,7 @@ extern __inline__ struct sk_buff *skb_unshare(struct sk_buff *skb, int pri, int 
  *	list and someone else may run off with it. For an interrupt
  *	type system cli() peek the buffer copy the data and sti();
  */
+ 
 extern __inline__ struct sk_buff *skb_peek(struct sk_buff_head *list_)
 {
 	struct sk_buff *list = ((struct sk_buff *)list_)->next;

@@ -3,50 +3,59 @@
  *
  *	Jonathan Naylor G4KLX	9/4/95
  */
- 
+
 #ifndef _NETROM_H
 #define _NETROM_H 
 #include <linux/netrom.h>
 
-#define	NR_T1CLAMPLO   (1 * PR_SLOWHZ)	/* If defined, clamp at 1 second **/
-#define	NR_T1CLAMPHI (300 * PR_SLOWHZ)	/* If defined, clamp at 30 seconds **/
+#define	NR_SLOWHZ			10	/* Run timing at 1/10 second */
 
-#define	NR_NETWORK_LEN		15
-#define	NR_TRANSPORT_LEN	5
- 
-#define	NR_PROTO_IP		0x0C
+#define	NR_T1CLAMPLO  	 		(1 * NR_SLOWHZ)		/* If defined, clamp at 1 second **/
+#define	NR_T1CLAMPHI 			(300 * NR_SLOWHZ)	/* If defined, clamp at 30 seconds **/
 
-#define	NR_PROTOEXT		0x00
-#define	NR_CONNREQ		0x01
-#define	NR_CONNACK		0x02
-#define	NR_DISCREQ		0x03
-#define	NR_DISCACK		0x04
-#define	NR_INFO			0x05
-#define	NR_INFOACK		0x06
+#define	NR_NETWORK_LEN			15
+#define	NR_TRANSPORT_LEN		5
 
-#define	NR_CHOKE_FLAG		0x80
-#define	NR_NAK_FLAG		0x40
-#define	NR_MORE_FLAG		0x20
+#define	NR_PROTO_IP			0x0C
+
+#define	NR_PROTOEXT			0x00
+#define	NR_CONNREQ			0x01
+#define	NR_CONNACK			0x02
+#define	NR_DISCREQ			0x03
+#define	NR_DISCACK			0x04
+#define	NR_INFO				0x05
+#define	NR_INFOACK			0x06
+
+#define	NR_CHOKE_FLAG			0x80
+#define	NR_NAK_FLAG			0x40
+#define	NR_MORE_FLAG			0x20
 
 /* Define Link State constants. */
 
-#define NR_STATE_0		0
-#define NR_STATE_1		1
-#define NR_STATE_2		2
-#define NR_STATE_3		3
+#define NR_STATE_0			0
+#define NR_STATE_1			1
+#define NR_STATE_2			2
+#define NR_STATE_3			3
 
-#define NR_DEFAULT_T1		(120 * PR_SLOWHZ)	/* Outstanding frames - 120 seconds */
-#define NR_DEFAULT_T2		(5   * PR_SLOWHZ)	/* Response delay     - 5 seconds */
-#define NR_DEFAULT_N2		3			/* Number of Retries - 3 */
-#define	NR_DEFAULT_T4		(180 * PR_SLOWHZ)	/* Busy Delay - 180 seconds */
-#define	NR_DEFAULT_IDLE		(20* 60 * PR_SLOWHZ)	/* No Activuty Timeout - 900 seconds*/
-#define	NR_DEFAULT_WINDOW	4			/* Default Window Size - 4 */
-#define	NR_DEFAULT_OBS		6			/* Default Obsolescence Count - 6 */
-#define	NR_DEFAULT_QUAL		10			/* Default Neighbour Quality - 10 */
-#define	NR_DEFAULT_TTL		16			/* Default Time To Live - 16 */
-#define NR_MODULUS 		256
-#define NR_MAX_WINDOW_SIZE	127			/* Maximum Window Allowable - 127 */
-#define	NR_DEFAULT_PACLEN	236			/* Default Packet Length - 236 */
+#define	NR_COND_ACK_PENDING		0x01
+#define	NR_COND_REJECT			0x02
+#define	NR_COND_PEER_RX_BUSY		0x04
+#define	NR_COND_OWN_RX_BUSY		0x08
+
+#define NR_DEFAULT_T1			(120 * NR_SLOWHZ)	/* Outstanding frames - 120 seconds */
+#define NR_DEFAULT_T2			(5   * NR_SLOWHZ)	/* Response delay     - 5 seconds */
+#define NR_DEFAULT_N2			3			/* Number of Retries - 3 */
+#define	NR_DEFAULT_T4			(180 * NR_SLOWHZ)	/* Busy Delay - 180 seconds */
+#define	NR_DEFAULT_IDLE			(20* 60 * NR_SLOWHZ)	/* No Activuty Timeout - 900 seconds*/
+#define	NR_DEFAULT_WINDOW		4			/* Default Window Size - 4 */
+#define	NR_DEFAULT_OBS			6			/* Default Obsolescence Count - 6 */
+#define	NR_DEFAULT_QUAL			10			/* Default Neighbour Quality - 10 */
+#define	NR_DEFAULT_TTL			16			/* Default Time To Live - 16 */
+#define NR_MODULUS 			256
+#define NR_MAX_WINDOW_SIZE		127			/* Maximum Window Allowable - 127 */
+#define	NR_DEFAULT_PACLEN		236			/* Default Packet Length - 236 */
+#define	NR_DEFAULT_ROUTING		1			/* Is routing enabled ? */
+#define	NR_DEFAULT_FAILS		2			/* Link fails until route fails */
 
 typedef struct {
 	ax25_address		user_addr, source_addr, dest_addr;
@@ -74,6 +83,7 @@ struct nr_neigh {
 	unsigned char   locked;
 	unsigned short  count;
 	unsigned int    number;
+	unsigned char	failed;
 };
 
 struct nr_route {
@@ -103,6 +113,7 @@ extern int  sysctl_netrom_transport_requested_window_size;
 extern int  sysctl_netrom_transport_no_activity_timeout;
 extern int  sysctl_netrom_transport_packet_length;
 extern int  sysctl_netrom_routing_control;
+extern int  sysctl_netrom_link_fails_count;
 extern int  nr_rx_frame(struct sk_buff *, struct device *);
 extern void nr_destroy_socket(struct sock *);
 

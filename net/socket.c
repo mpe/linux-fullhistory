@@ -554,32 +554,18 @@ int sock_wake_async(struct socket *sock, int how)
 }
 
 
-/*
- *	Perform the socket system call. we locate the appropriate
- *	family, then create a fresh socket.
- */
-
-static int find_protocol_family(int family)
-{
-	register int i;
-	for (i = 0; i < NPROTO; i++)
-	{
-		if (net_families[i] == NULL)
-			continue;
-		if (net_families[i]->family == family)
-			return i;
-	}
-	return -1;
-}
-
 asmlinkage int sys_socket(int family, int type, int protocol)
 {
 	int i, fd;
 	struct socket *sock;
 
-	/* Locate the correct protocol family. */
-	i = find_protocol_family(family);
-
+	/*
+	 *	Check protocol is in range
+	 */
+	 
+	if(family<0||family>=NPROTO)
+		return -EINVAL;
+		
 #if defined(CONFIG_KERNELD) && defined(CONFIG_NET)
 	/* Attempt to load a protocol module if the find failed. 
 	 * 
@@ -587,16 +573,15 @@ asmlinkage int sys_socket(int family, int type, int protocol)
 	 * requested real, full-featured networking support upon configuration.
 	 * Otherwise module support will break!
 	 */
-	if (i < 0)
+	if (net_families[family]==NULL)
 	{
 		char module_name[30];
 		sprintf(module_name,"net-pf-%d",family);
 		request_module(module_name);
-		i = find_protocol_family(family);
 	}
 #endif
 
-	if (i < 0)
+	if (net_families[family]==NULL)
   		return -EINVAL;
 
 /*
@@ -625,7 +610,7 @@ asmlinkage int sys_socket(int family, int type, int protocol)
 
 	sock->type = type;
 
-	if ((i = net_families[i]->create(sock, protocol)) < 0) 
+	if ((i = net_families[family]->create(sock, protocol)) < 0) 
 	{
 		sock_release(sock);
 		return(i);
@@ -1121,8 +1106,8 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 	struct socket *sock;
 	char address[MAX_SOCK_ADDR];
 	struct iovec iov[UIO_FASTIOV];
+	unsigned char ctl[sizeof(struct cmsghdr) + 20];	/* 20 is size of ipv6_pktinfo */
 	struct msghdr msg_sys;
-	void * krn_msg_ctl = NULL;
 	int err;
 	int total_len;
 	
@@ -1133,7 +1118,7 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 		return -EOPNOTSUPP;
 
 	if (copy_from_user(&msg_sys,msg,sizeof(struct msghdr)))
-		return -EFAULT;
+		return -EFAULT; 
 
 	/* do not move before msg_sys is valid */
 	if (msg_sys.msg_iovlen>UIO_MAXIOV)
@@ -1145,23 +1130,21 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 		return err;
 	total_len=err;
 
-	if (msg_sys.msg_control==NULL)
-		msg_sys.msg_controllen = 0;
-
-	if (msg_sys.msg_controllen)
-	{
-		krn_msg_ctl = kmalloc(msg_sys.msg_controllen, GFP_KERNEL);
-		
-		if (!krn_msg_ctl)
-		{
-			err = -ENOBUFS;
-			goto flush_it;
-		}		
-		err = copy_from_user(krn_msg_ctl, msg_sys.msg_control,
-				     msg_sys.msg_controllen);
+	if (msg_sys.msg_controllen) {
+		if (msg_sys.msg_controllen > sizeof(ctl)) {
+			char *tmp = kmalloc(msg_sys.msg_controllen, GFP_KERNEL);
+			if (tmp == NULL) {
+				err = -ENOBUFS;
+				goto failed2;
+			}
+			err = copy_from_user(tmp, msg_sys.msg_control, msg_sys.msg_controllen);
+			msg_sys.msg_control = tmp;
+		} else {
+			err = copy_from_user(ctl, msg_sys.msg_control, msg_sys.msg_controllen);
+			msg_sys.msg_control = ctl;
+		}
 		if (err)
-			goto flush_it;
-		msg_sys.msg_control = krn_msg_ctl;
+			goto failed;
 	}
 
 	msg_sys.msg_flags = flags;
@@ -1170,15 +1153,12 @@ asmlinkage int sys_sendmsg(int fd, struct msghdr *msg, unsigned flags)
 
 	err = sock_sendmsg(sock, &msg_sys, total_len);
 
-flush_it:
+failed:
+	if (msg_sys.msg_controllen && msg_sys.msg_control != ctl)
+		kfree(msg_sys.msg_control);
+failed2:
 	if (msg_sys.msg_iov != iov)
-		kfree(iov);
-
-	if (krn_msg_ctl)
-	{
-		kfree(krn_msg_ctl);
-	}
-
+		kfree(msg_sys.msg_iov);
 	return err;
 }
 
@@ -1192,8 +1172,7 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 	struct iovec iovstack[UIO_FASTIOV];
 	struct iovec *iov=iovstack;
 	struct msghdr msg_sys;
-	void * krn_msg_ctl = NULL;
-	void * usr_msg_ctl = NULL;
+	unsigned long cmsg_ptr;
 	int err;
 	int total_len;
 	int len = 0;
@@ -1227,79 +1206,27 @@ asmlinkage int sys_recvmsg(int fd, struct msghdr *msg, unsigned int flags)
 
 	total_len=err;
 
+	cmsg_ptr = (unsigned long)msg_sys.msg_control;
 	msg_sys.msg_flags = 0;
 	
-	if (msg_sys.msg_control==NULL)
-		msg_sys.msg_controllen = 0;
-
-	if (msg_sys.msg_controllen)
-	{
-		/*
-		 *	FIXME:
-		 *	I'm assuming that the kernel may have to examine
-		 *	the acciliary control messages passed by the user.
-		 *	Find out what POSIX says about this...
-		 */
-		krn_msg_ctl = kmalloc(msg_sys.msg_controllen, GFP_KERNEL);
-		
-		if (!krn_msg_ctl)
-		{
-			err=-ENOBUFS;
-			goto flush_it;		
-		}
-		err = copy_from_user(krn_msg_ctl, msg_sys.msg_control,
-				     msg_sys.msg_controllen);
-		if (err)
-		{
-			err = -EFAULT;
-			goto flush_it;
-		}
-		usr_msg_ctl = msg_sys.msg_control;
-		msg_sys.msg_control = krn_msg_ctl;
-	}
-
 	if (current->files->fd[fd]->f_flags&O_NONBLOCK)
 		flags |= MSG_DONTWAIT;
-
 	len=sock_recvmsg(sock, &msg_sys, total_len, flags);
 	if (msg_sys.msg_iov != iov)
-		kfree(iov);
+		kfree(msg_sys.msg_iov);
 	if (len<0)
-	{
-		err=len;
-		goto flush_it;
-	}
-	
+		return len;
+
 	if (uaddr != NULL)
 	{
-		err = move_addr_to_user(addr, msg_sys.msg_namelen, uaddr,
-					uaddr_len);
+		err = move_addr_to_user(addr, msg_sys.msg_namelen, uaddr, uaddr_len);
+		if (err)
+			return err;
 	}
-	
-	if (err >= 0 && msg_sys.msg_controllen)
-	{
-		err = copy_to_user(usr_msg_ctl, krn_msg_ctl,
-				   msg_sys.msg_controllen);
-	}
-
-flush_it:
-	if (msg_sys.msg_iov != iov)
-		kfree(iov);
-
-	if (krn_msg_ctl)
-	{
-		kfree(krn_msg_ctl);
-	}
-
-	if (err < 0)
-		return err;
-
 	if (put_user(msg_sys.msg_flags, &msg->msg_flags))
 		return -EFAULT;
-
-	if (put_user(msg_sys.msg_controllen, &msg->msg_controllen))
+	if (put_user((unsigned long)msg_sys.msg_control-cmsg_ptr, &msg->msg_controllen))
 		return -EFAULT;
-
 	return len;
 }
 
@@ -1431,19 +1358,8 @@ asmlinkage int sys_socketcall(int call, unsigned long *args)
  
 int sock_register(struct net_proto_family *ops)
 {
-	int i;
-
-	cli();
-	for(i = 0; i < NPROTO; i++) 
-	{
-		if (net_families[i] != NULL) 
-			continue;
-		net_families[i] = ops;
-		sti();
-		return(i);
-	}
-	sti();
-	return(-ENOMEM);
+	net_families[ops->family]=ops;
+	return 0;
 }
 
 /*
@@ -1454,22 +1370,8 @@ int sock_register(struct net_proto_family *ops)
  
 int sock_unregister(int family)
 {
-	int i;
-
-	cli();
-	for(i = 0; i < NPROTO; i++) 
-	{
-		if (net_families[i] == NULL) 
-			continue;
-		if (net_families[i]->family == family)
-		{
-			net_families[i]=NULL;
-			sti();
-			return(i);
-		}
-	}
-	sti();
-	return(-ENOENT);
+	net_families[family]=NULL;
+	return 0;
 }
 
 void proto_init(void)

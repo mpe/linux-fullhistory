@@ -39,8 +39,10 @@
  *					on routes.
  *	AX.25 033	Jonathan(G4KLX)	Remove auto-router.
  *			Joerg(DL1BKE)	Moved BPQ Ethernet driver to seperate device.
+ *	AX.25 035	Frederic(F1OAT)	Support for pseudo-digipeating.
+ *			Jonathan(G4KLX)	Support for packet forwarding.
  */
- 
+
 #include <linux/config.h>
 #if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
 #include <linux/errno.h>
@@ -121,7 +123,7 @@ void ax25_rt_device_down(struct device *dev)
 						kfree_s((void *)s, sizeof(*s));
 						break;
 					}
-				}				
+				}
 			}
 		}
 	}
@@ -154,7 +156,7 @@ int ax25_rt_ioctl(unsigned int cmd, void *arg)
 					if (route.digi_count != 0) {
 						if ((ax25_rt->digipeat = kmalloc(sizeof(ax25_digi), GFP_ATOMIC)) == NULL)
 							return -ENOMEM;
-						ax25_rt->digipeat->lastrepeat = 0;
+						ax25_rt->digipeat->lastrepeat = -1;
 						ax25_rt->digipeat->ndigi      = route.digi_count;
 						for (i = 0; i < route.digi_count; i++) {
 							ax25_rt->digipeat->repeated[i] = 0;
@@ -175,7 +177,7 @@ int ax25_rt_ioctl(unsigned int cmd, void *arg)
 					kfree_s(ax25_rt, sizeof(struct ax25_route));
 					return -ENOMEM;
 				}
-				ax25_rt->digipeat->lastrepeat = 0;
+				ax25_rt->digipeat->lastrepeat = -1;
 				ax25_rt->digipeat->ndigi      = route.digi_count;
 				for (i = 0; i < route.digi_count; i++) {
 					ax25_rt->digipeat->repeated[i] = 0;
@@ -287,20 +289,20 @@ int ax25_rt_get_info(char *buffer, char **start, off_t offset, int length, int d
 				len += sprintf(buffer + len, "    *");
 				break;
 		}
-		
+
 		if (ax25_rt->digipeat != NULL)
 			for (i = 0; i < ax25_rt->digipeat->ndigi; i++)
 				len += sprintf(buffer + len, " %s", ax2asc(&ax25_rt->digipeat->calls[i]));
-		
+
 		len += sprintf(buffer + len, "\n");
-				
+
 		pos = begin + len;
 
 		if (pos < offset) {
 			len   = 0;
 			begin = pos;
 		}
-		
+
 		if (pos > offset + length)
 			break;
 	}
@@ -358,7 +360,7 @@ static struct ax25_route *ax25_find_route(ax25_address *addr, struct device *dev
 	struct ax25_route *ax25_spe_rt = NULL;
 	struct ax25_route *ax25_def_rt = NULL;
 	struct ax25_route *ax25_rt;
-	
+
 	/*
 	 *	Bind to the physical interface we heard them on, or the default
 	 *	route if none is found;
@@ -379,7 +381,7 @@ static struct ax25_route *ax25_find_route(ax25_address *addr, struct device *dev
 
 	if (ax25_spe_rt != NULL)
 		return ax25_spe_rt;
-		
+
 	return ax25_def_rt;
 }
 
@@ -391,12 +393,12 @@ static struct ax25_route *ax25_find_route(ax25_address *addr, struct device *dev
 static inline void ax25_adjust_path(ax25_address *addr, ax25_digi *digipeat)
 {
 	int k;
-	
+
 	for (k = 0; k < digipeat->ndigi; k++) {
 		if (ax25cmp(addr, &digipeat->calls[k]) == 0)
 			break;
 	}
-	
+
 	digipeat->ndigi = k;
 }
  
@@ -411,7 +413,7 @@ int ax25_rt_autobind(ax25_cb *ax25, ax25_address *addr)
 
 	if ((ax25_rt = ax25_find_route(addr, NULL)) == NULL)
 		return -EHOSTUNREACH;
-		
+
 	ax25->device = ax25_rt->dev;
 
 	if ((call = ax25_findbyuid(current->euid)) == NULL) {
@@ -442,10 +444,10 @@ int ax25_rt_autobind(ax25_cb *ax25, ax25_address *addr)
 void ax25_rt_build_path(ax25_cb *ax25, ax25_address *addr, struct device *dev)
 {
 	struct ax25_route *ax25_rt;
-	
+
 	if ((ax25_rt = ax25_find_route(addr, dev)) == NULL)
 		return;
-	
+
 	if (ax25_rt->digipeat == NULL)
 		return;
 
@@ -472,24 +474,24 @@ void ax25_dg_build_path(struct sk_buff *skb, ax25_address *addr, struct device *
 
 	if (ax25_rt->digipeat == NULL)
 		return;
-		
+
 	digipeat = *ax25_rt->digipeat;
-	
+
 	ax25_adjust_path(addr, &digipeat);
 
 	len = ax25_rt->digipeat->ndigi * AX25_ADDR_LEN;
-		
+
 	if (skb_headroom(skb) < len) {
 		printk(KERN_CRIT "ax25_dg_build_path: not enough headroom for digis in skb\n");
 		return;
 	}
-	
+
 	memcpy(&dest, skb->data    , AX25_ADDR_LEN);
 	memcpy(&src,  skb->data + 7, AX25_ADDR_LEN);
 
 	bp = skb_push(skb, len);
 
-	build_ax25_addr(bp, &src, &dest, ax25_rt->digipeat, C_COMMAND, MODULUS);
+	build_ax25_addr(bp, &src, &dest, ax25_rt->digipeat, AX25_COMMAND, AX25_MODULUS);
 }
 
 /*
@@ -506,20 +508,30 @@ char ax25_ip_mode_get(ax25_address *callsign, struct device *dev)
 	return ' ';
 }
 
-/*
- *	Wow, a bit of data hiding. Is this C++ or what ?
- */
-int ax25_dev_get_value(struct device *dev, int valueno)
+static struct ax25_dev *ax25_dev_get_dev(struct device *dev)
 {
 	int i;
 
 	for (i = 0; i < AX25_MAX_DEVICES; i++)
 		if (ax25_device[i].dev != NULL && ax25_device[i].dev == dev)
-			return ax25_device[i].values[valueno];
-	
-	printk(KERN_WARNING "ax25_dev_get_value called with invalid device\n");
+			return ax25_device + i;
 
-	return 0;
+	return NULL;
+}
+
+/*
+ *	Wow, a bit of data hiding. Is this C++ or what ?
+ */
+int ax25_dev_get_value(struct device *dev, int valueno)
+{
+	struct ax25_dev *ax25_dev;
+
+	if ((ax25_dev = ax25_dev_get_dev(dev)) == NULL) {
+		printk(KERN_WARNING "ax25_dev_get_value called with invalid device\n");
+		return 1;
+	}
+
+	return ax25_dev->values[valueno];
 }
 
 /*
@@ -530,7 +542,7 @@ void ax25_dev_device_up(struct device *dev)
 {
 	struct ax25_dev *ax25_dev = NULL;
 	int i;
-	
+
 	for (i = 0; i < AX25_MAX_DEVICES; i++) {
 		if (ax25_device[i].dev == NULL) {
 			ax25_dev = ax25_device + i;
@@ -547,7 +559,8 @@ void ax25_dev_device_up(struct device *dev)
 
 	sprintf(ax25_dev->name, "%s.parms", dev->name);
 
-	ax25_dev->dev = dev;
+	ax25_dev->dev     = dev;
+	ax25_dev->forward = NULL;
 
 	ax25_dev->values[AX25_VALUES_IPDEFMODE] = AX25_DEF_IPDEFMODE;
 	ax25_dev->values[AX25_VALUES_AXDEFMODE] = AX25_DEF_AXDEFMODE;
@@ -570,15 +583,60 @@ void ax25_dev_device_up(struct device *dev)
 
 void ax25_dev_device_down(struct device *dev)
 {
-	int i;
+	struct ax25_dev *ax25_dev;
 
 	ax25_unregister_sysctl();
 
-	for (i = 0; i < AX25_MAX_DEVICES; i++)
-		if (ax25_device[i].dev != NULL && ax25_device[i].dev == dev)
-			ax25_device[i].dev = NULL;
+	if ((ax25_dev = ax25_dev_get_dev(dev)) != NULL)
+		ax25_dev->dev = NULL;
 
 	ax25_register_sysctl();
+}
+
+int ax25_fwd_ioctl(unsigned int cmd, struct ax25_fwd_struct *fwd)
+{
+	struct device *dev;
+	struct ax25_dev *ax25_dev;
+
+	if ((dev = ax25rtr_get_dev(&fwd->port_from)) == NULL)
+		return -EINVAL;
+
+	if ((ax25_dev = ax25_dev_get_dev(dev)) == NULL)
+		return -EINVAL;
+
+	switch (cmd) {
+		case SIOCAX25ADDFWD:
+			if ((dev = ax25rtr_get_dev(&fwd->port_to)) == NULL)
+				return -EINVAL;
+			if (ax25_dev->forward != NULL)
+				return -EINVAL;
+			ax25_dev->forward = dev;
+			break;
+
+		case SIOCAX25DELFWD:
+			if (ax25_dev->forward == NULL)
+				return -EINVAL;
+			ax25_dev->forward = NULL;
+			break;
+
+		default:
+			return -EINVAL;
+	}
+
+	return 0;
+}
+
+struct device *ax25_fwd_dev(struct device *dev)
+{
+	struct ax25_dev *ax25_dev;
+
+	if ((ax25_dev = ax25_dev_get_dev(dev)) == NULL)
+		return dev;
+
+	if (ax25_dev->forward == NULL)
+		return dev;
+
+	return ax25_dev->forward;
 }
       
 #ifdef MODULE
@@ -589,7 +647,7 @@ void ax25_dev_device_down(struct device *dev)
 void ax25_rt_free(void)
 {
 	struct ax25_route *s, *ax25_rt = ax25_route;
-  
+
 	while (ax25_rt != NULL) {
 		s       = ax25_rt;
 		ax25_rt = ax25_rt->next;
@@ -604,4 +662,3 @@ void ax25_rt_free(void)
 #endif
 
 #endif
-            

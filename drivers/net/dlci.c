@@ -587,7 +587,6 @@ int dlci_ioctl(unsigned int cmd, void *arg)
 int dlci_init(struct device *dev)
 {
    struct dlci_local *dlp;
-   int i;
 
    dev->priv = kmalloc(sizeof(struct dlci_local), GFP_KERNEL);
    if (!dev->priv)

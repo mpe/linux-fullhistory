@@ -23,7 +23,6 @@ comment 'General setup'
 
 bool 'Kernel math emulation' CONFIG_MATH_EMULATION
 bool 'Networking support' CONFIG_NET
-bool 'Limit memory to low 16MB' CONFIG_MAX_16M
 bool 'PCI bios support' CONFIG_PCI
 if [ "$CONFIG_PCI" = "y" ]; then
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then

@@ -49,10 +49,12 @@ struct in_addr {
 #define IP_TTL		2
 #define IP_HDRINCL	3
 #define IP_OPTIONS	4
-#define IP_LOCALADDR	5
+#define IP_LOCALADDR	5	/* Cannot remove; a lot of apps still use it. ANK */
 #define IP_RECVOPTS	6
 #define IP_RETOPTS	7
-#define IP_LOCALDEV	8
+#define IP_RXINFO	8
+#define IP_TXINFO	IP_RXINFO
+/* Gated uses it. Remove later or preserve for 4.4BSD compatibility??? */
 #define IP_RECVDSTADDR  9
 #define IP_PMTUDISC	10
 #define IP_RECVERR	11
@@ -91,11 +93,14 @@ struct ip_mreqn
 {
 	struct in_addr	imr_multiaddr;		/* IP multicast address of group */
 	struct in_addr	imr_address;		/* local IP address of interface */
-#if 1
-	char		imr_interface[16];
-#else
 	int		imr_ifindex;		/* Interface index */
-#endif
+};
+
+struct in_pktinfo
+{
+	int		ipi_ifindex;
+	struct in_addr	ipi_spec_dst;
+	struct in_addr	ipi_addr;
 };
 
 /* Structure describing an Internet (IP) socket address. */

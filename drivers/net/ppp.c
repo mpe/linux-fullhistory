@@ -388,8 +388,6 @@ ppp_first_time (void)
 static int
 ppp_init_dev (struct device *dev)
 {
-	int    indx;
-
 	dev->hard_header_len  = PPP_HARD_HDR_LEN;
 
 	/* device INFO */
@@ -3354,6 +3352,8 @@ static struct compressor *find_compressor (int type)
 	return (struct compressor *) 0;
 }
 
+#ifdef CONFIG_MODULES
+
 static int ppp_register_compressor (struct compressor *cp)
 {
 	struct compressor_link *new;
@@ -3405,6 +3405,8 @@ static void ppp_unregister_compressor (struct compressor *cp)
 	}
 	restore_flags(flags);
 }
+
+#endif
 
 /*************************************************************
  * Module support routines

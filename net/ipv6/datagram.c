@@ -31,79 +31,30 @@ int datagram_recv_ctl(struct sock *sk, struct msghdr *msg, struct sk_buff *skb)
 {
 	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
 	struct ipv6_options *opt = (struct ipv6_options *) skb->cb;
-	struct cmsghdr *cmsg = msg->msg_control;
-	int len = msg->msg_controllen;
-
-	msg->msg_controllen = 0;
 	
-	if (np->rxinfo && (len >= sizeof(struct cmsghdr) +
-			   sizeof(struct in6_pktinfo)))
+	if (np->rxinfo)
 	{
-		struct in6_pktinfo *src_info;
-		struct inet6_dev *in6_dev;
+		struct in6_pktinfo src_info;
 
-		cmsg->cmsg_len = (sizeof(struct cmsghdr) + 
-				  sizeof(struct in6_pktinfo));
-		cmsg->cmsg_level = SOL_IPV6;
-		cmsg->cmsg_type = IPV6_RXINFO;
-
-		src_info = (struct in6_pktinfo *) cmsg->cmsg_data;
-		in6_dev = ipv6_get_idev(skb->dev);
-
-		if (in6_dev == NULL)
-		{
-			printk(KERN_DEBUG "recv_ctl: unknown device\n");
-			return -ENODEV;
-		}
-
-		src_info->ipi6_ifindex = in6_dev->if_index;
-		ipv6_addr_copy(&src_info->ipi6_addr,
-			       &skb->nh.ipv6h->daddr);
-
-		len -= cmsg->cmsg_len;
-		msg->msg_controllen += cmsg->cmsg_len;
-		cmsg = (struct cmsghdr *)((u8*) cmsg + cmsg->cmsg_len);
+		src_info.ipi6_ifindex = skb->dev->ifindex;
+		ipv6_addr_copy(&src_info.ipi6_addr, &skb->nh.ipv6h->daddr);
+		put_cmsg(msg, SOL_IPV6, IPV6_RXINFO, sizeof(src_info), &src_info);
 	}
 
-	if (np->rxhlim && (len >= sizeof(struct cmsghdr) + sizeof(int)))
+	if (np->rxhlim)
 	{
-		int *hlim;
-		
-		cmsg->cmsg_len = (sizeof(struct cmsghdr) + sizeof(int));
-		cmsg->cmsg_level = SOL_IPV6;
-		cmsg->cmsg_type = IPV6_HOPLIMIT;
-		
-		hlim = (int *) cmsg->cmsg_data;
-		*hlim = skb->nh.ipv6h->hop_limit;
-		
-		len -= cmsg->cmsg_len;
-		msg->msg_controllen += cmsg->cmsg_len;
-		cmsg = (struct cmsghdr *)((u8*) cmsg + cmsg->cmsg_len);
+		int hlim = skb->nh.ipv6h->hop_limit;
+		put_cmsg(msg, SOL_IPV6, IPV6_HOPLIMIT, sizeof(hlim), &hlim);
 	}
 
 	if (opt->srcrt)
 	{
 		int hdrlen = sizeof(struct rt0_hdr) + (opt->srcrt->hdrlen << 3);
 
-		if (len >= sizeof(struct cmsghdr) + hdrlen)
-		{
-			struct rt0_hdr *rt0;
-
-			cmsg->cmsg_len = sizeof(struct cmsghdr) + hdrlen;
-			cmsg->cmsg_level = SOL_IPV6;
-			cmsg->cmsg_type = IPV6_RXINFO;
-		
-			rt0 = (struct rt0_hdr *) cmsg->cmsg_data;
-			memcpy(rt0, opt->srcrt, hdrlen);
-
-			len -= cmsg->cmsg_len;
-			msg->msg_controllen += cmsg->cmsg_len;
-			cmsg = (struct cmsghdr *)((u8*) cmsg + cmsg->cmsg_len);
-		}
+		put_cmsg(msg, SOL_IPV6, IPV6_RXSRCRT, hdrlen, opt->srcrt);
 	}
 	return 0;
 }
-			 
 
 int datagram_send_ctl(struct msghdr *msg, struct device **src_dev,
 		      struct in6_addr **src_addr, struct ipv6_options *opt, 
@@ -116,7 +67,7 @@ int datagram_send_ctl(struct msghdr *msg, struct device **src_dev,
 	int len;
 	int err = 0;
 
-	for (cmsg = msg->msg_control; cmsg; cmsg = cmsg_nxthdr(msg, cmsg))
+	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg))
 	{
 		if (cmsg->cmsg_level != SOL_IPV6)
 		{
@@ -165,7 +116,7 @@ int datagram_send_ctl(struct msghdr *msg, struct device **src_dev,
 
 			break;
 			
-		case SCM_SRCRT:
+		case IPV6_RXSRCRT:
 
 			len = cmsg->cmsg_len;
 

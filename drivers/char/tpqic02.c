@@ -2696,7 +2696,7 @@ static int qic02_tape_ioctl(struct inode * inode, struct file * filp,
 	 */
 
 	/* copy results to user space */
-	if (copy_to_user((char *) &ioctl_status, (char *) ioarg, sizeof(ioctl_status)))
+	if (copy_to_user((char *) ioarg, (char *) &ioctl_status, sizeof(ioctl_status)))
 	{
 	    return -EFAULT;
 	}	

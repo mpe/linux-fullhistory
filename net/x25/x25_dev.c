@@ -15,7 +15,7 @@
  *	History
  *	X.25 001	Jonathan Naylor	Started coding.
  */
-  
+
 #include <linux/config.h>
 #if defined(CONFIG_X25) || defined(CONFIG_X25_MODULE)
 #include <linux/errno.h>
@@ -89,8 +89,9 @@ static int x25_receive_data(struct sk_buff *skb, struct x25_neigh *neigh)
 	/*
 	 *	Its not a Call Request, nor is it a control frame, throw it awa
 	 */
+/*
 	x25_transmit_clear_request(neigh, lci, 0x0D);
-
+*/
 	kfree_skb(skb, FREE_READ);
 
 	return 0;
@@ -101,11 +102,12 @@ int x25_lapb_receive_frame(struct sk_buff *skb, struct device *dev, struct packe
 	struct x25_neigh *neigh;
 
 	skb->sk = NULL;
-	
+
 	/*
 	 *	Packet received from unrecognised device, throw it away.
 	 */
 	if ((neigh = x25_get_neigh(dev)) == NULL) {
+		printk(KERN_DEBUG "X.25: unknown neighbour - %s\n", dev->name);
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}
@@ -129,10 +131,6 @@ int x25_lapb_receive_frame(struct sk_buff *skb, struct device *dev, struct packe
 			kfree_skb(skb, FREE_READ);
 			return 0;
 
-		case 0x04:
-			kfree_skb(skb, FREE_READ);
-			return 0;
-
 		default:
 			kfree_skb(skb, FREE_READ);
 			return 0;
@@ -144,11 +142,12 @@ int x25_llc_receive_frame(struct sk_buff *skb, struct device *dev, struct packet
 	struct x25_neigh *neigh;
 
 	skb->sk = NULL;
-	
+
 	/*
 	 *	Packet received from unrecognised device, throw it away.
 	 */
 	if ((neigh = x25_get_neigh(dev)) == NULL) {
+		printk(KERN_DEBUG "X.25: unknown_neighbour - %s\n", dev->name);
 		kfree_skb(skb, FREE_READ);
 		return 0;
 	}

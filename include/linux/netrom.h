@@ -3,7 +3,7 @@
  * For kernel AX.25 see the file ax25.h. This file requires ax25.h for the
  * definition of the ax25_address structure.
  */
- 
+
 #ifndef	NETROM_KERNEL_H
 #define	NETROM_KERNEL_H
 
@@ -20,28 +20,28 @@
 
 #define	NETROM_KILL	99
 
-#define	SIOCNRDECOBS		(SIOCPROTOPRIVATE+0)
-#define	SIOCNRCTLCON		(SIOCPROTOPRIVATE+1)
+#define	SIOCNRDECOBS		(SIOCPROTOPRIVATE+2)
+#define	SIOCNRCTLCON		(SIOCPROTOPRIVATE+4)
 
 struct nr_route_struct {
 #define	NETROM_NEIGH	0
 #define	NETROM_NODE	1
-	int type;
-	ax25_address callsign;
-	char device[16];
-	unsigned int quality;
-	char mnemonic[7];
-	ax25_address neighbour;
-	unsigned int obs_count;
-	unsigned int ndigis;
-	ax25_address digipeaters[AX25_MAX_DIGIS];
+	int		type;
+	ax25_address	callsign;
+	char		device[16];
+	unsigned int	quality;
+	char		mnemonic[7];
+	ax25_address	neighbour;
+	unsigned int	obs_count;
+	unsigned int	ndigis;
+	ax25_address	digipeaters[AX25_MAX_DIGIS];
 };
 
 struct nr_ctl_struct {
-	unsigned char index;
-	unsigned char id;
-	unsigned int  cmd;
-	unsigned long arg;
+	unsigned char	index;
+	unsigned char	id;
+	unsigned int	cmd;
+	unsigned long	arg;
 };
 
 #endif

@@ -224,6 +224,32 @@ struct device *dev_get(const char *name)
 	}
 	return NULL;
 }
+
+struct device * dev_get_by_index(int ifindex)
+{
+	struct device *dev;
+
+	for (dev = dev_base; dev != NULL; dev = dev->next) 
+	{
+		if (dev->ifindex == ifindex)
+			return(dev);
+	}
+	return NULL;
+}
+
+struct device *dev_getbyhwaddr(unsigned short type, char *ha)
+{
+	struct device *dev;
+
+	for (dev = dev_base; dev != NULL; dev = dev->next) 
+	{
+		if (dev->type == type &&
+		    !(dev->flags&(IFF_LOOPBACK|IFF_NOARP)) &&
+		    memcmp(dev->dev_addr, ha, dev->addr_len) == 0)
+			return(dev);
+	}
+	return(NULL);
+}
 	
 /*
  *	Find and possibly load an interface.
@@ -268,18 +294,17 @@ int dev_open(struct device *dev)
 	if (ret == 0) 
 	{
 		dev->flags |= (IFF_UP | IFF_RUNNING);
-		dev->hash = dev_hash_name(dev->name);
 		/*
 		 *	Initialise multicasting status 
 		 */
 		dev_mc_upload(dev);
 		notifier_call_chain(&netdev_chain, NETDEV_UP, dev);
-		/* 
-		 *	FIXME: This logic was wrong before. Now its
-		 *	obviously so. I think the change here (removing the
-		 *	! on the net_alias_is) is right. ANK ??
+		
+		/*
+		 *	Passive non transmitting devices (including
+		 *	aliases) need not be on this chain.
 		 */
-		if (net_alias_is(dev) || dev->tx_queue_len)
+		if (!net_alias_is(dev) && dev->tx_queue_len)
 		{
 			cli();
 			dev->next_up = dev_up_base;
@@ -931,8 +956,6 @@ static int dev_ifconf(char *arg)
 
 	for (dev = dev_base; dev != NULL; dev = dev->next) 
 	{
-		if(!(dev->flags & IFF_UP))	/* Downed devices don't count */
-			continue;
 		/*
 		 *	Have we run out of space here ?
 		 */
@@ -1282,9 +1305,9 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 				dev->mtu = ifr.ifr_mtu;
 				ret = 0;
 			}
-			if (!ret && (dev->flags&IFF_UP)) {
+			if (!ret && dev->flags&IFF_UP) {
 				printk(KERN_DEBUG "SIFMTU %s(%s)\n", dev->name, current->comm);
-				notifier_call_chain(&netdev_chain, NETDEV_CHANGE, dev);
+				notifier_call_chain(&netdev_chain, NETDEV_CHANGEMTU, dev);
 			}
 			break;
 	
@@ -1308,6 +1331,8 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 			if(ifr.ifr_hwaddr.sa_family!=dev->type)
 				return -EINVAL;
 			ret=dev->set_mac_address(dev,&ifr.ifr_hwaddr);
+			if (!ret)
+				notifier_call_chain(&netdev_chain, NETDEV_CHANGEADDR, dev);
 			break;
 			
 		case SIOCGIFMAP:
@@ -1339,6 +1364,12 @@ static int dev_ifsioc(void *arg, unsigned int getset)
 				return -EINVAL;
 			dev_mc_delete(dev,ifr.ifr_hwaddr.sa_data,dev->addr_len, 1);
 			return 0;
+
+		case SIOGIFINDEX:
+			ifr.ifr_ifindex = dev->ifindex;
+			goto rarok;
+			
+
 		/*
 		 *	Unknown or private ioctl
 		 */
@@ -1417,6 +1448,7 @@ int dev_ioctl(unsigned int cmd, void *arg)
 		case SIOCSIFHWADDR:
 		case SIOCGIFSLAVE:
 		case SIOCGIFMAP:
+		case SIOGIFINDEX:
 			return dev_ifsioc(arg, cmd);
 
 		/*
@@ -1459,6 +1491,11 @@ int dev_ioctl(unsigned int cmd, void *arg)
 	}
 }
 
+int dev_new_index()
+{
+	static int ifindex;
+	return ++ifindex;
+}
 
 /*
  *	Initialize the DEV module. At boot time this walks the device list and
@@ -1585,6 +1622,7 @@ int net_dev_init(void)
 		else
 		{
 			dp = &dev->next;
+			dev->ifindex = dev_new_index();
 		}
 	}
 

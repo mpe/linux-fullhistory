@@ -1,4 +1,4 @@
-#define RCS_ID "$Id: scc.c,v 1.64 1996/10/30 18:58:26 jreuter Exp jreuter $"
+#define RCS_ID "$Id: scc.c,v 1.66 1997/01/08 22:56:06 jreuter Exp jreuter $"
 
 #define VERSION "3.0"
 #define BANNER  "Z8530 SCC driver version "VERSION".dl1bke (experimental) by DL1BKE\n"
@@ -83,9 +83,10 @@
    		  * Invents brand new bugs... ;-)
 
    		  The move to version number 3.0 reflects theses changes.
-   		  You can use version 2.4a if you need a KISS TNC emulator.
+   		  You can use 'kissbridge' if you need a KISS TNC emulator.
 
-   961213	- Fixed for Linux networking changes.
+   961213	- Fixed for Linux networking changes. (G4KLX)
+   960108	- Fixed the remaining problems.
 
    Thanks to all who contributed to this driver with ideas and bug
    reports!
@@ -202,7 +203,6 @@ static void scc_net_rx(struct scc_channel *scc, struct sk_buff *skb);
 static int scc_net_tx(struct sk_buff *skb, struct device *dev);
 static int scc_net_ioctl(struct device *dev, struct ifreq *ifr, int cmd);
 static int scc_net_set_mac_address(struct device *dev, void *addr);
-static int scc_net_rebuild_header(void *buff, struct device *dev, unsigned long raddr, struct sk_buff *skb);
 static int scc_net_header(struct sk_buff *skb, struct device *dev, unsigned short type, void *daddr, void *saddr, unsigned len);
 static struct enet_statistics * scc_net_get_stats(struct device *dev);
 
@@ -347,7 +347,6 @@ extern __inline__ void scc_notify(struct scc_channel *scc, int event)
 	skb = dev_alloc_skb(2);
 	if (skb != NULL)
 	{
-		skb->free = 1;
 		bp = skb_put(skb, 2);
 		*bp++ = PARAM_HWEVENT;
 		*bp++ = event;
@@ -548,9 +547,7 @@ extern __inline__ void scc_rxint(struct scc_channel *scc)
 			return;
 		}
 		
-		skb->free = 1;
 		scc->rx_buff = skb;
-		
 		*(skb_put(skb, 1)) = 0;	/* KISS data */
 	}
 	
@@ -1540,7 +1537,7 @@ static int scc_net_init(struct device *dev)
 
 	dev->hard_start_xmit = scc_net_tx;
 	dev->hard_header     = scc_net_header;
-	dev->rebuild_header  = scc_net_rebuild_header;
+	dev->rebuild_header  = ax25_rebuild_header;
 	dev->set_mac_address = scc_net_set_mac_address;
 	dev->get_stats       = scc_net_get_stats;
 	dev->do_ioctl        = scc_net_ioctl;
@@ -1967,13 +1964,6 @@ static int scc_net_set_mac_address(struct device *dev, void *addr)
 	struct sockaddr *sa = (struct sockaddr *) addr;
 	memcpy(dev->dev_addr, sa->sa_data, dev->addr_len);
 	return 0;
-}
-
-/* ----> rebuild header <---- */
-
-static int scc_net_rebuild_header(struct sk_buff *skb)
-{
-    return ax25_rebuild_header(skb);
 }
 
 /* ----> "hard" header <---- */

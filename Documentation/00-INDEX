@@ -52,6 +52,8 @@ magic-number.txt
 	- list of magic numbers used to mark/protect kernel data structures.
 mandatory.txt
 	- info on the linux implementation of Sys V mandatory file locking.
+memory.txt
+	- info on typical Linux memory problems.
 mca.txt
 	- info on supporting Micro Channel Architecture (e.g. PS/2) systems.
 modules.txt

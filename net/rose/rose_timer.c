@@ -48,7 +48,7 @@ static void rose_timer(unsigned long);
 void rose_set_timer(struct sock *sk)
 {
 	unsigned long flags;
-	
+
 	save_flags(flags);
 	cli();
 	del_timer(&sk->timer);
@@ -65,7 +65,7 @@ void rose_set_timer(struct sock *sk)
 static void rose_reset_timer(struct sock *sk)
 {
 	unsigned long flags;
-	
+
 	save_flags(flags);
 	cli();
 	del_timer(&sk->timer);
@@ -102,9 +102,9 @@ static void rose_timer(unsigned long param)
 			/*
 			 * Check for the state of the receive buffer.
 			 */
-			if (sk->rmem_alloc < (sk->rcvbuf / 2) && (sk->protinfo.rose->condition & OWN_RX_BUSY_CONDITION)) {
-				sk->protinfo.rose->condition &= ~OWN_RX_BUSY_CONDITION;
-				sk->protinfo.rose->condition &= ~ACK_PENDING_CONDITION;
+			if (sk->rmem_alloc < (sk->rcvbuf / 2) && (sk->protinfo.rose->condition & ROSE_COND_OWN_RX_BUSY)) {
+				sk->protinfo.rose->condition &= ~ROSE_COND_OWN_RX_BUSY;
+				sk->protinfo.rose->condition &= ~ROSE_COND_ACK_PENDING;
 				sk->protinfo.rose->vl         = sk->protinfo.rose->vr;
 				sk->protinfo.rose->timer      = 0;
 				rose_write_internal(sk, ROSE_RR);
@@ -131,8 +131,8 @@ static void rose_timer(unsigned long param)
 	 */
 	switch (sk->protinfo.rose->state) {
 		case ROSE_STATE_3:	/* HB */
-			if (sk->protinfo.rose->condition & ACK_PENDING_CONDITION) {
-				sk->protinfo.rose->condition &= ~ACK_PENDING_CONDITION;
+			if (sk->protinfo.rose->condition & ROSE_COND_ACK_PENDING) {
+				sk->protinfo.rose->condition &= ~ROSE_COND_ACK_PENDING;
 				rose_enquiry_response(sk);
 			}
 			break;

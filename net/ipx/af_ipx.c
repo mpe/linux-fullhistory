@@ -760,6 +760,12 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 		struct sk_buff *skb2;
   		long *l;
 		char *c;
+		
+		if(skb->pkt_type!=PACKET_HOST)
+		{
+			kfree_skb(skb, FREE_READ);
+			return 0;
+		}
 
 #ifdef DEBUG_IPX_PPROP_ROUTING
 		printk(KERN_INFO "IPX: PPROP packet received\n"
@@ -812,6 +818,16 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 					printk( "IPX: Forward PPROP onto net num %08x\n", (unsigned int) htonl(ifcs->if_netnum) );
 #endif
 					skb2 = skb_clone(skb, GFP_ATOMIC);
+#ifdef CONFIG_FIREWALL
+					/*
+					 *	See if we are allowed to firewall forward
+					 */
+					if (call_fw_firewall(PF_IPX, skb2->dev, ipx, NULL)!=FW_ACCEPT)
+					{
+						kfree_skb(skb, FREE_READ);
+						return 0;
+					}
+#endif
 					ipxrtr_route_skb(skb2);
 				}
 #ifdef DEBUG_IPX_PPROP_ROUTING
@@ -846,8 +862,7 @@ static int ipxitf_rcv(ipx_interface *intrfc, struct sk_buff *skb)
 		}
 #endif
 		/* We only route point-to-point packets. */
-		if ((skb->pkt_type != PACKET_BROADCAST) &&
-			(skb->pkt_type != PACKET_MULTICAST))
+		if (skb->pkt_type == PACKET_HOST)
 		{
 			skb=skb_unshare(skb, GFP_ATOMIC, FREE_READ);
 			if(skb)
@@ -1699,15 +1714,6 @@ static int ipx_rt_get_info(char *buffer, char **start, off_t offset,
 *														    *
 \*******************************************************************************************************************/
 
-static int ipx_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
-{
-	switch(cmd)
-	{
-		default:
-			return(-EINVAL);
-	}
-}
-
 static int ipx_setsockopt(struct socket *sock, int level, int optname, char *optval, int optlen)
 {
 	struct sock *sk;
@@ -1777,30 +1783,6 @@ static int ipx_listen(struct socket *sock, int backlog)
 	return -EOPNOTSUPP;
 }
 
-static void def_callback1(struct sock *sk)
-{
-	if(!sk->dead)
-		wake_up_interruptible(sk->sleep);
-}
-
-static void def_callback2(struct sock *sk, int len)
-{
-	if(!sk->dead)
-	{
-		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket, 1);
-	}
-}
-
-static void def_callback3(struct sock *sk, int len)
-{
-	if(!sk->dead)
-	{
-		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket, 2);
-	}
-}
-
 static int ipx_create(struct socket *sock, int protocol)
 {
 	struct sock *sk;
@@ -1816,30 +1798,9 @@ static int ipx_create(struct socket *sock, int protocol)
 			sk_free(sk);
 			return(-ESOCKTNOSUPPORT);
 	}
-	sk->rcvbuf=SK_RMEM_MAX;
-	sk->sndbuf=SK_WMEM_MAX;
-	sk->prot=NULL;	/* So we use default free mechanisms */
-	skb_queue_head_init(&sk->receive_queue);
-	skb_queue_head_init(&sk->write_queue);
-	sk->send_head=NULL;
-	skb_queue_head_init(&sk->back_log);
-	sk->state=TCP_CLOSE;
-	sk->socket=sock;
-	sk->type=sock->type;
+	sock_init_data(sock,sk);
 	sk->mtu=IPX_MTU;
 	sk->no_check = 1;		/* Checksum off by default */
-	if(sock!=NULL)
-	{
-		sk->sleep=&sock->wait;
-		sock->sk=sk;
-	}
-
-	sk->state_change=def_callback1;
-	sk->data_ready=def_callback2;
-	sk->write_space=def_callback3;
-	sk->error_report=def_callback1;
-
-	sk->zapped=1;
 	MOD_INC_USE_COUNT;
 	return 0;
 }
@@ -2384,7 +2345,7 @@ static struct proto_ops ipx_dgram_ops = {
 	ipx_shutdown,
 	ipx_setsockopt,
 	ipx_getsockopt,
-	ipx_fcntl,
+	sock_no_fcntl,
 	ipx_sendmsg,
 	ipx_recvmsg
 };

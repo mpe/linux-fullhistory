@@ -1283,7 +1283,6 @@ static int pi_probe(struct device *dev, int card_type)
 {
     short ioaddr;
     struct pi_local *lp;
-    int i;
     unsigned long flags;
     unsigned long mem_ptr;
 
@@ -1401,7 +1400,7 @@ static int pi_probe(struct device *dev, int card_type)
 
     /* Fill in the fields of the device structure */
 
-    dev_init_buffers(dev):
+    dev_init_buffers(dev);
     
 #if defined(CONFIG_AX25) || defined(CONFIG_AX25_MODULE)
     dev->hard_header    = ax25_encapsulate;

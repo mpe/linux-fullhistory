@@ -72,7 +72,12 @@ void dev_mc_upload(struct device *dev)
 	/*
 	 *	An aliased device should end up with the combined
 	 *	multicast list of all its aliases. 
-	 *	[Check this is still ok -AC]
+	 *	Really, multicasting with logical interfaces is very
+	 *	subtle question. Now we DO forward multicast packets
+	 *	to logical interfcases, that doubles multicast
+	 *	traffic but allows mrouted to work.
+	 *	Alas, mrouted does not understand aliases even
+	 *	in 4.4BSD --ANK
 	 */
 	 
 	dev = net_alias_main_dev(dev);

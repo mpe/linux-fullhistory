@@ -78,7 +78,11 @@
 #include <net/sock.h>
 #include <net/icmp.h>
 #include <linux/net_alias.h>
-  
+
+/* Compile time configuretion flags */
+
+#define CONFIG_IP_LOCAL_RT_POLICY 1
+
 static void rt_run_flush(unsigned long);
   
 static struct timer_list rt_flush_timer =
@@ -629,7 +633,8 @@ void ip_rt_send_redirect(struct sk_buff *skb)
 		icmp_send(skb, ICMP_REDIRECT, ICMP_REDIR_HOST, rt->rt_gateway);
 		rt->last_error = jiffies;
 		if (ipv4_config.log_martians && ++rt->errors == RT_REDIRECT_NUMBER)
-			printk(KERN_WARNING "host %08x/%s ignores redirects.\n", rt->rt_src, rt->rt_src_dev->name);
+			printk(KERN_WARNING "host %08x/%s ignores redirects for %08x to %08x.\n",
+			       rt->rt_src, rt->rt_src_dev->name, rt->rt_dst, rt->rt_gateway);
 	}
 }
 
@@ -1187,13 +1192,8 @@ int ip_route_output_slow(struct rtable **rp, u32 daddr, u32 saddr, u8 tos,
 	fi = res.f->fib_info;
 	dst_map = daddr;
 
-	if (fi->fib_flags&RTF_NAT) {
-		dst_map = htonl((ntohl(daddr)&((1<<res.fm)-1)))|fi->fib_gateway;
-		fi = fib_lookup_info(dst_map, saddr, tos, &loopback_dev, dev_out);
-		if (!fi || fi->fib_flags&(RTF_NAT|RTF_LOCAL|RTF_MULTICAST|RTF_BROADCAST))
-			return -EINVAL;
-		flags = RTCF_NAT;
-	}
+	if (fi->fib_flags&RTF_NAT)
+		return -EINVAL;
 
 	if (!saddr) {
 		saddr = fi->fib_dev->pa_addr;
@@ -1305,9 +1305,7 @@ make_route:
 		rth->u.dst.rtt	= TCP_TIMEOUT_INIT;
 	}
 	rth->rt_flags = flags;
-	hash = rt_hash_code(dst_key, src_key, tos);
-	if (dst_dev_key)
-		hash ^= dev_hash_name(dst_dev_key->name);
+	hash = rt_hash_code(dst_key, dst_dev_key ? src_key^(dst_dev_key->ifindex<<5) : src_key, tos);
 	*rp = rt_intern_hash(hash, rth, ETH_P_IP);
 	return 0;
 }
@@ -1317,9 +1315,8 @@ int ip_route_output(struct rtable **rp, u32 daddr, u32 saddr, u8 tos, struct dev
 	unsigned hash;
 	struct rtable *rth;
 
-	hash = rt_hash_code(daddr, saddr, tos);
-	if (dev_out)
-		hash ^= dev_out->hash;
+	hash = rt_hash_code(daddr, dev_out ? saddr^(dev_out->ifindex<<5)
+			                   : saddr, tos);
 
 	start_bh_atomic();
 	for (rth=rt_hash_table[hash]; rth; rth=rth->u.rt_next) {
@@ -1341,13 +1338,13 @@ int ip_route_output(struct rtable **rp, u32 daddr, u32 saddr, u8 tos, struct dev
 	return ip_route_output_slow(rp, daddr, saddr, tos, dev_out);
 }
 
-int ip_route_output_dev(struct rtable **rp, u32 daddr, u32 saddr, u8 tos, char *devname)
+int ip_route_output_dev(struct rtable **rp, u32 daddr, u32 saddr, u8 tos, int ifindex)
 {
 	unsigned hash;
 	struct rtable *rth;
 	struct device *dev_out;
 
-	hash = rt_hash_code(daddr, saddr, tos)^dev_hash_mc_name(devname);
+	hash = rt_hash_code(daddr, saddr^(ifindex<<5), tos);
 
 	start_bh_atomic();
 	for (rth=rt_hash_table[hash]; rth; rth=rth->u.rt_next) {
@@ -1356,7 +1353,7 @@ int ip_route_output_dev(struct rtable **rp, u32 daddr, u32 saddr, u8 tos, char *
 		    rth->key.src_dev == NULL &&
 		    rth->key.tos == tos &&
 		    rth->key.dst_dev &&
-		    strcmp(rth->key.dst_dev->name, devname)==0) {
+		    rth->key.dst_dev->ifindex == ifindex) {
 			rth->u.dst.lastuse = jiffies;
 			atomic_inc(&rth->u.dst.use);
 			atomic_inc(&rth->u.dst.refcnt);
@@ -1367,7 +1364,7 @@ int ip_route_output_dev(struct rtable **rp, u32 daddr, u32 saddr, u8 tos, char *
 	}
 	end_bh_atomic();
 
-	dev_out = dev_get(devname);
+	dev_out = dev_get_by_index(ifindex);
 	if (!dev_out)
 		return -ENODEV;
 	return ip_route_output_slow(rp, daddr, saddr, tos, dev_out);

@@ -162,21 +162,6 @@ static int nb_device_event(struct notifier_block *this, unsigned long event, voi
 \*******************************************************************************************************************/
 
 /*
- *	Generic fcntl calls are already dealt with. If we don't need funny ones
- *	this is the all you need. Async I/O is also separate.
- */
-
-static int netbeui_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
-{
-/*	netbeui_socket *sk=(netbeui_socket *)sock->data;*/
-	switch(cmd)
-	{
-		default:
-			return(-EINVAL);
-	}
-}
-
-/*
  *	Set 'magic' options for netbeui. If we don't have any this is fine
  *	as it is.
  */
@@ -266,34 +251,6 @@ static int netbeui_listen(struct socket *sock, int backlog)
 }
 
 /*
- *	These are standard.
- */
-
-static void def_callback1(struct sock *sk)
-{
-	if(!sk->dead)
-		wake_up_interruptible(sk->sleep);
-}
-
-static void def_callback2(struct sock *sk, int len)
-{
-	if(!sk->dead)
-	{
-		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket,1);
-	}
-}
-
-static void def_callback3(struct sock *sk, int len)
-{
-	if(!sk->dead)
-	{
-		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket,2);
-	}
-}
-
-/*
  *	Create a socket. Initialise the socket, blank the addresses
  *	set the state.
  */
@@ -317,30 +274,8 @@ static int netbeui_create(struct socket *sock, int protocol)
 
 	MOD_INC_USE_COUNT;
 
-	sk->allocation=GFP_KERNEL;
-	sk->rcvbuf=SK_RMEM_MAX;
-	sk->sndbuf=SK_WMEM_MAX;
-	sk->pair=NULL;
-	sk->priority=SOPRI_NORMAL;
-	skb_queue_head_init(&sk->receive_queue);
-	skb_queue_head_init(&sk->write_queue);
-	skb_queue_head_init(&sk->back_log);
-	sk->state=TCP_CLOSE;
-	sk->socket=sock;
-	sk->type=sock->type;
+	sock_init_data(sock,sk);
 	sk->mtu=1500;
-
-	if(sock!=NULL)
-	{
-		sock->data=(void *)sk;
-		sk->sleep=sock->wait;
-	}
-
-	sk->state_change=def_callback1;
-	sk->data_ready=def_callback2;
-	sk->write_space=def_callback3;
-	sk->error_report=def_callback1;
-	sk->zapped=1;
 	return(0);
 }
 
@@ -881,7 +816,7 @@ static struct proto_ops netbeui_proto_ops = {
 	netbeui_shutdown,
 	netbeui_setsockopt,
 	netbeui_getsockopt,
-	netbeui_fcntl,
+	sock_no_fcntl,
 	netbeui_sendmsg,
 	netbeui_recvmsg
 };

@@ -150,16 +150,7 @@ int rawv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	}
 
 	if (msg->msg_controllen)
-	{
-		int err;
-
-		err = datagram_recv_ctl(sk, msg, skb);
-
-		if (err < 0)
-		{
-			copied = err;
-		}
-	}
+		datagram_recv_ctl(sk, msg, skb);
 
 	skb_free_datagram(sk, skb);
 	return (copied);
@@ -311,7 +302,7 @@ static int rawv6_sendmsg(struct sock *sk, struct msghdr *msg, int len)
 	if (len + (sk->ip_hdrincl ? 0 : sizeof(struct ipv6hdr)) > 65535)
 		return -EMSGSIZE;
 
-	if (msg->msg_control)
+	if (msg->msg_controllen)
 	{
 		opt = &opt_space;
 		memset(opt, 0, sizeof(struct ipv6_options));

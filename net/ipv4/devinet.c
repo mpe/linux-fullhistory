@@ -43,9 +43,7 @@
 #include <net/sock.h>
 #include <net/arp.h>
 #include <linux/notifier.h>
-#ifdef CONFIG_NET_ALIAS
 #include <linux/net_alias.h>
-#endif
 #ifdef CONFIG_KERNELD
 #include <linux/kerneld.h>
 #endif
@@ -56,7 +54,7 @@ extern struct notifier_block *netdev_chain;
  *	Determine a default network mask, based on the IP address. 
  */
 
-unsigned long ip_get_mask(unsigned long addr)
+static unsigned long ip_get_mask(unsigned long addr)
 {
   	unsigned long dst;
 
@@ -78,19 +76,6 @@ unsigned long ip_get_mask(unsigned long addr)
   	return(0);
 }
 
-struct device *dev_getbyhwaddr(unsigned short type, char *ha)
-{
-	struct device *dev;
-
-	for (dev = dev_base; dev != NULL; dev = dev->next) 
-	{
-		if (dev->type == type &&
-		    !(dev->flags&(IFF_LOOPBACK|IFF_NOARP)) &&
-		    memcmp(dev->dev_addr, ha, dev->addr_len) == 0)
-			return(dev);
-	}
-	return(NULL);
-}
 
 /*
  *	This checks bitmasks for the ioctl calls for devices.
@@ -180,9 +165,13 @@ int devinet_ioctl(unsigned int cmd, void *arg)
 			
 			if(ifr.ifr_addr.sa_family==AF_UNSPEC)
 			{
+				int ret;
 				if(dev->set_mac_address==NULL)
 					return -EOPNOTSUPP;
-				return dev->set_mac_address(dev,&ifr.ifr_addr);
+				ret = dev->set_mac_address(dev,&ifr.ifr_addr);
+				if (!ret)
+					notifier_call_chain(&netdev_chain, NETDEV_CHANGEADDR, dev);
+				return ret;
 			}
 			if(ifr.ifr_addr.sa_family!=AF_INET)
 				return -EINVAL;

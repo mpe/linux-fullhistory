@@ -248,6 +248,7 @@ static void packet_close(struct sock *sk, unsigned long timeout)
 	}
 	
 	release_sock(sk);
+	sk->dead = 1;
 	destroy_sock(sk);
 }
 

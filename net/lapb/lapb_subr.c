@@ -131,26 +131,26 @@ int lapb_decode(lapb_cb *lapb, struct sk_buff *skb, int *ns, int *nr, int *pf, i
 
 	if (lapb->mode & LAPB_MLP) {
 		if (lapb->mode & LAPB_DCE) {
-			if (skb->data[0] == LAPB_ADDR_C)
-				*type = LAPB_COMMAND;
 			if (skb->data[0] == LAPB_ADDR_D)
+				*type = LAPB_COMMAND;
+			if (skb->data[0] == LAPB_ADDR_C)
 				*type = LAPB_RESPONSE;
 		} else {
-			if (skb->data[0] == LAPB_ADDR_D)
-				*type = LAPB_COMMAND;
 			if (skb->data[0] == LAPB_ADDR_C)
+				*type = LAPB_COMMAND;
+			if (skb->data[0] == LAPB_ADDR_D)
 				*type = LAPB_RESPONSE;
 		}
 	} else {
 		if (lapb->mode & LAPB_DCE) {
-			if (skb->data[0] == LAPB_ADDR_A)
-				*type = LAPB_COMMAND;
 			if (skb->data[0] == LAPB_ADDR_B)
+				*type = LAPB_COMMAND;
+			if (skb->data[0] == LAPB_ADDR_A)
 				*type = LAPB_RESPONSE;
 		} else {
-			if (skb->data[0] == LAPB_ADDR_B)
-				*type = LAPB_COMMAND;
 			if (skb->data[0] == LAPB_ADDR_A)
+				*type = LAPB_COMMAND;
+			if (skb->data[0] == LAPB_ADDR_B)
 				*type = LAPB_RESPONSE;
 		}
 	}
@@ -185,7 +185,7 @@ int lapb_decode(lapb_cb *lapb, struct sk_buff *skb, int *ns, int *nr, int *pf, i
 			*nr = (skb->data[0] >> 5) & 0x07;
 			*pf = skb->data[0] & LAPB_SPF;
 		} else if ((skb->data[0] & LAPB_U) == 3) { 	/* U frame - take out PF */
-			frametype = skb->data[0] & ~PF;
+			frametype = skb->data[0] & ~LAPB_SPF;
 			*pf = skb->data[0] & LAPB_SPF;
 		}
 
@@ -204,7 +204,7 @@ void lapb_send_control(lapb_cb *lapb, int frametype, int poll_bit, int type)
 {
 	struct sk_buff *skb;
 	unsigned char  *dptr;
-	
+
 	if ((skb = alloc_skb(LAPB_HEADER_LEN + 3, GFP_ATOMIC)) == NULL)
 		return;
 

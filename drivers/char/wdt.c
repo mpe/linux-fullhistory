@@ -50,8 +50,8 @@ static int wdt_is_open=0;
  *	You can use wdt=x,y to set these now.
  */
  
-int io=0x240;
-int irq=14;
+static int io=0x240;
+static int irq=14;
 
 #define WD_TIMO (100*60)		/* 1 minute */
 

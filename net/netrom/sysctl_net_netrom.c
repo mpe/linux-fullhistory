@@ -16,18 +16,19 @@
 static int min_quality[] = {0}, max_quality[] = {255};
 static int min_obs[]     = {0}, max_obs[]     = {255};
 static int min_ttl[]     = {0}, max_ttl[]     = {255};
-static int min_t1[]      = {5 * PR_SLOWHZ};
-static int max_t1[]      = {600 * PR_SLOWHZ};
+static int min_t1[]      = {5 * NR_SLOWHZ};
+static int max_t1[]      = {600 * NR_SLOWHZ};
 static int min_n2[]      = {2}, max_n2[]      = {127};
-static int min_t2[]      = {1 * PR_SLOWHZ};
-static int max_t2[]      = {60 * PR_SLOWHZ};
-static int min_t4[]      = {1 * PR_SLOWHZ};
-static int max_t4[]      = {1000 * PR_SLOWHZ};
+static int min_t2[]      = {1 * NR_SLOWHZ};
+static int max_t2[]      = {60 * NR_SLOWHZ};
+static int min_t4[]      = {1 * NR_SLOWHZ};
+static int max_t4[]      = {1000 * NR_SLOWHZ};
 static int min_window[]  = {1}, max_window[]  = {127};
-static int min_idle[]    = {0 * PR_SLOWHZ};
-static int max_idle[]    = {65535 * PR_SLOWHZ};
+static int min_idle[]    = {0 * NR_SLOWHZ};
+static int max_idle[]    = {65535 * NR_SLOWHZ};
 static int min_n1[]      = {1}, max_n1[]      = {236};
 static int min_route[]   = {0}, max_route[]   = {1};
+static int min_fails[]   = {1}, max_fails[]   = {10};
 
 static struct ctl_table_header *nr_table_header;
 
@@ -65,6 +66,9 @@ static ctl_table nr_table[] = {
         {NET_NETROM_ROUTING_CONTROL, "routing_control",
          &sysctl_netrom_routing_control, sizeof(int), 0644, NULL,
          &proc_dointvec_minmax, &sysctl_intvec, NULL, &min_route, &max_route},
+        {NET_NETROM_LINK_FAILS_COUNT, "link_fails_count",
+         &sysctl_netrom_link_fails_count, sizeof(int), 0644, NULL,
+         &proc_dointvec_minmax, &sysctl_intvec, NULL, &min_fails, &max_fails},
 	{0}
 };
 

@@ -340,7 +340,11 @@ main(argc, argv)
 
 void setup_normal_output_buffer()
 {
-	if (EXT_MEM_K < 1024) error("Less than 2MB of memory.\n");
+#ifdef STANDARD_MEMORY_BIOS_CALL
+	if (EXT_MEM_K < 1024) error("<2M of mem\n");
+#else
+	if (EXT_MEM_K*64 < 1024) error("<2M of mem\n");
+#endif
 	output_data = (char *)0x100000; /* Points to 1M */
 }
 

@@ -552,11 +552,8 @@ int init_ncp_fs(void)
 #ifdef MODULE
 EXPORT_NO_SYMBOLS;
 
-int
-init_module( void)
+int init_module( void)
 {
-	int status;
-
         DPRINTK("ncpfs: init_module called\n");
 
 #ifdef DEBUG_NCP_MALLOC

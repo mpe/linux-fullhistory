@@ -269,6 +269,11 @@ int ipv6_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	__u8			*nhptr;
 	int			pkt_len;
 
+	if (skb->pkt_type == PACKET_OTHERHOST) {
+		kfree_skb(skb, FREE_READ);
+		return 0;
+	}
+
 	hdr = skb->nh.ipv6h;
 	skb->h.raw = (__u8*)hdr;
 
@@ -408,6 +413,11 @@ int ipv6_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 	}
 	else
 	{
+		if (skb->pkt_type != PACKET_HOST) {
+			kfree_skb(skb, FREE_READ);
+			return 0;
+		}
+
 		if (ipv6_forwarding)
 		{
 			if (addr_type & IPV6_ADDR_LINKLOCAL)

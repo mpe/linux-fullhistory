@@ -93,6 +93,10 @@ extern __inline__ int notifier_call_chain(struct notifier_block **n, unsigned lo
 				   - we can use this eg to kick tcp sessions
 				   once done */
 #define NETDEV_CHANGE	0x0004	/* Notify device state change */
+#define NETDEV_REGISTER 0x0005
+#define NETDEV_UNREGISTER	0x0006
+#define NETDEV_CHANGEMTU	0x0007
+#define NETDEV_CHANGEADDR	0x0008
 
 #define SYS_DOWN	0x0001	/* Notify of system down */
 #define SYS_HALT	0x0002	/* Notify of system halt */

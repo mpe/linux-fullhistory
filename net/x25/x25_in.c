@@ -49,7 +49,7 @@ static int x25_queue_rx_frame(struct sock *sk, struct sk_buff *skb, int more)
 		skb_queue_tail(&sk->protinfo.x25->fragment_queue, skb);
 		return 0;
 	}
-	
+
 	if (!more && sk->protinfo.x25->fraglen > 0) {	/* End of fragment */
 		sk->protinfo.x25->fraglen += skb->len;
 		skb_queue_tail(&sk->protinfo.x25->fragment_queue, skb);
@@ -57,7 +57,6 @@ static int x25_queue_rx_frame(struct sock *sk, struct sk_buff *skb, int more)
 		if ((skbn = alloc_skb(sk->protinfo.x25->fraglen, GFP_ATOMIC)) == NULL)
 			return 1;
 
-		skbn->arp  = 1;
 		skb_set_owner_r(skbn, sk);
 		skbn->h.raw = skbn->data;
 
@@ -84,6 +83,9 @@ static int x25_queue_rx_frame(struct sock *sk, struct sk_buff *skb, int more)
  */
 static int x25_state1_machine(struct sock *sk, struct sk_buff *skb, int frametype)
 {
+	x25_address source_addr, dest_addr;
+	struct x25_facilities facilities;
+
 	switch (frametype) {
 
 		case X25_CALL_ACCEPTED:
@@ -95,6 +97,20 @@ static int x25_state1_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 			sk->protinfo.x25->vl        = 0;
 			sk->protinfo.x25->state     = X25_STATE_3;
 			sk->state                   = TCP_ESTABLISHED;
+			/*
+			 *	Parse the data in the frame.
+			 */
+			skb_pull(skb, X25_STD_MIN_LEN);
+			skb_pull(skb, x25_addr_ntoa(skb->data, &source_addr, &dest_addr));
+			skb_pull(skb, x25_parse_facilities(skb, &facilities));
+			/*
+			 *	Facilities XXX
+			 *	Copy any Call User Data.
+			 */
+			if (skb->len >= 0) {
+				memcpy(sk->protinfo.x25->calluserdata.cuddata, skb->data, skb->len);
+				sk->protinfo.x25->calluserdata.cudlength = skb->len;
+			}
 			if (!sk->dead)
 				sk->state_change(sk);
 			break;
@@ -202,13 +218,13 @@ static int x25_state3_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 				sk->protinfo.x25->timer     = sk->protinfo.x25->t22;
 			} else {
 				if (sk->protinfo.x25->condition & X25_COND_PEER_RX_BUSY) {
-					x25_frames_acked(sk, nr);
+					sk->protinfo.x25->va = nr;
 				} else {
 					x25_check_iframes_acked(sk, nr);
 				}
 			}
 			break;
-			
+
 		case X25_DATA:	/* XXX */
 			sk->protinfo.x25->condition &= ~X25_COND_PEER_RX_BUSY;
 			if (!x25_validate_nr(sk, nr)) {
@@ -224,7 +240,7 @@ static int x25_state3_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 				break;
 			}
 			if (sk->protinfo.x25->condition & X25_COND_PEER_RX_BUSY) {
-				x25_frames_acked(sk, nr);
+				sk->protinfo.x25->va = nr;
 			} else {
 				x25_check_iframes_acked(sk, nr);
 			}
@@ -242,7 +258,7 @@ static int x25_state3_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 			 *	If the window is full Ack it immediately, else
 			 *	start the holdback timer.
 			 */
-			if (((sk->protinfo.x25->vl + sk->protinfo.x25->facilities.window_size) % modulus) == sk->protinfo.x25->vr) {
+			if (((sk->protinfo.x25->vl + sk->protinfo.x25->facilities.winsize_in) % modulus) == sk->protinfo.x25->vr) {
 				sk->protinfo.x25->condition &= ~X25_COND_ACK_PENDING;
 				sk->protinfo.x25->timer      = 0;
 				x25_enquiry_response(sk);
@@ -250,6 +266,27 @@ static int x25_state3_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 				sk->protinfo.x25->condition |= X25_COND_ACK_PENDING;
 				sk->protinfo.x25->timer      = sk->protinfo.x25->t2;
 			}
+			break;
+
+		case X25_INTERRUPT_CONFIRMATION:
+			sk->protinfo.x25->intflag = 0;
+			break;
+
+		case X25_INTERRUPT:
+			if (sk->urginline) {
+				queued = (sock_queue_rcv_skb(sk, skb) == 0);
+			} else {
+				skb_set_owner_r(skb, sk);
+				skb_queue_tail(&sk->protinfo.x25->interrupt_in_queue, skb);
+				queued = 1;
+			}
+			if (sk->proc != 0) {
+				if (sk->proc > 0)
+					kill_proc(sk->proc, SIGURG, 1);
+				else
+					kill_pg(-sk->proc, SIGURG, 1);
+			}
+			x25_write_internal(sk, X25_INTERRUPT_CONFIRMATION);
 			break;
 
 		default:
@@ -305,7 +342,7 @@ static int x25_state4_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 int x25_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 {
 	int queued = 0, frametype, ns, nr, q, d, m;
-	
+
 	if (sk->protinfo.x25->state == X25_STATE_0)
 		return 0;
 

@@ -122,7 +122,6 @@ static int tunnel_xmit(struct sk_buff *skb, struct device *dev)
 {
 	struct enet_statistics *stats;		/* This device's statistics */
 	struct rtable *rt;     			/* Route to the other host */
-	struct hh_cache *hh;
 	struct device *tdev;			/* Device to other host */
 	struct iphdr  *iph;			/* Our new IP header */
 	int    max_headroom;			/* The extra header space needed */
@@ -143,7 +142,6 @@ static int tunnel_xmit(struct sk_buff *skb, struct device *dev)
 		return 0;
 	}
 	tdev = rt->u.dst.dev;
-	hh = rt->u.dst.hh;
 
 	if (tdev->type == ARPHRD_TUNNEL) { 
 		/* Tunnel to tunnel?  -- I don't think so. */
@@ -161,7 +159,7 @@ static int tunnel_xmit(struct sk_buff *skb, struct device *dev)
 	 */
 	max_headroom = (((tdev->hard_header_len+15)&~15)+tunnel_hlen);
 
-	if (skb_headroom(skb) < max_headroom || skb->users != 1) {
+	if (skb_headroom(skb) < max_headroom || skb_shared(skb)) {
 		struct sk_buff *new_skb = skb_realloc_headroom(skb, max_headroom);
 		if (!new_skb) {
 			ip_rt_put(rt);

@@ -762,7 +762,7 @@ static void set_multicast_list(struct device *dev)
 {
 	struct net_local *lp = (struct net_local *)dev->priv;
 	short ioaddr = dev->base_addr;
-	int num_addrs=dev->mc_list;
+	int num_addrs=dev->mc_count;
 	
 	if(dev->flags&(IFF_ALLMULTI|IFF_PROMISC))
 		num_addrs=1;

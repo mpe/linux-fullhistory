@@ -125,7 +125,7 @@ struct in_rtmsg
 	unsigned char	rtmsg_class;
 	unsigned char	rtmsg_prefixlen;
 	unsigned char	rtmsg_reserved;
-	char		rtmsg_device[16];
+	int		rtmsg_ifindex;
 };
 
 
@@ -139,7 +139,8 @@ struct in_ifmsg
 	short		ifmsg_metric;
 	unsigned char	ifmsg_prefixlen;
 	unsigned char	ifmsg_reserved;
-	char		ifmsg_device[16];
+	int		ifmsg_index;
+	char		ifmsg_name[16];
 };
 
 enum rtrule_actions
@@ -160,11 +161,11 @@ struct in_rtrulemsg
 	struct in_addr	rtrmsg_src;
 	struct in_addr	rtrmsg_dst;
 	struct in_addr	rtrmsg_srcmap;
+	int		rtrmsg_ifindex;
 	unsigned char	rtrmsg_srclen;
 	unsigned char	rtrmsg_dstlen;
 	unsigned char	rtrmsg_tos;
 	unsigned char	rtrmsg_class;
-	char		rtrmsg_device[16];
 	unsigned char	rtrmsg_flags;
 	unsigned char	rtrmsg_action;
 	unsigned char	rtrmsg_preference;

@@ -63,9 +63,16 @@ struct cmsghdr {
 
 #define CMSG_ALIGN(len) ( ((len)+sizeof(long)-1) & ~(sizeof(long)-1) )
 
-#define	CMSG_FIRST(msg)	((msg)->msg_controllen >= sizeof(struct cmsghdr) ? \
-			 (struct cmsghdr *)(msg)->msg_control : \
-			 (struct cmsghdr *)NULL)
+/* Stevens's Adv. API specifies CMSG_SPACE & CMSG_LENGTH,
+ * I cannot understand, what the differenece? --ANK
+ */
+
+#define CMSG_SPACE(len) CMSG_ALIGN((len)+sizeof(struct cmsghdr))
+#define CMSG_LENGTH(len) CMSG_ALIGN((len)+sizeof(struct cmsghdr))
+
+#define	CMSG_FIRSTHDR(msg)	((msg)->msg_controllen >= sizeof(struct cmsghdr) ? \
+				 (struct cmsghdr *)(msg)->msg_control : \
+				 (struct cmsghdr *)NULL)
 
 extern __inline__ struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
 					       struct cmsghdr *cmsg)
@@ -82,20 +89,6 @@ extern __inline__ struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
 
 	return (struct cmsghdr *) ptr;
 }
-
-#ifdef __KERNEL__
-
-#define	KCMSG_NXTHDR(msg, cmsg)	({ \
-	struct cmsghdr * __cmptr = (struct cmsghdr *)((unsigned char*)(cmsg) + CMSG_ALIGN(kcm.cmsg_len)); \
-	( (void *)(__cmptr + 1) <= (msg)->msg_control + (msg)->msg_controllen && \
-	  !copy_from_user(&kcm, __cmptr, sizeof(struct cmsghdr)) ? __cmptr : NULL); })
-
-#define	KCMSG_FIRSTHDR(msg)	((msg)->msg_control && (msg)->msg_controllen >= sizeof(struct cmsghdr) \
-				 && !copy_from_user(&kcm, (msg)->msg_control, sizeof(struct cmsghdr)) ? \
-				 (struct cmsghdr *)(msg)->msg_control : \
-				 (struct cmsghdr *)NULL)
-
-#endif
 
 /* "Socket"-level control message types: */
 
@@ -154,7 +147,7 @@ struct ucred
 #define PF_AAL5		AF_AAL5
 #define PF_X25		AF_X25
 #define PF_INET6	AF_INET6
-#define PR_ROSE		AF_ROSE
+#define PF_ROSE		AF_ROSE
 #define PF_DECNET	AF_DECNET
 #define PF_NETBEUI	AF_NETBEUI
 

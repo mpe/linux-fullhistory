@@ -63,7 +63,7 @@ void lapb_set_timer(lapb_cb *lapb)
 static void lapb_reset_timer(lapb_cb *lapb)
 {
 	unsigned long flags;
-	
+
 	save_flags(flags);
 	cli();
 	del_timer(&lapb->timer);

@@ -61,44 +61,6 @@
 #include <linux/ip_fw.h>
 #include <net/addrconf.h>
 
-/*
- *	Default callbacks for user INET sockets. These just wake up
- *	the user owning the socket.
- */
-
-static void def_callback1(struct sock *sk)
-{
-	if(!sk->dead)
-		wake_up_interruptible(sk->sleep);
-}
-
-static void def_callback2(struct sock *sk,int len)
-{
-	if(!sk->dead)
-	{
-		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket, 1);
-	}
-}
-
-static void def_callback3(struct sock *sk)
-{
-	long wmem;
-	
-	wmem = (long) sk->wmem_alloc;
-
-	if (wmem < 0) {
-		printk(KERN_DEBUG "bug wmem_alloc < 0\n");
-		sk->wmem_alloc = 0;
-	}
-		
-	if(!sk->dead && sk->wmem_alloc*2 <= sk->sndbuf)
-	{
-		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket, 2);
-	}
-}
-
 struct sock * rawv6_sock_array[SOCK_ARRAY_SIZE];
 
 extern struct proto_ops inet6_stream_ops;
@@ -113,9 +75,6 @@ static int inet6_create(struct socket *sock, int protocol)
 	sk = sk_alloc(GFP_KERNEL);
 	if (sk == NULL) 
 		return(-ENOBUFS);
-
-	/* Efficient way to set most fields to zero */
-	memset(sk,0,sizeof(*sk));	
 
 	/*
 	 *	Note for tcp that also wiped the dummy_th block for us.
@@ -168,38 +127,18 @@ static int inet6_create(struct socket *sock, int protocol)
 			sk_free(sk);
 			return(-ESOCKTNOSUPPORT);
 	}
-
-	sk->socket = sock;
+	
+	sock_init_data(sock,sk);
 
 	sk->family = AF_INET6;
-	sk->type = sock->type;
 	sk->protocol = protocol;
-	sk->allocation = GFP_KERNEL;
-	sk->sndbuf = SK_WMEM_MAX;
-	sk->rcvbuf = SK_RMEM_MAX;
-	sk->priority = 1;
 
 	sk->prot = prot;
 	sk->backlog_rcv = prot->backlog_rcv;
 
-	sk->sleep = &sock->wait;
-	sock->sk = sk;
-
-	sk->state = TCP_CLOSE;
-
-	skb_queue_head_init(&sk->write_queue);
-	skb_queue_head_init(&sk->receive_queue);
-	skb_queue_head_init(&sk->error_queue);
-	skb_queue_head_init(&sk->back_log);
-
 	sk->timer.data = (unsigned long)sk;
 	sk->timer.function = &net_timer;
 	init_timer(&sk->timer);
-
-	sk->state_change = def_callback1;
-	sk->data_ready   = def_callback2;
-	sk->write_space  = def_callback3;
-	sk->error_report = def_callback1;
 
 	sk->net_pinfo.af_inet6.hop_limit  = ipv6_hop_limit;
 	sk->net_pinfo.af_inet6.mcast_hops = IPV6_DEFAULT_MCASTHOPS;
@@ -212,12 +151,10 @@ static int inet6_create(struct socket *sock, int protocol)
 
 	sk->ip_ttl=64;
 
-#ifdef CONFIG_IP_MULTICAST
 	sk->ip_mc_loop=1;
 	sk->ip_mc_ttl=1;
-	*sk->ip_mc_name=0;
+	sk->ip_mc_index=0;
 	sk->ip_mc_list=NULL;
-#endif
 
 
 	if (sk->type==SOCK_RAW && protocol==IPPROTO_RAW)
@@ -490,7 +427,7 @@ static int inet6_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		if(err)
 			return err;
 
-		/* see inet_fcntl */
+		/* see sock_no_fcntl */
 		if (current->pid != pid && current->pgrp != -pid && !suser())
 			return -EPERM;
 		sk->proc = pid;
@@ -551,17 +488,9 @@ static int inet6_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case SIOCGIFMAP:
 	case SIOCSIFSLAVE:
 	case SIOCGIFSLAVE:
+	case SIOGIFINDEX:
 
 		return(dev_ioctl(cmd,(void *) arg));		
-		
-		return -EINVAL;
-
-	case SIOGIFINDEX:
-		/*
-		 *	This one will be moved to the generic device
-		 *	layer in the near future
-		 */
-		return addrconf_get_ifindex((void *) arg);
 		
 	case SIOCSIFADDR:
 		return addrconf_add_ifaddr((void *) arg);
@@ -804,7 +733,7 @@ struct proto_ops inet6_stream_ops = {
 	inet_shutdown,			/* ok		*/
 	inet_setsockopt,		/* ok		*/
 	inet_getsockopt,		/* ok		*/
-	inet_fcntl,			/* ok		*/
+	sock_no_fcntl,			/* ok		*/
 	inet_sendmsg,			/* ok		*/
 	inet_recvmsg			/* ok		*/
 };
@@ -825,7 +754,7 @@ struct proto_ops inet6_dgram_ops = {
 	inet_shutdown,			/* ok		*/
 	inet_setsockopt,		/* ok		*/
 	inet_getsockopt,		/* ok		*/
-	inet_fcntl,			/* ok		*/
+	sock_no_fcntl,			/* ok		*/
 	inet_sendmsg,			/* ok		*/
 	inet_recvmsg			/* ok		*/
 };
@@ -844,8 +773,15 @@ void inet6_proto_init(struct net_proto *pro)
 #endif
 {
 	int i;
+	struct sk_buff *dummy_skb;
 
 	printk(KERN_INFO "IPv6 v0.1 for NET3.037\n");
+
+	if (sizeof(struct ipv6_options) > sizeof(dummy_skb->cb))
+	{
+		printk(KERN_CRIT "inet6_proto_init: panic\n");
+		return;
+	}
 
   	(void) sock_register(&inet6_family_ops);
 	

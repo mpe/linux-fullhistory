@@ -1,10 +1,10 @@
 /*
  * These are the public elements of the Linux LAPB module.
  */
- 
+
 #ifndef	LAPB_KERNEL_H
 #define	LAPB_KERNEL_H
- 
+
 #define	LAPB_OK			0
 #define	LAPB_BADTOKEN		1
 #define	LAPB_INVALUE		2

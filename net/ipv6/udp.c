@@ -231,17 +231,8 @@ int udpv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 			memcpy(&sin6->sin6_addr, &skb->nh.ipv6h->saddr,
 			       sizeof(struct in6_addr));
 
-			if (msg->msg_control)
-			{
-				int err;
-
-				err = datagram_recv_ctl(sk, msg, skb);
-
-				if (err < 0)
-				{
-					copied = err;
-				}
-			}
+			if (msg->msg_controllen)
+				datagram_recv_ctl(sk, msg, skb);
 		}
   	}
 	
@@ -556,7 +547,7 @@ static int udpv6_sendmsg(struct sock *sk, struct msghdr *msg, int ulen)
 
 	udh.daddr = NULL;
 	
-	if (msg->msg_control)
+	if (msg->msg_controllen)
 	{
 		opt = &opt_space;
 		memset(opt, 0, sizeof(struct ipv6_options));

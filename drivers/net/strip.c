@@ -1,3 +1,5 @@
+#error "Doesn't run with 2.1.x"
+
 /*
  * Copyright 1996 The Board of Trustees of The Leland Stanford
  * Junior University. All Rights Reserved.
@@ -1804,17 +1806,16 @@ static int strip_header(struct sk_buff *skb, struct device *dev,
  * or non-zero if it needs more time to do an address lookup
  */
 
-static int strip_rebuild_header(void *buff, struct device *dev,
-        unsigned long dst, struct sk_buff *skb)
+static int strip_rebuild_header(struct sk_buff *skb)
 {
-    STRIP_Header *header = (STRIP_Header *)buff;
+    STRIP_Header *header = (STRIP_Header *)skb->data;
 
-    /*printk(KERN_INFO "%s: strip_rebuild_header\n", dev->name);*/
+    /*printk(KERN_INFO "%s: strip_rebuild_header\n", skb->dev->name);*/
 
 #ifdef CONFIG_INET
     /* Arp find returns zero if if knows the address, */
     /* or if it doesn't know the address it sends an ARP packet and returns non-zero */
-    return arp_find(header->dst_addr.c, dst, dev, dev->pa_addr, skb)? 1 : 0;
+    return arp_find(header->dst_addr.c, skb)? 1 : 0;
 #else
     return 0;
 #endif

@@ -20,6 +20,7 @@
  *	AX.25 031	Joerg(DL1BKE)	Added DAMA support
  *	AX.25 032	Joerg(DL1BKE)	Fixed DAMA timeout bug
  *	AX.25 033	Jonathan(G4KLX)	Modularisation functions.
+ *	AX.25 035	Frederic(F1OAT)	Support for pseudo-digipeating.
  */
 
 #include <linux/config.h>
@@ -109,11 +110,11 @@ static void ax25_timer(unsigned long param)
 			 * Check the state of the receive buffer.
 			 */
 			if (ax25->sk != NULL) {
-				if (ax25->sk->rmem_alloc < (ax25->sk->rcvbuf / 2) && (ax25->condition & OWN_RX_BUSY_CONDITION)) {
-					ax25->condition &= ~OWN_RX_BUSY_CONDITION;
+				if (ax25->sk->rmem_alloc < (ax25->sk->rcvbuf / 2) && (ax25->condition & AX25_COND_OWN_RX_BUSY)) {
+					ax25->condition &= ~AX25_COND_OWN_RX_BUSY;
+					ax25->condition &= ~AX25_COND_ACK_PENDING;
 					if (!ax25->dama_slave)
-						ax25_send_control(ax25, RR, POLLOFF, C_RESPONSE);
-					ax25->condition &= ~ACK_PENDING_CONDITION;
+						ax25_send_control(ax25, AX25_RR, AX25_POLLOFF, AX25_RESPONSE);
 					break;
 				}
 			}
@@ -130,8 +131,8 @@ static void ax25_timer(unsigned long param)
 
 	if (ax25->t2timer > 0 && --ax25->t2timer == 0) {
 		if (ax25->state == AX25_STATE_3 || ax25->state == AX25_STATE_4) {
-			if (ax25->condition & ACK_PENDING_CONDITION) {
-				ax25->condition &= ~ACK_PENDING_CONDITION;
+			if (ax25->condition & AX25_COND_ACK_PENDING) {
+				ax25->condition &= ~AX25_COND_ACK_PENDING;
 				if (!ax25->dama_slave)
 					ax25_timeout_response(ax25);
 			}
@@ -144,8 +145,8 @@ static void ax25_timer(unsigned long param)
 		if (ax25->dama_slave) {
 			ax25_link_failed(&ax25->dest_addr, ax25->device);
 			ax25_clear_queues(ax25);
-			ax25_send_control(ax25, DISC, POLLON, C_COMMAND);
-				
+			ax25_send_control(ax25, AX25_DISC, AX25_POLLON, AX25_COMMAND);
+
 			ax25->state = AX25_STATE_0;
 			if (ax25->sk != NULL) {
 				if (ax25->sk->debug)
@@ -161,7 +162,7 @@ static void ax25_timer(unsigned long param)
 			ax25_reset_timer(ax25);
 			return;
 		}
-		
+
 		if (ax25->state == AX25_STATE_3) {
 			ax25->n2count = 0;
 			ax25_transmit_enquiry(ax25);
@@ -169,7 +170,7 @@ static void ax25_timer(unsigned long param)
 		}
 		ax25->t3timer = ax25->t3;
 	}
-	
+
 	if (ax25->idletimer > 0 && --ax25->idletimer == 0) {
 		/* dl1bke 960228: close the connection when IDLE expires */
 		/* 		  similar to DAMA T3 timeout but with    */
@@ -180,13 +181,13 @@ static void ax25_timer(unsigned long param)
 		ax25->n2count = 0;
 		if (!ax25->dama_slave) {
 			ax25->t3timer = 0;
-			ax25_send_control(ax25, DISC, POLLON, C_COMMAND);
+			ax25_send_control(ax25, AX25_DISC, AX25_POLLON, AX25_COMMAND);
 		} else {
 			ax25->t3timer = ax25->t3;
 		}
-		
+
 		/* state 1 or 2 should not happen, but... */
-		
+
 		if (ax25->state == AX25_STATE_1 || ax25->state == AX25_STATE_2)
 			ax25->state = AX25_STATE_0;
 		else
@@ -204,10 +205,10 @@ static void ax25_timer(unsigned long param)
 			ax25->sk->destroy   = 1;
 		}
 	}
-		                                                                                                                                                                                                                                                                                                                                        
+
 	/* dl1bke 960114: DAMA T1 timeouts are handled in ax25_dama_slave_transmit */
 	/* 		  nevertheless we have to re-enqueue the timer struct...   */
-	
+
 	if (ax25->t1timer == 0 || --ax25->t1timer > 0) {
 		ax25_reset_timer(ax25);
 		return;
@@ -225,7 +226,7 @@ static void ax25_timer(unsigned long param)
  *                within the poll of any connected channel. Remember 
  *                that we are not allowed to send anything unless we
  *                get polled by the Master.
- *                
+ *
  *                Thus we'll have to do parts of our T1 handling in
  *                ax25_enquiry_response().
  */
@@ -234,7 +235,7 @@ void ax25_t1_timeout(ax25_cb * ax25)
 	switch (ax25->state) {
 		case AX25_STATE_1: 
 			if (ax25->n2count == ax25->n2) {
-				if (ax25->modulus == MODULUS) {
+				if (ax25->modulus == AX25_MODULUS) {
 					ax25_link_failed(&ax25->dest_addr, ax25->device);
 					ax25_clear_queues(ax25);
 					ax25->state = AX25_STATE_0;
@@ -247,18 +248,17 @@ void ax25_t1_timeout(ax25_cb * ax25)
 						ax25->sk->dead      = 1;
 					}
 				} else {
-					ax25->modulus = MODULUS;
+					ax25->modulus = AX25_MODULUS;
 					ax25->window  = ax25_dev_get_value(ax25->device, AX25_VALUES_WINDOW);
 					ax25->n2count = 0;
-					ax25_send_control(ax25, SABM, ax25_dev_is_dama_slave(ax25->device)? POLLOFF : POLLON, C_COMMAND);
+					ax25_send_control(ax25, AX25_SABM, ax25_dev_is_dama_slave(ax25->device) ? AX25_POLLOFF : AX25_POLLON, AX25_COMMAND);
 				}
 			} else {
 				ax25->n2count++;
-				if (ax25->modulus == MODULUS) {
-					ax25_send_control(ax25, SABM, ax25_dev_is_dama_slave(ax25->device)? POLLOFF : POLLON, C_COMMAND);
-				} else {
-					ax25_send_control(ax25, SABME, ax25_dev_is_dama_slave(ax25->device)? POLLOFF : POLLON, C_COMMAND);
-				}
+				if (ax25->modulus == AX25_MODULUS)
+					ax25_send_control(ax25, AX25_SABM, ax25_dev_is_dama_slave(ax25->device) ? AX25_POLLOFF : AX25_POLLON, AX25_COMMAND);
+				else
+					ax25_send_control(ax25, AX25_SABME, ax25_dev_is_dama_slave(ax25->device) ? AX25_POLLOFF : AX25_POLLON, AX25_COMMAND);
 			}
 			break;
 
@@ -267,8 +267,8 @@ void ax25_t1_timeout(ax25_cb * ax25)
 				ax25_link_failed(&ax25->dest_addr, ax25->device);
 				ax25_clear_queues(ax25);
 				ax25->state = AX25_STATE_0;
-				ax25_send_control(ax25, DISC, POLLON, C_COMMAND);
-				
+				ax25_send_control(ax25, AX25_DISC, AX25_POLLON, AX25_COMMAND);
+
 				if (ax25->sk != NULL) {
 					ax25->sk->state     = TCP_CLOSE;
 					ax25->sk->err       = ETIMEDOUT;
@@ -280,7 +280,7 @@ void ax25_t1_timeout(ax25_cb * ax25)
 			} else {
 				ax25->n2count++;
 				if (!ax25_dev_is_dama_slave(ax25->device))
-					ax25_send_control(ax25, DISC, POLLON, C_COMMAND);
+					ax25_send_control(ax25, AX25_DISC, AX25_POLLON, AX25_COMMAND);
 			}
 			break;
 
@@ -295,7 +295,7 @@ void ax25_t1_timeout(ax25_cb * ax25)
 			if (ax25->n2count == ax25->n2) {
 				ax25_link_failed(&ax25->dest_addr, ax25->device);
 				ax25_clear_queues(ax25);
-				ax25_send_control(ax25, DM, POLLON, C_RESPONSE);
+				ax25_send_control(ax25, AX25_DM, AX25_POLLON, AX25_RESPONSE);
 				ax25->state = AX25_STATE_0;
 				if (ax25->sk != NULL) {
 					if (ax25->sk->debug)
@@ -357,13 +357,13 @@ int ax25_protocol_register(unsigned int pid, int (*func)(struct sk_buff *, ax25_
 
 	protocol->pid  = pid;
 	protocol->func = func;
-	
+
 	save_flags(flags);
 	cli();
-	
+
 	protocol->next = protocol_list;
 	protocol_list  = protocol;
-	
+
 	restore_flags(flags);
 
 	return 1;
@@ -395,10 +395,10 @@ void ax25_protocol_release(unsigned int pid)
 			kfree_s(s, sizeof(struct protocol_struct));
 			return;
 		}
-		
+
 		protocol = protocol->next;
 	}
-	
+
 	restore_flags(flags);
 }
 
@@ -411,13 +411,13 @@ int ax25_linkfail_register(void (*func)(ax25_address *, struct device *))
 		return 0;
 
 	linkfail->func = func;
-	
+
 	save_flags(flags);
 	cli();
-	
+
 	linkfail->next = linkfail_list;
 	linkfail_list  = linkfail;
-	
+
 	restore_flags(flags);
 
 	return 1;
@@ -449,10 +449,10 @@ void ax25_linkfail_release(void (*func)(ax25_address *, struct device *))
 			kfree_s(s, sizeof(struct linkfail_struct));
 			return;
 		}
-		
+
 		linkfail = linkfail->next;
 	}
-	
+
 	restore_flags(flags);
 }
 
@@ -469,13 +469,13 @@ int ax25_listen_register(ax25_address *callsign, struct device *dev)
 
 	listen->callsign = *callsign;
 	listen->dev      = dev;
-	
+
 	save_flags(flags);
 	cli();
-	
+
 	listen->next = listen_list;
 	listen_list  = listen;
-	
+
 	restore_flags(flags);
 
 	return 1;
@@ -507,10 +507,10 @@ void ax25_listen_release(ax25_address *callsign, struct device *dev)
 			kfree_s(s, sizeof(struct listen_struct));
 			return;
 		}
-		
+
 		listen = listen->next;
 	}
-	
+
 	restore_flags(flags);
 }
 
@@ -539,9 +539,20 @@ int ax25_listen_mine(ax25_address *callsign, struct device *dev)
 void ax25_link_failed(ax25_address *callsign, struct device *dev)
 {
 	struct linkfail_struct *linkfail;
-	
+
 	for (linkfail = linkfail_list; linkfail != NULL; linkfail = linkfail->next)
 		(linkfail->func)(callsign, dev);
+}
+
+int ax25_protocol_is_registered(unsigned int pid)
+{
+	struct protocol_struct *protocol;
+
+	for (protocol = protocol_list; protocol != NULL; protocol = protocol->next)
+		if (protocol->pid == pid)
+			return 1;
+
+	return 0;
 }
 
 #endif

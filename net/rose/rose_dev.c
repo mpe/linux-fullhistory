@@ -81,7 +81,7 @@ static int rose_header(struct sk_buff *skb, struct device *dev, unsigned short t
 {
 	unsigned char *buff = skb_push(skb, ROSE_MIN_LEN + 2);
 
-	*buff++ = GFI | Q_BIT;
+	*buff++ = ROSE_GFI | ROSE_Q_BIT;
 	*buff++ = 0x00;
 	*buff++ = ROSE_DATA;
 	*buff++ = 0x7F;
@@ -110,7 +110,7 @@ static int rose_rebuild_header(struct sk_buff *skb)
 		return 1;
 	}
 
-	if (skbn->sk != NULL)
+	if (skb->sk != NULL)
 		skb_set_owner_w(skbn, skb->sk);
 
 	kfree_skb(skb, FREE_WRITE);

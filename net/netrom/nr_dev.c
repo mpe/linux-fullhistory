@@ -86,16 +86,16 @@ static int nr_header(struct sk_buff *skb, struct device *dev, unsigned short typ
 	unsigned char *buff = skb_push(skb, NR_NETWORK_LEN + NR_TRANSPORT_LEN);
 
 	memcpy(buff, (saddr != NULL) ? saddr : dev->dev_addr, dev->addr_len);
-	buff[6] &= ~LAPB_C;
-	buff[6] &= ~LAPB_E;
-	buff[6] |= SSSID_SPARE;
+	buff[6] &= ~AX25_CBIT;
+	buff[6] &= ~AX25_EBIT;
+	buff[6] |= AX25_SSSID_SPARE;
 	buff    += AX25_ADDR_LEN;
 
 	if (daddr != NULL)
 		memcpy(buff, daddr, dev->addr_len);
-	buff[6] &= ~LAPB_C;
-	buff[6] |= LAPB_E;
-	buff[6] |= SSSID_SPARE;
+	buff[6] &= ~AX25_CBIT;
+	buff[6] |= AX25_EBIT;
+	buff[6] |= AX25_SSSID_SPARE;
 	buff    += AX25_ADDR_LEN;
 
 	*buff++ = sysctl_netrom_network_ttl_initialiser;
@@ -124,21 +124,21 @@ static int nr_rebuild_header(struct sk_buff *skb)
 		return 1;
 	}
 
-	bp[6] &= ~LAPB_C;
-	bp[6] &= ~LAPB_E;
-	bp[6] |= SSSID_SPARE;
+	bp[6] &= ~AX25_CBIT;
+	bp[6] &= ~AX25_EBIT;
+	bp[6] |= AX25_SSSID_SPARE;
 	bp    += AX25_ADDR_LEN;
 
-	bp[6] &= ~LAPB_C;
-	bp[6] |= LAPB_E;
-	bp[6] |= SSSID_SPARE;
+	bp[6] &= ~AX25_CBIT;
+	bp[6] |= AX25_EBIT;
+	bp[6] |= AX25_SSSID_SPARE;
 
 	if ((skbn = skb_clone(skb, GFP_ATOMIC)) == NULL) {
 		kfree_skb(skb, FREE_WRITE);
 		return 1;
 	}
 
-	if (skbn->sk != NULL)
+	if (skb->sk != NULL)
 		skb_set_owner_w(skbn, skb->sk);
 
 	kfree_skb(skb, FREE_WRITE);

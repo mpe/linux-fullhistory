@@ -248,6 +248,7 @@ static void atif_drop_device(struct device *dev)
 		{
 			*iface = tmp->next;
 			kfree_s(tmp, sizeof(struct atalk_iface));
+			dev->atalk_ptr=NULL;
 		}
 		else
 			iface = &tmp->next;
@@ -262,6 +263,7 @@ static struct atalk_iface *atif_add_device(struct device *dev, struct at_addr *s
 	if(iface==NULL)
 		return NULL;
 	iface->dev=dev;
+	dev->atalk_ptr=iface;
 	iface->address= *sa;
 	iface->status=0;
 	save_flags(flags);
@@ -377,10 +379,9 @@ static int atif_probe_device(struct atalk_iface *atif)
 
 struct at_addr *atalk_find_dev_addr(struct device *dev)
 {
-	struct atalk_iface *iface;
-	for(iface=atalk_iface_list;iface!=NULL;iface=iface->next)
-		if(iface->dev==dev)
-			return &iface->address;
+	struct atalk_iface *iface=dev->atalk_ptr;
+	if(iface)
+		return &iface->address;
 	return NULL;
 }
 
@@ -390,24 +391,10 @@ static struct at_addr *atalk_find_primary(void)
 	for(iface=atalk_iface_list;iface!=NULL;iface=iface->next)
 		if(!(iface->dev->flags&IFF_LOOPBACK))
 			return &iface->address;
-	if ( atalk_iface_list != NULL ) {
-	    return &atalk_iface_list->address;
-	} else {
-	    return NULL;
-	}
-}
-
-/*
- *	Give a device find its atif control structure
- */
-
-struct atalk_iface *atalk_find_dev(struct device *dev)
-{
-	struct atalk_iface *iface;
-	for(iface=atalk_iface_list;iface!=NULL;iface=iface->next)
-		if(iface->dev==dev)
-			return iface;
-	return NULL;
+	if ( atalk_iface_list != NULL )
+		return &atalk_iface_list->address;
+	else
+		return NULL;
 }
 
 /*
@@ -472,7 +459,7 @@ static struct atalk_route *atrtr_find(struct at_addr *target)
 
 /*
  *	Given an appletalk network find the device to use. This can be
- *	a simple lookup. Funny stuff like routers can wait 8)
+ *	a simple lookup.
  */
 
 static struct device *atrtr_get_dev(struct at_addr *sa)
@@ -925,52 +912,13 @@ unsigned short atalk_checksum(struct ddpehdr *ddp, int len)
 }
 
 /*
- *	Generic fcntl calls are already dealt with. If we don't need funny ones
- *	this is the all you need. Async I/O is also separate.
- */
-
-static int atalk_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
-{
-/*	struct sock *sk=sock->sk;*/
-	switch(cmd)
-	{
-		default:
-			return(-EINVAL);
-	}
-}
-
-/*
  *	Set 'magic' options for appletalk. If we don't have any this is fine
  *	as it is.
  */
 
 static int atalk_setsockopt(struct socket *sock, int level, int optname, char *optval, int optlen)
 {
-	struct sock *sk;
-	int err,opt;
-
-	sk=sock->sk;
-
-	if(optval==NULL)
-		return(-EINVAL);
-
-	err = get_user(opt, (int *)optval);
-	if (err)
-		return err;
-
-	switch(level)
-	{
-		case SOL_ATALK:
-			switch(optname)
-			{
-				default:
-					return -EOPNOTSUPP;
-			}
-			break;
-
-		default:
-			return -EOPNOTSUPP;
-	}
+	return -EOPNOTSUPP;
 }
 
 
@@ -981,30 +929,7 @@ static int atalk_setsockopt(struct socket *sock, int level, int optname, char *o
 static int atalk_getsockopt(struct socket *sock, int level, int optname,
 	char *optval, int *optlen)
 {
-	struct sock *sk;
-	int val=0;
-	int err;
-
-	sk=sock->sk;
-
-	switch(level)
-	{
-
-		case SOL_ATALK:
-			switch(optname)
-			{
-				default:
-					return -ENOPROTOOPT;
-			}
-			break;
-
-		default:
-			return -EOPNOTSUPP;
-	}
-	err = put_user(sizeof(int),optlen);
-	if (!err)
-		err = put_user(val, (int *) optval);
-	return err;
+	return -ENOPROTOOPT;
 }
 
 /*
@@ -1014,34 +939,6 @@ static int atalk_getsockopt(struct socket *sock, int level, int optname,
 static int atalk_listen(struct socket *sock, int backlog)
 {
 	return -EOPNOTSUPP;
-}
-
-/*
- *	These are standard.
- */
-
-static void def_callback1(struct sock *sk)
-{
-	if(!sk->dead)
-		wake_up_interruptible(sk->sleep);
-}
-
-static void def_callback2(struct sock *sk, int len)
-{
-	if(!sk->dead)
-	{
-		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket,1);
-	}
-}
-
-static void def_callback3(struct sock *sk)
-{
-	if(!sk->dead)
-	{
-		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket, 2);
-	}
 }
 
 /*
@@ -1071,32 +968,10 @@ static int atalk_create(struct socket *sock, int protocol)
 
 	MOD_INC_USE_COUNT;
 
-	sk->no_check=0;		/* Checksums on by default */
-	sk->allocation=GFP_KERNEL;
-	sk->rcvbuf=SK_RMEM_MAX;
-	sk->sndbuf=SK_WMEM_MAX;
-	sk->pair=NULL;
-	sk->priority=1;
-	skb_queue_head_init(&sk->receive_queue);
-	skb_queue_head_init(&sk->write_queue);
-	skb_queue_head_init(&sk->back_log);
-	sk->state=TCP_CLOSE;
-	sk->socket=sock;
-	sk->type=sock->type;
-
+	sock_init_data(sock,sk);
+	
+	/* Checksums on by default */
 	sk->mtu=DDP_MAXSZ;
-
-	if(sock!=NULL)
-	{
-		sk->sleep=&sock->wait;
-		sock->sk=sk;
-	}
-
-	sk->state_change=def_callback1;
-	sk->data_ready=def_callback2;
-	sk->write_space=def_callback3;
-	sk->error_report=def_callback1;
-
 	sk->zapped=1;
 	return(0);
 }
@@ -1909,7 +1784,7 @@ static struct proto_ops atalk_dgram_ops = {
 	atalk_shutdown,
 	atalk_setsockopt,
 	atalk_getsockopt,
-	atalk_fcntl,
+	sock_no_fcntl,
 	atalk_sendmsg,
 	atalk_recvmsg
 };

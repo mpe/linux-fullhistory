@@ -47,7 +47,7 @@ static void x25_timer(unsigned long);
 void x25_set_timer(struct sock *sk)
 {
 	unsigned long flags;
-	
+
 	save_flags(flags);
 	cli();
 
@@ -66,7 +66,7 @@ void x25_set_timer(struct sock *sk)
 static void x25_reset_timer(struct sock *sk)
 {
 	unsigned long flags;
-	
+
 	save_flags(flags);
 	cli();
 

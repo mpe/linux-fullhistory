@@ -48,11 +48,7 @@
 #include <linux/net_alias.h>
 #include <linux/lapb.h>
 
-#include <linux/lapbether.h>
-
 static char bcast_addr[6]={0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
-
-static char lapbeth_eth_addr[6];
 
 static int lapbeth_rcv(struct sk_buff *, struct device *, struct packet_type *);
 static int lapbeth_device_event(struct notifier_block *, unsigned long, void *);
@@ -79,8 +75,6 @@ static struct lapbethdev {
 	struct device *ethdev;		/* link to ethernet device */
 	struct device axdev;		/* lapbeth device (lapb#) */
 	struct enet_statistics stats;	/* some statistics */
-	char   dest_addr[6];		/* ether destination address */
-	char   acpt_addr[6];		/* accept ether frames from this address only */
 } *lapbeth_devices = NULL;
 
 
@@ -171,7 +165,6 @@ static int lapbeth_check_devices(struct device *dev)
 static int lapbeth_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *ptype)
 {
 	int len, err;
-	struct ethhdr *eth = (struct ethhdr *)skb->mac.raw;
 	struct lapbethdev *lapbeth;
 
 	skb->sk = NULL;		/* Initially we don't know who it's for */
@@ -183,20 +176,9 @@ static int lapbeth_rcv(struct sk_buff *skb, struct device *dev, struct packet_ty
 		return 0;
 	}
 
-	/*
-	 * if we want to accept frames from just one ethernet device
-	 * we check the source address of the sender.
-	 */
-
 	lapbeth = (struct lapbethdev *)dev->priv;
 
-	if (!(lapbeth->acpt_addr[0] & 0x01) && memcmp(eth->h_source, lapbeth->acpt_addr, ETH_ALEN)) {
-		printk(KERN_DEBUG "lapbeth: wrong dest address\n");
-		kfree_skb(skb, FREE_READ);
-		return 0;
-	}
-
-	((struct lapbethdev *)dev->priv)->stats.rx_packets++;
+	lapbeth->stats.rx_packets++;
 
 	len = skb->data[0] + skb->data[1] * 256;
 
@@ -296,7 +278,7 @@ static void lapbeth_data_transmit(void *token, struct sk_buff *skb)
 
 	skb->dev = dev = lapbeth->ethdev;
 
-	dev->hard_header(skb, dev, ETH_P_DEC, lapbeth->dest_addr, NULL, 0);
+	dev->hard_header(skb, dev, ETH_P_DEC, bcast_addr, NULL, 0);
 
 	dev->hard_start_xmit(skb, dev);
 }
@@ -369,37 +351,9 @@ static int lapbeth_set_mac_address(struct device *dev, void *addr)
     return 0;
 }
 
-/*	Ioctl commands
- *
- *		SIOCSLAPBETHADDR	set the destination and accepted
- *					source ethernet address (broadcast
- *					or multicast: accept all)
- */
 static int lapbeth_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 {
-	int err;
-	struct lapbeth_ethaddr *ethaddr = (struct lapbeth_ethaddr *)ifr->ifr_data;
-	struct lapbethdev *lapbeth = dev->priv;
-
-	if (!suser())
-		return -EPERM;
-	
-	if (lapbeth == NULL)		/* woops! */
-		return -ENODEV;
-	
-	switch (cmd) {
-		case SIOCSLAPBETHADDR:
-			if ((err = verify_area(VERIFY_READ, ethaddr, sizeof(struct lapbeth_ethaddr))) != 0)
-				return err;
-			copy_from_user(lapbeth->dest_addr, ethaddr->destination, ETH_ALEN);
-			copy_from_user(lapbeth->acpt_addr, ethaddr->accept, ETH_ALEN);
-			break;
-
-		default:
-			return -EINVAL;
-	}
-
-	return 0;
+	return -EINVAL;
 }
 
 /*
@@ -481,9 +435,6 @@ static int lapbeth_new_device(struct device *dev)
 
 	lapbeth->ethname[sizeof(lapbeth->ethname)-1] = '\0';
 	strncpy(lapbeth->ethname, dev->name, sizeof(lapbeth->ethname)-1);
-
-	memcpy(lapbeth->dest_addr, bcast_addr, sizeof(lapbeth_eth_addr));
-	memcpy(lapbeth->acpt_addr, bcast_addr, sizeof(lapbeth_eth_addr));
 
 	dev = &lapbeth->axdev;
 	buf = (unsigned char *)kmalloc(14, GFP_KERNEL);

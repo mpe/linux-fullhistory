@@ -56,7 +56,6 @@ struct ipv6_mc_list		*inet6_mcast_lst[HASH_SIZE];
  *	AF_INET6 device list
  */
 struct inet6_dev		*inet6_dev_lst;
-int				in6_ifnum = 0;
 
 atomic_t			addr_list_lock = 0;
 
@@ -167,7 +166,7 @@ struct inet6_dev * ipv6_add_dev(struct device *dev)
 
 	memset(dev6, 0, sizeof(struct inet6_dev));
 	dev6->dev = dev;
-	dev6->if_index = ++in6_ifnum;
+	dev6->if_index = dev->ifindex;
 
 	/*
 	 *	insert at head.
@@ -892,40 +891,6 @@ int addrconf_set_dstaddr(void *arg)
 
 err_exit:
 	return err;
-}
-
-/*
- *	Obtain if_index from device name
- */
-int addrconf_get_ifindex(void *arg)
-{
-	struct ifreq ifr;
-	int res = -ENODEV;
-	
-	if (copy_from_user(&ifr, arg, sizeof(struct ifreq)))
-	{
-		res = -EFAULT;		
-	}
-	else
-	{
-		struct inet6_dev *idev;
-
-		for (idev = inet6_dev_lst; idev; idev=idev->next)
-		{
-			if (!strncmp(ifr.ifr_name, idev->dev->name, IFNAMSIZ))
-			{
-				res = 0;
-				ifr.ifr_ifindex = idev->if_index;
-				if (copy_to_user(arg, &ifr, sizeof(ifr)))
-				{
-					res = -EFAULT;
-				}
-				break;
-			}
-		}
-	}
-
-	return res;
 }
 
 /*

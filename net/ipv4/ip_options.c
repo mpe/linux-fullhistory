@@ -484,15 +484,21 @@ void ip_options_undo(struct ip_options * opt)
 	}
 }
 
-int ip_options_getfromuser(struct ip_options **optp, unsigned char *data, int optlen)
+int ip_options_get(struct ip_options **optp, unsigned char *data, int optlen, int user)
 {
 	struct ip_options *opt;
+
 	opt = kmalloc(sizeof(struct ip_options)+((optlen+3)&~3), GFP_KERNEL);
 	if (!opt)
 		return -ENOMEM;
 	memset(opt, 0, sizeof(struct ip_options));
-	if (optlen && copy_from_user(opt->__data, data, optlen))
-		return -EFAULT;
+	if (optlen) {
+		if (user) {
+			if (copy_from_user(opt->__data, data, optlen))
+				return -EFAULT;
+		} else
+			memcpy(opt->__data, data, optlen);
+	}
 	while (optlen & 3)
 		opt->__data[optlen++] = IPOPT_END;
 	opt->optlen = optlen;

@@ -208,7 +208,7 @@ static int sit_init_dev(struct device *dev)
 	dev->hard_header_len 	= MAX_HEADER;
 	dev->mtu		= 1500 - sizeof(struct iphdr);
 	dev->addr_len		= 0;
-	dev->tx_queue_len	= 2;
+	dev->tx_queue_len	= 0;
 
 	memset(dev->broadcast, 0, MAX_ADDR_LEN);
 	memset(dev->dev_addr,  0, MAX_ADDR_LEN);
@@ -415,31 +415,19 @@ static int sit_xmit(struct sk_buff *skb, struct device *dev)
 	struct enet_statistics *stats;
 	struct sit_mtu_info *minfo;
 	struct in6_addr *addr6;	
-	unsigned long flags;
 	struct rtable *rt;
 	struct iphdr *iph;
 	__u32 saddr;
 	__u32 daddr;
-	__u32 raddr;
 	int addr_type;
 	int mtu;
-	int len;
+	int headroom;
 
 	/* 
 	 *	Make sure we are not busy (check lock variable) 
 	 */
 
 	stats = (struct enet_statistics *)dev->priv;
-	save_flags(flags);
-	cli();
-	if (dev->tbusy != 0) 
-	{
-		restore_flags(flags);
-		printk(KERN_DEBUG "sit_xmit: busy\n");
-		return(1);
-	}
-	dev->tbusy = 1;
-	restore_flags(flags);
 
 	daddr = dev->pa_dstaddr;
 	if (daddr == 0)
@@ -470,79 +458,57 @@ static int sit_xmit(struct sk_buff *skb, struct device *dev)
 		daddr = addr6->s6_addr32[3];
 	}
 
-	len = skb->tail - (skb->data + sizeof(struct ipv6hdr));
-
-	skb_orphan(skb);
-		
-	iph = (struct iphdr *) skb_push(skb, sizeof(struct iphdr));
-	
-	skb->protocol = htons(ETH_P_IP);
-
-	/* get route */
-
 	if (ip_route_output(&rt, daddr, 0, 0, NULL)) {
 		printk(KERN_DEBUG "sit: no route to host\n");
 		goto on_error;
 	}
 
-	skb->dst = dst_clone(&rt->u.dst);
 	minfo = sit_mtu_lookup(daddr);
 
+	/* IP should calculate pmtu correctly,
+	 * let's check it...
+	 */
+#if 0
 	if (minfo)
 		mtu = minfo->mtu;
 	else
-		mtu = rt->u.dst.dev->mtu;
+#endif
+		mtu = rt->u.dst.pmtu;
 
-	if (mtu > 576 && len > mtu)
+	if (mtu > 576 && skb->tail - (skb->data + sizeof(struct ipv6hdr)) > mtu)
 	{
 		icmpv6_send(skb, ICMPV6_PKT_TOOBIG, 0, mtu, dev);
+		ip_rt_put(rt);
 		goto on_error;
 	}
 
-	saddr = rt->rt_src;
-	skb->dev = rt->u.dst.dev;
-	raddr = rt->rt_gateway;	
+	headroom = ((rt->u.dst.dev->hard_header_len+15)&~15)+sizeof(struct iphdr);
 
-	if (raddr == 0)
-		raddr = daddr;
-
-	/* now for the device header */
-
-	skb->arp = 1;
-		
-	if (skb->dev->hard_header_len) 
-	{
-		int mac;
-
-		if (skb->data - skb->head < skb->dev->hard_header_len)
-		{
-			printk(KERN_DEBUG "sit: space at head < dev header\n");
+	if (skb_headroom(skb) < headroom || skb_shared(skb)) {
+		struct sk_buff *new_skb = skb_realloc_headroom(skb, headroom);
+		if (!new_skb) {
+			ip_rt_put(rt);
 			goto on_error;
 		}
-
-		if (skb->dev->hard_header)
-		{
-			mac = skb->dev->hard_header(skb, skb->dev, ETH_P_IP, 
-					       NULL, NULL, len);
-
-			if (mac < 0)
-				skb->arp = 0;
-
-		}
-		
+		dev_kfree_skb(skb, FREE_WRITE);
+		skb = new_skb;
 	}
+		
+	memset(&(IPCB(skb)->opt), 0, sizeof(IPCB(skb)->opt));
 
-	ip_rt_put(rt);
+	iph = (struct iphdr *) skb_push(skb, sizeof(struct iphdr));
+	skb->nh.iph   = iph;
 
+	saddr = rt->rt_src;
+	dst_release(skb->dst);
+	skb->dst = &rt->u.dst;
 
 	iph->version  = 4;
 	iph->ihl      = 5;
 	iph->tos      = 0;				/* tos set to 0... */
 
 	if (mtu > 576)
-	{
 		iph->frag_off = htons(IP_DF);
-	}
 	else
 		iph->frag_off = 0;
 
@@ -550,20 +516,18 @@ static int sit_xmit(struct sk_buff *skb, struct device *dev)
 	iph->saddr    = saddr;
 	iph->daddr    = daddr;
 	iph->protocol = IPPROTO_IPV6;
-	skb->nh.iph   = iph;
-
+	iph->tot_len  =	htons(skb->len);
+	iph->id	      =	htons(ip_id_count++);
 	ip_send_check(iph);
 
-	ip_queue_xmit(skb);
+	ip_send(skb);
 
 	stats->tx_packets++;
-	dev->tbusy=0;
 
 	return 0;
 
   on_error:
-	kfree_skb(skb, FREE_WRITE);
-	dev->tbusy=0;
+	dev_kfree_skb(skb, FREE_WRITE);
 	stats->tx_errors++;
 	return 0;	
 }

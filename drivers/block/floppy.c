@@ -2252,7 +2252,8 @@ static void rw_interrupt(void)
 				return;
 			}
 			current_type[current_drive] = _floppy;
-			floppy_sizes[TOMINOR(current_drive) ]= _floppy->size>>1;
+			floppy_sizes[TOMINOR(current_drive) ]= 
+				(_floppy->size+1)>>1;
 			break;
 	}
 
@@ -2261,7 +2262,7 @@ static void rw_interrupt(void)
 			DPRINT("Auto-detected floppy type %s in fd%d\n",
 				_floppy->name,current_drive);
 		current_type[current_drive] = _floppy;
-		floppy_sizes[TOMINOR(current_drive)] = _floppy->size >> 1;
+		floppy_sizes[TOMINOR(current_drive)] = (_floppy->size+1) >> 1;
 		probing = 0;
 	}
 
@@ -2450,8 +2451,13 @@ static int make_raw_rw_request(void)
 
 	TRACK = CURRENT->sector / max_sector;
 	sector_t = CURRENT->sector % max_sector;
-	if (_floppy->track && TRACK >= _floppy->track)
-		return 0;
+	if (_floppy->track && TRACK >= _floppy->track) {
+		if(CURRENT->current_nr_sectors & 1) {
+			current_count_sectors = 1;
+			return 1;
+		} else
+			return 0;
+	}
 	HEAD = sector_t / _floppy->sect;
 
 	if (((_floppy->stretch & FD_SWAPSIDES) || TESTF(FD_NEED_TWADDLE)) &&
@@ -3108,7 +3114,7 @@ static inline int set_geometry(unsigned int cmd, struct floppy_struct *g,
 		floppy_type[type].name="user format";
 		for (cnt = type << 2; cnt < (type << 2) + 4; cnt++)
 			floppy_sizes[cnt]= floppy_sizes[cnt+0x80]=
-				floppy_type[type].size>>1;
+				(floppy_type[type].size+1)>>1;
 		process_fd_request();
 		for (cnt = 0; cnt < N_DRIVE; cnt++){
 			if (ITYPE(drive_state[cnt].fd_device) == type &&
@@ -3127,7 +3133,7 @@ static inline int set_geometry(unsigned int cmd, struct floppy_struct *g,
 		if (buffer_drive == drive)
 			SUPBOUND(buffer_max, user_params[drive].sect);
 		current_type[drive] = &user_params[drive];
-		floppy_sizes[drive] = user_params[drive].size >> 1;
+		floppy_sizes[drive] = (user_params[drive].size+1) >> 1;
 		if (cmd == FDDEFPRM)
 			DRS->keep_data = -1;
 		else
@@ -3794,23 +3800,20 @@ static char get_fdc_version(void)
 
 /* lilo configuration */
 
-/* we make the invert_dcl function global. One day, somebody might
- * want to centralize all thinkpad related options into one lilo option,
- * there are just so many thinkpad related quirks! */
-void floppy_invert_dcl(int *ints,int param)
+void floppy_set_flags(int *ints,int param, int param2)
 {
 	int i;
 
 	for (i=0; i < ARRAY_SIZE(default_drive_params); i++){
 		if (param)
-			default_drive_params[i].params.flags |= 0x80;
+			default_drive_params[i].params.flags |= param2;
 		else
-			default_drive_params[i].params.flags &= ~0x80;
+			default_drive_params[i].params.flags &= ~param2;
 	}
-	DPRINT("Configuring drives for inverted dcl\n");
+	DPRINT("%s flag 0x%x\n", param2 ? "Setting" : "Clearing", param);
 }
 
-static void daring(int *ints,int param)
+static void daring(int *ints,int param, int param2)
 {
 	int i;
 
@@ -3826,7 +3829,7 @@ static void daring(int *ints,int param)
 	DPRINT("Assuming %s floppy hardware\n", param ? "standard" : "broken");
 }
 
-static void set_cmos(int *ints, int dummy)
+static void set_cmos(int *ints, int dummy, int dummy2)
 {
 	int current_drive=0;
 
@@ -3852,34 +3855,39 @@ static void set_cmos(int *ints, int dummy)
 
 static struct param_table {
 	const char *name;
-	void (*fn)(int *ints, int param);
+	void (*fn)(int *ints, int param, int param2);
 	int *var;
 	int def_param;
+	int param2;
 } config_params[]={
-	{ "allowed_drive_mask", 0, &allowed_drive_mask, 0xff },
-	{ "all_drives", 0, &allowed_drive_mask, 0xff },
-	{ "asus_pci", 0, &allowed_drive_mask, 0x33 },
+	{ "allowed_drive_mask", 0, &allowed_drive_mask, 0xff, 0}, /* obsolete */
+	{ "all_drives", 0, &allowed_drive_mask, 0xff, 0 }, /* obsolete */
+	{ "asus_pci", 0, &allowed_drive_mask, 0x33, 0},
 
-	{ "daring", daring, 0, 1},
+	{ "daring", daring, 0, 1, 0},
 
-	{ "two_fdc",  0, &FDC2, 0x370 },
-	{ "one_fdc", 0, &FDC2, 0 },
+	{ "two_fdc",  0, &FDC2, 0x370, 0 },
+	{ "one_fdc", 0, &FDC2, 0, 0 },
 
-	{ "thinkpad", floppy_invert_dcl, 0, 1 },
+	{ "thinkpad", floppy_set_flags, 0, 1, FD_INVERTED_DCL },
+	{ "broken_dcl", floppy_set_flags, 0, 1, FD_BROKEN_DCL },
+	{ "messages", floppy_set_flags, 0, 1, FTD_MSG },
+	{ "silent_dcl_clear", floppy_set_flags, 0, 1, FD_SILENT_DCL_CLEAR },
+	{ "debug", floppy_set_flags, 0, 1, FD_DEBUG },
 
-	{ "nodma", 0, &use_virtual_dma, 1 },
-	{ "omnibook", 0, &use_virtual_dma, 1 },
-	{ "dma", 0, &use_virtual_dma, 0 },
+	{ "nodma", 0, &use_virtual_dma, 1, 0 },
+	{ "omnibook", 0, &use_virtual_dma, 1, 0 },
+	{ "dma", 0, &use_virtual_dma, 0, 0 },
 
-	{ "fifo_depth", 0, &fifo_depth, 0xa },
-	{ "nofifo", 0, &no_fifo, 0x20 },
-	{ "usefifo", 0, &no_fifo, 0 },
+	{ "fifo_depth", 0, &fifo_depth, 0xa, 0 },
+	{ "nofifo", 0, &no_fifo, 0x20, 0 },
+	{ "usefifo", 0, &no_fifo, 0, 0 },
 
-	{ "cmos", set_cmos, 0, 0 },
+	{ "cmos", set_cmos, 0, 0, 0 },
 
-	{ "unexpected_interrupts", 0, &print_unex, 1 },
-	{ "no_unexpected_interrupts", 0, &print_unex, 0 },
-	{ "L40SX", 0, &print_unex, 0 } };
+	{ "unexpected_interrupts", 0, &print_unex, 1, 0 },
+	{ "no_unexpected_interrupts", 0, &print_unex, 0, 0 },
+	{ "L40SX", 0, &print_unex, 0, 0 } };
 
 #define FLOPPY_SETUP
 void floppy_setup(char *str, int *ints)
@@ -3894,7 +3902,9 @@ void floppy_setup(char *str, int *ints)
 				else
 					param = config_params[i].def_param;
 				if(config_params[i].fn)
-					config_params[i].fn(ints,param);
+					config_params[i].
+						fn(ints,param,
+						   config_params[i].param2);
 				if(config_params[i].var) {
 					DPRINT("%s=%d\n", str, param);
 					*config_params[i].var = param;
@@ -3928,7 +3938,7 @@ int floppy_init(void)
 
 	for (i=0; i<256; i++)
 		if (ITYPE(i))
-			floppy_sizes[i] = floppy_type[ITYPE(i)].size >> 1;
+			floppy_sizes[i] = (floppy_type[ITYPE(i)].size+1) >> 1;
 		else
 			floppy_sizes[i] = MAX_DISK_SIZE;
 
@@ -4209,6 +4219,12 @@ void cleanup_module(void)
 	/* eject disk, if any */
 	dummy = fd_eject(0);
 }
+
+MODULE_PARM(floppy,"s");
+MODULE_PARM(FLOPPY_IRQ,"i");
+MODULE_PARM(FLOPPY_DMA,"i");
+MODULE_AUTHOR("Alain L. Knaff");
+MODULE_SUPPORTED_DEVICE("fd");
 
 #ifdef __cplusplus
 }

@@ -37,3 +37,4 @@ struct watchdog_info {
 
 #define	WDIOS_DISABLECARD	0x0001	/* Turn off the watchdog timer */
 #define	WDIOS_ENABLECARD	0x0002	/* Turn on the watchdog timer */
+#define	WDIOS_TEMPPANIC		0x0004	/* Kernel panic on temperature trip */

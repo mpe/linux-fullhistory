@@ -895,7 +895,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 			}
 	
 			/* 
-			 *Now we need to check if we have a half built packet. 
+			 *	Now we need to check if we have a half built packet. 
 			 */
 
 			/* if we have queued packets */
@@ -912,9 +912,8 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov,
 				/*
 				 * This window_seq test is somewhat dangerous
 				 * If the remote does SWS avoidance we should
-				 * queue the best we can
-				 * if not we should in fact send multiple
-				 * packets...
+				 * queue the best we can if not we should in 
+				 * fact send multiple packets...
 				 * a method for detecting this would be most
 				 * welcome
 				 */

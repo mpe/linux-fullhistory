@@ -431,7 +431,7 @@ static void do_ps2esdi_request(void)
 	   list + sanity checks.                     */
 	INIT_REQUEST;
 
-	if (virt_to_bus((u_int) CURRENT->buffer + CURRENT->nr_sectors * 512) > 16 * MB) {
+	if (virt_to_bus(CURRENT->buffer + CURRENT->nr_sectors * 512) > 16 * MB) {
 		printk("%s: DMA above 16MB not supported\n", DEVICE_NAME);
 		end_request(FAIL);
 		if (CURRENT)

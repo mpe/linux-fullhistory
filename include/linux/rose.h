@@ -3,7 +3,7 @@
  * For kernel AX.25 see the file ax25.h. This file requires ax25.h for the
  * definition of the ax25_address structure.
  */
- 
+
 #ifndef	ROSE_KERNEL_H
 #define	ROSE_KERNEL_H
 
@@ -20,10 +20,11 @@
 
 #define	ROSE_KILL	99
 
-#define	SIOCRSCTLCON		(SIOCPROTOPRIVATE+0)
+#define	SIOCRSCTLCON		(SIOCPROTOPRIVATE+1)
+#define	SIOCRSL2CALL		(SIOCPROTOPRIVATE+2)
 
 typedef struct {
-	char rose_addr[5];
+	char		rose_addr[5];
 } rose_address;
 
 struct sockaddr_rose {
@@ -44,10 +45,10 @@ struct rose_route_struct {
 };
 
 struct rose_ctl_struct {
-	unsigned int  lci;
-	char          dev[20];
-	unsigned int  cmd;
-	unsigned long arg;
+	unsigned int	lci;
+	char		dev[20];
+	unsigned int	cmd;
+	unsigned long	arg;
 };
 
 #endif

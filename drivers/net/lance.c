@@ -309,7 +309,7 @@ int lance_init(void)
 {
 	int *port;
 
-	if (high_memory <= 16*1024*1024)
+	if (virt_to_bus(high_memory) <= 16*1024*1024)
 		lance_need_isa_bounce_buffers = 0;
 
 #if defined(CONFIG_PCI)

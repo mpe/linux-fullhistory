@@ -154,9 +154,7 @@
 #include <linux/firewall.h>
 #include <linux/mroute.h>
 #include <net/netlink.h>
-#ifdef CONFIG_NET_ALIAS
 #include <linux/net_alias.h>
-#endif
 
 /*
  *	SNMP management statistics

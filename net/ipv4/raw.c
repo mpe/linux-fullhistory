@@ -249,8 +249,8 @@ static int raw_sendto(struct sock *sk, const unsigned char *from,
 	}
 	tos = RT_TOS(sk->ip_tos) | (sk->localroute || (msg->msg_flags&MSG_DONTROUTE));
 
-	if (MULTICAST(daddr) && sk->ip_mc_name[0] && dev==NULL)
-		err = ip_route_output_dev(&rt, daddr, rfh.saddr, tos, sk->ip_mc_name);
+	if (MULTICAST(daddr) && sk->ip_mc_index && dev==NULL)
+		err = ip_route_output_dev(&rt, daddr, rfh.saddr, tos, sk->ip_mc_index);
 	else
 		err = ip_route_output(&rt, daddr, rfh.saddr, tos, dev);
 

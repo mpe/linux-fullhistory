@@ -213,7 +213,6 @@ int eql_init(struct device *dev)
 	static unsigned version_printed = 0;
 	/* static unsigned num_masters     = 0; */
 	equalizer_t *eql = 0;
-	int i;
 
 	if ( version_printed++ == 0 && eql_debug > 0)
 		printk(version);

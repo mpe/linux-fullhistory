@@ -586,7 +586,6 @@ static int set_dqblk(kdev_t dev, int id, short type, int flags, struct dqblk *dq
 {
 	struct dquot *dquot;
 	struct dqblk dq_dqblk;
-	int error;
 
 	if (dqblk == (struct dqblk *)NULL)
 		return(-EFAULT);
@@ -660,8 +659,6 @@ static int get_quota(kdev_t dev, int id, short type, struct dqblk *dqblk)
 
 static int get_stats(caddr_t addr)
 {
-	int error;
-
 	dqstats.allocated_dquots = nr_dquots;
 	dqstats.free_dquots = nr_free_dquots;
 	return copy_to_user(addr, (caddr_t)&dqstats, sizeof(struct dqstats)) 

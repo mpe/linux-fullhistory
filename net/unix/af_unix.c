@@ -3,11 +3,6 @@
  *
  * Authors:	Alan Cox, <alan.cox@linux.org>
  *
- *		Currently this contains all but the file descriptor passing code.
- *		Before that goes in the odd bugs in the iovec handlers need 
- *		fixing, and this bit testing. BSD fd passing is not a trivial part
- *		of the exercise it turns out. Anyone like writing garbage collectors.
- *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
@@ -298,11 +293,6 @@ static void unix_destroy_socket(unix_socket *sk)
 	}
 }
 
-static int unix_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
-{
-	return -EINVAL;
-}
-
 static int unix_listen(struct socket *sock, int backlog)
 {
 	struct sock *sk = sock->sk;
@@ -319,30 +309,6 @@ static int unix_listen(struct socket *sock, int backlog)
 	sk->state=TCP_LISTEN;
 	sock->flags |= SO_ACCEPTCON;
 	return 0;
-}
-
-static void def_callback1(struct sock *sk)
-{
-	if(!sk->dead)
-		wake_up_interruptible(sk->sleep);
-}
-
-static void def_callback2(struct sock *sk, int len)
-{
-	if(!sk->dead)
-	{
-		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket, 1);
-	}
-}
-
-static void def_callback3(struct sock *sk)
-{
-	if(!sk->dead)
-	{
-		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket, 2);
-	}
 }
 
 extern struct proto_ops unix_stream_ops;
@@ -377,33 +343,13 @@ static int unix_create(struct socket *sock, int protocol)
 	sk = sk_alloc(GFP_KERNEL);
 	if (!sk)
 		return -ENOMEM;
-	sock->sk = sk;
-	sk->type = sock->type;
-	sk->socket=sock;
-	sk->sleep= &sock->wait;
 
-	sk->peercred.pid = 0;
-	sk->peercred.uid = -1;
-	sk->peercred.gid = -1;
+	sock_init_data(sock,sk);
 	
-	init_timer(&sk->timer);
-	skb_queue_head_init(&sk->write_queue);
-	skb_queue_head_init(&sk->receive_queue);
-	skb_queue_head_init(&sk->error_queue);
-	skb_queue_head_init(&sk->back_log);
 	sk->protinfo.af_unix.family=AF_UNIX;
 	sk->protinfo.af_unix.inode=NULL;
 	sk->users=1;				/* Us */
 	sk->protinfo.af_unix.readsem=MUTEX;	/* single task reading lock */
-	sk->rcvbuf=SK_RMEM_MAX;
-	sk->sndbuf=SK_WMEM_MAX;
-	sk->allocation=GFP_KERNEL;
-	sk->state=TCP_CLOSE;
-	sk->priority=SOPRI_NORMAL;
-	sk->state_change=def_callback1;
-	sk->data_ready=def_callback2;
-	sk->write_space=def_callback3;
-	sk->error_report=def_callback1;
 	sk->mtu=4096;
 	sk->protinfo.af_unix.list=&unix_sockets_unbound;
 	unix_insert_socket(sk);
@@ -1489,7 +1435,7 @@ struct proto_ops unix_stream_ops = {
 	unix_shutdown,
 	NULL,
 	NULL,
-	unix_fcntl,
+	sock_no_fcntl,
 	unix_stream_sendmsg,
 	unix_stream_recvmsg
 };
@@ -1510,7 +1456,7 @@ struct proto_ops unix_dgram_ops = {
 	unix_shutdown,
 	NULL,
 	NULL,
-	unix_fcntl,
+	sock_no_fcntl,
 	unix_dgram_sendmsg,
 	unix_dgram_recvmsg
 };

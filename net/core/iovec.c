@@ -60,14 +60,6 @@ int verify_iovec(struct msghdr *m, struct iovec *iov, char *address, int mode)
 	} else
 		m->msg_name = NULL;
 
-	if(m->msg_controllen)
-	{
-		err=verify_area(mode, m->msg_control, m->msg_controllen);
-		if(err)
-			return err;
-	} else
-		m->msg_control = NULL;
-
 	if (m->msg_iovlen > UIO_FASTIOV)
 	{
 		iov = kmalloc(m->msg_iovlen*sizeof(struct iovec), GFP_KERNEL);

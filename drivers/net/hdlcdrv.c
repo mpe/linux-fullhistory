@@ -50,6 +50,7 @@
 #include <linux/etherdevice.h>
 #include <linux/skbuff.h>
 #include <linux/hdlcdrv.h>
+#include <net/ax25.h>
 
 /* make genksyms happy */
 #include <linux/ip.h>
@@ -743,7 +744,6 @@ static int hdlcdrv_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 static int hdlcdrv_probe(struct device *dev)
 {
 	struct hdlcdrv_channel_params dflt_ch_params = { 20, 2, 10, 40, 0 };
-	int i;
 	struct hdlcdrv_state *s;
 
 	if (!dev)

@@ -231,14 +231,39 @@ static long write_null(struct inode * inode, struct file * file,
 }
 
 /*
- * For fun, somebody might look into using the MMU for this.
- * NOTE! It's not trivial: you have to check that the mapping
- * is a private mapping and if so you can just map in the
- * zero page directly. But shared mappings _have_ to use the
- * physical copy.
+ * For fun, we are using the MMU for this.
  */
 static inline unsigned long read_zero_pagealigned(char * buf, unsigned long size)
 {
+	struct vm_area_struct * curr_vma;
+	unsigned long addr=(unsigned long)buf;
+
+/*
+ * First we take the most obvious case: when we have one VM area to deal with,
+ * and it's privately mapped.
+ */
+	curr_vma = find_vma(current->mm, addr);
+
+	if ( !(curr_vma->vm_flags & VM_SHARED) &&
+	      (addr + size <= curr_vma->vm_end) ) {
+
+		flush_cache_range(current->mm, addr, addr + size);
+		zap_page_range(current->mm, addr, size);
+        	zeromap_page_range(addr, size, PAGE_COPY);
+        	flush_tlb_range(current->mm, addr, addr + size);
+
+		return 0;
+	}
+
+/*
+ * Ooops, the shared case is hard. Lets do the conventional
+ *        zeroing.
+ *
+ * FIXME: same for the multiple-vma case, we dont handle it
+ *	  now for simplicity, although it's much easier than
+ *	  the shared case. Not that it should happen often ...
+ */ 
+
 	do {
 		if (clear_user(buf, PAGE_SIZE))
 			break;
@@ -247,6 +272,7 @@ static inline unsigned long read_zero_pagealigned(char * buf, unsigned long size
 		buf += PAGE_SIZE;
 		size -= PAGE_SIZE;
 	} while (size);
+
 	return size;
 }
 

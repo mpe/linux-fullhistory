@@ -115,7 +115,7 @@ extern void		ip_rt_check_expire(void);
 extern void		ip_rt_advice(struct rtable **rp, int advice);
 extern void		rt_cache_flush(int how);
 extern int		ip_route_output(struct rtable **, u32 dst, u32 src, u8 tos, struct device *devout);
-extern int		ip_route_output_dev(struct rtable **, u32 dst, u32 src, u8 tos, char *devname);
+extern int		ip_route_output_dev(struct rtable **, u32 dst, u32 src, u8 tos, int);
 extern int		ip_route_input(struct sk_buff*, u32 dst, u32 src, u8 tos, struct device *devin);
 extern unsigned short	ip_rt_frag_needed(struct iphdr *iph, unsigned short new_mtu);
 extern void		ip_rt_send_redirect(struct sk_buff *skb);

@@ -28,7 +28,7 @@ trivial patch so apply some common sense.
 	job the maintainers (and especially Linus) do is to keep things
 	looking the same. Sometimes this means that the clever hack in
 	your driver to get around a problem actual needs to become a
-	generalised kernel feature ready for next time.
+	generalized kernel feature ready for next time.
 
 	PLEASE try to include any credit lines you want added with the
 	patch. It avoids people being missed off by mistake and makes
@@ -387,4 +387,4 @@ S:	Maintained
 
 REST:
 P:	Linus Torvalds
-S:	Buried alive in email
+S:	Buried alive in diapers

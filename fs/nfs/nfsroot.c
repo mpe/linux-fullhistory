@@ -154,11 +154,6 @@ static int nfs_port;				/* Port to connect to for NFS */
 /* Yes, we use sys_socket, but there's no include file for it */
 extern asmlinkage int sys_socket(int family, int type, int protocol);
 
-extern void fib_lock(void);
-extern void fib_unlock(void);
-extern int rtmsg_process(struct nlmsghdr *n, struct in_rtmsg *r);
-extern unsigned long ip_get_mask(unsigned long addr);
-
 /***************************************************************************
 
 			Device Handling Subroutines
@@ -182,13 +177,12 @@ static int root_dev_open(void)
 		    !(dev->flags & (IFF_LOOPBACK | IFF_POINTOPOINT)) &&
 		    (0 != strncmp(dev->name, "dummy", 5)) &&
 		    (!user_dev_name[0] || !strcmp(dev->name, user_dev_name))) {
-			/* First up the interface */
+			struct ifreq ifr;
 			old_flags = dev->flags;
-			dev->flags = IFF_UP | IFF_BROADCAST | IFF_RUNNING;
-			if (!(old_flags & IFF_UP) && dev_open(dev)) {
-				dev->flags = old_flags;
+			strncpy(ifr.ifr_name, dev->name, IFNAMSIZ);
+			ifr.ifr_flags = old_flags | IFF_UP | IFF_RUNNING;
+			if (dev_ioctl(SIOCSIFFLAGS, &ifr) < 0)
 				continue;
-			}
 			openp = (struct open_dev *) kmalloc(sizeof(struct open_dev),
 						GFP_ATOMIC);
 			if (openp == NULL)
@@ -229,9 +223,10 @@ static void root_dev_close(void)
 		nextp = openp->next;
 		openp->next = NULL;
 		if (openp->dev != root_dev) {
-			if (!(openp->old_flags & IFF_UP))
-				dev_close(openp->dev);
-			openp->dev->flags = openp->old_flags;
+			struct ifreq ifr;
+			strncpy(ifr.ifr_name, openp->dev->name, IFNAMSIZ);
+			ifr.ifr_flags = openp->old_flags;
+			dev_ioctl(SIOCSIFFLAGS, &ifr);
 		}
 		kfree_s(openp, sizeof(struct open_dev));
 		openp = nextp;
@@ -467,20 +462,22 @@ static inline int root_alloc_bootp(void)
  */
 static int root_add_bootp_route(void)
 {
-	struct nlmsghdr dummy_nlh;
-	struct in_rtmsg rtm;
+	struct {
+		struct nlmsghdr nlh;
+		struct in_rtmsg rtm;
+	} rtreq;
 	int err;
+	unsigned short fs;
 
-	memset(&rtm, 0, sizeof(struct in_rtmsg));
-	dummy_nlh.nlmsg_seq = 0;
-	dummy_nlh.nlmsg_pid = current->pid;
-	dummy_nlh.nlmsg_type = RTMSG_NEWROUTE;
-	memcpy(&rtm.rtmsg_device, bootp_dev->name, 15);
-	rtm.rtmsg_mtu = bootp_dev->mtu;
-	rtm.rtmsg_flags = RTF_UP;
-	fib_lock();
-	err = rtmsg_process(&dummy_nlh, &rtm);
-	fib_unlock();
+	memset(&rtreq, 0, sizeof(rtreq));
+	rtreq.nlh.nlmsg_type = RTMSG_NEWROUTE;
+	rtreq.nlh.nlmsg_len = sizeof(rtreq);
+	rtreq.rtm.rtmsg_ifindex = bootp_dev->ifindex;
+	rtreq.rtm.rtmsg_flags = RTF_UP;
+	fs = get_fs();
+	set_fs(get_ds());
+	err = ip_rt_ioctl(SIOCRTMSG, &rtreq);
+	set_fs(fs);
 	if (err) {
 		printk(KERN_ERR "BOOTP: Adding of route failed!\n");
 		return -1;
@@ -495,19 +492,24 @@ static int root_add_bootp_route(void)
  */
 static int root_del_bootp_route(void)
 {
-	struct nlmsghdr dummy_nlh;
-	struct in_rtmsg rtm;
+	struct {
+		struct nlmsghdr nlh;
+		struct in_rtmsg rtm;
+	} rtreq;
 	int err;
+	unsigned short fs;
 
 	if (!bootp_have_route)
 		return 0;
-	memset(&rtm, 0, sizeof(struct in_rtmsg));
-	dummy_nlh.nlmsg_seq = 0;
-	dummy_nlh.nlmsg_pid = current->pid;
-	dummy_nlh.nlmsg_type = RTMSG_DELROUTE;
-	fib_lock();
-	err = rtmsg_process(&dummy_nlh, &rtm);
-	fib_unlock();
+	memset(&rtreq, 0, sizeof(rtreq));
+	rtreq.nlh.nlmsg_type = RTMSG_DELROUTE;
+	rtreq.nlh.nlmsg_len = sizeof(rtreq);
+	rtreq.rtm.rtmsg_ifindex = bootp_dev->ifindex;
+	rtreq.rtm.rtmsg_flags = RTF_UP;
+	fs = get_fs();
+	set_fs(get_ds());
+	err = ip_rt_ioctl(SIOCRTMSG, &rtreq);
+	set_fs(fs);
 	if (err) {
 		printk(KERN_ERR "BOOTP: Deleting of route failed!\n");
 		return -1;
@@ -596,6 +598,8 @@ static inline int root_send_udp(struct socket *sock, void *buf, int size)
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 	msg.msg_control = NULL;
+	msg.msg_controllen = 0;
+	msg.msg_flags = 0;
 	result = sock_sendmsg(sock, &msg, size);
 	set_fs(oldfs);
 	return (result != size);
@@ -620,6 +624,7 @@ static inline int root_recv_udp(struct socket *sock, void *buf, int size)
 	msg.msg_iov = &iov;
 	msg.msg_iovlen = 1;
 	msg.msg_control = NULL;
+	msg.msg_controllen = 0;
 	msg.msg_namelen = 0;
 	result = sock_recvmsg(sock, &msg, size, MSG_DONTWAIT);
 	set_fs(oldfs);
@@ -1286,14 +1291,36 @@ static void root_nfs_addrs(char *addrs)
 	rarp_serv = server;
 }
 
+static int root_nfs_add_default_route(struct in_addr gw, struct device *dev)
+{
+	unsigned short fs;
+	int err;
+	struct {
+		struct nlmsghdr nlh;
+		struct in_rtmsg rtm;
+	} rtreq;
+
+	memset(&rtreq, 0, sizeof(rtreq));
+	rtreq.nlh.nlmsg_type = RTMSG_NEWROUTE;
+	rtreq.nlh.nlmsg_len  = sizeof(rtreq);
+
+	rtreq.rtm.rtmsg_ifindex = dev->ifindex;
+	rtreq.rtm.rtmsg_flags = RTF_UP|RTF_GATEWAY;
+	rtreq.rtm.rtmsg_gateway = gw;
+	fs = get_fs();
+	set_fs(get_ds());
+	err = ip_rt_ioctl(SIOCRTMSG, &rtreq);
+	set_fs(fs);
+	return err;
+}
 
 /*
  *  Set the interface address and configure a route to the server.
  */
 static int root_nfs_setup(void)
 {
-	struct in_rtmsg rtm;
-	struct nlmsghdr dummy_nlh;
+	unsigned short fs;
+	struct ifreq ifr;
 	int err;
 
 	/* Set the default system name in case none was previously found */
@@ -1302,16 +1329,21 @@ static int root_nfs_setup(void)
 		system_utsname.nodename[__NEW_UTS_LEN] = '\0';
 	}
 
-	/* Set the correct netmask */
-	if (netmask.sin_addr.s_addr == INADDR_NONE)
-		netmask.sin_addr.s_addr = ip_get_mask(myaddr.sin_addr.s_addr);
-
-	/* Setup the device correctly */
-	root_dev->family     = myaddr.sin_family;
-	root_dev->pa_addr    = myaddr.sin_addr.s_addr;
-	root_dev->pa_mask    = netmask.sin_addr.s_addr;
-	root_dev->pa_brdaddr = root_dev->pa_addr | ~root_dev->pa_mask;
-	root_dev->pa_dstaddr = 0;
+	fs = get_fs();
+	set_fs(get_ds());
+	strncpy(ifr.ifr_name, root_dev->name, IFNAMSIZ);
+	memcpy(&ifr.ifr_addr, &myaddr, sizeof(myaddr));
+	devinet_ioctl(SIOCSIFADDR, &ifr);
+	if (netmask.sin_addr.s_addr != INADDR_NONE &&
+	    netmask.sin_addr.s_addr != root_dev->pa_mask) {
+		memcpy(&ifr.ifr_netmask, &netmask, sizeof(netmask));
+		devinet_ioctl(SIOCSIFNETMASK, &ifr);
+		memcpy(&ifr.ifr_broadaddr, &netmask, sizeof(netmask));
+		((struct sockaddr_in*)&ifr.ifr_broadaddr)->sin_addr.s_addr =
+			root_dev->pa_addr | ~root_dev->pa_mask;
+		devinet_ioctl(SIOCSIFBRDADDR, &ifr);
+	}
+	set_fs(fs);
 
 	/*
 	 * Now add a route to the server. If there is no gateway given,
@@ -1321,36 +1353,9 @@ static int root_nfs_setup(void)
 	 * gatewayed default route. Note that this gives sufficient network
 	 * setup even for full system operation in all common cases.
 	 */
-	dummy_nlh.nlmsg_seq = 0;
-	dummy_nlh.nlmsg_pid = current->pid;
-	dummy_nlh.nlmsg_type = RTMSG_NEWROUTE;
-
-	memset(&rtm, 0, sizeof(struct in_rtmsg));	/* Local subnet route */
-	memcpy(&rtm.rtmsg_device, root_dev->name, 15);
-	rtm.rtmsg_mtu = root_dev->mtu;
-	rtm.rtmsg_flags = RTF_UP;
-	rtm.rtmsg_prefixlen = (32 - ffz(~(netmask.sin_addr.s_addr)));
-	rtm.rtmsg_prefix = myaddr.sin_addr;
-	fib_lock();
-	err = rtmsg_process(&dummy_nlh, &rtm);
-	fib_unlock();
-	if (err) {
-		printk(KERN_ERR "Root-NFS: Adding of local route failed!\n");
-		return -1;
-	}
 
 	if (gateway.sin_addr.s_addr != INADDR_NONE) {	/* Default route */
-		rtm.rtmsg_prefix.s_addr = INADDR_ANY;
-		rtm.rtmsg_prefixlen = 32;
-		rtm.rtmsg_gateway = gateway.sin_addr;
-		rtm.rtmsg_flags |= RTF_GATEWAY;
-		if ((gateway.sin_addr.s_addr ^ myaddr.sin_addr.s_addr) & netmask.sin_addr.s_addr) {
-			printk(KERN_ERR "Root-NFS: Gateway not on local network!\n");
-			return -1;
-		}
-		fib_lock();
-		err = rtmsg_process(&dummy_nlh, &rtm);
-		fib_unlock();
+		err = root_nfs_add_default_route(gateway.sin_addr, root_dev); 
 		if (err) {
 			printk(KERN_ERR "Root-NFS: Adding of default route failed!\n");
 			return -1;

@@ -221,7 +221,7 @@ extern struct module *module_list;
 
 /* We want the EXPORT_SYMBOL tag left intact for recognition.  */
 
-#elif !defined(EXPORT_SYMTAB)
+#elif !defined(EXPORT_SYMTAB) && defined(CONFIG_MODULES)
 
 #define __EXPORT_SYMBOL(sym,str)   error EXPORT_SYMTAB_not_defined
 #define EXPORT_SYMBOL(var)	   error EXPORT_SYMTAB_not_defined

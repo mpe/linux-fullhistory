@@ -4,6 +4,8 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *
  *  1996-04-21	Modified by Ulrich Windl to make NTP work
+ *  1996-12-23  Modified by Dave Grothe to fix bugs in semaphores and
+ *              make semaphores SMP safe
  */
 
 /*
@@ -482,32 +484,48 @@ bad:
 	printk("       *q = %p\n",*q);
 }
 
+
 /*
  * Semaphores are implemented using a two-way counter:
  * The "count" variable is decremented for each process
- * that tries to sleep, while the "waiting" variable is
- * incremented _while_ the process is sleeping on that
- * semaphore. 
+ * that tries to sleep, while the "waking" variable is
+ * incremented when the "up()" code goes to wake up waiting
+ * processes.
  *
  * Notably, the inline "up()" and "down()" functions can
  * efficiently test if they need to do any extra work (up
  * needs to do something only if count was negative before
  * the increment operation.
+ *
+ * This routine must execute atomically.
  */
-static inline void normalize_semaphore(struct semaphore *sem)
+static inline int waking_non_zero(struct semaphore *sem)
 {
-	atomic_add(xchg(&sem->waiting,0), &sem->count);
+	int ret;
+	long flags;
+
+	save_flags(flags);
+	cli();
+
+	ret = 0;
+	if (sem->waking > 0) {
+		sem->waking--;
+		ret = 1;
+	}
+
+	restore_flags(flags);
+	return ret;
 }
 
 /*
  * When __up() is called, the count was negative before
- * incrementing it, and we need to wake up somebody. In
- * most cases "waiting" will be positive, and the normalization
- * will allow things to continue. However, if somebody has
- * /just/ done a down(), it may be that count was negative
- * without waiting being positive (or in the generic case
- * "count is more negative than waiting is positive"), and
- * the waiter needs to check this itself (see __down).
+ * incrementing it, and we need to wake up somebody.
+ *
+ * This routine adds one to the count of processes that need to
+ * wake up and exit.  ALL waiting processes actually wake up but
+ * only the one that gets to the "waking" field first will gate
+ * through and acquire the semaphore.  The others will go back
+ * to sleep.
  *
  * Note that these functions are only called when there is
  * contention on the lock, and as such all this is the
@@ -517,54 +535,82 @@ static inline void normalize_semaphore(struct semaphore *sem)
  */
 void __up(struct semaphore *sem)
 {
-	normalize_semaphore(sem);
+	atomic_inc(&sem->waking);
 	wake_up(&sem->wait);
+}
+
+/*
+ * Perform the "down" function.  Return zero for semaphore acquired,
+ * return negative for signalled out of the function.
+ *
+ * If called from __down, the return is ignored and the wait loop is
+ * not interruptible.  This means that a task waiting on a semaphore
+ * using "down()" cannot be killed until someone does an "up()" on
+ * the semaphore.
+ *
+ * If called from __down_interruptible, the return value gets checked
+ * upon return.  If the return value is negative then the task continues
+ * with the negative value in the return register (it can be tested by
+ * the caller).
+ *
+ * Either form may be used in conjunction with "up()".
+ *
+ */
+static inline int __do_down(struct semaphore * sem, int task_state)
+{
+	struct task_struct *tsk = current;
+	struct wait_queue wait = { tsk, NULL };
+	int		  ret = 0;
+
+	tsk->state = task_state;
+	add_wait_queue(&sem->wait, &wait);
+
+	/*
+	 * Ok, we're set up.  sem->count is known to be less than zero
+	 * so we must wait.
+	 *
+	 * We can let go the lock for purposes of waiting.
+	 * We re-acquire it after awaking so as to protect
+	 * all semaphore operations.
+	 *
+	 * If "up()" is called before we call waking_non_zero() then
+	 * we will catch it right away.  If it is called later then
+	 * we will have to go through a wakeup cycle to catch it.
+	 *
+	 * Multiple waiters contend for the semaphore lock to see
+	 * who gets to gate through and who has to wait some more.
+	 */
+	for (;;) {
+		if (waking_non_zero(sem))	/* are we waking up?  */
+			break;			/* yes, exit loop */
+
+		if (   task_state == TASK_INTERRUPTIBLE
+		    && (tsk->signal & ~tsk->blocked)	/* signalled */
+		   ) {
+			ret = -EINTR;			/* interrupted */
+			atomic_inc(&sem->count);	/* give up on down operation */
+			break;
+		}
+
+		schedule();
+		tsk->state = task_state;
+	}
+
+	tsk->state = TASK_RUNNING;
+	remove_wait_queue(&sem->wait, &wait);
+	return ret;
 }
 
 void __down(struct semaphore * sem)
 {
-	struct task_struct *tsk = current;
-	struct wait_queue wait = { tsk, NULL };
-
-	/*
-	 * The order here is important. We add ourselves to the
-	 * wait queues and mark ourselves sleeping _first_. That
-	 * way, if a "up()" comes in here, we'll either get
-	 * woken up (up happens after the wait queues are set up)
-	 * OR we'll have "waiting > 0".
-	 */
-	tsk->state = TASK_UNINTERRUPTIBLE;
-	add_wait_queue(&sem->wait, &wait);
-	atomic_inc(&sem->waiting);
-
-	/*
-	 * Ok, we're set up. The only race here is really that
-	 * an "up()" might have incremented count before we got
-	 * here, so we check "count+waiting". If that is larger
-	 * than zero, we shouldn't sleep, but re-try the lock.
-	 */
-	if (sem->count+sem->waiting <= 0) {
-		/*
-		 * If "count+waiting" <= 0, we have to wait
-		 * for a up(), which will normalize the count.
-		 * Remember, at this point we have decremented
-		 * count, and incremented up, so if count is
-		 * zero or positive we need to return to re-try
-		 * the lock.  It _may_ be that both count and
-		 * waiting is zero and that it is still locked,
-		 * but we still want to re-try the lock in that
-		 * case to make count go negative again so that
-		 * the optimized "up()" wake_up sequence works.
-		 */
-		do {
-			schedule();
-			tsk->state = TASK_UNINTERRUPTIBLE;
-		} while (sem->count < 0);
-	}
-	tsk->state = TASK_RUNNING;
-	remove_wait_queue(&sem->wait, &wait);
-	normalize_semaphore(sem);
+	__do_down(sem,TASK_UNINTERRUPTIBLE);
 }
+
+int __down_interruptible(struct semaphore * sem)
+{
+	return __do_down(sem,TASK_INTERRUPTIBLE);
+}
+
 
 static inline void __sleep_on(struct wait_queue **p, int state)
 {

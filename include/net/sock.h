@@ -466,7 +466,8 @@ struct sock
 	__u8			ip_mc_loop;		/* Loopback */
 	__u8			ip_recverr;
 	__u8			ip_pmtudisc;
-	char			ip_mc_name[MAX_ADDR_LEN];/* Multicast device name */
+	int			ip_mc_index;		/* Multicast device index */
+	__u32			ip_mc_addr;
 	struct ip_mc_socklist	*ip_mc_list;		/* Group array */
 
 /*
@@ -686,11 +687,23 @@ extern int			sock_setsockopt(struct socket *sock, int level,
 extern int			sock_getsockopt(struct socket *sock, int level,
 						int op, char *optval, 
 						int *optlen);
-extern struct sk_buff 		*sock_alloc_send_skb(struct sock *skb,
+extern struct sk_buff 		*sock_alloc_send_skb(struct sock *sk,
 						     unsigned long size,
 						     unsigned long fallback,
 						     int noblock,
 						     int *errcode);
+extern int 			sock_no_fcntl(struct socket *, unsigned int, unsigned long);
+
+/*
+ *	Default socket callbacks and setup code
+ */
+ 
+extern void sock_def_callback1(struct sock *);
+extern void sock_def_callback2(struct sock *, int);
+extern void sock_def_callback3(struct sock *);
+
+/* Initialise core socket variables */
+extern void sock_init_data(struct socket *sock, struct sock *sk);
 
 extern void sklist_remove_socket(struct sock **list, struct sock *sk);
 extern void sklist_insert_socket(struct sock **list, struct sock *sk);

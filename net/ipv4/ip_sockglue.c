@@ -40,11 +40,16 @@
  *	SOL_IP control messages.
  */
 
-static void ip_cmsg_recv_localdev(struct msghdr *msg, struct sk_buff *skb)
+static void ip_cmsg_recv_rxinfo(struct msghdr *msg, struct sk_buff *skb)
 {
-	static char empty_name[MAX_ADDR_LEN];
-	put_cmsg(msg, SOL_IP, IP_LOCALDEV, MAX_ADDR_LEN,
-		 skb->dev ? skb->dev->name : empty_name);
+	struct in_pktinfo info;
+	struct rtable *rt = (struct rtable *)skb->dst;
+
+	info.ipi_ifindex = skb->dev->ifindex;
+	info.ipi_addr.s_addr = skb->nh.iph->daddr;
+	info.ipi_spec_dst.s_addr = rt->rt_spec_dst;
+
+	put_cmsg(msg, SOL_IP, IP_RXINFO, sizeof(info), &info);
 }
 
 static void ip_cmsg_recv_localaddr(struct msghdr *msg, struct sk_buff *skb, int local)
@@ -94,20 +99,20 @@ void ip_cmsg_recv(struct msghdr *msg, struct sk_buff *skb)
 
 	/* Ordered by supposed usage frequency */
 	if (flags & 1)
-		ip_cmsg_recv_localaddr(msg, skb, 1);
-	if ((flags>>1) == 0)
+		ip_cmsg_recv_rxinfo(msg, skb);
+	if ((flags>>=1) == 0)
 		return;
 	if (flags & 1)
-		ip_cmsg_recv_localdev(msg, skb);
-	if ((flags>>1) == 0)
+		ip_cmsg_recv_localaddr(msg, skb, 1);
+	if ((flags>>=1) == 0)
 		return;
 	if (flags & 1)
 		ip_cmsg_recv_opts(msg, skb);
-	if ((flags>>1) == 0)
+	if ((flags>>=1) == 0)
 		return;
 	if (flags & 1)
 		ip_cmsg_recv_retopts(msg, skb);
-	if ((flags>>1) == 0)
+	if ((flags>>=1) == 0)
 		return;
 	if (flags & 1)
 		ip_cmsg_recv_localaddr(msg, skb, 0);
@@ -116,38 +121,38 @@ void ip_cmsg_recv(struct msghdr *msg, struct sk_buff *skb)
 int ip_cmsg_send(struct msghdr *msg, struct ipcm_cookie *ipc, struct device **devp)
 {
 	int err;
-	struct cmsghdr kcm, *cmsg;
-	char	devname[MAX_ADDR_LEN];
+	struct cmsghdr *cmsg;
 
-	for (cmsg = KCMSG_FIRSTHDR(msg); cmsg; cmsg = KCMSG_NXTHDR(msg, cmsg)) {
-		if (kcm.cmsg_level != SOL_IP)
+	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg)) {
+		if (cmsg->cmsg_level != SOL_IP)
 			continue;
-		switch (kcm.cmsg_type)
+		switch (cmsg->cmsg_type)
 		{
 		case IP_LOCALADDR:
-			if (kcm.cmsg_len < sizeof(struct in_addr)+sizeof(kcm))
+			if (cmsg->cmsg_len < sizeof(struct in_addr)+sizeof(*cmsg))
 				return -EINVAL;
-			if (copy_from_user(&ipc->addr, cmsg->cmsg_data, 4))
-				return -EFAULT;
+			memcpy(&ipc->addr, cmsg->cmsg_data, 4);
 			break;
 		case IP_RETOPTS:
-			err = kcm.cmsg_len - sizeof(kcm);
-			err = ip_options_getfromuser(&ipc->opt, cmsg->cmsg_data,
-						     err < 40 ? err : 40);
+			err = cmsg->cmsg_len - sizeof(*cmsg);
+			err = ip_options_get(&ipc->opt, cmsg->cmsg_data,
+					     err < 40 ? err : 40, 0);
 			if (err)
 				return err;
 			break;
-		case IP_LOCALDEV:
-			if (kcm.cmsg_len < MAX_ADDR_LEN+sizeof(kcm))
+		case IP_TXINFO:
+		{
+			struct in_pktinfo *info;
+			if (cmsg->cmsg_len < sizeof(*info)+sizeof(*cmsg))
 				return -EINVAL;
-			if (!devp)
+			info = (struct in_pktinfo*)cmsg->cmsg_data;
+			if (info->ipi_ifindex && !devp)
 				return -EINVAL;
-			if (copy_from_user(devname, cmsg->cmsg_data, MAX_ADDR_LEN-1))
-				return -EFAULT;
-			devname[MAX_ADDR_LEN-1] = 0;
-			if ((*devp = dev_get(devname)) == NULL)
+			if ((*devp = dev_get_by_index(info->ipi_ifindex)) == NULL)
 				return -ENODEV;
+			ipc->addr = info->ipi_spec_dst.s_addr;
 			break;
+		}
 		default:
 			return -EINVAL;
 		}
@@ -200,7 +205,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			  struct ip_options * old_opt;
 			  if (optlen > 40 || optlen < 0)
 			  	return -EINVAL;
-			  err = ip_options_getfromuser(&opt, optval, optlen);
+			  err = ip_options_get(&opt, optval, optlen, 1);
 			  if (err)
 			  	return err;
 			  /*
@@ -215,13 +220,13 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			  	kfree_s(old_opt, sizeof(struct optlen) + old_opt->optlen);
 			  return 0;
 		  }
-		case IP_LOCALADDR:
+		case IP_RXINFO:
 			if (val)
 				sk->ip_cmsg_flags |= 1;
 			else
 				sk->ip_cmsg_flags &= ~1;
 			return 0;
-		case IP_LOCALDEV:
+		case IP_LOCALADDR:
 			if (val)
 				sk->ip_cmsg_flags |= 2;
 			else
@@ -313,7 +318,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			
 			if (addr.s_addr==INADDR_ANY)	/* Default */
 			{
-				memset(sk->ip_mc_name, 0, sizeof(sk->ip_mc_name));
+				sk->ip_mc_index = 0;
 				return 0;
 			}
 			
@@ -329,8 +334,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			 
 			if(dev) 
 			{
-				memset(sk->ip_mc_name, 0, sizeof(sk->ip_mc_name));
-				strcpy(sk->ip_mc_name, dev->name);
+				sk->ip_mc_index = dev->ifindex;
 				return 0;
 			}
 			return -EADDRNOTAVAIL;
@@ -425,25 +429,28 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 
 		case IP_MULTICAST_IFN:
 		{
-			struct device *dev;
-			char *devname;
+			struct ip_mreqn mreq;
+			struct device *dev = NULL;
 			
-			err = getname(optval, &devname);
+			err = copy_from_user(&mreq,optval,sizeof(mreq));
 			if (err)
-				return err;
-			if (!devname[0])
-			{
-				memset(sk->ip_mc_name, 0, sizeof(sk->ip_mc_name));
-				putname(devname);
-				return 0;
-			}
-			dev = dev_get(devname);
-			putname(devname);
+				return -EFAULT;
+
+			if (!mreq.imr_ifindex) {
+				if (!mreq.imr_address.s_addr) {
+					sk->ip_mc_index = 0;
+					sk->ip_mc_addr  = 0;
+					return 0;
+				}
+				dev = ip_dev_find(mreq.imr_address.s_addr, NULL);
+			} else
+				dev = dev_get_by_index(mreq.imr_ifindex);
+
 			if (!dev)
 				return -ENODEV;
 
-			memset(sk->ip_mc_name, 0, sizeof(sk->ip_mc_name));
-			strcpy(sk->ip_mc_name,dev->name);
+			sk->ip_mc_index = mreq.imr_ifindex;
+			sk->ip_mc_addr  = mreq.imr_address.s_addr;
 			return 0;
 		}
 		case IP_ADD_MEMBERSHIPN:
@@ -451,14 +458,10 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			struct ip_mreqn mreq;
 			struct device *dev = NULL;
 			
-			/*
-			 *	Check the arguments.
-			 */
-
 			err = copy_from_user(&mreq,optval,sizeof(mreq));
 			if (err)
 				return -EFAULT; 
-			dev = dev_get(mreq.imr_interface);
+			dev = dev_get_by_index(mreq.imr_ifindex);
 			if (!dev)
 				return -ENODEV;
 			return ip_mc_join_group(sk,dev,mreq.imr_multiaddr.s_addr);
@@ -477,7 +480,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			if (err)
 				return -EFAULT; 
 
-			dev=dev_get(mreq.imr_interface);
+			dev=dev_get_by_index(mreq.imr_ifindex);
 			if(!dev)
 				return -ENODEV;
 			 
@@ -583,10 +586,10 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 				return err; 
 			}
 			return 0;
-		case IP_LOCALADDR:
+		case IP_RXINFO:
 			val = (sk->ip_cmsg_flags & 1) != 0;
 			return 0;
-		case IP_LOCALDEV:
+		case IP_LOCALADDR:
 			val = (sk->ip_cmsg_flags & 2) != 0;
 			return 0;
 		case IP_RECVOPTS:
@@ -619,17 +622,40 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 		case IP_MULTICAST_LOOP:
 			val=sk->ip_mc_loop;
 			break;
-		case IP_MULTICAST_IF:
 		case IP_MULTICAST_IFN:
-  			len=strlen(sk->ip_mc_name);
+		{
+			struct ip_mreqn mreq;
+			len = sizeof(struct ip_mreqn);
+  			err = put_user(len, optlen);
+			mreq.imr_ifindex = sk->ip_mc_index;
+			mreq.imr_address.s_addr = sk->ip_mc_addr;
+			mreq.imr_multiaddr.s_addr = 0;
+			if (!err) {
+				err = copy_to_user((void *)optval, &mreq, len);
+				if (err)
+					err = -EFAULT;
+			}
+			return err;
+		}
+		case IP_MULTICAST_IF:
+		{
+			struct device *dev = dev_get_by_index(sk->ip_mc_index);
+			if (dev == NULL) {
+				len = 0;
+				return put_user(len, optlen);
+			}
+			dev_lock_list();
+  			len = strlen(dev->name);
   			err = put_user(len, optlen);
 			if (!err)
 			{
-				err = copy_to_user((void *)optval,sk->ip_mc_name, len);
+				err = copy_to_user((void *)optval,dev->name, len);
 				if (err)
 				    err = -EFAULT;
 			}
+			dev_unlock_list();
 			return err;
+		}
 		default:
 			return(-ENOPROTOOPT);
 	}

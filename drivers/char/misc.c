@@ -175,7 +175,6 @@ void cleanup_module(void)
 
 #endif
 
-/* Should this be surrounded with "#ifdef CONFIG_MODULES" ? */
 EXPORT_SYMBOL(misc_register);
 EXPORT_SYMBOL(misc_deregister);
 #ifndef MODULE
@@ -219,14 +218,20 @@ int misc_init(void)
 #ifdef CONFIG_SUN_MOUSE
 	sun_mouse_init();
 #endif
-#ifdef CONFIG_SOFT_WATCHDOG
-	watchdog_init();
+/*
+ *	Only one watchdog can succeed. We probe the pcwatchdog first,
+ *	then the wdt cards and finally the software watchdog which always
+ *	works. This means if your hardware watchdog dies or is 'borrowed'
+ *	for some reason the software watchdog still gives you some cover.
+ */
+#ifdef CONFIG_PCWATCHDOG
+	pcwatchdog_init();
 #endif
 #ifdef CONFIG_WDT
 	wdt_init();
 #endif
-#ifdef CONFIG_PCWATCHDOG
-	pcwatchdog_init();
+#ifdef CONFIG_SOFT_WATCHDOG
+	watchdog_init();
 #endif
 #ifdef CONFIG_APM
 	apm_bios_init();

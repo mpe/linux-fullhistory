@@ -74,7 +74,10 @@ int ultramca_probe(struct device *dev)
 	unsigned char pos2, pos3, pos4, pos5;
 	int i;
 
-	if( (slot=mca_find_adapter(0x61c8,0)) != MCA_NOTFOUND)
+	/* Look for two flavors of SMC Elite/A (3013EP/A) -jeh- */
+	if(( (slot=mca_find_adapter(0x61c8,0)) != MCA_NOTFOUND) ||
+            ((slot=mca_find_adapter(0xefd5,0)) != MCA_NOTFOUND) )
+
 	{
 #ifndef MODULE
 		mca_set_adapter_name( slot, "SMC Elite/A (8013EP/A)" );

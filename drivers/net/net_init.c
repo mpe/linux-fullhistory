@@ -38,9 +38,7 @@
 #include <linux/trdevice.h>
 #include <linux/if_arp.h>
 #include <linux/fddidevice.h>
-#ifdef CONFIG_NET_ALIAS
 #include <linux/net_alias.h>
-#endif
 
 /* The network devices currently exist only in the socket namespace, so these
    entries are unused.  The only ones that make sense are
@@ -304,6 +302,7 @@ int register_netdev(struct device *dev)
 		else
 			dev_base = dev;
 		dev->next = NULL;
+		dev->ifindex = dev_new_index();
 	}
 	restore_flags(flags);
 	return 0;

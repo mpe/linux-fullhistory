@@ -224,7 +224,7 @@ kdev_t real_root_dev;
 #endif
 
 int root_mountflags = MS_RDONLY;
-char *execute_command = 0;
+char *execute_command = NULL;
 
 #ifdef CONFIG_ROOT_NFS
 char nfs_root_name[NFS_ROOT_NAME_LEN] = { "default" };
@@ -960,7 +960,7 @@ static int init(void * unused)
 	smp_begin();
 #endif	
 
-	#ifdef CONFIG_UMSDOS_FS
+#ifdef CONFIG_UMSDOS_FS
 	{
 		/*
 			When mounting a umsdos fs as root, we detect
@@ -973,13 +973,14 @@ static int init(void * unused)
 			current->fs->pwd  = pseudo_root;
 		}
 	}
-	#endif
+#endif
 
 #ifdef CONFIG_BLK_DEV_INITRD
 	root_mountflags = real_root_mountflags;
 	if (mount_initrd && ROOT_DEV != real_root_dev && ROOT_DEV == MKDEV(RAMDISK_MAJOR,0)) {
 		int error;
-
+		int pid,i;
+		
 		pid = kernel_thread(do_linuxrc, "/linuxrc", SIGCHLD);
 		if (pid>0)
 			while (pid != wait(&i));
@@ -1012,10 +1013,11 @@ static int init(void * unused)
 	 * trying to recover a really broken machine.
 	 */
 
-	execve(execute_command,argv_init,envp_init);
+	if (execute_command)
+		execve(execute_command,argv_init,envp_init);
+	execve("/sbin/init",argv_init,envp_init);
 	execve("/etc/init",argv_init,envp_init);
 	execve("/bin/init",argv_init,envp_init);
-	execve("/sbin/init",argv_init,envp_init);
 	execve("/bin/sh",argv_init,envp_init);
 	panic("No init found.  Try passing init= option to kernel.");
 }

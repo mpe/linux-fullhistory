@@ -429,28 +429,6 @@ void destroy_sock(struct sock *sk)
  *	the work.
  */
  
-int inet_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
-{
-	struct sock *sk = sock->sk;
-
-	switch(cmd)
-	{
-		case F_SETOWN:
-			/*
-			 * This is a little restrictive, but it's the only
-			 * way to make sure that you can't send a sigurg to
-			 * another process.
-			 */
-			if (!suser() && current->pgrp != -arg &&
-				current->pid != arg) return(-EPERM);
-			sk->proc = arg;
-			return(0);
-		case F_GETOWN:
-			return(sk->proc);
-		default:
-			return(-EINVAL);
-	}
-}
 
 /*
  *	Set socket options on an inet socket.
@@ -536,36 +514,6 @@ int inet_listen(struct socket *sock, int backlog)
 	sk->socket->flags |= SO_ACCEPTCON;
 	return(0);
 }
-
-/*
- *	Default callbacks for user INET sockets. These just wake up
- *	the user owning the socket.
- */
-
-static void def_callback1(struct sock *sk)
-{
-	if(!sk->dead)
-		wake_up_interruptible(sk->sleep);
-}
-
-static void def_callback2(struct sock *sk,int len)
-{
-	if(!sk->dead)
-	{
-		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket, 1);
-	}
-}
-
-static void def_callback3(struct sock *sk)
-{
-	if(!sk->dead && sk->wmem_alloc*2 <= sk->sndbuf)
-	{
-		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket, 2);
-	}
-}
-
 
 /*
  *	Create an inet socket.
@@ -660,38 +608,18 @@ static int inet_create(struct socket *sock, int protocol)
 			sk_free(sk);
 			return(-ESOCKTNOSUPPORT);
 	}
-	sk->type = sock->type;
-	sk->socket = sock;
-	sk->sleep = &sock->wait;
 
-	sk->peercred.pid = 0;
-	sk->peercred.uid = -1;
-	sk->peercred.gid = -1;
-
-	sock->sk = sk;
+	sock_init_data(sock,sk);
+	
+	sk->zapped=0;
 #ifdef CONFIG_TCP_NAGLE_OFF
 	sk->nonagle = 1;
 #endif  
 	sk->family = AF_INET;
 	sk->protocol = protocol;
-	sk->allocation = GFP_KERNEL;
-	sk->sndbuf = SK_WMEM_MAX;
-	sk->rcvbuf = SK_RMEM_MAX;
-	sk->priority = SOPRI_NORMAL;
 
 	sk->prot = prot;
 	sk->backlog_rcv = prot->backlog_rcv;
-
-	sk->sleep = &sock->wait;
-	sock->sk = sk;
-
-	sk->state = TCP_CLOSE;
-
-	skb_queue_head_init(&sk->write_queue);
-	skb_queue_head_init(&sk->receive_queue);
-	skb_queue_head_init(&sk->error_queue);
-	skb_queue_head_init(&sk->back_log);
-
 
 	sk->timer.data = (unsigned long)sk;
 	sk->timer.function = &net_timer;
@@ -705,26 +633,22 @@ static int inet_create(struct socket *sock, int protocol)
 
 	sk->ip_mc_loop=1;
 	sk->ip_mc_ttl=1;
-	*sk->ip_mc_name=0;
+	sk->ip_mc_index=0;
 	sk->ip_mc_list=NULL;
+	
 	/*
 	 *	Speed up by setting some standard state for the dummy_th
 	 *	if TCP uses it (maybe move to tcp_init later)
 	 */
   	
-	sk->state_change = def_callback1;
-	sk->data_ready = def_callback2;
-	sk->write_space = def_callback3;
-	sk->error_report = def_callback1;
-
 	if (sk->num) 
 	{
-	/*
-	 * It assumes that any protocol which allows
-	 * the user to assign a number at socket
-	 * creation time automatically
-	 * shares.
-	 */
+		/*
+		 * It assumes that any protocol which allows
+		 * the user to assign a number at socket
+		 * creation time automatically
+		 * shares.
+		 */
 		inet_put_sock(sk->num, sk);
 		sk->dummy_th.source = ntohs(sk->num);
 	}
@@ -1296,7 +1220,6 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 			err = get_user(pid, (int *) arg);
 			if (err)
 				return err; 
-			/* see inet_fcntl */
 			if (current->pid != pid && current->pgrp != -pid && !suser())
 				return -EPERM;
 			sk->proc = pid;
@@ -1359,6 +1282,7 @@ static int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		case SIOCGIFMAP:
 		case SIOCSIFSLAVE:
 		case SIOCGIFSLAVE:
+		case SIOGIFINDEX:
 			return(dev_ioctl(cmd,(void *) arg));
 
 		case SIOCGIFBR:
@@ -1671,7 +1595,7 @@ struct proto_ops inet_stream_ops = {
 	inet_shutdown,
 	inet_setsockopt,
 	inet_getsockopt,
-	inet_fcntl,
+	sock_no_fcntl,
 	inet_sendmsg,
 	inet_recvmsg
 };
@@ -1692,7 +1616,7 @@ struct proto_ops inet_dgram_ops = {
 	inet_shutdown,
 	inet_setsockopt,
 	inet_getsockopt,
-	inet_fcntl,
+	sock_no_fcntl,
 	inet_sendmsg,
 	inet_recvmsg
 };

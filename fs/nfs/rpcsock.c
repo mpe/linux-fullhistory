@@ -361,6 +361,9 @@ rpc_grok(struct rpc_sock *rsock)
 	if (result < 4) {
 		printk(KERN_WARNING "RPC: impossible RPC reply size %d\n",
 						result);
+		iov[0].iov_base=(void*)&xid;	/* xid=32bits, which is large enough */
+		iov[0].iov_len=result;
+		rpc_recvmsg(rsock, iov, 1, result, 0);
 		return 0;
 	}
 

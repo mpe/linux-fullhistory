@@ -701,3 +701,95 @@ void sklist_destroy_socket(struct sock **list,struct sock *sk)
 	}
 }
 
+/*
+ *	Support routines for general vectors
+ */
+
+/*
+ *	Socket with no special fcntl calls.
+ */ 
+ 
+int sock_no_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
+{
+	struct sock *sk = sock->sk;
+
+	switch(cmd)
+	{
+		case F_SETOWN:
+			/*
+			 * This is a little restrictive, but it's the only
+			 * way to make sure that you can't send a sigurg to
+			 * another process.
+			 */
+			if (!suser() && current->pgrp != -arg &&
+				current->pid != arg) return(-EPERM);
+			sk->proc = arg;
+			return(0);
+		case F_GETOWN:
+			return(sk->proc);
+		default:
+			return(-EINVAL);
+	}
+}
+
+/*
+ *	Default Socket Callbacks
+ */
+
+void sock_def_callback1(struct sock *sk)
+{
+	if(!sk->dead)
+		wake_up_interruptible(sk->sleep);
+}
+
+void sock_def_callback2(struct sock *sk, int len)
+{
+	if(!sk->dead)
+	{
+		wake_up_interruptible(sk->sleep);
+		sock_wake_async(sk->socket,1);
+	}
+}
+
+void sock_def_callback3(struct sock *sk)
+{
+	if(!sk->dead)
+	{
+		wake_up_interruptible(sk->sleep);
+		sock_wake_async(sk->socket, 2);
+	}
+}
+
+void sock_init_data(struct socket *sock, struct sock *sk)
+{
+	skb_queue_head_init(&sk->receive_queue);
+	skb_queue_head_init(&sk->write_queue);
+	skb_queue_head_init(&sk->back_log);
+	skb_queue_head_init(&sk->error_queue);
+	
+	init_timer(&sk->timer);
+	
+	sk->allocation	=	GFP_KERNEL;
+	sk->rcvbuf	=	SK_RMEM_MAX;
+	sk->sndbuf	=	SK_WMEM_MAX;
+	sk->priority	=	SOPRI_NORMAL;
+	sk->state 	= 	TCP_CLOSE;
+	sk->zapped	=	1;
+	sk->socket	=	sock;
+	if(sock)
+	{
+		sk->type	=	sock->type;
+		sk->sleep	=	&sock->wait;
+		sock->sk	=	sk;
+	}
+
+	sk->state_change	=	sock_def_callback1;
+	sk->data_ready		=	sock_def_callback2;
+	sk->write_space		=	sock_def_callback3;
+	sk->error_report	=	sock_def_callback1;
+
+	sk->peercred.pid 	=	0;
+	sk->peercred.uid	=	-1;
+	sk->peercred.gid	=	-1;
+
+}

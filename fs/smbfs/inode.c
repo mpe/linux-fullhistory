@@ -444,8 +444,6 @@ EXPORT_NO_SYMBOLS;
 int
 init_module(void)
 {
-	int status;
-
 	DPRINTK("smbfs: init_module called\n");
 
 #ifdef DEBUG_SMB_MALLOC

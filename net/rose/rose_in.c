@@ -56,7 +56,7 @@ static int rose_queue_rx_frame(struct sock *sk, struct sk_buff *skb, int more)
 		skb_queue_tail(&sk->protinfo.rose->frag_queue, skb);
 		return 0;
 	}
-	
+
 	if (!more && sk->protinfo.rose->fraglen > 0) {	/* End of fragment */
 		sk->protinfo.rose->fraglen += skb->len;
 		skb_queue_tail(&sk->protinfo.rose->frag_queue, skb);
@@ -190,9 +190,9 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 		case ROSE_RR:
 		case ROSE_RNR:
 			if (frametype == ROSE_RNR) {
-				sk->protinfo.rose->condition |= PEER_RX_BUSY_CONDITION;
+				sk->protinfo.rose->condition |= ROSE_COND_PEER_RX_BUSY;
 			} else {
-				sk->protinfo.rose->condition &= ~PEER_RX_BUSY_CONDITION;
+				sk->protinfo.rose->condition &= ~ROSE_COND_PEER_RX_BUSY;
 			}
 			if (!rose_validate_nr(sk, nr)) {
 				rose_clear_queues(sk);
@@ -205,16 +205,16 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 				sk->protinfo.rose->state     = ROSE_STATE_4;
 				sk->protinfo.rose->timer     = sk->protinfo.rose->t2;
 			} else {
-				if (sk->protinfo.rose->condition & PEER_RX_BUSY_CONDITION) {
-					rose_frames_acked(sk, nr);
+				if (sk->protinfo.rose->condition & ROSE_COND_PEER_RX_BUSY) {
+					sk->protinfo.rose->va = nr;
 				} else {
 					rose_check_iframes_acked(sk, nr);
 				}
 			}
 			break;
-			
+
 		case ROSE_DATA:	/* XXX */
-			sk->protinfo.rose->condition &= ~PEER_RX_BUSY_CONDITION;
+			sk->protinfo.rose->condition &= ~ROSE_COND_PEER_RX_BUSY;
 			if (!rose_validate_nr(sk, nr)) {
 				rose_clear_queues(sk);
 				rose_write_internal(sk, ROSE_RESET_REQUEST);
@@ -227,19 +227,19 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 				sk->protinfo.rose->timer     = sk->protinfo.rose->t2;
 				break;
 			}
-			if (sk->protinfo.rose->condition & PEER_RX_BUSY_CONDITION) {
-				rose_frames_acked(sk, nr);
+			if (sk->protinfo.rose->condition & ROSE_COND_PEER_RX_BUSY) {
+				sk->protinfo.rose->va = nr;
 			} else {
 				rose_check_iframes_acked(sk, nr);
 			}
-			if (sk->protinfo.rose->condition & OWN_RX_BUSY_CONDITION)
+			if (sk->protinfo.rose->condition & ROSE_COND_OWN_RX_BUSY)
 				break;
 			if (ns == sk->protinfo.rose->vr) {
 				if (rose_queue_rx_frame(sk, skb, m) == 0) {
 					sk->protinfo.rose->vr = (sk->protinfo.rose->vr + 1) % ROSE_MODULUS;
 					queued = 1;
 				} else {
-					sk->protinfo.rose->condition |= OWN_RX_BUSY_CONDITION;
+					sk->protinfo.rose->condition |= ROSE_COND_OWN_RX_BUSY;
 				}
 			}
 			/*
@@ -247,11 +247,11 @@ static int rose_state3_machine(struct sock *sk, struct sk_buff *skb, int framety
 			 * acknowledge hold back timer.
 			 */
 			if (((sk->protinfo.rose->vl + ROSE_DEFAULT_WINDOW) % ROSE_MODULUS) == sk->protinfo.rose->vr) {
-				sk->protinfo.rose->condition &= ~ACK_PENDING_CONDITION;
+				sk->protinfo.rose->condition &= ~ROSE_COND_ACK_PENDING;
 				sk->protinfo.rose->timer      = 0;
 				rose_enquiry_response(sk);
 			} else {
-				sk->protinfo.rose->condition |= ACK_PENDING_CONDITION;
+				sk->protinfo.rose->condition |= ROSE_COND_ACK_PENDING;
 				sk->protinfo.rose->timer      = sk->protinfo.rose->hb;
 			}
 			break;
@@ -309,7 +309,7 @@ static int rose_state4_machine(struct sock *sk, struct sk_buff *skb, int framety
 int rose_process_rx_frame(struct sock *sk, struct sk_buff *skb)
 {
 	int queued = 0, frametype, ns, nr, q, d, m;
-	
+
 	if (sk->protinfo.rose->state == ROSE_STATE_0)
 		return 0;
 

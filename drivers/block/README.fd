@@ -49,14 +49,9 @@ isn't, use the old method using environment variables.
 
  The floppy related options include:
 
- floppy=<mask>,allowed_drive_mask         
-	Obsolete. Use the floppy=<drive>,<type>,cmos option instead
-
- floppy=all_drives
-	Obsolete. Use the floppy=<drive>,<type>,cmos option instead
-
  floppy=asus_pci
-	Sets the bit mask to allow only units 0 and 1. (The default)
+	Sets the bit mask to allow only units 0 and 1. Obsolete, as
+	this is the default setting anyways	
 
  floppy=daring
 	Tells the floppy driver that you have a well behaved floppy controller.
@@ -161,6 +156,28 @@ floppy=fifo
 	to be an interaction between video and floppy. The unexpected interrupts
 	only affect performance, and can safely be ignored.)
 
+ floppy=broken_dcl
+	Don't use the disk change line, but assume that the disk was
+	changed whenever the device node is reopened. Needed on some
+	boxes where the disk change line is broken or unsupported.
+	This should be regarded as a stopgap measure, indeed it makes
+	floppy operation less efficient due to unneeded cache
+	flushings, and slightly more unreliable. Please verify your
+	cable, connection and jumper settings if you have any DCL
+	problems. However, some older drives, and also some Laptops
+	are known not to have a DCL.
+
+ floppy=debug
+	Print debugging messages
+
+ floppy=messages
+	Print informational messages for some operations (disk change
+	notifications, warnings about over and underruns, and about
+	autodetection)
+
+ floppy=silent_dcl_clear
+	Uses a less noisy way to clear the disk change line (which
+	doesn't involve seeks). Implied by daring.
 
 Supporting utilities and additional documentation:
 ==================================================

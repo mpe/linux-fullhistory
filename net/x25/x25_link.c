@@ -51,7 +51,7 @@ static void x25_link_timer(unsigned long);
 static void x25_link_set_timer(struct x25_neigh *neigh)
 {
 	unsigned long flags;
-	
+
 	save_flags(flags);
 	cli();
 	del_timer(&neigh->timer);
@@ -68,7 +68,7 @@ static void x25_link_set_timer(struct x25_neigh *neigh)
 static void x25_link_reset_timer(struct x25_neigh *neigh)
 {
 	unsigned long flags;
-	
+
 	save_flags(flags);
 	cli();
 	del_timer(&neigh->timer);
@@ -278,6 +278,9 @@ void x25_transmit_link(struct sk_buff *skb, struct x25_neigh *neigh)
 	}
 }
 
+/*
+ *	Called when the link layer has become established.
+ */
 void x25_link_established(struct x25_neigh *neigh)
 {
 	switch (neigh->state) {
@@ -293,6 +296,10 @@ void x25_link_established(struct x25_neigh *neigh)
 	}
 }
 
+/*
+ *	Called when the link layer has terminated, or an establishment
+ *	request has failed. XXX should tell sockets.
+ */
 void x25_link_terminated(struct x25_neigh *neigh)
 {
 	neigh->state = X25_LINK_STATE_0;
@@ -332,7 +339,7 @@ static void x25_remove_neigh(struct x25_neigh *x25_neigh)
 
 	while ((skb = skb_dequeue(&x25_neigh->queue)) != NULL)
 		kfree_skb(skb, FREE_WRITE);
-	
+
 	del_timer(&x25_neigh->timer);
 
 	save_flags(flags);
@@ -369,7 +376,7 @@ void x25_link_device_down(struct device *dev)
 	while (x25_neigh != NULL) {
 		neigh     = x25_neigh;
 		x25_neigh = x25_neigh->next;
-		
+
 		if (neigh->dev == dev)
 			x25_remove_neigh(neigh);
 	}
@@ -401,7 +408,18 @@ int x25_subscr_ioctl(unsigned int cmd, void *arg)
 
 	switch (cmd) {
 
-		case SIOCX25SETSUBSCR:
+		case SIOCX25GSUBSCRIP:
+			if ((err = verify_area(VERIFY_WRITE, arg, sizeof(struct x25_subscrip_struct))) != 0)
+				return err;
+			if ((dev = x25_dev_get(x25_subscr.device)) == NULL)
+				return -EINVAL;
+			if ((x25_neigh = x25_get_neigh(dev)) == NULL)
+				return -EINVAL;
+			x25_subscr.extended = x25_neigh->extended;
+			copy_to_user(arg, &x25_subscr, sizeof(struct x25_subscrip_struct));
+			break;
+
+		case SIOCX25SSUBSCRIP:
 			if ((err = verify_area(VERIFY_READ, arg, sizeof(struct x25_subscrip_struct))) != 0)
 				return err;
 			copy_from_user(&x25_subscr, arg, sizeof(struct x25_subscrip_struct));
@@ -446,7 +464,7 @@ int x25_link_get_info(char *buffer, char **start, off_t offset, int length, int 
 			len   = 0;
 			begin = pos;
 		}
-		
+
 		if (pos > offset + length)
 			break;
 	}
@@ -473,7 +491,7 @@ void x25_link_free(void)
 	while (x25_neigh != NULL) {
 		neigh     = x25_neigh;
 		x25_neigh = x25_neigh->next;
-		
+
 		x25_remove_neigh(neigh);
 	}
 }

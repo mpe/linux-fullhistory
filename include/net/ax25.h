@@ -8,45 +8,43 @@
 #define _AX25_H 
 #include <linux/ax25.h>
 
-#define PR_SLOWHZ	10		/*  Run timing at 1/10 second - gives us better resolution for 56kbit links */
+#define AX25_SLOWHZ			10	/* Run timing at 1/10 second - gives us better resolution for 56kbit links */
 
-#define	AX25_T1CLAMPLO  (1 * PR_SLOWHZ)	/* If defined, clamp at 1 second **/
-#define	AX25_T1CLAMPHI (30 * PR_SLOWHZ)	/* If defined, clamp at 30 seconds **/
+#define	AX25_T1CLAMPLO  		(1 * AX25_SLOWHZ)	/* If defined, clamp at 1 second **/
+#define	AX25_T1CLAMPHI 			(30 * AX25_SLOWHZ)	/* If defined, clamp at 30 seconds **/
 
-#define	AX25_BROKEN_NETMAC
+#define	AX25_BPQ_HEADER_LEN		16
+#define	AX25_KISS_HEADER_LEN		1
 
-#define	AX25_BPQ_HEADER_LEN	16
-#define	AX25_KISS_HEADER_LEN	1
+#define	AX25_HEADER_LEN			17
+#define	AX25_ADDR_LEN			7
+#define	AX25_DIGI_HEADER_LEN		(AX25_MAX_DIGIS * AX25_ADDR_LEN)
+#define	AX25_MAX_HEADER_LEN		(AX25_HEADER_LEN + AX25_DIGI_HEADER_LEN)
 
-#define	AX25_HEADER_LEN		17
-#define	AX25_ADDR_LEN		7
-#define	AX25_DIGI_HEADER_LEN	(AX25_MAX_DIGIS * AX25_ADDR_LEN)
-#define	AX25_MAX_HEADER_LEN	(AX25_HEADER_LEN + AX25_DIGI_HEADER_LEN)
- 
-#define AX25_P_ROSE	0x01
-#define AX25_P_IP	0xCC
-#define AX25_P_ARP	0xCD
-#define AX25_P_TEXT 	0xF0
-#define AX25_P_NETROM 	0xCF
-#define	AX25_P_SEGMENT	0x08
+/* AX.25 Protocol IDs */
+#define AX25_P_ROSE			0x01
+#define AX25_P_IP			0xCC
+#define AX25_P_ARP			0xCD
+#define AX25_P_TEXT 			0xF0
+#define AX25_P_NETROM 			0xCF
+#define	AX25_P_SEGMENT			0x08
 
-#define	SEG_REM		0x7F
-#define	SEG_FIRST	0x80
+/* AX.25 Segment control values */
+#define	AX25_SEG_REM			0x7F
+#define	AX25_SEG_FIRST			0x80
 
-#define LAPB_UI		0x03
-#define LAPB_C		0x80
-#define LAPB_E		0x01
+#define AX25_CBIT			0x80	/* Command/Response bit */
+#define AX25_EBIT			0x01	/* HDLC Address Extension bit */
+#define AX25_HBIT			0x80	/* Has been repeated bit */
 
-#define SSSID_SPARE	0x60	/* Unused bits in SSID for standard AX.25 */
-#define ESSID_SPARE	0x20	/* Unused bits in SSID for extended AX.25 */
-#define DAMA_FLAG	0x20	/* Well, it is *NOT* unused! (dl1bke 951121 */
+#define AX25_SSSID_SPARE		0x60	/* Unused bits in SSID for standard AX.25 */
+#define AX25_ESSID_SPARE		0x20	/* Unused bits in SSID for extended AX.25 */
+#define AX25_DAMA_FLAG			0x20	/* Well, it is *NOT* unused! (dl1bke 951121 */
 
-#define AX25_REPEATED	0x80
-
-#define	ACK_PENDING_CONDITION		0x01
-#define	REJECT_CONDITION		0x02
-#define	PEER_RX_BUSY_CONDITION		0x04
-#define	OWN_RX_BUSY_CONDITION		0x08
+#define	AX25_COND_ACK_PENDING		0x01
+#define	AX25_COND_REJECT		0x02
+#define	AX25_COND_PEER_RX_BUSY		0x04
+#define	AX25_COND_OWN_RX_BUSY		0x08
 
 #ifndef _LINUX_NETDEVICE_H
 #include <linux/netdevice.h>
@@ -76,44 +74,43 @@
 /* Upper sub-layer (LAPB) definitions */
 
 /* Control field templates */
-#define	I	0x00	/* Information frames */
-#define	S	0x01	/* Supervisory frames */
-#define	RR	0x01	/* Receiver ready */
-#define	RNR	0x05	/* Receiver not ready */
-#define	REJ	0x09	/* Reject */
-#define	U	0x03	/* Unnumbered frames */
-#define	SABM	0x2f	/* Set Asynchronous Balanced Mode */
-#define	SABME	0x6f	/* Set Asynchronous Balanced Mode Extended */
-#define	DISC	0x43	/* Disconnect */
-#define	DM	0x0f	/* Disconnected mode */
-#define	UA	0x63	/* Unnumbered acknowledge */
-#define	FRMR	0x87	/* Frame reject */
-#define	UI	0x03	/* Unnumbered information */
-#define	PF	0x10	/* Poll/final bit for standard AX.25 */
-#define	EPF	0x01	/* Poll/final bit for extended AX.25 */
+#define	AX25_I			0x00	/* Information frames */
+#define	AX25_S			0x01	/* Supervisory frames */
+#define	AX25_RR			0x01	/* Receiver ready */
+#define	AX25_RNR		0x05	/* Receiver not ready */
+#define	AX25_REJ		0x09	/* Reject */
+#define	AX25_U			0x03	/* Unnumbered frames */
+#define	AX25_SABM		0x2f	/* Set Asynchronous Balanced Mode */
+#define	AX25_SABME		0x6f	/* Set Asynchronous Balanced Mode Extended */
+#define	AX25_DISC		0x43	/* Disconnect */
+#define	AX25_DM			0x0f	/* Disconnected mode */
+#define	AX25_UA			0x63	/* Unnumbered acknowledge */
+#define	AX25_FRMR		0x87	/* Frame reject */
+#define	AX25_UI			0x03	/* Unnumbered information */
 
-#define ILLEGAL	0x100	/* Impossible to be a real frame type */
+#define	AX25_PF			0x10	/* Poll/final bit for standard AX.25 */
+#define	AX25_EPF		0x01	/* Poll/final bit for extended AX.25 */
 
-#define	POLLOFF		0
-#define	POLLON		1
+#define AX25_ILLEGAL		0x100	/* Impossible to be a real frame type */
+
+#define	AX25_POLLOFF		0
+#define	AX25_POLLON		1
 
 /* AX25 L2 C-bit */
-
-#define C_COMMAND	1	/* C_ otherwise it clashes with the de600 defines (sigh)) */
-#define C_RESPONSE	2
+#define AX25_COMMAND		1
+#define AX25_RESPONSE		2
 
 /* Define Link State constants. */
-
-#define AX25_STATE_0	0
-#define AX25_STATE_1	1
-#define AX25_STATE_2	2
-#define AX25_STATE_3	3
-#define AX25_STATE_4	4
+#define AX25_STATE_0		0
+#define AX25_STATE_1		1
+#define AX25_STATE_2		2
+#define AX25_STATE_3		3
+#define AX25_STATE_4		4
 
 #define	AX25_MAX_DEVICES	20	/* Max No of AX.25 devices */
 
-#define MODULUS 		8	/*  Standard AX.25 modulus */
-#define	EMODULUS		128	/*  Extended AX.25 modulus */
+#define AX25_MODULUS 		8	/*  Standard AX.25 modulus */
+#define	AX25_EMODULUS		128	/*  Extended AX.25 modulus */
 
 #define	AX25_DIGI_INBAND	0x01	/* Allow digipeating within port **/
 #define	AX25_DIGI_XBAND		0x02	/* Allow digipeating across ports **/
@@ -142,11 +139,11 @@
 #define	AX25_DEF_CONMODE	1			/* Connected mode allowed */
 #define	AX25_DEF_WINDOW		2			/* Window=2 */
 #define	AX25_DEF_EWINDOW	32			/* Module-128 Window=32 */
-#define	AX25_DEF_T1		(10 * PR_SLOWHZ)	/* T1=10s */
-#define	AX25_DEF_T2		(3 * PR_SLOWHZ)		/* T2=3s  */
-#define	AX25_DEF_T3		(300 * PR_SLOWHZ)	/* T3=300s */
+#define	AX25_DEF_T1		(10 * AX25_SLOWHZ)	/* T1=10s */
+#define	AX25_DEF_T2		(3 * AX25_SLOWHZ)	/* T2=3s  */
+#define	AX25_DEF_T3		(300 * AX25_SLOWHZ)	/* T3=300s */
 #define	AX25_DEF_N2		10			/* N2=10 */
-#define AX25_DEF_IDLE		(20 * 60 * PR_SLOWHZ)	/* Idle=20 mins */		
+#define AX25_DEF_IDLE		(20 * 60 * AX25_SLOWHZ)	/* Idle=20 mins */		
 #define AX25_DEF_PACLEN		256			/* Paclen=256 */
 #define AX25_DEF_MAXQUEUE	2			/* 1 * ax25->window */
 #define	AX25_DEF_DIGI		0x03			/* All digis alowed */
@@ -168,7 +165,7 @@ typedef struct ax25_cb {
 	struct ax25_cb		*next;
 	ax25_address		source_addr, dest_addr;
 	struct device		*device;
-	unsigned char		dama_slave;	/* dl1bke 951121 */
+	unsigned char		dama_slave, iamdigi;
 	unsigned char		state, modulus, hdrincl;
 	unsigned short		vs, vr, va;
 	unsigned char		condition, backoff;
@@ -191,6 +188,7 @@ typedef struct ax25_cb {
 struct ax25_dev {
 	char name[20];
 	struct device *dev;
+	struct device *forward;
 	int values[AX25_MAX_VALUES];
 };
 
@@ -245,6 +243,8 @@ extern char ax25_ip_mode_get(ax25_address *, struct device *);
 extern int  ax25_dev_get_value(struct device *, int);
 extern void ax25_dev_device_up(struct device *);
 extern void ax25_dev_device_down(struct device *);
+extern int  ax25_fwd_ioctl(unsigned int, struct ax25_fwd_struct *);
+extern struct device *ax25_fwd_dev(struct device *);
 extern void ax25_rt_free(void);
 
 /* ax25_subr.c */
@@ -289,5 +289,6 @@ extern int  ax25_linkfail_register(void (*)(ax25_address *, struct device *));
 extern void ax25_linkfail_release(void (*)(ax25_address *, struct device *));
 extern int  ax25_listen_register(ax25_address *, struct device *);
 extern void ax25_listen_release(ax25_address *, struct device *);
+extern int  ax25_protocol_is_registered(unsigned int);
 
 #endif

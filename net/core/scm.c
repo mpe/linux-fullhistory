@@ -8,6 +8,7 @@
  *		2 of the License, or (at your option) any later version.
  */
 
+#include <linux/config.h>
 #include <linux/signal.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
@@ -59,7 +60,7 @@ static int scm_fp_copy(struct cmsghdr *cmsg, struct scm_fp_list **fplp)
 {
 	int num;
 	struct scm_fp_list *fpl = *fplp;
-	struct file **fpp = &fpl->fp[fpl->count];
+	struct file **fpp;
 	int *fdp = (int*)cmsg->cmsg_data;
 	int i;
 
@@ -79,6 +80,7 @@ static int scm_fp_copy(struct cmsghdr *cmsg, struct scm_fp_list **fplp)
 		*fplp = fpl;
 		fpl->count = 0;
 	}
+	fpp = &fpl->fp[fpl->count];
 
 	if (fpl->count + num > SCM_MAX_FD)
 		return -EINVAL;
@@ -92,7 +94,6 @@ static int scm_fp_copy(struct cmsghdr *cmsg, struct scm_fp_list **fplp)
 		int fd;
 		
 		fd = fdp[i];
-
 		if (fd < 0 || fd >= NR_OPEN)
 			return -EBADF;
 		if (current->files->fd[fd]==NULL)
@@ -133,27 +134,19 @@ extern __inline__ int not_one_bit(unsigned val)
 int __scm_send(struct socket *sock, struct msghdr *msg, struct scm_cookie *p)
 {
 	int err;
-	struct cmsghdr kcm, *cmsg;
+	struct cmsghdr *cmsg;
 	struct file *file;
 	int acc_fd;
 	unsigned scm_flags=0;
 
-	for (cmsg = KCMSG_FIRSTHDR(msg); cmsg; cmsg = KCMSG_NXTHDR(msg, cmsg)) 
+	for (cmsg = CMSG_FIRSTHDR(msg); cmsg; cmsg = CMSG_NXTHDR(msg, cmsg))
 	{
-		if (kcm.cmsg_level != SOL_SOCKET)
+		if (cmsg->cmsg_level != SOL_SOCKET)
 			continue;
 
 		err = -EINVAL;
 
-		/*
-		 *	Temporary hack: no protocols except for AF_UNIX
-		 *	undestand scm now.
-		 */
-
-		if (sock->ops->family != AF_UNIX)
-			goto error;
-
-		switch (kcm.cmsg_type)
+		switch (cmsg->cmsg_type)
 		{
 		case SCM_RIGHTS:
 			err=scm_fp_copy(cmsg, &p->fp);
@@ -161,7 +154,7 @@ int __scm_send(struct socket *sock, struct msghdr *msg, struct scm_cookie *p)
 				goto error;
 			break;
 		case SCM_CREDENTIALS:
-			if (kcm.cmsg_len < sizeof(kcm) + sizeof(struct ucred))
+			if (cmsg->cmsg_len < sizeof(*cmsg) + sizeof(struct ucred))
 				goto error;
 			memcpy(&p->creds, cmsg->cmsg_data, sizeof(struct ucred));
 			err = scm_check_creds(&p->creds);
@@ -171,10 +164,9 @@ int __scm_send(struct socket *sock, struct msghdr *msg, struct scm_cookie *p)
 		case SCM_CONNECT:
 			if (scm_flags)
 				goto error;
-			if (kcm.cmsg_len < sizeof(kcm) + sizeof(int))
+			if (cmsg->cmsg_len < sizeof(*cmsg) + sizeof(int))
 				goto error;
 			memcpy(&acc_fd, cmsg->cmsg_data, sizeof(int));
-
 			p->sock = NULL;
 			if (acc_fd != -1) {
 				if (acc_fd < 0 || acc_fd >= NR_OPEN ||
@@ -192,7 +184,6 @@ int __scm_send(struct socket *sock, struct msghdr *msg, struct scm_cookie *p)
 			goto error;
 		}
 	}
-
 
 	if (p->fp && !p->fp->count)
 	{
@@ -218,6 +209,7 @@ void put_cmsg(struct msghdr * msg, int level, int type, int len, void *data)
 {
 	struct cmsghdr *cm = (struct cmsghdr*)msg->msg_control;
 	int cmlen = sizeof(*cm) + len;
+	int err;
 
 	if (cm==NULL || msg->msg_controllen < sizeof(*cm)) {
 		msg->msg_flags |= MSG_CTRUNC;
@@ -227,16 +219,18 @@ void put_cmsg(struct msghdr * msg, int level, int type, int len, void *data)
 		msg->msg_flags |= MSG_CTRUNC;
 		cmlen = msg->msg_controllen;
 	}
-	
-	cm->cmsg_level = level;
-	cm->cmsg_type = type;
-	cm->cmsg_len = cmlen;
-	memcpy(cm->cmsg_data, data, cmlen - sizeof(*cm));
-
-	cmlen = CMSG_ALIGN(cmlen);
-	msg->msg_control += cmlen;
-	msg->msg_controllen -= cmlen;
-
+	err = put_user(level, &cm->cmsg_level);
+	if (!err)
+		err = put_user(type, &cm->cmsg_type);
+	if (!err)
+		err = put_user(cmlen, &cm->cmsg_len);
+	if (!err)
+		err = copy_to_user(cm->cmsg_data, data, cmlen - sizeof(*cm));
+	if (!err) {
+		cmlen = CMSG_ALIGN(cmlen);
+		msg->msg_control += cmlen;
+		msg->msg_controllen -= cmlen;
+	}
 }
 
 void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm)
@@ -246,6 +240,7 @@ void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm)
 	int fdmax = (msg->msg_controllen - sizeof(struct cmsghdr))/sizeof(int);
 	int fdnum = scm->fp->count;
 	int *cmfptr;
+	int err = 0;
 	int i;
 	struct file **fp = scm->fp->fp;
 
@@ -258,22 +253,28 @@ void scm_detach_fds(struct msghdr *msg, struct scm_cookie *scm)
 		if (new_fd < 0)
 			break;
 		current->files->fd[new_fd] = fp[i];
-		*cmfptr = new_fd;
+		err = put_user(new_fd, cmfptr);
 		cmfptr++;
 	}
 
 	if (i > 0)
 	{
 		int cmlen = i*sizeof(int) + sizeof(struct cmsghdr);
-
-		cm->cmsg_level = SOL_SOCKET;
-		cm->cmsg_type = SCM_RIGHTS;
-		cm->cmsg_len = cmlen;
-
-		cmlen = CMSG_ALIGN(cmlen);
-		msg->msg_control += cmlen;
-		msg->msg_controllen -= cmlen;
+		if (!err)
+			err = put_user(SOL_SOCKET, &cm->cmsg_level);
+		if (!err)
+			err = put_user(SCM_RIGHTS, &cm->cmsg_type);
+		if (!err)
+			err = put_user(cmlen, &cm->cmsg_len);
+		if (!err) {
+			cmlen = CMSG_ALIGN(cmlen);
+			msg->msg_control += cmlen;
+			msg->msg_controllen -= cmlen;
+		}
 	}
+
+	if (err)
+		i = 0;
 
 	/*
 	 *	Dump those that don't fit.
