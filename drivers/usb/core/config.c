@@ -420,8 +420,8 @@ void usb_destroy_configuration(struct usb_device *dev)
 	for (c = 0; c < dev->descriptor.bNumConfigurations; c++) {
 		struct usb_host_config *cf = &dev->config[c];
 
-		if (cf->string)
-			kfree(cf->string);
+		kfree(cf->string);
+		cf->string = NULL;
 
 		for (i = 0; i < cf->desc.bNumInterfaces; i++) {
 			if (cf->intf_cache[i])
