@@ -216,7 +216,6 @@ void ext2_free_inode (struct inode * inode)
 		es->s_free_inodes_count =
 			cpu_to_le32(le32_to_cpu(es->s_free_inodes_count) + 1);
 		mark_buffer_dirty(sb->u.ext2_sb.s_sbh, 1);
-		mark_inode_dirty(inode);
 	}
 	mark_buffer_dirty(bh, 1);
 	if (sb->s_flags & MS_SYNCHRONOUS) {

@@ -213,6 +213,17 @@ static int autofs_root_symlink(struct inode *dir, struct dentry *dentry, const c
 	return 0;
 }
 
+/*
+ * NOTE!
+ *
+ * Normal filesystems would do a "d_delete()" to tell the VFS dcache
+ * that the file no longer exists. However, doing that means that the
+ * VFS layer can turn the dentry into a negative dentry, which we
+ * obviously do not want (we're dropping the entry not because it
+ * doesn't exist, but because it has timed out).
+ *
+ * Also see autofs_root_rmdir()..
+ */
 static int autofs_root_unlink(struct inode *dir, struct dentry *dentry)
 {
 	struct autofs_sb_info *sbi = (struct autofs_sb_info *) dir->i_sb->u.generic_sbp;
@@ -234,7 +245,7 @@ static int autofs_root_unlink(struct inode *dir, struct dentry *dentry)
 	autofs_hash_delete(ent);
 	clear_bit(n,sbi->symlink_bitmap);
 	kfree(sbi->symlink[n].data);
-	d_delete(dentry);
+	d_drop(dentry);
 	
 	return 0;
 }
@@ -257,7 +268,7 @@ static int autofs_root_rmdir(struct inode *dir, struct dentry *dentry)
 
 	autofs_hash_delete(ent);
 	dir->i_nlink--;
-	d_delete(dentry);
+	d_drop(dentry);
 
 	return 0;
 }

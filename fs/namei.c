@@ -280,15 +280,8 @@ static struct dentry * cached_lookup(struct dentry * parent, struct qstr * name)
 	struct dentry * dentry = d_lookup(parent, name);
 
 	if (dentry) {
-		/*
-		 *   FIXME!   We should have something like
-
-		dentry = dentry->revalidate(dentry);
-
-		 * here - we need to ask the low-level filesystem permission
-		 * to use the cached entry (NFS needs to time them out, and
-		 * /proc might go away etc).
-		 */
+		if (dentry->d_revalidate)
+			dentry = dentry->d_revalidate(dentry);
 
 		/*
 		 * The parent d_count _should_ be at least 2: one for the

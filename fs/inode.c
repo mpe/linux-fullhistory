@@ -319,32 +319,34 @@ struct inode * get_empty_inode(void)
 {
 	static unsigned long last_ino = 0;
 	struct inode * inode;
-	struct list_head * tmp = inode_unused.next;
+	struct list_head * tmp;
 
+	spin_lock(&inode_lock);
+	tmp = inode_unused.next;
 	if (tmp != &inode_unused) {
 		list_del(tmp);
 		inode = list_entry(tmp, struct inode, i_list);
 add_new_inode:
-		INIT_LIST_HEAD(&inode->i_list);
 		INIT_LIST_HEAD(&inode->i_hash);
 		inode->i_sb = NULL;
 		inode->i_ino = ++last_ino;
 		atomic_set(&inode->i_count, 1);
+		list_add(&inode->i_list, &inode_in_use);
 		inode->i_state = 0;
+		spin_unlock(&inode_lock);
 		clean_inode(inode);
 		return inode;
 	}
 
 	/*
 	 * Warning: if this succeeded, we will now
-	 * return with the inode lock, and we need to 
-	 * unlock it.
+	 * return with the inode lock.
 	 */
+	spin_unlock(&inode_lock);
 	inode = grow_inodes();
-	if (inode) {
-		spin_unlock(&inode_lock);
+	if (inode)
 		goto add_new_inode;
-	}
+
 	return inode;
 }
 
@@ -368,6 +370,13 @@ struct inode * get_pipe_inode(void)
 			PIPE_RD_OPENERS(*inode) = PIPE_WR_OPENERS(*inode) = 0;
 			PIPE_READERS(*inode) = PIPE_WRITERS(*inode) = 1;
 			PIPE_LOCK(*inode) = 0;
+			/*
+			 * Mark the inode dirty from the very beginning,
+			 * that way it will never be moved to the dirty
+			 * list because "make_inode_dirty()" will think
+			 * that it already _is_ on the dirty list.
+			 */
+			inode->i_state = 1 << I_DIRTY;
 			inode->i_pipe = 1;
 			inode->i_mode |= S_IFIFO | S_IRUSR | S_IWUSR;
 			inode->i_uid = current->fsuid;
@@ -465,6 +474,12 @@ void iput(struct inode *inode)
 		 */
 		if (atomic_read(&inode->i_count) == 1) {
 			void (*put)(struct inode *);
+
+			if (inode->i_pipe) {
+				free_page((unsigned long)PIPE_BASE(*inode));
+				PIPE_BASE(*inode)= NULL;
+			}
+
 			if (inode->i_sb && inode->i_sb->s_op) {
 				put = inode->i_sb->s_op->put_inode;
 				if (put)
@@ -507,13 +522,13 @@ int fs_may_mount(kdev_t dev)
 	return 1;
 }
 
-int fs_may_umount(kdev_t dev, struct dentry * root)
+int fs_may_umount(struct super_block *sb, struct dentry * root)
 {
 	shrink_dcache();
 	return root->d_count == 1;
 }
 
-int fs_may_remount_ro(kdev_t dev)
+int fs_may_remount_ro(struct super_block *sb)
 {
-	return 0;
+	return 1;
 }

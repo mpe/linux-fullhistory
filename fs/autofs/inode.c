@@ -173,7 +173,7 @@ struct super_block *autofs_read_super(struct super_block *s, void *data,
 	}
 
 	if ( parse_options(data,&pipefd,&s->s_root->d_inode->i_uid,&s->s_root->d_inode->i_gid,&sbi->oz_pgrp,&minproto,&maxproto) ) {
-		d_delete(s->s_root);
+		dput(s->s_root);
 		s->s_dev = 0;
 		kfree(sbi);
 		printk("autofs: called with bogus options\n");
@@ -182,7 +182,7 @@ struct super_block *autofs_read_super(struct super_block *s, void *data,
 	}
 
 	if ( minproto > AUTOFS_PROTO_VERSION || maxproto < AUTOFS_PROTO_VERSION ) {
-		d_delete(s->s_root);
+		dput(s->s_root);
 		s->s_dev = 0;
 		kfree(sbi);
 		printk("autofs: kernel does not match daemon version\n");
@@ -199,7 +199,7 @@ struct super_block *autofs_read_super(struct super_block *s, void *data,
 		} else {
 			printk("autofs: could not open pipe file descriptor\n");
 		}
-		d_delete(s->s_root);
+		dput(s->s_root);
 		s->s_dev = 0;
 		kfree(sbi);
 		MOD_DEC_USE_COUNT;

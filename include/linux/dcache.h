@@ -49,7 +49,27 @@ struct dentry {
 	struct list_head d_alias;	/* inode alias list */
 	struct list_head d_lru;		/* d_count = 0 LRU list */
 	struct qstr d_name;
+	struct dentry * (*d_revalidate)(struct dentry *);
 };
+
+/*
+ * d_drop() unhashes the entry from the parent
+ * dentry hashes, so that it won't be found through
+ * a VFS lookup any more. Note that this is different
+ * from deleting the dentry - d_delete will try to
+ * mark the dentry negative if possible, giving a
+ * successful _negative_ lookup, while d_drop will
+ * just make the cache lookup fail.
+ *
+ * d_drop() is used mainly for stuff that wants
+ * to invalidate a dentry for some reason (NFS
+ * timeouts or autofs deletes).
+ */
+inline void d_drop(struct dentry * dentry)
+{
+	list_del(&dentry->d_hash);
+	INIT_LIST_HEAD(&dentry->d_hash);
+}
 
 /*
  * These are the low-level FS interfaces to the dcache..

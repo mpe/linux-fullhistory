@@ -158,6 +158,7 @@ struct dentry * d_alloc(struct dentry * parent, const struct qstr *name)
 	dentry->d_name.name = str;
 	dentry->d_name.len = name->len;
 	dentry->d_name.hash = name->hash;
+	dentry->d_revalidate = NULL;
 	return dentry;
 }
 
@@ -239,6 +240,7 @@ static inline void d_remove_from_parent(struct dentry * dentry, struct dentry * 
 	dput(parent);
 }
 
+
 /*
  * When a file is deleted, we have two options:
  * - turn this dentry into a negative dentry
@@ -266,12 +268,10 @@ void d_delete(struct dentry * dentry)
 	}
 
 	/*
-	 * If not, just unhash us and wait for dput()
-	 * to pick up the tab..
+	 * If not, just drop the dentry and let dput
+	 * pick up the tab..
 	 */
-	list_del(&dentry->d_hash);
-	INIT_LIST_HEAD(&dentry->d_hash);
-
+	d_drop(dentry);
 }
 
 void d_add(struct dentry * entry, struct inode * inode)

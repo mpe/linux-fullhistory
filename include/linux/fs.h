@@ -629,8 +629,8 @@ extern struct file_operations rdwr_pipe_fops;
 extern struct file_system_type *get_fs_type(const char *name);
 
 extern int fs_may_mount(kdev_t dev);
-extern int fs_may_umount(kdev_t dev, struct dentry * root);
-extern int fs_may_remount_ro(kdev_t dev);
+extern int fs_may_umount(struct super_block *, struct dentry * root);
+extern int fs_may_remount_ro(struct super_block *);
 
 extern struct file *inuse_filps;
 extern struct super_block super_blocks[NR_SUPER];

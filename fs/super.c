@@ -611,7 +611,7 @@ static int do_umount(kdev_t dev,int unmount_root)
 	 * too bad there are no quotas running anymore. Turn them on again by hand.
 	 */
 	quota_off(dev, -1);
-	if (!fs_may_umount(dev, sb->s_root))
+	if (!fs_may_umount(sb, sb->s_root))
 		return -EBUSY;
 
 	/* clean up dcache .. */
@@ -785,7 +785,7 @@ static int do_remount_sb(struct super_block *sb, int flags, char *data)
 		/*flags |= MS_RDONLY;*/
 	/* If we are remounting RDONLY, make sure there are no rw files open */
 	if ((flags & MS_RDONLY) && !(sb->s_flags & MS_RDONLY))
-		if (!fs_may_remount_ro(sb->s_dev))
+		if (!fs_may_remount_ro(sb))
 			return -EBUSY;
 	sb->s_flags = (flags & ~MS_RDONLY) | (sb->s_flags & MS_RDONLY);
 	if (sb->s_op && sb->s_op->remount_fs) {
