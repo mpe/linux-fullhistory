@@ -17,6 +17,7 @@
 #include <linux/mman.h>
 #include <linux/mm.h>
 #include <linux/swap.h>
+#include <linux/init.h>
 #include <linux/bootmem.h> /* max_low_pfn */
 #ifdef CONFIG_BLK_DEV_INITRD
 #include <linux/blk.h>
@@ -273,7 +274,7 @@ srm_paging_stop (void)
 }
 #endif
 
-static void printk_memory_info(void)
+static void __init printk_memory_info(void)
 {
 	unsigned long codesize, reservedpages, datasize, initsize, tmp;
 	extern int page_is_ram(unsigned long) __init;
@@ -302,7 +303,7 @@ static void printk_memory_info(void)
 	       initsize >> 10);
 }
 
-void
+void __init
 mem_init(void)
 {
 	max_mapnr = num_physpages = max_low_pfn;
