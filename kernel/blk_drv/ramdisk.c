@@ -7,11 +7,11 @@
 
 #include <linux/config.h>
 #ifdef RAMDISK
-#include <linux/string.h>
 #include <linux/sched.h>
 #include <linux/minix_fs.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
+#include <linux/string.h>
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <asm/memory.h>

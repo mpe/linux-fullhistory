@@ -1,6 +1,8 @@
 #ifndef _LINUX_STAT_H
 #define _LINUX_STAT_H
 
+#ifndef __NOT_KERNEL
+
 struct old_stat {
 	unsigned short st_dev;
 	unsigned short st_ino;
@@ -37,6 +39,8 @@ struct new_stat {
 	unsigned long  __unused4;
 	unsigned long  __unused5;
 };
+
+#endif
 
 #define S_IFMT  00170000
 #define S_IFSOCK 0140000

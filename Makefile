@@ -7,6 +7,13 @@
 ROOT_DEV = /dev/hdb1
 
 #
+# uncomment this if you want kernel profiling: the profile_shift is the
+# granularity of the profiling (5 = 32-byte granularity)
+#
+
+#PROFILING = -DPROFILE_SHIFT=2
+
+#
 # uncomment the correct keyboard:
 #
 # The value of KBDFLAGS should be or'ed together from the following
@@ -71,7 +78,7 @@ LD86	=ld86 -0
 AS	=as
 LD	=ld
 HOSTCC	=gcc -static
-CC	=gcc -nostdinc -I$(KERNELHDRS)
+CC	=gcc -nostdinc -I$(KERNELHDRS) $(PROFILING)
 MAKE	=make
 CPP	=$(CC) -E
 AR	=ar

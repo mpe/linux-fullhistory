@@ -1,28 +1,16 @@
-#ifndef _EXT_FS_H
-#define _EXT_FS_H
+#ifndef _LINUX_EXT_FS_H
+#define _LINUX_EXT_FS_H
 
 /*
  * The ext filesystem constants/structures
  */
 
-/*
- * Free blocks/inodes management style
- *
- * One of these two constants must be defined
- *
- */
-/* #define EXTFS_BITMAP	*/	/* use a bitmap */
-#define EXTFS_FREELIST		/* use a linked list */
-
 #define EXT_NAME_LEN 255
 #define EXT_ROOT_INO 1
 
-#define EXT_I_MAP_SLOTS 8
-#define EXT_Z_MAP_SLOTS 8
 #define EXT_SUPER_MAGIC 0x137D
 
 #define EXT_INODES_PER_BLOCK ((BLOCK_SIZE)/(sizeof (struct ext_inode)))
-/* #define EXT_DIR_ENTRIES_PER_BLOCK ((BLOCK_SIZE)/(sizeof (struct ext_dir_entry))) */
 
 struct ext_inode {
 	unsigned short i_mode;
@@ -49,16 +37,10 @@ struct ext_free_block {
 struct ext_super_block {
 	unsigned long s_ninodes;
 	unsigned long s_nzones;
-#ifdef EXTFS_BITMAP
-	unsigned long s_imap_blocks;
-	unsigned long s_zmap_blocks;
-#endif
-#ifdef EXTFS_FREELIST
 	unsigned long s_firstfreeblock;
 	unsigned long s_freeblockscount;
 	unsigned long s_firstfreeinode;
 	unsigned long s_freeinodescount;
-#endif
 	unsigned long s_firstdatazone;
 	unsigned long s_log_zone_size;
 	unsigned long s_max_size;

@@ -1,5 +1,5 @@
-#ifndef _GENHD_H
-#define _GENHD_H
+#ifndef _LINUX_GENHD_H
+#define _LINUX_GENHD_H
 
 /*
  * 	genhd.h Copyright (C) 1992 Drew Eckhardt

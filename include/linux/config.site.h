@@ -1,5 +1,5 @@
-#ifndef _CONFIG_SITE_H
-#define _CONFIG_SITE_H
+#ifndef _LINUX_CONFIG_SITE_H
+#define _LINUX_CONFIG_SITE_H
 
 /*
 	This configuration file contains site specific things, things 

@@ -1,11 +1,10 @@
-#ifndef _MM_H
-#define _MM_H
+#ifndef _LINUX_MM_H
+#define _LINUX_MM_H
 
 #define PAGE_SIZE 4096
 
 #include <linux/fs.h>
 #include <linux/kernel.h>
-#include <linux/signal.h>
 
 /*
  * BAD_PAGE is the page that is used for page faults when linux

@@ -166,8 +166,6 @@ void ext_truncate(struct inode * inode)
 	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
 	     S_ISLNK(inode->i_mode)))
 		return;
-/*	if (inode->i_data[7] & 0xffff0000)
-		printk("BAD! ext inode has 16 high bits set\n"); */
 	while (1) {
 		flag = trunc_direct(inode);
 		flag |= trunc_indirect(inode,9,(unsigned long *)&inode->i_data[9]);

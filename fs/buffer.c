@@ -557,16 +557,24 @@ static int try_to_free(struct buffer_head * bh)
 
 /*
  * Try to free up some pages by shrinking the buffer-cache
+ *
+ * Priority tells the routine how hard to try to shrink the
+ * buffers: 0 means "don't bother too much", while a value
+ * of 3 means "we'd better get some free pages now".
  */
-int shrink_buffers(void)
+int shrink_buffers(unsigned int priority)
 {
 	struct buffer_head *bh;
 	int i;
 
+	if (priority > 2) {
+		priority = 3;
+		sync_buffers(0);
+	}
 	bh = free_list;
-	for (i = nr_buffers*2 ; i-- > 0 ; bh = bh->b_next_free) {
-		wait_on_buffer(bh);
-		if (bh->b_count || !bh->b_this_page)
+	i = nr_buffers >> (3-priority);
+	for ( ; i-- > 0 ; bh = bh->b_next_free) {
+		if (bh->b_lock || bh->b_count || !bh->b_this_page)
 			continue;
 		if (bh->b_dirt) {
 			ll_rw_block(WRITEA,bh);

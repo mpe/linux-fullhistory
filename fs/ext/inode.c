@@ -31,24 +31,13 @@ void ext_put_inode(struct inode *inode)
 
 void ext_put_super(struct super_block *sb)
 {
-#ifdef EXTFS_BITMAP
-	int i;
-#endif
 
 	lock_super(sb);
 	sb->s_dev = 0;
-#ifdef EXTFS_BITMAP
-	for(i = 0 ; i < EXT_I_MAP_SLOTS ; i++)
-		brelse(sb->u.ext_sb.s_imap[i]);
-	for(i = 0 ; i < EXT_Z_MAP_SLOTS ; i++)
-		brelse(sb->u.ext_sb.s_zmap[i]);
-#endif
-#ifdef EXTFS_FREELIST
-	if (sb->u.ext_sb.s_imap[1])
-		brelse (sb->u.ext_sb.s_imap[1]);
-	if (sb->u.ext_sb.s_zmap[1])
-		brelse (sb->u.ext_sb.s_zmap[1]);
-#endif
+	if (sb->u.ext_sb.s_firstfreeinodeblock)
+		brelse (sb->u.ext_sb.s_firstfreeinodeblock);
+	if (sb->u.ext_sb.s_firstfreeblock)
+		brelse (sb->u.ext_sb.s_firstfreeblock);
 	free_super(sb);
 	return;
 }
@@ -67,9 +56,6 @@ struct super_block *ext_read_super(struct super_block *s,void *data)
 	struct buffer_head *bh;
 	struct ext_super_block *es;
 	int dev = s->s_dev,block;
-#ifdef EXTFS_BITMAP
-	int i;
-#endif
 
 	lock_super(s);
 	if (!(bh = bread(dev, 1, BLOCK_SIZE))) {
@@ -78,26 +64,18 @@ struct super_block *ext_read_super(struct super_block *s,void *data)
 		printk("bread failed\n");
 		return NULL;
 	}
-/*	*((struct ext_super_block *) s) =
-		*((struct ext_super_block *) bh->b_data); */
 	es = (struct ext_super_block *) bh->b_data;
 	s->s_blocksize = 1024;
 	s->u.ext_sb.s_ninodes = es->s_ninodes;
 	s->u.ext_sb.s_nzones = es->s_nzones;
-#ifdef EXTFS_BITMAP
-	s->u.ext_sb.s_imap_blocks = es->s_imap_blocks;
-	s->u.ext_sb.s_zmap_blocks = es->s_zmap_blocks;
-#endif
 	s->u.ext_sb.s_firstdatazone = es->s_firstdatazone;
 	s->u.ext_sb.s_log_zone_size = es->s_log_zone_size;
 	s->u.ext_sb.s_max_size = es->s_max_size;
 	s->s_magic = es->s_magic;
-#ifdef EXTFS_FREELIST
-	s->u.ext_sb.s_zmap[0] = (struct buffer_head *) es->s_firstfreeblock;
-	s->u.ext_sb.s_zmap[2] = (struct buffer_head *) es->s_freeblockscount;
-	s->u.ext_sb.s_imap[0] = (struct buffer_head *) es->s_firstfreeinode;
-	s->u.ext_sb.s_imap[2] = (struct buffer_head *) es->s_freeinodescount;
-#endif
+	s->u.ext_sb.s_firstfreeblocknumber = es->s_firstfreeblock;
+	s->u.ext_sb.s_freeblockscount = es->s_freeblockscount;
+	s->u.ext_sb.s_firstfreeinodenumber = es->s_firstfreeinode;
+	s->u.ext_sb.s_freeinodescount = es->s_freeinodescount;
 	brelse(bh);
 	if (s->s_magic != EXT_SUPER_MAGIC) {
 		s->s_dev = 0;
@@ -105,59 +83,28 @@ struct super_block *ext_read_super(struct super_block *s,void *data)
 		printk("magic match failed\n");
 		return NULL;
 	}
-#ifdef EXTFS_BITMAP
-	for (i=0;i < EXT_I_MAP_SLOTS;i++)
-		s->u.ext_sb.s_imap[i] = NULL;
-	for (i=0;i < EXT_Z_MAP_SLOTS;i++)
-		s->u.ext_sb.s_zmap[i] = NULL;
-	block=2;
-	for (i=0 ; i < s->u.ext_sb.s_imap_blocks ; i++)
-		if (s->u.ext_sb.s_imap[i]=bread(dev, block, BLOCK_SIZE))
-			block++;
-		else
-			break;
-	for (i=0 ; i < s->u.ext_sb.s_zmap_blocks ; i++)
-		if (s->u.ext_sb.s_zmap[i]=bread(dev, block, BLOCK_SIZE))
-			block++;
-		else
-			break;
-	if (block != 2+s->u.ext_sb.s_imap_blocks+s->u.ext_sb.s_zmap_blocks) {
-		for(i=0;i<EXT_I_MAP_SLOTS;i++)
-			brelse(s->u.ext_sb.s_imap[i]);
-		for(i=0;i<EXT_Z_MAP_SLOTS;i++)
-			brelse(s->u.ext_sb.s_zmap[i]);
-		s->s_dev=0;
-		free_super(s);
-		printk("block failed\n");
-		return NULL;
-	}
-	s->u.ext_sb.s_imap[0]->b_data[0] |= 1;
-	s->u.ext_sb.s_zmap[0]->b_data[0] |= 1;
-#endif
-#ifdef EXTFS_FREELIST
-	if (!s->u.ext_sb.s_zmap[0])
-		s->u.ext_sb.s_zmap[1] = NULL;
+	if (!s->u.ext_sb.s_firstfreeblocknumber)
+		s->u.ext_sb.s_firstfreeblock = NULL;
 	else
-		if (!(s->u.ext_sb.s_zmap[1] = bread(dev, (unsigned long) s->u.ext_sb.s_zmap[0], BLOCK_SIZE))) {
+		if (!(s->u.ext_sb.s_firstfreeblock = bread(dev,
+			s->u.ext_sb.s_firstfreeblocknumber, BLOCK_SIZE))) {
 			printk ("ext_read_super: unable to read first free block\n");
 			s->s_dev = 0;
 			free_super(s);
 			return NULL;
 		}
-	if (!s->u.ext_sb.s_imap[0])
-		s->u.ext_sb.s_imap[1] = NULL;
+	if (!s->u.ext_sb.s_firstfreeinodenumber)
+		s->u.ext_sb.s_firstfreeinodeblock = NULL;
 	else {
-		block = 2 + (((unsigned long) s->u.ext_sb.s_imap[0]) - 1) / EXT_INODES_PER_BLOCK;
-		if (!(s->u.ext_sb.s_imap[1] = bread(dev, block, BLOCK_SIZE))) {
+		block = 2 + (s->u.ext_sb.s_firstfreeinodenumber - 1) / EXT_INODES_PER_BLOCK;
+		if (!(s->u.ext_sb.s_firstfreeinodeblock = bread(dev, block, BLOCK_SIZE))) {
 			printk ("ext_read_super: unable to read first free inode block\n");
-			brelse(s->u.ext_sb.s_zmap[1]);
+			brelse(s->u.ext_sb.s_firstfreeblock);
 			s->s_dev = 0;
 			free_super (s);
 			return NULL;
 		}
 	}
-#endif
-
 	free_super(s);
 	/* set up enough so that it can read an inode */
 	s->s_dev = dev;
@@ -172,26 +119,21 @@ struct super_block *ext_read_super(struct super_block *s,void *data)
 
 void ext_write_super (struct super_block *sb)
 {
-#ifdef EXTFS_FREELIST
 	struct buffer_head * bh;
 	struct ext_super_block * es;
 
-#ifdef EXTFS_DEBUG
-	printk ("ext_write_super called\n");
-#endif
 	if (!(bh = bread(sb->s_dev, 1, BLOCK_SIZE))) {
 		printk ("ext_write_super: bread failed\n");
 		return;
 	}
 	es = (struct ext_super_block *) bh->b_data;
-	es->s_firstfreeblock = (unsigned long) sb->u.ext_sb.s_zmap[0];
-	es->s_freeblockscount = (unsigned long) sb->u.ext_sb.s_zmap[2];
-	es->s_firstfreeinode = (unsigned long) sb->u.ext_sb.s_imap[0];
-	es->s_freeinodescount = (unsigned long) sb->u.ext_sb.s_imap[2];
+	es->s_firstfreeblock = sb->u.ext_sb.s_firstfreeblocknumber;
+	es->s_freeblockscount = sb->u.ext_sb.s_freeblockscount;
+	es->s_firstfreeinode = sb->u.ext_sb.s_firstfreeinodenumber;
+	es->s_freeinodescount = sb->u.ext_sb.s_freeinodescount;
 	bh->b_dirt = 1;
 	brelse (bh);
 	sb->s_dirt = 0;
-#endif
 }
 
 void ext_statfs (struct super_block *sb, struct statfs *buf)
@@ -200,7 +142,8 @@ void ext_statfs (struct super_block *sb, struct statfs *buf)
 
 	put_fs_long(EXT_SUPER_MAGIC, &buf->f_type);
 	put_fs_long(1024, &buf->f_bsize);
-	put_fs_long(sb->u.ext_sb.s_nzones << sb->u.ext_sb.s_log_zone_size, &buf->f_blocks);
+	put_fs_long(sb->u.ext_sb.s_nzones << sb->u.ext_sb.s_log_zone_size,
+		&buf->f_blocks);
 	tmp = ext_count_free_blocks(sb);
 	put_fs_long(tmp, &buf->f_bfree);
 	put_fs_long(tmp, &buf->f_bavail);
@@ -341,13 +284,7 @@ void ext_read_inode(struct inode * inode)
 	struct ext_inode * raw_inode;
 	int block;
 
-#ifdef EXTFS_BITMAP
-	block = 2 + inode->i_sb->u.ext_sb.s_imap_blocks + inode->i_sb->u.ext_sb.s_zmap_blocks +
-		(inode->i_ino-1)/EXT_INODES_PER_BLOCK;
-#endif
-#ifdef EXTFS_FREELIST
 	block = 2 + (inode->i_ino-1)/EXT_INODES_PER_BLOCK;
-#endif
 	if (!(bh=bread(inode->i_dev, block, BLOCK_SIZE)))
 		panic("unable to read i-node block");
 	raw_inode = ((struct ext_inode *) bh->b_data) +
@@ -389,13 +326,7 @@ void ext_write_inode(struct inode * inode)
 	struct ext_inode * raw_inode;
 	int block;
 
-#ifdef EXTFS_BITMAP
-	block = 2 + inode->i_sb->u.ext_sb.s_imap_blocks + inode->i_sb->u.ext_sb.s_zmap_blocks +
-		(inode->i_ino-1)/EXT_INODES_PER_BLOCK;
-#endif
-#ifdef EXTFS_FREELIST
 	block = 2 + (inode->i_ino-1)/EXT_INODES_PER_BLOCK;
-#endif
 	if (!(bh=bread(inode->i_dev, block, BLOCK_SIZE)))
 		panic("unable to read i-node block");
 	raw_inode = ((struct ext_inode *)bh->b_data) +

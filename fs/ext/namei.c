@@ -64,8 +64,6 @@ static int ext_match(int len,const char * name,struct ext_dir_entry * de)
 	/* "" means "." ---> so paths like "/usr/lib//libc.a" work */
 	if (!len && (de->name[0]=='.') && (de->name[1]=='\0'))
 		return 1;
-/*	if (len < EXT_NAME_LEN && de->name[len])
-		return 0; */
 	if (len < EXT_NAME_LEN && len != de->name_len)
 		return 0;
 	__asm__("cld\n\t"
@@ -92,8 +90,7 @@ static struct buffer_head * ext_find_entry(struct inode * dir,
 	const char * name, int namelen, struct ext_dir_entry ** res_dir,
 	struct ext_dir_entry ** prev_dir, struct ext_dir_entry ** next_dir)
 {
-/*	int entries; */
-	int block /* ,i */;
+	int block;
 	long offset;
 	struct buffer_head * bh;
 	struct ext_dir_entry * de;
@@ -108,7 +105,6 @@ static struct buffer_head * ext_find_entry(struct inode * dir,
 	if (namelen > EXT_NAME_LEN)
 		namelen = EXT_NAME_LEN;
 #endif
-/*	entries = dir->i_size / (sizeof (struct ext_dir_entry)); */
 	if (!(block = dir->i_data[0]))
 		return NULL;
 	if (!(bh = bread(dir->i_dev, block, BLOCK_SIZE)))
@@ -117,7 +113,6 @@ static struct buffer_head * ext_find_entry(struct inode * dir,
 		*prev_dir = NULL;
 	if (next_dir)
 		*next_dir = NULL;
-/*	i = 0; */
 	offset = 0;
 	de = (struct ext_dir_entry *) bh->b_data;
 	while (offset < dir->i_size) {
@@ -126,8 +121,6 @@ static struct buffer_head * ext_find_entry(struct inode * dir,
 			bh = NULL;
 			if (!(block = ext_bmap(dir,offset>>BLOCK_SIZE_BITS)) ||
 			    !(bh = bread(dir->i_dev, block, BLOCK_SIZE))) {
-/*				i += EXT_DIR_ENTRIES_PER_BLOCK; */
-/* 				offset += BLOCK_SIZE; */
 				continue;
 			}
 			de = (struct ext_dir_entry *) bh->b_data;
@@ -148,7 +141,6 @@ static struct buffer_head * ext_find_entry(struct inode * dir,
 		if (prev_dir)
 			*prev_dir = de;
 		de = (struct ext_dir_entry *) ((char *) de + de->rec_len);
-/*		i++; */
 	}
 	brelse(bh);
 	return NULL;
@@ -218,7 +210,6 @@ static struct buffer_head * ext_add_entry(struct inode * dir,
 	if (!(bh = bread(dir->i_dev, block, BLOCK_SIZE)))
 		return NULL;
 	rec_len = ((8 + namelen + EXT_DIR_PAD - 1) / EXT_DIR_PAD) * EXT_DIR_PAD;
-/*	i = 0; */
 	offset = 0;
 	de = (struct ext_dir_entry *) bh->b_data;
 	while (1) {
@@ -232,7 +223,6 @@ printk ("ext_add_entry: skipping to next block\n");
 			if (!block)
 				return NULL;
 			if (!(bh = bread(dir->i_dev, block, BLOCK_SIZE))) {
-/*				i += EXT_DIR_ENTRIES_PER_BLOCK; */
 				offset += BLOCK_SIZE;
 				continue;
 			}
@@ -271,7 +261,6 @@ printk ("ext_add_entry : creating next block\n");
 			/* Allocate the entry */
 			de->inode=0;
 			de->rec_len = rec_len;
-/*			dir->i_size = (i+1)*sizeof(struct ext_dir_entry); */
 			dir->i_size += de->rec_len;
 			dir->i_dirt = 1;
 			dir->i_ctime = CURRENT_TIME;
@@ -292,7 +281,7 @@ printk ("ext_add_entry : creating next block\n");
 			dir->i_mtime = CURRENT_TIME;
 			de->name_len = namelen;
 			for (i=0; i < namelen ; i++)
-				de->name[i]=/*(i<namelen)?*/get_fs_byte(name+i)/*:0*/;
+				de->name[i]=get_fs_byte(name+i);
 			bh->b_dirt = 1;
 			*res_dir = de;
 			return bh;
@@ -441,7 +430,6 @@ int ext_mkdir(struct inode * dir, const char * name, int len, int mode)
 	de->rec_len=16;
 	de->name_len=1;
 	strcpy(de->name,".");
-/*	de++; */
 	de = (struct ext_dir_entry *) ((char *) de + de->rec_len);
 	de->inode = dir->i_ino;
 	de->rec_len=16;
@@ -474,13 +462,11 @@ int ext_mkdir(struct inode * dir, const char * name, int len, int mode)
  */
 static int empty_dir(struct inode * inode)
 {
-	int /* nr, */ block;
-/*	int len; */
+	int block;
 	unsigned long offset;
 	struct buffer_head * bh;
 	struct ext_dir_entry * de, * de1;
 
-/*	len = inode->i_size / sizeof (struct ext_dir_entry); */
 	if (inode->i_size < 2 * 12 || !inode->i_data[0] ||
 	    !(bh=bread(inode->i_dev, inode->i_data[0], BLOCK_SIZE))) {
 	    	printk("warning - bad directory on dev %04x\n",inode->i_dev);
@@ -493,7 +479,6 @@ static int empty_dir(struct inode * inode)
 	    	printk("warning - bad directory on dev %04x\n",inode->i_dev);
 		return 0;
 	}
-/*	nr = 2; */
 	offset = de->rec_len + de1->rec_len;
 	de = (struct ext_dir_entry *) ((char *) de1 + de1->rec_len);
 	while (offset < inode->i_size ) {
@@ -749,12 +734,10 @@ static int subdir(struct inode * new, struct inode * old)
 #define PARENT_INO(buffer) \
 ((struct ext_dir_entry *) ((char *) buffer + \
 ((struct ext_dir_entry *) buffer)->rec_len))->inode
-/* (((struct ext_dir_entry *) (buffer))[1].inode) */
 
 #define PARENT_NAME(buffer) \
 ((struct ext_dir_entry *) ((char *) buffer + \
 ((struct ext_dir_entry *) buffer)->rec_len))->name
-/* (((struct ext_dir_entry *) (buffer))[1].name) */
 
 /*
  * rename uses retrying to avoid race-conditions: at least they should be minimal.

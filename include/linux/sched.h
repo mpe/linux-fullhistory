@@ -221,6 +221,7 @@ extern struct task_struct *current;
 extern unsigned long volatile jiffies;
 extern unsigned long startup_time;
 extern int jiffies_offset;
+extern int need_resched;
 
 #define CURRENT_TIME (startup_time+(jiffies+jiffies_offset)/HZ)
 

@@ -29,6 +29,9 @@
 
 int need_resched = 0;
 
+unsigned long * prof_buffer = NULL;
+unsigned long prof_len = 0;
+
 #define _S(nr) (1<<((nr)-1))
 #define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
 
@@ -157,12 +160,14 @@ void schedule(void)
 			if ((*p)->state == TASK_RUNNING && (*p)->counter > c)
 				c = (*p)->counter, next = i;
 		}
-		if (c) break;
+		if (c)
+			break;
 		for(p = &LAST_TASK ; p > &FIRST_TASK ; --p)
 			if (*p)
 				(*p)->counter = ((*p)->counter >> 1) +
 						(*p)->priority;
 	}
+	sti();
 	switch_to(next);
 }
 
@@ -396,21 +401,29 @@ static void do_timer(int regs)
 	static int avg_cnt = 0;
 
 	jiffies++;
-	if (3 & ((struct pt_regs *) regs)->cs)
+	if (3 & ((struct pt_regs *) regs)->cs) {
 		current->utime++;
-	else {
-		current->stime++;
 		/* Update ITIMER_VIRT for current task if not in a system call */
 		if (current->it_virt_value && !(--current->it_virt_value)) {
 			current->it_virt_value = current->it_virt_incr;
 			send_sig(SIGVTALRM,current,1);
 		}
+	} else {
+		current->stime++;
+#ifdef PROFILE_SHIFT
+		if (prof_buffer && current != task[0]) {
+			unsigned long eip = ((struct pt_regs *) regs)->eip;
+			eip >>= PROFILE_SHIFT;
+			if (eip < prof_len)
+				prof_buffer[eip]++;
+		}
+#endif
 	}
 	if (--avg_cnt < 0) {
 		avg_cnt = 500;
 		update_avg();
 	}
-	if ((--current->counter)<=0) {
+	if (current == task[0] || (--current->counter)<=0) {
 		current->counter=0;
 		need_resched = 1;
 	}

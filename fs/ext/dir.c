@@ -62,8 +62,6 @@ static int ext_readdir(struct inode * inode, struct file * filp,
 
 	if (!inode || !S_ISDIR(inode->i_mode))
 		return -EBADF;
-/*	if (filp->f_pos & (sizeof (struct ext_dir_entry) - 1))
-		return -EBADF; */
 	while (filp->f_pos < inode->i_size) {
 		offset = filp->f_pos & 1023;
 		block = ext_bmap(inode,(filp->f_pos)>>BLOCK_SIZE_BITS);
@@ -89,8 +87,8 @@ static int ext_readdir(struct inode * inode, struct file * filp,
 					return i;
 				}
 			}
-/*			de++; */
-			de = (struct ext_dir_entry *) ((char *) de + de->rec_len);
+			de = (struct ext_dir_entry *) ((char *) de 
+				+ de->rec_len);
 		}
 		brelse(bh);
 	}

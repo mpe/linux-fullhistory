@@ -51,7 +51,8 @@ int sys_dup(unsigned int fildes)
 int sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {	
 	struct file * filp;
-
+	extern int sock_fcntl (struct file *, unsigned int cmd,
+			       unsigned long arg);
 	if (fd >= NR_OPEN || !(filp = current->filp[fd]))
 		return -EBADF;
 	switch (cmd) {
@@ -74,6 +75,11 @@ int sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 		case F_GETLK:	case F_SETLK:	case F_SETLKW:
 			return -ENOSYS;
 		default:
+			/* sockets need a few special fcntls. */
+			if (S_ISSOCK (filp->f_inode->i_mode))
+			  {
+			     return (sock_fcntl (filp, cmd, arg));
+			  }
 			return -EINVAL;
 	}
 }

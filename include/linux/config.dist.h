@@ -1,5 +1,5 @@
-#ifndef _CONFIG_DIST_H
-#define _CONFIG_DIST_H
+#ifndef _LINUX_CONFIG_DIST_H
+#define _LINUX_CONFIG_DIST_H
 #ifdef CONFIG_DISTRIBUTION
 
 #undef CONFG_SCSI

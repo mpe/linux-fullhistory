@@ -201,11 +201,15 @@ void copy_to_cooked(struct tty_struct * tty)
 		if (I_IXON(tty)) {
 			if ((STOP_CHAR(tty) != __DISABLED_CHAR) &&
 			    (c==STOP_CHAR(tty))) {
+			        tty->status_changed = 1;
+				tty->ctrl_status |= TIOCPKT_STOP;
 				tty->stopped=1;
 				continue;
 			}
 			if ((START_CHAR(tty) != __DISABLED_CHAR) &&
 			    (c==START_CHAR(tty))) {
+			        tty->status_changed = 1;
+				tty->ctrl_status |= TIOCPKT_START;
 				tty->stopped=0;
 				continue;
 			}
@@ -338,10 +342,32 @@ static int read_chan(unsigned int channel, struct file * file, char * buf, int n
 	}
 	if (file->f_flags & O_NONBLOCK)
 		time = current->timeout = 0;
-	else if (L_CANON(tty))
+	else if (L_CANON(tty)) {
 		wait_for_canon_input(tty);
+		if (current->signal & ~current->blocked)
+			return -ERESTARTSYS;
+	}
 	if (minimum>nr)
 		minimum = nr;
+
+	/* deal with packet mode:  First test for status change */
+	if (tty->packet && tty->link && tty->link->status_changed)
+	  {
+	     put_fs_byte (tty->link->ctrl_status, b);
+	     tty->link->status_changed = 0;
+	     return (1);
+	  }
+	  
+	/* now bump the buffer up one. */
+	if (tty->packet)
+	  {
+	     put_fs_byte (0,b++);
+	     nr --;
+	     /* this really shouldn't happen, but we need to 
+		put it here. */
+	     if (nr == 0) return (1);
+	  }
+
 	while (nr>0) {
 		TTY_READ_FLUSH(tty);
 		if (tty->link)
@@ -379,8 +405,20 @@ static int read_chan(unsigned int channel, struct file * file, char * buf, int n
 	if (tty->link && tty->link->write)
 		TTY_WRITE_FLUSH(tty->link);
 	current->timeout = 0;
-	if (b-buf)
-		return b-buf;
+
+	/* packet mode sticks in an extra 0.  If that's all we've got,
+	   we should count it a zero bytes. */
+	if (tty->packet)
+	  {
+	     if ((b-buf) > 1)
+	       return b-buf;
+	  }
+	else
+	  {
+	     if (b-buf)
+	       return b-buf;
+	  }
+
 	if (current->signal & ~current->blocked)
 		return -ERESTARTSYS;
 	if (file->f_flags & O_NONBLOCK)
@@ -523,9 +561,20 @@ static int tty_open(struct inode * inode, struct file * filp)
 			return -EAGAIN;
 		if (tty->link)
 			tty->link->count++;
+
+		/* perhaps user applications that don't take care of
+		   this deserve what the get, but I think my system
+		   has hung do to this, esp. in X. -RAB */
+		tty->termios.c_lflag &= ~ECHO;
 	}
 	tty->count++;
 	retval = 0;
+
+	/* clean up the packet stuff. */
+	tty->status_changed = 0;
+	tty->ctrl_status = 0;
+	tty->packet = 0;
+
 	if (!(filp->f_flags & O_NOCTTY) &&
 	    current->leader &&
 	    current->tty<0 &&
@@ -598,6 +647,12 @@ static int tty_select(struct inode * inode, struct file * filp, int sel_type, se
 				return 1;
 			if (tty->link && !tty->link->count)
 				return 1;
+
+			/* see if the status byte can be read. */
+			if (tty->packet && tty->link &&
+			    tty->link->status_changed)
+			  return 1;
+
 			select_wait(&tty->secondary->proc_list, wait);
 			return 0;
 		case SEL_OUT:
@@ -639,7 +694,7 @@ long tty_init(long kmem_start)
 	for (i=0 ; i<256 ; i++) {
 		tty_table[i] =  (struct tty_struct) {
 		 	{0, 0, 0, 0, 0, INIT_C_CC},
-			-1, 0, 0, 0, 0, {0,0,0,0},
+			-1, 0, 0, 0, 0, 0, 0, 0, 0, {0,0,0,0},
 			NULL, NULL, NULL, NULL, NULL
 		};
 	}
@@ -655,6 +710,10 @@ long tty_init(long kmem_start)
 			-1,		/* initial pgrp */
 			0,			/* initial session */
 			0,			/* initial stopped */
+			0,			/* initial status_changed */
+			0,			/* initial packet */
+			0,			/* initial ctrl_status */
+			0,			/* initial unused */
 			0,			/* initial flags */
 			0,			/* initial count */
 			{video_num_lines,video_num_columns,0,0},
@@ -673,7 +732,7 @@ long tty_init(long kmem_start)
 			INIT_C_CC},
 			-1,
 			0,
-			0,
+			0, 0, 0, 0, 0,
 			0,
 			0,
 			{25,80,0,0},
@@ -692,7 +751,7 @@ long tty_init(long kmem_start)
 			INIT_C_CC},
 			-1,
 			0,
-			0,
+			0, 0, 0, 0, 0,
 			0,
 			0,
 			{25,80,0,0},
@@ -709,7 +768,7 @@ long tty_init(long kmem_start)
 			INIT_C_CC},
 			-1,
 			0,
-			0,
+			0, 0, 0, 0, 0,
 			0,
 			0,
 			{25,80,0,0},

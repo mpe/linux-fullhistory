@@ -41,7 +41,7 @@ current->start_code + current->end_code)
 
 unsigned long low_memory = 0;
 unsigned long high_memory = 0;
-unsigned long paging_pages = 0;
+unsigned long free_page_list = 0;
 
 #define copy_page(from,to) \
 __asm__("cld ; rep ; movsl"::"S" (from),"D" (to),"c" (1024):"cx","di","si")
@@ -71,14 +71,16 @@ void free_page(unsigned long addr)
 
 	if (addr < low_memory)
 		return;
-	if (addr < high_memory) {
-		i = addr - low_memory;
-		i >>= 12;
-		if (mem_map[i] == 1)
-			++nr_free_pages;
-		if (mem_map[i]--)
+	i = addr - low_memory;
+	i >>= 12;
+	if (addr < high_memory && mem_map[i]) {
+		if (--mem_map[i])
 			return;
-		mem_map[i] = 0;
+		addr &= 0xfffff000;
+		*(unsigned long *) addr = free_page_list;
+		free_page_list = addr;
+		++nr_free_pages;
+		return;
 	}
 	printk("trying to free free page (%08x): memory probably corrupted\n",addr);
 }
@@ -170,7 +172,7 @@ int copy_page_tables(unsigned long from,unsigned long to,long size)
 		from_page_table = (unsigned long *) (0xfffff000 & *from_dir);
 		if (!(to_page_table = (unsigned long *) get_free_page(GFP_KERNEL)))
 			return -1;	/* Out of memory, see freeing */
-		*to_dir = ((unsigned long) to_page_table) | 7;
+		*to_dir = ((unsigned long) to_page_table) | PAGE_ACCESSED | 7;
 		nr = (from==0)?0xA0:1024;
 		for ( ; nr-- > 0 ; from_page_table++,to_page_table++) {
 repeat:
@@ -187,7 +189,7 @@ repeat:
 					goto repeat;
 				}
 				*to_page_table = this_page;
-				*from_page_table = new_page | (PAGE_DIRTY | 7);
+				*from_page_table = new_page | (PAGE_DIRTY | PAGE_ACCESSED | 7);
 				continue;
 			}
 			this_page &= ~2;
@@ -294,7 +296,7 @@ int remap_page_range(unsigned long from, unsigned long to, unsigned long size,
 				invalidate();
 				return -1;
 			}
-			*dir++ = ((unsigned long) page_table) | 7;
+			*dir++ = ((unsigned long) page_table) | PAGE_ACCESSED | 7;
 		}
 		else
 			page_table = (unsigned long *)(0xfffff000 & *dir++);
@@ -384,7 +386,7 @@ static unsigned long put_page(unsigned long page,unsigned long address)
 			oom(current);
 			tmp = BAD_PAGETABLE;
 		}
-		*page_table = tmp | 7;
+		*page_table = tmp | PAGE_ACCESSED | 7;
 		return 0;
 	}
 	page_table += (address>>12) & 0x3ff;
@@ -393,7 +395,7 @@ static unsigned long put_page(unsigned long page,unsigned long address)
 		*page_table = 0;
 		invalidate();
 	}
-	*page_table = page | 7;
+	*page_table = page | PAGE_ACCESSED | 7;
 /* no need for invalidate */
 	return page;
 }
@@ -429,7 +431,7 @@ unsigned long put_dirty_page(unsigned long page, unsigned long address)
 		*page_table = 0;
 		invalidate();
 	}
-	*page_table = page | (PAGE_DIRTY | 7);
+	*page_table = page | (PAGE_DIRTY | PAGE_ACCESSED | 7);
 /* no need for invalidate */
 	return page;
 }
@@ -472,7 +474,7 @@ repeat:
 		new_page = BAD_PAGE;
 		send_sig(SIGSEGV,task,1);
 	}
-	*table_entry = new_page | dirty | 7;
+	*table_entry = new_page | dirty | PAGE_ACCESSED | 7;
 	free_page(old_page);
 	invalidate();
 }	
@@ -580,7 +582,7 @@ static int try_to_share(unsigned long address, struct task_struct * p)
 		to = get_free_page(GFP_KERNEL);
 		if (!to)
 			return 0;
-		*(unsigned long *) to_page = to | 7;
+		*(unsigned long *) to_page = to | PAGE_ACCESSED | 7;
 	}
 	to &= 0xfffff000;
 	to_page = to + ((address>>10) & 0xffc);
@@ -650,7 +652,7 @@ repeat:
 		*p = 0;
 	}
 	if (page) {
-		*p = page | 7;
+		*p = page | PAGE_ACCESSED | 7;
 		return *p;
 	}
 	if (page = get_free_page(GFP_KERNEL))
@@ -764,7 +766,8 @@ void show_mem(void)
 	printk("Free pages:    %6d\n",nr_free_pages);
 	printk("Buffer heads:  %6d\n",nr_buffer_heads);
 	printk("Buffer blocks: %6d\n",nr_buffers);
-	for (i = 0 ; i < paging_pages ; i++) {
+	i = (high_memory - low_memory) >> 12;
+	while (i-- > 0) {
 		total++;
 		if (!mem_map[i])
 			free++;
@@ -830,18 +833,26 @@ void do_page_fault(unsigned long *esp, unsigned long error_code)
 
 unsigned long mem_init(unsigned long start_mem, unsigned long end_mem)
 {
+	unsigned long tmp;
+
 	end_mem &= 0xfffff000;
 	high_memory = end_mem;
 	mem_map = (char *) start_mem;
-	paging_pages = (end_mem - start_mem) >> 12;
-	start_mem += paging_pages;
+	tmp = (end_mem - start_mem) >> 12;
+	start_mem += tmp;
 	start_mem += 0xfff;
 	start_mem &= 0xfffff000;
 	low_memory = start_mem;
-	paging_pages = (high_memory - low_memory) >> 12;
+	tmp = (high_memory - low_memory) >> 12;
 	swap_device = 0;
 	swap_file = NULL;
-	memset(mem_map,0,paging_pages);
-	nr_free_pages = paging_pages;
+	memset(mem_map,0,tmp);
+	nr_free_pages = tmp;
+	free_page_list = low_memory;
+	*(unsigned long *) free_page_list = 0;
+	while ((tmp = free_page_list + 4096) < high_memory) {
+		*(unsigned long *) tmp = free_page_list;
+		free_page_list = tmp;
+	}
 	return start_mem;
 }

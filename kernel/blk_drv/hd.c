@@ -593,7 +593,7 @@ static struct sigaction hd_sigaction = {
 	NULL
 };
 
-void hd_init(void)
+unsigned long hd_init(unsigned long mem_start)
 {
 	blk_dev[MAJOR_NR].request_fn = DEVICE_REQUEST;
 	blkdev_fops[MAJOR_NR] = &hd_fops;
@@ -602,6 +602,7 @@ void hd_init(void)
 	if (irqaction(HD_IRQ,&hd_sigaction))
 		printk("Unable to get IRQ%d for the harddisk driver\n",HD_IRQ);
 	timer_table[HD_TIMER].fn = hd_times_out;
+	return mem_start;
 }
 
 #endif

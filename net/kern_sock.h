@@ -1,6 +1,6 @@
 #ifndef _KERN_SOCK_H
 #define _KERN_SOCK_H
-
+#undef SOCK_DEBUG
 #define NSOCKETS 128			/* should be dynamic, later... */
 
 typedef enum {
@@ -29,7 +29,7 @@ struct socket {
 	socket_state state;
 	long flags;
 	struct proto_ops *ops;		/* protocols do most everything */
-	char *data;			/* protocol data */
+	void *data;			/* protocol data */
 	struct socket *conn;		/* server socket connected to */
 	struct socket *iconn;		/* incomplete client connections */
 	struct socket *next;
@@ -45,15 +45,31 @@ struct proto_ops {
 	int (*bind)(struct socket *sock, struct sockaddr *umyaddr,
 		    int sockaddr_len);
 	int (*connect)(struct socket *sock, struct sockaddr *uservaddr,
-		       int sockaddr_len);
+		       int sockaddr_len, int flags);
 	int (*socketpair)(struct socket *sock1, struct socket *sock2);
-	int (*accept)(struct socket *sock, struct socket *newsock);
+	int (*accept)(struct socket *sock, struct socket *newsock, int flags);
 	int (*getname)(struct socket *sock, struct sockaddr *uaddr,
 		       int *usockaddr_len, int peer);
 	int (*read)(struct socket *sock, char *ubuf, int size, int nonblock);
 	int (*write)(struct socket *sock, char *ubuf, int size, int nonblock);
 	int (*select)(struct socket *sock, int sel_type, select_table * wait);
 	int (*ioctl)(struct socket *sock, unsigned int cmd, unsigned long arg);
+	int (*listen)(struct socket *sock, int len);
+	int (*send)(struct socket *sock, void *buff, int len, int nonblock,
+		    unsigned flags);
+	int (*recv)(struct socket *sock, void *buff, int len, int nonblock,
+		    unsigned flags);
+	int (*sendto)(struct socket *sock, void *buff, int len, int nonblock,
+		      unsigned flags, struct sockaddr *, int addr_len);
+	int (*recvfrom)(struct socket *sock, void *buff, int len, int nonblock,
+			unsigned flags, struct sockaddr *, int *addr_len);
+	int (*shutdown)(struct socket *sock, int flags);
+	int (*setsockopt)(struct socket *sock, int level, int optname,
+			  char *optval, int optlen);
+	int (*getsockopt)(struct socket *sock, int level, int optname,
+			  char *optval, int *optlen);
+	int (*fcntl) (struct socket *sock, unsigned int cmd,
+		      unsigned long arg);
 };
 
 extern int sock_awaitconn(struct socket *mysock, struct socket *servsock);

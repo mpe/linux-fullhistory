@@ -14,7 +14,7 @@
 #include <linux/sched.h>
 #include <linux/kernel.h>
 #include <linux/signal.h>
-
+#include <linux/tty.h>
 #include <asm/segment.h>
 
 struct file_operations * chrdev_fops[MAX_CHRDEV] = {
@@ -338,10 +338,34 @@ int sys_creat(const char * pathname, int mode)
 	return sys_open(pathname, O_CREAT | O_WRONLY | O_TRUNC, mode);
 }
 
+static int
+close_fp (struct file *filp)
+{
+   struct inode *inode;
+
+	if (filp->f_count == 0) {
+		printk("Close: file count is 0\n");
+		return 0;
+	}
+
+	if (filp->f_count > 1) {
+		filp->f_count--;
+		return 0;
+	}
+     
+	inode = filp->f_inode;
+	if (filp->f_op && filp->f_op->release)
+		filp->f_op->release(inode,filp);
+
+	filp->f_count--;
+	filp->f_inode = NULL;
+	iput(inode);
+	return 0;
+}
+
 int sys_close(unsigned int fd)
 {	
 	struct file * filp;
-	struct inode * inode;
 
 	if (fd >= NR_OPEN)
 		return -EINVAL;
@@ -349,24 +373,97 @@ int sys_close(unsigned int fd)
 	if (!(filp = current->filp[fd]))
 		return -EINVAL;
 	current->filp[fd] = NULL;
-	if (filp->f_count == 0) {
-		printk("Close: file count is 0\n");
-		return 0;
-	}
-	if (filp->f_count > 1) {
-		filp->f_count--;
-		return 0;
-	}
-	inode = filp->f_inode;
-	if (filp->f_op && filp->f_op->release)
-		filp->f_op->release(inode,filp);
-	filp->f_count--;
-	filp->f_inode = NULL;
-	iput(inode);
-	return 0;
+	return (close_fp (filp));
 }
 
-int sys_vhangup(void)
+/* This routine looks through all the process's and closes any
+   references to the current processes tty.  To avoid problems with
+   process sleeping on an inode which has already been iput, anyprocess
+   which is sleeping on the tty is sent a sigkill (It's probably a rogue
+   process.)  Also no process should ever have /dev/console as it's
+   controlling tty, or have it open for reading.  So we don't have to
+   worry about messing with all the daemons abilities to write messages
+   to the console.  (Besides they should be using syslog.) */
+
+int
+sys_vhangup(void)
 {
-	return -ENOSYS;
+   int i;
+   int j;
+   struct file *filep;
+   struct tty_struct *tty;
+   extern void kill_wait (struct wait_queue **q, int signal);
+   extern int kill_pg (int pgrp, int sig, int priv);
+
+   if (!suser()) return (-EPERM);
+
+   /* send the SIGHUP signal. */
+   kill_pg (current->pgrp, SIGHUP, 0);
+
+   /* See if there is a controlling tty. */
+   if (current->tty < 0) return (0);
+
+   for (i = 0; i < NR_TASKS; i++)
+     {
+	if (task[i] == NULL) continue;
+	for (j = 0; j < NR_OPEN; j++)
+	  {
+	     filep = task[i]->filp[j];
+
+	     if (filep == NULL) continue;
+
+	     /* now we need to check to see if this file points to the
+		device we are trying to close. */
+
+ 	     if (!S_ISCHR (filep->f_inode->i_mode)) continue;
+
+	     /* This will catch both /dev/tty and the explicit terminal
+		device.  However, we must make sure that f_rdev is
+		defined and correct. */
+
+	     if ((MAJOR(filep->f_inode->i_rdev) == 5 ||
+		  MAJOR(filep->f_inode->i_rdev) == 4 ) &&
+		 (MAJOR(filep->f_rdev) == 4 &&
+		  MINOR(filep->f_rdev) == MINOR (current->tty)))
+	       {
+		  task[i]->filp[j] = NULL;
+
+		  /* so now we have found something to close.  We
+		     need to kill every process waiting on the
+		     inode. */
+
+		  kill_wait (&filep->f_inode->i_wait, SIGKILL);
+
+		  /* now make sure they are awake before we close the
+		     file. */
+
+		  wake_up (&filep->f_inode->i_wait);
+
+		  /* finally close the file. */
+
+		  current->close_on_exec &= ~(1<<j);
+		  close_fp (filep);
+	       }
+
+	  }
+
+	/* can't let them keep a reference to it around.
+	   But we can't touch current->tty until after the
+	   loop is complete. */
+
+	if (task[i]->tty == current->tty && task[i] != current)
+	  {
+	     task[i]->tty = -1;
+	  }
+     }
+   
+   /* need to do tty->session = 0 */
+   tty = TTY_TABLE(MINOR(current->tty));
+   tty->session = 0;
+   tty->pgrp = -1;
+   current->tty = -1;
+
+
+   return (0);
 }
+

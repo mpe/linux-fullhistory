@@ -225,7 +225,7 @@ extern struct file file_table[NR_FILE];
 extern struct super_block super_block[NR_SUPER];
 
 extern void grow_buffers(int size);
-extern int shrink_buffers(void);
+extern int shrink_buffers(unsigned int priority);
 
 extern int nr_buffers;
 extern int nr_buffer_heads;

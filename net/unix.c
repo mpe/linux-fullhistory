@@ -46,9 +46,10 @@ static int unix_proto_release(struct socket *sock, struct socket *peer);
 static int unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
 			   int sockaddr_len);
 static int unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
-			      int sockaddr_len);
+			      int sockaddr_len, int flags);
 static int unix_proto_socketpair(struct socket *sock1, struct socket *sock2);
-static int unix_proto_accept(struct socket *sock, struct socket *newsock);
+static int unix_proto_accept(struct socket *sock, struct socket *newsock, 
+			     int flags);
 static int unix_proto_getname(struct socket *sock, struct sockaddr *usockaddr,
 			      int *usockaddr_len, int peer);
 static int unix_proto_read(struct socket *sock, char *ubuf, int size,
@@ -58,6 +59,24 @@ static int unix_proto_write(struct socket *sock, char *ubuf, int size,
 static int unix_proto_select(struct socket *sock, int sel_type, select_table * wait);
 static int unix_proto_ioctl(struct socket *sock, unsigned int cmd,
 			    unsigned long arg);
+static int unix_proto_listen(struct socket *sock, int backlog);
+static int unix_proto_send (struct socket *sock, void *buff, int len,
+			    int nonblock, unsigned flags);
+static int unix_proto_recv (struct socket *sock, void *buff, int len,
+			    int nonblock, unsigned flags);
+static int unix_proto_sendto (struct socket *sock, void *buff, int len,
+			      int nonblock, unsigned flags,
+			      struct sockaddr *addr, int addr_len);
+static int unix_proto_recvfrom (struct socket *sock, void *buff, int len,
+				int nonblock, unsigned flags,
+				struct sockaddr *addr, int *addr_len);
+
+static int unix_proto_shutdown (struct socket *sock, int how);
+
+static int unix_proto_setsockopt (struct socket *sock, int level, int optname,
+				  char *optval, int optlen);
+static int unix_proto_getsockopt (struct socket *sock, int level, int optname,
+				  char *optval, int *optlen);
 
 struct proto_ops unix_proto_ops = {
 	unix_proto_init,
@@ -72,7 +91,16 @@ struct proto_ops unix_proto_ops = {
 	unix_proto_read,
 	unix_proto_write,
 	unix_proto_select,
-	unix_proto_ioctl
+ 	unix_proto_ioctl,
+ 	unix_proto_listen,
+ 	unix_proto_send,
+ 	unix_proto_recv,
+ 	unix_proto_sendto,
+ 	unix_proto_recvfrom,
+ 	unix_proto_shutdown,
+ 	unix_proto_setsockopt,
+ 	unix_proto_getsockopt,
+ 	NULL /* unix_proto_fcntl. */
 };
 
 #ifdef SOCK_DEBUG
@@ -94,6 +122,68 @@ sockaddr_un_printk(struct sockaddr_un *sockun, int sockaddr_len)
 	}
 }
 #endif
+  
+/* don't have to do anything. */
+static int
+unix_proto_listen (struct socket *sock, int backlog)
+{
+  return (0);
+}
+
+static int
+unix_proto_setsockopt(struct socket *sock, int level, int optname,
+		      char *optval, int optlen)
+{
+    return (-EOPNOTSUPP);
+}
+
+static int
+unix_proto_getsockopt(struct socket *sock, int level, int optname,
+		      char *optval, int *optlen)
+{
+    return (-EOPNOTSUPP);
+}
+
+static int
+unix_proto_sendto(struct socket *sock, void *buff, int len, int nonblock, 
+		  unsigned flags,  struct sockaddr *addr, int addr_len)
+{
+	return (-EOPNOTSUPP);
+}     
+
+static int
+unix_proto_recvfrom(struct socket *sock, void *buff, int len, int nonblock, 
+		    unsigned flags, struct sockaddr *addr, int *addr_len)
+{
+	return (-EOPNOTSUPP);
+}     
+
+static int
+unix_proto_shutdown (struct socket *sock, int how)
+{
+	return (-EOPNOTSUPP);
+}
+
+static int
+unix_proto_send(struct socket *sock, void *buff, int len, int nonblock,
+		unsigned flags)
+{
+	/* this error needs to be checked. */
+	if (flags != 0)
+	  return (-EINVAL);
+	return (unix_proto_write (sock, buff, len, nonblock));
+}
+
+static int
+unix_proto_recv(struct socket *sock, void *buff, int len, int nonblock,
+		unsigned flags)
+{
+	/* this error needs to be checked. */
+	if (flags != 0)
+	  return (-EINVAL);
+	return (unix_proto_read (sock, buff, len, nonblock));
+}
+
 
 static struct unix_proto_data *
 unix_data_lookup(struct sockaddr_un *sockun, int sockaddr_len)
@@ -282,7 +372,7 @@ unix_proto_bind(struct socket *sock, struct sockaddr *umyaddr,
  */
 static int
 unix_proto_connect(struct socket *sock, struct sockaddr *uservaddr,
-		   int sockaddr_len)
+		   int sockaddr_len, int flags)
 {
 	int i;
 	struct unix_proto_data *serv_upd;
@@ -337,11 +427,39 @@ unix_proto_socketpair(struct socket *sock1, struct socket *sock2)
  * on accept, we ref the peer's data for safe writes
  */
 static int
-unix_proto_accept(struct socket *sock, struct socket *newsock)
+unix_proto_accept(struct socket *sock, struct socket *newsock, int flags)
 {
+   struct socket *clientsock;
+
 	PRINTK("unix_proto_accept: socket 0x%x accepted via socket 0x%x\n",
 	       sock, newsock);
-	unix_data_ref(UN_DATA(newsock->conn));
+
+	/*
+	 * if there aren't any sockets awaiting connection, then wait for
+	 * one, unless nonblocking
+	 */
+	while (!(clientsock = sock->iconn)) {
+		if (flags & O_NONBLOCK)
+			return -EAGAIN;
+		interruptible_sleep_on(sock->wait);
+		if (current->signal & ~current->blocked) {
+			PRINTK("sys_accept: sleep was interrupted\n");
+			return -ERESTARTSYS;
+		}
+	}
+
+	/*
+	 * great. finish the connection relative to server and client,
+	 * wake up the client and return the new fd to the server
+	 */
+	sock->iconn = clientsock->next;
+	clientsock->next = NULL;
+	newsock->conn = clientsock;
+	clientsock->conn = newsock;
+	clientsock->state = SS_CONNECTED;
+	newsock->state = SS_CONNECTED;
+	wake_up(clientsock->wait);
+        unix_data_ref (UN_DATA(newsock->conn));
 	UN_DATA(newsock)->peerupd = UN_DATA(newsock->conn);
 	return 0;
 }
@@ -525,6 +643,23 @@ unix_proto_select(struct socket *sock, int sel_type, select_table * wait)
 {
 	struct unix_proto_data *upd, *peerupd;
 
+	/*
+	 * handle server sockets specially
+	 */
+	if (sock->flags & SO_ACCEPTCON) {
+		if (sel_type == SEL_IN) {
+			PRINTK("sock_select: %sconnections pending\n",
+			       sock->iconn ? "" : "no ");
+			if (sock->iconn)
+				return 1;
+			select_wait(sock->wait, wait);
+			return sock->iconn ? 1 : 0;
+		}
+		PRINTK("sock_select: nothing else for server socket\n");
+		select_wait(sock->wait, wait);
+		return 0;
+	}
+
 	if (sel_type == SEL_IN) {
 		upd = UN_DATA(sock);
 		PRINTK("unix_proto_select: there is%s data available\n",
@@ -565,7 +700,10 @@ unix_proto_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	peerupd = (sock->state == SS_CONNECTED) ? UN_DATA(sock->conn) : NULL;
 
 	switch (cmd) {
+
 	case TIOCINQ:
+		if (sock->flags & SO_ACCEPTCON)
+			return -EINVAL;
 		verify_area((void *)arg, sizeof(unsigned long));
 		if (UN_BUF_AVAIL(upd) || peerupd)
 			put_fs_long(UN_BUF_AVAIL(upd), (unsigned long *)arg);
@@ -574,6 +712,8 @@ unix_proto_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		break;
 
 	case TIOCOUTQ:
+		if (sock->flags & SO_ACCEPTCON)
+			return -EINVAL;
 		verify_area((void *)arg, sizeof(unsigned long));
 		if (peerupd)
 			put_fs_long(UN_BUF_SPACE(peerupd),

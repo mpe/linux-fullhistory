@@ -146,7 +146,9 @@ struct tty_struct {
 	struct termios termios;
 	int pgrp;
 	int session;
-	int stopped;
+	unsigned char stopped:1, status_changed:1, packet:1;
+	unsigned char ctrl_status;
+	short unused; /* make everything a multiple of 4. */
 	int flags;
 	int count;
 	struct winsize winsize;

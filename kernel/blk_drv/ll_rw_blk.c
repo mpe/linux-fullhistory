@@ -11,6 +11,7 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/string.h>
+#include <linux/config.h>
 
 #include <asm/system.h>
 
@@ -299,6 +300,9 @@ long blk_dev_init(long mem_start, long mem_end)
 		request[i].next = NULL;
 	}
 	memset(ro_bits,0,sizeof(ro_bits));
+#ifdef CONFIG_BLK_DEV_HD
+	mem_start = hd_init(mem_start,mem_end);
+#endif
 #ifdef RAMDISK
 	mem_start += rd_init(mem_start, RAMDISK*1024);
 #endif

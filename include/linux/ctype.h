@@ -1,5 +1,5 @@
-#ifndef _CTYPE_H
-#define _CTYPE_H
+#ifndef _LINUX_CTYPE_H
+#define _LINUX_CTYPE_H
 
 #define _U	0x01	/* upper */
 #define _L	0x02	/* lower */

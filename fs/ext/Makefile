@@ -14,7 +14,7 @@
 .s.o:
 	$(AS) -o $*.o $<
 
-OBJS=	bitmap.o freelists.o truncate.o namei.o inode.o \
+OBJS=	freelists.o truncate.o namei.o inode.o \
 	file.o dir.o symlink.o blkdev.o chrdev.o fifo.o
 
 ext.o: $(OBJS)

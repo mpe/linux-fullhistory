@@ -1,5 +1,5 @@
-#ifndef _MSDOS_FS_H
-#define _MSDOS_FS_H
+#ifndef _LINUX_MSDOS_FS_H
+#define _LINUX_MSDOS_FS_H
 
 /*
  * The MS-DOS filesystem constants/structures

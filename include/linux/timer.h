@@ -22,6 +22,8 @@
  * FLOPPY_TIMER		floppy disk timer (not used right now)
  * 
  * SCSI_TIMER		scsi.c timeout timer
+ *
+ * NET_TIMER		tcp/ip timeout timer
  */
 
 #define BLANK_TIMER	0
@@ -40,6 +42,7 @@
 #define HD_TIMER	16
 #define FLOPPY_TIMER	17
 #define SCSI_TIMER 	18
+#define NET_TIMER	19
 
 struct timer_struct {
 	unsigned long expires;

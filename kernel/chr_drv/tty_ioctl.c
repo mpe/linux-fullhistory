@@ -33,6 +33,8 @@ static void flush(struct tty_queue * queue)
 
 void flush_input(struct tty_struct * tty)
 {
+        tty->status_changed = 1;
+	tty->ctrl_status |= TIOCPKT_FLUSHREAD;
 	if (tty->read_q) {
 		flush(tty->read_q);
 		wake_up(&tty->read_q->proc_list);
@@ -49,6 +51,8 @@ void flush_input(struct tty_struct * tty)
 
 void flush_output(struct tty_struct * tty)
 {
+   	tty->status_changed = 1;
+	tty->ctrl_status |= TIOCPKT_FLUSHWRITE;
 	if (tty->write_q) {
 		flush(tty->write_q);
 		wake_up(&tty->write_q->proc_list);
@@ -138,6 +142,12 @@ static int set_termios(struct tty_struct * tty, struct termios * termios,
 		((char *)&tty->termios)[i]=get_fs_byte(i+(char *)termios);
 	if (IS_A_SERIAL(channel) && tty->termios.c_cflag != old_cflag)
 		change_speed(channel-64);
+
+	/* puting mpty's into echo mode is very bad, and I think under
+	   some situations can cause the kernel to do nothing but
+	   copy characters back and forth. -RAB */
+	if (IS_A_PTY_MASTER(channel)) tty->termios.c_lflag &= ~ECHO;
+
 	return 0;
 }
 
@@ -179,6 +189,22 @@ static int set_termio(struct tty_struct * tty, struct termio * termio,
 	}
 	for (i=0 ; i< (sizeof (*termio)) ; i++)
 		((char *)&tmp_termio)[i]=get_fs_byte(i+(char *)termio);
+
+	/* take care of the packet stuff. */
+	if ((tmp_termio.c_iflag & IXON) &&
+	    ~(tty->termios.c_iflag & IXON))
+	  {
+	     tty->status_changed = 1;
+	     tty->ctrl_status |= TIOCPKT_DOSTOP;
+	  }
+
+	if (~(tmp_termio.c_iflag & IXON) &&
+	    (tty->termios.c_iflag & IXON))
+	  {
+	     tty->status_changed = 1;
+	     tty->ctrl_status |= TIOCPKT_NOSTOP;
+	  }
+
 	*(unsigned short *)&tty->termios.c_iflag = tmp_termio.c_iflag;
 	*(unsigned short *)&tty->termios.c_oflag = tmp_termio.c_oflag;
 	*(unsigned short *)&tty->termios.c_cflag = tmp_termio.c_cflag;
@@ -408,6 +434,21 @@ int tty_ioctl(struct inode * inode, struct file * file,
 				tty->session = 0;
 			}
 			return 0;
+
+	       case TIOCPKT:
+			{
+			   int on;
+			   if (!IS_A_PTY_MASTER(dev))
+			     return (-EINVAL);
+			   verify_area ((unsigned long *)arg, sizeof (int));
+			   on=get_fs_long ((unsigned long *)arg);
+			   if (on )
+			     tty->packet = 1;
+			   else
+			     tty->packet = 0;
+			   return (0);
+			}
+
 		default:
 			return vt_ioctl(tty, dev, cmd, arg);
 	}

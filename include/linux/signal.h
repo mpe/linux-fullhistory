@@ -35,12 +35,13 @@ typedef unsigned int sigset_t;		/* 32 bits */
  * so they are commented out.
  */
 
-/*
+
 #define SIGIO		23
 #define SIGPOLL		SIGIO
+#define SIGURG		SIGIO
 #define SIGXCPU		24
 #define SIGXFSZ		25
-*/
+
 
 #define SIGVTALRM	26
 #define SIGPROF		27
@@ -60,12 +61,15 @@ typedef unsigned int sigset_t;		/* 32 bits */
 #define SIG_UNBLOCK        1	/* for unblocking signals */
 #define SIG_SETMASK        2	/* for setting the signal mask */
 
-#define SIG_DFL		((void (*)(int))0)	/* default signal handling */
-#define SIG_IGN		((void (*)(int))1)	/* ignore signal */
-#define SIG_ERR		((void (*)(int))-1)	/* error return from signal */
+/* Type of a signal handler.  */
+typedef void (*__sighandler_t)(int);
+
+#define SIG_DFL	((__sighandler_t)0)	/* default signal handling */
+#define SIG_IGN	((__sighandler_t)1)	/* ignore signal */
+#define SIG_ERR	((__sighandler_t)-1)	/* error return from signal */
 
 struct sigaction {
-	void (*sa_handler)(int);
+	__sighandler_t sa_handler;
 	sigset_t sa_mask;
 	int sa_flags;
 	void (*sa_restorer)(void);

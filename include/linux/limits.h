@@ -7,14 +7,14 @@
 #define NR_INODE 128
 #define NR_FILE 128
 #define NR_SUPER 8
-#define NR_HASH 307
+#define NR_HASH 997
 #define BLOCK_SIZE 1024
 #define BLOCK_SIZE_BITS 10
 #define MAX_CHRDEV 16
 #define MAX_BLKDEV 16
 
 #define NGROUPS_MAX       32	/* supplemental group IDs are available */
-#define ARG_MAX        40960	/* # bytes of args + environ for exec() */
+#define ARG_MAX       131072	/* # bytes of args + environ for exec() */
 #define CHILD_MAX        999    /* no limit :-) */
 #define OPEN_MAX          32	/* # open files a process may have */
 #define LINK_MAX         127	/* # links a file may have */

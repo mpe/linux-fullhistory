@@ -1,3 +1,4 @@
+/* modified by Ross Biro to help support inet sockets. */
 #include <linux/signal.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
@@ -16,13 +17,19 @@
 extern int sys_close(int fd);
 
 extern struct proto_ops unix_proto_ops;
+#ifdef INET_SOCKETS
+extern struct proto_ops inet_proto_ops;
+#endif
 
 static struct {
 	short family;
 	char *name;
 	struct proto_ops *ops;
 } proto_table[] = {
-	AF_UNIX,	"AF_UNIX",	&unix_proto_ops
+	{AF_UNIX,	"AF_UNIX",	&unix_proto_ops},
+#ifdef INET_SOCKETS
+	{AF_INET,	"AF_INET",	&inet_proto_ops},
+#endif
 };
 #define NPROTO (sizeof(proto_table) / sizeof(proto_table[0]))
 
@@ -277,16 +284,6 @@ sock_ioctl(struct inode *inode, struct file *file, unsigned int cmd,
 		printk("sock_ioctl: can't find socket for inode!\n");
 		return -EBADF;
 	}
-	switch (cmd) {
-	case TIOCINQ:
-	case TIOCOUTQ:
-		if (sock->flags & SO_ACCEPTCON)
-			return -EINVAL;
-		break;
-
-	default:
-		return -EINVAL;
-	}
 	return sock->ops->ioctl(sock, cmd, arg);
 }
 
@@ -300,23 +297,6 @@ sock_select(struct inode *inode, struct file *file, int sel_type, select_table *
 	       (sel_type == SEL_OUT) ? "out" : "ex");
 	if (!(sock = socki_lookup(inode))) {
 		printk("sock_select: can't find socket for inode!\n");
-		return 0;
-	}
-
-	/*
-	 * handle server sockets specially
-	 */
-	if (sock->flags & SO_ACCEPTCON) {
-		if (sel_type == SEL_IN) {
-			PRINTK("sock_select: %sconnections pending\n",
-			       sock->iconn ? "" : "no ");
-			if (sock->iconn)
-				return 1;
-			select_wait(&inode->i_wait, wait);
-			return sock->iconn ? 1 : 0;
-		}
-		PRINTK("sock_select: nothing else for server socket\n");
-		select_wait(&inode->i_wait, wait);
 		return 0;
 	}
 	/*
@@ -555,6 +535,8 @@ sock_listen(int fd, int backlog)
 		PRINTK("sys_listen: socket already accepting connections!\n");
 		return -EINVAL;
 	}
+	if (sock->ops && sock->ops->listen)
+	  sock->ops->listen (sock, backlog);
 	sock->flags |= SO_ACCEPTCON;
 	return 0;
 }
@@ -567,7 +549,7 @@ static int
 sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrlen)
 {
 	struct file *file;
-	struct socket *sock, *clientsock, *newsock;
+	struct socket *sock, *newsock;
 	int i;
 
 	PRINTK("sys_accept: fd = %d\n", fd);
@@ -580,20 +562,6 @@ sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrlen)
 	if (!(sock->flags & SO_ACCEPTCON)) {
 		PRINTK("sys_accept: socket not accepting connections!\n");
 		return -EINVAL;
-	}
-
-	/*
-	 * if there aren't any sockets awaiting connection, then wait for
-	 * one, unless nonblocking
-	 */
-	while (!(clientsock = sock->iconn)) {
-		if (file->f_flags & O_NONBLOCK)
-			return -EAGAIN;
-		interruptible_sleep_on(sock->wait);
-		if (current->signal & ~current->blocked) {
-			PRINTK("sys_accept: sleep was interrupted\n");
-			return -ERESTARTSYS;
-		}
 	}
 
 	if (!(newsock = sock_alloc(0))) {
@@ -611,24 +579,20 @@ sock_accept(int fd, struct sockaddr *upeer_sockaddr, int *upeer_addrlen)
 		sock_release(newsock);
 		return -EINVAL;
 	}
+	i = newsock->ops->accept(sock, newsock, file->f_flags);
 
-	/*
-	 * great. finish the connection relative to server and client,
-	 * wake up the client and return the new fd to the server
-	 */
-	sock->iconn = clientsock->next;
-	clientsock->next = NULL;
-	newsock->conn = clientsock;
-	clientsock->conn = newsock;
-	clientsock->state = SS_CONNECTED;
-	newsock->state = SS_CONNECTED;
-	newsock->ops->accept(sock, newsock);
-	PRINTK("sys_accept: connected socket 0x%x via 0x%x to 0x%x\n",
-	       sock, newsock, clientsock);
+	if ( i < 0)
+	  {
+	     sock_release (newsock);
+	     return (i);
+	  }
+
+	PRINTK("sys_accept: connected socket 0x%x via 0x%x\n",
+	       sock, newsock);
+
 	if (upeer_sockaddr)
 		newsock->ops->getname(newsock, upeer_sockaddr,
 				      upeer_addrlen, 1);
-	wake_up(clientsock->wait);
 
 	return fd;
 }
@@ -640,16 +604,18 @@ static int
 sock_connect(int fd, struct sockaddr *uservaddr, int addrlen)
 {
 	struct socket *sock;
+	struct file *file;
 	int i;
 
 	PRINTK("sys_connect: fd = %d\n", fd);
-	if (!(sock = sockfd_lookup(fd, NULL)))
+	if (!(sock = sockfd_lookup(fd, &file)))
 		return -EBADF;
 	if (sock->state != SS_UNCONNECTED) {
 		PRINTK("sys_connect: socket not unconnected\n");
 		return -EINVAL;
 	}
-	if ((i = sock->ops->connect(sock, uservaddr, addrlen)) < 0) {
+	i = sock->ops->connect(sock, uservaddr, addrlen, file->f_flags);
+	if (i < 0) {
 		PRINTK("sys_connect: connect failed\n");
 		return i;
 	}
@@ -677,6 +643,168 @@ sock_getpeername(int fd, struct sockaddr *usockaddr, int *usockaddr_len)
 		return -EBADF;
 	return sock->ops->getname(sock, usockaddr, usockaddr_len, 1);
 }
+
+
+/* send - shutdown added by bir7@leland.stanford.edu */
+
+static int
+sys_send( int fd, void * buff, int len, unsigned flags)
+{
+	struct socket *sock;
+	struct file *file;
+
+	PRINTK("sys_send (fd = %d, buff = %X, len = %d, flags = %X)\n",
+	       fd, buff, len, flags);
+
+	if (fd < 0 || fd >= NR_OPEN || 	((file = current->filp[fd]) == NULL))
+	  return (-EBADF);
+
+	if (!(sock = sockfd_lookup(fd, NULL)))
+		return (-ENOTSOCK);
+
+	return (sock->ops->send (sock, buff, len, (file->f_flags & O_NONBLOCK),
+				 flags));
+
+}
+
+static int
+sys_sendto( int fd, void * buff, int len, unsigned flags,
+	   struct sockaddr *addr, int addr_len)
+{
+	struct socket *sock;
+	struct file *file;
+
+	PRINTK("sys_sendto (fd = %d, buff = %X, len = %d, flags = %X,"
+	       " addr=%X, alen = %d\n", fd, buff, len, flags, addr, addr_len);
+
+	if (fd < 0 || fd >= NR_OPEN || 	((file = current->filp[fd]) == NULL))
+	  return (-EBADF);
+
+	if (!(sock = sockfd_lookup(fd, NULL)))
+		return (-ENOTSOCK);
+
+	return (sock->ops->sendto (sock, buff, len,
+				   (file->f_flags & O_NONBLOCK),
+				   flags, addr, addr_len));
+
+}
+
+
+static int
+sys_recv( int fd, void * buff, int len, unsigned flags)
+{
+	struct socket *sock;
+	struct file *file;
+
+	PRINTK("sys_recv (fd = %d, buff = %X, len = %d, flags = %X)\n",
+	       fd, buff, len, flags);
+
+	if (fd < 0 || fd >= NR_OPEN || 	((file = current->filp[fd]) == NULL))
+	  return (-EBADF);
+
+	if (!(sock = sockfd_lookup(fd, NULL)))
+		return (-ENOTSOCK);
+
+	return (sock->ops->recv (sock, buff, len,(file->f_flags & O_NONBLOCK),
+				 flags));
+
+}
+
+static int
+sys_recvfrom( int fd, void * buff, int len, unsigned flags,
+	     struct sockaddr *addr, int *addr_len)
+{
+	struct socket *sock;
+	struct file *file;
+
+	PRINTK("sys_recvfrom (fd = %d, buff = %X, len = %d, flags = %X,"
+	       " addr=%X, alen=%X\n", fd, buff, len, flags, addr, addr_len);
+
+	if (fd < 0 || fd >= NR_OPEN || 	((file = current->filp[fd]) == NULL))
+	  return (-EBADF);
+
+	if (!(sock = sockfd_lookup(fd, NULL)))
+		return (-ENOTSOCK);
+
+	return (sock->ops->recvfrom (sock, buff, len,
+				     (file->f_flags & O_NONBLOCK),
+				     flags, addr, addr_len));
+
+}
+
+
+static int
+sys_setsockopt (int fd, int level, int optname, char *optval, int optlen)
+{
+	struct socket *sock;
+	struct file *file;
+	
+	PRINTK ("sys_setsockopt(fd=%d, level=%d, optname=%d,\n",fd, level,
+		optname);
+	PRINTK ("               optval = %X, optlen = %d)\n", optval, optlen);
+
+	if (fd < 0 || fd >= NR_OPEN || 	((file = current->filp[fd]) == NULL))
+	  return (-EBADF);
+
+	if (!(sock = sockfd_lookup(fd, NULL)))
+		return (-ENOTSOCK);
+
+	return (sock->ops->setsockopt (sock, level, optname, optval, optlen));
+
+}
+
+static int
+sys_getsockopt (int fd, int level, int optname, char *optval, int *optlen)
+{
+	struct socket *sock;
+	struct file *file;
+	PRINTK ("sys_getsockopt(fd=%d, level=%d, optname=%d,\n",fd, level,
+		optname);
+	PRINTK ("               optval = %X, optlen = %X)\n", optval, optlen);
+
+	if (fd < 0 || fd >= NR_OPEN || 	((file = current->filp[fd]) == NULL))
+	  return (-EBADF);
+
+	if (!(sock = sockfd_lookup(fd, NULL)))
+	    return (-ENOTSOCK);
+	    
+	return (0);
+	return (sock->ops->getsockopt (sock, level, optname, optval, optlen));
+
+}
+
+
+static int
+sys_shutdown( int fd, int how)
+{
+	struct socket *sock;
+	struct file *file;
+
+	PRINTK("sys_shutdown (fd = %d, how = %d)\n",fd, how);
+
+	file = current->filp[fd];
+	if (fd < 0 || fd >= NR_OPEN || file == NULL)
+	  return (-EBADF);
+
+	if (!(sock = sockfd_lookup(fd, NULL)))
+		return (-ENOTSOCK);
+
+	return (sock->ops->shutdown (sock, how));
+
+}
+
+int
+sock_fcntl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+   struct socket *sock;
+   sock = socki_lookup (filp->f_inode);
+   
+   if (sock != NULL && sock->ops != NULL && sock->ops->fcntl != NULL)
+     return (sock->ops->fcntl (sock, cmd, arg));
+
+   return (-EINVAL);
+}
+
 
 /*
  * system call vectors. since i want to rewrite sockets as streams, we have
@@ -734,6 +862,61 @@ sys_socketcall(int call, unsigned long *args)
 				       get_fs_long(args+1),
 				       get_fs_long(args+2),
 				       (int *)get_fs_long(args+3));
+
+      case SYS_SEND:
+	  verify_area(args, 4 * sizeof (unsigned long));
+	  return ( sys_send (get_fs_long(args+0),
+			     (void *)get_fs_long(args+1),
+			     get_fs_long(args+2),
+			     get_fs_long(args+3)));
+			     
+      case SYS_SENDTO:
+	  verify_area(args, 6 * sizeof (unsigned long));
+	  return ( sys_sendto (get_fs_long(args+0),
+			     (void *)get_fs_long(args+1),
+			     get_fs_long(args+2),
+			     get_fs_long(args+3),
+			     (struct sockaddr *)get_fs_long(args+4),
+			     get_fs_long(args+5)));
+
+    
+      case SYS_RECV:
+	  verify_area(args, 4 * sizeof (unsigned long));
+	  return ( sys_recv (get_fs_long(args+0),
+			     (void *)get_fs_long(args+1),
+			     get_fs_long(args+2),
+			     get_fs_long(args+3)));
+			     
+      case SYS_RECVFROM:
+	  verify_area(args, 6 * sizeof (unsigned long));
+	  return ( sys_recvfrom (get_fs_long(args+0),
+				 (void *)get_fs_long(args+1),
+				 get_fs_long(args+2),
+				 get_fs_long(args+3),
+				 (struct sockaddr *)get_fs_long(args+4),
+				 (int *)get_fs_long(args+5)));
+
+      case SYS_SHUTDOWN:
+	  verify_area (args, 2* sizeof (unsigned long));
+	  return ( sys_shutdown (get_fs_long (args+0),
+				 get_fs_long (args+1)));
+
+      case SYS_SETSOCKOPT:
+	  verify_area (args, 5*sizeof (unsigned long));
+	  return (sys_setsockopt (get_fs_long (args+0),
+				  get_fs_long (args+1),
+				  get_fs_long (args+2),
+				  (char *)get_fs_long (args+3),
+				  get_fs_long (args+4)));
+
+
+      case SYS_GETSOCKOPT:
+	  verify_area (args, 5*sizeof (unsigned long));
+	  return (sys_getsockopt (get_fs_long (args+0),
+				  get_fs_long (args+1),
+				  get_fs_long (args+2),
+				  (char *)get_fs_long (args+3),
+				  (int *)get_fs_long (args+4)));
 
 	default:
 		return -EINVAL;

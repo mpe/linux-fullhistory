@@ -83,14 +83,12 @@ static int open_mouse(struct inode * inode, struct file * file)
 	mouse.dx = 0;
 	mouse.dy = 0;	
 	mouse.buttons = mouse.latch_buttons = 0x80;
-	MSE_INT_ON();	
 	if (request_irq(MOUSE_IRQ, mouse_interrupt)) {
-		MSE_INT_OFF();
-		mouse.active = 0;
-		mouse.ready = 0;
-		mouse.inode = NULL;
-		return -EBUSY;
-	}
+		/* once we get to here mouse is unused, IRQ is busy */
+		mouse.active = 0;  /* it's not active, fix it */
+		return -EBUSY;     /* IRQ is busy, so we're BUSY */
+	} /* if we can't get the IRQ and mouse not active */
+	MSE_INT_ON();	
 	return 0;
 }
 

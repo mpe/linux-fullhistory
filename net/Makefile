@@ -7,17 +7,27 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
+# only these two lines should need to be changed to remove inet sockets.
+# (and the tcp/tcpip.o in net.o)
+
+SUBDIRS		=# tcp
+SOCK_FLAGS	=# -DINET_SOCKETS
+
 .c.o:
-	$(CC) $(CFLAGS) -c $<
+	$(CC) $(CFLAGS) $(SOCK_FLAGS) -c $<
 .s.o:
 	$(AS) -o $*.o $<
 .c.s:
 	$(CC) $(CFLAGS) -S $<
 
-OBJS	=  socket.o unix.o
+OBJS	=  socket.o unix.o 
 
-net.o: $(OBJS)
-	$(LD) -r -o net.o $(OBJS)
+net.o: $(OBJS) subdirs
+	$(LD) -r -o net.o $(OBJS) #tcp/tcpip.o
+
+
+subdirs: dummy
+	for i in $(SUBDIRS); do (cd $$i; echo $$i; $(MAKE)) || exit; done
 
 clean:
 	rm -f core *.o *.a tmp_make
@@ -27,6 +37,9 @@ dep:
 	sed '/\#\#\# Dependencies/q' < Makefile > tmp_make
 	for i in *.c;do $(CPP) -M $$i;done >> tmp_make
 	cp tmp_make Makefile
+	@for i in $(SUBDIRS); do (cd $$i; echo $$i; $(MAKE) dep || exit; done
+
+dummy:
 
 ### Dependencies:
 socket.o : socket.c /usr/src/linux/include/linux/signal.h /usr/src/linux/include/linux/errno.h \

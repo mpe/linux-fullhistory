@@ -23,7 +23,7 @@ typedef long clock_t;
 
 #ifndef _PTRDIFF_T
 #define _PTRDIFF_T
-typedef long ptrdiff_t;
+typedef int ptrdiff_t;
 #endif
 
 #ifndef NULL
@@ -64,9 +64,6 @@ typedef unsigned int speed_t;
 typedef unsigned long tcflag_t;
 
 typedef unsigned long fd_set;
-
-typedef struct { int quot,rem; } div_t;
-typedef struct { long quot,rem; } ldiv_t;
 
 struct ustat {
 	daddr_t f_tfree;

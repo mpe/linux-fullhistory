@@ -929,13 +929,13 @@ void con_write(struct tty_struct * tty)
 		 *  Control characters can be used in the _middle_
 		 *  of an escape sequence.
 		 */
-		if (c < 32 || c == 127) switch(c) {
+		switch (c) {
 			case 7:
 				sysbeep();
-				break;
+				continue;
 			case 8:
 				bs(currcons);
-				break;
+				continue;
 			case 9:
 				pos -= (x << 1);
 				while (x < video_num_columns - 1) {
@@ -944,80 +944,84 @@ void con_write(struct tty_struct * tty)
 						break;
 				}
 				pos += (x << 1);
-				break;
+				continue;
 			case 10: case 11: case 12:
 				lf(currcons);
 				if (!lfnlmode)
-					break;
+					continue;
 			case 13:
 				cr(currcons);
-				break;
+				continue;
 			case 14:
 				charset = 1;
 				translate = G1_charset;
-				break;
+				continue;
 			case 15:
 				charset = 0;
 				translate = G0_charset;
-				break;
+				continue;
 			case 24: case 26:
 				state = ESnormal;
-				break;
+				continue;
 			case 27:
 				state = ESesc;
-				break;
+				continue;
 			case 127:
 				del(currcons);
-				break;
-		} else switch(state) {
+				continue;
+			case 128+27:
+				state = ESsquare;
+				continue;
+		}
+		switch(state) {
 			case ESesc:
 				state = ESnormal;
 				switch (c) {
 				  case '[':
 					state = ESsquare;
-					break;
+					continue;
 				  case 'E':
 					cr(currcons);
 					lf(currcons);
-					break;
+					continue;
 				  case 'M':
 					ri(currcons);
-					break;
+					continue;
 				  case 'D':
 					lf(currcons);
-					break;
+					continue;
 				  case 'H':
 					tab_stop[x >> 5] |= (1 << (x & 31));
-					break;
+					continue;
 				  case 'Z':
 					respond_ID(currcons,tty);
-					break;
+					continue;
 				  case '7':
 					save_cur(currcons);
-					break;
+					continue;
 				  case '8':
 					restore_cur(currcons);
-					break;
+					continue;
 				  case '(':
 					state = ESsetG0;
-					break;
+					continue;
 				  case ')':
 					state = ESsetG1;
-					break;
+					continue;
 				  case '#':
 					state = EShash;
-					break;
+					continue;
 				  case 'c':
 					reset_terminal(currcons,1);
-					break;
+					continue;
 				  case '>':  /* Numeric keypad */
 					SET(kbdapplic,kapplic,0);
-					break;
+					continue;
 				  case '=':  /* Appl. keypad */
 					SET(kbdapplic,kapplic,1);
-				 	break;
+				 	continue;
 				}	
-				break;
+				continue;
 			case ESsquare:
 				for(npar = 0 ; npar < NPAR ; npar++)
 					par[npar] = 0;
@@ -1025,97 +1029,97 @@ void con_write(struct tty_struct * tty)
 				state = ESgetpars;
 				if (c == '[') { /* Function key */
 					state=ESfunckey;
-					break;
+					continue;
 				}
 				if (ques=(c=='?'))
-					break;
+					continue;
 			case ESgetpars:
 				if (c==';' && npar<NPAR-1) {
 					npar++;
-					break;
+					continue;
 				} else if (c>='0' && c<='9') {
 					par[npar] *= 10;
 					par[npar] += c-'0';
-					break;
+					continue;
 				} else state=ESgotpars;
 			case ESgotpars:
 				state = ESnormal;
 				switch(c) {
 					case 'h':
 						set_mode(currcons,1);
-						break;
+						continue;
 					case 'l':
 						set_mode(currcons,0);
-						break;
+						continue;
 					case 'n':
 						if (!ques)
 							if (par[0] == 5)
 								status_report(currcons,tty);
 							else if (par[0] == 6)
 								cursor_report(currcons,tty);
-						break;
+						continue;
 				}
 				if (ques) {
 					ques = 0;
-					break;
+					continue;
 				}
 				switch(c) {
 					case 'G': case '`':
 						if (par[0]) par[0]--;
 						gotoxy(currcons,par[0],y);
-						break;
+						continue;
 					case 'A':
 						if (!par[0]) par[0]++;
 						gotoxy(currcons,x,y-par[0]);
-						break;
+						continue;
 					case 'B': case 'e':
 						if (!par[0]) par[0]++;
 						gotoxy(currcons,x,y+par[0]);
-						break;
+						continue;
 					case 'C': case 'a':
 						if (!par[0]) par[0]++;
 						gotoxy(currcons,x+par[0],y);
-						break;
+						continue;
 					case 'D':
 						if (!par[0]) par[0]++;
 						gotoxy(currcons,x-par[0],y);
-						break;
+						continue;
 					case 'E':
 						if (!par[0]) par[0]++;
 						gotoxy(currcons,0,y+par[0]);
-						break;
+						continue;
 					case 'F':
 						if (!par[0]) par[0]++;
 						gotoxy(currcons,0,y-par[0]);
-						break;
+						continue;
 					case 'd':
 						if (par[0]) par[0]--;
 						gotoxy(currcons,x,par[0]);
-						break;
+						continue;
 					case 'H': case 'f':
 						if (par[0]) par[0]--;
 						if (par[1]) par[1]--;
 						gotoxy(currcons,par[1],par[0]);
-						break;
+						continue;
 					case 'J':
 						csi_J(currcons,par[0]);
-						break;
+						continue;
 					case 'K':
 						csi_K(currcons,par[0]);
-						break;
+						continue;
 					case 'L':
 						csi_L(currcons,par[0]);
-						break;
+						continue;
 					case 'M':
 						csi_M(currcons,par[0]);
-						break;
+						continue;
 					case 'P':
 						csi_P(currcons,par[0]);
-						break;
+						continue;
 					case 'c':
 						if (!par[0])
 							respond_ID(currcons,tty);
-						break;
+						continue;
 					case 'g':
 						if (!par[0])
 							tab_stop[x >> 5] &= ~(1 << (x & 31));
@@ -1126,10 +1130,10 @@ void con_write(struct tty_struct * tty)
 							tab_stop[3] =
 							tab_stop[4] = 0;
 						}
-						break;
+						continue;
 					case 'm':
 						csi_m(currcons);
-						break;
+						continue;
 					case 'r':
 						if (!par[0])
 							par[0]++;
@@ -1142,24 +1146,24 @@ void con_write(struct tty_struct * tty)
 							bottom=par[1];
 							gotoxy(currcons,0,0);
 						}
-						break;
+						continue;
 					case 's':
 						save_cur(currcons);
-						break;
+						continue;
 					case 'u':
 						restore_cur(currcons);
-						break;
+						continue;
 					case '@':
 						csi_at(currcons,par[0]);
-						break;
+						continue;
 					case ']': /* setterm functions */
 						setterm_command(currcons);
-						break;
+						continue;
 				}
-				break;
+				continue;
 			case ESfunckey:
 				state = ESnormal;
-				break;
+				continue;
 			case EShash:
 				state = ESnormal;
 				if (c == '8') {
@@ -1170,7 +1174,7 @@ void con_write(struct tty_struct * tty)
 					video_erase_char =
 						(video_erase_char & 0xff00) | ' ';
 				}
-				break;
+				continue;
 			case ESsetG0:
 				if (c == '0')
 					G0_charset = GRAF_TRANS;
@@ -1181,7 +1185,7 @@ void con_write(struct tty_struct * tty)
 				if (charset == 0)
 					translate = G0_charset;
 				state = ESnormal;
-				break;
+				continue;
 			case ESsetG1:
 				if (c == '0')
 					G1_charset = GRAF_TRANS;
@@ -1192,7 +1196,7 @@ void con_write(struct tty_struct * tty)
 				if (charset == 1)
 					translate = G1_charset;
 				state = ESnormal;
-				break;
+				continue;
 			default:
 				state = ESnormal;
 		}

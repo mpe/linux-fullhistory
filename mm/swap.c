@@ -20,6 +20,8 @@
 static int lowest_bit = 0;
 static int highest_bit = 0;
 
+extern unsigned long free_page_list;
+
 /*
  * The following are used to make sure we don't thrash too much...
  */
@@ -150,6 +152,9 @@ int try_to_swap_out(unsigned long * table_ptr)
 	page = *table_ptr;
 	if (!(PAGE_PRESENT & page))
 		return 0;
+	*table_ptr &= ~PAGE_ACCESSED;
+	if (PAGE_ACCESSED & page)
+		return 0;
 	if (page < low_memory || page >= high_memory)
 		return 0;
 	for (i = 0; i < NR_LAST_FREE_PAGES; i++)
@@ -182,6 +187,40 @@ int try_to_swap_out(unsigned long * table_ptr)
 #define LAST_VM_PAGE (1024*1024)
 #define VM_PAGES (LAST_VM_PAGE - FIRST_VM_PAGE)
 
+static unsigned int dir_entry = 1024;
+static unsigned int page_entry = 0;
+
+/*
+ * sys_idle() does nothing much: it just searches for likely candidates for
+ * swapping out or forgetting about. This speeds up the search when we
+ * actually have to swap.
+ */
+int sys_idle(void)
+{
+	struct task_struct * p;
+	unsigned long page;
+
+	need_resched = 1;
+	if (dir_entry >= 1024)
+		dir_entry = FIRST_VM_PAGE>>10;
+	p = task[dir_entry >> 4];
+	page = pg_dir[dir_entry];
+	if (!(page & 1) || !p || !p->swappable) {
+		dir_entry++;
+		return 0;
+	}
+	page &= 0xfffff000;
+	if (page_entry >= 1024) {
+		page_entry = 0;
+		dir_entry++;
+		return 0;
+	}
+	page = *(page_entry + (unsigned long *) page);
+	if ((page < low_memory) || !(page & PAGE_PRESENT) || (page & PAGE_ACCESSED))
+		page_entry++;
+	return 0;
+}
+
 /*
  * Go through the page tables, searching for a user page that
  * we can swap out.
@@ -190,11 +229,9 @@ int try_to_swap_out(unsigned long * table_ptr)
  * is un-swappable), allowing high-priority processes which cannot be
  * swapped out (things like user-level device drivers (Not implemented)).
  */
-int swap_out(void)
+int swap_out(unsigned int priority)
 {
-	static int dir_entry = 1024;
-	static int page_entry = -1;
-	int counter = VM_PAGES;
+	int counter = VM_PAGES / 2;
 	int pg_table;
 	struct task_struct * p;
 
@@ -203,7 +240,7 @@ check_dir:
 		goto no_swap;
 	if (dir_entry >= 1024)
 		dir_entry = FIRST_VM_PAGE>>10;
-	if (!(p = task[dir_entry >> 4])) {
+	if (!(p = task[dir_entry >> 4]) || !p->swappable) {
 		counter -= 1024;
 		dir_entry++;
 		goto check_dir;
@@ -222,22 +259,39 @@ check_dir:
 check_table:
 	if (counter < 0)
 		goto no_swap;
-	counter--;
-	page_entry++;
 	if (page_entry >= 1024) {
-		page_entry = -1;
+		page_entry = 0;
 		dir_entry++;
 		goto check_dir;
 	}
-	if (p->swappable && try_to_swap_out(page_entry + (unsigned long *) pg_table)) {
+	if (try_to_swap_out(page_entry + (unsigned long *) pg_table)) {
 		p->rss--;
-		dir_entry++;
 		return 1;
 	}
+	page_entry++;
+	counter--;
 	goto check_table;
 no_swap:
-	printk("Out of swap-memory\n\r");
 	return 0;
+}
+
+static int try_to_free_page(void)
+{
+	if (shrink_buffers(0))
+		return 1;
+	if (swap_out(0))
+		return 1;
+	if (shrink_buffers(1))
+		return 1;
+	if (swap_out(1))
+		return 1;
+	if (shrink_buffers(2))
+		return 1;
+	if (swap_out(2))
+		return 1;
+	if (shrink_buffers(3))
+		return 1;
+	return swap_out(3);
 }
 
 /*
@@ -250,29 +304,24 @@ unsigned long get_free_page(int priority)
 	static unsigned long index = 0;
 
 repeat:
-	__asm__("std ; repne ; scasb\n\t"
-		"jne 1f\n\t"
-		"movb $1,1(%%edi)\n\t"
-		"sall $12,%%ecx\n\t"
-		"addl %2,%%ecx\n\t"
-		"movl %%ecx,%%edx\n\t"
-		"movl $1024,%%ecx\n\t"
-		"leal 4092(%%edx),%%edi\n\t"
-		"rep ; stosl\n\t"
-		"movl %%edx,%%eax\n"
-		"1:\tcld"
-		:"=a" (result)
-		:"0" (0),"b" (low_memory),"c" (paging_pages),
-		"D" (mem_map+paging_pages-1)
-		:"di","cx","dx");
-	if (result >= high_memory)
-		goto repeat;
-	if ((result && result < low_memory) || (result & 0xfff)) {
-		printk("weird result: %08x\n",result);
-		result = 0;
-	}
+	result = free_page_list;
 	if (result) {
-		--nr_free_pages;
+		if ((result & 0xfff) || result < low_memory || result >= high_memory) {
+			free_page_list = 0;
+			printk("Result = %08x - memory map destroyed\n");
+			panic("mm error");
+		}
+		free_page_list = *(unsigned long *) result;
+		nr_free_pages--;
+		if (mem_map[MAP_NR(result)]) {
+			printk("Free page %08x has mem_map = %d\n",
+				result,mem_map[MAP_NR(result)]);
+			goto repeat;
+		}
+		mem_map[MAP_NR(result)] = 1;
+		__asm__ __volatile__("cld ; rep ; stosl"
+			::"a" (0),"c" (1024),"D" (result)
+			:"di","cx");
 		if (index >= NR_LAST_FREE_PAGES)
 			index = 0;
 		last_free_pages[index] = result;
@@ -286,11 +335,7 @@ repeat:
 	}
 	if (priority <= GFP_BUFFER)
 		return 0;
-	if (shrink_buffers()) {
-		schedule();
-		goto repeat;
-	}
-	if (swap_out()) {
+	if (try_to_free_page()) {
 		schedule();
 		goto repeat;
 	}

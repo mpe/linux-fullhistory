@@ -18,6 +18,10 @@
 #include <linux/head.h>
 #include <linux/unistd.h>
 
+extern unsigned long * prof_buffer;
+extern unsigned long prof_len;
+extern int end;
+
 /*
  * we need this inline - forking from kernel space will result
  * in NO COPY ON WRITE (!!!), until an execve is executed. This
@@ -30,6 +34,7 @@
  * won't be any messing with the stack from main(), but we define
  * some others too.
  */
+static inline _syscall0(int,idle)
 static inline _syscall0(int,fork)
 static inline _syscall0(int,pause)
 static inline _syscall1(int,setup,void *,BIOS)
@@ -54,7 +59,6 @@ extern void init(void);
 extern void init_IRQ(void);
 extern long blk_dev_init(long,long);
 extern long chr_dev_init(long,long);
-extern void hd_init(void);
 extern void floppy_init(void);
 extern void sock_init(void);
 extern long rd_init(long mem_start, int length);
@@ -157,23 +161,28 @@ void start_kernel(void)
 	trap_init();
 	init_IRQ();
 	sched_init();
+#ifdef PROFILE_SHIFT
+	prof_buffer = (unsigned long *) memory_start;
+	prof_len = (unsigned long) &end;
+	prof_len >>= PROFILE_SHIFT;
+	memory_start += prof_len * sizeof(unsigned long);
+#endif
 	memory_start = chr_dev_init(memory_start,memory_end);
 	memory_start = blk_dev_init(memory_start,memory_end);
 	memory_start = mem_init(memory_start,memory_end);
 	buffer_init();
 	time_init();
 	printk("Linux version " UTS_RELEASE " " __DATE__ " " __TIME__ "\n");
-	hd_init();
 	floppy_init();
 	sock_init();
 	sti();
 #ifdef CONFIG_SCSI
 	scsi_dev_init();
 #endif
+	sti();
 	move_to_user_mode();
-	if (!fork()) {		/* we count on this going ok */
+	if (!fork())		/* we count on this going ok */
 		init();
-	}
 /*
  * task[0] is meant to be used as an "idle" task: it may not sleep, but
  * it might do some general things like count free pages or it could be
@@ -181,10 +190,10 @@ void start_kernel(void)
  * anything that can be useful, but shouldn't take time from the real
  * processes.
  *
- * Right now task[0] just does a infinite loop in user mode.
+ * Right now task[0] just does a infinite idle loop.
  */
 	for(;;)
-		/* nothing */ ;
+		idle();
 }
 
 static int printf(const char *fmt, ...)
