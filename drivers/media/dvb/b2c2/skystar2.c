@@ -1996,10 +1996,6 @@ static void driver_halt(struct pci_dev *pdev)
 	free_adapter_object(adapter);
 
 	pci_set_drvdata(pdev, NULL);
-
-	pci_disable_device(pdev);
-	pci_release_region(pdev, 1);
-	pci_release_region(pdev, 0);
 }
 
 static int dvb_start_feed(struct dvb_demux_feed *dvbdmxfeed)
