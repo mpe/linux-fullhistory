@@ -25,6 +25,7 @@
 #include <linux/cdrom.h>
 #include <linux/init.h>
 #include <linux/nls.h>
+#include <linux/ctype.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
@@ -39,6 +40,18 @@
 #ifdef LEAK_CHECK
 static int check_malloc = 0;
 static int check_bread = 0;
+#endif
+
+static int isofs_hashi(struct dentry *parent, struct qstr *qstr);
+static int isofs_hash(struct dentry *parent, struct qstr *qstr);
+static int isofs_cmpi(struct dentry *dentry, struct qstr *a, struct qstr *b);
+static int isofs_cmp(struct dentry *dentry, struct qstr *a, struct qstr *b);
+
+#ifdef CONFIG_JOLIET
+static int isofs_hashi_ms(struct dentry *parent, struct qstr *qstr);
+static int isofs_hash_ms(struct dentry *parent, struct qstr *qstr);
+static int isofs_cmpi_ms(struct dentry *dentry, struct qstr *a, struct qstr *b);
+static int isofs_cmp_ms(struct dentry *dentry, struct qstr *a, struct qstr *b);
 #endif
 
 void isofs_put_super(struct super_block *sb)
@@ -71,20 +84,212 @@ static struct super_operations isofs_sops = {
 	NULL
 };
 
-struct iso9660_options{
-  char map;
-  char rock;
-  char joliet;
-  char cruft;
-  char unhide;
-  unsigned char check;
-  unsigned int blocksize;
-  mode_t mode;
-  gid_t gid;
-  uid_t uid;
-  char *iocharset;
-  unsigned char utf8;
+static struct dentry_operations isofs_dentry_ops[] = {
+	{
+		NULL,			/* d_revalidate */
+		isofs_hash,
+		isofs_cmp,
+		NULL			/* d_delete */
+	},
+	{
+		NULL,			/* d_revalidate */
+		isofs_hashi,
+		isofs_cmpi,
+		NULL			/* d_delete */
+	},
+#ifdef CONFIG_JOLIET
+	{
+		NULL,			/* d_revalidate */
+		isofs_hash_ms,
+		isofs_cmp_ms,
+		NULL			/* d_delete */
+	},
+	{
+		NULL,			/* d_revalidate */
+		isofs_hashi_ms,
+		isofs_cmpi_ms,
+		NULL			/* d_delete */
+	}
+#endif
 };
+
+struct iso9660_options{
+	char map;
+	char rock;
+	char joliet;
+	char cruft;
+	char unhide;
+	unsigned char check;
+	unsigned int blocksize;
+	mode_t mode;
+	gid_t gid;
+	uid_t uid;
+	char *iocharset;
+	unsigned char utf8;
+};
+
+static int strnicmp(const char *s1, const char *s2, int len)
+{
+	int n = 0;
+	while (*s1 && *s2 && (tolower(*s1) == tolower(*s2))) {
+		s1++; s2++; n++;
+		if (n == len) return 0;
+	}
+	if (*s1 == 0 && *s2 == 0) return 0;
+	if (*s1 && *s2) {
+		if (*s1 > *s2) return 1;
+		return -1;
+	}
+	if (*s1) return 1;
+	return -1;
+}
+
+/*
+ * Compute the hash for the isofs name corresponding to the dentry.
+ */
+static int
+isofs_hash_common(struct dentry *dentry, struct qstr *qstr, int ms)
+{
+	const char *name;
+	int len;
+
+	len = qstr->len;
+	name = qstr->name;
+	if (ms) {
+		while (len && name[len-1] == '.')
+			len--;
+	}
+
+	qstr->hash = full_name_hash(name, len);
+
+	return 0;
+}
+
+/*
+ * Compute the hash for the isofs name corresponding to the dentry.
+ */
+static int
+isofs_hashi_common(struct dentry *dentry, struct qstr *qstr, int ms)
+{
+	const char *name;
+	int len;
+	char c;
+	unsigned long hash;
+
+	len = qstr->len;
+	name = qstr->name;
+	if (ms) {
+		while (len && name[len-1] == '.')
+			len--;
+	}
+
+	hash = init_name_hash();
+	while (len--) {
+		c = tolower(*name++);
+		hash = partial_name_hash(tolower(c), hash);
+	}
+	qstr->hash = end_name_hash(hash);
+
+	return 0;
+}
+
+/*
+ * Case insensitive compare of two isofs names.
+ */
+static int
+isofs_cmpi_common(struct dentry *dentry,struct qstr *a,struct qstr *b,int ms)
+{
+	int alen, blen;
+
+	/* A filename cannot end in '.' or we treat it like it has none */
+	alen = a->len;
+	blen = b->len;
+	if (ms) {
+		while (alen && a->name[alen-1] == '.')
+			alen--;
+		while (blen && b->name[blen-1] == '.')
+			blen--;
+	}
+	if (alen == blen) {
+		if (strnicmp(a->name, b->name, alen) == 0)
+			return 0;
+	}
+	return 1;
+}
+
+/*
+ * Case sensitive compare of two isofs names.
+ */
+static int
+isofs_cmp_common(struct dentry *dentry,struct qstr *a,struct qstr *b,int ms)
+{
+	int alen, blen;
+
+	/* A filename cannot end in '.' or we treat it like it has none */
+	alen = a->len;
+	blen = b->len;
+	if (ms) {
+		while (alen && a->name[alen-1] == '.')
+			alen--;
+		while (blen && b->name[blen-1] == '.')
+			blen--;
+	}
+	if (alen == blen) {
+		if (strncmp(a->name, b->name, alen) == 0)
+			return 0;
+	}
+	return 1;
+}
+
+static int
+isofs_hash(struct dentry *dentry, struct qstr *qstr)
+{
+	return isofs_hash_common(dentry, qstr, 0);
+}
+
+static int
+isofs_hashi(struct dentry *dentry, struct qstr *qstr)
+{
+	return isofs_hashi_common(dentry, qstr, 0);
+}
+
+static int
+isofs_cmp(struct dentry *dentry,struct qstr *a,struct qstr *b)
+{
+	return isofs_cmp_common(dentry, a, b, 0);
+}
+
+static int
+isofs_cmpi(struct dentry *dentry,struct qstr *a,struct qstr *b)
+{
+	return isofs_cmpi_common(dentry, a, b, 0);
+}
+
+#ifdef CONFIG_JOLIET
+static int
+isofs_hash_ms(struct dentry *dentry, struct qstr *qstr)
+{
+	return isofs_hash_common(dentry, qstr, 1);
+}
+
+static int
+isofs_hashi_ms(struct dentry *dentry, struct qstr *qstr)
+{
+	return isofs_hashi_common(dentry, qstr, 1);
+}
+
+static int
+isofs_cmp_ms(struct dentry *dentry,struct qstr *a,struct qstr *b)
+{
+	return isofs_cmp_common(dentry, a, b, 1);
+}
+
+static int
+isofs_cmpi_ms(struct dentry *dentry,struct qstr *a,struct qstr *b)
+{
+	return isofs_cmpi_common(dentry, a, b, 1);
+}
+#endif
 
 static int parse_options(char *options, struct iso9660_options * popt)
 {
@@ -95,7 +300,7 @@ static int parse_options(char *options, struct iso9660_options * popt)
 	popt->joliet = 'y';
 	popt->cruft = 'n';
 	popt->unhide = 'n';
-	popt->check = 's';		/* default: strict */
+	popt->check = 'u';		/* unset */
 	popt->blocksize = 1024;
 	popt->mode = S_IRUGO | S_IXUGO; /* r-x for all.  The disc could
 					   be shared with DOS machines so
@@ -274,6 +479,7 @@ struct super_block *isofs_read_super(struct super_block *s, void *data,
 	unsigned int			vol_desc_start;
 	struct inode		      * inode;
 	struct iso9660_options		opt;
+	int				table;
 
 	MOD_INC_USE_COUNT;
 	/* lock before any blocking operations */
@@ -374,7 +580,7 @@ struct super_block *isofs_read_super(struct super_block *s, void *data,
 			    } else if (sec->escape[2] == 0x45) {
 				joliet_level = 3;
 			    }
-			    printk("ISO 9660 Extensions: Microsoft Joliet Level %d\n",
+			    printk(KERN_DEBUG"ISO 9660 Extensions: Microsoft Joliet Level %d\n",
 				   joliet_level);
 			}
 			goto root_found;
@@ -532,7 +738,6 @@ root_found:
 	s->s_op = &isofs_sops;
 	s->u.isofs_sb.s_mapping = opt.map;
 	s->u.isofs_sb.s_rock = (opt.rock == 'y' ? 2 : 0);
-	s->u.isofs_sb.s_name_check = opt.check;
 	s->u.isofs_sb.s_cruft = opt.cruft;
 	s->u.isofs_sb.s_unhide = opt.unhide;
 	s->u.isofs_sb.s_uid = opt.uid;
@@ -555,7 +760,10 @@ root_found:
 	 * CD with Unicode names.  Until someone sees such a beast, it
 	 * will not be supported.
 	 */
-	if (joliet_level && opt.rock == 'y' && s->u.isofs_sb.s_rock != 1) {
+	if (opt.rock == 'y' && s->u.isofs_sb.s_rock == 1) {
+		joliet_level = 0;
+	}
+	if (joliet_level) {
 		iput(inode);
 		pri = (struct iso_primary_descriptor *) sec;
 		rootp = (struct iso_directory_record *)
@@ -566,11 +774,22 @@ root_found:
 			 << s -> u.isofs_sb.s_log_zone_size);
 		inode = iget(s, s->u.isofs_sb.s_firstdatazone);
 		s->u.isofs_sb.s_rock = 0;
+		opt.rock = 'n';
+	}
+
+	if (opt.check == 'u') {
+		/* Only Joliet is case insensitive by default */
+		if (joliet_level) opt.check = 'r';
+		else opt.check = 's';
 	}
 
 	s->s_root = d_alloc_root(inode, NULL);
 	if (!(s->s_root))
 		goto out_no_root;
+	table = 0;
+	if (joliet_level) table += 2;
+	if (opt.check == 'r') table++;
+	s->s_root->d_op = &isofs_dentry_ops[table];
 
 	if(!check_disk_change(dev)) {
 		brelse(bh);
@@ -694,34 +913,36 @@ int isofs_bmap(struct inode * inode,int block)
 	size = inode->u.isofs_i.i_section_size;
 	nextino = inode->u.isofs_i.i_next_section_ino;
 #ifdef DEBUG
-	printk("first inode: inode=%lu nextino=%lu firstext=%u size=%lu\n",
+	printk("first inode: inode=%x nextino=%x firstext=%u size=%lu\n",
 		inode->i_ino, nextino, firstext, size);
 #endif
 	i = 0;
-	while(b_off >= offset + size) {
-		offset += size;
+	if (nextino) {
+		while(b_off >= offset + size) {
+			offset += size;
 
-		if(nextino == 0) return 0;
-		ino = iget(inode->i_sb, nextino);
-		if(!ino) return 0;
-		firstext = ino->u.isofs_i.i_first_extent;
-		size = ino->u.isofs_i.i_section_size;
+			if(nextino == 0) return 0;
+			ino = iget(inode->i_sb, nextino);
+			if(!ino) return 0;
+			firstext = ino->u.isofs_i.i_first_extent;
+			size = ino->u.isofs_i.i_section_size;
 #ifdef DEBUG
-		printk("read inode: inode=%lu ino=%lu nextino=%lu firstext=%u size=%lu\n",
-			inode->i_ino, nextino, ino->u.isofs_i.i_next_section_ino, firstext, size);
+			printk("read inode: inode=%lu ino=%lu nextino=%lu firstext=%u size=%lu\n",
+			       inode->i_ino, nextino, ino->u.isofs_i.i_next_section_ino, firstext, size);
 #endif
-		nextino = ino->u.isofs_i.i_next_section_ino;
-		iput(ino);
+			nextino = ino->u.isofs_i.i_next_section_ino;
+			iput(ino);
 		
-		if(++i > 100) {
-			printk("isofs_bmap: More than 100 file sections ?!?, aborting...\n");
-			printk("isofs_bmap: ino=%lu block=%d firstext=%u size=%u nextino=%lu\n",
-				inode->i_ino, block, firstext, (unsigned)size, nextino);
-			return 0;
+			if(++i > 100) {
+				printk("isofs_bmap: More than 100 file sections ?!?, aborting...\n");
+				printk("isofs_bmap: ino=%lu block=%d firstext=%u size=%u nextino=%lu\n",
+				       inode->i_ino, block, firstext, (unsigned)size, nextino);
+				return 0;
+			}
 		}
 	}
 #ifdef DEBUG
-	printk("isofs_bmap: mapped inode:block %lu:%d to block %lu\n",
+	printk("isofs_bmap: mapped inode:block %x:%d to block %lu\n",
 		inode->i_ino, block, (b_off - offset + firstext) >> ISOFS_BUFFER_BITS(inode));
 #endif
 	return (b_off - offset + firstext) >> ISOFS_BUFFER_BITS(inode);
@@ -905,7 +1126,7 @@ void isofs_read_inode(struct inode * inode)
 #endif
 
 #ifdef DEBUG
-	printk("Get inode %d: %d %d: %d\n",inode->i_ino, block,
+	printk("Get inode %x: %d %d: %d\n",inode->i_ino, block,
 	       ((int)pnt) & 0x3ff, inode->i_size);
 #endif
 

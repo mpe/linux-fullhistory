@@ -430,9 +430,6 @@ int del_timer(struct timer_list * timer)
 	ret = detach_timer(timer);
 	timer->next = timer->prev = 0;
 	spin_unlock_irqrestore(&timerlist_lock, flags);
-
-	/* Make sure the timer isn't running in parallell.. */
-	synchronize_bh();
 	return ret;
 }
 

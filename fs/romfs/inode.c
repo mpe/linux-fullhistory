@@ -30,17 +30,18 @@
  *					  correct namelen for statfs
  *					spotted by Bill Hawes:
  *					  readlink shouldn't iput()
+ *	Jun 1998	2.1.106		from Avery Pennarun: glibc scandir()
+ *					  exposed a problem in readdir
+ *			2.1.107		code-freeze spellchecker run
+ *	Aug 1998			2.1.118+ VFS changes
  */
 
 /* todo:
  *	- see Documentation/filesystems/romfs.txt
- *	- use malloced memory for file names?
- *	- quicklist routines from fs/namei.c, get_page is possibly not
- *	  intended to be used now
+ *	- use allocated, not stack memory for file names?
  *	- considering write access...
  *	- network (tftp) files?
- *	- in the ancient times something leaked to made umounts
- *	  impossible, but I've not seen it in the last months
+ *	- merge back some _op tables
  */
 
 /*
@@ -492,6 +493,7 @@ static struct file_operations romfs_file_operations = {
 	NULL,			/* ioctl */
 	generic_file_mmap,	/* mmap */
 	NULL,			/* open */
+	NULL,			/* flush */
 	NULL,			/* release */
 	NULL,			/* fsync */
 	NULL,			/* fasync */
@@ -529,6 +531,7 @@ static struct file_operations romfs_dir_operations = {
 	NULL,			/* ioctl */
 	NULL,			/* mmap */
 	NULL,			/* open */
+	NULL,			/* flush */
 	NULL,			/* release */
 	NULL,			/* fsync */
 	NULL,			/* fasync */

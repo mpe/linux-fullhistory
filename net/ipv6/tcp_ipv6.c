@@ -617,7 +617,7 @@ void tcp_v6_err(struct sk_buff *skb, int type, int code, unsigned char *header, 
 			 */
 			sk->mtu = sk->dst_cache->pmtu;
 		}
-		if (sk->sock_readers) { /* remove later */
+		if (atomic_read(&sk->sock_readers)) { /* remove later */
 			printk(KERN_DEBUG "tcp_v6_err: pmtu disc: socket locked.\n");
 			return;
 		}
@@ -631,7 +631,7 @@ void tcp_v6_err(struct sk_buff *skb, int type, int code, unsigned char *header, 
 		struct open_request *req, *prev;
 		struct ipv6hdr hd;
 	case TCP_LISTEN:
-		if (sk->sock_readers)
+		if (atomic_read(&sk->sock_readers))
 			return;
 
 		/* Grrrr - fix this later. */
@@ -1178,7 +1178,7 @@ int tcp_v6_rcv(struct sk_buff *skb, struct device *dev,
 	if(sk->state == TCP_TIME_WAIT)
 		goto do_time_wait;
 
-	if (!sk->sock_readers)
+	if (!atomic_read(&sk->sock_readers))
 		return tcp_v6_do_rcv(sk, skb);
 
 	__skb_queue_tail(&sk->back_log, skb);

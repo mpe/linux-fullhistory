@@ -350,7 +350,7 @@ struct sock {
 	unsigned char		reuse,		/* SO_REUSEADDR setting			*/
 				nonagle;	/* Disable Nagle algorithm?		*/
 
-	int			sock_readers;	/* User count				*/
+	atomic_t		sock_readers;	/* User count				*/
 	int			rcvbuf;		/* Size of receive buffer in bytes	*/
 
 	struct wait_queue	**sleep;	/* Sock wait queue			*/
@@ -643,42 +643,20 @@ static inline void lock_sock(struct sock *sk)
 #if 0
 /* debugging code: the test isn't even 100% correct, but it can catch bugs */
 /* Note that a double lock is ok in theory - it's just _usually_ a bug */
-	if (sk->sock_readers) {
+	if (atomic_read(&sk->sock_readers)) {
 		__label__ here;
 		printk("double lock on socket at %p\n", &&here);
 here:
 	}
 #endif
-#ifdef __SMP__
-	/*
-	 * This is a very broken bottom half synchronization mechanism.
-	 * You don't want to know..
-	 */
-	{ unsigned long flags;
-	save_flags(flags);
-	cli();
-	sk->sock_readers++;
-	restore_flags(flags);
-	}
-#else
-	sk->sock_readers++;
-	barrier();
-#endif
+	atomic_inc(&sk->sock_readers);
+	synchronize_bh();
 }
 
 static inline void release_sock(struct sock *sk)
 {
 	barrier();
-#if 0
-/* debugging code: remove me when ok */
-	if (sk->sock_readers == 0) {
-		__label__ here;
-		sk->sock_readers = 1;
-		printk("trying to unlock unlocked socket at %p\n", &&here);
-here:
-	}
-#endif
-	if ((sk->sock_readers = sk->sock_readers-1) == 0)
+	if (atomic_dec_and_test(&sk->sock_readers))
 		__release_sock(sk);
 }
 

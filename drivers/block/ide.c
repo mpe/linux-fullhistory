@@ -1104,8 +1104,7 @@ static void ide_do_request (ide_hwgroup_t *hwgroup, unsigned long *hwgroup_flags
 			if (sleep) {
 				if (0 < (signed long)(jiffies + WAIT_MIN_SLEEP - sleep)) 
 					sleep = jiffies + WAIT_MIN_SLEEP;
-				hwgroup->timer.expires = sleep;
-				add_timer(&hwgroup->timer);
+				mod_timer(&hwgroup->timer, sleep);
 			} else {
 				/* Ugly, but how can we sleep for the lock otherwise? perhaps from tq_scheduler? */
 				ide_release_lock(&ide_lock);	/* for atari only */

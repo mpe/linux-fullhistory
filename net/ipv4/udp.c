@@ -493,7 +493,7 @@ void udp_err(struct sk_buff *skb, unsigned char *dp, int len)
     	  	return;	/* No socket for error */
 	}
 
-	if (sk->ip_recverr && !sk->sock_readers) {
+	if (sk->ip_recverr && !atomic_read(&sk->sock_readers)) {
 		struct sk_buff *skb2 = skb_clone(skb, GFP_ATOMIC);
 		if (skb2 && sock_queue_err_skb(sk, skb2))
 			kfree_skb(skb2);
@@ -1026,7 +1026,7 @@ static int udp_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 
 static inline void udp_deliver(struct sock *sk, struct sk_buff *skb)
 {
-	if (sk->sock_readers) {
+	if (atomic_read(&sk->sock_readers)) {
 		__skb_queue_tail(&sk->back_log, skb);
 		return;
 	}

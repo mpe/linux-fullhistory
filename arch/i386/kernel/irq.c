@@ -450,12 +450,12 @@ static inline void wait_on_irq(int cpu)
  * no other CPU is executing any bottom half handler.
  *
  * Don't wait if we're already running in an interrupt
- * context or are inside a bh handler.
+ * context or are inside a bh handler. 
  */
 void synchronize_bh(void)
 {
 	if (atomic_read(&global_bh_count) && !in_interrupt())
-			wait_on_bh();
+		wait_on_bh();
 }
 
 /*

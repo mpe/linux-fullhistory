@@ -182,7 +182,7 @@ void tcp_probe_timer(unsigned long data)
 	if(sk->zapped) 
 		return;
 	
-	if (sk->sock_readers) {
+	if (atomic_read(&sk->sock_readers)) {
 		/* Try again in second. */
 		tcp_reset_xmit_timer(sk, TIME_PROBE0, HZ);
 		return;
@@ -432,7 +432,7 @@ void tcp_retransmit_timer(unsigned long data)
 		return;
 	}
 
-	if (sk->sock_readers) {
+	if (atomic_read(&sk->sock_readers)) {
 		/* Try again in a second. */
 		tcp_reset_xmit_timer(sk, TIME_RETRANS, HZ);
 		return;
@@ -518,7 +518,7 @@ static void tcp_syn_recv_timer(unsigned long data)
 			struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 			
 			/* TCP_LISTEN is implied. */
-			if (!sk->sock_readers && tp->syn_wait_queue) {
+			if (!atomic_read(&sk->sock_readers) && tp->syn_wait_queue) {
 				struct open_request *prev = (struct open_request *)(&tp->syn_wait_queue);
 				struct open_request *req = tp->syn_wait_queue;
 				do {

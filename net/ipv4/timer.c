@@ -73,7 +73,7 @@ void net_timer (unsigned long data)
 	int why = sk->timeout;
 
 	/* Only process if socket is not in use. */
-	if (sk->sock_readers) {
+	if (atomic_read(&sk->sock_readers)) {
 		sk->timer.expires = jiffies+HZ;
 		add_timer(&sk->timer);
 		return;

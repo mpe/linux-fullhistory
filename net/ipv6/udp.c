@@ -569,7 +569,7 @@ int udpv6_rcv(struct sk_buff *skb, struct device *dev,
 
 	/* deliver */
 
-	if (sk->sock_readers)
+	if (atomic_read(&sk->sock_readers))
 		__skb_queue_tail(&sk->back_log, skb);
 	else
 		udpv6_queue_rcv_skb(sk, skb);

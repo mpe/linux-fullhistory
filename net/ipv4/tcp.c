@@ -707,7 +707,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 	int copied  = 0;
 
 	/* Verify that the socket is locked */
-	if (!sk->sock_readers)
+	if (!atomic_read(&sk->sock_readers))
 		printk("tcp_do_sendmsg: socket not locked!\n");
 
 	/* Wait for a connection to finish. */
@@ -1389,7 +1389,7 @@ void tcp_close(struct sock *sk, unsigned long timeout)
 	 * Check whether the socket is locked ... supposedly
 	 * it's impossible to tcp_close() a locked socket.
 	 */
-	if (sk->sock_readers)
+	if (atomic_read(&sk->sock_readers))
 		printk("tcp_close: socket already locked!\n");
 
 	/* We need to grab some memory, and put together a FIN,

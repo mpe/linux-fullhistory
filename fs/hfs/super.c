@@ -396,9 +396,7 @@ struct super_block *hfs_read_super(struct super_block *s, void *data,
 	struct hfs_mdb *mdb;
 	struct hfs_cat_key key;
 	kdev_t dev = s->s_dev;
-#ifndef CONFIG_MAC_PARTITION
 	hfs_s32 part_size, part_start;
-#endif
 	struct inode *root_inode;
 	int part;
 
@@ -415,16 +413,25 @@ struct super_block *hfs_read_super(struct super_block *s, void *data,
 	/* set the device driver to 512-byte blocks */
 	set_blocksize(dev, HFS_SECTOR_SIZE);
 
-	/* look for a partition table and find the correct partition */
-#ifndef CONFIG_MAC_PARTITION
+#ifdef CONFIG_MAC_PARTITION
+	/* check to see if we're in a partition */
+	mdb = hfs_mdb_get(s, s->s_flags & MS_RDONLY, 0);
+
+	/* erk. try parsing the partition table ourselves */
+	if (!mdb) {
+		if (hfs_part_find(s, part, silent, &part_size, &part_start)) {
+	    		goto bail2;
+	  	}
+	  	mdb = hfs_mdb_get(s, s->s_flags & MS_RDONLY, part_start);
+	}
+#else
 	if (hfs_part_find(s, part, silent, &part_size, &part_start)) {
 		goto bail2;
 	}
 
 	mdb = hfs_mdb_get(s, s->s_flags & MS_RDONLY, part_start);
-#else
-	mdb = hfs_mdb_get(s, s->s_flags & MS_RDONLY, 0);
 #endif
+
 	if (!mdb) {
 		if (!silent) {
 			printk("VFS: Can't find a HFS filesystem on dev %s.\n",

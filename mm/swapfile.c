@@ -489,7 +489,7 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 	int swap_header_version;
 	int lock_map_size = PAGE_SIZE;
 	int nr_good_pages = 0;
-	char tmp_lock_map = 0;
+	unsigned long tmp_lock_map = 0;
 	
 	lock_kernel();
 	if (!capable(CAP_SYS_ADMIN))
@@ -558,9 +558,9 @@ asmlinkage int sys_swapon(const char * specialfile, int swap_flags)
 		goto bad_swap;
 	}
 
-	p->swap_lockmap = &tmp_lock_map;
+	p->swap_lockmap = (char *) &tmp_lock_map;
 	rw_swap_page_nocache(READ, SWP_ENTRY(type,0), (char *) swap_header);
-	p->swap_lockmap = 0;
+	p->swap_lockmap = NULL;
 
 	if (!memcmp("SWAP-SPACE",swap_header->magic.magic,10))
 		swap_header_version = 1;

@@ -220,7 +220,7 @@ int rawv6_rcv(struct sk_buff *skb, struct device *dev,
 	if (sk->ip_hdrincl)
 		skb->h.raw = skb->nh.raw;
 
-	if (sk->sock_readers) {
+	if (atomic_read(&sk->sock_readers)) {
 		__skb_queue_tail(&sk->back_log, skb);
 		return 0;
 	}

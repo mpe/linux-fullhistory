@@ -771,6 +771,7 @@ static struct file_operations js_fops =
 	js_ioctl,		/* js_ioctl */
 	NULL,			/* js_mmap */
 	js_open,		/* js_open */
+	NULL,			/* js_flush */
 	js_release,		/* js_release */
 	NULL			/* js_sync */
 };

@@ -720,7 +720,7 @@ static inline void do_pmtu_discovery(struct sock *sk, struct iphdr *ip)
 			 * dropped. This is the new "fast" path mtu
 			 * discovery.
 			 */
-			if (!sk->sock_readers) {
+			if (!atomic_read(&sk->sock_readers)) {
 				lock_sock(sk); 
 				tcp_simple_retransmit(sk);
 				release_sock(sk);
@@ -813,7 +813,7 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 		/* Prevent race conditions with accept() - 
 		 * ICMP is unreliable. 
 		 */
-		if (sk->sock_readers) {
+		if (atomic_read(&sk->sock_readers)) {
 			/* XXX: add a counter here to profile this. 
 			 * If too many ICMPs get dropped on busy
 			 * servers this needs to be solved differently.
@@ -1175,7 +1175,7 @@ struct sock *tcp_create_openreq_child(struct sock *sk, struct open_request *req,
 		/* Clone the TCP header template */
 		newsk->dport = req->rmt_port;
 
-		newsk->sock_readers = 0;
+		atomic_set(&newsk->sock_readers, 0);
 		atomic_set(&newsk->rmem_alloc, 0);
 		skb_queue_head_init(&newsk->receive_queue);
 		atomic_set(&newsk->wmem_alloc, 0);
@@ -1543,7 +1543,7 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 
 	if (sk->state == TCP_TIME_WAIT)
 		goto do_time_wait;
-	if (!sk->sock_readers)
+	if (!atomic_read(&sk->sock_readers))
 		return tcp_v4_do_rcv(sk, skb);
 
 	__skb_queue_tail(&sk->back_log, skb);

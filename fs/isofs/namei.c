@@ -22,33 +22,31 @@
  * ok, we cannot use strncmp, as the name is not in our data space.
  * Thus we'll have to use isofs_match. No big problem. Match also makes
  * some sanity tests.
- *
- * NOTE! unlike strncmp, isofs_match returns 1 for success, 0 for failure.
  */
-static int isofs_match(int len,const char * name, const char * compare, int dlen)
+static int
+isofs_cmp(struct dentry * dentry, const char * compare, int dlen)
 {
+	struct qstr qstr;
+
 	if (!compare)
-		return 0;
+		return 1;
 
 	/* check special "." and ".." files */
 	if (dlen == 1) {
 		/* "." */
 		if (compare[0] == 0) {
-			if (!len)
-				return 1;
+			if (!dentry->d_name.len)
+				return 0;
 			compare = ".";
 		} else if (compare[0] == 1) {
 			compare = "..";
 			dlen = 2;
 		}
 	}
-#if 0
-	if (len <= 2) printk("Match: %d %d %s %d %d \n",len,dlen,compare,de->name[0], dlen);
-#endif
-	
-	if (dlen != len)
-		return 0;
-	return !memcmp(name, compare, len);
+
+	qstr.name = compare;
+	qstr.len = dlen;
+	return dentry->d_op->d_compare(dentry, &dentry->d_name, &qstr);
 }
 
 /*
@@ -59,8 +57,8 @@ static int isofs_match(int len,const char * name, const char * compare, int dlen
  * itself (as an inode number). It does NOT read the inode of the
  * entry - you'll have to do that yourself if you want to.
  */
-static struct buffer_head * isofs_find_entry(struct inode * dir,
-	const char * name, int namelen, unsigned long * ino)
+static struct buffer_head *
+isofs_find_entry(struct inode *dir, struct dentry *dentry, unsigned long *ino)
 {
 	unsigned long bufsize = ISOFS_BUFFER_SIZE(dir);
 	unsigned char bufbits = ISOFS_BUFFER_BITS(dir);
@@ -195,7 +193,7 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 			}
 			/* This allows us to match with and without
 			 * a trailing period. */
-			if(dpnt[dlen-1] == '.' && namelen == dlen-1)
+			if(dpnt[dlen-1] == '.' && dentry->d_name.len == dlen-1)
 				dlen--;
 		}
 		/*
@@ -205,7 +203,7 @@ static struct buffer_head * isofs_find_entry(struct inode * dir,
 		if(   !(de->flags[-dir->i_sb->u.isofs_sb.s_high_sierra] & 5)
 		   || dir->i_sb->u.isofs_sb.s_unhide == 'y' )
 		{
-			match = isofs_match(namelen,name,dpnt,dlen);
+			match = (isofs_cmp(dentry,dpnt,dlen) == 0);
 		}
 		if (match) {
 			if(inode_number == -1) {
@@ -231,11 +229,10 @@ int isofs_lookup(struct inode * dir, struct dentry * dentry)
 {
 	unsigned long ino;
 	struct buffer_head * bh;
-	char *lcname;
 	struct inode *inode;
 
 #ifdef DEBUG
-	printk("lookup: %x %d\n",dir->i_ino, dentry->d_name.len);
+	printk("lookup: %x %s\n",dir->i_ino, dentry->d_name.name);
 #endif
 	if (!dir)
 		return -ENOENT;
@@ -243,23 +240,9 @@ int isofs_lookup(struct inode * dir, struct dentry * dentry)
 	if (!S_ISDIR(dir->i_mode))
 		return -ENOENT;
 
-	/* If mounted with check=relaxed (and most likely norock),
-	 * then first convert this name to lower case.
-	 */
-	if (dir->i_sb->u.isofs_sb.s_name_check == 'r' &&
-	    (lcname = kmalloc(dentry->d_name.len, GFP_KERNEL)) != NULL) {
-		int i;
-		char c;
+	dentry->d_op = dir->i_sb->s_root->d_op;
 
-		for (i=0; i<dentry->d_name.len; i++) {
-			c = dentry->d_name.name[i];
-			if (c >= 'A' && c <= 'Z') c |= 0x20;
-			lcname[i] = c;
-		}
-		bh = isofs_find_entry(dir, lcname, dentry->d_name.len, &ino);
-		kfree(lcname);
-	} else
-		bh = isofs_find_entry(dir, dentry->d_name.name, dentry->d_name.len, &ino);
+	bh = isofs_find_entry(dir, dentry, &ino);
 
 	inode = NULL;
 	if (bh) {

@@ -125,17 +125,17 @@ extern __inline__ int unix_may_send(unix_socket *sk, unix_socket *osk)
 
 extern __inline__ void unix_lock(unix_socket *sk)
 {
-	sk->sock_readers++;
+	atomic_inc(&sk->sock_readers);
 }
 
 extern __inline__ int unix_unlock(unix_socket *sk)
 {
-	return --sk->sock_readers;
+	return atomic_dec_and_test(&sk->sock_readers);
 }
 
 extern __inline__ int unix_locked(unix_socket *sk)
 {
-	return sk->sock_readers;
+	return atomic_read(&sk->sock_readers);
 }
 
 extern __inline__ void unix_release_addr(struct unix_address *addr)
@@ -338,7 +338,7 @@ static void unix_destroy_socket(unix_socket *sk)
 		sk->protinfo.af_unix.dentry=NULL;
 	}
 	
-	if(!unix_unlock(sk) && atomic_read(&sk->wmem_alloc) == 0)
+	if(unix_unlock(sk) && atomic_read(&sk->wmem_alloc) == 0)
 	{
 		sk_free(sk);
 		unix_remove_socket(sk);
@@ -418,7 +418,7 @@ static int unix_create1(struct socket *sock, struct sock **skp, int protocol)
 	sk->destruct = unix_destruct_addr;
 	sk->protinfo.af_unix.family=PF_UNIX;
 	sk->protinfo.af_unix.dentry=NULL;
-	sk->sock_readers=1;			/* Us */
+	atomic_set(&sk->sock_readers, 1);	/* Us */
 	sk->protinfo.af_unix.readsem=MUTEX;	/* single task reading lock */
 	sk->mtu=4096;
 	sk->protinfo.af_unix.list=&unix_sockets_unbound;
@@ -1411,7 +1411,7 @@ static int unix_read_proc(char *buffer, char **start, off_t offset,
 	{
 		len+=sprintf(buffer+len,"%p: %08X %08X %08lX %04X %02X %5ld",
 			s,
-			s->sock_readers,
+			atomic_read(&s->sock_readers),
 			0,
 			s->socket ? s->socket->flags : 0,
 			s->type,

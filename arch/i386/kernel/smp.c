@@ -245,7 +245,7 @@ __initfunc(static int smp_read_mpc(struct mp_config_table *mpc))
 {
 	char str[16];
 	int count=sizeof(*mpc);
-	int apics=0;
+	int ioapics = 0;
 	unsigned char *mpt=((unsigned char *)mpc)+count;
 
 	if(memcmp(mpc->mpc_signature,MPC_SIGNATURE,4))
@@ -364,11 +364,15 @@ __initfunc(static int smp_read_mpc(struct mp_config_table *mpc))
 					(struct mpc_config_ioapic *)mpt;
 				if(m->mpc_flags&MPC_APIC_USABLE)
 				{
-					apics++;
+					ioapics++;
 					printk("I/O APIC #%d Version %d at 0x%lX.\n",
 						m->mpc_apicid,m->mpc_apicver,
 						m->mpc_apicaddr);
-					mp_ioapic_addr = m->mpc_apicaddr;
+					/*
+					 * we use the first one only currently
+					 */
+					if (!ioapics)
+						mp_ioapic_addr = m->mpc_apicaddr;
 				}
 				mpt+=sizeof(*m);
 				count+=sizeof(*m);
@@ -400,8 +404,8 @@ __initfunc(static int smp_read_mpc(struct mp_config_table *mpc))
 			}
 		}
 	}
-	if(apics>1)
-		printk("Warning: Multiple APICs not supported.\n");
+	if (ioapics > 1)
+		printk("Warning: Multiple IO-APICs not yet supported.\n");
 	return num_processors;
 }
 
