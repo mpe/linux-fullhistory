@@ -3627,11 +3627,7 @@ static void config_types(void)
 
 static int floppy_release(struct inode * inode, struct file * filp)
 {
-	int drive;
-
-	drive = DRIVE(inode->i_rdev);
-
-	block_fsync(filp, filp->f_dentry);
+	int drive = DRIVE(inode->i_rdev);
 
 	if (UDRS->fd_ref < 0)
 		UDRS->fd_ref=0;

@@ -1941,11 +1941,7 @@ static int floppy_open( struct inode *inode, struct file *filp )
 
 static int floppy_release( struct inode * inode, struct file * filp )
 {
-	int drive;
-
-	drive = MINOR(inode->i_rdev) & 3;
-
-	block_fsync (filp, filp->f_dentry);
+	int drive = MINOR(inode->i_rdev) & 3;
 
 	if (fd_ref[drive] < 0)
 		fd_ref[drive] = 0;

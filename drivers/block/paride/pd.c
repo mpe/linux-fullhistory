@@ -512,15 +512,8 @@ static int pd_release (struct inode *inode, struct file *file)
 
 	PD.access--;
 
-        if (!PD.access)  {
-                fsync_dev(devp);
-
-		sb = get_super(devp);
-		if (sb) invalidate_inodes(sb);
-
-                invalidate_buffers(devp);
-		if (PD.removable) pd_doorlock(unit,IDE_DOORUNLOCK);
-	}
+        if (!PD.access && PD.removable)
+		pd_doorlock(unit,IDE_DOORUNLOCK);
 
         MOD_DEC_USE_COUNT;
 

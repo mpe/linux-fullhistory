@@ -418,8 +418,6 @@ printk ( "GSCD: release\n" );
 #endif
 
 	gscd_bn = -1;
-	sync_dev(inode->i_rdev);
-	invalidate_buffers(inode -> i_rdev);
 
 	MOD_DEC_USE_COUNT;
 	return 0;

@@ -1105,7 +1105,6 @@ static int ps2esdi_release(struct inode *inode, struct file *file)
 	int dev = DEVICE_NR(inode->i_rdev);
 
 	if (dev < ps2esdi_drives) {
-		sync_dev(inode->i_rdev);
 		access_count[dev]--;
 	}
 	return 0;

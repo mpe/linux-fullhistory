@@ -1846,7 +1846,6 @@ static int ide_release (struct inode * inode, struct file * file)
 	ide_drive_t *drive;
 
 	if ((drive = get_info_ptr(inode->i_rdev)) != NULL) {
-		fsync_dev(inode->i_rdev);
 		drive->usage--;
 		if (drive->driver != NULL)
 			DRIVER(drive)->release(inode, file, drive);

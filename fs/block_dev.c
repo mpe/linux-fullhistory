@@ -298,7 +298,7 @@ ssize_t block_read(struct file * filp, char * buf, size_t count, loff_t *ppos)
  *	since the vma has no handle.
  */
  
-int block_fsync(struct file *filp, struct dentry *dentry)
+static int block_fsync(struct file *filp, struct dentry *dentry)
 {
 	return fsync_dev(dentry->d_inode->i_rdev);
 }
@@ -604,8 +604,11 @@ int blkdev_put(struct block_device *bdev, int kind)
 	kdev_t rdev = to_kdev_t(bdev->bd_dev); /* this should become bdev */
 	down(&bdev->bd_sem);
 	/* syncing will go here */
+	if (kind == BDEV_FILE || kind == BDEV_FS)
+		sync_dev(rdev);
 	if (atomic_dec_and_test(&bdev->bd_openers)) {
 		/* invalidating buffers will go here */
+		invalidate_buffers(rdev);
 	}
 	if (bdev->bd_op->release) {
 		struct inode * fake_inode = get_empty_inode();

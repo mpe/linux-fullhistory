@@ -452,7 +452,6 @@ static int sd_open(struct inode *inode, struct file *filp)
 static int sd_release(struct inode *inode, struct file *file)
 {
 	int target;
-	fsync_dev(inode->i_rdev);
 
 	target = DEVICE_NR(inode->i_rdev);
 

@@ -367,17 +367,12 @@ static int xd_ioctl (struct inode *inode,struct file *file,u_int cmd,u_long arg)
 /* xd_release: release the device */
 static int xd_release (struct inode *inode, struct file *file)
 {
-	int target;
-
-	target= DEVICE_NR(inode->i_rdev);
+	int target = DEVICE_NR(inode->i_rdev);
 	if (target < xd_drives) {
-		sync_dev(inode->i_rdev);
 		xd_access[target]--;
-
 #ifdef MODULE
 		MOD_DEC_USE_COUNT;
 #endif /* MODULE */
-
 	}
 	return 0;
 }

@@ -1413,8 +1413,6 @@ static int sjcd_release( struct inode *inode, struct file *file ){
 #endif
   if( --sjcd_open_count == 0 ){
     sjcd_invalidate_buffers();
-    sync_dev( inode->i_rdev );
-    invalidate_buffers( inode->i_rdev );
     s = sjcd_tray_unlock();
     if( s < 0 || !sjcd_status_valid || sjcd_command_failed ){
 #if defined( SJCD_DIAGNOSTIC )

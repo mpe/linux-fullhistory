@@ -320,8 +320,6 @@ z2_release( struct inode *inode, struct file *filp )
     if ( current_device == -1 )
 	return 0;     
 
-    sync_dev( inode->i_rdev );
-
     /*
      * FIXME: unmap memory
      */

@@ -675,8 +675,6 @@ static int md_open (struct inode *inode, struct file *file)
 static int md_release (struct inode *inode, struct file *file)
 {
   int minor=MINOR(inode->i_rdev);
-
-  sync_dev (inode->i_rdev);
   md_dev[minor].busy--;
   return 0;
 }

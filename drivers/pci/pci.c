@@ -238,12 +238,23 @@ pci_insert_device(struct pci_dev *dev, struct pci_bus *bus)
 #ifdef CONFIG_PROC_FS
 	pci_proc_attach_device(dev);
 #endif
-	for(ln=pci_drivers.next; ln != &pci_devices; ln=ln->next) {
+	for(ln=pci_drivers.next; ln != &pci_drivers; ln=ln->next) {
 		struct pci_driver *drv = list_entry(ln, struct pci_driver, node);
 		if (drv->probe(dev)) {
 			dev->driver = drv;
 			break;
 		}
+	}
+}
+
+static void pci_free_resources(struct pci_dev *dev)
+{
+	int i;
+
+	for (i = 0; i < PCI_NUM_RESOURCES; i++) {
+		struct resource *res = dev->resource + i;
+		if (res->parent)
+			release_resource(res);
 	}
 }
 
@@ -255,6 +266,7 @@ pci_remove_device(struct pci_dev *dev)
 	dev->driver = NULL;
 	list_del(&dev->bus_list);
 	list_del(&dev->global_list);
+	pci_free_resources(dev);
 #ifdef CONFIG_PROC_FS
 	pci_proc_detach_device(dev);
 #endif

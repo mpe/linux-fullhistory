@@ -1216,11 +1216,7 @@ static int acsi_open( struct inode * inode, struct file * filp )
 
 static int acsi_release( struct inode * inode, struct file * file )
 {
-	int device;
-
-	sync_dev(inode->i_rdev);
-
-	device = DEVICE_NR(MINOR(inode->i_rdev));
+	int device = DEVICE_NR(MINOR(inode->i_rdev));
 	if (--access_count[device] == 0 && acsi_info[device].removable)
 		acsi_prevent_removal(device, 0);
 	MOD_DEC_USE_COUNT;

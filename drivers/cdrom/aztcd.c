@@ -1593,8 +1593,6 @@ static int  aztcd_release(struct inode * inode, struct file * file)
   MOD_DEC_USE_COUNT;
   if (!--azt_open_count) {
 	azt_invalidate_buffers();
-	sync_dev(inode->i_rdev);             /*??? isn't it a read only dev?*/
-	invalidate_buffers(inode -> i_rdev);
 	aztUnlockDoor();
         if (azt_auto_eject)
            aztSendCmd(ACMD_EJECT);

@@ -1011,7 +1011,6 @@ extern int read_ahead[];
 extern ssize_t char_write(struct file *, const char *, size_t, loff_t *);
 extern ssize_t block_write(struct file *, const char *, size_t, loff_t *);
 
-extern int block_fsync(struct file *, struct dentry *);
 extern int file_fsync(struct file *, struct dentry *);
 extern int generic_buffer_fdatasync(struct inode *inode, unsigned long start_idx, unsigned long end_idx);
 

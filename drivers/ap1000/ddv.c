@@ -166,7 +166,6 @@ static void ddv_release(struct inode * inode, struct file * filp)
 #if DEBUG
 	printk("ddv_release started\n");
 #endif
-	sync_dev(inode->i_rdev);
 #if DEBUG
 	printk("ddv_release done\n");
 #endif

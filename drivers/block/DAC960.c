@@ -2467,10 +2467,6 @@ static int DAC960_Release(Inode_T *Inode, File_T *File)
       File != NULL && (File->f_flags & O_NONBLOCK))
     goto ModuleOnly;
   /*
-    Force any buffered data to be written.
-  */
-  fsync_dev(Inode->i_rdev);
-  /*
     Decrement the Logical Drive and Controller Usage Counts.
   */
   Controller->LogicalDriveUsageCount[LogicalDriveNumber]--;

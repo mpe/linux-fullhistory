@@ -1686,16 +1686,6 @@ static int floppy_release(struct inode * inode, struct file * filp)
 #endif
 	int drive = MINOR(inode->i_rdev) & 3;
 
-	fsync_dev(inode->i_rdev);
-
-#ifdef DEBUG
-	/* This is now handled in floppy_change, but still useful for debugging */
-	sb = get_super(inode->i_rdev);
-	if (sb)
-		invalidate_inodes(sb);
-	invalidate_buffers(inode->i_rdev);
-#endif
-
 	if (unit[drive].dirty == 1) {
 		del_timer (flush_track_timer + drive);
 		non_int_flush_track (drive);

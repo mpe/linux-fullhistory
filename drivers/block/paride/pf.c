@@ -447,8 +447,6 @@ static int pf_release (struct inode *inode, struct file *file)
 {       kdev_t devp;
 	int	unit;
 
-	struct super_block *sb;
-
         devp = inode->i_rdev;
         unit = DEVICE_NR(devp);
 
@@ -457,15 +455,8 @@ static int pf_release (struct inode *inode, struct file *file)
 
 	PF.access--;
 
-	if (!PF.access) {
-                fsync_dev(devp);
-
-		sb = get_super(devp);
-		if (sb) invalidate_inodes(sb);
-
-                invalidate_buffers(devp);
-		if (PF.removable) pf_lock(unit,0);
-        }
+	if (!PF.access && PF.removable)
+		pf_lock(unit,0);
 
         MOD_DEC_USE_COUNT;
 

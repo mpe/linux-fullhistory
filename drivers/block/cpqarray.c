@@ -837,7 +837,6 @@ static int ida_release(struct inode *inode, struct file *filep)
 	int dsk  = MINOR(inode->i_rdev) >> NWD_SHIFT;
 
 	DBGINFO(printk("ida_release %x (%x:%x)\n", inode->i_rdev, ctlr, dsk) );
-	fsync_dev(inode->i_rdev);
 
 	hba[ctlr]->drv[dsk].usage_count--;
 	hba[ctlr]->usage_count--;

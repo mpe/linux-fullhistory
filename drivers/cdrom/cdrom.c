@@ -640,11 +640,6 @@ int cdrom_release(struct inode *ip, struct file *fp)
 		!(fp && fp->f_flags & O_NONBLOCK);
 	cdo->release(cdi);
 	if (cdi->use_count == 0) {      /* last process that closes dev*/
-		struct super_block *sb;
-		sync_dev(dev);
-		sb = get_super(dev);
-		if (sb) invalidate_inodes(sb);
-		invalidate_buffers(dev);
 		if (opened_for_data &&
 		    cdi->options & CDO_AUTO_EJECT && CDROM_CAN(CDC_OPEN_TRAY))
 			cdo->tray_move(cdi, 1);

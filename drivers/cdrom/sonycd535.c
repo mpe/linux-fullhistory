@@ -1451,7 +1451,6 @@ cdu_release(struct inode *inode,
 		sony_usage--;
 	}
 	if (sony_usage == 0) {
-		sync_dev(inode->i_rdev);
 		check_drive_status();
 
 		if (sony_audio_status != CDROM_AUDIO_PLAY) {

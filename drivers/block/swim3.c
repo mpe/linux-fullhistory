@@ -924,8 +924,6 @@ static int floppy_release(struct inode *inode, struct file *filp)
 	if (devnum >= floppy_count)
 		return -ENODEV;
 
-	block_fsync (filp, filp->f_dentry);
-
 	fs = &floppy_states[devnum];
 	sw = fs->swim3;
 	if (fs->ref_count > 0 && --fs->ref_count == 0) {

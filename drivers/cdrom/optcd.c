@@ -1935,8 +1935,6 @@ static int opt_release(struct inode *ip, struct file *fp)
 	if (!--open_count) {
 		toc_uptodate = 0;
 		opt_invalidate_buffers();
-		sync_dev(ip -> i_rdev);
-		invalidate_buffers(ip -> i_rdev);
 	 	status = exec_cmd(COMUNLOCK);	/* Unlock door */
 		if (status < 0) {
 			DEBUG((DEBUG_VFS, "exec_cmd COMUNLOCK: %02x", -status));

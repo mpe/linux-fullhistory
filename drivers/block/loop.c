@@ -654,7 +654,6 @@ static int lo_release(struct inode *inode, struct file *file)
 	dev = MINOR(inode->i_rdev);
 	if (dev >= max_loop)
 		return 0;
-	err = fsync_dev(inode->i_rdev);
 	lo = &loop_dev[dev];
 	if (lo->lo_refcnt <= 0)
 		printk(KERN_ERR "lo_release: refcount(%d) <= 0\n", lo->lo_refcnt);

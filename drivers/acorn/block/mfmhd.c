@@ -1276,7 +1276,6 @@ static int mfm_open(struct inode *inode, struct file *file)
  */
 static int mfm_release(struct inode *inode, struct file *file)
 {
-	fsync_dev(inode->i_rdev);
 	mfm_info[DEVICE_NR(MINOR(inode->i_rdev))].access_count--;
 	MOD_DEC_USE_COUNT;
 	return 0;

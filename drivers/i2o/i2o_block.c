@@ -685,7 +685,6 @@ static int i2ob_release(struct inode *inode, struct file *file)
 	minor = MINOR(inode->i_rdev);
 	if (minor >= (MAX_I2OB<<4))
 		return -ENODEV;
-	sync_dev(inode->i_rdev);
 	dev = &i2ob_dev[(minor&0xF0)];
 	if (dev->refcnt <= 0)
 		printk(KERN_ALERT "i2ob_release: refcount(%d) <= 0\n", dev->refcnt);
