@@ -1,6 +1,6 @@
 /* Driver for Freecom USB/IDE adaptor
  *
- * $Id: freecom.c,v 1.11 2000/09/15 23:06:40 mdharm Exp $
+ * $Id: freecom.c,v 1.12 2000/09/22 01:16:17 mdharm Exp $
  *
  * Freecom v0.1:
  *
@@ -28,6 +28,7 @@
  * (http://www.freecom.de/)
  */
 
+#include <linux/config.h>
 #include "transport.h"
 #include "protocol.h"
 #include "usb.h"
@@ -83,6 +84,7 @@ struct freecom_status {
 /* These are the packet types.  The low bit indicates that this command
  * should wait for an interrupt. */
 #define FCM_PACKET_ATAPI  0x21
+#define FCM_PACKET_STATUS 0x20
 
 /* Receive data from the IDE interface.  The ATAPI packet has already
  * waited, so the data should be immediately available. */
@@ -490,7 +492,7 @@ int freecom_transport(Scsi_Cmnd *srb, struct us_data *us)
 #endif
 
         /* The ATAPI Command always goes out first. */
-        fcb->Type = FCM_PACKET_ATAPI;
+        fcb->Type = FCM_PACKET_ATAPI | 0x00;
         fcb->Timeout = 0;
         memcpy (fcb->Atapi, srb->cmnd, 12);
         memset (fcb->Filler, 0, sizeof (fcb->Filler));
@@ -529,6 +531,50 @@ int freecom_transport(Scsi_Cmnd *srb, struct us_data *us)
 	}
 
         pdump ((void *) fst, partial);
+
+	/* while we haven't recieved the IRQ */
+	while (!(fst->Status & 0x2)) {
+		/* send a command to re-fetch the status */
+		US_DEBUGP("Re-attempting to get status...\n");
+
+		fcb->Type = FCM_PACKET_STATUS;
+		fcb->Timeout = 0;
+		memset (fcb->Atapi, 0, 12);
+		memset (fcb->Filler, 0, sizeof (fcb->Filler));
+
+		/* Send it out. */
+		result = usb_stor_bulk_msg (us, fcb, opipe,
+				FCM_PACKET_LENGTH, &partial);
+		
+		/* The Freecom device will only fail if there is something wrong in
+		 * USB land.  It returns the status in its own registers, which
+		 * come back in the bulk pipe. */
+		if (result != 0) {
+			US_DEBUGP ("freecom xport failure: r=%d, p=%d\n",
+					result, partial);
+			
+			/* -ENOENT -- we canceled this transfer */
+			if (result == -ENOENT) {
+				US_DEBUGP("us_transfer_partial(): transfer aborted\n");
+				return US_BULK_TRANSFER_ABORTED;
+			}
+			
+			return USB_STOR_TRANSPORT_ERROR;
+		}
+
+		/* actually get the status info */
+		result = usb_stor_bulk_msg (us, fst, ipipe,
+				FCM_PACKET_LENGTH, &partial);
+		printk (KERN_DEBUG "bar Status result %d %d\n", result, partial);
+		/* -ENOENT -- we canceled this transfer */
+		if (result == -ENOENT) {
+			US_DEBUGP("us_transfer_partial(): transfer aborted\n");
+			return US_BULK_TRANSFER_ABORTED;
+		}
+
+		pdump ((void *) fst, partial);
+	}
+	
         if (partial != 4 || result != 0) {
                 return USB_STOR_TRANSPORT_ERROR;
         }
@@ -660,6 +706,7 @@ freecom_init (struct us_data *us)
 {
         int result, value;
         int counter;
+	char buffer[33];
 
         /* Allocate a buffer for us.  The upper usb transport code will
          * free this for us when cleaning up. */
@@ -671,6 +718,11 @@ freecom_init (struct us_data *us)
                         return USB_STOR_TRANSPORT_ERROR;
                 }
         }
+
+	result = usb_stor_control_msg(us, usb_rcvctrlpipe(us->pusb_dev, 0),
+			0x4c, 0xc0, 0x4346, 0x0, buffer, 0x20);
+	buffer[32] = '\0';
+	US_DEBUGP("String returned from FC init is: %s\n", buffer);
 
         result = freecom_ide_write (us, 0x06, 0xA0);
         if (result != USB_STOR_TRANSPORT_GOOD)

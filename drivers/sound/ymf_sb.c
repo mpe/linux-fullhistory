@@ -40,6 +40,9 @@
      in 724hwmcode.h.
    * fixed wrong legacy_io setting on YMF744/YMF754 .
 
+   Thu Sep 21 05:32:51 BRT 2000 0.0.5
+   * got rid of attach_uart401 and attach_sbmpu
+     Arnaldo Carvalho de Melo <acme@conectiva.com.br>
  */
 
 #include <linux/module.h>
@@ -217,17 +220,15 @@
 
 #define PFX		"ymf_sb: "
 
-#define YMFSB_VERSION	"0.0.4"
+#define YMFSB_VERSION	"0.0.5"
 #define YMFSB_CARD_NAME	"YMF7xx Legacy Audio driver " YMFSB_VERSION
 
 #ifdef SUPPORT_UART401_MIDI
 #if 0
 # define ymf7xxsb_probe_midi probe_uart401
-# define ymf7xxsb_attach_midi attach_uart401
 # define ymf7xxsb_unload_midi unload_uart401
 #else
 # define ymf7xxsb_probe_midi probe_sbmpu
-# define ymf7xxsb_attach_midi attach_sbmpu
 # define ymf7xxsb_unload_midi unload_sbmpu
 #endif
 #endif
@@ -771,14 +772,13 @@ static int __init ymf7xxsb_init_one (struct pci_dev *pcidev, const struct pci_de
 	/* register legacy MIDI */
 	if ( mpu_io > 0 && 0)
 	{
-		if (!ymf7xxsb_probe_midi (&mpu_data[cards])) {
+		if (!ymf7xxsb_probe_midi (&mpu_data[cards], THIS_MODULE)) {
 			printk (KERN_ERR PFX
 				"MIDI probe @ 0x%X failed, aborting\n",
 				mpu_io);
 			ymf7xxsb_unload_sb (&sb_data[cards], 0);
 			return -ENODEV;
 		}
-		ymf7xxsb_attach_midi (&mpu_data[cards], THIS_MODULE);
 	}
 #endif
 

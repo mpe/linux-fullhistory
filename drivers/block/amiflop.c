@@ -140,7 +140,7 @@ static int num_dr_types = sizeof(drive_types) / sizeof(drive_types[0]);
 
 /* defaults for 3 1/2" HD-Disks */
 static int floppy_sizes[256]={880,880,880,880,720,720,720,720,};
-static int floppy_blocksizes[256]={0,};
+static int floppy_blocksizes[256];
 /* hardsector size assumed to be 512 */
 
 static int amiga_read(int), dos_read(int);
@@ -151,7 +151,7 @@ static struct fd_data_type data_types[] = {
 };
 
 /* current info on each unit */
-static struct amiga_floppy_struct unit[FD_MAX_UNITS] = {{ 0,}};
+static struct amiga_floppy_struct unit[FD_MAX_UNITS];
 
 static struct timer_list flush_track_timer[FD_MAX_UNITS];
 static struct timer_list post_write_timer;
@@ -162,15 +162,15 @@ static int on_attempts;
 /* Synchronization of FDC access */
 /* request loop (trackbuffer) */
 static volatile int fdc_busy = -1;
-static volatile int fdc_nested = 0;
+static volatile int fdc_nested;
 static DECLARE_WAIT_QUEUE_HEAD(fdc_wait);
  
 static DECLARE_WAIT_QUEUE_HEAD(motor_wait);
 
 static volatile int selected = -1;	/* currently selected drive */
 
-static int writepending = 0;
-static int writefromint = 0;
+static int writepending;
+static int writefromint;
 static char *raw_buf;
 
 #define RAW_BUF_SIZE 30000  /* size of raw disk data */
@@ -180,7 +180,7 @@ static char *raw_buf;
  * information to interrupts. They are the data used for the current
  * request.
  */
-static volatile char block_flag = 0;
+static volatile char block_flag;
 static DECLARE_WAIT_QUEUE_HEAD(wait_fd_block);
 
 /* MS-Dos MFM Coding tables (should go quick and easy) */

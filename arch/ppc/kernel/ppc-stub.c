@@ -122,9 +122,9 @@ void breakinst(void);
 static char remcomInBuffer[BUFMAX];
 static char remcomOutBuffer[BUFMAX];
 
-static int initialized = 0;
-static int kgdb_active = 0;
-static int kgdb_started = 0;
+static int initialized;
+static int kgdb_active;
+static int kgdb_started;
 static u_int fault_jmp_buf[100];
 static int kdebug;
 

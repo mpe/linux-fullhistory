@@ -2085,12 +2085,11 @@ static int solo1_dmfm_open(struct inode *inode, struct file *file)
 			return -ERESTARTSYS;
 		down(&s->open_sem);
 	}
-	if (check_region(s->sbbase, FMSYNTH_EXTENT)) {
+	if (!request_region(s->sbbase, FMSYNTH_EXTENT, "ESS Solo1")) {
 		up(&s->open_sem);
 		printk(KERN_ERR "solo1: FM synth io ports in use, opl3 loaded?\n");
 		return -EBUSY;
 	}
-	request_region(s->sbbase, FMSYNTH_EXTENT, "ESS Solo1");
 	/* init the stuff */
 	outb(1, s->sbbase);
 	outb(0x20, s->sbbase+1); /* enable waveforms */

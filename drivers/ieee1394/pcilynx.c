@@ -18,16 +18,6 @@
  * Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  */
 
-/*
- * Lynx DMA usage:
- *
- * 0 is used for Lynx local bus transfers
- * 1 is async/selfid receive
- * 2 is iso receive
- * 3 is async transmit
- */
-
-
 #include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
@@ -63,8 +53,8 @@
 #define PRINT_GD(level, fmt, args...) printk(level "pcilynx: " fmt "\n" , ## args)
 #define PRINTD(level, card, fmt, args...) printk(level "pcilynx%d: " fmt "\n" , card , ## args)
 #else
-#define PRINT_GD(level, fmt, args...)
-#define PRINTD(level, card, fmt, args...)
+#define PRINT_GD(level, fmt, args...) do {} while (0)
+#define PRINTD(level, card, fmt, args...) do {} while (0)
 #endif
 
 static struct ti_lynx cards[MAX_PCILYNX_CARDS];
@@ -177,8 +167,8 @@ static int get_phy_reg(struct ti_lynx *lynx, int addr)
 
         spin_lock_irqsave(&lynx->phy_reg_lock, flags);
 
+        reg_write(lynx, LINK_PHY, LINK_PHY_READ | LINK_PHY_ADDR(addr));
         do {
-                reg_write(lynx, LINK_PHY, LINK_PHY_READ | LINK_PHY_ADDR(addr));
                 retval = reg_read(lynx, LINK_PHY);
 
                 if (i > 10000) {
@@ -309,12 +299,11 @@ static quadlet_t generate_own_selfid(struct ti_lynx *lynx,
         lsid = 0x80400000 | ((phyreg[0] & 0xfc) << 22);
         lsid |= (phyreg[1] & 0x3f) << 16; /* gap count */
         lsid |= (phyreg[2] & 0xc0) << 8; /* max speed */
-        /* lsid |= (phyreg[6] & 0x01) << 11; *//* contender (phy dependent) */
-        lsid |= 1 << 11; /* set contender (hack) */
+        lsid |= (phyreg[6] & 0x01) << 11; /* contender (phy dependent) */
+        /* lsid |= 1 << 11; *//* set contender (hack) */
         lsid |= (phyreg[6] & 0x10) >> 3; /* initiated reset */
 
-        //for (i = 0; i < (phyreg[2] & 0xf); i++) { /* ports */
-        for (i = 0; i < (phyreg[2] & 0x1f); i++) { /* ports */
+        for (i = 0; i < (phyreg[2] & 0xf); i++) { /* ports */
                 if (phyreg[3 + i] & 0x4) {
                         lsid |= (((phyreg[3 + i] & 0x8) | 0x10) >> 3)
                                 << (6 - i*2);
@@ -380,47 +369,63 @@ static void handle_selfid(struct ti_lynx *lynx, struct hpsb_host *host, size_t s
                 hpsb_selfid_received(host, lsid);
         }
 
+        if (isroot) reg_set_bits(lynx, LINK_CONTROL, LINK_CONTROL_CYCMASTER);
+
         hpsb_selfid_complete(host, phyid, isroot);
 }
 
 
 
-/* This must be called with the async.queue_lock held. */
-static void send_next_async(struct ti_lynx *lynx)
+/* This must be called with the respective queue_lock held. */
+static void send_next(struct ti_lynx *lynx, int what)
 {
         struct ti_pcl pcl;
-        struct hpsb_packet *packet = lynx->async.queue;
+        struct lynx_send_data *d;
+        struct hpsb_packet *packet;
 
-        lynx->async.header_dma = pci_map_single(lynx->dev, packet->header,
-                                                packet->header_size,
-                                                PCI_DMA_TODEVICE);
+        d = (what == iso ? &lynx->iso_send : &lynx->async);
+        packet = d->queue;
+
+        d->header_dma = pci_map_single(lynx->dev, packet->header,
+                                       packet->header_size, PCI_DMA_TODEVICE);
         if (packet->data_size) {
-                lynx->async.data_dma = pci_map_single(lynx->dev, packet->data,
-                                                      packet->data_size,
-                                                      PCI_DMA_TODEVICE);
+                d->data_dma = pci_map_single(lynx->dev, packet->data,
+                                             packet->data_size,
+                                             PCI_DMA_TODEVICE);
         } else {
-                lynx->async.data_dma = 0;
+                d->data_dma = 0;
         }
 
         pcl.next = PCL_NEXT_INVALID;
         pcl.async_error_next = PCL_NEXT_INVALID;
 #ifdef __BIG_ENDIAN
-        pcl.buffer[0].control = PCL_CMD_XMT | packet->speed_code << 14
-                | packet->header_size;
+        pcl.buffer[0].control = packet->speed_code << 14 | packet->header_size;
 #else
-        pcl.buffer[0].control = PCL_CMD_XMT | packet->speed_code << 14
-                | packet->header_size | PCL_BIGENDIAN;
+        pcl.buffer[0].control = packet->speed_code << 14 | packet->header_size 
+                | PCL_BIGENDIAN;
 #endif
-        pcl.buffer[0].pointer = lynx->async.header_dma;
+        pcl.buffer[0].pointer = d->header_dma;
         pcl.buffer[1].control = PCL_LAST_BUFF | packet->data_size;
-        pcl.buffer[1].pointer = lynx->async.data_dma;
+        pcl.buffer[1].pointer = d->data_dma;
+
+        switch (packet->type) {
+        case async:
+                pcl.buffer[0].control |= PCL_CMD_XMT;
+                break;
+        case iso:
+                pcl.buffer[0].control |= PCL_CMD_XMT | PCL_ISOMODE;
+                break;
+        case raw:
+                pcl.buffer[0].control |= PCL_CMD_UNFXMT;
+                break;
+        }                
 
         if (!packet->data_be) {
                 pcl.buffer[1].control |= PCL_BIGENDIAN;
         }
 
-        put_pcl(lynx, lynx->async.pcl, &pcl);
-        run_pcl(lynx, lynx->async.pcl_start, 3);
+        put_pcl(lynx, d->pcl, &pcl);
+        run_pcl(lynx, d->pcl_start, d->channel);
 }
 
 
@@ -475,6 +480,10 @@ static int lynx_initialize(struct hpsb_host *host)
         pcl.async_error_next = pcl_bus(lynx, lynx->async.pcl);
         put_pcl(lynx, lynx->async.pcl_start, &pcl);
 
+        pcl.next = pcl_bus(lynx, lynx->iso_send.pcl);
+        pcl.async_error_next = PCL_NEXT_INVALID;
+        put_pcl(lynx, lynx->iso_send.pcl_start, &pcl);
+
         pcl.next = PCL_NEXT_INVALID;
         pcl.async_error_next = PCL_NEXT_INVALID;
         pcl.buffer[0].control = PCL_CMD_RCV | 4;
@@ -499,15 +508,18 @@ static int lynx_initialize(struct hpsb_host *host)
         }
         put_pcl(lynx, lynx->iso_rcv.pcl_start, &pcl);
 
-        /* 85 bytes for each FIFO - FIXME - optimize or make configurable */
-        /* reg_write(lynx, FIFO_SIZES, 0x00555555); */
-        reg_write(lynx, FIFO_SIZES, 0x002020c0);
+        /* FIFO sizes from left to right: ITF=48 ATF=48 GRF=160 */
+        reg_write(lynx, FIFO_SIZES, 0x003030a0);
         /* 20 byte threshold before triggering PCI transfer */
         reg_write(lynx, DMA_GLOBAL_REGISTER, 0x2<<24);
-        /* 69 byte threshold on both send FIFOs before transmitting */
-        reg_write(lynx, FIFO_XMIT_THRESHOLD, 0x4545);
+        /* threshold on both send FIFOs before transmitting:
+           FIFO size - cache line size - 1 */
+        i = reg_read(lynx, PCI_LATENCY_CACHELINE) & 0xff;
+        i = 0x30 - i - 1;
+        reg_write(lynx, FIFO_XMIT_THRESHOLD, (i << 8) | i);
         
         reg_set_bits(lynx, PCI_INT_ENABLE, PCI_INT_1394);
+
         reg_write(lynx, LINK_INT_ENABLE, LINK_INT_PHY_TIMEOUT
                   | LINK_INT_PHY_REG_RCVD  | LINK_INT_PHY_BUSRESET
                   | LINK_INT_ISO_STUCK     | LINK_INT_ASYNC_STUCK 
@@ -515,15 +527,15 @@ static int lynx_initialize(struct hpsb_host *host)
                   | LINK_INT_GRF_OVERFLOW  | LINK_INT_ITF_UNDERFLOW
                   | LINK_INT_ATF_UNDERFLOW);
         
-        reg_write(lynx, DMA1_WORD0_CMP_VALUE, 0);
-        reg_write(lynx, DMA1_WORD0_CMP_ENABLE, 0xa<<4);
-        reg_write(lynx, DMA1_WORD1_CMP_VALUE, 0);
-        reg_write(lynx, DMA1_WORD1_CMP_ENABLE, DMA_WORD1_CMP_MATCH_NODE_BCAST
-                  | DMA_WORD1_CMP_MATCH_BROADCAST | DMA_WORD1_CMP_MATCH_LOCAL
-                  | DMA_WORD1_CMP_MATCH_BUS_BCAST | DMA_WORD1_CMP_ENABLE_SELF_ID
-                  | DMA_WORD1_CMP_ENABLE_MASTER);
+        reg_write(lynx, DMA_WORD0_CMP_VALUE(CHANNEL_ASYNC_RCV), 0);
+        reg_write(lynx, DMA_WORD0_CMP_ENABLE(CHANNEL_ASYNC_RCV), 0xa<<4);
+        reg_write(lynx, DMA_WORD1_CMP_VALUE(CHANNEL_ASYNC_RCV), 0);
+        reg_write(lynx, DMA_WORD1_CMP_ENABLE(CHANNEL_ASYNC_RCV),
+                  DMA_WORD1_CMP_MATCH_NODE_BCAST | DMA_WORD1_CMP_MATCH_BROADCAST
+                  | DMA_WORD1_CMP_MATCH_LOCAL    | DMA_WORD1_CMP_MATCH_BUS_BCAST
+                  | DMA_WORD1_CMP_ENABLE_SELF_ID | DMA_WORD1_CMP_ENABLE_MASTER);
 
-        run_pcl(lynx, lynx->rcv_pcl_start, 1);
+        run_pcl(lynx, lynx->rcv_pcl_start, CHANNEL_ASYNC_RCV);
 
         reg_write(lynx, DMA_WORD0_CMP_VALUE(CHANNEL_ISO_RCV), 0);
         reg_write(lynx, DMA_WORD0_CMP_ENABLE(CHANNEL_ISO_RCV), 0x9<<4);
@@ -536,7 +548,7 @@ static int lynx_initialize(struct hpsb_host *host)
                   | LINK_CONTROL_TX_ISO_EN   | LINK_CONTROL_RX_ISO_EN
                   | LINK_CONTROL_TX_ASYNC_EN | LINK_CONTROL_RX_ASYNC_EN
                   | LINK_CONTROL_RESET_TX    | LINK_CONTROL_RESET_RX
-                  | LINK_CONTROL_CYCSOURCE   | LINK_CONTROL_CYCTIMEREN);
+                  | LINK_CONTROL_CYCTIMEREN);
         
         /* attempt to enable contender bit -FIXME- would this work elsewhere? */
         reg_set_bits(lynx, GPIO_CTRL_A, 0x1);
@@ -559,19 +571,29 @@ static void lynx_release(struct hpsb_host *host)
         }
 }
 
-
-/*
- * FIXME - does not support iso/raw transmits yet and will choke on them.
- */
 static int lynx_transmit(struct hpsb_host *host, struct hpsb_packet *packet)
 {
         struct ti_lynx *lynx = host->hostdata;
-        struct hpsb_packet *p;
+        struct lynx_send_data *d;
         unsigned long flags;
 
         if (packet->data_size >= 4096) {
                 PRINT(KERN_ERR, lynx->id, "transmit packet data too big (%d)",
                       packet->data_size);
+                return 0;
+        }
+
+        switch (packet->type) {
+        case async:
+        case raw:
+                d = &lynx->async;
+                break;
+        case iso:
+                d = &lynx->iso_send;
+                break;
+        default:
+                PRINT(KERN_ERR, lynx->id, "invalid packet type %d",
+                      packet->type);
                 return 0;
         }
 
@@ -581,21 +603,18 @@ static int lynx_transmit(struct hpsb_host *host, struct hpsb_packet *packet)
                 cpu_to_be32s(&packet->header[3]);
         }
 
-        spin_lock_irqsave(&lynx->async.queue_lock, flags);
+        spin_lock_irqsave(&d->queue_lock, flags);
 
-        if (lynx->async.queue == NULL) {
-                lynx->async.queue = packet;
-                send_next_async(lynx);
+        if (d->queue == NULL) {
+                d->queue = packet;
+                d->queue_last = packet;
+                send_next(lynx, packet->type);
         } else {
-                p = lynx->async.queue;
-                while (p->xnext != NULL) {
-                        p = p->xnext;
-                }
-
-                p->xnext = packet;
+                d->queue_last->xnext = packet;
+                d->queue_last = packet;
         }
 
-        spin_unlock_irqrestore(&lynx->async.queue_lock, flags);
+        spin_unlock_irqrestore(&d->queue_lock, flags);
 
         return 1;
 }
@@ -652,7 +671,7 @@ static int lynx_devctl(struct hpsb_host *host, enum devctl_cmd cmd, int arg)
         case CANCEL_REQUESTS:
                 spin_lock_irqsave(&lynx->async.queue_lock, flags);
 
-                reg_write(lynx, DMA3_CHAN_CTRL, 0);
+                reg_write(lynx, DMA_CHAN_CTRL(CHANNEL_ASYNC_SEND), 0);
                 packet = lynx->async.queue;
                 lynx->async.queue = NULL;
 
@@ -718,18 +737,19 @@ static int lynx_devctl(struct hpsb_host *host, enum devctl_cmd cmd, int arg)
 static int mem_open(struct inode*, struct file*);
 static int mem_release(struct inode*, struct file*);
 static unsigned int aux_poll(struct file*, struct poll_table_struct*);
+static loff_t mem_llseek(struct file*, loff_t, int);
 static ssize_t mem_read (struct file*, char*, size_t, loff_t*);
 static ssize_t mem_write(struct file*, const char*, size_t, loff_t*);
 
 
 static struct file_operations aux_ops = {
         OWNER_THIS_MODULE
-	/* FIXME: should have custom llseek with bounds checking */
-	read:		mem_read,
-	write:		mem_write,
-	poll:		aux_poll,
-	open:		mem_open,
-	release:	mem_release,
+        read:           mem_read,
+        write:          mem_write,
+        poll:           aux_poll,
+        llseek:         mem_llseek,
+        open:           mem_open,
+        release:        mem_release,
 };
 
 
@@ -745,7 +765,7 @@ static void aux_setup_pcls(struct ti_lynx *lynx)
 static int mem_open(struct inode *inode, struct file *file)
 {
         int cid = MINOR(inode->i_rdev);
-        enum { rom, aux, ram } type;
+        enum { t_rom, t_aux, t_ram } type;
         struct memdata *md;
         
         V22_COMPAT_MOD_INC_USE_COUNT;
@@ -760,14 +780,14 @@ static int mem_open(struct inode *inode, struct file *file)
                         V22_COMPAT_MOD_DEC_USE_COUNT;
                         return -ENXIO;
                 }
-                type = aux;
+                type = t_aux;
         } else if (cid < PCILYNX_MINOR_RAM_START) {
                 cid -= PCILYNX_MINOR_ROM_START;
                 if (cid >= num_of_cards || !cards[cid].local_rom) {
                         V22_COMPAT_MOD_DEC_USE_COUNT;
                         return -ENXIO;
                 }
-                type = rom;
+                type = t_rom;
         } else {
                 /* WARNING: Know what you are doing when opening RAM.
                  * It is currently used inside the driver! */
@@ -776,10 +796,10 @@ static int mem_open(struct inode *inode, struct file *file)
                         V22_COMPAT_MOD_DEC_USE_COUNT;
                         return -ENXIO;
                 }
-                type = ram;
+                type = t_ram;
         }
 
-        md = (struct memdata *)vmalloc(sizeof(struct memdata));
+        md = (struct memdata *)kmalloc(sizeof(struct memdata), SLAB_KERNEL);
         if (md == NULL) {
                 V22_COMPAT_MOD_DEC_USE_COUNT;
                 return -ENOMEM;
@@ -789,13 +809,13 @@ static int mem_open(struct inode *inode, struct file *file)
         md->cid = cid;
 
         switch (type) {
-        case rom:
+        case t_rom:
                 md->type = rom;
                 break;
-        case ram:
+        case t_ram:
                 md->type = ram;
                 break;
-        case aux:
+        case t_aux:
                 atomic_set(&md->aux_intr_last_seen,
                            atomic_read(&cards[cid].aux_intr_seen));
                 md->type = aux;
@@ -811,7 +831,7 @@ static int mem_release(struct inode *inode, struct file *file)
 {
         struct memdata *md = (struct memdata *)file->private_data;
 
-        vfree(md);
+        kfree(md);
 
         V22_COMPAT_MOD_DEC_USE_COUNT;
         return 0;
@@ -839,6 +859,29 @@ static unsigned int aux_poll(struct file *file, poll_table *pt)
         return mask;
 }
 
+loff_t mem_llseek(struct file *file, loff_t offs, int orig)
+{
+        loff_t newoffs;
+
+        switch (orig) {
+        case 0:
+                newoffs = offs;
+                break;
+        case 1:
+                newoffs = offs + file->f_pos;
+                break;
+        case 2:
+                newoffs = PCILYNX_MAX_MEMORY + 1 + offs;
+                break;
+        default:
+                return -EINVAL;
+        }
+
+        if (newoffs < 0 || newoffs > PCILYNX_MAX_MEMORY + 1) return -EINVAL;
+
+        file->f_pos = newoffs;
+        return newoffs;
+}
 
 /* 
  * do not DMA if count is too small because this will have a serious impact 
@@ -857,8 +900,6 @@ static ssize_t mem_dmaread(struct memdata *md, u32 physbuf, ssize_t count,
         int i;
         DECLARE_WAITQUEUE(wait, current);
 
-        //printk("buf 0x%08x %x count %d offset %d\n", physbuf, physbuf % 3, count, offset);
-
         count &= ~3;
         count = MIN(count, 53196);
         retval = count;
@@ -868,17 +909,7 @@ static ssize_t mem_dmaread(struct memdata *md, u32 physbuf, ssize_t count,
                 PRINT(KERN_WARNING, md->lynx->id, "DMA ALREADY ACTIVE!");
         }
 
-        switch (md->type) {
-        case rom:
-                reg_write(md->lynx, LBUS_ADDR, LBUS_ADDR_SEL_ROM | offset);
-                break;
-        case ram:
-                reg_write(md->lynx, LBUS_ADDR, LBUS_ADDR_SEL_RAM | offset);
-                break;
-        case aux:
-                reg_write(md->lynx, LBUS_ADDR, LBUS_ADDR_SEL_AUX | offset);
-                break;
-        }
+        reg_write(md->lynx, LBUS_ADDR, md->type | offset);
 
         pcl = edit_pcl(md->lynx, md->lynx->dmem_pcl, &pcltmp);
         pcl->buffer[0].control = PCL_CMD_LBUS_TO_PCI | MIN(count, 4092);
@@ -933,7 +964,7 @@ static ssize_t mem_read(struct file *file, char *buffer, size_t count,
         if ((off + count) > PCILYNX_MAX_MEMORY + 1) {
                 count = PCILYNX_MAX_MEMORY + 1 - off;
         }
-        if (count <= 0) {
+        if (count == 0) {
                 return 0;
         }
 
@@ -1041,12 +1072,17 @@ static void lynx_irq_handler(int irq, void *dev_id,
 {
         struct ti_lynx *lynx = (struct ti_lynx *)dev_id;
         struct hpsb_host *host = lynx->host;
-        u32 intmask = reg_read(lynx, PCI_INT_STATUS);
-        u32 linkint = reg_read(lynx, LINK_INT_STATUS);
+        u32 intmask;
+        u32 linkint;
 
-        reg_write(lynx, PCI_INT_STATUS, intmask);
+        linkint = reg_read(lynx, LINK_INT_STATUS);
+        intmask = reg_read(lynx, PCI_INT_STATUS);
+
+        PRINTD(KERN_DEBUG, lynx->id, "interrupt: 0x%08x / 0x%08x", intmask,
+               linkint);
+
         reg_write(lynx, LINK_INT_STATUS, linkint);
-        //printk("-%d- one interrupt: 0x%08x / 0x%08x\n", lynx->id, intmask, linkint);
+        reg_write(lynx, PCI_INT_STATUS, intmask);
 
 #ifdef CONFIG_IEEE1394_PCILYNX_PORTS
         if (intmask & PCI_INT_AUX_INT) {
@@ -1054,7 +1090,7 @@ static void lynx_irq_handler(int irq, void *dev_id,
                 wake_up_interruptible(&lynx->aux_intr_wait);
         }
 
-        if (intmask & PCI_INT_DMA0_HLT) {
+        if (intmask & PCI_INT_DMA_HLT(CHANNEL_LOCALBUS)) {
                 wake_up_interruptible(&lynx->mem_dma_intr_wait);
         }
 #endif
@@ -1125,14 +1161,13 @@ static void lynx_irq_handler(int irq, void *dev_id,
                 mark_bh(IMMEDIATE_BH);
         }
 
-        if (intmask & PCI_INT_DMA3_HLT) {
-                /* async send DMA completed */
+        if (intmask & PCI_INT_DMA_HLT(CHANNEL_ASYNC_SEND)) {
                 u32 ack;
                 struct hpsb_packet *packet;
                 
                 spin_lock(&lynx->async.queue_lock);
 
-                ack = reg_read(lynx, DMA3_CHAN_STAT);
+                ack = reg_read(lynx, DMA_CHAN_STAT(CHANNEL_ASYNC_SEND));
                 packet = lynx->async.queue;
                 lynx->async.queue = packet->xnext;
 
@@ -1144,7 +1179,7 @@ static void lynx_irq_handler(int irq, void *dev_id,
                 }
 
                 if (lynx->async.queue != NULL) {
-                        send_next_async(lynx);
+                        send_next(lynx, async);
                 }
 
                 spin_unlock(&lynx->async.queue_lock);
@@ -1160,9 +1195,33 @@ static void lynx_irq_handler(int irq, void *dev_id,
                 hpsb_packet_sent(host, packet, ack);
         }
 
-        if (intmask & (PCI_INT_DMA1_HLT | PCI_INT_DMA1_PCL)) {
+        if (intmask & PCI_INT_DMA_HLT(CHANNEL_ISO_SEND)) {
+                struct hpsb_packet *packet;
+
+                spin_lock(&lynx->iso_send.queue_lock);
+
+                packet = lynx->iso_send.queue;
+                lynx->iso_send.queue = packet->xnext;
+
+                pci_unmap_single(lynx->dev, lynx->iso_send.header_dma,
+                                 packet->header_size, PCI_DMA_TODEVICE);
+                if (packet->data_size) {
+                        pci_unmap_single(lynx->dev, lynx->iso_send.data_dma,
+                                         packet->data_size, PCI_DMA_TODEVICE);
+                }
+
+                if (lynx->iso_send.queue != NULL) {
+                        send_next(lynx, iso);
+                }
+
+                spin_unlock(&lynx->iso_send.queue_lock);
+
+                hpsb_packet_sent(host, packet, ACK_COMPLETE);
+        }
+
+        if (intmask & PCI_INT_DMA_HLT(CHANNEL_ASYNC_RCV)) {
                 /* general receive DMA completed */
-                int stat = reg_read(lynx, DMA1_CHAN_STAT);
+                int stat = reg_read(lynx, DMA_CHAN_STAT(CHANNEL_ASYNC_RCV));
 
                 PRINTD(KERN_DEBUG, lynx->id, "received packet size %d",
                        stat & 0x1fff); 
@@ -1182,7 +1241,7 @@ static void lynx_irq_handler(int irq, void *dev_id,
                         hpsb_packet_received(host, q_data, stat & 0x1fff, 0);
                 }
 
-                run_pcl(lynx, lynx->rcv_pcl_start, 1);
+                run_pcl(lynx, lynx->rcv_pcl_start, CHANNEL_ASYNC_RCV);
         }
 }
 
@@ -1263,14 +1322,6 @@ static int add_card(struct pci_dev *dev)
         }
         pci_set_master(dev);
 
-        if (!request_irq(dev->irq, lynx_irq_handler, SA_SHIRQ,
-                         PCILYNX_DRIVER_NAME, lynx)) {
-                PRINT(KERN_INFO, lynx->id, "allocated interrupt %d", dev->irq);
-                lynx->state = have_intr;
-        } else {
-                FAIL("failed to allocate shared interrupt %d", dev->irq);
-        }
-
 #ifndef CONFIG_IEEE1394_PCILYNX_LOCALRAM
         lynx->pcl_mem = pci_alloc_consistent(dev, LOCALRAM_SIZE,
                                              &lynx->pcl_mem_dma);
@@ -1329,6 +1380,16 @@ static int add_card(struct pci_dev *dev)
         }
 #endif
 
+        reg_write(lynx, MISC_CONTROL, MISC_CONTROL_SWRESET);
+
+        if (!request_irq(dev->irq, lynx_irq_handler, SA_SHIRQ,
+                         PCILYNX_DRIVER_NAME, lynx)) {
+                PRINT(KERN_INFO, lynx->id, "allocated interrupt %d", dev->irq);
+                lynx->state = have_intr;
+        } else {
+                FAIL("failed to allocate shared interrupt %d", dev->irq);
+        }
+
         /* alloc_pcl return values are not checked, it is expected that the
          * provided PCL space is sufficient for the initial allocations */
 #ifdef CONFIG_IEEE1394_PCILYNX_PORTS
@@ -1342,6 +1403,8 @@ static int add_card(struct pci_dev *dev)
         lynx->rcv_pcl_start = alloc_pcl(lynx);
         lynx->async.pcl = alloc_pcl(lynx);
         lynx->async.pcl_start = alloc_pcl(lynx);
+        lynx->iso_send.pcl = alloc_pcl(lynx);
+        lynx->iso_send.pcl_start = alloc_pcl(lynx);
 
         for (i = 0; i < NUM_ISORCV_PCL; i++) {
                 lynx->iso_rcv.pcl[i] = alloc_pcl(lynx);
@@ -1362,6 +1425,11 @@ static int add_card(struct pci_dev *dev)
         lynx->iso_rcv.tq.routine = (void (*)(void*))iso_rcv_bh;
         lynx->iso_rcv.tq.data = lynx;
         lynx->iso_rcv.lock = SPIN_LOCK_UNLOCKED;
+
+        lynx->async.queue_lock = SPIN_LOCK_UNLOCKED;
+        lynx->async.channel = CHANNEL_ASYNC_SEND;
+        lynx->iso_send.queue_lock = SPIN_LOCK_UNLOCKED;
+        lynx->iso_send.channel = CHANNEL_ISO_SEND;
         
         PRINT(KERN_INFO, lynx->id, "remapped memory spaces reg 0x%p, rom 0x%p, "
               "ram 0x%p, aux 0x%p", lynx->registers, lynx->local_rom,
@@ -1388,6 +1456,8 @@ static void remove_card(struct ti_lynx *lynx)
         int i;
 
         switch (lynx->state) {
+        case have_intr:
+                free_irq(lynx->dev->irq, lynx);
         case have_iomappings:
                 reg_write(lynx, PCI_INT_ENABLE, 0);
                 reg_write(lynx, MISC_CONTROL, MISC_CONTROL_SWRESET);
@@ -1410,13 +1480,11 @@ static void remove_card(struct ti_lynx *lynx)
                 pci_free_consistent(lynx->dev, 65536, lynx->mem_dma_buffer,
                                     lynx->mem_dma_buffer_dma);
 #endif
-	case have_pcl_mem:
+        case have_pcl_mem:
 #ifndef CONFIG_IEEE1394_PCILYNX_LOCALRAM
                 pci_free_consistent(lynx->dev, LOCALRAM_SIZE, lynx->pcl_mem,
                                     lynx->pcl_mem_dma);
 #endif
-        case have_intr:
-                free_irq(lynx->dev->irq, lynx);
         case clear:
                 /* do nothing - already freed */
         }

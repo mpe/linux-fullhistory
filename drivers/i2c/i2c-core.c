@@ -105,7 +105,7 @@ static struct inode_operations i2cproc_inode_operations = {
 };
 #endif
 
-static int i2cproc_initialized = 0;
+static int i2cproc_initialized;
 
 #else /* undef CONFIG_PROC_FS */
 

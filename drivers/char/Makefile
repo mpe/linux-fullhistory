@@ -160,27 +160,16 @@ obj-$(CONFIG_R3964) += n_r3964.o
 obj-$(CONFIG_APPLICOM) += applicom.o
 obj-$(CONFIG_MS_BUSMOUSE) += msbusmouse.o
 obj-$(CONFIG_82C710_MOUSE) += qpmouse.o
-obj-$(CONFIG_SOFT_WATCHDOG) += softdog.o
-obj-$(CONFIG_PCWATCHDOG) += pcwd.o
-obj-$(CONFIG_ACQUIRE_WDT) += acquirewdt.o
-obj-$(CONFIG_MIXCOMWD) += mixcomwd.o
-obj-$(CONFIG_60XX_WDT) += sbc60xxwdt.o
 obj-$(CONFIG_AMIGAMOUSE) += amigamouse.o
 obj-$(CONFIG_ATARIMOUSE) += atarimouse.o
 obj-$(CONFIG_ADBMOUSE) += adbmouse.o
 obj-$(CONFIG_PC110_PAD) += pc110pad.o
-obj-$(CONFIG_WDT) += wdt.o
-obj-$(CONFIG_WDTPCI) += wdt_pci.o
 obj-$(CONFIG_RTC) += rtc.o
 obj-$(CONFIG_EFI_RTC) += efirtc.o
 ifeq ($(CONFIG_PPC),)
   obj-$(CONFIG_NVRAM) += nvram.o
 endif
 obj-$(CONFIG_TOSHIBA) += toshiba.o
-
-obj-$(CONFIG_21285_WATCHDOG) += wdt285.o
-obj-$(CONFIG_977_WATCHDOG) += wdt977.o
-obj-$(CONFIG_I810_TCO) += i810-tco.o
 obj-$(CONFIG_DS1620) += ds1620.o
 obj-$(CONFIG_INTEL_RNG) += i810_rng.o
 
@@ -230,6 +219,23 @@ else
     MOD_SUB_DIRS += agp
   endif
 endif
+
+# Only one watchdog can succeed. We probe the hardware watchdog
+# drivers first, then the softdog driver.  This means if your hardware
+# watchdog dies or is 'borrowed' for some reason the software watchdog
+# still gives you some cover.
+
+obj-$(CONFIG_PCWATCHDOG) += pcwd.o
+obj-$(CONFIG_ACQUIRE_WDT) += acquirewdt.o
+obj-$(CONFIG_MIXCOMWD) += mixcomwd.o
+obj-$(CONFIG_60XX_WDT) += sbc60xxwdt.o
+obj-$(CONFIG_WDT) += wdt.o
+obj-$(CONFIG_WDTPCI) += wdt_pci.o
+obj-$(CONFIG_21285_WATCHDOG) += wdt285.o
+obj-$(CONFIG_977_WATCHDOG) += wdt977.o
+obj-$(CONFIG_I810_TCO) += i810-tco.o
+obj-$(CONFIG_SOFT_WATCHDOG) += softdog.o
+
 
 # Extract lists of the multi-part drivers.
 # The 'int-*' lists are the intermediate files used to build the multi's.

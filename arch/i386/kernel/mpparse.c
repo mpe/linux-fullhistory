@@ -28,7 +28,7 @@
 #include <asm/pgalloc.h>
 
 /* Have we found an MP table */
-int smp_found_config = 0;
+int smp_found_config;
 
 /*
  * Various Linux-internal data structures created from the
@@ -37,17 +37,17 @@ int smp_found_config = 0;
 int apic_version [MAX_APICS];
 int mp_bus_id_to_type [MAX_MP_BUSSES];
 int mp_bus_id_to_pci_bus [MAX_MP_BUSSES] = { -1, };
-int mp_current_pci_id = 0;
+int mp_current_pci_id;
 int pic_mode;
-unsigned long mp_lapic_addr = 0;
+unsigned long mp_lapic_addr;
 
 /* Processor that is doing the boot up */
 unsigned int boot_cpu_id = -1U;
 /* Internal processor count */
-static unsigned int num_processors = 0;
+static unsigned int num_processors;
 
 /* Bitmask of physically existing CPUs */
-unsigned long phys_cpu_present_map = 0;
+unsigned long phys_cpu_present_map;
 
 /*
  * Intel MP BIOS table parsing routines:

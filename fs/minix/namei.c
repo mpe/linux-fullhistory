@@ -389,7 +389,6 @@ static int minix_rmdir(struct inode * dir, struct dentry *dentry)
 	if (!bh)
 		goto end_rmdir;
 	inode = dentry->d_inode;
-	DQUOT_INIT(inode);
 
 	if (!empty_dir(inode)) {
 		retval = -ENOTEMPTY;
@@ -424,7 +423,6 @@ static int minix_unlink(struct inode * dir, struct dentry *dentry)
 
 	retval = -ENOENT;
 	inode = dentry->d_inode;
-	DQUOT_INIT(inode);
 	bh = minix_find_entry(dir, dentry->d_name.name,
 			      dentry->d_name.len, &de);
 	if (!bh || de->inode != inode->i_ino)
@@ -557,8 +555,6 @@ static int minix_rename(struct inode * old_dir, struct dentry *old_dentry,
 		if (!new_inode) {
 			brelse(new_bh);
 			new_bh = NULL;
-		} else {
-			DQUOT_INIT(new_inode);
 		}
 	}
 	if (S_ISDIR(old_inode->i_mode)) {

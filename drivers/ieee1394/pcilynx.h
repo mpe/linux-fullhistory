@@ -19,11 +19,11 @@
 #define ISORCV_PER_PAGE          (PAGE_SIZE / MAX_ISORCV_SIZE)
 #define ISORCV_PAGES             (NUM_ISORCV_PCL / ISORCV_PER_PAGE)
 
-/* only iso rcv and localbus use these definitions so far */
 #define CHANNEL_LOCALBUS         0
 #define CHANNEL_ASYNC_RCV        1
 #define CHANNEL_ISO_RCV          2
 #define CHANNEL_ASYNC_SEND       3
+#define CHANNEL_ISO_SEND         4
 
 typedef int pcl_t;
 
@@ -88,12 +88,13 @@ struct ti_lynx {
         dma_addr_t rcv_page_dma;
         int rcv_active;
 
-        struct {
+        struct lynx_send_data {
                 pcl_t pcl_start, pcl;
-                struct hpsb_packet *queue;
+                struct hpsb_packet *queue, *queue_last;
                 spinlock_t queue_lock;
                 dma_addr_t header_dma, data_dma;
-        } async;
+                int channel;
+        } async, iso_send;
 
         struct {
                 pcl_t pcl[NUM_ISORCV_PCL];
@@ -113,7 +114,8 @@ struct memdata {
         struct ti_lynx *lynx;
         int cid;
         atomic_t aux_intr_last_seen;
-        enum { rom, aux, ram } type;
+	/* enum values are the same as LBUS_ADDR_SEL_* values below */
+        enum { rom = 0x10000, aux = 0x20000, ram = 0 } type;
 };
 
 
@@ -146,6 +148,8 @@ inline static void reg_clear_bits(const struct ti_lynx *lynx, int offset,
 
 
 /* chip register definitions follow */
+
+#define PCI_LATENCY_CACHELINE             0x0c
 
 #define MISC_CONTROL                      0x40
 #define MISC_CONTROL_SWRESET              (1<<0)
@@ -495,6 +499,7 @@ inline static void run_pcl(const struct ti_lynx *lynx, pcl_t pclid, int dmachan)
 #define PCL_LAST_CMD           (PCL_LAST_BUFF)
 #define PCL_WAITSTAT           (1<<17)
 #define PCL_BIGENDIAN          (1<<16)
+#define PCL_ISOMODE            (1<<12)
 
 
 #define _(x) (__constant_cpu_to_be32(x))

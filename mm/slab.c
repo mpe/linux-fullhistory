@@ -579,7 +579,6 @@ static void kmem_slab_destroy (kmem_cache_t *cachep, slab_t *slabp)
 		kmem_cache_free(cachep->slabp_cache, slabp);
 }
 
-
 /**
  * kmem_cache_create - Create a cache.
  * @name: A string which is used in /proc/slabinfo to identify this cache.
@@ -838,48 +837,60 @@ static int is_chained_kmem_cache(kmem_cache_t * cachep)
 }
 
 #ifdef CONFIG_SMP
-static DECLARE_MUTEX(cache_drain_sem);
-static kmem_cache_t *cache_to_drain = NULL;
-static DECLARE_WAIT_QUEUE_HEAD(cache_drain_wait);
-unsigned long slab_cache_drain_mask;
-
 /*
- * Waits for all CPUs to execute slab_drain_local_cache().
- * Caller must be holding cache_drain_sem.
+ * Waits for all CPUs to execute func().
  */
-static void slab_drain_all_sync(void)
+static void smp_call_function_all_cpus(void (*func) (void *arg), void *arg)
 {
-	DECLARE_WAITQUEUE(wait, current);
-
 	local_irq_disable();
-	slab_drain_local_cache();
+	func(arg);
 	local_irq_enable();
 
-	add_wait_queue(&cache_drain_wait, &wait);
-	current->state = TASK_UNINTERRUPTIBLE;
-	while (slab_cache_drain_mask != 0UL)
-		schedule();
-	current->state = TASK_RUNNING;
-	remove_wait_queue(&cache_drain_wait, &wait);
+	if (smp_call_function(func, arg, 1, 1))
+		BUG();
 }
+typedef struct ccupdate_struct_s
+{
+	kmem_cache_t *cachep;
+	cpucache_t *new[NR_CPUS];
+} ccupdate_struct_t;
+
+static void do_ccupdate_local(void *info)
+{
+	ccupdate_struct_t *new = (ccupdate_struct_t *)info;
+	cpucache_t *old = cc_data(new->cachep);
+	
+	cc_data(new->cachep) = new->new[smp_processor_id()];
+	new->new[smp_processor_id()] = old;
+}
+
+static void free_block (kmem_cache_t* cachep, void** objpp, int len);
 
 static void drain_cpu_caches(kmem_cache_t *cachep)
 {
-	unsigned long cpu_mask = 0;
+	ccupdate_struct_t new;
 	int i;
 
-	for (i = 0; i < smp_num_cpus; i++)
-		cpu_mask |= (1UL << cpu_logical_map(i));
+	memset(&new.new,0,sizeof(new.new));
 
-	down(&cache_drain_sem);
+	new.cachep = cachep;
 
-	cache_to_drain = cachep;
-	slab_cache_drain_mask = cpu_mask;
-	slab_drain_all_sync();
-	cache_to_drain = NULL;
+	down(&cache_chain_sem);
+	smp_call_function_all_cpus(do_ccupdate_local, (void *)&new);
 
-	up(&cache_drain_sem);
+	for (i = 0; i < smp_num_cpus; i++) {
+		cpucache_t* ccold = new.new[cpu_logical_map(i)];
+		if (!ccold || (ccold->avail == 0))
+			continue;
+		local_irq_disable();
+		free_block(cachep, cc_entry(ccold), ccold->avail);
+		local_irq_enable();
+		ccold->avail = 0;
+	}
+	smp_call_function_all_cpus(do_ccupdate_local, (void *)&new);
+	up(&cache_chain_sem);
 }
+
 #else
 #define drain_cpu_caches(cachep)	do { } while (0)
 #endif
@@ -1593,56 +1604,6 @@ kmem_cache_t * kmem_find_general_cachep (size_t size, int gfpflags)
 
 #ifdef CONFIG_SMP
 
-typedef struct ccupdate_struct_s
-{
-	kmem_cache_t *cachep;
-	cpucache_t *new[NR_CPUS];
-} ccupdate_struct_t;
-
-static ccupdate_struct_t *ccupdate_state = NULL;
-
-/* Called from per-cpu timer interrupt. */
-void slab_drain_local_cache(void)
-{
-	if (ccupdate_state != NULL) {
-		ccupdate_struct_t *new = ccupdate_state;
-		cpucache_t *old = cc_data(new->cachep);
-
-		cc_data(new->cachep) = new->new[smp_processor_id()];
-		new->new[smp_processor_id()] = old;
-	} else {
-		kmem_cache_t *cachep = cache_to_drain;
-		cpucache_t *cc = cc_data(cachep);
-
-		if (cc && cc->avail) {
-			free_block(cachep, cc_entry(cc), cc->avail);
-			cc->avail = 0;
-		}
-	}
-
-	clear_bit(smp_processor_id(), &slab_cache_drain_mask);
-	if (slab_cache_drain_mask == 0)
-		wake_up(&cache_drain_wait);
-}
-
-static void do_ccupdate(ccupdate_struct_t *data)
-{
-	unsigned long cpu_mask = 0;
-	int i;
-
-	for (i = 0; i < smp_num_cpus; i++)
-		cpu_mask |= (1UL << cpu_logical_map(i));
-
-	down(&cache_drain_sem);
-
-	ccupdate_state = data;
-	slab_cache_drain_mask = cpu_mask;
-	slab_drain_all_sync();
-	ccupdate_state = NULL;
-
-	up(&cache_drain_sem);
-}
-
 /* called with cache_chain_sem acquired.  */
 static int kmem_tune_cpucache (kmem_cache_t* cachep, int limit, int batchcount)
 {
@@ -1666,7 +1627,6 @@ static int kmem_tune_cpucache (kmem_cache_t* cachep, int limit, int batchcount)
 		for (i = 0; i< smp_num_cpus; i++) {
 			cpucache_t* ccnew;
 
-
 			ccnew = kmalloc(sizeof(void*)*limit+
 					sizeof(cpucache_t), GFP_KERNEL);
 			if (!ccnew)
@@ -1681,7 +1641,7 @@ static int kmem_tune_cpucache (kmem_cache_t* cachep, int limit, int batchcount)
 	cachep->batchcount = batchcount;
 	spin_unlock_irq(&cachep->spinlock);
 
-	do_ccupdate(&new);
+	smp_call_function_all_cpus(do_ccupdate_local, (void *)&new);
 
 	for (i = 0; i < smp_num_cpus; i++) {
 		cpucache_t* ccold = new.new[cpu_logical_map(i)];

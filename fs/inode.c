@@ -454,7 +454,7 @@ void prune_icache(int goal)
 	dispose_list(freeable);
 }
 
-int shrink_icache_memory(int priority, int gfp_mask)
+void shrink_icache_memory(int priority, int gfp_mask)
 {
 	int count = 0;
 
@@ -466,19 +466,13 @@ int shrink_icache_memory(int priority, int gfp_mask)
 	 * in clear_inode() and friends..
 	 */
 	if (!(gfp_mask & __GFP_IO))
-		return 0;
+		return;
 
 	if (priority)
 		count = inodes_stat.nr_unused / priority;
-	prune_icache(count);
-	/* FIXME: kmem_cache_shrink here should tell us
-	   the number of pages freed, and it should
-	   work in a __GFP_DMA/__GFP_HIGHMEM behaviour
-	   to free only the interesting pages in
-	   function of the needs of the current allocation. */
-	kmem_cache_shrink(inode_cachep);
 
-	return 0;
+	prune_icache(count);
+	kmem_cache_shrink(inode_cachep);
 }
 
 /*
@@ -519,9 +513,9 @@ static struct inode * find_inode(struct super_block * sb, unsigned long ino, str
  */
 static void clean_inode(struct inode *inode)
 {
-	static struct address_space_operations empty_aops = {};
-	static struct inode_operations empty_iops = {};
-	static struct file_operations empty_fops = {};
+	static struct address_space_operations empty_aops;
+	static struct inode_operations empty_iops;
+	static struct file_operations empty_fops;
 	memset(&inode->u, 0, sizeof(inode->u));
 	inode->i_sock = 0;
 	inode->i_op = &empty_iops;

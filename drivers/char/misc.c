@@ -70,8 +70,6 @@ extern int psaux_init(void);
 extern void gfx_register(void);
 #endif
 extern void streamable_init(void);
-extern void watchdog_init(void);
-extern void pcwatchdog_init(void);
 extern int rtc_sun_init(void);		/* Combines MK48T02 and MK48T08 */
 extern int rtc_DP8570A_init(void);
 extern int rtc_MK48T08_init(void);
@@ -254,18 +252,6 @@ int __init misc_init(void)
 #endif
 #ifdef CONFIG_PC110_PAD
 	pc110pad_init();
-#endif
-/*
- *	Only one watchdog can succeed. We probe the pcwatchdog first,
- *	then the wdt cards and finally the software watchdog which always
- *	works. This means if your hardware watchdog dies or is 'borrowed'
- *	for some reason the software watchdog still gives you some cover.
- */
-#ifdef CONFIG_PCWATCHDOG
-	pcwatchdog_init();
-#endif
-#ifdef CONFIG_SOFT_WATCHDOG
-	watchdog_init();
 #endif
 #ifdef CONFIG_MVME16x
 	rtc_MK48T08_init();

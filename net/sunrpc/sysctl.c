@@ -25,14 +25,14 @@
 /*
  * Declare the debug flags here
  */
-unsigned int	rpc_debug  = 0;
-unsigned int	nfs_debug  = 0;
-unsigned int	nfsd_debug = 0;
-unsigned int	nlm_debug  = 0;
+unsigned int	rpc_debug;
+unsigned int	nfs_debug;
+unsigned int	nfsd_debug;
+unsigned int	nlm_debug;
 
 #ifdef RPC_DEBUG
 
-static struct ctl_table_header *sunrpc_table_header = NULL;
+static struct ctl_table_header *sunrpc_table_header;
 static ctl_table		sunrpc_table[];
 
 void

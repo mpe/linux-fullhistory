@@ -15,8 +15,9 @@
 #define RLIMIT_AS	7		/* address space limit(?) */
 #define RLIMIT_NPROC	8		/* max number of processes */
 #define RLIMIT_MEMLOCK	9		/* max locked-in-memory address space */
+#define RLIMIT_LOCKS   10              /* maximum file locks held */
 
-#define RLIM_NLIMITS	10
+#define RLIM_NLIMITS	11
 
 /*
  * SuS says limits have to be unsigned.  Fine, it's unsigned, but
@@ -39,6 +40,7 @@
     {LONG_MAX, LONG_MAX},			/* RLIMIT_AS */		\
     {LONG_MAX, LONG_MAX},			/* RLIMIT_NPROC */	\
     {LONG_MAX, LONG_MAX},			/* RLIMIT_MEMLOCK */	\
+    {LONG_MAX, LONG_MAX},                       /* RLIMIT_LOCKS */      \
 }
 
 #endif /* __KERNEL__ */

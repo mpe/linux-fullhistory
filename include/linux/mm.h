@@ -94,6 +94,7 @@ struct vm_area_struct {
 #define VM_RAND_READ	0x00010000	/* App will not benefit from clustered reads */
 
 #define VM_DONTCOPY	0x00020000      /* Do not copy this vma on fork */
+#define VM_DONTEXPAND	0x00040000	/* Cannot expand with mremap() */
 
 #define VM_STACK_FLAGS	0x00000177
 

@@ -1,217 +1,70 @@
 #
 # Makefile for the linux networking.
 #
-# Note! Dependencies are done automagically by 'make dep', which also
-# removes any old dependencies. DON'T put your own dependencies here
-# unless it's something special (ie not a .c file).
+# 2 Sep 2000, Christoph Hellwig <hch@caldera.de>
+# Rewritten to use lists instead of if-statements.
 #
-# Note 2! The CFLAGS definition is now in the main makefile...
 
-MOD_SUB_DIRS := ipv4
-ALL_SUB_DIRS := 802 ax25 bridge core ethernet ipv4 ipv6 ipx unix appletalk \
-		netrom rose lapb x25 wanrouter netlink sched packet sunrpc \
-		econet irda decnet atm khttpd ipv4/netfilter ipv6/netfilter
-SUB_DIRS     := core ethernet
+O_TARGET :=	network.o
 
+mod-subdirs :=	ipv4/netfilter ipv6/netfilter ipx irda atm
+export-objs :=	netsyms.o
+
+subdir-y :=	core ethernet
+subdir-m :=	ipv4 # hum?
+
+
+subdir-$(CONFIG_NET)		+= 802 sched
+subdir-$(CONFIG_INET)		+= ipv4
+subdir-$(CONFIG_NETFILTER)	+= ipv4/netfilter
+subdir-$(CONFIG_UNIX)		+= unix
+subdir-$(CONFIG_IPV6)		+= ipv6
+
+ifneq ($(CONFIG_IPV6),n)
+ifneq ($(CONFIG_IPV6),)
+subdir-$(CONFIG_NETFILTER)	+= ipv6/netfilter
+endif
+endif
+
+subdir-$(CONFIG_KHTTPD)		+= khttpd
+subdir-$(CONFIG_NETLINK)	+= netlink
+subdir-$(CONFIG_PACKET)		+= packet
+subdir-$(CONFIG_NET_SCHED)	+= sched
+subdir-$(CONFIG_BRIDGE)		+= bridge
+subdir-$(CONFIG_IPX)		+= ipx
+subdir-$(CONFIG_ATALK)		+= appletalk
+subdir-$(CONFIG_WAN_ROUTER)	+= wanrouter
+subdir-$(CONFIG_X25)		+= x25
+subdir-$(CONFIG_LAPB)		+= lapb
+subdir-$(CONFIG_NETROM)		+= netrom
+subdir-$(CONFIG_ROSE)		+= rose
+subdir-$(CONFIG_AX25)		+= ax25
+subdir-$(CONFIG_IRDA)		+= irda
+subdir-$(CONFIG_SUNRPC)		+= sunrpc
+subdir-$(CONFIG_ATM)		+= atm
+subdir-$(CONFIG_DECNET)		+= decnet
+subdir-$(CONFIG_ECONET)		+= econet
+
+
+obj-y	:= socket.o protocols.o $(join $(subdir-y), $(patsubst %,/%.o,$(notdir $(subdir-y))))
 ifeq ($(CONFIG_NET),y)
-SUB_DIRS += 802 sched
+obj-$(CONFIG_MODULES)		+= netsyms.o
+obj-$(CONFIG_SYSCTL)		+= sysctl_net.o
 endif
 
-ifeq ($(CONFIG_INET),y)
-SUB_DIRS += ipv4
-ifeq ($(CONFIG_NETFILTER),y)
-SUB_DIRS += ipv4/netfilter
-MOD_SUB_DIRS += ipv4/netfilter
-endif
-endif
 
-ifeq ($(CONFIG_UNIX),y)
-SUB_DIRS += unix
-else
-  ifeq ($(CONFIG_UNIX),m)
-  MOD_SUB_DIRS += unix
-  endif
-endif
+# Subdirectories that should be entered when MAKING_MODULES=1, even if set to 'y'.
+both-m		:= $(filter $(mod-subdirs), $(subdir-y))
 
-ifeq ($(CONFIG_IPV6),y)
-SUB_DIRS += ipv6
-ifeq ($(CONFIG_NETFILTER),y)
-SUB_DIRS += ipv6/netfilter
-MOD_SUB_DIRS += ipv6/netfilter
-endif
-else
-  ifeq ($(CONFIG_IPV6),m)
-  MOD_SUB_DIRS += ipv6
-  ifeq ($(CONFIG_NETFILTER),y)
-  MOD_SUB_DIRS += ipv6/netfilter
-  endif
-  endif
-endif
+# Translate to Rules.make lists.
+O_OBJS		:= $(filter-out	$(export-objs), $(obj-y))
+OX_OBJS		:= $(filter	$(export-objs), $(obj-y))
+M_OBJS		:= $(sort $(filter-out	$(export-objs), $(obj-m)))
+MX_OBJS		:= $(sort $(filter	$(export-objs), $(obj-m)))
 
-ifeq ($(CONFIG_KHTTPD),y)
-SUB_DIRS += khttpd
-else
-  ifeq ($(CONFIG_KHTTPD),m)
-  MOD_SUB_DIRS += khttpd
-  endif
-endif
+SUB_DIRS	:= $(subdir-y)
+MOD_SUB_DIRS	:= $(sort $(subdir-m) $(both-m))
+ALL_SUB_DIRS 	:= $(sort $(subdir-y) $(subdir-m) $(subdir-n) $(subdir-))
 
-ifeq ($(CONFIG_NETLINK),y)
-SUB_DIRS += netlink
-  ifeq ($(CONFIG_NETLINK_DEV),m)
-    MOD_SUB_DIRS += netlink
-  endif
-endif
-
-ifeq ($(CONFIG_PACKET),y)
-SUB_DIRS += packet
-else
-  ifeq ($(CONFIG_PACKET),m)
-    MOD_SUB_DIRS += packet
-  endif
-endif
-
-ifeq ($(CONFIG_NET_SCHED),y)
-  MOD_SUB_DIRS += sched
-endif
-
-ifeq ($(CONFIG_BRIDGE),y)
-SUB_DIRS += bridge
-else
-  ifeq ($(CONFIG_BRIDGE),m)
-    MOD_SUB_DIRS += bridge
-  endif
-endif
-
-ifeq ($(CONFIG_IPX),y)
-SUB_DIRS += ipx
-# SPX can be still a module
-MOD_SUB_DIRS += ipx
-else
-  ifeq ($(CONFIG_IPX),m)
-  MOD_SUB_DIRS += ipx
-  endif
-endif
-
-ifeq ($(CONFIG_ATALK),y)
-SUB_DIRS += appletalk
-else
-  ifeq ($(CONFIG_ATALK),m)
-  MOD_SUB_DIRS += appletalk
-  endif
-endif
-
-ifeq ($(CONFIG_WAN_ROUTER),y)
-SUB_DIRS += wanrouter
-else
-  ifeq ($(CONFIG_WAN_ROUTER),m)
-  MOD_SUB_DIRS += wanrouter
-  endif
-endif
-
-ifeq ($(CONFIG_X25),y)
-SUB_DIRS += x25
-else
-  ifeq ($(CONFIG_X25),m)
-  MOD_SUB_DIRS += x25
-  endif
-endif
-
-ifeq ($(CONFIG_LAPB),y)
-SUB_DIRS += lapb
-else
-  ifeq ($(CONFIG_LAPB),m)
-  MOD_SUB_DIRS += lapb
-  endif
-endif
-
-ifeq ($(CONFIG_NETROM),y)
-SUB_DIRS += netrom
-else
-  ifeq ($(CONFIG_NETROM),m)
-  MOD_SUB_DIRS += netrom
-  endif
-endif
-
-ifeq ($(CONFIG_ROSE),y)
-SUB_DIRS += rose
-else
-  ifeq ($(CONFIG_ROSE),m)
-  MOD_SUB_DIRS += rose
-  endif
-endif
-
-ifeq ($(CONFIG_AX25),y)
-SUB_DIRS += ax25
-else
-  ifeq ($(CONFIG_AX25),m)
-  MOD_SUB_DIRS += ax25
-  endif
-endif
-
-ifeq ($(CONFIG_IRDA),y)
-SUB_DIRS += irda
-# There might be some irda features that are compiled as modules
-MOD_IN_SUB_DIRS += irda
-else
-  ifeq ($(CONFIG_IRDA),m)
-  MOD_SUB_DIRS += irda
-  endif
-endif
-
-ifeq ($(CONFIG_SUNRPC),y)
-SUB_DIRS += sunrpc
-else
-  ifeq ($(CONFIG_SUNRPC),m)
-  MOD_SUB_DIRS += sunrpc
-  endif
-endif
-
-ifeq ($(CONFIG_ATM),y)
-SUB_DIRS += atm
-ifeq ($(CONFIG_ATM_LANE),m)
-  MOD_ATM = atm
-endif
-ifeq ($(CONFIG_ATM_MPOA),m)
-  MOD_ATM = atm
-endif
-MOD_SUB_DIRS += $(MOD_ATM)
-endif
-
-ifeq ($(CONFIG_DECNET),y)
-SUB_DIRS += decnet
-else
-  ifeq ($(CONFIG_DECNET),m)
-  MOD_SUB_DIRS += decnet
-  endif
-endif
-
-ifeq ($(CONFIG_ECONET),y)
-SUB_DIRS += econet
-else
-  ifeq ($(CONFIG_ECONET),m)
-  MOD_SUB_DIRS += econet
-  endif
-endif
-
-# We must attach netsyms.o to socket.o, as otherwise there is nothing
-# to pull the object file from the archive.
-
-ifeq ($(CONFIG_NET),y)
-ifeq ($(CONFIG_MODULES),y)
-OX_OBJS      := netsyms.o
-endif
-endif
-
-O_TARGET     := network.o
-O_OBJS	     := socket.o protocols.o $(join $(SUB_DIRS), $(patsubst %,/%.o,$(notdir $(SUB_DIRS))))
-
-M_OBJS	     :=
-
-ifeq ($(CONFIG_SYSCTL),y)
-ifeq ($(CONFIG_NET),y)
-O_OBJS += sysctl_net.o
-endif
-endif
 
 include $(TOPDIR)/Rules.make

@@ -19,6 +19,8 @@
  * 2000/01/18 - separated sb_card and sb_common -
  * Jeff Garzik <jgarzik@mandrakesoft.com>
  *
+ * 2000/09/18 - got rid of attach_uart401
+ * Arnaldo Carvalho de Melo <acme@conectiva.com.br>
  */
 
 #include <linux/config.h>
@@ -1190,24 +1192,10 @@ static int init_Jazz16_midi(sb_devc * devc, struct address_info *hw_config)
 	return 1;
 }
 
-void attach_sbmpu(struct address_info *hw_config, struct module *owner)
-{
-	if (last_sb->model == MDL_ESS) {
-#if defined(CONFIG_SOUND_MPU401)
-		attach_mpu401(hw_config, owner);
-		if (last_sb->irq == -hw_config->irq) {
-			last_sb->midi_irq_cookie=(void *)hw_config->slots[1];
-		}
-#endif
-		return;
-	}
-	attach_uart401(hw_config, THIS_MODULE);
-	last_sb->midi_irq_cookie=midi_devs[hw_config->slots[4]]->devc;
-}
-
-int probe_sbmpu(struct address_info *hw_config)
+int probe_sbmpu(struct address_info *hw_config, struct module *owner)
 {
 	sb_devc *devc = last_devc;
+	int ret;
 
 	if (last_devc == NULL)
 		return 0;
@@ -1239,15 +1227,15 @@ int probe_sbmpu(struct address_info *hw_config)
 			return 0;
 		hw_config->name = "ESS1xxx MPU";
 		devc->midi_irq_cookie = -1;
-		return probe_mpu401(hw_config);
+		if (!probe_mpu401(hw_config))
+			return 0;
+		attach_mpu401(hw_config, owner);
+		if (last_sb->irq == -hw_config->irq)
+			last_sb->midi_irq_cookie=(void *)hw_config->slots[1];
+		return 1;
 	}
 #endif
 
-	if (check_region(hw_config->io_base, 4))
-	{
-		printk(KERN_ERR "sbmpu: I/O port conflict (%x)\n", hw_config->io_base);
-		return 0;
-	}
 	switch (devc->model)
 	{
 		case MDL_SB16:
@@ -1277,7 +1265,11 @@ int probe_sbmpu(struct address_info *hw_config)
 		default:
 			return 0;
 	}
-	return probe_uart401(hw_config);
+	
+	ret = probe_uart401(hw_config, owner);
+	if (ret)
+		last_sb->midi_irq_cookie=midi_devs[hw_config->slots[4]]->devc;
+	return ret;
 }
 
 void unload_sbmpu(struct address_info *hw_config)
@@ -1296,7 +1288,6 @@ EXPORT_SYMBOL(sb_dsp_detect);
 EXPORT_SYMBOL(sb_dsp_unload);
 EXPORT_SYMBOL(sb_dsp_disable_midi);
 EXPORT_SYMBOL(sb_be_quiet);
-EXPORT_SYMBOL(attach_sbmpu);
 EXPORT_SYMBOL(probe_sbmpu);
 EXPORT_SYMBOL(unload_sbmpu);
 EXPORT_SYMBOL(smw_free);

@@ -36,9 +36,7 @@ struct device_struct {
 };
 
 static rwlock_t chrdevs_lock = RW_LOCK_UNLOCKED;
-static struct device_struct chrdevs[MAX_CHRDEV] = {
-	{ NULL, NULL },
-};
+static struct device_struct chrdevs[MAX_CHRDEV];
 
 extern int get_blkdev_list(char *);
 

@@ -2370,28 +2370,25 @@ static int __init init_cmpci(void)
 			continue;
 		s->irq = pcidev->irq;
 
-		if (check_region(s->iobase, CM_EXTENT_CODEC)) {
+		if (!request_region(s->iobase, CM_EXTENT_CODEC, "cmpci")) {
 			printk(KERN_ERR "cmpci: io ports %#x-%#x in use\n", s->iobase, s->iobase+CM_EXTENT_CODEC-1);
 			goto err_region5;
 		}
-		request_region(s->iobase, CM_EXTENT_CODEC, "cmpci");
-		if (check_region(s->iomidi, CM_EXTENT_MIDI)) {
+		if (!request_region(s->iomidi, CM_EXTENT_MIDI, "cmpci Midi")) {
 			printk(KERN_WARNING "cmpci: io ports %#x-%#x in use, midi disabled.\n", s->iomidi, s->iomidi+CM_EXTENT_MIDI-1);
 			s->iomidi = 0;
 		}
 		else
 		{
-			request_region(s->iomidi, CM_EXTENT_MIDI, "cmpci Midi");
 			/* set IO based at 0x330 */
 			outb(inb(s->iobase + CODEC_CMI_LEGACY_CTRL + 3) & ~0x60, s->iobase + CODEC_CMI_LEGACY_CTRL + 3);
 		}
-		if (check_region(s->iosynth, CM_EXTENT_SYNTH)) {
+		if (!request_region(s->iosynth, CM_EXTENT_SYNTH, "cmpci FM")) {
 			printk(KERN_WARNING "cmpci: io ports %#x-%#x in use, synth disabled.\n", s->iosynth, s->iosynth+CM_EXTENT_SYNTH-1);
 			s->iosynth = 0;
 		}
 		else
 		{
-			request_region(s->iosynth, CM_EXTENT_SYNTH, "cmpci FM");
 			/* enable FM */
 			outb(inb(s->iobase + CODEC_CMI_MISC_CTRL + 2) | 8, s->iobase + CODEC_CMI_MISC_CTRL);
 		}

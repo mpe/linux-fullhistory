@@ -19,6 +19,7 @@
  */
 
 #include <linux/fs.h>
+#include <linux/ext2_fs.h>
 #include <linux/sched.h>
 
 static loff_t ext2_file_lseek(struct file *, loff_t, int);

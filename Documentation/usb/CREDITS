@@ -14,6 +14,7 @@ difficult to maintain, add yourself with a patch if desired.
   Greg Kroah-Hartman <greg@kroah.com>
   Pavel Machek <pavel@suse.cz>
   Paul Mackerras <paulus@cs.anu.edu.au>
+  Petko Manlolov <petkan@dce.bg>
   David E. Nelson <dnelson@jump.net>
   Vojtech Pavlik <vojtech@suse.cz>
   Bill Ryder <bryder@sgi.com>
@@ -112,6 +113,10 @@ THANKS file in Inaky's driver):
 	  serial converter, and the documentation for the device to
 	  allow a driver to be written.
 
+	- Thanks to ADMtek for providing Pegasus and Pegasus II
+	  evaluation boards, specs and valuable advices during
+	  the driver development.
+	
         And thanks go to (hey! in no particular order :)
 
         - Oren Tirosh <orenti@hishome.net>, for standing so patiently

@@ -53,7 +53,7 @@ extern __inline__ int get_order(unsigned long size)
         return order;
 }
 
-
+#include <linux/mm.h>
 #include <linux/pci.h>
 inline static int pci_enable_device(struct pci_dev *dev)
 {
@@ -114,7 +114,7 @@ extern inline void pci_unmap_single(struct pci_dev *hwdev, dma_addr_t dma_addr,
 		BUG();
 }
 
-struct scatterlist {};
+#include <asm/scatterlist.h>
 extern inline int pci_map_sg(struct pci_dev *hwdev, struct scatterlist *sg,
 			     int nents, int direction)
 {

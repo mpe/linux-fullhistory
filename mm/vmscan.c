@@ -101,7 +101,7 @@ static int try_to_swap_out(struct mm_struct * mm, struct vm_area_struct* vma, un
 		set_pte(page_table, swp_entry_to_pte(entry));
 drop_pte:
 		UnlockPage(page);
-		vma->vm_mm->rss--;
+		mm->rss--;
 		flush_tlb_page(vma, address);
 		deactivate_page(page);
 		page_cache_release(page);
@@ -169,9 +169,9 @@ drop_pte:
 		struct file *file = vma->vm_file;
 		if (file) get_file(file);
 		pte_clear(page_table);
-		vma->vm_mm->rss--;
+		mm->rss--;
 		flush_tlb_page(vma, address);
-		vmlist_access_unlock(vma->vm_mm);
+		vmlist_access_unlock(mm);
 		error = swapout(page, file);
 		UnlockPage(page);
 		if (file) fput(file);
@@ -201,10 +201,10 @@ drop_pte:
 	add_to_swap_cache(page, entry);
 
 	/* Put the swap entry into the pte after the page is in swapcache */
-	vma->vm_mm->rss--;
+	mm->rss--;
 	set_pte(page_table, swp_entry_to_pte(entry));
 	flush_tlb_page(vma, address);
-	vmlist_access_unlock(vma->vm_mm);
+	vmlist_access_unlock(mm);
 
 	/* OK, do a physical asynchronous write to swap.  */
 	rw_swap_page(WRITE, page, 0);
@@ -257,7 +257,7 @@ static inline int swap_out_pmd(struct mm_struct * mm, struct vm_area_struct * vm
 
 	do {
 		int result;
-		vma->vm_mm->swap_address = address + PAGE_SIZE;
+		mm->swap_address = address + PAGE_SIZE;
 		result = try_to_swap_out(mm, vma, address, pte, gfp_mask);
 		if (result)
 			return result;
@@ -309,7 +309,7 @@ static int swap_out_vma(struct mm_struct * mm, struct vm_area_struct * vma, unsi
 	if (vma->vm_flags & VM_LOCKED)
 		return 0;
 
-	pgdir = pgd_offset(vma->vm_mm, address);
+	pgdir = pgd_offset(mm, address);
 
 	end = vma->vm_end;
 	if (address >= end)
@@ -908,17 +908,8 @@ static int refill_inactive(unsigned int gfp_mask, int user)
 	   	 * refill_inactive() almost never fail when there's
 	   	 * really plenty of memory free. 
 		 */
-		count -= shrink_dcache_memory(priority, gfp_mask);
-		count -= shrink_icache_memory(priority, gfp_mask);
-		/*
-		 * Not currently working, see fixme in shrink_?cache_memory
-		 * In the inner funtions there is a comment:
-		 * "To help debugging, a zero exit status indicates
-		 *  all slabs were released." (-arca?)
-		 * lets handle it in a primitive but working way...
-		 *	if (count <= 0)
-		 *		goto done;
-		 */
+		shrink_dcache_memory(priority, gfp_mask);
+		shrink_icache_memory(priority, gfp_mask);
 
 		/* Try to get rid of some shared memory pages.. */
 		while (shm_swap(priority, gfp_mask)) {
@@ -985,8 +976,8 @@ static int do_try_to_free_pages(unsigned int gfp_mask, int user)
 	 * the inode and dentry cache whenever we do this.
 	 */
 	if (free_shortage() || inactive_shortage()) {
-		ret += shrink_dcache_memory(6, gfp_mask);
-		ret += shrink_icache_memory(6, gfp_mask);
+		shrink_dcache_memory(6, gfp_mask);
+		shrink_icache_memory(6, gfp_mask);
 		ret += refill_inactive(gfp_mask, user);
 	} else {
 		/*

@@ -46,7 +46,7 @@ static void __init quirk_passive_release(struct pci_dev *dev)
     chipset level fix */
     
 
-int isa_dma_bridge_buggy = 0;		/* Exported */
+int isa_dma_bridge_buggy;		/* Exported */
     
 static void __init quirk_isa_dma_hangs(struct pci_dev *dev)
 {
@@ -56,7 +56,7 @@ static void __init quirk_isa_dma_hangs(struct pci_dev *dev)
 	}
 }
 
-int pci_pci_problems = 0;
+int pci_pci_problems;
 
 /*
  *	Chipsets where PCI->PCI transfers vanish or hang

@@ -33,6 +33,15 @@
 #include "raw1394.h"
 
 
+#if BITS_PER_LONG == 64
+#define int2ptr(x) ((void *)x)
+#define ptr2int(x) ((u64)x)
+#else
+#define int2ptr(x) ((void *)(u32)x)
+#define ptr2int(x) ((u64)(u32)x)
+#endif
+
+
 static devfs_handle_t devfs_handle = NULL;
 
 LIST_HEAD(host_info_list);
@@ -204,8 +213,13 @@ static void host_reset(struct hpsb_host *host)
                                 req->file_info = fi;
                                 req->req.type = RAW1394_REQ_BUS_RESET;
                                 req->req.generation = get_hpsb_generation();
-                                req->req.misc = (host->node_id << 16) 
+                                req->req.misc = (host->node_id << 16)
                                         | host->node_count;
+                                if (fi->protocol_version > 3) {
+                                        req->req.misc |= ((host->irm_id
+                                                           & NODE_MASK) << 8);
+                                }
+
                                 queue_complete_req(req);
                         }
                                 
@@ -268,7 +282,7 @@ static void iso_receive(struct hpsb_host *host, int channel, quadlet_t *data,
                         req->req.type = RAW1394_REQ_ISO_RECEIVE;
                         req->req.generation = get_hpsb_generation();
                         req->req.misc = 0;
-                        req->req.recvb = (u64)fi->iso_buffer;
+                        req->req.recvb = ptr2int(fi->iso_buffer);
                         req->req.length = MIN(length, fi->iso_buffer_length);
                         
                         list_add_tail(&req->list, &reqs);
@@ -337,7 +351,7 @@ static void fcp_request(struct hpsb_host *host, int nodeid, int direction,
                         req->req.type = RAW1394_REQ_FCP_REQUEST;
                         req->req.generation = get_hpsb_generation();
                         req->req.misc = nodeid | (direction << 16);
-                        req->req.recvb = (u64)fi->fcp_buffer;
+                        req->req.recvb = ptr2int(fi->fcp_buffer);
                         req->req.length = length;
                         
                         list_add_tail(&req->list, &reqs);
@@ -387,7 +401,7 @@ static ssize_t dev_read(struct file *file, char *buffer, size_t count,
         req = list_entry(lh, struct pending_request, list);
 
         if (req->req.length) {
-                if (copy_to_user((void *)req->req.recvb, req->data,
+                if (copy_to_user(int2ptr(req->req.recvb), req->data,
                                  req->req.length)) {
                         req->req.error = RAW1394_ERROR_MEMFAULT;
                 }
@@ -402,11 +416,16 @@ static ssize_t dev_read(struct file *file, char *buffer, size_t count,
 static int state_opened(struct file_info *fi, struct pending_request *req)
 {
         if (req->req.type == RAW1394_REQ_INITIALIZE) {
-                if (req->req.misc == RAW1394_KERNELAPI_VERSION) {
+                switch (req->req.misc) {
+                case RAW1394_KERNELAPI_VERSION:
+                case 3:
                         fi->state = initialized;
+                        fi->protocol_version = req->req.misc;
                         req->req.error = RAW1394_ERROR_NONE;
                         req->req.generation = get_hpsb_generation();
-                } else {
+                        break;
+
+                default:
                         req->req.error = RAW1394_ERROR_COMPAT;
                         req->req.misc = RAW1394_KERNELAPI_VERSION;
                 }
@@ -488,6 +507,10 @@ static int state_initialized(struct file_info *fi, struct pending_request *req)
                         req->req.error = RAW1394_ERROR_NONE;
                         req->req.misc = (fi->host->node_id << 16) 
                                 | fi->host->node_count;
+                        if (fi->protocol_version > 3) {
+                                req->req.misc |=
+                                        (fi->host->irm_id & NODE_MASK) << 8;
+                        }
                 } else {
                         req->req.error = RAW1394_ERROR_INVALID_ARG;
                 }
@@ -519,7 +542,7 @@ static void handle_iso_listen(struct file_info *fi, struct pending_request *req)
                 } else {
                         fi->listen_channels |= 1ULL << channel;
                         hpsb_listen_channel(hl_handle, fi->host, channel);
-                        fi->iso_buffer = (void *)req->req.recvb;
+                        fi->iso_buffer = int2ptr(req->req.recvb);
                         fi->iso_buffer_length = req->req.length;
                 }
         } else {
@@ -545,7 +568,7 @@ static void handle_fcp_listen(struct file_info *fi, struct pending_request *req)
                 if (fi->fcp_buffer) {
                         req->req.error = RAW1394_ERROR_ALREADY;
                 } else {
-                        fi->fcp_buffer = (u8 *)req->req.recvb;
+                        fi->fcp_buffer = (u8 *)int2ptr(req->req.recvb);
                 }
         } else {
                 if (!fi->fcp_buffer) {
@@ -575,7 +598,7 @@ static int handle_local_request(struct file_info *fi,
                 break;
 
         case RAW1394_REQ_ASYNC_WRITE:
-                if (copy_from_user(req->data, (void *)req->req.sendb, 
+                if (copy_from_user(req->data, int2ptr(req->req.sendb),
                                    req->req.length)) {
                         req->req.error = RAW1394_ERROR_MEMFAULT;
                         break;
@@ -600,7 +623,7 @@ static int handle_local_request(struct file_info *fi,
                         }
                 }
 
-                if (copy_from_user(req->data, (void *)req->req.sendb,
+                if (copy_from_user(req->data, int2ptr(req->req.sendb),
                                    req->req.length)) {
                         req->req.error = RAW1394_ERROR_MEMFAULT;
                         break;
@@ -658,7 +681,7 @@ static int handle_remote_request(struct file_info *fi,
                 if (req->req.length == 4) {
                         quadlet_t x;
 
-                        if (copy_from_user(&x, (void *)req->req.sendb, 4)) {
+                        if (copy_from_user(&x, int2ptr(req->req.sendb), 4)) {
                                 req->req.error = RAW1394_ERROR_MEMFAULT;
                         }
 
@@ -670,7 +693,7 @@ static int handle_remote_request(struct file_info *fi,
                                                         req->req.length);
                         if (!packet) return -ENOMEM;
 
-                        if (copy_from_user(packet->data, (void *)req->req.sendb,
+                        if (copy_from_user(packet->data, int2ptr(req->req.sendb),
                                            req->req.length)) {
                                 req->req.error = RAW1394_ERROR_MEMFAULT;
                         }
@@ -696,7 +719,7 @@ static int handle_remote_request(struct file_info *fi,
                                               req->req.misc);
                 if (!packet) return -ENOMEM;
 
-                if (copy_from_user(packet->data, (void *)req->req.sendb,
+                if (copy_from_user(packet->data, int2ptr(req->req.sendb),
                                    req->req.length)) {
                         req->req.error = RAW1394_ERROR_MEMFAULT;
                         break;
@@ -735,11 +758,51 @@ static int handle_remote_request(struct file_info *fi,
         return sizeof(struct raw1394_request);
 }
 
+static int handle_iso_send(struct file_info *fi, struct pending_request *req,
+                           int channel)
+{
+        struct hpsb_packet *packet;
+
+        packet = alloc_hpsb_packet(req->req.length);
+        if (!packet) return -ENOMEM;
+        req->packet = packet;
+
+        fill_iso_packet(packet, req->req.length, channel & 0x3f,
+                        (req->req.misc >> 16) & 0x3, req->req.misc & 0xf);
+        packet->type = iso;
+        packet->speed_code = req->req.address & 0x3;
+        packet->host = fi->host;
+
+        if (copy_from_user(packet->data, int2ptr(req->req.sendb),
+                           req->req.length)) {
+                req->req.error = RAW1394_ERROR_MEMFAULT;
+                req->req.length = 0;
+                queue_complete_req(req);
+                return sizeof(struct raw1394_request);
+        }
+
+        req->tq.data = req;
+        req->tq.routine = (void (*)(void*))queue_complete_req;
+        req->req.length = 0;
+        queue_task(&req->tq, &packet->complete_tq);
+
+        if (!hpsb_send_packet(packet)) {
+                req->req.error = RAW1394_ERROR_SEND_ERROR;
+                queue_complete_req(req);
+        }
+
+        return sizeof(struct raw1394_request);
+}
+
 static int state_connected(struct file_info *fi, struct pending_request *req)
 {
         int node = req->req.address >> 48;
 
         req->req.error = RAW1394_ERROR_NONE;
+
+        if (req->req.type ==  RAW1394_REQ_ISO_SEND) {
+                return handle_iso_send(fi, req, node);
+        }
 
         if (req->req.generation != get_hpsb_generation()) {
                 req->req.error = RAW1394_ERROR_GENERATION;
@@ -749,13 +812,17 @@ static int state_connected(struct file_info *fi, struct pending_request *req)
                 return sizeof(struct raw1394_request);
         }
 
-        if (req->req.type == RAW1394_REQ_ISO_LISTEN) {
+        switch (req->req.type) {
+        case RAW1394_REQ_ISO_LISTEN:
                 handle_iso_listen(fi, req);
                 return sizeof(struct raw1394_request);
-        }
 
-        if (req->req.type == RAW1394_REQ_FCP_LISTEN) {
+        case RAW1394_REQ_FCP_LISTEN:
                 handle_fcp_listen(fi, req);
+                return sizeof(struct raw1394_request);
+
+        case RAW1394_REQ_RESET_BUS:
+                hpsb_reset_bus(fi->host);
                 return sizeof(struct raw1394_request);
         }
 
@@ -870,7 +937,7 @@ static int dev_release(struct inode *inode, struct file *file)
         struct pending_request *req;
         int done = 0, i;
 
-	lock_kernel();
+        lock_kernel();
         for (i = 0; i < 64; i++) {
                 if (fi->listen_channels & (1ULL << i)) {
                         hpsb_unlisten_channel(hl_handle, fi->host, i);
@@ -915,7 +982,7 @@ static int dev_release(struct inode *inode, struct file *file)
         kfree(fi);
 
         V22_COMPAT_MOD_DEC_USE_COUNT;
-	unlock_kernel();
+        unlock_kernel();
         return 0;
 }
 

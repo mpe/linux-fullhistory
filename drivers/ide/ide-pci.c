@@ -538,7 +538,7 @@ check_if_enabled:
 	 * Can we trust the reported IRQ?
 	 */
 	pciirq = dev->irq;
-	if ((dev->class & ~(0xfa)) != ((PCI_CLASS_STORAGE_IDE << 8) | 5)) {
+	if ((dev->class & ~(0xff)) != (PCI_CLASS_STORAGE_IDE << 8)) {
 		printk("%s: not 100%% native mode: will probe irqs later\n", d->name);
 		/*
 		 * This allows offboard ide-pci cards the enable a BIOS,

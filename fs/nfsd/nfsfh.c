@@ -405,7 +405,7 @@ find_fh_dentry(struct super_block *sb, ino_t ino, int generation, ino_t dirino, 
 			    || !S_ISDIR(dentry->d_inode->i_mode)) {
 				goto err_dentry;
 			}
-			if ((!dentry->d_flags & DCACHE_NFSD_DISCONNECTED))
+			if (!(dentry->d_flags & DCACHE_NFSD_DISCONNECTED))
 				found = 1;
 			tmp = splice(result, dentry);
 			err = PTR_ERR(tmp);

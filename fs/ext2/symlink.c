@@ -18,6 +18,7 @@
  */
 
 #include <linux/fs.h>
+#include <linux/ext2_fs.h>
 
 static int ext2_readlink(struct dentry *dentry, char *buffer, int buflen)
 {

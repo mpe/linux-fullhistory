@@ -142,6 +142,7 @@ struct ac97_codec {
 	char *name;
 	int id;
 	int dev_mixer; 
+	int type;
 
 	/* codec specific init/reset routines, used mainly for 4 or 6 channel support */
 	int  (*codec_init)  (struct ac97_codec *codec);
@@ -158,7 +159,9 @@ struct ac97_codec {
 	int supported_mixers;
 	int stereo_mixers;
 	int record_sources;
-	
+
+	int bit_resolution;
+
 	/* OSS mixer interface */
 	int  (*read_mixer) (struct ac97_codec *codec, int oss_channel);
 	void (*write_mixer)(struct ac97_codec *codec, int oss_channel,

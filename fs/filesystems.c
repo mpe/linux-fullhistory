@@ -21,10 +21,6 @@
 #include <linux/module.h>
 #include <linux/nfsd/interface.h>
 
-#ifdef CONFIG_CODA_FS
-extern int init_coda(void);
-#endif
-
 #ifdef CONFIG_DEVPTS_FS
 extern int init_devpts_fs(void);
 #endif
@@ -35,10 +31,6 @@ void __init filesystem_setup(void)
 
 #ifdef CONFIG_NFS_FS
 	init_nfs_fs();
-#endif
-
-#ifdef CONFIG_CODA_FS
-	init_coda();
 #endif
 
 #ifdef CONFIG_DEVPTS_FS

@@ -46,7 +46,7 @@ static int	nfsctl_getfs(struct nfsctl_fsparm *, struct knfsd_fh *);
 static int	nfsctl_ugidupdate(struct nfsctl_ugidmap *data);
 #endif
 
-static int	initialized = 0;
+static int	initialized;
 
 int exp_procfs_exports(char *buffer, char **start, off_t offset,
                              int length, int *eof, void *data);

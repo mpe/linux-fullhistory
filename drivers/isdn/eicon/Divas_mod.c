@@ -42,11 +42,13 @@
 
 #ifdef MODULE
 #include "idi.h"
-void EtdM_DIDD_Write(DESCRIPTOR *, int);
-EXPORT_SYMBOL_NOVERS(EtdM_DIDD_Read);
-EXPORT_SYMBOL_NOVERS(EtdM_DIDD_Write);
+void DIVA_DIDD_Write(DESCRIPTOR *, int);
+EXPORT_SYMBOL_NOVERS(DIVA_DIDD_Read);
+EXPORT_SYMBOL_NOVERS(DIVA_DIDD_Write);
 EXPORT_SYMBOL_NOVERS(DivasPrintf);
 #define Divas_init init_module
+#else
+#define Divas_init eicon_init
 #endif
 
 extern char *file_check(void);
@@ -58,7 +60,7 @@ Divas_init(void)
 {
 	printk(KERN_DEBUG "DIVA Server Driver - initialising\n");
 	
-	printk(KERN_DEBUG "DIVA Server Driver - Version 2.0.12 (%s)\n",file_check());
+	printk(KERN_DEBUG "DIVA Server Driver - Version 2.0.15 (%s)\n",file_check());
 
 
 #if !defined(CONFIG_PCI)
@@ -164,9 +166,5 @@ void mod_dec_use_count(void)
 	MOD_DEC_USE_COUNT;
 }
 
-#else
-Divas_setup(char *str, int *ints)
-{
-}
 #endif
 

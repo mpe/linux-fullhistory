@@ -39,7 +39,13 @@
  * read/write	read or write in current IEEE 1284 protocol
  * select	wait for interrupt (in readfds)
  *
+ * Changes:
  * Added SETTIME/GETTIME ioctl, Fred Barnes 1999.
+ *
+ * Arnaldo Carvalho de Melo <acme@conectiva.com.br> 2000/08/25
+ * - On error, copy_from_user and copy_to_user do not return -EFAULT,
+ *   They return the positive number of bytes *not* copied due to address
+ *   space errors.
  */
 
 #include <linux/module.h>
@@ -179,7 +185,7 @@ static ssize_t pp_write (struct file * file, const char * buf, size_t count,
 
 		wrote = parport_write (pp->pdev->port, kbuffer, n);
 
-		if (wrote < 0) {
+		if (wrote <= 0) {
 			if (!bytes_written)
 				bytes_written = wrote;
 			break;
@@ -369,19 +375,19 @@ static int pp_ioctl(struct inode *inode, struct file *file,
 
 	case PPRSTATUS:
 		reg = parport_read_status (port);
-		return copy_to_user ((unsigned char *) arg, &reg,
-				     sizeof (reg));
-
+		if (copy_to_user ((unsigned char *) arg, &reg, sizeof (reg)))
+			return -EFAULT;
+		return 0;
 	case PPRDATA:
 		reg = parport_read_data (port);
-		return copy_to_user ((unsigned char *) arg, &reg,
-				     sizeof (reg));
-
+		if (copy_to_user ((unsigned char *) arg, &reg, sizeof (reg)))
+			return -EFAULT;
+		return 0;
 	case PPRCONTROL:
 		reg = parport_read_control (port);
-		return copy_to_user ((unsigned char *) arg, &reg,
-				     sizeof (reg));
-
+		if (copy_to_user ((unsigned char *) arg, &reg, sizeof (reg)))
+			return -EFAULT;
+		return 0;
 	case PPYIELD:
 		parport_yield_blocking (pp->pdev);
 		return 0;

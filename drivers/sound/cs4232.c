@@ -39,6 +39,7 @@
  *                                       Tropez+ (WaveFront) support
  *	Christoph Hellwig	Adapted to module_init/module_exit,
  * 					simple cleanups
+ * 	Arnaldo C. de Melo	got rid of attach_uart401
  */
 
 #include <linux/config.h>
@@ -255,10 +256,9 @@ void attach_cs4232(struct address_info *hw_config)
 		hw_config2.driver_use_2 = 0;
 		hw_config2.card_subtype = 0;
 
-		if (probe_uart401(&hw_config2))
+		if (probe_uart401(&hw_config2, THIS_MODULE))
 		{
 			mpu_detected = 1;
-			attach_uart401(&hw_config2, THIS_MODULE);
 		}
 		else
 		{

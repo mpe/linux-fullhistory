@@ -1,4 +1,4 @@
-/* $Id: eicon_mod.c,v 1.35 2000/08/12 18:00:47 armin Exp $
+/* $Id: eicon_mod.c,v 1.37 2000/09/02 11:16:47 armin Exp $
  *
  * ISDN lowlevel-module for Eicon active cards.
  * 
@@ -32,7 +32,7 @@
 
 #define DRIVERNAME "Eicon active ISDN driver"
 #define DRIVERRELEASE "2.0"
-#define DRIVERPATCH ".14"
+#define DRIVERPATCH ".15"
 
 
 #include <linux/config.h>
@@ -55,7 +55,7 @@
 static eicon_card *cards = (eicon_card *) NULL;   /* glob. var , contains
                                                      start of card-list   */
 
-static char *eicon_revision = "$Revision: 1.35 $";
+static char *eicon_revision = "$Revision: 1.37 $";
 
 extern char *eicon_pci_revision;
 extern char *eicon_isa_revision;
@@ -78,8 +78,7 @@ ulong DebugVar;
 
 spinlock_t eicon_lock;
 
-DESCRIPTOR idi_d[16];
-int idi_dlength;
+DESCRIPTOR idi_d[32];
 
 /* Parameters to be set by insmod */
 #ifdef CONFIG_ISDN_DRV_EICON_ISA
@@ -210,6 +209,7 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 #ifdef CONFIG_PCI
 #ifdef CONFIG_ISDN_DRV_EICON_PCI
 	dia_start_t dstart;
+        int idi_length = 0;
 #endif
 #endif
 	isdn_ctrl cmd;
@@ -399,8 +399,15 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 						(unsigned long) a);
 					if (((c->arg - EICON_IOCTL_DIA_OFFSET)==DIA_IOCTL_START) && (!ret)) {
 						if (card->type != EICON_CTYPE_MAESTRAQ) {
-							EtdM_DIDD_Read(idi_d, &idi_dlength);
-							card->d = &idi_d[idi_dlength - 1];
+							DIVA_DIDD_Read(idi_d, sizeof(idi_d));
+                                                        for(idi_length = 0; idi_length < 32; idi_length++) {
+                                                          if (idi_d[idi_length].type == 0) break;
+                                                        }
+                                                        if ((idi_length < 1) || (idi_length >= 32)) {
+					                  eicon_log(card, 1, "eicon: invalid idi table length.\n");
+                                                          break;
+                                                        }
+							card->d = &idi_d[idi_length - 1];
 							card->flags |= EICON_FLAGS_LOADED;
 							card->flags |= EICON_FLAGS_RUNNING;
 							eicon_pci_init_conf(card);
@@ -414,19 +421,25 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 							cmd.driver = card->myid;        
 							cmd.arg = 0;                    
 							card->interface.statcallb(&cmd);
-							eicon_log(card, 1, "Eicon: %s started, %d channels (feat. 0x%x, SerNo. %d)\n",
+							eicon_log(card, 1, "Eicon: %s started, %d channels (feat. 0x%x)\n",
 								(card->type == EICON_CTYPE_MAESTRA) ? "BRI" : "PRI",
-								card->d->channels, card->d->features, card->d->serial);
+								card->d->channels, card->d->features);
 						} else {
 							int i;
-							EtdM_DIDD_Read(idi_d, &idi_dlength);
+							DIVA_DIDD_Read(idi_d, sizeof(idi_d));
+                                                        for(idi_length = 0; idi_length < 32; idi_length++)
+                                                          if (idi_d[idi_length].type == 0) break;
+                                                        if ((idi_length < 1) || (idi_length >= 32)) {
+					                  eicon_log(card, 1, "eicon: invalid idi table length.\n");
+                                                          break;
+                                                        }
         						for(i = 3; i >= 0; i--) {
 								if (!(card = eicon_findnpcicard(dstart.card_id - i)))
 									return -EINVAL;
 	
 								card->flags |= EICON_FLAGS_LOADED;
 								card->flags |= EICON_FLAGS_RUNNING;
-								card->d = &idi_d[idi_dlength - (i+1)];
+								card->d = &idi_d[idi_length - (i+1)];
 								eicon_pci_init_conf(card);
 								if (card->d->channels > 1) {
 									cmd.command = ISDN_STAT_ADDCH;
@@ -438,8 +451,8 @@ eicon_command(eicon_card * card, isdn_ctrl * c)
 								cmd.driver = card->myid;        
 								cmd.arg = 0;                    
 								card->interface.statcallb(&cmd);
-								eicon_log(card, 1, "Eicon: %d/4BRI started, %d channels (feat. 0x%x, SerNo. %d)\n",
-									4-i, card->d->channels, card->d->features, card->d->serial);
+								eicon_log(card, 1, "Eicon: %d/4BRI started, %d channels (feat. 0x%x)\n",
+									4-i, card->d->channels, card->d->features);
 							}
 						}
 					}
@@ -1392,9 +1405,9 @@ void mod_dec_use_count(void)
 }
 
 #ifdef CONFIG_ISDN_DRV_EICON_PCI
-void EtdM_DIDD_Write(DESCRIPTOR *, int);
-EXPORT_SYMBOL_NOVERS(EtdM_DIDD_Read);
-EXPORT_SYMBOL_NOVERS(EtdM_DIDD_Write);
+void DIVA_DIDD_Write(DESCRIPTOR *, int);
+EXPORT_SYMBOL_NOVERS(DIVA_DIDD_Read);
+EXPORT_SYMBOL_NOVERS(DIVA_DIDD_Write);
 EXPORT_SYMBOL_NOVERS(DivasPrintf);
 #else
 int DivasCardNext;

@@ -99,9 +99,14 @@ extern unsigned long minix_count_free_blocks(struct super_block *sb);
 extern struct buffer_head * minix_getblk(struct inode *, int, int);
 extern struct buffer_head * minix_bread(struct inode *, int, int);
 
+extern void V1_minix_truncate(struct inode *);
+extern void V2_minix_truncate(struct inode *);
 extern void minix_truncate(struct inode *);
 extern int minix_sync_inode(struct inode *);
-extern int minix_sync_file(struct file *, struct dentry *, int);
+extern int V1_minix_sync_file(struct inode *);
+extern int V2_minix_sync_file(struct inode *);
+extern int V1_minix_get_block(struct inode *, long, struct buffer_head *, int);
+extern int V2_minix_get_block(struct inode *, long, struct buffer_head *, int);
 
 extern struct address_space_operations minix_aops;
 extern struct inode_operations minix_file_inode_operations;

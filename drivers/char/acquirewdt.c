@@ -204,21 +204,7 @@ static struct notifier_block acq_notifier=
 	0
 };
 
-#ifdef MODULE
-
-#define acq_init init_module
-
-void cleanup_module(void)
-{
-	misc_deregister(&acq_miscdev);
-	unregister_reboot_notifier(&acq_notifier);
-	release_region(WDT_STOP,1);
-	release_region(WDT_START,1);
-}
-
-#endif
-
-int __init acq_init(void)
+static int __init acq_init(void)
 {
 	printk("WDT driver for Acquire single board computer initialising.\n");
 
@@ -229,4 +215,14 @@ int __init acq_init(void)
 	register_reboot_notifier(&acq_notifier);
 	return 0;
 }
+	
+static void __exit acq_exit(void)
+{
+	misc_deregister(&acq_miscdev);
+	unregister_reboot_notifier(&acq_notifier);
+	release_region(WDT_STOP,1);
+	release_region(WDT_START,1);
+}
 
+module_init(acq_init);
+module_exit(acq_exit);

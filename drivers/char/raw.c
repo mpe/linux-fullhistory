@@ -19,10 +19,10 @@
 
 #define dprintk(x...) 
 
-static struct block_device *raw_device_bindings[256] = {};
-static int raw_device_inuse[256] = {};
-static int raw_device_sector_size[256] = {};
-static int raw_device_sector_bits[256] = {};
+static struct block_device *raw_device_bindings[256];
+static int raw_device_inuse[256];
+static int raw_device_sector_size[256];
+static int raw_device_sector_bits[256];
 
 static ssize_t rw_raw_dev(int rw, struct file *, char *, size_t, loff_t *);
 

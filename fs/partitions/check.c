@@ -187,14 +187,11 @@ void add_gd_partition(struct gendisk *hd, int minor, int start, int size)
 #ifdef CONFIG_DEVFS_FS
 	printk(" p%d", (minor & ((1 << hd->minor_shift) - 1)));
 #else
-	if (hd->major >= COMPAQ_SMART2_MAJOR+0 && hd->major <= COMPAQ_SMART2_MAJOR+7)
+	if ((hd->major >= COMPAQ_SMART2_MAJOR+0 && hd->major <= COMPAQ_SMART2_MAJOR+7) ||
+	    (hd->major >= COMPAQ_CISS_MAJOR+0 && hd->major <= COMPAQ_CISS_MAJOR+7))
 		printk(" p%d", (minor & ((1 << hd->minor_shift) - 1)));
 	else
 		printk(" %s", disk_name(hd, minor, buf));
-	if (hd->major >= COMPAQ_CISS_MAJOR+0 && hd->major <= COMPAQ_CISS_MAJOR+7)
-                printk(" p%d", (minor & ((1 << hd->minor_shift) - 1)));
-        else
-                printk(" %s", disk_name(hd, minor, buf));
 #endif
 }
 

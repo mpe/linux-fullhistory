@@ -16,8 +16,6 @@
 #ifndef _LINUX_EXT2_FS_SB
 #define _LINUX_EXT2_FS_SB
 
-#include <linux/ext2_fs.h>
-
 /*
  * The following is not needed anymore since the descriptors buffer
  * heads are now dynamically allocated

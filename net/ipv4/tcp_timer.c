@@ -29,7 +29,7 @@ int sysctl_tcp_keepalive_probes = TCP_KEEPALIVE_PROBES;
 int sysctl_tcp_keepalive_intvl = TCP_KEEPALIVE_INTVL;
 int sysctl_tcp_retries1 = TCP_RETR1;
 int sysctl_tcp_retries2 = TCP_RETR2;
-int sysctl_tcp_orphan_retries = 0;
+int sysctl_tcp_orphan_retries;
 
 static void tcp_write_timer(unsigned long);
 static void tcp_delack_timer(unsigned long);

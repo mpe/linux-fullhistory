@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * SCSI layer glue code
  *
- * $Id: scsiglue.c,v 1.11 2000/09/12 01:18:08 mdharm Exp $
+ * $Id: scsiglue.c,v 1.13 2000/09/28 21:54:30 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -112,7 +112,7 @@ static int release(struct Scsi_Host *psh)
 {
 	struct us_data *us = (struct us_data *)psh->hostdata[0];
 
-	US_DEBUGP("us_release() called for host %s\n", us->htmplt.name);
+	US_DEBUGP("release() called for host %s\n", us->htmplt.name);
 
 	/* Kill the control threads
 	 *
@@ -226,10 +226,9 @@ static int bus_reset( Scsi_Cmnd *srb )
 
 	/* we use the usb_reset_device() function to handle this for us */
 	US_DEBUGP("bus_reset() called\n");
-	result = usb_reset_device(us->pusb_dev) ? FAILED : SUCCESS;
 
-	/* did the reset work? */
-	if (result < 0)
+	/* attempt to reset the port */
+	if (usb_reset_device(us->pusb_dev) < 0)
 		return FAILED;
 
 	/* FIXME: This needs to lock out driver probing while it's working
@@ -238,23 +237,24 @@ static int bus_reset( Scsi_Cmnd *srb )
  		struct usb_interface *intf =
 			&us->pusb_dev->actconfig->interface[i];
 
-		US_DEBUGP("Examinging driver %s...", intf->driver->name);
-		/* skip interfaces which we've claimed */
-		if (intf->driver && !strncmp(intf->driver->name,
-					"usb-storage", 12)) {
-			US_DEBUGPX("skipping.\n");
+		/* if this is an unclaimed interface, skip it */
+		if (!intf->driver) {
 			continue;
 		}
 
-		/* simulate a disconnect and reconnect for all interfaces */
-		if (intf->driver) {
-			US_DEBUGPX("simulating disconnect/reconnect.\n");
-			down(&intf->driver->serialize);
-			intf->driver->disconnect(us->pusb_dev,
-					intf->private_data);
-			intf->driver->probe(us->pusb_dev, i);
-			up(&intf->driver->serialize);
+		US_DEBUGP("Examinging driver %s...", intf->driver->name);
+		/* skip interfaces which we've claimed */
+		if (intf->driver == &usb_storage_driver) {
+			US_DEBUGPX("skipping ourselves.\n");
+			continue;
 		}
+		
+		/* simulate a disconnect and reconnect for all interfaces */
+		US_DEBUGPX("simulating disconnect/reconnect.\n");
+		down(&intf->driver->serialize);
+		intf->driver->disconnect(us->pusb_dev, intf->private_data);
+		intf->driver->probe(us->pusb_dev, i);
+		up(&intf->driver->serialize);
 	}
 
 	US_DEBUGP("bus_reset() complete\n");
@@ -298,9 +298,11 @@ static int proc_info (char *buffer, char **start, off_t offset, int length,
 		us = us->next;
 	}
 
+	/* release our lock on the data structures */
+	up(&us_list_semaphore);
+
 	/* if we couldn't find it, we return an error */
 	if (!us) {
-		up(&us_list_semaphore);
 		return -ESRCH;
 	}
 	
@@ -318,9 +320,6 @@ static int proc_info (char *buffer, char **start, off_t offset, int length,
 
 	/* show the GUID of the device */
 	SPRINTF("         GUID: " GUID_FORMAT "\n", GUID_ARGS(us->guid));
-
-	/* release our lock on the data structures */
-	up(&us_list_semaphore);
 
 	/*
 	 * Calculate start of next buffer, and return value.

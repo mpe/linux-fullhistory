@@ -1146,6 +1146,48 @@ people define most variables using "new style" but then fall back to
 	But until that happens, the subdirectory Makefile needs to define
 	these rules explicitly.
 
+    subdir-y subdir-m subdir-n subdir-
+
+	These variables replace $(ALL_SUB_DIRS), $(SUB_DIRS) and
+	$(MOD_SUB_DIRS).
+
+	Example:
+
+		# drivers/Makefile
+		subdir-$(CONFIG_PCI)		+= pci
+		subdir-$(CONFIG_PCMCIA)		+= pcmcia
+		subdir-$(CONFIG_MTD)		+= mtd
+		subdir-$(CONFIG_SBUS)		+= sbus
+
+	These variables work similar to obj-*, but are used for
+	subdirectories instead of object files.
+
+	After executing all of the assignments, the subdirectory
+	Makefile has built up four lists: $(subdir-y), $(subdir-m),
+	$(subdir-n), and $(subdir-).
+
+	$(subdir-y) is a list of directories that should be entered
+		for making vmlinux.
+	$(subdir-m) is a list of directories that should be entered
+		for making modules.
+	$(subdir-n) and $(subdir-) are only used for collecting a list
+		of all subdirectories of this directory.
+
+	Each list besides subdir-y may contain duplicates items; duplicates
+	are automatically removed later.
+
+    mod-subdirs
+
+	$(mod-subdirs) is a list of all the the subdirectories that should
+	be added to $(subdir-m), too if they appear in $(subdir-y)
+
+	Example:
+
+		# fs/Makefile
+		mod-subdirs :=	nls
+
+	This means nls should be added to (subdir-y) and $(subdir-m) if
+	CONFIG_NFS = y.
 
 
 === 9 Compatibility with Linux Kernel 2.2

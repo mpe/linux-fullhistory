@@ -23,7 +23,7 @@ struct nfs_unlinkdata {
 	unsigned int	count;
 };
 
-static struct nfs_unlinkdata	*nfs_deletes = NULL;
+static struct nfs_unlinkdata	*nfs_deletes;
 static struct rpc_wait_queue	nfs_delete_queue = RPC_INIT_WAITQ("nfs_delete_queue");
 
 /**

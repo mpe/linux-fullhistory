@@ -2,17 +2,21 @@ Documentation for the ESS1868F AudioDrive PnP sound card
 
 The ESS1868 sound card is a PnP ESS1688-compatible 16-bit sound card.
 
-Notes about configuring the sound card:
+It should be automatically detected by the Linux Kernel isapnp support when you
+load the sb.o module. Otherwise you should take care of:
 
   *  The ESS1868 does not allow use of a 16-bit DMA, thus DMA 0, 1, 2, and 3
      may only be used.
 
   *  isapnptools version 1.14 does work with ESS1868.  Earlier versions might
      not.
-  
+
   *  Sound support MUST be compiled as MODULES, not statically linked
      into the kernel.
-  
+
+
+NOTE: this is only needed when not using the kernel isapnp support!
+
 For configuring the sound card's I/O addresses, IRQ and DMA, here is a
 sample copy of the isapnp.conf directives regarding the ESS1868:
 
@@ -47,38 +51,5 @@ the sound modules with the proper I/O information.  Here is my setup:
 /sbin/insmod opl3 io=0x388
 /sbin/insmod v_midi
 
-opl3 is the FM synthesizer--I have not tried the SoftOSS wavetable
-synthesizer yet, but I assume it would work as well.  Also, doing:
-/sbin/insmod opl3
-/sbin/insmod adlib_card io=0x388
-works, but I believe the sound quality is a bit distorted when playing MIDI
-files.
-
-When using the above setup, my /proc/sound gives the following:
-
-OSS/Free:3.8s2++-971130
-Load type: Driver loaded as a module
-Kernel: Linux scitus.dyn.ml.org 2.1.104 #1 SMP Sun May 24 11:04:27 EDT 1998 i486
-Config options: 0
-
-Installed drivers: 
-
-Card config: 
-
-Audio devices:
-0: ESS ES1688 AudioDrive (rev 11) (3.1)
-
-Synth devices:
-0: Yamaha OPL-3
-
-Midi devices:
-0: Loopback MIDI Port 1
-1: Loopback MIDI Port 2
-
-Timers:
-0: System clock
-
-Mixers:
-0: Sound Blaster
-
-
+opl3 is the FM synthesizer
+/sbin/insmod opl3 io=0x388

@@ -24,7 +24,7 @@
 
 #ifdef RPC_DEBUG
 #define RPCDBG_FACILITY		RPCDBG_SCHED
-static int			rpc_task_id = 0;
+static int			rpc_task_id;
 #endif
 
 /*
@@ -56,7 +56,7 @@ static struct rpc_wait_queue	delay_queue = RPC_INIT_WAITQ("delayq");
 /*
  * All RPC tasks are linked into this list
  */
-static struct rpc_task *	all_tasks = NULL;
+static struct rpc_task *	all_tasks;
 
 /*
  * rpciod-related stuff
@@ -64,9 +64,9 @@ static struct rpc_task *	all_tasks = NULL;
 static DECLARE_WAIT_QUEUE_HEAD(rpciod_idle);
 static DECLARE_WAIT_QUEUE_HEAD(rpciod_killer);
 static DECLARE_MUTEX(rpciod_sema);
-static unsigned int		rpciod_users = 0;
-static pid_t			rpciod_pid = 0;
-static int			rpc_inhibit = 0;
+static unsigned int		rpciod_users;
+static pid_t			rpciod_pid;
+static int			rpc_inhibit;
 
 /*
  * Spinlock for wait queues. Access to the latter also has to be
@@ -82,7 +82,7 @@ spinlock_t rpc_sched_lock = SPIN_LOCK_UNLOCKED;
  * This is the last-ditch buffer for NFS swap requests
  */
 static u32			swap_buffer[PAGE_SIZE >> 2];
-static int			swap_buffer_used = 0;
+static int			swap_buffer_used;
 
 /*
  * Make allocation of the swap_buffer SMP-safe

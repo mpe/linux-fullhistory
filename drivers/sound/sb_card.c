@@ -47,6 +47,9 @@
  *
  * 12-08-2000 Added Creative SB32 PnP (CTL009F).
  * 	Kasatenko Ivan Alex. <skywriter@rnc.ru>
+ *
+ * 21-09-2000 Got rid of attach_sbmpu
+ * 	Arnaldo Carvalho de Melo <acme@conectiva.com.br>
  */
 
 #include <linux/config.h>
@@ -524,7 +527,7 @@ static struct pci_dev *sb_init(struct pci_bus *bus, struct address_info *hw_conf
 		return(NULL);
 
 	/* Cards with separate OPL3 device (ALS, CMI, etc.)
-	 * This is just to activate the device... */
+	 * This is just to activate the device so the OPL module can use it */
 	if(sb_isapnp_list[slot].opl_vendor || sb_isapnp_list[slot].opl_function) {
 		if((opl_dev[card] = isapnp_find_dev(bus, sb_isapnp_list[slot].opl_vendor, sb_isapnp_list[slot].opl_function, NULL))) {
 			int ret = opl_dev[card]->prepare(opl_dev[card]);
@@ -607,7 +610,7 @@ static int __init sb_isapnp_init(struct address_info *hw_config, struct address_
 	return 0;
 }
 
-int __init sb_isapnp_probe(struct address_info *hw_config, struct address_info *mpu_config, int card) 
+static int __init sb_isapnp_probe(struct address_info *hw_config, struct address_info *mpu_config, int card)
 {
 	static int first = 1;
 	int i;
@@ -647,7 +650,7 @@ int __init sb_isapnp_probe(struct address_info *hw_config, struct address_info *
 
 static int __init init_sb(void)
 {
-	int card, max = multiple ? SB_CARDS_MAX : 1;
+	int card, max = (multiple && isapnp) ? SB_CARDS_MAX : 1;
 
 	printk(KERN_INFO "Soundblaster audio driver Copyright (C) by Hannu Savolainen 1993-1996\n");
 	
@@ -658,9 +661,15 @@ static int __init init_sb(void)
 		 * single driver! */
 		if(isapnp && (sb_isapnp_probe(&cfg[card], &cfg_mpu[card], card) < 0) ) {
 			if(!sb_cards_num) {
+				/* Found no ISAPnP cards, so check for a non-pnp
+				 * card and set the detection loop for 1 cycle
+				 */
 				printk(KERN_NOTICE "sb: No ISAPnP cards found, trying standard ones...\n");
 				isapnp = 0;
+				max = 1;
 			} else
+				/* found all the ISAPnP cards so exit the
+				 * detection loop. */
 				break;
 		}
 #endif
@@ -674,8 +683,21 @@ static int __init init_sb(void)
 
 		cfg[card].card_subtype = type;
 
-		if (!probe_sb(&cfg[card]))
-			return -ENODEV;
+		if (!probe_sb(&cfg[card])) {
+			/* if one or more cards already registered, don't
+			 * return an error but print a warning. Note, this
+			 * should never really happen unless the hardware
+			 * or ISAPnP screwed up. */
+			if (sb_cards_num) {
+				printk(KERN_WARNING "sb.c: There was a " \
+				  "problem probing one of your SoundBlaster " \
+				  "ISAPnP soundcards. Continuing.\n");
+				card--;
+				sb_cards_num--;
+				continue;
+			} else
+				return -ENODEV;
+		}
 		attach_sb_card(&cfg[card]);
 
 		if(cfg[card].slots[0]==-1)
@@ -683,10 +705,8 @@ static int __init init_sb(void)
 		
 		if (!isapnp)
 			cfg_mpu[card].io_base = mpu_io;
-		if (probe_sbmpu(&cfg_mpu[card]))
+		if (probe_sbmpu(&cfg_mpu[card], THIS_MODULE))
 			sbmpu[card] = 1;
-		if (sbmpu[card])
-			attach_sbmpu(&cfg_mpu[card], THIS_MODULE);
 	}
 
 	if(isapnp)

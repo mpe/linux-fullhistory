@@ -14,6 +14,7 @@
  * Changes
  *	Alan Cox		Modularisation, cleanup.
  *	Christoph Hellwig	Adapted to module_init/module_exit
+ *	Arnaldo C. de Melo	Got rid of attach_uart401
  */
  
 #include <linux/config.h>
@@ -337,12 +338,6 @@ static void __init attach_trix_sb(struct address_info *hw_config)
 	sb_be_quiet = old_quiet;
 }
 
-static void __init attach_trix_mpu(struct address_info *hw_config)
-{
-	hw_config->name = "AudioTrix Pro";
-	attach_uart401(hw_config, THIS_MODULE);
-}
-
 static int __init probe_trix_mpu(struct address_info *hw_config)
 {
 	unsigned char conf;
@@ -363,11 +358,6 @@ static int __init probe_trix_mpu(struct address_info *hw_config)
 	if (mpu_initialized)
 	{
 		DDB(printk("Trix: MPU mode already initialized\n"));
-		return 0;
-	}
-	if (check_region(hw_config->io_base, 4))
-	{
-		printk(KERN_ERR "AudioTrix: MPU I/O port conflict (%x)\n", hw_config->io_base);
 		return 0;
 	}
 	if (hw_config->irq > 9)
@@ -401,7 +391,8 @@ static int __init probe_trix_mpu(struct address_info *hw_config)
 	conf |= irq_bits[hw_config->irq] << 4;
 	trix_write(0x19, (trix_read(0x19) & 0x83) | conf);
 	mpu_initialized = 1;
-	return probe_uart401(hw_config);
+	hw_config->name = "AudioTrix Pro";
+	return probe_uart401(hw_config, THIS_MODULE);
 }
 
 static void __exit unload_trix_wss(struct address_info *hw_config)
@@ -510,11 +501,8 @@ static int __init init_trix(void)
 			attach_trix_sb(&cfg2);
 	}
 	
-	if (cfg_mpu.io_base != -1) {
+	if (cfg_mpu.io_base != -1)
 		mpu = probe_trix_mpu(&cfg_mpu);
-		if (mpu)
-			attach_trix_mpu(&cfg_mpu);
-	}
 
 	return 0;
 }

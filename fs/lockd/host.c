@@ -29,8 +29,8 @@
 #define NLM_HOST_ADDR(sv)	(&(sv)->s_nlmclnt->cl_xprt->addr)
 
 static struct nlm_host *	nlm_hosts[NLM_HOST_NRHASH];
-static unsigned long		next_gc = 0;
-static int			nrhosts = 0;
+static unsigned long		next_gc;
+static int			nrhosts;
 static DECLARE_MUTEX(nlm_host_sema);
 
 

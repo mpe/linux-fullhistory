@@ -72,17 +72,13 @@ static int tosh_bios = 0x0000;
 static int tosh_date = 0x0000;
 static int tosh_sci = 0x0000;
 static int tosh_fan = 0;
-static int tosh_start = 0;
-static int tosh_extent = 0;
 
 static int tosh_fn = 0;
 
 MODULE_PARM(tosh_fn, "i");
 
 
-static int tosh_get_info(char *, char **, off_t, int, int);
-static int tosh_open(struct inode *ip, struct file *);
-static int tosh_release(struct inode *, struct file *);
+static int tosh_get_info(char *, char **, off_t, int);
 static int tosh_ioctl(struct inode *, struct file *, unsigned int,
 	unsigned long);
 
@@ -90,18 +86,12 @@ static int tosh_ioctl(struct inode *, struct file *, unsigned int,
 static struct file_operations tosh_fops = {
 	owner:		THIS_MODULE,
 	ioctl:		tosh_ioctl,
-	open:		tosh_open,
-	release:	tosh_release,
 };
 
 static struct miscdevice tosh_device = {
 	TOSH_MINOR_DEV,
 	"toshiba",
 	&tosh_fops
-};
-
-static struct proc_dir_entry tosh_proc_entry = {
-	0, 7, "toshiba", S_IFREG|S_IRUGO, 1, 0, 0, 33, NULL, tosh_get_info, NULL
 };
 
 /*
@@ -278,22 +268,6 @@ static int tosh_smm(SMMRegisters *regs)
 }
 
 
-static int tosh_open(struct inode *ip, struct file *fp)
-{
-	MOD_INC_USE_COUNT;
-
-	return 0;
-}
-
-
-static int tosh_release(struct inode *ip, struct file *fp)
-{
-	MOD_DEC_USE_COUNT;
-
-	return 0;
-}
-
-
 static int tosh_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 	unsigned long arg)
 {
@@ -338,7 +312,7 @@ static int tosh_ioctl(struct inode *ip, struct file *fp, unsigned int cmd,
 /*
  * Print the information for /proc/toshiba
  */
-int tosh_get_info(char *buffer, char **start, off_t fpos, int length, int dummy)
+int tosh_get_info(char *buffer, char **start, off_t fpos, int length)
 {
 	char *temp;
 	int key;
@@ -400,7 +374,7 @@ static int tosh_get_machine_id(void)
 	unsigned short bx,cx;
 	unsigned long address;
 
-	id = (0x100*(int) readb(0xffffe))+((int) readb(0xffffa));
+	id = (0x100*(int) isa_readb(0xffffe))+((int) isa_readb(0xffffa));
 	
 	/* do we have a SCTTable machine identication number on our hands */
 
@@ -427,11 +401,11 @@ static int tosh_get_machine_id(void)
 		/* now twiddle with our pointer a bit */
 
 		address = 0x000f0000+bx;
-		cx = readw(address);
+		cx = isa_readw(address);
 		address = 0x000f0009+bx+cx;
-		cx = readw(address);
+		cx = isa_readw(address);
 		address = 0x000f000a+cx;
-		cx = readw(address);
+		cx = isa_readw(address);
 
 		/* now construct our machine identification number */
 
@@ -478,15 +452,15 @@ int tosh_probe(void)
 
 	/* get the BIOS version */
 
-	major = readb(0xfe009)-'0';
-	minor = ((readb(0xfe00b)-'0')*10)+(readb(0xfe00c)-'0');
+	major = isa_readb(0xfe009)-'0';
+	minor = ((isa_readb(0xfe00b)-'0')*10)+(isa_readb(0xfe00c)-'0');
 	tosh_bios = (major*0x100)+minor;
 
 	/* get the BIOS date */
 
-	day = ((readb(0xffff5)-'0')*10)+(readb(0xffff6)-'0');
-	month = ((readb(0xffff8)-'0')*10)+(readb(0xffff9)-'0');
-	year = ((readb(0xffffb)-'0')*10)+(readb(0xffffc)-'0');
+	day = ((isa_readb(0xffff5)-'0')*10)+(isa_readb(0xffff6)-'0');
+	month = ((isa_readb(0xffff8)-'0')*10)+(isa_readb(0xffff9)-'0');
+	year = ((isa_readb(0xffffb)-'0')*10)+(isa_readb(0xffffc)-'0');
 	tosh_date = (((year-90) & 0x1f)<<10) | ((month & 0xf)<<6)
 		| ((day & 0x1f)<<1);
 
@@ -527,7 +501,7 @@ int __init tosh_init(void)
 	misc_register(&tosh_device);
 
 	/* register the proc entry */
-	proc_register(&proc_root, &tosh_proc_entry);
+	create_proc_info_entry("toshiba", 0, NULL, tosh_get_info);
 	return 0;
 }
 
@@ -540,14 +514,9 @@ int init_module(void)
 void cleanup_module(void)
 {
 	/* remove the proc entry */
-	proc_unregister(&proc_root, tosh_proc_entry.low_ino);
+	remove_proc_entry("toshiba", NULL);
 
 	/* unregister the device file */
 	misc_deregister(&tosh_device);
-
-	/* release ports */
-	release_region(tosh_start, tosh_extent);
-
-	return;
 }
 #endif

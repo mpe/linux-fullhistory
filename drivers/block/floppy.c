@@ -168,7 +168,7 @@ static int print_unex=1;
  * It's been recommended that take about 1/4 of the default speed
  * in some more extreme cases.
  */
-static int slow_floppy = 0;
+static int slow_floppy;
 
 #include <asm/dma.h>
 #include <asm/irq.h>
@@ -203,7 +203,7 @@ static unsigned short virtual_dma_port=0x3f0;
 void floppy_interrupt(int irq, void *dev_id, struct pt_regs * regs);
 static int set_dor(int fdc, char mask, char data);
 static void register_devfs_entries (int drive) __init;
-static devfs_handle_t devfs_handle = NULL;
+static devfs_handle_t devfs_handle;
 
 #define K_64	0x10000		/* 64KB */
 
@@ -221,7 +221,7 @@ static int allowed_drive_mask = 0x33;
 
 #include <asm/floppy.h>
 
-static int irqdma_allocated = 0;
+static int irqdma_allocated;
 
 #define MAJOR_NR FLOPPY_MAJOR
 
@@ -259,7 +259,7 @@ static inline void fallback_on_nodma_alloc(char **addr, size_t l)
 
 /* End dma memory related stuff */
 
-static unsigned long fake_change = 0;
+static unsigned long fake_change;
 static int initialising=1;
 
 static inline int TYPE(kdev_t x) {
@@ -460,10 +460,7 @@ static struct floppy_struct floppy_type[32] = {
 #define SECTSIZE (_FD_SECTSIZE(*floppy))
 
 /* Auto-detection: Disk type used until the next media change occurs. */
-static struct floppy_struct *current_type[N_DRIVE] = {
-	NULL, NULL, NULL, NULL,
-	NULL, NULL, NULL, NULL
-};
+static struct floppy_struct *current_type[N_DRIVE];
 
 /*
  * User-provided type information. current_type points to
@@ -472,14 +469,14 @@ static struct floppy_struct *current_type[N_DRIVE] = {
 static struct floppy_struct user_params[N_DRIVE];
 
 static int floppy_sizes[256];
-static int floppy_blocksizes[256] = { 0, };
+static int floppy_blocksizes[256];
 
 /*
  * The driver is trying to determine the correct media format
  * while probing is set. rw_interrupt() clears it after a
  * successful access.
  */
-static int probing = 0;
+static int probing;
 
 /* Synchronization of FDC access. */
 #define FD_COMMAND_NONE -1
@@ -487,7 +484,7 @@ static int probing = 0;
 #define FD_COMMAND_OKAY 3
 
 static volatile int command_status = FD_COMMAND_NONE;
-static unsigned long fdc_busy = 0;
+static unsigned long fdc_busy;
 static DECLARE_WAIT_QUEUE_HEAD(fdc_wait);
 static DECLARE_WAIT_QUEUE_HEAD(command_done);
 
@@ -558,9 +555,7 @@ static void reset_fdc(void);
 #define NEED_1_RECAL -2
 #define NEED_2_RECAL -3
 
-/* */
-static int usage_count = 0;
-
+static int usage_count;
 
 /* buffer related variables */
 static int buffer_track = -1;
@@ -573,8 +568,8 @@ static struct floppy_fdc_state fdc_state[N_FDC];
 static int fdc; /* current fdc */
 
 static struct floppy_struct *_floppy = floppy_type;
-static unsigned char current_drive = 0;
-static long current_count_sectors = 0;
+static unsigned char current_drive;
+static long current_count_sectors;
 static unsigned char sector_t; /* sector in track */
 static unsigned char in_sector_offset;	/* offset within physical sector,
 					 * expressed in units of 512 bytes */
@@ -625,7 +620,7 @@ static void is_alive(const char *message)
 
 #define OLOGSIZE 20
 
-static void (*lasthandler)(void) = NULL;
+static void (*lasthandler)(void);
 static unsigned long interruptjiffies;
 static unsigned long resultjiffies;
 static int resultsize;
@@ -991,8 +986,7 @@ static void empty(void)
 {
 }
 
-static struct tq_struct floppy_tq =
-{ 0, 0, 0, 0 };
+static struct tq_struct floppy_tq;
 
 static void schedule_bh( void (*handler)(void*) )
 {
@@ -1269,7 +1263,7 @@ static inline void perpendicular_mode(void)
 } /* perpendicular_mode */
 
 static int fifo_depth = 0xa;
-static int no_fifo = 0;
+static int no_fifo;
 
 static int fdc_configure(void)
 {

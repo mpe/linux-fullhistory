@@ -126,7 +126,7 @@ struct sock *udp_hash[UDP_HTABLE_SIZE];
 rwlock_t udp_hash_lock = RW_LOCK_UNLOCKED;
 
 /* Shared by v4/v6 udp. */
-int udp_port_rover = 0;
+int udp_port_rover;
 
 static int udp_v4_get_port(struct sock *sk, unsigned short snum)
 {

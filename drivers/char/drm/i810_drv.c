@@ -35,7 +35,7 @@
 
 #define I810_NAME	 "i810"
 #define I810_DESC	 "Intel I810"
-#define I810_DATE	 "20000910"
+#define I810_DATE	 "20000928"
 #define I810_MAJOR	 1
 #define I810_MINOR	 1
 #define I810_PATCHLEVEL	 0
@@ -508,6 +508,7 @@ int i810_release(struct inode *inode, struct file *filp)
 	   	DECLARE_WAITQUEUE(entry, current);
 	   	add_wait_queue(&dev->lock.lock_queue, &entry);
 		for (;;) {
+			current->state = TASK_INTERRUPTIBLE;
 			if (!dev->lock.hw_lock) {
 				/* Device has been unregistered */
 				retcode = -EINTR;
@@ -522,7 +523,6 @@ int i810_release(struct inode *inode, struct file *filp)
 			}
 				/* Contention */
 			atomic_inc(&dev->total_sleeps);
-			current->state = TASK_INTERRUPTIBLE;
 			schedule();
 			if (signal_pending(current)) {
 				retcode = -ERESTARTSYS;

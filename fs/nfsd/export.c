@@ -57,12 +57,12 @@ struct svc_clnthash {
 	struct svc_client *	h_client;
 };
 static struct svc_clnthash *	clnt_hash[CLIENT_HASHMAX];
-static svc_client *		clients = NULL;
-static int			initialized = 0;
+static svc_client *		clients;
+static int			initialized;
 
-static int			hash_lock = 0;
-static int			want_lock = 0;
-static int			hash_count = 0;
+static int			hash_lock;
+static int			want_lock;
+static int			hash_count;
 static DECLARE_WAIT_QUEUE_HEAD(	hash_wait );
 
 

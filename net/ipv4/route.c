@@ -117,7 +117,7 @@ int ip_rt_mtu_expires = 10*60*HZ;
 int ip_rt_min_pmtu = 512+20+20;
 int ip_rt_min_advmss = 536;
 
-static unsigned long rt_deadline = 0;
+static unsigned long rt_deadline;
 
 #define RTprint(a...)	printk(KERN_DEBUG a)
 

@@ -20,7 +20,7 @@
 #include "inflate/zlib.h"
 
 static z_stream stream;
-static int initialized = 0;
+static int initialized;
 
 /* Returns length of decompressed data. */
 int cramfs_uncompress_block(void *dst, int dstlen, void *src, int srclen)

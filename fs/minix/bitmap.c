@@ -83,8 +83,6 @@ void minix_free_block(struct inode * inode, int block)
 	if (!minix_test_and_clear_bit(bit,bh->b_data))
 		printk("free_block (%s:%d): bit already cleared\n",
 		       kdevname(sb->s_dev), block);
-	else
-		DQUOT_FREE_BLOCK(sb, inode, 1);
 	mark_buffer_dirty(bh);
 	return;
 }
@@ -100,9 +98,6 @@ int minix_new_block(struct inode * inode)
 		return 0;
 	}
 repeat:
-	if(DQUOT_ALLOC_BLOCK(sb, inode, 1))
-		return -EDQUOT;
-
 	j = 8192;
 	bh = NULL;
 	for (i = 0; i < sb->u.minix_sb.s_zmap_blocks; i++) {
@@ -114,7 +109,6 @@ repeat:
 		return 0;
 	if (minix_test_and_set_bit(j,bh->b_data)) {
 		printk("new_block: bit already set");
-		DQUOT_FREE_BLOCK(sb, inode, 1);
 		goto repeat;
 	}
 	mark_buffer_dirty(bh);
@@ -215,9 +209,6 @@ void minix_free_inode(struct inode * inode)
 		return;
 	}
 
-	DQUOT_FREE_INODE(inode->i_sb, inode);
-	DQUOT_DROP(inode);
-
 	bh = inode->i_sb->u.minix_sb.s_imap[ino >> 13];
 	minix_clear_inode(inode);
 	clear_inode(inode);
@@ -276,14 +267,6 @@ struct inode * minix_new_inode(const struct inode * dir, int * error)
 	mark_inode_dirty(inode);
 
 	unlock_super(sb);
-	if(DQUOT_ALLOC_INODE(sb, inode)) {
-		sb->dq_op->drop(inode);
-		inode->i_nlink = 0;
-		iput(inode);
-		*error = -EDQUOT;
-		return NULL;
-	}
-
 	*error = 0;
 	return inode;
 }

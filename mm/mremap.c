@@ -225,6 +225,10 @@ unsigned long do_mremap(unsigned long addr,
 	/* We can't remap across vm area boundaries */
 	if (old_len > vma->vm_end - addr)
 		goto out;
+	if (vma->vm_flags & VM_DONTEXPAND) {
+		if (new_len > old_len)
+			goto out;
+	}
 	if (vma->vm_flags & VM_LOCKED) {
 		unsigned long locked = current->mm->locked_vm << PAGE_SHIFT;
 		locked += new_len - old_len;

@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: transport.c,v 1.25 2000/09/13 21:48:26 mdharm Exp $
+ * $Id: transport.c,v 1.27 2000/09/28 21:54:30 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -43,12 +43,13 @@
  * with this program; if not, write to the Free Software Foundation, Inc.,
  * 675 Mass Ave, Cambridge, MA 02139, USA.
  */
+
+#include <linux/config.h>
 #include "transport.h"
 #include "protocol.h"
 #include "usb.h"
 #include "debug.h"
 
-#include <linux/config.h>
 #include <linux/sched.h>
 #include <linux/errno.h>
 #include <linux/malloc.h>
@@ -743,8 +744,15 @@ void usb_stor_invoke_transport(Scsi_Cmnd *srb, struct us_data *us)
 		/* issue the auto-sense command */
 		temp_result = us->transport(us->srb, us);
 		if (temp_result != USB_STOR_TRANSPORT_GOOD) {
-			us->transport_reset(us);
 			US_DEBUGP("-- auto-sense failure\n");
+
+			/* we skip the reset if this happens to be a
+			 * multi-target device, since failure of an
+			 * auto-sense is perfectly valid
+			 */
+			if (!(us->flags & US_FL_SCM_MULT_TARG)) {
+				us->transport_reset(us);
+			}
 			srb->result = DID_ERROR << 16;
 			return;
 		}
@@ -1052,7 +1060,7 @@ int usb_stor_Bulk_transport(Scsi_Cmnd *srb, struct us_data *us)
 	/* send it to out endpoint */
 	US_DEBUGP("Bulk command S 0x%x T 0x%x Trg %d LUN %d L %d F %d CL %d\n",
 		  le32_to_cpu(bcb.Signature), bcb.Tag,
-		  (bcb.Lun >> 4), (bcb.Lun & 0xFF), 
+		  (bcb.Lun >> 4), (bcb.Lun & 0x0F), 
 		  bcb.DataTransferLength, bcb.Flags, bcb.Length);
 	result = usb_stor_bulk_msg(us, &bcb, pipe, US_BULK_CB_WRAP_LEN, 
 				   &partial);

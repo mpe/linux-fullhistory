@@ -407,7 +407,7 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 		pciinfo.bus = hba[ctlr]->pci_bus;
 		pciinfo.dev_fn = hba[ctlr]->pci_dev_fn;
 		pciinfo.board_id = hba[ctlr]->board_id;
-		if (copy_to_user((void *) arg, &pciinfo,  sizeof( cciss_pci_info_struct ))
+		if (copy_to_user((void *) arg, &pciinfo,  sizeof( cciss_pci_info_struct )))
 			return  -EFAULT;
 		return(0);
 	}	
@@ -419,7 +419,7 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 		if (!arg) return -EINVAL;
 		intinfo.delay = readl(&c->cfgtable->HostWrite.CoalIntDelay);
 		intinfo.count = readl(&c->cfgtable->HostWrite.CoalIntCount);
-		if (copy_to_user((void *) arg, &intinfo, sizeof( cciss_coalint_struct ))
+		if (copy_to_user((void *) arg, &intinfo, sizeof( cciss_coalint_struct )))
 			return -EFAULT;
                 return(0);
         }
@@ -432,7 +432,7 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 
 		if (!arg) return -EINVAL;	
 		if (!capable(CAP_SYS_ADMIN)) return -EPERM;
-		if (copy_from_user(&intinfo, (void *) arg, sizeof( cciss_coalint_struct))
+		if (copy_from_user(&intinfo, (void *) arg, sizeof( cciss_coalint_struct)))
 			return -EFAULT;
 		if ( (intinfo.delay == 0 ) && (intinfo.count == 0))
 
@@ -479,7 +479,7 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 		if (!arg) return -EINVAL;
 		for(i=0;i<16;i++)
 			NodeName[i] = readb(&c->cfgtable->ServerName[i]);
-                if (copy_to_user((void *) arg, NodeName, sizeof( NodeName_type))
+                if (copy_to_user((void *) arg, NodeName, sizeof( NodeName_type)))
                 	return  -EFAULT;
                 return(0);
         }
@@ -493,7 +493,7 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 		if (!arg) return -EINVAL;
 		if (!capable(CAP_SYS_ADMIN)) return -EPERM;
 		
-		if (copy_from_user(NodeName, (void *) arg, sizeof( NodeName_type))
+		if (copy_from_user(NodeName, (void *) arg, sizeof( NodeName_type)))
 			return -EFAULT;
 
 		spin_lock_irqsave(&io_request_lock, flags);
@@ -525,7 +525,7 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 
 		if (!arg) return -EINVAL;
                 heartbeat = readl(&c->cfgtable->HeartBeat);
-                if (copy_to_user((void *) arg, &heartbeat, sizeof( Heartbeat_type))
+                if (copy_to_user((void *) arg, &heartbeat, sizeof( Heartbeat_type)))
                 	return -EFAULT;
                 return(0);
         }
@@ -536,7 +536,7 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 
 		if (!arg) return -EINVAL;
                 BusTypes = readl(&c->cfgtable->BusTypes);
-                if (copy_to_user((void *) arg, &BusTypes, sizeof( BusTypes_type) )
+                if (copy_to_user((void *) arg, &BusTypes, sizeof( BusTypes_type) ))
                 	return  -EFAULT;
                 return(0);
         }
@@ -547,7 +547,7 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 		if (!arg) return -EINVAL;
 		memcpy(firmware, hba[ctlr]->firm_ver, 4);
 
-                if (copy_to_user((void *) arg, firmware, sizeof( FirmwareVer_type))
+                if (copy_to_user((void *) arg, firmware, sizeof( FirmwareVer_type)))
                 	return -EFAULT;
                 return(0);
         }
@@ -557,7 +557,7 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 
                 if (!arg) return -EINVAL;
 
-                if (copy_to_user((void *) arg, &DriverVer, sizeof( DriverVer_type) )
+                if (copy_to_user((void *) arg, &DriverVer, sizeof( DriverVer_type) ))
                 	return -EFAULT;
                 return(0);
         }
@@ -578,7 +578,7 @@ static int cciss_ioctl(struct inode *inode, struct file *filep,
 	
 		if (!capable(CAP_SYS_RAWIO)) return -EPERM;
 
-		if (copy_from_user(&iocommand, (void *) arg, sizeof( IOCTL_Command_struct) )
+		if (copy_from_user(&iocommand, (void *) arg, sizeof( IOCTL_Command_struct) ))
 			return -EFAULT;
 		if((iocommand.buf_size < 1) && 
 				(iocommand.Request.Type.Direction != XFER_NONE))

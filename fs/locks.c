@@ -407,6 +407,7 @@ static void locks_delete_block(struct file_lock *waiter)
 	INIT_LIST_HEAD(&waiter->fl_list);
 	list_del(&waiter->fl_link);
 	INIT_LIST_HEAD(&waiter->fl_link);
+	waiter->fl_next = NULL;
 }
 
 /* Insert waiter into blocker's block list.
@@ -424,6 +425,7 @@ static void locks_insert_block(struct file_lock *blocker,
 		locks_delete_block(waiter);
 	}
 	list_add_tail(&waiter->fl_list, &blocker->fl_block);
+	waiter->fl_next = blocker;
 	list_add(&waiter->fl_link, &blocked_list);
 }
 
@@ -647,16 +649,13 @@ static int posix_locks_deadlock(struct file_lock *caller_fl,
 next_task:
 	if (caller_owner == blocked_owner && caller_pid == blocked_pid)
 		return 1;
-	while (tmp != &blocked_list) {
+	list_for_each(tmp, &blocked_list) {
 		struct file_lock *fl = list_entry(tmp, struct file_lock, fl_link);
-		tmp = tmp->next;
 		if ((fl->fl_owner == blocked_owner)
 		    && (fl->fl_pid == blocked_pid)) {
 			fl = fl->fl_next;
-			if (fl) {
-				blocked_owner = fl->fl_owner;
-				blocked_pid = fl->fl_pid;
-			}
+			blocked_owner = fl->fl_owner;
+			blocked_pid = fl->fl_pid;
 			goto next_task;
 		}
 	}

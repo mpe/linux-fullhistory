@@ -696,7 +696,7 @@ static int sr_packet(struct cdrom_device_info *cdi, struct cdrom_generic_command
 	return cgc->stat;
 }
 
-static int sr_registered = 0;
+static int sr_registered;
 
 static int sr_init()
 {

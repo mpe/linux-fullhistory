@@ -127,30 +127,37 @@ void free_hpsb_packet(struct hpsb_packet *packet)
 }
 
 
-void reset_host_bus(struct hpsb_host *host)
+int hpsb_reset_bus(struct hpsb_host *host)
 {
         if (!host->initialized) {
-                return;
+                return 1;
         }
 
-        hpsb_bus_reset(host);
-        host->template->devctl(host, RESET_BUS, 0);
+        if (!hpsb_bus_reset(host)) {
+                host->template->devctl(host, RESET_BUS, 0);
+                return 0;
+        } else {
+                return 1;
+        }
 }
 
 
-void hpsb_bus_reset(struct hpsb_host *host)
+int hpsb_bus_reset(struct hpsb_host *host)
 {
-        if (!host->in_bus_reset) {
-                abort_requests(host);
-                host->in_bus_reset = 1;
-                host->irm_id = -1;
-                host->busmgr_id = -1;
-                host->node_count = 0;
-                host->selfid_count = 0;
-        } else {
+        if (host->in_bus_reset) {
                 HPSB_NOTICE(__FUNCTION__ 
                             " called while bus reset already in progress");
+                return 1;
         }
+
+        abort_requests(host);
+        host->in_bus_reset = 1;
+        host->irm_id = -1;
+        host->busmgr_id = -1;
+        host->node_count = 0;
+        host->selfid_count = 0;
+
+        return 0;
 }
 
 
@@ -311,7 +318,7 @@ void hpsb_selfid_complete(struct hpsb_host *host, int phyid, int isroot)
                 if (host->reset_retries++ < 20) {
                         /* selfid stage did not complete without error */
                         HPSB_NOTICE("error in SelfID stage - resetting");
-                        reset_host_bus(host);
+                        hpsb_reset_bus(host);
                         return;
                 } else {
                         HPSB_NOTICE("stopping out-of-control reset loop");
@@ -332,6 +339,7 @@ void hpsb_selfid_complete(struct hpsb_host *host, int phyid, int isroot)
 
         host->reset_retries = 0;
         inc_hpsb_generation();
+        if (isroot) host->template->devctl(host, ACT_CYCLE_MASTER, 1);
         highlevel_host_reset(host);
 }
 
@@ -374,7 +382,7 @@ void hpsb_packet_sent(struct hpsb_host *host, struct hpsb_packet *packet,
  *
  * The packet is sent through the host specified in the packet->host field.
  * Before sending, the packet's transmit speed is automatically determined using
- * the local speed map.
+ * the local speed map when it is an async, non-broadcast packet.
  *
  * Possibilities for failure are that host is either not initialized, in bus
  * reset, the packet's generation number doesn't match the current generation
@@ -392,8 +400,12 @@ int hpsb_send_packet(struct hpsb_packet *packet)
         }
 
         packet->state = queued;
-        packet->speed_code = host->speed_map[(host->node_id & NODE_MASK) * 64
-                                            + (packet->node_id & NODE_MASK)];
+
+        if (packet->type == async && packet->node_id != ALL_NODES) {
+                packet->speed_code =
+                        host->speed_map[(host->node_id & NODE_MASK) * 64
+                                       + (packet->node_id & NODE_MASK)];
+        }
 
 #ifdef CONFIG_IEEE1394_VERBOSEDEBUG
         switch (packet->speed_code) {

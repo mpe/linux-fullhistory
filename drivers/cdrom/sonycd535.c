@@ -217,16 +217,16 @@ static unsigned short command_reg;
 static unsigned short read_status_reg;
 static unsigned short data_reg;
 
-static int initialized = 0;			/* Has the drive been initialized? */
+static int initialized;			/* Has the drive been initialized? */
 static int sony_disc_changed = 1;	/* Has the disk been changed
 					   since the last check? */
-static int sony_toc_read = 0;		/* Has the table of contents been
+static int sony_toc_read;		/* Has the table of contents been
 					   read? */
 static unsigned int sony_buffer_size;	/* Size in bytes of the read-ahead
 					   buffer. */
 static unsigned int sony_buffer_sectors;	/* Size (in 2048 byte records) of
 						   the read-ahead buffer. */
-static unsigned int sony_usage = 0;	/* How many processes have the
+static unsigned int sony_usage;		/* How many processes have the
 					   drive open. */
 
 static int sony_first_block = -1;	/* First OS block (512 byte) in
@@ -242,7 +242,7 @@ static struct s535_sony_subcode *last_sony_subcode;		/* Points to the last
 static Byte **sony_buffer;		/* Points to the pointers
 					   to the sector buffers */
 
-static int sony_inuse = 0;		/* is the drive in use? Only one
+static int sony_inuse;			/* is the drive in use? Only one
 					   open at a time allowed */
 
 /*
@@ -260,8 +260,8 @@ static int sony_audio_status = CDROM_AUDIO_NO_STATUS;
  *   I just kept the CDU-31A driver behavior rather than using the PAUSE
  * command on the CDU-535.
  */
-static Byte cur_pos_msf[3] = {0, 0, 0};
-static Byte final_pos_msf[3] = {0, 0, 0};
+static Byte cur_pos_msf[3];
+static Byte final_pos_msf[3];
 
 /* What IRQ is the drive using?  0 if none. */
 static int sony535_irq_used = CDU535_INTERRUPT;

@@ -1,9 +1,10 @@
 Documentation for the ESS AudioDrive chips
 
-In 2.2 kernels the SoundBlaster driver not only tries to detect an ESS chip, it
+In 2.4 kernels the SoundBlaster driver not only tries to detect an ESS chip, it
 tries to detect the type of ESS chip too. The correct detection of the chip 
-doesn't always succeed however, so the default behaviour is 2.0 behaviour
-which means: only detect ES688 and ES1688.
+doesn't always succeed however, so unless you use the kernel isapnp facilities
+(and you chip is pnp capable) the default behaviour is 2.0 behaviour which
+means: only detect ES688 and ES1688.
 
 All ESS chips now have a recording level setting. This is a need-to-have for
 people who want to use their ESS for recording sound.

@@ -91,16 +91,16 @@
 #define OHCI1394_MAX_SELF_ID_ERRORS       16
 
 #define AR_REQ_NUM_DESC                   4 /* number of AR req descriptors */
-#define AR_REQ_BUF_SIZE                4096 /* size of AR req buffers */
-#define AR_REQ_SPLIT_BUF_SIZE          4096 /* split packet buffer */
+#define AR_REQ_BUF_SIZE           PAGE_SIZE /* size of AR req buffers */
+#define AR_REQ_SPLIT_BUF_SIZE     PAGE_SIZE /* split packet buffer */
 
 #define AR_RESP_NUM_DESC                  4 /* number of AR resp descriptors */
-#define AR_RESP_BUF_SIZE               4096 /* size of AR resp buffers */
-#define AR_RESP_SPLIT_BUF_SIZE         4096 /* split packet buffer */
+#define AR_RESP_BUF_SIZE          PAGE_SIZE /* size of AR resp buffers */
+#define AR_RESP_SPLIT_BUF_SIZE    PAGE_SIZE /* split packet buffer */
 
 #define IR_NUM_DESC                      16 /* number of IR descriptors */
-#define IR_BUF_SIZE                    4096 /* 6480 bytes/buffer */
-#define IR_SPLIT_BUF_SIZE              4096 /* split packet buffer */
+#define IR_BUF_SIZE               PAGE_SIZE /* 4096 bytes/buffer */
+#define IR_SPLIT_BUF_SIZE         PAGE_SIZE /* split packet buffer */
 
 #define AT_REQ_NUM_DESC                  32 /* number of AT req descriptors */
 #define AT_RESP_NUM_DESC                 32 /* number of AT resp descriptors */
@@ -112,10 +112,17 @@ struct dma_cmd {
         u32 status;
 };
 
+/*
+ * FIXME:
+ * It is important that a single at_dma_prg does not cross a page boundary
+ * The proper way to do it would be to do the check dynamically as the
+ * programs are inserted into the AT fifo.
+ */
 struct at_dma_prg {
 	struct dma_cmd begin;
 	quadlet_t data[4];
 	struct dma_cmd end;
+	quadlet_t pad[4]; /* FIXME: quick hack for memory alignment */
 };
 
 /* DMA receive context */

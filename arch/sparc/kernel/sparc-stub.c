@@ -123,7 +123,7 @@ extern char getDebugChar(void);   /* read and return a single char */
  */
 #define BUFMAX 2048
 
-static int initialized = 0;	/* !0 means we've been initialized */
+static int initialized;	/* !0 means we've been initialized */
 
 static const char hexchars[]="0123456789abcdef";
 

@@ -2843,7 +2843,7 @@ long __init serial_console_init(long kmem_start, long kmem_end)
  * device more directly.
  */
 
-static int initialized = 0;
+static int initialized;
 
 static int rs_debug_init(struct async_struct *info)
 {

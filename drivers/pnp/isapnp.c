@@ -48,14 +48,14 @@ LIST_HEAD(isapnp_devices);
 #define ISAPNP_DEBUG
 #endif
 
-struct resource *pidxr_res = NULL;
-struct resource *pnpwrp_res = NULL;
-struct resource *isapnp_rdp_res = NULL;
+struct resource *pidxr_res;
+struct resource *pnpwrp_res;
+struct resource *isapnp_rdp_res;
 
-int isapnp_disable = 0;			/* Disable ISA PnP */
-int isapnp_rdp = 0;			/* Read Data Port */
+int isapnp_disable;			/* Disable ISA PnP */
+int isapnp_rdp;			/* Read Data Port */
 int isapnp_reset = 1;			/* reset all PnP cards (deactivate) */
-int isapnp_skip_pci_scan = 0;		/* skip PCI resource scanning */
+int isapnp_skip_pci_scan;		/* skip PCI resource scanning */
 int isapnp_verbose = 1;			/* verbose mode */
 int isapnp_reserve_irq[16] = { [0 ... 15] = -1 };	/* reserve (don't use) some IRQ */
 int isapnp_reserve_dma[8] = { [0 ... 7] = -1 };		/* reserve (don't use) some DMA */
@@ -108,7 +108,7 @@ MODULE_PARM_DESC(isapnp_reserve_mem, "ISA Plug & Play - reserve memory region(s)
 
 static unsigned char isapnp_checksum_value;
 static DECLARE_MUTEX(isapnp_cfg_mutex);
-static int isapnp_detected = 0;
+static int isapnp_detected;
 
 /* some prototypes */
 

@@ -27,6 +27,8 @@ History:
                    added info on OSS and ALSA.
 1.1.1  19991031	   Added notes on sound-slot- and sound-service.
 			(Alan Cox)
+1.1.2  20000920    Modified for Kernel 2.4 (Christoph Hellwig)
+
 
 Modular Sound Drivers:
 ======================
@@ -46,16 +48,12 @@ Alan's comments in linux/drivers/sound/README.FIRST:
   forums for bug reporting.
 
 The modular sound drivers may be loaded via insmod or modprobe.  
-To support all the various sound modules, there are three general 
+To support all the various sound modules, there are two general 
 support modules that must be loaded first:
  
    soundcore.o:   Top level handler for the sound system, provides
                   a set of functions for registration of devices
                   by type.
-
-   soundlow.o:    Low-level sound drivers which are not part of 
-                  OSS/Lite (Open Sound System), including SB32/AWE
-                  synthesizer, etc.
 
    sound.o:       Common sound functions required by all modules.
 
@@ -255,6 +253,9 @@ send me an E-MAIL.  PCI sound cards should not have this problem.a
 Since this was originally release, I have received a couple of 
 mails from people who have accomplished this!
 
+NOTE: In Linux 2.4 the Sound Blaster driver (and only this one yet)
+supports multiple cards with one module by default.
+Read the file 'Soundblaster' in this directory for details.
 
 Sound Problems:
 ===============
@@ -277,8 +278,7 @@ in the Sound-HOWTO).
       and /proc/dma.  Are you trying to use an address,
       IRQ or DMA port that another device is using?
   
-  C)  Check (cat) /proc/sys/pnp (if this exists, you 
-      may need a kernel patch to get this device).
+  C)  Check (cat) /proc/isapnp
   
   D)  Inspect your /var/log/messages file.  Often that will 
       indicate what IRQ or IO port could not be obtained.
@@ -332,8 +332,9 @@ Configuring Sound:
 
 There are several ways of configuring your sound:
 
-1)  Hardcoded in the kernel at compile time (not applicable when
-    using sound modules).  This was the OLD way!
+1)  On the kernel command line (when using the sound driver(s)
+    compiled in the kernel). Check the driver source and
+    documentation for details.
 
 2)  On the command line when using insmod or in a bash script
     using command line calls to load sound.
@@ -344,6 +345,10 @@ There are several ways of configuring your sound:
 
 5)  Via the OSS soundconf program (with the commercial version
     of the OSS driver.
+
+6)  By just loading the module and let isapnp do everything relevant
+    for you. This works only with a few drivers yet and - of course -
+    only with isapnp hardware.
 
 And I am sure, several other ways.  
 

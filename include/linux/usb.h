@@ -235,36 +235,36 @@ struct usb_device_descriptor {
 
 /* Endpoint descriptor */
 struct usb_endpoint_descriptor {
-	__u8  bLength;
-	__u8  bDescriptorType;
-	__u8  bEndpointAddress;
-	__u8  bmAttributes;
-	__u16 wMaxPacketSize;
-	__u8  bInterval;
-	__u8  bRefresh;
-	__u8  bSynchAddress;
+	__u8  bLength		__attribute__ ((packed));
+	__u8  bDescriptorType	__attribute__ ((packed));
+	__u8  bEndpointAddress	__attribute__ ((packed));
+	__u8  bmAttributes	__attribute__ ((packed));
+	__u16 wMaxPacketSize	__attribute__ ((packed));
+	__u8  bInterval		__attribute__ ((packed));
+	__u8  bRefresh		__attribute__ ((packed));
+	__u8  bSynchAddress	__attribute__ ((packed));
 
    	unsigned char *extra;   /* Extra descriptors */
 	int extralen;
-} __attribute__ ((packed));
+};
 
 /* Interface descriptor */
 struct usb_interface_descriptor {
-	__u8  bLength;
-	__u8  bDescriptorType;
-	__u8  bInterfaceNumber;
-	__u8  bAlternateSetting;
-	__u8  bNumEndpoints;
-	__u8  bInterfaceClass;
-	__u8  bInterfaceSubClass;
-	__u8  bInterfaceProtocol;
-	__u8  iInterface;
+	__u8  bLength		__attribute__ ((packed));
+	__u8  bDescriptorType	__attribute__ ((packed));
+	__u8  bInterfaceNumber	__attribute__ ((packed));
+	__u8  bAlternateSetting	__attribute__ ((packed));
+	__u8  bNumEndpoints	__attribute__ ((packed));
+	__u8  bInterfaceClass	__attribute__ ((packed));
+	__u8  bInterfaceSubClass __attribute__ ((packed));
+	__u8  bInterfaceProtocol __attribute__ ((packed));
+	__u8  iInterface	__attribute__ ((packed));
 
   	struct usb_endpoint_descriptor *endpoint;
 
    	unsigned char *extra;   /* Extra descriptors */
 	int extralen;
-} __attribute__ ((packed));
+};
 
 struct usb_interface {
 	struct usb_interface_descriptor *altsetting;
@@ -279,20 +279,20 @@ struct usb_interface {
 
 /* Configuration descriptor information.. */
 struct usb_config_descriptor {
-	__u8  bLength;
-	__u8  bDescriptorType;
-	__u16 wTotalLength;
-	__u8  bNumInterfaces;
-	__u8  bConfigurationValue;
-	__u8  iConfiguration;
-	__u8  bmAttributes;
-	__u8  MaxPower;
+	__u8  bLength		__attribute__ ((packed));
+	__u8  bDescriptorType	__attribute__ ((packed));
+	__u16 wTotalLength	__attribute__ ((packed));
+	__u8  bNumInterfaces	__attribute__ ((packed));
+	__u8  bConfigurationValue __attribute__ ((packed));
+	__u8  iConfiguration	__attribute__ ((packed));
+	__u8  bmAttributes	__attribute__ ((packed));
+	__u8  MaxPower		__attribute__ ((packed));
 
 	struct usb_interface *interface;
 
    	unsigned char *extra;   /* Extra descriptors */
 	int extralen;
-} __attribute__ ((packed));
+};
 
 /* String descriptor */
 struct usb_string_descriptor {

@@ -36,10 +36,10 @@
 
 #define MGA_NAME	 "mga"
 #define MGA_DESC	 "Matrox G200/G400"
-#define MGA_DATE	 "20000910"
+#define MGA_DATE	 "20000928"
 #define MGA_MAJOR	 2
 #define MGA_MINOR	 0
-#define MGA_PATCHLEVEL	 0
+#define MGA_PATCHLEVEL	 1
 
 static drm_device_t	      mga_device;
 drm_ctx_t		      mga_res_ctx;
@@ -216,6 +216,7 @@ static int mga_takedown(drm_device_t *dev)
 
 	DRM_DEBUG("\n");
 
+	if (dev->dev_private) mga_dma_cleanup(dev);
 	if (dev->irq) mga_irq_uninstall(dev);
 
 	down(&dev->struct_sem);
@@ -351,7 +352,6 @@ static int mga_init(void)
 #ifdef MODULE
 	drm_parse_options(mga);
 #endif
-	DRM_DEBUG("doing misc_register\n");
 	if ((retcode = misc_register(&mga_misc))) {
 		DRM_ERROR("Cannot register \"%s\"\n", MGA_NAME);
 		return retcode;
@@ -359,11 +359,8 @@ static int mga_init(void)
 	dev->device = MKDEV(MISC_MAJOR, mga_misc.minor);
 	dev->name   = MGA_NAME;
 
-   	DRM_DEBUG("doing mem init\n");
 	drm_mem_init();
-	DRM_DEBUG("doing proc init\n");
 	drm_proc_init(dev);
-	DRM_DEBUG("doing agp init\n");
 	dev->agp    = drm_agp_init();
       	if(dev->agp == NULL) {
 	   	DRM_INFO("The mga drm module requires the agpgart module"
@@ -380,7 +377,6 @@ static int mga_init(void)
 				      MTRR_TYPE_WRCOMB,
 				      1);
 #endif
-	DRM_DEBUG("doing ctxbitmap init\n");
 	if((retcode = drm_ctxbitmap_init(dev))) {
 		DRM_ERROR("Cannot allocate memory for context bitmap.\n");
 		drm_proc_cleanup();
@@ -415,7 +411,6 @@ static void mga_cleanup(void)
 		DRM_INFO("Module unloaded\n");
 	}
 	drm_ctxbitmap_cleanup(dev);
-	mga_dma_cleanup(dev);
 #ifdef CONFIG_MTRR
    	if(dev->agp && dev->agp->agp_mtrr) {
 	   	int retval;
@@ -508,22 +503,27 @@ int mga_release(struct inode *inode, struct file *filp)
 	if (dev->lock.hw_lock && _DRM_LOCK_IS_HELD(dev->lock.hw_lock->lock)
 	    && dev->lock.pid == current->pid) {
 	      	mga_reclaim_buffers(dev, priv->pid);
-		DRM_ERROR("Process %d dead, freeing lock for context %d\n",
-			  current->pid,
-			  _DRM_LOCKING_CONTEXT(dev->lock.hw_lock->lock));
+		DRM_INFO("Process %d dead (ctx %d, d_s = 0x%02x)\n",
+			 current->pid,
+			 _DRM_LOCKING_CONTEXT(dev->lock.hw_lock->lock),
+			 dev->dev_private ?
+			 ((drm_mga_private_t *)dev->dev_private)
+			 ->dispatch_status
+			 : 0);
+
+		if (dev->dev_private)
+			((drm_mga_private_t *)dev->dev_private)
+				->dispatch_status &= MGA_IN_DISPATCH;
+		
 		drm_lock_free(dev,
 			      &dev->lock.hw_lock->lock,
 			      _DRM_LOCKING_CONTEXT(dev->lock.hw_lock->lock));
-
-				/* FIXME: may require heavy-handed reset of
-                                   hardware at this point, possibly
-                                   processed via a callback to the X
-                                   server. */
 	} else if (dev->lock.hw_lock) {
 	   	/* The lock is required to reclaim buffers */
 	   	DECLARE_WAITQUEUE(entry, current);
 	   	add_wait_queue(&dev->lock.lock_queue, &entry);
 		for (;;) {
+			current->state = TASK_INTERRUPTIBLE;
 			if (!dev->lock.hw_lock) {
 				/* Device has been unregistered */
 				retcode = -EINTR;
@@ -538,7 +538,6 @@ int mga_release(struct inode *inode, struct file *filp)
 			}
 				/* Contention */
 			atomic_inc(&dev->total_sleeps);
-			current->state = TASK_INTERRUPTIBLE;
 			schedule();
 			if (signal_pending(current)) {
 				retcode = -ERESTARTSYS;
@@ -549,6 +548,9 @@ int mga_release(struct inode *inode, struct file *filp)
 		remove_wait_queue(&dev->lock.lock_queue, &entry);
 	   	if(!retcode) {
 		   	mga_reclaim_buffers(dev, priv->pid);
+			if (dev->dev_private)
+				((drm_mga_private_t *)dev->dev_private)
+					->dispatch_status &= MGA_IN_DISPATCH;
 		   	drm_lock_free(dev, &dev->lock.hw_lock->lock,
 				      DRM_KERNEL_CONTEXT);
 		}
@@ -556,6 +558,13 @@ int mga_release(struct inode *inode, struct file *filp)
 	drm_fasync(-1, filp, 0);
 
 	down(&dev->struct_sem);
+	if (priv->remove_auth_on_close == 1) {
+		drm_file_t *temp = dev->file_first;
+		while(temp) {
+			temp->authenticated = 0;
+			temp = temp->next;
+		}
+	}
 	if (priv->prev) priv->prev->next = priv->next;
 	else		dev->file_first	 = priv->next;
 	if (priv->next) priv->next->prev = priv->prev;
@@ -603,9 +612,6 @@ int mga_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 	atomic_inc(&dev->total_ioctl);
 	++priv->ioctl_count;
 
-	DRM_DEBUG("pid = %d, cmd = 0x%02x, nr = 0x%02x, dev 0x%x, auth = %d\n",
-		  current->pid, cmd, nr, dev->device, priv->authenticated);
-
 	if (nr >= MGA_IOCTL_COUNT) {
 		retcode = -EINVAL;
 	} else {
@@ -613,7 +619,10 @@ int mga_ioctl(struct inode *inode, struct file *filp, unsigned int cmd,
 		func	  = ioctl->func;
 
 		if (!func) {
-			DRM_DEBUG("no function\n");
+			DRM_DEBUG("no function: pid = %d, cmd = 0x%02x,"
+				  " nr = 0x%02x, dev 0x%x, auth = %d\n",
+				  current->pid, cmd, nr, dev->device,
+				  priv->authenticated);
 			retcode = -EINVAL;
 		} else if ((ioctl->root_only && !capable(CAP_SYS_ADMIN))
 			    || (ioctl->auth_needed && !priv->authenticated)) {
@@ -643,9 +652,6 @@ int mga_unlock(struct inode *inode, struct file *filp, unsigned int cmd,
 		return -EINVAL;
 	}
 
-	DRM_DEBUG("%d frees lock (%d holds)\n",
-		  lock.context,
-		  _DRM_LOCKING_CONTEXT(dev->lock.hw_lock->lock));
 	atomic_inc(&dev->total_unlocks);
 	if (_DRM_LOCK_IS_CONT(dev->lock.hw_lock->lock))
 		atomic_inc(&dev->total_contends);
@@ -653,9 +659,7 @@ int mga_unlock(struct inode *inode, struct file *filp, unsigned int cmd,
 	mga_dma_schedule(dev, 1);
 
 	if (drm_lock_free(dev, &dev->lock.hw_lock->lock,
-			  DRM_KERNEL_CONTEXT)) {
-	   DRM_ERROR("\n");
-	}
+			  DRM_KERNEL_CONTEXT)) DRM_ERROR("\n");
 
 	unblock_all_signals();
 	return 0;

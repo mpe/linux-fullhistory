@@ -216,9 +216,10 @@ static int __init flashcom_checkcard(int port)
  	return 1;
  }
  
-void __init mixcomwd_init(void)
+static int __init mixcomwd_init(void)
 {
 	int i;
+	int ret;
 	int found=0;
 
 	for (i = 0; !found && mixcomwd_ioports[i] != 0; i++) {
@@ -238,23 +239,21 @@ void __init mixcomwd_init(void)
 	
 	if (!found) {
 		printk("mixcomwd: No card detected, or port not available.\n");
-		return;
+		return -ENODEV;
 	}
 
 	request_region(watchdog_port,1,"MixCOM watchdog");
 		
-	misc_register(&mixcomwd_miscdev);
+	ret = misc_register(&mixcomwd_miscdev);
+	if (ret)
+		return ret;
+	
 	printk(KERN_INFO "MixCOM watchdog driver v%s, watchdog port at 0x%3x\n",VERSION,watchdog_port);
+
+	return 0;
 }	
 
-#ifdef MODULE
-int init_module(void)
-{
-	mixcomwd_init();
-	return 0;
-}
-
-void cleanup_module(void)
+static void __exit mixcomwd_exit(void)
 {
 #ifndef CONFIG_WATCHDOG_NOWAYOUT
 	if(mixcomwd_timer_alive) {
@@ -267,4 +266,6 @@ void cleanup_module(void)
 	release_region(watchdog_port,1);
 	misc_deregister(&mixcomwd_miscdev);
 }
-#endif
+
+module_init(mixcomwd_init);
+module_exit(mixcomwd_exit);

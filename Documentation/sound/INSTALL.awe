@@ -9,12 +9,9 @@
 If you're using PnP cards, the initialization of PnP is required
 before loading this driver.  You have now three options:
   1. Use isapnptools.
-  2. Install PnP kernel driver patch.
+  2. Use in-kernel isapnp support.
   3. Initialize PnP on DOS/Windows, then boot linux by loadlin.
 In this document, only the case 1 case is treated.
-For the case 2, please refer to the instruction in PnP driver project.
-The home page of PnP driver project is the following URL:
-	http://www-jcr.lmh.ox.ac.uk/~pnp/
 
 ----------------------------------------------------------------
 * Installation on Red Hat 5.0 Sound Driver

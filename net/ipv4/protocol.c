@@ -112,10 +112,7 @@ static struct inet_protocol icmp_protocol =
 
 struct inet_protocol *inet_protocol_base = IPPROTO_PREVIOUS;
 
-struct inet_protocol *inet_protos[MAX_INET_PROTOS] = 
-{
-	NULL
-};
+struct inet_protocol *inet_protos[MAX_INET_PROTOS];
 
 /*
  *	Add a protocol handler to the hash tables

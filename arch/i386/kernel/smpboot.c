@@ -46,7 +46,7 @@
 #include <asm/pgalloc.h>
 
 /* Set if we find a B stepping CPU			*/
-static int smp_b_stepping = 0;
+static int smp_b_stepping;
 
 /* Setup configured maximum number of CPUs to activate */
 static int max_cpus = -1;
@@ -55,21 +55,21 @@ static int max_cpus = -1;
 int smp_num_cpus = 1;
 
 /* Bitmask of currently online CPUs */
-unsigned long cpu_online_map = 0;
+unsigned long cpu_online_map;
 
 /* which CPU (physical APIC ID) maps to which logical CPU number */
 volatile int x86_apicid_to_cpu[NR_CPUS];
 /* which logical CPU number maps to which CPU (physical APIC ID) */
 volatile int x86_cpu_to_apicid[NR_CPUS];
 
-static volatile unsigned long cpu_callin_map = 0;
-static volatile unsigned long cpu_callout_map = 0;
+static volatile unsigned long cpu_callin_map;
+static volatile unsigned long cpu_callout_map;
 
 /* Per CPU bogomips and other parameters */
 struct cpuinfo_x86 cpu_data[NR_CPUS];
 
 /* Set when the idlers are all forked */
-int smp_threads_ready = 0;
+int smp_threads_ready;
 
 /*
  * Setup routine for controlling SMP activation
@@ -194,7 +194,7 @@ void __init smp_commence(void)
 static atomic_t tsc_start_flag = ATOMIC_INIT(0);
 static atomic_t tsc_count_start = ATOMIC_INIT(0);
 static atomic_t tsc_count_stop = ATOMIC_INIT(0);
-static unsigned long long tsc_values[NR_CPUS] = { 0, };
+static unsigned long long tsc_values[NR_CPUS];
 
 #define NR_LOOPS 5
 
@@ -438,7 +438,7 @@ void __init smp_callin(void)
 		synchronize_tsc_ap();
 }
 
-int cpucount = 0;
+int cpucount;
 
 extern int cpu_idle(void);
 

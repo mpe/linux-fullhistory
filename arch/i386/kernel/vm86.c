@@ -565,8 +565,8 @@ void handle_vm86_fault(struct kernel_vm86_regs * regs, long error_code)
 static struct vm86_irqs {
 	struct task_struct *tsk;
 	int sig;
-} vm86_irqs[16] = {{0},}; 
-static int irqbits=0;
+} vm86_irqs[16];
+static int irqbits;
 
 #define ALLOWED_SIGS ( 1 /* 0 = don't send a signal */ \
 	| (1 << SIGUSR1) | (1 << SIGUSR2) | (1 << SIGIO)  | (1 << SIGURG) \

@@ -39,12 +39,12 @@
 #define ALLOWED_SIGS		(sigmask(SIGKILL))
 
 extern struct svc_program	nlmsvc_program;
-struct nlmsvc_binding *		nlmsvc_ops = NULL;
+struct nlmsvc_binding *		nlmsvc_ops;
 static DECLARE_MUTEX(nlmsvc_sema);
-static unsigned int		nlmsvc_users = 0;
-static pid_t			nlmsvc_pid = 0;
-unsigned long			nlmsvc_grace_period = 0;
-unsigned long			nlmsvc_timeout = 0;
+static unsigned int		nlmsvc_users;
+static pid_t			nlmsvc_pid;
+unsigned long			nlmsvc_grace_period;
+unsigned long			nlmsvc_timeout;
 
 static DECLARE_MUTEX_LOCKED(lockd_start);
 static DECLARE_WAIT_QUEUE_HEAD(lockd_exit);
@@ -53,7 +53,7 @@ static DECLARE_WAIT_QUEUE_HEAD(lockd_exit);
  * Currently the following can be set only at insmod time.
  * Ideally, they would be accessible through the sysctl interface.
  */
-unsigned long			nlm_grace_period = 0;
+unsigned long			nlm_grace_period;
 unsigned long			nlm_timeout = LOCKD_DFLT_TIMEO;
 
 /*

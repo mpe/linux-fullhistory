@@ -17,7 +17,6 @@
 #include "hosts.h"
 #include "ieee1394_core.h"
 #include "ieee1394_transactions.h"
-/* #include "events.h" */
 #include "highlevel.h"
 #include "guid.h"
 
@@ -30,6 +29,7 @@ EXPORT_SYMBOL(hpsb_dec_host_usage);
 EXPORT_SYMBOL(alloc_hpsb_packet);
 EXPORT_SYMBOL(free_hpsb_packet);
 EXPORT_SYMBOL(hpsb_send_packet);
+EXPORT_SYMBOL(hpsb_reset_bus);
 EXPORT_SYMBOL(hpsb_bus_reset);
 EXPORT_SYMBOL(hpsb_selfid_received);
 EXPORT_SYMBOL(hpsb_selfid_complete);
@@ -39,6 +39,16 @@ EXPORT_SYMBOL(hpsb_generation);
 
 EXPORT_SYMBOL(get_tlabel);
 EXPORT_SYMBOL(free_tlabel);
+EXPORT_SYMBOL(fill_async_readquad);
+EXPORT_SYMBOL(fill_async_readquad_resp);
+EXPORT_SYMBOL(fill_async_readblock);
+EXPORT_SYMBOL(fill_async_readblock_resp);
+EXPORT_SYMBOL(fill_async_writequad);
+EXPORT_SYMBOL(fill_async_writeblock);
+EXPORT_SYMBOL(fill_async_write_resp);
+EXPORT_SYMBOL(fill_async_lock);
+EXPORT_SYMBOL(fill_async_lock_resp);
+EXPORT_SYMBOL(fill_iso_packet);
 EXPORT_SYMBOL(hpsb_make_readqpacket);
 EXPORT_SYMBOL(hpsb_make_readbpacket);
 EXPORT_SYMBOL(hpsb_make_writeqpacket);

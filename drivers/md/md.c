@@ -2041,7 +2041,7 @@ void md_autodetect_dev(kdev_t dev)
 }
 #endif
 
-void md__init md_run_setup(void)
+int md__init md_run_setup(void)
 {
 #ifdef CONFIG_AUTODETECT_RAID
 	mdk_rdev_t *rdev;
@@ -2084,7 +2084,7 @@ void md__init md_run_setup(void)
 #ifdef CONFIG_MD_BOOT
 	md_setup_drive();
 #endif
-	
+	return 0;
 }
 
 static int get_version (void * arg)
@@ -3747,6 +3747,10 @@ void md__init md_setup_drive(void)
 		if (!(md_setup_args.set & (1 << minor)))
 			continue;
 		printk("md: Loading md%d.\n", minor);
+		if (mddev_map[minor].mddev) {
+			printk(".. md%d already autodetected - use raid=noautodetect\n", minor);
+			continue;
+		}
 		mddev = alloc_mddev(MKDEV(MD_MAJOR,minor));
 		if (md_setup_args.pers[minor]) {
 			/* non-persistent */

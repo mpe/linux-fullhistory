@@ -1,6 +1,6 @@
 /* Driver for USB Mass Storage compliant devices
  *
- * $Id: usb.c,v 1.44 2000/09/14 22:56:36 mdharm Exp $
+ * $Id: usb.c,v 1.46 2000/09/25 23:25:12 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -95,7 +95,7 @@ struct semaphore us_list_semaphore;
 
 static void * storage_probe(struct usb_device *dev, unsigned int ifnum);
 static void storage_disconnect(struct usb_device *dev, void *ptr);
-static struct usb_driver storage_driver = {
+struct usb_driver usb_storage_driver = {
 	name:		"usb-storage",
 	probe:		storage_probe,
 	disconnect:	storage_disconnect,
@@ -334,28 +334,24 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
 	{ 0x03ee, 0x0000, 0x0000, 0x0245, 
 		"Mitsumi",
 		"CD-R/RW Drive",
-		US_SC_8020, US_PR_CBI, NULL, 
-		US_FL_SINGLE_LUN}, 
+		US_SC_8020, US_PR_CBI, NULL, 0}, 
 
 	{ 0x03f0, 0x0107, 0x0200, 0x0200, 
 		"HP",
 		"CD-Writer+",
-		US_SC_8070, US_PR_CB, NULL, 
-		0}, 
+		US_SC_8070, US_PR_CB, NULL, 0}, 
 
 #ifdef CONFIG_USB_STORAGE_HP8200e
 	{ 0x03f0, 0x0207, 0x0001, 0x0001, 
 		"HP",
 		"CD-Writer+ 8200e",
-		US_SC_8070, US_PR_SCM_ATAPI, init_8200e,
-		US_FL_SINGLE_LUN}, 
+		US_SC_8070, US_PR_SCM_ATAPI, init_8200e, 0}, 
 #endif
 
 	{ 0x04e6, 0x0001, 0x0200, 0x0200, 
 		"Matshita",
 		"LS-120",
-		US_SC_8020, US_PR_CB, NULL, 
-		US_FL_SINGLE_LUN},
+		US_SC_8020, US_PR_CB, NULL, 0},
 
 	{ 0x04e6, 0x0002, 0x0100, 0x0100, 
 		"Shuttle",
@@ -394,14 +390,12 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
 	{ 0x04e6, 0x0009, 0x0200, 0x0200, 
 		"Shuttle",
 		"eUSB ATA/ATAPI Adapter",
-		US_SC_8020, US_PR_CB, NULL, 
-		US_FL_SINGLE_LUN},
+		US_SC_8020, US_PR_CB, NULL, 0},
 
 	{ 0x04e6, 0x000a, 0x0200, 0x0200, 
 		"Shuttle",
 		"eUSB CompactFlash Adapter",
-		US_SC_8020, US_PR_CB, NULL, 
-		US_FL_SINGLE_LUN},
+		US_SC_8020, US_PR_CB, NULL, 0},
 
 	{ 0x04e6, 0x000B, 0x0100, 0x0100, 
 		"Shuttle",
@@ -418,8 +412,7 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
 	{ 0x04e6, 0x0101, 0x0200, 0x0200, 
 		"Shuttle",
 		"CD-RW Device",
-		US_SC_8020, US_PR_CB, NULL, 
-		US_FL_SINGLE_LUN},
+		US_SC_8020, US_PR_CB, NULL, 0},
 
 	{ 0x054c, 0x0010, 0x0106, 0x0210, 
 		"Sony",
@@ -448,20 +441,17 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
 	{ 0x059f, 0xa601, 0x0200, 0x0200, 
 		"LaCie",
 		"USB Hard Disk",
-		US_SC_RBC, US_PR_CB, NULL,
-		0 }, 
+		US_SC_RBC, US_PR_CB, NULL, 0 }, 
 
 	{ 0x05ab, 0x0031, 0x0100, 0x0100, 
 		"In-System",
 		"USB/IDE Bridge (ATAPI ONLY!)",
-		US_SC_8070, US_PR_BULK, NULL,
-		0 }, 
+		US_SC_8070, US_PR_BULK, NULL, 0 }, 
 
 	{ 0x0644, 0x0000, 0x0100, 0x0100, 
 		"TEAC",
 		"Floppy Drive",
-		US_SC_UFI, US_PR_CB, NULL,
-		0 }, 
+		US_SC_UFI, US_PR_CB, NULL, 0 }, 
 
 #ifdef CONFIG_USB_STORAGE_SDDR09
 	{ 0x066b, 0x0105, 0x0100, 0x0100, 
@@ -471,17 +461,15 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
 		US_FL_SINGLE_LUN | US_FL_START_STOP },
 #endif
 
-	{ 0x0693, 0x0005, 0x0100, 0x0100,
-		"Hagiwara",
-		"Flashgate",
-		US_SC_SCSI, US_PR_BULK, NULL,
-		0 }, 
-
 	{ 0x0693, 0x0002, 0x0100, 0x0100, 
 		"Hagiwara",
 		"FlashGate SmartMedia",
-		US_SC_SCSI, US_PR_BULK, NULL,
-		0 },
+		US_SC_SCSI, US_PR_BULK, NULL, 0 },
+
+	{ 0x0693, 0x0005, 0x0100, 0x0100,
+		"Hagiwara",
+		"Flashgate",
+		US_SC_SCSI, US_PR_BULK, NULL, 0 }, 
 
 	{ 0x0781, 0x0001, 0x0200, 0x0200, 
 		"Sandisk",
@@ -513,7 +501,7 @@ static struct us_unusual_dev us_unusual_dev_list[] = {
         { 0x07ab, 0xfc01, 0x0921, 0x0921,
                 "Freecom",
                 "USB-IDE",
-                US_SC_QIC, US_PR_FREECOM, freecom_init, US_FL_SINGLE_LUN },
+                US_SC_QIC, US_PR_FREECOM, freecom_init, 0},
 #endif
 
 	{ 0x07af, 0x0005, 0x0100, 0x0100, 
@@ -756,9 +744,6 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 			  dev->descriptor.idProduct, "0");
 	}
 
-	/* lock access to the data structures */
-	down(&us_list_semaphore);
-
 	/*
 	 * Now check if we have seen this GUID before
 	 * We're looking for a device with a matching GUID that isn't
@@ -809,7 +794,6 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		if ((ss = (struct us_data *)kmalloc(sizeof(struct us_data), 
 						    GFP_KERNEL)) == NULL) {
 			printk(KERN_WARNING USB_STORAGE "Out of memory\n");
-			up(&us_list_semaphore);
 			return NULL;
 		}
 		memset(ss, 0, sizeof(struct us_data));
@@ -914,7 +898,7 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 			ss->transport_name = "EUSB/SDDR09";
 			ss->transport = sddr09_transport;
 			ss->transport_reset = usb_stor_CB_reset;
-			ss->max_lun = 1;
+			ss->max_lun = 0;
 			break;
 #endif
 
@@ -938,7 +922,6 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 			
 		default:
 			ss->transport_name = "Unknown";
-			up(&us_list_semaphore);
 			kfree(ss->current_urb);
 			kfree(ss);
 			return NULL;
@@ -959,16 +942,19 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		case US_SC_8020:
 			ss->protocol_name = "8020i";
 			ss->proto_handler = usb_stor_ATAPI_command;
+			ss->max_lun = 0;
 			break;
 
 		case US_SC_QIC:
 			ss->protocol_name = "QIC-157";
 			ss->proto_handler = usb_stor_qic157_command;
+			ss->max_lun = 0;
 			break;
 
 		case US_SC_8070:
 			ss->protocol_name = "8070i";
 			ss->proto_handler = usb_stor_ATAPI_command;
+			ss->max_lun = 0;
 			break;
 
 		case US_SC_SCSI:
@@ -983,7 +969,6 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 
 		default:
 			ss->protocol_name = "Unknown";
-			up(&us_list_semaphore);
 			kfree(ss->current_urb);
 			kfree(ss);
 			return NULL;
@@ -1036,13 +1021,16 @@ static void * storage_probe(struct usb_device *dev, unsigned int ifnum)
 		ss->htmplt.module = THIS_MODULE;
 		scsi_register_module(MODULE_SCSI_HA, &(ss->htmplt));
 		
+		/* lock access to the data structures */
+		down(&us_list_semaphore);
+
 		/* put us in the list */
 		ss->next = us_list;
 		us_list = ss;
-	}
 
-	/* release the data structure lock */
-	up(&us_list_semaphore);
+		/* release the data structure lock */
+		up(&us_list_semaphore);
+	}
 
 	printk(KERN_DEBUG 
 	       "WARNING: USB Mass Storage data integrity not assured\n");
@@ -1108,7 +1096,7 @@ int __init usb_stor_init(void)
 	my_host_number = 0;
 
 	/* register the driver, return -1 if error */
-	if (usb_register(&storage_driver) < 0)
+	if (usb_register(&usb_storage_driver) < 0)
 		return -1;
 
 	/* we're all set */
@@ -1126,44 +1114,46 @@ void __exit usb_stor_exit(void)
 	 * This eliminates races with probes and disconnects 
 	 */
 	US_DEBUGP("-- calling usb_deregister()\n");
-	usb_deregister(&storage_driver) ;
+	usb_deregister(&usb_storage_driver) ;
 	
-	/* lock access to the data structures */
-	down(&us_list_semaphore);
-
 	/* While there are still virtual hosts, unregister them
-	 *
-	 * Note that the us_release() routine will destroy the local data
-	 * structure.  So we have to peel these off the top of the list
-	 * and keep updating the head pointer as we go.
+	 * Note that it's important to do this completely before removing
+	 * the structures because of possible races with the /proc
+	 * interface
+	 */
+	for (next = us_list; next; next = next->next) {
+		US_DEBUGP("-- calling scsi_unregister_module()\n");
+		scsi_unregister_module(MODULE_SCSI_HA, &(next->htmplt));
+	}
+	
+	/* While there are still structures, free them.  Note that we are
+	 * now race-free, since these structures can no longer be accessed
+	 * from either the SCSI command layer or the /proc interface
 	 */
 	while (us_list) {
 		/* keep track of where the next one is */
 		next = us_list->next;
 
-		US_DEBUGP("-- calling scsi_unregister_module()\n");
-		scsi_unregister_module(MODULE_SCSI_HA, &(us_list->htmplt));
-
-                /* Now that scsi_unregister_module is done with the host
-                 * template, we can free the us_data structure (the host
-                 * template is inline in this structure). */
-
 		/* If there's extra data in the us_data structure then
 		 * free that first */
-
 		if (us_list->extra) {
-			if (us_list->extra_destructor)
+			/* call the destructor routine, if it exists */
+			if (us_list->extra_destructor) {
+				US_DEBUGP("-- calling extra_destructor()\n");
 				us_list->extra_destructor(us_list->extra);
+			}
+
+			/* destroy the extra data */
+			US_DEBUGP("-- freeing the data structure\n");
 			kfree(us_list->extra);
 		}
+
+		/* free the structure itself */
                 kfree (us_list);
 
 		/* advance the list pointer */
 		us_list = next;
 	}
-	
-	/* unlock the data structures */
-	up(&us_list_semaphore);
 }
 
 module_init(usb_stor_init);

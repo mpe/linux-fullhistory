@@ -72,6 +72,8 @@ typedef __u64	Elf64_Word;
 
 #define EM_IA_64	50	/* HP/Intel IA-64 */
 
+#define EM_X8664	62	/* AMD x86-64 */
+
 /*
  * This is an interim value that we will use until the committee comes
  * up with a final number.

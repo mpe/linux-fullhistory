@@ -148,7 +148,7 @@ static inline void  net_profile_stamp(struct timeval *pstamp)
 	/* Not "fast" counterpart! On architectures without
 	   cpu clock "fast" routine is absolutely useless in this
 	   situation. do_gettimeofday still says something on slow-slow-slow
-	   boxes, though it eats more cpu time than the sobject of
+	   boxes, though it eats more cpu time than the subject of
 	   investigation :-) :-)
 	 */
 	do_gettimeofday(pstamp);

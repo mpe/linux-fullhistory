@@ -112,11 +112,11 @@ typedef struct {
   byte                  type;
   byte                  channels;
   word                  features;
-  dword			serial;
+  /* dword		serial; */
   IDI_CALL              request;
 } DESCRIPTOR;
 
-extern void    EtdM_DIDD_Read(DESCRIPTOR *, int *);
+extern void    DIVA_DIDD_Read(DESCRIPTOR *, int);
 
         /* descriptor type field coding */
 #define IDI_ADAPTER_S           1

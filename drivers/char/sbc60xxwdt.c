@@ -338,4 +338,4 @@ err_out:
 }
 
 module_init(sbc60xxwdt_init);
-module_exit(sbc60xxwdt_unload)
+module_exit(sbc60xxwdt_unload);

@@ -610,6 +610,7 @@ static void usb_hub_port_connect_change(struct usb_device *hub, int port,
 		delay = HUB_LONG_RESET_TIME;
 	}
 
+	hub->children[port] = NULL;
 	usb_hub_port_disable(hub, port);
 	up(&usb_address0_sem);
 }

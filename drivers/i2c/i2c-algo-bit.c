@@ -62,9 +62,9 @@
 
 /* module parameters:
  */
-static int i2c_debug=0;
-static int bit_test=0;	/* see if the line-setting functions work	*/
-static int bit_scan=0;	/* have a look at what's hanging 'round		*/
+static int i2c_debug;
+static int bit_test;	/* see if the line-setting functions work	*/
+static int bit_scan;	/* have a look at what's hanging 'round		*/
 
 /* --- setting states on the bus with the right timing: ---------------	*/
 

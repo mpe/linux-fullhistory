@@ -189,8 +189,12 @@ out:
 static inline int prev_goodness(struct task_struct * p, int this_cpu, struct mm_struct *this_mm)
 {
 	if (p->policy & SCHED_YIELD) {
-		p->policy &= ~SCHED_YIELD;
-		return 0;
+		/*
+		 * select the current process after every other
+		 * runnable process, but before the idle thread.
+		 * Also, dont trigger a counter recalculation.
+		 */
+		return -1;
 	}
 	return goodness(p, this_cpu, this_mm);
 }
@@ -451,6 +455,7 @@ signed long schedule_timeout(signed long timeout)
 static inline void __schedule_tail(struct task_struct *prev)
 {
 #ifdef CONFIG_SMP
+	int yield;
 	unsigned long flags;
 
 	/*
@@ -462,6 +467,8 @@ static inline void __schedule_tail(struct task_struct *prev)
 	 * cache.
 	 */
 	spin_lock_irqsave(&runqueue_lock, flags);
+	yield = prev->policy & SCHED_YIELD;
+	prev->policy &= ~SCHED_YIELD;
 	prev->has_cpu = 0;
 	if (prev->state == TASK_RUNNING)
 		goto running_again;
@@ -476,9 +483,11 @@ out_unlock:
 	 * current process as well.)
 	 */
 running_again:
-	if (prev != idle_task(smp_processor_id()))
+	if ((prev != idle_task(smp_processor_id())) && !yield)
 		reschedule_idle(prev);
 	goto out_unlock;
+#else
+	prev->policy &= ~SCHED_YIELD;
 #endif /* CONFIG_SMP */
 }
 
@@ -1030,12 +1039,13 @@ out_unlock:
 
 asmlinkage long sys_sched_yield(void)
 {
-	spin_lock_irq(&runqueue_lock);
+	/*
+	 * This process can only be rescheduled by us,
+	 * so this is safe without any locking.
+	 */
 	if (current->policy == SCHED_OTHER)
 		current->policy |= SCHED_YIELD;
 	current->need_resched = 1;
-	move_last_runqueue(current);
-	spin_unlock_irq(&runqueue_lock);
 	return 0;
 }
 

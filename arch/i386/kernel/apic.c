@@ -695,7 +695,7 @@ inline void smp_local_timer_interrupt(struct pt_regs * regs)
  * [ if a single-CPU system runs an SMP kernel then we call the local
  *   interrupt as well. Thus we cannot inline the local irq ... ]
  */
-unsigned int apic_timer_irqs [NR_CPUS] = { 0, };
+unsigned int apic_timer_irqs [NR_CPUS];
 
 void smp_apic_timer_interrupt(struct pt_regs * regs)
 {

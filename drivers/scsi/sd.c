@@ -80,7 +80,7 @@
 
 struct hd_struct *sd;
 
-static Scsi_Disk *rscsi_disks = NULL;
+static Scsi_Disk *rscsi_disks;
 static int *sd_sizes;
 static int *sd_blocksizes;
 static int *sd_hardsizes;	/* Hardware sector size */
@@ -1018,7 +1018,7 @@ static int sd_init_onedisk(int i)
  * their size, and reads partition table entries for them.
  */
 
-static int sd_registered = 0;
+static int sd_registered;
 
 static int sd_init()
 {

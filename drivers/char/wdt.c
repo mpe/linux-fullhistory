@@ -459,10 +459,6 @@ static struct notifier_block wdt_notifier=
 	0
 };
 
-#ifdef MODULE
-
-#define wdt_init init_module
-
 /**
  *	cleanup_module:
  *
@@ -473,7 +469,7 @@ static struct notifier_block wdt_notifier=
  *	module in 60 seconds or reboot.
  */
  
-void cleanup_module(void)
+static void __exit wdt_exit(void)
 {
 	misc_deregister(&wdt_miscdev);
 #ifdef CONFIG_WDT_501	
@@ -484,8 +480,6 @@ void cleanup_module(void)
 	free_irq(irq, NULL);
 }
 
-#endif
-
 /**
  * 	wdt_init:
  *
@@ -494,7 +488,7 @@ void cleanup_module(void)
  *	The open() function will actually kick the board off.
  */
  
-int __init wdt_init(void)
+static int __init wdt_init(void)
 {
 	int ret;
 
@@ -545,4 +539,7 @@ outmisc:
 	misc_deregister(&wdt_miscdev);
 	goto out;
 }
+
+module_init(wdt_init);
+module_exit(wdt_exit);
 

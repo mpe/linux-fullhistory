@@ -198,7 +198,7 @@ static struct archy_disk_type {
 #define MAX_DISK_SIZE 720
 
 static int floppy_sizes[256];
-static int floppy_blocksizes[256] = {0,};
+static int floppy_blocksizes[256];
 
 /* current info on each unit */
 static struct archy_floppy_struct {

@@ -14,6 +14,7 @@
  * Changes:
  *	Alan Cox		Modularisation
  *	Christoph Hellwig	Adapted to module_init/module_exit
+ *	Arnaldo C. de Melo	got rid of attach_uart401
  *
  * FIXME:
  * 	Check for install of mpu etc is wrong, should check result of the mss stuff
@@ -176,12 +177,6 @@ static void __init attach_opl3sa_wss(struct address_info *hw_config)
 }
 
 
-static void __init attach_opl3sa_mpu(struct address_info *hw_config)
-{
-	hw_config->name = "OPL3-SA (MPU401)";
-	attach_uart401(hw_config, THIS_MODULE);
-}
-
 static int __init probe_opl3sa_mpu(struct address_info *hw_config)
 {
 	unsigned char conf;
@@ -195,11 +190,6 @@ static int __init probe_opl3sa_mpu(struct address_info *hw_config)
 	if (mpu_initialized)
 	{
 		DDB(printk("OPL3-SA: MPU mode already initialized\n"));
-		return 0;
-	}
-	if (check_region(hw_config->io_base, 4))
-	{
-		printk(KERN_ERR "OPL3-SA: MPU I/O port conflict (%x)\n", hw_config->io_base);
 		return 0;
 	}
 	if (hw_config->irq > 10)
@@ -236,8 +226,9 @@ static int __init probe_opl3sa_mpu(struct address_info *hw_config)
 	opl3sa_write(0x03, conf);
 
 	mpu_initialized = 1;
+	hw_config->name = "OPL3-SA (MPU401)";
 
-	return probe_uart401(hw_config);
+	return probe_uart401(hw_config, THIS_MODULE);
 }
 
 static void __exit unload_opl3sa_wss(struct address_info *hw_config)
@@ -310,9 +301,6 @@ static int __init init_opl3sa(void)
 	found_mpu=probe_opl3sa_mpu(&cfg_mpu);
 
 	attach_opl3sa_wss(&cfg);
-	if(found_mpu)
-		attach_opl3sa_mpu(&cfg_mpu);
-
 	return 0;
 }
 

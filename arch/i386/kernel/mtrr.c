@@ -319,10 +319,10 @@ typedef u8 mtrr_type;
 #endif
 
 #ifdef USERSPACE_INTERFACE
-static char *ascii_buffer = NULL;
-static unsigned int ascii_buf_bytes = 0;
+static char *ascii_buffer;
+static unsigned int ascii_buf_bytes;
 #endif
-static unsigned int *usage_table = NULL;
+static unsigned int *usage_table;
 static DECLARE_MUTEX(main_lock);
 
 /*  Private functions  */
@@ -459,6 +459,7 @@ static unsigned int get_num_var_ranges (void)
 	/*break;*/
       case X86_VENDOR_CYRIX:
 	/*  Cyrix have 8 ARRs  */
+	return 8;
       case X86_VENDOR_CENTAUR:
         /*  and Centaur has 8 MCR's  */
 	if(boot_cpu_data.x86==5)
@@ -639,7 +640,7 @@ static void centaur_get_mcr (unsigned int reg, unsigned long *base,
 }   /*  End Function centaur_get_mcr  */
 
 static void (*get_mtrr) (unsigned int reg, unsigned long *base,
-			 unsigned long *size, mtrr_type *type) = NULL;
+			 unsigned long *size, mtrr_type *type);
 
 static void intel_set_mtrr_up (unsigned int reg, unsigned long base,
 			       unsigned long size, mtrr_type type, int do_safe)
@@ -782,7 +783,7 @@ static void centaur_set_mcr_up (unsigned int reg, unsigned long base,
 
 static void (*set_mtrr_up) (unsigned int reg, unsigned long base,
 			    unsigned long size, mtrr_type type,
-			    int do_safe) = NULL;
+			    int do_safe);
 
 #ifdef CONFIG_SMP
 

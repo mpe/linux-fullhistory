@@ -38,7 +38,7 @@ static spinlock_t ioapic_lock = SPIN_LOCK_UNLOCKED;
 /*
  * # of IO-APICs and # of IRQ routing registers
  */
-int nr_ioapics = 0;
+int nr_ioapics;
 int nr_ioapic_registers[MAX_IO_APICS];
 
 /* I/O APIC entries */
@@ -48,7 +48,7 @@ struct mpc_config_ioapic mp_ioapics[MAX_IO_APICS];
 struct mpc_config_intsrc mp_irqs[MAX_IRQ_SOURCES];
 
 /* MP IRQ source entries */
-int mp_irq_entries = 0;
+int mp_irq_entries;
 
 #if CONFIG_SMP
 # define TARGET_CPUS cpu_online_map
@@ -172,8 +172,8 @@ static void clear_IO_APIC (void)
 
 #define MAX_PIRQS 8
 int pirq_entries [MAX_PIRQS];
-int pirqs_enabled = 0;
-int skip_ioapic_setup = 0;
+int pirqs_enabled;
+int skip_ioapic_setup;
 
 static int __init ioapic_setup(char *str)
 {

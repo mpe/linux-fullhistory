@@ -286,10 +286,10 @@ static int num_pref_init_funcs __initdata = 0;
 
 
 struct fb_info *registered_fb[FB_MAX];
-int num_registered_fb = 0;
+int num_registered_fb;
 extern int fbcon_softback_size; 
 
-static int first_fb_vc = 0;
+static int first_fb_vc;
 static int last_fb_vc = MAX_NR_CONSOLES-1;
 static int fbcon_is_default = 1;
 

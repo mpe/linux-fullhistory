@@ -468,9 +468,7 @@ void bdput(struct block_device *bdev)
 static struct {
 	const char *name;
 	struct block_device_operations *bdops;
-} blkdevs[MAX_BLKDEV] = {
-	{ NULL, NULL },
-};
+} blkdevs[MAX_BLKDEV];
 
 int get_blkdev_list(char * p)
 {

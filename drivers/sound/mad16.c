@@ -66,6 +66,7 @@
  *	Paul Grayson		Added support for Midi on later Mozart cards.
  *								25-Nov-1999
  *	Christoph Hellwig	Adapted to module_init/module_exit.
+ *	Arnaldo C. de Melo	got rid of attach_uart401       21-Sep-2000
  */
 
 #include <linux/config.h>
@@ -714,28 +715,6 @@ static void __init attach_mad16(struct address_info *hw_config)
 	request_region(hw_config->io_base, 4, "MAD16 WSS config");
 }
 
-static void __init attach_mad16_mpu(struct address_info *hw_config)
-{
-#ifdef CONFIG_MAD16_OLDCARD
-
-	if (mad_read(MC1_PORT) & 0x20)
-		hw_config->io_base = 0x240;
-	else
-		hw_config->io_base = 0x220;
-
-	hw_config->name = "Mad16/Mozart";
-	sb_dsp_init(hw_config, THIS_MODULE);
-	return;
-#endif
-
-	if (!already_initialized)
-		return;
-
-	hw_config->driver_use_1 = SB_MIDI_ONLY;
-	hw_config->name = "Mad16/Mozart";
-	attach_uart401(hw_config, THIS_MODULE);
-}
-
 static int __init probe_mad16_mpu(struct address_info *hw_config)
 {
 	static int mpu_attached = 0;
@@ -791,7 +770,17 @@ static int __init probe_mad16_mpu(struct address_info *hw_config)
 
 		mad_write(MC3_PORT, tmp | 0x04);
 		hw_config->driver_use_1 = SB_MIDI_ONLY;
-		return sb_dsp_detect(hw_config, 0, 0, NULL);
+		if (!sb_dsp_detect(hw_config, 0, 0, NULL))
+			return 0;
+
+		if (mad_read(MC1_PORT) & 0x20)
+			hw_config->io_base = 0x240;
+		else
+			hw_config->io_base = 0x220;
+
+		hw_config->name = "Mad16/Mozart";
+		sb_dsp_init(hw_config, THIS_MODULE);
+		return 1;
 #else
 		/* assuming all later Mozart cards are identified as
 		 * either 82C928 or Mozart. If so, following code attempts
@@ -845,8 +834,7 @@ static int __init probe_mad16_mpu(struct address_info *hw_config)
 		}
 
 		mad_write(MC8_PORT, tmp);	/* write MPU port parameters */
-
-		return probe_uart401(hw_config);
+		goto probe_401;
 #endif
 	}
 	tmp = mad_read(MC6_PORT) & 0x83;
@@ -888,8 +876,12 @@ static int __init probe_mad16_mpu(struct address_info *hw_config)
 		}
 	}
 	mad_write(MC6_PORT, tmp);	/* Write MPU401 config */
-
-	return probe_uart401(hw_config);
+#ifndef CONFIG_MAD16_OLDCARD
+probe_401:
+#endif
+	hw_config->driver_use_1 = SB_MIDI_ONLY;
+	hw_config->name = "Mad16/Mozart";
+	return probe_uart401(hw_config, THIS_MODULE);
 }
 
 static void __exit unload_mad16(struct address_info *hw_config)
@@ -1090,10 +1082,6 @@ static int __init init_mad16(void)
 	attach_mad16(&cfg);
 
 	found_mpu = probe_mad16_mpu(&cfg_mpu);
-
-	if (found_mpu)
-		attach_mad16_mpu(&cfg_mpu);
-
 	return 0;
 }
 

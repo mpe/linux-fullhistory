@@ -301,10 +301,9 @@ static int __init watchdog_init (void)
 	tco_timer_settimer ((unsigned char) i810_margin);
 	tco_timer_reload ();
 
-	/* FIXME: no floating point math */
 	printk (KERN_INFO
 		"i810 TCO timer: V0.02, timer margin: %d sec (0x%04x)\n",
-		(int) (i810_margin * 0.6), TCOBASE);
+		(int) (i810_margin * 6 / 10), TCOBASE);
 	return 0;
 }
 

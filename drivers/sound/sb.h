@@ -178,8 +178,7 @@ extern sb_devc *last_sb;
 /*	From sb_common.c */
 void sb_dsp_disable_midi(int port);
 void sb_dsp_disable_recording(int port);
-void attach_sbmpu (struct address_info *hw_config, struct module *owner);
-int probe_sbmpu (struct address_info *hw_config);
+int probe_sbmpu (struct address_info *hw_config, struct module *owner);
 void unload_sbmpu (struct address_info *hw_config);
 
 void unload_sb16(struct address_info *hw_info);

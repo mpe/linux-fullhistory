@@ -1040,7 +1040,7 @@ static int proc_ioctl (struct dev_state *ps, void *arg)
 			kfree (buf);
 			return -EFAULT;
 		} else
-			memset (arg, 0, size);
+			memset (buf, 0, size);
 	}
 
 	/* ioctl to device */

@@ -8,7 +8,7 @@
 # Note 2! The CFLAGS definitions are now in the main makefile.
 
 O_TARGET := minix.o
-O_OBJS   := bitmap.o truncate.o namei.o inode.o file.o dir.o fsync.o
+O_OBJS   := bitmap.o itree_v1.o itree_v2.o namei.o inode.o file.o dir.o
 M_OBJS   := $(O_TARGET)
 
 include $(TOPDIR)/Rules.make

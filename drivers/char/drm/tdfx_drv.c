@@ -1,4 +1,4 @@
-/* tdfx.c -- tdfx driver -*- linux-c -*-
+/* tdfx_drv.c -- tdfx driver -*- linux-c -*-
  * Created: Thu Oct  7 10:38:32 1999 by faith@precisioninsight.com
  *
  * Copyright 1999 Precision Insight, Inc., Cedar Park, Texas.
@@ -36,7 +36,7 @@
 
 #define TDFX_NAME	 "tdfx"
 #define TDFX_DESC	 "3dfx Banshee/Voodoo3+"
-#define TDFX_DATE	 "20000910"
+#define TDFX_DATE	 "20000928"
 #define TDFX_MAJOR	 1
 #define TDFX_MINOR	 0
 #define TDFX_PATCHLEVEL  0
@@ -561,6 +561,7 @@ int tdfx_lock(struct inode *inode, struct file *filp, unsigned int cmd,
 #endif
                 add_wait_queue(&dev->lock.lock_queue, &entry);
                 for (;;) {
+                        current->state = TASK_INTERRUPTIBLE;
                         if (!dev->lock.hw_lock) {
                                 /* Device has been unregistered */
                                 ret = -EINTR;
@@ -576,7 +577,6 @@ int tdfx_lock(struct inode *inode, struct file *filp, unsigned int cmd,
 
                                 /* Contention */
                         atomic_inc(&dev->total_sleeps);
-                        current->state = TASK_INTERRUPTIBLE;
 #if 1
 			current->policy |= SCHED_YIELD;
 #endif

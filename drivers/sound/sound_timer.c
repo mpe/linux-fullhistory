@@ -16,7 +16,7 @@
 
 #include "sound_config.h"
 
-static volatile int initialized = 0, opened = 0, tmr_running = 0;
+static volatile int initialized, opened, tmr_running;
 static volatile time_t tmr_offs, tmr_ctr;
 static volatile unsigned long ticks_offs;
 static volatile int curr_tempo, curr_timebase;
@@ -25,7 +25,7 @@ static volatile unsigned long next_event_time;
 static unsigned long prev_event_time;
 static volatile unsigned long usecs_per_tmr;	/* Length of the current interval */
 
-static struct sound_lowlev_timer *tmr = NULL;
+static struct sound_lowlev_timer *tmr;
 
 static unsigned long tmr2ticks(int tmr_value)
 {

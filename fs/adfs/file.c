@@ -22,7 +22,6 @@
 #include <linux/version.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
-#include <linux/ext2_fs.h>
 #include <linux/fcntl.h>
 #include <linux/sched.h>
 #include <linux/stat.h>

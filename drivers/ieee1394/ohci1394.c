@@ -56,6 +56,8 @@
  *  . Apple PowerBook detection
  * Daniel Kobras <daniel.kobras@student.uni-tuebingen.de>
  *  . Reset the board properly before leaving + misc cleanups
+ * Leon van Stuivenberg <leonvs@iae.nl>
+ *  . Bug fixes
  */
 
 #include <linux/config.h>
@@ -253,7 +255,7 @@ inline static int handle_selfid(struct ti_ohci *ohci, struct hpsb_host *host,
 		return -1;
 	}
 	
-	size = ((self_id_count&0x0000EFFC)>>2) - 1;
+	size = ((self_id_count&0x00001FFC)>>2) - 1;
 	q++;
 
 	while (size > 0) {
@@ -652,6 +654,15 @@ static void insert_packet(struct ti_ohci *ohci,
 		 * FIXME: check that the packet data buffer
 		 * do not cross a page boundary 
 		 */
+		if (cross_bound((unsigned long)packet->data, 
+				packet->data_size)>0) {
+			/* FIXME: do something about it */
+			PRINT(KERN_ERR, ohci->id, __FUNCTION__
+			      ": packet data addr: %p size %d bytes "
+			      "cross page boundary", 
+			      packet->data, packet->data_size);
+		}
+
 		d->prg_cpu[idx]->end.address =
 			pci_map_single(ohci->dev, packet->data,
 				       packet->data_size, PCI_DMA_TODEVICE);
@@ -734,7 +745,7 @@ static int ohci_transmit(struct hpsb_host *host, struct hpsb_packet *packet)
 	unsigned char tcode;
 	unsigned long flags;
 
-	if (packet->data_size >= ohci->max_packet_size) {
+	if (packet->data_size > ohci->max_packet_size) {
 		PRINT(KERN_ERR, ohci->id, 
 		      "transmit packet size = %d too big",
 		      packet->data_size);
@@ -803,11 +814,11 @@ static int ohci_devctl(struct hpsb_host *host, enum devctl_cmd cmd, int arg)
 			u32 nodeId = reg_read(ohci, OHCI1394_NodeID);
 			if ((nodeId & (1<<30)) && (nodeId & 0x3f)) {
 				/*
-				 * enable cycleTimer cycleMaster cycleSource
+				 * enable cycleTimer, cycleMaster
 				 */
 				DBGMSG(ohci->id, "Cycle master enabled");
 				reg_write(ohci, OHCI1394_LinkControlSet, 
-					  0x00700000);
+					  0x00300000);
 			}
 		} else {
 			/* disable cycleTimer, cycleMaster, cycleSource */
@@ -830,61 +841,67 @@ static int ohci_devctl(struct hpsb_host *host, enum devctl_cmd cmd, int arg)
                 break;
 
 	case ISO_LISTEN_CHANNEL:
+        {
+                int *isochannels, offset= OHCI1394_IRMultiChanMaskLoSet;
+                unsigned int channel= (unsigned int)arg;
+                unsigned int channelbit= channel;
+                u32 setMask= 0x00000001;
+
+                /* save people from themselves */
+                if (channel > 63)
+                        break;
+
+                if (channel > 31) {
+                        isochannels= &(((int*)&ohci->IR_channel_usage)[0]);
+                        channelbit-= 32;
+                        offset= OHCI1394_IRMultiChanMaskHiSet;
+                }
+                else
+                        isochannels= &(((int*)&ohci->IR_channel_usage)[1]);
+
+                while(channelbit--) setMask= setMask << 1;
 
                 spin_lock_irqsave(&ohci->IR_channel_lock, flags);
 
-                if (!test_and_set_bit(arg, &ohci->IR_channel_usage)) {
-                        DBGMSG(ohci->id,
-			       "listening enabled on channel %d", arg);
-
-                        if (arg > 31) {
-                                u32 setMask= 0x00000001;
-                                arg-= 32;
-                                while(arg--) setMask= setMask << 1;
-                                reg_write(ohci, OHCI1394_IRMultiChanMaskHiSet,
-                                          setMask);
-                        } else {
-                                u32 setMask= 0x00000001;
-                                while(arg--) setMask= setMask << 1;
-                                reg_write(ohci, OHCI1394_IRMultiChanMaskLoSet,
-                                          setMask);
-                        }
-
-                }
+                if (!test_and_set_bit(channelbit, isochannels))
+                        reg_write(ohci, offset, setMask);
 
                 spin_unlock_irqrestore(&ohci->IR_channel_lock, flags);
+                DBGMSG(ohci->id, "listening enabled on channel %u", channel);
                 break;
-
+        }
 	case ISO_UNLISTEN_CHANNEL:
+        {
+                int *isochannels, offset= OHCI1394_IRMultiChanMaskLoClear;
+                unsigned int channel= (unsigned int)arg;
+                unsigned int channelbit= channel;
+                u32 clearMask= 0x00000001;
+
+                /* save people from themselves */
+                if (channel > 63)
+                        break;
+
+                if (channel > 31) {
+                        isochannels= &(((int*)&ohci->IR_channel_usage)[0]);
+                        channelbit-= 32;
+                        offset= OHCI1394_IRMultiChanMaskHiClear;
+                }
+                else
+                        isochannels= &(((int*)&ohci->IR_channel_usage)[1]);
+
+                while(channelbit--) clearMask= clearMask << 1;
 
                 spin_lock_irqsave(&ohci->IR_channel_lock, flags);
 
-                if (test_and_clear_bit(arg, &ohci->IR_channel_usage)) {
-                        DBGMSG(ohci->id,
-			       "listening disabled on iso channel %d", arg);
-
-                        if (arg > 31) {
-                                u32 clearMask= 0x00000001;
-                                arg-= 32;
-                                while(arg--) clearMask= clearMask << 1;
-                                reg_write(ohci,
-                                          OHCI1394_IRMultiChanMaskHiClear,
-                                          clearMask);
-                        } else {
-                                u32 clearMask= 0x00000001;
-                                while(arg--) clearMask= clearMask << 1;
-                                reg_write(ohci,
-                                          OHCI1394_IRMultiChanMaskLoClear,
-                                          clearMask);
-                        }
-
-                }
+                if (!test_and_clear_bit(channelbit, isochannels))
+                        reg_write(ohci, offset, clearMask);
 
                 spin_unlock_irqrestore(&ohci->IR_channel_lock, flags);
+                DBGMSG(ohci->id, "listening disabled on channel %u", channel);
                 break;
-
+        }
 	default:
-		PRINT_G(KERN_ERR, "ohci_devctl cmd %d not implemented yet\n",
+		PRINT_G(KERN_ERR, "ohci_devctl cmd %d not implemented yet",
 			cmd);
 		break;
 	}
@@ -904,6 +921,7 @@ static void dma_trm_reset(struct dma_trm_ctx *d)
 {
 	struct ti_ohci *ohci;
 	unsigned long flags;
+        struct hpsb_packet *nextpacket;
 
 	if (d==NULL) {
 		PRINT_G(KERN_ERR, "dma_trm_reset called with NULL arg");
@@ -919,8 +937,9 @@ static void dma_trm_reset(struct dma_trm_ctx *d)
 		PRINT(KERN_INFO, ohci->id, 
 		      "AT dma reset ctx=%d, aborting transmission", 
 		      d->ctx);
+                nextpacket = d->fifo_first->xnext;
 		hpsb_packet_sent(ohci->host, d->fifo_first, ACKX_ABORTED);
-		d->fifo_first = d->fifo_first->xnext;
+		d->fifo_first = nextpacket;
 	}
 	d->fifo_first = d->fifo_last = NULL;
 
@@ -929,9 +948,10 @@ static void dma_trm_reset(struct dma_trm_ctx *d)
 		PRINT(KERN_INFO, ohci->id, 
 		      "AT dma reset ctx=%d, aborting transmission", 
 		      d->ctx);
+                nextpacket = d->pending_first->xnext;
 		hpsb_packet_sent(ohci->host, d->pending_first, 
 				 ACKX_ABORTED);
-		d->pending_first = d->pending_first->xnext;
+		d->pending_first = nextpacket;
 	}
 	d->pending_first = d->pending_last = NULL;
 	
@@ -1072,6 +1092,20 @@ static void ohci_irq_handler(int irq, void *dev_id,
 		}
 		if (event & OHCI1394_selfIDComplete) {
 			if (host->in_bus_reset) {
+				/* 
+				 * Begin Fix (JSG): Check to make sure our 
+				 * node id is valid 
+				 */
+				node_id = reg_read(ohci, OHCI1394_NodeID); 
+				if (!(node_id & 0x80000000)) {
+					mdelay(1); /* phy is upset - 
+						    * this happens once in 
+						    * a while on hot-plugs...
+						    * give it a ms to recover 
+						    */
+				}
+				/* End Fix (JSG) */
+
 				node_id = reg_read(ohci, OHCI1394_NodeID);
 				if (node_id & 0x80000000) { /* NodeID valid */
 					phyid =  node_id & 0x0000003f;
@@ -1346,9 +1380,10 @@ static void dma_trm_bh(void *data)
 {
 	struct dma_trm_ctx *d = (struct dma_trm_ctx*)data;
 	struct ti_ohci *ohci = (struct ti_ohci*)(d->ohci);
-	struct hpsb_packet *packet;
+	struct hpsb_packet *packet, *nextpacket;
 	unsigned long flags;
 	u32 ack;
+        size_t datasize;
 
 	spin_lock_irqsave(&d->lock, flags);
 
@@ -1363,7 +1398,8 @@ static void dma_trm_bh(void *data)
 
 	while (d->fifo_first) {
 		packet = d->fifo_first;
-		if (packet->data_size)
+                datasize = d->fifo_first->data_size;
+		if (datasize)
 			ack = d->prg_cpu[d->sent_ind]->end.status>>16;
 		else 
 			ack = d->prg_cpu[d->sent_ind]->begin.status>>16;
@@ -1372,20 +1408,40 @@ static void dma_trm_bh(void *data)
 			/* this packet hasn't been sent yet*/
 			break;
 
-		DBGMSG(ohci->id, 
-		       "Packet sent to node %d ack=0x%X spd=%d ctx=%d",
-		       (packet->header[0]>>16)&0x3f, ack&0x1f, (ack>>5)&0x3, 
-		       d->ctx);
+#ifdef OHCI1394_DEBUG
+		if (datasize)
+			DBGMSG(ohci->id,
+			       "Packet sent to node %d tcode=0x%X tLabel="
+			       "0x%02X ack=0x%X spd=%d dataLength=%d ctx=%d", 
+			       (d->prg_cpu[d->sent_ind]->data[1]>>16)&0x3f,
+			       (d->prg_cpu[d->sent_ind]->data[0]>>4)&0xf,
+			       (d->prg_cpu[d->sent_ind]->data[0]>>10)&0x3f,
+			       ack&0x1f, (ack>>5)&0x3, 
+			       d->prg_cpu[d->sent_ind]->data[3]>>16,
+			       d->ctx);
+		else 
+			DBGMSG(ohci->id,
+			       "Packet sent to node %d tcode=0x%X tLabel="
+			       "0x%02X ack=0x%X spd=%d data=0x%08X ctx=%d", 
+			       (d->prg_cpu[d->sent_ind]->data[1]>>16)&0x3f,
+			       (d->prg_cpu[d->sent_ind]->data[0]>>4)&0xf,
+			       (d->prg_cpu[d->sent_ind]->data[0]>>10)&0x3f,
+			       ack&0x1f, (ack>>5)&0x3, 
+			       d->prg_cpu[d->sent_ind]->data[3],
+			       d->ctx);
+#endif		
+
+                nextpacket = packet->xnext;
 		hpsb_packet_sent(ohci->host, packet, ack&0xf);
 
-		if (packet->data_size)
+		if (datasize)
 			pci_unmap_single(ohci->dev, 
 					 d->prg_cpu[d->sent_ind]->end.address,
-					 packet->data_size, PCI_DMA_TODEVICE);
+					 datasize, PCI_DMA_TODEVICE);
 
 		d->sent_ind = (d->sent_ind+1)%d->num_desc;
 		d->free_prgs++;
-		d->fifo_first = d->fifo_first->xnext;
+		d->fifo_first = nextpacket;
 	}
 	if (d->fifo_first==NULL) d->fifo_last=NULL;
 
@@ -1687,22 +1743,36 @@ static int add_card(struct pci_dev *dev)
 		FAIL("failed to allocate buffer config rom");
 	}
 
-	DBGMSG(ohci->id, "The 1st byte at offset 0x404 is: 0x%02x",
-	       *((char *)ohci->csr_config_rom_cpu+4));
-
 	/* 
 	 * self-id dma buffer allocation
 	 * FIXME: some early chips may need 8KB alignment for the 
-	 * selfid buffer
+	 * selfid buffer... if you have problems a temporary fic
+	 * is to allocate 8192 bytes instead of 2048
 	 */
 	ohci->selfid_buf_cpu = 
 		pci_alloc_consistent(ohci->dev, 2048, &ohci->selfid_buf_bus);
 	if (ohci->selfid_buf_cpu == NULL) {
 		FAIL("failed to allocate DMA buffer for self-id packets");
 	}
-	if ((unsigned long)ohci->selfid_buf_cpu & 0xfff)
+	if ((unsigned long)ohci->selfid_buf_cpu & 0x1fff)
 		PRINT(KERN_INFO, ohci->id, "Selfid buffer %p not aligned on "
-		      "8Kb boundary", ohci->selfid_buf_cpu);  
+		      "8Kb boundary... may cause pb on some CXD3222 chip", 
+		      ohci->selfid_buf_cpu);  
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,13)
+	ohci->registers = ioremap_nocache(dev->base_address[0],
+					  OHCI1394_REGISTER_SIZE);
+#else
+	ohci->registers = ioremap_nocache(dev->resource[0].start,
+					  OHCI1394_REGISTER_SIZE);
+#endif
+
+	if (ohci->registers == NULL) {
+		FAIL("failed to remap registers - card not accessible");
+	}
+
+	PRINT(KERN_INFO, ohci->id, "remapped memory spaces reg 0x%p",
+	      ohci->registers);
 
 	ohci->ar_req_context = 
 		alloc_dma_rcv_ctx(ohci, 0, AR_REQ_NUM_DESC,
@@ -1711,7 +1781,9 @@ static int add_card(struct pci_dev *dev)
 				  OHCI1394_AsReqRcvContextControlClear,
 				  OHCI1394_AsReqRcvCommandPtr);
 
-	if (ohci->ar_req_context == NULL) return 1;
+	if (ohci->ar_req_context == NULL) {
+		FAIL("failed to allocate AR Req context");
+	}
 
 	ohci->ar_resp_context = 
 		alloc_dma_rcv_ctx(ohci, 1, AR_RESP_NUM_DESC,
@@ -1758,21 +1830,6 @@ static int add_card(struct pci_dev *dev)
         ohci->IR_channel_usage= 0x0000000000000000;
         spin_lock_init(&ohci->IR_channel_lock);
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,13)
-	ohci->registers = ioremap_nocache(dev->base_address[0],
-					  OHCI1394_REGISTER_SIZE);
-#else
-	ohci->registers = ioremap_nocache(dev->resource[0].start,
-					  OHCI1394_REGISTER_SIZE);
-#endif
-
-	if (ohci->registers == NULL) {
-		FAIL("failed to remap registers - card not accessible");
-	}
-
-	PRINT(KERN_INFO, ohci->id, "remapped memory spaces reg 0x%p",
-	      ohci->registers);
-
 	if (!request_irq(dev->irq, ohci_irq_handler, SA_SHIRQ,
 			 OHCI1394_DRIVER_NAME, ohci)) {
 		PRINT(KERN_INFO, ohci->id, "allocated interrupt %d", dev->irq);
@@ -1781,6 +1838,9 @@ static int add_card(struct pci_dev *dev)
 	}
 
 	ohci_init_config_rom(ohci);
+
+	DBGMSG(ohci->id, "The 1st byte at offset 0x404 is: 0x%02x",
+	       *((char *)ohci->csr_config_rom_cpu+4));
 
 	return 0;
 #undef FAIL
@@ -2116,7 +2176,7 @@ static int init_driver()
 	create_proc_read_entry ("ohci1394", 0, NULL, ohci1394_read_proc, NULL);
 #else
 	if (proc_register(&proc_root, &ohci_proc_entry)) {
-		PRINT_G(KERN_ERR, "unable to register proc file\n");
+		PRINT_G(KERN_ERR, "unable to register proc file");
 		return -EIO;
 	}
 #endif
@@ -2290,7 +2350,7 @@ void cleanup_module(void)
 #endif
 #endif
 
-	PRINT_G(KERN_INFO, "removed " OHCI1394_DRIVER_NAME " module\n");
+	PRINT_G(KERN_INFO, "removed " OHCI1394_DRIVER_NAME " module");
 }
 
 int init_module(void)
@@ -2298,7 +2358,7 @@ int init_module(void)
 	memset(cards, 0, MAX_OHCI1394_CARDS * sizeof (struct ti_ohci));
 	
 	if (hpsb_register_lowlevel(get_ohci_template())) {
-		PRINT_G(KERN_ERR, "registering failed\n");
+		PRINT_G(KERN_ERR, "registering failed");
 		return -ENXIO;
 	} 
 	return 0;

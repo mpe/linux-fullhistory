@@ -143,7 +143,7 @@ static int fbcon_set_origin(struct vc_data *);
  * if dispsw->cursor is NULL, use Atari alike software cursor
  */
 
-static int cursor_drawn = 0;
+static int cursor_drawn;
 
 #define CURSOR_DRAW_DELAY		(1)
 
@@ -154,8 +154,8 @@ static int cursor_drawn = 0;
 #define MAC_CURSOR_BLINK_RATE		(32)
 #define DEFAULT_CURSOR_BLINK_RATE	(20)
 
-static int vbl_cursor_cnt = 0;
-static int cursor_on = 0;
+static int vbl_cursor_cnt;
+static int cursor_on;
 static int cursor_blink_rate;
 
 static inline void cursor_undrawn(void)
@@ -218,7 +218,7 @@ static int fbcon_show_logo(void);
 /*
  * On the Macintoy, there may or may not be a working VBL int. We need to probe
  */
-static int vbl_detected = 0;
+static int vbl_detected;
 
 static void fbcon_vbl_detect(int irq, void *dummy, struct pt_regs *fp)
 {

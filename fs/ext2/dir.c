@@ -19,6 +19,7 @@
  */
 
 #include <linux/fs.h>
+#include <linux/ext2_fs.h>
 
 static unsigned char ext2_filetype_table[] = {
 	DT_UNKNOWN, DT_REG, DT_DIR, DT_CHR, DT_BLK, DT_FIFO, DT_SOCK, DT_LNK

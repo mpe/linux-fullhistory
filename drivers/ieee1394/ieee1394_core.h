@@ -73,7 +73,6 @@ struct hpsb_packet {
 };
 
 
-void reset_host_bus(struct hpsb_host *host);
 void abort_timedouts(struct hpsb_host *host);
 void abort_requests(struct hpsb_host *host);
 
@@ -106,6 +105,9 @@ inline static void inc_hpsb_generation(void)
  */
 int hpsb_send_packet(struct hpsb_packet *packet);
 
+/* Initiate bus reset on the given host.  Returns 1 if bus reset already in
+ * progress, 0 otherwise. */
+int hpsb_reset_bus(struct hpsb_host *host);
 
 /*
  * The following functions are exported for host driver module usage.  All of
@@ -114,8 +116,9 @@ int hpsb_send_packet(struct hpsb_packet *packet);
  * them directly.
  */
 
-/* Notify a bus reset to the core. */
-void hpsb_bus_reset(struct hpsb_host *host);
+/* Notify a bus reset to the core.  Returns 1 if bus reset already in progress,
+ * 0 otherwise. */
+int hpsb_bus_reset(struct hpsb_host *host);
 
 /*
  * Hand over received selfid packet to the core.  Complement check (second

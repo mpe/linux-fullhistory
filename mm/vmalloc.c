@@ -14,7 +14,7 @@
 #include <asm/pgalloc.h>
 
 rwlock_t vmlist_lock = RW_LOCK_UNLOCKED;
-struct vm_struct * vmlist = NULL;
+struct vm_struct * vmlist;
 
 static inline void free_area_pte(pmd_t * pmd, unsigned long address, unsigned long size)
 {

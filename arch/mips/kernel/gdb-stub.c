@@ -115,7 +115,7 @@ void handle_exception(struct gdb_regs *regs);
 
 static char input_buffer[BUFMAX];
 static char output_buffer[BUFMAX];
-static int initialized = 0;	/* !0 means we've been initialized */
+static int initialized;	/* !0 means we've been initialized */
 static const char hexchars[]="0123456789abcdef";
 
 

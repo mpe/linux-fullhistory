@@ -16,7 +16,7 @@ if [ "$CONFIG_SERIAL" = "y" ]; then
       tristate '   Dual serial port support' CONFIG_DUALSP_SERIAL
    fi
 fi
-bool 'Extended dumb serial driver options' CONFIG_SERIAL_EXTENDED
+dep_bool 'Extended dumb serial driver options' CONFIG_SERIAL_EXTENDED $CONFIG_SERIAL
 if [ "$CONFIG_SERIAL_EXTENDED" = "y" ]; then
    bool '  Support more than 4 serial ports' CONFIG_SERIAL_MANY_PORTS
    bool '  Support for sharing serial interrupts' CONFIG_SERIAL_SHARE_IRQ
@@ -122,6 +122,7 @@ comment 'Watchdog Cards'
 bool 'Watchdog Timer Support'	CONFIG_WATCHDOG
 if [ "$CONFIG_WATCHDOG" != "n" ]; then
    bool '  Disable watchdog shutdown on close' CONFIG_WATCHDOG_NOWAYOUT
+   tristate '  Software Watchdog' CONFIG_SOFT_WATCHDOG
    tristate '  WDT Watchdog timer' CONFIG_WDT
    tristate '  WDT PCI Watchdog timer' CONFIG_WDTPCI
    if [ "$CONFIG_WDT" != "n" ]; then
@@ -130,7 +131,6 @@ if [ "$CONFIG_WATCHDOG" != "n" ]; then
          bool '      Fan Tachometer' CONFIG_WDT_501_FAN
       fi
    fi
-   tristate '  Software Watchdog' CONFIG_SOFT_WATCHDOG
    tristate '  Berkshire Products PC Watchdog' CONFIG_PCWATCHDOG
    tristate '  Acquire SBC Watchdog Timer' CONFIG_ACQUIRE_WDT
    tristate '  SBC-60XX Watchdog Timer' CONFIG_60XX_WDT

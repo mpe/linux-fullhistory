@@ -564,11 +564,7 @@ static struct miscdevice temp_miscdev = {
 	&pcwd_fops
 };
  
-#ifdef	MODULE
-int init_module(void)
-#else
-int __init pcwatchdog_init(void)
-#endif
+static int __init pcwatchdog_init(void)
 {
 	int i, found = 0;
 	spin_lock_init(&io_lock);
@@ -644,8 +640,7 @@ int __init pcwatchdog_init(void)
 	return 0;
 }
 
-#ifdef	MODULE
-void cleanup_module(void)
+static void __exit pcwatchdog_exit(void)
 {
 	/*  Disable the board  */
 	if (revision == PCWD_REVISION_C) {
@@ -658,4 +653,6 @@ void cleanup_module(void)
 
 	release_region(current_readport, (revision == PCWD_REVISION_A) ? 2 : 4);
 }
-#endif
+
+module_init(pcwatchdog_init);
+module_exit(pcwatchdog_exit);

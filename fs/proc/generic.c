@@ -190,7 +190,7 @@ static int xlate_proc_name(const char *name,
 	return 0;
 }
 
-static unsigned char proc_alloc_map[PROC_NDYNAMIC / 8] = {0};
+static unsigned char proc_alloc_map[PROC_NDYNAMIC / 8];
 
 static int make_inode_number(void)
 {

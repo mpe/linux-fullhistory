@@ -13,6 +13,7 @@
 
 #include <linux/config.h>
 #include <linux/fs.h>
+#include <linux/ext2_fs.h>
 #include <linux/locks.h>
 #include <linux/quotaops.h>
 

@@ -1285,12 +1285,15 @@ int dquot_transfer(struct dentry *dentry, struct iattr *iattr)
 		blocks = isize_to_blocks(inode->i_size, BLOCK_SIZE_BITS);
 	else
 		blocks = (inode->i_blocks >> 1);
-	for (cnt = 0; cnt < MAXQUOTAS; cnt++)
+	for (cnt = 0; cnt < MAXQUOTAS; cnt++) {
+		if (!transfer_to[cnt])
+			continue;
 		if (check_idq(transfer_to[cnt], 1) == NO_QUOTA ||
 		    check_bdq(transfer_to[cnt], blocks, 0) == NO_QUOTA) {
 			cnt = MAXQUOTAS;
 			goto put_all;
 		}
+	}
 
 	if ((error = notify_change(dentry, iattr)))
 		goto put_all; 

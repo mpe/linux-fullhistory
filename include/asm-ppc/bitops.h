@@ -9,17 +9,9 @@
 #include <linux/config.h>
 #include <asm/byteorder.h>
 
-extern void set_bit(int nr, volatile void *addr);
-extern void clear_bit(int nr, volatile void *addr);
-extern void change_bit(int nr, volatile void *addr);
-extern int test_and_set_bit(int nr, volatile void *addr);
-extern int test_and_clear_bit(int nr, volatile void *addr);
-extern int test_and_change_bit(int nr, volatile void *addr);
-
 /*
- * Arguably these bit operations don't imply any memory barrier or
- * SMP ordering, but in fact a lot of drivers expect them to imply
- * both, since they do on x86 cpus.
+ * The test_and_*_bit operations are taken to imply a memory barrier
+ * on SMP systems.
  */
 #ifdef CONFIG_SMP
 #define SMP_WMB		"eieio\n"
@@ -36,58 +28,75 @@ extern int test_and_change_bit(int nr, volatile void *addr);
  * These used to be if'd out here because using : "cc" as a constraint
  * resulted in errors from egcs.  Things may be OK with gcc-2.95.
  */
-extern __inline__ void set_bit(int nr, volatile void * addr)
+static __inline__ void set_bit(int nr, volatile void * addr)
 {
 	unsigned long old;
 	unsigned long mask = 1 << (nr & 0x1f);
 	unsigned long *p = ((unsigned long *)addr) + (nr >> 5);
 	
-	__asm__ __volatile__(SMP_WMB "\
+	__asm__ __volatile__("\
 1:	lwarx	%0,0,%3
 	or	%0,%0,%2
 	stwcx.	%0,0,%3
-	bne	1b"
-	SMP_MB
+	bne-	1b"
 	: "=&r" (old), "=m" (*p)
 	: "r" (mask), "r" (p), "m" (*p)
 	: "cc" );
 }
 
-extern __inline__ void clear_bit(int nr, volatile void *addr)
+/*
+ * non-atomic version
+ */
+static __inline__ void __set_bit(int nr, volatile void *addr)
+{
+	unsigned long mask = 1 << (nr & 0x1f);
+	unsigned long *p = ((unsigned long *)addr) + (nr >> 5);
+
+	*p |= mask;
+}
+
+/*
+ * clear_bit doesn't imply a memory barrier
+ */
+#define smp_mb__before_clear_bit()	smp_mb()
+#define smp_mb__after_clear_bit()	smp_mb()
+
+static __inline__ void clear_bit(int nr, volatile void *addr)
 {
 	unsigned long old;
 	unsigned long mask = 1 << (nr & 0x1f);
 	unsigned long *p = ((unsigned long *)addr) + (nr >> 5);
 
-	__asm__ __volatile__(SMP_WMB "\
+	__asm__ __volatile__("\
 1:	lwarx	%0,0,%3
 	andc	%0,%0,%2
 	stwcx.	%0,0,%3
-	bne	1b"
-	SMP_MB
+	bne-	1b"
 	: "=&r" (old), "=m" (*p)
 	: "r" (mask), "r" (p), "m" (*p)
 	: "cc");
 }
 
-extern __inline__ void change_bit(int nr, volatile void *addr)
+static __inline__ void change_bit(int nr, volatile void *addr)
 {
 	unsigned long old;
 	unsigned long mask = 1 << (nr & 0x1f);
 	unsigned long *p = ((unsigned long *)addr) + (nr >> 5);
 
-	__asm__ __volatile__(SMP_WMB "\
+	__asm__ __volatile__("\
 1:	lwarx	%0,0,%3
 	xor	%0,%0,%2
 	stwcx.	%0,0,%3
-	bne	1b"
-	SMP_MB
+	bne-	1b"
 	: "=&r" (old), "=m" (*p)
 	: "r" (mask), "r" (p), "m" (*p)
 	: "cc");
 }
 
-extern __inline__ int test_and_set_bit(int nr, volatile void *addr)
+/*
+ * test_and_*_bit do imply a memory barrier (?)
+ */
+static __inline__ int test_and_set_bit(int nr, volatile void *addr)
 {
 	unsigned int old, t;
 	unsigned int mask = 1 << (nr & 0x1f);
@@ -101,12 +110,25 @@ extern __inline__ int test_and_set_bit(int nr, volatile void *addr)
 	SMP_MB
 	: "=&r" (old), "=&r" (t), "=m" (*p)
 	: "r" (mask), "r" (p), "m" (*p)
-	: "cc");
+	: "cc", "memory");
 
 	return (old & mask) != 0;
 }
 
-extern __inline__ int test_and_clear_bit(int nr, volatile void *addr)
+/*
+ * non-atomic version
+ */
+static __inline__ int __test_and_set_bit(int nr, volatile void *addr)
+{
+	unsigned long mask = 1 << (nr & 0x1f);
+	unsigned long *p = ((unsigned long *)addr) + (nr >> 5);
+	unsigned long old = *p;
+
+	*p = old | mask;
+	return (old & mask) != 0;
+}
+
+static __inline__ int test_and_clear_bit(int nr, volatile void *addr)
 {
 	unsigned int old, t;
 	unsigned int mask = 1 << (nr & 0x1f);
@@ -120,12 +142,25 @@ extern __inline__ int test_and_clear_bit(int nr, volatile void *addr)
 	SMP_MB
 	: "=&r" (old), "=&r" (t), "=m" (*p)
 	: "r" (mask), "r" (p), "m" (*p)
-	: "cc");
+	: "cc", "memory");
 
 	return (old & mask) != 0;
 }
 
-extern __inline__ int test_and_change_bit(int nr, volatile void *addr)
+/*
+ * non-atomic version
+ */
+static __inline__ int __test_and_clear_bit(int nr, volatile void *addr)
+{
+	unsigned long mask = 1 << (nr & 0x1f);
+	unsigned long *p = ((unsigned long *)addr) + (nr >> 5);
+	unsigned long old = *p;
+
+	*p = old & ~mask;
+	return (old & mask) != 0;
+}
+
+static __inline__ int test_and_change_bit(int nr, volatile void *addr)
 {
 	unsigned int old, t;
 	unsigned int mask = 1 << (nr & 0x1f);
@@ -139,13 +174,22 @@ extern __inline__ int test_and_change_bit(int nr, volatile void *addr)
 	SMP_MB
 	: "=&r" (old), "=&r" (t), "=m" (*p)
 	: "r" (mask), "r" (p), "m" (*p)
-	: "cc");
+	: "cc", "memory");
 
 	return (old & mask) != 0;
 }
+#else /* __INLINE_BITOPS */
+
+extern void set_bit(int nr, volatile void *addr);
+extern void clear_bit(int nr, volatile void *addr);
+extern void change_bit(int nr, volatile void *addr);
+extern int test_and_set_bit(int nr, volatile void *addr);
+extern int test_and_clear_bit(int nr, volatile void *addr);
+extern int test_and_change_bit(int nr, volatile void *addr);
+
 #endif /* __INLINE_BITOPS */
 
-extern __inline__ int test_bit(int nr, __const__ volatile void *addr)
+static __inline__ int test_bit(int nr, __const__ volatile void *addr)
 {
 	__const__ unsigned int *p = (__const__ unsigned int *) addr;
 
@@ -153,7 +197,7 @@ extern __inline__ int test_bit(int nr, __const__ volatile void *addr)
 }
 
 /* Return the bit position of the most significant 1 bit in a word */
-extern __inline__ int __ilog2(unsigned int x)
+static __inline__ int __ilog2(unsigned int x)
 {
 	int lz;
 
@@ -161,7 +205,7 @@ extern __inline__ int __ilog2(unsigned int x)
 	return 31 - lz;
 }
 
-extern __inline__ int ffz(unsigned int x)
+static __inline__ int ffz(unsigned int x)
 {
 	if ((x = ~x) == 0)
 		return 32;
@@ -175,7 +219,7 @@ extern __inline__ int ffz(unsigned int x)
  * the libc and compiler builtin ffs routines, therefore
  * differs in spirit from the above ffz (man ffs).
  */
-extern __inline__ int ffs(int x)
+static __inline__ int ffs(int x)
 {
 	return __ilog2(x & -x) + 1;
 }
@@ -198,7 +242,7 @@ extern __inline__ int ffs(int x)
 #define find_first_zero_bit(addr, size) \
 	find_next_zero_bit((addr), (size), 0)
 
-extern __inline__ unsigned long find_next_zero_bit(void * addr,
+static __inline__ unsigned long find_next_zero_bit(void * addr,
 	unsigned long size, unsigned long offset)
 {
 	unsigned int * p = ((unsigned int *) addr) + (offset >> 5);
@@ -240,42 +284,11 @@ found_middle:
 #define _EXT2_HAVE_ASM_BITOPS_
 
 #ifdef __KERNEL__
-/*
- * test_and_{set,clear}_bit guarantee atomicity without
- * disabling interrupts.
- */
-#define ext2_set_bit(nr, addr)		test_and_set_bit((nr) ^ 0x18, addr)
-#define ext2_clear_bit(nr, addr)	test_and_clear_bit((nr) ^ 0x18, addr)
 
-#else
-extern __inline__ int ext2_set_bit(int nr, void * addr)
-{
-	int		mask;
-	unsigned char	*ADDR = (unsigned char *) addr;
-	int oldbit;
+#define ext2_set_bit(nr, addr)		__test_and_set_bit((nr) ^ 0x18, addr)
+#define ext2_clear_bit(nr, addr)	__test_and_clear_bit((nr) ^ 0x18, addr)
 
-	ADDR += nr >> 3;
-	mask = 1 << (nr & 0x07);
-	oldbit = (*ADDR & mask) ? 1 : 0;
-	*ADDR |= mask;
-	return oldbit;
-}
-
-extern __inline__ int ext2_clear_bit(int nr, void * addr)
-{
-	int		mask;
-	unsigned char	*ADDR = (unsigned char *) addr;
-	int oldbit;
-
-	ADDR += nr >> 3;
-	mask = 1 << (nr & 0x07);
-	oldbit = (*ADDR & mask) ? 1 : 0;
-	*ADDR = *ADDR & ~mask;
-	return oldbit;
-}
-#endif	/* __KERNEL__ */
-
-extern __inline__ int ext2_test_bit(int nr, __const__ void * addr)
+static __inline__ int ext2_test_bit(int nr, __const__ void * addr)
 {
 	__const__ unsigned char	*ADDR = (__const__ unsigned char *) addr;
 
@@ -290,7 +303,7 @@ extern __inline__ int ext2_test_bit(int nr, __const__ void * addr)
 #define ext2_find_first_zero_bit(addr, size) \
         ext2_find_next_zero_bit((addr), (size), 0)
 
-extern __inline__ unsigned long ext2_find_next_zero_bit(void *addr,
+static __inline__ unsigned long ext2_find_next_zero_bit(void *addr,
 	unsigned long size, unsigned long offset)
 {
 	unsigned int *p = ((unsigned int *) addr) + (offset >> 5);
@@ -334,5 +347,7 @@ found_middle:
 #define minix_test_and_clear_bit(nr,addr) ext2_clear_bit(nr,addr)
 #define minix_test_bit(nr,addr) ext2_test_bit(nr,addr)
 #define minix_find_first_zero_bit(addr,size) ext2_find_first_zero_bit(addr,size)
+
+#endif	/* __KERNEL__ */
 
 #endif /* _PPC_BITOPS_H */

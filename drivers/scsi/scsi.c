@@ -36,6 +36,9 @@
  *  out_of_space hacks, D. Gilbert (dpg) 990608
  */
 
+#define REVISION	"Revision: 1.00"
+#define VERSION		"Id: scsi.c 1.00 2000/09/26"
+
 #include <linux/config.h>
 #include <linux/module.h>
 
@@ -1799,8 +1802,8 @@ out:
 #endif
 
 /*
- * This entry point should be called by a loadable module if it is trying
- * add a low level scsi driver to the system.
+ * This entry point should be called by a driver if it is trying
+ * to add a low level scsi driver to the system.
  */
 static int scsi_register_host(Scsi_Host_Template * tpnt)
 {
@@ -2299,6 +2302,10 @@ static int scsi_unregister_device(struct Scsi_Device_Template *tpnt)
 }
 
 
+/* This function should be called by drivers which needs to register
+ * with the midlevel scsi system. As of 2.4.0-test9pre3 this is our
+ * main device/hosts register function	/mathiasen
+ */
 int scsi_register_module(int module_type, void *ptr)
 {
 	switch (module_type) {
@@ -2326,6 +2333,8 @@ int scsi_register_module(int module_type, void *ptr)
 	}
 }
 
+/* Reverse the actions taken above
+ */
 void scsi_unregister_module(int module_type, void *ptr)
 {
 	switch (module_type) {
@@ -2450,7 +2459,7 @@ static void scsi_dump_status(int level)
 }
 #endif				/* CONFIG_PROC_FS */
 
-static int scsi_host_no_init (char *str)
+static int __init scsi_host_no_init (char *str)
 {
     static int next_no = 0;
     char *temp;
@@ -2470,17 +2479,26 @@ static int scsi_host_no_init (char *str)
     return 1;
 }
 
-#ifndef MODULE
-__setup("scsihosts=", scsi_host_no_init);
-#endif
-
 static char *scsihosts;
 
 MODULE_PARM(scsihosts, "s");
+MODULE_DESCRIPTION("SCSI core");
+
+#ifndef MODULE
+int __init scsi_setup(char *str)
+{
+	scsihosts = str;
+	return 1;
+}
+
+__setup("scsihosts=", scsi_setup);
+#endif
 
 static int __init init_scsi(void)
 {
 	struct proc_dir_entry *generic;
+
+	printk(KERN_INFO "SCSI subsystem driver " REVISION "\n");
 
         if( scsi_init_minimal_dma_pool() != 0 )
         {
@@ -2506,7 +2524,9 @@ static int __init init_scsi(void)
 #endif
 
         scsi_devfs_handle = devfs_mk_dir (NULL, "scsi", NULL);
-        scsi_host_no_init (scsihosts);
+        if (scsihosts)
+		printk("scsi: host order: %s\n", scsihosts);	
+	scsi_host_no_init (scsihosts);
 	/*
 	 * This is where the processing takes place for most everything
 	 * when commands are completed.

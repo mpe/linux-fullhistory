@@ -57,6 +57,10 @@
 #define ISO_RECEIVE 0
 #define ISO_TRANSMIT 1
 
+#ifndef virt_to_page
+#define virt_to_page(x) MAP_NR(x)
+#endif
+
 struct it_dma_prg {
 	struct dma_cmd begin;
 	quadlet_t data[4];
@@ -84,6 +88,7 @@ struct dma_iso_ctx {
 	int cmdPtr;
 	int ctxMatch;
 	wait_queue_head_t waitq;
+        spinlock_t lock;
 };
 
 struct video_card {
@@ -144,7 +149,7 @@ static struct video_template video_tmpl = { irq_handler };
  */
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2,3,0)
-#define page_address(x)	((void *) (x))
+#define page_address(x)	(x)
 #endif
 
 /* Given PGD from the address space's page table, return the kernel
@@ -163,7 +168,7 @@ static inline unsigned long uvirt_to_kva(pgd_t *pgd, unsigned long adr)
                         pte = *ptep;
                         if(pte_present(pte)) {
 				ret = (unsigned long) page_address(pte_page(pte));
-				ret |= (adr & (PAGE_SIZE - 1));
+                                ret |= (adr & (PAGE_SIZE - 1));
 			}
                 }
         }
@@ -212,7 +217,7 @@ static void * rvmalloc(unsigned long size)
 	void * mem;
 	unsigned long adr, page;
         
-	mem=vmalloc(size);
+	mem=vmalloc_32(size);
 	if (mem) 
 	{
 		memset(mem, 0, size); /* Clear the ram out, 
@@ -374,7 +379,7 @@ alloc_dma_iso_ctx(struct ti_ohci *ohci, int type, int ctx, int num_desc,
 		
 		d->packet_size = packet_size;
 
-		if (PAGE_SIZE % packet_size || packet_size>2048) {
+		if (PAGE_SIZE % packet_size || packet_size>4096) {
 			PRINT(KERN_ERR, ohci->id, 
 			      "Packet size %d not yet supported\n",
 			      packet_size);
@@ -413,6 +418,8 @@ alloc_dma_iso_ctx(struct ti_ohci *ohci, int type, int ctx, int num_desc,
 	}
 	memset(d->buffer_status, 0, d->num_desc * sizeof(unsigned int));
 	
+        spin_lock_init(&d->lock);
+
 	PRINT(KERN_INFO, ohci->id, "Iso %s DMA: %d buffers "
 	      "of size %d allocated for a frame size %d, each with %d prgs",
 	      (type==ISO_RECEIVE) ? "receive" : "transmit",
@@ -531,12 +538,14 @@ int wakeup_dma_ir_ctx(struct ti_ohci *ohci, struct dma_iso_ctx *d)
 		return -EFAULT;
 	}
 
+	spin_lock(&d->lock);
 	for (i=0;i<d->num_desc;i++) {
 		if (d->ir_prg[i][d->nb_cmd-1].status & 0xFFFF0000) {
 			reset_ir_status(d, i);
 			d->buffer_status[i] = VIDEO1394_BUFFER_READY;
 		}
 	}
+	spin_unlock(&d->lock);
 	if (waitqueue_active(&d->waitq)) wake_up_interruptible(&d->waitq);
 	return 0;
 }
@@ -551,12 +560,14 @@ int wakeup_dma_it_ctx(struct ti_ohci *ohci, struct dma_iso_ctx *d)
 		return -EFAULT;
 	}
 
+	spin_lock(&d->lock);
 	for (i=0;i<d->num_desc;i++) {
 		if (d->it_prg[i][d->nb_cmd-1].end.status & 0xFFFF0000) {
 			d->it_prg[i][d->nb_cmd-1].end.status = 0;
 			d->buffer_status[i] = VIDEO1394_BUFFER_READY;
 		}
 	}
+	spin_unlock(&d->lock);
 	if (waitqueue_active(&d->waitq)) wake_up_interruptible(&d->waitq);
 	return 0;
 }
@@ -664,6 +675,7 @@ static int video1394_ioctl(struct inode *inode, struct file *file,
 {
 	struct video_card *video = &video_cards[MINOR(inode->i_rdev)];
 	struct ti_ohci *ohci= video->ohci;
+	unsigned long flags;
 
 	switch(cmd)
 	{
@@ -832,9 +844,12 @@ static int video1394_ioctl(struct inode *inode, struct file *file,
 			return -EFAULT;
 		}
 		
-		if (d->buffer_status[v.buffer]!=VIDEO1394_BUFFER_FREE) {
+		spin_lock_irqsave(&d->lock,flags);
+
+		if (d->buffer_status[v.buffer]==VIDEO1394_BUFFER_QUEUED) {
 			PRINT(KERN_ERR, ohci->id, 
 			      "buffer %d is already used",v.buffer);
+			spin_unlock_irqrestore(&d->lock,flags);
 			return -EFAULT;
 		}
 		
@@ -848,6 +863,8 @@ static int video1394_ioctl(struct inode *inode, struct file *file,
 		d->last_buffer = v.buffer;
 
 		d->ir_prg[d->last_buffer][d->nb_cmd-1].branchAddress = 0;
+
+		spin_unlock_irqrestore(&d->lock,flags);
 
 		if (!(reg_read(ohci, d->ctrlSet) & 0x8000)) 
 		{
@@ -890,16 +907,26 @@ static int video1394_ioctl(struct inode *inode, struct file *file,
 			return -EFAULT;
 		}
 
+		/*
+		 * I change the way it works so that it returns 
+		 * the last received frame.
+		 */
+		spin_lock_irqsave(&d->lock, flags);
 		switch(d->buffer_status[v.buffer]) {
 		case VIDEO1394_BUFFER_READY:
 			d->buffer_status[v.buffer]=VIDEO1394_BUFFER_FREE;
-			return 0;
+			break;
 		case VIDEO1394_BUFFER_QUEUED:
 #if 1
 			while(d->buffer_status[v.buffer]!=
 			      VIDEO1394_BUFFER_READY) {
+				spin_unlock_irqrestore(&d->lock, flags);
 				interruptible_sleep_on(&d->waitq);
-				if(signal_pending(current)) return -EINTR;
+				spin_lock_irqsave(&d->lock, flags);
+				if(signal_pending(current)) {
+					spin_unlock_irqrestore(&d->lock,flags);
+					return -EINTR;
+				}
 			}
 #else
 			if (wait_event_interruptible(d->waitq, 
@@ -909,12 +936,30 @@ static int video1394_ioctl(struct inode *inode, struct file *file,
 				return -EINTR;
 #endif
 			d->buffer_status[v.buffer]=VIDEO1394_BUFFER_FREE;
-			return 0;
+			break;
 		default:
 			PRINT(KERN_ERR, ohci->id, 
 			      "buffer %d is not queued",v.buffer);
+			spin_unlock_irqrestore(&d->lock, flags);
 			return -EFAULT;
 		}
+
+		/*
+		 * Look ahead to see how many more buffers have been received
+		 */
+		i=0;
+		while (d->buffer_status[(v.buffer+1)%d->num_desc]==
+		       VIDEO1394_BUFFER_READY) {
+			v.buffer=(v.buffer+1)%d->num_desc;
+			i++;
+		}
+		spin_unlock_irqrestore(&d->lock, flags);
+
+		v.buffer=i;
+		if(copy_to_user((void *)arg, &v, sizeof(v)))
+			return -EFAULT;
+
+		return 0;
 	}
 	case VIDEO1394_TALK_QUEUE_BUFFER:
 	{
@@ -935,9 +980,12 @@ static int video1394_ioctl(struct inode *inode, struct file *file,
 			return -EFAULT;
 		}
 		
+		spin_lock_irqsave(&d->lock,flags);
+
 		if (d->buffer_status[v.buffer]!=VIDEO1394_BUFFER_FREE) {
 			PRINT(KERN_ERR, ohci->id, 
 			      "buffer %d is already used",v.buffer);
+			spin_unlock_irqrestore(&d->lock,flags);
 			return -EFAULT;
 		}
 		
@@ -957,6 +1005,8 @@ static int video1394_ioctl(struct inode *inode, struct file *file,
 		d->last_buffer = v.buffer;
 
 		d->it_prg[d->last_buffer][d->nb_cmd-1].end.branchAddress = 0;
+
+		spin_unlock_irqrestore(&d->lock,flags);
 
 		if (!(reg_read(ohci, d->ctrlSet) & 0x8000)) 
 		{

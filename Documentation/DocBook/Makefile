@@ -55,11 +55,11 @@ mcabook.sgml: mcabook.tmpl $(TOPDIR)/arch/i386/kernel/mca.c
 	$(TOPDIR)/scripts/docgen $(TOPDIR)/arch/i386/kernel/mca.c \
 		<mcabook.tmpl >mcabook.sgml
 
-videobook.sgml: videobook.tmpl $(TOPDIR)/drivers/char/videodev.c
-	$(TOPDIR)/scripts/docgen $(TOPDIR)/drivers/char/videodev.c \
+videobook.sgml: videobook.tmpl $(TOPDIR)/drivers/media/video/videodev.c
+	$(TOPDIR)/scripts/docgen $(TOPDIR)/drivers/media/video/videodev.c \
 		<videobook.tmpl >videobook.sgml
 
-APISOURCES :=	$(TOPDIR)/drivers/char/videodev.c \
+APISOURCES :=	$(TOPDIR)/drivers/media/video/videodev.c \
 		$(TOPDIR)/arch/i386/kernel/mca.c \
 		$(TOPDIR)/arch/i386/kernel/mtrr.c \
 		$(TOPDIR)/drivers/char/misc.c \

@@ -155,56 +155,29 @@ void fill_iso_packet(struct hpsb_packet *packet, int length, int channel,
  * Return value: The allocated transaction label or -1 if there was no free
  * tlabel and @wait is false.
  */
-static int __get_tlabel(struct hpsb_host *host, nodeid_t nodeid)
-{
-	int tlabel;
-
-	if (host->tlabel_count) {
-		host->tlabel_count--;
-
-		if (host->tlabel_pool[0] != ~0) {
-			tlabel = ffz(host->tlabel_pool[0]);
-			host->tlabel_pool[0] |= 1 << tlabel;
-		} else {
-			tlabel = ffz(host->tlabel_pool[1]);
-			host->tlabel_pool[1] |= 1 << tlabel;
-			tlabel += 32;
-		}
-		return tlabel;
-	}
-	return -1;	
-}
-
 int get_tlabel(struct hpsb_host *host, nodeid_t nodeid, int wait)
 {
-        unsigned long flags;
-        int tlabel;
-	wait_queue_t wq;
+	int tlabel;
+	unsigned long flags;
+
+	if (wait) {
+		down(&host->tlabel_count);
+	} else {
+		if (down_trylock(&host->tlabel_count)) return -1;
+	}
 
 	spin_lock_irqsave(&host->tlabel_lock, flags);
 
-        tlabel = __get_tlabel(host, nodeid);
-	if (tlabel != -1 || !wait) {
-		spin_unlock_irqrestore(&host->tlabel_lock, flags);
-		return tlabel;
-	}
-
-	init_waitqueue_entry(&wq, current);
-	add_wait_queue(&host->tlabel_wait, &wq);
-
-	for (;;) {
-                set_current_state(TASK_UNINTERRUPTIBLE);
-                tlabel = __get_tlabel(host, nodeid);
-		if (tlabel != -1) break;
-		
-		spin_unlock_irqrestore(&host->tlabel_lock, flags);
-		schedule();
-		spin_lock_irqsave(&host->tlabel_lock, flags);
+	if (host->tlabel_pool[0] != ~0) {
+		tlabel = ffz(host->tlabel_pool[0]);
+		host->tlabel_pool[0] |= 1 << tlabel;
+	} else {
+		tlabel = ffz(host->tlabel_pool[1]);
+		host->tlabel_pool[1] |= 1 << tlabel;
+		tlabel += 32;
 	}
 
 	spin_unlock_irqrestore(&host->tlabel_lock, flags);
-	set_current_state(TASK_RUNNING);
-	remove_wait_queue(&host->tlabel_wait, &wq);
 
 	return tlabel;
 }
@@ -233,11 +206,9 @@ void free_tlabel(struct hpsb_host *host, nodeid_t nodeid, int tlabel)
                 host->tlabel_pool[1] &= ~(1 << (tlabel-32));
         }
 
-        host->tlabel_count++;
-
         spin_unlock_irqrestore(&host->tlabel_lock, flags);
 
-        wake_up(&host->tlabel_wait);
+        up(&host->tlabel_count);
 }
 
 

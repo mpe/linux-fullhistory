@@ -6,8 +6,7 @@
  */
 
 /*	From uart401.c */
-int probe_uart401 (struct address_info *hw_config);
-void attach_uart401 (struct address_info *hw_config, struct module *owner);
+int probe_uart401 (struct address_info *hw_config, struct module *owner);
 void unload_uart401 (struct address_info *hw_config);
 
 void uart401intr (int irq, void *dev_id, struct pt_regs * dummy);

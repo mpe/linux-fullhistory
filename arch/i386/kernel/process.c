@@ -50,17 +50,17 @@
 
 asmlinkage void ret_from_fork(void) __asm__("ret_from_fork");
 
-int hlt_counter=0;
+int hlt_counter;
 
 /*
  * Powermanagement idle function, if any..
  */
-void (*pm_idle)(void) = NULL;
+void (*pm_idle)(void);
 
 /*
  * Power off function, if any
  */
-void (*pm_power_off)(void) = NULL;
+void (*pm_power_off)(void);
 
 void disable_hlt(void)
 {
@@ -149,9 +149,9 @@ static int __init idle_setup (char *str)
 
 __setup("idle=", idle_setup);
 
-static long no_idt[2] = {0, 0};
-static int reboot_mode = 0;
-static int reboot_thru_bios = 0;
+static long no_idt[2];
+static int reboot_mode;
+static int reboot_thru_bios;
 
 static int __init reboot_setup(char *str)
 {

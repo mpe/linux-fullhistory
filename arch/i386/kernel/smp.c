@@ -445,7 +445,7 @@ int smp_call_function (void (*func) (void *info), void *info, int nonatomic,
  */
 {
 	struct call_data_struct data;
-	int ret, cpus = smp_num_cpus-1;
+	int cpus = smp_num_cpus-1;
 
 	if (!cpus)
 		return 0;
@@ -466,7 +466,6 @@ int smp_call_function (void (*func) (void *info), void *info, int nonatomic,
 	while (atomic_read(&data.started) != cpus)
 		barrier();
 
-	ret = 0;
 	if (wait)
 		while (atomic_read(&data.finished) != cpus)
 			barrier();

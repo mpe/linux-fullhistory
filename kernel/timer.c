@@ -22,7 +22,6 @@
 #include <linux/smp_lock.h>
 #include <linux/interrupt.h>
 #include <linux/kernel_stat.h>
-#include <linux/slab.h>
 
 #include <asm/uaccess.h>
 
@@ -596,9 +595,6 @@ void update_process_times(int user_tick)
 		kstat.per_cpu_system[cpu] += system;
 	} else if (local_bh_count(cpu) || local_irq_count(cpu) > 1)
 		kstat.per_cpu_system[cpu] += system;
-
-	if (slab_cache_drain_mask & (1UL << cpu))
-		slab_drain_local_cache();
 }
 
 /*

@@ -41,9 +41,9 @@
 
 extern struct svc_program	nfsd_program;
 static void			nfsd(struct svc_rqst *rqstp);
-struct timeval			nfssvc_boot = { 0, 0 };
-static struct svc_serv 		*nfsd_serv = NULL;
-static int			nfsd_busy = 0;
+struct timeval			nfssvc_boot;
+static struct svc_serv 		*nfsd_serv;
+static int			nfsd_busy;
 static unsigned long		nfsd_last_call;
 
 struct nfsd_list {

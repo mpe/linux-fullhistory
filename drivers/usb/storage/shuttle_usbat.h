@@ -1,7 +1,7 @@
 /* Driver for SCM Microsystems USB-ATAPI cable
  * Header File
  *
- * $Id: shuttle_usbat.h,v 1.4 2000/08/25 00:13:51 mdharm Exp $
+ * $Id: shuttle_usbat.h,v 1.5 2000/09/17 14:44:52 groovyjava Exp $
  *
  * Current development and maintenance by:
  *   (c) 2000 Robert Baruch (autophile@dol.net)
@@ -63,7 +63,7 @@ extern int usbat_read_block(struct us_data *us, unsigned char access,
 	int use_sg);
 extern int usbat_write_block(struct us_data *us, unsigned char access,
 	unsigned char reg, unsigned char *content, unsigned short len,
-	int use_sg);
+	int use_sg, int minutes);
 extern int usbat_multiple_write(struct us_data *us, unsigned char access,
 	unsigned char *registers, unsigned char *data_out,
 	unsigned short num_registers);

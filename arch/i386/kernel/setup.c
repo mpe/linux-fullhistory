@@ -95,22 +95,22 @@
  * Machine setup..
  */
 
-char ignore_irq13 = 0;		/* set if exception 16 works */
+char ignore_irq13;		/* set if exception 16 works */
 struct cpuinfo_x86 boot_cpu_data = { 0, 0, 0, 0, -1, 1, 0, 0, -1 };
 
-unsigned long mmu_cr4_features = 0;
+unsigned long mmu_cr4_features;
 
 /*
  * Bus types ..
  */
-int EISA_bus = 0;
-int MCA_bus = 0;
+int EISA_bus;
+int MCA_bus;
 
 /* for MCA, but anyone else can use it if they want */
-unsigned int machine_id = 0;
-unsigned int machine_submodel_id = 0;
-unsigned int BIOS_revision = 0;
-unsigned int mca_pentium_flag = 0;
+unsigned int machine_id;
+unsigned int machine_submodel_id;
+unsigned int BIOS_revision;
+unsigned int mca_pentium_flag;
 
 /*
  * Setup options
@@ -123,7 +123,7 @@ struct sys_desc_table_struct {
 	unsigned char table[0];
 };
 
-struct e820map e820 = { 0 };
+struct e820map e820;
 
 unsigned char aux_device_present;
 
@@ -291,7 +291,7 @@ visws_get_board_type_and_rev(void)
 #endif
 
 
-static char command_line[COMMAND_LINE_SIZE] = { 0, };
+static char command_line[COMMAND_LINE_SIZE];
        char saved_command_line[COMMAND_LINE_SIZE];
 
 struct resource standard_io_resources[] = {

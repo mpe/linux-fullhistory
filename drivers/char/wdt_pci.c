@@ -274,7 +274,7 @@ static ssize_t wdtpci_write(struct file *file, const char *buf, size_t count, lo
  *	@ptr: offset (no seek allowed)
  *
  *	Read reports the temperature in degrees Fahrenheit. The API is in
- *	farenheit. It was designed by an imperial measurement luddite.
+ *	fahrenheit. It was designed by an imperial measurement luddite.
  */
  
 static ssize_t wdtpci_read(struct file *file, char *buf, size_t count, loff_t *ptr)

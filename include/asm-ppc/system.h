@@ -36,6 +36,16 @@
 #define set_mb(var, value)	do { var = value; mb(); } while (0)
 #define set_wmb(var, value)	do { var = value; wmb(); } while (0)
 
+#ifdef CONFIG_SMP
+#define smp_mb()	mb()
+#define smp_rmb()	rmb()
+#define smp_wmb()	wmb()
+#else
+#define smp_mb()	__asm__ __volatile__("": : :"memory")
+#define smp_rmb()	__asm__ __volatile__("": : :"memory")
+#define smp_wmb()	__asm__ __volatile__("": : :"memory")
+#endif /* CONFIG_SMP */
+
 extern void xmon_irq(int, void *, struct pt_regs *);
 extern void xmon(struct pt_regs *excp);
 
@@ -67,6 +77,7 @@ extern void cvt_fd(float *from, double *to, unsigned long *fpscr);
 extern void cvt_df(double *from, float *to, unsigned long *fpscr);
 extern int call_rtas(const char *, int, int, unsigned long *, ...);
 extern int abs(int);
+extern void cacheable_memzero(void *p, unsigned int nb);
 
 struct device_node;
 extern void note_scsi_host(struct device_node *, void *);
@@ -114,16 +125,25 @@ extern void __global_restore_flags(unsigned long);
 
 #define xchg(ptr,x) ((__typeof__(*(ptr)))__xchg((unsigned long)(x),(ptr),sizeof(*(ptr))))
 
-extern unsigned long xchg_u64(void *ptr, unsigned long val);
-extern unsigned long xchg_u32(void *ptr, unsigned long val);
+static __inline__ unsigned long
+xchg_u32(volatile void *p, unsigned long val)
+{
+	unsigned long prev;
+
+	__asm__ __volatile__ ("
+1:	lwarx	%0,0,%2
+	stwcx.	%3,0,%2
+	bne-	1b"
+	: "=&r" (prev), "=m" (*(volatile unsigned long *)p)
+	: "r" (p), "r" (val), "m" (*(volatile unsigned long *)p)
+	: "cc", "memory");
+
+	return prev;
+}
 
 /*
  * This function doesn't exist, so you'll get a linker error
  * if something tries to do an invalid xchg().
- *
- * This only works if the compiler isn't horribly bad at optimizing.
- * gcc-2.5.8 reportedly can't handle this, but as that doesn't work
- * too well on the alpha anyway..
  */
 extern void __xchg_called_with_bad_pointer(void);
 
@@ -135,8 +155,10 @@ static inline unsigned long __xchg(unsigned long x, void * ptr, int size)
 	switch (size) {
 	case 4:
 		return (unsigned long )xchg_u32(ptr, x);
+#if 0	/* xchg_u64 doesn't exist on 32-bit PPC */
 	case 8:
 		return (unsigned long )xchg_u64(ptr, x);
+#endif /* 0 */
 	}
 	__xchg_called_with_bad_pointer();
 	return x;
@@ -149,4 +171,56 @@ extern inline void * xchg_ptr(void * m, void * val)
 	return (void *) xchg_u32(m, (unsigned long) val);
 }
 
-#endif
+
+#define __HAVE_ARCH_CMPXCHG	1
+
+static __inline__ unsigned long
+__cmpxchg_u32(volatile int *p, int old, int new)
+{
+	int prev;
+
+	__asm__ __volatile__ ("
+1:	lwarx	%0,0,%2
+	cmpw	0,%0,%3
+	bne	2f
+	stwcx.	%4,0,%2
+	bne-	1b\n"
+#ifdef CONFIG_SMP
+"	sync\n"
+#endif /* CONFIG_SMP */
+"2:"
+	: "=&r" (prev), "=m" (*p)
+	: "r" (p), "r" (old), "r" (new), "m" (*p)
+	: "cc", "memory");
+
+	return prev;
+}
+
+/* This function doesn't exist, so you'll get a linker error
+   if something tries to do an invalid cmpxchg().  */
+extern void __cmpxchg_called_with_bad_pointer(void);
+
+static __inline__ unsigned long
+__cmpxchg(volatile void *ptr, unsigned long old, unsigned long new, int size)
+{
+	switch (size) {
+	case 4:
+		return __cmpxchg_u32(ptr, old, new);
+#if 0	/* we don't have __cmpxchg_u64 on 32-bit PPC */
+	case 8:
+		return __cmpxchg_u64(ptr, old, new);
+#endif /* 0 */
+	}
+	__cmpxchg_called_with_bad_pointer();
+	return old;
+}
+
+#define cmpxchg(ptr,o,n)						 \
+  ({									 \
+     __typeof__(*(ptr)) _o_ = (o);					 \
+     __typeof__(*(ptr)) _n_ = (n);					 \
+     (__typeof__(*(ptr))) __cmpxchg((ptr), (unsigned long)_o_,		 \
+				    (unsigned long)_n_, sizeof(*(ptr))); \
+  })
+
+#endif /* __PPC_SYSTEM_H */

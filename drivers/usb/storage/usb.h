@@ -1,7 +1,7 @@
 /* Driver for USB Mass Storage compliant devices
  * Main Header File
  *
- * $Id: usb.h,v 1.8 2000/08/25 00:13:51 mdharm Exp $
+ * $Id: usb.h,v 1.9 2000/09/25 23:25:12 mdharm Exp $
  *
  * Current development and maintenance by:
  *   (c) 1999, 2000 Matthew Dharm (mdharm-usb@one-eyed-alien.net)
@@ -112,6 +112,7 @@ struct us_unusual_dev {
 typedef int (*trans_cmnd)(Scsi_Cmnd*, struct us_data*);
 typedef int (*trans_reset)(struct us_data*);
 typedef void (*proto_cmnd)(Scsi_Cmnd*, struct us_data*);
+typedef void (*extra_data_destructor)(void *);	 /* extra data destructor   */
 
 /* we allocate one of these for every device that we remember */
 struct us_data {
@@ -178,16 +179,17 @@ struct us_data {
 	struct semaphore	queue_exclusion; /* to protect data structs */
 	struct us_unusual_dev   *unusual_dev;	 /* If unusual device       */
 	void			*extra;		 /* Any extra data          */
-	void (*extra_destructor)(void *);	 /* extra data destructor   */
+	extra_data_destructor	extra_destructor;/* extra data destructor   */
 };
 
 /* The list of structures and the protective lock for them */
 extern struct us_data *us_list;
 extern struct semaphore us_list_semaphore;
 
-/* Function to fill an inquiry response. See usb.c for details */
+/* The structure which defines our driver */
+struct usb_driver usb_storage_driver;
 
+/* Function to fill an inquiry response. See usb.c for details */
 extern void fill_inquiry_response(struct us_data *us,
 	unsigned char *data, unsigned int data_len);
-
 #endif

@@ -16,6 +16,8 @@
 
 #include <asm/uaccess.h>
 
+#define special_file(m) (S_ISCHR(m)||S_ISBLK(m)||S_ISFIFO(m)||S_ISSOCK(m))
+
 int vfs_statfs(struct super_block *sb, struct statfs *buf)
 {
 	int retval = -ENODEV;
@@ -322,7 +324,8 @@ asmlinkage long sys_access(const char * filename, int mode)
 	if (!res) {
 		res = permission(nd.dentry->d_inode, mode);
 		/* SuS v2 requires we report a read only fs too */
-		if(!res && (mode & S_IWOTH) && IS_RDONLY(nd.dentry->d_inode))
+		if(!res && (mode & S_IWOTH) && IS_RDONLY(nd.dentry->d_inode)
+		   && !special_file(nd.dentry->d_inode->i_mode))
 			res = -EROFS;
 		path_release(&nd);
 	}
