@@ -14,7 +14,7 @@ const char * ppa_info(struct Scsi_Host *);
 int ppa_command(Scsi_Cmnd *);
 int ppa_queuecommand(Scsi_Cmnd *, void (* done)(Scsi_Cmnd *));
 int ppa_abort(Scsi_Cmnd *);
-int ppa_reset(Scsi_Cmnd *);
+int ppa_reset(Scsi_Cmnd *, unsigned int);
 int ppa_biosparam(Disk *, kdev_t, int[]);
 
 #define PPA {			\

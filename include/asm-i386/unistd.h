@@ -171,6 +171,7 @@
 #define __NR_mremap		163
 #define __NR_setresuid		164
 #define __NR_getresuid		165
+#define __NR_query_module	166
 
 /* user-visible error numbers are in the range -1 - -122: see <asm-i386/errno.h> */
 

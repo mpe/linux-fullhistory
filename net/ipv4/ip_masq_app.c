@@ -19,7 +19,7 @@
  *
  * FIXME:
  *	- ip_masq_skb_replace(): use same skb if space available.
- *	
+ *
  */
 
 #include <linux/config.h>
@@ -53,13 +53,9 @@ static __inline__ const char * masq_proto_name(unsigned proto)
 #define IP_MASQ_APP_PROTO(type)       ( (type>>16) & 0x00ff )
 
 
-static struct symbol_table ip_masq_app_syms = {
-#include <linux/symtab_begin.h>
-	X(register_ip_masq_app),
-	X(unregister_ip_masq_app),
-	X(ip_masq_skb_replace),
-#include <linux/symtab_end.h>
-};
+EXPORT_SYMBOL(register_ip_masq_app);
+EXPORT_SYMBOL(unregister_ip_masq_app);
+EXPORT_SYMBOL(ip_masq_skb_replace);
 
 /*
  * 	will hold masq app. hashed list heads
@@ -83,13 +79,13 @@ int register_ip_masq_app(struct ip_masq_app *mapp, unsigned short proto, __u16 p
         mapp->type = IP_MASQ_APP_TYPE(proto, port);
         mapp->n_attach = 0;
         hash = IP_MASQ_APP_HASH(proto, port);
-        
+
         save_flags(flags);
         cli();
         mapp->next = ip_masq_app_base[hash];
-        ip_masq_app_base[hash] = mapp; 
+        ip_masq_app_base[hash] = mapp;
         restore_flags(flags);
-        
+
         return 0;
 }
 
@@ -124,7 +120,7 @@ int unregister_ip_masq_app(struct ip_masq_app *mapp)
                         restore_flags(flags);
                         return 0;
                 }
-        
+
         restore_flags(flags);
         printk("unregister_ip_masq_app(proto=%s,port=%u): not hashed!\n",
                masq_proto_name(IP_MASQ_APP_PROTO(mapp->type)), IP_MASQ_APP_PORT(mapp->type));
@@ -191,12 +187,12 @@ struct ip_masq_app * ip_masq_bind_app(struct ip_masq *ms)
                 /*
                  *	don't allow binding if already bound
                  */
-                
+
                 if (ms->app != NULL) {
                         printk("ip_masq_bind_app() called for already bound object.\n");
                         return ms->app;
                 }
-                
+
                 ms->app = mapp;
                 if (mapp->masq_init_1) mapp->masq_init_1(mapp, ms);
                 ip_masq_app_bind_chg(mapp, +1);
@@ -227,9 +223,9 @@ int ip_masq_unbind_app(struct ip_masq *ms)
 static __inline__ void masq_fix_seq(const struct ip_masq_seq *ms_seq, struct tcphdr *th)
 {
         __u32 seq;
-        
+
         seq = ntohl(th->seq);
-        
+
 	/*
 	 * 	Adjust seq with delta-offset for all packets after
          * 	the most recent resized pkt seq and with previous_delta offset
@@ -249,7 +245,7 @@ static __inline__ void masq_fix_seq(const struct ip_masq_seq *ms_seq, struct tcp
 #endif
 		}
 	}
-        
+
 
 }
 
@@ -260,15 +256,15 @@ static __inline__ void masq_fix_seq(const struct ip_masq_seq *ms_seq, struct tcp
 static __inline__ void masq_fix_ack_seq(const struct ip_masq_seq *ms_seq, struct tcphdr *th)
 {
         __u32 ack_seq;
-        
+
         ack_seq=ntohl(th->ack_seq);
-        
+
         /*
          * Adjust ack_seq with delta-offset for
          * the packets AFTER most recent resized pkt has caused a shift
          * for packets before most recent resized pkt, use previous_delta
          */
-        
+
         if (ms_seq->delta || ms_seq->previous_delta) {
                 if(after(ack_seq,ms_seq->init_seq)) {
                         th->ack_seq = htonl(ack_seq-ms_seq->delta);
@@ -282,7 +278,7 @@ static __inline__ void masq_fix_ack_seq(const struct ip_masq_seq *ms_seq, struct
 #endif
                 }
         }
-        
+
 }
 
 /*
@@ -293,7 +289,7 @@ static __inline__ void masq_fix_ack_seq(const struct ip_masq_seq *ms_seq, struct
 static __inline__ void masq_seq_update(struct ip_masq *ms, struct ip_masq_seq *ms_seq, unsigned mflag, __u32 seq, int diff)
 {
         /* if (diff == 0) return; */
-        
+
         if ( !(ms->flags & mflag) || after(seq, ms_seq->init_seq))
         {
                 ms_seq->previous_delta=ms_seq->delta;
@@ -316,50 +312,50 @@ int ip_masq_app_pkt_out(struct ip_masq *ms, struct sk_buff **skb_p, struct devic
 	struct tcphdr *th;
         int diff;
         __u32 seq;
-        
+
         /*
          *	check if application masquerading is bound to
          *	this ip_masq.
          *	assumes that once an ip_masq is bound,
          *	it will not be unbound during its life.
          */
-        
+
         if ( (mapp = ms->app) == NULL)
                 return 0;
-        
+
         iph = (*skb_p)->nh.iph;
         th = (struct tcphdr *)&(((char *)iph)[iph->ihl*4]);
-        
+
         /*
          *	Remember seq number in case this pkt gets resized
          */
-        
+
         seq = ntohl(th->seq);
-        
+
         /*
          *	Fix seq stuff if flagged as so.
          */
-        
+
         if (ms->protocol == IPPROTO_TCP) {
                 if (ms->flags & IP_MASQ_F_OUT_SEQ)
                         masq_fix_seq(&ms->out_seq, th);
                 if (ms->flags & IP_MASQ_F_IN_SEQ)
                         masq_fix_ack_seq(&ms->in_seq, th);
         }
-        
+
         /*
-         *	Call private output hook function 
+         *	Call private output hook function
          */
-        
+
         if ( mapp->pkt_out == NULL )
                 return 0;
-        
+
         diff = mapp->pkt_out(mapp, ms, skb_p, dev);
-        
+
         /*
          *	Update ip_masq seq stuff if len has changed.
          */
-        
+
         if (diff != 0 && ms->protocol == IPPROTO_TCP)
                 masq_seq_update(ms, &ms->out_seq, IP_MASQ_F_OUT_SEQ, seq, diff);
 
@@ -379,50 +375,50 @@ int ip_masq_app_pkt_in(struct ip_masq *ms, struct sk_buff **skb_p, struct device
 	struct tcphdr *th;
         int diff;
         __u32 seq;
-        
+
         /*
          *	check if application masquerading is bound to
          *	this ip_masq.
          *	assumes that once an ip_masq is bound,
          *	it will not be unbound during its life.
          */
-        
+
         if ( (mapp = ms->app) == NULL)
                 return 0;
-        
+
         iph = (*skb_p)->nh.iph;
         th = (struct tcphdr *)&(((char *)iph)[iph->ihl*4]);
-        
+
         /*
          *	Remember seq number in case this pkt gets resized
          */
-        
+
         seq = ntohl(th->seq);
-        
+
         /*
          *	Fix seq stuff if flagged as so.
          */
-        
+
         if (ms->protocol == IPPROTO_TCP) {
                 if (ms->flags & IP_MASQ_F_IN_SEQ)
                         masq_fix_seq(&ms->in_seq, th);
                 if (ms->flags & IP_MASQ_F_OUT_SEQ)
                         masq_fix_ack_seq(&ms->out_seq, th);
         }
-        
+
         /*
-         *	Call private input hook function 
+         *	Call private input hook function
          */
-        
+
         if ( mapp->pkt_in == NULL )
                 return 0;
-        
+
         diff = mapp->pkt_in(mapp, ms, skb_p, dev);
 
         /*
          *	Update ip_masq seq stuff if len has changed.
          */
-        
+
         if (diff != 0 && ms->protocol == IPPROTO_TCP)
                 masq_seq_update(ms, &ms->in_seq, IP_MASQ_F_IN_SEQ, seq, diff);
 
@@ -446,7 +442,7 @@ int ip_masq_app_getinfo(char *buffer, char **start, off_t offset, int length, in
 
         for (idx=0 ; idx < IP_MASQ_APP_TAB_SIZE; idx++)
                 for (mapp = ip_masq_app_base[idx]; mapp ; mapp = mapp->next) {
-			/* 
+			/*
 			 * If you change the length of this sprintf, then all
 			 * the length calculations need fixing too!
 			 * Line length = 40 (3 + 2 + 7 + 1 + 7 + 1 + 2 + 17)
@@ -468,19 +464,19 @@ done:
         *start = buffer + begin;
         len -= begin;
         if (len > length)
-                len = length;	
+                len = length;
         return len;
 }
 
 
-#ifdef CONFIG_PROC_FS        
+#ifdef CONFIG_PROC_FS
 static struct proc_dir_entry proc_net_ip_masq_app = {
 	PROC_NET_IP_MASQ_APP, 11, "ip_masq_app",
 	S_IFREG | S_IRUGO, 1, 0, 0,
 	0, &proc_net_inode_operations,
 	ip_masq_app_getinfo
 };
-#endif        
+#endif
 
 /*
  *	Initialization routine
@@ -488,11 +484,9 @@ static struct proc_dir_entry proc_net_ip_masq_app = {
 
 int ip_masq_app_init(void)
 {
-
-        register_symtab (&ip_masq_app_syms);
-#ifdef CONFIG_PROC_FS        
+#ifdef CONFIG_PROC_FS
 	proc_net_register(&proc_net_ip_masq_app);
-#endif        
+#endif
         return 0;
 }
 
@@ -531,7 +525,7 @@ static struct sk_buff * skb_replace(struct sk_buff *skb, int pri, char *o_buf, i
                  *
                  *	FIXME: move this to core/sbuff.c:skb_grow()
                  */
-        
+
                 n_skb = alloc_skb(MAX_HEADER + skb->len + diff, pri);
                 if (n_skb == NULL) {
                         printk("skb_replace(): no room left (from %p)\n",
@@ -561,17 +555,17 @@ static struct sk_buff * skb_replace(struct sk_buff *skb, int pri, char *o_buf, i
                 /*
                  * Copy pkt in new buffer
                  */
-                
+
                 memcpy(n_skb->data, skb->data, o_offset);
                 memcpy(n_skb->data + o_offset, n_buf, n_len);
                 memcpy(n_skb->data + o_offset + n_len, o_buf + o_len,
                        skb->len - (o_offset + o_len) );
-                
+
                 /*
                  * Problem, how to replace the new skb with old one,
                  * preferably inplace
                  */
-                
+
                 kfree_skb(skb, FREE_WRITE);
         }
         return n_skb;
@@ -590,7 +584,7 @@ struct sk_buff * ip_masq_skb_replace(struct sk_buff *skb, int pri, char *o_buf, 
         diff = n_len - o_len;
         n_skb = skb_replace(skb, pri, o_buf, o_len, n_buf, n_len);
         skb_len = skb->len;
-                
+
         if (diff)
         {
                 struct iphdr *iph;

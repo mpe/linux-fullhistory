@@ -2955,12 +2955,8 @@ static void autoconfig(struct serial_state * state)
 int register_serial(struct serial_struct *req);
 void unregister_serial(int line);
 
-static struct symbol_table serial_syms = {
-#include <linux/symtab_begin.h>
-	X(register_serial),
-	X(unregister_serial),
-#include <linux/symtab_end.h>
-};
+EXPORT_SYMBOL(register_serial);
+EXPORT_SYMBOL(unregister_serial);
 
 /*
  * The serial driver boot-time initialization code!
@@ -3062,7 +3058,7 @@ int rs_init(void)
 		       state->port, state->irq,
 		       uart_config[state->type].name);
 	}
-	register_symtab(&serial_syms);
+
 	return 0;
 }
 

@@ -39,7 +39,7 @@
    		       init() so it doesn't migrate module based ethernet cards up
    		       to eth2 Took out the old module ideas as they are no longer
    		       relevant to the PI driver.
-   July 16, 1994 (dp)  Fixed the B channel rx overrun problem ac referred to 
+   July 16, 1994 (dp)  Fixed the B channel rx overrun problem ac referred to
    		       above. Also added a bit of a hack to improve the maximum
    	               baud rate on the B channel (Search for STUFF2). Included
    		       ioctl stuff from John Paul Morrison. version 0.6 ALPHA
@@ -51,7 +51,7 @@
                        version 0.8 ALPHA
    July 17, 1995 (ac)  Finally polishing of AX25.030+ support
    Oct  29, 1995 (ac)  A couple of minor fixes before this, and this release changes
-   		       to the proper set_mac_address semantics which will break 
+   		       to the proper set_mac_address semantics which will break
    		       a few programs I suspect.
    Aug  18, 1996 (jsn) Converted to be used as a module.
    Dec  13, 1996 (jsn) Fixed to match Linux networking changes.
@@ -124,16 +124,16 @@ struct mbuf {
 /*
  *	The actual devices we will use
  */
- 
+
 /*
  *	PI device declarations.
  */
- 
+
 static int pi0_preprobe(struct device *dev){return 0;}	/* Dummy probe function */
 static struct device pi0a = { "pi0a", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, pi0_preprobe };
 static struct device pi0b = { "pi0b", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, pi0_preprobe };
 
- 
+
 /* The number of low I/O ports used by the card. */
 #define PI_TOTAL_SIZE	8
 
@@ -688,7 +688,7 @@ static void b_txint(struct pi_local *lp)
              * Tx OFF now - flag should have gone
              */
 	    rts(lp, OFF);
-	 
+
 	    restore_flags(flags);
 	    return;
 	}
@@ -831,7 +831,7 @@ static void b_exint(struct pi_local *lp)
 	    c = *lp->txptr++;
 	    /* Wait for tx buffer empty */
 	    while((rdscc(lp->cardbase, cmd, R0) & 0x04) == 0)
-		;   
+		;
 	    wrtscc(lp->cardbase, cmd, R8, c);
 	}
 #endif
@@ -896,7 +896,7 @@ static void b_exint(struct pi_local *lp)
 	    c = *lp->txptr++;
 	    /* Wait for tx buffer empty */
 	    while((rdscc(lp->cardbase, cmd, R0) & 0x04) == 0)
-		;   
+		;
 	    wrtscc(lp->cardbase, cmd, R8, c);
 	}
 #endif
@@ -1225,9 +1225,9 @@ int pi_init(void)
        be rejected by get_dma_buffer().
     */
     register_netdev(&pi0a);
-    
+
     pi0a.priv = kmalloc(sizeof(struct pi_local) + (DMA_BUFF_SIZE + sizeof(struct mbuf)) * 4, GFP_KERNEL | GFP_DMA);
-			
+
     pi0a.dma = PI_DMA;
     pi0a.base_addr = ioaddr + 2;
     pi0a.irq = 0;
@@ -1244,7 +1244,7 @@ int pi_init(void)
     pi_probe(&pi0b, card_type);
 
     pi0b.irq = pi0a.irq;	/* IRQ is shared */
-    
+
     return 0;
 }
 
@@ -1510,7 +1510,7 @@ static void pi_interrupt(int reg_ptr, void *dev_id, struct pt_regs *regs)
 	printk(KERN_ERR "PI: pi_interrupt(): irq %d for unknown device.\n", irq);
 	return;
     }
-#endif    
+#endif
     /* Read interrupt status register (only valid from channel A)
      * Process all pending interrupts in while loop
      */
@@ -1591,7 +1591,7 @@ static int pi_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
     int ret = verify_area(VERIFY_WRITE, ifr->ifr_data, sizeof(struct pi_req));
     if (ret)
 	return ret;
-	
+
     if(cmd!=SIOCDEVPRIVATE)
     	return -EINVAL;
 
@@ -1628,7 +1628,7 @@ static int pi_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 	   pi_close(dev);
 	   free_dma(lp->dmachan);
 	   dev->dma = lp->dmachan = rq.dmachan;
-	   if (request_dma(lp->dmachan,"pi2")) 
+	   if (request_dma(lp->dmachan,"pi2"))
 		ret = -EAGAIN;
 	   pi_open(dev);
 	   restore_flags(flags);
@@ -1672,9 +1672,10 @@ static struct netstats *
 }
 
 #ifdef MODULE
+EXPORT_NO_SYMBOLS;
+
 int init_module(void)
 {
-    register_symtab(NULL);
     return pi_init();
 }
 

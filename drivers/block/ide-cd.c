@@ -144,6 +144,9 @@
  *                          to fix the drive door locking problems.
  *
  * 4.03  Dec 04, 1996  -- Added DSC overlap support.
+ * 4.04  Dec 29, 1996  -- Added CDROMREADRAW ioclt based on patch 
+ *                          by Ales Makarov (xmakarov@sun.felk.cvut.cz)
+ *
  *
  * MOSTLY DONE LIST:
  *  Query the drive to find what features are available
@@ -152,8 +155,8 @@
  * TO DO LIST:
  *  Avoid printing error messages for expected errors from the drive.
  *    (If you are using a cd changer, you may get errors in the kernel
-       logs that are completly expected.  Don't complpain to me about this,
-       unless you have a patch to fix it.  I am working on it...)
+ *     logs that are completly expected.  Don't complain to me about this,
+ *     unless you have a patch to fix it.  I am working on it...)
  *  Reset unlocks drive?
  *  Implement ide_cdrom_disc_status using the generic cdrom interface
  *  Implement ide_cdrom_select_speed using the generic cdrom interface
@@ -161,7 +164,7 @@
  *
  *  -- Suggestions are welcome.  Patches that work are more welcome though.
  *       For those wishing to work on this driver, please be sure you download
- *       and comply with the latest ATAPI standard.  This document can 
+ *       and comply with the latest ATAPI standard.  This document can be
  *       obtained by anonymous ftp from fission.dt.wdc.com in directory:
  *       /pub/standards/atapi/spec/SFF8020-r2.6/PDF/8020r26.pdf
  *
@@ -1834,7 +1837,7 @@ cdrom_read_block (ide_drive_t *drive, int format, int lba, int nblocks,
 	pc.c[7] = ((nblocks>>8) & 0xff);
 	pc.c[6] = ((nblocks>>16) & 0xff);
 	if (format <= 1)
-		pc.c[9] = 0xf0;
+		pc.c[9] = 0xf8;         /* returns 2352 for any format */
 	else
 		pc.c[9] = 0x10;
 
@@ -1956,6 +1959,7 @@ int ide_cdrom_dev_ioctl (struct cdrom_device_info *cdi,
 
 
 	switch (cmd) {
+	case CDROMREADRAW:
 	case CDROMREADMODE1:
 	case CDROMREADMODE2: {
 		struct cdrom_msf msf;
@@ -1966,11 +1970,13 @@ int ide_cdrom_dev_ioctl (struct cdrom_device_info *cdi,
 		if (cmd == CDROMREADMODE1) {
 			blocksize = CD_FRAMESIZE;
 			format = 2;
-		} else {
+		} else if (cmd == CDROMREADMODE2) {
 			blocksize = CD_FRAMESIZE_RAW0;
 			format = 3;
+		} else {
+			blocksize = CD_FRAMESIZE_RAW;
+			format = 0;
 		}
-
 		stat = verify_area (VERIFY_WRITE, (char *)arg, blocksize);
 		if (stat) return stat;
 
@@ -1989,7 +1995,7 @@ int ide_cdrom_dev_ioctl (struct cdrom_device_info *cdi,
 		if (lba < 0 || lba >= toc->capacity)
 			return -EINVAL;
 
-		buf = (char *) kmalloc (CD_FRAMESIZE_RAW0, GFP_KERNEL);
+		buf = (char *) kmalloc (CD_FRAMESIZE_RAW, GFP_KERNEL);
 		if (buf == NULL)
 			return -ENOMEM;
 

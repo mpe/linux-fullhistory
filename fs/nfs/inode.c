@@ -42,7 +42,7 @@ static void nfs_put_super(struct super_block *);
 static void nfs_read_inode(struct inode *);
 static void nfs_statfs(struct super_block *, struct statfs *, int bufsiz);
 
-static struct super_operations nfs_sops = { 
+static struct super_operations nfs_sops = {
 	nfs_read_inode,		/* read inode */
 	nfs_notify_change,	/* notify change */
 	NULL,			/* write inode */
@@ -280,7 +280,7 @@ int nfs_notify_change(struct inode *inode, struct iattr *attr)
 	int error;
 
 	sattr.mode = (unsigned) -1;
-	if (attr->ia_valid & ATTR_MODE) 
+	if (attr->ia_valid & ATTR_MODE)
 		sattr.mode = attr->ia_mode;
 
 	sattr.uid = (unsigned) -1;
@@ -360,13 +360,11 @@ int init_nfs_fs(void)
 }
 
 #ifdef MODULE
+EXPORT_NO_SYMBOLS;
+
 int init_module(void)
 {
-	int status;
-
-	if ((status = init_nfs_fs()) == 0)
-		register_symtab(0);
-	return status;
+	return init_nfs_fs();
 }
 
 void cleanup_module(void)

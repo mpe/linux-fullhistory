@@ -100,6 +100,7 @@ int rd_image_start = 0;		/* starting block # of image */
 #ifdef CONFIG_BLK_DEV_INITRD
 unsigned long initrd_start,initrd_end;
 int mount_initrd = 1;		/* zero if initrd should not be mounted */
+int initrd_below_start_ok = 0;
 #endif
 #endif
 

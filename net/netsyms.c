@@ -69,140 +69,136 @@ extern void destroy_8023_client(struct datalink_proto *);
 extern char *skb_push_errstr;
 extern char *skb_put_errstr;
 
-static struct symbol_table net_syms = {
-#include <linux/symtab_begin.h>
+/* Skbuff symbols. */
+EXPORT_SYMBOL(skb_push_errstr);
+EXPORT_SYMBOL(skb_put_errstr);
 
-	/* Skbuff symbols. */
-	X(skb_push_errstr),
-	X(skb_put_errstr),
+/* Socket layer registration */
+EXPORT_SYMBOL(sock_register);
+EXPORT_SYMBOL(sock_unregister);
 
-	/* Socket layer registration */
-	X(sock_register),
-	X(sock_unregister),
+/* Socket layer support routines */
+EXPORT_SYMBOL(memcpy_fromiovec);
+EXPORT_SYMBOL(sock_setsockopt);
+EXPORT_SYMBOL(sock_getsockopt);
+EXPORT_SYMBOL(sock_sendmsg);
+EXPORT_SYMBOL(sock_recvmsg);
+EXPORT_SYMBOL(sk_alloc);
+EXPORT_SYMBOL(sk_free);
+EXPORT_SYMBOL(sock_wake_async);
+EXPORT_SYMBOL(sock_alloc_send_skb);
+EXPORT_SYMBOL(sock_rfree);
+EXPORT_SYMBOL(sock_wfree);
+EXPORT_SYMBOL(skb_recv_datagram);
+EXPORT_SYMBOL(skb_free_datagram);
+EXPORT_SYMBOL(skb_copy_datagram);
+EXPORT_SYMBOL(skb_copy_datagram_iovec);
+EXPORT_SYMBOL(skb_realloc_headroom);
+EXPORT_SYMBOL(datagram_select);
 
-	/* Socket layer support routines */
-	X(memcpy_fromiovec),
-	X(sock_setsockopt),
-	X(sock_getsockopt),
-	X(sock_sendmsg),
-	X(sock_recvmsg),
-	X(sk_alloc),
-	X(sk_free),
-	X(sock_wake_async),
-	X(sock_alloc_send_skb),
-	X(sock_rfree),
-	X(sock_wfree),
-	X(skb_recv_datagram),
-	X(skb_free_datagram),
-	X(skb_copy_datagram),
-	X(skb_copy_datagram_iovec),
-	X(skb_realloc_headroom),
-	X(datagram_select),
-
-	/* Needed by smbfs.o */
-	X(__scm_destroy),
-	X(__scm_send),
+/* Needed by smbfs.o */
+EXPORT_SYMBOL(__scm_destroy);
+EXPORT_SYMBOL(__scm_send);
 
 #ifdef CONFIG_IPX_MODULE
-	X(make_8023_client),
-	X(destroy_8023_client),
-	X(make_EII_client),
-	X(destroy_EII_client),
+EXPORT_SYMBOL(make_8023_client);
+EXPORT_SYMBOL(destroy_8023_client);
+EXPORT_SYMBOL(make_EII_client);
+EXPORT_SYMBOL(destroy_EII_client);
 #endif
 
 #ifdef CONFIG_INET
-	/* Internet layer registration */
-	X(get_new_socknum),
-	X(inet_add_protocol),
-	X(inet_del_protocol),
-	X(rarp_ioctl_hook),
-	X(init_etherdev),
-	X(ip_route_output),
-	X(icmp_send),
-	X(ip_options_compile),
-	X(ip_rt_put),
-	X(arp_send),
-	X(ip_id_count),
-	X(ip_send_check),
-	X(ip_fragment),
-	X(ip_dev_find_tunnel),
-	X(inet_family_ops),
+/* Internet layer registration */
+EXPORT_SYMBOL(get_new_socknum);
+EXPORT_SYMBOL(inet_add_protocol);
+EXPORT_SYMBOL(inet_del_protocol);
+EXPORT_SYMBOL(rarp_ioctl_hook);
+EXPORT_SYMBOL(init_etherdev);
+EXPORT_SYMBOL(ip_route_output);
+EXPORT_SYMBOL(icmp_send);
+EXPORT_SYMBOL(ip_options_compile);
+EXPORT_SYMBOL(ip_rt_put);
+EXPORT_SYMBOL(arp_send);
+EXPORT_SYMBOL(ip_id_count);
+EXPORT_SYMBOL(ip_send_check);
+EXPORT_SYMBOL(ip_fragment);
+EXPORT_SYMBOL(ip_dev_find_tunnel);
+EXPORT_SYMBOL(inet_family_ops);
 
 #ifdef CONFIG_IP_FORWARD
-	X(ip_forward),
+EXPORT_SYMBOL(ip_forward);
 #endif
 
 #ifdef CONFIG_IPV6_MODULE
-	/* inet functions common to v4 and v6 */
-	X(inet_stream_ops),
-	X(inet_dgram_ops),
-	X(inet_remove_sock),
-	X(inet_release),
-	X(inet_stream_connect),
-	X(inet_dgram_connect),
-	X(inet_accept),
-	X(inet_select),
-	X(inet_listen),
-	X(inet_shutdown),
-	X(inet_setsockopt),
-	X(inet_getsockopt),
-	X(inet_fcntl),
-	X(inet_sendmsg),
-	X(inet_recvmsg),
-	X(tcp_sock_array),
-	X(udp_sock_array),
-	X(destroy_sock),
-	X(ip_queue_xmit),
-	X(csum_partial),
-	X(skb_copy),
-	X(dev_lockct),
-	X(ndisc_eth_hook),
-	X(memcpy_fromiovecend),
-	X(csum_partial_copy),
-	X(csum_partial_copy_fromiovecend),
-	X(__release_sock),
-	X(net_timer),
-	X(inet_put_sock),
-	/* UDP/TCP exported functions for TCPv6 */
-	X(udp_ioctl),
-	X(udp_connect),
-	X(udp_sendmsg),
-	X(tcp_cache_zap),
-	X(tcp_close),
-	X(tcp_accept),
-	X(tcp_write_wakeup),
-	X(tcp_read_wakeup),
-	X(tcp_select),
-	X(tcp_ioctl),
-	X(tcp_shutdown),
-	X(tcp_setsockopt),
-	X(tcp_getsockopt),
-	X(tcp_recvmsg),
-	X(tcp_send_synack),
-	X(sock_wmalloc),
-	X(tcp_reset_xmit_timer),
-	X(tcp_parse_options),
-	X(tcp_rcv_established),
-	X(tcp_init_xmit_timers),
-	X(tcp_clear_xmit_timers),
-	X(tcp_slt_array),
-	X(__tcp_inc_slow_timer),
-	X(tcp_statistics),
-	X(tcp_rcv_state_process),
-	X(tcp_do_sendmsg),
-	X(tcp_v4_build_header),
-	X(tcp_v4_rebuild_header),
-	X(tcp_v4_send_check),
-	X(tcp_v4_conn_request),
-	X(tcp_v4_syn_recv_sock),
-	X(tcp_v4_backlog_rcv),
-	X(tcp_v4_connect),
-	X(__ip_chk_addr),
-	X(net_reset_timer),
-	X(net_delete_timer),
-	X(udp_prot),
-	X(tcp_prot),
-	X(ipv4_specific),
+/* inet functions common to v4 and v6 */
+EXPORT_SYMBOL(inet_stream_ops);
+EXPORT_SYMBOL(inet_dgram_ops);
+EXPORT_SYMBOL(inet_remove_sock);
+EXPORT_SYMBOL(inet_release);
+EXPORT_SYMBOL(inet_stream_connect);
+EXPORT_SYMBOL(inet_dgram_connect);
+EXPORT_SYMBOL(inet_accept);
+EXPORT_SYMBOL(inet_select);
+EXPORT_SYMBOL(inet_listen);
+EXPORT_SYMBOL(inet_shutdown);
+EXPORT_SYMBOL(inet_setsockopt);
+EXPORT_SYMBOL(inet_getsockopt);
+EXPORT_SYMBOL(inet_fcntl);
+EXPORT_SYMBOL(inet_sendmsg);
+EXPORT_SYMBOL(inet_recvmsg);
+EXPORT_SYMBOL(tcp_sock_array);
+EXPORT_SYMBOL(udp_sock_array);
+EXPORT_SYMBOL(destroy_sock);
+EXPORT_SYMBOL(ip_queue_xmit);
+EXPORT_SYMBOL(csum_partial);
+EXPORT_SYMBOL(dev_lockct);
+EXPORT_SYMBOL(ndisc_eth_hook);
+EXPORT_SYMBOL(memcpy_fromiovecend);
+EXPORT_SYMBOL(csum_partial_copy);
+EXPORT_SYMBOL(csum_partial_copy_fromiovecend);
+EXPORT_SYMBOL(__release_sock);
+EXPORT_SYMBOL(net_timer);
+EXPORT_SYMBOL(inet_put_sock);
+/* UDP/TCP exported functions for TCPv6 */
+EXPORT_SYMBOL(udp_ioctl);
+EXPORT_SYMBOL(udp_connect);
+EXPORT_SYMBOL(udp_sendmsg);
+EXPORT_SYMBOL(tcp_cache_zap);
+EXPORT_SYMBOL(tcp_close);
+EXPORT_SYMBOL(tcp_accept);
+EXPORT_SYMBOL(tcp_write_wakeup);
+EXPORT_SYMBOL(tcp_read_wakeup);
+EXPORT_SYMBOL(tcp_select);
+EXPORT_SYMBOL(tcp_ioctl);
+EXPORT_SYMBOL(tcp_shutdown);
+EXPORT_SYMBOL(tcp_setsockopt);
+EXPORT_SYMBOL(tcp_getsockopt);
+EXPORT_SYMBOL(tcp_recvmsg);
+EXPORT_SYMBOL(tcp_send_synack);
+EXPORT_SYMBOL(sock_wmalloc);
+EXPORT_SYMBOL(tcp_reset_xmit_timer);
+EXPORT_SYMBOL(tcp_parse_options);
+EXPORT_SYMBOL(tcp_rcv_established);
+EXPORT_SYMBOL(tcp_init_xmit_timers);
+EXPORT_SYMBOL(tcp_clear_xmit_timers);
+EXPORT_SYMBOL(tcp_slt_array);
+EXPORT_SYMBOL(__tcp_inc_slow_timer);
+EXPORT_SYMBOL(tcp_statistics);
+EXPORT_SYMBOL(tcp_rcv_state_process);
+EXPORT_SYMBOL(tcp_do_sendmsg);
+EXPORT_SYMBOL(tcp_v4_build_header);
+EXPORT_SYMBOL(tcp_v4_rebuild_header);
+EXPORT_SYMBOL(tcp_v4_send_check);
+EXPORT_SYMBOL(tcp_v4_conn_request);
+EXPORT_SYMBOL(tcp_v4_syn_recv_sock);
+EXPORT_SYMBOL(tcp_v4_backlog_rcv);
+EXPORT_SYMBOL(tcp_v4_connect);
+EXPORT_SYMBOL(__ip_chk_addr);
+EXPORT_SYMBOL(net_reset_timer);
+EXPORT_SYMBOL(net_delete_timer);
+EXPORT_SYMBOL(udp_prot);
+EXPORT_SYMBOL(tcp_prot);
+EXPORT_SYMBOL(ipv4_specific);
 #endif
 
 #if	defined(CONFIG_ULTRA)	||	defined(CONFIG_WD80x3)		|| \
@@ -210,21 +206,21 @@ static struct symbol_table net_syms = {
 	defined(CONFIG_E2100)	||	defined(CONFIG_HPLAN_PLUS)	|| \
 	defined(CONFIG_HPLAN)	||	defined(CONFIG_AC3200)		|| \
 	defined(CONFIG_ES3210)
-	/* If 8390 NIC support is built in, we will need these. */
-	X(ei_open),
-	X(ei_close),
-	X(ei_debug),
-	X(ei_interrupt),
-	X(ethdev_init),
-	X(NS8390_init),
+/* If 8390 NIC support is built in, we will need these. */
+EXPORT_SYMBOL(ei_open);
+EXPORT_SYMBOL(ei_close);
+EXPORT_SYMBOL(ei_debug);
+EXPORT_SYMBOL(ei_interrupt);
+EXPORT_SYMBOL(ethdev_init);
+EXPORT_SYMBOL(NS8390_init);
 #endif
 
 #ifdef CONFIG_TR
-	X(tr_setup),
-	X(tr_type_trans),
-	X(register_trdev),
-	X(unregister_trdev),
-	X(init_trdev),
+EXPORT_SYMBOL(tr_setup);
+EXPORT_SYMBOL(tr_type_trans);
+EXPORT_SYMBOL(register_trdev);
+EXPORT_SYMBOL(unregister_trdev);
+EXPORT_SYMBOL(init_trdev);
 #endif
                           
 #ifdef CONFIG_NET_ALIAS
@@ -233,59 +229,50 @@ static struct symbol_table net_syms = {
 
 #endif  /* CONFIG_INET */
 
-	/* Device callback registration */
-	X(register_netdevice_notifier),
-	X(unregister_netdevice_notifier),
+/* Device callback registration */
+EXPORT_SYMBOL(register_netdevice_notifier);
+EXPORT_SYMBOL(unregister_netdevice_notifier);
 
 #ifdef CONFIG_NET_ALIAS
-	X(register_net_alias_type),
-	X(unregister_net_alias_type),
+EXPORT_SYMBOL(register_net_alias_type);
+EXPORT_SYMBOL(unregister_net_alias_type);
 #endif
 
-        /* support for loadable net drivers */
+/* support for loadable net drivers */
 #ifdef CONFIG_INET
-	X(register_netdev),
-	X(unregister_netdev),
-	X(ether_setup),
-	X(eth_type_trans),
-	X(eth_copy_and_sum),
-	X(arp_query),
-	X(alloc_skb),
-	X(__kfree_skb),
-	X(skb_clone),
-	X(skb_copy),
-	X(dev_alloc_skb),
-	X(netif_rx),
-	X(dev_tint),
-	X(irq2dev_map),
-	X(dev_add_pack),
-	X(dev_remove_pack),
-	X(dev_get),
-	X(dev_ioctl),
-	X(dev_queue_xmit),
-	X(dev_base),
-	X(dev_close),
-	X(dev_mc_add),
-	X(arp_find),
-	X(n_tty_ioctl),
-	X(tty_register_ldisc),
-	X(kill_fasync),
-	X(arp_query),
-	X(ip_rcv),
-	X(arp_rcv),
+EXPORT_SYMBOL(register_netdev);
+EXPORT_SYMBOL(unregister_netdev);
+EXPORT_SYMBOL(ether_setup);
+EXPORT_SYMBOL(eth_type_trans);
+EXPORT_SYMBOL(eth_copy_and_sum);
+EXPORT_SYMBOL(arp_query);
+EXPORT_SYMBOL(alloc_skb);
+EXPORT_SYMBOL(__kfree_skb);
+EXPORT_SYMBOL(skb_clone);
+EXPORT_SYMBOL(skb_copy);
+EXPORT_SYMBOL(dev_alloc_skb);
+EXPORT_SYMBOL(netif_rx);
+EXPORT_SYMBOL(dev_tint);
+EXPORT_SYMBOL(irq2dev_map);
+EXPORT_SYMBOL(dev_add_pack);
+EXPORT_SYMBOL(dev_remove_pack);
+EXPORT_SYMBOL(dev_get);
+EXPORT_SYMBOL(dev_ioctl);
+EXPORT_SYMBOL(dev_queue_xmit);
+EXPORT_SYMBOL(dev_base);
+EXPORT_SYMBOL(dev_close);
+EXPORT_SYMBOL(dev_mc_add);
+EXPORT_SYMBOL(arp_find);
+EXPORT_SYMBOL(n_tty_ioctl);
+EXPORT_SYMBOL(tty_register_ldisc);
+EXPORT_SYMBOL(kill_fasync);
+EXPORT_SYMBOL(ip_rcv);
+EXPORT_SYMBOL(arp_rcv);
 #endif  /* CONFIG_INET */
 
 #ifdef CONFIG_NETLINK
-	X(netlink_attach),
-	X(netlink_detach),
-	X(netlink_donothing),
-	X(netlink_post),
+EXPORT_SYMBOL(netlink_attach);
+EXPORT_SYMBOL(netlink_detach);
+EXPORT_SYMBOL(netlink_donothing);
+EXPORT_SYMBOL(netlink_post);
 #endif /* CONFIG_NETLINK */
-	
-#include <linux/symtab_end.h>
-};
-
-void export_net_symbols(void)
-{
-	register_symtab(&net_syms);
-}

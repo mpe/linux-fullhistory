@@ -713,7 +713,7 @@ de620_rx_intr(struct device *dev)
 		else { /* Yep! Go get it! */
 			skb_reserve(skb,2);	/* Align */
 			skb->dev = dev;
-			skb->free = 1;
+			skb->used = 0;
 			/* skb->data points to the start of sk_buff data area */
 			buffer = skb_put(skb,size);
 			/* copy the packet into the buffer */

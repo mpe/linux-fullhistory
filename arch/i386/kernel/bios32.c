@@ -105,6 +105,7 @@ union bios32 {
 	char chars[16];
 };
 
+#ifdef CONFIG_PCI
 /*
  * Physical address of the service directory.  I don't know if we're
  * allowed to have more than one of these or not, so just in case
@@ -118,7 +119,6 @@ static struct {
 	unsigned short segment;
 } bios32_indirect = { 0, KERNEL_CS };
 
-#ifdef CONFIG_PCI
 
 /*
  * function table for accessing PCI configuration space
@@ -619,7 +619,6 @@ struct pci_access pci_direct_conf2 = {
       pci_conf2_write_config_dword
 };
 
-#endif
 
 struct pci_access *check_direct_pci(void)
 {
@@ -773,9 +772,11 @@ unsigned long pcibios_fixup(unsigned long mem_start, unsigned long mem_end)
     return mem_start;
 }
 
+#endif
 
 unsigned long pcibios_init(unsigned long memory_start, unsigned long memory_end)
 {
+#ifdef CONFIG_PCI
 	union bios32 *check;
 	unsigned char sum;
 	int i, length;
@@ -818,7 +819,6 @@ unsigned long pcibios_init(unsigned long memory_start, unsigned long memory_end)
 			}
 		}
 	}
-#ifdef CONFIG_PCI
 	if (bios32_entry) {
 		memory_start = check_pcibios (memory_start, memory_end);
 	}

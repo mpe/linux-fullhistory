@@ -194,7 +194,7 @@ struct pci_dev_info dev_info[] = {
 	DEVICE( ALLIANCE,	ALLIANCE_PROMOTIO, "Promotion-6410"),
 	DEVICE( ALLIANCE,	ALLIANCE_PROVIDEO, "Provideo"),
 	DEVICE( VMIC,		VMIC_VME,	"VMIVME-7587"),
- 	DEVICE( DIGI,		DIGI_RIGHTSWITCH, "Digi RightSwitch SE-6"),
+ 	DEVICE( DIGI,		DIGI_RIGHTSWITCH, "RightSwitch SE-6"),
 	DEVICE( MUTECH,		MUTECH_MV1000,	"MV-1000"),
 	DEVICE( ZEITNET,	ZEITNET_1221,	"1221"),
 	DEVICE( ZEITNET,	ZEITNET_1225,	"1225"),
@@ -522,6 +522,7 @@ const char *pci_strvendor(unsigned int vendor)
 	      case PCI_VENDOR_ID_PLX:		return "PLX";
 	      case PCI_VENDOR_ID_ALLIANCE:	return "Alliance";
 	      case PCI_VENDOR_ID_VMIC:		return "VMIC";
+	      case PCI_VENDOR_ID_DIGI:		return "Digi Intl.";
 	      case PCI_VENDOR_ID_MUTECH:	return "Mutech";
 	      case PCI_VENDOR_ID_TOSHIBA:	return "Toshiba";
 	      case PCI_VENDOR_ID_ZEITNET:	return "ZeitNet";

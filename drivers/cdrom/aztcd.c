@@ -268,6 +268,7 @@ static int azt_mode = -1;
 static volatile int azt_read_count = 1;
 
 static int azt_port = AZT_BASE_ADDR;
+MODULE_PARM(azt_port, "i");
 
 static char  azt_cont = 0;
 static char  azt_init_end = 0;

@@ -1572,34 +1572,23 @@ void vfat_read_inode(struct inode *inode)
 	fat_read_inode(inode, &vfat_dir_inode_operations);
 }
 
-
-
-
 static struct file_system_type vfat_fs_type = {
 	vfat_read_super, "vfat", 1, NULL
 };
 
-static struct symbol_table vfat_syms = {
-#include <linux/symtab_begin.h>
-	X(vfat_create),
-	X(vfat_unlink),
-	X(vfat_mkdir),
-	X(vfat_rmdir),
-	X(vfat_rename),
-	X(vfat_put_super),
-	X(vfat_read_super),
-	X(vfat_read_inode),
-	X(vfat_lookup),
-#include <linux/symtab_end.h>
-};                                           
+EXPORT_SYMBOL(vfat_create);
+EXPORT_SYMBOL(vfat_unlink);
+EXPORT_SYMBOL(vfat_mkdir);
+EXPORT_SYMBOL(vfat_rmdir);
+EXPORT_SYMBOL(vfat_rename);
+EXPORT_SYMBOL(vfat_put_super);
+EXPORT_SYMBOL(vfat_read_super);
+EXPORT_SYMBOL(vfat_read_inode);
+EXPORT_SYMBOL(vfat_lookup);
 
 int init_vfat_fs(void)
 {
-	int status;
-
-	if ((status = register_filesystem(&vfat_fs_type)) == 0)
-		status = register_symtab(&vfat_syms);
-	return status;
+	return register_filesystem(&vfat_fs_type);
 }
 
 #ifdef MODULE
@@ -1607,7 +1596,6 @@ int init_module(void)
 {
 	return init_vfat_fs();
 }
-
 
 void cleanup_module(void)
 {

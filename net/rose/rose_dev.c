@@ -1,8 +1,8 @@
 /*
  *	Rose release 001
  *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
+ *	This is ALPHA test software. This code may break your machine, randomly fail to work with new
+ *	releases, misbehave and/or generally screw up. It might even work.
  *
  *	This code REQUIRES 2.1.0 or higher/ NET3.029
  *
@@ -87,8 +87,8 @@ static int rose_header(struct sk_buff *skb, struct device *dev, unsigned short t
 
 	if (daddr != NULL)
 		return 37;
-	
-	return -37;	
+
+	return -37;
 }
 
 static int rose_rebuild_header(struct sk_buff *skb)
@@ -130,7 +130,7 @@ static int rose_set_mac_address(struct device *dev, void *addr)
 	ax25_listen_release((ax25_address *)dev->dev_addr, NULL);
 
 	memcpy(dev->dev_addr, sa->sa_data, dev->addr_len);
-	
+
 	ax25_listen_register((ax25_address *)dev->dev_addr, NULL);
 
 	return 0;
@@ -249,15 +249,15 @@ static struct device dev_rose[] = {
 	{"rose1", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, rose_init}
 };
 
+EXPORT_NO_SYMBOLS;
+
 int init_module(void)
 {
 	register_netdev(&dev_rose[0]);
 	register_netdev(&dev_rose[1]);
 
-	register_symtab(NULL);
-
 	rose_proto_init(NULL);
-	
+
 	return 0;
 }
 
@@ -281,7 +281,7 @@ void cleanup_module(void)
 	unregister_netdevice_notifier(&rose_dev_notifier);
 
 	sock_unregister(rose_proto_ops.family);
-	
+
 	for (i = 0; i < 2; i++) {
 		if (dev_rose[i].priv != NULL) {
 			kfree(dev_rose[i].priv);

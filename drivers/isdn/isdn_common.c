@@ -5,7 +5,7 @@
  * Copyright 1994,95,96 by Fritz Elfert (fritz@wuemaus.franken.de)
  * Copyright 1995,96    Thinking Objects Software GmbH Wuerzburg
  * Copyright 1995,96    by Michael Hipp (Michael.Hipp@student.uni-tuebingen.de)
- * 
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2, or (at your option)
@@ -18,7 +18,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: isdn_common.c,v $
  * Revision 1.23  1996/06/25 18:35:38  fritz
@@ -297,7 +297,7 @@ static void isdn_receive_skb_callback(int di, int channel, struct sk_buff *skb)
         int ifmt;
 #endif
 	modem_info *info;
-        
+
         if ((i = isdn_dc2minor(di,channel))==-1) {
                 isdn_trash_skb(skb, FREE_READ);
                 return;
@@ -679,7 +679,7 @@ static int isdn_status_callback(isdn_ctrl * c)
                                 }
                         for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
                                 modem_info *info = &dev->mdm.info[i];
-                                
+
                                 if (info->isdn_driver == di) {
                                         info->isdn_driver = -1;
                                         info->isdn_channel = -1;
@@ -727,7 +727,7 @@ int isdn_getnum(char **p)
 /*
  * isdn_readbchan() tries to get data from the read-queue.
  * It MUST be called with interrupts off.
- *  
+ *
  * I hope I got the EFAULT error path right -AK.
  */
 int isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, int user)
@@ -739,7 +739,7 @@ int isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, int 
 	int dflag;
         struct sk_buff *skb;
 	u_char *cp;
-	int ret = 0; 
+	int ret = 0;
 
 	if (!dev->drv[di])
 		return 0;
@@ -753,7 +753,7 @@ int isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, int 
 	cp = buf;
 	count = 0;
 	while (left) {
-		        ret = 0; 
+		        ret = 0;
                 if (!(skb = skb_peek(&dev->drv[di]->rpqueue[channel])))
                         break;
                 if (skb->lock)
@@ -772,8 +772,8 @@ int isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, int 
                                 if (dev->drv[di]->DLEflag & DLEmask) {
 									    if (user) {
                                                 ret = put_user(DLE,cp);
-												cp++; 
-												if (ret) break; 
+												cp++;
+												if (ret) break;
                                         } else
                                                 *cp++ = DLE;
                                         dev->drv[di]->DLEflag &= ~DLEmask;
@@ -781,7 +781,7 @@ int isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, int 
 									    if (user) {
                                                 ret = put_user(*p,cp);
 												if (ret) break;
-												cp++; 
+												cp++;
                                         } else
                                                 *cp++ = *p;
                                         if (*p == DLE) {
@@ -803,12 +803,12 @@ int isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, int 
                                 dflag = 0;
                         }
                         count_put = count_pull;
-						ret = 0; 
+						ret = 0;
                         if (user)
                                 ret = copy_to_user(cp, skb->data, count_put);
                         else
                                 memcpy(cp, skb->data, count_put);
-						count_put -= ret; 
+						count_put -= ret;
                         cp += count_put;
                         left -= count_put;
                 }
@@ -832,7 +832,7 @@ int isdn_readbchan(int di, int channel, u_char * buf, u_char * fp, int len, int 
                          * but we pull off the data we got until now.
                          */
 			skb_pull(skb,count_pull);
-                        skb->lock = 0; 
+                        skb->lock = 0;
                 }
 		dev->drv[di]->rcvcount[channel] -= count_put;
 	}
@@ -937,7 +937,7 @@ static long isdn_read(struct inode *inode, struct file *file, char *buf, unsigne
 			if (copy_to_user(buf, p, len))
 				return -EFAULT;
 			file->f_pos += len;
-			return len; 
+			return len;
 		}
 		return 0;
 	}
@@ -1085,25 +1085,25 @@ static int isdn_set_allcfg(char *src)
 		return ret;
 	save_flags(flags);
 	cli();
-	ret = get_user(i, src); 
-	if (ret) 
-		goto out; 
+	ret = get_user(i, src);
+	if (ret)
+		goto out;
     src += sizeof(int);
 	while (i) {
 		char *c;
 		char *c2;
 
 		if(copy_from_user((char *) &cfg, src, sizeof(cfg)))
-			goto fault; 
+			goto fault;
 		src += sizeof(cfg);
 		if (!isdn_net_new(cfg.name, NULL)) {
 			restore_flags(flags);
 			return -EIO;
 		}
-		if ((ret = isdn_net_setcfg(&cfg))) 
-			goto out; 
+		if ((ret = isdn_net_setcfg(&cfg)))
+			goto out;
 		if(copy_from_user(buf, src, sizeof(buf)))
-			goto fault; 
+			goto fault;
 		src += sizeof(buf);
 		c = buf;
 		while (*c) {
@@ -1112,15 +1112,15 @@ static int isdn_set_allcfg(char *src)
 			strcpy(phone.phone, c);
 			strcpy(phone.name, cfg.name);
 			phone.outgoing = 0;
-			if ((ret = isdn_net_addphone(&phone))) 
-				goto fault; 
+			if ((ret = isdn_net_addphone(&phone)))
+				goto fault;
 			if (c2)
 				c = c2;
 			else
 				c += strlen(c);
 		}
    		if(copy_from_user(buf, src, sizeof(buf)))
-			goto fault; 
+			goto fault;
 		src += sizeof(buf);
 		c = buf;
 		while (*c) {
@@ -1129,8 +1129,8 @@ static int isdn_set_allcfg(char *src)
 			strcpy(phone.phone, c);
 			strcpy(phone.name, cfg.name);
 			phone.outgoing = 1;
-			if ((ret = isdn_net_addphone(&phone))) 
-				goto out; 
+			if ((ret = isdn_net_addphone(&phone)))
+				goto out;
 			if (c2)
 				c = c2;
 			else
@@ -1175,7 +1175,7 @@ static int isdn_get_allcfg(char *dest)
 		cfg.callback = (p->local.flags & ISDN_NET_CALLBACK) ? 1 : 0;
 		cfg.chargehup = (p->local.hupflags & 4) ? 1 : 0;
 		cfg.ihup = (p->local.hupflags & 8) ? 1 : 0;
-		ret = 0; 
+		ret = 0;
 		ret += copy_to_user(dest, p->local.name, 10);
 		dest += 10;
 		ret += copy_to_user(dest, (char *) &cfg, sizeof(cfg));
@@ -1183,15 +1183,15 @@ static int isdn_get_allcfg(char *dest)
 		strcpy(phone.name, p->local.name);
 		phone.outgoing = 0;
 		if (ret)
-			break; 
-		if ((ret = isdn_net_getphones(&phone, dest)) < 0) 
-			break; 
+			break;
+		if ((ret = isdn_net_getphones(&phone, dest)) < 0)
+			break;
 		else
 			dest += ret;
 		strcpy(phone.name, p->local.name);
 		phone.outgoing = 1;
-		if ((ret = isdn_net_getphones(&phone, dest)) < 0) 
-			break; 
+		if ((ret = isdn_net_getphones(&phone, dest)) < 0)
+			break;
 		else
 			dest += ret;
 		p = p->next;
@@ -1226,11 +1226,11 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                         int i;
                                         for (i = 0;i<ISDN_MAX_CHANNELS;i++) {
                                                 ret = put_user(dev->ibytes[i],p);
-	                                            if (ret) break; 
-												p++; 
+	                                            if (ret) break;
+												p++;
 												ret = put_user(dev->obytes[i],p);
-												p++; 
-												if (ret) break; 
+												p++;
+												if (ret) break;
                                         }
                                         return ret;
                                 } else
@@ -1258,19 +1258,19 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                 /* Add a network-interface */
                                 if (arg) {
                                         if(copy_from_user(name, (char *) arg, sizeof(name)))
-											return -EFAULT; 
+											return -EFAULT;
                                         s = name;
                                 } else
                                         s = NULL;
                                 if ((s = isdn_net_new(s, NULL))) {
-									    return copy_to_user((char *) arg, s, strlen(s) + 1) ? -EFAULT : ret; 
+									    return copy_to_user((char *) arg, s, strlen(s) + 1) ? -EFAULT : ret;
                                 } else
                                         return -ENODEV;
                         case IIOCNETASL:
                                 /* Add a slave to a network-interface */
                                 if (arg) {
                                         if(copy_from_user(bname, (char *) arg, sizeof(bname)))
-											return -EFAULT; 
+											return -EFAULT;
                                 } else
                                         return -EINVAL;
                                 if ((s = isdn_net_newslave(bname))) {
@@ -1293,12 +1293,12 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                         return -EINVAL;
                         case IIOCNETGCF:
                                 /* Get configurable parameters of a network-interface */
-                                if (arg) {				  
+                                if (arg) {
                                         if(copy_from_user((char *) &cfg, (char *) arg, sizeof(cfg)))
-											return -EFAULT; 
+											return -EFAULT;
                                         if (!(ret = isdn_net_getcfg(&cfg))) {
                                                 if(copy_to_user((char *) arg, (char *) &cfg, sizeof(cfg)))
-													return -EFAULT; 
+													return -EFAULT;
                                         }
                                         return ret;
                                 } else
@@ -1333,13 +1333,13 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                         return -EINVAL;
 #ifdef CONFIG_ISDN_PPP
                         case IIOCNETALN:
-								if (arg) 
+								if (arg)
                                         ret = copy_from_user(name,(char*)arg,sizeof(name));
 								else
-									    return -EINVAL; 
+									    return -EINVAL;
                                 return ret ? -EFAULT : isdn_ppp_dial_slave(name);
                         case IIOCNETDLN:
-							    
+
                                 if(arg) {
 									    ret = copy_from_user(name,(char*)arg,sizeof(name));
                                 } else
@@ -1374,7 +1374,7 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                         char *p;
                                         if(copy_from_user((char *) &iocts, (char *) arg,
                                                       sizeof(isdn_ioctl_struct)))
-											return -EFAULT; 
+											return -EFAULT;
 										if (strlen(iocts.drvid)) {
                                                 if ((p = strchr(iocts.drvid, ',')))
                                                         *p = 0;
@@ -1415,14 +1415,14 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                 if (arg) {
                                         char *p = (char *) arg;
                                         int i;
-                                                                   
+
                                         for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
                                                 if(copy_to_user(p, dev->mdm.info[i].emu.profile,
                                                             ISDN_MODEM_ANZREG))
 													return -EFAULT;
                                                 p += ISDN_MODEM_ANZREG;
                                                 if(copy_to_user(p, dev->mdm.info[i].emu.pmsn, ISDN_MSNLEN))
-													return -EFAULT; 
+													return -EFAULT;
                                                 p += ISDN_MSNLEN;
                                         }
                                         return (ISDN_MODEM_ANZREG + ISDN_MSNLEN) * ISDN_MAX_CHANNELS;
@@ -1434,14 +1434,14 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                 if (arg) {
                                         char *p = (char *) arg;
                                         int i;
-                                        
+
                                         for (i = 0; i < ISDN_MAX_CHANNELS; i++) {
                                                 if(copy_from_user(dev->mdm.info[i].emu.profile, p,
                                                               ISDN_MODEM_ANZREG))
-													return -EFAULT; 
+													return -EFAULT;
 												p += ISDN_MODEM_ANZREG;
                                                 if(copy_from_user(dev->mdm.info[i].emu.pmsn, p, ISDN_MSNLEN))
-													return -EFAULT; 
+													return -EFAULT;
 												p += ISDN_MSNLEN;
                                         }
                                         return 0;
@@ -1455,9 +1455,9 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                         int i;
                                         char *p;
                                         char nstring[255];
-                                        
+
                                         ret = copy_from_user((char *) &iocts, (char *) arg, sizeof(isdn_ioctl_struct));
-                      
+
 										if (ret) return -EFAULT;
 										if (strlen(iocts.drvid)) {
                                                 drvidx = -1;
@@ -1472,7 +1472,7 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                                 return -ENODEV;
                                         if (cmd == IIOCSETMAP) {
                                                 ret = copy_from_user(nstring, (char *) iocts.arg, 255);
-												if (ret) return -EFAULT; 
+												if (ret) return -EFAULT;
                                                 memset(dev->drv[drvidx]->msn2eaz, 0,
                                                        sizeof(dev->drv[drvidx]->msn2eaz));
                                                 p = strtok(nstring, ",");
@@ -1489,7 +1489,7 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
                                                                      dev->drv[drvidx]->msn2eaz[i] : "-",
                                                                      (i < 9) ? "," : "\0");
 												if(copy_to_user((char *) iocts.arg, nstring, strlen(nstring) + 1))
-													return -EFAULT; 
+													return -EFAULT;
 										}
                                         return 0;
                                 } else
@@ -1511,7 +1511,7 @@ static int isdn_ioctl(struct inode *inode, struct file *file, uint cmd, ulong ar
 
                                         ret = copy_from_user((char *) &iocts, (char *) arg, sizeof(isdn_ioctl_struct));
 										if (ret)
-											    return -EFAULT; 
+											    return -EFAULT;
                                         if (strlen(iocts.drvid)) {
                                                 if ((p = strchr(iocts.drvid, ',')))
                                                         *p = 0;
@@ -1802,7 +1802,7 @@ void isdn_unexclusive_channel(int di, int ch)
  * len     = Length of packet-data
  *
  */
-void isdn_receive_callback(int drvidx, int chan, u_char *buf, int len) 
+void isdn_receive_callback(int drvidx, int chan, u_char *buf, int len)
 {
         struct sk_buff *skb;
 
@@ -1819,7 +1819,7 @@ void isdn_receive_callback(int drvidx, int chan, u_char *buf, int len)
 /*
  *  writebuf replacement for SKB_ABLE drivers
  */
-int isdn_writebuf_stub(int drvidx, int chan, const u_char *buf, int len, 
+int isdn_writebuf_stub(int drvidx, int chan, const u_char *buf, int len,
 		       int user)
 {
 	int ret;
@@ -1841,7 +1841,7 @@ int isdn_writebuf_stub(int drvidx, int chan, const u_char *buf, int len,
                 if (user) {
 					    if(copy_from_user(skb_put(skb, len), buf, len)) {
 						        kfree_skb(skb,FREE_WRITE);
-						        return -EFAULT; 
+						        return -EFAULT;
 						}
                 } else
                         memcpy(skb_put(skb, len), buf, len);
@@ -1869,7 +1869,7 @@ int isdn_writebuf_skb_stub(int drvidx, int chan, struct sk_buff * skb)
         int ret;
 	int len = skb->len;	/* skb pointer no longer valid after free */
 
-        if (dev->drv[drvidx]->interface->writebuf_skb) 
+        if (dev->drv[drvidx]->interface->writebuf_skb)
 		ret = dev->drv[drvidx]->interface->
 			writebuf_skb(drvidx, chan, skb);
 	else {
@@ -1970,7 +1970,7 @@ int register_isdn(isdn_if * i)
 		if (!dev->drv[drvidx])
 			break;
 	i->channels = drvidx;
- 
+
 	i->rcvcallb_skb = isdn_receive_skb_callback;
 	i->rcvcallb     = isdn_receive_callback;
 	i->statcallb    = isdn_status_callback;
@@ -1980,7 +1980,7 @@ int register_isdn(isdn_if * i)
 	cli();
         for (j = 0; j < drvidx; j++)
                 if (!strcmp(i->id,dev->drvid[j]))
-                    sprintf(i->id, "line%d", drvidx);                    
+                    sprintf(i->id, "line%d", drvidx);
 	for (j = 0; j < n; j++)
 		for (k = 0; k < ISDN_MAX_CHANNELS; k++)
 			if (dev->chanmap[k] < 0) {
@@ -2023,15 +2023,10 @@ static char *isdn_getrev(const char *revision)
 	return rev;
 }
 
-static struct symbol_table isdn_syms = {
-#include <linux/symtab_begin.h>
-        X(register_isdn),
-#include <linux/symtab_end.h>
-};
+EXPORT_SYMBOL(register_isdn);
 
 static void isdn_export_syms(void)
 {
-        register_symtab(&isdn_syms);
         has_exported = 1;
 }
 

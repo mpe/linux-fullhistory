@@ -467,7 +467,7 @@ Scsi_Host_Template idescsi_template = IDESCSI;
 int init_module (void)
 {
 	idescsi_init ();
-	idescsi_template.usage_count = &mod_use_count_;
+	idescsi_template.usage_count = &__this_module.usecount;
 	scsi_register_module (MODULE_SCSI_HA, &idescsi_template);
 	return 0;
 }

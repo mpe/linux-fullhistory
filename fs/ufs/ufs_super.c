@@ -57,13 +57,11 @@ init_ufs_fs(void)
 }
 
 #ifdef MODULE
+EXPORT_NO_SYMBOLS;
+
 int init_module(void)
 {
-	int status;
-
-	if ((status = init_ufs_fs()) == 0)
-		register_symtab(0);
-	return status;
+	return init_ufs_fs();
 }
 
 void cleanup_module(void)
@@ -138,7 +136,7 @@ ufs_read_super(struct super_block * sb, void * data, int silent)
 		goto ufs_read_super_lose;
 	}
 	/* XXX - redo this so we can free it later... */
-	usb = (struct ufs_superblock *)__get_free_page(GFP_KERNEL); 
+	usb = (struct ufs_superblock *)__get_free_page(GFP_KERNEL);
 	if (usb == NULL) {
 		brelse(bh1);
 		brelse(bh2);
@@ -325,4 +323,3 @@ void ufs_statfs(struct super_block * sb, struct statfs * buf, int bufsiz)
 	copy_to_user(buf, sp, bufsiz);
 	return;
 }
-

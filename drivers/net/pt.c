@@ -36,8 +36,8 @@
  *		pt_loopback functions - they were unused.
  * 13/12/96 jsn Fixed to match Linux networking changes.
  */
- 
-/* 
+
+/*
  * default configuration of the PackeTwin,
  * ie What Craig uses his PT for.
  */
@@ -172,7 +172,7 @@ static void switchbuffers(struct pt_local *lp)
     else
 	lp->rcvbuf = lp->rxdmabuf1;
 }
-		
+
 static void hardware_send_packet(struct pt_local *lp, struct sk_buff *skb)
 {
     char kickflag;
@@ -214,7 +214,7 @@ static void hardware_send_packet(struct pt_local *lp, struct sk_buff *skb)
 		} /*switch */
 		return;
 	}
-	
+
     lp->stats.tx_packets++;
 
     save_flags(flags);
@@ -224,18 +224,18 @@ static void hardware_send_packet(struct pt_local *lp, struct sk_buff *skb)
 
 #ifdef PT_DEBUG
 	printk(KERN_DEBUG "PT: hardware_send_packet(): kickflag = %d (%d).\n", kickflag, lp->base & CHANA);
-#endif	
+#endif
     skb_queue_tail(&lp->sndq, skb);
     if (kickflag) {
         /* Simulate interrupt to transmit */
             if (lp->dmachan)
-            {	
+            {
             	pt_txisr(lp);
             } else {
             	save_flags(flags);
 	           	cli();
             	if (lp->tstate == IDLE)
-                	pt_txisr(lp); 
+                	pt_txisr(lp);
             	restore_flags(flags);
             }
     }
@@ -331,7 +331,7 @@ static void scc_init(struct device *dev)
 
 #ifdef PT_DEBUG
 	printk(KERN_DEBUG "PT: scc_init(): (%d).\n", lp->base & CHANA);
-#endif	
+#endif
     save_flags(flags);
     cli();
 
@@ -344,26 +344,26 @@ static void scc_init(struct device *dev)
     } else {
     	wrtscc(lp->cardbase, cmd, R9, CHRB);		/* Reset channel B */
     }
-    
+
     /* Deselect all Rx and Tx interrupts */
     wrtscc(lp->cardbase, cmd, R1, 0);
-    
+
     /* Turn off external interrupts (like CTS/CD) */
     wrtscc(lp->cardbase, cmd, R15, 0);
-           
+
     /* X1 clock, SDLC mode */
     wrtscc(lp->cardbase, cmd, R4, SDLC | X1CLK);
-	
+
 	/* Preset CRC and set mode */
 	if (lp->nrzi)
 	{
     	/* Preset Tx CRC, put into NRZI mode */
-       wrtscc(lp->cardbase, cmd, R10, CRCPS | NRZI);		
+       wrtscc(lp->cardbase, cmd, R10, CRCPS | NRZI);
     } else {
     	/* Preset Tx CRC, put into NRZ mode */
-       wrtscc(lp->cardbase, cmd, R10, CRCPS);    
+       wrtscc(lp->cardbase, cmd, R10, CRCPS);
     }
-    
+
     /* Tx/Rx parameters */
     if (lp->speed)		/* Use internal clocking */
     {
@@ -375,7 +375,7 @@ static void scc_init(struct device *dev)
            wrtscc(lp->cardbase, cmd, R11, TCTRxCP | RCRTxCP | TRxCBR);
            wrtscc(lp->cardbase,cmd, R14, 0);	/* wiz1 */
     }
-       
+
     /* Null out SDLC start address */
     wrtscc(lp->cardbase, cmd, R6, 0);
 
@@ -397,12 +397,12 @@ static void scc_init(struct device *dev)
 		br = lp->speed;
 		tc = ((lp->xtal / 32) / (br * 2)) - 2;
 	    wrtscc(lp->cardbase, cmd, R12, tc & 0xff);		/* lower byte */
-   		wrtscc(lp->cardbase, cmd, R13, (tc >> 8) & 0xff);	/* upper byte */			
+   		wrtscc(lp->cardbase, cmd, R13, (tc >> 8) & 0xff);	/* upper byte */
 	}
 
 	/* Turn transmitter off, to setup stuff */
    	pt_rts(lp, OFF);
-   	
+
 	/* External clocking */
 	if (lp->speed)
 	{
@@ -415,7 +415,7 @@ static void scc_init(struct device *dev)
         if (lp->base & CHANA)
             outb_p( (pt_sercfg &= ~PT_EXTCLKA), (lp->cardbase + SERIAL_CFG) );
         else
-            outb_p( (pt_sercfg &= ~PT_EXTCLKB), (lp->cardbase + SERIAL_CFG) );        	    
+            outb_p( (pt_sercfg &= ~PT_EXTCLKB), (lp->cardbase + SERIAL_CFG) );
     } else {
 		/* DPLL frm rtxc,BRG src PCLK */
 /*		wrtscc(lp->cardbase, cmd, R14, BRSRC | SSRTxC);*/
@@ -423,14 +423,14 @@ static void scc_init(struct device *dev)
         if (lp->base & CHANA)
             outb_p( (pt_sercfg |= PT_EXTCLKA), (lp->cardbase + SERIAL_CFG) );
         else
-            outb_p( (pt_sercfg |= PT_EXTCLKB), (lp->cardbase + SERIAL_CFG) );     
+            outb_p( (pt_sercfg |= PT_EXTCLKB), (lp->cardbase + SERIAL_CFG) );
     }
 
-    if (!lp->dmachan)	
+    if (!lp->dmachan)
 		wrtscc(lp->cardbase, cmd, R1, (INT_ALL_Rx | EXT_INT_ENAB));
 
     wrtscc(lp->cardbase, cmd, R15, BRKIE);	/* ABORT int */
-	
+
 	/* Turn on the DTR to tell modem we're alive */
 	if (lp->base & CHANA)
 	    outb_p( (pt_sercfg |= PT_DTRA_ON), (lp->cardbase + SERIAL_CFG) );
@@ -439,7 +439,7 @@ static void scc_init(struct device *dev)
 
     /* Now, turn on the receiver and hunt for a flag */
     wrtscc(lp->cardbase, cmd, R3, RxENABLE | RxCRC_ENAB | AUTO_ENAB | Rx8 );
-	
+
 	restore_flags(flags);
 
 } /* scc_init() */
@@ -451,11 +451,11 @@ static void chipset_init(struct device *dev)
 	struct pt_local *lp = (struct pt_local*) dev->priv;
 #ifdef PT_DEBUG
 	printk(KERN_DEBUG "PT: chipset_init(): pt0a tstate = %d.\n", ((struct pt_local*)pt0a.priv)->tstate);
-	printk(KERN_DEBUG "PT: chipset_init(): pt0b tstate = %d.\n", ((struct pt_local*)pt0b.priv)->tstate);	
+	printk(KERN_DEBUG "PT: chipset_init(): pt0b tstate = %d.\n", ((struct pt_local*)pt0b.priv)->tstate);
 #endif
 	/* Reset SCC if both channels are to be canned */
 	if ( ((lp->base & CHANA) && !(pt_sercfg & PT_DTRB_ON)) ||
-			(!(lp->base & CHANA) && !(pt_sercfg & PT_DTRA_ON)) ) 
+			(!(lp->base & CHANA) && !(pt_sercfg & PT_DTRA_ON)) )
 	{
 		wrtscc(lp->cardbase, lp->base + CTL, R9, FHWRES);
         	/* Reset int and dma registers */
@@ -463,7 +463,7 @@ static void chipset_init(struct device *dev)
 	        outb_p((pt_dmacfg = 0), lp->cardbase + DMA_CFG);
 #ifdef PT_DEBUG
 		printk(KERN_DEBUG "PT: chipset_init() Resetting SCC, called by ch (%d).\n", lp->base & CHANA);
-#endif			        
+#endif
 	}
 	/* Reset individual channel */
     	if (lp->base & CHANA) {
@@ -471,11 +471,11 @@ static void chipset_init(struct device *dev)
         	outb_p( (pt_sercfg &= ~PT_DTRA_ON), lp->cardbase + SERIAL_CFG);
     	} else {
         	wrtscc(lp->cardbase, lp->base + CTL, R9, MIE | DLC | NV | CHRB);
-			outb_p( (pt_sercfg &= ~PT_DTRB_ON), lp->cardbase + SERIAL_CFG);			 
-	}	
-} /* chipset_init() */	
-	
-	
+			outb_p( (pt_sercfg &= ~PT_DTRB_ON), lp->cardbase + SERIAL_CFG);
+	}
+} /* chipset_init() */
+
+
 
 int pt_init(void)
 {
@@ -532,7 +532,7 @@ int pt_init(void)
     pt_probe(&pt0b);
 
     pt0b.irq = pt0a.irq;	/* IRQ is shared */
-    
+
     return 0;
 } /* pt_init() */
 
@@ -545,7 +545,7 @@ static int hw_probe(int ioaddr)
     int a = 1;
     int b = 1;
     unsigned long start_time, end_time;
-    
+
     inb_p(ioaddr + TMR1CLR);
     inb_p(ioaddr + TMR2CLR);
 
@@ -558,7 +558,7 @@ static int hw_probe(int ioaddr)
     outb_p(SC1 | LSB_MSB | MODE0, ioaddr + TMRCMD);
     outb_p((time << 1) & 0xff, ioaddr + TMR1);
     outb_p((time >> 7) & 0xff, ioaddr + TMR1);
-    
+
     /* wait until counter reg is loaded */
     do {
         /* Latch count for reading */
@@ -581,20 +581,20 @@ static int hw_probe(int ioaddr)
             return 0;
         }
     }
-    
+
     /* Now fix the timers up for general operation */
-    
+
     /* Clear the timers */
     inb_p(ioaddr + TMR1CLR);
     inb_p(ioaddr + TMR2CLR);
-    
+
     outb_p(SC1 | LSB_MSB | MODE0, ioaddr + TMRCMD);
     inb_p(ioaddr + TMR1CLR);
-    
+
     outb_p(SC2 | LSB_MSB | MODE0, ioaddr + TMRCMD);
     /* Should this be tmr1 or tmr2? wiz3*/
     inb_p(ioaddr + TMR1CLR);
-    
+
     return 1;
 } /* hw_probe() */
 
@@ -606,13 +606,13 @@ static void pt_rts(struct pt_local *lp, int x)
 	int cmd = lp->base + CTL;
 #ifdef PT_DEBUG
 	printk(KERN_DEBUG "PT: pt_rts(): Transmitter status will be %d (%d).\n", x, lp->base & CHANA);
-#endif			
+#endif
 	if (x == ON) {
 	    /* Ex ints off to avoid int */
 	    wrtscc(lp->cardbase, cmd, R15, 0);
 	    wrtscc(lp->cardbase, cmd, R3, AUTO_ENAB | Rx8);	/* Rx off */
 	    lp->rstate = IDLE;
-	    
+
 	    if(lp->dmachan)
 	    {
 	        /* Setup for Tx DMA */
@@ -621,7 +621,7 @@ static void pt_rts(struct pt_local *lp, int x)
 	        /* No interrupts */
 	        wrtscc(lp->cardbase, cmd, R1, 0);
 	    }
-	
+
             if (!lp->clockmode)
             {
                 if (lp->speed)
@@ -637,7 +637,7 @@ static void pt_rts(struct pt_local *lp, int x)
             /* Transmitter on now */
         } else {		/* turning off Tx */
             lp->tstate = IDLE;
-            
+
             /* Turn off Tx by dropping RTS */
             wrtscc(lp->cardbase, cmd, R5, Tx8 | DTR);
             if (!lp->clockmode)
@@ -651,7 +651,7 @@ static void pt_rts(struct pt_local *lp, int x)
                     tc = ((lp->xtal / 32) / (br * 2)) - 2;
                     wrtscc(lp->cardbase, cmd, R12, tc & 0xff);
                     wrtscc(lp->cardbase, cmd, R13, (tc >> 8) & 0xff);
-                    
+
                     /* SEARCH mode, BRG source */
                     wrtscc(lp->cardbase, cmd, R14, BRSRC | SEARCH);
                     /* Enable the BRG */
@@ -661,23 +661,23 @@ static void pt_rts(struct pt_local *lp, int x)
             /* Flush Rx fifo */
             /* Turn Rx off */
             wrtscc(lp->cardbase, cmd, R3, AUTO_ENAB | Rx8);
-            
+
             /* Reset error latch */
             wrtscc(lp->cardbase, cmd, R0, ERR_RES);
-            
+
             /* get status byte from R1 */
             (void) rdscc(lp->cardbase, cmd, R1);
-            
+
             /* Read and dump data in queue */
             (void) rdscc(lp->cardbase, cmd, R8);
             (void) rdscc(lp->cardbase, cmd, R8);
             (void) rdscc(lp->cardbase, cmd, R8);
-            
+
             /* Now, turn on Rx and hunt for a flag */
               wrtscc(lp->cardbase, cmd, R3, RxENABLE | AUTO_ENAB | Rx8 );
-              
+
             lp->rstate = ACTIVE;
-            
+
             if (lp->dmachan)
             {
                 setup_rx_dma(lp);
@@ -691,9 +691,9 @@ static void pt_rts(struct pt_local *lp, int x)
 	}
 	wrtscc(lp->cardbase, cmd, R15, BRKIE );
     }
-} /* pt_rts() */	
-		
-				
+} /* pt_rts() */
+
+
 static int valid_dma_page(unsigned long addr, unsigned long dev_bufsize)
 {
     if (((addr & 0xffff) + dev_bufsize) <= 0x10000)
@@ -708,7 +708,7 @@ static int pt_set_mac_address(struct device *dev, void *addr)
 	memcpy(dev->dev_addr, sa->sa_data, dev->addr_len);		/* addr is an AX.25 shifted ASCII */
 	return 0;		/* mac address */
 }
-	
+
 
 /* Allocate a buffer which does not cross a DMA page boundary */
 static char * get_dma_buffer(unsigned long *mem_ptr)
@@ -765,11 +765,11 @@ static int pt_probe(struct device *dev)
 
     lp->base = dev->base_addr;
     lp->cardbase = dev->base_addr & 0x3f0;
-	
+
     /* These need to be initialised before scc_init() is called.
      */
     lp->xtal = XTAL;
-    
+
     if (dev->base_addr & CHANA) {
         lp->speed = DEF_A_SPEED;
         lp->txdelay = DEF_A_TXDELAY;
@@ -801,10 +801,10 @@ static int pt_probe(struct device *dev)
 	 * properly first!!
 	 */
 	lp->dmachan = 0;
-	
+
         if (dev->irq < 2) {
             autoirq_setup(0);
-            
+
             /* Turn on PT interrupts */
             save_flags(flags);
             cli();
@@ -818,7 +818,7 @@ static int pt_probe(struct device *dev)
 	    /* Turn off PT interrupts */
 	    save_flags(flags);
 	    cli();
-            outb_p( (pt_sercfg  &= ~ PT_EI), lp->cardbase + INT_CFG);            
+            outb_p( (pt_sercfg  &= ~ PT_EI), lp->cardbase + INT_CFG);
             restore_flags(flags);
 
             if (!dev->irq) {
@@ -893,7 +893,7 @@ static int pt_open(struct device *dev)
     unsigned long flags;
     struct pt_local *lp = dev->priv;
     static first_time = 1;
-    
+
     if (dev->base_addr & CHANA)
     {
         if (first_time)
@@ -905,12 +905,12 @@ static int pt_open(struct device *dev)
             }
         }
  	irq2dev_map[dev->irq] = dev;
- 
-         /* Reset hardware */	
+
+         /* Reset hardware */
          chipset_init(dev);
      }
      lp->tstate = IDLE;
-    
+
      if (dev->base_addr & CHANA)
      {
          scc_init(dev);
@@ -919,12 +919,12 @@ static int pt_open(struct device *dev)
      /* Save a copy of register RR0 for comparing with later on */
      /* We always put 0 in zero count */
      lp->saved_RR0 = rdscc(lp->cardbase, lp->base + CTL, R0) & ~ZCOUNT;
-    
+
     /* master interrupt enable */
     save_flags(flags);
     cli();
     wrtscc(lp->cardbase, lp->base + CTL, R9, MIE | NV);
-    outb_p( pt_sercfg |= PT_EI, lp->cardbase + INT_CFG);    
+    outb_p( pt_sercfg |= PT_EI, lp->cardbase + INT_CFG);
     restore_flags(flags);
 
     lp->open_time = jiffies;
@@ -935,7 +935,7 @@ static int pt_open(struct device *dev)
     first_time = 0;
 
     MOD_INC_USE_COUNT;
-	
+
     return 0;
 } /* pt_open() */
 
@@ -945,7 +945,7 @@ static int pt_send_packet(struct sk_buff *skb, struct device *dev)
 
 #ifdef PT_DEBUG
 	printk(KERN_DEBUG "PT: pt_send_packet(): (%d)\n", lp->base & CHANA);
-#endif			
+#endif
 	/* If some higher layer thinks we've missed an tx-done interrupt
 	   we are passed NULL. Caution: dev_tint() handles the cli()/sti()
 	   itself.*/
@@ -955,11 +955,11 @@ static int pt_send_packet(struct sk_buff *skb, struct device *dev)
 	}
 	hardware_send_packet(lp, skb);
 	dev->trans_start = jiffies;
-	
+
 	return 0;
 }
-				   
-	   
+
+
 
 /* The inverse routine to pt_open() */
 static int pt_close(struct device *dev)
@@ -970,12 +970,12 @@ static int pt_close(struct device *dev)
 	int cmd;
 
 	cmd = lp->base + CTL;
-		
+
 	save_flags(flags);
 	cli();
-	
+
 	/* Reset SCC or channel */
-	chipset_init(dev);	
+	chipset_init(dev);
 	disable_dma(lp->dmachan);
 
 	lp->open_time = 0;
@@ -985,15 +985,15 @@ static int pt_close(struct device *dev)
 	/* Free any buffers left in the hardware transmit queue */
 	while ((ptr = skb_dequeue(&lp->sndq)) != NULL)
 		free_p(ptr);
-		
+
 	restore_flags(flags);
-	
+
 #ifdef PT_DEBUG
-	printk(KERN_DEBUG "PT: pt_close(): Closing down channel (%d).\n", lp->base & CHANA);	
-#endif	
+	printk(KERN_DEBUG "PT: pt_close(): Closing down channel (%d).\n", lp->base & CHANA);
+#endif
 
 	MOD_DEC_USE_COUNT;
-	
+
 	return 0;
 } /* pt_close() */
 
@@ -1010,7 +1010,7 @@ static int pt_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 
     if (cmd != SIOCDEVPRIVATE)
         return -EINVAL;
-        
+
     copy_from_user(&rq, ifr->ifr_data, sizeof(struct pt_req));
 
     switch (rq.cmd) {
@@ -1044,7 +1044,7 @@ static int pt_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 	   pt_close(dev);
 	   free_dma(lp->dmachan);
 	   dev->dma = lp->dmachan = rq.dmachan;
-	   if (request_dma(lp->dmachan,"pt")) 
+	   if (request_dma(lp->dmachan,"pt"))
 		ret = -EAGAIN;
 	   pt_open(dev);
 	   restore_flags(flags);
@@ -1103,7 +1103,7 @@ static void tdelay(struct pt_local *lp, int time)
 	/* For some reason, we turn off the Tx interrupts here! */
 	if (!lp->dmachan)
 		wrtscc(lp->cardbase, lp->base + CTL, R1, INT_ALL_Rx | EXT_INT_ENAB);
-	
+
     if (lp->base & CHANA) {
         outb_p(time & 0xff, lp->cardbase + TMR1);
         outb_p((time >> 8)&0xff, lp->cardbase + TMR1);
@@ -1119,23 +1119,23 @@ static void pt_txisr(struct pt_local *lp)
 	unsigned long flags;
 	int cmd;
 	unsigned char c;
-	
+
 	save_flags(flags);
 	cli();
 	cmd = lp->base + CTL;
 
 #ifdef PT_DEBUG
 	printk(KERN_DEBUG "PT: pt_txisr(): tstate = %d (%d).\n", lp->tstate, lp->base & CHANA);
-#endif	
-	
-	switch (lp->tstate) 
+#endif
+
+	switch (lp->tstate)
 	{
 	case CRCOUT:
 	    lp->tstate = FLAGOUT;
 	    tdelay(lp, lp->squeldelay);
 	    restore_flags(flags);
 	    return;
-	    
+
 	case IDLE:
 	    /* Transmitter idle. Find a frame for transmission */
 	    if ((lp->sndbuf = skb_dequeue(&lp->sndq)) == NULL)
@@ -1144,7 +1144,7 @@ static void pt_txisr(struct pt_local *lp)
 	         * Tx off now - flag should have gone
 	         */
 	        pt_rts(lp, OFF);
-	        
+
 	        restore_flags(flags);
 	        return;
 	    }
@@ -1155,7 +1155,7 @@ static void pt_txisr(struct pt_local *lp)
 		    lp->txcnt = (int) lp->sndbuf->len - 1;
 		}
 	    /* If a buffer to send, drop though here */
-	
+
 	case DEFER:
 	    /* Check DCD - debounce it */
 	    /* See Intel Microcommunications Handbook p2-308 */
@@ -1184,12 +1184,12 @@ static void pt_txisr(struct pt_local *lp)
 	    tdelay(lp, lp->txdelay);
 	    restore_flags(flags);
 	    return;
-	
+
 	case ACTIVE:
 	    /* Here we are actively sending a frame */
 	    if (lp->txcnt--)
 	    {
-	        /* XLZ - checkout Gracilis PT code to see if the while 
+	        /* XLZ - checkout Gracilis PT code to see if the while
 	         * loop is better or not.
 	         */
 	        c = *lp->txptr++;
@@ -1228,7 +1228,7 @@ static void pt_txisr(struct pt_local *lp)
 		printk(KERN_ERR "PT: pt_txisr(): Invalid tstate (%d) for chan %s.\n", lp->tstate, (cmd & CHANA? "A": "B") );
 		pt_rts(lp, OFF);
 		lp->tstate = IDLE;
-		break;		
+		break;
     } 				/*switch */
     restore_flags(flags);
 }
@@ -1250,15 +1250,15 @@ static void pt_rxisr(struct device *dev)
 
     /* Get status byte from R1 */
     rse = rdscc(lp->cardbase, cmd, R1);
-    
+
 #ifdef PT_DEBUG
     printk(KERN_DEBUG "PT: pt_rxisr(): R1 = %#3x. (%d)\n", rse, lp->base & CHANA);
-#endif        
+#endif
 
 	if (lp->dmachan && (rse & Rx_OVR))
 		lp->rstate = RXERROR;
-		
-    if (rdscc(lp->cardbase, cmd, R0) & Rx_CH_AV && !lp->dmachan) 
+
+    if (rdscc(lp->cardbase, cmd, R0) & Rx_CH_AV && !lp->dmachan)
     {
         /* There is a char to be stored
          * Read special condition bits before reading the data char
@@ -1291,22 +1291,22 @@ static void pt_rxisr(struct device *dev)
              (void) rdscc(lp->cardbase, cmd, R8);
              (void) rdscc(lp->cardbase, cmd, R8);
              (void) rdscc(lp->cardbase, cmd, R8);
-             
+
              /* Reset error latch */
              wrtscc(lp->cardbase, cmd, R0, ERR_RES);
              lp->rstate = ACTIVE;
-             
+
              /* Resync the SCC */
              wrtscc(lp->cardbase, cmd, R3, RxENABLE | ENT_HM | AUTO_ENAB | Rx8);
-             
+
          }
      }
-     
+
      if (rse & END_FR)
      {
 #ifdef PT_DEBUG
 	printk(KERN_DEBUG "PT: pt_rxisr() Got end of a %u byte frame.\n", lp->rcvbuf->cnt);
-#endif	     
+#endif
 		if (lp->dmachan)
 		{
 			clear_dma_ff(lp->dmachan);
@@ -1314,7 +1314,7 @@ static void pt_rxisr(struct device *dev)
 		} else {
 			bytecount = lp->rcvbuf->cnt;
 		}
-			
+
          /* END OF FRAME - Make sure Rx was active */
          if (lp->rcvbuf->cnt > 0 || lp->dmachan)
          {
@@ -1339,12 +1339,12 @@ static void pt_rxisr(struct device *dev)
         	         lp->rcvbuf->cnt = 0;
 
 					/* Re-sync the SCC */
-					wrtscc(lp->cardbase, cmd, R3, RxENABLE | ENT_HM | AUTO_ENAB | Rx8);			
-        	         
+					wrtscc(lp->cardbase, cmd, R3, RxENABLE | ENT_HM | AUTO_ENAB | Rx8);
+
         	     }
 #ifdef PT_DEBUG
 	printk(KERN_DEBUG "PT: pt_rxisr() %s error.\n", (rse & CRC_ERR)? "CRC" : "state");
-#endif                 
+#endif
              } else {
                  /* We have a valid frame */
                  if (lp->dmachan)
@@ -1353,11 +1353,11 @@ static void pt_rxisr(struct device *dev)
 					/* Get buffer for next frame */
                  	cur_buf = lp->rcvbuf;
                  	switchbuffers(lp);
-                 	setup_rx_dma(lp);                 	
+                 	setup_rx_dma(lp);
                  } else {
 	                 pkt_len = lp->rcvbuf->cnt -= 2;  /* Toss 2 CRC bytes */
     	             pkt_len += 1;	/* make room for KISS control byte */
-        		}         
+        		}
 
                  /* Malloc up new buffer */
                  sksize = pkt_len;
@@ -1370,7 +1370,7 @@ static void pt_rxisr(struct device *dev)
                      return;
                  }
                  skb->dev = dev;
-                 
+
                  /* KISS kludge = prefix with a 0 byte */
                  cfix=skb_put(skb,pkt_len);
                  *cfix++=0;
@@ -1411,13 +1411,13 @@ static void pt_tmrisr(struct pt_local *lp)
 
 #ifdef PT_DEBUG
 	printk(KERN_DEBUG "PT: pt_tmrisr(): tstate = %d (%d).\n", lp->tstate, lp->base & CHANA);
-#endif		
-	
+#endif
+
     save_flags(flags);
     cli();
-    
-    
-    switch (lp->tstate) 
+
+
+    switch (lp->tstate)
     {
     /* Most of this stuff is in pt_exisr() */
     case FLAGOUT:
@@ -1426,19 +1426,19 @@ static void pt_tmrisr(struct pt_local *lp)
 /*    case ACTIVE:
     case UNDERRUN:*/
         pt_exisr(lp);
-        break; 
-      
+        break;
+
     default:
 	if (lp->base & CHANA)
  	    printk(KERN_ERR "PT: pt_tmrisr(): Invalid tstate %d for Channel A\n", lp->tstate);
 	else
 	    printk(KERN_ERR "PT: pt_tmrisr(): Invalid tstate %d for Channel B\n", lp->tstate);
-	break;		
+	break;
     } /* end switch */
     restore_flags(flags);
 } /* pt_tmrisr() */
 
-	
+
 /*
  * This routine is called by the kernel when there is an interrupt for the
  * PT.
@@ -1452,7 +1452,7 @@ static void pt_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     unsigned char st;
     register int cbase = dev->base_addr & 0x3f0;
     unsigned long flags;
-    
+
     /* Read the PT's interrupt register, this is not the SCC one! */
     intreg = inb_p(cbase + INT_REG);
     while(( intreg & 0x07) != 0x07) {
@@ -1462,11 +1462,11 @@ static void pt_interrupt(int irq, void *dev_id, struct pt_regs *regs)
         	/* Read interrupt vector from R2, channel B */
 #ifdef PT_DEBUG
 		printk(KERN_DEBUG "PT: pt_interrupt(): R3 = %#3x", st);
-#endif		        
+#endif
 /*        	st = rdscc(lp->cardbase, cbase + CHANB + CTL, R2) & 0x0e;*/
 #ifdef PT_DEBUG
 		printk(KERN_DEBUG "PI: R2 = %#3x.\n", st);
-#endif	
+#endif
 			if (st & CHARxIP) {
 			    /* Channel A Rx */
 	            lp = (struct pt_local*)pt0a.priv;
@@ -1498,7 +1498,7 @@ static void pt_interrupt(int irq, void *dev_id, struct pt_regs *regs)
             wrtscc(lp->cardbase, lp->base + CTL, R0, RES_H_IUS);
             restore_flags(flags);
         }  /* end of SCC ints */
-        
+
         if (!(intreg & PT_TMR1_MSK))
         {
             /* Clear timer 1 */
@@ -1528,19 +1528,19 @@ static void pt_exisr(struct pt_local *lp)
     unsigned char st;
     char c;
     int length;
-    
+
     save_flags(flags);
     cli();
-    
+
     /* Get external status */
     st = rdscc(lp->cardbase, cmd, R0);
 
 #ifdef PT_DEBUG
 	printk(KERN_DEBUG "PT: exisr(): R0 = %#3x tstate = %d (%d).\n", st, lp->tstate, lp->base & CHANA);
-#endif	
+#endif
     /* Reset external status latch */
     wrtscc(lp->cardbase, cmd, R0, RES_EXT_INT);
-    
+
     if ((lp->rstate >= ACTIVE) && (st & BRK_ABRT) && lp->dmachan)
     {
     	setup_rx_dma(lp);
@@ -1552,7 +1552,7 @@ static void pt_exisr(struct pt_local *lp)
     case ACTIVE:		/* Unexpected underrun */
 #ifdef PT_DEBUG
 	printk(KERN_DEBUG "PT: exisr(): unexpected underrun detected.\n");
-#endif	    
+#endif
         free_p(lp->sndbuf);
         lp->sndbuf = NULL;
         if (!lp->dmachan)
@@ -1565,7 +1565,7 @@ static void pt_exisr(struct pt_local *lp)
         tdelay(lp, lp->squeldelay);
         restore_flags(flags);
         return;
-    case UNDERRUN:		
+    case UNDERRUN:
         lp->tstate = CRCOUT;
         restore_flags(flags);
         return;
@@ -1587,47 +1587,47 @@ static void pt_exisr(struct pt_local *lp)
 	        lp->txcnt = (int) lp->sndbuf->len - 1;
 	    }
         /* Fall through if we have a packet */
-    
+
     case ST_TXDELAY:
     	if (lp->dmachan)
     	{
     		/* Disable DMA chan */
     		disable_dma(lp->dmachan);
-    		
+
     		/* Set up for TX dma */
     		wrtscc(lp->cardbase, cmd, R1, WT_FN_RDYFN | EXT_INT_ENAB);
-    		
+
     		length = lp->sndbuf->len - 1;
     		memcpy(lp->txdmabuf, &lp->sndbuf->data[1], length);
-    		
+
     		/* Setup DMA controller for Tx */
     		setup_tx_dma(lp, length);
-    		
+
     		enable_dma(lp->dmachan);
-    		
+
     		/* Reset CRC, Txint pending */
     		wrtscc(lp->cardbase, cmd, R0, RES_Tx_CRC | RES_Tx_P);
-    		
+
     		/* Allow underrun only */
     		wrtscc(lp->cardbase, cmd, R15, TxUIE);
-    		
+
     		/* Enable TX DMA */
     		wrtscc(lp->cardbase, cmd, R1, WT_RDY_ENAB | WT_FN_RDYFN | EXT_INT_ENAB);
-    		
+
     		/* Send CRC on underrun */
     		wrtscc(lp->cardbase, cmd, R0, RES_EOM_L);
-    		
+
     		lp->tstate = ACTIVE;
     		break;
-    	} 
+    	}
         /* Get first char to send */
         lp->txcnt--;
         c = *lp->txptr++;
         /* Reset CRC for next frame */
         wrtscc(lp->cardbase, cmd, R0, RES_Tx_CRC);
-        
+
         /* send abort on underrun */
-        if (lp->nrzi)	
+        if (lp->nrzi)
         {
             wrtscc(lp->cardbase, cmd, R10, CRCPS | NRZI | ABUNDER);
         } else {
@@ -1635,10 +1635,10 @@ static void pt_exisr(struct pt_local *lp)
         }
         /* send first char */
         wrtscc(lp->cardbase, cmd, R8, c);
-        
+
         /* Reset end of message latch */
         wrtscc(lp->cardbase, cmd, R0, RES_EOM_L);
-        
+
         /* stuff an extra one in */
 /*        while ((rdscc(lp->cardbase, cmd, R0) & Tx_BUF_EMP) && lp->txcnt)
         {
@@ -1646,21 +1646,21 @@ static void pt_exisr(struct pt_local *lp)
             c = *lp->txptr++;
             wrtscc(lp->cardbase, cmd, R8, c);
         }*/
-        
+
         /* select Tx interrupts to enable */
         /* Allow underrun int only */
         wrtscc(lp->cardbase, cmd, R15, TxUIE);
-        
+
         /* Reset external interrupts */
         wrtscc(lp->cardbase, cmd, R0, RES_EXT_INT);
-        
+
         /* Tx and Rx ints enabled */
         wrtscc(lp->cardbase, cmd, R1, TxINT_ENAB | EXT_INT_ENAB);
-        
+
         lp->tstate = ACTIVE;
         restore_flags(flags);
         return;
-        
+
         /* slotime has timed out */
     case DEFER:
         /* Check DCD - debounce it
@@ -1691,14 +1691,14 @@ static void pt_exisr(struct pt_local *lp)
         tdelay(lp, lp->txdelay);
         restore_flags(flags);
         return;
- 
+
  	/* Only for int driven parts */
  	if (lp->dmachan)
  	{
  		restore_flags(flags);
  		return;
  	}
- 	
+
     } /* end switch */
     /*
      * Rx mode only
@@ -1710,24 +1710,24 @@ static void pt_exisr(struct pt_local *lp)
     {
 #ifdef PT_DEBUG
 	printk(KERN_DEBUG "PT: exisr(): abort detected.\n");
-#endif        
+#endif
   		/* read and dump all of SCC Rx FIFO */
         (void) rdscc(lp->cardbase, cmd, R8);
         (void) rdscc(lp->cardbase, cmd, R8);
-        (void) rdscc(lp->cardbase, cmd, R8);      
-        
+        (void) rdscc(lp->cardbase, cmd, R8);
+
         lp->rcp = lp->rcvbuf->data;
         lp->rcvbuf->cnt = 0;
-        
+
 		/* Re-sync the SCC */
-		wrtscc(lp->cardbase, cmd, R3, RxENABLE | ENT_HM | AUTO_ENAB | Rx8);			
+		wrtscc(lp->cardbase, cmd, R3, RxENABLE | ENT_HM | AUTO_ENAB | Rx8);
 
     }
-    
+
     /* Check for DCD transitions */
     if ( (st & DCD) != (lp->saved_RR0 & DCD))
     {
-#ifdef PT_DEBUG    
+#ifdef PT_DEBUG
         printk(KERN_DEBUG "PT: pt_exisr(): DCD is now %s.\n", (st & DCD)? "ON" : "OFF" );
 #endif
 		if (st & DCD)
@@ -1737,13 +1737,13 @@ static void pt_exisr(struct pt_local *lp)
 			{
 #ifdef PT_DEBUG
 				printk(KERN_DEBUG "PT: pt_exisr() dumping %u bytes from buffer.\n", lp->rcvbuf->cnt);
-#endif					
+#endif
 				/* wind back buffers */
 				lp->rcp = lp->rcvbuf->data;
 				lp->rcvbuf->cnt = 0;
 			}
 		} else {  /* DCD off */
-			
+
 			/* read and dump al SCC FIFO */
 			(void)rdscc(lp->cardbase, cmd, R8);
 			(void)rdscc(lp->cardbase, cmd, R8);
@@ -1752,11 +1752,11 @@ static void pt_exisr(struct pt_local *lp)
 			/* wind back buffers */
 			lp->rcp = lp->rcvbuf->data;
 			lp->rcvbuf->cnt = 0;
-			
+
 			/* Re-sync the SCC */
-			wrtscc(lp->cardbase, cmd, R3, RxENABLE | ENT_HM | AUTO_ENAB | Rx8);			
-		}		
-			
+			wrtscc(lp->cardbase, cmd, R3, RxENABLE | ENT_HM | AUTO_ENAB | Rx8);
+		}
+
     }
     /* Update the saved version of register RR) */
     lp->saved_RR0 = st &~ ZCOUNT;
@@ -1765,9 +1765,10 @@ static void pt_exisr(struct pt_local *lp)
 } /* pt_exisr() */
 
 #ifdef MODULE
+EXPORT_NO_SYMBOLS;
+
 int init_module(void)
 {
-    register_symtab(NULL);
     return pt_init();
 }
 
@@ -1780,7 +1781,7 @@ void cleanup_module(void)
     kfree(pt0a.priv);
     pt0a.priv = NULL;
     unregister_netdev(&pt0a);
-    
+
     kfree(pt0b.priv);
     pt0b.priv = NULL;
     unregister_netdev(&pt0b);

@@ -65,139 +65,128 @@ extern void dump_thread(struct pt_regs *, struct user *);
  * support routines are named is a mess, they all start with
  * a '.' which makes it a bitch to export, here is the trick:
  */
-#define DD(sym) extern int __sparc_dot_ ## sym (int) __asm__("." ## #sym)
-#define XD(sym) { (void *) & __sparc_dot_ ## sym, "." ## #sym }
 
-DD(rem);
-DD(urem);
-DD(div);
-DD(udiv);
-DD(mul);
-DD(umul);
+#define EXPORT_SYMBOL_DOT(sym)					\
+extern int __sparc_dot_ ## sym (int) __asm__("." ## #sym);	\
+const struct module_symbol __export_dot_##sym			\
+__attribute__((section("__ksymtab"))) =				\
+{ (unsigned long) &__sparc_dot_ ## sym, "." ## #sym }
 
-static struct symbol_table arch_symbol_table = {
-#include <linux/symtab_begin.h>
 
-	/* used by various drivers */
-	X(sparc_cpu_model),
+/* used by various drivers */
+EXPORT_SYMBOL(sparc_cpu_model);
 #ifdef __SMP__
-	X(kernel_flag),
-	X(kernel_counter),
-	X(active_kernel_processor),
-	X(syscall_count),
+EXPORT_SYMBOL(kernel_flag);
+EXPORT_SYMBOL(kernel_counter);
+EXPORT_SYMBOL(active_kernel_processor);
+EXPORT_SYMBOL(syscall_count);
 #endif
-	X(page_offset),
-	X(stack_top),
+EXPORT_SYMBOL(page_offset);
+EXPORT_SYMBOL(stack_top);
 
-	X(udelay),
-	X(mstk48t02_regs),
+EXPORT_SYMBOL(udelay);
+EXPORT_SYMBOL(mstk48t02_regs);
 #if CONFIG_SUN_AUXIO
-	X(auxio_register),
+EXPORT_SYMBOL(auxio_register);
 #endif
-	X(request_fast_irq),
-	X(sparc_alloc_io),
-	X(sparc_free_io),
-	X(mmu_v2p),
-	X(mmu_unlockarea),
-	X(mmu_lockarea),
-	X(mmu_get_scsi_sgl),
-	X(mmu_get_scsi_one),
-	X(mmu_release_scsi_sgl),
-	X(mmu_release_scsi_one),
-	X(sparc_dvma_malloc),
-	X(sun4c_unmapioaddr),
-	X(srmmu_unmapioaddr),
+EXPORT_SYMBOL(request_fast_irq);
+EXPORT_SYMBOL(sparc_alloc_io);
+EXPORT_SYMBOL(sparc_free_io);
+EXPORT_SYMBOL(mmu_v2p);
+EXPORT_SYMBOL(mmu_unlockarea);
+EXPORT_SYMBOL(mmu_lockarea);
+EXPORT_SYMBOL(mmu_get_scsi_sgl);
+EXPORT_SYMBOL(mmu_get_scsi_one);
+EXPORT_SYMBOL(mmu_release_scsi_sgl);
+EXPORT_SYMBOL(mmu_release_scsi_one);
+EXPORT_SYMBOL(sparc_dvma_malloc);
+EXPORT_SYMBOL(sun4c_unmapioaddr);
+EXPORT_SYMBOL(srmmu_unmapioaddr);
 #if CONFIG_SBUS
-	X(SBus_chain),
+EXPORT_SYMBOL(SBus_chain);
 #endif
-	/* Solaris/SunOS binary compatibility */
-	X(svr4_setcontext),
-	X(svr4_getcontext),
-	X(_sigpause_common),
-	X(sunos_mmap),
-	X(sunos_poll),
 
-	/* Should really be in linux/kernel/ksyms.c */
-	X(dump_thread),
+/* Solaris/SunOS binary compatibility */
+EXPORT_SYMBOL(svr4_setcontext);
+EXPORT_SYMBOL(svr4_getcontext);
+EXPORT_SYMBOL(_sigpause_common);
+EXPORT_SYMBOL(sunos_mmap);
+EXPORT_SYMBOL(sunos_poll);
 
-	/* prom symbols */
-	X(idprom),
-	X(prom_root_node),
-	X(prom_getchild),
-        X(prom_getsibling),
-	X(prom_searchsiblings),
-	X(prom_firstprop),
-        X(prom_nextprop),
-	X(prom_getproplen),
-	X(prom_getproperty),
-        X(prom_setprop),
-        X(prom_nodeops),
-	X(prom_getbootargs),
-	X(prom_apply_obio_ranges),
-	X(prom_getname),
-	X(prom_feval),
-	X(prom_getstring),
-	X(prom_apply_sbus_ranges),
-	X(prom_getint),
-	X(prom_getintdefault),
-	X(romvec),
+/* Should really be in linux/kernel/ksyms.c */
+EXPORT_SYMBOL(dump_thread);
 
-	/* sparc library symbols */
-	X(bcopy),
-	X(memmove),
-	X(memscan),
-	X(strlen),
-	X(strnlen),
-	X(strcpy),
-	X(strncpy),
-	X(strcat),
-	X(strncat),
-	X(strcmp),
-	X(strncmp),
-	X(strchr),
-	X(strrchr),
-	X(strpbrk),
-	X(strtok),
-	X(strstr),
-	X(strspn),
+/* prom symbols */
+EXPORT_SYMBOL(idprom);
+EXPORT_SYMBOL(prom_root_node);
+EXPORT_SYMBOL(prom_getchild);
+EXPORT_SYMBOL(prom_getsibling);
+EXPORT_SYMBOL(prom_searchsiblings);
+EXPORT_SYMBOL(prom_firstprop);
+EXPORT_SYMBOL(prom_nextprop);
+EXPORT_SYMBOL(prom_getproplen);
+EXPORT_SYMBOL(prom_getproperty);
+EXPORT_SYMOBL(prom_setprop);
+EXPORT_SYMBOL(prom_nodeops);
+EXPORT_SYMBOL(prom_getbootargs);
+EXPORT_SYMBOL(prom_apply_obio_ranges);
+EXPORT_SYMBOL(prom_getname);
+EXPORT_SYMBOL(prom_feval);
+EXPORT_SYMBOL(prom_getstring);
+EXPORT_SYMBOL(prom_apply_sbus_ranges);
+EXPORT_SYMBOL(prom_getint);
+EXPORT_SYMBOL(prom_getintdefault);
+EXPORT_SYMBOL(romvec);
 
-	/* Special internal versions of library functions. */
-	X(__copy_1page),
-	X(__memcpy),
-	X(__memset),
-	X(bzero_1page),
-	X(__bzero),
-	X(__memscan_zero),
-	X(__memscan_generic),
-	X(__memcmp),
-	X(__strncmp),
+/* sparc library symbols */
+EXPORT_SYMBOL(bcopy);
+EXPORT_SYMBOL(memmove);
+EXPORT_SYMBOL(memscan);
+EXPORT_SYMBOL(strlen);
+EXPORT_SYMBOL(strnlen);
+EXPORT_SYMBOL(strcpy);
+EXPORT_SYMBOL(strncpy);
+EXPORT_SYMBOL(strcat);
+EXPORT_SYMBOL(strncat);
+EXPORT_SYMBOL(strcmp);
+EXPORT_SYMBOL(strncmp);
+EXPORT_SYMBOL(strchr);
+EXPORT_SYMBOL(strrchr);
+EXPORT_SYMBOL(strpbrk);
+EXPORT_SYMBOL(strtok);
+EXPORT_SYMBOL(strstr);
+EXPORT_SYMBOL(strspn);
 
-	/* Moving data to/from userspace. */
-	X(__copy_user),
-	X(__clear_user),
-	X(__strncpy_from_user),
+/* Special internal versions of library functions. */
+EXPORT_SYMBOL(__copy_1page);
+EXPORT_SYMBOL(__memcpy);
+EXPORT_SYMBOL(__memset);
+EXPORT_SYMBOL(bzero_1page);
+EXPORT_SYMBOL(__bzero);
+EXPORT_SYMBOL(__memscan_zero);
+EXPORT_SYMBOL(__memscan_generic);
+EXPORT_SYMBOL(__memcmp);
+EXPORT_SYMBOL(__strncmp);
 
-	/* No version information on this, heavily used in inline asm,
-	 * and will always be 'void __ret_efault(void)'.
-	 */
-	XNOVERS(__ret_efault),
+/* Moving data to/from userspace. */
+EXPORT_SYMBOL(__copy_user);
+EXPORT_SYMBOL(__clear_user);
+EXPORT_SYMBOL(__strncpy_from_user);
 
-	/* No version information on these, as gcc produces such symbols. */
-	XNOVERS(memcmp),
-	XNOVERS(memcpy),
-	XNOVERS(memset),
-	XNOVERS(__ashrdi3),
+/* No version information on this, heavily used in inline asm,
+ * and will always be 'void __ret_efault(void)'.
+ */
+EXPORT_SYMBOLNOVERS(__ret_efault);
 
-	XD(rem),
-	XD(urem),
-	XD(mul),
-	XD(umul),
-	XD(div),
-	XD(udiv),
-#include <linux/symtab_end.h>
-};
+/* No version information on these, as gcc produces such symbols. */
+EXPORT_SYMBOL_NOVERS(memcmp);
+EXPORT_SYMBOL_NOVERS(memcpy);
+EXPORT_SYMBOL_NOVERS(memset);
+EXPORT_SYMBOL_NOVERS(__ashrdi3);
 
-void arch_syms_export(void)
-{
-	register_symtab(&arch_symbol_table);
-}
+EXPORT_SYMBOL_DOT(rem);
+EXPORT_SYMBOL_DOT(urem);
+EXPORT_SYMBOL_DOT(mul);
+EXPORT_SYMBOL_DOT(umul);
+EXPORT_SYMBOL_DOT(div);
+EXPORT_SYMBOL_DOT(udiv);

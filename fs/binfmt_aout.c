@@ -37,7 +37,7 @@ static struct linux_binfmt aout_format = {
 #ifndef MODULE
 	NULL, NULL, load_aout_binary, load_aout_library, aout_core_dump
 #else
-	NULL, &mod_use_count_, load_aout_binary, load_aout_library, aout_core_dump
+	NULL, &__this_module.usecount, load_aout_binary, load_aout_library, aout_core_dump
 #endif
 };
 

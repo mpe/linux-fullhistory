@@ -5,7 +5,7 @@
  * Version:	@(#)ip_masq_irc.c 0.01   03/20/96
  *
  * Author:	Juan Jose Ciarlante
- *		
+ *
  *
  * Fixes:
  *	- set NO_DADDR flag in ip_masq_new().
@@ -17,7 +17,7 @@
  *	modify it under the terms of the GNU General Public License
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
- *	
+ *
  */
 
 #include <linux/module.h>
@@ -77,29 +77,29 @@ masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
          *		AAAAAAAAA: bound addr (1.0.0.0==16777216, min 8 digits)
          *		P:         bound port (min 1 d )
          *		F:         filename   (min 1 d )
-         *		S:         size       (min 1 d ) 
+         *		S:         size       (min 1 d )
          *		0x01, \n:  terminators
          */
 
         data_limit = skb->h.raw + skb->len;
-        
+
 	while (data < (data_limit - 25) )
 	{
 		if (memcmp(data,"DCC ",4))  {
 			data ++;
 			continue;
 		}
-                
+
                 dcc_p = data;
 		data += 4;     /* point to DCC cmd */
-                
+
                 if (memcmp(data, "CHAT ", 5) == 0 ||
                     memcmp(data, "SEND ", 5) == 0)
                 {
                         /*
                          *	extra arg (file_size) req. for "SEND"
                          */
-                        
+
                         if (*data == 'S') xtra_args++;
                         data += 5;
                 }
@@ -109,22 +109,22 @@ masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
                 /*
                  *	skip next string.
                  */
-                
+
                 while( *data++ != ' ')
-                        
+
                         /*
                          *	must still parse, at least, "AAAAAAAA P\x01\n",
                          *      12 bytes left.
                          */
                         if (data > (data_limit-12)) return 0;
 
-                
+
                 addr_beg_p = data;
-                
+
                 /*
                  *	client bound address in dec base
                  */
-                
+
  		s_addr = simple_strtoul(data,&data,10);
 		if (*data++ !=' ')
 			continue;
@@ -132,14 +132,14 @@ masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
                 /*
                  *	client bound port in dec base
                  */
-                
+
 		s_port = simple_strtoul(data,&data,10);
                 addr_end_p = data;
-                
+
                 /*
                  *	should check args consistency?
                  */
-                
+
                 while(xtra_args) {
                         if (*data != ' ')
                                 break;
@@ -147,24 +147,24 @@ masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
                         simple_strtoul(data,&data,10);
                         xtra_args--;
                 }
-                
+
                 if (xtra_args != 0) continue;
-                
+
                 /*
                  *	terminators.
                  */
-                
+
                 if (data[0] != 0x01)
                         continue;
 		if (data[1]!='\r' && data[1]!='\n')
 			continue;
-                
+
 		/*
 		 *	Now create an masquerade entry for it
                  * 	must set NO_DPORT and NO_DADDR because
                  *	connection is requested by another client.
 		 */
-                
+
 		n_ms = ip_masq_new(dev, IPPROTO_TCP,
                                    htonl(s_addr),htons(s_port),
                                    0, 0,
@@ -174,29 +174,29 @@ masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
 			return 0;
 
                 ip_masq_set_expire(n_ms, ip_masq_expire->tcp_fin_timeout);
-                
+
 		/*
 		 * Replace the old "address port" with the new one
 		 */
-                
+
 		buf_len = sprintf(buf,"%lu %u",
                         ntohl(n_ms->maddr),ntohs(n_ms->mport));
-                
+
 		/*
 		 * Calculate required delta-offset to keep TCP happy
 		 */
-		
+
 		diff = buf_len - (addr_end_p-addr_beg_p);
 
 #if DEBUG_CONFIG_IP_MASQ_IRC
                 *addr_beg_p = '\0';
 		printk("masq_irc_out(): '%s' %X:%X detected (diff=%d)\n", dcc_p, s_addr,s_port, diff);
-#endif	
+#endif
 		/*
 		 *	No shift.
 		 */
-		 
-		if (diff==0) 
+
+		if (diff==0)
 		{
 			/*
 			 * simple case, just copy.
@@ -219,7 +219,7 @@ masq_irc_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **skb
  *     	You need 1 object per port in case you need
  *	to offer also other used irc ports (6665,6666,etc),
  *	they will share methods but they need own space for
- *	data. 
+ *	data.
  */
 
 struct ip_masq_app ip_masq_irc = {
@@ -252,12 +252,12 @@ int ip_masq_irc_done(void)
 }
 
 #ifdef MODULE
+EXPORT_NO_SYMBOLS;
 
 int init_module(void)
 {
         if (ip_masq_irc_init() != 0)
                 return -EIO;
-        register_symtab(NULL);
         return 0;
 }
 

@@ -32,7 +32,7 @@
 #include <linux/module.h>
 
 int init_module(void) {
-    driver_template.usage_count = &mod_use_count_;
+    driver_template.usage_count = &__this_module.usecount;
     scsi_register_module(MODULE_SCSI_HA, &driver_template);
     return (driver_template.present == 0);
 }

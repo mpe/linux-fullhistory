@@ -46,7 +46,7 @@ void ext_put_super(struct super_block *sb)
 	return;
 }
 
-static struct super_operations ext_sops = { 
+static struct super_operations ext_sops = {
 	ext_read_inode,
 	NULL,
 	ext_write_inode,
@@ -57,7 +57,7 @@ static struct super_operations ext_sops = {
 	NULL
 };
 
-struct super_block *ext_read_super(struct super_block *s,void *data, 
+struct super_block *ext_read_super(struct super_block *s,void *data,
 				   int silent)
 {
 	struct buffer_head *bh;
@@ -346,7 +346,7 @@ struct buffer_head * ext_bread(struct inode * inode, int block, int create)
 	struct buffer_head * bh;
 
 	bh = ext_getblk(inode,block,create);
-	if (!bh || buffer_uptodate(bh)) 
+	if (!bh || buffer_uptodate(bh))
 		return bh;
 	ll_rw_block(READ, 1, &bh);
 	wait_on_buffer(bh);
@@ -462,13 +462,11 @@ int init_ext_fs(void)
 }
 
 #ifdef MODULE
+EXPORT_NO_SYMBOLS;
+
 int init_module(void)
 {
-	int status;
-
-	if ((status = init_ext_fs()) == 0)
-		register_symtab(0);
-	return status;
+	return init_ext_fs();
 }
 
 void cleanup_module(void)

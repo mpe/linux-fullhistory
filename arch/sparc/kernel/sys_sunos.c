@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.68 1996/12/19 05:25:43 davem Exp $
+/* $Id: sys_sunos.c,v 1.69 1996/12/21 04:50:38 tridge Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -131,7 +131,7 @@ asmlinkage int sunos_mctl(unsigned long addr, unsigned long len, int function, c
 }
 
 /* SunOS is completely broken... it returns 0 on success, otherwise
- * ENOMEM.  For sys_sbrk() it wants the new brk value as a return
+ * ENOMEM.  For sys_sbrk() it wants the old brk value as a return
  * on success and ENOMEM as before on failure.
  */
 asmlinkage int sunos_brk(unsigned long brk)
@@ -142,7 +142,7 @@ asmlinkage int sunos_brk(unsigned long brk)
 
 	if(sparc_cpu_model == sun4c) {
 		if(brk >= 0x20000000 && brk < 0xe0000000)
-			return current->mm->brk;
+			return -ENOMEM;
 	}
 
 	if (brk < current->mm->end_code)
@@ -205,13 +205,14 @@ asmlinkage int sunos_brk(unsigned long brk)
 asmlinkage unsigned long sunos_sbrk(int increment)
 {
 	int error;
+	unsigned long oldbrk = current->mm->brk;
 
 	/* This should do it hopefully... */
 	error = sunos_brk(((int) current->mm->brk) + increment);
 	if(error)
 		return error;
 	else
-		return current->mm->brk;
+		return oldbrk;
 }
 
 /* XXX Completely undocumented, and completely magic...

@@ -144,7 +144,7 @@ static struct linux_binfmt java_format = {
 #ifndef MODULE
 	NULL, 0, load_java, NULL, NULL
 #else
-	NULL, &mod_use_count_, load_java, NULL, NULL
+	NULL, &__this_module.usecount, load_java, NULL, NULL
 #endif
 };
 
@@ -161,7 +161,7 @@ static struct linux_binfmt applet_format = {
 #ifndef MODULE
 	NULL, 0, load_applet, NULL, NULL
 #else
-	NULL, &mod_use_count_, load_applet, NULL, NULL
+	NULL, &__this_module.usecount, load_applet, NULL, NULL
 #endif
 };
 

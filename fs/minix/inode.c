@@ -74,7 +74,7 @@ void minix_put_super(struct super_block *sb)
 	return;
 }
 
-static struct super_operations minix_sops = { 
+static struct super_operations minix_sops = {
 	minix_read_inode,
 	NULL,
 	minix_write_inode,
@@ -163,7 +163,7 @@ static const char * minix_checkroot(struct super_block *s)
 	return errmsg;
 }
 
-struct super_block *minix_read_super(struct super_block *s,void *data, 
+struct super_block *minix_read_super(struct super_block *s,void *data,
 				     int silent)
 {
 	struct buffer_head *bh;
@@ -441,7 +441,7 @@ int minix_bmap(struct inode * inode,int block)
 /*
  * The minix V1 fs getblk functions.
  */
-static struct buffer_head * V1_inode_getblk(struct inode * inode, int nr, 
+static struct buffer_head * V1_inode_getblk(struct inode * inode, int nr,
 					    int create)
 {
 	int tmp;
@@ -475,7 +475,7 @@ repeat:
 	return result;
 }
 
-static struct buffer_head * V1_block_getblk(struct inode * inode, 
+static struct buffer_head * V1_block_getblk(struct inode * inode,
 	struct buffer_head * bh, int nr, int create)
 {
 	int tmp;
@@ -525,7 +525,7 @@ repeat:
 	return result;
 }
 
-static struct buffer_head * V1_minix_getblk(struct inode * inode, int block, 
+static struct buffer_head * V1_minix_getblk(struct inode * inode, int block,
 					    int create)
 {
 	struct buffer_head * bh;
@@ -554,7 +554,7 @@ static struct buffer_head * V1_minix_getblk(struct inode * inode, int block,
 /*
  * The minix V2 fs getblk functions.
  */
-static struct buffer_head * V2_inode_getblk(struct inode * inode, int nr, 
+static struct buffer_head * V2_inode_getblk(struct inode * inode, int nr,
 					    int create)
 {
 	int tmp;
@@ -588,7 +588,7 @@ repeat:
 	return result;
 }
 
-static struct buffer_head * V2_block_getblk(struct inode * inode, 
+static struct buffer_head * V2_block_getblk(struct inode * inode,
 	struct buffer_head * bh, int nr, int create)
 {
 	int tmp;
@@ -638,7 +638,7 @@ repeat:
 	return result;
 }
 
-static struct buffer_head * V2_minix_getblk(struct inode * inode, int block, 
+static struct buffer_head * V2_minix_getblk(struct inode * inode, int block,
 					    int create)
 {
 	struct buffer_head * bh;
@@ -952,13 +952,11 @@ int init_minix_fs(void)
 }
 
 #ifdef MODULE
+EXPORT_NO_SYMBOLS;
+
 int init_module(void)
 {
-	int status;
-
-	if ((status = init_minix_fs()) == 0)
-		register_symtab(0);
-	return status;
+	return init_minix_fs();
 }
 
 void cleanup_module(void)

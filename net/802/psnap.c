@@ -9,7 +9,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  */
- 
+
 #include <linux/module.h>
 #include <linux/netdevice.h>
 #include <linux/skbuff.h>
@@ -25,7 +25,7 @@ static struct datalink_proto *snap_dl = NULL;		/* 802.2 DL for SNAP */
 /*
  *	Find a snap client by matching the 5 bytes.
  */
- 
+
 static struct datalink_proto *find_snap_client(unsigned char *desc)
 {
 	struct datalink_proto	*proto;
@@ -37,27 +37,27 @@ static struct datalink_proto *find_snap_client(unsigned char *desc)
 /*
  *	A SNAP packet has arrived
  */
- 
+
 int snap_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 {
-	static struct packet_type psnap_packet_type = 
+	static struct packet_type psnap_packet_type =
 	{
-		0,	
+		0,
 		NULL,		/* All Devices */
 		snap_rcv,
 		NULL,
 		NULL,
 	};
-	
+
 	struct datalink_proto	*proto;
 
 	proto = find_snap_client(skb->h.raw);
-	if (proto != NULL) 
+	if (proto != NULL)
 	{
 		/*
 		 *	Pass the frame on.
 		 */
-		 
+
 		skb->h.raw += 5;
 		skb_pull(skb,5);
 		if (psnap_packet_type.type == 0)
@@ -72,7 +72,7 @@ int snap_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 /*
  *	Put a SNAP header on a frame and pass to 802.2
  */
- 
+
 static void snap_datalink_header(struct datalink_proto *dl, struct sk_buff *skb, unsigned char *dest_node)
 {
 	memcpy(skb_push(skb,5),dl->type,5);
@@ -83,25 +83,20 @@ static void snap_datalink_header(struct datalink_proto *dl, struct sk_buff *skb,
  *	Set up the SNAP layer
  */
 
-static struct symbol_table snap_proto_syms = {
-#include <linux/symtab_begin.h>
-	X(register_snap_client),
-	X(unregister_snap_client),
-#include <linux/symtab_end.h>
-};
- 
+EXPORT_SYMBOL(register_snap_client);
+EXPORT_SYMBOL(unregister_snap_client);
+
 void snap_proto_init(struct net_proto *pro)
 {
 	snap_dl=register_8022_client(0xAA, snap_rcv);
 	if(snap_dl==NULL)
 		printk("SNAP - unable to register with 802.2\n");
-	register_symtab(&snap_proto_syms);
 }
-	
+
 /*
  *	Register SNAP clients. We don't yet use this for IP or IPX.
  */
- 
+
 struct datalink_proto *register_snap_client(unsigned char *desc, int (*rcvfunc)(struct sk_buff *, struct device *, struct packet_type *))
 {
 	struct datalink_proto	*proto;
@@ -110,7 +105,7 @@ struct datalink_proto *register_snap_client(unsigned char *desc, int (*rcvfunc)(
 		return NULL;
 
 	proto = (struct datalink_proto *) kmalloc(sizeof(*proto), GFP_ATOMIC);
-	if (proto != NULL) 
+	if (proto != NULL)
 	{
 		memcpy(proto->type, desc,5);
 		proto->type_len = 5;
@@ -152,4 +147,3 @@ void unregister_snap_client(unsigned char *desc)
 
 	restore_flags(flags);
 }
-

@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.133 1996/12/18 06:43:28 tridge Exp $
+/* $Id: sun4c.c,v 1.135 1996/12/23 05:27:50 davem Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -1862,10 +1862,11 @@ static void sun4c_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdir)
 /* Please take special note on the foo_kernel() routines below, our
  * fast in window fault handler wants to get at the pte's for vmalloc
  * area with traps off, therefore they _MUST_ be locked down to prevent
- * a watchdog from happening.  The lowest VMALLOC'd thing is the buffer
- * cache hash table, it is never free'd ever, so the pg0 we use for the
- * lowest most page of pte's will never be freed and is guarenteed to
- * be locked down.  Be careful with this code thanks.
+ * a watchdog from happening.  It only takes 4 pages of pte's to lock
+ * down the maximum vmalloc space possible on sun4c so we statically
+ * allocate these page table pieces in the kernel image.  Therefore
+ * we should never have to really allocate or free any kernel page
+ * table information.
  */
 
 /* Allocate and free page tables. The xxx_kernel() versions are
@@ -1874,39 +1875,16 @@ static void sun4c_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdir)
  */
 static void sun4c_pte_free_kernel(pte_t *pte)
 {
-	unsigned long pg0_addr = (unsigned long) pg0;
-	unsigned long this_addr = (unsigned long) pte;
-	unsigned long page = (unsigned long) pte;
-
-	pg0_addr &= PAGE_MASK;
-	this_addr &= PAGE_MASK;
-
-	/* See above comment. */
-	if(pg0_addr != this_addr) {
-		page = (PAGE_OFFSET + ((sun4c_get_pte(this_addr) & 0xffff)<<PAGE_SHIFT));
-		sun4c_unlockarea((char *)this_addr, PAGE_SIZE);
-	}
-
-	free_page(page);
+	/* This should never get called. */
+	panic("sun4c_pte_free_kernel called, can't happen...");
 }
 
 static pte_t *sun4c_pte_alloc_kernel(pmd_t *pmd, unsigned long address)
 {
-	address = (address >> PAGE_SHIFT) & (SUN4C_PTRS_PER_PTE - 1);
-	if (sun4c_pmd_none(*pmd)) {
-		pte_t *page = (pte_t *) get_free_page(GFP_KERNEL);
-		if (sun4c_pmd_none(*pmd)) {
-			if (page) {
-				/* See above comment. */
-				page = (pte_t *) sun4c_lockarea((char *)page, PAGE_SIZE);
-				*pmd = __pmd(PGD_TABLE | (unsigned long) page);
-				return page + address;
-			}
-			*pmd = __pmd(PGD_TABLE | (unsigned long) BAD_PAGETABLE);
-			return NULL;
-		}
-		free_page((unsigned long) page);
-	}
+	if(address >= SUN4C_LOCK_VADDR)
+		return NULL;
+	if (sun4c_pmd_none(*pmd))
+		panic("sun4c_pmd_none for kernel pmd, can't happen...");
 	if (sun4c_pmd_bad(*pmd)) {
 		printk("Bad pmd in pte_alloc_kernel: %08lx\n", pmd_val(*pmd));
 		*pmd = __pmd(PGD_TABLE | (unsigned long) BAD_PAGETABLE);
@@ -1921,7 +1899,6 @@ static pte_t *sun4c_pte_alloc_kernel(pmd_t *pmd, unsigned long address)
  */
 static void sun4c_pmd_free_kernel(pmd_t *pmd)
 {
-	*pmd = __pmd(0);
 }
 
 static pmd_t *sun4c_pmd_alloc_kernel(pgd_t *pgd, unsigned long address)
@@ -2072,7 +2049,7 @@ extern unsigned long end;
 __initfunc(unsigned long sun4c_paging_init(unsigned long start_mem, unsigned long end_mem))
 {
 	int i, cnt;
-	unsigned long kernel_end;
+	unsigned long kernel_end, vaddr;
 	extern unsigned long sparc_iobase_vaddr;
 
 	kernel_end = (unsigned long) &end;
@@ -2093,8 +2070,19 @@ __initfunc(unsigned long sun4c_paging_init(unsigned long start_mem, unsigned lon
 	sun4c_set_context(0);
 	memset(swapper_pg_dir, 0, PAGE_SIZE);
 	memset(pg0, 0, PAGE_SIZE);
+	memset(pg1, 0, PAGE_SIZE);
+	memset(pg2, 0, PAGE_SIZE);
+	memset(pg3, 0, PAGE_SIZE);
+
 	/* Save work later. */
-	swapper_pg_dir[SUN4C_VMALLOC_START>>SUN4C_PGDIR_SHIFT] = __pgd(PGD_TABLE | (unsigned long) pg0);
+	vaddr = SUN4C_VMALLOC_START;
+	swapper_pg_dir[vaddr>>SUN4C_PGDIR_SHIFT] = __pgd(PGD_TABLE | (unsigned long) pg0);
+	vaddr += SUN4C_PGDIR_SIZE;
+	swapper_pg_dir[vaddr>>SUN4C_PGDIR_SHIFT] = __pgd(PGD_TABLE | (unsigned long) pg1);
+	vaddr += SUN4C_PGDIR_SIZE;
+	swapper_pg_dir[vaddr>>SUN4C_PGDIR_SHIFT] = __pgd(PGD_TABLE | (unsigned long) pg2);
+	vaddr += SUN4C_PGDIR_SIZE;
+	swapper_pg_dir[vaddr>>SUN4C_PGDIR_SHIFT] = __pgd(PGD_TABLE | (unsigned long) pg3);
 	sun4c_init_ss2_cache_bug();
 	start_mem = PAGE_ALIGN(start_mem);
 	start_mem = sparc_context_init(start_mem, num_contexts);

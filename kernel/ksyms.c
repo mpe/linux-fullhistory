@@ -1,4 +1,4 @@
-/* 
+/*
  * Herein lies all the functions/variables that are "exported" for linkage
  * with dynamically loaded kernel modules.
  *			Jon.
@@ -6,7 +6,7 @@
  * - Stacked module support and unified symbol table added (June 1994)
  * - External symbol table support added (December 1994)
  * - Versions on symbols added (December 1994)
- * by Bjorn Ekwall <bj0rn@blox.se>
+ *   by Bjorn Ekwall <bj0rn@blox.se>
  */
 
 #include <linux/module.h>
@@ -52,7 +52,7 @@
 
 extern unsigned char aux_device_present, kbd_read_mask;
 #ifdef __i386__
-	extern struct drive_info_struct drive_info;
+extern struct drive_info_struct drive_info;
 #endif
 
 #ifdef CONFIG_PCI
@@ -83,294 +83,278 @@ extern void free_dma(unsigned int dmanr);
 
 extern void hard_reset_now(void);
 
-struct symbol_table symbol_table = {
-#include <linux/symtab_begin.h>
 #ifdef MODVERSIONS
-	{ (void *)1 /* Version version :-) */,
-		SYMBOL_NAME_STR (Using_Versions) },
+const struct module_symbol __export_Using_Versions
+__attribute__((section("__ksymtab"))) = {
+	1 /* Version version */, "Using_Versions"
+};
 #endif
 
-	/* stackable module support */
-	X(register_symtab_from),
 #ifdef CONFIG_KERNELD
-	X(kerneld_send),
+EXPORT_SYMBOL(kerneld_send);
 #endif
-	X(get_options),
+EXPORT_SYMBOL(get_options);
 
 #ifdef CONFIG_PCI
-	/* PCI BIOS support */
-	X(pcibios_present),
-	X(pcibios_find_class),
-	X(pcibios_find_device),
-	X(pcibios_read_config_byte),
-	X(pcibios_read_config_word),
-	X(pcibios_read_config_dword),
-	X(pcibios_write_config_byte),
-	X(pcibios_write_config_word),
-	X(pcibios_write_config_dword),
-    	X(pcibios_strerror),
-	X(pci_strvendor),
-	X(pci_strdev),
+/* PCI BIOS support */
+EXPORT_SYMBOL(pcibios_present);
+EXPORT_SYMBOL(pcibios_find_class);
+EXPORT_SYMBOL(pcibios_find_device);
+EXPORT_SYMBOL(pcibios_read_config_byte);
+EXPORT_SYMBOL(pcibios_read_config_word);
+EXPORT_SYMBOL(pcibios_read_config_dword);
+EXPORT_SYMBOL(pcibios_write_config_byte);
+EXPORT_SYMBOL(pcibios_write_config_word);
+EXPORT_SYMBOL(pcibios_write_config_dword);
+EXPORT_SYMBOL(pcibios_strerror);
+EXPORT_SYMBOL(pci_strvendor);
+EXPORT_SYMBOL(pci_strdev);
 #endif
 
-	/* process memory management */
-	X(do_mmap),
-	X(do_munmap),
-	X(exit_mm),
+/* process memory management */
+EXPORT_SYMBOL(do_mmap);
+EXPORT_SYMBOL(do_munmap);
+EXPORT_SYMBOL(exit_mm);
 
-	/* internal kernel memory management */
-	X(__get_free_pages),
-	X(free_pages),
-	X(kmalloc),
-	X(kfree),
-	X(vmalloc),
-	X(vfree),
- 	X(mem_map),
- 	X(remap_page_range),
-	X(max_mapnr),
-	X(num_physpages),
-	X(high_memory),
-	X(update_vm_cache),
+/* internal kernel memory management */
+EXPORT_SYMBOL(__get_free_pages);
+EXPORT_SYMBOL(free_pages);
+EXPORT_SYMBOL(kmalloc);
+EXPORT_SYMBOL(kfree);
+EXPORT_SYMBOL(vmalloc);
+EXPORT_SYMBOL(vfree);
+EXPORT_SYMBOL(mem_map);
+EXPORT_SYMBOL(remap_page_range);
+EXPORT_SYMBOL(max_mapnr);
+EXPORT_SYMBOL(num_physpages);
+EXPORT_SYMBOL(high_memory);
+EXPORT_SYMBOL(update_vm_cache);
 
-	/* filesystem internal functions */
-	X(getname),
-	X(putname),
-	X(__iget),
-	X(iput),
-	X(namei),
-	X(lnamei),
-	X(open_namei),
-	X(sys_close),
-	X(close_fp),
-	X(check_disk_change),
-	X(invalidate_buffers),
-	X(invalidate_inodes),
-	X(invalidate_inode_pages),
-	X(fsync_dev),
-	X(permission),
-	X(inode_setattr),
-	X(inode_change_ok),
-	X(set_blocksize),
-	X(getblk),
-	X(bread),
-	X(breada),
-	X(__brelse),
-	X(__bforget),
-	X(ll_rw_block),
-	X(__wait_on_buffer),
-	X(mark_buffer_uptodate),
-	X(unlock_buffer),
-	X(dcache_lookup),
-	X(dcache_add),
-	X(add_blkdev_randomness),
-	X(generic_file_read),
-	X(generic_file_mmap),
-	X(generic_readpage),
+/* filesystem internal functions */
+EXPORT_SYMBOL(getname);
+EXPORT_SYMBOL(putname);
+EXPORT_SYMBOL(__iget);
+EXPORT_SYMBOL(iput);
+EXPORT_SYMBOL(namei);
+EXPORT_SYMBOL(lnamei);
+EXPORT_SYMBOL(open_namei);
+EXPORT_SYMBOL(sys_close);
+EXPORT_SYMBOL(close_fp);
+EXPORT_SYMBOL(check_disk_change);
+EXPORT_SYMBOL(invalidate_buffers);
+EXPORT_SYMBOL(invalidate_inodes);
+EXPORT_SYMBOL(invalidate_inode_pages);
+EXPORT_SYMBOL(fsync_dev);
+EXPORT_SYMBOL(permission);
+EXPORT_SYMBOL(inode_setattr);
+EXPORT_SYMBOL(inode_change_ok);
+EXPORT_SYMBOL(set_blocksize);
+EXPORT_SYMBOL(getblk);
+EXPORT_SYMBOL(bread);
+EXPORT_SYMBOL(breada);
+EXPORT_SYMBOL(__brelse);
+EXPORT_SYMBOL(__bforget);
+EXPORT_SYMBOL(ll_rw_block);
+EXPORT_SYMBOL(__wait_on_buffer);
+EXPORT_SYMBOL(mark_buffer_uptodate);
+EXPORT_SYMBOL(unlock_buffer);
+EXPORT_SYMBOL(dcache_lookup);
+EXPORT_SYMBOL(dcache_add);
+EXPORT_SYMBOL(add_blkdev_randomness);
+EXPORT_SYMBOL(generic_file_read);
+EXPORT_SYMBOL(generic_file_mmap);
+EXPORT_SYMBOL(generic_readpage);
 
-	/* device registration */
-	X(register_chrdev),
-	X(unregister_chrdev),
-	X(register_blkdev),
-	X(unregister_blkdev),
-	X(tty_register_driver),
-	X(tty_unregister_driver),
-	X(tty_std_termios),
+/* device registration */
+EXPORT_SYMBOL(register_chrdev);
+EXPORT_SYMBOL(unregister_chrdev);
+EXPORT_SYMBOL(register_blkdev);
+EXPORT_SYMBOL(unregister_blkdev);
+EXPORT_SYMBOL(tty_register_driver);
+EXPORT_SYMBOL(tty_unregister_driver);
+EXPORT_SYMBOL(tty_std_termios);
 
 #if defined(CONFIG_BLK_DEV_IDECD) || \
     defined(CONFIG_BLK_DEV_SR) || \
     defined(CONFIG_CM206)
-       X(register_cdrom),
-       X(unregister_cdrom),
-       X(cdrom_fops),
+EXPORT_SYMBOL(register_cdrom);
+EXPORT_SYMBOL(unregister_cdrom);
+EXPORT_SYMBOL(cdrom_fops);
 #endif
  
-	/* block device driver support */
-	X(block_read),
-	X(block_write),
-	X(block_fsync),
-	X(wait_for_request),
-	X(blksize_size),
-	X(hardsect_size),
-	X(blk_size),
-	X(blk_dev),
-	X(is_read_only),
-	X(set_device_ro),
-	X(bmap),
-	X(sync_dev),
-	X(get_blkfops),
-	X(blkdev_open),
-	X(blkdev_release),
-	X(gendisk_head),
-	X(resetup_one_dev),
-	X(unplug_device),
+/* block device driver support */
+EXPORT_SYMBOL(block_read);
+EXPORT_SYMBOL(block_write);
+EXPORT_SYMBOL(block_fsync);
+EXPORT_SYMBOL(wait_for_request);
+EXPORT_SYMBOL(blksize_size);
+EXPORT_SYMBOL(hardsect_size);
+EXPORT_SYMBOL(blk_size);
+EXPORT_SYMBOL(blk_dev);
+EXPORT_SYMBOL(is_read_only);
+EXPORT_SYMBOL(set_device_ro);
+EXPORT_SYMBOL(bmap);
+EXPORT_SYMBOL(sync_dev);
+EXPORT_SYMBOL(get_blkfops);
+EXPORT_SYMBOL(blkdev_open);
+EXPORT_SYMBOL(blkdev_release);
+EXPORT_SYMBOL(gendisk_head);
+EXPORT_SYMBOL(resetup_one_dev);
+EXPORT_SYMBOL(unplug_device);
 #ifdef __i386__
-	X(drive_info),
+EXPORT_SYMBOL(drive_info);
 #endif
 
-#ifdef CONFIG_SERIAL	
-	/* Module creation of serial units */
-	X(register_serial),
-	X(unregister_serial),
-#endif
-	/* tty routines */
-	X(tty_hangup),
-	X(tty_wait_until_sent),
-	X(tty_check_change),
-	X(tty_hung_up_p),
-	X(do_SAK),
-	X(console_print),
+/* tty routines */
+EXPORT_SYMBOL(tty_hangup);
+EXPORT_SYMBOL(tty_wait_until_sent);
+EXPORT_SYMBOL(tty_check_change);
+EXPORT_SYMBOL(tty_hung_up_p);
+EXPORT_SYMBOL(do_SAK);
+EXPORT_SYMBOL(console_print);
 
-	/* filesystem registration */
-	X(register_filesystem),
-	X(unregister_filesystem),
+/* filesystem registration */
+EXPORT_SYMBOL(register_filesystem);
+EXPORT_SYMBOL(unregister_filesystem);
 
-	/* executable format registration */
-	X(register_binfmt),
-	X(unregister_binfmt),
-	X(search_binary_handler),
-	X(prepare_binprm),
-	X(remove_arg_zero),
+/* executable format registration */
+EXPORT_SYMBOL(register_binfmt);
+EXPORT_SYMBOL(unregister_binfmt);
+EXPORT_SYMBOL(search_binary_handler);
+EXPORT_SYMBOL(prepare_binprm);
+EXPORT_SYMBOL(remove_arg_zero);
 
-	/* execution environment registration */
-	X(lookup_exec_domain),
-	X(register_exec_domain),
-	X(unregister_exec_domain),
+/* execution environment registration */
+EXPORT_SYMBOL(lookup_exec_domain);
+EXPORT_SYMBOL(register_exec_domain);
+EXPORT_SYMBOL(unregister_exec_domain);
 
-	/* sysctl table registration */
-	X(register_sysctl_table),
-	X(unregister_sysctl_table),
-	X(sysctl_string),
-	X(sysctl_intvec),
-	X(proc_dostring),
-	X(proc_dointvec),
-	X(proc_dointvec_minmax),
+/* sysctl table registration */
+EXPORT_SYMBOL(register_sysctl_table);
+EXPORT_SYMBOL(unregister_sysctl_table);
+EXPORT_SYMBOL(sysctl_string);
+EXPORT_SYMBOL(sysctl_intvec);
+EXPORT_SYMBOL(proc_dostring);
+EXPORT_SYMBOL(proc_dointvec);
+EXPORT_SYMBOL(proc_dointvec_minmax);
 
-	/* interrupt handling */
-	X(request_irq),
-	X(free_irq),
-	X(enable_irq),
-	X(disable_irq),
-	X(probe_irq_on),
-	X(probe_irq_off),
-	X(bh_active),
-	X(bh_mask),
-	X(bh_mask_count),
-	X(bh_base),
-	X(add_timer),
-	X(del_timer),
-	X(tq_timer),
-	X(tq_immediate),
-	X(tq_scheduler),
-	X(timer_active),
-	X(timer_table),
- 	X(intr_count),
+/* interrupt handling */
+EXPORT_SYMBOL(request_irq);
+EXPORT_SYMBOL(free_irq);
+EXPORT_SYMBOL(enable_irq);
+EXPORT_SYMBOL(disable_irq);
+EXPORT_SYMBOL(probe_irq_on);
+EXPORT_SYMBOL(probe_irq_off);
+EXPORT_SYMBOL(bh_active);
+EXPORT_SYMBOL(bh_mask);
+EXPORT_SYMBOL(bh_mask_count);
+EXPORT_SYMBOL(bh_base);
+EXPORT_SYMBOL(add_timer);
+EXPORT_SYMBOL(del_timer);
+EXPORT_SYMBOL(tq_timer);
+EXPORT_SYMBOL(tq_immediate);
+EXPORT_SYMBOL(tq_scheduler);
+EXPORT_SYMBOL(timer_active);
+EXPORT_SYMBOL(timer_table);
+EXPORT_SYMBOL(intr_count);
 
-	/* autoirq from  drivers/net/auto_irq.c */
-	X(autoirq_setup),
-	X(autoirq_report),
+/* autoirq from  drivers/net/auto_irq.c */
+EXPORT_SYMBOL(autoirq_setup);
+EXPORT_SYMBOL(autoirq_report);
 
-	/* dma handling */
-	X(request_dma),
-	X(free_dma),
+/* dma handling */
+EXPORT_SYMBOL(request_dma);
+EXPORT_SYMBOL(free_dma);
 #ifdef HAVE_DISABLE_HLT
-	X(disable_hlt),
-	X(enable_hlt),
+EXPORT_SYMBOL(disable_hlt);
+EXPORT_SYMBOL(enable_hlt);
 #endif
 
-	/* IO port handling */
-	X(check_region),
-	X(request_region),
-	X(release_region),
+/* IO port handling */
+EXPORT_SYMBOL(check_region);
+EXPORT_SYMBOL(request_region);
+EXPORT_SYMBOL(release_region);
 
-	/* process management */
-	X(wake_up),
-	X(wake_up_interruptible),
-	X(sleep_on),
-	X(interruptible_sleep_on),
-	X(schedule),
-	X(current_set),
-	X(jiffies),
-	X(xtime),
-	X(do_gettimeofday),
-	X(loops_per_sec),
-	X(need_resched),
-	X(kstat),
-	X(kill_proc),
-	X(kill_pg),
-	X(kill_sl),
+/* process management */
+EXPORT_SYMBOL(wake_up);
+EXPORT_SYMBOL(wake_up_interruptible);
+EXPORT_SYMBOL(sleep_on);
+EXPORT_SYMBOL(interruptible_sleep_on);
+EXPORT_SYMBOL(schedule);
+EXPORT_SYMBOL(current_set);
+EXPORT_SYMBOL(jiffies);
+EXPORT_SYMBOL(xtime);
+EXPORT_SYMBOL(do_gettimeofday);
+EXPORT_SYMBOL(loops_per_sec);
+EXPORT_SYMBOL(need_resched);
+EXPORT_SYMBOL(kstat);
+EXPORT_SYMBOL(kill_proc);
+EXPORT_SYMBOL(kill_pg);
+EXPORT_SYMBOL(kill_sl);
 
-	/* misc */
-	X(panic),
-	X(printk),
-	X(sprintf),
-	X(vsprintf),
-	X(kdevname),
-	X(simple_strtoul),
-	X(system_utsname),
-	X(sys_call_table),
-	X(hard_reset_now),
-	X(_ctype),
-	X(secure_tcp_sequence_number),
+/* misc */
+EXPORT_SYMBOL(panic);
+EXPORT_SYMBOL(printk);
+EXPORT_SYMBOL(sprintf);
+EXPORT_SYMBOL(vsprintf);
+EXPORT_SYMBOL(kdevname);
+EXPORT_SYMBOL(simple_strtoul);
+EXPORT_SYMBOL(system_utsname);
+EXPORT_SYMBOL(sys_call_table);
+EXPORT_SYMBOL(hard_reset_now);
+EXPORT_SYMBOL(_ctype);
+EXPORT_SYMBOL(secure_tcp_sequence_number);
 
-	/* Signal interfaces */
-	X(send_sig),
+/* Signal interfaces */
+EXPORT_SYMBOL(send_sig);
 
-	/* Program loader interfaces */
-	X(setup_arg_pages),
-	X(copy_strings),
-	X(do_execve),
-	X(flush_old_exec),
-	X(open_inode),
-	X(read_exec),
+/* Program loader interfaces */
+EXPORT_SYMBOL(setup_arg_pages);
+EXPORT_SYMBOL(copy_strings);
+EXPORT_SYMBOL(do_execve);
+EXPORT_SYMBOL(flush_old_exec);
+EXPORT_SYMBOL(open_inode);
+EXPORT_SYMBOL(read_exec);
 
-	/* Miscellaneous access points */
-	X(si_meminfo),
+/* Miscellaneous access points */
+EXPORT_SYMBOL(si_meminfo);
 
-	/* Added to make file system as module */
-	X(set_writetime),
-	X(sys_tz),
-	X(__wait_on_super),
-	X(file_fsync),
-	X(clear_inode),
-	X(refile_buffer),
-	X(nr_async_pages),
-	X(___strtok),
-	X(init_fifo),
-	X(super_blocks),
-	X(reuse_list),
-	X(fifo_inode_operations),
-	X(chrdev_inode_operations),
-	X(blkdev_inode_operations),
-	X(read_ahead),
-	X(get_hash_table),
-	X(get_empty_inode),
-	X(insert_inode_hash),
-	X(event),
-	X(__down),
-	X(__up),
-	X(securelevel),
+/* Added to make file system as module */
+EXPORT_SYMBOL(set_writetime);
+EXPORT_SYMBOL(sys_tz);
+EXPORT_SYMBOL(__wait_on_super);
+EXPORT_SYMBOL(file_fsync);
+EXPORT_SYMBOL(clear_inode);
+EXPORT_SYMBOL(refile_buffer);
+EXPORT_SYMBOL(nr_async_pages);
+EXPORT_SYMBOL(___strtok);
+EXPORT_SYMBOL(init_fifo);
+EXPORT_SYMBOL(super_blocks);
+EXPORT_SYMBOL(reuse_list);
+EXPORT_SYMBOL(fifo_inode_operations);
+EXPORT_SYMBOL(chrdev_inode_operations);
+EXPORT_SYMBOL(blkdev_inode_operations);
+EXPORT_SYMBOL(read_ahead);
+EXPORT_SYMBOL(get_hash_table);
+EXPORT_SYMBOL(get_empty_inode);
+EXPORT_SYMBOL(insert_inode_hash);
+EXPORT_SYMBOL(event);
+EXPORT_SYMBOL(__down);
+EXPORT_SYMBOL(__up);
+EXPORT_SYMBOL(securelevel);
+
 /* all busmice */
-	X(add_mouse_randomness),
-	X(fasync_helper),
+EXPORT_SYMBOL(add_mouse_randomness);
+EXPORT_SYMBOL(fasync_helper);
+
 /* psaux mouse */
-	X(aux_device_present),
-	X(kbd_read_mask),
+EXPORT_SYMBOL(aux_device_present);
+EXPORT_SYMBOL(kbd_read_mask);
 
 #ifdef CONFIG_BLK_DEV_MD
-	X(disk_name),	/* for md.c */
+EXPORT_SYMBOL(disk_name);	/* for md.c */
 #endif
  	
-	/* binfmt_aout */
-	X(get_write_access),
-	X(put_write_access),
-
-	/********************************************************
-	 * Do not add anything below this line,
-	 * as the stacked modules depend on this!
-	 */
-#include <linux/symtab_end.h>
-};
-
-/*
-int symbol_table_size = sizeof (symbol_table) / sizeof (symbol_table[0]);
-*/
+/* binfmt_aout */
+EXPORT_SYMBOL(get_write_access);
+EXPORT_SYMBOL(put_write_access);

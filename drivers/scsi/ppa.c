@@ -463,7 +463,7 @@ int     ppa_abort( Scsi_Cmnd * cmd )
         return SCSI_ABORT_SNOOZE;
 }
 
-int     ppa_reset( Scsi_Cmnd * cmd )
+int     ppa_reset( Scsi_Cmnd * cmd, unsigned int ignored )
 
 {       ppa_abort_flag = 2;
         return SCSI_RESET_PUNT;

@@ -4,7 +4,7 @@ FAQ list:
 =========
 
  A FAQ list may be found in the fdutils package (see below), and also
-at ftp.imag.fr:pub/Linux/ZLIBC/floppy/FAQ
+at http://www.club.innet.lu/~year3160/floppy/FAQ.html
 
 
 Lilo config options (Thinkpad users, read this)
@@ -171,58 +171,25 @@ package. This package also contains a new version of mtools which
 allows to access high capacity disks (up to 1992K on a high density 3
 1/2 disk!). It also contains additional documentation about the floppy
 driver. It can be found at:
- ftp.imag.fr:pub/Linux/ZLIBC/fdutils/fdutils-4.1.src.tar.gz
- sunsite.unc.edu:/pub/Linux/system/Misc/fdutils-4.1.src.tar.gz
- tsx-11.mit.edu:/pub/linux/sources/sbin/fdutils-4.1.src.tar.gz
+ linux.wauug.org:/pub/knaff/fdutils/fdutils-4.3.src.tar.gz
+ sunsite.unc.edu:/pub/Linux/system/Misc/fdutils-4.3.src.tar.gz
+ tsx-11.mit.edu:/pub/linux/sources/sbin/fdutils-4.3.src.tar.gz
 
  Alpha patches to these utilities are at:
- ftp.imag.fr:pub/Linux/ZLIBC/fdutils/ALPHA
+ http://www.club.innet.lu/~year3160/fdutils/ALPHA
  All patches contained in this directory are directly against the base
 version, i.e. DON'T APPLY THEM ON TOP OF EACH OTHER. Only apply the
 most recent one.
-
-
-Alpha patches for the floppy driver:
-====================================
-
- You may find ALPHA patches of the driver itself in
-ftp.imag.fr:pub/Linux/ZLIBC/floppy/ALPHA. These patches are named
-fdp<kernel-version>-<day><month>.diff.gz
- WARNING: These _are_ ALPHA, and may introduce new problems! Some
-problems may only show up on certain hardware, or when trying weirdo
-things. So don't be misled by people claiming they are stable and
-should really be BETA. What works for one person, may not work for
-somebody else at all. This directory contains a RELEASES file
-describing the features of some of these patches.
-
- If after some testing these patches prove to be sufficiently stable,
-they'll move into ftp.imag.fr:pub/Linux/ZLIBC/floppy/BETA.
-
- You may find quick&dirty fixes to the driver in
-ftp.imag.fr:pub/Linux/ZLIBC/QDF. These patches are named
-fdp<kernel-version>-<day><month>.diff
- These patches fix only the most obvious problems, or provide trivial
-enhancements. The main objective is to keep these patches small and
-local, in order to keep the probability of introducing new problems as
-small as possible. However, they may not attack the root of the
-problem but only cure the symptoms. This directory contains a RELEASES
-file describing the features of these patches.
-
- The ALPHA, BETA and QDF directories are removed, and replaced by a
-README file when they get empty due to integration of the patches into
-the stock kernel. You may still find patches to old kernels in
-ftp.imag.fr:pub/Linux/ZLIBC/obsolete
-
 
 Reporting problems about the floppy driver
 ==========================================
 
  If you have a question or a bug report about the floppy driver, mail
-me at Alain.Knaff@imag.fr. If you post to the news, use preferably one
-of the groups comp.os.linux.help (for questions) or
-comp.os.linux.hardware (for bug reports). As the volume in these
-groups is rather high, be sure to include the word "floppy" (or
-"FLOPPY") in the subject line.
+me at Alain.Knaff@poboxes.com . If you post to Usenet, preferably use
+comp.os.linux.hardware. As the volume in these groups is rather high,
+be sure to include the word "floppy" (or "FLOPPY") in the subject
+line.  If the reported problem happens when mounting floppy disks, be
+sure to mention also the type of the filesystem in the subject line.
 
  Be sure to read the FAQ before mailing/posting any bug reports!
 

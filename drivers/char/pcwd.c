@@ -215,14 +215,13 @@ static void pcwd_send_heartbeat(void)
 	wdrst_stat |= WD_WDRST;
 
 	outb_p(wdrst_stat, current_readport + PORT_OFFSET);
-	return(1);
 }
 
 static int pcwd_ioctl(struct inode *inode, struct file *file,
 	unsigned int cmd, unsigned long arg)
 {
 	int i, cdat, rv;
-	static struct watchdog_ident ident=
+	static struct watchdog_info ident=
 	{
 		WDIOF_OVERHEAT|WDIOF_CARDRESET,
 #ifdef CONFIG_PCWD_REV_A	
@@ -238,61 +237,39 @@ static int pcwd_ioctl(struct inode *inode, struct file *file,
 		return -ENOIOCTLCMD;
 
 	case WDIOC_GETSUPPORT:
-		i = verify_area(VERIFY_WRITE, (void*) arg, sizeof(struct watchdog_info));
-		if (i)
-			return i;
-		else
-			return copy_to_user(arg, &ident, sizeof(ident));
+		i = copy_to_user((void*)arg, &ident, sizeof(ident));
+		return i ? -EFAULT : 0;
 
 	case WDIOC_GETSTATUS:
-		i = verify_area(VERIFY_WRITE, (void*) arg, sizeof(int));
-		if (i)
-			return i;
-		else {
-			cdat = inb(current_readport);
-			rv = 0;
+		cdat = inb(current_readport);
+		rv = 0;
 
-			if (cdat & WD_WDRST)
-				rv |= WDIOF_CARDRESET;
+		if (cdat & WD_WDRST)
+			rv |= WDIOF_CARDRESET;
 
-			if (cdat & WD_T110)
-				rv |= WDIOF_OVERHEAT;
+		if (cdat & WD_T110)
+			rv |= WDIOF_OVERHEAT;
 
-			return put_user(rv, (int *) arg);
-		}
+		return put_user(rv, (int *) arg);
 		break;
 
 	case WDIOC_GETBOOTSTATUS:
-		i = verify_area(VERIFY_WRITE, (void*) arg, sizeof(int));
-		if (i)
-			return i;
-		else {
-			int rv;
-			rv = 0;
+		rv = 0;
 
-			if (initial_status & WD_WDRST)
-				rv |= WDIOF_CARDRESET;
+		if (initial_status & WD_WDRST)
+			rv |= WDIOF_CARDRESET;
 
-			if (initial_status & WD_T110)
-				rv |= WDIOF_OVERHEAT;
-			return put_user(rv, (int *) arg);
-		}
-		break;
+		if (initial_status & WD_T110)
+			rv |= WDIOF_OVERHEAT;
+		return put_user(rv, (int *) arg);
 
 	case WDIOC_GETTEMP:
-		i = verify_area(VERIFY_WRITE, (void*) arg, sizeof(int));
-		if (i)
-			return i;
-		else {
-			int rv;
-
-			rv = 0;
-			if ((supports_temp) && (mode_debug == 0)) {
-				rv = inb(current_readport);
-				return put_user(rv, (int*) arg);
-			} else
-				return put_user(rv, (int*) arg);
-		}
+		rv = 0;
+		if ((supports_temp) && (mode_debug == 0)) {
+			rv = inb(current_readport);
+			return put_user(rv, (int*) arg);
+		} else
+			return put_user(rv, (int*) arg);
 
 	case WDIOC_KEEPALIVE:
 		pcwd_send_heartbeat();
@@ -304,11 +281,12 @@ static int pcwd_ioctl(struct inode *inode, struct file *file,
 
 static long pcwd_write(struct file *file, struct inode *inode, const char *buf, unsigned long len)
 {
-	if(len)
+	if (len)
 	{
 		pcwd_send_heartbeat();
 		return 1;
 	}
+	return 0;
 }
 
 static int pcwd_open(struct inode *ino, struct file *filep)

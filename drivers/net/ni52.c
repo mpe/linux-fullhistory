@@ -1163,7 +1163,7 @@ static int ni52_send_packet(struct sk_buff *skb, struct device *dev)
     return 0;
   if(skb->len > XMIT_BUFF_SIZE)
   {
-    printk("%s: Sorry, max. framelength is %d bytes. The length of your frame is %ld bytes.\n",dev->name,XMIT_BUFF_SIZE,skb->len);
+    printk("%s: Sorry, max. framelength is %d bytes. The length of your frame is %d bytes.\n",dev->name,XMIT_BUFF_SIZE,skb->len);
     return 0;
   }
 

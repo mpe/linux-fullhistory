@@ -129,7 +129,7 @@ void ext2_put_super (struct super_block * sb)
 	return;
 }
 
-static struct super_operations ext2_sops = { 
+static struct super_operations ext2_sops = {
 	ext2_read_inode,
 	NULL,
 	ext2_write_inode,
@@ -421,22 +421,22 @@ struct super_block * ext2_read_super (struct super_block * sb, void * data,
 	if (le32_to_cpu(es->s_rev_level) > EXT2_GOOD_OLD_REV) {
 		if (le32_to_cpu(es->s_feature_incompat) & ~EXT2_FEATURE_INCOMPAT_SUPP) {
 			printk("EXT2-fs: %s: couldn't mount because of "
-			       "unsupported optional features.\n", 
+			       "unsupported optional features.\n",
 			       kdevname(dev));
 			goto failed_mount;
 		}
 		if (!(sb->s_flags & MS_RDONLY) &&
 		    (le32_to_cpu(es->s_feature_ro_compat) & ~EXT2_FEATURE_RO_COMPAT_SUPP)) {
 			printk("EXT2-fs: %s: couldn't mount RDWR because of "
-			       "unsupported optional features.\n", 
+			       "unsupported optional features.\n",
 			       kdevname(dev));
 			goto failed_mount;
 		}
 	}
 	sb->s_blocksize_bits = le32_to_cpu(sb->u.ext2_sb.s_es->s_log_block_size) + 10;
 	sb->s_blocksize = 1 << sb->s_blocksize_bits;
-	if (sb->s_blocksize != BLOCK_SIZE && 
-	    (sb->s_blocksize == 1024 || sb->s_blocksize == 2048 ||  
+	if (sb->s_blocksize != BLOCK_SIZE &&
+	    (sb->s_blocksize == 1024 || sb->s_blocksize == 2048 ||
 	     sb->s_blocksize == 4096)) {
 		unsigned long offset;
 
@@ -675,7 +675,7 @@ int ext2_remount (struct super_block * sb, int * flags, char * data)
 	else {
 		/*
 		 * Mounting a RDONLY partition read-write, so reread and
-		 * store the current valid flag.  (It may have been changed 
+		 * store the current valid flag.  (It may have been changed
 		 * by e2fsck since we originally mounted the partition.)
 		 */
 		sb->u.ext2_sb.s_mount_state = le16_to_cpu(es->s_state);
@@ -695,13 +695,11 @@ int init_ext2_fs(void)
 }
 
 #ifdef MODULE
+EXPORT_NO_SYMBOLS;
+
 int init_module(void)
 {
-	int status;
-
-	if ((status = init_ext2_fs()) == 0)
-		register_symtab(0);
-	return status;
+	return init_ext2_fs();
 }
 
 void cleanup_module(void)

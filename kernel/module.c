@@ -4,599 +4,880 @@
 #include <linux/string.h>
 #include <linux/module.h>
 #include <linux/sched.h>
-#include <linux/malloc.h>
-#include <linux/vmalloc.h>
 #include <linux/config.h>
-
 #include <asm/uaccess.h>
+#include <linux/vmalloc.h>
+
 /*
  * Originally by Anonymous (as far as I know...)
  * Linux version by Bas Laarhoven <bas@vimec.nl>
  * 0.99.14 version by Jon Tombs <jon@gtex02.us.es>,
- *
  * Heavily modified by Bjorn Ekwall <bj0rn@blox.se> May 1994 (C)
+ * Rewritten by Richard Henderson <rth@tamu.edu> Dec 1996
+ *
  * This source is covered by the GNU GPL, the same as all kernel sources.
- *
- * Features:
- *	- Supports stacked modules (removable only of there are no dependents).
- *	- Supports table of symbols defined by the modules.
- *	- Supports /proc/ksyms, showing value, name and owner of all
- *	  the symbols defined by all modules (in stack order).
- *	- Added module dependencies information into /proc/modules
- *	- Supports redefines of all symbols, for streams-like behaviour.
- *	- Compatible with older versions of insmod.
- *
- * New addition in December 1994: (Bjorn Ekwall, idea from Jacques Gelinas)
- *	- Externally callable function:
- *
- *		"int register_symtab(struct symbol_table *)"
- *
- *	  This function can be called from within the kernel,
- *	  and ALSO from loadable modules.
- *	  The goal is to assist in modularizing the kernel even more,
- *	  and finally: reducing the number of entries in ksyms.c
- *	  since every subsystem should now be able to decide and
- *	  control exactly what symbols it wants to export, locally!
- *
- * On 1-Aug-95:  <Matti.Aarnio@utu.fi>  altered code to use same style as
- *		 do  /proc/net/XXX  "files".  Namely allow more than 4kB
- *		 (or what the block size is) output.
- *
- *	- Use dummy syscall functions for users who disable all
- *	  module support. Similar to kernel/sys.c (Paul Gortmaker)
  */
 
 #ifdef CONFIG_MODULES		/* a *big* #ifdef block... */
 
-static struct module kernel_module;
+extern struct module_symbol __start___ksymtab[];
+extern struct module_symbol __stop___ksymtab[];
+
+extern const struct exception_table_entry __start___ex_table[];
+extern const struct exception_table_entry __stop___ex_table[];
+
+static struct module kernel_module =
+{
+	sizeof(struct module),	/* size_of_struct */
+	NULL,			/* next */
+	"",			/* name */
+	0,			/* size */
+	1,			/* usecount */
+	MOD_RUNNING,		/* flags */
+	0,			/* nsyms -- to filled in in init_modules */
+	0,			/* ndeps */
+	__start___ksymtab,	/* syms */
+	NULL,			/* deps */
+	NULL,			/* refs */
+	NULL,			/* init */
+	NULL,			/* cleanup */
+	__start___ex_table,	/* ex_table_start */
+	__stop___ex_table,	/* ex_table_end */
+#ifdef __alpha__
+	NULL,			/* gp */
+#endif
+};
+
 struct module *module_list = &kernel_module;
 
-static int freeing_modules; /* true if some modules are marked for deletion */
+static long get_mod_name(const char *user_name, char **buf);
+static void put_mod_name(char *buf);
+static struct module *find_module(const char *name);
+static void free_module(struct module *);
 
-static struct module *find_module( const char *name);
-static int free_modules( void);
-
-extern struct symbol_table symbol_table; /* in kernel/ksyms.c */
 
 /*
  * Called at boot time
  */
-void init_modules(void) {
-	struct internal_symbol *sym;
-	int i;
 
-	for (i = 0, sym = symbol_table.symbol; sym->name; ++sym, ++i)
-		;
-	symbol_table.n_symbols = i;
+void init_modules(void)
+{
+	kernel_module.nsyms = __stop___ksymtab - __start___ksymtab;
 
-	kernel_module.symtab = &symbol_table;
-	kernel_module.state = MOD_RUNNING; /* Hah! */
-	kernel_module.name = "";
+#ifdef __alpha__
+	{
+		register unsigned long gp __asm__("$29");
+		kernel_module.gp = gp;
+	}
+#endif
 }
-
 
 /*
  * Copy the name of a module from user space.
  */
-inline int
-get_mod_name(char *user_name, char *buf)
+
+static inline long
+get_mod_name(const char *user_name, char **buf)
 {
-	/* Should return -EBIG instead of -EFAULT when the name
-       is too long, but that we couldn't detect real faults then.
-       Maybe strncpy_from_user() should return -EBIG, when
-       the source string is too long. */
-	return strncpy_from_user(buf, user_name, MOD_MAX_NAME); 
+	unsigned long page;
+	long retval;
+
+	if ((unsigned long)user_name >= TASK_SIZE)
+		return -EFAULT;
+
+	page = __get_free_page(GFP_KERNEL);
+	if (!page)
+		return -ENOMEM;
+
+	retval = strncpy_from_user((char *)page, user_name, PAGE_SIZE);
+	if (retval > 0) {
+		if (retval < PAGE_SIZE) {
+			*buf = (char *)page;
+			return retval;
+		}
+		retval = -ENAMETOOLONG;
+	} else if (!retval)
+		retval = -EINVAL;
+
+	free_page(page);
+	return retval;
 }
 
+static inline void
+put_mod_name(char *buf)
+{
+	free_page((unsigned long)buf);
+}
 
 /*
  * Allocate space for a module.
  */
+
 asmlinkage unsigned long
-sys_create_module(char *module_name, unsigned long size)
+sys_create_module(const char *name_user, size_t size)
 {
-	struct module *mp;
-	void* addr;
-	int error;
-	int npages;
-	int sspace = sizeof(struct module) + MOD_MAX_NAME;
-	char name[MOD_MAX_NAME];
+	char *name;
+	long namelen, error;
+	struct module *mod;
 
-	if (!suser())
-		return -EPERM;
-	if (module_name == NULL || size == 0)
-		return -EINVAL;
-	if ((error = get_mod_name(module_name, name)) < 0)
-		return error;
+	if (!suser()) {
+		error = -EPERM;
+		goto err0;
+	}
+	if ((namelen = get_mod_name(name_user, &name)) < 0) {
+		error = namelen;
+		goto err0;
+	}
+	if (size < sizeof(struct module)+namelen) {
+		error = -EINVAL;
+		goto err1;
+	}
 	if (find_module(name) != NULL) {
-		return -EEXIST;
+		error = -EEXIST;
+		goto err1;
+	}
+	if ((mod = (struct module *)vmalloc(size)) == NULL) {
+		error = -ENOMEM;
+		goto err1;
 	}
 
-	if ((mp = (struct module*) kmalloc(sspace, GFP_KERNEL)) == NULL) {
-		return -ENOMEM;
-	}
-	strcpy((char *)(mp + 1), name); /* why not? */
+	memset(mod, 0, sizeof(*mod));
+	mod->size_of_struct = sizeof(*mod);
+	mod->next = module_list;
+	mod->name = (char *)(mod + 1);
+	mod->size = size;
+	memcpy((char*)(mod+1), name, namelen+1);
 
-	npages = (size + sizeof (long) + PAGE_SIZE - 1) / PAGE_SIZE;
-	if ((addr = vmalloc(npages * PAGE_SIZE)) == 0) {
-		kfree_s(mp, sspace);
-		return -ENOMEM;
-	}
+	put_mod_name(name);
 
-	mp->next = module_list;
-	mp->ref = NULL;
-	mp->symtab = NULL;
-	mp->name = (char *)(mp + 1);
-	mp->size = npages;
-	mp->addr = addr;
-	mp->state = MOD_UNINITIALIZED;
-	mp->cleanup = NULL;
-	mp->exceptinfo.start = NULL;
-	mp->exceptinfo.stop = NULL;
+	module_list = mod;	/* link it in */
 
-	* (long *) addr = 0;	/* set use count to zero */
-	module_list = mp;	/* link it in */
+	return (unsigned long) mod;
 
-	pr_debug("module `%s' (%lu pages @ 0x%08lx) created\n",
-		mp->name, (unsigned long) mp->size, (unsigned long) mp->addr);
-	return (unsigned long) addr;
+err1:
+	put_mod_name(name);
+err0:
+	return error;
 }
-
 
 /*
  * Initialize a module.
  */
+
 asmlinkage int
-sys_init_module(char *module_name, char *code, unsigned codesize,
-		struct mod_routines *routines,
-		struct symbol_table *symtab)
+sys_init_module(const char *name_user, struct module *mod_user)
 {
-	struct module *mp;
-	struct symbol_table *newtab;
-	char name[MOD_MAX_NAME];
-	int error;
-	struct mod_routines rt;
+	struct module mod_tmp, *mod;
+	char *name, *n_name;
+	long namelen, n_namelen, i, error;
+	unsigned long mod_user_size;
+	struct module_ref *dep;
 
-	if (!suser())
-		return -EPERM;
+	if (!suser()) {
+		error = -EPERM;
+		goto err0;
+	}
+	if ((namelen = get_mod_name(name_user, &name)) < 0) {
+		error = namelen;
+		goto err0;
+	}
+	if ((mod = find_module(name)) == NULL) {
+		error = -ENOENT;
+		goto err1;
+	}
 
-#ifdef __i386__
-	/* A little bit of protection... we "know" where the user stack is... */
+	/* In the future we can check for various known sizes, but for
+	   now there is only one.  */
+	if ((error = get_user(mod_user_size, &mod_user->size_of_struct)) != 0)
+		goto err1;
+	if (mod_user_size != sizeof(struct module)) {
+		printk(KERN_ERR "init_module: Invalid module header size.\n"
+		       KERN_ERR "A new version of the modutils is likely "
+				"needed.\n");
+		error = -EINVAL;
+		goto err1;
+	}
 
-	if (symtab && ((unsigned long)symtab > 0xb0000000)) {
-		printk(KERN_WARNING "warning: you are using an old insmod, no symbols will be inserted!\n");
-		symtab = NULL;
+	/* Hold the current contents while we play with the user's idea
+	   of righteousness.  */
+	mod_tmp = *mod;
+
+	error = copy_from_user(mod, mod_user, sizeof(struct module));
+	if (error) {
+		error = -EFAULT;
+		goto err2;
+	}
+
+	/* Sanity check the size of the module.  */
+	error = -EINVAL;
+
+	if (mod->size > mod_tmp.size) {
+		printk(KERN_ERR "init_module: Size of initialized module "
+				"exceeds size of created module.\n");
+		goto err2;
+	}
+
+	/* Make sure all interesting pointers are sane.  */
+
+#define bound(p, n, m)  ((unsigned long)(p) >= (unsigned long)(m+1) &&  \
+	         (unsigned long)((p)+(n)) <= (unsigned long)(m) + (m)->size)
+
+	if (!bound(mod->name, namelen, mod)) {
+		printk(KERN_ERR "init_module: mod->name out of bounds.\n");
+		goto err2;
+	}
+	if (mod->nsyms && !bound(mod->syms, mod->nsyms, mod)) {
+		printk(KERN_ERR "init_module: mod->syms out of bounds.\n");
+		goto err2;
+	}
+	if (mod->ndeps && !bound(mod->deps, mod->ndeps, mod)) {
+		printk(KERN_ERR "init_module: mod->deps out of bounds.\n");
+		goto err2;
+	}
+	if (mod->init && !bound(mod->init, 0, mod)) {
+		printk(KERN_ERR "init_module: mod->init out of bounds.\n");
+		goto err2;
+	}
+	if (mod->cleanup && !bound(mod->cleanup, 0, mod)) {
+		printk(KERN_ERR "init_module: mod->cleanup out of bounds.\n");
+		goto err2;
+	}
+	if (mod->ex_table_start > mod->ex_table_end
+	    || (mod->ex_table_start &&
+		!((unsigned long)mod->ex_table_start >= (unsigned long)(mod+1)
+		  && ((unsigned long)mod->ex_table_end
+		      < (unsigned long)mod + mod->size)))
+	    || (((unsigned long)mod->ex_table_start
+		 - (unsigned long)mod->ex_table_end)
+		% sizeof(struct exception_table_entry))) {
+		printk(KERN_ERR "init_module: mod->ex_table_* invalid.\n");
+		goto err2;
+	}
+	if (mod->flags & ~MOD_AUTOCLEAN) {
+		printk(KERN_ERR "init_module: mod->flags invalid.\n");
+		goto err2;
+	}
+#ifdef __alpha__
+	if (!bound(mod->gp - 0x8000, 0, mod)) {
+		printk(KERN_ERR "init_module: mod->gp out of bounds.\n");
+		goto err2;
 	}
 #endif
-	if ((error = get_mod_name(module_name, name)) < 0)
-		return error;
-	pr_debug("initializing module `%s', %d (0x%x) bytes\n",
-		name, codesize, codesize);
-	if (copy_from_user(&rt, routines, sizeof rt))
-			return -EFAULT;
-	if ((mp = find_module(name)) == NULL)
-		return -ENOENT;
-	if (codesize & MOD_AUTOCLEAN) {
-		/*
-		 * set autoclean marker from codesize...
-		 * set usage count to "zero"
-		 */
-		codesize &= ~MOD_AUTOCLEAN;
-		GET_USE_COUNT(mp) = MOD_AUTOCLEAN;
+
+#undef bound
+
+	/* Check that the user isn't doing something silly with the name.  */
+
+	if ((n_namelen = get_mod_name(mod->name - (unsigned long)mod
+				      + (unsigned long)mod_user,
+				      &n_name)) < 0) {
+		error = n_namelen;
+		goto err2;
 	}
-	if ((codesize + sizeof (long) + PAGE_SIZE - 1) / PAGE_SIZE > mp->size)
-		return -EINVAL;
-	if (copy_from_user((char *)mp->addr + sizeof (long), code, codesize))
-			return -EFAULT;
-	memset((char *)mp->addr + sizeof (long) + codesize, 0,
-		mp->size * PAGE_SIZE - (codesize + sizeof (long)));
-	pr_debug("module init entry = 0x%08lx, cleanup entry = 0x%08lx\n",
-		(unsigned long) rt.init, (unsigned long) rt.cleanup);
-	if (rt.signature != MODULE_2_1_7_SIG){
-		printk ("Older insmod used with kernel 2.1.7 +\n");
-		return -EINVAL;
-	}
-	mp->cleanup = rt.cleanup;
-	mp->exceptinfo = rt.exceptinfo;
-
-	/* update kernel symbol table */
-	if (symtab) { /* symtab == NULL means no new entries to handle */
-		struct internal_symbol *sym;
-		struct module_ref *ref;
-		int size;
-		int i;
-		int legal_start;
-
-		error = get_user(size, &symtab->size);
-		if (error)
-				return error;
-		if ((newtab = (struct symbol_table*) kmalloc(size, GFP_KERNEL)) == NULL) {
-			return -ENOMEM;
-		}
-
-		if (copy_from_user((char *)(newtab), symtab, size)) {
-				kfree_s(newtab, size);
-				return -EFAULT;
-		}
-
-		/* sanity check */
-		legal_start = sizeof(struct symbol_table) +
-			newtab->n_symbols * sizeof(struct internal_symbol) +
-			newtab->n_refs * sizeof(struct module_ref);
-
-		if ((newtab->n_symbols < 0) || (newtab->n_refs < 0) || (legal_start > size)) {
-			printk(KERN_WARNING "Rejecting illegal symbol table (n_symbols=%d,n_refs=%d)\n",
-			       newtab->n_symbols, newtab->n_refs);
-			kfree_s(newtab, size);
-			return -EINVAL;
-		}
-
-		/* relocate name pointers, index referred from start of table */
-		for (sym = &(newtab->symbol[0]), i = 0; i < newtab->n_symbols; ++sym, ++i) {
-			if ((unsigned long)sym->name < legal_start || size <= (unsigned long)sym->name) {
-				printk(KERN_WARNING "Rejecting illegal symbol table\n");
-				kfree_s(newtab, size);
-				return -EINVAL;
-			}
-			/* else */
-			sym->name += (long)newtab;
-		}
-		mp->symtab = newtab;
-
-		/* Update module references.
-		 * On entry, from "insmod", ref->module points to
-		 * the referenced module!
-		 * Now it will point to the current module instead!
-		 * The ref structure becomes the first link in the linked
-		 * list of references to the referenced module.
-		 * Also, "sym" from above, points to the first ref entry!!!
-		 */
-		for (ref = (struct module_ref *)sym, i = 0;
-			i < newtab->n_refs; ++ref, ++i) {
-
-			/* Check for valid reference */
-			struct module *link = module_list;
-			while (link && (ref->module != link))
-				link = link->next;
-
-			if (link == (struct module *)0) {
-				printk(KERN_WARNING "Non-module reference! Rejected!\n");
-				return -EINVAL;
-			}
-
-			ref->next = ref->module->ref;
-			ref->module->ref = ref;
-			ref->module = mp;
-		}
+	if (namelen != n_namelen || strcmp(n_name, mod_tmp.name) != 0) {
+		printk(KERN_ERR "init_module: changed module name to "
+				"`%s' from `%s'\n",
+		       n_name, mod_tmp.name);
+		error = -EINVAL;
+		goto err3;
 	}
 
-	GET_USE_COUNT(mp) += 1;
-	if ((*rt.init)() != 0) {
-		GET_USE_COUNT(mp) = 0;
+	/* Ok, that's about all the sanity we can stomach; copy the rest.  */
+
+	error = copy_from_user(mod+1, mod_user+1, mod->size-sizeof(*mod));
+	if (error) {
+		error = -EFAULT;
+		goto err3;
+	}
+
+	/* Update module references.  */
+	mod->next = mod_tmp.next;
+	mod->refs = NULL;
+	for (i = 0, dep = mod->deps; i < mod->ndeps; ++i, ++dep) {
+		struct module *o, *d = dep->dep;
+
+		/* Make sure the indicated dependancies are really modules.  */
+		if (d == mod) {
+			printk(KERN_ERR "init_module: self-referential "
+					"dependancy in mod->deps.\n");
+			error = -EINVAL;
+			goto err3;
+		}
+
+		for (o = module_list; o != &kernel_module; o = o->next)
+			if (o == d) goto found_dep;
+
+		printk(KERN_ERR "init_module: found dependancy that is "
+				"(no longer?) a module.\n");
+		error = -EINVAL;
+		goto err3;
+		
+	found_dep:
+		dep->ref = mod;
+		dep->next_ref = d->refs;
+		d->refs = dep;
+	}
+
+	/* Free our temporary memory.  */
+	put_mod_name(n_name);
+	put_mod_name(name);
+
+	/* Initialize the module.  */
+	mod->usecount = 1;
+	if (mod->init && mod->init() != 0) {
+		mod->usecount = 0;
 		return -EBUSY;
 	}
-	GET_USE_COUNT(mp) -= 1;
-	mp->state = MOD_RUNNING;
+	mod->usecount--;
 
+	/* And set it running.  */
+	mod->flags |= MOD_RUNNING;
 	return 0;
+
+err3:
+	put_mod_name(n_name);
+err2:
+	*mod = mod_tmp;
+err1:
+	put_mod_name(name);
+err0:
+	return error;
 }
 
 asmlinkage int
-sys_delete_module(char *module_name)
+sys_delete_module(const char *name_user)
 {
-	struct module *mp;
-	char name[MOD_MAX_NAME];
-	int error;
+	struct module *mod, *next;
+	char *name;
+	long error;
 
 	if (!suser())
 		return -EPERM;
-	/* else */
-	if (module_name != NULL) {
-		if ((error = get_mod_name(module_name, name)) < 0)
+
+	if (name_user) {
+		if ((error = get_mod_name(name_user, &name)) < 0)
 			return error;
-		if ((mp = find_module(name)) == NULL)
+		if (error == 0) {
+			put_mod_name(name);
+			return -EINVAL;
+		}
+		if ((mod = find_module(name)) == NULL) {
+			put_mod_name(name);
 			return -ENOENT;
-		if ((mp->ref != NULL) ||
-		    ((GET_USE_COUNT(mp) & ~(MOD_AUTOCLEAN | MOD_VISITED)) != 0))
+		}
+		put_mod_name(name);
+		if (mod->refs != NULL || mod->usecount != 0)
 			return -EBUSY;
-		GET_USE_COUNT(mp) &= ~(MOD_AUTOCLEAN | MOD_VISITED);
-		if (mp->state == MOD_RUNNING)
-			(*mp->cleanup)();
-		mp->state = MOD_DELETED;
-		free_modules();
+
+		free_module(mod);
+		return 0;
 	}
-	/* for automatic reaping */
-	else {
-		struct module *mp_next;
-		for (mp = module_list; mp != &kernel_module; mp = mp_next) {
-			mp_next = mp->next;
-			if ((mp->ref == NULL) && (mp->state == MOD_RUNNING) &&
-			    ((GET_USE_COUNT(mp) & ~MOD_VISITED) == MOD_AUTOCLEAN)) {
-			    	if ((GET_USE_COUNT(mp) & MOD_VISITED)) {
-					/* Don't reap until one "cycle" after last _use_ */
-			   		GET_USE_COUNT(mp) &= ~MOD_VISITED;
-				}
-				else {
-					GET_USE_COUNT(mp) &= ~(MOD_AUTOCLEAN | MOD_VISITED);
-					(*mp->cleanup)();
-					mp->state = MOD_DELETED;
-					free_modules();
-				}
-			}
+
+	/* Do automatic reaping */
+	for (mod = module_list; mod != &kernel_module; mod = next) {
+		next = mod->next;
+		if (mod->refs == NULL &&
+		    mod->usecount == 0 &&
+		    ((mod->flags & (MOD_AUTOCLEAN|MOD_RUNNING|MOD_DELETED))
+		     == (MOD_AUTOCLEAN|MOD_RUNNING))) {
+			if (mod->flags & MOD_VISITED)
+				mod->flags &= ~MOD_VISITED;
+			else
+				free_module(mod);
 		}
 	}
 	return 0;
 }
 
+/* Query various bits about modules.  */
+
+static int
+qm_modules(char *buf, size_t bufsize, size_t *ret)
+{
+	struct module *mod;
+	size_t nmod, space, len;
+
+	nmod = space = 0;
+
+	for (mod=module_list; mod != &kernel_module; mod=mod->next, ++nmod) {
+		len = strlen(mod->name)+1;
+		if (len > bufsize)
+			goto calc_space_needed;
+		if (copy_to_user(buf, mod->name, len))
+			return -EFAULT;
+		buf += len;
+		bufsize -= len;
+		space += len;
+	}
+
+	if (put_user(nmod, ret))
+		return -EFAULT;
+	else
+		return 0;
+
+calc_space_needed:
+	for (space += len; mod; mod = mod->next)
+		space += strlen(mod->name)+1;
+
+	if (put_user(space, ret))
+		return -EFAULT;
+	else
+		return -ENOSPC;
+}
+
+static int
+qm_deps(struct module *mod, char *buf, size_t bufsize, size_t *ret)
+{
+	size_t i, space, len;
+
+	if (mod == &kernel_module)
+		return -EINVAL;
+	if ((mod->flags & (MOD_RUNNING | MOD_DELETED)) != MOD_RUNNING)
+		if (put_user(0, ret))
+			return -EFAULT;
+		else
+			return 0;
+
+	space = 0;
+	for (i = 0; i < mod->ndeps; ++i) {
+		const char *dep_name = mod->deps[i].dep->name;
+
+		len = strlen(dep_name)+1;
+		if (len > bufsize)
+			goto calc_space_needed;
+		if (copy_to_user(buf, dep_name, len))
+			return -EFAULT;
+		buf += len;
+		bufsize -= len;
+		space += len;
+	}
+
+	if (put_user(i, ret))
+		return -EFAULT;
+	else
+		return 0;
+
+calc_space_needed:
+	for (space += len; i < mod->ndeps; ++i)
+		space += strlen(mod->deps[i].dep->name)+1;
+
+	if (put_user(space, ret))
+		return -EFAULT;
+	else
+		return -ENOSPC;
+}
+
+static int
+qm_refs(struct module *mod, char *buf, size_t bufsize, size_t *ret)
+{
+	size_t nrefs, space, len;
+	struct module_ref *ref;
+
+	if (mod == &kernel_module)
+		return -EINVAL;
+	if ((mod->flags & (MOD_RUNNING | MOD_DELETED)) != MOD_RUNNING)
+		if (put_user(0, ret))
+			return -EFAULT;
+		else
+			return 0;
+
+	space = 0;
+	for (nrefs = 0, ref = mod->refs; ref ; ++nrefs, ref = ref->next_ref) {
+		const char *ref_name = ref->ref->name;
+
+		len = strlen(ref_name)+1;
+		if (len > bufsize)
+			goto calc_space_needed;
+		if (copy_to_user(buf, ref_name, len))
+			return -EFAULT;
+		buf += len;
+		bufsize -= len;
+		space += len;
+	}
+
+	if (put_user(nrefs, ret))
+		return -EFAULT;
+	else
+		return 0;
+
+calc_space_needed:
+	for (space += len; ref; ref = ref->next_ref)
+		space += strlen(ref->ref->name)+1;
+
+	if (put_user(space, ret))
+		return -EFAULT;
+	else
+		return -ENOSPC;
+}
+
+static int
+qm_symbols(struct module *mod, char *buf, size_t bufsize, size_t *ret)
+{
+	size_t i, space, len;
+	struct module_symbol *s;
+	char *strings;
+	unsigned long *vals;
+
+	if ((mod->flags & (MOD_RUNNING | MOD_DELETED)) != MOD_RUNNING)
+		if (put_user(0, ret))
+			return -EFAULT;
+		else
+			return 0;
+
+	space = mod->nsyms * 2*sizeof(void *);
+
+	if (!access_ok(VERIFY_WRITE, buf, space))
+		return -EFAULT;
+
+	i = len = 0;
+	s = mod->syms;
+
+	if (space > bufsize)
+		goto calc_space_needed;
+
+	bufsize -= space;
+	vals = (unsigned long *)buf;
+	strings = buf+space;
+
+	for (; i < mod->nsyms ; ++i, ++s, vals += 2) {
+		len = strlen(s->name)+1;
+		if (len > bufsize)
+			goto calc_space_needed;
+
+		if (copy_to_user(strings, s->name, len)
+		    || __put_user(s->value, vals+0)
+		    || __put_user(space, vals+1))
+			return -EFAULT;
+
+		strings += len;
+		bufsize -= len;
+		space += len;
+	}
+
+	if (put_user(i, ret))
+		return -EFAULT;
+	else
+		return 0;
+
+calc_space_needed:
+	for (space += len; i < mod->nsyms; ++i, ++s)
+		space += strlen(s->name)+1;
+
+	if (put_user(space, ret))
+		return -EFAULT;
+	else
+		return -ENOSPC;
+}
+
+static int
+qm_info(struct module *mod, char *buf, size_t bufsize, size_t *ret)
+{
+	int error = 0;
+
+	if (mod == &kernel_module)
+		return -EINVAL;
+
+	if (sizeof(struct module_info) <= bufsize) {
+		struct module_info info;
+		info.addr = (unsigned long)mod;
+		info.size = mod->size;
+		info.flags = mod->flags;
+
+		if (copy_to_user(buf, &info, sizeof(struct module_info)))
+			return -EFAULT;
+	} else
+		error = -ENOSPC;
+
+	if (put_user(sizeof(struct module_info), ret))
+		return -EFAULT;
+
+	return error;
+}
+
+asmlinkage int
+sys_query_module(const char *name_user, int which, char *buf, size_t bufsize,
+		 size_t *ret)
+{
+	struct module *mod;
+
+	if (name_user == NULL)
+		mod = &kernel_module;
+	else {
+		long namelen;
+		char *name;
+
+		if ((namelen = get_mod_name(name_user, &name)) < 0)
+			return namelen;
+		if (namelen == 0)
+			mod = &kernel_module;
+		else if ((mod = find_module(name)) == NULL) {
+			put_mod_name(name);
+			return -ENOENT;
+		}
+		put_mod_name(name);
+	}
+
+	switch (which)
+	{
+	case 0:
+		return 0;
+	case QM_MODULES:
+		return qm_modules(buf, bufsize, ret);
+	case QM_DEPS:
+		return qm_deps(mod, buf, bufsize, ret);
+	case QM_REFS:
+		return qm_refs(mod, buf, bufsize, ret);
+	case QM_SYMBOLS:
+		return qm_symbols(mod, buf, bufsize, ret);
+	case QM_INFO:
+		return qm_info(mod, buf, bufsize, ret);
+	}
+
+	return -EINVAL;
+}
 
 /*
- * Copy the kernel symbol table to user space.  If the argument is null,
- * just return the size of the table.
+ * Copy the kernel symbol table to user space.  If the argument is
+ * NULL, just return the size of the table.
  *
- * Note that the transient module symbols are copied _first_,
- * in lifo order!!!
- *
- * The symbols to "insmod" are according to the "old" format: struct kernel_sym,
- * which is actually quite handy for this purpose.
- * Note that insmod inserts a struct symbol_table later on...
- * (as that format is quite handy for the kernel...)
- *
- * For every module, the first (pseudo)symbol copied is the module name
- * and the address of the module struct.
- * This lets "insmod" keep track of references, and build the array of
- * struct module_refs in the symbol table.
- * The format of the module name is "#module", so that "insmod" can easily
- * notice when a module name comes along. Also, this will make it possible
- * to use old versions of "insmod", albeit with reduced functionality...
- * The "kernel" module has an empty name.
+ * This call is depreciated in favour of query_module+QM_SYMBOLS which
+ * does not arbitrarily limit the length of the symbol.
  */
+
 asmlinkage int
 sys_get_kernel_syms(struct kernel_sym *table)
 {
-	struct internal_symbol *from;
-	struct kernel_sym isym;
-	struct kernel_sym *to;
-	struct module *mp = module_list;
+	struct module *mod;
 	int i;
-	int nmodsyms = 0;
-	int err;
 
-	for (mp = module_list; mp; mp = mp->next) {
-		if (mp->symtab && mp->symtab->n_symbols) {
-			/* include the count for the module name! */
-			nmodsyms += mp->symtab->n_symbols + 1;
-		}
-		else
-			/* include the count for the module name! */
-			nmodsyms += 1; /* return modules without symbols too */
+	for (mod = module_list, i = 0; mod; mod = mod->next) {
+		/* include the count for the module name! */
+		i += mod->nsyms + 1;
 	}
 
-	if (table != NULL) {
-		to = table;
+	if (table == NULL)
+		return i;
 
-		/* copy all module symbols first (always LIFO order) */
-		for (mp = module_list; mp; mp = mp->next) {
-			if (mp->state == MOD_RUNNING) {
-				/* magic: write module info as a pseudo symbol */
-				isym.value = (unsigned long)mp;
-				sprintf(isym.name, "#%s", mp->name);
-				err = copy_to_user(to, &isym, sizeof isym);
-				if (err)
-						return -EFAULT;
-				++to;
+	for (mod = module_list, i = 0; mod; mod = mod->next) {
+		struct kernel_sym ksym;
+		struct module_symbol *msym;
+		unsigned int j;
 
-				if (mp->symtab != NULL) {
-					for (i = mp->symtab->n_symbols,
-						from = mp->symtab->symbol;
-						i > 0; --i, ++from, ++to) {
+		if ((mod->flags & (MOD_RUNNING|MOD_DELETED)) != MOD_RUNNING)
+			continue;
 
-						isym.value = (unsigned long)from->addr;
-						strncpy(isym.name, from->name, sizeof isym.name);
-						err = copy_to_user(to, &isym, sizeof isym);
-						if (err)
-								return -EFAULT;
-					}
-				}
-			}
+		/* magic: write module info as a pseudo symbol */
+		ksym.value = (unsigned long)mod;
+		ksym.name[0] = '#';
+		strncpy(ksym.name+1, mod->name, sizeof(ksym.name)-1);
+		ksym.name[sizeof(ksym.name)-1] = '\0';
+
+		if (copy_to_user(table, &ksym, sizeof(ksym)) != 0)
+			return i;
+		++i, ++table;
+
+		if (mod->nsyms == 0)
+			continue;
+
+		for (j = 0, msym = mod->syms; j < mod->nsyms; ++j, ++msym) {
+			ksym.value = msym->value;
+			strncpy(ksym.name, msym->name, sizeof(ksym.name));
+			ksym.name[sizeof(ksym.name)-1] = '\0';
+
+			if (copy_to_user(table, &ksym, sizeof(ksym)) != 0)
+				return i;
+			++i, ++table;
 		}
 	}
-
-	return nmodsyms;
+	return i;
 }
 
 /*
  * Look for a module by name, ignoring modules marked for deletion.
  */
-struct module *
-find_module( const char *name)
-{
-	struct module *mp;
 
-	for (mp = module_list ; mp ; mp = mp->next) {
-		if (mp->state == MOD_DELETED)
+static struct module *
+find_module(const char *name)
+{
+	struct module *mod;
+
+	for (mod = module_list; mod ; mod = mod->next) {
+		if (mod->flags & MOD_DELETED)
 			continue;
-		if (!strcmp(mp->name, name))
+		if (!strcmp(mod->name, name))
 			break;
 	}
-	return mp;
-}
 
-static void
-drop_refs(struct module *mp)
-{
-	struct module *step;
-	struct module_ref *prev;
-	struct module_ref *ref;
-
-	for (step = module_list; step; step = step->next) {
-		for (prev = ref = step->ref; ref; ref = prev->next) {
-			if (ref->module == mp) {
-				if (ref == step->ref)
-					step->ref = ref->next;
-				else
-					prev->next = ref->next;
-				break; /* every module only references once! */
-			}
-			else
-				prev = ref;
-		}
-	}
+	return mod;
 }
 
 /*
- * Try to free modules which have been marked for deletion.  Returns nonzero
- * if a module was actually freed.
+ * Free the given module.
  */
-int
-free_modules( void)
+
+static void
+free_module(struct module *mod)
 {
-	struct module *mp;
-	struct module **mpp;
-	int did_deletion;
+	struct module_ref *dep;
+	unsigned i;
 
-	did_deletion = 0;
-	freeing_modules = 0;
-	mpp = &module_list;
-	while ((mp = *mpp) != NULL) {
-		if (mp->state != MOD_DELETED) {
-			mpp = &mp->next;
-		} else {
-			if ((GET_USE_COUNT(mp) != 0) || (mp->ref != NULL)) {
-				freeing_modules = 1;
-				mpp = &mp->next;
-			} else {	/* delete it */
-				*mpp = mp->next;
-				if (mp->symtab) {
-					if (mp->symtab->n_refs)
-						drop_refs(mp);
-					if (mp->symtab->size)
-						kfree_s(mp->symtab, mp->symtab->size);
-				}
-				vfree(mp->addr);
-				kfree_s(mp, sizeof(struct module) + MOD_MAX_NAME);
-				did_deletion = 1;
-			}
-		}
+	/* Let the module clean up.  */
+
+	mod->flags |= MOD_DELETED;
+	if (mod->flags & MOD_RUNNING) {
+		mod->cleanup();
+		mod->flags &= ~MOD_RUNNING;
 	}
-	return did_deletion;
-}
 
+	/* Remove the module from the dependancy lists.  */
+
+	for (i = 0, dep = mod->deps; i < mod->ndeps; ++i, ++dep) {
+		struct module_ref **pp;
+		for (pp = &dep->dep->refs; *pp != dep; pp = &(*pp)->next_ref)
+			continue;
+		*pp = dep->next_ref;
+	}
+
+	/* And from the main module list.  */
+
+	if (mod == module_list) {
+		module_list = mod->next;
+	} else {
+		struct module *p;
+		for (p = module_list; p->next != mod; p = p->next)
+			continue;
+		p->next = mod->next;
+	}
+
+	/* And free the memory.  */
+
+	vfree(mod);
+}
 
 /*
  * Called by the /proc file system to return a current list of modules.
  */
-int get_module_list(char *buf)
+
+int get_module_list(char *p)
 {
-	char *p;
-	const char *q;
-	int i;
-	struct module *mp;
+	size_t left = PAGE_SIZE;
+	struct module *mod;
+	char tmpstr[64];
 	struct module_ref *ref;
-	char size[32];
 
-	p = buf;
-	/* Do not show the kernel pseudo module */
-	for (mp = module_list ; mp && mp->next; mp = mp->next) {
-		if (p - buf > 4096 - 100)
-			break;			/* avoid overflowing buffer */
-		q = mp->name;
-		if (*q == '\0' && mp->size == 0 && mp->ref == NULL)
-			continue; /* don't list modules for kernel syms */
-		i = 20;
-		while (*q) {
-			*p++ = *q++;
-			i--;
+	for (mod = module_list; mod != &kernel_module; mod = mod->next) {
+		long len;
+		const char *q;
+
+#define safe_copystr(str, len)						\
+		do {							\
+			if (left < len)					\
+				goto fini;				\
+			memcpy(p, str, len); p += len, left -= len;	\
+		} while (0)
+
+        	len = strlen(mod->name);
+		safe_copystr(mod->name, len);
+
+		if ((len = 20 - len) > 0) {
+			if (left < len)
+				goto fini;
+			memset(p, ' ', len);
+			p += len;
+			left -= len;
 		}
-		sprintf(size, "%d", mp->size);
-		i -= strlen(size);
-		if (i <= 0)
-			i = 1;
-		while (--i >= 0)
-			*p++ = ' ';
-		q = size;
-		while (*q)
-			*p++ = *q++;
-		if (mp->state == MOD_UNINITIALIZED)
-			q = "  (uninitialized)";
-		else if (mp->state == MOD_RUNNING)
-			q = "";
-		else if (mp->state == MOD_DELETED)
+
+		len = sprintf(tmpstr, "%8lu", mod->size);
+		safe_copystr(tmpstr, len);
+
+		if (mod->flags & MOD_RUNNING) {
+			len = sprintf(tmpstr, "%4lu", mod->usecount);
+			safe_copystr(tmpstr, len);
+		}
+
+		if (mod->flags & MOD_DELETED)
 			q = "  (deleted)";
+		else if (mod->flags & MOD_RUNNING)
+			q = "";
 		else
-			q = "  (bad state)";
-		while (*q)
-			*p++ = *q++;
+			q = "  (uninitialized)";
+		len = strlen(q);
+		safe_copystr(q, len);
 
-		*p++ = '\t';
-		if ((ref = mp->ref) != NULL) {
-			*p++ = '[';
-			for (; ref; ref = ref->next) {
-				q = ref->module->name;
-				while (*q)
-					*p++ = *q++;
-				if (ref->next)
-					*p++ = ' ';
+		safe_copystr("\t", 1);
+
+		if ((ref = mod->refs) != NULL) {
+			safe_copystr("[", 1);
+			while (1) {
+				q = ref->ref->name;
+				len = strlen(q);
+				safe_copystr(q, len);
+
+				if ((ref = ref->next_ref) != NULL)
+					safe_copystr(" ", 1);
+				else
+					break;
 			}
-			*p++ = ']';
+			safe_copystr("]", 1);
 		}
-		if (mp->state == MOD_RUNNING) {
-			sprintf(size,"\t%ld%s",
-				GET_USE_COUNT(mp) & ~(MOD_AUTOCLEAN | MOD_VISITED),
-				((GET_USE_COUNT(mp) & MOD_AUTOCLEAN)?
-					" (autoclean)":""));
-			q = size;
-			while (*q)
-				*p++ = *q++;
-		}
-		*p++ = '\n';
-	}
-	return p - buf;
-}
 
+		if ((mod->flags & (MOD_RUNNING | MOD_AUTOCLEAN))
+		    == (MOD_RUNNING | MOD_AUTOCLEAN)) {
+			safe_copystr(" (autoclean)", 12);
+		}
+
+		safe_copystr("\n", 1);
+
+#undef safe_copystr
+	}
+
+fini:
+	return PAGE_SIZE - left;
+}
 
 /*
  * Called by the /proc file system to return a current list of ksyms.
  */
-int get_ksyms_list(char *buf, char **start, off_t offset, int length)
+
+int
+get_ksyms_list(char *buf, char **start, off_t offset, int length)
 {
-	struct module *mp;
-	struct internal_symbol *sym;
-	int i;
+	struct module *mod;
 	char *p = buf;
 	int len     = 0;	/* code from  net/ipv4/proc.c */
 	off_t pos   = 0;
 	off_t begin = 0;
 
-	for (mp = module_list; mp; mp = mp->next) {
-		if ((mp->state == MOD_RUNNING) &&
-		    (mp->symtab != NULL) &&
-		    (mp->symtab->n_symbols > 0)) {
-			for (i = mp->symtab->n_symbols,
-				sym = mp->symtab->symbol;
-				i > 0; --i, ++sym) {
+	for (mod = module_list; mod; mod = mod->next) {
+		unsigned i;
+		struct module_symbol *sym;
 
-				p = buf + len;
-				if (mp->name[0]) {
-					len += sprintf(p, "%08lx %s\t[%s]\n",
-						       (long)sym->addr,
-						       sym->name, mp->name);
-				} else {
-					len += sprintf(p, "%08lx %s\n",
-						       (long)sym->addr,
-						       sym->name);
-				}
-				pos = begin + len;
-				if (pos < offset) {
-					len   = 0;
-					begin = pos;
-				}
-				pos = begin + len;
-				if (pos > offset+length)
-					goto leave_the_loop;
+		if (!(mod->flags & MOD_RUNNING) || (mod->flags & MOD_DELETED))
+			continue;
+
+		for (i = mod->nsyms, sym = mod->syms; i > 0; --i, ++sym) {
+			p = buf + len;
+			if (*mod->name) {
+				len += sprintf(p, "%0*lx %s\t[%s]\n",
+					       (int)(2*sizeof(void*)),
+					       sym->value, sym->name,
+					       mod->name);
+			} else {
+				len += sprintf(p, "%0*lx %s\n",
+					       (int)(2*sizeof(void*)),
+					       sym->value, sym->name);
 			}
+			pos = begin + len;
+			if (pos < offset) {
+				len = 0;
+				begin = pos;
+			}
+			pos = begin + len;
+			if (pos > offset+length)
+				goto leave_the_loop;
 		}
 	}
-    leave_the_loop:
+leave_the_loop:
 	*start = buf + (offset - begin);
 	len -= (offset - begin);
 	if (len > length)
@@ -604,189 +885,44 @@ int get_ksyms_list(char *buf, char **start, off_t offset, int length)
 	return len;
 }
 
-/*
- * Rules:
- * - The new symbol table should be statically allocated, or else you _have_
- *   to set the "size" field of the struct to the number of bytes allocated.
- *
- * - The strings that name the symbols will not be copied, maybe the pointers
- *
- * - For a loadable module, the function should only be called in the
- *   context of init_module
- *
- * Those are the only restrictions! (apart from not being reentrant...)
- *
- * If you want to remove a symbol table for a loadable module,
- * the call looks like: "register_symtab(0)".
- *
- * The look of the code is mostly dictated by the format of
- * the frozen struct symbol_table, due to compatibility demands.
- */
-#define INTSIZ sizeof(struct internal_symbol)
-#define REFSIZ sizeof(struct module_ref)
-#define SYMSIZ sizeof(struct symbol_table)
-#define MODSIZ sizeof(struct module)
-static struct symbol_table nulltab;
-
-int
-register_symtab_from(struct symbol_table *intab, long *from)
-{
-	struct module *mp;
-	struct module *link;
-	struct symbol_table *oldtab;
-	struct symbol_table *newtab;
-	struct module_ref *newref;
-	int size;
-
-	if (intab && (intab->n_symbols == 0)) {
-		struct internal_symbol *sym;
-		/* How many symbols, really? */
-
-		for (sym = intab->symbol; sym->name; ++sym)
-			intab->n_symbols +=1;
-	}
-
-	for (mp = module_list; mp != &kernel_module; mp = mp->next) {
-		/*
-		 * "from" points to "mod_use_count_" (== start of module)
-		 * or is == 0 if called from a non-module
-		 */
-		if ((unsigned long)(mp->addr) == (unsigned long)from)
-			break;
-	}
-
-	if (mp == &kernel_module) {
-		/* Aha! Called from an "internal" module */
-		if (!intab)
-			return 0; /* or -ESILLY_PROGRAMMER :-) */
-
-		/* create a pseudo module! */
-		if (!(mp = (struct module*) kmalloc(MODSIZ, GFP_KERNEL))) {
-			/* panic time! */
-			printk(KERN_ERR "Out of memory for new symbol table!\n");
-			return -ENOMEM;
-		}
-		/* else  OK */
-		memset(mp, 0, MODSIZ);
-		mp->state = MOD_RUNNING; /* Since it is resident... */
-		mp->name = ""; /* This is still the "kernel" symbol table! */
-		mp->symtab = intab;
-
-		/* link it in _after_ the resident symbol table */
-		mp->next = kernel_module.next;
-		kernel_module.next = mp;
-
-		return 0;
-	}
-
-	/* else ******** Called from a loadable module **********/
-
-	/*
-	 * This call should _only_ be done in the context of the
-	 * call to  init_module  i.e. when loading the module!!
-	 * Or else...
-	 */
-
-	/* Any table there before? */
-	if ((oldtab = mp->symtab) == (struct symbol_table*)0) {
-		/* No, just insert it! */
-		mp->symtab = intab;
-		return 0;
-	}
-
-	/* else  ****** we have to replace the module symbol table ******/
-
-	if (oldtab->n_refs == 0) { /* no problems! */
-		mp->symtab = intab;
-		/* if the old table was kmalloc-ed, drop it */
-		if (oldtab->size > 0)
-			kfree_s(oldtab, oldtab->size);
-
-		return 0;
-	}
-
-	/* else */
-	/***** The module references other modules... insmod said so! *****/
-	/* We have to allocate a new symbol table, or we lose them! */
-	if (intab == (struct symbol_table*)0)
-		intab = &nulltab; /* easier code with zeroes in place */
-
-	/* the input symbol table space does not include the string table */
-	/* (it does for symbol tables that insmod creates) */
-
-	if (!(newtab = (struct symbol_table*)kmalloc(
-		size = SYMSIZ + intab->n_symbols * INTSIZ +
-			oldtab->n_refs * REFSIZ,
-		GFP_KERNEL))) {
-		/* panic time! */
-		printk(KERN_ERR "Out of memory for new symbol table!\n");
-		return -ENOMEM;
-	}
-
-	/* copy up to, and including, the new symbols */
-	memcpy(newtab, intab, SYMSIZ + intab->n_symbols * INTSIZ);
-
-	newtab->size = size;
-	newtab->n_refs = oldtab->n_refs;
-
-	/* copy references */
-	memcpy( ((char *)newtab) + SYMSIZ + intab->n_symbols * INTSIZ,
-		((char *)oldtab) + SYMSIZ + oldtab->n_symbols * INTSIZ,
-		oldtab->n_refs * REFSIZ);
-
-	/* relink references from the old table to the new one */
-
-	/* pointer to the first reference entry in newtab! Really! */
-	newref = (struct module_ref*) &(newtab->symbol[newtab->n_symbols]);
-
-	/* check for reference links from previous modules */
-	for (	link = module_list;
-		link && (link != &kernel_module);
-		link = link->next) {
-
-		if (link->ref && (link->ref->module == mp))
-			link->ref = newref++;
-	}
-
-	mp->symtab = newtab;
-
-	/* all references (if any) have been handled */
-
-	/* if the old table was kmalloc-ed, drop it */
-	if (oldtab->size > 0)
-		kfree_s(oldtab, oldtab->size);
-
-	return 0;
-}
-
 #else		/* CONFIG_MODULES */
 
 /* Dummy syscalls for people who don't want modules */
 
-asmlinkage unsigned long sys_create_module(void)
+asmlinkage unsigned long
+sys_create_module(const char *name_user, size_t size)
 {
 	return -ENOSYS;
 }
 
-asmlinkage int sys_init_module(void)
+asmlinkage int
+sys_init_module(const char *name_user, struct module *mod_user)
 {
 	return -ENOSYS;
 }
 
-asmlinkage int sys_delete_module(void)
+asmlinkage int
+sys_delete_module(const char *name_user)
 {
 	return -ENOSYS;
 }
 
-asmlinkage int sys_get_kernel_syms(void)
+asmlinkage int
+sys_query_module(const char *name_user, int which, char *buf, size_t bufsize,
+		 size_t *ret)
 {
+	/* Let the program know about the new interface.  Not that
+	   it'll do them much good.  */
+	if (which == 0)
+		return 0;
+
 	return -ENOSYS;
 }
 
-int register_symtab_from(struct symbol_table *intab, long *from)
+asmlinkage int
+sys_get_kernel_syms(struct kernel_sym *table)
 {
-	return 0;
+	return -ENOSYS;
 }
 
 #endif	/* CONFIG_MODULES */
-

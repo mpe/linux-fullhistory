@@ -5,6 +5,7 @@
 #define __NO_VERSION__
 #include <linux/module.h>
 #include <linux/config.h>
+
 #ifdef CONFIG_MODULES
 
 #include <linux/sched.h>
@@ -37,47 +38,39 @@ extern int scsicam_bios_param (Disk * disk,
 extern void print_command (unsigned char *command);
 extern void print_sense(const char * devclass, Scsi_Cmnd * SCpnt);
 
-struct symbol_table scsi_symbol_table = {
-#include <linux/symtab_begin.h>
-    X(scsi_register_module),
-    X(scsi_unregister_module),
-    X(scsi_free),
-    X(scsi_malloc),
-    X(scsi_register),
-    X(scsi_unregister),
-    X(scsicam_bios_param),
-    X(allocate_device),
-    X(scsi_do_cmd),
-    X(scsi_command_size),
-    X(scsi_init_malloc),
-    X(scsi_init_free),
-    X(scsi_ioctl),
-    X(print_command),
-    X(print_sense),
-    X(print_msg),
-    X(print_status),
-    X(dma_free_sectors),
-    X(kernel_scsi_ioctl),
-    X(need_isa_buffer),
-    X(request_queueable),
-    X(print_Scsi_Cmnd),
-    X(scsi_mark_host_reset),
-    X(scsi_mark_bus_reset),
+EXPORT_SYMBOL(scsi_register_module);
+EXPORT_SYMBOL(scsi_unregister_module);
+EXPORT_SYMBOL(scsi_free);
+EXPORT_SYMBOL(scsi_malloc);
+EXPORT_SYMBOL(scsi_register);
+EXPORT_SYMBOL(scsi_unregister);
+EXPORT_SYMBOL(scsicam_bios_param);
+EXPORT_SYMBOL(allocate_device);
+EXPORT_SYMBOL(scsi_do_cmd);
+EXPORT_SYMBOL(scsi_command_size);
+EXPORT_SYMBOL(scsi_init_malloc);
+EXPORT_SYMBOL(scsi_init_free);
+EXPORT_SYMBOL(scsi_ioctl);
+EXPORT_SYMBOL(print_command);
+EXPORT_SYMBOL(print_sense);
+EXPORT_SYMBOL(print_msg);
+EXPORT_SYMBOL(print_status);
+EXPORT_SYMBOL(dma_free_sectors);
+EXPORT_SYMBOL(kernel_scsi_ioctl);
+EXPORT_SYMBOL(need_isa_buffer);
+EXPORT_SYMBOL(request_queueable);
+EXPORT_SYMBOL(print_Scsi_Cmnd);
+EXPORT_SYMBOL(scsi_mark_host_reset);
+EXPORT_SYMBOL(scsi_mark_bus_reset);
 #if defined(CONFIG_PROC_FS)
-    X(proc_print_scsidevice),
+EXPORT_SYMBOL(proc_print_scsidevice);
 #endif
 /*
  * These are here only while I debug the rest of the scsi stuff.
  */
-    X(scsi_hostlist),
-    X(scsi_hosts),
-    X(scsi_devicelist),
-    X(scsi_devices),
+EXPORT_SYMBOL(scsi_hostlist);
+EXPORT_SYMBOL(scsi_hosts);
+EXPORT_SYMBOL(scsi_devicelist);
+EXPORT_SYMBOL(scsi_devices);
 
-    /********************************************************
-     * Do not add anything below this line,
-     * as the stacked modules depend on this!
-     */
-#include <linux/symtab_end.h>
-};
-#endif
+#endif /* CONFIG_MODULES */

@@ -151,7 +151,7 @@ ncp_put_inode(struct inode *inode)
                 DDPRINTK("ncp_put_inode: put directory %ld\n",
 			 inode->i_ino);
                 ncp_invalid_dir_cache(inode);
-        }                
+        }
 
 	clear_inode(inode);
 	unlock_super(sb);
@@ -228,7 +228,7 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 	lock_super(sb);
 
         NCP_SBP(sb) = server;
-        
+
 	sb->s_blocksize = 1024; /* Eh...  Is this correct? */
 	sb->s_blocksize_bits = 10;
 	sb->s_magic = NCP_SUPER_MAGIC;
@@ -269,7 +269,7 @@ ncp_read_super(struct super_block *sb, void *raw_data, int silent)
 		unlock_super(sb);
 		goto fail;
 	}
-   
+
         /*
          * Make the connection to the server
          */
@@ -402,11 +402,11 @@ ncp_trigger_message(struct ncp_server *server)
 #endif
 }
 
-static void 
+static void
 ncp_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 {
 	struct statfs tmp;
-	
+
 	/* We cannot say how much disk space is left on a mounted
            NetWare Server, because free space is distributed over
            volumes, and the current user might have disk quotas. So
@@ -439,11 +439,11 @@ ncp_notify_change(struct inode *inode, struct iattr *attr)
 	if ((result = inode_change_ok(inode, attr)) < 0)
 		return result;
 
-	if (((attr->ia_valid & ATTR_UID) && 
+	if (((attr->ia_valid & ATTR_UID) &&
 	     (attr->ia_uid != NCP_SERVER(inode)->m.uid)))
 		return -EPERM;
 
-	if (((attr->ia_valid & ATTR_GID) && 
+	if (((attr->ia_valid & ATTR_GID) &&
 	     (attr->ia_uid != NCP_SERVER(inode)->m.gid)))
                 return -EPERM;
 
@@ -461,14 +461,14 @@ ncp_notify_change(struct inode *inode, struct iattr *attr)
 		ncp_date_unix2dos(attr->ia_ctime,
 				  &(info.creationTime), &(info.creationDate));
 	}
-	
+
 	if ((attr->ia_valid & ATTR_MTIME) != 0)
 	{
 		info_mask |= (DM_MODIFY_TIME|DM_MODIFY_DATE);
 		ncp_date_unix2dos(attr->ia_mtime,
 				  &(info.modifyTime), &(info.modifyDate));
 	}
-	
+
 	if ((attr->ia_valid & ATTR_ATIME) != 0)
 	{
 		__u16 dummy;
@@ -527,7 +527,7 @@ ncp_notify_change(struct inode *inode, struct iattr *attr)
 
 	return result;
 }
-		
+
 #ifdef DEBUG_NCP_MALLOC
 int ncp_malloced;
 int ncp_current_malloced;
@@ -543,6 +543,8 @@ int init_ncp_fs(void)
 }
 
 #ifdef MODULE
+EXPORT_NO_SYMBOLS;
+
 int
 init_module( void)
 {
@@ -556,9 +558,7 @@ init_module( void)
 #endif
         ncp_init_dir_cache();
 
-	if ((status = init_ncp_fs()) == 0)
-		register_symtab(0);
-	return status;
+	return init_ncp_fs();
 }
 
 void

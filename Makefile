@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 1
-SUBLEVEL = 17
+SUBLEVEL = 18
 
 ARCH = i386
 
@@ -176,7 +176,7 @@ vmlinux: $(CONFIGURATION) init/main.o init/version.o linuxsubdirs
 		$(FILESYSTEMS) \
 		$(DRIVERS) \
 		$(LIBS) -o vmlinux
-	$(NM) vmlinux | grep -v '\(compiled\)\|\(\.o$$\)\|\( a \)' | sort > System.map
+	$(NM) vmlinux | grep -v '\(compiled\)\|\(\.o$$\)\|\( a \)\|\(\.\.ng$$\)' | sort > System.map
 
 symlinks:
 	rm -f include/asm

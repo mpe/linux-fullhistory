@@ -62,6 +62,7 @@ CONFIG_BLK_DEV_FD=y
 CONFIG_BLK_DEV_RAM=y
 # CONFIG_BLK_DEV_INITRD is not set
 # CONFIG_BLK_DEV_XD is not set
+# CONFIG_BLK_DEV_EZ is not set
 # CONFIG_BLK_DEV_HD is not set
 
 #
@@ -164,7 +165,6 @@ CONFIG_DE4X5=y
 # CONFIG_PLIP is not set
 # CONFIG_PPP is not set
 # CONFIG_NET_RADIO is not set
-# CONFIG_NET_HAM is not set
 # CONFIG_SLIP is not set
 # CONFIG_TR is not set
 

@@ -34,27 +34,17 @@ void isdn_init(void);
 void pcwatchdog_init(void);
 #endif
 
-static long read_ram(struct inode * inode, struct file * file,
-	char * buf, unsigned long count)
-{
-	return -EIO;
-}
-
-static long write_ram(struct inode * inode, struct file * file,
-	const char * buf, unsigned long count)
-{
-	return -EIO;
-}
-
+/*
+ * This funcion reads the *physical* memory. The f_pos points directly to the 
+ * memory location. 
+ */
 static long read_mem(struct inode * inode, struct file * file,
 	char * buf, unsigned long count)
 {
 	unsigned long p = file->f_pos;
 	unsigned long end_mem;
-	int read;
+	unsigned long read;
 
-	if (count < 0)
-		return -EINVAL;
 	end_mem = __pa(high_memory);
 	if (p >= end_mem)
 		return 0;
@@ -82,10 +72,8 @@ static long write_mem(struct inode * inode, struct file * file,
 {
 	unsigned long p = file->f_pos;
 	unsigned long end_mem;
-	int written;
+	unsigned long written;
 
-	if (count < 0)
-		return -EINVAL;
 	end_mem = __pa(high_memory);
 	if (p >= end_mem)
 		return 0;
@@ -132,19 +120,70 @@ static int mmap_mem(struct inode * inode, struct file * file, struct vm_area_str
 	return 0;
 }
 
+/*
+ * This function reads the *virtual* memory as seen by the kernel.
+ */
 static long read_kmem(struct inode *inode, struct file *file,
 	char *buf, unsigned long count)
 {
-	int read1, read2;
+	unsigned long p = file->f_pos;
+	unsigned long read = 0;
+	long virtr;
+		
+	if (p < (unsigned long) high_memory) { 
+		unsigned long tmp;
+		
+		if (count > (unsigned long) high_memory - p)
+			tmp = (unsigned long) high_memory - p;
+		else
+			tmp = count;
+		read = tmp;
+#if defined(__sparc__) /* we don't have page 0 mapped on sparc.. */
+		while (p < PAGE_SIZE && tmp > 0) {
+			put_user(0,buf);
+			buf++;
+			p++;
+			tmp--;
+		}
+#endif
+		copy_to_user(buf, (char *) p, tmp);
+		buf += tmp;
+	}
 
-	read1 = read_mem(inode, file, buf, count);
-	if (read1 < 0)
-		return read1;
-	read2 = vread(buf + read1, (char *) ((unsigned long) file->f_pos), count - read1);
-	if (read2 < 0)
-		return read2;
-	file->f_pos += read2;
-	return read1 + read2;
+	virtr = vread(buf, (char *) (unsigned long) file->f_pos, count - read);
+	if (virtr < 0)
+		return virtr;
+	file->f_pos += virtr + read;
+	return virtr + read;
+}
+
+/*
+ * This function writes to the *virtual* memory as seen by the kernel.
+ */
+static long write_kmem(struct inode * inode, struct file * file,
+	const char * buf, unsigned long count)
+{
+	unsigned long p = file->f_pos;
+	unsigned long written;
+
+	if (p >= (unsigned long) high_memory)
+		return 0;
+	if (count > (unsigned long) high_memory - p)
+		count = (unsigned long) high_memory - p;
+	written = 0;
+#if defined(__sparc__) /* we don't have page 0 mapped on sparc.. */
+	while (p < PAGE_SIZE && count > 0) {
+		/* Hmm. Do something? */
+		buf++;
+		p++;
+		count--;
+		written++;
+	}
+#endif
+	copy_from_user((char *) p, buf, count);
+	written += count;
+	file->f_pos += written;
+	return count;
 }
 
 static long read_port(struct inode * inode, struct file * file,
@@ -298,23 +337,9 @@ static long long memory_lseek(struct inode * inode, struct file * file,
 	return file->f_pos;
 }
 
-#define write_kmem	write_mem
 #define mmap_kmem	mmap_mem
 #define zero_lseek	null_lseek
 #define write_zero	write_null
-
-static struct file_operations ram_fops = {
-	memory_lseek,
-	read_ram,
-	write_ram,
-	NULL,		/* ram_readdir */
-	NULL,		/* ram_select */
-	NULL,		/* ram_ioctl */
-	NULL,		/* ram_mmap */
-	NULL,		/* no special open code */
-	NULL,		/* no special release code */
-	NULL		/* fsync */
-};
 
 static struct file_operations mem_fops = {
 	memory_lseek,
@@ -395,9 +420,6 @@ static struct file_operations full_fops = {
 static int memory_open(struct inode * inode, struct file * filp)
 {
 	switch (MINOR(inode->i_rdev)) {
-		case 0:
-			filp->f_op = &ram_fops;
-			break;
 		case 1:
 			filp->f_op = &mem_fops;
 			break;

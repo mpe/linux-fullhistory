@@ -431,17 +431,10 @@ static void do_md_request (void)
   return;
 }  
 
-static struct symbol_table md_symbol_table=
-{
-#include <linux/symtab_begin.h>
-
-  X(md_size),
-  X(register_md_personality),
-  X(unregister_md_personality),
-  X(partition_name),
-
-#include <linux/symtab_end.h>
-};
+EXPORT_SYMBOL(md_size);
+EXPORT_SYMBOL(register_md_personality);
+EXPORT_SYMBOL(unregister_md_personality);
+EXPORT_SYMBOL(partition_name);
 
 static struct proc_dir_entry proc_md = {
 	PROC_MD, 6, "mdstat",
@@ -461,7 +454,6 @@ static void md_geninit (struct gendisk *gdisk)
   }
 
   blksize_size[MAJOR_NR] = md_blocksizes;
-  register_symtab (&md_symbol_table);
 
   proc_register(&proc_root, &proc_md);
 }

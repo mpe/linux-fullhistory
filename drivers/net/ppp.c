@@ -246,7 +246,7 @@ static ppp_ctrl_t *ppp_list = NULL;
 static char ppp_warning[] = KERN_WARNING "PPP: ALERT! not INUSE! %d\n";
 
 static char szVersion[]		= PPP_VERSION;
- 
+
 /*
  * Information for the protocol decoder
  */
@@ -347,13 +347,13 @@ ppp_first_time (void)
 		"TCP compression code copyright 1989 Regents of the "
 		"University of California\n");
 #endif
-	
+
 	printk (KERN_INFO
 		"PPP Dynamic channel allocation code copyright 1995 "
 		"Caldera, Inc.\n");
 /*
  * Register the tty discipline
- */	
+ */
 	(void) memset (&ppp_ldisc, 0, sizeof (ppp_ldisc));
 	ppp_ldisc.magic		= TTY_LDISC_MAGIC;
 	ppp_ldisc.open		= ppp_tty_open;
@@ -365,7 +365,7 @@ ppp_first_time (void)
 	ppp_ldisc.receive_room	= ppp_tty_room;
 	ppp_ldisc.receive_buf	= ppp_tty_receive;
 	ppp_ldisc.write_wakeup	= ppp_tty_wakeup;
-	
+
 	status = tty_register_ldisc (N_PPP, &ppp_ldisc);
 	if (status == 0)
 		printk (KERN_INFO "PPP line discipline registered.\n");
@@ -454,13 +454,9 @@ ppp_init_ctrl_blk (register struct ppp *ppp)
 	ppp->sc_rc_state = NULL;
 }
 
-static struct symbol_table ppp_syms = {
-#include <linux/symtab_begin.h>
-	X(ppp_register_compressor),
-	X(ppp_unregister_compressor),
-	X(ppp_crc16_table),
-#include <linux/symtab_end.h>
-};
+EXPORT_SYMBOL(ppp_register_compressor);
+EXPORT_SYMBOL(ppp_unregister_compressor);
+EXPORT_SYMBOL(ppp_crc16_table);
 
 /* called at boot/load time for each ppp device defined in the kernel */
 
@@ -474,8 +470,6 @@ ppp_init (struct device *dev)
 	if (first_time) {
 		first_time = 0;
 		answer	   = ppp_first_time();
-		if (answer == 0)
-			(void) register_symtab (&ppp_syms);
 	}
 	if (answer == 0)
 		answer = -ENODEV;
@@ -576,7 +570,7 @@ ppp_changedmtu (struct ppp *ppp, int new_mtu, int new_mru)
 		mru = PPP_MRU;
 
 	mru += 10;
-	
+
 	if (ppp->flags & SC_DEBUG)
 		printk (KERN_INFO "ppp: channel %s mtu = %d, mru = %d\n",
 			dev->name, new_mtu, new_mru);
@@ -2168,7 +2162,7 @@ ppp_set_compression (struct ppp *ppp, struct ppp_option_data *odp)
 		ptr = data.ptr;
 		if ((__u32) nb >= (__u32)CCP_MAX_OPTION_LENGTH)
 			nb = CCP_MAX_OPTION_LENGTH;
-	
+
 		error = verify_area (VERIFY_READ, ptr, nb);
 	}
 
@@ -3179,7 +3173,7 @@ ppp_find (int pid_value)
 	/* try to find the exact same free device which we had before */
 	ctl	 = ppp_list;
 	if_num	 = 0;
-  
+
 	while (ctl) {
 		ppp = ctl2ppp (ctl);
 		if (!set_bit(0, &ppp->inuse)) {
@@ -3209,7 +3203,7 @@ ppp_alloc (void)
 	/* try to find an free device */
 	ctl	 = ppp_list;
 	if_num	 = 0;
-  
+
 	while (ctl) {
 		ppp = ctl2ppp (ctl);
 		if (!set_bit(0, &ppp->inuse))
@@ -3233,7 +3227,7 @@ ppp_alloc (void)
 		ppp->line      = if_num;
 		ppp->tty       = NULL;
 		ppp->dev       = dev;
-    
+
 		dev->next      = NULL;
 		dev->init      = ppp_init_dev;
 		dev->name      = ctl->name;
@@ -3241,7 +3235,7 @@ ppp_alloc (void)
 		dev->priv      = (void *) ppp;
 
 		sprintf (dev->name, "ppp%d", if_num);
-    
+
 		/* link in the new channel */
 		ctl->next      = ppp_list;
 		ppp_list       = ctl;
@@ -3424,8 +3418,7 @@ init_module(void)
 	if (status != 0)
 		printk (KERN_INFO
 		       "PPP: ppp_init() failure %d\n", status);
-	else
-		(void) register_symtab (&ppp_syms);
+
 	return (status);
 }
 
@@ -3480,7 +3473,7 @@ cleanup_module(void)
 		       "PPP: ppp line discipline successfully unregistered\n");
 /*
  * De-register the devices so that there is no problem with them
- */	
+ */
 	next_ctl = ppp_list;
 	while (next_ctl) {
 		ctl	 = next_ctl;

@@ -713,7 +713,6 @@ static void parse_options(char *line)
 
 
 extern void setup_arch(char **, unsigned long *, unsigned long *);
-extern void arch_syms_export(void);
 
 #ifndef __SMP__
 
@@ -882,7 +881,6 @@ asmlinkage void start_kernel(void)
 	ipc_init();
 #endif
 	dquot_init();
-	arch_syms_export();
 	sti();
 	check_bugs();
 

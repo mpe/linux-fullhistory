@@ -13,43 +13,36 @@
 extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(elf_fpregset_t *);
 
-static struct symbol_table arch_symbol_table = {
-#include <linux/symtab_begin.h>
-	/* platform dependent support */
-	X(EISA_bus),
-	X(MCA_bus),
-	X(wp_works_ok),
-	X(__verify_write),
-	X(dump_thread),
-	X(dump_fpu),
-	X(ioremap),
-	X(iounmap),
-	XNOVERS(__down_failed),
-	XNOVERS(__up_wakeup),
-#ifdef __SMP__
-	X(apic_reg),		/* Needed internally for the I386 inlines */
-	X(cpu_data),
-	X(syscall_count),
-	X(kernel_flag),
-	X(kernel_counter),
-	X(active_kernel_processor),
-	X(smp_invalidate_needed),
-#endif
-#ifdef CONFIG_MCA
-	/* Adapter probing and info methods. */
-	X(mca_write_pos),
-	X(mca_read_pos),
-	X(mca_read_stored_pos),
-	X(mca_set_adapter_name),
-	X(mca_get_adapter_name),
-	X(mca_set_adapter_procfn),
-	X(mca_isenabled),
-	X(mca_isadapter),
-#endif
-#include <linux/symtab_end.h>
-};
+/* platform dependent support */
+EXPORT_SYMBOL(EISA_bus);
+EXPORT_SYMBOL(MCA_bus);
+EXPORT_SYMBOL(wp_works_ok);
+EXPORT_SYMBOL(__verify_write);
+EXPORT_SYMBOL(dump_thread);
+EXPORT_SYMBOL(dump_fpu);
+EXPORT_SYMBOL(ioremap);
+EXPORT_SYMBOL(iounmap);
+EXPORT_SYMBOL_NOVERS(__down_failed);
+EXPORT_SYMBOL_NOVERS(__up_wakeup);
 
-void arch_syms_export(void)
-{
-	register_symtab(&arch_symbol_table);
-}
+#ifdef __SMP__
+EXPORT_SYMBOL(apic_reg);	/* Needed internally for the I386 inlines */
+EXPORT_SYMBOL(cpu_data);
+EXPORT_SYMBOL(syscall_count);
+EXPORT_SYMBOL(kernel_flag);
+EXPORT_SYMBOL(kernel_counter);
+EXPORT_SYMBOL(active_kernel_processor);
+EXPORT_SYMBOL(smp_invalidate_needed);
+#endif
+
+#ifdef CONFIG_MCA
+/* Adapter probing and info methods. */
+EXPORT_SYMBOL(mca_write_pos);
+EXPORT_SYMBOL(mca_read_pos);
+EXPORT_SYMBOL(mca_read_stored_pos);
+EXPORT_SYMBOL(mca_set_adapter_name);
+EXPORT_SYMBOL(mca_get_adapter_name);
+EXPORT_SYMBOL(mca_set_adapter_procfn);
+EXPORT_SYMBOL(mca_isenabled);
+EXPORT_SYMBOL(mca_isadapter);
+#endif

@@ -116,6 +116,7 @@ void dmafree(void *addr, int order)
  */
 
 #ifdef MODULE
+EXPORT_NO_SYMBOLS;
 #define ftape_init init_module
 #endif
 
@@ -175,9 +176,7 @@ int ftape_init(void)
 	udelay_calibrate();	/* must be before fdc_wait_calibrate ! */
 	fdc_wait_calibrate();
 	TRACE_EXIT;
-#ifdef MODULE
-	register_symtab(0);	/* remove global ftape symbols */
-#endif
+
 	return 0;
 }
 

@@ -17,7 +17,7 @@ int wd7000_detect(Scsi_Host_Template *);
 int wd7000_command(Scsi_Cmnd *);
 int wd7000_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int wd7000_abort(Scsi_Cmnd *);
-int wd7000_reset(Scsi_Cmnd *);
+int wd7000_reset(Scsi_Cmnd *, unsigned int);
 int wd7000_biosparam(Disk *, kdev_t, int *);
 
 #ifndef NULL

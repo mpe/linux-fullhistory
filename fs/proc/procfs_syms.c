@@ -9,36 +9,30 @@
  * in the procfs.
  */
 extern int (* dispatch_scsi_info_ptr) (int ino, char *buffer, char **start,
-				off_t offset, int length, int inout);
+				       off_t offset, int length, int inout);
 extern struct inode_operations proc_scsi_inode_operations;
 
-static struct symbol_table procfs_syms = {
-/* Should this be surrounded with "#ifdef CONFIG_MODULES" ? */
-#include <linux/symtab_begin.h>
-	X(proc_register),
-	X(proc_register_dynamic),
-	X(proc_unregister),
-	X(proc_root),
-	X(proc_get_inode),
-	X(in_group_p),
-	X(generate_cluster),
-	X(proc_net_inode_operations),
-	X(proc_net),
+EXPORT_SYMBOL(proc_register);
+EXPORT_SYMBOL(proc_register_dynamic);
+EXPORT_SYMBOL(proc_unregister);
+EXPORT_SYMBOL(proc_root);
+EXPORT_SYMBOL(proc_get_inode);
+EXPORT_SYMBOL(in_group_p);
+EXPORT_SYMBOL(proc_net_inode_operations);
+EXPORT_SYMBOL(proc_net);
 
-	/*
-	 * This is required so that if we load scsi later, that the
-	 * scsi code can attach to /proc/scsi in the correct manner.
-	 */
-	X(proc_scsi),
-	X(proc_scsi_inode_operations),
-	X(dispatch_scsi_info_ptr),
-	
+/*
+ * This is required so that if we load scsi later, that the
+ * scsi code can attach to /proc/scsi in the correct manner.
+ */
+EXPORT_SYMBOL(proc_scsi);
+EXPORT_SYMBOL(proc_scsi_inode_operations);
+EXPORT_SYMBOL(dispatch_scsi_info_ptr);
+
 #if defined(CONFIG_SUN_OPENPROMFS_MODULE)
-	X(proc_openprom_register),
-	X(proc_openprom_deregister),
-#endif	
-#include <linux/symtab_end.h>
-};
+EXPORT_SYMBOL(proc_openprom_register);
+EXPORT_SYMBOL(proc_openprom_deregister);
+#endif
 
 static struct file_system_type proc_fs_type = {
 	proc_read_super, "proc", 0, NULL
@@ -46,10 +40,5 @@ static struct file_system_type proc_fs_type = {
 
 int init_proc_fs(void)
 {
-	int status;
-
-        if ((status = register_filesystem(&proc_fs_type)) == 0)
-		status = register_symtab(&procfs_syms);
-	return status;
+	return register_filesystem(&proc_fs_type) == 0;
 }
-

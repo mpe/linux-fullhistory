@@ -499,7 +499,7 @@ int aha1740_abort(Scsi_Cmnd * SCpnt)
    that it will get some kind of response for the command in SCpnt.  We must
    oblige, or the command will hang the scsi system */
 
-int aha1740_reset(Scsi_Cmnd * SCpnt)
+int aha1740_reset(Scsi_Cmnd * SCpnt, unsigned int ignored)
 {
     DEB(printk("aha1740_reset called\n"));
     return SCSI_RESET_PUNT;

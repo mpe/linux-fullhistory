@@ -3068,7 +3068,7 @@ static void st_detach(Scsi_Device * SDp)
 #ifdef MODULE
 
 int init_module(void) {
-  st_template.usage_count = &mod_use_count_;
+  st_template.usage_count = &__this_module.usecount;
   return scsi_register_module(MODULE_SCSI_DEV, &st_template);
 }
 

@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.74 1996/12/08 08:18:59 davem Exp $
+/* $Id: head.S,v 1.75 1996/12/20 07:54:57 davem Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -409,7 +409,7 @@ C_LABEL(cpu3_stack):			.skip 0x2000
  */
 	.globl C_LABEL(bootup_user_stack)
 	.globl C_LABEL(bootup_kernel_stack)
-	.globl C_LABEL(pg0)
+	.globl C_LABEL(pg0), C_LABEL(pg1), C_LABEL(pg2), C_LABEL(pg3)
 	.globl C_LABEL(empty_bad_page)
 	.globl C_LABEL(empty_bad_page_table)
 	.globl C_LABEL(empty_zero_page)
@@ -418,6 +418,9 @@ C_LABEL(bootup_user_stack):		.skip 0x2000
 C_LABEL(bootup_kernel_stack):		.skip 0x2000
 C_LABEL(swapper_pg_dir):		.skip 0x1000
 C_LABEL(pg0):				.skip 0x1000
+C_LABEL(pg1):				.skip 0x1000
+C_LABEL(pg2):				.skip 0x1000
+C_LABEL(pg3):				.skip 0x1000
 C_LABEL(empty_bad_page):		.skip 0x1000
 C_LABEL(empty_bad_page_table):		.skip 0x1000
 C_LABEL(empty_zero_page):		.skip 0x1000

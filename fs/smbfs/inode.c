@@ -438,6 +438,8 @@ init_smb_fs(void)
 }
 
 #ifdef MODULE
+EXPORT_NO_SYMBOLS;
+
 int
 init_module(void)
 {
@@ -453,9 +455,7 @@ init_module(void)
 
 	smb_init_dir_cache();
 
-	if ((status = init_smb_fs()) == 0)
-		register_symtab(0);
-	return status;
+	return init_smb_fs();
 }
 
 void

@@ -1,4 +1,4 @@
- 
+
 #include <linux/config.h>
 #include <linux/module.h>
 #include <asm/uaccess.h>
@@ -56,15 +56,15 @@ static netbeui_socket *volatile netbeui_socket_list=NULL;
  *	handler using this technique. They can be added although we do not
  *	use this facility.
  */
- 
+
 static void netbeui_remove_socket(netbeui_socket *sk)
 {
 	unsigned long flags;
 	netbeui_socket *s;
-	
+
 	save_flags(flags);
 	cli();
-	
+
 	s=netbeui_socket_list;
 	if(s==sk)
 	{
@@ -107,7 +107,7 @@ static void netbeui_destroy_socket(netbeui_socket *sk);
 /*
  *	Handler for deferred kills.
  */
- 
+
 static void netbeui_destroy_timer(unsigned long data)
 {
 	netbeui_destroy_socket((netbeui_socket *)data);
@@ -117,12 +117,12 @@ static void netbeui_destroy_socket(netbeui_socket *sk)
 {
 	struct sk_buff *skb;
 	netbeui_remove_socket(sk);
-	
+
 	while((skb=skb_dequeue(&sk->receive_queue))!=NULL)
 	{
 		kfree_skb(skb,FREE_READ);
 	}
-	
+
 	if(sk->wmem_alloc == 0 && sk->rmem_alloc == 0 && sk->dead)
 	{
 		sk_free(sk);
@@ -143,9 +143,9 @@ static void netbeui_destroy_socket(netbeui_socket *sk)
 
 
 /*
- *	Called from proc fs 
+ *	Called from proc fs
  */
- 
+
 int netbeui_get_info(char *buffer, char **start, off_t offset, int length, int dummy)
 {
 	netbeui_socket *s;
@@ -171,10 +171,10 @@ int netbeui_get_info(char *buffer, char **start, off_t offset, int length, int d
 			s->protinfo.af_at.dest_port);
 		len += sprintf (buffer+len,"%08X:%08X ", s->wmem_alloc, s->rmem_alloc);
 		len += sprintf (buffer+len,"%02X %d\n", s->state, SOCK_INODE(s->socket)->i_uid);
-		
+
 		/* Are we still dumping unwanted data then discard the record */
 		pos=begin+len;
-		
+
 		if(pos<offset)
 		{
 			len=0;			/* Keep dumping into the buffer start */
@@ -183,13 +183,13 @@ int netbeui_get_info(char *buffer, char **start, off_t offset, int length, int d
 		if(pos>offset+length)		/* We have dumped enough */
 			break;
 	}
-	
+
 	/* The data in question runs from begin to begin+len */
 	*start=buffer+(offset-begin);	/* Start of wanted data */
 	len-=(offset-begin);		/* Remove unwanted header data from length */
 	if(len>length)
 		len=length;		/* Remove unwanted tail data from length */
-	
+
 	return len;
 }
 
@@ -218,7 +218,7 @@ static int nb_device_event(struct notifier_block *this, unsigned long event, voi
  *	Generic fcntl calls are already dealt with. If we don't need funny ones
  *	this is the all you need. Async I/O is also separate.
  */
-  
+
 static int netbeui_fcntl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 /*	netbeui_socket *sk=(netbeui_socket *)sock->data;*/
@@ -230,24 +230,24 @@ static int netbeui_fcntl(struct socket *sock, unsigned int cmd, unsigned long ar
 }
 
 /*
- *	Set 'magic' options for netbeui. If we don't have any this is fine 
+ *	Set 'magic' options for netbeui. If we don't have any this is fine
  *	as it is.
  */
- 
+
 static int netbeui_setsockopt(struct socket *sock, int level, int optname, char *optval, int optlen)
 {
 	netbeui_socket *sk;
 	int err,opt;
-	
+
 	sk=(netbeui_socket *)sock->data;
-	
+
 	if(optval==NULL)
 		return(-EINVAL);
 
 	err = get_user(opt, (int *)optval);
 	if (err)
 		return err;
-	
+
 	switch(level)
 	{
 		case SOL_NETBEUI:
@@ -257,7 +257,7 @@ static int netbeui_setsockopt(struct socket *sock, int level, int optname, char 
 					return -EOPNOTSUPP;
 			}
 			break;
-			
+
 		case SOL_SOCKET:
 			return sock_setsockopt(sk,level,optname,optval,optlen);
 
@@ -270,14 +270,14 @@ static int netbeui_setsockopt(struct socket *sock, int level, int optname, char 
 /*
  *	Get any magic options. Comment above applies.
  */
- 
+
 static int netbeui_getsockopt(struct socket *sock, int level, int optname,
 	char *optval, int *optlen)
 {
 	netbeui_socket *sk;
 	int val=0;
 	int err;
-	
+
 	sk=(netbeui_socket *)sock->data;
 
 	switch(level)
@@ -290,10 +290,10 @@ static int netbeui_getsockopt(struct socket *sock, int level, int optname,
 					return -ENOPROTOOPT;
 			}
 			break;
-			
+
 		case SOL_SOCKET:
 			return sock_getsockopt(sk,level,optname,optval,optlen);
-			
+
 		default:
 			return -EOPNOTSUPP;
 	}
@@ -306,7 +306,7 @@ static int netbeui_getsockopt(struct socket *sock, int level, int optname,
 /*
  *	Only for connection oriented sockets - ignore
  */
- 
+
 static int netbeui_listen(struct socket *sock, int backlog)
 {
 	struct sock *sk=(netbeui_socket *)sock->data;
@@ -321,13 +321,13 @@ static int netbeui_listen(struct socket *sock, int backlog)
 	sk->state=TCP_LISTEN;
 	sk->state_change(sk);
 	netbeui_llc_listen(sk);
-	return 0;	
+	return 0;
 }
 
 /*
  *	These are standard.
  */
- 
+
 static void def_callback1(struct sock *sk)
 {
 	if(!sk->dead)
@@ -347,7 +347,7 @@ static void def_callback2(struct sock *sk, int len)
  *	Create a socket. Initialise the socket, blank the addresses
  *	set the state.
  */
- 
+
 static int netbeui_create(struct socket *sock, int protocol)
 {
 	netbeui_socket *sk;
@@ -364,14 +364,14 @@ static int netbeui_create(struct socket *sock, int protocol)
 			sk_free((void *)sk);
 			return(-ESOCKTNOSUPPORT);
 	}
-	
+
 	sk->llc802=llc_alloc(GFP_KERNEL);
 	if(sk->llc802==NULL)
 	{
 		sk_free((void *)sk);
 		return -ENOBUFS:
 	}
-	
+
 	MOD_INC_USE_COUNT;
 
 	sk->allocation=GFP_KERNEL;
@@ -386,13 +386,13 @@ static int netbeui_create(struct socket *sock, int protocol)
 	sk->socket=sock;
 	sk->type=sock->type;
 	sk->mtu=1500;
-	
+
 	if(sock!=NULL)
 	{
 		sock->data=(void *)sk;
 		sk->sleep=sock->wait;
 	}
-	
+
 	sk->state_change=def_callback1;
 	sk->data_ready=def_callback2;
 	sk->write_space=def_callback1;
@@ -404,7 +404,7 @@ static int netbeui_create(struct socket *sock, int protocol)
 /*
  *	Copy a socket. No work needed.
  */
- 
+
 static int netbeui_dup(struct socket *newsock,struct socket *oldsock)
 {
 	return(netbeui_create(newsock,oldsock->type));
@@ -413,7 +413,7 @@ static int netbeui_dup(struct socket *newsock,struct socket *oldsock)
 /*
  *	Free a socket. No work needed
  */
- 
+
 static int netbeui_release(struct socket *sock, struct socket *peer)
 {
 	netbeui_socket *sk=(netbeui_socket *)sock->data;
@@ -426,21 +426,21 @@ static int netbeui_release(struct socket *sock, struct socket *peer)
 	netbeui_destroy_socket(sk);
 	return(0);
 }
-		
+
 /*
  *	Set the address 'our end' of the connection.
  */
- 
+
 static int netbeui_bind(struct socket *sock, struct sockaddr *uaddr,size_t addr_len)
 {
 	netbeui_socket *sk;
 	struct sockaddr_netbeui *addr=(struct sockaddr_netbeui *)uaddr;
-	
+
 	sk=(netbeui_socket *)sock->data;
-	
+
 	if(sk->zapped==0)
 		return(-EINVAL);
-		
+
 	if(addr_len!=sizeof(struct sockaddr_at))
 		return -EINVAL;
 
@@ -448,7 +448,7 @@ static int netbeui_bind(struct socket *sock, struct sockaddr *uaddr,size_t addr_
 		return -EAFNOSUPPORT;
 
 	if(netbeui_find_socket(addr)!=NULL)
-		return -EADDRINUSE;	   
+		return -EADDRINUSE;
 
 	netbeui_insert_socket(sk);
 	sk->zapped=0;
@@ -458,20 +458,20 @@ static int netbeui_bind(struct socket *sock, struct sockaddr *uaddr,size_t addr_
 /*
  *	Set the address we talk to.
  */
- 
+
 static int netbeui_connect(struct socket *sock, struct sockaddr *uaddr,
 	size_t addr_len, int flags)
 {
 	netbeui_socket *sk=(netbeui_socket *)sock->data;
 	struct sockaddr_netbeui *addr;
-	
-	sk->state = TCP_CLOSE;	
+
+	sk->state = TCP_CLOSE;
 	sock->state = SS_UNCONNECTED;
 
 	if(addr_len!=sizeof(*addr))
 		return(-EINVAL);
 	addr=(struct sockaddr_netbeui *)uaddr;
-	
+
 	if(addr->sat_family!=AF_NETBEUI)
 		return -EAFNOSUPPORT;
 
@@ -481,16 +481,16 @@ static int netbeui_connect(struct socket *sock, struct sockaddr *uaddr,
 
 	if(sk->zapped)
 		return -EINVAL;
-	
+
 	if(atrtr_get_dev(&addr->sat_addr)==NULL)
 		return -ENETUNREACH;
-		
+
 }
 
 /*
  *	Not relevant
  */
- 
+
 static int netbeui_socketpair(struct socket *sock1, struct socket *sock2)
 {
 	return(-EOPNOTSUPP);
@@ -499,7 +499,7 @@ static int netbeui_socketpair(struct socket *sock1, struct socket *sock2)
 /*
  *	WRITE ME
  */
- 
+
 static int netbeui_accept(struct socket *sock, struct socket *newsock, int flags)
 {
 	if(newsock->data)
@@ -511,21 +511,21 @@ static int netbeui_accept(struct socket *sock, struct socket *newsock, int flags
  *	Find the name of a netbeui socket. Just copy the right
  *	fields into the sockaddr.
  */
- 
+
 static int netbeui_getname(struct socket *sock, struct sockaddr *uaddr,
 	size_t *uaddr_len, int peer)
 {
 	struct sockaddr_netbeui snb;
 	netbeui_socket *sk;
-	
+
 	sk=(netbeui_socket *)sock->data;
 	if(sk->zapped)
 	{
 		return -EINVAL;
-	}	
-	
+	}
+
 	*uaddr_len = sizeof(struct sockaddr_netbeui);
-		
+
 	if(peer)
 	{
 		if(sk->state!=TCP_ESTABLISHED)
@@ -542,7 +542,7 @@ static int netbeui_getname(struct socket *sock, struct sockaddr *uaddr,
 /*
  *	Receive a packet (in skb) from device dev.
  */
- 
+
 static int netbeui_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 {
 	netbeui_socket *sock;
@@ -560,13 +560,13 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 	struct netbeui_route *rt;
 	int loopback=0;
 	int err;
-	
+
 	if(flags)
 		return -EINVAL;
-		
+
 	if(len>587)
 		return -EMSGSIZE;
-		
+
 	if(usat)
 	{
 		if(sk->zapped)
@@ -582,7 +582,7 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 #if 0 	/* netnetbeui doesn't implement this check */
 		if(usat->sat_addr.s_node==ATADDR_BCAST && !sk->broadcast)
 			return -EPERM;
-#endif			
+#endif
 	}
 	else
 	{
@@ -594,19 +594,19 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 		usat->sat_addr.s_node=sk->protinfo.af_at.dest_node;
 		usat->sat_addr.s_net=sk->protinfo.af_at.dest_net;
 	}
-	
+
 	/* Build a packet */
-	
+
 	if(sk->debug)
 		printk("SK %p: Got address.\n",sk);
-	
+
 	size=sizeof(struct ddpehdr)+len+nb_dl->header_length;	/* For headers */
 
 	if(usat->sat_addr.s_net!=0 || usat->sat_addr.s_node == ATADDR_ANYNODE)
 	{
 		rt=atrtr_find(&usat->sat_addr);
 		if(rt==NULL)
-			return -ENETUNREACH;	
+			return -ENETUNREACH;
 		dev=rt->dev;
 	}
 	else
@@ -622,7 +622,7 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 
 	if(sk->debug)
 		printk("SK %p: Size needed %d, device %s\n", sk, size, dev->name);
-	
+
 	size += dev->hard_header_len;
 
 	skb = sock_alloc_send_skb(sk, size, 0, 0 , &err);
@@ -636,10 +636,10 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 	skb_reserve(skb,dev->hard_header_len);
 
 	skb->dev=dev;
-	
+
 	if(sk->debug)
 		printk("SK %p: Begin build.\n", sk);
-	
+
 	ddp=(struct ddpehdr *)skb_put(skb,sizeof(struct ddpehdr));
 	ddp->deh_pad=0;
 	ddp->deh_hops=0;
@@ -660,34 +660,34 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 
 	if(sk->debug)
 		printk("SK %p: Copy user data (%d bytes).\n", sk, len);
-		
+
 	err = memcpy_fromiovec(skb_put(skb,len),msg->msg_iov,len);
 	if (err)
 	{
 		kfree_skb(skb, FREE_WRITE);
 		return -EFAULT;
 	}
-		
+
 	if(sk->no_check==1)
 		ddp->deh_sum=0;
 	else
 		ddp->deh_sum=netbeui_checksum(ddp, len+sizeof(*ddp));
-		
+
 #ifdef CONFIG_FIREWALL
 
 	if(call_out_firewall(AF_NETBEUI, skb->dev, ddp, NULL)!=FW_ACCEPT)
 	{
 		kfree_skb(skb, FREE_WRITE);
 		return -EPERM;
-	}	
-	
+	}
+
 #endif
-	
+
 	/*
 	 *	Loopback broadcast packets to non gateway targets (ie routes
 	 *	to group we are in)
 	 */
-	 
+
 	if(ddp->deh_dnode==ATADDR_BCAST)
 	{
 		if((!(rt->flags&RTF_GATEWAY))&&(!(dev->flags&IFF_LOOPBACK)))
@@ -705,7 +705,7 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 		}
 	}
 
-	if((dev->flags&IFF_LOOPBACK) || loopback) 
+	if((dev->flags&IFF_LOOPBACK) || loopback)
 	{
 		if(sk->debug)
 			printk("SK %p: Loop back.\n", sk);
@@ -719,7 +719,7 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 		skb_pull(skb,nb_dl->header_length);
 		netbeui_rcv(skb,dev,NULL);
 	}
-	else 
+	else
 	{
 		if(sk->debug)
 			printk("SK %p: send out.\n", sk);
@@ -728,7 +728,7 @@ static int netbeui_sendmsg(struct socket *sock, struct msghdr *msg, int len, int
 		    gsat.sat_addr = rt->gateway;
 		    usat = &gsat;
 		}
-	
+
 		if(nb_send_low(dev,skb,&usat->sat_addr, NULL)==-1)
 			kfree_skb(skb, FREE_WRITE);
 		/* else queued/sent above in the aarp queue */
@@ -747,7 +747,7 @@ static int netbeui_recvmsg(struct socket *sock, struct msghdr *msg, int size, in
 	int copied = 0;
 	struct sk_buff *skb;
 	int er = 0;
-	
+
 	if(addr_len)
 		*addr_len=sizeof(*sat);
 
@@ -777,8 +777,8 @@ static int netbeui_recvmsg(struct socket *sock, struct msghdr *msg, int size, in
 			msg->msg_flags|=MSG_TRUNC;
 		}
 		er = skb_copy_datagram_iovec(skb,sizeof(*ddp),msg->msg_iov,copied);
-		if (er) 
-			goto out; 
+		if (er)
+			goto out;
 	}
 	if(sat)
 	{
@@ -790,7 +790,7 @@ static int netbeui_recvmsg(struct socket *sock, struct msghdr *msg, int size, in
 out:
 	skb_free_datagram(sk, skb);
 	return er ? er : (copied);
-}		
+}
 
 
 static int netbeui_shutdown(struct socket *sk,int how)
@@ -801,7 +801,7 @@ static int netbeui_shutdown(struct socket *sk,int how)
 static int netbeui_select(struct socket *sock , int sel_type, select_table *wait)
 {
 	netbeui_socket *sk=(netbeui_socket *)sock->data;
-	
+
 	return datagram_select(sk,sel_type,wait);
 }
 
@@ -813,7 +813,7 @@ static int netbeui_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg
 {
 	long amount=0;
 	netbeui_socket *sk=(netbeui_socket *)sock->data;
-	
+
 	switch(cmd)
 	{
 		/*
@@ -850,7 +850,7 @@ static int netbeui_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg
 			return(atrtr_ioctl(cmd,(void *)arg));
 		/*
 		 *	Interface
-		 */			
+		 */
 		case SIOCGIFADDR:
 		case SIOCSIFADDR:
 		case SIOCGIFBRDADDR:
@@ -888,7 +888,7 @@ static int netbeui_ioctl(struct socket *sock,unsigned int cmd, unsigned long arg
 
 static struct proto_ops netbeui_proto_ops = {
 	AF_NETBEUI,
-	
+
 	netbeui_create,
 	netbeui_dup,
 	netbeui_release,
@@ -933,22 +933,22 @@ void netbeui_proto_init(struct net_proto *pro)
 /* ddp?  isn't it atalk too? 8) */
 	if ((nb_dl = register_snap_client(nb_snap_id, netbeui_rcv)) == NULL)
 		printk(KERN_CRIT "Unable to register DDP with SNAP.\n");
-	
+
 	register_netdevice_notifier(&nb_notifier);
 
 #ifdef CONFIG_PROC_FS
 	proc_net_register(&proc_netbeui);
-#endif	
+#endif
 
 	printk(KERN_INFO "NetBEUI 0.02 for Linux NET3.037\n");
 }
 
 #ifdef MODULE
+EXPORT_NO_SYMBOLS;
 
 int init_module(void)
 {
 	netbeui_proto_init(NULL);
-	register_symtab(0);
 	return 0;
 }
 
@@ -957,7 +957,7 @@ void cleanup_module(void)
 	unsigned long flags;
 #ifdef CONFIG_PROC_FS
 	proc_net_unregister(PROC_NET_NETBEUI);
-#endif	
+#endif
 	unregister_netdevice_notifier(&nb_notifier);
 	unregister_snap_client(nb_snap_id);
 	sock_unregister(netbeui_proto_ops.family);

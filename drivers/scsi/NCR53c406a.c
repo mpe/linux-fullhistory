@@ -729,7 +729,7 @@ NCR53c406a_abort(Scsi_Cmnd *SCpnt){
 }
 
 int 
-NCR53c406a_reset(Scsi_Cmnd *SCpnt){
+NCR53c406a_reset(Scsi_Cmnd *SCpnt, unsigned int ignored){
     DEB(printk("NCR53c406a_reset called\n"));
     outb(C4_IMG, CONFIG4);      /* Select reg set 0 */
     outb(CHIP_RESET, CMD_REG);

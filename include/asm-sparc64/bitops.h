@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.4 1996/12/12 15:50:14 davem Exp $
+/* $Id: bitops.h,v 1.5 1996/12/21 06:09:28 davem Exp $
  * bitops.h: Bit string operations on the V9.
  *
  * Copyright 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -204,10 +204,6 @@ extern __inline__ int test_le_bit(int nr, __const__ void * addr)
 #define find_first_zero_le_bit(addr, size) \
         find_next_zero_le_bit((addr), (size), 0)
 
----------------------------------------------------------
-| byte | byte | byte | byte | byte | byte | byte | byte |
----------------------------------------------------------
- 63  56 55  48 47  40 39  32 31  24 23  16 15   8 7    0
 extern __inline__ unsigned long __swab64(unsigned long value)
 {
 	return (((value>>56) & 0x00000000000000ff) |

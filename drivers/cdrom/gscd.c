@@ -71,6 +71,7 @@ static int gscdPresent            = 0;
 static unsigned char gscd_buf[2048];    /* buffer for block size conversion */
 static int   gscd_bn              = -1;
 static short gscd_port            = GSCD_BASE_ADDR;
+MODULE_PARM(gscd, "h");
 
 /* Kommt spaeter vielleicht noch mal dran ...
  *    static struct wait_queue *gscd_waitq = NULL;

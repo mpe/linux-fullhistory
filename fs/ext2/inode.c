@@ -329,42 +329,6 @@ repeat:
 	return result;
 }
 
-static int block_getcluster (struct inode * inode, struct buffer_head * bh,
-					  int nr,
-					  int blocksize)
-{
-	u32 * p;
-	int firstblock = 0;
-	int result = 0;
-	int i;
-
-	/* Check to see if clustering possible here. */
-
-	if(!bh) return 0;
-
-	if((nr & ((PAGE_SIZE >> EXT2_BLOCK_SIZE_BITS(inode->i_sb)) - 1)) != 0)
-		goto out;
-	if(nr + 3 > EXT2_ADDR_PER_BLOCK(inode->i_sb)) goto out;
-
-	for(i=0; i< (PAGE_SIZE >> EXT2_BLOCK_SIZE_BITS(inode->i_sb)); i++) {
-	  p = (u32 *) bh->b_data + nr + i;
-	  
-	  /* All blocks in cluster must already be allocated */
-	  if(le32_to_cpu(*p) == 0) goto out;
-	  
-	  /* See if aligned correctly */
-	  if(i==0) firstblock = le32_to_cpu(*p);
-	  else if(le32_to_cpu(*p) != firstblock + i) goto out;
-	}
-	
-	p = (u32 *) bh->b_data + nr;
-	result = generate_cluster_swab32(bh->b_dev, (int *) p, blocksize);
-
-      out:
-	brelse(bh);
-	return result;
-}
-
 struct buffer_head * ext2_getblk (struct inode * inode, long block,
 				  int create, int * err)
 {
@@ -425,56 +389,6 @@ struct buffer_head * ext2_getblk (struct inode * inode, long block,
 			   create, inode->i_sb->s_blocksize, b, err);
 	return block_getblk (inode, bh, block & (addr_per_block - 1), create,
 			     inode->i_sb->s_blocksize, b, err);
-}
-
-int ext2_getcluster (struct inode * inode, long block)
-{
-	struct buffer_head * bh;
-	int err, create;
-	unsigned long b;
-	unsigned long addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
-	int addr_per_block_bits = EXT2_ADDR_PER_BLOCK_BITS(inode->i_sb);
-
-	create = 0;
-	err = -EIO;
-	if (block < 0) {
-		ext2_warning (inode->i_sb, "ext2_getblk", "block < 0");
-		return 0;
-	}
-	if (block > EXT2_NDIR_BLOCKS + addr_per_block +
-		(1 << (addr_per_block_bits * 2)) +
-		((1 << (addr_per_block_bits * 2)) << addr_per_block_bits)) {
-		ext2_warning (inode->i_sb, "ext2_getblk", "block > big");
-		return 0;
-	}
-
-	err = -ENOSPC;
-	b = block;
-	if (block < EXT2_NDIR_BLOCKS) return 0;
-
-	block -= EXT2_NDIR_BLOCKS;
-
-	if (block < addr_per_block) {
-		bh = inode_getblk (inode, EXT2_IND_BLOCK, create, b, &err);
-		return block_getcluster (inode, bh, block, 
-					 inode->i_sb->s_blocksize);
-	}
-	block -= addr_per_block;
-	if (block < (1 << (addr_per_block_bits * 2))) {
-		bh = inode_getblk (inode, EXT2_DIND_BLOCK, create, b, &err);
-		bh = block_getblk (inode, bh, block >> addr_per_block_bits,
-				   create, inode->i_sb->s_blocksize, b, &err);
-		return block_getcluster (inode, bh, block & (addr_per_block - 1),
-				     inode->i_sb->s_blocksize);
-	}
-	block -= (1 << (addr_per_block_bits * 2));
-	bh = inode_getblk (inode, EXT2_TIND_BLOCK, create, b, &err);
-	bh = block_getblk (inode, bh, block >> (addr_per_block_bits * 2),
-			   create, inode->i_sb->s_blocksize, b, &err);
-	bh = block_getblk (inode, bh, (block >> addr_per_block_bits) & (addr_per_block - 1),
-			   create, inode->i_sb->s_blocksize, b, &err);
-	return block_getcluster (inode, bh, block & (addr_per_block - 1),
-				 inode->i_sb->s_blocksize);
 }
 
 struct buffer_head * ext2_bread (struct inode * inode, int block, 

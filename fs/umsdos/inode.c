@@ -1,7 +1,7 @@
 /*
  *  linux/fs/umsdos/inode.c
  *
- *	Written 1993 by Jacques Gelinas 
+ *	Written 1993 by Jacques Gelinas
  *	Inspired from linux/fs/msdos/... by Werner Almesberger
  *
  */
@@ -275,7 +275,7 @@ int UMSDOS_notify_change(struct inode *inode, struct iattr *attr)
 {
 	int ret = 0;
 
-	if ((ret = inode_change_ok(inode, attr)) != 0) 
+	if ((ret = inode_change_ok(inode, attr)) != 0)
 		return ret;
 
 	if (inode->i_nlink > 0){
@@ -321,17 +321,17 @@ int UMSDOS_notify_change(struct inode *inode, struct iattr *attr)
 				ret = umsdos_emd_dir_read (emd_owner,&filp,(char*)&entry
 					,UMSDOS_REC_SIZE);
 				if (ret == 0){
-					if (attr->ia_valid & ATTR_UID) 
+					if (attr->ia_valid & ATTR_UID)
 						entry.uid = attr->ia_uid;
-					if (attr->ia_valid & ATTR_GID) 
+					if (attr->ia_valid & ATTR_GID)
 						entry.gid = attr->ia_gid;
-					if (attr->ia_valid & ATTR_MODE) 
+					if (attr->ia_valid & ATTR_MODE)
 						entry.mode = attr->ia_mode;
-					if (attr->ia_valid & ATTR_ATIME) 
+					if (attr->ia_valid & ATTR_ATIME)
 						entry.atime = attr->ia_atime;
-					if (attr->ia_valid & ATTR_MTIME) 
+					if (attr->ia_valid & ATTR_MTIME)
 						entry.mtime = attr->ia_mtime;
-					if (attr->ia_valid & ATTR_CTIME) 
+					if (attr->ia_valid & ATTR_CTIME)
 						entry.ctime = attr->ia_ctime;
 
 					entry.nlink = inode->i_nlink;
@@ -352,7 +352,7 @@ int UMSDOS_notify_change(struct inode *inode, struct iattr *attr)
 			PRINTK (("\n"));
 		}
 	}
-	if (ret == 0) 
+	if (ret == 0)
 		inode_setattr(inode, attr);
 	return ret;
 }
@@ -366,7 +366,7 @@ int UMSDOS_notify_change(struct inode *inode, struct iattr *attr)
 	so it's easier to tell them apart.
 */
 
-static struct super_operations umsdos_sops = { 
+static struct super_operations umsdos_sops = {
 	UMSDOS_read_inode,
 	UMSDOS_notify_change,
 	UMSDOS_write_inode,
@@ -431,7 +431,7 @@ struct super_block *UMSDOS_read_super(
 
 				This feature allows the installation
 				of a linux system within a DOS system in a subdirectory.
-	
+
 				A user may install its linux stuff in c:\linux
 				avoiding any clash with existing DOS file and subdirectory.
 				When linux boots, it hides this fact, showing a normal
@@ -505,13 +505,11 @@ int init_umsdos_fs(void)
 }
 
 #ifdef MODULE
+EXPORT_NO_SYMBOLS;
+
 int init_module(void)
 {
-	int status;
-
-	if ((status = init_umsdos_fs()) == 0)
-		register_symtab(0);
-	return status;
+	return init_umsdos_fs();
 }
 
 void cleanup_module(void)
@@ -520,4 +518,3 @@ void cleanup_module(void)
 }
 
 #endif
-

@@ -31,10 +31,10 @@
  *
  *	At present the "first packet" is defined as a packet starting with
  *	the protocol ID string - "PNA".
- *	When the link is up there appears to be enough control data 
+ *	When the link is up there appears to be enough control data
  *	crossing the control link to keep it open even if a long audio
  *	piece is playing.
- *	
+ *
  */
 
 #include <linux/module.h>
@@ -64,11 +64,11 @@ masq_raudio_init_1 (struct ip_masq_app *mapp, struct ip_masq *ms)
 {
         MOD_INC_USE_COUNT;
 	if ((ms->app_data = kmalloc(sizeof(struct raudio_priv_data),
-				    GFP_ATOMIC)) == NULL) 
+				    GFP_ATOMIC)) == NULL)
 		printk(KERN_INFO "RealAudio: No memory for application data\n");
-	else 
+	else
 	{
-		struct raudio_priv_data *priv = 
+		struct raudio_priv_data *priv =
 			(struct raudio_priv_data *)ms->app_data;
 		priv->seen_start = 0;
 		priv->data_conn = NULL;
@@ -94,7 +94,7 @@ masq_raudio_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **
 	char *p, *data, *data_limit;
 	struct ip_masq *n_ms;
 	unsigned short version, msg_id, msg_len, udp_port;
-	struct raudio_priv_data *priv = 
+	struct raudio_priv_data *priv =
 		(struct raudio_priv_data *)ms->app_data;
 
 	/* Everything running correctly already */
@@ -156,7 +156,7 @@ masq_raudio_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **
 					   ms->saddr, udp_port,
 					   ms->daddr, 0,
 					   IP_MASQ_F_NO_DPORT);
-					
+
 			if (n_ms==NULL)
 				return 0;
 
@@ -171,7 +171,7 @@ masq_raudio_out (struct ip_masq_app *mapp, struct ip_masq *ms, struct sk_buff **
 			if (priv)
 				priv->data_conn = n_ms;
 
-			/* 
+			/*
 			 * There is nothing else useful we can do
 			 * Maybe a development could do more, but for now
 			 * we exit gracefully!
@@ -214,12 +214,12 @@ int ip_masq_raudio_done(void)
 }
 
 #ifdef MODULE
+EXPORT_NO_SYMBOLS;
 
 int init_module(void)
 {
         if (ip_masq_raudio_init() != 0)
                 return -EIO;
-        register_symtab(0);
         return 0;
 }
 

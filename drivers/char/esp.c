@@ -28,6 +28,11 @@
  *     by Dennis J. Boylan).  Patches to allow use with 2.1.x contributed
  *     by Chris Faylor.
  *
+ * Most recent changes: (Andrew J. Robinson)
+ *     Remove tx_flowed_[on|off], since the ESP handles flow itself.
+ *     Enabled reinterrupt pacing to ensure all requests are serviced.
+ *     Decreased RX timeout to reduce latency.
+ *
  * This module exports the following rs232 io functions:
  *
  *	int esp_init(void);
@@ -68,8 +73,9 @@
 static int irq[NR_PRIMARY] = {0,0,0,0,0,0,0,0};	/* IRQ for each base port */
 static unsigned int divisor[NR_PRIMARY] = {0,0,0,0,0,0,0,0};
 	/* custom divisor for each port */
-static unsigned int dma = CONFIG_ESP_DMA_CHANNEL; /* DMA channel */
-static unsigned int trigger = CONFIG_ESP_TRIGGER_LEVEL; /* FIFO trigger level */
+static unsigned int dma = CONFIG_ESPSERIAL_DMA_CHANNEL; /* DMA channel */
+static unsigned int trigger = CONFIG_ESPSERIAL_TRIGGER_LEVEL;
+	/* FIFO trigger level */
 /* END */
 
 static char *dma_buffer;
@@ -78,8 +84,8 @@ static char *dma_buffer;
 
 #define WAKEUP_CHARS 1024
 
-static char *serial_name = "ESP driver";
-static char *serial_version = "1.1";
+static char *serial_name = "ESP serial driver";
+static char *serial_version = "1.2";
 
 DECLARE_TASK_QUEUE(tq_esp);
 
@@ -574,31 +580,8 @@ static _INLINE_ void check_modem_status(struct esp_struct *info)
 	}
 }
 
-static _INLINE_ void tx_flowed_on(struct esp_struct *info)
-{
-#if (defined(SERIAL_DEBUG_INTR) || defined(SERIAL_DEBUG_FLOW))
-	printk("CTS tx start...");
-#endif
-	info->tty->hw_stopped = 0;
-	info->IER |= UART_IER_THRI;
-	serial_out(info, UART_ESI_CMD1, ESI_SET_SRV_MASK); /* set mask */
-	serial_out(info, UART_ESI_CMD2, info->IER);
-	rs_sched_event(info, ESP_EVENT_WRITE_WAKEUP);
-}
-
-static _INLINE_ void tx_flowed_off(struct esp_struct *info)
-{
-#if (defined(SERIAL_DEBUG_INTR) || defined(SERIAL_DEBUG_FLOW))
-	printk("CTS tx stop...");
-#endif
-	info->tty->hw_stopped = 1;
-	info->IER &= ~UART_IER_THRI;
-	serial_out(info, UART_ESI_CMD1, ESI_SET_SRV_MASK); /* set mask */
-	serial_out(info, UART_ESI_CMD2, info->IER);
-}
-
 /*
- * This is the serial driver's interrupt routine for a single port
+ * This is the serial driver's interrupt routine
  */
 static void rs_interrupt_single(int irq, void *dev_id, struct pt_regs * regs)
 {
@@ -644,12 +627,6 @@ static void rs_interrupt_single(int irq, void *dev_id, struct pt_regs * regs)
 
 			if (err_status & 0x8000)	/* Start break */
 				wake_up_interruptible(&info->break_wait);
-
-			if (err_status & 0x0002)	/* tx off */
-				tx_flowed_off(info);
-
-			if (err_status & 0x0004)	/* tx on */
-				tx_flowed_on(info);
 		}
 		
 		if ((scratch & 0x88)  || /* DMA completed or timed out */
@@ -777,7 +754,7 @@ static void esp_basic_init(struct esp_struct * info)
 	/* set error status mask (check this) */
 	serial_out(info, UART_ESI_CMD1, ESI_SET_ERR_MASK);
 	serial_out(info, UART_ESI_CMD2, 0xbd);
-	serial_out(info, UART_ESI_CMD2, 0x06);
+	serial_out(info, UART_ESI_CMD2, 0x00);
 
 	/* set DMA timeout */
 	serial_out(info, UART_ESI_CMD1, ESI_SET_DMA_TMOUT);
@@ -793,6 +770,10 @@ static void esp_basic_init(struct esp_struct * info)
 	/* Set clock scaling */
 	serial_out(info, UART_ESI_CMD1, ESI_SET_PRESCALAR);
 	serial_out(info, UART_ESI_CMD2, ESPC_SCALE);
+
+	/* set reinterrupt pacing */
+	serial_out(info, UART_ESI_CMD1, ESI_SET_REINTR);
+	serial_out(info, UART_ESI_CMD2, 0xff);
 }
 
 static int startup(struct esp_struct * info)
@@ -867,7 +848,7 @@ static int startup(struct esp_struct * info)
 
 	/* set receive character timeout */
 	serial_out(info, UART_ESI_CMD1, ESI_SET_RX_TIMEOUT);
-	serial_out(info, UART_ESI_CMD2, 0xff);
+	serial_out(info, UART_ESI_CMD2, 0x80);
 
 	info->stat_flags = 0;
 
@@ -1417,7 +1398,7 @@ static void rs_unthrottle(struct tty_struct * tty)
 	serial_out(info, UART_ESI_CMD1, ESI_SET_SRV_MASK);
 	serial_out(info, UART_ESI_CMD2, info->IER);
 	serial_out(info, UART_ESI_CMD1, ESI_SET_RX_TIMEOUT);
-	serial_out(info, UART_ESI_CMD2, 0xff);
+	serial_out(info, UART_ESI_CMD2, 0x80);
 	sti();
 }
 
@@ -2409,7 +2390,7 @@ int esp_init(void)
 	}
 
 	if ((dma != 1) && (dma != 3))
-		dma = CONFIG_ESP_DMA_CHANNEL;
+		dma = 1;
 
 	if ((trigger < 1) || (trigger > 1015))
 		trigger = 768;

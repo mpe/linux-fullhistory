@@ -442,6 +442,7 @@ static int sbpcd[] =
 #else
 static int sbpcd[] = {CDROM_PORT, SBPRO}; /* probe with user's setup only */
 #endif
+MODULE_PARM(sbpcd, "2i");
 
 #define NUM_PROBE  (sizeof(sbpcd) / sizeof(int))
 

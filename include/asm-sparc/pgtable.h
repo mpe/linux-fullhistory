@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.54 1996/12/03 02:38:31 davem Exp $ */
+/* $Id: pgtable.h,v 1.56 1996/12/23 05:28:50 davem Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -105,6 +105,9 @@ extern pgd_t swapper_pg_dir[1024];
  * holds the same as on the i386.
  */
 extern pte_t pg0[1024];
+extern pte_t pg1[1024];
+extern pte_t pg2[1024];
+extern pte_t pg3[1024];
 
 extern unsigned long ptr_in_current_pgd;
 

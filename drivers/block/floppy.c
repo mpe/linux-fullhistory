@@ -4061,7 +4061,9 @@ static int floppy_grab_irq_and_dma(void)
 static void floppy_release_irq_and_dma(void)
 {
 #ifdef FLOPPY_SANITY_CHECK
+#ifndef __sparc__
 	int drive;
+#endif
 #endif
 	long tmpsize;
 	unsigned long tmpaddr;
@@ -4094,9 +4096,11 @@ static void floppy_release_irq_and_dma(void)
 	}
 
 #ifdef FLOPPY_SANITY_CHECK
+#ifndef __sparc__
 	for (drive=0; drive < N_FDC * 4; drive++)
 		if (motor_off_timer[drive].next)
 			printk("motor off timer %d still active\n", drive);
+#endif
 
 	if (fd_timeout.next)
 		printk("floppy timer still active:%s\n", timeout_message);
@@ -4179,7 +4183,7 @@ extern "C" {
 #endif
 int init_module(void)
 {
-	printk(KERN_INFO "inserting floppy driver for %s\n", kernel_version);
+	printk(KERN_INFO "inserting floppy driver for " UTS_RELEASE "\n");
 		
 	if(floppy)
 		parse_floppy_cfg_string(floppy);

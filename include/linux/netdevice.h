@@ -83,7 +83,8 @@ struct hh_cache
 	int		hh_refcnt;	/* number of users */
 	unsigned short  hh_type;	/* protocol identifier, f.e ETH_P_IP */
 	char		hh_uptodate;	/* hh_data is valid */
-	char		hh_data[16];    /* cached hardware header */
+	/* cached hardware header; allow for machine alignment needs.  */
+	unsigned long	hh_data[16/sizeof(unsigned long)];
 };
 
 /*

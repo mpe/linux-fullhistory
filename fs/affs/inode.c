@@ -4,7 +4,7 @@
  *  (c) 1996  Hans-Joachim Widmaier - Rewritten
  *
  *  (C) 1993  Ray Burr - Modified for Amiga FFS filesystem.
- * 
+ *
  *  (C) 1992  Eric Youngdale Modified for ISO9660 filesystem.
  *
  *  (C) 1991  Linus Torvalds - minix filesystem
@@ -98,11 +98,11 @@ affs_write_super(struct super_block *sb)
 	pr_debug("AFFS: write_super() at %d, clean=%d\n",CURRENT_TIME,clean);
 }
 
-static struct super_operations affs_sops = { 
+static struct super_operations affs_sops = {
 	affs_read_inode,
 	affs_notify_change,
 	affs_write_inode,
-	affs_put_inode,	
+	affs_put_inode,
 	affs_put_super,
 	affs_write_super,
 	affs_statfs,
@@ -467,7 +467,7 @@ affs_read_super(struct super_block *s,void *data, int silent)
 	size   = s->u.affs_sb.s_partition_size - reserved;
 	num_bm = (size + s->s_blocksize * 8 - 32 - 1) / (s->s_blocksize * 8 - 32);
 	az_no  = (size + AFFS_ZONE_SIZE - 1) / (AFFS_ZONE_SIZE - 32);
-	ptype  = num_bm * sizeof(struct affs_bm_info) + 
+	ptype  = num_bm * sizeof(struct affs_bm_info) +
 		 az_no * sizeof(struct affs_alloc_zone) +
 		 MAX_ZONES * sizeof(struct affs_zone);
 	pr_debug("num_bm=%d, az_no=%d, sum=%d\n",num_bm,az_no,ptype);
@@ -666,7 +666,7 @@ affs_read_inode(struct inode *inode)
 
 	inode->u.affs_i.i_protect      = prot;
 	inode->u.affs_i.i_parent       = htonl(file_end->parent);
-	inode->u.affs_i.i_original     = 0;	
+	inode->u.affs_i.i_original     = 0;
 	inode->u.affs_i.i_zone         = 0;
 	inode->u.affs_i.i_hlink        = 0;
 	inode->u.affs_i.i_pa_cnt       = 0;
@@ -682,7 +682,7 @@ affs_read_inode(struct inode *inode)
 		inode->i_mode = inode->i_sb->u.affs_sb.s_mode;
 	else
 		inode->i_mode = prot_to_mode(prot);
-	
+
 	if (inode->i_sb->u.affs_sb.s_flags & SF_SETUID)
 		inode->i_uid = inode->i_sb->u.affs_sb.s_uid;
 	else {
@@ -761,7 +761,7 @@ affs_read_inode(struct inode *inode)
 			 sys_tz.tz_minuteswest * 60;
 	affs_brelse(bh);
 	affs_brelse(lbh);
-	
+
 	inode->i_op = NULL;
 	if (S_ISREG(inode->i_mode)) {
 		if (inode->i_sb->u.affs_sb.s_flags & SF_OFS) {
@@ -829,16 +829,16 @@ affs_notify_change(struct inode *inode, struct iattr *attr)
 	error = inode_change_ok(inode,attr);
 	if (error)
 		return error;
-	
+
 	if (((attr->ia_valid & ATTR_UID) && (inode->i_sb->u.affs_sb.s_flags & SF_SETUID)) ||
 	    ((attr->ia_valid & ATTR_GID) && (inode->i_sb->u.affs_sb.s_flags & SF_SETGID)) ||
 	    ((attr->ia_valid & ATTR_MODE) &&
 	     (inode->i_sb->u.affs_sb.s_flags & (SF_SETMODE | SF_IMMUTABLE))))
 		error = -EPERM;
-	
+
 	if (error)
 		return (inode->i_sb->u.affs_sb.s_flags & SF_QUIET) ? 0 : error;
-	
+
 	if (attr->ia_valid & ATTR_MODE)
 		inode->u.affs_i.i_protect = mode_to_prot(attr->ia_mode);
 
@@ -870,7 +870,7 @@ affs_new_inode(const struct inode *dir)
 
 	if (!dir || !(inode = get_empty_inode()))
 		return NULL;
-	
+
 	sb = dir->i_sb;
 	inode->i_sb    = sb;
 	inode->i_flags = sb->s_flags;
@@ -950,12 +950,12 @@ affs_add_entry(struct inode *dir, struct inode *link, struct inode *inode,
 	hash = affs_hash_name(name,len,AFFS_I2FSTYPE(dir),AFFS_I2HSIZE(dir));
 
 	lock_super(inode->i_sb);
-	DIR_END(inode_bh->b_data,inode)->hash_chain = 
+	DIR_END(inode_bh->b_data,inode)->hash_chain =
 				((struct dir_front *)dir_bh->b_data)->hashtable[hash];
 	((struct dir_front *)dir_bh->b_data)->hashtable[hash] = ntohl(inode->i_ino);
 	if (link_bh) {
 		LINK_END(inode_bh->b_data,inode)->original   = ntohl(link->i_ino);
-		LINK_END(inode_bh->b_data,inode)->link_chain = 
+		LINK_END(inode_bh->b_data,inode)->link_chain =
 						FILE_END(link_bh->b_data,link)->link_chain;
 		FILE_END(link_bh->b_data,link)->link_chain   = ntohl(inode->i_ino);
 		affs_fix_checksum(AFFS_I2BSIZE(link),link_bh->b_data,5);
@@ -994,14 +994,12 @@ init_affs_fs(void)
 }
 
 #ifdef MODULE
+EXPORT_NO_SYMBOLS;
 
 int
 init_module(void)
 {
-	int	 status;
-	if ((status = init_affs_fs()) == 0)
-		register_symtab(0);
-	return status;
+	return init_affs_fs();
 }
 
 void

@@ -1857,6 +1857,10 @@ int iobase  = 0;
 int iobase1 = 0;
 int iobase2 = 0;
 int iobase3 = 0;
+MODULE_PARM(iobase, "i");
+MODULE_PARM(iobase1, "i");
+MODULE_PARM(iobase2, "i");
+MODULE_PARM(iobase3, "i");
 
 /*
  * You can setup up to 4 boards (current value of RC_NBOARD)

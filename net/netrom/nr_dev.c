@@ -1,8 +1,8 @@
 /*
  *	NET/ROM release 004
  *
- *	This is ALPHA test software. This code may break your machine, randomly fail to work with new 
- *	releases, misbehave and/or generally screw up. It might even work. 
+ *	This is ALPHA test software. This code may break your machine, randomly fail to work with new
+ *	releases, misbehave and/or generally screw up. It might even work.
  *
  *	This code REQUIRES 1.3.0 or higher/ NET3.029
  *
@@ -106,8 +106,8 @@ static int nr_header(struct sk_buff *skb, struct device *dev, unsigned short typ
 
 	if (daddr != NULL)
 		return 37;
-	
-	return -37;	
+
+	return -37;
 }
 
 static int nr_rebuild_header(struct sk_buff *skb)
@@ -126,7 +126,7 @@ static int nr_rebuild_header(struct sk_buff *skb)
 	bp[6] &= ~LAPB_E;
 	bp[6] |= SSSID_SPARE;
 	bp    += AX25_ADDR_LEN;
-	
+
 	bp[6] &= ~LAPB_C;
 	bp[6] |= LAPB_E;
 	bp[6] |= SSSID_SPARE;
@@ -158,7 +158,7 @@ static int nr_set_mac_address(struct device *dev, void *addr)
 	ax25_listen_release((ax25_address *)dev->dev_addr, NULL);
 
 	memcpy(dev->dev_addr, sa->sa_data, dev->addr_len);
-	
+
 	ax25_listen_register((ax25_address *)dev->dev_addr, NULL);
 
 	return 0;
@@ -279,6 +279,8 @@ static struct device dev_nr[] = {
 	{"nr3", 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, nr_init}
 };
 
+EXPORT_NO_SYMBOLS;
+
 int init_module(void)
 {
 	int i;
@@ -286,10 +288,8 @@ int init_module(void)
 	for (i = 0; i < 4; i++)
 		register_netdev(&dev_nr[i]);
 
-	register_symtab(NULL);
-
 	nr_proto_init(NULL);
-	
+
 	return 0;
 }
 
@@ -312,7 +312,7 @@ void cleanup_module(void)
 	nr_unregister_sysctl();
 
 	sock_unregister(nr_proto_ops.family);
-	
+
 	for (i = 0; i < 4; i++) {
 		if (dev_nr[i].priv != NULL) {
 			kfree(dev_nr[i].priv);

@@ -16,7 +16,7 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
+ * Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  * $Log: icn.c,v $
  * Revision 1.29  1996/08/29 20:34:54  fritz
@@ -154,7 +154,7 @@ static void icn_free_queue(struct sk_buff_head *queue)
 {
         struct sk_buff *skb;
         unsigned long flags;
-        
+
         save_flags(flags);
         cli();
         while ((skb = skb_dequeue(queue)))
@@ -334,7 +334,7 @@ static void icn_pollbchan_receive(int channel, icn_card *card)
                 while (rbavl) {
                         cnt = readb(&rbuf_l);
                         if ((card->rcvidx[channel] + cnt) > 4000) {
-                                printk(KERN_WARNING 
+                                printk(KERN_WARNING
                                        "icn: (%s) bogus packet on ch%d, dropping.\n",
                                        CID,
                                        channel + 1);
@@ -354,7 +354,7 @@ static void icn_pollbchan_receive(int channel, icn_card *card)
                                                 printk(KERN_WARNING "ïcn: receive out of memory\n");
                                                 break;
                                         }
-                                        memcpy(skb_put(skb, cnt), card->rcvbuf[channel], cnt); 
+                                        memcpy(skb_put(skb, cnt), card->rcvbuf[channel], cnt);
                                         card->rcvidx[channel] = 0;
                                         card->interface.rcvcallb_skb(card->myid, channel, skb);
                                 }
@@ -403,7 +403,7 @@ static void icn_pollbchan_send(int channel, icn_card *card)
 			    writeb (0x0, &sbuf_f);
 			    cnt = skb->len;
 			}
-		        writeb (cnt, &sbuf_l);		    
+		        writeb (cnt, &sbuf_l);
                         memcpy_toio(&sbuf_d, skb->data, cnt);
                         skb_pull(skb, cnt);
                         card->sndcount[channel] -= cnt;
@@ -633,7 +633,7 @@ static void icn_polldchan(unsigned long data)
                                                 vstr[3] = '\0';
                                                 card->fw_rev = (int)simple_strtoul(vstr,NULL,10);
                                                 continue;
-                                                
+
                                         }
                                 }
                         } else {
@@ -758,7 +758,7 @@ static int icn_check_loader(int cardnumber)
 
 /* Load the boot-code into the interface-card's memory and start it.
  * Always called from user-process.
- * 
+ *
  * Parameters:
  *            buffer = pointer to packet
  * Return:
@@ -916,7 +916,7 @@ static int icn_loadproto(u_char * buffer, icn_card * card)
                         cnt = MIN(256, left);
                         if (copy_from_user(codebuf, p, cnt))
                         	/* FIXME -WRONG */return -EFAULT;
-                        memcpy_toio(&sbuf_l, codebuf, cnt); /* copy data                     */ 
+                        memcpy_toio(&sbuf_l, codebuf, cnt); /* copy data                     */
                         sbnext;                         /* switch to next buffer         */
                         p += cnt;
                         left -= cnt;
@@ -1263,7 +1263,7 @@ static int icn_command(isdn_ctrl * c, icn_card * card)
                                 char sis[50];
                                 char dcode[4];
                                 int si1, si2;
-                                
+
                                 a = c->arg;
                                 strcpy(sis, c->num);
                                 p = strrchr(sis, ',');
@@ -1589,6 +1589,7 @@ static int icn_addcard(int port, char *id1, char *id2)
 }
 
 #ifdef MODULE
+EXPORT_NO_SYMBOLS;
 #define icn_init init_module
 #else
 void icn_setup(char *str, int *ints)
@@ -1622,9 +1623,6 @@ int icn_init(void)
         dev.shmem = (icn_shmem *) ((unsigned long)membase & 0x0ffc000);
         dev.channel = -1;
         dev.mcard   = NULL;
-
-        /* No symbols to export, hide all symbols */
-        register_symtab(NULL);
 
         if ((p = strchr(revision, ':'))) {
                 strcpy(rev, p + 1);

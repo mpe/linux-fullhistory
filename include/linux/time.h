@@ -22,10 +22,10 @@ struct timezone {
 #define NFDBITS			__NFDBITS
 
 #ifdef __KERNEL__
-void do_gettimeofday(struct timeval *tv);
-void do_settimeofday(struct timeval *tv);
-void get_fast_time(struct timeval *tv);
-void (*do_get_fast_time)(struct timeval *);
+extern void do_gettimeofday(struct timeval *tv);
+extern void do_settimeofday(struct timeval *tv);
+extern void get_fast_time(struct timeval *tv);
+extern void (*do_get_fast_time)(struct timeval *);
 #endif
 
 #define FD_SETSIZE		__FD_SETSIZE

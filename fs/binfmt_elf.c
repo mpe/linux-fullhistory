@@ -59,7 +59,7 @@ static struct linux_binfmt elf_format = {
 #ifndef MODULE
 	NULL, NULL, load_elf_binary, load_elf_library, elf_core_dump
 #else
-	NULL, &mod_use_count_, load_elf_binary, load_elf_library, elf_core_dump
+	NULL, &__this_module.usecount, load_elf_binary, load_elf_library, elf_core_dump
 #endif
 };
 

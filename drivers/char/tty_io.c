@@ -1923,7 +1923,7 @@ int tty_init(void)
 		panic("Couldn't register /dev/console driver\n");
 	
 	kbd_init();
-#ifdef CONFIG_ESP  /* init ESP before rs, so rs doesn't see the port */
+#ifdef CONFIG_ESPSERIAL  /* init ESP before rs, so rs doesn't see the port */
 	esp_init();
 #endif
 #ifdef CONFIG_SERIAL

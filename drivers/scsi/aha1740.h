@@ -157,7 +157,7 @@ int aha1740_detect(Scsi_Host_Template *);
 int aha1740_command(Scsi_Cmnd *);
 int aha1740_queuecommand(Scsi_Cmnd *, void (*done)(Scsi_Cmnd *));
 int aha1740_abort(Scsi_Cmnd *);
-int aha1740_reset(Scsi_Cmnd *);
+int aha1740_reset(Scsi_Cmnd *, unsigned int);
 int aha1740_biosparam(Disk *, kdev_t, int*);
 
 #define AHA1740_ECBS 32

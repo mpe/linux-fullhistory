@@ -61,7 +61,36 @@
  *
  * - XA data (green, mode2 form2): | sync - head - sub - data - EDC |
  *                                 |  12  -   4  -  8  - 2324 -  4  |
+ *
+ * Sector types (format) - Forces the CD-ROM to read the specified sector type,
+ *                         attempt to read any other format ends with an error
+ *
+ * format       sector type             user data size (bytes)
+ * -----------------------------------------------------------------------------
+ *   1     CD DA (Red Book)             2352    (CD_FRAMESIZE_RAW)
+ *   2     Mode1 Form1 (Yellow Book)    2048    (CD_FRAMESIZE)
+ *   3     Mode1 Form2 (Yellow Book)    2336    (CD_FRAMESIZE_RAW0)
+ *   4     Mode2 Form1 (Green Book)     2048    (CD_FRAMESIZE)
+ *   5     Mode2 Form2 (Green Book)     2328    (2324+4 spare bytes)
+ *
+ *
+ * Data Selection Field (pc.c[9]) - This value controls the actual number
+ *                                  of bytes transferred from the CD-ROM
+ *
+ * bit      7       6        5        4        3       2        1        0
+ * ----------------------------------------------------------------------------
+ *     |  Sync  |   Sub  | Header |  User  | EDC & | Error |  Block  | reserved
+ *     |        | Header |        |  Data  |  ECC  | Flags |  Error  |
+ *     \-------------------------------------------/\---------------/
+ *                           |                              |
+ *                           V                              V
+ *                   stored on CD (2532)    generated during error correction
+ *
+ * The maximal number of bytes returned by CD-ROM is 2646 (CD_FRAMESIZE_RAWER),
+ * when pc.c[9] = 0xfa.
+ *
  */
+ 
 
 /*
  * CDROM IOCTL structures

@@ -34,24 +34,22 @@ unsigned long
 search_exception_table(unsigned long addr)
 {
 	unsigned long ret;
-#ifdef CONFIG_MODULES
-	struct module *mp;
-#endif
 
-	/* Search the kernel's table first.  */
+#ifndef CONFIG_MODULES
+	/* There is only the kernel to search.  */
 	ret = search_one_table(__start___ex_table, __stop___ex_table-1, addr);
-	if (ret)
-		return ret;
-
-#ifdef CONFIG_MODULES
+	if (ret) return ret;
+#else
+	/* The kernel is the last "module" -- no need to treat it special.  */
+	struct module *mp;
 	for (mp = module_list; mp != NULL; mp = mp->next) {
-		if (mp->exceptinfo.start != NULL) {
-			ret = search_one_table(mp->exceptinfo.start,
-				mp->exceptinfo.stop-1, addr);
-			if (ret)
-				return ret;
-		}
+		if (mp->ex_table_start == NULL)
+			continue;
+		ret = search_one_table(mp->ex_table_start,
+				       mp->ex_table_stop-1, addr);
+		if (ret) return ret;
 	}
 #endif
+
 	return 0;
 }

@@ -888,15 +888,11 @@ int hdlcdrv_unregister_hdlcdrv(struct device *dev)
 
 /* --------------------------------------------------------------------- */
 
-static struct symbol_table hdlcdrv_syms = {
-#include <linux/symtab_begin.h>
-        X(hdlcdrv_receiver),
-        X(hdlcdrv_transmitter),
-        X(hdlcdrv_arbitrate),
-        X(hdlcdrv_register_hdlcdrv),
-        X(hdlcdrv_unregister_hdlcdrv),
-#include <linux/symtab_end.h>
-};
+EXPORT_SYMBOL(hdlcdrv_receiver);
+EXPORT_SYMBOL(hdlcdrv_transmitter);
+EXPORT_SYMBOL(hdlcdrv_arbitrate);
+EXPORT_SYMBOL(hdlcdrv_register_hdlcdrv);
+EXPORT_SYMBOL(hdlcdrv_unregister_hdlcdrv);
 
 /* --------------------------------------------------------------------- */
 
@@ -907,7 +903,6 @@ int init_module(void)
 	printk(KERN_INFO "hdlcdrv: (C) 1996 Thomas Sailer HB9JNX/AE4WA\n");
 	printk(KERN_INFO "hdlcdrv: version 0.2 compiled %s %s\n", 
 	       __TIME__, __DATE__);
-        register_symtab(&hdlcdrv_syms);
 	return 0;
 }
 

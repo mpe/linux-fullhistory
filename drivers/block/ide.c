@@ -2828,45 +2828,55 @@ struct file_operations ide_fops[] = {{
 	ide_revalidate_disk	/* revalidate */
 }};
 
-static struct symbol_table ide_syms = {
-#include <linux/symtab_begin.h>
-	X(ide_hwifs),
-	X(ide_register_module),		X(ide_unregister_module),
+EXPORT_SYMBOL(ide_hwifs);
+EXPORT_SYMBOL(ide_register_module);
+EXPORT_SYMBOL(ide_unregister_module);
 
-	/*
-	 * Probe module
-	 */
-	X(ide_timer_expiry),		X(ide_intr),
-	X(ide_geninit),			X(ide_fops),
-	X(ide_get_queue),
-	X(do_ide0_request),
+/*
+ * Probe module
+ */
+EXPORT_SYMBOL(ide_timer_expiry);
+EXPORT_SYMBOL(ide_intr);
+EXPORT_SYMBOL(ide_geninit);
+EXPORT_SYMBOL(ide_fops);
+EXPORT_SYMBOL(ide_get_queue);
+EXPORT_SYMBOL(do_ide0_request);
 #if MAX_HWIFS > 1
-	X(do_ide1_request),
+EXPORT_SYMBOL(do_ide1_request);
 #endif /* MAX_HWIFS > 1 */
 #if MAX_HWIFS > 2
-	X(do_ide2_request),
+EXPORT_SYMBOL(do_ide2_request);
 #endif /* MAX_HWIFS > 2 */
 #if MAX_HWIFS > 3
-	X(do_ide3_request),
+EXPORT_SYMBOL(do_ide3_request);
 #endif /* MAX_HWIFS > 3 */
 
-	/*
-	 * Driver module
-	 */
-	X(ide_scan_devices),		X(ide_register_subdriver),
-	X(ide_unregister_subdriver),	X(ide_input_data),
-	X(ide_output_data),		X(atapi_input_bytes),
-	X(atapi_output_bytes),		X(ide_set_handler),
-	X(ide_dump_status),		X(ide_error),
-	X(ide_fixstring),		X(ide_wait_stat),
-	X(ide_do_reset),		X(ide_init_drive_cmd),
-	X(ide_do_drive_cmd),		X(ide_end_drive_cmd),
-	X(ide_end_request),		X(ide_revalidate_disk),
-	X(ide_cmd),			X(ide_stall_queue),
+/*
+ * Driver module
+ */
+EXPORT_SYMBOL(ide_scan_devices);
+EXPORT_SYMBOL(ide_register_subdriver);
+EXPORT_SYMBOL(ide_unregister_subdriver);
+EXPORT_SYMBOL(ide_input_data);
+EXPORT_SYMBOL(ide_output_data);
+EXPORT_SYMBOL(atapi_input_bytes);
+EXPORT_SYMBOL(atapi_output_bytes);
+EXPORT_SYMBOL(ide_set_handler);
+EXPORT_SYMBOL(ide_dump_status);
+EXPORT_SYMBOL(ide_error);
+EXPORT_SYMBOL(ide_fixstring);
+EXPORT_SYMBOL(ide_wait_stat);
+EXPORT_SYMBOL(ide_do_reset);
+EXPORT_SYMBOL(ide_init_drive_cmd);
+EXPORT_SYMBOL(ide_do_drive_cmd);
+EXPORT_SYMBOL(ide_end_drive_cmd);
+EXPORT_SYMBOL(ide_end_request);
+EXPORT_SYMBOL(ide_revalidate_disk);
+EXPORT_SYMBOL(ide_cmd);
+EXPORT_SYMBOL(ide_stall_queue);
 
-	X(ide_register),		X(ide_unregister),
-#include <linux/symtab_end.h>
-};
+EXPORT_SYMBOL(ide_register);
+EXPORT_SYMBOL(ide_unregister);
 
 /*
  * This is gets invoked once during initialization, to set *everything* up
@@ -2879,12 +2889,12 @@ int ide_init (void)
 	ide_init_builtin_drivers();
 	initializing = 0;
 
-	(void) register_symtab(&ide_syms);
 	return 0;
 }
 
 #ifdef MODULE
 char *options = NULL;
+MODULE_PARM(options,"s");
 
 static void parse_options (char *line)
 {

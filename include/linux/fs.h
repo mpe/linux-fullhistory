@@ -573,20 +573,17 @@ extern struct super_block super_blocks[NR_SUPER];
 
 extern void refile_buffer(struct buffer_head * buf);
 extern void set_writetime(struct buffer_head * buf, int flag);
-extern void refill_freelist(int size);
 extern int try_to_free_buffer(struct buffer_head*, struct buffer_head**, int);
 
 extern int nr_buffers;
 extern int buffermem;
 extern int nr_buffer_heads;
 
-#define BUF_CLEAN 0
-#define BUF_UNSHARED 1 /* Buffers that were shared but are not any more */
-#define BUF_LOCKED 2   /* Buffers scheduled for write */
-#define BUF_LOCKED1 3  /* Supers, inodes */
-#define BUF_DIRTY 4    /* Dirty buffers, not yet scheduled for write */
-#define BUF_SHARED 5   /* Buffers shared */
-#define NR_LIST 6
+#define BUF_CLEAN	0
+#define BUF_LOCKED	1	/* Buffers scheduled for write */
+#define BUF_LOCKED1	2	/* Supers, inodes */
+#define BUF_DIRTY	3	/* Dirty buffers, not yet scheduled for write */
+#define NR_LIST		4
 
 void mark_buffer_uptodate(struct buffer_head * bh, int on);
 

@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.39 1996/12/10 06:06:35 davem Exp $
+/* $Id: bitops.h,v 1.40 1996/12/23 05:28:49 davem Exp $
  * bitops.h: Bit string operations on the Sparc.
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -473,6 +473,12 @@ found_middle:
 
 #define ext2_find_first_zero_bit     find_first_zero_le_bit
 #define ext2_find_next_zero_bit      find_next_zero_le_bit
+
+/* Bitmap functions for the minix filesystem.  */
+#define minix_set_bit(nr,addr) set_bit(nr,addr)
+#define minix_clear_bit(nr,addr) clear_bit(nr,addr)
+#define minix_test_bit(nr,addr) test_bit(nr,addr)
+#define minix_find_first_zero_bit(addr,size) find_first_zero_bit(addr,size)
 
 #endif /* __KERNEL__ */
 

@@ -170,6 +170,7 @@
 #define __NR_getresuid			344
 #define __NR_pciconfig_read		345
 #define __NR_pciconfig_write		346
+#define __NR_query_module		347
 
 #if defined(__LIBRARY__) && defined(__GNUC__)
 
@@ -214,7 +215,7 @@ type name (type1 arg1, type2 arg2, type3 arg3, type4 arg4)		 \
 type name (type1 arg1,type2 arg2,type3 arg3,type4 arg4,type5 arg5)	 \
 {									 \
 	extern long syscall (int, ...);					 \
-	return syscall(__NR_##name, arg1, arg2, arg3, arg4);		 \
+	return syscall(__NR_##name, arg1, arg2, arg3, arg4, arg5);	 \
 }
 
 #endif /* __LIBRARY__ && __GNUC__ */

@@ -1007,7 +1007,7 @@ int fdomain_16x0_detect( Scsi_Host_Template *tpnt )
    Write_FIFO_port       = port_base + Write_FIFO;
    Write_SCSI_Data_port  = port_base + Write_SCSI_Data;
 
-   fdomain_16x0_reset( NULL );
+   fdomain_16x0_reset( NULL, 0 );
 
    if (fdomain_test_loopback()) {
 #if DEBUG_DETECT
@@ -1892,7 +1892,7 @@ int fdomain_16x0_abort( Scsi_Cmnd *SCpnt)
    return SCSI_ABORT_SUCCESS;
 }
 
-int fdomain_16x0_reset( Scsi_Cmnd *SCpnt )
+int fdomain_16x0_reset( Scsi_Cmnd *SCpnt, unsigned int ignored )
 {
 #if DEBUG_RESET
    static int called_once = 0;

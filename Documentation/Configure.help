@@ -3553,22 +3553,21 @@ CONFIG_ISTALLION
   whenever you want), say M here and read Documentation/modules.txt.
 
 Hayes ESP serial port support
-CONFIG_ESP
+CONFIG_ESPSERIAL
   This is a driver which supports Hayes ESP serial ports.  It uses DMA
   to transfer data to and from the host.  Make sure to read
   drivers/char/README.esp. To compile this driver as a module ( = code
   which can be inserted in and removed from the running kernel
   whenever you want), say M here and read Documentation/modules.txt.
-  This driver may be compiled as a loadable module.
 
 Hayes ESP serial port DMA channel
-CONFIG_ESP_DMA_CHANNEL
+CONFIG_ESPSERIAL_DMA_CHANNEL
   This is the DMA channel to be used to transfer data to and from the host.
   One DMA channel is shared between all the ESP ports.   Valid values are
   1 and 3.
 
 Hayes ESP serial port trigger level
-CONFIG_ESP_TRIGGER_LEVEL
+CONFIG_ESPSERIAL_TRIGGER_LEVEL
   This is the trigger level (in bytes) of the transmit FIFO and the receive
   FIFO.  Larger values may result in fewer interrupts; however, a value too
   high could result in data loss.  Valid values are 1 through 1015.
@@ -4567,6 +4566,20 @@ CONFIG_MSDOS_PARTITION
   sharing a hard disk between i386 and m68k Linux boxes, for example.
   Say Y if you need this feature; users who are only using their
   system-native partitioning scheme can say N here.
+
+Sparc ESP SCSI support
+CONFIG_SCSI_SUNESP
+  This is the driver for the Sun ESP SCSI host adapter. The ESP
+  chipset is present in most SPARC-based computers.
+
+Sparc /dev/openprom compatibility driver
+CONFIG_SUN_OPENPROMIO
+  This driver provides user programs with an interface to the Sparc
+  PROM device tree. The driver implements a SunOS-compatible
+  interface and a NetBSD-compatible interface. If you want to
+  compile this as a module ( = code which can be inserted in and
+  removed from the running kernel whenever you want), say M and read
+  Documentation/modules.txt. If unsure, say Y.
 
 # need an empty line after last entry, for sed script in Configure.
 

@@ -17,7 +17,8 @@
 #include <asm/uaccess.h>
 #include <asm/unaligned.h>
 
-void die_if_kernel(char * str, struct pt_regs * regs, long err)
+void die_if_kernel(char * str, struct pt_regs * regs, long err,
+		   unsigned long *r9_15)
 {
 	long i;
 	unsigned long sp;
@@ -27,19 +28,30 @@ void die_if_kernel(char * str, struct pt_regs * regs, long err)
 		return;
 	printk("%s(%d): %s %ld\n", current->comm, current->pid, str, err);
 	sp = (unsigned long) (regs+1);
-	printk("pc = [<%lx>] ps = %04lx\n", regs->pc, regs->ps);
-	printk("rp = [<%lx>] sp = %lx\n", regs->r26, sp);
-	printk("r0=%lx r1=%lx r2=%lx r3=%lx\n",
-		regs->r0, regs->r1, regs->r2, regs->r3);
-	printk("r8=%lx\n", regs->r8);
-	printk("r16=%lx r17=%lx r18=%lx r19=%lx\n",
-		regs->r16, regs->r17, regs->r18, regs->r19);
-	printk("r20=%lx r21=%lx r22=%lx r23=%lx\n",
-		regs->r20, regs->r21, regs->r22, regs->r23);
-	printk("r24=%lx r25=%lx r26=%lx r27=%lx\n",
-		regs->r24, regs->r25, regs->r26, regs->r27);
-	printk("r28=%lx r29=%lx r30=%lx\n",
-		regs->r28, regs->gp, sp);
+	printk("pc = [<%016lx>] ps = %04lx\n", regs->pc, regs->ps);
+	printk("rp = [<%016lx>] sp = %016lx\n", regs->r26, sp);
+	printk("r0 = %016lx  r1 = %016lx\n", regs->r0, regs->r1);
+	printk("r2 = %016lx  r3 = %016lx\n", regs->r2, regs->r3);
+	printk("r4 = %016lx  r5 = %016lx\n", regs->r4, regs->r5);
+	printk("r6 = %016lx  r7 = %016lx\n", regs->r6, regs->r7);
+
+	if (r9_15) {
+		printk("r8 = %016lx  r9 = %016lx\n", regs->r8, r9_15[9]);
+		printk("r10= %016lx  r11= %016lx\n", r9_15[10], r9_15[11]);
+		printk("r12= %016lx  r13= %016lx\n", r9_15[12], r9_15[13]);
+		printk("r14= %016lx  r15= %016lx\n", r9_15[14], r9_15[15]);
+	} else {
+		printk("r8 = %016lx\n", regs->r8);
+	}
+
+	printk("r16= %016lx  r17= %016lx\n", regs->r16, regs->r17);
+	printk("r18= %016lx  r19= %016lx\n", regs->r18, regs->r19);
+	printk("r20= %016lx  r21= %016lx\n", regs->r20, regs->r21);
+	printk("r22= %016lx  r23= %016lx\n", regs->r22, regs->r23);
+	printk("r24= %016lx  r25= %016lx\n", regs->r24, regs->r25);
+	printk("r26= %016lx  r27= %016lx\n", regs->r26, regs->r27);
+	printk("r28= %016lx  r29= %016lx\n", regs->r28, regs->gp);
+
 	printk("Code:");
 	pc = (unsigned int *) regs->pc;
 	for (i = -3; i < 6; i++)
@@ -66,7 +78,7 @@ asmlinkage void do_entArith(unsigned long summary, unsigned long write_mask,
 	}
 	printk("%s: arithmetic trap at %016lx: %02lx %016lx\n",
 		current->comm, regs.pc, summary, write_mask);
-	die_if_kernel("Arithmetic fault", &regs, 0);
+	die_if_kernel("Arithmetic fault", &regs, 0, 0);
 	force_sig(SIGFPE, current);
 }
 
@@ -76,7 +88,7 @@ asmlinkage void do_entIF(unsigned long type, unsigned long a1,
 {
 	extern int ptrace_cancel_bpt (struct task_struct *who);
 
-	die_if_kernel("Instruction fault", &regs, type);
+	die_if_kernel("Instruction fault", &regs, type, 0);
 	switch (type) {
 	      case 0: /* breakpoint */
 		if (ptrace_cancel_bpt(current)) {

@@ -375,7 +375,8 @@ static void make_request(int major,int rw, struct buffer_head * bh)
 	req = *get_queue(bh->b_rdev);
 	if (!req) {
 		/* MD and loop can't handle plugging without deadlocking */
-		if (major != MD_MAJOR && major != LOOP_MAJOR)
+		if (major != MD_MAJOR && major != LOOP_MAJOR && 
+		    major != DDV_MAJOR)
 			plug_device(blk_dev + major);
 	} else switch (major) {
 	     case IDE0_MAJOR:	/* same as HD_MAJOR */
@@ -725,5 +726,11 @@ int blk_dev_init(void)
 #ifdef CONFIG_BLK_DEV_MD
 	md_init();
 #endif CONFIG_BLK_DEV_MD
+#ifdef CONFIG_APBLOCK
+	ap_init();
+#endif
+#ifdef CONFIG_DDV
+	ddv_init();
+#endif
 	return 0;
 }

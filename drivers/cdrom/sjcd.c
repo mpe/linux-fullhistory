@@ -106,6 +106,7 @@ static int sjcd_audio_status;
 static struct sjcd_play_msf sjcd_playing;
 
 static int sjcd_base = SJCD_BASE_ADDR;
+MODULE_PARM(sjcd_base, "i");
 
 static struct wait_queue *sjcd_waitq = NULL;
 

@@ -648,10 +648,14 @@ syscall_error:
 	ldq	$20,72($30)	/* .. and this a3 */
 	subq	$31,$0,$0	/* with error in v0 */
 	addq	$31,1,$1	/* set a3 for errno return */
-	bis	$31,$31,$26	/* tell "ret_from_sys_call" that we can restart */
+	stq	$0,0($30)
+	bis	$31,$31,$26	/* tell "ret_from_sys_call" we can restart */
 	stq	$1,72($30)	/* a3 for return */
+	br	$31,ret_from_sys_call
+
 ret_success:
 	stq	$0,0($30)
+	stq	$31,72($30)	/* a3=0 => no error */
 	br	$31,ret_from_sys_call
 
 .align 3
@@ -777,4 +781,5 @@ sys_call_table:
 	.quad sys_sched_setparam, sys_sched_getparam, sys_sched_setscheduler, sys_sched_getscheduler, sys_sched_yield
 	.quad sys_sched_get_priority_max, sys_sched_get_priority_min, sys_sched_rr_get_interval, do_entSys /* sys_afs_syscall */, sys_newuname
 	.quad sys_nanosleep, sys_mremap, do_entSys, sys_setresuid, sys_getresuid
-	.quad sys_pciconfig_read, sys_pciconfig_write, do_entSys, do_entSys, do_entSys
+	.quad sys_pciconfig_read, sys_pciconfig_write, sys_query_module
+	.quad do_entSys, do_entSys

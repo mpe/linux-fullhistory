@@ -53,6 +53,7 @@ teles_mod_inc_use_count(void)
 }
 
 #ifdef MODULE
+EXPORT_NO_SYMBOLS;
 #define teles_init init_module
 #else
 void teles_setup(char *str, int *ints)
@@ -114,9 +115,6 @@ teles_init(void)
                 TeiNew();
                 CallcNew();
                 ll_init();
-
-		/* No symbols to export, hide all symbols */
-		register_symtab(NULL);
 
 #ifdef MODULE
                 printk(KERN_NOTICE "Teles module installed\n");

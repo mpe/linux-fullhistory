@@ -17,7 +17,7 @@
  *
  * Stack layout in 'ret_from_system_call':
  * 	ptrace needs to have all regs on the stack.
- *	if the order here is changed, it needs to be 
+ *	if the order here is changed, it needs to be
  *	updated in fork.c:copy_process, signal.c:do_signal,
  *	ptrace.c and ptrace.h
  *
@@ -133,7 +133,7 @@ ENOSYS = 38
 
 /* macro ENTER_KERNEL waits for entering the kernel, increments
    kernel_counter, and reloads the processor variables if necessary
-   uses : %eax, %edx (pushed and popped) 
+   uses : %eax, %edx (pushed and popped)
 
    Note: We go to great pains to minimise the number of locked operations.
    We want to spin without locking, and lock when we attempt an update.
@@ -146,7 +146,7 @@ ENOSYS = 38
 #ifndef __SMP_PROF__
 
 #define SMP_PROF_A
-#define SMP_PROF_B 
+#define SMP_PROF_B
 
 #else
 
@@ -627,8 +627,9 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_nanosleep)
 	.long SYMBOL_NAME(sys_mremap)
 	.long SYMBOL_NAME(sys_setresuid)
-	.long SYMBOL_NAME(sys_getresuid)
+	.long SYMBOL_NAME(sys_getresuid)	/* 165 */
 	.long SYMBOL_NAME(sys_vm86)
-	.rept NR_syscalls-166
+	.long SYMBOL_NAME(sys_query_module)
+	.rept NR_syscalls-167
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr

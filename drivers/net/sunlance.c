@@ -42,8 +42,13 @@
 
 	11/17/96: Handle LE_C0_MERR in lance_interrupt(). (ecd@skynet.be)
 
+	12/22/96: Don't loop forever in lance_rx() on incomplete packets.
+		  This was the sun4c killer. Shit, stupid bug.
+		  (ecd@skynet.be)
 */
+
 #undef DEBUG_DRIVER
+
 static char *version =
 	"sunlance.c:v1.9 21/Aug/96 Miguel de Icaza (miguel@nuclecu.unam.mx)\n";
 
@@ -429,7 +434,6 @@ static int lance_rx (struct device *dev)
 		if ((bits & LE_R1_POK) != LE_R1_POK) {
 			lp->stats.rx_over_errors++;
 			lp->stats.rx_errors++;
-			continue;
 		} else if (bits & LE_R1_ERR) {
 			/* Count only the end frame as a rx error,
 			 * not the beginning
@@ -624,7 +628,8 @@ static int lance_open (struct device *dev)
 
 	last_dev = dev;
 
-	if (request_irq (dev->irq, &lance_interrupt, SA_SHIRQ, lancestr, (void *) dev)) {
+	if (request_irq (dev->irq, &lance_interrupt, SA_SHIRQ,
+			 lancestr, (void *) dev)) {
 		printk ("Lance: Can't get irq %d\n", dev->irq);
 		return -EAGAIN;
 	}
@@ -635,7 +640,8 @@ static int lance_open (struct device *dev)
 
 	/* On the 4m, setup the ledma to provide the upper bits for buffers */
 	if (lp->ledma)
-		lp->ledma->regs->dma_test = ((unsigned int) lp->init_block) & 0xff000000;
+		lp->ledma->regs->dma_test = ((unsigned int) lp->init_block)
+						& 0xff000000;
 
 	lance_init_ring (dev);
 	load_csrs (lp);
@@ -716,7 +722,8 @@ static inline int lance_reset (struct device *dev)
 		lp->ledma->regs->cond_reg |= DMA_RST_ENET;
 		udelay (200);
 		lp->ledma->regs->cond_reg &= ~DMA_RST_ENET;
-		lp->ledma->regs->dma_test = ((unsigned int) lp->init_block) & 0xff000000;
+		lp->ledma->regs->dma_test = ((unsigned int) lp->init_block)
+						& 0xff000000;
 	}
 	lance_init_ring (dev);
 	load_csrs (lp);
@@ -737,6 +744,7 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 	volatile struct lance_regs *ll = lp->ll;
 	volatile struct lance_init_block *ib = lp->init_block;
 	volatile unsigned long flush;
+	unsigned long flags;
 	int entry, skblen, len;
 	int status = 0;
 	static int outs;
@@ -748,7 +756,7 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 		if (tickssofar < 100) {
 			status = -1;
 		} else {
-			printk ("%s: transmit timed out, status %04x, resetting\n",
+			printk ("%s: transmit timed out, status %04x, reset\n",
 				dev->name, ll->rdp);
 			lance_reset (dev);
 		}
@@ -762,35 +770,25 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 	}
 
 	if (skb->len <= 0) {
-		printk ("skb len is %d\n", skb->len);
+		printk ("skb len is %ld\n", skb->len);
 		return 0;
 	}
+
 	/* Block a timer-based transmit from overlapping. */
-#ifdef OLD_METHOD
-	dev->tbusy = 1;
-#else
 	if (set_bit (0, (void *) &dev->tbusy) != 0) {
 		printk ("Transmitter access conflict.\n");
 		return -1;
 	}
-#endif
+
 	skblen = skb->len;
 
-	if (!TX_BUFFS_AVAIL)
-		return -1;
+	save_and_cli(flags);
 
-#ifdef DEBUG_DRIVER
-	/* dump the packet */
-	{
-		int i;
-	
-		for (i = 0; i < 64; i++) {
-			if ((i % 16) == 0)
-				printk ("\n");
-			printk ("%2.2x ", skb->data [i]);
-		}
+	if (!TX_BUFFS_AVAIL) {
+		restore_flags(flags);
+		return -1;
 	}
-#endif
+
 	len = (skblen <= ETH_ZLEN) ? ETH_ZLEN : skblen;
 	entry = lp->tx_new & TX_RING_MOD_MASK;
 	ib->btx_ring [entry].length = (-len) | 0xf000;
@@ -820,6 +818,7 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 	if (lp->ledma)
 		flush = ll->rdp;
 
+	restore_flags(flags);
 	return status;
 }
 
@@ -862,15 +861,13 @@ static void lance_load_multicast (struct device *dev)
 		
 		crc = 0xffffffff;
 		for (byte = 0; byte < 6; byte++)
-			for (bit = *addrs++, j = 0; j < 8; j++, bit>>=1)
-			{
+			for (bit = *addrs++, j = 0; j < 8; j++, bit >>= 1) {
 				int test;
 
 				test = ((bit ^ crc) & 0x01);
 				crc >>= 1;
 
-				if (test)
-				{
+				if (test) {
 					crc = crc ^ poly;
 				}
 			}
@@ -933,16 +930,17 @@ int sparc_lance_init (struct device *dev, struct linux_sbus_device *sdev,
 	dev->base_addr = (long) sdev;
 
 	/* Copy the IDPROM ethernet address to the device structure, later we
-	 * will copy the address in the device structure to the lance initialization
-	 * block
+	 * will copy the address in the device structure to the lance
+	 * initialization block.
 	 */
 	for (i = 0; i < 6; i++)
-		printk ("%2.2x%c",
-			dev->dev_addr[i] = idprom->id_ethaddr[i], i == 5 ? ' ': ':');
+		printk ("%2.2x%c", dev->dev_addr[i] = idprom->id_ethaddr[i],
+			i == 5 ? ' ': ':');
 	printk("\n");
 
 	/* Get the IO region */
-	prom_apply_sbus_ranges (sdev->my_bus, &sdev->reg_addrs [0], sdev->num_registers);
+	prom_apply_sbus_ranges (sdev->my_bus, &sdev->reg_addrs [0],
+				sdev->num_registers);
 	ll = sparc_alloc_io (sdev->reg_addrs [0].phys_addr, 0,
 			     sizeof (struct lance_regs), lancestr,
 			     sdev->reg_addrs[0].which_io, 0x0);
@@ -953,7 +951,8 @@ int sparc_lance_init (struct device *dev, struct linux_sbus_device *sdev,
 	memset ((char *)dev->priv, 0, sizeof (struct lance_private));
 
 	if (lebuffer){
-		prom_apply_sbus_ranges (lebuffer->my_bus, &lebuffer->reg_addrs [0],
+		prom_apply_sbus_ranges (lebuffer->my_bus,
+					&lebuffer->reg_addrs [0],
 					lebuffer->num_registers);
 		lp->init_block = (void *)
 			sparc_alloc_io (lebuffer->reg_addrs [0].phys_addr, 0,
@@ -966,8 +965,10 @@ int sparc_lance_init (struct device *dev, struct linux_sbus_device *sdev,
 				   lancedma);
 		lp->pio_buffer = 0;
 	}
-	lp->busmaster_regval = prom_getintdefault(sdev->prom_node, "busmaster-regval",
-						  (LE_C3_BSWP|LE_C3_ACON|LE_C3_BCON));
+	lp->busmaster_regval = prom_getintdefault(sdev->prom_node,
+						  "busmaster-regval",
+						  (LE_C3_BSWP | LE_C3_ACON |
+						   LE_C3_BCON));
     
 	lp->ll = ll;
 	lp->name = lancestr;
@@ -1014,10 +1015,10 @@ int sparc_lance_init (struct device *dev, struct linux_sbus_device *sdev,
 				       sizeof(prop));
 
 			if (strcmp(prop, "true")) {
-				printk("%s: warning: overriding option 'tpe-link-test?'\n",
-				       dev->name);
-				printk("%s: warning: mail any problems to ecd@skynet.be\n",
-				       dev->name);
+				printk("%s: warning: overriding option "
+				       "'tpe-link-test?'\n", dev->name);
+				printk("%s: warning: mail any problems "
+				       "to ecd@skynet.be\n", dev->name);
 				set_auxio(AUXIO_LINK_TEST, 0);
 			}
 no_link_test:
@@ -1039,7 +1040,8 @@ no_link_test:
 
 	/* This should never happen. */
 	if ((int)(lp->init_block->brx_ring) & 0x07) {
-		printk(" **ERROR** LANCE Rx and Tx rings not on even boundary.\n");
+		printk("%s: ERROR: Rx and Tx rings not on even boundary.\n",
+		       dev->name);
 		return ENODEV;
 	}
 
@@ -1092,13 +1094,15 @@ int sparc_lance_probe (struct device *dev)
 			if (strcmp (sdev->prom_name, "ledma") == 0) {
 				cards++;
 				ledma = find_ledma (sdev);
-				if ((v = sparc_lance_init(dev, sdev->child, ledma, 0)))
+				if ((v = sparc_lance_init(dev, sdev->child,
+							  ledma, 0)))
 					return v;
 				continue;
 			}
 			if (strcmp (sdev->prom_name, "lebuffer") == 0){
 				cards++;
-				if ((v = sparc_lance_init(dev, sdev->child, 0, sdev)))
+				if ((v = sparc_lance_init(dev, sdev->child,
+							  0, sdev)))
 					return v;
 				continue;
 			}

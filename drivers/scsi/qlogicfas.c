@@ -656,7 +656,7 @@ int	qlogicfas_abort(Scsi_Cmnd * cmd)
 
 /*----------------------------------------------------------------*/
 /* reset SCSI bus */
-int	qlogicfas_reset(Scsi_Cmnd * cmd)
+int	qlogicfas_reset(Scsi_Cmnd * cmd, unsigned int ignored)
 {
 	qabort = 2;
 	ql_zap();

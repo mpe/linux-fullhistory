@@ -1,4 +1,4 @@
-/* $Id: pgtsun4c.h,v 1.32 1996/12/08 08:39:04 davem Exp $
+/* $Id: pgtsun4c.h,v 1.33 1996/12/20 07:55:04 davem Exp $
  * pgtsun4c.h:  Sun4c specific pgtable.h defines and code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -109,7 +109,7 @@ extern __inline__ unsigned long sun4c_get_segmap(unsigned long addr)
 extern __inline__ void sun4c_put_segmap(unsigned long addr, unsigned long entry)
 {
 
-  __asm__ __volatile__("\n\tstba %1, [%0] %2\n\t" : :
+  __asm__ __volatile__("\n\tstba %1, [%0] %2; nop; nop; nop;\n\t" : :
 		       "r" (addr), "r" (entry),
 		       "i" (ASI_SEGMAP));
 
@@ -128,7 +128,7 @@ extern __inline__ unsigned long sun4c_get_pte(unsigned long addr)
 
 extern __inline__ void sun4c_put_pte(unsigned long addr, unsigned long entry)
 {
-  __asm__ __volatile__("\n\tsta %1, [%0] %2\n\t" : :
+  __asm__ __volatile__("\n\tsta %1, [%0] %2; nop; nop; nop;\n\t" : :
 		       "r" (addr), 
 		       "r" ((entry & ~(_SUN4C_PAGE_PRESENT))), "i" (ASI_PTE));
 
@@ -148,7 +148,7 @@ extern __inline__ int sun4c_get_context(void)
 
 extern __inline__ int sun4c_set_context(int ctx)
 {
-  __asm__ __volatile__("\n\tstba %0, [%1] %2\n\t" : :
+  __asm__ __volatile__("\n\tstba %0, [%1] %2; nop; nop; nop;\n\t" : :
 		       "r" (ctx), "r" (AC_CONTEXT), "i" (ASI_CONTROL));
 
   return ctx;

@@ -1111,6 +1111,7 @@ int pcxe_init(void)
 	digi_channels = kmalloc(sizeof(struct channel) * nbdevs, GFP_KERNEL);
 	if (!digi_channels)
 		panic("Unable to allocate digi_channel struct");
+	memset(digi_channels, 0, sizeof(struct channel) * nbdevs);
 
 	pcxe_table =  kmalloc(sizeof(struct tty_struct *) * nbdevs, GFP_KERNEL);
 	if (!pcxe_table)

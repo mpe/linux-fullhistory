@@ -313,12 +313,12 @@ $unaligned:
 	stq_u	t0, 0(a0)	# e0    :
 
 $finish_up:
-	zapnot	t0, t10, t4	# was last byte written null?
+	zapnot	t0, t8, t4	# was last byte written null?
 	cmovne	t4, 1, t4
 
-	and	t10, 0xf0, t3	# binary search for the address of the
-	and	t10, 0xcc, t2	# last byte written
-	and	t10, 0xaa, t1
+	and	t8, 0xf0, t3	# binary search for the address of the
+	and	t8, 0xcc, t2	# last byte written
+	and	t8, 0xaa, t1
 	bic	a0, 7, t0
 	cmovne	t3, 4, t3
 	cmovne	t2, 2, t2

@@ -34,9 +34,9 @@ struct msghdr
 	void	*	msg_name;	/* Socket name			*/
 	int		msg_namelen;	/* Length of name		*/
 	struct iovec *	msg_iov;	/* Data blocks			*/
-	size_t		msg_iovlen;	/* Number of blocks		*/
+	__kernel_size_t	msg_iovlen;	/* Number of blocks		*/
 	void 	*	msg_control;	/* Per protocol magic (eg BSD file descriptor passing) */
-	size_t		msg_controllen;	/* Length of cmsg list */
+	__kernel_size_t	msg_controllen;	/* Length of cmsg list */
 	unsigned	msg_flags;
 };
 
@@ -47,7 +47,7 @@ struct msghdr
  */
 
 struct cmsghdr {
-	size_t		cmsg_len;	/* data byte count, including hdr */
+	__kernel_size_t	cmsg_len;	/* data byte count, including hdr */
         int		cmsg_level;	/* originating protocol */
         int		cmsg_type;	/* protocol-specific type */
 	unsigned char	cmsg_data[0];
@@ -105,7 +105,6 @@ extern __inline__ struct cmsghdr * cmsg_nxthdr(struct msghdr *mhdr,
 
 struct ucred
 {
-	/* Should we be using __kernel_*_t here ?? */
 	__kernel_pid_t	pid;
 	__kernel_uid_t	uid;
 	__kernel_gid_t	gid;

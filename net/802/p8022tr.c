@@ -16,7 +16,7 @@ static struct datalink_proto *p8022tr_list = NULL;
  *	frames. We have the absolute minimum needed for IPX,
  *	IP and Appletalk phase 2.
  */
- 
+
 static struct datalink_proto *
 find_8022tr_client(unsigned char type)
 {
@@ -48,7 +48,7 @@ p8022tr_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 }
 
 static void
-p8022tr_datalink_header(struct datalink_proto *dl, 
+p8022tr_datalink_header(struct datalink_proto *dl,
 		struct sk_buff *skb, unsigned char *dest_node)
 {
 	struct device	*dev = skb->dev;
@@ -66,30 +66,25 @@ p8022tr_datalink_header(struct datalink_proto *dl,
 	memmove(newdata, olddata, dev->hard_header_len - SNAP_HEADER_LEN);
 }
 
-static struct packet_type p8022tr_packet_type = 
+static struct packet_type p8022tr_packet_type =
 {
-	0,	
+	0,
 	NULL,		/* All devices */
 	p8022tr_rcv,
 	NULL,
 	NULL,
 };
- 
 
-static struct symbol_table p8022tr_proto_syms = {
-#include <linux/symtab_begin.h>
-	X(register_8022tr_client),
-	X(unregister_8022tr_client),
-#include <linux/symtab_end.h>
-};
+
+EXPORT_SYMBOL(register_8022tr_client);
+EXPORT_SYMBOL(unregister_8022tr_client);
 
 void p8022tr_proto_init(struct net_proto *pro)
 {
 	p8022tr_packet_type.type=htons(ETH_P_TR_802_2);
 	dev_add_pack(&p8022tr_packet_type);
-	register_symtab(&p8022tr_proto_syms);
 }
-	
+
 struct datalink_proto *
 register_8022tr_client(unsigned char type, int (*rcvfunc)(struct sk_buff *, struct device *, struct packet_type *))
 {
@@ -134,4 +129,3 @@ void unregister_8022tr_client(unsigned char type)
 
 	restore_flags(flags);
 }
-

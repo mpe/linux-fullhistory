@@ -94,10 +94,6 @@
 #include <net/scm.h>
 
 
-#if defined(CONFIG_MODULES) && defined(CONFIG_NET)
-extern void export_net_symbols(void);
-#endif
-
 static long long sock_lseek(struct inode *inode, struct file *file,
 			    long long offset, int whence);
 static long sock_read(struct inode *inode, struct file *file,
@@ -1512,14 +1508,6 @@ void sock_init(void)
 	 */
 
 	proto_init();
-
-	/*
-	 *	Export networking symbols to the world.
-	 */
-
-#if defined(CONFIG_MODULES) && defined(CONFIG_NET)
-	export_net_symbols();
-#endif
 }
 
 int socket_get_info(char *buffer, char **start, off_t offset, int length)

@@ -175,17 +175,13 @@ void cleanup_module(void)
 
 #endif
 
-static struct symbol_table misc_syms = {
 /* Should this be surrounded with "#ifdef CONFIG_MODULES" ? */
-#include <linux/symtab_begin.h>
-	X(misc_register),
-	X(misc_deregister),
+EXPORT_SYMBOL(misc_register);
+EXPORT_SYMBOL(misc_deregister);
 #ifndef MODULE
-	X(set_selection),   /* used by the kmouse module, can only */
-	X(paste_selection), /* be exported if misc.c is in linked in */
+EXPORT_SYMBOL(set_selection);   /* used by the kmouse module, can only */
+EXPORT_SYMBOL(paste_selection); /* be exported if misc.c is in linked in */
 #endif
-#include <linux/symtab_end.h>
-};
 
 #if defined(CONFIG_PROC_FS) && !defined(MODULE)
 static struct proc_dir_entry proc_misc = {
@@ -240,15 +236,10 @@ int misc_init(void)
 #endif
 #endif /* !MODULE */
 	if (register_chrdev(MISC_MAJOR,"misc",&misc_fops)) {
-	  printk("unable to get major %d for misc devices\n",
-		 MISC_MAJOR);
+		printk("unable to get major %d for misc devices\n",
+		       MISC_MAJOR);
 		return -EIO;
 	}
 
-	if(register_symtab(&misc_syms)!=0)
-	{
-		unregister_chrdev(MISC_MAJOR, "misc");
-		return -EIO;
-	}
 	return 0;
 }

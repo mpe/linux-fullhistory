@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.64 1996/12/03 08:44:34 jj Exp $
+/*  $Id: signal.c,v 1.66 1996/12/20 07:54:58 davem Exp $
  *  linux/arch/sparc/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -26,7 +26,11 @@
 #define _BLOCKABLE (~(_S(SIGKILL) | _S(SIGSTOP)))
 
 asmlinkage int sys_waitpid(pid_t pid, unsigned long *stat_addr, int options);
+
+extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
+		   void *fpqueue, unsigned long *fpqdepth);
 extern void fpload(unsigned long *fpregs, unsigned long *fsr);
+
 asmlinkage int do_signal(unsigned long oldmask, struct pt_regs * regs,
 			 unsigned long orig_o0, int ret_from_syscall);
 
@@ -64,7 +68,6 @@ struct signal_sframe {
 
 struct new_signal_frame {
 	struct      sparc_stackf ss;
-	struct      reg_window sig_window;
 	__siginfo_t info;
 	unsigned    long __pad;
 	unsigned    long insns [2];
@@ -140,11 +143,26 @@ void do_new_sigreturn (struct pt_regs *regs)
 	up_psr = regs->psr;
 	memcpy (regs, &sf->info.si_regs, sizeof (struct pt_regs));
 
-	/* User can only change condition codes in %psr. */
-	regs->psr = (up_psr & ~(PSR_ICC)) | (regs->psr & PSR_ICC);
+	/* User can only change condition codes and FPU enabling in the %psr. */
+	regs->psr = (up_psr & ~(PSR_ICC | PSR_EF)) | (regs->psr & (PSR_ICC | PSR_EF));
 	
-	if (regs->psr & PSR_EF)
-		fpload (&sf->info.si_float_regs [0], &sf->info.si_fsr);
+	if (regs->psr & PSR_EF) {
+		regs->psr &= ~(PSR_EF);
+#ifndef __SMP__
+		if(current == last_task_used_math)
+			last_task_used_math = 0;
+#endif
+		current->used_math = 1;
+		current->flags &= ~(PF_USEDFPU);
+
+		/* Copy signal FPU state into thread struct FPU state. */
+		memcpy(&current->tss.float_regs[0], &sf->info.si_float_regs[0],
+		       (sizeof(unsigned long) * 64));
+		current->tss.fsr = sf->info.si_fsr;
+		if((current->tss.fpqdepth = sf->info.si_fpqdepth) != 0)
+		    memcpy(&current->tss.fpqueue[0], &sf->info.si_fpqueue[0],
+		           ((sizeof(unsigned long) + (sizeof(unsigned long *))) * 16));
+	}
 	current->blocked = sf->info.si_mask & _BLOCKABLE;
 }
 
@@ -287,17 +305,53 @@ new_setup_frame(struct sigaction *sa, struct pt_regs *regs, int signo, unsigned 
 	}
 
 	if (current->tss.w_saved != 0){
-		printk ("Ay Caramba!  w_saved not zero!\n");
+		printk ("%s[%d]: Invalid user stack frame for signal delivery.\n",
+			current->comm, current->pid);
 		do_exit (SIGILL);
 		return;
 	}
 
-	/* 2. Save the state current process state */
+	/* 2. Save the current process state */
 	memcpy (&sf->info.si_regs, regs, sizeof (struct pt_regs));
-	if (regs->psr & PSR_EF){
+#ifdef __SMP__
+	if(current->flags & PF_USEDFPU) {
+		put_psr(get_psr() | PSR_EF);
 		fpsave (&sf->info.si_float_regs [0], &sf->info.si_fsr,
 			&sf->info.si_fpqueue[0], &sf->info.si_fpqdepth);
+
+		/* Save a copy into thread struct as well. */
+		memcpy(&current->tss.float_regs[0], &sf->info.si_float_regs[0],
+		       (sizeof(unsigned long) * 64));
+		current->tss.fsr = sf->info.si_fsr;
+		if((current->tss.fpqdepth = sf->info.si_fpqdepth) != 0)
+		    memcpy(&current->tss.fpqueue[0], &sf->info.si_fpqueue[0],
+			   ((sizeof(unsigned long) + (sizeof(unsigned long *))) * 16));
+
+		regs->psr &= ~(PSR_EF);
+		current->flags &= ~(PF_USEDFPU);
 	}
+#else
+	if(current == last_task_used_math) {
+		put_psr(get_psr() | PSR_EF);
+		fpsave (&sf->info.si_float_regs [0], &sf->info.si_fsr,
+			&sf->info.si_fpqueue[0], &sf->info.si_fpqdepth);
+
+		/* Save a copy into thread struct as well. */
+		memcpy(&current->tss.float_regs[0], &sf->info.si_float_regs[0],
+		       (sizeof(unsigned long) * 64));
+		current->tss.fsr = sf->info.si_fsr;
+		if((current->tss.fpqdepth = sf->info.si_fpqdepth) != 0)
+		    memcpy(&current->tss.fpqueue[0], &sf->info.si_fpqueue[0],
+			   ((sizeof(unsigned long) + (sizeof(unsigned long *))) * 16));
+
+		last_task_used_math = NULL;
+		regs->psr &= ~(PSR_EF);
+	}
+#endif
+
+	/* This new thread of control has not used the FPU. */
+	current->used_math = 0;
+
 	sf->info.si_mask = oldmask;
 	memcpy (sf, (char *) regs->u_regs [UREG_FP], sizeof (struct reg_window));
 	
@@ -315,7 +369,7 @@ new_setup_frame(struct sigaction *sa, struct pt_regs *regs, int signo, unsigned 
 	regs->pc = (unsigned long) sa->sa_handler;
 	regs->npc = (regs->pc + 4);
 
-	/* Flush cache, replace this with a generic thingie */
+	/* Flush instruction space. */
 	flush_sig_insns(current->mm, (unsigned long) &(sf->insns[0]));
 }
 

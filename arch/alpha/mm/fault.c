@@ -35,7 +35,7 @@ void get_new_asn_and_reload(struct task_struct *tsk, struct mm_struct *mm)
 }
 #endif
 
-extern void die_if_kernel(char *,struct pt_regs *,long);
+extern void die_if_kernel(char *,struct pt_regs *,long, unsigned long *);
 
 /*
  * This routine handles page faults.  It determines the address,
@@ -121,7 +121,7 @@ bad_area:
 		printk("%s: memory violation at pc=%08lx ra=%08lx "
 		       "(bad address = %08lx)\n",
 			tsk->comm, regs->pc, regs->r26, address);
-		die_if_kernel("oops", regs, cause);
+		die_if_kernel("oops", regs, cause, (unsigned long*)regs - 16);
 		force_sig(SIGSEGV, tsk);
 		return;
 	}
@@ -131,6 +131,6 @@ bad_area:
  */
 	printk(KERN_ALERT "Unable to handle kernel paging request at "
 	       "virtual address %016lx\n", address);
-	die_if_kernel("Oops", regs, cause);
+	die_if_kernel("Oops", regs, cause, (unsigned long*)regs - 16);
 	do_exit(SIGKILL);
 }

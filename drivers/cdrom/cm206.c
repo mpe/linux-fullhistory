@@ -77,7 +77,33 @@ History:
 	      Upgrade to Linux kernel 1.3.78. 
 
  11 apr 1996  0.98 Upgrade to Linux kernel 1.3.85
-              Made it more uniform.
+              More code moved to cdrom.c
+
+	      0.99 Some more small changes to decrease number
+	      of oopses at module load; 
+
+	      Branch from here:
+
+	      0.99.1.0 Update to kernel release 2.0.10 dev_t -> kdev_t
+	      (emoenke) various typos found by others.  extra
+	      module-load oops protection.
+
+	      0.99.1.1 Initialization constant cdrom_dops.speed
+	      changed from float (2.0) to int (2); Cli()-sti() pair
+	      around cm260_reset() in module initialization code.
+
+	      0.99.1.2 Changes literally as proposed by Scott Snyder
+	      <snyder@d0sgif.fnal.gov>, which have to do mainly with
+	      the poor minor support i had. The major new concept is
+	      to change a cdrom driver's operations struct from the
+	      capabilities struct. This reflects the fact that there
+	      is one major for a driver, whilst there can be many
+	      minors whith completely different capabilities.
+
+	      0.99.1.3 More changes for operations/info separation.
+
+	      0.99.1.4 Added speed selection (someone had to do this
+	      first).
  * 
  * Parts of the code are based upon lmscd.c written by Kai Petzke,
  * sbpcd.c written by Eberhard Moenkeberg, and mcd.c by Martin
@@ -98,7 +124,7 @@ History:
  * - Philips/LMS cm260 product specification
  *
  *                       David van Leeuwen, david@tm.tno.nl.  */
-#define VERSION "$Id: cm206.c,v 0.99.1.1 1996/08/11 10:35:01 david Exp $"
+#define VERSION "$Id: cm206.c,v 0.99.1.4 1996/12/23 21:46:13 david Exp $"
 
 #include <linux/module.h>	
 
@@ -135,6 +161,8 @@ static int auto_probe=1;	/* Yes, why not? */
 
 static int cm206_base = CM206_BASE;
 static int cm206_irq = CM206_IRQ; 
+MODULE_PARM(cm206_base, "i");
+MODULE_PARM(cm206_irq, "i");
 
 #define POLLOOP 10000
 #define READ_AHEAD 1		/* defines private buffer, waste! */
@@ -580,7 +608,7 @@ void get_disc_status(void)
 
 /* The new open. The real opening strategy is defined in cdrom.c. */
 
-static int cm206_open(struct cdrom_device_info *i, int purpose) 
+static int cm206_open(struct cdrom_device_info * cdi, int purpose) 
 {
   if (!cd->openfiles) {		/* reset only first time */
     cd->background=0;
@@ -593,7 +621,7 @@ static int cm206_open(struct cdrom_device_info *i, int purpose)
   return 0;
 }
 
-static void cm206_release(struct cdrom_device_info *i)
+static void cm206_release(struct cdrom_device_info * cdi)
 {
   if (cd->openfiles==1) {
     if (cd->background) {
@@ -885,7 +913,8 @@ void get_toc_entry(struct cdrom_tocentry * ep)
  * upon success. Memory checking has been done by cdrom_ioctl(), the
  * calling function, as well as LBA/MSF sanitization.
 */
-int cm206_audio_ioctl(struct cdrom_device_info *i, unsigned int cmd, void * arg)
+int cm206_audio_ioctl(struct cdrom_device_info * cdi, unsigned int cmd, 
+		      void * arg)  
 {
   switch (cmd) {
   case CDROMREADTOCHDR: 
@@ -930,7 +959,8 @@ int cm206_audio_ioctl(struct cdrom_device_info *i, unsigned int cmd, void * arg)
    some driver statistics accessible through ioctl calls.
  */
 
-static int cm206_ioctl(struct cdrom_device_info *i, unsigned int cmd, unsigned long arg)
+static int cm206_ioctl(struct cdrom_device_info * cdi, unsigned int cmd, 
+		       unsigned long arg)
 {
   switch (cmd) {
 #ifdef STATISTICS
@@ -947,7 +977,7 @@ static int cm206_ioctl(struct cdrom_device_info *i, unsigned int cmd, unsigned l
   }
 }     
 
-int cm206_media_changed(struct cdrom_device_info *i, int n) 
+int cm206_media_changed(struct cdrom_device_info * cdi, int disc_nr) 
 {
   if (cd != NULL) {
     int r;
@@ -963,14 +993,14 @@ int cm206_media_changed(struct cdrom_device_info *i, int n)
    the logic should be in cdrom.c */
 
 /* returns number of times device is in use */
-int cm206_open_files(struct cdrom_device_info *i)	
+int cm206_open_files(struct cdrom_device_info * cdi)	
 {
   if (cd) return cd->openfiles;
   return -1;
 }
 
 /* controls tray movement */
-int cm206_tray_move(struct cdrom_device_info *i, int position) 
+int cm206_tray_move(struct cdrom_device_info * cdi, int position) 
 {
   if (position) {		/* 1: eject */
     type_0_command(c_open_tray,1);
@@ -981,7 +1011,7 @@ int cm206_tray_move(struct cdrom_device_info *i, int position)
 }
 
 /* gives current state of the drive */
-int cm206_drive_status(struct cdrom_device_info *i, int n)
+int cm206_drive_status(struct cdrom_device_info * cdi, int slot_nr)
 {
   get_drive_status();
   if (cd->dsb & dsb_tray_not_closed) return CDS_TRAY_OPEN;
@@ -991,7 +1021,7 @@ int cm206_drive_status(struct cdrom_device_info *i, int n)
 }
  
 /* gives current state of disc in drive */
-int cm206_disc_status(struct cdrom_device_info *i)
+int cm206_disc_status(struct cdrom_device_info * cdi)
 {
   uch xa;
   get_drive_status();
@@ -1009,7 +1039,7 @@ int cm206_disc_status(struct cdrom_device_info *i)
 }
 
 /* locks or unlocks door lock==1: lock; return 0 upon success */
-int cm206_lock_door(struct cdrom_device_info *i, int lock)
+int cm206_lock_door(struct cdrom_device_info * cdi, int lock)
 {
   uch command = (lock) ? c_lock_tray : c_unlock_tray;
   type_0_command(command, 1);	/* wait and get dsb */
@@ -1020,7 +1050,8 @@ int cm206_lock_door(struct cdrom_device_info *i, int lock)
 /* Although a session start should be in LBA format, we return it in 
    MSF format because it is slightly easier, and the new generic ioctl
    will take care of the necessary conversion. */
-int cm206_get_last_session(struct cdrom_device_info *i, struct cdrom_multisession * mssp) 
+int cm206_get_last_session(struct cdrom_device_info * cdi, 
+			   struct cdrom_multisession * mssp) 
 {
   if (!FIRST_TRACK) get_disc_status();
   if (mssp != NULL) {
@@ -1038,7 +1069,7 @@ int cm206_get_last_session(struct cdrom_device_info *i, struct cdrom_multisessio
   return 0;
 }
 
-int cm206_get_upc(struct cdrom_device_info *info, struct cdrom_mcn * mcn)
+int cm206_get_upc(struct cdrom_device_info * cdi, struct cdrom_mcn * mcn)
 {
   uch upc[10];
   char * ret = mcn->medium_catalog_number;
@@ -1054,7 +1085,7 @@ int cm206_get_upc(struct cdrom_device_info *info, struct cdrom_mcn * mcn)
   return 0;
 } 
 
-int cm206_reset(struct cdrom_device_info *i)
+int cm206_reset(struct cdrom_device_info * cdi)
 {
   stop_read();
   reset_cm260();
@@ -1067,6 +1098,26 @@ int cm206_reset(struct cdrom_device_info *i)
   return 0;
 }
 
+int cm206_select_speed(struct cdrom_device_info * cdi, int speed)
+{
+  int r;
+  switch (speed) {
+  case 0: 
+    r = type_0_command(c_auto_mode, 1);
+    break;
+  case 1:
+    r = type_0_command(c_force_1x, 1);
+    break;
+  case 2:
+    r = type_0_command(c_force_2x, 1);
+    break;
+  default:
+    return -1;
+  }
+  if (r<0) return r;
+  else return 1;
+}
+
 static struct cdrom_device_ops cm206_dops = {
   cm206_open,			/* open */
   cm206_release,		/* release */
@@ -1075,7 +1126,7 @@ static struct cdrom_device_ops cm206_dops = {
   cm206_media_changed,		/* media changed */
   cm206_tray_move,		/* tray move */
   cm206_lock_door,		/* lock door */
-  NULL,				/* select speed */
+  cm206_select_speed,		/* select speed */
   NULL,				/* select disc */
   cm206_get_last_session,	/* get last session */
   cm206_get_upc,		/* get universal product code */
@@ -1087,22 +1138,22 @@ static struct cdrom_device_ops cm206_dops = {
   1,				/* number of minor devices */
 };
 
-static struct cdrom_device_info cm206_info= {
-	&cm206_dops,
-	NULL,
-	NULL,
-	CM206_CDROM_MAJOR,
-	CDC_CLOSE_TRAY | CDC_OPEN_TRAY | CDC_LOCK | CDC_MULTI_SESSION |
-		CDC_MEDIA_CHANGED | CDC_MCN | CDC_PLAY_AUDIO, /* capability */
-	2,				/* maximum speed */
-	1,				/* number of discs */
-	0,				/* options, ignored */
-	0,				/* mc_flags, ignored */
-	0
+
+static struct cdrom_device_info cm206_info = {
+  &cm206_dops,                  /* device operations */
+  NULL,				/* link */
+  NULL,				/* handle (not used by cm206) */
+  MKDEV(MAJOR_NR,0),		/* dev */
+  0,				/* mask */
+  2,				/* maximum speed */
+  1,				/* number of discs */
+  0,				/* options, not owned */
+  0,				/* mc_flags, not owned */
+  0				/* use count, not owned */
 };
-	
-/* This routine gets called during init if thing go wrong, can be used
- * in cleanup_module as well. */
+
+/* This routine gets called during initialization if thing go wrong,
+ * can be used in cleanup_module as well. */
 void cleanup(int level)
 {
   switch (level) {
@@ -1229,7 +1280,7 @@ int cm206_init(void)
     cleanup(3);
     return -EIO;
   }
-  if (register_cdrom(&cm206_info,"cm206") != 0) {
+  if (register_cdrom(&cm206_info, "cm206") != 0) {
     printk("Cannot register for cdrom %d!\n", MAJOR_NR);
     cleanup(3);
     return -EIO;
@@ -1304,6 +1355,6 @@ void cm206_setup(char *s, int *p)
 #endif /* MODULE */
 /*
  * Local variables:
- * compile-command: "gcc -DMODULE -D__KERNEL__ -I/usr/src/linux/include/linux -Wall -Wstrict-prototypes -O2 -m486 -c cm206.c -o cm206.o"
+ * compile-command: "gcc -DMODULE -D__KERNEL__ -I. -I/usr/src/linux/include/linux -Wall -Wstrict-prototypes -O2 -m486 -c cm206.c -o cm206.o"
  * End:
  */

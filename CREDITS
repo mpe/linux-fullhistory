@@ -767,6 +767,13 @@ E: lam836@cs.cuhk.hk
 D: Author of the dialog utility, foundation
 D: for Menuconfig's lxdialog.
 
+N: David van Leeuwen
+E: david@tm.tno.nl
+D: Philips/LMS cm206 cdrom driver, generic cdrom driver
+S: Scheltemalaan 14
+S: 3817 KS Amersfoort
+S: The Netherlands
+
 N: Volker Lendecke
 E: lendecke@namu01.Num.Math.Uni-Goettingen.de
 D: Kernel smbfs (to mount WfW, NT and OS/2 network drives.)
@@ -1148,6 +1155,11 @@ D: Author of menu based configuration tool, Menuconfig.
 S: 1407 Broad Street
 S: Waynesboro, Virginia  22980
 S: USA
+
+N: Andrew J. Robinson
+E: arobinso@nyx.net
+W: http://www.nyx.net/~arobinso
+D: Hayes ESP serial port driver
 
 N: Florian La Roche
 E: rzsfl@rz.uni-sb.de

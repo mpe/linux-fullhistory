@@ -73,12 +73,8 @@
 #include <linux/miscdevice.h>
 #include <linux/apm_bios.h>
 
-static struct symbol_table	apm_syms = {
-#include <linux/symtab_begin.h>
-	X(apm_register_callback),
-	X(apm_unregister_callback),
-#include <linux/symtab_end.h>
-};
+EXPORT_SYMBOL(apm_register_callback);
+EXPORT_SYMBOL(apm_unregister_callback);
 
 extern unsigned long get_cmos_time(void);
 
@@ -89,7 +85,7 @@ extern unsigned long get_cmos_time(void);
 #define	APM_MINOR_DEV	134
 
 /* Configurable options:
- *  
+ *
  * CONFIG_APM_IGNORE_USER_SUSPEND: define to ignore USER SUSPEND requests.
  * This is necessary on the NEC Versa M series, which generates these when
  * resuming from SYSTEM SUSPEND.  However, enabling this on other laptops
@@ -564,7 +560,7 @@ void apm_unregister_callback(int (*callback)(apm_event_t))
 	*ptr = old->next;
 	kfree_s(old, sizeof(callback_list_t));
 }
-	
+
 static int queue_empty(struct apm_bios_struct * as)
 {
 	return as->event_head == as->event_tail;
@@ -579,7 +575,7 @@ static apm_event_t get_queued_event(struct apm_bios_struct * as)
 static int queue_event(apm_event_t event, struct apm_bios_struct *sender)
 {
 	struct apm_bios_struct *	as;
-	
+
 	if (user_list == NULL)
 		return 0;
 	for (as = user_list; as != NULL; as = as->next) {
@@ -635,7 +631,7 @@ static void suspend(void)
 	clock_cmos_diff += CURRENT_TIME;
 	got_clock_diff = 1;
 	restore_flags(flags);
-	
+
 	err = apm_set_power_state(APM_STATE_SUSPEND);
 	if (err)
 		apm_error("suspend", err);
@@ -673,7 +669,7 @@ static void send_event(apm_event_t event, apm_event_t undo,
 {
 	callback_list_t *	call;
 	callback_list_t *	fix;
-    
+
 	for (call = callback_list; call != NULL; call = call->next) {
 		if (call->callback(event) && undo) {
 			for (fix = callback_list; fix != call; fix = fix->next)
@@ -796,7 +792,7 @@ void apm_do_busy(void)
 
 	if (!apm_enabled)
 		return;
-	
+
 #ifndef ALWAYS_CALL_BUSY
 	if (!clock_slowed)
 		return;
@@ -1054,7 +1050,7 @@ int apm_get_info(char *buf, char **start, off_t fpos, int length, int dummy)
 	      Number of remaining minutes or seconds
 	      -1: Unknown
 	   8) min = minutes; sec = seconds */
-	    
+
 	p += sprintf(p, "%s %d.%d 0x%02x 0x%02x 0x%02x 0x%02x %d%% %d %s\n",
 		     driver_version,
 		     (apm_bios_info.version >> 8) & 0xff,
@@ -1176,7 +1172,7 @@ void apm_bios_init(void)
 			if (dx == 0xffff)
 				printk("unknown\n");
 			else {
-				if ((dx & 0x8000)) 
+				if ((dx & 0x8000))
 					printk("%d minutes\n", dx & 0x7ffe );
 				else
 					printk("%d seconds\n", dx & 0x7fff );
@@ -1201,8 +1197,6 @@ void apm_bios_init(void)
 	apm_timer.function = do_apm_timer;
 	apm_timer.expires = APM_CHECK_TIMEOUT + jiffies;
 	add_timer(&apm_timer);
-
-	register_symtab(&apm_syms);
 
 #ifdef CONFIG_PROC_FS
 	proc_register_dynamic(&proc_root, &apm_proc_entry);

@@ -9,35 +9,25 @@
 
 extern void atari_microwire_cmd( int cmd );
 
-static struct symbol_table atari_symbol_table = {
-#include <linux/symtab_begin.h>
 
-	X(atari_mch_cookie),
-	X(atari_hw_present),
-	X(is_medusa),
-	X(atari_register_vme_int),
-	X(atari_unregister_vme_int),
-	X(stdma_lock),
-	X(stdma_release),
-	X(stdma_others_waiting),
-	X(stdma_islocked),
+EXPORT_SYMBOL(atari_mch_cookie);
+EXPORT_SYMBOL(atari_hw_present);
+EXPORT_SYMBOL(is_medusa);
+EXPORT_SYMBOL(atari_register_vme_int);
+EXPORT_SYMBOL(atari_unregister_vme_int);
+EXPORT_SYMBOL(stdma_lock);
+EXPORT_SYMBOL(stdma_release);
+EXPORT_SYMBOL(stdma_others_waiting);
+EXPORT_SYMBOL(stdma_islocked);
 
-	X(atari_mouse_buttons),
-	X(atari_mouse_interrupt_hook),
-	X(atari_MIDI_interrupt_hook),
-	X(atari_mch_cookie),
-	X(ikbd_write),
-	X(ikbd_mouse_y0_top),
-	X(ikbd_mouse_thresh),
-	X(ikbd_mouse_rel_pos),
-	X(ikbd_mouse_disable),
+EXPORT_SYMBOL(atari_mouse_buttons);
+EXPORT_SYMBOL(atari_mouse_interrupt_hook);
+EXPORT_SYMBOL(atari_MIDI_interrupt_hook);
+EXPORT_SYMBOL(atari_mch_cookie);
+EXPORT_SYMBOL(ikbd_write);
+EXPORT_SYMBOL(ikbd_mouse_y0_top);
+EXPORT_SYMBOL(ikbd_mouse_thresh);
+EXPORT_SYMBOL(ikbd_mouse_rel_pos);
+EXPORT_SYMBOL(ikbd_mouse_disable);
 
-	X(atari_microwire_cmd),
-	
-#include <linux/symtab_end.h>
-};
-
-void atari_syms_export(void)
-{
-	register_symtab(&atari_symbol_table);
-}
+EXPORT_SYMBOL(atari_microwire_cmd);
