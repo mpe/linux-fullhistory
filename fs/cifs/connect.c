@@ -2932,7 +2932,8 @@ cifs_umount(struct super_block *sb, struct cifs_sb_info *cifs_sb)
 				return 0;
 			} else if (rc == -ESHUTDOWN) {
 				cFYI(1,("Waking up socket by sending it signal"));
-				send_sig(SIGKILL,cifsd_task,1);
+				if(cifsd_task)
+					send_sig(SIGKILL,cifsd_task,1);
 				rc = 0;
 			} /* else - we have an smb session
 				left on this socket do not kill cifsd */
