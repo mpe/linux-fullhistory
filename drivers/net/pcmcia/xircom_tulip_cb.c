@@ -3132,7 +3132,7 @@ static int __init tulip_init(void)
 	return 0;
 }
 
-static __exit void tulip_exit(void)
+static void __exit tulip_exit(void)
 {
 	pci_unregister_driver(&tulip_ops);
 }

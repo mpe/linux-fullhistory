@@ -59,6 +59,9 @@ unsigned char pckbd_sysrq_xlate[128] =
 
 static void kbd_write_command_w(int data);
 static void kbd_write_output_w(int data);
+#ifdef CONFIG_PSMOUSE
+static void aux_write_ack(int val);
+#endif
 
 spinlock_t kbd_controller_lock = SPIN_LOCK_UNLOCKED;
 static unsigned char handle_kbd_event(void);
@@ -76,6 +79,8 @@ static volatile unsigned char resend = 0;
 
 static int __init psaux_init(void);
 
+#define AUX_RECONNECT 170 /* scancode when ps2 device is plugged (back) in */
+ 
 static struct aux_queue *queue;	/* Mouse data buffer. */
 static int aux_count = 0;
 /* used when we send commands to the mouse that expect an ACK. */
@@ -395,6 +400,11 @@ static inline void handle_mouse_event(unsigned char scancode)
 			return;
 		}
 		mouse_reply_expected = 0;
+	}
+	else if(scancode == AUX_RECONNECT){
+		queue->head = queue->tail = 0;  /* Flush input queue */
+		aux_write_ack(AUX_ENABLE_DEV);  /* ping the mouse :) */
+		return;
 	}
 
 	add_mouse_randomness(scancode);

@@ -5,6 +5,8 @@
  *
  *      including portions (c) 1995-1998 Patrick Caulfield.
  *
+ *      slight improvements (c) 2000 Edward Betts <edward@debian.org>
+ *
  *  This file is based on the VGA console driver (vgacon.c):
  *	
  *	Created 28 Sep 1997 by Geert Uytterhoeven
@@ -240,13 +242,18 @@ static int __init mda_detect(void)
 	/* Ok, there is definitely a card registering at the correct
 	 * memory location, so now we do an I/O port test.
 	 */
-	
-	if (! test_mda_b(0x66, 0x0f)) {	    /* cursor low register */
+
+	/* Edward: These two mess `tests' mess up my cursor on bootup */
+
+	/* cursor low register */
+	/* if (! test_mda_b(0x66, 0x0f)) {
 		return 0;
-	}
-	if (! test_mda_b(0x99, 0x0f)) {     /* cursor low register */
+	} */
+
+	/* cursor low register */
+	/* if (! test_mda_b(0x99, 0x0f)) {
 		return 0;
-	}
+	} */
 
 	/* See if the card is a Hercules, by checking whether the vsync
 	 * bit of the status register is changing.  This test lasts for
@@ -338,6 +345,9 @@ static const char __init *mdacon_startup(void)
 	if (mda_type != TYPE_MDA) {
 		mda_initialize();
 	}
+
+	/* cursor looks ugly during boot-up, so turn it off */
+	mda_set_cursor(mda_vram_len - 1);
 
 	printk("mdacon: %s with %ldK of memory detected.\n",
 		mda_type_name, mda_vram_len/1024);
@@ -494,13 +504,21 @@ static int mdacon_set_palette(struct vc_data *c, unsigned char *table)
 
 static int mdacon_blank(struct vc_data *c, int blank)
 {
-	if (blank) {
-		outb_p(0x00, mda_mode_port);	/* disable video */
+	if (mda_type == TYPE_MDA) {
+		if (blank) 
+			scr_memsetw((void *)mda_vram_base, 
+				mda_convert_attr(c->vc_video_erase_char),
+				c->vc_screenbuf_size);
+		/* Tell console.c that it has to restore the screen itself */
+		return 1;
 	} else {
-		outb_p(MDA_MODE_VIDEO_EN | MDA_MODE_BLINK_EN, mda_mode_port);
+		if (blank)
+			outb_p(0x00, mda_mode_port);	/* disable video */
+		else
+			outb_p(MDA_MODE_VIDEO_EN | MDA_MODE_BLINK_EN, 
+				mda_mode_port);
+		return 0;
 	}
-	
-	return 0;
 }
 
 static int mdacon_font_op(struct vc_data *c, struct console_font_op *op)

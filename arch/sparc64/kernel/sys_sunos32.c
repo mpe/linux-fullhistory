@@ -1,4 +1,4 @@
-/* $Id: sys_sunos32.c,v 1.43 2000/03/26 11:28:53 davem Exp $
+/* $Id: sys_sunos32.c,v 1.44 2000/04/08 02:11:50 davem Exp $
  * sys_sunos32.c: SunOS binary compatability layer on sparc64.
  *
  * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -45,6 +45,7 @@
 #include <linux/socket.h>
 #include <linux/in.h>
 #include <linux/nfs.h>
+#include <linux/nfs2.h>
 #include <linux/nfs_mount.h>
 
 /* for sunos_select */
@@ -69,7 +70,6 @@ asmlinkage u32 sunos_mmap(u32 addr, u32 len, u32 prot, u32 flags, u32 fd, u32 of
 
 	down(&current->mm->mmap_sem);
 	lock_kernel();
-	current->personality |= PER_BSD;
 	if(flags & MAP_NORESERVE) {
 		static int cnt;
 		if (cnt++ < 10)
@@ -549,7 +549,6 @@ asmlinkage int sunos_select(int width, u32 inp, u32 outp, u32 exp, u32 tvp_x)
 
 	/* SunOS binaries expect that select won't change the tvp contents */
 	lock_kernel();
-	current->personality |= STICKY_TIMEOUTS;
 	ret = sys32_select (width, inp, outp, exp, tvp_x);
 	if (ret == -EINTR && tvp_x) {
 		struct timeval32 *tvp = (struct timeval32 *)A(tvp_x);
@@ -685,7 +684,7 @@ static int sunos_nfs_mount(char *dir_name, int linux_flags, void *data)
 	 * address to create a socket and bind it to a reserved
 	 * port on this system
 	 */
-	if (copy_from_user(&sunos_mount, data, sizeof(sunos_mount))
+	if (copy_from_user(&sunos_mount, data, sizeof(sunos_mount)))
 		return -EFAULT;
 
 	server_fd = sys_socket (AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -776,14 +775,14 @@ sunos_mount(char *type, char *dir, int flags, void *data)
 		dev_fname = getname(data);
 	} else if(strcmp(type_page, "nfs") == 0) {
 		ret = sunos_nfs_mount (dir_page, flags, data);
-		goto out2
+		goto out2;
         } else if(strcmp(type_page, "ufs") == 0) {
 		printk("Warning: UFS filesystem mounts unsupported.\n");
 		ret = -ENODEV;
-		goto out2
+		goto out2;
 	} else if(strcmp(type_page, "proc")) {
 		ret = -ENODEV;
-		goto out2
+		goto out2;
 	}
 	ret = PTR_ERR(dev_fname);
 	if (IS_ERR(dev_fname))
@@ -1214,7 +1213,6 @@ asmlinkage int sunos_open(u32 fname, int flags, int mode)
 {
 	const char *filename = (const char *)(long)fname;
 
-	current->personality |= PER_BSD;
 	return sparc32_open(filename, flags, mode);
 }
 
@@ -1349,8 +1347,6 @@ asmlinkage int sunos_sigaction (int sig, u32 act, u32 oact)
 {
 	struct k_sigaction new_ka, old_ka;
 	int ret;
-
-	current->personality |= PER_BSD;
 
 	if (act) {
 		old_sigset_t32 mask;

@@ -56,7 +56,7 @@ struct inflate_codes_state {
 };
 
 
-inflate_codes_statef *inflate_codes_new(bl, bd, tl, td, z)
+inflate_codes_statef *cramfs_inflate_codes_new(bl, bd, tl, td, z)
 uInt bl, bd;
 inflate_huft *tl;
 inflate_huft *td; /* need separate declaration for Borland C++ */
@@ -77,7 +77,7 @@ z_streamp z;
 }
 
 
-int inflate_codes(s, z, r)
+int cramfs_inflate_codes(s, z, r)
 inflate_blocks_statef *s;
 z_streamp z;
 int r;
@@ -105,7 +105,7 @@ int r;
       if (m >= 258 && n >= 10)
       {
         UPDATE
-        r = inflate_fast(c->lbits, c->dbits, c->ltree, c->dtree, s, z);
+        r = cramfs_inflate_fast(c->lbits, c->dbits, c->ltree, c->dtree, s, z);
         LOAD
         if (r != Z_OK)
         {
@@ -120,7 +120,7 @@ int r;
     case LEN:           /* i: get length/literal/eob next */
       j = c->sub.code.need;
       NEEDBITS(j)
-      t = c->sub.code.tree + ((uInt)b & inflate_mask[j]);
+      t = c->sub.code.tree + ((uInt)b & cramfs_inflate_mask[j]);
       DUMPBITS(t->bits)
       e = (uInt)(t->exop);
       if (e == 0)               /* literal */
@@ -154,7 +154,7 @@ int r;
     case LENEXT:        /* i: getting length extra (have base) */
       j = c->sub.copy.get;
       NEEDBITS(j)
-      c->len += (uInt)b & inflate_mask[j];
+      c->len += (uInt)b & cramfs_inflate_mask[j];
       DUMPBITS(j)
       c->sub.code.need = c->dbits;
       c->sub.code.tree = c->dtree;
@@ -162,7 +162,7 @@ int r;
     case DIST:          /* i: get distance next */
       j = c->sub.code.need;
       NEEDBITS(j)
-      t = c->sub.code.tree + ((uInt)b & inflate_mask[j]);
+      t = c->sub.code.tree + ((uInt)b & cramfs_inflate_mask[j]);
       DUMPBITS(t->bits)
       e = (uInt)(t->exop);
       if (e & 16)               /* distance */
@@ -185,7 +185,7 @@ int r;
     case DISTEXT:       /* i: getting distance extra */
       j = c->sub.copy.get;
       NEEDBITS(j)
-      c->sub.copy.dist += (uInt)b & inflate_mask[j];
+      c->sub.copy.dist += (uInt)b & cramfs_inflate_mask[j];
       DUMPBITS(j)
       c->mode = COPY;
     case COPY:          /* o: copying bytes in window, waiting for space */
@@ -240,7 +240,7 @@ int r;
 }
 
 
-void inflate_codes_free(c, z)
+void cramfs_inflate_codes_free(c, z)
 inflate_codes_statef *c;
 z_streamp z;
 {

@@ -232,6 +232,7 @@ int scsi_init_cmd_errh(Scsi_Cmnd * SCpnt)
 	SCpnt->old_use_sg = SCpnt->use_sg;
 	SCpnt->old_cmd_len = SCpnt->cmd_len;
 	SCpnt->sc_old_data_direction = SCpnt->sc_data_direction;
+	SCpnt->old_underflow = SCpnt->underflow;
 	memcpy((void *) SCpnt->data_cmnd,
 	       (const void *) SCpnt->cmnd, sizeof(SCpnt->cmnd));
 	SCpnt->buffer = SCpnt->request_buffer;

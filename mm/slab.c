@@ -1529,7 +1529,7 @@ nul_ptr:
  * it should be in this state _before_ it is released.
  */
 static inline void
-__kmem_cache_free(kmem_cache_t *cachep, const void *objp)
+__kmem_cache_free(kmem_cache_t *cachep, void *objp)
 {
 	kmem_slab_t	*slabp;
 	kmem_bufctl_t	*bufp;
@@ -1722,7 +1722,7 @@ kfree(const void *objp)
 		 */
 		cachep = SLAB_GET_PAGE_CACHE(page);
 		if (cachep && (cachep->c_flags & SLAB_CFLGS_GENERAL)) {
-			__kmem_cache_free(cachep, objp);
+			__kmem_cache_free(cachep, (void *)objp);
 			return;
 		}
 	}
@@ -1757,7 +1757,7 @@ kfree_s(const void *objp, size_t size)
 		cachep = SLAB_GET_PAGE_CACHE(page);
 		if (cachep && cachep->c_flags & SLAB_CFLGS_GENERAL) {
 			if (size <= cachep->c_org_size) {	/* XXX better check */
-				__kmem_cache_free(cachep, objp);
+				__kmem_cache_free(cachep, (void *)objp);
 				return;
 			}
 		}

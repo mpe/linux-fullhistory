@@ -4,7 +4,9 @@
  *	(c) 1999, 2000 Ingo Molnar <mingo@redhat.com>
  *
  *	Fixes
- *	Maciej W. Rozycki	:	Bits for genuine 82489DX timers
+ *	Maciej W. Rozycki	:	Bits for genuine 82489DX APICs;
+ *					thanks to Eric Gilmore for
+ *					testing these extensively
  */
 
 #include <linux/config.h>
@@ -44,32 +46,96 @@ int get_maxlvt(void)
 	return maxlvt;
 }
 
-void disable_local_APIC (void)
+static void clear_local_APIC(void)
 {
-	unsigned long value;
-        int maxlvt;
+	int maxlvt;
+	unsigned long v;
+
+	maxlvt = get_maxlvt();
 
 	/*
-	 * Disable APIC
+	 * Careful: we have to set masks only first to deassert
+	 * any level-triggered sources.
 	 */
- 	value = apic_read(APIC_SPIV);
- 	value &= ~(1<<8);
- 	apic_write(APIC_SPIV,value);
+	v = apic_read(APIC_LVTT);
+	apic_write_around(APIC_LVTT, v | APIC_LVT_MASKED);
+	v = apic_read(APIC_LVT0);
+	apic_write_around(APIC_LVT0, v | APIC_LVT_MASKED);
+	v = apic_read(APIC_LVT1);
+	apic_write_around(APIC_LVT1, v | APIC_LVT_MASKED);
+	if (maxlvt >= 3) {
+		v = apic_read(APIC_LVTERR);
+		apic_write_around(APIC_LVTERR, v | APIC_LVT_MASKED);
+	}
+	if (maxlvt >= 4) {
+		v = apic_read(APIC_LVTPC);
+		apic_write_around(APIC_LVTPC, v | APIC_LVT_MASKED);
+	}
 
 	/*
 	 * Clean APIC state for other OSs:
 	 */
- 	value = apic_read(APIC_SPIV);
- 	value &= ~(1<<8);
- 	apic_write(APIC_SPIV,value);
-	maxlvt = get_maxlvt();
-	apic_write_around(APIC_LVTT, 0x00010000);
-	apic_write_around(APIC_LVT0, 0x00010000);
-	apic_write_around(APIC_LVT1, 0x00010000);
+	apic_write_around(APIC_LVTT, APIC_LVT_MASKED);
+	apic_write_around(APIC_LVT0, APIC_LVT_MASKED);
+	apic_write_around(APIC_LVT1, APIC_LVT_MASKED);
 	if (maxlvt >= 3)
-		apic_write_around(APIC_LVTERR, 0x00010000);
+		apic_write_around(APIC_LVTERR, APIC_LVT_MASKED);
 	if (maxlvt >= 4)
-		apic_write_around(APIC_LVTPC, 0x00010000);
+		apic_write_around(APIC_LVTPC, APIC_LVT_MASKED);
+}
+
+void __init connect_bsp_APIC(void)
+{
+	if (pic_mode) {
+		/*
+		 * Do not trust the local APIC being empty at bootup.
+		 */
+		clear_local_APIC();
+		/*
+		 * PIC mode, enable symmetric IO mode in the IMCR,
+		 * i.e. connect BSP's local APIC to INT and NMI lines.
+		 */
+		printk("leaving PIC mode, enabling symmetric IO mode.\n");
+		outb(0x70, 0x22);
+		outb(0x01, 0x23);
+	}
+}
+
+void disconnect_bsp_APIC(void)
+{
+	if (pic_mode) {
+		/*
+		 * Put the board back into PIC mode (has an effect
+		 * only on certain older boards).  Note that APIC
+		 * interrupts, including IPIs, won't work beyond
+		 * this point!  The only exception are INIT IPIs.
+		 */
+		printk("disabling symmetric IO mode, entering PIC mode.\n");
+		outb(0x70, 0x22);
+		outb(0x00, 0x23);
+	}
+}
+
+void disable_local_APIC(void)
+{
+	unsigned long value;
+
+	clear_local_APIC();
+
+	/*
+	 * Disable APIC (implies clearing of registers
+	 * for 82489DX!).
+	 */
+	value = apic_read(APIC_SPIV);
+	value &= ~(1<<8);
+	apic_write_around(APIC_SPIV, value);
+}
+
+void __init sync_Arb_IDs(void)
+{
+	Dprintk("Synchronizing Arb IDs.\n");
+	apic_write_around(APIC_ICR, APIC_DEST_ALLINC | APIC_INT_LEVELTRIG
+				| APIC_DM_INIT);
 }
 
 extern void __error_in_apic_c (void);
@@ -77,6 +143,9 @@ extern void __error_in_apic_c (void);
 void __init setup_local_APIC (void)
 {
 	unsigned long value, ver, maxlvt;
+
+	value = apic_read(APIC_LVR);
+	ver = GET_APIC_VERSION(value);
 
 	if ((SPURIOUS_APIC_VECTOR & 0x0f) != 0x0f)
 		__error_in_apic_c();
@@ -87,11 +156,12 @@ void __init setup_local_APIC (void)
 	if (!test_bit(GET_APIC_ID(apic_read(APIC_ID)), &phys_cpu_present_map))
 		BUG();
 
- 	value = apic_read(APIC_SPIV);
+	value = apic_read(APIC_SPIV);
+	value &= ~APIC_VECTOR_MASK;
 	/*
 	 * Enable APIC
 	 */
- 	value |= (1<<8);
+	value |= (1<<8);
 
 	/*
 	 * Some unknown Intel IO/APIC (or APIC) errata is biting us with
@@ -108,7 +178,7 @@ void __init setup_local_APIC (void)
 	 */
 #if 0
 	/* Enable focus processor (bit==0) */
- 	value &= ~(1<<9);
+	value &= ~(1<<9);
 #else
 	/* Disable focus processor (bit==1) */
 	value |= (1<<9);
@@ -117,7 +187,7 @@ void __init setup_local_APIC (void)
 	 * Set spurious IRQ vector
 	 */
 	value |= SPURIOUS_APIC_VECTOR;
- 	apic_write(APIC_SPIV,value);
+	apic_write_around(APIC_SPIV, value);
 
 	/*
 	 * Set up LVT0, LVT1:
@@ -126,48 +196,44 @@ void __init setup_local_APIC (void)
 	 * strictly necessery in pure symmetric-IO mode, but sometimes
 	 * we delegate interrupts to the 8259A.
 	 */
-	if (!smp_processor_id()) {
-		value = 0x00000700;
+	/*
+	 * TODO: set up through-local-APIC from through-I/O-APIC? --macro
+	 */
+	value = apic_read(APIC_LVT0) & APIC_LVT_MASKED;
+	if (!smp_processor_id() && (pic_mode || !value)) {
+		value = APIC_DM_EXTINT;
 		printk("enabled ExtINT on CPU#%d\n", smp_processor_id());
 	} else {
-		value = 0x00010700;
+		value = APIC_DM_EXTINT | APIC_LVT_MASKED;
 		printk("masked ExtINT on CPU#%d\n", smp_processor_id());
 	}
- 	apic_write_around(APIC_LVT0,value);
+	apic_write_around(APIC_LVT0, value);
 
 	/*
 	 * only the BP should see the LINT1 NMI signal, obviously.
 	 */
 	if (!smp_processor_id())
-		value = 0x00000400;		// unmask NMI
+		value = APIC_DM_NMI;
 	else
-		value = 0x00010400;		// mask NMI
- 	apic_write_around(APIC_LVT1,value);
+		value = APIC_DM_NMI | APIC_LVT_MASKED;
+	if (!APIC_INTEGRATED(ver))		/* 82489DX */
+		value |= APIC_LVT_LEVEL_TRIGGER;
+	apic_write_around(APIC_LVT1, value);
 
-	value = apic_read(APIC_LVR);
-	ver = GET_APIC_VERSION(value);
 	if (APIC_INTEGRATED(ver)) {		/* !82489DX */
 		maxlvt = get_maxlvt();
-		/*
-		 * Due to the Pentium erratum 3AP.
-		 */
-		if (maxlvt > 3) {
-			apic_readaround(APIC_SPIV); // not strictly necessery
+		if (maxlvt > 3)		/* Due to the Pentium erratum 3AP. */
 			apic_write(APIC_ESR, 0);
-		}
 		value = apic_read(APIC_ESR);
 		printk("ESR value before enabling vector: %08lx\n", value);
 
-		value = apic_read(APIC_LVTERR);
 		value = ERROR_APIC_VECTOR;      // enables sending errors
-		apic_write(APIC_LVTERR,value);
+		apic_write_around(APIC_LVTERR, value);
 		/*
 		 * spec says clear errors after enabling vector.
 		 */
-		if (maxlvt != 3) {
-			apic_readaround(APIC_SPIV);
+		if (maxlvt > 3)
 			apic_write(APIC_ESR, 0);
-		}
 		value = apic_read(APIC_ESR);
 		printk("ESR value after enabling vector: %08lx\n", value);
 	} else
@@ -177,22 +243,23 @@ void __init setup_local_APIC (void)
 	 * Set Task Priority to 'accept all'. We never change this
 	 * later on.
 	 */
- 	value = apic_read(APIC_TASKPRI);
- 	value &= ~APIC_TPRI_MASK;
- 	apic_write(APIC_TASKPRI,value);
+	value = apic_read(APIC_TASKPRI);
+	value &= ~APIC_TPRI_MASK;
+	apic_write_around(APIC_TASKPRI, value);
 
 	/*
 	 * Set up the logical destination ID and put the
 	 * APIC into flat delivery mode.
 	 */
- 	value = apic_read(APIC_LDR);
+	value = apic_read(APIC_LDR);
 	value &= ~APIC_LDR_MASK;
 	value |= (1<<(smp_processor_id()+24));
- 	apic_write(APIC_LDR,value);
+	apic_write_around(APIC_LDR, value);
 
- 	value = apic_read(APIC_DFR);
-	value |= SET_APIC_DFR(0xf);
- 	apic_write(APIC_DFR, value);
+	/*
+	 * Must be "all ones" explicitly for 82489DX.
+	 */
+	apic_write_around(APIC_DFR, 0xffffffff);
 }
 
 void __init init_apic_mappings(void)
@@ -213,6 +280,13 @@ void __init init_apic_mappings(void)
 	}
 	set_fixmap_nocache(FIX_APIC_BASE, apic_phys);
 	Dprintk("mapped APIC to %08lx (%08lx)\n", APIC_BASE, apic_phys);
+
+	/*
+	 * Fetch the APIC ID of the BSP in case we have a
+	 * default configuration (or the MP table is broken).
+	 */
+	if (boot_cpu_id == -1U)
+		boot_cpu_id = GET_APIC_ID(apic_read(APIC_ID));
 
 #ifdef CONFIG_X86_IO_APIC
 	{
@@ -285,7 +359,7 @@ void __init wait_8254_wraparound(void)
 	 * chipset timer can cause.
 	 */
 
-	} while (delta<300);
+	} while (delta < 300);
 }
 
 /*
@@ -305,21 +379,19 @@ void __setup_APIC_LVTT(unsigned int clocks)
 {
 	unsigned int lvtt1_value, tmp_value;
 
-	tmp_value = apic_read(APIC_LVTT);
 	lvtt1_value = SET_APIC_TIMER_BASE(APIC_TIMER_BASE_DIV) |
 			APIC_LVT_TIMER_PERIODIC | LOCAL_TIMER_VECTOR;
-	apic_write(APIC_LVTT, lvtt1_value);
+	apic_write_around(APIC_LVTT, lvtt1_value);
 
 	/*
 	 * Divide PICLK by 16
 	 */
 	tmp_value = apic_read(APIC_TDCR);
-	apic_write(APIC_TDCR, (tmp_value
+	apic_write_around(APIC_TDCR, (tmp_value
 				& ~(APIC_TDR_DIV_1 | APIC_TDR_DIV_TMBASE))
 				| APIC_TDR_DIV_16);
 
-	tmp_value = apic_read(APIC_TMICT);
-	apic_write(APIC_TMICT, clocks/APIC_DIVISOR);
+	apic_write_around(APIC_TMICT, clocks/APIC_DIVISOR);
 }
 
 void setup_APIC_timer(void * data)
@@ -353,6 +425,12 @@ void setup_APIC_timer(void * data)
 
 	t0 = apic_read(APIC_TMCCT)*APIC_DIVISOR;
 	do {
+		/*
+		 * It looks like the 82489DX cannot handle
+		 * consecutive reads of the TMCCT register well;
+		 * this dummy read prevents it from a lockup.
+		 */
+		apic_read(APIC_SPIV);
 		t1 = apic_read(APIC_TMCCT)*APIC_DIVISOR;
 		delta = (int)(t0 - t1 - slice*(smp_processor_id()+1));
 	} while (delta < 0);
@@ -490,6 +568,41 @@ int setup_profiling_timer(unsigned int multiplier)
 
 #undef APIC_DIVISOR
 
+#ifdef CONFIG_SMP
+static inline void handle_smp_time (int user, int cpu)
+{
+	int system = !user;
+	struct task_struct * p = current;
+	/*
+	 * After doing the above, we need to make like
+	 * a normal interrupt - otherwise timer interrupts
+	 * ignore the global interrupt lock, which is the
+	 * WrongThing (tm) to do.
+	 */
+
+	irq_enter(cpu, 0);
+	update_one_process(p, 1, user, system, cpu);
+	if (p->pid) {
+		p->counter -= 1;
+		if (p->counter <= 0) {
+			p->counter = 0;
+			p->need_resched = 1;
+		}
+		if (p->priority < DEF_PRIORITY) {
+			kstat.cpu_nice += user;
+			kstat.per_cpu_nice[cpu] += user;
+		} else {
+			kstat.cpu_user += user;
+			kstat.per_cpu_user[cpu] += user;
+		}
+		kstat.cpu_system += system;
+		kstat.per_cpu_system[cpu] += system;
+
+	}
+	irq_exit(cpu, 0);
+}
+#endif
+
 /*
  * Local timer interrupt handler. It does both profiling and
  * process statistics/rescheduling.
@@ -502,7 +615,6 @@ int setup_profiling_timer(unsigned int multiplier)
 
 inline void smp_local_timer_interrupt(struct pt_regs * regs)
 {
-	int user = (user_mode(regs) != 0);
 	int cpu = smp_processor_id();
 
 	/*
@@ -511,13 +623,8 @@ inline void smp_local_timer_interrupt(struct pt_regs * regs)
 	 * updated with atomic operations). This is especially
 	 * useful with a profiling multiplier != 1
 	 */
-	if (!user)
-		x86_do_profile(regs->eip);
 
 	if (--prof_counter[cpu] <= 0) {
-		int system = 1 - user;
-		struct task_struct * p = current;
-
 		/*
 		 * The multiplier may have changed since the last time we got
 		 * to this point as a result of the user writing to
@@ -532,33 +639,9 @@ inline void smp_local_timer_interrupt(struct pt_regs * regs)
 			prof_old_multiplier[cpu] = prof_counter[cpu];
 		}
 
-		/*
-		 * After doing the above, we need to make like
-		 * a normal interrupt - otherwise timer interrupts
-		 * ignore the global interrupt lock, which is the
-		 * WrongThing (tm) to do.
-		 */
-
- 		irq_enter(cpu, 0);
-		update_one_process(p, 1, user, system, cpu);
-		if (p->pid) {
-			p->counter -= 1;
-			if (p->counter <= 0) {
-				p->counter = 0;
-				p->need_resched = 1;
-			}
-			if (p->priority < DEF_PRIORITY) {
-				kstat.cpu_nice += user;
-				kstat.per_cpu_nice[cpu] += user;
-			} else {
-				kstat.cpu_user += user;
-				kstat.per_cpu_user[cpu] += user;
-			}
-			kstat.cpu_system += system;
-			kstat.per_cpu_system[cpu] += system;
-
-		}
-		irq_exit(cpu, 0);
+#ifdef CONFIG_SMP
+		handle_smp_time(user_mode(regs), cpu);
+#endif
 	}
 
 	/*
@@ -603,7 +686,17 @@ void smp_apic_timer_interrupt(struct pt_regs * regs)
  */
 asmlinkage void smp_spurious_interrupt(void)
 {
-	ack_APIC_irq();
+	unsigned long v;
+
+	/*
+	 * Check if this really is a spurious interrupt and ACK it
+	 * if it is a vectored one.  Just in case...
+	 * Spurious interrupts should not be ACKed.
+	 */
+	v = apic_read(APIC_ISR + ((SPURIOUS_APIC_VECTOR & ~0x1f) >> 1));
+	if (v & (1 << (SPURIOUS_APIC_VECTOR & 0x1f)))
+		ack_APIC_irq();
+
 	/* see sw-dev-man vol 3, chapter 7.4.13.5 */
 	printk("spurious APIC interrupt on CPU#%d, should never happen.\n",
 			smp_processor_id());

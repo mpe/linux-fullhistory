@@ -597,7 +597,6 @@ struct sock {
 
 
 	/* This part is used for the timeout functions. */
-	spinlock_t		timer_lock;	/* Required until timer in core is repaired */
 	struct timer_list	timer;		/* This is the sock cleanup timer. */
 	struct timeval		stamp;
 

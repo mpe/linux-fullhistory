@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.166 2000/03/25 01:55:11 davem Exp $
+ * Version:	$Id: tcp.c,v 1.167 2000/04/08 07:21:18 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -951,10 +951,14 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, int size)
 				tmp += copy;
 				queue_it = 0;
 			}
-			skb = sock_wmalloc(sk, tmp, 0, GFP_KERNEL);
 
-			/* If we didn't get any memory, we need to sleep. */
-			if (skb == NULL) {
+			if (tcp_memory_free(sk)) {
+				skb = alloc_skb(tmp, GFP_KERNEL);
+				if (skb == NULL)
+					goto do_oom;
+				skb_set_owner_w(skb, sk);
+			} else {
+				/* If we didn't get any memory, we need to sleep. */
 				set_bit(SOCK_ASYNC_NOSPACE, &sk->socket->flags);
 				set_bit(SOCK_NOSPACE, &sk->socket->flags);
 
@@ -1028,6 +1032,9 @@ do_shutdown:
 			send_sig(SIGPIPE, current, 0);
 		err = -EPIPE;
 	}
+	goto out;
+do_oom:
+	err = copied ? : -ENOBUFS;
 	goto out;
 do_interrupted:
 	if(copied)

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_input.c,v 1.191 2000/03/25 01:55:13 davem Exp $
+ * Version:	$Id: tcp_input.c,v 1.192 2000/04/08 07:21:20 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1618,6 +1618,7 @@ static void tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 
 	tp->fin_seq = TCP_SKB_CB(skb)->end_seq;
 	tp->ack.pending = 1;
+	tp->ack.quick = 0;
 
 	sk->shutdown |= RCV_SHUTDOWN;
 
@@ -1670,9 +1671,9 @@ static void tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 
 		/* Do not send POLL_HUP for half duplex close. */
 		if (sk->shutdown == SHUTDOWN_MASK || sk->state == TCP_CLOSE)
-			sock_wake_async(sk->socket, 1, POLL_HUP);
+			sk_wake_async(sk, 1, POLL_HUP);
 		else
-			sock_wake_async(sk->socket, 1, POLL_IN);
+			sk_wake_async(sk, 1, POLL_IN);
 	}
 }
 
@@ -2207,7 +2208,7 @@ static void tcp_check_urg(struct sock * sk, struct tcphdr * th)
 			kill_proc(sk->proc, SIGURG, 1);
 		else
 			kill_pg(-sk->proc, SIGURG, 1);
-		sock_wake_async(sk->socket, 3, POLL_PRI);
+		sk_wake_async(sk, 3, POLL_PRI);
 	}
 
 	/* We may be adding urgent data when the last byte read was
@@ -3162,7 +3163,7 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 
 		if(!sk->dead) {
 			sk->state_change(sk);
-			sock_wake_async(sk->socket, 0, POLL_OUT);
+			sk_wake_async(sk, 0, POLL_OUT);
 		}
 
 		if (tp->write_pending) {
@@ -3444,7 +3445,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 				 */
 				if (!sk->dead) {
 					sk->state_change(sk);
-					sock_wake_async(sk->socket,0,POLL_OUT);
+					sk_wake_async(sk,0,POLL_OUT);
 				}
 
 				tp->snd_una = TCP_SKB_CB(skb)->ack_seq;

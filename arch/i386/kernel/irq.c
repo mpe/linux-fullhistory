@@ -462,8 +462,8 @@ int handle_IRQ_event(unsigned int irq, struct pt_regs * regs, struct irqaction *
  *	@irq: Interrupt to disable
  *
  *	Disable the selected interrupt line. Disables of an interrupt
- *	stack. Unlike disable_irq, this function does not ensure existing
- *	instances of the irq handler have completed before returning.
+ *	stack. Unlike disable_irq(), this function does not ensure existing
+ *	instances of the IRQ handler have completed before returning.
  *
  *	This function may be called from IRQ context.
  */
@@ -1127,7 +1127,7 @@ static void register_irq_proc (unsigned int irq)
 	irq_dir[irq] = proc_mkdir(name, root_irq_dir);
 
 	/* create /proc/irq/1234/smp_affinity */
-	entry = create_proc_entry("smp_affinity", 0700, irq_dir[irq]);
+	entry = create_proc_entry("smp_affinity", 0600, irq_dir[irq]);
 
 	entry->nlink = 1;
 	entry->data = (void *)(long)irq;
@@ -1148,7 +1148,7 @@ void init_irq_proc (void)
 	root_irq_dir = proc_mkdir("irq", 0);
 
 	/* create /proc/irq/prof_cpu_mask */
-	entry = create_proc_entry("prof_cpu_mask", 0700, root_irq_dir);
+	entry = create_proc_entry("prof_cpu_mask", 0600, root_irq_dir);
 
 	entry->nlink = 1;
 	entry->data = (void *)&prof_cpu_mask;

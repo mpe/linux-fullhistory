@@ -125,7 +125,13 @@ void fat_truncate(struct inode *inode)
 	if (IS_IMMUTABLE(inode))
 		return /* -EPERM */;
 	cluster = SECTOR_SIZE*sbi->cluster_size;
-	MSDOS_I(inode)->mmu_private = inode->i_size;
+	/* 
+	 * This protects against truncating a file bigger than it was then
+	 * trying to write into the hole.
+	 */
+	if (MSDOS_I(inode)->mmu_private > inode->i_size)
+		MSDOS_I(inode)->mmu_private = inode->i_size;
+
 	fat_free(inode,(inode->i_size+(cluster-1))>>sbi->cluster_bits);
 	MSDOS_I(inode)->i_attrs |= ATTR_ARCH;
 	inode->i_ctime = inode->i_mtime = CURRENT_TIME;

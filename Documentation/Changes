@@ -425,12 +425,6 @@ Psmisc
    fuser, which comes with psmisc, reads /proc/*/fd/* to do its job.
 Upgrade psmisc if 2.2 changes to /proc broke the version you're using.
 
-Tunelp
-======
-
-   A new version of tunelp is available which will allow you to enable
-"trustirq" mode, improving printing while using IRQ-driven lp ports.
-
 PCI utils
 =========
 
@@ -524,6 +518,17 @@ Logical Volume Manager
 Since 2.3.47 the kernel contains the Logical Volume Manager aka LVM. To use it,
 you need to install the LVM tools. More information can be found at the home page
 of the LVM project at http://linux.msede.com/lvm/.
+
+Inline Documentation
+====================
+Many of the functions available for modules to use are now documented
+with specially-formatted comments near their definitions.  These
+comments can be combined with the SGML templates in the
+Documentation/DocBook directory to make DocBook files, which can then
+be combined with DocBook stylesheets to make PostScript documents,
+HTML pages, PDF files, and so on.  In order to convert from DocBook
+format to a format of your choice, you'll need to install jade, as
+well as some stylesheets.
 
 
 Where to get the files
@@ -775,12 +780,6 @@ The 0.1.2 release:
 http://linux.powertweak.com/files/powertweak-0.1.2.tgz
 ftp://atrey.karlin.mff.cuni.cz/pub/linux/pci/powertweak/powertweak-0.1.2.tgz
 
-Tunelp
-======
-
-The 0-2.1.131 release:
-ftp://e-mind.com/pub/linux/tunelp/tunelp-0-2.1.131.tar.gz
-
 Xosview
 =======
 
@@ -817,6 +816,17 @@ Logical Volume Manager
 
 The 0.7 release:
 ftp://linux.msede.com/lvm/v0.7/lvm_0.7.tar.gz
+
+Jade
+====
+
+The 1.2.1 release:
+ftp://ftp.jclark.com/pub/jade/jade-1.2.1.tar.gz
+
+DSSSL Stylesheets for the DocBook DTD
+=====================================
+
+http://nwalsh.com/docbook/dsssl/
 
 
 Other Info

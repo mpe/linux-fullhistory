@@ -30,13 +30,13 @@ static LIST_HEAD(pm_devs);
 
 /**
  *	pm_register - register a device with power management
- *	@type: The device type 
- *	@id: Device ID
- *	@callback: Callback function
+ *	@type: device type 
+ *	@id: device ID
+ *	@callback: callback function
  *
  *	Add a device to the list of devices that wish to be notified about
- *	power management events. A pm_dev structure is returnd on success,
- *	on failure the return is NULL
+ *	power management events. A &pm_dev structure is returned on success,
+ *	on failure the return is %NULL.
  */
  
 struct pm_dev *pm_register(pm_dev_t type,
@@ -113,8 +113,8 @@ void pm_unregister_all(pm_callback callback)
  *	@data: data for the callback
  *
  *	Issue a power management request to a given device. The 
- *	PM_SUSPEND and PM_RESUME events are handled specially. The
- *	data field must hold the intented next state. No call is made
+ *	%PM_SUSPEND and %PM_RESUME events are handled specially. The
+ *	data field must hold the intended next state. No call is made
  *	if the state matches.
  *
  *	BUGS: what stops two power management requests occuring in parallel
@@ -171,12 +171,12 @@ static void pm_undo_all(struct pm_dev *last)
 }
 
 /**
- *	pm_send - send request to all managed device
+ *	pm_send_all - send request to all managed devices
  *	@rqst: power management request
  *	@data: data for the callback
  *
  *	Issue a power management request to a all devices. The 
- *	PM_SUSPEND events are handled specially. Any device is 
+ *	%PM_SUSPEND events are handled specially. Any device is 
  *	permitted to fail a suspend by returning a non zero (error)
  *	value from its callback function. If any device vetoes a 
  *	suspend request then all other devices that have suspended 
@@ -214,14 +214,14 @@ int pm_send_all(pm_request_t rqst, void *data)
 /**
  *	pm_find  - find a device
  *	@type: type of device
- *	@from: Where to start looking
+ *	@from: where to start looking
  *
  *	Scan the power management list for devices of a specific type. The
  *	return value for a matching device may be passed to further calls
- *	to this function to find further matches. A NULL indicates the end
+ *	to this function to find further matches. A %NULL indicates the end
  *	of the list. 
  *
- *	To search from the beginning pass NULL as the from value.
+ *	To search from the beginning pass %NULL as the @from value.
  */
  
 struct pm_dev *pm_find(pm_dev_t type, struct pm_dev *from)

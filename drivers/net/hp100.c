@@ -1800,9 +1800,9 @@ static void hp100_clean_txring( struct net_device *dev )
 	     donecount);
 #endif
 #ifdef LINUX_2_1
-      dev_kfree_skb( lp->txrhead->skb );
+      dev_kfree_skb_any( lp->txrhead->skb );
 #else
-      dev_kfree_skb( lp->txrhead->skb, FREE_WRITE );
+      dev_kfree_skb_any( lp->txrhead->skb, FREE_WRITE );
 #endif
       lp->txrhead->skb=(void *)NULL;
       lp->txrhead=lp->txrhead->next;
@@ -1960,9 +1960,9 @@ static int hp100_start_xmit( struct sk_buff *skb, struct net_device *dev )
   hp100_ints_on();
 	
 #ifdef LINUX_2_1
-  dev_kfree_skb( skb );
+  dev_kfree_skb_any( skb );
 #else
-  dev_kfree_skb( skb, FREE_WRITE );
+  dev_kfree_skb_any( skb, FREE_WRITE );
 #endif
 	
 #ifdef HP100_DEBUG_TX
@@ -2198,9 +2198,9 @@ static void hp100_rx_bm( struct net_device *dev )
 #endif
 	  if(ptr->skb!=NULL)
 #ifdef LINUX_2_1
-	    dev_kfree_skb( ptr->skb );
+	    dev_kfree_skb_any( ptr->skb );
 #else
-	    dev_kfree_skb( ptr->skb, FREE_READ );					
+	    dev_kfree_skb_any( ptr->skb, FREE_READ );					
 #endif
           lp->stats.rx_errors++;
         }

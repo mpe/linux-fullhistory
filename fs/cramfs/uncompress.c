@@ -33,14 +33,14 @@ int cramfs_uncompress_block(void *dst, int dstlen, void *src, int srclen)
 	stream.next_out = dst;
 	stream.avail_out = dstlen;
 
-	err = inflateReset(&stream);
+	err = cramfs_inflateReset(&stream);
 	if (err != Z_OK) {
-		printk("inflateReset error %d\n", err);
-		inflateEnd(&stream);
-		inflateInit(&stream);
+		printk("cramfs_inflateReset error %d\n", err);
+		cramfs_inflateEnd(&stream);
+		cramfs_inflateInit(&stream);
 	}
 
-	err = inflate(&stream, Z_FINISH);
+	err = cramfs_inflate(&stream, Z_FINISH);
 	if (err != Z_STREAM_END)
 		goto err;
 	return stream.total_out;
@@ -56,7 +56,7 @@ int cramfs_uncompress_init(void)
 	if (!initialized++) {
 		stream.next_in = NULL;
 		stream.avail_in = 0;
-		inflateInit(&stream);
+		cramfs_inflateInit(&stream);
 	}
 	return 0;
 }
@@ -64,6 +64,6 @@ int cramfs_uncompress_init(void)
 int cramfs_uncompress_exit(void)
 {
 	if (!--initialized)
-		inflateEnd(&stream);
+		cramfs_inflateEnd(&stream);
 	return 0;
 }

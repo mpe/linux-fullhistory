@@ -756,6 +756,8 @@ struct scsi_cmnd {
 
 	unsigned underflow;	/* Return error if less than
 				   this amount is transfered */
+	unsigned old_underflow;	/* save underflow here when reusing the
+				 * command for error handling */
 
 	unsigned transfersize;	/* How much we are guaranteed to
 				   transfer with each SCSI transfer

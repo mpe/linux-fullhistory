@@ -193,7 +193,7 @@ static void sppp_clear_timeout(struct sppp *p)
  *
  *	This can be called directly by cards that do not have
  *	timing constraints but is normally called from the network layer
- *	after interrupt servicing to process frames queued via netif_rx.
+ *	after interrupt servicing to process frames queued via netif_rx().
  *
  *	We process the options in the card. If the frame is destined for
  *	the protocol stacks then it requeues the frame for the upper level

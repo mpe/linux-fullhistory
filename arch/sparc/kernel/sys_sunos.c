@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.118 2000/03/26 11:28:56 davem Exp $
+/* $Id: sys_sunos.c,v 1.120 2000/04/08 08:32:14 davem Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -50,6 +50,7 @@
 #include <linux/socket.h>
 #include <linux/in.h>
 #include <linux/nfs.h>
+#include <linux/nfs2.h>
 #include <linux/nfs_mount.h>
 
 /* for sunos_select */
@@ -69,7 +70,6 @@ asmlinkage unsigned long sunos_mmap(unsigned long addr, unsigned long len,
 
 	down(&current->mm->mmap_sem);
 	lock_kernel();
-	current->personality |= PER_BSD;
 	if(flags & MAP_NORESERVE) {
 		static int cnt;
 		if (cnt++ < 10)
@@ -582,7 +582,6 @@ asmlinkage int sunos_select(int width, fd_set *inp, fd_set *outp, fd_set *exp, s
 
 	/* SunOS binaries expect that select won't change the tvp contents */
 	lock_kernel();
-	current->personality |= STICKY_TIMEOUTS;
 	ret = sys_select (width, inp, outp, exp, tvp);
 	if (ret == -EINTR && tvp) {
 		time_t sec, usec;
@@ -712,7 +711,7 @@ static int sunos_nfs_mount(char *dir_name, int linux_flags, void *data)
 	 * address to create a socket and bind it to a reserved
 	 * port on this system
 	 */
-	if (copy_from_user(&sunos_mount, data, sizeof(sunos_mount))
+	if (copy_from_user(&sunos_mount, data, sizeof(sunos_mount)))
 		return -EFAULT;
 
 	server_fd = sys_socket (AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -803,14 +802,14 @@ sunos_mount(char *type, char *dir, int flags, void *data)
 		dev_fname = getname(data);
 	} else if(strcmp(type_page, "nfs") == 0) {
 		ret = sunos_nfs_mount (dir_page, flags, data);
-		goto out2
+		goto out2;
         } else if(strcmp(type_page, "ufs") == 0) {
 		printk("Warning: UFS filesystem mounts unsupported.\n");
 		ret = -ENODEV;
-		goto out2
+		goto out2;
 	} else if(strcmp(type_page, "proc")) {
 		ret = -ENODEV;
-		goto out2
+		goto out2;
 	}
 	ret = PTR_ERR(dev_fname);
 	if (IS_ERR(dev_fname))
@@ -1054,18 +1053,6 @@ asmlinkage int sunos_shmsys(int op, unsigned long arg1, unsigned long arg2,
 	return rval;
 }
 
-asmlinkage int sunos_open(const char *filename, int flags, int mode)
-{
-	int ret;
-
-	lock_kernel();
-	current->personality |= PER_BSD;
-	ret = sys_open (filename, flags, mode);
-	unlock_kernel();
-	return ret;
-}
-
-
 #define SUNOS_EWOULDBLOCK 35
 
 /* see the sunos man page read(2v) for an explanation
@@ -1199,8 +1186,6 @@ sunos_sigaction(int sig, const struct old_sigaction *act,
 {
 	struct k_sigaction new_ka, old_ka;
 	int ret;
-
-	current->personality |= PER_BSD;
 
 	if(act) {
 		old_sigset_t mask;

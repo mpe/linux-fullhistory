@@ -211,7 +211,7 @@ extern __inline__ atomic_t *skb_datarefp(struct sk_buff *skb)
  *	skb_queue_empty - check if a queue is empty
  *	@list: queue head
  *
- *	Returns true if the queue is empty, false otherwise
+ *	Returns true if the queue is empty, false otherwise.
  */
  
 extern __inline__ int skb_queue_empty(struct sk_buff_head *list)
@@ -240,7 +240,7 @@ extern __inline__ struct sk_buff *skb_get(struct sk_buff *skb)
  
 /**
  *	kfree_skb - free an sk_buff
- *	@skb: The buffer to free
+ *	@skb: buffer to free
  *
  *	Drop a reference to the buffer and free it if the usage count has
  *	hit zero.
@@ -261,9 +261,9 @@ extern __inline__ void kfree_skb_fast(struct sk_buff *skb)
 
 /**
  *	skb_cloned - is the buffer a clone
- *	@skb: Buffer to check
+ *	@skb: buffer to check
  *
- *	Returns true if the buffer was generated with skb_clone and is
+ *	Returns true if the buffer was generated with skb_clone() and is
  *	one of multiple shared copies of the buffer. Cloned buffers are
  *	shared data so must not be written to under normal circumstances.
  */
@@ -328,9 +328,9 @@ extern __inline__ struct sk_buff *skb_share_check(struct sk_buff *skb, int pri)
  *	copy of the data, drops a reference count on the old copy and returns
  *	the new copy with the reference count at 1. If the buffer is not a clone
  *	the original buffer is returned. When called with a spinlock held or
- *	from interrupt state pri must be GFP_ATOMIC
+ *	from interrupt state @pri must be %GFP_ATOMIC
  *
- *	NULL is returned on a memory allocation failure.
+ *	%NULL is returned on a memory allocation failure.
  */
  
 extern __inline__ struct sk_buff *skb_unshare(struct sk_buff *skb, int pri)
@@ -347,12 +347,12 @@ extern __inline__ struct sk_buff *skb_unshare(struct sk_buff *skb, int pri)
  *	skb_peek
  *	@list_: list to peek at
  *
- *	Peek an sk_buff. Unlike most other operations you _MUST_
+ *	Peek an &sk_buff. Unlike most other operations you _MUST_
  *	be careful with this one. A peek leaves the buffer on the
  *	list and someone else may run off with it. You must hold
  *	the appropriate locks or have a private queue to do this.
  *
- *	Returns NULL for an empty list or a pointer to the head element.
+ *	Returns %NULL for an empty list or a pointer to the head element.
  *	The reference count is not incremented and the reference is therefore
  *	volatile. Use with caution.
  */
@@ -369,12 +369,12 @@ extern __inline__ struct sk_buff *skb_peek(struct sk_buff_head *list_)
  *	skb_peek_tail
  *	@list_: list to peek at
  *
- *	Peek an sk_buff. Unlike most other operations you _MUST_
+ *	Peek an &sk_buff. Unlike most other operations you _MUST_
  *	be careful with this one. A peek leaves the buffer on the
  *	list and someone else may run off with it. You must hold
  *	the appropriate locks or have a private queue to do this.
  *
- *	Returns NULL for an empty list or a pointer to the tail element.
+ *	Returns %NULL for an empty list or a pointer to the tail element.
  *	The reference count is not incremented and the reference is therefore
  *	volatile. Use with caution.
  */
@@ -391,7 +391,7 @@ extern __inline__ struct sk_buff *skb_peek_tail(struct sk_buff_head *list_)
  *	skb_queue_len	- get queue length
  *	@list_: list to measure
  *
- *	Return the length of an sk_buff queue. 
+ *	Return the length of an &sk_buff queue. 
  */
  
 extern __inline__ __u32 skb_queue_len(struct sk_buff_head *list_)
@@ -446,7 +446,7 @@ extern __inline__ void __skb_queue_head(struct sk_buff_head *list, struct sk_buf
  *	@newsk: buffer to queue
  *
  *	Queue a buffer at the start of the list. This function takes the
- *	list lock and can be used safely with other locking sk_buff functions
+ *	list lock and can be used safely with other locking &sk_buff functions
  *	safely.
  *
  *	A buffer cannot be placed on two lists at the same time.
@@ -493,7 +493,7 @@ extern __inline__ void __skb_queue_tail(struct sk_buff_head *list, struct sk_buf
  *	@newsk: buffer to queue
  *
  *	Queue a buffer at the tail of the list. This function takes the
- *	list lock and can be used safely with other locking sk_buff functions
+ *	list lock and can be used safely with other locking &sk_buff functions
  *	safely.
  *
  *	A buffer cannot be placed on two lists at the same time.
@@ -514,7 +514,7 @@ extern __inline__ void skb_queue_tail(struct sk_buff_head *list, struct sk_buff 
  *
  *	Remove the head of the list. This function does not take any locks
  *	so must be used with appropriate locks held only. The head item is
- *	returned or NULL if the list is empty.
+ *	returned or %NULL if the list is empty.
  */
 
 extern __inline__ struct sk_buff *__skb_dequeue(struct sk_buff_head *list)
@@ -543,7 +543,7 @@ extern __inline__ struct sk_buff *__skb_dequeue(struct sk_buff_head *list)
  *
  *	Remove the head of the list. The list lock is taken so the function
  *	may be used safely with other locking list functions. The head item is
- *	returned or NULL if the list is empty.
+ *	returned or %NULL if the list is empty.
  */
 
 extern __inline__ struct sk_buff *skb_dequeue(struct sk_buff_head *list)
@@ -675,7 +675,7 @@ extern __inline__ void skb_unlink(struct sk_buff *skb)
  *
  *	Remove the tail of the list. This function does not take any locks
  *	so must be used with appropriate locks held only. The tail item is
- *	returned or NULL if the list is empty.
+ *	returned or %NULL if the list is empty.
  */
 
 extern __inline__ struct sk_buff *__skb_dequeue_tail(struct sk_buff_head *list)
@@ -692,7 +692,7 @@ extern __inline__ struct sk_buff *__skb_dequeue_tail(struct sk_buff_head *list)
  *
  *	Remove the head of the list. The list lock is taken so the function
  *	may be used safely with other locking list functions. The tail item is
- *	returned or NULL if the list is empty.
+ *	returned or %NULL if the list is empty.
  */
 
 extern __inline__ struct sk_buff *skb_dequeue_tail(struct sk_buff_head *list)
@@ -725,7 +725,7 @@ extern __inline__ unsigned char *__skb_put(struct sk_buff *skb, unsigned int len
  *
  *	This function extends the used data area of the buffer. If this would
  *	exceed the total buffer size the kernel will panic. A pointer to the
- *	first byte of the extra data is returned
+ *	first byte of the extra data is returned.
  */
  
 extern __inline__ unsigned char *skb_put(struct sk_buff *skb, unsigned int len)
@@ -752,8 +752,8 @@ extern __inline__ unsigned char *__skb_push(struct sk_buff *skb, unsigned int le
  *	@len: amount of data to add
  *
  *	This function extends the used data area of the buffer at the buffer
- *	start. If this would  exceed the total buffer headroom the kernel will
- *	 panic. A pointer to the first byte of the extra data is returned
+ *	start. If this would exceed the total buffer headroom the kernel will
+ *	panic. A pointer to the first byte of the extra data is returned.
  */
 
 extern __inline__ unsigned char *skb_push(struct sk_buff *skb, unsigned int len)
@@ -777,10 +777,10 @@ extern __inline__ char *__skb_pull(struct sk_buff *skb, unsigned int len)
  *	@skb: buffer to use 
  *	@len: amount of data to remove
  *
- *	This function  removes data from the start of a buffer, returning
+ *	This function removes data from the start of a buffer, returning
  *	the memory to the headroom. A pointer to the next data in the buffer
  *	is returned. Once the data has been pulled future pushes will overwrite
- *	the old data
+ *	the old data.
  */
 
 extern __inline__ unsigned char * skb_pull(struct sk_buff *skb, unsigned int len)
@@ -794,7 +794,7 @@ extern __inline__ unsigned char * skb_pull(struct sk_buff *skb, unsigned int len
  *	skb_headroom - bytes at buffer head
  *	@skb: buffer to check
  *
- *	Return the number of bytes of free space at the head of an sk_buff
+ *	Return the number of bytes of free space at the head of an &sk_buff.
  */
  
 extern __inline__ int skb_headroom(const struct sk_buff *skb)
@@ -819,7 +819,7 @@ extern __inline__ int skb_tailroom(const struct sk_buff *skb)
  *	@skb: buffer to alter
  *	@len: bytes to move
  *
- *	Increase the headroom of an empty sk_buff by reducing the tail
+ *	Increase the headroom of an empty &sk_buff by reducing the tail
  *	room. This is only allowed for an empty buffer.
  */
 
@@ -856,8 +856,8 @@ extern __inline__ void skb_trim(struct sk_buff *skb, unsigned int len)
  *	skb_orphan - orphan a buffer
  *	@skb: buffer to orphan
  *
- *	If a buffer currently has an owner then we call the owners
- *	destructor function and make the skb unowned. The buffer continues
+ *	If a buffer currently has an owner then we call the owner's
+ *	destructor function and make the @skb unowned. The buffer continues
  *	to exist but is no longer charged to its former owner.
  */
 
@@ -874,7 +874,7 @@ extern __inline__ void skb_orphan(struct sk_buff *skb)
  *	skb_purge - empty a list
  *	@list: list to empty
  *
- *	Delete all buffers on an sk_buff list. Each buffer is removed from
+ *	Delete all buffers on an &sk_buff list. Each buffer is removed from
  *	the list and one reference dropped. This function takes the list
  *	lock and is atomic with respect to other list locking functions.
  */
@@ -891,7 +891,7 @@ extern __inline__ void skb_queue_purge(struct sk_buff_head *list)
  *	__skb_purge - empty a list
  *	@list: list to empty
  *
- *	Delete all buffers on an sk_buff list. Each buffer is removed from
+ *	Delete all buffers on an &sk_buff list. Each buffer is removed from
  *	the list and one reference dropped. This function does not take the
  *	list lock and the caller must hold the relevant locks to use it.
  */
@@ -908,12 +908,12 @@ extern __inline__ void __skb_queue_purge(struct sk_buff_head *list)
  *	dev_alloc_skb - allocate an skbuff for sending
  *	@length: length to allocate
  *
- *	Allocate a new sk_buff and assign it a usage count of one. The
+ *	Allocate a new &sk_buff and assign it a usage count of one. The
  *	buffer has unspecified headroom built in. Users should allocate
  *	the headroom they think they need without accounting for the
  *	built in space. The built in space is used for optimisations.
  *
- *	NULL is returned in there is no free memory. Although this function
+ *	%NULL is returned in there is no free memory. Although this function
  *	allocates memory it can be called from an interrupt.
  */
  
@@ -934,7 +934,7 @@ extern __inline__ struct sk_buff *dev_alloc_skb(unsigned int length)
  *
  *	If the buffer passed lacks sufficient headroom or is a clone then
  *	it is copied and the additional headroom made available. If there
- *	is no free memory NULL is returned. The new buffer is returned if
+ *	is no free memory %NULL is returned. The new buffer is returned if
  *	a copy was made (and the old one dropped a reference). The existing
  *	buffer is returned otherwise.
  *

@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_timer.c,v 1.74 2000/02/14 20:56:30 davem Exp $
+ * Version:	$Id: tcp_timer.c,v 1.75 2000/04/08 07:21:25 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -49,8 +49,6 @@ void tcp_init_xmit_timers(struct sock *sk)
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 
-	spin_lock_init(&sk->timer_lock);
-
 	init_timer(&tp->retransmit_timer);
 	tp->retransmit_timer.function=&tcp_retransmit_timer;
 	tp->retransmit_timer.data = (unsigned long) sk;
@@ -76,7 +74,6 @@ void tcp_reset_xmit_timer(struct sock *sk, int what, unsigned long when)
 {
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 
-	spin_lock_bh(&sk->timer_lock);
 	switch (what) {
 	case TCP_TIME_RETRANS:
 		/* When seting the transmit timer the probe timer 
@@ -84,50 +81,44 @@ void tcp_reset_xmit_timer(struct sock *sk, int what, unsigned long when)
 		 * The delayed ack timer can be set if we are changing the
 		 * retransmit timer when removing acked frames.
 		 */
-		if(tp->probe_timer.prev && del_timer(&tp->probe_timer))
+		if (timer_pending(&tp->probe_timer) && del_timer(&tp->probe_timer))
 			__sock_put(sk);
-		if (!tp->retransmit_timer.prev || !del_timer(&tp->retransmit_timer))
-			sock_hold(sk);
 		if (when > TCP_RTO_MAX) {
 			printk(KERN_DEBUG "reset_xmit_timer sk=%p when=0x%lx, caller=%p\n", sk, when, NET_CALLER(sk));
 			when = TCP_RTO_MAX;
 		}
-		mod_timer(&tp->retransmit_timer, jiffies+when);
+		if (!mod_timer(&tp->retransmit_timer, jiffies+when))
+			sock_hold(sk);
 		break;
 
 	case TCP_TIME_DACK:
-		if (!tp->delack_timer.prev || !del_timer(&tp->delack_timer))
+		if (!mod_timer(&tp->delack_timer, jiffies+when))
 			sock_hold(sk);
-		mod_timer(&tp->delack_timer, jiffies+when);
 		break;
 
 	case TCP_TIME_PROBE0:
-		if (!tp->probe_timer.prev || !del_timer(&tp->probe_timer))
+		if (!mod_timer(&tp->probe_timer, jiffies+when))
 			sock_hold(sk);
-		mod_timer(&tp->probe_timer, jiffies+when);
-		break;	
+		break;
 
 	default:
 		printk(KERN_DEBUG "bug: unknown timer value\n");
 	};
-	spin_unlock_bh(&sk->timer_lock);
 }
 
 void tcp_clear_xmit_timers(struct sock *sk)
 {	
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 
-	spin_lock_bh(&sk->timer_lock);
-	if(tp->retransmit_timer.prev && del_timer(&tp->retransmit_timer))
+	if(timer_pending(&tp->retransmit_timer) && del_timer(&tp->retransmit_timer))
 		__sock_put(sk);
-	if(tp->delack_timer.prev && del_timer(&tp->delack_timer))
+	if(timer_pending(&tp->delack_timer) && del_timer(&tp->delack_timer))
 		__sock_put(sk);
 	tp->ack.blocked = 0;
-	if(tp->probe_timer.prev && del_timer(&tp->probe_timer))
+	if(timer_pending(&tp->probe_timer) && del_timer(&tp->probe_timer))
 		__sock_put(sk);
-	if(sk->timer.prev && del_timer(&sk->timer))
+	if(timer_pending(&sk->timer) && del_timer(&sk->timer))
 		__sock_put(sk);
-	spin_unlock_bh(&sk->timer_lock);
 }
 
 static void tcp_write_err(struct sock *sk)
@@ -136,6 +127,35 @@ static void tcp_write_err(struct sock *sk)
 	sk->error_report(sk);
 
 	tcp_done(sk);
+}
+
+/* Do not allow orphaned sockets to eat all our resources.
+ * This is direct violation of TCP specs, but it is required
+ * to prevent DoS attacks. It is called when a retransmission timeout
+ * or zero probe timeout occurs on orphaned socket.
+ *
+ * Criterium is still not confirmed experimentally and may change.
+ * We kill the socket, if:
+ * 1. If number of orphaned sockets exceeds an administratively configured
+ *    limit.
+ * 2. Under pessimistic assumption that all the orphans eat memory not
+ *    less than this one, total consumed memory exceeds all
+ *    the available memory.
+ */
+static int tcp_out_of_resources(struct sock *sk, int do_reset)
+{
+	int orphans = atomic_read(&tcp_orphan_count);
+
+	if (orphans >= sysctl_tcp_max_orphans ||
+	    ((orphans*atomic_read(&sk->wmem_alloc))>>PAGE_SHIFT) >= num_physpages) {
+		if (net_ratelimit())
+			printk(KERN_INFO "Out of socket memory\n");
+		if (do_reset)
+			tcp_send_active_reset(sk, GFP_ATOMIC);
+		tcp_done(sk);
+		return 1;
+	}
+	return 0;
 }
 
 /* A write timeout has occurred. Process the after effects. */
@@ -172,9 +192,14 @@ static int tcp_write_timeout(struct sock *sk)
 
 			dst_negative_advice(&sk->dst_cache);
 		}
+
 		retry_until = sysctl_tcp_retries2;
-		if (sk->dead)
+		if (sk->dead) {
+			if (tcp_out_of_resources(sk, tp->retransmits < retry_until))
+				return 1;
+
 			retry_until = sysctl_tcp_orphan_retries;
+		}
 	}
 
 	if (tp->retransmits >= retry_until) {
@@ -257,7 +282,14 @@ static void tcp_probe_timer(unsigned long data)
 	 * with RFCs, only probe timer combines both retransmission timeout
 	 * and probe timeout in one bottle.				--ANK
 	 */
-	max_probes = sk->dead ? sysctl_tcp_orphan_retries : sysctl_tcp_retries2;
+	max_probes = sysctl_tcp_retries2;
+
+	if (sk->dead) {
+		if (tcp_out_of_resources(sk, tp->probes_out <= max_probes))
+			goto out_unlock;
+
+		max_probes = sysctl_tcp_orphan_retries;
+	}
 
 	if (tp->probes_out > max_probes) {
 		tcp_write_err(sk);
@@ -574,6 +606,8 @@ static void tcp_retransmit_timer(unsigned long data)
 	tp->retransmits++;
 	tp->rto = min(tp->rto << 1, TCP_RTO_MAX);
 	tcp_reset_xmit_timer(sk, TCP_TIME_RETRANS, tp->rto);
+	if (tp->retransmits > sysctl_tcp_retries1)
+		__sk_dst_reset(sk);
 	TCP_CHECK_TIMER(sk);
 
 out_unlock:
@@ -676,19 +710,14 @@ static void tcp_synack_timer(struct sock *sk)
 
 void tcp_delete_keepalive_timer (struct sock *sk)
 {
-	spin_lock_bh(&sk->timer_lock);
-	if (sk->timer.prev && del_timer (&sk->timer))
+	if (timer_pending(&sk->timer) && del_timer (&sk->timer))
 		__sock_put(sk);
-	spin_unlock_bh(&sk->timer_lock);
 }
 
 void tcp_reset_keepalive_timer (struct sock *sk, unsigned long len)
 {
-	spin_lock_bh(&sk->timer_lock);
-	if(!sk->timer.prev || !del_timer(&sk->timer))
+	if (!mod_timer(&sk->timer, jiffies+len))
 		sock_hold(sk);
-	mod_timer(&sk->timer, jiffies+len);
-	spin_unlock_bh(&sk->timer_lock);
 }
 
 void tcp_set_keepalive(struct sock *sk, int val)

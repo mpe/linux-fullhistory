@@ -181,7 +181,7 @@ int netdev_nit=0;
  *	dev_add_pack - add packet handler
  *	@pt: packet type declaration
  * 
- *	Add a protocol handler to the networking stack. The passed packet_type
+ *	Add a protocol handler to the networking stack. The passed &packet_type
  *	is linked into kernel lists and may not be freed until it has been
  *	removed from the kernel lists.
  */
@@ -217,7 +217,7 @@ void dev_add_pack(struct packet_type *pt)
  *	@pt: packet type declaration
  * 
  *	Remove a protocol handler that was previously added to the kernel
- *	protocol handlers by dev_add_pack. The passed packet_type is removed
+ *	protocol handlers by dev_add_pack(). The passed &packet_type is removed
  *	from the kernel lists and can be freed or reused once this function
  *	returns.
  */
@@ -260,9 +260,9 @@ void dev_remove_pack(struct packet_type *pt)
  *	__dev_get_by_name	- find a device by its name 
  *	@name: name to find
  *
- *	Find an interface by name. Must be called under rtnl semaphore
- *	or dev_base_lock. If the name is found a pointer to the device
- *	is returned. If the name is not found then NULL is returned. The
+ *	Find an interface by name. Must be called under RTNL semaphore
+ *	or @dev_base_lock. If the name is found a pointer to the device
+ *	is returned. If the name is not found then %NULL is returned. The
  *	reference counters are not incremented so the caller must be
  *	careful with locks.
  */
@@ -286,7 +286,7 @@ struct net_device *__dev_get_by_name(const char *name)
  *	Find an interface by name. This can be called from any 
  *	context and does its own locking. The returned handle has
  *	the usage count incremented and the caller must use dev_put() to
- *	release it when it is no longer needed. NULL is returned if no
+ *	release it when it is no longer needed. %NULL is returned if no
  *	matching device is found.
  */
 
@@ -336,11 +336,11 @@ int dev_get(const char *name)
  *	__dev_get_by_index - find a device by its ifindex
  *	@ifindex: index of device
  *
- *	Search for an interface by index. Returns NULL if the device
+ *	Search for an interface by index. Returns %NULL if the device
  *	is not found or a pointer to the device. The device has not
  *	had its reference counter increased so the caller must be careful
- *	about locking. The caller must hold either the rtnl semaphore
- *	or dev_base_lock.
+ *	about locking. The caller must hold either the RTNL semaphore
+ *	or @dev_base_lock.
  */
 
 struct net_device * __dev_get_by_index(int ifindex)
@@ -440,15 +440,15 @@ int dev_alloc_name(struct net_device *dev, const char *name)
  *	@name: name format string
  *	@err: error return pointer
  *
- *	Passed a format string - eg "lt%d" it will allocate a network device
- *	and space for the name. NULL is returned if no memory is available.
+ *	Passed a format string, eg. "lt%d", it will allocate a network device
+ *	and space for the name. %NULL is returned if no memory is available.
  *	If the allocation succeeds then the name is assigned and the 
- *	device pointer returned. NULL is returned if the name allocation failed.
- *	The cause of an error is returned as a negative errno code in the 
- *	variable err points to.
+ *	device pointer returned. %NULL is returned if the name allocation
+ *	failed. The cause of an error is returned as a negative errno code
+ *	in the variable @err points to.
  *
- *	The claler must hold the dev_base or rtnl locks when doing this in order
- *	to avoid duplicate name allocations.
+ *	The caller must hold the @dev_base or RTNL locks when doing this in
+ *	order to avoid duplicate name allocations.
  */
 
 struct net_device *dev_alloc(const char *name, int *err)
@@ -520,9 +520,9 @@ static int default_rebuild_header(struct sk_buff *skb)
  *	dev_open	- prepare an interface for use. 
  *	@dev:	device to open
  *
- *	Takes a device from down to up state. The devices private open
+ *	Takes a device from down to up state. The device's private open
  *	function is invoked and then the multicast lists are loaded. Finally
- *	the device is moved into the up state and a NETDEV_UP message is
+ *	the device is moved into the up state and a %NETDEV_UP message is
  *	sent to the netdev notifier chain.
  *
  *	Calling this function on an active interface is a nop. On a failure
@@ -622,8 +622,8 @@ void dev_clear_fastroute(struct net_device *dev)
  *	@dev: device to shutdown
  *
  *	This function moves an active device into down state. A 
- *	NETDEV_GOING_DOWN is sent to the netev notifier chain. The device
- *	is then deactivated and finally a NETDEV_DOWN is sent to the notifier
+ *	%NETDEV_GOING_DOWN is sent to the netdev notifier chain. The device
+ *	is then deactivated and finally a %NETDEV_DOWN is sent to the notifier
  *	chain.
  */
  
@@ -695,9 +695,10 @@ int register_netdevice_notifier(struct notifier_block *nb)
  *	unregister_netdevice_notifier - unregister a network notifier block
  *	@nb: notifier
  *
- *	Unregister a notifier previously registered by register_netdevice_notifier
- *	The notifier is unlinked into the kernel structures and may
- *	then be reused. A negative errno code is returned on a failure.
+ *	Unregister a notifier previously registered by
+ *	register_netdevice_notifier(). The notifier is unlinked into the
+ *	kernel structures and may then be reused. A negative errno code
+ *	is returned on a failure.
  */
 
 int unregister_netdevice_notifier(struct notifier_block *nb)
@@ -1079,7 +1080,7 @@ static void net_tx_action(struct softirq_action *h)
  *	@fn: function to call
  *
  *	Make a function call that is atomic with respect to the protocol
- *	layers
+ *	layers.
  */
  
 void net_call_rx_atomic(void (*fn)(void))
@@ -1554,10 +1555,10 @@ static int dev_get_wireless_info(char * buffer, char **start, off_t offset,
  *	@slave: slave device
  *	@master: new master device
  *
- *	Changes the master device of the slave. Pass NULL to break the
+ *	Changes the master device of the slave. Pass %NULL to break the
  *	bonding. The caller must hold the RTNL semaphore. On a failure
  *	a negative errno code is returned. On success the reference counts
- *	are adjusted, RTM_NEWLINK is sent to the routing socket and the
+ *	are adjusted, %RTM_NEWLINK is sent to the routing socket and the
  *	function returns zero.
  */
  
@@ -1629,7 +1630,7 @@ void dev_set_promiscuity(struct net_device *dev, int inc)
  *	Add or remove reception of all multicast frames to a device. While the
  *	count in the device remains above zero the interface remains listening
  *	to all interfaces. Once it hits zero the device reverts back to normal
- *	filtering operation. A negative inc value is used to drop the counter
+ *	filtering operation. A negative @inc value is used to drop the counter
  *	when releasing a resource needing all multicasts.
  */
 
@@ -2005,12 +2006,16 @@ int dev_ioctl(unsigned int cmd, void *arg)
 				return ret;
 			}
 #ifdef WIRELESS_EXT
+			/* Take care of Wireless Extensions */
 			if (cmd >= SIOCIWFIRST && cmd <= SIOCIWLAST) {
-				dev_load(ifr.ifr_name);
-				if (IW_IS_SET(cmd)) {
-					if (!suser())
+				/* If command is `set a parameter', or
+				 * `get the encoding parameters', check if
+				 * the user has the right to do it */
+				if (IW_IS_SET(cmd) || (cmd == SIOCGIWENCODE)) {
+					if(!capable(CAP_NET_ADMIN))
 						return -EPERM;
 				}
+				dev_load(ifr.ifr_name);
 				rtnl_lock();
 				ret = dev_ifsioc(&ifr, cmd);
 				rtnl_unlock();
@@ -2051,7 +2056,7 @@ static int dev_boot_phase = 1;
  *	@dev: device to register
  *	
  *	Take a completed network device structure and add it to the kernel
- *	interfaces. A NETDEV_REGISTER message is sent to the netdev notifier
+ *	interfaces. A %NETDEV_REGISTER message is sent to the netdev notifier
  *	chain. 0 is returned on success. A negative errno code is returned
  *	on a failure to set up the device, or if the name is a duplicate.
  *

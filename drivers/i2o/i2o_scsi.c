@@ -288,6 +288,9 @@ static void i2o_scsi_reply(struct i2o_handler *h, struct i2o_controller *c, stru
 struct i2o_handler i2o_scsi_handler=
 {
 	i2o_scsi_reply,
+	NULL,
+	NULL,
+	NULL,
 	"I2O SCSI OSM",
 	0,
 	I2O_CLASS_SCSI_PERIPHERAL
@@ -297,12 +300,12 @@ static int i2o_find_lun(struct i2o_controller *c, struct i2o_device *d, int *tar
 {
 	u8 reply[8];
 	
-	if(i2o_query_scalar(c, d->lct_data->tid, 0, 3, reply, 4)<0)
+	if(i2o_query_scalar(c, d->lct_data.tid, 0, 3, reply, 4)<0)
 		return -1;
 		
 	*target=reply[0];
 	
-	if(i2o_query_scalar(c, d->lct_data->tid, 0, 4, reply, 8)<0)
+	if(i2o_query_scalar(c, d->lct_data.tid, 0, 4, reply, 8)<0)
 		return -1;
 
 	*lun=reply[1];
@@ -319,7 +322,7 @@ void i2o_scsi_init(struct i2o_controller *c, struct i2o_device *d, struct Scsi_H
 	int target;
 	
 	h->controller=c;
-	h->bus_task=d->lct_data->tid;
+	h->bus_task=d->lct_data.tid;
 	
 	for(target=0;target<16;target++)
 		for(lun=0;lun<8;lun++)
@@ -328,33 +331,33 @@ void i2o_scsi_init(struct i2o_controller *c, struct i2o_device *d, struct Scsi_H
 	for(unit=c->devices;unit!=NULL;unit=unit->next)
 	{
 		dprintk(("Class %03X, parent %d, want %d.\n",
-			unit->lct_data->class_id, unit->lct_data->parent_tid, d->lct_data->tid));
+			unit->lct_data.class_id, unit->lct_data.parent_tid, d->lct_data.tid));
 			
 		/* Only look at scsi and fc devices */
-		if (    (unit->lct_data->class_id != I2O_CLASS_SCSI_PERIPHERAL)
-		     && (unit->lct_data->class_id != I2O_CLASS_FIBRE_CHANNEL_PERIPHERAL)
+		if (    (unit->lct_data.class_id != I2O_CLASS_SCSI_PERIPHERAL)
+		     && (unit->lct_data.class_id != I2O_CLASS_FIBRE_CHANNEL_PERIPHERAL)
 		   )
 			continue;
 
 		/* On our bus ? */
-		dprintk(("Found a disk (%d).\n", unit->lct_data->tid));
-		if ((unit->lct_data->parent_tid == d->lct_data->tid)
-		     || (unit->lct_data->parent_tid == d->lct_data->parent_tid)
+		dprintk(("Found a disk (%d).\n", unit->lct_data.tid));
+		if ((unit->lct_data.parent_tid == d->lct_data.tid)
+		     || (unit->lct_data.parent_tid == d->lct_data.parent_tid)
 		   )
 		{
 			u16 limit;
 			dprintk(("Its ours.\n"));
 			if(i2o_find_lun(c, unit, &target, &lun)==-1)
 			{
-				printk(KERN_ERR "i2o_scsi: Unable to get lun for tid %d.\n", unit->lct_data->tid);
+				printk(KERN_ERR "i2o_scsi: Unable to get lun for tid %d.\n", unit->lct_data.tid);
 				continue;
 			}
 			dprintk(("Found disk %d %d.\n", target, lun));
-			h->task[target][lun]=unit->lct_data->tid;
+			h->task[target][lun]=unit->lct_data.tid;
 			h->tagclock[target][lun]=jiffies;
 
 			/* Get the max fragments/request */
-			i2o_query_scalar(c, d->lct_data->tid, 0xF103, 3, &limit, 2);
+			i2o_query_scalar(c, d->lct_data.tid, 0xF103, 3, &limit, 2);
 			
 			/* sanity */
 			if ( limit == 0 )
@@ -428,8 +431,8 @@ int i2o_scsi_detect(Scsi_Host_Template * tpnt)
 			/*
 			 *	bus_adapter, SCSI (obsolete), or FibreChannel busses only
 			 */
-			if(    (d->lct_data->class_id!=I2O_CLASS_BUS_ADAPTER_PORT)	// bus_adapter
-//			    && (d->lct_data->class_id!=I2O_CLASS_FIBRE_CHANNEL_PORT)	// FC_PORT
+			if(    (d->lct_data.class_id!=I2O_CLASS_BUS_ADAPTER_PORT)	// bus_adapter
+//			    && (d->lct_data.class_id!=I2O_CLASS_FIBRE_CHANNEL_PORT)	// FC_PORT
 			  )
 				continue;
 		

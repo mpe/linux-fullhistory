@@ -647,11 +647,6 @@ int usb_get_current_frame_number (struct usb_device *usb_dev);
 #define PIPE_CONTROL			2
 #define PIPE_BULK			3
 
-#define USB_ISOCHRONOUS		0
-#define USB_INTERRUPT		1
-#define USB_CONTROL		2
-#define USB_BULK		3
-
 #define usb_maxpacket(dev, pipe, out)	(out \
 				? (dev)->epmaxpacketout[usb_pipeendpoint(pipe)] \
 				: (dev)->epmaxpacketin [usb_pipeendpoint(pipe)] )

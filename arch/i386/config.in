@@ -52,7 +52,6 @@ fi
 if [ "$CONFIG_MK6" = "y" ]; then
    define_bool CONFIG_X86_ALIGNMENT_16 y
    define_bool CONFIG_X86_TSC y
-   define_bool CONFIG_X86_USE_3DNOW y
    define_bool CONFIG_X86_USE_PPRO_CHECKSUM y
 fi
 if [ "$CONFIG_M686" = "y" ]; then
@@ -67,6 +66,7 @@ if [ "$CONFIG_MK7" = "y" ]; then
    define_bool CONFIG_X86_USE_3DNOW y
    define_bool CONFIG_X86_PGE y
    define_bool CONFIG_X86_USE_PPRO_CHECKSUM y
+   define_int CONFIG_X86_L1_CACHE_BYTES 64
 fi
 
 tristate '/dev/cpu/microcode - Intel P6 CPU microcode support' CONFIG_MICROCODE

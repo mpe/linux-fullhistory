@@ -7,7 +7,7 @@
  *		handler for protocols to use and generic option handler.
  *
  *
- * Version:	$Id: sock.c,v 1.91 2000/03/25 01:55:03 davem Exp $
+ * Version:	$Id: sock.c,v 1.92 2000/04/08 07:21:15 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -786,18 +786,22 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size,
 		if (sk->shutdown&SEND_SHUTDOWN)
 			goto failure;
 
-		if (fallback) {
-			/* The buffer get won't block, or use the atomic queue.
-			 * It does produce annoying no free page messages still.
-			 */
-			skb = sock_wmalloc(sk, size, 0, GFP_BUFFER);
+		if (atomic_read(&sk->wmem_alloc) < sk->sndbuf) {
+			if (fallback) {
+				/* The buffer get won't block, or use the atomic queue.
+			 	* It does produce annoying no free page messages still.
+			 	*/
+				skb = alloc_skb(size, GFP_BUFFER);
+				if (skb)
+					break;
+				try_size = fallback;
+			}
+			skb = alloc_skb(try_size, sk->allocation);
 			if (skb)
 				break;
-			try_size = fallback;
+			err = -ENOBUFS;
+			goto failure;
 		}
-		skb = sock_wmalloc(sk, try_size, 0, sk->allocation);
-		if (skb)
-			break;
 
 		/*
 		 *	This means we have too many buffers for this socket already.
@@ -813,6 +817,7 @@ struct sk_buff *sock_alloc_send_skb(struct sock *sk, unsigned long size,
 		timeo = sock_wait_for_wmem(sk, timeo);
 	}
 
+	skb_set_owner_w(skb, sk);
 	return skb;
 
 interrupted:
@@ -1136,7 +1141,6 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 	skb_queue_head_init(&sk->write_queue);
 	skb_queue_head_init(&sk->error_queue);
 
-	spin_lock_init(&sk->timer_lock);
 	init_timer(&sk->timer);
 	
 	sk->allocation	=	GFP_KERNEL;

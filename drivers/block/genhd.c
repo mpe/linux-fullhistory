@@ -37,16 +37,12 @@ void __init device_init(void)
 #ifdef CONFIG_PARPORT
 	parport_init();
 #endif
-	/*
-	 *	I2O must come before block and char as the I2O layer may
-	 *	in future claim devices that block/char most not touch.
-	 */
-#ifdef CONFIG_I2O
-	i2o_init();
-#endif
 	chr_dev_init();
 	blk_dev_init();
 	sti();
+#ifdef CONFIG_I2O
+	i2o_init();
+#endif
 #ifdef CONFIG_BLK_DEV_DAC960
 	DAC960_Initialize();
 #endif

@@ -366,12 +366,12 @@ void mca_handle_nmi(void)
 /**
  *	mca_find_adapter - scan for adapters
  *	@id:	MCA identification to search for
- *	@start:	Starting slot
+ *	@start:	starting slot
  *
  *	Search the MCA configuration for adapters matching the 16bit
  *	ID given. The first time it should be called with start as zero
  *	and then further calls made passing the return value of the
- *	previous call until MCA_NOTFOUND is returned.
+ *	previous call until %MCA_NOTFOUND is returned.
  *
  *	Disabled adapters are not reported.
  */
@@ -411,12 +411,12 @@ EXPORT_SYMBOL(mca_find_adapter);
 /**
  *	mca_find_unused_adapter - scan for unused adapters
  *	@id:	MCA identification to search for
- *	@start:	Starting slot
+ *	@start:	starting slot
  *
  *	Search the MCA configuration for adapters matching the 16bit
  *	ID given. The first time it should be called with start as zero
  *	and then further calls made passing the return value of the
- *	previous call until MCA_NOTFOUND is returned.
+ *	previous call until %MCA_NOTFOUND is returned.
  *
  *	Adapters that have been claimed by drivers and those that
  *	are disabled are not reported. This function thus allows a driver
@@ -647,10 +647,10 @@ EXPORT_SYMBOL(mca_set_adapter_name);
  *	function is called with the buffer, slot, and device pointer (or
  *	some equally informative context information, or nothing, if you
  *	prefer), and is expected to put useful information into the
- *	buffer.  The adapter name, id, and POS registers get printed
+ *	buffer.  The adapter name, ID, and POS registers get printed
  * 	before this is called though, so don't do it again.
  *
- *	This should be called with a NULL procfn when a module
+ *	This should be called with a %NULL @procfn when a module
  *	unregisters, thus preventing kernel crashes and other such
  *	nastiness.
  */

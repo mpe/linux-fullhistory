@@ -25,7 +25,7 @@ struct inflate_codes_state {int dummy;}; /* for buggy compilers */
    at least ten.  The ten bytes are six bytes for the longest length/
    distance pair plus four bytes for overloading the bit buffer. */
 
-int inflate_fast(bl, bd, tl, td, s, z)
+int cramfs_inflate_fast(bl, bd, tl, td, s, z)
 uInt bl, bd;
 inflate_huft *tl;
 inflate_huft *td; /* need separate declaration for Borland C++ */
@@ -50,8 +50,8 @@ z_streamp z;
   LOAD
 
   /* initialize masks */
-  ml = inflate_mask[bl];
-  md = inflate_mask[bd];
+  ml = cramfs_inflate_mask[bl];
+  md = cramfs_inflate_mask[bd];
 
   /* do until not enough input or output space for fast loop */
   do {                          /* assume called with m >= 258 && n >= 10 */
@@ -70,7 +70,7 @@ z_streamp z;
       {
         /* get extra bits for length */
         e &= 15;
-        c = t->base + ((uInt)b & inflate_mask[e]);
+        c = t->base + ((uInt)b & cramfs_inflate_mask[e]);
         DUMPBITS(e)
 
         /* decode distance base of block to copy */
@@ -83,7 +83,7 @@ z_streamp z;
             /* get extra bits to add to distance base */
             e &= 15;
             GRABBITS(e)         /* get extra bits (up to 13) */
-            d = t->base + ((uInt)b & inflate_mask[e]);
+            d = t->base + ((uInt)b & cramfs_inflate_mask[e]);
             DUMPBITS(e)
 
             /* do the copy */
@@ -115,7 +115,7 @@ z_streamp z;
           else if ((e & 64) == 0)
           {
             t += t->base;
-            e = (t += ((uInt)b & inflate_mask[e]))->exop;
+            e = (t += ((uInt)b & cramfs_inflate_mask[e]))->exop;
           }
           else
           {
@@ -130,7 +130,7 @@ z_streamp z;
       if ((e & 64) == 0)
       {
         t += t->base;
-        if ((e = (t += ((uInt)b & inflate_mask[e]))->exop) == 0)
+        if ((e = (t += ((uInt)b & cramfs_inflate_mask[e]))->exop) == 0)
         {
           DUMPBITS(t->bits)
           *q++ = (Byte)t->base;

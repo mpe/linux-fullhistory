@@ -177,8 +177,8 @@ extern void d_rehash(struct dentry *);
  * @entry: dentry to add
  * @inode: The inode to attach to this dentry
  *
- * This adds the entry to the hash queues and initializes "d_inode".
- * The entry was actually filled in earlier during "d_alloc()"
+ * This adds the entry to the hash queues and initializes @inode.
+ * The entry was actually filled in earlier during d_alloc().
  */
  
 static __inline__ void d_add(struct dentry * entry, struct inode * inode)
@@ -207,9 +207,9 @@ extern char * __d_path(struct dentry *, struct vfsmount *, struct dentry *,
 
 /**
  *	dget	-	get a reference to a dentry
- *	@dentry: dentry to get a reference too
+ *	@dentry: dentry to get a reference to
  *
- *	Given a dentry or NULL pointer increment the reference count
+ *	Given a dentry or %NULL pointer increment the reference count
  *	if appropriate and return the dentry. A dentry will not be 
  *	destroyed when it has references.
  */
@@ -225,7 +225,7 @@ static __inline__ struct dentry * dget(struct dentry *dentry)
  *	d_unhashed -	is dentry hashed
  *	@dentry: entry to check
  *
- *	Returns true if the dentry passed is not currently hashed
+ *	Returns true if the dentry passed is not currently hashed.
  */
  
 static __inline__ int d_unhashed(struct dentry *dentry)

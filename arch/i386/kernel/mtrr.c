@@ -1110,7 +1110,7 @@ static int (*get_free_region) (unsigned long base,
  *
  *	Memory type region registers control the caching on newer Intel and
  *	non Intel processors. This function allows drivers to request an
- *	MTRR is added. The details and hardware specifics of each processors
+ *	MTRR is added. The details and hardware specifics of each processor's
  *	implementation are hidden from the caller, but nevertheless the 
  *	caller should expect to need to provide a power of two size on an
  *	equivalent power of two boundary.
@@ -1125,13 +1125,13 @@ static int (*get_free_region) (unsigned long base,
  *
  *	The available types are
  *
- *	MTRR_TYPE_UNCACHEABLE	-	No caching
+ *	%MTRR_TYPE_UNCACHEABLE	-	No caching
  *
- *	MTRR_TYPE_WRITEBACK	-	Write data back in bursts whenever
+ *	%MTRR_TYPE_WRITEBACK	-	Write data back in bursts whenever
  *
- *	MTRR_TYPE_WRCOMB	-	Write data back soon but allow bursts
+ *	%MTRR_TYPE_WRCOMB	-	Write data back soon but allow bursts
  *
- *	MTRR_TYPE_WRTHROUGH	-	Cache reads but not writes
+ *	%MTRR_TYPE_WRTHROUGH	-	Cache reads but not writes
  *
  *	BUGS: Needs a quiet flag for the cases where drivers do not mind
  *	failures and do not wish system log messages to be sent.

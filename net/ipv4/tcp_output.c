@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.123 2000/03/25 01:52:05 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.124 2000/04/08 07:21:24 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1121,27 +1121,22 @@ void tcp_send_delayed_ack(struct sock *sk)
 	timeout = jiffies + ato;
 
 	/* Use new timeout only if there wasn't a older one earlier. */
-	spin_lock_bh(&sk->timer_lock);
-	if (!tp->delack_timer.prev || !del_timer(&tp->delack_timer)) {
-		sock_hold(sk);
-		tp->delack_timer.expires = timeout;
-	} else {
+	if (timer_pending(&tp->delack_timer)) {
+		unsigned long old_timeout = tp->delack_timer.expires;
+
 		/* If delack timer was blocked or is about to expire,
 		 * send ACK now.
 		 */
-		if (tp->ack.blocked || time_before_eq(tp->delack_timer.expires, jiffies+(ato>>2))) {
-			spin_unlock_bh(&sk->timer_lock);
-
+		if (tp->ack.blocked || time_before_eq(old_timeout, jiffies+(ato>>2))) {
 			tcp_send_ack(sk);
-			__sock_put(sk);
 			return;
 		}
 
-		if (time_before(timeout, tp->delack_timer.expires))
-			tp->delack_timer.expires = timeout;
+		if (!time_before(timeout, old_timeout))
+			timeout = old_timeout;
 	}
-	add_timer(&tp->delack_timer);
-	spin_unlock_bh(&sk->timer_lock);
+	if (!mod_timer(&tp->delack_timer, timeout))
+		sock_hold(sk);
 
 #ifdef TCP_FORMAL_WINDOW
 	/* Explanation. Header prediction path does not handle

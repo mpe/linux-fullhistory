@@ -32,6 +32,10 @@
 #define PCI_VENDOR_ID_SI			0x0139
 #endif
 
+#ifndef PCI_VENDOR_ID_ALI
+#define PCI_VENDOR_ID_ALI			0x10b9
+#endif
+
 #ifndef PCI_DEVICE_ID_TRIDENT_4DWAVE_DX
 #define PCI_DEVICE_ID_TRIDENT_4DWAVE_DX	0x2000
 #endif
@@ -42,6 +46,10 @@
 
 #ifndef PCI_DEVICE_ID_SI_7018
 #define PCI_DEVICE_ID_SI_7018		0x7018
+#endif
+
+#ifndef PCI_DEVICE_ID_ALI_5451
+#define PCI_DEVICE_ID_ALI_5451		0x5451
 #endif
 
 #ifndef FALSE
@@ -81,6 +89,28 @@ enum trident_op_registers {
 	T4D_AINT_B	= 0xd8, T4D_AINTEN_B    = 0xdc
 };
 
+enum ali_op_registers {
+	ALI_GLOBAL_CONTROL	= 0xd4,
+	ALI_STIMER		= 0xc8
+};
+
+enum ali_global_control_bit {
+	ALI_PCM_IN_ENABLE	= 0x80000000,
+	ALI_PCM_IN_DISABLE	= 0x7fffffff
+};
+
+enum ali_pcm_in_channel_num {
+	ALI_PCM_IN_CHANNEL	= 31
+};
+
+enum ali_ac97_power_control_bit {
+	ALI_EAPD_POWER_DOWN	= 0x8000
+};
+
+enum ali_update_ptr_flags {
+	ALI_ADDRESS_INT_UPDATE	= 0x01
+};
+
 /* S/PDIF Operational Registers for 4D-NX */
 enum nx_spdif_registers {
 	NX_SPCTRL_SPCSO	= 0x24, NX_SPLBA = 0x28,
@@ -113,8 +143,20 @@ enum si_ac97_registers {
 	SI_SERIAL_INTF_CTRL = 0x48, SI_AC97_GPIO = 0x4c
 };
 
+enum ali_ac97_registers {
+	ALI_AC97_WRITE       = 0x40, ALI_AC97_READ = 0x44
+};
+
 /* Bit mask for operational registers */
 #define AC97_REG_ADDR      0x000000ff
+
+enum ali_ac97_bits {
+	ALI_AC97_BUSY_WRITE = 0x8000, ALI_AC97_BUSY_READ = 0x8000,
+	ALI_AC97_WRITE_ACTION = 0x8000, ALI_AC97_READ_ACTION = 0x8000,
+	ALI_AC97_AUDIO_BUSY = 0x4000, ALI_AC97_SECONDARY  = 0x0080,
+	ALI_AC97_READ_MIXER_REGISTER = 0xfeff,
+	ALI_AC97_WRITE_MIXER_REGISTER = 0x0100
+};
 
 enum sis7018_ac97_bits {
 	SI_AC97_BUSY_WRITE = 0x8000, SI_AC97_BUSY_READ = 0x8000,

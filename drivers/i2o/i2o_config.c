@@ -166,6 +166,9 @@ static void i2o_cfg_reply(struct i2o_handler *h, struct i2o_controller *c, struc
 struct i2o_handler cfg_handler=
 {
 	i2o_cfg_reply,
+	NULL,
+	NULL,
+	NULL,
 	"Configuration",
 	0,
 	0xffffffff	// All classes
@@ -409,14 +412,14 @@ static int ioctl_parms(unsigned long arg, unsigned int type)
 		return -ENOMEM;
 	}
 
-        len = i2o_issue_params(i2o_cmd, c, kcmd.tid, 
-       			ops, kcmd.oplen, res, 65536);
-        i2o_unlock_controller(c);
+	len = i2o_issue_params(i2o_cmd, c, kcmd.tid, 
+				ops, kcmd.oplen, res, 65536);
+	i2o_unlock_controller(c);
 	kfree(ops);
         
 	if (len < 0) {
 		kfree(res);
-		return len; /* -DetailedStatus */
+		return -EAGAIN;
 	}
 
 	put_user(len, kcmd.reslen);
@@ -749,7 +752,7 @@ static int ioctl_evt_reg(unsigned long arg, struct file *fp)
 
 	/* Device exists? */
 	for(d = iop->devices; d; d = d->next)
-		if(d->lct_data->tid == kdesc.tid)
+		if(d->lct_data.tid == kdesc.tid)
 			break;
 
 	if(!d)
@@ -903,7 +906,7 @@ int __init i2o_config_init(void)
 #endif
 {
 	printk(KERN_INFO "I2O configuration manager v 0.04.\n");
-	printk(KERN_INFO "  (C) Copyright 1999 Red Hat Software");
+	printk(KERN_INFO "  (C) Copyright 1999 Red Hat Software\n");
 	
 	if((page_buf = kmalloc(4096, GFP_KERNEL))==NULL)
 	{

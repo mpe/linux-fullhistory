@@ -79,8 +79,8 @@ struct inode_operations bad_inode_ops =
  *	@inode: Inode to mark bad
  *
  *	When an inode cannot be read due to a media or remote network
- *	failure this function makes the inode 'bad' and causes I/O operations
- *	on it to fail from this point on
+ *	failure this function makes the inode "bad" and causes I/O operations
+ *	on it to fail from this point on.
  */
  
 void make_bad_inode(struct inode * inode) 
@@ -101,7 +101,7 @@ void make_bad_inode(struct inode * inode)
  *	is_bad_inode - is an inode errored
  *	@inode: inode to test
  *
- *	Returns true if the inode in question has been marked as bad
+ *	Returns true if the inode in question has been marked as bad.
  */
  
 int is_bad_inode(struct inode * inode) 

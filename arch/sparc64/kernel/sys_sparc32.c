@@ -1,4 +1,4 @@
-/* $Id: sys_sparc32.c,v 1.142 2000/03/24 04:17:38 davem Exp $
+/* $Id: sys_sparc32.c,v 1.144 2000/04/08 02:11:47 davem Exp $
  * sys_sparc32.c: Conversion between 32bit and 64bit native syscalls.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -3542,6 +3542,18 @@ struct nfsctl_fhparm32 {
 	s32			gf32_version;
 };
 
+struct nfsctl_fdparm32 {
+	struct sockaddr		gd32_addr;
+	s8			gd32_path[NFS_MAXPATHLEN+1];
+	s32			gd32_version;
+};
+
+struct nfsctl_fsparm32 {
+	struct sockaddr		gd32_addr;
+	s8			gd32_path[NFS_MAXPATHLEN+1];
+	s32			gd32_maxlen;
+};
+
 struct nfsctl_arg32 {
 	s32			ca32_version;	/* safeguard */
 	union {
@@ -3550,15 +3562,17 @@ struct nfsctl_arg32 {
 		struct nfsctl_export32	u32_export;
 		struct nfsctl_uidmap32	u32_umap;
 		struct nfsctl_fhparm32	u32_getfh;
-		u32			u32_debug;
+		struct nfsctl_fdparm32	u32_getfd;
+		struct nfsctl_fsparm32	u32_getfs;
 	} u;
 #define ca32_svc	u.u32_svc
 #define ca32_client	u.u32_client
 #define ca32_export	u.u32_export
 #define ca32_umap	u.u32_umap
 #define ca32_getfh	u.u32_getfh
+#define ca32_getfd	u.u32_getfd
+#define ca32_getfs	u.u32_getfs
 #define ca32_authd	u.u32_authd
-#define ca32_debug	u.u32_debug
 };
 
 union nfsctl_res32 {
@@ -3689,6 +3703,38 @@ static int nfs_getfh32_trans(struct nfsctl_arg *karg, struct nfsctl_arg32 *arg32
 	return err;
 }
 
+static int nfs_getfd32_trans(struct nfsctl_arg *karg, struct nfsctl_arg32 *arg32)
+{
+	int err;
+	
+	err = __get_user(karg->ca_version, &arg32->ca32_version);
+	err |= copy_from_user(&karg->ca_getfd.gd_addr,
+			  &arg32->ca32_getfd.gd32_addr,
+			  (sizeof(struct sockaddr)));
+	err |= copy_from_user(&karg->ca_getfd.gd_path,
+			  &arg32->ca32_getfd.gd32_path,
+			  (NFS_MAXPATHLEN+1));
+	err |= __get_user(karg->ca_getfd.gd_version,
+		      &arg32->ca32_getfd.gd32_version);
+	return err;
+}
+
+static int nfs_getfs32_trans(struct nfsctl_arg *karg, struct nfsctl_arg32 *arg32)
+{
+	int err;
+	
+	err = __get_user(karg->ca_version, &arg32->ca32_version);
+	err |= copy_from_user(&karg->ca_getfs.gd_addr,
+			  &arg32->ca32_getfs.gd32_addr,
+			  (sizeof(struct sockaddr)));
+	err |= copy_from_user(&karg->ca_getfs.gd_path,
+			  &arg32->ca32_getfs.gd32_path,
+			  (NFS_MAXPATHLEN+1));
+	err |= __get_user(karg->ca_getfs.gd_maxlen,
+		      &arg32->ca32_getfs.gd32_maxlen);
+	return err;
+}
+
 /* This really doesn't need translations, we are only passing
  * back a union which contains opaque nfs file handle data.
  */
@@ -3727,6 +3773,7 @@ int asmlinkage sys32_nfsservctl(int cmd, struct nfsctl_arg32 *arg32, union nfsct
 		err = nfs_clnt32_trans(karg, arg32);
 		break;
 	case NFSCTL_EXPORT:
+	case NFSCTL_UNEXPORT:
 		err = nfs_exp32_trans(karg, arg32);
 		break;
 	/* This one is unimplemented, be we're ready for it. */
@@ -3735,6 +3782,12 @@ int asmlinkage sys32_nfsservctl(int cmd, struct nfsctl_arg32 *arg32, union nfsct
 		break;
 	case NFSCTL_GETFH:
 		err = nfs_getfh32_trans(karg, arg32);
+		break;
+	case NFSCTL_GETFD:
+		err = nfs_getfd32_trans(karg, arg32);
+		break;
+	case NFSCTL_GETFS:
+		err = nfs_getfs32_trans(karg, arg32);
 		break;
 	default:
 		err = -EINVAL;
@@ -3747,7 +3800,12 @@ int asmlinkage sys32_nfsservctl(int cmd, struct nfsctl_arg32 *arg32, union nfsct
 	err = sys_nfsservctl(cmd, karg, kres);
 	set_fs(oldfs);
 
-	if(!err && cmd == NFSCTL_GETFH)
+	if (err)
+		goto done;
+
+	if((cmd == NFSCTL_GETFH) ||
+	   (cmd == NFSCTL_GETFD) ||
+	   (cmd == NFSCTL_GETFS))
 		err = nfs_getfh32_res_trans(kres, res32);
 
 done:

@@ -95,6 +95,7 @@ EXPORT_SYMBOL(xdr_decode_netobj);
 EXPORT_SYMBOL(xdr_encode_netobj);
 EXPORT_SYMBOL(xdr_zero);
 EXPORT_SYMBOL(xdr_one);
+EXPORT_SYMBOL(xdr_two);
 EXPORT_SYMBOL(xdr_shift_iovec);
 EXPORT_SYMBOL(xdr_zero_iovec);
 

@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.36 2000/01/29 01:09:05 anton Exp $
+# $Id: Makefile,v 1.37 2000/03/31 04:06:22 davem Exp $
 # Makefile for the linux Sparc-specific parts of the memory manager.
 #
 # Note! Dependencies are done automagically by 'make dep', which also

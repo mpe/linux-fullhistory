@@ -21,7 +21,7 @@
  *	Based heavily on SonicVibes.c:
  *      Copyright (C) 1998-1999  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
- *	Heavily modified by Zach Brown <zab@redhat.com> based on lunch
+ *	Heavily modified by Zach Brown <zab@zabbo.net> based on lunch
  *	with ESS engineers.  Many thanks to Howard Kim for providing 
  *	contacts and hardware.  Honorable mention goes to Eric 
  *	Brombaugh for all sorts of things.  Best regards to the 
@@ -105,8 +105,28 @@
  *	being used now is quite dirty and assumes we're on a uni-processor
  *	machine.  Much of it will need to be cleaned up for SMP ACPI or 
  *	similar.
+ *
+ *	We also pay attention to PCI power management now.  The driver
+ *	will power down units of the chip that it knows aren't needed.
+ *	The WaveProcessor and company are only powered on when people
+ *	have /dev/dsp*s open.  On removal the driver will
+ *	power down the maestro entirely.  There could still be
+ *	trouble with BIOSen that magically change power states 
+ *	themselves, but we'll see.  
  *	
  * History
+ *  (still based on v0.14) Mar 29 2000 - Zach Brown <zab@redhat.com>
+ *	move to 2.3 power management interface, which
+ *		required hacking some suspend/resume/check paths 
+ *	make static compilation work
+ *  v0.14 - Jan 28 2000 - Zach Brown <zab@redhat.com>
+ *	add PCI power management through ACPI regs.
+ *	we now shut down on machine reboot/halt
+ *	leave scary PCI config items alone (isa stuff, mostly)
+ *	enable 1921s, it seems only mine was broke.
+ *	fix swapped left/right pcm dac.  har har.
+ *	up bob freq, increase buffers, fix pointers at underflow
+ *	silly compilation problems
  *  v0.13 - Nov 18 1999 - Zach Brown <zab@redhat.com>
  *	fix nec Versas?  man would that be cool.
  *  v0.12 - Nov 12 1999 - Zach Brown <zab@redhat.com>
@@ -162,13 +182,11 @@
  *	bob freq code, region sanity, jitter sync fix; all from Eric 
  *
  * TODO
- *	some people get indir reg timeouts?
  *	fix bob frequency
  *	endianness
  *	do smart things with ac97 2.0 bits.
  *	docking and dual codecs and 978?
  *	leave 54->61 open
- *	resolve 2.3/2.2 stuff
  *
  *	it also would be fun to have a mode that would not use pci dma at all
  *	but would copy into the wavecache on board memory and use that 
@@ -190,12 +208,14 @@
  #define SILLY_MAKE_INIT(FUNC) __initfunc(FUNC)
  #define SILLY_OFFSET(VMA) ((VMA)->vm_offset)
 
+
 #else
 
  #define SILLY_PCI_BASE_ADDRESS(PCIDEV) (PCIDEV->resource[0].start)
  #define SILLY_INIT_SEM(SEM) init_MUTEX(&SEM)
  #define SILLY_MAKE_INIT(FUNC) __init FUNC
  #define SILLY_OFFSET(VMA) ((VMA)->vm_pgoff)
+
 
 #endif
 
@@ -213,15 +233,12 @@
 #include <asm/dma.h>
 #include <linux/init.h>
 #include <linux/poll.h>
+#include <linux/reboot.h>
 #include <asm/uaccess.h>
 #include <asm/hardirq.h>
 
 #include <linux/pm.h>
 static int maestro_pm_callback(struct pm_dev *dev, pm_request_t rqst, void *d);
-static int in_suspend=0;
-wait_queue_head_t suspend_queue;
-static void check_suspend(void);
-#define CHECK_SUSPEND check_suspend();
 
 #include "maestro.h"
 
@@ -231,14 +248,18 @@ static void check_suspend(void);
 
 #ifdef M_DEBUG
 static int debug=0;
-static int dsps_order=0;
 #define M_printk(args...) {if (debug) printk(args);}
 #else
 #define M_printk(x)
 #endif
 
+/* we try to setup 2^(dsps_order) /dev/dsp devices */
+static int dsps_order=0;
+/* wether or not we mess around with power management */
+static int use_pm=2; /* set to 1 for force */
+
 /* --------------------------------------------------------------------- */
-#define DRIVER_VERSION "0.13"
+#define DRIVER_VERSION "0.14"
 
 #ifndef PCI_VENDOR_ESS
 #define PCI_VENDOR_ESS			0x125D
@@ -282,6 +303,46 @@ static int dsps_order=0;
 #define NR_APUS		64
 #define NR_APU_REGS	16
 
+/* acpi states */
+enum {
+	ACPI_D0=0,
+	ACPI_D1,
+	ACPI_D2,
+	ACPI_D3
+};
+
+/* bits in the acpi masks */
+#define ACPI_12MHZ	( 1 << 15)
+#define ACPI_24MHZ	( 1 << 14)
+#define ACPI_978	( 1 << 13)
+#define ACPI_SPDIF	( 1 << 12)
+#define ACPI_GLUE	( 1 << 11)
+#define ACPI__10	( 1 << 10) /* reserved */
+#define ACPI_PCIINT	( 1 << 9)
+#define ACPI_HV		( 1 << 8) /* hardware volume */
+#define ACPI_GPIO	( 1 << 7)
+#define ACPI_ASSP	( 1 << 6)
+#define ACPI_SB		( 1 << 5) /* sb emul */
+#define ACPI_FM		( 1 << 4) /* fm emul */
+#define ACPI_RB		( 1 << 3) /* ringbus / aclink */
+#define ACPI_MIDI	( 1 << 2) 
+#define ACPI_GP		( 1 << 1) /* game port */
+#define ACPI_WP		( 1 << 0) /* wave processor */
+
+#define ACPI_ALL	(0xffff)
+#define ACPI_SLEEP	(~(ACPI_SPDIF|ACPI_ASSP|ACPI_SB|ACPI_FM| \
+			ACPI_MIDI|ACPI_GP|ACPI_WP))
+#define ACPI_NONE	(ACPI__10)
+
+/* these masks indicate which units we care about at
+	which states */
+u16 acpi_state_mask[] = {
+	[ACPI_D0] = ACPI_ALL,
+	[ACPI_D1] = ACPI_SLEEP,
+	[ACPI_D2] = ACPI_SLEEP,
+	[ACPI_D3] = ACPI_NONE
+};
+
 static const unsigned sample_size[] = { 1, 2, 2, 4 };
 static const unsigned sample_shift[] = { 0, 1, 1, 2 };
 
@@ -302,6 +363,10 @@ static int clock_freq[]={
 	[TYPE_MAESTRO2] = (50000000L / 1024L),
 	[TYPE_MAESTRO2E] = (50000000L / 1024L)
 };
+
+static int maestro_notifier(struct notifier_block *nb, unsigned long event, void *buf);
+
+static struct notifier_block maestro_nb = {maestro_notifier, NULL, 0};
 
 /* --------------------------------------------------------------------- */
 
@@ -357,6 +422,7 @@ struct ess_state {
 
 	/* pointer to each dsp?s piece of the apu->src buffer page */
 	void *mixbuf;
+
 };
 	
 struct ess_card {
@@ -383,6 +449,11 @@ struct ess_card {
 		unsigned int mixer_state[SOUND_MIXER_NRDEVICES];
 	} mix;
 	
+	int power_regs;
+		
+	int in_suspend;
+	wait_queue_head_t suspend_queue;
+
 	struct ess_state channels[MAX_DSPS];
 	u16 maestro_map[NR_IDRS];	/* Register map */
 	/* we have to store this junk so that we can come back from a
@@ -397,7 +468,7 @@ struct ess_card {
 	int dmaorder;
 
 	/* hardware resources */
-	struct pci_dev pcidev; /* uck.. */
+	struct pci_dev *pcidev;
 	u32 iobase;
 	u32 irq;
 
@@ -434,6 +505,8 @@ ld2(unsigned int x)
 
 /* --------------------------------------------------------------------- */
 
+static void check_suspend(struct ess_card *card);
+
 static struct ess_card *devs = NULL;
 
 /* --------------------------------------------------------------------- */
@@ -443,14 +516,15 @@ static struct ess_card *devs = NULL;
  *	ESS Maestro AC97 codec programming interface.
  */
 	 
-static void maestro_ac97_set(int io, u8 cmd, u16 val)
+static void maestro_ac97_set(struct ess_card *card, u8 cmd, u16 val)
 {
+	int io = card->iobase;
 	int i;
 	/*
 	 *	Wait for the codec bus to be free 
 	 */
 
-	CHECK_SUSPEND;
+	check_suspend(card);
 	 
 	for(i=0;i<10000;i++)
 	{
@@ -466,13 +540,14 @@ static void maestro_ac97_set(int io, u8 cmd, u16 val)
 	mdelay(1);
 }
 
-static u16 maestro_ac97_get(int io, u8 cmd)
+static u16 maestro_ac97_get(struct ess_card *card, u8 cmd)
 {
+	int io = card->iobase;
 	int sanity=10000;
 	u16 data;
 	int i;
 	
-	CHECK_SUSPEND;
+	check_suspend(card);
 	/*
 	 *	Wait for the codec bus to be free 
 	 */
@@ -564,7 +639,7 @@ static int ac97_read_mixer(struct ess_card *card, int mixer)
 	int ret=0;
 	struct ac97_mixer_hw *mh = &ac97_hw[mixer];
 
-	val = maestro_ac97_get(card->iobase , mh->offset);
+	val = maestro_ac97_get(card, mh->offset);
 
 	if(AC97_STEREO_MASK & (1<<mixer)) {
 		/* nice stereo mixers .. */
@@ -605,7 +680,7 @@ static int ac97_read_mixer(struct ess_card *card, int mixer)
 	call with spinlock held */
 	
 /* linear scale -> log */
-unsigned char lin2log[101] = 
+static unsigned char lin2log[101] = 
 {
 0, 0 , 15 , 23 , 30 , 34 , 38 , 42 , 45 , 47 ,
 50 , 52 , 53 , 55 , 57 , 58 , 60 , 61 , 62 ,
@@ -649,19 +724,19 @@ static void ac97_write_mixer(struct ess_card *card,int mixer, unsigned int left,
 	} else if (mixer == SOUND_MIXER_SPEAKER) {
 		val = (((100 - left) * mh->scale) / 100) << 1;
 	} else if (mixer == SOUND_MIXER_MIC) {
-		val = maestro_ac97_get(card->iobase , mh->offset) & ~0x801f;
+		val = maestro_ac97_get(card, mh->offset) & ~0x801f;
 		val |= (((100 - left) * mh->scale) / 100);
 	/*  the low bit is optional in the tone sliders and masking
 		it lets is avoid the 0xf 'bypass'.. */
 	} else if (mixer == SOUND_MIXER_BASS) {
-		val = maestro_ac97_get(card->iobase , mh->offset) & ~0x0f00;
+		val = maestro_ac97_get(card , mh->offset) & ~0x0f00;
 		val |= ((((100 - left) * mh->scale) / 100) << 8) & 0x0e00;
 	} else if (mixer == SOUND_MIXER_TREBLE)  {
-		val = maestro_ac97_get(card->iobase , mh->offset) & ~0x000f;
+		val = maestro_ac97_get(card , mh->offset) & ~0x000f;
 		val |= (((100 - left) * mh->scale) / 100) & 0x000e;
 	}
 
-	maestro_ac97_set(card->iobase , mh->offset, val);
+	maestro_ac97_set(card , mh->offset, val);
 	
 	M_printk(" -> %x\n",val);
 }
@@ -708,7 +783,7 @@ static unsigned int ac97_oss_rm[] = {
 static int 
 ac97_recmask_io(struct ess_card *card, int read, int mask) 
 {
-	unsigned int val = ac97_oss_mask[ maestro_ac97_get(card->iobase, 0x1a) & 0x7 ];
+	unsigned int val = ac97_oss_mask[ maestro_ac97_get(card, 0x1a) & 0x7 ];
 
 	if (read) return val;
 
@@ -723,7 +798,7 @@ ac97_recmask_io(struct ess_card *card, int read, int mask)
 
 	M_printk("maestro: setting ac97 recmask to 0x%x\n",val);
 
-	maestro_ac97_set(card->iobase,0x1a,val);
+	maestro_ac97_set(card,0x1a,val);
 
 	return 0;
 };
@@ -736,7 +811,7 @@ ac97_recmask_io(struct ess_card *card, int read, int mask)
  *	The PT101 setup is untested.
  */
  
-static u16 maestro_ac97_init(struct ess_card *card, int iobase)
+static u16 maestro_ac97_init(struct ess_card *card)
 {
 	u16 vend1, vend2, caps;
 
@@ -747,13 +822,13 @@ static u16 maestro_ac97_init(struct ess_card *card, int iobase)
 	card->mix.write_mixer = ac97_write_mixer;
 	card->mix.recmask_io = ac97_recmask_io;
 
-	vend1 = maestro_ac97_get(iobase, 0x7c);
-	vend2 = maestro_ac97_get(iobase, 0x7e);
+	vend1 = maestro_ac97_get(card, 0x7c);
+	vend2 = maestro_ac97_get(card, 0x7e);
 
-	caps = maestro_ac97_get(iobase, 0x00);
+	caps = maestro_ac97_get(card, 0x00);
 
 	printk(KERN_INFO "maestro: AC97 Codec detected: v: 0x%2x%2x caps: 0x%x pwr: 0x%x\n",
-		vend1,vend2,caps,maestro_ac97_get(iobase,0x26) & 0xf);
+		vend1,vend2,caps,maestro_ac97_get(card,0x26) & 0xf);
 
 	if (! (caps & 0x4) ) {
 		/* no bass/treble nobs */
@@ -765,10 +840,14 @@ static u16 maestro_ac97_init(struct ess_card *card, int iobase)
 	switch ((long)(vend1 << 16) | vend2) {
 	case 0x545200ff:	/* TriTech */
 		/* no idea what this does */
-		maestro_ac97_set(iobase,0x2a,0x0001);
-		maestro_ac97_set(iobase,0x2c,0x0000);
-		maestro_ac97_set(iobase,0x2c,0xffff);
+		maestro_ac97_set(card,0x2a,0x0001);
+		maestro_ac97_set(card,0x2c,0x0000);
+		maestro_ac97_set(card,0x2c,0xffff);
 		break;
+#if 0	/* i thought the problems I was seeing were with
+	the 1921, but apparently they were with the pci board
+	it was on, so this code is commented out.
+	 lets see if this holds true. */
 	case 0x83847609:	/* ESS 1921 */
 		/* writing to 0xe (mic) or 0x1a (recmask) seems
 			to hang this codec */
@@ -776,20 +855,21 @@ static u16 maestro_ac97_init(struct ess_card *card, int iobase)
 		card->mix.record_sources = 0;
 		card->mix.recmask_io = NULL;
 #if 0	/* don't ask.  I have yet to see what these actually do. */
-		maestro_ac97_set(iobase,0x76,0xABBA); /* o/~ Take a chance on me o/~ */
+		maestro_ac97_set(card,0x76,0xABBA); /* o/~ Take a chance on me o/~ */
 		udelay(20);
-		maestro_ac97_set(iobase,0x78,0x3002);
+		maestro_ac97_set(card,0x78,0x3002);
 		udelay(20);
-		maestro_ac97_set(iobase,0x78,0x3802);
+		maestro_ac97_set(card,0x78,0x3802);
 		udelay(20);
 #endif
 		break;
+#endif
 	default: break;
 	}
 
-	maestro_ac97_set(iobase, 0x1E, 0x0404);
+	maestro_ac97_set(card, 0x1E, 0x0404);
 	/* null misc stuff */
-	maestro_ac97_set(iobase, 0x20, 0x0000);
+	maestro_ac97_set(card, 0x20, 0x0000);
 
 	return 0;
 }
@@ -923,7 +1003,7 @@ static void maestro_write(struct ess_state *s, u16 reg, u16 data)
 {
 	unsigned long flags;
 
-	CHECK_SUSPEND;
+	check_suspend(s->card);
 	spin_lock_irqsave(&s->card->lock,flags);
 
 	__maestro_write(s->card,reg,data);
@@ -944,7 +1024,7 @@ static u16 maestro_read(struct ess_state *s, u16 reg)
 	if(READABLE_MAP & (1<<reg))
 	{
 		unsigned long flags;
-		CHECK_SUSPEND;
+		check_suspend(s->card);
 		spin_lock_irqsave(&s->card->lock,flags);
 
 		__maestro_read(s->card,reg);
@@ -1003,7 +1083,7 @@ static void apu_set_register(struct ess_state *s, u16 channel, u8 reg, u16 data)
 {
 	unsigned long flags;
 	
-	CHECK_SUSPEND;
+	check_suspend(s->card);
 
 	if(channel&ESS_CHAN_HARD)
 		channel&=~ESS_CHAN_HARD;
@@ -1032,7 +1112,7 @@ static u16 apu_get_register(struct ess_state *s, u16 channel, u8 reg)
 	unsigned long flags;
 	u16 v;
 	
-	CHECK_SUSPEND;
+	check_suspend(s->card);
 
 	if(channel&ESS_CHAN_HARD)
 		channel&=~ESS_CHAN_HARD;
@@ -1060,7 +1140,7 @@ static void wave_set_register(struct ess_state *s, u16 reg, u16 value)
 {
 	long ioaddr = s->card->iobase;
 	unsigned long flags;
-	CHECK_SUSPEND;
+	check_suspend(s->card);
 	
 	spin_lock_irqsave(&s->card->lock,flags);
 
@@ -1075,7 +1155,7 @@ static u16 wave_get_register(struct ess_state *s, u16 reg)
 	long ioaddr = s->card->iobase;
 	unsigned long flags;
 	u16 value;
-	CHECK_SUSPEND;
+	check_suspend(s->card);
 	
 	spin_lock_irqsave(&s->card->lock,flags);
 	outw(reg, ioaddr+0x10);
@@ -1198,7 +1278,7 @@ extern inline void stop_adc(struct ess_state *s)
 }	
 
 /* stop output apus */
-extern inline void stop_dac(struct ess_state *s)
+static void stop_dac(struct ess_state *s)
 {
 	/* XXX have to lock around this? */
 	if (! (s->enable & DAC_RUNNING)) return;
@@ -1304,11 +1384,12 @@ ess_play_setup(struct ess_state *ess, int mode, u32 rate, void *buffer, int size
 			
 /* XXX think about endianess when writing these registers */
 		M_printk("maestro: ess_play_setup: APU[%d] pa = 0x%x\n", ess->apu[channel], pa);
-		/* Load the buffer into the wave engine */
+		/* start of sample */
 		apu_set_register(ess, channel, 4, ((pa>>16)&0xFF)<<8);
 		apu_set_register(ess, channel, 5, pa&0xFFFF);
+		/* sample end */
 		apu_set_register(ess, channel, 6, (pa+size)&0xFFFF);
-		/* setting loop == sample len */
+		/* setting loop len == sample len */
 		apu_set_register(ess, channel, 7, size);
 		
 		/* clear effects/env.. */
@@ -1328,7 +1409,7 @@ ess_play_setup(struct ess_state *ess, int mode, u32 rate, void *buffer, int size
 
 		if(mode&ESS_FMT_STEREO) {
 			/* set panning: left or right */
-			apu_set_register(ess, channel, 10, 0x8F00 | (channel ? 0x10 : 0));
+			apu_set_register(ess, channel, 10, 0x8F00 | (channel ? 0 : 0x10));
 			ess->apu_mode[channel] += 0x10;
 		} else
 			apu_set_register(ess, channel, 10, 0x8F08);
@@ -1539,7 +1620,7 @@ static void start_bob(struct ess_state *s)
 	int divide;
 	
 	/* XXX make freq selector much smarter, see calc_bob_rate */
-	int freq = 150;		/* requested frequency - calculate what we want here. */
+	int freq = 200; 
 	
 	/* compute ideal interrupt frequency for buffer size & play rate */
 	/* first, find best prescaler value to match freq */
@@ -1647,6 +1728,7 @@ prog_dmabuf(struct ess_state *s, unsigned rec)
 
 	db->hwptr = db->swptr = db->total_bytes = db->count = db->error = db->endcleared = 0;
 
+	/* this algorithm is a little nuts.. where did /1000 come from? */
 	bytepersec = rate << sample_shift[fmt];
 	bufs = PAGE_SIZE << db->buforder;
 	if (db->ossfragshift) {
@@ -1675,13 +1757,11 @@ prog_dmabuf(struct ess_state *s, unsigned rec)
 	memset(db->rawbuf, (fmt & ESS_FMT_16BIT) ? 0 : 0x80, db->dmasize);
 
 	spin_lock_irqsave(&s->lock, flags);
-	if (rec) {
-		ess_rec_setup(s, fmt, s->rateadc, 
-			db->rawbuf, db->numfrag << db->fragshift);
-	} else {
-		ess_play_setup(s, fmt, s->ratedac, 
-			db->rawbuf, db->numfrag << db->fragshift);
-	}
+	if (rec) 
+		ess_rec_setup(s, fmt, s->rateadc, db->rawbuf, db->dmasize);
+	else 
+		ess_play_setup(s, fmt, s->ratedac, db->rawbuf, db->dmasize);
+
 	spin_unlock_irqrestore(&s->lock, flags);
 	db->ready = 1;
 
@@ -1720,8 +1800,7 @@ ess_update_ptr(struct ess_state *s)
 		/* oh boy should this all be re-written.  everything in the current code paths think
 		that the various counters/pointers are expressed in bytes to the user but we have
 		two apus doing stereo stuff so we fix it up here.. it propogates to all the various
-		counters from here.  Notice that this means that mono recording is very very
-		broken right now.  */
+		counters from here.  */
 		if ( s->fmt & (ESS_FMT_STEREO << ESS_ADC_SHIFT)) {
 			hwptr = (get_dmac(s)*2) % s->dma_adc.dmasize;
 		} else {
@@ -1751,7 +1830,7 @@ ess_update_ptr(struct ess_state *s)
 		hwptr = get_dmaa(s) % s->dma_dac.dmasize; 
 		/* the apu only reports the length it has seen, not the
 			length of the memory that has been used (the WP
-			knows that */
+			knows that) */
 		if ( ((s->fmt >> ESS_DAC_SHIFT) & ESS_FMT_MASK) == (ESS_FMT_STEREO|ESS_FMT_16BIT))
 			hwptr<<=1;
 
@@ -1768,14 +1847,15 @@ ess_update_ptr(struct ess_state *s)
 			s->dma_dac.count -= diff;
 /*			M_printk("maestro: ess_update_ptr: diff: %d, count: %d\n", diff, s->dma_dac.count); */
 			if (s->dma_dac.count <= 0) {
+				M_printk("underflow! diff: %d count: %d hw: %d sw: %d\n", diff, s->dma_dac.count, 
+					hwptr, s->dma_dac.swptr);
 				/* FILL ME 
 				wrindir(s, SV_CIENABLE, s->enable); */
 				/* XXX how on earth can calling this with the lock held work.. */
 				stop_dac(s);
 				/* brute force everyone back in sync, sigh */
 				s->dma_dac.count = 0; 
-				s->dma_dac.swptr = 0; 
-				s->dma_dac.hwptr = 0; 
+				s->dma_dac.swptr = hwptr; 
 				s->dma_dac.error++;
 			} else if (s->dma_dac.count <= (signed)s->dma_dac.fragsize && !s->dma_dac.endcleared) {
 				clear_advance(s);
@@ -1783,6 +1863,8 @@ ess_update_ptr(struct ess_state *s)
 			}
 			if (s->dma_dac.count + (signed)s->dma_dac.fragsize <= (signed)s->dma_dac.dmasize) {
 				wake_up(&s->dma_dac.wait);
+/*				printk("waking up DAC count: %d sw: %d hw: %d\n",s->dma_dac.count, s->dma_dac.swptr, 
+					hwptr);*/
 			}
 		}
 	}
@@ -2023,10 +2105,10 @@ static int ess_ioctl_mixdev(struct inode *inode, struct file *file, unsigned int
 }
 
 static /*const*/ struct file_operations ess_mixer_fops = {
-	llseek:		ess_llseek,
-	ioctl:		ess_ioctl_mixdev,
-	open:		ess_open_mixdev,
-	release:	ess_release_mixdev,
+	llseek:         ess_llseek,
+	ioctl:          ess_ioctl_mixdev,
+	open:           ess_open_mixdev,
+	release:        ess_release_mixdev,
 };
 
 /* --------------------------------------------------------------------- */
@@ -2153,8 +2235,7 @@ ess_read(struct file *file, char *buffer, size_t count, loff_t *ppos)
 				goto rec_return_free;
 			}
 			if (!interruptible_sleep_on_timeout(&s->dma_adc.wait, HZ)) {
-				if(! in_suspend)
-				printk(KERN_DEBUG "maestro: read: chip lockup? dmasz %u fragsz %u count %i hwptr %u swptr %u\n",
+				if(! s->card->in_suspend) printk(KERN_DEBUG "maestro: read: chip lockup? dmasz %u fragsz %u count %i hwptr %u swptr %u\n",
 				       s->dma_adc.dmasize, s->dma_adc.fragsize, s->dma_adc.count, 
 				       s->dma_adc.hwptr, s->dma_adc.swptr);
 				stop_adc(s);
@@ -2253,8 +2334,7 @@ ess_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
 				goto return_free;
 			}
 			if (!interruptible_sleep_on_timeout(&s->dma_dac.wait, HZ)) {
-				if(! in_suspend)
-				printk(KERN_DEBUG "maestro: write: chip lockup? dmasz %u fragsz %u count %i hwptr %u swptr %u\n",
+				if(! s->card->in_suspend) printk(KERN_DEBUG "maestro: write: chip lockup? dmasz %u fragsz %u count %i hwptr %u swptr %u\n",
 				       s->dma_dac.dmasize, s->dma_dac.fragsize, s->dma_dac.count, 
 				       s->dma_dac.hwptr, s->dma_dac.swptr);
 				stop_dac(s);
@@ -2277,6 +2357,7 @@ ess_write(struct file *file, const char *buffer, size_t count, loff_t *ppos)
 			if (!ret) ret = -EFAULT;
 			goto return_free;
 		}
+/*		printk("wrote %d bytes at sw: %d cnt: %d while hw: %d\n",cnt, swptr, s->dma_dac.count, s->dma_dac.hwptr);*/
 
 		swptr = (swptr + cnt) % s->dma_dac.dmasize;
 
@@ -2613,6 +2694,7 @@ static int ess_ioctl(struct inode *inode, struct file *file, unsigned int cmd, u
 
         case SNDCTL_DSP_SETFRAGMENT:
                 get_user_ret(val, (int *)arg, -EFAULT);
+		M_printk("maestro: SETFRAGMENT: %0x\n",val);
 		if (file->f_mode & FMODE_READ) {
 			s->dma_adc.ossfragshift = val & 0xffff;
 			s->dma_adc.ossmaxfrags = (val >> 16) & 0xffff;
@@ -2678,6 +2760,36 @@ set_base_registers(struct ess_state *s,void *vaddr)
 	wave_set_register(s, 0x01FF , packed_phys);
 }
 
+/* 
+ * this guy makes sure we're in the right power
+ * state for what we want to be doing 
+ */
+static void maestro_power(struct ess_card *card, int tostate)
+{
+	u16 active_mask = acpi_state_mask[tostate];
+	u8 state;
+
+	if(!use_pm) return;
+
+	pci_read_config_byte(card->pcidev, card->power_regs+0x4, &state);
+	state&=3;
+
+	/* make sure we're in the right state */
+	if(state != tostate) {
+		M_printk(KERN_WARNING "maestro: dev %02x:%02x.%x switching from D%d to D%d\n",
+			card->pcidev->bus->number, 
+			PCI_SLOT(card->pcidev->devfn),
+			PCI_FUNC(card->pcidev->devfn),
+			state,tostate);
+		pci_write_config_byte(card->pcidev, card->power_regs+0x4, tostate);
+	}
+
+	/* and make sure the units we care about are on 
+		XXX we might want to do this before state flipping? */
+	pci_write_config_word(card->pcidev, 0x54, ~ active_mask);
+	pci_write_config_word(card->pcidev, 0x56, ~ active_mask);
+}
+
 /* we allocate a large power of two for all our memory.
 	this is cut up into (not to scale :):
 	|silly fifo word	| 512byte mixbuf per adc	| dac/adc * channels |
@@ -2690,7 +2802,7 @@ allocate_buffers(struct ess_state *s)
 	unsigned long mapend,map;
 
 	/* alloc as big a chunk as we can */
-	for (order = (dsps_order + (15-PAGE_SHIFT) + 1); order >= (dsps_order + 2 + 1); order--)
+	for (order = (dsps_order + (16-PAGE_SHIFT) + 1); order >= (dsps_order + 2 + 1); order--)
 		if((rawbuf = (void *)__get_free_pages(GFP_KERNEL|GFP_DMA, order)))
 			break;
 
@@ -2708,12 +2820,6 @@ allocate_buffers(struct ess_state *s)
 
 	s->card->dmapages = rawbuf;
 	s->card->dmaorder = order;
-
-	/* play bufs are in the same first region as record bufs */
-	set_base_registers(s,rawbuf);
-
-	M_printk("maestro: writing %lx (%lx) to the wp\n",virt_to_bus(rawbuf),
-		((virt_to_bus(rawbuf))&0xFFE00000)>>12);
 
 	for(i=0;i<NR_DSPS;i++) {
 		struct ess_state *ess = &s->card->channels[i];
@@ -2733,7 +2839,7 @@ allocate_buffers(struct ess_state *s)
 			happily scribble away.. */ 
 		ess->mixbuf = rawbuf + (512 * (i+1));
 
-		M_printk("maestro: setup apu %d: %p %p %p\n",i,ess->dma_dac.rawbuf,
+		M_printk("maestro: setup apu %d: dac: %p adc: %p mix: %p\n",i,ess->dma_dac.rawbuf,
 			ess->dma_adc.rawbuf, ess->mixbuf);
 
 	}
@@ -2819,6 +2925,20 @@ ess_open(struct inode *inode, struct file *file)
 		return -ENOMEM;
 	}
 
+	/* we're covered by the open_sem */
+	if( ! s->card->dsps_open )  {
+		maestro_power(s->card,ACPI_D0);
+		start_bob(s);
+	}
+	s->card->dsps_open++;
+	M_printk("maestro: open, %d bobs now\n",s->card->dsps_open);
+
+	/* ok, lets write WC base regs now that we've 
+		powered up the chip */
+	M_printk("maestro: writing 0x%lx (bus 0x%lx) to the wp\n",virt_to_bus(s->card->dmapages),
+		((virt_to_bus(s->card->dmapages))&0xFFE00000)>>12);
+	set_base_registers(s,s->card->dmapages);
+
 	if (file->f_mode & FMODE_READ) {
 /*
 		fmtm &= ~((ESS_FMT_STEREO | ESS_FMT_16BIT) << ESS_ADC_SHIFT);
@@ -2841,13 +2961,6 @@ ess_open(struct inode *inode, struct file *file)
 	}
 	set_fmt(s, fmtm, fmts);
 	s->open_mode |= file->f_mode & (FMODE_READ | FMODE_WRITE);
-
-	/* we're covered by the open_sem */
-	if( ! s->card->dsps_open )  {
-		start_bob(s);
-	}
-	s->card->dsps_open++;
-	M_printk("maestro: open, %d bobs now\n",s->card->dsps_open);
 
 	up(&s->open_sem);
 	MOD_INC_USE_COUNT;
@@ -2874,8 +2987,10 @@ ess_release(struct inode *inode, struct file *file)
 	/* we're covered by the open_sem */
 	M_printk("maestro: %d dsps now alive\n",s->card->dsps_open-1);
 	if( --s->card->dsps_open <= 0) {
+		s->card->dsps_open = 0;
 		stop_bob(s);
 		free_buffers(s);
+		maestro_power(s->card,ACPI_D2);
 	}
 	up(&s->open_sem);
 	wake_up(&s->open_wait);
@@ -2884,56 +2999,42 @@ ess_release(struct inode *inode, struct file *file)
 }
 
 static struct file_operations ess_audio_fops = {
-	llseek:		ess_llseek,
-	read:		ess_read,
-	write:		ess_write,
-	poll:		ess_poll,
-	ioctl:		ess_ioctl,
-	mmap:		ess_mmap,
-	open:		ess_open,
-	release:	ess_release,
+	llseek:         ess_llseek,
+	read:           ess_read,
+	write:          ess_write,
+	poll:           ess_poll,
+	ioctl:          ess_ioctl,
+	mmap:           ess_mmap,
+	open:           ess_open,
+	release:        ess_release,
 };
 
 static int
 maestro_config(struct ess_card *card) 
 {
-	struct pci_dev *pcidev = &card->pcidev;
+	struct pci_dev *pcidev = card->pcidev;
 	struct ess_state *ess = &card->channels[0];
 	int apu,iobase  = card->iobase;
 	u16 w;
 	u32 n;
 
-	/*
-	 *	Disable ACPI
+	/* We used to muck around with pci config space that
+	 * we had no business messing with.  We don't know enough
+	 * about the machine to know which DMA mode is appropriate, 
+	 * etc.  We were guessing wrong on some machines and making
+	 * them unhappy.  We now trust in the BIOS to do things right,
+	 * which almost certainly means a new host of problems will
+	 * arise with broken BIOS implementations.  screw 'em. 
+	 * We're already intolerant of machines that don't assign
+	 * IRQs.
 	 */
-	 
-	pci_write_config_dword(pcidev, 0x54, 0x00000000);
-	pci_write_config_dword(pcidev, 0x56, 0x00000000);
 	
-	/*
-	 *	Use TDMA for now. TDMA works on all boards, so while its
-	 *	not the most efficient its the simplest.
-	 */ 
+	/* do config work at full power */
+	maestro_power(card,ACPI_D0);
 	 
 	pci_read_config_word(pcidev, 0x50, &w);
 
-	/* Clear DMA bits */
-	w&=~(1<<10|1<<9|1<<8);
-
-	/* TDMA on */
-	w|= (1<<8);
-
-	/*
-	 *	Some of these are undocumented bits
-	 */
-	 
-	w&=~(1<<13)|(1<<14);		/* PIC Snoop mode bits */
-	w&=~(1<<11);			/* Safeguard off */
-	w|= (1<<7);			/* Posted write */
-	w|= (1<<6);			/* ISA timing on */
-	/* XXX huh?  claims to be reserved.. */
-	w&=~(1<<5);			/* Don't swap left/right */
-	w&=~(1<<1);			/* Subtractive decode off */
+	w&=~(1<<5);			/* Don't swap left/right (undoc)*/
 	
 	pci_write_config_word(pcidev, 0x50, w);
 	
@@ -2946,19 +3047,9 @@ maestro_config(struct ess_card *card)
 	w&=~(1<<6);		/* Debounce off */
 	w&=~(1<<5);		/* GPIO 4:5 */
 	w|= (1<<4);             /* Disconnect from the CHI.  Enabling this made a dell 7500 work. */
-	w&=~(1<<3);		/* IDMA off (undocumented) */
 	w&=~(1<<2);		/* MIDI fix off (undoc) */
 	w&=~(1<<1);		/* reserved, always write 0 */
-	w&=~(1<<0);		/* IRQ to ISA off (undoc) */
 	pci_write_config_word(pcidev, 0x52, w);
-
-	/*
-	 *	DDMA off
-	 */
-
-	pci_read_config_word(pcidev, 0x60, &w);
-	w&=~(1<<0);
-	pci_write_config_word(pcidev, 0x60, w);
 	
 	/*
 	 *	Legacy mode
@@ -2971,8 +3062,6 @@ maestro_config(struct ess_card *card)
 	 
 	pci_write_config_word(pcidev, 0x40, w);
 
-	/* stake our claim on the iospace */
-	request_region(iobase, 256, card_names[card->card_type]);
 	
 	sound_reset(iobase);
 
@@ -3140,6 +3229,39 @@ maestro_config(struct ess_card *card)
 	
 }
 
+/* this guy tries to find the pci power management
+ * register bank.  this should really be in core
+ * code somewhere.  1 on success. */
+int
+parse_power(struct ess_card *card, struct pci_dev *pcidev)
+{
+	u32 n;
+	u16 w;
+	u8 next;
+	int max = 64;  /* an a 8bit guy pointing to 32bit guys
+				can only express so much. */
+
+	card->power_regs = 0;
+
+	/* check to see if we have a capabilities list in
+		the config register */
+	pci_read_config_word(pcidev, PCI_STATUS, &w);
+	if(! w & PCI_STATUS_CAP_LIST) return 0;
+
+	/* walk the list, starting at the head. */
+	pci_read_config_byte(pcidev,PCI_CAPABILITY_LIST,&next);
+
+	while(next && max--) {
+		pci_read_config_dword(pcidev, next & ~3, &n);
+		if((n & 0xff) == PCI_CAP_ID_PM) {
+			card->power_regs = next;
+			break;
+		}
+		next = ((n>>8) & 0xff);
+	}
+
+	return card->power_regs ? 1 : 0;
+}
 
 static int 
 maestro_install(struct pci_dev *pcidev, int card_type)
@@ -3149,7 +3271,7 @@ maestro_install(struct pci_dev *pcidev, int card_type)
 	int i;
 	struct ess_card *card;
 	struct ess_state *ess;
-        struct pm_dev *pmdev;
+	struct pm_dev *pmdev;
 	int num = 0;
 
 	/* don't pick up weird modem maestros */
@@ -3158,15 +3280,15 @@ maestro_install(struct pci_dev *pcidev, int card_type)
 			
 	iobase = SILLY_PCI_BASE_ADDRESS(pcidev); 
 
-	if(check_region(iobase, 256))
+	/* stake our claim on the iospace */
+	if( request_region(iobase, 256, card_names[card_type]) == NULL )
 	{
 		printk(KERN_WARNING "maestro: can't allocate 256 bytes I/O at 0x%4.4x\n", iobase);
 		return 0;
 	}
 
 	/* this was tripping up some machines */
-	if(pcidev->irq == 0) 
-	{
+	if(pcidev->irq == 0) {
 		printk(KERN_WARNING "maestro: pci subsystem reports irq 0, this might not be correct.\n");
 	}
 
@@ -3181,13 +3303,16 @@ maestro_install(struct pci_dev *pcidev, int card_type)
 	}
 	
 	memset(card, 0, sizeof(*card));
-	memcpy(&card->pcidev,pcidev,sizeof(card->pcidev));
+	card->pcidev = pcidev;
 
-	pmdev = pm_register(PM_PCI_DEV,
-                            PM_PCI_ID(pcidev),
-                            maestro_pm_callback);
-        if (pmdev)
-                pmdev->data = card;
+	pmdev = pm_register(PM_PCI_DEV, PM_PCI_ID(pcidev),
+			maestro_pm_callback);
+	if (pmdev)
+		pmdev->data = card;
+
+	if (register_reboot_notifier(&maestro_nb)) {
+		printk(KERN_WARNING "maestro: reboot notifier registration failed; may not reboot properly.\n");
+	}
 
 	card->iobase = iobase;
 	card->card_type = card_type;
@@ -3195,6 +3320,7 @@ maestro_install(struct pci_dev *pcidev, int card_type)
 	card->next = devs;
 	card->magic = ESS_CARD_MAGIC;
 	spin_lock_init(&card->lock);
+	init_waitqueue_head(&card->suspend_queue);
 	devs = card;
 	
 	/* init our groups of 6 apus */
@@ -3246,13 +3372,37 @@ maestro_install(struct pci_dev *pcidev, int card_type)
 	pci_read_config_dword(pcidev, PCI_SUBSYSTEM_VENDOR_ID, &n);
 	printk(KERN_INFO "maestro:  subvendor id: 0x%08x\n",n); 
 
+	/* turn off power management unless:
+	 *	- the user explicitly asks for it
+	 * 		or
+	 *		- we're not a 2e, lesser chipps seem to have problems.
+	 *		- we're not on our _very_ small whitelist.  some implemenetations
+	 *			really dont' like the pm code, others require it.
+	 *			feel free to expand this as required.
+	 */
+#define SUBSYSTEM_VENDOR(x) (x&0xffff)
+	if(	(use_pm != 1) && 
+		((card_type != TYPE_MAESTRO2E)	|| (SUBSYSTEM_VENDOR(n) != 0x1028)))
+			use_pm = 0;
+
+	if(!use_pm) 
+		printk(KERN_INFO "maestro: not attempting power management.\n");
+	else {
+		if(!parse_power(card,pcidev)) 
+			printk(KERN_INFO "maestro: no PCI power managment interface found.\n");
+		else {
+			pci_read_config_dword(pcidev, card->power_regs, &n);
+			printk(KERN_INFO "maestro: PCI power managment capability: 0x%x\n",n>>16);
+		}	
+	}
+
 	maestro_config(card);
 
-	if(maestro_ac97_get(iobase, 0x00)==0x0080) {
+	if(maestro_ac97_get(card, 0x00)==0x0080) {
 		printk(KERN_ERR "maestro: my goodness!  you seem to have a pt101 codec, which is quite rare.\n"
 				"\tyou should tell someone about this.\n");
 	} else {
-		maestro_ac97_init(card,iobase);
+		maestro_ac97_init(card);
 	}
 
 	if ((card->dev_mixer = register_sound_mixer(&ess_mixer_fops, -1)) < 0) {
@@ -3273,9 +3423,12 @@ maestro_install(struct pci_dev *pcidev, int card_type)
 				unregister_sound_dsp(s->dev_audio);
 		}
 		release_region(card->iobase, 256);		
+		unregister_reboot_notifier(&maestro_nb);
 		kfree(card);
 		return 0;
 	}
+	/* now go to sleep 'till something interesting happens */
+	maestro_power(card,ACPI_D2);
 
 	printk(KERN_INFO "maestro: %d channels configured.\n", num);
 	return 1; 
@@ -3304,8 +3457,6 @@ int SILLY_MAKE_INIT(init_maestro(void))
 		dsps_order = MAX_DSP_ORDER;
 		printk(KERN_WARNING "maestro: clipping dsps_order to %d\n",dsps_order);
 	}
-
-	init_waitqueue_head(&suspend_queue);
 
 	/*
 	 *	Find the ESS Maestro 2.
@@ -3340,56 +3491,78 @@ int SILLY_MAKE_INIT(init_maestro(void))
 	return 0;
 }
 
-/* --------------------------------------------------------------------- */
-
-#ifdef MODULE
-MODULE_AUTHOR("Zach Brown <zab@redhat.com>, Alan Cox <alan@redhat.com>");
-MODULE_DESCRIPTION("ESS Maestro Driver");
-#ifdef M_DEBUG
-MODULE_PARM(debug,"i");
-#endif
-MODULE_PARM(dsps_order,"i");
-
-void cleanup_module(void)
+static void nuke_maestros(void)
 {
-	struct ess_card *s;
+	struct ess_card *card;
 
+	/* we do these unconditionally, which is probably wrong */
 	pm_unregister_all(maestro_pm_callback);
+	unregister_reboot_notifier(&maestro_nb);
 
-	while ((s = devs)) {
+	while ((card = devs)) {
 		int i;
 		devs = devs->next;
 	
 		/* XXX maybe should force stop bob, but should be all 
 			stopped by _release by now */
-		free_irq(s->irq, s);
-		unregister_sound_mixer(s->dev_mixer);
+		free_irq(card->irq, card);
+		unregister_sound_mixer(card->dev_mixer);
 		for(i=0;i<NR_DSPS;i++)
 		{
-			struct ess_state *ess = &s->channels[i];
+			struct ess_state *ess = &card->channels[i];
 			if(ess->dev_audio != -1)
 				unregister_sound_dsp(ess->dev_audio);
 		}
-		release_region(s->iobase, 256);
-		kfree(s);
+		/* Goodbye, Mr. Bond. */
+		maestro_power(card,ACPI_D3);
+		release_region(card->iobase, 256);
+		kfree(card);
 	}
-	M_printk("maestro: unloading\n");
+	devs = NULL;
 }
 
-#endif /* MODULE */
+static int maestro_notifier(struct notifier_block *nb, unsigned long event, void *buf)
+{
+	/* this notifier is called when the kernel is really shut down. */
+	M_printk("maestro: shutting down\n");
+	nuke_maestros();
+	return NOTIFY_OK;
+}
+
+/* --------------------------------------------------------------------- */
+
+#ifdef MODULE
+MODULE_AUTHOR("Zach Brown <zab@zabbo.net>, Alan Cox <alan@redhat.com>");
+MODULE_DESCRIPTION("ESS Maestro Driver");
+#ifdef M_DEBUG
+MODULE_PARM(debug,"i");
+#endif
+MODULE_PARM(dsps_order,"i");
+MODULE_PARM(use_pm,"i");
+
+void cleanup_module(void) {
+	M_printk("maestro: unloading\n");
+	nuke_maestros();
+}
+
+#else /* MODULE */
+__initcall(init_maestro);
+#endif
+
+/* --------------------------------------------------------------------- */
 
 void
-check_suspend(void)
+check_suspend(struct ess_card *card)
 {
 	DECLARE_WAITQUEUE(wait, current);
 
-	if(!in_suspend) return;
+	if(!card->in_suspend) return;
 
-	in_suspend++;
-	add_wait_queue(&suspend_queue, &wait);
+	card->in_suspend++;
+	add_wait_queue(&(card->suspend_queue), &wait);
 	current->state = TASK_UNINTERRUPTIBLE;
 	schedule();
-	remove_wait_queue(&suspend_queue, &wait);
+	remove_wait_queue(&(card->suspend_queue), &wait);
 	current->state = TASK_RUNNING;
 }
 
@@ -3397,113 +3570,138 @@ static int
 maestro_suspend(struct ess_card *card)
 {
 	unsigned long flags;
-        int i,j;
+	int i,j;
 
-	save_flags(flags);
-	cli();
+	save_flags(flags); 
+	cli(); /* over-kill */
 
-        M_printk("maestro: pm in dev %p\n",card);
+	M_printk("maestro: apm in dev %p\n",card);
 
-        for(i=0;i<NR_DSPS;i++) {
-                struct ess_state *s = &card->channels[i];
+	/* we have to read from the apu regs, need
+		to power it up */
+	maestro_power(card,ACPI_D0);
 
-                if(s->dev_audio == -1)
-                        continue;
-                
-                M_printk("maestro: stopping apus for device %d\n",i);
-                stop_dac(s);
-                stop_adc(s);
-                for(j=0;j<6;j++) 
-                        card->apu_map[s->apu[j]][5]=apu_get_register(s,j,5);
-                
-        }
+	for(i=0;i<NR_DSPS;i++) {
+		struct ess_state *s = &card->channels[i];
 
-        /* get rid of interrupts? */
-        if( card->dsps_open > 0)
-                stop_bob(&card->channels[0]);
+		if(s->dev_audio == -1)
+			continue;
 
-        in_suspend=1;
+		M_printk("maestro: stopping apus for device %d\n",i);
+		stop_dac(s);
+		stop_adc(s);
+		for(j=0;j<6;j++) 
+			card->apu_map[s->apu[j]][5]=apu_get_register(s,j,5);
+
+	}
+
+	/* get rid of interrupts? */
+	if( card->dsps_open > 0)
+		stop_bob(&card->channels[0]);
+
+	card->in_suspend++;
 
 	restore_flags(flags);
 
-	/* we'll let the bios do the rest of the power down.. */
-
+	/* we trust in the bios to power down the chip on suspend.
+	 * XXX I'm also not sure that in_suspend will protect
+	 * against all reg accesses from here on out. 
+	 */
 	return 0;
 }
 static int 
 maestro_resume(struct ess_card *card)
 {
 	unsigned long flags;
-        int i;
+	int i;
 
 	save_flags(flags);
-	cli();
-	in_suspend=0;
-	M_printk("maestro: resuming\n");
+	cli(); /* over-kill */
 
-	/* first lets just bring everything back. .*/
+	card->in_suspend = 0;
 
-        M_printk("maestro: pm in dev %p\n",card);
+	M_printk("maestro: resuming card at %p\n",card);
 
-        maestro_config(card);
-        /* need to restore the base pointers.. */ 
-        if(card->dmapages) 
-                set_base_registers(&card->channels[0],card->dmapages);
-        
-        mixer_push_state(card);
-        
-        for(i=0;i<NR_DSPS;i++) {
-                struct ess_state *s = &card->channels[i];
-                int chan,reg;
-                
-                if(s->dev_audio == -1)
-                        continue;
-                
-                for(chan = 0 ; chan < 6 ; chan++) {
-                        wave_set_register(s,s->apu[chan]<<3,s->apu_base[chan]);
-                        for(reg = 1 ; reg < NR_APU_REGS ; reg++)  
-                                apu_set_register(s,chan,reg,s->card->apu_map[s->apu[chan]][reg]);
-                }
-                for(chan = 0 ; chan < 6 ; chan++)  
-                        apu_set_register(s,chan,0,s->card->apu_map[s->apu[chan]][0] & 0xFF0F);
-        }
+	/* restore all our config */
+	maestro_config(card);
+	/* need to restore the base pointers.. */ 
+	if(card->dmapages) 
+		set_base_registers(&card->channels[0],card->dmapages);
+
+	mixer_push_state(card);
+
+	/* set each channels' apu control registers before
+	 * restoring audio 
+	 */
+	for(i=0;i<NR_DSPS;i++) {
+		struct ess_state *s = &card->channels[i];
+		int chan,reg;
+
+		if(s->dev_audio == -1)
+			continue;
+
+		for(chan = 0 ; chan < 6 ; chan++) {
+			wave_set_register(s,s->apu[chan]<<3,s->apu_base[chan]);
+			for(reg = 1 ; reg < NR_APU_REGS ; reg++)  
+				apu_set_register(s,chan,reg,s->card->apu_map[s->apu[chan]][reg]);
+		}
+		for(chan = 0 ; chan < 6 ; chan++)  
+			apu_set_register(s,chan,0,s->card->apu_map[s->apu[chan]][0] & 0xFF0F);
+	}
 
 	/* now we flip on the music */
-        M_printk("maestro: pm in dev %p\n",card);
 
-        for(i=0;i<NR_DSPS;i++) {
-                struct ess_state *s = &card->channels[i];
-                
-                /* these use the apu_mode, and can handle
-                   spurious calls */
-                start_dac(s);	
-                start_adc(s);	
-        }
-        if( card->dsps_open > 0)
-                start_bob(&card->channels[0]);
+	if( card->dsps_open <= 0) {
+		/* this card's idle */
+		maestro_power(card,ACPI_D2);
+	} else {
+		/* ok, we're actually playing things on
+			this card */
+		maestro_power(card,ACPI_D0);
+		start_bob(&card->channels[0]);
+		for(i=0;i<NR_DSPS;i++) {
+			struct ess_state *s = &card->channels[i];
+
+			/* these use the apu_mode, and can handle
+				spurious calls */
+			start_dac(s);	
+			start_adc(s);	
+		}
+	}
 
 	restore_flags(flags);
 
-	wake_up(&suspend_queue);
+	/* all right, we think things are ready, 
+		wake up people who were using the device
+		when we suspended */
+	wake_up(&(card->suspend_queue));
 
 	return 0;
 }
 
 int 
-maestro_pm_callback(struct pm_dev *dev, pm_request_t rqst, void *data) {
-        struct ess_card *card = (struct ess_card*) dev->data;
-        if (card) {
-                M_printk("maestro: pm event received: 0x%x\n", rqst);
+maestro_pm_callback(struct pm_dev *dev, pm_request_t rqst, void *data) 
+{
+	struct ess_card *card = (struct ess_card*) dev->data;
 
-                switch (rqst) {
-                case PM_SUSPEND: 
-                        maestro_suspend(card);
-                        break;
-                case PM_RESUME: 
-                        maestro_resume(card);
-                        break;
-                }
+	if ( ! card ) goto out;
+
+	M_printk("maestro: pm event 0x%x received for card %p\n", rqst, card);
+	
+	switch (rqst) {
+		case PM_SUSPEND: 
+			maestro_suspend(card);
+		break;
+		case PM_RESUME: 
+			maestro_resume(card);
+		break;
+		/*
+		 * we'd also like to find out about
+		 * power level changes because some biosen
+		 * do mean things to the maestro when they
+		 * change their power state.
+		 */
         }
-
+out:
 	return 0;
 }

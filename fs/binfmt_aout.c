@@ -286,8 +286,11 @@ static int load_aout_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 	/* OK, This is the point of no return */
 	current->personality = PER_LINUX;
 
-#if defined(__sparc__) && !defined(__sparc_v9__)
+#if defined(__sparc__)
+	current->personality = PER_SUNOS;
+#if !defined(__sparc_v9__)
 	memcpy(&current->thread.core_exec, &ex, sizeof(struct exec));
+#endif
 #endif
 
 	current->mm->end_code = ex.a_text +

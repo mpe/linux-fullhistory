@@ -210,13 +210,13 @@ if [ "$CONFIG_VIDEO_DEV" != "n" ]; then
 	 dep_tristate '  QuickCam Colour Video For Linux (EXPERIMENTAL)' CONFIG_VIDEO_CQCAM $CONFIG_VIDEO_DEV $CONFIG_PARPORT
       fi
    fi
-   dep_tristate 'CPiA Video For Linux' CONFIG_VIDEO_CPIA $CONFIG_VIDEO_DEV
+   dep_tristate '  CPiA Video For Linux' CONFIG_VIDEO_CPIA $CONFIG_VIDEO_DEV
    if [ "$CONFIG_VIDEO_CPIA" != "n" ]; then
      if [ "CONFIG_PARPORT_1284" != "n" ]; then
-       dep_tristate 'CPiA Parallel Port Lowlevel Support' CONFIG_VIDEO_CPIA_PP $CONFIG_VIDEO_CPIA $CONFIG_PARPORT
+       dep_tristate '    CPiA Parallel Port Lowlevel Support' CONFIG_VIDEO_CPIA_PP $CONFIG_VIDEO_CPIA $CONFIG_PARPORT
      fi
      if [ "$CONFIG_USB" != "n" ]; then
-       dep_tristate 'CPiA USB Lowlevel Support' CONFIG_VIDEO_CPIA_USB $CONFIG_VIDEO_CPIA $CONFIG_USB
+       dep_tristate '    CPiA USB Lowlevel Support' CONFIG_VIDEO_CPIA_USB $CONFIG_VIDEO_CPIA $CONFIG_USB
      fi
    fi
    dep_tristate '  SAA5249 Teletext processor' CONFIG_VIDEO_SAA5249 $CONFIG_VIDEO_DEV $CONFIG_I2C

@@ -111,108 +111,26 @@ struct tlb_state cpu_tlbstate[NR_CPUS] = {[0 ... NR_CPUS-1] = { &init_mm, 0 }};
  * We use 'broadcast', CPU->CPU IPIs and self-IPIs too.
  */
 
-static unsigned int cached_APIC_ICR;
-static unsigned int cached_APIC_ICR2;
-
-/*
- * Caches reserved bits, APIC reads are (mildly) expensive
- * and force otherwise unnecessary CPU synchronization.
- *
- * (We could cache other APIC registers too, but these are the
- * main ones used in RL.)
- */
-#define slow_ICR (apic_read(APIC_ICR) & ~0xFDFFF)
-#define slow_ICR2 (apic_read(APIC_ICR2) & 0x00FFFFFF)
-
-void cache_APIC_registers (void)
-{
-	cached_APIC_ICR = slow_ICR;
-	cached_APIC_ICR2 = slow_ICR2;
-	mb();
-}
-
-static inline unsigned int __get_ICR (void)
-{
-#if FORCE_READ_AROUND_WRITE
-	/*
-	 * Wait for the APIC to become ready - this should never occur. It's
-	 * a debugging check really.
-	 */
-	int count = 0;
-	unsigned int cfg;
-
-	while (count < 1000)
-	{
-		cfg = slow_ICR;
-		if (!(cfg&(1<<12)))
-			return cfg;
-		printk("CPU #%d: ICR still busy [%08x]\n",
-					smp_processor_id(), cfg);
-		irq_err_count++;
-		count++;
-		udelay(10);
-	}
-	printk("CPU #%d: previous IPI still not cleared after 10mS\n",
-			smp_processor_id());
-	return cfg;
-#else
-	return cached_APIC_ICR;
-#endif
-}
-
-static inline unsigned int __get_ICR2 (void)
-{
-#if FORCE_READ_AROUND_WRITE
-	return slow_ICR2;
-#else
-	return cached_APIC_ICR2;
-#endif
-}
-
-#define LOGICAL_DELIVERY 1
-
 static inline int __prepare_ICR (unsigned int shortcut, int vector)
 {
-	unsigned int cfg;
-
-	cfg = __get_ICR();
-	cfg |= APIC_DEST_DM_FIXED|shortcut|vector
-#if LOGICAL_DELIVERY
-		|APIC_DEST_LOGICAL
-#endif
-		;
-
-	return cfg;
+	return APIC_DM_FIXED | shortcut | vector | APIC_DEST_LOGICAL;
 }
 
 static inline int __prepare_ICR2 (unsigned int mask)
 {
-	unsigned int cfg;
-
-	cfg = __get_ICR2();
-#if LOGICAL_DELIVERY
-	cfg |= SET_APIC_DEST_FIELD(mask);
-#else
-	cfg |= SET_APIC_DEST_FIELD(mask);
-#endif
-
-	return cfg;
+	return SET_APIC_DEST_FIELD(mask);
 }
 
 static inline void __send_IPI_shortcut(unsigned int shortcut, int vector)
 {
+	/*
+	 * Subtle. In the case of the 'never do double writes' workaround
+	 * we have to lock out interrupts to be safe.  As we don't care
+	 * of the value read we use an atomic rmw access to avoid costly
+	 * cli/sti.  Otherwise we use an even cheaper single atomic write
+	 * to the APIC.
+	 */
 	unsigned int cfg;
-/*
- * Subtle. In the case of the 'never do double writes' workaround we
- * have to lock out interrupts to be safe. Otherwise it's just one
- * single atomic write to the APIC, no need for cli/sti.
- */
-#if FORCE_READ_AROUND_WRITE
-	unsigned long flags;
-
-	__save_flags(flags);
-	__cli();
-#endif
 
 	/*
 	 * No need to touch the target chip field
@@ -222,10 +140,7 @@ static inline void __send_IPI_shortcut(unsigned int shortcut, int vector)
 	/*
 	 * Send the IPI. The write to APIC_ICR fires this off.
 	 */
-	apic_write(APIC_ICR, cfg);
-#if FORCE_READ_AROUND_WRITE
-	__restore_flags(flags);
-#endif
+	apic_write_around(APIC_ICR, cfg);
 }
 
 static inline void send_IPI_allbutself(int vector)
@@ -252,19 +167,16 @@ void send_IPI_self(int vector)
 static inline void send_IPI_mask(int mask, int vector)
 {
 	unsigned long cfg;
-#if FORCE_READ_AROUND_WRITE
 	unsigned long flags;
 
 	__save_flags(flags);
 	__cli();
-#endif
 
 	/*
 	 * prepare target chip field
 	 */
-
 	cfg = __prepare_ICR2(mask);
-	apic_write(APIC_ICR2, cfg);
+	apic_write_around(APIC_ICR2, cfg);
 
 	/*
 	 * program the ICR 
@@ -274,10 +186,8 @@ static inline void send_IPI_mask(int mask, int vector)
 	/*
 	 * Send the IPI. The write to APIC_ICR fires this off.
 	 */
-	apic_write(APIC_ICR, cfg);
-#if FORCE_READ_AROUND_WRITE
+	apic_write_around(APIC_ICR, cfg);
 	__restore_flags(flags);
-#endif
 }
 
 /*

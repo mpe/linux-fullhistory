@@ -763,7 +763,12 @@ static void add_timer_randomness(struct timer_rand_state *state, unsigned num)
 
 void add_keyboard_randomness(unsigned char scancode)
 {
-	add_timer_randomness(&keyboard_timer_state, scancode);
+	static unsigned char last_scancode = 0;
+	/* ignore autorepeat (multiple key down w/o key up) */
+	if (scancode != last_scancode) {
+		last_scancode = scancode;
+		add_timer_randomness(&keyboard_timer_state, scancode);
+	}
 }
 
 void add_mouse_randomness(__u32 mouse_data)

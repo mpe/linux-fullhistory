@@ -605,7 +605,7 @@ soundcard_init(void)
 
 static void destroy_special_devices(void)
 {
-	unregister_sound_special(6);
+	unregister_sound_special(1);
 	unregister_sound_special(8);
 }
 

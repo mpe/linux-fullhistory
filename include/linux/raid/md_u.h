@@ -17,12 +17,6 @@
 
 /* ioctls */
 
-/* compat */
-#define REGISTER_DEV 		_IO (MD_MAJOR, 1)
-#define START_MD     		_IO (MD_MAJOR, 2)
-#define STOP_MD      		_IO (MD_MAJOR, 3)
-
-
 /* status */
 #define RAID_VERSION		_IOR (MD_MAJOR, 0x10, mdu_version_t)
 #define GET_ARRAY_INFO		_IOR (MD_MAJOR, 0x11, mdu_array_info_t)

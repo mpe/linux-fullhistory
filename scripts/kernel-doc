@@ -1,9 +1,10 @@
 #!/usr/bin/perl
 
 ## Copyright (c) 1998 Michael Zucchi, All Rights Reserved        ##
+## Copyright (C) 2000  Tim Waugh <twaugh@redhat.com>             ##
 ##                                                               ##
-## This software falls under the GNU Public License. Please read ##
-##              the COPYING file for more information            ##
+## This software falls under the GNU General Public License.     ##
+## Please read the COPYING file for more information             ##
 
 #
 # This will read a 'c' file and scan for embedded comments in the
@@ -76,15 +77,15 @@
 #
 # 'funcname()' - function
 # '$ENVVAR' - environmental variable
-# '&struct_name' - name of a structure
+# '&struct_name' - name of a structure (up to two words including 'struct')
 # '@parameter' - name of a parameter
 # '%CONST' - name of a constant.
 
 # match expressions used to find embedded type information
-$type_constant = "\\\%(\\w+)";
-$type_func = "(\\w+\\(\\))";
+$type_constant = "\\\%([-_\\w]+)";
+$type_func = "(\\w+)\\(\\)";
 $type_param = "\\\@(\\w+)";
-$type_struct = "\\\&(\\w+)";
+$type_struct = "\\\&((struct\\s*)?\\w+)";
 $type_env = "(\\\$\\w+)";
 
 
@@ -99,7 +100,8 @@ $type_env = "(\\\$\\w+)";
 $blankline_html = "<p>";
 
 # sgml, docbook format
-%highlights_sgml = ( $type_constant, "<replaceable class=\"option\">\$1</replaceable>",
+%highlights_sgml = ( "([^=])\\\"([^\\\"<]+)\\\"", "\$1<quote>\$2</quote>",
+		     $type_constant, "<constant>\$1</constant>",
 		     $type_func, "<function>\$1</function>",
 		     $type_struct, "<structname>\$1</structname>",
 		     $type_env, "<envar>\$1</envar>",
@@ -115,10 +117,10 @@ $blankline_sgml = "</para><para>\n";
 $blankline_gnome = "</para><para>\n";
 
 # these are pretty rough
-%highlights_man = ( $type_constant, "\\n.I \\\"\$1\\\"\\n",
-		    $type_func, "\\n.B \\\"\$1\\\"\\n",
-		    $type_struct, "\\n.I \\\"\$1\\\"\\n",
-		    $type_param."([\.\, ]*)\n?", "\\n.I \\\"\$1\$2\\\"\\n" );
+%highlights_man = ( $type_constant, "\$1",
+		    $type_func, "\\\\fB\$1\\\\fP",
+		    $type_struct, "\\\\fI\$1\\\\fP",
+		    $type_param, "\\\\fI\$1\\\\fP" );
 $blankline_man = "";
 
 # text-mode
@@ -258,10 +260,16 @@ sub output_html {
     print "(";
     $count = 0;
     foreach $parameter (@{$args{'parameterlist'}}) {
-	print "<i>".$args{'parametertypes'}{$parameter}."</i> <b>".$parameter."</b>\n";
+	$type = $args{'parametertypes'}{$parameter};
+	if ($type =~ m/([^\(]*\(\*)\s*\)\s*\(([^\)]*)\)/) {
+	    # pointer-to-function
+	    print "<i>$1</i><b>$parameter</b>) <i>($2)</i>";
+	} else {
+	    print "<i>".$type."</i> <b>".$parameter."</b>";
+	}
 	if ($count != $#{$args{'parameterlist'}}) {
 	    $count++;
-	    print ", ";
+	    print ",\n";
 	}
     }
     print ")\n";
@@ -269,16 +277,16 @@ sub output_html {
     print "<h3>Arguments</h3>\n";
     print "<dl>\n";
     foreach $parameter (@{$args{'parameterlist'}}) {
-	print "<dt><i>".$args{'parametertypes'}{$parameter}."</i> <b>".$parameter."</b>\n";
+	print "<dt><b>".$parameter."</b>\n";
 	print "<dd>";
 	output_highlight($args{'parameters'}{$parameter});
     }
     print "</dl>\n";
     foreach $section (@{$args{'sectionlist'}}) {
 	print "<h3>$section</h3>\n";
-	print "<ul>\n";
+	print "<blockquote>\n";
 	output_highlight($args{'sections'}{$section});
-	print "</ul>\n";
+	print "</blockquote>\n";
     }
     print "<hr>\n";
 }
@@ -339,8 +347,15 @@ sub output_sgml {
     $count = 0;
     if ($#{$args{'parameterlist'}} >= 0) {
 	foreach $parameter (@{$args{'parameterlist'}}) {
-	    print "   <paramdef>".$args{'parametertypes'}{$parameter};
-	    print " <parameter>$parameter</parameter></paramdef>\n";
+	    $type = $args{'parametertypes'}{$parameter};
+	    if ($type =~ m/([^\(]*\(\*)\s*\)\s*\(([^\)]*)\)/) {
+		# pointer-to-function
+		print "   <paramdef>$1<parameter>$parameter</parameter>)\n";
+		print "     <funcparams>$2</funcparams></paramdef>\n";
+	    } else {
+		print "   <paramdef>".$type;
+		print " <parameter>$parameter</parameter></paramdef>\n";
+	    }
 	}
     } else {
 	print "  <void>\n";
@@ -438,8 +453,15 @@ sub output_gnome {
     $count = 0;
     if ($#{$args{'parameterlist'}} >= 0) {
 	foreach $parameter (@{$args{'parameterlist'}}) {
-	    print "   <paramdef>".$args{'parametertypes'}{$parameter};
-	    print " <parameter>$parameter</parameter></paramdef>\n";
+	    $type = $args{'parametertypes'}{$parameter};
+	    if ($type =~ m/([^\(]*\(\*)\s*\)\s*\(([^\)]*)\)/) {
+		# pointer-to-function
+		print "   <paramdef>$1 <parameter>$parameter</parameter>)\n";
+		print "     <funcparams>$2</funcparams></paramdef>\n";
+	    } else {
+		print "   <paramdef>".$type;
+		print " <parameter>$parameter</parameter></paramdef>\n";
+	    }
 	}
     } else {
 	print "  <void>\n";
@@ -515,26 +537,35 @@ sub output_man {
     my ($parameter, $section);
     my $count;
 
-    print ".TH \"$args{'module'}\" \"$args{'function'}\" \"25 May 1998\" \"API Manual\" LINUX\n";
+    print ".TH \"$args{'module'}\" 4 \"$args{'function'}\" \"25 May 1998\" \"API Manual\" LINUX\n";
 
-    print ".SH Function\n";
+    print ".SH NAME\n";
+    print $args{'function'}." \\- ".$args{'purpose'}."\n";
 
-    print ".I \"".$args{'functiontype'}."\"\n";
-    print ".B \"".$args{'function'}."\"\n";
-    print "(\n";
+    print ".SH SYNOPSIS\n";
+    print ".B \"".$args{'functiontype'}."\" ".$args{'function'}."\n";
     $count = 0;
+    $parenth = "(";
+    $post = ",";
     foreach $parameter (@{$args{'parameterlist'}}) {
-	print ".I \"".$args{'parametertypes'}{$parameter}."\"\n.B \"".$parameter."\"\n";
-	if ($count != $#{$args{'parameterlist'}}) {
-	    $count++;
-	    print ",\n";
+	if ($count == $#{$args{'parameterlist'}}) {
+	    $post = ");";
 	}
+	$type = $args{'parametertypes'}{$parameter};
+	if ($type =~ m/([^\(]*\(\*)\s*\)\s*\(([^\)]*)\)/) {
+	    # pointer-to-function
+	    print ".BI \"".$parenth.$1."\" ".$parameter." \") (".$2.")".$post."\"\n";
+	} else {
+	    $type =~ s/([^\*])$/\1 /;
+	    print ".BI \"".$parenth.$type."\" ".$parameter." \"".$post."\"\n";
+	}
+	$count++;
+	$parenth = "";
     }
-    print ")\n";
 
     print ".SH Arguments\n";
     foreach $parameter (@{$args{'parameterlist'}}) {
-	print ".IP \"".$args{'parametertypes'}{$parameter}." ".$parameter."\" 12\n";
+	print ".IP \"".$parameter."\" 12\n";
 	output_highlight($args{'parameters'}{$parameter});
     }
     foreach $section (@{$args{'sectionlist'}}) {
@@ -548,7 +579,7 @@ sub output_intro_man {
     my ($parameter, $section);
     my $count;
 
-    print ".TH \"$args{'module'}\" \"$args{'module'}\" \"25 May 1998\" \"API Manual\" LINUX\n";
+    print ".TH \"$args{'module'}\" 4 \"$args{'module'}\" \"25 May 1998\" \"API Manual\" LINUX\n";
 
     foreach $section (@{$args{'sectionlist'}}) {
 	print ".SH \"$section\"\n";
@@ -562,17 +593,35 @@ sub output_text {
     my %args = %{$_[0]};
     my ($parameter, $section);
 
-    print "Function = ".$args{'function'}."\n";
-    print "  return type: ".$args{'functiontype'}."\n\n";
+    print "Function:\n\n";
+    $start=$args{'functiontype'}." ".$args{'function'}." (";
+    print $start;
+    $count = 0;
     foreach $parameter (@{$args{'parameterlist'}}) {
-	print " ".$args{'parametertypes'}{$parameter}." ".$parameter."\n";
-	print "    -> ".$args{'parameters'}{$parameter}."\n";
+	if ($type =~ m/([^\(]*\(\*)\s*\)\s*\(([^\)]*)\)/) {
+	    # pointer-to-function
+	    print $1.$parameter.") (".$2;
+	} else {
+	    print $type." ".$parameter;
+	}
+	if ($count != $#{$args{'parameterlist'}}) {
+	    $count++;
+	    print ",\n";
+	    print " " x length($start);
+	} else {
+	    print ");\n\n";
+	}
+    }
+
+    print "Arguments:\n\n";
+    foreach $parameter (@{$args{'parameterlist'}}) {
+	print $parameter."\n\t".$args{'parameters'}{$parameter}."\n";
     }
     foreach $section (@{$args{'sectionlist'}}) {
-	print " $section:\n";
-	print "    -> ";
+	print "$section:\n\n";
 	output_highlight($args{'sections'}{$section});
     }
+    print "\n\n";
 }
 
 sub output_intro_text {
@@ -614,32 +663,46 @@ sub dump_function {
     $prototype =~ s/^inline+ //;
     $prototype =~ s/^__inline__+ //;
 
-    if ($prototype =~ m/^()([a-zA-Z0-9_~:]+)\s*\(([^\)]*)\)/ ||
-	$prototype =~ m/^(\w+)\s+([a-zA-Z0-9_~:]+)\s*\(([^\)]*)\)/ ||
-	$prototype =~ m/^(\w+\s*\*)\s*([a-zA-Z0-9_~:]+)\s*\(([^\)]*)\)/ ||
-	$prototype =~ m/^(\w+\s+\w+)\s+([a-zA-Z0-9_~:]+)\s*\(([^\)]*)\)/ ||
-	$prototype =~ m/^(\w+\s+\w+\s*\*)\s*([a-zA-Z0-9_~:]+)\s*\(([^\)]*)\)/)  {
+    if ($prototype =~ m/^()([a-zA-Z0-9_~:]+)\s*\(([^\{]*)\)/ ||
+	$prototype =~ m/^(\w+)\s+([a-zA-Z0-9_~:]+)\s*\(([^\{]*)\)/ ||
+	$prototype =~ m/^(\w+\s*\*)\s*([a-zA-Z0-9_~:]+)\s*\(([^\{]*)\)/ ||
+	$prototype =~ m/^(\w+\s+\w+)\s+([a-zA-Z0-9_~:]+)\s*\(([^\{]*)\)/ ||
+	$prototype =~ m/^(\w+\s+\w+\s*\*)\s*([a-zA-Z0-9_~:]+)\s*\(([^\{]*)\)/)  {
 	$return_type = $1;
 	$function_name = $2;
 	$args = $3;
 
+	# allow for up to fours args to function pointers
+	$args =~ s/(\([^\),]+),/\1#/;
+	$args =~ s/(\([^\),]+),/\1#/;
+	$args =~ s/(\([^\),]+),/\1#/;
 #	print STDERR "ARGS = '$args'\n";
 
 	foreach $arg (split ',', $args) {
 	    # strip leading/trailing spaces
 	    $arg =~ s/^\s*//;
 	    $arg =~ s/\s*$//;
-#	    print STDERR "SCAN ARG: '$arg'\n";
-	    @args = split('\s', $arg);
 
-#	    print STDERR " -> @args\n";
-	    $param = pop @args;
-#	    print STDERR " -> @args\n";
-	    if ($param =~ m/^(\*+)(.*)/) {
-		$param = $2;
-		push @args, $1;
+	    if ($arg =~ m/\(/) {
+		# pointer-to-function
+		$arg =~ tr/#/,/;
+		$arg =~ m/[^\(]+\(\*([^\)]+)\)/;
+		$param = $1;
+		$type = $arg;
+		$type =~ s/([^\(]+\(\*)$param/\1/;
+	    } else {
+#		print STDERR "SCAN ARG: '$arg'\n";
+		@args = split('\s', $arg);
+
+#		print STDERR " -> @args\n";
+		$param = pop @args;
+#		print STDERR " -> @args\n";
+		if ($param =~ m/^(\*+)(.*)/) {
+		    $param = $2;
+		    push @args, $1;
+		}
+		$type = join " ", @args;
 	    }
-	    $type = join " ", @args;
 
 	    if ($type eq "" && $param eq "...")
 	    {

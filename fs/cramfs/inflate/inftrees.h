@@ -32,14 +32,14 @@ struct inflate_huft_s {
    value below is more than safe. */
 #define MANY 1440
 
-extern int inflate_trees_bits OF((
+extern int cramfs_inflate_trees_bits OF((
     uIntf *,                    /* 19 code lengths */
     uIntf *,                    /* bits tree desired/actual depth */
     inflate_huft * FAR *,       /* bits tree result */
     inflate_huft *,             /* space for trees */
     z_streamp));                /* for messages */
 
-extern int inflate_trees_dynamic OF((
+extern int cramfs_inflate_trees_dynamic OF((
     uInt,                       /* number of literal/length codes */
     uInt,                       /* number of distance codes */
     uIntf *,                    /* that many (total) code lengths */
@@ -50,7 +50,7 @@ extern int inflate_trees_dynamic OF((
     inflate_huft *,             /* space for trees */
     z_streamp));                /* for messages */
 
-extern int inflate_trees_fixed OF((
+extern int cramfs_inflate_trees_fixed OF((
     uIntf *,                    /* literal desired/actual bit depth */
     uIntf *,                    /* distance desired/actual bit depth */
     inflate_huft * FAR *,       /* literal/length tree result */

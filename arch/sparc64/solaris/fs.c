@@ -1,4 +1,4 @@
-/* $Id: fs.c,v 1.17 2000/03/10 04:43:30 davem Exp $
+/* $Id: fs.c,v 1.18 2000/04/08 02:11:54 davem Exp $
  * fs.c: fs related syscall emulation for Solaris
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -506,7 +506,7 @@ asmlinkage int solaris_fstatvfs(unsigned int fd, u32 buf)
 		unlock_kernel();
 		fput(file);
 	}
-out:
+
 	return error;
 }
 

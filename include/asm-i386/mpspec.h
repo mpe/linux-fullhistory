@@ -13,6 +13,11 @@
  
 #define SMP_MAGIC_IDENT	(('_'<<24)|('P'<<16)|('M'<<8)|'_')
 
+/*
+ * a maximum of 16 APICs with the current APIC ID architecture.
+ */
+#define MAX_APICS 16
+
 struct intel_mp_floating
 {
 	char mpf_signature[4];		/* "_MP_" 			*/
@@ -144,7 +149,8 @@ struct mpc_config_lintsrc
 enum mp_bustype {
 	MP_BUS_ISA,
 	MP_BUS_EISA,
-	MP_BUS_PCI
+	MP_BUS_PCI,
+	MP_BUS_MCA
 };
 extern int mp_bus_id_to_type [MAX_MP_BUSSES];
 extern int mp_bus_id_to_pci_bus [MAX_MP_BUSSES];
@@ -155,7 +161,7 @@ extern int smp_found_config;
 extern void find_smp_config (void);
 extern void get_smp_config (void);
 extern int nr_ioapics;
-extern int apic_version [NR_CPUS];
+extern int apic_version [MAX_APICS];
 extern int mp_bus_id_to_type [MAX_MP_BUSSES];
 extern int mp_irq_entries;
 extern struct mpc_config_intsrc mp_irqs [MAX_IRQ_SOURCES];

@@ -46,8 +46,10 @@ summary from [1.]>" for easy identification by the developers
 [7.1.] Software (add the output of the ver_linux script here)
 [7.2.] Processor information (from /proc/cpuinfo):
 [7.3.] Module information (from /proc/modules):
-[7.4.] SCSI information (from /proc/scsi/scsi)
-[7.5.] Other information that might be relevant to the problem
+[7.4.] Loaded driver and hardware information (/proc/ioports, /proc/iomem)
+[7.5.] PCI information ('lspci -vvv' as root)
+[7.6.] SCSI information (from /proc/scsi/scsi)
+[7.7.] Other information that might be relevant to the problem
        (please look in /proc and include all information that you
        think to be relevant):
 [X.] Other notes, patches, fixes, workarounds:

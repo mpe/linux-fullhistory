@@ -92,7 +92,7 @@ struct cpu_iu_info linux_sparc_chips[] = {
   /* Someone please write the code to support this beast! ;) */
   { 2, 0, "Bipolar Integrated Technology - B5010"},
   { 3, 0, "LSI Logic Corporation - unknown-type"},
-  { 4, 0, "Texas Instruments, Inc. - SuperSparc 50"},
+  { 4, 0, "Texas Instruments, Inc. - SuperSparc-(II)"},
   /* SparcClassic  --  borned STP1010TAB-50*/
   { 4, 1, "Texas Instruments, Inc. - MicroSparc"},
   { 4, 2, "Texas Instruments, Inc. - MicroSparc II"},

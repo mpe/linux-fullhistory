@@ -4076,7 +4076,7 @@ static int __init floppy_setup(char *str)
 	} else
 		DPRINT("botched floppy option\n");
 	DPRINT("Read linux/drivers/block/README.fd\n");
-	return 1;
+	return 0;
 }
 
 static int have_no_fdc= -EIO;

@@ -20,7 +20,7 @@
  */
 
 /* version number of this driver */
-#define RIVAFB_VERSION "0.7.0"
+#define RIVAFB_VERSION "0.7.1"
 
 #include <linux/config.h>
 #include <linux/module.h>
@@ -99,6 +99,7 @@ enum riva_chips {
 	CH_RIVA_TNT2,
 	CH_RIVA_UTNT2,	/* UTNT2 */
 	CH_RIVA_VTNT2,	/* VTNT2 */
+	CH_RIVA_UVTNT2,	/* VTNT2 */
 	CH_RIVA_ITNT2,	/* ITNT2 */
 };
 
@@ -113,6 +114,7 @@ static struct riva_chip_info {
 	{ "RIVA-TNT2", 5 },
 	{ "RIVA-UTNT2", 5 },
 	{ "RIVA-VTNT2", 5 },
+	{ "RIVA-UVTNT2", 5 },
 	{ "RIVA-ITNT2", 5 },
 };
 
@@ -123,6 +125,7 @@ static struct pci_device_id rivafb_pci_tbl[] __devinitdata = {
 	{ PCI_VENDOR_ID_NVIDIA, PCI_DEVICE_ID_NVIDIA_TNT2, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_RIVA_TNT2 },
 	{ PCI_VENDOR_ID_NVIDIA, PCI_DEVICE_ID_NVIDIA_UTNT2, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_RIVA_UTNT2 },
 	{ PCI_VENDOR_ID_NVIDIA, PCI_DEVICE_ID_NVIDIA_VTNT2, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_RIVA_VTNT2 },
+	{ PCI_VENDOR_ID_NVIDIA, PCI_DEVICE_ID_NVIDIA_UVTNT2, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_RIVA_VTNT2 },
 	{ PCI_VENDOR_ID_NVIDIA, PCI_DEVICE_ID_NVIDIA_ITNT2, PCI_ANY_ID, PCI_ANY_ID, 0, 0, CH_RIVA_ITNT2 },
 	{ 0, }, /* terminate list */
 };

@@ -1,3 +1,7 @@
+2000-03-29  Tim Waugh  <twaugh@redhat.com>
+
+	* parport_pc.c: Add support for another PCI card.
+
 2000-03-27  Tim Waugh  <twaugh@redhat.com>
 
 	* parport_pc.c (parport_pc_ecp_read_block_pio): Correct operation

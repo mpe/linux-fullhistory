@@ -370,10 +370,11 @@ EXPORT_SYMBOL(register_sound_synth);
 
 /**
  *	unregister_sound_special - unregister a special sound device
- *	@unit: Unit number to allocate
+ *	@unit: unit number to allocate
  *
- *	Release a sound device that was allocated with register_sound_special.
- *	The unit passed is the return value from the register function.
+ *	Release a sound device that was allocated with
+ *	register_sound_special(). The unit passed is the return value from
+ *	the register function.
  */
 
 
@@ -386,9 +387,9 @@ EXPORT_SYMBOL(unregister_sound_special);
 
 /**
  *	unregister_sound_mixer - unregister a mixer
- *	@unit: Unit number to allocate
+ *	@unit: unit number to allocate
  *
- *	Release a sound device that was allocated with register_sound_mixer.
+ *	Release a sound device that was allocated with register_sound_mixer().
  *	The unit passed is the return value from the register function.
  */
 
@@ -401,9 +402,9 @@ EXPORT_SYMBOL(unregister_sound_mixer);
 
 /**
  *	unregister_sound_midi - unregister a midi device
- *	@unit: Unit number to allocate
+ *	@unit: unit number to allocate
  *
- *	Release a sound device that was allocated with register_sound_midi.
+ *	Release a sound device that was allocated with register_sound_midi().
  *	The unit passed is the return value from the register function.
  */
 
@@ -416,9 +417,9 @@ EXPORT_SYMBOL(unregister_sound_midi);
 
 /**
  *	unregister_sound_dsp - unregister a DSP device
- *	@unit: Unit number to allocate
+ *	@unit: unit number to allocate
  *
- *	Release a sound device that was allocated with register_sound_dsp.
+ *	Release a sound device that was allocated with register_sound_dsp().
  *	The unit passed is the return value from the register function.
  *
  *	Both of the allocated units are released together automatically.
@@ -434,9 +435,9 @@ EXPORT_SYMBOL(unregister_sound_dsp);
 
 /**
  *	unregister_sound_synth - unregister a synth device
- *	@unit: Unit number to allocate
+ *	@unit: unit number to allocate
  *
- *	Release a sound device that was allocated with register_sound_synth.
+ *	Release a sound device that was allocated with register_sound_synth().
  *	The unit passed is the return value from the register function.
  */
 

@@ -1253,17 +1253,15 @@ static int __init ltpc_setup(char *str)
 			/* usage message */
 			printk (KERN_ERR
 				"ltpc: usage: ltpc=auto|iobase[,irq[,dma]]\n");
+			return 0;
 		}
-		return 1;
 	} else {
 		io = ints[1];
 		if (ints[0] > 1) {
 			irq = ints[2];
-			return 1;
 		}
 		if (ints[0] > 2) {
 			dma = ints[3];
-			return 1;
 		}
 		/* ignore any other paramters */
 	}

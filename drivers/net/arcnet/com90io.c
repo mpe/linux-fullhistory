@@ -426,7 +426,7 @@ static int __init com90io_setup(char *s)
 
 	s = get_options(s, 4, ints);
 	if (!ints[0])
-		return 1;
+		return 0;
 	dev = alloc_bootmem(sizeof(struct net_device) + 10);
 	memset(dev, 0, sizeof(struct net_device) + 10);
 	dev->name = (char *) (dev + 1);

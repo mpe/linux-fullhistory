@@ -293,7 +293,6 @@ extern unsigned char fat_uni2esc[];
 extern unsigned char fat_esc2uni[];
 
 /* fatfs_syms.c */
-extern int init_fat_fs(void);
 extern void cleanup_fat_fs(void);
 
 /* nls.c */

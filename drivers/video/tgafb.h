@@ -1,9 +1,9 @@
 /*
  *  linux/drivers/video/tgafb.h -- DEC 21030 TGA frame buffer device
  *
- *  	Copyright (C) 1999 Martin Lucina, Tom Zerucha
+ *  	Copyright (C) 1999,2000 Martin Lucina, Tom Zerucha
  *  
- *  $Id: tgafb.h,v 1.4 1999/05/15 08:44:31 mato Exp $
+ *  $Id: tgafb.h,v 1.4.2.3 2000/04/04 06:44:56 mato Exp $
  *
  *  This file is subject to the terms and conditions of the GNU General Public
  *  License. See the file COPYING in the main directory of this archive for
@@ -17,6 +17,9 @@
      * TGA hardware description (minimal)
      */
 
+#define TGA_TYPE_8PLANE			0
+#define TGA_TYPE_24PLANE		1
+#define TGA_TYPE_24PLUSZ		3
 
     /*
      * Offsets within Memory Space
@@ -50,7 +53,7 @@
 
 
     /* 
-     * useful defines for managing the video timing registers
+     * useful defines for managing the registers
      */
 
 #define TGA_HORIZ_ODD			0x80000000
@@ -68,6 +71,10 @@
 #define TGA_VERT_SYNC			0x003f0000
 #define TGA_VERT_FP			0x0000f800
 #define TGA_VERT_ACTIVE			0x000007ff
+
+#define TGA_VALID_VIDEO			0x01
+#define TGA_VALID_BLANK			0x02
+#define TGA_VALID_CURSOR		0x04
 
 
     /*
@@ -167,10 +174,11 @@ struct tgafb_info {
     struct fb_info_gen gen;
 
     /* Device dependent information */
-    int tga_type;					/* TGA type: {8plane, 24plane, 24plusZ} */
-    unsigned long tga_mem_base;
-    unsigned long tga_fb_base;
-    unsigned long tga_regs_base;
+    u8 tga_type;					/* TGA_TYPE_XXX */
+    u8 tga_chip_rev;					/* dc21030 revision */
+    u64 tga_mem_base;
+    u64 tga_fb_base;
+    u64 tga_regs_base;
     struct fb_var_screeninfo default_var;		/* default video mode */
 };
 
@@ -180,11 +188,12 @@ struct tgafb_info {
      */
 
 struct tgafb_par {
-    int xres, yres;					/* resolution in pixels */
-    unsigned int htimings;				/* horizontal timing register */
-    unsigned int vtimings;				/* vertical timing register */
-    unsigned int pll_freq;				/* pixclock in mhz */
-    unsigned int bits_per_pixel;			/* bits per pixel */
+    u32 xres, yres;				/* resolution in pixels */
+    u32 htimings;				/* horizontal timing register */
+    u32 vtimings;				/* vertical timing register */
+    u32 pll_freq;				/* pixclock in mhz */
+    u32 bits_per_pixel;				/* bits per pixel */
+    u32 sync_on_green;				/* set if sync is on green */
 };
 
 #endif /* TGAFB_H */

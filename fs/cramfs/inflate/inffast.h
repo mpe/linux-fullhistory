@@ -8,7 +8,7 @@
    subject to change. Applications should only use zlib.h.
  */
 
-extern int inflate_fast OF((
+extern int cramfs_inflate_fast OF((
     uInt,
     uInt,
     inflate_huft *,

@@ -1,4 +1,4 @@
-/* $Id: ttable.h,v 1.14 1999/10/13 11:48:58 jj Exp $ */
+/* $Id: ttable.h,v 1.15 2000/04/03 10:36:42 davem Exp $ */
 #ifndef _SPARC64_TTABLE_H
 #define _SPARC64_TTABLE_H
 
@@ -85,7 +85,7 @@
 	sethi	%hi(109f), %g7;				\
 	ba,pt	%xcc, scetrap;				\
 109:	 or	%g7, %lo(109b), %g7;			\
-	call	routine;				\
+	ba,pt	%xcc, routine;				\
 	 sethi	%hi(systbl), %l7;			\
 	nop; nop; nop;
 	

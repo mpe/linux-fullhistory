@@ -1509,7 +1509,7 @@ module_exit(cleanup_baycomepp);
 
 static int __init baycom_epp_setup(char *str)
 {
-        static unsigned __initdata nr_dev = 0;
+        static unsigned __initlocaldata nr_dev = 0;
 	int ints[2];
 
         if (nr_dev >= NR_PORTS)

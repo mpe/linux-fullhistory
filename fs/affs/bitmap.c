@@ -280,28 +280,17 @@ s32
 affs_new_header(struct inode *inode)
 {
 	s32			 block;
-	struct buffer_head	*bh;
 
 	pr_debug("AFFS: new_header(ino=%lu)\n",inode->i_ino);
 
 	if (!(block = affs_balloc(inode,0))) {
 		while (affs_find_new_zone(inode->i_sb,0)) {
 			if ((block = affs_balloc(inode,0)))
-				goto init_block;
+				return block;
 			schedule();
 		}
 		return 0;
 	}
-init_block:
-	if (!(bh = getblk(inode->i_dev,block,AFFS_I2BSIZE(inode)))) {
-		affs_error(inode->i_sb,"new_header","Cannot get block %d",block);
-		return 0;
-	}
-	memset(bh->b_data,0,AFFS_I2BSIZE(inode));
-	mark_buffer_uptodate(bh,1);
-	mark_buffer_dirty(bh,1);
-	affs_brelse(bh);
-
 	return block;
 }
 
@@ -314,7 +303,6 @@ affs_new_data(struct inode *inode)
 	unsigned long		 oldest;
 	struct affs_zone	*zone;
 	struct super_block	*sb;
-	struct buffer_head	*bh;
 	int			 i = 0;
 	s32			 block;
 
@@ -327,7 +315,7 @@ affs_new_data(struct inode *inode)
 		unlock_super(sb);
 		block = inode->u.affs_i.i_data[inode->u.affs_i.i_pa_next++];
 		inode->u.affs_i.i_pa_next &= AFFS_MAX_PREALLOC - 1;
-		goto init_block;
+		return block;
 	}
 	unlock_super(sb);
 	oldest = jiffies;
@@ -364,24 +352,13 @@ found:
 	if (!(block = affs_balloc(inode,i))) {		/* No data zones left */
 		while (affs_find_new_zone(sb,i)) {
 			if ((block = affs_balloc(inode,i)))
-				goto init_block;
+				return block;
 			schedule();
 		}
 		inode->u.affs_i.i_zone = 0;
 		zone->z_ino            = -1;
 		return 0;
 	}
-
-init_block:
-	if (!(bh = getblk(inode->i_dev,block,sb->s_blocksize))) {
-		affs_error(inode->i_sb,"new_data","Cannot get block %d",block);
-		return 0;
-	}
-	memset(bh->b_data,0,sb->s_blocksize);
-	mark_buffer_uptodate(bh,1);
-	mark_buffer_dirty(bh,1);
-	affs_brelse(bh);
-
 	return block;
 }
 

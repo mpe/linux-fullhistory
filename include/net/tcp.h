@@ -1486,10 +1486,8 @@ static inline void tcp_clear_xmit_timer(struct sock *sk, int what)
 		return;
 	};
 
-	spin_lock_bh(&sk->timer_lock);
-	if (timer->prev != NULL && del_timer(timer))
+	if (timer_pending(timer) && del_timer(timer))
 		__sock_put(sk);
-	spin_unlock_bh(&sk->timer_lock);
 }
 
 /* This function does not return reliable answer. Use it only as advice.

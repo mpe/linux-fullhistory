@@ -83,7 +83,7 @@ static union {
  *	@sz: size
  *	@here: address
  *
- *	Out of line support code for skb_put. Not user callable
+ *	Out of line support code for skb_put(). Not user callable.
  */
  
 void skb_over_panic(struct sk_buff *skb, int sz, void *here)
@@ -99,7 +99,7 @@ void skb_over_panic(struct sk_buff *skb, int sz, void *here)
  *	@sz: size
  *	@here: address
  *
- *	Out of line support code for skb_push. Not user callable
+ *	Out of line support code for skb_push(). Not user callable.
  */
  
 
@@ -154,12 +154,12 @@ static __inline__ void skb_head_to_pool(struct sk_buff *skb)
  *	@size: size to allocate
  *	@gfp_mask: allocation mask
  *
- *	Allocate a new sk_buff. The returned buffer has no headroom and a
+ *	Allocate a new &sk_buff. The returned buffer has no headroom and a
  *	tail room of size bytes. The object has a reference count of one.
- *	The return is the buffer. On a failure the return is NULL.
+ *	The return is the buffer. On a failure the return is %NULL.
  *
- *	Buffers may only be allocated from interrupts using a gfp_mask of
- *	GFP_ATOMIC.
+ *	Buffers may only be allocated from interrupts using a @gfp_mask of
+ *	%GFP_ATOMIC.
  */
  
 struct sk_buff *alloc_skb(unsigned int size,int gfp_mask)
@@ -300,13 +300,13 @@ void __kfree_skb(struct sk_buff *skb)
  *	@skb: buffer to clone
  *	@gfp_mask: allocation priority
  *
- *	Duplicate an sk_buff. The new one is not owned by a socket. Both
+ *	Duplicate an &sk_buff. The new one is not owned by a socket. Both
  *	copies share the same packet data but not structure. The new
  *	buffer has a reference count of 1. If the allocation fails the 
- *	function returns NULL otherwise the new buffer is returned.
+ *	function returns %NULL otherwise the new buffer is returned.
  *	
- *	If this function is called from an interrupt gfp_mask must be
- *	GFP_ATOMIC.
+ *	If this function is called from an interrupt gfp_mask() must be
+ *	%GFP_ATOMIC.
  */
 
 struct sk_buff *skb_clone(struct sk_buff *skb, int gfp_mask)
@@ -383,12 +383,12 @@ static void copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
  *	@skb: buffer to copy
  *	@gfp_mask: allocation priority
  *
- *	Make a copy of both an sk_buff and its data. This is used when the
+ *	Make a copy of both an &sk_buff and its data. This is used when the
  *	caller wishes to modify the data and needs a private copy of the 
- *	data to alter. Returns NULL on failure or the pointer to the buffer
+ *	data to alter. Returns %NULL on failure or the pointer to the buffer
  *	on success. The returned buffer has a reference count of 1.
  *
- *	You must pass GFP_ATOMIC as the allocation priority if this function
+ *	You must pass %GFP_ATOMIC as the allocation priority if this function
  *	is called from an interrupt.
  */
  
@@ -423,15 +423,15 @@ struct sk_buff *skb_copy(const struct sk_buff *skb, int gfp_mask)
  *	@newtailroom: new free bytes at tail
  *	@gfp_mask: allocation priority
  *
- *	Make a copy of both an sk_buff and its data and while doing so 
+ *	Make a copy of both an &sk_buff and its data and while doing so 
  *	allocate additional space.
  *
  *	This is used when the caller wishes to modify the data and needs a 
  *	private copy of the data to alter as well as more space for new fields.
- *	 Returns NULL on failure or the pointer to the buffer
+ *	Returns %NULL on failure or the pointer to the buffer
  *	on success. The returned buffer has a reference count of 1.
  *
- *	You must pass GFP_ATOMIC as the allocation priority if this function
+ *	You must pass %GFP_ATOMIC as the allocation priority if this function
  *	is called from an interrupt.
  */
  

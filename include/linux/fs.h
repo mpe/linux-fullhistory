@@ -20,7 +20,6 @@
 #include <linux/stat.h>
 #include <linux/cache.h>
 #include <linux/stddef.h>
-#include <linux/string.h>
 
 #include <asm/atomic.h>
 #include <asm/bitops.h>
@@ -172,6 +171,7 @@ extern int max_super_blocks, nr_super_blocks;
 
 #ifdef __KERNEL__
 
+#include <linux/string.h>
 #include <asm/semaphore.h>
 #include <asm/byteorder.h>
 
@@ -857,6 +857,7 @@ extern int unregister_blkdev(unsigned int, const char *);
 extern struct block_device *bdget(dev_t);
 extern void bdput(struct block_device *);
 extern int blkdev_open(struct inode *, struct file *);
+extern int blkdev_close(struct inode * inode, struct file * filp);
 extern struct file_operations def_blk_fops;
 extern struct file_operations def_fifo_fops;
 extern int ioctl_by_bdev(struct block_device *, unsigned, unsigned long);
@@ -1014,6 +1015,9 @@ typedef struct {
 
 typedef int (*read_actor_t)(read_descriptor_t *, struct page *, unsigned long, unsigned long);
 
+/* needed for stackable file system support */
+extern loff_t default_llseek(struct file *file, loff_t offset, int origin);
+
 extern struct dentry * lookup_dentry(const char *, unsigned int);
 extern int walk_init(const char *, unsigned, struct nameidata *);
 extern int walk_name(const char *, unsigned, struct nameidata *);
@@ -1071,6 +1075,7 @@ typedef int (get_block_t)(struct inode*,long,struct buffer_head*,int);
 
 /* Generic buffer handling for block filesystems.. */
 extern int block_flushpage(struct page *, unsigned long);
+extern int block_fsync(struct file *filp, struct dentry *dentry);
 extern int block_symlink(struct inode *, const char *, int);
 extern int block_write_full_page(struct page*, get_block_t*);
 extern int block_read_full_page(struct page*, get_block_t*);

@@ -377,6 +377,7 @@ void scsi_old_done(Scsi_Cmnd * SCpnt)
 		SCpnt->use_sg = SCpnt->old_use_sg;
 		SCpnt->cmd_len = SCpnt->old_cmd_len;
 		SCpnt->sc_data_direction = SCpnt->sc_old_data_direction;
+		SCpnt->underflow = SCpnt->old_underflow;
 	}
 	switch (host_byte(result)) {
 	case DID_OK:
@@ -637,6 +638,7 @@ void scsi_old_done(Scsi_Cmnd * SCpnt)
 			SCpnt->use_sg = SCpnt->old_use_sg;
 			SCpnt->cmd_len = SCpnt->old_cmd_len;
 			SCpnt->sc_data_direction = SCpnt->sc_old_data_direction;
+			SCpnt->underflow = SCpnt->old_underflow;
 			SCpnt->result = 0;
                         /*
                          * Ugly, ugly.  The newer interfaces all
@@ -664,6 +666,7 @@ void scsi_old_done(Scsi_Cmnd * SCpnt)
 		SCpnt->use_sg = SCpnt->old_use_sg;
 		SCpnt->cmd_len = SCpnt->old_cmd_len;
 		SCpnt->sc_data_direction = SCpnt->sc_old_data_direction;
+		SCpnt->underflow = SCpnt->old_underflow;
                 /*
                  * The upper layers assume the lock isn't held.  We mustn't
                  * disappoint them.  When the new error handling code is in

@@ -1494,16 +1494,19 @@ static int ray_open(struct net_device *dev)
     dev_link_t *link;
     ray_dev_t *local = (ray_dev_t *)dev->priv;
     
+    MOD_INC_USE_COUNT;
+
     DEBUG(1, "ray_open('%s')\n", dev->name);
 
     for (link = dev_list; link; link = link->next)
         if (link->priv == dev) break;
-    if (!DEV_OK(link))
+    if (!DEV_OK(link)) {
+        MOD_DEC_USE_COUNT;
         return -ENODEV;
+    }
 
     if (link->open == 0) local->num_multi = 0;
     link->open++;
-    MOD_INC_USE_COUNT;
 
     if (sniffer) netif_stop_queue(dev);
     else         netif_start_queue(dev);

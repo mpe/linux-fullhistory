@@ -308,7 +308,7 @@ static unsigned char s507_irqmask[] =
 #ifdef MODULE
 int init_module (void)
 #else
-__initfunc(int wanpipe_init(void))
+int __init wanpipe_init(void)
 #endif
 {
 	printk(KERN_INFO "%s v%u.%u %s\n",

@@ -91,8 +91,6 @@ static void comx_delete_dentry(struct dentry *dentry);
 static struct proc_dir_entry *create_comx_proc_entry(char *name, int mode,
 	int size, struct proc_dir_entry *dir);
 
-static void comx_fill_inode(struct inode *inode, int fill);
-
 static struct dentry_operations comx_dentry_operations = {
 	NULL,			/* revalidate */
 	NULL,			/* d_hash */
@@ -101,13 +99,7 @@ static struct dentry_operations comx_dentry_operations = {
 };
 
 
-struct proc_dir_entry comx_root_dir = {
-	0, 4, "comx",
-	S_IFDIR | S_IWUSR | S_IRUGO | S_IXUGO, 2, 0, 0,
-	0, &comx_root_inode_ops,
-	NULL, comx_fill_inode,
-	NULL, &proc_root, NULL 
-};
+static struct proc_dir_entry * comx_root_dir;
 
 struct comx_debugflags_struct	comx_debugflags[] = {
 	{ "comx_rx",		DEBUG_COMX_RX		},
@@ -120,14 +112,6 @@ struct comx_debugflags_struct	comx_debugflags[] = {
 	{ "dlci",		DEBUG_COMX_DLCI		},
 	{ NULL,			0			} 
 };
-
-static void comx_fill_inode(struct inode *inode, int fill)
-{
-	if (fill)
-		MOD_INC_USE_COUNT;
-	else
-		MOD_DEC_USE_COUNT;
-}
 
 
 int comx_debug(struct net_device *dev, char *fmt, ...)
@@ -853,14 +837,13 @@ static int comx_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	struct net_device *dev;
 	struct comx_channel *ch;
 
-	if (dir->i_ino != comx_root_dir.low_ino) return -ENOTDIR;
+	if (dir->i_ino != comx_root_dir->low_ino) return -ENOTDIR;
 
 	if ((new_dir = create_proc_entry(dentry->d_name.name, mode | S_IFDIR, 
-		&comx_root_dir)) == NULL) {
+		comx_root_dir)) == NULL) {
 		return -EIO;
 	}
 
-	new_dir->proc_iops = &proc_dir_inode_operations;  // ez egy normalis /proc konyvtar
 	new_dir->nlink = 2;
 	new_dir->data = NULL; // ide jon majd a struct dev
 
@@ -930,7 +913,7 @@ static int comx_rmdir(struct inode *dir, struct dentry *dentry)
 	int ret;
 
 	/* Egyelore miert ne ? */
-	if (dir->i_ino != comx_root_dir.low_ino) return -ENOTDIR;
+	if (dir->i_ino != comx_root_dir->low_ino) return -ENOTDIR;
 
 	if (dev->flags & IFF_UP) {
 		printk(KERN_ERR "%s: down interface before removing it\n", dev->name);
@@ -968,8 +951,7 @@ static int comx_rmdir(struct inode *dir, struct dentry *dentry)
 	remove_proc_entry(FILENAME_STATUS, entry);
 	remove_proc_entry(FILENAME_HARDWARE, entry);
 	remove_proc_entry(FILENAME_PROTOCOL, entry);
-	remove_proc_entry(dentry->d_name.name, &comx_root_dir);
-//	proc_unregister(&comx_root_dir, dentry->d_inode->i_ino);
+	remove_proc_entry(dentry->d_name.name, comx_root_dir);
 
 	MOD_DEC_USE_COUNT;
 	return 0;
@@ -1133,23 +1115,15 @@ int __init comx_init(void)
 {
 	struct proc_dir_entry *new_file;
 
-	memcpy(&comx_root_inode_ops, &proc_dir_inode_operations, 
-		sizeof(struct inode_operations));
 	comx_root_inode_ops.lookup = &comx_lookup;
 	comx_root_inode_ops.mkdir = &comx_mkdir;
 	comx_root_inode_ops.rmdir = &comx_rmdir;
 
-	memcpy(&comx_normal_inode_ops, &proc_net_inode_operations, 
-		sizeof(struct inode_operations));
-	comx_normal_inode_ops.default_file_ops = &comx_normal_file_ops;
 	comx_normal_inode_ops.lookup = &comx_lookup;
 
 	memcpy(&comx_debug_inode_ops, &comx_normal_inode_ops, 
 		sizeof(struct inode_operations));
-	comx_debug_inode_ops.default_file_ops = &comx_debug_file_ops;
 
-	memcpy(&comx_normal_file_ops, proc_net_inode_operations.default_file_ops,
-		sizeof(struct file_operations));
 	comx_normal_file_ops.open = &comx_file_open;
 	comx_normal_file_ops.release = &comx_file_release;
 
@@ -1158,22 +1132,25 @@ int __init comx_init(void)
 	comx_debug_file_ops.llseek = &comx_debug_lseek;
 	comx_debug_file_ops.read = &comx_debug_read;
 
-	if (proc_register(&proc_root, &comx_root_dir) < 0) return -ENOMEM;
-
+	comx_root_dir = create_proc_entry("comx", 
+		S_IFDIR | S_IWUSR | S_IRUGO | S_IXUGO, &proc_root);
+	if (!comx_root_dir)
+		return -ENOMEM;
+	comx_root_dir->proc_iops = &comx_root_inode_ops;
 
 	if ((new_file = create_proc_entry(FILENAME_HARDWARELIST, 
-	   S_IFREG | 0444, &comx_root_dir)) == NULL) {
+	   S_IFREG | 0444, comx_root_dir)) == NULL) {
 		return -ENOMEM;
 	}
 	
-	new_file->ops = &comx_normal_inode_ops;
+	new_file->proc_iops = &comx_normal_inode_ops;
 	new_file->data = new_file;
 	new_file->read_proc = &comx_root_read_proc;
 	new_file->write_proc = NULL;
 	new_file->nlink = 1;
 
 	if ((new_file = create_proc_entry(FILENAME_PROTOCOLLIST, 
-	   S_IFREG | 0444, &comx_root_dir)) == NULL) {
+	   S_IFREG | 0444, comx_root_dir)) == NULL) {
 		return -ENOMEM;
 	}
 	
@@ -1217,9 +1194,9 @@ int __init comx_init(void)
 #ifdef MODULE
 void cleanup_module(void)
 {
-	remove_proc_entry(FILENAME_HARDWARELIST, &comx_root_dir);
-	remove_proc_entry(FILENAME_PROTOCOLLIST, &comx_root_dir);
-	proc_unregister(&proc_root, comx_root_dir.low_ino);
+	remove_proc_entry(FILENAME_HARDWARELIST, comx_root_dir);
+	remove_proc_entry(FILENAME_PROTOCOLLIST, comx_root_dir);
+	remove_proc_entry(comx_root_dir->name, &proc_root);
 }
 #endif
 

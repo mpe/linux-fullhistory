@@ -1313,12 +1313,12 @@ EXPORT_SYMBOL(z8530_shutdown);
 /**
  *	z8530_channel_load - Load channel data
  *	@c: Z8530 channel to configure
- *	@rtable: Table of register, value pairs
+ *	@rtable: table of register, value pairs
  *	FIXME: ioctl to allow user uploaded tables
  *
  *	Load a Z8530 channel up from the system data. We use +16 to 
- *	indicate the 'prime' registers. The value 255 terminates the
- *	table
+ *	indicate the "prime" registers. The value 255 terminates the
+ *	table.
  */
 
 int z8530_channel_load(struct z8530_channel *c, u8 *rtable)

@@ -16,6 +16,7 @@ Steve Ralston, LSI Logic Corp.
 	Debugging SCSI and Block OSM
 
 Deepak Saxena, Intel Corp.
+	Various core/block extensions
 	/proc interface, bug fixes
 	Ioctl interfaces for control
 	Debugging LAN OSM
@@ -64,24 +65,22 @@ ASUSTeK
 STATUS:
 
 o	The core setup works within limits.
-o	The scsi layer seems to almost work. I'm still chasing down the hang
-	bug.
-o	The block OSM is fairly minimal but does seem to work.
+o	The scsi layer seems to almost work. 
+           I'm still chasing down the hang bug.
+o	The block OSM is mostly functional
 o	LAN OSM works with FDDI and Ethernet cards.
 
 TO DO:
 
 General:
-o	Support multiple IOP's and tell them about each other
 o	Provide hidden address space if asked
 o	Long term message flow control
 o	PCI IOP's without interrupts are not supported yet
 o	Push FAIL handling into the core
 o	DDM control interfaces for module load etc
-o	Event handling
+o       Add I2O 2.0 support (Deffered to 2.5 kernel)
 
 Block:
-o	Real error handler
 o	Multiple major numbers
 o	Read ahead and cache handling stuff. Talk to Ingo and people
 o	Power management
@@ -90,9 +89,11 @@ o	Finish Media changers
 SCSI:
 o	Find the right way to associate drives/luns/busses
 
-Lan:	Batch mode sends
-	Performance tuning
-	Event handling
+Lan:	
+o	Performance tuning
+o	Test Fibre Channel code
+o	Fix lan_set_mc_list()
 
 Tape:
 o	Anyone seen anything implementing this ?
+           (D.S: Will attempt to do so if spare cycles permit)

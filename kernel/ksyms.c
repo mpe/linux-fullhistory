@@ -52,6 +52,11 @@
 #include <linux/kmod.h>
 #endif
 
+#ifdef CONFIG_BLK_DEV_LVM_MODULE
+extern void (*lvm_hd_name_ptr) ( char*, int);
+EXPORT_SYMBOL(lvm_hd_name_ptr);
+#endif
+
 extern int console_loglevel;
 extern void set_device_ro(kdev_t dev,int flag);
 #if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
@@ -235,15 +240,17 @@ EXPORT_SYMBOL(vfs_follow_link);
 EXPORT_SYMBOL(page_readlink);
 EXPORT_SYMBOL(page_follow_link);
 EXPORT_SYMBOL(page_symlink_inode_operations);
+EXPORT_SYMBOL(block_fsync);
 EXPORT_SYMBOL(block_symlink);
 EXPORT_SYMBOL(vfs_readdir);
 
-/* for stackable file systems (lofs, wrapfs, etc.) */
-EXPORT_SYMBOL(add_to_page_cache);
+/* for stackable file systems (lofs, wrapfs, cryptfs, etc.) */
+EXPORT_SYMBOL(default_llseek);
+EXPORT_SYMBOL(dentry_open);
 EXPORT_SYMBOL(filemap_nopage);
 EXPORT_SYMBOL(filemap_swapout);
 EXPORT_SYMBOL(filemap_sync);
-EXPORT_SYMBOL(remove_inode_page);
+EXPORT_SYMBOL(lock_page);
 
 #if !defined(CONFIG_NFSD) && defined(CONFIG_NFSD_MODULE)
 EXPORT_SYMBOL(do_nfsservctl);
@@ -272,6 +279,7 @@ EXPORT_SYMBOL(bmap);
 EXPORT_SYMBOL(sync_dev);
 EXPORT_SYMBOL(devfs_register_partitions);
 EXPORT_SYMBOL(blkdev_open);
+EXPORT_SYMBOL(blkdev_close);
 EXPORT_SYMBOL(blkdev_get);
 EXPORT_SYMBOL(blkdev_put);
 EXPORT_SYMBOL(ioctl_by_bdev);
@@ -398,6 +406,7 @@ EXPORT_SYMBOL(iomem_resource);
 
 /* process management */
 EXPORT_SYMBOL(__wake_up);
+EXPORT_SYMBOL(wake_up_process);
 EXPORT_SYMBOL(sleep_on);
 EXPORT_SYMBOL(sleep_on_timeout);
 EXPORT_SYMBOL(interruptible_sleep_on);

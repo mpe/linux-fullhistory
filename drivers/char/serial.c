@@ -4683,7 +4683,7 @@ int register_serial(struct serial_struct *req)
  *
  *	The port specified is deconfigured and its resources are freed. Any
  *	user of the port is disconnected as if carrier was dropped. Line is
- *	the port number returned by register_serial.
+ *	the port number returned by register_serial().
  */
 
 void unregister_serial(int line)

@@ -3145,7 +3145,7 @@ debugger_fn_bl (struct Scsi_Host *host, struct debugger_token *token,
     save_flags(flags);
     cli();
     for (bp = (struct NCR53c7x0_break *) host->breakpoints;
-	    bp; bp = (struct NCR53c7x0_break *) bp->next); {
+	    bp; bp = (struct NCR53c7x0_break *) bp->next) {
 	    sprintf (buf, "scsi%d : bp : success : at %08x, replaces %08x %08x",
 		bp->addr, bp->old[0], bp->old[1]);
 	    len = strlen(buf);

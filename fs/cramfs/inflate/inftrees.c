@@ -6,7 +6,7 @@
 #include "zutil.h"
 #include "inftrees.h"
 
-const char inflate_copyright[] =
+static const char inflate_copyright[] =
    " inflate 1.1.3 Copyright 1995-1998 Mark Adler ";
 /*
   If you use the zlib library in a product, an acknowledgment is welcome
@@ -287,7 +287,7 @@ uIntf *v;               /* working area: values in order of bit length */
 }
 
 
-int inflate_trees_bits(c, bb, tb, hp, z)
+int cramfs_inflate_trees_bits(c, bb, tb, hp, z)
 uIntf *c;               /* 19 code lengths */
 uIntf *bb;              /* bits tree desired/actual depth */
 inflate_huft * FAR *tb; /* bits tree result */
@@ -312,7 +312,7 @@ z_streamp z;            /* for messages */
   return r;
 }
 
-int inflate_trees_dynamic(nl, nd, c, bl, bd, tl, td, hp, z)
+int cramfs_inflate_trees_dynamic(nl, nd, c, bl, bd, tl, td, hp, z)
 uInt nl;                /* number of literal/length codes */
 uInt nd;                /* number of distance codes */
 uIntf *c;               /* that many (total) code lengths */
@@ -377,7 +377,7 @@ z_streamp z;            /* for messages */
 #include "inffixed.h"
 
 
-int inflate_trees_fixed(bl, bd, tl, td, z)
+int cramfs_inflate_trees_fixed(bl, bd, tl, td, z)
 uIntf *bl;               /* literal desired/actual bit depth */
 uIntf *bd;               /* distance desired/actual bit depth */
 inflate_huft * FAR *tl;  /* literal/length tree result */

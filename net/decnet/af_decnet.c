@@ -2091,7 +2091,7 @@ static int __init decnet_setup(char *str)
 	decnet_address = dn_htons(area << 10 | node);
 	dn_dn2eth(decnet_ether_address, dn_ntohs(decnet_address));
 
-	return 0;
+	return 1;
 }
 
 __setup("decnet=", decnet_setup);

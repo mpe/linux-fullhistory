@@ -10,7 +10,6 @@
  * Version 2 (June 1991). See the "COPYING" file distributed with this software
  * for more info.
  *
- *
  * 26-11-1999 Patched to compile without ISA PnP support in the
  * kernel - Daniel Stone (tamriel@ductape.net) 
  *
@@ -37,6 +36,10 @@
  * 26-03-2000 Fixed acer, esstype and sm_games module options.
  *  Alessandro Zummo <azummo@ita.flashnet.it>
  *
+ * 27-03-2000 ISAPnP multiple card detection, cleanup, and reorg.
+ *  Thanks to Gaël Quéri and Alessandro Zummo for testing and fixes.
+ *  Paul E. Laufer <pelaufer@csupomona.edu>
+ *
  */
 
 #include <linux/config.h>
@@ -51,7 +54,14 @@
 #include "sb_mixer.h"
 #include "sb.h"
 
-static int sbmpu = 0;
+#if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE
+#define SB_CARDS_MAX 4
+#else
+#define SB_CARDS_MAX 1
+#endif
+
+static int sbmpu[SB_CARDS_MAX] = {0};
+static int sb_cards_num = 0;
 
 extern void *smw_free;
 
@@ -75,7 +85,6 @@ static void __init attach_sb_card(struct address_info *hw_config)
 {
 	if(!sb_dsp_init(hw_config))
 		hw_config->slots[0] = -1;
-	SOUND_LOCK;
 }
 
 static int __init probe_sb(struct address_info *hw_config)
@@ -84,7 +93,7 @@ static int __init probe_sb(struct address_info *hw_config)
 
 	if (hw_config->io_base == -1 || hw_config->dma == -1 || hw_config->irq == -1)
 	{
-		printk(KERN_ERR "sb_card: I/O, IRQ, and DMA are mandatory\n");
+		printk(KERN_ERR "sb: I/O, IRQ, and DMA are mandatory\n");
 		return -EINVAL;
 	}
 
@@ -149,14 +158,6 @@ iobase=0x%x irq=%d lo_dma=%d hi_dma=%d\n",
 	}
 #endif
 
-	/* This is useless since it is done by sb_dsp_detect - azummo */
-	
-	if (check_region(hw_config->io_base, 16))
-	{
-		printk(KERN_ERR "sb_card: I/O port 0x%x is already in use\n\n", hw_config->io_base);
-		return 0;
-	}
-
 	/* Setup extra module options */
 
 	sbmo.acer 	= acer;
@@ -166,25 +167,31 @@ iobase=0x%x irq=%d lo_dma=%d hi_dma=%d\n",
 	return sb_dsp_detect(hw_config, 0, 0, &sbmo);
 }
 
-static void __exit unload_sb(struct address_info *hw_config)
+static void __exit unload_sb(struct address_info *hw_config, int card)
 {
 	if(hw_config->slots[0]!=-1)
-		sb_dsp_unload(hw_config, sbmpu);
+		sb_dsp_unload(hw_config, sbmpu[card]);
 }
 
-static struct address_info cfg;
-static struct address_info cfg_mpu;
+static struct address_info cfg[SB_CARDS_MAX];
+static struct address_info cfg_mpu[SB_CARDS_MAX];
 
-struct pci_dev 	*sb_dev 	= NULL, 
-		*mpu_dev	= NULL;
+struct pci_dev 	*sb_dev[SB_CARDS_MAX] 	= {NULL}, 
+		*mpu_dev[SB_CARDS_MAX]	= {NULL};
 
 
 #if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE
 static int isapnp	= 1;
 static int isapnpjump	= 0;
-static int activated	= 1;
+static int multiple	= 0;
+static int reverse	= 0;
+static int uart401	= 0;
+
+static int audio_activated[SB_CARDS_MAX] = {0};
+static int mpu_activated[SB_CARDS_MAX]   = {0};
 #else
 static int isapnp	= 0;
+static int multiple	= 1;
 #endif
 
 MODULE_DESCRIPTION("Soundblaster driver");
@@ -202,8 +209,14 @@ MODULE_PARM(acer,	"i");
 #if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE
 MODULE_PARM(isapnp,	"i");
 MODULE_PARM(isapnpjump,	"i");
+MODULE_PARM(multiple,	"i");
+MODULE_PARM(reverse,	"i");
+MODULE_PARM(uart401,	"i");
 MODULE_PARM_DESC(isapnp,	"When set to 0, Plug & Play support will be disabled");
 MODULE_PARM_DESC(isapnpjump,	"Jumps to a specific slot in the driver's PnP table. Use the source, Luke.");
+MODULE_PARM_DESC(multiple,	"When set to 0, will not search for multiple cards");
+MODULE_PARM_DESC(reverse,	"When set to 1, will reverse ISAPnP search order");
+MODULE_PARM_DESC(uart401,	"When set to 1, will attempt to detect and enable the mpu on some clones");
 #endif
 
 MODULE_PARM_DESC(io,		"Soundblaster i/o base address (0x220,0x240,0x260,0x280)");
@@ -218,6 +231,200 @@ MODULE_PARM_DESC(acer,		"Set this to detect cards in some ACER notebooks");
 
 #if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE
 
+/* Please add new entries at the end of the table */
+static struct {
+	char *name; 
+	unsigned short card_vendor, card_device, audio_vendor, audio_function, mpu_vendor, mpu_function;
+	short dma, dma2, mpu_io, mpu_irq; /* see sb_init() */
+} sb_isapnp_list[] __initdata = {
+	{"Sound Blaster 16", 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0024),
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster 16", 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0026), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster 16", 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0027), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster 16", 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0029), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster 16", 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x002b), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster Vibra16S", 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0051), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0001),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster Vibra16C", 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0070), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0001),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster Vibra16CL", 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0080), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0041),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster Vibra16X", 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x00F0), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0043),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster AWE 32", 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0039), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster AWE 32",
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0042), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster AWE 32",
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0043), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster AWE 32",
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0044),
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster AWE 32",
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0048), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster AWE 32",
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x0054), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster AWE 32",
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x009C), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0041),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster AWE 64",
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x009D), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0042),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster AWE 64 Gold",
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x009E), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0044),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster AWE 64",
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x00C1), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0042),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster AWE 64",
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x00C3), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0045),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster AWE 64",
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x00C5), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0045),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster AWE 64",
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x00C7), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0045),
+		0,0,
+		0,1,1,-1},
+	{"Sound Blaster AWE 64",
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_DEVICE(0x00E4), 
+		ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0045),
+		0,0,
+		0,1,1,-1},
+	{"ESS 1868",
+		ISAPNP_VENDOR('E','S','S'), ISAPNP_DEVICE(0x1868), 
+		ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1868),
+		0,0,
+		0,1,2,-1},
+	{"ESS 1868",
+		ISAPNP_VENDOR('E','S','S'), ISAPNP_DEVICE(0x1868), 
+		ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x8611),
+		0,0,
+		0,1,2,-1},
+	{"ESS 1869 PnP AudioDrive", 
+		ISAPNP_VENDOR('E','S','S'), ISAPNP_DEVICE(0x0003), 
+		ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1869),
+		0,0,
+		0,1,2,-1},
+	{"ESS 1869",
+		ISAPNP_VENDOR('E','S','S'), ISAPNP_DEVICE(0x1869), 
+		ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1869),
+		0,0,
+		0,1,2,-1},
+	{"ESS 1878",
+		ISAPNP_VENDOR('E','S','S'), ISAPNP_DEVICE(0x1878), 
+		ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1878),
+		0,0,
+		0,1,2,-1},
+	{"ESS 1879",
+		ISAPNP_VENDOR('E','S','S'), ISAPNP_DEVICE(0x1879), 
+		ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1879),
+		0,0,
+		0,1,2,-1},
+	{"CMI 8330 SoundPRO",
+		ISAPNP_VENDOR('C','M','I'), ISAPNP_DEVICE(0x0001), 
+		ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x0001),
+		ISAPNP_VENDOR('@','H','@'), ISAPNP_FUNCTION(0x0001),
+		0,1,0,-1},
+	{"Diamond DT0197H",
+		ISAPNP_VENDOR('R','W','B'), ISAPNP_DEVICE(0x1688), 
+		ISAPNP_VENDOR('@','@','@'), ISAPNP_FUNCTION(0x0001),
+		ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x0001),
+		0,-1,0,0},
+	{"ALS007",
+		ISAPNP_VENDOR('A','L','S'), ISAPNP_DEVICE(0x0007),
+		ISAPNP_VENDOR('@','@','@'), ISAPNP_FUNCTION(0x0001),
+		ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x0001),
+		0,-1,0,0},
+	{"ALS100",
+	       	ISAPNP_VENDOR('A','L','S'), ISAPNP_DEVICE(0x0001), 
+		ISAPNP_VENDOR('@','@','@'), ISAPNP_FUNCTION(0x0001),
+		ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x0001),
+		1,0,0,0},
+	{"ALS110",
+		ISAPNP_VENDOR('A','L','S'), ISAPNP_DEVICE(0x0110),
+		ISAPNP_VENDOR('@','@','@'), ISAPNP_FUNCTION(0x1001),
+		ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x1001),
+		1,0,0,0},
+	{"ALS120",
+		ISAPNP_VENDOR('A','L','S'), ISAPNP_DEVICE(0x0120),
+		ISAPNP_VENDOR('@','@','@'), ISAPNP_FUNCTION(0x2001),
+		ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x2001),
+		1,0,0,0},
+	{"ALS200",
+		ISAPNP_VENDOR('A','L','S'), ISAPNP_DEVICE(0x0200),
+		ISAPNP_VENDOR('@','@','@'), ISAPNP_FUNCTION(0x0020),
+		ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x0020),
+		1,0,0,0},
+	{"RTL3000",
+		ISAPNP_VENDOR('R','T','L'), ISAPNP_DEVICE(0x3000),
+		ISAPNP_VENDOR('@','@','@'), ISAPNP_FUNCTION(0x2001),
+		ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x2001),
+		1,0,0,0},
+	{0}
+};
+
 /* That's useful. */
 
 #define show_base(devname, resname, resptr) printk(KERN_INFO "sb: %s %s base located at %#lx\n", devname, resname, (resptr)->start)
@@ -227,14 +434,10 @@ static struct pci_dev *activate_dev(char *devname, char *resname, struct pci_dev
 	int err;
 
 	/* Device already active? Let's use it */
-
 	if(dev->active)
-	{
-		activated = 0;
 		return(dev);
-	}
-	if((err = dev->activate(dev)) < 0)
-	{
+	
+	if((err = dev->activate(dev)) < 0) {
 		printk(KERN_ERR "sb: %s %s config failed (out of resources?)[%d]\n", devname, resname, err);
 
 		dev->deactivate(dev);
@@ -244,320 +447,129 @@ static struct pci_dev *activate_dev(char *devname, char *resname, struct pci_dev
 	return(dev);
 }
 
-/* Card's specific initialization functions
- */
-
-static struct pci_dev *sb_init_generic(struct pci_bus *bus, struct pci_dev *card, struct address_info *hw_config, struct address_info *mpu_config)
+static struct pci_dev *sb_init(struct pci_bus *bus, struct address_info *hw_config, struct address_info *mpu_config, int slot, int card)
 {
-	if((sb_dev = isapnp_find_dev(bus, card->vendor, card->device, NULL)))
-	{
-		sb_dev->prepare(sb_dev);
 
-		if((sb_dev = activate_dev("Soundblaster", "sb", sb_dev)))
-		{
-			hw_config->io_base 	= sb_dev->resource[0].start;
-			hw_config->irq 		= sb_dev->irq_resource[0].start;
-			hw_config->dma 		= sb_dev->dma_resource[0].start;
-			hw_config->dma2 	= sb_dev->dma_resource[1].start;
-			mpu_config->io_base	= sb_dev->resource[1].start;
+	/* Configure Audio device */
+	if((sb_dev[card] = isapnp_find_dev(bus, sb_isapnp_list[slot].audio_vendor, sb_isapnp_list[slot].audio_function, NULL)))
+	{
+		int ret;
+		ret = sb_dev[card]->prepare(sb_dev[card]);
+		/* If device is active, assume configured with /proc/isapnp
+		 * and use anyway. Some other way to check this? */
+		if(ret && ret != -EBUSY) {
+			printk(KERN_ERR "sb: ISAPnP found device that could not be autoconfigured.\n");
+			return(NULL);
 		}
-	}
-	return(sb_dev);
-}
-
-static struct pci_dev *sb_init_ess(struct pci_bus *bus, struct pci_dev *card, struct address_info *hw_config, struct address_info *mpu_config)
-{
-	if((sb_dev = isapnp_find_dev(bus, card->vendor, card->device, NULL)))
-	{
-		sb_dev->prepare(sb_dev);
-
-		if((sb_dev = activate_dev("ESS", "sb", sb_dev)))
-		{
-			hw_config->io_base 	= sb_dev->resource[0].start;
-			hw_config->irq 		= sb_dev->irq_resource[0].start;
-			hw_config->dma 		= sb_dev->dma_resource[0].start;
-			hw_config->dma2		= sb_dev->dma_resource[1].start;
-			mpu_config->io_base	= sb_dev->resource[2].start;
-		}
-	}
-	return(sb_dev);
-}
-
-static struct pci_dev *sb_init_cmi(struct pci_bus *bus, struct pci_dev *card, struct address_info *hw_config, struct address_info *mpu_config)
-{
-	/* 
-	 *  The CMI8330/C3D is a very 'stupid' chip... where did they get al those @@@ ?
-	 *  It's ISAPnP section is badly designed and has many flaws, i'll do my best
-	 *  to workaround them. I strongly suggest you to buy a real soundcard.
-	 *  The CMI8330 on my motherboard has also the bad habit to activate 
-	 *  the rear channel of my amplifier instead of the front one.
-	 */
-
-	/*  @X@0001:Soundblaster.
-	 */
-
-	if((sb_dev = isapnp_find_dev(bus,
-		ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x0001), NULL)))
-	{
-		sb_dev->prepare(sb_dev);
+		if(ret == -EBUSY)
+			audio_activated[card] = 1;
 		
-		if((sb_dev = activate_dev("CMI8330", "sb", sb_dev)))
+		if((sb_dev[card] = activate_dev(sb_isapnp_list[slot].name, "sb", sb_dev[card])))
 		{
-			hw_config->io_base 	= sb_dev->resource[0].start;
-			hw_config->irq 		= sb_dev->irq_resource[0].start;
-			hw_config->dma 		= sb_dev->dma_resource[0].start;
-			hw_config->dma2 	= sb_dev->dma_resource[1].start;
+			hw_config->io_base 	= sb_dev[card]->resource[0].start;
+			hw_config->irq 		= sb_dev[card]->irq_resource[0].start;
+			hw_config->dma 		= sb_dev[card]->dma_resource[sb_isapnp_list[slot].dma].start;
+			if(sb_isapnp_list[slot].dma2 != -1)
+				hw_config->dma2 = sb_dev[card]->dma_resource[sb_isapnp_list[slot].dma2].start;
+			else
+				hw_config->dma2 = -1;
+		} else
+			return(NULL);
+	} else
+		return(NULL);
 
-			show_base("CMI8330", "sb", &sb_dev->resource[0]);
-		}
-
-		if(!sb_dev) return(NULL);
+	/* Cards with MPU as part of Audio device (CTL and ESS) */
+	if(!sb_isapnp_list[slot].mpu_vendor) {
+		mpu_config->io_base	= sb_dev[card]->resource[sb_isapnp_list[slot].mpu_io].start;
+		return(sb_dev[card]);
 	}
-	else
-		printk(KERN_ERR "sb: CMI8330 panic: sb base not found\n");
 
-	/*  @H@0001:mpu
-	 */
-
-	if((mpu_dev = isapnp_find_dev(bus,
-		ISAPNP_VENDOR('@','H','@'), ISAPNP_FUNCTION(0x0001), NULL)))
+	/* Cards with separate MPU device (ALS, CMI, etc */
+	if(!uart401)
+		return(sb_dev[card]);
+	if((mpu_dev[card] = isapnp_find_dev(bus, sb_isapnp_list[slot].mpu_vendor, sb_isapnp_list[slot].mpu_function, NULL)))
 	{
-		mpu_dev->prepare(mpu_dev);
-
-		/*  This disables the interrupt on this resource. Do we need it ?
-		 */
-
-		mpu_dev->irq_resource[0].flags = 0;
-
-		if((mpu_dev = activate_dev("CMI8330", "mpu", mpu_dev)))
-		{
-			show_base("CMI8330", "mpu", &mpu_dev->resource[0]);
-			mpu_config->io_base = mpu_dev->resource[0].start;
+		int ret = mpu_dev[card]->prepare(mpu_dev[card]);
+		/* If device is active, assume configured with /proc/isapnp
+		 * and use anyway */
+		if(ret && ret != -EBUSY) {
+			printk(KERN_ERR "sb: MPU device could not be autoconfigured.\n");
+			return(sb_dev[card]);
 		}
-	}
-	else
-		printk(KERN_ERR "sb: CMI8330 panic: mpu not found\n");
-
-	printk(KERN_INFO "sb: CMI8330 mail reports to Alessandro Zummo <azummo@ita.flashnet.it>\n");
-
-	return(sb_dev);
-}
-
-static struct pci_dev *sb_init_diamond(struct pci_bus *bus, struct pci_dev *card, struct address_info *hw_config, struct address_info *mpu_config)
-{
-	/* 
-	 * Diamonds DT0197H
-	 * very similar to the CMI8330 above
-	 */
-
-	/*  @@@0001:Soundblaster.
-	 */
-
-	if((sb_dev = isapnp_find_dev(bus,
-				ISAPNP_VENDOR('@','@','@'), ISAPNP_FUNCTION(0x0001), NULL)))
-	{
-		sb_dev->prepare(sb_dev);
+		if(ret == -EBUSY)
+			mpu_activated[card] = 1;
 		
-		if((sb_dev = activate_dev("DT0197H", "sb", sb_dev)))
-		{
-			hw_config->io_base 	= sb_dev->resource[0].start;
-			hw_config->irq 		= sb_dev->irq_resource[0].start;
-			hw_config->dma 		= sb_dev->dma_resource[0].start;
-			hw_config->dma2 	= -1;
-
-			show_base("DT0197H", "sb", &sb_dev->resource[0]);
-		}
-
-		if(!sb_dev) return(NULL);
-	}
-	else
-		printk(KERN_ERR "sb: DT0197H panic: sb base not found\n");
-
-	/*  @X@0001:mpu
-	 */
-
-	if((mpu_dev = isapnp_find_dev(bus,
-				ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x0001), NULL)))
-	{
-		mpu_dev->prepare(mpu_dev);
-
-		if((mpu_dev = activate_dev("DT0197H", "mpu", mpu_dev)))
-		{
-			show_base("DT0197H", "mpu", &mpu_dev->resource[0]);
-			mpu_config->io_base = mpu_dev->resource[0].start;
-		}
-	}
-	else
-		printk(KERN_ERR "sb: DT0197H panic: mpu not found\n");
-
-	printk(KERN_INFO "sb: DT0197H mail reports to Torsten Werner <twerner@intercomm.de>\n");
-
-	return(sb_dev);
-}
-
-static struct pci_dev *sb_init_als(struct pci_bus *bus, struct pci_dev *card, struct address_info *hw_config, struct address_info *mpu_config)
-{
-	/* 
-	 * ALS100
-	 * very similar to both ones above above
-	 */
-
-	/*  @@@0001:Soundblaster.
-	 */
-
-	if((sb_dev = isapnp_find_dev(bus,
-				ISAPNP_VENDOR('@','@','@'), ISAPNP_FUNCTION(0x0001), NULL)))
-	{
-		sb_dev->prepare(sb_dev);
+		/* Some mpus use audio device irq? Need to test... -PEL */
+		if(sb_isapnp_list[slot].mpu_irq == -1)
+			mpu_dev[card]->irq_resource[0].flags = 0;
 		
-		if((sb_dev = activate_dev("ALS100", "sb", sb_dev)))
-		{
-			hw_config->io_base 	= sb_dev->resource[0].start;
-			hw_config->irq 		= sb_dev->irq_resource[0].start;
-			hw_config->dma 		= sb_dev->dma_resource[1].start;
-			hw_config->dma2 	= sb_dev->dma_resource[0].start;
-
-			show_base("ALS100", "sb", &sb_dev->resource[0]);
-		}
-
-		if(!sb_dev) return(NULL);
-	}
-	else
-		printk(KERN_ERR "sb: ALS100 panic: sb base not found\n");
-
-	/*  @X@0001:mpu
-	 */
-
-	if((mpu_dev = isapnp_find_dev(bus,
-				ISAPNP_VENDOR('@','X','@'), ISAPNP_FUNCTION(0x0001), NULL)))
-	{
-		mpu_dev->prepare(mpu_dev);
-
-		if((mpu_dev = activate_dev("ALS100", "mpu", mpu_dev)))
-		{
-			show_base("ALS100", "mpu", &mpu_dev->resource[0]);
-			mpu_config->io_base = mpu_dev->resource[0].start;
+		if((mpu_dev[card] = activate_dev(sb_isapnp_list[slot].name, "mpu", mpu_dev[card]))) {
+			mpu_config->io_base = mpu_dev[card]->resource[sb_isapnp_list[slot].mpu_io].start;
+			if(sb_isapnp_list[slot].mpu_irq != -1)
+				mpu_config->irq = mpu_dev[card]->irq_resource[sb_isapnp_list[slot].mpu_irq].start;
 		}
 	}
 	else
-		printk(KERN_ERR "sb: ALS100 panic: mpu not found\n");
-
-	printk(KERN_INFO "sb: ALS100 mail reports to Torsten Werner <twerner@intercomm.de>\n");
-
-	return(sb_dev);
+		printk(KERN_ERR "sb: %s panic: mpu not found\n", sb_isapnp_list[slot].name);
+	
+	return(sb_dev[card]);
 }
 
-#define SBF_DEV	0x01 /* Please notice that cards without this flag are on the top in the list */
-
-
-static struct { unsigned short vendor, function, flags; struct pci_dev * (*initfunc)(struct pci_bus *, struct pci_dev *, struct address_info *, struct address_info *); char *name; }
-sb_isapnp_list[] __initdata = {
-	{ISAPNP_VENDOR('C','M','I'), ISAPNP_FUNCTION(0x0001), 0,	&sb_init_cmi,		"CMI 8330 SoundPRO" },
-	{ISAPNP_VENDOR('R','W','B'), ISAPNP_FUNCTION(0x1688), 0,	&sb_init_diamond,	"Diamond DT0197H" },
-	{ISAPNP_VENDOR('A','L','S'), ISAPNP_FUNCTION(0x0001), 0,	&sb_init_als,		"ALS 100" },
-	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0001), SBF_DEV,	&sb_init_generic,	"Sound Blaster 16" },
-	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0031), SBF_DEV,	&sb_init_generic,	"Sound Blaster 16" },
-	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0041), SBF_DEV,	&sb_init_generic,	"Sound Blaster 16" },
-	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0042), SBF_DEV,	&sb_init_generic,	"Sound Blaster 16" },
-	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0043), SBF_DEV,	&sb_init_generic,	"Sound Blaster 16" },
-	{ISAPNP_VENDOR('C','T','L'), ISAPNP_FUNCTION(0x0045), SBF_DEV,	&sb_init_generic,	"Sound Blaster 16" },
-	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x0968), SBF_DEV,	&sb_init_ess,		"ESS 1688" },
-	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1868), SBF_DEV,	&sb_init_ess,		"ESS 1868" },
-	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x8611), SBF_DEV,	&sb_init_ess,		"ESS 1868" },
-	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1869), SBF_DEV,	&sb_init_ess,		"ESS 1869" },
-	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1878), SBF_DEV,	&sb_init_ess,		"ESS 1878" },
-	{ISAPNP_VENDOR('E','S','S'), ISAPNP_FUNCTION(0x1879), SBF_DEV,	&sb_init_ess,		"ESS 1879" },
-	{0}
-};
-
-static int __init sb_isapnp_init(struct address_info *hw_config, struct address_info *mpu_config, struct pci_bus *bus, struct pci_dev *card, int slot)
+static int __init sb_isapnp_init(struct address_info *hw_config, struct address_info *mpu_config, struct pci_bus *bus, int slot, int card)
 {
-	struct pci_dev *idev = NULL;
+	char *busname = bus->name[0] ? bus->name : sb_isapnp_list[slot].name;
 
-	/* You missed the init func? That's bad. */
-	if(sb_isapnp_list[slot].initfunc)
-	{
-		char *busname = bus->name[0] ? bus->name : sb_isapnp_list[slot].name;
+	printk(KERN_INFO "sb: %s detected\n", busname); 
 
-		printk(KERN_INFO "sb: %s detected\n", busname); 
+	/* Initialize this baby. */
 
-		/* Initialize this baby. */
-
-		if((idev = sb_isapnp_list[slot].initfunc(bus, card, hw_config, mpu_config)))
-		{
-			/* We got it. */
-
-			printk(KERN_NOTICE "sb: ISAPnP reports '%s' at i/o %#x, irq %d, dma %d, %d\n",
-			       busname,
-			       hw_config->io_base, hw_config->irq, hw_config->dma,
-			       hw_config->dma2);
-			return 1;
-		}
-		else
-			printk(KERN_INFO "sb: Failed to initialize %s\n", busname);
+	if(sb_init(bus, hw_config, mpu_config, slot, card)) {
+		/* We got it. */
+		
+		printk(KERN_NOTICE "sb: ISAPnP reports '%s' at i/o %#x, irq %d, dma %d, %d\n",
+		       busname,
+		       hw_config->io_base, hw_config->irq, hw_config->dma,
+		       hw_config->dma2);
+		return 1;
 	}
 	else
-		printk(KERN_ERR "sb: Bad entry in sb_card.c PnP table\n");
+		printk(KERN_INFO "sb: Failed to initialize %s\n", busname);
 
 	return 0;
 }
 
-/* Actually this routine will detect and configure only the first card with successful
-   initialization. isapnpjump could be used to jump to a specific entry.
-   Please always add entries at the end of the array.
-   Should this be fixed? - azummo
-*/
-
-int __init sb_isapnp_probe(struct address_info *hw_config, struct address_info *mpu_config) 
+int __init sb_isapnp_probe(struct address_info *hw_config, struct address_info *mpu_config, int card) 
 {
+	static int first = 1;
 	int i;
 
 	/* Count entries in sb_isapnp_list */
-	for (i = 0; sb_isapnp_list[i].vendor != 0; i++);
+	for (i = 0; sb_isapnp_list[i].card_vendor != 0; i++);
+	i--;
 
 	/* Check and adjust isapnpjump */
-	if( isapnpjump < 0 || isapnpjump > ( i - 1 ) )
-	{
-		printk(KERN_ERR "sb: Valid range for isapnpjump is 0-%d. Adjusted to 0.\n", i-1);
-		isapnpjump = 0;
-	}
-	
-	for (i = isapnpjump; sb_isapnp_list[i].vendor != 0; i++) {
-
-		if(!(sb_isapnp_list[i].flags & SBF_DEV))
-		{
-			struct pci_bus *bus = NULL;
-				
-			while ((bus = isapnp_find_card(
-					sb_isapnp_list[i].vendor,
-					sb_isapnp_list[i].function,
-					bus))) {
-	
-				if(sb_isapnp_init(hw_config, mpu_config, bus, NULL, i))
-					return 0;
-			}
-		}
+	if( isapnpjump < 0 || isapnpjump > i) {
+		isapnpjump = reverse ? i : 0;
+		printk(KERN_ERR "sb: Valid range for isapnpjump is 0-%d. Adjusted to %d.\n", i, isapnpjump);
 	}
 
-	/*  No cards found. I'll try now to search inside every card for a logical device
-	 *  that matches any entry marked with SBF_DEV in the table.
-	 */
+	if(!first || !reverse)
+		i = isapnpjump;
+	first = 0;
+	while(sb_isapnp_list[i].card_vendor != 0) {
+		static struct pci_bus *bus = NULL;
 
-	for (i = isapnpjump; sb_isapnp_list[i].vendor != 0; i++) {
-
-		if(sb_isapnp_list[i].flags & SBF_DEV)
-		{
-			struct pci_dev *card = NULL;
-
-			while ((card = isapnp_find_dev(NULL,
-					sb_isapnp_list[i].vendor,
-					sb_isapnp_list[i].function,
-					card))) {
-
-				if(sb_isapnp_init(hw_config, mpu_config, card->bus, card, i))
-					return 0;
+		while ((bus = isapnp_find_card(
+				sb_isapnp_list[i].card_vendor,
+				sb_isapnp_list[i].card_device,
+				bus))) {
+	
+			if(sb_isapnp_init(hw_config, mpu_config, bus, i, card)) {
+				isapnpjump = i; /* start next search from here */
+				return 0;
 			}
 		}
+		i += reverse ? -1 : 1;		
 	}
 
 	return -ENODEV;
@@ -566,62 +578,77 @@ int __init sb_isapnp_probe(struct address_info *hw_config, struct address_info *
 
 static int __init init_sb(void)
 {
+	int card, max = multiple ? SB_CARDS_MAX : 1;
+
 	printk(KERN_INFO "Soundblaster audio driver Copyright (C) by Hannu Savolainen 1993-1996\n");
-
-	/* Please remember that even with CONFIG_ISAPNP defined one should still be
-		able to disable PNP support for this single driver!
-	*/
-
-#if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE			
-	if(isapnp && (sb_isapnp_probe(&cfg, &cfg_mpu) < 0) ) {
-		printk(KERN_NOTICE "sb_card: No ISAPnP cards found, trying standard ones...\n");
-		isapnp = 0;
-	}
+	
+	for(card = 0; card < max; card++, sb_cards_num++) {
+#if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE
+		/* Please remember that even with CONFIG_ISAPNP defined one should still be
+		   able to disable PNP support for this single driver! */
+		if(isapnp && (sb_isapnp_probe(&cfg[card], &cfg_mpu[card], card) < 0) ) {
+			if(!sb_cards_num) {
+				printk(KERN_NOTICE "sb: No ISAPnP cards found, trying standard ones...\n");
+				isapnp = 0;
+			} else
+				break;
+		}
 #endif
 
-	if( isapnp == 0 ) {
-		cfg.io_base	= io;
-		cfg.irq		= irq;
-		cfg.dma		= dma;
-		cfg.dma2	= dma16;
+		if(!isapnp) {
+			cfg[card].io_base	= io;
+			cfg[card].irq		= irq;
+			cfg[card].dma		= dma;
+			cfg[card].dma2		= dma16;
+		}
+
+		cfg[card].card_subtype = type;
+
+		if (!probe_sb(&cfg[card]))
+			return -ENODEV;
+		attach_sb_card(&cfg[card]);
+
+		if(cfg[card].slots[0]==-1)
+			return -ENODEV;
+		
+		if (!isapnp) 
+			cfg_mpu[card].io_base = mpu_io;
+		if (probe_sbmpu(&cfg_mpu[card]))
+			sbmpu[card] = 1;
+		if (sbmpu[card])
+			attach_sbmpu(&cfg_mpu[card]);
 	}
 
-	cfg.card_subtype = type;
+	SOUND_LOCK;
 
-	if (!probe_sb(&cfg))
-		return -ENODEV;
-	attach_sb_card(&cfg);
+	if(isapnp)
+		printk(KERN_NOTICE "sb: %d Soundblaster PnP card(s) found.\n", sb_cards_num);
 
-	if(cfg.slots[0]==-1)
-		return -ENODEV;
-		
-	if (isapnp == 0) 
-		cfg_mpu.io_base = mpu_io;
-	if (probe_sbmpu(&cfg_mpu))
-		sbmpu = 1;
-	if (sbmpu)
-		attach_sbmpu(&cfg_mpu);
 	return 0;
 }
 
 static void __exit cleanup_sb(void)
 {
+	int i;
+	
 	if (smw_free) {
 		vfree(smw_free);
 		smw_free = NULL;
 	}
-	unload_sb(&cfg);
-	if (sbmpu)
-		unload_sbmpu(&cfg_mpu);
-	SOUND_LOCK_END;
 
-#if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE			
-	if(activated)
-	{
-		if(sb_dev) 	sb_dev->deactivate(sb_dev);
-		if(mpu_dev) 	mpu_dev->deactivate(mpu_dev);
-	}
+	for(i = 0; i < sb_cards_num; i++) {
+		unload_sb(&cfg[i], i);
+		if (sbmpu[i])
+			unload_sbmpu(&cfg_mpu[i]);
+
+#if defined CONFIG_ISAPNP || defined CONFIG_ISAPNP_MODULE
+		if(!audio_activated[i] && sb_dev[i])
+			sb_dev[i]->deactivate(sb_dev[i]);
+		if(!mpu_activated[i] && mpu_dev[i])
+			mpu_dev[i]->deactivate(mpu_dev[i]);
 #endif
+	}
+	SOUND_LOCK_END;	
 }
 
 module_init(init_sb);

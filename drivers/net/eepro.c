@@ -1614,6 +1614,8 @@ init_module(void)
 
 		if (register_netdev(d) == 0)
 			n_eepro++;
+		else
+			break;
 	}
 	
 	return n_eepro ? 0 : -ENODEV;

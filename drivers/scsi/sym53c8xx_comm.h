@@ -2178,7 +2178,7 @@ static int __init sym53c8xx__setup(char *str)
 			++cur;
 	}
 #endif /* SCSI_NCR_BOOT_COMMAND_LINE_SUPPORT */
-	return 0;
+	return 1;
 }
 
 /*===================================================================

@@ -1258,7 +1258,8 @@ int probe_sbmpu(struct address_info *hw_config)
 				return 0;
 			}
 			hw_config->name = "Sound Blaster 16";
-			hw_config->irq = -devc->irq;
+			if (hw_config->irq < 3 || hw_config->irq == devc->irq)
+				hw_config->irq = -devc->irq;
 			if (devc->minor > 12)		/* What is Vibra's version??? */
 				sb16_set_mpu_port(devc, hw_config);
 			break;

@@ -8,7 +8,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
- * Version:	$Id: af_unix.c,v 1.91 2000/03/25 01:55:34 davem Exp $
+ * Version:	$Id: af_unix.c,v 1.93 2000/04/08 07:21:29 davem Exp $
  *
  * Fixes:
  *		Linus Torvalds	:	Assorted bug cures.
@@ -1103,6 +1103,9 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 	    (err = unix_autobind(sock)) != 0)
 		goto out;
 
+	err = -EMSGSIZE;
+	if ((unsigned)len > sk->sndbuf - 32)
+		goto out;
 
 	skb = sock_alloc_send_skb(sk, len, 0, msg->msg_flags&MSG_DONTWAIT, &err);
 	if (skb==NULL)

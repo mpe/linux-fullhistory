@@ -29,7 +29,7 @@
 /*
  * TODO List
  *
- * - Add support for any version 2.0 spec changes once 2.0 IRTOS
+ * - Add support for any version 2.0 spec changes once 2.0 IRTOS is
  *   is available to test with
  * - Clean up code to use official structure definitions 
  */
@@ -64,6 +64,8 @@ typedef struct _i2o_proc_entry_t
 	write_proc_t *write_proc;	/* write func */
 } i2o_proc_entry;
 
+// #define DRIVERDEBUG
+
 static int i2o_proc_read_lct(char *, char **, off_t, int, int *, void *);
 static int i2o_proc_read_hrt(char *, char **, off_t, int, int *, void *);
 static int i2o_proc_read_status(char *, char **, off_t, int, int *, void *);
@@ -97,8 +99,12 @@ static int i2o_proc_add_controller(struct i2o_controller *,
 				   struct proc_dir_entry * );
 static void i2o_proc_remove_controller(struct i2o_controller *, 
 				       struct proc_dir_entry * );
+static void i2o_proc_add_device(struct i2o_device *, struct proc_dir_entry *);
+static void i2o_proc_remove_device(struct i2o_device *);
 static int create_i2o_procfs(void);
 static int destroy_i2o_procfs(void);
+static void i2o_proc_new_dev(struct i2o_controller *, struct i2o_device *);
+static void i2o_proc_dev_del(struct i2o_controller *, struct i2o_device *);
 
 static int i2o_proc_read_lan_dev_info(char *, char **, off_t, int, int *,
 				      void *);
@@ -128,6 +134,20 @@ static int i2o_proc_read_lan_fddi_stats(char *, char **, off_t, int, int *,
 					void *);
 
 static struct proc_dir_entry *i2o_proc_dir_root;
+
+/*
+ * I2O OSM descriptor
+ */
+static struct i2o_handler i2o_proc_handler =
+{
+	NULL,
+	i2o_proc_new_dev,
+	i2o_proc_dev_del,
+	NULL,
+	"I2O procfs Layer",
+	0,
+	0xffffffff	// All classes
+};
 
 /*
  * IOP specific entries...write field just in case someone 
@@ -239,6 +259,7 @@ static i2o_proc_entry lan_fddi_entries[] =
 	{"lan_fddi_stats", S_IFREG|S_IRUGO, i2o_proc_read_lan_fddi_stats, NULL},
 	{NULL, 0, NULL, NULL}
 };
+
 
 static char *chtostr(u8 *chars, int n)
 {
@@ -411,6 +432,9 @@ int i2o_proc_read_lct(char *buf, char **start, off_t offset, int len,
 						entries == 1 ? "entry" : "entries");
 	if(lct->boot_tid)	
 		len += sprintf(buf+len, "Boot Device @ ID %d\n", lct->boot_tid);
+
+	len += 
+		sprintf(buf+len, "Current Change Indicator: %#10x\n", lct->change_ind);
 
 	for(i = 0; i < entries; i++)
 	{
@@ -1024,7 +1048,7 @@ int i2o_proc_read_groups(char *buf, char **start, off_t offset, int len,
 	len = 0;
 
 	token = i2o_query_table(I2O_PARAMS_TABLE_GET,
-				d->controller, d->lct_data->tid, 0xF000, -1, NULL, 0,
+				d->controller, d->lct_data.tid, 0xF000, -1, NULL, 0,
 				&result, sizeof(result));
 
 	if (token < 0) {
@@ -1088,7 +1112,7 @@ int i2o_proc_read_phys_device(char *buf, char **start, off_t offset, int len,
 	len = 0;
 
 	token = i2o_query_table(I2O_PARAMS_TABLE_GET,
-				d->controller, d->lct_data->tid,
+				d->controller, d->lct_data.tid,
 				0xF001, -1, NULL, 0,
 				&result, sizeof(result));
 
@@ -1137,7 +1161,7 @@ int i2o_proc_read_claimed(char *buf, char **start, off_t offset, int len,
 	len = 0;
 
 	token = i2o_query_table(I2O_PARAMS_TABLE_GET,
-				d->controller, d->lct_data->tid,
+				d->controller, d->lct_data.tid,
 				0xF002, -1, NULL, 0,
 				&result, sizeof(result));
 
@@ -1196,7 +1220,7 @@ int i2o_proc_read_users(char *buf, char **start, off_t offset, int len,
 	len = 0;
 
 	token = i2o_query_table(I2O_PARAMS_TABLE_GET,
-				d->controller, d->lct_data->tid,
+				d->controller, d->lct_data.tid,
 				0xF003, -1, NULL, 0,
 				&result, sizeof(result));
 
@@ -1255,7 +1279,7 @@ int i2o_proc_read_priv_msgs(char *buf, char **start, off_t offset, int len,
 	len = 0;
 
 	token = i2o_query_table(I2O_PARAMS_TABLE_GET,
-				d->controller, d->lct_data->tid,
+				d->controller, d->lct_data.tid,
 				0xF000, -1,
 				NULL, 0,
 				&result, sizeof(result));
@@ -1310,7 +1334,7 @@ int i2o_proc_read_authorized_users(char *buf, char **start, off_t offset, int le
 	len = 0;
 
 	token = i2o_query_table(I2O_PARAMS_TABLE_GET,
-				d->controller, d->lct_data->tid,
+				d->controller, d->lct_data.tid,
 				0xF006, -1,
 				NULL, 0,
 				&result, sizeof(result));
@@ -1352,7 +1376,7 @@ int i2o_proc_read_dev_identity(char *buf, char **start, off_t offset, int len,
 	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+	token = i2o_query_scalar(d->controller, d->lct_data.tid,
 				0xF100,	-1,
 				&work32, sizeof(work32));
 
@@ -1421,7 +1445,7 @@ int i2o_proc_read_ddm_identity(char *buf, char **start, off_t offset, int len,
 	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->lct_data->tid, 
+	token = i2o_query_scalar(d->controller, d->lct_data.tid, 
 				0xF101,	-1,
 				&result, sizeof(result));
 
@@ -1464,7 +1488,7 @@ int i2o_proc_read_uinfo(char *buf, char **start, off_t offset, int len,
 	spin_lock(&i2o_proc_lock);
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+	token = i2o_query_scalar(d->controller, d->lct_data.tid,
 				0xF102,	-1,
 				&result, sizeof(result));
 
@@ -1497,7 +1521,7 @@ int i2o_proc_read_sgl_limits(char *buf, char **start, off_t offset, int len,
 	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->lct_data->tid, 
+	token = i2o_query_scalar(d->controller, d->lct_data.tid, 
 				 0xF103, -1,
 				 &work32, sizeof(work32));
 
@@ -1573,7 +1597,7 @@ int i2o_proc_read_sensors(char *buf, char **start, off_t offset, int len,
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+	token = i2o_query_scalar(d->controller, d->lct_data.tid,
 				 0xF200, -1,
 				 &result, sizeof(result));
 
@@ -2020,7 +2044,7 @@ int i2o_proc_read_lan_dev_info(char *buf, char **start, off_t offset, int len,
 	spin_lock(&i2o_proc_lock);
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+	token = i2o_query_scalar(d->controller, d->lct_data.tid,
 				 0x0000, -1, &work32, 56*4);
 	if (token < 0) {
 		len += i2o_report_query_status(buf+len, token, "0x0000 LAN Device Info");
@@ -2142,7 +2166,7 @@ int i2o_proc_read_lan_mac_addr(char *buf, char **start, off_t offset, int len,
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+	token = i2o_query_scalar(d->controller, d->lct_data.tid,
 				 0x0001, -1, &work32, 48*4);
 	if (token < 0) {
 		len += i2o_report_query_status(buf+len, token,"0x0001 LAN MAC Address");
@@ -2240,7 +2264,7 @@ int i2o_proc_read_lan_mcast_addr(char *buf, char **start, off_t offset,
 	len = 0;
 
 	token = i2o_query_table(I2O_PARAMS_TABLE_GET,
-				d->controller, d->lct_data->tid, 0x0002, -1, 
+				d->controller, d->lct_data.tid, 0x0002, -1, 
 				NULL, 0, &result, sizeof(result));
 
 	if (token < 0) {
@@ -2275,7 +2299,7 @@ int i2o_proc_read_lan_batch_control(char *buf, char **start, off_t offset,
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+	token = i2o_query_scalar(d->controller, d->lct_data.tid,
 				 0x0003, -1, &work32, 9*4);
 	if (token < 0) {
 		len += i2o_report_query_status(buf+len, token,"0x0003 LAN Batch Control");
@@ -2316,7 +2340,7 @@ int i2o_proc_read_lan_operation(char *buf, char **start, off_t offset, int len,
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+	token = i2o_query_scalar(d->controller, d->lct_data.tid,
 				 0x0004, -1, &work32, 20);
 	if (token < 0) {
 		len += i2o_report_query_status(buf+len, token,"0x0004 LAN Operation");
@@ -2389,7 +2413,7 @@ int i2o_proc_read_lan_media_operation(char *buf, char **start, off_t offset,
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+	token = i2o_query_scalar(d->controller, d->lct_data.tid,
 				 0x0005, -1, &result, sizeof(result));
 	if (token < 0) {
 		len += i2o_report_query_status(buf+len, token, "0x0005 LAN Media Operation");
@@ -2471,7 +2495,7 @@ int i2o_proc_read_lan_alt_addr(char *buf, char **start, off_t offset, int len,
 	len = 0;
 
 	token = i2o_query_table(I2O_PARAMS_TABLE_GET,
-				d->controller, d->lct_data->tid,
+				d->controller, d->lct_data.tid,
 				0x0006, -1, NULL, 0, &result, sizeof(result));
 
 	if (token < 0) {
@@ -2506,7 +2530,7 @@ int i2o_proc_read_lan_tx_info(char *buf, char **start, off_t offset, int len,
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+	token = i2o_query_scalar(d->controller, d->lct_data.tid,
 				 0x0007, -1, &work32, 8*4);
 	if (token < 0) {
 		len += i2o_report_query_status(buf+len, token,"0x0007 LAN Transmit Info");
@@ -2558,7 +2582,7 @@ int i2o_proc_read_lan_rx_info(char *buf, char **start, off_t offset, int len,
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+	token = i2o_query_scalar(d->controller, d->lct_data.tid,
 				 0x0008, -1, &work32, 8*4);
 	if (token < 0) {
 		len += i2o_report_query_status(buf+len, token,"0x0008 LAN Receive Info");
@@ -2675,7 +2699,7 @@ int i2o_proc_read_lan_hist_stats(char *buf, char **start, off_t offset, int len,
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+	token = i2o_query_scalar(d->controller, d->lct_data.tid,
 				 0x0100, -1, &stats, sizeof(stats));
 	if (token < 0) {
 		len += i2o_report_query_status(buf+len, token,"0x100 LAN Statistics");
@@ -2705,7 +2729,7 @@ int i2o_proc_read_lan_hist_stats(char *buf, char **start, off_t offset, int len,
 	/* Optional statistics follows */
 	/* Get 0x0180 to see which optional groups/fields are supported */
 
-	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+	token = i2o_query_scalar(d->controller, d->lct_data.tid,
 				 0x0180, -1, &supp_groups, sizeof(supp_groups));
 	
 	if (token < 0) {
@@ -2716,7 +2740,7 @@ int i2o_proc_read_lan_hist_stats(char *buf, char **start, off_t offset, int len,
 
 	if (supp_groups[1]) /* 0x0182 */
 	{
-		token = i2o_query_scalar(d->controller, d->lct_data->tid,
+		token = i2o_query_scalar(d->controller, d->lct_data.tid,
 				 	0x0182, -1, &tx_stats, sizeof(tx_stats));
 
 		if (token < 0) {
@@ -2749,7 +2773,7 @@ int i2o_proc_read_lan_hist_stats(char *buf, char **start, off_t offset, int len,
 
 	if (supp_groups[2]) /* 0x0183 */
 	{
-		token = i2o_query_scalar(d->controller, d->lct_data->tid,
+		token = i2o_query_scalar(d->controller, d->lct_data.tid,
 					 0x0183, -1, &rx_stats, sizeof(rx_stats));
 		if (token < 0) {
 			len += i2o_report_query_status(buf+len, token,"0x183 LAN Optional Rx Historical Stats");
@@ -2785,7 +2809,7 @@ int i2o_proc_read_lan_hist_stats(char *buf, char **start, off_t offset, int len,
 	
 	if (supp_groups[3]) /* 0x0184 */
 	{
-		token = i2o_query_scalar(d->controller, d->lct_data->tid,
+		token = i2o_query_scalar(d->controller, d->lct_data.tid,
 				 	0x0184, -1, &chksum_stats, sizeof(chksum_stats));
 
 		if (token < 0) {
@@ -2864,7 +2888,7 @@ int i2o_proc_read_lan_eth_stats(char *buf, char **start, off_t offset,
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+	token = i2o_query_scalar(d->controller, d->lct_data.tid,
 				 0x0200, -1, &stats, sizeof(stats));
 
 	if (token < 0) {
@@ -2893,7 +2917,7 @@ int i2o_proc_read_lan_eth_stats(char *buf, char **start, off_t offset,
 	/* Optional Ethernet statistics follows  */
 	/* Get 0x0280 to see which optional fields are supported */
 
-	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+	token = i2o_query_scalar(d->controller, d->lct_data.tid,
 				 0x0280, -1, &supp_fields, sizeof(supp_fields));
 
 	if (token < 0) {
@@ -2904,7 +2928,7 @@ int i2o_proc_read_lan_eth_stats(char *buf, char **start, off_t offset,
 
 	if (supp_fields) /* 0x0281 */
 	{
-		token = i2o_query_scalar(d->controller, d->lct_data->tid,
+		token = i2o_query_scalar(d->controller, d->lct_data.tid,
 					 0x0281, -1, &stats, sizeof(stats));
 
 		if (token < 0) {
@@ -2959,7 +2983,7 @@ int i2o_proc_read_lan_tr_stats(char *buf, char **start, off_t offset,
 	spin_lock(&i2o_proc_lock);	
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+	token = i2o_query_scalar(d->controller, d->lct_data.tid,
 				 0x0300, -1, &work64, sizeof(work64));
 
 	if (token < 0) {
@@ -3053,7 +3077,7 @@ int i2o_proc_read_lan_fddi_stats(char *buf, char **start, off_t offset,
 	spin_lock(&i2o_proc_lock);
 	len = 0;
 
-	token = i2o_query_scalar(d->controller, d->lct_data->tid,
+	token = i2o_query_scalar(d->controller, d->lct_data.tid,
 				 0x0400, -1, &work64, sizeof(work64));
 
 	if (token < 0) {
@@ -3135,78 +3159,117 @@ static int i2o_proc_add_controller(struct i2o_controller *pctrl,
 	
 	for(dev = pctrl->devices; dev; dev = dev->next)
 	{
-		sprintf(buff, "%0#5x", dev->lct_data->tid);
+		sprintf(buff, "%0#5x", dev->lct_data.tid);
 
 		dir1 = proc_mkdir(buff, dir);
 		dev->proc_entry = dir1;
 
 		if(!dir1)
 			printk(KERN_INFO "i2o_proc: Could not allocate proc dir\n");
-		
-		i2o_proc_create_entries(dev, generic_dev_entries, dir1);
 
-		switch(dev->lct_data->class_id)
-		{
+		i2o_proc_add_device(dev, dir1);
+	}
+
+	return 0;
+}
+
+void i2o_proc_new_dev(struct i2o_controller *c, struct i2o_device *d)
+{
+	char buff[10];
+
+#ifdef DRIVERDEBUG
+	printk(KERN_INFO "Adding new device to /proc/i2o/iop%d\n", c->unit);
+#endif
+	sprintf(buff, "%0#5x", d->lct_data.tid);
+
+	d->proc_entry = proc_mkdir(buff, c->proc_entry);
+
+	if(!d->proc_entry)
+	{
+		printk(KERN_WARNING "i2o: Could not allocate procdir!\n");
+		return;
+	}
+
+	i2o_proc_add_device(d, d->proc_entry);
+}
+
+void i2o_proc_add_device(struct i2o_device *dev, struct proc_dir_entry *dir)
+{	
+	i2o_proc_create_entries(dev, generic_dev_entries, dir);
+
+	/* Inform core that we want updates about this device's status */
+	i2o_device_notify_on(dev, &i2o_proc_handler);
+	switch(dev->lct_data.class_id)
+	{
 		case I2O_CLASS_SCSI_PERIPHERAL:
 		case I2O_CLASS_RANDOM_BLOCK_STORAGE:
-			i2o_proc_create_entries(dev, rbs_dev_entries, dir1);
+			i2o_proc_create_entries(dev, rbs_dev_entries, dir);
 			break;
 		case I2O_CLASS_LAN:
-			i2o_proc_create_entries(dev, lan_entries, dir1);
-			switch(dev->lct_data->sub_class)
+			i2o_proc_create_entries(dev, lan_entries, dir);
+			switch(dev->lct_data.sub_class)
 			{
-			case I2O_LAN_ETHERNET:
-				i2o_proc_create_entries(dev, lan_eth_entries,
-							dir1);
-				break;
-			case I2O_LAN_FDDI:
-				i2o_proc_create_entries(dev, lan_fddi_entries,
-							dir1);
-				break;
-			case I2O_LAN_TR:
-				i2o_proc_create_entries(dev, lan_tr_entries,
-							dir1);
-				break;
-			default:
-				break;
+				case I2O_LAN_ETHERNET:
+					i2o_proc_create_entries(dev, lan_eth_entries, dir);
+					break;
+				case I2O_LAN_FDDI:
+					i2o_proc_create_entries(dev, lan_fddi_entries, dir);
+					break;
+				case I2O_LAN_TR:
+					i2o_proc_create_entries(dev, lan_tr_entries, dir);
+					break;
+				default:
+					break;
 			}
 			break;
 		default:
 			break;
-		}
 	}
-
-	return 0;
 }
 
 static void i2o_proc_remove_controller(struct i2o_controller *pctrl, 
 				       struct proc_dir_entry *parent)
 {
 	char buff[10];
-	char dev_id[10];
-	struct proc_dir_entry *de;
 	struct i2o_device *dev;
 
 	/* Remove unused device entries */
 	for(dev=pctrl->devices; dev; dev=dev->next)
+		i2o_proc_remove_device(dev);
+
+	if(!pctrl->proc_entry->count)
 	{
-		de=dev->proc_entry;
-		sprintf(dev_id, "%0#5x", dev->lct_data->tid);
+		sprintf(buff, "iop%d", pctrl->unit);
 
-		/* Would it be safe to remove _files_ even if they are in use? */
-		if((de) && (!de->count))
+		i2o_proc_remove_entries(generic_iop_entries, pctrl->proc_entry);
+
+		remove_proc_entry(buff, parent);
+		pctrl->proc_entry = NULL;
+	}
+}
+
+void i2o_proc_remove_device(struct i2o_device *dev)
+{
+	struct proc_dir_entry *de=dev->proc_entry;
+	char dev_id[10];
+
+	sprintf(dev_id, "%0#5x", dev->lct_data.tid);
+
+	i2o_device_notify_off(dev, &i2o_proc_handler);
+	/* Would it be safe to remove _files_ even if they are in use? */
+	if((de) && (!de->count))
+	{
+		i2o_proc_remove_entries(generic_dev_entries, de);
+		switch(dev->lct_data.class_id)
 		{
-			i2o_proc_remove_entries(generic_dev_entries, de);
-
-			switch(dev->lct_data->class_id)
-			{
 			case I2O_CLASS_SCSI_PERIPHERAL:
 			case I2O_CLASS_RANDOM_BLOCK_STORAGE:
 				i2o_proc_remove_entries(rbs_dev_entries, de);
 				break;
 			case I2O_CLASS_LAN:
+			{
 				i2o_proc_remove_entries(lan_entries, de);
-				switch(dev->lct_data->sub_class)
+				switch(dev->lct_data.sub_class)
 				{
 				case I2O_LAN_ETHERNET:
 					i2o_proc_remove_entries(lan_eth_entries, de);
@@ -3219,19 +3282,19 @@ static void i2o_proc_remove_controller(struct i2o_controller *pctrl,
 					break;
 				}
 			}
-			remove_proc_entry(dev_id, parent);
+			remove_proc_entry(dev_id, dev->controller->proc_entry);
 		}
 	}
+}
+	
+void i2o_proc_dev_del(struct i2o_controller *c, struct i2o_device *d)
+{
+#ifdef DRIVERDEBUG
+	printk(KERN_INFO, "Deleting device %d from iop%d\n", 
+		d->lct_data.tid, c->unit);
+#endif
 
-	if(!pctrl->proc_entry->count)
-	{
-		sprintf(buff, "iop%d", pctrl->unit);
-
-		i2o_proc_remove_entries(generic_iop_entries, pctrl->proc_entry);
-
-		remove_proc_entry(buff, parent);
-		pctrl->proc_entry = NULL;
-	}
+	i2o_proc_remove_device(d);
 }
 
 static int create_i2o_procfs(void)
@@ -3278,13 +3341,19 @@ static int destroy_i2o_procfs(void)
 
 	return 0;
 }
-		
+
 #ifdef MODULE
 #define i2o_proc_init init_module
 #endif
 
 int __init i2o_proc_init(void)
 {
+	if (i2o_install_handler(&i2o_proc_handler) < 0)
+	{
+		printk(KERN_ERR "i2o_proc: Unable to install PROC handler.\n");
+		return 0;
+	}
+
 	if(create_i2o_procfs())
 		return -EBUSY;
 
@@ -3293,12 +3362,12 @@ int __init i2o_proc_init(void)
 
 #ifdef MODULE
 
-
 MODULE_AUTHOR("Deepak Saxena");
 MODULE_DESCRIPTION("I2O procfs Handler");
 
 void cleanup_module(void)
 {
 	destroy_i2o_procfs();
+	i2o_remove_handler(&i2o_proc_handler);
 }
 #endif

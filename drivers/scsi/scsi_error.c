@@ -409,6 +409,7 @@ STATIC int scsi_eh_retry_command(Scsi_Cmnd * SCpnt)
 	SCpnt->use_sg = SCpnt->old_use_sg;
 	SCpnt->cmd_len = SCpnt->old_cmd_len;
 	SCpnt->sc_data_direction = SCpnt->sc_old_data_direction;
+	SCpnt->underflow = SCpnt->old_underflow;
 
 	scsi_send_eh_cmnd(SCpnt, SCpnt->timeout_per_command);
 
@@ -466,6 +467,7 @@ STATIC int scsi_request_sense(Scsi_Cmnd * SCpnt)
 	SCpnt->use_sg = 0;
 	SCpnt->cmd_len = COMMAND_SIZE(SCpnt->cmnd[0]);
 	SCpnt->sc_data_direction = SCSI_DATA_READ;
+	SCpnt->underflow = 0;
 
 	scsi_send_eh_cmnd(SCpnt, SENSE_TIMEOUT);
 
@@ -489,6 +491,7 @@ STATIC int scsi_request_sense(Scsi_Cmnd * SCpnt)
 	SCpnt->use_sg = SCpnt->old_use_sg;
 	SCpnt->cmd_len = SCpnt->old_cmd_len;
 	SCpnt->sc_data_direction = SCpnt->sc_old_data_direction;
+	SCpnt->underflow = SCpnt->old_underflow;
 
 	/*
 	 * Hey, we are done.  Let's look to see what happened.
@@ -533,8 +536,10 @@ STATIC int scsi_test_unit_ready(Scsi_Cmnd * SCpnt)
 	SCpnt->request_bufflen = 256;
 	SCpnt->use_sg = 0;
 	SCpnt->cmd_len = COMMAND_SIZE(SCpnt->cmnd[0]);
-	scsi_send_eh_cmnd(SCpnt, SENSE_TIMEOUT);
+	SCpnt->underflow = 0;
 	SCpnt->sc_data_direction = SCSI_DATA_NONE;
+
+	scsi_send_eh_cmnd(SCpnt, SENSE_TIMEOUT);
 
 	/* Last chance to have valid sense data */
 	if (!scsi_sense_valid(SCpnt))
@@ -556,6 +561,7 @@ STATIC int scsi_test_unit_ready(Scsi_Cmnd * SCpnt)
 	SCpnt->use_sg = SCpnt->old_use_sg;
 	SCpnt->cmd_len = SCpnt->old_cmd_len;
 	SCpnt->sc_data_direction = SCpnt->sc_old_data_direction;
+	SCpnt->underflow = SCpnt->old_underflow;
 
 	/*
 	 * Hey, we are done.  Let's look to see what happened.
@@ -736,6 +742,7 @@ STATIC void scsi_eh_finish_command(Scsi_Cmnd ** SClist, Scsi_Cmnd * SCpnt)
 	 */
 	SCpnt->use_sg = SCpnt->old_use_sg;
 	SCpnt->sc_data_direction = SCpnt->sc_old_data_direction;
+	SCpnt->underflow = SCpnt->old_underflow;
 	*SClist = SCpnt;
 }
 

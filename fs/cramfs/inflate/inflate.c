@@ -50,7 +50,7 @@ struct internal_state {
 };
 
 
-int ZEXPORT inflateReset(z)
+int ZEXPORT cramfs_inflateReset(z)
 z_streamp z;
 {
   if (z == Z_NULL || z->state == Z_NULL)
@@ -58,24 +58,24 @@ z_streamp z;
   z->total_in = z->total_out = 0;
   z->msg = Z_NULL;
   z->state->mode = z->state->nowrap ? BLOCKS : METHOD;
-  inflate_blocks_reset(z->state->blocks, z, Z_NULL);
+  cramfs_inflate_blocks_reset(z->state->blocks, z, Z_NULL);
   return Z_OK;
 }
 
 
-int ZEXPORT inflateEnd(z)
+int ZEXPORT cramfs_inflateEnd(z)
 z_streamp z;
 {
   if (z == Z_NULL || z->state == Z_NULL)
     return Z_STREAM_ERROR;
   if (z->state->blocks != Z_NULL)
-    inflate_blocks_free(z->state->blocks, z);
+    cramfs_inflate_blocks_free(z->state->blocks, z);
   z->state = Z_NULL;
   return Z_OK;
 }
 
 
-int ZEXPORT inflateInit2_(z, w, version, stream_size)
+int ZEXPORT cramfs_inflateInit2_(z, w, version, stream_size)
 z_streamp z;
 int w;
 const char *version;
@@ -105,39 +105,39 @@ int stream_size;
   /* set window size */
   if (w < 8 || w > 15)
   {
-    inflateEnd(z);
+    cramfs_inflateEnd(z);
     return Z_STREAM_ERROR;
   }
   z->state->wbits = (uInt)w;
 
   /* create inflate_blocks state */
   if ((z->state->blocks =
-      inflate_blocks_new(z, z->state->nowrap ? Z_NULL : adler32, (uInt)1 << w))
+      cramfs_inflate_blocks_new(z, z->state->nowrap ? Z_NULL : cramfs_adler32, (uInt)1 << w))
       == Z_NULL)
   {
-    inflateEnd(z);
+    cramfs_inflateEnd(z);
     return Z_MEM_ERROR;
   }
 
   /* reset state */
-  inflateReset(z);
+  cramfs_inflateReset(z);
   return Z_OK;
 }
 
 
-int ZEXPORT inflateInit_(z, version, stream_size)
+int ZEXPORT cramfs_inflateInit_(z, version, stream_size)
 z_streamp z;
 const char *version;
 int stream_size;
 {
-  return inflateInit2_(z, DEF_WBITS, version, stream_size);
+  return cramfs_inflateInit2_(z, DEF_WBITS, version, stream_size);
 }
 
 
 #define NEEDBYTE {if(z->avail_in==0)return r;r=f;}
 #define NEXTBYTE (z->avail_in--,z->total_in++,*z->next_in++)
 
-int ZEXPORT inflate(z, f)
+int ZEXPORT cramfs_inflate(z, f)
 z_streamp z;
 int f;
 {
@@ -207,7 +207,7 @@ int f;
       z->state->sub.marker = 0;       /* can try inflateSync */
       return Z_STREAM_ERROR;
     case BLOCKS:
-      r = inflate_blocks(z->state->blocks, z, r);
+      r = cramfs_inflate_blocks(z->state->blocks, z, r);
       if (r == Z_DATA_ERROR)
       {
         z->state->mode = BAD;
@@ -219,7 +219,7 @@ int f;
       if (r != Z_STREAM_END)
         return r;
       r = f;
-      inflate_blocks_reset(z->state->blocks, z, &z->state->sub.check.was);
+      cramfs_inflate_blocks_reset(z->state->blocks, z, &z->state->sub.check.was);
       if (z->state->nowrap)
       {
         z->state->mode = DONE;
@@ -263,7 +263,7 @@ int f;
 }
 
 
-int ZEXPORT inflateSync(z)
+int ZEXPORT cramfs_inflateSync(z)
 z_streamp z;
 {
   uInt n;       /* number of bytes to look at */
@@ -307,7 +307,7 @@ z_streamp z;
   if (m != 4)
     return Z_DATA_ERROR;
   r = z->total_in;  w = z->total_out;
-  inflateReset(z);
+  cramfs_inflateReset(z);
   z->total_in = r;  z->total_out = w;
   z->state->mode = BLOCKS;
   return Z_OK;
@@ -321,7 +321,7 @@ z_streamp z;
  * decompressing, PPP checks that at the end of input packet, inflate is
  * waiting for these length bytes.
  */
-int ZEXPORT inflateSyncPoint(z)
+int ZEXPORT cramfs_inflateSyncPoint(z)
 z_streamp z;
 {
   if (z == Z_NULL || z->state == Z_NULL || z->state->blocks == Z_NULL)

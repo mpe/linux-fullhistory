@@ -116,7 +116,7 @@ static void init_once(void * foo, kmem_cache_t * cachep, unsigned long flags)
  *	__mark_inode_dirty -	internal function
  *	@inode: inode to mark
  *
- *	Mark an inode as dirty. Callers should use mark_inode_dirty
+ *	Mark an inode as dirty. Callers should use mark_inode_dirty.
  */
  
 void __mark_inode_dirty(struct inode *inode)
@@ -530,7 +530,7 @@ static void clean_inode(struct inode *inode)
  * no pre-existing information.
  *
  * On a successful return the inode pointer is returned. On a failure
- * a NULL pointer is returned. The returned inode is not on any superblock
+ * a %NULL pointer is returned. The returned inode is not on any superblock
  * lists.
  */
  
@@ -707,7 +707,7 @@ struct inode *iget4(struct super_block *sb, unsigned long ino, find_inode_t find
  *	@inode: unhashed inode
  *
  *	Add an inode to the inode hash for this superblock. If the inode
- *	has no superblock it is added to a seperate anonymous chain
+ *	has no superblock it is added to a separate anonymous chain.
  */
  
 void insert_inode_hash(struct inode *inode)
@@ -724,7 +724,7 @@ void insert_inode_hash(struct inode *inode)
  *	remove_inode_hash - remove an inode from the hash
  *	@inode: inode to unhash
  *
- *	Remove an inode from the superblock or anonymous hash
+ *	Remove an inode from the superblock or anonymous hash.
  */
  
 void remove_inode_hash(struct inode *inode)
@@ -829,9 +829,9 @@ kdevname(inode->i_dev), inode->i_ino, atomic_read(&inode->i_sem.count));
  *
  *	Returns the block number on the device holding the inode that
  *	is the disk block number for the block of the file requested.
- *	That is asked for block 4 of inode 1 the function will return the
+ *	That is, asked for block 4 of inode 1 the function will return the
  *	disk block relative to the disk start that holds that block of the 
- *	file
+ *	file.
  */
  
 int bmap(struct inode * inode, int block)
@@ -869,9 +869,9 @@ void __init inode_init(void)
  *	update_atime	-	update the access time
  *	@inode: inode accessed
  *
- *	Update the accessed time on an inode and mark it for  writeback.
+ *	Update the accessed time on an inode and mark it for writeback.
  *	This function automatically handles read only file systems and media,
- *	as well as the noatime flag and inode specific noatime markers
+ *	as well as the "noatime" flag and inode specific "noatime" markers.
  */
  
 void update_atime (struct inode *inode)

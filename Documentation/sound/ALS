@@ -13,9 +13,12 @@ To use an ALS sound card under Linux, enable the following options in the
 sound configuration section of the kernel config:
   - 100% Sound Blaster compatibles (SB16/32/64, ESS, Jazz16) support
   - FM synthesizer (YM3812/OPL-3) support 
-Since the ALS-007/100/200 is a PnP card, the sound driver probably should be
-compiled as a module, with the isapnptools used to wake up the sound card.
-Set the "I/O base for SB", "Sound Blaster IRQ" and "Sound Blaster DMA" (8 bit -
+Since the ALS-007/100/200 are PnP cards, ISAPnP support should probably be
+compiled in.
+
+Alternatively, if you decide not to use kernel level ISAPnP, you can use the
+user mode isapnptools to wake up the sound card, as in 2.2.X. Set the "I/O 
+base for SB", "Sound Blaster IRQ" and "Sound Blaster DMA" (8 bit -
 either 0, 1 or 3) to the values used in your particular installation (they
 should match the values used to configure the card using isapnp).  The
 ALS-007 does NOT implement 16 bit DMA, so the "Sound Blaster 16 bit DMA"
@@ -41,3 +44,4 @@ jwoithe@physics.adelaide.edu.au
 30 March 1998
 
 Modified 2000-02-26 by Dave Forrest, drf5n@virginia.edu to add ALS100/ALS200
+Modified 2000-04-10 by Paul Laufer, pelaufer@csupomona.edu to add ISAPnP info.

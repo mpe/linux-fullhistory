@@ -22,6 +22,10 @@ ifeq ($(CONFIG_ATARI_PARTITION),y)
 O_OBJS += atari.o
 endif
 
+ifeq ($(CONFIG_IBM_PARTITION),y)
+O_OBJS += ibm.o
+endif
+
 ifeq ($(CONFIG_MAC_PARTITION),y)
 O_OBJS += mac.o
 endif
@@ -45,5 +49,6 @@ endif
 ifeq ($(CONFIG_ULTRIX_PARTITION),y)
 O_OBJS += ultrix.o
 endif
+
 
 include $(TOPDIR)/Rules.make

@@ -1,24 +1,29 @@
 /*
- *   	i2o_lan.h		LAN Class specific definitions
+ *   	i2o_lan.h			I2O LAN Class definitions
  *
- *      I2O LAN CLASS OSM       Prototyping, May 17th 1999
+ *      I2O LAN CLASS OSM       	April 3rd 2000
  *
- *      (C) Copyright 1999      University of Helsinki,
- *                              Department of Computer Science
+ *      (C) Copyright 1999, 2000	University of Helsinki,
+ *					Department of Computer Science
  *
  *      This code is still under development / test.
  *
- *      Author:         Auvo Häkkinen <Auvo.Hakkinen@cs.Helsinki.FI>
- *			Juha Sievänen <Juha.Sievanen@cs.Helsinki.FI>    
+ *	Author:		Auvo Häkkinen <Auvo.Hakkinen@cs.Helsinki.FI>
+ *			Juha Sievänen <Juha.Sievanen@cs.Helsinki.FI>
+ *			Taneli Vähäkangas <Taneli.Vahakangas@cs.Helsinki.FI>
  */
 
 #ifndef _I2O_LAN_H
 #define _I2O_LAN_H
 
-/* Tunable parameters first */
+/* Default values for tunable parameters first */
 
-#define I2O_BUCKET_COUNT 	256
-#define I2O_BUCKET_THRESH	18 /* 9 buckets in one message */
+#define I2O_LAN_MAX_BUCKETS_OUT 256
+#define I2O_LAN_BUCKET_THRESH	18	/* 9 buckets in one message */
+#define I2O_LAN_RX_COPYBREAK	200
+#define I2O_LAN_TX_TIMEOUT 	(1*HZ)
+#define I2O_LAN_TX_BATCH_MODE	1	/* 1=on, 0=off */
+#define I2O_LAN_EVENT_MASK	0	/* 0=None, 0xFFC00002=All */
 
 /* LAN types */
 #define I2O_LAN_ETHERNET	0x0030
@@ -114,5 +119,38 @@ struct i2o_bucket_descriptor {
 #define I2O_LAN_EVT_LINK_DOWN		0x01
 #define I2O_LAN_EVT_LINK_UP		0x02
 #define I2O_LAN_EVT_MEDIA_CHANGE 	0x04
- 
+
+#include <linux/netdevice.h>
+#include <linux/fddidevice.h>
+
+struct i2o_lan_local {
+	u8 unit;
+	struct i2o_device *i2o_dev;
+	struct fddi_statistics stats;   /* see also struct net_device_stats */
+	unsigned short (*type_trans)(struct sk_buff *, struct net_device *);
+	atomic_t buckets_out;  		/* nbr of unused buckets on DDM */
+	atomic_t tx_out;		/* outstanding TXes */
+	u8 tx_count;  			/* packets in one TX message frame */
+	u16 tx_max_out;	   		/* DDM's Tx queue len */
+	u8 sgl_max;			/* max SGLs in one message frame */
+	u32 m;				/* IOP address of msg frame */
+
+	struct tq_struct i2o_batch_send_task;
+	int send_active;
+	struct sk_buff **i2o_fbl;	/* Free bucket list (to reuse skbs) */
+	int i2o_fbl_tail;
+	spinlock_t fbl_lock;
+
+	spinlock_t tx_lock;
+
+	/* LAN OSM configurable parameters are here: */
+
+	u16 max_buckets_out;		/* max nbr of buckets to send to DDM */
+	u16 bucket_thresh;		/* send more when this many used */
+	u16 rx_copybreak;
+
+	u8  tx_batch_mode;		/* Set when using batch mode sends */
+	u32 i2o_event_mask;		/* To turn on interesting event flags */
+};
+
 #endif /* _I2O_LAN_H */

@@ -30,6 +30,7 @@
 #include "osf.h"
 #include "sgi.h"
 #include "sun.h"
+#include "ibm.h"
 
 extern void device_init(void);
 extern void md_setup_drive(void);
@@ -68,8 +69,16 @@ static int (*check_part[])(struct gendisk *hd, kdev_t dev, unsigned long first_s
 #ifdef CONFIG_ULTRIX_PARTITION
 	ultrix_partition,
 #endif
+#ifdef CONFIG_IBM_PARTITION
+	ibm_partition,
+#endif
 	NULL
 };
+
+#if defined CONFIG_BLK_DEV_LVM || defined CONFIG_BLK_DEV_LVM_MODULE
+#include <linux/lvm.h>
+void (*lvm_hd_name_ptr) (char *, int) = NULL;
+#endif
 
 /*
  * disk_name() is used by genhd.c and blkpg.c.
@@ -97,6 +106,13 @@ char *disk_name (struct gendisk *hd, int minor, char *buf)
 	 * This requires special handling here.
 	 */
 	switch (hd->major) {
+#if defined CONFIG_BLK_DEV_LVM || defined CONFIG_BLK_DEV_LVM_MODULE
+		case LVM_BLK_MAJOR:
+			*buf = 0;
+			if ( lvm_hd_name_ptr != NULL)
+				(lvm_hd_name_ptr) ( buf, minor);
+			return buf;
+#endif
 		case IDE9_MAJOR:
 			unit += 2;
 		case IDE8_MAJOR:
@@ -387,7 +403,7 @@ void register_disk(struct gendisk *gdev, kdev_t dev, unsigned minors,
 {
 	if (!gdev)
 		return;
-	grok_partitions(gdev, MINOR(dev)>>gdev->minor_shift, minors, size);
+		grok_partitions(gdev, MINOR(dev)>>gdev->minor_shift, minors, size);
 }
 
 void grok_partitions(struct gendisk *dev, int drive, unsigned minors, long size)
@@ -432,10 +448,6 @@ int __init partition_setup(void)
 #ifdef CONFIG_BLK_DEV_MD
 	autodetect_raid();
 #endif
-#ifdef CONFIG_MD_BOOT
-	md_setup_drive();
-#endif
-
 	return 0;
 }
 

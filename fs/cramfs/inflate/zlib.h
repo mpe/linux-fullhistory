@@ -291,7 +291,7 @@ ZEXTERN int ZEXPORT deflateEnd OF((z_streamp strm));
 
 
 /* 
-ZEXTERN int ZEXPORT inflateInit OF((z_streamp strm));
+ZEXTERN int ZEXPORT cramfs_inflateInit OF((z_streamp strm));
 
      Initializes the internal stream state for decompression. The fields
    next_in, avail_in, zalloc, zfree and opaque must be initialized before by
@@ -311,7 +311,7 @@ ZEXTERN int ZEXPORT inflateInit OF((z_streamp strm));
 */
 
 
-ZEXTERN int ZEXPORT inflate OF((z_streamp strm, int flush));
+ZEXTERN int ZEXPORT cramfs_inflate OF((z_streamp strm, int flush));
 /*
     inflate decompresses as much data as possible, and stops when the input
   buffer becomes empty or the output buffer becomes full. It may some
@@ -380,7 +380,7 @@ ZEXTERN int ZEXPORT inflate OF((z_streamp strm, int flush));
 */
 
 
-ZEXTERN int ZEXPORT inflateEnd OF((z_streamp strm));
+ZEXTERN int ZEXPORT cramfs_inflateEnd OF((z_streamp strm));
 /*
      All dynamically allocated data structures for this stream are freed.
    This function discards any unprocessed input and does not flush any
@@ -569,7 +569,7 @@ ZEXTERN int ZEXPORT inflateSetDictionary OF((z_streamp strm,
    inflate().
 */
 
-ZEXTERN int ZEXPORT inflateSync OF((z_streamp strm));
+ZEXTERN int ZEXPORT cramfs_inflateSync OF((z_streamp strm));
 /* 
     Skips invalid compressed data until a full flush point (see above the
   description of deflate with Z_FULL_FLUSH) can be found, or until all
@@ -584,7 +584,7 @@ ZEXTERN int ZEXPORT inflateSync OF((z_streamp strm));
   until success or end of the input data.
 */
 
-ZEXTERN int ZEXPORT inflateReset OF((z_streamp strm));
+ZEXTERN int ZEXPORT cramfs_inflateReset OF((z_streamp strm));
 /*
      This function is equivalent to inflateEnd followed by inflateInit,
    but does not free and reallocate all the internal decompression state.
@@ -818,7 +818,7 @@ ZEXTERN const char * ZEXPORT gzerror OF((gzFile file, int *errnum));
    compression library.
 */
 
-ZEXTERN uLong ZEXPORT adler32 OF((uLong adler, const Bytef *buf, uInt len));
+ZEXTERN uLong ZEXPORT cramfs_adler32 OF((uLong adler, const Bytef *buf, uInt len));
 
 /*
      Update a running Adler-32 checksum with the bytes buf[0..len-1] and
@@ -859,23 +859,23 @@ ZEXTERN uLong ZEXPORT crc32   OF((uLong crc, const Bytef *buf, uInt len));
  */
 ZEXTERN int ZEXPORT deflateInit_ OF((z_streamp strm, int level,
                                      const char *version, int stream_size));
-ZEXTERN int ZEXPORT inflateInit_ OF((z_streamp strm,
+ZEXTERN int ZEXPORT cramfs_inflateInit_ OF((z_streamp strm,
                                      const char *version, int stream_size));
 ZEXTERN int ZEXPORT deflateInit2_ OF((z_streamp strm, int  level, int  method,
                                       int windowBits, int memLevel,
                                       int strategy, const char *version,
                                       int stream_size));
-ZEXTERN int ZEXPORT inflateInit2_ OF((z_streamp strm, int  windowBits,
+ZEXTERN int ZEXPORT cramfs_inflateInit2_ OF((z_streamp strm, int  windowBits,
                                       const char *version, int stream_size));
 #define deflateInit(strm, level) \
         deflateInit_((strm), (level),       ZLIB_VERSION, sizeof(z_stream))
-#define inflateInit(strm) \
-        inflateInit_((strm),                ZLIB_VERSION, sizeof(z_stream))
+#define cramfs_inflateInit(strm) \
+        cramfs_inflateInit_((strm),                ZLIB_VERSION, sizeof(z_stream))
 #define deflateInit2(strm, level, method, windowBits, memLevel, strategy) \
         deflateInit2_((strm),(level),(method),(windowBits),(memLevel),\
                       (strategy),           ZLIB_VERSION, sizeof(z_stream))
 #define inflateInit2(strm, windowBits) \
-        inflateInit2_((strm), (windowBits), ZLIB_VERSION, sizeof(z_stream))
+        cramfs_inflateInit2_((strm), (windowBits), ZLIB_VERSION, sizeof(z_stream))
 
 
 #if !defined(_Z_UTIL_H) && !defined(NO_DUMMY_DECL)
@@ -883,7 +883,7 @@ ZEXTERN int ZEXPORT inflateInit2_ OF((z_streamp strm, int  windowBits,
 #endif
 
 ZEXTERN const char   * ZEXPORT zError           OF((int err));
-ZEXTERN int            ZEXPORT inflateSyncPoint OF((z_streamp z));
+ZEXTERN int            ZEXPORT cramfs_inflateSyncPoint OF((z_streamp z));
 ZEXTERN const uLongf * ZEXPORT get_crc_table    OF((void));
 
 #ifdef __cplusplus

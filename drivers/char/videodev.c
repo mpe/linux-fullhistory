@@ -221,26 +221,26 @@ extern struct file_operations video_fops;
 
 /**
  *	video_register_device - register video4linux devices
- *	@vfd: Video device structure we want to register
+ *	@vfd: video device structure we want to register
  *	@type: type of device to register
  *	FIXME: needs a semaphore on 2.3.x
  *	
  *	The registration code assigns minor numbers based on the type
  *	requested. -ENFILE is returned in all the device slots for this
  *	catetory are full. If not then the minor field is set and the
- *	driver initialize function is called (if non NULL).
+ *	driver initialize function is called (if non %NULL).
  *
  *	Zero is returned on success.
  *
  *	Valid types are
  *
- *	VFL_TYPE_GRABBER - A frame grabber
+ *	%VFL_TYPE_GRABBER - A frame grabber
  *
- *	VFL_TYPE_VTX - A teletext device
+ *	%VFL_TYPE_VTX - A teletext device
  *
- *	VFL_TYPE_VBI - Vertical blank data (undecoded)
+ *	%VFL_TYPE_VBI - Vertical blank data (undecoded)
  *
- *	VFL_TYPE_RADIO - A radio card	
+ *	%VFL_TYPE_RADIO - A radio card	
  */
  
 int video_register_device(struct video_device *vfd, int type)

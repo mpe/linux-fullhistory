@@ -13,12 +13,19 @@ dma     	8-bit DMA channel for the Sound Blaster (0,1,3)
 dma16   	16-bit DMA channel for SB16 and equivalent cards (5,6,7)
 mpu_io		I/O for MPU chip if present (0x300,0x330)
 
-mad16=1 	Set when loading this as part of the MAD16 setup only
-trix=1  	Set when loading this as part of the Audiotrix setup only
-pas2=1		Set when loading this as part of the Pas2 setup only
 sm_games=1	Set if you have a Logitech soundman games
 acer=1		Set this to detect cards in some ACER notebooks
 mwave_bug=1	Set if you are trying to use this driver with mwave (see on)
+type		Use this to specify a specific card type
+
+The following arguments are taken if ISAPnP support is compiled in
+
+isapnp=0	Set this to disable ISAPnP detection (use io=0xXXX etc. above)
+multiple=1	Set to enable detection of multiple Soundblaster cards.
+reverse=1	Reverses the order of the search in the PnP table.
+uart401=1	Set to enable detection of mpu devices on some clones.
+isapnpjump	Jumps to a specific slot in the driver's PnP table. Use the
+		source, Luke.
 
 You may well want to load the opl3 driver for synth music on most SB and
 clone SB devices

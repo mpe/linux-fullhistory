@@ -41,14 +41,16 @@ comment 'Additional Block Devices'
 tristate 'Loopback device support' CONFIG_BLK_DEV_LOOP
 dep_tristate 'Network block device support' CONFIG_BLK_DEV_NBD $CONFIG_NET
 
+tristate 'Logical volume manager (LVM) support' CONFIG_BLK_DEV_LVM N
+if [ "$CONFIG_BLK_DEV_LVM" != "n" ]; then
+   bool '   LVM information in proc filesystem' CONFIG_LVM_PROC_FS Y
+fi
+
 bool 'Multiple devices driver support' CONFIG_BLK_DEV_MD
 dep_tristate '  Linear (append) mode' CONFIG_MD_LINEAR $CONFIG_BLK_DEV_MD
 dep_tristate '  RAID-0 (striping) mode' CONFIG_MD_STRIPED $CONFIG_BLK_DEV_MD
 #dep_tristate '  RAID-1 (mirroring) mode' CONFIG_MD_MIRRORING $CONFIG_BLK_DEV_MD
 #dep_tristate '  RAID-4/RAID-5 mode' CONFIG_MD_RAID5 $CONFIG_BLK_DEV_MD
-if [ "$CONFIG_MD_LINEAR" = "y" -o "$CONFIG_MD_STRIPED" = "y" ]; then
-   bool '    Boot support (linear, striped)' CONFIG_MD_BOOT
-fi
 tristate 'RAM disk support' CONFIG_BLK_DEV_RAM
 dep_bool '  Initial RAM disk (initrd) support' CONFIG_BLK_DEV_INITRD $CONFIG_BLK_DEV_RAM
 

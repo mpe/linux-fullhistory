@@ -1,4 +1,4 @@
-/* $Id: namei.h,v 1.14 1999/06/10 05:23:12 davem Exp $
+/* $Id: namei.h,v 1.15 2000/04/08 02:15:14 davem Exp $
  * linux/include/asm-sparc/namei.h
  *
  * Routines to handle famous /usr/gnemul/s*.
@@ -14,7 +14,7 @@
 static inline char * __emul_prefix(void)
 {
 	switch (current->personality) {
-	case PER_BSD:
+	case PER_SUNOS:
 		return SPARC_BSD_EMUL;
 	case PER_SVR4:
 		return SPARC_SOL_EMUL;

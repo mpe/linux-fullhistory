@@ -268,10 +268,10 @@ E: bir7@leland.Stanford.Edu
 D: Original author of the Linux networking code
 
 N: Anton Blanchard
-E: anton@progsoc.uts.edu.au
-W: http://www.progsoc.uts.edu.au/~anton/
+E: anton@linuxcare.com
+W: http://linuxcare.com.au/anton/
 P: 1024/8462A731 4C 55 86 34 44 59 A7 99  2B 97 88 4A 88 9A 0D 97
-D: sun4 port
+D: sun4 port, Sparc hacker
 S: 47 Robert Street
 S: Marrickville NSW 2204
 S: Australia

@@ -495,6 +495,10 @@ static inline void parse_mem_cmdline (char ** cmdline_p)
 			if (!memcmp(from+4, "nopentium", 9)) {
 				from += 9+4;
 				boot_cpu_data.x86_capability &= ~X86_FEATURE_PSE;
+			} else if (!memcmp(from+4, "exactmap", 8)) {
+				from += 8+4;
+				e820.nr_map = 0;
+				usermem = 1;
 			} else {
 				/* If the user specifies memory size, we
 				 * blow away any automatically generated

@@ -390,6 +390,7 @@ extern kdev_t ROOT_DEV;
 static struct dentry *check_pseudo_root(struct super_block *sb)
 {
 	struct dentry *root, *init;
+	struct vfsmount *vfsmnt = NULL;
 
 	/*
 	 * Check whether we're mounted as the root device.
@@ -398,19 +399,25 @@ static struct dentry *check_pseudo_root(struct super_block *sb)
 		
 	if (sb->s_dev != ROOT_DEV)
 		goto out_noroot;
-		
-printk("check_pseudo_root: mounted as root\n");
 
-	root = lookup_dentry(UMSDOS_PSDROOT_NAME, dget(sb->s_root), 0); 
+	/* 
+	 * lookup_dentry needs a (so far non-existent) root. 
+	 */
+	current->fs->root = dget(sb->s_root);
+	current->fs->rootmnt = mntget(vfsmnt);
+	current->fs->pwd = dget(sb->s_root);
+	current->fs->pwdmnt = mntget(vfsmnt);
+	printk(KERN_INFO "check_pseudo_root: mounted as root\n");
+	root = lookup_dentry(UMSDOS_PSDROOT_NAME, 0); 
 	if (IS_ERR(root))
 		goto out_noroot;
 	if (!root->d_inode)
 		goto out_dput;
-printk("check_pseudo_root: found %s/%s\n",
-root->d_parent->d_name.name, root->d_name.name);
+
+	printk(KERN_INFO "check_pseudo_root: found %s/%s\n", root->d_parent->d_name.name, root->d_name.name);
 
 	/* look for /sbin/init */
-	init = lookup_dentry("sbin/init", dget(root), 0);
+	init = lookup_dentry("sbin/init", 0);
 	if (!IS_ERR(init)) {
 		if (init->d_inode)
 			goto root_ok;
@@ -420,8 +427,7 @@ root->d_parent->d_name.name, root->d_name.name);
 	goto out_dput;
 
 root_ok:
-printk("check_pseudo_root: found %s/%s, enabling pseudo-root\n",
-init->d_parent->d_name.name, init->d_name.name);
+	printk(KERN_INFO "check_pseudo_root: found %s/%s, enabling pseudo-root\n", init->d_parent->d_name.name, init->d_name.name);
 	dput(init);
 	return root;
 

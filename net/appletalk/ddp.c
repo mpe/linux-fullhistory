@@ -292,7 +292,7 @@ static int atalk_get_info(char *buffer, char **start, off_t offset, int length)
 		if (pos > offset + length)	/* We have dumped enough */
 			break;
 	}
-	spin_lock_bh(&atalk_sockets_lock);
+	spin_unlock_bh(&atalk_sockets_lock);
 
 	/* The data in question runs from begin to begin+len */
 	*start = buffer + (offset - begin);	/* Start of wanted data */

@@ -107,7 +107,7 @@ static int go_tx(struct net_device *dev);
 
 void __init arcnet_init(void)
 {
-	static int arcnet_inited __initdata = 0;
+	static int arcnet_inited = 0;
 	int count;
 
 	if (arcnet_inited++)

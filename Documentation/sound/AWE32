@@ -9,9 +9,10 @@ important, because the driver works only with real Creative cards.
 2) If your card is NOT "Plug-n-Play" then go to 5th step now. In the other case
 proceed to step 3.
 
-3) You should obtain isapnptools. I looked through other PnP packages 
-for Linux, but all they are either in deep unstable beta/alpha releases or 
-they are much worse than isapnptools. In my case isapnptools were included in 
+3) You should compile in kernel ISAPnP support or you should obtain isapnptools.
+If you choose kernel level ISAPnP skip to step 5. I looked through other PnP 
+packages for Linux, but all they are either in deep unstable beta/alpha releases
+or they are much worse than isapnptools. In my case isapnptools were included in
 a Linux distribution (Red Hat 5.x). If you also already have them then go to 
 step 4.
 
@@ -67,11 +68,7 @@ support" as <M> (module).
 
 In "make (x,menu)config" select in "Sound":
 select "OSS sound modules" as <M> (module)
-
-In "Additional low level sound drivers":
-"Additional low level sound drivers", "AWE32 synth" as <M> (module).
-Select "Additional low level sound drivers" as [y] (or [*] (yes)) (If it is not
-available as [y], select it as <M> (module))
+select "AWE32 Synth" as <M> (module)
 
 Now recompile the kernel (make dep; make (b)zImage, b(z)lilo, etc...;
 make modules; make modules_install), update your boot loader (if required) and
@@ -87,9 +84,7 @@ http://members.xoom.com/yar/synthgm.sbk.gz. Copy it to /usr and gunzip it there.
 
 alias midi awe_wave
 post-install awe_wave /usr/bin/sfxload /usr/synthfm.sbk
-options sb io=0x220 irq=5 dma=1 dma16=5 mpu_io=0x330
 
-(on io=0xaaa irq=b.... you should use your own settings)
 That will enable the Sound Blaster and AWE wave synthesis.
 
 To play midi files you should get one of these programs:
@@ -107,4 +102,4 @@ welcome.
 			    Yaroslav Rosomakho (alons55@dialup.ptt.ru)
 				    http://www.yar.opennet.ru
 
-Last Updated: 3Jan99
+Last Updated: 10Apr2000

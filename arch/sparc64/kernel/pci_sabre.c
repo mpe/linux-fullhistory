@@ -1,4 +1,4 @@
-/* $Id: pci_sabre.c,v 1.16 2000/03/25 05:18:12 davem Exp $
+/* $Id: pci_sabre.c,v 1.17 2000/03/31 04:06:59 davem Exp $
  * pci_sabre.c: Sabre specific PCI controller support.
  *
  * Copyright (C) 1997, 1998, 1999 David S. Miller (davem@caipfs.rutgers.edu)
@@ -1086,7 +1086,7 @@ static void __init sabre_scan_bus(struct pci_controller_info *p)
 	sabre_bus = pci_scan_bus(p->pci_first_busno,
 				 p->pci_ops,
 				 &p->pbm_A);
-
+#if 0
 	{
 		unsigned int devfn;
 		u8 *addr;
@@ -1096,7 +1096,7 @@ static void __init sabre_scan_bus(struct pci_controller_info *p)
 					       devfn, PCI_LATENCY_TIMER);
 		pci_config_write8(addr, 32);
 	}
-
+#endif
 	apb_init(p, sabre_bus);
 
 	walk = &sabre_bus->children;

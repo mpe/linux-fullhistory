@@ -8,9 +8,7 @@
 
     Based largely on the bttv driver by Ralph Metzler (rjkm@thp.uni-koeln.de)
 
-    Additional debugging and coding by Takashi Oe (toe@unlinfo.unl.edu)
-	(Some codes are stolen from proposed v4l2 videodev.c
-		of Bill Dirks <dirks@rendition.com>)
+    Additional debugging and coding by Takashi Oe (toe@unlserve.unl.edu)
 
     This program is free software; you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
@@ -94,11 +92,7 @@ static void saa_write_reg(unsigned char, unsigned char);
 static unsigned char saa_status(int, struct planb *);
 static void saa_set(unsigned char, unsigned char, struct planb *);
 static void saa_init_regs(struct planb *);
-static void * rvmalloc(unsigned long);
-static void rvfree(void *, unsigned long);
-static unsigned long vmalloc_to_bus(void *);
-static unsigned long vmalloc_to_phys(void *);
-static int fbuffer_alloc(struct planb *);
+static int grabbuf_alloc(struct planb *);
 static int vgrab(struct planb *, struct video_mmap *);
 static void add_clip(struct planb *, struct video_clip *);
 static void fill_cmd_buff(struct planb *);
@@ -125,82 +119,36 @@ static inline int overlay_is_active(struct planb *);
 /* Memory management functions */
 /*******************************/
 
-static void * rvmalloc(unsigned long size)
+static int grabbuf_alloc(struct planb *pb)
 {
-	void *mem, *memptr;
-	unsigned long page;
-        
-	mem=vmalloc(size);
-	if (mem) 
-	{
-		memset(mem, 0, size); /* Clear the ram out, leave no junk */
-		memptr = mem;
-		while (size > 0) 
-                {
-	                page = vmalloc_to_phys(memptr);
-			mem_map_reserve(MAP_NR(phys_to_virt(page)));
-			memptr+=PAGE_SIZE;
-			size-=PAGE_SIZE;
-		}
+	int i, npage;
+
+	npage = MAX_GBUFFERS * ((PLANB_MAX_FBUF / PAGE_SIZE + 1)
+#ifndef PLANB_GSCANLINE
+		+ MAX_LNUM
+#endif /* PLANB_GSCANLINE */
+		);
+	if ((pb->rawbuf = (unsigned char**) kmalloc (npage
+				* sizeof(unsigned long), GFP_KERNEL)) == 0)
+		return -ENOMEM;
+	for (i = 0; i < npage; i++) {
+		pb->rawbuf[i] = (unsigned char *)__get_free_pages(GFP_KERNEL
+								|GFP_DMA, 0);
+		if (!pb->rawbuf[i])
+			break;
+		set_bit(PG_reserved, &mem_map[MAP_NR(pb->rawbuf[i])].flags);
 	}
-	return mem;
-}
-
-static void rvfree(void * mem, unsigned long size)
-{
-	void *memptr;
-        unsigned long page;
-        
-	if (mem) 
-	{
-		memptr = mem;
-		while (size > 0) 
-                {
-	                page = vmalloc_to_phys(memptr);
-			mem_map_unreserve(MAP_NR(phys_to_virt(page)));
-			memptr += PAGE_SIZE;
-			size-=PAGE_SIZE;
+	if (i-- < npage) {
+		printk(KERN_DEBUG "PlanB: init_grab: grab buffer not allocated\n");
+		for (; i > 0; i--) {
+			clear_bit(PG_reserved,
+				&mem_map[MAP_NR(pb->rawbuf[i])].flags);
+			free_pages((unsigned long)pb->rawbuf[i], 0);
 		}
-		vfree(mem);
-	}
-}
-
-/*  Useful for using vmalloc()ed memory as DMA target  */
-static unsigned long vmalloc_to_bus(void *virt)
-{
-	pgd_t		*pgd;
-	pmd_t		*pmd;
-	pte_t		*pte;
-	unsigned long	a = (unsigned long)virt;
-
-	if (pgd_none(*(pgd = pgd_offset(current->mm, a))) ||
-	    pmd_none(*(pmd = pmd_offset(pgd,         a))) ||
-	    pte_none(*(pte = pte_offset(pmd,         a))))
-		return 0;
-	return virt_to_bus((void *)pte_page(*pte))
-		+ (a & (PAGE_SIZE - 1));
-}
-
-static unsigned long vmalloc_to_phys(void *virt) {
-	return virt_to_phys(bus_to_virt(vmalloc_to_bus(virt)));
-}
-
-/*
- *	Create the giant waste of buffer space we need for now
- *	until we get DMA to user space sorted out (probably 2.3.x)
- *
- *	We only create this as and when someone uses mmap
- */
- 
-static int fbuffer_alloc(struct planb *pb)
-{
-	if(!pb->fbuffer)
-		pb->fbuffer=(unsigned char *) rvmalloc(MAX_GBUFFERS
-					* PLANB_MAX_FBUF);
-	else
-		printk(KERN_ERR "PlanB: Double alloc of fbuffer!\n");
-	if(!pb->fbuffer)
+		kfree(pb->rawbuf);
 		return -ENOBUFS;
+	}
+	pb->rawbuf_size = npage;
 	return 0;
 }
 
@@ -446,11 +394,8 @@ static int planb_prepare_open(struct planb *pb)
 						+ PLANB_DUMMY);
 	pb->mask = (unsigned char *)(pb->frame_stat+MAX_GBUFFERS);
 
-	pb->fbuffer = (unsigned char *)rvmalloc(MAX_GBUFFERS * PLANB_MAX_FBUF);
-	if (!pb->fbuffer) {
-		kfree(pb->priv_space);
-		return -ENOMEM;
-	}
+	pb->rawbuf = NULL;
+	pb->rawbuf_size = 0;
 	pb->grabbing = 0;
 	for (i = 0; i < MAX_GBUFFERS; i++) {
 		pb->frame_stat[i] = GBUFFER_UNUSED;
@@ -461,31 +406,23 @@ static int planb_prepare_open(struct planb *pb)
 #ifndef PLANB_GSCANLINE
 		pb->lsize[i] = 0;
 		pb->lnum[i] = 0;
-		pb->l_fr_addr[i]=(unsigned char *)rvmalloc(PAGE_SIZE*MAX_LNUM);
-		if (!pb->l_fr_addr[i]) {
-			int j;
-			kfree(pb->priv_space);
-			rvfree((void *)pb->fbuffer, MAX_GBUFFERS
-							* PLANB_MAX_FBUF);
-			for(j = 0; j < i; j++)
-				rvfree((void *)pb->l_fr_addr[j], PAGE_SIZE
-								* MAX_LNUM);
-			return -ENOMEM;
-		}
 #endif /* PLANB_GSCANLINE */
 	}
 	pb->gcount = 0;
 	pb->suspend = 0;
 	pb->last_fr = -999;
 	pb->prev_last_fr = -999;
-	return 0;   
+
+	/* Reset DMA controllers */
+	planb_dbdma_stop(&pb->planb_base->ch2);
+	planb_dbdma_stop(&pb->planb_base->ch1);
+
+	return 0;
 }
 
 static void planb_prepare_close(struct planb *pb)
 {
-#ifndef PLANB_GSCANLINE
 	int i;
-#endif
 
 	/* make sure the dma's are idle */
 	planb_dbdma_stop(&pb->planb_base->ch2);
@@ -496,16 +433,15 @@ static void planb_prepare_close(struct planb *pb)
 		pb->priv_space = 0;
 		pb->cmd_buff_inited = 0;
 	}
-	if(pb->fbuffer)
-		rvfree((void *)pb->fbuffer, MAX_GBUFFERS*PLANB_MAX_FBUF);
-	pb->fbuffer = NULL;
-#ifndef PLANB_GSCANLINE
-	for(i = 0; i < MAX_GBUFFERS; i++) {
-		if(pb->l_fr_addr[i])
-			rvfree((void *)pb->l_fr_addr[i], PAGE_SIZE * MAX_LNUM);
-		pb->l_fr_addr[i] = NULL;
+	if(pb->rawbuf) {
+		for (i = 0; i < pb->rawbuf_size; i++) {
+			clear_bit(PG_reserved,
+				&mem_map[MAP_NR(pb->rawbuf[i])].flags);
+			free_pages((unsigned long)pb->rawbuf[i], 0);
+		}
+		kfree(pb->rawbuf);
 	}
-#endif /* PLANB_GSCANLINE */
+	pb->rawbuf = NULL;
 }
 
 /*****************************/
@@ -940,12 +876,8 @@ static int palette2fmt[] = {
        0,
        0,
 };
-#define PLANB_PALETTE_MAX 15
 
-#define SWAP4(x) (((x>>24) & 0x000000ff) |\
-                  ((x>>8)  & 0x0000ff00) |\
-                  ((x<<8)  & 0x00ff0000) |\
-                  ((x<<24) & 0xff000000))
+#define PLANB_PALETTE_MAX 15
 
 static inline int overlay_is_active(struct planb *pb)
 {
@@ -962,9 +894,10 @@ static int vgrab(struct planb *pb, struct video_mmap *mp)
 	unsigned int fr = mp->frame;
 	unsigned int format;
 
-	if(pb->fbuffer==NULL) {
-		if(fbuffer_alloc(pb))
-			return -ENOBUFS;
+	if(pb->rawbuf==NULL) {
+		int err;
+		if((err=grabbuf_alloc(pb)))
+			return err;
 	}
 
 	IDEBUG("PlanB: grab %d: %dx%d(%u)\n", pb->grabbing,
@@ -984,12 +917,10 @@ static int vgrab(struct planb *pb, struct video_mmap *mp)
 		return -EINVAL;
 
 	planb_lock(pb);
-	pb->gbuffer[fr] = (unsigned char *)(pb->fbuffer + PLANB_MAX_FBUF * fr);
 	if(mp->width != pb->gwidth[fr] || mp->height != pb->gheight[fr] ||
 			format != pb->gfmt[fr] || (pb->gnorm_switch[fr])) {
-#ifdef PLANB_GSCANLINE
 		int i;
-#else
+#ifndef PLANB_GSCANLINE
 		unsigned int osize = pb->gwidth[fr] * pb->gheight[fr]
 								* pb->gfmt[fr];
 		unsigned int nsize = mp->width * mp->height * format;
@@ -1001,10 +932,15 @@ static int vgrab(struct planb *pb, struct video_mmap *mp)
 #ifndef PLANB_GSCANLINE
 		if(pb->gnorm_switch[fr])
 			nsize = 0;
-		if(nsize < osize)
-			memset((void *)(pb->gbuffer[fr] + nsize), 0,
-								osize - nsize);
-		memset((void *)pb->l_fr_addr[fr], 0, PAGE_SIZE * pb->lnum[fr]);
+		if (nsize < osize) {
+			for(i = pb->gbuf_idx[fr]; osize > 0; i++) {
+				memset((void *)pb->rawbuf[i], 0, PAGE_SIZE);
+				osize -= PAGE_SIZE;
+			}
+		}
+		for(i = pb->l_fr_addr_idx[fr]; i < pb->l_fr_addr_idx[fr]
+							+ pb->lnum[fr]; i++)
+			memset((void *)pb->rawbuf[i], 0, PAGE_SIZE);
 #else
 /* XXX TODO */
 /*
@@ -1228,7 +1164,7 @@ static volatile struct dbdma_cmd *setup_grab_cmd(int fr, struct planb *pb)
 	unsigned long	base;
 #endif
 	unsigned long	jump;
-	unsigned char	*vaddr;
+	int		pagei;
 	volatile struct dbdma_cmd *c1;
 	volatile struct dbdma_cmd *jump_addr;
 
@@ -1277,11 +1213,12 @@ static volatile struct dbdma_cmd *setup_grab_cmd(int fr, struct planb *pb)
 
 	/* even field data: */
 
-	vaddr = pb->gbuffer[fr];
+	pagei = pb->gbuf_idx[fr];
 #ifdef PLANB_GSCANLINE
 	for (i = 0; i < nlines; i += stepsize) {
 		tab_cmd_gen(c1++, INPUT_MORE | BR_IFSET, count,
-				vmalloc_to_bus(vaddr + i * scanline), jump);
+					virt_to_bus(pb->rawbuf[pagei
+					+ i * scanline / PAGE_SIZE]), jump);
 	}
 #else
 	i = 0;
@@ -1289,7 +1226,7 @@ static volatile struct dbdma_cmd *setup_grab_cmd(int fr, struct planb *pb)
 	do {
 	    int j;
 
-	    base = vmalloc_to_bus((void*)vaddr);
+	    base = virt_to_bus(pb->rawbuf[pagei]);
 	    nlpp = (PAGE_SIZE - leftover1) / count / stepsize;
 	    for(j = 0; j < nlpp && i < nlines; j++, i += stepsize, c1++)
 		tab_cmd_gen(c1, INPUT_MORE | KEY_STREAM0 | BR_IFSET,
@@ -1304,11 +1241,13 @@ static volatile struct dbdma_cmd *setup_grab_cmd(int fr, struct planb *pb)
 			tab_cmd_gen(c1++, INPUT_MORE | BR_IFSET, count, base
 				+ count * nlpp * stepsize + leftover1, jump);
 		    } else {
-			pb->l_to_addr[fr][pb->lnum[fr]] = vaddr + count * nlpp
-							* stepsize + leftover1;
+			pb->l_to_addr[fr][pb->lnum[fr]] = pb->rawbuf[pagei]
+					+ count * nlpp * stepsize + leftover1;
+			pb->l_to_next_idx[fr][pb->lnum[fr]] = pagei + 1;
+			pb->l_to_next_size[fr][pb->lnum[fr]] = count - lov0;
 			tab_cmd_gen(c1++, INPUT_MORE | BR_IFSET, count,
-				vmalloc_to_bus(pb->l_fr_addr[fr] + PAGE_SIZE
-							* pb->lnum[fr]), jump);
+				virt_to_bus(pb->rawbuf[pb->l_fr_addr_idx[fr]
+						+ pb->lnum[fr]]), jump);
 			if(++pb->lnum[fr] > MAX_LNUM)
 				pb->lnum[fr]--;
 		    }
@@ -1316,7 +1255,7 @@ static volatile struct dbdma_cmd *setup_grab_cmd(int fr, struct planb *pb)
 		    i += stepsize;
 		}
 	    }
-	    vaddr += PAGE_SIZE;
+	    pagei++;
 	} while(i < nlines);
 	tab_cmd_dbdma(c1, DBDMA_NOP | BR_ALWAYS, jump);
 	c1 = jump_addr;
@@ -1341,18 +1280,19 @@ static volatile struct dbdma_cmd *setup_grab_cmd(int fr, struct planb *pb)
 #ifdef PLANB_GSCANLINE
 	for (i = 1; i < nlines; i += stepsize) {
 		tab_cmd_gen(c1++, INPUT_MORE | BR_IFSET, count,
-				vmalloc_to_bus(vaddr + i * scanline), jump);
+					virt_to_bus(pb->rawbuf[pagei
+					+ i * scanline / PAGE_SIZE]), jump);
 	}
 #else
 	i = 1;
 	leftover1 = 0;
-	vaddr = pb->gbuffer[fr];
+	pagei = pb->gbuf_idx[fr];
 	if(nlines <= 1)
 	    goto skip;
 	do {
 	    int j;
 
-	    base = vmalloc_to_bus((void*)vaddr);
+	    base = virt_to_bus(pb->rawbuf[pagei]);
 	    nlpp = (PAGE_SIZE - leftover1) / count / stepsize;
 	    if(leftover1 >= count) {
 		tab_cmd_gen(c1++, INPUT_MORE | KEY_STREAM0 | BR_IFSET, count,
@@ -1369,11 +1309,14 @@ static volatile struct dbdma_cmd *setup_grab_cmd(int fr, struct planb *pb)
 		    leftover1 = 0;
 		else {
 		    if(lov0 > count) {
-			pb->l_to_addr[fr][pb->lnum[fr]] = vaddr + count
-					* (nlpp * stepsize + 1) + leftover1;
+			pb->l_to_addr[fr][pb->lnum[fr]] = pb->rawbuf[pagei]
+				+ count * (nlpp * stepsize + 1) + leftover1;
+			pb->l_to_next_idx[fr][pb->lnum[fr]] = pagei + 1;
+			pb->l_to_next_size[fr][pb->lnum[fr]] = count * stepsize
+									- lov0;
 			tab_cmd_gen(c1++, INPUT_MORE | BR_IFSET, count,
-				vmalloc_to_bus(pb->l_fr_addr[fr] + PAGE_SIZE
-							* pb->lnum[fr]), jump);
+				virt_to_bus(pb->rawbuf[pb->l_fr_addr_idx[fr]
+							+ pb->lnum[fr]]), jump);
 			if(++pb->lnum[fr] > MAX_LNUM)
 				pb->lnum[fr]--;
 			i += stepsize;
@@ -1381,7 +1324,7 @@ static volatile struct dbdma_cmd *setup_grab_cmd(int fr, struct planb *pb)
 		    leftover1 = count * stepsize - lov0;
 		}
 	    }
-	    vaddr += PAGE_SIZE;
+	    pagei++;
 	} while(i < nlines);
 skip:
 	tab_cmd_dbdma(c1, DBDMA_NOP | BR_ALWAYS, jump);
@@ -1390,7 +1333,7 @@ skip:
 
 cmd_tab_data_end:
 	tab_cmd_store(c1++, (unsigned)(&pb->planb_base_phys->intr_stat),
-			(fr << 2) | PLANB_FRM_IRQ | PLANB_GEN_IRQ);
+			(fr << 9) | PLANB_FRM_IRQ | PLANB_GEN_IRQ);
 	/* stop it */
 	tab_cmd_dbdma(c1, DBDMA_STOP, 0);
 
@@ -1406,13 +1349,15 @@ static void planb_irq(int irq, void *dev_id, struct pt_regs * regs)
 	IDEBUG("PlanB: planb_irq()\n");
 
 	/* get/clear interrupt status bits */
+	eieio();
 	stat = in_le32(&pb->planb_base->intr_stat);
 	astat = stat & pb->intr_mask;
-	out_le32(&pb->planb_base->intr_stat, PLANB_IRQ_CMD_MASK
+	out_le32(&pb->planb_base->intr_stat, PLANB_FRM_IRQ
 					& ~astat & stat & ~PLANB_GEN_IRQ);
+	IDEBUG("PlanB: stat = %X, astat = %X\n", stat, astat);
 
 	if(astat & PLANB_FRM_IRQ) {
-		unsigned int fr = stat >> 2;
+		unsigned int fr = stat >> 9;
 #ifndef PLANB_GSCANLINE
 		int i;
 #endif
@@ -1425,9 +1370,16 @@ static void planb_irq(int irq, void *dev_id, struct pt_regs * regs)
 #ifndef PLANB_GSCANLINE
 		IDEBUG("PlanB: %d * %d bytes are being copied over\n",
 				pb->lnum[fr], pb->lsize[fr]);
-		for(i = 0; i < pb->lnum[fr]; i++)
-			memcpy(pb->l_to_addr[fr][i], pb->l_fr_addr[fr]
-					+ PAGE_SIZE * i, pb->lsize[fr]);
+		for(i = 0; i < pb->lnum[fr]; i++) {
+			int first = pb->lsize[fr] - pb->l_to_next_size[fr][i];
+
+			memcpy(pb->l_to_addr[fr][i],
+				pb->rawbuf[pb->l_fr_addr_idx[fr] + i],
+				first);
+			memcpy(pb->rawbuf[pb->l_to_next_idx[fr][i]],
+				pb->rawbuf[pb->l_fr_addr_idx[fr] + i] + first,
+						pb->l_to_next_size[fr][i]);
+		}
 #endif
 		pb->frame_stat[fr] = GBUFFER_DONE;
 		pb->grabbing--;
@@ -1848,6 +1800,8 @@ chk_grab:
 				IDEBUG("PlanB: waiting for grab"
 							" done (%d)\n", i);
  			        interruptible_sleep_on(&pb->capq);
+				if(signal_pending(current))
+					return -EINTR;
 				goto chk_grab;
                         case GBUFFER_DONE:
                                 pb->frame_stat[i] = GBUFFER_UNUSED;
@@ -2058,38 +2012,27 @@ unimplemented:
 	return 0;
 }
 
-/*
- *	This maps the vmalloced and reserved fbuffer to user space.
- *
- *  FIXME: 
- *  - PAGE_READONLY should suffice!?
- *  - remap_page_range is kind of inefficient for page by page remapping.
- *    But e.g. pte_alloc() does not work in modules ... :-(
- */
- 
 static int planb_mmap(struct video_device *dev, const char *adr, unsigned long size)
 {
-	struct planb *pb=(struct planb *)dev;
-        unsigned long start=(unsigned long) adr;
-	unsigned long page;
-	void *pos;
+	int i;
+	struct planb *pb = (struct planb *)dev;
+        unsigned long start = (unsigned long)adr;
 
-	if (size>MAX_GBUFFERS*PLANB_MAX_FBUF)
+	if (size > MAX_GBUFFERS * PLANB_MAX_FBUF)
 	        return -EINVAL;
-	if (!pb->fbuffer)
-	{
-		if(fbuffer_alloc(pb))
-			return -EINVAL;
+	if (!pb->rawbuf) {
+		int err;
+		if((err=grabbuf_alloc(pb)))
+			return err;
 	}
-	pos = (void *)pb->fbuffer;
-	while (size > 0) 
-	{
-	        page = vmalloc_to_phys(pos);
-		if (remap_page_range(start, page, PAGE_SIZE, PAGE_SHARED))
-		        return -EAGAIN;
-		start+=PAGE_SIZE;
-		pos+=PAGE_SIZE;
-		size-=PAGE_SIZE;    
+	for (i = 0; i < pb->rawbuf_size; i++) {
+		if (remap_page_range(start, virt_to_phys((void *)pb->rawbuf[i]),
+						PAGE_SIZE, PAGE_SHARED))
+			return -EAGAIN;
+		start += PAGE_SIZE;
+		if (size <= PAGE_SIZE)
+			break;
+		size -= PAGE_SIZE;
 	}
 	return 0;
 }
@@ -2125,6 +2068,7 @@ static int init_planb(struct planb *pb)
 {
 	unsigned char saa_rev;
 	int i, result;
+	unsigned long flags;
 
 	memset ((void *) &pb->win, 0, sizeof (struct planb_window));
 	/* Simple sanity check */
@@ -2167,7 +2111,7 @@ static int init_planb(struct planb *pb)
 	pb->tab_size = PLANB_MAXLINES + 40;
 	pb->suspend = 0;
 	pb->lock = 0;
-	pb->lockq = NULL;
+	init_waitqueue_head(&pb->lockq);
 	pb->ch1_cmd = 0;
 	pb->ch2_cmd = 0;
 	pb->mask = 0;
@@ -2175,7 +2119,7 @@ static int init_planb(struct planb *pb)
 	pb->offset = 0;
 	pb->user = 0;
 	pb->overlay = 0;
-	pb->suspendq = NULL;
+	init_waitqueue_head(&pb->suspendq);
 	pb->cmd_buff_inited = 0;
 	pb->frame_buffer_phys = 0;
 
@@ -2191,19 +2135,20 @@ static int init_planb(struct planb *pb)
 	/* clear interrupt mask */
 	pb->intr_mask = PLANB_CLR_IRQ;
 
+	save_flags(flags); cli();
         result = request_irq(pb->irq, planb_irq, 0, "PlanB", (void *)pb);
-        if (result==-EINVAL) {
-                printk(KERN_ERR "PlanB: Bad irq number (%d) or handler\n",
-                       (int)pb->irq);
-                return result;
-        }
-	if (result==-EBUSY) {
-                printk(KERN_ERR "PlanB: I don't know why, but IRQ %d busy\n",
-			(int)pb->irq);
-                return result;
-        }
-        if (result < 0) 
-                return result;
+        if (result < 0) {
+	        if (result==-EINVAL)
+	                printk(KERN_ERR "PlanB: Bad irq number (%d) "
+						"or handler\n", (int)pb->irq);
+		else if (result==-EBUSY)
+			printk(KERN_ERR "PlanB: I don't know why, "
+					"but IRQ %d is busy\n", (int)pb->irq);
+		restore_flags(flags);
+		return result;
+	}
+	disable_irq(pb->irq);
+	restore_flags(flags);
         
 	/* Now add the template and register the device unit. */
 	memcpy(&pb->video_dev,&planb_template,sizeof(planb_template));
@@ -2216,26 +2161,27 @@ static int init_planb(struct planb *pb)
 	pb->picture.depth = pb->win.depth;
 
 	pb->frame_stat=NULL;
-	pb->capq=NULL;
+	init_waitqueue_head(&pb->capq);
 	for(i=0; i<MAX_GBUFFERS; i++) {
-		pb->gbuffer[i]=NULL;
+		pb->gbuf_idx[i] = PLANB_MAX_FBUF * i / PAGE_SIZE;
 		pb->gwidth[i]=0;
 		pb->gheight[i]=0;
 		pb->gfmt[i]=0;
 		pb->cap_cmd[i]=NULL;
 #ifndef PLANB_GSCANLINE
-		pb->l_fr_addr[i]=NULL;
+		pb->l_fr_addr_idx[i] = MAX_GBUFFERS * (PLANB_MAX_FBUF
+						/ PAGE_SIZE + 1) + MAX_LNUM * i;
 		pb->lsize[i] = 0;
 		pb->lnum[i] = 0;
 #endif
 	}
-	pb->fbuffer=NULL;
+	pb->rawbuf=NULL;
 	pb->grabbing=0;
 
-	/* clear interrupts */
+	/* enable interrupts */
 	out_le32(&pb->planb_base->intr_stat, PLANB_CLR_IRQ);
-	/* set interrupt mask */
 	pb->intr_mask = PLANB_FRM_IRQ;
+	enable_irq(pb->irq);
 
 	if(video_register_device(&pb->video_dev, VFL_TYPE_GRABBER)<0)
 		return -1;

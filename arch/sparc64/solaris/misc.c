@@ -1,4 +1,4 @@
-/* $Id: misc.c,v 1.23 2000/03/13 21:57:34 davem Exp $
+/* $Id: misc.c,v 1.24 2000/04/08 02:11:55 davem Exp $
  * misc.c: Miscelaneous syscall emulation for Solaris
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -54,7 +54,7 @@ static u32 do_solaris_mmap(u32 addr, u32 len, u32 prot, u32 flags, u32 fd, u64 o
 	unsigned long retval, ret_type;
 
 	lock_kernel();
-	current->personality |= PER_SVR4;
+	current->personality = PER_SVR4;
 	if (flags & MAP_NORESERVE) {
 		static int cnt = 0;
 		

@@ -60,7 +60,7 @@ pt_succ_return_linux(struct pt_regs *regs, unsigned long value, long *addr)
 static void
 pt_os_succ_return (struct pt_regs *regs, unsigned long val, long *addr)
 {
-	if (current->personality & PER_BSD)
+	if (current->personality == PER_SUNOS)
 		pt_succ_return (regs, val);
 	else
 		pt_succ_return_linux (regs, val, addr);
@@ -155,7 +155,7 @@ static inline void read_sunos_user(struct pt_regs *regs, unsigned long offset,
 		pt_error_return(regs, EIO);
 		return;
 	}
-	if (current->personality & PER_BSD)
+	if (current->personality == PER_SUNOS)
 		pt_succ_return (regs, v);
 	else
 		pt_succ_return_linux (regs, v, addr);
@@ -310,8 +310,8 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		goto out;
 	}
 
-	if (((current->personality & PER_BSD) && (request == PTRACE_SUNATTACH))
-	    || (!(current->personality & PER_BSD) && (request == PTRACE_ATTACH))) {
+	if ((current->personality == PER_SUNOS && request == PTRACE_SUNATTACH)
+	    || (current->personality != PER_SUNOS && request == PTRACE_ATTACH)) {
 		unsigned long flags;
 
 		if(child == current) {
@@ -349,9 +349,7 @@ asmlinkage void do_ptrace(struct pt_regs *regs)
 		pt_succ_return(regs, 0);
 		goto out;
 	}
-	if (!(child->flags & PF_PTRACED)
-	    && ((current->personality & PER_BSD) && (request != PTRACE_SUNATTACH))
-	    && (!(current->personality & PER_BSD) && (request != PTRACE_ATTACH))) {
+	if (!(child->flags & PF_PTRACED)) {
 		pt_error_return(regs, ESRCH);
 		goto out;
 	}

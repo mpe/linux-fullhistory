@@ -11,6 +11,7 @@
  */
 
 #define DEBUG 0
+#include <asm/div64.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
 #include <linux/malloc.h>
@@ -59,6 +60,7 @@ affs_read_inode(struct inode *inode)
 	unsigned long		 prot;
 	s32			 ptype, stype;
 	unsigned short		 id;
+	loff_t		tmp;
 
 	pr_debug("AFFS: read_inode(%lu)\n",inode->i_ino);
 
@@ -147,7 +149,10 @@ affs_read_inode(struct inode *inode)
 				block = AFFS_I2BSIZE(inode) - 24;
 			else
 				block = AFFS_I2BSIZE(inode);
-			inode->u.affs_i.i_lastblock = ((inode->i_size + block - 1) / block) - 1;
+			tmp = inode->i_size + block -1;
+			do_div (tmp, block);
+			tmp--;
+			inode->u.affs_i.i_lastblock = tmp;
 			break;
 		case ST_SOFTLINK:
 			inode->i_mode |= S_IFLNK;

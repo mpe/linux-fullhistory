@@ -986,7 +986,7 @@ static int __init ip_auto_config_setup(char *addrs)
 		num++;
 	}
 
-	return 0;
+	return 1;
 }
 
 static int __init nfsaddrs_config_setup(char *addrs)

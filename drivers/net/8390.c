@@ -181,7 +181,7 @@ int ei_open(struct net_device *dev)
  * ei_close - shut down network device
  * @dev: network device to close
  *
- * Opposite of ei_open. Only used when "ifconfig <devname> down" is done.
+ * Opposite of ei_open(). Only used when "ifconfig <devname> down" is done.
  */
 int ei_close(struct net_device *dev)
 {
@@ -416,7 +416,7 @@ static int ei_start_xmit(struct sk_buff *skb, struct net_device *dev)
  * the 8390 via the card specific functions and fire them at the networking
  * stack. We also handle transmit completions and wake the transmit path if
  * neccessary. We also update the counters and do other housekeeping as
- * needed
+ * needed.
  */
 
 void ei_interrupt(int irq, void *dev_id, struct pt_regs * regs)
@@ -530,7 +530,7 @@ void ei_interrupt(int irq, void *dev_id, struct pt_regs * regs)
  * is a much better solution as it avoids kernel based Tx timeouts, and
  * an unnecessary card reset.
  *
- * Called with lock held
+ * Called with lock held.
  */
 
 static void ei_tx_err(struct net_device *dev)
@@ -573,7 +573,7 @@ static void ei_tx_err(struct net_device *dev)
  * @dev: network device for which tx intr is handled
  *
  * We have finished a transmit: check for errors and then trigger the next
- * packet to be sent. Called with lock held
+ * packet to be sent. Called with lock held.
  */
 
 static void ei_tx_intr(struct net_device *dev)
@@ -665,7 +665,7 @@ static void ei_tx_intr(struct net_device *dev)
  * @dev: network device with which receive will be run
  *
  * We have a good packet(s), get it/them out of the buffers. 
- * Called with lock held
+ * Called with lock held.
  */
 
 static void ei_receive(struct net_device *dev)
@@ -801,7 +801,7 @@ static void ei_receive(struct net_device *dev)
  * This includes causing "the NIC to defer indefinitely when it is stopped
  * on a busy network."  Ugh.
  * Called with lock held. Don't call this with the interrupts off or your
- * computer will hate you - it takes 10mS or so. 
+ * computer will hate you - it takes 10ms or so. 
  */
 
 static void ei_rx_overrun(struct net_device *dev)

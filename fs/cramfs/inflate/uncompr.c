@@ -40,16 +40,16 @@ int ZEXPORT uncompress (dest, destLen, source, sourceLen)
     stream.avail_out = (uInt)*destLen;
     if ((uLong)stream.avail_out != *destLen) return Z_BUF_ERROR;
 
-    err = inflateInit(&stream);
+    err = cramfs_inflateInit(&stream);
     if (err != Z_OK) return err;
 
-    err = inflate(&stream, Z_FINISH);
+    err = cramfs_inflate(&stream, Z_FINISH);
     if (err != Z_STREAM_END) {
-        inflateEnd(&stream);
+        cramfs_inflateEnd(&stream);
         return err == Z_OK ? Z_BUF_ERROR : err;
     }
     *destLen = stream.total_out;
 
-    err = inflateEnd(&stream);
+    err = cramfs_inflateEnd(&stream);
     return err;
 }

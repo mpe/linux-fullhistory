@@ -27,6 +27,11 @@ extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(elf_fpregset_t *);
 extern spinlock_t rtc_lock;
 
+#if defined(CONFIG_APM)
+extern void machine_real_restart(unsigned char *, int);
+EXPORT_SYMBOL(machine_real_restart);
+#endif
+
 #ifdef CONFIG_SMP
 extern void FASTCALL( __write_lock_failed(rwlock_t *rw));
 extern void FASTCALL( __read_lock_failed(rwlock_t *rw));
@@ -68,7 +73,6 @@ EXPORT_SYMBOL_NOVERS(__down_write_failed);
 EXPORT_SYMBOL_NOVERS(__down_read_failed);
 EXPORT_SYMBOL_NOVERS(__rwsem_wake);
 /* Networking helper routines. */
-EXPORT_SYMBOL(csum_partial_copy);
 EXPORT_SYMBOL(csum_partial_copy_generic);
 /* Delay loops */
 EXPORT_SYMBOL(__udelay);
@@ -84,7 +88,6 @@ EXPORT_SYMBOL_NOVERS(__put_user_4);
 
 EXPORT_SYMBOL(strtok);
 EXPORT_SYMBOL(strpbrk);
-EXPORT_SYMBOL(strstr);
 
 EXPORT_SYMBOL(strncpy_from_user);
 EXPORT_SYMBOL(__strncpy_from_user);

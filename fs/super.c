@@ -96,10 +96,10 @@ static struct file_system_type **find_filesystem(const char *name)
  *	@fs: the file system structure
  *
  *	Adds the file system passed to the list of file systems the kernel
- *	is aware of for by mount and other syscalls. Returns 0 on success,
+ *	is aware of for mount and other syscalls. Returns 0 on success,
  *	or a negative errno code on an error.
  *
- *	The file_system_type that is passed is linked into the kernel 
+ *	The &struct file_system_type that is passed is linked into the kernel 
  *	structures and must not be freed until the file system has been
  *	unregistered.
  */
@@ -131,8 +131,8 @@ int register_filesystem(struct file_system_type * fs)
  *	with the kernel. An error is returned if the file system is not found.
  *	Zero is returned on a success.
  *	
- *	Once this function has returned the file_system_type structure may be
- *	freed or reused.
+ *	Once this function has returned the &struct file_system_type structure
+ *	may be freed or reused.
  */
  
 int unregister_filesystem(struct file_system_type * fs)
@@ -459,7 +459,7 @@ int get_filesystem_info( char *buf )
  *	@sb: superblock to wait on
  *
  *	Waits for a superblock to become unlocked and then returns. It does
- *	not take the lock. This is an internal function. See wait_on_super.
+ *	not take the lock. This is an internal function. See wait_on_super().
  */
  
 void __wait_on_super(struct super_block * sb)
@@ -508,10 +508,10 @@ void sync_supers(kdev_t dev)
 
 /**
  *	get_super	-	get the superblock of a device
- *	@dev: device to get the super block for
+ *	@dev: device to get the superblock for
  *	
  *	Scans the superblock list and finds the superblock of the file system
- *	mounted on the device given. NULL is returned if no match is found.
+ *	mounted on the device given. %NULL is returned if no match is found.
  */
  
 struct super_block * get_super(kdev_t dev)
@@ -561,10 +561,10 @@ out:
 /**
  *	get_empty_super	-	find empty superblocks
  *
- *	Find a super_block with no device assigned. A free superblock is 
+ *	Find a superblock with no device assigned. A free superblock is 
  *	found and returned. If neccessary new superblocks are allocated.
- *	NULL is returned if there are insufficient resources to complete
- *	the request
+ *	%NULL is returned if there are insufficient resources to complete
+ *	the request.
  */
  
 struct super_block *get_empty_super(void)

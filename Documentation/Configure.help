@@ -7216,7 +7216,7 @@ CONFIG_NET_SCHED
   Differentiated Services (diffserv) and Resource Reservation Protocol
   (RSVP) on your Linux router if you also say Y to "QoS support",
   "Packet classifier API" and to some classifiers below. Documentation
-  and software is at http://icawwww1.ipfl.ch/linux/diffserv/ .
+  and software is at http://icawww1.epfl.ch/linux-diffserv/ .
 
   If you say Y here and to "/proc file system" below, you will be able
   to read status information about packet schedulers from the file
@@ -7346,7 +7346,7 @@ CONFIG_NET_QOS
   Differentiated Services (diffserv) and Resource Reservation Protocol
   (RSVP) on your Linux router if you also say Y to "Packet classifier
   API" and to some classifiers below. Documentation and software is at
-  http://icawwww1.ipfl.ch/linux/diffserv/ .
+  http://icawww1.epfl.ch/linux-diffserv/ .
 
   Note that the answer to this question won't directly affect the
   kernel: saying N will just cause this configure script to skip all
@@ -7369,7 +7369,7 @@ CONFIG_NET_CLS
   This will enable you to use Differentiated Services (diffserv) and
   Resource Reservation Protocol (RSVP) on your Linux router.
   Documentation and software is at
-  http://icawwww1.ipfl.ch/linux/diffserv/ .
+  http://icawww1.epfl.ch/linux-diffserv/ .
 
 ### Add
 #tristate '    TC index classifier' CONFIG_NET_CLS_TCINDEX
@@ -12854,12 +12854,12 @@ CONFIG_SOUND_SB
   Please read the file Documentation/sound/Soundblaster.
 
   You should also say Y here for cards based on the Avance Logic
-  ALS-007 chip (read Documentation/sound/ALS) and for cards based
-  on ESS chips (read Documentation/sound/ESS1868 and
+  ALS-007 and ALS-1X0 chips (read Documentation/sound/ALS) and for cards
+  based on ESS chips (read Documentation/sound/ESS1868 and
   Documentation/sound/ESS). If you have an SB AWE 32 or SB AWE 64, say
-  Y here and also to "Additional lowlevel drivers" and to "SB32/AWE
-  support" below and read Documentation/sound/INSTALL.awe. If you have
-  an IBM Mwave card, say Y here and read Documentation/sound/mwave.
+  Y here and also to "AWE32 synth" below and read 
+  Documentation/sound/INSTALL.awe. If you have an IBM Mwave card, say
+  Y here and read Documentation/sound/mwave.
 
   If you compile the driver into the kernel and don't want to use
   isapnp, you have to add "sb=<io>,<irq>,<dma>,<dma2>" to the kernel

@@ -21,8 +21,6 @@
 #include <asm/processor.h>
 #include <asm/msr.h>
 
-#define CONFIG_BUGi386
-
 static int __init no_halt(char *s)
 {
 	boot_cpu_data.hlt_works_ok = 0;
@@ -370,16 +368,18 @@ static void __init check_cyrix_coma(void)
 }
  
 /*
- * Check wether we are able to run this kernel safely on SMP.
+ * Check whether we are able to run this kernel safely on SMP.
  *
  * - In order to run on a i386, we need to be compiled for i386
  *   (for due to lack of "invlpg" and working WP on a i386)
  * - In order to run on anything without a TSC, we need to be
  *   compiled for a i486.
- * - In order to work on a Pentium/SMP machine, we need to be
- *   compiled for a Pentium or lower, as a PPro config implies
- *   a properly working local APIC without the need to do extra
- *   reads from the APIC.
+ * - In order to support the local APIC on a buggy Pentium machine,
+ *   we need to be compiled with CONFIG_X86_GOOD_APIC disabled,
+ *   which happens implicitly if compiled for a Pentium or lower
+ *   (unless an advanced selection of CPU features is used) as an
+ *   otherwise config implies a properly working local APIC without
+ *   the need to do extra reads from the APIC.
 */
 
 static void __init check_config(void)
@@ -411,11 +411,18 @@ static void __init check_config(void)
 #endif
 
 /*
- * If we were told we had a good APIC for SMP, we'd better be a PPro
+ * If we were told we had a good local APIC, check for buggy Pentia,
+ * i.e. all B steppings and the C2 stepping of P54C when using their
+ * integrated APIC (see 11AP erratum in "Pentium Processor
+ * Specification Update").
  */
-#if defined(CONFIG_X86_GOOD_APIC) && defined(CONFIG_SMP)
-	if (smp_found_config && boot_cpu_data.x86 <= 5)
-		panic("Kernel compiled for PPro+, assumes local APIC without read-before-write bug");
+#if defined(CONFIG_X86_LOCAL_APIC) && defined(CONFIG_X86_GOOD_APIC)
+	if (boot_cpu_data.x86_vendor == X86_VENDOR_INTEL
+	    && boot_cpu_data.x86_capability & X86_FEATURE_APIC
+	    && boot_cpu_data.x86 == 5
+	    && boot_cpu_data.x86_model == 2
+	    && (boot_cpu_data.x86_mask < 6 || boot_cpu_data.x86_mask == 11))
+		panic("Kernel compiled for PPro+, assumes a local APIC without the read-before-write bug!");
 #endif
 }
 

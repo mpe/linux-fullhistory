@@ -31,6 +31,7 @@ extern void * memcpy(void *,const void *,__kernel_size_t);
 extern void * memmove(void *,const void *,__kernel_size_t);
 extern void * memscan(void *,int,__kernel_size_t);
 extern int memcmp(const void *,const void *,__kernel_size_t);
+extern void * memchr(const void *,int,__kernel_size_t);
 
 /*
  * Include machine specific inline routines

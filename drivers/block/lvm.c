@@ -287,7 +287,7 @@ static int lvm_reset_spindown = 0;
 static char pv_name[NAME_LEN];
 /* static char rootvg[NAME_LEN] = { 0, }; */
 static uint lv_open = 0;
-static const char *const lvm_name = LVM_NAME;
+const char *const lvm_name = LVM_NAME;
 static int lock = 0;
 static int loadtime = 0;
 static uint vg_count = 0;

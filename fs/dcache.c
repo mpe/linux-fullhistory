@@ -83,7 +83,7 @@ static inline void dentry_iput(struct dentry * dentry)
 }
 
 /* 
- * dput
+ * This is dput
  *
  * This is complicated by the fact that we do not want to put
  * dentries that are no longer on any hash chain on the unused
@@ -534,7 +534,7 @@ int shrink_dcache_memory(int priority, unsigned int gfp_mask, zone_t * zone)
  * @parent: parent of entry to allocate
  * @name: qstr of the name
  *
- * Allocates a dentry. It returns NULL if there is insufficient memory
+ * Allocates a dentry. It returns %NULL if there is insufficient memory
  * available. On a success the dentry is returned. The name passed in is
  * copied and the copy passed in may be reused after this call.
  */
@@ -590,7 +590,7 @@ struct dentry * d_alloc(struct dentry * parent, const struct qstr *name)
 /**
  * d_instantiate - fill in inode information for a dentry
  * @entry: dentry to complete
- * @inode: inode to attacheto this dentry
+ * @inode: inode to attach to this dentry
  *
  * Fill in inode information in the entry.
  *
@@ -599,7 +599,7 @@ struct dentry * d_alloc(struct dentry * parent, const struct qstr *name)
  *
  * NOTE! This assumes that the inode count has been incremented
  * (or otherwise set) by the caller to indicate that it is now
- * in use by the dcache..
+ * in use by the dcache.
  */
  
 void d_instantiate(struct dentry *entry, struct inode * inode)
@@ -613,9 +613,9 @@ void d_instantiate(struct dentry *entry, struct inode * inode)
  * d_alloc_root - allocate root dentry
  * @root_inode: inode to allocate the root for
  *
- * Allocate a root ('/') dentry for the inode given. The inode is
- * instantiated and returned. NULL is returned if there is insufficient
- * memory or the inode passed is NULL.
+ * Allocate a root ("/") dentry for the inode given. The inode is
+ * instantiated and returned. %NULL is returned if there is insufficient
+ * memory or the inode passed is %NULL.
  */
  
 struct dentry * d_alloc_root(struct inode * root_inode)
@@ -648,7 +648,7 @@ static inline struct list_head * d_hash(struct dentry * parent, unsigned long ha
  * Searches the children of the parent dentry for the name in question. If
  * the dentry is found its reference count is incremented and the dentry
  * is returned. The caller must use d_put to free the entry when it has
- * finished using it. NULL is returned on failure.
+ * finished using it. %NULL is returned on failure.
  */
  
 struct dentry * d_lookup(struct dentry * parent, struct qstr * name)
@@ -780,7 +780,7 @@ void d_delete(struct dentry * dentry)
  * d_rehash	- add an entry back to the hash
  * @entry: dentry to add to the hash
  *
- * Adds a dentry to the hash according to its name
+ * Adds a dentry to the hash according to its name.
  */
  
 void d_rehash(struct dentry * entry)
@@ -881,11 +881,11 @@ void d_move(struct dentry * dentry, struct dentry * target)
  * @buffer: buffer to return value in
  * @buflen: buffer length
  *
- * Convert a dentry into an ascii path name. If the entry has been deleted
- * the string ' (deleted)' is appended. Note that this is ambiguous. Returns
+ * Convert a dentry into an ASCII path name. If the entry has been deleted
+ * the string " (deleted)" is appended. Note that this is ambiguous. Returns
  * the buffer.
  *
- * "buflen" should be PAGE_SIZE or more.
+ * "buflen" should be %PAGE_SIZE or more.
  */
 char * __d_path(struct dentry *dentry, struct vfsmount *vfsmnt,
 		struct dentry *root, struct vfsmount *rootmnt,

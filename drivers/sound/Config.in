@@ -97,6 +97,7 @@ if [ "$CONFIG_SOUND_OSS" = "y" -o "$CONFIG_SOUND_OSS" = "m" ]; then
       bool '      16 bit sampling option of GUS (_NOT_ GUS MAX)' CONFIG_SOUND_GUS16 
       bool '      GUS MAX support' CONFIG_SOUND_GUSMAX
    fi
+   dep_tristate '    Intel ICH audio support' CONFIG_SOUND_ICH $CONFIG_SOUND_OSS
    dep_tristate '    Loopback MIDI device support' CONFIG_SOUND_VMIDI $CONFIG_SOUND_OSS
    dep_tristate '    MediaTrix AudioTrix Pro support' CONFIG_SOUND_TRIX $CONFIG_SOUND_OSS
    if [ "$CONFIG_SOUND_TRIX" = "y" ]; then

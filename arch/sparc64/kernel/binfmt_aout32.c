@@ -230,7 +230,7 @@ static int load_aout32_binary(struct linux_binprm * bprm, struct pt_regs * regs)
 		return retval;
 
 	/* OK, This is the point of no return */
-	current->personality = PER_LINUX;
+	current->personality = PER_SUNOS;
 
 	current->mm->end_code = ex.a_text +
 		(current->mm->start_code = N_TXTADDR(ex));

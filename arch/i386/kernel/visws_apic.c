@@ -376,7 +376,7 @@ void init_VISWS_APIC_irqs(void)
 	for (i = 0; i < 16; i++) {
 		irq_desc[i].status = IRQ_DISABLED;
 		irq_desc[i].action = 0;
-		irq_desc[i].depth = 0;
+		irq_desc[i].depth = 1;
 
 		/*
 		 * Cobalt IRQs are mapped to standard ISA

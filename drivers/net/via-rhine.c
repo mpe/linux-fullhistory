@@ -32,10 +32,15 @@
 	- Urban Widmark: minor cleanups, merges from Becker 1.03a/1.04 versions
 
 	LK1.1.3:
-	- Urban Widmark: use PCI DMA interface (with thanks to the eepro100.c code)
-	                 update "Theory of Operation" with softnet/locking changes
+	- Urban Widmark: use PCI DMA interface (with thanks to the eepro100.c
+			 code) update "Theory of Operation" with
+			 softnet/locking changes
 	- Dave Miller: PCI DMA and endian fixups
 	- Jeff Garzik: MOD_xxx race fixes, updated PCI resource allocation
+
+	LK1.1.4:
+	- Urban Widmark: fix gcc 2.95.2 problem and
+	                 remove writel's to fixed address 0x7c
 */
 
 /* A few user-configurable values.   These may be modified when a driver
@@ -105,7 +110,7 @@ static const int multicast_filter_limit = 32;
 #include <asm/io.h>
 
 static const char *versionA __devinitdata =
-"via-rhine.c:v1.03a-LK1.1.3  3/23/2000  Written by Donald Becker\n";
+"via-rhine.c:v1.03a-LK1.1.4  3/28/2000  Written by Donald Becker\n";
 static const char *versionB __devinitdata =
 "  http://cesdis.gsfc.nasa.gov/linux/drivers/via-rhine.html\n";
 
@@ -774,6 +779,7 @@ static void via_rhine_init_ring(struct net_device *dev)
 {
 	struct netdev_private *np = (struct netdev_private *)dev->priv;
 	int i;
+	dma_addr_t next = np->rx_ring_dma;
 
 	np->cur_rx = np->cur_tx = 0;
 	np->dirty_rx = np->dirty_tx = 0;
@@ -784,8 +790,8 @@ static void via_rhine_init_ring(struct net_device *dev)
 	for (i = 0; i < RX_RING_SIZE; i++) {
 		np->rx_ring[i].rx_status = 0;
 		np->rx_ring[i].desc_length = cpu_to_le32(np->rx_buf_sz);
-		np->rx_ring[i].next_desc =
-			cpu_to_le32(np->rx_ring_dma + sizeof(struct rx_desc)*(i+1));
+		next += sizeof(struct rx_desc);
+		np->rx_ring[i].next_desc = cpu_to_le32(next);
 		np->rx_skbuff[i] = 0;
 	}
 	/* Mark the last entry as wrapping the ring. */
@@ -806,13 +812,15 @@ static void via_rhine_init_ring(struct net_device *dev)
 		np->rx_ring[i].addr = cpu_to_le32(np->rx_skbuff_dma[i]);
 		np->rx_ring[i].rx_status = cpu_to_le32(DescOwn);
 	}
+	np->dirty_rx = (unsigned int)(i - RX_RING_SIZE);
 
+	next = np->tx_ring_dma;
 	for (i = 0; i < TX_RING_SIZE; i++) {
 		np->tx_skbuff[i] = 0;
 		np->tx_ring[i].tx_status = 0;
 		np->tx_ring[i].desc_length = cpu_to_le32(0x00e08000);
-		np->tx_ring[i].next_desc =
-			cpu_to_le32(np->tx_ring_dma + sizeof(struct tx_desc)*(i+1));
+		next += sizeof(struct tx_desc);
+		np->tx_ring[i].next_desc = cpu_to_le32(next);
 		np->tx_buf[i] = kmalloc(PKT_BUF_SZ, GFP_KERNEL);
 	}
 	np->tx_ring[i-1].next_desc = cpu_to_le32(np->tx_ring_dma);
@@ -1097,7 +1105,6 @@ static void via_rhine_error(struct net_device *dev, int intr_status)
 	if (intr_status & IntrStatsMax) {
 		np->stats.rx_crc_errors	+= readw(ioaddr + RxCRCErrs);
 		np->stats.rx_missed_errors	+= readw(ioaddr + RxMissed);
-		writel(0, RxMissed);
 	}
 	if (intr_status & IntrTxAbort) {
 		/* Stats counted in Tx-done handler, just restart Tx. */
@@ -1129,7 +1136,6 @@ static struct net_device_stats *via_rhine_get_stats(struct net_device *dev)
 	   non-critical. */
 	np->stats.rx_crc_errors	+= readw(ioaddr + RxCRCErrs);
 	np->stats.rx_missed_errors	+= readw(ioaddr + RxMissed);
-	writel(0, RxMissed);
 
 	return &np->stats;
 }

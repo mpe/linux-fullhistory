@@ -2254,6 +2254,7 @@ enum parport_pc_pci_cards {
 	boca_ioppar,
 	plx_9050,
 	afavlab_tk9902,
+	timedia_1889,
 };
 
 
@@ -2291,6 +2292,7 @@ static struct parport_pc_pci {
 	/* boca_ioppar */		{ 1, { { 0, -1 }, } },
 	/* plx_9050 */			{ 2, { { 4, -1 }, { 5, -1 }, } },
 	/* afavlab_tk9902 */		{ 1, { { 0, 1 }, } },
+	/* timedia_1889 */		{ 1, { { 2, -1 }, } },
 };
 
 static struct pci_device_id parport_pc_pci_tbl[] __devinitdata = {
@@ -2348,6 +2350,8 @@ static struct pci_device_id parport_pc_pci_tbl[] __devinitdata = {
 	  PCI_SUBVENDOR_ID_EXSYS, PCI_SUBDEVICE_ID_EXSYS_4014, 0,0, plx_9050 },
 	{ PCI_VENDOR_ID_AFAVLAB, PCI_DEVICE_ID_AFAVLAB_TK9902,
 	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, afavlab_tk9902 },
+	{ PCI_VENDOR_ID_TIMEDIA, PCI_DEVICE_ID_TIMEDIA_1889,
+	  PCI_ANY_ID, PCI_ANY_ID, 0, 0, timedia_1889 },
 	{ 0, }, /* terminate list */
 };
 MODULE_DEVICE_TABLE(pci,parport_pc_pci_tbl);

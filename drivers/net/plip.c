@@ -687,11 +687,12 @@ plip_receive_packet(struct net_device *dev, struct net_local *nl,
 			return ERROR;
 		}
 		/* Malloc up new buffer. */
-		rcv->skb = dev_alloc_skb(rcv->length.h);
+		rcv->skb = dev_alloc_skb(rcv->length.h + 2);
 		if (rcv->skb == NULL) {
 			printk(KERN_ERR "%s: Memory squeeze.\n", dev->name);
 			return ERROR;
 		}
+		skb_reserve(rcv->skb, 2);	/* Align IP on 16 byte boundaries */
 		skb_put(rcv->skb,rcv->length.h);
 		rcv->skb->dev = dev;
 		rcv->state = PLIP_PK_DATA;
@@ -989,7 +990,7 @@ plip_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
 	switch (nl->connection) {
 	case PLIP_CN_CLOSING:
-		netif_start_queue (dev);
+		netif_wake_queue (dev);
 	case PLIP_CN_NONE:
 	case PLIP_CN_SEND:
 		dev->last_rx = jiffies;
@@ -1035,7 +1036,7 @@ plip_tx_packet(struct sk_buff *skb, struct net_device *dev)
 	if (skb->len > dev->mtu + dev->hard_header_len) {
 		printk(KERN_WARNING "%s: packet too big, %d.\n", dev->name, (int)skb->len);
 		netif_start_queue (dev);
-		return 0;
+		return 1;
 	}
 
 	if (net_debug > 2)
@@ -1054,7 +1055,6 @@ plip_tx_packet(struct sk_buff *skb, struct net_device *dev)
 	mark_bh(IMMEDIATE_BH);
 	spin_unlock_irq(&nl->lock);
 	
-	netif_start_queue (dev);
 	return 0;
 }
 

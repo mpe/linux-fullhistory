@@ -13,7 +13,9 @@
  *	and Ingo Molnar <mingo@redhat.com>
  *
  *	Fixes
- *	Maciej W. Rozycki	:	Bits for genuine 82489DX APICs
+ *	Maciej W. Rozycki	:	Bits for genuine 82489DX APICs;
+ *					thanks to Eric Gilmore for
+ *					testing these extensively
  */
 
 #include <linux/mm.h>
@@ -45,9 +47,6 @@ struct mpc_config_intsrc mp_irqs[MAX_IRQ_SOURCES];
 
 /* MP IRQ source entries */
 int mp_irq_entries = 0;
-
-/* non-0 if default (table-less) MP configuration */
-int mpc_default_type = 0;
 
 /*
  * Rough estimation of how many shared IRQs there are, can
@@ -166,7 +165,7 @@ static void clear_IO_APIC (void)
 
 #define MAX_PIRQS 8
 int pirq_entries [MAX_PIRQS];
-int pirqs_enabled;
+int pirqs_enabled = 0;
 int skip_ioapic_setup = 0;
 
 static int __init ioapic_setup(char *str)
@@ -235,7 +234,8 @@ static int __init find_timer_pin(int type)
 		int lbus = mp_irqs[i].mpc_srcbus;
 
 		if ((mp_bus_id_to_type[lbus] == MP_BUS_ISA ||
-		     mp_bus_id_to_type[lbus] == MP_BUS_EISA) &&
+		     mp_bus_id_to_type[lbus] == MP_BUS_EISA ||
+		     mp_bus_id_to_type[lbus] == MP_BUS_MCA) &&
 		    (mp_irqs[i].mpc_irqtype == type) &&
 		    (mp_irqs[i].mpc_srcbusirq == 0x00))
 
@@ -260,12 +260,14 @@ int IO_APIC_get_PCI_irq_vector(int bus, int slot, int pci_pin)
 			if (mp_ioapics[apic].mpc_apicid == mp_irqs[i].mpc_dstapic)
 				break;
 
-		if ((apic || IO_APIC_IRQ(mp_irqs[i].mpc_dstirq)) &&
-		    (mp_bus_id_to_type[lbus] == MP_BUS_PCI) &&
+		if ((mp_bus_id_to_type[lbus] == MP_BUS_PCI) &&
 		    !mp_irqs[i].mpc_irqtype &&
 		    (bus == mp_bus_id_to_pci_bus[mp_irqs[i].mpc_srcbus]) &&
 		    (slot == ((mp_irqs[i].mpc_srcbusirq >> 2) & 0x1f))) {
 			int irq = pin_2_irq(i,apic,mp_irqs[i].mpc_dstirq);
+
+			if (!(apic || IO_APIC_IRQ(irq)))
+				continue;
 
 			if (pci_pin == (mp_irqs[i].mpc_srcbusirq & 3))
 				return irq;
@@ -298,14 +300,26 @@ static int __init EISA_ELCR(unsigned int irq)
  * EISA conforming in the MP table, that means its trigger type must
  * be read in from the ELCR */
 
-#define default_EISA_trigger(idx)	(EISA_ELCR(mp_irqs[idx].mpc_dstirq))
+#define default_EISA_trigger(idx)	(EISA_ELCR(mp_irqs[idx].mpc_srcbusirq))
 #define default_EISA_polarity(idx)	(0)
 
-/* ISA interrupts are always polarity zero edge triggered, even when
- * listed as conforming in the MP table. */
+/* ISA interrupts are always polarity zero edge triggered,
+ * when listed as conforming in the MP table. */
 
 #define default_ISA_trigger(idx)	(0)
 #define default_ISA_polarity(idx)	(0)
+
+/* PCI interrupts are always polarity one level triggered,
+ * when listed as conforming in the MP table. */
+
+#define default_PCI_trigger(idx)	(1)
+#define default_PCI_polarity(idx)	(1)
+
+/* MCA interrupts are always polarity zero level triggered,
+ * when listed as conforming in the MP table. */
+
+#define default_MCA_trigger(idx)	(1)
+#define default_MCA_polarity(idx)	(0)
 
 static int __init MPBIOS_polarity(int idx)
 {
@@ -326,14 +340,19 @@ static int __init MPBIOS_polarity(int idx)
 					polarity = default_ISA_polarity(idx);
 					break;
 				}
-				case MP_BUS_EISA:
+				case MP_BUS_EISA: /* EISA pin */
 				{
 					polarity = default_EISA_polarity(idx);
 					break;
 				}
 				case MP_BUS_PCI: /* PCI pin */
 				{
-					polarity = 1;
+					polarity = default_PCI_polarity(idx);
+					break;
+				}
+				case MP_BUS_MCA: /* MCA pin */
+				{
+					polarity = default_MCA_polarity(idx);
 					break;
 				}
 				default:
@@ -385,19 +404,24 @@ static int __init MPBIOS_trigger(int idx)
 		{
 			switch (mp_bus_id_to_type[bus])
 			{
-				case MP_BUS_ISA:
+				case MP_BUS_ISA: /* ISA pin */
 				{
 					trigger = default_ISA_trigger(idx);
 					break;
 				}
-				case MP_BUS_EISA:
+				case MP_BUS_EISA: /* EISA pin */
 				{
 					trigger = default_EISA_trigger(idx);
 					break;
 				}
-				case MP_BUS_PCI: /* PCI pin, level */
+				case MP_BUS_PCI: /* PCI pin */
 				{
-					trigger = 1;
+					trigger = default_PCI_trigger(idx);
+					break;
+				}
+				case MP_BUS_MCA: /* MCA pin */
+				{
+					trigger = default_MCA_trigger(idx);
 					break;
 				}
 				default:
@@ -460,6 +484,7 @@ static int __init pin_2_irq(int idx, int apic, int pin)
 	{
 		case MP_BUS_ISA: /* ISA pin */
 		case MP_BUS_EISA:
+		case MP_BUS_MCA:
 		{
 			irq = mp_irqs[idx].mpc_srcbusirq;
 			break;
@@ -624,8 +649,8 @@ void __init setup_ExtINT_IRQ0_pin(unsigned int pin, int vector)
 
 	disable_8259A_irq(0);
 
-	apic_readaround(APIC_LVT0);
-	apic_write(APIC_LVT0, 0x00010700);	// mask LVT0
+	/* mask LVT0 */
+	apic_write_around(APIC_LVT0, APIC_LVT_MASKED | APIC_DM_EXTINT);
 
 	init_8259A(1);
 
@@ -650,8 +675,8 @@ void __init setup_ExtINT_IRQ0_pin(unsigned int pin, int vector)
 	/*
 	 * Add it to the IO-APIC irq-routing table:
 	 */
-	io_apic_write(0, 0x10+2*pin, *(((int *)&entry)+0));
 	io_apic_write(0, 0x11+2*pin, *(((int *)&entry)+1));
+	io_apic_write(0, 0x10+2*pin, *(((int *)&entry)+0));
 
 	enable_8259A_irq(0);
 }
@@ -725,8 +750,8 @@ void __init print_IO_APIC(void)
 
 	printk(KERN_DEBUG ".... IRQ redirection table:\n");
 
-	printk(KERN_DEBUG " NR Log Phy ");
-	printk(KERN_DEBUG "Mask Trig IRR Pol Stat Dest Deli Vect:   \n");
+	printk(KERN_DEBUG " NR Log Phy Mask Trig IRR Pol"
+			  " Stat Dest Deli Vect:   \n");
 
 	for (i = 0; i <= reg_01.entries; i++) {
 		struct IO_APIC_route_entry entry;
@@ -831,13 +856,8 @@ void /*__init*/ print_local_APIC(void * dummy)
 	print_APIC_bitfield(APIC_IRR);
 
 	if (APIC_INTEGRATED(ver)) {		/* !82489DX */
-		/*
-		 * Due to the Pentium erratum 3AP.
-		 */
-		if (maxlvt > 3) {
-			apic_readaround(APIC_SPIV); // not strictly necessery
+		if (maxlvt > 3)		/* Due to the Pentium erratum 3AP. */
 			apic_write(APIC_ESR, 0);
-		}
 		v = apic_read(APIC_ESR);
 		printk(KERN_DEBUG "... APIC ESR: %08x\n", v);
 	}
@@ -879,6 +899,32 @@ void print_all_local_APICs (void)
 	print_local_APIC(NULL);
 }
 
+void /*__init*/ print_PIC(void)
+{
+	unsigned int v, flags;
+
+	printk(KERN_DEBUG "\nprinting PIC contents\n");
+
+	v = inb(0xa1) << 8 | inb(0x21);
+	printk(KERN_DEBUG "... PIC  IMR: %04x\n", v);
+
+	v = inb(0xa0) << 8 | inb(0x20);
+	printk(KERN_DEBUG "... PIC  IRR: %04x\n", v);
+
+	__save_flags(flags);
+	__cli();
+	outb(0x0b,0xa0);
+	outb(0x0b,0x20);
+	v = inb(0xa0) << 8 | inb(0x20);
+	outb(0x0a,0xa0);
+	outb(0x0a,0x20);
+	__restore_flags(flags);
+	printk(KERN_DEBUG "... PIC  ISR: %04x\n", v);
+
+	v = inb(0x4d1) << 8 | inb(0x4d0);
+	printk(KERN_DEBUG "... PIC ELCR: %04x\n", v);
+}
+
 static void __init enable_IO_APIC(void)
 {
 	struct IO_APIC_reg_01 reg_01;
@@ -890,16 +936,7 @@ static void __init enable_IO_APIC(void)
 	}
 	if (!pirqs_enabled)
 		for (i = 0; i < MAX_PIRQS; i++)
-			pirq_entries[i] =- 1;
-
-	if (pic_mode) {
-		/*
-		 * PIC mode, enable symmetric IO mode in the IMCR.
-		 */
-		printk("leaving PIC mode, enabling symmetric IO mode.\n");
-		outb(0x70, 0x22);
-		outb(0x01, 0x23);
-	}
+			pirq_entries[i] = -1;
 
 	/*
 	 * The number of IO-APIC IRQ registers (== #pins):
@@ -925,15 +962,7 @@ void disable_IO_APIC(void)
 	 */
 	clear_IO_APIC();
 
-	/*
-	 * Put it back into PIC mode (has an effect only on
-	 * certain older boards)
-	 */
-	if (pic_mode) {
-		printk("disabling symmetric IO mode, entering PIC mode.\n");
-		outb_p(0x70, 0x22);
-		outb_p(0x00, 0x23);
-	}
+	disconnect_bsp_APIC();
 }
 
 /*
@@ -986,48 +1015,6 @@ static void __init setup_ioapic_ids_from_mpc (void)
 	}
 }
 
-static void __init construct_default_ISA_mptable(void)
-{
-	int i, pos = 0;
-	const int bus_type = (mpc_default_type == 2 || mpc_default_type == 3 ||
-			      mpc_default_type == 6) ? MP_BUS_EISA : MP_BUS_ISA;
-
-	for (i = 0; i < 16; i++) {
-		if (!IO_APIC_IRQ(i))
-			continue;
-
-		mp_irqs[pos].mpc_irqtype = mp_INT;
-		mp_irqs[pos].mpc_irqflag = 0;		/* default */
-		mp_irqs[pos].mpc_srcbus = 0;
-		mp_irqs[pos].mpc_srcbusirq = i;
-		mp_irqs[pos].mpc_dstapic = 0;
-		mp_irqs[pos].mpc_dstirq = i;
-		pos++;
-	}
-	mp_irq_entries = pos;
-	mp_bus_id_to_type[0] = bus_type;
-
-	/*
-	 * MP specification 1.4 defines some extra rules for default
-	 * configurations, fix them up here:
-	 */
-	switch (mpc_default_type)
-	{
-		case 2:
-		/*
-		 * IRQ0 is not connected:
-		 */
-			mp_irqs[0].mpc_irqtype = mp_ExtINT;
-			break;
-		default:
-		/*
-		 * pin 2 is IRQ0:
-		 */
-			mp_irqs[0].mpc_dstirq = 2;
-	}
-
-}
-
 /*
  * There is a nasty bug in some older SMP boards, their mptable lies
  * about the timer IRQ. We do the following to work around the situation:
@@ -1041,9 +1028,17 @@ static int __init timer_irq_works(void)
 	unsigned int t1 = jiffies;
 
 	sti();
-	mdelay(40);
+	/* Let ten ticks pass... */
+	mdelay((10 * 1000) / HZ);
 
-	if (jiffies-t1>1)
+	/*
+	 * Expect a few ticks at least, to be sure some possible
+	 * glue logic does not lock up after one or two first
+	 * ticks in a non-ExtINT mode.  Also the local APIC
+	 * might have cached one ExtINT interrupt.  Finally, at
+	 * least one tick may be lost due to delays.
+	 */
+	if (jiffies - t1 > 4)
 		return 1;
 
 	return 0;
@@ -1257,8 +1252,14 @@ static struct hw_interrupt_type lapic_irq_type = {
 
 static void enable_NMI_through_LVT0 (void * dummy)
 {
-	apic_readaround(APIC_LVT0);
-	apic_write(APIC_LVT0, 0x00000400);	// unmask and set to NMI
+	unsigned int v, ver;
+
+	ver = apic_read(APIC_LVR);
+	ver = GET_APIC_VERSION(ver);
+	v = APIC_DM_NMI;			/* unmask and set to NMI */
+	if (!APIC_INTEGRATED(ver))		/* 82489DX */
+		v |= APIC_LVT_LEVEL_TRIGGER;
+	apic_write_around(APIC_LVT0, v);
 }
 
 static void setup_nmi (void)
@@ -1303,24 +1304,23 @@ static inline void check_timer(void)
 
 	printk(KERN_INFO "..TIMER: vector=%d pin1=%d pin2=%d\n", vector, pin1, pin2);
 
-	/*
-	 * Ok, does IRQ0 through the IOAPIC work?
-	 */
-	if (timer_irq_works()) {
-		if (nmi_watchdog) {
-			disable_8259A_irq(0);
-			init_8259A(1);
-			setup_nmi();
-			enable_8259A_irq(0);
-			if (nmi_irq_works())
-				return;
-		} else
-			return;
-	}
-
 	if (pin1 != -1) {
-		printk(KERN_ERR "..MP-BIOS bug: 8254 timer not connected to IO-APIC\n");
+		/*
+		 * Ok, does IRQ0 through the IOAPIC work?
+		 */
+		unmask_IO_APIC_irq(0);
+		if (timer_irq_works()) {
+			if (nmi_watchdog) {
+				disable_8259A_irq(0);
+				init_8259A(1);
+				setup_nmi();
+				enable_8259A_irq(0);
+				nmi_irq_works();
+			}
+			return;
+		}
 		clear_IO_APIC_pin(0, pin1);
+		printk(KERN_ERR "..MP-BIOS bug: 8254 timer not connected to IO-APIC\n");
 	}
 
 	printk(KERN_INFO "...trying to set up timer (IRQ0) through the 8259A ... ");
@@ -1334,10 +1334,9 @@ static inline void check_timer(void)
 			printk("works.\n");
 			if (nmi_watchdog) {
 				setup_nmi();
-				if (nmi_irq_works())
-					return;
-			} else
-				return;
+				nmi_irq_works();
+			}
+			return;
 		}
 		/*
 		 * Cleanup, just in case ...
@@ -1355,9 +1354,8 @@ static inline void check_timer(void)
 
 	disable_8259A_irq(0);
 	irq_desc[0].handler = &lapic_irq_type;
-	init_8259A(1);					// AEOI mode
-	apic_readaround(APIC_LVT0);
-	apic_write(APIC_LVT0, 0x00000000 | vector);	// Fixed mode
+	init_8259A(1);						/* AEOI mode */
+	apic_write_around(APIC_LVT0, APIC_DM_FIXED | vector);	/* Fixed mode */
 	enable_8259A_irq(0);
 
 	if (timer_irq_works()) {
@@ -1392,20 +1390,11 @@ void __init setup_IO_APIC(void)
 	printk("ENABLING IO-APIC IRQs\n");
 
 	/*
-	 * If there are no explicit MP IRQ entries, it's either one of the
-	 * default configuration types or we are broken. In both cases it's
-	 * fine to set up most of the low 16 IO-APIC pins to ISA defaults.
-	 */
-	if (!mp_irq_entries) {
-		printk("no explicit IRQ entries, using default mptable\n");
-		construct_default_ISA_mptable();
-	}
-
-	/*
 	 * Set up the IO-APIC IRQ routing table by parsing the MP-BIOS
 	 * mptable:
 	 */
 	setup_ioapic_ids_from_mpc();
+	sync_Arb_IDs();
 	setup_IO_APIC_irqs();
 	init_IO_APIC_traps();
 	check_timer();
@@ -1421,6 +1410,7 @@ void IO_APIC_init_uniprocessor (void)
 {
 	if (!smp_found_config)
 		return;
+	connect_bsp_APIC();
 	setup_local_APIC();
 	setup_IO_APIC();
 	setup_APIC_clocks();

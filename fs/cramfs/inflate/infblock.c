@@ -65,7 +65,7 @@ local const uInt border[] = { /* Order of the bit length code lengths */
  */
 
 
-void inflate_blocks_reset(s, z, c)
+void cramfs_inflate_blocks_reset(s, z, c)
 inflate_blocks_statef *s;
 z_streamp z;
 uLongf *c;
@@ -73,7 +73,7 @@ uLongf *c;
   if (c != Z_NULL)
     *c = s->check;
   if (s->mode == CODES)
-    inflate_codes_free(s->sub.decode.codes, z);
+    cramfs_inflate_codes_free(s->sub.decode.codes, z);
   s->mode = TYPE;
   s->bitk = 0;
   s->bitb = 0;
@@ -83,7 +83,7 @@ uLongf *c;
 }
 
 
-inflate_blocks_statef *inflate_blocks_new(z, c, w)
+inflate_blocks_statef *cramfs_inflate_blocks_new(z, c, w)
 z_streamp z;
 check_func c;
 uInt w;
@@ -99,12 +99,12 @@ uInt w;
   s->end = s->window + w;
   s->checkfn = c;
   s->mode = TYPE;
-  inflate_blocks_reset(s, z, Z_NULL);
+  cramfs_inflate_blocks_reset(s, z, Z_NULL);
   return s;
 }
 
 
-int inflate_blocks(s, z, r)
+int cramfs_inflate_blocks(s, z, r)
 inflate_blocks_statef *s;
 z_streamp z;
 int r;
@@ -140,8 +140,8 @@ int r;
             uInt bl, bd;
             inflate_huft *tl, *td;
 
-            inflate_trees_fixed(&bl, &bd, &tl, &td, z);
-            s->sub.decode.codes = inflate_codes_new(bl, bd, tl, td, z);
+            cramfs_inflate_trees_fixed(&bl, &bd, &tl, &td, z);
+            s->sub.decode.codes = cramfs_inflate_codes_new(bl, bd, tl, td, z);
             if (s->sub.decode.codes == Z_NULL)
             {
               r = Z_MEM_ERROR;
@@ -219,7 +219,7 @@ int r;
       while (s->sub.trees.index < 19)
         s->sub.trees.blens[border[s->sub.trees.index++]] = 0;
       s->sub.trees.bb = 7;
-      t = inflate_trees_bits(s->sub.trees.blens, &s->sub.trees.bb,
+      t = cramfs_inflate_trees_bits(s->sub.trees.blens, &s->sub.trees.bb,
                              &s->sub.trees.tb, s->hufts, z);
       if (t != Z_OK)
       {
@@ -239,7 +239,7 @@ int r;
 
         t = s->sub.trees.bb;
         NEEDBITS(t)
-        h = s->sub.trees.tb + ((uInt)b & inflate_mask[t]);
+        h = s->sub.trees.tb + ((uInt)b & cramfs_inflate_mask[t]);
         t = h->bits;
         c = h->base;
         if (c < 16)
@@ -253,7 +253,7 @@ int r;
           j = c == 18 ? 11 : 3;
           NEEDBITS(t + i)
           DUMPBITS(t)
-          j += (uInt)b & inflate_mask[i];
+          j += (uInt)b & cramfs_inflate_mask[i];
           DUMPBITS(i)
           i = s->sub.trees.index;
           t = s->sub.trees.table;
@@ -281,7 +281,7 @@ int r;
         bl = 9;         /* must be <= 9 for lookahead assumptions */
         bd = 6;         /* must be <= 9 for lookahead assumptions */
         t = s->sub.trees.table;
-        t = inflate_trees_dynamic(257 + (t & 0x1f), 1 + ((t >> 5) & 0x1f),
+        t = cramfs_inflate_trees_dynamic(257 + (t & 0x1f), 1 + ((t >> 5) & 0x1f),
                                   s->sub.trees.blens, &bl, &bd, &tl, &td,
                                   s->hufts, z);
         if (t != Z_OK)
@@ -291,7 +291,7 @@ int r;
           r = t;
           LEAVE
         }
-        if ((c = inflate_codes_new(bl, bd, tl, td, z)) == Z_NULL)
+        if ((c = cramfs_inflate_codes_new(bl, bd, tl, td, z)) == Z_NULL)
         {
           r = Z_MEM_ERROR;
           LEAVE
@@ -301,10 +301,10 @@ int r;
       s->mode = CODES;
     case CODES:
       UPDATE
-      if ((r = inflate_codes(s, z, r)) != Z_STREAM_END)
-        return inflate_flush(s, z, r);
+      if ((r = cramfs_inflate_codes(s, z, r)) != Z_STREAM_END)
+        return cramfs_inflate_flush(s, z, r);
       r = Z_OK;
-      inflate_codes_free(s->sub.decode.codes, z);
+      cramfs_inflate_codes_free(s->sub.decode.codes, z);
       LOAD
       if (!s->last)
       {
@@ -330,16 +330,16 @@ int r;
 }
 
 
-int inflate_blocks_free(s, z)
+int cramfs_inflate_blocks_free(s, z)
 inflate_blocks_statef *s;
 z_streamp z;
 {
-  inflate_blocks_reset(s, z, Z_NULL);
+  cramfs_inflate_blocks_reset(s, z, Z_NULL);
   return Z_OK;
 }
 
 
-void inflate_set_dictionary(s, d, n)
+void cramfs_inflate_set_dictionary(s, d, n)
 inflate_blocks_statef *s;
 const Bytef *d;
 uInt  n;

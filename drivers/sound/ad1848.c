@@ -27,6 +27,7 @@
  * Alan Cox		: reformatted. Fixed SMP bugs. Moved to kernel alloc/free
  *		          of irqs. Use dev_id.
  * Christoph Hellwig	: adapted to module_init/module_exit
+ * Aki Laukkanen	: added power management support
  *
  * Status:
  *		Tested. Believed fully functional.
@@ -36,6 +37,7 @@
 #include <linux/init.h>
 #include <linux/module.h>
 #include <linux/stddef.h>
+#include <linux/pm.h>
 
 #include "soundmodule.h"
 
@@ -52,6 +54,7 @@ typedef struct
 	int             irq;
 	int             dma1, dma2;
 	int             dual_dma;	/* 1, when two DMA channels allocated */
+	int 		subtype;
 	unsigned char   MCE_bit;
 	unsigned char   saved_regs[32];
 	int             debug_flag;
@@ -87,6 +90,9 @@ typedef struct
 	int             irq_ok;
 	mixer_ents     *mix_devices;
 	int             mixer_output_port;
+
+	/* Power management */
+	struct		pm_dev *pmdev;
 } ad1848_info;
 
 typedef struct ad1848_port_info
@@ -100,7 +106,9 @@ typedef struct ad1848_port_info
 }
 ad1848_port_info;
 
+static struct address_info cfg;
 static int nr_ad1848_devs = 0;
+
 int deskpro_xl = 0;
 int deskpro_m = 0;
 int soundpro = 0;
@@ -163,11 +171,11 @@ static void     ad1848_halt(int dev);
 static void     ad1848_halt_input(int dev);
 static void     ad1848_halt_output(int dev);
 static void     ad1848_trigger(int dev, int bits);
+static int	ad1848_pm_callback(struct pm_dev *dev, pm_request_t rqst, void *data);
 
 #ifndef EXCLUDE_TIMERS
 static int ad1848_tmr_install(int dev);
 static void ad1848_tmr_reprogram(int dev);
-
 #endif
 
 static int ad_read(ad1848_info * devc, int reg)
@@ -1415,7 +1423,7 @@ static void ad1848_init_hw(ad1848_info * devc)
 		if (devc->model == MD_IWAVE)
 			ad_write(devc, 12, 0x6c);	/* Select codec mode 3 */
 
-		if (devc-> model != MD_1845_SSCAPE)
+		if (devc->model != MD_1845_SSCAPE)
 			for (i = 16; i < 32; i++)
 				ad_write(devc, i, init_values[i]);
 
@@ -1849,7 +1857,6 @@ int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capt
 	 *   The actually used IRQ is ABS(irq).
 	 */
 
-
 	int my_dev;
 	char dev_name[100];
 	int e;
@@ -1863,6 +1870,7 @@ int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capt
 	devc->timer_ticks = 0;
 	devc->dma1 = dma_playback;
 	devc->dma2 = dma_capture;
+	devc->subtype = cfg.card_subtype;
 	devc->audio_flags = DMA_AUTOMODE;
 	devc->playback_dev = devc->record_dev = 0;
 	if (name != NULL)
@@ -1915,6 +1923,10 @@ int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capt
 
 	nr_ad1848_devs++;
 
+	devc->pmdev = pm_register(PM_ISA_DEV, my_dev, ad1848_pm_callback);
+	if (devc->pmdev)
+		devc->pmdev->data = devc;
+
 	ad1848_init_hw(devc);
 
 	if (irq > 0)
@@ -1950,7 +1962,7 @@ int ad1848_init(char *name, int io_base, int irq, int dma_playback, int dma_capt
 				devc->irq_ok = 1;
 			}
 #else
-			devc->irq_ok=1;
+			devc->irq_ok = 1;
 #endif			
 		}
 		else
@@ -2075,6 +2087,9 @@ void ad1848_unload(int io_base, int irq, int dma_playback, int dma_capture, int 
 		mixer = audio_devs[devc->dev_no]->mixer_dev;
 		if(mixer>=0)
 			sound_unload_mixerdev(mixer);
+
+		if (devc->pmdev)
+			pm_unregister(devc->pmdev);
 
 		nr_ad1848_devs--;
 		for ( ; i < nr_ad1848_devs ; i++)
@@ -2507,7 +2522,8 @@ void attach_ms_sound(struct address_info *hw_config)
 		hw_config->slots[0] = ad1848_init("MS Sound System", hw_config->io_base + 4,
 						    hw_config->irq,
 						    hw_config->dma,
-				     hw_config->dma2, 0, hw_config->osp);
+						    hw_config->dma2, 0, 
+						    hw_config->osp);
 		request_region(hw_config->io_base, 4, "WSS config");
 		return;
 	}
@@ -2562,10 +2578,9 @@ void attach_ms_sound(struct address_info *hw_config)
 
 	outb((bits | dma_bits[dma] | dma2_bit), config_port);	/* Write IRQ+DMA setup */
 
-	hw_config->slots[0] = ad1848_init("MSS audio codec", hw_config->io_base + 4,
+	hw_config->slots[0] = ad1848_init("MS Sound System", hw_config->io_base + 4,
 					  hw_config->irq,
-					  dma,
-					  dma2, 0,
+					  dma, dma2, 0,
 					  hw_config->osp);
 	request_region(hw_config->io_base, 4, "WSS config");
 }
@@ -2692,6 +2707,83 @@ static int ad1848_tmr_install(int dev)
 }
 #endif /* EXCLUDE_TIMERS */
 
+static int ad1848_suspend(ad1848_info *devc)
+{
+	unsigned long flags;
+
+	save_flags(flags);
+	cli();
+
+	ad_mute(devc);
+	
+	restore_flags(flags);
+	return 0;
+}
+
+static int ad1848_resume(ad1848_info *devc)
+{
+	unsigned long flags;
+	int mixer_levels[32], i;
+
+	save_flags(flags);
+	cli();
+
+	/* store old mixer levels */
+	memcpy(mixer_levels, devc->levels, sizeof (mixer_levels));  
+	ad1848_init_hw(devc);
+
+	/* restore mixer levels */
+	for (i = 0; i < 32; i++)
+		ad1848_mixer_set(devc, devc->dev_no, mixer_levels[i]);
+
+	if (!devc->subtype) {
+		static signed char interrupt_bits[12] = { -1, -1, -1, -1, -1, 0x00, -1, 0x08, -1, 0x10, 0x18, 0x20 };
+		static char dma_bits[4] = { 1, 2, 0, 3 };
+
+		signed char bits;
+		char dma2_bit = 0;
+
+		int config_port = devc->base + 0;
+
+		bits = interrupt_bits[devc->irq];
+		if (bits == -1) {
+			printk(KERN_ERR "MSS: Bad IRQ %d\n", devc->irq);
+			return -1;
+		}
+
+		outb((bits | 0x40), config_port); 
+
+		if (devc->dma2 != -1 && devc->dma2 != devc->dma1)
+			if ( (devc->dma1 == 0 && devc->dma2 == 1) ||
+			     (devc->dma1 == 1 && devc->dma2 == 0) ||
+			     (devc->dma1 == 3 && devc->dma2 == 0))
+				dma2_bit = 0x04;
+
+		outb((bits | dma_bits[devc->dma1] | dma2_bit), config_port);
+	}
+
+	restore_flags(flags);
+      	return 0;
+}
+
+static int ad1848_pm_callback(struct pm_dev *dev, pm_request_t rqst, void *data) 
+{
+	ad1848_info *devc = dev->data;
+	if (devc) {
+		DEB(printk("ad1848: pm event received: 0x%x\n", rqst));
+
+		switch (rqst) {
+		case PM_SUSPEND:
+			ad1848_suspend(devc);
+			break;
+		case PM_RESUME:
+			ad1848_resume(devc);
+			break;
+		}
+	}
+	return 0;
+}
+
 
 EXPORT_SYMBOL(ad1848_detect);
 EXPORT_SYMBOL(ad1848_init);
@@ -2707,8 +2799,6 @@ static int __initdata irq = -1;
 static int __initdata dma = -1;
 static int __initdata dma2 = -1;
 static int __initdata type = 0;
-
-static struct address_info cfg;
 
 MODULE_PARM(io, "i");                   /* I/O for a raw AD1848 card */
 MODULE_PARM(irq, "i");                  /* IRQ to use */

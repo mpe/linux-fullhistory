@@ -19,6 +19,22 @@
 #include <linux/timer.h>
 #include <asm/io.h>
 
+
+
+/* undefine, or define to various debugging levels (>4 == obscene levels) */
+#undef TULIP_DEBUG
+
+
+#ifdef TULIP_DEBUG
+/* note: prints function name for you */
+#define DPRINTK(fmt, args...) printk(KERN_DEBUG "%s: " fmt, __FUNCTION__ , ## args)
+#else
+#define DPRINTK(fmt, args...)
+#endif
+
+
+
+
 struct tulip_chip_table {
 	char *chip_name;
 	int io_size;
@@ -148,6 +164,38 @@ enum t21041_csr13_bits {
 	csr13_mask_10bt = (csr13_eng | csr13_cac | csr13_srl),
 };
 
+enum t21143_csr6_bits {
+	csr6_sc = (1<<31),
+	csr6_ra = (1<<30),
+	csr6_ign_dest_msb = (1<<26),
+	csr6_mbo = (1<<25),
+	csr6_scr = (1<<24),
+	csr6_pcs = (1<<23),
+	csr6_ttm = (1<<22),
+	csr6_sf = (1<<21),
+	csr6_hbd = (1<<19),
+	csr6_ps = (1<<18),
+	csr6_ca = (1<<17),
+	csr6_st = (1<<13),
+	csr6_fc = (1<<12),
+	csr6_om_int_loop = (1<<10),
+	csr6_om_ext_loop = (1<<11),
+	csr6_fd = (1<<9),
+	csr6_pm = (1<<7),
+	csr6_pr = (1<<6),
+	csr6_sb = (1<<5),
+	csr6_if = (1<<4),
+	csr6_pb = (1<<3),
+	csr6_ho = (1<<2),
+	csr6_sr = (1<<1),
+	csr6_hp = (1<<0),
+	
+	csr6_mask_capture = (csr6_sc | csr6_ca),
+	csr6_mask_defstate = (csr6_mask_capture | csr6_mbo),
+	csr6_mask_fullcap = (csr6_mask_defstate | csr6_hbd |
+			     csr6_ps | (3<<14) | csr6_fd),
+};
+
 
 /* Keep the ring sizes a power of two for efficiency.
    Making the Tx ring too large decreases the effectiveness of channel
@@ -247,6 +295,7 @@ struct ring_info {
 	struct sk_buff	*skb;
 	dma_addr_t	mapping;
 };
+
 
 struct tulip_private {
 	const char *product_name;
