@@ -551,11 +551,10 @@ unsigned long get_cmos_time(void)
 	    BCD_TO_BIN(year);
 
 /*
- * This will work up to Dec 31, 2069.
+ * x86-64 systems only exists since 2002.
+ * This will work up to Dec 31, 2100
  */
-
-	if ((year += 1900) < 1970)
-		year += 100;
+	year += 2000;
 
 	return mktime(year, mon, day, hour, min, sec);
 }
