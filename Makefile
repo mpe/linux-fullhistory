@@ -1,6 +1,6 @@
 VERSION = 0.99
 PATCHLEVEL = 14
-ALPHA = n
+ALPHA = o
 
 all:	Version zImage
 
@@ -50,7 +50,7 @@ SVGA_MODE=	-DSVGA_MODE=NORMAL_VGA
 # standard CFLAGS
 #
 
-CFLAGS = -Wall -Wstrict-prototypes -O6 -fomit-frame-pointer -pipe
+CFLAGS = -Wall -Wstrict-prototypes -O2 -fomit-frame-pointer -pipe
 
 ifdef CONFIG_CPP
 CFLAGS := $(CFLAGS) -x c++

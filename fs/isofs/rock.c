@@ -53,19 +53,27 @@
 #define MAYBE_CONTINUE(LABEL,DEV) \
   {if (buffer) kfree(buffer); \
   if (cont_extent){ \
-    int block, offset; \
+    int block, offset, offset1; \
     struct buffer_head * bh; \
     buffer = kmalloc(cont_size,GFP_KERNEL); \
     block = cont_extent; \
     offset = cont_offset; \
+    offset1 = 0; \
     if(ISOFS_BUFFER_SIZE(DEV) == 1024) {     \
       block <<= 1;    \
       if (offset >= 1024) block++; \
       offset &= 1023; \
+      if(offset + cont_size >= 1024) { \
+	  bh = bread(DEV->i_dev, block++, ISOFS_BUFFER_SIZE(DEV)); \
+	  memcpy(buffer, bh->b_data + offset, 1024 - offset); \
+          brelse(bh); \
+	  offset1 = 1024 - offset; \
+	  offset = 0; \
+      }  \
     };     \
     bh = bread(DEV->i_dev, block, ISOFS_BUFFER_SIZE(DEV)); \
     if(bh){       \
-      memcpy(buffer, bh->b_data, cont_size); \
+      memcpy(buffer + offset1, bh->b_data + offset, cont_size - offset1); \
       brelse(bh); \
       chr = (unsigned char *) buffer; \
       len = cont_size; \
@@ -291,10 +299,17 @@ int parse_rock_ridge_inode(struct iso_directory_record * de,
 	};
 	break;
       case SIG('T','F'):
+	/* Some RRIP writers incorrectly place ctime in the TF_CREATE field.
+	   Try and handle this correctly for either case. */
 	cnt = 0; /* Rock ridge never appears on a High Sierra disk */
-	if(rr->u.TF.flags & TF_CREATE) inode->i_ctime = iso_date(rr->u.TF.times[cnt++].time, 0);
-	if(rr->u.TF.flags & TF_MODIFY) inode->i_mtime = iso_date(rr->u.TF.times[cnt++].time, 0);
-	if(rr->u.TF.flags & TF_ACCESS) inode->i_atime = iso_date(rr->u.TF.times[cnt++].time, 0);
+	if(rr->u.TF.flags & TF_CREATE) 
+	  inode->i_ctime = iso_date(rr->u.TF.times[cnt++].time, 0);
+	if(rr->u.TF.flags & TF_MODIFY) 
+	  inode->i_mtime = iso_date(rr->u.TF.times[cnt++].time, 0);
+	if(rr->u.TF.flags & TF_ACCESS) 
+	  inode->i_atime = iso_date(rr->u.TF.times[cnt++].time, 0);
+	if(rr->u.TF.flags & TF_ATTRIBUTES) 
+	  inode->i_ctime = iso_date(rr->u.TF.times[cnt++].time, 0);
 	break;
       case SIG('S','L'):
 	{int slen;

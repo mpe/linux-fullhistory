@@ -7,17 +7,10 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
-SUBDIRS     := unix socket 
+# only these two lines should need to be changed to remove inet sockets.
+# (and the inet/tcpip.o in net.o)
 
-ifdef CONFIG_INET
-SUBDIRS	    := $(SUBDIRS) inet
-endif
-ifdef CONFIG_IPX
-SUBDIRS	    := $(SUBDIRS) ipx
-endif
-ifdef CONFIG_AX25
-SUBDIRS     := $(SUBDIRS) ax25
-endif
+SUBDIRS     := unix inet
 
 SUBOBJS     := $(foreach f,$(SUBDIRS),$f/$f.o)
 

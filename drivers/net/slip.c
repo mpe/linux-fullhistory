@@ -40,9 +40,9 @@
 #include <linux/tty.h>
 #include <linux/in.h>
 #include "inet.h"
-#include "devinet.h"
+#include "dev.h"
 #ifdef CONFIG_AX25
-#include "ax25/ax25.h"
+#include "ax25.h"
 #endif
 #include "eth.h"
 #include "ip.h"

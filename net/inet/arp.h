@@ -5,7 +5,7 @@
  *
  *		Definitions for the ARP protocol module.
  *
- * Version:	@(#)arp.h	1.28	24/12/93
+ * Version:	@(#)arp.h	1.0.6	05/21/93
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -26,31 +26,29 @@
 #define ARP_QUEUE_MAGIC	0x0432447A	/* magic # for queues		*/
 
 
-/* 
- *	This structure defines the ARP mapping cache.
- */
- 
-struct arp_table 
-{
-  	struct arp_table		*next;
-  	volatile unsigned long	last_used;
-  	unsigned int			flags;
-	unsigned long			ip;
-	unsigned char			ha[MAX_ADDR_LEN];
-	unsigned char			hlen;
-	unsigned char			htype;
+/* This structure defines the ARP mapping cache. */
+struct arp_table {
+  struct arp_table		*next;
+  volatile unsigned long	last_used;
+  unsigned int			flags;
+#if 1
+  unsigned long			ip;
+#else
+  unsigned char			pa[MAX_ADDR_LEN];
+  unsigned char			plen;
+  unsigned char			ptype;
+#endif
+  unsigned char			ha[MAX_ADDR_LEN];
+  unsigned char			hlen;
+  unsigned char			htype;
 };
 
 
-/*
- *	This is also used in "sock.c" and "tcp.c" - YUCK! - FvK 
- */
- 
+/* This is also used in "sock.c" and "tcp.c" - YUCK! - FvK */
 extern struct sk_buff *arp_q;
 
 
 extern void	arp_destroy(unsigned long paddr);
-extern void	arp_destroy_maybe(unsigned long paddr);
 extern int	arp_rcv(struct sk_buff *skb, struct device *dev,
 			struct packet_type *pt);
 extern int	arp_find(unsigned char *haddr, unsigned long paddr,

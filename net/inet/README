@@ -1,8 +1,27 @@
 
-NET2Debugged 1.28 README
+NET2Debugged 1.24 README
 ------------------------
 
+Major Changes
 
+o	PLIP driver sort of works
+o	UDP and RAW have been partially rewritten for speed
+o	Internals heavily cleaned up, and memory monitoring of network
+	memory is now done. (On shift-scroll-lock)
+o	ARP should now not generate garbage
+o	Using MSG_PEEK can't cause race conditions and crashes
+o	Support for bootp clients.
+o	Supports RFC931 TAP authd
+o	NFS problems with certain types of network configuration are
+	fixed.
+o	Doesn't forward packets for other subnet (can cause packet storms)
+o	TCP won't ack rst frames causing packet storms (especially with
+	Lan workplace for DOS).
+o	Numerous fixes for solidity
+o	Verify_area used properly.
+o	MSG_PEEK is faster again
+o	Minor TCP fixes. Hopefully no more TCP lockups (ha!)
+o	Donald's promiscuous mode. Go forth and write protocol analysers...
 -------------------------------------------------------------------------
 NOTE:
 	Drivers for this stack set must be using alloc_skb() not just

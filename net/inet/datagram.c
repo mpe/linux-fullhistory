@@ -13,8 +13,6 @@
  *		Alan Cox	:	Rewrote skb_read_datagram to avoid the skb_peek_copy stuff.
  *		Alan Cox	:	Added support for SOCK_SEQPACKET. IPX can no longer use the SO_TYPE hack but
  *					AX.25 now works right, and SPX is feasible.
- *		Alan Cox	:	Tidied up ready for the big day.
- *		Alan Cox	:	Fixed write select of no IP protocol crash.
  */
 
 #include <linux/config.h>
@@ -138,13 +136,6 @@ restart:
 	  return skb;
 }	
 
-/*
- *	Free a datagram buffer. This has some conditions to watch. We keep
- *	a user count so the last user may free the buffer. If however the
- *	buffer has a valid next pointer it was never removed and all the
- *	users PEEKed at it - so don't free it yet.
- */
- 
 void skb_free_datagram(struct sk_buff *skb)
 {
 	unsigned long flags;
@@ -194,11 +185,7 @@ int datagram_select(struct sock *sk, int sel_type, select_table *wait)
 			return(0);
 
 		case SEL_OUT:
-			if(sk->prot && sk->prot->wspace(sk) >= MIN_WRITE_SPACE) 
-			{
-				return(1);
-			}
-			if(sk->prot==NULL && sk->sndbuf-sk->wmem_alloc >= MIN_WRITE_SPACE)
+			if (sk->prot->wspace(sk) >= MIN_WRITE_SPACE) 
 			{
 				return(1);
 			}

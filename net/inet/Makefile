@@ -7,9 +7,6 @@
 #
 # Note 2! The CFLAGS definition is now in the main makefile...
 
-CFLAGS := $(CFLAGS) -I../socket -I..
-CPP := $(CPP) -I../socket -I..
-
 .c.o:
 	$(CC) $(CFLAGS) -c -o $*.o $<
 .s.o:
@@ -18,8 +15,10 @@ CPP := $(CPP) -I../socket -I..
 	$(CC) $(CFLAGS) -S -o $*.s $<
 
 
-OBJS	= sockinet.o utils.o route.o proc.o timer.o protocol.o loopback.o \
-	  eth.o packet.o arp.o devinet.o ip.o raw.o icmp.o tcp.o udp.o
+OBJS	= sock.o utils.o route.o proc.o timer.o protocol.o loopback.o \
+	  eth.o packet.o arp.o dev.o ip.o raw.o icmp.o tcp.o udp.o \
+	  datagram.o skbuff.o
+#	  ipx.o ax25.o ax25_in.o ax25_out.o ax25_subr.o ax25_timer.o
 
 ifdef CONFIG_INET
 

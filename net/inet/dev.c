@@ -790,6 +790,7 @@ static inline int bad_mask(unsigned long mask, unsigned long addr)
 	return 0;
 }
 
+
 /* Perform the SIOCxIFxxx calls. */
 static int
 dev_ifsioc(void *arg, unsigned int getset)

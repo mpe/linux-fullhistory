@@ -24,15 +24,15 @@
 
 /* This is an entry in the IP routing table. */
 struct rtable {
-	struct rtable	*rt_next;
-	unsigned long	rt_dst;
-	unsigned long	rt_mask;
-	unsigned long	rt_gateway;
-	u_char		rt_flags;
-	u_char		rt_metric;
-	short		rt_refcnt;
-	u_long		rt_use;
-	struct device	*rt_dev;
+  struct rtable		*rt_next;
+  unsigned long		rt_dst;
+  unsigned long		rt_mask;
+  unsigned long		rt_gateway;
+  u_char		rt_flags;
+  u_char		rt_metric;
+  short			rt_refcnt;
+  u_long		rt_use;
+  struct device		*rt_dev;
 };
 
 

@@ -59,8 +59,6 @@ struct options {
   unsigned short	handling;
   unsigned short	stream;
   unsigned		tcc;
-  int		option_length;
-  void *option_data;
 };
 
 

@@ -17,7 +17,6 @@
  *		Alan Cox		:	Fraglist support (idea by Donald Becker)
  *		Alan Cox		:	'users' counter. Combines with datagram changes to avoid skb_peek_copy
  *						being used.
- *		Alan Cox		: 	Extra fields for RAW fixes
  *
  *		This program is free software; you can redistribute it and/or
  *		modify it under the terms of the GNU General Public License
@@ -29,7 +28,7 @@
 #include <linux/malloc.h>
 
 #ifdef CONFIG_IPX
-#include "ipx/ipx.h"
+#include "ipx.h"
 #endif
 
 #define HAVE_ALLOC_SKB		/* For the drivers to know */
@@ -39,46 +38,43 @@
 #define FREE_WRITE	0
 
 
-struct sk_buff 
-{
-  	unsigned long		magic_debug_cookie;
-  	struct sk_buff		*volatile next;
-  	struct sk_buff		*volatile prev;
-  	struct sk_buff		*volatile link3;
-  	struct sk_buff		*volatile* list;
-  	struct sock		*sk;
-  	volatile unsigned long	when;	/* used to compute rtt's	*/
-  	struct device		*dev;
-  	void			*mem_addr;
-  	union 
-  	{
-		struct tcphdr	*th;
-		struct ethhdr	*eth;
-		struct iphdr	*iph;
-		struct udphdr	*uh;
-		struct arphdr	*arp;
-		unsigned char	*raw;
-		unsigned long	seq;
+struct sk_buff {
+  unsigned long			magic_debug_cookie;
+  struct sk_buff		*volatile next;
+  struct sk_buff		*volatile prev;
+  struct sk_buff		*volatile link3;
+  struct sk_buff		*volatile* list;
+  struct sock			*sk;
+  volatile unsigned long	when;	/* used to compute rtt's	*/
+  struct device			*dev;
+  void				*mem_addr;
+  union {
+	struct tcphdr	*th;
+	struct ethhdr	*eth;
+	struct iphdr	*iph;
+	struct udphdr	*uh;
+	struct arphdr	*arp;
+	unsigned char	*raw;
+	unsigned long	seq;
 #ifdef CONFIG_IPX	
-		ipx_packet	*ipx;
+	ipx_packet	*ipx;
 #endif	
-  	} h;
-  	struct iphdr *		ip_hdr;
-  	unsigned long		mem_len;
-  	unsigned long 		len;
-  	unsigned long		fraglen;
-  	struct sk_buff		*fraglist;	/* Fragment list */
-  	unsigned long		truesize;
-  	unsigned long 		saddr;
-  	unsigned long 		daddr;
-  	int			magic;
-  	volatile char 		acked,
+  } h;
+  unsigned long			mem_len;
+  unsigned long 		len;
+  unsigned long			fraglen;
+  struct sk_buff		*fraglist;	/* Fragment list */
+  unsigned long			truesize;
+  unsigned long 		saddr;
+  unsigned long 		daddr;
+  int				magic;
+  volatile char 		acked,
 				used,
 				free,
 				arp,
 				urg_used;
-  	unsigned char			tries,lock;	/* Lock is now unused */
-  	unsigned short		users;		/* User count - see datagram.c (and soon seqpacket.c/stream.c) */
+  unsigned char			tries,lock;	/* Lock is now unused */
+  unsigned short		users;		/* User count - see datagram.c (and soon seqpacket.c/stream.c) */
 };
 
 #define SK_WMEM_MAX	8192
