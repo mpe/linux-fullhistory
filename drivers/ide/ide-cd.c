@@ -3219,6 +3219,9 @@ int ide_cdrom_setup (ide_drive_t *drive)
 	 */
 	blk_queue_hardsect_size(drive->queue, CD_FRAMESIZE);
 
+	if (drive->autotune == IDE_TUNE_DEFAULT ||
+	    drive->autotune == IDE_TUNE_AUTO)
+		drive->dsc_overlap = (drive->next != drive);
 #if 0
 	drive->dsc_overlap = (HWIF(drive)->no_dsc) ? 0 : 1;
 	if (HWIF(drive)->no_dsc) {
@@ -3282,6 +3285,7 @@ static void ide_cd_release(struct kref *kref)
 	if (devinfo->handle == drive && unregister_cdrom(devinfo))
 		printk(KERN_ERR "%s: %s failed to unregister device from the cdrom "
 				"driver.\n", __FUNCTION__, drive->name);
+	drive->dsc_overlap = 0;
 	drive->driver_data = NULL;
 	blk_queue_prep_rq(drive->queue, NULL);
 	g->private_data = NULL;

@@ -2034,11 +2034,6 @@ int ide_register_subdriver(ide_drive_t *drive, ide_driver_t *driver)
 	list_add_tail(&drive->list, &driver->drives);
 	spin_unlock(&drives_lock);
 //	printk(KERN_INFO "%s: attached %s driver.\n", drive->name, driver->name);
-	if ((drive->autotune == IDE_TUNE_DEFAULT) ||
-		(drive->autotune == IDE_TUNE_AUTO)) {
-		/* DMA timings and setup moved to ide-probe.c */
-		drive->dsc_overlap = (drive->next != drive && driver->supports_dsc_overlap);
-	}
 #ifdef CONFIG_PROC_FS
 	if (drive->driver != &idedefault_driver)
 		ide_add_proc_entries(drive->proc, driver->proc, drive);
