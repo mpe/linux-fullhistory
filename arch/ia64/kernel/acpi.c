@@ -756,7 +756,7 @@ EXPORT_SYMBOL(acpi_unmap_lsapic);
 #endif /* CONFIG_ACPI_HOTPLUG_CPU */
  
 
-#ifdef CONFIG_NUMA
+#ifdef CONFIG_ACPI_NUMA
 acpi_status __init
 acpi_map_iosapic (acpi_handle handle, u32 depth, void *context, void **ret)
 {
