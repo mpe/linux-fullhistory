@@ -621,6 +621,11 @@ static struct proc_dir_entry proc_root_ioports = {
 	S_IFREG | S_IRUGO, 1, 0, 0,
 	0, &proc_array_inode_operations
 };
+static struct proc_dir_entry proc_root_memory = {
+	PROC_MEMORY, 6, "memory",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
+};
 static struct proc_dir_entry proc_root_cmdline = {
 	PROC_CMDLINE, 7, "cmdline",
 	S_IFREG | S_IRUGO, 1, 0, 0,
@@ -709,6 +714,7 @@ __initfunc(void proc_root_init(void))
 	proc_register(&proc_root, &proc_root_fs);
 	proc_register(&proc_root, &proc_root_dma);
 	proc_register(&proc_root, &proc_root_ioports);
+	proc_register(&proc_root, &proc_root_memory);
 	proc_register(&proc_root, &proc_root_cmdline);
 #ifdef CONFIG_RTC
 	proc_register(&proc_root, &proc_root_rtc);

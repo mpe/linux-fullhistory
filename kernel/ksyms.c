@@ -300,10 +300,12 @@ EXPORT_SYMBOL(disable_hlt);
 EXPORT_SYMBOL(enable_hlt);
 #endif
 
-/* IO port handling */
-EXPORT_SYMBOL(check_region);
-EXPORT_SYMBOL(request_region);
-EXPORT_SYMBOL(release_region);
+/* resource handling */
+EXPORT_SYMBOL(check_resource);
+EXPORT_SYMBOL(request_resource);
+EXPORT_SYMBOL(release_resource);
+EXPORT_SYMBOL(occupy_resource);
+EXPORT_SYMBOL(vacate_resource);
 
 /* process management */
 EXPORT_SYMBOL(__wake_up);

@@ -359,7 +359,7 @@ static int writeout_one_page(struct page *page)
 
 	bh = head;
 	do {
-		if (buffer_locked(bh) || !buffer_dirty(bh))
+		if (buffer_locked(bh) || !buffer_dirty(bh) || !buffer_uptodate(bh))
 			continue;
 
 		bh->b_flushtime = 0;
@@ -376,7 +376,7 @@ static int waitfor_one_page(struct page *page)
 	bh = head;
 	do {
 		wait_on_buffer(bh);
-		if (!buffer_uptodate(bh))
+		if (buffer_req(bh) && !buffer_uptodate(bh))
 			error = -EIO;
 	} while ((bh = bh->b_this_page) != head);
 	return error;

@@ -1,10 +1,17 @@
 /*
  *	linux/kernel/resource.c
  *
- * Copyright (C) 1995	Linus Torvalds
- *			David Hinds
+ * Copyright (C) 1995, 1999	Linus Torvalds
+ *				David Hinds
  *
- * Kernel io-region resource management
+ * Kernel resource management
+ *
+ * We now distinguish between claiming space for devices (using the
+ * 'occupy' and 'vacate' calls), and associating a resource with a
+ * device driver (with the 'request', 'release', and 'check' calls).
+ * A resource can be claimed even if there is no associated driver
+ * (by occupying with name=NULL).  Vacating a resource makes it
+ * available for other dynamically configured devices.
  */
 
 #include <linux/sched.h>
@@ -12,47 +19,59 @@
 #include <linux/ioport.h>
 #include <linux/init.h>
 
-#define IOTABLE_SIZE 128
+#define RSRC_TABLE_SIZE 128
 
-typedef struct resource_entry_t {
+struct resource_entry {
 	u_long from, num;
 	const char *name;
-	struct resource_entry_t *next;
-} resource_entry_t;
+	struct resource_entry *next;
+};
 
-static resource_entry_t iolist = { 0, 0, "", NULL };
+struct resource_entry res_list[] = {
+    { 0, 0, NULL, NULL }, /* IO */
+    { 0, 0, NULL, NULL }  /* mem */
+};
 
-static resource_entry_t iotable[IOTABLE_SIZE];
+static struct resource_entry rsrc_table[RSRC_TABLE_SIZE];
 
 /*
- * This generates the report for /proc/ioports
+ * This generates reports for /proc/ioports and /proc/memory
  */
-int get_ioport_list(char *buf)
+int get_resource_list(int class, char *buf)
 {
-	resource_entry_t *p;
+	struct resource_entry *root = &res_list[class];
+	struct resource_entry *p;
 	int len = 0;
-
-	for (p = iolist.next; (p) && (len < 4000); p = p->next)
-		len += sprintf(buf+len, "%04lx-%04lx : %s\n",
-			   p->from, p->from+p->num-1, p->name);
+	char *fmt = (class == RES_IO) ?
+		"%04lx-%04lx : %s\n" : "%08lx-%08lx : %s\n";
+	
+	for (p = root->next; (p) && (len < 4000); p = p->next)
+		len += sprintf(buf+len, fmt, p->from, p->from+p->num-1,
+			       (p->name ? p->name : "occupied"));
 	if (p)
 		len += sprintf(buf+len, "4K limit reached!\n");
 	return len;
 }
 
 /*
- * The workhorse function: find where to put a new entry
+ * Basics: find a matching resource entry, or find an insertion point
  */
-static resource_entry_t *find_gap(resource_entry_t *root,
-				  u_long from, u_long num)
+static struct resource_entry *
+find_match(struct resource_entry *root, u_long from, u_long num)
 {
-	unsigned long flags;
-	resource_entry_t *p;
-	
+	struct resource_entry *p;
+	for (p = root; p; p = p->next)
+		if ((p->from == from) && (p->num == num))
+			return p;
+	return NULL;
+}
+
+static struct resource_entry *
+find_gap(struct resource_entry *root, u_long from, u_long num)
+{
+	struct resource_entry *p;
 	if (from > from+num-1)
 		return NULL;
-	save_flags(flags);
-	cli();
 	for (p = root; ; p = p->next) {
 		if ((p != root) && (p->from+p->num-1 >= from)) {
 			p = NULL;
@@ -61,123 +80,147 @@ static resource_entry_t *find_gap(resource_entry_t *root,
 		if ((p->next == NULL) || (p->next->from > from+num-1))
 			break;
 	}
-	restore_flags(flags);
 	return p;
 }
 
 /*
- * Call this from the device driver to register the ioport region.
+ * Call this from a driver to assert ownership of a resource
  */
-void request_region(unsigned long from, unsigned long num, const char *name)
+void request_resource(int class, unsigned long from,
+		      unsigned long num, const char *name)
 {
-	resource_entry_t *p;
+	struct resource_entry *root = &res_list[class];
+	struct resource_entry *p;
+	long flags;
 	int i;
 
-	for (i = 0; i < IOTABLE_SIZE; i++)
-		if (iotable[i].num == 0)
-			break;
-	if (i == IOTABLE_SIZE)
-		printk("warning: ioport table is full\n");
-	else {
-		p = find_gap(&iolist, from, num);
-		if (p == NULL)
-			return;
-		iotable[i].name = name;
-		iotable[i].from = from;
-		iotable[i].num = num;
-		iotable[i].next = p->next;
-		p->next = &iotable[i];
+	p = find_match(root, from, num);
+	if (p) {
+		p->name = name;
 		return;
 	}
+
+	save_flags(flags);
+	cli();
+	for (i = 0; i < RSRC_TABLE_SIZE; i++)
+		if (rsrc_table[i].num == 0)
+			break;
+	if (i == RSRC_TABLE_SIZE)
+		printk("warning: resource table is full\n");
+	else {
+		p = find_gap(root, from, num);
+		if (p == NULL) {
+			restore_flags(flags);
+			return;
+		}
+		rsrc_table[i].name = name;
+		rsrc_table[i].from = from;
+		rsrc_table[i].num = num;
+		rsrc_table[i].next = p->next;
+		p->next = &rsrc_table[i];
+	}
+	restore_flags(flags);
 }
 
 /* 
- * Call this when the device driver is unloaded
+ * Call these when a driver is unloaded but the device remains
  */
-void release_region(unsigned long from, unsigned long num)
+void release_resource(int class, unsigned long from, unsigned long num)
 {
-	resource_entry_t *p, *q;
+	struct resource_entry *root = &res_list[class];
+	struct resource_entry *p;
+	p = find_match(root, from, num);
+	if (p) p->name = NULL;
+}
 
-	for (p = &iolist; ; p = q) {
+/*
+ * Call these to check a region for conflicts before probing
+ */
+int check_resource(int class, unsigned long from, unsigned long num)
+{
+	struct resource_entry *root = &res_list[class];
+	struct resource_entry *p;
+	p = find_match(root, from, num);
+	if (p != NULL)
+		return (p->name != NULL) ? -EBUSY : 0;
+	return (find_gap(root, from, num) == NULL) ? -EBUSY : 0;
+}
+
+/*
+ * Call this to claim a resource for a piece of hardware
+ */
+unsigned long occupy_resource(int class, unsigned long base,
+			      unsigned long end, unsigned long num,
+			      unsigned long align, const char *name)
+{
+	struct resource_entry *root = &res_list[class];
+	unsigned long from = 0, till;
+	unsigned long flags;
+	int i;
+	struct resource_entry *p, *q;
+
+	if ((base > end-1) || (num > end - base))
+		return 0;
+
+	for (i = 0; i < RSRC_TABLE_SIZE; i++)
+		if (rsrc_table[i].num == 0)
+			break;
+	if (i == RSRC_TABLE_SIZE)
+		return 0;
+
+	save_flags(flags);
+	cli();
+	/* printk("occupy: search in %08lx[%08lx] ", base, end - base); */
+	for (p = root; p != NULL; p = q) {
+		q = p->next;
+		/* Find window in list */
+		from = (p->from+p->num + align-1) & ~(align-1);
+		till = (q == NULL) ? (0 - align) : q->from;
+		/* printk(" %08lx:%08lx", from, till); */
+		/* Clip window with base and end */
+		if (from < base) from = base;
+		if (till > end) till = end;
+		/* See if result is large enougth */
+		if ((from < till) && (from + num < till))
+			break;
+	}
+	/* printk("\r\n"); */
+	restore_flags(flags);
+
+	if (p == NULL)
+		return 0;
+
+	rsrc_table[i].name = name;
+	rsrc_table[i].from = from;
+	rsrc_table[i].num = num;
+	rsrc_table[i].next = p->next;
+	p->next = &rsrc_table[i];
+	return from;
+}
+
+/*
+ * Call this when a resource becomes available for other hardware
+ */
+void vacate_resource(int class, unsigned long from, unsigned long num)
+{
+	struct resource_entry *root = &res_list[class];
+	struct resource_entry *p, *q;
+	long flags;
+
+	save_flags(flags);
+	cli();
+	for (p = root; ; p = q) {
 		q = p->next;
 		if (q == NULL)
 			break;
 		if ((q->from == from) && (q->num == num)) {
 			q->num = 0;
 			p->next = q->next;
-			return;
-		}
-	}
-}
-
-/*
- * Call this to check the ioport region before probing
- */
-int check_region(unsigned long from, unsigned long num)
-{
-	return (find_gap(&iolist, from, num) == NULL) ? -EBUSY : 0;
-}
-
-#ifdef __sparc__   /* Why to carry unused code on other architectures? */
-/*
- * This is for architectures with MMU-managed ports (sparc).
- */
-unsigned long occupy_region(unsigned long base, unsigned long end,
-			    unsigned long num, unsigned int align, const char *name)
-{
-	unsigned long from = 0, till;
-	unsigned long flags;
-	int i;
-	resource_entry_t *p;		/* Scanning ptr */
-	resource_entry_t *p1;		/* === p->next */
-	resource_entry_t *s;		/* Found slot */
-
-	if (base > end-1)
-		return 0;
-	if (num > end - base)
-		return 0;
-
-	for (i = 0; i < IOTABLE_SIZE; i++)
-		if (iotable[i].num == 0)
-			break;
-	if (i == IOTABLE_SIZE) {
-		/* Driver prints a warning typically. */
-		return 0;
-	}
-
-	save_flags(flags);
-	cli();
-	/* printk("occupy: search in %08lx[%08lx] ", base, end - base); */
-	s = NULL;
-	for (p = &iolist; p != NULL; p = p1) {
-		p1 = p->next;
-		/* Find window in list */
-		from = (p->from+p->num + align-1) & ~((unsigned long)align-1);
-		till = (p1 == NULL)? (unsigned long) (0 - (unsigned long)align): p1->from;
-		/* printk(" %08lx:%08lx", from, till); */
-		/* Clip window with base and end */
-		if (from < base) from = base;
-		if (till > end) till = end;
-		/* See if result is large enougth */
-		if (from < till && from + num < till) {
-			s = p;
 			break;
 		}
 	}
-	/* printk("\r\n"); */
 	restore_flags(flags);
-
-	if (s == NULL)
-		return 0;
-
-	iotable[i].name = name;
-	iotable[i].from = from;
-	iotable[i].num = num;
-	iotable[i].next = s->next;
-	s->next = &iotable[i];
-	return from;
 }
-#endif
 
 /* Called from init/main.c to reserve IO ports. */
 void __init reserve_setup(char *str, int *ints)

@@ -234,30 +234,13 @@ struct buffer_head {
 typedef void (bh_end_io_t)(struct buffer_head *bh, int uptodate);
 void init_buffer(struct buffer_head *, kdev_t, int, bh_end_io_t *, void *);
 
-static inline int buffer_uptodate(struct buffer_head * bh)
-{
-	return test_bit(BH_Uptodate, &bh->b_state);
-}	
+#define __buffer_state(bh, state)	(((bh)->b_state & (1UL << BH_##state)) != 0)
 
-static inline int buffer_dirty(struct buffer_head * bh)
-{
-	return test_bit(BH_Dirty, &bh->b_state);
-}
-
-static inline int buffer_locked(struct buffer_head * bh)
-{
-	return test_bit(BH_Lock, &bh->b_state);
-}
-
-static inline int buffer_req(struct buffer_head * bh)
-{
-	return test_bit(BH_Req, &bh->b_state);
-}
-
-static inline int buffer_protected(struct buffer_head * bh)
-{
-	return test_bit(BH_Protected, &bh->b_state);
-}
+#define buffer_uptodate(bh)	__buffer_state(bh,Uptodate)
+#define buffer_dirty(bh)	__buffer_state(bh,Dirty)
+#define buffer_locked(bh)	__buffer_state(bh,Lock)
+#define buffer_req(bh)		__buffer_state(bh,Req)
+#define buffer_protected(bh)	__buffer_state(bh,Protected)
 
 #define buffer_page(bh)		(mem_map + MAP_NR((bh)->b_data))
 #define touch_buffer(bh)	set_bit(PG_referenced, &buffer_page(bh)->flags)

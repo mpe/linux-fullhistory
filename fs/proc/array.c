@@ -1326,6 +1326,9 @@ static long get_root_array(char * page, int type, char **start,
 
 		case PROC_IOPORTS:
 			return get_ioport_list(page);
+
+		case PROC_MEMORY:
+			return get_mem_list(page);
 #ifdef CONFIG_BLK_DEV_MD
 	        case PROC_MD:
 			return get_md_status(page);
