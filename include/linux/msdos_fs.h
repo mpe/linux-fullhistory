@@ -6,6 +6,8 @@
  */
 
 #include <linux/fs.h>
+#include <linux/stat.h>
+#include <linux/fd.h>
 
 #define MSDOS_ROOT_INO  1 /* == MINIX_ROOT_INO */
 #define SECTOR_SIZE     512 /* sector size (bytes) */
@@ -32,6 +34,11 @@
 	/* attribute bits that are copied "as is" */
 
 #define DELETED_FLAG 0xe5 /* marks file as deleted when in name[0] */
+#define IS_FREE(n) (!*(n) || *(unsigned char *) (n) == DELETED_FLAG || \
+  *(unsigned char *) (n) == FD_FILL_BYTE)
+
+#define MSDOS_VALID_MODE (S_IFREG | S_IFDIR | S_IRWXU | S_IRWXG | S_IRWXO)
+	/* valid file mode bits */
 
 #define MSDOS_SB(s) (&((s)->u.msdos_sb))
 #define MSDOS_I(i) (&((i)->u.msdos_i))
@@ -40,10 +47,26 @@
 #define MSDOS_DOT    ".          " /* ".", padded to MSDOS_NAME chars */
 #define MSDOS_DOTDOT "..         " /* "..", padded to MSDOS_NAME chars */
 
-#define MSDOS_FAT12 4086 /* maximum number of clusters in a 12 bit FAT */
+#define MSDOS_FAT12 4078 /* maximum number of clusters in a 12 bit FAT */
+
+/*
+ * Conversion from and to little-endian byte order. (no-op on i386/i486)
+ *
+ * Naming: Ca_b_c, where a: F = from, T = to, b: LE = little-endian, BE = big-
+ * endian, c: W = word (16 bits), L = longword (32 bits)
+ */
+
+#define CF_LE_W(v) (v)
+#define CF_LE_L(v) (v)
+#define CT_LE_W(v) (v)
+#define CT_LE_L(v) (v)
+
 
 struct msdos_boot_sector {
-	char ignored[13];
+	char ignored[3];	    /* Boot strap short or near jump */
+	char system_id[8];	    /* Name - can be used to special case
+				       partition manager volumes */
+	unsigned char sector_size[2];/* bytes per logical sector */
 	unsigned char cluster_size; /* sectors/cluster */
 	unsigned short reserved;    /* reserved sectors */
 	unsigned char fats;	    /* number of FATs */
@@ -51,8 +74,8 @@ struct msdos_boot_sector {
 	unsigned char sectors[2];   /* number of sectors */
 	unsigned char media;	    /* media code (unused) */
 	unsigned short fat_length;  /* sectors/FAT */
-	unsigned short secs_track;  /* sectors per track (unused) */
-	unsigned short heads;	    /* number of heads (unused) */
+	unsigned short secs_track;  /* sectors per track */
+	unsigned short heads;	    /* number of heads */
 	unsigned long hidden;	    /* hidden sectors (unused) */
 	unsigned long total_sect;   /* number of sectors (if sectors == 0) */
 };
@@ -80,11 +103,11 @@ struct fat_cache {
 
 /* Convert attribute bits and a mask to the UNIX mode. */
 
-#define MSDOS_MKMODE(a,m) (m & (a & ATTR_RO ? 0444 : 0777))
+#define MSDOS_MKMODE(a,m) (m & (a & ATTR_RO ? 0555 : 0777))
 
 /* Convert the UNIX mode to MS-DOS attribute bits. */
 
-#define MSDOS_MKATTR(m) (!(m & 0200) ? ATTR_RO : ATTR_NONE)
+#define MSDOS_MKATTR(m) ((m & 0200) ? ATTR_NONE : ATTR_RO)
 
 
 static inline struct buffer_head *msdos_sread(int dev,int sector,void **start)
@@ -100,6 +123,7 @@ static inline struct buffer_head *msdos_sread(int dev,int sector,void **start)
 
 /* misc.c */
 
+extern void fs_panic(struct super_block *s,char *msg);
 extern int is_binary(char conversion,char *extension);
 extern void lock_creation(void);
 extern void unlock_creation(void);
@@ -149,6 +173,7 @@ extern void msdos_statfs(struct super_block *sb,struct statfs *buf);
 extern int msdos_bmap(struct inode *inode,int block);
 extern void msdos_read_inode(struct inode *inode);
 extern void msdos_write_inode(struct inode *inode);
+extern int msdos_notify_change(int flags,struct inode *inode);
 
 /* dir.c */
 

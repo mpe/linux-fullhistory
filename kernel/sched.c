@@ -159,8 +159,10 @@ int sys_pause(void)
 		if (sa->sa_handler == SIG_IGN || (sa->sa_handler == SIG_DFL
 		    && (sig == SIGCONT || sig == SIGCHLD || sig == SIGWINCH)))
 			current->blocked |= mask;
-	current->state = TASK_INTERRUPTIBLE;
-	schedule();
+	do {
+		current->state = TASK_INTERRUPTIBLE;
+		schedule();
+	} while (!(current->signal & ~current->blocked));
 	/* if a suspending signal interrupted us we must restart */
 	if (!(current->signal & ~current->blocked &
 		~(_S(SIGSTOP) | _S(SIGTSTP) | _S(SIGTTIN) | _S(SIGTTOU)))) {

@@ -6,7 +6,7 @@
 
 /*
  *  'fork.c' contains the help-routines for the 'fork' system call
- * (see also system_call.s), and some misc functions ('verify_area').
+ * (see also system_call.s).
  * Fork is rather simple, once you get the hang of it, but the memory
  * management can be a bitch. See 'mm/mm.c': 'copy_page_tables()'
  */
@@ -23,27 +23,6 @@
 #define MAX_TASKS_PER_USER (NR_TASKS/2)
 
 long last_pid=0;
-
-int verify_area(int type, void * addr, unsigned long size)
-{
-	unsigned long start;
-
-	start = (unsigned long) addr;
-	if (start >= TASK_SIZE)
-		return -EFAULT;
-	if (size > TASK_SIZE - start)
-		return -EFAULT;
-	if (type == VERIFY_READ)
-		return 0;
-	size += start & 0xfff;
-	size >>= 12;
-	start &= 0xfffff000;
-	do {
-		write_verify(start);
-		start += 4096;
-	} while (size--);
-	return 0;
-}
 
 static int find_empty_process(void)
 {

@@ -662,7 +662,7 @@ int sys_swapon(const char * specialfile)
 		p->flags = 0;
 		return -ENOMEM;
 	}
-	read_swap_page(type < 1,tmp);
+	read_swap_page(SWP_ENTRY(type,0),tmp);
 	if (strncmp("SWAP-SPACE",tmp+4086,10)) {
 		printk("Unable to find swap-space signature\n");
 		free_page((long) tmp);

@@ -330,7 +330,8 @@ struct inode * xiafs_new_inode(struct inode * dir)
     inode->i_ino = tmp;
     inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
     inode->i_op = NULL;
-    inode->i_blocks = inode->i_blksize = 0;
+    inode->i_blocks = 0;
+    inode->i_blksize = XIAFS_ZSIZE(inode->i_sb);
     return inode;
 }
 

@@ -18,7 +18,7 @@
 
 SUBDIRS	= scsi
 
-OBJS = hd.o ll_rw_blk.o floppy.o ramdisk.o genhd.o
+OBJS = xd.o hd.o ll_rw_blk.o floppy.o ramdisk.o genhd.o
 
 all: blk_drv.a scsisubdirs
 
@@ -37,6 +37,9 @@ clean:
 dep:
 	$(CPP) -M *.c > .depend
 	for i in $(SUBDIRS); do (cd $$i && $(MAKE) dep); done
+
+xd.o:	
+	$(CC) $(CFLAGS) -fno-omit-frame-pointer $(RAMDISK) -c $<
 
 dummy:
 

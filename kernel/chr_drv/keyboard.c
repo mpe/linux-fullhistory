@@ -40,6 +40,7 @@
 extern void do_keyboard_interrupt(void);
 extern void ctrl_alt_del(void);
 extern void change_console(unsigned int new_console);
+extern void fake_keyboard_interrupt(void);
 
 unsigned long kbd_flags = 0;
 unsigned long kbd_dead_keys = 0;
@@ -75,23 +76,6 @@ static inline void kb_wait(void)
 			break;
 }
 
-/*
- * send_cmd() sends a command byte to the keyboard.
- */
-static inline void send_cmd(unsigned char c)
-{
-	kb_wait();
-	outb(c,0x64);
-}
-
-static inline unsigned char get_scancode(void)
-{
-	kb_wait();
-	if (inb_p(0x64) & 0x01)
-		return inb(0x60);
-	return 0;
-}
-
 static void keyboard_interrupt(int int_pt_regs)
 {
 	static unsigned char rep = 0xff;
@@ -102,8 +86,11 @@ static void keyboard_interrupt(int int_pt_regs)
 	if (!kbd_dead_keys)
 		kbd_prev_dead_keys = 0;
 	kbd_dead_keys = 0;
-	send_cmd(0xAD);
-	scancode = get_scancode();
+	kb_wait();
+	if (!(inb_p(0x64) & 0x01))
+		goto end_kbd_intr;
+	scancode = inb(0x60);
+	mark_bh(KEYBOARD_BH);
 	if (scancode == 0xfa) {
 		acknowledge = 1;
 		goto end_kbd_intr;
@@ -145,8 +132,6 @@ static void keyboard_interrupt(int int_pt_regs)
 		key_table[scancode](scancode);
 	rep = scancode;
 end_kbd_intr:
-	send_cmd(0xAE);
-	mark_bh(KEYBOARD_BH);
 }
 
 static void put_queue(int ch)
@@ -1116,13 +1101,15 @@ unsigned int handle_diacr(unsigned int ch)
 {
 	static unsigned char diacr_table[] =
 		{'`', 180, '^', '~', 168, 0};		/* Must end with 0 */
+	static unsigned char ret_diacr[] =
+		{'`', '\'', '^', '~', '"' };		/* Must not end with 0 */
 	int i;
 
 	for(i=0; diacr_table[i]; i++)
 		if (ch==diacr_table[i] && ((1<<i)&kbd->kbd_flags)) {
 			if (diacr == i) {
 				diacr=-1;
-				return ch;		/* pressed twice */
+				return ret_diacr[i];	/* pressed twice */
 			} else {
 				diacr=i;		/* key is dead */
 				return 0;
@@ -1131,7 +1118,7 @@ unsigned int handle_diacr(unsigned int ch)
 	if (diacr == -1)
 		return ch;
 	else if (ch == ' ') {
-		ch=diacr_table[diacr];
+		ch=ret_diacr[diacr];
 		diacr=-1;
 		return ch;
 	} else if (ch<64 || ch>122) {
@@ -1366,6 +1353,10 @@ static void kbd_bh(void * unused)
 		want_console = -1;
 	}
 	do_keyboard_interrupt();
+	cli();
+	if (inb_p(0x64) & 0x01)
+		fake_keyboard_interrupt();
+	sti();
 }
 
 long no_idt[2] = {0, 0};
@@ -1475,6 +1466,6 @@ unsigned long kbd_init(unsigned long kmem_start)
 	}
 	bh_base[KEYBOARD_BH].routine = kbd_bh;
 	request_irq(KEYBOARD_IRQ,keyboard_interrupt);
-	keyboard_interrupt(0);
+	mark_bh(KEYBOARD_BH);
 	return kmem_start;
 }

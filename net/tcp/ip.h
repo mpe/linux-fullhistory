@@ -156,6 +156,12 @@ extern int ip_ads;
 #define MY_IP_ADDR ip_addr[0]
 int my_ip_addr(unsigned long);
 
+/*
+ * returned by my_ip_addr..
+ */
+#define IS_MYADDR 1
+#define IS_BROADCAST 2
+
 #include "eth.h"
 
 void

@@ -563,10 +563,28 @@ void do_wp_page(unsigned long error_code, unsigned long address,
 	invalidate();
 }
 
-void write_verify(unsigned long address)
+int verify_area(int type, void * addr, unsigned long size)
 {
-	if (address < TASK_SIZE)
-		do_wp_page(1,address,current,0);
+	unsigned long start;
+
+	start = (unsigned long) addr;
+	if (start >= TASK_SIZE)
+		return -EFAULT;
+	if (size > TASK_SIZE - start)
+		return -EFAULT;
+	if (type == VERIFY_READ || !size)
+		return 0;
+	if (!size)
+		return 0;
+	size--;
+	size += start & 0xfff;
+	size >>= 12;
+	start &= 0xfffff000;
+	do {
+		do_wp_page(1,start,current,0);
+		start += 4096;
+	} while (size--);
+	return 0;
 }
 
 static void get_empty_page(struct task_struct * tsk, unsigned long address)

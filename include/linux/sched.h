@@ -143,16 +143,16 @@ struct tss_struct {
 
 struct task_struct {
 /* these are hardcoded - don't touch */
-	long state;	/* -1 unrunnable, 0 runnable, >0 stopped */
+	long state;		/* -1 unrunnable, 0 runnable, >0 stopped */
 	long counter;
 	long priority;
-	long signal;
+	unsigned long signal;
+	unsigned long blocked;	/* bitmap of masked signals */
+	unsigned long flags;	/* per process flags, defined below */
+/* various fields */
 	struct sigaction sigaction[32];
-	long blocked;	/* bitmap of masked signals */
 	unsigned long saved_kernel_stack;
 	unsigned long kernel_stack_page;
-	unsigned int flags;	/* per process flags, defined below */
-/* various fields */
 	int exit_code;
 	int dumpable:1;
 	int swappable:1;
@@ -220,9 +220,9 @@ struct task_struct {
  * your own risk!. Base=0, limit=0x1fffff (=2MB)
  */
 #define INIT_TASK \
-/* state etc */	{ 0,15,15, \
-/* signals */	0,{{ 0, },},0,0,0, \
-/* flags */	0, \
+/* state etc */	{ 0,15,15,0,0,0, \
+/* signals */	{{ 0, },}, \
+/* stack */	0,0, \
 /* ec,brk... */	0,0,0,0,0,0,0,0, \
 /* argv.. */	0,0,0,0, \
 /* pid etc.. */	0,0,0,0, \
@@ -275,7 +275,7 @@ extern void interruptible_sleep_on(struct wait_queue ** p);
 extern void wake_up(struct wait_queue ** p);
 extern void wake_up_interruptible(struct wait_queue ** p);
 
-extern int send_sig(long sig,struct task_struct * p,int priv);
+extern int send_sig(unsigned long sig,struct task_struct * p,int priv);
 extern int in_group_p(gid_t grp);
 
 extern int request_irq(unsigned int irq,void (*handler)(int));

@@ -48,7 +48,6 @@ static int ext_follow_link(struct inode * dir, struct inode * inode,
 	int flag, int mode, struct inode ** res_inode)
 {
 	int error;
-	unsigned short fs;
 	struct buffer_head * bh;
 
 	*res_inode = NULL;

@@ -65,23 +65,12 @@ VM_MASK		= 0x00020000
 /*
  * these are offsets into the task-struct.
  */
-state		= 0
-counter		= 4
-priority	= 8
+state		=  0
+counter		=  4
+priority	=  8
 signal		= 12
-sigaction	= 16		# MUST be 16 (=len of sigaction)
-blocked		= (33*16)
-saved_kernel_stack = ((33*16)+4)
-kernel_stack_page = ((33*16)+8)
-flags		= ((33*16)+12)
-
-/*
- * offsets within sigaction
- */
-sa_handler	= 0
-sa_mask		= 4
-sa_flags	= 8
-sa_restorer	= 12
+blocked		= 16
+flags		= 20
 
 ENOSYS = 38
 
@@ -112,6 +101,21 @@ ENOSYS = 38
 	mov %dx,%es; \
 	movl $0x17,%edx; \
 	mov %dx,%fs
+
+#define RESTORE_ALL \
+	popl %ebx; \
+	popl %ecx; \
+	popl %edx; \
+	popl %esi; \
+	popl %edi; \
+	popl %ebp; \
+	popl %eax; \
+	pop %ds; \
+	pop %es; \
+	pop %fs; \
+	pop %gs; \
+	addl $4,%esp; \
+	iret
 
 .align 4
 reschedule:
@@ -151,16 +155,16 @@ _system_call:
 ret_from_sys_call:
 	movl EFLAGS(%esp),%eax		# check VM86 flag: CS/SS are
 	testl $VM_MASK,%eax		# different then
-	jne 4f
+	jne 1f
 	cmpw $0x0f,CS(%esp)		# was old code segment supervisor ?
 	jne 2f
 	cmpw $0x17,OLDSS(%esp)		# was stack segment = 0x17 ?
 	jne 2f
-4:	sti				# slow interrupts get here with interrupts disabled
+1:	sti				# slow interrupts get here with interrupts disabled
 	orl $IF_MASK,%eax		# these just try to make sure
 	andl $~NT_MASK,%eax		# the program doesn't do anything
 	movl %eax,EFLAGS(%esp)		# stupid
-1:	cmpl $0,_need_resched
+	cmpl $0,_need_resched
 	jne reschedule
 	movl _current,%eax
 	cmpl _task,%eax			# task[0] cannot have signals
@@ -169,44 +173,28 @@ ret_from_sys_call:
 	jne reschedule
 	cmpl $0,counter(%eax)		# counter
 	je reschedule
-	movl signal(%eax),%ebx
 	movl blocked(%eax),%ecx
 	notl %ecx
-	andl %ebx,%ecx
-	je 2f				# XXX - branch is almost always taken
-	bsfl %ecx,%ecx
-	btrl %ecx,signal(%eax)		# change atomically (%ebx is stale)
-	jnc 2f				# bit became clear (can't happen?)
-	incl %ecx
+	andl signal(%eax),%ecx
+	jne signal_return
+2:	RESTORE_ALL
+.align 4
+signal_return:
 	movl %esp,%ebx
-	testl $VM_MASK,EFLAGS(%esp)
-	je 3f
 	pushl %ebx
-	pushl %ecx
-	call _save_v86_state
-	popl %ecx
-	movl %eax,%ebx
-	movl %eax,%esp
-3:	pushl %ebx
-	pushl %ecx
+	testl $VM_MASK,EFLAGS(%ebx)
+	jne v86_signal_return
 	call _do_signal
-	popl %ecx
 	popl %ebx
-	testl %eax, %eax
-	jne 1b			# see if we need to switch tasks, or do more signals
-2:	popl %ebx
-	popl %ecx
-	popl %edx
-	popl %esi
-	popl %edi
-	popl %ebp
-	popl %eax
-	pop %ds
-	pop %es
-	pop %fs
-	pop %gs
-	addl $4,%esp 		# skip the orig_eax
-	iret
+	RESTORE_ALL
+.align 4
+v86_signal_return:
+	call _save_v86_state
+	movl %eax,%esp
+	pushl %eax
+	call _do_signal
+	popl %ebx
+	RESTORE_ALL
 
 .align 4
 _sys_execve:

@@ -212,7 +212,7 @@ static struct buffer_head * xiafs_add_entry(struct inode * dir,
 		}
 	    }
 	    if (!de->d_ino && RNDUP4(namelen)+8 <= de->d_rec_len) {
-	        dir->i_mtime = CURRENT_TIME;
+	        dir->i_atime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
 		dir->i_dirt = 1;
 		memcpy(de->d_name, name, namelen);
 		de->d_name[namelen]=0;
@@ -316,7 +316,7 @@ int xiafs_mknod(struct inode *dir, const char *name, int len, int mode, int rdev
     }
     if (S_ISBLK(mode) || S_ISCHR(mode))
         inode->i_rdev = rdev;
-    inode->i_mtime = inode->i_atime = CURRENT_TIME;
+    inode->i_atime = inode->i_ctime = inode->i_atime = CURRENT_TIME;
     inode->i_dirt = 1;
     bh = xiafs_add_entry(dir, name, len, &de, NULL);
     if (!bh) {
@@ -357,7 +357,7 @@ int xiafs_mkdir(struct inode * dir, const char * name, int len, int mode)
     }
     inode->i_op = &xiafs_dir_inode_operations;
     inode->i_size = XIAFS_ZSIZE(dir->i_sb);
-    inode->i_mtime = inode->i_atime = CURRENT_TIME;
+    inode->i_atime = inode->i_ctime = inode->i_mtime = CURRENT_TIME;
     dir_block = xiafs_bread(inode,0,1);
     if (!dir_block) {
         iput(dir);
@@ -524,7 +524,7 @@ int xiafs_rmdir(struct inode * dir, const char * name, int len)
     inode->i_nlink=0;
     inode->i_dirt=1;
     dir->i_nlink--;
-    dir->i_mtime = CURRENT_TIME;
+    dir->i_atime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
     dir->i_dirt=1;
     retval = 0;
 end_rmdir:
@@ -569,10 +569,9 @@ repeat:
     }
     xiafs_rm_entry(de, de_pre);
     bh->b_dirt = 1;
-    dir->i_mtime = CURRENT_TIME;
+    dir->i_atime = dir->i_ctime = dir->i_mtime = CURRENT_TIME;
     dir->i_dirt = 1;
     inode->i_nlink--;
-    inode->i_ctime = CURRENT_TIME;
     inode->i_dirt = 1;
     retval = 0;
 end_unlink:
@@ -668,7 +667,7 @@ int xiafs_link(struct inode * oldinode, struct inode * dir,
     brelse(bh);
     iput(dir);
     oldinode->i_nlink++;
-    oldinode->i_ctime = CURRENT_TIME;
+    oldinode->i_atime = oldinode->i_ctime = CURRENT_TIME;
     oldinode->i_dirt = 1;
     iput(oldinode);
     return 0;

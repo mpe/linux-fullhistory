@@ -78,6 +78,8 @@ extern void rd_load(void);
 extern long rd_init(long mem_start, int length);
 extern int ramdisk_size;
 
+extern unsigned long xd_init(unsigned long mem_start, unsigned long mem_end);
+
 #define RO_IOCTLS(dev,where) \
   case BLKROSET: if (!suser()) return -EPERM; \
 		 set_device_ro((dev),get_fs_long((long *) (where))); return 0; \
@@ -144,6 +146,14 @@ extern int ramdisk_size;
 #define DEVICE_INTR do_sr
 #define DEVICE_REQUEST do_sr_request
 #define DEVICE_NR(device) (MINOR(device))
+#define DEVICE_ON(device)
+#define DEVICE_OFF(device)
+
+#elif (MAJOR_NR == 13)
+/* xt hard disk */
+#define DEVICE_NAME "xt disk"
+#define DEVICE_REQUEST do_xd_request
+#define DEVICE_NR(device) (MINOR(device) >> 6)
 #define DEVICE_ON(device)
 #define DEVICE_OFF(device)
 

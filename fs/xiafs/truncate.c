@@ -60,6 +60,7 @@ repeat:
 	else {
 	    *lp = 0;
 	    inode->i_dirt = 1;
+	    inode->i_blocks-=2 << XIAFS_ZSHIFT(inode->i_sb);
 	    xiafs_free_zone(inode->i_sb, tmp);
 	}
 	brelse(bh);
@@ -105,6 +106,7 @@ repeat:
 	else {
 	    *indp = 0;
 	    ind_bh->b_dirt = 1;
+	    inode->i_blocks-= 2 << XIAFS_ZSHIFT(inode->i_sb);
 	    xiafs_free_zone(inode->i_sb, tmp);
 	}
 	brelse(bh);
@@ -117,6 +119,7 @@ repeat:
       else {
 	  tmp = *lp;
 	  *lp = 0;
+	  inode->i_blocks-= 2 << XIAFS_ZSHIFT(inode->i_sb);
 	  xiafs_free_zone(inode->i_sb, tmp);
       }
     }
@@ -166,6 +169,7 @@ repeat:
 	    tmp = *lp;
 	    *lp = 0;
 	    inode->i_dirt = 1;
+	    inode->i_blocks-=2 << XIAFS_ZSHIFT(inode->i_sb);
 	    xiafs_free_zone(inode->i_sb, tmp);
 	}
     }
@@ -189,7 +193,7 @@ void xiafs_truncate(struct inode * inode)
 	current->counter = 0;
 	schedule();
     }
-    inode->i_mtime = CURRENT_TIME;
+    inode->i_atime = inode->i_ctime = inode->i_mtime = CURRENT_TIME;
     inode->i_dirt = 1;
 }
 

@@ -57,8 +57,10 @@ static int xiafs_readlink(struct inode * inode, char * buffer, int buflen)
     if (buflen > BLOCK_SIZE)
         buflen = BLOCK_SIZE;
     bh = xiafs_bread(inode, 0, 0);
-    inode->i_atime=CURRENT_TIME;
-    inode->i_dirt=1;
+    if (!IS_RDONLY (inode)) {
+ 	inode->i_atime=CURRENT_TIME;
+ 	inode->i_dirt=1;
+    }
     iput(inode);
     if (!bh)
         return 0;
@@ -90,8 +92,10 @@ static int xiafs_follow_link(struct inode * dir, struct inode * inode,
 	*res_inode = inode;
 	return 0;
     }
-    inode->i_atime=CURRENT_TIME;
-    inode->i_dirt=1;
+    if (!IS_RDONLY (inode)) {
+	inode->i_atime=CURRENT_TIME;
+	inode->i_dirt=1;
+    }
     if (current->link_count > 5) {
         iput(inode);
 	iput(dir);

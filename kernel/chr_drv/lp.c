@@ -299,6 +299,8 @@ static int lp_open(struct inode * inode, struct file * file)
 		sa.sa_restorer = NULL;
 		ret = irqaction(irq, &sa);
 		if (ret) {
+			kfree_s(lp_table[minor].lp_buffer, LP_BUFFER_SIZE);
+			lp_table[minor].lp_buffer = NULL;
 			printk("lp%d unable to use interrupt %d, error %d\n", irq, ret);
 			return ret;
 		}
@@ -317,6 +319,7 @@ static void lp_release(struct inode * inode, struct file * file)
 	if ((irq = LP_IRQ(minor))) {
 		free_irq(irq);
 		kfree_s(lp_table[minor].lp_buffer, LP_BUFFER_SIZE);
+		lp_table[minor].lp_buffer = NULL;
 	}
 
 	LP_F(minor) &= ~LP_BUSY;
@@ -353,28 +356,48 @@ static int lp_ioctl(struct inode *inode, struct file *file,
 		case LPSETIRQ: {
 			int ret;
 			int oldirq;
+			int newirq = arg;
+			struct lp_struct *lp = &lp_table[minor];
 			struct sigaction sa;
 
 			if (!suser())
 				return -EPERM;
 
-			if ((oldirq = LP_IRQ(minor))) {
+			oldirq = LP_IRQ(minor);
+
+			/* Allocate buffer now if we are going to need it */
+			if (!oldirq && newirq) {
+				if (!(lp->lp_buffer = kmalloc(LP_BUFFER_SIZE, GFP_KERNEL)))
+					return -ENOMEM;
+			}
+
+			if (oldirq) {
 				free_irq(oldirq);
 			}
-			if (arg) {
+			if (newirq) {
 				/* Install new irq */
 				sa.sa_handler = lp_interrupt;
 				sa.sa_flags = SA_INTERRUPT;
 				sa.sa_mask = 0;
 				sa.sa_restorer = NULL;
-				if ((ret = irqaction(arg, &sa))) {
-					if (oldirq)
+				if ((ret = irqaction(newirq, &sa))) {
+					if (oldirq) {
 						/* restore old irq */
 						irqaction(oldirq, &sa);
+					} else {
+						/* We don't need the buffer */
+						kfree_s(lp->lp_buffer, LP_BUFFER_SIZE);
+						lp->lp_buffer = NULL;
+					}
 					return ret;
 				}
 			}
-			LP_IRQ(minor) = arg;
+			if (oldirq && !newirq) {
+				/* We don't need the buffer */
+				kfree_s(lp->lp_buffer, LP_BUFFER_SIZE);
+				lp->lp_buffer = NULL;
+			}
+			LP_IRQ(minor) = newirq;
 			lp_reset(minor);
 			break;
 		}
@@ -405,8 +428,10 @@ long lp_init(long kmem_start)
 	unsigned int testvalue = 0;
 	int count = 0;
 
-	if (register_chrdev(6,"lp",&lp_fops))
+	if (register_chrdev(6,"lp",&lp_fops)) {
 		printk("unable to get major 6 for line printer\n");
+		return kmem_start;
+	}
 	/* take on all known port values */
 	for (offset = 0; offset < LP_NO; offset++) {
 		/* write to port & read back to check */

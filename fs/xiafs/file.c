@@ -175,9 +175,10 @@ xiafs_file_read(struct inode * inode, struct file * filp, char * buf, int count)
     if (!read)
         return -EIO;
     filp->f_reada = 1;
-    inode->i_atime = CURRENT_TIME;
-    inode->i_dirt = 1;
-
+    if (!IS_RDONLY (inode)) {
+	inode->i_atime = CURRENT_TIME;
+	inode->i_dirt = 1;
+    }
     return read;
 }
 
@@ -239,7 +240,7 @@ xiafs_file_write(struct inode * inode, struct file * filp, char * buf, int count
 	bh->b_dirt = 1;
 	brelse(bh);
     }
-    inode->i_mtime = CURRENT_TIME;
+    inode->i_atime = inode->i_ctime = inode->i_mtime = CURRENT_TIME;
     filp->f_pos = pos;
     inode->i_dirt = 1;
 

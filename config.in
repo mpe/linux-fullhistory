@@ -4,6 +4,8 @@ Kernel math emulation
 CONFIG_MATH_EMULATION y/n n
 Normal harddisk support
 CONFIG_BLK_DEV_HD y/n y
+XT harddisk support
+CONFIG_BLK_DEV_XD y/n n
 TCP/IP
 CONFIG_TCPIP y/n y
 Kernel profiling support

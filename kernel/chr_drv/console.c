@@ -54,6 +54,7 @@
 #define NPAR 16
 
 extern void vt_init(void);
+extern void register_console(void (*proc)(const char *));
 
 unsigned long	video_num_columns;		/* Number of text columns	*/
 unsigned long	video_num_lines;		/* Number of test lines		*/
@@ -1244,6 +1245,7 @@ long con_init(long kmem_start)
 	long base;
 	int orig_x = ORIG_X;
 	int orig_y = ORIG_Y;
+	void console_print(const char * b);
 
 	vc_scrmembuf = (unsigned short *) kmem_start;
 	video_num_columns = ORIG_VIDEO_COLS;
@@ -1334,6 +1336,7 @@ long con_init(long kmem_start)
 		display_desc,
 		video_num_columns,video_num_lines,
 		NR_CONSOLES);
+	register_console(console_print);
 	return kmem_start;
 }
 

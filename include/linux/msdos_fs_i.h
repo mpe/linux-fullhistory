@@ -2,8 +2,9 @@
 #define _MSDOS_FS_I
 
 /*
- * msdos file system inode data in memory
+ * MS-DOS file system inode data in memory
  */
+
 struct msdos_inode_info {
 	int i_start;	/* first cluster or 0 */
 	int i_attrs;	/* unused attribute bits */

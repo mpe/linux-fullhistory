@@ -170,87 +170,104 @@ extern int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options);
  * want to handle. Thus you cannot kill init even with a SIGKILL even by
  * mistake.
  */
-int do_signal(long signr,struct pt_regs * regs)
+void do_signal(struct pt_regs * regs)
 {
+	unsigned long signr;
 	unsigned long sa_handler;
 	long old_eip = regs->eip;
-	struct sigaction * sa = current->sigaction + signr - 1;
+	struct sigaction * sa;
 	int longs;
 	unsigned long * tmp_esp;
 
-	sa_handler = (unsigned long) sa->sa_handler;
-	if ((regs->orig_eax >= 0) &&
-	    ((regs->eax == -ERESTARTSYS) || (regs->eax == -ERESTARTNOINTR))) {
-		if ((sa_handler > 1) && (regs->eax == -ERESTARTSYS) &&
-		    (sa->sa_flags & SA_INTERRUPT))
-			regs->eax = -EINTR;
-		else {
-			regs->eax = regs->orig_eax;
-			regs->eip = old_eip -= 2;
-		}
+	if (regs->orig_eax >= 0 && regs->eax == -ERESTARTNOINTR) {
+		regs->eax = regs->orig_eax;
+		regs->eip = old_eip -= 2;
 	}
-	if (sa_handler==1) {
+	signr = current->signal & ~current->blocked;
+	do {
+		__asm__("bsf %2,%1\n\t"
+			"btrl %1,%0"
+			:"=m" (current->signal),"=r" (signr)
+			:"1" (signr));
+		sa = current->sigaction + signr;
+		signr++;
+		sa_handler = (unsigned long) sa->sa_handler;
+		if (sa_handler==1) {
 /* check for SIGCHLD: it's special */
-		if (signr == SIGCHLD)
-			while (sys_waitpid(-1,NULL,WNOHANG) > 0)
-				/* nothing */;
-		return(1);   /* Ignore, see if there are more signals... */
-	}
-	if (!sa_handler) {
-		if (current->pid == 1)
-			return 1;
-		switch (signr) {
-		case SIGCONT:
-		case SIGCHLD:
-		case SIGWINCH:
-			return(1);  /* Ignore, ... */
-
-		case SIGSTOP:
-		case SIGTSTP:
-		case SIGTTIN:
-		case SIGTTOU:
-			current->state = TASK_STOPPED;
-			current->exit_code = signr;
-			if (!(current->p_pptr->sigaction[SIGCHLD-1].sa_flags & 
-					SA_NOCLDSTOP))
-				send_sig(SIGCHLD, current->p_pptr, 1);
-			return(1);  /* Reschedule another event */
-
-		case SIGQUIT:
-		case SIGILL:
-		case SIGTRAP:
-		case SIGIOT:
-		case SIGFPE:
-		case SIGSEGV:
-			if (core_dump(signr,regs))
-				signr |= 0x80;
-			/* fall through */
-		default:
-			current->signal |= _S(signr & 0x7f);
-			do_exit(signr);
+			if (signr == SIGCHLD)
+				while (sys_waitpid(-1,NULL,WNOHANG) > 0)
+					/* nothing */;
+			continue;
 		}
-	}
-	/*
-	 * OK, we're invoking a handler 
-	 */
-	if (sa->sa_flags & SA_ONESHOT)
-		sa->sa_handler = NULL;
-	regs->eip = sa_handler;
-	longs = (sa->sa_flags & SA_NOMASK)?(7*4):(8*4);
-	regs->esp -= longs;
-	tmp_esp = (unsigned long *) regs->esp;
-	verify_area(VERIFY_WRITE,tmp_esp,longs);
-	put_fs_long((long) sa->sa_restorer,tmp_esp++);
-	put_fs_long(signr,tmp_esp++);
-	if (!(sa->sa_flags & SA_NOMASK))
-		put_fs_long(current->blocked,tmp_esp++);
-	put_fs_long(regs->eax,tmp_esp++);
-	put_fs_long(regs->ecx,tmp_esp++);
-	put_fs_long(regs->edx,tmp_esp++);
-	put_fs_long(regs->eflags,tmp_esp++);
-	put_fs_long(old_eip,tmp_esp++);
-	current->blocked |= sa->sa_mask;
+		if (!sa_handler) {
+			if (current->pid == 1)
+				continue;
+			switch (signr) {
+			case SIGCONT:
+			case SIGCHLD:
+			case SIGWINCH:
+				continue;
+
+			case SIGSTOP:
+			case SIGTSTP:
+			case SIGTTIN:
+			case SIGTTOU:
+				current->state = TASK_STOPPED;
+				current->exit_code = signr;
+				if (!(current->p_pptr->sigaction[SIGCHLD-1].sa_flags & 
+						SA_NOCLDSTOP))
+					send_sig(SIGCHLD, current->p_pptr, 1);
+				schedule();
+				continue;
+
+			case SIGQUIT:
+			case SIGILL:
+			case SIGTRAP:
+			case SIGIOT:
+			case SIGFPE:
+			case SIGSEGV:
+				if (core_dump(signr,regs))
+					signr |= 0x80;
+				/* fall through */
+			default:
+				current->signal |= _S(signr & 0x7f);
+				do_exit(signr);
+			}
+		}
+		/*
+		 * OK, we're invoking a handler 
+		 */
+		if (regs->orig_eax >= 0 && regs->eax == -ERESTARTSYS) {
+			if (sa->sa_flags & SA_INTERRUPT)
+				regs->eax = -EINTR;
+			else {
+				regs->eax = regs->orig_eax;
+				regs->eip = old_eip -= 2;
+			}
+		}
+		if (sa->sa_flags & SA_ONESHOT)
+			sa->sa_handler = NULL;
+		regs->eip = sa_handler;
+		longs = (sa->sa_flags & SA_NOMASK)?(7*4):(8*4);
+		regs->esp -= longs;
+		tmp_esp = (unsigned long *) regs->esp;
+		verify_area(VERIFY_WRITE,tmp_esp,longs);
+		put_fs_long((long) sa->sa_restorer,tmp_esp++);
+		put_fs_long(signr,tmp_esp++);
+		if (!(sa->sa_flags & SA_NOMASK))
+			put_fs_long(current->blocked,tmp_esp++);
+		put_fs_long(regs->eax,tmp_esp++);
+		put_fs_long(regs->ecx,tmp_esp++);
+		put_fs_long(regs->edx,tmp_esp++);
+		put_fs_long(regs->eflags,tmp_esp++);
+		put_fs_long(old_eip,tmp_esp++);
+		current->blocked |= sa->sa_mask;
 /* force a supervisor-mode page-in of the signal handler to reduce races */
-	__asm__("testb $0,%%fs:%0"::"m" (*(char *) sa_handler));
-	return(0);		/* Continue, execute handler */
+		__asm__("testb $0,%%fs:%0"::"m" (*(char *) sa_handler));
+		return;
+	} while ((signr = current->signal & ~current->blocked));
+	if (regs->orig_eax >= 0 && regs->eax == -ERESTARTSYS) {
+		regs->eax = regs->orig_eax;
+		regs->eip = old_eip -= 2;
+	}
 }

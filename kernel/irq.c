@@ -125,6 +125,11 @@ static void (*bad_interrupt[16])(void) = {
 	bad_IRQ14_interrupt, bad_IRQ15_interrupt
 };
 
+void fake_keyboard_interrupt(void)
+{
+	IRQ1_interrupt();
+}
+
 /*
  * Initial irq handlers.
  */

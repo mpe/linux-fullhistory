@@ -386,6 +386,9 @@ long blk_dev_init(long mem_start, long mem_end)
 #ifdef CONFIG_BLK_DEV_HD
 	mem_start = hd_init(mem_start,mem_end);
 #endif
+#ifdef CONFIG_BLK_DEV_XD
+	mem_start = xd_init(mem_start,mem_end);
+#endif
 	if (ramdisk_size)
 		mem_start += rd_init(mem_start, ramdisk_size*1024);
 	return mem_start;

@@ -20,9 +20,9 @@
 int sys_close(int fd);
 int getrusage(struct task_struct *, int, struct rusage *);
 
-int send_sig(long sig,struct task_struct * p,int priv)
+int send_sig(unsigned long sig,struct task_struct * p,int priv)
 {
-	if (!p || (sig < 0) || (sig > 32))
+	if (!p || sig > 32)
 		return -EINVAL;
 	if (!priv && ((sig != SIGCONT) || (current->session != p->session)) &&
 	    (current->euid != p->euid) && (current->uid != p->uid) && !suser())

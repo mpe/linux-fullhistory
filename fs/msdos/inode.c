@@ -1,7 +1,7 @@
 /*
  *  linux/fs/msdos/inode.c
  *
- *  Written 1992 by Werner Almesberger
+ *  Written 1992,1993 by Werner Almesberger
  */
 
 #include <linux/msdos_fs.h>
@@ -15,22 +15,28 @@
 
 #include <asm/segment.h>
 
+
 void msdos_put_inode(struct inode *inode)
 {
 	struct inode *depend;
+	struct super_block *sb;
 
-	if (inode->i_nlink)
+	if (inode->i_nlink) {
+		if (MSDOS_I(inode)->i_busy) cache_inval_inode(inode);
 		return;
+	}
 	inode->i_size = 0;
 	msdos_truncate(inode);
 	depend = MSDOS_I(inode)->i_depend;
+	sb = inode->i_sb;
 	clear_inode(inode);
 	if (depend) {
 		if (MSDOS_I(depend)->i_old != inode) {
-			printk("Invalid link (0x%X): expected 0x%X, got "
-			    "0x%X\n",(int) depend,(int) inode,(int)
-			    MSDOS_I(depend)->i_old);
-			panic("That's fatal");
+			printk("Invalid link (0x%X): expected 0x%X, got 0x%X\n",
+			    (int) depend,(int) inode,(int) MSDOS_I(depend)->
+			    i_old);
+			fs_panic(sb,"...");
+			return;
 		}
 		MSDOS_I(depend)->i_old = NULL;
 		iput(depend);
@@ -50,7 +56,7 @@ void msdos_put_super(struct super_block *sb)
 
 static struct super_operations msdos_sops = { 
 	msdos_read_inode,
-	NULL,
+	msdos_notify_change,
 	msdos_write_inode,
 	msdos_put_inode,
 	msdos_put_super,
@@ -59,7 +65,8 @@ static struct super_operations msdos_sops = {
 };
 
 
-static int parse_options(char *options,char *check,char *conversion,uid_t *uid, gid_t *gid, int *umask)
+static int parse_options(char *options,char *check,char *conversion,uid_t *uid,
+    gid_t *gid,int *umask,int *debug,int *fat)
 {
 	char *this,*value;
 
@@ -68,6 +75,7 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid, 
 	*uid = current->uid;
 	*gid = current->gid;
 	*umask = current->umask;
+	*debug = *fat = 0;
 	if (!options) return 1;
 	for (this = strtok(options,","); this; this = strtok(NULL,",")) {
 		if ((value = strchr(this,'=')) != NULL)
@@ -109,6 +117,17 @@ static int parse_options(char *options,char *check,char *conversion,uid_t *uid, 
 			if (*value)
 				return 0;
 		}
+		else if (!strcmp(this,"debug")) {
+			if (value) return 0;
+			*debug = 1;
+		}
+		else if (!strcmp(this,"fat")) {
+			if (!value || !*value)
+				return 0;
+			*fat = simple_strtoul(value,&value,0);
+			if (*value || (*fat != 12 && *fat != 16))
+				return 0;
+		}
 		else return 0;
 	}
 	return 1;
@@ -121,13 +140,15 @@ struct super_block *msdos_read_super(struct super_block *s,void *data)
 {
 	struct buffer_head *bh;
 	struct msdos_boot_sector *b;
-	int data_sectors;
+	int data_sectors,logical_sector_size,sector_mult;
+	int debug,error,fat;
 	char check,conversion;
 	uid_t uid;
 	gid_t gid;
 	int umask;
 
-	if (!parse_options((char *) data,&check,&conversion,&uid,&gid,&umask)) {
+	if (!parse_options((char *) data,&check,&conversion,&uid,&gid,&umask,
+	    &debug,&fat)) {
 		s->s_dev = 0;
 		return NULL;
 	}
@@ -142,29 +163,64 @@ struct super_block *msdos_read_super(struct super_block *s,void *data)
 	}
 	b = (struct msdos_boot_sector *) bh->b_data;
 	s->s_blocksize = 1024;	/* we cannot handle anything else yet */
-	MSDOS_SB(s)->cluster_size = b->cluster_size;
+
+/*
+ * The DOS3 partition size limit is *not* 32M as many people think.  
+ * Instead, it is 64K sectors (with the usual sector size being
+ * 512 bytes, leading to a 32M limit).
+ * 
+ * DOS 3 partition managers got around this problem by faking a 
+ * larger sector size, ie treating multiple physical sectors as 
+ * a single logical sector.
+ * 
+ * We can accommodate this scheme by adjusting our cluster size,
+ * fat_start, and data_start by an appropriate value.
+ *
+ * (by Drew Eckhardt)
+ */
+
+#define ROUND_TO_MULTIPLE(n,m) ((n) && (m) ? (n)+(m)-1-((n)-1)%(m) : 0)
+    /* don't divide by zero */
+
+	logical_sector_size = CF_LE_W(*(unsigned short *) &b->sector_size);
+	sector_mult = logical_sector_size >> SECTOR_BITS;
+	MSDOS_SB(s)->cluster_size = b->cluster_size*sector_mult;
 	MSDOS_SB(s)->fats = b->fats;
-	MSDOS_SB(s)->fat_start = b->reserved;
-	MSDOS_SB(s)->fat_length = b->fat_length;
-	MSDOS_SB(s)->dir_start = b->reserved+b->fats*b->fat_length;
-	MSDOS_SB(s)->dir_entries = *((unsigned short *) &b->dir_entries);
-	MSDOS_SB(s)->data_start = MSDOS_SB(s)->dir_start+((MSDOS_SB(s)->
-	    dir_entries << 5) >> 9);
-	data_sectors = (*((unsigned short *) &b->sectors) ? *((unsigned short *)
-	    &b->sectors) : b->total_sect)-MSDOS_SB(s)->data_start;
-	MSDOS_SB(s)->clusters = b->cluster_size ? data_sectors/b->cluster_size :
-	    0;
-	MSDOS_SB(s)->fat_bits = MSDOS_SB(s)->clusters > MSDOS_FAT12 ? 16 : 12;
-	brelse(bh);
-printk("[MS-DOS FS Rel. alpha.8, FAT %d, check=%c, conv=%c, uid=%d, gid=%d, umask=%03o]\n",
-  MSDOS_SB(s)->fat_bits,check,conversion,uid,gid,umask);
-printk("[me=0x%x,cs=%d,#f=%d,fs=%d,fl=%d,ds=%d,de=%d,data=%d,se=%d,ts=%d]\n",
-  b->media,MSDOS_SB(s)->cluster_size,MSDOS_SB(s)->fats,MSDOS_SB(s)->fat_start,
-  MSDOS_SB(s)->fat_length,MSDOS_SB(s)->dir_start,MSDOS_SB(s)->dir_entries,
-  MSDOS_SB(s)->data_start,*(unsigned short *) &b->sectors,b->total_sect);
-	if (!MSDOS_SB(s)->fats || (MSDOS_SB(s)->dir_entries & (MSDOS_DPS-1))
+	MSDOS_SB(s)->fat_start = CF_LE_W(b->reserved)*sector_mult;
+	MSDOS_SB(s)->fat_length = CF_LE_W(b->fat_length)*sector_mult;
+	MSDOS_SB(s)->dir_start = (CF_LE_W(b->reserved)+b->fats*CF_LE_W(
+	    b->fat_length))*sector_mult;
+	MSDOS_SB(s)->dir_entries = CF_LE_W(*((unsigned short *) &b->dir_entries
+	    ));
+	MSDOS_SB(s)->data_start = MSDOS_SB(s)->dir_start+ROUND_TO_MULTIPLE((
+	    MSDOS_SB(s)->dir_entries << MSDOS_DIR_BITS) >> SECTOR_BITS,
+	    sector_mult);
+	data_sectors = (CF_LE_W(*((unsigned short *) &b->sectors)) ?
+	    CF_LE_W(*((unsigned short *) &b->sectors)) :
+	    CF_LE_L(b->total_sect))*sector_mult-MSDOS_SB(s)->data_start;
+	MSDOS_SB(s)->clusters = b->cluster_size ? data_sectors/b->cluster_size/
+	    sector_mult : 0;
+	MSDOS_SB(s)->fat_bits = fat ? fat : MSDOS_SB(s)->clusters > MSDOS_FAT12
+	    ? 16 : 12;
+	error = !MSDOS_SB(s)->fats || (MSDOS_SB(s)->dir_entries & (MSDOS_DPS-1))
 	    || !b->cluster_size || MSDOS_SB(s)->clusters+2 > MSDOS_SB(s)->
-		fat_length*SECTOR_SIZE*8/MSDOS_SB(s)->fat_bits) {
+	    fat_length*SECTOR_SIZE*8/MSDOS_SB(s)->fat_bits || !sector_mult ||
+	    (logical_sector_size & (SECTOR_SIZE-1)) || !b->secs_track ||
+	    !b->heads;
+	brelse(bh);
+	if (error || debug) {
+		printk("[MS-DOS FS Rel. alpha.10,FAT %d,check=%c,conv=%c,"
+		    "uid=%d,gid=%d,umask=%03o%s]\n",MSDOS_SB(s)->fat_bits,check,
+		    conversion,uid,gid,umask,MSDOS_CAN_BMAP(MSDOS_SB(s)) ? ",
+		    bmap" : "");
+		printk("[me=0x%x,cs=%d,#f=%d,fs=%d,fl=%d,ds=%d,de=%d,data=%d,"
+		    "se=%d,ts=%d,ls=%d]\n",b->media,MSDOS_SB(s)->cluster_size,
+		    MSDOS_SB(s)->fats,MSDOS_SB(s)->fat_start,MSDOS_SB(s)->
+		    fat_length,MSDOS_SB(s)->dir_start,MSDOS_SB(s)->dir_entries,
+		    MSDOS_SB(s)->data_start,CF_LE_W(*(unsigned short *) &b->
+		    sectors),b->total_sect,logical_sector_size);
+	}
+	if (error) {
 		s->s_dev = 0;
 		printk("Unsupported FS parameters\n");
 		return NULL;
@@ -180,6 +236,7 @@ printk("[me=0x%x,cs=%d,#f=%d,fs=%d,fl=%d,ds=%d,de=%d,data=%d,se=%d,ts=%d]\n",
 	MSDOS_SB(s)->free_clusters = -1; /* don't know yet */
 	MSDOS_SB(s)->fat_wait = NULL;
 	MSDOS_SB(s)->fat_lock = 0;
+	MSDOS_SB(s)->prev_free = 0;
 	if (!(s->s_mounted = iget(s,MSDOS_ROOT_INO))) {
 		s->s_dev = 0;
 		printk("get root inode failed\n");
@@ -260,16 +317,18 @@ void msdos_read_inode(struct inode *inode)
 		inode->i_mtime = inode->i_atime = inode->i_ctime = 0;
 		return;
 	}
-	if (!(bh = bread(inode->i_dev,inode->i_ino >> MSDOS_DPB_BITS, BLOCK_SIZE)))
-	    panic("unable to read i-node block");
+	if (!(bh = bread(inode->i_dev,inode->i_ino >> MSDOS_DPB_BITS,
+	    BLOCK_SIZE))) {
+		printk("dev = 0x%04X, ino = %d\n",inode->i_dev,inode->i_ino);
+		panic("msdos_read_inode: unable to read i-node block");
+	}
 	raw_entry = &((struct msdos_dir_entry *) (bh->b_data))
 	    [inode->i_ino & (MSDOS_DPB-1)];
-	if ((raw_entry->attr & ATTR_DIR) && *raw_entry->name && *(unsigned char *)
-	    raw_entry->name != DELETED_FLAG) {
+	if ((raw_entry->attr & ATTR_DIR) && !IS_FREE(raw_entry->name)) {
 		inode->i_mode = MSDOS_MKMODE(raw_entry->attr,0777 &
 		    ~MSDOS_SB(inode->i_sb)->fs_umask) | S_IFDIR;
 		inode->i_op = &msdos_dir_inode_operations;
-		MSDOS_I(inode)->i_start = raw_entry->start;
+		MSDOS_I(inode)->i_start = CF_LE_W(raw_entry->start);
 		inode->i_nlink = msdos_subdirs(inode);
 		    /* includes .., compensating for "self" */
 #ifdef DEBUG
@@ -279,7 +338,7 @@ void msdos_read_inode(struct inode *inode)
 		}
 #endif
 		inode->i_size = 0;
-		if ((this = raw_entry->start) != 0)
+		if ((this = CF_LE_W(raw_entry->start)) != 0)
 			while (this != -1) {
 				inode->i_size += SECTOR_SIZE*MSDOS_SB(inode->
 				    i_sb)->cluster_size;
@@ -289,14 +348,15 @@ void msdos_read_inode(struct inode *inode)
 			}
 	}
 	else {
-		inode->i_mode = MSDOS_MKMODE(raw_entry->attr,0666 &
-		    ~MSDOS_SB(inode->i_sb)->fs_umask) | S_IFREG;
+		inode->i_mode = MSDOS_MKMODE(raw_entry->attr,(IS_NOEXEC(inode)
+		    ? 0666 : 0777) & ~MSDOS_SB(inode->i_sb)->fs_umask) |
+		    S_IFREG;
 		inode->i_op = MSDOS_CAN_BMAP(MSDOS_SB(inode->i_sb)) ? 
 		    &msdos_file_inode_operations :
 		    &msdos_file_inode_operations_no_bmap;
-		MSDOS_I(inode)->i_start = raw_entry->start;
+		MSDOS_I(inode)->i_start = CF_LE_W(raw_entry->start);
 		inode->i_nlink = 1;
-		inode->i_size = raw_entry->size;
+		inode->i_size = CF_LE_L(raw_entry->size);
 	}
 	MSDOS_I(inode)->i_binary = is_binary(MSDOS_SB(inode->i_sb)->conversion,
 	    raw_entry->ext);
@@ -306,7 +366,7 @@ void msdos_read_inode(struct inode *inode)
 	inode->i_blocks = (inode->i_size+inode->i_blksize-1)/
 	    inode->i_blksize*MSDOS_SB(inode->i_sb)->cluster_size;
 	inode->i_mtime = inode->i_atime = inode->i_ctime =
-	    date_dos2unix(raw_entry->time,raw_entry->date);
+	    date_dos2unix(CF_LE_W(raw_entry->time),CF_LE_W(raw_entry->date));
 	brelse(bh);
 }
 
@@ -318,8 +378,11 @@ void msdos_write_inode(struct inode *inode)
 
 	inode->i_dirt = 0;
 	if (inode->i_ino == MSDOS_ROOT_INO || !inode->i_nlink) return;
-	if (!(bh = bread(inode->i_dev,inode->i_ino >> MSDOS_DPB_BITS, BLOCK_SIZE)))
-	    panic("unable to read i-node block");
+	if (!(bh = bread(inode->i_dev,inode->i_ino >> MSDOS_DPB_BITS,
+	    BLOCK_SIZE))) {
+		printk("dev = 0x%04X, ino = %d\n",inode->i_dev,inode->i_ino);
+		panic("msdos_write_inode: unable to read i-node block");
+	}
 	raw_entry = &((struct msdos_dir_entry *) (bh->b_data))
 	    [inode->i_ino & (MSDOS_DPB-1)];
 	if (S_ISDIR(inode->i_mode)) {
@@ -328,12 +391,41 @@ void msdos_write_inode(struct inode *inode)
 	}
 	else {
 		raw_entry->attr = ATTR_NONE;
-		raw_entry->size = inode->i_size;
+		raw_entry->size = CT_LE_L(inode->i_size);
 	}
 	raw_entry->attr |= MSDOS_MKATTR(inode->i_mode) |
 	    MSDOS_I(inode)->i_attrs;
-	raw_entry->start = MSDOS_I(inode)->i_start;
+	raw_entry->start = CT_LE_L(MSDOS_I(inode)->i_start);
 	date_unix2dos(inode->i_mtime,&raw_entry->time,&raw_entry->date);
+	raw_entry->time = CT_LE_W(raw_entry->time);
+	raw_entry->date = CT_LE_W(raw_entry->date);
 	bh->b_dirt = 1;
 	brelse(bh);
+}
+
+
+int msdos_notify_change(int flags,struct inode *inode)
+{
+	int error;
+
+	error = 0;
+	if ((flags & NOTIFY_UIDGID) && (inode->i_uid != MSDOS_SB(inode->i_sb)->
+	    fs_uid || inode->i_gid != MSDOS_SB(inode->i_sb)->fs_gid)) {
+		inode->i_uid = MSDOS_SB(inode->i_sb)->fs_uid;
+		inode->i_gid = MSDOS_SB(inode->i_sb)->fs_gid;
+		error = -EPERM;
+	}
+	if (!(flags & NOTIFY_MODE))
+		return error;
+	if (inode->i_mode & ~MSDOS_VALID_MODE) {
+		inode->i_mode &= MSDOS_VALID_MODE;
+		error = -EPERM;
+	}
+	if (IS_NOEXEC(inode) && !S_ISDIR(inode->i_mode))
+		inode->i_mode &= S_IFMT | 0666;
+	else inode->i_mode |= 0111;
+	inode->i_mode = ((inode->i_mode & S_IFMT) | ((((inode->i_mode & S_IRWXU
+	    & ~MSDOS_SB(inode->i_sb)->fs_umask) | S_IRUSR) >> 6)*0111)) &
+	    ~MSDOS_SB(inode->i_sb)->fs_umask;
+	return error;
 }

@@ -1,7 +1,7 @@
 /*
  *  linux/fs/msdos/file.c
  *
- *  Written 1992 by Werner Almesberger
+ *  Written 1992,1993 by Werner Almesberger
  *
  *  MS-DOS regular file handling primitives
  */

@@ -317,40 +317,24 @@ arp_destroy(unsigned long paddr)
 {
   unsigned long hash;
   struct arp_table *apt;
-  struct arp_table *lapt;
+  struct arp_table **lapt;
   PRINTK (("arp_destroy (paddr=%X)\n",paddr));
   /* we don't want to destroy are own arp */
   if (my_ip_addr(paddr)) return;
   hash = net32(paddr) & (ARP_TABLE_SIZE - 1);
 
   cli(); /* can't be interrupted. */
-  /* make sure there is something there. */
-  if (arp_table[hash] == NULL) return;
-
-  /* check the first one. */
-  if (arp_table[hash]->ip == paddr)
-    {
-      apt = (struct arp_table *)arp_table[hash];
-      arp_table[hash] = arp_table[hash]->next;
-      arp_free (apt, sizeof (*apt));
-      sti();
-      return;
-    }
-
-  /* now deal with it any where else in the chain. */
-  lapt = (struct arp_table *)arp_table[hash];
-  for (apt = (struct arp_table *)arp_table[hash]->next;
-       apt != NULL;
-       apt = (struct arp_table *)apt->next)
-    {
-      if (apt->ip == paddr) 
-	{
-	  lapt->next = apt->next;
-	  arp_free (apt, sizeof (*apt));
-	  sti();
-	  return;
-	}
-    }
+  lapt = (struct arp_table **) &arp_table[hash];
+  while ((apt = *lapt) != NULL) {
+    if (apt->ip == paddr)
+      {
+      	*lapt = (struct arp_table *) apt->next;
+      	arp_free(apt, sizeof(*apt));
+      	sti();
+      	return;
+      }
+    lapt = (struct arp_table **) &apt->next;
+  }
   sti();
 }
 
@@ -410,7 +394,7 @@ arp_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
        tbl->last_used = timer_seq;
     }
 
-  if (!my_ip_addr(*arp_targetp(arp)))
+  if (my_ip_addr(*arp_targetp(arp)) != IS_MYADDR)
     {
        kfree_skb (skb, FREE_READ);
        return (0);

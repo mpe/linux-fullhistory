@@ -94,7 +94,14 @@ int main(int argc, char ** argv)
 	if ((argc < 4) || (argc > 5))
 		usage();
 	if (argc > 4) {
-		if (strcmp(argv[4], "FLOPPY")) {
+		if (!strcmp(argv[4], "CURRENT")) {
+			if (stat("/", &sb)) {
+				perror("/");
+				die("Couldn't stat /");
+			}
+			major_root = major(sb.st_dev);
+			minor_root = minor(sb.st_dev);
+		} else if (strcmp(argv[4], "FLOPPY")) {
 			if (stat(argv[4], &sb)) {
 				perror(argv[4]);
 				die("Couldn't stat root device.");

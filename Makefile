@@ -24,11 +24,11 @@ endif
 
 #
 # ROOT_DEV specifies the default root-device when making the image.
-# This can be either FLOPPY, /dev/xxxx or empty, in which case the
-# default of FLOPPY is used by 'build'.
+# This can be either FLOPPY, CURRENT, /dev/xxxx or empty, in which case
+# the default of FLOPPY is used by 'build'.
 #
 
-ROOT_DEV = /dev/hdb1
+ROOT_DEV = CURRENT
 
 #
 # uncomment the correct keyboard:
@@ -45,20 +45,20 @@ ROOT_DEV = /dev/hdb1
 # 0x10 - dieresis (umlaut)
 
 KEYBOARD = -DKBD_FINNISH -DKBDFLAGS=0
-# KEYBOARD = -DKBD_FINNISH_LATIN1 -DKBDFLAGS=0x9F
+# KEYBOARD = -DKBD_FINNISH_LATIN1 -DKBDFLAGS=0x1F
 # KEYBOARD = -DKBD_US -DKBDFLAGS=0
 # KEYBOARD = -DKBD_GR -DKBDFLAGS=0
-# KEYBOARD = -DKBD_GR_LATIN1 -DKBDFLAGS=0x9F
+# KEYBOARD = -DKBD_GR_LATIN1 -DKBDFLAGS=0x1F
 # KEYBOARD = -DKBD_FR -DKBDFLAGS=0
-# KEYBOARD = -DKBD_FR_LATIN1 -DKBDFLAGS=0x9F
+# KEYBOARD = -DKBD_FR_LATIN1 -DKBDFLAGS=0x1F
 # KEYBOARD = -DKBD_UK -DKBDFLAGS=0
 # KEYBOARD = -DKBD_DK -DKBDFLAGS=0
-# KEYBOARD = -DKBD_DK_LATIN1 -DKBDFLAGS=0x9F
+# KEYBOARD = -DKBD_DK_LATIN1 -DKBDFLAGS=0x1F
 # KEYBOARD = -DKBD_DVORAK -DKBDFLAGS=0
 # KEYBOARD = -DKBD_SG -DKBDFLAGS=0
-# KEYBOARD = -DKBD_SG_LATIN1 -DKBDFLAGS=0x9F
+# KEYBOARD = -DKBD_SG_LATIN1 -DKBDFLAGS=0x1F
 # KEYBOARD = -DKBD_SF -DKBDFLAGS=0
-# KEYBOARD = -DKBD_SF_LATIN1 -DKBDFLAGS=0x9F
+# KEYBOARD = -DKBD_SF_LATIN1 -DKBDFLAGS=0x1F
 # KEYBOARD = -DKBD_NO -DKBDFLAGS=0
 
 #
@@ -139,7 +139,7 @@ tools/./version.h: tools/version.h
 
 tools/version.h: $(CONFIGURE) Makefile
 	@./makever.sh
-	@echo \#define UTS_RELEASE \"0.99.pl7-`cat .version`\" > tools/version.h
+	@echo \#define UTS_RELEASE \"0.99.pl7A-`cat .version`\" > tools/version.h
 	@echo \#define UTS_VERSION \"`date +%D`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_TIME \"`date +%T`\" >> tools/version.h
 	@echo \#define LINUX_COMPILE_BY \"`whoami`\" >> tools/version.h
@@ -232,9 +232,9 @@ clean:
 mrproper: clean
 	rm -f include/linux/autoconf.h tools/version.h
 	rm -f .version .config*
-	rm -f `find . -name .depend -print`
+	rm -f .depend `find . -name .depend -print`
 
-backup: clean
+backup: mrproper
 	cd .. && tar cf - linux | gzip -9 > backup.z
 	sync
 

@@ -99,6 +99,7 @@ struct serial_struct {
 #define ASYNC_HUP_NOTIFY 0x0001 /* Notify blocked open on hangups */
 #define ASYNC_FOURPORT  0x0002	/* Set OU1, OUT2 per AST Fourport settings */
 #define ASYNC_SAK	0x0004	/* Secure Attention Key (Orange book) */
+#define ASYNC_SKIP_TEST 0x0008	/* Skip UART test on bootup */
 
 #define ASYNC_SPD_MASK	0x0030
 #define ASYNC_SPD_HI	0x0010	/* Use 56000 instead of 38400 bps */

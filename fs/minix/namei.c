@@ -376,6 +376,7 @@ static int empty_dir(struct inode * inode)
 		return 1;
 	info = &inode->i_sb->u.minix_sb;
 	block = 0;
+	bh = NULL;
 	offset = 2*info->s_dirsize;
 	if (inode->i_size & (info->s_dirsize-1))
 		goto bad_dir;

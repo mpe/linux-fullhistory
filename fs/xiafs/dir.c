@@ -101,8 +101,10 @@ static int xiafs_readdir(struct inode * inode,
 		put_fs_long(de->d_ino,&dirent->d_ino);
 		put_fs_word(i,&dirent->d_reclen);
 		brelse(bh);
-		inode->i_atime=CURRENT_TIME;
-		inode->i_dirt=1;
+		if (!IS_RDONLY (inode)) {
+		    inode->i_atime=CURRENT_TIME;		    
+		    inode->i_dirt=1;
+		}
 		return i;
 	    }
 	    de = (struct xiafs_direct *) (offset + bh->b_data);
@@ -113,9 +115,9 @@ static int xiafs_readdir(struct inode * inode,
 	    return 0;
 	}
     }
-    inode->i_atime=CURRENT_TIME;
+    if (!IS_RDONLY (inode)) {
+	inode->i_atime=CURRENT_TIME;		    
+	inode->i_dirt=1;
+    }
     return 0;
 }
-
-
-

@@ -130,7 +130,12 @@ int sys_prof(void)
 	return -ENOSYS;
 }
 
-unsigned long save_v86_state(int signr,struct vm86_regs * regs)
+int sys_ipc(void)
+{
+	return -ENOSYS;
+}
+
+unsigned long save_v86_state(struct vm86_regs * regs)
 {
 	unsigned long stack;
 

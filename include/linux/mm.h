@@ -95,7 +95,6 @@ extern int copy_page_tables(struct task_struct * new);
 extern int unmap_page_range(unsigned long from, unsigned long size);
 extern int remap_page_range(unsigned long from, unsigned long to, unsigned long size, int mask);
 extern int zeromap_page_range(unsigned long from, unsigned long size, int mask);
-extern void write_verify(unsigned long address);
 
 extern void do_wp_page(unsigned long error_code, unsigned long address,
 	struct task_struct *tsk, unsigned long user_esp);

@@ -23,6 +23,7 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/locks.h>
+#include <linux/errno.h>
 
 #include <asm/system.h>
 #include <asm/io.h>
@@ -100,6 +101,11 @@ int sys_sync(void)
 {
 	sync_dev(0);
 	return 0;
+}
+
+int sys_fsync(int fd)
+{
+	return -ENOSYS;
 }
 
 void invalidate_buffers(dev_t dev)
@@ -358,7 +364,7 @@ repeat:
 	if (bh->b_count || bh->b_size != size)
 		goto repeat;
 	if (bh->b_dirt) {
-		sync_buffers(bh->b_dev);
+		sync_buffers(0);
 		goto repeat;
 	}
 /* NOTE!! While we slept waiting for this block, somebody else might */

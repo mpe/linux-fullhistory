@@ -91,8 +91,8 @@ struct config {
     unsigned char interrupt: 4;
     unsigned char dma_channel: 3;
     unsigned char bios_drive_number: 1;
-    unsigned char heads: 6;
-    unsigned char sectors: 6;
+    unsigned char heads;
+    unsigned char sectors;
     unsigned char ha_scsi_id: 3;
     unsigned char subversion: 4;
 };

@@ -192,7 +192,7 @@ int
 ip_addr_match (unsigned long addr1, unsigned long addr2)
 {
   int i;
-  if (addr1 == addr2) return (1);
+  if (addr1 == addr2) return (IS_MYADDR);
   for (i = 0; i < 4; i++, addr1 >>= 8, addr2 >>= 8)
     {
       if ((addr1 & 0xff) != (addr2 & 0xff))
@@ -203,20 +203,22 @@ ip_addr_match (unsigned long addr1, unsigned long addr2)
 	    {
 	      return (0);
 	    }
-	  return (1);
+	  return (IS_BROADCAST);
 	}
     }
-  return (1);
+  return (IS_MYADDR);
 }
 
 int
 my_ip_addr(unsigned long addr)
 {
   int i;
+  int result;
   for (i = 0; i < MAX_IP_ADDRES; i++)
     {
       if (ip_addr[i] == 0) return (0);
-      if (ip_addr_match (addr, ip_addr[i])) return (1);
+      result = ip_addr_match (addr, ip_addr[i]);
+      if (result) return result;
     }
   return (0);
 }

@@ -18,6 +18,7 @@
 #include <linux/head.h>
 #include <linux/unistd.h>
 #include <linux/string.h>
+#include <linux/timer.h>
 
 extern unsigned long * prof_buffer;
 extern unsigned long prof_len;
@@ -203,6 +204,17 @@ static void parse_options(char *line)
 	envp_init[envs+1] = NULL;
 }
 
+static void copro_timeout(void)
+{
+#ifdef CONFIG_MATH_EMULATION
+	printk(" Trying to use software floating point\n");
+	hard_math = 0;
+	__asm__("movl %%cr0,%%eax ; xorl $6,%%eax ; movl %%eax,%%cr0":::"ax");
+#else
+	printk(" No software floating point - tough cookies\n");
+#endif
+}
+
 void start_kernel(void)
 {
 /*
@@ -266,13 +278,19 @@ void start_kernel(void)
 	if (hard_math) {
 		unsigned short control_word;
 
-		printk("Checking for 387 error mechanism ...");
+		timer_table[MISC_TIMER].expires = jiffies+100;
+		timer_table[MISC_TIMER].fn = copro_timeout;
+		timer_active |= 1<<MISC_TIMER;
+		printk("You have a bad 386/387 coupling.");
 		__asm__("fninit ; fnstcw %0 ; fwait":"=m" (*&control_word));
 		control_word &= 0xffc0;
 		__asm__("fldcw %0 ; fwait"::"m" (*&control_word));
 		outb_p(inb_p(0x21) | (1 << 2), 0x21);
 		__asm__("fldz ; fld1 ; fdiv %st,%st(1) ; fwait");
-		printk(" ok, using %s.\n",ignore_irq13?"exception 16":"irq13");
+		timer_active &= ~(1<<MISC_TIMER);
+		if (hard_math)
+			printk("\rMath coprocessor using %s error reporting.\n",
+				ignore_irq13?"exception 16":"irq13");
 	}
 	move_to_user_mode();
 	if (!fork())		/* we count on this going ok */

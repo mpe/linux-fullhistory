@@ -119,6 +119,8 @@ extern int sys_vm86();
 extern int sys_wait4();
 extern int sys_swapoff();
 extern int sys_sysinfo();
+extern int sys_ipc();
+extern int sys_fsync();
 
 fn_ptr sys_call_table[] = { sys_setup, sys_exit, sys_fork, sys_read,
 sys_write, sys_open, sys_close, sys_waitpid, sys_creat, sys_link,
@@ -141,7 +143,7 @@ sys_ftruncate, sys_fchmod, sys_fchown, sys_getpriority, sys_setpriority,
 sys_profil, sys_statfs, sys_fstatfs, sys_ioperm, sys_socketcall,
 sys_syslog, sys_setitimer, sys_getitimer, sys_newstat, sys_newlstat,
 sys_newfstat, sys_newuname, sys_iopl, sys_vhangup, sys_idle, sys_vm86,
-sys_wait4, sys_swapoff, sys_sysinfo };
+sys_wait4, sys_swapoff, sys_sysinfo, sys_ipc, sys_fsync };
 
 /* So we don't have to do any more manual updating.... */
 int NR_syscalls = sizeof(sys_call_table)/sizeof(fn_ptr);
