@@ -535,7 +535,7 @@ C_LABEL(__csum_partial_copy_end):
 /* %o1 is dst
  * %o3 is # bytes to zero out
  * %o4 is faulting address
- * %o5 is %pc where fault occured */
+ * %o5 is %pc where fault occurred */
 	clr	%o2
 31:
 /* %o0 is src
@@ -543,7 +543,7 @@ C_LABEL(__csum_partial_copy_end):
  * %o2 is # of bytes to copy from src to dst
  * %o3 is # bytes to zero out
  * %o4 is faulting address
- * %o5 is %pc where fault occured */
+ * %o5 is %pc where fault occurred */
 	save	%sp, -104, %sp
         mov     %i5, %o0
         mov     %i7, %o1

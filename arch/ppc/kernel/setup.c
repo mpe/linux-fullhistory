@@ -1,5 +1,5 @@
 /*
- * $Id: setup.c,v 1.120 1998/12/10 00:24:28 cort Exp $
+ * $Id: setup.c,v 1.122 1998/12/31 20:51:19 cort Exp $
  * Common prep/pmac/chrp boot and setup code.
  */
 
@@ -259,6 +259,9 @@ void ide_init_hwif_ports (ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 		break;
 	}
 #endif
+#if defined(CONFIG_MBX)
+	mbx_ide_init_hwif_ports(p,base,irq);
+#endif	
 }
 EXPORT_SYMBOL(ide_init_hwif_ports);
 #endif
@@ -464,9 +467,9 @@ int get_cpuinfo(char *buffer)
  * Find out what kind of machine we're on and save any data we need
  * from the early boot process (devtree is copied on pmac by prom_init() )
  */
-__initfunc(unsigned long
+unsigned long __init
 identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
-		 unsigned long r6, unsigned long r7))
+		 unsigned long r6, unsigned long r7)
 {
 	extern void setup_pci_ptrs(void);
 	
@@ -491,6 +494,9 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 		char *model;
 
 		have_of = 1;
+		
+		/* prom_init has already been called from __start */
+		finish_device_tree();
 		/* ask the OF info if we're a chrp or pmac */
 		model = get_property(find_path_device("/"), "device_type", NULL);
 		if ( model && !strncmp("chrp",model,4) )
@@ -510,8 +516,10 @@ identify_machine(unsigned long r3, unsigned long r4, unsigned long r5,
 
 	if ( have_of )
 	{
+#ifdef CONFIG_MACH_SPECIFIC
 		/* prom_init has already been called from __start */
 		finish_device_tree();
+#endif /* CONFIG_MACH_SPECIFIC	*/
 		/*
 		 * If we were booted via quik, r3 points to the physical
 		 * address of the command-line parameters.

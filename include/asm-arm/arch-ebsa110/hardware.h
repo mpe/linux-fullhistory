@@ -38,7 +38,7 @@
 #define MAPTOPHYS(a)		((unsigned long)(a) - PAGE_OFFSET)
 #define KERNTOPHYS(a)		((unsigned long)(&a))
 #define KERNEL_BASE		(0xc0008000)
-#define SAFE_ADDR		0x40000000
+#define FLUSH_BASE_PHYS		0x40000000
 
 #else
 

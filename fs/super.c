@@ -1129,17 +1129,16 @@ void __init mount_root(void)
 		if ((fs_type = get_fs_type("nfs"))) {
 			sb = get_empty_super(); /* "can't fail" */
 			sb->s_dev = get_unnamed_dev();
-			sb->s_flags = root_mountflags & ~MS_RDONLY;
+			sb->s_flags = root_mountflags;
 			vfsmnt = add_vfsmnt(sb, "/dev/root", "/");
 			if (vfsmnt) {
 				if (nfs_root_mount(sb) >= 0) {
-					sb->s_rd_only = 0;
 					sb->s_dirt = 0;
 					sb->s_type = fs_type;
 					current->fs->root = dget(sb->s_root);
 					current->fs->pwd = dget(sb->s_root);
 					ROOT_DEV = sb->s_dev;
-					printk (KERN_NOTICE "VFS: Mounted root (nfs filesystem).\n");
+			                printk (KERN_NOTICE "VFS: Mounted root (NFS filesystem)%s.\n", (sb->s_flags & MS_RDONLY) ? " readonly" : "");
 					return;
 				}
 				remove_vfsmnt(sb->s_dev);

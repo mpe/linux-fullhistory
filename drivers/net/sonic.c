@@ -425,7 +425,7 @@ static int sonic_send_packet(struct sk_buff *skb, struct device *dev)
     lp->tda[entry].tx_frag_ptr_h = laddr >> 16;
     lp->tda[entry].tx_frag_size  = length;
     
-    /* if there are already packets queued, allow sending serveral packets at once */
+    /* if there are already packets queued, allow sending several packets at once */
     if (lp->dirty_tx != lp->cur_tx)
 	lp->tda[(lp->cur_tx-1) % SONIC_TDS_MASK].link &= ~SONIC_END_OF_LINKS;
     

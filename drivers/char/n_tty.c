@@ -73,7 +73,8 @@ static inline void put_tty_queue(unsigned char c, struct tty_struct *tty)
  */
 static void check_unthrottle(struct tty_struct * tty)
 {
-	if (test_and_clear_bit(TTY_THROTTLED, &tty->flags) && 
+	if (tty->count &&
+	    test_and_clear_bit(TTY_THROTTLED, &tty->flags) && 
 	    tty->driver.unthrottle)
 		tty->driver.unthrottle(tty);
 }
@@ -923,15 +924,19 @@ do_it_again:
 
 	add_wait_queue(&tty->read_wait, &wait);
 
-	disable_bh(TQUEUE_BH);
+	if (down_interruptible(&tty->atomic_read))
+		return -ERESTARTSYS;
+	set_bit(TTY_DONT_FLIP, &tty->flags);
 	while (nr) {
 		/* First test for status change. */
 		if (tty->packet && tty->link->ctrl_status) {
+			unsigned char cs;
 			if (b != buf)
 				break;
-			put_user(tty->link->ctrl_status, b++);
-			nr--;
+			cs = tty->link->ctrl_status;
 			tty->link->ctrl_status = 0;
+			put_user(cs, b++);
+			nr--;
 			break;
 		}
 		/* This statement must be first before checking for input
@@ -960,9 +965,9 @@ do_it_again:
 				retval = -ERESTARTSYS;
 				break;
 			}
-			enable_bh(TQUEUE_BH);
+			clear_bit(TTY_DONT_FLIP, &tty->flags);
 			timeout = schedule_timeout(timeout);
-			disable_bh(TQUEUE_BH);
+			set_bit(TTY_DONT_FLIP, &tty->flags);
 			continue;
 		}
 		current->state = TASK_RUNNING;
@@ -1024,7 +1029,8 @@ do_it_again:
 		if (time)
 			timeout = time;
 	}
-	enable_bh(TQUEUE_BH);
+	clear_bit(TTY_DONT_FLIP, &tty->flags);
+	up(&tty->atomic_read);
 	remove_wait_queue(&tty->read_wait, &wait);
 
 	if (!waitqueue_active(&tty->read_wait))

@@ -202,8 +202,13 @@ void handle_scancode(unsigned char scancode)
 
 	tty = ttytab? ttytab[fg_console]: NULL;
 	if (tty && (!tty->driver_data)) {
-		/* This is to workaround ugly bug in tty_io.c, which
-                   does not do locking when it should */
+		/*
+		 * We touch the tty structure via the the ttytab array
+		 * without knowing whether or not tty is open, which
+		 * is inherently dangerous.  We currently rely on that
+		 * fact that console_open sets tty->driver_data when
+		 * it opens it, and clears it when it closes it.
+		 */
 		tty = NULL;
 	}
 	kbd = kbd_table + fg_console;

@@ -4,11 +4,19 @@
 #ifndef __SMP__
 
 /*
+ * To be safe, we assume the only compiler that can cope with
+ * empty initialisers is EGCS.
+ */
+#if (__GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 90))
+#define EMPTY_INIT_OK
+#endif
+
+/*
  * Your basic spinlocks, allowing only a single CPU anywhere
  */
-#if (__GNUC__ > 2) || (__GNUC_MINOR__ >= 8)
+#ifdef EMPTY_INIT_OK
   typedef struct { } spinlock_t;
-# define SPIN_LOCK_UNLOCKED { }
+# define SPIN_LOCK_UNLOCKED (spinlock_t) { }
 #else
   typedef unsigned char spinlock_t;
 # define SPIN_LOCK_UNLOCKED 0
@@ -37,9 +45,9 @@
  * irq-safe write-lock, but readers can get non-irqsafe
  * read-locks.
  */
-#if (__GNUC__ > 2) || (__GNUC_MINOR__ >= 8)
+#ifdef EMPTY_INIT_OK
   typedef struct { } rwlock_t;
-# define RW_LOCK_UNLOCKED { }
+# define RW_LOCK_UNLOCKED (rwlock_t) { }
 #else
   typedef unsigned char rwlock_t;
 # define RW_LOCK_UNLOCKED 0

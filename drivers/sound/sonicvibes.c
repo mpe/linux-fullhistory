@@ -49,6 +49,8 @@
  *    31.08.98   0.7   Fix realplayer problems - dac.count issues
  *    10.12.98   0.8   Fix drain_dac trying to wait on not yet initialized DMA
  *    16.12.98   0.9   Fix a few f_file & FMODE_ bugs
+ *    06.01.99   0.10  remove the silly SA_INTERRUPT flag.
+ *                     hopefully killed the egcs section type conflict
  *
  */
 
@@ -2243,7 +2245,7 @@ static unsigned dmaio = 0xac00;
 
 /* --------------------------------------------------------------------- */
 
-static const struct initvol {
+static struct initvol {
 	int mixch;
 	int vol;
 } initvol[] __initdata = {
@@ -2271,7 +2273,7 @@ __initfunc(int init_sonicvibes(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "sv: version v0.9 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "sv: version v0.10 time " __TIME__ " " __DATE__ "\n");
 #if 0
 	if (!(wavetable_mem = __get_free_pages(GFP_KERNEL, 20-PAGE_SHIFT)))
 		printk(KERN_INFO "sv: cannot allocate 1MB of contiguous nonpageable memory for wavetable data\n");
@@ -2382,7 +2384,7 @@ __initfunc(int init_sonicvibes(void))
 		wrindir(s, SV_CIPCMSR1, ((8000 * 65536 / FULLRATE) >> 8) & 0xff);
 		wrindir(s, SV_CIADCOUTPUT, 0);
 		/* request irq */
-		if (request_irq(s->irq, sv_interrupt, SA_INTERRUPT|SA_SHIRQ, "S3 SonicVibes", s)) {
+		if (request_irq(s->irq, sv_interrupt, SA_SHIRQ, "S3 SonicVibes", s)) {
 			printk(KERN_ERR "sv: irq %u in use\n", s->irq);
 			goto err_irq;
 		}

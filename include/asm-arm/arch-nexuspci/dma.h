@@ -7,6 +7,3 @@
  * Copyright (C) 1998 Philip Blundell
  */
 
-/* Need this to keep <asm/dma.h> happy. */
-typedef unsigned int dmamode_t;
-

@@ -11,6 +11,7 @@
 #define __ASM_ARCH_SERIAL_H
 
 #include <linux/config.h>
+
 #include <asm/irq.h>
 
 /*

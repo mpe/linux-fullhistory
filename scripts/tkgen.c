@@ -905,6 +905,7 @@ void dump_tk_script(struct kconfig *scfg)
    * Generate the code to close out the last menu.
    */
   end_proc(menu_num);
+  clear_globalflags(config);
 
   /*
    * The top level menu also needs an update function.  When we exit a

@@ -60,7 +60,7 @@ static char buffersize_index[65] =
  */
 static unsigned long bh_hash_mask = 0;
 
-static int grow_buffers(int pri, int size);
+static int grow_buffers(int size);
 
 static struct buffer_head ** hash_table;
 static struct buffer_head * lru_list[NR_LIST] = {NULL, };
@@ -689,7 +689,7 @@ void set_blocksize(kdev_t dev, int size)
  */
 static void refill_freelist(int size)
 {
-	if (!grow_buffers(GFP_KERNEL, size)) {
+	if (!grow_buffers(size)) {
 		wakeup_bdflush(1);
 		current->policy |= SCHED_YIELD;
 		schedule();
@@ -1396,7 +1396,7 @@ int generic_readpage(struct file * file, struct page * page)
  * Try to increase the number of buffers available: the size argument
  * is used to determine what kind of buffers we want.
  */
-static int grow_buffers(int pri, int size)
+static int grow_buffers(int size)
 {
 	unsigned long page;
 	struct buffer_head *bh, *tmp;
@@ -1408,7 +1408,7 @@ static int grow_buffers(int pri, int size)
 		return 0;
 	}
 
-	if (!(page = __get_free_page(pri)))
+	if (!(page = __get_free_page(GFP_BUFFER)))
 		return 0;
 	bh = create_buffers(page, size, 0);
 	if (!bh) {
@@ -1571,7 +1571,7 @@ void __init buffer_init(void)
 	}
 
 	lru_list[BUF_CLEAN] = 0;
-	grow_buffers(GFP_KERNEL, BLOCK_SIZE);
+	grow_buffers(BLOCK_SIZE);
 }
 
 

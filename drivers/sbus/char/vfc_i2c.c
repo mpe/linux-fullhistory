@@ -156,7 +156,7 @@ int vfc_i2c_xmit_addr(struct vfc_dev *dev, unsigned char addr, char mode)
 	switch(mode) {
 	case VFC_I2C_READ:
 		dev->regs->i2c_reg=raddr=SHIFT((unsigned int)addr | 0x1);
-		VFC_I2C_DEBUG_PRINTK(("vfc%d: recieving from i2c addr 0x%x\n",
+		VFC_I2C_DEBUG_PRINTK(("vfc%d: receiving from i2c addr 0x%x\n",
 				  dev->instance,addr | 0x1));
 		break;
 	case VFC_I2C_WRITE:
@@ -255,7 +255,7 @@ int vfc_i2c_recvbuf(struct vfc_dev *dev, unsigned char addr,
 		if(!count) last=1;
 		if((ret=vfc_i2c_recv_byte(dev,buf,last))) {
 			printk(KERN_ERR "vfc%d: "
-			       "VFC error while recieving byte\n",
+			       "VFC error while receiving byte\n",
 			       dev->instance);
 			dev->regs->i2c_s1=SEND_I2C_STOP;
 			ret=-EINVAL;

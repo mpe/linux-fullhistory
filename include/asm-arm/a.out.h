@@ -27,4 +27,9 @@ struct exec
 #define M_ARM 103
 
 #include <asm/arch/a.out.h>
+
+#ifndef LIBRARY_START_TEXT
+#define LIBRARY_START_TEXT	(0x00c00000)
+#endif
+
 #endif /* __A_OUT_GNU_H__ */

@@ -105,7 +105,7 @@
  *  08/24/1996.
  *
  *  Enhancement for wd7000_detect function has been made, so you don't have
- *  to enter BIOS ROM adress in initialisation data (see struct Config).
+ *  to enter BIOS ROM address in initialisation data (see struct Config).
  *  We cannot detect IRQ, DMA and I/O base address for now, so we have to
  *  enter them as arguments while wd_7000 is detected. If someone has IRQ,
  *  DMA or I/O base address set to some other value, he can enter them in

@@ -80,8 +80,11 @@ extern void chrp_ide_probe(void);
 
 static __inline__ int ide_default_irq(ide_ioreg_t base)
 {
-	if ( (_machine == _MACH_Pmac) || (_machine == _MACH_mbx) )
+	if ( _machine == _MACH_Pmac )
 		return 0;
+	else if ( _machine == _MACH_mbx )
+		/* hardcode IRQ 14 on the MBX */
+		return 14+16;		     
         else if ( _machine == _MACH_chrp) {
                 if (chrp_ide_ports_known == 0) 
 			chrp_ide_probe();
@@ -142,7 +145,7 @@ static __inline__ void ide_release_region (ide_ioreg_t from, unsigned int extent
 }
 
 /* Convert the shorts/longs in hd_driveid from little to big endian;
-   chars are endian independant, of course, but strings need to be flipped.
+   chars are endian independent, of course, but strings need to be flipped.
    (Despite what it says in drivers/block/ide.h, they come up as little endian...)
    Changes to linux/hdreg.h may require changes here. */
 static __inline__ void ide_fix_driveid (struct hd_driveid *id) {
@@ -252,14 +255,14 @@ static __inline__ void ide_fix_driveid (struct hd_driveid *id) {
 	}
 }
 
-
 #undef insw
 #define insw(port, buf, ns) 	do {			\
 	if ( _machine == _MACH_chrp)  {\
 		 ide_insw((port)+_IO_BASE, (buf), (ns));  \
 	}\
 	else if ( (_machine == _MACH_Pmac) || (_machine == _MACH_mbx) )			\
-		ide_insw((port), (buf), (ns));		\
+		ide_insw((port)+((_machine==_MACH_mbx)? 0x80000000: 0), \
+			 (buf), (ns));		\
 	else						\
 		/* this must be the same as insw in io.h!! */	\
 		_insw((unsigned short *)((port)+_IO_BASE), (buf), (ns)); \
@@ -270,8 +273,9 @@ static __inline__ void ide_fix_driveid (struct hd_driveid *id) {
 	if ( _machine == _MACH_chrp) {\
 		ide_outsw((port)+_IO_BASE, (buf), (ns)); \
 	}\
-	else if ( (_machine == _MACH_Pmac) || (_machine == _MACH_mbx) )			\
-		ide_outsw((port), (buf), (ns));		\
+	else if ( (_machine == _MACH_Pmac) || (_machine == _MACH_mbx) )	 \
+		ide_outsw((port)+((_machine==_MACH_mbx)? 0x80000000: 0), \
+			   (buf), (ns));		\
 	else						\
 		/* this must be the same as outsw in io.h!! */	\
 		_outsw((unsigned short *)((port)+_IO_BASE), (buf), (ns)); \
@@ -279,13 +283,17 @@ static __inline__ void ide_fix_driveid (struct hd_driveid *id) {
 
 #undef inb
 #define inb(port)	\
-	in_8((unsigned char *)((port) + ((_machine==_MACH_Pmac)? 0: _IO_BASE)))
+	in_8((unsigned char *)((port) + \
+			       ((_machine==_MACH_Pmac)? 0: _IO_BASE) + \
+			       ((_machine==_MACH_mbx)? 0x80000000: 0)) )
 #undef inb_p
 #define inb_p(port)	inb(port)
 
 #undef outb
 #define outb(val, port)	\
-	out_8((unsigned char *)((port) + ((_machine==_MACH_Pmac)? 0: _IO_BASE)), (val))
+	out_8((unsigned char *)((port) + \
+				((_machine==_MACH_Pmac)? 0: _IO_BASE) + \
+				((_machine==_MACH_mbx)? 0x80000000: 0)), (val) )
 #undef outb_p
 #define outb_p(val, port)	outb(val, port)
 

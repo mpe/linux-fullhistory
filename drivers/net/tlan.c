@@ -2797,7 +2797,7 @@ void TLan_EeReceiveByte( u16 io_base, u8 *data, int stop )
 	 *
 	 *	Returns:
 	 *		No error = 0, else, the stage at which the error
-	 *		occured.
+	 *		occurred.
 	 *	Parms:
 	 *		io_base		The IO port base address for the
 	 *				TLAN device with the EEPROM to

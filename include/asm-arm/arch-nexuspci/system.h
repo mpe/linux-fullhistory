@@ -6,13 +6,12 @@
 #ifndef __ASM_ARCH_SYSTEM_H
 #define __ASM_ARCH_SYSTEM_H
 
-extern __inline__ void arch_hard_reset (void)
+extern __inline__ void arch_reset(char mode)
 {
 	/*
 	 * loop endlessly - the watchdog will reset us if it's enabled.
 	 */
 	cli();
-	while (1);
 }
 
 #endif

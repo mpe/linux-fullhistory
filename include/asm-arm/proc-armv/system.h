@@ -22,22 +22,24 @@ extern __inline__ unsigned long __xchg(unsigned long x, volatile void *ptr, int 
 	return x;
 }
 
-/*
- * This processor does not need anything special before reset,
- * but RPC may do...
- */
-extern __inline__ void proc_hard_reset(void)
-{
-}
+#define set_cr(x)					\
+	do {						\
+	__asm__ __volatile__(				\
+	"mcr	p15, 0, %0, c1, c0	@ set CR"	\
+	  : : "r" (x));					\
+	} while (0)
+
+extern unsigned long cr_no_alignment;	/* defined in entry-armv.S */
+extern unsigned long cr_alignment;	/* defined in entry-armv.S */
 
 /*
  * We can wait for an interrupt...
  */
-#define proc_idle()			\
-	do {				\
-	__asm__ __volatile__(		\
-"	mcr	p15, 0, %0, c15, c8, 2"	\
-	  : : "r" (0));			\
+#define proc_idle()						\
+	do {							\
+	__asm__ __volatile__(					\
+"	mcr	p15, 0, %0, c15, c8, 2	@ proc_idle"		\
+	  : : "r" (0));						\
 	} while (0)
 
 /*
@@ -47,75 +49,75 @@ extern __inline__ void proc_hard_reset(void)
 /*
  * Save the current interrupt enable state & disable IRQs
  */
-#define __save_flags_cli(x)		\
-	do {				\
-	  unsigned long temp;		\
-	  __asm__ __volatile__(		\
-	"mrs	%1, cpsr\n"		\
-"	and	%0, %1, #192\n"		\
-"	orr	%1, %1, #128\n"		\
-"	msr	cpsr, %1"		\
-	  : "=r" (x), "=r" (temp)	\
-	  :				\
-	  : "memory");			\
+#define __save_flags_cli(x)					\
+	do {							\
+	  unsigned long temp;					\
+	  __asm__ __volatile__(					\
+	"mrs	%1, cpsr		@ save_flags_cli\n"	\
+"	and	%0, %1, #192\n"					\
+"	orr	%1, %1, #128\n"					\
+"	msr	cpsr, %1"					\
+	  : "=r" (x), "=r" (temp)				\
+	  :							\
+	  : "memory");						\
 	} while (0)
 	
 /*
  * Enable IRQs
  */
-#define __sti()				\
-	do {				\
-	  unsigned long temp;		\
-	  __asm__ __volatile__(		\
-	"mrs	%0, cpsr\n"		\
-"	bic	%0, %0, #128\n"		\
-"	msr	cpsr, %0"		\
-	  : "=r" (temp)			\
-	  :				\
-	  : "memory");			\
+#define __sti()							\
+	do {							\
+	  unsigned long temp;					\
+	  __asm__ __volatile__(					\
+	"mrs	%0, cpsr		@ sti\n"		\
+"	bic	%0, %0, #128\n"					\
+"	msr	cpsr, %0"					\
+	  : "=r" (temp)						\
+	  :							\
+	  : "memory");						\
 	} while(0)
 
 /*
  * Disable IRQs
  */
-#define __cli()				\
-	do {				\
-	  unsigned long temp;		\
-	  __asm__ __volatile__(		\
-	"mrs	%0, cpsr\n"		\
-"	orr	%0, %0, #128\n"		\
-"	msr	cpsr, %0"		\
-	  : "=r" (temp)			\
-	  :				\
-	  : "memory");			\
+#define __cli()							\
+	do {							\
+	  unsigned long temp;					\
+	  __asm__ __volatile__(					\
+	"mrs	%0, cpsr		@ cli\n"		\
+"	orr	%0, %0, #128\n"					\
+"	msr	cpsr, %0"					\
+	  : "=r" (temp)						\
+	  :							\
+	  : "memory");						\
 	} while(0)
 
 /*
  * save current IRQ & FIQ state
  */
-#define __save_flags(x)			\
-	do {				\
-	  __asm__ __volatile__(		\
-	"mrs	%0, cpsr\n"		\
-"	and	%0, %0, #192"		\
-	  : "=r" (x)			\
-	  :				\
-	  : "memory");			\
+#define __save_flags(x)						\
+	do {							\
+	  __asm__ __volatile__(					\
+	"mrs	%0, cpsr		@ save_flags\n"		\
+"	and	%0, %0, #192"					\
+	  : "=r" (x)						\
+	  :							\
+	  : "memory");						\
 	} while (0)
 
 /*
  * restore saved IRQ & FIQ state
  */
-#define __restore_flags(x)		\
-	do {				\
-	  unsigned long temp;		\
-	  __asm__ __volatile__(		\
-	"mrs	%0, cpsr\n"		\
-"	bic	%0, %0, #192\n"		\
-"	orr	%0, %0, %1\n"		\
-"	msr	cpsr, %0"		\
-	  : "=r" (temp)			\
-	  : "r" (x)			\
+#define __restore_flags(x)					\
+	do {							\
+	  unsigned long temp;					\
+	  __asm__ __volatile__(					\
+	"mrs	%0, cpsr		@ restore_flags\n"	\
+"	bic	%0, %0, #192\n"					\
+"	orr	%0, %0, %1\n"					\
+"	msr	cpsr, %0"					\
+	  : "=r" (temp)						\
+	  : "r" (x)						\
 	  : "memory");			\
 	} while (0)
 

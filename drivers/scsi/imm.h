@@ -63,6 +63,7 @@
 /* ------ END OF USER CONFIGURABLE PARAMETERS ----- */
 
 #ifdef IMM_CODE
+#include  <linux/config.h>
 #include  <linux/stddef.h>
 #include  <linux/module.h>
 #include  <linux/kernel.h>

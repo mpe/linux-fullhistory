@@ -81,6 +81,8 @@
  *		       -- Oliver Neukum <c188@org.chemie.uni-muenchen.de>
  *    10.12.98   0.15  Fix drain_dac trying to wait on not yet initialized DMA
  *    16.12.98   0.16  Don't wake up app until there are fragsize bytes to read/write
+ *    06.01.99   0.17  remove the silly SA_INTERRUPT flag.
+ *                     hopefully killed the egcs section type conflict
  *
  * some important things missing in Ensoniq documentation:
  *
@@ -2241,7 +2243,7 @@ static int micz[NR_DEVICE] = { 0, };
 
 /* --------------------------------------------------------------------- */
 
-static const struct initvol {
+static struct initvol {
 	int mixch;
 	int vol;
 } initvol[] __initdata = {
@@ -2270,7 +2272,7 @@ __initfunc(int init_es1370(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1370: version v0.16 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1370: version v0.17 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1370, pcidev))) {
 		if (pcidev->base_address[0] == 0 || 
@@ -2298,7 +2300,7 @@ __initfunc(int init_es1370(void))
 			goto err_region;
 		}
 		request_region(s->io, ES1370_EXTENT, "es1370");
-		if (request_irq(s->irq, es1370_interrupt, SA_INTERRUPT|SA_SHIRQ, "es1370", s)) {
+		if (request_irq(s->irq, es1370_interrupt, SA_SHIRQ, "es1370", s)) {
 			printk(KERN_ERR "es1370: irq %u in use\n", s->irq);
 			goto err_irq;
 		}

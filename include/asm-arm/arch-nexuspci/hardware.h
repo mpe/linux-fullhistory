@@ -34,6 +34,6 @@
  */
 #define RAM_BASE		0x40000000
 #define KERNTOPHYS(a)		((unsigned long)(&a))
-#define SAFE_ADDR		0x40000000
+#define FLUSH_BASE_PHYS		0x40000000
 
 #endif

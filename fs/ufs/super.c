@@ -58,6 +58,7 @@
  */
 
 
+#include <linux/config.h>
 #include <linux/module.h>
 
 #include <stdarg.h>
@@ -274,6 +275,8 @@ static int ufs_parse_options (char * options, unsigned * mount_options)
 				ufs_set_opt (*mount_options, UFSTYPE_44BSD);
 			else if (!strcmp (value, "next"))
 				ufs_set_opt (*mount_options, UFSTYPE_NEXT);
+			else if (!strcmp (value, "openstep"))
+				ufs_set_opt (*mount_options, UFSTYPE_OPENSTEP);
 			else {
 				printk ("UFS-fs: Invalid type option: %s\n", value);
 				return 0;
@@ -464,7 +467,7 @@ struct super_block * ufs_read_super (struct super_block * sb, void * data,
 	}
 	if (!(sb->u.ufs_sb.s_mount_opt & UFS_MOUNT_UFSTYPE)) {
 		printk("You didn't specify type of your ufs file system\n\n"
-		"       mount -t ufs -o ufstype=sun|44bsd|old|next ....\n\n"
+		"       mount -t ufs -o ufstype=sun|44bsd|old|next|openstep ....\n\n"
 		"!!! WARNING !!! wrong value may corrupt you file system\n"
 		"default value is ufstype=old\n");
 		ufs_set_opt (sb->u.ufs_sb.s_mount_opt, UFSTYPE_OLD);
@@ -506,7 +509,7 @@ struct super_block * ufs_read_super (struct super_block * sb, void * data,
 		flags |= UFS_DE_OLD | UFS_UID_OLD | UFS_ST_OLD | UFS_CG_OLD;
 		if (!(sb->s_flags & MS_RDONLY)) {
 			printk("old type of ufs is supported read-only\n"); 
-			goto failed;
+			sb->s_flags |= MS_RDONLY;
 		}
 		break;
 	
@@ -520,10 +523,23 @@ struct super_block * ufs_read_super (struct super_block * sb, void * data,
 		flags |= UFS_DE_OLD | UFS_UID_OLD | UFS_ST_OLD | UFS_CG_OLD;
 		if (!(sb->s_flags & MS_RDONLY)) {
 			printk("nextstep type of ufs is supported read-only\n");
-			goto failed;
+			sb->s_flags |= MS_RDONLY;
 		}
 		break;
 	
+	case UFS_MOUNT_UFSTYPE_OPENSTEP:
+		UFSD(("openstep ufstype\n"))
+		uspi->s_fsize = block_size = 1024;
+		uspi->s_fmask = ~(1024 - 1);
+		uspi->s_fshift = 10;
+		uspi->s_sbsize = super_block_size = 2048;
+		uspi->s_sbbase = 0;
+		flags |= UFS_DE_44BSD | UFS_UID_44BSD | UFS_ST_44BSD | UFS_CG_44BSD;
+		if (!(sb->s_flags & MS_RDONLY)) {
+			printk("openstep type of ufs is supported read-only\n");
+			sb->s_flags |= MS_RDONLY;
+		}
+		break;
 	
 	default:
 		printk("this fs type of ufs is not supported\n");
@@ -567,8 +583,10 @@ again:
 	}
 #endif
 
-	if ((sb->u.ufs_sb.s_mount_opt & UFS_MOUNT_UFSTYPE) == 
-	UFS_MOUNT_UFSTYPE_NEXT && uspi->s_sbbase < 256) {
+	if ((((sb->u.ufs_sb.s_mount_opt & UFS_MOUNT_UFSTYPE) == 
+	UFS_MOUNT_UFSTYPE_NEXT) ||
+	((sb->u.ufs_sb.s_mount_opt & UFS_MOUNT_UFSTYPE) ==
+	UFS_MOUNT_UFSTYPE_OPENSTEP)) && uspi->s_sbbase < 256) {
 		ubh_brelse_uspi(uspi);
 		ubh = NULL;
 		uspi->s_sbbase += 8;

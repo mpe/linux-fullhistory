@@ -2,6 +2,8 @@
  * include/asm-arm/dec21285.h
  *
  * Copyright (C) 1998 Russell King
+ *
+ * DC21285 registers
  */
 #define DC21285_PCI_IACK		0x79000000
 #define DC21285_ARMCSR_BASE		0x42000000
@@ -13,109 +15,74 @@
 #define DC21285_PCI_MEM			0x80000000
 
 #ifndef __ASSEMBLY__
-
-/*
- * DEC21285
- */
-#define CSR_SA110_CNTL		((volatile unsigned long *)0xfe00013c)
-#define CSR_PCIADDR_EXTN	((volatile unsigned long *)0xfe000140)
-#define CSR_PREFETCHMEMRANGE	((volatile unsigned long *)0xfe000144)
-#define CSR_XBUS_CYCLE		((volatile unsigned long *)0xfe000148)
-#define CSR_XBUS_IOSTROBE	((volatile unsigned long *)0xfe00014c)
-#define CSR_DOORBELL_PCI	((volatile unsigned long *)0xfe000150)
-#define CSR_DOORBELL_SA110	((volatile unsigned long *)0xfe000154)
-
-#define CSR_UARTDR		((volatile unsigned long *)0xfe000160)
-#define CSR_RXSTAT		((volatile unsigned long *)0xfe000164)
-#define CSR_H_UBRLCR		((volatile unsigned long *)0xfe000168)
-#define CSR_M_UBRLCR		((volatile unsigned long *)0xfe00016c)
-#define CSR_L_UBRLCR		((volatile unsigned long *)0xfe000170)
-#define CSR_UARTCON		((volatile unsigned long *)0xfe000174)
-#define CSR_UARTFLG		((volatile unsigned long *)0xfe000178)
-
-#define CSR_IRQ_STATUS		((volatile unsigned long *)0xfe000180)
-#define CSR_IRQ_RAWSTATUS	((volatile unsigned long *)0xfe000184)
-#define CSR_IRQ_ENABLE		((volatile unsigned long *)0xfe000188)
-#define CSR_IRQ_DISABLE		((volatile unsigned long *)0xfe00018c)
-#define CSR_IRQ_SOFT		((volatile unsigned long *)0xfe000190)
-
-#define CSR_FIQ_STATUS		((volatile unsigned long *)0xfe000280)
-#define CSR_FIQ_RAWSTATUS	((volatile unsigned long *)0xfe000284)
-#define CSR_FIQ_ENABLE		((volatile unsigned long *)0xfe000288)
-#define CSR_FIQ_DISABLE		((volatile unsigned long *)0xfe00028c)
-#define CSR_FIQ_SOFT		((volatile unsigned long *)0xfe000290)
-
-#define CSR_TIMER1_LOAD		((volatile unsigned long *)0xfe000300)
-#define CSR_TIMER1_VALUE	((volatile unsigned long *)0xfe000304)
-#define CSR_TIMER1_CNTL		((volatile unsigned long *)0xfe000308)
-#define CSR_TIMER1_CLR		((volatile unsigned long *)0xfe00030c)
-
-#define CSR_TIMER2_LOAD		((volatile unsigned long *)0xfe000320)
-#define CSR_TIMER2_VALUE	((volatile unsigned long *)0xfe000324)
-#define CSR_TIMER2_CNTL		((volatile unsigned long *)0xfe000328)
-#define CSR_TIMER2_CLR		((volatile unsigned long *)0xfe00032c)
-
-#define CSR_TIMER3_LOAD		((volatile unsigned long *)0xfe000340)
-#define CSR_TIMER3_VALUE	((volatile unsigned long *)0xfe000344)
-#define CSR_TIMER3_CNTL		((volatile unsigned long *)0xfe000348)
-#define CSR_TIMER3_CLR		((volatile unsigned long *)0xfe00034c)
-
-#define CSR_TIMER4_LOAD		((volatile unsigned long *)0xfe000360)
-#define CSR_TIMER4_VALUE	((volatile unsigned long *)0xfe000364)
-#define CSR_TIMER4_CNTL		((volatile unsigned long *)0xfe000368)
-#define CSR_TIMER4_CLR		((volatile unsigned long *)0xfe00036c)
-
+#define DC21285_IO(x)		((volatile unsigned long *)(0xfe000000+(x)))
 #else
-
-#define CSR_SA110_CNTL		0x13c
-#define CSR_PCIADDR_EXTN	0x140
-#define CSR_PREFETCHMEMRANGE	0x144
-#define CSR_XBUS_CYCLE		0x148
-#define CSR_XBUS_IOSTROBE	0x14c
-#define CSR_DOORBELL_PCI	0x150
-#define CSR_DOORBELL_SA110	0x154
-
-#define CSR_UARTDR		0x160
-#define CSR_RXSTAT		0x164
-#define CSR_H_UBRLCR		0x168
-#define CSR_M_UBRLCR		0x16c
-#define CSR_L_UBRLCR		0x170
-#define CSR_UARTCON		0x174
-#define CSR_UARTFLG		0x178
-
-#define CSR_IRQ_STATUS		0x180
-#define CSR_IRQ_RAWSTATUS	0x184
-#define CSR_IRQ_ENABLE		0x188
-#define CSR_IRQ_DISABLE		0x18c
-#define CSR_IRQ_SOFT		0x190
-
-#define CSR_FIQ_STATUS		0x280
-#define CSR_FIQ_RAWSTATUS	0x284
-#define CSR_FIQ_ENABLE		0x288
-#define CSR_FIQ_DISABLE		0x28c
-#define CSR_FIQ_SOFT		0x290
-
-#define CSR_TIMER1_LOAD		0x300
-#define CSR_TIMER1_VALUE	0x304
-#define CSR_TIMER1_CNTL		0x308
-#define CSR_TIMER1_CLR		0x30c
-
-#define CSR_TIMER2_LOAD		0x320
-#define CSR_TIMER2_VALUE	0x324
-#define CSR_TIMER2_CNTL		0x328
-#define CSR_TIMER2_CLR		0x32c
-
-#define CSR_TIMER3_LOAD		0x340
-#define CSR_TIMER3_VALUE	0x344
-#define CSR_TIMER3_CNTL		0x348
-#define CSR_TIMER3_CLR		0x34c
-
-#define CSR_TIMER4_LOAD		0x360
-#define CSR_TIMER4_VALUE	0x364
-#define CSR_TIMER4_CNTL		0x368
-#define CSR_TIMER4_CLR		0x36c
-
+#define DC21285_IO(x)		(x)
 #endif
+
+#define CSR_PCICMD		DC21285_IO(0x0004)
+#define CSR_PCICACHELINESIZE	DC21285_IO(0x000c)
+#define CSR_PCICSRBASE		DC21285_IO(0x0010)
+#define CSR_PCICSRIOBASE	DC21285_IO(0x0014)
+#define CSR_PCISDRAMBASE	DC21285_IO(0x0018)
+#define CSR_PCIROMBASE		DC21285_IO(0x0030)
+#define CSR_CSRBASEMASK		DC21285_IO(0x00f8)
+#define CSR_CSRBASEOFFSET	DC21285_IO(0x00fc)
+#define CSR_SDRAMBASEMASK	DC21285_IO(0x0100)
+#define CSR_SDRAMBASEOFFSET	DC21285_IO(0x0104)
+#define CSR_ROMBASEMASK		DC21285_IO(0x0108)
+#define CSR_SDRAMTIMING		DC21285_IO(0x010c)
+#define CSR_SDRAMADDRSIZE0	DC21285_IO(0x0110)
+#define CSR_SDRAMADDRSIZE1	DC21285_IO(0x0114)
+#define CSR_SDRAMADDRSIZE2	DC21285_IO(0x0118)
+#define CSR_SDRAMADDRSIZE3	DC21285_IO(0x011c)
+#define CSR_I2O_INFREEHEAD	DC21285_IO(0x0120)
+#define CSR_I2O_INPOSTTAIL	DC21285_IO(0x0124)
+#define CSR_I2O_OUTPOSTHEAD	DC21285_IO(0x0128)
+#define CSR_I2O_OUTFREETAIL	DC21285_IO(0x012c)
+#define CSR_I2O_INFREECOUNT	DC21285_IO(0x0130)
+#define CSR_I2O_OUTPOSTCOUNT	DC21285_IO(0x0134)
+#define CSR_I2O_INPOSTCOUNT	DC21285_IO(0x0138)
+#define CSR_SA110_CNTL		DC21285_IO(0x013c)
+#define CSR_PCIADDR_EXTN	DC21285_IO(0x0140)
+#define CSR_PREFETCHMEMRANGE	DC21285_IO(0x0144)
+#define CSR_XBUS_CYCLE		DC21285_IO(0x0148)
+#define CSR_XBUS_IOSTROBE	DC21285_IO(0x014c)
+#define CSR_DOORBELL_PCI	DC21285_IO(0x0150)
+#define CSR_DOORBELL_SA110	DC21285_IO(0x0154)
+#define CSR_UARTDR		DC21285_IO(0x0160)
+#define CSR_RXSTAT		DC21285_IO(0x0164)
+#define CSR_H_UBRLCR		DC21285_IO(0x0168)
+#define CSR_M_UBRLCR		DC21285_IO(0x016c)
+#define CSR_L_UBRLCR		DC21285_IO(0x0170)
+#define CSR_UARTCON		DC21285_IO(0x0174)
+#define CSR_UARTFLG		DC21285_IO(0x0178)
+#define CSR_IRQ_STATUS		DC21285_IO(0x0180)
+#define CSR_IRQ_RAWSTATUS	DC21285_IO(0x0184)
+#define CSR_IRQ_ENABLE		DC21285_IO(0x0188)
+#define CSR_IRQ_DISABLE		DC21285_IO(0x018c)
+#define CSR_IRQ_SOFT		DC21285_IO(0x0190)
+#define CSR_FIQ_STATUS		DC21285_IO(0x0280)
+#define CSR_FIQ_RAWSTATUS	DC21285_IO(0x0284)
+#define CSR_FIQ_ENABLE		DC21285_IO(0x0288)
+#define CSR_FIQ_DISABLE		DC21285_IO(0x028c)
+#define CSR_FIQ_SOFT		DC21285_IO(0x0290)
+#define CSR_TIMER1_LOAD		DC21285_IO(0x0300)
+#define CSR_TIMER1_VALUE	DC21285_IO(0x0304)
+#define CSR_TIMER1_CNTL		DC21285_IO(0x0308)
+#define CSR_TIMER1_CLR		DC21285_IO(0x030c)
+#define CSR_TIMER2_LOAD		DC21285_IO(0x0320)
+#define CSR_TIMER2_VALUE	DC21285_IO(0x0324)
+#define CSR_TIMER2_CNTL		DC21285_IO(0x0328)
+#define CSR_TIMER2_CLR		DC21285_IO(0x032c)
+#define CSR_TIMER3_LOAD		DC21285_IO(0x0340)
+#define CSR_TIMER3_VALUE	DC21285_IO(0x0344)
+#define CSR_TIMER3_CNTL		DC21285_IO(0x0348)
+#define CSR_TIMER3_CLR		DC21285_IO(0x034c)
+#define CSR_TIMER4_LOAD		DC21285_IO(0x0360)
+#define CSR_TIMER4_VALUE	DC21285_IO(0x0364)
+#define CSR_TIMER4_CNTL		DC21285_IO(0x0368)
+#define CSR_TIMER4_CLR		DC21285_IO(0x036c)
 
 #define TIMER_CNTL_ENABLE	(1 << 7)
 #define TIMER_CNTL_AUTORELOAD	(1 << 6)

@@ -46,4 +46,29 @@
 //#define PARAMS_OFFSET		0x0100
 //#define PARAMS_BASE		(PAGE_OFFSET + PARAMS_OFFSET)
 
-#define SAFE_ADDR		0x50000000
+#define FLUSH_BASE_PHYS		0x50000000
+
+/* GPIO pins */
+#define GPIO_CCLK		0x800
+#define GPIO_DSCLK		0x400
+#define GPIO_E2CLK		0x200
+#define GPIO_IOLOAD		0x100
+#define GPIO_RED_LED		0x080
+#define GPIO_WDTIMER		0x040
+#define GPIO_DATA		0x020
+#define GPIO_IOCLK		0x010
+#define GPIO_DONE		0x008
+#define GPIO_FAN		0x004
+#define GPIO_GREEN_LED		0x002
+#define GPIO_RESET		0x001
+
+/* CPLD pins */
+#define CPLD_DSRESET		8
+#define CPLD_UNMUTE		2
+
+#ifndef __ASSEMBLY__
+extern void gpio_modify_op(int mask, int set);
+extern void gpio_modify_io(int mask, int in);
+extern int  gpio_read(void);
+extern void cpld_modify(int mask, int set);
+#endif

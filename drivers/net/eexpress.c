@@ -506,7 +506,7 @@ static int eexp_xmit(struct sk_buff *buf, struct device *dev)
 	printk(KERN_DEBUG "%s: eexp_xmit()\n", dev->name);
 #endif
 
-	outb(SIRQ_dis|irqrmap[dev->irq],dev->base_addr+SET_IRQ);
+	disable_irq(dev->irq);
 
 	/* If dev->tbusy is set, all our tx buffers are full but the kernel
 	 * is calling us anyway.  Check that nothing bad is happening.
@@ -543,7 +543,7 @@ static int eexp_xmit(struct sk_buff *buf, struct device *dev)
 	        eexp_hw_tx_pio(dev,data,length);
 	}
 	dev_kfree_skb(buf);
-	outb(SIRQ_en|irqrmap[dev->irq],dev->base_addr+SET_IRQ);
+	enable_irq(dev->irq);
 	return 0;
 }
 

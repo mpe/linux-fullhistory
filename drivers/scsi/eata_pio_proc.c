@@ -1,5 +1,3 @@
-#include <linux/config.h>
-
 /*
  * eata_set_info
  * buffer : pointer to the data that has been written to the hostfile

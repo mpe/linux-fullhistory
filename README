@@ -48,12 +48,12 @@ INSTALLING the kernel:
  - If you install the full sources, do a
 
 		cd /usr/src
-		gzip -cd linux-2.1.XX.tar.gz | tar xfv -
+		gzip -cd linux-2.2.XX.tar.gz | tar xfv -
 
    to get it all put in place. Replace "XX" with the version number of the
    latest kernel.
 
- - You can also upgrade between 2.1.xx releases by patching.  Patches are
+ - You can also upgrade between 2.2.xx releases by patching.  Patches are
    distributed in the traditional gzip and the new bzip2 format.  To
    install by patching, get all the newer patch files and do
 
@@ -91,7 +91,7 @@ INSTALLING the kernel:
 
 SOFTWARE REQUIREMENTS
 
-   Compiling and running the 2.1.x kernels requires up-to-date
+   Compiling and running the 2.2.x kernels requires up-to-date
    versions of various software packages.  Consult
    ./Documentation/Changes for the minimum version numbers required
    and how to get updates for these packages.  Beware that using
@@ -145,7 +145,7 @@ CONFIGURING the kernel:
 
 COMPILING the kernel:
 
- - Make sure you have gcc-2.7.0 or newer available.  It seems older gcc
+ - Make sure you have gcc-2.7.2 or newer available.  It seems older gcc
    versions can have problems compiling newer versions of Linux.  This
    is mainly because the older compilers can only generate "a.out"-format
    executables.  As of Linux 2.1.0, the kernel must be compiled as an

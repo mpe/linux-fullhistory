@@ -1,5 +1,5 @@
 /*
- * $Id: bitops.h,v 1.10 1998/08/16 21:56:53 geert Exp $
+ * $Id: bitops.h,v 1.11 1999/01/03 20:16:48 cort Exp $
  * bitops.h: Bit string operations on the ppc
  */
 
@@ -15,6 +15,16 @@ extern void change_bit(int nr, volatile void *addr);
 extern int test_and_set_bit(int nr, volatile void *addr);
 extern int test_and_clear_bit(int nr, volatile void *addr);
 extern int test_and_change_bit(int nr, volatile void *addr);
+
+
+/* Returns the number of 0's to the left of the most significant 1 bit */
+extern __inline__  int cntlzw(int bits)
+{
+	int lz;
+
+	asm ("cntlzw %0,%1" : "=r" (lz) : "r" (bits));
+	return lz;
+}
 
 /*
  * These are if'd out here because using : "cc" as a constraint

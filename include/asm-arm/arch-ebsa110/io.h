@@ -36,7 +36,7 @@ extern __inline__ void __out##fnsuffix (unsigned int value, unsigned int port)	\
 	"tst	%2, #0x80000000\n\t"						\
 	"mov	%0, %4\n\t"							\
 	"addeq	%0, %0, %3\n\t"							\
-	"str" ##instr## "	%1, [%0, %2, lsl #2]"				\
+	"str" ##instr## "	%1, [%0, %2, lsl #2]	@ out"###fnsuffix	\
 	: "=&r" (temp)								\
 	: "r" (value), "r" (port), "Ir" (PCIO_BASE - IO_BASE), "Ir" (IO_BASE)	\
 	: "cc");								\
@@ -50,7 +50,7 @@ extern __inline__ unsigned sz __in##fnsuffix (unsigned int port)		\
 	"tst	%2, #0x80000000\n\t"						\
 	"mov	%0, %4\n\t"							\
 	"addeq	%0, %0, %3\n\t"							\
-	"ldr" ##instr## "	%1, [%0, %2, lsl #2]"				\
+	"ldr" ##instr## "	%1, [%0, %2, lsl #2]	@ in"###fnsuffix	\
 	: "=&r" (temp), "=r" (value)						\
 	: "r" (port), "Ir" (PCIO_BASE - IO_BASE), "Ir" (IO_BASE)		\
 	: "cc");								\
@@ -87,11 +87,11 @@ DECLARE_IO(long,l,"")
 ({										\
 	if (__PORT_PCIO((port)))						\
 		__asm__ __volatile__(						\
-		"strb	%0, [%1, %2]"						\
+		"strb	%0, [%1, %2]		@ outbc"			\
 		: : "r" (value), "r" (PCIO_BASE), "Jr" ((port) << 2));		\
 	else									\
 		__asm__ __volatile__(						\
-		"strb	%0, [%1, %2]"						\
+		"strb	%0, [%1, %2]		@ outbc"			\
 		: : "r" (value), "r" (IO_BASE), "r" ((port) << 2));		\
 })
 
@@ -100,11 +100,11 @@ DECLARE_IO(long,l,"")
 	unsigned char result;							\
 	if (__PORT_PCIO((port)))						\
 		__asm__ __volatile__(						\
-		"ldrb	%0, [%1, %2]"						\
+		"ldrb	%0, [%1, %2]		@ inbc"				\
 		: "=r" (result) : "r" (PCIO_BASE), "Jr" ((port) << 2));		\
 	else									\
 		__asm__ __volatile__(						\
-		"ldrb	%0, [%1, %2]"						\
+		"ldrb	%0, [%1, %2]		@ inbc"				\
 		: "=r" (result) : "r" (IO_BASE), "r" ((port) << 2));		\
 	result;									\
 })
@@ -114,11 +114,11 @@ DECLARE_IO(long,l,"")
 	unsigned long v = value;						\
 	if (__PORT_PCIO((port)))						\
 		__asm__ __volatile__(						\
-		"str	%0, [%1, %2]"						\
+		"str	%0, [%1, %2]		@ outwc"			\
 		: : "r" (v|v<<16), "r" (PCIO_BASE), "Jr" ((port) << 2));	\
 	else									\
 		__asm__ __volatile__(						\
-		"str	%0, [%1, %2]"						\
+		"str	%0, [%1, %2]		@ outwc"			\
 		: : "r" (v|v<<16), "r" (IO_BASE), "r" ((port) << 2));		\
 })
 
@@ -127,11 +127,11 @@ DECLARE_IO(long,l,"")
 	unsigned short result;							\
 	if (__PORT_PCIO((port)))						\
 		__asm__ __volatile__(						\
-		"ldr	%0, [%1, %2]"						\
+		"ldr	%0, [%1, %2]		@ inwc"				\
 		: "=r" (result) : "r" (PCIO_BASE), "Jr" ((port) << 2));		\
 	else									\
 		__asm__ __volatile__(						\
-		"ldr	%0, [%1, %2]"						\
+		"ldr	%0, [%1, %2]		@ inwc"				\
 		: "=r" (result) : "r" (IO_BASE), "r" ((port) << 2));		\
 	result & 0xffff;							\
 })
@@ -141,11 +141,11 @@ DECLARE_IO(long,l,"")
 	unsigned long v = value;						\
 	if (__PORT_PCIO((port)))						\
 		__asm__ __volatile__(						\
-		"str	%0, [%1, %2]"						\
+		"str	%0, [%1, %2]		@ outlc"			\
 		: : "r" (v), "r" (PCIO_BASE), "Jr" ((port) << 2));		\
 	else									\
 		__asm__ __volatile__(						\
-		"str	%0, [%1, %2]"						\
+		"str	%0, [%1, %2]		@ outlc"			\
 		: : "r" (v), "r" (IO_BASE), "r" ((port) << 2));			\
 })
 
@@ -154,11 +154,11 @@ DECLARE_IO(long,l,"")
 	unsigned long result;							\
 	if (__PORT_PCIO((port)))						\
 		__asm__ __volatile__(						\
-		"ldr	%0, [%1, %2]"						\
+		"ldr	%0, [%1, %2]		@ inlc"				\
 		: "=r" (result) : "r" (PCIO_BASE), "Jr" ((port) << 2));		\
 	else									\
 		__asm__ __volatile__(						\
-		"ldr	%0, [%1, %2]"						\
+		"ldr	%0, [%1, %2]		@ inlc"				\
 		: "=r" (result) : "r" (IO_BASE), "r" ((port) << 2));		\
 	result;									\
 })

@@ -9,24 +9,29 @@
  * Changelog:
  *  21-Mar-1998	RMK	Created
  *  27-Aug-1998	PJB	CATS support
+ *  28-Dec-1998	APH	Made leds optional
  */
 
 #define RTC_PORT(x)		(0x72+(x))
 #define RTC_ALWAYS_BCD		1
 
+#include <linux/config.h>
 #include <asm/leds.h>
 #include <asm/system.h>
 #include <linux/mc146818rtc.h>
 
 extern __inline__ unsigned long gettimeoffset (void)
 {
-	return 0;
+	unsigned long value = LATCH - *CSR_TIMER1_VALUE;
+
+	return (tick * value) / LATCH;
 }
 
 extern __inline__ int reset_timer (void)
 {
 	*CSR_TIMER1_CLR = 0;
 
+#ifdef CONFIG_LEDS
 	/*
 	 * Do the LEDs thing on EBSA-285 hardware.
 	 */
@@ -47,7 +52,8 @@ extern __inline__ int reset_timer (void)
 			leds_event(led_timer);
 		}
 	}
-
+#endif
+	
 	return 1;
 }
 

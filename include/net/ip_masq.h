@@ -48,7 +48,8 @@
 #define IP_MASQ_F_NO_SADDR	      0x0004	/* no sport set yet */
 #define IP_MASQ_F_NO_SPORT	      0x0008	/* no sport set yet */
 
-#define IP_MASQ_F_NO_REPLY	      0x0010	/* no reply yet from outside */
+#define IP_MASQ_F_DLOOSE	      0x0010	/* loose dest binding */
+#define IP_MASQ_F_NO_REPLY	      0x0080	/* no reply yet from outside */
 
 #define IP_MASQ_F_HASHED	      0x0100 	/* hashed entry */
 #define IP_MASQ_F_OUT_SEQ             0x0200	/* must do output seq adjust */

@@ -1,5 +1,5 @@
 /*
- * $Id: process.c,v 1.69 1998/12/28 10:28:49 paulus Exp $
+ * $Id: process.c,v 1.70 1999/01/07 16:28:59 cort Exp $
  *
  *  linux/arch/ppc/kernel/process.c
  *
@@ -191,19 +191,6 @@ switch_to(struct task_struct *prev, struct task_struct *new)
 	_enable_interrupts(s);
 }
 
-void instruction_dump (unsigned long *pc)
-{
-	int i;
-
-	if((((unsigned long) pc) & 3))
-                return;
-
-	printk("Instruction DUMP:");
-	for(i = -3; i < 6; i++)
-		printk("%c%08lx%c",i?' ':'<',pc[i],i?' ':'>');
-	printk("\n");
-}
-
 void show_regs(struct pt_regs * regs)
 {
 	int i;
@@ -242,6 +229,19 @@ void show_regs(struct pt_regs * regs)
 		}
 	}
 out:
+}
+
+void instruction_dump (unsigned long *pc)
+{
+	int i;
+
+	if((((unsigned long) pc) & 3))
+                return;
+
+	printk("Instruction DUMP:");
+	for(i = -3; i < 6; i++)
+		printk("%c%08lx%c",i?' ':'<',pc[i],i?' ':'>');
+	printk("\n");
 }
 
 void exit_thread(void)

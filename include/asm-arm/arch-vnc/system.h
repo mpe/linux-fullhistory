@@ -1,5 +1,5 @@
 /*
- * linux/include/asm-arm/arch-ebsa285/system.h
+ * linux/include/asm-arm/arch-vnc/system.h
  *
  * Copyright (c) 1996,1997,1998 Russell King.
  * Copyright (c) 1998 Corel Computer Corp.
@@ -9,7 +9,7 @@
 #include <asm/leds.h>
 #include <asm/io.h>
 
-extern __inline__ void arch_hard_reset (void)
+extern __inline__ void arch_reset(char mode)
 {
 	cli();
 
@@ -31,11 +31,7 @@ extern __inline__ void arch_hard_reset (void)
 	/* set a RED LED and toggle WD_TIMER for rebooting...
 	 */
 	outb(0xC4, 0x338);
-	
-	while(1);
 }
-
-#define ARCH_IDLE_OK
 
 #define arch_start_idle()	leds_event(led_idle_start)
 #define arch_end_idle()		leds_event(led_idle_end)

@@ -34,7 +34,7 @@
 /* Same on both card types */
 #define COPS_CLEAR_INT  1
 
-/* LAP response codes recieved from the cards. */
+/* LAP response codes received from the cards. */
 #define LAP_INIT        1       /* Init cmd */
 #define LAP_INIT_RSP    2       /* Init response */
 #define LAP_WRITE       3       /* Write cmd */

@@ -283,6 +283,9 @@ struct mm_struct * mm_alloc(void)
  */
 void mmput(struct mm_struct *mm)
 {
+	/* notify parent sleeping on vfork() */
+	wake_up(&current->p_opptr->vfork_sleep);
+
 	if (atomic_dec_and_test(&mm->count)) {
 		release_segments(mm);
 		exit_mmap(mm);
@@ -521,6 +524,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->p_pptr = p->p_opptr = current;
 	p->p_cptr = NULL;
 	init_waitqueue(&p->wait_chldexit);
+	init_waitqueue(&p->vfork_sleep);
 
 	p->sigpending = 0;
 	sigemptyset(&p->signal);

@@ -7,7 +7,6 @@
  *   22-08-1998	RMK	Restructured IRQ routines
  *   03-09-1998	PJB	Merged CATS support
  */
-
 #include <linux/config.h>
 
 static void ebsa285_mask_irq(unsigned int irq)

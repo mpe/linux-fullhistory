@@ -33,7 +33,7 @@ Written by Gerard Roudier <groudier@club-internet.fr>
       10.6 SCSI BUS checking boot option
 11. Some constants and flags of the ncr53c8xx.h header file
 12. Installation
-13. Architecture dependant features
+13. Architecture dependent features
 14. Known problems
       14.1 Tagged commands with Iomega Jaz device
       14.2 Device names change when another controller is added
@@ -948,7 +948,7 @@ patches:
       ftp://ftp.tux.org/pub/people/gerard-roudier/README
 
 
-13. Architecture dependant features.
+13. Architecture dependent features.
 
 <Not yet written>
 

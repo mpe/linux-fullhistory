@@ -9,8 +9,10 @@
  *  10-Oct-1996	RMK	Created
  *  04-Dec-1997	RMK	Updated for new arch/arm/kernel/time.c
  *  07-Aug-1998	RMK	Updated for arch/arm/kernel/leds.c
+ *  28-Dec-1998	APH	Made leds code optional
  */
 
+#include <linux/config.h>
 #include <asm/leds.h>
 
 #define IRQ_TIMER IRQ_EBSA110_TIMER0
@@ -47,15 +49,19 @@ extern __inline__ int reset_timer (void)
 extern __inline__ int reset_timer (void)
 {
 	static unsigned int divisor;
+#ifdef CONFIG_LEDS	
 	static int count = 50;
+#endif
 
 	*PIT_T1 = (PIT1_COUNT) & 0xff;
 	*PIT_T1 = (PIT1_COUNT) >> 8;
 
+#ifdef CONFIG_LEDS
 	if (--count == 0) {
 		count = 50;
 		leds_event(led_timer);
 	}
+#endif
 
 	if (divisor == 0) {
 		divisor = DIVISOR - 1;

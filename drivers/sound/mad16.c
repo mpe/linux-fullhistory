@@ -495,17 +495,24 @@ static int chip_detect(void)
 
 				for (i = 0xf8d; i <= 0xf93; i++)
 					DDB(printk("port %03x = %02x\n", i, mad_read(i)));
+                                if(!detect_mad16()) {
 
-				if (!detect_mad16()) {
-				  board_type = C924;
-				  c924pnp++;
-				  DDB(printk("Detect using password = 0xE5 (again), port offset -0x80\n"));
+				  /* The C931 has the password reg at F8D */
+				  outb((0xE4), 0xF8D);
+				  outb((0x80), 0xF8D);
+				  DDB(printk("Detect using password = 0xE4 for C931\n"));
+
 				  if (!detect_mad16()) {
-				    c924pnp=0;
-				    return 0;
-				  }
+				    board_type = C924;
+				    c924pnp++;
+				    DDB(printk("Detect using password = 0xE5 (again), port offset -0x80\n"));
+				    if (!detect_mad16()) {
+				      c924pnp=0;
+				      return 0;
+				    }
 				  
-				  DDB(printk("mad16.c: 82C924 PnP detected\n"));
+				    DDB(printk("mad16.c: 82C924 PnP detected\n"));
+				  }
 				}
 				else
 				  DDB(printk("mad16.c: 82C930 detected\n"));

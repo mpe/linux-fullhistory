@@ -2231,6 +2231,12 @@ static int con_open(struct tty_struct *tty, struct file * filp)
 	return 0;
 }
 
+static void con_close(struct tty_struct *tty, struct file * filp)
+{
+	if (tty->count == 1)
+		tty->driver_data = 0;
+}
+
 static void vc_init(unsigned int currcons, unsigned int rows, unsigned int cols, int do_clear)
 {
 	int j, k ;
@@ -2292,6 +2298,7 @@ __initfunc(unsigned long con_init(unsigned long kmem_start))
 	console_driver.termios_locked = console_termios_locked;
 
 	console_driver.open = con_open;
+	console_driver.close = con_close;
 	console_driver.write = con_write;
 	console_driver.write_room = con_write_room;
 	console_driver.put_char = con_put_char;

@@ -227,7 +227,7 @@ static void z8530_rtsdtr(struct z8530_channel *c, int set)
  *	Receive handler. This is much like the async one but not quite the
  *	same or as complex
  *
- *	Note: Its intended that this handler can easily be seperated from
+ *	Note: Its intended that this handler can easily be separated from
  *	the main code to run realtime. That'll be needed for some machines
  *	(eg to ever clock 64kbits on a sparc ;)).
  *

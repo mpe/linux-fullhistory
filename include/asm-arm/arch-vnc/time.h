@@ -4,20 +4,80 @@
  * Copyright (c) 1997 Corel Computer Corp.
  * Slight modifications to bring in line with ebsa285 port.
  *  -- Russell King.
+ *  Added LED driver (based on the ebsa285 code) - Alex Holden 28/12/98.
  */
 
+#include <linux/config.h>
 #include <linux/mc146818rtc.h>
+
+#include <asm/leds.h>
+#include <asm/system.h>
 
 #undef IRQ_TIMER
 #define IRQ_TIMER		IRQ_TIMER4
 
+#define mSEC_10_from_14 ((14318180 + 100) / 200)
+
 extern __inline__ unsigned long gettimeoffset (void)
 {
-	return 0;
+	int count;
+
+	static int count_p = (mSEC_10_from_14/6);    /* for the first call after boot */
+	static unsigned long jiffies_p = 0;
+
+	/*
+	 * cache volatile jiffies temporarily; we have IRQs turned off. 
+	 */
+	unsigned long jiffies_t;
+
+	/* timer count may underflow right here */
+	outb_p(0x00, 0x43);	/* latch the count ASAP */
+
+	count = inb_p(0x40);	/* read the latched count */
+
+	/*
+	 * We do this guaranteed double memory access instead of a _p 
+	 * postfix in the previous port access. Wheee, hackady hack
+	 */
+ 	jiffies_t = jiffies;
+
+	count |= inb_p(0x40) << 8;
+
+	/* Detect timer underflows.  If we haven't had a timer tick since 
+	   the last time we were called, and time is apparently going
+	   backwards, the counter must have wrapped during this routine. */
+	if ((jiffies_t == jiffies_p) && (count > count_p))
+		count -= (mSEC_10_from_14/6);
+	else
+		jiffies_p = jiffies_t;
+
+	count_p = count;
+
+	count = (((mSEC_10_from_14/6)-1) - count) * tick;
+	count = (count + (mSEC_10_from_14/6)/2) / (mSEC_10_from_14/6);
+
+	return count;
 }
 
 extern __inline__ int reset_timer (void)
 {
+#ifdef CONFIG_LEDS
+	static unsigned int count = 50;
+	static int last_pid;
+
+	if (current->pid != last_pid) {
+		last_pid = current->pid;
+		if (last_pid)
+			leds_event(led_idle_end);
+		else
+			leds_event(led_idle_start);
+	}
+
+	if (--count == 0) {
+		count = 50;
+		leds_event(led_timer);
+	}
+#endif
 	return 1;
 }
 
@@ -137,8 +197,6 @@ extern __inline__ unsigned long get_cmos_time(void)
 		year += 100;
 	return mktime(year, mon, day, hour, min, sec);
 }
-
-#define mSEC_10_from_14 ((14318180 + 100) / 200)
 
 /*
  * Set up timer interrupt, and return the current time in seconds.

@@ -207,11 +207,11 @@ __initfunc(int znet_probe(struct device *dev))
 	char *p;
 
 	/* This code scans the region 0xf0000 to 0xfffff for a "NETIDBLK". */
-	for(p = (char *)0xf0000; p < (char *)0x100000; p++)
+	for(p = phys_to_virt(0xf0000); p < phys_to_virt(0x100000); p++)
 		if (*p == 'N'  &&  strncmp(p, "NETIDBLK", 8) == 0)
 			break;
 
-	if (p >= (char *)0x100000) {
+	if (p >= pyhs_to_virt(0x100000)) {
 		if (znet_debug > 1)
 			printk(KERN_INFO "No Z-Note ethernet adaptor found.\n");
 		return ENODEV;

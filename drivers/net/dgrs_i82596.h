@@ -393,7 +393,7 @@ typedef volatile struct
 	/* cmd halfword values */
 #define	I596_SCB_ACK		0xF000	/* ACKNOWLEDGMENTS */
 #define	I596_SCB_ACK_CX		0x8000	/* Ack command completion */
-#define	I596_SCB_ACK_FR		0x4000	/* Ack recieved frame */
+#define	I596_SCB_ACK_FR		0x4000	/* Ack received frame */
 #define	I596_SCB_ACK_CNA	0x2000	/* Ack command unit not active */
 #define	I596_SCB_ACK_RNR	0x1000	/* Ack rcv unit not ready */
 #define	I596_SCB_ACK_ALL	0xF000	/* Ack everything */
@@ -419,7 +419,7 @@ typedef volatile struct
 	/* status halfword values */
 #define	I596_SCB_STAT		0xF000	/* STATUS */
 #define	I596_SCB_CX		0x8000	/* command completion */
-#define	I596_SCB_FR		0x4000	/* recieved frame */
+#define	I596_SCB_FR		0x4000	/* received frame */
 #define	I596_SCB_CNA		0x2000	/* command unit not active */
 #define	I596_SCB_RNR		0x1000	/* rcv unit not ready */
 

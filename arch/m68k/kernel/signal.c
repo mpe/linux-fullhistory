@@ -361,7 +361,7 @@ restore_sigcontext(struct pt_regs *regs, struct sigcontext *usc, void *fp,
 			 : "a0");
 #undef frame_offset
 		/*
-		 * If we ever get here an exception occured while
+		 * If we ever get here an exception occurred while
 		 * building the above stack-frame.
 		 */
 		goto badframe;
@@ -460,7 +460,7 @@ rt_restore_ucontext(struct pt_regs *regs, struct switch_stack *sw,
 			 : "a0");
 #undef frame_offset
 		/*
-		 * If we ever get here an exception occured while
+		 * If we ever get here an exception occurred while
 		 * building the above stack-frame.
 		 */
 		goto badframe;

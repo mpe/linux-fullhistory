@@ -4,27 +4,25 @@
  * Copyright (C) 1996,1997,1998 Russell King
  */
 
+#define BASE 0x42000160
+
+static __inline__ void putc(char c)
+{
+	while (*((volatile unsigned int *)(BASE + 0x18)) & 8);
+	*((volatile unsigned int *)(BASE)) = c;
+}
+
 /*
  * This does not append a newline
  */
 static void puts(const char *s)
 {
-	__asm__ __volatile__("
-	ldrb	%0, [%2], #1
-	teq	%0, #0
-	beq	3f
-1:	strb	%0, [%3]
-2:	ldrb	%1, [%3, #0x14]
-	and	%1, %1, #0x60
-	teq	%1, #0x60
-	bne	2b
-	teq	%0, #'\n'
-	moveq	%0, #'\r'
-	beq	1b
-	ldrb	%0, [%2], #1
-	teq	%0, #0
-	bne	1b
-3:	" : : "r" (0), "r" (0), "r" (s), "r" (0xf0000be0) : "cc");
+	while (*s) {
+		putc(*s);
+		if (*s == '\n')
+			putc('\r');
+		s++;
+	}
 }
 
 /*

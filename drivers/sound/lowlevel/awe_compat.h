@@ -150,7 +150,6 @@ static int _mem_start;  /* memory pointer for permanent buffers */
 #define my_malloc_init(memptr)	_mem_start = (memptr)
 #define my_malloc_memptr()	_mem_start
 #define my_free(ptr)	/* do nothing */
-#define my_realloc(buf,oldsize,size)	NULL	/* no realloc */
 
 static void *my_malloc(int size)
 {
@@ -176,16 +175,6 @@ buffer = my_malloc(sizeof(type) * (nums)); index = (nums);\
 #define my_free(ptr)		if (ptr) {vfree(ptr);}
 #define my_kmalloc(size)	kmalloc(size,GFP_KERNEL)
 #define my_kfree(ptr)		kfree(ptr)
-
-static void *my_realloc(void *buf, int oldsize, int size)
-{
-	void *ptr;
-	if ((ptr = vmalloc(size)) == NULL)
-		return NULL;
-	memcpy(ptr, buf, ((oldsize < size) ? oldsize : size) );
-	vfree(buf);
-	return ptr;
-}
 
 /* do not allocate buffer at beginning */
 #define INIT_TABLE(buffer,index,nums,type) {buffer=NULL; index=0;}

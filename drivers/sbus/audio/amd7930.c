@@ -1021,7 +1021,7 @@ static int amd7930_ioctl(struct inode * inode, struct file * file,
  *
  *       0 - successful reception
  *   non-0 - error value from chip's DER (D-Channel Error Register):
- *       1 - recieved packet abort
+ *       1 - received packet abort
  *       2 - framing error; non-integer number of bytes received
  *       8 - FCS error; CRC sequence indicated corrupted data
  *      16 - overflow error; packet exceeded size of buffer

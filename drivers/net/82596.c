@@ -67,7 +67,7 @@ static const char *version = "82596.c:v1.0 15/07/98\n";
 #endif
 
 /*
- * Define various macros for Channel Attention, word swapping etc., dependant
+ * Define various macros for Channel Attention, word swapping etc., dependent
  * on architecture.  MVME and BVME are 680x0 based, otherwise it is Intel.
  */
 

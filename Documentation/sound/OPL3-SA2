@@ -2,7 +2,7 @@ Documentation for the OPL3-SA2, SA3, and SAx driver (opl3sa2.o)
 ---------------------------------------------------------------
 
 Scott Murray, scottm@interlog.com
-December, 1998
+January 5, 1998
 
 NOTE: All trade-marked terms mentioned below are properties of their
       respective owners.
@@ -97,25 +97,12 @@ butting heads with another device.
 
 If you still cannot get the module to load, look at the contents of
 your system log file, usually /var/log/messages.  If you see the
-message "No Yamaha audio controller found", then you have a different
-chipset than I've encountered so far.  Look for a line in the log file
-that says "opl3sa2.c: chipset version = <some number>".  If you want
-me to add support for your card, send me the number from this line and
-any information you have on the make and chipset of your sound card,
-and I should be able to work up a permanent fix.
-
-A temporary solution is to force the driver to act as either a SA2 or
-SA3.  If you use the modular driver, this can be done with the "force"
-option.  Using "force=2" makes the driver treat your card as a SA2,
-and "force=3" makes it treat your card as a SA3.  Note that the driver
-does not really differentiate internally between the SA3 and SAx, so
-"force=3" is actually suitable for an SAx card.
-
-If you build the driver into the kernel, a similar option is
-available, "Chipset".  Setting it to 2 or 3 will yield the same result
-as the "force" option does for the module.  I recommend trying
-auto-probing first ("Chipset" equal to the default of -1) before
-forcing compatibility with a specific chipset.
+message "Unknown Yamaha audio controller version", then you have a
+different chipset than I've encountered so far.  Look for a line in
+the log file that says "opl3sa2.c: chipset version = <some number>".
+If you want me to add support for your card, send me the number from
+this line and any information you have on the make and chipset of your
+sound card, and I should be able to work up a permanent fix.
 
 If you do not see the chipset version message, and none of the other
 messages present in the system log are helpful, email me some details

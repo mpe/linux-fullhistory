@@ -20,7 +20,9 @@
  * source.
  */
 #define HAS_IOC
+#include <asm/ioc.h>
 #define HAS_MEMC
+#include <asm/memc.h>
 #define HAS_MEMC1A
 #define HAS_VIDC
 

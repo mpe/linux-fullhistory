@@ -1197,8 +1197,8 @@ static struct sk_buff *alloc_bridge_skb(int port_no, int pdu_size, char *pdu_nam
  		return NULL;
  	}
   	skb->dev = dev;
- 	skb->mac.raw = skb->h.raw = skb_put(skb,size);
- 	memset(skb->h.raw + 60 - pad_size, 0xa5, pad_size);
+ 	skb->mac.raw = skb->nh.raw = skb_put(skb,size);
+ 	memset(skb->nh.raw + 60 - pad_size, 0xa5, pad_size);
   	eth = skb->mac.ethernet;
   	memcpy(eth->h_dest, bridge_ula, ETH_ALEN);
   	memcpy(eth->h_source, dev->dev_addr, ETH_ALEN);
@@ -1221,13 +1221,13 @@ static struct sk_buff *alloc_bridge_skb(int port_no, int pdu_size, char *pdu_nam
 #endif
 	eth->h_proto = htons(pdu_size + BRIDGE_LLC1_HS);
   
-  	skb->h.raw += skb->dev->hard_header_len;
- 	llc_buffer = skb->h.raw;
+  	skb->nh.raw += skb->dev->hard_header_len;
+ 	llc_buffer = skb->nh.raw;
  	*llc_buffer++ = BRIDGE_LLC1_DSAP;
  	*llc_buffer++ = BRIDGE_LLC1_SSAP;
  	*llc_buffer++ = BRIDGE_LLC1_CTRL;
- 	/* set h.raw to where the bpdu starts */
- 	skb->h.raw += BRIDGE_LLC1_HS;
+ 	/* set nh.raw to where the bpdu starts */
+ 	skb->nh.raw += BRIDGE_LLC1_HS;
   
  	/* mark that we've been here... */
   	skb->pkt_bridged = IS_BRIDGED;
@@ -1248,18 +1248,18 @@ static int send_config_bpdu(int port_no, Config_bpdu *config_bpdu)
 		return(-1);
 
 	/* copy fields before "flags" */
-	memcpy(skb->h.raw, config_bpdu, BRIDGE_BPDU_8021_CONFIG_FLAG_OFFSET);
+	memcpy(skb->nh.raw, config_bpdu, BRIDGE_BPDU_8021_CONFIG_FLAG_OFFSET);
 
 	/* build the "flags" field */
-	*(skb->h.raw+BRIDGE_BPDU_8021_CONFIG_FLAG_OFFSET) = 0;
+	*(skb->nh.raw+BRIDGE_BPDU_8021_CONFIG_FLAG_OFFSET) = 0;
 	if (config_bpdu->top_change_ack)
-		*(skb->h.raw+BRIDGE_BPDU_8021_CONFIG_FLAG_OFFSET) |= 0x80;
+		*(skb->nh.raw+BRIDGE_BPDU_8021_CONFIG_FLAG_OFFSET) |= 0x80;
 	if (config_bpdu->top_change)
-		*(skb->h.raw+BRIDGE_BPDU_8021_CONFIG_FLAG_OFFSET) |= 0x01;
+		*(skb->nh.raw+BRIDGE_BPDU_8021_CONFIG_FLAG_OFFSET) |= 0x01;
 
 	config_bpdu_hton(config_bpdu);
 	/* copy the rest */
-	memcpy(skb->h.raw+BRIDGE_BPDU_8021_CONFIG_FLAG_OFFSET+1,
+	memcpy(skb->nh.raw+BRIDGE_BPDU_8021_CONFIG_FLAG_OFFSET+1,
 		 (char*)&(config_bpdu->root_id),
 		 BRIDGE_BPDU_8021_CONFIG_SIZE-1-BRIDGE_BPDU_8021_CONFIG_FLAG_OFFSET);
 
@@ -1275,7 +1275,7 @@ static int send_tcn_bpdu(int port_no, Tcn_bpdu *bpdu)
 	if (skb == NULL)
   		return(-1);
   
-  	memcpy(skb->h.raw, bpdu, sizeof(Tcn_bpdu));
+  	memcpy(skb->nh.raw, bpdu, sizeof(Tcn_bpdu));
   
  	dev_queue_xmit(skb);
   	return(0);
@@ -1376,7 +1376,7 @@ int br_receive_frame(struct sk_buff *skb)	/* 3.5 */
 	if(!port)
 		return 0;
 	
-	skb->h.raw = skb->mac.raw;
+	skb->nh.raw = skb->mac.raw;
 	eth = skb->mac.ethernet;
 	p = &port_info[port];
  
@@ -1480,7 +1480,7 @@ int br_tx_frame(struct sk_buff *skb)	/* 3.5 */
 		return(0);
 	}
 	++br_stats_cnt.port_not_disable;
-	skb->mac.raw = skb->h.raw = skb->data;
+	skb->mac.raw = skb->nh.raw = skb->data;
 	eth = skb->mac.ethernet;
 	port = 0;	/* an impossible port (locally generated) */	
 	if (br_stats.flags & BR_DEBUG)
@@ -1735,7 +1735,7 @@ static int br_forward(struct sk_buff *skb, int port)	/* 3.7 */
 			skb->pkt_bridged = IS_BRIDGED;
 			
 			/* reset the skb->ip pointer */	
-			skb->h.raw = skb->data + ETH_HLEN;
+			skb->nh.raw = skb->data + ETH_HLEN;
 
 			/*
 			 *	Send the buffer out.
@@ -1804,7 +1804,7 @@ static int br_flood(struct sk_buff *skb, int port)
 			   or have a received valid MAC header */
 			
 /*			printk("Flood to port %d\n",i);*/
-			nskb->h.raw = nskb->data + ETH_HLEN;
+			nskb->nh.raw = nskb->data + ETH_HLEN;
 #if LINUX_VERSION_CODE >= 0x20100
 			nskb->priority = 1;
 			dev_queue_xmit(nskb);

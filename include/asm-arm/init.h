@@ -5,7 +5,7 @@
 
 /* C routines */
 
-#ifdef CONFIG_BINUTILS_NEW
+#ifdef CONFIG_TEXT_INIT_SECTION
 
 #define __init __attribute__ ((__section__ (".text.init")))
 #define __initfunc(__arginit) \
@@ -25,5 +25,8 @@
 #define __INIT		.section	".text.init",@alloc,@execinstr
 #define __INITDATA	.section	".data.init",@alloc,@write
 #define __FINIT	.previous
+
+#define __cacheline_aligned __attribute__ \
+			 ((__aligned__ (L1_CACHE_BYTES)))
 
 #endif

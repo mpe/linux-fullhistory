@@ -3,9 +3,23 @@
 
 typedef unsigned int dmach_t;
 
+#include <linux/config.h>
+#include <linux/kernel.h>
 #include <asm/irq.h>
+#include <asm/system.h>
 #include <asm/spinlock.h>
 #include <asm/arch/dma.h>
+
+/*
+ * DMA modes - we have two, IN and OUT
+ */
+typedef unsigned int dmamode_t;
+
+#define DMA_MODE_MASK	1
+
+#define DMA_MODE_READ	0
+#define DMA_MODE_WRITE	1
+#define DMA_AUTOINIT	2
 
 typedef struct {
 	unsigned long address;
@@ -115,6 +129,12 @@ extern int  get_dma_residue(dmach_t channel);
 
 #ifndef NO_DMA
 #define NO_DMA	255
+#endif
+
+#ifdef CONFIG_PCI_QUIRKS
+extern int isa_dma_bridge_buggy;
+#else
+#define isa_dma_bridge_buggy    (0)
 #endif
 
 #endif /* _ARM_DMA_H */

@@ -483,7 +483,7 @@
 /*
  *	Some tape drives require a long irq timeout
  */
-#define IDETAPE_WAIT_CMD		60
+#define IDETAPE_WAIT_CMD		(60*HZ)
 
 /*
  *	DSC timings.

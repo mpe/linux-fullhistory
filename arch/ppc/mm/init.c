@@ -1,5 +1,5 @@
 /*
- *  $Id: init.c,v 1.138 1998/12/15 17:34:43 cort Exp $
+ *  $Id: init.c,v 1.139 1998/12/29 19:53:49 cort Exp $
  *
  *  PowerPC version 
  *    Copyright (C) 1995-1996 Gary Thomas (gdt@linuxppc.org)
@@ -1027,6 +1027,8 @@ __initfunc(void MMU_init(void))
         ioremap(MBX_CSR_ADDR, MBX_CSR_SIZE);
         ioremap(IMAP_ADDR, IMAP_SIZE);
         ioremap(PCI_CSR_ADDR, PCI_CSR_SIZE);
+	/* ide needs to be able to get at PCI space -- Cort */
+        ioremap(0x80000000, 0x4000);
 #endif /* CONFIG_8xx */
 }
 
@@ -1297,7 +1299,7 @@ __initfunc(unsigned long *pmac_find_end_of_memory(void))
 /*
  * This finds the amount of physical ram and does necessary
  * setup for prep.  This is pretty architecture specific so
- * this will likely stay seperate from the pmac.
+ * this will likely stay separate from the pmac.
  * -- Cort
  */
 __initfunc(unsigned long *prep_find_end_of_memory(void))

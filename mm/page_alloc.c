@@ -258,9 +258,6 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 		 * a bad memory situation, we're better off trying
 		 * to free things up until things are better.
 		 *
-		 * Normally we shouldn't ever have to do this, with
-		 * kswapd doing this in the background.
-		 *
 		 * Most notably, this puts most of the onus of
 		 * freeing up memory on the processes that _use_
 		 * the most memory, rather than on everybody.
@@ -282,7 +279,7 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 		{
 			int freed;
 			current->flags |= PF_MEMALLOC;
-			freed = try_to_free_pages(gfp_mask, SWAP_CLUSTER_MAX);
+			freed = try_to_free_pages(gfp_mask, freepages.high - nr_free_pages);
 			current->flags &= ~PF_MEMALLOC;
 			if (!freed && !(gfp_mask & (__GFP_MED | __GFP_HIGH)))
 				goto nopage;

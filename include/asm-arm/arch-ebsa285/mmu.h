@@ -16,13 +16,13 @@
  * On ebsa285, the dram is contiguous
  */
 #define __virt_to_phys__is_a_macro
-#define __virt_to_phys(vpage) ((vpage) - PAGE_OFFSET)
+#define __virt_to_phys(vpage) ((unsigned long)(vpage) - PAGE_OFFSET)
 #define __phys_to_virt__is_a_macro
-#define __phys_to_virt(ppage) ((ppage) + PAGE_OFFSET)
+#define __phys_to_virt(ppage) ((unsigned long)(ppage) + PAGE_OFFSET)
 
 #define __virt_to_bus__is_a_macro
-#define __virt_to_bus(x)	(x - 0xe0000000)
+#define __virt_to_bus(x)	((x) - 0xe0000000)
 #define __bus_to_virt__is_a_macro
-#define __bus_to_virt(x)	(x + 0xe0000000)
+#define __bus_to_virt(x)	((x) + 0xe0000000)
 
 #endif

@@ -48,10 +48,11 @@
 #define MDL_ES1868MIDI	14	/* MIDI port of ESS1868 */
 #define MDL_AEDSP	15	/* Audio Excel DSP 16 */
 
-#define SUBMDL_ES188X	0x10	/* Subtype ES188X for specific handling */
+#define SUBMDL_ES1788	0x10	/* Subtype ES1788 for specific handling */
 #define SUBMDL_ES1868	0x11	/* Subtype ES1868 for specific handling */
 #define SUBMDL_ES1869	0x12	/* Subtype ES1869 for specific handling */
 #define SUBMDL_ES1878	0x13	/* Subtype ES1878 for specific handling */
+#define SUBMDL_ES188X	0x14	/* Subtype ES1887 for specific handling */
 #define SUBMDL_ALS007	42	/* ALS-007 differs from SB16 only in mixer */
 				/* register assignment */
 /*

@@ -747,7 +747,7 @@ vortex_open(struct device *dev)
 			vp->tx_skbuff[i] = 0;
 		outl(0, ioaddr + DownListPtr);
 	}
-	/* Set reciever mode: presumably accept b-case and phys addr only. */
+	/* Set receiver mode: presumably accept b-case and phys addr only. */
 	set_rx_mode(dev);
 	outw(StatsEnable, ioaddr + EL3_CMD); /* Turn on statistics. */
 

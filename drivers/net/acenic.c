@@ -7,6 +7,11 @@
  * Thanks to Alteon and 3Com for providing hardware and documentation
  * enabling me to write this driver.
  *
+ * A mailing list for discussing the use of this driver has been
+ * setup, please subscribe to the lists if you have any questions
+ * about the driver. Send mail to linux-acenic-help@sunsite.auc.dk to
+ * see how to subscribe.
+ *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
  * the Free Software Foundation; either version 2 of the License, or
@@ -56,10 +61,6 @@
  * and jumbo frames (up to 9000 bytes) and does a lot of work in the
  * firmware. Also the programming interface is quite neat, except for
  * the parts dealing with the i2c eeprom on the card ;-)
- *
- * A number of standard Ethernet receive skb's are now allocated at
- * init time and not released before the driver is unloaded. This
- * makes it possible to do ifconfig down/up.
  *
  * Using jumbo frames:
  *
@@ -132,7 +133,7 @@ static int rx_coal_tick[8] = {0, };
 static int max_tx_desc[8] = {0, };
 static int max_rx_desc[8] = {0, };
 
-static const char *version = "acenic.c: v0.19 12/17/98  Jes Sorensen (Jes.Sorensen@cern.ch)\n";
+static const char *version = "acenic.c: v0.22 01/07/99  Jes Sorensen (Jes.Sorensen@cern.ch)\n";
 
 static struct device *root_dev = NULL;
 
@@ -143,37 +144,28 @@ __initfunc(int acenic_probe (struct device *dev))
 	static int i = 0;
 	int boards_found = 0;
 	int version_disp;
-	u32 tmp;
 	struct ace_private *ap;
+	u8 pci_latency;
+#if 0
 	u16 vendor, device;
 	u8 pci_bus;
 	u8 pci_dev_fun;
-	u8 pci_latency;
 	u8 irq;
+#endif
+	struct pci_dev *pdev = NULL;
 
 	if (!pci_present())		/* is PCI support present? */
 		return -ENODEV;
 
 	version_disp = 0;
 
-	for (; i < 255; i++)
+	while((pdev = pci_find_class(PCI_CLASS_NETWORK_ETHERNET << 8, pdev)))
 	{
 		dev = NULL;
 
-		if (pcibios_find_class(PCI_CLASS_NETWORK_ETHERNET << 8,
-				       i, &pci_bus, &pci_dev_fun) !=
-		    PCIBIOS_SUCCESSFUL)
-			break;
-
-		pcibios_read_config_word(pci_bus, pci_dev_fun,
-					 PCI_VENDOR_ID, &vendor);
-
-		pcibios_read_config_word(pci_bus, pci_dev_fun,
-					 PCI_DEVICE_ID, &device);
-
-		if ((vendor != PCI_VENDOR_ID_ALTEON) &&
-		    !((vendor == PCI_VENDOR_ID_3COM) &&
-		      (device == PCI_DEVICE_ID_3COM_3C985)))
+		if ((pdev->vendor != PCI_VENDOR_ID_ALTEON) &&
+		    !((pdev->vendor == PCI_VENDOR_ID_3COM) &&
+		      (pdev->device == PCI_DEVICE_ID_3COM_3C985)))
 			continue;
 
 		dev = init_etherdev(dev, sizeof(struct ace_private));
@@ -188,37 +180,12 @@ __initfunc(int acenic_probe (struct device *dev))
 			dev->priv = kmalloc(sizeof(*ap), GFP_KERNEL);
 
 		ap = dev->priv;
-		ap->vendor = vendor;
+		ap->pdev = pdev;
+		ap->vendor = pdev->vendor;
 
-		/* Read register base address from
-		   PCI Configuration Space */
+		pci_set_master(pdev);
 
-		pcibios_read_config_dword(pci_bus, pci_dev_fun,
-					  PCI_BASE_ADDRESS_0, &tmp);
-
-		pcibios_read_config_byte(pci_bus, pci_dev_fun,
-					 PCI_INTERRUPT_LINE, &irq);
-
-		pcibios_read_config_word(pci_bus, pci_dev_fun,
-					 PCI_COMMAND, &ap->pci_command);
-
-		if (!(ap->pci_command & PCI_COMMAND_MASTER)){
-			ap->pci_command |= PCI_COMMAND_MASTER;
-
-			pcibios_write_config_word(pci_bus, pci_dev_fun,
-						  PCI_COMMAND,
-						  ap->pci_command);
-		}
-
-		if (!(ap->pci_command & PCI_COMMAND_MEMORY)){
-			printk(KERN_ERR "Shared mem not enabled - "
-			       "unable to configure AceNIC\n");
-			break;
-		}
-
-		dev->irq = irq;
-		ap->pci_bus = pci_bus;
-		ap->pci_dev_fun = pci_dev_fun;
+		dev->irq = pdev->irq;
 #ifdef __SMP__
 		spin_lock_init(&ap->lock);
 #endif
@@ -245,13 +212,13 @@ __initfunc(int acenic_probe (struct device *dev))
 			printk(version);
 		}
 
-		pcibios_read_config_byte(pci_bus, pci_dev_fun,
-					 PCI_LATENCY_TIMER, &pci_latency);
+		pci_read_config_word(pdev, PCI_COMMAND, &ap->pci_command);
+
+		pci_read_config_byte(pdev, PCI_LATENCY_TIMER, &pci_latency);
 		if (pci_latency <= 0x40){
 			pci_latency = 0x40;
-			pcibios_write_config_byte(pci_bus, pci_dev_fun,
-						  PCI_LATENCY_TIMER,
-						  pci_latency);
+			pci_write_config_byte(pdev, PCI_LATENCY_TIMER,
+					      pci_latency);
 		}
 
 		switch(ap->vendor){
@@ -268,14 +235,15 @@ __initfunc(int acenic_probe (struct device *dev))
 			printk(KERN_INFO "%s: Unknown AceNIC ", dev->name);
 			break;
 		}
-		printk("Gigabit Ethernet at 0x%08x, irq %i, PCI latency %i "
-		       "clks\n", tmp, dev->irq, pci_latency);
+		printk("Gigabit Ethernet at 0x%08lx, irq %i, PCI latency %i "
+		       "clks\n", pdev->base_address[0], dev->irq, pci_latency);
 
 		/*
 		 * Remap the regs into kernel space.
 		 */
 
-		ap->regs = (struct ace_regs *)ioremap(tmp, 0x4000);
+		ap->regs = (struct ace_regs *)ioremap(pdev->base_address[0],
+						      0x4000);
 		if (!ap->regs){
 			printk(KERN_ERR "%s:  Unable to map I/O register, "
 			       "AceNIC %i will be disabled.\n", dev->name, i);
@@ -404,7 +372,7 @@ __initfunc(static int ace_init(struct device *dev, int board_idx))
 	struct ace_private *ap;
 	struct ace_regs *regs;
 	struct ace_info *info;
-	u32 tig_ver, mac1 = 0, mac2 = 0, tmp;
+	u32 tig_ver, mac1, mac2, tmp;
 	unsigned long tmp_ptr, myjif;
 	short i;
 
@@ -471,10 +439,12 @@ __initfunc(static int ace_init(struct device *dev, int board_idx))
 		return -ENODEV;
 	}
 
+	mac1 = 0;
 	for(i = 0; i < 4; i++){
 		mac1 = mac1 << 8;
 		mac1 |= read_eeprom_byte(regs, 0x8c+i);
 	}
+	mac2 = 0;
 	for(i = 4; i < 8; i++){
 		mac2 = mac2 << 8;
 		mac2 |= read_eeprom_byte(regs, 0x8c+i);
@@ -527,10 +497,8 @@ __initfunc(static int ace_init(struct device *dev, int board_idx))
 				       "supported, PCI write and invalidate "
 				       "disabled\n", L1_CACHE_BYTES);
 				ap->pci_command &= ~PCI_COMMAND_INVALIDATE;
-				pcibios_write_config_word(ap->pci_bus,
-							  ap->pci_dev_fun,
-							  PCI_COMMAND,
-							  ap->pci_command);
+				pci_write_config_word(ap->pdev, PCI_COMMAND,
+						      ap->pci_command);
 			}
 		}
 	}
@@ -646,10 +614,6 @@ __initfunc(static int ace_init(struct device *dev, int board_idx))
 #if 0
 {
 	u32 tmp;
-	tmp = regs->AssistState;
-	tmp &= ~2;
-	tmp |= 1;
-	regs->AssistState = tmp;
 
 	tmp = regs->MacRxState;
 	tmp &= ~4;
@@ -659,35 +623,43 @@ __initfunc(static int ace_init(struct device *dev, int board_idx))
 
 	regs->TuneStatTicks = 2 * TICKS_PER_SEC;
 
-	if ((board_idx < 8) && tx_coal_tick[board_idx])
-		regs->TuneTxCoalTicks = tx_coal_tick[board_idx] *
-			TICKS_PER_SEC / 1000;
-	else
+	if (board_idx >= 0) {
+		if ((board_idx < 8) && tx_coal_tick[board_idx])
+			regs->TuneTxCoalTicks = tx_coal_tick[board_idx] *
+				TICKS_PER_SEC / 1000;
+		else
+			regs->TuneTxCoalTicks = TICKS_PER_SEC / 500;
+		if ((board_idx < 8) && max_tx_desc[board_idx])
+			regs->TuneMaxTxDesc = max_tx_desc[board_idx];
+		else
+			regs->TuneMaxTxDesc = 7;
+
+		if ((board_idx < 8) && rx_coal_tick[board_idx])
+			regs->TuneRxCoalTicks = rx_coal_tick[board_idx] *
+				TICKS_PER_SEC / 1000;
+		else
+			regs->TuneRxCoalTicks = TICKS_PER_SEC / 10000;
+		if ((board_idx < 8) && max_rx_desc[board_idx])
+			regs->TuneMaxRxDesc = max_rx_desc[board_idx];
+		else
+			regs->TuneMaxRxDesc = 2;
+
+		if (board_idx < 8)
+			regs->TuneTrace = trace[board_idx];
+		else
+			regs->TuneTrace = 0;
+	}else{
 		regs->TuneTxCoalTicks = TICKS_PER_SEC / 500;
-	if ((board_idx < 8) && max_tx_desc[board_idx])
-		regs->TuneMaxTxDesc = max_tx_desc[board_idx];
-	else
 		regs->TuneMaxTxDesc = 7;
-
-	if ((board_idx < 8) && rx_coal_tick[board_idx])
-		regs->TuneRxCoalTicks = rx_coal_tick[board_idx] *
-			TICKS_PER_SEC / 1000;
-	else
 		regs->TuneRxCoalTicks = TICKS_PER_SEC / 10000;
-	if ((board_idx < 8) && max_rx_desc[board_idx])
-		regs->TuneMaxRxDesc = max_rx_desc[board_idx];
-	else
 		regs->TuneMaxRxDesc = 2;
-
-	if (board_idx < 8)
-		regs->TuneTrace = trace[board_idx];
-	else
 		regs->TuneTrace = 0;
+	}
 
 	tmp = LNK_ENABLE;
 
-	if ((board_idx > 7) || !(link[board_idx])){
-		if (board_idx > 8)
+	if ((board_idx > 7) || (board_idx < 0) || !(link[board_idx])){
+		if (board_idx > 7)
 			printk(KERN_WARNING "%s: more then 8 NICs detected, "
 			       "ignoring link options!\n", dev->name);
 		/*
@@ -700,6 +672,7 @@ __initfunc(static int ace_init(struct device *dev, int board_idx))
 			tmp |= LNK_TX_FLOW_CTL_Y;
 	} else {
 		int option = link[board_idx];
+
 		if (option & 0x01){
 			printk(KERN_INFO "%s: Setting half duplex link\n",
 			       dev->name);
@@ -756,7 +729,7 @@ __initfunc(static int ace_init(struct device *dev, int board_idx))
 	myjif = jiffies + 3 * HZ;
 	while (time_before(jiffies, myjif) && !ap->fw_running);
 	if (!ap->fw_running){
-		printk(KERN_ERR "%s: firmware NOT running!\n", dev->name);
+		printk(KERN_ERR "%s: Firmware NOT running!\n", dev->name);
 		ace_dump_trace(ap);
 		regs->CpuCtrl |= CPU_HALT;
 		return -EBUSY;
@@ -1501,10 +1474,13 @@ static struct net_device_stats *ace_get_stats(struct device *dev)
 }
 
 
-__initfunc(int ace_copy(struct ace_regs *regs, void *src, u32 dest, int size))
+__initfunc(void ace_copy(struct ace_regs *regs, void *src, u32 dest, int size))
 {
 	int tsize;
 	u32 tdest;
+
+	if (size <= 0)
+		return;
 
 	while(size > 0){
 		tsize = min(((~dest & (ACE_WINDOW_SIZE - 1)) + 1),
@@ -1524,14 +1500,17 @@ __initfunc(int ace_copy(struct ace_regs *regs, void *src, u32 dest, int size))
 		size -= tsize;
 	}
 
-	return 0;
+	return;
 }
 
 
-__initfunc(int ace_clear(struct ace_regs *regs, u32 dest, int size))
+__initfunc(void ace_clear(struct ace_regs *regs, u32 dest, int size))
 {
-	int tsize;
+	int tsize = 0;
 	u32 tdest;
+
+	if (size <= 0)
+		return;
 
 	while(size > 0){
 		tsize = min(((~dest & (ACE_WINDOW_SIZE - 1)) + 1),
@@ -1545,7 +1524,7 @@ __initfunc(int ace_clear(struct ace_regs *regs, u32 dest, int size))
 		size -= tsize;
 	}
 
-	return 0;
+	return;
 }
 
 

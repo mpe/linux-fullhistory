@@ -65,7 +65,7 @@ static struct concap_proto_ops ix25_pops = {
 	&isdn_x25iface_disconn_ind
 };
 
-/* error message helper fuction */
+/* error message helper function */
 static void illegal_state_warn( unsigned state, unsigned char firstbyte) 
 {
 	printk( KERN_WARNING "isdn_x25iface: firstbyte %x illegal in"

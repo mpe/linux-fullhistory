@@ -812,7 +812,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 					 * FIXME: the *_user functions should
 					 *	  return how much data was
 					 *	  copied before the fault
-					 *	  occured and then a partial
+					 *	  occurred and then a partial
 					 *	  packet with this data should
 					 *	  be sent.  Unfortunately
 					 *	  csum_and_copy_from_user doesn't

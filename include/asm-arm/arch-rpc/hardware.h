@@ -13,6 +13,7 @@
  * What hardware must be present
  */
 #define HAS_IOMD
+#include <asm/iomd.h>
 #define HAS_VIDC20
 
 /* Hardware addresses of major areas.

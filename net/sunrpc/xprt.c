@@ -821,12 +821,19 @@ static void tcp_data_ready(struct sock *sk, int len)
 	 */
 	if (!xprt->rx_pending_flag)
 	{
-		dprintk("RPC:     xprt queue\n");
+		int start_queue=0;
+
+		dprintk("RPC:     xprt queue %p\n", rpc_xprt_pending);
 		if(rpc_xprt_pending==NULL)
-			tcp_rpciod_queue();
+			start_queue=1;
 		xprt->rx_pending_flag=1;
 		xprt->rx_pending=rpc_xprt_pending;
 		rpc_xprt_pending=xprt;
+		if (start_queue)
+		  {
+		    tcp_rpciod_queue();
+		    start_queue=0;
+		  }
 	}
 	else
 		dprintk("RPC:     xprt queued already %p\n", xprt);

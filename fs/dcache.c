@@ -166,10 +166,26 @@ out:
  */
 int d_invalidate(struct dentry * dentry)
 {
-	/* Check whether to do a partial shrink_dcache */
+	/*
+	 * Check whether to do a partial shrink_dcache
+	 * to get rid of unused child entries.
+	 */
 	if (!list_empty(&dentry->d_subdirs)) {
 		shrink_dcache_parent(dentry);
-		if (!list_empty(&dentry->d_subdirs))
+	}
+
+	/*
+	 * Somebody still using it?
+	 *
+	 * If it's a directory, we can't drop it
+	 * for fear of somebody re-populating it
+	 * with children (even though dropping it
+	 * would make it unreachable from the root,
+	 * we might still populate it if it was a
+	 * working directory or similar).
+	 */
+	if (dentry->d_count) {
+		if (dentry->d_inode && S_ISDIR(dentry->d_inode->i_mode))
 			return -EBUSY;
 	}
 

@@ -292,6 +292,7 @@ static void exit_notify(void)
 		kill_pg(current->pgrp,SIGHUP,1);
 		kill_pg(current->pgrp,SIGCONT,1);
 	}
+
 	/* Let father know we died */
 	notify_parent(current, current->exit_signal);
 

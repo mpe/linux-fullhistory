@@ -1365,7 +1365,7 @@ static void hp100_init_pdls( struct device *dev )
 /* They return how much memory the fragments need.            */
 static int hp100_init_rxpdl( struct device *dev, register hp100_ring_t *ringptr, register u32 *pdlptr )
 {
-  /* pdlptr is starting adress for this pdl */
+  /* pdlptr is starting address for this pdl */
 
   if( 0!=( ((unsigned)pdlptr) & 0xf) )
     printk("hp100: %s: Init rxpdl: Unaligned pdlptr 0x%x.\n",dev->name,(unsigned)pdlptr);

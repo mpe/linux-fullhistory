@@ -33,6 +33,7 @@
 #define SNDCARD_WAVEFRONT               41
 #define SNDCARD_OPL3SA2                 42
 #define SNDCARD_OPL3SA2_MPU             43
+#define SNDCARD_WAVEARTIST		44
 #define SNDCARD_AD1816                  88
 
 void attach_opl3sa_wss (struct address_info *hw_config);
@@ -503,6 +504,9 @@ probe_ad1816, unload_ad1816},
 #ifdef CONFIG_SOUND_VIDC
 	{"VIDC", 0, SNDCARD_VIDC, "ARM VIDC 16-bit D/A", attach_vidc, probe_vidc, unload_vidc },
 #endif
+#ifdef CONFIG_SOUND_WAVEARTIST
+	{"WaveArtist", 0, SNDCARD_WAVEARTIST, "NetWinder WaveArtist", attach_waveartist, probe_waveartist, unload_waveartist },
+#endif
 	{NULL, 0, 0,		"*?*",			NULL, NULL, NULL}
 };
 
@@ -677,6 +681,10 @@ struct card_info snd_installed_cards[] =
 
 #ifdef CONFIG_SOUND_VIDC
 	{ SNDCARD_VIDC, {0, 0, 0, 0}, SND_DEFAULT_ENABLE },
+#endif
+
+#ifdef CONFIG_SOUND_WAVEARTIST
+	{ SNDCARD_WAVEARTIST, { CONFIG_WAVEARTIST_BASE, CONFIG_WAVEARTIST_IRQ, CONFIG_WAVEARTIST_DMA, CONFIG_WAVEARTIST_DMA2 }, SND_DEFAULT_ENABLE },
 #endif
 	{0, {0}, 0}
 };

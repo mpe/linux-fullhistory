@@ -43,6 +43,9 @@
    - Added code that unregisters irq and proc-info
    - Version# bump
 
+   Mon Nov 16 15:28:23 CET 1998 (Wim Dumon)
+   - pass 'dev' as last parameter of request_irq in stead of 'NULL'   
+   
    *    WARNING
 	-------
 	This is alpha-test software.  It is not guaranteed to work. As a
@@ -51,8 +54,7 @@
 	If it doesn't work, be sure to send me a mail with the problems !
 */
 
-static const char *version =
-"ne2.c:v0.90 Oct 14 1998 David Weinehall <tao@acc.umu.se>\n";
+static const char *version = "ne2.c:v0.91 Nov 16 1998 Wim Dumon <wimpie@kotnet.org>\n";
 
 #include <linux/module.h>
 #include <linux/version.h>
@@ -317,7 +319,7 @@ __initfunc (static int ne2_probe1(struct device *dev, int slot))
 	   share and the board will usually be enabled. */
 	{
 		int irqval = request_irq(dev->irq, ei_interrupt, 
-				0, name, NULL);
+				0, name, dev);
 		if (irqval) {
 			printk (" unable to get IRQ %d (irqval=%d).\n", 
 					dev->irq, +irqval);
@@ -330,7 +332,7 @@ __initfunc (static int ne2_probe1(struct device *dev, int slot))
 	/* Allocate dev->priv and fill in 8390 specific dev fields. */
 	if (ethdev_init(dev)) {
 		printk (" unable to get memory for dev->priv.\n");
-		free_irq(dev->irq, NULL);
+		free_irq(dev->irq, dev);
 		return -ENOMEM;
 	}
 

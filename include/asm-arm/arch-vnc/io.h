@@ -23,7 +23,7 @@
 extern __inline__ void __out##fnsuffix (unsigned int value, unsigned int port)	\
 {										\
 	__asm__ __volatile__(							\
-	"str" ##instr## "	%0, [%1, %2]"					\
+	"str%?" ##instr## "	%0, [%1, %2]		@ out"###fnsuffix	\
 	: 									\
 	: "r" (value), "r" (PCIO_BASE), typ (port));				\
 }
@@ -33,7 +33,7 @@ extern __inline__ unsigned sz __in##fnsuffix (unsigned int port)		\
 {										\
 	unsigned long value;							\
 	__asm__ __volatile__(							\
-	"ldr" ##instr## "	%0, [%1, %2]"					\
+	"ldr%?" ##instr## "	%0, [%1, %2]		@ in"###fnsuffix	\
 	: "=&r" (value)								\
 	: "r" (PCIO_BASE), typ (port));						\
 	return (unsigned sz)value;						\
@@ -65,7 +65,7 @@ DECLARE_IO(long,l,"","Jr")
 #define __outbc(value,port)							\
 ({										\
 	__asm__ __volatile__(							\
-	"strb	%0, [%1, %2]"							\
+	"strb	%0, [%1, %2]				@ outbc"		\
 	:									\
 	: "r" (value), "r" (PCIO_BASE), "Jr" (port));				\
 })
@@ -74,7 +74,7 @@ DECLARE_IO(long,l,"","Jr")
 ({										\
 	unsigned char result;							\
 	__asm__ __volatile__(							\
-	"ldrb	%0, [%1, %2]"							\
+	"ldrb	%0, [%1, %2]				@ inbc"			\
 	: "=r" (result)								\
 	: "r" (PCIO_BASE), "Jr" (port));					\
 	result;									\
@@ -83,7 +83,7 @@ DECLARE_IO(long,l,"","Jr")
 #define __outwc(value,port)							\
 ({										\
 	__asm__ __volatile__(							\
-	"strh	%0, [%1, %2]"							\
+	"strh	%0, [%1, %2]				@ outwc"		\
 	:									\
 	: "r" (value), "r" (PCIO_BASE), "r" (port));				\
 })
@@ -92,7 +92,7 @@ DECLARE_IO(long,l,"","Jr")
 ({										\
 	unsigned short result;							\
 	__asm__ __volatile__(							\
-	"ldrh	%0, [%1, %2]"							\
+	"ldrh	%0, [%1, %2]				@ inwc"			\
 	: "=r" (result)								\
 	: "r" (PCIO_BASE), "r" (port));						\
 	result & 0xffff;							\
@@ -101,7 +101,7 @@ DECLARE_IO(long,l,"","Jr")
 #define __outlc(value,port)							\
 ({										\
 	__asm__ __volatile__(							\
-	"str	%0, [%1, %2]"							\
+	"str	%0, [%1, %2]				@ outlc"		\
 	:									\
 	: "r" (value), "r" (PCIO_BASE), "Jr" (port));				\
 })
@@ -110,7 +110,7 @@ DECLARE_IO(long,l,"","Jr")
 ({										\
 	unsigned long result;							\
 	__asm__ __volatile__(							\
-	"ldr	%0, [%1, %2]"							\
+	"ldr	%0, [%1, %2]				@ inlc"			\
 	: "=r" (result)								\
 	: "r" (PCIO_BASE), "Jr" (port));					\
 	result;									\

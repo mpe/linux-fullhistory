@@ -158,7 +158,7 @@ struct rpc_xprt {
 	 */
 	union {					/* record marker & XID */
 		u32		header[2];
-		u8 *		data[8];
+		u8 		data[8];
 	}			tcp_recm;
 	struct rpc_rqst *	tcp_rqstp;
 	struct iovec		tcp_iovec[MAX_IOVEC];

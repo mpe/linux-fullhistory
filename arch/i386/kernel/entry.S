@@ -559,13 +559,14 @@ ENTRY(sys_call_table)
 	.long SYMBOL_NAME(sys_sendfile)
 	.long SYMBOL_NAME(sys_ni_syscall)		/* streams1 */
 	.long SYMBOL_NAME(sys_ni_syscall)		/* streams2 */
+	.long SYMBOL_NAME(sys_vfork)            /* 190 */
 
 	/*
-	 * NOTE!! This doesn' thave to be exact - we just have
+	 * NOTE!! This doesn't have to be exact - we just have
 	 * to make sure we have _enough_ of the "sys_ni_syscall"
 	 * entries. Don't panic if you notice that this hasn't
 	 * been shrunk every time we add a new system call.
 	 */
-	.rept NR_syscalls-189
+	.rept NR_syscalls-190
 		.long SYMBOL_NAME(sys_ni_syscall)
 	.endr

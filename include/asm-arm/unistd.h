@@ -23,7 +23,7 @@
 #define __NR_time			(__NR_SYSCALL_BASE+ 13)
 #define __NR_mknod			(__NR_SYSCALL_BASE+ 14)
 #define __NR_chmod			(__NR_SYSCALL_BASE+ 15)
-#define __NR_chown			(__NR_SYSCALL_BASE+ 16)
+#define __NR_lchown			(__NR_SYSCALL_BASE+ 16)
 #define __NR_break			(__NR_SYSCALL_BASE+ 17)
 #define __NR_oldstat			(__NR_SYSCALL_BASE+ 18)
 #define __NR_lseek			(__NR_SYSCALL_BASE+ 19)
@@ -189,8 +189,12 @@
 #define __NR_rt_sigsuspend		(__NR_SYSCALL_BASE+179)
 #define __NR_pread			(__NR_SYSCALL_BASE+180)
 #define __NR_pwrite			(__NR_SYSCALL_BASE+181)
-#define __NR_xstat			(__NR_SYSCALL_BASE+182)
-#define __NR_xmknod			(__NR_SYSCALL_BASE+183)
+#define __NR_chown			(__NR_SYSCALL_BASE+182)
+#define __NR_getcwd			(__NR_SYSCALL_BASE+183)
+#define __NR_capget			(__NR_SYSCALL_BASE+184)
+#define __NR_capset			(__NR_SYSCALL_BASE+185)
+#define __NR_sigaltstack		(__NR_SYSCALL_BASE+186)
+#define __NR_sendfile			(__NR_SYSCALL_BASE+187)
 
 #define __sys2(x) #x
 #define __sys1(x) __sys2(x)
@@ -299,41 +303,94 @@ type name(type1 arg1, type2 arg2, type3 arg3, type4 arg4, type5 arg5) {			\
 
 #ifdef __KERNEL_SYSCALLS__
 
-/*
- * we need this inline - forking from kernel space will result
- * in NO COPY ON WRITE (!!!), until an execve is executed. This
- * is no problem, but for the stack. This is handled by not letting
- * main() use the stack at all after fork(). Thus, no function
- * calls - which means inline code for fork too, as otherwise we
- * would use the stack upon exit from 'fork()'.
- *
- * Actually only pause and fork are needed inline, so that there
- * won't be any messing with the stack from main(), but we define
- * some others too.
- */
-#define __NR__exit __NR_exit
-static inline _syscall0(int,idle);
-static inline _syscall0(int,pause);
-static inline _syscall1(int,setup,int,magic);
-static inline _syscall0(int,sync);
-static inline _syscall0(pid_t,setsid);
-static inline _syscall3(int,write,int,fd,const char *,buf,off_t,count);
-static inline _syscall3(int,read,int,fd,char *,buf,off_t,count)
-static inline _syscall3(off_t,lseek,int,fd,off_t,offset,int,count);
-static inline _syscall1(int,dup,int,fd);
-static inline _syscall3(int,execve,const char *,file,char **,argv,char **,envp);
-static inline _syscall3(int,open,const char *,file,int,flag,int,mode);
-static inline _syscall1(int,close,int,fd);
-static inline _syscall1(int,_exit,int,exitcode);
-static inline _syscall3(pid_t,waitpid,pid_t,pid,int *,wait_stat,int,options);
-static inline _syscall1(int,delete_module,const char *,name)
+static inline int idle(void)
+{
+	extern int sys_idle(void);
+	return sys_idle();
+}
+
+static inline int pause(void)
+{
+	extern int sys_pause(void);
+	return sys_pause();
+}
+
+static inline int sync(void)
+{
+	extern int sys_sync(void);
+	return sys_sync();
+}
+
+static inline pid_t setsid(void)
+{
+	extern int sys_setsid(void);
+	return sys_setsid();
+}
+
+static inline int write(int fd, const char *buf, off_t count)
+{
+	extern int sys_write(int, const char *, int);
+	return sys_write(fd, buf, count);
+}
+
+static inline int read(int fd, char *buf, off_t count)
+{
+	extern int sys_read(int, char *, int);
+	return sys_read(fd, buf, count);
+}
+
+static inline off_t lseek(int fd, off_t offset, int count)
+{
+	extern off_t sys_lseek(int, off_t, int);
+	return sys_lseek(fd, offset, count);
+}
+
+static inline int dup(int fd)
+{
+	extern int sys_dup(int);
+	return sys_dup(fd);
+}
+
+static inline int open(const char *file, int flag, int mode)
+{
+	extern int sys_open(const char *, int, int);
+	return sys_open(file, flag, mode);
+}
+
+static inline int close(int fd)
+{
+	return sys_close(fd);
+}
+
+static inline int _exit(int exitcode)
+{
+	extern int sys_exit(int);
+	return sys_exit(exitcode);
+}
+
+static inline pid_t waitpid(pid_t pid, int *wait_stat, int options)
+{
+	extern int sys_wait4(int, int *, int, struct rusage *);
+	return sys_wait4((int)pid, wait_stat, options, NULL);
+}
+
+static inline int delete_module(const char *name)
+{
+	extern int sys_delete_module(const char *name);
+	return sys_delete_module(name);
+}
 
 static inline pid_t wait(int * wait_stat)
 {
-	return waitpid(-1,wait_stat,0);
+	extern int sys_wait4(int, int *, int, struct rusage *);
+	return sys_wait4(-1, wait_stat, 0, NULL);
 }
 
-
+/*
+ * The following two can't be eliminated yet - they rely on
+ * specific conditions.
+ */
+static inline _syscall3(int,execve,const char *,file,char **,argv,char **,envp);
 
 /*
  * This is the mechanism for creating a new kernel thread.

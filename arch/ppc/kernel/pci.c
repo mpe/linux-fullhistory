@@ -1,5 +1,5 @@
 /*
- * $Id: pci.c,v 1.42 1998/12/04 14:31:37 cort Exp $
+ * $Id: pci.c,v 1.43 1998/12/29 18:55:11 cort Exp $
  * Common pmac/prep/chrp pci routines. -- Cort
  */
 
@@ -123,8 +123,8 @@ __initfunc(void pcibios_init(void))
 __initfunc(void
 	   setup_pci_ptrs(void))
 {
-	PPC_DEVICE *hostbridge;
 #ifndef CONFIG_MBX  
+	PPC_DEVICE *hostbridge;
 	switch (_machine) {
 	case _MACH_prep:
 	  	hostbridge=residual_find_device(PROCESSORDEVICE, NULL,
@@ -188,6 +188,7 @@ __initfunc(void pcibios_fixup(void))
 	extern struct bridge_data **bridges;
 	extern unsigned char *Motherboard_map;
 	extern unsigned char *Motherboard_routes;
+	unsigned char i;
 #ifndef CONFIG_MBX
 	switch (_machine )
 	{
@@ -200,7 +201,7 @@ __initfunc(void pcibios_fixup(void))
 			 * irq this device uses.  This is necessary on things
 			 * without residual data. -- Cort
 			 */
-			unsigned char d = PCI_SLOT(dev->devfn), i;
+			unsigned char d = PCI_SLOT(dev->devfn);
 			dev->irq = Motherboard_routes[Motherboard_map[d]];
 			for ( i = 0 ; i <= 5 ; i++ )
 			{

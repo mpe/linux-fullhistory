@@ -33,6 +33,7 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 #include <asm/amigaints.h>
+#include <asm/amigahw.h>
 
 #include "8390.h"
 
@@ -417,7 +418,7 @@ void cleanup_module(void)
     unsigned int key = ((struct ei_device *)ariadne2_dev.priv)->priv;
     free_irq(IRQ_AMIGA_PORTS, &ariadne2_dev);
     unregister_netdev(&ariadne2_dev);
-    zorro_config_board(key, 0);
+    zorro_unconfig_board(key, 0);
     unlock_8390_module();
 }
 

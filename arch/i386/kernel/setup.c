@@ -619,7 +619,7 @@ __initfunc(void print_cpu_info(struct cpuinfo_x86 *c))
 	else
 		printk("%s", c->x86_model_id);
 
-	if (c->x86_mask) 
+	if (c->x86_mask || c->cpuid_level>=0) 
 		printk(" stepping %02x", c->x86_mask);
 
 	if(c->x86_vendor == X86_VENDOR_CENTAUR)

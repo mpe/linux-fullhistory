@@ -21,13 +21,13 @@ This will override the configuration in mcdx.h.
 
 This driver:
 
-    o   handles XA (and hopefully) multi session CDs as well as
+    o   handles XA and (hopefully) multi session CDs as well as
         ordinary CDs;
     o   supports up to 5 drives (of course, you'll need free 
         IRQs, i/o ports and slots);
     o   uses much less kernel memory than the standard mcd driver
         (no extra driver internal buffers!).
-        o   plays audio (like the `old' driver, I hope)
+    o   plays audio (like the `old' driver, I hope)
 
 This version doesn't support yet:
 

@@ -21,7 +21,7 @@ typedef struct {
 } sigset_t;
 
 #else
-/* Here we must cater to lics that poke about in kernel headers.  */
+/* Here we must cater to libcs that poke about in kernel headers.  */
 
 #define NSIG		32
 typedef unsigned long sigset_t;
@@ -69,6 +69,8 @@ typedef unsigned long sigset_t;
 #define SIGRTMIN	32
 #define SIGRTMAX	(_NSIG-1)
 
+#define SIGSWI		32
+
 /*
  * SA_FLAGS values:
  *
@@ -96,6 +98,8 @@ typedef unsigned long sigset_t;
 #define SA_INTERRUPT	0x20000000 /* dummy -- ignored */
 
 #define SA_RESTORER	0x04000000
+#define SA_THIRTYTWO	0x02000000 /* deliver signal in 32-bit mode even if
+				      task is running 26 bits. */
 
 /* 
  * sigaltstack controls

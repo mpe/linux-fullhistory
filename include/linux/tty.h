@@ -299,6 +299,7 @@ struct tty_struct {
 	int canon_data;
 	unsigned long canon_head;
 	unsigned int canon_column;
+	struct semaphore atomic_read;
 };
 
 /* tty magic number */
@@ -320,6 +321,7 @@ struct tty_struct {
 #define TTY_DO_WRITE_WAKEUP 5
 #define TTY_PUSH 6
 #define TTY_CLOSING 7
+#define TTY_DONT_FLIP 8
 #define TTY_HW_COOK_OUT 14
 #define TTY_HW_COOK_IN 15
 #define TTY_PTY_LOCK 16

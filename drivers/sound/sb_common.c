@@ -13,7 +13,7 @@
 /*
  * Daniel J. Rodriksson: Modified sbintr to handle 8 and 16 bit interrupts
  *                       for full duplex support ( only sb16 by now )
- * Rolf Fokkens:	 Added (BETA?) support for ES188x chips.
+ * Rolf Fokkens:	 Added (BETA?) support for ES1887 chips.
  * (fokkensr@vertis.nl)	 Which means: You can adjust the recording levels.
  */
 #include <linux/config.h>
@@ -554,6 +554,15 @@ static int ess_init(sb_devc * devc, struct address_info *hw_config)
 	/*
 	 * This the detection heuristic of ESS technology, though somewhat
 	 * changed to actually make it work.
+	 * This results in the following detection steps:
+	 * - distinct between ES688 and ES1688+ (as always done in this driver)
+	 *   if ES688 we're ready
+	 * - try to detect ES1868, ES1869 or ES1878 (ess_identify)
+	 *   if successful we're ready
+	 * - try to detect ES1888, ES1887 or ES1788 (aim: detect ES1887)
+	 *   if successful we're ready
+	 * - Dunno. Must be 1688. Will do in general
+	 *
 	 * This is the most BETA part of the software: Will the detection
          * always work?
 	 */
@@ -568,7 +577,7 @@ static int ess_init(sb_devc * devc, struct address_info *hw_config)
 			chip = "ES688";
 		};
 		if (chip == NULL) {
-			int type, dummy;
+			int type;
 
 			type = ess_identify (devc);
 
@@ -587,12 +596,18 @@ static int ess_init(sb_devc * devc, struct address_info *hw_config)
 				break;
 			};
 		};
-		if (chip == NULL) {
-			if (  !ess_probe (devc, 0x64, (1 << 3))
-			    && ess_probe (devc, 0x70, 0x7f)) {
-				chip = "ES188x";
+		if (chip == NULL && !ess_probe(devc, 0x64, (1 << 3))) {
+			if (ess_probe (devc, 0x70, 0x7f)) {
+				if (ess_probe (devc, 0x64, (1 << 5))) {
+					chip = "ES1887";
+				} else {
+					chip = "ES1888";
+				}
 				devc->submodel = SUBMDL_ES188X;
-			};
+			} else {
+				chip = "ES1788";
+				devc->submodel = SUBMDL_ES1788;
+			}
 		};
 		if (chip == NULL) {
 			chip = "ES1688";
@@ -1066,7 +1081,7 @@ void sb_dsp_unload(struct address_info *hw_config, int sbmpu)
 /*
  *	Mixer access routines
  *
- *	ES188x modifications: some mixer registers reside in the
+ *	ES1887 modifications: some mixer registers reside in the
  *	range above 0xa0. These must be accessed in another way.
  */
 
@@ -1107,7 +1122,10 @@ unsigned int sb_getmixer(sb_devc * devc, unsigned int port)
 
 	return val;
 }
-
+/*
+ * Some PnP chips can be identified by repeatedly reading mixer register 0x40.
+ * This is done by ess_identify
+ */
 static unsigned int ess_identify (sb_devc * devc)
 {
 	unsigned int val;

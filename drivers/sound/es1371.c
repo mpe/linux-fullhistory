@@ -52,6 +52,8 @@
  *    10.12.98   0.6   Fix drain_dac trying to wait on not yet initialized DMA
  *    23.12.98   0.7   Fix a few f_file & FMODE_ bugs
  *                     Don't wake up app until there are fragsize bytes to read/write
+ *    06.01.99   0.8   remove the silly SA_INTERRUPT flag.
+ *                     hopefully killed the egcs section type conflict
  *
  */
 
@@ -2710,7 +2712,7 @@ __initfunc(int init_es1371(void))
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1371: version v0.7 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1371: version v0.8 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1371, pcidev))) {
 		if (pcidev->base_address[0] == 0 || 
@@ -2738,7 +2740,7 @@ __initfunc(int init_es1371(void))
 			goto err_region;
 		}
 		request_region(s->io, ES1371_EXTENT, "es1371");
-		if (request_irq(s->irq, es1371_interrupt, SA_INTERRUPT|SA_SHIRQ, "es1371", s)) {
+		if (request_irq(s->irq, es1371_interrupt, SA_SHIRQ, "es1371", s)) {
 			printk(KERN_ERR "es1371: irq %u in use\n", s->irq);
 			goto err_irq;
 		}

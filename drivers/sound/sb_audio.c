@@ -67,7 +67,12 @@ static int sb_audio_open(int dev, int mode)
 	devc->fullduplex = devc->duplex &&
 		((mode & OPEN_READ) && (mode & OPEN_WRITE));
 	sb_dsp_reset(devc);
-	ess_mixer_reload (devc, SOUND_MIXER_RECLEV);
+
+	/* At first glance this check isn't enough, some ESS chips might not 
+	 * have a RECLEV. However if they don't common_mixer_set will refuse 
+	 * cause devc->iomap has no register mapping for RECLEV
+	 */
+	if (devc->model == MDL_ESS) ess_mixer_reload (devc, SOUND_MIXER_RECLEV);
 
 	/* The ALS007 seems to require that the DSP be removed from the output */
 	/* in order for recording to be activated properly.  This is done by   */
@@ -659,6 +664,43 @@ static void ess_speed(sb_devc * devc)
 	return;
 }
 
+static void ess_change
+	(sb_devc *devc, unsigned int reg, unsigned int mask, unsigned int val)
+{
+	int value;
+
+	value = ess_read(devc, reg);
+	value = (value & ~mask) | (val & mask);
+	ess_write(devc, reg, value);
+}
+
+struct ess_command {int cmd; int data;};
+
+static void ess_exec_commands
+	(sb_devc *devc, struct ess_command *cmdtab[])
+{
+	struct ess_command *cmd;
+
+	cmd = cmdtab [ ((devc->channels != 1) << 1) + (devc->bits != AFMT_U8) ];
+
+	while (cmd->cmd != -1) {
+		ess_write (devc, cmd->cmd, cmd->data);
+		cmd++;
+	}
+}
+
+static struct ess_command ess_i08m[] =		/* input 8 bit mono */
+	{ {0xb7, 0x51}, {0xb7, 0xd0}, {-1, 0} };
+static struct ess_command ess_i16m[] =		/* input 16 bit mono */
+	{ {0xb7, 0x71}, {0xb7, 0xf4}, {-1, 0} };
+static struct ess_command ess_i08s[] =		/* input 8 bit stereo */
+	{ {0xb7, 0x51}, {0xb7, 0x98}, {-1, 0} };
+static struct ess_command ess_i16s[] =		/* input 16 bit stereo */
+	{ {0xb7, 0x71}, {0xb7, 0xbc}, {-1, 0} };
+
+static struct ess_command *ess_inp_cmds[] =
+	{ ess_i08m, ess_i16m, ess_i08s, ess_i16s };
+
 static int ess_audio_prepare_for_input(int dev, int bsize, int bcount)
 {
 	sb_devc *devc = audio_devs[dev]->devc;
@@ -666,45 +708,30 @@ static int ess_audio_prepare_for_input(int dev, int bsize, int bcount)
 	sb_dsp_command(devc, DSP_CMD_SPKOFF);
 
 	ess_write(devc, 0xb8, 0x0e);	/* Auto init DMA mode */
-	ess_write(devc, 0xa8, (ess_read(devc, 0xa8) & ~0x03) | (3 - devc->channels));	/* Mono/stereo */
+	ess_change (devc, 0xa8, 0x03, 3 - devc->channels);	/* Mono/stereo */
 	ess_write(devc, 0xb9, 2);	/* Demand mode (4 bytes/DMA request) */
 
-	if (devc->channels == 1)
-	{
-		if (devc->bits == AFMT_U8)
-		{	
-			/* 8 bit mono */
-			ess_write(devc, 0xb7, 0x51);
-			ess_write(devc, 0xb7, 0xd0);
-		}
-		else
-		{
-			/* 16 bit mono */
-			ess_write(devc, 0xb7, 0x71);
-			ess_write(devc, 0xb7, 0xf4);
-		}
-	}
-	else
-	{	
-		/* Stereo */
-		if (devc->bits == AFMT_U8)
-		{
-			/* 8 bit stereo */
-			ess_write(devc, 0xb7, 0x51);
-			ess_write(devc, 0xb7, 0x98);
-		}
-		else
-		{	
-			/* 16 bit stereo */
-			ess_write(devc, 0xb7, 0x71);
-			ess_write(devc, 0xb7, 0xbc);
-		}
-	}
-	ess_write(devc, 0xb1, (ess_read(devc, 0xb1) & 0x0f) | 0x50);
-	ess_write(devc, 0xb2, (ess_read(devc, 0xb2) & 0x0f) | 0x50);
+	ess_exec_commands (devc, ess_inp_cmds);
+
+	ess_change (devc, 0xb1, 0xf0, 0x50);
+	ess_change (devc, 0xb2, 0xf0, 0x50);
+
 	devc->trigger_bits = 0;
 	return 0;
 }
+
+static struct ess_command ess_o08m[] =          /* output 8 bit mono */
+        { {0xb6, 0x80}, {0xb7, 0x51}, {0xb7, 0xd0}, {-1, 0} };
+static struct ess_command ess_o16m[] =          /* output 16 bit mono */
+        { {0xb6, 0x00}, {0xb7, 0x71}, {0xb7, 0xf4}, {-1, 0} };
+static struct ess_command ess_o08s[] =          /* output 8 bit stereo */
+        { {0xb6, 0x80}, {0xb7, 0x51}, {0xb7, 0x98}, {-1, 0} };
+static struct ess_command ess_o16s[] =          /* output 16 bit stereo */
+        { {0xb6, 0x00}, {0xb7, 0x71}, {0xb7, 0xbc}, {-1, 0} };
+
+
+static struct ess_command *ess_out_cmds[] =
+        { ess_o08m, ess_o16m, ess_o08s, ess_o16s };
 
 static int ess_audio_prepare_for_output(int dev, int bsize, int bcount)
 {
@@ -714,42 +741,14 @@ static int ess_audio_prepare_for_output(int dev, int bsize, int bcount)
 	ess_speed(devc);
 
 	ess_write(devc, 0xb8, 4);	/* Auto init DMA mode */
-	ess_write(devc, 0xa8, (ess_read(devc, 0xa8) & ~0x03) | (3 - devc->channels));	/* Mono/stereo */
+	ess_change (devc, 0xa8, 0x03, 3 - devc->channels);	/* Mono/stereo */
 	ess_write(devc, 0xb9, 2);	/* Demand mode (4 bytes/request) */
 
-	if (devc->channels == 1)
-	{
-		if (devc->bits == AFMT_U8)
-		{	/* 8 bit mono */
-			ess_write(devc, 0xb6, 0x80);
-			ess_write(devc, 0xb7, 0x51);
-			ess_write(devc, 0xb7, 0xd0);
-		}
-		else
-		{	/* 16 bit mono */
-			ess_write(devc, 0xb6, 0x00);
-			ess_write(devc, 0xb7, 0x71);
-			ess_write(devc, 0xb7, 0xf4);
-		}
-	}
-	else
-	{	/* Stereo */
-		if (devc->bits == AFMT_U8)
-		{	/* 8 bit stereo */
-			ess_write(devc, 0xb6, 0x80);
-			ess_write(devc, 0xb7, 0x51);
-			ess_write(devc, 0xb7, 0x98);
-		}
-		else
-		{		/* 16 bit stereo */
-			ess_write(devc, 0xb6, 0x00);
-			ess_write(devc, 0xb7, 0x71);
-			ess_write(devc, 0xb7, 0xbc);
-		}
-	}
+	ess_exec_commands (devc, ess_out_cmds);
 
-	ess_write(devc, 0xb1, (ess_read(devc, 0xb1) & 0x0f) | 0x50);
-	ess_write(devc, 0xb2, (ess_read(devc, 0xb2) & 0x0f) | 0x50);
+	ess_change (devc, 0xb1, 0xf0, 0x50);
+	ess_change (devc, 0xb2, 0xf0, 0x50);
+
 	sb_dsp_command(devc, DSP_CMD_SPKON);
 
 	devc->trigger_bits = 0;
@@ -774,7 +773,7 @@ static void ess_audio_output_block(int dev, unsigned long buf, int nr_bytes,
 	ess_write(devc, 0xa4, (unsigned char) ((unsigned short) c & 0xff));
 	ess_write(devc, 0xa5, (unsigned char) (((unsigned short) c >> 8) & 0xff));
 
-	ess_write(devc, 0xb8, ess_read(devc, 0xb8) | 0x05);	/* Go */
+	ess_change (devc, 0xb8, 0x05, 0x05);	/* Go */
 	devc->intr_active = 1;
 }
 
@@ -798,8 +797,8 @@ static void ess_audio_start_input(int dev, unsigned long buf, int nr_bytes, int 
 
 	ess_write(devc, 0xa4, (unsigned char) ((unsigned short) c & 0xff));
 	ess_write(devc, 0xa5, (unsigned char) (((unsigned short) c >> 8) & 0xff));
-
-	ess_write(devc, 0xb8, ess_read(devc, 0xb8) | 0x0f);	/* Go */
+ 
+	ess_change (devc, 0xb8, 0x0f, 0x0f);	/* Go */
 	devc->intr_active = 1;
 }
 

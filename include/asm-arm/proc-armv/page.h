@@ -7,6 +7,8 @@
 #ifndef __ASM_PROC_PAGE_H
 #define __ASM_PROC_PAGE_H
 
+#include <asm/hardware.h>
+
 /* PAGE_SHIFT determines the page size */
 #define PAGE_SHIFT	12
 #define PAGE_SIZE       (1UL << PAGE_SHIFT)
@@ -60,7 +62,10 @@ typedef unsigned long pgprot_t;
 #define PAGE_ALIGN(addr)	(((addr)+PAGE_SIZE-1)&PAGE_MASK)
 
 /* This handles the memory map.. */
+#ifndef PAGE_OFFSET
 #define PAGE_OFFSET		0xc0000000
+#endif
+
 #define MAP_NR(addr)		(((unsigned long)(addr) - PAGE_OFFSET) >> PAGE_SHIFT)
 
 #endif /* __KERNEL__ */

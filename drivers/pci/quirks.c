@@ -129,7 +129,7 @@ __initfunc(static void quirk_passive_release(struct pci_dev *dev, int arg))
     but VIA don't answer queries. If you happen to have good contacts at VIA
     ask them for me please -- Alan 
     
-    This appears to be BIOS not version dependant. So presumably there is a 
+    This appears to be BIOS not version dependent. So presumably there is a 
     chipset level fix */
     
 

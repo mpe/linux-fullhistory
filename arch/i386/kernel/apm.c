@@ -31,6 +31,7 @@
  * Aug 1998, Version 1.5
  * Sep 1998, Version 1.6
  * Nov 1998, Version 1.7
+ * Jan 1999, Version 1.8
  *
  * History:
  *    0.6b: first version in official kernel, Linux 1.3.46
@@ -72,6 +73,11 @@
  *         Make boot messages far less verbose by default
  *         Make asm safer
  *         Stephen Rothwell
+ *    1.8: Add CONFIG_APM_RTC_IS_GMT
+ *         Richard Gooch <rgooch@atnf.csiro.au>
+ *         change APM_NOINTS to CONFIG_APM_ALLOW_INTS
+ *         remove dependency on CONFIG_PROC_FS
+ *         Stephen Rothwell
  *
  * APM 1.1 Reference:
  *
@@ -105,10 +111,8 @@
 #include <linux/fcntl.h>
 #include <linux/malloc.h>
 #include <linux/linkage.h>
-#ifdef CONFIG_PROC_FS
 #include <linux/stat.h>
 #include <linux/proc_fs.h>
-#endif
 #include <linux/miscdevice.h>
 #include <linux/apm_bios.h>
 #include <linux/init.h>
@@ -202,13 +206,6 @@ extern unsigned long get_cmos_time(void);
 #define ALWAYS_CALL_BUSY
 
 /*
- * Define to disable interrupts in APM BIOS calls (the CPU Idle BIOS call
- * should turn interrupts on before it does a 'hlt').
- * This reportedly needs undefining for the ThinkPad 600.
- */
-#define APM_NOINTS
-
-/*
  * Define to make the APM BIOS calls zero all data segment registers (so
  * that an incorrect BIOS implementation will cause a kernel panic if it
  * tries to write to arbitrary memory).
@@ -266,9 +263,7 @@ static ssize_t	do_read(struct file *, char *, size_t , loff_t *);
 static unsigned int do_poll(struct file *, poll_table *);
 static int	do_ioctl(struct inode *, struct file *, u_int, u_long);
 
-#ifdef CONFIG_PROC_FS
 static int	apm_get_info(char *, char **, off_t, int, int);
-#endif
 
 extern int	apm_register_callback(int (*)(apm_event_t));
 extern void	apm_unregister_callback(int (*)(apm_event_t));
@@ -290,8 +285,13 @@ static int			standbys_pending = 0;
 static int			waiting_for_resume = 0;
 #endif
 
+#ifdef CONFIG_APM_RTC_IS_GMT
+#	define	clock_cmos_diff	0
+#	define	got_clock_diff	1
+#else
 static long			clock_cmos_diff;
 static int			got_clock_diff = 0;
+#endif
 static int			debug = 0;
 static int			apm_disabled = 0;
 
@@ -300,7 +300,7 @@ static struct apm_bios_struct *	user_list = NULL;
 
 static struct timer_list	apm_timer;
 
-static char			driver_version[] = "1.7";	/* no spaces */
+static char			driver_version[] = "1.8";	/* no spaces */
 
 #ifdef APM_DEBUG
 static char *	apm_event_name[] = {
@@ -375,22 +375,22 @@ static const lookup_t error_table[] = {
 #define ERROR_COUNT	(sizeof(error_table)/sizeof(lookup_t))
 
 /*
- * These are the actual BIOS calls.  Depending on APM_ZERO_SEGS
- * and APM_NOINTS, we are being really paranoid here!  Not only are
- * interrupts disabled, but all the segment registers (except SS) are
- * saved and zeroed this means that if the BIOS tries to reference any
- * data without explicitly loading the segment registers, the kernel will
- * fault immediately rather than have some unforeseen circumstances for
- * the rest of the kernel.  And it will be very obvious!  :-) Doing this
- * depends on CS referring to the same physical memory as DS so that DS
- * can be zeroed before the call. Unfortunately, we can't do anything
+ * These are the actual BIOS calls.  Depending on APM_ZERO_SEGS and
+ * CONFIG_APM_ALLOW_INTS, we are being really paranoid here!  Not only
+ * are interrupts disabled, but all the segment registers (except SS)
+ * are saved and zeroed this means that if the BIOS tries to reference
+ * any data without explicitly loading the segment registers, the kernel
+ * will fault immediately rather than have some unforeseen circumstances
+ * for the rest of the kernel.  And it will be very obvious!  :-) Doing
+ * this depends on CS referring to the same physical memory as DS so that
+ * DS can be zeroed before the call. Unfortunately, we can't do anything
  * about the stack segment/pointer.  Also, we tell the compiler that
  * everything could change.
  *
  * Also, we KNOW that for the non error case of apm_bios_call, there
  * is no useful data returned in the low order 8 bits of eax.
  */
-#ifdef APM_NOINTS
+#ifndef CONFIG_APM_ALLOW_INTS
 #	define APM_DO_CLI	__cli()
 #else
 #	define APM_DO_CLI
@@ -747,14 +747,17 @@ static void suspend(void)
 	unsigned long	flags;
 	int		err;
 
-				/* Estimate time zone so that set_time can
-                                   update the clock */
+#ifndef CONFIG_APM_RTC_IS_GMT
+	/*
+	 * Estimate time zone so that set_time can update the clock
+	 */
 	save_flags(flags);
 	clock_cmos_diff = -get_cmos_time();
 	cli();
 	clock_cmos_diff += CURRENT_TIME;
 	got_clock_diff = 1;
 	restore_flags(flags);
+#endif
 
 	err = apm_set_power_state(APM_STATE_SUSPEND);
 	if (err)
@@ -826,7 +829,7 @@ static void check_events(void)
 	apm_event_t		event;
 #ifdef CONFIG_APM_IGNORE_SUSPEND_BOUNCE
 	static unsigned long	last_resume = 0;
-	static int		did_resume = 0;
+	static int		ignore_bounce = 0;
 #endif
 
 	while ((event = get_event()) != 0) {
@@ -837,6 +840,10 @@ static void check_events(void)
 		else
 			printk(KERN_DEBUG "apm: received unknown "
 			       "event 0x%02x\n", event);
+#endif
+#ifdef CONFIG_APM_IGNORE_SUSPEND_BOUNCE
+		if (ignore_bounce && ((jiffies - last_resume) > HZ))
+			ignore_bounce = 0;
 #endif
 		switch (event) {
 		case APM_SYS_STANDBY:
@@ -859,7 +866,7 @@ static void check_events(void)
 #endif
 		case APM_SYS_SUSPEND:
 #ifdef CONFIG_APM_IGNORE_SUSPEND_BOUNCE
-			if (did_resume && ((jiffies - last_resume) < HZ))
+			if (ignore_bounce)
 				break;
 #endif
 #ifdef CONFIG_APM_IGNORE_MULTIPLE_SUSPEND
@@ -880,7 +887,7 @@ static void check_events(void)
 #endif
 #ifdef CONFIG_APM_IGNORE_SUSPEND_BOUNCE
 			last_resume = jiffies;
-			did_resume = 1;
+			ignore_bounce = 1;
 #endif
 			set_time();
 			send_event(event, 0, NULL);
@@ -1139,7 +1146,6 @@ static int do_open(struct inode * inode, struct file * filp)
 	return 0;
 }
 
-#ifdef CONFIG_PROC_FS
 int apm_get_info(char *buf, char **start, off_t fpos, int length, int dummy)
 {
 	char *		p;
@@ -1228,7 +1234,6 @@ int apm_get_info(char *buf, char **start, off_t fpos, int length, int dummy)
 
 	return p - buf;
 }
-#endif
 
 void __init apm_setup(char *str, int *dummy)
 {
@@ -1422,10 +1427,9 @@ void __init apm_bios_init(void)
 	apm_timer.expires = APM_CHECK_TIMEOUT + jiffies;
 	add_timer(&apm_timer);
 
-#ifdef CONFIG_PROC_FS
 	ent = create_proc_entry("apm", 0, 0);
-	ent->get_info = apm_get_info;
-#endif
+	if (ent != NULL)
+		ent->get_info = apm_get_info;
 
 	misc_register(&apm_device);
 

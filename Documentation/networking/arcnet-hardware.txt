@@ -2560,7 +2560,7 @@ Setting the Timeouts
 --------------------
 
 The two jumpers labeled ET1 and ET2 are used to determine the timeout
-parameters (respons and reconfiguration time). Every node in a network
+parameters (response and reconfiguration time). Every node in a network
 must be set to the same timeout values.
 
    ET1 ET2 | Response Time (us) | Reconfiguration Time (ms)

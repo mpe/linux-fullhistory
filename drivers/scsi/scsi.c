@@ -531,7 +531,7 @@ static void scan_scsis (struct Scsi_Host *shpnt,
       for (dev = 0; dev < shpnt->max_id; ++dev) {
         if( shpnt->reverse_ordering)
         	/* Shift to scanning 15,14,13... or 7,6,5,4, */
-        	order_dev = shpnt->max_channel-dev-1;
+        	order_dev = shpnt->max_id-dev-1;
         else
         	order_dev = dev;
         	

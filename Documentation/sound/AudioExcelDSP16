@@ -51,7 +51,7 @@ Where the aedsp16 options are the options for this driver while opl3 and
 ad1848 are the corresponding options for the MSS and OPL3 modules.
 
 Loading MSS and OPL3 needs to pre load the aedsp16 module to set up correctly
-the sound card. Installation dependancies must be written in the conf.modules
+the sound card. Installation dependencies must be written in the conf.modules
 file:
 
 pre-install ad1848 modprobe aedsp16

@@ -617,7 +617,7 @@ ignored (others aren't affected).
     Legal values are between 0 and 255. Default: 255/0. Note: This
     value is forced to 0 on a Falcon, since scatter-gather isn't
     possible with the ST-DMA. Not using scatter-gather hurts
-    perfomance significantly.
+    performance significantly.
 
   <host-id>:
     The SCSI ID to be used by the initiator (your Atari). This is

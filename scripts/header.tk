@@ -207,7 +207,7 @@ proc read_config { filename } {
 			eval $cmd
 		}
 		if [regexp {([0-9A-Za-z_]+)="([^"]*)"} $line foo var value] {
-			set cmd "global $var; set $var $value"
+			set cmd "global $var; set $var \"$value\""
 			eval $cmd
 		}
 	}

@@ -704,7 +704,7 @@ csz_dequeue(struct Qdisc* sch)
 	}
 #ifdef CSZ_PLUS_TBF
 	/* We are about to return no skb.
-	   Schedule watchdog timer, if it occured because of shaping.
+	   Schedule watchdog timer, if it occurred because of shaping.
 	 */
 	if (q->wd_expires) {
 		unsigned long delay = PSCHED_US2JIFFIE(q->wd_expires);

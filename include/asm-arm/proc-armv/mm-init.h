@@ -136,7 +136,7 @@ setup_pagetables(unsigned long start_mem, unsigned long end_mem)
 	/*
 	 * An area to invalidate the cache
 	 */
-	alloc_init_section(&start_mem, 0xdf000000, SAFE_ADDR, DOMAIN_KERNEL,
+	alloc_init_section(&start_mem, FLUSH_BASE, FLUSH_BASE_PHYS, DOMAIN_KERNEL,
 			   PMD_SECT_CACHEABLE | PMD_SECT_AP_READ);
 
 	/*

@@ -151,7 +151,7 @@
     autonegotiation feature in  the SROM autoconf  code, this detection will
     occur automatically for that case.
 
-    Command line arguements are  now allowed, similar to  passing arguements
+    Command line  arguments are  now allowed, similar to  passing  arguments
     through LILO. This will allow a per adapter board set  up of full duplex
     and media. The only lexical constraints are:  the board name (dev->name)
     appears in  the list before its parameters.  The list of parameters ends

@@ -27,7 +27,7 @@ Device names start at 0 and continue up.  Beware of this as previous Digi
 drivers started device names with 1.
 
 PCI boards are auto-detected and configured by the driver.  PCI boards will
-be allocated device numbers (internally) begining with the lowest PCI slot
+be allocated device numbers (internally) beginning with the lowest PCI slot
 first.  In other words a PCI card in slot 3 will always have higher device
 nodes than a PCI card in slot 1. 
 
@@ -46,7 +46,7 @@ are:
    Base of memory window (in HEX if using string identifiers), 
 
 NOTE : PCI boards are auto-detected and configured.  Do not attempt to 
-configure PCI boards with the LILO append comand.  If you wish to override
+configure PCI boards with the LILO append command.  If you wish to override
 previous configuration data (As set by digiConfig), but you do not wish to
 configure any specific card (Example if there are PCI cards in the system) 
 the following override command will accomplish this:

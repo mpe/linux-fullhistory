@@ -829,6 +829,10 @@ rpciod(void *ptr)
 		}
 		save_flags(oldflags); cli();
 		if (!schedq.task) {
+			/* following two lines added by airlied@linux.ie
+				to make NFS over TCP work 5/1/99 */
+		        dprintk("RPC: rpciod running checking dispatch\n");
+		        rpciod_tcp_dispatcher();
 			dprintk("RPC: rpciod back to sleep\n");
 			interruptible_sleep_on(&rpciod_idle);
 			dprintk("RPC: switch to rpciod\n");

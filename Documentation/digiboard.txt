@@ -10,7 +10,7 @@ The Digiboard Driver for Linux supports the following boards:
 
 In case you have problems with this version (1.6.1) of this driver, please
 email directly to me as I made the last update. It you have a report about
-runnning it on other architectures than intel, email me, so I can document
+running it on other architectures than intel, email me, so I can document
 it here.
 
 A version of this driver has been taken by Digiboard to make a driver

@@ -493,7 +493,7 @@ int sdla_down (sdlahw_t* hw)
 }
 
 /*============================================================================
- * Map shared memory window into SDLA adress space.
+ * Map shared memory window into SDLA address space.
  */
 
 EXPORT_SYMBOL(sdla_mapmem);

@@ -894,7 +894,7 @@ __initfunc(static void xd_wd_init_drive (u_char drive))
 				xd_setparam(CMD_WDSETPARAM,drive,xd_info[drive].heads,xd_info[drive].cylinders,
 					((u_short *) (buf))[0xD8],((u_short *) (buf))[0xDA],buf[0x1B4]);
 		}
-	/* 1002 based RLL controler requests converted adressing, but reports physical 
+	/* 1002 based RLL controler requests converted addressing, but reports physical 
 	   (physical 26 sec., logical 17 sec.) 
 	   1004 based ???? */
 		if (rll & wd_1002) {

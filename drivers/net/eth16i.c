@@ -799,12 +799,12 @@ static int eth16i_receive_probe_packet(int ioaddr)
 		if( (jiffies - starttime) > TX_TIMEOUT) {
 
 			if(eth16i_debug > 1)
-				printk(KERN_DEBUG "Timeout occured waiting transmit packet received\n");
+				printk(KERN_DEBUG "Timeout occurred waiting transmit packet received\n");
 			starttime = jiffies;
 			while((inb(ioaddr + RX_STATUS_REG) & 0x80) == 0) {
 				if( (jiffies - starttime) > TX_TIMEOUT) {
 					if(eth16i_debug > 1)
-						printk(KERN_DEBUG "Timeout occured waiting receive packet\n");
+						printk(KERN_DEBUG "Timeout occurred waiting receive packet\n");
 					return -1;
 				}
 			}

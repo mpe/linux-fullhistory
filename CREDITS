@@ -1581,8 +1581,8 @@ S: 75019 Paris
 S: France
 
 N: Rik van Riel
-E: H.H.vanRiel@phys.uu.nl
-W: http://www.phys.uu.nl/~riel/
+E: H.H.vanRiel@humbolt.geo.uu.nl
+W: http://humbolt.geo.uu.nl/
 D: Maintainer of the mm-patches page (see www.linuxhq.com)
 D: Documentation/sysctl/*, kswapd fixes, random kernel hacker
 S: Vorenkampsweg 1
@@ -1630,6 +1630,14 @@ S: France
 N: Alessandro Rubini
 E: rubini@ipvvis.unipv.it
 D: the gpm mouse server and kernel support for it
+
+N: Philipp Rumpf
+E: prumpf@jcsbs.lanobis.de
+D: ipi_count for x86
+D: random bugfixes
+S: Rueting 4
+S: 23743 Groemitz
+S: Germany
 
 N: Paul Russell
 E: Paul.Russell@rustcorp.com.au
@@ -1719,6 +1727,16 @@ D: Always IN2000 SCSI driver
 D: wd33c93 SCSI driver (linux-m68k)
 S: San Jose, California
 S: USA
+
+N: Jaspreet Singh
+E: jaspreet@sangoma.com
+W: www.sangoma.com
+D: WANPIPE driver for Sangoma S508/FT1 cards 
+S: Sangoma Technologies Inc.,
+S: 1001 Denison Street
+S: Suite 101
+S: Markham, Ontario L3R 2Z6
+S: Canada
 
 N: Rick Sladkey
 E: jrs@world.std.com

@@ -210,7 +210,7 @@ The latter problem could be reproduced by using hisax as well as the
 isdnloop driver. It seems that it is not caused by the isdn code.
 Somehow, the inode of a socket is freed while a process still refers
 the socket's wait queue. This causes problems when the process tries to
-remove itself from the wait queue (refered by the dangling
+remove itself from the wait queue (referred by the dangling
 sock->sleep pointer) before returning from a select() system call.
 
 - Henner

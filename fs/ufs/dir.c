@@ -110,9 +110,7 @@ revalidate:
 				brelse(bh);
 				return stored;
 			}
-#if 0 /* XXX */
-			if (!ext2_check_dir_entry ("ext2_readdir", inode, de,
-			/* XXX - beware about de having to be swabped somehow */
+			if (!ufs_check_dir_entry ("ufs_readdir", inode, de,
 						   bh, offset)) {
 				/* On error, skip the f_pos to the
 				   next block. */
@@ -122,7 +120,6 @@ revalidate:
 				brelse (bh);
 				return stored;
 			}
-#endif /* XXX */
 			offset += SWAB16(de->d_reclen);
 			if (de->d_ino) {
 			/* SWAB16() was unneeded -- compare to 0 */

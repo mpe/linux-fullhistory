@@ -52,7 +52,7 @@ typedef struct
 	int             dma1, dma2;
 	int             dual_dma;	/* 1, when two DMA channels allocated */
 	unsigned char   MCE_bit;
-	unsigned char   saved_regs[16];
+	unsigned char   saved_regs[32];
 	int             debug_flag;
 
 	int             audio_flags;
@@ -1601,6 +1601,9 @@ int ad1848_detect(int io_base, int *ad_flags, int *osp)
 				/*
 				 *      It's at least CS4231
 				 */
+
+				devc->chip_name = "CS4231";
+				devc->model = MD_4231;
 				
 				/*
 				 * It could be an AD1845 or CS4231A as well.

@@ -155,7 +155,7 @@ The four user programs listed below are described in this document:
    current digiConfig application does not provide this function for PCI cards
    (Though it does build device nodes for non-PCI cards).  To use this program
    execute the following:first install the driver, and execute digiDload (See above).  After digiDload
-   has sucessfully loaded, execute the following:
+   has successfully loaded, execute the following:
 
         buildPCI <arg1> <arg2>
 
@@ -295,7 +295,7 @@ Description (Verbose) : Made the following modifications:
                             Linux kernels support higher baud rates by using
                             0x1000 bit.  When the returned value (ored with
                             0x1000) was used to reference our fbaud table a 
-                            serious memory problem occured.  This has been fixed.
+                            serious memory problem occurred.  This has been fixed.
 
                         4.  Added a request_region call to post_fep_init.  This
                             should cause the i/o ports being used to be 
@@ -401,8 +401,8 @@ Description (Verbose) : Made the following modifications:
                            found in epcaconfig.h; if so it DOESN'T load
                            epcaconfig data depending on epca_setup to handle 
                            board configuration.  pc_open has been modified 
-                           such that it checks to insure that no errors
-                           occured during the LILO boot process.  If a 
+                           such that it checks to ensure that no errors
+                           occurred during the LILO boot process.  If a 
                            user attempts to boot the driver (via. LILO)
                            with incorrect data, the open will fail. 
 

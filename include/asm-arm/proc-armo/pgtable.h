@@ -94,10 +94,6 @@ extern __inline__ void update_memc_addr(struct mm_struct *mm, unsigned long addr
 
 #define __flush_entry_to_ram(entry)
 
-/* Certain architectures need to do special things when pte's
- * within a page table are directly modified.  Thus, the following
- * hook is made available.
- */
 /* PMD_SHIFT determines the size of the area a second-level page table can map */
 #define PMD_SHIFT       20
 #define PMD_SIZE        (1UL << PMD_SHIFT)
@@ -273,6 +269,10 @@ extern __inline__ pte_t pte_modify(pte_t pte, pgprot_t newprot)
 	return pte;
 }
 
+/* Certain architectures need to do special things when pte's
+ * within a page table are directly modified.  Thus, the following
+ * hook is made available.
+ */
 #define set_pte(pteptr, pteval) ((*(pteptr)) = (pteval))
 
 extern __inline__ unsigned long pte_page(pte_t pte)

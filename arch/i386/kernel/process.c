@@ -781,6 +781,18 @@ asmlinkage int sys_clone(struct pt_regs regs)
 	return do_fork(clone_flags, newsp, &regs);
 }
 
+asmlinkage int sys_vfork(struct pt_regs regs)
+{
+	int     child;
+
+	child = do_fork(CLONE_VM | SIGCHLD, regs.esp, &regs);
+
+	if (child > 0)
+		sleep_on(&current->vfork_sleep);
+
+	return child;
+}
+
 /*
  * sys_execve() executes a new program.
  */

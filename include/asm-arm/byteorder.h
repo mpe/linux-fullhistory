@@ -3,10 +3,14 @@
 
 #include <asm/types.h>
 
-#if defined(__GNUC__) && __GNUC__ == 2 && __GNUC_MINOR__ < 80
+#if defined(__GNUC__) && __GNUC__ == 2 && __GNUC_MINOR__ < 8
 
-/* Recent versions of GCC can do as well or better than this
-   on their own - we shouldn't interfere.  */
+/* Recent versions of GCC can open code the swaps at least as well
+   as we can write them by hand, so the "optimisations" here only 
+   make sense for older compilers.  Worse, some versions of GCC
+   actually go wrong in the presence of the assembler versions.
+   We play it safe and only turn them on for compilers older than
+   GCC 2.8.0.  */
 
 static __inline__ __const__ __u32 ___arch__swab32(__u32 x)
 {
@@ -35,6 +39,11 @@ static __inline__ __const__ __u16 ___arch__swab16(__u16 x)
 #define __arch__swab16(x) ___arch__swab16(x)
 
 #endif /* __GNUC__ */
+
+#if !defined(__STRICT_ANSI__) || defined(__KERNEL__)
+#  define __BYTEORDER_HAS_U64__
+#  define __SWAB_64_THRU_32__
+#endif
 
 #include <linux/byteorder/little_endian.h>
 

@@ -67,7 +67,9 @@ extern int tcp_tw_death_row_slot;
 	defined(CONFIG_E2100)	||	defined(CONFIG_HPLAN_PLUS)	|| \
 	defined(CONFIG_HPLAN)	||	defined(CONFIG_AC3200)		|| \
 	defined(CONFIG_ES3210)	||	defined(CONFIG_ULTRA32)		|| \
-	defined(CONFIG_LNE390)	||	defined(CONFIG_NE3210)
+	defined(CONFIG_LNE390)	||	defined(CONFIG_NE3210)		|| \
+	defined(CONFIG_NE2K_PCI) ||	defined(CONFIG_APNE)		|| \
+	defined(CONFIG_DAYNAPORT)
 #include "../drivers/net/8390.h"
 #endif
 
@@ -392,7 +394,9 @@ EXPORT_SYMBOL(arp_find);
 	defined(CONFIG_E2100)	||	defined(CONFIG_HPLAN_PLUS)	|| \
 	defined(CONFIG_HPLAN)	||	defined(CONFIG_AC3200)		|| \
 	defined(CONFIG_ES3210)	||	defined(CONFIG_ULTRA32)		|| \
-	defined(CONFIG_LNE390)	||	defined(CONFIG_NE3210)
+	defined(CONFIG_LNE390)	||	defined(CONFIG_NE3210)		|| \
+	defined(CONFIG_NE2K_PCI) ||	defined(CONFIG_APNE)		|| \
+	defined(CONFIG_DAYNAPORT)
 /* If 8390 NIC support is built in, we will need these. */
 EXPORT_SYMBOL(ei_open);
 EXPORT_SYMBOL(ei_close);

@@ -19,7 +19,7 @@
  *           - IRQ_FLG_SLOW: handler is inserted at bottom of list and before
  *                           they're executed irq level is set to the previous
  *                           one, but handlers don't need to be reentrant, if
- *                           reentrance occured, slow handlers will be just
+ *                           reentrance occurred, slow handlers will be just
  *                           called again.
  *           The whole interrupt handling for CIAs is moved to cia.c
  *           /Roman Zippel
@@ -396,7 +396,7 @@ void amiga_do_irq_list(int irq, struct pt_regs *fp, struct irq_server *server)
 	for (;;) {
 		for (; node; node = node->next)
 			node->handler(irq, node->dev_id, fp);
-		/* if reentrance occured, serve slow handlers again */
+		/* if reentrance occurred, serve slow handlers again */
 		custom.intena = ami_intena_vals[irq];
 		if (!server->reentrance) {
 			server->count--;

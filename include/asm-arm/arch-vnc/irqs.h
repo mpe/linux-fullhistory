@@ -39,7 +39,7 @@
 #define IRQ_HARDDISK		30	/* from 553.14 */
 
 /* These defines handle the translation from the above FB #defines
- * into physical buts for the FootBridge IRQ registers
+ * into physical bits for the FootBridge IRQ registers
  */
 #define IRQ_MASK_SOFTIRQ	0x00000002
 #define IRQ_MASK_UART_DEBUG	0x0000000C
@@ -52,11 +52,16 @@
 #define IRQ_MASK_VIDCOMP	0x00000400
 #define IRQ_MASK_EXTERN_IRQ	0x00000800
 #define IRQ_MASK_DMA1		0x00030000
-#define IRQ_MASK_PCI_ERR	0xf0000000
+#define IRQ_MASK_PCI_ERR	0xf8800000
 
 /*
  * Now map them to the Linux interrupts
  */
+#undef IRQ_TIMER
 #define IRQ_TIMER		IRQ_TIMER0
+#undef RTC_IRQ
+#define RTC_IRQ			IRQ_RTC_ALARM
+#undef AUX_IRQ
+#define AUX_IRQ			IRQ_MOUSE
 
 #define irq_cannonicalize(i)	(i)

@@ -257,7 +257,8 @@ struct task_struct {
 	/* Pointer to task[] array linkage. */
 	struct task_struct **tarray_ptr;
 
-	struct wait_queue *wait_chldexit;	/* for wait4() */
+	struct wait_queue *wait_chldexit, *vfork_sleep;	/* for wait4()/vfork */
+
 	unsigned long policy, rt_priority;
 	unsigned long it_real_value, it_prof_value, it_virt_value;
 	unsigned long it_real_incr, it_prof_incr, it_virt_incr;
@@ -298,6 +299,7 @@ struct task_struct {
 	struct files_struct *files;
 /* memory management info */
 	struct mm_struct *mm;
+
 /* signal handlers */
 	spinlock_t sigmask_lock;	/* Protects signal and blocked */
 	struct signal_struct *sig;
@@ -348,7 +350,7 @@ struct task_struct {
 /* proc links*/ &init_task,&init_task,NULL,NULL,NULL, \
 /* pidhash */	NULL, NULL, \
 /* tarray */	&task[0], \
-/* chld wait */	NULL, \
+/* chld wait */	NULL, NULL, \
 /* timeout */	SCHED_OTHER,0,0,0,0,0,0,0, \
 /* timer */	{ NULL, NULL, 0, 0, it_real_fn }, \
 /* utime */	{0,0,0,0},0, \

@@ -208,9 +208,9 @@ void use_config(const char * name, int len)
 #define GETNEXT { \
 	next_byte(__buf); \
 	if ((unsigned long) next % sizeof(unsigned long) == 0) { \
-		__buf = * (unsigned long *) next; \
-		if (!__buf) \
+		if (next >= end) \
 			break; \
+		__buf = * (unsigned long *) next; \
 	} \
 	next++; \
 }
@@ -249,7 +249,7 @@ void use_config(const char * name, int len)
  * per memory read.  The MAX6 and MIN6 tests dispose of most
  * input characters with 1 or 2 comparisons.
  */
-void state_machine(const char * map)
+void state_machine(const char * map, const char * end)
 {
 	const char * next = map;
 	const char * map_dot;
@@ -441,7 +441,7 @@ void do_depend(const char * filename, const char * command)
 		return;
 	}
 
-	mapsize = st.st_size + 2*sizeof(unsigned long);
+	mapsize = st.st_size;
 	mapsize = (mapsize+pagesizem1) & ~pagesizem1;
 	map = mmap(NULL, mapsize, PROT_READ, MAP_PRIVATE, fd, 0);
 	if ((long) map == -1) {
@@ -457,7 +457,7 @@ void do_depend(const char * filename, const char * command)
 
 	hasdep = 0;
 	clear_config();
-	state_machine(map);
+	state_machine(map, map+st.st_size);
 	if (hasdep)
 		puts(command);
 

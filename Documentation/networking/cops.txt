@@ -17,7 +17,7 @@ TANGENT driver mode:
 DAYNA driver mode:
 	Dayna DL2000/DaynaTalk PC (Half Length), COPS LT-95,
 	Farallon PhoneNET PC III, Farallon PhoneNET PC II
-Other cards possibly supported mode unkown though:
+Other cards possibly supported mode unknown though:
 	Dayna DL2000 (Full length)
 
 The COPS driver defaults to using Dayna mode. To change the driver's 

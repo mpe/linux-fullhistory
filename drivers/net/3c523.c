@@ -521,7 +521,7 @@ __initfunc(int elmc_probe(struct device *dev))
 	/* The 3c523 has a 24K chunk of memory.  The first 16K is the
 	   shared memory, while the last 8K is for the EtherStart BIOS ROM.
 	   Which we don't care much about here.  We'll just tell Linux that
-	   we're using 16K.  MCA won't permit adress space conflicts caused
+	   we're using 16K.  MCA won't permit address space conflicts caused
 	   by not mapping the other 8K. */
 	dev->mem_start = shm_table[(status & ELMC_STATUS_MEMORY_SELECT) >> 3];
 

@@ -229,7 +229,7 @@ protocols (e.g. by a member struct concap_proto* in struct device)
 then the interface of the service function could be changed
 by passing a pointer of type (struct device*) instead of
 type (struct concap_proto*). Doing so would make many of the service
-functions compatible to network device support fuctions.
+functions compatible to network device support functions.
 
 e.g. instead of the concap protocol's service function
 
@@ -241,7 +241,7 @@ we could have
 
 As this is compatible to the dev->hard_start_xmit() method, the device
 driver could directly register the concap protocol's encap_and_xmit()
-fuction as its hard_start_xmit() method. This would eliminate one
+function as its hard_start_xmit() method. This would eliminate one
 procedure call layer.
 
 

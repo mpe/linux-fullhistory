@@ -2932,7 +2932,6 @@ void gus_wave_init(struct address_info *hw_config)
 	int gus_type = 0x24;	/* 2.4 */
 
 	int irq = hw_config->irq, dma = hw_config->dma, dma2 = hw_config->dma2;
-	int dev;
 	int sdev;
 
 	hw_config->slots[0] = -1;	/* No wave */

@@ -76,7 +76,6 @@ static int try_to_swap_out(struct task_struct * tsk, struct vm_area_struct* vma,
 		set_pte(page_table, __pte(entry));
 drop_pte:
 		vma->vm_mm->rss--;
-		tsk->nswap++;
 		flush_tlb_page(vma, address);
 		__free_page(page_map);
 		return 0;
@@ -99,6 +98,14 @@ drop_pte:
 		pte_clear(page_table);
 		goto drop_pte;
 	}
+
+	/*
+	 * Don't go down into the swap-out stuff if
+	 * we cannot do I/O! Avoid recursing on FS
+	 * locks etc.
+	 */
+	if (!(gfp_mask & __GFP_IO))
+		return 0;
 
 	/*
 	 * Ok, it's really dirty. That means that

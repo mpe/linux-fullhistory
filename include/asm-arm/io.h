@@ -31,7 +31,7 @@
  *              to an address that the kernel can use.
  */
 #define virt_to_bus(x)	(__virt_to_bus((unsigned long)(x)))
-#define bus_to_virt(x)	((void *)(__bus_to_virt(x)))
+#define bus_to_virt(x)	((void *)(__bus_to_virt((unsigned long)(x))))
 
 /*
  * These macros actually build the multi-value IO function prototypes
@@ -172,6 +172,8 @@ __IO(l,"",long)
 #undef ARCH_IO_CONSTANT
 
 #ifdef __KERNEL__
+
+extern void * __ioremap(unsigned long offset, unsigned long size, unsigned long flags);
 
 /*
  * String version of IO memory access ops:

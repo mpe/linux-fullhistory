@@ -15,20 +15,11 @@
 #define MAX_DMA_ADDRESS		0xffffffff
 
 /*
- * DMA modes - we have two, IN and OUT
- */
-
-typedef int dmamode_t;
-#define DMA_MODE_READ		0x44
-#define DMA_MODE_WRITE		0x48
-
-/*
  * The 21285 has two internal DMA channels; we call these 0 and 1.
  * On CATS hardware we have an additional eight ISA dma channels
  * numbered 2..9.
  */
 #define MAX_DMA_CHANNELS	10
-
 #define DMA_ISA_BASE		2
 #define DMA_FLOPPY		(DMA_ISA_BASE + 2)
 

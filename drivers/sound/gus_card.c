@@ -128,17 +128,20 @@ void gusintr(int irq, void *dev_id, struct pt_regs *dummy)
 {
 	unsigned char src;
 	extern int gus_timer_enabled;
-	struct address_info *hw_config=dev_id;
 
 	sti();
 
 #ifdef CONFIG_GUSMAX
-	if (have_gus_max)
+	if (have_gus_max) {
+		struct address_info *hw_config = dev_id;
 		adintr(irq, (void *)hw_config->slots[1], NULL);
+	}
 #endif
 #ifdef CONFIG_GUS16
-	if (db16)
+	if (db16) {
+		struct address_info *hw_config = dev_id;
 		adintr(irq, (void *)hw_config->slots[3], NULL);
+	}
 #endif
 
 	while (1)

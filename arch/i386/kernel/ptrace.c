@@ -70,7 +70,7 @@ static inline int put_stack_long(struct task_struct *task, int offset,
 extern int _stext, _etext;
 static void print_child_state(struct task_struct *task)
 {
-	unsigned int * stack = (unsigned int *) task->tss.esp0;
+	unsigned int * stack = (unsigned int *) task->tss.esp;
 	int count = 40;
 
 	printk("Process: %s (stack=%p, task=%p)\n", task->comm, stack, task);
@@ -78,7 +78,7 @@ static void print_child_state(struct task_struct *task)
 		unsigned int data;
 		if ((unsigned int) stack < (unsigned int) task)
 			break;
-		if ((unsigned int) stack >= PAGE_SIZE + (unsigned int) task)
+		if ((unsigned int) stack >= 2*PAGE_SIZE + (unsigned int) task)
 			break;
 		data = *stack;
 		stack++;
@@ -394,15 +394,16 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 		ret = 0;
 		goto out;
 	}
-	if (pid == 1)		/* you may not mess with init */
-		goto out;
 	ret = -ESRCH;
 	read_lock(&tasklist_lock);
 	child = find_task_by_pid(pid);
 	read_unlock(&tasklist_lock);	/* FIXME!!! */
 	if (!child)
 		goto out;
+print_child_state(child);
 	ret = -EPERM;
+	if (pid == 1)		/* you may not mess with init */
+		goto out;
 	if (request == PTRACE_ATTACH) {
 		if (child == current)
 			goto out;
@@ -435,8 +436,6 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	if (!(child->flags & PF_PTRACED))
 		goto out;
 	if (child->state != TASK_STOPPED) {
-print_child_state(child);
-goto out;
 		if (request != PTRACE_KILL)
 			goto out;
 	}

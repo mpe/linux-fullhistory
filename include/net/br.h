@@ -299,5 +299,5 @@ int br_tree_get_info(char *buffer, char **start, off_t offset, int length, int d
 /* externs */
 
 extern struct br_stat br_stats;
-
+extern Port_data port_info[];
 

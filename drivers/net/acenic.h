@@ -581,8 +581,11 @@ struct ace_private
 	int			flags;
 	u16			vendor;
 	u16			pci_command;
+	struct pci_dev		*pdev;
+#if 0
 	u8			pci_bus;
 	u8			pci_dev_fun;
+#endif
 	char			name[24];
 	struct net_device_stats stats;
 };

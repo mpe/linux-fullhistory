@@ -826,7 +826,7 @@ ifdef CONFIG_8390_BUILTIN
 L_OBJS += 8390.o
 else
   ifdef CONFIG_8390_MODULE
-  M_OBJS += 8390.o
+  MX_OBJS += 8390.o
   endif
 endif
 

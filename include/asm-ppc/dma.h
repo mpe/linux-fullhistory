@@ -204,6 +204,7 @@ extern long ppc_cs4232_dma, ppc_cs4232_dma2;
 #define DMA2_EXT_REG               0x4D6
 
 #define DMA_MODE_CASCADE 0xC0   /* pass thru DREQ->HRQ, DACK<-HLDA only */
+#define DMA_AUTOINIT	0x10
 
 extern spinlock_t  dma_spin_lock;
 
@@ -392,5 +393,11 @@ static __inline__ int get_dma_residue(unsigned int dmanr)
 /* These are in kernel/dma.c: */
 extern int request_dma(unsigned int dmanr, const char * device_id);	/* reserve a DMA channel */
 extern void free_dma(unsigned int dmanr);	/* release it again */
+
+#ifdef CONFIG_PCI_QUIRKS
+extern int isa_dma_bridge_buggy;
+#else
+#define isa_dma_bridge_buggy    (0)
+#endif
 
 #endif /* _ASM_DMA_H */

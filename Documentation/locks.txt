@@ -45,7 +45,7 @@ exists, and neither will have any effect on the other.
 I wanted the two lock styles to be cooperative, but there were so many
 race and deadlock conditions that the current solution was the only
 practical one. It puts us in the same position as, for example, SunOS
-4.1.x and serveral other commercial Unices. The only OS's that support
+4.1.x and several other commercial Unices. The only OS's that support
 cooperative flock()/fcntl() are those that emulate flock() using
 fcntl(), with all the problems that implies.
 

@@ -55,7 +55,7 @@ extern __inline__ void set_fs (mm_segment_t fs)
 /* We use 33-bit arithmetic here... */
 #define __range_ok(addr,size) ({ \
 	unsigned long flag, sum; \
-	__asm__ __volatile__("adds %1, %2, %3; sbccs %1, %1, %0; movcc %0, #0" \
+	__asm__ __volatile__("adds %1, %2, %3; sbcccs %1, %1, %0; movcc %0, #0" \
 		: "=&r" (flag), "=&r" (sum) \
 		: "r" (addr), "Ir" (size), "0" (current->addr_limit) \
 		: "cc"); \

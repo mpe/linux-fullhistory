@@ -118,8 +118,17 @@ bios     - preserve state of BIOS ROM. It is default. Driver does not enable BIO
 noinit   - tells driver, that devices were already initialized. You should use it
            if you have G100 and/or if driver cannot detect memory, you see strange
 	   pattern on screen and so on. Devices not enabled by BIOS are still
-	   initialized.
-init     - driver initializes every device it knows about. It is default.
+	   initialized. It is default.
+init     - driver initializes every device it knows about.
+nomtrr   - disables write combining on frame buffer. This slows down driver but
+           there is reported minor incompatibility between GUS DMA and XFree under
+	   high loads if write combining is enabled (sound dropouts).
+mtrr     - enables write combining on frame buffer. It speeds up video accesses
+           much. It is default. You must have MTRR support enabled in kernel and
+	   your CPU must have MTRR (f.e. Pentium II have them).
+sgram    - tells to driver that you have G200 with SGRAM memory. It has no effect 
+           without `init'.
+sdram    - tells to driver that you have G200 with SDRAM memory. It is a default.
 inv24    - change timings parameters for 24bpp modes on Millenium and Millenium II.
            Specify this if you see strange color shadows around characters.
 noinv24  - use standard timmings. It is default.
@@ -200,6 +209,7 @@ Currently there are following known bugs:
  + 24bpp does not support correctly XF-FBDev on big-endian architectures.
  + interlaced text mode is not supported; it looks like hardware limitiation,
    but I'm not sure.
+ + G200 SGRAM/SDRAM is not autodetected.
  + maybe more...
 And following misfeatures:
  + SVGALib does not restore screen on exit.

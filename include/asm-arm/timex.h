@@ -10,4 +10,13 @@
 
 #include <asm/arch/timex.h>
 
+typedef unsigned long cycles_t;
+
+extern cycles_t cacheflush_time;
+
+static inline cycles_t get_cycles (void)
+{
+	return 0;
+}
+
 #endif

@@ -1,0 +1,29 @@
+#!/bin/sh
+# Before running this script please ensure that your PATH is
+# typical as you use for compilation/istallation. I use
+# /bin /sbin /usr/bin /usr/sbin /usr/local/bin, but it may
+# differs on your system.
+#
+echo '-- Versions installed: (if some fields are empty or looks'
+echo '-- unusual then possibly you have very old versions)'
+uname -a
+insmod -V 1>/tmp/ver_linux.tmp 2>>/tmp/ver_linux.tmp
+awk 'NR==1{print "Kernel modules        ",$NF}' /tmp/ver_linux.tmp
+rm -f /tmp/ver_linux.tmp
+echo "Gnu C                 " `gcc --version`
+ld -v 2>&1 | awk -F\) '{print $1}' | awk \
+      '/BFD/{print "Binutils              ",$NF}'
+ls -l `ldd /bin/sh | awk '/libc/{print $3}'` | sed -e 's/\.so$//' \
+  | awk -F'[.-]'   '{print "Linux C Library        " $(NF-2)"."$(NF-1)"."$NF}'
+echo -n "Dynamic linker         "
+ldd -v > /dev/null 2>&1 && ldd -v || ldd --version |head -1
+ls -l /usr/lib/lib{g,stdc}++.so  2>/dev/null | awk -F. \
+       '{print "Linux C++ Library      " $4"."$5"."$6}'
+ps --version 2>&1 | awk 'NR==1{print "Procps                ", $NF}'
+mount --version | awk -F\- '{print "Mount                 ", $NF}'
+netstat --version | awk \
+'NR==1{if ($5 != "") { n=split($5,buf,"-"); ver=buf[n]; done=1 }}
+ NR==2{if (done != 1) ver=$3 }
+ END{print "Net-tools             ",ver}'
+loadkeys -h 2>&1 | awk 'NR==1{print "Kbd                   ",$3}'
+expr --v | awk '{print "Sh-utils              ", $NF}'

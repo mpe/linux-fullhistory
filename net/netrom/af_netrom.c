@@ -892,11 +892,18 @@ int nr_rx_frame(struct sk_buff *skb, struct device *dev)
 	 */
 	if (frametype != NR_CONNREQ) {
 		/*
+		 * Here it would be nice to be able to send a reset but
+		 * NET/ROM doesn't have one. The following hack would
+		 * have been a way to extend the protocol but apparently
+		 * it kills BPQ boxes... :-(
+		 */
+#if 0
+		/*
 		 * Never reply to a CONNACK/CHOKE.
 		 */
 		if (frametype != NR_CONNACK || flags != NR_CHOKE_FLAG)
 			nr_transmit_refusal(skb, 1);
-
+#endif
 		return 0;
 	}
 

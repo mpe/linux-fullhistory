@@ -1,5 +1,5 @@
 /*
- * $Id: mbx_setup.c,v 1.4 1998/11/15 19:58:55 cort Exp $
+ * $Id: mbx_setup.c,v 1.5 1998/12/29 18:55:07 cort Exp $
  *
  *  linux/arch/ppc/kernel/setup.c
  *
@@ -59,18 +59,21 @@ extern void m8xx_cpm_reset(uint);
 void __init powermac_init(void)
 {
 }
+
 void __init adbdev_init(void)
 {
 }
 
 void __init mbx_ide_init_hwif_ports(ide_ioreg_t *p, ide_ioreg_t base, int *irq)
 {
+	ide_ioreg_t port = base;
+	int i = 8;
 
-	*p = 0;
-	*irq = 0;
-
-	if (base != 0)		/* Only map the first ATA flash drive */
-		return;
+	while (i--)
+		*p++ = port++;
+	*p++ = base + 0x206;
+	if (irq != NULL)
+		*irq = 0;
 #ifdef ATA_FLASH
 	base = (unsigned long) ioremap(PCMCIA_MEM_ADDR, 0x200);
 	for (i = 0; i < 8; ++i)

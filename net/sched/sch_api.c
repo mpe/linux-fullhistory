@@ -94,7 +94,7 @@ static int tclass_notify(struct sk_buff *oskb, struct nlmsghdr *n,
    ---enqueue
 
    enqueue returns number of enqueued packets i.e. this number is 1,
-   if packet was enqueued sucessfully and <1 if something (not
+   if packet was enqueued successfully and <1 if something (not
    necessary THIS packet) was dropped.
 
    Auxiliary routines:

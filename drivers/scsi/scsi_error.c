@@ -969,7 +969,7 @@ int scsi_decide_disposition (Scsi_Cmnd * SCpnt)
       /*
        * Note - this means that we just report the status back to the
        * top level driver, not that we actually think that it indicates
-       * sucess.
+       * success.
        */
       return SUCCESS;
       /*

@@ -8,10 +8,10 @@
 
 #include <asm/proc-fns.h>
 
-#define arch_hard_reset() {						\
+#define arch_reset(mode) {						\
 	extern void ecard_reset (int card);				\
 	outb (0, IOMD_ROMCR0);						\
-	ecard_reset (-1);						\
+	ecard_reset(-1);						\
 	cli();								\
 	__asm__ __volatile__("msr  spsr, r1;"				\
 			     "mcr  p15, 0, %0, c1, c0, 0;"		\

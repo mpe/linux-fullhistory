@@ -1107,6 +1107,12 @@ static void NS8390_trigger_send(struct device *dev, unsigned int length,
 
 #ifdef MODULE
 
+EXPORT_SYMBOL(ei_open);
+EXPORT_SYMBOL(ei_close);
+EXPORT_SYMBOL(ei_interrupt);
+EXPORT_SYMBOL(ethdev_init);
+EXPORT_SYMBOL(NS8390_init);
+
 struct module *NS8390_module = NULL;
 
 int init_module(void)

@@ -8,7 +8,7 @@
 /*
  * The following structure is used to manage multiple PCI busses.
  *
- * XXX: We should solve thos problem in an architecture independant
+ * XXX: We should solve this problem in an architecture independent
  * way, rather than hacking something up here.
  */
 

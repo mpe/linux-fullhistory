@@ -100,6 +100,7 @@
 
 #include <asm/io.h>
 #include <asm/spinlock.h>
+#include <asm/unaligned.h>
 #ifdef CONFIG_MTRR
 #include <asm/mtrr.h>
 #endif
@@ -111,7 +112,7 @@
 #include <video/fbcon-cfb24.h>
 #include <video/fbcon-cfb32.h>
 
-#if defined(CONFIG_PPC)
+#if defined(CONFIG_FB_OF)
 #if defined(CONFIG_FB_COMPAT_XPMAC)
 #include <asm/vc_ioctl.h>
 #endif
@@ -169,7 +170,7 @@
 /* I benchmarked PII/350MHz with G200... MEMCPY, MEMCPYTOIO and WRITEL are on same speed ( <2% diff) */
 /* so that means that G200 speed (or AGP speed?) is our limit... I do not have benchmark to test, how */
 /* much of PCI bandwidth is used during transfers... */
-#if defined(__i386__) || defined(__ppc__)
+#if defined(__i386__)
 #define MEMCPYTOIO_MEMCPY
 #else
 #define MEMCPYTOIO_WRITEL
@@ -180,10 +181,16 @@
 #error "Sorry, I have no idea how to do this on sparc... There is mapioaddr... With bus_type parameter..."
 #endif
 
-#ifdef __m68k__
+#if defined(__m68k__)
 #define MAP_BUSTOVIRT
 #else
+#if defined(CONFIG_PPC) && defined(CONFIG_PREP) && defined(_ISA_MEM_BASE)
+/* do not tell me that PPC is not broken... if ioremap() oops with
+   invalid value written to msr... */
+#define MAP_ISAMEMBASE
+#else
 #define MAP_IOREMAP
+#endif
 #endif
 
 #ifdef DEBUG
@@ -344,7 +351,11 @@ static inline int mga_ioremap(unsigned long phys, unsigned long size, int flags,
 #ifdef MAP_BUSTOVIRT
 	virt->vaddr = bus_to_virt(phys);
 #else
+#ifdef MAP_ISAMEMBASE
+	virt->vaddr = (void*)(phys + _ISA_MEM_BASE);
+#else
 #error "Your architecture does not have neither ioremap nor bus_to_virt... Giving up"
+#endif
 #endif
 #endif
 	return (virt->vaddr == 0); /* 0, !0... 0, error_code in future */
@@ -554,6 +565,7 @@ struct matrox_fb_info {
 		int		inverse;
 		int		hwcursor;
 		int		blink;
+		int		sgram;
 
 		int		accelerator;
 		int		text_type_aux;
@@ -592,15 +604,13 @@ struct matrox_fb_info {
 	} cmap;
 #endif
 	struct { unsigned red, green, blue, transp; } palette[256];
-#if defined(CONFIG_PPC) && defined(CONFIG_FB_COMPAT_XPMAC)
+#if defined(CONFIG_FB_OF) && defined(CONFIG_FB_COMPAT_XPMAC)
 	char	matrox_name[32];
 #endif
 };
 
-#if defined(CONFIG_PPC)
-unsigned char nvram_read_byte(int);
-#endif
 #if defined(CONFIG_FB_OF)
+unsigned char nvram_read_byte(int);
 int matrox_of_init(struct device_node *dp);
 #endif
 
@@ -3116,7 +3126,7 @@ static const unsigned char MGA1064_DAC[] = {
 		0x00, 0,  
 		M1064_XPIXCLKCTRL_PLL_UP | M1064_XPIXCLKCTRL_EN | M1064_XPIXCLKCTRL_SRC_PLL, 
 		M1064_XGENCTRL_VS_0 | M1064_XGENCTRL_ALPHA_DIS | M1064_XGENCTRL_BLACK_0IRE | M1064_XGENCTRL_NO_SYNC_ON_GREEN, 
-		M1064_XMISCCTRL_DAC_EN | M1064_XMISCCTRL_MFC_VGA | M1064_XMISCCTRL_DAC_8BIT | M1064_XMISCCTRL_LUT_EN,
+		M1064_XMISCCTRL_DAC_EN | M1064_XMISCCTRL_MFC_DIS | M1064_XMISCCTRL_DAC_8BIT | M1064_XMISCCTRL_LUT_EN,
 		0x10, 0x3F, M1064_XZOOMCTRL_1, M1064_XSENSETEST_BCOMP | M1064_XSENSETEST_GCOMP | M1064_XSENSETEST_RCOMP | M1064_XSENSETEST_PDOWN, 
 		0x00,
 		0x00, 0x00, 0xFF, 0xFF};
@@ -3200,7 +3210,7 @@ static int DAC1064_init_1(CPMINFO struct matrox_hw_state* hw, struct my_timming*
 	memcpy(hw->DACreg, MGA1064_DAC, sizeof(MGA1064_DAC_regs));
 	if (p->type == FB_TYPE_TEXT) {
 		hw->DACreg[POS1064_XMISCCTRL] = M1064_XMISCCTRL_DAC_EN
-					      | M1064_XMISCCTRL_MFC_VGA
+					      | M1064_XMISCCTRL_MFC_DIS
 					      | M1064_XMISCCTRL_DAC_6BIT
 					      | M1064_XMISCCTRL_LUT_EN;
 		hw->DACreg[POS1064_XMULCTRL] = M1064_XMULCTRL_DEPTH_8BPP 
@@ -3969,10 +3979,8 @@ __initfunc(static int MGAG100_preinit(WPMINFO struct matrox_hw_state* hw)) {
 	pci_read_config_dword(ACCESS_FBINFO(pcidev), 0x50, &reg50);
 	reg50 &= ~0x3000;
 	pci_write_config_dword(ACCESS_FBINFO(pcidev), 0x50, reg50);
-	if (!(x7AF4 & 0x10))
-		hw->MXoptionReg |= 0x4000;
 	if (ACCESS_FBINFO(devflags.accelerator) == FB_ACCEL_MATROX_MGAG100) {
-		hw->MXoptionReg |= 0x1080;
+		hw->MXoptionReg |= 0x5080;
 		pci_write_config_dword(ACCESS_FBINFO(pcidev), PCI_OPTION_REG, hw->MXoptionReg);
 		mga_outl(M_CTLWTST, 0x01032521);
 		/* mga_outl(M_CTLWTST, 0x03258A31); */ 
@@ -3999,6 +4007,8 @@ __initfunc(static int MGAG100_preinit(WPMINFO struct matrox_hw_state* hw)) {
 		}
 	} else {
 		hw->MXoptionReg |= 0x00000C00;
+		if (ACCESS_FBINFO(devflags.sgram))
+			hw->MXoptionReg |= 0x4000;
 		mga_outl(M_CTLWTST, 0x042450A1);
 		mga_outb(0x1E47, 0x00);
 		mga_outb(0x1E46, 0x00);
@@ -4513,7 +4523,7 @@ static int matroxfb_set_var(struct fb_var_screeninfo *var, int con,
 			ACCESS_FBINFO(newhw) = ohw;
 			matrox_cfbX_init(PMINFO display);
 			do_install_cmap(PMINFO display);
-#if defined(CONFIG_PPC) && defined(CONFIG_FB_COMPAT_XPMAC)
+#if defined(CONFIG_FB_OF) && defined(CONFIG_FB_COMPAT_XPMAC)
 			if (console_fb_info == &ACCESS_FBINFO(fbcon)) {
 				int vmode, cmode;
 
@@ -4531,7 +4541,7 @@ static int matroxfb_set_var(struct fb_var_screeninfo *var, int con,
 				display_info.cmap_data_address = 0;
 				display_info.disp_reg_address = ACCESS_FBINFO(mmio.base);
 			}
-#endif /* CONFIG_PPC && CONFIG_FB_COMPAT_XPMAC */
+#endif /* CONFIG_FB_OF && CONFIG_FB_COMPAT_XPMAC */
 		}
 	}
 	return 0;
@@ -4845,6 +4855,8 @@ static int noinit = 1;			/* "matrox:noinit" */
 static int inverse = 0;			/* "matrox:inverse" */
 static int hwcursor = 1;		/* "matrox:nohwcursor" */
 static int blink = 1;			/* "matrox:noblink" */
+static int sgram = 0;			/* "matrox:sgram" */
+static int mtrr = 1;			/* "matrox:nomtrr" */
 static int grayscale = 0;		/* "matrox:grayscale" */
 static unsigned int fastfont = 0;	/* "matrox:fastfont:xxxxx" */
 static int dev = -1;			/* "matrox:dev:xxxxx" */
@@ -4935,6 +4947,10 @@ __initfunc(void matroxfb_setup(char *options, int *ints)) {
 			disabled = 1;
 		else if (!strcmp(this_opt, "enabled"))	/* noenabled does not exist */
 			disabled = 0;
+		else if (!strcmp(this_opt, "sgram"))	/* nosgram == sdram */
+			sgram = 1;
+		else if (!strcmp(this_opt, "sdram"))
+			sgram = 0;
 		else {
 			int value = 1;
 	
@@ -4956,6 +4972,8 @@ __initfunc(void matroxfb_setup(char *options, int *ints)) {
 				nobios = !value;
 			else if (!strcmp(this_opt, "init"))
 				noinit = !value;
+			else if (!strcmp(this_opt, "mtrr"))
+				mtrr = value;
 			else if (!strcmp(this_opt, "inv24"))
 				inv24 = value;
 			else if (!strcmp(this_opt, "cross4MB"))
@@ -5441,9 +5459,11 @@ __initfunc(static int initMatrox2(WPMINFO struct display* d, struct board* b)) {
 	if (ACCESS_FBINFO(video.len_usable) > 0x08000000)
 		ACCESS_FBINFO(video.len_usable) = 0x08000000;
 #ifdef CONFIG_MTRR
-	ACCESS_FBINFO(mtrr.vram) = mtrr_add(video_base_phys, ACCESS_FBINFO(video.len), MTRR_TYPE_WRCOMB, 1);
-	ACCESS_FBINFO(mtrr.vram_valid) = 1;
-	printk(KERN_INFO "matroxfb: MTRR's turned on\n");
+	if (mtrr) {
+		ACCESS_FBINFO(mtrr.vram) = mtrr_add(video_base_phys, ACCESS_FBINFO(video.len), MTRR_TYPE_WRCOMB, 1);
+		ACCESS_FBINFO(mtrr.vram_valid) = 1;
+		printk(KERN_INFO "matroxfb: MTRR's turned on\n");
+	}
 #endif	/* CONFIG_MTRR */
 
 /* validate params, autodetect k, M */
@@ -5563,7 +5583,7 @@ __initfunc(static int initMatrox2(WPMINFO struct display* d, struct board* b)) {
 	ACCESS_FBINFO(fbcon.flags) = FBINFO_FLAG_DEFAULT;
 	ACCESS_FBINFO(hw_switch->reset(PMINFO hw));
 	ACCESS_FBINFO(video.len_usable) &= PAGE_MASK;
-#if defined(CONFIG_PPC)
+#if defined(CONFIG_FB_OF)
 #if defined(CONFIG_FB_COMPAT_XPMAC)
 	strcpy(ACCESS_FBINFO(matrox_name), "MTRX,");	/* OpenFirmware naming convension */
 	strncat(ACCESS_FBINFO(matrox_name), b->name, 26);
@@ -5679,6 +5699,7 @@ __initfunc(static int matrox_init(void)) {
 				ACCESS_FBINFO(devflags.precise_width) = option_precise_width;
 				ACCESS_FBINFO(devflags.hwcursor) = hwcursor;
 				ACCESS_FBINFO(devflags.blink) = blink;
+				ACCESS_FBINFO(devflags.sgram) = sgram;
 				ACCESS_FBINFO(capable.cross4MB) = cross4MB;
 
 				ACCESS_FBINFO(fastfont.size) = fastfont;
@@ -5756,6 +5777,10 @@ MODULE_PARM(nobios, "i");
 MODULE_PARM_DESC(nobios, "Disables ROM BIOS (0 or 1=disabled) (default=do not change BIOS state)"); 
 MODULE_PARM(noinit, "i");
 MODULE_PARM_DESC(noinit, "Disables W/SG/SD-RAM and bus interface initialization (0 or 1=do not initialize) (default=0)");
+MODULE_PARM(mtrr, "i");
+MODULE_PARM_DESC(mtrr, "This speeds up video memory accesses (0=disabled or 1) (default=1)");
+MODULE_PARM(sgram, "i");
+MODULE_PARM_DESC(sgram, "Indicates that G200 has SGRAM memory (0=SDRAM, 1=SGRAM) (default=0)");
 MODULE_PARM(inv24, "i");
 MODULE_PARM_DESC(inv24, "Inverts clock polarity for 24bpp and loop frequency > 100MHz (default=do not invert polarity)");
 MODULE_PARM(inverse, "i");

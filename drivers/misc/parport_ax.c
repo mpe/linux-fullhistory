@@ -11,7 +11,6 @@
  *          Grant Guenther <grant@torque.net>
  */
 
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/delay.h>
 #include <linux/errno.h>

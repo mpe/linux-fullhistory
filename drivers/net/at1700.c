@@ -838,10 +838,12 @@ cleanup_module(void)
 {
 	struct net_local *lp = dev_at1700.priv;
 	unregister_netdev(&dev_at1700);
+#ifdef CONFIG_MCA	
 	if(lp->mca_slot)
 	{
 		mca_mark_as_unused(lp->mca_slot);
 	}
+#endif	
 	kfree(dev_at1700.priv);
 	dev_at1700.priv = NULL;
 

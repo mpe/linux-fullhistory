@@ -305,7 +305,7 @@ struct dbri {
 #define DBRI_RD_M	(1<<14)	/* Marker interrupt */
 #define DBRI_RD_BCNT(v)	v	/* Buffer size */
 #define DBRI_RD_CRC	(1<<7)	/* 0: CRC is correct */
-#define DBRI_RD_BBC	(1<<6)	/* 1: Bad Byte recieved */
+#define DBRI_RD_BBC	(1<<6)	/* 1: Bad Byte received */
 #define DBRI_RD_ABT	(1<<5)	/* Abort: frame aborted */
 #define DBRI_RD_OVRN	(1<<3)	/* Overrun: data lost */
 #define DBRI_RD_STATUS(v)      ((v)&0xff)      /* Receive status */

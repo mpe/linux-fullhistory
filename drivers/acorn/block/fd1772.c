@@ -1039,7 +1039,7 @@ static void fd_rwsec_done(int status)
 static void fd_times_out(unsigned long dummy)
 {
 	SET_IRQ_HANDLER(NULL);
-	/* If the timeout occured while the readtrack_check timer was
+	/* If the timeout occurred while the readtrack_check timer was
 	 * active, we need to cancel it, else bad things will happen */
 	del_timer( &readtrack_timer ); 
 	FDC1772_WRITE(FDC1772REG_CMD, FDC1772CMD_FORCI);

@@ -226,7 +226,7 @@ extern unsigned long empty_zero_page[1024];
  do { \
 	unsigned long __pgdir = (unsigned long)pgdir; \
 	((tsk)->tss.pg_tables = (unsigned long *)(__pgdir)); \
-	asm("mtspr %0,%1 \n\t" :: "i"(M_TWB), "r"(__pa(__pgdir))); \
+	asm("mtspr %0,%1 \n\t" : : "i"(M_TWB), "r"(__pa(__pgdir))); \
  } while (0)
 #endif /* CONFIG_8xx */
      
@@ -637,5 +637,7 @@ extern void kernel_set_cachemode (unsigned long address, unsigned long size,
 
 /* Needs to be defined here and not in linux/mm.h, as it is arch dependent */
 #define PageSkip(page)		(0)
+#define kern_addr_valid(addr)	(1)
+
 #endif __ASSEMBLY__
 #endif /* _PPC_PGTABLE_H */

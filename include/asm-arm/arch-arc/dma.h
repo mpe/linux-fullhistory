@@ -16,14 +16,6 @@
 
 #define MAX_DMA_ADDRESS		0x03000000
 
-/*
- * DMA modes - we have two, IN and OUT
- */
-typedef enum {
-	DMA_MODE_READ,
-	DMA_MODE_WRITE
-} dmamode_t;
-
 #ifdef CONFIG_ARCH_ARC
 #define MAX_DMA_CHANNELS	3
 

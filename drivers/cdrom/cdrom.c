@@ -417,7 +417,7 @@ int open_for_data(struct cdrom_device_info * cdi)
 			cdo->lock_door(cdi, 1);
 			cdinfo(CD_OPEN, "door locked.\n");
 	}	
-	cdinfo(CD_OPEN, "device opened sucessfully.\n"); 
+	cdinfo(CD_OPEN, "device opened successfully.\n"); 
 	return ret;
 
 	/* Something failed.  Try to unlock the drive, because some drivers
@@ -699,7 +699,7 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 		sanitize_format(&ms_info.addr, &ms_info.addr_format,
 				requested_format);
 		IOCTL_OUT(arg, struct cdrom_multisession, ms_info);
-		cdinfo(CD_DO_IOCTL, "CDROMMULTISESSION sucessful\n"); 
+		cdinfo(CD_DO_IOCTL, "CDROMMULTISESSION successful\n"); 
 		return 0;
 		}
 
@@ -789,7 +789,7 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 		if ((ret=cdo->get_mcn(cdi, &mcn)))
 			return ret;
 		IOCTL_OUT(arg, struct cdrom_mcn, mcn);
-		cdinfo(CD_DO_IOCTL, "CDROM_GET_MCN sucessful\n"); 
+		cdinfo(CD_DO_IOCTL, "CDROM_GET_MCN successful\n"); 
 		return 0;
 		}
 
@@ -895,7 +895,7 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 			sanitize_format(&q.cdsc_absaddr, &back, requested);
 			sanitize_format(&q.cdsc_reladdr, &q.cdsc_format, requested);
 			IOCTL_OUT(arg, struct cdrom_subchnl, q);
-			/* cdinfo(CD_DO_IOCTL, "CDROMSUBCHNL sucessful\n"); */ 
+			/* cdinfo(CD_DO_IOCTL, "CDROMSUBCHNL successful\n"); */ 
 			return 0;
 			}
 		case CDROMREADTOCHDR: {
@@ -908,7 +908,7 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 			if ((ret=cdo->audio_ioctl(cdi, cmd, &header)))
 				return ret;
 			IOCTL_OUT(arg, struct cdrom_tochdr, header);
-			/* cdinfo(CD_DO_IOCTL, "CDROMREADTOCHDR sucessful\n"); */ 
+			/* cdinfo(CD_DO_IOCTL, "CDROMREADTOCHDR successful\n"); */ 
 			return 0;
 			}
 		case CDROMREADTOCENTRY: {
@@ -930,7 +930,7 @@ int cdrom_ioctl(struct inode *ip, struct file *fp,
 			sanitize_format(&entry.cdte_addr,
 			&entry.cdte_format, requested_format);
 			IOCTL_OUT(arg, struct cdrom_tocentry, entry);
-			/* cdinfo(CD_DO_IOCTL, "CDROMREADTOCENTRY sucessful\n"); */ 
+			/* cdinfo(CD_DO_IOCTL, "CDROMREADTOCENTRY successful\n"); */ 
 			return 0;
 			}
 		case CDROMPLAYMSF: {
