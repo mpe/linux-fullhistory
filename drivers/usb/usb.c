@@ -1625,7 +1625,6 @@ int usb_string(struct usb_device *dev, int index, char *buf, size_t size)
 	err = usb_get_string(dev, dev->string_langid, index, tbuf, 255);
 	if (err < 0)
 		goto errout;
-	info("actual string desc. length = %d", err);
 
 	size--;		/* leave room for trailing NULL char in output buffer */
 	for (idx = 0, u = 2; u < err; u += 2) {
@@ -1729,6 +1728,8 @@ int usb_new_device(struct usb_device *dev)
 		return -1;
 	}
 
+	info("new device strings: Mfr=%d, Product=%d, SerialNumber=%d",
+		dev->descriptor.iManufacturer, dev->descriptor.iProduct, dev->descriptor.iSerialNumber);
 	if (dev->descriptor.iManufacturer)
 		usb_show_string(dev, "Manufacturer", dev->descriptor.iManufacturer);
 	if (dev->descriptor.iProduct)

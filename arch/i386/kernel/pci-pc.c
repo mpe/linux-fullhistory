@@ -1036,8 +1036,6 @@ static void __init pcibios_irq_peer_trick(struct irq_routing_table *rt)
  *  table, but unfortunately we have to know the interrupt router chip.
  */
 
-#define ALLOWED_IRQ_MASK 0x0ff8
-
 static char *pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_table *rt, int pin, int assign)
 {
 	struct irq_info *q;
@@ -1070,7 +1068,7 @@ static char *pcibios_lookup_irq(struct pci_dev *dev, struct irq_routing_table *r
 	DBG(" -> PIRQ %02x, mask %04x", pirq, mask);
 	if (!assign || (dev->class >> 8) == PCI_CLASS_DISPLAY_VGA)
 		newirq = 0;
-	else for(newirq = 16; newirq && !(mask & ALLOWED_IRQ_MASK & (1 << newirq)); newirq--)
+	else for(newirq = 13; newirq && !(mask & (1 << newirq)); newirq--)
 		;
 	if (!(router = pci_find_slot(rt->rtr_bus, rt->rtr_devfn))) {
 		DBG(" -> router not found\n");
@@ -1175,10 +1173,8 @@ static void __init pcibios_fixup_irqs(void)
 		/*
 		 * Fix out-of-range IRQ numbers and missing IRQs.
 		 */
-		if (dev->irq >= 16) {
-			DBG("%s: invalid IRQ %d\n", dev->irq);
+		if (dev->irq >= NR_IRQS)
 			dev->irq = 0;
-		}
 		if (pin && !dev->irq && pirq_table) {
 			char *msg = pcibios_lookup_irq(dev, pirq_table, pin, 0);
 			if (msg)
