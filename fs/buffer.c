@@ -1053,10 +1053,13 @@ void __bforget(struct buffer_head * buf)
 	wait_on_buffer(buf);
 	mark_buffer_clean(buf);
 	clear_bit(BH_Protected, &buf->b_state);
-	buf->b_count--;
 	remove_from_hash_queue(buf);
 	buf->b_dev = NODEV;
 	refile_buffer(buf);
+	if (!--buf->b_count)
+		return;
+	printk("VFS: forgot an in-use buffer! (count=%d)\n",
+		buf->b_count);
 }
 
 /*
@@ -1065,19 +1068,19 @@ void __bforget(struct buffer_head * buf)
  */
 struct buffer_head * bread(kdev_t dev, int block, int size)
 {
-	struct buffer_head * bh;
+	struct buffer_head * bh = getblk(dev, block, size);
 
-	if (!(bh = getblk(dev, block, size))) {
-		printk("VFS: bread: impossible error\n");
+	if (bh) {
+		if (buffer_uptodate(bh))
+			return bh;
+		ll_rw_block(READ, 1, &bh);
+		wait_on_buffer(bh);
+		if (buffer_uptodate(bh))
+			return bh;
+		brelse(bh);
 		return NULL;
 	}
-	if (buffer_uptodate(bh))
-		return bh;
-	ll_rw_block(READ, 1, &bh);
-	wait_on_buffer(bh);
-	if (buffer_uptodate(bh))
-		return bh;
-	brelse(bh);
+	printk("VFS: bread: impossible error\n");
 	return NULL;
 }
 

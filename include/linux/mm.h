@@ -310,7 +310,7 @@ extern unsigned long do_mmap(struct file *, unsigned long, unsigned long,
 extern int do_munmap(unsigned long, size_t);
 
 /* filemap.c */
-extern unsigned long page_unuse(unsigned long);
+extern unsigned long page_unuse(struct page *);
 extern int shrink_mmap(int, int);
 extern void truncate_inode_pages(struct inode *, unsigned long);
 extern unsigned long get_cached_page(struct inode *, unsigned long, int);

@@ -103,7 +103,7 @@ static void ne2k_pci_block_output(struct device *dev, const int count,
 struct ne2k_pci_card {
 	struct ne2k_pci_card *next;
 	struct device *dev;
-	unsigned char pci_bus, pci_device_fn;
+	struct pci_dev *pci_dev;
 };
 /* A list of all installed devices, for removing the driver module. */
 static struct ne2k_pci_card *ne2k_card_list = NULL;
@@ -170,45 +170,29 @@ struct netdev_entry netcard_drv =
 
 __initfunc (int ne2k_pci_probe(struct device *dev))
 {
-	static int pci_index = 0;	/* Static, for multiple calls. */
+	struct pci_dev *pdev = NULL;
 	int cards_found = 0;
 	int i;
 
-	if ( ! pcibios_present())
+	if ( ! pci_present())
 		return -ENODEV;
 
-	for (;pci_index < 0xff; pci_index++) {
-		unsigned char pci_bus, pci_device_fn;
+	while ((pdev = pci_find_class(PCI_CLASS_NETWORK_ETHERNET << 8, pdev)) != NULL) {
 		u8 pci_irq_line;
-		u16 pci_command, new_command, vendor, device;
+		u16 pci_command, new_command;
 		u32 pci_ioaddr;
-
-		if (pcibios_find_class (PCI_CLASS_NETWORK_ETHERNET << 8, pci_index,
-								&pci_bus, &pci_device_fn)
-			!= PCIBIOS_SUCCESSFUL)
-			break;
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_VENDOR_ID, &vendor);
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_DEVICE_ID, &device);
 
 		/* Note: some vendor IDs (RealTek) have non-NE2k cards as well. */
 		for (i = 0; pci_clone_list[i].vendor != 0; i++)
-			if (pci_clone_list[i].vendor == vendor
-				&& pci_clone_list[i].dev_id == device)
+			if (pci_clone_list[i].vendor == pdev->vendor
+				&& pci_clone_list[i].dev_id == pdev->device)
 				break;
 		if (pci_clone_list[i].vendor == 0)
 			continue;
 
-		pcibios_read_config_dword(pci_bus, pci_device_fn,
-								  PCI_BASE_ADDRESS_0, &pci_ioaddr);
-		pcibios_read_config_byte(pci_bus, pci_device_fn,
-								 PCI_INTERRUPT_LINE, &pci_irq_line);
-		pcibios_read_config_word(pci_bus, pci_device_fn,
-								 PCI_COMMAND, &pci_command);
-
-		/* Remove I/O space marker in bit 0. */
-		pci_ioaddr &= PCI_BASE_ADDRESS_IO_MASK;
+		pci_ioaddr = pdev->base_address[0] & PCI_BASE_ADDRESS_IO_MASK;
+		pci_irq_line = pdev->irq;
+		pci_read_config_word(pdev, PCI_COMMAND, &pci_command);
 
 		/* Avoid already found cards from previous calls */
 		if (check_region(pci_ioaddr, NE_IO_EXTENT))
@@ -228,8 +212,7 @@ __initfunc (int ne2k_pci_probe(struct device *dev))
 			printk(KERN_INFO "  The PCI BIOS has not enabled this"
 				   " NE2k clone!  Updating PCI command %4.4x->%4.4x.\n",
 				   pci_command, new_command);
-			pcibios_write_config_word(pci_bus, pci_device_fn,
-									  PCI_COMMAND, new_command);
+			pci_write_config_word(pdev, PCI_COMMAND, new_command);
 		}
 
 		if (pci_irq_line <= 0 || pci_irq_line >= NR_IRQS)
@@ -252,8 +235,7 @@ __initfunc (int ne2k_pci_probe(struct device *dev))
 			ne2k_card->next = ne2k_card_list;
 			ne2k_card_list = ne2k_card;
 			ne2k_card->dev = dev;
-			ne2k_card->pci_bus = pci_bus;
-			ne2k_card->pci_device_fn = pci_device_fn;
+			ne2k_card->pci_dev = pdev;
 		}
 		dev = 0;
 

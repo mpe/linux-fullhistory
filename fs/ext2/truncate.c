@@ -14,6 +14,8 @@
  *
  *  Big-endian to little-endian byte-swapping/bitmaps by
  *        David S. Miller (davem@caip.rutgers.edu), 1995
+ *
+ *  General cleanup and race fixes, wsh, 1998
  */
 
 /*
@@ -47,6 +49,22 @@ static int ext2_secrm_seed = 152;	/* Random generator base */
 #endif
 
 /*
+ * Macros to return the block number for the inode size and offset.
+ * Currently we always hold the inode semaphore during truncate, so
+ * there's no need to test for changes during the operation.
+ */
+#define DIRECT_BLOCK(inode) \
+	((inode->i_size + inode->i_sb->s_blocksize - 1) / \
+			  inode->i_sb->s_blocksize)
+#define INDIRECT_BLOCK(inode,offset) ((int)DIRECT_BLOCK(inode) - offset)
+#define DINDIRECT_BLOCK(inode,offset) \
+	(INDIRECT_BLOCK(inode,offset) / addr_per_block)
+#define TINDIRECT_BLOCK(inode,offset) \
+	(INDIRECT_BLOCK(inode,offset) / (addr_per_block*addr_per_block))
+
+static u32 le32_zero = cpu_to_le32(0);
+
+/*
  * Truncate has the most races in the whole filesystem: coding it is
  * a pain in the a**. Especially as I don't do any locking...
  *
@@ -57,53 +75,136 @@ static int ext2_secrm_seed = 152;	/* Random generator base */
  *
  * The new code handles normal truncates (size = 0) as well as the more
  * general case (size = XXX). I hope.
+ *
+ *
+ * Truncate operations have been rewritten to avoid various races. The
+ * previous code was allowing blocking operations to precede a call to
+ * bforget(), possible allowing the buffer to be used again.
+ *
+ * We now ensure that b_count == 1 before calling bforget() and that the
+ * parent buffer (if any) is unlocked before clearing the block pointer.
+ * The operations are always performed in this order:
+ *	(1) Make sure that the parent buffer is unlocked.
+ *	(2) Use find_buffer() to find the block buffer without blocking,
+ *	    and set 'retry' if the buffer is locked or b_count > 1.
+ *	(3) Clear the block pointer in the parent (buffer or inode).
+ *	(4) Update the inode block count and mark the inode dirty.
+ *	(5) Forget the block buffer, if any. This call won't block, as
+ *	    we know the buffer is unlocked from (2).
+ *	(6) If the block pointer is in a (parent) buffer, mark the buffer
+ *	    dirty. (Note that this can block on a loop device.)
+ *	(7) Accumulate the blocks to free and/or update the block bitmap.
+ *	    (This operation will frequently block.)
+ *
+ * The requirement that parent buffers be unlocked follows from the general
+ * principle of not modifying a buffer that may be undergoing I/O. With the
+ * the present kernels there's no problem with modifying a locked inode, as
+ * the I_DIRTY bit is cleared before setting I_LOCK.
+ *		-- WSH, 1998
  */
+
+/*
+ * Check whether any of the slots in an indirect block are
+ * still in use, and if not free the block.
+ */
+static int check_block_empty(struct inode *inode, struct buffer_head *bh,
+				u32 *p, struct buffer_head *ind_bh)
+{
+	int addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
+	u32 * ind = (u32 *) bh->b_data;
+	int i, retry;
+
+	/* Make sure both buffers are unlocked */
+	do {
+		retry = 0;
+		if (buffer_locked(bh)) {
+			__wait_on_buffer(bh);
+			retry = 1;
+		}
+		if (ind_bh && buffer_locked(ind_bh)) {
+			__wait_on_buffer(ind_bh);
+			retry = 1;
+		}
+	} while (retry);
+
+	for (i = 0; i < addr_per_block; i++)
+		if (le32_to_cpu(*(ind++)))
+			goto in_use;
+
+	if (bh->b_count == 1) {
+		int tmp;
+		if (ind_bh) {
+			tmp = le32_to_cpu(*p);
+			*p = le32_zero;
+		} else {
+			tmp = *p;
+			*p = 0;
+		}
+		inode->i_blocks -= (inode->i_sb->s_blocksize / 512);
+		mark_inode_dirty(inode);
+		/*
+		 * Forget the buffer, then mark the parent buffer dirty.
+		 */
+		bforget(bh);
+		if (ind_bh)
+			mark_buffer_dirty(ind_bh, 1);
+		ext2_free_blocks (inode, tmp, 1);
+		goto out;
+	}
+	retry = 1;
+
+in_use:
+	if (IS_SYNC(inode) && buffer_dirty(bh)) {
+		ll_rw_block (WRITE, 1, &bh);
+		wait_on_buffer (bh);
+	}
+	brelse (bh);
+
+out:
+	return retry;
+}
 
 static int trunc_direct (struct inode * inode)
 {
-	u32 * p;
-	int i, tmp;
 	struct buffer_head * bh;
-	unsigned long block_to_free = 0;
-	unsigned long free_count = 0;
-	int retry = 0;
+	int i, retry = 0;
+	unsigned long block_to_free = 0, free_count = 0;
 	int blocks = inode->i_sb->s_blocksize / 512;
-#define DIRECT_BLOCK ((inode->i_size + inode->i_sb->s_blocksize - 1) / \
-			inode->i_sb->s_blocksize)
-	int direct_block = DIRECT_BLOCK;
+	int direct_block = DIRECT_BLOCK(inode);
 
-repeat:
 	for (i = direct_block ; i < EXT2_NDIR_BLOCKS ; i++) {
-		p = inode->u.ext2_i.i_data + i;
-		tmp = *p;
+		u32 * p = inode->u.ext2_i.i_data + i;
+		int tmp = *p;
+
 		if (!tmp)
 			continue;
-		bh = get_hash_table (inode->i_dev, tmp,
-				     inode->i_sb->s_blocksize);
-		if (i < direct_block) {
-			brelse (bh);
-			goto repeat;
+
+		bh = find_buffer(inode->i_dev, tmp, inode->i_sb->s_blocksize);
+		if (bh) {
+			bh->b_count++;
+			if(bh->b_count != 1 || buffer_locked(bh)) {
+				brelse(bh);
+				retry = 1;
+				continue;
+			}
 		}
-		if ((bh && bh->b_count != 1) || tmp != *p) {
-			retry = 1;
-			brelse (bh);
-			continue;
-		}
+
 		*p = 0;
 		inode->i_blocks -= blocks;
 		mark_inode_dirty(inode);
 		bforget(bh);
-		if (free_count == 0) {
-			block_to_free = tmp;
-			free_count++;
-		} else if (free_count > 0 && block_to_free == tmp - free_count)
+
+		/* accumulate blocks to free if they're contiguous */
+		if (free_count == 0)
+			goto free_this;
+		else if (block_to_free == tmp - free_count)
 			free_count++;
 		else {
 			ext2_free_blocks (inode, block_to_free, free_count);
+		free_this:
 			block_to_free = tmp;
 			free_count = 1;
 		}
-/*		ext2_free_blocks (inode, tmp, 1); */
 	}
 	if (free_count > 0)
 		ext2_free_blocks (inode, block_to_free, free_count);
@@ -111,174 +212,146 @@ repeat:
 }
 
 static int trunc_indirect (struct inode * inode, int offset, u32 * p,
-			   int in_inode)
+			struct buffer_head *dind_bh)
 {
-	int i, tmp;
-	struct buffer_head * bh;
 	struct buffer_head * ind_bh;
-	u32 * ind;
-	unsigned long block_to_free = 0;
-	unsigned long free_count = 0;
-	int retry = 0;
-	int addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
-	int blocks = inode->i_sb->s_blocksize / 512;
-#define INDIRECT_BLOCK ((int)DIRECT_BLOCK - offset)
-	int indirect_block = INDIRECT_BLOCK;
+	int i, tmp, retry = 0;
+	unsigned long block_to_free = 0, free_count = 0;
+	int indirect_block, addr_per_block, blocks;
 
-	tmp = in_inode ? *p : le32_to_cpu(*p);
+	tmp = dind_bh ? le32_to_cpu(*p) : *p;
 	if (!tmp)
 		return 0;
 	ind_bh = bread (inode->i_dev, tmp, inode->i_sb->s_blocksize);
-	if (tmp != (in_inode ? *p : le32_to_cpu(*p))) {
+	if (tmp != (dind_bh ? le32_to_cpu(*p) : *p)) {
 		brelse (ind_bh);
 		return 1;
 	}
+	/* A read failure? Report error and clear slot (should be rare). */ 
 	if (!ind_bh) {
-		*p = in_inode ? 0 : cpu_to_le32(0);
+		ext2_error(inode->i_sb, "trunc_indirect",
+			"Read failure, inode=%ld, block=%d",
+			inode->i_ino, tmp);
+		if (dind_bh) {
+			*p = le32_zero;
+			mark_buffer_dirty(dind_bh, 1);
+		} else {
+			*p = 0;
+			mark_inode_dirty(inode);
+		}
 		return 0;
 	}
-repeat:
+
+	blocks = inode->i_sb->s_blocksize / 512;
+	addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
+	indirect_block = INDIRECT_BLOCK(inode, offset);
+	if (indirect_block < 0)
+		indirect_block = 0;
 	for (i = indirect_block ; i < addr_per_block ; i++) {
-		if (i < 0)
-			i = 0;
-		if (i < indirect_block)
-			goto repeat;
-		ind = i + (u32 *) ind_bh->b_data;
+		u32 * ind = i + (u32 *) ind_bh->b_data;
+		struct buffer_head * bh;
+
+		wait_on_buffer(ind_bh);
 		tmp = le32_to_cpu(*ind);
 		if (!tmp)
 			continue;
-		bh = get_hash_table (inode->i_dev, tmp,
-				     inode->i_sb->s_blocksize);
-		if (i < indirect_block) {
-			brelse (bh);
-			goto repeat;
+		/*
+		 * Use find_buffer so we don't block here.
+		 */
+		bh = find_buffer(inode->i_dev, tmp, inode->i_sb->s_blocksize);
+		if (bh) {
+			bh->b_count++;
+			if (bh->b_count != 1 || buffer_locked(bh)) {
+				brelse (bh);
+				retry = 1;
+				continue;
+			}
 		}
-		if ((bh && bh->b_count != 1) || tmp != le32_to_cpu(*ind)) {
-			retry = 1;
-			brelse (bh);
-			continue;
-		}
-		*ind = cpu_to_le32(0);
-		mark_buffer_dirty(ind_bh, 1);
+
+		*ind = le32_zero;
+		inode->i_blocks -= blocks;
+		mark_inode_dirty(inode);
 		bforget(bh);
-		if (free_count == 0) {
-			block_to_free = tmp;
-			free_count++;
-		} else if (free_count > 0 && block_to_free == tmp - free_count)
+		mark_buffer_dirty(ind_bh, 1);
+
+		/* accumulate blocks to free if they're contiguous */
+		if (free_count == 0)
+			goto free_this;
+		else if (block_to_free == tmp - free_count)
 			free_count++;
 		else {
 			ext2_free_blocks (inode, block_to_free, free_count);
+		free_this:
 			block_to_free = tmp;
 			free_count = 1;
 		}
-/*		ext2_free_blocks (inode, tmp, 1); */
-		inode->i_blocks -= blocks;
-		mark_inode_dirty(inode);
 	}
 	if (free_count > 0)
 		ext2_free_blocks (inode, block_to_free, free_count);
-	ind = (u32 *) ind_bh->b_data;
-	for (i = 0; i < addr_per_block; i++)
-		if (le32_to_cpu(*(ind++)))
-			break;
-	if (i >= addr_per_block) {
-		if (ind_bh->b_count != 1)
-			retry = 1;
-		else {
-			tmp = in_inode ? *p : le32_to_cpu(*p);
-			*p = in_inode ? 0 : cpu_to_le32(0);
-			inode->i_blocks -= blocks;
-			mark_inode_dirty(inode);
-			ext2_free_blocks (inode, tmp, 1);
-			bforget(ind_bh);
-			ind_bh = NULL;
-		}
-	}
-	if (IS_SYNC(inode) && ind_bh && buffer_dirty(ind_bh)) {
-		ll_rw_block (WRITE, 1, &ind_bh);
-		wait_on_buffer (ind_bh);
-	}
-	brelse (ind_bh);
+	/*
+	 * Check the block and dispose of the ind_bh buffer.
+	 */
+	retry |= check_block_empty(inode, ind_bh, p, dind_bh);
+
 	return retry;
 }
 
-static int trunc_dindirect (struct inode * inode, int offset,
-			    u32 * p, int in_inode)
+static int trunc_dindirect (struct inode * inode, int offset, u32 * p,
+			struct buffer_head * tind_bh)
 {
-	int i, tmp;
 	struct buffer_head * dind_bh;
-	u32 * dind;
-	int retry = 0;
-	int addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
-	int blocks = inode->i_sb->s_blocksize / 512;
-#define DINDIRECT_BLOCK (((int)DIRECT_BLOCK - offset) / addr_per_block)
-	int dindirect_block = DINDIRECT_BLOCK;
+	int i, tmp, retry = 0;
+	int dindirect_block, addr_per_block;
 
-	tmp = in_inode ? *p : le32_to_cpu(*p);
+	tmp = tind_bh ? le32_to_cpu(*p) : *p;
 	if (!tmp)
 		return 0;
 	dind_bh = bread (inode->i_dev, tmp, inode->i_sb->s_blocksize);
-	if (tmp != (in_inode ? *p : le32_to_cpu(*p))) {
+	if (tmp != (tind_bh ? le32_to_cpu(*p) : *p)) {
 		brelse (dind_bh);
 		return 1;
 	}
+	/* A read failure? Report error and clear slot (should be rare). */ 
 	if (!dind_bh) {
-		*p = in_inode ? 0 : cpu_to_le32(0);
+		ext2_error(inode->i_sb, "trunc_dindirect",
+			"Read failure, inode=%ld, block=%d",
+			inode->i_ino, tmp);
+		if (tind_bh) {
+			*p = le32_zero;
+			mark_buffer_dirty(tind_bh, 1);
+		} else {
+			*p = 0;
+			mark_inode_dirty(inode);
+		}
 		return 0;
 	}
-repeat:
+
+	addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
+	dindirect_block = DINDIRECT_BLOCK(inode, offset);
+	if (dindirect_block < 0)
+		dindirect_block = 0;
 	for (i = dindirect_block ; i < addr_per_block ; i++) {
-		if (i < 0)
-			i = 0;
-		if (i < dindirect_block)
-			goto repeat;
-		dind = i + (u32 *) dind_bh->b_data;
-		tmp = le32_to_cpu(*dind);
-		if (!tmp)
-			continue;
-		retry |= trunc_indirect(inode, offset + (i * addr_per_block),
-					dind, 0);
-		mark_buffer_dirty(dind_bh, 1);
+		u32 * dind = i + (u32 *) dind_bh->b_data;
+
+		retry |= trunc_indirect(inode,
+					offset + (i * addr_per_block),
+					dind, dind_bh);
 	}
-	dind = (u32 *) dind_bh->b_data;
-	for (i = 0; i < addr_per_block; i++)
-		if (le32_to_cpu(*(dind++)))
-			break;
-	if (i >= addr_per_block) {
-		if (dind_bh->b_count != 1)
-			retry = 1;
-		else {
-			tmp = in_inode ? *p : le32_to_cpu(*p);
-			*p = in_inode ? 0 : cpu_to_le32(0);
-			inode->i_blocks -= blocks;
-			mark_inode_dirty(inode);
-			ext2_free_blocks (inode, tmp, 1);
-			bforget(dind_bh);
-			dind_bh = 0;
-		}
-	}
-	if (IS_SYNC(inode) && dind_bh && buffer_dirty(dind_bh)) {
-		ll_rw_block (WRITE, 1, &dind_bh);
-		wait_on_buffer (dind_bh);
-	}
-	brelse (dind_bh);
+	/*
+	 * Check the block and dispose of the dind_bh buffer.
+	 */
+	retry |= check_block_empty(inode, dind_bh, p, tind_bh);
+
 	return retry;
 }
 
 static int trunc_tindirect (struct inode * inode)
 {
-	int i, tmp;
+	u32 * p = inode->u.ext2_i.i_data + EXT2_TIND_BLOCK;
 	struct buffer_head * tind_bh;
-	u32 * tind, * p;
-	int retry = 0;
-	int addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
-	int blocks = inode->i_sb->s_blocksize / 512;
-#define TINDIRECT_BLOCK (((int)DIRECT_BLOCK - (addr_per_block * addr_per_block + \
-			  addr_per_block + EXT2_NDIR_BLOCKS)) / \
-			  (addr_per_block * addr_per_block))
-	int tindirect_block = TINDIRECT_BLOCK;
+	int i, tmp, retry = 0;
+	int tindirect_block, addr_per_block, offset;
 
-	p = inode->u.ext2_i.i_data + EXT2_TIND_BLOCK;
 	if (!(tmp = *p))
 		return 0;
 	tind_bh = bread (inode->i_dev, tmp, inode->i_sb->s_blocksize);
@@ -286,53 +359,40 @@ static int trunc_tindirect (struct inode * inode)
 		brelse (tind_bh);
 		return 1;
 	}
+	/* A read failure? Report error and clear slot (should be rare). */ 
 	if (!tind_bh) {
+		ext2_error(inode->i_sb, "trunc_tindirect",
+			"Read failure, inode=%ld, block=%d",
+			inode->i_ino, tmp);
 		*p = 0;
+		mark_inode_dirty(inode);
 		return 0;
 	}
-repeat:
+
+	addr_per_block = EXT2_ADDR_PER_BLOCK(inode->i_sb);
+	offset = EXT2_NDIR_BLOCKS + addr_per_block + 
+		(addr_per_block * addr_per_block);
+	tindirect_block = TINDIRECT_BLOCK(inode, offset);
+	if (tindirect_block < 0)
+		tindirect_block = 0;
 	for (i = tindirect_block ; i < addr_per_block ; i++) {
-		if (i < 0)
-			i = 0;
-		if (i < tindirect_block)
-			goto repeat;
-		tind = i + (u32 *) tind_bh->b_data;
-		retry |= trunc_dindirect(inode, EXT2_NDIR_BLOCKS +
-			 addr_per_block + (i + 1) * addr_per_block * addr_per_block,
-			 tind, 0);
-		mark_buffer_dirty(tind_bh, 1);
+		u32 * tind = i + (u32 *) tind_bh->b_data;
+
+		retry |= trunc_dindirect(inode,
+				offset + (i * addr_per_block * addr_per_block),
+				tind, tind_bh);
 	}
-	tind = (u32 *) tind_bh->b_data;
-	for (i = 0; i < addr_per_block; i++)
-		if (le32_to_cpu(*(tind++)))
-			break;
-	if (i >= addr_per_block) {
-		if (tind_bh->b_count != 1)
-			retry = 1;
-		else {
-			tmp = *p;
-			*p = 0;
-			inode->i_blocks -= blocks;
-			mark_inode_dirty(inode);
-			ext2_free_blocks (inode, tmp, 1);
-			bforget(tind_bh);
-			tind_bh = 0;
-		}
-	}
-	if (IS_SYNC(inode) && tind_bh && buffer_dirty(tind_bh)) {
-		ll_rw_block (WRITE, 1, &tind_bh);
-		wait_on_buffer (tind_bh);
-	}
-	brelse (tind_bh);
+	/*
+	 * Check the block and dispose of the tind_bh buffer.
+	 */
+	retry |= check_block_empty(inode, tind_bh, p, NULL);
+
 	return retry;
 }
 		
 void ext2_truncate (struct inode * inode)
 {
-	int retry;
-	struct buffer_head * bh;
-	int err;
-	int offset;
+	int err, offset, retry;
 
 	if (!(S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode) ||
 	    S_ISLNK(inode->i_mode)))
@@ -342,11 +402,14 @@ void ext2_truncate (struct inode * inode)
 	ext2_discard_prealloc(inode);
 	while (1) {
 		retry = trunc_direct(inode);
-		retry |= trunc_indirect (inode, EXT2_IND_BLOCK,
-			(u32 *) &inode->u.ext2_i.i_data[EXT2_IND_BLOCK], 1);
-		retry |= trunc_dindirect (inode, EXT2_IND_BLOCK +
-			EXT2_ADDR_PER_BLOCK(inode->i_sb),
-			(u32 *) &inode->u.ext2_i.i_data[EXT2_DIND_BLOCK], 1);
+		retry |= trunc_indirect (inode, 
+				EXT2_IND_BLOCK,
+				(u32 *) &inode->u.ext2_i.i_data[EXT2_IND_BLOCK],
+				NULL);
+		retry |= trunc_dindirect (inode,
+				EXT2_IND_BLOCK+EXT2_ADDR_PER_BLOCK(inode->i_sb),
+				(u32 *)&inode->u.ext2_i.i_data[EXT2_DIND_BLOCK],
+				NULL);
 		retry |= trunc_tindirect (inode);
 		if (!retry)
 			break;
@@ -357,12 +420,13 @@ void ext2_truncate (struct inode * inode)
 	}
 	/*
 	 * If the file is not being truncated to a block boundary, the
-	 * contents of the partial block following the end of the file must be
-	 * zeroed in case it ever becomes accessible again because of
-	 * subsequent file growth.
+	 * contents of the partial block following the end of the file
+	 * must be zeroed in case it ever becomes accessible again due
+	 * to subsequent file growth.
 	 */
 	offset = inode->i_size & (inode->i_sb->s_blocksize - 1);
 	if (offset) {
+		struct buffer_head * bh;
 		bh = ext2_bread (inode,
 				 inode->i_size >> EXT2_BLOCK_SIZE_BITS(inode->i_sb),
 				 0, &err);

@@ -532,21 +532,26 @@ end_move_self:
 	call	empty_8042
 
 ! wait until a20 really *is* enabled; it can take a fair amount of
-! time on any
-	
+! time on certain systems; Toshiba Tecras are known to have this
+! problem.  The memory location used here is the int 0x1f vector,
+! which should be safe to use; any *unused* memory location < 0xfff0
+! should work here.  
+
+#define	TEST_ADDR 0x7c
+
 	push	ds
-	push	es
 	xor	ax,ax			! segment 0x0000
 	mov	ds,ax
 	dec	ax			! segment 0xffff (HMA)
-	mov	es,ax
+	mov	gs,ax
+	mov	bx,[TEST_ADDR]		! we want to restore the value later
 a20_wait:
 	inc	ax
-	mov	[0x7c00],ax		! any unused memory location < 64K
-	seg	es
-	cmp	ax,[0x7c10]		! corresponding HMA address
+	mov	[TEST_ADDR],ax
+	seg	gs
+	cmp	ax,[TEST_ADDR+0x10]
 	je	a20_wait		! loop until no longer aliased
-	pop	es
+	mov	[TEST_ADDR],bx		! restore original value
 	pop	ds
 		
 ! make sure any possible coprocessor is properly reset..

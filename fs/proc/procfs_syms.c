@@ -11,7 +11,9 @@
 extern int (* dispatch_scsi_info_ptr) (int ino, char *buffer, char **start,
 				       off_t offset, int length, int inout);
 extern struct inode_operations proc_scsi_inode_operations;
+extern struct proc_dir_entry proc_sys_root;
 
+EXPORT_SYMBOL(proc_sys_root);
 EXPORT_SYMBOL(proc_register);
 EXPORT_SYMBOL(proc_unregister);
 EXPORT_SYMBOL(create_proc_entry);

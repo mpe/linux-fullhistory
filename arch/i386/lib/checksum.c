@@ -118,7 +118,7 @@ unsigned int csum_partial(const unsigned char * buf, int len, unsigned int sum) 
             negl %%ebx
             lea 45f(%%ebx,%%ebx,2), %%ebx
             testl %%esi, %%esi
-            jmp %%ebx
+            jmp *%%ebx
 
             # Handle 2-byte-aligned regions
 20:         addw (%%esi), %%ax
@@ -369,7 +369,7 @@ unsigned int csum_partial_copy_generic (const char *src, char *dst,
         subl %%ebx, %%edi  
         lea 3f(%%ebx,%%ebx), %%ebx
         testl %%esi, %%esi 
-        jmp %%ebx         
+        jmp *%%ebx         
 1:      addl $64,%%esi
         addl $64,%%edi\n" 
 ROUND1(-64) ROUND(-60) ROUND(-56) ROUND(-52)

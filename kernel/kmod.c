@@ -15,6 +15,7 @@
 #include <linux/types.h>
 #include <linux/unistd.h>
 #include <asm/smp_lock.h>
+#include <asm/semaphore.h>
 #include <asm/uaccess.h>
 
 /*
@@ -22,6 +23,7 @@
 */
 char modprobe_path[256] = "/sbin/modprobe";
 static char * envp[] = { "HOME=/", "TERM=linux", "PATH=/usr/bin:/bin", NULL };
+static struct semaphore kmod_sem = MUTEX;
 
 /*
 	exec_modprobe is spawned from a kernel-mode user process,
@@ -33,7 +35,8 @@ static char * envp[] = { "HOME=/", "TERM=linux", "PATH=/usr/bin:/bin", NULL };
 #define task_init task[smp_num_cpus]
 
 static inline void
-use_init_file_context(void) {
+use_init_file_context(void)
+{
 	lock_kernel();
 
 	/* don't use the user's root, use init's root instead */
@@ -63,7 +66,7 @@ static int exec_modprobe(void * module_name)
 	spin_unlock_irq(&current->sigmask_lock);
 
 	for (i = 0; i < current->files->max_fds; i++ ) {
-	    if (current->files->fd[i]) close(i);
+		if (current->files->fd[i]) close(i);
 	}
 
 	/* Give kmod all privileges.. */
@@ -100,15 +103,20 @@ int request_module(const char * module_name)
 		return -EPERM;
 	}
 
+	down(&kmod_sem);
+
 	pid = kernel_thread(exec_modprobe, (void*) module_name, CLONE_FS);
 	if (pid < 0) {
 		printk(KERN_ERR "kmod: fork failed, errno %d\n", -pid);
-		return pid;
+		goto out;
 	}
 	waitpid_result = waitpid(pid, NULL, __WCLONE);
 	if (waitpid_result != pid) {
 		printk (KERN_ERR "kmod: waitpid(%d,NULL,0) failed, returning %d.\n",
 			pid, waitpid_result);
 	}
-	return 0;
+	pid = 0;
+out:
+	up(&kmod_sem);
+	return pid;
 }

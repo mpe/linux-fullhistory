@@ -144,10 +144,6 @@ __initfunc(static void do_sys_setup(void))
 	init_adfs_fs();
 #endif
 
-#ifdef CONFIG_ADFS_FS
-	init_adfs_fs();
-#endif
-
 #ifdef CONFIG_DEVPTS_FS
 	init_devpts_fs();
 #endif

@@ -142,7 +142,7 @@ static int	stl_nrbrds = sizeof(stl_brdconf) / sizeof(stlconf_t);
  */
 static char	*stl_drvtitle = "Stallion Multiport Serial Driver";
 static char	*stl_drvname = "stallion";
-static char	*stl_drvversion = "5.4.5";
+static char	*stl_drvversion = "5.4.6";
 static char	*stl_serialname = "ttyE";
 static char	*stl_calloutname = "cue";
 
@@ -1082,7 +1082,6 @@ static int stl_write(struct tty_struct *tty, int from_user, const unsigned char 
 {
 	stlport_t	*portp;
 	unsigned int	len, stlen;
-	unsigned long	flags;
 	unsigned char	*chbuf;
 	char		*head, *tail;
 
@@ -1114,12 +1113,9 @@ static int stl_write(struct tty_struct *tty, int from_user, const unsigned char 
 			(tail - head - 1);
 		count = MIN(len, count);
 		
-		save_flags(flags);
-		cli();
 		down(&stl_tmpwritesem);
 		copy_from_user(stl_tmpwritebuf, chbuf, count);
 		up(&stl_tmpwritesem);
-		restore_flags(flags);
 		chbuf = &stl_tmpwritebuf[0];
 	}
 

@@ -107,7 +107,17 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 
 	if (PageSwapCache(page_map)) {
 		if (pte_write(pte)) {
+			struct page *found;
 			printk ("VM: Found a writable swap-cached page!\n");
+			/* Try to diagnose the problem ... */
+			found = find_page(&swapper_inode, page_map->offset);
+			if (found) {
+				printk("page=%p@%08lx, found=%p, count=%d\n",
+					page_map, page_map->offset,
+					found, atomic_read(&found->count));
+				__free_page(found);
+			} else 
+				printk ("Spurious, page not in cache\n");
 			return 0;
 		}
 	}
@@ -144,9 +154,8 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 			 * we have the swap cache set up to associate the
 			 * page with that swap entry.
 			 */
-			if (PageSwapCache(page_map)) {
-				entry = page_map->offset;
-			} else {
+        		entry = in_swap_cache(page_map);
+			if (!entry) {
 				entry = get_swap_page();
 				if (!entry)
 					return 0; /* No swap space left */
@@ -219,8 +228,8 @@ static inline int try_to_swap_out(struct task_struct * tsk, struct vm_area_struc
 	flush_cache_page(vma, address);
 	pte_clear(page_table);
 	flush_tlb_page(vma, address);
-	entry = page_unuse(page);
-	free_page(page);
+	entry = page_unuse(page_map);
+	__free_page(page_map);
 	return entry;
 }
 
@@ -584,6 +593,7 @@ int kswapd(void *unused)
 	}
 	/* As if we could ever get here - maybe we want to make this killable */
 	remove_wait_queue(&kswapd_wait, &wait);
+	unlock_kernel();
 	return 0;
 }
 

@@ -336,14 +336,15 @@ __initfunc(static int cops_probe1(struct device *dev, int ioaddr))
 	if(board==DAYNA)
 		printk("%s: %s at %#3x, using IRQ %d, in Dayna mode.\n", 
 			dev->name, cardname, ioaddr, dev->irq);
-	if(board==TANGENT)
+	if(board==TANGENT) {
 		if(dev->irq)
 			printk("%s: %s at %#3x, IRQ %d, in Tangent mode\n", 
 				dev->name, cardname, ioaddr, dev->irq);
-	else
-		printk("%s: %s at %#3x, using polled IO, in Tangent mode.\n", 
-			dev->name, cardname, ioaddr);
+		else
+			printk("%s: %s at %#3x, using polled IO, in Tangent mode.\n", 
+				dev->name, cardname, ioaddr);
 
+	}
         return 0;
 }
 

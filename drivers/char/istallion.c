@@ -170,7 +170,7 @@ static int	stli_nrbrds = sizeof(stli_brdconf) / sizeof(stlconf_t);
  */
 static char	*stli_drvtitle = "Stallion Intelligent Multiport Serial Driver";
 static char	*stli_drvname = "istallion";
-static char	*stli_drvversion = "5.4.5";
+static char	*stli_drvversion = "5.4.6";
 static char	*stli_serialname = "ttyE";
 static char	*stli_calloutname = "cue";
 
@@ -1425,12 +1425,12 @@ static int stli_write(struct tty_struct *tty, int from_user, const unsigned char
 			(tail - head - 1);
 		count = MIN(len, count);
 		EBRDDISABLE(brdp);
+		restore_flags(flags);
 
 		down(&stli_tmpwritesem);
 		copy_from_user(stli_tmpwritebuf, chbuf, count);
 		up(&stli_tmpwritesem);
 		chbuf = &stli_tmpwritebuf[0];
-		restore_flags(flags);
 	}
 
 /*

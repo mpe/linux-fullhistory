@@ -216,20 +216,19 @@ next:
  * free it from the page hash-queues etc, as we don't want to keep it
  * in-core unnecessarily.
  */
-unsigned long page_unuse(unsigned long page)
+unsigned long page_unuse(struct page * page)
 {
-	struct page * p = mem_map + MAP_NR(page);
-	int count = atomic_read(&p->count);
+	int count = atomic_read(&page->count);
 
 	if (count != 2)
 		return count;
-	if (!p->inode)
+	if (!page->inode)
 		return count;
-	if (PageSwapCache(p))
+	if (PageSwapCache(page))
 		panic ("Doing a normal page_unuse of a swap cache page");
-	remove_page_from_hash_queue(p);
-	remove_page_from_inode_queue(p);
-	free_page(page);
+	remove_page_from_hash_queue(page);
+	remove_page_from_inode_queue(page);
+	__free_page(page);
 	return 1;
 }
 

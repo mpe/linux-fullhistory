@@ -62,10 +62,14 @@ static void proc_pid_fill_inode(struct inode * inode, int fill)
 
 	read_lock(&tasklist_lock);
 	if (fill && (p = find_task_by_pid(pid)) != NULL) {
+		uid_t uid = 0;
+		gid_t gid = 0;
 		if (p->dumpable || ino == PROC_PID_INO) {
-			inode->i_uid = p->euid;
-			inode->i_gid = p->gid;
+			uid = p->euid;
+			gid = p->egid;
 		}
+		inode->i_uid = uid;
+		inode->i_gid = gid;
 	}
 	read_unlock(&tasklist_lock);
 }

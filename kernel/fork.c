@@ -453,6 +453,17 @@ static inline int copy_sighand(unsigned long clone_flags, struct task_struct * t
 	return 0;
 }
 
+static inline void copy_flags(unsigned long clone_flags, struct task_struct *p)
+{
+	unsigned long new_flags = p->flags;
+
+	new_flags &= ~PF_SUPERPRIV;
+	new_flags |= PF_FORKNOEXEC;
+	if (!(clone_flags & CLONE_PTRACE))
+		new_flags &= ~(PF_PTRACED|PF_TRACESYS);
+	p->flags = new_flags;
+}
+
 /*
  *  Ok, this is the main fork-routine. It copies the system process
  * information (task[nr]) and sets up the necessary registers. It
@@ -485,22 +496,26 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	p->did_exec = 0;
 	p->swappable = 0;
 	p->state = TASK_UNINTERRUPTIBLE;
-	p->flags &= ~(PF_PTRACED|PF_TRACESYS|PF_SUPERPRIV);
-	p->sigpending = 0;
-	p->flags |= PF_FORKNOEXEC;
+
+	copy_flags(clone_flags, p);
 	p->pid = get_pid(clone_flags);
+
 	p->next_run = NULL;
 	p->prev_run = NULL;
 	p->p_pptr = p->p_opptr = current;
 	p->p_cptr = NULL;
 	init_waitqueue(&p->wait_chldexit);
+
+	p->sigpending = 0;
 	sigemptyset(&p->signal);
 	p->sigqueue = NULL;
 	p->sigqueue_tail = &p->sigqueue;
+
 	p->it_real_value = p->it_virt_value = p->it_prof_value = 0;
 	p->it_real_incr = p->it_virt_incr = p->it_prof_incr = 0;
 	init_timer(&p->real_timer);
 	p->real_timer.data = (unsigned long) p;
+
 	p->leader = 0;		/* session leadership doesn't inherit */
 	p->tty_old_pgrp = 0;
 	p->times.tms_utime = p->times.tms_stime = 0;
