@@ -2498,6 +2498,7 @@ static int __devinit snd_es1968_create_gameport(es1968_t *chip, int dev)
 	gameport_set_phys(gp, "pci%s/gameport0", pci_name(chip->pci));
 	gp->dev.parent = &chip->pci->dev;
 	gp->io = JOYSTICK_ADDR;
+	gp->port_data = r;
 
 	gameport_register_port(gp);
 
