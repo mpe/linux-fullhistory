@@ -239,7 +239,8 @@ extern unsigned long get_unmapped_area(unsigned long, unsigned long);
  *
  * Will go away eventually..
  */
-#define SHM_SWP_TYPE 0x41
+#define SHM_SWP_TYPE 0x40
+
 extern void shm_no_page (ulong *);
 
 /*

@@ -16,6 +16,11 @@
 .c.o:
 	$(CC) $(CFLAGS) -c $<
 
+#
+# This file contains the font map for the default (hardware) font
+#
+FONTMAPFILE = cp437.uni
+
 OBJS  = tty_io.o n_tty.o console.o keyboard.o serial.o \
 	tty_ioctl.o pty.o vt.o mem.o vc_screen.o \
 	defkeymap.o consolemap.o vesa_blank.o selection.o
@@ -23,7 +28,6 @@ OBJS  = tty_io.o n_tty.o console.o keyboard.o serial.o \
 SRCS  = tty_io.c n_tty.c console.c keyboard.c serial.c \
 	tty_ioctl.c pty.c vt.c mem.c vc_screen.c \
 	defkeymap.c consolemap.c vesa_blank.c selection.c
-
 
 ifdef CONFIG_CYCLADES
 OBJS := $(OBJS) cyclades.o
@@ -98,13 +102,19 @@ modules:
 
 endif
 
-dep:
+dep: uni_hash_tbl.h
 	$(CPP) -M $(SRCS) > .depend
 ifdef MODULES
 	$(CPP) -M -DMODULE $(MODULES:.o=.c) >> .depend
 endif
 
 dummy:
+
+conhakehash: conmakehash.c
+	$(HOSTCC) -o conmakehash conmakehash.c
+
+uni_hash_tbl.h: $(FONTMAPFILE) conmakehash
+	./conmakehash $(FONTMAPFILE) 641 283 6 > uni_hash_tbl.h
 
 #
 # include a dependency file if one exists

@@ -33,8 +33,9 @@
  *     'void scrollback(int lines)'
  *     'void scrollfront(int lines)'
  *
- *     'int con_get_font(char *)' 
- *     'int con_set_font(char *)'
+ *     'int con_get_font(char *data)' 
+ *     'int con_set_font(char *data, int ch512)'
+ *     'int con_adjust_height(int fontheight)'
  *
  *     'void mouse_report(struct tty_struct * tty, int butt, int mrx, int mry)'
  *     'int mouse_reporting(void)'
@@ -64,6 +65,8 @@
  * Code for xterm like mouse click reporting by Peter Orbaek 20-Jul-94
  * <poe@daimi.aau.dk>
  *
+ * Improved loadable font/UTF-8 support by H. Peter Anvin, Feb 1995
+ *
  */
 
 #define BLANK 0x0020
@@ -74,7 +77,8 @@
  * (such as cursor movement) and should not be displayed as a
  * glyph unless the disp_ctrl mode is explicitly enabled.
  */
-#define CTRL_ACTION 0xd00ff80
+#define CTRL_ACTION 0x0d00ff81
+#define CTRL_ALWAYS 0x0800f501	/* Cannot be overridden by disp_ctrl */
 
 /*
  *  NOTE!!! We sometimes disable and enable interrupts for a short while
@@ -122,8 +126,8 @@ static struct termios *console_termios_locked[MAX_NR_CONSOLES];
 #define NPAR 16
 
 static void con_setsize(unsigned long rows, unsigned long cols);
-static void vc_init(unsigned int console, unsigned long rows, unsigned long cols,
-		    int do_clear);
+static void vc_init(unsigned int console, unsigned long rows,
+		    unsigned long cols, int do_clear);
 static void get_scrmem(int currcons);
 static void set_scrmem(int currcons, long offset);
 static void set_origin(int currcons);
@@ -140,7 +144,7 @@ extern void register_console(void (*proc)(const char *));
 extern void vesa_blank(void);
 extern void vesa_unblank(void);
 extern void compute_shiftstate(void);
-extern int conv_uni_to_pc(unsigned long ucs);
+extern int conv_uni_to_pc(long ucs);
 
 /* Description of the hardware situation */
 static unsigned char	video_type;		/* Type of display being used	*/
@@ -157,12 +161,18 @@ static unsigned char	video_page;		/* Initial video page (unused)  */
 static unsigned long	video_screen_size;
 static int can_do_color = 0;
 static int printable = 0;			/* Is console ready for printing? */
+	/* these two also used in in vt.c */
+       int		video_mode_512ch = 0;	/* 512-character mode */
+       unsigned long	video_font_height;	/* Height of current screen font */
+static unsigned long	video_scan_lines;	/* Number of scan lines on screen */
+static unsigned short console_charmask = 0x0ff;
 
 static unsigned short *vc_scrbuf[MAX_NR_CONSOLES];
 
 static int console_blanked = 0;
 static int blankinterval = 10*60*HZ;
 static long blank_origin, blank__origin, unblank_origin;
+
 
 struct vc_data {
 	unsigned long	vc_screenbuf_size;
@@ -212,9 +222,9 @@ struct vc_data {
 	unsigned long	vc_report_mouse : 2;
 	unsigned char	vc_utf		: 1;	/* Unicode UTF-8 encoding */
 	unsigned char	vc_utf_count;
-	unsigned long	vc_utf_char;
+	         long	vc_utf_char;
 	unsigned long	vc_tab_stop[5];		/* Tab stops. 160 columns. */
-	unsigned char * vc_translate;
+	unsigned short * vc_translate;
 	unsigned char 	vc_G0_charset;
 	unsigned char 	vc_G1_charset;
 	unsigned char 	vc_saved_G0;
@@ -879,7 +889,7 @@ static void csi_m(int currcons)
 				  * Select first alternate font, let's
 				  * chars < 32 be displayed as ROM chars.
 				  */
-				translate = set_translate(NULL_MAP);
+				translate = set_translate(IBMPC_MAP);
 				disp_ctrl = 1;
 				toggle_meta = 0;
 				break;
@@ -887,7 +897,7 @@ static void csi_m(int currcons)
 				  * Select second alternate font, toggle
 				  * high bit before displaying as ROM char.
 				  */
-				translate = set_translate(NULL_MAP);
+				translate = set_translate(IBMPC_MAP);
 				disp_ctrl = 1;
 				toggle_meta = 1;
 				break;
@@ -1264,8 +1274,8 @@ static void reset_terminal(int currcons, int do_clear)
 	bottom		= video_num_lines;
 	vc_state	= ESnormal;
 	ques		= 0;
-	translate	= set_translate(NORM_MAP);
-	G0_charset	= NORM_MAP;
+	translate	= set_translate(LAT1_MAP);
+	G0_charset	= LAT1_MAP;
 	G1_charset	= GRAF_MAP;
 	charset		= 0;
 	need_wrap	= 0;
@@ -1370,7 +1380,7 @@ static int con_write(struct tty_struct * tty, int from_user,
 				utf_char = (utf_char << 6) | (c & 0x3f);
 				utf_count--;
 				if (utf_count == 0)
-				    c = utf_char;
+				    tc = c = utf_char;
 				else continue;
 			} else {
 				if ((c & 0xe0) == 0xc0) {
@@ -1379,26 +1389,25 @@ static int con_write(struct tty_struct * tty, int from_user,
 				} else if ((c & 0xf0) == 0xe0) {
 				    utf_count = 2;
 				    utf_char = (c & 0x0f);
+				} else if ((c & 0xf8) == 0xf0) {
+				    utf_count = 3;
+				    utf_char = (c & 0x07);
+				} else if ((c & 0xfc) == 0xf8) {
+				    utf_count = 4;
+				    utf_char = (c & 0x03);
+				} else if ((c & 0xfe) == 0xfc) {
+				    utf_count = 5;
+				    utf_char = (c & 0x01);
 				} else
 				    utf_count = 0;
 				continue;
-			}
-		    } else
-			utf_count = 0;
-
-		    /* Now try to find out how to display it */
-		    tc = conv_uni_to_pc(c);
-		    if (tc == -1 || tc == -2)
-		      continue;
-		    if (tc == -3 || tc == -4) {	/* hashtable not valid */
-						/* or symbol not found */
-			tc = (c <= 0xff) ? translate[c] : 040;
-			ok = 0;
-		    } else
-		        ok = 1;
+			      }
+		    } else {
+		      tc = c;
+		      utf_count = 0;
+		    }
 		} else {	/* no utf */
-		    tc = translate[toggle_meta ? (c|0x80) : c];
-		    ok = 0;
+		  tc = translate[toggle_meta ? (c|0x80) : c];
 		}
 
 		/* If the original code was < 32 we only allow a
@@ -1407,19 +1416,39 @@ static int con_write(struct tty_struct * tty, int from_user,
 		 * disp_ctrl mode has been explicitly enabled.
 		 * Note: ESC is *never* allowed to be displayed as
 		 * that would disable all escape sequences!
+		 * To display font position 0x1B, go into UTF mode
+		 * and display character U+F01B, or change the mapping.
 		 */
-		if (!ok && tc && (c >= 32 || (disp_ctrl && c != 0x1b)
-		|| !((CTRL_ACTION >> c) & 1)))
-		    ok = 1;
-
+		ok = (tc && (c >= 32 || (!utf && !(((disp_ctrl ? CTRL_ALWAYS
+					    : CTRL_ACTION) >> c) & 1))));
+		
 		if (vc_state == ESnormal && ok) {
+		        /* Now try to find out how to display it */
+		        tc = conv_uni_to_pc(tc);
+			if ( tc == -4 )
+			  {
+			    /* If we got -4 (not found) then see if we have
+			       defined a replacement character (U+FFFD) */
+			    tc = conv_uni_to_pc(0xfffd);
+			  }
+			else if ( tc == -3 )
+			  {
+			    /* Bad hash table -- hope for the best */
+			    tc = c;
+			  }
+			if (tc & ~console_charmask)
+			  continue; /* Conversion failed */
+
 			if (need_wrap) {
 				cr(currcons);
 				lf(currcons);
 			}
 			if (decim)
 				insert_char(currcons);
-			scr_writew((attr << 8) + tc, (unsigned short *) pos);
+			scr_writew( video_mode_512ch ?
+			   ((attr & 0xf7) << 8) + ((tc & 0x100) << 3) +
+			   (tc & 0x0ff) : (attr << 8) + tc,
+			   (unsigned short *) pos);
 			if (x == video_num_columns - 1)
 				need_wrap = decawm;
 			else {
@@ -1710,9 +1739,9 @@ static int con_write(struct tty_struct * tty, int from_user,
 				if (c == '0')
 					G0_charset = GRAF_MAP;
 				else if (c == 'B')
-					G0_charset = NORM_MAP;
+					G0_charset = LAT1_MAP;
 				else if (c == 'U')
-					G0_charset = NULL_MAP;
+					G0_charset = IBMPC_MAP;
 				else if (c == 'K')
 					G0_charset = USER_MAP;
 				if (charset == 0)
@@ -1723,9 +1752,9 @@ static int con_write(struct tty_struct * tty, int from_user,
 				if (c == '0')
 					G1_charset = GRAF_MAP;
 				else if (c == 'B')
-					G1_charset = NORM_MAP;
+					G1_charset = LAT1_MAP;
 				else if (c == 'U')
-					G1_charset = NULL_MAP;
+					G1_charset = IBMPC_MAP;
 				else if (c == 'K')
 					G1_charset = USER_MAP;
 				if (charset == 1)
@@ -1973,6 +2002,21 @@ long con_init(long kmem_start)
 	gotoxy(currcons,orig_x,orig_y);
 	set_origin(currcons);
 	csi_J(currcons, 0);
+
+
+	/* Figure out the size of the screen and screen font so we
+	   can figure out the appropriate screen size should we load
+	   a different font */
+
+	if ( video_type == VIDEO_TYPE_EGAC || video_type == VIDEO_TYPE_EGAM )
+	{
+		video_font_height = ORIG_VIDEO_POINTS;
+		/* This may be suboptimal but is a safe bet - go with it */
+		video_scan_lines = video_font_height * video_num_lines;
+		printk("Console: %ld point font, %ld scans\n",
+		       video_font_height, video_scan_lines);
+	}
+
 	printable = 1;
 	printk("Console: %s %s %ldx%ld, %d virtual console%s (max %d)\n",
 		can_do_color ? "colour" : "mono",
@@ -2187,17 +2231,19 @@ int con_open(struct tty_struct *tty, struct file * filp)
    should use 0xA0000 for the bwmap as well.. */
 #define blackwmap ((char *)0xa0000)
 #define cmapsz 8192
+#define attrib_port (0x3c0)
 #define seq_port_reg (0x3c4)
 #define seq_port_val (0x3c5)
 #define gr_port_reg (0x3ce)
 #define gr_port_val (0x3cf)
 
-static int set_get_font(char * arg, int set)
+static int set_get_font(char * arg, int set, int ch512)
 {
 #ifdef CAN_LOAD_EGA_FONTS
 	int i;
 	char *charmap;
 	int beg;
+	unsigned short video_port_status = video_port_reg + 6;
 
 	/* no use to "load" CGA... */
 
@@ -2210,7 +2256,8 @@ static int set_get_font(char * arg, int set)
 	} else
 		return -EINVAL;
 
-	i = verify_area(set ? VERIFY_READ : VERIFY_WRITE, (void *)arg, cmapsz);
+	i = verify_area(set ? VERIFY_READ : VERIFY_WRITE, (void *)arg,
+			ch512 ? 2*cmapsz : cmapsz);
 	if (i)
 		return i;
 
@@ -2239,6 +2286,23 @@ static int set_get_font(char * arg, int set)
 		for (i=0; i<cmapsz ; i++)
 			put_user(scr_readb(charmap + i), arg + i);
 
+	/*
+	 * In 512-character mode, the character map is not contiguous if
+	 * we want to remain EGA compatible -- which we do
+	 */
+
+	if (ch512)
+	  {
+	    charmap += 2*cmapsz;
+	    arg += cmapsz;
+	    if (set)
+	      for (i=0; i<cmapsz ; i++)
+		*(charmap+i) = get_fs_byte(arg+i);
+	    else
+	      for (i=0; i<cmapsz ; i++)
+		put_fs_byte(*(charmap+i), arg+i);
+	  };
+
 	cli();
 	outb_p( 0x00, seq_port_reg );   /* First, the sequencer */
 	outb_p( 0x01, seq_port_val );   /* Synchronous reset */
@@ -2246,6 +2310,11 @@ static int set_get_font(char * arg, int set)
 	outb_p( 0x03, seq_port_val );   /* CPU writes to maps 0 and 1 */
 	outb_p( 0x04, seq_port_reg );
 	outb_p( 0x03, seq_port_val );   /* odd-even addressing */
+	if (set)
+	  {
+	    outb_p( 0x03, seq_port_reg ); /* Character Map Select */
+	    outb_p( ch512 ? 0x04 : 0x00, seq_port_val );
+	  }
 	outb_p( 0x00, seq_port_reg );
 	outb_p( 0x03, seq_port_val );   /* clear synchronous reset */
 
@@ -2255,6 +2324,18 @@ static int set_get_font(char * arg, int set)
 	outb_p( 0x10, gr_port_val );    /* enable even-odd addressing */
 	outb_p( 0x06, gr_port_reg );
 	outb_p( beg, gr_port_val );     /* map starts at b800:0 or b000:0 */
+	if (set)			/* attribute controller */
+	  {
+	    /* 256-char: enable intensity bit
+	       512-char: disable intensity bit */
+	    inb_p( video_port_status );	/* clear address flip-flop */
+	    outb_p ( 0x12, attrib_port ); /* color plane enable register */
+	    outb_p ( ch512 ? 0x07 : 0x0f, attrib_port );
+	    /* Wilton (1987) mentions the following; I don't know what
+	       it means, but it works, and it appears necessary */
+	    inb_p( video_port_status );
+	    outb_p ( 0x20, attrib_port );
+	  }
 	sti();
 
 	return 0;
@@ -2269,13 +2350,96 @@ static int set_get_font(char * arg, int set)
  * 8xH fonts (0 < H <= 32).
  */
 
-int con_set_font (char *arg)
+int con_set_font (char *arg, int ch512)
 {
-	hashtable_contents_valid = 0;
-	return set_get_font (arg,1);
+	int i;
+
+	i = set_get_font (arg,1,ch512);
+  	if ( !i ) {
+		hashtable_contents_valid = 0;
+      		video_mode_512ch = ch512;
+      		console_charmask = ch512 ? 0x1ff : 0x0ff;
+	}
+	return i;
 }
 
 int con_get_font (char *arg)
 {
-	return set_get_font (arg,0);
+	return set_get_font (arg,0,video_mode_512ch);
+}
+
+/*
+ * Adjust the screen to fit a font of a certain height
+ *
+ * Returns < 0 for error, 0 if nothing changed, and the number
+ * of lines on the adjusted console if changed.
+ */
+int con_adjust_height(unsigned long fontheight)
+{
+	int rows, maxscan;
+	unsigned char ovr, vde, fsr, curs, cure;
+
+	if (fontheight > 32 ||
+	     (video_type != VIDEO_TYPE_EGAC && video_type != VIDEO_TYPE_EGAM))
+		return -EINVAL;
+
+	if ( fontheight == video_font_height || fontheight == 0 )
+		return 0;
+	
+	video_font_height = fontheight;
+
+	rows = video_scan_lines/fontheight;	/* Number of video rows we end up with */
+	maxscan = rows*fontheight - 1;		/* Scan lines to actually display-1 */
+
+	/* Reprogram the CRTC for the new font size
+           Note: the attempt to read the overflow register will fail
+	   on an EGA, but using 0xff for the previous value appears to
+	   be OK for EGA text modes in the range 257-512 scan lines, so I
+	   guess we don't need to worry about it.
+
+	   The same applies for the spill bits in the font size and cursor
+	   registers; they are write-only on EGA, but it appears that they
+	   are all don't care bits on EGA, so I guess it doesn't matter. */
+
+	cli();
+	outb_p( 0x07, video_port_reg );		/* CRTC overflow register */
+	ovr = inb_p(video_port_val);
+	outb_p( 0x09, video_port_reg );	        /* Font size register */
+	fsr = inb_p(video_port_val);
+	outb_p( 0x0a, video_port_reg );	        /* Cursor start */
+	curs = inb_p(video_port_val);
+	outb_p( 0x0b, video_port_reg );	        /* Cursor end */
+	cure = inb_p(video_port_val);
+	sti();
+
+	vde = maxscan & 0xff;			/* Vertical display end reg */
+	ovr = (ovr & 0xbd) +			/* Overflow register */
+	      ((maxscan & 0x100) >> 7) +
+	      ((maxscan & 0x200) >> 3);
+	fsr = (fsr & 0xe0) + (fontheight-1);    /*  Font size register */
+	curs = (curs & 0xc0) + fontheight - (fontheight < 10 ? 2 : 3);
+	cure = (cure & 0xe0) + fontheight - (fontheight < 10 ? 1 : 2);
+
+	cli();
+	outb_p( 0x07, video_port_reg );		/* CRTC overflow register */
+	outb_p( ovr, video_port_val );
+	outb_p( 0x09, video_port_reg );	        /* Font size */
+	outb_p( fsr, video_port_val );
+	outb_p( 0x0a, video_port_reg );	        /* Cursor start */
+	outb_p( curs, video_port_val );
+	outb_p( 0x0b, video_port_reg );	        /* Cursor end */
+	outb_p( cure, video_port_val );
+	outb_p( 0x12, video_port_reg );	        /* Vertical display limit */
+	outb_p( vde, video_port_val );
+	sti();
+
+	if ( rows == video_num_lines ) {
+	  /* Change didn't affect number of lines -- no need to scare
+	     the rest of the world */
+	  return 0;
+	}
+
+	vc_resize(rows, 0);	                /* Adjust console size */
+
+	return rows;
 }

@@ -211,7 +211,7 @@ void swap_duplicate(unsigned long entry)
 		return;
 	offset = SWP_OFFSET(entry);
 	type = SWP_TYPE(entry);
-	if (type == SHM_SWP_TYPE)
+	if (type & SHM_SWP_TYPE)
 		return;
 	if (type >= nr_swapfiles) {
 		printk("Trying to duplicate nonexistent swap-page\n");
@@ -238,7 +238,7 @@ void swap_free(unsigned long entry)
 	if (!entry)
 		return;
 	type = SWP_TYPE(entry);
-	if (type == SHM_SWP_TYPE)
+	if (type & SHM_SWP_TYPE)
 		return;
 	if (type >= nr_swapfiles) {
 		printk("Trying to free nonexistent swap-page\n");

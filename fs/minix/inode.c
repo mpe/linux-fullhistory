@@ -232,7 +232,7 @@ void minix_statfs(struct super_block *sb, struct statfs *buf, int bufsiz)
 	tmp.f_bsize = 1024;
 	tmp.f_blocks = (sb->u.minix_sb.s_nzones - sb->u.minix_sb.s_firstdatazone) << sb->u.minix_sb.s_log_zone_size;
 	tmp.f_bfree = minix_count_free_blocks(sb);
-	tmp.f_bavail = tmp.f_bavail;
+	tmp.f_bavail = tmp.f_bfree;
 	tmp.f_files = sb->u.minix_sb.s_ninodes;
 	tmp.f_ffree = minix_count_free_inodes(sb);
 	tmp.f_namelen = sb->u.minix_sb.s_namelen;

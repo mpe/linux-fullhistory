@@ -1,6 +1,10 @@
 /*
  *      u14-34f.c - Low-level driver for UltraStor 14F/34F SCSI host adapters.
  *
+ *      13 Jun 1995 rev. 2.01 for linux 1.2.10
+ *         HAVE_OLD_UX4F_FIRMWARE should be defined for U34F boards when
+ *         the firmware prom is not the lastest one (28008-006).
+ *
  *      11 Mar 1995 rev. 2.00 for linux 1.2.0
  *          Fixed a bug which prevented media change detection for removable
  *          disk drives.
@@ -53,11 +57,11 @@
  *
  *      Copyright (C) 1994, 1995 Dario Ballabio (dario@milano.europe.dg.com)
  *
- *      WARNING: if your 14F board has an old firmware revision (see below)
+ *      WARNING: if your 14/34F board has an old firmware revision (see below)
  *               you must change "#undef" into "#define" in the following
  *               statement.
  */
-#undef HAVE_OLD_U14F_FIRMWARE
+#undef HAVE_OLD_UX4F_FIRMWARE
 /*
  *  The UltraStor 14F, 24F, and 34F are a family of intelligent, high
  *  performance SCSI-2 host adapters.
@@ -123,6 +127,10 @@
  *    larger than 16Kbyte.
  *
  *    The new firmware has fixed all the above problems.
+ *
+ *  For U34F boards the latest bios prom is 38008-002 (BIOS rev. 2.01),
+ *  the latest firmware prom is 28008-006. Older firmware 28008-005 has
+ *  problems when using more then 16 scatter/gather lists.
  *
  *  In order to support multiple ISA boards in a reliable way,
  *  the driver sets host->wish_block = TRUE for all ISA boards.
@@ -449,6 +457,11 @@ static inline int port_detect(ushort *port_base, unsigned int j,
    irqlist[irq] = j;
 
    if (HD(j)->subversion == ESA) {
+
+#if defined (HAVE_OLD_UX4F_FIRMWARE)
+      sh[j]->sg_tablesize = MAX_SAFE_SGLIST;
+#endif
+
       sh[j]->dma_channel = NO_DMA;
       sh[j]->unchecked_isa_dma = FALSE;
       sprintf(BN(j), "U34F%d", j);
@@ -456,7 +469,7 @@ static inline int port_detect(ushort *port_base, unsigned int j,
    else {
       sh[j]->wish_block = TRUE;
 
-#if defined (HAVE_OLD_U14F_FIRMWARE)
+#if defined (HAVE_OLD_UX4F_FIRMWARE)
       sh[j]->hostt->use_clustering = DISABLE_CLUSTERING;
       sh[j]->sg_tablesize = MAX_SAFE_SGLIST;
 #endif
@@ -475,7 +488,7 @@ static inline int port_detect(ushort *port_base, unsigned int j,
 
       if (strcmp(&HD(j)->board_id[32], "06000600")) {
          printk("%s: %s.\n", BN(j), &HD(j)->board_id[8]);
-         printk("%s: firmware %s is outdated, BIOS rev. should be 2.01.\n", 
+         printk("%s: firmware %s is outdated, FW PROM should be 28004-006.\n",
                 BN(j), &HD(j)->board_id[32]);
          sh[j]->hostt->use_clustering = DISABLE_CLUSTERING;
          sh[j]->sg_tablesize = MAX_SAFE_SGLIST;

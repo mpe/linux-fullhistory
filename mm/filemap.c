@@ -28,25 +28,26 @@
  * though.
  */
 
+static inline void multi_bmap(struct inode * inode, unsigned int block, unsigned int * nr, int shift)
+{
+	int i = PAGE_SIZE >> shift;
+	block >>= shift;
+	do {
+		*nr = bmap(inode, block);
+		i--;
+		block++;
+		nr++;
+	} while (i > 0);
+}
+
 static unsigned long filemap_nopage(struct vm_area_struct * area, unsigned long address,
 	unsigned long page, int no_share)
 {
 	struct inode * inode = area->vm_inode;
-	unsigned int block;
-	int nr[8];
-	int i, *p;
+	int nr[PAGE_SIZE/512];
 
-	address &= PAGE_MASK;
-	block = address - area->vm_start + area->vm_offset;
-	block >>= inode->i_sb->s_blocksize_bits;
-	i = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;
-	p = nr;
-	do {
-		*p = bmap(inode,block);
-		i--;
-		block++;
-		p++;
-	} while (i > 0);
+	multi_bmap(inode, (address & PAGE_MASK) - area->vm_start + area->vm_offset, nr,
+		inode->i_sb->s_blocksize_bits);
 	return bread_page(page, inode->i_dev, nr, inode->i_sb->s_blocksize, no_share);
 }
 
@@ -65,9 +66,10 @@ static void filemap_sync_page(struct vm_area_struct * vma,
 	unsigned long offset,
 	unsigned long page)
 {
+	struct inode * inode;
+	int nr[PAGE_SIZE/512];
 	struct buffer_head * bh;
 
-	printk("msync: %ld: [%08lx]\n", offset, page);
 	bh = buffer_pages[MAP_NR(page)];
 	if (bh) {
 		/* whee.. just mark the buffer heads dirty */
@@ -78,9 +80,49 @@ static void filemap_sync_page(struct vm_area_struct * vma,
 		} while (tmp != bh);
 		return;
 	}
-	/* we'll need to go fetch the buffer heads etc.. RSN */
-	printk("Can't handle non-shared page yet\n");
-	return;
+	inode = vma->vm_inode;
+	multi_bmap(inode, offset, nr, inode->i_sb->s_blocksize_bits);
+	bwrite_page(page, inode->i_dev, nr, inode->i_sb->s_blocksize);
+}
+
+/*
+ * Swapping to a shared file: while we're busy writing out the page
+ * (and the page still exists in memory), we save the page information
+ * in the page table, so that "filemap_swapin()" can re-use the page
+ * immediately if it is called while we're busy swapping it out..
+ *
+ * Once we've written it all out, we mark the page entry "empty", which
+ * will result in a normal page-in (instead of a swap-in) from the now
+ * up-to-date shared file mapping.
+ */
+void filemap_swapout(struct vm_area_struct * vma,
+	unsigned long offset,
+	pte_t *page_table)
+{
+	unsigned long page = pte_page(*page_table);
+	unsigned long entry = SWP_ENTRY(SHM_SWP_TYPE, MAP_NR(page));
+
+	pte_val(*page_table) = entry;
+	filemap_sync_page(vma, offset, page);
+	if (pte_val(*page_table) == entry)
+		pte_clear(page_table);
+}
+
+/*
+ * filemap_swapin() is called only if we have something in the page
+ * tables that is non-zero (but not present), which we know to be the
+ * page index of a page that is busy being swapped out (see above).
+ * So we just use it directly..
+ */
+static pte_t filemap_swapin(struct vm_area_struct * vma,
+	unsigned long offset,
+	unsigned long entry)
+{
+	unsigned long page = SWP_OFFSET(entry);
+
+	mem_map[page]++;
+	page = (page << PAGE_SHIFT) + PAGE_OFFSET;
+	return pte_mkdirty(mk_pte(page,vma->vm_page_prot));
 }
 
 static inline void filemap_sync_pte(pte_t * pte, struct vm_area_struct *vma,
@@ -189,21 +231,6 @@ static void filemap_close(struct vm_area_struct * vma)
 }
 
 /*
- * This isn't implemented yet: you'll get a warning and incorrect behaviour.
- *
- * Note that the page is free'd by the higher-level after return,
- * so we have to either write it out or just forget it. We currently
- * forget it..
- */
-void filemap_swapout(struct vm_area_struct * vma,
-	unsigned long offset,
-	pte_t *page_table)
-{
-	printk("swapout not implemented on shared files..\n");
-	pte_clear(page_table);
-}
-
-/*
  * Shared mappings need to be able to do the right thing at
  * close/unmap/sync. They will also use the private file as
  * backing-store for swapping..
@@ -218,7 +245,7 @@ static struct vm_operations_struct file_shared_mmap = {
 	filemap_nopage,		/* nopage */
 	NULL,			/* wppage */
 	filemap_swapout,	/* swapout */
-	NULL,			/* swapin */
+	filemap_swapin,		/* swapin */
 };
 
 /*
@@ -253,15 +280,8 @@ int generic_mmap(struct inode * inode, struct file * file, struct vm_area_struct
 		return -ENOEXEC;
 	ops = &file_private_mmap;
 	if (vma->vm_flags & VM_SHARED) {
-		if (vma->vm_flags & (VM_WRITE | VM_MAYWRITE)) {
-			static int nr = 0;
+		if (vma->vm_flags & (VM_WRITE | VM_MAYWRITE))
 			ops = &file_shared_mmap;
-#ifndef SHARED_MMAP_REALLY_WORKS /* it doesn't, yet */
-			if (nr++ < 5)
-				printk("%s tried to do a shared writeable mapping\n", current->comm);
-			return -EINVAL;
-#endif
-		}
 	}
 	if (!IS_RDONLY(inode)) {
 		inode->i_atime = CURRENT_TIME;

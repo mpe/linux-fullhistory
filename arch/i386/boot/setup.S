@@ -175,6 +175,11 @@ novga:	mov	[14],ax
 	int	0x10
 	mov	[4],bx		! bh = display page
 	mov	[6],ax		! al = video mode, ah = window width
+	xor	ax,ax
+	mov	es,ax		! Access low memory
+	seg es
+	mov	ax,[0x485]	! POINTS - Height of character matrix
+	mov	[16],ax
 
 ! Get hd0 data
 

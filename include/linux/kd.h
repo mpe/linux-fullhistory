@@ -7,6 +7,14 @@
 #define GIO_FONT	0x4B60	/* gets font in expanded form */
 #define PIO_FONT	0x4B61	/* use font in expanded form */
 
+#define GIO_FONTX	0x4B6B	/* get font using struct consolefontdesc */
+#define PIO_FONTX	0x4B6C	/* set font using struct consolefontdesc */
+struct consolefontdesc {
+	u_short charcount;	/* characters in font (256 or 512) */
+	u_short charheight;	/* scan lines per character (1-32) */
+	char *chardata;		/* font data in expanded form */
+};
+
 #define KIOCSOUND	0x4B2F	/* start sound generation (0 for off) */
 #define KDMKTONE	0x4B30	/* generate tone */
 
@@ -40,6 +48,8 @@ typedef char scrnmap_t;
 #define		E_TABSZ		256
 #define GIO_SCRNMAP	0x4B40	/* get screen mapping from kernel */
 #define PIO_SCRNMAP	0x4B41	/* put screen mapping table in kernel */
+#define GIO_UNISCRNMAP  0x4B69	/* get full Unicode screen mapping */
+#define PIO_UNISCRNMAP  0x4B6A  /* set full Unicode screen mapping */
 
 #define GIO_UNIMAP	0x4B66	/* get unicode-to-font mapping from kernel */
 struct unipair {
@@ -57,6 +67,9 @@ struct unimapinit {
 	u_short advised_hashstep;  /* 0 if no opinion */
 	u_short advised_hashlevel; /* 0 if no opinion */
 };
+
+#define UNI_DIRECT_BASE 0xF000	/* start of Direct Font Region */
+#define UNI_DIRECT_MASK 0x01FF	/* Direct Font Region bitmask */
 
 #define		K_RAW		0x00
 #define		K_XLATE		0x01
@@ -116,6 +129,6 @@ struct kbkeycode {
 
 /* note: 0x4B00-0x4B4E all have had a value at some time;
    don't reuse for the time being */
-/* note: 0x4B60-0x4B68 used above */
+/* note: 0x4B60-0x4B6C used above */
 
 #endif /* _LINUX_KD_H */

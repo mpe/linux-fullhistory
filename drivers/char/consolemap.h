@@ -3,11 +3,12 @@
  *
  * Interface between console.c, selection.c  and consolemap.c
  */
-#define NORM_MAP 0
+#define LAT1_MAP 0
 #define GRAF_MAP 1
-#define NULL_MAP 2
+#define IBMPC_MAP 2
 #define USER_MAP 3
 
 extern int hashtable_contents_valid;
 extern unsigned char inverse_translate(unsigned char c);
-extern unsigned char *set_translate(int m);
+extern unsigned short *set_translate(int m);
+extern int conv_uni_to_pc(long ucs);

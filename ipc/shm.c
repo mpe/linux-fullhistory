@@ -502,7 +502,7 @@ int sys_shmat (int shmid, char *shmaddr, int shmflg, ulong *raddr)
 		return -EIDRM;
 	}
 
-	shmd->vm_pte = (SHM_SWP_TYPE << 1) | (id << SHM_ID_SHIFT);
+	shmd->vm_pte = SWP_ENTRY(SHM_SWP_TYPE, id);
 	shmd->vm_start = addr;
 	shmd->vm_end = addr + shp->shm_npages * PAGE_SIZE;
 	shmd->vm_task = current;

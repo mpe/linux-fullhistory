@@ -151,17 +151,32 @@ static inline void __constant_memcpy_tofs(void * to, const void * from, unsigned
 		case 0:
 			return;
 		case 1:
-			put_user_byte(*(const char *) from, (char *) to);
+			__put_user(*(const char *) from, (char *) to, 1);
 			return;
 		case 2:
-			put_user_word(*(const short *) from, (short *) to);
+			__put_user(*(const short *) from, (short *) to, 2);
 			return;
 		case 3:
-			put_user_word(*(const short *) from, (short *) to);
-			put_user_byte(*(2+(const char *) from), 2+(char *) to);
+			__put_user(*(const short *) from, (short *) to, 2);
+			__put_user(*(2+(const char *) from), 2+(char *) to, 1);
 			return;
 		case 4:
-			put_user_long(*(const int *) from, (int *) to);
+			__put_user(*(const int *) from, (int *) to, 4);
+			return;
+		case 8:
+			__put_user(*(const int *) from, (int *) to, 4);
+			__put_user(*(1+(const int *) from), 1+(int *) to, 4);
+			return;
+		case 12:
+			__put_user(*(const int *) from, (int *) to, 4);
+			__put_user(*(1+(const int *) from), 1+(int *) to, 4);
+			__put_user(*(2+(const int *) from), 2+(int *) to, 4);
+			return;
+		case 16:
+			__put_user(*(const int *) from, (int *) to, 4);
+			__put_user(*(1+(const int *) from), 1+(int *) to, 4);
+			__put_user(*(2+(const int *) from), 2+(int *) to, 4);
+			__put_user(*(3+(const int *) from), 3+(int *) to, 4);
 			return;
 	}
 #define COMMON(x) \
@@ -215,17 +230,32 @@ static inline void __constant_memcpy_fromfs(void * to, const void * from, unsign
 		case 0:
 			return;
 		case 1:
-			*(char *)to = get_user_byte((const char *) from);
+			*(char *)to = __get_user((const char *) from, 1);
 			return;
 		case 2:
-			*(short *)to = get_user_word((const short *) from);
+			*(short *)to = __get_user((const short *) from, 2);
 			return;
 		case 3:
-			*(short *) to = get_user_word((const short *) from);
-			*((char *) to + 2) = get_user_byte(2+(const char *) from);
+			*(short *) to = __get_user((const short *) from, 2);
+			*((char *) to + 2) = __get_user(2+(const char *) from, 1);
 			return;
 		case 4:
-			*(int *) to = get_user_long((const int *) from);
+			*(int *) to = __get_user((const int *) from, 4);
+			return;
+		case 8:
+			*(int *) to = __get_user((const int *) from, 4);
+			*(1+(int *) to) = __get_user(1+(const int *) from, 4);
+			return;
+		case 12:
+			*(int *) to = __get_user((const int *) from, 4);
+			*(1+(int *) to) = __get_user(1+(const int *) from, 4);
+			*(1+(int *) to) = __get_user(2+(const int *) from, 4);
+			return;
+		case 16:
+			*(int *) to = __get_user((const int *) from, 4);
+			*(1+(int *) to) = __get_user(1+(const int *) from, 4);
+			*(2+(int *) to) = __get_user(2+(const int *) from, 4);
+			*(3+(int *) to) = __get_user(3+(const int *) from, 4);
 			return;
 	}
 #define COMMON(x) \

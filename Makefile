@@ -1,6 +1,6 @@
 VERSION = 1
 PATCHLEVEL = 3
-SUBLEVEL = 0
+SUBLEVEL = 1
 
 ARCH = i386
 
@@ -236,6 +236,7 @@ clean:	archclean
 mrproper: clean
 	rm -f include/linux/autoconf.h include/linux/version.h
 	rm -f drivers/sound/local.h
+	rm -f drivers/char/uni_hash_tbl.h drivers/char/conmakehash
 	rm -f .version .config* config.in config.old
 	rm -f include/asm
 	rm -f .depend `find . -name .depend -print`

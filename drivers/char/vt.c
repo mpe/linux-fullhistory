@@ -17,6 +17,8 @@
 #include <linux/vt.h>
 #include <linux/string.h>
 #include <linux/malloc.h>
+#include <linux/major.h>
+#include <linux/fs.h>
 
 #include <asm/io.h>
 #include <asm/segment.h>
@@ -63,13 +65,19 @@ extern unsigned int keymap_count;
 /*
  * routines to load custom translation table and EGA/VGA font from console.c
  */
-extern int con_set_trans(char * table);
-extern int con_get_trans(char * table);
+extern int con_set_trans_old(char * table);
+extern int con_get_trans_old(char * table);
+extern int con_set_trans_new(unsigned short * table);
+extern int con_get_trans_new(unsigned short * table);
 extern void con_clear_unimap(struct unimapinit *ui);
 extern int con_set_unimap(ushort ct, struct unipair *list);
 extern int con_get_unimap(ushort ct, ushort *uct, struct unipair *list);
-extern int con_set_font(char * fontmap);
+extern int con_set_font(char * fontmap, int ch512);
 extern int con_get_font(char * fontmap);
+extern int con_adjust_height(unsigned long fontheight);
+
+extern int video_mode_512ch;
+extern unsigned long video_font_height;
 
 /*
  * these are the valid i/o ports we're allowed to change. they map all the
@@ -78,6 +86,41 @@ extern int con_get_font(char * fontmap);
 #define GPFIRST 0x3b4
 #define GPLAST 0x3df
 #define GPNUM (GPLAST - GPFIRST + 1)
+
+/*
+ * This function is called when the size of the physical screen has been
+ * changed.  If either the row or col argument is nonzero, set the appropriate
+ * entry in each winsize structure for all the virtual consoles, then
+ * send SIGWINCH to all processes with a virtual console as controlling
+ * tty.
+ */
+
+static void
+kd_size_changed(int row, int col)
+{
+  struct task_struct *p;
+  int i;
+
+  if ( !row && !col ) return;
+
+  for ( i = 0 ; i < MAX_NR_CONSOLES ; i++ )
+    {
+      if ( console_driver.table[i] )
+	{
+	  if ( row ) console_driver.table[i]->winsize.ws_row = row;
+	  if ( col ) console_driver.table[i]->winsize.ws_col = col;
+	}
+    }
+
+  for_each_task(p)
+    {
+      if ( p->tty && MAJOR(p->tty->device) == TTY_MAJOR &&
+	   MINOR(p->tty->device) <= MAX_NR_CONSOLES && MINOR(p->tty->device) )
+	{
+	  send_sig(SIGWINCH, p, 1);
+	}
+    }
+}
 
 /*
  * Generates sound of some count for some number of clock ticks
@@ -829,22 +872,85 @@ int vt_ioctl(struct tty_struct *tty, struct file * file,
 			return -EPERM;
 		if (vt_cons[fg_console]->vc_mode != KD_TEXT)
 			return -EINVAL;
-		return con_set_font((char *)arg);
+		return con_set_font((char *)arg, 0);
 		/* con_set_font() defined in console.c */
 
 	case GIO_FONT:
-		if (vt_cons[fg_console]->vc_mode != KD_TEXT)
+		if (vt_cons[fg_console]->vc_mode != KD_TEXT ||
+		    video_mode_512ch)
 			return -EINVAL;
 		return con_get_font((char *)arg);
 		/* con_get_font() defined in console.c */
 
+	case PIO_FONTX:
+	{
+	        struct consolefontdesc cfdarg;
+
+		if (!perm)
+			return -EPERM;
+		if (vt_cons[fg_console]->vc_mode != KD_TEXT)
+			return -EINVAL;
+		i = verify_area(VERIFY_READ, (void *)arg,
+				sizeof(struct consolefontdesc));
+		if (i) return i;
+		memcpy_fromfs(&cfdarg, (void *)arg,
+			      sizeof(struct consolefontdesc)); 
+		
+		if ( cfdarg.charcount == 256 ||
+		     cfdarg.charcount == 512 ) {
+			i = con_set_font(cfdarg.chardata,
+				cfdarg.charcount == 512);
+			if (i)
+				return i;
+			i = con_adjust_height(cfdarg.charheight);
+			if (i <= 0) return i;
+			kd_size_changed(i, 0);
+			return 0;
+		} else
+			return -EINVAL;
+	}
+
+	case GIO_FONTX:
+	{
+	        struct consolefontdesc cfdarg;
+		int nchar;
+
+		if (vt_cons[fg_console]->vc_mode != KD_TEXT)
+			return -EINVAL;
+		i = verify_area(VERIFY_WRITE, (void *)arg,
+			sizeof(struct consolefontdesc));
+		if (i) return i;	
+		memcpy_fromfs(&cfdarg, (void *) arg,
+			      sizeof(struct consolefontdesc)); 
+		i = cfdarg.charcount;
+		cfdarg.charcount = nchar = video_mode_512ch ? 512 : 256;
+		cfdarg.charheight = video_font_height;
+		memcpy_tofs((void *) arg, &cfdarg,
+			    sizeof(struct consolefontdesc)); 
+		if ( cfdarg.chardata )
+		{
+			if ( i < nchar )
+				return -ENOMEM;
+			return con_get_font(cfdarg.chardata);
+		} else
+			return 0;
+	}
+
 	case PIO_SCRNMAP:
 		if (!perm)
 			return -EPERM;
-		return con_set_trans((char *)arg);
+		return con_set_trans_old((char *)arg);
 
 	case GIO_SCRNMAP:
-		return con_get_trans((char *)arg);
+		return con_get_trans_old((char *)arg);
+
+	case PIO_UNISCRNMAP:
+		if (!perm)
+			return -EPERM;
+		return con_set_trans_new((unsigned short *)arg);
+
+	case GIO_UNISCRNMAP:
+		return con_get_trans_new((unsigned short *)arg);
 
 	case PIO_UNIMAPCLR:
 	      { struct unimapinit ui;
