@@ -1,5 +1,5 @@
 /*
- *   Copyright (C) International Business Machines Corp., 2000-2004
+ *   Copyright (C) International Business Machines Corp., 2000-2005
  *   Portions Copyright (C) Christoph Hellwig, 2001-2002
  *
  *   This program is free software;  you can redistribute it and/or modify
@@ -2796,6 +2796,8 @@ int jfs_lazycommit(void *arg)
 			if (!WorkDone)
 				break;
 		}
+		/* In case a wakeup came while all threads were active */
+		jfs_commit_thread_waking = 0;
 
 		if (current->flags & PF_FREEZE) {
 			LAZY_UNLOCK(flags);
