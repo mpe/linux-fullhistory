@@ -71,6 +71,9 @@ config GENERIC_IOMAP
 	bool
 	default y
 
+config FIQ
+	bool
+
 source "init/Kconfig"
 
 menu "System Type"
@@ -398,11 +401,6 @@ config ALIGNMENT_TRAP
 	  here, which has a severe performance impact. This is necessary for
 	  correct operation of some network protocols. With an IP-only
 	  configuration it is safe to say N, otherwise say Y.
-
-config FIQ
-	bool
-	depends on ARCH_ACORN || ARCH_L7200
-	default y
 
 endmenu
 
