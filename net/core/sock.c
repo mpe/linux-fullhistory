@@ -543,8 +543,8 @@ struct sk_buff *sock_wmalloc(struct sock *sk, unsigned long size, int force, int
 			atomic_add(skb->truesize, &sk->wmem_alloc);
 			skb->destructor = sock_wfree;
 			skb->sk = sk;
+			return skb;
 		}
-		return skb;
 	}
 	return NULL;
 }
@@ -557,8 +557,8 @@ struct sk_buff *sock_rmalloc(struct sock *sk, unsigned long size, int force, int
 			atomic_add(skb->truesize, &sk->rmem_alloc);
 			skb->destructor = sock_rfree;
 			skb->sk = sk;
+			return skb;
 		}
-		return skb;
 	}
 	return NULL;
 }

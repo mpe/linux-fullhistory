@@ -68,7 +68,7 @@ asmlinkage int sys_capget(cap_user_header_t header, cap_user_data_t dataptr)
 
      if (target != current)
 	     read_unlock(&tasklist_lock); 
-     spin_unlock(&task_capacibility_lock);
+     spin_unlock(&task_capability_lock);
 
      if (!error) {
 	     if (copy_to_user(dataptr, &data, sizeof data))

@@ -15,6 +15,7 @@
 #include <linux/types.h>
 #include <linux/unistd.h>
 #include <linux/smp_lock.h>
+#include <linux/signal.h>
 
 #include <asm/uaccess.h>
 
@@ -22,7 +23,6 @@
 	modprobe_path is set via /proc/sys.
 */
 char modprobe_path[256] = "/sbin/modprobe";
-static char * envp[] = { "HOME=/", "TERM=linux", "PATH=/sbin:/usr/sbin:/bin:/usr/bin", NULL };
 
 /*
 	exec_modprobe is spawned from a kernel-mode user process,
@@ -41,14 +41,15 @@ use_init_file_context(void)
 	/* don't use the user's root, use init's root instead */
 	exit_fs(current);	/* current->fs->count--; */
 	current->fs = task_init->fs;
-	current->fs->count++;
+	atomic_inc(&current->fs->count);
 
 	unlock_kernel();
 }
 
 static int exec_modprobe(void * module_name)
 {
-	char *argv[] = { modprobe_path, "-s", "-k", (char*)module_name, NULL};
+	static char * envp[] = { "HOME=/", "TERM=linux", "PATH=/sbin:/usr/sbin:/bin:/usr/bin", NULL };
+	char *argv[] = { modprobe_path, "-s", "-k", (char*)module_name, NULL };
 	int i;
 
 	use_init_file_context();
@@ -97,6 +98,7 @@ int request_module(const char * module_name)
 {
 	int pid;
 	int waitpid_result;
+	sigset_t tmpsig;
 
 	/* Don't allow request_module() before the root fs is mounted!  */
 	if ( ! current->fs->root ) {
@@ -107,10 +109,25 @@ int request_module(const char * module_name)
 
 	pid = kernel_thread(exec_modprobe, (void*) module_name, CLONE_FS);
 	if (pid < 0) {
-		printk(KERN_ERR "kmod: fork failed, errno %d\n", -pid);
+		printk(KERN_ERR "request_module[%s]: fork failed, errno %d\n", module_name, -pid);
 		return pid;
 	}
+
+	/* Block everything but SIGKILL/SIGSTOP */
+	spin_lock_irq(&current->sigmask_lock);
+	tmpsig = current->blocked;
+	siginitset(&current->blocked, ~(sigmask(SIGKILL)|sigmask(SIGSTOP)));
+	recalc_sigpending(current);
+	spin_unlock_irq(&current->sigmask_lock);
+
 	waitpid_result = waitpid(pid, NULL, __WCLONE);
+
+	/* Allow signals again.. */
+	spin_lock_irq(&current->sigmask_lock);
+	current->blocked = tmpsig;
+	recalc_sigpending(current);
+	spin_unlock_irq(&current->sigmask_lock);
+
 	if (waitpid_result != pid) {
 		printk (KERN_ERR "kmod: waitpid(%d,NULL,0) failed, returning %d.\n",
 			pid, waitpid_result);

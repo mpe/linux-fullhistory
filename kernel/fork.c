@@ -51,9 +51,9 @@ spinlock_t taskslot_lock = SPIN_LOCK_UNLOCKED;
 #define UIDHASH_SZ	(PIDHASH_SZ >> 2)
 
 static struct user_struct {
+	atomic_t count;
 	struct user_struct *next, **pprev;
 	unsigned int uid;
-	int task_count;
 } *uidhash[UIDHASH_SZ];
 
 spinlock_t uidhash_lock = SPIN_LOCK_UNLOCKED;
@@ -98,12 +98,10 @@ void free_uid(struct task_struct *p)
 
 	if (up) {
 		p->user = NULL;
-		lock_kernel();
-		if (!--up->task_count) {
+		if (atomic_dec_and_test(&up->count)) {
 			uid_hash_remove(up);
 			kmem_cache_free(uid_cachep, up);
 		}
-		unlock_kernel();
 	}
 }
 
@@ -119,11 +117,11 @@ int alloc_uid(struct task_struct *p)
 			return -EAGAIN;
 		p->user = up;
 		up->uid = p->uid;
-		up->task_count = 0;
+		atomic_set(&up->count, 0);
 		uid_hash_insert(up, hashent);
 	}
 
-	up->task_count++;
+	atomic_inc(&up->count);
 	return 0;
 }
 
@@ -487,7 +485,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 	lock_kernel();
 
 	if (p->user) {
-		if (p->user->task_count >= p->rlim[RLIMIT_NPROC].rlim_cur)
+		if (atomic_read(&p->user->count) >= p->rlim[RLIMIT_NPROC].rlim_cur)
 			goto bad_fork_free;
 	}
 
@@ -567,7 +565,7 @@ int do_fork(unsigned long clone_flags, unsigned long usp, struct pt_regs *regs)
 
 	nr_tasks++;
 	if (p->user)
-		p->user->task_count++;
+		atomic_inc(&p->user->count);
 
 	retval = -ENOMEM;
 	/* copy all the process information */
@@ -633,7 +631,7 @@ bad_fork_cleanup:
 	}
 
 	if (p->user)
-		p->user->task_count++;
+		atomic_dec(&p->user->count);
 	nr_tasks--;
 	add_free_taskslot(p->tarray_ptr);
 bad_fork_free:

@@ -289,7 +289,7 @@ static int autofs_root_symlink(struct inode *dir, struct dentry *dentry, const c
 		return -ENOSPC;
 	}
 
-	ent->name = kmalloc(dentry->d_name.len, GFP_KERNEL);
+	ent->name = kmalloc(dentry->d_name.len+1, GFP_KERNEL);
 	if ( !ent->name ) {
 		kfree(sl->data);
 		kfree(ent);
@@ -302,7 +302,7 @@ static int autofs_root_symlink(struct inode *dir, struct dentry *dentry, const c
 
 	ent->ino = AUTOFS_FIRST_SYMLINK + n;
 	ent->hash = dentry->d_name.hash;
-	memcpy(ent->name, dentry->d_name.name,ent->len = dentry->d_name.len);
+	memcpy(ent->name, dentry->d_name.name, 1+(ent->len = dentry->d_name.len));
 
 	autofs_hash_insert(dh,ent);
 	d_instantiate(dentry, iget(dir->i_sb,ent->ino));
@@ -392,14 +392,14 @@ static int autofs_root_mkdir(struct inode *dir, struct dentry *dentry, int mode)
 	if ( !ent )
 		return -ENOSPC;
 
-	ent->name = kmalloc(dentry->d_name.len, GFP_KERNEL);
+	ent->name = kmalloc(dentry->d_name.len+1, GFP_KERNEL);
 	if ( !ent->name ) {
 		kfree(ent);
 		return -ENOSPC;
 	}
 
 	ent->hash = dentry->d_name.hash;
-	memcpy(ent->name, dentry->d_name.name, ent->len = dentry->d_name.len);
+	memcpy(ent->name, dentry->d_name.name, 1+(ent->len = dentry->d_name.len));
 	ent->ino = sbi->next_dir_ino++;
 	autofs_hash_insert(dh,ent);
 	dir->i_nlink++;
@@ -434,20 +434,20 @@ static inline int autofs_get_protover(int *p)
 }
 
 /* Perform an expiry operation */
-static inline int autofs_expire_run(struct autofs_sb_info *sbi,
+static inline int autofs_expire_run(struct super_block *sb,
+				    struct autofs_sb_info *sbi,
 				    struct autofs_packet_expire *pkt_p)
 {
 	struct autofs_dir_ent *ent;
 	struct autofs_packet_expire pkt;
-	struct autofs_dirhash *dh = &(sbi->dirhash);
-	
+
 	memset(&pkt,0,sizeof pkt);
 
 	pkt.hdr.proto_version = AUTOFS_PROTO_VERSION;
 	pkt.hdr.type = autofs_ptype_expire;
 
 	if ( !sbi->exp_timeout ||
-	     !(ent = autofs_expire(dh,sbi->exp_timeout)) )
+	     !(ent = autofs_expire(sb,sbi)) )
 		return -EAGAIN;
 
 	pkt.len = ent->len;
@@ -456,8 +456,6 @@ static inline int autofs_expire_run(struct autofs_sb_info *sbi,
 
 	if ( copy_to_user(pkt_p, &pkt, sizeof(struct autofs_packet_expire)) )
 		return -EFAULT;
-	
-	autofs_update_usage(dh,ent);
 
 	return 0;
 }
@@ -494,7 +492,8 @@ static int autofs_root_ioctl(struct inode *inode, struct file *filp,
 	case AUTOFS_IOC_SETTIMEOUT:
 		return autofs_get_set_timeout(sbi,(unsigned long *)arg);
 	case AUTOFS_IOC_EXPIRE:
-		return autofs_expire_run(sbi,(struct autofs_packet_expire *)arg);
+		return autofs_expire_run(inode->i_sb,sbi,
+					 (struct autofs_packet_expire *)arg);
 	default:
 		return -ENOSYS;
 	}

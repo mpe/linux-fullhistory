@@ -258,6 +258,7 @@ extern inline unsigned long get_free_page(int gfp_mask)
  * Decide if we should try to do some swapout..
  */
 extern int free_memory_available(void);
+extern struct wait_queue * kswapd_wait;
 
 #define free_page(addr) free_pages((addr),0)
 extern void FASTCALL(free_pages(unsigned long addr, unsigned long order));
@@ -312,8 +313,7 @@ extern void put_cached_page(unsigned long);
  * GFP bitmasks..
  */
 #define __GFP_WAIT	0x01
-#define __GFP_IO	0x02
-#define __GFP_LOW	0x00
+#define __GFP_LOW	0x02
 #define __GFP_MED	0x04
 #define __GFP_HIGH	0x08
 
@@ -321,9 +321,9 @@ extern void put_cached_page(unsigned long);
 
 #define GFP_BUFFER	(__GFP_LOW | __GFP_WAIT)
 #define GFP_ATOMIC	(__GFP_HIGH)
-#define GFP_USER	(__GFP_LOW | __GFP_WAIT | __GFP_IO)
-#define GFP_KERNEL	(__GFP_MED | __GFP_WAIT | __GFP_IO)
-#define GFP_NFS		(__GFP_HIGH | __GFP_WAIT | __GFP_IO)
+#define GFP_USER	(__GFP_LOW | __GFP_WAIT)
+#define GFP_KERNEL	(__GFP_MED | __GFP_WAIT)
+#define GFP_NFS		(__GFP_HIGH | __GFP_WAIT)
 
 /* Flag - indicates that the buffer will be suitable for DMA.  Ignored on some
    platforms, used as appropriate on others */

@@ -7,12 +7,6 @@
 #include <linux/sched.h>
 #include <asm/page.h>
 
-#ifdef __SMP__
-extern void __check_locks(unsigned int);
-#else
-#define __check_locks(x)	do { } while (0)
-#endif
-
 #define VERIFY_READ 0
 #define VERIFY_WRITE 1
 
@@ -118,7 +112,6 @@ extern void __get_user_4(void);
 /* Careful: we have to cast the result to the type of the pointer for sign reasons */
 #define get_user(x,ptr)							\
 ({	int __ret_gu,__val_gu;						\
-	__check_locks(1);						\
 	switch(sizeof (*(ptr))) {					\
 	case 1:  __get_user_x(1,__ret_gu,__val_gu,ptr); break;		\
 	case 2:  __get_user_x(2,__ret_gu,__val_gu,ptr); break;		\
@@ -143,7 +136,6 @@ extern void __put_user_bad(void);
 
 #define put_user(x,ptr)									\
 ({	int __ret_pu;									\
-	__check_locks(1);								\
 	switch(sizeof (*(ptr))) {							\
 	case 1:  __put_user_x(1,__ret_pu,(__typeof__(*(ptr)))(x),ptr); break;		\
 	case 2:  __put_user_x(2,__ret_pu,(__typeof__(*(ptr)))(x),ptr); break;		\
@@ -161,7 +153,6 @@ extern void __put_user_bad(void);
 #define __put_user_nocheck(x,ptr,size)			\
 ({							\
 	long __pu_err;					\
-	__check_locks(1);				\
 	__put_user_size((x),(ptr),(size),__pu_err);	\
 	__pu_err;					\
 })
@@ -204,7 +195,6 @@ struct __large_struct { unsigned long buf[100]; };
 #define __get_user_nocheck(x,ptr,size)				\
 ({								\
 	long __gu_err, __gu_val;				\
-	__check_locks(1);					\
 	__get_user_size(__gu_val,(ptr),(size),__gu_err);	\
 	(x) = (__typeof__(*(ptr)))__gu_val;			\
 	__gu_err;						\
@@ -284,7 +274,6 @@ do {									\
 static inline unsigned long
 __generic_copy_from_user_nocheck(void *to, const void *from, unsigned long n)
 {
-	__check_locks(1);
 	__copy_user(to,from,n);
 	return n;
 }
@@ -292,7 +281,6 @@ __generic_copy_from_user_nocheck(void *to, const void *from, unsigned long n)
 static inline unsigned long
 __generic_copy_to_user_nocheck(void *to, const void *from, unsigned long n)
 {
-	__check_locks(1);
 	__copy_user(to,from,n);
 	return n;
 }
@@ -387,7 +375,6 @@ unsigned long __generic_copy_from_user(void *, const void *, unsigned long);
 static inline unsigned long
 __constant_copy_to_user(void *to, const void *from, unsigned long n)
 {
-	__check_locks(1);
 	if (access_ok(VERIFY_WRITE, to, n))
 		__constant_copy_user(to,from,n);
 	return n;
@@ -396,7 +383,6 @@ __constant_copy_to_user(void *to, const void *from, unsigned long n)
 static inline unsigned long
 __constant_copy_from_user(void *to, const void *from, unsigned long n)
 {
-	__check_locks(1);
 	if (access_ok(VERIFY_READ, from, n))
 		__constant_copy_user(to,from,n);
 	return n;
@@ -405,7 +391,6 @@ __constant_copy_from_user(void *to, const void *from, unsigned long n)
 static inline unsigned long
 __constant_copy_to_user_nocheck(void *to, const void *from, unsigned long n)
 {
-	__check_locks(1);
 	__constant_copy_user(to,from,n);
 	return n;
 }
@@ -413,7 +398,6 @@ __constant_copy_to_user_nocheck(void *to, const void *from, unsigned long n)
 static inline unsigned long
 __constant_copy_from_user_nocheck(void *to, const void *from, unsigned long n)
 {
-	__check_locks(1);
 	__constant_copy_user(to,from,n);
 	return n;
 }

@@ -402,7 +402,7 @@ resume:
 		this_parent = this_parent->d_parent;
 		goto resume;
 	}
-	return (count == 1); /* one remaining use count? */
+	return (count > 1); /* remaining users? */
 }
 
 /*

@@ -172,10 +172,12 @@ static inline int shrink_one_page(struct page *page, int gfp_mask)
 				break;
 			}
 			age_page(page);
+#if 0
 			if (page->age)
 				break;
 			if (page_cache_size * 100 < (page_cache.min_percent * num_physpages))
 				break;
+#endif
 			if (PageSwapCache(page)) {
 				delete_from_swap_cache(page);
 				return 1;
@@ -189,7 +191,7 @@ static inline int shrink_one_page(struct page *page, int gfp_mask)
 			break;
 
 		/* is it a buffer cache page? */
-		if ((gfp_mask & __GFP_IO) && bh && try_to_free_buffer(bh, &bh, 6))
+		if (bh && try_to_free_buffer(bh, &bh, 6))
 			return 1;
 		break;
 
@@ -211,8 +213,8 @@ int shrink_mmap(int priority, int gfp_mask)
 	struct page * page;
 	int count_max, count_min;
 
-	count_max = (limit<<2) >> (priority>>1);
-	count_min = (limit<<2) >> (priority);
+	count_max = (limit<<1) >> (priority>>1);
+	count_min = (limit<<1) >> (priority);
 
 	page = mem_map + clock;
 	do {
@@ -327,6 +329,7 @@ static unsigned long try_to_read_ahead(struct file * file,
 			 */
 			page = mem_map + MAP_NR(page_cache);
 			add_to_page_cache(page, inode, offset, hash);
+			set_bit(PG_referenced, &page->flags);
 			inode->i_op->readpage(file, page);
 			page_cache = 0;
 		}

@@ -1,16 +1,13 @@
 #ifndef LINUX_NBD_H
 #define LINUX_NBD_H
 
-#include <linux/ioctl.h>
-#include <asm/types.h>
-
-#define NBD_SET_SOCK _IO( 0xab, 0 )
-#define NBD_SET_BLKSIZE _IO( 0xab, 1 )
-#define NBD_SET_SIZE _IO( 0xab, 2 )
-#define NBD_DO_IT _IO( 0xab, 3 )
-#define NBD_CLEAR_SOCK _IO( 0xab, 4 )
-#define NBD_CLEAR_QUE _IO( 0xab, 5 )
-#define NBD_PRINT_DEBUG _IO( 0xab, 6 )
+#define NBD_SET_SOCK	_IO( 0xab, 0 )
+#define NBD_SET_BLKSIZE	_IO( 0xab, 1 )
+#define NBD_SET_SIZE	_IO( 0xab, 2 )
+#define NBD_DO_IT	_IO( 0xab, 3 )
+#define NBD_CLEAR_SOCK	_IO( 0xab, 4 )
+#define NBD_CLEAR_QUE	_IO( 0xab, 5 )
+#define NBD_PRINT_DEBUG	_IO( 0xab, 6 )
 
 #ifdef MAJOR_NR
 
@@ -54,21 +51,23 @@ struct nbd_device {
 
 /* This now IS in some kind of include file...	*/
 
-#define NBD_REQUEST_MAGIC 0x12560953
-#define NBD_REPLY_MAGIC 0x96744668
-#define LO_MAGIC 0x68797548
+/* These are send over network in request/reply magic field */
+
+#define NBD_REQUEST_MAGIC 0x25609513
+#define NBD_REPLY_MAGIC 0x67446698
+/* Do *not* use magics: 0x12560953 0x96744668. */
 
 struct nbd_request {
-	__u32 magic;
-	__u32 from;
-	__u32 len;
+	u32 magic;
+	u32 type;	/* == READ || == WRITE 	*/
 	char handle[8];
-	__u32 type;	/* == READ || == WRITE 	*/
+	u64 from;
+	u32 len;
 };
 
 struct nbd_reply {
-	__u32 magic;
+	u32 magic;
+	u32 error;		/* 0 = ok, else error	*/
 	char handle[8];		/* handle you got from request	*/
-	__u32 error;		/* 0 = ok, else error	*/
 };
 #endif

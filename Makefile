@@ -228,8 +228,10 @@ config: symlinks scripts/split-include
 	    scripts/split-include include/linux/autoconf.h include/config; \
 	fi
 
-linuxsubdirs: dummy
-	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i; done
+linuxsubdirs: $(patsubst %, _dir_%, $(SUBDIRS))
+
+$(patsubst %, _dir_%, $(SUBDIRS)) : dummy
+	$(MAKE) -C $(patsubst _dir_%, %, $@)
 
 $(TOPDIR)/include/linux/version.h: include/linux/version.h
 $(TOPDIR)/include/linux/compile.h: include/linux/compile.h
@@ -271,26 +273,8 @@ init/version.o: init/version.c include/linux/compile.h
 init/main.o: init/main.c
 	$(CC) $(CFLAGS) $(PROFILING) -c -o $*.o $<
 
-fs: dummy
-	$(MAKE) linuxsubdirs SUBDIRS=fs
-
-lib: dummy
-	$(MAKE) linuxsubdirs SUBDIRS=lib
-
-mm: dummy
-	$(MAKE) linuxsubdirs SUBDIRS=mm
-
-ipc: dummy
-	$(MAKE) linuxsubdirs SUBDIRS=ipc
-
-kernel: dummy
-	$(MAKE) linuxsubdirs SUBDIRS=kernel
-
-drivers: dummy
-	$(MAKE) linuxsubdirs SUBDIRS=drivers
-
-net: dummy
-	$(MAKE) linuxsubdirs SUBDIRS=net
+fs lib mm ipc kernel drivers net: dummy
+	$(MAKE) $(subst $@, _dir_$@, $@)
 
 MODFLAGS = -DMODULE
 ifdef CONFIG_MODULES
@@ -298,11 +282,10 @@ ifdef CONFIG_MODVERSIONS
 MODFLAGS += -DMODVERSIONS -include $(HPATH)/linux/modversions.h
 endif
 
-modules: include/linux/version.h
-	@set -e; \
-	for i in $(SUBDIRS); \
-	do $(MAKE) -C $$i CFLAGS="$(CFLAGS) $(MODFLAGS)" MAKING_MODULES=1 modules; \
-	done
+modules: $(patsubst %, _mod_%, $(SUBDIRS))
+
+$(patsubst %, _mod_%, $(SUBDIRS)) : include/linux/version.h
+	$(MAKE) -C $(patsubst _mod_%, %, $@) CFLAGS="$(CFLAGS) $(MODFLAGS)" MAKING_MODULES=1 modules
 
 modules_install:
 	@( \
@@ -396,7 +379,9 @@ sums:
 dep-files: scripts/mkdep archdep include/linux/version.h
 	scripts/mkdep init/*.c > .depend
 	scripts/mkdep `find $(FINDHPATH) -follow -name \*.h ! -name modversions.h -print` > .hdepend
-	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i fastdep; done
+#	set -e; for i in $(SUBDIRS); do $(MAKE) -C $$i fastdep ;done
+# let this be made through the fastdep rule in Rules.make
+	$(MAKE) $(patsubst %,_sfdep_%,$(SUBDIRS)) _FASTDEP_ALL_SUB_DIRS="$(SUBDIRS)"
 
 MODVERFILE :=
 

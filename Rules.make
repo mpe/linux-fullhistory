@@ -105,15 +105,23 @@ endif
 fastdep: dummy
 	$(TOPDIR)/scripts/mkdep $(wildcard *.[chS] local.h.master) > .depend
 ifdef ALL_SUB_DIRS
-	set -e; for i in $(ALL_SUB_DIRS); do $(MAKE) -C $$i fastdep; done
+	$(MAKE) $(patsubst %,_sfdep_%,$(ALL_SUB_DIRS)) _FASTDEP_ALL_SUB_DIRS="$(ALL_SUB_DIRS)"
 endif
 
+ifdef _FASTDEP_ALL_SUB_DIRS
+$(patsubst %,_sfdep_%,$(_FASTDEP_ALL_SUB_DIRS)):
+	$(MAKE) -C $(patsubst _sfdep_%,%,$@) fastdep
+endif
+
+	
 #
 # A rule to make subdirectories
 #
-sub_dirs: dummy
+sub_dirs: dummy $(patsubst %,_subdir_%,$(SUB_DIRS))
+
 ifdef SUB_DIRS
-	set -e; for i in $(SUB_DIRS); do $(MAKE) -C $$i; done
+$(patsubst %,_subdir_%,$(SUB_DIRS)) : dummy
+	$(MAKE) -C $(patsubst _subdir_%,%,$@)
 endif
 
 #
@@ -123,13 +131,20 @@ ALL_MOBJS = $(MX_OBJS) $(M_OBJS)
 ifneq "$(strip $(ALL_MOBJS))" ""
 PDWN=$(shell $(CONFIG_SHELL) $(TOPDIR)/scripts/pathdown.sh)
 endif
-modules: $(ALL_MOBJS) $(MIX_OBJS) $(MI_OBJS) dummy
+
 ifdef MOD_SUB_DIRS
-	set -e; for i in $(MOD_SUB_DIRS); do $(MAKE) -C $$i modules; done
+$(patsubst %,_modsubdir_%,$(MOD_SUB_DIRS)) : dummy
+	$(MAKE) -C $(patsubst _modsubdir_%,%,$@) modules
 endif
+
 ifdef MOD_IN_SUB_DIRS
-	set -e; for i in $(MOD_IN_SUB_DIRS); do $(MAKE) -C $$i modules; done
+$(patsubst %,_modinsubdir_%,$(MOD_IN_SUB_DIRS)) : dummy
+	$(MAKE) -C $(patsubst _modinsubdir_%,%,$@) modules
 endif
+
+modules: $(ALL_MOBJS) $(MIX_OBJS) $(MI_OBJS) dummy \
+	 $(patsubst %,_modsubdir_%,$(MOD_SUB_DIRS)) \
+	 $(patsubst %,_modinsubdir_%,$(MOD_IN_SUB_DIRS))
 ifneq "$(strip $(MOD_LIST_NAME))" ""
 	rm -f $$TOPDIR/modules/$(MOD_LIST_NAME)
 ifdef MOD_SUB_DIRS

@@ -1,7 +1,7 @@
 		       LINUX ALLOCATED DEVICES
 	     Maintained by H. Peter Anvin <hpa@zytor.com>
 
-		     Last revised: August 5, 1998
+		    Last revised: August 10, 1998
 
 This list is the Linux Device List, the official registry of allocated
 device numbers and /dev directory nodes for the Linux operating
@@ -184,19 +184,16 @@ Your cooperation is appreciated.
 		 64 = /dev/ttyS0	First serial port
 		      ...
 		127 = /dev/ttyS63	64th serial port
-		128 = /dev/ptyp0	First old pseudo-tty master
+		128 = /dev/ptyp0	OBSOLETE
 		      ...
-		191 = /dev/ptysf	64th old pseudo-tty master
-		192 = /dev/ttyp0	First old pseudo-tty slave
+		191 = /dev/ptysf	OBSOLETE
+		192 = /dev/ttyp0	OBSOLETE
 		      ...
-		255 = /dev/ttysf	64th old pseudo-tty slave
+		255 = /dev/ttysf	OBSOLETE
 
-		For compatibility with previous versions of Linux, the
-		first 64 PTYs are replicated under this device number.
-		This use is deprecated with the release of Linux 2.0
-		and may be removed in a future version of Linux.  To
-		ensure proper operation, do not mix old and new PTY
-		devices.
+		Older versions of the Linux kernel used this major
+		number for BSD PTY devices.  As of Linux 2.1.115, this
+		is no longer supported.  Use major numbers 2 and 3.
 
   5 char	Alternate TTY devices
 		  0 = /dev/tty		Current TTY device
@@ -310,9 +307,6 @@ Your cooperation is appreciated.
 		133 = /dev/exttrp	External device trap
 		134 = /dev/apm_bios	Advanced Power Management BIOS
 		135 = /dev/rtc		Real Time Clock
-		136 = /dev/qcam0	QuickCam on lp0
-		137 = /dev/qcam1	QuickCam on lp1
-		138 = /dev/qcam2	QuickCam on lp2
 		139 = /dev/openprom	SPARC OpenBoot PROM
 		140 = /dev/relay8	Berkshire Products Octal relay card
 		141 = /dev/relay16	Berkshire Products ISO-16 relay card
@@ -326,8 +320,8 @@ Your cooperation is appreciated.
 		149 = /dev/input/mouse	Linux/SGI Irix emulation mouse
 		150 = /dev/input/keyboard Linux/SGI Irix emulation keyboard
 		151 = /dev/led		Front panel LEDs
-		152 = /dev/radio	Radio card (type?)
 		153 = /dev/mergemem	Memory merge device
+		154 = /dev/pmu		Macintosh PowerBook power manager
 
  11 char	Raw keyboard device
 		  0 = /dev/kbd		Raw keyboard device
@@ -1163,16 +1157,19 @@ Your cooperation is appreciated.
  80 char	Photometrics AT200 CCD camera
 		  0 = /dev/at200	Photometrics AT200 CCD camera
 
- 81 char	Brooktree Bt848 frame grabbers
-		  0 = /dev/bttv0	First Bt848 card
-		  1 = /dev/bttv1	Second Bt848 card
+ 81 char	video4linux
+		  0 = /dev/video0	Video capture/overlay device
 		      ...
-		 16 = /dev/bttvc0	Control for first Bt848 card
-		 17 = /dev/bttvc1	Control for second Bt848 card
+		 63 = /dev/video63	Video capture/overlay device
+		 64 = /dev/radio0	Radio device
 		      ...
-		 32 = /dev/bttv-vbi0	VBI data of first Bt848 card
-		 33 = /dev/bttv-vbi1	VBI data of second Bt848 card
+		127 = /dev/radio63	Radio device
+		192 = /dev/vtx0		Teletext device
 		      ...
+		223 = /dev/vtx31	Teletext device
+		224 = /dev/vbi0		Vertical blank interrupt
+		      ...
+		255 = /dev/vbi31	Vertical blank interrupt
 
  82 char	WiNRADiO communications receiver card
 		  0 = /dev/winradio0	First WiNRADiO card
@@ -1330,7 +1327,12 @@ Your cooperation is appreciated.
 
 109 char	Reserved for logical volume manager
 
-108-119		UNALLOCATED
+110 char	miroMEDIA Surround board
+		  0 = /dev/srnd0	First miroMEDIA Surround board
+		  1 = /dev/srnd1	Second miroMEDIA Surround board
+		    ...
+
+111-119		UNALLOCATED
 
 120-127		LOCAL/EXPERIMENTAL USE
 
@@ -1388,6 +1390,8 @@ It is recommended that these links exist on all systems:
 /dev/core	/proc/kcore	symbolic	Backward compatibility
 /dev/ramdisk	ram0		symbolic	Backward compatibility
 /dev/ftape	qft0		symbolic	Backward compatibility
+/dev/bttv0	video0		symbolic	Backward compatibility
+/dev/radio	radio0		symbolic	Backward compatibility
 /dev/scd?	sr?		hard		Alternate SCSI CD-ROM name
 
 	Locally defined links

@@ -16,6 +16,7 @@
  *   once to be processed
  * 97-4-11 Making protocol independent of endianity etc.
  * 97-9-13 Cosmetic changes
+ * 98-5-13 Attempt to make 64-bit-clean on 64-bit machines
  *
  * possible FIXME: make set_sock / set_blksize / set_size / do_it one syscall
  * why not: would need verify_area and friends, would share yet another 
@@ -24,18 +25,24 @@
 
 #define PARANOIA
 #include <linux/major.h>
-#define MAJOR_NR NBD_MAJOR
-#include <linux/nbd.h>
 
 #include <linux/module.h>
 
+#include <linux/sched.h>
 #include <linux/fs.h>
 #include <linux/stat.h>
 #include <linux/errno.h>
 #include <linux/file.h>
+#include <linux/ioctl.h>
 
 #include <asm/segment.h>
 #include <asm/uaccess.h>
+#include <asm/types.h>
+
+#define MAJOR_NR NBD_MAJOR
+#include <linux/nbd.h>
+
+#define LO_MAGIC 0x68797548
 
 static int nbd_blksizes[MAX_NBD] = {1024, 1024,};
 static int nbd_sizes[MAX_NBD] = {0x7fffffff, 0x7fffffff,};
@@ -68,8 +75,7 @@ static int nbd_open(struct inode *inode, struct file *file)
 /*
  *  Send or receive packet.
  */
-static
-int nbd_xmit(int send, struct socket *sock, char *buf, int size)
+static int nbd_xmit(int send, struct socket *sock, char *buf, int size)
 {
 	mm_segment_t oldfs;
 	int result;
@@ -132,7 +138,7 @@ void nbd_send_req(struct socket *sock, struct request *req)
 	DEBUG("NBD: sending control, ");
 	request.magic = htonl(NBD_REQUEST_MAGIC);
 	request.type = htonl(req->cmd);
-	request.from = htonl(req->sector * 512);
+	request.from = cpu_to_be64( (u64) req->sector * (u64) 512);
 	request.len = htonl(req->current_nr_sectors << 9);
 	memcpy(request.handle, &req, sizeof(req));
 
@@ -153,8 +159,8 @@ void nbd_send_req(struct socket *sock, struct request *req)
 }
 
 #define HARDFAIL( s ) { printk( KERN_ERR "NBD: " s "(result %d)\n", result ); lo->harderror = result; return NULL; }
-struct request *		/* NULL returned = something went wrong, inform userspace       */
- nbd_read_stat(struct nbd_device *lo)
+struct request *nbd_read_stat(struct nbd_device *lo)
+		/* NULL returned = something went wrong, inform userspace       */ 
 {
 	int result;
 	struct nbd_reply reply;
@@ -425,8 +431,8 @@ int nbd_init(void)
 {
 	int i;
 
-	if (sizeof(struct nbd_request) != 24) {
-		printk(KERN_CRIT "Sizeof nbd_request needs to be 24 in order to work!\n" );
+	if (sizeof(struct nbd_request) != 28) {
+		printk(KERN_CRIT "Sizeof nbd_request needs to be 28 in order to work!\n" );
 		return -EIO;
 	}
 

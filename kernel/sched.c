@@ -470,8 +470,6 @@ asmlinkage void schedule(void)
 		goto scheduling_in_interrupt;
 	release_kernel_lock(prev, this_cpu);
 
-	__check_locks(1);
-
 	/* Do "administrative" work here while we don't hold any locks */
 	if (bh_active & bh_mask)
 		do_bottom_half();

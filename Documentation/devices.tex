@@ -1,5 +1,5 @@
 \documentstyle{article}
-% $Id: devices.tex,v 1.12 1998/08/06 04:52:01 hpa Exp $
+% $Id: devices.tex,v 1.14 1998/08/10 22:39:24 hpa Exp $
 % ---------------------------------------------------------------------------
 % Adopt somewhat reasonable margins, so it doesn't take a million
 % pages to print... :-)  If you're actually putting this in print, you
@@ -48,7 +48,7 @@ foo \kill}%
 %
 \title{{\bf Linux Allocated Devices}}
 \author{Maintained by H. Peter Anvin $<$hpa@zytor.com$>$}
-\date{Last revised: August 5, 1998}
+\date{Last revised: August 10, 1998}
 \maketitle
 %
 \noindent
@@ -246,7 +246,7 @@ Your cooperation is appreciated.
 \major{78}{}{char }{PAM Software's multimodem boards}
 \major{79}{}{char }{PAM Software's multimodem boards -- alternate devices}
 \major{80}{}{char }{Photometrics AT200 CCD camera}
-\major{81}{}{char }{Brooktree Bt848 frame grabbers}
+\major{81}{}{char }{video4linux}
 \major{82}{}{char }{WiNRADiO communications receiver card}
 \major{83}{}{char }{Teletext/videotext interfaces}
 \major{84}{}{char }{Ikon 1011[57] Versatec Greensheet Interface}
@@ -275,7 +275,8 @@ Your cooperation is appreciated.
 \major{107}{}{char }{3Dfx Voodoo Graphics device}
 \major{108}{}{char }{Device independent PPP interface}
 \major{109}{}{char }{Reserved for logical volume manager}
-\major{110}{--119}{}{Unallocated}
+\major{110}{}{char }{miroMEDIA Surround board}
+\major{111}{--119}{}{Unallocated}
 \major{120}{--127}{}{Local/experimental use}
 \major{128}{--135}{char }{Unix98 PTY masters}
 \major{136}{--143}{char }{Unix98 PTY slaves}
@@ -438,19 +439,18 @@ schemes, the meaning of the numbers vary.
 	\minor{64}{/dev/ttyS0}{First serial port}
 	\minordots
 	\minor{127}{/dev/ttyS63}{64th serial port}
-	\minor{128}{/dev/ptyp0}{First old pseudo-tty master}
+	\minor{128}{/dev/ptyp0}{OBSOLETE}
 	\minordots
-	\minor{191}{/dev/ptysf}{64th old pseudo-tty master}
-	\minor{192}{/dev/ttyp0}{First old pseudo-tty slave}
+	\minor{191}{/dev/ptysf}{OBSOLETE}
+	\minor{192}{/dev/ttyp0}{OBSOLETE}
 	\minordots
-	\minor{255}{/dev/ttysf}{64th old pseudo-tty slave}
+	\minor{255}{/dev/ttysf}{OBSOLETE}
 \end{devicelist}
 
 \noindent
-For compatibility with previous versions of Linux, the first 64 PTYs
-are replicated under this device number.  This use is deprecated with
-the release of Linux 2.0 and may be removed in a future version of
-Linux.  To ensure proper operation, do not mix old and new PTY devices.
+Older versions of the Linux kernel used this major number for BSD PTY
+devices.  As of Linux 2.1.115, this is no longer supported.  Use major
+numbers 2 and 3.
 
 \begin{devicelist}
 \major{ 5}{}{char }{Alternate TTY devices}
@@ -583,9 +583,6 @@ physical disks.
 	\minor{133}{/dev/exttrp}{External device trap}
 	\minor{134}{/dev/apm\_bios}{Advanced Power Management BIOS}
 	\minor{135}{/dev/rtc}{Real Time Clock}
-	\minor{136}{/dev/qcam0}{QuickCam on {\file lp0}}
-	\minor{137}{/dev/qcam1}{QuickCam on {\file lp1}}
-	\minor{138}{/dev/qcam2}{QuickCam on {\file lp2}}
 	\minor{139}{/dev/openprom}{SPARC OpenBoot PROM}
 	\minor{140}{/dev/relay8}{Berkshire Products Octal relay card}
 	\minor{141}{/dev/relay16}{Berkshire Products ISO-16 relay card}
@@ -599,8 +596,8 @@ physical disks.
 	\minor{149}{/dev/input/mouse}{Linux/SGI Irix emulation mouse}
 	\minor{150}{/dev/input/keyboard}{Linux/SGI Irix emulation keyboard}
 	\minor{151}{/dev/led}{Front panel LEDs}
-	\minor{152}{/dev/radio}{Radio card (type?)}
 	\minor{153}{/dev/mergemem}{Memory merge device}
+	\minor{154}{/dev/pmu}{Macintosh PowerBook power manager}
 \end{devicelist}
 
 \begin{devicelist}
@@ -1677,16 +1674,19 @@ Currently for Dolphin Interconnect Solutions' PCI-SCI bridge.
 \end{devicelist}
 
 \begin{devicelist}
-\major{81}{}{char }{Brooktree Bt848 frame grabbers}
-        \minor{0}{/dev/bttv0}{First Bt848 card} 
-        \minor{0}{/dev/bttv1}{Second Bt848 card} 
-        \minordots
-        \minor{16}{/dev/bttvc0}{Control for first Bt848 card} 
-        \minor{17}{/dev/bttvc1}{Control for second Bt848 card} 
-        \minordots
-        \minor{32}{/dev/bttv-vbi0}{VBI data of first Bt848 card}
-        \minor{33}{/dev/bttv-vbi1}{VBI data of second Bt848 card}
-        \minordots
+\major{81}{}{char }{video4linux}
+	\minor{0}{/dev/video0}{Video capture/overlay device}
+	\minordots
+	\minor{63}{/dev/video63}{Video capture/overlay device}
+	\minor{64}{/dev/radio0}{Radio device}
+	\minordots
+	\minor{127}{/dev/radio63}{Radio device}
+	\minor{192}{/dev/vtx0}{Teletext device}
+	\minordots
+	\minor{223}{/dev/vtx31}{Teletext device}
+	\minor{224}{/dev/vbi0}{Vertical blank interupt}
+	\minordots
+	\minor{255}{/dev/vbi31}{Vertical blank interupt}
 \end{devicelist}
 
 \begin{devicelist}
@@ -1910,7 +1910,14 @@ $<$arla-announce-request@stacken.kth.se$>$.
 \end{devicelist}
 
 \begin{devicelist}
-\major{110}{--119}{}{Unallocated}
+\major{110}{}{char }{miroMEDIA Surround board}
+	\minor{0}{/dev/srnd0}{First miroMEDIA Surround board}
+	\minor{1}{/dev/srnd1}{First miroMEDIA Surround board}
+	\minordots
+\end{devicelist}
+
+\begin{devicelist}
+\major{111}{--119}{}{Unallocated}
 \end{devicelist}
 
 \begin{devicelist}
@@ -1989,6 +1996,8 @@ It is recommended that these links exist on all systems:
 \link{/dev/core}{/proc/kcore}{symbolic}{Backward compatibility}
 \link{/dev/ramdisk}{ram0}{symbolic}{Backward compatibility}
 \link{/dev/ftape}{qft0}{symbolic}{Backward compatibility}
+\link{/dev/bttv0}{video0}{symbolic}{Backward compatibility}
+\link{/dev/radio}{radio0}{symbolic}{Backward compatibility}
 \link{/dev/scd?}{sr?}{hard}{Alternate name for CD-ROMs}
 \end{nodelist}
 

@@ -1238,7 +1238,7 @@ retry_open:
 #ifdef CONFIG_UNIX98_PTYS
 	if (device == PTMX_DEV) {
 		/* find a free pty. */
-		int major, minor, line;
+		int major, minor;
 		struct tty_driver *driver;
 
 		/* find a device that is not in use. */
@@ -1255,9 +1255,8 @@ retry_open:
 		return -EIO; /* no free ptys */
 	ptmx_found:
 		set_bit(TTY_PTY_LOCK, &tty->flags); /* LOCK THE SLAVE */
-		line = minor - driver->minor_start;
-		devpts_pty_new(line + major*NR_PTYS, MKDEV(driver->other->major,
-				   line+driver->other->minor_start));
+		minor -= driver->minor_start;
+		devpts_pty_new(driver->other->name_base + minor, MKDEV(driver->other->major, minor + driver->other->minor_start));
 		noctty = 1;
 		goto init_dev_done;
 	}

@@ -25,6 +25,7 @@
 * Oct 15, 1997  Farhan Thawar   changed wan_encapsulate to add a pad byte of 0
 * Apr 20, 1998	Alan Cox	Fixed 2.1 symbols
 * May 17, 1998  K. Baranowski	Fixed SNAP encapsulation in wan_encapsulate
+* Aug 15, 1998	Arnaldo C. Melo	Fixed device_setup return value
 *****************************************************************************/
 
 #include <linux/stddef.h>	/* offsetof(), etc. */
@@ -466,7 +467,7 @@ static int device_setup (wan_device_t* wandev, wandev_conf_t* u_conf)
 			if(!copy_from_user(data, conf->data, conf->data_size))
 			{
 				conf->data=data;
-				wandev->setup(wandev,conf);
+				err = wandev->setup(wandev,conf);
 			}
 			else 
 				err = -ENOBUFS;

@@ -3,12 +3,6 @@
 
 #include <linux/linkage.h>
 
-#ifdef __SMP__
-extern void __check_locks(unsigned int);
-#else
-#define __check_locks(x)	do { } while (0)
-#endif
-
 /*
  * SMP- and interrupt-safe semaphores..
  *
@@ -90,7 +84,6 @@ static inline int waking_non_zero(struct semaphore *sem)
  */
 extern inline void down(struct semaphore * sem)
 {
-	__check_locks(0);
 	__asm__ __volatile__(
 		"# atomic down operation\n\t"
 #ifdef __SMP__
@@ -112,7 +105,6 @@ extern inline int down_interruptible(struct semaphore * sem)
 {
 	int result;
 
-	__check_locks(0);
 	__asm__ __volatile__(
 		"# atomic interruptible down operation\n\t"
 #ifdef __SMP__

@@ -26,13 +26,14 @@
 */
 
 
-#define BusLogic_DriverVersion		"2.1.13"
-#define BusLogic_DriverDate		"17 April 1998"
+#define BusLogic_DriverVersion		"2.1.15"
+#define BusLogic_DriverDate		"17 August 1998"
 
 
 #include <linux/version.h>
 #include <linux/module.h>
 #include <linux/config.h>
+#include <linux/init.h>
 #include <linux/types.h>
 #include <linux/blk.h>
 #include <linux/blkdev.h>
@@ -1178,7 +1179,8 @@ static void BusLogic_InitializeProbeInfoList(BusLogic_HostAdapter_T
 		    BusLogic_ProbeInfoCount - FlashPointCount;
 		  memcpy(SavedProbeInfo,
 			 BusLogic_ProbeInfoList,
-			 sizeof(BusLogic_ProbeInfoList));
+			 BusLogic_ProbeInfoCount
+			 * sizeof(BusLogic_ProbeInfo_T));
 		  memcpy(&BusLogic_ProbeInfoList[0],
 			 &SavedProbeInfo[FlashPointCount],
 			 MultiMasterCount * sizeof(BusLogic_ProbeInfo_T));
@@ -3136,25 +3138,25 @@ static void BusLogic_ProcessCompletedCCBs(BusLogic_HostAdapter_T *HostAdapter)
 		  HostAdapter->TargetStatistics[CCB->TargetID]
 			       .CommandsCompleted++;
 		  if (BusLogic_GlobalOptions.TraceErrors)
-		      {
-			int i;
-			BusLogic_Notice("CCB #%ld Target %d: Result %X Host "
-					"Adapter Status %02X "
-					"Target Status %02X\n",
-					HostAdapter, CCB->SerialNumber,
-					CCB->TargetID, Command->result,
-					CCB->HostAdapterStatus,
-					CCB->TargetDeviceStatus);
-			BusLogic_Notice("CDB   ", HostAdapter);
-			for (i = 0; i < CCB->CDB_Length; i++)
-			  BusLogic_Notice(" %02X", HostAdapter, CCB->CDB[i]);
-			BusLogic_Notice("\n", HostAdapter);
-			BusLogic_Notice("Sense ", HostAdapter);
-			for (i = 0; i < CCB->SenseDataLength; i++)
-			  BusLogic_Notice(" %02X", HostAdapter,
-					  Command->sense_buffer[i]);
-			BusLogic_Notice("\n", HostAdapter);
-		      }
+		    {
+		      int i;
+		      BusLogic_Notice("CCB #%ld Target %d: Result %X Host "
+				      "Adapter Status %02X "
+				      "Target Status %02X\n",
+				      HostAdapter, CCB->SerialNumber,
+				      CCB->TargetID, Command->result,
+				      CCB->HostAdapterStatus,
+				      CCB->TargetDeviceStatus);
+		      BusLogic_Notice("CDB   ", HostAdapter);
+		      for (i = 0; i < CCB->CDB_Length; i++)
+			BusLogic_Notice(" %02X", HostAdapter, CCB->CDB[i]);
+		      BusLogic_Notice("\n", HostAdapter);
+		      BusLogic_Notice("Sense ", HostAdapter);
+		      for (i = 0; i < CCB->SenseDataLength; i++)
+			BusLogic_Notice(" %02X", HostAdapter,
+					Command->sense_buffer[i]);
+		      BusLogic_Notice("\n", HostAdapter);
+		    }
 		}
 	      break;
 	    }
@@ -4206,7 +4208,6 @@ int BusLogic_ProcDirectoryInfo(char *ProcBuffer, char **StartPointer,
   BusLogic_TargetStatistics_T *TargetStatistics;
   int TargetID, Length;
   char *Buffer;
-  if (WriteFlag) return 0;
   for (HostAdapter = BusLogic_FirstRegisteredHostAdapter;
        HostAdapter != NULL;
        HostAdapter = HostAdapter->Next)
@@ -4218,6 +4219,14 @@ int BusLogic_ProcDirectoryInfo(char *ProcBuffer, char **StartPointer,
       return 0;
     }
   TargetStatistics = HostAdapter->TargetStatistics;
+  if (WriteFlag)
+    {
+      HostAdapter->ExternalHostAdapterResets = 0;
+      HostAdapter->HostAdapterInternalErrors = 0;
+      memset(TargetStatistics, 0,
+	     BusLogic_MaxTargetDevices * sizeof(BusLogic_TargetStatistics_T));
+      return 0;
+    }
   Buffer = HostAdapter->MessageBuffer;
   Length = HostAdapter->MessageBufferLength;
   Length += sprintf(&Buffer[Length], "\n\

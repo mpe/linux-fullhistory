@@ -1,16 +1,17 @@
 	   BusLogic MultiMaster and FlashPoint SCSI Driver for Linux
 
-			 Version 2.0.12 for Linux 2.0
+			 Version 2.0.15 for Linux 2.0
+			 Version 2.1.15 for Linux 2.1
 
 			      PRODUCTION RELEASE
 
-				 29 March 1998
+				17 August 1998
 
 			       Leonard N. Zubkoff
 			       Dandelion Digital
 			       lnz@dandelion.com
 
-	   Copyright 1995 by Leonard N. Zubkoff <lnz@dandelion.com>
+	 Copyright 1995-1998 by Leonard N. Zubkoff <lnz@dandelion.com>
 
 
 				 INTRODUCTION
@@ -80,7 +81,7 @@ including: ... Linux ...".
 
 Mylex Corporation is located at 34551 Ardenwood Blvd., Fremont, California
 94555, USA and can be reached at 510/796-6100 or on the World Wide Web at
-http://www.mylex.com.  Mylex Technical Support can be reached by electronic
+http://www.mylex.com.  Mylex HBA Technical Support can be reached by electronic
 mail at techsup@mylex.com, by Voice at 510/608-2400, or by FAX at 510/745-7715.
 Contact information for offices in Europe and Japan is available on the Web
 site.
@@ -584,16 +585,16 @@ NOTE: Module Utilities 2.1.71 or later is required for correct parsing
 
 			      DRIVER INSTALLATION
 
-This distribution was prepared for Linux kernel version 2.0.33, but should be
+This distribution was prepared for Linux kernel version 2.0.35, but should be
 compatible with 2.0.4 or any later 2.0 series kernel.
 
 To install the new BusLogic SCSI driver, you may use the following commands,
 replacing "/usr/src" with wherever you keep your Linux kernel source tree:
 
   cd /usr/src
-  tar -xvzf BusLogic-2.0.12.tar.gz
+  tar -xvzf BusLogic-2.0.15.tar.gz
   mv README.* LICENSE.* BusLogic.[ch] FlashPoint.c linux/drivers/scsi
-  patch -p < BusLogic.patch
+  patch -p0 < BusLogic.patch (only for 2.0.33 and below)
   cd linux
   make config
   make depend

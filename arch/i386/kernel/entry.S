@@ -153,7 +153,6 @@ ENTRY(lcall7)
 	.globl	ret_from_smpfork
 ret_from_smpfork:
 	GET_CURRENT(%ebx)
-call __putlock
 	btrl	$0, SYMBOL_NAME(scheduler_lock)
 	jmp	ret_from_sys_call
 #endif /* __SMP__ */

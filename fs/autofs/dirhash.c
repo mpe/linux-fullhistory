@@ -37,15 +37,72 @@ void autofs_update_usage(struct autofs_dirhash *dh,
 	autofs_init_usage(dh,ent);  /* Relink at queue tail */
 }
 
-struct autofs_dir_ent *autofs_expire(struct autofs_dirhash *dh,
-				     unsigned long timeout)
+struct autofs_dir_ent *autofs_expire(struct super_block *sb,
+				     struct autofs_sb_info *sbi)
 {
+	struct autofs_dirhash *dh = &sbi->dirhash;
 	struct autofs_dir_ent *ent;
+	struct dentry *dentry;
+	unsigned long timeout = sbi->exp_timeout;
 
 	ent = dh->expiry_head.exp_next;
 
-	if ( ent == &(dh->expiry_head) ) return NULL;
-	return (jiffies - ent->last_usage >= timeout) ? ent : NULL;
+	if ( ent == &(dh->expiry_head) )
+		return NULL;	/* No entries */
+
+	while ( jiffies - ent->last_usage >= timeout ) {
+		/* Move to end of list in case expiry isn't desirable */
+		autofs_update_usage(dh, ent);
+
+		/* Check to see that entry is expirable */
+		if ( ent->ino < AUTOFS_FIRST_DIR_INO )
+			return ent; /* Symlinks are always expirable */
+
+		/* Get the dentry for the autofs subdirectory */
+		dentry = lookup_dentry(ent->name, dget(sb->s_root), 0);
+
+		if ( IS_ERR(dentry) ) {
+			printk("autofs: no such dentry on expiry queue: %s\n",
+			       ent->name);
+			autofs_delete_usage(ent);
+			continue;
+		}
+
+		if ( !dentry->d_inode ) {
+			dput(dentry);
+			printk("autofs: negative dentry on expiry queue: %s\n",
+			       ent->name);
+			autofs_delete_usage(ent);
+			continue;
+		}
+
+		/* Make sure entry is mounted and unused; note that dentry will
+		   point to the mounted-on-top root. */
+		if ( !S_ISDIR(dentry->d_inode->i_mode)
+		     || dentry->d_covers == dentry ) {
+			dput(dentry);
+			DPRINTK(("autofs: not expirable (not a mounted directory): %s\n", ent->name));
+			continue;
+		}
+
+		/*
+		 * Now, this is known to be a mount point; therefore the dentry
+		 * will be held by the superblock.  is_root_busy() will break if
+		 * we hold a use count here, so we have to dput() it before calling
+		 * is_root_busy().  However, since it is a mount point (already
+		 * verified), dput() will be a nonblocking operation and the use
+		 * count will not go to zero; therefore the call to is_root_busy()
+		 * here is legal.
+		 */
+		dput(dentry);
+
+		if ( !is_root_busy(dentry) ) {
+			DPRINTK(("autofs: signaling expire on %s\n", ent->name));
+			return ent; /* Expirable! */
+		}
+		DPRINTK(("autofs: didn't expire due to is_root_busy: %s\n", ent->name));
+	}
+	return NULL;		/* No expirable entries */
 }
 
 void autofs_initialize_hash(struct autofs_dirhash *dh) {

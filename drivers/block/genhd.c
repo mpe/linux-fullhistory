@@ -414,7 +414,8 @@ check_table:
 			 * This is necessary for drives for situations where
 			 * the translated geometry is unavailable from the BIOS.
 			 */
-			for (i = 0; i < 4 ; i++) {
+			int	xlate_done = 0;
+			for (i = 0; i < 4 && !xlate_done; i++) {
 				struct partition *q = &p[i];
 				if (NR_SECTS(q)
 				   && (q->sector & 63) == 1
@@ -423,9 +424,15 @@ check_table:
 					if (heads == 32 || heads == 64 || heads == 128 || heads == 255) {
 
 						(void) ide_xlate_1024(dev, heads, " [PTBL]");
-						break;
+						xlate_done = 1;
 					}
 				}
+			}
+			if (!xlate_done) {
+				/*
+				 * Default translation is equivalent of "BIOS LBA":
+				 */
+				ide_xlate_1024(dev, -2, " [LBA]");
 			}
 		}
 	}

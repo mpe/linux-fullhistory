@@ -3165,11 +3165,11 @@ STATIC s32bits probe_adapter(PADAPTER_INFO pAdapterInfo)
 
 	if(RD_HARPOON(ioport + hp_page_ctrl) & BIOS_SHADOW)
 	{
-		pAdapterInfo->ai_FlashRomSize = 64 * 1024;	/* 64k Rom */
+		pAdapterInfo->ai_FlashRomSize = 64 * 1024;	/* 64k ROM */
 	}
 	else
 	{
-		pAdapterInfo->ai_FlashRomSize = 32 * 1024;	/* 32k Rom */
+		pAdapterInfo->ai_FlashRomSize = 32 * 1024;	/* 32k ROM */
 	}
 
    pAdapterInfo->ai_stateinfo |= (FAST20_ENA | TAG_QUEUE_ENA);
@@ -4944,7 +4944,7 @@ int SccbMgr_isr(ULONG pCurrCard)
  *
  * Function: Sccb_bad_isr
  *
- * Description: Some type of interrupt has occured which is slightly
+ * Description: Some type of interrupt has occurred which is slightly
  *              out of the ordinary.  We will now decode it fully, in
  *              this routine.  This is broken up in an attempt to save
  *              processing time.
@@ -7038,7 +7038,7 @@ void siwidr(ULONG port, UCHAR width)
  *
  * Function: sssyncv
  *
- * Description: Write the desired value to the Sync Regisiter for the
+ * Description: Write the desired value to the Sync Register for the
  *              ID specified.
  *
  *---------------------------------------------------------------------*/

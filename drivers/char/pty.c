@@ -86,7 +86,15 @@ static void pty_close(struct tty_struct * tty, struct file * filp)
 	if (tty->driver.subtype == PTY_TYPE_MASTER) {
 		tty_hangup(tty->link);
 		set_bit(TTY_OTHER_CLOSED, &tty->flags);
-		devpts_pty_kill(MINOR(tty->device) - tty->driver.minor_start);
+#ifdef CONFIG_UNIX98_PTYS
+		{
+			unsigned int major = MAJOR(tty->device) - UNIX98_PTY_MASTER_MAJOR;
+			if ( major < UNIX98_NR_MAJORS ) {
+				devpts_pty_kill( MINOR(tty->device)
+			  - tty->driver.minor_start + tty->driver.name_base );
+			}
+		}
+#endif
 	}
 }
 
@@ -215,16 +223,20 @@ static int pty_chars_in_buffer(struct tty_struct *tty)
 	return ((count < N_TTY_BUF_SIZE/2) ? 0 : count);
 }
 
-/*
- * Return the minor device number of a given pty.  This lets us
- * open a master pty with the multi-headed ptmx device, then
- * find out which one we got after it is open, with an ioctl.
+/* 
+ * Return the device number of a Unix98 PTY (only!).  This lets us open a
+ * master pty with the multi-headed ptmx device, then find out which
+ * one we got after it is open, with an ioctl.
  */
-static int pty_get_device_minor(struct tty_struct *tty, unsigned int *value)
+#ifdef CONFIG_UNIX98_PTYS
+static int pty_get_device_number(struct tty_struct *tty, unsigned int *value)
 {
-	unsigned int result = MINOR(tty->device);
+	unsigned int result = MINOR(tty->device)
+		- tty->driver.minor_start + tty->driver.name_base;
 	return put_user(result, value);
 }
+#endif
+
 /* Set the lock flag on a pty */
 static int pty_set_lock(struct tty_struct *tty, int * arg)
 {
@@ -238,21 +250,36 @@ static int pty_set_lock(struct tty_struct *tty, int * arg)
 	return 0;
 }
 
-static int pty_ioctl(struct tty_struct *tty, struct file *file,
-		     unsigned int cmd, unsigned long arg)
+static int pty_bsd_ioctl(struct tty_struct *tty, struct file *file,
+			unsigned int cmd, unsigned long arg)
 {
 	if (!tty) {
 		printk("pty_ioctl called with NULL tty!\n");
 		return -EIO;
 	}
 	switch(cmd) {
-	case TIOCGPTN: /* Get PT Number */
-		return pty_get_device_minor(tty, (unsigned int *)arg);
 	case TIOCSPTLCK: /* Set PT Lock (disallow slave open) */
 		return pty_set_lock(tty, (int *) arg);
 	}
 	return -ENOIOCTLCMD;
 }
+
+#ifdef CONFIG_UNIX98_PTYS
+static int pty_unix98_ioctl(struct tty_struct *tty, struct file *file,
+			    unsigned int cmd, unsigned long arg)
+{
+	if (!tty) {
+		printk("pty_unix98_ioctl called with NULL tty!\n");
+		return -EIO;
+	}
+	switch(cmd) {
+	case TIOCGPTN: /* Get PT Number */
+		return pty_get_device_number(tty, (unsigned int *)arg);
+	}
+
+	return pty_bsd_ioctl(tty,file,cmd,arg);
+}
+#endif
 
 static void pty_flush_buffer(struct tty_struct *tty)
 {
@@ -370,7 +397,7 @@ __initfunc(int pty_init(void))
 	 * assign it here, instead of up with the rest of the
 	 * pty_driver initialization. <cananian@alumni.princeton.edu>
 	 */
-	pty_driver.ioctl = pty_ioctl;
+	pty_driver.ioctl = pty_bsd_ioctl;
 
 	/* Unix98 devices */
 #ifdef CONFIG_UNIX98_PTYS
@@ -381,6 +408,7 @@ __initfunc(int pty_init(void))
 		ptm_driver[i].proc_entry = 0;
 		ptm_driver[i].major = UNIX98_PTY_MASTER_MAJOR+i;
 		ptm_driver[i].minor_start = 0;
+		ptm_driver[i].name_base = i*NR_PTYS;
 		ptm_driver[i].num = NR_PTYS;
 		ptm_driver[i].other = &pts_driver[i];
 		ptm_driver[i].table = ptm_table[i];
@@ -393,6 +421,7 @@ __initfunc(int pty_init(void))
 		pts_driver[i].proc_entry = 0;
 		pts_driver[i].major = UNIX98_PTY_SLAVE_MAJOR+i;
 		pts_driver[i].minor_start = 0;
+		pts_driver[i].name_base = i*NR_PTYS;
 		pts_driver[i].num = ptm_driver[i].num;
 		pts_driver[i].other = &ptm_driver[i];
 		pts_driver[i].table = pts_table[i];
@@ -400,7 +429,7 @@ __initfunc(int pty_init(void))
 		pts_driver[i].termios_locked = pts_termios_locked[i];
 		pts_driver[i].driver_state = ptm_state[i];
 		
-		ptm_driver[i].ioctl = pty_ioctl;
+		ptm_driver[i].ioctl = pty_unix98_ioctl;
 		
 		if (tty_register_driver(&ptm_driver[i]))
 			panic("Couldn't register Unix98 ptm driver major %d",

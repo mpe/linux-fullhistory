@@ -129,7 +129,7 @@ void autofs_hash_nuke(struct autofs_dirhash *);
 /* Expiration-handling functions */
 
 void autofs_update_usage(struct autofs_dirhash *,struct autofs_dir_ent *);
-struct autofs_dir_ent *autofs_expire(struct autofs_dirhash *,unsigned long);
+struct autofs_dir_ent *autofs_expire(struct super_block *,struct autofs_sb_info *);
 
 /* Operations structures */
 

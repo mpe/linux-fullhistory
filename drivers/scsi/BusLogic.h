@@ -1772,4 +1772,43 @@ static void BusLogic_Message(BusLogic_MessageLevel_T, char *,
 static void BusLogic_ParseDriverOptions(char *);
 
 
+/*
+  Declare the Initialization Functions.
+*/
+
+static void BusLogic_AnnounceDriver(BusLogic_HostAdapter_T *) __init;
+static void BusLogic_RegisterHostAdapter(BusLogic_HostAdapter_T *) __init;
+static void BusLogic_UnregisterHostAdapter(BusLogic_HostAdapter_T *) __init;
+static boolean BusLogic_CreateInitialCCBs(BusLogic_HostAdapter_T *) __init;
+static void BusLogic_DestroyCCBs(BusLogic_HostAdapter_T *) __init;
+static void BusLogic_AppendProbeAddressISA(BusLogic_IO_Address_T) __init;
+static void
+BusLogic_InitializeProbeInfoListISA(BusLogic_HostAdapter_T *) __init;
+static void BusLogic_SortProbeInfo(BusLogic_ProbeInfo_T *, int) __init;
+static int
+BusLogic_InitializeMultiMasterProbeInfo(BusLogic_HostAdapter_T *) __init;
+static int
+BusLogic_InitializeFlashPointProbeInfo(BusLogic_HostAdapter_T *) __init;
+static void BusLogic_InitializeProbeInfoList(BusLogic_HostAdapter_T *) __init;
+static boolean BusLogic_Failure(BusLogic_HostAdapter_T *, char *) __init;
+static boolean BusLogic_ProbeHostAdapter(BusLogic_HostAdapter_T *) __init;
+static boolean BusLogic_CheckHostAdapter(BusLogic_HostAdapter_T *) __init;
+static boolean
+BusLogic_ReadHostAdapterConfiguration(BusLogic_HostAdapter_T *) __init;
+static boolean
+BusLogic_ReportHostAdapterConfiguration(BusLogic_HostAdapter_T *) __init;
+static boolean BusLogic_AcquireResources(BusLogic_HostAdapter_T *) __init;
+static void BusLogic_ReleaseResources(BusLogic_HostAdapter_T *) __init;
+static boolean BusLogic_TargetDeviceInquiry(BusLogic_HostAdapter_T *) __init;
+static void BusLogic_ReportTargetDeviceInfo(BusLogic_HostAdapter_T *) __init;
+static void BusLogic_InitializeHostStructure(BusLogic_HostAdapter_T *,
+					     SCSI_Host_T *) __init;
+static void BusLogic_SelectQueueDepths(SCSI_Host_T *, SCSI_Device_T *) __init;
+int BusLogic_DetectHostAdapter(SCSI_Host_Template_T *) __init;
+int BusLogic_ReleaseHostAdapter(SCSI_Host_T *) __init;
+static boolean BusLogic_ParseKeyword(char **, char *) __init;
+static void BusLogic_ParseDriverOptions(char *) __init;
+void BusLogic_Setup(char *, int *) __init;
+
+
 #endif /* BusLogic_DriverVersion */

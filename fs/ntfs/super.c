@@ -32,7 +32,7 @@
 int ntfs_fixup_record(ntfs_volume *vol, char *record, char *magic, int size)
 {
 	int start, count, offset;
-	short fixup;
+	unsigned short fixup;
 
 	if(!IS_MAGIC(record,magic))
 		return 0;

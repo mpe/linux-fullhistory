@@ -42,7 +42,7 @@ int swapout_interval = HZ / 4;
 /* 
  * The wait queue for waking up the pageout daemon:
  */
-static struct wait_queue * kswapd_wait = NULL;
+struct wait_queue * kswapd_wait = NULL;
 
 static void init_swap_timer(void);
 
@@ -469,7 +469,7 @@ static int do_try_to_free_page(int gfp_mask)
 				return 1;
 			state = 1;
 		case 1:
-			if ((gfp_mask & __GFP_IO) && shm_swap(i, gfp_mask))
+			if (shm_swap(i, gfp_mask))
 				return 1;
 			state = 2;
 		case 2:
@@ -525,7 +525,7 @@ int kswapd(void *unused)
 
 	/* Give kswapd a realtime priority. */
 	current->policy = SCHED_FIFO;
-	current->priority = 32;  /* Fixme --- we need to standardise our
+	current->rt_priority = 32;  /* Fixme --- we need to standardise our
 				    namings for POSIX.4 realtime scheduling
 				    priorities.  */
 
@@ -558,22 +558,18 @@ int kswapd(void *unused)
 		 */
 		tries = pager_daemon.tries_base;
 		tries >>= 4*free_memory_available();
-	
-		while (tries--) {
-			int gfp_mask;
 
-			if (free_memory_available() > 1)
-				break;
-			gfp_mask = __GFP_IO;
-			do_try_to_free_page(gfp_mask);
+		do {
+			do_try_to_free_page(0);
 			/*
 			 * Syncing large chunks is faster than swapping
 			 * synchronously (less head movement). -- Rik.
 			 */
 			if (atomic_read(&nr_async_pages) >= pager_daemon.swap_cluster)
 				run_task_queue(&tq_disk);
-
-		}
+			if (free_memory_available() > 1)
+				break;
+		} while (--tries > 0);
 	}
 	/* As if we could ever get here - maybe we want to make this killable */
 	remove_wait_queue(&kswapd_wait, &wait);
@@ -582,23 +578,30 @@ int kswapd(void *unused)
 }
 
 /*
- * This is REALLY ugly.
- *
  * We need to make the locks finer granularity, but right
  * now we need this so that we can do page allocations
  * without holding the kernel lock etc.
+ *
+ * The "PF_MEMALLOC" flag protects us against recursion:
+ * if we need more memory as part of a swap-out effort we
+ * will just silently return "success" to tell the page
+ * allocator to accept the allocation.
  */
 int try_to_free_pages(unsigned int gfp_mask, int count)
 {
-	int retval;
+	int retval = 1;
 
 	lock_kernel();
-	do {
-		retval = do_try_to_free_page(gfp_mask);
-		if (!retval)
-			break;
-		count--;
-	} while (count > 0);
+	if (current->flags & PF_MEMALLOC) {
+		current->flags |= PF_MEMALLOC;
+		do {
+			retval = do_try_to_free_page(gfp_mask);
+			if (!retval)
+				break;
+			count--;
+		} while (count > 0);
+		current->flags &= PF_MEMALLOC;
+	}
 	unlock_kernel();
 	return retval;
 }

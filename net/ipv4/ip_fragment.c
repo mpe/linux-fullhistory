@@ -370,6 +370,16 @@ static struct sk_buff *ip_glue(struct ipq *qp)
 
 	skb->pkt_type = qp->fragments->skb->pkt_type;
 	skb->protocol = qp->fragments->skb->protocol;
+	/*
+	*  Clearly bogus, because security markings of the individual
+	*  fragments should have been checked for consistency before
+	*  gluing, and intermediate coalescing of fragments may have
+	*  taken place in ip_defrag() before ip_glue() ever got called.
+	*  If we're not going to do the consistency checking, we might
+	*  as well take the value associated with the first fragment.
+	*	--rct
+	*/
+	skb->security = qp->fragments->skb->security;
 
 	/* Done with all fragments. Fixup the new IP header. */
 	iph = skb->nh.iph;

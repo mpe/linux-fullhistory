@@ -239,7 +239,6 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 		goto nopage;
 
 	if (gfp_mask & __GFP_WAIT) {
-		__check_locks(1);
 		if (in_interrupt()) {
 			static int count = 0;
 			if (++count < 5) {
@@ -264,6 +263,16 @@ unsigned long __get_free_pages(int gfp_mask, unsigned long order)
 	spin_lock_irqsave(&page_alloc_lock, flags);
 	RMQUEUE(order, (gfp_mask & GFP_DMA));
 	spin_unlock_irqrestore(&page_alloc_lock, flags);
+
+	/*
+	 * If we failed to find anything, we'll return NULL, but we'll
+	 * wake up kswapd _now_ ad even wait for it synchronously if
+	 * we can.. This way we'll at least make some forward progress
+	 * over time.
+	 */
+	wake_up(&kswapd_wait);
+	if (gfp_mask & __GFP_WAIT)
+		schedule();
 nopage:
 	return 0;
 }
