@@ -64,7 +64,7 @@
 
 /* Version string */
 
-#define ACPI_CA_VERSION                 0x20050228
+#define ACPI_CA_VERSION                 0x20050303
 
 /*
  * OS name, used for the _OS object.  The _OS object is essentially obsolete,
