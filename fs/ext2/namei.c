@@ -653,15 +653,13 @@ repeat:
 		retval = -ENOTDIR;
 		goto end_rmdir;
 	}
-	if (!empty_dir (inode)) {
+	down(&inode->i_sem);
+	if (!empty_dir (inode))
 		retval = -ENOTEMPTY;
-		goto end_rmdir;
-	}
-	if (de->inode != inode->i_ino) {
+	else if (de->inode != inode->i_ino)
 		retval = -ENOENT;
-		goto end_rmdir;
-	}
-	if (inode->i_count > 1) {
+	else {
+		if (inode->i_count > 1) {
 		/*
 		 * Are we deleting the last instance of a busy directory?
 		 * Better clean up if so.
@@ -669,9 +667,11 @@ repeat:
 		 * Make directory empty (it will be truncated when finally
 		 * dereferenced).  This also inhibits ext2_add_entry.
 		 */
-		inode->i_size = 0;
+			inode->i_size = 0;
+		}
+		retval = ext2_delete_entry (de, bh);
 	}
-	retval = ext2_delete_entry (de, bh);
+	up(&inode->i_sem);
 	if (retval)
 		goto end_rmdir;
 	bh->b_dirt = 1;

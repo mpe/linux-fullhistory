@@ -377,7 +377,7 @@ el3_start_xmit(struct sk_buff *skb, struct device *dev)
 		return 0;
 
 	if (el3_debug > 4) {
-		printk("%s: el3_start_xmit(lenght = %d) called, status %4.4x.\n",
+		printk("%s: el3_start_xmit(lenght = %ld) called, status %4.4x.\n",
 			   dev->name, skb->len, inw(ioaddr + EL3_STATUS));
 	}
 #ifndef final_version

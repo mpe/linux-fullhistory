@@ -39,6 +39,7 @@
  *		Dominik Kubla	:	Better checking
  *		Tegge		:	Assorted corrections on cross port stuff
  *		Alan Cox	:	ATF_PERM was backwards! - might be useful now (sigh)
+ *		Alan Cox	:	Arp timer added.
  *
  * To Fix:
  *				:	arp response allocates an skbuff to send. However there is a perfectly
@@ -60,6 +61,7 @@
 #include <linux/config.h>
 #include <linux/socket.h>
 #include <linux/sockios.h>
+#include <linux/timer.h>
 #include <linux/errno.h>
 #include <linux/if_arp.h>
 #include <linux/in.h>
@@ -248,6 +250,28 @@ arp_send_q(void)
 	}
   }
 }
+
+
+static struct timer_list arp_timer;
+
+static void arp_queue_ticker(unsigned long data);
+
+static void arp_queue_kick(void)
+{
+	arp_timer.expires = 500;	/* 5 seconds */
+	arp_timer.data = 0;
+	arp_timer.function = arp_queue_ticker;
+	del_timer(&arp_timer);
+	add_timer(&arp_timer);
+}
+
+static void arp_queue_ticker(unsigned long data/*UNUSED*/)
+{
+	arp_send_q();
+	if (skb_peek(&arp_q))
+		arp_queue_kick();
+}
+
 
 
 /* Create and send our response to an ARP request. */
@@ -753,6 +777,8 @@ arp_queue(struct sk_buff *skb)
 	printk("ARP: arp_queue skb already on queue magic=%X.\n", skb->magic);
 	return;
   }
+  if(arp_q==NULL)
+  	arp_queue_kick();
   skb_queue_tail(&arp_q,skb);
   skb->magic = ARP_QUEUE_MAGIC;
   sti();

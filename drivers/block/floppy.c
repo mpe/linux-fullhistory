@@ -301,7 +301,7 @@ static void select_callback(unsigned long unused)
 
 static void floppy_select(unsigned int nr)
 {
-	static struct timer_list select = { NULL, 0, 0, select_callback };
+	static struct timer_list select = { NULL, NULL, 0, 0, select_callback };
 
 	if (current_drive == (current_DOR & 3)) {
 		floppy_ready();
@@ -324,10 +324,10 @@ static void motor_on_callback(unsigned long nr)
 }
 
 static struct timer_list motor_on_timer[4] = {
-	{ NULL, 0, 0, motor_on_callback },
-	{ NULL, 0, 1, motor_on_callback },
-	{ NULL, 0, 2, motor_on_callback },
-	{ NULL, 0, 3, motor_on_callback }
+	{ NULL, NULL, 0, 0, motor_on_callback },
+	{ NULL, NULL, 0, 1, motor_on_callback },
+	{ NULL, NULL, 0, 2, motor_on_callback },
+	{ NULL, NULL, 0, 3, motor_on_callback }
 };
 
 static void motor_off_callback(unsigned long nr)
@@ -341,10 +341,10 @@ static void motor_off_callback(unsigned long nr)
 }
 
 static struct timer_list motor_off_timer[4] = {
-	{ NULL, 0, 0, motor_off_callback },
-	{ NULL, 0, 1, motor_off_callback },
-	{ NULL, 0, 2, motor_off_callback },
-	{ NULL, 0, 3, motor_off_callback }
+	{ NULL, NULL, 0, 0, motor_off_callback },
+	{ NULL, NULL, 0, 1, motor_off_callback },
+	{ NULL, NULL, 0, 2, motor_off_callback },
+	{ NULL, NULL, 0, 3, motor_off_callback }
 };
 
 static void floppy_on(unsigned int nr)

@@ -131,6 +131,8 @@ static void xd_wd_init_controller (u_char *address);
 static void xd_wd_init_drive (u_char drive);
 static void xd_seagate_init_controller (u_char *address);
 static void xd_seagate_init_drive (u_char drive);
+static void xd_omti_init_controller (u_char *address);
+static void xd_omti_init_drive (u_char drive);
 static void xd_setparam (u_char command,u_char drive,u_char heads,u_short cylinders,u_short rwrite,u_short wprecomp,u_char ecc);
 static void xd_override_init_drive (u_char drive);
 

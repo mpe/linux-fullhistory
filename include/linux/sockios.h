@@ -39,6 +39,10 @@ struct ip_config {
 #define SIOCGPGRP	0x8904
 #define SIOCATMARK	0x8905
 
+/* Routing table calls. */
+#define SIOCADDRT	0x890B		/* add routing table entry	*/
+#define SIOCDELRT	0x890C		/* delete routing table entry	*/
+
 /* Socket configuration controls. */
 #define SIOCGIFNAME	0x8910		/* get iface name		*/
 #define SIOCSIFLINK	0x8911		/* set iface channel		*/
@@ -64,9 +68,9 @@ struct ip_config {
 #define SIOCGIFENCAP	0x8925		/* get/set slip encapsulation   */
 #define SIOCSIFENCAP	0x8926		
 
-/* Routing table calls. */
-#define SIOCADDRT	0x8940		/* add routing table entry	*/
-#define SIOCDELRT	0x8941		/* delete routing table entry	*/
+/* Routing table calls (oldrtent - don't use) */
+#define SIOCADDRTOLD	0x8940		/* add routing table entry	*/
+#define SIOCDELRTOLD	0x8941		/* delete routing table entry	*/
 
 /* ARP cache control calls. */
 #define SIOCDARP	0x8950		/* delete ARP table entry	*/

@@ -253,17 +253,33 @@ static inline int bad_mask(unsigned long mask, unsigned long addr)
 
 static int rt_new(struct rtentry *r)
 {
-	struct device *dev;
+	int err;
+	char * devname;
+	struct device * dev = NULL;
 	unsigned long flags, daddr, mask, gw;
+
+	if ((devname = r->rt_dev) != NULL) {
+		err = getname(devname, &devname);
+		if (err)
+			return err;
+		dev = dev_get(devname);
+		putname(devname);
+		if (!dev)
+			return -EINVAL;
+	}
 
 	if (r->rt_dst.sa_family != AF_INET)
 		return -EAFNOSUPPORT;
 
 	flags = r->rt_flags;
 	daddr = ((struct sockaddr_in *) &r->rt_dst)->sin_addr.s_addr;
-	mask = r->rt_genmask;
+	mask = ((struct sockaddr_in *) &r->rt_genmask)->sin_addr.s_addr;
 	gw = ((struct sockaddr_in *) &r->rt_gateway)->sin_addr.s_addr;
-	dev = (struct device *) r->rt_dev;
+
+	if (flags & RTF_HOST)
+		mask = 0xffffffff;
+	else if (r->rt_genmask.sa_family != AF_INET)
+		return -EAFNOSUPPORT;
 
 	if (flags & RTF_GATEWAY) {
 		if (r->rt_gateway.sa_family != AF_INET)
@@ -343,19 +359,41 @@ no_route:
 	return NULL;
 }
 
+static int get_old_rtent(struct old_rtentry * src, struct rtentry * rt)
+{
+	int err;
+	struct old_rtentry tmp;
+
+	err=verify_area(VERIFY_READ, src, sizeof(*src));
+	if (err)
+		return err;
+	memcpy_fromfs(&tmp, src, sizeof(*src));
+	memset(rt, 0, sizeof(*rt));
+	rt->rt_dst = tmp.rt_dst;
+	rt->rt_gateway = tmp.rt_gateway;
+	rt->rt_genmask.sa_family = AF_INET;
+	((struct sockaddr_in *) &rt->rt_genmask)->sin_addr.s_addr = tmp.rt_genmask;
+	rt->rt_flags = tmp.rt_flags;
+	rt->rt_dev = tmp.rt_dev;
+	return 0;
+}
 
 int rt_ioctl(unsigned int cmd, void *arg)
 {
-	struct device *dev;
-	struct rtentry rt;
-	char *devname;
-	int ret;
 	int err;
+	struct rtentry rt;
 
 	switch(cmd) {
 	case DDIOCSDBG:
-		ret = dbg_ioctl(arg, DBG_RT);
-		break;
+		return dbg_ioctl(arg, DBG_RT);
+	case SIOCADDRTOLD:
+	case SIOCDELRTOLD:
+		if (!suser())
+			return -EPERM;
+		err = get_old_rtent((struct old_rtentry *) arg, &rt);
+		if (err)
+			return err;
+		return (cmd == SIOCDELRTOLD) ? rt_kill(&rt) : rt_new(&rt);
 	case SIOCADDRT:
 	case SIOCDELRT:
 		if (!suser())
@@ -364,21 +402,8 @@ int rt_ioctl(unsigned int cmd, void *arg)
 		if (err)
 			return err;
 		memcpy_fromfs(&rt, arg, sizeof(struct rtentry));
-		if ((devname = (char *) rt.rt_dev) != NULL) {
-			err = getname(devname, &devname);
-			if (err)
-				return err;
-			dev = dev_get(devname);
-			putname(devname);
-			if (!dev)
-				return -EINVAL;
-			rt.rt_dev = dev;
-		}
-		ret = (cmd == SIOCDELRT) ? rt_kill(&rt) : rt_new(&rt);
-		break;
-	default:
-		ret = -EINVAL;
+		return (cmd == SIOCDELRT) ? rt_kill(&rt) : rt_new(&rt);
 	}
 
-	return ret;
+	return -EINVAL;
 }

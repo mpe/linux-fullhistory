@@ -211,30 +211,34 @@ asmlinkage int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options);
  */
 asmlinkage int sys_sigreturn(unsigned long __unused)
 {
-#define CHECK_SEG(x) if (x) x |= 3
 #define COPY(x) regs->x = context.x
+#define COPY_SEG(x) \
+if ((context.x & 0xfffc) && (context.x & 3) != 3) goto badframe; COPY(x);
+#define COPY_SEG_STRICT(x) \
+if (!(context.x & 0xfffc) || (context.x & 3) != 3) goto badframe; COPY(x);
 	struct sigcontext_struct context;
 	struct pt_regs * regs;
 
 	regs = (struct pt_regs *) &__unused;
+	if (verify_area(VERIFY_READ, (void *) regs->esp, sizeof(context)))
+		goto badframe;
 	memcpy_fromfs(&context,(void *) regs->esp, sizeof(context));
 	current->blocked = context.oldmask & _BLOCKABLE;
-	CHECK_SEG(context.ss);
-	CHECK_SEG(context.cs);
-	CHECK_SEG(context.ds);
-	CHECK_SEG(context.es);
-	CHECK_SEG(context.fs);
-	CHECK_SEG(context.gs);
+	COPY_SEG(ds);
+	COPY_SEG(es);
+	COPY_SEG(fs);
+	COPY_SEG(gs);
+	COPY_SEG_STRICT(ss);
+	COPY_SEG_STRICT(cs);
 	COPY(eip); COPY(eflags);
 	COPY(ecx); COPY(edx);
 	COPY(ebx);
 	COPY(esp); COPY(ebp);
 	COPY(edi); COPY(esi);
-	COPY(cs); COPY(ss);
-	COPY(ds); COPY(es);
-	COPY(fs); COPY(gs);
 	regs->orig_eax = -1;		/* disable syscall checks */
 	return context.eax;
+badframe:
+	do_exit(SIGSEGV);
 }
 
 /*

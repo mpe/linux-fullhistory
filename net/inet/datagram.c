@@ -186,7 +186,7 @@ int datagram_select(struct sock *sk, int sel_type, select_table *wait)
 			return(0);
 
 		case SEL_OUT:
-			if (sk->prot->wspace(sk) >= MIN_WRITE_SPACE)
+			if (sk->prot && sk->prot->wspace(sk) >= MIN_WRITE_SPACE)
 			{
 				return(1);
 			}

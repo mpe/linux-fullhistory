@@ -384,6 +384,7 @@ repeat:
 	clear_inode(inode);
 	inode->i_count = 1;
 	inode->i_nlink = 1;
+	inode->i_sem.count = 1;
 	nr_free_inodes--;
 	if (nr_free_inodes < 0) {
 		printk ("VFS: get_empty_inode: bad free inode count.\n");

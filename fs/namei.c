@@ -275,7 +275,7 @@ int open_namei(const char * pathname, int flag, int mode,
 	struct inode ** res_inode, struct inode * base)
 {
 	const char * basename;
-	int namelen,error,i;
+	int namelen,error;
 	struct inode * dir, *inode;
 	struct task_struct ** p;
 
@@ -297,42 +297,34 @@ int open_namei(const char * pathname, int flag, int mode,
 		*res_inode=dir;
 		return 0;
 	}
-	for (i = 0; i < 5; i++) {	/* races... */
-		dir->i_count++;		/* lookup eats the dir */
+	dir->i_count++;		/* lookup eats the dir */
+	if (flag & O_CREAT) {
+		down(&dir->i_sem);
 		error = lookup(dir,basename,namelen,&inode);
-		if (!error)
-			break;
-		if (!(flag & O_CREAT)) {
+		if (!error) {
+			if (flag & O_EXCL) {
+				iput(inode);
+				error = -EEXIST;
+			}
+		} else if (!permission(dir,MAY_WRITE | MAY_EXEC))
+			error = -EACCES;
+		else if (!dir->i_op || !dir->i_op->create)
+			error = -EACCES;
+		else if (IS_RDONLY(dir))
+			error = -EROFS;
+		else {
+			dir->i_count++;		/* create eats the dir */
+			error = dir->i_op->create(dir,basename,namelen,mode,res_inode);
+			up(&dir->i_sem);
 			iput(dir);
 			return error;
 		}
-		if (!permission(dir,MAY_WRITE | MAY_EXEC)) {
-			iput(dir);
-			return -EACCES;
-		}
-		if (!dir->i_op || !dir->i_op->create) {
-			iput(dir);
-			return -EACCES;
-		}
-		if (IS_RDONLY(dir)) {
-			iput(dir);
-			return -EROFS;
-		}
-		dir->i_count++;		/* create eats the dir */
-		error = dir->i_op->create(dir,basename,namelen,mode,res_inode);
-		if (error != -EEXIST) {
-			iput(dir);
-			return error;
-		}
-	}
+		up(&dir->i_sem);
+	} else
+		error = lookup(dir,basename,namelen,&inode);
 	if (error) {
 		iput(dir);
 		return error;
-	}
-	if ((flag & (O_CREAT | O_EXCL)) == (O_CREAT | O_EXCL)) {
-		iput(dir);
-		iput(inode);
-		return -EEXIST;
 	}
 	error = follow_link(dir,inode,flag,mode,&inode);
 	if (error)
@@ -415,7 +407,10 @@ int do_mknod(const char * filename, int mode, dev_t dev)
 		iput(dir);
 		return -EPERM;
 	}
-	return dir->i_op->mknod(dir,basename,namelen,mode,dev);
+	down(&dir->i_sem);
+	error = dir->i_op->mknod(dir,basename,namelen,mode,dev);
+	up(&dir->i_sem);
+	return error;
 }
 
 asmlinkage int sys_mknod(const char * filename, int mode, dev_t dev)
@@ -467,7 +462,10 @@ static int do_mkdir(const char * pathname, int mode)
 		iput(dir);
 		return -EPERM;
 	}
-	return dir->i_op->mkdir(dir,basename,namelen,mode);
+	down(&dir->i_sem);
+	error = dir->i_op->mkdir(dir,basename,namelen,mode);
+	up(&dir->i_sem);
+	return error;
 }
 
 asmlinkage int sys_mkdir(const char * pathname, int mode)
@@ -590,7 +588,10 @@ static int do_symlink(const char * oldname, const char * newname)
 		iput(dir);
 		return -EPERM;
 	}
-	return dir->i_op->symlink(dir,basename,namelen,oldname);
+	down(&dir->i_sem);
+	error = dir->i_op->symlink(dir,basename,namelen,oldname);
+	up(&dir->i_sem);
+	return error;
 }
 
 asmlinkage int sys_symlink(const char * oldname, const char * newname)
@@ -646,7 +647,10 @@ static int do_link(struct inode * oldinode, const char * newname)
 		iput(oldinode);
 		return -EPERM;
 	}
-	return dir->i_op->link(oldinode, dir, basename, namelen);
+	down(&dir->i_sem);
+	error = dir->i_op->link(oldinode, dir, basename, namelen);
+	up(&dir->i_sem);
+	return error;
 }
 
 asmlinkage int sys_link(const char * oldname, const char * newname)
@@ -719,8 +723,11 @@ static int do_rename(const char * oldname, const char * newname)
 		iput(new_dir);
 		return -EPERM;
 	}
-	return old_dir->i_op->rename(old_dir, old_base, old_len, 
+	down(&new_dir->i_sem);
+	error = old_dir->i_op->rename(old_dir, old_base, old_len, 
 		new_dir, new_base, new_len);
+	up(&new_dir->i_sem);
+	return error;
 }
 
 asmlinkage int sys_rename(const char * oldname, const char * newname)

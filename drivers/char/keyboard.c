@@ -34,7 +34,11 @@
 #endif
 
 #ifndef KBD_DEFLEDS
-#define KBD_DEFLEDS (1 << VC_NUMLOCK)
+/*
+ * Some laptops take the 789uiojklm,. keys as number pad when NumLock
+ * is on. This seems a good reason to start with NumLock off.
+ */
+#define KBD_DEFLEDS 0
 #endif
 
 #ifndef KBD_DEFLOCK

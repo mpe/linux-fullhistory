@@ -1531,8 +1531,8 @@ inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case DDIOCSDBG:
 		return(dbg_ioctl((void *) arg, DBG_INET));
 
-	case SIOCADDRT:
-	case SIOCDELRT:
+	case SIOCADDRT: case SIOCADDRTOLD:
+	case SIOCDELRT: case SIOCDELRTOLD:
 		return(rt_ioctl(cmd,(void *) arg));
 
 	case SIOCDARP:
@@ -1595,7 +1595,7 @@ sock_rmalloc(struct sock *sk, unsigned long size, int force, int priority)
 {
   if (sk) {
 	if (sk->rmem_alloc + size < sk->rcvbuf || force) {
-		void *c = alloc_skb(size, priority);
+		struct sk_buff *c = alloc_skb(size, priority);
 		cli();
 		if (c) sk->rmem_alloc += size;
 		sti();

@@ -127,10 +127,12 @@ static unsigned char generic_sense[6] = {REQUEST_SENSE, 0,0,0, 255, 0};
 static struct blist blacklist[] = 
 {
    {"DENON","DRD-25X","V"},   /* A cdrom that locks up when probed at lun != 0 */
+   {"MAXTOR","XT-3280","PR02"},  /* Locks-up when LUN>0 polled. */
    {"MAXTOR","XT-4380S","B3C"},  /* Locks-up when LUN>0 polled. */
    {"MAXTOR","MXT-1240S","I1.2"}, /* Locks up when LUN > 0 polled */
    {"MAXTOR","XT-4170S","B5A"},  /* Locks-up sometimes when LUN>0 polled. */
    {"NEC","CD-ROM DRIVE:841","1.0"},  /* Locks-up when LUN>0 polled. */
+   {"RODIME","RO3000S","2.33"},  /* Locks up if polled for lun != 0 */
    {"SEAGATE", "ST157N", "\004|j"}, /* causes failed REQUEST SENSE on lun 1 for aha152x
 				     * controller, which causes SCSI code to reset bus.*/
    {"SEAGATE", "ST296","921"},   /* Responds to all lun */
@@ -387,7 +389,7 @@ static void scan_scsis (void)
 
 			scsi_devices[NR_SCSI_DEVICES].tagged_queue = 0;
 
-			if ((scsi_devices[NR_SCSI_DEVICES].scsi_level == SCSI_2) &&
+			if ((scsi_devices[NR_SCSI_DEVICES].scsi_level >= SCSI_2) &&
 			    (scsi_result[7] & 2)) {
 			    scsi_devices[NR_SCSI_DEVICES].tagged_supported = 1;
 			    scsi_devices[NR_SCSI_DEVICES].current_tag = 0;
@@ -451,6 +453,9 @@ static void scan_scsis (void)
 			/* Some scsi devices cannot be polled for lun != 0
 			   due to firmware bugs */
 			if(blacklisted(scsi_result)) break;
+			/* Old drives like the MAXTOR XT-3280 say vers=0 */
+			if ((scsi_result[2] & 0x07) == 0)
+			    break;
 			/* Some scsi-1 peripherals do not handle lun != 0.
 			   I am assuming that scsi-2 peripherals do better */
 			if((scsi_result[2] & 0x07) == 1 && 

@@ -441,7 +441,7 @@ static int get_maps(int pid, char *buf)
 	return sz;
 }
 
-asmlinkage int get_module_list( char *);
+extern int get_module_list(char *);
 
 static int array_read(struct inode * inode, struct file * file,char * buf, int count)
 {

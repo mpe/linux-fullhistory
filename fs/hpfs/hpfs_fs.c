@@ -124,7 +124,7 @@ typedef void nonconst;
 static void hpfs_read_inode(struct inode *);
 static void hpfs_put_super(struct super_block *);
 static void hpfs_statfs(struct super_block *, struct statfs *);
-static int hpfs_remount_fs(struct super_block *, int *);
+static int hpfs_remount_fs(struct super_block *, int *, char *);
 
 static const struct super_operations hpfs_sops =
 {
@@ -752,7 +752,7 @@ static void hpfs_statfs(struct super_block *s, struct statfs *buf)
  * remount.  Don't let read only be turned off.
  */
 
-static int hpfs_remount_fs(struct super_block *s, int *flags)
+static int hpfs_remount_fs(struct super_block *s, int *flags, char *data)
 {
 	if (!(*flags & MS_RDONLY))
 		return -EINVAL;

@@ -361,6 +361,19 @@ void wake_up_interruptible(struct wait_queue **q)
 	} while (tmp != *q);
 }
 
+void __down(struct semaphore * sem)
+{
+	struct wait_queue wait = { current, NULL };
+	add_wait_queue(&sem->wait, &wait);
+	current->state = TASK_UNINTERRUPTIBLE;
+	while (sem->count <= 0) {
+		schedule();
+		current->state = TASK_UNINTERRUPTIBLE;
+	}
+	current->state = TASK_RUNNING;
+	remove_wait_queue(&sem->wait, &wait);
+}
+
 static inline void __sleep_on(struct wait_queue **p, int state)
 {
 	unsigned long flags;

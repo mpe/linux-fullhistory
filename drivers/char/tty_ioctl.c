@@ -523,6 +523,9 @@ int tty_ioctl(struct inode * inode, struct file * file,
 		case TIOCSTI:
 			if ((current->tty != dev) && !suser())
 				return -EACCES;
+			retval = verify_area(VERIFY_READ, (void *) arg, 1);
+			if (retval)
+				return retval;
 			put_tty_queue(get_fs_byte((char *) arg), &tty->read_q);
 			TTY_READ_FLUSH(tty);
 			return 0;

@@ -140,7 +140,7 @@ struct snd_wait {
 
 #define DEFINE_TIMER(name, proc) \
   static struct timer_list name = \
-  {NULL, 0, 0, proc}
+  {NULL, NULL, 0, 0, proc}
 
 /*
  * The ACTIVATE_TIMER requests system to call 'proc' after 'time' ticks.

@@ -89,7 +89,7 @@ extern __inline__ int clear_bit(int nr, int * addr)
 	addr += nr >> 5;
 	mask = 1 << (nr & 0x1f);
 	cli();
-	retval = (mask & *addr) == 0;
+	retval = (mask & *addr) != 0;
 	*addr &= ~mask;
 	sti();
 	return retval;

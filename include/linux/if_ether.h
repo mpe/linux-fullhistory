@@ -21,7 +21,7 @@
 /* IEEE 802.3 Ethernet magic constants. */
 #define ETH_ALEN	6		/* #bytes in eth addr		*/
 #define ETH_HLEN	14		/* #bytes in eth header		*/
-#define ETH_ZLEN	64		/* min #bytes in frame		*/
+#define ETH_ZLEN	60		/* min #bytes in frame		*/
 #define ETH_FLEN	1536		/* max #bytes in frame		*/
 #define ETH_DLEN	(ETH_FLEN - ETH_HLEN)	/* max #bytes of data	*/
 

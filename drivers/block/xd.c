@@ -60,6 +60,7 @@ static XD_SIGNATURE xd_sigs[] = {
 	{ 0x0008,"06/24/88(C) Copyright 1988 Western Digital Corp.",xd_wd_init_controller,xd_wd_init_drive," Western Digital WDXT-GEN2" }, /* Dan Newcombe, newcombe@aa.csc.peachnet.edu */
 	{ 0x0015,"SEAGATE ST11 BIOS REVISION",xd_seagate_init_controller,xd_seagate_init_drive," Seagate ST11M/R" }, /* Salvador Abreu, spa@fct.unl.pt */
 	{ 0x0010,"ST11R BIOS",xd_seagate_init_controller,xd_seagate_init_drive," Seagate ST11M/R" }, /* Risto Kankkunen, risto.kankkunen@cs.helsinki.fi */
+	{ 0x1000,"(c)Copyright 1987 SMS",xd_omti_init_controller,xd_omti_init_drive,"n OMTI 5520" }, /* Dirk Melchers, dirk@merlin.nbg.sub.org */
 };
 static u_char *xd_bases[] =
 {
@@ -578,6 +579,34 @@ static void xd_seagate_init_drive (u_char drive)
 	}
 	else
 		printk("xd_seagate_init_drive: error reading geometry from drive %d\n",drive);
+}
+
+/* Omti support courtesy Dirk Melchers */
+static void xd_omti_init_controller (u_char *address)
+{
+	switch ((u_long) address) {
+		case 0xC8000:	xd_iobase = 0x320; break;
+		case 0xD0000:	xd_iobase = 0x324; break;
+		case 0xD8000:	xd_iobase = 0x328; break;
+		case 0xE0000:	xd_iobase = 0x32C; break;
+		default:	printk("xd_omti_init_controller: unsupported BIOS address %p\n",address);
+				xd_iobase = 0x320; break;
+	}
+	
+	xd_irq = 5;			/* the IRQ and DMA channel are fixed on the Omti controllers */
+	xd_dma = 3;
+	xd_maxsectors = 0x40;
+
+	outb(0,XD_RESET);		/* reset the controller */
+}
+
+static void xd_omti_init_drive (u_char drive)
+{
+	/* gets infos from drive */
+	xd_override_init_drive(drive);
+
+	/* set other parameters, Hardcoded, not that nice :-) */
+	xd_info[drive].control = 2;
 }
 
 /* xd_override_init_drive: this finds disk geometry in a "binary search" style, narrowing in on the "correct" number of heads

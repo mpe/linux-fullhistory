@@ -75,6 +75,7 @@ extern struct timer_struct timer_table[32];
  */
 struct timer_list {
 	struct timer_list *next;
+	struct timer_list *prev;
 	unsigned long expires;
 	unsigned long data;
 	void (*function)(unsigned long);

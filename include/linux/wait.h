@@ -11,6 +11,13 @@ struct wait_queue {
 	struct wait_queue * next;
 };
 
+struct semaphore {
+	int count;
+	struct wait_queue * wait;
+};
+
+#define MUTEX ((struct semaphore) { 1, NULL })
+
 struct select_table_entry {
 	struct wait_queue wait;
 	struct wait_queue ** wait_address;

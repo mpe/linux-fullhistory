@@ -363,11 +363,9 @@ repeat:
 	/*
 	 * First, test whether the goal block is free.
 	 */
-	i = ((goal - es->s_first_data_block) / EXT2_BLOCKS_PER_GROUP(sb));
-	if (i >= EXT2_BLOCKS_PER_GROUP(sb) || i < 0) {
-		i = 0;
+	if (goal < es->s_first_data_block || goal >= es->s_blocks_count)
 		goal = es->s_first_data_block;
-	}
+	i = (goal - es->s_first_data_block) / EXT2_BLOCKS_PER_GROUP(sb);
 	gdp = get_group_desc (sb, i, &bh2);
 	if (gdp->bg_free_blocks_count > 0) {
 		j = ((goal - es->s_first_data_block) % EXT2_BLOCKS_PER_GROUP(sb));

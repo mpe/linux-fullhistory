@@ -233,8 +233,7 @@ free_modules( void)
 /*
  * Called by the /proc file system to return a current list of modules.
  */
-int
-get_module_list( char *buf)
+int get_module_list(char *buf)
 {
 	char *p;
 	char *q;

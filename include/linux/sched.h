@@ -479,6 +479,21 @@ extern inline void select_wait(struct wait_queue ** wait_address, select_table *
 	p->nr++;
 }
 
+extern void __down(struct semaphore * sem);
+
+extern inline void down(struct semaphore * sem)
+{
+	if (sem->count <= 0)
+		__down(sem);
+	sem->count--;
+}
+
+extern inline void up(struct semaphore * sem)
+{
+	sem->count++;
+	wake_up(&sem->wait);
+}	
+
 static inline unsigned long _get_base(char * addr)
 {
 	unsigned long __base;

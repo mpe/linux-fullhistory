@@ -86,7 +86,7 @@ kd_nosound(unsigned long ignored)
 void
 kd_mksound(unsigned int count, unsigned int ticks)
 {
-	static struct timer_list sound_timer = { NULL, 0, 0, kd_nosound };
+	static struct timer_list sound_timer = { NULL, NULL, 0, 0, kd_nosound };
 
 	cli();
 	del_timer(&sound_timer);
