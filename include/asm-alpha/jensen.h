@@ -1,6 +1,8 @@
 #ifndef __ALPHA_JENSEN_H
 #define __ALPHA_JENSEN_H
 
+#include <asm/compiler.h>
+
 /*
  * Defines for the AlphaPC EISA IO and memory address space.
  */
@@ -66,6 +68,14 @@
  */
 #define EISA_IO			(IDENT_ADDR + 0x300000000UL)
 
+
+#ifdef __KERNEL__
+
+#ifndef __EXTERN_INLINE
+#define __EXTERN_INLINE extern inline
+#define __IO_EXTERN_INLINE
+#endif
+
 /*
  * Change virtual addresses to bus addresses and vv.
  *
@@ -73,10 +83,16 @@
  * as the bus address, but this is not necessarily true on
  * other alpha hardware.
  */
-#define virt_to_bus virt_to_phys
-#define bus_to_virt phys_to_virt
+__EXTERN_INLINE unsigned long jensen_virt_to_bus(void * address)
+{
+	return virt_to_phys(address);
+}
 
-#define HAE_ADDRESS	EISA_HAE
+__EXTERN_INLINE void * jensen_bus_to_virt(unsigned long address)
+{
+	return phys_to_virt(address);
+}
+
 
 /*
  * Handle the "host address register". This needs to be set
@@ -86,16 +102,19 @@
  *
  * HAE isn't needed for the local IO operations, though.
  */
-#define __HAE_MASK 0x1ffffff
-extern inline void __set_hae(unsigned long addr)
+
+#define JENSEN_HAE_ADDRESS	EISA_HAE
+#define JENSEN_HAE_MASK		0x1ffffff
+
+__EXTERN_INLINE void jensen_set_hae(unsigned long addr)
 {
 	/* hae on the Jensen is bits 31:25 shifted right */
 	addr >>= 25;
-	if (addr != hae.cache)
+	if (addr != alpha_mv.hae_cache)
 		set_hae(addr);
 }
 
-#ifdef __KERNEL__
+#define vuip	volatile unsigned int *
 
 /*
  * IO functions
@@ -108,36 +127,31 @@ extern inline void __set_hae(unsigned long addr)
  * gone in the PCI version. I hope I can get DEC suckered^H^H^H^H^H^H^H^H
  * convinced that I need one of the newer machines.
  */
-extern inline unsigned int __local_inb(unsigned long addr)
+
+static inline unsigned int jensen_local_inb(unsigned long addr)
 {
-	long result = *(volatile int *) ((addr << 9) + EISA_VL82C106);
-	return 0xffUL & result;
+	return 0xff & *(vuip)((addr << 9) + EISA_VL82C106);
 }
 
-extern inline void __local_outb(unsigned char b, unsigned long addr)
+static inline void jensen_local_outb(unsigned char b, unsigned long addr)
 {
-	*(volatile unsigned int *) ((addr << 9) + EISA_VL82C106) = b;
+	*(vuip)((addr << 9) + EISA_VL82C106) = b;
 	mb();
 }
 
-extern unsigned int _bus_inb(unsigned long addr);
-
-extern inline unsigned int __bus_inb(unsigned long addr)
+static inline unsigned int jensen_bus_inb(unsigned long addr)
 {
 	long result;
 
-	__set_hae(0);
-	result = *(volatile int *) ((addr << 7) + EISA_IO + 0x00);
-	result >>= (addr & 3) * 8;
-	return 0xffUL & result;
+	jensen_set_hae(0);
+	result = *(volatile int *)((addr << 7) + EISA_IO + 0x00);
+	return __kernel_extbl(result, addr & 3);
 }
 
-extern void _bus_outb(unsigned char b, unsigned long addr);
-
-extern inline void __bus_outb(unsigned char b, unsigned long addr)
+static inline void jensen_bus_outb(unsigned char b, unsigned long addr)
 {
-	__set_hae(0);
-	*(volatile unsigned int *) ((addr << 7) + EISA_IO + 0x00) = b * 0x01010101;
+	jensen_set_hae(0);
+	*(vuip)((addr << 7) + EISA_IO + 0x00) = b * 0x01010101;
 	mb();
 }
 
@@ -146,130 +160,164 @@ extern inline void __bus_outb(unsigned char b, unsigned long addr)
  * operations that result in operations across inline functions.
  * Which is why this is a macro.
  */
-#define __is_local(addr) ( \
+
+#define jensen_is_local(addr) ( \
 /* keyboard */	(addr == 0x60 || addr == 0x64) || \
 /* RTC */	(addr == 0x170 || addr == 0x171) || \
 /* mb COM2 */	(addr >= 0x2f8 && addr <= 0x2ff) || \
 /* mb LPT1 */	(addr >= 0x3bc && addr <= 0x3be) || \
 /* mb COM2 */	(addr >= 0x3f8 && addr <= 0x3ff))
 
-extern inline unsigned int __inb(unsigned long addr)
+__EXTERN_INLINE unsigned int jensen_inb(unsigned long addr)
 {
-	if (__is_local(addr))
-		return __local_inb(addr);
-	return _bus_inb(addr);
-}
-
-extern inline void __outb(unsigned char b, unsigned long addr)
-{
-	if (__is_local(addr))
-		__local_outb(b, addr);
+	if (jensen_is_local(addr))
+		return jensen_local_inb(addr);
 	else
-		_bus_outb(b, addr);
+		return jensen_bus_inb(addr);
 }
 
-extern inline unsigned int __inw(unsigned long addr)
+__EXTERN_INLINE void jensen_outb(unsigned char b, unsigned long addr)
+{
+	if (jensen_is_local(addr))
+		jensen_local_outb(b, addr);
+	else
+		jensen_bus_outb(b, addr);
+}
+
+__EXTERN_INLINE unsigned int jensen_inw(unsigned long addr)
 {
 	long result;
 
-	__set_hae(0);
+	jensen_set_hae(0);
 	result = *(volatile int *) ((addr << 7) + EISA_IO + 0x20);
 	result >>= (addr & 3) * 8;
 	return 0xffffUL & result;
 }
 
-extern inline unsigned int __inl(unsigned long addr)
+__EXTERN_INLINE unsigned int jensen_inl(unsigned long addr)
 {
-	__set_hae(0);
-	return *(volatile unsigned int *) ((addr << 7) + EISA_IO + 0x60);
+	jensen_set_hae(0);
+	return *(vuip) ((addr << 7) + EISA_IO + 0x60);
 }
 
-extern inline void __outw(unsigned short b, unsigned long addr)
+__EXTERN_INLINE void jensen_outw(unsigned short b, unsigned long addr)
 {
-	__set_hae(0);
-	*(volatile unsigned int *) ((addr << 7) + EISA_IO + 0x20) = b * 0x00010001;
+	jensen_set_hae(0);
+	*(vuip) ((addr << 7) + EISA_IO + 0x20) = b * 0x00010001;
 	mb();
 }
 
-extern inline void __outl(unsigned int b, unsigned long addr)
+__EXTERN_INLINE void jensen_outl(unsigned int b, unsigned long addr)
 {
-	__set_hae(0);
-	*(volatile unsigned int *) ((addr << 7) + EISA_IO + 0x60) = b;
+	jensen_set_hae(0);
+	*(vuip) ((addr << 7) + EISA_IO + 0x60) = b;
 	mb();
 }
 
 /*
  * Memory functions.
  */
-extern inline unsigned long __readb(unsigned long addr)
+
+__EXTERN_INLINE unsigned long jensen_readb(unsigned long addr)
 {
 	long result;
 
-	__set_hae(addr);
-	addr &= __HAE_MASK;
+	jensen_set_hae(addr);
+	addr &= JENSEN_HAE_MASK;
 	result = *(volatile int *) ((addr << 7) + EISA_MEM + 0x00);
 	result >>= (addr & 3) * 8;
 	return 0xffUL & result;
 }
 
-extern inline unsigned long __readw(unsigned long addr)
+__EXTERN_INLINE unsigned long jensen_readw(unsigned long addr)
 {
 	long result;
 
-	__set_hae(addr);
-	addr &= __HAE_MASK;
+	jensen_set_hae(addr);
+	addr &= JENSEN_HAE_MASK;
 	result = *(volatile int *) ((addr << 7) + EISA_MEM + 0x20);
 	result >>= (addr & 3) * 8;
 	return 0xffffUL & result;
 }
 
-extern inline unsigned long __readl(unsigned long addr)
+__EXTERN_INLINE unsigned long jensen_readl(unsigned long addr)
 {
-	__set_hae(addr);
-	addr &= __HAE_MASK;
-	return *(volatile unsigned int *) ((addr << 7) + EISA_MEM + 0x60);
+	jensen_set_hae(addr);
+	addr &= JENSEN_HAE_MASK;
+	return *(vuip) ((addr << 7) + EISA_MEM + 0x60);
 }
 
-extern inline unsigned long __readq(unsigned long addr)
+__EXTERN_INLINE unsigned long jensen_readq(unsigned long addr)
 {
 	unsigned long r0, r1;
-	__set_hae(addr);
-	addr &= __HAE_MASK;
+
+	jensen_set_hae(addr);
+	addr &= JENSEN_HAE_MASK;
 	addr = (addr << 7) + EISA_MEM + 0x60;
-	r0 = *(volatile unsigned int *) (addr);
-	r1 = *(volatile unsigned int *) (addr + (4 << 7));
+	r0 = *(vuip) (addr);
+	r1 = *(vuip) (addr + (4 << 7));
 	return r1 << 32 | r0;
 }
 
-extern inline void __writeb(unsigned short b, unsigned long addr)
+__EXTERN_INLINE void jensen_writeb(unsigned char b, unsigned long addr)
 {
-	__set_hae(addr);
-	addr &= __HAE_MASK;
-	*(volatile unsigned int *) ((addr << 7) + EISA_MEM + 0x00) = b * 0x01010101;
+	jensen_set_hae(addr);
+	addr &= JENSEN_HAE_MASK;
+	*(vuip) ((addr << 7) + EISA_MEM + 0x00) = b * 0x01010101;
 }
 
-extern inline void __writew(unsigned short b, unsigned long addr)
+__EXTERN_INLINE void jensen_writew(unsigned short b, unsigned long addr)
 {
-	__set_hae(addr);
-	addr &= __HAE_MASK;
-	*(volatile unsigned int *) ((addr << 7) + EISA_MEM + 0x20) = b * 0x00010001;
+	jensen_set_hae(addr);
+	addr &= JENSEN_HAE_MASK;
+	*(vuip) ((addr << 7) + EISA_MEM + 0x20) = b * 0x00010001;
 }
 
-extern inline void __writel(unsigned int b, unsigned long addr)
+__EXTERN_INLINE void jensen_writel(unsigned int b, unsigned long addr)
 {
-	__set_hae(addr);
-	addr &= __HAE_MASK;
-	*(volatile unsigned int *) ((addr << 7) + EISA_MEM + 0x60) = b;
+	jensen_set_hae(addr);
+	addr &= JENSEN_HAE_MASK;
+	*(vuip) ((addr << 7) + EISA_MEM + 0x60) = b;
 }
 
-extern inline void __writeq(unsigned long b, unsigned long addr)
+__EXTERN_INLINE void jensen_writeq(unsigned long b, unsigned long addr)
 {
-	__set_hae(addr);
-	addr &= __HAE_MASK;
+	jensen_set_hae(addr);
+	addr &= JENSEN_HAE_MASK;
 	addr = (addr << 7) + EISA_MEM + 0x60;
-	*(volatile unsigned int *) (addr) = b;
-	*(volatile unsigned int *) (addr + (4 << 7)) = b >> 32;
+	*(vuip) (addr) = b;
+	*(vuip) (addr + (4 << 7)) = b >> 32;
 }
+
+/* Find the DENSE memory area for a given bus address.
+   Whee, there is none.  */
+
+__EXTERN_INLINE unsigned long jensen_dense_mem(unsigned long addr)
+{
+	return 0;
+}
+
+#undef vuip
+
+#ifdef __WANT_IO_DEF
+
+#define virt_to_bus	jensen_virt_to_bus
+#define bus_to_virt	jensen_bus_to_virt
+#define __inb		jensen_inb
+#define __inw		jensen_inw
+#define __inl		jensen_inl
+#define __outb		jensen_outb
+#define __outw		jensen_outw
+#define __outl		jensen_outl
+#define __readb		jensen_readb
+#define __readw		jensen_readw
+#define __writeb	jensen_writeb
+#define __writew	jensen_writew
+#define __readl		jensen_readl
+#define __readq		jensen_readq
+#define __writel	jensen_writel
+#define __writeq	jensen_writeq
+#define dense_mem	jensen_dense_mem
 
 /*
  * The above have so much overhead that it probably doesn't make
@@ -281,17 +329,13 @@ extern inline void __writeq(unsigned long b, unsigned long addr)
 #define outb(x, port) \
 (__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
 
+#endif /* __WANT_IO_DEF */
+
+#ifdef __IO_EXTERN_INLINE
+#undef __EXTERN_INLINE
+#undef __IO_EXTERN_INLINE
+#endif
+
 #endif /* __KERNEL__ */
 
-/*
- * The Alpha Jensen hardware for some rather strange reason puts
- * the RTC clock at 0x170 instead of 0x70. Probably due to some
- * misguided idea about using 0x70 for NMI stuff.
- *
- * These defines will override the defaults when doing RTC queries
- */
-#define RTC_PORT(x)	(0x170+(x))
-#define RTC_ADDR(x)	(x)
-#define RTC_ALWAYS_BCD	0
-
-#endif
+#endif /* __ALPHA_JENSEN_H */

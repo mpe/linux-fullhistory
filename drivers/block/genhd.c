@@ -1101,7 +1101,6 @@ __initfunc(void device_setup(void))
 	extern int soc_probe(void);
 #endif
 	struct gendisk *p;
-	int nr=0;
 
 #ifdef CONFIG_PARPORT
 	parport_init();
@@ -1123,10 +1122,9 @@ __initfunc(void device_setup(void))
 	console_map_init();
 #endif
 
-	for (p = gendisk_head ; p ; p=p->next) {
+	for (p = gendisk_head ; p ; p=p->next)
 		setup_dev(p);
-		nr += p->nr_real;
-	}
+
 #ifdef CONFIG_BLK_DEV_RAM
 #ifdef CONFIG_BLK_DEV_INITRD
 	if (initrd_start && mount_initrd) initrd_load();
@@ -1138,3 +1136,25 @@ __initfunc(void device_setup(void))
         md_setup_drive();
 #endif
 }
+
+#ifdef CONFIG_PROC_FS
+int get_partition_list(char * page)
+{
+	struct gendisk *p;
+	char buf[8];
+	int n, len;
+
+	len = sprintf(page, "major minor  #blocks  name\n\n");
+	for (p = gendisk_head; p; p = p->next) {
+		for (n=0; n < (p->nr_real << p->minor_shift); n++) {
+			if (p->part[n].nr_sects && len < PAGE_SIZE - 80) {
+				len += sprintf(page+len,
+					       "%4d  %4d %10d %s\n",
+					       p->major, n, p->sizes[n],
+					       disk_name(p, n, buf));
+			}
+		}
+	}
+	return len;
+}
+#endif

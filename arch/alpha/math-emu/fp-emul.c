@@ -61,23 +61,33 @@ extern void alpha_write_fp_reg (unsigned long reg, unsigned long val);
 MODULE_DESCRIPTION("FP Software completion module");
 
 extern long (*alpha_fp_emul_imprecise)(struct pt_regs *, unsigned long);
-static long (*save_emul)(struct pt_regs *, unsigned long);
+extern long (*alpha_fp_emul) (unsigned long pc);
+
+static long (*save_emul_imprecise)(struct pt_regs *, unsigned long);
+static long (*save_emul) (unsigned long pc);
+
 long do_alpha_fp_emul_imprecise(struct pt_regs *, unsigned long);
+long do_alpha_fp_emul(unsigned long);
 
 int init_module(void)
 {
-	save_emul = alpha_fp_emul_imprecise;
+	save_emul_imprecise = alpha_fp_emul_imprecise;
+	save_emul = alpha_fp_emul;
 	alpha_fp_emul_imprecise = do_alpha_fp_emul_imprecise;
+	alpha_fp_emul = do_alpha_fp_emul;
 	return 0;
 }
 
 void cleanup_module(void)
 {
-	alpha_fp_emul_imprecise = save_emul;
+	alpha_fp_emul_imprecise = save_emul_imprecise;
+	alpha_fp_emul = save_emul;
 }
 
-#undef alpha_fp_emul_imprecise
-#define alpha_fp_emul_imprecise  do_alpha_fp_emul_imprecise
+#undef  alpha_fp_emul_imprecise
+#define alpha_fp_emul_imprecise		do_alpha_fp_emul_imprecise
+#undef  alpha_fp_emul
+#define alpha_fp_emul			do_alpha_fp_emul
 
 #endif /* MODULE */
 
@@ -96,6 +106,8 @@ alpha_fp_emul (unsigned long pc)
 	unsigned long va, vb, vc, res, fpcr;
 	__u32 insn;
 
+	MOD_INC_USE_COUNT;
+
 	get_user(insn, (__u32*)pc);
 	fc     = (insn >>  0) &  0x1f;	/* destination register */
 	func   = (insn >>  5) & 0x7ff;
@@ -105,8 +117,8 @@ alpha_fp_emul (unsigned long pc)
 	
 	va = alpha_read_fp_reg(fa);
 	vb = alpha_read_fp_reg(fb);
-
 	fpcr = rdfpcr();
+
 	/*
 	 * Try the operation in software.  First, obtain the rounding
 	 * mode...
@@ -213,8 +225,10 @@ alpha_fp_emul (unsigned long pc)
 	      default:
 		printk("alpha_fp_emul: unexpected function code %#lx at %#lx\n",
 		       func & 0x3f, pc);
+		MOD_DEC_USE_COUNT;
 		return 0;
 	}
+
 	/*
 	 * Take the appropriate action for each possible
 	 * floating-point result:
@@ -237,8 +251,10 @@ alpha_fp_emul (unsigned long pc)
 		wrfpcr(fpcr);
 
 		/* Do we generate a signal?  */
-		if (res >> 51 & fpcw & IEEE_TRAP_ENABLE_MASK)
+		if (res >> 51 & fpcw & IEEE_TRAP_ENABLE_MASK) {
+			MOD_DEC_USE_COUNT;
 			return 0;
+		}
 	}
 
 	/*
@@ -247,6 +263,8 @@ alpha_fp_emul (unsigned long pc)
 	 * result:
 	 */
 	alpha_write_fp_reg(fc, vc);
+
+	MOD_DEC_USE_COUNT;
 	return 1;
 }
 

@@ -688,7 +688,7 @@ __initfunc(void tgafb_init(void))
     fb_var.xres = fb_var.xres_virtual = 640;
     fb_var.yres = fb_var.yres_virtual = 480;
     fb_fix.line_length = 80*fb_var.bits_per_pixel;
-    fb_fix.smem_start = (char *)__pa(tga_fb_base + DENSE_MEM(tga_fb_base));
+    fb_fix.smem_start = (char *)__pa(tga_fb_base + dense_mem(tga_fb_base));
     fb_fix.smem_len = fb_fix.line_length*fb_var.yres;
     fb_fix.type = FB_TYPE_PACKED_PIXELS;
     fb_fix.type_aux = 0;
@@ -729,7 +729,7 @@ __initfunc(void tgafb_init(void))
     disp.cmap.start = 0;
     disp.cmap.len = 0;
     disp.cmap.red = disp.cmap.green = disp.cmap.blue = disp.cmap.transp = NULL;
-    disp.screen_base = (char *)tga_fb_base + DENSE_MEM(tga_fb_base);
+    disp.screen_base = (char *)tga_fb_base + dense_mem(tga_fb_base);
     disp.visual = fb_fix.visual;
     disp.type = fb_fix.type;
     disp.type_aux = fb_fix.type_aux;

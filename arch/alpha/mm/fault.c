@@ -4,23 +4,31 @@
  *  Copyright (C) 1995  Linus Torvalds
  */
 
-#include <linux/signal.h>
 #include <linux/sched.h>
-#include <linux/head.h>
 #include <linux/kernel.h>
+#include <linux/mm.h>
+
+#define __EXTERN_INLINE inline
+#include <asm/mmu_context.h>
+#include <asm/pgtable.h>
+#undef  __EXTERN_INLINE
+
+#include <linux/config.h>
+#include <linux/signal.h>
+#include <linux/head.h>
 #include <linux/errno.h>
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/ptrace.h>
 #include <linux/mman.h>
-#include <linux/mm.h>
 #include <linux/smp.h>
 #include <linux/smp_lock.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
-#include <asm/pgtable.h>
-#include <asm/mmu_context.h>
+
+extern void die_if_kernel(char *,struct pt_regs *,long, unsigned long *);
+
 
 #ifdef __SMP__
 unsigned long last_asn[NR_CPUS] = { /* gag */
@@ -61,21 +69,26 @@ unsigned long last_asn[NR_CPUS] = { /* gag */
 unsigned long asn_cache = ASN_FIRST_VERSION;
 #endif /* __SMP__ */
 
-#ifndef BROKEN_ASN
 /*
- * Select a new ASN and reload the context. This is
- * not inlined as this expands to a pretty large
- * function.
+ * Select a new ASN for a task.
  */
-void get_new_asn_and_reload(struct task_struct *tsk, struct mm_struct *mm)
-{
-	mm->context = 0;
-	get_new_mmu_context(tsk, mm);
-	reload_context(tsk);
-}
-#endif
 
-extern void die_if_kernel(char *,struct pt_regs *,long, unsigned long *);
+void
+get_new_mmu_context(struct task_struct *p, struct mm_struct *mm)
+{
+	unsigned long asn = asn_cache;
+
+	if ((asn & HARDWARE_ASN_MASK) < MAX_ASN)
+		++asn;
+	else {
+		tbiap();
+		imb();
+		asn = (asn & ~HARDWARE_ASN_MASK) + ASN_FIRST_VERSION;
+	}
+	asn_cache = asn;
+	mm->context = asn;			/* full version + asn */
+	p->tss.asn = asn & HARDWARE_ASN_MASK;	/* just asn */
+}
 
 /*
  * This routine handles page faults.  It determines the address,
@@ -99,12 +112,13 @@ extern void die_if_kernel(char *,struct pt_regs *,long, unsigned long *);
  */
 
 /* Macro for exception fixup code to access integer registers.  */
-#define dpf_reg(r) \
-	(((unsigned long *)regs)[(r) <= 8 ? (r) : (r) <= 15 ? (r)-16 : \
+#define dpf_reg(r)							\
+	(((unsigned long *)regs)[(r) <= 8 ? (r) : (r) <= 15 ? (r)-16 :	\
 				 (r) <= 18 ? (r)+8 : (r)-10])
 
-asmlinkage void do_page_fault(unsigned long address, unsigned long mmcsr,
-			      long cause, struct pt_regs *regs)
+asmlinkage void
+do_page_fault(unsigned long address, unsigned long mmcsr,
+	      long cause, struct pt_regs *regs)
 {
 	struct vm_area_struct * vma;
 	struct mm_struct *mm = current->mm;

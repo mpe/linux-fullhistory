@@ -382,7 +382,7 @@ plip_bh_timeout_error(struct device *dev, struct net_local *nl,
 				return TIMEOUT;
 			}
 			c0 = inb(PAR_STATUS(dev));
-			printk("%s: transmit timeout(%d,%02x)\n",
+			printk(KERN_WARNING "%s: transmit timeout(%d,%02x)\n",
 			       dev->name, snd->state, c0);
 		}
 		nl->enet_stats.tx_errors++;
@@ -400,7 +400,7 @@ plip_bh_timeout_error(struct device *dev, struct net_local *nl,
 				return TIMEOUT;
 			}
 			c0 = inb(PAR_STATUS(dev));
-			printk("%s: receive timeout(%d,%02x)\n",
+			printk(KERN_WARNING "%s: receive timeout(%d,%02x)\n",
 			       dev->name, rcv->state, c0);
 		}
 		nl->enet_stats.rx_dropped++;
@@ -501,7 +501,7 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 		dev->interrupt = 0;
 		outb(0x01, PAR_DATA(dev)); /* send ACK */
 		if (net_debug > 2)
-			printk("%s: receive start\n", dev->name);
+			printk(KERN_DEBUG "%s: receive start\n", dev->name);
 		rcv->state = PLIP_PK_LENGTH_LSB;
 		rcv->nibble = PLIP_NB_BEGIN;
 
@@ -531,13 +531,13 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 			return TIMEOUT;
 		if (rcv->length.h > dev->mtu + dev->hard_header_len
 		    || rcv->length.h < 8) {
-			printk("%s: bogus packet size %d.\n", dev->name, rcv->length.h);
+			printk(KERN_WARNING "%s: bogus packet size %d.\n", dev->name, rcv->length.h);
 			return ERROR;
 		}
 		/* Malloc up new buffer. */
 		rcv->skb = dev_alloc_skb(rcv->length.h);
 		if (rcv->skb == NULL) {
-			printk("%s: Memory squeeze.\n", dev->name);
+			printk(KERN_WARNING "%s: Memory squeeze.\n", dev->name);
 			return ERROR;
 		}
 		skb_put(rcv->skb,rcv->length.h);
@@ -565,7 +565,7 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 		if (rcv->data != rcv->checksum) {
 			nl->enet_stats.rx_crc_errors++;
 			if (net_debug)
-				printk("%s: checksum error\n", dev->name);
+				printk(KERN_DEBUG "%s: checksum error\n", dev->name);
 			return ERROR;
 		}
 		rcv->state = PLIP_PK_DONE;
@@ -578,7 +578,7 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 		nl->enet_stats.rx_packets++;
 		rcv->skb = NULL;
 		if (net_debug > 2)
-			printk("%s: receive end\n", dev->name);
+			printk(KERN_DEBUG "%s: receive end\n", dev->name);
 
 		/* Close the connection. */
 		outb (0x00, PAR_DATA(dev));
@@ -662,7 +662,7 @@ plip_send_packet(struct device *dev, struct net_local *nl,
 	unsigned int cx;
 
 	if (snd->skb == NULL || (lbuf = snd->skb->data) == NULL) {
-		printk("%s: send skb lost\n", dev->name);
+		printk(KERN_ERR "%s: send skb lost\n", dev->name);
 		snd->state = PLIP_PK_DONE;
 		snd->skb = NULL;
 		return ERROR;
@@ -699,7 +699,7 @@ plip_send_packet(struct device *dev, struct net_local *nl,
 				}
 				outb(PAR_INTR_OFF, PAR_CONTROL(dev));
 				if (net_debug > 2)
-					printk("%s: send start\n", dev->name);
+					printk(KERN_DEBUG "%s: send start\n", dev->name);
 				snd->state = PLIP_PK_LENGTH_LSB;
 				snd->nibble = PLIP_NB_BEGIN;
 				nl->timeout_count = 0;
@@ -752,7 +752,7 @@ plip_send_packet(struct device *dev, struct net_local *nl,
 		outb (0x00, data_addr);
 		snd->skb = NULL;
 		if (net_debug > 2)
-			printk("%s: send end\n", dev->name);
+			printk(KERN_DEBUG "%s: send end\n", dev->name);
 		nl->connection = PLIP_CN_CLOSING;
 		nl->is_deferred = 1;
 		queue_task(&nl->deferred, &tq_timer);
@@ -791,7 +791,7 @@ plip_error(struct device *dev, struct net_local *nl,
 	status = inb(PAR_STATUS(dev));
 	if ((status & 0xf8) == 0x80) {
 		if (net_debug > 2)
-			printk("%s: reset interface.\n", dev->name);
+			printk(KERN_DEBUG "%s: reset interface.\n", dev->name);
 		nl->connection = PLIP_CN_NONE;
 		nl->should_relinquish = 0;
 		dev->tbusy = 0;
@@ -817,7 +817,7 @@ plip_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	unsigned char c0;
 
 	if (dev == NULL) {
-		printk("plip_interrupt: irq %d for unknown device.\n", irq);
+		printk(KERN_ERR "plip_interrupt: irq %d for unknown device.\n", irq);
 		return;
 	}
 
@@ -830,12 +830,12 @@ plip_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	c0 = inb(PAR_STATUS(dev));
 	if ((c0 & 0xf8) != 0xc0) {
 		if (net_debug > 1)
-			printk("%s: spurious interrupt\n", dev->name);
+			printk(KERN_DEBUG "%s: spurious interrupt\n", dev->name);
 		return;
 	}
 	dev->interrupt = 1;
 	if (net_debug > 3)
-		printk("%s: interrupt.\n", dev->name);
+		printk(KERN_DEBUG "%s: interrupt.\n", dev->name);
 
 	spin_lock_irq(&nl->lock);
 	switch (nl->connection) {
@@ -861,7 +861,7 @@ plip_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 
 	case PLIP_CN_ERROR:
 		spin_unlock_irq(&nl->lock);
-		printk("%s: receive interrupt in error state\n", dev->name);
+		printk(KERN_WARNING "%s: receive interrupt in error state\n", dev->name);
 		break;
 	}
 }
@@ -899,18 +899,18 @@ plip_tx_packet(struct sk_buff *skb, struct device *dev)
 	}
 
 	if (test_and_set_bit(0, (void*)&dev->tbusy) != 0) {
-		printk("%s: Transmitter access conflict.\n", dev->name);
+		printk(KERN_WARNING "%s: Transmitter access conflict.\n", dev->name);
 		return 1;
 	}
 
 	if (skb->len > dev->mtu + dev->hard_header_len) {
-		printk("%s: packet too big, %d.\n", dev->name, (int)skb->len);
+		printk(KERN_WARNING "%s: packet too big, %d.\n", dev->name, (int)skb->len);
 		dev->tbusy = 0;
 		return 0;
 	}
 
 	if (net_debug > 2)
-		printk("%s: send request\n", dev->name);
+		printk(KERN_DEBUG "%s: send request\n", dev->name);
 
 	spin_lock_irq(&nl->lock);
 	dev->trans_start = jiffies;
@@ -1083,8 +1083,7 @@ plip_get_stats(struct device *dev)
 	return r;
 }
 
-static int
-plip_config(struct device *dev, struct ifmap *map)
+static int plip_config(struct device *dev, struct ifmap *map)
 {
 	struct net_local *nl = (struct net_local *) dev->priv;
 	struct pardevice *pardev = nl->pardev;
@@ -1092,8 +1091,8 @@ plip_config(struct device *dev, struct ifmap *map)
 	if (dev->flags & IFF_UP)
 		return -EBUSY;
 
-	printk(KERN_WARNING "plip: Warning, changing irq with ifconfig will be obsoleted.\n");
-	printk("plip: Next time, please set with /proc/parport/*/irq instead.\n");
+	printk(KERN_INFO "plip: Warning, changing irq with ifconfig will be obsoleted.\n");
+	printk(KERN_INFO "plip: Next time, please set with /proc/parport/*/irq instead.\n");
 
 	if (map->irq != (unsigned char)-1) {
 		pardev->port->irq = dev->irq = map->irq;

@@ -1157,10 +1157,7 @@ nfsd_readdir(struct svc_rqst *rqstp, struct svc_fh *fhp, loff_t offset,
 	/* If we didn't fill the buffer completely, we're at EOF */
 	eof = !cd.eob;
 
-	/* Hewlett Packard ignores the eof flag on READDIR. Some
-	 * fs-specific readdir implementations seem to reset f_pos to 0
-	 * at EOF however, causing an endless loop. */
-	if (cd.offset && !eof)
+	if (cd.offset)
 		*cd.offset = htonl(file.f_pos);
 
 	p = cd.buffer;

@@ -249,7 +249,7 @@ __initfunc(void ide_init_trm290 (ide_hwif_t *hwif))
 	ide_setup_dma(hwif, (hwif->config_data + 4) ^ (hwif->channel ? 0x0080 : 0x0000), 3);
 	hwif->dmaproc = &trm290_dmaproc;
 	hwif->selectproc = &trm290_selectproc;
-	hwif->no_autodma = 1;				/* play it safe for now */
+	hwif->autodma = 0;				/* play it safe for now */
 #if 1
 	{
 		/*

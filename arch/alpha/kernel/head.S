@@ -7,7 +7,6 @@
  * the kernel global pointer and jump to the kernel entry-point.
  */
 
-#define __ASSEMBLY__
 #include <asm/system.h>
 
 #define halt call_pal PAL_halt

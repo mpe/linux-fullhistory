@@ -15,7 +15,7 @@
 #define osf_vfork sys_fork
 
 /*
- * These offsets must match with "struct hae" in io.h:
+ * These offsets must match with alpha_mv in <asm/machvec.h>.
  */
 #define HAE_CACHE	0
 #define HAE_REG		8
@@ -109,7 +109,7 @@
 	stq	$3,24($30);		\
 	stq	$4,32($30);		\
 	stq	$28,144($30);		\
-	lda	$2,hae;			\
+	lda	$2,alpha_mv;		\
 	stq	$5,40($30);		\
 	stq	$6,48($30);		\
 	stq	$7,56($30);		\
@@ -130,7 +130,7 @@
 	stq	$18,176($30)
 
 #define RESTORE_ALL			\
-	lda	$19,hae;		\
+	lda	$19,alpha_mv;		\
 	ldq	$0,0($30);		\
 	ldq	$1,8($30);		\
 	ldq	$2,16($30);		\
@@ -1135,7 +1135,7 @@ sys_call_table:
 	.quad sys_sysinfo
 	.quad sys_sysctl
 	.quad sys_idle				/* 320 */
-	.quad sys_umount
+	.quad sys_oldumount
 	.quad sys_swapon
 	.quad sys_times
 	.quad sys_personality

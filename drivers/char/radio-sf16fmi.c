@@ -29,6 +29,7 @@ struct fmi_device
 	int port;
 	int curvol;
 	unsigned long curfreq;
+	int flags;
 };
 
 #ifndef CONFIG_RADIO_SF16FMI_PORT
@@ -39,7 +40,8 @@ static int io = CONFIG_RADIO_SF16FMI_PORT;
 static int users = 0;
 
 /* local things */
-#define RSF16_ENCODE(x)	((x*(1000/4)+10700)/50)
+/* freq in 1/16kHz to internal number */
+#define RSF16_ENCODE(x)	((x/16+10700)/50)
 
 static void outbits(int bits, int data, int port)
 {
@@ -68,8 +70,6 @@ static void fmi_unmute(int port)
 {
 	outb(0x08, port);
 }
-
-/* FREQ is in 1/16ths of a MHz so this is probably wrong atm */
 
 static int fmi_setfreq(struct fmi_device *dev, unsigned long freq)
 {
@@ -124,9 +124,14 @@ static int fmi_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				return -EFAULT;
 			if(v.tuner)	/* Only 1 tuner */
 				return -EINVAL;
-			v.rangelow=(int)(87.5*16);
-			v.rangehigh=(int)(108.0*16);
-			v.flags=0;
+			if (fmi->flags & VIDEO_TUNER_LOW) {
+				v.rangelow = 87500 * 16;
+				v.rangehigh = 108000 * 16;
+			} else {
+				v.rangelow=(int)(175*8 /* 87.5 *16 */);
+				v.rangehigh=(int)(108*16);
+			}
+			v.flags=fmi->flags;
 			v.mode=VIDEO_MODE_AUTO;
 			v.signal=0xFFFF*fmi_getsigstr(fmi);
 			if(copy_to_user(arg,&v, sizeof(v)))
@@ -140,18 +145,30 @@ static int fmi_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 				return -EFAULT;
 			if(v.tuner!=0)
 				return -EINVAL;
+			fmi->flags = v.flags & VIDEO_TUNER_LOW;
 			/* Only 1 tuner so no setting needed ! */
 			return 0;
 		}
 		case VIDIOCGFREQ:
-			if(copy_to_user(arg, &fmi->curfreq, sizeof(fmi->curfreq)))
+		{
+			unsigned long tmp = fmi->curfreq;
+			if (!(fmi->flags & VIDEO_TUNER_LOW))
+				tmp /= 1000;
+			if(copy_to_user(arg, &tmp, sizeof(tmp)))
 				return -EFAULT;
 			return 0;
+		}
 		case VIDIOCSFREQ:
-			if(copy_from_user(&fmi->curfreq, arg,sizeof(fmi->curfreq)))
+		{
+			unsigned long tmp;
+			if(copy_from_user(&tmp, arg, sizeof(tmp)))
 				return -EFAULT;
+			if (!(fmi->flags & VIDEO_TUNER_LOW))
+				tmp *= 1000;
+			fmi->curfreq = tmp;
 			fmi_setfreq(fmi, fmi->curfreq);
 			return 0;
+		}
 		case VIDIOCGAUDIO:
 		{	
 			struct video_audio v;
@@ -211,6 +228,7 @@ static struct video_device fmi_radio=
 	fmi_close,
 	NULL,	/* Can't read  (no capture ability) */
 	NULL,	/* Can't write */
+	NULL,	/* Can't poll */
 	fmi_ioctl,
 	NULL,
 	NULL
@@ -225,6 +243,7 @@ __initfunc(int fmi_init(struct video_init *v))
 	}
 
 	fmi_unit.port=io;
+	fmi_unit.flags = VIDEO_TUNER_LOW;
 	fmi_radio.priv=&fmi_unit;
 	
 	if(video_register_device(&fmi_radio, VFL_TYPE_RADIO)==-1)

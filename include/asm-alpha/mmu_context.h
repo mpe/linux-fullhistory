@@ -9,6 +9,7 @@
 
 #include <linux/config.h>
 #include <asm/system.h>
+#include <asm/machvec.h>
 
 /*
  * The maximum ASN's the processor supports.  On the EV4 this is 63
@@ -32,11 +33,17 @@
  * work correctly and can thus not be used (explaining the lack of PAL-code
  * support).
  */
-#ifdef CONFIG_ALPHA_EV5
-#define MAX_ASN 127
+#define EV4_MAX_ASN 63
+#define EV5_MAX_ASN 127
+
+#ifdef CONFIG_ALPHA_GENERIC
+# define MAX_ASN	(alpha_mv.max_asn)
 #else
-#define MAX_ASN 63
-#define BROKEN_ASN 1
+# ifdef CONFIG_ALPHA_EV4
+#  define MAX_ASN	EV4_MAX_ASN
+# else
+#  define MAX_ASN	EV5_MAX_ASN
+# endif
 #endif
 
 #ifdef __SMP__
@@ -78,26 +85,21 @@ extern unsigned long asn_cache;
  * force a new asn for any other processes the next time they want to
  * run.
  */
-extern inline void
-get_new_mmu_context(struct task_struct *p, struct mm_struct *mm)
-{
-	unsigned long asn = asn_cache;
 
-	if ((asn & HARDWARE_ASN_MASK) < MAX_ASN)
-		++asn;
-	else {
-		tbiap();
-		imb();
-		asn = (asn & ~HARDWARE_ASN_MASK) + ASN_FIRST_VERSION;
-	}
-	asn_cache = asn;
-	mm->context = asn;			/* full version + asn */
-	p->tss.asn = asn & HARDWARE_ASN_MASK;	/* just asn */
+#ifndef __EXTERN_INLINE
+#define __EXTERN_INLINE extern inline
+#define __MMU_EXTERN_INLINE
+#endif
+
+extern void get_new_mmu_context(struct task_struct *p, struct mm_struct *mm);
+
+__EXTERN_INLINE void ev4_get_mmu_context(struct task_struct *p)
+{
+	/* As described, ASN's are broken.  */
 }
 
-extern inline void get_mmu_context(struct task_struct *p)
+__EXTERN_INLINE void ev5_get_mmu_context(struct task_struct *p)
 {
-#ifndef BROKEN_ASN
 	struct mm_struct * mm = p->mm;
 
 	if (mm) {
@@ -106,27 +108,81 @@ extern inline void get_mmu_context(struct task_struct *p)
 		if ((mm->context ^ asn) & ~HARDWARE_ASN_MASK)
 			get_new_mmu_context(p, mm);
 	}
-#endif
 }
+
+#ifdef CONFIG_ALPHA_GENERIC
+# define get_mmu_context		(alpha_mv.mv_get_mmu_context)
+#else
+# ifdef CONFIG_ALPHA_EV4
+#  define get_mmu_context		ev4_get_mmu_context
+# else
+#  define get_mmu_context		ev5_get_mmu_context
+# endif
+#endif
 
 extern inline void init_new_context(struct mm_struct *mm)
 {
 	mm->context = 0;
 }
 
-#define destroy_context(mm)	do { } while(0)
+extern inline void destroy_context(struct mm_struct *mm)
+{
+	/* Nothing to do.  */
+}
+
 
 /*
- * After we have set current->mm to a new value, this activates
- * the context for the new mm so we see the new mappings.
- * Ideally this would be an extern inline function, but reload_context
- * is declared in pgtable.h, which includes this file. :-(
+ * Force a context reload. This is needed when we change the page
+ * table pointer or when we update the ASN of the current process.
  */
-#define activate_context(tsk)		\
-	do {				\
-		get_mmu_context(tsk);	\
-		reload_context(tsk);	\
-	} while (0)
 
+#if defined(CONFIG_ALPHA_GENERIC)
+#define MASK_CONTEXT(tss) \
+ ((struct thread_struct *)((unsigned long)(tss) & alpha_mv.mmu_context_mask))
+#elif defined(CONFIG_ALPHA_DP264)
+#define MASK_CONTEXT(tss) \
+ ((struct thread_struct *)((unsigned long)(tss) & 0xfffffffffful))
+#else
+#define MASK_CONTEXT(tss)  (tss)
 #endif
 
+__EXTERN_INLINE struct thread_struct *
+__reload_tss(struct thread_struct *tss)
+{
+	register struct thread_struct *a0 __asm__("$16");
+	register struct thread_struct *v0 __asm__("$0");
+
+	a0 = MASK_CONTEXT(tss);
+
+	__asm__ __volatile__(
+		"call_pal %2" : "=r"(v0), "=r"(a0)
+		: "i"(PAL_swpctx), "r"(a0)
+		: "$1", "$16", "$22", "$23", "$24", "$25");
+
+	return v0;
+}
+
+__EXTERN_INLINE void
+reload_context(struct task_struct *task)
+{
+	__reload_tss(&task->tss);
+}
+
+/*
+ * After we have set current->mm to a new value, this activates the
+ * context for the new mm so we see the new mappings.
+ */
+
+__EXTERN_INLINE void
+activate_context(struct task_struct *task)
+{
+	get_mmu_context(task);
+	reload_context(task);
+}
+
+#ifdef __MMU_EXTERN_INLINE
+#undef __EXTERN_INLINE
+#undef __MMU_EXTERN_INLINE
+#endif
+
+#endif /* __ALPHA_MMU_CONTEXT_H */

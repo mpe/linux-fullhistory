@@ -1822,6 +1822,8 @@ int vfat_rename(struct inode *old_dir,struct dentry *old_dentry,
 		put_new_inode = 0;
 	}
 
+	clear_inode(old_inode);
+
 rename_done:
 	if (locked)
 		fat_unlock_creation();

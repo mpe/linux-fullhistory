@@ -24,6 +24,8 @@
 #define __KERNEL_SYSCALLS__
 #include <asm/unistd.h>
 
+#include "proto.h"
+
 struct ipi_msg_flush_tb_struct ipi_msg_flush_tb;
 
 struct cpuinfo_alpha cpu_data[NR_CPUS];
@@ -735,15 +737,11 @@ send_ipi_message(long to_whom, enum ipi_message_type operation)
 	}
 }
 
-static char smp_buf[256];
-
-char *smp_info(void)
+int smp_info(char *buffer)
 {
-        sprintf(smp_buf, "CPUs probed %d active %d map 0x%x AKP %d\n",
-		smp_num_probed, smp_num_cpus, cpu_present_map,
-		klock_info.akp);
-
-        return smp_buf;
+        return sprintf(buffer, "CPUs probed %d active %d map 0x%x AKP %d\n",
+		       smp_num_probed, smp_num_cpus, cpu_present_map,
+		       klock_info.akp);
 }
 
 /* wrapper for call from panic() */

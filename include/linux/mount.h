@@ -37,4 +37,10 @@ struct vfsmount
 
 struct vfsmount *lookup_vfsmnt(kdev_t dev);
 
+/*
+ *	Umount options
+ */
+ 
+#define MNT_FORCE	0x00000001	/* Attempt to forcibily umount */
+
 #endif /* _LINUX_MOUNT_H */

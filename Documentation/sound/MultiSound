@@ -9,8 +9,8 @@ Supported Features
 ~~~~~~~~~~~~~~~~~~
 
 Currently digital audio and mixer functionality is supported.  (memory
-mapped digital audio is not yet supported).  MultiSound support is
-fully modularized, and can only be used as modules:
+mapped digital audio is not yet supported).  Modular MultiSound
+support is composed of the following modules:
 
 msnd		- MultiSound base (requires soundcore)
 msnd_classic	- Base audio/mixer support for Classic, Monetery and
@@ -80,12 +80,26 @@ mem		        Shared memory area, e.g. mem=0xd8000
 msnd_classic, msnd_pinnacle Additional Options
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-fifosize		The digital audio FIFOs, in kilobytes.  The default is
-			64kB (two FIFOs are allocated, so this uses up 128kB).
+fifosize		The digital audio FIFOs, in kilobytes.  The
+			default is 64kB (two FIFOs are allocated, so
+			this uses up 128kB).
 
 calibrate_signal	Setting this to one calibrates the ADCs to the
 			signal, zero calibrates to the card (defaults
 			to zero).
+
+
+msnd_pinnacle Additional Options
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+digital			Specify digital=1 to enable the S/PDIF input
+			if you have the digital daughterboard
+			adapter. This will enable access to the
+			DIGITAL1 input for the soundcard in the mixer.
+			Some mixer programs might have trouble setting
+			the DIGITAL1 source as an input.  If you have
+			trouble, you can try the setdigital.c program
+			at the bottom of this document.
 
 
 Obtaining and Creating Firmware Files
@@ -105,7 +119,9 @@ following firmware files to /etc/sound (note the file renaming):
   cp DSPCODE/MSNDPERM.REB /etc/sound/msndperm.bin
 
 When configuring the Linux kernel, specify /etc/sound/msndinit.bin and
-/etc/sound/msndperm.bin for the two firmware files.
+/etc/sound/msndperm.bin for the two firmware files (Linux kernel
+versions older than 2.2 do not ask for firmware paths, and are
+hardcoded to /etc/sound).
 
 
 	For the Pinnacle/Fiji
@@ -122,9 +138,9 @@ and end lines):
 
 -- conv.l start --
 %%
-[ \n\t,\r]	;
-\;.*		;
-DB		;
+[ \n\t,\r]
+\;.*
+DB
 [0-9A-Fa-f]+H	{ int n; sscanf(yytext, "%xH", &n); printf("%c", n); }
 -- conv.l end --
 
@@ -143,4 +159,76 @@ archive unpacked into a directory named PINNDDK):
 The conv (and conv.l) program is not needed after conversion and can
 be safely deleted.  Then, when configuring the Linux kernel, specify
 /etc/sound/pndspini.bin and /etc/sound/pndsperm.bin for the two
-firmware files.
+firmware files (Linux kernel versions older than 2.2 do not ask for
+firmware paths, and are hardcoded to /etc/sound).
+
+
+Recording from the S/PDIF Input
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you have a Pinnacle or Fiji with S/PDIF input and want to set it as
+the input source, you can use this program if you have trouble trying
+to do it with a mixer program (be sure to insert the module with the
+digital=1 option).
+
+Compile with:
+cc -O setdigital.c -o setdigital
+
+-- start setdigital.c --
+#include <stdio.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/ioctl.h>
+#include <sys/soundcard.h>
+
+int main(int argc, char *argv[])
+{
+	int fd;
+	unsigned long recmask, recsrc;
+
+	if (argc != 2) {
+		fprintf(stderr, "usage: setdigital <mixer device>\n");
+		exit(1);
+	} else
+
+	if ((fd = open(argv[1], O_RDWR)) < 0) {
+		perror(argv[1]);
+		exit(1);
+	}
+
+	if (ioctl(fd, SOUND_MIXER_READ_RECMASK, &recmask) < 0) {
+		fprintf(stderr, "error: ioctl read recmask failed\n");
+		perror("ioctl");
+		close(fd);
+		exit(1);
+	}
+
+	if (!(recmask & SOUND_MASK_DIGITAL1)) {
+		fprintf(stderr, "error: cannot find DIGITAL1 device in mixer\n");
+		close(fd);
+		exit(1);
+	}
+
+	if (ioctl(fd, SOUND_MIXER_READ_RECSRC, &recsrc) < 0) {
+		fprintf(stderr, "error: ioctl read recsrc failed\n");
+		perror("ioctl");
+		close(fd);
+		exit(1);
+	}
+
+	recsrc |= SOUND_MASK_DIGITAL1;
+	
+	if (ioctl(fd, SOUND_MIXER_WRITE_RECSRC, &recsrc) < 0) {
+		fprintf(stderr, "error: ioctl write recsrc failed\n");
+		perror("ioctl");
+		close(fd);
+		exit(1);
+	}
+
+	close(fd);
+	
+	return 0;
+}
+-- end setdigital.c --

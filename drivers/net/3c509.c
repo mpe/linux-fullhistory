@@ -178,6 +178,9 @@ int el3_probe(struct device *dev)
 	}
 
 #ifdef CONFIG_MCA
+#warning "The MCA code in drivers/net/3c509.c does not compile"
+#warning "See http://glycerine.itsmm.uni.edu/mca/ for patches."
+#if 0   
 	if (MCA_bus) {
 		mca_adaptor_select_mode(1);
 		for (i = 0; i < 8; i++)
@@ -195,6 +198,7 @@ int el3_probe(struct device *dev)
 
 	}
 #endif
+#endif
 
 	/* Reset the ISA PnP mechanism on 3c509b. */
 	outb(0x02, 0x279);           /* Select PnP config control register. */
@@ -208,7 +212,7 @@ int el3_probe(struct device *dev)
 		if (inb(id_port) & 0x01)
 			break;
 	}
-	if (id_port >= 0x200) {             /* GCC optimizes this test out. */
+	if (id_port >= 0x200) {
 		/* Rare -- do we really need a warning? */
 		printk(" WARNING: No I/O port available for 3c509 activation.\n");
 		return -ENODEV;

@@ -46,10 +46,10 @@ extern __inline__ void clear_bit(unsigned long nr, volatile void * addr)
 
 	__asm__ __volatile__(
 	"1:	ldl_l %0,%1\n"
-	"	and %0,%3,%2\n\t"
-	"	beq %2,2f\n\t"
-	"	xor %0,%3,%0\n\t"
-	"	stl_c %0,%1\n\t"
+	"	and %0,%3,%2\n"
+	"	beq %2,2f\n"
+	"	xor %0,%3,%0\n"
+	"	stl_c %0,%1\n"
 	"	beq %0,3f\n"
 	"2:\n"
 	".section .text2,\"ax\"\n"
@@ -66,8 +66,8 @@ extern __inline__ void change_bit(unsigned long nr, volatile void * addr)
 
 	__asm__ __volatile__(
 	"1:	ldl_l %0,%1\n"
-	"	xor %0,%2,%0\n\t"
-	"	stl_c %0,%1\n\t"
+	"	xor %0,%2,%0\n"
+	"	stl_c %0,%1\n"
 	"	beq %0,3f\n"
 	".section .text2,\"ax\"\n"
 	"3:	br 1b\n"
@@ -109,10 +109,10 @@ extern __inline__ unsigned long test_and_clear_bit(unsigned long nr,
 
 	__asm__ __volatile__(
 	"1:	ldl_l %0,%1\n"
-	"	and %0,%3,%2\n\t"
-	"	beq %2,2f\n\t"
-	"	xor %0,%3,%0\n\t"
-	"	stl_c %0,%1\n\t"
+	"	and %0,%3,%2\n"
+	"	beq %2,2f\n"
+	"	xor %0,%3,%0\n"
+	"	stl_c %0,%1\n"
 	"	beq %0,3f\n"
 	"2:\n"
 	".section .text2,\"ax\"\n"
@@ -133,9 +133,9 @@ extern __inline__ unsigned long test_and_change_bit(unsigned long nr,
 
 	__asm__ __volatile__(
 	"1:	ldl_l %0,%1\n"
-	"	and %0,%3,%2\n\t"
-	"	xor %0,%3,%0\n\t"
-	"	stl_c %0,%1\n\t"
+	"	and %0,%3,%2\n"
+	"	xor %0,%3,%0\n"
+	"	stl_c %0,%1\n"
 	"	beq %0,3f\n"
 	".section .text2,\"ax\"\n"
 	"3:	br 1b\n"
@@ -172,6 +172,11 @@ extern inline unsigned long ffz_b(unsigned long x)
 
 extern inline unsigned long ffz(unsigned long word)
 {
+#ifdef __alpha_cix__
+	/* Whee.  EV6 can calculate it directly.  */
+	unsigned long result;
+	__asm__("ctlz %1,%0" : "=r"(result) : "r"(~word));
+#else
 	unsigned long bits, qofs, bofs;
 
 	__asm__("cmpbge %1,%2,%0" : "=r"(bits) : "r"(word), "r"(~0UL));
@@ -180,6 +185,7 @@ extern inline unsigned long ffz(unsigned long word)
 	bofs = ffz_b(bits);
 
 	return qofs*8 + bofs;
+#endif
 }
 
 #ifdef __KERNEL__
@@ -190,16 +196,34 @@ extern inline unsigned long ffz(unsigned long word)
  * differs in spirit from the above ffz (man ffs).
  */
 
-#define ffs(x) generic_ffs(x)
+extern inline int ffs(int word)
+{
+	int result = ffz(~word);
+	return word ? result+1 : 0;
+}
 
 /*
  * hweightN: returns the hamming weight (i.e. the number
  * of bits set) of a N-bit word
  */
 
+#ifdef __alpha_cix__
+/* Whee.  EV6 can calculate it directly.  */
+extern __inline__ unsigned long hweight64(unsigned long w)
+{
+	unsigned long result;
+	__asm__("ctpop %1,%0" : "=r"(result) : "r"(w));
+	return result;
+}
+
+#define hweight32(x) hweight64((x) & 0xfffffffful)
+#define hweight16(x) hweight64((x) & 0xfffful)
+#define hweight8(x)  hweight64((x) & 0xfful)
+#else
 #define hweight32(x) generic_hweight32(x)
 #define hweight16(x) generic_hweight16(x)
-#define hweight8(x) generic_hweight8(x)
+#define hweight8(x)  generic_hweight8(x)
+#endif
 
 #endif /* __KERNEL__ */
 

@@ -20,8 +20,10 @@
 #include <asm/unaligned.h>
 #include <asm/sysinfo.h>
 
+#include "proto.h"
 
-static void dik_show_regs(struct pt_regs *regs, unsigned long *r9_15)
+static void
+dik_show_regs(struct pt_regs *regs, unsigned long *r9_15)
 {
 	printk("pc = [<%016lx>]  ra = [<%016lx>]  ps = %04lx\n",
 	       regs->pc, regs->r26, regs->ps);
@@ -51,7 +53,8 @@ static void dik_show_regs(struct pt_regs *regs, unsigned long *r9_15)
 	printk("gp = %016lx  sp = %p\n", regs->gp, regs+1);
 }
 
-static void dik_show_code(unsigned int *pc)
+static void
+dik_show_code(unsigned int *pc)
 {
 	long i;
 
@@ -65,7 +68,8 @@ static void dik_show_code(unsigned int *pc)
 	printk("\n");
 }
 
-static void dik_show_trace(unsigned long *sp)
+static void
+dik_show_trace(unsigned long *sp)
 {
 	long i = 0;
 	printk("Trace:");
@@ -86,8 +90,8 @@ static void dik_show_trace(unsigned long *sp)
 	printk("\n");
 }
 
-void die_if_kernel(char * str, struct pt_regs *regs, long err,
-		   unsigned long *r9_15)
+void
+die_if_kernel(char * str, struct pt_regs *regs, long err, unsigned long *r9_15)
 {
 	if (regs->ps & 8)
 		return;
@@ -106,21 +110,20 @@ void die_if_kernel(char * str, struct pt_regs *regs, long err,
 }
 
 #ifndef CONFIG_MATHEMU
-static long dummy_alpha_fp_emul_imprecise(struct pt_regs *r, unsigned long wm)
-{
-  return 0;
-}
-
+static long dummy_emul() { return 0; }
 long (*alpha_fp_emul_imprecise)(struct pt_regs *regs, unsigned long writemask)
-  = dummy_alpha_fp_emul_imprecise;
+  = (void *)dummy_emul;
+long (*alpha_fp_emul) (unsigned long pc)
+  = (void *)dummy_emul;
 #else
 long alpha_fp_emul_imprecise(struct pt_regs *regs, unsigned long writemask);
+long alpha_fp_emul (unsigned long pc);
 #endif
 
-asmlinkage void do_entArith(unsigned long summary, unsigned long write_mask,
-			    unsigned long a2, unsigned long a3,
-			    unsigned long a4, unsigned long a5,
-			    struct pt_regs regs)
+asmlinkage void
+do_entArith(unsigned long summary, unsigned long write_mask, unsigned long a2,
+	    unsigned long a3, unsigned long a4, unsigned long a5,
+	    struct pt_regs regs)
 {
 	if ((summary & 1)) {
 		/*
@@ -133,8 +136,10 @@ asmlinkage void do_entArith(unsigned long summary, unsigned long write_mask,
 	}
 
 	lock_kernel();
+#if 0
 	printk("%s: arithmetic trap at %016lx: %02lx %016lx\n",
 		current->comm, regs.pc, summary, write_mask);
+#endif
 	die_if_kernel("Arithmetic fault", &regs, 0, 0);
 	force_sig(SIGFPE, current);
 	unlock_kernel();
@@ -202,7 +207,6 @@ asmlinkage void do_entIF(unsigned long type, unsigned long a1,
 	      case 4: /* opDEC */
 #ifdef CONFIG_ALPHA_NEED_ROUNDING_EMULATION
 		{
-			extern long alpha_fp_emul (unsigned long pc);
 			unsigned int opcode;
 
 			/* get opcode of faulting instruction: */
@@ -255,9 +259,10 @@ struct unaligned_stat {
 #define una_reg(r)  (regs.regs[(r) >= 16 && (r) <= 18 ? (r)+19 : (r)])
 
 
-asmlinkage void do_entUna(void * va, unsigned long opcode, unsigned long reg,
-	unsigned long a3, unsigned long a4, unsigned long a5,
-	struct allregs regs)
+asmlinkage void
+do_entUna(void * va, unsigned long opcode, unsigned long reg,
+	  unsigned long a3, unsigned long a4, unsigned long a5,
+	  struct allregs regs)
 {
 	long error, tmp1, tmp2, tmp3, tmp4;
 	unsigned long pc = regs.pc - 4;
@@ -497,7 +502,8 @@ got_exception:
  * needs to be remapped to preserve non-finite values
  * (infinities, not-a-numbers, denormals).
  */
-static inline unsigned long s_mem_to_reg (unsigned long s_mem)
+static inline unsigned long
+s_mem_to_reg (unsigned long s_mem)
 {
 	unsigned long frac    = (s_mem >>  0) & 0x7fffff;
 	unsigned long sign    = (s_mem >> 31) & 0x1;
@@ -524,7 +530,8 @@ static inline unsigned long s_mem_to_reg (unsigned long s_mem)
  * Convert an s-floating point value in register format to the
  * corresponding value in memory format.
  */
-static inline unsigned long s_reg_to_mem (unsigned long s_reg)
+static inline unsigned long
+s_reg_to_mem (unsigned long s_reg)
 {
 	return ((s_reg >> 62) << 30) | ((s_reg << 5) >> 34);
 }
@@ -571,12 +578,10 @@ static int unauser_reg_offsets[32] = {
 
 #undef R
 
-asmlinkage void do_entUnaUser(void * va, unsigned long opcode,
-			      unsigned long reg, struct pt_regs *regs)
+asmlinkage void
+do_entUnaUser(void * va, unsigned long opcode,
+	      unsigned long reg, struct pt_regs *regs)
 {
-	extern void alpha_write_fp_reg (unsigned long reg, unsigned long val);
-	extern unsigned long alpha_read_fp_reg (unsigned long reg);
-
 	static int cnt = 0;
 	static long last_time = 0;
 
@@ -868,10 +873,10 @@ give_sigbus:
 /*
  * Unimplemented system calls.
  */
-asmlinkage long alpha_ni_syscall(unsigned long a0, unsigned long a1,
-				 unsigned long a2, unsigned long a3,
-				 unsigned long a4, unsigned long a5,
-				 struct pt_regs regs)
+asmlinkage long
+alpha_ni_syscall(unsigned long a0, unsigned long a1, unsigned long a2,
+		 unsigned long a3, unsigned long a4, unsigned long a5,
+		 struct pt_regs regs)
 {
 	/* We only get here for OSF system calls, minus #112;
 	   the rest go to sys_ni_syscall.  */
@@ -879,17 +884,11 @@ asmlinkage long alpha_ni_syscall(unsigned long a0, unsigned long a1,
 	return -ENOSYS;
 }
 
-extern asmlinkage void entMM(void);
-extern asmlinkage void entIF(void);
-extern asmlinkage void entArith(void);
-extern asmlinkage void entUna(void);
-extern asmlinkage void entSys(void);
-
-register unsigned long gptr __asm__("$29");
-
-void trap_init(void)
+void
+trap_init(void)
 {
 	/* Tell PAL-code what global pointer we want in the kernel.  */
+	register unsigned long gptr __asm__("$29");
 	wrkgp(gptr);
 
 	wrent(entArith, 1);

@@ -1,5 +1,5 @@
-#ifndef _HWRPB_H
-#define _HWRPB_H
+#ifndef __ALPHA_HWRPB_H
+#define __ALPHA_HWRPB_H
 
 #define INIT_HWRPB ((struct hwrpb_struct *) 0x10000000)
 
@@ -34,6 +34,7 @@
 #define ST_DEC_AXPPCI_33	 11	/* NoName system type	*/
 #define ST_DEC_TLASER		 12	/* Turbolaser systype	*/
 #define ST_DEC_2100_A50		 13	/* Avanti systype	*/
+#define ST_DEC_MUSTANG		 14	/* Mustang systype	*/
 #define ST_DEC_ALCOR		 15	/* Alcor (EV5) systype	*/
 #define ST_DEC_1000		 17	/* Mikasa systype	*/
 #define ST_DEC_EB64		 18	/* EB64 systype		*/
@@ -92,7 +93,7 @@ struct percpu_struct {
 	unsigned long halt_pv;
 	unsigned long halt_reason;
 	unsigned long res;
-	unsigned long ipc_buffer[21];
+	char ipc_buffer[168];
 	unsigned long palcode_avail[16];
 	unsigned long compatibility;
 };
@@ -184,4 +185,6 @@ struct hwrpb_struct {
 	unsigned long dsr_offset;	/* "Dynamic System Recognition Data Block Table" */
 };
 
-#endif
+extern struct hwrpb_struct *hwrpb;
+
+#endif /* __ALPHA_HWRPB_H */

@@ -7,12 +7,6 @@
 	__arginit __init; \
 	__arginit
 
-#if __GNUC__ >= 2 && __GNUC_MINOR__ >= 8
-#define __initlocaldata  __initdata
-#else
-#define __initlocaldata
-#endif
-
 /* For assembly routines */
 #define __INIT		.section	.text.init,"ax"
 #define __FINIT		.previous

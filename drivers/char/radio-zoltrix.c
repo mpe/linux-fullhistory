@@ -2,14 +2,14 @@
  * (c) 1998 C. van Schaik <carl@leg.uct.ac.za>
  *
  * BUGS  
- *  The signal strength query is unsurprisingly inaccurate.  And it seems
- *  to indicate that (on my card, at least) the frequency setting isn't
- *  too great.  It seems to work in a similar way to a car stereo which
- *  flickers when it is near or on a station...
+ *  Due to the inconsistancy in reading from the signal flags
+ *  it is difficult to get an accurate tuned signal.
  *
  *  There seems to be a problem with the volume setting that I must still
- *  figure out. This is a minor problem... It still works but you may
- *  have to set the card lounder to get the same volume.
+ *  figure out. 
+ *  It seems that the card has is not linear to 0 volume. It cuts off
+ *  at a low frequency, and it is not possible (at least I have not found)
+ *  to get fine volume control over the low volume range.
  *
  *  Some code derived from code by Frans Brinkman
  */
@@ -62,31 +62,31 @@ static void zol_mute(struct zol_device *dev)
 	inb(io + 3);		/* Zoltrix needs to be read to confirm */
 }
 
+static void zol_on(int vol)
+{
+        int l;
+        outb(vol, io);
+        sleep_delay(10000);
+        l = inb(io + 2);
+}
+
 static int zol_setvol(struct zol_device *dev, int vol)
 {
-	int l;
-
 	if (vol == dev->curvol) {	/* requested volume = current */
 		if (dev->muted) {	/* user is unmuting the card  */
 			dev->muted = 0;
-			outb(vol, io);
-			sleep_delay(20000);
-			l = inb(io + 2);
+                        zol_on(vol);
 		}
 		return 0;
 	}
 	if (vol == 0) {		/* volume = 0 means mute the card */
-		outb(0, io);
-		outb(0, io);
-		l = inb(io + 3);
+                zol_mute(dev);
 		return 0;
 	}
 	dev->muted = 0;
 	dev->curvol = vol;
 
-	outb(vol, io);
-	sleep_delay(20000);
-	l = inb(io + 2);
+	zol_on(vol);
 
 	return 0;
 }
@@ -95,7 +95,7 @@ static int zol_setfreq(struct zol_device *dev, unsigned long freq)
 {
 	/* tunes the radio to the desired frequency */
 	unsigned long long bitmask, f, m;
-	int i, l;
+	int i;
 
 	m = (freq * 25 / 4 - 8800) * 2;
 	f = (unsigned long long) m + 0x4d1c;
@@ -103,10 +103,8 @@ static int zol_setfreq(struct zol_device *dev, unsigned long freq)
 	bitmask = 0xc480402c10080000ull;
 	i = 45;
 
-	outb(0x00, io);
-	outb(0x00, io);
-	sleep_delay(10000);
-	inb(io + 3);
+	zol_mute(dev);
+
 	outb(0x40, io);
 	outb(0xc0, io);
 
@@ -133,29 +131,26 @@ static int zol_setfreq(struct zol_device *dev, unsigned long freq)
 	outb(0x80, io);
 	outb(0xc0, io);
 	outb(0x40, io);
-	outb(0x00, io);
-	sleep_delay(10000);
-	l = inb(io + 2);
-	sleep_delay(10000);
-	l = inb(io + 1);
-	outb(dev->curvol, io);
-	sleep_delay(10000);
-	l = inb(io + 2);
+        zol_on(dev->curvol);
 	return 0;
 }
 
-/* Get signal strenght */
+/* Get signal strength */
+
 int zol_getsigstr(struct zol_device *dev)
 {
 	int a, b;
-	outb(0x00, io);
-	sleep_delay(10000);
-	a = inb(io + 2);
-	sleep_delay(20000);
-	b = inb(io + 1);
-	outb(0x00, io);
 
-	if (((a | b) & 255) != 0x0ff)
+	outb(0x00, io);         /* This stuff I found to do nothing */
+	outb(dev->curvol, io);
+	sleep_delay(20000);
+
+	a = inb(io);
+	sleep_delay(1000);
+	b = inb(io);
+
+        if ((a == b) && (a == 0xdf))  /* I found this out by playing */
+                                      /* with a binary scanner on the card io */
 		return (1);
 	else
 		return (0);
@@ -225,7 +220,7 @@ static int zol_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			struct video_audio v;
 			memset(&v, 0, sizeof(v));
 			v.flags |= VIDEO_AUDIO_MUTABLE | VIDEO_AUDIO_VOLUME;
-			v.volume = rt->curvol * 6554;
+			v.volume = rt->curvol * 4095;
 			strcpy(v.name, "Radio");
 			if (copy_to_user(arg, &v, sizeof(v)))
 				return -EFAULT;
@@ -242,7 +237,7 @@ static int zol_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			if (v.flags & VIDEO_AUDIO_MUTE)
 				zol_mute(rt);
 			else
-				zol_setvol(rt, v.volume / 6554);
+				zol_setvol(rt, v.volume / 4096);
 
 			return 0;
 		}
@@ -277,6 +272,7 @@ static struct video_device zoltrix_radio =
 	zol_close,
 	NULL,			/* Can't read  (no capture ability) */
 	NULL,			/* Can't write */
+	NULL,
 	zol_ioctl,
 	NULL,
 	NULL

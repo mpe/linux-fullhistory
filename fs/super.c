@@ -633,7 +633,7 @@ static void d_mount(struct dentry *covered, struct dentry *dentry)
 	dentry->d_covers = covered;
 }
 
-static int do_umount(kdev_t dev, int unmount_root)
+static int do_umount(kdev_t dev, int unmount_root, int flags)
 {
 	struct super_block * sb;
 	int retval;
@@ -665,7 +665,7 @@ static int do_umount(kdev_t dev, int unmount_root)
 	 * about for the moment.
 	 */
 	 
-	if(sb->s_op->umount_begin)
+	if( (flags&MNT_FORCE) && sb->s_op->umount_begin)
 		sb->s_op->umount_begin(sb);
 
 	/*
@@ -717,7 +717,7 @@ out:
 	return retval;
 }
 
-static int umount_dev(kdev_t dev)
+static int umount_dev(kdev_t dev, int flags)
 {
 	int retval;
 	struct inode * inode = get_empty_inode();
@@ -735,7 +735,7 @@ static int umount_dev(kdev_t dev)
 
 	down(&mount_sem);
 
-	retval = do_umount(dev,0);
+	retval = do_umount(dev, 0, flags);
 	if (!retval) {
 		fsync_dev(dev);
 		if (dev != ROOT_DEV) {
@@ -761,10 +761,11 @@ out:
  * If any other fields are ever needed by any block device release
  * functions, they should be faked here.  -- jrs
  *
- * For 2.3.x we want a new sys_umount syscall with flags (ie 'force')
+ * We now support a flag for forced unmount like the other 'big iron'
+ * unixes. Our API is identical to OSF/1 to avoid making a mess of AMD
  */
 
-asmlinkage int sys_umount(char * name)
+asmlinkage int sys_umount(char * name, int flags)
 {
 	struct dentry * dentry;
 	int retval;
@@ -794,10 +795,19 @@ asmlinkage int sys_umount(char * name)
 		dput(dentry);
 
 		if (!retval)
-			retval = umount_dev(dev);
+			retval = umount_dev(dev, flags);
 	}
 	unlock_kernel();
 	return retval;
+}
+
+/*
+ *	The 2.0 compatible umount. No flags. 
+ */
+ 
+asmlinkage int sys_oldumount(char * name)
+{
+	return sys_umount(name,0);
 }
 
 /*
@@ -1263,7 +1273,7 @@ __initfunc(static int do_change_root(kdev_t new_root_dev,const char *put_old))
 		int umount_error;
 
 		printk(KERN_NOTICE "Trying to unmount old root ... ");
-		umount_error = do_umount(old_root_dev,1);
+		umount_error = do_umount(old_root_dev,1, 0);
 		if (!umount_error) {
 			printk("okay\n");
 			invalidate_buffers(old_root_dev);

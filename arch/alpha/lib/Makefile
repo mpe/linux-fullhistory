@@ -7,7 +7,7 @@ OBJS  = __divqu.o __remqu.o __divlu.o __remlu.o memset.o memcpy.o io.o \
 	strcat.o strcpy.o strncat.o strncpy.o stxcpy.o stxncpy.o \
 	strchr.o strrchr.o \
 	copy_user.o clear_user.o strncpy_from_user.o strlen_user.o \
-	csum_ipv6_magic.o
+	csum_ipv6_magic.o strcasecmp.o
 
 lib.a: $(OBJS)
 	$(AR) rcs lib.a $(OBJS)

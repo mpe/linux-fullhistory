@@ -560,6 +560,11 @@ static struct proc_dir_entry proc_root_devices = {
 	S_IFREG | S_IRUGO, 1, 0, 0,
 	0, &proc_array_inode_operations
 };
+static struct proc_dir_entry proc_root_partitions = {
+	PROC_PARTITIONS, 10, "partitions",
+	S_IFREG | S_IRUGO, 1, 0, 0,
+	0, &proc_array_inode_operations
+};
 static struct proc_dir_entry proc_root_interrupts = {
 	PROC_INTERRUPTS, 10,"interrupts",
 	S_IFREG | S_IRUGO, 1, 0, 0,
@@ -667,6 +672,7 @@ __initfunc(void proc_root_init(void))
 #endif
 	proc_register(&proc_root, &proc_root_stat);
 	proc_register(&proc_root, &proc_root_devices);
+	proc_register(&proc_root, &proc_root_partitions);
 	proc_register(&proc_root, &proc_root_interrupts);
 	proc_register(&proc_root, &proc_root_filesystems);
 	proc_register(&proc_root, &proc_root_fs);

@@ -1,6 +1,12 @@
-OPL3-SA sound driver (opl3sa.o)
+OPL3-SA1 sound driver (opl3sa.o)
 
-The Yamaha OPL3-SAx sound chip is usually found built into motherboards, and
+---
+Note: This howto only describes how to setup the OPL3-SA1 chip; this info
+does not apply to the SA2, SA3, or SA4. Contact hannu@opensound.com for
+the support details of these other SAx chips.
+---
+
+The Yamaha OPL3-SA1 sound chip is usually found built into motherboards, and
 it's a decent little chip offering a WSS mode, a SB Pro emulation mode, MPU401
 and OPL3 FM Synth capabilities.
 
@@ -73,4 +79,3 @@ A 'cat /dev/sndstat' with all the above options should look similar to this:
 
 Questions? Comments?
 <stiker@northlink.com>
-

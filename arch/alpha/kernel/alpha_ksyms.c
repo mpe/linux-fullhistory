@@ -25,6 +25,7 @@
 #include <asm/softirq.h>
 #include <asm/fpu.h>
 #include <asm/irq.h>
+#include <asm/machvec.h>
 
 #define __KERNEL_SYSCALLS__
 #include <asm/unistd.h>
@@ -43,6 +44,7 @@ extern void __remlu (void);
 extern void __divqu (void);
 extern void __remqu (void);
 
+EXPORT_SYMBOL(alpha_mv);
 EXPORT_SYMBOL(local_bh_count);
 EXPORT_SYMBOL(local_irq_count);
 EXPORT_SYMBOL(enable_irq);
@@ -121,7 +123,9 @@ EXPORT_SYMBOL(csum_ipv6_magic);
 
 #ifdef CONFIG_MATHEMU_MODULE
 extern long (*alpha_fp_emul_imprecise)(struct pt_regs *, unsigned long);
+extern long (*alpha_fp_emul) (unsigned long pc);
 EXPORT_SYMBOL(alpha_fp_emul_imprecise);
+EXPORT_SYMBOL(alpha_fp_emul);
 #endif
 
 /*

@@ -113,7 +113,8 @@ static int az_setfreq(struct az_device *dev, unsigned long frequency)
 {
 	int  i;
 
-	frequency = (frequency * 100) / 16;	/* massage data a bit */
+	/*  6.25 *  */
+	frequency = frequency*6 + frequency/4;	/* massage data a bit */
   
 	frequency += 1070;		/* tuning needs 24 data bits  */
 	frequency /= 5;
@@ -269,6 +270,7 @@ static struct video_device aztech_radio=
 	az_close,
 	NULL,	/* Can't read  (no capture ability) */
 	NULL,	/* Can't write */
+	NULL,	/* No poll */
 	az_ioctl,
 	NULL,
 	NULL

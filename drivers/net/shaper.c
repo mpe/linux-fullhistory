@@ -128,6 +128,7 @@ static int shaper_clocks(struct shaper *shaper, struct sk_buff *skb)
   
 static void shaper_setspeed(struct shaper *shaper, int bitspersec)
 {
+	shaper->bitspersec=bitspersec;
 	shaper->bytespertick=(bitspersec/HZ)/8;
 	if(!shaper->bytespertick)
 		shaper->bytespertick++;
@@ -549,17 +550,27 @@ static int shaper_ioctl(struct device *dev,  struct ifreq *ifr, int cmd)
 {
 	struct shaperconf *ss= (struct shaperconf *)&ifr->ifr_data;
 	struct shaper *sh=dev->priv;
-	struct device *them=dev_get(ss->ss_name);
 	switch(ss->ss_cmd)
 	{
 		case SHAPER_SET_DEV:
+		{
+			struct device *them=dev_get(ss->ss_name);
 			if(them==NULL)
 				return -ENODEV;
 			if(sh->dev)
 				return -EBUSY;
 			return shaper_attach(dev,dev->priv, them);
+		}
+		case SHAPER_GET_DEV:
+			if(sh->dev==NULL)
+				return -ENODEV;
+			memcpy(ss->ss_name, sh->dev->name, sizeof(ss->ss_name));
+			return 0;
 		case SHAPER_SET_SPEED:
 			shaper_setspeed(sh,ss->ss_speed);
+			return 0;
+		case SHAPER_GET_SPEED:
+			ss->ss_speed=sh->bitspersec;
 			return 0;
 		default:
 			return -EINVAL;

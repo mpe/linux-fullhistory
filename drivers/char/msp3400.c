@@ -58,7 +58,7 @@
 #endif
 
 
-int debug = 0; /* insmod parameter */
+static int debug = 0; /* insmod parameter */
 
 struct msp3400c {
 	struct i2c_bus     *bus;
@@ -542,7 +542,8 @@ static int msp3400c_thread(void *data)
 		LOCK_I2C_BUS(msp->bus);
 		msp3400c_setvolume(msp->bus, 0, 0);
 		msp3400c_setmode(msp, MSP_MODE_AM_DETECT);
-		val1 = val2 = max1 = max2 = 0;
+		val1 = val2 = 0;
+		max1 = max2 = -1;
 		del_timer(&msp->wake_stereo);
 		msp->watch_stereo = 0;
 

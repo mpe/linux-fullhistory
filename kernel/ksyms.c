@@ -51,6 +51,7 @@
 #include <linux/ctype.h>
 #include <linux/file.h>
 #include <linux/console.h>
+#include <linux/time.h>
 
 extern unsigned char aux_device_present, pckbd_read_mask;
 
@@ -389,7 +390,7 @@ EXPORT_SYMBOL(pckbd_read_mask);
 #ifdef CONFIG_BLK_DEV_MD
 EXPORT_SYMBOL(disk_name);	/* for md.c */
 #endif
- 	
+
 /* binfmt_aout */
 EXPORT_SYMBOL(get_write_access);
 EXPORT_SYMBOL(put_write_access);
@@ -397,3 +398,6 @@ EXPORT_SYMBOL(put_write_access);
 /* dynamic registering of consoles */
 EXPORT_SYMBOL(register_console);
 EXPORT_SYMBOL(unregister_console);
+
+/* time */
+EXPORT_SYMBOL(get_fast_time);

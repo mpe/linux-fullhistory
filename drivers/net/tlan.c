@@ -48,15 +48,16 @@ typedef u32 (TLanIntVectorFunc)( struct device *, u16 );
 static	struct device	*TLanDevices = NULL;
 static	int		TLanDevicesInstalled = 0;
 
+static	int		aui = 0;
+static	int		sa_int = 0;
+static	int		duplex = 0;
+static	int		speed = 0;
+
 #endif
 
 
 static  int		debug = 0;
-static	int		aui = 0;
-static	int		sa_int = 0;
 static	int		bbuf = 0;
-static	int		duplex = 0;
-static	int		speed = 0;
 static	u8		*TLanPadBuffer;
 static	char		TLanSignature[] = "TLAN";
 static	int		TLanVersionMajor = 1;

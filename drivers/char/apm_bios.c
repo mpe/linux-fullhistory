@@ -515,6 +515,8 @@ static int apm_get_power_status(u_short *status, u_short *bat, u_short *life)
 	return APM_SUCCESS;
 }
 
+#if 0
+/* not used anywhere */
 static int apm_get_battery_status(u_short which, 
 				  u_short *bat, u_short *life, u_short *nbat)
 {
@@ -532,6 +534,7 @@ static int apm_get_battery_status(u_short which,
 		return (error >> 8);
 	return APM_SUCCESS;
 }
+#endif
 
 static inline int apm_engage_power_management(u_short device)
 {

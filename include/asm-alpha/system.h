@@ -100,13 +100,16 @@ extern void wripir(unsigned long);
 
 #define switch_to(prev,next) do { \
 	current = next; \
-	alpha_switch_to((unsigned long) &current->tss - 0xfffffc0000000000); \
+	alpha_switch_to((unsigned long) &current->tss - IDENT_ADDR); \
 } while (0)
 
 extern void alpha_switch_to(unsigned long pctxp);
 
 #define mb() \
 __asm__ __volatile__("mb": : :"memory")
+
+#define wmb() \
+__asm__ __volatile__("wmb": : :"memory")
 
 #define imb() \
 __asm__ __volatile__ ("call_pal %0" : : "i" (PAL_imb) : "memory")

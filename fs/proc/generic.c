@@ -283,7 +283,11 @@ out:
 extern void free_proc_entry(struct proc_dir_entry *);
 void free_proc_entry(struct proc_dir_entry *de)
 {
-	kfree(de);
+	int ino = de->low_ino;
+
+	if (ino >= PROC_DYNAMIC_FIRST &&
+	    ino < PROC_DYNAMIC_FIRST+PROC_NDYNAMIC)
+		kfree(de);
 }
 
 /*

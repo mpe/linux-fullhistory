@@ -19,8 +19,7 @@
 #define _ASM_DMA_H
 
 #include <linux/config.h>
-
-#include <asm/io.h>		/* need byte IO */
+#include <asm/io.h>
 
 #define dma_outb	outb
 #define dma_inb		inb
@@ -75,7 +74,6 @@
 
 #define MAX_DMA_CHANNELS	8
 
-#ifdef CONFIG_ALPHA_XL
 /* The maximum address that we can perform a DMA transfer to on Alpha XL,
    due to a hardware SIO (PCI<->ISA bus bridge) chip limitation, is 64MB.
    See <asm/apecs.h> for more info.
@@ -86,12 +84,18 @@
    We MUST coordinate the maximum with <asm/apecs.h> for consistency.
    For now, this limit is set to 48Mb...
 */
-#define MAX_DMA_ADDRESS		(0xfffffc0003000000UL)
-#else /* CONFIG_ALPHA_XL */
-/* The maximum address that we can perform a DMA transfer to on normal
-   Alpha platforms */
-#define MAX_DMA_ADDRESS		(~0UL)
-#endif /* CONFIG_ALPHA_XL */
+#define ALPHA_XL_MAX_DMA_ADDRESS	(0xfffffc0003000000UL)
+#define ALPHA_MAX_DMA_ADDRESS		(~0UL)
+
+#ifdef CONFIG_ALPHA_GENERIC
+# define MAX_DMA_ADDRESS		(alpha_mv.max_dma_address)
+#else
+# ifdef CONFIG_ALPHA_XL
+#  define MAX_DMA_ADDRESS		ALPHA_XL_MAX_DMA_ADDRESS
+# else
+#  define MAX_DMA_ADDRESS		ALPHA_MAX_DMA_ADDRESS
+# endif
+#endif
 
 /* 8237 DMA controllers */
 #define IO_DMA1_BASE	0x00	/* 8 bit slave DMA, channels 0..3 */

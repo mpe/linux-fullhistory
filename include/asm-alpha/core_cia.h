@@ -3,6 +3,7 @@
 
 #include <linux/config.h>
 #include <linux/types.h>
+#include <asm/compiler.h>
 
 /*
  * CIA is the internal name for the 2117x chipset which provides
@@ -21,7 +22,7 @@
 
 /*------------------------------------------------------------------------**
 **                                                                        **
-**  EB164 I/O procedures                                                   **
+**  EB164 I/O procedures                                                  **
 **                                                                        **
 **      inport[b|w|t|l], outport[b|w|t|l] 8:16:24:32 IO xfers             **
 **	inportbxt: 8 bits only                                            **
@@ -72,25 +73,20 @@
  *
  */
 
-#define BYTE_ENABLE_SHIFT 5
-#define TRANSFER_LENGTH_SHIFT 3
+#define CIA_MEM_R1_MASK 0x1fffffff  /* SPARSE Mem region 1 mask is 29 bits */
+#define CIA_MEM_R2_MASK 0x07ffffff  /* SPARSE Mem region 2 mask is 27 bits */
+#define CIA_MEM_R3_MASK 0x03ffffff  /* SPARSE Mem region 3 mask is 26 bits */
 
-#define MEM_R1_MASK 0x1fffffff  /* SPARSE Mem region 1 mask is 29 bits */
-#define MEM_R2_MASK 0x07ffffff  /* SPARSE Mem region 2 mask is 27 bits */
-#define MEM_R3_MASK 0x03ffffff  /* SPARSE Mem region 3 mask is 26 bits */
+#define CIA_DMA_WIN_BASE_DEFAULT	(1024*1024*1024)
+#define CIA_DMA_WIN_SIZE_DEFAULT	(1024*1024*1024)
 
-#ifdef CONFIG_ALPHA_SRM_SETUP
-/* if we are using the SRM PCI setup, we'll need to use variables instead */
-#define CIA_DMA_WIN_BASE_DEFAULT    (1024*1024*1024)
-#define CIA_DMA_WIN_SIZE_DEFAULT    (1024*1024*1024)
-
-extern unsigned int CIA_DMA_WIN_BASE;
-extern unsigned int CIA_DMA_WIN_SIZE;
-
-#else /* SRM_SETUP */
-#define CIA_DMA_WIN_BASE            (1024*1024*1024)
-#define CIA_DMA_WIN_SIZE	(1024*1024*1024)
-#endif /* SRM_SETUP */
+#if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM_SETUP)
+#define CIA_DMA_WIN_BASE		alpha_mv.dma_win_base
+#define CIA_DMA_WIN_SIZE		alpha_mv.dma_win_size
+#else
+#define CIA_DMA_WIN_BASE		CIA_DMA_WIN_SIZE_DEFAULT
+#define CIA_DMA_WIN_SIZE		CIA_DMA_WIN_SIZE_DEFAULT
+#endif
 
 /*
  * 21171-CA Control and Status Registers (p4-1)
@@ -178,7 +174,6 @@ extern unsigned int CIA_DMA_WIN_SIZE;
 #define CIA_SPARSE_MEM_R2		(IDENT_ADDR + 0x8400000000UL)
 #define CIA_SPARSE_MEM_R3		(IDENT_ADDR + 0x8500000000UL)
 #define CIA_DENSE_MEM		        (IDENT_ADDR + 0x8600000000UL)
-#define DENSE_MEM(addr)			CIA_DENSE_MEM
 
 /*
  * ALCOR's GRU ASIC registers
@@ -194,13 +189,10 @@ extern unsigned int CIA_DMA_WIN_SIZE;
 #define GRU_LED				(IDENT_ADDR + 0x8780000800UL)
 #define GRU_RESET			(IDENT_ADDR + 0x8780000900UL)
 
-#if defined(CONFIG_ALPHA_ALCOR)
-#define GRU_INT_REQ_BITS		0x800fffffUL
-#elif defined(CONFIG_ALPHA_XLT)
-#define GRU_INT_REQ_BITS		0x80003fffUL
-#else
-#define GRU_INT_REQ_BITS		0xffffffffUL
-#endif
+#define ALCOR_GRU_INT_REQ_BITS		0x800fffffUL
+#define XLT_GRU_INT_REQ_BITS		0x80003fffUL
+#define GRU_INT_REQ_BITS		(alpha_mv.sys.cia.gru_int_req_bits+0)
+
 
 /*
  * Bit definitions for I/O Controller status register 0:
@@ -215,20 +207,100 @@ extern unsigned int CIA_DMA_WIN_SIZE;
 #define CIA_IOC_STAT0_P_NBR_SHIFT	13
 #define CIA_IOC_STAT0_P_NBR_MASK	0x7ffff
 
-#define HAE_ADDRESS	                CIA_IOC_HAE_MEM
+#define CIA_HAE_ADDRESS	                CIA_IOC_HAE_MEM
+
+/*
+ * Data structure for handling CIA machine checks.
+ */
+
+/* EV5-specific info.  */
+struct el_CIA_procdata {
+	unsigned long shadow[8];	/* PALmode shadow registers */
+	unsigned long paltemp[24];	/* PAL temporary registers */
+	/* EV5-specific fields */
+	unsigned long exc_addr;		/* Address of excepting instruction. */
+	unsigned long exc_sum;		/* Summary of arithmetic traps. */
+	unsigned long exc_mask;		/* Exception mask (from exc_sum). */
+	unsigned long exc_base;		/* PALbase at time of exception. */
+	unsigned long isr;		/* Interrupt summary register. */
+	unsigned long icsr;		/* Ibox control register. */
+	unsigned long ic_perr_stat;
+	unsigned long dc_perr_stat;
+	unsigned long va;		/* Effective VA of fault or miss. */
+	unsigned long mm_stat;
+	unsigned long sc_addr;
+	unsigned long sc_stat;
+	unsigned long bc_tag_addr;
+	unsigned long ei_addr;
+	unsigned long fill_syn;
+	unsigned long ei_stat;
+	unsigned long ld_lock;
+};
+
+/* System-specific info.  */
+struct el_CIA_sysdata_mcheck {
+	unsigned long      coma_gcr;                       
+	unsigned long      coma_edsr;                      
+	unsigned long      coma_ter;                       
+	unsigned long      coma_elar;                      
+	unsigned long      coma_ehar;                      
+	unsigned long      coma_ldlr;                      
+	unsigned long      coma_ldhr;                      
+	unsigned long      coma_base0;                     
+	unsigned long      coma_base1;                     
+	unsigned long      coma_base2;                     
+	unsigned long      coma_cnfg0;                     
+	unsigned long      coma_cnfg1;                     
+	unsigned long      coma_cnfg2;                     
+	unsigned long      epic_dcsr;                      
+	unsigned long      epic_pear;                      
+	unsigned long      epic_sear;                      
+	unsigned long      epic_tbr1;                      
+	unsigned long      epic_tbr2;                      
+	unsigned long      epic_pbr1;                      
+	unsigned long      epic_pbr2;                      
+	unsigned long      epic_pmr1;                      
+	unsigned long      epic_pmr2;                      
+	unsigned long      epic_harx1;                     
+	unsigned long      epic_harx2;                     
+	unsigned long      epic_pmlt;                      
+	unsigned long      epic_tag0;                      
+	unsigned long      epic_tag1;                      
+	unsigned long      epic_tag2;                      
+	unsigned long      epic_tag3;                      
+	unsigned long      epic_tag4;                      
+	unsigned long      epic_tag5;                      
+	unsigned long      epic_tag6;                      
+	unsigned long      epic_tag7;                      
+	unsigned long      epic_data0;                     
+	unsigned long      epic_data1;                     
+	unsigned long      epic_data2;                     
+	unsigned long      epic_data3;                     
+	unsigned long      epic_data4;                     
+	unsigned long      epic_data5;                     
+	unsigned long      epic_data6;                     
+	unsigned long      epic_data7;                     
+};
+
 
 #ifdef __KERNEL__
+
+#ifndef __EXTERN_INLINE
+#define __EXTERN_INLINE extern inline
+#define __IO_EXTERN_INLINE
+#endif
 
 /*
  * Translate physical memory address as seen on (PCI) bus into
  * a kernel virtual address and vv.
  */
-extern inline unsigned long virt_to_bus(void * address)
+
+__EXTERN_INLINE unsigned long cia_virt_to_bus(void * address)
 {
 	return virt_to_phys(address) + CIA_DMA_WIN_BASE;
 }
 
-extern inline void * bus_to_virt(unsigned long address)
+__EXTERN_INLINE void * cia_bus_to_virt(unsigned long address)
 {
 	return phys_to_virt(address - CIA_DMA_WIN_BASE);
 }
@@ -241,50 +313,47 @@ extern inline void * bus_to_virt(unsigned long address)
  * get at PCI memory and I/O.
  */
 
+#define vip	volatile int *
 #define vuip	volatile unsigned int *
 #define vulp	volatile unsigned long *
 
-extern inline unsigned int __inb(unsigned long addr)
+__EXTERN_INLINE unsigned int cia_inb(unsigned long addr)
 {
-	long result = *(vuip) ((addr << 5) + CIA_IO + 0x00);
-	result >>= (addr & 3) * 8;
-	return 0xffUL & result;
+	long result;
+	result = *(vip) ((addr << 5) + CIA_IO + 0x00);
+	return __kernel_extbl(result, addr & 3);
 }
 
-extern inline void __outb(unsigned char b, unsigned long addr)
+__EXTERN_INLINE void cia_outb(unsigned char b, unsigned long addr)
 {
-	unsigned int w;
-
-	w = __kernel_insbl(b, addr & 3);
+	unsigned int w = __kernel_insbl(b, addr & 3);
 	*(vuip) ((addr << 5) + CIA_IO + 0x00) = w;
-	mb();
+	wmb();
 }
 
-extern inline unsigned int __inw(unsigned long addr)
+__EXTERN_INLINE unsigned int cia_inw(unsigned long addr)
 {
-	long result = *(vuip) ((addr << 5) + CIA_IO + 0x08);
-	result >>= (addr & 3) * 8;
-	return 0xffffUL & result;
+	long result;
+	result = *(vip) ((addr << 5) + CIA_IO + 0x08);
+	return __kernel_extwl(result, addr & 3);
 }
 
-extern inline void __outw(unsigned short b, unsigned long addr)
+__EXTERN_INLINE void cia_outw(unsigned short b, unsigned long addr)
 {
-	unsigned int w;
-
-	w = __kernel_inswl(b, addr & 3);
+	unsigned int w = __kernel_inswl(b, addr & 3);
 	*(vuip) ((addr << 5) + CIA_IO + 0x08) = w;
-	mb();
+	wmb();
 }
 
-extern inline unsigned int __inl(unsigned long addr)
+__EXTERN_INLINE unsigned int cia_inl(unsigned long addr)
 {
 	return *(vuip) ((addr << 5) + CIA_IO + 0x18);
 }
 
-extern inline void __outl(unsigned int b, unsigned long addr)
+__EXTERN_INLINE void cia_outl(unsigned int b, unsigned long addr)
 {
 	*(vuip) ((addr << 5) + CIA_IO + 0x18) = b;
-	mb();
+	wmb();
 }
 
 
@@ -320,287 +389,213 @@ extern inline void __outl(unsigned int b, unsigned long addr)
  * 
  */
 
-#ifdef CONFIG_ALPHA_SRM_SETUP
-
-extern unsigned long cia_sm_base_r1, cia_sm_base_r2, cia_sm_base_r3;
-
-extern inline unsigned long __readb(unsigned long addr)
+__EXTERN_INLINE unsigned long cia_srm_base(unsigned long addr)
 {
-	unsigned long result, shift, work;
+	unsigned long mask, base;
 
-	if ((addr >= cia_sm_base_r1) &&
-	    (addr <= (cia_sm_base_r1 + MEM_R1_MASK)))
-	  work = (((addr & MEM_R1_MASK) << 5) + CIA_SPARSE_MEM + 0x00);
-	else
-	if ((addr >= cia_sm_base_r2) &&
-	    (addr <= (cia_sm_base_r2 + MEM_R2_MASK)))
-	  work = (((addr & MEM_R2_MASK) << 5) + CIA_SPARSE_MEM_R2 + 0x00);
-	else
-	if ((addr >= cia_sm_base_r3) &&
-	    (addr <= (cia_sm_base_r3 + MEM_R3_MASK)))
-	  work = (((addr & MEM_R3_MASK) << 5) + CIA_SPARSE_MEM_R3 + 0x00);
+	if (addr >= alpha_mv.sm_base_r1
+	    && addr <= alpha_mv.sm_base_r1 + CIA_MEM_R1_MASK) {
+		mask = CIA_MEM_R1_MASK;
+		base = CIA_SPARSE_MEM;
+	}
+	else if (addr >= alpha_mv.sm_base_r2
+		 && addr <= alpha_mv.sm_base_r2 + CIA_MEM_R2_MASK) {
+		mask = CIA_MEM_R2_MASK;
+		base = CIA_SPARSE_MEM_R2;
+	}
+	else if (addr >= alpha_mv.sm_base_r3
+		 && addr <= alpha_mv.sm_base_r3 + CIA_MEM_R3_MASK) {
+		mask = CIA_MEM_R3_MASK;
+		base = CIA_SPARSE_MEM_R3;
+	}
 	else
 	{
 #if 0
-	  printk("__readb: address 0x%lx not covered by HAE\n", addr);
+		printk("cia: address 0x%lx not covered by HAE\n", addr);
 #endif
-	  return 0x0ffUL;
+		return 0;
 	}
-	shift = (addr & 0x3) << 3;
-	result = *(vuip) work;
-	result >>= shift;
-	return 0x0ffUL & result;
+
+	return ((addr & mask) << 5) + base;
 }
 
-extern inline unsigned long __readw(unsigned long addr)
+__EXTERN_INLINE unsigned long cia_srm_readb(unsigned long addr)
 {
-	unsigned long result, shift, work;
+	unsigned long result, work;
 
-	if ((addr >= cia_sm_base_r1) &&
-	    (addr <= (cia_sm_base_r1 + MEM_R1_MASK)))
-	  work = (((addr & MEM_R1_MASK) << 5) + CIA_SPARSE_MEM + 0x08);
-	else
-	if ((addr >= cia_sm_base_r2) &&
-	    (addr <= (cia_sm_base_r2 + MEM_R2_MASK)))
-	  work = (((addr & MEM_R2_MASK) << 5) + CIA_SPARSE_MEM_R2 + 0x08);
-	else
-	if ((addr >= cia_sm_base_r3) &&
-	    (addr <= (cia_sm_base_r3 + MEM_R3_MASK)))
-	  work = (((addr & MEM_R3_MASK) << 5) + CIA_SPARSE_MEM_R3 + 0x08);
-	else
-	{
-#if 0
-	  printk("__readw: address 0x%lx not covered by HAE\n", addr);
-#endif
-	  return 0x0ffffUL;
-	}
-	shift = (addr & 0x3) << 3;
-	result = *(vuip) work;
-	result >>= shift;
-	return 0x0ffffUL & result;
+	if ((work = cia_srm_base(addr)) == 0)
+		return 0xff;
+	work += 0x00;	/* add transfer length */
+
+	result = *(vip) work;
+	return __kernel_extbl(result, addr & 3);
 }
 
-extern inline void __writeb(unsigned char b, unsigned long addr)
+__EXTERN_INLINE unsigned long cia_srm_readw(unsigned long addr)
 {
-	unsigned long work;
+	unsigned long result, work;
 
-	if ((addr >= cia_sm_base_r1) &&
-	    (addr <= (cia_sm_base_r1 + MEM_R1_MASK)))
-	  work = (((addr & MEM_R1_MASK) << 5) + CIA_SPARSE_MEM + 0x00);
-	else
-	if ((addr >= cia_sm_base_r2) &&
-	    (addr <= (cia_sm_base_r2 + MEM_R2_MASK)))
-	  work = (((addr & MEM_R2_MASK) << 5) + CIA_SPARSE_MEM_R2 + 0x00);
-	else
-	if ((addr >= cia_sm_base_r3) &&
-	    (addr <= (cia_sm_base_r3 + MEM_R3_MASK)))
-	  work = (((addr & MEM_R3_MASK) << 5) + CIA_SPARSE_MEM_R3 + 0x00);
-	else
-	{
-#if 0
-	  printk("__writeb: address 0x%lx not covered by HAE\n", addr);
-#endif
-	  return;
-	}
-	*(vuip) work = b * 0x01010101;
+	if ((work = cia_srm_base(addr)) == 0)
+		return 0xffff;
+	work += 0x08;	/* add transfer length */
+
+	result = *(vip) work;
+	return __kernel_extwl(result, addr & 3);
 }
 
-extern inline void __writew(unsigned short b, unsigned long addr)
+__EXTERN_INLINE void cia_srm_writeb(unsigned char b, unsigned long addr)
 {
-	unsigned long work;
-
-	if ((addr >= cia_sm_base_r1) &&
-	    (addr <= (cia_sm_base_r1 + MEM_R1_MASK)))
-	  work = (((addr & MEM_R1_MASK) << 5) + CIA_SPARSE_MEM + 0x00);
-	else
-	if ((addr >= cia_sm_base_r2) &&
-	    (addr <= (cia_sm_base_r2 + MEM_R2_MASK)))
-	  work = (((addr & MEM_R2_MASK) << 5) + CIA_SPARSE_MEM_R2 + 0x00);
-	else
-	if ((addr >= cia_sm_base_r3) &&
-	    (addr <= (cia_sm_base_r3 + MEM_R3_MASK)))
-	  work = (((addr & MEM_R3_MASK) << 5) + CIA_SPARSE_MEM_R3 + 0x00);
-	else
-	{
-#if 0
-	  printk("__writew: address 0x%lx not covered by HAE\n", addr);
-#endif
-	  return;
+	unsigned long work = cia_srm_base(addr), w;
+	if (work) {
+		work += 0x00;	/* add transfer length */
+		w = __kernel_insbl(b, addr & 3);
+		*(vuip) work = w;
 	}
-	*(vuip) work = b * 0x00010001;
 }
 
-#else /* SRM_SETUP */
-
-extern inline unsigned long __readb(unsigned long addr)
+__EXTERN_INLINE void cia_srm_writew(unsigned short b, unsigned long addr)
 {
-	unsigned long result, shift, msb;
-
-	shift = (addr & 0x3) * 8 ;
-	msb = addr & 0xE0000000 ;
-	addr &= MEM_R1_MASK ;
-	if (msb != hae.cache) {
-	  set_hae(msb);
+	unsigned long work = cia_srm_base(addr), w;
+	if (work) {
+		work += 0x08;	/* add transfer length */
+		w = __kernel_inswl(b, addr & 3);
+		*(vuip) work = w;
 	}
-	result = *(vuip) ((addr << 5) + CIA_SPARSE_MEM + 0x00) ;
-	result >>= shift;
-	return 0xffUL & result;
 }
 
-extern inline unsigned long __readw(unsigned long addr)
+__EXTERN_INLINE unsigned long cia_readb(unsigned long addr)
 {
-	unsigned long result, shift, msb;
+	unsigned long result, msb;
 
-	shift = (addr & 0x3) * 8;
-	msb = addr & 0xE0000000 ;
-	addr &= MEM_R1_MASK ;
-	if (msb != hae.cache) {
-	  set_hae(msb);
-	}
-	result = *(vuip) ((addr << 5) + CIA_SPARSE_MEM + 0x08);
-	result >>= shift;
-	return 0xffffUL & result;
+	msb = addr & 0xE0000000;
+	addr &= CIA_MEM_R1_MASK;
+	set_hae(msb);
+
+	result = *(vip) ((addr << 5) + CIA_SPARSE_MEM + 0x00);
+	return __kernel_extbl(result, addr & 3);
 }
 
-extern inline void __writeb(unsigned char b, unsigned long addr)
+__EXTERN_INLINE unsigned long cia_readw(unsigned long addr)
 {
-        unsigned long msb ; 
+	unsigned long result, msb;
 
-	msb = addr & 0xE0000000 ;
-	addr &= MEM_R1_MASK ;
-	if (msb != hae.cache) {
-	  set_hae(msb);
-	}
-	*(vuip) ((addr << 5) + CIA_SPARSE_MEM + 0x00) = b * 0x01010101;
+	msb = addr & 0xE0000000;
+	addr &= CIA_MEM_R1_MASK;
+	set_hae(msb);
+
+	result = *(vip) ((addr << 5) + CIA_SPARSE_MEM + 0x08);
+	return __kernel_extwl(result, addr & 3);
 }
 
-extern inline void __writew(unsigned short b, unsigned long addr)
+__EXTERN_INLINE void cia_writeb(unsigned char b, unsigned long addr)
 {
-        unsigned long msb ; 
+        unsigned long msb, w; 
 
-	msb = addr & 0xE0000000 ;
-	addr &= MEM_R1_MASK ;
-	if (msb != hae.cache) {
-	  set_hae(msb);
-	}
-	*(vuip) ((addr << 5) + CIA_SPARSE_MEM + 0x08) = b * 0x00010001;
+	msb = addr & 0xE0000000;
+	addr &= CIA_MEM_R1_MASK;
+	set_hae(msb);
+
+	w = __kernel_insbl(b, addr & 3);
+	*(vuip) ((addr << 5) + CIA_SPARSE_MEM + 0x00) = w;
 }
 
-#endif /* SRM_SETUP */
+__EXTERN_INLINE void cia_writew(unsigned short b, unsigned long addr)
+{
+        unsigned long msb, w; 
 
-extern inline unsigned long __readl(unsigned long addr)
+	msb = addr & 0xE0000000;
+	addr &= CIA_MEM_R1_MASK;
+	set_hae(msb);
+
+	w = __kernel_inswl(b, addr & 3);
+	*(vuip) ((addr << 5) + CIA_SPARSE_MEM + 0x08) = w;
+}
+
+__EXTERN_INLINE unsigned long cia_readl(unsigned long addr)
 {
 	return *(vuip) (addr + CIA_DENSE_MEM);
 }
 
-extern inline unsigned long __readq(unsigned long addr)
+__EXTERN_INLINE unsigned long cia_readq(unsigned long addr)
 {
 	return *(vulp) (addr + CIA_DENSE_MEM);
 }
 
-extern inline void __writel(unsigned int b, unsigned long addr)
+__EXTERN_INLINE void cia_writel(unsigned int b, unsigned long addr)
 {
 	*(vuip) (addr + CIA_DENSE_MEM) = b;
 }
 
-extern inline void __writeq(unsigned long b, unsigned long addr)
+__EXTERN_INLINE void cia_writeq(unsigned long b, unsigned long addr)
 {
 	*(vulp) (addr + CIA_DENSE_MEM) = b;
 }
 
+/* Find the DENSE memory area for a given bus address.  */
+
+__EXTERN_INLINE unsigned long cia_dense_mem(unsigned long addr)
+{
+	return CIA_DENSE_MEM;
+}
+
+#undef vip
+#undef vuip
+#undef vulp
+
+#ifdef __WANT_IO_DEF
+
+#define virt_to_bus	cia_virt_to_bus
+#define bus_to_virt	cia_bus_to_virt
+#define __inb		cia_inb
+#define __inw		cia_inw
+#define __inl		cia_inl
+#define __outb		cia_outb
+#define __outw		cia_outw
+#define __outl		cia_outl
+
+#ifdef CONFIG_ALPHA_SRM_SETUP
+#define __readb		cia_srm_readb
+#define __readw		cia_srm_readw
+#define __writeb	cia_srm_writeb
+#define __writew	cia_srm_writew
+#else
+#define __readb		cia_readb
+#define __readw		cia_readw
+#define __writeb	cia_writeb
+#define __writew	cia_writew
+#endif
+
+#define __readl		cia_readl
+#define __readq		cia_readq
+#define __writel	cia_writel
+#define __writeq	cia_writeq
+#define dense_mem	cia_dense_mem
+
 #define inb(port) \
 (__builtin_constant_p((port))?__inb(port):_inb(port))
-
 #define outb(x, port) \
 (__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
+
+#define inw(port) \
+(__builtin_constant_p((port))?__inw(port):_inw(port))
+#define outw(x, port) \
+(__builtin_constant_p((port))?__outw((x),(port)):_outw((x),(port)))
+
+#define inl(port)	__inl(port)
+#define outl(x,port)	__outl((x),(port))
 
 #define readl(a)	__readl((unsigned long)(a))
 #define readq(a)	__readq((unsigned long)(a))
 #define writel(v,a)	__writel((v),(unsigned long)(a))
 #define writeq(v,a)	__writeq((v),(unsigned long)(a))
 
-#undef vuip
-#undef vulp
+#endif /* __WANT_IO_DEF */
 
-extern unsigned long cia_init (unsigned long mem_start,
-				 unsigned long mem_end);
+#ifdef __IO_EXTERN_INLINE
+#undef __EXTERN_INLINE
+#undef __IO_EXTERN_INLINE
+#endif
 
 #endif /* __KERNEL__ */
-
-/*
- * Data structure for handling CIA machine checks:
- */
-/* ev5-specific info: */
-struct el_procdata {
-	unsigned long shadow[8];	/* PALmode shadow registers */
-	unsigned long paltemp[24];	/* PAL temporary registers */
-	/* EV5-specific fields */
-	unsigned long exc_addr;		/* Address of excepting instruction. */
-	unsigned long exc_sum;		/* Summary of arithmetic traps. */
-	unsigned long exc_mask;		/* Exception mask (from exc_sum). */
-	unsigned long exc_base;		/* PALbase at time of exception. */
-	unsigned long isr;		/* Interrupt summary register. */
-	unsigned long icsr;		/* Ibox control register. */
-	unsigned long ic_perr_stat;
-	unsigned long dc_perr_stat;
-	unsigned long va;		/* Effective VA of fault or miss. */
-	unsigned long mm_stat;
-	unsigned long sc_addr;
-	unsigned long sc_stat;
-	unsigned long bc_tag_addr;
-	unsigned long ei_addr;
-	unsigned long fill_syn;
-	unsigned long ei_stat;
-	unsigned long ld_lock;
-};
-
-/* system-specific info: */
-struct el_CIA_sysdata_mcheck {
-    unsigned long      coma_gcr;                       
-    unsigned long      coma_edsr;                      
-    unsigned long      coma_ter;                       
-    unsigned long      coma_elar;                      
-    unsigned long      coma_ehar;                      
-    unsigned long      coma_ldlr;                      
-    unsigned long      coma_ldhr;                      
-    unsigned long      coma_base0;                     
-    unsigned long      coma_base1;                     
-    unsigned long      coma_base2;                     
-    unsigned long      coma_cnfg0;                     
-    unsigned long      coma_cnfg1;                     
-    unsigned long      coma_cnfg2;                     
-    unsigned long      epic_dcsr;                      
-    unsigned long      epic_pear;                      
-    unsigned long      epic_sear;                      
-    unsigned long      epic_tbr1;                      
-    unsigned long      epic_tbr2;                      
-    unsigned long      epic_pbr1;                      
-    unsigned long      epic_pbr2;                      
-    unsigned long      epic_pmr1;                      
-    unsigned long      epic_pmr2;                      
-    unsigned long      epic_harx1;                     
-    unsigned long      epic_harx2;                     
-    unsigned long      epic_pmlt;                      
-    unsigned long      epic_tag0;                      
-    unsigned long      epic_tag1;                      
-    unsigned long      epic_tag2;                      
-    unsigned long      epic_tag3;                      
-    unsigned long      epic_tag4;                      
-    unsigned long      epic_tag5;                      
-    unsigned long      epic_tag6;                      
-    unsigned long      epic_tag7;                      
-    unsigned long      epic_data0;                     
-    unsigned long      epic_data1;                     
-    unsigned long      epic_data2;                     
-    unsigned long      epic_data3;                     
-    unsigned long      epic_data4;                     
-    unsigned long      epic_data5;                     
-    unsigned long      epic_data6;                     
-    unsigned long      epic_data7;                     
-};
-
-#define RTC_PORT(x)	(0x70 + (x))
-#define RTC_ADDR(x)	(0x80 | (x))
-#define RTC_ALWAYS_BCD	0
 
 #endif /* __ALPHA_CIA__H__ */

@@ -29,7 +29,7 @@ static int used_queues = 0;
 static int max_msqid = 0;
 static struct wait_queue *msg_lock = NULL;
 
-__initfunc(void msg_init (void))
+void __init msg_init (void)
 {
 	int id;
 	
@@ -47,16 +47,11 @@ static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg
 	struct ipc_perm *ipcp;
 	struct msg *msgh;
 	long mtype;
-	unsigned long flags;
 	
 	if (msgsz > MSGMAX || (long) msgsz < 0 || msqid < 0)
 		return -EINVAL;
-	if (!msgp) 
-		return -EFAULT;
-	err = verify_area (VERIFY_READ, msgp->mtext, msgsz);
-	if (err) 
-		return err;
-	get_user(mtype, &msgp->mtype);
+	if (get_user(mtype, &msgp->mtype))
+		return -EFAULT; 
 	if (mtype < 1)
 		return -EINVAL;
 	id = (unsigned int) msqid % MSGMNI;
@@ -103,8 +98,6 @@ static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg
 	msgh->msg_type = mtype;
 	msgh->msg_stime = CURRENT_TIME;
 
-	save_flags(flags);
-	cli();
 	if (!msq->msg_first)
 		msq->msg_first = msq->msg_last = msgh;
 	else {
@@ -117,7 +110,6 @@ static int real_msgsnd (int msqid, struct msgbuf *msgp, size_t msgsz, int msgflg
 	msq->msg_qnum++;
 	msq->msg_lspid = current->pid;
 	msq->msg_stime = CURRENT_TIME;
-	restore_flags(flags);
 	wake_up (&msq->rwait);
 	return 0;
 }
@@ -129,16 +121,9 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 	struct msg *tmsg, *leastp = NULL;
 	struct msg *nmsg = NULL;
 	int id, err;
-	unsigned long flags;
 
 	if (msqid < 0 || (long) msgsz < 0)
 		return -EINVAL;
-	if (!msgp || !msgp->mtext)
-	    return -EFAULT;
-
-	err = verify_area (VERIFY_WRITE, msgp->mtext, msgsz);
-	if (err)
-		return err;
 
 	id = (unsigned int) msqid % MSGMNI;
 	msq = msgque [id];
@@ -160,8 +145,6 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 			return -EACCES;
 		}
 
-		save_flags(flags);
-		cli();
 		if (msgtyp == 0) 
 			nmsg = msq->msg_first;
 		else if (msgtyp > 0) {
@@ -186,15 +169,12 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 			if (leastp && leastp->msg_type <= - msgtyp)
 				nmsg = leastp;
 		}
-		restore_flags(flags);
 		
 		if (nmsg) { /* done finding a message */
 			if ((msgsz < nmsg->msg_ts) && !(msgflg & MSG_NOERROR)) {
 				return -E2BIG;
 			}
 			msgsz = (msgsz > nmsg->msg_ts)? nmsg->msg_ts : msgsz;
-			save_flags(flags);
-			cli();
 			if (nmsg ==  msq->msg_first)
 				msq->msg_first = nmsg->msg_next;
 			else {
@@ -214,10 +194,10 @@ static int real_msgrcv (int msqid, struct msgbuf *msgp, size_t msgsz, long msgty
 			msgbytes -= nmsg->msg_ts; 
 			msghdrs--; 
 			msq->msg_cbytes -= nmsg->msg_ts;
-			restore_flags(flags);
 			wake_up (&msq->wwait);
-			put_user (nmsg->msg_type, &msgp->mtype);
-			copy_to_user (msgp->mtext, nmsg->msg_spot, msgsz);
+			if (put_user (nmsg->msg_type, &msgp->mtype) ||
+			    copy_to_user (msgp->mtext, nmsg->msg_spot, msgsz))
+				msgsz = -EFAULT; 
 			kfree(nmsg);
 			return msgsz;
 		} else {  /* did not find a message */
@@ -395,18 +375,15 @@ asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 			msginfo.msgmap = msghdrs;
 			msginfo.msgtql = msgbytes;
 		}
-		err = verify_area (VERIFY_WRITE, buf, sizeof (struct msginfo));
-		if (err)
-			goto out;
-		copy_to_user (buf, &msginfo, sizeof(struct msginfo));
+
+		err = -EFAULT; 
+		if (copy_to_user (buf, &msginfo, sizeof(struct msginfo)))
+			goto out; 
 		err = max_msqid;
 		goto out;
 	}
 	case MSG_STAT:
 		if (!buf)
-			goto out;
-		err = verify_area (VERIFY_WRITE, buf, sizeof (*buf));
-		if (err)
 			goto out;
 		err = -EINVAL;
 		if (msqid > max_msqid)
@@ -427,22 +404,20 @@ asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 		tbuf.msg_qbytes = msq->msg_qbytes;
 		tbuf.msg_lspid  = msq->msg_lspid;
 		tbuf.msg_lrpid  = msq->msg_lrpid;
-		copy_to_user (buf, &tbuf, sizeof(*buf));
+		err = -EFAULT;
+		if (copy_to_user (buf, &tbuf, sizeof(*buf)))
+			goto out; 
 		err = id;
 		goto out;
 	case IPC_SET:
 		if (!buf)
 			goto out;
-		err = verify_area (VERIFY_READ, buf, sizeof (*buf));
-		if (err)
-			goto out;
-		copy_from_user (&tbuf, buf, sizeof (*buf));
+		err = -EFAULT; 
+		if (!copy_from_user (&tbuf, buf, sizeof (*buf)))
+			err = 0; 
 		break;
 	case IPC_STAT:
 		if (!buf)
-			goto out;
-		err = verify_area (VERIFY_WRITE, buf, sizeof(*buf));
-		if (err)
 			goto out;
 		break;
 	}
@@ -471,8 +446,9 @@ asmlinkage int sys_msgctl (int msqid, int cmd, struct msqid_ds *buf)
 		tbuf.msg_qbytes = msq->msg_qbytes;
 		tbuf.msg_lspid  = msq->msg_lspid;
 		tbuf.msg_lrpid  = msq->msg_lrpid;
-		copy_to_user (buf, &tbuf, sizeof (*buf));
-		err = 0;
+		err = -EFAULT;
+		if (!copy_to_user (buf, &tbuf, sizeof (*buf)))
+			err = 0;
 		goto out;
 	case IPC_SET:
 		err = -EPERM;

@@ -564,7 +564,7 @@ static int lp_open(struct inode * inode, struct file * file)
 		return -ENXIO;
 	if ((LP_F(minor) & LP_EXIST) == 0)
 		return -ENXIO;
-	if (test_and_set_bit(LP_BUSY_BIT_POS, &LP_F(minor)) & LP_BUSY)
+	if (test_and_set_bit(LP_BUSY_BIT_POS, &LP_F(minor)))
 		return -EBUSY;
 
 	MOD_INC_USE_COUNT;

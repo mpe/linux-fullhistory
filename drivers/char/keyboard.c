@@ -11,8 +11,8 @@
  * Diacriticals redone & other small changes, aeb@cwi.nl, June 1993
  * Added decr/incr_console, dynamic keymaps, Unicode support,
  * dynamic function/string keys, led setting,  Sept 1994
- *
  * `Sticky' modifier keys, 951006.
+ *
  * 11-11-96: SAK should now work in the raw mode (Martin Mares)
  * 
  * Modified to provide 'generic' keyboard support by Hamish Macdonald
@@ -590,6 +590,7 @@ unsigned char handle_diacr(unsigned char ch)
 	if (ch == ' ' || ch == d)
 		return d;
 
+	put_queue(d);
 	return ch;
 }
 

@@ -18,6 +18,7 @@ struct shaper
 {
 	struct sk_buff_head sendq;
 	__u32 bytespertick;
+	__u32 bitspersec;
 	__u32 shapelatency;
 	__u32 shapeclock;
 	__u32 recovery;		/* Time we can next clock a packet out on
@@ -44,6 +45,8 @@ struct shaper
 
 #define SHAPER_SET_DEV		0x0001
 #define SHAPER_SET_SPEED	0x0002
+#define SHAPER_GET_DEV		0x0003
+#define SHAPER_GET_SPEED	0x0004
 
 struct shaperconf
 {

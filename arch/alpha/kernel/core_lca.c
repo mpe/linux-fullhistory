@@ -1,5 +1,7 @@
 /*
- * Code common to all LCA chips.
+ *	linux/arch/alpha/kernel/core_lca.c
+ *
+ * Code common to all LCA core logic chips.
  *
  * Written by David Mosberger (davidm@cs.arizona.edu) with some code
  * taken from Dave Rusling's (david.rusling@reo.mts.dec.com) 32-bit
@@ -9,18 +11,23 @@
 #include <linux/config.h>
 #include <linux/types.h>
 #include <linux/pci.h>
+#include <linux/init.h>
+#include <linux/tty.h>
 
 #include <asm/ptrace.h>
 #include <asm/system.h>
-#include <asm/io.h>
 #include <asm/smp.h>
+
+#define __EXTERN_INLINE inline
+#include <asm/io.h>
+#include <asm/core_lca.h>
+#undef __EXTERN_INLINE
+
+#include "proto.h"
 
 /*
  * BIOS32-style PCI interface:
  */
-
-#define vulp	volatile unsigned long *
-#define vuip	volatile unsigned int *
 
 /*
  * Machine check reasons.  Defined according to PALcode sources
@@ -38,6 +45,7 @@
 #define MCHK_K_DCPERR		0x0092
 #define MCHK_K_ICPERR		0x0094
 
+
 /*
  * Platform-specific machine-check reasons:
  */
@@ -45,10 +53,6 @@
 #define MCHK_K_SIO_IOCHK	0x206	/* all platforms so far */
 #define MCHK_K_DCSR		0x208	/* all but Noname */
 
-#ifdef CONFIG_ALPHA_SRM_SETUP
-unsigned int LCA_DMA_WIN_BASE = LCA_DMA_WIN_BASE_DEFAULT;
-unsigned int LCA_DMA_WIN_SIZE = LCA_DMA_WIN_SIZE_DEFAULT;
-#endif /* SRM_SETUP */
 
 /*
  * Given a bus, device, and function number, compute resulting
@@ -91,8 +95,9 @@ unsigned int LCA_DMA_WIN_SIZE = LCA_DMA_WIN_SIZE_DEFAULT;
  *	doesn't get shifted by 2 bits as we want to "drop" the bottom two
  *	bits.
  */
-static int mk_conf_addr(unsigned char bus, unsigned char device_fn,
-			unsigned char where, unsigned long *pci_addr)
+
+static int
+mk_conf_addr(u8 bus, u8 device_fn, u8 where, unsigned long *pci_addr)
 {
 	unsigned long addr;
 
@@ -100,7 +105,7 @@ static int mk_conf_addr(unsigned char bus, unsigned char device_fn,
 		int device = device_fn >> 3;
 		int func = device_fn & 0x7;
 
-		/* type 0 configuration cycle: */
+		/* Type 0 configuration cycle.  */
 
 		if (device > 12) {
 			return -1;
@@ -109,7 +114,7 @@ static int mk_conf_addr(unsigned char bus, unsigned char device_fn,
 		*(vulp)LCA_IOC_CONF = 0;
 		addr = (1 << (11 + device)) | (func << 8) | where;
 	} else {
-		/* type 1 configuration cycle: */
+		/* Type 1 configuration cycle.  */
 		*(vulp)LCA_IOC_CONF = 1;
 		addr = (bus << 16) | (device_fn << 8) | where;
 	}
@@ -117,8 +122,8 @@ static int mk_conf_addr(unsigned char bus, unsigned char device_fn,
 	return 0;
 }
 
-
-static unsigned int conf_read(unsigned long addr)
+static unsigned int
+conf_read(unsigned long addr)
 {
 	unsigned long flags, code, stat0;
 	unsigned int value;
@@ -126,13 +131,12 @@ static unsigned int conf_read(unsigned long addr)
 	save_flags(flags);
 	cli();
 
-	/* reset status register to avoid loosing errors: */
+	/* Reset status register to avoid loosing errors.  */
 	stat0 = *(vulp)LCA_IOC_STAT0;
 	*(vulp)LCA_IOC_STAT0 = stat0;
 	mb();
 
-	/* access configuration space: */
-
+	/* Access configuration space.  */
 	value = *(vuip)addr;
 	draina();
 
@@ -144,10 +148,12 @@ static unsigned int conf_read(unsigned long addr)
 			printk("lca.c:conf_read: got stat0=%lx\n", stat0);
 		}
 
-		/* reset error status: */
+		/* Reset error status.  */
 		*(vulp)LCA_IOC_STAT0 = stat0;
 		mb();
-		wrmces(0x7);			/* reset machine check */
+
+		/* Reset machine check.  */
+		wrmces(0x7);
 
 		value = 0xffffffff;
 	}
@@ -155,21 +161,20 @@ static unsigned int conf_read(unsigned long addr)
 	return value;
 }
 
-
-static void conf_write(unsigned long addr, unsigned int value)
+static void
+conf_write(unsigned long addr, unsigned int value)
 {
 	unsigned long flags, code, stat0;
 
 	save_flags(flags);	/* avoid getting hit by machine check */
 	cli();
 
-	/* reset status register to avoid loosing errors: */
+	/* Reset status register to avoid loosing errors.  */
 	stat0 = *(vulp)LCA_IOC_STAT0;
 	*(vulp)LCA_IOC_STAT0 = stat0;
 	mb();
 
-	/* access configuration space: */
-
+	/* Access configuration space.  */
 	*(vuip)addr = value;
 	draina();
 
@@ -181,163 +186,170 @@ static void conf_write(unsigned long addr, unsigned int value)
 			printk("lca.c:conf_write: got stat0=%lx\n", stat0);
 		}
 
-		/* reset error status: */
+		/* Reset error status.  */
 		*(vulp)LCA_IOC_STAT0 = stat0;
 		mb();
-		wrmces(0x7);			/* reset machine check */
+
+		/* Reset machine check. */
+		wrmces(0x7);
 	}
 	restore_flags(flags);
 }
 
-
-int pcibios_read_config_byte (unsigned char bus, unsigned char device_fn,
-			      unsigned char where, unsigned char *value)
+int
+lca_pcibios_read_config_byte (u8 bus, u8 device_fn, u8 where, u8 *value)
 {
 	unsigned long addr = LCA_CONF;
 	unsigned long pci_addr;
 
 	*value = 0xff;
 
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr) < 0) {
-		return PCIBIOS_SUCCESSFUL;
-	}
+	if (mk_conf_addr(bus, device_fn, where, &pci_addr))
+		return PCIBIOS_DEVICE_NOT_FOUND;
+
 	addr |= (pci_addr << 5) + 0x00;
 	*value = conf_read(addr) >> ((where & 3) * 8);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-
-int pcibios_read_config_word (unsigned char bus, unsigned char device_fn,
-			      unsigned char where, unsigned short *value)
+int 
+lca_pcibios_read_config_word (u8 bus, u8 device_fn, u8 where, u16 *value)
 {
 	unsigned long addr = LCA_CONF;
 	unsigned long pci_addr;
 
 	*value = 0xffff;
 
-	if (where & 0x1) {
+	if (where & 0x1)
 		return PCIBIOS_BAD_REGISTER_NUMBER;
-	}
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr)) {
-		return PCIBIOS_SUCCESSFUL;
-	}
+	if (mk_conf_addr(bus, device_fn, where, &pci_addr))
+		return PCIBIOS_DEVICE_NOT_FOUND;
+
 	addr |= (pci_addr << 5) + 0x08;
 	*value = conf_read(addr) >> ((where & 3) * 8);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-
-int pcibios_read_config_dword (unsigned char bus, unsigned char device_fn,
-			       unsigned char where, unsigned int *value)
+int
+lca_pcibios_read_config_dword (u8 bus, u8 device_fn, u8 where, u32 *value)
 {
 	unsigned long addr = LCA_CONF;
 	unsigned long pci_addr;
 
 	*value = 0xffffffff;
-	if (where & 0x3) {
+	if (where & 0x3)
 		return PCIBIOS_BAD_REGISTER_NUMBER;
-	}
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr)) {
-		return PCIBIOS_SUCCESSFUL;
-	}
+	if (mk_conf_addr(bus, device_fn, where, &pci_addr))
+		return PCIBIOS_DEVICE_NOT_FOUND;
+
 	addr |= (pci_addr << 5) + 0x18;
 	*value = conf_read(addr);
 	return PCIBIOS_SUCCESSFUL;
 }
 
-
-int pcibios_write_config_byte (unsigned char bus, unsigned char device_fn,
-			       unsigned char where, unsigned char value)
+int 
+lca_pcibios_write_config_byte (u8 bus, u8 device_fn, u8 where, u8 value)
 {
 	unsigned long addr = LCA_CONF;
 	unsigned long pci_addr;
 
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr) < 0) {
-		return PCIBIOS_SUCCESSFUL;
-	}
+	if (mk_conf_addr(bus, device_fn, where, &pci_addr))
+		return PCIBIOS_DEVICE_NOT_FOUND;
+
 	addr |= (pci_addr << 5) + 0x00;
 	conf_write(addr, value << ((where & 3) * 8));
 	return PCIBIOS_SUCCESSFUL;
 }
 
-
-int pcibios_write_config_word (unsigned char bus, unsigned char device_fn,
-			       unsigned char where, unsigned short value)
+int
+lca_pcibios_write_config_word (u8 bus, u8 device_fn, u8 where, u16 value)
 {
 	unsigned long addr = LCA_CONF;
 	unsigned long pci_addr;
 
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr) < 0) {
-		return PCIBIOS_SUCCESSFUL;
-	}
+	if (where & 0x1)
+		return PCIBIOS_BAD_REGISTER_NUMBER;
+	if (mk_conf_addr(bus, device_fn, where, &pci_addr))
+		return PCIBIOS_DEVICE_NOT_FOUND;
+
 	addr |= (pci_addr << 5) + 0x08;
 	conf_write(addr, value << ((where & 3) * 8));
 	return PCIBIOS_SUCCESSFUL;
 }
 
-
-int pcibios_write_config_dword (unsigned char bus, unsigned char device_fn,
-				unsigned char where, unsigned int value)
+int 
+lca_pcibios_write_config_dword (u8 bus, u8 device_fn, u8 where, u32 value)
 {
 	unsigned long addr = LCA_CONF;
 	unsigned long pci_addr;
 
-	if (mk_conf_addr(bus, device_fn, where, &pci_addr) < 0) {
-		return PCIBIOS_SUCCESSFUL;
-	}
+	if (where & 0x3)
+		return PCIBIOS_BAD_REGISTER_NUMBER;
+	if (mk_conf_addr(bus, device_fn, where, &pci_addr))
+		return PCIBIOS_DEVICE_NOT_FOUND;
+
 	addr |= (pci_addr << 5) + 0x18;
 	conf_write(addr, value << ((where & 3) * 8));
 	return PCIBIOS_SUCCESSFUL;
 }
 
-
-unsigned long lca_init(unsigned long mem_start, unsigned long mem_end)
+void __init
+lca_init_arch(unsigned long *mem_start, unsigned long *mem_end)
 {
-#ifdef CONFIG_ALPHA_SRM_SETUP
-	/* check window 0 for enabled and mapped to 0 */
-	if ((*(vulp)LCA_IOC_W_BASE0 & (1UL<<33)) &&
-	    (*(vulp)LCA_IOC_T_BASE0 == 0))
+	switch (alpha_use_srm_setup)
 	{
-	  LCA_DMA_WIN_BASE = *(vulp)LCA_IOC_W_BASE0 & 0xffffffffUL;
-	  LCA_DMA_WIN_SIZE = *(vulp)LCA_IOC_W_MASK0 & 0xffffffffUL;
-	  LCA_DMA_WIN_SIZE += 1;
-#if 1
-	  printk("lca_init: using Window 0 settings\n");
-	  printk("lca_init: BASE 0x%lx MASK 0x%lx TRANS 0x%lx\n",
-		 *(vulp)LCA_IOC_W_BASE0,
-		 *(vulp)LCA_IOC_W_MASK0,
-		 *(vulp)LCA_IOC_T_BASE0);
+	default:
+#if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM_SETUP)
+		/* Check window 0 for enabled and mapped to 0.  */
+		if ((*(vulp)LCA_IOC_W_BASE0 & (1UL<<33))
+		    && (*(vulp)LCA_IOC_T_BASE0 == 0)) {
+			LCA_DMA_WIN_BASE = *(vulp)LCA_IOC_W_BASE0 & 0xffffffffUL;
+			LCA_DMA_WIN_SIZE = *(vulp)LCA_IOC_W_MASK0 & 0xffffffffUL;
+			LCA_DMA_WIN_SIZE += 1;
+#if 0
+			printk("lca_init: using Window 0 settings\n");
+			printk("lca_init: BASE 0x%lx MASK 0x%lx TRANS 0x%lx\n",
+			       *(vulp)LCA_IOC_W_BASE0,
+			       *(vulp)LCA_IOC_W_MASK0,
+			       *(vulp)LCA_IOC_T_BASE0);
 #endif
-	}
-	else	/* check window 2 for enabled and mapped to 0 */
-	if ((*(vulp)LCA_IOC_W_BASE1 & (1UL<<33)) &&
-	    (*(vulp)LCA_IOC_T_BASE1 == 0))
-	{
-	  LCA_DMA_WIN_BASE = *(vulp)LCA_IOC_W_BASE1 & 0xffffffffUL;
-	  LCA_DMA_WIN_SIZE = *(vulp)LCA_IOC_W_MASK1 & 0xffffffffUL;
-	  LCA_DMA_WIN_SIZE += 1;
-#if 1
-	  printk("lca_init: using Window 1 settings\n");
-	  printk("lca_init: BASE 0x%lx MASK 0x%lx TRANS 0x%lx\n",
-		 *(vulp)LCA_IOC_W_BASE1,
-		 *(vulp)LCA_IOC_W_MASK1,
-		 *(vulp)LCA_IOC_T_BASE1);
-#endif
-	}
-	else /* we must use our defaults... */
-#endif /* SRM_SETUP */
-	{
-	/*
-	 * Set up the PCI->physical memory translation windows.
-	 * For now, window 1 is disabled.  In the future, we may
-	 * want to use it to do scatter/gather DMA.  Window 0
-	 * goes at 1 GB and is 1 GB large.
-	 */
-	*(vulp)LCA_IOC_W_BASE1 = 0UL<<33;
+			break;
+		}
 
-	*(vulp)LCA_IOC_W_BASE0 = 1UL<<33 | LCA_DMA_WIN_BASE;
-	*(vulp)LCA_IOC_W_MASK0 = LCA_DMA_WIN_SIZE - 1;
-	*(vulp)LCA_IOC_T_BASE0 = 0;
+		/* Check window 2 for enabled and mapped to 0.  */
+		if ((*(vulp)LCA_IOC_W_BASE1 & (1UL<<33))
+		    && (*(vulp)LCA_IOC_T_BASE1 == 0)) {
+			LCA_DMA_WIN_BASE = *(vulp)LCA_IOC_W_BASE1 & 0xffffffffUL;
+			LCA_DMA_WIN_SIZE = *(vulp)LCA_IOC_W_MASK1 & 0xffffffffUL;
+			LCA_DMA_WIN_SIZE += 1;
+#if 1
+			printk("lca_init: using Window 1 settings\n");
+			printk("lca_init: BASE 0x%lx MASK 0x%lx TRANS 0x%lx\n",
+			       *(vulp)LCA_IOC_W_BASE1,
+			       *(vulp)LCA_IOC_W_MASK1,
+			       *(vulp)LCA_IOC_T_BASE1);
+#endif
+			break;
+		}
+
+		/* Otherwise, we must use our defaults.  */
+		LCA_DMA_WIN_BASE = LCA_DMA_WIN_BASE_DEFAULT;
+		LCA_DMA_WIN_SIZE = LCA_DMA_WIN_SIZE_DEFAULT;
+#endif
+	case 0:
+		/*
+		 * Set up the PCI->physical memory translation windows.
+		 * For now, window 1 is disabled.  In the future, we may
+		 * want to use it to do scatter/gather DMA. 
+		 *
+		 * Window 0 goes at 1 GB and is 1 GB large.
+		 */
+		*(vulp)LCA_IOC_W_BASE1 = 0UL<<33;
+
+		*(vulp)LCA_IOC_W_BASE0 = 1UL<<33 | LCA_DMA_WIN_BASE_DEFAULT;
+		*(vulp)LCA_IOC_W_MASK0 = LCA_DMA_WIN_SIZE_DEFAULT - 1;
+		*(vulp)LCA_IOC_T_BASE0 = 0;
+		break;
 	}
 
 	/*
@@ -346,9 +358,7 @@ unsigned long lca_init(unsigned long mem_start, unsigned long mem_end)
 	 * data parity errors.
 	 */
 	*(vulp)LCA_IOC_PAR_DIS = 1UL<<5;
-	return mem_start;
 }
-
 
 /*
  * Constants used during machine-check handling.  I suppose these
@@ -374,12 +384,12 @@ unsigned long lca_init(unsigned long mem_start, unsigned long mem_end)
 #define IOC_LOST	(  1<<5)
 #define IOC_P_NBR	((__u32) ~((1<<13) - 1))
 
-
-void mem_error (unsigned long esr, unsigned long ear)
+static void
+mem_error (unsigned long esr, unsigned long ear)
 {
 	printk("    %s %s error to %s occurred at address %x\n",
-	       *((esr & ESR_CEE) ? "Correctable" :
-		 (esr & ESR_UEE) ? "Uncorrectable" : "A"),
+	       ((esr & ESR_CEE) ? "Correctable" :
+		(esr & ESR_UEE) ? "Uncorrectable" : "A"),
 	       (esr & ESR_WRE) ? "write" : "read",
 	       (esr & ESR_SOR) ? "memory" : "b-cache",
 	       (unsigned) (ear & 0x1ffffff8));
@@ -397,8 +407,8 @@ void mem_error (unsigned long esr, unsigned long ear)
 	}
 }
 
-
-void ioc_error (__u32 stat0, __u32 stat1)
+static void
+ioc_error (__u32 stat0, __u32 stat1)
 {
 	static const char * const pci_cmd[] = {
 		"Interrupt Acknowledge", "Special", "I/O Read", "I/O Write",
@@ -428,9 +438,9 @@ void ioc_error (__u32 stat0, __u32 stat1)
 	}
 }
 
-
-void lca_machine_check (unsigned long vector, unsigned long la,
-			struct pt_regs *regs)
+void
+lca_machine_check (unsigned long vector, unsigned long la,
+		   struct pt_regs *regs)
 {
 	unsigned long * ptr;
 	const char * reason;
@@ -441,6 +451,7 @@ void lca_machine_check (unsigned long vector, unsigned long la,
 	printk(KERN_CRIT "lca: machine check (la=0x%lx,pc=0x%lx)\n",
 	       la, regs->pc);
 	el.c = (struct el_common *) la;
+
 	/*
 	 * The first quadword after the common header always seems to
 	 * be the machine check reason---don't know why this isn't
@@ -505,7 +516,7 @@ void lca_machine_check (unsigned long vector, unsigned long la,
 		printk(KERN_CRIT "  Unknown errorlog size %d\n", el.c->size);
 	}
 
-	/* dump the logout area to give all info: */
+	/* Dump the logout area to give all info.  */
 
 	ptr = (unsigned long *) la;
 	for (i = 0; i < el.c->size / sizeof(long); i += 2) {
@@ -524,11 +535,11 @@ lca_clock_print(void)
 {
         long    pmr_reg;
 
-        pmr_reg = READ_PMR;
+        pmr_reg = LCA_READ_PMR;
 
         printk("Status of clock control:\n");
-        printk("\tPrimary clock divisor\t0x%x\n", GET_PRIMARY(pmr_reg));
-        printk("\tOverride clock divisor\t0x%x\n", GET_OVERRIDE(pmr_reg));
+        printk("\tPrimary clock divisor\t0x%lx\n", LCA_GET_PRIMARY(pmr_reg));
+        printk("\tOverride clock divisor\t0x%lx\n", LCA_GET_OVERRIDE(pmr_reg));
         printk("\tInterrupt override is %s\n",
 	       (pmr_reg & LCA_PMR_INTO) ? "on" : "off"); 
         printk("\tDMA override is %s\n",
@@ -541,8 +552,8 @@ lca_get_clock(void)
 {
         long    pmr_reg;
 
-        pmr_reg = READ_PMR;
-        return(GET_PRIMARY(pmr_reg));
+        pmr_reg = LCA_READ_PMR;
+        return(LCA_GET_PRIMARY(pmr_reg));
 
 }
 
@@ -551,9 +562,9 @@ lca_clock_fiddle(int divisor)
 {
         long    pmr_reg;
 
-        pmr_reg = READ_PMR;
-        SET_PRIMARY_CLOCK(pmr_reg, divisor);
+        pmr_reg = LCA_READ_PMR;
+        LCA_SET_PRIMARY_CLOCK(pmr_reg, divisor);
 	/* lca_norm_clock = divisor; */
-        WRITE_PMR(pmr_reg);
+        LCA_WRITE_PMR(pmr_reg);
         mb();
 }

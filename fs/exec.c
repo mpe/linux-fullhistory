@@ -392,7 +392,7 @@ end_readexec:
 static int exec_mmap(void)
 {
 	struct mm_struct * mm, * old_mm;
-	int retval;
+	int retval, nr;
 
 	if (current->mm->count == 1) {
 		flush_cache_mm(current->mm);
@@ -411,9 +411,16 @@ static int exec_mmap(void)
 	mm = mm_alloc();
 	if (!mm)
 		goto fail_nomem;
+
 	mm->cpu_vm_mask = (1UL << smp_processor_id());
 	mm->total_vm = 0;
 	mm->rss = 0;
+	/*
+	 * Make sure we have a private ldt if needed ...
+	 */
+	nr = current->tarray_ptr - &task[0]; 
+	copy_segments(nr, current, mm);
+
 	old_mm = current->mm;
 	current->mm = mm;
 	retval = new_page_tables(current);
@@ -431,6 +438,8 @@ fail_restore:
 	/* The pgd belongs to the parent ... don't free it! */
 	mm->pgd = NULL;
 	current->mm = old_mm;
+	/* restore the ldt for this task */
+	copy_segments(nr, current, NULL);
 	mmput(mm);
 
 fail_nomem:

@@ -241,9 +241,6 @@ is386:	pushl %ecx		# restore original EFLAGS
 #endif
 	xorl %eax,%eax
 	lldt %ax
-	pushl %eax		# These are the parameters to main :-)
-	pushl %eax
-	pushl %eax
 	cld			# gcc2 wants the direction flag cleared at all times
 	call SYMBOL_NAME(start_kernel)
 L6:

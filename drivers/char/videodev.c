@@ -108,7 +108,6 @@ static ssize_t video_read(struct file *file,
 }
 
 
-
 /*
  *	Write for now does nothing. No reason it shouldnt do overlay setting
  *	for some boards I guess..
@@ -120,6 +119,21 @@ static ssize_t video_write(struct file *file, const char *buf,
 	struct video_device *vfl=video_device[MINOR(file->f_dentry->d_inode->i_rdev)];
 	if(vfl->write)
 		return vfl->write(vfl, buf, count, file->f_flags&O_NONBLOCK);
+	else
+		return 0;
+}
+
+
+/*
+ *	Poll to see if we're readable, can probably be used for timing on incoming
+ *  frames, etc..
+ */
+
+static unsigned int video_poll(struct file *file, poll_table * wait)
+{
+	struct video_device *vfl=video_device[MINOR(file->f_dentry->d_inode->i_rdev)];
+	if(vfl->poll)
+		return vfl->poll(vfl, file, wait);
 	else
 		return 0;
 }
@@ -297,7 +311,7 @@ static struct file_operations video_fops=
 	video_read,
 	video_write,
 	NULL,	/* readdir */
-	NULL,	/* poll */
+	video_poll,	/* poll */
 	video_ioctl,
 	video_mmap,
 	video_open,

@@ -156,6 +156,7 @@ static void * rvmalloc(unsigned long size)
 	mem=vmalloc(size);
 	if (mem) 
 	{
+		memset(mem, 0, size); /* Clear the ram out, no junk to the user */
 	        adr=(unsigned long) mem;
 		while (size > 0) 
                 {
@@ -642,7 +643,16 @@ int palette2fmt[] = {
        BT848_COLOR_FMT_RGB24,
        BT848_COLOR_FMT_RGB32,
        BT848_COLOR_FMT_RGB15,
+       BT848_COLOR_FMT_YUY2,
+       BT848_COLOR_FMT_BtYUV,
+       -1,
+       -1,
+       -1,
+       BT848_COLOR_FMT_RAW,
+       BT848_COLOR_FMT_YCrCb422,
+       BT848_COLOR_FMT_YCrCb411,
 };
+#define PALETTEFMT_MAX 11
 
 static int  make_rawrisctab(struct bttv *btv, unsigned int *ro,
                             unsigned int *re, unsigned int *vbuf)
@@ -1044,13 +1054,18 @@ static int vgrab(struct bttv *btv, struct video_mmap *mp)
 	 */
 	 
 	vbuf=(unsigned int *)(btv->fbuffer+BTTV_MAX_FBUF*mp->frame);
-	if (!(btread(BT848_DSTATUS)&BT848_DSTATUS_HLOC))
-                return -EAGAIN;
+/*	if (!(btread(BT848_DSTATUS)&BT848_DSTATUS_HLOC))
+                return -EAGAIN; */
 	ro=btv->grisc+(((btv->grabcount++)&1) ? 4096 :0);
 	re=ro+2048;
 	btv->gwidth=mp->width;
 	btv->gheight=mp->height;
-	btv->gfmt=mp->format;
+	if (mp->format > PALETTEFMT_MAX)
+		return -EINVAL;
+	btv->gfmt=palette2fmt[mp->format];
+	if(btv->gfmt==-1)
+		return -EINVAL;
+		
 	make_vrisctab(btv, ro, re, vbuf, btv->gwidth, btv->gheight, btv->gfmt);
 	/* bt848_set_risc_jmps(btv); */
 	btor(3, BT848_CAP_CTL);
@@ -1561,6 +1576,7 @@ static int bttv_ioctl(struct video_device *dev, unsigned int cmd, void *arg)
 			v.rangehigh=0xFFFFFFFF;
 			v.flags=VIDEO_TUNER_PAL|VIDEO_TUNER_NTSC|VIDEO_TUNER_SECAM;
 			v.mode = btv->win.norm;
+			v.signal = (btread(BT848_DSTATUS)&BT848_DSTATUS_HLOC) ? 0xFFFF : 0;
 			if(copy_to_user(arg,&v,sizeof(v)))
 				return -EFAULT;
 			return 0;
@@ -1927,6 +1943,7 @@ static struct video_device bttv_template=
 	bttv_close,
 	bttv_read,
 	bttv_write,
+	NULL,			/* poll */
 	bttv_ioctl,
 	bttv_mmap,
 	bttv_init_done,
@@ -1980,6 +1997,20 @@ static long vbi_read(struct video_device *v, char *buf, unsigned long count,
 	return count;
 }
 
+static unsigned int vbi_poll(struct video_device *dev, struct file *file,
+	poll_table *wait)
+{
+	struct bttv *btv=(struct bttv *)(dev-2);
+	unsigned int mask = 0;
+
+	poll_wait(file, &btv->vbiq, wait);
+
+	if (btv->vbip < VBIBUF_SIZE)
+		mask |= (POLLIN | POLLRDNORM);
+
+	return mask;
+}
+
 static int vbi_open(struct video_device *dev, int flags)
 {
 	struct bttv *btv=(struct bttv *)(dev-2);
@@ -2017,6 +2048,7 @@ static struct video_device vbi_template=
 	vbi_close,
 	vbi_read,
 	bttv_write,
+	vbi_poll,
 	vbi_ioctl,
 	NULL,	/* no mmap yet */
 	bttv_init_done,
@@ -2113,6 +2145,7 @@ static struct video_device radio_template=
 	radio_close,
 	radio_read,          /* just returns -EINVAL */
 	bttv_write,          /* just returns -EINVAL */
+	NULL,                /* no poll */
 	radio_ioctl,
 	NULL,	             /* no mmap */
 	bttv_init_done,      /* just returns 0 */
@@ -2176,7 +2209,7 @@ static int find_vga(void)
 	for (dev = pci_devices; dev != NULL; dev = dev->next) 
 	{
 		if (dev->class != PCI_CLASS_NOT_DEFINED_VGA &&
-			(dev->class) >> 8 != PCI_BASE_CLASS_DISPLAY) 
+			((dev->class) >> 16 != PCI_BASE_CLASS_DISPLAY))
 		{
 			continue;
 		}
@@ -2196,40 +2229,40 @@ static int find_vga(void)
 				badr=vbs[i].badr;
 				break;
 			}
-			if (!badr) 
-			{
-				printk(KERN_ERR "bttv: Unknown video memory base address.\n");
-				continue;
-			}
-			pci_read_config_dword(dev, badr, &vidadr);
-			if (vidadr & PCI_BASE_ADDRESS_SPACE_IO) 
-			{
-				printk(KERN_ERR "bttv: Memory seems to be I/O memory.\n");
-				printk(KERN_ERR "bttv: Check entry for your card type in bttv.c vidbases struct.\n");
-				continue;
-			}
-			vidadr &= PCI_BASE_ADDRESS_MEM_MASK;
-			if (!vidadr) 
-			{
-				printk(KERN_ERR "bttv: Memory @ 0, must be something wrong!");
-				continue;
-			}
-      
-			if (dev->vendor == PCI_VENDOR_ID_DEC &&
-				dev->device == PCI_DEVICE_ID_DEC_TGA) 
-			{
-				tga_type = (readl((unsigned long)vidadr) >> 12) & 0x0f;
-				if (tga_type != 0 && tga_type != 1 && tga_type != 3) 
-				{
-					printk(KERN_ERR "bttv: TGA type (0x%x) unrecognized!\n", tga_type);
-					found--;
-				}
-				vidadr+=dec_offsets[tga_type];
-			}
-			DEBUG(printk(KERN_DEBUG "bttv: memory @ 0x%08x, ", vidadr));
-			DEBUG(printk(KERN_DEBUG "devfn: 0x%04x.\n", dev->devfn));
-			found++;
 		}
+		if (!badr) 
+		{
+			printk(KERN_ERR "bttv: Unknown video memory base address.\n");
+			continue;
+		}
+		pci_read_config_dword(dev, badr, &vidadr);
+		if (vidadr & PCI_BASE_ADDRESS_SPACE_IO) 
+		{
+			printk(KERN_ERR "bttv: Memory seems to be I/O memory.\n");
+			printk(KERN_ERR "bttv: Check entry for your card type in bttv.c vidbases struct.\n");
+			continue;
+		}
+		vidadr &= PCI_BASE_ADDRESS_MEM_MASK;
+		if (!vidadr) 
+		{
+			printk(KERN_ERR "bttv: Memory @ 0, must be something wrong!");
+			continue;
+		}
+     
+		if (dev->vendor == PCI_VENDOR_ID_DEC &&
+			dev->device == PCI_DEVICE_ID_DEC_TGA) 
+		{
+			tga_type = (readl((unsigned long)vidadr) >> 12) & 0x0f;
+			if (tga_type != 0 && tga_type != 1 && tga_type != 3) 
+			{
+				printk(KERN_ERR "bttv: TGA type (0x%x) unrecognized!\n", tga_type);
+				found--;
+			}
+			vidadr+=dec_offsets[tga_type];
+		}
+		DEBUG(printk(KERN_DEBUG "bttv: memory @ 0x%08x, ", vidadr));
+		DEBUG(printk(KERN_DEBUG "devfn: 0x%04x.\n", dev->devfn));
+		found++;
 	}
   
 	if (vidmem)
@@ -2548,6 +2581,8 @@ static int init_bt848(int i)
 	if (!(btv->grisc=(unsigned int *) kmalloc(32768, GFP_KERNEL)))
 		return -1;
 
+	memset(btv->vbibuf, 0, VBIBUF_SIZE); /* We don't want to return random
+	                                        memory to the user */
 	btv->fbuffer=NULL;
 
 	bt848_muxsel(btv, 1);

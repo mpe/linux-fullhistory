@@ -34,6 +34,7 @@
 #include <linux/inet.h>
 #include <linux/etherdevice.h>
 #include <linux/if_arp.h>
+#include <linux/wireless.h>
 #include <linux/skbuff.h>
 #include <net/sock.h>
 #include <net/inet_common.h>
@@ -47,6 +48,8 @@
 
 static struct proto_ops econet_ops;
 static struct sock *econet_sklist;
+
+static spinlock_t aun_queue_lock;
 
 #ifdef CONFIG_ECONET_AUNUDP
 static struct socket *udpsock;
@@ -343,7 +346,7 @@ static int econet_sendmsg(struct socket *sock, struct msghdr *msg, int len,
 		
 		eb->cookie = saddr->cookie;
 		eb->sec = *saddr;
-		eb->sent - ec_tx_done;
+		eb->sent = ec_tx_done;
 
 		if (dev->hard_header) {
 			int res;
@@ -965,7 +968,6 @@ static void aun_data_available(struct sock *sk, int slen)
  *	drop the packet.
  */
 
-static spinlock_t aun_queue_lock;
 
 static void ab_cleanup(unsigned long h)
 {

@@ -281,10 +281,8 @@ static int read_long(struct task_struct * tsk, unsigned long addr,
 	struct vm_area_struct * vma = find_extend_vma(tsk, addr);
 
 	DBG(DBG_MEM_ALL, ("in read_long\n"));
-	if (!vma) {
-	        printk("Unable to find vma for addr 0x%lx\n",addr);
+	if (!vma)
 		return -EIO;
-	}
 	if ((addr & ~PAGE_MASK) > (PAGE_SIZE - sizeof(long))) {
 		struct vm_area_struct * vma_high = vma;
 		unsigned long low, align;

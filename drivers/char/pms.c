@@ -893,6 +893,7 @@ struct video_device pms_template=
 	pms_close,
 	pms_read,
 	pms_write,
+	NULL,		/* FIXME - we can use POLL on this board with the irq */
 	pms_ioctl,
 	NULL,
 	pms_init_done,

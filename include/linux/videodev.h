@@ -3,6 +3,8 @@
 
 #ifdef __KERNEL__
 
+#include <linux/poll.h>
+
 struct video_device
 {
 	char name[32];
@@ -14,6 +16,7 @@ struct video_device
 	long (*read)(struct video_device *, char *, unsigned long, int noblock);
 	/* Do we need a write method ? */
 	long (*write)(struct video_device *, const char *, unsigned long, int noblock);
+	unsigned int (*poll)(struct video_device *, struct file *, poll_table *);
 	int (*ioctl)(struct video_device *, unsigned int , void *);
 	int (*mmap)(struct video_device *, const char *, unsigned long);
 	int (*initialize)(struct video_device *);	
@@ -109,6 +112,10 @@ struct video_picture
 #define VIDEO_PALETTE_YUYV	8
 #define VIDEO_PALETTE_UYVY	9	/* The great thing about standards is ... */
 #define VIDEO_PALETTE_YUV420	10
+#define VIDEO_PALETTE_YUV411	11	/* YUV411 capture */
+#define VIDEO_PALETTE_RAW	12	/* RAW capture (BT848) */
+#define VIDEO_PALETTE_YUV422P	13	/* YUV 4:2:2 Planar */
+#define VIDEO_PALETTE_YUV411P	14	/* YUV 4:1:1 Planar */
 };
 
 struct video_audio
@@ -160,7 +167,7 @@ struct video_mmap
 {
 	unsigned int frame;		/* Frame (0 or 1) for double buffer */
 	int height,width;
-	unsigned int format;
+	unsigned int format;	/* should be VIDEO_PALETTE_* */
 };
 
 struct video_key
@@ -205,6 +212,7 @@ struct video_key
 #define VID_HARDWARE_ZOLTRIX	10
 #define VID_HARDWARE_SAA7146    11
 #define VID_HARDWARE_VIDEUM	12	/* Reserved for Winnov videum */
+#define VID_HARDWARE_RTRACK2	13
 
 /*
  *	Initialiser list

@@ -28,6 +28,7 @@
 #include <linux/mman.h>
 #include <linux/elfcore.h>
 #include <linux/reboot.h>
+#include <linux/console.h>
 
 #ifdef CONFIG_RTC
 #include <linux/mc146818rtc.h>
@@ -40,6 +41,9 @@
 #include <asm/pgtable.h>
 #include <asm/hwrpb.h>
 #include <asm/fpu.h>
+
+#include "proto.h"
+#include "bios32.h"
 
 /*
  * Initial task structure. Make this a per-architecture thing,
@@ -62,20 +66,20 @@ union task_union init_task_union __attribute__((section("init_task")))
 /*
  * No need to acquire the kernel lock, we're entirely local..
  */
-asmlinkage int sys_sethae(unsigned long hae, unsigned long a1, unsigned long a2,
-	unsigned long a3, unsigned long a4, unsigned long a5,
-	struct pt_regs regs)
+asmlinkage int
+sys_sethae(unsigned long hae, unsigned long a1, unsigned long a2,
+	   unsigned long a3, unsigned long a4, unsigned long a5,
+	   struct pt_regs regs)
 {
-#if !defined(CONFIG_ALPHA_TSUNAMI)
 	(&regs)->hae = hae;
-#endif
 	return 0;
 }
 
 #ifdef __SMP__
 /* This is being executed in task 0 'user space'. */
 #define resched_needed() 1
-int cpu_idle(void *unused)
+int
+cpu_idle(void *unused)
 {
 	extern volatile int smp_commenced;
 
@@ -90,7 +94,8 @@ int cpu_idle(void *unused)
 	}
 }
 
-asmlinkage int sys_idle(void)
+asmlinkage int
+sys_idle(void)
 {
         if(current->pid != 0)
                 return -EPERM;
@@ -101,7 +106,8 @@ asmlinkage int sys_idle(void)
 
 #else /* __SMP__ */
 
-asmlinkage int sys_idle(void)
+asmlinkage int
+sys_idle(void)
 {
 	int ret = -EPERM;
 
@@ -122,90 +128,101 @@ out:
 }
 #endif /* __SMP__ */
 
-#if defined(CONFIG_ALPHA_SRM_SETUP)
-extern void reset_for_srm(void);	
-extern unsigned long srm_hae;
-#endif
-
-static void finish_shutdown(void)
+void
+generic_kill_arch (int mode, char *restart_cmd)
 {
-#ifdef CONFIG_RTC  /* reset rtc to defaults */
-	unsigned char control;
-	unsigned long flags;
+	/* The following currently only has any effect on SRM.  We should
+	   fix MILO to understand it.  Should be pretty easy.  Also we can
+	   support RESTART2 via the ipc_buffer machinations pictured below,
+	   which SRM ignores.  */
 
-	/* i'm not sure if i really need to disable interrupts here */
-	save_and_cli(flags);
+	if (alpha_using_srm) {
+		struct percpu_struct *cpup;
+		unsigned long flags;
+	
+		cpup = (struct percpu_struct *)
+		  ((unsigned long)hwrpb + hwrpb->processor_offset);
 
- 	/* reset periodic interrupt frequency */
-        CMOS_WRITE(0x26, RTC_FREQ_SELECT);
+		flags = cpup->flags;
 
-	/* turn on periodic interrupts */
-	control = CMOS_READ(RTC_CONTROL);
-	control |= RTC_PIE;
-	CMOS_WRITE(control, RTC_CONTROL);	
-        CMOS_READ(RTC_INTR_FLAGS);
-	restore_flags(flags);
+		/* Clear reason to "default"; clear "bootstrap in progress". */
+		flags &= ~0x00ff0001UL;
+
+		if (mode == LINUX_REBOOT_CMD_RESTART) {
+			if (!restart_cmd) {
+				flags |= 0x00020000UL; /* "cold bootstrap" */
+				cpup->ipc_buffer[0] = 0;
+			} else {
+				flags |=  0x00030000UL; /* "warm bootstrap" */
+				strncpy(cpup->ipc_buffer, restart_cmd,
+					sizeof(cpup->ipc_buffer));
+			}
+		}
+		else {
+			flags |=  0x00040000UL; /* "remain halted" */
+		}
+			
+		cpup->flags = flags;					       
+		mb();						
+
+		if (alpha_use_srm_setup) {
+			reset_for_srm();
+			set_hae(srm_hae);
+		}
+
+#ifdef CONFIG_DUMMY_CONSOLE
+		/* This has the effect of reseting the VGA video origin.  */
+		take_over_console(&dummy_con, 0, MAX_NR_CONSOLES-1, 1);
 #endif
-#if defined(CONFIG_ALPHA_SRM) && defined(CONFIG_ALPHA_ALCOR)
-	/* who said DEC engineer's have no sense of humor? ;-)) */
-	*(int *) GRU_RESET = 0x0000dead;
-	mb();
+	}
+
+#ifdef CONFIG_RTC
+	/* Reset rtc to defaults.  */
+	{
+		unsigned char control;
+		unsigned long flags;
+
+		/* I'm not sure if i really need to disable interrupts here. */
+		save_and_cli(flags);
+
+		/* Reset periodic interrupt frequency.  */
+		CMOS_WRITE(0x26, RTC_FREQ_SELECT);
+
+		/* Turn on periodic interrupts.  */
+		control = CMOS_READ(RTC_CONTROL);
+		control |= RTC_PIE;
+		CMOS_WRITE(control, RTC_CONTROL);	
+		CMOS_READ(RTC_INTR_FLAGS);
+
+		restore_flags(flags);
+	}
 #endif
+
+	if (!alpha_using_srm && mode != LINUX_REBOOT_CMD_RESTART) {
+		/* Unfortunately, since MILO doesn't currently understand
+		   the hwrpb bits above, we can't reliably halt the 
+		   processor and keep it halted.  So just loop.  */
+		return;
+	}
+
 	halt();
 }
 
-void machine_restart(char * __unused)
+void
+machine_restart(char *restart_cmd)
 {
-#if defined(CONFIG_ALPHA_SRM)
-	extern struct hwrpb_struct *hwrpb;
-	struct percpu_struct *cpup;
-	unsigned long flags;
-	
-	cpup = (struct percpu_struct *)
-	  ((unsigned long)hwrpb + hwrpb->processor_offset);
-	flags = cpup->flags;
-	flags &= ~0x0000000000ff0001UL; /* clear reason to "default" */
-	flags |=  0x0000000000020000UL; /* this is "cold bootstrap" */
-/*	flags |=  0x0000000000030000UL; *//* this is "warm bootstrap" */
-	cpup->flags = flags;					       
-	mb();						
-#if defined(CONFIG_ALPHA_SRM_SETUP)
-	reset_for_srm();
-	set_hae(srm_hae);
-#endif
-#endif /* SRM */                                        
-
-	finish_shutdown();
+	alpha_mv.kill_arch(LINUX_REBOOT_CMD_RESTART, restart_cmd);
 }
 
-void machine_halt(void)
+void
+machine_halt(void)
 {
-#if defined(CONFIG_ALPHA_SRM)
-	extern struct hwrpb_struct *hwrpb;
-	struct percpu_struct *cpup;
-	unsigned long flags;
-	
-	cpup = (struct percpu_struct *)
-	  ((unsigned long)hwrpb + hwrpb->processor_offset);
-	flags = cpup->flags;
-	flags &= ~0x0000000000ff0001UL; /* clear reason to "default" */
-	flags |=  0x0000000000040000UL; /* this is "remain halted" */
-	cpup->flags = flags;					       
-	mb();						
-#if defined(CONFIG_ALPHA_SRM_SETUP)
-	reset_for_srm();
-	set_hae(srm_hae);
-#endif
-
-	finish_shutdown();
-#endif /* SRM */                                        
+	alpha_mv.kill_arch(LINUX_REBOOT_CMD_HALT, NULL);
 }
 
 void machine_power_off(void)
 {
-	/* None of the machines we support, at least, has switchable 
-	   power supplies.  */
-	machine_halt();
+	alpha_mv.kill_arch(LINUX_REBOOT_CMD_POWER_OFF, NULL);
 }
 
 void show_regs(struct pt_regs * regs)

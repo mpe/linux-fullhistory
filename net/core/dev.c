@@ -740,21 +740,20 @@ static inline void handle_bridge(struct sk_buff *skb, unsigned short type)
 		 *	recovering the MAC header first.
 		 */
 		
-		int offset=skb->data-skb->mac.raw;
-		cli();
-		skb_push(skb,offset);	/* Put header back on for bridge */
-		if(br_receive_frame(skb))
-		{
-			sti();
+		int offset;
+
+		skb=skb_clone(skb, GFP_ATOMIC);
+		if(skb==NULL)		
 			return;
-		}
-		/*
-		 *	Pull the MAC header off for the copy going to
-		 *	the upper layers.
-		 */
-		skb_pull(skb,offset);
-		sti();
+			
+		offset=skb->data-skb->mac.raw;
+		skb_push(skb,offset);	/* Put header back on for bridge */
+
+		if(br_receive_frame(skb))
+			return;
+		kfree_skb(skb, FREE_READ);
 	}
+	return;
 }
 #endif
 

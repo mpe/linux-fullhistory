@@ -51,13 +51,24 @@ static int FDC2 = -1;
 #define FLOPPY_MOTOR_MASK 0xf0
 
 /*
- * Most Alphas have no problems with floppy DMA crossing 64k borders. Sigh...
+ * Most Alphas have no problems with floppy DMA crossing 64k borders,
+ * except for XL.  It is also the only one with DMA limits, so we use
+ * that to test in the generic kernel.
  */
-#ifdef CONFIG_ALPHA_XL
-#define CROSS_64KB(a,s) \
-    ((unsigned long)(a)/0x10000 != ((unsigned long)(a) + (s) - 1) / 0x10000)
-#else /* CONFIG_ALPHA_XL */
-#define CROSS_64KB(a,s) (0)
-#endif /* CONFIG_ALPHA_XL */
+
+#define __CROSS_64KB(a,s)					\
+({ unsigned long __s64 = (unsigned long)(a);			\
+   unsigned long __e64 = __s64 + (unsigned long)(s) - 1;	\
+   (__s64 ^ __e64) & ~0xfffful; })
+
+#ifdef CONFIG_ALPHA_GENERIC
+# define CROSS_64KB(a,s)   (__CROSS_64KB(a,s) && ~alpha_mv.max_dma_address)
+#else
+# ifdef CONFIG_ALPHA_XL
+#  define CROSS_64KB(a,s)  __CROSS_64KB(a,s)
+# else
+#  define CROSS_64KB(a,s)  (0)
+# endif
+#endif
 
 #endif /* __ASM_ALPHA_FLOPPY_H */

@@ -34,6 +34,8 @@ typedef struct {
 	int	val[2];
 } __kernel_fsid_t;
 
+#ifdef __KERNEL__
+
 #ifndef __GNUC__
 
 #define	__FD_SET(d, set)	((set)->fds_bits[__FDELT(d)] |= __FDMASK(d))
@@ -108,5 +110,7 @@ static __inline__ void __FD_ZERO(__kernel_fd_set *p)
 }
 
 #endif /* __GNUC__ */
+
+#endif /* __KERNEL__ */
 
 #endif /* _ALPHA_POSIX_TYPES_H */

@@ -6,23 +6,6 @@
 #include <linux/types.h>
 #include <asm/io.h>
 
-/* 
- * Jensen has a separate "local" and "bus" IO space for
- * byte-wide IO.
- */
-#ifdef __is_local
-
-unsigned int _bus_inb(unsigned long addr)
-{
-	return __bus_inb(addr);
-}
-
-void _bus_outb(unsigned char b, unsigned long addr)
-{
-	__bus_outb(b, addr);
-}
-#endif
-
 unsigned int _inb(unsigned long addr)
 {
 	return __inb(addr);
@@ -470,47 +453,57 @@ void _memcpy_toio(unsigned long to, void * from, long count)
 
 /*
  * "memset" on IO memory space.
- * This needs to be optimized.
  */
 void _memset_c_io(unsigned long to, unsigned long c, long count)
 {
+	/* Handle any initial odd byte */
 	if (count > 0 && (to & 1)) {
 		writeb(c, to);
 		to++;
 		count--;
 	}
+
+	/* Handle any initial odd halfword */
 	if (count >= 2 && (to & 2)) {
 		writew(c, to);
 		to += 2;
 		count -= 2;
 	}
+
+	/* Handle any initial odd word */
 	if (count >= 4 && (to & 4)) {
 		writel(c, to);
 		to += 4;
 		count -= 4;
 	}
-	if ((to & 7) == 0) {
-		count -= 8;
-		while (count >= 0) {
+
+	/* Handle all full-sized quadwords: we're aligned (or have a small count) */
+	count -= 8;
+	if (count >= 0) {
+		do {
 			writeq(c, to);
 			to += 8;
 			count -= 8;
-		}
-		count += 8;
+		} while (count >= 0);
 	}
-	if (count >= 4 && (to & 4)) {
+	count += 8;
+
+	/* The tail is word-aligned if we still have count >= 4 */
+	if (count >= 4) {
 		writel(c, to);
 		to += 4;
 		count -= 4;
 	}
-	if (count >= 2 && (to & 2)) {
+
+	/* The tail is half-word aligned if we have count >= 2 */
+	if (count >= 2) {
 		writew(c, to);
 		to += 2;
 		count -= 2;
 	}
-	while (count > 0) {
+
+	/* And finally, one last byte.. */
+	if (count) {
 		writeb(c, to);
-		count--;
-		to++;
 	}
 }

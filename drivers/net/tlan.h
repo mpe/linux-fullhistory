@@ -496,6 +496,24 @@ inline void TLan_SetBit(u8 bit, u16 port)
 #define TLan_GetBit( bit, port )	((int) (inb_p(port) & bit))
 #define TLan_SetBit( bit, port )	outb_p(inb_p(port) | bit, port)
 
+#ifdef I_LIKE_A_FAST_HASH_FUNCTION
+/* given 6 bytes, view them as 8 6-bit numbers and return the XOR of those */
+/* the code below is about seven times as fast as the original code */
+inline u32 TLan_HashFunc( u8 *a )
+{
+        u8     hash;
+
+        hash = (a[0]^a[3]);             /* & 077 */
+        hash ^= ((a[0]^a[3])>>6);       /* & 003 */
+        hash ^= ((a[1]^a[4])<<2);       /* & 074 */
+        hash ^= ((a[1]^a[4])>>4);       /* & 017 */
+        hash ^= ((a[2]^a[5])<<4);       /* & 060 */
+        hash ^= ((a[2]^a[5])>>2);       /* & 077 */
+
+        return (hash & 077);
+}
+
+#else /* original code */
 
 inline	u32	xor( u32 a, u32 b )
 {
@@ -519,7 +537,5 @@ inline u32 TLan_HashFunc( u8 *a )
 
 } 
 
-
-
-
+#endif /* I_LIKE_A_FAST_HASH_FUNCTION */
 #endif

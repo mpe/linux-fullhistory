@@ -32,19 +32,22 @@ struct thread_struct * original_pcb_ptr;
 struct pgtable_cache_struct quicklists;
 #endif
 
-void __bad_pmd(pgd_t *pgd)
+void
+__bad_pmd(pgd_t *pgd)
 {
 	printk("Bad pgd in pmd_alloc: %08lx\n", pgd_val(*pgd));
 	pgd_set(pgd, BAD_PAGETABLE);
 }
 
-void __bad_pte(pmd_t *pmd)
+void
+__bad_pte(pmd_t *pmd)
 {
 	printk("Bad pmd in pte_alloc: %08lx\n", pmd_val(*pmd));
 	pmd_set(pmd, (pte_t *) BAD_PAGETABLE);
 }
 
-pmd_t *get_pmd_slow(pgd_t *pgd, unsigned long offset)
+pmd_t *
+get_pmd_slow(pgd_t *pgd, unsigned long offset)
 {
 	pmd_t *pmd;
 
@@ -66,7 +69,8 @@ pmd_t *get_pmd_slow(pgd_t *pgd, unsigned long offset)
 	return (pmd_t *) pgd_page(*pgd) + offset;
 }
 
-pte_t *get_pte_slow(pmd_t *pmd, unsigned long offset)
+pte_t *
+get_pte_slow(pmd_t *pmd, unsigned long offset)
 {
 	pte_t *pte;
 
@@ -117,22 +121,25 @@ int do_check_pgt_cache(int low, int high)
  * ZERO_PAGE is a special page that is used for zero-initialized
  * data and COW.
  */
-pmd_t * __bad_pagetable(void)
+pmd_t *
+__bad_pagetable(void)
 {
 	memset((void *) EMPTY_PGT, 0, PAGE_SIZE);
 	return (pmd_t *) EMPTY_PGT;
 }
 
-pte_t __bad_page(void)
+pte_t
+__bad_page(void)
 {
 	memset((void *) EMPTY_PGE, 0, PAGE_SIZE);
 	return pte_mkdirty(mk_pte((unsigned long) EMPTY_PGE, PAGE_SHARED));
 }
 
-void show_mem(void)
+void
+show_mem(void)
 {
-	int i,free = 0,total = 0,reserved = 0;
-	int shared = 0, cached = 0;
+	long i,free = 0,total = 0,reserved = 0;
+	long shared = 0, cached = 0;
 
 	printk("\nMem-info:\n");
 	show_free_areas();
@@ -149,12 +156,12 @@ void show_mem(void)
 		else
 			shared += atomic_read(&mem_map[i].count) - 1;
 	}
-	printk("%d pages of RAM\n",total);
-	printk("%d free pages\n",free);
-	printk("%d reserved pages\n",reserved);
-	printk("%d pages shared\n",shared);
-	printk("%d pages swap cached\n",cached);
-	printk("%d pages in page table cache\n",pgtable_cache_size);
+	printk("%ld pages of RAM\n",total);
+	printk("%ld free pages\n",free);
+	printk("%ld reserved pages\n",reserved);
+	printk("%ld pages shared\n",shared);
+	printk("%ld pages swap cached\n",cached);
+	printk("%ld pages in page table cache\n",pgtable_cache_size);
 	show_buffers();
 #ifdef CONFIG_NET
 	show_net_buffers();
@@ -163,29 +170,20 @@ void show_mem(void)
 
 extern unsigned long free_area_init(unsigned long, unsigned long);
 
-static struct thread_struct * load_PCB(struct thread_struct * pcb)
+static struct thread_struct *
+load_PCB(struct thread_struct * pcb)
 {
-	struct thread_struct *old_pcb;
-
-	__asm__ __volatile__(
-		"stq $30,0(%1)\n\t"
-		"bis %1,%1,$16\n\t"
-#ifdef CONFIG_ALPHA_DP264
-		"zap $16,0xe0,$16\n\t"
-#endif /* DP264 */
-		"call_pal %2\n\t"
-		"bis $0,$0,%0"
-		: "=r" (old_pcb)
-		: "r" (pcb), "i" (PAL_swpctx)
-		: "$0", "$1", "$16", "$22", "$23", "$24", "$25");
-	return old_pcb;
+	register unsigned long sp __asm__("$30");
+	pcb->ksp = sp;
+	return __reload_tss(pcb);
 }
 
 /*
  * paging_init() sets up the page tables: in the alpha version this actually
  * unmaps the bootup page table (as we're now in KSEG, so we don't need it).
  */
-unsigned long paging_init(unsigned long start_mem, unsigned long end_mem)
+unsigned long
+paging_init(unsigned long start_mem, unsigned long end_mem)
 {
 	int i;
 	unsigned long newptbr;
@@ -242,7 +240,8 @@ printk("OKSP 0x%lx OPTBR 0x%lx\n",
  * note that current should be pointing at the idle thread task struct
  * for this CPU.
  */
-void paging_init_secondary(void)
+void
+paging_init_secondary(void)
 {
 	current->tss.ptbr = init_task.tss.ptbr;
 	current->tss.pal_flags = 1;
@@ -260,7 +259,8 @@ printk("paging_init_secondary: KSP 0x%lx PTBR 0x%lx\n",
 }
 #endif /* __SMP__ */
 
-void mem_init(unsigned long start_mem, unsigned long end_mem)
+void
+mem_init(unsigned long start_mem, unsigned long end_mem)
 {
 	unsigned long tmp;
 
@@ -291,7 +291,8 @@ void mem_init(unsigned long start_mem, unsigned long end_mem)
 	return;
 }
 
-void free_initmem (void)
+void
+free_initmem (void)
 {
 	extern char __init_begin, __init_end;
 	unsigned long addr;
@@ -306,7 +307,8 @@ void free_initmem (void)
 		(&__init_end - &__init_begin) >> 10);
 }
 
-void si_meminfo(struct sysinfo *val)
+void
+si_meminfo(struct sysinfo *val)
 {
 	int i;
 

@@ -10,35 +10,42 @@
 
 NM := nm -B
 
-ifdef CONFIG_CROSSCOMPILE
-# enable this for linking under OSF/1:
-LINKFLAGS = -non_shared -T 0xfffffc0000310000 -N
-else
- elf=$(shell if $(LD) --help | grep elf64alpha >/dev/null; then echo yes; fi)
- ifeq ($(elf),yes)
-   LINKFLAGS = -static -T arch/alpha/vmlinux.lds
- else
-   LINKFLAGS = -static -T arch/alpha/vmlinux.lds -N
- endif
-# GNU gcc/cc1/as can use pipes instead of temporary files
-CFLAGS := $(CFLAGS) -pipe
-endif
+LINKFLAGS = -static -T arch/alpha/vmlinux.lds -N
+CFLAGS := $(CFLAGS) -pipe -mno-fp-regs -ffixed-8
 
-CFLAGS := $(CFLAGS) -mno-fp-regs -ffixed-8
+# Determine if we can use the BWX instructions with GAS.
+old_gas := $(shell if $(AS) --version 2>&1 | grep 'version 2.7' > /dev/null; then echo y; else echo n; fi)
 
-# determine if we can use the BWX instructions with GAS
-OLD_GAS := $(shell if $(AS) --version 2>&1 | grep 'version 2.7' > /dev/null; then echo y; else echo n; fi)
+# Determine if GCC understands the -mcpu= option.
+have_mcpu := $(shell if $(CC) -mcpu=ev5 -S -o /dev/null -xc /dev/null > /dev/null 2>&1; then echo y; else echo n; fi)
 
-# If PYXIS, then enable use of BWIO space
-ifneq ($(OLD_GAS),y)
- ifeq ($(CONFIG_ALPHA_PYXIS),y)
-  CFLAGS := $(CFLAGS) -Wa,-m21164a -DBWX_USABLE -DBWIO_ENABLED
- endif
+# If GENERIC, make sure to turn off any instruction set extensions that
+# the host compiler might have on by default.  Given that EV4 and EV5
+# have the same instruction set, prefer EV5 because an EV5 schedule is
+# more likely to keep an EV4 processor busy than vice-versa.
+ifeq ($(CONFIG_ALPHA_GENERIC)$(have_mcpu),yy)
+ CFLAGS := $(CFLAGS) -mcpu=ev5
 endif
 
 # If EV6, turn on the proper optimizations.
-ifeq ($(CONFIG_ALPHA_EV6),y)
- CFLAGS := -mcpu=ev6 $(CFLAGS)
+ifeq ($(CONFIG_ALPHA_EV6)$(have_mcpu),yy)
+ CFLAGS := $(CFLAGS) -mcpu=ev6
+endif
+
+# For TSUNAMI, we must have the assembler not emulate our instructions.
+# BWX is most important, but we don't really want any emulation ever.
+ifeq ($(old_gas),y)
+ ifneq ($(CONFIG_ALPHA_GENERIC)$(CONFIG_ALPHA_TSUNAMI),)
+   # How do we do #error in make?
+   CFLAGS := --error-please-upgrade-your-assembler
+ endif
+else
+ ifeq ($(CONFIG_ALPHA_GENERIC),y)
+   CFLAGS := $(CFLAGS) -Wa,-mev6
+ endif
+ ifeq ($(CONFIG_ALPHA_PYXIS),y)
+   CFLAGS := $(CFLAGS) -Wa,-m21164a -DBWIO_ENABLED
+ endif
 endif
 
 HEAD := arch/alpha/kernel/head.o
@@ -59,7 +66,7 @@ rawboot:
 	@$(MAKEBOOT) rawboot
 
 #
-# my boot writes directly to a specific disk partition, I doubt most
+# My boot writes directly to a specific disk partition, I doubt most
 # people will want to do that without changes..
 #
 msb my-special-boot:

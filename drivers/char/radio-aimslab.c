@@ -155,7 +155,11 @@ static int rt_setfreq(struct rt_device *dev, unsigned long freq)
 
 	/* adapted from radio-aztech.c */
 
-	freq = (freq * 100) / 16;	/* massage the data a little	*/
+	/* We want to compute x * 100 / 16 without overflow 
+	 * So we compute x*6 + (x/100)*25 to give x*6.25
+	 */
+	 
+	freq = freq * 6 + freq/4;	/* massage the data a little	*/
 	freq += 1070;			/* IF = 10.7 MHz 		*/
 	freq /= 5;			/* ref = 25 kHz			*/
 
@@ -308,6 +312,7 @@ static struct video_device rtrack_radio=
 	rt_close,
 	NULL,	/* Can't read  (no capture ability) */
 	NULL,	/* Can't write */
+	NULL,	/* No poll */
 	rt_ioctl,
 	NULL,
 	NULL

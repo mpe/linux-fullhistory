@@ -20,44 +20,101 @@ O_OBJS   := entry.o traps.o process.o osf_sys.o irq.o signal.o setup.o \
 OX_OBJS  := alpha_ksyms.o
 
 
+ifdef CONFIG_ALPHA_GENERIC
+
+O_OBJS	 += core_apecs.o core_cia.o core_lca.o core_mcpcia.o core_pyxis.o \
+	    core_t2.o core_tsunami.o \
+	    sys_alcor.o sys_cabriolet.o sys_dp264.o sys_eb64p.o \
+	    sys_jensen.o sys_miata.o sys_mikasa.o sys_noritake.o \
+	    sys_rawhide.o sys_ruffian.o sys_sable.o sys_sio.o \
+	    sys_sx164.o sys_takara.o \
+	    es1888.o smc37c669.o smc37c93x.o
+else
+
+# Core logic support
 ifdef CONFIG_ALPHA_APECS
-O_OBJS   += apecs.o
+O_OBJS   += core_apecs.o
 endif
 ifdef CONFIG_ALPHA_CIA
-O_OBJS   += cia.o
+O_OBJS   += core_cia.o
 endif
 ifdef CONFIG_ALPHA_LCA
-O_OBJS   += lca.o
-endif
-ifdef CONFIG_ALPHA_PYXIS
-O_OBJS   += pyxis.o
-endif
-ifdef CONFIG_ALPHA_T2
-O_OBJS   += t2.o
-endif
-ifdef CONFIG_ALPHA_TSUNAMI
-O_OBJS   += tsunami.o
+O_OBJS   += core_lca.o
 endif
 ifdef CONFIG_ALPHA_MCPCIA
-O_OBJS   += mcpcia.o
+O_OBJS   += core_mcpcia.o
+endif
+ifdef CONFIG_ALPHA_PYXIS
+O_OBJS   += core_pyxis.o
+endif
+ifdef CONFIG_ALPHA_T2
+O_OBJS   += core_t2.o
+endif
+ifdef CONFIG_ALPHA_TSUNAMI
+O_OBJS   += core_tsunami.o
 endif
 
-ifneq ($(CONFIG_ALPHA_PC164)$(CONFIG_ALPHA_LX164),nn)
-O_OBJS   += smc37c93x.o
+# Board support
+ifneq ($(CONFIG_ALPHA_ALCOR)$(CONFIG_ALPHA_XLT),)
+O_OBJS   += sys_alcor.o
 endif
-ifneq ($(CONFIG_ALPHA_SX164)$(CONFIG_ALPHA_MIATA)$(CONFIG_ALPHA_DP264),nnn)
+ifneq ($(CONFIG_ALPHA_CABRIOLET)$(CONFIG_ALPHA_EB164)$(CONFIG_ALPHA_EB66P)$(CONFIG_ALPHA_LX164)$(CONFIG_ALPHA_PC164),)
+O_OBJS   += sys_cabriolet.o
+endif
+ifdef CONFIG_ALPHA_DP264
+O_OBJS   += sys_dp264.o
+endif
+ifneq ($(CONFIG_ALPHA_EB64P)$(CONFIG_ALPHA_EB66),)
+O_OBJS   += sys_eb64p.o
+endif
+ifdef CONFIG_ALPHA_JENSEN
+O_OBJS   += sys_jensen.o
+endif
+ifdef CONFIG_ALPHA_MIATA
+O_OBJS   += sys_miata.o
+endif
+ifdef CONFIG_ALPHA_MIKASA
+O_OBJS   += sys_mikasa.o
+endif
+ifdef CONFIG_ALPHA_NORITAKE
+O_OBJS   += sys_noritake.o
+endif
+ifdef CONFIG_ALPHA_RAWHIDE
+O_OBJS   += sys_rawhide.o
+endif
+ifdef CONFIG_ALPHA_RUFFIAN
+O_OBJS   += sys_ruffian.o
+endif
+ifdef CONFIG_ALPHA_SABLE
+O_OBJS   += sys_sable.o
+endif
+ifneq ($(CONFIG_ALPHA_BOOK1)$(CONFIG_ALPHA_AVANTI)$(CONFIG_ALPHA_NONAME)$(CONFIG_ALPHA_P2K)$(CONFIG_ALPHA_XL),)
+O_OBJS   += sys_sio.o
+endif
+ifdef CONFIG_ALPHA_SX164
+O_OBJS   += sys_sx164.o
+endif
+ifdef CONFIG_ALPHA_TAKARA
+O_OBJS   += sys_takara.o
+endif
+
+# Device support
+ifdef CONFIG_ALPHA_MIATA
+O_OBJS   += es1888.o
+endif
+ifneq ($(CONFIG_ALPHA_SX164)$(CONFIG_ALPHA_MIATA)$(CONFIG_ALPHA_DP264),)
 O_OBJS   += smc37c669.o
 endif
+ifneq ($(CONFIG_ALPHA_PC164)$(CONFIG_ALPHA_LX164),)
+O_OBJS   += smc37c93x.o
+endif
+
+endif # GENERIC
 
 ifdef SMP
 O_OBJS   += smp.o
 endif
 
 all: kernel.o head.o
-
-head.o: head.s
-
-head.s: head.S $(TOPDIR)/include/asm-alpha/system.h
-	$(CPP) -traditional $(AFLAGS) -o $*.s $<
 
 include $(TOPDIR)/Rules.make

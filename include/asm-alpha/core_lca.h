@@ -1,6 +1,10 @@
 #ifndef __ALPHA_LCA__H__
 #define __ALPHA_LCA__H__
 
+#include <linux/config.h>
+#include <asm/system.h>
+#include <asm/compiler.h>
+
 /*
  * Low Cost Alpha (LCA) definitions (these apply to 21066 and 21068,
  * for example).
@@ -52,21 +56,16 @@
  * ugh).
  */
 
-#include <linux/config.h>
-#include <asm/system.h>
+#define LCA_DMA_WIN_BASE_DEFAULT	(1024*1024*1024)
+#define LCA_DMA_WIN_SIZE_DEFAULT	(1024*1024*1024)
 
-#ifdef CONFIG_ALPHA_SRM_SETUP
-/* if we are using the SRM PCI setup, we'll need to use variables instead */
-#define LCA_DMA_WIN_BASE_DEFAULT    (1024*1024*1024)
-#define LCA_DMA_WIN_SIZE_DEFAULT    (1024*1024*1024)
-
-extern unsigned int LCA_DMA_WIN_BASE;
-extern unsigned int LCA_DMA_WIN_SIZE;
-
-#else /* SRM_SETUP */
-#define LCA_DMA_WIN_BASE	(1024*1024*1024)
-#define LCA_DMA_WIN_SIZE	(1024*1024*1024)
-#endif /* SRM_SETUP */
+#if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM_SETUP)
+#define LCA_DMA_WIN_BASE		alpha_mv.dma_win_base
+#define LCA_DMA_WIN_SIZE		alpha_mv.dma_win_size
+#else
+#define LCA_DMA_WIN_BASE		LCA_DMA_WIN_BASE_DEFAULT
+#define LCA_DMA_WIN_SIZE		LCA_DMA_WIN_SIZE_DEFAULT
+#endif
 
 /*
  * Memory Controller registers:
@@ -125,7 +124,6 @@ extern unsigned int LCA_DMA_WIN_SIZE;
 #define LCA_IO			(IDENT_ADDR + 0x1c0000000UL)
 #define LCA_SPARSE_MEM		(IDENT_ADDR + 0x200000000UL)
 #define LCA_DENSE_MEM		(IDENT_ADDR + 0x300000000UL)
-#define DENSE_MEM(addr)		LCA_DENSE_MEM
 
 /*
  * Bit definitions for I/O Controller status register 0:
@@ -140,7 +138,7 @@ extern unsigned int LCA_DMA_WIN_SIZE;
 #define LCA_IOC_STAT0_P_NBR_SHIFT	13
 #define LCA_IOC_STAT0_P_NBR_MASK	0x7ffff
 
-#define HAE_ADDRESS	LCA_IOC_HAE
+#define LCA_HAE_ADDRESS		LCA_IOC_HAE
 
 /* LCA PMR Power Management register defines */
 #define LCA_PMR_ADDR	(IDENT_ADDR + 0x120000098UL)
@@ -148,225 +146,29 @@ extern unsigned int LCA_DMA_WIN_SIZE;
 #define LCA_PMR_ODIV    0x38                    /* Override clock divisor */
 #define LCA_PMR_INTO    0x40                    /* Interrupt override */
 #define LCA_PMR_DMAO    0x80                    /* DMA override */
-#define LCA_PMR_OCCEB   0xffff0000L             /* Override cycle counter - even
- bits */
-#define LCA_PMR_OCCOB   0xffff000000000000L     /* Override cycle counter - even
- bits */
+#define LCA_PMR_OCCEB   0xffff0000L             /* Override cycle counter - even bits */
+#define LCA_PMR_OCCOB   0xffff000000000000L     /* Override cycle counter - even bits */
 #define LCA_PMR_PRIMARY_MASK    0xfffffffffffffff8
+
 /* LCA PMR Macros */
 
-#define READ_PMR        (*(volatile unsigned long *)LCA_PMR_ADDR)
-#define WRITE_PMR(d)    (*((volatile unsigned long *)LCA_PMR_ADDR) = (d))
+#define LCA_READ_PMR        (*(volatile unsigned long *)LCA_PMR_ADDR)
+#define LCA_WRITE_PMR(d)    (*((volatile unsigned long *)LCA_PMR_ADDR) = (d))
 
-#define GET_PRIMARY(r)  ((r) & LCA_PMR_PDIV)
-#define GET_OVERRIDE(r) (((r) >> 3) & LCA_PMR_PDIV)
-#define SET_PRIMARY_CLOCK(r, c) ((r) = (((r) & LCA_PMR_PRIMARY_MASK) | (c)))
+#define LCA_GET_PRIMARY(r)  ((r) & LCA_PMR_PDIV)
+#define LCA_GET_OVERRIDE(r) (((r) >> 3) & LCA_PMR_PDIV)
+#define LCA_SET_PRIMARY_CLOCK(r, c) ((r) = (((r) & LCA_PMR_PRIMARY_MASK)|(c)))
 
 /* LCA PMR Divisor values */
-#define DIV_1   0x0
-#define DIV_1_5 0x1
-#define DIV_2   0x2
-#define DIV_4   0x3
-#define DIV_8   0x4
-#define DIV_16  0x5
-#define DIV_MIN DIV_1
-#define DIV_MAX DIV_16
+#define LCA_PMR_DIV_1   0x0
+#define LCA_PMR_DIV_1_5 0x1
+#define LCA_PMR_DIV_2   0x2
+#define LCA_PMR_DIV_4   0x3
+#define LCA_PMR_DIV_8   0x4
+#define LCA_PMR_DIV_16  0x5
+#define LCA_PMR_DIV_MIN DIV_1
+#define LCA_PMR_DIV_MAX DIV_16
 
-
-#ifdef __KERNEL__
-
-/*
- * Translate physical memory address as seen on (PCI) bus into
- * a kernel virtual address and vv.
- */
-extern inline unsigned long virt_to_bus(void * address)
-{
-	return virt_to_phys(address) + LCA_DMA_WIN_BASE;
-}
-
-extern inline void * bus_to_virt(unsigned long address)
-{
-	/*
-	 * This check is a sanity check but also ensures that bus
-	 * address 0 maps to virtual address 0 which is useful to
-	 * detect null "pointers" (the NCR driver is much simpler if
-	 * NULL pointers are preserved).
-	 */
-	if (address < LCA_DMA_WIN_BASE)
-		return 0;
-	return phys_to_virt(address - LCA_DMA_WIN_BASE);
-}
-
-/*
- * I/O functions:
- *
- * Unlike Jensen, the Noname machines have no concept of local
- * I/O---everything goes over the PCI bus.
- *
- * There is plenty room for optimization here.  In particular,
- * the Alpha's insb/insw/extb/extw should be useful in moving
- * data to/from the right byte-lanes.
- */
-
-#define vuip	volatile unsigned int *
-#define vulp	volatile unsigned long *
-
-extern inline unsigned int __inb(unsigned long addr)
-{
-	long result = *(vuip) ((addr << 5) + LCA_IO + 0x00);
-	result >>= (addr & 3) * 8;
-	return 0xffUL & result;
-}
-
-extern inline void __outb(unsigned char b, unsigned long addr)
-{
-	unsigned int w;
-
-	w = __kernel_insbl(b, addr & 3);
-	*(vuip) ((addr << 5) + LCA_IO + 0x00) = w;
-	mb();
-}
-
-extern inline unsigned int __inw(unsigned long addr)
-{
-	long result = *(vuip) ((addr << 5) + LCA_IO + 0x08);
-	result >>= (addr & 3) * 8;
-	return 0xffffUL & result;
-}
-
-extern inline void __outw(unsigned short b, unsigned long addr)
-{
-	unsigned int w;
-
-	w = __kernel_inswl(b, addr & 3);
-	*(vuip) ((addr << 5) + LCA_IO + 0x08) = w;
-	mb();
-}
-
-extern inline unsigned int __inl(unsigned long addr)
-{
-	return *(vuip) ((addr << 5) + LCA_IO + 0x18);
-}
-
-extern inline void __outl(unsigned int b, unsigned long addr)
-{
-	*(vuip) ((addr << 5) + LCA_IO + 0x18) = b;
-	mb();
-}
-
-
-/*
- * Memory functions.  64-bit and 32-bit accesses are done through
- * dense memory space, everything else through sparse space.
- */
-extern inline unsigned long __readb(unsigned long addr)
-{
-	unsigned long result, shift, msb;
-
-	shift = (addr & 0x3) * 8;
-	if (addr >= (1UL << 24)) {
-		msb = addr & 0xf8000000;
-		addr -= msb;
-		if (msb != hae.cache) {
-			set_hae(msb);
-		}
-	}
-	result = *(vuip) ((addr << 5) + LCA_SPARSE_MEM + 0x00);
-	result >>= shift;
-	return 0xffUL & result;
-}
-
-extern inline unsigned long __readw(unsigned long addr)
-{
-	unsigned long result, shift, msb;
-
-	shift = (addr & 0x3) * 8;
-	if (addr >= (1UL << 24)) {
-		msb = addr & 0xf8000000;
-		addr -= msb;
-		if (msb != hae.cache) {
-			set_hae(msb);
-		}
-	}
-	result = *(vuip) ((addr << 5) + LCA_SPARSE_MEM + 0x08);
-	result >>= shift;
-	return 0xffffUL & result;
-}
-
-extern inline unsigned long __readl(unsigned long addr)
-{
-	return *(vuip) (addr + LCA_DENSE_MEM);
-}
-
-extern inline unsigned long __readq(unsigned long addr)
-{
-	return *(vulp) (addr + LCA_DENSE_MEM);
-}
-
-extern inline void __writeb(unsigned char b, unsigned long addr)
-{
-	unsigned long msb;
-	unsigned int w;
-
-	if (addr >= (1UL << 24)) {
-		msb = addr & 0xf8000000;
-		addr -= msb;
-		if (msb != hae.cache) {
-			set_hae(msb);
-		}
-	}
-	asm ("insbl %2,%1,%0" : "r="(w) : "ri"(addr & 0x3), "r"(b));
-	*(vuip) ((addr << 5) + LCA_SPARSE_MEM + 0x00) = w;
-}
-
-extern inline void __writew(unsigned short b, unsigned long addr)
-{
-	unsigned long msb;
-	unsigned int w;
-
-	if (addr >= (1UL << 24)) {
-		msb = addr & 0xf8000000;
-		addr -= msb;
-		if (msb != hae.cache) {
-			set_hae(msb);
-		}
-	}
-	asm ("inswl %2,%1,%0" : "r="(w) : "ri"(addr & 0x3), "r"(b));
-	*(vuip) ((addr << 5) + LCA_SPARSE_MEM + 0x08) = w;
-}
-
-extern inline void __writel(unsigned int b, unsigned long addr)
-{
-	*(vuip) (addr + LCA_DENSE_MEM) = b;
-}
-
-extern inline void __writeq(unsigned long b, unsigned long addr)
-{
-	*(vulp) (addr + LCA_DENSE_MEM) = b;
-}
-
-/*
- * Most of the above have so much overhead that it probably doesn't
- * make sense to have them inlined (better icache behavior).
- */
-
-#define inb(port) \
-(__builtin_constant_p((port))?__inb(port):_inb(port))
-
-#define outb(x, port) \
-(__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
-
-#define readl(a)	__readl((unsigned long)(a))
-#define readq(a)	__readq((unsigned long)(a))
-#define writel(v,a)	__writel((v),(unsigned long)(a))
-#define writeq(v,a)	__writeq((v),(unsigned long)(a))
-
-#undef vuip
-#undef vulp
-
-extern unsigned long lca_init (unsigned long mem_start, unsigned long mem_end);
-
-#endif /* __KERNEL__ */
 
 /*
  * Data structure for handling LCA machine checks.  Correctable errors
@@ -407,8 +209,221 @@ union el_lca {
 	struct el_lca_mcheck_short *	s;
 };
 
-#define RTC_PORT(x)	(0x70 + (x))
-#define RTC_ADDR(x)	(0x80 | (x))
-#define RTC_ALWAYS_BCD	0
+#ifdef __KERNEL__
+
+#ifndef __EXTERN_INLINE
+#define __EXTERN_INLINE extern inline
+#define __IO_EXTERN_INLINE
+#endif
+
+/*
+ * Translate physical memory address as seen on (PCI) bus into
+ * a kernel virtual address and vv.
+ */
+
+__EXTERN_INLINE unsigned long lca_virt_to_bus(void * address)
+{
+	return virt_to_phys(address) + LCA_DMA_WIN_BASE;
+}
+
+__EXTERN_INLINE void * lca_bus_to_virt(unsigned long address)
+{
+	/*
+	 * This check is a sanity check but also ensures that bus
+	 * address 0 maps to virtual address 0 which is useful to
+	 * detect null "pointers" (the NCR driver is much simpler if
+	 * NULL pointers are preserved).
+	 */
+	if (address < LCA_DMA_WIN_BASE)
+		return 0;
+	return phys_to_virt(address - LCA_DMA_WIN_BASE);
+}
+
+/*
+ * I/O functions:
+ *
+ * Unlike Jensen, the Noname machines have no concept of local
+ * I/O---everything goes over the PCI bus.
+ *
+ * There is plenty room for optimization here.  In particular,
+ * the Alpha's insb/insw/extb/extw should be useful in moving
+ * data to/from the right byte-lanes.
+ */
+
+#define vip	volatile int *
+#define vuip	volatile unsigned int *
+#define vulp	volatile unsigned long *
+
+__EXTERN_INLINE unsigned int lca_inb(unsigned long addr)
+{
+	long result = *(vip) ((addr << 5) + LCA_IO + 0x00);
+	return __kernel_extbl(result, addr & 3);
+}
+
+__EXTERN_INLINE void lca_outb(unsigned char b, unsigned long addr)
+{
+	unsigned int w;
+
+	w = __kernel_insbl(b, addr & 3);
+	*(vuip) ((addr << 5) + LCA_IO + 0x00) = w;
+	mb();
+}
+
+__EXTERN_INLINE unsigned int lca_inw(unsigned long addr)
+{
+	long result = *(vip) ((addr << 5) + LCA_IO + 0x08);
+	return __kernel_extwl(result, addr & 3);
+}
+
+__EXTERN_INLINE void lca_outw(unsigned short b, unsigned long addr)
+{
+	unsigned int w;
+
+	w = __kernel_inswl(b, addr & 3);
+	*(vuip) ((addr << 5) + LCA_IO + 0x08) = w;
+	mb();
+}
+
+__EXTERN_INLINE unsigned int lca_inl(unsigned long addr)
+{
+	return *(vuip) ((addr << 5) + LCA_IO + 0x18);
+}
+
+__EXTERN_INLINE void lca_outl(unsigned int b, unsigned long addr)
+{
+	*(vuip) ((addr << 5) + LCA_IO + 0x18) = b;
+	mb();
+}
+
+
+/*
+ * Memory functions.  64-bit and 32-bit accesses are done through
+ * dense memory space, everything else through sparse space.
+ */
+
+__EXTERN_INLINE unsigned long lca_readb(unsigned long addr)
+{
+	unsigned long result, msb;
+
+	if (addr >= (1UL << 24)) {
+		msb = addr & 0xf8000000;
+		addr -= msb;
+		set_hae(msb);
+	}
+	result = *(vip) ((addr << 5) + LCA_SPARSE_MEM + 0x00);
+	return __kernel_extbl(result, addr & 3);
+}
+
+__EXTERN_INLINE unsigned long lca_readw(unsigned long addr)
+{
+	unsigned long result, msb;
+
+	if (addr >= (1UL << 24)) {
+		msb = addr & 0xf8000000;
+		addr -= msb;
+		set_hae(msb);
+	}
+	result = *(vip) ((addr << 5) + LCA_SPARSE_MEM + 0x08);
+	return __kernel_extwl(result, addr & 3);
+}
+
+__EXTERN_INLINE unsigned long lca_readl(unsigned long addr)
+{
+	return *(vuip) (addr + LCA_DENSE_MEM);
+}
+
+__EXTERN_INLINE unsigned long lca_readq(unsigned long addr)
+{
+	return *(vulp) (addr + LCA_DENSE_MEM);
+}
+
+__EXTERN_INLINE void lca_writeb(unsigned char b, unsigned long addr)
+{
+	unsigned long msb;
+	unsigned int w;
+
+	if (addr >= (1UL << 24)) {
+		msb = addr & 0xf8000000;
+		addr -= msb;
+		set_hae(msb);
+	}
+	w = __kernel_insbl(b, addr & 3);
+	*(vuip) ((addr << 5) + LCA_SPARSE_MEM + 0x00) = w;
+}
+
+__EXTERN_INLINE void lca_writew(unsigned short b, unsigned long addr)
+{
+	unsigned long msb;
+	unsigned int w;
+
+	if (addr >= (1UL << 24)) {
+		msb = addr & 0xf8000000;
+		addr -= msb;
+		set_hae(msb);
+	}
+	w = __kernel_inswl(b, addr & 3);
+	*(vuip) ((addr << 5) + LCA_SPARSE_MEM + 0x08) = w;
+}
+
+__EXTERN_INLINE void lca_writel(unsigned int b, unsigned long addr)
+{
+	*(vuip) (addr + LCA_DENSE_MEM) = b;
+}
+
+__EXTERN_INLINE void lca_writeq(unsigned long b, unsigned long addr)
+{
+	*(vulp) (addr + LCA_DENSE_MEM) = b;
+}
+
+/* Find the DENSE memory area for a given bus address.  */
+
+__EXTERN_INLINE unsigned long lca_dense_mem(unsigned long addr)
+{
+	return LCA_DENSE_MEM;
+}
+
+#undef vip
+#undef vuip
+#undef vulp
+
+#ifdef __WANT_IO_DEF
+
+#define virt_to_bus	lca_virt_to_bus
+#define bus_to_virt	lca_bus_to_virt
+#define __inb		lca_inb
+#define __inw		lca_inw
+#define __inl		lca_inl
+#define __outb		lca_outb
+#define __outw		lca_outw
+#define __outl		lca_outl
+#define __readb		lca_readb
+#define __readw		lca_readw
+#define __writeb	lca_writeb
+#define __writew	lca_writew
+#define __readl		lca_readl
+#define __readq		lca_readq
+#define __writel	lca_writel
+#define __writeq	lca_writeq
+#define dense_mem	lca_dense_mem
+
+#define inb(port) \
+(__builtin_constant_p((port))?__inb(port):_inb(port))
+
+#define outb(x, port) \
+(__builtin_constant_p((port))?__outb((x),(port)):_outb((x),(port)))
+
+#define readl(a)	__readl((unsigned long)(a))
+#define readq(a)	__readq((unsigned long)(a))
+#define writel(v,a)	__writel((v),(unsigned long)(a))
+#define writeq(v,a)	__writeq((v),(unsigned long)(a))
+
+#endif /* __WANT_IO_DEF */
+
+#ifdef __IO_EXTERN_INLINE
+#undef __EXTERN_INLINE
+#undef __IO_EXTERN_INLINE
+#endif
+
+#endif /* __KERNEL__ */
 
 #endif /* __ALPHA_LCA__H__ */

@@ -842,6 +842,7 @@ static struct video_device qcam_template=
 	qcam_close,
 	qcam_read,
 	qcam_write,
+	NULL,
 	qcam_ioctl,
 	NULL,
 	qcam_init_done,

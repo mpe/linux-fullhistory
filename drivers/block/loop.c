@@ -6,14 +6,13 @@
  * Copyright 1993 by Theodore Ts'o.  Redistribution of this file is
  * permitted under the GNU Public License.
  *
- * more DES encryption plus IDEA encryption by Nicholas J. Leon, June 20, 1996
  * DES encryption plus some minor changes by Werner Almesberger, 30-MAY-1993
+ * more DES encryption plus IDEA encryption by Nicholas J. Leon, June 20, 1996
  *
  * Modularized and updated for 1.1.16 kernel - Mitch Dsouza 28th May 1994
- *
  * Adapted for 1.3.59 kernel - Andries Brouwer, 1 Feb 1996
  *
- * Fixed do_loop_request() re-entrancy - <Vincent.Renardias@waw.com> Mar 20, 1997
+ * Fixed do_loop_request() re-entrancy - Vincent.Renardias@waw.com Mar 20, 1997
  *
  * Handle sparse backing files correctly - Kenn Humborg, Jun 28, 1998
  */
@@ -427,7 +426,11 @@ static int loop_set_fd(struct loop_device *lo, kdev_t dev, unsigned int arg)
 			lo->lo_backing_file->f_op = file->f_op;
 			lo->lo_backing_file->private_data = file->private_data;
 
-			error = 0;
+			error = get_write_access(inode); /* cannot fail */
+			if (error) {
+				fput(lo->lo_backing_file);
+				lo->lo_backing_file = NULL;
+			}
 		}
 	}
 	if (error)

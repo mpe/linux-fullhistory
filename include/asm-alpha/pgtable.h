@@ -13,6 +13,8 @@
 #include <asm/system.h>
 #include <asm/processor.h>	/* For TASK_SIZE */
 #include <asm/mmu_context.h>
+#include <asm/machvec.h>
+
 
 /* Caches aren't brain-dead on the Alpha. */
 #define flush_cache_all()			do { } while (0)
@@ -23,60 +25,86 @@
 #define flush_icache_range(start, end)		do { } while (0)
 
 /*
- * Force a context reload. This is needed when we
- * change the page table pointer or when we update
- * the ASN of the current process.
- */
-static inline void reload_context(struct task_struct *task)
-{
-	__asm__ __volatile__(
-#ifdef CONFIG_ALPHA_DP264
-		"zap %0,0xe0,$16\n\t"
-#else
-		"bis %0,%0,$16\n\t"
-#endif
-		"call_pal %1"
-		: /* no outputs */
-		: "r" (&task->tss), "i" (PAL_swpctx)
-		: "$0", "$1", "$16", "$22", "$23", "$24", "$25");
-}
-
-/*
  * Use a few helper functions to hide the ugly broken ASN
  * numbers on early Alphas (ev4 and ev45)
  */
-#ifdef BROKEN_ASN
 
-#define flush_tlb_current(x) tbiap()
-#define flush_tlb_other(x) do { } while (0)
-
-#else
-
-extern void get_new_asn_and_reload(struct task_struct *, struct mm_struct *);
-
-#define flush_tlb_current(mm) get_new_asn_and_reload(current, mm)
-#define flush_tlb_other(mm) do { (mm)->context = 0; } while (0)
-
+#ifndef __EXTERN_INLINE
+#define __EXTERN_INLINE extern inline
+#define __MMU_EXTERN_INLINE
 #endif
+
+__EXTERN_INLINE void
+ev4_flush_tlb_current(struct mm_struct *mm)
+{
+	tbiap();
+}
+
+__EXTERN_INLINE void
+ev4_flush_tlb_other(struct mm_struct *mm)
+{
+}
+
+__EXTERN_INLINE void
+ev5_flush_tlb_current(struct mm_struct *mm)
+{
+	mm->context = 0;
+	get_new_mmu_context(current, mm);
+	reload_context(current);
+}
+
+__EXTERN_INLINE void
+ev5_flush_tlb_other(struct mm_struct *mm)
+{
+	mm->context = 0;
+}
 
 /*
  * Flush just one page in the current TLB set.
  * We need to be very careful about the icache here, there
  * is no way to invalidate a specific icache page..
  */
-static inline void flush_tlb_current_page(struct mm_struct * mm,
-	struct vm_area_struct *vma,
-	unsigned long addr)
+
+__EXTERN_INLINE void
+ev4_flush_tlb_current_page(struct mm_struct * mm,
+			   struct vm_area_struct *vma,
+			   unsigned long addr)
 {
-#ifdef BROKEN_ASN
 	tbi(2 + ((vma->vm_flags & VM_EXEC) != 0), addr);
-#else
+}
+
+__EXTERN_INLINE void
+ev5_flush_tlb_current_page(struct mm_struct * mm,
+			   struct vm_area_struct *vma,
+			   unsigned long addr)
+{
 	if (vma->vm_flags & VM_EXEC)
-		flush_tlb_current(mm);
+		ev5_flush_tlb_current(mm);
 	else
 		tbi(2, addr);
-#endif
 }
+
+
+#ifdef CONFIG_ALPHA_GENERIC
+# define flush_tlb_current		alpha_mv.mv_flush_tlb_current
+# define flush_tlb_other		alpha_mv.mv_flush_tlb_other
+# define flush_tlb_current_page		alpha_mv.mv_flush_tlb_current_page
+#else
+# ifdef CONFIG_ALPHA_EV4
+#  define flush_tlb_current		ev4_flush_tlb_current
+#  define flush_tlb_other		ev4_flush_tlb_other
+#  define flush_tlb_current_page	ev4_flush_tlb_current_page
+# else
+#  define flush_tlb_current		ev5_flush_tlb_current
+#  define flush_tlb_other		ev5_flush_tlb_other
+#  define flush_tlb_current_page	ev5_flush_tlb_current_page
+# endif
+#endif
+
+#ifdef __MMU_EXTERN_INLINE
+#undef __EXTERN_INLINE
+#undef __MMU_EXTERN_INLINE
+#endif
 
 /*
  * Flush current user mapping.

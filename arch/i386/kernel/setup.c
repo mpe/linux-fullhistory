@@ -36,6 +36,7 @@
 #include <linux/console.h>
 #include <asm/uaccess.h>
 #include <asm/system.h>
+#include <asm/io.h>
 #include <asm/smp.h>
 
 /*
@@ -81,12 +82,10 @@ extern int rd_image_start;	/* starting block # of image */
 extern int root_mountflags;
 extern int _etext, _edata, _end;
 
-extern char empty_zero_page[PAGE_SIZE];
-
 /*
  * This is set up by the setup-routine at boot-time
  */
-#define PARAM	empty_zero_page
+#define PARAM	((unsigned char *)empty_zero_page)
 #define EXT_MEM_K (*(unsigned short *) (PARAM+2))
 #define ALT_MEM_K (*(unsigned long *) (PARAM+0x1e0))
 #ifdef CONFIG_APM
@@ -254,6 +253,27 @@ __initfunc(static int amd_model(struct cpuinfo_x86 *c))
 	c->x86_model_id[48] = 0;
 	return 1;
 }
+
+/*
+ *      Cyrix CPU configuration register indexes
+ */
+#define CX86_CCR2 0xc2
+#define CX86_CCR3 0xc3
+#define CX86_CCR4 0xe8
+#define CX86_CCR5 0xe9
+#define CX86_DIR0 0xfe
+#define CX86_DIR1 0xff
+
+/*
+ *      Cyrix CPU indexed register access macros
+ */
+
+#define getCx86(reg) ({ outb((reg), 0x22); inb(0x23); })
+
+#define setCx86(reg, data) do { \
+	outb((reg), 0x22); \
+	outb((data), 0x23); \
+} while (0)
 
 /*
  * Use the Cyrix DEVID CPU registers if avail. to get more detailed info.

@@ -50,7 +50,7 @@ unsigned char pckbd_sysrq_xlate[128] =
  */
 
 /*
- * Some x86 BIOSes do not correctly initializes the keyboard, so the
+ * Some x86 BIOSes do not correctly initialize the keyboard, so the
  * "kbd-reset" command line options can be given to force a reset.
  * [Ranger]
  */

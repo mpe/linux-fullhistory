@@ -3,6 +3,7 @@
 
 #include <linux/config.h>
 #include <linux/types.h>
+#include <asm/compiler.h>
 
 /*
  * TSUNAMI/TYPHOON are the internal names for the core logic chipset which
@@ -15,22 +16,18 @@
  *
  */
 
-#define BYTE_ENABLE_SHIFT 5
-#define TRANSFER_LENGTH_SHIFT 3
-
-#ifdef CONFIG_ALPHA_SRM_SETUP
-/* if we are using the SRM PCI setup, we'll need to use variables instead */
 #define TSUNAMI_DMA_WIN_BASE_DEFAULT    (1024*1024*1024)
 #define TSUNAMI_DMA_WIN_SIZE_DEFAULT    (1024*1024*1024)
 
-extern unsigned int TSUNAMI_DMA_WIN_BASE;
-extern unsigned int TSUNAMI_DMA_WIN_SIZE;
+#if defined(CONFIG_ALPHA_GENERIC) || defined(CONFIG_ALPHA_SRM_SETUP)
+#define TSUNAMI_DMA_WIN_BASE		alpha_mv.dma_win_base
+#define TSUNAMI_DMA_WIN_SIZE		alpha_mv.dma_win_size
+#else
+#define TSUNAMI_DMA_WIN_BASE		TSUNAMI_DMA_WIN_BASE_DEFAULT
+#define TSUNAMI_DMA_WIN_SIZE		TSUNAMI_DMA_WIN_SIZE_DEFAULT
+#endif
 
-#else /* SRM_SETUP */
-#define TSUNAMI_DMA_WIN_BASE	(1024*1024*1024)
-#define TSUNAMI_DMA_WIN_SIZE	(1024*1024*1024)
-#endif /* SRM_SETUP */
-
+/* XXX: Do we need to conditionalize on this?  */
 #ifdef USE_48_BIT_KSEG
 #define TS_BIAS 0x80000000000UL
 #else
@@ -287,20 +284,30 @@ union TPchipPERRMASK {
 #define TSUNAMI_PCI1_IO			(IDENT_ADDR + TS_BIAS + 0x3FC000000UL)
 #define TSUNAMI_PCI1_CONF		(IDENT_ADDR + TS_BIAS + 0x3FE000000UL)
 
-#define HAE_ADDRESS 0
+/*
+ * Data structure for handling TSUNAMI machine checks:
+ */
+struct el_TSUNAMI_sysdata_mcheck {
+};
+
 
 #ifdef __KERNEL__
+
+#ifndef __EXTERN_INLINE
+#define __EXTERN_INLINE extern inline
+#define __IO_EXTERN_INLINE
+#endif
 
 /*
  * Translate physical memory address as seen on (PCI) bus into
  * a kernel virtual address and vv.
  */
-extern inline unsigned long virt_to_bus(void * address)
+__EXTERN_INLINE unsigned long tsunami_virt_to_bus(void * address)
 {
 	return virt_to_phys(address) + TSUNAMI_DMA_WIN_BASE;
 }
 
-extern inline void * bus_to_virt(unsigned long address)
+__EXTERN_INLINE void * tsunami_bus_to_virt(unsigned long address)
 {
 	return phys_to_virt(address - TSUNAMI_DMA_WIN_BASE);
 }
@@ -315,49 +322,46 @@ extern inline void * bus_to_virt(unsigned long address)
 /* HACK ALERT! HACK ALERT! */
 /* HACK ALERT! HACK ALERT! */
 
-/* only using PCI bus 0 for now in all routines */
+/* Only using PCI bus 0 for now in all routines.  */
 
-#define DENSE_MEM(addr)			TSUNAMI_PCI0_MEM
+#define TSUNAMI_IACK_SC  TSUNAMI_PCI0_IACK_SC
 
 /* HACK ALERT! HACK ALERT! */
 /* HACK ALERT! HACK ALERT! */
-
-/* Also assume we are optimizing for EV6, and so the compiler knows about
-   byte/word instructions.  */
 
 #define vucp	volatile unsigned char *
 #define vusp	volatile unsigned short *
 #define vuip	volatile unsigned int *
 #define vulp	volatile unsigned long *
 
-extern inline unsigned int __inb(unsigned long addr)
+__EXTERN_INLINE unsigned int tsunami_inb(unsigned long addr)
 {
-	return *(vucp)(addr + TSUNAMI_PCI0_IO);
+	return __kernel_ldbu(*(vucp)(addr + TSUNAMI_PCI0_IO));
 }
 
-extern inline void __outb(unsigned char b, unsigned long addr)
+__EXTERN_INLINE void tsunami_outb(unsigned char b, unsigned long addr)
 {
-	*(vucp)(addr + TSUNAMI_PCI0_IO) = b;
+	__kernel_stb(b, *(vucp)(addr + TSUNAMI_PCI0_IO));
 	mb();
 }
 
-extern inline unsigned int __inw(unsigned long addr)
+__EXTERN_INLINE unsigned int tsunami_inw(unsigned long addr)
 {
-	return *(vusp)(addr+TSUNAMI_PCI0_IO);
+	return __kernel_ldwu(*(vusp)(addr+TSUNAMI_PCI0_IO));
 }
 
-extern inline void __outw(unsigned short b, unsigned long addr)
+__EXTERN_INLINE void tsunami_outw(unsigned short b, unsigned long addr)
 {
-	*(vusp)(addr+TSUNAMI_PCI0_IO) = b;
+	__kernel_stw(b, *(vusp)(addr+TSUNAMI_PCI0_IO));
 	mb();
 }
 
-extern inline unsigned int __inl(unsigned long addr)
+__EXTERN_INLINE unsigned int tsunami_inl(unsigned long addr)
 {
 	return *(vuip)(addr+TSUNAMI_PCI0_IO);
 }
 
-extern inline void __outl(unsigned int b, unsigned long addr)
+__EXTERN_INLINE void tsunami_outl(unsigned int b, unsigned long addr)
 {
 	*(vuip)(addr+TSUNAMI_PCI0_IO) = b;
 	mb();
@@ -367,49 +371,82 @@ extern inline void __outl(unsigned int b, unsigned long addr)
  * Memory functions.  all accesses are done through linear space.
  */
 
-extern inline unsigned long __readb(unsigned long addr)
+__EXTERN_INLINE unsigned long tsunami_readb(unsigned long addr)
 {
-	return *(vucp)(addr+TSUNAMI_PCI0_MEM);
+	return __kernel_ldbu(*(vucp)(addr+TSUNAMI_PCI0_MEM));
 }
 
-extern inline unsigned long __readw(unsigned long addr)
+__EXTERN_INLINE unsigned long tsunami_readw(unsigned long addr)
 {
-	return *(vusp)(addr+TSUNAMI_PCI0_MEM);
+	return __kernel_ldwu(*(vusp)(addr+TSUNAMI_PCI0_MEM));
 }
 
-extern inline unsigned long __readl(unsigned long addr)
+__EXTERN_INLINE unsigned long tsunami_readl(unsigned long addr)
 {
 	return *(vuip)(addr+TSUNAMI_PCI0_MEM);
 }
 
-extern inline unsigned long __readq(unsigned long addr)
+__EXTERN_INLINE unsigned long tsunami_readq(unsigned long addr)
 {
 	return *(vulp)(addr+TSUNAMI_PCI0_MEM);
 }
 
-extern inline void __writeb(unsigned char b, unsigned long addr)
+__EXTERN_INLINE void tsunami_writeb(unsigned char b, unsigned long addr)
 {
-	*(vucp)(addr+TSUNAMI_PCI0_MEM) = b;
+	__kernel_stb(b, *(vucp)(addr+TSUNAMI_PCI0_MEM));
 	mb();
 }
 
-extern inline void __writew(unsigned short b, unsigned long addr)
+__EXTERN_INLINE void tsunami_writew(unsigned short b, unsigned long addr)
 {
-	*(vusp)(addr+TSUNAMI_PCI0_MEM) = b;
+	__kernel_stw(b, *(vusp)(addr+TSUNAMI_PCI0_MEM));
 	mb();
 }
 
-extern inline void __writel(unsigned int b, unsigned long addr)
+__EXTERN_INLINE void tsunami_writel(unsigned int b, unsigned long addr)
 {
 	*(vuip)(addr+TSUNAMI_PCI0_MEM) = b;
 	mb();
 }
 
-extern inline void __writeq(unsigned long b, unsigned long addr)
+__EXTERN_INLINE void tsunami_writeq(unsigned long b, unsigned long addr)
 {
 	*(vulp)(addr+TSUNAMI_PCI0_MEM) = b;
 	mb();
 }
+
+/* Find the DENSE memory area for a given bus address.  */
+
+__EXTERN_INLINE unsigned long tsunami_dense_mem(unsigned long addr)
+{
+	return TSUNAMI_PCI0_MEM;
+}
+
+#undef vucp
+#undef vusp
+#undef vuip
+#undef vulp
+
+#ifdef __WANT_IO_DEF
+
+#define virt_to_bus	tsunami_virt_to_bus
+#define bus_to_virt	tsunami_bus_to_virt
+
+#define __inb		tsunami_inb
+#define __inw		tsunami_inw
+#define __inl		tsunami_inl
+#define __outb		tsunami_outb
+#define __outw		tsunami_outw
+#define __outl		tsunami_outl
+#define __readb		tsunami_readb
+#define __readw		tsunami_readw
+#define __writeb	tsunami_writeb
+#define __writew	tsunami_writew
+#define __readl		tsunami_readl
+#define __readq		tsunami_readq
+#define __writel	tsunami_writel
+#define __writeq	tsunami_writeq
+#define dense_mem	tsunami_dense_mem
 
 #define inb(port) __inb((port))
 #define inw(port) __inw((port))
@@ -429,23 +466,13 @@ extern inline void __writeq(unsigned long b, unsigned long addr)
 #define writel(v,a)	__writel((v),(unsigned long)(a))
 #define writeq(v,a)	__writeq((v),(unsigned long)(a))
 
-#undef vucp
-#undef vusp
-#undef vuip
-#undef vulp
+#endif /* __WANT_IO_DEF */
 
-extern unsigned long tsunami_init (unsigned long, unsigned long);
+#ifdef __IO_EXTERN_INLINE
+#undef __EXTERN_INLINE
+#undef __IO_EXTERN_INLINE
+#endif
 
 #endif /* __KERNEL__ */
-
-/*
- * Data structure for handling TSUNAMI machine checks:
- */
-struct el_TSUNAMI_sysdata_mcheck {
-};
-
-#define RTC_PORT(x)	(0x70 + (x))
-#define RTC_ADDR(x)	(0x80 | (x))
-#define RTC_ALWAYS_BCD	0
 
 #endif /* __ALPHA_TSUNAMI__H__ */
