@@ -47,6 +47,7 @@
 #include <asm/timer.h>
 #include <asm/sections.h>
 #include <asm/setup.h>
+#include <asm/mmu.h>
 
 #ifdef CONFIG_IP_PNP
 #include <net/ipconfig.h>
@@ -157,11 +158,11 @@ int prom_callback(long *args)
 
 			for_each_process(p) {
 				mm = p->mm;
-				if (CTX_HWBITS(mm->context) == ctx)
+				if (CTX_NRBITS(mm->context) == ctx)
 					break;
 			}
 			if (!mm ||
-			    CTX_HWBITS(mm->context) != ctx)
+			    CTX_NRBITS(mm->context) != ctx)
 				goto done;
 
 			pgdp = pgd_offset(mm, va);
@@ -187,12 +188,19 @@ int prom_callback(long *args)
 		}
 
 		if ((va >= KERNBASE) && (va < (KERNBASE + (4 * 1024 * 1024)))) {
+			unsigned long kernel_pctx = 0;
+
+			if (tlb_type == cheetah_plus)
+				kernel_pctx |= (CTX_CHEETAH_PLUS_NUC |
+						CTX_CHEETAH_PLUS_CTX0);
+
 			/* Spitfire Errata #32 workaround */
 			__asm__ __volatile__("stxa	%0, [%1] %2\n\t"
 					     "flush	%%g6"
 					     : /* No outputs */
-					     : "r" (0),
-					     "r" (PRIMARY_CONTEXT), "i" (ASI_DMMU));
+					     : "r" (kernel_pctx),
+					       "r" (PRIMARY_CONTEXT),
+					       "i" (ASI_DMMU));
 
 			/*
 			 * Locked down tlb entry.

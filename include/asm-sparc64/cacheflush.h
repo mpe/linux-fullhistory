@@ -2,6 +2,17 @@
 #define _SPARC64_CACHEFLUSH_H
 
 #include <linux/config.h>
+#include <asm/page.h>
+
+/* Flushing for D-cache alias handling is only needed if
+ * the page size is smaller than 16K.
+ */
+#if PAGE_SHIFT < 14
+#define DCACHE_ALIASING_POSSIBLE
+#endif
+
+#ifndef __ASSEMBLY__
+
 #include <linux/mm.h>
 
 /* Cache flush operations. */
@@ -20,9 +31,9 @@
  * module load, so we need this.
  */
 extern void flush_icache_range(unsigned long start, unsigned long end);
+extern void __flush_icache_page(unsigned long);
 
 extern void __flush_dcache_page(void *addr, int flush_icache);
-extern void __flush_icache_page(unsigned long);
 extern void flush_dcache_page_impl(struct page *page);
 #ifdef CONFIG_SMP
 extern void smp_flush_dcache_page_impl(struct page *page, int cpu);
@@ -33,6 +44,7 @@ extern void flush_dcache_page_all(struct mm_struct *mm, struct page *page);
 #endif
 
 extern void __flush_dcache_range(unsigned long start, unsigned long end);
+extern void flush_dcache_page(struct page *page);
 
 #define flush_icache_page(vma, pg)	do { } while(0)
 #define flush_icache_user_range(vma,pg,adr,len)	do { } while (0)
@@ -49,11 +61,12 @@ extern void __flush_dcache_range(unsigned long start, unsigned long end);
 		memcpy(dst, src, len);				\
 	} while (0)
 
-extern void flush_dcache_page(struct page *page);
 #define flush_dcache_mmap_lock(mapping)		do { } while (0)
 #define flush_dcache_mmap_unlock(mapping)	do { } while (0)
 
 #define flush_cache_vmap(start, end)		do { } while (0)
 #define flush_cache_vunmap(start, end)		do { } while (0)
+
+#endif /* !__ASSEMBLY__ */
 
 #endif /* _SPARC64_CACHEFLUSH_H */

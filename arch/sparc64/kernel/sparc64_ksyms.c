@@ -59,6 +59,7 @@
 #include <asm/ns87303.h>
 #include <asm/timer.h>
 #include <asm/cpudata.h>
+#include <asm/rwsem.h>
 
 struct poll {
 	int fd;
@@ -174,6 +175,15 @@ EXPORT_SYMBOL(down_trylock);
 EXPORT_SYMBOL(down_interruptible);
 EXPORT_SYMBOL(up);
 
+/* RW semaphores */
+EXPORT_SYMBOL(__down_read);
+EXPORT_SYMBOL(__down_read_trylock);
+EXPORT_SYMBOL(__down_write);
+EXPORT_SYMBOL(__down_write_trylock);
+EXPORT_SYMBOL(__up_read);
+EXPORT_SYMBOL(__up_write);
+EXPORT_SYMBOL(__downgrade_write);
+
 /* Atomic counter implementation. */
 EXPORT_SYMBOL(atomic_add);
 EXPORT_SYMBOL(atomic_add_ret);
@@ -209,8 +219,11 @@ EXPORT_SYMBOL(__flushw_user);
 EXPORT_SYMBOL(tlb_type);
 EXPORT_SYMBOL(get_fb_unmapped_area);
 EXPORT_SYMBOL(flush_icache_range);
+
 EXPORT_SYMBOL(flush_dcache_page);
+#ifdef DCACHE_ALIASING_POSSIBLE
 EXPORT_SYMBOL(__flush_dcache_range);
+#endif
 
 EXPORT_SYMBOL(mostek_lock);
 EXPORT_SYMBOL(mstk48t02_regs);
@@ -350,7 +363,9 @@ EXPORT_SYMBOL(__memset);
 EXPORT_SYMBOL(memchr);
 
 EXPORT_SYMBOL(csum_partial);
-EXPORT_SYMBOL(csum_partial_copy_sparc64);
+EXPORT_SYMBOL(csum_partial_copy_nocheck);
+EXPORT_SYMBOL(__csum_partial_copy_from_user);
+EXPORT_SYMBOL(__csum_partial_copy_to_user);
 EXPORT_SYMBOL(ip_fast_csum);
 
 /* Moving data to/from/in userspace. */
