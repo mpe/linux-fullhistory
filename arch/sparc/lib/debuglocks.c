@@ -1,7 +1,8 @@
-/* $Id: debuglocks.c,v 1.1 1997/05/08 18:13:34 davem Exp $
+/* $Id: debuglocks.c,v 1.3 1998/09/29 09:46:22 davem Exp $
  * debuglocks.c: Debugging versions of SMP locking primitives.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1998 Anton Blanchard (anton@progsoc.uts.edu.au)
  */
 
 #include <linux/kernel.h>
@@ -22,26 +23,56 @@
  * number of the owner in the lowest two bits.
  */
 
+#define STORE_CALLER(A) __asm__ __volatile__("mov %%i7, %0" : "=r" (A));
+
+static inline void show(char *str, spinlock_t *lock, unsigned long caller)
+{
+	int cpu = smp_processor_id();
+
+	printk("%s(%p) CPU#%d stuck at %08lx, owner PC(%08lx):CPU(%lx)\n",str,
+		lock, cpu, caller, lock->owner_pc & ~3, lock->owner_pc & 3);
+}
+
+static inline void show_read(char *str, rwlock_t *lock, unsigned long caller)
+{
+	int cpu = smp_processor_id();
+
+	printk("%s(%p) CPU#%d stuck at %08lx, owner PC(%08lx):CPU(%lx)\n",str,
+		lock, cpu, caller, lock->owner_pc & ~3, lock->owner_pc & 3);
+}
+
+static inline void show_write(char *str, rwlock_t *lock, unsigned long caller)
+{
+	int cpu = smp_processor_id();
+
+	printk("%s(%p) CPU#%d stuck at %08lx, owner PC(%08lx):CPU(%lx) reader[0]=%08lx reader[1]=%08lx reader[2]=%08lx reader[3]=%08lx\n",
+		str, lock, cpu, caller, lock->owner_pc & ~3, lock->owner_pc & 3,
+		lock->reader_pc[0],
+		lock->reader_pc[1],
+		lock->reader_pc[2],
+		lock->reader_pc[3]);
+}
+
 #undef INIT_STUCK
 #define INIT_STUCK 100000000
 
-#undef STUCK
-#define STUCK \
-if(!--stuck) { printk("spin_lock(%p) CPU#%d stuck at %08lx, owner PC(%08lx):CPU(%lx)\n", lock, cpu, caller, lock->owner_pc & ~3, lock->owner_pc & 3); stuck = INIT_STUCK; }
-
-void _spin_lock(spinlock_t *lock)
+void _do_spin_lock(spinlock_t *lock, char *str)
 {
 	unsigned long caller;
 	unsigned long val;
 	int cpu = smp_processor_id();
 	int stuck = INIT_STUCK;
 
-	__asm__ __volatile__("mov %%i7, %0" : "=r" (caller));
+	STORE_CALLER(caller);
+
 again:
 	__asm__ __volatile__("ldstub [%1], %0" : "=r" (val) : "r" (&(lock->lock)));
 	if(val) {
 		while(lock->lock) {
-			STUCK;
+			if (!--stuck) {
+				show(str, lock, caller);
+				stuck = INIT_STUCK;
+			}
 			barrier();
 		}
 		goto again;
@@ -55,7 +86,8 @@ int _spin_trylock(spinlock_t *lock)
 	unsigned long caller;
 	int cpu = smp_processor_id();
 
-	__asm__ __volatile__("mov %%i7, %0" : "=r" (caller));
+	STORE_CALLER(caller);
+
 	__asm__ __volatile__("ldstub [%1], %0" : "=r" (val) : "r" (&(lock->lock)));
 	if(!val) {
 		/* We got it, record our identity for debugging. */
@@ -64,103 +96,33 @@ int _spin_trylock(spinlock_t *lock)
 	return val == 0;
 }
 
-void _spin_unlock(spinlock_t *lock)
+void _do_spin_unlock(spinlock_t *lock)
 {
 	lock->owner_pc = 0;
-	__asm__ __volatile__("stb %%g0, [%0]" : : "r" (&(lock->lock)) : "memory");
+	barrier();
+	lock->lock = 0;
 }
 
 #undef INIT_STUCK
 #define INIT_STUCK 100000000
 
-#undef STUCK
-#define STUCK \
-if(!--stuck) { printk("spin_lock_irq(%p) CPU#%d stuck at %08lx, owner PC(%08lx):CPU(%lx)\n", lock, cpu, caller, lock->owner_pc & ~3, lock->owner_pc & 3); stuck = INIT_STUCK; }
-
-void _spin_lock_irq(spinlock_t *lock)
+void _do_read_lock(rwlock_t *rw, char *str)
 {
 	unsigned long caller;
 	unsigned long val;
 	int cpu = smp_processor_id();
 	int stuck = INIT_STUCK;
 
-	__cli();
-	__asm__ __volatile__("mov %%i7, %0" : "=r" (caller));
-again:
-	__asm__ __volatile__("ldstub [%1], %0" : "=r" (val) : "r" (&(lock->lock)));
-	if(val) {
-		while(lock->lock) {
-			STUCK;
-			barrier();
-		}
-		goto again;
-	}
-	lock->owner_pc = (cpu & 3) | (caller & ~3);
-}
+	STORE_CALLER(caller);
 
-void _spin_unlock_irq(spinlock_t *lock)
-{
-	lock->owner_pc = 0;
-	__asm__ __volatile__("stb %%g0, [%0]" : : "r" (&(lock->lock)) : "memory");
-	__sti();
-}
-
-#undef INIT_STUCK
-#define INIT_STUCK 100000000
-
-#undef STUCK
-#define STUCK \
-if(!--stuck) { printk("spin_lock_irq(%p) CPU#%d stuck at %08lx, owner PC(%08lx):CPU(%lx)\n", lock, cpu, caller, lock->owner_pc & ~3, lock->owner_pc & 3); stuck = INIT_STUCK; }
-
-/* Caller macro does __save_and_cli(flags) for us. */
-void _spin_lock_irqsave(spinlock_t *lock)
-{
-	unsigned long caller;
-	unsigned long val;
-	int cpu = smp_processor_id();
-	int stuck = INIT_STUCK;
-
-	__asm__ __volatile__("mov %%i7, %0" : "=r" (caller));
-again:
-	__asm__ __volatile__("ldstub [%1], %0" : "=r" (val) : "r" (&(lock->lock)));
-	if(val) {
-		while(lock->lock) {
-			STUCK;
-			barrier();
-		}
-		goto again;
-	}
-	lock->owner_pc = (cpu & 3) | (caller & ~3);
-}
-
-void _spin_unlock_irqrestore(spinlock_t *lock)
-{
-	lock->owner_pc = 0;
-	__asm__ __volatile__("stb %%g0, [%0]" : : "r" (&(lock->lock)) : "memory");
-}
-
-#undef INIT_STUCK
-#define INIT_STUCK 100000000
-
-#undef STUCK
-#define STUCK \
-if(!--stuck) { printk("read_lock(%p) CPU#%d stuck at %08lx, owner PC(%08lx):CPU(%lx)\n", rw, cpu, caller, rw->owner_pc & ~3, rw->owner_pc & 3); stuck = INIT_STUCK; }
-
-void _read_lock(rwlock_t *rw)
-{
-	unsigned long flags;
-	unsigned long caller;
-	unsigned long val;
-	int cpu = smp_processor_id();
-	int stuck = INIT_STUCK;
-
-	__asm__ __volatile__("mov %%i7, %0" : "=r" (caller));
-	__save_and_cli(flags);
 wlock_again:
 	__asm__ __volatile__("ldstub [%1 + 3], %0" : "=r" (val) : "r" (&(rw->lock)));
 	if(val) {
 		while(rw->lock & 0xff) {
-			STUCK;
+			if (!--stuck) {
+				show(str, (spinlock_t *)rw, caller);
+				stuck = INIT_STUCK;
+			}
 			barrier();
 		}
 		goto wlock_again;
@@ -169,120 +131,16 @@ clock_again:
 	__asm__ __volatile__("ldstub [%1 + 2], %0" : "=r" (val) : "r" (&(rw->lock)));
 	if(val) {
 		while(rw->lock & 0xff00) {
-			STUCK;
+			if (!--stuck) {
+				show_read(str, rw, caller);
+				stuck = INIT_STUCK;
+			}
 			barrier();
 		}
 		goto clock_again;
 	}
 	(*((unsigned short *)&rw->lock))++;
-	barrier();
-	(*(((unsigned short *)&rw->lock)+1)) = 0;
-	__restore_flags(flags);
-}
-
-#undef INIT_STUCK
-#define INIT_STUCK 100000000
-
-#undef STUCK
-#define STUCK \
-if(!--stuck) { printk("read_unlock(%p) CPU#%d stuck at %08lx, owner PC(%08lx):CPU(%lx)\n", rw, cpu, caller, rw->owner_pc & ~3, rw->owner_pc & 3); stuck = INIT_STUCK; }
-
-void _read_unlock(rwlock_t *rw)
-{
-	unsigned long flags, val, caller;
-	int cpu = smp_processor_id();
-	int stuck = INIT_STUCK;
-
-	__asm__ __volatile__("mov %%i7, %0" : "=r" (caller));
-	__save_and_cli(flags);
-clock_again:
-	__asm__ __volatile__("ldstub [%1 + 2], %0" : "=r" (val) : "r" (&(rw->lock)));
-	if(val) {
-		while(rw->lock & 0xff00) {
-			STUCK;
-			barrier();
-		}
-		goto clock_again;
-	}
-	(*((unsigned short *)&rw->lock))--;
-	barrier();
-	(*(((unsigned char *)&rw->lock)+2))=0;
-	__restore_flags(flags);
-}
-
-#undef INIT_STUCK
-#define INIT_STUCK 100000000
-
-#undef STUCK
-#define STUCK \
-if(!--stuck) { printk("write_lock(%p) CPU#%d stuck at %08lx, owner PC(%08lx):CPU(%lx)\n", rw, cpu, caller, rw->owner_pc & ~3, rw->owner_pc & 3); stuck = INIT_STUCK; }
-
-void _write_lock(rwlock_t *rw)
-{
-	unsigned long flags, val, caller;
-	int cpu = smp_processor_id();
-	int stuck = INIT_STUCK;
-
-	__asm__ __volatile__("mov %%i7, %0" : "=r" (caller));
-	__save_and_cli(flags);
-wlock_again:
-	__asm__ __volatile__("ldstub [%1 + 3], %0" : "=r" (val) : "r" (&(rw->lock)));
-	if(val) {
-		while(rw->lock & 0xff) {
-			STUCK;
-			barrier();
-		}
-		goto wlock_again;
-	}
-	rw->owner_pc = (cpu & 3) | (caller & ~3);
-	while(rw->lock & ~0xff) {
-		STUCK;
-		barrier();
-	}
-}
-
-void _write_unlock(rwlock_t *rw)
-{
-	rw->owner_pc = 0;
-	barrier();
-	rw->lock = 0;
-}
-
-#undef INIT_STUCK
-#define INIT_STUCK 100000000
-
-#undef STUCK
-#define STUCK \
-if(!--stuck) { printk("read_lock_irq(%p) CPU#%d stuck at %08lx, owner PC(%08lx):CPU(%lx)\n", rw, cpu, caller, rw->owner_pc & ~3, rw->owner_pc & 3); stuck = INIT_STUCK; }
-
-void _read_lock_irq(rwlock_t *rw)
-{
-	unsigned long caller;
-	unsigned long val;
-	int cpu = smp_processor_id();
-	int stuck = INIT_STUCK;
-
-	__asm__ __volatile__("mov %%i7, %0" : "=r" (caller));
-	__cli();
-wlock_again:
-	__asm__ __volatile__("ldstub [%1 + 3], %0" : "=r" (val) : "r" (&(rw->lock)));
-	if(val) {
-		while(rw->lock & 0xff) {
-			STUCK;
-			barrier();
-		}
-		goto wlock_again;
-	}
-clock_again:
-	__asm__ __volatile__("ldstub [%1 + 2], %0" : "=r" (val) : "r" (&(rw->lock)));
-	if(val) {
-		while(rw->lock & 0xff00) {
-			STUCK;
-			barrier();
-		}
-		goto clock_again;
-	}
-	(*((unsigned short *)&rw->lock))++;
+	rw->reader_pc[cpu] = caller;
 	barrier();
 	(*(((unsigned short *)&rw->lock)+1)) = 0;
 }
@@ -290,134 +148,29 @@ clock_again:
 #undef INIT_STUCK
 #define INIT_STUCK 100000000
 
-#undef STUCK
-#define STUCK \
-if(!--stuck) { printk("read_unlock_irq(%p) CPU#%d stuck at %08lx, owner PC(%08lx):CPU(%lx)\n", rw, cpu, caller, rw->owner_pc & ~3, rw->owner_pc & 3); stuck = INIT_STUCK; }
-
-void _read_unlock_irq(rwlock_t *rw)
-{
-	unsigned long val, caller;
-	int stuck = INIT_STUCK;
-	int cpu = smp_processor_id();
-
-	__asm__ __volatile__("mov %%i7, %0" : "=r" (caller));
-clock_again:
-	__asm__ __volatile__("ldstub [%1 + 2], %0" : "=r" (val) : "r" (&(rw->lock)));
-	if(val) {
-		while(rw->lock & 0xff00) {
-			STUCK;
-			barrier();
-		}
-		goto clock_again;
-	}
-	(*((unsigned short *)&rw->lock))--;
-	barrier();
-	(*(((unsigned char *)&rw->lock)+2))=0;
-	__sti();
-}
-
-#undef INIT_STUCK
-#define INIT_STUCK 100000000
-
-#undef STUCK
-#define STUCK \
-if(!--stuck) { printk("write_lock_irq(%p) CPU#%d stuck at %08lx, owner PC(%08lx):CPU(%lx)\n", rw, cpu, caller, rw->owner_pc & ~3, rw->owner_pc & 3); stuck = INIT_STUCK; }
-
-void _write_lock_irq(rwlock_t *rw)
-{
-	unsigned long val, caller;
-	int cpu = smp_processor_id();
-	int stuck = INIT_STUCK;
-
-	__asm__ __volatile__("mov %%i7, %0" : "=r" (caller));
-	__cli();
-wlock_again:
-	__asm__ __volatile__("ldstub [%1 + 3], %0" : "=r" (val) : "r" (&(rw->lock)));
-	if(val) {
-		while(rw->lock & 0xff) {
-			STUCK;
-			barrier();
-		}
-		goto wlock_again;
-	}
-	rw->owner_pc = (cpu & 3) | (caller & ~3);
-	while(rw->lock & ~0xff) {
-		STUCK;
-		barrier();
-	}
-}
-
-void _write_unlock_irq(rwlock_t *rw)
-{
-	rw->owner_pc = 0;
-	barrier();
-	rw->lock = 0;
-	__sti();
-}
-
-#undef INIT_STUCK
-#define INIT_STUCK 100000000
-
-#undef STUCK
-#define STUCK \
-if(!--stuck) { printk("read_lock_irqsave(%p) CPU#%d stuck at %08lx, owner PC(%08lx):CPU(%lx)\n", rw, cpu, caller, rw->owner_pc & ~3, rw->owner_pc & 3); stuck = INIT_STUCK; }
-
-/* Caller does __save_and_cli(flags) for us. */
-void _read_lock_irqsave(rwlock_t *rw)
+void _do_read_unlock(rwlock_t *rw, char *str)
 {
 	unsigned long caller;
 	unsigned long val;
 	int cpu = smp_processor_id();
 	int stuck = INIT_STUCK;
 
-	__asm__ __volatile__("mov %%i7, %0" : "=r" (caller));
-wlock_again:
-	__asm__ __volatile__("ldstub [%1 + 3], %0" : "=r" (val) : "r" (&(rw->lock)));
-	if(val) {
-		while(rw->lock & 0xff) {
-			STUCK;
-			barrier();
-		}
-		goto wlock_again;
-	}
+	STORE_CALLER(caller);
+
 clock_again:
 	__asm__ __volatile__("ldstub [%1 + 2], %0" : "=r" (val) : "r" (&(rw->lock)));
 	if(val) {
 		while(rw->lock & 0xff00) {
-			STUCK;
-			barrier();
-		}
-		goto clock_again;
-	}
-	(*((unsigned short *)&rw->lock))++;
-	barrier();
-	(*(((unsigned short *)&rw->lock)+1)) = 0;
-}
-
-#undef INIT_STUCK
-#define INIT_STUCK 100000000
-
-#undef STUCK
-#define STUCK \
-if(!--stuck) { printk("read_unlock_irqrestore(%p) CPU#%d stuck at %08lx, owner PC(%08lx):CPU(%lx)\n", rw, cpu, caller, rw->owner_pc & ~3, rw->owner_pc & 3); stuck = INIT_STUCK; }
-
-void _read_unlock_irqrestore(rwlock_t *rw)
-{
-	unsigned long val, caller;
-	int cpu = smp_processor_id();
-	int stuck = INIT_STUCK;
-
-	__asm__ __volatile__("mov %%i7, %0" : "=r" (caller));
-clock_again:
-	__asm__ __volatile__("ldstub [%1 + 2], %0" : "=r" (val) : "r" (&(rw->lock)));
-	if(val) {
-		while(rw->lock & 0xff00) {
-			STUCK;
+			if (!--stuck) {
+				show_read(str, rw, caller);
+				stuck = INIT_STUCK;
+			}
 			barrier();
 		}
 		goto clock_again;
 	}
 	(*((unsigned short *)&rw->lock))--;
+	rw->reader_pc[cpu] = 0;
 	barrier();
 	(*(((unsigned char *)&rw->lock)+2))=0;
 }
@@ -425,35 +178,38 @@ clock_again:
 #undef INIT_STUCK
 #define INIT_STUCK 100000000
 
-#undef STUCK
-#define STUCK \
-if(!--stuck) { printk("write_lock_irqsave(%p) CPU#%d stuck at %08lx, owner PC(%08lx):CPU(%lx)\n", rw, cpu, caller, rw->owner_pc & ~3, rw->owner_pc & 3); stuck = INIT_STUCK; }
-
-/* Caller does __save_and_cli(flags) for us. */
-void _write_lock_irqsave(rwlock_t *rw)
+void _do_write_lock(rwlock_t *rw, char *str)
 {
-	unsigned long val, caller;
+	unsigned long caller;
+	unsigned long val;
 	int cpu = smp_processor_id();
 	int stuck = INIT_STUCK;
 
-	__asm__ __volatile__("mov %%i7, %0" : "=r" (caller));
+	STORE_CALLER(caller);
+
 wlock_again:
 	__asm__ __volatile__("ldstub [%1 + 3], %0" : "=r" (val) : "r" (&(rw->lock)));
 	if(val) {
 		while(rw->lock & 0xff) {
-			STUCK;
+			if (!--stuck) {
+				show_write(str, rw, caller);
+				stuck = INIT_STUCK;
+			}
 			barrier();
 		}
 		goto wlock_again;
 	}
 	rw->owner_pc = (cpu & 3) | (caller & ~3);
 	while(rw->lock & ~0xff) {
-		STUCK;
+		if (!--stuck) {
+			show_write(str, rw, caller);
+			stuck = INIT_STUCK;
+		}
 		barrier();
 	}
 }
 
-void _write_unlock_irqrestore(rwlock_t *rw)
+void _do_write_unlock(rwlock_t *rw)
 {
 	rw->owner_pc = 0;
 	barrier();

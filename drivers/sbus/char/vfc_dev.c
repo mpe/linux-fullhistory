@@ -21,7 +21,6 @@
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/fs.h>
-#include <linux/uaccess.h>
 
 #include <asm/openprom.h>
 #include <asm/oplib.h>
@@ -31,6 +30,7 @@
 #include <asm/delay.h>
 #include <asm/page.h>
 #include <asm/pgtable.h>
+#include <asm/uaccess.h>
 
 #define VFC_MAJOR (60)
 

@@ -5,7 +5,7 @@
  *
  *		IPv4 Forwarding Information Base: policy rules.
  *
- * Version:	$Id: fib_rules.c,v 1.6 1998/08/26 12:03:30 davem Exp $
+ * Version:	$Id: fib_rules.c,v 1.7 1998/10/03 09:37:09 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -13,6 +13,9 @@
  *		modify it under the terms of the GNU General Public License
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
+ *
+ * Fixes:
+ * 		Rani Assaf	:	local_rule cannot be deleted
  */
 
 #include <linux/config.h>
@@ -89,8 +92,10 @@ int inet_rtm_delrule(struct sk_buff *skb, struct nlmsghdr* nlh, void *arg)
 		    (!rta[RTA_PRIORITY-1] || memcmp(RTA_DATA(rta[RTA_PRIORITY-1]), &r->r_preference, 4) == 0) &&
 		    (!rta[RTA_IIF-1] || strcmp(RTA_DATA(rta[RTA_IIF-1]), r->r_ifname) == 0) &&
 		    (!rtm->rtm_table || (r && rtm->rtm_table == r->r_table))) {
+			if (r == &local_rule)
+				return -EPERM;
 			*rp = r->r_next;
-			if (r != &default_rule && r != &main_rule && r != &local_rule)
+			if (r != &default_rule && r != &main_rule)
 				kfree(r);
 			return 0;
 		}

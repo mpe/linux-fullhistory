@@ -1,4 +1,4 @@
-/* $Id: tree.c,v 1.24 1998/03/09 14:04:29 jj Exp $
+/* $Id: tree.c,v 1.25 1998/09/17 11:04:58 jj Exp $
  * tree.c: Basic device tree traversal/scanning for the Linux
  *         prom library.
  *
@@ -11,6 +11,7 @@
 #include <linux/types.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
+#include <linux/ctype.h>
 
 #include <asm/openprom.h>
 #include <asm/oplib.h>
@@ -257,29 +258,49 @@ char * prom_nextprop(int node, char *oprop, char *buffer)
 
 int prom_finddevice(char *name)
 {
-	int topnd = prom_getchild(prom_root_node);
-	int srch;
+	char nbuf[128];
+	char *s = name, *d;
+	int node = prom_root_node, node2;
+	unsigned int which_io, phys_addr;
+	struct linux_prom_registers reg[PROMREG_MAX];
 
-	if(name[0] == '/')
-		name++;
-	if(sparc_cpu_model == sun4d) {
-		if(!strcmp(name, "sbus"))
-			name = "sbi";
-		if((srch = prom_searchsiblings(topnd, "io-unit")) == 0 ||
-		   (srch = prom_getchild(srch)) == 0 ||
-		   (srch = prom_searchsiblings(srch, name)) == 0) {
-			prom_printf("%s prom node not found.\n", name);
-			prom_halt();
-		}
-	} else if((srch = prom_searchsiblings(topnd, name)) == 0) {
-		if((srch = prom_searchsiblings(topnd, "iommu")) == 0 ||
-		   (srch = prom_getchild(srch)) == 0 ||
-		   (srch = prom_searchsiblings(srch, name)) == 0) {
-			prom_printf("Cannot find node %s\n", name);
-			prom_halt();
+	while (*s++) {
+		if (!*s) return node; /* path '.../' is legal */
+		node = prom_getchild(node);
+
+		for (d = nbuf; *s != 0 && *s != '@' && *s != '/';)
+			*d++ = *s++;
+		*d = 0;
+		
+		node = prom_searchsiblings(node, nbuf);
+		if (!node)
+			return 0;
+
+		if (*s == '@') {
+			if (isxdigit(s[1]) && s[2] == ',') {
+				which_io = simple_strtoul(s+1, NULL, 16);
+				phys_addr = simple_strtoul(s+3, &d, 16);
+				if (d != s + 3 && (!*d || *d == '/')
+				    && d <= s + 3 + 8) {
+					node2 = node;
+					while (node2 && node2 != -1) {
+						if (prom_getproperty (node2, "reg", (char *)reg, sizeof (reg)) > 0) {
+							if (which_io == reg[0].which_io && phys_addr == reg[0].phys_addr) {
+								node = node2;
+								break;
+							}
+						}
+						node2 = prom_getsibling(node2);
+						if (!node2 || node2 == -1)
+							break;
+						node2 = prom_searchsiblings(prom_getsibling(node2), nbuf);
+					}
+				}
+			}
+			while (*s != 0 && *s != '/') s++;
 		}
 	}
-	return srch;
+	return node;
 }
 
 int prom_node_has_property(int node, char *prop)

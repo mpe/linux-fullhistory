@@ -179,9 +179,9 @@ static int load_inode_bitmap (struct super_block * sb,
  */
 void ext2_free_inode (struct inode * inode)
 {
+	struct super_block * sb = inode->i_sb;
 	int is_directory;
 	unsigned long ino;
-	struct super_block * sb;
 	struct buffer_head * bh;
 	struct buffer_head * bh2;
 	unsigned long block_group;
@@ -190,8 +190,6 @@ void ext2_free_inode (struct inode * inode)
 	struct ext2_group_desc * gdp;
 	struct ext2_super_block * es;
 
-	if (!inode)
-		return;
 	if (!inode->i_dev) {
 		printk ("ext2_free_inode: inode has no device\n");
 		return;
@@ -205,7 +203,7 @@ void ext2_free_inode (struct inode * inode)
 			inode->i_nlink);
 		return;
 	}
-	if (!inode->i_sb) {
+	if (!sb) {
 		printk("ext2_free_inode: inode on nonexistent device\n");
 		return;
 	}
@@ -213,15 +211,21 @@ void ext2_free_inode (struct inode * inode)
 	ino = inode->i_ino;
 	ext2_debug ("freeing inode %lu\n", ino);
 
-	sb = inode->i_sb;
+	/*
+	 * Note: we must free any quota before locking the superblock,
+	 * as writing the quota to disk may need the lock as well.
+	 */
+	DQUOT_FREE_INODE(sb, inode);
+	DQUOT_DROP(inode);
+
 	lock_super (sb);
-	if (ino < EXT2_FIRST_INO(sb) ||
-	    ino > le32_to_cpu(sb->u.ext2_sb.s_es->s_inodes_count)) {
+	es = sb->u.ext2_sb.s_es;
+	if (ino < EXT2_FIRST_INO(sb) || 
+	    ino > le32_to_cpu(es->s_inodes_count)) {
 		ext2_error (sb, "free_inode",
 			    "reserved inode or nonexistent inode");
 		goto error_return;
 	}
-	es = sb->u.ext2_sb.s_es;
 	block_group = (ino - 1) / EXT2_INODES_PER_GROUP(sb);
 	bit = (ino - 1) % EXT2_INODES_PER_GROUP(sb);
 	bitmap_nr = load_inode_bitmap (sb, block_group);
@@ -233,7 +237,6 @@ void ext2_free_inode (struct inode * inode)
 	is_directory = S_ISDIR(inode->i_mode);
 
 	/* Do this BEFORE marking the inode not in use */
-	DQUOT_FREE_INODE(sb, inode);
 	clear_inode (inode);
 
 	/* Ok, now we can actually update the inode bitmaps.. */

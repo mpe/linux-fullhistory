@@ -340,6 +340,12 @@ static void fbcon_init(struct vc_data *conp, int init)
 	                     fb_display[unit].var.bits_per_pixel);
     fb_display[unit].conp = conp;
     fb_display[unit].fb_info = info;
+    /* clear out the cmap so we don't have dangling pointers */
+    fb_display[unit].cmap.len = 0;
+    fb_display[unit].cmap.red = 0;
+    fb_display[unit].cmap.green = 0;
+    fb_display[unit].cmap.blue = 0;
+    fb_display[unit].cmap.transp = 0;
     fbcon_setup(unit, init, !init);
     /* Must be done after fbcon_setup to prevent excess updates */
     conp->vc_display_fg = &info->display_fg;
@@ -410,10 +416,9 @@ static void fbcon_setup(int con, int init, int logo)
     unsigned short *save = NULL, *r, *q;
     int i, charcnt = 256;
     struct fbcon_font_desc *font;
-    /* Only if not module */
-    int initmem_freed = 1;
     
-    if (con != fg_console || initmem_freed || p->type == FB_TYPE_TEXT)
+    if (con != fg_console || (p->fb_info->flags & FBINFO_FLAG_MODULE) ||
+        p->type == FB_TYPE_TEXT)
     	logo = 0;
 
     p->var.xoffset = p->var.yoffset = p->yscroll = 0;  /* reset wrap/pan */
@@ -551,7 +556,8 @@ static void fbcon_setup(int con, int init, int logo)
     if (!init) {
 	if (conp->vc_cols != nr_cols || conp->vc_rows != nr_rows)
 	    vc_resize_con(nr_rows, nr_cols, con);
-	else if (CON_IS_VISIBLE(conp)) {
+	else if (CON_IS_VISIBLE(conp) &&
+		 vt_cons[conp->vc_num]->vc_mode == KD_TEXT) {
 	    if (p->dispsw->clear_margins)
 		p->dispsw->clear_margins(conp, p, 0);
 	    update_screen(con);
@@ -1165,7 +1171,7 @@ static int fbcon_switch(struct vc_data *conp)
 
     if (info && info->switch_con)
 	(*info->switch_con)(unit, info);
-    if (p->dispsw->clear_margins)
+    if (p->dispsw->clear_margins && vt_cons[unit]->vc_mode == KD_TEXT)
 	p->dispsw->clear_margins(conp, p, 0);
     if (logo_shown == -2) {
 	logo_shown = fg_console;
@@ -1336,7 +1342,7 @@ static int fbcon_do_set_font(int unit, struct console_font_op *op, u8 *data, int
 	p->vrows = p->var.yres_virtual/h;
 	updatescrollmode(p);
 	vc_resize_con( p->var.yres/h, p->var.xres/w, unit );
-    } else if (CON_IS_VISIBLE(p->conp)) {
+    } else if (CON_IS_VISIBLE(p->conp) && vt_cons[unit]->vc_mode == KD_TEXT) {
 	if (p->dispsw->clear_margins)
 	    p->dispsw->clear_margins(p->conp, p, 0);
 	update_screen(unit);

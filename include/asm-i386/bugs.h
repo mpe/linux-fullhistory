@@ -29,9 +29,7 @@ __initfunc(static void no_halt(char *s, int *ints))
 __initfunc(static void no_387(char *s, int *ints))
 {
 	boot_cpu_data.hard_math = 0;
-	__asm__("movl %%cr0,%%eax\n\t"
-		"orl $0xE,%%eax\n\t"
-		"movl %%eax,%%cr0\n\t" : : : "ax");
+	write_cr0(0xE | read_cr0());
 }
 
 static char __initdata fpu_error = 0;

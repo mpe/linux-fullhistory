@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.33 1998/07/28 16:52:48 jj Exp $
+/* $Id: time.c,v 1.39 1998/09/29 09:46:15 davem Exp $
  * linux/arch/sparc/kernel/time.c
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -6,6 +6,9 @@
  *
  * Chris Davis (cdavis@cois.on.ca) 03/27/1998
  * Added support for the intersil on the sun4/4200
+ *
+ * Gleb Raiko (rajko@mech.math.msu.su) 08/18/1998
+ * Support for MicroSPARC-IIep, PCI CPU.
  *
  * This file handles the Sparc specific time handling details.
  */
@@ -19,6 +22,7 @@
 #include <linux/interrupt.h>
 #include <linux/timex.h>
 #include <linux/init.h>
+#include <linux/pci.h>
 
 #include <asm/oplib.h>
 #include <asm/segment.h>
@@ -36,6 +40,7 @@ enum sparc_clock_type sp_clock_typ;
 struct mostek48t02 *mstk48t02_regs = 0;
 struct mostek48t08 *mstk48t08_regs = 0;
 static int set_rtc_mmss(unsigned long);
+static void sbus_do_settimeofday(struct timeval *tv);
 
 #ifdef CONFIG_SUN4
 struct intersil *intersil_clock;
@@ -71,10 +76,13 @@ void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	static long last_rtc_update=0;
 
 #ifdef CONFIG_SUN4
-	int temp;
-        intersil_read_intr(intersil_clock, temp);
-	/* re-enable the irq */
-	enable_pil_irq(10);
+	if((idprom->id_machtype == (SM_SUN4 | SM_4_260)) ||
+   (idprom->id_machtype == (SM_SUN4 | SM_4_110))) {
+		int temp;
+        	intersil_read_intr(intersil_clock, temp);
+		/* re-enable the irq */
+		enable_pil_irq(10);
+	}
 #endif
 	clear_clock_irq();
 
@@ -83,11 +91,12 @@ void timer_interrupt(int irq, void *dev_id, struct pt_regs * regs)
 	/* Determine when to update the Mostek clock. */
 	if (time_state != TIME_BAD && xtime.tv_sec > last_rtc_update + 660 &&
 	    xtime.tv_usec > 500000 - (tick >> 1) &&
-	    xtime.tv_usec < 500000 + (tick >> 1))
+	    xtime.tv_usec < 500000 + (tick >> 1)) {
 	  if (set_rtc_mmss(xtime.tv_sec) == 0)
 	    last_rtc_update = xtime.tv_sec;
 	  else
 	    last_rtc_update = xtime.tv_sec - 600; /* do it again in 60 s */
+	}
 }
 
 /* Converts Gregorian date to seconds since 1970-01-01 00:00:00.
@@ -316,7 +325,7 @@ static __inline__ void clock_probe(void)
 		kick_start_clock();
 }
 
-__initfunc(void time_init(void))
+__initfunc(void sbus_time_init(void))
 {
 	unsigned int year, mon, day, hour, min, sec;
 	struct mostek48t02 *mregs;
@@ -327,6 +336,8 @@ __initfunc(void time_init(void))
 #endif
 
 	do_get_fast_time = do_gettimeofday;
+	BTFIXUPSET_CALL(bus_do_settimeofday, sbus_do_settimeofday, BTFIXUPCALL_NORM);
+	btfixup();
 
 #if CONFIG_AP1000
 	init_timers(timer_interrupt);
@@ -344,7 +355,6 @@ __initfunc(void time_init(void))
 #ifdef CONFIG_SUN4
 	if(idprom->id_machtype == (SM_SUN4 | SM_4_330)) {
 #endif
-
 	mregs = mstk48t02_regs;
 	if(!mregs) {
 		prom_printf("Something wrong, clock regs not mapped yet.\n");
@@ -397,7 +407,19 @@ __initfunc(void time_init(void))
 	__sti();
 }
 
-static __inline__ unsigned long do_gettimeoffset(void)
+__initfunc(void time_init(void))
+{
+#ifdef CONFIG_PCI
+	extern void pci_time_init(void);
+	if (pci_present()) {
+		pci_time_init();
+		return;
+	}
+#endif
+	sbus_time_init();
+}
+
+extern __inline__ unsigned long do_gettimeoffset(void)
 {
 	unsigned long offset = 0;
 	unsigned int count;
@@ -458,6 +480,11 @@ void do_gettimeofday(struct timeval *tv)
 }
 
 void do_settimeofday(struct timeval *tv)
+{
+	bus_do_settimeofday(tv);
+}
+
+static void sbus_do_settimeofday(struct timeval *tv)
 {
 	cli();
 #if !CONFIG_AP1000

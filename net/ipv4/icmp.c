@@ -3,7 +3,7 @@
  *	
  *		Alan Cox, <alan@cymru.net>
  *
- *	Version: $Id: icmp.c,v 1.45 1998/08/26 12:03:35 davem Exp $
+ *	Version: $Id: icmp.c,v 1.46 1998/10/03 09:37:15 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -50,6 +50,11 @@
  *		Yu Tianli	:	Fixed two ugly bugs in icmp_send
  *					- IP option length was accounted wrongly
  *					- ICMP header length was not accounted at all.
+ *
+ * To Fix:
+ *
+ *	- Should use skb_pull() instead of all the manual checking.
+ *	  This would also greatly simply some upper layer error handlers. --AK
  *
  * RFC1122 (Host Requirements -- Comm. Layer) Status:
  * (boy, are there a lot of rules for ICMP)
@@ -708,12 +713,10 @@ static void icmp_unreach(struct icmphdr *icmph, struct sk_buff *skb, int len)
 	hash = iph->protocol & (MAX_INET_PROTOS - 1);
 	if ((raw_sk = raw_v4_htable[hash]) != NULL) 
 	{
-		raw_sk = raw_v4_lookup(raw_sk, iph->protocol, iph->saddr, iph->daddr, skb->dev->ifindex);
-		while (raw_sk) 
-		{
+		while ((raw_sk = raw_v4_lookup(raw_sk, iph->protocol, iph->saddr,
+					       iph->daddr, skb->dev->ifindex)) != NULL) {
 			raw_err(raw_sk, skb);
-			raw_sk = raw_v4_lookup(raw_sk->next, iph->protocol,
-					       iph->saddr, iph->daddr, skb->dev->ifindex);
+			raw_sk = raw_sk->next;
 		}
 	}
 
@@ -1072,8 +1075,7 @@ static struct icmp_control icmp_pointers[NR_ICMP_TYPES+1] = {
 /* TIME EXCEEDED (11) */
  { &icmp_statistics.IcmpOutTimeExcds, &icmp_statistics.IcmpInTimeExcds, icmp_unreach, 1, &sysctl_icmp_timeexceed_time },
 /* PARAMETER PROBLEM (12) */
-/* FIXME: RFC1122 3.2.2.5 - MUST pass PARAM_PROB messages to transport layer */
- { &icmp_statistics.IcmpOutParmProbs, &icmp_statistics.IcmpInParmProbs, icmp_discard, 1, &sysctl_icmp_paramprob_time },
+ { &icmp_statistics.IcmpOutParmProbs, &icmp_statistics.IcmpInParmProbs, icmp_unreach, 1, &sysctl_icmp_paramprob_time },
 /* TIMESTAMP (13) */
  { &icmp_statistics.IcmpOutTimestamps, &icmp_statistics.IcmpInTimestamps, icmp_timestamp, 0,  },
 /* TIMESTAMP REPLY (14) */

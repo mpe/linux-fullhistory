@@ -314,13 +314,6 @@ static inline void bpp_snap(const char *msg, unsigned minor)
 
 #endif /* __sparc__ */
 
-/*
- * This is TRUE if the module_init successfully loaded the module.
- */
-#if 0
-static int loaded_flag = 0;
-#endif
-
 static void bpp_wake_up(unsigned long val)
 { wake_up(&instances[val].wait_queue); }
 
@@ -946,25 +939,22 @@ static volatile struct bpp_regs *map_bpp(struct linux_sbus_device *dev, int idx)
 {
       volatile struct bpp_regs *regs;
 
-      /* Apply ranges to here, do not pollute Sbus devices list. */
-      struct linux_prom_registers areg;
-
       /*
        * PROM reports different numbers on Zebra and on DMA2.
        * We need to figure out when to apply parent ranges.
        * printk will show this on different machines.
        */
 
-      areg = dev->reg_addrs[0];
-      printk("bpp%d.map_bpp: 0x%x.%p[0x%x] i=%d\n", idx,
-            areg.which_io, areg.phys_addr, areg.reg_size,
-            dev->irqs[0]);
       /* IPC Zebra   1.fa200000[1c] i=2  */
-      /** prom_apply_sbus_ranges (&areg, 1); **/
+      prom_apply_sbus_ranges(dev->my_bus, &dev->reg_addrs[0],
+			     dev->num_registers, dev);
 
-      regs = sparc_alloc_io (areg.phys_addr, 0,
-                                   sizeof(struct bpp_regs), "bpp",
-                                   areg.which_io, 0x0);
+      regs = sparc_alloc_io(dev->reg_addrs[0].phys_addr, 0,
+			    dev->reg_addrs[0].reg_size, "bpp",
+			    dev->reg_addrs[0].which_io, 0x0);
+      printk("bpp%d.map_bpp: 0x%x.%p[0x%x] i=%d\n", idx,
+	     dev->reg_addrs[0].which_io, dev->reg_addrs[0].phys_addr,
+	     dev->reg_addrs[0].reg_size, dev->irqs[0]);
 
       return regs;
 }

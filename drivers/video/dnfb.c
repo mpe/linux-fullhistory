@@ -321,6 +321,7 @@ void dnfb_init(void)
 	fb_info.blank=&dnfbcon_blank;	
 	fb_info.node = -1;
 	fb_info.fbops = &dnfb_ops;
+	fb_info.flags = FBINFO_FLAG_DEFAULT;
 	
         outb(RESET_CREG, AP_CONTROL_3A);
         outw(0x0, AP_WRITE_ENABLE);

@@ -47,10 +47,12 @@ unsigned long *irq_rcvreg = &dummy;
  *
  * take an encoded intr value and lookup if it's valid
  * then get the mask bits that match from irq_mask
+ *
+ * P3: Translation from irq 0x0d to mask 0x2000 is for MrCoffee.
  */
 static unsigned char irq_xlate[32] = {
     /*  0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  a,  b,  c,  d,  e,  f */
-	0,  0,  0,  0,  1,  0,  2,  0,  3,  0,  4,  5,  6,  0,  0,  7,
+	0,  0,  0,  0,  1,  0,  2,  0,  3,  0,  4,  5,  6, 14,  0,  7,
 	0,  0,  8,  9,  0, 10,  0, 11,  0, 12,  0, 13,  0, 14,  0,  0
 };
 

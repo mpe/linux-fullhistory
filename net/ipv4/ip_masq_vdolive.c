@@ -2,7 +2,7 @@
  *		IP_MASQ_VDOLIVE  - VDO Live masquerading module
  *
  *
- * Version:	@(#)$Id: ip_masq_vdolive.c,v 1.2 1997/11/28 15:32:35 alan Exp $
+ * Version:	@(#)$Id: ip_masq_vdolive.c,v 1.3 1998/08/29 23:51:18 davem Exp $
  *
  * Author:	Nigel Metheringham <Nigel.Metheringham@ThePLAnet.net>
  *		PLAnet Online Ltd
@@ -52,10 +52,12 @@ struct ip_masq_app *masq_incarnations[MAX_MASQ_APP_PORTS];
 /*
  *     Debug level
  */
+#ifdef CONFIG_IP_MASQ_DEBUG
 static int debug=0;
+MODULE_PARM(debug, "i");
+#endif
 
 MODULE_PARM(ports, "1-" __MODULE_STRING(MAX_MASQ_APP_PORTS) "i");
-MODULE_PARM(debug, "i");
 
 static int
 masq_vdolive_init_1 (struct ip_masq_app *mapp, struct ip_masq *ms)

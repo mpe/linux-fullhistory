@@ -826,6 +826,10 @@ ipgre_tunnel_ioctl (struct device *dev, struct ifreq *ifr, int cmd)
 
 	case SIOCADDTUNNEL:
 	case SIOCCHGTUNNEL:
+		err = -EPERM;
+		if (!capable(CAP_NET_ADMIN))
+			goto done;
+
 		err = -EFAULT;
 		if (copy_from_user(&p, ifr->ifr_ifru.ifru_data, sizeof(p)))
 			goto done;
@@ -859,6 +863,10 @@ ipgre_tunnel_ioctl (struct device *dev, struct ifreq *ifr, int cmd)
 		break;
 
 	case SIOCDELTUNNEL:
+		err = -EPERM;
+		if (!capable(CAP_NET_ADMIN))
+			goto done;
+
 		if (dev == &ipgre_fb_tunnel_dev) {
 			err = -EFAULT;
 			if (copy_from_user(&p, ifr->ifr_ifru.ifru_data, sizeof(p)))

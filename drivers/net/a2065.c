@@ -570,6 +570,7 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 	int entry, skblen, len;
 	int status = 0;
 	static int outs;
+	unsigned long flags;
 
 	/* Transmitter timeout, serious problems */
 	if (dev->tbusy) {
@@ -586,18 +587,20 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 	}
 
 	/* Block a timer-based transmit from overlapping. */
-#ifdef OLD_METHOD
-	dev->tbusy = 1;
-#else
 	if (test_and_set_bit (0, (void *) &dev->tbusy) != 0) {
 		printk ("Transmitter access conflict.\n");
 		return -1;
 	}
-#endif
+
 	skblen = skb->len;
 
-	if (!TX_BUFFS_AVAIL)
+	save_flags(flags);
+	cli();
+
+	if (!TX_BUFFS_AVAIL){
+		restore_flags(flags);
 		return -1;
+	}
 
 #ifdef DEBUG_DRIVER
 	/* dump the packet */
@@ -634,6 +637,7 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
     
 	if (TX_BUFFS_AVAIL)
 		dev->tbusy = 0;
+	restore_flags(flags);
 
 	return status;
 }

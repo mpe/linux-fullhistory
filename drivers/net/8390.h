@@ -178,6 +178,7 @@ struct ei_device {
   /* The new statistics table. */
   struct net_device_stats stat;
   unsigned char *reg_offset;    /* Register mapping table */
+  unsigned long priv;		/* Private field to store bus IDs etc. */
 };
 
 /* The maximum number of 8390 interrupt service routines called per IRQ. */
@@ -207,11 +208,11 @@ struct ei_device {
 #define E8390_PAGE1	0x40	/* using the two high-order bits */
 #define E8390_PAGE2	0x80	/* Page 3 is invalid. */
 
-
-#ifndef CONFIG_MAC
-#define EI_SHIFT(x)	(x)
-#else
+#if defined(CONFIG_MAC) || defined(CONFIG_AMIGA_PCMCIA) || \
+    defined(CONFIG_ARIADNE2) || defined(CONFIG_ARIADNE2_MODULE)
 #define EI_SHIFT(x)	(ei_local->reg_offset[x])
+#else
+#define EI_SHIFT(x)	(x)
 #endif
 
 #define E8390_CMD	EI_SHIFT(0x00)  /* The command register (for all pages) */

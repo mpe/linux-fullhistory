@@ -4,9 +4,9 @@
  * switching to graphics mode happens at boot time (while
  * running in real mode, see arch/i386/video.S).
  *
- * (c) 1998 Gerd Knorr <kraxel@cs.tu-berlin.de>
+ * (c) 1998 Gerd Knorr <kraxel@goldbach.in-berlin.de>
  *
- */ 
+ */
 
 #include <linux/module.h>
 #include <linux/kernel.h>
@@ -29,6 +29,7 @@
 #include <video/fbcon.h>
 #include <video/fbcon-cfb8.h>
 #include <video/fbcon-cfb16.h>
+#include <video/fbcon-cfb24.h>
 #include <video/fbcon-cfb32.h>
 
 #define dac_reg	(0x3c8)
@@ -82,6 +83,9 @@ static union {
 #ifdef FBCON_HAS_CFB16
     u16 cfb16[16];
 #endif
+#ifdef FBCON_HAS_CFB24
+    u32 cfb24[16];
+#endif
 #ifdef FBCON_HAS_CFB32
     u32 cfb32[16];
 #endif
@@ -90,8 +94,8 @@ static union {
 static int             inverse   = 0;
 static int             currcon   = 0;
 
-static int             pmi_setpal = 1;	/* pmi for palette changes ??? */
-static int             ypan       = 1;
+static int             pmi_setpal = 0;	/* pmi for palette changes ??? */
+static int             ypan       = 0;
 static int             ywrap      = 0;
 static unsigned short  *pmi_base  = 0;
 static void            (*pmi_start)(void);
@@ -220,6 +224,12 @@ static void vesafb_set_disp(int con)
 		display->dispsw_data = fbcon_cmap.cfb16;
 		break;
 #endif
+#ifdef FBCON_HAS_CFB24
+	case 24:
+		sw = &fbcon_cfb24;
+		display->dispsw_data = fbcon_cmap.cfb24;
+		break;
+#endif
 #ifdef FBCON_HAS_CFB32
 	case 32:
 		sw = &fbcon_cfb32;
@@ -339,7 +349,13 @@ static int vesa_setcolreg(unsigned regno, unsigned red, unsigned green,
 #endif
 #ifdef FBCON_HAS_CFB24
 	case 24:
-		/* FIXME: todo */
+		red   >>= 8;
+		green >>= 8;
+		blue  >>= 8;
+		fbcon_cmap.cfb24[regno] =
+			(red   << vesafb_defined.red.offset)   |
+			(green << vesafb_defined.green.offset) |
+			(blue  << vesafb_defined.blue.offset);
 		break;
 #endif
 #ifdef FBCON_HAS_CFB32
@@ -398,7 +414,7 @@ static int vesafb_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 	return 0;
 }
 
-static int vesafb_ioctl(struct inode *inode, struct file *file, 
+static int vesafb_ioctl(struct inode *inode, struct file *file,
 		       unsigned int cmd, unsigned long arg, int con,
 		       struct fb_info *info)
 {
@@ -437,8 +453,10 @@ void vesafb_setup(char *options, int *ints)
 			ywrap=0,ypan=1;
 		else if (! strcmp(this_opt, "ywrap"))
 			ywrap=1,ypan=0;
-		else if (! strcmp(this_opt, "nopal"))
+		else if (! strcmp(this_opt, "vgapal"))
 			pmi_setpal=0;
+		else if (! strcmp(this_opt, "pmipal"))
+			pmi_setpal=1;
 		else if (!strncmp(this_opt, "font:", 5))
 			strcpy(fb_info.fontname, this_opt+5);
 	}
@@ -578,6 +596,7 @@ __initfunc(void vesafb_init(void))
 	fb_info.switch_con=&vesafb_switch;
 	fb_info.updatevar=&vesafb_update_var;
 	fb_info.blank=&vesafb_blank;
+	fb_info.flags=FBINFO_FLAG_DEFAULT;
 	vesafb_set_disp(-1);
 
 	if (register_framebuffer(&fb_info)<0)

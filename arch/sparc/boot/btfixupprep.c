@@ -1,4 +1,4 @@
-/* $Id: btfixupprep.c,v 1.3 1998/03/09 14:03:10 jj Exp $
+/* $Id: btfixupprep.c,v 1.5 1998/09/16 12:24:55 jj Exp $
    Simple utility to prepare vmlinux image for sparc.
    Resolves all BTFIXUP uses and settings and creates
    a special .s object to link to the image.
@@ -29,8 +29,11 @@
 
 #define MAXSYMS 1024
 
+static char *symtab = "SYMBOL TABLE:";
 static char *relrec = "RELOCATION RECORDS FOR [";
 static int rellen;
+static int symlen;
+int mode;
 
 struct _btfixup;
 
@@ -97,6 +100,20 @@ int main(int argc,char **argv)
 	unsigned long offset;
 	char *initvalstr;
 
+	symlen = strlen(symtab);
+	while (fgets (buffer, 1024, stdin) != NULL)
+		if (!strncmp (buffer, symtab, symlen))
+			goto main0;
+	fatal();
+main0:
+	if (fgets (buffer, 1024, stdin) == NULL || buffer[0] < '0' || buffer[0] > '9')
+		fatal();
+	for (mode = 0;; mode++)
+		if (buffer[mode] < '0' || buffer[mode] > '9')
+			break;
+	if (mode != 8 && mode != 16)
+		fatal();
+	
 	rellen = strlen(relrec);
 	while (fgets (buffer, 1024, stdin) != NULL)
 		if (!strncmp (buffer, relrec, rellen))
@@ -112,17 +129,19 @@ main1:
 	if (fgets (buffer, 1024, stdin) == NULL)
 		fatal();
 	while (fgets (buffer, 1024, stdin) != NULL) {
+		int nbase;
 		if (!strncmp (buffer, relrec, rellen))
 			goto main1;
 		p = strchr (buffer, '\n');
 		if (p) *p = 0;
-		if (strlen (buffer) < 30)
+		if (strlen (buffer) < 22+mode)
 			continue;
-		if (strncmp (buffer + 8, " R_SPARC_", 9))
+		if (strncmp (buffer + mode, " R_SPARC_", 9))
 			continue;
-		if (buffer[27] != '_' || buffer[28] != '_' || buffer[29] != '_')
+		nbase = 27 - 8 + mode;
+		if (buffer[nbase] != '_' || buffer[nbase+1] != '_' || buffer[nbase+2] != '_')
 			continue;
-		switch (buffer[30]) {
+		switch (buffer[nbase+3]) {
 			case 'f':	/* CALL */
 			case 'b':	/* BLACKBOX */
 			case 's':	/* SIMM13 */
@@ -133,26 +152,26 @@ main1:
 			default:
 				continue;
 		}
-		p = strchr (buffer + 32, '+');
+		p = strchr (buffer + nbase+5, '+');
 		if (p) *p = 0;
-		shift = 32;
-		if (buffer[31] == 's' && buffer[32] == '_') {
-			shift = 33;
+		shift = nbase + 5;
+		if (buffer[nbase+4] == 's' && buffer[nbase+5] == '_') {
+			shift = nbase + 6;
 			if (strcmp (sect, ".text.init")) {
 				fprintf(stderr, "Wrong use of '%s' BTFIXUPSET.\nBTFIXUPSET_CALL can be used only in __init sections\n", buffer+shift);
 				exit(1);
 			}
-		} else if (buffer[31] != '_')
+		} else if (buffer[nbase+4] != '_')
 			continue;
-		if (strcmp (sect, ".text") && strcmp (sect, ".text.init") && (strcmp (sect, "__ksymtab") || buffer[30] != 'f')) {
-			if (buffer[30] == 'f')
-				fprintf(stderr, "Wrong use of '%s' in '%s' section. It can be only used in .text, .text.init and __ksymtab\n", buffer + shift, sect);
+		if (strcmp (sect, ".text") && strcmp (sect, ".text.init") && strcmp (sect, ".fixup") && (strcmp (sect, "__ksymtab") || buffer[nbase+3] != 'f')) {
+			if (buffer[nbase+3] == 'f')
+				fprintf(stderr, "Wrong use of '%s' in '%s' section. It can be only used in .text, .text.init, .fixup and __ksymtab\n", buffer + shift, sect);
 			else
-				fprintf(stderr, "Wrong use of '%s' in '%s' section. It can be only used in .text and .text.init\n", buffer + shift, sect);
+				fprintf(stderr, "Wrong use of '%s' in '%s' section. It can be only used in .text, .fixup and .text.init\n", buffer + shift, sect);
 			exit(1);
 		}
 		p = strstr (buffer + shift, "__btset_");
-		if (p && buffer[31] == 's') {
+		if (p && buffer[nbase+4] == 's') {
 			fprintf(stderr, "__btset_ in BTFIXUP name can only be used when defining the variable, not for setting\n%s\n", buffer);
 			exit(1);
 		}
@@ -171,23 +190,23 @@ main1:
 			initvalstr = p + 10;
 			*p = 0;
 		}
-		f = find(buffer[30], buffer + shift);
-		if (buffer[31] == 's')
+		f = find(buffer[nbase+3], buffer + shift);
+		if (buffer[nbase+4] == 's')
 			continue;
-		switch (buffer[30]) {
+		switch (buffer[nbase+3]) {
 		case 'f':
 			if (initval) {
 				fprintf(stderr, "Cannot use pre-initalized fixups for calls\n%s\n", buffer);
 				exit(1);
 			}
 			if (!strcmp (sect, "__ksymtab")) {
-				if (strncmp (buffer + 17, "32        ", 10)) {
+				if (strncmp (buffer + mode+9, "32        ", 10)) {
 					fprintf(stderr, "BTFIXUP_CALL in EXPORT_SYMBOL results in relocation other than R_SPARC_32\n\%s\n", buffer);
 					exit(1);
 				}
-			} else if (strncmp (buffer + 17, "WDISP30   ", 10) &&
-				   strncmp (buffer + 17, "HI22      ", 10) &&
-				   strncmp (buffer + 17, "LO10      ", 10)) {
+			} else if (strncmp (buffer + mode+9, "WDISP30   ", 10) &&
+				   strncmp (buffer + mode+9, "HI22      ", 10) &&
+				   strncmp (buffer + mode+9, "LO10      ", 10)) {
 				fprintf(stderr, "BTFIXUP_CALL results in relocation other than R_SPARC_WDISP30, R_SPARC_HI22 or R_SPARC_LO10\n%s\n", buffer);
 				exit(1);
 			}
@@ -197,7 +216,7 @@ main1:
 				fprintf(stderr, "Cannot use pre-initialized fixups for blackboxes\n%s\n", buffer);
 				exit(1);
 			}
-			if (strncmp (buffer + 17, "HI22      ", 10)) {
+			if (strncmp (buffer + mode+9, "HI22      ", 10)) {
 				fprintf(stderr, "BTFIXUP_BLACKBOX results in relocation other than R_SPARC_HI22\n%s\n", buffer);
 				exit(1);
 			}
@@ -207,7 +226,7 @@ main1:
 				fprintf(stderr, "Wrong initializer for SIMM13. Has to be from $fffff000 to $00000fff\n%s\n", buffer);
 				exit(1);
 			}
-			if (strncmp (buffer + 17, "13        ", 10)) {
+			if (strncmp (buffer + mode+9, "13        ", 10)) {
 				fprintf(stderr, "BTFIXUP_SIMM13 results in relocation other than R_SPARC_13\n%s\n", buffer);
 				exit(1);
 			}
@@ -217,7 +236,7 @@ main1:
 				fprintf(stderr, "Wrong initializer for HALF.\n%s\n", buffer);
 				exit(1);
 			}
-			if (strncmp (buffer + 17, "13        ", 10)) {
+			if (strncmp (buffer + mode+9, "13        ", 10)) {
 				fprintf(stderr, "BTFIXUP_HALF results in relocation other than R_SPARC_13\n%s\n", buffer);
 				exit(1);
 			}
@@ -227,7 +246,7 @@ main1:
 				fprintf(stderr, "Wrong initializer for SETHI. Cannot have set low 10 bits\n%s\n", buffer);
 				exit(1);
 			}
-			if (strncmp (buffer + 17, "HI22      ", 10)) {
+			if (strncmp (buffer + mode+9, "HI22      ", 10)) {
 				fprintf(stderr, "BTFIXUP_SETHI results in relocation other than R_SPARC_HI22\n%s\n", buffer);
 				exit(1);
 			}
@@ -237,7 +256,7 @@ main1:
 				fprintf(stderr, "Cannot use pre-initalized fixups for INT\n%s\n", buffer);
 				exit(1);
 			}
-			if (strncmp (buffer + 17, "HI22      ", 10) && strncmp (buffer + 17, "LO10      ", 10)) {
+			if (strncmp (buffer + mode+9, "HI22      ", 10) && strncmp (buffer + mode+9, "LO10      ", 10)) {
 				fprintf(stderr, "BTFIXUP_INT results in relocation other than R_SPARC_HI22 and R_SPARC_LO10\n%s\n", buffer);
 				exit(1);
 			}
@@ -261,7 +280,7 @@ main1:
 			exit(1);
 		}
 		offset = strtoul(buffer, &q, 16);
-		if (q != buffer + 8 || (!offset && strncmp (buffer, "00000000 ", 9))) {
+		if (q != buffer + mode || (!offset && (mode == 8 ? strncmp (buffer, "00000000 ", 9) : strncmp (buffer, "0000000000000000 ", 17)))) {
 			fprintf(stderr, "Malformed relocation address in\n%s\n", buffer);
 			exit(1);
 		}
@@ -274,7 +293,7 @@ main1:
 		if (!*rr) fatal();
 		(*rr)->offset = offset;
 		(*rr)->f = NULL;
-		if (buffer[30] == 'f') {
+		if (buffer[nbase+3] == 'f') {
 			lastf = f;
 			lastfoffset = offset;
 			lastfrelno = k;
@@ -302,11 +321,13 @@ main1:
 			printf("0\n");
 		for (r = f->rel, j--; r != NULL; j--, r = r->next) {
 			if (!strcmp (r->sect, ".text"))
-				printf ("_stext+0x%08x", r->offset);
+				printf ("_stext+0x%08lx", r->offset);
 			else if (!strcmp (r->sect, ".text.init"))
-				printf ("__init_begin+0x%08x", r->offset);
+				printf ("__init_begin+0x%08lx", r->offset);
 			else if (!strcmp (r->sect, "__ksymtab"))
-				printf ("__start___ksymtab+0x%08x", r->offset);
+				printf ("__start___ksymtab+0x%08lx", r->offset);
+			else if (!strcmp (r->sect, ".fixup"))
+				printf ("__start___fixup+0x%08lx", r->offset);
 			else
 				fatal();
 			if (f->type == 'f' || !r->f)

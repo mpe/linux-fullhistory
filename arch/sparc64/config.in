@@ -1,4 +1,4 @@
-# $Id: config.in,v 1.55 1998/08/03 15:28:38 davem Exp $
+# $Id: config.in,v 1.57 1998/09/17 11:05:14 jj Exp $
 # For a description of the syntax of this configuration file,
 # see the Configure script.
 #
@@ -51,14 +51,15 @@ else
 	define_bool CONFIG_SUN_CONSOLE y
 	define_bool CONFIG_SUN_AUXIO y
 	define_bool CONFIG_SUN_IO y
-	define_bool CONFIG_PCI y
-	define_bool CONFIG_PCI_CONSOLE y
+	bool 'PCI support' CONFIG_PCI
 	source drivers/sbus/char/Config.in
 	source drivers/sbus/audio/Config.in
 fi
 
 tristate 'Openprom tree appears in /proc/openprom (EXPERIMENTAL)' CONFIG_SUN_OPENPROMFS
-bool 'Backward-compatible /proc/pci' CONFIG_PCI_OLD_PROC
+if [ "$CONFIG_PCI" = "y" ]; then
+  bool 'Backward-compatible /proc/pci' CONFIG_PCI_OLD_PROC
+fi
 bool 'Networking support' CONFIG_NET
 bool 'System V IPC' CONFIG_SYSVIPC
 bool 'BSD Process Accounting' CONFIG_BSD_PROCESS_ACCT
@@ -246,5 +247,5 @@ mainmenu_option next_comment
 comment 'Kernel hacking'
 
 bool 'Magic SysRq key' CONFIG_MAGIC_SYSRQ
-bool 'ECache flush trap support at ta 0x72' CONFIG_EC_FLUSH_TRAP
+#bool 'ECache flush trap support at ta 0x72' CONFIG_EC_FLUSH_TRAP
 endmenu

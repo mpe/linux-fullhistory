@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_ipv4.c,v 1.160 1998/09/15 02:11:27 davem Exp $
+ * Version:	$Id: tcp_ipv4.c,v 1.161 1998/10/03 09:38:05 davem Exp $
  *
  *		IPv4 specific functions
  *
@@ -594,7 +594,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	}
 
 	tmp = ip_route_connect(&rt, nexthop, sk->saddr,
-			       RT_TOS(sk->ip_tos)|sk->localroute, sk->bound_dev_if);
+			       RT_TOS(sk->ip_tos)|RTO_CONN|sk->localroute, sk->bound_dev_if);
 	if (tmp < 0)
 		return tmp;
 
@@ -642,9 +642,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	/* Reset mss clamp */
 	tp->mss_clamp = ~0;
 
-	if ((sk->ip_pmtudisc == IP_PMTUDISC_DONT ||
-	     (sk->ip_pmtudisc == IP_PMTUDISC_WANT &&
-	      (rt->u.dst.mxlock&(1<<RTAX_MTU)))) &&
+	if (!ip_dont_fragment(sk, &rt->u.dst) &&
 	    rt->u.dst.pmtu > 576 && rt->rt_dst != rt->rt_gateway) {
 		/* Clamp mss at maximum of 536 and user_mss.
 		   Probably, user ordered to override tiny segment size
@@ -716,7 +714,11 @@ static struct open_request *tcp_v4_search_req(struct tcp_opt *tp,
 	for (req = prev->dl_next; req; req = req->dl_next) {
 		if (req->af.v4_req.rmt_addr == iph->saddr &&
 		    req->af.v4_req.loc_addr == iph->daddr &&
-		    req->rmt_port == rport) {
+		    req->rmt_port == rport
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+		    && req->lcl_port == th->dest
+#endif
+		    ) {
 			*prevp = prev; 
 			return req; 
 		}
@@ -776,6 +778,8 @@ static inline void do_pmtu_discovery(struct sock *sk, struct iphdr *ip)
  * and for some paths there is no check at all.
  * A more general error queue to queue errors for later handling
  * is probably better.
+ *
+ * sk->err and sk->err_soft should be atomic_t.
  */
 
 void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
@@ -786,8 +790,8 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 	int type = skb->h.icmph->type;
 	int code = skb->h.icmph->code;
 	struct sock *sk;
-	int opening;
 	__u32 seq;
+	int err;
 
 	if (len < (iph->ihl << 2) + ICMP_MIN_LENGTH) { 
 		icmp_statistics.IcmpInErrors++; 
@@ -804,13 +808,8 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 
 	tp = &sk->tp_pinfo.af_tcp;
 	seq = ntohl(th->seq);
-	if (sk->state != TCP_LISTEN && 
-   	    !between(seq, tp->snd_una-16384, max(tp->snd_una+32768,tp->snd_nxt))) {
-		if (net_ratelimit()) 
-			printk(KERN_WARNING 
-				"icmp packet outside the tcp window:"
-				" state:%d seq:%u win:%u,%u\n",
-			       (int)sk->state, seq, tp->snd_una, tp->snd_nxt); 
+	if (sk->state != TCP_LISTEN && !between(seq, tp->snd_una, tp->snd_nxt)) {
+		net_statistics.OutOfWindowIcmps++;
 		return; 
 	}
 
@@ -824,24 +823,26 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 #endif
 		return;
 	case ICMP_PARAMETERPROB:
-		sk->err=EPROTO;
-		sk->error_report(sk); /* This isn't serialized on SMP! */
+		err = EPROTO;
 		break; 
 	case ICMP_DEST_UNREACH:
+		if (code > NR_ICMP_UNREACH)
+			return;
+
 		if (code == ICMP_FRAG_NEEDED) { /* PMTU discovery (RFC1191) */
 			do_pmtu_discovery(sk, iph); 
-			return; 
+			return;
 		}
-		break; 
+
+		err = icmp_err_convert[code].errno;
+		break;
+	case ICMP_TIME_EXCEEDED:
+		err = EHOSTUNREACH;
+		break;
+	default:
+		return;
 	}
 
-	/* If we've already connected we will keep trying
-	 * until we time out, or the user gives up.
-	 */
-	if (code > NR_ICMP_UNREACH)
-		return;
- 
-	opening = 0; 
 	switch (sk->state) {
 		struct open_request *req, *prev;
 	case TCP_LISTEN:
@@ -849,10 +850,10 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 		 * ICMP is unreliable. 
 		 */
 		if (atomic_read(&sk->sock_readers)) {
-			/* XXX: add a counter here to profile this. 
-			 * If too many ICMPs get dropped on busy
-			 * servers this needs to be solved differently.
-			 */
+			net_statistics.LockDroppedIcmps++;
+			 /* If too many ICMPs get dropped on busy
+			  * servers this needs to be solved differently.
+			  */
 			return;
 		}
 
@@ -869,10 +870,7 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 		if (!req)
 			return;
 		if (seq != req->snt_isn) {
-			if (net_ratelimit())
-				printk(KERN_DEBUG "icmp packet for openreq "
-				       "with wrong seq number:%d:%d\n",
-				       seq, req->snt_isn);
+			net_statistics.OutOfWindowIcmps++;
 			return;
 		}
 		if (req->sk) {	
@@ -899,25 +897,43 @@ void tcp_v4_err(struct sk_buff *skb, unsigned char *dp, int len)
 		}
 		break;
 	case TCP_SYN_SENT:
-	case TCP_SYN_RECV: 
+	case TCP_SYN_RECV:  /* Cannot happen */ 
 		if (!th->syn)
-			return; 
-		opening = 1; 
-		break;
+			return;
+		tcp_statistics.TcpAttemptFails++;
+		sk->err = err;
+		sk->zapped = 1;
+		mb();
+		sk->error_report(sk);
+		return;
 	}
-	
-	if(icmp_err_convert[code].fatal || opening) {
+
+	/* If we've already connected we will keep trying
+	 * until we time out, or the user gives up.
+	 *
+	 * rfc1122 4.2.3.9 allows to consider as hard errors
+	 * only PROTO_UNREACH and PORT_UNREACH (well, FRAG_FAILED too,
+	 * but it is obsoleted by pmtu discovery).
+	 *
+	 * Note, that in modern internet, where routing is unreliable
+	 * and in each dark corner broken firewalls sit, sending random
+	 * errors ordered by their masters even this two messages finally lose
+	 * their original sense (even Linux sends invalid PORT_UNREACHs)
+	 *
+	 * Now we are in compliance with RFCs.
+	 *							--ANK (980905)
+	 */
+
+	if (sk->ip_recverr) {
 		/* This code isn't serialized with the socket code */
-		sk->err = icmp_err_convert[code].errno;
-		if (opening) {
-			tcp_statistics.TcpAttemptFails++;
-			if (sk->state != TCP_LISTEN)
-				tcp_set_state(sk,TCP_CLOSE);
-			mb(); 
-			sk->error_report(sk);		/* Wake people up to see the error (see connect in sock.c) */
-		}
+		/* ANK (980927) ... which is harmless now,
+		   sk->err's may be safely lost.
+		 */
+		sk->err = err;
+		mb(); 
+		sk->error_report(sk);		/* Wake people up to see the error (see connect in sock.c) */
 	} else	{ /* Only an error on timeout */
-		sk->err_soft = icmp_err_convert[code].errno;
+		sk->err_soft = err;
 		mb(); 
 	}
 }
@@ -952,7 +968,16 @@ static void tcp_v4_send_reset(struct sk_buff *skb)
 
 	/* Never send a reset in response to a reset. */
 	if (th->rst)
-		return; 
+		return;
+
+	if (((struct rtable*)skb->dst)->rt_type != RTN_LOCAL) {
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+		if (((struct rtable*)skb->dst)->rt_type == RTN_UNICAST)
+			icmp_send(skb, ICMP_DEST_UNREACH,
+				  ICMP_PORT_UNREACH, 0);
+#endif
+		return;
+	}
 
 	/* Swap the send and the receive. */
 	memset(&rth, 0, sizeof(struct tcphdr)); 
@@ -986,6 +1011,33 @@ static void tcp_v4_send_reset(struct sk_buff *skb)
 }
 
 #ifdef CONFIG_IP_TRANSPARENT_PROXY
+
+/*
+   Seems, I never wrote nothing more stupid.
+   I hope Gods will forgive me, but I cannot forgive myself 8)
+                                                --ANK (981001)
+ */
+
+static struct sock *tcp_v4_search_proxy_openreq(struct sk_buff *skb)
+{
+	struct iphdr *iph = skb->nh.iph;
+	struct tcphdr *th = (struct tcphdr *)(skb->nh.raw + iph->ihl*4);
+	struct sock *sk;
+	int i;
+
+	for (i=0; i<TCP_LHTABLE_SIZE; i++) {
+		for(sk = tcp_listening_hash[i]; sk; sk = sk->next) {
+			struct open_request *dummy;
+			if (tcp_v4_search_req(&sk->tp_pinfo.af_tcp, iph,
+					      th, &dummy) &&
+			    (!sk->bound_dev_if ||
+			     sk->bound_dev_if == skb->dev->ifindex))
+				return sk;
+		}
+	}
+	return NULL;
+}
+
 /*
  *	Check whether a received TCP packet might be for one of our
  *	connections.
@@ -997,10 +1049,20 @@ int tcp_chkaddr(struct sk_buff *skb)
 	struct tcphdr *th = (struct tcphdr *)(skb->nh.raw + iph->ihl*4);
 	struct sock *sk;
 
-	sk = tcp_v4_lookup(iph->saddr, th->source, iph->daddr, th->dest, skb->dev->ifindex);
+	sk = tcp_v4_lookup(iph->saddr, th->source, iph->daddr,
+			   th->dest, skb->dev->ifindex);
 
 	if (!sk)
-		return 0;
+		return tcp_v4_search_proxy_openreq(skb) != NULL;
+
+	if (sk->state == TCP_LISTEN) {
+		struct open_request *dummy;
+		if (tcp_v4_search_req(&sk->tp_pinfo.af_tcp, skb->nh.iph,
+				      th, &dummy) &&
+		    (!sk->bound_dev_if ||
+		     sk->bound_dev_if == skb->dev->ifindex))
+			return 1;
+	}
 
 	/* 0 means accept all LOCAL addresses here, not all the world... */
 
@@ -1597,10 +1659,15 @@ int tcp_v4_rcv(struct sk_buff *skb, unsigned short len)
 		sk = tcp_v4_proxy_lookup(th->dest, skb->nh.iph->saddr, th->source,
 					 skb->nh.iph->daddr, skb->dev,
 					 IPCB(skb)->redirport, skb->dev->ifindex);
-	else
+	else {
 #endif
-	sk = __tcp_v4_lookup(th, skb->nh.iph->saddr, th->source,
-			     skb->nh.iph->daddr, th->dest, skb->dev->ifindex);
+		sk = __tcp_v4_lookup(th, skb->nh.iph->saddr, th->source,
+				     skb->nh.iph->daddr, th->dest, skb->dev->ifindex);
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+		if (!sk)
+			sk = tcp_v4_search_proxy_openreq(skb);
+	}
+#endif
 	if (!sk)
 		goto no_tcp_socket;
 	if(!ipsec_sk_policy(sk,skb))

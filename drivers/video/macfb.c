@@ -414,6 +414,7 @@ __initfunc(void macfb_init(void))
 	fb_info.switch_con=&macfb_switch;
 	fb_info.updatevar=&fb_update_var;
 	fb_info.blank=&macfb_blank;
+	fb_info.flags = FBINFO_FLAG_DEFAULT;
 	do_fb_set_var(&macfb_defined,1);
 
 	macfb_get_var(&disp.var, -1, &fb_info);

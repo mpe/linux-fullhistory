@@ -1530,6 +1530,7 @@ __initfunc(void retz3fb_init(void))
 	fb_info.switch_con = &z3fb_switch;
 	fb_info.updatevar = &z3fb_updatevar;
 	fb_info.blank = &z3fb_blank;
+	fb_info.flags = FBINFO_FLAG_DEFAULT;
 
 	if (z3fb_mode == -1)
 		retz3fb_default = retz3fb_predefined[0].var;

@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.85 1998/08/04 20:51:33 davem Exp $
+/* $Id: pgtable.h,v 1.90 1998/09/24 03:21:56 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -169,9 +169,12 @@ extern void *sparc_init_alloc(unsigned long *kbrk, unsigned long size);
 #define flush_cache_range(mm, start, end)	flushw_user()
 #define flush_cache_page(vma, page)		flushw_user()
 
+extern void flush_page_to_ram(unsigned long page);
+
 /* This operation in unnecessary on the SpitFire since D-CACHE is write-through. */
-#define flush_page_to_ram(page)			do { } while (0)
 #define flush_icache_range(start, end)		do { } while (0)
+
+extern void __flush_dcache_range(unsigned long start, unsigned long end);
 
 extern void __flush_cache_all(void);
 
@@ -517,18 +520,22 @@ extern pgd_t swapper_pg_dir[1];
 
 extern inline void SET_PAGE_DIR(struct task_struct *tsk, pgd_t *pgdir)
 {
-	if(pgdir != swapper_pg_dir && tsk == current) {
+	if(pgdir != swapper_pg_dir && tsk->mm == current->mm) {
 		register unsigned long paddr asm("o5");
 
 		paddr = __pa(pgdir);
 		__asm__ __volatile__ ("
 			rdpr		%%pstate, %%o4
 			wrpr		%%o4, %1, %%pstate
+			mov		%3, %%g4
 			mov		%0, %%g7
+			stxa		%%g0, [%%g4] %2
 			wrpr		%%o4, 0x0, %%pstate
 		" : /* No outputs */
-		  : "r" (paddr), "i" (PSTATE_MG|PSTATE_IE)
+		  : "r" (paddr), "i" (PSTATE_MG|PSTATE_IE),
+		    "i" (ASI_DMMU), "i" (TSB_REG)
 		  : "o4");
+		flush_tlb_mm(current->mm);
 	}
 }
 
@@ -619,6 +626,9 @@ extern void module_unmap (void *addr);
 
 /* Needs to be defined here and not in linux/mm.h, as it is arch dependent */
 #define PageSkip(page)		(test_bit(PG_skip, &(page)->flags))
+
+extern int io_remap_page_range(unsigned long from, unsigned long offset,
+			       unsigned long size, pgprot_t prot, int space);
 
 #endif /* !(__ASSEMBLY__) */
 

@@ -1035,6 +1035,10 @@ __initfunc(int sparcaudio_init(void))
 	cs4231_init();
 #endif
 
+#ifdef CONFIG_SPARCAUDIO_DBRI
+	dbri_init();
+#endif
+
 	return 0;
 }
 

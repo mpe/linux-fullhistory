@@ -245,7 +245,7 @@ struct ip_chain
 #endif
 
 /* Lock around ip_fw_chains linked list structure */
-spinlock_t ip_fw_lock = SPIN_LOCK_UNLOCKED;
+rwlock_t ip_fw_lock = RW_LOCK_UNLOCKED;
 
 /* Head of linked list of fw rules */
 static struct ip_chain *ip_fw_chains; 
@@ -531,18 +531,19 @@ ip_fw_domatch(struct ip_fwkernel *f,
 #ifdef CONFIG_IP_FIREWALL_NETLINK
 	if (f->ipfw.fw_flg & IP_FW_F_NETLINK) {
 		size_t len = min(f->ipfw.fw_outputsize, ntohs(ip->tot_len)) 
-			+ sizeof(skb->fwmark) + IFNAMSIZ;
+			+ sizeof(__u32) + sizeof(skb->fwmark) + IFNAMSIZ;
 		struct sk_buff *outskb=alloc_skb(len, GFP_ATOMIC);
 
 		duprintf("Sending packet out NETLINK (length = %u).\n", 
 			 (unsigned int)len);
 		if (outskb) {
-			/* Prepend mark & interface */
+			/* Prepend length, mark & interface */
 			skb_put(outskb, len);
-			*((__u32 *)outskb->data) = skb->fwmark;
-			strcpy(outskb->data+sizeof(__u32), rif);
-			memcpy(outskb->data+sizeof(__u32)+IFNAMSIZ, ip, 
-			       len-(sizeof(__u32)+IFNAMSIZ));
+			*((__u32 *)outskb->data) = (__u32)len;
+			*((__u32 *)(outskb->data+sizeof(__u32))) = skb->fwmark;
+			strcpy(outskb->data+sizeof(__u32)*2, rif);
+			memcpy(outskb->data+sizeof(__u32)*2+IFNAMSIZ, ip, 
+			       len-(sizeof(__u32)*2+IFNAMSIZ));
 			netlink_broadcast(ipfwsk, outskb, 0, ~0, GFP_KERNEL);
 		}
 		else duprintf("netlink post failed - alloc_skb failed!\n");
@@ -1324,28 +1325,7 @@ int ip_fw_ctl(int cmd, void *m, int len)
 
 	case IP_FW_MASQ_TIMEOUTS: {
 #ifdef CONFIG_IP_MASQUERADE
-		struct ip_fw_masq *masq;
-
-		if (len != sizeof(struct ip_fw_masq)) {
-			duprintf("ip_fw_ctl (masq): length %d, expected %d\n",
-				len, sizeof(struct ip_fw_masq));
-			ret = EINVAL;
-		}
-		else {
-			masq = (struct ip_fw_masq *)m;
-			if (masq->tcp_timeout)
-				ip_masq_expire->tcp_timeout 
-					= masq->tcp_timeout;
-
-			if (masq->tcp_fin_timeout)
-				ip_masq_expire->tcp_fin_timeout 
-					= masq->tcp_fin_timeout;
-
-			if (masq->udp_timeout)
-				ip_masq_expire->udp_timeout 
-					= masq->udp_timeout;
-			ret = 0;
-		}
+		return ip_fw_masq_timeouts(m, len);
 #else
 		ret = EINVAL;
 #endif

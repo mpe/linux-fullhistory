@@ -106,7 +106,6 @@ struct dbri {
 #define D_TEST		0xd	/* No comment */
 #define D_CDM		0xe	/* CHI Data mode command */
 
-#define DBRI_CMD(cmd, intr, value) ((cmd << 28) | (intr << 27) | value)
 
 
 /* Special bits for some commands */
@@ -268,7 +267,7 @@ struct dbri {
 
 /* Transmit descriptor defines */
 #define DBRI_TD_F	(1<<31)	/* End of Frame */
-#define DBRI_TD_D	(1<<31)	/* Do not append CRC */
+#define DBRI_TD_D	(1<<30)	/* Do not append CRC */
 #define DBRI_TD_CNT(v)	(v<<16)	/* Number of valid bytes in the buffer */
 #define DBRI_TD_B	(1<<15)	/* Final interrupt */
 #define DBRI_TD_M	(1<<14)	/* Marker interrupt */

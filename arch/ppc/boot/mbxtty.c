@@ -12,6 +12,7 @@
  * I f**ked around for a day trying to figure out how to make EPPC-Bug
  * use SMC1, but gave up and decided to fix it here.
  */
+#include <linux/config.h>
 #include <linux/types.h>
 #ifdef CONFIG_MBX
 #include <asm/mbx.h>

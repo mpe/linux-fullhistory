@@ -1,9 +1,9 @@
-/* $Id: zs.c,v 1.26 1998/08/03 23:58:14 davem Exp $
+/* $Id: zs.c,v 1.29 1998/09/21 05:06:53 jj Exp $
  * zs.c: Zilog serial port driver for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1996 Eddie C. Dost   (ecd@skynet.be)
- * Fixes by Pete A. Zaitcev <zaitcev@ipmce.su>.
+ * Fixes by Pete A. Zaitcev <zaitcev@metabyte.com>.
  */
 
 #include <linux/errno.h>
@@ -36,9 +36,9 @@
 #include <asm/sbus.h>
 #ifdef __sparc_v9__
 #include <asm/fhc.h>
+#endif
 #ifdef CONFIG_PCI
 #include <linux/pci.h>
-#endif
 #endif
 
 #include "sunserial.h"
@@ -111,7 +111,7 @@ static unsigned char zscons_regs[16] = {
 
 DECLARE_TASK_QUEUE(tq_serial);
 
-struct tty_driver serial_driver, callout_driver;
+static struct tty_driver serial_driver, callout_driver;
 static int serial_refcount;
 
 /* serial subtype definitions */
@@ -1808,7 +1808,7 @@ int zs_open(struct tty_struct *tty, struct file * filp)
 
 static void show_serial_version(void)
 {
-	char *revision = "$Revision: 1.26 $";
+	char *revision = "$Revision: 1.29 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');

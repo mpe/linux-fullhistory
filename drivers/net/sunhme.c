@@ -1676,9 +1676,14 @@ static inline void pci_happy_meal_tx(struct happy_meal *hp)
 
 		TXD(("[%d]", elem));
 		this = &txbase[elem];
+#ifdef  __sparc_v9__
 		__asm__ __volatile__("lduwa [%1] %2, %0"
 				     : "=r" (flags)
 				     : "r" (&this->tx_flags), "i" (ASI_PL));
+#else
+		flush_cache_all();
+		flags = flip_dword(this->tx_flags);
+#endif
 		if(flags & TXFLAG_OWN)
 			break;
 		skb = hp->tx_skbs[elem];
@@ -1813,7 +1818,7 @@ static inline void happy_meal_rx(struct happy_meal *hp, struct device *dev,
 		}
 
 		/* This card is _fucking_ hot... */
-		if(!~(csum))
+		if(!(csum ^ 0xffff))
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 		else
 			skb->ip_summed = CHECKSUM_NONE;
@@ -1845,9 +1850,14 @@ static inline void pci_happy_meal_rx(struct happy_meal *hp, struct device *dev,
 
 	RXD(("RX<"));
 	this = &rxbase[elem];
+#ifdef  __sparc_v9__
 	__asm__ __volatile__("lduwa [%1] %2, %0"
 			     : "=r" (flags)
 			     : "r" (&this->rx_flags), "i" (ASI_PL));
+#else
+	flush_cache_all();
+	flags = flip_dword(this->rx_flags); /* FIXME */
+#endif
 	while(!(flags & RXFLAG_OWN)) {
 		struct sk_buff *skb;
 		int len;
@@ -1934,9 +1944,14 @@ static inline void pci_happy_meal_rx(struct happy_meal *hp, struct device *dev,
 	next:
 		elem = NEXT_RX(elem);
 		this = &rxbase[elem];
+#ifdef __sparc_v9__ 
 		__asm__ __volatile__("lduwa [%1] %2, %0"
 				     : "=r" (flags)
 				     : "r" (&this->rx_flags), "i" (ASI_PL));
+#else
+		flush_cache_all();
+		flags = flip_dword(this->rx_flags); /* FIXME */
+#endif
 	}
 	hp->rx_new = elem;
 	if(drops)
@@ -2159,7 +2174,7 @@ static int happy_meal_open(struct device *dev)
 			return -EAGAIN;
 		}
 	} else
-#else
+#endif
 #ifdef CONFIG_PCI
 	if(hp->happy_flags & HFLAG_PCI) {
 		if(request_irq(dev->irq, &pci_happy_meal_interrupt,
@@ -2170,7 +2185,6 @@ static int happy_meal_open(struct device *dev)
 			return -EAGAIN;
 		}
 	} else
-#endif
 #endif
 	if(request_irq(dev->irq, &happy_meal_interrupt,
 		       SA_SHIRQ, "HAPPY MEAL", (void *)dev)) {

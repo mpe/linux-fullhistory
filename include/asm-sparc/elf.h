@@ -1,4 +1,4 @@
-/* $Id: elf.h,v 1.17 1998/05/11 08:40:10 davem Exp $ */
+/* $Id: elf.h,v 1.20 1998/09/14 09:11:10 davem Exp $ */
 #ifndef __ASMSPARC_ELF_H
 #define __ASMSPARC_ELF_H
 
@@ -10,12 +10,51 @@
 #include <asm/ptrace.h>
 #include <asm/mbus.h>
 
+/* For the most part we present code dumps in the format
+ * Solaris does.
+ */
 typedef unsigned long elf_greg_t;
-
-#define ELF_NGREG (sizeof (struct pt_regs) / sizeof(elf_greg_t))
+#define ELF_NGREG 38
 typedef elf_greg_t elf_gregset_t[ELF_NGREG];
 
-typedef unsigned long elf_fpregset_t;
+/* Format is:
+ * 	G0 --> G7
+ *	O0 --> O7
+ *	L0 --> L7
+ *	I0 --> I7
+ *	PSR, PC, nPC, Y, WIM, TBR
+ */
+#define ELF_CORE_COPY_REGS(__elf_regs, __pt_regs)	\
+do {	unsigned long *dest = &(__elf_regs[0]);		\
+	struct pt_regs *src = (__pt_regs);		\
+	unsigned long *sp;				\
+	memcpy(&dest[0], &src->u_regs[0],		\
+	       sizeof(unsigned long) * 16);		\
+	/* Don't try this at home kids... */		\
+	set_fs(USER_DS);				\
+	sp = (unsigned long *) src->u_regs[14];		\
+	copy_from_user(&dest[16], sp,			\
+		       sizeof(unsigned long) * 16);	\
+	set_fs(KERNEL_DS);				\
+	dest[32] = src->psr;				\
+	dest[33] = src->pc;				\
+	dest[34] = src->npc;				\
+	dest[35] = src->y;				\
+	dest[36] = dest[37] = 0; /* XXX */		\
+} while(0);
+
+typedef struct {
+	union {
+		unsigned long	pr_regs[32];
+		double		pr_dregs[16];
+	} pr_fr;
+	unsigned long __unused;
+	unsigned long	pr_fsr;
+	unsigned char	pr_qcnt;
+	unsigned char	pr_q_entrysize;
+	unsigned char	pr_en;
+	unsigned int	pr_q[64];
+} elf_fpregset_t;
 
 /*
  * This is used to ensure we don't load something for the wrong architecture.
@@ -42,7 +81,7 @@ typedef unsigned long elf_fpregset_t;
    the loader.  We need to make sure that it is out of the way of the program
    that it will "exec", and that there is sufficient room for the brk.  */
 
-#define ELF_ET_DYN_BASE         (TASK_UNMAPPED_BASE + 0x1000000)
+#define ELF_ET_DYN_BASE         (0x08000000)
 
 /* This yields a mask that user programs can use to figure out what
    instruction set this cpu supports.  This can NOT be done in userspace

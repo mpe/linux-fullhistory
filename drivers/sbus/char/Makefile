@@ -47,7 +47,13 @@ else
   endif
 endif
 
-endif # eq($(ARCH),sparc64)
+else # !eq($(ARCH),sparc64)
+
+ifeq ($(CONFIG_PCI),y)
+O_OBJS += su32.o pcikbd.o
+endif
+
+endif # !eq($(ARCH),sparc64)
 
 ifeq ($(CONFIG_SUN_OPENPROMIO),y)
 O_OBJS += openprom.o

@@ -1,7 +1,7 @@
 /*
  *	Linux NET3:	IP/IP protocol decoder. 
  *
- *	Version: $Id: ipip.c,v 1.23 1998/08/26 12:04:00 davem Exp $
+ *	Version: $Id: ipip.c,v 1.24 1998/10/03 09:37:35 davem Exp $
  *
  *	Authors:
  *		Sam Lantinga (slouken@cs.ucdavis.edu)  02/01/95
@@ -625,6 +625,10 @@ ipip_tunnel_ioctl (struct device *dev, struct ifreq *ifr, int cmd)
 
 	case SIOCADDTUNNEL:
 	case SIOCCHGTUNNEL:
+		err = -EPERM;
+		if (!capable(CAP_NET_ADMIN))
+			goto done;
+
 		err = -EFAULT;
 		if (copy_from_user(&p, ifr->ifr_ifru.ifru_data, sizeof(p)))
 			goto done;
@@ -652,6 +656,10 @@ ipip_tunnel_ioctl (struct device *dev, struct ifreq *ifr, int cmd)
 		break;
 
 	case SIOCDELTUNNEL:
+		err = -EPERM;
+		if (!capable(CAP_NET_ADMIN))
+			goto done;
+
 		if (dev == &ipip_fb_tunnel_dev) {
 			err = -EFAULT;
 			if (copy_from_user(&p, ifr->ifr_ifru.ifru_data, sizeof(p)))

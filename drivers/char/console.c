@@ -130,7 +130,9 @@ static struct termios *console_termios[MAX_NR_CONSOLES];
 static struct termios *console_termios_locked[MAX_NR_CONSOLES];
 struct vc vc_cons [MAX_NR_CONSOLES];
 
+#ifndef VT_SINGLE_DRIVER
 static struct consw *con_driver_map[MAX_NR_CONSOLES];
+#endif
 
 static int con_open(struct tty_struct *, struct file *);
 static void vc_init(unsigned int console, unsigned int rows,
@@ -192,6 +194,12 @@ static int scrollback_delta = 0;
 #define IS_FG (currcons == fg_console)
 #define IS_VISIBLE CON_IS_VISIBLE(vc_cons[currcons].d)
 
+#ifdef VT_BUF_VRAM_ONLY
+#define DO_UPDATE 0
+#else
+#define DO_UPDATE IS_VISIBLE
+#endif
+
 static inline unsigned short *screenpos(int currcons, int offset, int viewed)
 {
 	unsigned short *p = (unsigned short *)(visible_origin + offset);
@@ -240,6 +248,7 @@ scrdown(int currcons, unsigned int t, unsigned int b, int nr)
 
 static void do_update_region(int currcons, unsigned long start, int count)
 {
+#ifndef VT_BUF_VRAM_ONLY
 	unsigned int xx, yy, offset;
 	u16 *p;
 
@@ -276,11 +285,12 @@ static void do_update_region(int currcons, unsigned long start, int count)
 		xx = 0;
 		yy++;
 	}
+#endif
 }
 
 void update_region(int currcons, unsigned long start, int count)
 {
-	if (IS_VISIBLE) {
+	if (DO_UPDATE) {
 		hide_cursor(currcons);
 		do_update_region(currcons, start, count);
 		set_cursor(currcons);
@@ -294,6 +304,7 @@ static u8 build_attr(int currcons, u8 _color, u8 _intensity, u8 _blink, u8 _unde
 	if (sw->con_build_attr)
 		return sw->con_build_attr(vc_cons[currcons].d, _color, _intensity, _blink, _underline, _reverse);
 
+#ifndef VT_BUF_VRAM_ONLY
 /*
  * ++roman: I completely changed the attribute format for monochrome
  * mode (!can_do_color). The formerly used MDA (monochrome display
@@ -325,6 +336,9 @@ static u8 build_attr(int currcons, u8 _color, u8 _intensity, u8 _blink, u8 _unde
 		a <<= 1;
 	return a;
 	}
+#else
+	return 0;
+#endif
 }
 
 static void update_attr(int currcons)
@@ -343,6 +357,7 @@ void invert_screen(int currcons, int offset, int count, int viewed)
 	p = screenpos(currcons, offset, viewed);
 	if (sw->con_invert_region)
 		sw->con_invert_region(vc_cons[currcons].d, p, count);
+#ifndef VT_BUF_VRAM_ONLY
 	else {
 		u16 *q = p;
 		int cnt = count;
@@ -363,7 +378,8 @@ void invert_screen(int currcons, int offset, int count, int viewed)
 			}
 		}
 	}
-	if (IS_VISIBLE)
+#endif
+	if (DO_UPDATE)
 		do_update_region(currcons, (unsigned long) p, count);
 }
 
@@ -376,7 +392,7 @@ void complement_pos(int currcons, int offset)
 
 	if (p) {
 		scr_writew(old, p);
-		if (IS_VISIBLE)
+		if (DO_UPDATE)
 			sw->con_putc(vc_cons[currcons].d, old, oldy, oldx);
 	}
 	if (offset == -1)
@@ -387,7 +403,7 @@ void complement_pos(int currcons, int offset)
 		old = scr_readw(p);
 		new = old ^ complement_mask;
 		scr_writew(new, p);
-		if (IS_VISIBLE) {
+		if (DO_UPDATE) {
 			oldx = (offset >> 1) % video_num_columns;
 			oldy = (offset >> 1) / video_num_columns;
 			sw->con_putc(vc_cons[currcons].d, new, oldy, oldx);
@@ -404,7 +420,7 @@ static void insert_char(int currcons, unsigned int nr)
 		scr_writew(scr_readw(p), p + nr);
 	scr_memsetw(q, video_erase_char, nr*2);
 	need_wrap = 0;
-	if (IS_VISIBLE) {
+	if (DO_UPDATE) {
 		unsigned short oldattr = attr;
 		sw->con_bmove(vc_cons[currcons].d,y,x,y,x+nr,1,
 			      video_num_columns-x-nr);
@@ -427,7 +443,7 @@ static void delete_char(int currcons, unsigned int nr)
 	}
 	scr_memsetw(p, video_erase_char, nr*2);
 	need_wrap = 0;
-	if (IS_VISIBLE) {
+	if (DO_UPDATE) {
 		unsigned short oldattr = attr;
 		sw->con_bmove(vc_cons[currcons].d, y, x+nr, y, x, 1,
 			      video_num_columns-x-nr);
@@ -455,7 +471,7 @@ static void add_softcursor(int currcons)
 	if ((type & 0x20) && ((softcursor_original & 0x7000) == (i & 0x7000))) i ^= 0x7000;
 	if ((type & 0x40) && ((i & 0x700) == ((i & 0x7000) >> 4))) i ^= 0x0700;
 	scr_writew(i, (u16 *) pos);
-	if (IS_VISIBLE)
+	if (DO_UPDATE)
 		sw->con_putc(vc_cons[currcons].d, i, y, x);
 }
 
@@ -465,7 +481,7 @@ static void hide_cursor(int currcons)
 		clear_selection();
 	if (softcursor_original != -1) {
 		scr_writew(softcursor_original,(u16 *) pos);
-		if (IS_VISIBLE)
+		if (DO_UPDATE)
 			sw->con_putc(vc_cons[currcons].d, softcursor_original, y, x);
 		softcursor_original = -1;
 	}
@@ -572,8 +588,10 @@ static void visual_init(int currcons, int init)
 {
     /* ++Geert: sw->con_init determines console size */
     sw = conswitchp;
+#ifndef VT_SINGLE_DRIVER
     if (con_driver_map[currcons])
 	sw = con_driver_map[currcons];
+#endif
     cons_num = currcons;
     display_fg = &master_display_fg;
     vc_cons[currcons].d->vc_uni_pagedir_loc = &vc_cons[currcons].d->vc_uni_pagedir;
@@ -887,7 +905,7 @@ static void csi_J(int currcons, int vpar)
 		case 0:	/* erase from cursor to end of display */
 			count = (scr_end-pos)>>1;
 			start = (unsigned short *) pos;
-			if (IS_VISIBLE) {
+			if (DO_UPDATE) {
 				/* do in two stages */
 				sw->con_clear(vc_cons[currcons].d, y, x, 1,
 					      video_num_columns-x);
@@ -899,7 +917,7 @@ static void csi_J(int currcons, int vpar)
 		case 1:	/* erase from start to cursor */
 			count = ((pos-origin)>>1)+1;
 			start = (unsigned short *) origin;
-			if (IS_VISIBLE) {
+			if (DO_UPDATE) {
 				/* do in two stages */
 				sw->con_clear(vc_cons[currcons].d, 0, 0, y,
 					      video_num_columns);
@@ -910,7 +928,7 @@ static void csi_J(int currcons, int vpar)
 		case 2: /* erase whole display */
 			count = video_num_columns * video_num_lines;
 			start = (unsigned short *) origin;
-			if (IS_VISIBLE)
+			if (DO_UPDATE)
 				sw->con_clear(vc_cons[currcons].d, 0, 0,
 					      video_num_lines,
 					      video_num_columns);
@@ -931,21 +949,21 @@ static void csi_K(int currcons, int vpar)
 		case 0:	/* erase from cursor to end of line */
 			count = video_num_columns-x;
 			start = (unsigned short *) pos;
-			if (IS_VISIBLE)
+			if (DO_UPDATE)
 				sw->con_clear(vc_cons[currcons].d, y, x, 1,
 					      video_num_columns-x);
 			break;
 		case 1:	/* erase from start of line to cursor */
 			start = (unsigned short *) (pos - (x<<1));
 			count = x+1;
-			if (IS_VISIBLE)
+			if (DO_UPDATE)
 				sw->con_clear(vc_cons[currcons].d, y, 0, 1,
 					      x + 1);
 			break;
 		case 2: /* erase whole line */
 			start = (unsigned short *) (pos - (x<<1));
 			count = video_num_columns;
-			if (IS_VISIBLE)
+			if (DO_UPDATE)
 				sw->con_clear(vc_cons[currcons].d, y, 0, 1,
 					      video_num_columns);
 			break;
@@ -965,7 +983,7 @@ static void csi_X(int currcons, int vpar) /* erase the following vpar positions 
 	count = (vpar > video_num_columns-x) ? (video_num_columns-x) : vpar;
 
 	scr_memsetw((unsigned short *) pos, video_erase_char, 2 * count);
-	if (IS_VISIBLE)
+	if (DO_UPDATE)
 		sw->con_clear(vc_cons[currcons].d, y, x, 1, count);
 	need_wrap = 0;
 }
@@ -1743,10 +1761,14 @@ static void do_con_trol(struct tty_struct *tty, unsigned int currcons, int c)
 static int do_con_write(struct tty_struct * tty, int from_user,
 			const unsigned char *buf, int count)
 {
+#ifdef VT_BUF_VRAM_ONLY
+#define FLUSH do { } while(0);
+#else
 #define FLUSH if (draw_x >= 0) { \
 	sw->con_putcs(vc_cons[currcons].d, (u16 *)draw_from, (u16 *)draw_to-(u16 *)draw_from, y, draw_x); \
 	draw_x = -1; \
 	}
+#endif
 
 	int c, tc, ok, n = 0, draw_x = -1;
 	unsigned int currcons;
@@ -1874,7 +1896,7 @@ static int do_con_write(struct tty_struct * tty, int from_user,
 				     ((attr & ~himask) << 8) + ((tc & 0x100) ? himask : 0) + (tc & 0xff) :
 				     (attr << 8) + tc,
 				   (u16 *) pos);
-			if (IS_VISIBLE && draw_x < 0) {
+			if (DO_UPDATE && draw_x < 0) {
 				draw_x = x;
 				draw_from = pos;
 			}
@@ -1957,6 +1979,9 @@ void vt_console_print(struct console *co, const char * b, unsigned count)
 		printk("vt_console_print: tty %d not allocated ??\n", currcons+1);
 		goto quit;
 	}
+
+	if (vcmode != KD_TEXT)
+		return;
 
 	/* undraw cursor first */
 	if (IS_FG)
@@ -2329,6 +2354,8 @@ __initfunc(unsigned long con_init(unsigned long kmem_start))
 	return kmem_start;
 }
 
+#ifndef VT_SINGLE_DRIVER
+
 static void clear_buffer_attributes(int currcons)
 {
 	unsigned short *p = (unsigned short *) origin;
@@ -2402,6 +2429,8 @@ void give_up_console(struct consw *csw)
 		if (con_driver_map[i] == csw)
 			con_driver_map[i] = NULL;
 }
+
+#endif
 
 /*
  *	Screen blanking
@@ -2766,5 +2795,7 @@ EXPORT_SYMBOL(video_font_height);
 EXPORT_SYMBOL(video_scan_lines);
 EXPORT_SYMBOL(vc_resize);
 
+#ifndef VT_SINGLE_DRIVER
 EXPORT_SYMBOL(take_over_console);
 EXPORT_SYMBOL(give_up_console);
+#endif

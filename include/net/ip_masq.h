@@ -2,7 +2,7 @@
  * 	IP masquerading functionality definitions
  */
 
-#include <linux/config.h> /* for CONFIG_IP_MASQ_NDEBUG */
+#include <linux/config.h> /* for CONFIG_IP_MASQ_DEBUG */
 #ifndef _IP_MASQ_H
 #define _IP_MASQ_H
 
@@ -36,17 +36,26 @@
  */
 #define MASQUERADE_EXPIRE_ICMP      125*HZ
 
-#define IP_MASQ_F_OUT_SEQ              	0x01	/* must do output seq adjust */
-#define IP_MASQ_F_IN_SEQ              	0x02	/* must do input seq adjust */
-#define IP_MASQ_F_NO_DPORT     	        0x04	/* no dport set yet */
-#define IP_MASQ_F_NO_DADDR	        0x08 	/* no daddr yet */
-#define IP_MASQ_F_HASHED	        0x10 	/* hashed entry */
-
-#define IP_MASQ_F_NO_SPORT	       0x200	/* no sport set yet */
-#define IP_MASQ_F_NO_REPLY	       0x800	/* no reply yet from outside */
-#define IP_MASQ_F_MPORT		      0x1000 	/* own mport specified */
+#define IP_MASQ_MOD_CTL			0x00
+#define IP_MASQ_USER_CTL		0x01
 
 #ifdef __KERNEL__
+
+#define IP_MASQ_TAB_SIZE	256
+
+#define IP_MASQ_F_NO_DADDR	      0x0001 	/* no daddr yet */
+#define IP_MASQ_F_NO_DPORT     	      0x0002	/* no dport set yet */
+#define IP_MASQ_F_NO_SADDR	      0x0004	/* no sport set yet */
+#define IP_MASQ_F_NO_SPORT	      0x0008	/* no sport set yet */
+
+#define IP_MASQ_F_NO_REPLY	      0x0010	/* no reply yet from outside */
+
+#define IP_MASQ_F_HASHED	      0x0100 	/* hashed entry */
+#define IP_MASQ_F_OUT_SEQ             0x0200	/* must do output seq adjust */
+#define IP_MASQ_F_IN_SEQ              0x0400	/* must do input seq adjust */
+
+#define IP_MASQ_F_MPORT		      0x1000 	/* own mport specified */
+#define IP_MASQ_F_USER		      0x2000	/* from uspace */
 
 /*
  *	Delta seq. info structure
@@ -81,7 +90,8 @@ struct ip_masq {
 };
 
 /*
- *	timeout values
+ *	Timeout values
+ *	ipchains holds a copy of this definition
  */
 
 struct ip_fw_masq {
@@ -90,8 +100,13 @@ struct ip_fw_masq {
         int udp_timeout;
 };
 
-extern struct ip_fw_masq *ip_masq_expire;
-
+union ip_masq_tphdr {
+		unsigned char *raw;
+		struct udphdr *uh;
+		struct tcphdr *th;
+		struct icmphdr *icmph;
+		__u16 *portp;
+};
 /*
  *	[0]: UDP free_ports
  *	[1]: TCP free_ports
@@ -121,7 +136,18 @@ extern void ip_masq_control_add(struct ip_masq *ms, struct ip_masq* ctl_ms);
 extern void ip_masq_control_del(struct ip_masq *ms);
 extern struct ip_masq * ip_masq_control_get(struct ip_masq *ms);
 
+struct ip_masq_ctl;
+ 
+struct ip_masq_hook {
+	int (*ctl)(int, struct ip_masq_ctl *, int);
+	int (*info)(char *, char **, off_t, int, int);
+};
 
+extern struct ip_masq *ip_masq_m_tab[IP_MASQ_TAB_SIZE];
+extern struct ip_masq *ip_masq_s_tab[IP_MASQ_TAB_SIZE];
+extern const char * ip_masq_state_name(int state);
+extern struct ip_masq_hook *ip_masq_user_hook;
+extern u32 ip_masq_select_addr(struct device *dev, u32 dst, int scope);
 /*
  * 	
  *	IP_MASQ_APP: IP application masquerading definitions 
@@ -201,55 +227,26 @@ static __inline__ struct ip_masq * ip_masq_out_get_iph(const struct iphdr *iph)
 extern void ip_masq_put(struct ip_masq *ms);
 
 
-/* 
- *	Locking stuff
- */
+extern rwlock_t __ip_masq_lock;
 
-
-static __inline__ void ip_masq_lock(atomic_t *lock, int rw)
-{
-#if 0
-	if (rw) 
-#endif
-		start_bh_atomic();
-	atomic_inc(lock);
-}
-
-static __inline__ void ip_masq_unlock(atomic_t *lock, int rw)
-{
-	atomic_dec(lock);
-#if 0
-	if (rw) 
-#endif
-		end_bh_atomic();
-}
-
+#ifdef __SMP__
+#define read_lock_bh(lock) 	do { start_bh_atomic(); read_lock(lock); \
+					} while (0)
+#define read_unlock_bh(lock)	do { read_unlock(lock); end_bh_atomic(); \
+					} while (0)
+#define write_lock_bh(lock)	do { start_bh_atomic(); write_lock(lock); \
+					} while (0)
+#define write_unlock_bh(lock)	do { write_unlock(lock); end_bh_atomic(); \
+					} while (0)
+#else
+#define read_lock_bh(lock)	start_bh_atomic()
+#define read_unlock_bh(lock)	end_bh_atomic()
+#define write_lock_bh(lock)	start_bh_atomic()
+#define write_unlock_bh(lock)	end_bh_atomic()
+#endif 
 /*
- *	Sleep-able lockzzz...
+ *
  */
-static __inline__ void ip_masq_lockz(atomic_t *lock, struct wait_queue ** waitq, int rw)
-{
-	if (rw)
-		while(atomic_read(lock)) sleep_on(waitq);
-	ip_masq_lock(lock, rw);
-}
-
-static __inline__ void ip_masq_unlockz(atomic_t *lock, struct wait_queue ** waitq, int rw)
-{
-	ip_masq_unlock(lock, rw);
-	if (rw)
-		wake_up(waitq);
-}
-	
-/*
- *	Perfect for winning races ... ;)
- */
-static __inline__ int ip_masq_nlocks(atomic_t *lock)
-{
-	return atomic_read(lock);
-}
-
-extern atomic_t __ip_masq_lock;
 
 /*
  *	Debugging stuff
@@ -257,7 +254,7 @@ extern atomic_t __ip_masq_lock;
 
 extern int ip_masq_get_debug_level(void);
 
-#ifndef CONFIG_IP_MASQ_NDEBUG
+#ifdef CONFIG_IP_MASQ_DEBUG
 #define IP_MASQ_DEBUG(level, msg...) do { \
 	if (level <= ip_masq_get_debug_level()) \
 		printk(KERN_DEBUG "IP_MASQ:" ## msg); \
@@ -279,6 +276,8 @@ extern int ip_masq_get_debug_level(void);
 /*
  *	/proc/net entry
  */
+extern int ip_masq_proc_register(struct proc_dir_entry *);
+extern void ip_masq_proc_unregister(struct proc_dir_entry *);
 extern int ip_masq_app_getinfo(char *buffer, char **start, off_t offset, int length, int dummy);
 
 /*

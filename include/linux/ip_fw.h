@@ -22,11 +22,13 @@
 #ifndef _IP_FWCHAINS_H
 #define _IP_FWCHAINS_H
 
+#ifdef __KERNEL__
 #include <linux/icmp.h>
 #include <linux/in.h>
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
+#endif /* __KERNEL__ */
 #define IP_FW_MAX_LABEL_LENGTH 8
 typedef char ip_chainlabel[IP_FW_MAX_LABEL_LENGTH+1];
 
@@ -91,11 +93,9 @@ struct ip_fwuser
 #define IP_FW_CREATECHAIN	(IP_FW_BASE_CTL+9)  /* Takes ip_chainlabel */
 #define IP_FW_DELETECHAIN	(IP_FW_BASE_CTL+10) /* Takes ip_chainlabel */
 #define IP_FW_POLICY		(IP_FW_BASE_CTL+11) /* Takes ip_fwpolicy */
-/* Masquerade controls */
-#define IP_FW_MASQ_INSERT	(IP_FW_BASE_CTL+12)
-#define IP_FW_MASQ_ADD		(IP_FW_BASE_CTL+13)
-#define IP_FW_MASQ_DEL		(IP_FW_BASE_CTL+14)
-#define IP_FW_MASQ_FLUSH  	(IP_FW_BASE_CTL+15)
+/* Masquerade control, only 1 optname */
+
+#define IP_FW_MASQ_CTL  	(IP_FW_BASE_CTL+12) /* General ip_masq ctl */
 
 /* Builtin chain labels */
 #define IP_FW_LABEL_FORWARD	"forward"
@@ -167,23 +167,7 @@ struct ip_fwpolicy
  * timeouts for ip masquerading
  */
 
-struct ip_fw_masq;
-
-/* Masquerading stuff */
-#define IP_FW_MASQCTL_MAX 256
-#define IP_MASQ_MOD_NMAX  32
-
-struct ip_fw_masqctl
-{
-	int mctl_action;
-	union {
-		struct {
-			char name[IP_MASQ_MOD_NMAX];
-			char data[1];
-		} mod;
-	} u;
-};
-
+extern int ip_fw_masq_timeouts(void *, int);
 
 
 /*
@@ -202,7 +186,7 @@ extern void ip_fw_init(void);
 #endif /* 2.1.x */
 extern int ip_fw_ctl(int, void *, int);
 #ifdef CONFIG_IP_MASQUERADE
-extern int ip_masq_ctl(int, void *, int);
+extern int ip_masq_uctl(int, char *, int);
 #endif
 #endif /* KERNEL */
 

@@ -57,6 +57,7 @@
 #define FB_ACCEL_SUN_CREATOR	11	/* Sun Creator/Creator3D	*/
 #define FB_ACCEL_SUN_CGSIX	12	/* Sun cg6			*/
 #define FB_ACCEL_SUN_LEO	13	/* Sun leo/zx			*/
+#define FB_ACCEL_IMS_TWINTURBO	14	/* IMS Twin Turbo		*/
 
 struct fb_fix_screeninfo {
 	char id[16];			/* identification string eg "TT Builtin" */
@@ -281,6 +282,8 @@ struct display {
 struct fb_info {
    char modename[40];			/* default video mode */
    int node;
+   int flags;
+#define FBINFO_FLAG_MODULE	1	/* Low-level driver is a module */
    struct fb_ops *fbops;
    struct fb_monspecs monspecs;
    struct display *disp;		/* initial display variable */
@@ -298,6 +301,11 @@ struct fb_info {
    /* From here on everything is device dependent */
 };
 
+#ifdef MODULE
+#define FBINFO_FLAG_DEFAULT	FBINFO_FLAG_MODULE
+#else
+#define FBINFO_FLAG_DEFAULT	0
+#endif
 
     /*
      *  This structure abstracts from the underlying hardware. It is not

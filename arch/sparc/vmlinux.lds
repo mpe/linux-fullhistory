@@ -22,7 +22,9 @@ SECTIONS
   .data1   : { *(.data1) }
   _edata  =  .;
   PROVIDE (edata = .);
+  __start___fixup = .;
   .fixup   : { *(.fixup) }
+  __stop___fixup = .;
   __start___ex_table = .;
   __ex_table : { *(__ex_table) }
   __stop___ex_table = .;

@@ -104,14 +104,16 @@ static inline unsigned long _get_base(char * addr)
  * Clear and set 'TS' bit respectively
  */
 #define clts() __asm__ __volatile__ ("clts")
-#define stts() \
-__asm__ __volatile__ ( \
-	"movl %%cr0,%%eax\n\t" \
-	"orl $8,%%eax\n\t" \
-	"movl %%eax,%%cr0" \
-	: /* no outputs */ \
-	: /* no inputs */ \
-	:"ax")
+#define read_cr0() ({ \
+	unsigned int __dummy; \
+	__asm__( \
+		"movl %%cr0,%0\n\t" \
+		:"=r" (__dummy)); \
+	__dummy; \
+})
+#define write_cr0(x) \
+	__asm__("movl %0,%%cr0": :"r" (x));
+#define stts() write_cr0(8 | read_cr0())
 
 #endif	/* __KERNEL__ */
 

@@ -632,6 +632,7 @@ __initfunc(static int init_platinum(struct fb_info_platinum *info))
 	info->fb_info.switch_con = &platinum_switch;
 	info->fb_info.updatevar = &platinum_updatevar;
 	info->fb_info.blank = &platinum_blank;
+	info->fb_info.flags = FBINFO_FLAG_DEFAULT;
 
 	for (j = 0; j < 16; j++) {
 		k = color_table[j];

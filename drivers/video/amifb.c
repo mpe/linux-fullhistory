@@ -1503,7 +1503,7 @@ static int amifb_set_var(struct fb_var_screeninfo *var, int con,
 				break;
 #endif
 			    default:
-				display->dispsw = NULL;
+				display->dispsw = &fbcon_dummy;
 			}
 			if (fb_info.changevar)
 				(*fb_info.changevar)(con);
@@ -1857,6 +1857,7 @@ default_chipset:
 	fb_info.switch_con = &amifbcon_switch;
 	fb_info.updatevar = &amifbcon_updatevar;
 	fb_info.blank = &amifbcon_blank;
+	fb_info.flags = FBINFO_FLAG_DEFAULT;
 
 	chipptr = chipalloc(videomemorysize+
 	                    SPRITEMEMSIZE+

@@ -5,7 +5,7 @@
  *
  *		IPv4 FIB: lookup engine and maintenance routines.
  *
- * Version:	$Id: fib_hash.c,v 1.5 1998/08/26 12:03:27 davem Exp $
+ * Version:	$Id: fib_hash.c,v 1.6 1998/10/03 09:37:06 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -43,9 +43,9 @@
 #include <net/sock.h>
 #include <net/ip_fib.h>
 
-#define FTprint(a...) 
+#define FTprint(a...)
 /*
-printk(KERN_DEBUG a)
+   printk(KERN_DEBUG a)
  */
 
 /*
@@ -140,6 +140,11 @@ extern __inline__ int fn_key_eq(fn_key_t a, fn_key_t b)
 	return a.datum == b.datum;
 }
 
+extern __inline__ int fn_key_leq(fn_key_t a, fn_key_t b)
+{
+	return a.datum <= b.datum;
+}
+
 #define FZ_MAX_DIVISOR 1024
 
 #ifdef CONFIG_IP_ROUTE_LARGE_TABLES
@@ -154,9 +159,11 @@ static __inline__ void fn_rebuild_zone(struct fn_zone *fz,
 	for (i=0; i<old_divisor; i++) {
 		for (f=old_ht[i]; f; f=next) {
 			next = f->fn_next;
-			f->fn_next = NULL;
-			for (fp = fz_chain_p(f->fn_key, fz); *fp; fp = &(*fp)->fn_next)
+			for (fp = fz_chain_p(f->fn_key, fz);
+			     *fp && fn_key_leq((*fp)->fn_key, f->fn_key);
+			     fp = &(*fp)->fn_next)
 				/* NONE */;
+			f->fn_next = *fp;
 			*fp = f;
 		}
 	}
@@ -199,7 +206,6 @@ static void fn_rehash_zone(struct fn_zone *fz)
 		fn_rebuild_zone(fz, old_ht, old_divisor);
 		end_bh_atomic();
 		kfree(old_ht);
-FTprint("REHASHED ZONE: order %d mask %08x hash %d/%08x\n", fz->fz_order, fz->fz_mask, fz->fz_divisor, fz->fz_hashmask);
 	}
 }
 #endif /* CONFIG_IP_ROUTE_LARGE_TABLES */
@@ -240,7 +246,6 @@ fn_new_zone(struct fn_hash *table, int z)
 	for (i=z+1; i<=32; i++)
 		if (table->fn_zones[i])
 			break;
-	start_bh_atomic();
 	if (i>32) {
 		/* No more specific masks, we are the first. */
 		fz->fz_next = table->fn_zone_list;
@@ -250,8 +255,6 @@ fn_new_zone(struct fn_hash *table, int z)
 		table->fn_zones[i]->fz_next = fz;
 	}
 	table->fn_zones[z] = fz;
-	end_bh_atomic();
-FTprint("NEW ZONE: order %d mask %08x hash %d/%08x\n", fz->fz_order, fz->fz_mask, fz->fz_divisor, fz->fz_hashmask);
 	return fz;
 }
 
@@ -265,19 +268,18 @@ fn_hash_lookup(struct fib_table *tb, const struct rt_key *key, struct fib_result
 	for (fz = t->fn_zone_list; fz; fz = fz->fz_next) {
 		struct fib_node *f;
 		fn_key_t k = fz_key(key->dst, fz);
-		int matched = 0;
 
 		for (f = fz_chain(k, fz); f; f = f->fn_next) {
-			if (!fn_key_eq(k, f->fn_key)
-#ifdef CONFIG_IP_ROUTE_TOS
-			    || (f->fn_tos && f->fn_tos != key->tos)
-#endif
-			    ) {
-				if (matched)
+			if (!fn_key_eq(k, f->fn_key)) {
+				if (fn_key_leq(k, f->fn_key))
 					break;
-				continue;
+				else
+					continue;
 			}
-			matched = 1;
+#ifdef CONFIG_IP_ROUTE_TOS
+			if (f->fn_tos && f->fn_tos != key->tos)
+				continue;
+#endif
 			f->fn_state |= FN_S_ACCESSED;
 
 			if (f->fn_state&FN_S_ZOMBIE)
@@ -306,11 +308,14 @@ for ( ; ((f) = *(fp)) != NULL; (fp) = &(f)->fn_next)
 #define FIB_SCAN_KEY(f, fp, key) \
 for ( ; ((f) = *(fp)) != NULL && fn_key_eq((f)->fn_key, (key)); (fp) = &(f)->fn_next)
 
-#define FIB_CONTINUE(f, fp) \
-{ \
-	fp = &f->fn_next; \
-	continue; \
-}
+#ifndef CONFIG_IP_ROUTE_TOS
+#define FIB_SCAN_TOS(f, fp, key, tos) FIB_SCAN_KEY(f, fp, key)
+#else
+#define FIB_SCAN_TOS(f, fp, key, tos) \
+for ( ; ((f) = *(fp)) != NULL && fn_key_eq((f)->fn_key, (key)) && \
+     (f)->fn_tos == (tos) ; (fp) = &(f)->fn_next)
+#endif
+
 
 #ifdef CONFIG_RTNETLINK
 static void rtmsg_fib(int, struct fib_node*, int, int,
@@ -326,7 +331,7 @@ fn_hash_insert(struct fib_table *tb, struct rtmsg *r, struct kern_rta *rta,
 		struct nlmsghdr *n, struct netlink_skb_parms *req)
 {
 	struct fn_hash *table = (struct fn_hash*)tb->tb_data;
-	struct fib_node *new_f, *f, **fp;
+	struct fib_node *new_f, *f, **fp, **del_fp;
 	struct fn_zone *fz;
 	struct fib_info *fi;
 
@@ -336,7 +341,6 @@ fn_hash_insert(struct fib_table *tb, struct rtmsg *r, struct kern_rta *rta,
 	u8 tos = r->rtm_tos;
 #endif
 	fn_key_t key;
-	unsigned state = 0;
 	int err;
 
 FTprint("tb(%d)_insert: %d %08x/%d %d %08x\n", tb->tb_id, r->rtm_type, rta->rta_dst ?
@@ -357,10 +361,8 @@ rta->rta_prefsrc ? *(u32*)rta->rta_prefsrc : 0);
 		key = fz_key(dst, fz);
 	}
 
-	if  ((fi = fib_create_info(r, rta, n, &err)) == NULL) {
-FTprint("fib_create_info err=%d\n", err);
+	if  ((fi = fib_create_info(r, rta, n, &err)) == NULL)
 		return err;
-	}
 
 #ifdef CONFIG_IP_ROUTE_LARGE_TABLES
 	if (fz->fz_nent > (fz->fz_divisor<<2) &&
@@ -375,7 +377,7 @@ FTprint("fib_create_info err=%d\n", err);
 	 * Scan list to find the first route with the same destination
 	 */
 	FIB_SCAN(f, fp) {
-		if (fn_key_eq(f->fn_key,key))
+		if (fn_key_leq(key,f->fn_key))
 			break;
 	}
 
@@ -389,70 +391,75 @@ FTprint("fib_create_info err=%d\n", err);
 	}
 #endif
 
-	if (f && fn_key_eq(f->fn_key, key)
+	del_fp = NULL;
+
+	if (f && (f->fn_state&FN_S_ZOMBIE) &&
 #ifdef CONFIG_IP_ROUTE_TOS
-	    && f->fn_tos == tos
+	    f->fn_tos == tos &&
 #endif
-	    ) {
+	    fn_key_eq(f->fn_key, key)) {
+		del_fp = fp;
+		fp = &f->fn_next;
+		f = *fp;
+		goto create;
+	}
+
+	FIB_SCAN_TOS(f, fp, key, tos) {
+		if (fi->fib_priority <= FIB_INFO(f)->fib_priority)
+			break;
+	}
+
+	/* Now f==*fp points to the first node with the same
+	   keys [prefix,tos,priority], if such key already
+	   exists or to the node, before which we will insert new one.
+	 */
+
+	if (f && 
+#ifdef CONFIG_IP_ROUTE_TOS
+	    f->fn_tos == tos &&
+#endif
+	    fn_key_eq(f->fn_key, key) &&
+	    fi->fib_priority == FIB_INFO(f)->fib_priority) {
 		struct fib_node **ins_fp;
 
-		state = f->fn_state;
-		if (n->nlmsg_flags&NLM_F_EXCL && !(state&FN_S_ZOMBIE))
-			return -EEXIST;
+		err = -EEXIST;
+		if (n->nlmsg_flags&NLM_F_EXCL)
+			goto out;
+
 		if (n->nlmsg_flags&NLM_F_REPLACE) {
-			struct fib_info *old_fi = FIB_INFO(f);
-			if (old_fi != fi) {
-				rtmsg_fib(RTM_DELROUTE, f, z, tb->tb_id, n, req);
-				start_bh_atomic();
-				FIB_INFO(f) = fi;
-				f->fn_type = r->rtm_type;
-				f->fn_scope = r->rtm_scope;
-				end_bh_atomic();
-				rtmsg_fib(RTM_NEWROUTE, f, z, tb->tb_id, n, req);
-			}
-			state = f->fn_state;
-			f->fn_state = 0;
-			fib_release_info(old_fi);
-			if (state&FN_S_ACCESSED)
-				rt_cache_flush(-1);
-			return 0;
+			del_fp = fp;
+			fp = &f->fn_next;
+			f = *fp;
+			goto replace;
 		}
 
 		ins_fp = fp;
+		err = -EEXIST;
 
-		for ( ; (f = *fp) != NULL && fn_key_eq(f->fn_key, key)
-#ifdef CONFIG_IP_ROUTE_TOS
-		     && f->fn_tos == tos
-#endif
-		     ; fp = &f->fn_next) {
-			state |= f->fn_state;
+		FIB_SCAN_TOS(f, fp, key, tos) {
+			if (fi->fib_priority != FIB_INFO(f)->fib_priority)
+				break;
 			if (f->fn_type == type && f->fn_scope == r->rtm_scope
-			    && FIB_INFO(f) == fi) {
-				fib_release_info(fi);
-				if (f->fn_state&FN_S_ZOMBIE) {
-					f->fn_state = 0;
-					rtmsg_fib(RTM_NEWROUTE, f, z, tb->tb_id, n, req);
-					if (state&FN_S_ACCESSED)
-						rt_cache_flush(-1);
-					return 0;
-				}
-				return -EEXIST;
-			}
+			    && FIB_INFO(f) == fi)
+				goto out;
 		}
+
 		if (!(n->nlmsg_flags&NLM_F_APPEND)) {
 			fp = ins_fp;
 			f = *fp;
 		}
-	} else {
-		if (!(n->nlmsg_flags&NLM_F_CREATE))
-			return -ENOENT;
 	}
 
+create:
+	err = -ENOENT;
+	if (!(n->nlmsg_flags&NLM_F_CREATE))
+		goto out;
+
+replace:
+	err = -ENOBUFS;
 	new_f = (struct fib_node *) kmalloc(sizeof(struct fib_node), GFP_KERNEL);
-	if (new_f == NULL) {
-		fib_release_info(fi);
-		return -ENOBUFS;
-	}
+	if (new_f == NULL)
+		goto out;
 
 	memset(new_f, 0, sizeof(struct fib_node));
 
@@ -473,9 +480,25 @@ FTprint("fib_create_info err=%d\n", err);
 	*fp = new_f;
 	fz->fz_nent++;
 
+	if (del_fp) {
+		f = *del_fp;
+		/* Unlink replaced node */
+		*del_fp = f->fn_next;
+		if (!(f->fn_state&FN_S_ZOMBIE))
+			rtmsg_fib(RTM_DELROUTE, f, z, tb->tb_id, n, req);
+		if (f->fn_state&FN_S_ACCESSED)
+			rt_cache_flush(-1);
+		fn_free_node(f);
+		fz->fz_nent--;
+	} else {
+		rt_cache_flush(-1);
+	}
 	rtmsg_fib(RTM_NEWROUTE, new_f, z, tb->tb_id, n, req);
-	rt_cache_flush(-1);
 	return 0;
+
+out:
+	fib_release_info(fi);
+	return err;
 }
 
 
@@ -484,10 +507,11 @@ fn_hash_delete(struct fib_table *tb, struct rtmsg *r, struct kern_rta *rta,
 		struct nlmsghdr *n, struct netlink_skb_parms *req)
 {
 	struct fn_hash *table = (struct fn_hash*)tb->tb_data;
-	struct fib_node **fp, *f;
+	struct fib_node **fp, **del_fp, *f;
 	int z = r->rtm_dst_len;
 	struct fn_zone *fz;
 	fn_key_t key;
+	int matched;
 #ifdef CONFIG_IP_ROUTE_TOS
 	u8 tos = r->rtm_tos;
 #endif
@@ -513,6 +537,8 @@ FTprint("tb(%d)_delete: %d %08x/%d %d\n", tb->tb_id, r->rtm_type, rta->rta_dst ?
 	FIB_SCAN(f, fp) {
 		if (fn_key_eq(f->fn_key, key))
 			break;
+		if (fn_key_leq(key, f->fn_key))
+			return -ESRCH;
 	}
 #ifdef CONFIG_IP_ROUTE_TOS
 	FIB_SCAN_KEY(f, fp, key) {
@@ -521,40 +547,47 @@ FTprint("tb(%d)_delete: %d %08x/%d %d\n", tb->tb_id, r->rtm_type, rta->rta_dst ?
 	}
 #endif
 
-	while ((f = *fp) != NULL && fn_key_eq(f->fn_key, key)
-#ifdef CONFIG_IP_ROUTE_TOS
-	       && f->fn_tos == tos
-#endif
-	       ) {
+	matched = 0;
+	del_fp = NULL;
+	FIB_SCAN_TOS(f, fp, key, tos) {
 		struct fib_info * fi = FIB_INFO(f);
 
-		if ((f->fn_state&FN_S_ZOMBIE) ||
-		    (r->rtm_type && f->fn_type != r->rtm_type) ||
-		    (r->rtm_scope && f->fn_scope != r->rtm_scope) ||
-		    (r->rtm_protocol && fi->fib_protocol != r->rtm_protocol) ||
-		    fib_nh_match(r, n, rta, fi))
-			FIB_CONTINUE(f, fp);
-		break;
+		if (f->fn_state&FN_S_ZOMBIE)
+			return -ESRCH;
+
+		matched++;
+
+		if (del_fp == NULL &&
+		    (!r->rtm_type || f->fn_type == r->rtm_type) &&
+		    (r->rtm_scope == RT_SCOPE_NOWHERE || f->fn_scope == r->rtm_scope) &&
+		    (!r->rtm_protocol || fi->fib_protocol == r->rtm_protocol) &&
+		    fib_nh_match(r, n, rta, fi) == 0)
+			del_fp = fp;
 	}
-	if (!f)
-		return -ESRCH;
-#if 0
-	*fp = f->fn_next;
-	rtmsg_fib(RTM_DELROUTE, f, z, tb->tb_id, n, req);
-	fn_free_node(f);
-	fz->fz_nent--;
-	rt_cache_flush(0);
-#else
-	f->fn_state |= FN_S_ZOMBIE;
-	rtmsg_fib(RTM_DELROUTE, f, z, tb->tb_id, n, req);
-	if (f->fn_state&FN_S_ACCESSED) {
-		f->fn_state &= ~FN_S_ACCESSED;
-		rt_cache_flush(-1);
+
+	if (del_fp) {
+		f = *del_fp;
+		rtmsg_fib(RTM_DELROUTE, f, z, tb->tb_id, n, req);
+
+		if (matched != 1) {
+			*del_fp = f->fn_next;
+			if (f->fn_state&FN_S_ACCESSED)
+				rt_cache_flush(-1);
+			fn_free_node(f);
+			fz->fz_nent--;
+		} else {
+			f->fn_state |= FN_S_ZOMBIE;
+			if (f->fn_state&FN_S_ACCESSED) {
+				f->fn_state &= ~FN_S_ACCESSED;
+				rt_cache_flush(-1);
+			}
+			if (++fib_hash_zombies > 128)
+				fib_flush();
+		}
+
+		return 0;
 	}
-	if (++fib_hash_zombies > 128)
-		fib_flush();
-#endif
-	return 0;
+	return -ESRCH;
 }
 
 extern __inline__ int

@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.173 1998/08/04 20:48:57 davem Exp $
+/* $Id: srmmu.c,v 1.175 1998/08/28 18:57:31 zaitcev Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -1997,7 +1997,7 @@ static void srmmu_update_mmu_cache(struct vm_area_struct * vma, unsigned long ad
 
 static void srmmu_destroy_context(struct mm_struct *mm)
 {
-	if(mm->context != NO_CONTEXT && mm->count == 1) {
+	if(mm->context != NO_CONTEXT && atomic_read(&mm->count) == 1) {
 		flush_cache_mm(mm);
 		ctxd_set(&srmmu_context_table[mm->context], swapper_pg_dir);
 		flush_tlb_mm(mm);
@@ -2071,7 +2071,7 @@ static void srmmu_vac_update_mmu_cache(struct vm_area_struct * vma,
 
 static void hypersparc_destroy_context(struct mm_struct *mm)
 {
-	if(mm->context != NO_CONTEXT && mm->count == 1) {
+	if(mm->context != NO_CONTEXT && atomic_read(&mm->count) == 1) {
 		ctxd_t *ctxp;
 
 		/* HyperSparc is copy-back, any data for this
@@ -2399,10 +2399,93 @@ __initfunc(static void init_swift(void))
 	poke_srmmu = poke_swift;
 }
 
-/* turbosparc.S */
-extern void turbosparc_flush_cache_all(void);
-extern void turbosparc_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr);
-extern void turbosparc_flush_page_for_dma(unsigned long page);
+static void turbosparc_flush_cache_all(void)
+{
+	flush_user_windows();
+	turbosparc_idflash_clear();
+}
+
+static void turbosparc_flush_cache_mm(struct mm_struct *mm)
+{
+	FLUSH_BEGIN(mm)
+	flush_user_windows();
+	turbosparc_idflash_clear();
+	FLUSH_END
+}
+
+static void turbosparc_flush_cache_range(struct mm_struct *mm, unsigned long start, unsigned long end)
+{
+	FLUSH_BEGIN(mm)
+	flush_user_windows();
+	turbosparc_idflash_clear();
+	FLUSH_END
+}
+
+static void turbosparc_flush_cache_page(struct vm_area_struct *vma, unsigned long page)
+{
+	FLUSH_BEGIN(vma->vm_mm)
+	flush_user_windows();
+	if (vma->vm_flags & VM_EXEC)
+		turbosparc_flush_icache();
+	turbosparc_flush_dcache();
+	FLUSH_END
+}
+
+/* TurboSparc is copy-back, if we turn it on, but this does not work. */
+static void turbosparc_flush_page_to_ram(unsigned long page)
+{
+#ifdef TURBOSPARC_WRITEBACK
+	volatile unsigned long clear;
+
+	if (srmmu_hwprobe(page))
+		turbosparc_flush_page_cache(page);
+	clear = srmmu_get_fstatus();
+#endif
+}
+
+static void turbosparc_flush_sig_insns(struct mm_struct *mm, unsigned long insn_addr)
+{
+}
+
+static void turbosparc_flush_page_for_dma(unsigned long page)
+{
+	turbosparc_flush_dcache();
+}
+
+static void turbosparc_flush_chunk(unsigned long chunk)
+{
+}
+
+static void turbosparc_flush_tlb_all(void)
+{
+	srmmu_flush_whole_tlb();
+	module_stats.invall++;
+}
+
+static void turbosparc_flush_tlb_mm(struct mm_struct *mm)
+{
+	FLUSH_BEGIN(mm)
+	srmmu_flush_whole_tlb();
+	module_stats.invmm++;
+	FLUSH_END
+}
+
+static void turbosparc_flush_tlb_range(struct mm_struct *mm, unsigned long start, unsigned long end)
+{
+	FLUSH_BEGIN(mm)
+	srmmu_flush_whole_tlb();
+	module_stats.invrnge++;
+	FLUSH_END
+}
+
+static void turbosparc_flush_tlb_page(struct vm_area_struct *vma, unsigned long page)
+{
+	FLUSH_BEGIN(vma->vm_mm)
+	srmmu_flush_whole_tlb();
+	module_stats.invpg++;
+	FLUSH_END
+}
+
 
 __initfunc(static void poke_turbosparc(void))
 {
@@ -2420,7 +2503,7 @@ __initfunc(static void poke_turbosparc(void))
 #ifdef TURBOSPARC_WRITEBACK
 	ccreg |= (TURBOSPARC_SNENABLE);		/* Do DVMA snooping in Dcache */
 	ccreg &= ~(TURBOSPARC_uS2 | TURBOSPARC_WTENABLE);
-			/* Write-back D-cache, emulate VLSI 
+			/* Write-back D-cache, emulate VLSI
 			 * abortion number three, not number one */
 #else
 	/* For now let's play safe, optimize later */
@@ -2428,7 +2511,8 @@ __initfunc(static void poke_turbosparc(void))
 			/* Do DVMA snooping in Dcache, Write-thru D-cache */
 	ccreg &= ~(TURBOSPARC_uS2);
 			/* Emulate VLSI abortion number three, not number one */
-#endif			 
+#endif
+
 	switch (ccreg & 7) {
 	case 0: /* No SE cache */
 	case 7: /* Test mode */
@@ -2449,22 +2533,17 @@ __initfunc(static void init_turbosparc(void))
 	srmmu_modtype = TurboSparc;
 
 	BTFIXUPSET_CALL(flush_cache_all, turbosparc_flush_cache_all, BTFIXUPCALL_NORM);
-	BTFIXUPSET_CALL(flush_cache_mm, hypersparc_flush_cache_mm, BTFIXUPCALL_NORM);
-	BTFIXUPSET_CALL(flush_cache_page, hypersparc_flush_cache_page, BTFIXUPCALL_NORM);
-	BTFIXUPSET_CALL(flush_cache_range, hypersparc_flush_cache_range, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_mm, turbosparc_flush_cache_mm, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_page, turbosparc_flush_cache_page, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_cache_range, turbosparc_flush_cache_range, BTFIXUPCALL_NORM);
 
-	BTFIXUPSET_CALL(flush_tlb_all, hypersparc_flush_tlb_all, BTFIXUPCALL_NORM);
-	BTFIXUPSET_CALL(flush_tlb_mm, hypersparc_flush_tlb_mm, BTFIXUPCALL_NORM);
-	BTFIXUPSET_CALL(flush_tlb_page, hypersparc_flush_tlb_page, BTFIXUPCALL_NORM);
-	BTFIXUPSET_CALL(flush_tlb_range, hypersparc_flush_tlb_range, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_all, turbosparc_flush_tlb_all, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_mm, turbosparc_flush_tlb_mm, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_page, turbosparc_flush_tlb_page, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_tlb_range, turbosparc_flush_tlb_range, BTFIXUPCALL_NORM);
 
-#ifdef TURBOSPARC_WRITEBACK
-	BTFIXUPSET_CALL(flush_page_to_ram, hypersparc_flush_page_to_ram, BTFIXUPCALL_NORM);
-	BTFIXUPSET_CALL(flush_chunk, hypersparc_flush_chunk, BTFIXUPCALL_NORM);
-#else
-	BTFIXUPSET_CALL(flush_page_to_ram, swift_flush_page_to_ram, BTFIXUPCALL_NOP);
-	BTFIXUPSET_CALL(flush_chunk, swift_flush_chunk, BTFIXUPCALL_NOP);
-#endif
+	BTFIXUPSET_CALL(flush_page_to_ram, turbosparc_flush_page_to_ram, BTFIXUPCALL_NORM);
+	BTFIXUPSET_CALL(flush_chunk, turbosparc_flush_chunk, BTFIXUPCALL_NORM);
 
 	BTFIXUPSET_CALL(flush_sig_insns, turbosparc_flush_sig_insns, BTFIXUPCALL_NOP);
 	BTFIXUPSET_CALL(flush_page_for_dma, turbosparc_flush_page_for_dma, BTFIXUPCALL_NOP);

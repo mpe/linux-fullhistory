@@ -1,7 +1,7 @@
 /*
  * sysctl_net_ipv4.c: sysctl interface to net IPV4 subsystem.
  *
- * $Id: sysctl_net_ipv4.c,v 1.34 1998/04/11 09:38:26 freitag Exp $
+ * $Id: sysctl_net_ipv4.c,v 1.35 1998/10/03 09:37:54 davem Exp $
  *
  * Begun April 1, 1996, Mike Shaver.
  * Added /proc/sys/net/ipv4 directory entry (empty =) ). [MS]
@@ -43,7 +43,6 @@ extern int sysctl_ip_dynaddr;
 /* From ip_masq.c */
 extern int sysctl_ip_masq_debug;
 
-extern int sysctl_tcp_cong_avoidance;
 extern int sysctl_tcp_hoe_retransmits;
 extern int sysctl_tcp_timestamps;
 extern int sysctl_tcp_window_scaling;

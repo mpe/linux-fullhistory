@@ -1,4 +1,4 @@
-/*  $Id: signal.c,v 1.30 1998/07/30 11:29:34 davem Exp $
+/*  $Id: signal.c,v 1.37 1998/09/25 01:09:22 davem Exp $
  *  arch/sparc64/kernel/signal.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -39,6 +39,8 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs * regs,
 
 /* This turned off for production... */
 /* #define DEBUG_SIGNALS 1 */
+/* #define DEBUG_SIGNALS_TRACE 1 */
+/* #define DEBUG_SIGNALS_MAPS 1 */
 
 /* {set, get}context() needed for 64-bit SparcLinux userland. */
 asmlinkage void sparc64_set_context(struct pt_regs *regs)
@@ -49,16 +51,17 @@ asmlinkage void sparc64_set_context(struct pt_regs *regs)
 	unsigned long pc, npc, tstate;
 	unsigned long fp, i7;
 	unsigned char fenab;
+	int err;
 
 	__asm__ __volatile__("flushw");
 	if(tp->w_saved						||
 	   (((unsigned long)ucp) & (sizeof(unsigned long)-1))	||
 	   (!__access_ok((unsigned long)ucp, sizeof(*ucp))))
 		goto do_sigsegv;
-	grp = &ucp->uc_mcontext.mc_gregs;
-	__get_user(pc, &((*grp)[MC_PC]));
-	__get_user(npc, &((*grp)[MC_NPC]));
-	if((pc | npc) & 3)
+	grp  = &ucp->uc_mcontext.mc_gregs;
+	err  = __get_user(pc, &((*grp)[MC_PC]));
+	err |= __get_user(npc, &((*grp)[MC_NPC]));
+	if(err || ((pc | npc) & 3))
 		goto do_sigsegv;
 	if(regs->u_regs[UREG_I1]) {
 		sigset_t set;
@@ -78,48 +81,57 @@ asmlinkage void sparc64_set_context(struct pt_regs *regs)
 	}
 	regs->tpc = pc;
 	regs->tnpc = npc;
-	__get_user(regs->y, &((*grp)[MC_Y]));
-	__get_user(tstate, &((*grp)[MC_TSTATE]));
+	err |= __get_user(regs->y, &((*grp)[MC_Y]));
+	err |= __get_user(tstate, &((*grp)[MC_TSTATE]));
 	regs->tstate &= ~(TSTATE_ICC | TSTATE_XCC);
 	regs->tstate |= (tstate & (TSTATE_ICC | TSTATE_XCC));
-	__get_user(regs->u_regs[UREG_G1], (&(*grp)[MC_G1]));
-	__get_user(regs->u_regs[UREG_G2], (&(*grp)[MC_G2]));
-	__get_user(regs->u_regs[UREG_G3], (&(*grp)[MC_G3]));
-	__get_user(regs->u_regs[UREG_G4], (&(*grp)[MC_G4]));
-	__get_user(regs->u_regs[UREG_G5], (&(*grp)[MC_G5]));
-	__get_user(regs->u_regs[UREG_G6], (&(*grp)[MC_G6]));
-	__get_user(regs->u_regs[UREG_G7], (&(*grp)[MC_G7]));
-	__get_user(regs->u_regs[UREG_I0], (&(*grp)[MC_O0]));
-	__get_user(regs->u_regs[UREG_I1], (&(*grp)[MC_O1]));
-	__get_user(regs->u_regs[UREG_I2], (&(*grp)[MC_O2]));
-	__get_user(regs->u_regs[UREG_I3], (&(*grp)[MC_O3]));
-	__get_user(regs->u_regs[UREG_I4], (&(*grp)[MC_O4]));
-	__get_user(regs->u_regs[UREG_I5], (&(*grp)[MC_O5]));
-	__get_user(regs->u_regs[UREG_I6], (&(*grp)[MC_O6]));
-	__get_user(regs->u_regs[UREG_I7], (&(*grp)[MC_O7]));
+	err |= __get_user(regs->u_regs[UREG_G1], (&(*grp)[MC_G1]));
+	err |= __get_user(regs->u_regs[UREG_G2], (&(*grp)[MC_G2]));
+	err |= __get_user(regs->u_regs[UREG_G3], (&(*grp)[MC_G3]));
+	err |= __get_user(regs->u_regs[UREG_G4], (&(*grp)[MC_G4]));
+	err |= __get_user(regs->u_regs[UREG_G5], (&(*grp)[MC_G5]));
+	err |= __get_user(regs->u_regs[UREG_G6], (&(*grp)[MC_G6]));
+	err |= __get_user(regs->u_regs[UREG_G7], (&(*grp)[MC_G7]));
+	err |= __get_user(regs->u_regs[UREG_I0], (&(*grp)[MC_O0]));
+	err |= __get_user(regs->u_regs[UREG_I1], (&(*grp)[MC_O1]));
+	err |= __get_user(regs->u_regs[UREG_I2], (&(*grp)[MC_O2]));
+	err |= __get_user(regs->u_regs[UREG_I3], (&(*grp)[MC_O3]));
+	err |= __get_user(regs->u_regs[UREG_I4], (&(*grp)[MC_O4]));
+	err |= __get_user(regs->u_regs[UREG_I5], (&(*grp)[MC_O5]));
+	err |= __get_user(regs->u_regs[UREG_I6], (&(*grp)[MC_O6]));
+	err |= __get_user(regs->u_regs[UREG_I7], (&(*grp)[MC_O7]));
 
-	__get_user(fp, &(ucp->uc_mcontext.mc_fp));
-	__get_user(i7, &(ucp->uc_mcontext.mc_i7));
-	__put_user(fp, (&(((struct reg_window *)(STACK_BIAS+regs->u_regs[UREG_I6]))->ins[6])));
-	__put_user(i7, (&(((struct reg_window *)(STACK_BIAS+regs->u_regs[UREG_I6]))->ins[7])));
+	err |= __get_user(fp, &(ucp->uc_mcontext.mc_fp));
+	err |= __get_user(i7, &(ucp->uc_mcontext.mc_i7));
+	err |= __put_user(fp,
+	      (&(((struct reg_window *)(STACK_BIAS+regs->u_regs[UREG_I6]))->ins[6])));
+	err |= __put_user(i7,
+	      (&(((struct reg_window *)(STACK_BIAS+regs->u_regs[UREG_I6]))->ins[7])));
 
-	__get_user(fenab, &(ucp->uc_mcontext.mc_fpregs.mcfpu_enab));
+	err |= __get_user(fenab, &(ucp->uc_mcontext.mc_fpregs.mcfpu_enab));
 	if(fenab) {
 		unsigned long *fpregs = (unsigned long *)(((char *)current) + AOFF_task_fpregs);
 		unsigned long fprs;
 		
 		fprs_write(0);
-		__get_user(fprs, &(ucp->uc_mcontext.mc_fpregs.mcfpu_fprs));
+		err |= __get_user(fprs, &(ucp->uc_mcontext.mc_fpregs.mcfpu_fprs));
 		if (fprs & FPRS_DL)
-			copy_from_user(fpregs, &(ucp->uc_mcontext.mc_fpregs.mcfpu_fregs),
-			       	       (sizeof(unsigned int) * 32));
+			err |= copy_from_user(fpregs,
+					      &(ucp->uc_mcontext.mc_fpregs.mcfpu_fregs),
+					      (sizeof(unsigned int) * 32));
 		if (fprs & FPRS_DU)
-			copy_from_user(fpregs+16, ((unsigned long *)&(ucp->uc_mcontext.mc_fpregs.mcfpu_fregs))+16,
-			       	       (sizeof(unsigned int) * 32));
-		__get_user(current->tss.xfsr[0], &(ucp->uc_mcontext.mc_fpregs.mcfpu_fsr));
-		__get_user(current->tss.gsr[0], &(ucp->uc_mcontext.mc_fpregs.mcfpu_gsr));
+			err |= copy_from_user(fpregs+16,
+			 ((unsigned long *)&(ucp->uc_mcontext.mc_fpregs.mcfpu_fregs))+16,
+			 (sizeof(unsigned int) * 32));
+		err |= __get_user(current->tss.xfsr[0],
+				  &(ucp->uc_mcontext.mc_fpregs.mcfpu_fsr));
+		err |= __get_user(current->tss.gsr[0],
+				  &(ucp->uc_mcontext.mc_fpregs.mcfpu_gsr));
 		regs->tstate &= ~TSTATE_PEF;
 	}
+	if (err)
+		goto do_sigsegv;
+
 	return;
 do_sigsegv:
 	lock_kernel();
@@ -134,6 +146,7 @@ asmlinkage void sparc64_get_context(struct pt_regs *regs)
 	mcontext_t *mcp;
 	unsigned long fp, i7;
 	unsigned char fenab;
+	int err;
 
 	synchronize_user_stack();
 	if(tp->w_saved || clear_user(ucp, sizeof(*ucp)))
@@ -152,52 +165,61 @@ asmlinkage void sparc64_get_context(struct pt_regs *regs)
 	regs->tpc   = regs->tnpc;
 	regs->tnpc += 4;
 
+	err = 0;
 	if (_NSIG_WORDS == 1)
-		__put_user(current->blocked.sig[0], (unsigned long *)&ucp->uc_sigmask);
+		err |= __put_user(current->blocked.sig[0],
+				  (unsigned long *)&ucp->uc_sigmask);
 	else
-		__copy_to_user(&ucp->uc_sigmask, &current->blocked, sizeof(sigset_t));
+		err |= __copy_to_user(&ucp->uc_sigmask, &current->blocked,
+				      sizeof(sigset_t));
 
-	__put_user(regs->tstate, &((*grp)[MC_TSTATE]));
-	__put_user(regs->tpc, &((*grp)[MC_PC]));
-	__put_user(regs->tnpc, &((*grp)[MC_NPC]));
-	__put_user(regs->y, &((*grp)[MC_Y]));
-	__put_user(regs->u_regs[UREG_G1], &((*grp)[MC_G1]));
-	__put_user(regs->u_regs[UREG_G2], &((*grp)[MC_G2]));
-	__put_user(regs->u_regs[UREG_G3], &((*grp)[MC_G3]));
-	__put_user(regs->u_regs[UREG_G4], &((*grp)[MC_G4]));
-	__put_user(regs->u_regs[UREG_G5], &((*grp)[MC_G5]));
-	__put_user(regs->u_regs[UREG_G6], &((*grp)[MC_G6]));
-	__put_user(regs->u_regs[UREG_G6], &((*grp)[MC_G7]));
-	__put_user(regs->u_regs[UREG_I0], &((*grp)[MC_O0]));
-	__put_user(regs->u_regs[UREG_I1], &((*grp)[MC_O1]));
-	__put_user(regs->u_regs[UREG_I2], &((*grp)[MC_O2]));
-	__put_user(regs->u_regs[UREG_I3], &((*grp)[MC_O3]));
-	__put_user(regs->u_regs[UREG_I4], &((*grp)[MC_O4]));
-	__put_user(regs->u_regs[UREG_I5], &((*grp)[MC_O5]));
-	__put_user(regs->u_regs[UREG_I6], &((*grp)[MC_O6]));
-	__put_user(regs->u_regs[UREG_I7], &((*grp)[MC_O7]));
+	err |= __put_user(regs->tstate, &((*grp)[MC_TSTATE]));
+	err |= __put_user(regs->tpc, &((*grp)[MC_PC]));
+	err |= __put_user(regs->tnpc, &((*grp)[MC_NPC]));
+	err |= __put_user(regs->y, &((*grp)[MC_Y]));
+	err |= __put_user(regs->u_regs[UREG_G1], &((*grp)[MC_G1]));
+	err |= __put_user(regs->u_regs[UREG_G2], &((*grp)[MC_G2]));
+	err |= __put_user(regs->u_regs[UREG_G3], &((*grp)[MC_G3]));
+	err |= __put_user(regs->u_regs[UREG_G4], &((*grp)[MC_G4]));
+	err |= __put_user(regs->u_regs[UREG_G5], &((*grp)[MC_G5]));
+	err |= __put_user(regs->u_regs[UREG_G6], &((*grp)[MC_G6]));
+	err |= __put_user(regs->u_regs[UREG_G6], &((*grp)[MC_G7]));
+	err |= __put_user(regs->u_regs[UREG_I0], &((*grp)[MC_O0]));
+	err |= __put_user(regs->u_regs[UREG_I1], &((*grp)[MC_O1]));
+	err |= __put_user(regs->u_regs[UREG_I2], &((*grp)[MC_O2]));
+	err |= __put_user(regs->u_regs[UREG_I3], &((*grp)[MC_O3]));
+	err |= __put_user(regs->u_regs[UREG_I4], &((*grp)[MC_O4]));
+	err |= __put_user(regs->u_regs[UREG_I5], &((*grp)[MC_O5]));
+	err |= __put_user(regs->u_regs[UREG_I6], &((*grp)[MC_O6]));
+	err |= __put_user(regs->u_regs[UREG_I7], &((*grp)[MC_O7]));
 
-	__get_user(fp, (&(((struct reg_window *)(STACK_BIAS+regs->u_regs[UREG_I6]))->ins[6])));
-	__get_user(i7, (&(((struct reg_window *)(STACK_BIAS+regs->u_regs[UREG_I6]))->ins[7])));
-	__put_user(fp, &(mcp->mc_fp));
-	__put_user(i7, &(mcp->mc_i7));
+	err |= __get_user(fp,
+		 (&(((struct reg_window *)(STACK_BIAS+regs->u_regs[UREG_I6]))->ins[6])));
+	err |= __get_user(i7,
+		 (&(((struct reg_window *)(STACK_BIAS+regs->u_regs[UREG_I6]))->ins[7])));
+	err |= __put_user(fp, &(mcp->mc_fp));
+	err |= __put_user(i7, &(mcp->mc_i7));
 
-	__put_user(fenab, &(mcp->mc_fpregs.mcfpu_enab));
+	err |= __put_user(fenab, &(mcp->mc_fpregs.mcfpu_enab));
 	if(fenab) {
 		unsigned long *fpregs = (unsigned long *)(((char *)current) + AOFF_task_fpregs);
 		unsigned long fprs;
 		
 		fprs = current->tss.fpsaved[0];
 		if (fprs & FPRS_DL)
-			copy_to_user(&(mcp->mc_fpregs.mcfpu_fregs), fpregs,
-				     (sizeof(unsigned int) * 32));
+			err |= copy_to_user(&(mcp->mc_fpregs.mcfpu_fregs), fpregs,
+					    (sizeof(unsigned int) * 32));
 		if (fprs & FPRS_DU)
-			copy_to_user(((unsigned long *)&(mcp->mc_fpregs.mcfpu_fregs))+16, fpregs+16,
-				     (sizeof(unsigned int) * 32));
-		__put_user(current->tss.xfsr[0], &(mcp->mc_fpregs.mcfpu_fsr));
-		__put_user(current->tss.gsr[0], &(mcp->mc_fpregs.mcfpu_gsr));
-		__put_user(fprs, &(mcp->mc_fpregs.mcfpu_fprs));
+			err |= copy_to_user(
+                          ((unsigned long *)&(mcp->mc_fpregs.mcfpu_fregs))+16, fpregs+16,
+			  (sizeof(unsigned int) * 32));
+		err |= __put_user(current->tss.xfsr[0], &(mcp->mc_fpregs.mcfpu_fsr));
+		err |= __put_user(current->tss.gsr[0], &(mcp->mc_fpregs.mcfpu_gsr));
+		err |= __put_user(fprs, &(mcp->mc_fpregs.mcfpu_fprs));
 	}
+	if (err)
+		goto do_sigsegv;
+
 	return;
 do_sigsegv:
 	lock_kernel();
@@ -474,22 +496,25 @@ static int invalid_frame_pointer(void *fp, int fplen)
 	return 0;
 }
 
-static inline void
+static inline int
 save_fpu_state(struct pt_regs *regs, __siginfo_fpu_t *fpu)
 {
 	unsigned long *fpregs = (unsigned long *)(regs+1);
 	unsigned long fprs;
+	int err = 0;
 	
 	fprs = current->tss.fpsaved[0];
 	if (fprs & FPRS_DL)
-		copy_to_user(&fpu->si_float_regs[0], fpregs,
-		     	     (sizeof(unsigned int) * 32));
+		err |= copy_to_user(&fpu->si_float_regs[0], fpregs,
+				    (sizeof(unsigned int) * 32));
 	if (fprs & FPRS_DU)
-		copy_to_user(&fpu->si_float_regs[32], fpregs+16,
-		     	     (sizeof(unsigned int) * 32));
-	__put_user(current->tss.xfsr[0], &fpu->si_fsr);
-	__put_user(current->tss.gsr[0], &fpu->si_gsr);
-	__put_user(fprs, &fpu->si_fprs);
+		err |= copy_to_user(&fpu->si_float_regs[32], fpregs+16,
+				    (sizeof(unsigned int) * 32));
+	err |= __put_user(current->tss.xfsr[0], &fpu->si_fsr);
+	err |= __put_user(current->tss.gsr[0], &fpu->si_gsr);
+	err |= __put_user(fprs, &fpu->si_fprs);
+
+	return err;
 }
 
 static inline void *get_sigframe(struct k_sigaction *ka, struct pt_regs *regs, unsigned long framesize)
@@ -500,7 +525,8 @@ static inline void *get_sigframe(struct k_sigaction *ka, struct pt_regs *regs, u
 
 	/* This is the X/Open sanctioned signal stack switching.  */
 	if (ka->sa.sa_flags & SA_ONSTACK) {
-		if (!on_sig_stack(sp) && !((current->sas_ss_sp + current->sas_ss_size) & 7))
+		if (!on_sig_stack(sp) &&
+		    !((current->sas_ss_sp + current->sas_ss_size) & 7))
 			sp = current->sas_ss_sp + current->sas_ss_size;
 	}
 	return (void *)(sp - framesize);
@@ -511,7 +537,7 @@ new_setup_frame(struct k_sigaction *ka, struct pt_regs *regs,
 		  int signo, sigset_t *oldset)
 {
 	struct new_signal_frame *sf;
-	int sigframe_size;
+	int sigframe_size, err;
 
 	/* 1. Make sure everything is clean */
 	synchronize_user_stack();
@@ -534,22 +560,25 @@ new_setup_frame(struct k_sigaction *ka, struct pt_regs *regs,
 	}
 
 	/* 2. Save the current process state */
-	copy_to_user(&sf->info.si_regs, regs, sizeof (*regs));
+	err = copy_to_user(&sf->info.si_regs, regs, sizeof (*regs));
 	
 	if (current->tss.fpsaved[0] & FPRS_FEF) {
-		save_fpu_state(regs, &sf->fpu_state);
-		__put_user((u64)&sf->fpu_state, &sf->fpu_save);
+		err |= save_fpu_state(regs, &sf->fpu_state);
+		err |= __put_user((u64)&sf->fpu_state, &sf->fpu_save);
 	} else {
-		__put_user(0, &sf->fpu_save);
+		err |= __put_user(0, &sf->fpu_save);
 	}
 
-	__put_user(oldset->sig[0], &sf->info.si_mask);
+	err |= __put_user(oldset->sig[0], &sf->info.si_mask);
 	if (_NSIG_WORDS > 1)
-		__copy_to_user(sf->extramask, &oldset->sig[1], sizeof(sf->extramask));
+		err |= __copy_to_user(sf->extramask, &oldset->sig[1],
+				      sizeof(sf->extramask));
 
-	copy_in_user((u64 *)sf,
-		     (u64 *)(regs->u_regs[UREG_FP]+STACK_BIAS),
-		     sizeof(struct reg_window));
+	err |= copy_in_user((u64 *)sf,
+			    (u64 *)(regs->u_regs[UREG_FP]+STACK_BIAS),
+			    sizeof(struct reg_window));
+	if (err)
+		goto sigsegv;
 	
 	/* 3. signal handler back-trampoline and parameters */
 	regs->u_regs[UREG_FP] = ((unsigned long) sf) - STACK_BIAS;
@@ -572,8 +601,13 @@ new_setup_frame(struct k_sigaction *ka, struct pt_regs *regs,
 
 		regs->u_regs[UREG_I7] = (unsigned long) (&(sf->insns[0]) - 2);
 		
-		__put_user(0x821020d8, &sf->insns[0]); /* mov __NR_sigreturn, %g1 */
-		__put_user(0x91d0206d, &sf->insns[1]); /* t 0x6d */
+		/* mov __NR_sigreturn, %g1 */
+		err |= __put_user(0x821020d8, &sf->insns[0]);
+
+		/* t 0x6d */
+		err |= __put_user(0x91d0206d, &sf->insns[1]);
+		if (err)
+			goto sigsegv;
 
 		if(pte_present(*ptep)) {
 			unsigned long page = pte_page(*ptep);
@@ -590,6 +624,9 @@ new_setup_frame(struct k_sigaction *ka, struct pt_regs *regs,
 sigill:
 	lock_kernel();
 	do_exit(SIGILL);
+sigsegv:
+	lock_kernel();
+	do_exit(SIGSEGV);
 }
 
 static inline void
@@ -597,7 +634,7 @@ setup_rt_frame(struct k_sigaction *ka, struct pt_regs *regs,
 	       int signo, sigset_t *oldset, siginfo_t *info)
 {
 	struct rt_signal_frame *sf;
-	int sigframe_size;
+	int sigframe_size, err;
 
 	/* 1. Make sure everything is clean */
 	synchronize_user_stack();
@@ -619,27 +656,29 @@ setup_rt_frame(struct k_sigaction *ka, struct pt_regs *regs,
 	}
 
 	/* 2. Save the current process state */
-	copy_to_user(&sf->regs, regs, sizeof (*regs));
+	err = copy_to_user(&sf->regs, regs, sizeof (*regs));
 
 	if (current->tss.fpsaved[0] & FPRS_FEF) {
-		save_fpu_state(regs, &sf->fpu_state);
-		__put_user((u64)&sf->fpu_state, &sf->fpu_save);
+		err |= save_fpu_state(regs, &sf->fpu_state);
+		err |= __put_user((u64)&sf->fpu_state, &sf->fpu_save);
 	} else {
-		__put_user(0, &sf->fpu_save);
+		err |= __put_user(0, &sf->fpu_save);
 	}
 	
 	/* Setup sigaltstack */
-	__put_user(current->sas_ss_sp, &sf->stack.ss_sp);
-	__put_user(sas_ss_flags(regs->u_regs[UREG_FP]), &sf->stack.ss_flags);
-	__put_user(current->sas_ss_size, &sf->stack.ss_size);
+	err |= __put_user(current->sas_ss_sp, &sf->stack.ss_sp);
+	err |= __put_user(sas_ss_flags(regs->u_regs[UREG_FP]), &sf->stack.ss_flags);
+	err |= __put_user(current->sas_ss_size, &sf->stack.ss_size);
 
-	copy_to_user(&sf->mask, oldset, sizeof(sigset_t));
+	err |= copy_to_user(&sf->mask, oldset, sizeof(sigset_t));
 
-	copy_in_user((u64 *)sf,
-		     (u64 *)(regs->u_regs[UREG_FP]+STACK_BIAS),
-		     sizeof(struct reg_window));
+	err |= copy_in_user((u64 *)sf,
+			    (u64 *)(regs->u_regs[UREG_FP]+STACK_BIAS),
+			    sizeof(struct reg_window));
 
-	copy_to_user(&sf->info, info, sizeof(siginfo_t));
+	err |= copy_to_user(&sf->info, info, sizeof(siginfo_t));
+	if (err)
+		goto sigsegv;
 	
 	/* 3. signal handler back-trampoline and parameters */
 	regs->u_regs[UREG_FP] = ((unsigned long) sf) - STACK_BIAS;
@@ -662,8 +701,13 @@ setup_rt_frame(struct k_sigaction *ka, struct pt_regs *regs,
 
 		regs->u_regs[UREG_I7] = (unsigned long) (&(sf->insns[0]) - 2);
 		
-		__put_user(0x82102065, &sf->insns[0]); /* mov __NR_rt_sigreturn, %g1 */
-		__put_user(0x91d0206d, &sf->insns[1]); /* t 0x6d */
+		/* mov __NR_rt_sigreturn, %g1 */
+		err |= __put_user(0x82102065, &sf->insns[0]);
+
+		/* t 0x6d */
+		err |= __put_user(0x91d0206d, &sf->insns[1]);
+		if (err)
+			goto sigsegv;
 
 		if(pte_present(*ptep)) {
 			unsigned long page = pte_page(*ptep);
@@ -680,6 +724,9 @@ setup_rt_frame(struct k_sigaction *ka, struct pt_regs *regs,
 sigill:
 	lock_kernel();
 	do_exit(SIGILL);
+sigsegv:
+	lock_kernel();
+	do_exit(SIGSEGV);
 }
 
 static inline void handle_signal(unsigned long signr, struct k_sigaction *ka,
@@ -720,6 +767,60 @@ static inline void syscall_restart(unsigned long orig_i0, struct pt_regs *regs,
 			regs->tnpc -= 4;
 	}
 }
+
+#ifdef DEBUG_SIGNALS_MAPS
+
+#define MAPS_LINE_FORMAT	  "%016lx-%016lx %s %016lx %s %lu "
+
+static inline void read_maps (void)
+{
+	struct vm_area_struct * map, * next;
+	char * buffer;
+	ssize_t i;
+
+	buffer = (char*)__get_free_page(GFP_KERNEL);
+	if (!buffer)
+		return;
+
+	for (map = current->mm->mmap ; map ; map = next ) {
+		/* produce the next line */
+		char *line;
+		char str[5], *cp = str;
+		int flags;
+		kdev_t dev;
+		unsigned long ino;
+
+		/*
+		 * Get the next vma now (but it won't be used if we sleep).
+		 */
+		next = map->vm_next;
+		flags = map->vm_flags;
+
+		*cp++ = flags & VM_READ ? 'r' : '-';
+		*cp++ = flags & VM_WRITE ? 'w' : '-';
+		*cp++ = flags & VM_EXEC ? 'x' : '-';
+		*cp++ = flags & VM_MAYSHARE ? 's' : 'p';
+		*cp++ = 0;
+
+		dev = 0;
+		ino = 0;
+		if (map->vm_file != NULL) {
+			dev = map->vm_file->f_dentry->d_inode->i_dev;
+			ino = map->vm_file->f_dentry->d_inode->i_ino;
+			line = d_path(map->vm_file->f_dentry, buffer, PAGE_SIZE);
+		}
+		printk(MAPS_LINE_FORMAT, map->vm_start, map->vm_end, str, map->vm_offset,
+			      kdevname(dev), ino);
+		if (map->vm_file != NULL)
+			printk("%s\n", line);
+		else
+			printk("\n");
+	}
+	free_page((unsigned long)buffer);
+	return;
+}
+
+#endif
 
 /* Note that 'init' is a special process: it doesn't get signals it doesn't
  * want to handle. Thus you cannot kill init even with a SIGKILL even by
@@ -824,9 +925,26 @@ asmlinkage int do_signal(sigset_t *oldset, struct pt_regs * regs,
 					unlock_kernel();
 				}
 #ifdef DEBUG_SIGNALS
-				/* Very useful to debug dynamic linker problems */
-				printk ("Sig ILL going...\n");
+				/* Very useful to debug the dynamic linker */
+				printk ("Sig %d going...\n", (int)signr);
 				show_regs (regs);
+#ifdef DEBUG_SIGNALS_TRACE
+				{
+					struct reg_window *rw = (struct reg_window *)(regs->u_regs[UREG_FP] + STACK_BIAS);
+					unsigned long ins[8];
+                                                
+					while(rw &&
+					      !(((unsigned long) rw) & 0x3)) {
+					        copy_from_user(ins, &rw->ins[0], sizeof(ins));
+						printk("Caller[%016lx](%016lx,%016lx,%016lx,%016lx,%016lx,%016lx)\n", ins[7], ins[0], ins[1], ins[2], ins[3], ins[4], ins[5]);
+						rw = (struct reg_window *)(unsigned long)(ins[6] + STACK_BIAS);
+					}
+				}
+#endif			
+#ifdef DEBUG_SIGNALS_MAPS	
+				printk("Maps:\n");
+				read_maps();
+#endif
 #endif
 				/* fall through */
 			default:

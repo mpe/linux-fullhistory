@@ -44,10 +44,6 @@ static int load_elf_library(int fd);
 extern int dump_fpu (struct pt_regs *, elf_fpregset_t *);
 extern void dump_thread(struct pt_regs *, struct user *);
 
-#ifdef __sparc__
-extern unsigned long get_unmapped_area(unsigned long addr, unsigned long len);
-#endif
-
 #ifndef elf_addr_t
 #define elf_addr_t unsigned long
 #define elf_caddr_t char *

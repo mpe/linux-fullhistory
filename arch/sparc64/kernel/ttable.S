@@ -1,4 +1,4 @@
-/* $Id: ttable.S,v 1.25 1998/05/23 18:24:53 jj Exp $
+/* $Id: ttable.S,v 1.27 1998/09/25 01:09:10 davem Exp $
  * ttable.S: Sparc V9 Trap Table(s) with SpitFire extensions.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -11,7 +11,7 @@
 sparc64_ttable_tl0:
 tl0_resv000:	BOOT_KERNEL BTRAP(0x1) BTRAP(0x2) BTRAP(0x3)
 tl0_resv004:	BTRAP(0x4)  BTRAP(0x5) BTRAP(0x6) BTRAP(0x7)
-tl0_iax:	ACCESS_EXCEPTION_TRAP(instruction_access_exception)
+tl0_iax:	TRAP_NOSAVE(__do_instruction_access_exception)
 tl0_resv009:	BTRAP(0x9)
 tl0_iae:	TRAP(do_iae)
 tl0_resv00b:	BTRAP(0xb) BTRAP(0xc) BTRAP(0xd) BTRAP(0xe) BTRAP(0xf)
@@ -28,14 +28,14 @@ tl0_cwin:	CLEAN_WINDOW
 tl0_div0:	TRAP(do_div0)
 tl0_resv029:	BTRAP(0x29) BTRAP(0x2a) BTRAP(0x2b) BTRAP(0x2c) BTRAP(0x2d) BTRAP(0x2e)
 tl0_resv02f:	BTRAP(0x2f)
-tl0_dax:	ACCESS_EXCEPTION_TRAP(data_access_exception)
+tl0_dax:	TRAP_NOSAVE(__do_data_access_exception)
 tl0_resv031:	BTRAP(0x31)
 tl0_dae:	TRAP(do_dae)
 tl0_resv033:	BTRAP(0x33)
 tl0_mna:	TRAP_NOSAVE(do_mna)
 tl0_lddfmna:	TRAP_NOSAVE(do_lddfmna)
 tl0_stdfmna:	TRAP_NOSAVE(do_stdfmna)
-tl0_privact:	TRAP(do_privact)
+tl0_privact:	TRAP_NOSAVE(__do_privact)
 tl0_resv038:	BTRAP(0x38) BTRAP(0x39) BTRAP(0x3a) BTRAP(0x3b) BTRAP(0x3c) BTRAP(0x3d)
 tl0_resv03e:	BTRAP(0x3e) BTRAP(0x3f) BTRAP(0x40)
 tl0_irq1:	TRAP_IRQ(handler_irq, 1)  TRAP_IRQ(handler_irq, 2)
@@ -160,7 +160,7 @@ tl0_resv1f0:	BTRAPS(0x1f0) BTRAPS(0x1f8)
 sparc64_ttable_tl1:
 tl1_resv000:	BOOT_KERNEL    BTRAPTL1(0x1) BTRAPTL1(0x2) BTRAPTL1(0x3)
 tl1_resv004:	BTRAPTL1(0x4)  BTRAPTL1(0x5) BTRAPTL1(0x6) BTRAPTL1(0x7)
-tl1_iax:	ACCESS_EXCEPTION_TRAPTL1(instruction_access_exception)
+tl1_iax:	TRAP_NOSAVE(__do_instruction_access_exception_tl1)
 tl1_resv009:	BTRAPTL1(0x9)
 tl1_iae:	TRAPTL1(do_iae_tl1)
 tl1_resv00b:	BTRAPTL1(0xb) BTRAPTL1(0xc) BTRAPTL1(0xd) BTRAPTL1(0xe) BTRAPTL1(0xf)
@@ -178,7 +178,7 @@ tl1_cwin:	CLEAN_WINDOW
 tl1_div0:	TRAPTL1(do_div0_tl1)
 tl1_resv029:	BTRAPTL1(0x29) BTRAPTL1(0x2a) BTRAPTL1(0x2b) BTRAPTL1(0x2c)
 tl1_resv02d:	BTRAPTL1(0x2d) BTRAPTL1(0x2e) BTRAPTL1(0x2f)
-tl1_dax:	ACCESS_EXCEPTION_TRAPTL1(data_access_exception)
+tl1_dax:	TRAP_NOSAVE(__do_data_access_exception_tl1)
 tl1_resv031:	BTRAPTL1(0x31)
 tl1_dae:	TRAPTL1(do_dae_tl1)
 tl1_resv033:	BTRAPTL1(0x33)

@@ -1,4 +1,4 @@
-/* $Id: sunos_ioctl32.c,v 1.9 1998/03/29 10:10:53 davem Exp $
+/* $Id: sunos_ioctl32.c,v 1.10 1998/08/15 20:42:46 davem Exp $
  * sunos_ioctl32.c: SunOS ioctl compatability on sparc64.
  *
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -24,7 +24,14 @@
 #include <linux/smp_lock.h>
 #include <asm/kbio.h>
 
-#define A(x) ((unsigned long)x)
+/* Use this to get at 32-bit user passed pointers. */
+#define A(__x)				\
+({	unsigned long __ret;		\
+	__asm__ ("srl	%0, 0, %0"	\
+		 : "=r" (__ret)		\
+		 : "0" (__x));		\
+	__ret;				\
+})
 
 #define SUNOS_NR_OPEN	256
 

@@ -1,4 +1,4 @@
-/* $Id: ultra.S,v 1.24 1998/05/22 11:02:56 davem Exp $
+/* $Id: ultra.S,v 1.27 1998/09/28 06:18:42 davem Exp $
  * ultra.S: Don't expand these all over the place...
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -56,6 +56,7 @@ __flush_tlb_range_page_by_page:
 __flush_tlb_range_constant_time: /* %o0=ctx, %o1=start, %o3=end */
 /*IC5*/	rdpr		%pstate, %g1
 	wrpr		%g1, PSTATE_IE, %pstate
+	mov		TLB_TAG_ACCESS, %g3
 	mov		(62 << 3), %g2
 1:	ldxa		[%g2] ASI_ITLB_TAG_READ, %o4
 	and		%o4, 0x3ff, %o5
@@ -80,10 +81,12 @@ __flush_tlb_range_constant_time: /* %o0=ctx, %o1=start, %o3=end */
 	 sub		%g2, (1 << 3), %g2
 /*IC8*/	retl
 	 wrpr		%g1, 0x0, %pstate
-4:	stxa		%g0, [%g2] ASI_ITLB_DATA_ACCESS
+4:	stxa		%g0, [%g3] ASI_IMMU
+	stxa		%g0, [%g2] ASI_ITLB_DATA_ACCESS
 	ba,pt		%xcc, 2b
 	 flush		%g6
-5:	stxa		%g0, [%g2] ASI_DTLB_DATA_ACCESS
+5:	stxa		%g0, [%g3] ASI_DMMU
+	stxa		%g0, [%g2] ASI_DTLB_DATA_ACCESS
 	ba,pt		%xcc, 3b
 	 flush		%g6
 __flush_tlb_mm_slow:
@@ -121,6 +124,35 @@ __flush_tlb_range_pbp_slow:
 	flush		%g6
 	retl
 	 wrpr		%g1, 0x0, %pstate
+
+	/* Unfortunately, it is necessary. */
+	.globl		flush_page_to_ram
+flush_page_to_ram:	/* %o0 = page */
+	rdpr		%pstate, %g5
+	wrpr		%g5, PSTATE_IE, %pstate
+	sethi		%hi(dcache_aliases_found), %g1
+	ldx		[%g1 + %lo(dcache_aliases_found)], %g2
+	sub		%o0, %g4, %o0		! Get phys_page
+	clr		%o2			! This dcache area begin
+	sethi		%hi(1<<14), %o1		! This dcache area end
+1:	ldxa		[%o2] ASI_DCACHE_TAG, %o3
+	andcc		%o3, 0x3, %g0		! Valid bits set?
+	be,pn		%xcc, 2f		! Nope, skip this one
+	 andn		%o3, 0x3, %o3		! Mask out valid bits
+	sllx		%o3, (13 - 2), %o3	! Shift into physaddr
+	cmp		%o3, %o0		! Match?
+	bne,pt		%xcc, 2f		! Nope, skip to next
+	 nop
+	stxa		%g0, [%o2] ASI_DCACHE_TAG
+	membar		#Sync
+	add		%g2, 1, %g2		! Increment alias counter
+2:	add		%o2, (1<<5), %o2	! 32-bytes per full line
+	cmp		%o2, %o1
+	bne,pt		%xcc, 1b
+	 nop
+	stx		%g2, [%g1 + %lo(dcache_aliases_found)]
+	retl
+	 wrpr		%g5, 0x0, %pstate
 
 #ifdef __SMP__
 	/* These are all called by the slaves of a cross call, at

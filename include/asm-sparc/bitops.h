@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.51 1998/07/26 03:05:37 davem Exp $
+/* $Id: bitops.h,v 1.54 1998/09/21 05:07:34 jj Exp $
  * bitops.h: Bit string operations on the Sparc.
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -108,7 +108,7 @@ extern __inline__ unsigned long test_and_set_bit(unsigned long nr, __SMPVOL void
 	: "0" (mask), "r" (ADDR)
 	: "g3", "g4", "g5", "g7", "cc");
 
-	return mask;
+	return mask != 0;
 }
 
 extern __inline__ void set_bit(unsigned long nr, __SMPVOL void *addr)
@@ -131,7 +131,7 @@ extern __inline__ unsigned long test_and_clear_bit(unsigned long nr, __SMPVOL vo
 	: "0" (mask), "r" (ADDR)
 	: "g3", "g4", "g5", "g7", "cc");
 
-	return mask;
+	return mask != 0;
 }
 
 extern __inline__ void clear_bit(unsigned long nr, __SMPVOL void *addr)
@@ -154,7 +154,7 @@ extern __inline__ unsigned long test_and_change_bit(unsigned long nr, __SMPVOL v
 	: "0" (mask), "r" (ADDR)
 	: "g3", "g4", "g5", "g7", "cc");
 
-	return mask;
+	return mask != 0;
 }
 
 extern __inline__ void change_bit(unsigned long nr, __SMPVOL void *addr)

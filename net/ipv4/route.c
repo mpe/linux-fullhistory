@@ -5,7 +5,7 @@
  *
  *		ROUTE - implementation of the IP router.
  *
- * Version:	$Id: route.c,v 1.57 1998/08/26 12:04:09 davem Exp $
+ * Version:	$Id: route.c,v 1.58 1998/10/03 09:37:50 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -333,7 +333,7 @@ void rt_cache_flush(int delay)
 		   otherwise fire it at deadline time.
 		 */
 
-		if (user_mode && (long)(rt_deadline-now) < ip_rt_max_delay-ip_rt_min_delay)
+		if (user_mode && tmo < ip_rt_max_delay-ip_rt_min_delay)
 			tmo = 0;
 		
 		if (delay > tmo)
@@ -432,7 +432,7 @@ static struct rtable *rt_intern_hash(unsigned hash, struct rtable * rt)
 		rthp = &rth->u.rt_next;
 	}
 
-	/* Try to bind route ro arp only if it is output
+	/* Try to bind route to arp only if it is output
 	   route or unicast forwarding path.
 	 */
 	if (rt->rt_type == RTN_UNICAST || rt->key.iif == 0)
@@ -569,12 +569,26 @@ static struct dst_entry *ipv4_negative_advice(struct dst_entry *dst)
 	struct rtable *rt = (struct rtable*)dst;
 
 	if (rt != NULL) {
-		if (dst->obsolete || rt->rt_flags&RTCF_REDIRECTED) {
+		if (dst->obsolete) {
+			ip_rt_put(rt);
+			return NULL;
+		}
+		if (rt->rt_flags&RTCF_REDIRECTED) {
+			unsigned hash = rt_hash_code(rt->key.dst, rt->key.src^(rt->key.oif<<5), rt->key.tos);
+			struct rtable **rthp;
 #if RT_CACHE_DEBUG >= 1
 			printk(KERN_DEBUG "ip_rt_advice: redirect to %d.%d.%d.%d/%02x dropped\n", NIPQUAD(rt->rt_dst), rt->key.tos);
 #endif
 			ip_rt_put(rt);
-			rt_cache_flush(0);
+			start_bh_atomic();
+			for (rthp = &rt_hash_table[hash]; *rthp; rthp = &(*rthp)->u.rt_next) {
+				if (*rthp == rt) {
+					*rthp = rt->u.rt_next;
+					rt_free(rt);
+					break;
+				}
+			}
+			end_bh_atomic();
 			return NULL;
 		}
 	}
@@ -654,12 +668,12 @@ static int ip_error(struct sk_buff *skb)
 	}
 
 	now = jiffies;
-	if ((rt->u.dst.rate_tokens += now - rt->u.dst.rate_last) > ip_rt_error_burst)
+	if ((rt->u.dst.rate_tokens += (now - rt->u.dst.rate_last)) > ip_rt_error_burst)
 		rt->u.dst.rate_tokens = ip_rt_error_burst;
+	rt->u.dst.rate_last = now;
 	if (rt->u.dst.rate_tokens >= ip_rt_error_cost) {
 		rt->u.dst.rate_tokens -= ip_rt_error_cost;
 		icmp_send(skb, ICMP_DEST_UNREACH, code, 0);
-		rt->u.dst.rate_last = now;
 	}
 
 	kfree_skb(skb);
@@ -1004,8 +1018,8 @@ int ip_route_input_slow(struct sk_buff *skb, u32 daddr, u32 saddr,
 		flags |= RTCF_DOREDIRECT;
 
 	if (skb->protocol != __constant_htons(ETH_P_IP)) {
-		/* Not IP (i.e. ARP). Do not make route for invalid
-		 * destination AND it is not translated destination.
+		/* Not IP (i.e. ARP). Do not create route, if it is
+		 * invalid for proxy arp. DNAT routes are always valid.
 		 */
 		if (out_dev == in_dev && !(flags&RTCF_DNAT))
 			return -EINVAL;
@@ -1069,6 +1083,7 @@ brd_input:
 			flags |= RTCF_DIRECTSRC;
 	}
 	flags |= RTCF_BROADCAST;
+	res.type = RTN_BROADCAST;
 
 local_input:
 	rth = dst_alloc(sizeof(struct rtable), &ipv4_dst_ops);
@@ -1227,7 +1242,7 @@ int ip_route_output_slow(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int 
 		   if address is local --- clear the flag.
 		 */
 		if (dev_out == NULL) {
-			if (nochecksrc == 0)
+			if (nochecksrc == 0 || inet_addr_type(saddr) != RTN_UNICAST)
 				return -EINVAL;
 			flags |= RTCF_TPROXY;
 		}
@@ -1251,7 +1266,7 @@ int ip_route_output_slow(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int 
 			(MULTICAST(daddr) || daddr == 0xFFFFFFFF)) {
 			/* Special hack: user can direct multicasts
 			   and limited broadcast via necessary interface
-			   without fiddling with IP_MULTICAST_IF or IP_TXINFO.
+			   without fiddling with IP_MULTICAST_IF or IP_PKTINFO.
 			   This hack is not just for fun, it allows
 			   vic,vat and friends to work.
 			   They bind socket to loopback, set ttl to zero
@@ -1280,11 +1295,9 @@ int ip_route_output_slow(struct rtable **rp, u32 daddr, u32 saddr, u32 tos, int 
 			key.src = inet_select_addr(dev_out, 0, RT_SCOPE_LINK);
 			goto make_route;
 		}
-		if (MULTICAST(daddr)) {
+		if (MULTICAST(daddr))
 			key.src = inet_select_addr(dev_out, 0, key.scope);
-			goto make_route;
-		}
-		if (!daddr)
+		else if (!daddr)
 			key.src = inet_select_addr(dev_out, 0, RT_SCOPE_HOST);
 	}
 
@@ -1378,13 +1391,18 @@ make_route:
 		flags |= RTCF_LOCAL;
 
 	if (res.type == RTN_BROADCAST) {
-		flags |= RTCF_BROADCAST;
-		if (dev_out->flags&IFF_BROADCAST)
-			flags |= RTCF_LOCAL;
+		flags |= RTCF_BROADCAST|RTCF_LOCAL;
+		res.fi = NULL;
 	} else if (res.type == RTN_MULTICAST) {
 		flags |= RTCF_MULTICAST|RTCF_LOCAL;
 		if (!ip_check_mc(dev_out, daddr))
 			flags &= ~RTCF_LOCAL;
+		/* If multicast route do not exist use
+		   default one, but do not gateway in this case.
+		   Yes, it is hack.
+		 */
+		if (res.fi && res.prefixlen < 4)
+			res.fi = NULL;
 	}
 
 	rth = dst_alloc(sizeof(struct rtable), &ipv4_dst_ops);

@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.39 1998/07/26 03:02:49 davem Exp $
+/* $Id: rtrap.S,v 1.40 1998/09/23 02:05:18 davem Exp $
  * rtrap.S: Preparing for return from trap on Sparc V9.
  *
  * Copyright (C) 1997,1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -144,7 +144,12 @@ check_user_wins:brz,pt			%o2, 1f
 		call			fault_in_user_windows
 		 add			%sp, STACK_BIAS + REGWIN_SZ, %o0
 
-1:		andcc			%l1, %l6, %g0
+1:
+#if 0
+		call			rtrap_check
+		 add			%sp, STACK_BIAS + REGWIN_SZ, %o0
+#endif
+		andcc			%l1, %l6, %g0
 		be,pt			%xcc, rt_continue
 		 stb			%g0, [%g6 + AOFF_task_tss + AOFF_thread_fpdepth] ! This is neccessary for non-syscall rtraps only
 

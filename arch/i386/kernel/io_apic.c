@@ -291,9 +291,22 @@ int IO_APIC_get_PCI_irq_vector(int bus, int slot, int pci_pin)
 }
 
 /*
+ * Unclear documentation on what a "conforming ISA interrupt" means.
+ *
+ * Should we, or should we not, take the ELCR register into account?
+ * It's part of the EISA specification, but maybe it should only be
+ * used if the interrupt is actually marked as EISA?
+ *
+ * Oh, well. Don't do it until somebody tells us what the right thing
+ * to do is..
+ */
+#undef USE_ELCR_TRIGGER_LEVEL
+#ifdef USE_ELCR_TRIGGER_LEVEL
+
+/*
  * ISA Edge/Level control register, ELCR
  */
-static int __init ISA_ELCR(unsigned int irq)
+static int __init EISA_ELCR(unsigned int irq)
 {
 	if (irq < 16) {
 		unsigned int port = 0x4d0 + (irq >> 3);
@@ -303,41 +316,15 @@ static int __init ISA_ELCR(unsigned int irq)
 	return 0;
 }	
 
-/*
- * ISA interrupts can be:
- *  - level triggered, active low (ELCR = 1)
- *  - edge triggered, active high (ELCR = 0)
- *  - edge triggered, active low (magic irq 8)
- */
-static int __init default_ISA_trigger(int idx)
-{
-	unsigned int irq = mp_irqs[idx].mpc_dstirq;
+#define default_ISA_trigger(idx)	(EISA_ELCR(mp_irqs[idx].mpc_dstirq))
+#define default_ISA_polarity(idx)	(0)
 
-	if (irq == 8)
-		return 0;
-	return ISA_ELCR(irq);
-}
-
-static int __init default_ISA_polarity(int idx)
-{
-#if 0
-	unsigned int irq = mp_irqs[idx].mpc_dstirq;
-
-	if (irq == 8)
-		return 1;
-	return ISA_ELCR(irq);
 #else
-	return 0;
-#endif
-}
 
-/*
- * There are broken mptables which register ISA+high-active+level IRQs,
- * these are illegal and are converted here to ISA+high-active+edge
- * IRQ sources. Careful, ISA+low-active+level is another broken entry
- * type, it represents PCI IRQs 'embedded into an ISA bus', they have
- * to be accepted. Yes, ugh.
- */
+#define default_ISA_trigger(idx)	(0)
+#define default_ISA_polarity(idx)	(0)
+
+#endif
 
 static int __init MPBIOS_polarity(int idx)
 {
@@ -457,37 +444,14 @@ static int __init MPBIOS_trigger(int idx)
 	return trigger;
 }
 
-static int __init trigger_flag_broken(int idx)
-{
-#if 0
-	int bus = mp_irqs[idx].mpc_srcbus;
-	int polarity = MPBIOS_polarity(idx);
-	int trigger = MPBIOS_trigger(idx);
-
-	if ( (mp_bus_id_to_type[bus] == MP_BUS_ISA) &&
-		(polarity == 0) /* active-high */ &&
-		(trigger == 1) /* level */ )
-
-		return 1; /* broken */
-#endif
-	return 0;
-}
-
 static inline int irq_polarity(int idx)
 {
-	/*
-	 * There are no known BIOS bugs wrt polarity.                yet.
-	 */
 	return MPBIOS_polarity(idx);
 }
 
 static inline int irq_trigger(int idx)
 {
-	int trigger = MPBIOS_trigger(idx);
-
-	if (trigger_flag_broken(idx))
-		trigger = 0;
-	return trigger;
+	return MPBIOS_trigger(idx);
 }
 
 static int __init pin_2_irq(int idx, int pin)
@@ -621,9 +585,6 @@ void __init setup_IO_APIC_irqs(void)
 		entry.vector = assign_irq_vector(irq);
 
 		bus = mp_irqs[idx].mpc_srcbus;
-
-		if (trigger_flag_broken (idx))
-			printk("broken BIOS, changing pin %d to edge\n", pin);
 
 		io_apic_write(0x11+2*pin, *(((int *)&entry)+1));
 		io_apic_write(0x10+2*pin, *(((int *)&entry)+0));

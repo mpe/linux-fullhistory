@@ -5,7 +5,7 @@
  *
  *		Dumb Network Address Translation.
  *
- * Version:	$Id: ip_nat_dumb.c,v 1.5 1998/09/07 00:13:54 davem Exp $
+ * Version:	$Id: ip_nat_dumb.c,v 1.6 1998/10/03 09:37:25 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -18,6 +18,7 @@
  *		Rani Assaf	:	A zero checksum is a special case
  *					only in UDP
  * 		Rani Assaf	:	Added ICMP messages rewriting
+ * 		Rani Assaf	:	Repaired wrong changes, made by ANK.
  *
  *
  * NOTE:	It is just working model of real NAT.
@@ -40,6 +41,7 @@
 #include <net/checksum.h>
 #include <linux/route.h>
 #include <net/route.h>
+#include <net/ip_fib.h>
 
 
 int
@@ -89,7 +91,8 @@ ip_do_nat(struct sk_buff *skb)
 
 			if ((icmph->type != ICMP_DEST_UNREACH) &&
 			    (icmph->type != ICMP_TIME_EXCEEDED) &&
-			    (icmph->type != ICMP_PARAMETERPROB)) break;
+			    (icmph->type != ICMP_PARAMETERPROB))
+				break;
 
 			ciph = (struct iphdr *) (icmph + 1);
 
@@ -98,8 +101,30 @@ ip_do_nat(struct sk_buff *skb)
 
 			if (rt->rt_flags&RTCF_DNAT && ciph->saddr == odaddr)
 				ciph->saddr = iph->daddr;
-			if (rt->rt_flags&RTCF_SNAT && ciph->daddr == osaddr)
-				ciph->daddr = iph->saddr;
+			if (rt->rt_flags&RTCF_SNAT) {
+				if (ciph->daddr != osaddr) {
+					struct   fib_result res;
+					struct   rt_key key;
+					unsigned flags = 0;
+
+					key.src = ciph->daddr;
+					key.dst = ciph->saddr;
+					key.iif = skb->dev->ifindex;
+					key.oif = 0;
+#ifdef CONFIG_IP_ROUTE_TOS
+					key.tos = RT_TOS(ciph->tos);
+#endif
+					/* Use fib_lookup() until we get our own
+					 * hash table of NATed hosts -- Rani
+				 	 */
+					if (fib_lookup(&key, &res) != 0)
+						return 0;
+					if (res.r)
+						ciph->daddr = fib_rules_policy(ciph->daddr, &res, &flags);
+				}
+				else
+					ciph->daddr = iph->saddr;
+			}
 			break;
 		}
 		default:

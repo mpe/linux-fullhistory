@@ -60,24 +60,30 @@ else
 endif
 
 ifeq ($(CONFIG_IP_MASQUERADE),y)
-IPV4X_OBJS += ip_masq.o ip_masq_mod.o ip_masq_app.o 
+IPV4X_OBJS += ip_masq.o ip_masq_app.o 
 
-ifeq ($(CONFIG_IP_MASQUERADE_IPAUTOFW),y)
-IPV4_OBJS += ip_masq_autofw.o
-else
-  ifeq ($(CONFIG_IP_MASQUERADE_IPAUTOFW),m)
-  M_OBJS += ip_masq_autofw.o
+ifeq ($(CONFIG_IP_MASQUERADE_MOD),y)
+  IPV4X_OBJS += ip_masq_mod.o 
+  
+  ifeq ($(CONFIG_IP_MASQUERADE_IPAUTOFW),y)
+  IPV4_OBJS += ip_masq_autofw.o
+  else
+    ifeq ($(CONFIG_IP_MASQUERADE_IPAUTOFW),m)
+    M_OBJS += ip_masq_autofw.o
+    endif
   endif
+  
+  ifeq ($(CONFIG_IP_MASQUERADE_IPPORTFW),y)
+  IPV4_OBJS += ip_masq_portfw.o
+  else
+    ifeq ($(CONFIG_IP_MASQUERADE_IPPORTFW),m)
+    M_OBJS += ip_masq_portfw.o
+    endif
+  endif
+  
 endif
 
-ifeq ($(CONFIG_IP_MASQUERADE_IPPORTFW),y)
-IPV4_OBJS += ip_masq_portfw.o
-else
-  ifeq ($(CONFIG_IP_MASQUERADE_IPPORTFW),m)
-  M_OBJS += ip_masq_portfw.o
-  endif
-endif
-
+M_OBJS += ip_masq_user.o
 M_OBJS += ip_masq_ftp.o ip_masq_irc.o ip_masq_raudio.o ip_masq_quake.o
 M_OBJS += ip_masq_vdolive.o ip_masq_cuseeme.o
 endif

@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: icmp.c,v 1.19 1998/08/26 12:04:52 davem Exp $
+ *	$Id: icmp.c,v 1.20 1998/10/03 09:38:31 davem Exp $
  *
  *	Based on net/ipv4/icmp.c
  *
@@ -334,7 +334,7 @@ void icmpv6_send(struct sk_buff *skb, int type, int code, __u32 info,
 	msg.daddr = &hdr->saddr;
 
 	len = min((skb->tail - ((unsigned char *) hdr)) + sizeof(struct icmp6hdr), 
-		  IPV6_MIN_MTU - sizeof(struct icmp6hdr));
+		  IPV6_MIN_MTU - sizeof(struct ipv6hdr));
 
 	if (len < 0) {
 		printk(KERN_DEBUG "icmp: len problem\n");
@@ -396,7 +396,7 @@ static void icmpv6_echo_reply(struct sk_buff *skb)
 }
 
 static void icmpv6_notify(struct sk_buff *skb,
-			  int type, int code, unsigned char *buff, int len)
+			  int type, int code, u32 info, unsigned char *buff, int len)
 {
 	struct in6_addr *saddr = &skb->nh.ipv6h->saddr;
 	struct in6_addr *daddr = &skb->nh.ipv6h->daddr;
@@ -404,7 +404,6 @@ static void icmpv6_notify(struct sk_buff *skb,
 	struct inet6_protocol *ipprot;
 	struct sock *sk;
 	u8 *pb;
-	__u32 info = 0;
 	int hash;
 	u8 nexthdr;
 
@@ -436,10 +435,7 @@ static void icmpv6_notify(struct sk_buff *skb,
 
 		if (ipprot->err_handler)
 			ipprot->err_handler(skb, hdr, NULL, type, code, pb, info);
-		return;
 	}
-
-	/* delivery to upper layer protocols failed. try raw sockets */
 
 	sk = raw_v6_htable[hash];
 
@@ -467,6 +463,9 @@ int icmpv6_rcv(struct sk_buff *skb, unsigned long len)
 	int type;
 
 	icmpv6_statistics.Icmp6InMsgs++;
+
+	if (len < sizeof(struct icmp6hdr))
+		goto discard_it;
 
 	/* Perform checksum. */
 	switch (skb->ip_summed) {	
@@ -538,7 +537,7 @@ int icmpv6_rcv(struct sk_buff *skb, unsigned long len)
 	case ICMPV6_DEST_UNREACH:
 	case ICMPV6_TIME_EXCEED:
 	case ICMPV6_PARAMPROB:
-		icmpv6_notify(skb, type, hdr->icmp6_code,
+		icmpv6_notify(skb, type, hdr->icmp6_code, hdr->icmp6_mtu,
 			      (char *) (hdr + 1), ulen);
 		break;
 
@@ -574,7 +573,7 @@ int icmpv6_rcv(struct sk_buff *skb, unsigned long len)
 		 * must pass to upper level 
 		 */
 
-		icmpv6_notify(skb, type, hdr->icmp6_code,
+		icmpv6_notify(skb, type, hdr->icmp6_code, hdr->icmp6_mtu,
 			      (char *) (hdr + 1), ulen);
 	};
 	kfree_skb(skb);
@@ -586,7 +585,7 @@ discard_it:
 	return 0;
 }
 
-__initfunc(int icmpv6_init(struct net_proto_family *ops))
+int __init icmpv6_init(struct net_proto_family *ops)
 {
 	struct sock *sk;
 	int err;
@@ -632,7 +631,7 @@ static struct icmp6_err {
 } tab_unreach[] = {
 	{ ENETUNREACH,	0},	/* NOROUTE		*/
 	{ EACCES,	1},	/* ADM_PROHIBITED	*/
-	{ 0,		0},	/* Was NOT_NEIGHBOUR, now reserved */
+	{ EHOSTUNREACH,	0},	/* Was NOT_NEIGHBOUR, now reserved */
 	{ EHOSTUNREACH,	0},	/* ADDR_UNREACH		*/
 	{ ECONNREFUSED,	1},	/* PORT_UNREACH		*/
 };
@@ -641,10 +640,11 @@ int icmpv6_err_convert(int type, int code, int *err)
 {
 	int fatal = 0;
 
-	*err = 0;
+	*err = EPROTO;
 
 	switch (type) {
 	case ICMPV6_DEST_UNREACH:
+		fatal = 1;
 		if (code <= ICMPV6_PORT_UNREACH) {
 			*err  = tab_unreach[code].err;
 			fatal = tab_unreach[code].fatal;
@@ -658,6 +658,10 @@ int icmpv6_err_convert(int type, int code, int *err)
 	case ICMPV6_PARAMPROB:
 		*err = EPROTO;
 		fatal = 1;
+		break;
+
+	case ICMPV6_TIME_EXCEED:
+		*err = EHOSTUNREACH;
 		break;
 	};
 

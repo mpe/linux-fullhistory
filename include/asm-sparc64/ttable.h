@@ -1,4 +1,4 @@
-/* $Id: ttable.h,v 1.8 1998/06/12 14:54:32 jj Exp $ */
+/* $Id: ttable.h,v 1.10 1998/09/25 01:09:45 davem Exp $ */
 #ifndef _SPARC64_TTABLE_H
 #define _SPARC64_TTABLE_H
 
@@ -72,26 +72,6 @@
 	 sethi	%hi(systbl), %l7;			\
 	nop; nop; nop;
 	
-#define ACCESS_EXCEPTION_TRAP(routine)			\
-	rdpr	%pstate, %g1;				\
-	wrpr	%g1, PSTATE_MG|PSTATE_AG, %pstate;	\
-	ba,pt	%xcc, etrap;				\
-	 rd	%pc, %g7;				\
-	call	routine;				\
-	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0;	\
-	ba,pt	%xcc, rtrap;				\
-	 clr	%l6;
-
-#define ACCESS_EXCEPTION_TRAPTL1(routine)		\
-	rdpr	%pstate, %g1;				\
-	wrpr	%g1, PSTATE_MG|PSTATE_AG, %pstate;	\
-	ba,pt	%xcc, etraptl1;				\
-	 rd	%pc, %g7;				\
-	call	routine;				\
-	 add	%sp, STACK_BIAS + REGWIN_SZ, %o0;	\
-	ba,pt	%xcc, rtrap;				\
-	 clr	%l6;
-	 
 #define INDIRECT_SOLARIS_SYSCALL(num)			\
 	sethi	%hi(109f), %g7;				\
 	ba,pt	%xcc, etrap;				\
@@ -205,7 +185,8 @@
 	stxa	%i6, [%sp + STACK_BIAS + 0x70] %asi;	\
 	stxa	%i7, [%sp + STACK_BIAS + 0x78] %asi;	\
 	saved; retry; nop; nop; nop; nop; nop; nop;	\
-	nop; nop; nop; nop; nop;			\
+	nop; nop; nop; nop;				\
+	b,a,pt	%xcc, spill_fixup_dax;			\
 	b,a,pt	%xcc, spill_fixup_mna;			\
 	b,a,pt	%xcc, spill_fixup;
 
@@ -230,7 +211,8 @@
 	stwa	%i6, [%sp + 0x38] %asi;			\
 	stwa	%i7, [%sp + 0x3c] %asi;			\
 	saved; retry; nop; nop; nop; nop;		\
-	nop; nop; nop; nop; nop; nop;			\
+	nop; nop; nop; nop; nop;			\
+	b,a,pt	%xcc, spill_fixup_dax;			\
 	b,a,pt	%xcc, spill_fixup_mna;			\
 	b,a,pt	%xcc, spill_fixup;
 
@@ -292,7 +274,8 @@
 	ldxa	[%sp + STACK_BIAS + 0x70] %asi, %i6;	\
 	ldxa	[%sp + STACK_BIAS + 0x78] %asi, %i7;	\
 	restored; retry; nop; nop; nop; nop; nop; nop;	\
-	nop; nop; nop; nop; nop;			\
+	nop; nop; nop; nop;				\
+	b,a,pt	%xcc, fill_fixup_dax;			\
 	b,a,pt	%xcc, fill_fixup_mna;			\
 	b,a,pt	%xcc, fill_fixup;
 
@@ -317,7 +300,8 @@
 	lduwa	[%sp + 0x38] %asi, %i6;			\
 	lduwa	[%sp + 0x3c] %asi, %i7;			\
 	restored; retry; nop; nop; nop; nop;		\
-	nop; nop; nop; nop; nop; nop;			\
+	nop; nop; nop; nop; nop;			\
+	b,a,pt	%xcc, fill_fixup_dax;			\
 	b,a,pt	%xcc, fill_fixup_mna;			\
 	b,a,pt	%xcc, fill_fixup;
 

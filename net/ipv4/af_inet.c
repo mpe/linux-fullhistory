@@ -5,7 +5,7 @@
  *
  *		PF_INET protocol family socket handler.
  *
- * Version:	$Id: af_inet.c,v 1.75 1998/08/26 12:03:15 davem Exp $
+ * Version:	$Id: af_inet.c,v 1.79 1998/10/04 06:51:08 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -119,8 +119,6 @@
 
 struct linux_mib net_statistics;
 
-extern int sysctl_core_destroy_delay;
-
 extern int raw_get_info(char *, char **, off_t, int, int);
 extern int snmp_get_info(char *, char **, off_t, int, int);
 extern int netstat_get_info(char *, char **, off_t, int, int);
@@ -198,7 +196,7 @@ static __inline__ void kill_sk_later(struct sock *sk)
 	sk->destroy = 1;
 	sk->ack_backlog = 0;
 	release_sock(sk);
-	net_reset_timer(sk, TIME_DESTROY, sysctl_core_destroy_delay);
+	net_reset_timer(sk, TIME_DESTROY, SOCK_DESTROY_TIME);
 }
 
 void destroy_sock(struct sock *sk)
@@ -643,33 +641,20 @@ int inet_stream_connect(struct socket *sock, struct sockaddr * uaddr,
 	if (sk->state != TCP_ESTABLISHED && (flags & O_NONBLOCK)) 
 	  	return (-EINPROGRESS);
 
-#if 1
 	if (sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV) {
 		inet_wait_for_connect(sk);
 		if (signal_pending(current))
 			return -ERESTARTSYS;
 	}
-#else
-	cli();
-	while(sk->state == TCP_SYN_SENT || sk->state == TCP_SYN_RECV) {
-		interruptible_sleep_on(sk->sleep);
-		if (signal_pending(current)) {
-			sti();
-			return(-ERESTARTSYS);
-		}
-		/* This fixes a nasty in the tcp/ip code. There is a hideous hassle with
-		   icmp error packets wanting to close a tcp or udp socket. */
-		if (sk->err && sk->protocol == IPPROTO_TCP) {
-			sock->state = SS_UNCONNECTED;
-			sti();
-			return sock_error(sk); /* set by tcp_err() */
-		}
-	}
-	sti();
-#endif
 
 	sock->state = SS_CONNECTED;
 	if ((sk->state != TCP_ESTABLISHED) && sk->err) {
+		/* This is ugly but needed to fix a race in the ICMP error handler */
+		if (sk->protocol == IPPROTO_TCP && sk->zapped) { 
+			lock_sock(sk);  
+			tcp_set_state(sk, TCP_CLOSE);
+			release_sock(sk); 
+		}
 		sock->state = SS_UNCONNECTED;
 		return sock_error(sk);
 	}
@@ -716,13 +701,6 @@ int inet_accept(struct socket *sock, struct socket *newsock, int flags)
 	if (flags & O_NONBLOCK)
 		goto do_half_success;
 
-	cli();
-	while (sk2->state == TCP_SYN_RECV) {
-		interruptible_sleep_on(sk2->sleep);
-		if (signal_pending(current))
-			goto do_interrupted;
-	}
-	sti();
 	if(sk2->state == TCP_ESTABLISHED)
 		goto do_full_success;
 	if(sk2->err > 0)
@@ -749,18 +727,9 @@ do_bad_connection:
 	newsk->socket = newsock;
 	return err;
 
-do_interrupted:
-	sti();
-	sk1->pair = sk2;
-	sk2->sleep = NULL;
-	sk2->socket = NULL;
-	newsock->sk = newsk;
-	newsk->socket = newsock;
-	err = -ERESTARTSYS;
-do_err:
-	return err;
 do_sk1_err:
 	err = sock_error(sk1);
+do_err:
 	return err;
 }
 
@@ -805,8 +774,6 @@ int inet_recvmsg(struct socket *sock, struct msghdr *msg, int size,
 		return(-EINVAL);
 	if (sk->prot->recvmsg == NULL) 
 		return(-EOPNOTSUPP);
-	if (sk->err)
-		return sock_error(sk);
 	/* We may need to bind the socket. */
 	if (inet_autobind(sk) != 0)
 		return(-EAGAIN);

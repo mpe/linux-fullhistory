@@ -121,7 +121,7 @@ static void sun4c_clear_clock_irq(void)
 {
 	volatile unsigned int clear_intr;
 #ifdef CONFIG_SUN4
-	if( idprom->id_machtype == SM_SUN4 | SM_4_260 ) 
+	if (idprom->id_machtype == (SM_SUN4 | SM_4_260)) 
 	  clear_intr = sun4_timer.timer_limit10;
 	else
 #endif
@@ -146,7 +146,7 @@ __initfunc(static void sun4c_init_timers(void (*counter_fn)(int, void *, struct 
 	 * the cache chip on the sun4c.
 	 */
 #ifdef CONFIG_SUN4
-	if (idprom->id_machtype == SM_SUN4 | SM_4_260)
+	if (idprom->id_machtype == (SM_SUN4 | SM_4_260))
 		sun4c_timers = &sun4_timer;
 	else
 #endif
@@ -171,7 +171,10 @@ __initfunc(static void sun4c_init_timers(void (*counter_fn)(int, void *, struct 
 		prom_halt();
 	}
     
+#if 0
+	/* This does not work on 4/330 */
 	sun4c_enable_irq(10);
+#endif
 	claim_ticker14(NULL, PROFILE_IRQ, 0);
 }
 

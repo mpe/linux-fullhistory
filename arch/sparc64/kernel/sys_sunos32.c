@@ -1,4 +1,4 @@
-/* $Id: sys_sunos32.c,v 1.16 1998/06/16 04:37:06 davem Exp $
+/* $Id: sys_sunos32.c,v 1.18 1998/08/31 03:41:01 davem Exp $
  * sys_sunos32.c: SunOS binary compatability layer on sparc64.
  *
  * Copyright (C) 1995, 1996, 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -52,7 +52,14 @@
 #include <linux/time.h>
 #include <linux/personality.h>
 
-#define A(x) ((unsigned long)x)
+/* Use this to get at 32-bit user passed pointers. */
+#define A(__x)				\
+({	unsigned long __ret;		\
+	__asm__ ("srl	%0, 0, %0"	\
+		 : "=r" (__ret)		\
+		 : "0" (__x));		\
+	__ret;				\
+})
 
 #define SUNOS_NR_OPEN	256
 
@@ -98,6 +105,7 @@ asmlinkage u32 sunos_mmap(u32 addr, u32 len, u32 prot, u32 flags, u32 fd, u32 of
 	ret_type = flags & _MAP_NEW;
 	flags &= ~_MAP_NEW;
 
+	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 	retval = do_mmap(file,
 			 (unsigned long) addr, (unsigned long) len,
 			 (unsigned long) prot, (unsigned long) flags,

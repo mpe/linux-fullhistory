@@ -5,7 +5,7 @@
  *
  *		RAW - implementation of IP "raw" sockets.
  *
- * Version:	$Id: raw.c,v 1.37 1998/08/26 12:04:07 davem Exp $
+ * Version:	$Id: raw.c,v 1.38 1998/10/03 09:37:45 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -143,26 +143,53 @@ struct sock *raw_v4_lookup(struct sock *sk, unsigned short num,
 	return s;
 }
 
-/*
- *	Raw_err does not currently get called by the icmp module - FIXME:
- */
- 
 void raw_err (struct sock *sk, struct sk_buff *skb)
 {
 	int type = skb->h.icmph->type;
 	int code = skb->h.icmph->code;
+	u32 info = 0;
+	int err = 0;
+	int harderr = 0;
 
-	if (sk->ip_recverr) {
-		struct sk_buff *skb2 = skb_clone(skb, GFP_ATOMIC);
-		if (skb2 && sock_queue_err_skb(sk, skb2))
-			kfree_skb(skb);
+	/* Report error on raw socket, if:
+	   1. User requested ip_recverr.
+	   2. Socket is connected (otherwise the error indication
+	      is useless without ip_recverr and error is hard.
+	 */
+	if (!sk->ip_recverr && sk->state != TCP_ESTABLISHED)
+		return;
+
+	switch (type) {
+	default:
+	case ICMP_TIME_EXCEEDED:
+		err = EHOSTUNREACH;
+		break;
+	case ICMP_SOURCE_QUENCH:
+		return;
+	case ICMP_PARAMETERPROB:
+		err = EPROTO;
+		info = ntohl(skb->h.icmph->un.gateway)>>24;
+		harderr = 1;
+		break;
+	case ICMP_DEST_UNREACH:
+		err = EHOSTUNREACH;
+		if (code > NR_ICMP_UNREACH)
+			break;
+		err = icmp_err_convert[code].errno;
+		harderr = icmp_err_convert[code].fatal;
+		if (code == ICMP_FRAG_NEEDED) {
+			harderr = (sk->ip_pmtudisc != IP_PMTUDISC_DONT);
+			err = EMSGSIZE;
+			info = ntohs(skb->h.icmph->un.frag.mtu);
+		}
 	}
 
-	if (type == ICMP_DEST_UNREACH && code == ICMP_FRAG_NEEDED) {
-		if (sk->ip_pmtudisc != IP_PMTUDISC_DONT) {
-			sk->err = EMSGSIZE;
-			sk->error_report(sk);
-		}
+	if (sk->ip_recverr)
+		ip_icmp_error(sk, skb, err, 0, info, (u8 *)(skb->h.icmph + 1));
+		
+	if (sk->ip_recverr || harderr) {
+		sk->err = err;
+		sk->error_report(sk);
 	}
 }
 
@@ -170,7 +197,7 @@ static int raw_rcv_skb(struct sock * sk, struct sk_buff * skb)
 {
 	/* Charge it to the socket. */
 	
-	if (__sock_queue_rcv_skb(sk,skb)<0)
+	if (sock_queue_rcv_skb(sk,skb)<0)
 	{
 		ip_statistics.IpInDiscards++;
 		kfree_skb(skb);
@@ -443,23 +470,12 @@ int raw_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 
 	if (flags & MSG_OOB)
 		return -EOPNOTSUPP;
-		
-	if (sk->shutdown & RCV_SHUTDOWN) 
-		return(0);
 
 	if (addr_len)
 		*addr_len=sizeof(*sin);
 
-	if (sk->ip_recverr && (skb = skb_dequeue(&sk->error_queue)) != NULL) {
-		err = sock_error(sk);
-		if (msg->msg_controllen == 0) {
-			skb_free_datagram(sk, skb);
-			return err;
-		}
-		put_cmsg(msg, SOL_IP, IP_RECVERR, skb->len, skb->data);
-		skb_free_datagram(sk, skb);
-		return 0;
-	}
+	if (flags & MSG_ERRQUEUE)
+		return ip_recv_error(sk, msg, len);
 
 	skb=skb_recv_datagram(sk,flags,noblock,&err);
 	if(skb==NULL)

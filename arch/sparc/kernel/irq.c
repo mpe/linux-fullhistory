@@ -1,4 +1,4 @@
-/*  $Id: irq.c,v 1.86 1998/06/04 09:54:49 jj Exp $
+/*  $Id: irq.c,v 1.89 1998/09/21 05:05:12 jj Exp $
  *  arch/sparc/kernel/irq.c:  Interrupt request handling routines. On the
  *                            Sparc the IRQ's are basically 'cast in stone'
  *                            and you are supposed to probe the prom's device
@@ -6,7 +6,7 @@
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  *  Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
- *  Copyright (C) 1995 Pete A. Zaitcev (zaitcev@ipmce.su)
+ *  Copyright (C) 1995 Pete A. Zaitcev (zaitcev@metabyte.com)
  *  Copyright (C) 1996 Dave Redman (djhr@tadpole.co.uk)
  */
 
@@ -40,6 +40,7 @@
 #include <asm/spinlock.h>
 #include <asm/hardirq.h>
 #include <asm/softirq.h>
+#include <asm/pcic.h>
 
 /*
  * Dave Redman (djhr@tadpole.co.uk)
@@ -669,6 +670,13 @@ __initfunc(void init_IRQ(void))
 		break;
 
 	case sun4m:
+#ifdef CONFIG_PCI
+		pcic_probe();
+		if (pci_present()) {
+			sun4m_pci_init_IRQ();
+			break;
+		}
+#endif
 		sun4m_init_IRQ();
 		break;
 		

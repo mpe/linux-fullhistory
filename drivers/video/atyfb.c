@@ -1,4 +1,4 @@
-/*  $Id: atyfb.c,v 1.75 1998/09/03 20:13:21 geert Exp $
+/*  $Id: atyfb.c,v 1.77 1998/09/14 08:01:46 jj Exp $
  *  linux/drivers/video/atyfb.c -- Frame buffer device for ATI Mach64
  *
  *	Copyright (C) 1997-1998  Geert Uytterhoeven
@@ -1970,9 +1970,6 @@ static int atyfb_get_var(struct fb_var_screeninfo *var, int con,
 static void atyfb_set_disp(struct display *disp, struct fb_info_aty *info,
 			   int bpp, int accel)
 {
-	    unsigned long flags;
-
-	    save_flags(flags); cli();
 	    switch (bpp) {
 #ifdef FBCON_HAS_CFB8
 		case 8:
@@ -2008,7 +2005,6 @@ static void atyfb_set_disp(struct display *disp, struct fb_info_aty *info,
 		info->dispsw.cursor = atyfb_cursor;
 		info->dispsw.set_font = atyfb_set_font;
 	    }
-	    restore_flags(flags);
 }
 
 
@@ -2522,6 +2518,7 @@ __initfunc(static int aty_init(struct fb_info_aty *info, const char *name))
     info->fb_info.switch_con = &atyfbcon_switch;
     info->fb_info.updatevar = &atyfbcon_updatevar;
     info->fb_info.blank = &atyfbcon_blank;
+    info->fb_info.flags = FBINFO_FLAG_DEFAULT;
 
     for (j = 0; j < 16; j++) {
 	k = color_table[j];

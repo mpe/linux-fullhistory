@@ -329,11 +329,11 @@ sun_mouse_open(struct inode * inode, struct file * file)
 	return 0;
 }
 
-static int sun_mouse_fasync (struct file *filp, int on)
+static int sun_mouse_fasync (int fd, struct file *filp, int on)
 {
 	int retval;
 
-	retval = fasync_helper (filp, on, &sunmouse.fasync);
+	retval = fasync_helper (fd, filp, on, &sunmouse.fasync);
 	if (retval < 0)
 		return retval;
 	return 0;
@@ -342,7 +342,7 @@ static int sun_mouse_fasync (struct file *filp, int on)
 static int
 sun_mouse_close(struct inode *inode, struct file *file)
 {
-	sun_mouse_fasync (file, 0);
+	sun_mouse_fasync (-1, file, 0);
 	if (--sunmouse.active)
 		return 0;
 	sunmouse.ready = 0;

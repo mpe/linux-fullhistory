@@ -99,7 +99,7 @@ __initfunc(int dummy_init(struct device *dev))
 	ether_setup(dev);
 	dev->tx_queue_len = 0;
 	dev->flags |= IFF_NOARP;
-	dev->flags &= ~(IFF_BROADCAST|IFF_MULTICAST);
+	dev->flags &= ~IFF_MULTICAST;
 #ifdef CONFIG_NET_FASTROUTE
 	dev->accept_fastpath = dummy_accept_fastpath;
 #endif

@@ -166,7 +166,7 @@ extern __inline__ void ip_send(struct sk_buff *skb)
 		ip_finish_output(skb);
 }
 
-static __inline__
+extern __inline__
 int ip_decrease_ttl(struct iphdr *iph)
 {
 	u16 check = iph->check;
@@ -175,6 +175,14 @@ int ip_decrease_ttl(struct iphdr *iph)
 		check++;		/* carry overflow */
 	iph->check = htons(check);
 	return --iph->ttl;
+}
+
+extern __inline__
+int ip_dont_fragment(struct sock *sk, struct dst_entry *dst)
+{
+	return (sk->ip_pmtudisc == IP_PMTUDISC_DO ||
+		(sk->ip_pmtudisc == IP_PMTUDISC_WANT &&
+		 !(dst->mxlock&(1<<RTAX_MTU))));
 }
 
 /*
@@ -233,7 +241,10 @@ extern int	ip_setsockopt(struct sock *sk, int level, int optname, char *optval, 
 extern int	ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *optlen);
 extern int	ip_ra_control(struct sock *sk, unsigned char on, void (*destructor)(struct sock *));
 
-extern int		ipv4_backlog_rcv(struct sock *sk, struct sk_buff *skb);  
-
+extern int 	ip_recv_error(struct sock *sk, struct msghdr *msg, int len);
+extern void	ip_icmp_error(struct sock *sk, struct sk_buff *skb, int err, 
+			      u16 port, u32 info, u8 *payload);
+extern void	ip_local_error(struct sock *sk, int err, u32 daddr, u16 dport,
+			       u32 info);
 
 #endif	/* _IP_H */

@@ -191,7 +191,7 @@ void die(const char * str, struct pt_regs * regs, long err)
 	do_exit(SIGSEGV);
 }
 
-static void die_if_kernel(const char * str, struct pt_regs * regs, long err)
+static inline void die_if_kernel(const char * str, struct pt_regs * regs, long err)
 {
 	if (!(regs->eflags & VM_MASK) && !(3 & regs->xcs))
 		die(str, regs, err);
@@ -427,7 +427,7 @@ asmlinkage void do_spurious_interrupt_bug(struct pt_regs * regs,
  * Careful.. There are problems with IBM-designed IRQ13 behaviour.
  * Don't touch unless you *really* know how it works.
  */
-asmlinkage void math_state_restore(void)
+asmlinkage void math_state_restore(struct pt_regs regs)
 {
 	__asm__ __volatile__("clts");		/* Allow maths ops (or we recurse) */
 	if(current->used_math)

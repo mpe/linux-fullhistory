@@ -7,7 +7,7 @@
  *
  *	Adapted from linux/net/ipv4/raw.c
  *
- *	$Id: raw.c,v 1.21 1998/08/26 12:05:13 davem Exp $
+ *	$Id: raw.c,v 1.22 1998/10/03 09:38:40 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -185,8 +185,31 @@ void rawv6_err(struct sock *sk, struct sk_buff *skb, struct ipv6hdr *hdr,
 	       struct inet6_skb_parm *opt,
 	       int type, int code, unsigned char *buff, u32 info)
 {
-	if (sk == NULL)
+	int err;
+	int harderr;
+
+	if (buff > skb->tail)
 		return;
+
+	/* Report error on raw socket, if:
+	   1. User requested recverr.
+	   2. Socket is connected (otherwise the error indication
+	      is useless without recverr and error is hard.
+	 */
+	if (!sk->net_pinfo.af_inet6.recverr && sk->state != TCP_ESTABLISHED)
+		return;
+
+	harderr = icmpv6_err_convert(type, code, &err);
+	if (type == ICMPV6_PKT_TOOBIG)
+		harderr = (sk->net_pinfo.af_inet6.pmtudisc == IPV6_PMTUDISC_DO);
+
+	if (sk->net_pinfo.af_inet6.recverr)
+		ipv6_icmp_error(sk, skb, err, 0, ntohl(info), buff);
+
+	if (sk->net_pinfo.af_inet6.recverr || harderr) {
+		sk->err = err;
+		sk->error_report(sk);
+	}
 }
 
 static inline int rawv6_rcv_skb(struct sock * sk, struct sk_buff * skb)
@@ -234,16 +257,16 @@ int rawv6_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	if (flags & MSG_OOB)
 		return -EOPNOTSUPP;
 		
-	if (sk->shutdown & RCV_SHUTDOWN) 
-		return(0);
-
 	if (addr_len) 
 		*addr_len=sizeof(*sin6);
+
+	if (flags & MSG_ERRQUEUE)
+		return ipv6_recv_error(sk, msg, len);
 
 	skb = skb_recv_datagram(sk, flags, noblock, &err);
 	if (!skb)
 		goto out;
-	
+
 	copied = skb->tail - skb->h.raw;
   	if (copied > len) {
   		copied = len;

@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.46 1998/08/03 23:58:01 davem Exp $
+/* $Id: sys_sparc.c,v 1.48 1998/09/07 09:19:34 davem Exp $
  * linux/arch/sparc/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -206,6 +206,7 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 		}
 	}
 
+	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 	retval = do_mmap(file, addr, len, prot, flags, off);
 
 out_putf:
@@ -297,6 +298,11 @@ sys_rt_sigaction(int sig, const struct sigaction *act, struct sigaction *oact,
 	/* XXX: Don't preclude handling different sized sigset_t's.  */
 	if (sigsetsize != sizeof(sigset_t))
 		return -EINVAL;
+
+	/* All tasks which use RT signals (effectively) use
+	 * new style signals.
+	 */
+	current->tss.new_signal = 1;
 
 	if (act) {
 		new_ka.ka_restorer = restorer;

@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.118 1998/08/04 20:48:47 davem Exp $
+/*  $Id: process.c,v 1.126 1998/09/21 05:05:18 jj Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -61,8 +61,8 @@ asmlinkage int sys_idle(void)
 		goto out;
 
 	/* endless idle loop with no priority at all */
-	current->priority = -100;
-	current->counter = -100;
+	current->priority = 0;
+	current->counter = 0;
 	for (;;) {
 		if (ARCH_SUN4C_SUN4) {
 			static int count = HZ;
@@ -108,16 +108,13 @@ out:
 /* This is being executed in task 0 'user space'. */
 int cpu_idle(void *unused)
 {
-	extern volatile int smp_commenced;
-
-	current->priority = -100;
+	current->priority = 0;
 	while(1) {
-		srmmu_check_pgt_cache();
-		run_task_queue(&tq_scheduler);
-		/* endless idle loop with no priority at all */
-		current->counter = -100;
-		if(!smp_commenced || current->need_resched)
-			schedule();
+		check_pgt_cache();
+ 		run_task_queue(&tq_scheduler);
+ 		/* endless idle loop with no priority at all */
+		current->counter = 0;
+		schedule();
 	}
 }
 
@@ -176,8 +173,10 @@ void machine_restart(char * cmd)
 
 void machine_power_off(void)
 {
+#ifdef CONFIG_SUN_AUXIO
 	if (auxio_power_register)
 		*auxio_power_register |= AUXIO_POWER_OFF;
+#endif
 	machine_halt();
 }
 
@@ -594,8 +593,44 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
  */
 int dump_fpu (struct pt_regs * regs, elf_fpregset_t * fpregs)
 {
-	/* Currently we report that we couldn't dump the fpu structure */
-	return 0;
+	if (current->used_math == 0) {
+		memset(fpregs, 0, sizeof(*fpregs));
+		fpregs->pr_q_entrysize = 8;
+		return 1;
+	}
+#ifdef __SMP__
+	if (current->flags & PF_USEDFPU) {
+		put_psr(get_psr() | PSR_EF);
+		fpsave(&current->tss.float_regs[0], &current->tss.fsr,
+		       &current->tss.fpqueue[0], &current->tss.fpqdepth);
+		regs->psr &= ~(PSR_EF);
+		current->flags &= ~(PF_USEDFPU);
+	}
+#else
+	if (current == last_task_used_math) {
+		put_psr(get_psr() | PSR_EF);
+		fpsave(&current->tss.float_regs[0], &current->tss.fsr,
+		       &current->tss.fpqueue[0], &current->tss.fpqdepth);
+		last_task_used_math = 0;
+		regs->psr &= ~(PSR_EF);
+	}
+#endif
+	memcpy(&fpregs->pr_fr.pr_regs[0],
+	       &current->tss.float_regs[0],
+	       (sizeof(unsigned long) * 32));
+	fpregs->pr_fsr = current->tss.fsr;
+	fpregs->pr_qcnt = current->tss.fpqdepth;
+	fpregs->pr_q_entrysize = 8;
+	fpregs->pr_en = 1;
+	if(fpregs->pr_qcnt != 0) {
+		memcpy(&fpregs->pr_q[0],
+		       &current->tss.fpqueue[0],
+		       sizeof(struct fpq) * fpregs->pr_qcnt);
+	}
+	/* Zero out the rest. */
+	memset(&fpregs->pr_q[fpregs->pr_qcnt], 0,
+	       sizeof(struct fpq) * (32 - fpregs->pr_qcnt));
+	return 1;
 }
 
 /*

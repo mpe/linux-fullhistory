@@ -4,7 +4,7 @@
  *
  * Author:	Juan Jose Ciarlante, <jjciarla@raiz.uncu.edu.ar>
  *
- * 	$Id: ip_masq_mod.c,v 1.4 1998/03/27 07:02:45 davem Exp $
+ * 	$Id: ip_masq_mod.c,v 1.5 1998/08/29 23:51:09 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *	modify it under the terms of the GNU General Public License
@@ -22,6 +22,8 @@
 #include <linux/errno.h>
 #include <net/ip_masq.h>
 #include <net/ip_masq_mod.h>
+
+#include <linux/ip_masq.h>
 #ifdef CONFIG_KMOD
 #include <linux/kmod.h>
 #endif
@@ -30,6 +32,10 @@ EXPORT_SYMBOL(register_ip_masq_mod);
 EXPORT_SYMBOL(unregister_ip_masq_mod);
 EXPORT_SYMBOL(ip_masq_mod_lkp_link);
 EXPORT_SYMBOL(ip_masq_mod_lkp_unlink);
+
+#ifdef __SMP__
+static spinlock_t masq_mod_lock = SPIN_LOCK_UNLOCKED;
+#endif
 
 /*
  *	Base pointer for registered modules
@@ -56,7 +62,7 @@ int ip_masq_mod_register_proc(struct ip_masq_mod *mmod)
 		ent->name = mmod->mmod_name;
 		ent->namelen = strlen (mmod->mmod_name);
 	}
-	ret = proc_net_register(ent);
+	ret = ip_masq_proc_register(ent);
 	if (ret) mmod->mmod_proc_ent = NULL;
 
 	return ret;
@@ -71,7 +77,7 @@ void ip_masq_mod_unregister_proc(struct ip_masq_mod *mmod)
 	struct proc_dir_entry *ent = mmod->mmod_proc_ent;
 	if (!ent)
 		return;
-	proc_unregister(proc_net, ent->low_ino);
+	ip_masq_proc_unregister(ent);
 #endif
 }
 
@@ -83,28 +89,28 @@ int ip_masq_mod_lkp_unlink(struct ip_masq_mod *mmod)
 {
 	struct ip_masq_mod **mmod_p;
 
-	start_bh_atomic();
+	write_lock_bh(&masq_mod_lock);
 
 	for (mmod_p = &ip_masq_mod_lkp_base; *mmod_p ; mmod_p = &(*mmod_p)->next)
 		if (mmod == (*mmod_p))  {
 			*mmod_p = mmod->next;
 			mmod->next = NULL;
-			end_bh_atomic();
+			write_unlock_bh(&masq_mod_lock);
 			return 0;
 		}
 
-	end_bh_atomic();
+	write_unlock_bh(&masq_mod_lock);
 	return -EINVAL;
 }
 
 int ip_masq_mod_lkp_link(struct ip_masq_mod *mmod)
 {
-	start_bh_atomic();
+	write_lock_bh(&masq_mod_lock);
 
 	mmod->next = ip_masq_mod_lkp_base;
 	ip_masq_mod_lkp_base=mmod;
 
-	end_bh_atomic();
+	write_unlock_bh(&masq_mod_lock);
 	return 0;
 }
 
@@ -164,108 +170,110 @@ int unregister_ip_masq_mod(struct ip_masq_mod *mmod)
 	return -EINVAL;
 }
 
-int ip_masq_mod_in_rule(struct iphdr *iph, __u16 *portp)
+int ip_masq_mod_in_rule(const struct sk_buff *skb, const struct iphdr *iph)
 {
 	struct ip_masq_mod *mmod;
-	int ret;
+	int ret = IP_MASQ_MOD_NOP;
 
 	for (mmod=ip_masq_mod_lkp_base;mmod;mmod=mmod->next) {
 		if (!mmod->mmod_in_rule) continue;
-		switch (ret=mmod->mmod_in_rule(iph, portp)) {
+		switch (ret=mmod->mmod_in_rule(skb, iph)) {
 			case IP_MASQ_MOD_NOP:
 				continue;
 			case IP_MASQ_MOD_ACCEPT:
-				return 1;
 			case IP_MASQ_MOD_REJECT:
-				return -1;
+				goto out;
 		}
 	}
-	return 0;
+out:
+	return ret;
 }
 
-int ip_masq_mod_out_rule(struct iphdr *iph, __u16 *portp)
+int ip_masq_mod_out_rule(const struct sk_buff *skb, const struct iphdr *iph)
 {
 	struct ip_masq_mod *mmod;
-	int ret;
+	int ret = IP_MASQ_MOD_NOP;
 
 	for (mmod=ip_masq_mod_lkp_base;mmod;mmod=mmod->next) {
 		if (!mmod->mmod_out_rule) continue;
-		switch (ret=mmod->mmod_out_rule(iph, portp)) {
+		switch (ret=mmod->mmod_out_rule(skb, iph)) {
 			case IP_MASQ_MOD_NOP:
 				continue;
 			case IP_MASQ_MOD_ACCEPT:
-				return 1;
 			case IP_MASQ_MOD_REJECT:
-				return -1;
+				goto out;
 		}
 	}
-	return 0;
+out:
+	return ret;
 }
 
-struct ip_masq * ip_masq_mod_in_create(struct iphdr *iph, __u16 *portp, __u32 maddr)
+struct ip_masq * ip_masq_mod_in_create(const struct sk_buff *skb, const struct iphdr *iph, __u32 maddr)
 {
 	struct ip_masq_mod *mmod;
-	struct ip_masq *ms;
+	struct ip_masq *ms = NULL;
 
 	for (mmod=ip_masq_mod_lkp_base;mmod;mmod=mmod->next) {
 		if (!mmod->mmod_in_create) continue;
-		if ((ms=mmod->mmod_in_create(iph, portp, maddr))) {
-			return ms;
+		if ((ms=mmod->mmod_in_create(skb, iph, maddr))) {
+			goto out;
 		}
 	}
-	return NULL;
+out:
+	return ms;
 }
 
-struct ip_masq * ip_masq_mod_out_create(struct iphdr *iph, __u16 *portp, __u32 maddr)
+struct ip_masq * ip_masq_mod_out_create(const struct sk_buff *skb, const struct iphdr *iph,  __u32 maddr)
 {
 	struct ip_masq_mod *mmod;
-	struct ip_masq *ms;
+	struct ip_masq *ms = NULL;
 
 	for (mmod=ip_masq_mod_lkp_base;mmod;mmod=mmod->next) {
 		if (!mmod->mmod_out_create) continue;
-		if ((ms=mmod->mmod_out_create(iph, portp, maddr))) {
-			return ms;
+		if ((ms=mmod->mmod_out_create(skb, iph, maddr))) {
+			goto out;
 		}
 	}
-	return NULL;
+out:
+	return ms;
 }
 
-int ip_masq_mod_in_update(struct iphdr *iph, __u16 *portp, struct ip_masq *ms)
+int ip_masq_mod_in_update(const struct sk_buff *skb, const struct iphdr *iph, struct ip_masq *ms)
 {
 	struct ip_masq_mod *mmod;
-	int ret;
+	int ret = IP_MASQ_MOD_NOP;
 
 	for (mmod=ip_masq_mod_lkp_base;mmod;mmod=mmod->next) {
 		if (!mmod->mmod_in_update) continue;
-		switch (ret=mmod->mmod_in_update(iph, ms)) {
+		switch (ret=mmod->mmod_in_update(skb, iph, ms)) {
 			case IP_MASQ_MOD_NOP:
 				continue;
 			case IP_MASQ_MOD_ACCEPT:
-				return 1;
 			case IP_MASQ_MOD_REJECT:
-				return -1;
+				goto out;
 		}
 	}
-	return 0;
+out:
+	return ret;
 }
 
-int ip_masq_mod_out_update(struct iphdr *iph, __u16 *portp,  struct ip_masq *ms)
+int ip_masq_mod_out_update(const struct sk_buff *skb, const struct iphdr *iph, struct ip_masq *ms)
 {
 	struct ip_masq_mod *mmod;
-	int ret;
+	int ret = IP_MASQ_MOD_NOP;
 
 	for (mmod=ip_masq_mod_lkp_base;mmod;mmod=mmod->next) {
 		if (!mmod->mmod_out_update) continue;
-		switch (ret=mmod->mmod_out_update(iph, portp, ms)) {
+		switch (ret=mmod->mmod_out_update(skb, iph, ms)) {
 			case IP_MASQ_MOD_NOP:
 				continue;
 			case IP_MASQ_MOD_ACCEPT:
-				return 1;
 			case IP_MASQ_MOD_REJECT:
-				return -1;
+				goto out;
 		}
 	}
-	return 0;
+out:
+	return ret;
 }
 
 struct ip_masq_mod * ip_masq_mod_getbyname(const char *mmod_name)
@@ -287,20 +295,20 @@ struct ip_masq_mod * ip_masq_mod_getbyname(const char *mmod_name)
 /*
  *	Module control entry
  */
-int ip_masq_mod_ctl(int optname, struct ip_fw_masqctl *mctl, int optlen)
+int ip_masq_mod_ctl(int optname, struct ip_masq_ctl *mctl, int optlen)
 {
 	struct ip_masq_mod * mmod;
 #ifdef CONFIG_KMOD
-	char kmod_name[IP_MASQ_MOD_NMAX+8];
+	char kmod_name[IP_MASQ_TNAME_MAX+8];
 #endif
 	/* tappo */
-	mctl->u.mod.name[IP_MASQ_MOD_NMAX-1] = 0;
+	mctl->m_tname[IP_MASQ_TNAME_MAX-1] = 0;
 
-	mmod = ip_masq_mod_getbyname(mctl->u.mod.name);
+	mmod = ip_masq_mod_getbyname(mctl->m_tname);
 	if (mmod)
 		return mmod->mmod_ctl(optname, mctl, optlen);
 #ifdef CONFIG_KMOD
-	sprintf(kmod_name,"ip_masq_%s", mctl->u.mod.name);
+	sprintf(kmod_name,"ip_masq_%s", mctl->m_tname);
 
 	IP_MASQ_DEBUG(1, "About to request \"%s\" module\n", kmod_name);
 
@@ -308,7 +316,7 @@ int ip_masq_mod_ctl(int optname, struct ip_fw_masqctl *mctl, int optlen)
 	 *	Let sleep for a while ...
 	 */
 	request_module(kmod_name);
-	mmod = ip_masq_mod_getbyname(mctl->u.mod.name);
+	mmod = ip_masq_mod_getbyname(mctl->m_tname);
 	if (mmod)
 		return mmod->mmod_ctl(optname, mctl, optlen);
 #endif

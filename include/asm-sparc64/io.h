@@ -1,4 +1,4 @@
-/* $Id: io.h,v 1.18 1998/07/12 12:07:43 ecd Exp $ */
+/* $Id: io.h,v 1.19 1998/08/23 05:41:46 ecd Exp $ */
 #ifndef __SPARC64_IO_H
 #define __SPARC64_IO_H
 
@@ -127,7 +127,10 @@ extern void insl(unsigned long addr, void *dst, unsigned long count);
 #define writew(w, addr)		outw((w), (unsigned long)(addr))
 #define writel(l, addr)		outl((l), (unsigned long)(addr))
 
-/* Memcpy to/from I/O space is just a regular memory operation on Ultra as well. */
+/*
+ * Memcpy to/from I/O space is just a regular memory operation on
+ * Ultra as well.
+ */
 
 /*
  * FIXME: Write faster routines using ASL_*L for this.
@@ -170,7 +173,7 @@ memcpy_toio(void *dst, const void *src, __kernel_size_t n)
 #if 0 /* XXX Not exactly, we need to use ASI_*L from/to the I/O end,
        * XXX so these are disabled until we code that stuff.
        */
-#define eth_io_copy_and_sum(a,b,c,d)	eth_copy_and_sum((a),((char *)(b)),(c),(d))
+#define eth_io_copy_and_sum(a,b,c,d) eth_copy_and_sum((a),((char *)(b)),(c),(d))
 #endif
 
 static inline int check_signature(unsigned long io_addr,
@@ -187,22 +190,39 @@ out:
 	return retval;
 }
 
-extern void sparc_ultra_mapioaddr   (unsigned long physaddr, unsigned long virt_addr,
-				     int bus, int rdonly);
-extern void sparc_ultra_unmapioaddr (unsigned long virt_addr);
-
-extern __inline__ void mapioaddr (unsigned long physaddr, unsigned long virt_addr,
-				  int bus, int rdonly)
+/*
+ * On the sparc we have the whole physical IO address space mapped at all
+ * times, so ioremap() and iounmap() do not need to do anything.
+ */
+extern __inline__ void *ioremap(unsigned long offset, unsigned long size)
 {
-	sparc_ultra_mapioaddr (physaddr, virt_addr, bus, rdonly);
+	return __va(offset);
+}
+
+extern __inline__ void iounmap(void *addr)
+{
+}
+
+
+extern void sparc_ultra_mapioaddr(unsigned long physaddr,
+				  unsigned long virt_addr,
+				  int bus, int rdonly);
+extern void sparc_ultra_unmapioaddr(unsigned long virt_addr);
+
+extern __inline__ void mapioaddr(unsigned long physaddr,
+				 unsigned long virt_addr,
+				 int bus, int rdonly)
+{
+	sparc_ultra_mapioaddr(physaddr, virt_addr, bus, rdonly);
 }
 
 extern __inline__ void unmapioaddr(unsigned long virt_addr)
 {
-	sparc_ultra_unmapioaddr (virt_addr);
+	sparc_ultra_unmapioaddr(virt_addr);
 }
 
-extern void *sparc_alloc_io (u32 pa, void *va, int sz, char *name, u32 io, int rdonly);
+extern void *sparc_alloc_io(u32 pa, void *va, int sz, char *name,
+			    u32 io, int rdonly);
 extern void sparc_free_io (void *va, int sz);
 extern void *sparc_dvma_malloc (int sz, char *name, __u32 *dvma_addr);
 

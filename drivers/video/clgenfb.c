@@ -1413,7 +1413,7 @@ static void clgen_set_dispsw(const void *par, struct display *disp,
 
     default:
 	printk("unsupported color depth\n");
-	disp->dispsw = NULL;
+	disp->dispsw = &fbcon_dummy;
 	break;
     }
 }
@@ -1570,6 +1570,7 @@ __initfunc(void clgenfb_init(void))
     fb_info->gen.info.switch_con = &fbgen_switch;
     fb_info->gen.info.updatevar  = &fbgen_update_var;
     fb_info->gen.info.blank      = &fbgen_blank;
+    fb_info->gen.info.flags	 = FBINFO_FLAG_DEFAULT;
     
     /* mark this board as "autoconfigured" */
     zorro_config_board(key, 0);

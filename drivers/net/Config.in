@@ -37,6 +37,7 @@ if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
   fi
   if [ "$CONFIG_ZORRO" = "y" ]; then
     tristate 'Ariadne support' CONFIG_ARIADNE
+    tristate 'Ariadne II support' CONFIG_ARIADNE2
     tristate 'A2065 support' CONFIG_A2065
     tristate 'Hydra support' CONFIG_HYDRA
   fi

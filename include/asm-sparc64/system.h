@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.42 1998/07/29 01:32:51 davem Exp $ */
+/* $Id: system.h,v 1.44 1998/09/21 03:57:22 davem Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
@@ -124,6 +124,21 @@ extern __inline__ void flushw_user(void)
 
 #define flush_user_windows flushw_user
 
+#define DEBUG_SWITCH
+
+#ifdef DEBUG_SWITCH
+#define SWITCH_CTX_CHECK(__tsk) \
+do {	unsigned short ctx_now; \
+	ctx_now = spitfire_get_secondary_context(); \
+	if(ctx_now != (__tsk)->tss.ctx) \
+		printk("[%s:%d] Bogus ctx after switch [%x:%x]\n", \
+		       (__tsk)->comm, (__tsk)->pid, \
+		       (__tsk)->tss.ctx, ctx_now); \
+} while(0)
+#else
+#define SWITCH_CTX_CHECK(__tsk)	do { } while(0)
+#endif
+
 	/* See what happens when you design the chip correctly?
 	 *
 	 * XXX What we are doing here assumes a lot about gcc reload
@@ -142,11 +157,13 @@ extern __inline__ void flushw_user(void)
 	 */
 #define switch_to(prev, next)							\
 do {	save_and_clear_fpu();							\
+	__asm__ __volatile__(							\
+	"flushw\n\t"								\
+	"wrpr	%g0, 0x94, %pstate\n\t");					\
+	__get_mmu_context(next);						\
 	(next)->mm->cpu_vm_mask |= (1UL << smp_processor_id());			\
 	__asm__ __volatile__(							\
-	"rdpr	%%pstate, %%g2\n\t"						\
-	"wrpr	%%g2, 0x3, %%pstate\n\t"					\
-	"flushw\n\t"								\
+	"wrpr	%%g0, 0x95, %%pstate\n\t"					\
 	"stx	%%l0, [%%sp + 2047 + 0x60]\n\t"					\
 	"stx	%%l1, [%%sp + 2047 + 0x68]\n\t"					\
 	"stx	%%i6, [%%sp + 2047 + 0x70]\n\t"					\
@@ -168,10 +185,12 @@ do {	save_and_clear_fpu();							\
 	"ldx	[%%sp + 2047 + 0x68], %%l1\n\t"					\
 	"ldx	[%%sp + 2047 + 0x70], %%i6\n\t"					\
 	"ldx	[%%sp + 2047 + 0x78], %%i7\n\t"					\
+	"wrpr	%%g0, 0x94, %%pstate\n\t"					\
+	"mov	%%l2, %%g6\n\t"							\
 	"wrpr	%%g0, 0x96, %%pstate\n\t"					\
 	"andcc	%%o7, 0x100, %%g0\n\t"						\
 	"bne,pn	%%icc, ret_from_syscall\n\t"					\
-	" mov	%%l2, %%g6\n\t"							\
+	" nop\n\t"								\
 	: 									\
 	: "r" (next),								\
 	  "i" ((const unsigned long)(&((struct task_struct *)0)->tss.wstate)),	\
@@ -182,6 +201,7 @@ do {	save_and_clear_fpu();							\
 	  "l2", "l3", "l4", "l5", "l6", "l7",					\
 	  "i0", "i1", "i2", "i3", "i4", "i5",					\
 	  "o0", "o1", "o2", "o3", "o4", "o5", "o7");				\
+	SWITCH_CTX_CHECK(current);						\
 } while(0)
 
 extern __inline__ unsigned long xchg32(__volatile__ unsigned int *m, unsigned int val)

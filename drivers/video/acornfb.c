@@ -220,7 +220,7 @@ acornfb_set_disp(int con)
 		break;
 #endif
 	default:
-		display->dispsw = NULL;
+		display->dispsw = &fbcon_dummy;
 		break;
 	}
 }
@@ -381,6 +381,7 @@ acornfb_init(unsigned long mem_start))
 	fb_info.switch_con	= acornfb_switch;
 	fb_info.updatevar	= acornfb_update_var;
 	fb_info.blank		= acornfb_blank;
+	fb_info.flags		= FBINFO_FLAG_DEFAULT;
 
 	acornfb_set_disp(-1);
 	fb_set_cmap(fb_default_cmap(current_par.palette_size),

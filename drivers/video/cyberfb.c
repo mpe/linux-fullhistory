@@ -1044,6 +1044,7 @@ __initfunc(void cyberfb_init(void))
 	fb_info.switch_con = &Cyberfb_switch;
 	fb_info.updatevar = &Cyberfb_updatevar;
 	fb_info.blank = &Cyberfb_blank;
+	fb_info.flags = FBINFO_FLAG_DEFAULT;
 
 	fbhw->init();
 	fbhw->decode_var(&cyberfb_default, &par);

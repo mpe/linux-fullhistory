@@ -138,24 +138,24 @@ __initfunc(void sun4_dvma_init(void))
 	struct Linux_SBus_DMA *dchain;
 
 	if(sun4_dma_physaddr) {
-	dma = kmalloc(sizeof(struct Linux_SBus_DMA), GFP_ATOMIC);
+		dma = kmalloc(sizeof(struct Linux_SBus_DMA), GFP_ATOMIC);
 
-	/* No SBUS */
-	dma->SBus_dev = 0x0;
+		/* No SBUS */
+		dma->SBus_dev = 0x0;
 
-	/* Only one DMA device */
-	dma_chain=dma;
+		/* Only one DMA device */
+		dma_chain=dma;
 
-	dma->regs = (struct sparc_dma_registers *)
-		sparc_alloc_io (sun4_dma_physaddr, 0,
-				PAGE_SIZE, "dma", 0x0, 0x0);
+		dma->regs = (struct sparc_dma_registers *)
+			sparc_alloc_io (sun4_dma_physaddr, 0,
+					PAGE_SIZE, "dma", 0x0, 0x0);
 
-	/* No prom node */
-	dma->node = 0x0;
+		/* No prom node */
+		dma->node = 0x0;
 
-	init_one_dvma(dma, 0);
+		init_one_dvma(dma, 0);
 	} else {
-	  dma_chain=0x0;
+	  	dma_chain=0x0;
 	}
 }
 

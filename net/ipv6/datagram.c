@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: datagram.c,v 1.15 1998/08/26 12:04:47 davem Exp $
+ *	$Id: datagram.c,v 1.16 1998/10/03 09:38:25 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -28,6 +28,158 @@
 #include <net/ndisc.h>
 #include <net/addrconf.h>
 #include <net/transp_v6.h>
+
+#include <linux/errqueue.h>
+#include <asm/uaccess.h>
+
+void ipv6_icmp_error(struct sock *sk, struct sk_buff *skb, int err, 
+		     u16 port, u32 info, u8 *payload)
+{
+	struct icmp6hdr *icmph = (struct icmp6hdr *)skb->h.raw;
+	struct sock_exterr_skb *serr;
+
+	if (!sk->net_pinfo.af_inet6.recverr)
+		return;
+
+	skb = skb_clone(skb, GFP_ATOMIC);
+	if (!skb)
+		return;
+
+	serr = SKB_EXT_ERR(skb);
+	serr->ee.ee_errno = err;
+	serr->ee.ee_origin = SO_EE_ORIGIN_ICMP6;
+	serr->ee.ee_type = icmph->icmp6_type; 
+	serr->ee.ee_code = icmph->icmp6_code;
+	serr->ee.ee_pad = 0;
+	serr->ee.ee_info = info;
+	serr->ee.ee_data = 0;
+	serr->addr_offset = (u8*)&(((struct ipv6hdr*)(icmph+1))->daddr) - skb->nh.raw;
+	serr->port = port;
+
+	skb->h.raw = payload;
+	skb_pull(skb, payload - skb->data);
+
+	if (sock_queue_err_skb(sk, skb))
+		kfree_skb(skb);
+}
+
+void ipv6_local_error(struct sock *sk, int err, struct flowi *fl, u32 info)
+{
+	struct sock_exterr_skb *serr;
+	struct ipv6hdr *iph;
+	struct sk_buff *skb;
+
+	if (!sk->net_pinfo.af_inet6.recverr)
+		return;
+
+	skb = alloc_skb(sizeof(struct ipv6hdr), GFP_ATOMIC);
+	if (!skb)
+		return;
+
+	iph = (struct ipv6hdr*)skb_put(skb, sizeof(struct ipv6hdr));
+	skb->nh.ipv6h = iph;
+	memcpy(&iph->daddr, fl->fl6_dst, 16);
+
+	serr = SKB_EXT_ERR(skb);
+	serr->ee.ee_errno = err;
+	serr->ee.ee_origin = SO_EE_ORIGIN_LOCAL;
+	serr->ee.ee_type = 0; 
+	serr->ee.ee_code = 0;
+	serr->ee.ee_pad = 0;
+	serr->ee.ee_info = info;
+	serr->ee.ee_data = 0;
+	serr->addr_offset = (u8*)&iph->daddr - skb->nh.raw;
+	serr->port = fl->uli_u.ports.dport;
+
+	skb->h.raw = skb->tail;
+	skb_pull(skb, skb->tail - skb->data);
+
+	if (sock_queue_err_skb(sk, skb))
+		kfree_skb(skb);
+}
+
+/* 
+ *	Handle MSG_ERRQUEUE
+ */
+int ipv6_recv_error(struct sock *sk, struct msghdr *msg, int len)
+{
+	struct sock_exterr_skb *serr;
+	struct sk_buff *skb, *skb2;
+	struct sockaddr_in6 *sin;
+	struct {
+		struct sock_extended_err ee;
+		struct sockaddr_in6	 offender;
+	} errhdr;
+	int err;
+	int copied;
+
+	err = -EAGAIN;
+	skb = skb_dequeue(&sk->error_queue);
+	if (skb == NULL)
+		goto out;
+
+	copied = skb->len;
+	if (copied > len) {
+		msg->msg_flags |= MSG_TRUNC;
+		copied = len;
+	}
+	err = memcpy_toiovec(msg->msg_iov, skb->data, copied);
+	if (err)
+		goto out_free_skb;
+
+	serr = SKB_EXT_ERR(skb);
+
+	sin = (struct sockaddr_in6 *)msg->msg_name;
+	if (sin) {
+		sin->sin6_family = AF_INET6;
+		sin->sin6_port = serr->port; 
+		if (serr->ee.ee_origin == SO_EE_ORIGIN_ICMP6)
+			memcpy(&sin->sin6_addr, skb->nh.raw + serr->addr_offset, 16);
+		else
+			ipv6_addr_set(&sin->sin6_addr, 0, 0,
+				      __constant_htonl(0xffff),
+				      *(u32*)(skb->nh.raw + serr->addr_offset));
+	}
+
+	memcpy(&errhdr.ee, &serr->ee, sizeof(struct sock_extended_err));
+	sin = &errhdr.offender;
+	sin->sin6_family = AF_UNSPEC;
+	if (serr->ee.ee_origin != SO_EE_ORIGIN_LOCAL) {
+		sin->sin6_family = AF_INET6;
+		if (serr->ee.ee_origin == SO_EE_ORIGIN_ICMP6) {
+			memcpy(&sin->sin6_addr, &skb->nh.ipv6h->saddr, 16);
+			if (sk->net_pinfo.af_inet6.rxopt.all)
+				datagram_recv_ctl(sk, msg, skb);
+		} else {
+			ipv6_addr_set(&sin->sin6_addr, 0, 0,
+				      __constant_htonl(0xffff),
+				      skb->nh.iph->saddr);
+			if (sk->ip_cmsg_flags)
+				ip_cmsg_recv(msg, skb);
+		}
+	}
+
+	put_cmsg(msg, SOL_IPV6, IPV6_RECVERR, sizeof(errhdr), &errhdr);
+
+	/* Now we could try to dump offended packet options */
+
+	msg->msg_flags |= MSG_ERRQUEUE;
+	err = copied;
+
+	/* Reset and regenerate socket error */
+	sk->err = 0;
+	if ((skb2 = skb_peek(&sk->error_queue)) != NULL) {
+		sk->err = SKB_EXT_ERR(skb2)->ee.ee_errno;
+		sk->error_report(sk);
+	}
+
+out_free_skb:	
+	kfree_skb(skb);
+out:
+	return err;
+}
+
+
 
 int datagram_recv_ctl(struct sock *sk, struct msghdr *msg, struct sk_buff *skb)
 {

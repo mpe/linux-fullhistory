@@ -5,6 +5,7 @@
 
 #include <linux/stddef.h>
 #include <linux/init.h>
+#include <linux/config.h>
 #include <asm/oplib.h>
 #include <asm/io.h>
 #include <asm/auxio.h>
@@ -32,6 +33,11 @@ __initfunc(void auxio_probe(void))
 		node = prom_getchild(node);
 		auxio_nd = prom_searchsiblings(node, "auxio");
 		if(!auxio_nd) {
+#ifdef CONFIG_PCI
+			/* There may be auxio on Ebus */
+			auxio_register = 0;
+			return;
+#else
 			if(prom_searchsiblings(node, "leds")) {
 				/* VME chassis sun4m machine, no auxio exists. */
 				auxio_register = 0;
@@ -39,6 +45,7 @@ __initfunc(void auxio_probe(void))
 			}
 			prom_printf("Cannot find auxio node, cannot continue...\n");
 			prom_halt();
+#endif
 		}
 	}
 	prom_getproperty(auxio_nd, "reg", (char *) auxregs, sizeof(auxregs));

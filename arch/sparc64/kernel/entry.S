@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.87 1998/07/29 16:32:28 jj Exp $
+/* $Id: entry.S,v 1.90 1998/09/25 01:09:05 davem Exp $
  * arch/sparc64/kernel/entry.S:  Sparc64 trap low-level entry points.
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -373,17 +373,112 @@ netbsd_syscall:
 	retl
 	 nop
 
+	/* These next few routines must be sure to clear the
+	 * SFSR FaultValid bit so that the fast tlb data protection
+	 * handler does not flush the wrong context and lock up the
+	 * box.
+	 */
+	.globl		__do_data_access_exception
+	.globl		__do_data_access_exception_tl1
+__do_data_access_exception_tl1:
+	rdpr		%pstate, %g4
+	wrpr		%g4, PSTATE_MG|PSTATE_AG, %pstate
+	rdpr		%tl, %g3
+	cmp		%g3, 1
+	mov		TLB_SFSR, %g3
+	mov		DMMU_SFAR, %g5
+	ldxa		[%g3] ASI_DMMU, %g4	! Get SFSR
+	ldxa		[%g5] ASI_DMMU, %g5	! Get SFAR
+	stxa		%g0, [%g3] ASI_DMMU	! Clear SFSR.FaultValid bit
+	membar		#Sync
+	bgu,pn		%icc, winfix_dax
+	 rdpr		%tpc, %g3
+	sethi		%hi(109f), %g7
+	ba,pt		%xcc, etraptl1
+	 or		%g7, %lo(109f), %g7	! Merge in below
+__do_data_access_exception:
+	rdpr		%pstate, %g4
+	wrpr		%g4, PSTATE_MG|PSTATE_AG, %pstate
+	mov		TLB_SFSR, %g3
+	mov		DMMU_SFAR, %g5
+	ldxa		[%g3] ASI_DMMU, %g4	! Get SFSR
+	ldxa		[%g5] ASI_DMMU, %g5	! Get SFAR
+	stxa		%g0, [%g3] ASI_DMMU	! Clear SFSR.FaultValid bit
+	membar		#Sync
+	sethi		%hi(109f), %g7
+	ba,pt		%xcc, etrap
+109:	 or		%g7, %lo(109b), %g7
+	mov		%l4, %o1
+	mov		%l5, %o2
+	call		data_access_exception
+	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0
+	ba,pt		%xcc, rtrap
+	 clr		%l6
+
+	.globl		__do_instruction_access_exception
+	.globl		__do_instruction_access_exception_tl1
+__do_instruction_access_exception_tl1:
+	rdpr		%pstate, %g4
+	wrpr		%g4, PSTATE_MG|PSTATE_AG, %pstate
+	mov		TLB_SFSR, %g3
+	mov		DMMU_SFAR, %g5
+	ldxa		[%g3] ASI_DMMU, %g4	! Get SFSR
+	ldxa		[%g5] ASI_DMMU, %g5	! Get SFAR
+	stxa		%g0, [%g3] ASI_IMMU	! Clear FaultValid bit
+	membar		#Sync
+	sethi		%hi(109f), %g7
+	ba,pt		%xcc, etraptl1
+	 or		%g7, %lo(109f), %g7	! Merge in below
+__do_instruction_access_exception:
+	rdpr		%pstate, %g4
+	wrpr		%g4, PSTATE_MG|PSTATE_AG, %pstate
+	mov		TLB_SFSR, %g3
+	mov		DMMU_SFAR, %g5
+	ldxa		[%g3] ASI_DMMU, %g4	! Get SFSR
+	ldxa		[%g5] ASI_DMMU, %g5	! Get SFAR
+	stxa		%g0, [%g3] ASI_IMMU	! Clear FaultValid bit
+	membar		#Sync
+	sethi		%hi(109f), %g7
+	ba,pt		%xcc, etrap
+109:	 or		%g7, %lo(109b), %g7
+	mov		%l4, %o1
+	mov		%l5, %o2
+	call		instruction_access_exception
+	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0
+	ba,pt		%xcc, rtrap
+	 clr		%l6
+
+	.globl		__do_privact
+__do_privact:
+	mov		TLB_SFSR, %g3
+	stxa		%g0, [%g3] ASI_DMMU	! Clear FaultValid bit
+	membar		#Sync
+	sethi		%hi(109f), %g7
+	ba,pt		%xcc, etrap
+109:	or		%g7, %lo(109b), %g7
+	call		do_privact
+	 add		%sp, STACK_BIAS + REGWIN_SZ, %o0
+	ba,pt		%xcc, rtrap
+	 clr		%l6
+
 	.globl		do_mna
 do_mna:
 	rdpr		%tl, %g3
 	cmp		%g3, 1
-	bgu,a,pn	%icc, winfix_mna
-	 rdpr		%tpc, %g3
+
+	/* Setup %g4/%g5 now as they are used in the
+	 * winfixup code.
+	 */
+	mov		TLB_SFSR, %g3
 	mov		DMMU_SFAR, %g4
-	mov		TLB_SFSR, %g5
-	sethi		%hi(109f), %g7
 	ldxa		[%g4] ASI_DMMU, %g4
-	ldxa		[%g5] ASI_DMMU, %g5
+	ldxa		[%g3] ASI_DMMU, %g5
+	stxa		%g0, [%g3] ASI_DMMU	! Clear FaultValid bit
+	membar		#Sync
+	bgu,pn		%icc, winfix_dax
+	 rdpr		%tpc, %g3
+
+1:	sethi		%hi(109f), %g7
 	ba,pt		%xcc, etrap
 109:	 or		%g7, %lo(109b), %g7
 	mov		%l4, %o1
@@ -395,11 +490,13 @@ do_mna:
 
 	.globl		do_lddfmna
 do_lddfmna:
-	mov		DMMU_SFAR, %g4
-	mov		TLB_SFSR, %g5
 	sethi		%hi(109f), %g7
+	mov		TLB_SFSR, %g4
+	ldxa		[%g4] ASI_DMMU, %g5
+	stxa		%g0, [%g4] ASI_DMMU	! Clear FaultValid bit
+	membar		#Sync
+	mov		DMMU_SFAR, %g4
 	ldxa		[%g4] ASI_DMMU, %g4
-	ldxa		[%g5] ASI_DMMU, %g5
 	ba,pt		%xcc, etrap
 109:	 or		%g7, %lo(109b), %g7
 	mov		%l4, %o1
@@ -411,11 +508,13 @@ do_lddfmna:
 
 	.globl		do_stdfmna
 do_stdfmna:
-	mov		DMMU_SFAR, %g4
-	mov		TLB_SFSR, %g5
 	sethi		%hi(109f), %g7
+	mov		TLB_SFSR, %g4
+	ldxa		[%g4] ASI_DMMU, %g5
+	stxa		%g0, [%g4] ASI_DMMU	! Clear FaultValid bit
+	membar		#Sync
+	mov		DMMU_SFAR, %g4
 	ldxa		[%g4] ASI_DMMU, %g4
-	ldxa		[%g5] ASI_DMMU, %g5
 	ba,pt		%xcc, etrap
 109:	 or		%g7, %lo(109b), %g7
 	mov		%l4, %o1

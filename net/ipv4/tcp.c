@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp.c,v 1.121 1998/09/07 00:13:52 davem Exp $
+ * Version:	$Id: tcp.c,v 1.127 1998/10/04 07:04:32 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -301,7 +301,7 @@
  *   MUST use the RFC 793 clock selection mechanism.  (doesn't, but it's
  *     OK: RFC 793 specifies a 250KHz clock, while we use 1MHz, which is
  *     necessary for 10Mbps networks - and harder than BSD to spoof!
- *     With syncookies we doesn't)
+ *     With syncookies we don't)
  *
  * Simultaneous Open Attempts (4.2.2.10)
  *   MUST support simultaneous open attempts (does)
@@ -598,8 +598,13 @@ unsigned int tcp_poll(struct file * file, struct socket *sock, poll_table *wait)
 		     sk->urginline || !tp->urg_data))
 			mask |= POLLIN | POLLRDNORM;
 
-		if (sock_wspace(sk) >= tcp_min_write_space(sk, tp))
-			mask |= POLLOUT | POLLWRNORM;
+		if (!(sk->shutdown & SEND_SHUTDOWN)) {
+			if (sock_wspace(sk) >= tcp_min_write_space(sk, tp)) {
+				mask |= POLLOUT | POLLWRNORM;
+			} else {  /* send SIGIO later */
+				sk->socket->flags |= SO_NOSPACE;
+			}
+		}
 
 		if (tp->urg_data & URG_VALID)
 			mask |= POLLPRI;
@@ -729,6 +734,9 @@ static void wait_for_tcp_memory(struct sock * sk)
 	lock_sock(sk);
 }
 
+/* When all user supplied data has been queued set the PSH bit */
+#define PSH_NEEDED (seglen == 0 && iovlen == 0)
+
 /*
  *	This routine copies from a user buffer into a socket,
  *	and starts the transmit system.
@@ -742,15 +750,15 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 	int mss_now;
 	int err = 0;
 	int copied  = 0;
-
-	/* Verify that the socket is locked */
-	if (!atomic_read(&sk->sock_readers))
-		printk("tcp_do_sendmsg: socket not locked!\n");
+	struct sk_buff *skb;
 
 	/* Wait for a connection to finish. */
 	if ((1 << sk->state) & ~(TCPF_ESTABLISHED | TCPF_CLOSE_WAIT))
 		if((err = wait_for_tcp_connect(sk, flags)) != 0)
 			return err;
+
+	/* This should be in poll */
+	sk->socket->flags &= ~SO_NOSPACE; /* clear SIGIO XXX */
 
 	mss_now = tcp_current_mss(sk);
 
@@ -763,10 +771,9 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 
 		while(seglen > 0) {
 			int copy, tmp, queue_it;
-			struct sk_buff *skb;
 
 			if (err)
-				return -EFAULT;
+				goto do_fault2;
 
 			/* Stop on errors. */
 			if (sk->err)
@@ -810,12 +817,24 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 							from, skb_put(skb, copy),
 							copy, skb->csum, &err);
 					}
+					/*
+					 * FIXME: the *_user functions should
+					 *	  return how much data was
+					 *	  copied before the fault
+					 *	  occured and then a partial
+					 *	  packet with this data should
+					 *	  be sent.  Unfortunately
+					 *	  csum_and_copy_from_user doesn't
+					 *	  return this information.
+					 *	  ATM it might send partly zeroed
+					 *	  data in this case.
+					 */
 					tp->write_seq += copy;
 					TCP_SKB_CB(skb)->end_seq += copy;
 					from += copy;
 					copied += copy;
 					seglen -= copy;
-					if(!seglen && !iovlen)
+					if (PSH_NEEDED)
 						TCP_SKB_CB(skb)->flags |= TCPCB_FLAG_PSH;
 					continue;
 				}
@@ -884,7 +903,7 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 
 			/* Prepare control bits for TCP header creation engine. */
 			TCP_SKB_CB(skb)->flags = (TCPCB_FLAG_ACK |
-						  ((!seglen && !iovlen) ?
+						  (PSH_NEEDED ?
 						   TCPCB_FLAG_PSH : 0));
 			TCP_SKB_CB(skb)->sacked = 0;
 			if (flags & MSG_OOB) {
@@ -901,6 +920,9 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 			skb->csum = csum_and_copy_from_user(from,
 					skb_put(skb, copy), copy, 0, &err);
 
+			if (err)
+				goto do_fault;
+
 			from += copy;
 			copied += copy;
 
@@ -912,8 +934,6 @@ int tcp_do_sendmsg(struct sock *sk, int iovlen, struct iovec *iov, int flags)
 		}
 	}
 	sk->err = 0;
-	if (err)
-		return -EFAULT;
 	return copied;
 
 do_sock_err:
@@ -930,7 +950,13 @@ do_interrupted:
 	if(copied)
 		return copied;
 	return err;
+do_fault:
+	kfree_skb(skb);
+do_fault2:
+	return -EFAULT;
 }
+
+#undef PSH_NEEDED
 
 /*
  *	Send an ack if one is backlogged at this point. Ought to merge
@@ -1046,8 +1072,6 @@ static void cleanup_rbuf(struct sock *sk, int copied)
 		tcp_eat_skb(sk, skb);
 	}
 
-	SOCK_DEBUG(sk, "sk->rspace = %lu\n", sock_rspace(sk));
-
   	/* We send an ACK if we can now advertise a non-zero window
 	 * which has been raised "significantly".
   	 */
@@ -1083,6 +1107,9 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 	unsigned long used;
 	int err = 0; 
 	int target = 1;		/* Read at least this many bytes */
+
+	if (sk->err)
+		return sock_error(sk);
 
 	if (sk->state == TCP_LISTEN)
 		return -ENOTCONN;
@@ -1165,6 +1192,14 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg,
 		if (copied >= target)
 			break;
 
+		/*
+		   These three lines and clause if (sk->state == TCP_CLOSE)
+		   are unlikely to be correct, if target > 1.
+		   I DO NOT FIX IT, because I have no idea, what
+		   POSIX prescribes to make here. Probably, it really
+		   wants to lose data 8), if not all target is received.
+		                                                 --ANK
+		 */
 		if (sk->err && !(flags&MSG_PEEK)) {
 			copied = sock_error(sk);
 			break;
@@ -1589,7 +1624,10 @@ struct sock *tcp_accept(struct sock *sk, int flags)
 	 * This does not pass any already set errors on the new socket
 	 * to the user, but they will be returned on the first socket operation
 	 * after the accept.
-	 */ 
+	 *
+	 * Once linux gets a multithreaded net_bh or equivalent there will be a race
+	 * here - you'll have to check for sk->zapped as set by the ICMP handler then.
+	 */
 
 	error = 0;
 out:

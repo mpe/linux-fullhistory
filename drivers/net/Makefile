@@ -752,6 +752,16 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_ARIADNE2),y)
+L_OBJS += ariadne2.o
+CONFIG_8390_BUILTIN = y
+else
+  ifeq ($(CONFIG_ARIADNE2),m)
+  M_OBJS += ariadne2.o
+  CONFIG_8390_MODULE = y
+  endif
+endif
+
 # If anything built-in uses the 8390, then build it into the kernel also.
 # If not, but a module uses it, build as a module.
 ifdef CONFIG_8390_BUILTIN

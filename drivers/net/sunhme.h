@@ -632,6 +632,7 @@ extern inline void hme_write32(struct happy_meal *hp,
 }
 
 #ifdef CONFIG_PCI
+#ifdef __sparc_v9__
 extern inline void pcihme_write_rxd(struct happy_meal_rxd *rp,
 				    unsigned int flags,
 				    unsigned int addr)
@@ -655,6 +656,27 @@ extern inline void pcihme_write_txd(struct happy_meal_txd *tp,
 	: "r" (&tp->tx_addr), "r" (&tp->tx_flags),
 	  "i" (ASI_PL), "r" (addr), "r" (flags));
 }
-#endif
+#else
+
+extern inline void pcihme_write_rxd(struct happy_meal_rxd *rp,
+				    unsigned int flags,
+				    unsigned int addr)
+{
+	rp->rx_addr = flip_dword(addr);
+	rp->rx_flags = flip_dword(flags);
+        flush_cache_all();
+}
+	
+extern inline void pcihme_write_txd(struct happy_meal_txd *tp,
+				    unsigned int flags,
+				    unsigned int addr)
+{
+	tp->tx_addr = flip_dword(addr);
+	tp->tx_flags = flip_dword(flags);
+        flush_cache_all();
+}
+	
+#endif  /* def __sparc_v9__ */
+#endif  /* def CONFIG_PCI */
 
 #endif /* !(_SUNHME_H) */

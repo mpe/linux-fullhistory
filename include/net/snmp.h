@@ -176,6 +176,8 @@ struct linux_mib
 	unsigned long	PruneCalled; 
 	unsigned long	RcvPruned;
 	unsigned long	OfoPruned;
+	unsigned long	OutOfWindowIcmps; 
+	unsigned long	LockDroppedIcmps; 
 };
  	
 #endif

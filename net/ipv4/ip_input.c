@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) module.
  *
- * Version:	$Id: ip_input.c,v 1.33 1998/08/26 12:03:47 davem Exp $
+ * Version:	$Id: ip_input.c,v 1.34 1998/10/03 09:37:23 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -503,6 +503,7 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
         {
 		int fwres;
 		u16 rport;
+		u8  tos = iph->tos;
 
 		if ((fwres=call_in_firewall(PF_INET, skb->dev, iph, &rport, &skb))<FW_ACCEPT) {
 			if (fwres==FW_REJECT)
@@ -513,6 +514,18 @@ int ip_rcv(struct sk_buff *skb, struct device *dev, struct packet_type *pt)
 #ifdef	CONFIG_IP_TRANSPARENT_PROXY
 		if (fwres==FW_REDIRECT && (IPCB(skb)->redirport = rport) != 0)
 			return ip_local_deliver(skb);
+#endif
+#ifdef	CONFIG_IP_ROUTE_TOS
+		/* It is for 2.2 only. Firewalling should make smart
+		   rerouting itself, ideally, but now it is too late
+		   to teach it. 			--ANK (980905)
+		 */
+		if (iph->tos != tos && ((struct rtable*)skb->dst)->rt_type == RTN_UNICAST) {
+			dst_release(skb->dst);
+			skb->dst = NULL;
+			if (ip_route_input(skb, iph->daddr, iph->saddr, iph->tos, dev))
+				goto drop; 
+		}
 #endif
 	}
 #endif

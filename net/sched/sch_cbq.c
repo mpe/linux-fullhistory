@@ -54,7 +54,7 @@
 
 	-----------------------------------------------------------------------
 
-	Algorithm skeleton was taken from from NS simulator cbq.cc.
+	Algorithm skeleton was taken from NS simulator cbq.cc.
 	If someone wants to check this code against the LBL version,
 	he should take into account that ONLY the skeleton was borrowed,
 	the implementation is different. Particularly:

@@ -1,4 +1,4 @@
-/* $Id: ioctl32.c,v 1.48 1998/08/03 23:58:04 davem Exp $
+/* $Id: ioctl32.c,v 1.52 1998/09/25 17:09:22 jj Exp $
  * ioctl32.c: Conversion between 32bit and 64bit native ioctls.
  *
  * Copyright (C) 1997  Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
@@ -40,6 +40,7 @@
 #undef __KERNEL__
 #include <scsi/scsi_ioctl.h>
 #define __KERNEL__
+#include <scsi/sg.h>
 
 #include <asm/types.h>
 #include <asm/uaccess.h>
@@ -51,16 +52,20 @@
 #include <asm/envctrl.h>
 #include <asm/audioio.h>
 
-/* As gcc will warn about casting u32 to some ptr, we have to cast it to
- * unsigned long first, and that's what is A() for.
- * You just do (void *)A(x), instead of having to type (void *)((unsigned long)x)
- * or instead of just (void *)x, which will produce warnings.
- */
-#define A(x) ((unsigned long)x)
+/* Use this to get at 32-bit user passed pointers. 
+   See sys_sparc32.c for description about these. */
+#define A(__x) ((unsigned long)(__x))
+#define AA(__x)				\
+({	unsigned long __ret;		\
+	__asm__ ("srl	%0, 0, %0"	\
+		 : "=r" (__ret)		\
+		 : "0" (__x));		\
+	__ret;				\
+})
 
 extern asmlinkage int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg);
 
-static int w_long(unsigned int fd, unsigned int cmd, u32 arg)
+static int w_long(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	mm_segment_t old_fs = get_fs();
 	int err;
@@ -69,23 +74,23 @@ static int w_long(unsigned int fd, unsigned int cmd, u32 arg)
 	set_fs (KERNEL_DS);
 	err = sys_ioctl(fd, cmd, (unsigned long)&val);
 	set_fs (old_fs);
-	if (!err && put_user(val, (u32 *)A(arg)))
+	if (!err && put_user(val, (u32 *)arg))
 		return -EFAULT;
 	return err;
 }
  
-static int rw_long(unsigned int fd, unsigned int cmd, u32 arg)
+static int rw_long(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	mm_segment_t old_fs = get_fs();
 	int err;
 	unsigned long val;
 	
-	if(get_user(val, (u32 *)A(arg)))
+	if(get_user(val, (u32 *)arg))
 		return -EFAULT;
 	set_fs (KERNEL_DS);
 	err = sys_ioctl(fd, cmd, (unsigned long)&val);
 	set_fs (old_fs);
-	if (!err && put_user(val, (u32 *)A(arg)))
+	if (!err && put_user(val, (u32 *)arg))
 		return -EFAULT;
 	return err;
 }
@@ -95,9 +100,9 @@ struct timeval32 {
 	int tv_usec;
 };
 
-static int do_siocgstamp(unsigned int fd, unsigned int cmd, u32 arg)
+static int do_siocgstamp(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
-	struct timeval32 *up = (struct timeval32 *)A(arg);
+	struct timeval32 *up = (struct timeval32 *)arg;
 	struct timeval ktv;
 	mm_segment_t old_fs = get_fs();
 	int err;
@@ -106,10 +111,8 @@ static int do_siocgstamp(unsigned int fd, unsigned int cmd, u32 arg)
 	err = sys_ioctl(fd, cmd, (unsigned long)&ktv);
 	set_fs(old_fs);
 	if(!err) {
-		if(!access_ok(VERIFY_WRITE, up, sizeof(*up))	||
-		   __put_user(ktv.tv_sec, &up->tv_sec)		||
-		   __put_user(ktv.tv_usec, &up->tv_usec))
-			err = -EFAULT;
+		err = put_user(ktv.tv_sec, &up->tv_sec);
+		err |= __put_user(ktv.tv_usec, &up->tv_usec);
 	}
 	return err;
 }
@@ -149,7 +152,7 @@ struct ifconf32 {
         __kernel_caddr_t32  ifcbuf;
 };
 
-static inline int dev_ifconf(unsigned int fd, u32 arg)
+static inline int dev_ifconf(unsigned int fd, unsigned long arg)
 {
 	struct ifconf32 ifc32;
 	struct ifconf ifc;
@@ -159,7 +162,7 @@ static inline int dev_ifconf(unsigned int fd, u32 arg)
 	unsigned int i, j;
 	int err;
 
-	if (copy_from_user(&ifc32, (struct ifconf32 *)A(arg), sizeof(struct ifconf32)))
+	if (copy_from_user(&ifc32, (struct ifconf32 *)arg, sizeof(struct ifconf32)))
 		return -EFAULT;
 
 	if(ifc32.ifcbuf == 0) {
@@ -199,7 +202,7 @@ static inline int dev_ifconf(unsigned int fd, u32 arg)
 				ifc32.ifc_len = i;
 			else
 				ifc32.ifc_len = i - sizeof (struct ifreq32);
-			if (copy_to_user((struct ifconf32 *)A(arg), &ifc32, sizeof(struct ifconf32)))
+			if (copy_to_user((struct ifconf32 *)arg, &ifc32, sizeof(struct ifconf32)))
 				err = -EFAULT;
 		}
 	}
@@ -208,7 +211,7 @@ static inline int dev_ifconf(unsigned int fd, u32 arg)
 	return err;
 }
 
-static inline int dev_ifsioc(unsigned int fd, unsigned int cmd, u32 arg)
+static inline int dev_ifsioc(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	struct ifreq ifr;
 	mm_segment_t old_fs;
@@ -216,26 +219,27 @@ static inline int dev_ifsioc(unsigned int fd, unsigned int cmd, u32 arg)
 	
 	switch (cmd) {
 	case SIOCSIFMAP:
-		if (copy_from_user(&ifr, (struct ifreq32 *)A(arg), sizeof(ifr.ifr_name)) ||
-		    __get_user(ifr.ifr_map.mem_start, &(((struct ifreq32 *)A(arg))->ifr_ifru.ifru_map.mem_start)) ||
-		    __get_user(ifr.ifr_map.mem_end, &(((struct ifreq32 *)A(arg))->ifr_ifru.ifru_map.mem_end)) ||
-		    __get_user(ifr.ifr_map.base_addr, &(((struct ifreq32 *)A(arg))->ifr_ifru.ifru_map.base_addr)) ||
-		    __get_user(ifr.ifr_map.irq, &(((struct ifreq32 *)A(arg))->ifr_ifru.ifru_map.irq)) ||
-		    __get_user(ifr.ifr_map.dma, &(((struct ifreq32 *)A(arg))->ifr_ifru.ifru_map.dma)) ||
-		    __get_user(ifr.ifr_map.port, &(((struct ifreq32 *)A(arg))->ifr_ifru.ifru_map.port)))
+		err = copy_from_user(&ifr, (struct ifreq32 *)arg, sizeof(ifr.ifr_name));
+		err |= __get_user(ifr.ifr_map.mem_start, &(((struct ifreq32 *)arg)->ifr_ifru.ifru_map.mem_start));
+		err |= __get_user(ifr.ifr_map.mem_end, &(((struct ifreq32 *)arg)->ifr_ifru.ifru_map.mem_end));
+		err |= __get_user(ifr.ifr_map.base_addr, &(((struct ifreq32 *)arg)->ifr_ifru.ifru_map.base_addr));
+		err |= __get_user(ifr.ifr_map.irq, &(((struct ifreq32 *)arg)->ifr_ifru.ifru_map.irq));
+		err |= __get_user(ifr.ifr_map.dma, &(((struct ifreq32 *)arg)->ifr_ifru.ifru_map.dma));
+		err |= __get_user(ifr.ifr_map.port, &(((struct ifreq32 *)arg)->ifr_ifru.ifru_map.port));
+		if (err)
 			return -EFAULT;
 		break;
 	case SIOCGPPPSTATS:
 	case SIOCGPPPCSTATS:
 	case SIOCGPPPVER:
-		if (copy_from_user(&ifr, (struct ifreq32 *)A(arg), sizeof(struct ifreq32)))
+		if (copy_from_user(&ifr, (struct ifreq32 *)arg, sizeof(struct ifreq32)))
 			return -EFAULT;
 		ifr.ifr_data = (__kernel_caddr_t)get_free_page(GFP_KERNEL);
 		if (!ifr.ifr_data)
 			return -EAGAIN;
 		break;
 	default:
-		if (copy_from_user(&ifr, (struct ifreq32 *)A(arg), sizeof(struct ifreq32)))
+		if (copy_from_user(&ifr, (struct ifreq32 *)arg, sizeof(struct ifreq32)))
 			return -EFAULT;
 		break;
 	}
@@ -255,7 +259,7 @@ static inline int dev_ifsioc(unsigned int fd, unsigned int cmd, u32 arg)
 		case SIOCGIFBRDADDR:
 		case SIOCGIFDSTADDR:
 		case SIOCGIFNETMASK:
-			if (copy_to_user((struct ifreq32 *)A(arg), &ifr, sizeof(struct ifreq32)))
+			if (copy_to_user((struct ifreq32 *)arg, &ifr, sizeof(struct ifreq32)))
 				return -EFAULT;
 			break;
 		case SIOCGPPPSTATS:
@@ -265,7 +269,7 @@ static inline int dev_ifsioc(unsigned int fd, unsigned int cmd, u32 arg)
 			u32 data;
 			int len;
 
-			__get_user(data, &(((struct ifreq32 *)A(arg))->ifr_ifru.ifru_data));
+			__get_user(data, &(((struct ifreq32 *)arg)->ifr_ifru.ifru_data));
 			if(cmd == SIOCGPPPVER)
 				len = strlen(PPP_VERSION) + 1;
 			else if(cmd == SIOCGPPPCSTATS)
@@ -278,14 +282,13 @@ static inline int dev_ifsioc(unsigned int fd, unsigned int cmd, u32 arg)
 			break;
 		}
 		case SIOCGIFMAP:
-			if (copy_to_user((struct ifreq32 *)A(arg), &ifr, sizeof(ifr.ifr_name)) ||
-			    __put_user(ifr.ifr_map.mem_start, &(((struct ifreq32 *)A(arg))->ifr_ifru.ifru_map.mem_start)) ||
-			    __put_user(ifr.ifr_map.mem_end, &(((struct ifreq32 *)A(arg))->ifr_ifru.ifru_map.mem_end)) ||
-			    __put_user(ifr.ifr_map.base_addr, &(((struct ifreq32 *)A(arg))->ifr_ifru.ifru_map.base_addr)) ||
-			    __put_user(ifr.ifr_map.irq, &(((struct ifreq32 *)A(arg))->ifr_ifru.ifru_map.irq)) ||
-			    __put_user(ifr.ifr_map.dma, &(((struct ifreq32 *)A(arg))->ifr_ifru.ifru_map.dma)) ||
-			    __put_user(ifr.ifr_map.port, &(((struct ifreq32 *)A(arg))->ifr_ifru.ifru_map.port)))
-				return -EFAULT;
+			err = copy_to_user((struct ifreq32 *)arg, &ifr, sizeof(ifr.ifr_name));
+			err |= __put_user(ifr.ifr_map.mem_start, &(((struct ifreq32 *)arg)->ifr_ifru.ifru_map.mem_start));
+			err |= __put_user(ifr.ifr_map.mem_end, &(((struct ifreq32 *)arg)->ifr_ifru.ifru_map.mem_end));
+			err |= __put_user(ifr.ifr_map.base_addr, &(((struct ifreq32 *)arg)->ifr_ifru.ifru_map.base_addr));
+			err |= __put_user(ifr.ifr_map.irq, &(((struct ifreq32 *)arg)->ifr_ifru.ifru_map.irq));
+			err |= __put_user(ifr.ifr_map.dma, &(((struct ifreq32 *)arg)->ifr_ifru.ifru_map.dma));
+			err |= __put_user(ifr.ifr_map.port, &(((struct ifreq32 *)arg)->ifr_ifru.ifru_map.port));
 			break;
 		}
 	}
@@ -311,7 +314,7 @@ struct rtentry32 {
 
 };
 
-static inline int routing_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
+static inline int routing_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	struct rtentry r;
 	char devname[16];
@@ -319,19 +322,20 @@ static inline int routing_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	int ret;
 	mm_segment_t old_fs = get_fs();
 	
-	if (copy_from_user (&r.rt_dst, &(((struct rtentry32 *)A(arg))->rt_dst), 3 * sizeof(struct sockaddr)) ||
-	    __get_user (r.rt_flags, &(((struct rtentry32 *)A(arg))->rt_flags)) ||
-	    __get_user (r.rt_metric, &(((struct rtentry32 *)A(arg))->rt_metric)) ||
-	    __get_user (r.rt_mtu, &(((struct rtentry32 *)A(arg))->rt_mtu)) ||
-	    __get_user (r.rt_window, &(((struct rtentry32 *)A(arg))->rt_window)) ||
-	    __get_user (r.rt_irtt, &(((struct rtentry32 *)A(arg))->rt_irtt)) ||
-	    __get_user (rtdev, &(((struct rtentry32 *)A(arg))->rt_dev)) ||
-	    (rtdev && copy_from_user (devname, (char *)A(rtdev), 15)))
-		return -EFAULT;
+	ret = copy_from_user (&r.rt_dst, &(((struct rtentry32 *)arg)->rt_dst), 3 * sizeof(struct sockaddr));
+	ret |= __get_user (r.rt_flags, &(((struct rtentry32 *)arg)->rt_flags));
+	ret |= __get_user (r.rt_metric, &(((struct rtentry32 *)arg)->rt_metric));
+	ret |= __get_user (r.rt_mtu, &(((struct rtentry32 *)arg)->rt_mtu));
+	ret |= __get_user (r.rt_window, &(((struct rtentry32 *)arg)->rt_window));
+	ret |= __get_user (r.rt_irtt, &(((struct rtentry32 *)arg)->rt_irtt));
+	ret |= __get_user (rtdev, &(((struct rtentry32 *)arg)->rt_dev));
 	if (rtdev) {
+		ret |= copy_from_user (devname, (char *)A(rtdev), 15);
 		r.rt_dev = devname; devname[15] = 0;
 	} else
 		r.rt_dev = 0;
+	if (ret)
+		return -EFAULT;
 	set_fs (KERNEL_DS);
 	ret = sys_ioctl (fd, cmd, (long)&r);
 	set_fs (old_fs);
@@ -345,7 +349,7 @@ struct hd_geometry32 {
 	u32 start;
 };
                         
-static inline int hdio_getgeo(unsigned int fd, u32 arg)
+static inline int hdio_getgeo(unsigned int fd, unsigned long arg)
 {
 	mm_segment_t old_fs = get_fs();
 	struct hd_geometry geo;
@@ -355,9 +359,8 @@ static inline int hdio_getgeo(unsigned int fd, u32 arg)
 	err = sys_ioctl(fd, HDIO_GETGEO, (unsigned long)&geo);
 	set_fs (old_fs);
 	if (!err) {
-		if (copy_to_user ((struct hd_geometry32 *)A(arg), &geo, 4) ||
-		    __put_user (geo.start, &(((struct hd_geometry32 *)A(arg))->start)))
-			return -EFAULT;
+		err = copy_to_user ((struct hd_geometry32 *)arg, &geo, 4);
+		err |= __put_user (geo.start, &(((struct hd_geometry32 *)arg)->start));
 	}
 	return err;
 }
@@ -373,7 +376,7 @@ struct  fbcmap32 {
 #define FBIOPUTCMAP32	_IOW('F', 3, struct fbcmap32)
 #define FBIOGETCMAP32	_IOW('F', 4, struct fbcmap32)
 
-static inline int fbiogetputcmap(unsigned int fd, unsigned int cmd, u32 arg)
+static inline int fbiogetputcmap(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	struct fbcmap f;
 	int ret;
@@ -381,19 +384,21 @@ static inline int fbiogetputcmap(unsigned int fd, unsigned int cmd, u32 arg)
 	u32 r, g, b;
 	mm_segment_t old_fs = get_fs();
 	
-	if (get_user(f.index, &(((struct fbcmap32 *)A(arg))->index)) ||
-	    __get_user(f.count, &(((struct fbcmap32 *)A(arg))->count)) ||
-	    __get_user(r, &(((struct fbcmap32 *)A(arg))->red)) ||
-	    __get_user(g, &(((struct fbcmap32 *)A(arg))->green)) ||
-	    __get_user(b, &(((struct fbcmap32 *)A(arg))->blue)))
+	ret = get_user(f.index, &(((struct fbcmap32 *)arg)->index));
+	ret |= __get_user(f.count, &(((struct fbcmap32 *)arg)->count));
+	ret |= __get_user(r, &(((struct fbcmap32 *)arg)->red));
+	ret |= __get_user(g, &(((struct fbcmap32 *)arg)->green));
+	ret |= __get_user(b, &(((struct fbcmap32 *)arg)->blue));
+	if (ret)
 		return -EFAULT;
 	if ((f.index < 0) || (f.index > 255)) return -EINVAL;
 	if (f.index + f.count > 256)
 		f.count = 256 - f.index;
 	if (cmd == FBIOPUTCMAP32) {
-		if (copy_from_user (red, (char *)A(r), f.count) ||
-		    copy_from_user (green, (char *)A(g), f.count) ||
-		    copy_from_user (blue, (char *)A(b), f.count))
+		ret = copy_from_user (red, (char *)A(r), f.count);
+		ret |= copy_from_user (green, (char *)A(g), f.count);
+		ret |= copy_from_user (blue, (char *)A(b), f.count);
+		if (ret)
 			return -EFAULT;
 	}
 	f.red = red; f.green = green; f.blue = blue;
@@ -401,10 +406,9 @@ static inline int fbiogetputcmap(unsigned int fd, unsigned int cmd, u32 arg)
 	ret = sys_ioctl (fd, (cmd == FBIOPUTCMAP32) ? FBIOPUTCMAP_SPARC : FBIOGETCMAP_SPARC, (long)&f);
 	set_fs (old_fs);
 	if (!ret && cmd == FBIOGETCMAP32) {
-		if (copy_to_user ((char *)A(r), red, f.count) ||
-		    copy_to_user ((char *)A(g), green, f.count) ||
-		    copy_to_user ((char *)A(b), blue, f.count))
-			return -EFAULT;
+		ret = copy_to_user ((char *)A(r), red, f.count);
+		ret |= copy_to_user ((char *)A(g), green, f.count);
+		ret |= copy_to_user ((char *)A(b), blue, f.count);
 	}
 	return ret;
 }
@@ -423,7 +427,7 @@ struct fbcursor32 {
 #define FBIOSCURSOR32	_IOW('F', 24, struct fbcursor32)
 #define FBIOGCURSOR32	_IOW('F', 25, struct fbcursor32)
 
-static inline int fbiogscursor(unsigned int fd, unsigned int cmd, u32 arg)
+static inline int fbiogscursor(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	struct fbcursor f;
 	int ret;
@@ -433,29 +437,32 @@ static inline int fbiogscursor(unsigned int fd, unsigned int cmd, u32 arg)
 	u32 m, i;
 	mm_segment_t old_fs = get_fs();
 	
-	if (copy_from_user (&f, (struct fbcursor32 *)A(arg), 2 * sizeof (short) + 2 * sizeof(struct fbcurpos)) ||
-	    __get_user(f.size.fbx, &(((struct fbcursor32 *)A(arg))->size.fbx)) ||
-	    __get_user(f.size.fby, &(((struct fbcursor32 *)A(arg))->size.fby)) ||
-	    __get_user(f.cmap.index, &(((struct fbcursor32 *)A(arg))->cmap.index)) ||
-	    __get_user(f.cmap.count, &(((struct fbcursor32 *)A(arg))->cmap.count)) ||
-	    __get_user(r, &(((struct fbcursor32 *)A(arg))->cmap.red)) ||
-	    __get_user(g, &(((struct fbcursor32 *)A(arg))->cmap.green)) ||
-	    __get_user(b, &(((struct fbcursor32 *)A(arg))->cmap.blue)) ||
-	    __get_user(m, &(((struct fbcursor32 *)A(arg))->mask)) ||
-	    __get_user(i, &(((struct fbcursor32 *)A(arg))->image)))
+	ret = copy_from_user (&f, (struct fbcursor32 *)arg, 2 * sizeof (short) + 2 * sizeof(struct fbcurpos));
+	ret |= __get_user(f.size.fbx, &(((struct fbcursor32 *)arg)->size.fbx));
+	ret |= __get_user(f.size.fby, &(((struct fbcursor32 *)arg)->size.fby));
+	ret |= __get_user(f.cmap.index, &(((struct fbcursor32 *)arg)->cmap.index));
+	ret |= __get_user(f.cmap.count, &(((struct fbcursor32 *)arg)->cmap.count));
+	ret |= __get_user(r, &(((struct fbcursor32 *)arg)->cmap.red));
+	ret |= __get_user(g, &(((struct fbcursor32 *)arg)->cmap.green));
+	ret |= __get_user(b, &(((struct fbcursor32 *)arg)->cmap.blue));
+	ret |= __get_user(m, &(((struct fbcursor32 *)arg)->mask));
+	ret |= __get_user(i, &(((struct fbcursor32 *)arg)->image));
+	if (ret)
 		return -EFAULT;
 	if (f.set & FB_CUR_SETCMAP) {
 		if ((uint) f.size.fby > 32)
 			return -EINVAL;
-		if (copy_from_user (mask, (char *)A(m), f.size.fby * 4) ||
-		    copy_from_user (image, (char *)A(i), f.size.fby * 4))
+		ret = copy_from_user (mask, (char *)A(m), f.size.fby * 4);
+		ret |= copy_from_user (image, (char *)A(i), f.size.fby * 4);
+		if (ret)
 			return -EFAULT;
 		f.image = image; f.mask = mask;
 	}
 	if (f.set & FB_CUR_SETCMAP) {
-		if (copy_from_user (red, (char *)A(r), 2) ||
-		    copy_from_user (green, (char *)A(g), 2) ||
-		    copy_from_user (blue, (char *)A(b), 2))
+		ret = copy_from_user (red, (char *)A(r), 2);
+		ret |= copy_from_user (green, (char *)A(g), 2);
+		ret |= copy_from_user (blue, (char *)A(b), 2);
+		if (ret)
 			return -EFAULT;
 		f.cmap.red = red; f.cmap.green = green; f.cmap.blue = blue;
 	}
@@ -491,7 +498,7 @@ struct fb_cmap32 {
 	__kernel_caddr_t32	transp;
 };
 
-static int fb_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
+static int fb_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	mm_segment_t old_fs = get_fs();
 	u32 red = 0, green = 0, blue = 0, transp = 0;
@@ -500,6 +507,7 @@ static int fb_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
 	void *karg;
 	int err = 0;
 
+	memset(&cmap, 0, sizeof(cmap));
 	switch (cmd) {
 	case FBIOGET_FSCREENINFO:
 		karg = &fix;
@@ -507,120 +515,91 @@ static int fb_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
 	case FBIOGETCMAP:
 	case FBIOPUTCMAP:
 		karg = &cmap;
-		if (__get_user(cmap.start, &((struct fb_cmap32 *)A(arg))->start) ||
-		    __get_user(cmap.len, &((struct fb_cmap32 *)A(arg))->len) ||
-		    __get_user(red, &((struct fb_cmap32 *)A(arg))->red) ||
-		    __get_user(green, &((struct fb_cmap32 *)A(arg))->green) ||
-		    __get_user(blue, &((struct fb_cmap32 *)A(arg))->blue) ||
-		    __get_user(transp, &((struct fb_cmap32 *)A(arg))->transp))
-			return -EFAULT;
+		err = __get_user(cmap.start, &((struct fb_cmap32 *)arg)->start);
+		err |= __get_user(cmap.len, &((struct fb_cmap32 *)arg)->len);
+		err |= __get_user(red, &((struct fb_cmap32 *)arg)->red);
+		err |= __get_user(green, &((struct fb_cmap32 *)arg)->green);
+		err |= __get_user(blue, &((struct fb_cmap32 *)arg)->blue);
+		err |= __get_user(transp, &((struct fb_cmap32 *)arg)->transp);
+		if (err)
+			goto out;
+		err = -ENOMEM;
 		cmap.red = kmalloc(cmap.len * sizeof(__u16), GFP_KERNEL);
 		if (!cmap.red)
-			return -ENOMEM;
+			goto out;
 		cmap.green = kmalloc(cmap.len * sizeof(__u16), GFP_KERNEL);
-		if (!cmap.green) {
-			kfree(cmap.red);
-			return -ENOMEM;
-		}
+		if (!cmap.green)
+			goto out;
 		cmap.blue = kmalloc(cmap.len * sizeof(__u16), GFP_KERNEL);
-		if (!cmap.blue) {
-			kfree(cmap.red);
-			kfree(cmap.green);
-			return -ENOMEM;
-		}
+		if (!cmap.blue)
+			goto out;
 		if (transp) {
 			cmap.transp = kmalloc(cmap.len * sizeof(__u16), GFP_KERNEL);
-			if (!cmap.transp) {
-				kfree(cmap.red);
-				kfree(cmap.green);
-				kfree(cmap.blue);
-				return -ENOMEM;
-			}
-		} else {
+			if (!cmap.transp)
+				goto out;
+		} else
 			cmap.transp = NULL;
-		}
+			
 		if (cmd == FBIOGETCMAP)
 			break;
 
-		if (__copy_from_user(cmap.red, (char *)A(((struct fb_cmap32 *)A(arg))->red),
-				     cmap.len * sizeof(__u16)) ||
-		    __copy_from_user(cmap.green, (char *)A(((struct fb_cmap32 *)A(arg))->green),
-				     cmap.len * sizeof(__u16)) ||
-		    __copy_from_user(cmap.blue, (char *)A(((struct fb_cmap32 *)A(arg))->blue),
-				     cmap.len * sizeof(__u16)) ||
-		    (cmap.transp &&
-		     __copy_from_user(cmap.transp, (char *)A(((struct fb_cmap32 *)A(arg))->transp),
-				      cmap.len * sizeof(__u16)))) {
-			kfree(cmap.red);
-			kfree(cmap.green);
-			kfree(cmap.blue);
-			if (cmap.transp)
-				kfree(cmap.transp);
-			return -EFAULT;
-		}
+		err = __copy_from_user(cmap.red, (char *)A(red), cmap.len * sizeof(__u16));
+		err |= __copy_from_user(cmap.green, (char *)A(green), cmap.len * sizeof(__u16));
+		err |= __copy_from_user(cmap.blue, (char *)A(blue), cmap.len * sizeof(__u16));
+		if (cmap.transp) err |= __copy_from_user(cmap.transp, (char *)A(transp), cmap.len * sizeof(__u16));
+		if (err)
+			goto out;
 		break;
 	default:
-		printk("%s: Unknown fb ioctl cmd fd(%d) cmd(%08x) arg(%08x)\n",
-		       __FUNCTION__, fd, cmd, arg);
+		do {
+			static int count = 0;
+			if (++count <= 20)
+				printk("%s: Unknown fb ioctl cmd fd(%d) "
+				       "cmd(%08x) arg(%08lx)\n",
+				       __FUNCTION__, fd, cmd, arg);
+		} while(0);
 		return -ENOSYS;
 	}
 	set_fs(KERNEL_DS);
 	err = sys_ioctl(fd, cmd, (unsigned long)karg);
 	set_fs(old_fs);
 	if (err)
-		return err;
+		goto out;
 	switch (cmd) {
 	case FBIOGET_FSCREENINFO:
-		if (__copy_to_user((char *)((struct fb_fix_screeninfo32 *)A(arg))->id,
-				   (char *)fix.id, sizeof(fix.id)) ||
-		    __put_user((__u32)(unsigned long)fix.smem_start,
-			       &((struct fb_fix_screeninfo32 *)A(arg))->smem_start) ||
-		    __put_user(fix.smem_len, &((struct fb_fix_screeninfo32 *)A(arg))->smem_len) ||
-		    __put_user(fix.type, &((struct fb_fix_screeninfo32 *)A(arg))->type) ||
-		    __put_user(fix.type_aux, &((struct fb_fix_screeninfo32 *)A(arg))->type_aux) ||
-		    __put_user(fix.visual, &((struct fb_fix_screeninfo32 *)A(arg))->visual) ||
-		    __put_user(fix.xpanstep, &((struct fb_fix_screeninfo32 *)A(arg))->xpanstep) ||
-		    __put_user(fix.ypanstep, &((struct fb_fix_screeninfo32 *)A(arg))->ypanstep) ||
-		    __put_user(fix.ywrapstep, &((struct fb_fix_screeninfo32 *)A(arg))->ywrapstep) ||
-		    __put_user(fix.line_length, &((struct fb_fix_screeninfo32 *)A(arg))->line_length) ||
-		    __put_user((__u32)(unsigned long)fix.mmio_start,
-			       &((struct fb_fix_screeninfo32 *)A(arg))->mmio_start) ||
-		    __put_user(fix.mmio_len, &((struct fb_fix_screeninfo32 *)A(arg))->mmio_len) ||
-		    __put_user(fix.accel, &((struct fb_fix_screeninfo32 *)A(arg))->accel) ||
-		    __copy_to_user((char *)((struct fb_fix_screeninfo32 *)A(arg))->reserved,
-				   (char *)fix.reserved, sizeof(fix.reserved)))
-			return -EFAULT;
+		err = __copy_to_user((char *)((struct fb_fix_screeninfo32 *)arg)->id, (char *)fix.id, sizeof(fix.id));
+		err |= __put_user((__u32)(unsigned long)fix.smem_start, &((struct fb_fix_screeninfo32 *)arg)->smem_start);
+		err |= __put_user(fix.smem_len, &((struct fb_fix_screeninfo32 *)arg)->smem_len);
+		err |= __put_user(fix.type, &((struct fb_fix_screeninfo32 *)arg)->type);
+		err |= __put_user(fix.type_aux, &((struct fb_fix_screeninfo32 *)arg)->type_aux);
+		err |= __put_user(fix.visual, &((struct fb_fix_screeninfo32 *)arg)->visual);
+		err |= __put_user(fix.xpanstep, &((struct fb_fix_screeninfo32 *)arg)->xpanstep);
+		err |= __put_user(fix.ypanstep, &((struct fb_fix_screeninfo32 *)arg)->ypanstep);
+		err |= __put_user(fix.ywrapstep, &((struct fb_fix_screeninfo32 *)arg)->ywrapstep);
+		err |= __put_user(fix.line_length, &((struct fb_fix_screeninfo32 *)arg)->line_length);
+		err |= __put_user((__u32)(unsigned long)fix.mmio_start, &((struct fb_fix_screeninfo32 *)arg)->mmio_start);
+		err |= __put_user(fix.mmio_len, &((struct fb_fix_screeninfo32 *)arg)->mmio_len);
+		err |= __put_user(fix.accel, &((struct fb_fix_screeninfo32 *)arg)->accel);
+		err |= __copy_to_user((char *)((struct fb_fix_screeninfo32 *)arg)->reserved, (char *)fix.reserved, sizeof(fix.reserved));
 		break;
 	case FBIOGETCMAP:
-		if (__copy_to_user((char *)A(((struct fb_cmap32 *)A(arg))->red), cmap.red,
-				   cmap.len * sizeof(__u16)) ||
-		    __copy_to_user((char *)A(((struct fb_cmap32 *)A(arg))->green), cmap.blue,
-				   cmap.len * sizeof(__u16)) ||
-		    __copy_to_user((char *)A(((struct fb_cmap32 *)A(arg))->blue), cmap.blue,
-				   cmap.len * sizeof(__u16)) ||
-		    (cmap.transp &&
-		     __copy_to_user((char *)A(((struct fb_cmap32 *)A(arg))->transp), cmap.transp,
-				    cmap.len * sizeof(__u16)))) {
-			kfree(cmap.red);
-			kfree(cmap.green);
-			kfree(cmap.blue);
-			if (cmap.transp)
-				kfree(cmap.transp);
-			return -EFAULT;
-		}
-		/* fall through */
-	case FBIOPUTCMAP:
-		kfree(cmap.red);
-		kfree(cmap.green);
-		kfree(cmap.blue);
+		err = __copy_to_user((char *)A(red), cmap.red, cmap.len * sizeof(__u16));
+		err |= __copy_to_user((char *)A(green), cmap.blue, cmap.len * sizeof(__u16));
+		err |= __copy_to_user((char *)A(blue), cmap.blue, cmap.len * sizeof(__u16));
 		if (cmap.transp)
-			kfree(cmap.transp);
+			err |= __copy_to_user((char *)A(transp), cmap.transp, cmap.len * sizeof(__u16));
+		break;
+	case FBIOPUTCMAP:
 		break;
 	}
-	return 0;
+out:	if (cmap.red) kfree(cmap.red);
+	if (cmap.green) kfree(cmap.green);
+	if (cmap.blue) kfree(cmap.blue);
+	if (cmap.transp) kfree(cmap.transp);
+	return err;
 }
 
-static int hdio_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
+static int hdio_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	mm_segment_t old_fs = get_fs();
 	unsigned long kval;
@@ -632,7 +611,7 @@ static int hdio_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
 	set_fs(old_fs);
 
 	if(error == 0) {
-		uvp = (unsigned int *)A(arg);
+		uvp = (unsigned int *)arg;
 		if(put_user(kval, uvp))
 			error = -EFAULT;
 	}
@@ -744,10 +723,10 @@ static struct {
 
 #define NR_FD_IOCTL_TRANS (sizeof(fd_ioctl_trans_table)/sizeof(fd_ioctl_trans_table[0]))
 
-static int fd_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
+static int fd_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	mm_segment_t old_fs = get_fs();
-	void *karg;
+	void *karg = NULL;
 	unsigned int kcmd = 0;
 	int i, err;
 
@@ -771,19 +750,18 @@ static int fd_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
 				return -ENOMEM;
 			if (cmd == FDGETPRM32)
 				break;
-			if (__get_user(f->size, &((struct floppy_struct32 *)A(arg))->size) ||
-			    __get_user(f->sect, &((struct floppy_struct32 *)A(arg))->sect) ||
-			    __get_user(f->head, &((struct floppy_struct32 *)A(arg))->head) ||
-			    __get_user(f->track, &((struct floppy_struct32 *)A(arg))->track) ||
-			    __get_user(f->stretch, &((struct floppy_struct32 *)A(arg))->stretch) ||
-			    __get_user(f->gap, &((struct floppy_struct32 *)A(arg))->gap) ||
-			    __get_user(f->rate, &((struct floppy_struct32 *)A(arg))->rate) ||
-			    __get_user(f->spec1, &((struct floppy_struct32 *)A(arg))->spec1) ||
-			    __get_user(f->fmt_gap, &((struct floppy_struct32 *)A(arg))->fmt_gap) ||
-			    __get_user((u64)f->name, &((struct floppy_struct32 *)A(arg))->name)) {
-				kfree(karg);
-				return -EFAULT;
-			}
+			err = __get_user(f->size, &((struct floppy_struct32 *)arg)->size);
+			err |= __get_user(f->sect, &((struct floppy_struct32 *)arg)->sect);
+			err |= __get_user(f->head, &((struct floppy_struct32 *)arg)->head);
+			err |= __get_user(f->track, &((struct floppy_struct32 *)arg)->track);
+			err |= __get_user(f->stretch, &((struct floppy_struct32 *)arg)->stretch);
+			err |= __get_user(f->gap, &((struct floppy_struct32 *)arg)->gap);
+			err |= __get_user(f->rate, &((struct floppy_struct32 *)arg)->rate);
+			err |= __get_user(f->spec1, &((struct floppy_struct32 *)arg)->spec1);
+			err |= __get_user(f->fmt_gap, &((struct floppy_struct32 *)arg)->fmt_gap);
+			err |= __get_user((u64)f->name, &((struct floppy_struct32 *)arg)->name);
+			if (err)
+				goto out;
 			break;
 		}
 		case FDSETDRVPRM32:
@@ -796,28 +774,27 @@ static int fd_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
 				return -ENOMEM;
 			if (cmd == FDGETDRVPRM32)
 				break;
-			if (__get_user(f->cmos, &((struct floppy_drive_params32 *)A(arg))->cmos) ||
-			    __get_user(f->max_dtr, &((struct floppy_drive_params32 *)A(arg))->max_dtr) ||
-			    __get_user(f->hlt, &((struct floppy_drive_params32 *)A(arg))->hlt) ||
-			    __get_user(f->hut, &((struct floppy_drive_params32 *)A(arg))->hut) ||
-			    __get_user(f->srt, &((struct floppy_drive_params32 *)A(arg))->srt) ||
-			    __get_user(f->spinup, &((struct floppy_drive_params32 *)A(arg))->spinup) ||
-			    __get_user(f->spindown, &((struct floppy_drive_params32 *)A(arg))->spindown) ||
-			    __get_user(f->spindown_offset, &((struct floppy_drive_params32 *)A(arg))->spindown_offset) ||
-			    __get_user(f->select_delay, &((struct floppy_drive_params32 *)A(arg))->select_delay) ||
-			    __get_user(f->rps, &((struct floppy_drive_params32 *)A(arg))->rps) ||
-			    __get_user(f->tracks, &((struct floppy_drive_params32 *)A(arg))->tracks) ||
-			    __get_user(f->timeout, &((struct floppy_drive_params32 *)A(arg))->timeout) ||
-			    __get_user(f->interleave_sect, &((struct floppy_drive_params32 *)A(arg))->interleave_sect) ||
-			    __copy_from_user(&f->max_errors, &((struct floppy_drive_params32 *)A(arg))->max_errors, sizeof(f->max_errors)) ||
-			    __get_user(f->flags, &((struct floppy_drive_params32 *)A(arg))->flags) ||
-			    __get_user(f->read_track, &((struct floppy_drive_params32 *)A(arg))->read_track) ||
-			    __copy_from_user(f->autodetect, ((struct floppy_drive_params32 *)A(arg))->autodetect, sizeof(f->autodetect)) ||
-			    __get_user(f->checkfreq, &((struct floppy_drive_params32 *)A(arg))->checkfreq) ||
-			    __get_user(f->native_format, &((struct floppy_drive_params32 *)A(arg))->native_format)) {
-				kfree(karg);
-				return -EFAULT;
-			}
+			err = __get_user(f->cmos, &((struct floppy_drive_params32 *)arg)->cmos);
+			err |= __get_user(f->max_dtr, &((struct floppy_drive_params32 *)arg)->max_dtr);
+			err |= __get_user(f->hlt, &((struct floppy_drive_params32 *)arg)->hlt);
+			err |= __get_user(f->hut, &((struct floppy_drive_params32 *)arg)->hut);
+			err |= __get_user(f->srt, &((struct floppy_drive_params32 *)arg)->srt);
+			err |= __get_user(f->spinup, &((struct floppy_drive_params32 *)arg)->spinup);
+			err |= __get_user(f->spindown, &((struct floppy_drive_params32 *)arg)->spindown);
+			err |= __get_user(f->spindown_offset, &((struct floppy_drive_params32 *)arg)->spindown_offset);
+			err |= __get_user(f->select_delay, &((struct floppy_drive_params32 *)arg)->select_delay);
+			err |= __get_user(f->rps, &((struct floppy_drive_params32 *)arg)->rps);
+			err |= __get_user(f->tracks, &((struct floppy_drive_params32 *)arg)->tracks);
+			err |= __get_user(f->timeout, &((struct floppy_drive_params32 *)arg)->timeout);
+			err |= __get_user(f->interleave_sect, &((struct floppy_drive_params32 *)arg)->interleave_sect);
+			err |= __copy_from_user(&f->max_errors, &((struct floppy_drive_params32 *)arg)->max_errors, sizeof(f->max_errors));
+			err |= __get_user(f->flags, &((struct floppy_drive_params32 *)arg)->flags);
+			err |= __get_user(f->read_track, &((struct floppy_drive_params32 *)arg)->read_track);
+			err |= __copy_from_user(f->autodetect, ((struct floppy_drive_params32 *)arg)->autodetect, sizeof(f->autodetect));
+			err |= __get_user(f->checkfreq, &((struct floppy_drive_params32 *)arg)->checkfreq);
+			err |= __get_user(f->native_format, &((struct floppy_drive_params32 *)arg)->native_format);
+			if (err)
+				goto out;
 			break;
 		}
 		case FDGETDRVSTAT32:
@@ -842,56 +819,48 @@ static int fd_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
 	set_fs (KERNEL_DS);
 	err = sys_ioctl (fd, kcmd, (unsigned long)karg);
 	set_fs (old_fs);
-	if (err) {
-		kfree(karg);
-		return err;
-	}
+	if (err)
+		goto out;
 	switch (cmd) {
 		case FDGETPRM32:
 		{
 			struct floppy_struct *f = karg;
 
-			if (__put_user(f->size, &((struct floppy_struct32 *)A(arg))->size) ||
-			    __put_user(f->sect, &((struct floppy_struct32 *)A(arg))->sect) ||
-			    __put_user(f->head, &((struct floppy_struct32 *)A(arg))->head) ||
-			    __put_user(f->track, &((struct floppy_struct32 *)A(arg))->track) ||
-			    __put_user(f->stretch, &((struct floppy_struct32 *)A(arg))->stretch) ||
-			    __put_user(f->gap, &((struct floppy_struct32 *)A(arg))->gap) ||
-			    __put_user(f->rate, &((struct floppy_struct32 *)A(arg))->rate) ||
-			    __put_user(f->spec1, &((struct floppy_struct32 *)A(arg))->spec1) ||
-			    __put_user(f->fmt_gap, &((struct floppy_struct32 *)A(arg))->fmt_gap) ||
-			    __put_user((u64)f->name, &((struct floppy_struct32 *)A(arg))->name)) {
-				kfree(karg);
-				return -EFAULT;
-			}
+			err = __put_user(f->size, &((struct floppy_struct32 *)arg)->size);
+			err |= __put_user(f->sect, &((struct floppy_struct32 *)arg)->sect);
+			err |= __put_user(f->head, &((struct floppy_struct32 *)arg)->head);
+			err |= __put_user(f->track, &((struct floppy_struct32 *)arg)->track);
+			err |= __put_user(f->stretch, &((struct floppy_struct32 *)arg)->stretch);
+			err |= __put_user(f->gap, &((struct floppy_struct32 *)arg)->gap);
+			err |= __put_user(f->rate, &((struct floppy_struct32 *)arg)->rate);
+			err |= __put_user(f->spec1, &((struct floppy_struct32 *)arg)->spec1);
+			err |= __put_user(f->fmt_gap, &((struct floppy_struct32 *)arg)->fmt_gap);
+			err |= __put_user((u64)f->name, &((struct floppy_struct32 *)arg)->name);
 			break;
 		}
 		case FDGETDRVPRM32:
 		{
 			struct floppy_drive_params *f = karg;
 
-			if (__put_user(f->cmos, &((struct floppy_drive_params32 *)A(arg))->cmos) ||
-			    __put_user(f->max_dtr, &((struct floppy_drive_params32 *)A(arg))->max_dtr) ||
-			    __put_user(f->hlt, &((struct floppy_drive_params32 *)A(arg))->hlt) ||
-			    __put_user(f->hut, &((struct floppy_drive_params32 *)A(arg))->hut) ||
-			    __put_user(f->srt, &((struct floppy_drive_params32 *)A(arg))->srt) ||
-			    __put_user(f->spinup, &((struct floppy_drive_params32 *)A(arg))->spinup) ||
-			    __put_user(f->spindown, &((struct floppy_drive_params32 *)A(arg))->spindown) ||
-			    __put_user(f->spindown_offset, &((struct floppy_drive_params32 *)A(arg))->spindown_offset) ||
-			    __put_user(f->select_delay, &((struct floppy_drive_params32 *)A(arg))->select_delay) ||
-			    __put_user(f->rps, &((struct floppy_drive_params32 *)A(arg))->rps) ||
-			    __put_user(f->tracks, &((struct floppy_drive_params32 *)A(arg))->tracks) ||
-			    __put_user(f->timeout, &((struct floppy_drive_params32 *)A(arg))->timeout) ||
-			    __put_user(f->interleave_sect, &((struct floppy_drive_params32 *)A(arg))->interleave_sect) ||
-			    __copy_to_user(&((struct floppy_drive_params32 *)A(arg))->max_errors, &f->max_errors, sizeof(f->max_errors)) ||
-			    __put_user(f->flags, &((struct floppy_drive_params32 *)A(arg))->flags) ||
-			    __put_user(f->read_track, &((struct floppy_drive_params32 *)A(arg))->read_track) ||
-			    __copy_to_user(((struct floppy_drive_params32 *)A(arg))->autodetect, f->autodetect, sizeof(f->autodetect)) ||
-			    __put_user(f->checkfreq, &((struct floppy_drive_params32 *)A(arg))->checkfreq) ||
-			    __put_user(f->native_format, &((struct floppy_drive_params32 *)A(arg))->native_format)) {
-				kfree(karg);
-				return -EFAULT;
-			}
+			err = __put_user(f->cmos, &((struct floppy_drive_params32 *)arg)->cmos);
+			err |= __put_user(f->max_dtr, &((struct floppy_drive_params32 *)arg)->max_dtr);
+			err |= __put_user(f->hlt, &((struct floppy_drive_params32 *)arg)->hlt);
+			err |= __put_user(f->hut, &((struct floppy_drive_params32 *)arg)->hut);
+			err |= __put_user(f->srt, &((struct floppy_drive_params32 *)arg)->srt);
+			err |= __put_user(f->spinup, &((struct floppy_drive_params32 *)arg)->spinup);
+			err |= __put_user(f->spindown, &((struct floppy_drive_params32 *)arg)->spindown);
+			err |= __put_user(f->spindown_offset, &((struct floppy_drive_params32 *)arg)->spindown_offset);
+			err |= __put_user(f->select_delay, &((struct floppy_drive_params32 *)arg)->select_delay);
+			err |= __put_user(f->rps, &((struct floppy_drive_params32 *)arg)->rps);
+			err |= __put_user(f->tracks, &((struct floppy_drive_params32 *)arg)->tracks);
+			err |= __put_user(f->timeout, &((struct floppy_drive_params32 *)arg)->timeout);
+			err |= __put_user(f->interleave_sect, &((struct floppy_drive_params32 *)arg)->interleave_sect);
+			err |= __copy_to_user(&((struct floppy_drive_params32 *)arg)->max_errors, &f->max_errors, sizeof(f->max_errors));
+			err |= __put_user(f->flags, &((struct floppy_drive_params32 *)arg)->flags);
+			err |= __put_user(f->read_track, &((struct floppy_drive_params32 *)arg)->read_track);
+			err |= __copy_to_user(((struct floppy_drive_params32 *)arg)->autodetect, f->autodetect, sizeof(f->autodetect));
+			err |= __put_user(f->checkfreq, &((struct floppy_drive_params32 *)arg)->checkfreq);
+			err |= __put_user(f->native_format, &((struct floppy_drive_params32 *)arg)->native_format);
 			break;
 		}
 		case FDGETDRVSTAT32:
@@ -899,66 +868,57 @@ static int fd_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
 		{
 			struct floppy_drive_struct *f = karg;
 
-			if (__put_user(f->flags, &((struct floppy_drive_struct32 *)A(arg))->flags) ||
-			    __put_user(f->spinup_date, &((struct floppy_drive_struct32 *)A(arg))->spinup_date) ||
-			    __put_user(f->select_date, &((struct floppy_drive_struct32 *)A(arg))->select_date) ||
-			    __put_user(f->first_read_date, &((struct floppy_drive_struct32 *)A(arg))->first_read_date) ||
-			    __put_user(f->probed_format, &((struct floppy_drive_struct32 *)A(arg))->probed_format) ||
-			    __put_user(f->track, &((struct floppy_drive_struct32 *)A(arg))->track) ||
-			    __put_user(f->maxblock, &((struct floppy_drive_struct32 *)A(arg))->maxblock) ||
-			    __put_user(f->maxtrack, &((struct floppy_drive_struct32 *)A(arg))->maxtrack) ||
-			    __put_user(f->generation, &((struct floppy_drive_struct32 *)A(arg))->generation) ||
-			    __put_user(f->keep_data, &((struct floppy_drive_struct32 *)A(arg))->keep_data) ||
-			    __put_user(f->fd_ref, &((struct floppy_drive_struct32 *)A(arg))->fd_ref) ||
-			    __put_user(f->fd_device, &((struct floppy_drive_struct32 *)A(arg))->fd_device) ||
-			    __put_user(f->last_checked, &((struct floppy_drive_struct32 *)A(arg))->last_checked) ||
-			    __put_user((u64)f->dmabuf, &((struct floppy_drive_struct32 *)A(arg))->dmabuf) ||
-			    __put_user((u64)f->bufblocks, &((struct floppy_drive_struct32 *)A(arg))->bufblocks)) {
-				kfree(karg);
-				return -EFAULT;
-			}
+			err = __put_user(f->flags, &((struct floppy_drive_struct32 *)arg)->flags);
+			err |= __put_user(f->spinup_date, &((struct floppy_drive_struct32 *)arg)->spinup_date);
+			err |= __put_user(f->select_date, &((struct floppy_drive_struct32 *)arg)->select_date);
+			err |= __put_user(f->first_read_date, &((struct floppy_drive_struct32 *)arg)->first_read_date);
+			err |= __put_user(f->probed_format, &((struct floppy_drive_struct32 *)arg)->probed_format);
+			err |= __put_user(f->track, &((struct floppy_drive_struct32 *)arg)->track);
+			err |= __put_user(f->maxblock, &((struct floppy_drive_struct32 *)arg)->maxblock);
+			err |= __put_user(f->maxtrack, &((struct floppy_drive_struct32 *)arg)->maxtrack);
+			err |= __put_user(f->generation, &((struct floppy_drive_struct32 *)arg)->generation);
+			err |= __put_user(f->keep_data, &((struct floppy_drive_struct32 *)arg)->keep_data);
+			err |= __put_user(f->fd_ref, &((struct floppy_drive_struct32 *)arg)->fd_ref);
+			err |= __put_user(f->fd_device, &((struct floppy_drive_struct32 *)arg)->fd_device);
+			err |= __put_user(f->last_checked, &((struct floppy_drive_struct32 *)arg)->last_checked);
+			err |= __put_user((u64)f->dmabuf, &((struct floppy_drive_struct32 *)arg)->dmabuf);
+			err |= __put_user((u64)f->bufblocks, &((struct floppy_drive_struct32 *)arg)->bufblocks);
 			break;
 		}
 		case FDGETFDCSTAT32:
 		{
 			struct floppy_fdc_state *f = karg;
 
-			if (__put_user(f->spec1, &((struct floppy_fdc_state32 *)A(arg))->spec1) ||
-			    __put_user(f->spec2, &((struct floppy_fdc_state32 *)A(arg))->spec2) ||
-			    __put_user(f->dtr, &((struct floppy_fdc_state32 *)A(arg))->dtr) ||
-			    __put_user(f->version, &((struct floppy_fdc_state32 *)A(arg))->version) ||
-			    __put_user(f->dor, &((struct floppy_fdc_state32 *)A(arg))->dor) ||
-			    __put_user(f->address, &((struct floppy_fdc_state32 *)A(arg))->address) ||
-			    __copy_to_user((char *)&((struct floppy_fdc_state32 *)A(arg))->address
-			    		   + sizeof(((struct floppy_fdc_state32 *)A(arg))->address),
-					   (char *)&f->address + sizeof(f->address), sizeof(int)) ||
-			    __put_user(f->driver_version, &((struct floppy_fdc_state32 *)A(arg))->driver_version) ||
-			    __copy_to_user(((struct floppy_fdc_state32 *)A(arg))->track, f->track, sizeof(f->track))) {
-				kfree(karg);
-				return -EFAULT;
-			}
+			err = __put_user(f->spec1, &((struct floppy_fdc_state32 *)arg)->spec1);
+			err |= __put_user(f->spec2, &((struct floppy_fdc_state32 *)arg)->spec2);
+			err |= __put_user(f->dtr, &((struct floppy_fdc_state32 *)arg)->dtr);
+			err |= __put_user(f->version, &((struct floppy_fdc_state32 *)arg)->version);
+			err |= __put_user(f->dor, &((struct floppy_fdc_state32 *)arg)->dor);
+			err |= __put_user(f->address, &((struct floppy_fdc_state32 *)arg)->address);
+			err |= __copy_to_user((char *)&((struct floppy_fdc_state32 *)arg)->address
+			    		   + sizeof(((struct floppy_fdc_state32 *)arg)->address),
+					   (char *)&f->address + sizeof(f->address), sizeof(int));
+			err |= __put_user(f->driver_version, &((struct floppy_fdc_state32 *)arg)->driver_version);
+			err |= __copy_to_user(((struct floppy_fdc_state32 *)arg)->track, f->track, sizeof(f->track));
 			break;
 		}
 		case FDWERRORGET32:
 		{
 			struct floppy_write_errors *f = karg;
 
-			if (__put_user(f->write_errors, &((struct floppy_write_errors32 *)A(arg))->write_errors) ||
-			    __put_user(f->first_error_sector, &((struct floppy_write_errors32 *)A(arg))->first_error_sector) ||
-			    __put_user(f->first_error_generation, &((struct floppy_write_errors32 *)A(arg))->first_error_generation) ||
-			    __put_user(f->last_error_sector, &((struct floppy_write_errors32 *)A(arg))->last_error_sector) ||
-			    __put_user(f->last_error_generation, &((struct floppy_write_errors32 *)A(arg))->last_error_generation) ||
-			    __put_user(f->badness, &((struct floppy_write_errors32 *)A(arg))->badness)) {
-				kfree(karg);
-				return -EFAULT;
-			}
+			err = __put_user(f->write_errors, &((struct floppy_write_errors32 *)arg)->write_errors);
+			err |= __put_user(f->first_error_sector, &((struct floppy_write_errors32 *)arg)->first_error_sector);
+			err |= __put_user(f->first_error_generation, &((struct floppy_write_errors32 *)arg)->first_error_generation);
+			err |= __put_user(f->last_error_sector, &((struct floppy_write_errors32 *)arg)->last_error_sector);
+			err |= __put_user(f->last_error_generation, &((struct floppy_write_errors32 *)arg)->last_error_generation);
+			err |= __put_user(f->badness, &((struct floppy_write_errors32 *)arg)->badness);
 			break;
 		}
 		default:
 			break;
 	}
-	kfree(karg);
-	return 0;
+out:	if (karg) kfree(karg);
+	return err;
 }
 
 struct ppp_option_data32 {
@@ -974,7 +934,7 @@ struct ppp_idle32 {
 };
 #define PPPIOCGIDLE32		_IOR('t', 63, struct ppp_idle32)
 
-static int ppp_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
+static int ppp_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	mm_segment_t old_fs = get_fs();
 	struct ppp_option_data32 data32;
@@ -991,7 +951,7 @@ static int ppp_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
 		karg = &idle;
 		break;
 	case PPPIOCSCOMPRESS32:
-		if (copy_from_user(&data32, (struct ppp_option_data32 *)A(arg), sizeof(struct ppp_option_data32)))
+		if (copy_from_user(&data32, (struct ppp_option_data32 *)arg, sizeof(struct ppp_option_data32)))
 			return -EFAULT;
 		data.ptr = kmalloc (data32.length, GFP_KERNEL);
 		if (!data.ptr)
@@ -1006,8 +966,13 @@ static int ppp_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
 		karg = &data;
 		break;
 	default:
-		printk("ppp_ioctl: Unknown cmd fd(%d) cmd(%08x) arg(%08x)\n",
-		       (int)fd, (unsigned int)cmd, (unsigned int)arg);
+		do {
+			static int count = 0;
+			if (++count <= 20)
+				printk("ppp_ioctl: Unknown cmd fd(%d) "
+				       "cmd(%08x) arg(%08x)\n",
+				       (int)fd, (unsigned int)cmd, (unsigned int)arg);
+		} while(0);
 		return -EINVAL;
 	}
 	set_fs (KERNEL_DS);
@@ -1019,7 +984,7 @@ static int ppp_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
 			return err;
 		idle32.xmit_idle = idle.xmit_idle;
 		idle32.recv_idle = idle.recv_idle;
-		if (copy_to_user((struct ppp_idle32 *)A(arg), &idle32, sizeof(struct ppp_idle32)))
+		if (copy_to_user((struct ppp_idle32 *)arg, &idle32, sizeof(struct ppp_idle32)))
 			return -EFAULT;
 		break;
 	case PPPIOCSCOMPRESS32:
@@ -1072,7 +1037,7 @@ struct mtconfiginfo32 {
 #define	MTIOCGETCONFIG32	_IOR('m', 4, struct mtconfiginfo32)
 #define	MTIOCSETCONFIG32	_IOW('m', 5, struct mtconfiginfo32)
 
-static int mt_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
+static int mt_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	mm_segment_t old_fs = get_fs();
 	struct mtconfiginfo info;
@@ -1098,21 +1063,26 @@ static int mt_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
 	case MTIOCSETCONFIG32:
 		kcmd = MTIOCSETCONFIG;
 		karg = &info;
-		if (__get_user(info.mt_type, &((struct mtconfiginfo32 *)A(arg))->mt_type) ||
-		    __get_user(info.ifc_type, &((struct mtconfiginfo32 *)A(arg))->ifc_type) ||
-		    __get_user(info.irqnr, &((struct mtconfiginfo32 *)A(arg))->irqnr) ||
-		    __get_user(info.dmanr, &((struct mtconfiginfo32 *)A(arg))->dmanr) ||
-		    __get_user(info.port, &((struct mtconfiginfo32 *)A(arg))->port) ||
-		    __get_user(info.debug, &((struct mtconfiginfo32 *)A(arg))->debug) ||
-		    __copy_from_user((char *)&info.debug + sizeof(info.debug),
-				     (char *)&((struct mtconfiginfo32 *)A(arg))->debug
-			    		     + sizeof(((struct mtconfiginfo32 *)A(arg))->debug),
-				     sizeof(__u32)))
+		err = __get_user(info.mt_type, &((struct mtconfiginfo32 *)arg)->mt_type);
+		err |= __get_user(info.ifc_type, &((struct mtconfiginfo32 *)arg)->ifc_type);
+		err |= __get_user(info.irqnr, &((struct mtconfiginfo32 *)arg)->irqnr);
+		err |= __get_user(info.dmanr, &((struct mtconfiginfo32 *)arg)->dmanr);
+		err |= __get_user(info.port, &((struct mtconfiginfo32 *)arg)->port);
+		err |= __get_user(info.debug, &((struct mtconfiginfo32 *)arg)->debug);
+		err |= __copy_from_user((char *)&info.debug + sizeof(info.debug),
+				     (char *)&((struct mtconfiginfo32 *)arg)->debug
+				     + sizeof(((struct mtconfiginfo32 *)arg)->debug), sizeof(__u32));
+		if (err)
 			return -EFAULT;
 		break;
 	default:
-		printk("mt_ioctl: Unknown cmd fd(%d) cmd(%08x) arg(%08x)\n",
-		       (int)fd, (unsigned int)cmd, (unsigned int)arg);
+		do {
+			static int count = 0;
+			if (++count <= 20)
+				printk("mt_ioctl: Unknown cmd fd(%d) "
+				       "cmd(%08x) arg(%08x)\n",
+				       (int)fd, (unsigned int)cmd, (unsigned int)arg);
+		} while(0);
 		return -EINVAL;
 	}
 	set_fs (KERNEL_DS);
@@ -1122,35 +1092,33 @@ static int mt_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
 		return err;
 	switch (cmd) {
 	case MTIOCPOS32:
-		if (__put_user(pos.mt_blkno, &((struct mtpos32 *)A(arg))->mt_blkno))
+		if (__put_user(pos.mt_blkno, &((struct mtpos32 *)arg)->mt_blkno))
 			return -EFAULT;
 		break;
 	case MTIOCGET32:
-		if (__put_user(get.mt_type, &((struct mtget32 *)A(arg))->mt_type) ||
-		    __put_user(get.mt_resid, &((struct mtget32 *)A(arg))->mt_resid) ||
-		    __put_user(get.mt_dsreg, &((struct mtget32 *)A(arg))->mt_dsreg) ||
-		    __put_user(get.mt_gstat, &((struct mtget32 *)A(arg))->mt_gstat) ||
-		    __put_user(get.mt_erreg, &((struct mtget32 *)A(arg))->mt_erreg) ||
-		    __put_user(get.mt_fileno, &((struct mtget32 *)A(arg))->mt_fileno) ||
-		    __put_user(get.mt_blkno, &((struct mtget32 *)A(arg))->mt_blkno))
-			return -EFAULT;
+		err = __put_user(get.mt_type, &((struct mtget32 *)arg)->mt_type);
+		err |= __put_user(get.mt_resid, &((struct mtget32 *)arg)->mt_resid);
+		err |= __put_user(get.mt_dsreg, &((struct mtget32 *)arg)->mt_dsreg);
+		err |= __put_user(get.mt_gstat, &((struct mtget32 *)arg)->mt_gstat);
+		err |= __put_user(get.mt_erreg, &((struct mtget32 *)arg)->mt_erreg);
+		err |= __put_user(get.mt_fileno, &((struct mtget32 *)arg)->mt_fileno);
+		err |= __put_user(get.mt_blkno, &((struct mtget32 *)arg)->mt_blkno);
 		break;
 	case MTIOCGETCONFIG32:
-		if (__put_user(info.mt_type, &((struct mtconfiginfo32 *)A(arg))->mt_type) ||
-		    __put_user(info.ifc_type, &((struct mtconfiginfo32 *)A(arg))->ifc_type) ||
-		    __put_user(info.irqnr, &((struct mtconfiginfo32 *)A(arg))->irqnr) ||
-		    __put_user(info.dmanr, &((struct mtconfiginfo32 *)A(arg))->dmanr) ||
-		    __put_user(info.port, &((struct mtconfiginfo32 *)A(arg))->port) ||
-		    __put_user(info.debug, &((struct mtconfiginfo32 *)A(arg))->debug) ||
-		    __copy_to_user((char *)&((struct mtconfiginfo32 *)A(arg))->debug
-			    		   + sizeof(((struct mtconfiginfo32 *)A(arg))->debug),
-					   (char *)&info.debug + sizeof(info.debug), sizeof(__u32)))
-			return -EFAULT;
+		err = __put_user(info.mt_type, &((struct mtconfiginfo32 *)arg)->mt_type);
+		err |= __put_user(info.ifc_type, &((struct mtconfiginfo32 *)arg)->ifc_type);
+		err |= __put_user(info.irqnr, &((struct mtconfiginfo32 *)arg)->irqnr);
+		err |= __put_user(info.dmanr, &((struct mtconfiginfo32 *)arg)->dmanr);
+		err |= __put_user(info.port, &((struct mtconfiginfo32 *)arg)->port);
+		err |= __put_user(info.debug, &((struct mtconfiginfo32 *)arg)->debug);
+		err |= __copy_to_user((char *)&((struct mtconfiginfo32 *)arg)->debug
+			    		   + sizeof(((struct mtconfiginfo32 *)arg)->debug),
+					   (char *)&info.debug + sizeof(info.debug), sizeof(__u32));
 		break;
 	case MTIOCSETCONFIG32:
 		break;
 	}
-	return 0;
+	return err;
 }
 
 struct cdrom_read32 {
@@ -1166,7 +1134,7 @@ struct cdrom_read_audio32 {
 	__kernel_caddr_t32	buf;
 };
 
-static int cdrom_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
+static int cdrom_ioctl_trans(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	mm_segment_t old_fs = get_fs();
 	struct cdrom_read cdread;
@@ -1182,9 +1150,10 @@ static int cdrom_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
 	case CDROMREADRAW:
 	case CDROMREADCOOKED:
 		karg = &cdread;
-		if (__get_user(cdread.cdread_lba, &((struct cdrom_read32 *)A(arg))->cdread_lba) ||
-		    __get_user(addr, &((struct cdrom_read32 *)A(arg))->cdread_bufaddr) ||
-		    __get_user(cdread.cdread_buflen, &((struct cdrom_read32 *)A(arg))->cdread_buflen))
+		err = __get_user(cdread.cdread_lba, &((struct cdrom_read32 *)arg)->cdread_lba);
+		err |= __get_user(addr, &((struct cdrom_read32 *)arg)->cdread_bufaddr);
+		err |= __get_user(cdread.cdread_buflen, &((struct cdrom_read32 *)arg)->cdread_buflen);
+		if (err)
 			return -EFAULT;
 		data = kmalloc(cdread.cdread_buflen, GFP_KERNEL);
 		if (!data)
@@ -1193,10 +1162,11 @@ static int cdrom_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
 		break;
 	case CDROMREADAUDIO:
 		karg = &cdreadaudio;
-		if (copy_from_user(&cdreadaudio.addr, &((struct cdrom_read_audio32 *)A(arg))->addr, sizeof(cdreadaudio.addr)) ||
-		    __get_user(cdreadaudio.addr_format, &((struct cdrom_read_audio32 *)A(arg))->addr_format) ||
-		    __get_user(cdreadaudio.nframes, &((struct cdrom_read_audio32 *)A(arg))->nframes) || 
-		    __get_user(addr, &((struct cdrom_read_audio32 *)A(arg))->buf))
+		err = copy_from_user(&cdreadaudio.addr, &((struct cdrom_read_audio32 *)arg)->addr, sizeof(cdreadaudio.addr));
+		err |= __get_user(cdreadaudio.addr_format, &((struct cdrom_read_audio32 *)arg)->addr_format);
+		err |= __get_user(cdreadaudio.nframes, &((struct cdrom_read_audio32 *)arg)->nframes); 
+		err |= __get_user(addr, &((struct cdrom_read_audio32 *)arg)->buf);
+		if (err)
 			return -EFAULT;
 		data = kmalloc(cdreadaudio.nframes * 2352, GFP_KERNEL);
 		if (!data)
@@ -1204,38 +1174,35 @@ static int cdrom_ioctl_trans(unsigned int fd, unsigned int cmd, u32 arg)
 		cdreadaudio.buf = data;
 		break;
 	default:
-		printk("cdrom_ioctl: Unknown cmd fd(%d) cmd(%08x) arg(%08x)\n",
-		       (int)fd, (unsigned int)cmd, (unsigned int)arg);
+		do {
+			static int count = 0;
+			if (++count <= 20)
+				printk("cdrom_ioctl: Unknown cmd fd(%d) "
+				       "cmd(%08x) arg(%08x)\n",
+				       (int)fd, (unsigned int)cmd, (unsigned int)arg);
+		} while(0);
 		return -EINVAL;
 	}
 	set_fs (KERNEL_DS);
 	err = sys_ioctl (fd, cmd, (unsigned long)karg);
 	set_fs (old_fs);
-	if (err) {
-		if (data) kfree(data);
-		return err;
-	}
+	if (err)
+		goto out;
 	switch (cmd) {
 	case CDROMREADMODE2:
 	case CDROMREADMODE1:
 	case CDROMREADRAW:
 	case CDROMREADCOOKED:
-		if (copy_to_user((char *)A(addr), data, cdread.cdread_buflen)) {
-			kfree(data);
-			return -EFAULT;
-		}
+		err = copy_to_user((char *)A(addr), data, cdread.cdread_buflen);
 		break;
 	case CDROMREADAUDIO:
-		if (copy_to_user((char *)A(addr), data, cdreadaudio.nframes * 2352)) {
-			kfree(data);
-			return -EFAULT;
-		}
+		err = copy_to_user((char *)A(addr), data, cdreadaudio.nframes * 2352);
 		break;
 	default:
 		break;
 	}
-	if (data) kfree(data);
-	return 0;
+out:	if (data) kfree(data);
+	return err;
 }
 
 struct loop_info32 {
@@ -1253,7 +1220,7 @@ struct loop_info32 {
 	char			reserved[4];
 };
 
-static int loop_status(unsigned int fd, unsigned int cmd, u32 arg)
+static int loop_status(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	mm_segment_t old_fs = get_fs();
 	struct loop_info l;
@@ -1261,12 +1228,13 @@ static int loop_status(unsigned int fd, unsigned int cmd, u32 arg)
 
 	switch(cmd) {
 	case LOOP_SET_STATUS:
-		if ((get_user(l.lo_number, &((struct loop_info32 *)A(arg))->lo_number) ||
-		     __get_user(l.lo_device, &((struct loop_info32 *)A(arg))->lo_device) ||
-		     __get_user(l.lo_inode, &((struct loop_info32 *)A(arg))->lo_inode) ||
-		     __get_user(l.lo_rdevice, &((struct loop_info32 *)A(arg))->lo_rdevice) ||
-		     __copy_from_user((char *)&l.lo_offset, (char *)&((struct loop_info32 *)A(arg))->lo_offset,
-					   8 + (unsigned long)l.lo_init - (unsigned long)&l.lo_offset)))
+		err = get_user(l.lo_number, &((struct loop_info32 *)arg)->lo_number);
+		err |= __get_user(l.lo_device, &((struct loop_info32 *)arg)->lo_device);
+		err |= __get_user(l.lo_inode, &((struct loop_info32 *)arg)->lo_inode);
+		err |= __get_user(l.lo_rdevice, &((struct loop_info32 *)arg)->lo_rdevice);
+		err |= __copy_from_user((char *)&l.lo_offset, (char *)&((struct loop_info32 *)arg)->lo_offset,
+					   8 + (unsigned long)l.lo_init - (unsigned long)&l.lo_offset);
+		if (err)
 			return -EFAULT;
 		set_fs (KERNEL_DS);
 		err = sys_ioctl (fd, cmd, (unsigned long)&l);
@@ -1276,14 +1244,14 @@ static int loop_status(unsigned int fd, unsigned int cmd, u32 arg)
 		set_fs (KERNEL_DS);
 		err = sys_ioctl (fd, cmd, (unsigned long)&l);
 		set_fs (old_fs);
-		if (!err && 
-		    (put_user(l.lo_number, &((struct loop_info32 *)A(arg))->lo_number) ||
-		     __put_user(l.lo_device, &((struct loop_info32 *)A(arg))->lo_device) ||
-		     __put_user(l.lo_inode, &((struct loop_info32 *)A(arg))->lo_inode) ||
-		     __put_user(l.lo_rdevice, &((struct loop_info32 *)A(arg))->lo_rdevice) ||
-		     __copy_to_user((char *)&((struct loop_info32 *)A(arg))->lo_offset,
-					   (char *)&l.lo_offset, (unsigned long)l.lo_init - (unsigned long)&l.lo_offset)))
-			err = -EFAULT;
+		if (!err) {
+			err = put_user(l.lo_number, &((struct loop_info32 *)arg)->lo_number);
+			err |= __put_user(l.lo_device, &((struct loop_info32 *)arg)->lo_device);
+			err |= __put_user(l.lo_inode, &((struct loop_info32 *)arg)->lo_inode);
+			err |= __put_user(l.lo_rdevice, &((struct loop_info32 *)arg)->lo_rdevice);
+			err |= __copy_to_user((char *)&((struct loop_info32 *)arg)->lo_offset,
+					   (char *)&l.lo_offset, (unsigned long)l.lo_init - (unsigned long)&l.lo_offset);
+		}
 		break;
 	}
 	return err;
@@ -1422,7 +1390,7 @@ static int do_unimap_ioctl(struct file *file, int cmd, struct unimapdesc32 *user
 	return 0;
 }
 
-asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
+asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 {
 	struct file * filp;
 	int error = -EBADF;
@@ -1433,7 +1401,7 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 		goto out;
 
 	if (!filp->f_op || !filp->f_op->ioctl) {
-		error = sys_ioctl (fd, cmd, (unsigned long)arg);
+		error = sys_ioctl (fd, cmd, arg);
 		goto out;
 	}
 	switch (cmd) {
@@ -1535,7 +1503,7 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case FDPOLLDRVSTAT32:
 	case FDGETFDCSTAT32:
 	case FDWERRORGET32:
-		error = fd_ioctl_trans(fd, cmd, (unsigned long)arg);
+		error = fd_ioctl_trans(fd, cmd, arg);
 		goto out;
 
 	case PPPIOCGIDLE32:
@@ -1570,16 +1538,16 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 		
 	case PIO_FONTX:
 	case GIO_FONTX:
-		error = do_fontx_ioctl(filp, cmd, (struct consolefontdesc32 *)A(arg));
+		error = do_fontx_ioctl(filp, cmd, (struct consolefontdesc32 *)arg);
 		goto out;
 		
 	case PIO_UNIMAP:
 	case GIO_UNIMAP:
-		error = do_unimap_ioctl(filp, cmd, (struct unimapdesc32 *)A(arg));
+		error = do_unimap_ioctl(filp, cmd, (struct unimapdesc32 *)arg);
 		goto out;
 
 	case KDFONTOP:
-		error = do_kdfontop_ioctl(filp, (struct console_font_op32 *)A(arg));
+		error = do_kdfontop_ioctl(filp, (struct console_font_op32 *)arg);
 		goto out;
 		
 	/* List here exlicitly which ioctl's are known to have
@@ -1822,6 +1790,13 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case SIOCDRARP:
 	case SIOCADDDLCI:
 	case SIOCDELDLCI:
+	
+	/* SG stuff */
+	case SG_SET_TIMEOUT:
+	case SG_GET_TIMEOUT:
+	case SG_EMULATED_HOST:
+	case SG_SET_TRANSFORM:
+	case SG_GET_TRANSFORM:
 
 	/* PPP stuff */
 	case PPPIOCGFLAGS:
@@ -1890,12 +1865,17 @@ asmlinkage int sys32_ioctl(unsigned int fd, unsigned int cmd, u32 arg)
 	case AUTOFS_IOC_PROTOVER:
 	case AUTOFS_IOC_EXPIRE:
 
-		error = sys_ioctl (fd, cmd, (unsigned long)arg);
+		error = sys_ioctl (fd, cmd, arg);
 		goto out;
 
 	default:
-		printk("sys32_ioctl: Unknown cmd fd(%d) cmd(%08x) arg(%08x)\n",
-		       (int)fd, (unsigned int)cmd, (unsigned int)arg);
+		do {
+			static int count = 0;
+			if (++count <= 20)
+				printk("sys32_ioctl: Unknown cmd fd(%d) "
+				       "cmd(%08x) arg(%08x)\n",
+				       (int)fd, (unsigned int)cmd, (unsigned int)arg);
+		} while(0);
 		error = -EINVAL;
 		break;
 	}

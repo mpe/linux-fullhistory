@@ -73,10 +73,6 @@ static struct sun_floppy_ops sun_fdops;
 
 #define FLOPPY_MOTOR_MASK         0x10
 
-/* It's all the same... */
-#define virt_to_bus(x)            (x)
-#define bus_to_virt(x)            (x)
-
 /* XXX This isn't really correct. XXX */
 #define get_dma_residue(x)        (0)
 
@@ -320,6 +316,8 @@ static int sun_floppy_init(void)
 								"floppy",
 								fd_regs[0].which_io,
 								0x0);
+	release_region((long)sun_fdc & PAGE_MASK, 
+		       (((long)sun_fdc & ~PAGE_MASK) + fd_regs[0].reg_size + PAGE_SIZE - 1) & PAGE_MASK);
 	/* Last minute sanity check... */
 	if(sun_fdc->status_82072 == 0xff) {
 		sun_fdc = NULL;

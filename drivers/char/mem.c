@@ -44,6 +44,12 @@ extern int videodev_init(void);
 #ifdef CONFIG_FB
 extern void fbmem_init(void);
 #endif
+#ifdef CONFIG_PROM_CONSOLE
+extern void prom_con_init(void);
+#endif
+#ifdef CONFIG_MDA_CONSOLE
+extern void mda_console_init(void);
+#endif
 
 static ssize_t do_write_mem(struct file * file, void *p, unsigned long realp,
 			    const char * buf, size_t count, loff_t *ppos)
@@ -544,6 +550,12 @@ __initfunc(int chr_dev_init(void))
 	rand_initialize();
 #if defined (CONFIG_FB)
 	fbmem_init();
+#endif
+#if defined (CONFIG_PROM_CONSOLE)
+	prom_con_init();
+#endif
+#if defined (CONFIG_MDA_CONSOLE)
+	mda_console_init();
 #endif
 	tty_init();
 #ifdef CONFIG_PRINTER

@@ -6,7 +6,7 @@
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *	Alexey Kuznetsov	<kuznet@ms2.inr.ac.ru>
  *
- *	$Id: sit.c,v 1.28 1998/08/26 12:05:22 davem Exp $
+ *	$Id: sit.c,v 1.29 1998/10/03 09:38:47 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -434,21 +434,21 @@ static int ipip6_tunnel_xmit(struct sk_buff *skb, struct device *dev)
 		ip_rt_put(rt);
 		goto tx_error;
 	}
-	if (mtu >= IPV6_MIN_MTU) {
-		if (skb->dst && mtu < skb->dst->pmtu) {
-			struct rt6_info *rt6 = (struct rt6_info*)skb->dst;
-			if (mtu < rt6->u.dst.pmtu) {
-				if (tunnel->parms.iph.daddr || rt6->rt6i_dst.plen == 128) {
-					rt6->rt6i_flags |= RTF_MODIFIED;
-					rt6->u.dst.pmtu = mtu;
-				}
+	if (mtu < IPV6_MIN_MTU)
+		mtu = IPV6_MIN_MTU;
+	if (skb->dst && mtu < skb->dst->pmtu) {
+		struct rt6_info *rt6 = (struct rt6_info*)skb->dst;
+		if (mtu < rt6->u.dst.pmtu) {
+			if (tunnel->parms.iph.daddr || rt6->rt6i_dst.plen == 128) {
+				rt6->rt6i_flags |= RTF_MODIFIED;
+				rt6->u.dst.pmtu = mtu;
 			}
 		}
-		if (skb->len > mtu) {
-			icmpv6_send(skb, ICMPV6_PKT_TOOBIG, 0, mtu, dev);
-			ip_rt_put(rt);
-			goto tx_error;
-		}
+	}
+	if (skb->len > mtu) {
+		icmpv6_send(skb, ICMPV6_PKT_TOOBIG, 0, mtu, dev);
+		ip_rt_put(rt);
+		goto tx_error;
 	}
 
 	if (tunnel->err_count > 0) {
@@ -554,6 +554,10 @@ ipip6_tunnel_ioctl (struct device *dev, struct ifreq *ifr, int cmd)
 
 	case SIOCADDTUNNEL:
 	case SIOCCHGTUNNEL:
+		err = -EPERM;
+		if (!capable(CAP_NET_ADMIN))
+			goto done;
+
 		err = -EFAULT;
 		if (copy_from_user(&p, ifr->ifr_ifru.ifru_data, sizeof(p)))
 			goto done;
@@ -580,6 +584,10 @@ ipip6_tunnel_ioctl (struct device *dev, struct ifreq *ifr, int cmd)
 		break;
 
 	case SIOCDELTUNNEL:
+		err = -EPERM;
+		if (!capable(CAP_NET_ADMIN))
+			goto done;
+
 		if (dev == &ipip6_fb_tunnel_dev) {
 			err = -EFAULT;
 			if (copy_from_user(&p, ifr->ifr_ifru.ifru_data, sizeof(p)))

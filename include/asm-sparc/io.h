@@ -1,4 +1,4 @@
-/* $Id: io.h,v 1.15 1998/01/30 10:59:51 jj Exp $ */
+/* $Id: io.h,v 1.18 1998/09/21 05:07:17 jj Exp $ */
 #ifndef __SPARC_IO_H
 #define __SPARC_IO_H
 
@@ -15,77 +15,84 @@
  * space only works on sun4's
  */
 
-extern __inline__ unsigned long inb_local(unsigned long addr)
-{
-	return 0;
+#define virt_to_bus virt_to_phys
+
+extern __inline__ unsigned  flip_dword (unsigned d) {
+        return ((d&0xff)<<24) | (((d>>8)&0xff)<<16) | (((d>>16)&0xff)<<8)| ((d>>24)&0xff);
 }
 
-extern __inline__ void outb_local(unsigned char b, unsigned long addr)
-{
-	return;
+extern __inline__ unsigned short flip_word (unsigned short d) {
+        return ((d&0xff) << 8) | ((d>>8)&0xff);
 }
 
-extern __inline__ unsigned long inb(unsigned long addr)
-{
-	return 0;
-}
-
-extern __inline__ unsigned long inw(unsigned long addr)
-{
-	return 0;
-}
-
-extern __inline__ unsigned long inl(unsigned long addr)
-{
-	return 0;
-}
-
-extern __inline__ void outb(unsigned char b, unsigned long addr)
-{
-	return;
-}
-
-extern __inline__ void outw(unsigned short b, unsigned long addr)
-{
-	return;
-}
-
-extern __inline__ void outl(unsigned int b, unsigned long addr)
-{
-	return;
-}
-
-/*
- * Memory functions
- */
 extern __inline__ unsigned long readb(unsigned long addr)
 {
-	return 0;
+       return *(volatile unsigned char*)addr;
 }
 
 extern __inline__ unsigned long readw(unsigned long addr)
 {
-	return 0;
+       return flip_word(*(volatile unsigned short*)addr);
 }
 
 extern __inline__ unsigned long readl(unsigned long addr)
 {
-	return 0;
+       return flip_dword(*(volatile unsigned long*)addr);
 }
 
 extern __inline__ void writeb(unsigned short b, unsigned long addr)
 {
-	return;
+       *(volatile unsigned char*)addr = b;
 }
 
 extern __inline__ void writew(unsigned short b, unsigned long addr)
 {
-	return;
+       *(volatile unsigned short*)addr = flip_word(b);
 }
 
 extern __inline__ void writel(unsigned int b, unsigned long addr)
 {
-	return;
+        *(volatile unsigned long*)addr = flip_dword(b);
+}
+
+extern __inline__ unsigned long inb_local(unsigned long addr)
+{
+       return readb(addr);
+}
+
+extern __inline__ void outb_local(unsigned char b, unsigned long addr)
+{
+       return writeb(b,addr);
+}
+
+extern __inline__ unsigned long inb(unsigned long addr)
+{
+       return readb(addr);
+}
+
+extern __inline__ unsigned long inw(unsigned long addr)
+{
+       return readw(addr);
+}
+
+extern __inline__ unsigned long inl(unsigned long addr)
+{
+       return readl(addr);
+}
+
+extern __inline__ void outb(unsigned char b, unsigned long addr)
+{
+       return writeb(b,addr);
+}
+
+extern __inline__ void outw(unsigned short b, unsigned long addr)
+{
+       return writew(b,addr);
+}
+
+extern __inline__ void outl(unsigned int b, unsigned long addr)
+{
+       return writel(b,addr);
 }
 
 #define inb_p inb

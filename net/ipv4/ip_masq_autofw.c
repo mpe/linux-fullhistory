@@ -2,7 +2,7 @@
  *		IP_MASQ_AUTOFW auto forwarding module
  *
  *
- * Version:	@(#)ip_masq_autofw.c  0.02      97/10/22
+ * 	$Id: ip_masq_autofw.c,v 1.3 1998/08/29 23:51:10 davem Exp $
  *
  * Author:	Richard Lynch
  *
@@ -36,15 +36,34 @@
 #include <linux/ip_fw.h>
 #include <net/ip_masq.h>
 #include <net/ip_masq_mod.h>
-#include <net/ip_autofw.h>
+#include <linux/ip_masq.h>
+
+#define IP_AUTOFW_EXPIRE	     15*HZ
+
+/* WARNING: bitwise equal to ip_autofw_user  in linux/ip_masq.h */
+struct ip_autofw {
+	struct ip_autofw * next;
+	__u16 type;
+	__u16 low;
+	__u16 hidden;
+	__u16 high;
+	__u16 visible;
+	__u16 protocol;
+	__u32 lastcontact;
+	__u32 where;
+	__u16 ctlproto;
+	__u16 ctlport;
+	__u16 flags;
+	struct timer_list timer;
+};
 
 /*
  *	Debug level
  */
+#ifdef CONFIG_IP_MASQ_DEBUG
 static int debug=0;
-
-MODULE_PARM(ports, "1-" __MODULE_STRING(MAX_MASQ_APP_PORTS) "i");
 MODULE_PARM(debug, "i");
+#endif
 
 /*
  *	Auto-forwarding table
@@ -156,11 +175,11 @@ static __inline__ void ip_autofw_expire(unsigned long data)
 
 
 
-static __inline__ int ip_autofw_add(struct ip_autofw * af)
+static __inline__ int ip_autofw_add(struct ip_autofw_user * af)
 {
 	struct ip_autofw * newaf;
-	init_timer(&af->timer);
 	newaf = kmalloc( sizeof(struct ip_autofw), GFP_KERNEL );
+	init_timer(&newaf->timer);
 	if ( newaf == NULL ) 
 	{
 		printk("ip_autofw_add:  malloc said no\n");
@@ -169,7 +188,7 @@ static __inline__ int ip_autofw_add(struct ip_autofw * af)
 
 	MOD_INC_USE_COUNT;
 
-	memcpy(newaf, af, sizeof(struct ip_autofw));
+	memcpy(newaf, af, sizeof(struct ip_autofw_user));
 	newaf->timer.data = (unsigned long) newaf;
 	newaf->timer.function = ip_autofw_expire;
 	newaf->timer.expires = 0;
@@ -180,7 +199,7 @@ static __inline__ int ip_autofw_add(struct ip_autofw * af)
 	return(0);
 }
 
-static __inline__ int ip_autofw_del(struct ip_autofw * af)
+static __inline__ int ip_autofw_del(struct ip_autofw_user * af)
 {
 	struct ip_autofw ** af_p, *curr;
 
@@ -229,20 +248,21 @@ static __inline__ int ip_autofw_flush(void)
  *	Methods for registered object
  */
 
-static int autofw_ctl(int optname, struct ip_fw_masqctl *mctl, int optlen)
+static int autofw_ctl(int optname, struct ip_masq_ctl *mctl, int optlen)
 {
-	struct ip_autofw *af = (struct ip_autofw*) mctl->u.mod.data;
+	struct ip_autofw_user *af = &mctl->u.autofw_user;
 
-	switch (optname) {
-		case IP_FW_MASQ_ADD:
+	switch (mctl->m_cmd) {
+		case IP_MASQ_CMD_ADD:
+		case IP_MASQ_CMD_INSERT:
 			if (optlen<sizeof(*af))
 				return EINVAL;
 			return ip_autofw_add(af);
-		case IP_FW_MASQ_DEL:
+		case IP_MASQ_CMD_DEL:
 			if (optlen<sizeof(*af))
 				return EINVAL;
 			return ip_autofw_del(af);
-		case IP_FW_MASQ_FLUSH:
+		case IP_MASQ_CMD_FLUSH:
 			return ip_autofw_flush();
 
 	}
@@ -250,8 +270,9 @@ static int autofw_ctl(int optname, struct ip_fw_masqctl *mctl, int optlen)
 }
 
 
-static int autofw_out_update(struct iphdr *iph, __u16 *portp, struct ip_masq *ms)
+static int autofw_out_update(const struct sk_buff *skb, const struct iphdr *iph, struct ip_masq *ms)
 {
+	const __u16 *portp = (__u16 *)&(((char *)iph)[iph->ihl*4]);
 	/* 
 	 *	Update any ipautofw entries ...
 	 */
@@ -260,8 +281,9 @@ static int autofw_out_update(struct iphdr *iph, __u16 *portp, struct ip_masq *ms
 	return IP_MASQ_MOD_NOP;
 }
 
-static struct ip_masq * autofw_out_create(struct iphdr *iph, __u16 * portp, __u32 maddr)
+static struct ip_masq * autofw_out_create(const struct sk_buff *skb, const struct iphdr *iph, __u32 maddr)
 {
+	const __u16 *portp = (__u16 *)&(((char *)iph)[iph->ihl*4]);
 	/*
 	 *	If the source port is supposed to match the masq port, then
 	 *  	make it so 
@@ -278,22 +300,25 @@ static struct ip_masq * autofw_out_create(struct iphdr *iph, __u16 * portp, __u3
 }
 
 #if 0
-static int autofw_in_update(struct iphdr *iph, __u16 *portp, struct ip_masq *ms)
+static int autofw_in_update(const struct sk_buff *skb, const struct iphdr *iph, __u16 *portp, struct ip_masq *ms)
 {
+	const __u16 *portp = (__u16 *)&(((char *)iph)[iph->ihl*4]);
 	ip_autofw_update_in(iph->saddr, portp[1], iph->protocol);
 	return IP_MASQ_MOD_NOP;
 }
 #endif
 
-static int autofw_in_rule(struct iphdr *iph, __u16 *portp)
+static int autofw_in_rule(const struct sk_buff *skb, const struct iphdr *iph)
 {
+	const __u16 *portp = (__u16 *)&(((char *)iph)[iph->ihl*4]);
 	return (ip_autofw_check_range(iph->saddr, portp[1], iph->protocol, 0)
 		|| ip_autofw_check_direct(portp[1], iph->protocol)
 		|| ip_autofw_check_port(portp[1], iph->protocol));
 }
 
-static struct ip_masq * autofw_in_create(struct iphdr *iph, __u16 *portp, __u32 maddr)
+static struct ip_masq * autofw_in_create(const struct sk_buff *skb, const struct iphdr *iph, __u32 maddr)
 {
+	const __u16 *portp = (__u16 *)&(((char *)iph)[iph->ihl*4]);
 	struct ip_autofw *af;
 
         if ((af=ip_autofw_check_range(iph->saddr, portp[1], iph->protocol, 0))) {

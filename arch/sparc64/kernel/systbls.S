@@ -1,4 +1,4 @@
-/* $Id: systbls.S,v 1.47 1998/07/28 13:07:55 jj Exp $
+/* $Id: systbls.S,v 1.49 1998/09/13 04:30:32 davem Exp $
  * systbls.S: System call entry point tables for OS compatibility.
  *            The native Linux system call table lives here also.
  *
@@ -17,9 +17,9 @@
 
 	.globl sys_call_table32
 sys_call_table32:
-/*0*/	.word sys_setup, sparc_exit, sys_fork, sys_read, sys_write
+/*0*/	.word sys_nis_syscall, sparc_exit, sys_fork, sys_read, sys_write
 /*5*/	.word sys_open, sys_close, sys32_wait4, sys_creat, sys_link
-/*10*/  .word sys_unlink, sunos_execv, sys_chdir, sys_nis_syscall, sys32_mknod
+/*10*/  .word sys_unlink, sunos_execv, sys_chdir, sys32_chown, sys32_mknod
 /*15*/	.word sys32_chmod, sys32_lchown, sparc_brk, sys_nis_syscall, sys32_lseek
 /*20*/	.word sys_getpid, sys_capget, sys_capset, sys_setuid, sys_getuid
 /*25*/	.word sys_time, sys_ptrace, sys_alarm, sys32_sigaltstack, sys32_pause
@@ -76,9 +76,9 @@ sys_call_table32:
 	.globl sys_call_table64, sys_call_table
 sys_call_table64:
 sys_call_table:
-/*0*/	.word sys_setup, sparc_exit, sys_fork, sys_read, sys_write
+/*0*/	.word sys_nis_syscall, sparc_exit, sys_fork, sys_read, sys_write
 /*5*/	.word sys_open, sys_close, sys_wait4, sys_creat, sys_link
-/*10*/  .word sys_unlink, sunos_execv, sys_chdir, sys_nis_syscall, sys_mknod
+/*10*/  .word sys_unlink, sunos_execv, sys_chdir, sys_chown, sys_mknod
 /*15*/	.word sys_chmod, sys_lchown, sparc_brk, sys_nis_syscall, sys_lseek
 /*20*/	.word sys_getpid, sys_capget, sys_capset, sys_setuid, sys_getuid
 /*25*/	.word sys_time, sys_ptrace, sys_alarm, sys_sigaltstack, sys_nis_syscall

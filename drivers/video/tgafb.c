@@ -763,6 +763,7 @@ __initfunc(void tgafb_init(void))
     fb_info.switch_con = &tgafbcon_switch;
     fb_info.updatevar = &tgafbcon_updatevar;
     fb_info.blank = &tgafbcon_blank;
+    fb_info.flags = FBINFO_FLAG_DEFAULT;
 
     tgafb_set_var(&fb_var, -1, &fb_info);
 

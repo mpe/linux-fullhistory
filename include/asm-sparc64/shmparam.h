@@ -1,4 +1,4 @@
-/* $Id: shmparam.h,v 1.2 1997/08/04 16:16:55 davem Exp $ */
+/* $Id: shmparam.h,v 1.3 1998/09/28 07:15:03 jj Exp $ */
 #ifndef _ASMSPARC64_SHMPARAM_H
 #define _ASMSPARC64_SHMPARAM_H
 
@@ -36,7 +36,7 @@
  * SHMMAX <= (PAGE_SIZE << _SHM_IDX_BITS).
  */
 
-#define SHMMAX (1024 * 1024)		/* max shared seg size (bytes) */
+#define SHMMAX 0x1000000		/* max shared seg size (bytes) */
 #define SHMMIN 1 /* really PAGE_SIZE */	/* min shared seg size (bytes) */
 #define SHMMNI (1<<_SHM_ID_BITS)	/* max num of segs system wide */
 #define SHMALL				/* max shm system wide (pages) */ \

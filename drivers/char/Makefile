@@ -29,12 +29,14 @@ LX_OBJS += console.o selection.o
 endif
 
 ifeq ($(CONFIG_SERIAL),y)
-  ifndef CONFIG_SUN_SERIAL
+  ifeq ($(CONFIG_SUN_SERIAL),)
   LX_OBJS += serial.o
   endif
 else
   ifeq ($(CONFIG_SERIAL),m)
-  MX_OBJS += serial.o
+    ifeq ($(CONFIG_SUN_SERIAL),)
+    MX_OBJS += serial.o
+    endif
   endif
 endif
 

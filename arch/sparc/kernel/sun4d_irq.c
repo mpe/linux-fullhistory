@@ -1,4 +1,4 @@
-/*  $Id: sun4d_irq.c,v 1.14 1998/06/04 09:54:47 jj Exp $
+/*  $Id: sun4d_irq.c,v 1.15 1998/09/29 09:46:12 davem Exp $
  *  arch/sparc/kernel/sun4d_irq.c:
  *			SS1000/SC2000 interrupt handling.
  *
@@ -284,11 +284,12 @@ int sun4d_request_irq(unsigned int irq,
 	/* If this is flagged as statically allocated then we use our
 	 * private struct which is never freed.
 	 */
-	if (irqflags & SA_STATIC_ALLOC)
+	if (irqflags & SA_STATIC_ALLOC) {
 	    if (static_irq_count < MAX_STATIC_ALLOC)
 		action = &static_irqaction[static_irq_count++];
 	    else
 		printk("Request for IRQ%d (%s) SA_STATIC_ALLOC failed using kmalloc\n",irq, devname);
+	}
 	
 	if (action == NULL)
 	    action = (struct irqaction *)kmalloc(sizeof(struct irqaction),

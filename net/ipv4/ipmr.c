@@ -9,7 +9,7 @@
  *	as published by the Free Software Foundation; either version
  *	2 of the License, or (at your option) any later version.
  *
- *	Version: $Id: ipmr.c,v 1.36 1998/08/26 12:04:03 davem Exp $
+ *	Version: $Id: ipmr.c,v 1.37 1998/10/03 09:37:39 davem Exp $
  *
  *	Fixes:
  *	Michael Chastain	:	Incorrect size of copying.
@@ -431,7 +431,6 @@ static void ipmr_cache_resolve(struct mfc_cache *cache)
 				((struct nlmsgerr*)NLMSG_DATA(nlh))->error = -EMSGSIZE;
 			}
 			err = netlink_unicast(rtnl, skb, NETLINK_CB(skb).pid, MSG_DONTWAIT);
-			if (err < 0) printk(KERN_DEBUG "Err=%d", err);
 		} else
 #endif
 			ip_mr_forward(skb, cache, 0);
@@ -476,9 +475,10 @@ static int ipmr_cache_report(struct sk_buff *pkt, vifi_t vifi, int assert)
  		msg->im_vif = reg_vif_num;
 		skb->nh.iph->ihl = sizeof(struct iphdr) >> 2;
 		skb->nh.iph->tot_len = htons(ntohs(pkt->nh.iph->tot_len) + sizeof(struct iphdr));
-	} else {
+	} else 
 #endif
-
+	{	
+		
 	/*
 	 *	Copy the IP header
 	 */
@@ -500,9 +500,7 @@ static int ipmr_cache_report(struct sk_buff *pkt, vifi_t vifi, int assert)
 	igmp->code 	=	0;
 	skb->nh.iph->tot_len=htons(skb->len);			/* Fix the length */
 	skb->h.raw = skb->nh.raw;
-#ifdef CONFIG_IP_PIMSM
         }
-#endif
 	
 	/*
 	 *	Deliver to mrouted
@@ -753,7 +751,9 @@ int ip_mroute_setsockopt(struct sock *sk,int optname,char *optval,int optlen)
 						return -EADDRNOTAVAIL;
 					break;
 				default:
+#if 0
 					printk(KERN_DEBUG "ipmr_add_vif: flags %02x\n", vif.vifc_flags);
+#endif
 					return -EINVAL;
 				}
 
@@ -1548,7 +1548,6 @@ done:
   		len=length;
 	if (len < 0) {
 		len = 0;
-		printk(KERN_CRIT "Yep, guys... our template for proc_*_read is crappy :-)\n");
 	}
   	return len;
 }

@@ -2,7 +2,7 @@
  *		IP_MASQ_PORTFW masquerading module
  *
  *
- * Version:	@(#)ip_masq_portfw.c  0.02      97/10/30
+ *	$Id: ip_masq_portfw.c,v 1.2 1998/08/29 23:51:11 davem Exp $
  *
  * Author:	Steven Clarke <steven.clarke@monmouth.demon.co.uk>
  *
@@ -10,9 +10,8 @@
  *	Juan Jose Ciarlante	: created this new file from ip_masq.c and ip_fw.c
  *	Juan Jose Ciarlante	: modularized 
  *	Juan Jose Ciarlante 	: use GFP_KERNEL
+ *	Juan Jose Ciarlante 	: locking
  *
- *	FIXME
- *		- after creating /proc/net/ip_masq/ direct, put portfw underneath
  */
 
 #include <linux/config.h>
@@ -23,19 +22,38 @@
 #include <linux/list.h>
 #include <net/ip.h>
 #include <linux/ip_fw.h>
+#include <linux/ip_masq.h>
 #include <net/ip_masq.h>
 #include <net/ip_masq_mod.h>
-#include <net/ip_portfw.h>
 #include <linux/proc_fs.h>
 #include <linux/init.h>
 
+#define IP_PORTFW_PORT_MIN 1
+#define IP_PORTFW_PORT_MAX 60999
+
+struct ip_portfw {
+	struct 		list_head list;
+	__u32           laddr, raddr;
+	__u16           lport, rport;
+	atomic_t	pref_cnt;	/* pref "counter" down to 0 */
+	int 		pref;		/* user set pref */
+};
+
 static struct ip_masq_mod *mmod_self = NULL;
+/*
+ *	Debug level
+ */
+#ifdef CONFIG_IP_MASQ_DEBUG
+static int debug=0;
+MODULE_PARM(debug, "i");
+#endif
 
 /*
  *	Lock
  */
-static atomic_t portfw_lock = ATOMIC_INIT(0);
-static struct wait_queue *portfw_wait;
+#ifdef __SMP__
+static spinlock_t portfw_lock = SPIN_LOCK_UNLOCKED;
+#endif
 
 static struct list_head portfw_list[2];
 static __inline__ int portfw_idx(int protocol)
@@ -61,7 +79,7 @@ static __inline__ int ip_portfw_del(__u16 protocol, __u16 lport, __u32 laddr, __
 
 	nent = atomic_read(&mmod_self->mmod_nent);
 
-	ip_masq_lockz(&portfw_lock, &portfw_wait, 1);
+	write_lock_bh(&portfw_lock);
 
 	for (entry=list->next;entry != list;entry = entry->next)  {
 		n = list_entry(entry, struct ip_portfw, list);
@@ -75,7 +93,7 @@ static __inline__ int ip_portfw_del(__u16 protocol, __u16 lport, __u32 laddr, __
 			MOD_DEC_USE_COUNT;
 		}
 	}
-	ip_masq_unlockz(&portfw_lock, &portfw_wait, 1);
+	write_unlock_bh(&portfw_lock);
 	
 	return nent==atomic_read(&mmod_self->mmod_nent)? ESRCH : 0;
 }
@@ -91,7 +109,7 @@ static __inline__ void ip_portfw_flush(void)
 	struct list_head *e;
 	struct ip_portfw *n;
 
-	ip_masq_lockz(&portfw_lock, &portfw_wait, 1);
+	write_lock_bh(&portfw_lock);
 
 	for (prot = 0; prot < 2;prot++) {
 		l = &portfw_list[prot];
@@ -104,12 +122,12 @@ static __inline__ void ip_portfw_flush(void)
 		}
 	}
 
-	ip_masq_unlockz(&portfw_lock, &portfw_wait, 1);
+	write_unlock_bh(&portfw_lock);
 }
 
 /*
  *	Lookup routine for lport,laddr match
- *	called from ip_masq module (via registered obj)
+ *	must be called with locked tables
  */
 static __inline__ struct ip_portfw *ip_portfw_lookup(__u16 protocol, __u16 lport, __u32 laddr, __u32 *daddr_p, __u16 *dport_p)
 {
@@ -117,8 +135,6 @@ static __inline__ struct ip_portfw *ip_portfw_lookup(__u16 protocol, __u16 lport
 	
 	struct ip_portfw *n = NULL;
 	struct list_head *l, *e;
-
-	ip_masq_lock(&portfw_lock, 0);
 
 	l = &portfw_list[prot];
 
@@ -136,7 +152,6 @@ static __inline__ struct ip_portfw *ip_portfw_lookup(__u16 protocol, __u16 lport
 	}
 	n = NULL;
 out:
-	ip_masq_unlock(&portfw_lock, 0);
 	return n;
 }
 
@@ -153,7 +168,7 @@ static __inline__ int ip_portfw_edit(__u16 protocol, __u16 lport, __u32 laddr, _
 	int count = 0;
 
 
-	ip_masq_lockz(&portfw_lock, &portfw_wait, 0);
+	read_lock_bh(&portfw_lock);
 
 	l = &portfw_list[prot];
 
@@ -169,7 +184,7 @@ static __inline__ int ip_portfw_edit(__u16 protocol, __u16 lport, __u32 laddr, _
 		}
 	}
 
-	ip_masq_unlockz(&portfw_lock, &portfw_wait, 0);
+	read_unlock_bh(&portfw_lock);
 
 	return count;
 }
@@ -212,14 +227,14 @@ static __inline__ int ip_portfw_add(__u16 protocol, __u16 lport, __u32 laddr, __
 	atomic_set(&npf->pref_cnt, npf->pref);
 	INIT_LIST_HEAD(&npf->list);
 
-	ip_masq_lockz(&portfw_lock, &portfw_wait, 1);
+	write_lock_bh(&portfw_lock);
 
 	/*
 	 *	Add at head
 	 */
 	list_add(&npf->list, &portfw_list[prot]);
 
-	ip_masq_unlockz(&portfw_lock, &portfw_wait, 1);
+	write_unlock_bh(&portfw_lock);
 
 	ip_masq_mod_inc_nent(mmod_self);
         return 0;
@@ -227,18 +242,34 @@ static __inline__ int ip_portfw_add(__u16 protocol, __u16 lport, __u32 laddr, __
 
 
 
-static __inline__ int portfw_ctl(int cmd, struct ip_fw_masqctl *mctl, int optlen)
+static __inline__ int portfw_ctl(int optname, struct ip_masq_ctl *mctl, int optlen)
 {
-        struct ip_portfw_edits *mm = (struct ip_portfw_edits *) mctl->u.mod.data;
+        struct ip_portfw_user *mm =  &mctl->u.portfw_user;
 	int ret = EINVAL;
+	int arglen = optlen - IP_MASQ_CTL_BSIZE;
+	int cmd;
 
+
+	IP_MASQ_DEBUG(1-debug, "ip_masq_user_ctl(len=%d/%d|%d/%d)\n",
+		arglen,
+		sizeof (*mm),
+		optlen,
+		sizeof (*mctl));
+
+	/*
+	 *	Yes, I'm a bad guy ...
+	 */
+	if (arglen != sizeof(*mm) && optlen != sizeof(*mctl)) 
+		return EINVAL;
+ 
 	/* 
 	 *	Don't trust the lusers - plenty of error checking! 
 	 */
-	if (optlen<sizeof(*mm)) 
-		return EINVAL;
- 
-        if (cmd != IP_FW_MASQ_FLUSH) {
+	cmd = mctl->m_cmd;
+	IP_MASQ_DEBUG(1-debug, "ip_masq_portfw_ctl(cmd=%d)\n", cmd);
+
+
+        if (cmd != IP_MASQ_CMD_FLUSH) {
 		if (htons(mm->lport) < IP_PORTFW_PORT_MIN 
 				|| htons(mm->lport) > IP_PORTFW_PORT_MAX)
 			return EINVAL;
@@ -249,19 +280,19 @@ static __inline__ int portfw_ctl(int cmd, struct ip_fw_masqctl *mctl, int optlen
 
 
 	switch(cmd) {
-	case IP_FW_MASQ_ADD:
+	case IP_MASQ_CMD_ADD:
 		ret = ip_portfw_add(mm->protocol,
 				mm->lport, mm->laddr,
 				mm->rport, mm->raddr,
 				mm->pref);
 		break;
 
-	case IP_FW_MASQ_DEL:
+	case IP_MASQ_CMD_DEL:
 		ret = ip_portfw_del(mm->protocol, 
 				mm->lport, mm->laddr,
 				mm->rport, mm->raddr);
 		break;
-	case IP_FW_MASQ_FLUSH:
+	case IP_MASQ_CMD_FLUSH:
 		ip_portfw_flush();
 		ret = 0;
 		break;
@@ -286,7 +317,6 @@ static int portfw_procinfo(char *buffer, char **start, off_t offset,
         int ind;
         int len=0;
 
-	ip_masq_lockz(&portfw_lock, &portfw_wait, 0);
 
         if (offset < 64) 
         {
@@ -295,6 +325,8 @@ static int portfw_procinfo(char *buffer, char **start, off_t offset,
         }
         pos = 64;
 
+	read_lock_bh(&portfw_lock);
+
         for(ind = 0; ind < 2; ind++)
         {
 		l = &portfw_list[ind];
@@ -302,8 +334,10 @@ static int portfw_procinfo(char *buffer, char **start, off_t offset,
                 {
 			pf = list_entry(e, struct ip_portfw, list);
                         pos += 64;
-                        if (pos <= offset)
+                        if (pos <= offset) {
+				len = 0;
                                 continue;
+			}
 
                         sprintf(temp,"%s  %08lX %5u > %08lX %5u %5d %5d",
                                 ind ? "TCP" : "UDP",
@@ -317,7 +351,7 @@ static int portfw_procinfo(char *buffer, char **start, off_t offset,
 		}
         }
 done:
-	ip_masq_unlockz(&portfw_lock, &portfw_wait, 0);
+	read_unlock_bh(&portfw_lock);
 
         begin = len - (pos - offset);
         *start = buffer + begin;
@@ -329,7 +363,7 @@ done:
 
 static struct proc_dir_entry portfw_proc_entry = {
 /* 		0, 0, NULL", */
-		0, 9, "ip_portfw",   /* Just for compatibility, for now ... */
+		0, 6, "portfw",   /* Just for compatibility, for now ... */
 		S_IFREG | S_IRUGO, 1, 0, 0,
 		0, &proc_net_inode_operations,
 		portfw_procinfo
@@ -341,13 +375,26 @@ static struct proc_dir_entry portfw_proc_entry = {
 #define proc_ent NULL
 #endif
 
-static int portfw_in_rule(struct iphdr *iph, __u16 *portp)
+static int portfw_in_rule(const struct sk_buff *skb, const struct iphdr *iph)
 {
+	const __u16 *portp = (__u16 *)&(((char *)iph)[iph->ihl*4]);
+#ifdef CONFIG_IP_MASQ_DEBUG
+	struct rtable *rt = (struct rtable *)skb->dst;
+#endif
+	struct ip_portfw *pfw;
 
-	return (ip_portfw_lookup(iph->protocol, portp[1], iph->daddr, NULL, NULL)!=0);
+	IP_MASQ_DEBUG(2, "portfw_in_rule(): skb:= dev=%s (index=%d), rt_iif=%d, rt_flags=0x%x rt_dev___=%s daddr=%d.%d.%d.%d dport=%d\n",
+		skb->dev->name, skb->dev->ifindex, rt->rt_iif, rt->rt_flags,
+		rt->u.dst.dev->name,
+		NIPQUAD(iph->daddr), ntohs(portp[1]));
+
+	read_lock(&portfw_lock);
+	pfw = ip_portfw_lookup(iph->protocol, portp[1], iph->daddr, NULL, NULL);
+	read_unlock(&portfw_lock);
+	return (pfw!=0);
 }
 
-static struct ip_masq * portfw_in_create(struct iphdr *iph, __u16 *portp, __u32 maddr)
+static struct ip_masq * portfw_in_create(const struct sk_buff *skb, const struct iphdr *iph, __u32 maddr)
 {
 	/* 
 	 *	If no entry exists in the masquerading table
@@ -357,13 +404,14 @@ static struct ip_masq * portfw_in_create(struct iphdr *iph, __u16 *portp, __u32 
 
 	__u32 raddr;
 	__u16 rport;
+	const __u16 *portp = (__u16 *)&(((char *)iph)[iph->ihl*4]);
 	struct ip_masq *ms = NULL;
 	struct ip_portfw *pf;
 
 	/*
-	 *	Lock for reading only, by now...
+	 *	Lock for writing.
 	 */
-	ip_masq_lock(&portfw_lock, 0);
+	write_lock(&portfw_lock);
 
 	if ((pf=ip_portfw_lookup(iph->protocol, 
 			portp[1], iph->daddr, 
@@ -375,8 +423,8 @@ static struct ip_masq * portfw_in_create(struct iphdr *iph, __u16 *portp, __u32 
 				0);
 		ip_masq_listen(ms);
 
-		if (!ms || atomic_read(&mmod_self->mmod_nent) <= 1 || 
-			ip_masq_nlocks(&portfw_lock) != 1)
+		if (!ms || atomic_read(&mmod_self->mmod_nent) <= 1 
+			/* || ip_masq_nlocks(&portfw_lock) != 1 */ )
 				/*
 				 *	Maybe later...
 				 */
@@ -390,18 +438,16 @@ static struct ip_masq * portfw_in_create(struct iphdr *iph, __u16 *portp, __u32 
 		 */
 	
 		if (atomic_dec_and_test(&pf->pref_cnt)) {
-			start_bh_atomic();
 
 			atomic_set(&pf->pref_cnt, pf->pref);
 			list_del(&pf->list);
 			list_add(&pf->list, 
 				portfw_list[portfw_idx(iph->protocol)].prev);
 
-			end_bh_atomic();
 		}
 	}
 out:
-	ip_masq_unlock(&portfw_lock, 0);
+	write_unlock(&portfw_lock);
 	return ms;
 }
 

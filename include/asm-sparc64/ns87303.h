@@ -1,4 +1,4 @@
-/* $Id: ns87303.h,v 1.1 1997/10/14 13:30:37 ecd Exp $
+/* $Id: ns87303.h,v 1.2 1998/09/13 15:38:50 ecd Exp $
  * ns87303.h: Configuration Register Description for the
  *            National Semiconductor PC87303 (SuperIO).
  *
@@ -26,6 +26,9 @@
 #define CS1CF0	0x0c
 #define CS1CF1	0x0d
 
+/* Function Enable Register (FER) bits */
+#define FER_EDM		0x10	/* Encoded Drive and Motor pin information   */
+
 /* Function Address Register (FAR) bits */
 #define FAR_LPT_MASK	0x03
 #define FAR_LPTB	0x00
@@ -39,6 +42,7 @@
 				/*               of the parallel port	     */
 
 /* Function Control Register (FCR) bits */
+#define FCR_LDE		0x10	/* Logical Drive Exchange                    */
 #define FCR_ZWS_ENA	0x20	/* Enable short host read/write in ECP/EPP   */
 
 /* Printer Controll Register (PCR) bits */
@@ -55,6 +59,7 @@
 
 /* Advanced SuperIO Config Register (ASC) bits */
 #define ASC_LPT_IRQ7	0x01	/* Allways use IRQ7 for LPT                  */
+#define ASC_DRV2_SEL	0x02	/* Logical Drive Exchange controlled by TDR  */
 
 #ifdef __KERNEL__
 

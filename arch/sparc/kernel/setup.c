@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.99 1998/07/28 16:52:45 jj Exp $
+/*  $Id: setup.c,v 1.103 1998/09/21 05:05:23 jj Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -332,9 +332,6 @@ __initfunc(void setup_arch(char **cmdline_p,
 	switch(sparc_cpu_model) {
 	case sun4:
 		printk("SUN4\n");
-#ifdef CONFIG_SUN4_FORCECONSOLE
-		register_console(&prom_console);
-#endif
 		packed = 0;
 		break;
 	case sun4c:
@@ -443,8 +440,14 @@ __initfunc(void setup_arch(char **cmdline_p,
 					serial_console = 1;
 				} else if (idev == PROMDEV_ITTYB && odev == PROMDEV_OTTYB) {
 					serial_console = 2;
+				} else if (idev == PROMDEV_I_UNK && odev == PROMDEV_OTTYA) {
+					prom_printf("MrCoffee ttya\n");
+					serial_console = 1;
+				} else if (idev == PROMDEV_I_UNK && odev == PROMDEV_OSCREEN) {
+					serial_console = 0;
+					prom_printf("MrCoffee keyboard\n");
 				} else {
-					prom_printf("Inconsistent console\n");
+					prom_printf("Inconsistent or unknown console\n");
 					prom_halt();
 				}
 			}

@@ -553,9 +553,9 @@ set_imstt_regvals_tvp (struct fb_info_imstt *p, struct imstt_regvals *init, int 
 	p->cmap_regs[TVPADDRW] = TVPIRPLA;	eieio();
 	p->cmap_regs[TVPIDATA] = 0x00;		eieio();
 	p->cmap_regs[TVPADDRW] = TVPIRPPD;	eieio();
-	p->cmap_regs[TVPIDATA] = init->pclk_n;	eieio();
-	p->cmap_regs[TVPADDRW] = TVPIRPPD;	eieio();
 	p->cmap_regs[TVPIDATA] = init->pclk_m;	eieio();
+	p->cmap_regs[TVPADDRW] = TVPIRPPD;	eieio();
+	p->cmap_regs[TVPIDATA] = init->pclk_n;	eieio();
 	p->cmap_regs[TVPADDRW] = TVPIRPPD;	eieio();
 	p->cmap_regs[TVPIDATA] = init->pclk_p;	eieio();
 
@@ -690,6 +690,84 @@ set_16 (struct fb_info_imstt *p, __u8 x)
 
 #define set_555(_p)	set_16(_p, 15)	/* need 220 or 224 for X */
 #define set_565(_p)	set_16(_p, 0)	/* 220, 224 is darker in X */
+
+void
+imsttfb_rectcopy (struct display *disp, int sy, int sx, int dy, int dx, int height, int width)
+{
+	struct fb_info_imstt *p = (struct fb_info_imstt *)disp->fb_info;
+	__u32 tmp, cnt_reg;
+	__u32	line_pitch = disp->var.xres * (disp->var.bits_per_pixel >> 3),
+		rect_height = height,
+		rect_width = width * (disp->var.bits_per_pixel >> 3),
+		fb_offset_old = sy * line_pitch + (sx * (disp->var.bits_per_pixel >> 3)),
+		fb_offset_new = dy * line_pitch + (dx * (disp->var.bits_per_pixel >> 3));
+
+	cnt_reg = ((rect_height - 1) << 16) | (rect_width - 1);
+
+	tmp = (line_pitch << 16) | line_pitch;
+	out_le32(&p->dc_regs[SP], tmp);
+	tmp = line_pitch;
+	out_le32(&p->dc_regs[DP_OCTRL], tmp);
+#if 0
+	do {
+		tmp = in_le32(&p->dc_regs[SSTATUS]);
+		eieio();
+	} while (tmp & 0x80);
+#endif
+	out_le32(&p->dc_regs[CNT], cnt_reg);
+	out_le32(&p->dc_regs[S1SA], fb_offset_old);
+	out_le32(&p->dc_regs[S2SA], fb_offset_new);
+	out_le32(&p->dc_regs[DSA], fb_offset_new);
+	out_le32(&p->dc_regs[BLTCTL], 0x5);
+#if 0
+	do {
+		tmp = in_le32(&p->dc_regs[SSTATUS]);
+		eieio();
+	} while (tmp & 0x80);
+
+	do {
+		tmp = in_le32(&p->dc_regs[SSTATUS]);
+		eieio();
+	} while (tmp & 0x40);
+#endif
+}
+
+static void
+imsttfbcon_bmove (struct display *disp, int sy, int sx, int dy, int dx, int height, int width)
+{
+	sy *= fontheight(disp);
+	sx *= fontwidth(disp);
+	dy *= fontheight(disp);
+	dx *= fontwidth(disp);
+	height *= fontheight(disp);
+	width *= fontwidth(disp);
+
+	imsttfb_rectcopy(disp, sy, sx, dy, dx, height, width);
+}
+
+static struct display_switch fbcon_imstt8 = {
+	fbcon_cfb8_setup, imsttfbcon_bmove, fbcon_cfb8_clear, fbcon_cfb8_putc,
+	fbcon_cfb8_putcs, fbcon_cfb8_revc, NULL, NULL, fbcon_cfb8_clear_margins,
+	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+};
+
+static struct display_switch fbcon_imstt16 = {
+	fbcon_cfb16_setup, imsttfbcon_bmove, fbcon_cfb16_clear, fbcon_cfb16_putc,
+	fbcon_cfb16_putcs, fbcon_cfb16_revc, NULL, NULL, fbcon_cfb16_clear_margins,
+	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+};
+
+static struct display_switch fbcon_imstt24 = {
+	fbcon_cfb24_setup, imsttfbcon_bmove, fbcon_cfb24_clear, fbcon_cfb24_putc,
+	fbcon_cfb24_putcs, fbcon_cfb24_revc, NULL, NULL, fbcon_cfb24_clear_margins,
+	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+};
+
+static struct display_switch fbcon_imstt32 = {
+	fbcon_cfb32_setup, imsttfbcon_bmove, fbcon_cfb32_clear, fbcon_cfb32_putc,
+	fbcon_cfb32_putcs, fbcon_cfb32_revc, NULL, NULL, fbcon_cfb32_clear_margins,
+	FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
+};
 
 #ifdef CONFIG_FB_COMPAT_XPMAC
 #include <asm/vc_ioctl.h>
@@ -834,7 +912,7 @@ imsttfb_get_fix (struct fb_fix_screeninfo *fix, int con, struct fb_info *info)
 
 	*fix = p->fix;
 	fix->visual = var->bits_per_pixel == 8 ? FB_VISUAL_PSEUDOCOLOR
-					       : FB_VISUAL_TRUECOLOR;
+					       : FB_VISUAL_DIRECTCOLOR;
 	fix->line_length = var->xres * (var->bits_per_pixel >> 3);
 
 	return 0;
@@ -853,7 +931,7 @@ imsttfb_set_var (struct fb_var_screeninfo *var, int con, struct fb_info *info)
 {
 	struct fb_info_imstt *p = (struct fb_info_imstt *)info;
 	struct display *disp;
-	unsigned int oldbpp, oldxres, oldyres, oldgreenlen;
+	unsigned int oldbpp, oldxres, oldyres, oldgreenlen, oldaccel;
 	struct imstt_regvals *init;
 
 	disp = &fb_display[con];
@@ -880,6 +958,7 @@ imsttfb_set_var (struct fb_var_screeninfo *var, int con, struct fb_info *info)
 	oldxres = disp->var.xres;
 	oldyres = disp->var.yres;
 	oldgreenlen = disp->var.green.length;
+	oldaccel = disp->var.accel_flags;
 
 	disp->var = *var;
 
@@ -898,11 +977,15 @@ imsttfb_set_var (struct fb_var_screeninfo *var, int con, struct fb_info *info)
 
 	disp->screen_base = p->frame_buffer;
 	disp->inverse = 0;
+	disp->ypanstep = 1;
+	disp->ywrapstep = 0;
 	disp->scrollmode = SCROLL_YREDRAW;
 
-	if (oldbpp != disp->var.bits_per_pixel) {
+	if (oldbpp != disp->var.bits_per_pixel || oldaccel != disp->var.accel_flags) {
+		unsigned int accel = disp->var.accel_flags & FB_ACCELF_TEXT;
+
 		disp->visual = disp->var.bits_per_pixel == 8 ? FB_VISUAL_PSEUDOCOLOR
-						 	     : FB_VISUAL_TRUECOLOR;
+						 	     : FB_VISUAL_DIRECTCOLOR;
 		disp->dispsw = &fbcon_dummy;
 		disp->dispsw_data = 0;
 		switch (disp->var.bits_per_pixel) {
@@ -916,7 +999,7 @@ imsttfb_set_var (struct fb_var_screeninfo *var, int con, struct fb_info *info)
 				disp->var.transp.offset = 0;
 				disp->var.transp.length = 0;
 #ifdef FBCON_HAS_CFB8
-				disp->dispsw = &fbcon_cfb8;
+				disp->dispsw = accel ? &fbcon_imstt8 : &fbcon_cfb8;
 #endif
 				break;
 			case 16:	/* RGB 565 */
@@ -931,7 +1014,7 @@ imsttfb_set_var (struct fb_var_screeninfo *var, int con, struct fb_info *info)
 				disp->var.transp.offset = 0;
 				disp->var.transp.length = 0;
 #ifdef FBCON_HAS_CFB16
-				disp->dispsw = &fbcon_cfb16;
+				disp->dispsw = accel ? &fbcon_imstt16 : &fbcon_cfb16;
 				disp->dispsw_data = p->fbcon_cmap.cfb16;
 #endif
 				break;
@@ -945,7 +1028,7 @@ imsttfb_set_var (struct fb_var_screeninfo *var, int con, struct fb_info *info)
 				disp->var.transp.offset = 0;
 				disp->var.transp.length = 0;
 #ifdef FBCON_HAS_CFB24
-				disp->dispsw = &fbcon_cfb24;
+				disp->dispsw = accel ? &fbcon_imstt24 : &fbcon_cfb24;
 				disp->dispsw_data = p->fbcon_cmap.cfb24;
 #endif
 				break;
@@ -959,7 +1042,7 @@ imsttfb_set_var (struct fb_var_screeninfo *var, int con, struct fb_info *info)
 				disp->var.transp.offset = 24;
 				disp->var.transp.length = 8;
 #ifdef FBCON_HAS_CFB32
-				disp->dispsw = &fbcon_cfb32;
+				disp->dispsw = accel ? &fbcon_imstt32 : &fbcon_cfb32;
 				disp->dispsw_data = p->fbcon_cmap.cfb32;
 #endif
 				break;
@@ -1127,7 +1210,7 @@ static struct fb_ops imsttfb_ops = {
 };
 
 static int
-imsttfb_switch (int con, struct fb_info *info)
+imsttfbcon_switch (int con, struct fb_info *info)
 {
 	struct display *old = &fb_display[currcon], *new = &fb_display[con];
 
@@ -1157,7 +1240,7 @@ imsttfb_switch (int con, struct fb_info *info)
 }
 
 static int
-imsttfb_updatevar (int con, struct fb_info *info)
+imsttfbcon_updatevar (int con, struct fb_info *info)
 {
 	struct fb_info_imstt *p = (struct fb_info_imstt *)info;
 	unsigned int off;
@@ -1172,7 +1255,7 @@ imsttfb_updatevar (int con, struct fb_info *info)
 }
 
 static void
-imsttfb_blank (int blank, struct fb_info *info)
+imsttfbcon_blank (int blank, struct fb_info *info)
 {
 	struct fb_info_imstt *p = (struct fb_info_imstt *)info;
 	__u32 ctrl;
@@ -1203,6 +1286,7 @@ __initfunc(static void init_imstt(struct fb_info_imstt *p))
 {
 	__u32 i, tmp;
 	struct imstt_regvals *init;
+	unsigned int accel;
 
 	tmp = in_le32(&p->dc_regs[SSTATUS]);
 	/* printk("chip version %ld, ", (tmp & 0x0F00) >> 8); */
@@ -1262,6 +1346,10 @@ __initfunc(static void init_imstt(struct fb_info_imstt *p))
 	p->disp.var.left_margin = p->disp.var.right_margin = 16;
 	p->disp.var.upper_margin = p->disp.var.lower_margin = 16;
 	p->disp.var.hsync_len = p->disp.var.vsync_len = 8;
+	p->disp.var.accel_flags = 0; /* FB_ACCELF_TEXT; */
+
+	accel = p->disp.var.accel_flags & FB_ACCELF_TEXT;
+
 	p->disp.dispsw = &fbcon_dummy;
 	p->disp.dispsw_data = 0;
 	switch (p->disp.var.bits_per_pixel) {
@@ -1275,7 +1363,7 @@ __initfunc(static void init_imstt(struct fb_info_imstt *p))
 			p->disp.var.transp.offset = 0;
 			p->disp.var.transp.length = 0;
 #ifdef FBCON_HAS_CFB8
-			p->disp.dispsw = &fbcon_cfb8;
+			p->disp.dispsw = accel ? &fbcon_imstt8 : &fbcon_cfb8;
 #endif
 			break;
 		case 16:	/* RGB 565 */
@@ -1290,7 +1378,7 @@ __initfunc(static void init_imstt(struct fb_info_imstt *p))
 			p->disp.var.transp.offset = 0;
 			p->disp.var.transp.length = 0;
 #ifdef FBCON_HAS_CFB16
-			p->disp.dispsw = &fbcon_cfb16;
+			p->disp.dispsw = accel ? &fbcon_imstt16 : &fbcon_cfb16;
 			p->disp.dispsw_data = p->fbcon_cmap.cfb16;
 #endif
 			break;
@@ -1304,7 +1392,7 @@ __initfunc(static void init_imstt(struct fb_info_imstt *p))
 			p->disp.var.transp.offset = 0;
 			p->disp.var.transp.length = 0;
 #ifdef FBCON_HAS_CFB24
-			p->disp.dispsw = &fbcon_cfb24;
+			p->disp.dispsw = accel ? &fbcon_imstt24 : &fbcon_cfb24;
 			p->disp.dispsw_data = p->fbcon_cmap.cfb24;
 #endif
 			break;
@@ -1318,7 +1406,7 @@ __initfunc(static void init_imstt(struct fb_info_imstt *p))
 			p->disp.var.transp.offset = 24;
 			p->disp.var.transp.length = 8;
 #ifdef FBCON_HAS_CFB32
-			p->disp.dispsw = &fbcon_cfb32;
+			p->disp.dispsw = accel ? &fbcon_imstt32 : &fbcon_cfb32;
 			p->disp.dispsw_data = p->fbcon_cmap.cfb32;
 #endif
 			break;
@@ -1343,10 +1431,14 @@ __initfunc(static void init_imstt(struct fb_info_imstt *p))
 	p->fix.smem_len = p->total_vram;
 	p->fix.mmio_start = (__u8 *)p->dc_regs_phys;
 	p->fix.mmio_len = 0x40000;
+	p->fix.accel = FB_ACCEL_IMS_TWINTURBO;
 	p->fix.type = FB_TYPE_PACKED_PIXELS;
 	p->fix.visual = p->disp.var.bits_per_pixel == 8 ? FB_VISUAL_PSEUDOCOLOR
 							: FB_VISUAL_DIRECTCOLOR;
 	p->fix.line_length = p->disp.var.xres * (p->disp.var.bits_per_pixel >> 3);
+	p->fix.xpanstep = 8;
+	p->fix.ypanstep = 1;
+	p->fix.ywrapstep = 0;
 
 	p->disp.screen_base = p->frame_buffer;
 	p->disp.visual = p->fix.visual;
@@ -1354,6 +1446,8 @@ __initfunc(static void init_imstt(struct fb_info_imstt *p))
 	p->disp.type_aux = p->fix.type_aux;
 	p->disp.line_length = p->fix.line_length;
 	p->disp.can_soft_blank = 1;
+	p->disp.ypanstep = 1;
+	p->disp.ywrapstep = 0;
 	p->disp.scrollmode = SCROLL_YREDRAW;
 
 	strcpy(p->info.modename, p->fix.id);
@@ -1362,9 +1456,10 @@ __initfunc(static void init_imstt(struct fb_info_imstt *p))
 	p->info.disp = &p->disp;
 	p->info.fontname[0] = 0;
 	p->info.changevar = 0;
-	p->info.switch_con = &imsttfb_switch;
-	p->info.updatevar = &imsttfb_updatevar;
-	p->info.blank = &imsttfb_blank;
+	p->info.switch_con = &imsttfbcon_switch;
+	p->info.updatevar = &imsttfbcon_updatevar;
+	p->info.blank = &imsttfbcon_blank;
+	p->info.flags = FBINFO_FLAG_DEFAULT;
 
 	for (i = 0; i < 16; i++) {
 		unsigned int j = color_table[i];

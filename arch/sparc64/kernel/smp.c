@@ -63,7 +63,7 @@ int smp_info(char *buf)
 	for (i = 0; i < NR_CPUS; i++)
 		if(cpu_present_map & (1UL << i))
 			len += sprintf(buf + len,
-					"CPU%d:\t\tonline\n", i
+					"CPU%d:\t\tonline\n", i);
 	return len;
 }
 
@@ -380,7 +380,7 @@ void smp_flush_tlb_mm(struct mm_struct *mm)
 {
 	u32 ctx = mm->context & 0x3ff;
 
-	if(mm == current->mm && mm->count == 1) {
+	if(mm == current->mm && atomic_read(&mm->count) == 1) {
 		if(mm->cpu_vm_mask == (1UL << smp_processor_id()))
 			goto local_flush_and_out;
 		return smp_cross_call_avoidance(mm);
@@ -396,7 +396,7 @@ void smp_flush_tlb_range(struct mm_struct *mm, unsigned long start,
 {
 	u32 ctx = mm->context & 0x3ff;
 
-	if(mm == current->mm && mm->count == 1) {
+	if(mm == current->mm && atomic_read(&mm->count) == 1) {
 		if(mm->cpu_vm_mask == (1UL << smp_processor_id()))
 			goto local_flush_and_out;
 		return smp_cross_call_avoidance(mm);
@@ -413,13 +413,13 @@ void smp_flush_tlb_page(struct mm_struct *mm, unsigned long page)
 {
 	u32 ctx = mm->context & 0x3ff;
 
-	if(mm == current->mm && mm->count == 1) {
+	if(mm == current->mm && atomic_read(&mm->count) == 1) {
 		if(mm->cpu_vm_mask == (1UL << smp_processor_id()))
 			goto local_flush_and_out;
 		return smp_cross_call_avoidance(mm);
 	}
 #if 0 /* XXX Disabled until further notice... */
-	else if(mm->count == 1) {
+	else if(atomic_read(&mm->count) == 1) {
 		/* Try to handle two special cases to avoid cross calls
 		 * in common scenerios where we are swapping process
 		 * pages out.

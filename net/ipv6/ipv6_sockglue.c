@@ -7,7 +7,7 @@
  *
  *	Based on linux/net/ipv4/ip_sockglue.c
  *
- *	$Id: ipv6_sockglue.c,v 1.23 1998/08/26 12:05:04 davem Exp $
+ *	$Id: ipv6_sockglue.c,v 1.24 1998/10/03 09:38:37 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -275,33 +275,17 @@ done:
 		break;
 
 	case IPV6_MULTICAST_IF:
-	{
-		int oif = 0;
-		struct in6_addr addr;
-
-		if (copy_from_user(&addr, optval, sizeof(struct in6_addr)))
-			return -EFAULT;
-				
-		if (!ipv6_addr_any(&addr)) {
-			struct inet6_ifaddr *ifp;
-
-			ifp = ipv6_chk_addr(&addr, NULL, 0);
-
-			if (ifp == NULL) {
-				retv = -EADDRNOTAVAIL;
-				break;
-			}
-
-			oif = ifp->idev->dev->ifindex;
-		}
-		if (sk->bound_dev_if && sk->bound_dev_if != oif) {
+		if (sk->bound_dev_if && sk->bound_dev_if != val) {
 			retv = -EINVAL;
 			break;
 		}
-		np->mcast_oif = oif;
+		if (dev_get_by_index(val) == NULL) {
+			retv = -ENODEV;
+			break;
+		}
+		np->mcast_oif = val;
 		retv = 0;
 		break;
-	}
 	case IPV6_ADD_MEMBERSHIP:
 	case IPV6_DROP_MEMBERSHIP:
 	{
@@ -319,6 +303,21 @@ done:
 	case IPV6_ROUTER_ALERT:
 		retv = ip6_ra_control(sk, val, NULL);
 		break;
+	case IPV6_MTU_DISCOVER:
+		if (val<0 || val>2)
+			return -EINVAL;
+		np->pmtudisc = val;
+		return 0;
+	case IPV6_MTU:
+		if (val && val < IPV6_MIN_MTU)
+			return -EINVAL;
+		np->frag_size = val;
+		return 0;
+	case IPV6_RECVERR:
+		np->recverr = !!val;
+		if (!val)
+			skb_queue_purge(&sk->error_queue);
+		return 0;
 	};
 
 out:
@@ -330,6 +329,7 @@ int ipv6_getsockopt(struct sock *sk, int level, int optname, char *optval,
 {
 	struct ipv6_pinfo *np = &sk->net_pinfo.af_inet6;
 	int len;
+	int val;
 
 	if(level==SOL_IP && sk->type != SOCK_RAW)
 		return udp_prot.getsockopt(sk, level, optname, optval, optlen);
@@ -364,9 +364,24 @@ int ipv6_getsockopt(struct sock *sk, int level, int optname, char *optval,
 			len = 0;
 		return put_user(len, optlen);
 	}
+	case IP_MTU:
+		val = 0;	
+		lock_sock(sk);
+		if (sk->dst_cache)		
+			val = sk->dst_cache->pmtu;
+		release_sock(sk);
+		if (!val)
+			return -ENOTCONN;
+		break;
 	default:
+		return -EINVAL;
 	}
-	return -EINVAL;
+	len=min(sizeof(int),len);
+	if(put_user(len, optlen))
+		return -EFAULT;
+	if(copy_to_user(optval,&val,len))
+		return -EFAULT;
+	return 0;
 }
 
 #if defined(MODULE) && defined(CONFIG_SYSCTL)

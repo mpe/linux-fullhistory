@@ -5,7 +5,7 @@
  *
  *		IPv4 Forwarding Information Base: semantics.
  *
- * Version:	$Id: fib_semantics.c,v 1.10 1998/08/26 12:03:32 davem Exp $
+ * Version:	$Id: fib_semantics.c,v 1.11 1998/10/03 09:37:12 davem Exp $
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
  *
@@ -141,6 +141,7 @@ extern __inline__ struct fib_info * fib_find_info(const struct fib_info *nfi)
 			continue;
 		if (nfi->fib_protocol == fi->fib_protocol &&
 		    nfi->fib_prefsrc == fi->fib_prefsrc &&
+		    nfi->fib_priority == fi->fib_priority &&
 		    nfi->fib_mtu == fi->fib_mtu &&
 		    nfi->fib_rtt == fi->fib_rtt &&
 		    nfi->fib_window == fi->fib_window &&
@@ -230,6 +231,10 @@ int fib_nh_match(struct rtmsg *r, struct nlmsghdr *nlh, struct kern_rta *rta,
 	struct rtnexthop *nhp;
 	int nhlen;
 #endif
+
+	if (rta->rta_priority &&
+	    *rta->rta_priority != fi->fib_priority)
+		return 1;
 
 	if (rta->rta_oif || rta->rta_gw) {
 		if ((!rta->rta_oif || *rta->rta_oif == fi->fib_nh->nh_oif) &&
@@ -405,6 +410,8 @@ fib_create_info(const struct rtmsg *r, struct kern_rta *rta,
 	fi->fib_protocol = r->rtm_protocol;
 	fi->fib_nhs = nhs;
 	fi->fib_flags = r->rtm_flags;
+	if (rta->rta_priority)
+		fi->fib_priority = *rta->rta_priority;
 	if (rta->rta_mx) {
 		int attrlen = RTA_PAYLOAD(rta->rta_mx);
 		struct rtattr *attr = RTA_DATA(rta->rta_mx);
@@ -484,34 +491,20 @@ fib_create_info(const struct rtmsg *r, struct kern_rta *rta,
 			goto failure;
 	} else {
 		change_nexthops(fi) {
-			if ((err = fib_check_nh(r, fi, nh)) != 0) {
-				if (err == -EINVAL)
-					printk("Einval 2\n");
+			if ((err = fib_check_nh(r, fi, nh)) != 0)
 				goto failure;
-			}
 		} endfor_nexthops(fi)
 	}
 
 	if (fi->fib_prefsrc) {
 		if (r->rtm_type != RTN_LOCAL || rta->rta_dst == NULL ||
 		    memcmp(&fi->fib_prefsrc, rta->rta_dst, 4))
-			if (inet_addr_type(fi->fib_prefsrc) != RTN_LOCAL) {
-				printk("Einval 3\n");
+			if (inet_addr_type(fi->fib_prefsrc) != RTN_LOCAL)
 				goto err_inval;
-			}
 	}
 
 link_it:
 	if ((ofi = fib_find_info(fi)) != NULL) {
-		if (fi->fib_nh[0].nh_scope != ofi->fib_nh[0].nh_scope) {
-			printk("nh %d/%d gw=%08x/%08x dev=%s/%s\n",
-			       fi->fib_nh[0].nh_scope,
-			       ofi->fib_nh[0].nh_scope,
-			       fi->fib_nh[0].nh_gw,
-			       ofi->fib_nh[0].nh_gw,
-			       fi->fib_nh[0].nh_dev->name,
-			       ofi->fib_nh[0].nh_dev->name);
-		}
 		kfree(fi);
 		ofi->fib_refcnt++;
 		return ofi;
@@ -613,6 +606,8 @@ fib_dump_info(struct sk_buff *skb, u32 pid, u32 seq, int event,
 	if (rtm->rtm_dst_len)
 		RTA_PUT(skb, RTA_DST, 4, dst);
 	rtm->rtm_protocol = fi->fib_protocol;
+	if (fi->fib_priority)
+		RTA_PUT(skb, RTA_PRIORITY, 4, &fi->fib_priority);
 #ifdef CONFIG_NET_CLS_ROUTE
 	if (fi->fib_nh[0].nh_tclassid)
 		RTA_PUT(skb, RTA_FLOW, 4, &fi->fib_nh[0].nh_tclassid);
@@ -720,12 +715,16 @@ fib_convert_rtentry(int cmd, struct nlmsghdr *nl, struct rtmsg *rtm,
 	rtm->rtm_dst_len = plen;
 	rta->rta_dst = ptr;
 
+	if (r->rt_metric) {
+		*(u32*)&r->rt_pad3 = r->rt_metric - 1;
+		rta->rta_priority = (u32*)&r->rt_pad3;
+	}
 	if (r->rt_flags&RTF_REJECT) {
 		rtm->rtm_scope = RT_SCOPE_HOST;
 		rtm->rtm_type = RTN_UNREACHABLE;
 		return 0;
 	}
-	rtm->rtm_scope = RT_SCOPE_LINK;
+	rtm->rtm_scope = RT_SCOPE_NOWHERE;
 	rtm->rtm_type = RTN_UNICAST;
 
 	if (r->rt_dev) {
@@ -735,7 +734,7 @@ fib_convert_rtentry(int cmd, struct nlmsghdr *nl, struct rtmsg *rtm,
 		struct device *dev;
 		char   devname[IFNAMSIZ];
 
-		if (copy_from_user(devname, r->rt_dev, 15))
+		if (copy_from_user(devname, r->rt_dev, IFNAMSIZ-1))
 			return -EFAULT;
 		devname[IFNAMSIZ-1] = 0;
 #ifdef CONFIG_IP_ALIAS
@@ -776,6 +775,9 @@ fib_convert_rtentry(int cmd, struct nlmsghdr *nl, struct rtmsg *rtm,
 
 	if (r->rt_flags&RTF_GATEWAY && rta->rta_gw == NULL)
 		return -EINVAL;
+
+	if (rtm->rtm_scope == RT_SCOPE_NOWHERE)
+		rtm->rtm_scope = RT_SCOPE_LINK;
 
 	if (r->rt_flags&(RTF_MTU|RTF_WINDOW|RTF_IRTT)) {
 		struct rtattr *rec;
@@ -974,7 +976,7 @@ void fib_node_get_info(int type, int dead, struct fib_info *fi, u32 prefix, u32 
 	if (fi) {
 		len = sprintf(buffer, "%s\t%08X\t%08X\t%04X\t%d\t%u\t%d\t%08X\t%d\t%u\t%u",
 			      fi->fib_dev ? fi->fib_dev->name : "*", prefix,
-			      fi->fib_nh->nh_gw, flags, 0, 0, 0,
+			      fi->fib_nh->nh_gw, flags, 0, 0, fi->fib_priority,
 			      mask, fi->fib_mtu, fi->fib_window, fi->fib_rtt);
 	} else {
 		len = sprintf(buffer, "*\t%08X\t%08X\t%04X\t%d\t%u\t%d\t%08X\t%d\t%u\t%u",

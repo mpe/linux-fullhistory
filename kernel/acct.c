@@ -16,6 +16,10 @@
  *
  * (C) Copyright 1995 - 1997 Marco van Wieringen - ELM Consultancy B.V.
  *
+ *  Plugged two leaks. 1) It didn't return acct_file into the free_filps if
+ *  the file happened to be read-only. 2) If the accounting was suspended
+ *  due to the lack of space it happily allowed to reopen it and completely
+ *  lost the old acct_file. 3/10/98, Al Viro.
  */
 
 #include <linux/config.h>
@@ -123,17 +127,25 @@ asmlinkage int sys_acct(const char *name)
 		goto out;
 
 	if (name == (char *)NULL) {
-		if (acct_active) {
-			acct_process(0); 
+		if (acct_file) {
+			/* fput() may block, so just in case... */
+			struct file *tmp = acct_file;
+			if (acct_active)
+				acct_process(0); 
 		        del_timer(&acct_timer);
 			acct_active = 0;
 			acct_needcheck = 0;
-			fput(acct_file);
+			acct_file = NULL;
+			fput(tmp);
 		}
 		error = 0;
 		goto out;
 	} else {
-		if (!acct_active) {
+		/*
+		 * We can't rely on acct_active - it might be disabled
+		 * due to the lack of space.
+		 */
+		if (!acct_file) {
 			tmp = getname(name);
 			error = PTR_ERR(tmp);
 			if (IS_ERR(tmp))
@@ -181,11 +193,17 @@ asmlinkage int sys_acct(const char *name)
 					}
 					put_write_access(acct_file->f_dentry->d_inode);
 				}
-				acct_file->f_count--;
+				/* decrementing f_count is _not_ enough */
+				put_filp(acct_file);
+				acct_file = NULL;
 			} else
 				error = -EUSERS;
 			dput(dentry);
 		} else
+			/*
+			 * NB: in this case FreeBSD just closes acct_file
+			 * and opens new one. Maybe it's better behavior...
+			 */
 			error = -EBUSY;
 	}
 out:

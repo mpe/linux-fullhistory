@@ -7,7 +7,7 @@
  * assume GCC is being used.
  */
 
-#if __GNUC_MINOR__ > 7
+#if (__GNUC__ > 2) || (__GNUC_MINOR__ >= 8)
 typedef unsigned long int      __kernel_size_t;
 #else
 typedef unsigned long long     __kernel_size_t;

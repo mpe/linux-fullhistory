@@ -149,5 +149,13 @@ struct ipv6_mreq {
 #define IPV6_ADD_MEMBERSHIP	20
 #define IPV6_DROP_MEMBERSHIP	21
 #define IPV6_ROUTER_ALERT	22
+#define IPV6_MTU_DISCOVER	23
+#define IPV6_MTU		24
+#define IPV6_RECVERR		25
+
+/* IPV6_MTU_DISCOVER values */
+#define IPV6_PMTUDISC_DONT		0
+#define IPV6_PMTUDISC_WANT		1
+#define IPV6_PMTUDISC_DO		2
 
 #endif

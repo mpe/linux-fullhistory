@@ -8,7 +8,7 @@
  *		as published by the Free Software Foundation; either version
  *		2 of the License, or (at your option) any later version.
  *
- * Version:	$Id: af_unix.c,v 1.69 1998/08/28 01:15:41 davem Exp $
+ * Version:	$Id: af_unix.c,v 1.71 1998/10/03 09:39:05 davem Exp $
  *
  * Fixes:
  *		Linus Torvalds	:	Assorted bug cures.
@@ -463,7 +463,7 @@ static int unix_autobind(struct socket *sock)
 
 	addr = kmalloc(sizeof(*addr) + sizeof(short) + 16, GFP_KERNEL);
 	if (!addr)
-		return -ENOBUFS;
+		return -ENOMEM;
 	if (sk->protinfo.af_unix.addr || sk->protinfo.af_unix.dentry)
 	{
 		kfree(addr);
@@ -548,7 +548,7 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 
 	addr = kmalloc(sizeof(*addr)+addr_len, GFP_KERNEL);
 	if (!addr)
-		return -ENOBUFS;
+		return -ENOMEM;
 
 	/* We slept; recheck ... */
 
@@ -786,7 +786,7 @@ static int unix_accept(struct socket *sock, struct socket *newsock, int flags)
 	struct sk_buff *skb;
 	
 	if (sock->state != SS_UNCONNECTED)
-		return(-EINVAL);
+		return(-EINVAL); 
 	if (!(sock->flags & SO_ACCEPTCON)) 
 		return(-EINVAL);
 
@@ -1332,7 +1332,7 @@ static int unix_shutdown(struct socket *sock, int mode)
 				peer_mode |= SEND_SHUTDOWN;
 			if (mode&SEND_SHUTDOWN)
 				peer_mode |= RCV_SHUTDOWN;
-			other->shutdown |= mode;
+			other->shutdown |= peer_mode;
 			other->state_change(other);
 		}
 	}

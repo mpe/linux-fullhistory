@@ -1,4 +1,4 @@
-/* $Id: openprom.h,v 1.20 1997/04/10 06:41:06 davem Exp $ */
+/* $Id: openprom.h,v 1.23 1998/09/21 05:07:26 jj Exp $ */
 #ifndef __SPARC_OPENPROM_H
 #define __SPARC_OPENPROM_H
 
@@ -203,6 +203,55 @@ struct linux_prom_ranges {
 	unsigned int ot_parent_space;
 	unsigned int ot_parent_base;		/* CPU looks from here */
 	unsigned int or_size;
+};
+
+/* Ranges and reg properties are a bit different for PCI. */
+struct linux_prom_pci_registers {
+	/* 
+	 * We don't know what information this field contain.
+	 * We guess, PCI device function is in bits 15:8
+	 * So, ...
+	 */
+	unsigned int which_io;  /* Let it be which_io */
+
+	unsigned int phys_hi;
+	unsigned int phys_lo;
+
+	unsigned int size_hi;
+	unsigned int size_lo;
+};
+
+struct linux_prom_pci_ranges {
+	unsigned int child_phys_hi;	/* Only certain bits are encoded here. */
+	unsigned int child_phys_mid;
+	unsigned int child_phys_lo;
+
+	unsigned int parent_phys_hi;
+	unsigned int parent_phys_lo;
+
+	unsigned int size_hi;
+	unsigned int size_lo;
+};
+
+struct linux_prom_pci_assigned_addresses {
+	unsigned int which_io;
+
+	unsigned int phys_hi;
+	unsigned int phys_lo;
+
+	unsigned int size_hi;
+	unsigned int size_lo;
+};
+
+struct linux_prom_ebus_ranges {
+	unsigned int child_phys_hi;
+	unsigned int child_phys_lo;
+
+	unsigned int parent_phys_hi;
+	unsigned int parent_phys_mid;
+	unsigned int parent_phys_lo;
+
+	unsigned int size;
 };
 
 #endif /* !(__ASSEMBLY__) */

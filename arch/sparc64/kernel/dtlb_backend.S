@@ -1,4 +1,4 @@
-/* $Id: dtlb_backend.S,v 1.4 1998/06/15 16:59:34 jj Exp $
+/* $Id: dtlb_backend.S,v 1.6 1998/09/24 03:21:32 davem Exp $
  * dtlb_backend.S: Back end to DTLB miss replacement strategy.
  *                 This is included directly into the trap table.
  *

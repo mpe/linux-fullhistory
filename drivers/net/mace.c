@@ -120,27 +120,13 @@ mace_probe(struct device *dev)
 		if (dev->priv == 0)
 			return -ENOMEM;
 	}
+	memset(dev->priv, 0, PRIV_BYTES);
 
 	mp = (struct mace_data *) dev->priv;
 	dev->base_addr = mace->addrs[0].address;
 	mp->mace = (volatile struct mace *)
 		ioremap(mace->addrs[0].address, 0x1000);
 	dev->irq = mace->intrs[0].line;
-
-	if (request_irq(dev->irq, mace_interrupt, 0, "MACE", dev)) {
-		printk(KERN_ERR "MACE: can't get irq %d\n", dev->irq);
-		return -EAGAIN;
-	}
-	if (request_irq(mace->intrs[1].line, mace_txdma_intr, 0, "MACE-txdma",
-			dev)) {
-		printk(KERN_ERR "MACE: can't get irq %d\n", mace->intrs[1].line);
-		return -EAGAIN;
-	}
-	if (request_irq(mace->intrs[2].line, mace_rxdma_intr, 0, "MACE-rxdma",
-			dev)) {
-		printk(KERN_ERR "MACE: can't get irq %d\n", mace->intrs[2].line);
-		return -EAGAIN;
-	}
 
 	addr = get_property(mace, "mac-address", NULL);
 	if (addr == NULL) {
@@ -187,6 +173,23 @@ mace_probe(struct device *dev)
 
 	ether_setup(dev);
 
+	mace_reset(dev);
+
+	if (request_irq(dev->irq, mace_interrupt, 0, "MACE", dev)) {
+		printk(KERN_ERR "MACE: can't get irq %d\n", dev->irq);
+		return -EAGAIN;
+	}
+	if (request_irq(mace->intrs[1].line, mace_txdma_intr, 0, "MACE-txdma",
+			dev)) {
+		printk(KERN_ERR "MACE: can't get irq %d\n", mace->intrs[1].line);
+		return -EAGAIN;
+	}
+	if (request_irq(mace->intrs[2].line, mace_rxdma_intr, 0, "MACE-rxdma",
+			dev)) {
+		printk(KERN_ERR "MACE: can't get irq %d\n", mace->intrs[2].line);
+		return -EAGAIN;
+	}
+
 	return 0;
 }
 
@@ -197,36 +200,49 @@ static void mace_reset(struct device *dev)
     int i;
 
     /* soft-reset the chip */
-    mb->biucc = SWRST; eieio();
-    udelay(100);
+    i = 200;
+    while (--i) {
+	out_8(&mb->biucc, SWRST);
+	if (mb->biucc & SWRST) {
+	    udelay(20);
+	    continue;
+	}
+	break;
+    }
+    if (!i) {
+	printk("mace: cannot reset chip!\n");
+	return;
+    }
+
+    out_8(&mb->imr, 0xff);	/* disable all intrs for now */
+    i = in_8(&mb->ir);
+    out_8(&mb->maccc, 0);	/* turn off tx, rx */
 
     mb->biucc = XMTSP_64;
-    mb->imr = 0xff;		/* disable all intrs for now */
-    i = mb->ir;
-    mb->maccc = 0;		/* turn off tx, rx */
     mb->utr = RTRD;
-    mb->fifocc = RCVFW_64;
+    mb->fifocc = RCVFW_32 | XMTFW_16 | XMTFWU | RCVFWU | XMTBRST;
     mb->xmtfc = AUTO_PAD_XMIT;	/* auto-pad short frames */
+    mb->rcvfc = 0;
 
     /* load up the hardware address */
-    mb->iac = ADDRCHG | PHYADDR; eieio();
-    while ((mb->iac & ADDRCHG) != 0)
-	eieio();
+    out_8(&mb->iac, ADDRCHG | PHYADDR);
+    while ((in_8(&mb->iac) & ADDRCHG) != 0)
+	;
     for (i = 0; i < 6; ++i) {
-	mb->padr = dev->dev_addr[i];
-	eieio();
+	out_8(&mb->padr, dev->dev_addr[i]);
     }
 
     /* clear the multicast filter */
-    mb->iac = ADDRCHG | LOGADDR; eieio();
-    while ((mb->iac & ADDRCHG) != 0)
-	eieio();
+    out_8(&mb->iac, ADDRCHG | LOGADDR);
+    while ((in_8(&mb->iac) & ADDRCHG) != 0)
+	;
     for (i = 0; i < 8; ++i) {
-	mb->ladrf = 0;
-	eieio();
+	out_8(&mb->ladrf, 0);
     }
+    /* done changing address */
+    out_8(&mb->iac, 0);
 
-    mb->plscc = PORTSEL_GPSI + ENPLSIO;
+    out_8(&mb->plscc, PORTSEL_GPSI + ENPLSIO);
 }
 
 static int mace_set_address(struct device *dev, void *addr)
@@ -240,15 +256,15 @@ static int mace_set_address(struct device *dev, void *addr)
     save_flags(flags); cli();
 
     /* load up the hardware address */
-    mb->iac = ADDRCHG | PHYADDR; eieio();
-    while ((mb->iac & ADDRCHG) != 0)
-	eieio();
+    out_8(&mb->iac, ADDRCHG | PHYADDR);
+    while ((in_8(&mb->iac) & ADDRCHG) != 0)
+	;
     for (i = 0; i < 6; ++i) {
-	mb->padr = dev->dev_addr[i] = p[i];
-	eieio();
+	out_8(&mb->padr, dev->dev_addr[i] = p[i]);
     }
+    out_8(&mb->iac, 0);
     /* note: setting ADDRCHG clears ENRCV */
-    mb->maccc = mp->maccc; eieio();
+    out_8(&mb->maccc, mp->maccc);
 
     restore_flags(flags);
     return 0;
@@ -316,9 +332,9 @@ static int mace_open(struct device *dev)
     mp->tx_bad_runt = 0;
 
     /* turn it on! */
-    mb->maccc = mp->maccc; eieio();
+    out_8(&mb->maccc, mp->maccc);
     /* enable all interrupts except receive interrupts */
-    mb->imr = RCVINT; eieio();
+    out_8(&mb->imr, RCVINT);
     return 0;
 }
 
@@ -389,7 +405,7 @@ static int mace_xmit_start(struct sk_buff *skb, struct device *dev)
 	dev->tbusy = 1;
 	mp->tx_fullup = 1;
 	restore_flags(flags);
-	return -1;		/* can't take it at the moment */
+	return 1;		/* can't take it at the moment */
     }
     restore_flags(flags);
 
@@ -483,16 +499,15 @@ static void mace_set_multicast(struct device *dev)
 	printk("\n");
 #endif
 
-	mb->iac = ADDRCHG | LOGADDR; eieio();
-	while ((mb->iac & ADDRCHG) != 0)
-	    eieio();
+	out_8(&mb->iac, ADDRCHG | LOGADDR);
+	while ((in_8(&mb->iac) & ADDRCHG) != 0)
+	    ;
 	for (i = 0; i < 8; ++i) {
-	    mb->ladrf = multicast_filter[i];
-	    eieio();
+	    out_8(&mb->ladrf, multicast_filter[i]);
 	}
     }
     /* reset maccc */
-    mb->maccc = mp->maccc; eieio();
+    out_8(&mb->maccc, mp->maccc);
 }
 
 static void mace_handle_misc_intrs(struct mace_data *mp, int intr)
@@ -525,9 +540,10 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
     volatile struct dbdma_cmd *cp;
     int intr, fs, i, stat, x;
     int xcount, dstat;
-    static int mace_last_fs, mace_last_xcount;
+    /* static int mace_last_fs, mace_last_xcount; */
 
-    intr = mb->ir;		/* read interrupt register */
+    intr = in_8(&mb->ir);		/* read interrupt register */
+    in_8(&mb->xmtrc);			/* get retries */
     mace_handle_misc_intrs(mp, intr);
 
     i = mp->tx_empty;
@@ -543,10 +559,9 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	if (intr != 0)
 	    mace_handle_misc_intrs(mp, intr);
 	if (mp->tx_bad_runt) {
-	    fs = mb->xmtfs;
-	    eieio();
+	    fs = in_8(&mb->xmtfs);
 	    mp->tx_bad_runt = 0;
-	    mb->xmtfc = AUTO_PAD_XMIT;
+	    mb->xmtfc = AUTO_PAD_XMIT; 
 	    continue;
 	}
 	dstat = ld_le32(&td->status);
@@ -569,8 +584,7 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	     * so the two bytes will only be a runt packet which should
 	     * be ignored by other stations.
 	     */
-	    mb->xmtfc = DXMTFCS;
-	    eieio();
+	    out_8(&mb->xmtfc, DXMTFCS);
 	}
 	fs = mb->xmtfs;
 	if ((fs & XMTSV) == 0) {
@@ -618,14 +632,16 @@ static void mace_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 		++mp->stats.tx_carrier_errors;
 	    if (fs & (UFLO|LCOL|RTRY))
 		++mp->stats.tx_aborted_errors;
-	} else
+	} else 
 	    ++mp->stats.tx_packets;
 	dev_kfree_skb(mp->tx_bufs[i]);
 	--mp->tx_active;
 	if (++i >= N_TX_RING)
 	    i = 0;
+#if 0
 	mace_last_fs = fs;
 	mace_last_xcount = xcount;
+#endif
     }
 
     if (i != mp->tx_empty) {
@@ -675,7 +691,7 @@ static void mace_tx_timeout(unsigned long data)
     cp = mp->tx_cmds + NCMDS_TX * mp->tx_empty;
 
     /* turn off both tx and rx and reset the chip */
-    mb->maccc = 0;
+    out_8(&mb->maccc, 0);
     out_le32(&td->control, (RUN|PAUSE|FLUSH|WAKE) << 16);
     printk(KERN_ERR "mace: transmit timeout - resetting\n");
     mace_reset(dev);

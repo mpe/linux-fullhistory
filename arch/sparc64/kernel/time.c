@@ -1,4 +1,4 @@
-/* $Id: time.c,v 1.15 1998/05/12 22:38:29 ecd Exp $
+/* $Id: time.c,v 1.16 1998/09/05 17:25:28 jj Exp $
  * time.c: UltraSparc timer and TOD clock support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caip.rutgers.edu)
@@ -32,8 +32,8 @@
 #include <asm/ebus.h>
 
 struct mostek48t02 *mstk48t02_regs = 0;
-struct mostek48t08 *mstk48t08_regs = 0;
-struct mostek48t59 *mstk48t59_regs = 0;
+static struct mostek48t08 *mstk48t08_regs = 0;
+static struct mostek48t59 *mstk48t59_regs = 0;
 
 static int set_rtc_mmss(unsigned long);
 
@@ -133,7 +133,7 @@ static inline unsigned long mktime(unsigned int year, unsigned int mon,
 }
 
 /* Kick start a stopped clock (procedure from the Sun NVRAM/hostid FAQ). */
-static void kick_start_clock(void)
+static void __init kick_start_clock(void)
 {
 	register struct mostek48t02 *regs = mstk48t02_regs;
 	unsigned char sec;
@@ -182,7 +182,7 @@ static void kick_start_clock(void)
 }
 
 /* Return nonzero if the clock chip battery is low. */
-static int has_low_battery(void)
+static int __init has_low_battery(void)
 {
 	register struct mostek48t02 *regs = mstk48t02_regs;
 	unsigned char data1, data2;
@@ -197,7 +197,7 @@ static int has_low_battery(void)
 
 
 /* Probe for the real time clock chip. */
-__initfunc(static void set_system_time(void))
+static void __init set_system_time(void)
 {
 	unsigned int year, mon, day, hour, min, sec;
 	struct mostek48t02 *mregs;
@@ -222,14 +222,17 @@ __initfunc(static void set_system_time(void))
 	mregs->creg &= ~MSTK_CREG_READ;
 }
 
-__initfunc(void clock_probe(void))
+void __init clock_probe(void)
 {
 	struct linux_prom_registers clk_reg[2];
 	char model[128];
 	int node, busnd = -1, err;
+	unsigned long flags;
 #ifdef CONFIG_PCI
 	struct linux_ebus *ebus = 0;
 #endif
+
+	__save_and_cli(flags);
 
 	if(central_bus != NULL) {
 		busnd = central_bus->child->prom_node;
@@ -349,6 +352,8 @@ __initfunc(void clock_probe(void))
 		kick_start_clock();
 
 	set_system_time();
+	
+	__restore_flags(flags);
 }
 
 #ifndef BCD_TO_BIN
@@ -359,19 +364,15 @@ __initfunc(void clock_probe(void))
 #define BIN_TO_BCD(val) ((((val)/10)<<4) + (val)%10)
 #endif
 
-__initfunc(void time_init(void))
-{
-	/* clock_probe() is now done at end of sbus_init on sparc64
-	 * so that both sbus and fhc bus information is probed and
-	 * available.
-	 */
-}
-
 extern void init_timers(void (*func)(int, void *, struct pt_regs *),
 			unsigned long *);
 
-__initfunc(void sun4u_start_timers(void))
+void __init time_init(void)
 {
+	/* clock_probe() is now done at end of [se]bus_init on sparc64
+	 * so that sbus, fhc and ebus bus information is probed and
+	 * available.
+	 */
 	unsigned long clock;
 
 	init_timers(timer_interrupt, &clock);

@@ -14,8 +14,6 @@
  *  more details.
  */
 
-
-#include <linux/config.h>
 #include <linux/module.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>
@@ -410,6 +408,7 @@ __initfunc(void g364fb_init(void))
     fb_info.switch_con = &g364fbcon_switch;
     fb_info.updatevar = &g364fbcon_updatevar;
     fb_info.blank = &g364fbcon_blank;
+    fb_info.flags = FBINFO_FLAG_DEFAULT;
 
     g364fb_set_var(&fb_var, -1, &fb_info);
 

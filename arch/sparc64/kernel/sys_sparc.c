@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.20 1998/08/03 20:03:26 davem Exp $
+/* $Id: sys_sparc.c,v 1.22 1998/09/25 01:09:27 davem Exp $
  * linux/arch/sparc64/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -181,6 +181,7 @@ asmlinkage unsigned long sys_mmap(unsigned long addr, unsigned long len,
 		}
 	}
 
+	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 	retval = do_mmap(file, addr, len, prot, flags, off);
 
 out_putf:
@@ -252,17 +253,20 @@ asmlinkage int sys_aplib(void)
 
 asmlinkage int solaris_syscall(struct pt_regs *regs)
 {
+	static int count = 0;
 	lock_kernel();
 	regs->tpc = regs->tnpc;
 	regs->tnpc += 4;
-	printk ("For Solaris binary emulation you need solaris module loaded\n");
+	if(++count <= 20)
+		printk ("For Solaris binary emulation you need solaris module loaded\n");
 	show_regs (regs);
 	send_sig(SIGSEGV, current, 1);
 	unlock_kernel();
-	return 0;
+	return -ENOSYS;
 }
 
-asmlinkage int sys_utrap_install(utrap_entry_t type, utrap_handler_t new_p, utrap_handler_t new_d,
+asmlinkage int sys_utrap_install(utrap_entry_t type, utrap_handler_t new_p,
+				 utrap_handler_t new_d,
 				 utrap_handler_t *old_p, utrap_handler_t *old_d)
 {
 	if (type < UT_INSTRUCTION_EXCEPTION || type > UT_TRAP_INSTRUCTION_31)

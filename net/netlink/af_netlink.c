@@ -551,10 +551,6 @@ static int netlink_recvmsg(struct socket *sock, struct msghdr *msg, int len,
 	if (flags&(MSG_OOB|MSG_PEEK))
 		return -EOPNOTSUPP;
 
-	err = -sock_error(sk);
-	if (err)
-		return err;
-
 	skb = skb_recv_datagram(sk,flags,noblock,&err);
 	if (skb==NULL)
  		return err;

@@ -1,4 +1,4 @@
-/* $Id: sparc_ksyms.c,v 1.65 1998/06/04 09:54:50 jj Exp $
+/* $Id: sparc_ksyms.c,v 1.70 1998/09/17 11:04:55 jj Exp $
  * arch/sparc/kernel/ksyms.c: Sparc specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -85,11 +85,6 @@ __attribute__((section("__ksymtab"))) =				\
 
 /* used by various drivers */
 EXPORT_SYMBOL(sparc_cpu_model);
-#ifdef __SMP__
-EXPORT_SYMBOL(klock_info);
-#endif
-EXPORT_SYMBOL_PRIVATE(_lock_kernel);
-EXPORT_SYMBOL_PRIVATE(_unlock_kernel);
 EXPORT_SYMBOL_PRIVATE(_spinlock_waitfor);
 #ifdef SPIN_LOCK_DEBUG
 EXPORT_SYMBOL(_spin_lock);
@@ -119,14 +114,10 @@ EXPORT_SYMBOL_PRIVATE(_rw_write_enter);
 EXPORT_SYMBOL(__sparc_bh_counter);
 #ifdef __SMP__
 #ifdef DEBUG_IRQLOCK
-EXPORT_SYMBOL(irq_enter);
-EXPORT_SYMBOL(irq_exit);
 EXPORT_SYMBOL(__global_restore_flags);
 EXPORT_SYMBOL(__global_sti);
 EXPORT_SYMBOL(__global_cli);
 #else
-EXPORT_SYMBOL_PRIVATE(_irq_enter);
-EXPORT_SYMBOL_PRIVATE(_irq_exit);
 EXPORT_SYMBOL_PRIVATE(_global_restore_flags);
 EXPORT_SYMBOL_PRIVATE(_global_sti);
 EXPORT_SYMBOL_PRIVATE(_global_cli);
@@ -134,7 +125,10 @@ EXPORT_SYMBOL_PRIVATE(_global_cli);
 #endif
 
 EXPORT_SYMBOL(page_offset);
+
+#ifndef CONFIG_SUN4
 EXPORT_SYMBOL(stack_top);
+#endif
 
 /* Atomic operations. */
 EXPORT_SYMBOL_PRIVATE(_atomic_add);
@@ -227,7 +221,7 @@ EXPORT_SYMBOL(__prom_getsibling);
 
 /* sparc library symbols */
 EXPORT_SYMBOL(bcopy);
-EXPORT_SYMBOL(memscan);
+EXPORT_SYMBOL_NOVERS(memscan);
 EXPORT_SYMBOL(strlen);
 EXPORT_SYMBOL(strnlen);
 EXPORT_SYMBOL(strcpy);
@@ -235,7 +229,7 @@ EXPORT_SYMBOL(strncpy);
 EXPORT_SYMBOL(strcat);
 EXPORT_SYMBOL(strncat);
 EXPORT_SYMBOL(strcmp);
-EXPORT_SYMBOL(strncmp);
+EXPORT_SYMBOL_NOVERS(strncmp);
 EXPORT_SYMBOL(strchr);
 EXPORT_SYMBOL(strrchr);
 EXPORT_SYMBOL(strpbrk);

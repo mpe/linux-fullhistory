@@ -1,4 +1,4 @@
-/* $Id: fault.c,v 1.94 1998/05/01 16:00:27 jj Exp $
+/* $Id: fault.c,v 1.95 1998/09/18 19:50:32 davem Exp $
  * fault.c:  Page fault handlers for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -149,7 +149,9 @@ static void unhandled_fault(unsigned long address, struct task_struct *tsk,
 	       (unsigned long) tsk->mm->context);
 	printk(KERN_ALERT "tsk->mm->pgd = %08lx\n",
 	       (unsigned long) tsk->mm->pgd);
+	lock_kernel();
 	die_if_kernel("Oops", regs);
+	unlock_kernel();
 }
 
 asmlinkage int lookup_fault(unsigned long pc, unsigned long ret_pc, 
@@ -196,11 +198,11 @@ asmlinkage void do_sparc_fault(struct pt_regs *regs, int text_fault, int write,
 	unsigned int fixup;
 	unsigned long g2;
 	int from_user = !(regs->psr & PSR_PS);
-	lock_kernel();
-	down(&mm->mmap_sem);
+
 	if(text_fault)
 		address = regs->pc;
 
+	down(&mm->mmap_sem);
 	/* The kernel referencing a bad kernel pointer can lock up
 	 * a sun4c machine completely, so we must attempt recovery.
 	 */
@@ -231,7 +233,7 @@ good_area:
 	}
 	handle_mm_fault(current, vma, address, write);
 	up(&mm->mmap_sem);
-	goto out;
+	return;
 	/*
 	 * Something tried to access memory that isn't in our memory map..
 	 * Fix it, but check if it's kernel or user first..
@@ -263,7 +265,7 @@ bad_area:
 			regs->u_regs[UREG_G2] = g2;
 			regs->pc = fixup;
 			regs->npc = regs->pc + 4;
-			goto out;
+			return;
 		}
 	}
 	if(from_user) {
@@ -274,11 +276,9 @@ bad_area:
 		tsk->tss.sig_address = address;
 		tsk->tss.sig_desc = SUBSIG_NOMAPPING;
 		force_sig(SIGSEGV, tsk);
-		goto out;
+		return;
 	}
 	unhandled_fault (address, tsk, regs);
-out:
-	unlock_kernel();
 }
 
 asmlinkage void do_sun4c_fault(struct pt_regs *regs, int text_fault, int write,

@@ -27,17 +27,10 @@ struct kern_rta
 	void		*rta_gw;
 	u32		*rta_priority;
 	void		*rta_prefsrc;
-#ifdef CONFIG_RTNL_OLD_IFINFO
-	unsigned	*rta_window;
-	unsigned	*rta_rtt;
-	unsigned	*rta_mtu;
-	unsigned char	*rta_ifname;
-#else
 	struct rtattr	*rta_mx;
 	struct rtattr	*rta_mp;
 	unsigned char	*rta_protoinfo;
 	unsigned char	*rta_flow;
-#endif
 	struct rta_cacheinfo *rta_ci;
 };
 
@@ -69,17 +62,12 @@ struct fib_info
 	unsigned		fib_flags;
 	int			fib_protocol;
 	u32			fib_prefsrc;
-#ifdef CONFIG_RTNL_OLD_IFINFO
-	unsigned		fib_mtu;
-	unsigned		fib_rtt;
-	unsigned		fib_window;
-#else
+	u32			fib_priority;
 #define FIB_MAX_METRICS RTAX_RTT
 	unsigned		fib_metrics[FIB_MAX_METRICS];
 #define fib_mtu fib_metrics[RTAX_MTU-1]
 #define fib_window fib_metrics[RTAX_WINDOW-1]
 #define fib_rtt fib_metrics[RTAX_RTT-1]
-#endif
 	int			fib_nhs;
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
 	int			fib_power;

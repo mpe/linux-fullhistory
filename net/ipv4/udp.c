@@ -5,7 +5,7 @@
  *
  *		The User Datagram Protocol (UDP).
  *
- * Version:	$Id: udp.c,v 1.62 1998/09/15 02:11:32 davem Exp $
+ * Version:	$Id: udp.c,v 1.63 1998/10/03 09:38:16 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -481,6 +481,9 @@ void udp_err(struct sk_buff *skb, unsigned char *dp, int len)
 	int type = skb->h.icmph->type;
 	int code = skb->h.icmph->code;
 	struct sock *sk;
+	int harderr;
+	u32 info;
+	int err;
 
 	if (len < (iph->ihl<<2)+sizeof(struct udphdr)) {
 		icmp_statistics.IcmpInErrors++;
@@ -493,36 +496,40 @@ void udp_err(struct sk_buff *skb, unsigned char *dp, int len)
     	  	return;	/* No socket for error */
 	}
 
-	if (sk->ip_recverr && !atomic_read(&sk->sock_readers)) {
-		struct sk_buff *skb2 = skb_clone(skb, GFP_ATOMIC);
-		if (skb2 && sock_queue_err_skb(sk, skb2))
-			kfree_skb(skb2);
-	}
-  	
+	err = 0;
+	info = 0;
+	harderr = 0;
+
 	switch (type) {
+	default:
 	case ICMP_TIME_EXCEEDED:
+		err = EHOSTUNREACH;
+		break;
 	case ICMP_SOURCE_QUENCH:
 		return;
 	case ICMP_PARAMETERPROB:
-		sk->err = EPROTO;
-		sk->error_report(sk);
-		return;
+		err = EPROTO;
+		info = ntohl(skb->h.icmph->un.gateway)>>24;
+		harderr = 1;
+		break;
 	case ICMP_DEST_UNREACH:
 		if (code == ICMP_FRAG_NEEDED) { /* Path MTU discovery */
 			if (sk->ip_pmtudisc != IP_PMTUDISC_DONT) {
-				/* 
-				 * There should be really a way to pass the
-				 * discovered MTU value back to the user (the
-				 * ICMP layer did all the work for us)
-				 */
-				sk->err = EMSGSIZE;
-				sk->error_report(sk);
+				err = EMSGSIZE;
+				info = ntohs(skb->h.icmph->un.frag.mtu);
+				harderr = 1;
+				break;
 			}
 			return;
 		}
+		err = EHOSTUNREACH;
+		if (code <= NR_ICMP_UNREACH) {
+			harderr = icmp_err_convert[code].fatal;
+			err = icmp_err_convert[code].errno;
+		}
 		break;
 	}
-			
+
 	/*
 	 *	Various people wanted BSD UDP semantics. Well they've come 
 	 *	back out because they slow down response to stuff like dead
@@ -531,21 +538,25 @@ void udp_err(struct sk_buff *skb, unsigned char *dp, int len)
 	 *	client code people.
 	 */
 	 
-	/* RFC1122: OK.  Passes ICMP errors back to application, as per */
-	/* 4.1.3.3. */
-	/* After the comment above, that should be no surprise. */
+	/*
+	 *      RFC1122: OK.  Passes ICMP errors back to application, as per 
+	 *	4.1.3.3. After the comment above, that should be no surprise. 
+	 */
 
-	if (code < NR_ICMP_UNREACH && icmp_err_convert[code].fatal)
-	{
-		/*
-		 *	4.x BSD compatibility item. Break RFC1122 to
-		 *	get BSD socket semantics.
-		 */
-		if(sk->bsdism && sk->state!=TCP_ESTABLISHED)
-			return;
-		sk->err = icmp_err_convert[code].errno;
-		sk->error_report(sk);
-	}
+	if (!harderr && !sk->ip_recverr)
+		return;
+
+	/*
+	 *	4.x BSD compatibility item. Break RFC1122 to
+	 *	get BSD socket semantics.
+	 */
+	if(sk->bsdism && sk->state!=TCP_ESTABLISHED)
+		return;
+
+	if (sk->ip_recverr)
+		ip_icmp_error(sk, skb, err, uh->dest, info, (u8*)(uh+1));
+	sk->err = err;
+	sk->error_report(sk);
 }
 
 
@@ -854,24 +865,17 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, int len,
 	/*
 	 *	Check any passed addresses
 	 */
-	 
   	if (addr_len) 
   		*addr_len=sizeof(*sin);
 
-	if (sk->ip_recverr && (skb = skb_dequeue(&sk->error_queue)) != NULL) {
-		err = sock_error(sk);
-		if (msg->msg_controllen != 0) {
-			put_cmsg(msg, SOL_IP, IP_RECVERR, skb->len, skb->data);
-			err = 0;
-		}
-		goto out_free;
-	}
-  
+	if (flags & MSG_ERRQUEUE)
+		return ip_recv_error(sk, msg, len);
+
 	/*
 	 *	From here the generic datagram does a lot of the work. Come
 	 *	the finished NET3, it will do _ALL_ the work!
 	 */
-	 	
+
 	skb = skb_recv_datagram(sk, flags, noblock, &err);
 	if (!skb)
 		goto out;
@@ -1026,7 +1030,7 @@ static int udp_queue_rcv_skb(struct sock * sk, struct sk_buff *skb)
 	 *	Charge it to the socket, dropping if the queue is full.
 	 */
 
-	if (__sock_queue_rcv_skb(sk,skb)<0) {
+	if (sock_queue_rcv_skb(sk,skb)<0) {
 		udp_statistics.UdpInErrors++;
 		ip_statistics.IpInDiscards++;
 		ip_statistics.IpInDelivers--;
@@ -1196,9 +1200,11 @@ csum_error:
 	 * RFC1122: OK.  Discards the bad packet silently (as far as 
 	 * the network is concerned, anyway) as per 4.1.3.4 (MUST). 
 	 */
-	NETDEBUG(printk(KERN_DEBUG "UDP: bad checksum. From %08lX:%d to %08lX:%d ulen %d\n",
-			ntohl(saddr),ntohs(uh->source),
-			ntohl(daddr),ntohs(uh->dest),
+	NETDEBUG(printk(KERN_DEBUG "UDP: bad checksum. From %d.%d.%d.%d:%d to %d.%d.%d.%d:%d ulen %d\n",
+			NIPQUAD(saddr),
+			ntohs(uh->source),
+			NIPQUAD(daddr),
+			ntohs(uh->dest),
 			ulen));
 	udp_statistics.UdpInErrors++;
 	kfree_skb(skb);

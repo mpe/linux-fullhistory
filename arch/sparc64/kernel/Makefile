@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.38 1998/07/26 03:02:47 davem Exp $
+# $Id: Makefile,v 1.40 1998/09/17 11:05:03 jj Exp $
 # Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
@@ -20,8 +20,12 @@ O_OBJS   := process.o setup.o cpu.o idprom.o \
 	    traps.o devices.o auxio.o ioport.o \
 	    irq.o ptrace.o time.o sys_sparc.o signal.o \
 	    unaligned.o sys_sunos32.o sunos_ioctl32.o \
-	    central.o psycho.o ebus.o
+	    central.o psycho.o
 OX_OBJS  := sparc64_ksyms.o
+
+ifdef CONFIG_PCI
+  O_OBJS += ebus.o
+endif
 
 ifdef SMP
 O_OBJS += smp.o trampoline.o
@@ -48,6 +52,12 @@ head.o: head.S ttable.S itlb_base.S dtlb_base.S dtlb_backend.S dtlb_prot.S \
 #
 binfmt_elf32.o: $(TOPDIR)/fs/binfmt_elf.c
 
+ifneq ($(IS_EGCS),y)
+  CMODEL_CFLAG := -mmedlow
+else
+  CMODEL_CFLAG := -mcmodel=medlow
+endif
+
 check_asm: dummy
 	@echo "/* Automatically generated. Do not edit. */" > asm_offsets.h
 	@echo "#ifndef __ASM_OFFSETS_H__" >> asm_offsets.h
@@ -70,7 +80,7 @@ check_asm: dummy
 	@rm -f tmp.[ci]
 	#$(CC) -o check_asm check_asm.c
 	# <hack> Until we can do this natively, a hack has to take place
-	$(CC) -mmedlow -ffixed-g4 -S -o check_asm.s check_asm.c
+	$(CC) $(CMODEL_CFLAG) -ffixed-g4 -S -o check_asm.s check_asm.c
 	$(HOSTCC) -Wa,-Av9a -o check_asm check_asm.s
 	@rm -f check_asm.s
 	# </hack>
@@ -94,7 +104,7 @@ check_asm: dummy
 	@rm -f tmp.[ci]
 	#$(CC) -D__SMP__ -o check_asm check_asm.c
 	# <hack> Until we can do this natively, a hack has to take place
-	$(CC) -D__SMP__ -mmedlow -ffixed-g4 -S -o check_asm.s check_asm.c
+	$(CC) -D__SMP__ $(CMODEL_CFLAG) -ffixed-g4 -S -o check_asm.s check_asm.c
 	$(HOSTCC) -Wa,-Av9a -o check_asm check_asm.s
 	@rm -f check_asm.s
 	# </hack>

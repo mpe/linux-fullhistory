@@ -7,6 +7,9 @@
  *		2 of the License, or (at your option) any later version.
  *
  * Authors:	Alexey Kuznetsov, <kuznet@ms2.inr.ac.ru>
+ *
+ * Changes:
+ * J Hadi Salim <hadi@nortel.com> 980914:	computation fixes
  */
 
 #include <linux/config.h>
@@ -156,9 +159,9 @@ red_enqueue(struct sk_buff *skb, struct Qdisc* sch)
 
 	if (!PSCHED_IS_PASTPERFECT(q->qidlestart)) {
 		long us_idle;
-		PSCHED_SET_PASTPERFECT(q->qidlestart);
 		PSCHED_GET_TIME(now);
 		us_idle = PSCHED_TDIFF_SAFE(now, q->qidlestart, q->Scell_max, 0);
+		PSCHED_SET_PASTPERFECT(q->qidlestart);
 
 /*
    The problem: ideally, average length queue recalcultion should
@@ -177,9 +180,17 @@ red_enqueue(struct sk_buff *skb, struct Qdisc* sch)
    but it is field for experiments.
 */
 		q->qave >>= q->Stab[(us_idle>>q->Scell_log)&0xFF];
-	}
+	} else {
+		q->qave += sch->stats.backlog - (q->qave >> q->Wlog);
+		/* NOTE:
+		   q->qave is fixed point number with point at Wlog.
+		   The formulae above is equvalent to floating point
+		   version:
 
-	q->qave += sch->stats.backlog - (q->qave >> q->Wlog);
+		   qave = qave*(1-W) + sch->stats.backlog*W;
+		                                           --ANK (980924)
+		 */
+	}
 
 	if (q->qave < q->qth_min) {
 enqueue:
@@ -202,6 +213,22 @@ drop:
 		goto drop;
 	}
 	if (++q->qcount) {
+		/* The formula used below causes questions.
+
+		   OK. qR is random number in the interval 0..Rmask
+		   i.e. 0..(2^Plog). If we used floating point
+		   arithmetics, it would be: (2^Plog)*rnd_num,
+		   where rnd_num is less 1.
+
+		   Taking into account, that qave have fixed
+		   point at Wlog, and Plog is related to max_P by
+		   max_P = (qth_max-qth_min)/2^Plog; two lines
+		   below have the following floating point equivalent:
+		   
+		   max_P*(qave - qth_min)/(qth_max-qth_min) < rnd/qcount
+
+		   Any questions? --ANK (980924)
+		 */
 		if (((q->qave - q->qth_min)>>q->Wlog)*q->qcount < q->qR)
 			goto enqueue;
 		q->qcount = 0;
@@ -289,7 +316,7 @@ static int red_init(struct Qdisc *sch, struct rtattr *opt)
 	q->Plog = ctl->Plog;
 	q->Rmask = ctl->Plog < 32 ? ((1<<ctl->Plog) - 1) : ~0UL;
 	q->Scell_log = ctl->Scell_log;
-	q->Scell_max = (256<<q->Scell_log)-1;
+	q->Scell_max = (255<<q->Scell_log);
 	q->qth_min = ctl->qth_min<<ctl->Wlog;
 	q->qth_max = ctl->qth_max<<ctl->Wlog;
 	q->limit = ctl->limit;

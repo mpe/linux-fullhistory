@@ -1,4 +1,4 @@
-# $Id: Makefile,v 1.27 1998/07/27 07:36:16 davem Exp $
+# $Id: Makefile,v 1.29 1998/09/16 12:25:20 jj Exp $
 # sparc64/Makefile
 #
 # Makefile for the architecture dependent flags and dependencies on the
@@ -12,14 +12,22 @@
 SHELL  =/bin/bash
 
 CC		= sparc64-linux-gcc -D__KERNEL__ -I$(TOPDIR)/include
+
+IS_EGCS := $(shell if $(CC) --version 2>&1 | grep 'egcs' > /dev/null; then echo y; else echo n; fi)
+NEW_GAS := $(shell if $(LD) --version 2>&1 | grep 'elf64_sparc' > /dev/null; then echo y; else echo n; fi)
+
+ifneq ($(NEW_GAS),y)
 AS		= sparc64-linux-as
 LD		= sparc64-linux-ld
 NM		= sparc64-linux-nm
 AR		= sparc64-linux-ar
 RANLIB		= sparc64-linux-ranlib
+else
+AS		:= $(AS) -64
+LD		:= $(LD) -m elf64_sparc
+endif
 ELFTOAOUT	= elftoaout
 
-IS_EGCS := $(shell if $(CC) --version 2>&1 | grep 'egcs' > /dev/null; then echo y; else echo n; fi)
 
 #
 # Uncomment the first CFLAGS if you are doing kgdb source level
@@ -30,7 +38,7 @@ ifneq ($(IS_EGCS),y)
   CFLAGS := $(CFLAGS) -pipe -mno-fpu -mtune=ultrasparc -mmedlow \
 	    -ffixed-g4 -fcall-used-g5 -fcall-used-g7 -Wno-sign-compare
 else
-  CFLAGS := $(CFLAGS) -pipe -mno-fpu -mtune=ultrasparc -mcmodel=medlow \
+  CFLAGS := $(CFLAGS) -m64 -pipe -mno-fpu -mcpu=ultrasparc -mcmodel=medlow \
 	    -ffixed-g4 -fcall-used-g5 -fcall-used-g7 -Wno-sign-compare
 endif
 

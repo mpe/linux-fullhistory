@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.70 1998/08/04 20:49:15 davem Exp $
+/*  $Id: process.c,v 1.75 1998/09/23 02:05:15 davem Exp $
  *  arch/sparc64/kernel/process.c
  *
  *  Copyright (C) 1995, 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -407,14 +407,20 @@ void flush_thread(void)
 		 * where we grab a new one.
 		 */
 		spin_lock(&scheduler_lock);
-		get_mmu_context(current);
+		current->mm->cpu_vm_mask = 0;
+		activate_context(current);
+		current->mm->cpu_vm_mask = (1UL<<smp_processor_id());
 		spin_unlock(&scheduler_lock);
 	}
 	if (current->tss.flags & SPARC_FLAG_32BIT)
-		__asm__ __volatile__("stxa %%g0, [%0] %1" : : "r"(TSB_REG), "i"(ASI_DMMU));
+		__asm__ __volatile__("stxa %%g0, [%0] %1"
+				     : /* no outputs */
+				     : "r"(TSB_REG), "i"(ASI_DMMU));
+	__cli();
 	current->tss.ctx = current->mm->context & 0x3ff;
 	spitfire_set_secondary_context (current->tss.ctx);
 	__asm__ __volatile__("flush %g6");
+	__sti();
 }
 
 /* It's a bit more tricky when 64-bit tasks are involved... */
@@ -592,7 +598,13 @@ int copy_thread(int nr, unsigned long clone_flags, unsigned long sp,
  */
 void dump_thread(struct pt_regs * regs, struct user * dump)
 {
-#if 0
+#if 1
+	/* Only should be used for SunOS and ancient a.out
+	 * SparcLinux binaries...  Fixme some day when bored.
+	 * But for now at least plug the security hole :-)
+	 */
+	memset(dump, 0, sizeof(struct user));
+#else
 	unsigned long first_stack_page;
 	dump->magic = SUNOS_CORE_MAGIC;
 	dump->len = sizeof(struct user);
@@ -616,13 +628,69 @@ void dump_thread(struct pt_regs * regs, struct user * dump)
 #endif	
 }
 
+typedef struct {
+	union {
+		unsigned int	pr_regs[32];
+		unsigned long	pr_dregs[16];
+	} pr_fr;
+	unsigned int __unused;
+	unsigned int	pr_fsr;
+	unsigned char	pr_qcnt;
+	unsigned char	pr_q_entrysize;
+	unsigned char	pr_en;
+	unsigned int	pr_q[64];
+} elf_fpregset_t32;
+
 /*
  * fill in the fpu structure for a core dump.
  */
 int dump_fpu (struct pt_regs * regs, elf_fpregset_t * fpregs)
 {
-	/* Currently we report that we couldn't dump the fpu structure */
-	return 0;
+	unsigned long *kfpregs = (unsigned long *)(((char *)current) + AOFF_task_fpregs);
+	unsigned long fprs = current->tss.fpsaved[0];
+
+	if ((current->tss.flags & SPARC_FLAG_32BIT) != 0) {
+		elf_fpregset_t32 *fpregs32 = (elf_fpregset_t32 *)fpregs;
+
+		if (fprs & FPRS_DL)
+			memcpy(&fpregs32->pr_fr.pr_regs[0], kfpregs,
+			       sizeof(unsigned int) * 32);
+		else
+			memset(&fpregs32->pr_fr.pr_regs[0], 0,
+			       sizeof(unsigned int) * 32);
+		fpregs32->pr_qcnt = 0;
+		fpregs32->pr_q_entrysize = 8;
+		memset(&fpregs32->pr_q[0], 0,
+		       (sizeof(unsigned int) * 64));
+		if (fprs & FPRS_FEF) {
+			fpregs32->pr_fsr = (unsigned int) current->tss.xfsr[0];
+			fpregs32->pr_en = 1;
+		} else {
+			fpregs32->pr_fsr = 0;
+			fpregs32->pr_en = 0;
+		}
+	} else {
+		if(fprs & FPRS_DL)
+			memcpy(&fpregs->pr_regs[0], kfpregs,
+			       sizeof(unsigned int) * 32);
+		else
+			memset(&fpregs->pr_regs[0], 0,
+			       sizeof(unsigned int) * 32);
+		if(fprs & FPRS_DU)
+			memcpy(&fpregs->pr_regs[16], kfpregs+16,
+			       sizeof(unsigned int) * 32);
+		else
+			memset(&fpregs->pr_regs[16], 0,
+			       sizeof(unsigned int) * 32);
+		if(fprs & FPRS_FEF) {
+			fpregs->pr_fsr = current->tss.xfsr[0];
+			fpregs->pr_gsr = current->tss.gsr[0];
+		} else {
+			fpregs->pr_fsr = fpregs->pr_gsr = 0;
+		}
+		fpregs->pr_fprs = fprs;
+	}
+	return 1;
 }
 
 /*

@@ -1,4 +1,4 @@
-/* $Id: string.h,v 1.11 1998/06/12 14:54:35 jj Exp $
+/* $Id: string.h,v 1.12 1998/10/04 08:44:27 davem Exp $
  * string.h: External definitions for optimized assembly string
  *           routines for the Linux Kernel.
  *
@@ -127,6 +127,15 @@ extern inline void *__nonconstant_memset(void *s, char c, __kernel_size_t count)
 
 /* Now the str*() stuff... */
 #define __HAVE_ARCH_STRLEN
+
+/* Ugly but it works around a bug in our original sparc64-linux-gcc.  */
+extern __kernel_size_t __strlen(const char *);
+#undef strlen
+#define strlen(__arg0)					\
+({	int __strlen_res = __strlen(__arg0) + 1;	\
+	__strlen_res -= 1;				\
+	__strlen_res;					\
+})
 
 #define __HAVE_ARCH_STRNCMP
 

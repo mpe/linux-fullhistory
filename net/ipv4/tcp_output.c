@@ -5,7 +5,7 @@
  *
  *		Implementation of the Transmission Control Protocol(TCP).
  *
- * Version:	$Id: tcp_output.c,v 1.94 1998/09/15 02:11:36 davem Exp $
+ * Version:	$Id: tcp_output.c,v 1.95 1998/09/27 12:57:13 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -414,6 +414,7 @@ u32 __tcp_select_window(struct sock *sk, u32 cur_win)
 	
 	if ((free_space < (sk->rcvbuf/4)) && (free_space < ((int) (mss/2)))) {
 		window = 0;
+		tp->pred_flags = 0; 
 	} else {
 		/* Get the largest window that is a nice multiple of mss.
 		 * Window clamp already applied above.

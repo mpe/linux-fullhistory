@@ -1,4 +1,4 @@
-/* $Id: oplib.h,v 1.19 1998/01/30 10:59:53 jj Exp $
+/* $Id: oplib.h,v 1.20 1998/09/17 11:05:25 jj Exp $
  * oplib.h:  Describes the interface and available routines in the
  *           Linux Prom library.
  *
@@ -279,6 +279,9 @@ extern char *prom_firstprop(int node, char *buffer);
  * node.  Returns null string on failure.
  */
 extern char *prom_nextprop(int node, char *prev_property, char *buffer);
+
+/* Returns phandle of the path specified */
+extern int prom_finddevice(char *name);
 
 /* Returns 1 if the specified node has given property. */
 extern int prom_node_has_property(int node, char *property);

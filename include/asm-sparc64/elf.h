@@ -1,4 +1,4 @@
-/* $Id: elf.h,v 1.17 1998/03/23 10:07:06 jj Exp $ */
+/* $Id: elf.h,v 1.18 1998/09/09 05:36:08 davem Exp $ */
 #ifndef __ASM_SPARC64_ELF_H
 #define __ASM_SPARC64_ELF_H
 
@@ -9,13 +9,6 @@
 #include <asm/ptrace.h>
 #include <asm/processor.h>
 
-typedef unsigned long elf_greg_t;
-
-#define ELF_NGREG (sizeof (struct pt_regs) / sizeof(elf_greg_t))
-typedef elf_greg_t elf_gregset_t[ELF_NGREG];
-
-typedef unsigned long elf_fpregset_t;
-
 /*
  * These are used to set parameters in the core dumps.
  */
@@ -23,6 +16,18 @@ typedef unsigned long elf_fpregset_t;
 #define ELF_ARCH		EM_SPARCV9
 #define ELF_CLASS		ELFCLASS64
 #define ELF_DATA		ELFDATA2MSB
+
+typedef unsigned long elf_greg_t;
+
+#define ELF_NGREG (sizeof (struct pt_regs) / sizeof(elf_greg_t))
+typedef elf_greg_t elf_gregset_t[ELF_NGREG];
+
+typedef struct {
+	unsigned long	pr_regs[32];
+	unsigned long	pr_fsr;
+	unsigned long	pr_gsr;
+	unsigned long	pr_fprs;
+} elf_fpregset_t;
 #endif
 
 /*

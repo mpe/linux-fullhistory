@@ -1,8 +1,9 @@
-/* $Id: console.c,v 1.17 1998/03/09 14:04:21 jj Exp $
+/* $Id: console.c,v 1.20 1998/09/21 05:05:50 jj Exp $
  * console.c: Routines that deal with sending and receiving IO
  *            to/from the current console device using the PROM.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1998 Pete Zaitcev <zaitcev@metabyte.com>
  */
 
 #include <linux/config.h>
@@ -16,6 +17,9 @@
 #include <linux/string.h>
 
 extern void restore_current(void);
+
+static char con_name_jmc[] = "/obio/su@"; /* "/obio/su@0,3002f8"; */
+#define CON_SIZE_JMC	(sizeof(con_name_jmc))
 
 /* Non blocking get character from console input device, returns -1
  * if no input was taken.  This can be used for polling.
@@ -83,7 +87,6 @@ prom_nbputchar(char c)
 		  i = 0;
 		}
 #endif
-	
 		break;
 	default:
 		i = -1;
@@ -139,9 +142,14 @@ prom_query_input_device()
 		restore_flags(flags);
 		if(prom_node_has_property(st_p, "keyboard"))
 			return PROMDEV_IKBD;
-		prom_getproperty(st_p, "device_type", propb, sizeof(propb));
+		if (prom_getproperty(st_p, "name", propb, sizeof(propb)) != -1) {
+			if(strncmp(propb, "keyboard", sizeof("serial")) == 0)
+				return PROMDEV_IKBD;
+		}
+		if (prom_getproperty(st_p, "device_type", propb, sizeof(propb)) != -1) {
 		if(strncmp(propb, "serial", sizeof("serial")))
 			return PROMDEV_I_UNK;
+		}
 		prom_getproperty(prom_root_node, "stdin-path", propb, sizeof(propb));
 		p = propb;
 		while(*p) p++; p -= 2;
@@ -154,7 +162,7 @@ prom_query_input_device()
 		return PROMDEV_I_UNK;
 	case PROM_AP1000:
 		return PROMDEV_I_UNK;
-	};
+	}
 }
 
 /* Query for output device type */
@@ -190,9 +198,12 @@ prom_query_output_device()
 			return PROMDEV_OSCREEN;
 		}
 		if(prom_vers == PROM_V3) {
-			if(strncmp("serial", propb, sizeof("serial")))
+			if(propl >= 0 &&
+			    strncmp("serial", propb, sizeof("serial")) != 0)
 				return PROMDEV_O_UNK;
 			prom_getproperty(prom_root_node, "stdout-path", propb, sizeof(propb));
+			if(strncmp(propb, con_name_jmc, CON_SIZE_JMC) == 0)
+				return PROMDEV_OTTYA;
 			p = propb;
 			while(*p) p++; p -= 2;
 			if(p[0]==':') {
@@ -201,9 +212,7 @@ prom_query_output_device()
 				else if(p[1] == 'b')
 					return PROMDEV_OTTYB;
 			}
-			return PROMDEV_O_UNK;
 		} else {
-			/* This works on SS-2 (an early OpenFirmware) still. */
 			switch(*romvec->pv_stdin) {
 			case PROMDEV_TTYA:	return PROMDEV_OTTYA;
 			case PROMDEV_TTYB:	return PROMDEV_OTTYB;
@@ -212,7 +221,6 @@ prom_query_output_device()
 		break;
 	case PROM_AP1000:
 	default:
-		return PROMDEV_I_UNK;
-	};
+	}
 	return PROMDEV_O_UNK;
 }

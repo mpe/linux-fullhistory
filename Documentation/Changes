@@ -226,6 +226,9 @@ will no longer work.  You need to optain "ipchains," available from
 http://www.adelaide.net.au/~rustcorp/ipfwchains/ipfwchains.html, and use
 that instead of ipfwadm.
 
+   To use port forwarding and auto forwarding you will need 'ipmasqadm'
+tool, available from http://juanjox.home.ml.org. 
+
 Memory
 ======
 
@@ -539,6 +542,11 @@ IP Chains
 The 1.3.3 release:
 http://www.adelaide.net.au/~rustcorp/ipfwchains/ipchains-source-1.3.3.tar.gz
 http://www.adelaide.net.au/~rustcorp/ipfwchains/ipchains-source-1.3.3.tar.bz2
+
+IP Masq Adm
+===========
+The 0.4.1 release:
+http://juanjox.home.ml.org/ipmasqadm-0.4.1.tar.gz
 
 iBCS
 ====

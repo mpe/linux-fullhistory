@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.56 1998/04/06 16:08:32 jj Exp $
+/* $Id: traps.c,v 1.57 1998/09/17 11:04:51 jj Exp $
  * arch/sparc/kernel/traps.c
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -242,8 +242,8 @@ extern int do_mathemu(struct pt_regs *, struct task_struct *);
 void do_fpe_trap(struct pt_regs *regs, unsigned long pc, unsigned long npc,
 		 unsigned long psr)
 {
-	static calls = 0;
-	int ret;
+	static int calls = 0;
+	int ret = 0;
 #ifndef __SMP__
 	struct task_struct *fpt = last_task_used_math;
 #else

@@ -1334,10 +1334,7 @@ static int amd7930_attach(struct sparcaudio_driver *drv, int node,
 	/* Point at the information structure and initialize it. */
 	drv->ops = &amd7930_ops;
 	info = (struct amd7930_info *)drv->private;
-	info->Bb.output_ptr = info->Bb.input_ptr = NULL;
-	info->Bb.output_count = info->Bb.input_count = 0;
-	info->Bc.output_ptr = info->Bc.input_ptr = NULL;
-	info->Bc.output_count = info->Bc.input_count = 0;
+	memset(info, 0, sizeof(*info));
 	info->ints_on = 1; /* force disable below */
 
 	drv->dev = sdev;

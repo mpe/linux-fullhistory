@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: ip6_output.c,v 1.14 1998/08/26 12:05:01 davem Exp $
+ *	$Id: ip6_output.c,v 1.15 1998/10/03 09:38:34 davem Exp $
  *
  *	Based on linux/net/ipv4/ip_output.c
  *
@@ -291,8 +291,10 @@ static int ip6_frag_xmit(struct sock *sk, inet_getfrag_t getfrag,
 	frag_len = (mtu - unfrag_len) & ~0x7;
 
 	/* Unfragmentable part exceeds mtu. */
-	if (frag_len <= 0)
+	if (frag_len <= 0) {
+		ipv6_local_error(sk, EMSGSIZE, fl, mtu);
 		return -EMSGSIZE;
+	}
 
 	nfrags = last_len / frag_len;
 
@@ -321,8 +323,10 @@ static int ip6_frag_xmit(struct sock *sk, inet_getfrag_t getfrag,
 	   all the exthdrs will fit to the first fragment.
 	 */
 	if (opt) {
-		if (frag_len < opt->opt_flen)
+		if (frag_len < opt->opt_flen) {
+			ipv6_local_error(sk, EMSGSIZE, fl, mtu);
 			return -EMSGSIZE;
+		}
 		data_off = frag_off - opt->opt_flen;
 	}
 
@@ -520,12 +524,21 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 	}
 
 	mtu = dst->pmtu;
+	if (np->frag_size < mtu) {
+		if (np->frag_size)
+			mtu = np->frag_size;
+		else if (np->pmtudisc == IPV6_PMTUDISC_DONT)
+			mtu = IPV6_MIN_MTU;
+	}
 
 	/* Critical arithmetic overflow check.
 	   FIXME: may gcc optimize it out? --ANK (980726)
 	 */
-	if (pktlength < length)
-		return -EMSGSIZE;
+	if (pktlength < length) {
+		ipv6_local_error(sk, EMSGSIZE, fl, mtu);
+		err = -EMSGSIZE;
+		goto out;
+	}
 
 	if (pktlength <= mtu) {
 		struct sk_buff *skb;
@@ -573,8 +586,12 @@ int ip6_build_xmit(struct sock *sk, inet_getfrag_t getfrag, const void *data,
 			kfree_skb(skb);
 		}
 	} else {
-		if (sk->ip_hdrincl || jumbolen)
-			return -EMSGSIZE;
+		if (sk->ip_hdrincl || jumbolen ||
+		    np->pmtudisc == IPV6_PMTUDISC_DO) {
+			ipv6_local_error(sk, EMSGSIZE, fl, mtu);
+			err = -EMSGSIZE;
+			goto out;
+		}
 
 		err = ip6_frag_xmit(sk, getfrag, data, dst, fl, opt, final_dst, hlimit,
 				    flags, length, mtu);

@@ -1325,11 +1325,11 @@ kbd_read (struct file *f, char *buffer, size_t count, loff_t *ppos)
 }
 
 /* Needed by X */
-static int kbd_fasync (struct file *filp, int on)
+static int kbd_fasync (int fd, struct file *filp, int on)
 {
 	int retval;
 
-	retval = fasync_helper (filp, on, &kb_fasync);
+	retval = fasync_helper (fd, filp, on, &kb_fasync);
 	if (retval < 0)
 		return retval;
 	return 0;
@@ -1479,7 +1479,7 @@ kbd_close (struct inode *i, struct file *f)
 	kbd_redirected = 0;
 	kbd_opened = 0;
 
-	kbd_fasync (f, 0);
+	kbd_fasync (-1, f, 0);
 	return 0;
 }
 

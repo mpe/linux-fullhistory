@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: tcp_ipv6.c,v 1.92 1998/09/15 02:11:42 davem Exp $
+ *	$Id: tcp_ipv6.c,v 1.93 1998/10/03 09:38:50 davem Exp $
  *
  *	Based on: 
  *	linux/net/ipv4/tcp.c
@@ -53,6 +53,7 @@ static void	tcp_v6_xmit(struct sk_buff *skb);
 static struct open_request *tcp_v6_search_req(struct tcp_opt *tp,
 					      struct ipv6hdr *ip6h,
 					      struct tcphdr *th,
+					      int iif,
 					      struct open_request **prevp);
 
 static struct tcp_func ipv6_mapped;
@@ -363,6 +364,12 @@ static int tcp_v6_unique_address(struct sock *sk)
 	return retval;
 }
 
+static __inline__ int tcp_v6_iif(struct sk_buff *skb)
+{
+	struct inet6_skb_parm *opt = (struct inet6_skb_parm *) skb->cb;
+	return opt->iif;
+}
+
 static int tcp_v6_connect(struct sock *sk, struct sockaddr *uaddr, 
 			  int addr_len)
 {
@@ -580,7 +587,6 @@ void tcp_v6_err(struct sk_buff *skb, struct ipv6hdr *hdr,
 	struct ipv6_pinfo *np;
 	struct sock *sk;
 	int err;
-	int opening;
 	struct tcp_opt *tp; 
 	__u32 seq; 
 
@@ -597,17 +603,17 @@ void tcp_v6_err(struct sk_buff *skb, struct ipv6hdr *hdr,
 	tp = &sk->tp_pinfo.af_tcp;
 	seq = ntohl(th->seq); 
 	if (sk->state != TCP_LISTEN && !between(seq, tp->snd_una, tp->snd_nxt)) {
-		if (net_ratelimit()) 
-			printk(KERN_DEBUG "icmp packet outside the tcp window:"
-					  " s:%d %u,%u,%u\n",
-			       (int)sk->state, seq, tp->snd_una, tp->snd_nxt); 
+		net_statistics.OutOfWindowIcmps++;
 		return; 
 	}
 
 	np = &sk->net_pinfo.af_inet6;
-	if (type == ICMPV6_PKT_TOOBIG && sk->state != TCP_LISTEN) {
+	if (type == ICMPV6_PKT_TOOBIG) {
 		struct dst_entry *dst = NULL;
 		/* icmp should have updated the destination cache entry */
+
+		if (sk->state == TCP_LISTEN)
+			return;
 
 		if (sk->dst_cache)
 			dst = dst_check(&sk->dst_cache, np->dst_cookie);
@@ -632,7 +638,7 @@ void tcp_v6_err(struct sk_buff *skb, struct ipv6hdr *hdr,
 			dst = dst_clone(dst);
 
 		if (dst->error) {
-			sk->err_soft = dst->error;
+			sk->err_soft = -dst->error;
 		} else if (tp->pmtu_cookie > dst->pmtu
 			   && !atomic_read(&sk->sock_readers)) {
 			lock_sock(sk); 
@@ -644,26 +650,29 @@ void tcp_v6_err(struct sk_buff *skb, struct ipv6hdr *hdr,
 		return;
 	}
 
-	opening = 0; 
+	icmpv6_err_convert(type, code, &err);
+
 	/* Might be for an open_request */
 	switch (sk->state) {
 		struct open_request *req, *prev;
 		struct ipv6hdr hd;
 	case TCP_LISTEN:
-		if (atomic_read(&sk->sock_readers))
-			return;
+		if (atomic_read(&sk->sock_readers)) {
+			net_statistics.LockDroppedIcmps++;
+			 /* If too many ICMPs get dropped on busy
+			  * servers this needs to be solved differently.
+			  */
+ 			return;
+		}
 
 		/* Grrrr - fix this later. */
 		ipv6_addr_copy(&hd.saddr, saddr);
 		ipv6_addr_copy(&hd.daddr, daddr); 
-		req = tcp_v6_search_req(tp, &hd,th, &prev);
+		req = tcp_v6_search_req(tp, &hd, th, tcp_v6_iif(skb), &prev);
 		if (!req)
 			return;
 		if (seq != req->snt_isn) {
-			if (net_ratelimit())
-				printk(KERN_DEBUG "icmp packet for openreq "
-				       "with wrong seq number:%d:%d\n",
-				       seq, req->snt_isn);
+			net_statistics.OutOfWindowIcmps++;
 			return;
 		}
 		if (req->sk) {
@@ -676,21 +685,26 @@ void tcp_v6_err(struct sk_buff *skb, struct ipv6hdr *hdr,
 		}
 		/* FALL THROUGH */ 
 	case TCP_SYN_SENT:
-	case TCP_SYN_RECV: 
-		opening = 1;
-		break; 
+	case TCP_SYN_RECV:  /* Cannot happen */ 
+		tcp_statistics.TcpAttemptFails++;
+		sk->err = err;
+		sk->zapped = 1;
+		mb();
+		sk->error_report(sk);
+		return;
 	}
 
-	if (icmpv6_err_convert(type, code, &err) || opening) {
+	if (np->recverr) {
+		/* This code isn't serialized with the socket code */
+		/* ANK (980927) ... which is harmless now,
+		   sk->err's may be safely lost.
+		 */
 		sk->err = err;
-
-		if (opening) {
-			tcp_statistics.TcpAttemptFails++;
-			tcp_set_state(sk,TCP_CLOSE);
-			sk->error_report(sk);
-		}
+		mb();
+		sk->error_report(sk);
 	} else {
 		sk->err_soft = err;
+		mb();
 	}
 }
 
@@ -853,7 +867,7 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb, __u32 isn)
 
 	/* So that link locals have meaning */
 	if (!sk->bound_dev_if && ipv6_addr_type(&req->af.v6_req.rmt_addr)&IPV6_ADDR_LINKLOCAL)
-		req->af.v6_req.iif = skb->dev->ifindex;
+		req->af.v6_req.iif = tcp_v6_iif(skb);
 
 	req->class = &or_ipv6;
 	req->retrans = 0;
@@ -1035,6 +1049,9 @@ static void tcp_v6_send_reset(struct sk_buff *skb)
 	if (th->rst)
 		return;
 
+	if (ipv6_addr_is_multicast(&skb->nh.ipv6h->daddr))
+		return; 
+
 	/*
 	 * We need to grab some memory, and put together an RST,
 	 * and then put it into the queue to be sent.
@@ -1076,7 +1093,7 @@ static void tcp_v6_send_reset(struct sk_buff *skb)
 				    buff->csum);
 
 	fl.proto = IPPROTO_TCP;
-	fl.oif = skb->dev->ifindex;
+	fl.oif = tcp_v6_iif(skb);
 	fl.uli_u.ports.dport = t1->dest;
 	fl.uli_u.ports.sport = t1->source;
 
@@ -1096,6 +1113,7 @@ static void tcp_v6_send_reset(struct sk_buff *skb)
 static struct open_request *tcp_v6_search_req(struct tcp_opt *tp,
 					      struct ipv6hdr *ip6h,
 					      struct tcphdr *th,
+					      int iif,
 					      struct open_request **prevp)
 {
 	struct open_request *req, *prev; 
@@ -1109,9 +1127,10 @@ static struct open_request *tcp_v6_search_req(struct tcp_opt *tp,
 	for (req = prev->dl_next; req; req = req->dl_next) {
 		if (!ipv6_addr_cmp(&req->af.v6_req.rmt_addr, &ip6h->saddr) &&
 		    !ipv6_addr_cmp(&req->af.v6_req.loc_addr, &ip6h->daddr) &&
-		    req->rmt_port == rport) {
-			*prevp = prev; 
-			return req; 
+		    req->rmt_port == rport &&
+		    (!req->af.v6_req.iif || req->af.v6_req.iif == iif)) {
+			*prevp = prev;
+			return req;
 		}
 		prev = req; 
 	}
@@ -1123,7 +1142,7 @@ static void tcp_v6_rst_req(struct sock *sk, struct sk_buff *skb)
 	struct tcp_opt *tp = &sk->tp_pinfo.af_tcp;
 	struct open_request *req, *prev;
 
-	req = tcp_v6_search_req(tp,skb->nh.ipv6h,skb->h.th,&prev);
+	req = tcp_v6_search_req(tp,skb->nh.ipv6h,skb->h.th,tcp_v6_iif(skb),&prev);
 	if (!req)
 		return;
 	/* Sequence number check required by RFC793 */
@@ -1156,7 +1175,7 @@ static inline struct sock *tcp_v6_hnd_req(struct sock *sk, struct sk_buff *skb)
 		struct open_request *req, *dummy;
 		struct tcp_opt *tp = &(sk->tp_pinfo.af_tcp);
 			
-		req = tcp_v6_search_req(tp, skb->nh.ipv6h,th, &dummy);
+		req = tcp_v6_search_req(tp, skb->nh.ipv6h, th, tcp_v6_iif(skb), &dummy);
 		if (req) {
 			sk = tcp_check_req(sk, skb, req);
 		}
@@ -1292,7 +1311,6 @@ int tcp_v6_rcv(struct sk_buff *skb, unsigned long len)
 {
 	struct tcphdr *th;	
 	struct sock *sk;
-	struct device *dev = skb->dev;
 	struct in6_addr *saddr = &skb->nh.ipv6h->saddr;
 	struct in6_addr *daddr = &skb->nh.ipv6h->daddr;
 
@@ -1330,7 +1348,7 @@ int tcp_v6_rcv(struct sk_buff *skb, unsigned long len)
 		/* CHECKSUM_UNNECESSARY */
 	};
 
-	sk = __tcp_v6_lookup(th, saddr, th->source, daddr, th->dest, dev->ifindex);
+	sk = __tcp_v6_lookup(th, saddr, th->source, daddr, th->dest, tcp_v6_iif(skb));
 
 	if (!sk)
 		goto no_tcp_socket;
@@ -1412,7 +1430,7 @@ static struct sock * tcp_v6_get_sock(struct sk_buff *skb, struct tcphdr *th)
 
 	saddr = &skb->nh.ipv6h->saddr;
 	daddr = &skb->nh.ipv6h->daddr;
-	return tcp_v6_lookup(saddr, th->source, daddr, th->dest, skb->dev->ifindex);
+	return tcp_v6_lookup(saddr, th->source, daddr, th->dest, tcp_v6_iif(skb));
 }
 
 static void tcp_v6_xmit(struct sk_buff *skb)
@@ -1441,7 +1459,7 @@ static void tcp_v6_xmit(struct sk_buff *skb)
 		dst = ip6_route_output(sk, &fl);
 
 		if (dst->error) {
-			sk->err_soft = dst->error;
+			sk->err_soft = -dst->error;
 			dst_release(dst);
 			return;
 		}

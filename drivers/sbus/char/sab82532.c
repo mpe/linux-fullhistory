@@ -1,4 +1,4 @@
-/* $Id: sab82532.c,v 1.20 1998/05/29 06:00:24 ecd Exp $
+/* $Id: sab82532.c,v 1.23 1998/09/16 03:20:25 ecd Exp $
  * sab82532.c: ASYNC Driver for the SIEMENS SAB82532 DUSCC.
  *
  * Copyright (C) 1997  Eddie C. Dost  (ecd@skynet.be)
@@ -51,6 +51,13 @@ static int sab82532_refcount;
 #undef SERIAL_DEBUG_WAIT_UNTIL_SENT
 #undef SERIAL_DEBUG_SEND_BREAK
 #undef SERIAL_DEBUG_INTR
+
+/* Trace things on serial device, useful for console debugging: */
+#undef SERIAL_LOG_DEVICE
+
+#ifdef SERIAL_LOG_DEVICE
+static void dprint_init(int tty);
+#endif
 
 static void change_speed(struct sab82532 *info);
 static void sab82532_wait_until_sent(struct tty_struct *tty, int timeout);
@@ -1330,57 +1337,34 @@ static int set_modem_info(struct sab82532 * info, unsigned int cmd,
 /*
  * This routine sends a break character out the serial port.
  */
-static void send_break(	struct sab82532 * info, int duration)
+static void sab82532_break(struct tty_struct *tty, int break_state)
 {
+	struct sab82532 * info = (struct sab82532 *)tty->driver_data;
+	unsigned long flags;
+
+	if (serial_paranoia_check(info, tty->device, "sab82532_break"))
+		return;
+
 	if (!info->regs)
 		return;
-	current->state = TASK_INTERRUPTIBLE;
-	current->timeout = jiffies + duration;
+
 #ifdef SERIAL_DEBUG_SEND_BREAK
-	printk("sab82532_send_break(%d) jiff=%lu...", duration, jiffies);
+	printk("sab82532_break(%d) jiff=%lu...", break_state, jiffies);
 #endif
-	cli();
-	info->regs->rw.dafo |= SAB82532_DAFO_XBRK;
-	schedule();
-	info->regs->rw.dafo &= ~(SAB82532_DAFO_XBRK);
-	sti();
-#ifdef SERIAL_DEBUG_SEND_BREAK
-	printk("done jiffies=%lu\n", jiffies);
-#endif
+	save_flags(flags); cli();
+	if (break_state == -1)
+		info->regs->rw.dafo |= SAB82532_DAFO_XBRK;
+	else
+		info->regs->rw.dafo &= ~(SAB82532_DAFO_XBRK);
+	restore_flags(flags);
 }
 
-/*
- * This routine sets the break condition on the serial port.
- */
-static void begin_break(struct sab82532 * info)
-{
-	if (!info->regs)
-		return;
-	info->regs->rw.dafo |= SAB82532_DAFO_XBRK;
-#ifdef SERIAL_DEBUG_SEND_BREAK
-	printk("begin_break: jiffies=%lu\n", jiffies);
-#endif
-}
-
-/*
- * This routine clears the break condition on the serial port.
- */
-static void end_break(struct sab82532 * info)
-{
-	if (!info->regs)
-		return;
-	info->regs->rw.dafo &= ~(SAB82532_DAFO_XBRK);
-#ifdef SERIAL_DEBUG_SEND_BREAK
-	printk("end_break: jiffies=%lu\n", jiffies);
-#endif
-}
 
 static int sab82532_ioctl(struct tty_struct *tty, struct file * file,
 		    unsigned int cmd, unsigned long arg)
 {
 	int error;
 	struct sab82532 * info = (struct sab82532 *)tty->driver_data;
-	int retval;
 	struct async_icount cprev, cnow;	/* kernel counter temps */
 	struct serial_icounter_struct *p_cuser;	/* user space */
 
@@ -1396,43 +1380,6 @@ static int sab82532_ioctl(struct tty_struct *tty, struct file * file,
 	}
 	
 	switch (cmd) {
-		case TCSBRK:	/* SVID version: non-zero arg --> no break */
-			retval = tty_check_change(tty);
-			if (retval)
-				return retval;
-			tty_wait_until_sent(tty, 0);
-			if (signal_pending(current))
-				return -EINTR;
-			if (!arg) {
-				send_break(info, HZ/4);	/* 1/4 second */
-				if (signal_pending(current))
-					return -EINTR;
-			}
-			return 0;
-		case TCSBRKP:	/* support for POSIX tcsendbreak() */
-			retval = tty_check_change(tty);
-			if (retval)
-				return retval;
-			tty_wait_until_sent(tty, 0);
-			if (signal_pending(current))
-				return -EINTR;
-			send_break(info, arg ? arg*(HZ/10) : HZ/4);
-			if (signal_pending(current))
-				return -EINTR;
-			return 0;
-		case TIOCSBRK:
-			retval = tty_check_change(tty);
-			if (retval)
-				return retval;
-			tty_wait_until_sent(tty, 0);
-			begin_break(info);
-			return 0;
-		case TIOCCBRK:
-			retval = tty_check_change(tty);
-			if (retval)
-				return retval;
-			end_break(info);
-			return 0;
 		case TIOCGSOFTCAR:
 			return put_user(C_CLOCAL(tty) ? 1 : 0, (int *) arg);
 		case TIOCSSOFTCAR:
@@ -2047,7 +1994,7 @@ int sab82532_read_proc(char *page, char **start, off_t off, int count,
 	int i, len = 0;
 	off_t	begin = 0;
 
-	len += sprintf(page, "serinfo:1.0 driver:%s\n", "$Revision: 1.20 $");
+	len += sprintf(page, "serinfo:1.0 driver:%s\n", "$Revision: 1.23 $");
 	for (i = 0; i < NR_PORTS && len < 4000; i++) {
 		len += line_info(page + len, sab82532_table[i]);
 		if (len+begin > off+count)
@@ -2142,7 +2089,7 @@ sab82532_kgdb_hook(int line))
 
 __initfunc(static inline void show_serial_version(void))
 {
-	char *revision = "$Revision: 1.20 $";
+	char *revision = "$Revision: 1.23 $";
 	char *version, *p;
 
 	version = strchr(revision, ' ');
@@ -2203,6 +2150,7 @@ __initfunc(int sab82532_init(void))
 	serial_driver.stop = sab82532_stop;
 	serial_driver.start = sab82532_start;
 	serial_driver.hangup = sab82532_hangup;
+	serial_driver.break_ctl = sab82532_break;
 	serial_driver.wait_until_sent = sab82532_wait_until_sent;
 	serial_driver.read_proc = sab82532_read_proc;
 
@@ -2274,6 +2222,10 @@ __initfunc(int sab82532_init(void))
 		       info->line, (unsigned long)info->regs,
 		       __irq_itoa(info->irq), sab82532_version[info->type]);
 	}
+
+#ifdef SERIAL_LOG_DEVICE
+	dprint_init(SERIAL_LOG_DEVICE);
+#endif
 	return 0;
 }
 
@@ -2388,7 +2340,12 @@ sab82532_console_write(struct console *con, const char *s, unsigned n)
 	struct sab82532 *info;
 	int i;
 
-	info = sab82532_chain + con->index;
+	info = sab82532_chain;
+	for (i = con->index; i; i--) {
+		info = info->next;
+		if (!info)
+			return;
+	}
 
 	for (i = 0; i < n; i++) {
 		if (*s == '\n')
@@ -2421,7 +2378,12 @@ sab82532_console_setup(struct console *con, char *options)
 	int		i, bits;
 	unsigned long	flags;
 
-	info = sab82532_chain + con->index;
+	info = sab82532_chain;
+	for (i = con->index; i; i--) {
+		info = info->next;
+		if (!info)
+			return -ENODEV;
+	}
 	info->is_console = 1;
 
 	/*
@@ -2487,7 +2449,7 @@ sab82532_console_setup(struct console *con, char *options)
 	if (i & CBAUDEX) {
 		i &= ~(CBAUDEX);
 		if ((i < 1) || ((i + 15) >= NR_EBRG_VALUES))
-			info->tty->termios->c_cflag &= ~CBAUDEX;
+			cflag &= ~CBAUDEX;
 		else
 			i += 15;
 	}
@@ -2565,4 +2527,36 @@ __initfunc(int sab82532_console_init(void))
 	return 0;
 }
 
+#ifdef SERIAL_LOG_DEVICE
+
+static int serial_log_device = 0;
+
+static void
+dprint_init(int tty)
+{
+	serial_console = tty + 1;
+	sab82532_console.index = tty;
+	sab82532_console_setup(&sab82532_console, "");
+	serial_console = 0;
+	serial_log_device = tty + 1;
+}
+
+int
+dprintf(const char *fmt, ...)
+{
+	static char buffer[4096];
+	va_list args;
+	int i;
+
+	if (!serial_log_device)
+		return 0;
+
+	va_start(args, fmt);
+	i = vsprintf(buffer, fmt, args);
+	va_end(args);
+	sab82532_console.write(&sab82532_console, buffer, i);
+	return i;
+}
+#endif /* SERIAL_LOG_DEVICE */
 #endif /* CONFIG_SERIAL_CONSOLE */
+

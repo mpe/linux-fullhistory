@@ -180,7 +180,7 @@ ccfold:	sllx		%sum, 32, %o0		! IEU0	Group
 	bcs,a,pn	%xcc, 1f		! CTI
 	 add		%o0, 1, %o0		! IEU1	4 clocks (mispredict)
 1:	retl					! CTI	Group brk forced
-	 sllx		%g4, 32,%g4		! IEU0	Group
+	 sllx		%g4, 32, %g4		! IEU0	Group
 
 ccslow:	mov	0, %g5
 	brlez,pn %len, 4f
@@ -268,8 +268,9 @@ cpc_handler:
 	sub	%g0, EFAULT, %g2
 	brnz,a,pt %g1, 1f
 	 st	%g2, [%g1]
-1:	retl
-	 nop
+1:	sethi	%uhi(PAGE_OFFSET), %g4
+	retl
+	 sllx	%g4, 32, %g4
 
 	.section __ex_table
 	.align  4

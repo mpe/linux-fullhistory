@@ -481,6 +481,7 @@ __initfunc(static void init_control(struct fb_info_control *p))
 	
 	control_par_to_all(p, 1);
 	
+	p->info.flags = FBINFO_FLAG_DEFAULT;
 	if (register_framebuffer(&p->info) < 0) {
 		kfree(p);
 		return;

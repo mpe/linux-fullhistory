@@ -5,7 +5,7 @@
  *
  *		The IP to API glue.
  *		
- * Version:	$Id: ip_sockglue.c,v 1.37 1998/08/26 12:03:57 davem Exp $
+ * Version:	$Id: ip_sockglue.c,v 1.39 1998/10/03 09:37:33 davem Exp $
  *
  * Authors:	see ip.c
  *
@@ -41,6 +41,11 @@
 #include <net/transp_v6.h>
 #endif
 
+#ifdef CONFIG_IP_MASQUERADE
+#include <linux/ip_masq.h>
+#endif
+
+#include <linux/errqueue.h>
 #include <asm/uaccess.h>
 
 #define MAX(a,b) ((a)>(b)?(a):(b))
@@ -74,7 +79,8 @@ static void ip_cmsg_recv_pktinfo(struct msghdr *msg, struct sk_buff *skb)
 
 static void ip_cmsg_recv_ttl(struct msghdr *msg, struct sk_buff *skb)
 {
-	put_cmsg(msg, SOL_IP, IP_TTL, 1, &skb->nh.iph->ttl);
+	int ttl = skb->nh.iph->ttl;
+	put_cmsg(msg, SOL_IP, IP_TTL, sizeof(int), &ttl);
 }
 
 static void ip_cmsg_recv_tos(struct msghdr *msg, struct sk_buff *skb)
@@ -221,6 +227,140 @@ int ip_ra_control(struct sock *sk, unsigned char on, void (*destructor)(struct s
 	return 0;
 }
 
+void ip_icmp_error(struct sock *sk, struct sk_buff *skb, int err, 
+		   u16 port, u32 info, u8 *payload)
+{
+	struct sock_exterr_skb *serr;
+
+	if (!sk->ip_recverr)
+		return;
+
+	skb = skb_clone(skb, GFP_ATOMIC);
+	if (!skb)
+		return;
+
+	serr = SKB_EXT_ERR(skb);  
+	serr->ee.ee_errno = err;
+	serr->ee.ee_origin = SO_EE_ORIGIN_ICMP;
+	serr->ee.ee_type = skb->h.icmph->type; 
+	serr->ee.ee_code = skb->h.icmph->code;
+	serr->ee.ee_pad = 0;
+	serr->ee.ee_info = info;
+	serr->ee.ee_data = 0;
+	serr->addr_offset = (u8*)&(((struct iphdr*)(skb->h.icmph+1))->daddr) - skb->nh.raw;
+	serr->port = port;
+
+	skb->h.raw = payload;
+	skb_pull(skb, payload - skb->data);
+
+	if (sock_queue_err_skb(sk, skb))
+		kfree_skb(skb);
+}
+
+void ip_local_error(struct sock *sk, int err, u32 daddr, u16 port, u32 info)
+{
+	struct sock_exterr_skb *serr;
+	struct iphdr *iph;
+	struct sk_buff *skb;
+
+	if (!sk->ip_recverr)
+		return;
+
+	skb = alloc_skb(sizeof(struct iphdr), GFP_ATOMIC);
+	if (!skb)
+		return;
+
+	iph = (struct iphdr*)skb_put(skb, sizeof(struct iphdr));
+	skb->nh.iph = iph;
+	iph->daddr = daddr;
+
+	serr = SKB_EXT_ERR(skb);  
+	serr->ee.ee_errno = err;
+	serr->ee.ee_origin = SO_EE_ORIGIN_LOCAL;
+	serr->ee.ee_type = 0; 
+	serr->ee.ee_code = 0;
+	serr->ee.ee_pad = 0;
+	serr->ee.ee_info = info;
+	serr->ee.ee_data = 0;
+	serr->addr_offset = (u8*)&iph->daddr - skb->nh.raw;
+	serr->port = port;
+
+	skb->h.raw = skb->tail;
+	skb_pull(skb, skb->tail - skb->data);
+
+	if (sock_queue_err_skb(sk, skb))
+		kfree_skb(skb);
+}
+
+/* 
+ *	Handle MSG_ERRQUEUE
+ */
+int ip_recv_error(struct sock *sk, struct msghdr *msg, int len)
+{
+	struct sock_exterr_skb *serr;
+	struct sk_buff *skb, *skb2;
+	struct sockaddr_in *sin;
+	struct {
+		struct sock_extended_err ee;
+		struct sockaddr_in	 offender;
+	} errhdr;
+	int err;
+	int copied;
+
+	err = -EAGAIN;
+	skb = skb_dequeue(&sk->error_queue);
+	if (skb == NULL)
+		goto out;
+
+	copied = skb->len;
+	if (copied > len) {
+		msg->msg_flags |= MSG_TRUNC;
+		copied = len;
+	}
+	err = memcpy_toiovec(msg->msg_iov, skb->data, copied);
+	if (err)
+		goto out_free_skb;
+
+	serr = SKB_EXT_ERR(skb);
+
+	sin = (struct sockaddr_in *)msg->msg_name;
+	if (sin) {
+		sin->sin_family = AF_INET; 
+		sin->sin_addr.s_addr = *(u32*)(skb->nh.raw + serr->addr_offset);
+		sin->sin_port = serr->port; 
+	}
+
+	memcpy(&errhdr.ee, &serr->ee, sizeof(struct sock_extended_err));
+	sin = &errhdr.offender;
+	sin->sin_family = AF_UNSPEC;
+	if (serr->ee.ee_origin == SO_EE_ORIGIN_ICMP) {
+		sin->sin_family = AF_INET;
+		sin->sin_addr.s_addr = skb->nh.iph->saddr;
+		if (sk->ip_cmsg_flags)
+			ip_cmsg_recv(msg, skb);
+	}
+
+	put_cmsg(msg, SOL_IP, IP_RECVERR, sizeof(errhdr), &errhdr);
+
+	/* Now we could try to dump offended packet options */
+
+	msg->msg_flags |= MSG_ERRQUEUE;
+	err = copied;
+
+	/* Reset and regenerate socket error */
+	sk->err = 0;
+	if ((skb2 = skb_peek(&sk->error_queue)) != NULL) {
+		sk->err = SKB_EXT_ERR(skb2)->ee.ee_errno;
+		sk->error_report(sk);
+	}
+
+out_free_skb:	
+	kfree_skb(skb);
+out:
+	return err;
+}
+
+
 /*
  *	Socket option code for IP. This is the end of the line after any TCP,UDP etc options on
  *	an IP socket.
@@ -234,10 +374,6 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 #if defined(CONFIG_IP_FIREWALL)
 	char tmp_fw[MAX(sizeof(struct ip_fwtest),sizeof(struct ip_fwnew))];
 #endif
-#ifdef CONFIG_IP_MASQUERADE
-	char masq_ctl[IP_FW_MASQCTL_MAX];
-#endif
-
 	if(optlen>=sizeof(int)) {
 		if(get_user(val, (int *) optval))
 			return -EFAULT;
@@ -347,23 +483,15 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 				return -ENOPROTOOPT;
 			sk->ip_hdrincl=val?1:0;
 			return 0;
-		case IP_PMTUDISC:
+		case IP_MTU_DISCOVER:
 			if (val<0 || val>2)
 				return -EINVAL;
 			sk->ip_pmtudisc = val;
 			return 0;
 		case IP_RECVERR:
-			if (sk->type==SOCK_STREAM)
-				return -ENOPROTOOPT;
-			lock_sock(sk);
-			if (sk->ip_recverr && !val) {
-				struct sk_buff *skb;
-				/* Drain queued errors */
-				while((skb=skb_dequeue(&sk->error_queue))!=NULL)
-					kfree_skb(skb);
-			}
-			sk->ip_recverr = val?1:0;
-			release_sock(sk);
+			sk->ip_recverr = !!val;
+			if (!val)
+				skb_queue_purge(&sk->error_queue);
 			return 0;
 		case IP_MULTICAST_TTL: 
 			if (optlen<1)
@@ -466,17 +594,13 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 			return -err;	/* -0 is 0 after all */
 #endif /* CONFIG_IP_FIREWALL */
 #ifdef CONFIG_IP_MASQUERADE
-		case IP_FW_MASQ_ADD:
-		case IP_FW_MASQ_DEL:
-		case IP_FW_MASQ_FLUSH:
+		case IP_FW_MASQ_CTL:
 			if(!capable(CAP_NET_ADMIN))
 				return -EPERM;
-			if(optlen>sizeof(masq_ctl) || optlen<1)
+			if(optlen<1)
 				return -EINVAL;
-			if(copy_from_user(masq_ctl,optval,optlen))
-				return -EFAULT;
-			err=ip_masq_ctl(optname, masq_ctl,optlen);
-			return -err;	/* -0 is 0 after all */
+			err=ip_masq_uctl(optname, optval ,optlen);
+			return err;
 			
 #endif
 		default:
@@ -491,7 +615,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, char *optval, int opt
 
 int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *optlen)
 {
-	int val,err;
+	int val;
 	int len;
 	
 	if(level!=SOL_IP)
@@ -554,8 +678,17 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 		case IP_HDRINCL:
 			val=sk->ip_hdrincl;
 			break;
-		case IP_PMTUDISC:
+		case IP_MTU_DISCOVER:
 			val=sk->ip_pmtudisc;
+			break;
+		case IP_MTU:
+			val = 0;	
+			lock_sock(sk);
+			if (sk->dst_cache)		
+				val = sk->dst_cache->pmtu;
+			release_sock(sk);
+			if (!val)
+				return -ENOTCONN;
 			break;
 		case IP_RECVERR:
 			val=sk->ip_recverr;
@@ -566,7 +699,6 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 		case IP_MULTICAST_LOOP:
 			val=sk->ip_mc_loop;
 			break;
-#if 0
 		case IP_MULTICAST_IF:
 		{
 			struct ip_mreqn mreq;
@@ -579,30 +711,6 @@ int ip_getsockopt(struct sock *sk, int level, int optname, char *optval, int *op
 			if(copy_to_user((void *)optval, &mreq, len))
 				return -EFAULT;
 			return 0;
-		}
-#endif
-		case IP_MULTICAST_IF:
-		{
-			struct device *dev = dev_get_by_index(sk->ip_mc_index);
-
-			printk(KERN_INFO "application %s uses old get IP_MULTICAST_IF. Please, report!\n", current->comm);
-
-			if (dev == NULL) 
-			{
-				len = 0;
-				return put_user(len, optlen);
-			}
-			dev_lock_list();
-  			len = min(len,strlen(dev->name));
-  			err = put_user(len, optlen);
-			if (!err)
-			{
-				err = copy_to_user((void *)optval,dev->name, len);
-				if(err)
-					err=-EFAULT;
-			}
-			dev_unlock_list();
-			return err;
 		}
 		default:
 			return(-ENOPROTOOPT);

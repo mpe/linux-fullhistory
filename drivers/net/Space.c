@@ -90,6 +90,7 @@ extern int sgiseeq_probe(struct device *);
 extern int atarilance_probe(struct device *);
 extern int a2065_probe(struct device *);
 extern int ariadne_probe(struct device *);
+extern int ariadne2_probe(struct device *);
 extern int hydra_probe(struct device *);
 extern int apne_probe(struct device *);
 extern int bionet_probe(struct device *);
@@ -363,6 +364,9 @@ struct devprobe m68k_probes[] __initdata = {
 #endif
 #ifdef CONFIG_ARIADNE		/* Village Tronic Ariadne Ethernet Board */
 	{ariadne_probe, 0},
+#endif
+#ifdef CONFIG_ARIADNE2		/* Village Tronic Ariadne II Ethernet Board */
+	{ariadne2_probe, 0},
 #endif
 #ifdef CONFIG_HYDRA		/* Hydra Systems Amiganet Ethernet board */
 	{hydra_probe, 0},

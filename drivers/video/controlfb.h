@@ -141,8 +141,8 @@ static struct control_regvals control_reg_init_17 = {
 	1024, 768
 };
 
-/* Register values for 1024x768, 72Hz mode (15) */
-static struct control_regvals control_reg_init_15 = {
+/* Register values for 1024x768, 72Hz mode (16 (15?)) */
+static struct control_regvals control_reg_init_16 = {
 	{ 1024, 2048, 4096 },
 	{ 0x10, 0x28, 0x50 },
 	{ 1607, 1604, 68, 39, 10, 1610, 1612, 132,
@@ -253,8 +253,8 @@ static struct control_regvals *control_reg_init[VMODE_MAX] = {
 	&control_reg_init_12,
 	&control_reg_init_13,
 	&control_reg_init_14,
-	&control_reg_init_15,
-	NULL,
+	&control_reg_init_16,
+	&control_reg_init_16,
 	&control_reg_init_17,
 	&control_reg_init_18,
 	&control_reg_init_19,

@@ -2,7 +2,7 @@
  *		IP_MASQ_APP application masquerading module
  *
  *
- * Version:	@(#)ip_masq_app.c  0.04      96/06/17
+ * 	$Id: ip_masq_app.c,v 1.16 1998/08/29 23:51:14 davem Exp $
  *
  * Author:	Juan Jose Ciarlante, <jjciarla@raiz.uncu.edu.ar>
  *
@@ -474,7 +474,7 @@ done:
 
 #ifdef CONFIG_PROC_FS
 static struct proc_dir_entry proc_net_ip_masq_app = {
-	PROC_NET_IP_MASQ_APP, 11, "ip_masq_app",
+	PROC_NET_IP_MASQ_APP, 3, "app",
 	S_IFREG | S_IRUGO, 1, 0, 0,
 	0, &proc_net_inode_operations,
 	ip_masq_app_getinfo
@@ -488,7 +488,7 @@ static struct proc_dir_entry proc_net_ip_masq_app = {
 __initfunc(int ip_masq_app_init(void))
 {
 #ifdef CONFIG_PROC_FS
-	proc_net_register(&proc_net_ip_masq_app);
+	ip_masq_proc_register(&proc_net_ip_masq_app);
 #endif
         return 0;
 }

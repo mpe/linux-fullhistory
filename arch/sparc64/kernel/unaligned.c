@@ -1,4 +1,4 @@
-/* $Id: unaligned.c,v 1.10 1998/06/19 13:00:32 jj Exp $
+/* $Id: unaligned.c,v 1.11 1998/09/22 03:24:52 davem Exp $
  * unaligned.c: Unaligned load/store trap handling with special
  *              cases for the kernel to do them more quickly.
  *
@@ -91,10 +91,13 @@ static inline int decode_signedness(unsigned int insn)
 }
 
 static inline void maybe_flush_windows(unsigned int rs1, unsigned int rs2,
-				       unsigned int rd)
+				       unsigned int rd, int from_kernel)
 {
 	if(rs2 >= 16 || rs1 >= 16 || rd >= 16) {
-		flushw_user();
+		if(from_kernel != 0)
+			__asm__ __volatile__("flushw");
+		else
+			flushw_user();
 	}
 }
 
@@ -149,12 +152,13 @@ static inline unsigned long compute_effective_address(struct pt_regs *regs,
 {
 	unsigned int rs1 = (insn >> 14) & 0x1f;
 	unsigned int rs2 = insn & 0x1f;
+	int from_kernel = (regs->tstate & TSTATE_PRIV) != 0;
 
 	if(insn & 0x2000) {
-		maybe_flush_windows(rs1, 0, rd);
+		maybe_flush_windows(rs1, 0, rd, from_kernel);
 		return (fetch_reg(rs1, regs) + sign_extend_imm13(insn));
 	} else {
-		maybe_flush_windows(rs1, rs2, rd);
+		maybe_flush_windows(rs1, rs2, rd, from_kernel);
 		return (fetch_reg(rs1, regs) + fetch_reg(rs2, regs));
 	}
 }
@@ -430,12 +434,13 @@ int handle_popc(u32 insn, struct pt_regs *regs)
 {
 	u64 value;
 	int ret, i, rd = ((insn >> 25) & 0x1f);
+	int from_kernel = (regs->tstate & TSTATE_PRIV) != 0;
 	                        
 	if (insn & 0x2000) {
-		maybe_flush_windows(0, 0, rd);
+		maybe_flush_windows(0, 0, rd, from_kernel);
 		value = sign_extend_imm13(insn);
 	} else {
-		maybe_flush_windows(0, insn & 0x1f, rd);
+		maybe_flush_windows(0, insn & 0x1f, rd, from_kernel);
 		value = fetch_reg(insn & 0x1f, regs);
 	}
 	for (ret = 0, i = 0; i < 16; i++) {
@@ -583,7 +588,8 @@ void handle_lddfmna(struct pt_regs *regs, unsigned long sfar, unsigned long sfsr
 		pc = (u32)pc;
 	if (get_user(insn, (u32 *)pc) != -EFAULT) {
 		asi = sfsr >> 16;
-		if (asi > ASI_SNFL)
+		if ((asi > ASI_SNFL) ||
+		    (asi < ASI_P))
 			goto daex;
 		if (get_user(first, (u32 *)sfar) ||
 		     get_user(second, (u32 *)(sfar + 4))) {
@@ -637,7 +643,8 @@ void handle_stdfmna(struct pt_regs *regs, unsigned long sfar, unsigned long sfsr
 		asi = sfsr >> 16;
 		value = 0;
 		flag = (freg < 32) ? FPRS_DL : FPRS_DU;
-		if (asi > ASI_SNFL)
+		if ((asi > ASI_SNFL) ||
+		    (asi < ASI_P))
 			goto daex;
 		save_and_clear_fpu();
 		if (current->tss.fpsaved[0] & flag)

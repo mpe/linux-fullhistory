@@ -577,13 +577,13 @@ int init_module(void)
 
 void cleanup_module(void)
 {
-	unregister_netdev(&apne_dev);
-
 	pcmcia_disable_irq();
 
 	free_irq(IRQ_AMIGA_PORTS, &apne_dev);
 
 	pcmcia_reset();
+
+	unregister_netdev(&apne_dev);
 
 	unlock_8390_module();
 }

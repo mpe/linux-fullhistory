@@ -159,7 +159,7 @@ void smp_flush_tlb_mm(struct mm_struct *mm)
 			local_flush_tlb_mm(mm);
 		} else {
 			xc1((smpfunc_t) BTFIXUP_CALL(local_flush_tlb_mm), (unsigned long) mm);
-			if(mm->count == 1 && current->mm == mm)
+			if(atomic_read(&mm->count) == 1 && current->mm == mm)
 				mm->cpu_vm_mask = (1 << smp_processor_id());
 		}
 	}
@@ -274,4 +274,27 @@ int setup_profiling_timer(unsigned int multiplier)
 	restore_flags(flags);
 
 	return 0;
+}
+
+int smp_bogo_info(char *buf)
+{
+	int len = 0, i;
+	
+	for (i = 0; i < NR_CPUS; i++)
+		if (cpu_present_map & (1 << i))
+			len += sprintf(buf + len, "Cpu%dBogo\t: %lu.%02lu\n", 
+					i,
+					cpu_data[i].udelay_val/500000,
+					(cpu_data[i].udelay_val/5000)%100);
+	return len;
+}
+
+int smp_info(char *buf)
+{
+	int len = 0, i;
+	
+	for (i = 0; i < NR_CPUS; i++)
+		if (cpu_present_map & (1 << i))
+			len += sprintf(buf + len, "CPU%d\t\t: online\n", i);
+	return len;
 }

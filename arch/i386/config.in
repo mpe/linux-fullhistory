@@ -135,8 +135,9 @@ if [ "$CONFIG_VT" = "y" ]; then
   mainmenu_option next_comment
   comment 'Console drivers'
   bool 'VGA text console' CONFIG_VGA_CONSOLE
+  bool 'Video mode selection support' CONFIG_VIDEO_SELECT
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-    bool 'Video mode selection support' CONFIG_VIDEO_SELECT
+    tristate 'MDA text console (dual-headed) (EXPERIMENTAL)' CONFIG_MDA_CONSOLE
     bool 'Support for frame buffer devices (EXPERIMENTAL)' CONFIG_FB
   fi
   source drivers/video/Config.in

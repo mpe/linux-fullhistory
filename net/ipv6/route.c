@@ -5,7 +5,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>	
  *
- *	$Id: route.c,v 1.33 1998/08/26 12:05:18 davem Exp $
+ *	$Id: route.c,v 1.34 1998/10/03 09:38:43 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -1025,6 +1025,7 @@ void rt6_pmtu_discovery(struct in6_addr *daddr, struct in6_addr *saddr,
 	 */
 	if (!rt->rt6i_nexthop && !(rt->rt6i_flags & RTF_NONEXTHOP)) {
 		nrt = rt6_cow(rt, daddr, saddr);
+		nrt->u.dst.pmtu = pmtu;
 		nrt->rt6i_flags |= RTF_DYNAMIC;
 		dst_release(&nrt->u.dst);
 	} else {
@@ -1035,6 +1036,7 @@ void rt6_pmtu_discovery(struct in6_addr *daddr, struct in6_addr *saddr,
 		nrt->rt6i_dst.plen = 128;
 		nrt->rt6i_nexthop = neigh_clone(rt->rt6i_nexthop);
 		nrt->rt6i_flags |= (RTF_DYNAMIC | RTF_CACHE);
+		nrt->u.dst.pmtu = pmtu;
 		rt6_ins(nrt);
 	}
 
@@ -1063,10 +1065,10 @@ static struct rt6_info * ip6_rt_copy(struct rt6_info *ort)
 		rt->u.dst.dev = ort->u.dst.dev;
 		rt->u.dst.lastuse = jiffies;
 		rt->rt6i_hoplimit = ort->rt6i_hoplimit;
-		rt->rt6i_expires = ort->rt6i_expires;
+		rt->rt6i_expires = 0;
 
 		ipv6_addr_copy(&rt->rt6i_gateway, &ort->rt6i_gateway);
-		rt->rt6i_flags = ort->rt6i_flags;
+		rt->rt6i_flags = ort->rt6i_flags & ~RTF_EXPIRES;
 		rt->rt6i_metric = ort->rt6i_metric;
 
 		memcpy(&rt->rt6i_dst, &ort->rt6i_dst, sizeof(struct rt6key));

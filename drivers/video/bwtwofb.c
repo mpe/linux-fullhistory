@@ -1,4 +1,4 @@
-/* $Id: bwtwofb.c,v 1.5 1998/08/23 14:20:40 mj Exp $
+/* $Id: bwtwofb.c,v 1.6 1998/09/15 15:45:35 jj Exp $
  * bwtwofb.c: BWtwo frame buffer driver
  *
  * Copyright (C) 1998 Jakub Jelinek   (jj@ultra.linux.cz)
@@ -135,7 +135,7 @@ static u8 bw2regs_66hz[] __initdata = {
 
 static char idstring[60] __initdata = { 0 };
 
-__initfunc(char *bwtwofb_init(struct fb_info_sbusfb *fb))
+char __init *bwtwofb_init(struct fb_info_sbusfb *fb)
 {
 	struct fb_fix_screeninfo *fix = &fb->fix;
 	struct display *disp = &fb->disp;
@@ -153,7 +153,7 @@ __initfunc(char *bwtwofb_init(struct fb_info_sbusfb *fb))
 	if (!fb->s.bw2.regs) {
 		fb->s.bw2.regs = (struct bw2_regs *)sparc_alloc_io(phys+BWTWO_REGISTER_OFFSET, 0, 
 				sizeof(struct bw2_regs), "bw2_regs", fb->iospace, 0);
-		if (!prom_getbool(fb->prom_node, "width")) {
+		if ((!ARCH_SUN4) && (!prom_getbool(fb->prom_node, "width"))) {
 			/* Ugh, broken PROM didn't initialize us.
 			 * Let's deal with this ourselves.
 			 */
@@ -201,6 +201,7 @@ __initfunc(char *bwtwofb_init(struct fb_info_sbusfb *fb))
 	fix->line_length = fb->var.xres_virtual>>3;
 	
 	disp->scrollmode = SCROLL_YREDRAW;
+	disp->inverse = 1;
 	if (!disp->screen_base)
 		disp->screen_base = (char *)sparc_alloc_io(phys, 0, 
 			type->fb_size, "bw2_ram", fb->iospace, 0);
@@ -208,8 +209,10 @@ __initfunc(char *bwtwofb_init(struct fb_info_sbusfb *fb))
 	fb->dispsw = fbcon_mfb;
 	fix->visual = FB_VISUAL_MONO01;
 
+#ifndef CONFIG_SUN4
 	fb->blank = bw2_blank;
 	fb->unblank = bw2_unblank;
+#endif
 	fb->margins = bw2_margins;
 	
 	fb->physbase = phys;

@@ -8,9 +8,9 @@
 #define LO_MAGIC 0x01010101
 #define HI_MAGIC 0x80808080
 
-	.align 4
-	.global strlen
-strlen:
+	.align	32
+	.global __strlen
+__strlen:
 	mov	%o0, %o1
 	andcc	%o0, 3, %g0
 	be,pt	%icc, 9f

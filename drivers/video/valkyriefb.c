@@ -830,7 +830,7 @@ static void valkyrie_par_to_display(struct fb_par_valkyrie *par,
         }
 }
 
-static void valkyrie_init_info(struct fb_info *info, struct fb_info_valkyrie *p)
+static void __init valkyrie_init_info(struct fb_info *info, struct fb_info_valkyrie *p)
 {
 	strcpy(info->modename, p->fix.id);
 	info->node = -1;	/* ??? danj */
@@ -841,6 +841,7 @@ static void valkyrie_init_info(struct fb_info *info, struct fb_info_valkyrie *p)
 	info->switch_con = &valkyriefb_switch;
 	info->updatevar = &valkyriefb_updatevar;
 	info->blank = &valkyriefb_blank;
+	info->flags = FBINFO_FLAG_DEFAULT;
 }
 
 

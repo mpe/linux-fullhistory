@@ -1,4 +1,4 @@
-/* $Id: conv.h,v 1.3 1998/03/26 08:46:13 jj Exp $
+/* $Id: conv.h,v 1.4 1998/08/15 20:42:51 davem Exp $
  * conv.h: Utility macros for Solaris emulation
  *
  * Copyright (C) 1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -11,13 +11,14 @@
 
 #include <asm/unistd.h>
 
-/* As gcc will warn about casting u32 to some ptr, we have to cast it to
- * unsigned long first, and that's what is A() for.
- * You just do (void *)A(x), instead of having to
- * type (void *)((unsigned long)x) or instead of just (void *)x, which will
- * produce warnings.
- */
-#define A(x) ((unsigned long)x)
+/* Use this to get at 32-bit user passed pointers. */
+#define A(__x)				\
+({	unsigned long __ret;		\
+	__asm__ ("srl	%0, 0, %0"	\
+		 : "=r" (__ret)		\
+		 : "0" (__x));		\
+	__ret;				\
+})
 
 extern unsigned sys_call_table[];
 extern unsigned sys_call_table32[];

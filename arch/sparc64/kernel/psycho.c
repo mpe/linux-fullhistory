@@ -1,4 +1,4 @@
-/* $Id: psycho.c,v 1.63 1998/08/02 05:55:42 ecd Exp $
+/* $Id: psycho.c,v 1.64 1998/09/01 07:24:24 jj Exp $
  * psycho.c: Ultra/AX U2P PCI controller support.
  *
  * Copyright (C) 1997 David S. Miller (davem@caipfs.rutgers.edu)
@@ -75,7 +75,6 @@ asmlinkage int sys_pciconfig_write(unsigned long bus,
 #include <asm/uaccess.h>
 
 struct linux_psycho *psycho_root = NULL;
-struct linux_psycho **psycho_index_map;
 int linux_num_psycho = 0;
 static struct linux_pbm_info *bus2pbm[256];
 
@@ -534,18 +533,6 @@ __initfunc(void pcibios_init(void))
 		if(!node)
 			break;
 	}
-
-	/* Last minute sanity check. */
-	if(psycho_root == NULL && SBus_chain == NULL) {
-		prom_printf("Fatal error, neither SBUS nor PCI bus found.\n");
-		prom_halt();
-	}
-
-	psycho_index_map = kmalloc(sizeof(struct linux_psycho *) * linux_num_psycho,
-				   GFP_ATOMIC);
-
-	for (psycho = psycho_root; psycho; psycho = psycho->next)
-		psycho_index_map[psycho->index] = psycho;
 }
 
 int pcibios_present(void)

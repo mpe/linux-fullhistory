@@ -108,6 +108,8 @@
 #define TIOCSERGETLSR   0x5459 /* Get line status register */
 #define TIOCSERGETMULTI 0x545A /* Get multiport config  */
 #define TIOCSERSETMULTI 0x545B /* Set multiport config */
+#define TIOCMIWAIT	0x545C /* Wait input */
+#define TIOCGICOUNT	0x545D /* Read serial port inline interrupt counts */
 
 /* Kernel definitions */
 #ifdef __KERNEL__

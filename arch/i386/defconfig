@@ -288,6 +288,7 @@ CONFIG_DEVPTS_FS=y
 # Console drivers
 #
 CONFIG_VGA_CONSOLE=y
+# CONFIG_VIDEO_SELECT is not set
 
 #
 # Sound

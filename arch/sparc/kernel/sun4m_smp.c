@@ -53,7 +53,6 @@ extern unsigned char boot_cpu_id;
 extern int smp_activated;
 extern volatile int cpu_number_map[NR_CPUS];
 extern volatile int __cpu_logical_map[NR_CPUS];
-extern struct klock_info klock_info;
 extern volatile unsigned long ipi_count;
 extern volatile int smp_process_available;
 extern volatile int smp_commenced;
@@ -66,30 +65,6 @@ extern int __smp4m_processor_id(void);
 #else
 #define SMP_PRINTK(x)
 #endif
-
-int smp4m_bogo_info(char *buf)
-{
-	return sprintf(buf,
-            "Cpu0Bogo\t: %lu.%02lu\n"
-	    "Cpu1Bogo\t: %lu.%02lu\n"
-	    "Cpu2Bogo\t: %lu.%02lu\n"
-	    "Cpu3Bogo\t: %lu.%02lu\n",
-	    cpu_data[0].udelay_val/500000, (cpu_data[0].udelay_val/5000)%100,
-	    cpu_data[1].udelay_val/500000, (cpu_data[1].udelay_val/5000)%100,
-	    cpu_data[2].udelay_val/500000, (cpu_data[2].udelay_val/5000)%100,
-	    cpu_data[3].udelay_val/500000, (cpu_data[3].udelay_val/5000)%100);
-}
-
-int smp4m_info(char *buf)
-{
-	return sprintf(buf,
-"        CPU0\t\tCPU1\t\tCPU2\t\tCPU3\n"
-"State:  %s\t\t%s\t\t%s\t\t%s\n",
-(cpu_present_map & 1) ? ((klock_info.akp == 0) ? "akp" : "online") : "offline",
-(cpu_present_map & 2) ? ((klock_info.akp == 1) ? "akp" : "online") : "offline",
-(cpu_present_map & 4) ? ((klock_info.akp == 2) ? "akp" : "online") : "offline",
-(cpu_present_map & 8) ? ((klock_info.akp == 3) ? "akp" : "online") : "offline");
-}
 
 static inline unsigned long swap(volatile unsigned long *ptr, unsigned long val)
 {
@@ -186,7 +161,6 @@ __initfunc(void smp4m_boot_cpus(void))
 	mid_xlate[boot_cpu_id] = (linux_cpus[boot_cpu_id].mid & ~8);
 	cpu_number_map[boot_cpu_id] = 0;
 	__cpu_logical_map[0] = boot_cpu_id;
-	klock_info.akp = boot_cpu_id;
 	current->processor = boot_cpu_id;
 	smp_store_cpu_info(boot_cpu_id);
 	set_irq_udt(mid_xlate[boot_cpu_id]);
@@ -468,6 +442,7 @@ void smp4m_percpu_timer_interrupt(struct pt_regs *regs)
 
 	if(!--prof_counter[cpu]) {
 		int user = user_mode(regs);
+
 		if(current->pid) {
 			update_one_process(current, 1, user, !user, cpu);
 
@@ -534,7 +509,5 @@ __initfunc(void sun4m_init_smp(void))
 	BTFIXUPSET_BLACKBOX(load_current, smp4m_blackbox_current);
 	BTFIXUPSET_CALL(smp_cross_call, smp4m_cross_call, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(smp_message_pass, smp4m_message_pass, BTFIXUPCALL_NORM);
-	BTFIXUPSET_CALL(smp_bogo_info, smp4m_bogo_info, BTFIXUPCALL_NORM);
-	BTFIXUPSET_CALL(smp_info, smp4m_info, BTFIXUPCALL_NORM);
 	BTFIXUPSET_CALL(__smp_processor_id, __smp4m_processor_id, BTFIXUPCALL_NORM);
 }

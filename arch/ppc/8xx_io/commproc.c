@@ -21,6 +21,7 @@
  * applications that require more DP ram, we can expand the boundaries
  * but then we have to be careful of any downloaded microcode.
  */
+#include <linux/config.h>
 #include <linux/errno.h>
 #include <linux/sched.h>
 #include <linux/kernel.h>

@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.42 1998/07/28 13:08:35 jj Exp $ */
+/* $Id: unistd.h,v 1.47 1998/09/21 05:07:22 jj Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 
@@ -16,7 +16,6 @@
  * Copyright (C) 1995 Adrian M. Rodriguez (adrian@remus.rutgers.edu)
  */
 
-#define __NR_setup                0 /* Used only by init, to get system going.     */
 #define __NR_exit                 1 /* Common                                      */
 #define __NR_fork                 2 /* Common                                      */
 #define __NR_read                 3 /* Common                                      */
@@ -29,10 +28,10 @@
 #define __NR_unlink              10 /* Common                                      */
 #define __NR_execv               11 /* SunOS Specific                              */
 #define __NR_chdir               12 /* Common                                      */
-/* #define __NR_ni_syscall       13    ENOSYS under SunOS                          */
+#define __NR_chown               13 /* Common                                      */
 #define __NR_mknod               14 /* Common                                      */
 #define __NR_chmod               15 /* Common                                      */
-#define __NR_chown               16 /* Common                                      */
+#define __NR_lchown              16 /* Common                                      */
 #define __NR_brk                 17 /* Common                                      */
 /* #define __NR_ni_syscall       18    ENOSYS under SunOS                          */
 #define __NR_lseek               19 /* Common                                      */
@@ -164,8 +163,8 @@
 #define __NR_setrlimit          145 /* Common                                      */
 #define __NR_killpg             146 /* SunOS Specific                              */
 #define __NR_prctl		147 /* ENOSYS under SunOS                          */
-/* #define __NR_ni_syscall      148    ENOSYS under SunOS                          */
-/* #define __NR_ni_syscall      149    ENOSYS under SunOS                          */
+#define __NR_pciconfig_read     148 /* ENOSYS under SunOS                          */
+#define __NR_pciconfig_write    149 /* ENOSYS under SunOS                          */
 #define __NR_getsockname        150 /* Common                                      */
 #define __NR_getmsg             151 /* SunOS Specific                              */
 #define __NR_putmsg             152 /* SunOS Specific                              */
@@ -426,7 +425,6 @@ return -1; \
 #define __NR__exit __NR_exit
 static __inline__ _syscall0(int,idle)
 static __inline__ _syscall0(int,pause)
-static __inline__ _syscall1(int,setup,int,magic)
 static __inline__ _syscall0(int,sync)
 static __inline__ _syscall0(pid_t,setsid)
 static __inline__ _syscall3(int,write,int,fd,__const__ char *,buf,off_t,count)

@@ -139,6 +139,7 @@ struct ipv6_pinfo {
 	struct in6_addr		*daddr_cache;
 
 	__u32			flow_lbl;
+	__u32			frag_size;
 	int			hop_limit;
 	int			mcast_hops;
 	int			mcast_oif;
@@ -159,7 +160,9 @@ struct ipv6_pinfo {
 	} rxopt;
 
 	/* sockopt flags */
-	__u8			mc_loop:1;
+	__u8			mc_loop:1,
+	                        recverr:1,
+	                        pmtudisc:2;
 
 	struct ipv6_mc_socklist	*ipv6_mc_list;
 	__u32			dst_cookie;
@@ -842,20 +845,6 @@ extern __inline__ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 	return 0;
 }
 
-extern __inline__ int __sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
-{
-	/* Cast skb->rcvbuf to unsigned... It's pointless, but reduces
-	   number of warnings when compiling with -W --ANK
-	 */
-	if (atomic_read(&sk->rmem_alloc) + skb->truesize >= (unsigned)sk->rcvbuf)
-		return -ENOMEM;
-	skb_set_owner_r(skb, sk);
-	__skb_queue_tail(&sk->receive_queue,skb);
-	if (!sk->dead)
-		sk->data_ready(sk,skb->len);
-	return 0;
-}
-
 extern __inline__ int sock_queue_err_skb(struct sock *sk, struct sk_buff *skb)
 {
 	/* Cast skb->rcvbuf to unsigned... It's pointless, but reduces
@@ -864,7 +853,7 @@ extern __inline__ int sock_queue_err_skb(struct sock *sk, struct sk_buff *skb)
 	if (atomic_read(&sk->rmem_alloc) + skb->truesize >= (unsigned)sk->rcvbuf)
 		return -ENOMEM;
 	skb_set_owner_r(skb, sk);
-	__skb_queue_tail(&sk->error_queue,skb);
+	skb_queue_tail(&sk->error_queue,skb);
 	if (!sk->dead)
 		sk->data_ready(sk,skb->len);
 	return 0;

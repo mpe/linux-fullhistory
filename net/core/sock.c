@@ -7,7 +7,7 @@
  *		handler for protocols to use and generic option handler.
  *
  *
- * Version:	$Id: sock.c,v 1.70 1998/08/26 12:03:07 davem Exp $
+ * Version:	$Id: sock.c,v 1.73 1998/10/03 16:08:10 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -138,8 +138,7 @@ __u32 sysctl_rmem_max = SK_RMEM_MAX;
 __u32 sysctl_wmem_default = SK_WMEM_MAX;
 __u32 sysctl_rmem_default = SK_RMEM_MAX;
 
-int sysctl_core_destroy_delay = SOCK_DESTROY_TIME;
-/* Maximal space eaten by iovec (still not made (2.1.88)!) plus some space */
+/* Maximal space eaten by iovec or ancilliary data plus some space */
 int sysctl_optmem_max = sizeof(unsigned long)*(2*UIO_MAXIOV + 512);
 
 /*
@@ -155,7 +154,6 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 	int valbool;
 	int err;
 	struct linger ling;
-	struct ifreq req;
 	int ret = 0;
 
 #ifdef CONFIG_FILTER
@@ -293,31 +291,37 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 			
 #ifdef CONFIG_NETDEVICES
 		case SO_BINDTODEVICE:
+		{
+			char devname[IFNAMSIZ]; 
+
 			/* Bind this socket to a particular device like "eth0",
-			 * as specified in an ifreq structure. If the device
-			 * is "", socket is NOT bound to a device.
-			 */
+			 * as specified in the passed interface name. If the
+			 * name is "" or the option length is zero the socket 
+			 * is not bound. 
+			 */ 
 
 			if (!valbool) {
 				sk->bound_dev_if = 0;
-			}
-			else {
-				if (copy_from_user(&req, optval, sizeof(req)))
-					return -EFAULT;
-
+			} else {
+				if (optlen > IFNAMSIZ) 
+					optlen = IFNAMSIZ; 
+				if (copy_from_user(devname, optval, optlen))
+				    return -EFAULT;
+				    
 				/* Remove any cached route for this socket. */
 				dst_release(xchg(&sk->dst_cache, NULL));
 
-				if (req.ifr_ifrn.ifrn_name[0] == '\0') {
+				if (devname[0] == '\0') {
 					sk->bound_dev_if = 0;
 				} else {
-					struct device *dev = dev_get(req.ifr_ifrn.ifrn_name);
+					struct device *dev = dev_get(devname);
 					if (!dev)
 						return -EINVAL;
 					sk->bound_dev_if = dev->ifindex;
 				}
+				return 0;
 			}
-			return 0;
+		}
 #endif
 
 
@@ -483,7 +487,8 @@ struct sock *sk_alloc(int family, int priority, int zero_it)
 	struct sock *sk = kmem_cache_alloc(sk_cachep, priority);
 
 	if(sk) {
-		if (zero_it) memset(sk, 0, sizeof(struct sock));
+		if (zero_it) 
+			memset(sk, 0, sizeof(struct sock));
 		sk->family = family;
 	}
 
@@ -498,7 +503,7 @@ void sk_free(struct sock *sk)
 	kmem_cache_free(sk_cachep, sk);
 }
 
-__initfunc(void sk_init(void))
+void __init sk_init(void)
 {
 	sk_cachep = kmem_cache_create("sock", sizeof(struct sock), 0,
 				      SLAB_HWCACHE_ALIGN, 0, 0);
@@ -508,35 +513,34 @@ __initfunc(void sk_init(void))
 /*
  *	Simple resource managers for sockets.
  */
- 
+
+
+/* 
+ * Write buffer destructor automatically called from kfree_skb. 
+ */
 void sock_wfree(struct sk_buff *skb)
 {
 	struct sock *sk = skb->sk;
-#if 1
-	if (!sk) {
-		printk(KERN_DEBUG "sock_wfree: sk==NULL\n");
-		return;
-	}
-#endif
+
 	/* In case it might be waiting for more memory. */
 	atomic_sub(skb->truesize, &sk->wmem_alloc);
 	sk->write_space(sk);
 }
 
-
+/* 
+ * Read buffer destructor automatically called from kfree_skb. 
+ */
 void sock_rfree(struct sk_buff *skb)
 {
 	struct sock *sk = skb->sk;
-#if 1
-	if (!sk) {
-		printk(KERN_DEBUG "sock_rfree: sk==NULL\n");
-		return;
-	}
-#endif
+
 	atomic_sub(skb->truesize, &sk->rmem_alloc);
 }
 
 
+/*
+ * Allocate a skb from the socket's send buffer.
+ */
 struct sk_buff *sock_wmalloc(struct sock *sk, unsigned long size, int force, int priority)
 {
 	if (force || atomic_read(&sk->wmem_alloc) < sk->sndbuf) {
@@ -551,6 +555,9 @@ struct sk_buff *sock_wmalloc(struct sock *sk, unsigned long size, int force, int
 	return NULL;
 }
 
+/*
+ * Allocate a skb from the socket's receive buffer.
+ */ 
 struct sk_buff *sock_rmalloc(struct sock *sk, unsigned long size, int force, int priority)
 {
 	if (force || atomic_read(&sk->rmem_alloc) < sk->rcvbuf) {
@@ -565,6 +572,9 @@ struct sk_buff *sock_rmalloc(struct sock *sk, unsigned long size, int force, int
 	return NULL;
 }
 
+/* 
+ * Allocate a memory block from the socket's option memory buffer.
+ */ 
 void *sock_kmalloc(struct sock *sk, int size, int priority)
 {
 	if (atomic_read(&sk->omem_alloc)+size < sysctl_optmem_max) {
@@ -581,6 +591,9 @@ void *sock_kmalloc(struct sock *sk, int size, int priority)
 	return NULL;
 }
 
+/*
+ * Free an option memory block.
+ */
 void sock_kfree_s(struct sock *sk, void *mem, int size)
 {
 	kfree_s(mem, size); 
@@ -813,7 +826,7 @@ void sklist_destroy_socket(struct sock **list,struct sock *sk)
 		 *	Someone is using our buffers still.. defer
 		 */
 		init_timer(&sk->timer);
-		sk->timer.expires=jiffies+sysctl_core_destroy_delay;
+		sk->timer.expires=jiffies+SOCK_DESTROY_TIME;
 		sk->timer.function=sklist_destroy_timer;
 		sk->timer.data = (unsigned long)sk;
 		add_timer(&sk->timer);
@@ -944,13 +957,22 @@ int sock_no_recvmsg(struct socket *sock, struct msghdr *m, int flags,
  *	Default Socket Callbacks
  */
 
-void sock_def_callback1(struct sock *sk)
+void sock_def_wakeup(struct sock *sk)
 {
 	if(!sk->dead)
 		wake_up_interruptible(sk->sleep);
 }
 
-void sock_def_callback2(struct sock *sk, int len)
+void sock_def_error_report(struct sock *sk)
+{
+	if (!sk->dead) 
+	{
+		wake_up_interruptible(sk->sleep);
+		sock_wake_async(sk->socket,0); 
+	}
+}
+
+void sock_def_readable(struct sock *sk, int len)
 {
 	if(!sk->dead)
 	{
@@ -1000,10 +1022,10 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 		sock->sk	=	sk;
 	}
 
-	sk->state_change	=	sock_def_callback1;
-	sk->data_ready		=	sock_def_callback2;
+	sk->state_change	=	sock_def_wakeup;
+	sk->data_ready		=	sock_def_readable;
 	sk->write_space		=	sock_def_write_space;
-	sk->error_report	=	sock_def_callback1;
+	sk->error_report	=	sock_def_error_report;
 	sk->destruct            =       sock_def_destruct;
 
 	sk->peercred.pid 	=	0;

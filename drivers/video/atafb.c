@@ -2845,6 +2845,7 @@ __initfunc(void atafb_init(void))
 	fb_info.switch_con = &atafb_switch;
 	fb_info.updatevar = &fb_update_var;
 	fb_info.blank = &atafb_blank;
+	fb_info.flags = FBINFO_FLAG_DEFAULT;
 	do_fb_set_var(&atafb_predefined[default_par-1], 1);
 	strcat(fb_info.modename, fb_var_names[default_par-1][0]);
 

@@ -445,6 +445,7 @@ __initfunc(void vfb_init(void))
     fb_info.switch_con = &vfbcon_switch;
     fb_info.updatevar = &vfbcon_updatevar;
     fb_info.blank = &vfbcon_blank;
+    fb_info.flags = FBINFO_FLAG_DEFAULT;
 
     vfb_set_var(&vfb_default, -1, &fb_info);
 

@@ -67,29 +67,13 @@
 #define MAXTTL		255
 #define IPDEFTTL	64
 
-struct timestamp {
-	__u8	len;
-	__u8	ptr;
-#if defined(__LITTLE_ENDIAN_BITFIELD)
-	__u8	flags:4,
-		overflow:4;
-#elif defined(__BIG_ENDIAN_BITFIELD)
-	__u8	overflow:4,
-		flags:4;
-#else
-#error	"Please fix <asm/byteorder.h>"
-#endif						
-	__u32	data[9];
-};
+/* struct timestamp, struct route and MAX_ROUTES are removed.
 
-
-#define MAX_ROUTE	16
-
-struct route {
-  char		route_size;
-  char		pointer;
-  unsigned long route[MAX_ROUTE];
-};
+   REASONS: it is clear that nobody used them because:
+   - MAX_ROUTES value was wrong.
+   - "struct route" was wrong.
+   - "struct timestamp" had fatally misaligned bitfields and was completely unusable.
+ */
 
 #define IPOPT_OPTVAL 0
 #define IPOPT_OLEN   1
@@ -102,7 +86,7 @@ struct route {
 
 #define	IPOPT_TS_TSONLY		0		/* timestamps only */
 #define	IPOPT_TS_TSANDADDR	1		/* timestamps and addresses */
-#define	IPOPT_TS_PRESPEC	2		/* specified modules only */
+#define	IPOPT_TS_PRESPEC	3		/* specified modules only */
 
 struct ip_options {
   __u32		faddr;				/* Saved first hop address */

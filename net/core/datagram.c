@@ -103,6 +103,11 @@ struct sk_buff *skb_recv_datagram(struct sock *sk, unsigned flags, int noblock, 
 	int error;
 	struct sk_buff *skb;
 
+	/* Caller is allowed not to check sk->err before skb_recv_datagram() */
+	error = sock_error(sk);
+	if (error)
+		goto no_packet;
+
 restart:
 	while(skb_queue_empty(&sk->receive_queue))	/* No data */
 	{
@@ -216,11 +221,11 @@ unsigned int datagram_poll(struct file * file, struct socket *sock, poll_table *
 	mask = 0;
 
 	/* exceptional events? */
-	if (sk->err)
+	if (sk->err || !skb_queue_empty(&sk->error_queue))
 		mask |= POLLERR;
 	if (sk->shutdown & RCV_SHUTDOWN)
 		mask |= POLLHUP;
-	
+
 	/* readable? */
 	if (!skb_queue_empty(&sk->receive_queue))
 		mask |= POLLIN | POLLRDNORM;
@@ -237,6 +242,8 @@ unsigned int datagram_poll(struct file * file, struct socket *sock, poll_table *
 	/* writable? */
 	if (sock_writeable(sk))
 		mask |= POLLOUT | POLLWRNORM | POLLWRBAND;
+	else
+		sk->socket->flags |= SO_NOSPACE;
 
 	return mask;
 }

@@ -74,8 +74,8 @@ static int ns87415_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 		case ide_dma_end: /* returns 1 on error, 0 otherwise */
 			drive->waiting_for_dma = 0;
 			dma_stat = inb(hwif->dma_base+2);
-			outb(7, hwif->dma_base);		/* from errata: stop DMA, clear INTR & ERROR */
-			outb(dma_stat|6, hwif->dma_base+2);	/* clear the INTR & ERROR bits */
+			outb(inb(hwif->dma_base)&~1, hwif->dma_base);	/* stop DMA */
+			outb(inb(hwif->dma_base)|6, hwif->dma_base);	/* from ERRATA: clear the INTR & ERROR bits */
 			return (dma_stat & 7) != 4;		/* verify good DMA status */
 		case ide_dma_write:
 		case ide_dma_read:

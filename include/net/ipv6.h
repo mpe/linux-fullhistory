@@ -4,7 +4,7 @@
  *	Authors:
  *	Pedro Roque		<roque@di.fc.ul.pt>
  *
- *	$Id: ipv6.h,v 1.13 1998/08/26 12:02:11 davem Exp $
+ *	$Id: ipv6.h,v 1.14 1998/10/03 09:36:45 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -283,6 +283,11 @@ extern void			ipv6_netdev_notif_init(void);
 extern void			ipv6_packet_cleanup(void);
 
 extern void			ipv6_netdev_notif_cleanup(void);
+
+extern int 			ipv6_recv_error(struct sock *sk, struct msghdr *msg, int len);
+extern void			ipv6_icmp_error(struct sock *sk, struct sk_buff *skb, int err, u16 port,
+						u32 info, u8 *payload);
+extern void			ipv6_local_error(struct sock *sk, int err, struct flowi *fl, u32 info);
 
 #endif /* __KERNEL__ */
 #endif /* _NET_IPV6_H */

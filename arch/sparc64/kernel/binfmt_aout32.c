@@ -91,7 +91,7 @@ do_aout32_core_dump(long signr, struct pt_regs * regs)
 #       define START_DATA(u)    (u.u_tsize)
 #       define START_STACK(u)   ((regs->u_regs[UREG_FP]) & ~(PAGE_SIZE - 1))
 
-	if (!current->dumpable || current->mm->count != 1)
+	if (!current->dumpable || atomic_read(&current->mm->count) != 1)
 		return 0;
 	current->dumpable = 0;
 
@@ -201,7 +201,8 @@ aout32_core_dump(long signr, struct pt_regs * regs)
  * memory and creates the pointer tables from them, and puts their
  * addresses on the "stack", returning the new stack pointer value.
  */
-#define A(x) ((unsigned long)x)
+#define A(__x) ((unsigned long)(__x))
+
 static u32 *create_aout32_tables(char * p, struct linux_binprm * bprm)
 {
 	u32 *argv, *envp;

@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.51 1998/06/12 14:54:20 jj Exp $
+/* $Id: traps.c,v 1.54 1998/09/25 01:09:02 davem Exp $
  * arch/sparc64/kernel/traps.c
  *
  * Copyright (C) 1995,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -178,6 +178,79 @@ unsigned long syscall_trace_exit(unsigned long retval, struct pt_regs *regs)
 }
 #endif /* SYSCALL_TRACING */
 
+#if 0
+void rtrap_check(struct pt_regs *regs)
+{
+	register unsigned long pgd_phys asm("o1");
+	register unsigned long pgd_cache asm("o2");
+	register unsigned long g1_or_g3 asm("o3");
+	register unsigned long g2 asm("o4");
+	unsigned long ctx;
+
+#if 0
+	do {
+		unsigned long test;
+		__asm__ __volatile__("rdpr	%%pstate, %0"
+				     : "=r" (test));
+		if((test & PSTATE_MG) != 0 ||
+		   (test & PSTATE_IE) == 0) {
+			printk("rtrap_check: Bogus pstate[%016lx]\n", test);
+			return;
+		}
+	} while(0);
+#endif
+
+	__asm__ __volatile__("
+	rdpr	%%pstate, %%o5
+	wrpr	%%o5, %4, %%pstate
+	or	%%g1, %%g3, %2
+	mov	%%g2, %3
+	mov	%%g7, %0
+	mov	%5, %1
+	ldxa	[%1] %6, %1
+	wrpr	%%o5, 0x0, %%pstate"
+	: "=r" (pgd_phys), "=r" (pgd_cache),
+	  "=r" (g1_or_g3), "=r" (g2)
+	: "i" (PSTATE_IE | PSTATE_MG), "i" (TSB_REG),
+	  "i" (ASI_DMMU)
+	: "o5");
+
+	ctx = spitfire_get_secondary_context();
+
+	if((pgd_phys != __pa(current->mm->pgd)) ||
+	   ((pgd_cache != 0) &&
+	    (pgd_cache != pgd_val(current->mm->pgd[0]))) ||
+	   (g1_or_g3 != (0xfffffffe00000000UL | 0x0000000000000018UL)) ||
+#define KERN_HIGHBITS		((_PAGE_VALID | _PAGE_SZ4MB) ^ 0xfffff80000000000)
+#define KERN_LOWBITS		(_PAGE_CP | _PAGE_CV | _PAGE_P | _PAGE_W)
+	   (g2 != (KERN_HIGHBITS | KERN_LOWBITS)) ||
+#undef KERN_HIGHBITS
+#undef KERN_LOWBITS
+	   ((ctx != (current->mm->context & 0x3ff)) ||
+	    (ctx == 0) ||
+	    (current->tss.ctx != ctx))) {
+		printk("SHIT[%s:%d]: "
+		       "(PP[%016lx] CACH[%016lx] CTX[%x] g1g3[%016lx] g2[%016lx]) ",
+		       current->comm, current->pid,
+		       pgd_phys, pgd_cache, ctx, g1_or_g3, g2);
+		printk("SHIT[%s:%d]: "
+		       "[PP[%016lx] CACH[%016lx] CTX[%x:%x]] PC[%016lx:%016lx]\n",
+		       current->comm, current->pid,
+		       __pa(current->mm->pgd),
+		       pgd_val(current->mm->pgd[0]),
+		       current->mm->context & 0x3ff,
+		       current->tss.ctx,
+		       regs->tpc, regs->tnpc);
+		show_regs(regs);
+#if 1
+		__sti();
+		while(1)
+			barrier();
+#endif
+	}
+}
+#endif
+
 void bad_trap (struct pt_regs *regs, long lvl)
 {
 	lock_kernel ();
@@ -205,7 +278,20 @@ void bad_trap_tl1 (struct pt_regs *regs, long lvl)
 	unlock_kernel();
 }
 
-void data_access_exception (struct pt_regs *regs)
+void instruction_access_exception (struct pt_regs *regs,
+				   unsigned long sfsr, unsigned long sfar)
+{
+	lock_kernel();
+#if 1
+	printk("instruction_access_exception: Shit SFSR[%016lx] SFAR[%016lx], going.\n",
+	       sfsr, sfar);
+#endif
+	die_if_kernel("Iax", regs);
+	unlock_kernel();
+}
+
+void data_access_exception (struct pt_regs *regs,
+			    unsigned long sfsr, unsigned long sfar)
 {
 	if (regs->tstate & TSTATE_PRIV) {
 		/* Test if this comes from uaccess places. */
@@ -224,7 +310,17 @@ void data_access_exception (struct pt_regs *regs)
 			regs->u_regs[UREG_G2] = g2;
 			return;
 		}
+		/* Shit... */
+#if 1
+		printk("data_access_exception: Shit SFSR[%016lx] SFAR[%016lx], going.\n",
+		       sfsr, sfar);
+#endif
+		die_if_kernel("Dax", regs);
 	}
+#if 0
+	else
+		rtrap_check(regs);
+#endif
 	lock_kernel();
 	force_sig(SIGSEGV, current);
 	unlock_kernel();
@@ -286,17 +382,10 @@ void do_dae(struct pt_regs *regs)
 	unlock_kernel();
 }
 
-void instruction_access_exception (struct pt_regs *regs)
+void do_iae(struct pt_regs *regs)
 {
 	clean_and_reenable_l1_caches();
 
-	lock_kernel();
-	force_sig(SIGSEGV, current);
-	unlock_kernel();
-}
-
-void do_iae(struct pt_regs *regs)
-{
 	lock_kernel();
 	force_sig(SIGSEGV, current);
 	unlock_kernel();

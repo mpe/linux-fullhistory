@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.30 1998/07/24 09:50:08 jj Exp $
+/*  $Id: setup.c,v 1.32 1998/09/24 03:21:37 davem Exp $
  *  linux/arch/sparc64/kernel/setup.c
  *
  *  Copyright (C) 1995,1996  David S. Miller (davem@caip.rutgers.edu)
@@ -55,8 +55,6 @@ struct screen_info screen_info = {
 	0,                      /* orig-video-isVGA */
 	16                      /* orig-video-points */
 };
-
-unsigned int phys_bytes_of_ram, end_of_phys_memory;
 
 /* Typing sync at the prom prompt calls the function pointed to by
  * the sync callback which I set to the following function.
@@ -235,8 +233,8 @@ extern unsigned long sun_serial_setup(unsigned long);
 extern unsigned short root_flags;
 extern unsigned short root_dev;
 extern unsigned short ram_flags;
-extern unsigned ramdisk_image;
-extern unsigned ramdisk_size;
+extern unsigned int ramdisk_image;
+extern unsigned int ramdisk_size;
 #define RAMDISK_IMAGE_START_MASK	0x07FF
 #define RAMDISK_PROMPT_FLAG		0x8000
 #define RAMDISK_LOAD_FLAG		0x4000
@@ -278,7 +276,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 	unsigned long * memory_start_p, unsigned long * memory_end_p))
 {
 	extern int serial_console;  /* in console.c, of course */
-	unsigned long lowest_paddr;
+	unsigned long lowest_paddr, end_of_phys_memory = 0;
 	int total, i;
 
 #ifdef PROM_DEBUG_CONSOLE
@@ -441,6 +439,8 @@ extern int smp_info(char *);
 extern int smp_bogo(char *);
 extern int mmu_info(char *);
 
+unsigned long dcache_aliases_found = 0;
+
 int get_cpuinfo(char *buffer)
 {
 	int cpuid=smp_processor_id();
@@ -454,6 +454,7 @@ int get_cpuinfo(char *buffer)
             "type\t\t: sun4u\n"
 	    "ncpus probed\t: %d\n"
 	    "ncpus active\t: %d\n"
+	    "d-aliases\t: %lu\n"
 #ifndef __SMP__
             "BogoMips\t: %lu.%02lu\n"
 #endif
@@ -461,7 +462,7 @@ int get_cpuinfo(char *buffer)
             sparc_cpu_type[cpuid],
             sparc_fpu_type[cpuid],
             prom_rev, prom_prev >> 16, (prom_prev >> 8) & 0xff, prom_prev & 0xff,
-	    linux_num_cpus, smp_num_cpus
+	    linux_num_cpus, smp_num_cpus, dcache_aliases_found
 #ifndef __SMP__
             , loops_per_sec/500000, (loops_per_sec/5000) % 100
 #endif

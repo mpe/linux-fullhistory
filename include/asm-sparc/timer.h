@@ -1,4 +1,4 @@
-/* $Id: timer.h,v 1.17 1998/04/24 12:30:19 davem Exp $
+/* $Id: timer.h,v 1.20 1998/09/21 05:07:37 jj Exp $
  * timer.h:  Definitions for the timer chips on the Sparc.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -11,6 +11,7 @@
 
 #include <asm/system.h>  /* For NCPUS */
 #include <asm/sun4paddr.h>
+#include <asm/btfixup.h>
 
 /* Timer structures. The interrupt timer has two properties which
  * are the counter (which is handled in do_timer in sched.c) and the limit.
@@ -101,5 +102,9 @@ extern struct sun4d_timer_regs *sun4d_timers;
 
 extern __volatile__ unsigned int *master_l10_counter;
 extern __volatile__ unsigned int *master_l10_limit;
+
+/* FIXME: Make do_[gs]ettimeofday btfixup calls */
+BTFIXUPDEF_CALL(void, bus_do_settimeofday, struct timeval *tv)
+#define bus_do_settimeofday(tv) BTFIXUP_CALL(bus_do_settimeofday)(tv)
 
 #endif /* !(_SPARC_TIMER_H) */

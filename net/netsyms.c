@@ -43,6 +43,8 @@ extern struct net_proto_family inet_family_ops;
 
 #if defined(CONFIG_IPV6) || defined (CONFIG_IPV6_MODULE)
 #include <linux/in6.h>
+#include <linux/icmpv6.h>
+#include <net/ipv6.h>
 #include <net/ndisc.h>
 #include <net/dst.h>
 #include <net/transp_v6.h>
@@ -228,6 +230,10 @@ EXPORT_SYMBOL(__release_sock);
 /* needed for ip_gre -cw */
 EXPORT_SYMBOL(ip_statistics);
 
+#ifdef CONFIG_IPV6
+EXPORT_SYMBOL(ipv6_addr_type);
+EXPORT_SYMBOL(icmpv6_send);
+#endif
 #ifdef CONFIG_IPV6_MODULE
 /* inet functions common to v4 and v6 */
 EXPORT_SYMBOL(inet_stream_ops);

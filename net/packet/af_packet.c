@@ -5,10 +5,7 @@
  *
  *		PACKET - implements raw packet sockets.
  *
- *		Doesn't belong in IP but it's currently too hooked into ip
- *		to separate.
- *
- * Version:	@(#)packet.c	1.0.6	05/25/93
+ * Version:	$Id: af_packet.c,v 1.18 1998/10/03 15:55:24 freitag Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -1245,7 +1242,7 @@ void cleanup_module(void)
 
 int init_module(void)
 #else
-__initfunc(void packet_proto_init(struct net_proto *pro))
+void __init packet_proto_init(struct net_proto *pro)
 #endif
 {
 	sock_register(&packet_family_ops);

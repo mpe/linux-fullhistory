@@ -5,7 +5,7 @@
  *
  *		The Internet Protocol (IP) output module.
  *
- * Version:	$Id: ip_output.c,v 1.62 1998/09/14 01:22:58 davem Exp $
+ * Version:	$Id: ip_output.c,v 1.63 1998/10/03 09:37:30 davem Exp $
  *
  * Authors:	Ross Biro, <bir7@leland.Stanford.Edu>
  *		Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
@@ -111,8 +111,7 @@ void ip_build_and_send_pkt(struct sk_buff *skb, struct sock *sk,
 	iph->ihl      = 5;
 	iph->tos      = sk->ip_tos;
 	iph->frag_off = 0;
-	if (sk->ip_pmtudisc == IP_PMTUDISC_WANT && 
-		!(rt->u.dst.mxlock&(1<<RTAX_MTU)))
+	if (ip_dont_fragment(sk, &rt->u.dst))
 		iph->frag_off |= htons(IP_DF);
 	iph->ttl      = sk->ip_ttl;
 	iph->daddr    = rt->rt_dst;
@@ -312,7 +311,7 @@ void ip_queue_xmit(struct sk_buff *skb)
 	if (tot_len > rt->u.dst.pmtu)
 		goto fragment;
 
-	if (sk->ip_pmtudisc == IP_PMTUDISC_WANT && !(rt->u.dst.mxlock & (1 << RTAX_MTU)))
+	if (ip_dont_fragment(sk, &rt->u.dst))
 		iph->frag_off |= __constant_htons(IP_DF);
 
 	/* Add an IP checksum. */
@@ -323,8 +322,7 @@ void ip_queue_xmit(struct sk_buff *skb)
 	return;
 
 fragment:
-	if (sk->ip_pmtudisc == IP_PMTUDISC_WANT &&
-	    !(rt->u.dst.mxlock & (1 << RTAX_MTU)) &&
+	if (ip_dont_fragment(sk, &rt->u.dst) &&
 	    tot_len > (iph->ihl<<2) + sizeof(struct tcphdr)+16) {
 		/* Reject packet ONLY if TCP might fragment
 		   it itself, if were careful enough.
@@ -383,23 +381,24 @@ int ip_build_xmit_slow(struct sock *sk,
 	unsigned int fraglen, maxfraglen, fragheaderlen;
 	int err;
 	int offset, mf;
+	int mtu;
 	unsigned short id;
 
 	int hh_len = (rt->u.dst.dev->hard_header_len + 15)&~15;
 	int nfrags=0;
 	struct ip_options *opt = ipc->opt;
-	int df = htons(IP_DF);
+	int df = 0;
 
-	if (sk->ip_pmtudisc == IP_PMTUDISC_DONT ||
-		(rt->u.dst.mxlock&(1<<RTAX_MTU)))
-		df = 0;
+	mtu = rt->u.dst.pmtu;
+	if (ip_dont_fragment(sk, &rt->u.dst))
+		df = htons(IP_DF);
   
 	if (!sk->ip_hdrincl)
 		length -= sizeof(struct iphdr);
 
 	if (opt) {
 		fragheaderlen = sizeof(struct iphdr) + opt->optlen;
-		maxfraglen = ((rt->u.dst.pmtu-sizeof(struct iphdr)-opt->optlen) & ~7) + fragheaderlen;
+		maxfraglen = ((mtu-sizeof(struct iphdr)-opt->optlen) & ~7) + fragheaderlen;
 	} else {
 		fragheaderlen = sk->ip_hdrincl ? 0 : sizeof(struct iphdr);
 		
@@ -408,11 +407,13 @@ int ip_build_xmit_slow(struct sock *sk,
 		 *	out the size of the frames to send.
 		 */
 	 
-		maxfraglen = ((rt->u.dst.pmtu-sizeof(struct iphdr)) & ~7) + fragheaderlen;
+		maxfraglen = ((mtu-sizeof(struct iphdr)) & ~7) + fragheaderlen;
 	}
 
-	if (length + fragheaderlen > 0xFFFF)
+	if (length + fragheaderlen > 0xFFFF) {
+		ip_local_error(sk, EMSGSIZE, rt->rt_dst, sk->dport, mtu);
 		return -EMSGSIZE;
+	}
 
 	/*
 	 *	Start at the end of the frame by handling the remainder.
@@ -443,6 +444,7 @@ int ip_build_xmit_slow(struct sock *sk,
 	 */
 	 
 	if (offset > 0 && df) { 
+		ip_local_error(sk, EMSGSIZE, rt->rt_dst, sk->dport, mtu);
  		return(-EMSGSIZE);
 	}
 
@@ -612,10 +614,9 @@ int ip_build_xmit(struct sock *sk,
 	/*
 	 *	Do path mtu discovery if needed.
 	 */
-	df = htons(IP_DF);
-	if (sk->ip_pmtudisc == IP_PMTUDISC_DONT ||
-		(rt->u.dst.mxlock&(1<<RTAX_MTU)))
-		df = 0;
+	df = 0;
+	if (ip_dont_fragment(sk, &rt->u.dst))
+		df = htons(IP_DF);
 	 	
 	/* 
 	 *	Fast path for unfragmented frames without options. 

@@ -5,7 +5,7 @@
  *
  *		The options processing module for ip.c
  *
- * Version:	$Id: ip_options.c,v 1.14 1998/08/26 12:03:51 davem Exp $
+ * Version:	$Id: ip_options.c,v 1.15 1998/10/03 09:37:27 davem Exp $
  *
  * Authors:	A.N.Kuznetsov
  *		
@@ -89,12 +89,6 @@ int ip_options_echo(struct ip_options * dopt, struct sk_buff * skb)
 	int	optlen;
 	u32	daddr;
 
-#if 111
-	if (skb == NULL) {
-		printk(KERN_DEBUG "no skb in ip_options_echo\n");
-		return -EINVAL;
-	}
-#endif
 	memset(dopt, 0, sizeof(struct ip_options));
 
 	dopt->is_data = 1;
@@ -145,14 +139,19 @@ int ip_options_echo(struct ip_options * dopt, struct sk_buff * skb)
 					return -EINVAL;
 				dopt->ts_needtime = 1;
 				soffset += 4;
-			}
-			if (((struct timestamp*)(dptr+1))->flags == IPOPT_TS_PRESPEC) {
-				__u32 addr;
-				memcpy(&addr, sptr+soffset-9, 4);
-				if (inet_addr_type(addr) == RTN_UNICAST) {
-					dopt->ts_needtime = 0;
-					dopt->ts_needaddr = 0;
-					soffset -= 8;
+				if ((dptr[3]&0xF) == IPOPT_TS_PRESPEC) {
+					__u32 addr;
+					if (soffset + 3 > optlen)
+						return -EINVAL;
+					soffset += 4;
+					if (soffset + 8 <= optlen) {
+						dopt->ts_needtime = 0;
+						memcpy(&addr, sptr+soffset-1, 4);
+						if (inet_addr_type(addr) != RTN_UNICAST) {
+							dopt->ts_needtime = 1;
+							soffset += 8;
+						}
+					}
 				}
 			}
 			dptr[2] = soffset;
@@ -353,55 +352,56 @@ int ip_options_compile(struct ip_options * opt, struct sk_buff * skb)
 				goto error;
 			}
 			if (optptr[2] <= optlen) {
-				struct timestamp * ts = (struct timestamp*)(optptr+1);
 				__u32 * timeptr = NULL;
-				if (ts->ptr+3 > ts->len) {
+				if (optptr[2]+3 > optptr[1]) {
 					pp_ptr = optptr + 2;
 					goto error;
 				}
-				switch (ts->flags) {
+				switch (optptr[3]&0xF) {
 				      case IPOPT_TS_TSONLY:
 					opt->ts = optptr - iph;
 					if (skb) 
-						timeptr = (__u32*)&optptr[ts->ptr-1];
+						timeptr = (__u32*)&optptr[optptr[2]-1];
 					opt->ts_needtime = 1;
-					ts->ptr += 4;
+					optptr[2] += 4;
 					break;
 				      case IPOPT_TS_TSANDADDR:
-					if (ts->ptr+7 > ts->len) {
+					if (optptr[2]+7 > optptr[1]) {
 						pp_ptr = optptr + 2;
 						goto error;
 					}
 					opt->ts = optptr - iph;
 					if (skb) {
-						memcpy(&optptr[ts->ptr-1], &rt->rt_spec_dst, 4);
-						timeptr = (__u32*)&optptr[ts->ptr+3];
+						memcpy(&optptr[optptr[2]-1], &rt->rt_spec_dst, 4);
+						timeptr = (__u32*)&optptr[optptr[2]+3];
 					}
 					opt->ts_needaddr = 1;
 					opt->ts_needtime = 1;
-					ts->ptr += 8;
+					optptr[2] += 8;
 					break;
 				      case IPOPT_TS_PRESPEC:
-					if (ts->ptr+7 > ts->len) {
+					if (optptr[2]+7 > optptr[1]) {
 						pp_ptr = optptr + 2;
 						goto error;
 					}
 					opt->ts = optptr - iph;
 					{
 						u32 addr;
-						memcpy(&addr, &optptr[ts->ptr-1], 4);
+						memcpy(&addr, &optptr[optptr[2]-1], 4);
 						if (inet_addr_type(addr) == RTN_UNICAST)
 							break;
 						if (skb)
-							timeptr = (__u32*)&optptr[ts->ptr+3];
+							timeptr = (__u32*)&optptr[optptr[2]+3];
 					}
-					opt->ts_needaddr = 1;
 					opt->ts_needtime = 1;
-					ts->ptr += 8;
+					optptr[2] += 8;
 					break;
 				      default:
-					pp_ptr = optptr + 3;
-					goto error;
+					if (!skb && !capable(CAP_NET_RAW)) {
+						pp_ptr = optptr + 3;
+						goto error;
+					}
+					break;
 				}
 				if (timeptr) {
 					struct timeval tv;
@@ -412,14 +412,14 @@ int ip_options_compile(struct ip_options * opt, struct sk_buff * skb)
 					opt->is_changed = 1;
 				}
 			} else {
-				struct timestamp * ts = (struct timestamp*)(optptr+1);
-				if (ts->overflow == 15) {
+				unsigned overflow = optptr[3]>>4;
+				if (overflow == 15) {
 					pp_ptr = optptr + 3;
 					goto error;
 				}
 				opt->ts = optptr - iph;
 				if (skb) {
-					ts->overflow++;
+					optptr[3] = (optptr[3]&0xF)|((overflow+1)<<4);
 					opt->is_changed = 1;
 				}
 			}
@@ -435,7 +435,7 @@ int ip_options_compile(struct ip_options * opt, struct sk_buff * skb)
 		      case IPOPT_SEC:
 		      case IPOPT_SID:
 		      default:
-			if (!skb) {
+			if (!skb && !capable(CAP_NET_RAW)) {
 				pp_ptr = optptr;
 				goto error;
 			}
@@ -480,10 +480,10 @@ void ip_options_undo(struct ip_options * opt)
 			memset(&optptr[optptr[2]-1], 0, 4);
 			optptr[2] -= 4;
 		}
-		if (opt->ts_needaddr) {
+		if (opt->ts_needaddr)
 			memset(&optptr[optptr[2]-1], 0, 4);
+		if ((optptr[3]&0xF) != IPOPT_TS_PRESPEC)
 			optptr[2] -= 4;
-		}
 	}
 }
 

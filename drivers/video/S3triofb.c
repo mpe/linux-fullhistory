@@ -572,7 +572,7 @@ __initfunc(void s3triofb_init_of(struct device_node *dp))
     else
 	disp.dispsw = &fbcon_cfb8;
 #else
-    disp.dispsw = NULL;
+    disp.dispsw = &fbcon_dummy;
 #endif
     disp.scrollmode = fb_var.accel_flags & FB_ACCELF_TEXT ? 0 : SCROLL_YREDRAW;
 
@@ -610,6 +610,7 @@ __initfunc(void s3triofb_init_of(struct device_node *dp))
     }
 #endif /* CONFIG_FB_COMPAT_XPMAC) */
 
+    fb_info.flags = FBINFO_FLAG_DEFAULT;
     if (register_framebuffer(&fb_info) < 0)
 	return;
 

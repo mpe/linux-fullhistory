@@ -1,4 +1,4 @@
-/*  $Id: signal32.c,v 1.41 1998/07/30 11:29:32 davem Exp $
+/*  $Id: signal32.c,v 1.44 1998/09/25 01:09:17 davem Exp $
  *  arch/sparc64/kernel/signal32.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
@@ -39,6 +39,7 @@ asmlinkage int do_signal32(sigset_t *oldset, struct pt_regs *regs,
 /* #define DEBUG_SIGNALS 1 */
 /* #define DEBUG_SIGNALS_TRACE 1 */
 /* #define DEBUG_SIGNALS_MAPS 1 */
+/* #define DEBUG_SIGNALS_TLB 1 */
 
 /* Signal frames: the original one (compatible with SunOS):
  *
@@ -270,8 +271,10 @@ void do_new_sigreturn32(struct pt_regs *regs)
 	recalc_sigpending(current);
 	spin_unlock_irq(&current->sigmask_lock);
 	return;
+
 segv:
-	send_sig(SIGSEGV, current, 1);
+	lock_kernel();
+	do_exit(SIGSEGV);
 }
 
 asmlinkage void do_sigreturn32(struct pt_regs *regs)
@@ -329,8 +332,10 @@ asmlinkage void do_sigreturn32(struct pt_regs *regs)
 	regs->tstate &= ~(TSTATE_ICC);
 	regs->tstate |= psr_to_tstate_icc(psr);
 	return;
+
 segv:
-	send_sig(SIGSEGV, current, 1);
+	lock_kernel();
+	do_exit(SIGSEGV);
 }
 
 asmlinkage void do_rt_sigreturn32(struct pt_regs *regs)
@@ -412,7 +417,8 @@ asmlinkage void do_rt_sigreturn32(struct pt_regs *regs)
 	spin_unlock_irq(&current->sigmask_lock);
 	return;
 segv:
-	send_sig(SIGSEGV, current, 1);
+	lock_kernel();
+	do_exit(SIGSEGV);
 }
 
 /* Checks if the fp is valid */
@@ -445,6 +451,7 @@ setup_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	struct signal_sframe32 *sframep;
 	struct sigcontext32 *sc;
 	unsigned seta[_NSIG_WORDS32];
+	int err = 0;
 	
 #if 0	
 	int window = 0;
@@ -472,7 +479,8 @@ setup_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	sc = &sframep->sig_context;
 
 	/* We've already made sure frame pointer isn't in kernel space... */
-	__put_user((sas_ss_flags(regs->u_regs[UREG_FP]) == SS_ONSTACK), &sc->sigc_onstack);
+	err = __put_user((sas_ss_flags(regs->u_regs[UREG_FP]) == SS_ONSTACK),
+			 &sc->sigc_onstack);
 	
 	switch (_NSIG_WORDS) {
 	case 4: seta[7] = (oldset->sig[3] >> 32);
@@ -484,67 +492,81 @@ setup_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	case 1: seta[1] = (oldset->sig[0] >> 32);
 	        seta[0] = oldset->sig[0];
 	}
-	__put_user(seta[0], &sc->sigc_mask);
-	__copy_to_user(sframep->extramask, seta + 1, (_NSIG_WORDS32 - 1) * sizeof(unsigned));
-	__put_user(regs->u_regs[UREG_FP], &sc->sigc_sp);
-	__put_user(pc, &sc->sigc_pc);
-	__put_user(npc, &sc->sigc_npc);
+	err |= __put_user(seta[0], &sc->sigc_mask);
+	err |= __copy_to_user(sframep->extramask, seta + 1,
+			      (_NSIG_WORDS32 - 1) * sizeof(unsigned));
+	err |= __put_user(regs->u_regs[UREG_FP], &sc->sigc_sp);
+	err |= __put_user(pc, &sc->sigc_pc);
+	err |= __put_user(npc, &sc->sigc_npc);
 	psr = tstate_to_psr (regs->tstate);
 	if(current->tss.fpsaved[0] & FPRS_FEF)
 		psr |= PSR_EF;
-	__put_user(psr, &sc->sigc_psr);
-	__put_user(regs->u_regs[UREG_G1], &sc->sigc_g1);
-	__put_user(regs->u_regs[UREG_I0], &sc->sigc_o0);
-	__put_user(current->tss.w_saved, &sc->sigc_oswins);
+	err |= __put_user(psr, &sc->sigc_psr);
+	err |= __put_user(regs->u_regs[UREG_G1], &sc->sigc_g1);
+	err |= __put_user(regs->u_regs[UREG_I0], &sc->sigc_o0);
+	err |= __put_user(current->tss.w_saved, &sc->sigc_oswins);
 #if 0
 /* w_saved is not currently used... */
 	if(current->tss.w_saved)
 		for(window = 0; window < current->tss.w_saved; window++) {
 			sc->sigc_spbuf[window] =
 				(char *)current->tss.rwbuf_stkptrs[window];
-			copy_to_user(&sc->sigc_wbuf[window],
-			       &current->tss.reg_window[window],
-			       sizeof(struct reg_window));
+			err |= copy_to_user(&sc->sigc_wbuf[window],
+					    &current->tss.reg_window[window],
+					    sizeof(struct reg_window));
 		}
 	else
 #endif	
-		copy_in_user((u32 *)sframep,
-			     (u32 *)(regs->u_regs[UREG_FP]),
-			     sizeof(struct reg_window32));
+		err |= copy_in_user((u32 *)sframep,
+				    (u32 *)(regs->u_regs[UREG_FP]),
+				    sizeof(struct reg_window32));
 		       
 	current->tss.w_saved = 0; /* So process is allowed to execute. */
-	__put_user(signr, &sframep->sig_num);
+	err |= __put_user(signr, &sframep->sig_num);
 	if(signr == SIGSEGV ||
 	   signr == SIGILL ||
 	   signr == SIGFPE ||
 	   signr == SIGBUS ||
 	   signr == SIGEMT) {
-		__put_user(current->tss.sig_desc, &sframep->sig_code);
-		__put_user(current->tss.sig_address, &sframep->sig_address);
+		err |= __put_user(current->tss.sig_desc, &sframep->sig_code);
+		err |= __put_user(current->tss.sig_address, &sframep->sig_address);
 	} else {
-		__put_user(0, &sframep->sig_code);
-		__put_user(0, &sframep->sig_address);
+		err |= __put_user(0, &sframep->sig_code);
+		err |= __put_user(0, &sframep->sig_address);
 	}
-	__put_user((u64)sc, &sframep->sig_scptr);
+	err |= __put_user((u64)sc, &sframep->sig_scptr);
+	if (err)
+		goto sigsegv;
+
 	regs->u_regs[UREG_FP] = (unsigned long) sframep;
 	regs->tpc = (unsigned long) sa->sa_handler;
 	regs->tnpc = (regs->tpc + 4);
+	return;
+
+sigsegv:
+	lock_kernel();
+	do_exit(SIGSEGV);
 }
 
 
-static inline void save_fpu_state32(struct pt_regs *regs, __siginfo_fpu_t *fpu)
+static inline int save_fpu_state32(struct pt_regs *regs, __siginfo_fpu_t *fpu)
 {
 	unsigned long *fpregs = (unsigned long *)(((char *)current) + AOFF_task_fpregs);
 	unsigned long fprs;
+	int err = 0;
 	
 	fprs = current->tss.fpsaved[0];
 	if (fprs & FPRS_DL)
-		copy_to_user(&fpu->si_float_regs[0], fpregs, (sizeof(unsigned int) * 32));
+		err |= copy_to_user(&fpu->si_float_regs[0], fpregs,
+				    (sizeof(unsigned int) * 32));
 	if (fprs & FPRS_DU)
-		copy_to_user(&fpu->si_float_regs[32], fpregs+16, (sizeof(unsigned int) * 32));
-	__put_user(current->tss.xfsr[0], &fpu->si_fsr);
-	__put_user(current->tss.gsr[0], &fpu->si_gsr);
-	__put_user(fprs, &fpu->si_fprs);
+		err |= copy_to_user(&fpu->si_float_regs[32], fpregs+16,
+				    (sizeof(unsigned int) * 32));
+	err |= __put_user(current->tss.xfsr[0], &fpu->si_fsr);
+	err |= __put_user(current->tss.gsr[0], &fpu->si_gsr);
+	err |= __put_user(fprs, &fpu->si_fprs);
+
+	return err;
 }
 
 static inline void new_setup_frame32(struct k_sigaction *ka, struct pt_regs *regs,
@@ -553,7 +575,7 @@ static inline void new_setup_frame32(struct k_sigaction *ka, struct pt_regs *reg
 	struct new_signal_frame32 *sf;
 	int sigframe_size;
 	u32 psr;
-	int i;
+	int i, err;
 	unsigned seta[_NSIG_WORDS32];
 
 	/* 1. Make sure everything is clean */
@@ -583,21 +605,21 @@ static inline void new_setup_frame32(struct k_sigaction *ka, struct pt_regs *reg
 	}
 
 	/* 2. Save the current process state */
-	put_user(regs->tpc, &sf->info.si_regs.pc);
-	__put_user(regs->tnpc, &sf->info.si_regs.npc);
-	__put_user(regs->y, &sf->info.si_regs.y);
+	err  = put_user(regs->tpc, &sf->info.si_regs.pc);
+	err |= __put_user(regs->tnpc, &sf->info.si_regs.npc);
+	err |= __put_user(regs->y, &sf->info.si_regs.y);
 	psr = tstate_to_psr (regs->tstate);
 	if(current->tss.fpsaved[0] & FPRS_FEF)
 		psr |= PSR_EF;
-	__put_user(psr, &sf->info.si_regs.psr);
+	err |= __put_user(psr, &sf->info.si_regs.psr);
 	for (i = 0; i < 16; i++)
-		__put_user(regs->u_regs[i], &sf->info.si_regs.u_regs[i]);
+		err |= __put_user(regs->u_regs[i], &sf->info.si_regs.u_regs[i]);
 
 	if (psr & PSR_EF) {
-		save_fpu_state32(regs, &sf->fpu_state);
-		__put_user((u64)&sf->fpu_state, &sf->fpu_save);
+		err |= save_fpu_state32(regs, &sf->fpu_state);
+		err |= __put_user((u64)&sf->fpu_state, &sf->fpu_save);
 	} else {
-		__put_user(0, &sf->fpu_save);
+		err |= __put_user(0, &sf->fpu_save);
 	}
 
 	switch (_NSIG_WORDS) {
@@ -610,13 +632,17 @@ static inline void new_setup_frame32(struct k_sigaction *ka, struct pt_regs *reg
 	case 1: seta[1] = (oldset->sig[0] >> 32);
 	        seta[0] = oldset->sig[0];
 	}
-	__put_user(seta[0], &sf->info.si_mask);
-	__copy_to_user(sf->extramask, seta + 1, (_NSIG_WORDS32 - 1) * sizeof(unsigned));
+	err |= __put_user(seta[0], &sf->info.si_mask);
+	err |= __copy_to_user(sf->extramask, seta + 1,
+			      (_NSIG_WORDS32 - 1) * sizeof(unsigned));
 
-	copy_in_user((u32 *)sf,
-		     (u32 *)(regs->u_regs[UREG_FP]),
-		     sizeof(struct reg_window32));
+	err |= copy_in_user((u32 *)sf,
+			    (u32 *)(regs->u_regs[UREG_FP]),
+			    sizeof(struct reg_window32));
 	
+	if (err)
+		goto sigsegv;
+
 	/* 3. signal handler back-trampoline and parameters */
 	regs->u_regs[UREG_FP] = (unsigned long) sf;
 	regs->u_regs[UREG_I0] = signo;
@@ -638,8 +664,10 @@ static inline void new_setup_frame32(struct k_sigaction *ka, struct pt_regs *reg
 
 		regs->u_regs[UREG_I7] = (unsigned long) (&(sf->insns[0]) - 2);
 	
-		__put_user(0x821020d8, &sf->insns[0]); /* mov __NR_sigreturn, %g1 */
-		__put_user(0x91d02010, &sf->insns[1]); /* t 0x10 */
+		err  = __put_user(0x821020d8, &sf->insns[0]); /*mov __NR_sigreturn, %g1*/
+		err |= __put_user(0x91d02010, &sf->insns[1]); /*t 0x10*/
+		if(err)
+			goto sigsegv;
 
 		if(pte_present(*ptep)) {
 			unsigned long page = pte_page(*ptep);
@@ -656,6 +684,9 @@ static inline void new_setup_frame32(struct k_sigaction *ka, struct pt_regs *reg
 sigill:
 	lock_kernel();
 	do_exit(SIGILL);
+sigsegv:
+	lock_kernel();
+	do_exit(SIGSEGV);
 }
 
 /* Setup a Solaris stack frame */
@@ -674,7 +705,7 @@ setup_svr4_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	int window = 0;
 #endif	
 	unsigned psr;
-	int i;
+	int i, err;
 
 	synchronize_user_stack();
 	save_and_clear_fpu();
@@ -691,7 +722,7 @@ setup_svr4_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	}
 
 	/* Start with a clean frame pointer and fill it */
-	clear_user(sfp, sizeof (*sfp));
+	err = clear_user(sfp, sizeof (*sfp));
 
 	/* Setup convenience variables */
 	si = &sfp->si;
@@ -709,37 +740,37 @@ setup_svr4_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	if (_NSIG_WORDS >= 2) {
 		setv.sigbits[2] = oldset->sig[1];
 		setv.sigbits[3] = (oldset->sig[1] >> 32);
-		__copy_to_user(&uc->sigmask, &setv, sizeof(svr4_sigset_t));
+		err |= __copy_to_user(&uc->sigmask, &setv, sizeof(svr4_sigset_t));
 	} else
-		__copy_to_user(&uc->sigmask, &setv, 2 * sizeof(unsigned));
+		err |= __copy_to_user(&uc->sigmask, &setv, 2 * sizeof(unsigned));
 	
 	/* Store registers */
-	__put_user(regs->tpc, &((*gr) [SVR4_PC]));
-	__put_user(regs->tnpc, &((*gr) [SVR4_NPC]));
+	err |= __put_user(regs->tpc, &((*gr) [SVR4_PC]));
+	err |= __put_user(regs->tnpc, &((*gr) [SVR4_NPC]));
 	psr = tstate_to_psr (regs->tstate);
 	if(current->tss.fpsaved[0] & FPRS_FEF)
 		psr |= PSR_EF;
-	__put_user(psr, &((*gr) [SVR4_PSR]));
-	__put_user(regs->y, &((*gr) [SVR4_Y]));
+	err |= __put_user(psr, &((*gr) [SVR4_PSR]));
+	err |= __put_user(regs->y, &((*gr) [SVR4_Y]));
 	
 	/* Copy g [1..7] and o [0..7] registers */
 	for (i = 0; i < 7; i++)
-		__put_user(regs->u_regs[UREG_G1+i], (&(*gr)[SVR4_G1])+i);
+		err |= __put_user(regs->u_regs[UREG_G1+i], (&(*gr)[SVR4_G1])+i);
 	for (i = 0; i < 8; i++)
-		__put_user(regs->u_regs[UREG_I0+i], (&(*gr)[SVR4_O0])+i);
+		err |= __put_user(regs->u_regs[UREG_I0+i], (&(*gr)[SVR4_O0])+i);
 
 	/* Setup sigaltstack */
-	__put_user(current->sas_ss_sp, &uc->stack.sp);
-	__put_user(sas_ss_flags(regs->u_regs[UREG_FP]), &uc->stack.flags);
-	__put_user(current->sas_ss_size, &uc->stack.size);
+	err |= __put_user(current->sas_ss_sp, &uc->stack.sp);
+	err |= __put_user(sas_ss_flags(regs->u_regs[UREG_FP]), &uc->stack.flags);
+	err |= __put_user(current->sas_ss_size, &uc->stack.size);
 
 	/* Save the currently window file: */
 
 	/* 1. Link sfp->uc->gwins to our windows */
-	__put_user((u32)(long)gw, &mc->gwin);
+	err |= __put_user((u32)(long)gw, &mc->gwin);
 	    
 	/* 2. Number of windows to restore at setcontext (): */
-	__put_user(current->tss.w_saved, &gw->count);
+	err |= __put_user(current->tss.w_saved, &gw->count);
 
 	/* 3. Save each valid window
 	 *    Currently, it makes a copy of the windows from the kernel copy.
@@ -754,9 +785,12 @@ setup_svr4_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	 */
 #if 0	 
 	for(window = 0; window < current->tss.w_saved; window++) {
-		__put_user((int *) &(gw->win [window]), (int **)gw->winptr +window );
-		copy_to_user(&gw->win [window], &current->tss.reg_window [window], sizeof (svr4_rwindow_t));
-		__put_user(0, (int *)gw->winptr + window);
+		err |= __put_user((int *) &(gw->win [window]),
+				  (int **)gw->winptr +window );
+		err |= copy_to_user(&gw->win [window],
+				    &current->tss.reg_window [window],
+				    sizeof (svr4_rwindow_t));
+		err |= __put_user(0, (int *)gw->winptr + window);
 	}
 #endif	
 
@@ -768,8 +802,10 @@ setup_svr4_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 	 * that much currently, should use those that David already
 	 * is providing with tss.sig_desc
 	 */
-	__put_user(signr, &si->siginfo.signo);
-	__put_user(SVR4_SINOINFO, &si->siginfo.code);
+	err |= __put_user(signr, &si->siginfo.signo);
+	err |= __put_user(SVR4_SINOINFO, &si->siginfo.code);
+	if (err)
+		goto sigsegv;
 
 	regs->u_regs[UREG_FP] = (unsigned long) sfp;
 	regs->tpc = (unsigned long) sa->sa_handler;
@@ -783,14 +819,22 @@ setup_svr4_frame32(struct sigaction *sa, unsigned long pc, unsigned long npc,
 		struct reg_window32 *rw = (struct reg_window32 *)
 			(regs->u_regs [14] & 0x00000000ffffffffUL);
 
-		__put_user(signr, &rw->ins [0]);
-		__put_user((u64)si, &rw->ins [1]);
-		__put_user((u64)uc, &rw->ins [2]);
-		__put_user((u64)sfp, &rw->ins [6]);	/* frame pointer */
+		err |= __put_user(signr, &rw->ins [0]);
+		err |= __put_user((u64)si, &rw->ins [1]);
+		err |= __put_user((u64)uc, &rw->ins [2]);
+		err |= __put_user((u64)sfp, &rw->ins [6]);	/* frame pointer */
+		if (err)
+			goto sigsegv;
+
 		regs->u_regs[UREG_I0] = signr;
 		regs->u_regs[UREG_I1] = (u32)(u64) si;
 		regs->u_regs[UREG_I2] = (u32)(u64) uc;
 	}
+	return;
+
+sigsegv:
+	lock_kernel();
+	do_exit(SIGSEGV);
 }
 
 asmlinkage int
@@ -799,7 +843,7 @@ svr4_getcontext(svr4_ucontext_t *uc, struct pt_regs *regs)
 	svr4_gregset_t  *gr;
 	svr4_mcontext_t *mc;
 	svr4_sigset_t setv;
-	int i;
+	int i, err;
 
 	synchronize_user_stack();
 	save_and_clear_fpu();
@@ -809,8 +853,7 @@ svr4_getcontext(svr4_ucontext_t *uc, struct pt_regs *regs)
 		lock_kernel();
 		do_exit (SIGSEGV);
 	}
-	if(clear_user(uc, sizeof (*uc)))
-		return -EFAULT;
+	err = clear_user(uc, sizeof (*uc));
 
 	/* Setup convenience variables */
 	mc = &uc->mcontext;
@@ -821,38 +864,38 @@ svr4_getcontext(svr4_ucontext_t *uc, struct pt_regs *regs)
 	if (_NSIG_WORDS >= 2) {
 		setv.sigbits[2] = current->blocked.sig[1];
 		setv.sigbits[3] = (current->blocked.sig[1] >> 32);
-		__copy_to_user(&uc->sigmask, &setv, sizeof(svr4_sigset_t));
+		err |= __copy_to_user(&uc->sigmask, &setv, sizeof(svr4_sigset_t));
 	} else
-		__copy_to_user(&uc->sigmask, &setv, 2 * sizeof(unsigned));
+		err |= __copy_to_user(&uc->sigmask, &setv, 2 * sizeof(unsigned));
 
 	/* Store registers */
-	__put_user(regs->tpc, &uc->mcontext.greg [SVR4_PC]);
-	__put_user(regs->tnpc, &uc->mcontext.greg [SVR4_NPC]);
+	err |= __put_user(regs->tpc, &uc->mcontext.greg [SVR4_PC]);
+	err |= __put_user(regs->tnpc, &uc->mcontext.greg [SVR4_NPC]);
 #if 1
-	__put_user(0, &uc->mcontext.greg [SVR4_PSR]);
+	err |= __put_user(0, &uc->mcontext.greg [SVR4_PSR]);
 #else
 	i = tstate_to_psr(regs->tstate) & ~PSR_EF;		   
 	if (current->tss.fpsaved[0] & FPRS_FEF)
 		i |= PSR_EF;
-	__put_user(i, &uc->mcontext.greg [SVR4_PSR]);
+	err |= __put_user(i, &uc->mcontext.greg [SVR4_PSR]);
 #endif
-        __put_user(regs->y, &uc->mcontext.greg [SVR4_Y]);
+	err |= __put_user(regs->y, &uc->mcontext.greg [SVR4_Y]);
 	
 	/* Copy g [1..7] and o [0..7] registers */
 	for (i = 0; i < 7; i++)
-		__put_user(regs->u_regs[UREG_G1+i], (&(*gr)[SVR4_G1])+i);
+		err |= __put_user(regs->u_regs[UREG_G1+i], (&(*gr)[SVR4_G1])+i);
 	for (i = 0; i < 8; i++)
-		__put_user(regs->u_regs[UREG_I0+i], (&(*gr)[SVR4_O0])+i);
+		err |= __put_user(regs->u_regs[UREG_I0+i], (&(*gr)[SVR4_O0])+i);
 
 	/* Setup sigaltstack */
-	__put_user(current->sas_ss_sp, &uc->stack.sp);
-	__put_user(sas_ss_flags(regs->u_regs[UREG_FP]), &uc->stack.flags);
-	__put_user(current->sas_ss_size, &uc->stack.size);
+	err |= __put_user(current->sas_ss_sp, &uc->stack.sp);
+	err |= __put_user(sas_ss_flags(regs->u_regs[UREG_FP]), &uc->stack.flags);
+	err |= __put_user(current->sas_ss_size, &uc->stack.size);
 
 	/* The register file is not saved
 	 * we have already stuffed all of it with sync_user_stack
 	 */
-	return 0;
+	return (err ? -EFAULT : 0);
 }
 
 
@@ -923,8 +966,8 @@ asmlinkage int svr4_setcontext(svr4_ucontext_t *c, struct pt_regs *regs)
 	spin_unlock_irq(&current->sigmask_lock);
 	regs->tpc = pc;
 	regs->tnpc = npc | 1;
-	__get_user(regs->y, &((*gr) [SVR4_Y]));
-	__get_user(psr, &((*gr) [SVR4_PSR]));
+	err |= __get_user(regs->y, &((*gr) [SVR4_Y]));
+	err |= __get_user(psr, &((*gr) [SVR4_PSR]));
 	regs->tstate &= ~(TSTATE_ICC);
 	regs->tstate |= psr_to_tstate_icc(psr);
 #if 0	
@@ -933,9 +976,11 @@ asmlinkage int svr4_setcontext(svr4_ucontext_t *c, struct pt_regs *regs)
 #endif
 	/* Restore g[1..7] and o[0..7] registers */
 	for (i = 0; i < 7; i++)
-		__get_user(regs->u_regs[UREG_G1+i], (&(*gr)[SVR4_G1])+i);
+		err |= __get_user(regs->u_regs[UREG_G1+i], (&(*gr)[SVR4_G1])+i);
 	for (i = 0; i < 8; i++)
-		__get_user(regs->u_regs[UREG_I0+i], (&(*gr)[SVR4_O0])+i);
+		err |= __get_user(regs->u_regs[UREG_I0+i], (&(*gr)[SVR4_O0])+i);
+	if(err)
+		goto sigsegv;
 
 	return -EINTR;
 sigsegv:
@@ -950,7 +995,7 @@ static inline void setup_rt_frame32(struct k_sigaction *ka, struct pt_regs *regs
 	struct rt_signal_frame32 *sf;
 	int sigframe_size;
 	u32 psr;
-	int i;
+	int i, err;
 	sigset_t32 seta;
 
 	/* 1. Make sure everything is clean */
@@ -980,27 +1025,27 @@ static inline void setup_rt_frame32(struct k_sigaction *ka, struct pt_regs *regs
 	}
 
 	/* 2. Save the current process state */
-	put_user(regs->tpc, &sf->regs.pc);
-	__put_user(regs->tnpc, &sf->regs.npc);
-	__put_user(regs->y, &sf->regs.y);
+	err  = put_user(regs->tpc, &sf->regs.pc);
+	err |= __put_user(regs->tnpc, &sf->regs.npc);
+	err |= __put_user(regs->y, &sf->regs.y);
 	psr = tstate_to_psr (regs->tstate);
 	if(current->tss.fpsaved[0] & FPRS_FEF)
 		psr |= PSR_EF;
-	__put_user(psr, &sf->regs.psr);
+	err |= __put_user(psr, &sf->regs.psr);
 	for (i = 0; i < 16; i++)
-		__put_user(regs->u_regs[i], &sf->regs.u_regs[i]);
+		err |= __put_user(regs->u_regs[i], &sf->regs.u_regs[i]);
 
 	if (psr & PSR_EF) {
-		save_fpu_state32(regs, &sf->fpu_state);
-		__put_user((u64)&sf->fpu_state, &sf->fpu_save);
+		err |= save_fpu_state32(regs, &sf->fpu_state);
+		err |= __put_user((u64)&sf->fpu_state, &sf->fpu_save);
 	} else {
-		__put_user(0, &sf->fpu_save);
+		err |= __put_user(0, &sf->fpu_save);
 	}
 	
 	/* Setup sigaltstack */
-	__put_user(current->sas_ss_sp, &sf->stack.ss_sp);
-	__put_user(sas_ss_flags(regs->u_regs[UREG_FP]), &sf->stack.ss_flags);
-	__put_user(current->sas_ss_size, &sf->stack.ss_size);
+	err |= __put_user(current->sas_ss_sp, &sf->stack.ss_sp);
+	err |= __put_user(sas_ss_flags(regs->u_regs[UREG_FP]), &sf->stack.ss_flags);
+	err |= __put_user(current->sas_ss_size, &sf->stack.ss_size);
 
 	switch (_NSIG_WORDS) {
 	case 4: seta.sig[7] = (oldset->sig[3] >> 32);
@@ -1012,11 +1057,13 @@ static inline void setup_rt_frame32(struct k_sigaction *ka, struct pt_regs *regs
 	case 1: seta.sig[1] = (oldset->sig[0] >> 32);
 	        seta.sig[0] = oldset->sig[0];
 	}
-	__copy_to_user(&sf->mask, &seta, sizeof(sigset_t));
+	err |= __copy_to_user(&sf->mask, &seta, sizeof(sigset_t));
 
-	copy_in_user((u32 *)sf,
-		     (u32 *)(regs->u_regs[UREG_FP]),
-		     sizeof(struct reg_window32));
+	err |= copy_in_user((u32 *)sf,
+			    (u32 *)(regs->u_regs[UREG_FP]),
+			    sizeof(struct reg_window32));
+	if (err)
+		goto sigsegv;
 	
 	/* 3. signal handler back-trampoline and parameters */
 	regs->u_regs[UREG_FP] = (unsigned long) sf;
@@ -1039,8 +1086,13 @@ static inline void setup_rt_frame32(struct k_sigaction *ka, struct pt_regs *regs
 
 		regs->u_regs[UREG_I7] = (unsigned long) (&(sf->insns[0]) - 2);
 	
-		__put_user(0x821020d8, &sf->insns[0]); /* mov __NR_sigreturn, %g1 */
-		__put_user(0x91d02010, &sf->insns[1]); /* t 0x10 */
+		/* mov __NR_rt_sigreturn, %g1 */
+		err |= __put_user(0x82102065, &sf->insns[0]);
+
+		/* t 0x10 */
+		err |= __put_user(0x91d02010, &sf->insns[1]);
+		if (err)
+			goto sigsegv;
 
 		if(pte_present(*ptep)) {
 			unsigned long page = pte_page(*ptep);
@@ -1057,6 +1109,9 @@ static inline void setup_rt_frame32(struct k_sigaction *ka, struct pt_regs *regs
 sigill:
 	lock_kernel();
 	do_exit(SIGILL);
+sigsegv:
+	lock_kernel();
+	do_exit(SIGSEGV);
 }
 
 static inline void handle_signal32(unsigned long signr, struct k_sigaction *ka,
@@ -1257,6 +1312,14 @@ asmlinkage int do_signal32(sigset_t *oldset, struct pt_regs * regs,
 				/* Very useful to debug dynamic linker problems */
 				printk ("Sig %ld going for %s[%d]...\n", signr, current->comm, current->pid);
 				show_regs (regs);
+#ifdef DEBUG_SIGNALS_TLB
+				do {
+					extern void sparc_ultra_dump_itlb(void);
+					extern void sparc_ultra_dump_dtlb(void);
+					sparc_ultra_dump_dtlb();
+					sparc_ultra_dump_itlb();
+				} while(0);
+#endif
 #ifdef DEBUG_SIGNALS_TRACE
 				{
 					struct reg_window32 *rw = (struct reg_window32 *)(regs->u_regs[UREG_FP] & 0xffffffff);

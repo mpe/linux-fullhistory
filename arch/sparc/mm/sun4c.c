@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.166 1998/08/04 20:49:05 davem Exp $
+/* $Id: sun4c.c,v 1.171 1998/09/21 05:05:41 jj Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -400,7 +400,9 @@ void sun4c_complete_all_stores(void)
 
 	_unused = sun4c_get_context();
 	sun4c_set_context(_unused);
+#ifdef CONFIG_SUN_AUXIO
 	_unused = *AUXREG;
+#endif
 }
 
 /* Bootup utility functions. */
@@ -622,9 +624,8 @@ __initfunc(static void sun4c_probe_mmu(void))
 			break;
 
 		case (SM_SUN4|SM_4_470):
-			prom_printf("No support for 4400 yet\n");
-			prom_halt();
-			num_segmaps = 1024;
+			/* should be 1024 segmaps. when it get fixed */
+			num_segmaps = 256;
 			num_contexts = 64;
 			break;
 		default:
@@ -755,13 +756,15 @@ static inline void fix_permissions(unsigned long vaddr, unsigned long bits_on,
 				      ~bits_off);
 }
 
-/* the 4/260 dies real hard on the prom_putsegment line.
-    not sure why, but it seems to work without it cgd */
 static inline void sun4c_init_map_kernelprom(unsigned long kernel_end)
 {
 	unsigned long vaddr;
 	unsigned char pseg, ctx;
-#ifndef CONFIG_SUN4
+#ifdef CONFIG_SUN4
+	/* sun4/110 and 260 have no kadb. */
+	if((idprom->id_machtype != (SM_SUN4 | SM_4_260)) && 
+	   (idprom->id_machtype != (SM_SUN4 | SM_4_110))) {
+#endif
 	for(vaddr = KADB_DEBUGGER_BEGVM;
 	    vaddr < LINUX_OPPROM_ENDVM;
 	    vaddr += SUN4C_REAL_PGDIR_SIZE) {
@@ -772,6 +775,8 @@ static inline void sun4c_init_map_kernelprom(unsigned long kernel_end)
 				prom_putsegment(ctx, vaddr, pseg);
 			fix_permissions(vaddr, _SUN4C_PAGE_PRIV, 0);
 		}
+	}
+#ifdef CONFIG_SUN4
 	}
 #endif
 	for(vaddr = KERNBASE; vaddr < kernel_end; vaddr += SUN4C_REAL_PGDIR_SIZE) {
@@ -2142,7 +2147,7 @@ static void sun4c_destroy_context_hw(struct mm_struct *mm)
 {
 	struct ctx_list *ctx_old;
 
-	if(mm->context != NO_CONTEXT && mm->count == 1) {
+	if(mm->context != NO_CONTEXT && atomic_read(&mm->count) == 1) {
 		sun4c_demap_context_hw(&sun4c_context_ring[mm->context], mm->context);
 		ctx_old = ctx_list_pool + mm->context;
 		remove_from_ctx_list(ctx_old);
@@ -2205,7 +2210,7 @@ static void sun4c_destroy_context_sw(struct mm_struct *mm)
 {
 	struct ctx_list *ctx_old;
 
-	if(mm->context != NO_CONTEXT && mm->count == 1) {
+	if(mm->context != NO_CONTEXT && atomic_read(&mm->count) == 1) {
 		sun4c_demap_context_sw(&sun4c_context_ring[mm->context], mm->context);
 		ctx_old = ctx_list_pool + mm->context;
 		remove_from_ctx_list(ctx_old);

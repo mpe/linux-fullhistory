@@ -40,6 +40,7 @@
 #include <linux/vt_kern.h>
 
 #include <asm/uaccess.h>
+#include <asm/pgtable.h>	/* io_remap_page_range() */
 
 #include <video/sbusfb.h>
 
@@ -91,8 +92,6 @@ static int sbusfb_ioctl(struct inode *inode, struct file *file, u_int cmd,
 			    u_long arg, int con, struct fb_info *info);
 static void sbusfb_cursor(struct display *p, int mode, int x, int y);
 static void sbusfb_clear_margin(struct display *p, int s);
-extern int io_remap_page_range(unsigned long from, unsigned long offset, 
-			unsigned long size, pgprot_t prot, int space);
 			    
 
     /*
@@ -421,13 +420,13 @@ static int sbus_hw_scursor (struct fbcursor *cursor, struct fb_info_sbusfb *fb)
 		    copy_from_user (fb->cursor.bits [1], f.image, bytes))
 			return -EFAULT;
 		if (f.size.fbx <= 32) {
-			u = ~(0xffffffff >> f.size.fbx);
+			u = 0xffffffff << (32 - f.size.fbx);
 			for (i = fb->cursor.size.fby - 1; i >= 0; i--) {
 				fb->cursor.bits [0][i] &= u;
 				fb->cursor.bits [1][i] &= fb->cursor.bits [0][i];
 			}
 		} else {
-			u = ~(0xffffffff >> (f.size.fbx - 32));
+			u = 0xffffffff << (64 - f.size.fbx);
 			for (i = fb->cursor.size.fby - 1; i >= 0; i--) {
 				fb->cursor.bits [0][2*i+1] &= u;
 				fb->cursor.bits [1][2*i] &= fb->cursor.bits [0][2*i];
@@ -1017,6 +1016,7 @@ sizechange:
 	fb->info.switch_con = &sbusfbcon_switch;
 	fb->info.updatevar = &sbusfbcon_updatevar;
 	fb->info.blank = &sbusfbcon_blank;
+	fb->info.flags = FBINFO_FLAG_DEFAULT;
 	
 	fb->cursor.hwsize.fbx = 32;
 	fb->cursor.hwsize.fby = 32;

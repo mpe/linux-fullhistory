@@ -1,7 +1,8 @@
-/* $Id: openpromfs.c,v 1.26 1998/01/28 09:55:32 ecd Exp $
+/* $Id: openpromfs.c,v 1.31 1998/08/26 10:32:19 davem Exp $
  * openpromfs.c: /proc/openprom handling routines
  *
- * Copyright (C) 1996,1997 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1996-1998 Jakub Jelinek  (jj@sunsite.mff.cuni.cz)
+ * Copyright (C) 1998      Eddie C. Dost  (ecd@skynet.be)
  */
 
 #include <linux/module.h>
@@ -27,7 +28,9 @@ typedef struct {
 
 typedef struct {
 #define OPP_STRING	0x10
-#define OPP_BINARY	0x20
+#define OPP_STRINGLIST	0x20
+#define OPP_BINARY	0x40
+#define OPP_HEXSTRING	0x80
 #define OPP_DIRTY	0x01
 #define OPP_QUOTED	0x02
 #define OPP_NOTQUOTED	0x04
@@ -83,7 +86,7 @@ static ssize_t property_read(struct file *filp, char *buf,
 	struct inode *inode = filp->f_dentry->d_inode;
 	int i, j, k;
 	u32 node;
-	char *p;
+	char *p, *s;
 	u32 *q;
 	openprom_property *op;
 	char buffer[64];
@@ -129,28 +132,51 @@ static ssize_t property_read(struct file *filp, char *buf,
 			return -EIO;
 		op->value [k] = 0;
 		if (k) {
-			for (p = op->value; *p >= ' ' && *p <= '~'; p++);
-			if (p >= op->value + k - 1 && !*p) {
-				op->flag |= OPP_STRING;
-				if (p == op->value + k - 1) {
-					op->flag |= OPP_ASCIIZ;
-					op->len--;
+			for (s = 0, p = op->value; p < op->value + k; p++) {
+				if ((*p >= ' ' && *p <= '~') || *p == '\n') {
+					op->flag |= OPP_STRING;
+					s = p;
+					continue;
 				}
-			} else if (!(k & 3))
-				op->flag |= OPP_BINARY;
-			else {
-				printk ("/proc/openprom: Strange property "
-					"size %d\n", i);
-				return -EIO;
+				if (p > op->value && !*p && s == p - 1) {
+					if (p < op->value + k - 1)
+						op->flag |= OPP_STRINGLIST;
+					else
+						op->flag |= OPP_ASCIIZ;
+					continue;
+				}
+				if (k == 1 && !*p) {
+					op->flag |= (OPP_STRING|OPP_ASCIIZ);
+					break;
+				}
+				op->flag &= ~(OPP_STRING|OPP_STRINGLIST);
+				if (k & 3)
+					op->flag |= OPP_HEXSTRING;
+				else
+					op->flag |= OPP_BINARY;
+				break;
 			}
+			if (op->flag & OPP_STRINGLIST)
+				op->flag &= ~(OPP_STRING);
+			if (op->flag & OPP_ASCIIZ)
+				op->len--;
 		}
 	} else
 		op = (openprom_property *)filp->private_data;
-	if (!count || !op->len) return 0;
-	if (op->flag & OPP_STRING)
+	if (!count || !(op->len || (op->flag & OPP_ASCIIZ)))
+		return 0;
+	if (op->flag & OPP_STRINGLIST) {
+		for (k = 0, p = op->value; p < op->value + op->len; p++)
+			if (!*p)
+				k++;
+		i = op->len + 4 * k + 3;
+	} else if (op->flag & OPP_STRING) {
 		i = op->len + 3;
-	else
-		i = (op->len * 9)>>2;
+	} else if (op->flag & OPP_BINARY) {
+		i = (op->len * 9) >> 2;
+	} else {
+		i = (op->len << 1) + 1;
+	}
 	k = filp->f_pos;
 	if (k >= i) return 0;
 	if (count > i - k) count = i - k;
@@ -160,20 +186,48 @@ static ssize_t property_read(struct file *filp, char *buf,
 			k++;
 			count--;
 		}
+
 		if (k + count >= i - 2)
 			j = i - 2 - k;
 		else
 			j = count;
+
 		if (j >= 0) {
 			copy_to_user(buf + k - filp->f_pos,
 				     op->value + k - 1, j);
 			count -= j;
 			k += j;
 		}
+
 		if (count)
 			__put_user('\'', &buf [k++ - filp->f_pos]);
 		if (count > 1)
 			__put_user('\n', &buf [k++ - filp->f_pos]);
+
+	} else if (op->flag & OPP_STRINGLIST) {
+		char *tmp;
+
+		tmp = kmalloc (i, GFP_KERNEL);
+		if (!tmp)
+			return -ENOMEM;
+
+		s = tmp;
+		*s++ = '\'';
+		for (p = op->value; p < op->value + op->len; p++) {
+			if (!*p) {
+				strcpy(s, "' + '");
+				s += 5;
+				continue;
+			}
+			*s++ = *p;
+		}
+		strcpy(s, "'\n");
+
+		copy_to_user(buf, tmp + k, count);
+
+		kfree(tmp);
+		k += count;
+
 	} else if (op->flag & OPP_BINARY) {
 		char buffer[10];
 		u32 *first, *last;
@@ -205,9 +259,35 @@ static ssize_t property_read(struct file *filp, char *buf,
 				}
 			}
 		}
+
 		if (last == (u32 *)(op->value + op->len - 4) && last_cnt == 9)
 			__put_user('\n', (buf - 1));
+
 		k += count;
+
+	} else if (op->flag & OPP_HEXSTRING) {
+		char buffer[2];
+
+		if ((k < i - 1) && (k & 1)) {
+			sprintf (buffer, "%02x", *(op->value + (k >> 1)));
+			__put_user(buffer[1], &buf[k++ - filp->f_pos]);
+			count--;
+		}
+
+		for (; (count > 1) && (k < i - 1); k += 2) {
+			sprintf (buffer, "%02x", *(op->value + (k >> 1)));
+			copy_to_user (buf + k - filp->f_pos, buffer, 2);
+			count -= 2;
+		}
+
+		if (count && (k < i - 1)) {
+			sprintf (buffer, "%02x", *(op->value + (k >> 1)));
+			__put_user(buffer[0], &buf[k++ - filp->f_pos]);
+			count--;
+		}
+
+		if (count)
+			__put_user('\n', &buf [k++ - filp->f_pos]);
 	}
 	count = k - filp->f_pos;
 	filp->f_pos = k;

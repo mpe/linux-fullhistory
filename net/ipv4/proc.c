@@ -7,7 +7,7 @@
  *		PROC file system.  It is mainly used for debugging and
  *		statistics.
  *
- * Version:	$Id: proc.c,v 1.31 1998/07/29 20:09:25 freitag Exp $
+ * Version:	$Id: proc.c,v 1.32 1998/10/03 09:37:42 davem Exp $
  *
  * Authors:	Fred N. van Kempen, <waltje@uWalt.NL.Mugnet.ORG>
  *		Gerald J. Heim, <heim@peanuts.informatik.uni-tuebingen.de>
@@ -357,15 +357,18 @@ int netstat_get_info(char *buffer, char **start, off_t offset, int length, int d
 
 	len = sprintf(buffer,
 		      "TcpExt: SyncookiesSent SyncookiesRecv SyncookiesFailed"
-		      " EmbryonicRsts PruneCalled RcvPruned OfoPruned\n"
-		      "TcpExt: %lu %lu %lu %lu %lu %lu %lu\n",
+		      " EmbryonicRsts PruneCalled RcvPruned OfoPruned"
+		      " OutOfWindowIcmps LockDroppedIcmps\n" 	
+		      "TcpExt: %lu %lu %lu %lu %lu %lu %lu %lu %lu\n",
 		      net_statistics.SyncookiesSent,
 		      net_statistics.SyncookiesRecv,
 		      net_statistics.SyncookiesFailed,
 		      net_statistics.EmbryonicRsts,
 		      net_statistics.PruneCalled,
 		      net_statistics.RcvPruned,
-		      net_statistics.OfoPruned);
+		      net_statistics.OfoPruned,
+		      net_statistics.OutOfWindowIcmps,
+		      net_statistics.LockDroppedIcmps);
 
 	if (offset >= len)
 	{

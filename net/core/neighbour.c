@@ -592,7 +592,7 @@ static __inline__ void neigh_update_hhs(struct neighbour *neigh)
    -- lladdr is new lladdr or NULL, if it is not supplied.
    -- new    is new state.
    -- override==1 allows to override existing lladdr, if it is different.
-   -- arp==0 means that that the change is administrative.
+   -- arp==0 means that the change is administrative.
  */
 
 int neigh_update(struct neighbour *neigh, u8 *lladdr, u8 new, int override, int arp)

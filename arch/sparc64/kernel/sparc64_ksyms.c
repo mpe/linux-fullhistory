@@ -1,4 +1,4 @@
-/* $Id: sparc64_ksyms.c,v 1.39 1998/07/04 12:35:59 ecd Exp $
+/* $Id: sparc64_ksyms.c,v 1.41 1998/10/04 08:44:16 davem Exp $
  * arch/sparc64/kernel/sparc64_ksyms.c: Sparc64 specific ksyms support.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -103,7 +103,6 @@ __attribute__((section("__ksymtab"))) =				\
 #ifdef __SMP__
 EXPORT_SYMBOL(scheduler_lock);
 EXPORT_SYMBOL(global_bh_lock);
-EXPORT_SYMBOL(klock_info);
 EXPORT_SYMBOL(global_irq_holder);
 EXPORT_SYMBOL(synchronize_irq);
 EXPORT_SYMBOL(cpu_data);
@@ -184,7 +183,7 @@ EXPORT_SYMBOL(__prom_getsibling);
 
 /* sparc library symbols */
 EXPORT_SYMBOL(bcopy);
-EXPORT_SYMBOL(strlen);
+EXPORT_SYMBOL(__strlen);
 EXPORT_SYMBOL(strnlen);
 EXPORT_SYMBOL(strcpy);
 EXPORT_SYMBOL(strncpy);

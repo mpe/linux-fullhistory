@@ -1,4 +1,4 @@
-/* $Id: uaccess.h,v 1.15 1998/02/05 14:19:54 jj Exp $
+/* $Id: uaccess.h,v 1.17 1998/09/16 12:25:29 jj Exp $
  * uaccess.h: User space memore access functions.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -324,8 +324,6 @@ __kernel_size_t __copy_size = (__kernel_size_t) (n); \
 __kernel_size_t __copy_res; \
 if(__copy_size && __access_ok((unsigned long)__copy_from, __copy_size)) { \
 __copy_res = __copy_user(__copy_to, __copy_from, __copy_size); \
-if(__copy_res) \
-memset((char *)__copy_to + __copy_size - __copy_res, 0, __copy_res); \
 } else __copy_res = __copy_size; \
 __copy_res; })
 

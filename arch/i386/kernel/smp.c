@@ -736,6 +736,7 @@ int __init start_secondary(void *unused)
 	/*  Must be done before calibration delay is computed  */
 	mtrr_init_secondary_cpu ();
 #endif
+	stts();
 	smp_callin();
 	while (!smp_commenced)
 		barrier();
@@ -1751,8 +1752,8 @@ void __init setup_APIC_clock(void)
 
 	static volatile int calibration_lock;
 
-	save_flags(flags);
-	cli();
+	__save_flags(flags);
+	__cli();
 
 	SMP_PRINTK(("setup_APIC_clock() called.\n"));
 
@@ -1790,8 +1791,7 @@ void __init setup_APIC_clock(void)
 
 	ack_APIC_irq ();
 
-
-	restore_flags(flags);
+	__restore_flags(flags);
 }
 
 /*

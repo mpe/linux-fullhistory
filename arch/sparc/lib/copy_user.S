@@ -3,7 +3,7 @@
  *  Copyright(C) 1995 Linus Torvalds
  *  Copyright(C) 1996 David S. Miller
  *  Copyright(C) 1996 Eddie C. Dost
- *  Copyright(C) 1996 Jakub Jelinek
+ *  Copyright(C) 1996,1998 Jakub Jelinek
  *
  * derived from:
  *	e-mail between David and Eddie.
@@ -13,13 +13,14 @@
 
 #include <asm/cprefix.h>
 #include <asm/ptrace.h>
+#include <asm/asmmacro.h>
 
 #define EX(x,y,a,b,z) 				\
 98: 	x,y;					\
 	.section .fixup,z##alloc,z##execinstr;	\
 	.align	4;				\
-99:	retl;					\
-	 a, b, %o0;				\
+99:	ba fixupretl;				\
+	 a, b, %g3;				\
 	.section __ex_table,z##alloc;		\
 	.align	4;				\
 	.word	98b, 99b;			\
@@ -31,8 +32,8 @@
 	.section .fixup,z##alloc,z##execinstr;	\
 	.align	4;				\
 99:	c, d, e;				\
-	retl;					\
-	 a, b, %o0;				\
+	ba fixupretl;				\
+	 a, b, %g3;				\
 	.section __ex_table,z##alloc;		\
 	.align	4;				\
 	.word	98b, 99b;			\
@@ -340,7 +341,7 @@ short_aligned_end:
 	 andcc	%o2, 4, %g0
 
 	EXO2(ld	[%o1 + 0x00], %g2,#)
-	EX(ld	[%o1 + 0x04], %g3, sub %o2, 4,#)
+	EXO2(ld	[%o1 + 0x04], %g3,#)
 	add	%o1, 8, %o1
 	EXO2(st	%g2, [%o0 + 0x00],#)
 	EX(st	%g3, [%o0 + 0x04], sub %o2, 4,#)
@@ -352,16 +353,32 @@ short_aligned_end:
 	.section .fixup,#alloc,#execinstr
 	.align	4
 97:
-	retl
-	 mov	%o2, %o0
+	mov	%o2, %g3
+fixupretl:
+	GET_PAGE_OFFSET(g1)
+	cmp	%o0, %g1
+	blu	1f
+	 cmp	%o1, %g1
+	bgeu	1f
+	 nop
+	save	%sp, -64, %sp
+	mov	%i0, %o0
+	call	__bzero
+	 mov	%g3, %o1
+	restore
+1:	retl
+	 mov	%g3, %o0
+
 /* exception routine sets %g2 to (broken_insn - first_insn)>>2 */
 50:
 /* This magic counts how many bytes are left when crash in MOVE_BIGCHUNK
  * happens. This is derived from the amount ldd reads, st stores, etc.
  * x = g2 % 12;
- * o0 = g1 + g7 - ((g2 / 12) * 32 + (x < 4) ? x * 8 : (x - 4) * 4)
+ * g3 = g1 + g7 - ((g2 / 12) * 32 + (x < 4) ? 0 : (x - 4) * 4);
+ * o0 += (g2 / 12) * 32;
  */
 	cmp	%g2, 12
+	add	%o0, %g7, %o0
 	bcs	1f
 	 cmp	%g2, 24
 	bcs	2f
@@ -370,84 +387,97 @@ short_aligned_end:
 	 nop
 	sub	%g2, 12, %g2
 	sub	%g7, 32, %g7
-3:
-	sub	%g2, 12, %g2
+3:	sub	%g2, 12, %g2
 	sub	%g7, 32, %g7
-2:
-	sub	%g2, 12, %g2
+2:	sub	%g2, 12, %g2
 	sub	%g7, 32, %g7
-1:
-	cmp	%g2, 4
-	bcs,a	1f
-	 sll	%g2, 3, %g2
+1:	cmp	%g2, 4
+	bcs,a	60f
+	 clr	%g2
 	sub	%g2, 4, %g2
 	sll	%g2, 2, %g2
-1:
-	and	%g1, 0x7f, %o0
-	add	%o0, %g7, %o0
-	retl
-	 sub	%o0, %g2, %o0
+60:	and	%g1, 0x7f, %g3
+	sub	%o0, %g7, %o0
+	add	%g3, %g7, %g3
+	ba	fixupretl
+	 sub	%g3, %g2, %g3
 51:
 /* i = 41 - g2; j = i % 6;
- * o0 = (g1 & 15) + (i / 6) * 16 + (j < 4) ? (j + 1) * 4 : (j - 3) * 8;	
+ * g3 = (g1 & 15) + (i / 6) * 16 + (j < 4) ? (j + 1) * 4 : 16;
+ * o0 -= (i / 6) * 16 + 16;
  */
 	neg	%g2
 	and	%g1, 0xf, %g1
 	add	%g2, 41, %g2
-1:
-	cmp	%g2, 6
+	add	%o0, %g1, %o0
+1:	cmp	%g2, 6
 	bcs,a	2f
 	 cmp	%g2, 4
 	add	%g1, 16, %g1
 	b	1b
 	 sub	%g2, 6, %g2
-2:
-	bcs,a	3f
-	 inc	%g2
-	sub	%g2, 3, %g2
-	b	2f
-	 sll	%g2, 3, %g2
-3:
+2:	bcc,a	2f
+	 mov	16, %g2
+	inc	%g2
 	sll	%g2, 2, %g2
-2:
-	retl
-	 add	%g1, %g2, %o0
+2:	add	%g1, %g2, %g3
+	ba	fixupretl
+	 sub	%o0, %g3, %o0
 52:
-/* o0 = g1 + g7 - (g2 / 8) * 32 + (x & 3) * 8 */
-	and	%g2, 0xfffffff8, %g4
+/* g3 = g1 + g7 - (g2 / 8) * 32 + (g2 & 4) ? (g2 & 3) * 8 : 0;
+   o0 += (g2 / 8) * 32 */
+	andn	%g2, 7, %g4
+	add	%o0, %g7, %o0
+	andcc	%g2, 4, %g0
 	and	%g2, 3, %g2
 	sll	%g4, 2, %g4
 	sll	%g2, 3, %g2
-	add	%g2, %g4, %g2
-	b,a	1b
+	bne	60b
+	 sub	%g7, %g4, %g7
+	ba	60b
+	 clr	%g2
 53:
-/* o0 = o3 + (o2 & 15) - (g2 & 8) - (g2 & 3) * 2 */
+/* g3 = o3 + (o2 & 15) - (g2 & 8) - (g2 & 4) ? (g2 & 3) * 2 : 0;
+   o0 += (g2 & 8) */
 	and	%g2, 3, %g4
-	and	%g2, 0xfffffff8, %g2
+	andcc	%g2, 4, %g0
+	and	%g2, 8, %g2
 	sll	%g4, 1, %g4
+	be	1f
+	 add	%o0, %g2, %o0
 	add	%g2, %g4, %g2
-	and	%o2, 0xf, %o0
-	add	%o0, %o3, %o0
-	retl
-	 sub	%o0, %g2, %o0
+1:	and	%o2, 0xf, %g3
+	add	%g3, %o3, %g3
+	ba	fixupretl
+	 sub	%g3, %g2, %g3
 54:
-/* o0 = o3 + (o2 & 15) - (g2 / 4) * 2 - (g2 & 1) */
+/* g3 = o3 + (o2 & 15) - (g2 / 4) * 2 - (g2 & 2) ? (g2 & 1) : 0;
+   o0 += (g2 / 4) * 2 */
 	srl	%g2, 2, %o4
-	and	%g2, 1, %o1
-	sll	%o4, 1, %o4
+	and	%g2, 1, %o5
+	srl	%g2, 1, %g2
+	add	%o4, %o4, %o4
+	and	%o5, %g2, %o5
 	and	%o2, 0xf, %o2
-	sub	%o3, %o1, %o3
+	add	%o0, %o4, %o0
+	sub	%o3, %o5, %o3
 	sub	%o2, %o4, %o2
-	retl
-	 add	%o2, %o3, %o0
+	ba	fixupretl
+	 add	%o2, %o3, %g3
 55:
-/* o0 = (o2 & 1) + (27 - g2)/4 * 2 + ((27 - g2) & 1) */
+/* i = 27 - g2;
+   g3 = (o2 & 1) + i / 4 * 2 + !(i & 3);
+   o0 -= i / 4 * 2 + 1 */
 	neg	%g2
 	and	%o2, 1, %o2
 	add	%g2, 27, %g2
-	srl	%g2, 2, %o1
-	and	%g2, 1, %g2
-	sll	%o1, 1, %o1
-	add	%o2, %g2, %o0
-	retl
-	 add	%o0, %o1, %o0
+	srl	%g2, 2, %o5
+	andcc	%g2, 3, %g0
+	mov	1, %g2
+	add	%o5, %o5, %o5
+	be,a	1f
+	 clr	%g2
+1:	add	%g2, %o5, %g3
+	sub	%o0, %g3, %o0
+	ba	fixupretl
+	 add	%g3, %o2, %g3

@@ -311,6 +311,7 @@ __initfunc(void xxxfb_init(void))
     fb_info.gen.info.switch_con = &xxxfb_switch;
     fb_info.gen.info.updatevar = &xxxfb_update_var;
     fb_info.gen.info.blank = &xxxfb_blank;
+    fb_info.gen.info.flags = FBINFO_FLAG_DEFAULT;
     /* This should give a reasonable default video mode */
     fbgen_get_var(&disp.var, -1, &fb_info.gen.info);
     fbgen_do_set_var(&disp.var, 1, &fb_info.gen);

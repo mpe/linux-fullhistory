@@ -7,7 +7,7 @@
  *	Andi Kleen		<ak@muc.de>
  *	Alexey Kuznetsov	<kuznet@ms2.inr.ac.ru>
  *
- *	$Id: exthdrs.c,v 1.7 1998/08/26 12:04:49 davem Exp $
+ *	$Id: exthdrs.c,v 1.8 1998/10/03 09:38:27 davem Exp $
  *
  *	This program is free software; you can redistribute it and/or
  *      modify it under the terms of the GNU General Public License
@@ -368,9 +368,7 @@ ipv6_invert_rthdr(struct sock *sk, struct ipv6_rt_hdr *hdr)
    what it does and calculates authentication data correctly.
    Certainly, it is possible only for udp and raw sockets, but not for tcp.
 
-   BTW I beg pardon, it is not good place for flames, but
-   I cannot be silent 8) It is very sad, but fools prevail 8)
-   AUTH header has 4byte granular length, what kills all the idea
+   AUTH header has 4byte granular length, which kills all the idea
    behind AUTOMATIC 64bit alignment of IPv6. Now we will loose
    cpu ticks, checking that sender did not something stupid
    and opt->hdrlen is even. Shit!		--ANK (980730)
@@ -383,6 +381,8 @@ static u8 *ipv6_auth_hdr(struct sk_buff **skb_ptr, u8 *nhptr)
 	struct ipv6_opt_hdr *hdr = (struct ipv6_opt_hdr *)skb->h.raw;
 	int len = (hdr->hdrlen+2)<<2;
 
+	if (len&7)
+		return NULL;
 	opt->auth = (u8*)hdr - skb->nh.raw;
 	if (skb->h.raw + len > skb->tail)
 		return NULL;

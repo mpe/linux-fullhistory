@@ -1,4 +1,4 @@
-/*  $Id: init.c,v 1.93 1998/08/04 20:49:25 davem Exp $
+/*  $Id: init.c,v 1.98 1998/09/28 06:18:39 davem Exp $
  *  arch/sparc64/mm/init.c
  *
  *  Copyright (C) 1996,1997 David S. Miller (davem@caip.rutgers.edu)
@@ -37,7 +37,8 @@ struct sparc_phys_banks sp_banks[SPARC_PHYS_BANKS];
 /* Ugly, but necessary... -DaveM */
 unsigned long phys_base;
 
-unsigned long tlb_context_cache = CTX_FIRST_VERSION;
+/* get_new_mmu_context() uses "cache + 1".  */
+unsigned long tlb_context_cache = CTX_FIRST_VERSION - 1;
 
 /* References to section boundaries */
 extern char __init_begin, __init_end, etext, __bss_start;
@@ -565,9 +566,9 @@ static void __flush_nucleus_vptes(void)
 	unsigned long prom_reserved_base = 0xfffffffc00000000UL;
 	int i;
 
-	__asm__ __volatile__("rdpr	%%pstate, %0\n\t"
-			     "wrpr	%0, %1, %%pstate\n\t"
-			     "flushw"
+	__asm__ __volatile__("flushw\n\t"
+			     "rdpr	%%pstate, %0\n\t"
+			     "wrpr	%0, %1, %%pstate"
 			     : "=r" (pstate)
 			     : "i" (PSTATE_IE));
 
@@ -720,6 +721,18 @@ void prom_reload_locked(void)
 	membar("#Sync");
 }
 
+void __flush_dcache_range(unsigned long start, unsigned long end)
+{
+	unsigned long va;
+	int n = 0;
+
+	for (va = start; va < end; va += 32) {
+		spitfire_put_dcache_tag(va & 0x3fe0, 0x0);
+		if (++n >= 512)
+			break;
+	}
+}
+
 void __flush_cache_all(void)
 {
 	unsigned long va;
@@ -735,9 +748,9 @@ void __flush_tlb_all(void)
 	unsigned long pstate;
 	int i;
 
-	__asm__ __volatile__("rdpr	%%pstate, %0\n\t"
-			     "wrpr	%0, %1, %%pstate\n\t"
-			     "flushw"
+	__asm__ __volatile__("flushw\n\t"
+			     "rdpr	%%pstate, %0\n\t"
+			     "wrpr	%0, %1, %%pstate"
 			     : "=r" (pstate)
 			     : "i" (PSTATE_IE));
 	for(i = 0; i < 64; i++) {
@@ -913,7 +926,6 @@ void sparc_ultra_unmapioaddr(unsigned long virt_addr)
 	pte_clear(ptep);
 }
 
-#ifdef NOTUSED
 void sparc_ultra_dump_itlb(void)
 {
         int slot;
@@ -933,17 +945,17 @@ void sparc_ultra_dump_dtlb(void)
 {
         int slot;
 
-        prom_printf ("Contents of dtlb: ");
+        printk ("Contents of dtlb: ");
 	for (slot = 0; slot < 14; slot++) printk ("    ");
-	prom_printf ("%2x:%016lx,%016lx\n", 0, spitfire_get_dtlb_tag(0), spitfire_get_dtlb_data(0));
+	printk ("%2x:%016lx,%016lx\n", 0, spitfire_get_dtlb_tag(0),
+		spitfire_get_dtlb_data(0));
         for (slot = 1; slot < 64; slot+=3) {
-        	prom_printf ("%2x:%016lx,%016lx %2x:%016lx,%016lx %2x:%016lx,%016lx\n", 
+        	printk ("%2x:%016lx,%016lx %2x:%016lx,%016lx %2x:%016lx,%016lx\n", 
         		slot, spitfire_get_dtlb_tag(slot), spitfire_get_dtlb_data(slot),
         		slot+1, spitfire_get_dtlb_tag(slot+1), spitfire_get_dtlb_data(slot+1),
         		slot+2, spitfire_get_dtlb_tag(slot+2), spitfire_get_dtlb_data(slot+2));
         }
 }
-#endif
 
 /* paging_init() sets up the page tables */
 

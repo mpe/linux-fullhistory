@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.91 1998/06/16 04:37:04 davem Exp $
+/* $Id: sys_sunos.c,v 1.92 1998/08/31 03:40:53 davem Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -118,6 +118,7 @@ asmlinkage unsigned long sunos_mmap(unsigned long addr, unsigned long len,
 		}
 	}
 
+	flags &= ~(MAP_EXECUTABLE | MAP_DENYWRITE);
 	retval = do_mmap(file, addr, len, prot, flags, off);
 	if(!ret_type)
 		retval = ((retval < PAGE_OFFSET) ? 0 : retval);

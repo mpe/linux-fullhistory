@@ -5,7 +5,7 @@
  *
  *		The IP forwarding functionality.
  *		
- * Version:	$Id: ip_forward.c,v 1.41 1998/08/26 12:03:42 davem Exp $
+ * Version:	$Id: ip_forward.c,v 1.42 1998/10/03 09:37:19 davem Exp $
  *
  * Authors:	see ip.c
  *
@@ -103,8 +103,8 @@ int ip_forward(struct sk_buff *skb)
 #endif
 
 
-#ifdef CONFIG_TRANSPARENT_PROXY
-	if (ip_chk_sock(skb))
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
+	if (ip_chksock(skb))
                 goto local_pkt;
 #endif
 
@@ -271,7 +271,7 @@ skip_call_fw_firewall:
 	ip_send(skb);
 	return 0;
 
-#ifdef CONFIG_TRANSPARENT_PROXY
+#ifdef CONFIG_IP_TRANSPARENT_PROXY
 local_pkt:
 	return ip_local_deliver(skb);
 #endif

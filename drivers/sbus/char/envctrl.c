@@ -1,4 +1,4 @@
-/* $Id: envctrl.c,v 1.7 1998/06/10 07:25:28 davem Exp $
+/* $Id: envctrl.c,v 1.8 1998/08/26 10:29:40 davem Exp $
  * envctrl.c: Temperature and Fan monitoring on Machines providing it.
  *
  * Copyright (C) 1998  Eddie C. Dost  (ecd@skynet.be)
