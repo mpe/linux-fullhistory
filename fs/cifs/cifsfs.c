@@ -236,9 +236,7 @@ static struct inode *
 cifs_alloc_inode(struct super_block *sb)
 {
 	struct cifsInodeInfo *cifs_inode;
-	cifs_inode =
-	    (struct cifsInodeInfo *) kmem_cache_alloc(cifs_inode_cachep,
-						      SLAB_KERNEL);
+	cifs_inode = kmem_cache_alloc(cifs_inode_cachep, SLAB_KERNEL);
 	if (!cifs_inode)
 		return NULL;
 	cifs_inode->cifsAttrs = 0x20;	/* default */
@@ -598,7 +596,7 @@ struct file_operations cifs_dir_ops = {
 static void
 cifs_init_once(void *inode, kmem_cache_t * cachep, unsigned long flags)
 {
-	struct cifsInodeInfo *cifsi = (struct cifsInodeInfo *) inode;
+	struct cifsInodeInfo *cifsi = inode;
 
 	if ((flags & (SLAB_CTOR_VERIFY | SLAB_CTOR_CONSTRUCTOR)) ==
 	    SLAB_CTOR_CONSTRUCTOR) {

@@ -37,7 +37,7 @@
 	struct cifsFileInfo * cf;
 
 	if(file) {
-		cf = (struct cifsFileInfo *)file->private_data;
+		cf = file->private_data;
 		if(cf == NULL) {
 			cFYI(1,("empty cifs private file data"));
 			return;
@@ -298,7 +298,7 @@ static int initiate_cifs_search(const int xid, struct file *file)
 	} else {
 		memset(file->private_data,0,sizeof(struct cifsFileInfo));
 	}
-	cifsFile = (struct cifsFileInfo *)file->private_data;
+	cifsFile = file->private_data;
 	cifsFile->invalidHandle = TRUE;
 	cifsFile->srch_inf.endOfSearch = FALSE;
 
@@ -336,8 +336,7 @@ static int initiate_cifs_search(const int xid, struct file *file)
 		&cifsFile->netfid, &cifsFile->srch_inf); 
 	if(rc == 0)
 		cifsFile->invalidHandle = FALSE;
-	if(full_path)
-		kfree(full_path);
+	kfree(full_path);
 	return rc;
 }
 
@@ -454,7 +453,7 @@ static int find_cifs_entry(const int xid, struct cifsTconInfo *pTcon,
 	int pos_in_buf = 0;
 	loff_t first_entry_in_buffer;
 	loff_t index_to_find = file->f_pos;
-	struct cifsFileInfo * cifsFile = (struct cifsFileInfo *)file->private_data;
+	struct cifsFileInfo * cifsFile = file->private_data;
 	/* check if index in the buffer */
 	
 	if((cifsFile == NULL) || (ppCurrentEntry == NULL) || (num_to_ret == NULL))
@@ -470,12 +469,10 @@ static int find_cifs_entry(const int xid, struct cifsTconInfo *pTcon,
 		cFYI(1,("search backing up - close and restart search"));
 		cifsFile->invalidHandle = TRUE;
 		CIFSFindClose(xid, pTcon, cifsFile->netfid);
-		if(cifsFile->search_resume_name) {
-			kfree(cifsFile->search_resume_name);
-			cifsFile->search_resume_name = NULL;
-		}
+		kfree(cifsFile->search_resume_name);
+		cifsFile->search_resume_name = NULL;
 		if(cifsFile->srch_inf.ntwrk_buf_start) {
-			cFYI(1,("freeing SMB ff cache buf on search rewind")); 
+			cFYI(1,("freeing SMB ff cache buf on search rewind"));
 			cifs_buf_release(cifsFile->srch_inf.ntwrk_buf_start);
 		}
 		rc = initiate_cifs_search(xid,file);
@@ -498,10 +495,11 @@ static int find_cifs_entry(const int xid, struct cifsTconInfo *pTcon,
 		int i;
 		char * current_entry;
 		char * end_of_smb = cifsFile->srch_inf.ntwrk_buf_start + 
-			smbCalcSize((struct smb_hdr *)cifsFile->srch_inf.ntwrk_buf_start);
+			smbCalcSize((struct smb_hdr *)
+				cifsFile->srch_inf.ntwrk_buf_start);
 /*	dump_cifs_file_struct(file,"found entry in fce "); */
-		first_entry_in_buffer = cifsFile->srch_inf.index_of_last_entry -
-			cifsFile->srch_inf.entries_in_buffer;
+		first_entry_in_buffer = cifsFile->srch_inf.index_of_last_entry
+					- cifsFile->srch_inf.entries_in_buffer;
 		pos_in_buf = index_to_find - first_entry_in_buffer;
 		cFYI(1,("found entry - pos_in_buf %d",pos_in_buf)); 
 		current_entry = cifsFile->srch_inf.srch_entries_start;
@@ -520,7 +518,10 @@ static int find_cifs_entry(const int xid, struct cifsTconInfo *pTcon,
 			current_entry = nxt_dir_entry(current_entry,end_of_smb);
 		}
 		if((current_entry == NULL) && (i < pos_in_buf)) {
-			cERROR(1,("reached end of buf searching for pos in buf %d index to find %lld rc %d",pos_in_buf,index_to_find,rc)); /* BB removeme BB */
+			/* BB fixme - check if we should flag this error */
+			cERROR(1,("reached end of buf searching for pos in buf"
+			  " %d index to find %lld rc %d",
+			  pos_in_buf,index_to_find,rc));
 		}
 		rc = 0;
 		*ppCurrentEntry = current_entry;
@@ -787,7 +788,7 @@ int cifs_readdir(struct file *file, void *direntry, filldir_t filldir)
 			FreeXid(xid);
 			return rc;
 		}
-		cifsFile = (struct cifsFileInfo *) file->private_data;
+		cifsFile = file->private_data;
 		if (cifsFile->srch_inf.endOfSearch) {
 			if(cifsFile->srch_inf.emptyDir) {
 				cFYI(1, ("End of search, empty dir"));
@@ -798,11 +799,10 @@ int cifs_readdir(struct file *file, void *direntry, filldir_t filldir)
 			cifsFile->invalidHandle = TRUE;
 			CIFSFindClose(xid, pTcon, cifsFile->netfid);
 		} 
-		if(cifsFile->search_resume_name) {
-			kfree(cifsFile->search_resume_name);
-			cifsFile->search_resume_name = NULL;
-		} */
-/* BB account for . and .. in f_pos */
+		kfree(cifsFile->search_resume_name);
+		cifsFile->search_resume_name = NULL; */
+
+		/* BB account for . and .. in f_pos as special case */
 		/* dump_cifs_file_struct(file, "rdir after default ");*/
 
 		rc = find_cifs_entry(xid,pTcon, file,
@@ -818,33 +818,43 @@ int cifs_readdir(struct file *file, void *direntry, filldir_t filldir)
 		}
 		cFYI(1,("loop through %d times filling dir for net buf %p",
 			num_to_fill,cifsFile->srch_inf.ntwrk_buf_start)); 
-		end_of_smb = cifsFile->srch_inf.ntwrk_buf_start + 
-			smbCalcSize((struct smb_hdr *)cifsFile->srch_inf.ntwrk_buf_start);
+		end_of_smb = cifsFile->srch_inf.ntwrk_buf_start +
+			smbCalcSize((struct smb_hdr *)
+				    cifsFile->srch_inf.ntwrk_buf_start);
 		tmp_buf = kmalloc(NAME_MAX+1,GFP_KERNEL);
 		for(i=0;(i<num_to_fill) && (rc == 0);i++) {
 			if(current_entry == NULL) {
-				cERROR(1,("beyond end of smb with num to fill %d i %d",num_to_fill,i)); /* BB removeme BB */
+				/* evaluate whether this case is an error */
+				cERROR(1,("past end of SMB num to fill %d i %d",
+					  num_to_fill, i));
 				break;
 			}
-/*			if((!(cifs_sb->mnt_cifs_flags & CIFS_MOUNT_SERVER_INUM)) || 
-			   (cifsFile->srch_inf.info_level != something that supports server inodes)) {
+
+			/* BB FIXME - need to enable the below code BB */
+
+		/* if((!(cifs_sb->mnt_cifs_flags & CIFS_MOUNT_SERVER_INUM)) ||
+			   (cifsFile->srch_inf.info_level != 
+				   something that supports server inodes)) {
 				create dentry
 				create inode
-				fill in inode new_inode (which makes number locally)
+				fill in inode new_inode (getting local i_ino)
 			}
-			also create local inode for per reasons unless new mount parm says otherwise */
+			also create local inode for performance reasons (so we 
+			have a cache of inode metadata) unless this new mount 
+			parm says otherwise */
+
 			rc = cifs_filldir(current_entry, file, 
 					filldir, direntry,tmp_buf);
 			file->f_pos++;
 			if(file->f_pos == cifsFile->srch_inf.index_of_last_entry) {
-				cFYI(1,("last entry in buf at pos %lld %s",file->f_pos,tmp_buf)); /* BB removeme BB */
+				cFYI(1,("last entry in buf at pos %lld %s",
+					file->f_pos,tmp_buf)); /* BB removeme BB */
 				cifs_save_resume_key(current_entry,cifsFile);
 				break;
 			} else 
 				current_entry = nxt_dir_entry(current_entry,end_of_smb);
 		}
-		if(tmp_buf != NULL)
-			kfree(tmp_buf);
+		kfree(tmp_buf);
 		break;
 	} /* end switch */
 
