@@ -20,11 +20,9 @@
 
 #include <media/saa7146.h>
 
-/* global variables */
-struct list_head saa7146_devices;
-struct semaphore saa7146_devices_lock;
+LIST_HEAD(saa7146_devices);
+DECLARE_MUTEX(saa7146_devices_lock);
 
-static int initialized = 0;
 static int saa7146_num = 0;
 
 unsigned int saa7146_debug = 0;
@@ -527,12 +525,6 @@ int saa7146_register_extension(struct saa7146_extension* ext)
 {
 	DEB_EE(("ext:%p\n",ext));
 
-	if( 0 == initialized ) {
-		INIT_LIST_HEAD(&saa7146_devices);
-		init_MUTEX(&saa7146_devices_lock);
-		initialized = 1;
-	}
-
 	ext->driver.name = ext->name;
 	ext->driver.id_table = ext->pci_tbl;
 	ext->driver.probe = saa7146_init_one;
@@ -549,23 +541,6 @@ int saa7146_unregister_extension(struct saa7146_extension* ext)
 	pci_unregister_driver(&ext->driver);
 	return 0;
 }
-
-static int __init saa7146_init_module(void)
-{
-	if( 0 == initialized ) {
-		INIT_LIST_HEAD(&saa7146_devices);
-		init_MUTEX(&saa7146_devices_lock);
-		initialized = 1;
-	}
-	return 0;
-}
-
-static void __exit saa7146_cleanup_module(void)
-{
-}
-
-module_init(saa7146_init_module);
-module_exit(saa7146_cleanup_module);
 
 EXPORT_SYMBOL_GPL(saa7146_register_extension);
 EXPORT_SYMBOL_GPL(saa7146_unregister_extension);
