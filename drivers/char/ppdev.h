@@ -75,7 +75,7 @@ struct ppdev_frob_struct {
 #define PPSETPHASE	_IOW(PP_IOCTL, 0x94, int)
 
 /* Set and get port timeout (struct timeval's) */
-#define PPGETTIME	_IOW(PP_IOCTL, 0x95, struct timeval)
-#define PPSETTIME	_IOR(PP_IOCTL, 0x96, struct timeval)
+#define PPGETTIME	_IOR(PP_IOCTL, 0x95, struct timeval)
+#define PPSETTIME	_IOW(PP_IOCTL, 0x96, struct timeval)
 
 

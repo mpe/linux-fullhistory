@@ -1,5 +1,5 @@
 Ioctl Numbers
-2 September 1999
+10 October 1999
 Michael Elizabeth Chastain
 <mec@shout.net>
 
@@ -114,6 +114,8 @@ Code	Seq#	Include File		Comments
 'e'	00-1F	linux/video_encoder.h	conflict!
 'e'	00-1F	net/irda/irtty.h	conflict!
 'f'	00-1F	linux/ext2_fs.h
+'h'	00-7F				Charon filesystem
+					<mailto:zapman@interlan.net>
 'i'	00-3F	linux/i2o.h
 'j'	00-3F	linux/joystick.h
 'k'	all	asm-sparc/kbio.h
@@ -140,6 +142,8 @@ Code	Seq#	Include File		Comments
 'v'	00-1F	linux/ext2_fs.h		conflict!
 'v'	all	linux/videodev.h	conflict!
 'w'	all				CERN SCI driver
+'y'	00-1F				packet based user level communications
+					<mailto:zapman@interlan.net>
 'z'	00-3F				CAN bus card
 					<mailto:hdstich@connectu.ulm.circular.de>
 'z'	40-7F				CAN bus card

@@ -1,5 +1,5 @@
 /*
- *	linux/drivers/char/pc_keyb.h
+ *	include/linux/pc_keyb.h
  *
  *	PC Keyboard And Keyboard Controller
  *
@@ -30,7 +30,7 @@ extern unsigned char pckbd_read_mask;
 extern unsigned char aux_device_present;
 
 /*
- *	Keyboard Controller Registers
+ *	Keyboard Controller Registers on normal PCs.
  */
 
 #define KBD_STATUS_REG		0x64	/* Status register (R) */

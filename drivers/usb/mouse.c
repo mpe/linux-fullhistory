@@ -120,7 +120,7 @@ static int mouse_irq(int state, void *__buffer, int len, void *dev_id)
 
 	wake_up_interruptible(&mouse->wait);
 	if (mouse->fasync)
-		kill_fasync(mouse->fasync, SIGIO);
+		kill_fasync(mouse->fasync, SIGIO, POLL_IN);
 
 	return 1;
 }

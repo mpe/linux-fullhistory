@@ -16,6 +16,9 @@
 #define TR_RCF_LONGEST_FRAME_MASK 0x0070
 #define TR_RCF_FRAME4K 0x0030
 
+#define SK_ISA 0
+#define SK_PCI 1
+
 /*------------------------------------------------------------------*/
 /*  Bit order for adapter communication with DMA		    */
 /*  --------------------------------------------------------------  */
@@ -642,7 +645,7 @@ typedef struct {
  * but possibly multiple TPLs for one frame) the length of the TPLs has to be
  * initialized in the OPL. (OPEN parameter list)
  */
-#define TPL_NUM		3	/* Number of Transmit Parameter Lists.
+#define TPL_NUM		9	/* Number of Transmit Parameter Lists.
 				 * !! MUST BE >= 3 !!
 				 */
 
@@ -1062,6 +1065,8 @@ typedef struct net_local {
 	int DataRate;
 	unsigned char ScbInUse;
 	unsigned short CMDqueue;
+
+	unsigned int DeviceType;
 
 	unsigned long AdapterOpenFlag:1;
 	unsigned long AdapterVirtOpenFlag:1;

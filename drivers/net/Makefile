@@ -5,7 +5,7 @@
 
 SUB_DIRS     := 
 MOD_SUB_DIRS := $(SUB_DIRS)
-ALL_SUB_DIRS := $(SUB_DIRS) hamradio irda fc pcmcia
+ALL_SUB_DIRS := $(SUB_DIRS) fc hamradio irda pcmcia tokenring wan
 
 L_TARGET := net.a
 L_OBJS   := auto_irq.o
@@ -24,10 +24,6 @@ CONFIG_7990_BUILTIN :=
 CONFIG_7990_MODULE :=
 CONFIG_82596_BUILTIN :=
 CONFIG_82596_MODULE :=
-CONFIG_85230_BUILTIN :=
-CONFIG_85230_MODULE  :=
-CONFIG_SYNCPPP_BUILTIN :=
-CONFIG_SYNCPPP_MODULE  :=
 
 ifeq ($(CONFIG_PCMCIA),y)
   SUB_DIRS += pcmcia
@@ -58,38 +54,6 @@ endif
 
 ifeq ($(CONFIG_SEEQ8005),y)
 L_OBJS += seeq8005.o
-endif
-
-ifeq ($(CONFIG_IBMTR),y)
-L_OBJS += ibmtr.o
-else
-  ifeq ($(CONFIG_IBMTR),m)
-  M_OBJS += ibmtr.o
-  endif
-endif
-
-ifeq ($(CONFIG_IBMLS),y)
-L_OBJS += lanstreamer.o
-else
-  ifeq ($(CONFIG_IBMLS),m)
-  M_OBJS += lanstreamer.o
-  endif
-endif
-
-ifeq ($(CONFIG_IBMOL),y)
-L_OBJS += olympic.o
-else
-  ifeq ($(CONFIG_IBMOL),m)
-  M_OBJS += olympic.o
-  endif
-endif
-
-ifeq ($(CONFIG_SKTR),y)
-L_OBJS += sktr.o
-else
-  ifeq ($(CONFIG_SKTR),m)
-  M_OBJS += sktr.o
-  endif
 endif
 
 ifeq ($(CONFIG_ETHERTAP),y)
@@ -123,6 +87,13 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_PCMCIA_PCNET),y)
+CONFIG_8390_BUILTIN = y
+else
+  ifeq ($(CONFIG_PCMCIA_PCNET),m)
+  CONFIG_8390_MODULE = y
+  endif
+endif
 
 ifeq ($(CONFIG_SHAPER),y)
 L_OBJS += shaper.o
@@ -609,6 +580,15 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_DM9102),y) 
+L_OBJS += dmfe.o
+else
+  ifeq ($(CONFIG_DM9102),m)
+  M_OBJS += dmfe.o
+  endif
+endif
+
+
 ifeq ($(CONFIG_YELLOWFIN),y)
 L_OBJS += yellowfin.o
 else
@@ -811,76 +791,11 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_LAPBETHER),y)
-L_OBJS += lapbether.o
-else
-  ifeq ($(CONFIG_LAPBETHER),m)
-  M_OBJS += lapbether.o
-  endif
-endif
-
 ifeq ($(CONFIG_EPIC100),y)
 L_OBJS += epic100.o
 else
   ifeq ($(CONFIG_EPIC100),m)
   M_OBJS += epic100.o
-  endif
-endif
-
-ifeq ($(CONFIG_HOSTESS_SV11),y)
-L_OBJS += hostess_sv11.o
-CONFIG_85230_BUILTIN = y
-CONFIG_SYNCPPP_BUILTIN = y
-else
-  ifeq ($(CONFIG_HOSTESS_SV11),m)
-  CONFIG_85230_MODULE = y
-  CONFIG_SYNCPPP_MODULE = y
-  M_OBJS += hostess_sv11.o
-  endif
-endif
-
-ifeq ($(CONFIG_SEALEVEL_4021),y)
-L_OBJS += sealevel.o
-CONFIG_85230_BUILTIN = y
-CONFIG_SYNCPPP_BUILTIN = y
-else
-  ifeq ($(CONFIG_SEALEVEL_4021),m)
-  CONFIG_85230_MODULE = y
-  CONFIG_SYNCPPP_MODULE = y
-  M_OBJS += sealevel.o
-  endif
-endif
-
-
-ifeq ($(CONFIG_COSA),y)
-L_OBJS += cosa.o
-CONFIG_SYNCPPP_BUILTIN = y
-else
-  ifeq ($(CONFIG_COSA),m)
-  CONFIG_SYNCPPP_MODULE = y
-  M_OBJS += cosa.o
-  endif
-endif
-
-# If anything built-in uses syncppp, then build it into the kernel also.
-# If not, but a module uses it, build as a module.
-
-ifdef CONFIG_SYNCPPP_BUILTIN
-LX_OBJS += syncppp.o
-else
-  ifdef CONFIG_SYNCPPP_MODULE
-  MX_OBJS += syncppp.o
-  endif
-endif
-
-# If anything built-in uses Z85230, then build it into the kernel also.
-# If not, but a module uses it, build as a module.
-
-ifdef CONFIG_85230_BUILTIN
-LX_OBJS += z85230.o
-else
-  ifdef CONFIG_85230_MODULE
-  MX_OBJS += z85230.o
   endif
 endif
 
@@ -910,6 +825,14 @@ CONFIG_8390_BUILTIN = y
 else
   ifeq ($(CONFIG_ARIADNE2),m)
   M_OBJS += ariadne2.o
+  CONFIG_8390_MODULE = y
+  endif
+endif
+
+ifeq ($(CONFIG_PCMCIA_PCNET),y)
+CONFIG_8390_BUILTIN = y
+else
+  ifeq ($(CONFIG_PCMCIA_PCNET),m)
   CONFIG_8390_MODULE = y
   endif
 endif
@@ -1036,22 +959,6 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_SDLA),y)
-L_OBJS += sdla.o
-else
-  ifeq ($(CONFIG_SDLA),m)
-  M_OBJS += sdla.o
-  endif
-endif
-
-ifeq ($(CONFIG_DLCI),y)
-L_OBJS += dlci.o 
-else
-  ifeq ($(CONFIG_DLCI),m)
-  M_OBJS += dlci.o
-  endif
-endif
-
 ifeq ($(CONFIG_ARIADNE),y)
 L_OBJS += ariadne.o
 else
@@ -1128,68 +1035,6 @@ else
   endif
 endif
 
-ifeq ($(CONFIG_ADAPTEC_STARFIRE),y)
-L_OBJS += starfire.o
-else
-  ifeq ($(CONFIG_ADAPTEC_STARFIRE),m)
-  M_OBJS += starfire.o
-  endif
-endif
-
-ifeq ($(CONFIG_VENDOR_SANGOMA),y)
-  LX_OBJS += sdladrv.o
-  L_OBJS += sdlamain.o
-  ifeq ($(CONFIG_WANPIPE_X25),y)
-    L_OBJS += sdla_x25.o
-  endif
-  ifeq ($(CONFIG_WANPIPE_FR),y)
-    L_OBJS += sdla_fr.o
-  endif
-  ifeq ($(CONFIG_WANPIPE_PPP),y)
-    L_OBJS += sdla_ppp.o
-  endif
-endif
-
-ifeq ($(CONFIG_VENDOR_SANGOMA),m)
-  MX_OBJS += sdladrv.o
-  M_OBJS += wanpipe.o
-  WANPIPE_OBJS = sdlamain.o
-  ifeq ($(CONFIG_WANPIPE_X25),y)
-    WANPIPE_OBJS += sdla_x25.o
-  endif
-  ifeq ($(CONFIG_WANPIPE_FR),y)
-    WANPIPE_OBJS += sdla_fr.o
-  endif
-  ifeq ($(CONFIG_WANPIPE_PPP),y)
-    WANPIPE_OBJS += sdla_ppp.o
-  endif
-endif
-
-ifeq ($(CONFIG_CYCLADES_SYNC),y)
-  LX_OBJS += cycx_drv.o
-  L_OBJS += cycx_main.o
-  ifeq ($(CONFIG_CYCLOMX_X25),y)
-    L_OBJS += cycx_x25.o
-  endif
-endif
-
-ifeq ($(CONFIG_CYCLADES_SYNC),m)
-  MX_OBJS += cycx_drv.o
-  M_OBJS += cyclomx.o
-  CYCLOMX_OBJS = cycx_main.o
-  ifeq ($(CONFIG_CYCLOMX_X25),y)
-    CYCLOMX_OBJS += cycx_x25.o
-  endif
-endif
-
-ifeq ($(CONFIG_X25_ASY),y)
-L_OBJS += x25_asy.o
-else
-  ifeq ($(CONFIG_X25_ASY),m)
-  M_OBJS += x25_asy.o
-  endif
-endif
-
 #
 # HIPPI adapters
 #
@@ -1211,6 +1056,24 @@ else
   endif
 endif
 
+ifeq ($(CONFIG_TR),y)
+SUB_DIRS += tokenring
+MOD_IN_SUB_DIRS += tokenring
+else
+  ifeq ($(CONFIG_TR),m)
+  MOD_IN_SUB_DIRS += tokenring
+  endif
+endif
+
+ifeq ($(CONFIG_WAN),y)
+SUB_DIRS += wan
+MOD_IN_SUB_DIRS += wan
+else
+  ifeq ($(CONFIG_WAN),m)
+  MOD_IN_SUB_DIRS += wan
+  endif
+endif
+
 ifeq ($(CONFIG_NET_FC),y)
 SUB_DIRS += fc
 MOD_IN_SUB_DIRS += fc
@@ -1224,12 +1087,6 @@ include $(TOPDIR)/Rules.make
 
 clean:
 	rm -f core *.o *.a *.s
-
-wanpipe.o: $(WANPIPE_OBJS)
-	ld -r -o $@ $(WANPIPE_OBJS)
-
-cyclomx.o: $(CYCLOMX_OBJS)
-	ld -r -o $@ $(CYCLOMX_OBJS)
 
 rcpci.o: rcpci45.o rclanmtl.o
 	$(LD) -r -o rcpci.o rcpci45.o rclanmtl.o

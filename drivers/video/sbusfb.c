@@ -304,13 +304,13 @@ static void sbusfb_clear_margin(struct display *p, int s)
 			fb_base -= (skip_bytes + fb->x_margin) / 8;
 			skip_bytes /= 8;
 			scr_size /= 8;
-			mymemset (fb_base, skip_bytes - fb->x_margin / 8);
-			mymemset (fb_base + scr_size - skip_bytes + fb->x_margin / 8, skip_bytes - fb->x_margin / 8);
+			fb_memset255 (fb_base, skip_bytes - fb->x_margin / 8);
+			fb_memset255 (fb_base + scr_size - skip_bytes + fb->x_margin / 8, skip_bytes - fb->x_margin / 8);
 			incr = fb->var.xres_virtual / 8;
 			size = fb->x_margin / 8 * 2;
 			for (q = fb_base + skip_bytes - fb->x_margin / 8, h = 0;
 			     h <= he; q += incr, h++)
-				mymemset (q, size);
+				fb_memset255 (q, size);
 		} else {
 			fb_base -= (skip_bytes + fb->x_margin);
 			memset (fb_base, attr_bgcol(p,s), skip_bytes - fb->x_margin);

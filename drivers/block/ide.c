@@ -526,7 +526,7 @@ void ide_set_handler (ide_drive_t *drive, ide_handler_t *handler, unsigned int t
  * current_capacity() returns the capacity (in sectors) of a drive
  * according to its current geometry/LBA settings.
  */
-static unsigned long current_capacity (ide_drive_t *drive)
+unsigned long current_capacity (ide_drive_t *drive)
 {
 	if (!drive->present)
 		return 0;
@@ -1067,13 +1067,16 @@ static inline void start_request (ide_drive_t *drive)
 		goto kill_rq;
 	}
 	block += drive->part[minor&PARTN_MASK].start_sect + drive->sect0;
-#if FAKE_FDISK_FOR_EZDRIVE
-	if (block == 0 && drive->remap_0_to_1)
+
+	/* Yecch - this will shift the entire interval,
+	   possibly killing some innocent following sector */
+	if (block == 0 && drive->remap_0_to_1 == 1)
 		block = 1;  /* redirect MBR access to EZ-Drive partn table */
-#endif /* FAKE_FDISK_FOR_EZDRIVE */
+
 #if (DISK_RECOVERY_TIME > 0)
 	while ((read_timer() - hwif->last_time) < DISK_RECOVERY_TIME);
 #endif
+
 	SELECT_DRIVE(hwif, drive);
 	if (ide_wait_stat(drive, drive->ready_stat, BUSY_STAT|DRQ_STAT, WAIT_READY)) {
 		printk("%s: drive not ready for command\n", drive->name);
@@ -1513,7 +1516,7 @@ void ide_intr (int irq, void *dev_id, struct pt_regs *regs)
  * get_info_ptr() returns the (ide_drive_t *) for a given device number.
  * It returns NULL if the given device number does not match any present drives.
  */
-static ide_drive_t *get_info_ptr (kdev_t i_rdev)
+ide_drive_t *get_info_ptr (kdev_t i_rdev)
 {
 	int		major = MAJOR(i_rdev);
 	unsigned int	h;
@@ -1609,11 +1612,8 @@ int ide_do_drive_cmd (ide_drive_t *drive, struct request *rq, ide_action_t actio
 	}
 	spin_unlock_irqrestore(&io_request_lock, flags);
 	do_hwgroup_request(hwgroup);
-	save_flags(flags);	/* all CPUs; overkill? */
-	cli();			/* all CPUs; overkill? */
 	if (action == ide_wait && rq->rq_status != RQ_INACTIVE)
 		down(&sem);	/* wait for it to be serviced */
-	restore_flags(flags);	/* all CPUs; overkill? */
 	return rq->errors ? -EIO : 0;	/* return -EIO if errors */
 }
 
@@ -2321,10 +2321,11 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 		case HDIO_GETGEO:
 		{
 			struct hd_geometry *loc = (struct hd_geometry *) arg;
+			unsigned short bios_cyl = drive->bios_cyl; /* truncate */
 			if (!loc || (drive->media != ide_disk && drive->media != ide_floppy)) return -EINVAL;
 			if (put_user(drive->bios_head, (byte *) &loc->heads)) return -EFAULT;
 			if (put_user(drive->bios_sect, (byte *) &loc->sectors)) return -EFAULT;
-			if (put_user(drive->bios_cyl, (unsigned short *) &loc->cylinders)) return -EFAULT;
+			if (put_user(bios_cyl, (unsigned short *) &loc->cylinders)) return -EFAULT;
 			if (put_user((unsigned)drive->part[MINOR(inode->i_rdev)&PARTN_MASK].start_sect,
 				(unsigned long *) &loc->start)) return -EFAULT;
 			return 0;
@@ -2343,7 +2344,8 @@ static int ide_ioctl (struct inode *inode, struct file *file,
 				return -EINVAL;
 			if (drive->id == NULL)
 				return -ENOMSG;
-			if (copy_to_user((char *)arg, (char *)drive->id, (cmd == HDIO_GET_IDENTITY) ? sizeof(*drive->id) : 142))
+			if (copy_to_user((char *)arg, (char *)drive->id,
+					 (cmd == HDIO_GET_IDENTITY) ? sizeof(*drive->id) : 142))
 				return -EFAULT;
 			return 0;
 
@@ -2629,6 +2631,7 @@ static int __init match_parm (char *s, const char *keywords[], int vals[], int m
  * "hdx=nowerr"		: ignore the WRERR_STAT bit on this drive
  * "hdx=cdrom"		: drive is present, and is a cdrom drive
  * "hdx=cyl,head,sect"	: disk drive is present, with specified geometry
+ * "hdx=noremap"        : do not remap 0->1 even though EZD was detected
  * "hdx=autotune"	: driver will attempt to tune interface speed
  *				to the fastest PIO mode supported,
  *				if possible for this drive only.
@@ -2735,7 +2738,8 @@ void __init ide_setup (char *s)
 	if (s[0] == 'h' && s[1] == 'd' && s[2] >= 'a' && s[2] <= max_drive) {
 		const char *hd_words[] = {"none", "noprobe", "nowerr", "cdrom",
 				"serialize", "autotune", "noautotune",
-				"slow", "swapdata", "bswap", "flash", NULL};
+				"slow", "swapdata", "bswap", "flash",
+				"remap", "noremap", NULL};
 		unit = s[2] - 'a';
 		hw   = unit / MAX_DRIVES;
 		unit = unit % MAX_DRIVES;
@@ -2772,12 +2776,18 @@ void __init ide_setup (char *s)
 			case -8: /* "slow" */
 				drive->slow = 1;
 				goto done;
-			case -9: /* swapdata or bswap */
+			case -9: /* "swapdata" or "bswap" */
 			case -10:
 				drive->bswap = 1;
 				goto done;
-			case -11:
+			case -11: /* "flash" */
 				drive->ata_flash = 1;
+				goto done;
+			case -12: /* "remap" */
+				drive->remap_0_to_1 = 1;
+				goto done;
+			case -13: /* "noremap" */
+				drive->remap_0_to_1 = 2;
 				goto done;
 			case 3: /* cyl,head,sect */
 				drive->media	= ide_disk;
@@ -3020,113 +3030,6 @@ bad_hwif:
 	printk("-- NOT SUPPORTED ON ide%d", hw);
 done:
 	printk("\n");
-}
-
-/*
- * This routine is called from the partition-table code in genhd.c
- * to "convert" a drive to a logical geometry with fewer than 1024 cyls.
- *
- * The second parameter, "xparm", determines exactly how the translation 
- * will be handled:
- *		 0 = convert to CHS with fewer than 1024 cyls
- *			using the same method as Ontrack DiskManager.
- *		 1 = same as "0", plus offset everything by 63 sectors.
- *		-1 = similar to "0", plus redirect sector 0 to sector 1.
- *		>1 = convert to a CHS geometry with "xparm" heads.
- *
- * Returns 0 if the translation was not possible, if the device was not 
- * an IDE disk drive, or if a geometry was "forced" on the commandline.
- * Returns 1 if the geometry translation was successful.
- */
-
-int ide_xlate_1024 (kdev_t i_rdev, int xparm, const char *msg)
-{
-	ide_drive_t *drive;
-
-	static const byte head_vals[] = {4, 8, 16, 32, 64, 128, 255, 0};
-	const byte *heads = head_vals;
-	unsigned long tracks;
-
-	drive = get_info_ptr(i_rdev);
-	if (!drive)
-		return 0;
-
-	if (drive->forced_geom) {
-		/*
-		 * Update the current 3D drive values.
-		 */
-		drive->id->cur_cyls	= drive->bios_cyl;
-		drive->id->cur_heads	= drive->bios_head;
-		drive->id->cur_sectors	= drive->bios_sect;
-		return 0;
-	}
-
-	if (xparm > 1 && xparm <= drive->bios_head && drive->bios_sect == 63) {
-		/*
-		 * Update the current 3D drive values.
-		 */
-		drive->id->cur_cyls	= drive->bios_cyl;
-		drive->id->cur_heads	= drive->bios_head;
-		drive->id->cur_sectors	= drive->bios_sect;
-		return 0;		/* we already have a translation */
-	}
-
-	printk("%s ", msg);
-
-	if (xparm < 0 && (drive->bios_cyl * drive->bios_head * drive->bios_sect) < (1024 * 16 * 63)) {
-		/*
-		 * Update the current 3D drive values.
-		 */
-		drive->id->cur_cyls	= drive->bios_cyl;
-		drive->id->cur_heads	= drive->bios_head;
-		drive->id->cur_sectors	= drive->bios_sect;
-		return 0;		/* small disk: no translation needed */
-	}
-
-	if (drive->id) {
-		drive->cyl  = drive->id->cyls;
-		drive->head = drive->id->heads;
-		drive->sect = drive->id->sectors;
-	}
-	drive->bios_cyl  = drive->cyl;
-	drive->bios_head = drive->head;
-	drive->bios_sect = drive->sect;
-	drive->special.b.set_geometry = 1;
-
-	tracks = drive->bios_cyl * drive->bios_head * drive->bios_sect / 63;
-	drive->bios_sect = 63;
-	if (xparm > 1) {
-		drive->bios_head = xparm;
-		drive->bios_cyl = tracks / drive->bios_head;
-	} else {
-		while (drive->bios_cyl >= 1024) {
-			drive->bios_head = *heads;
-			drive->bios_cyl = tracks / drive->bios_head;
-			if (0 == *++heads)
-				break;
-		}
-#if FAKE_FDISK_FOR_EZDRIVE
-		if (xparm == -1) {
-			drive->remap_0_to_1 = 1;
-			printk("[remap 0->1] ");
-		} else
-#endif /* FAKE_FDISK_FOR_EZDRIVE */
-		if (xparm == 1) {
-			drive->sect0 = 63;
-			drive->bios_cyl = (tracks - 1) / drive->bios_head;
-			printk("[remap +63] ");
-		}
-	}
-
-	drive->part[0].nr_sects = current_capacity(drive);
-	printk("[%d/%d/%d]", drive->bios_cyl, drive->bios_head, drive->bios_sect);
-	/*
-	 * Update the current 3D drive values.
-	 */
-	drive->id->cur_cyls	= drive->bios_cyl;
-	drive->id->cur_heads	= drive->bios_head;
-	drive->id->cur_sectors	= drive->bios_sect;
-	return 1;
 }
 
 /*
@@ -3523,6 +3426,9 @@ EXPORT_SYMBOL(ide_register_hw);
 EXPORT_SYMBOL(ide_register);
 EXPORT_SYMBOL(ide_unregister);
 EXPORT_SYMBOL(ide_setup_ports);
+
+EXPORT_SYMBOL(get_info_ptr);
+EXPORT_SYMBOL(current_capacity);
 
 /*
  * This is gets invoked once during initialization, to set *everything* up

@@ -392,6 +392,8 @@ PPP
    Due to changes in the PPP driver and routing code, those of you
 using PPP networking will need to upgrade your pppd.
 
+See ftp://cs.anu.edu.au/pub/software/ppp/ for newest versions.
+
 iBCS
 ====
 

@@ -278,6 +278,7 @@ static int x25_state3_machine(struct sock *sk, struct sk_buff *skb, int frametyp
 					kill_proc(sk->proc, SIGURG, 1);
 				else
 					kill_pg(-sk->proc, SIGURG, 1);
+				sock_wake_async(sk, 3, POLL_PRI);
 			}
 			x25_write_internal(sk, X25_INTERRUPT_CONFIRMATION);
 			break;

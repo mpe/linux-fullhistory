@@ -18,6 +18,7 @@
 #include <asm/hardirq.h>
 #include <asm/delay.h>
 #include <asm/irq.h>
+#include <asm/mmx.h>
 
 extern void dump_thread(struct pt_regs *, struct user *);
 extern int dump_fpu(elf_fpregset_t *);
@@ -73,7 +74,13 @@ EXPORT_SYMBOL(clear_user);
 EXPORT_SYMBOL(__clear_user);
 EXPORT_SYMBOL(__generic_copy_from_user);
 EXPORT_SYMBOL(__generic_copy_to_user);
-EXPORT_SYMBOL(strlen_user);
+EXPORT_SYMBOL(strnlen_user);
+
+#ifdef CONFIG_X86_USE_3DNOW
+EXPORT_SYMBOL(_mmx_memcpy);
+EXPORT_SYMBOL(mmx_clear_page);
+EXPORT_SYMBOL(mmx_copy_page);
+#endif
 
 #ifdef __SMP__
 EXPORT_SYMBOL(cpu_data);
@@ -119,3 +126,4 @@ EXPORT_SYMBOL(mca_is_adapter_used);
 #ifdef CONFIG_VT
 EXPORT_SYMBOL(screen_info);
 #endif
+

@@ -43,11 +43,11 @@
 #ifdef CONFIG_FB_COMPAT_XPMAC
 #include <asm/vc_ioctl.h>
 #endif
+#include <linux/adb.h>
+#include <linux/cuda.h>
 #include <asm/io.h>
 #include <asm/prom.h>
 #include <asm/pgtable.h>
-#include <asm/adb.h>
-#include <asm/cuda.h>
 
 #include <video/fbcon.h>
 #include <video/fbcon-cfb8.h>
@@ -702,26 +702,48 @@ void __init control_of_init(struct device_node *dp)
 	p->cmap_regs = ioremap(p->cmap_regs_phys, 0x1000);
 
 	/* Work out which banks of VRAM we have installed. */
-	/* danj: I guess the card just ignores writes to nonexistant VRAM... */
+	/* According to Andrew Fyfe <bandr@best.com>, the VRAM behaves like so: */
+	/* afyfe: observations from an 8500:
+	 * - with 2M vram in bank 1, it appears at offsets 0, 2M and 4M
+	 * - with 2M vram in bank 2, it appears only at offset 6M
+	 * - with 4M vram, it appears only as a 4M block at offset 0.
+	 */
+
+	/* We know there is something at 2M if there is something at 0M. */
+	out_8(&p->frame_buffer[0x200000], 0xa5);
+	out_8(&p->frame_buffer[0x200001], 0x38);
+	asm volatile("eieio; dcbi 0,%0" : : "r" (&p->frame_buffer[0x200000]) : "memory" );
+
 	out_8(&p->frame_buffer[0], 0x5a);
 	out_8(&p->frame_buffer[1], 0xc7);
 	asm volatile("eieio; dcbi 0,%0" : : "r" (&p->frame_buffer[0]) : "memory" );
-	bank1 = (in_8(&p->frame_buffer[0]) == 0x5a) && (in_8(&p->frame_buffer[1]) == 0xc7);
 
-	out_8(&p->frame_buffer[0x600000], 0xa5);
-	out_8(&p->frame_buffer[0x600001], 0x38);
-	asm volatile("eieio; dcbi 0,%0" : : "r" (&p->frame_buffer[0x600000]) : "memory" );
-	bank2 = (in_8(&p->frame_buffer[0x600000]) == 0xa5)
-		&& (in_8(&p->frame_buffer[0x600001]) == 0x38);
-	
-	p->total_vram = (bank1 + bank2) * 0x200000;
-	/* If we don't have bank 1 installed, we hope we have bank 2 :-) */
-	p->control_use_bank2 = !bank1;
-	if (p->control_use_bank2) {
+	bank1 =  (in_8(&p->frame_buffer[0x000000]) == 0x5a)
+		&& (in_8(&p->frame_buffer[0x000001]) == 0xc7);
+	bank2 =  (in_8(&p->frame_buffer[0x200000]) == 0xa5)
+		&& (in_8(&p->frame_buffer[0x200001]) == 0x38);
+
+	if(bank2 && !bank1)
+		printk(KERN_INFO "controlfb: Found memory at 2MB but not at 0!  Please contact dan@debian.org\n");
+
+	if(!bank1) {
+		out_8(&p->frame_buffer[0x600000], 0xa5);
+		out_8(&p->frame_buffer[0x600001], 0x38);
+		asm volatile("eieio; dcbi 0,%0" : : "r" (&p->frame_buffer[0x600000]) : "memory" );
+		bank2 = (in_8(&p->frame_buffer[0x600000]) == 0xa5)
+			&& (in_8(&p->frame_buffer[0x600001]) == 0x38);
+		/* If we don't have bank 1 installed, we hope we have bank 2 :-) */
+		p->control_use_bank2 = 1;
 		p->frame_buffer += 0x600000;
 		p->frame_buffer_phys += 0x600000;
 	}
 	
+	p->total_vram = (bank1 + bank2) * 0x200000;
+	
+	printk(KERN_INFO "controlfb: Memory bank 1 %s, bank 2 %s, total VRAM %dMB\n",
+		bank1 ? "present" : "absent", bank2 ? "present" : "absent",
+		2 * (bank1 + bank2));
+
 	init_control(p);
 }
 

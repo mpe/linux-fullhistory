@@ -1163,7 +1163,7 @@ int __init virgefb_setup(char *options)
  *    Initialization
  */
 
-void __init virgefb_init(void)
+int __init virgefb_init(void)
 {
 	struct virgefb_par par;
 	unsigned long board_addr;

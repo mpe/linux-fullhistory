@@ -12,6 +12,8 @@
  *		Donald J. Becker, <becker@super.org>
  *
  * Changelog:
+ *		Arnaldo Carvalho de Melo <acme@conectiva.com.br> - 09/1999
+ *		- fix sbni: s/device/net_device/
  *		Paul Gortmaker (06/98): 
  *		 - sort probes in a sane way, make sure all (safe) probes
  *		   get run once & failed autoprobes don't autoprobe again.
@@ -104,6 +106,7 @@ extern int pamsnet_probe(struct net_device *);
 extern int tlan_probe(struct net_device *);
 extern int mace_probe(struct net_device *);
 extern int bmac_probe(struct net_device *);
+extern int ncr885e_probe(struct net_device *);
 extern int cs89x0_probe(struct net_device *dev);
 extern int ethertap_probe(struct net_device *dev);
 extern int ether1_probe (struct net_device *dev);
@@ -118,11 +121,12 @@ extern int bagetlance_probe(struct net_device *);
 extern int dec_lance_probe(struct net_device *);
 extern int mvme147lance_probe(struct net_device *dev);
 extern int via_rhine_probe(struct net_device *dev);
-extern int starfire_probe(struct net_device *dev);
 extern int tc515_probe(struct net_device *dev);
 extern int lance_probe(struct net_device *dev);
+extern int starfire_probe(struct net_device *dev);
 extern int rcpci_probe(struct net_device *);
 extern int mac_onboard_sonic_probe(struct net_device *dev);
+extern int dmfe_reg_board(struct net_device *);
 
 /* Gigabit Ethernet adapters */
 extern int yellowfin_probe(struct net_device *dev);
@@ -142,6 +146,9 @@ extern int rr_hippi_probe(struct net_device *);
 
 /* Fibre Channel adapters */
 extern int iph5526_probe(struct net_device *dev);
+
+/* SBNI adapters */
+extern int sbni_probe(struct net_device *);
 
 struct devprobe
 {
@@ -216,6 +223,11 @@ struct devprobe pci_probes[] __initdata = {
 #ifdef CONFIG_SIS900
 	{sis900_probe, 0},
 #endif
+
+#ifdef CONFIG_DM9102
+	{dmfe_reg_board, 0}, 
+#endif
+
 #ifdef CONFIG_YELLOWFIN
 	{yellowfin_probe, 0},
 #endif
@@ -293,10 +305,10 @@ struct devprobe mca_probes[] __initdata = {
 
 /*
  * ISA probes that touch addresses < 0x400 (including those that also
- * look for EISA/PCI cards in addition to ISA cards).
+ * look for EISA/PCI/MCA cards in addition to ISA cards).
  */
 struct devprobe isa_probes[] __initdata = {
-#ifdef CONFIG_EL3		/* ISA, EISA (MCA someday) 3c5x9 */
+#ifdef CONFIG_EL3		/* ISA, EISA, MCA 3c5x9 */
 	{el3_probe, 0},
 #endif
 #ifdef CONFIG_HP100 		/* ISA, EISA & PCI */
@@ -457,6 +469,9 @@ struct devprobe ppc_probes[] __initdata = {
 #endif
 #ifdef CONFIG_BMAC
 	{bmac_probe, 0},
+#endif
+#ifdef CONFIG_NCR885E
+	{ncr885e_probe, 0},
 #endif
 	{NULL, 0},
 };
@@ -781,6 +796,7 @@ struct net_device eql_dev = {
 /* Token-ring device probe */
 extern int ibmtr_probe(struct net_device *);
 extern int olympic_probe(struct net_device *);
+extern int sktr_probe(struct net_device *);
 
 static int
 trif_probe(struct net_device *dev)
@@ -876,6 +892,29 @@ static struct net_device tr0_dev = {
 #   undef       NEXT_DEV
 #   define      NEXT_DEV        (&fc0_dev)
 #endif
+
+
+#ifdef CONFIG_SBNI
+	static struct net_device sbni7_dev =
+		{"sbni7", 0, 0, 0, 0, 0, 0, 0, 0, 0, NEXT_DEV, sbni_probe};
+	static struct net_device sbni6_dev =
+		{"sbni6", 0, 0, 0, 0, 0, 0, 0, 0, 0, &sbni7_dev, sbni_probe};
+	static struct net_device sbni5_dev =
+		{"sbni5", 0, 0, 0, 0, 0, 0, 0, 0, 0, &sbni6_dev, sbni_probe};
+	static struct net_device sbni4_dev =
+		{"sbni4", 0, 0, 0, 0, 0, 0, 0, 0, 0, &sbni5_dev, sbni_probe};
+	static struct net_device sbni3_dev =
+		{"sbni3", 0, 0, 0, 0, 0, 0, 0, 0, 0, &sbni4_dev, sbni_probe};
+	static struct net_device sbni2_dev =
+		{"sbni2", 0, 0, 0, 0, 0, 0, 0, 0, 0, &sbni3_dev, sbni_probe};
+	static struct net_device sbni1_dev =
+		{"sbni1", 0, 0, 0, 0, 0, 0, 0, 0, 0, &sbni2_dev, sbni_probe};
+	static struct net_device sbni0_dev =
+		{"sbni0", 0, 0, 0, 0, 0, 0, 0, 0, 0, &sbni1_dev, sbni_probe};
+
+#undef	NEXT_DEV
+#define	NEXT_DEV	(&sbni0_dev)
+#endif 
 	
 	
 #ifdef CONFIG_NET_SB1000

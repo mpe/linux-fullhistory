@@ -30,8 +30,9 @@
 #include <asm/mediabay.h>
 #include <asm/feature.h>
 #ifdef CONFIG_PMAC_PBOOK
-#include <asm/adb.h>
-#include <asm/pmu.h>
+#include <linux/adb.h>
+#include <linux/pmu.h>
+#include <asm/irq.h>
 #endif
 #include "ide_modes.h"
 
@@ -50,9 +51,9 @@ static int pmac_ide_build_dmatable(ide_drive_t *drive, int wr);
 #endif /* CONFIG_BLK_DEV_IDEDMA_PMAC */
 
 #ifdef CONFIG_PMAC_PBOOK
-static int idepmac_notify(struct notifier_block *, unsigned long, void *);
-struct notifier_block idepmac_sleep_notifier = {
-	idepmac_notify
+static int idepmac_notify(struct pmu_sleep_notifier *self, int when);
+struct pmu_sleep_notifier idepmac_sleep_notifier = {
+	idepmac_notify, SLEEP_LEVEL_BLOCK,
 };
 #endif /* CONFIG_PMAC_PBOOK */
 
@@ -224,7 +225,7 @@ void __init pmac_ide_probe(void)
 	pmac_ide_count = i;
 
 #ifdef CONFIG_PMAC_PBOOK
-	notifier_chain_register(&sleep_notifier_list, &idepmac_sleep_notifier);
+	pmu_register_sleep_notifier(&idepmac_sleep_notifier);
 #endif /* CONFIG_PMAC_PBOOK */
 }
 
@@ -384,29 +385,107 @@ int pmac_ide_dmaproc(ide_dma_action_t func, ide_drive_t *drive)
 #endif /* CONFIG_BLK_DEV_IDEDMA_PMAC */
 
 #ifdef CONFIG_PMAC_PBOOK
-static int idepmac_notify(struct notifier_block *this,
-			  unsigned long code, void *p)
+static void idepmac_sleep_disk(int i, unsigned long base)
 {
-	int i, timeout;
+	int j;
 
-	switch (code) {
-	case PBOOK_SLEEP:
-		/* do anything here?? */
+	/* Reset to PIO 0 */
+	out_le32((unsigned *)(base + 0x200 + _IO_BASE), 0x2f8526);
+
+	/* FIXME: We only handle the master IDE */
+	if (ide_hwifs[i].drives[0].media == ide_disk) {
+		/* Spin down the drive */
+		outb(0xa0, base+0x60);
+		outb(0x0, base+0x30);
+		outb(0x0, base+0x20);
+		outb(0x0, base+0x40);
+		outb(0x0, base+0x50);
+		outb(0xe0, base+0x70);
+		outb(0x2, base+0x160);   
+		for (j = 0; j < 10; j++) {
+			int status;
+			mdelay(100);
+			status = inb(base+0x70);
+			if (!(status & BUSY_STAT) && (status & DRQ_STAT))
+				break;
+		}
+	}
+}
+
+static void idepmac_wake_disk(int i, unsigned long base)
+{
+	int j;
+
+	/* Revive IDE disk and controller */
+	feature_set(pmac_ide_node[i], FEATURE_IDE_enable);
+	mdelay(1);
+	feature_set(pmac_ide_node[i], FEATURE_IDE_DiskPower);
+	mdelay(100);
+	feature_set(pmac_ide_node[i], FEATURE_IDE_Reset);
+	mdelay(1);
+	/* Make sure we are still PIO0 */
+	out_le32((unsigned *)(base + 0x200 + _IO_BASE), 0x2f8526);
+	mdelay(100);
+
+	/* Wait up to 10 seconds (enough for recent drives) */
+	for (j = 0; j < 100; j++) {
+		int status;
+		mdelay(100);
+		status = inb(base + 0x70);
+		if (!(status & BUSY_STAT))
+			break;
+	}
+}
+
+/* Here we handle media bay devices */
+static void
+idepmac_wake_bay(int i, unsigned long base)
+{
+	int timeout;
+
+	timeout = 5000;
+	while ((inb(base + 0x70) & BUSY_STAT) && timeout) {
+		mdelay(1);
+		--timeout;
+	}
+}
+
+static int idepmac_notify(struct pmu_sleep_notifier *self, int when)
+{
+	int i, ret;
+	unsigned long base;
+
+	switch (when) {
+	case PBOOK_SLEEP_REQUEST:
+		break;
+	case PBOOK_SLEEP_REJECT:
+		break;
+	case PBOOK_SLEEP_NOW:
+		for (i = 0; i < pmac_ide_count; ++i) {
+			if ((base = pmac_ide_regbase[i]) == 0)
+				continue;
+			/* Disable irq during sleep */
+			disable_irq(pmac_ide_irq[i]);
+			ret = check_media_bay_by_base(base, MB_CD);
+			if (ret == -ENODEV)
+				/* not media bay - put the disk to sleep */
+				idepmac_sleep_disk(i, base);
+		}
 		break;
 	case PBOOK_WAKE:
-		/* wait for the controller(s) to become ready */
-		timeout = 5000;
 		for (i = 0; i < pmac_ide_count; ++i) {
-			unsigned long base = pmac_ide_regbase[i];
-			if (check_media_bay_by_base(base, MB_CD) == -EINVAL)
+			if ((base = pmac_ide_regbase[i]) == 0)
 				continue;
-			while ((inb(base + 0x70) & BUSY_STAT) && timeout) {
-				mdelay(1);
-				--timeout;
-			}
+		        /* We don't handle media bay devices this way */
+			ret = check_media_bay_by_base(base, MB_CD);
+			if (ret == -ENODEV)
+				idepmac_wake_disk(i, base);
+			else if (ret == 0)
+				idepmac_wake_bay(i, base);
+			enable_irq(pmac_ide_irq[i]);
 		}
 		break;
 	}
-	return NOTIFY_DONE;
+	return PBOOK_SLEEP_OK;
 }
 #endif /* CONFIG_PMAC_PBOOK */

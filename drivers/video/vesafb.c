@@ -532,6 +532,8 @@ int __init vesafb_init(void)
 
 	video_base          = screen_info.lfb_base;
 	video_bpp           = screen_info.lfb_depth;
+	if (15 == video_bpp)
+		video_bpp = 16;
 	video_width         = screen_info.lfb_width;
 	video_height        = screen_info.lfb_height;
 	video_linelength    = screen_info.lfb_linelength;

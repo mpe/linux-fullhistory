@@ -1403,7 +1403,7 @@ static void tcp_fin(struct sk_buff *skb, struct sock *sk, struct tcphdr *th)
 
 	if (!sk->dead) {
 		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket, 1);
+		sock_wake_async(sk->socket, 1, POLL_HUP);
 	}
 
 	switch(sk->state) {
@@ -1806,7 +1806,7 @@ static int tcp_data(struct sk_buff *skb, struct sock *sk, unsigned int len)
 	 */
 	if (!sk->dead) {
 		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket,1);
+		sock_wake_async(sk->socket,1, POLL_IN);
 	}
 	return(1);
 }
@@ -1965,6 +1965,7 @@ static void tcp_check_urg(struct sock * sk, struct tcphdr * th)
 			kill_proc(sk->proc, SIGURG, 1);
 		else
 			kill_pg(-sk->proc, SIGURG, 1);
+		sock_wake_async(sk->socket, 3, POLL_PRI);
 	}
 
 	/* We may be adding urgent data when the last byte read was
@@ -2201,7 +2202,7 @@ int tcp_rcv_established(struct sock *sk, struct sk_buff *skb,
 			 * this frame, the pred_flags won't match up. -DaveM
 			 */
 			wake_up_interruptible(sk->sleep);
-			sock_wake_async(sk->socket,1);
+			sock_wake_async(sk->socket,1, POLL_IN);
 			tcp_delack_estimator(tp);
 
 			tcp_remember_ack(tp, th, skb); 
@@ -2760,7 +2761,7 @@ static int tcp_rcv_synsent_state_process(struct sock *sk, struct sk_buff *skb,
 
 		if(!sk->dead) {
 			wake_up_interruptible(sk->sleep);
-			sock_wake_async(sk->socket, 0);
+			sock_wake_async(sk->socket, 0, POLL_IN);
 		}
 		return -1;
 	}
@@ -3017,7 +3018,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb,
 				 */
 				if (!sk->dead && sk->sleep) {
 					wake_up_interruptible(sk->sleep);
-					sock_wake_async(sk->socket, 1);
+					sock_wake_async(sk->socket,0,POLL_OUT);
 				}
 
 				tp->snd_una = TCP_SKB_CB(skb)->ack_seq;

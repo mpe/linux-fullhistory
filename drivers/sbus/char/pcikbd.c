@@ -764,7 +764,7 @@ void pcimouse_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	queue->head = head;
 	aux_ready = 1;
 	if (queue->fasync)
-		kill_fasync(queue->fasync, SIGIO);
+		kill_fasync(queue->fasync, SIGIO, POLL_IN);
 	wake_up_interruptible(&queue->proc_list);
 }
 

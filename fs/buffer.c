@@ -1205,6 +1205,18 @@ static int create_page_buffers(int rw, struct page *page, kdev_t dev, int b[], i
 	return 0;
 }
 
+static void unmap_buffer(struct buffer_head * bh)
+{
+	if (buffer_mapped(bh))
+	{
+		mark_buffer_clean(bh);
+		wait_on_buffer(bh);
+		clear_bit(BH_Uptodate, &bh->b_state);
+		clear_bit(BH_Mapped, &bh->b_state);
+		clear_bit(BH_Req, &bh->b_state);
+	}
+}
+
 /*
  * We don't have to release all buffers here, but
  * we have to be sure that no dirty buffer is left
@@ -1231,16 +1243,8 @@ int block_flushpage(struct inode *inode, struct page *page, unsigned long offset
 		/*
 		 * is this block fully flushed?
 		 */
-		if (offset <= curr_off) {
-			if (buffer_mapped(bh)) {
-				mark_buffer_clean(bh);
-				wait_on_buffer(bh);
-				clear_bit(BH_Uptodate, &bh->b_state);
-				clear_bit(BH_Mapped, &bh->b_state);
-				clear_bit(BH_Req, &bh->b_state);
-				bh->b_blocknr = 0;
-			}
-		}
+		if (offset <= curr_off)
+			unmap_buffer(bh);
 		curr_off = next_off;
 		bh = next;
 	} while (bh != head);
@@ -1284,6 +1288,19 @@ static void create_empty_buffers(struct page *page, struct inode *inode, unsigne
 	tail->b_this_page = head;
 	page->buffers = head;
 	get_page(page);
+}
+
+static void unmap_underlying_metadata(struct buffer_head * bh)
+{
+	bh = get_hash_table(bh->b_dev, bh->b_blocknr, bh->b_size);
+	if (bh)
+	{
+		unmap_buffer(bh);
+		/* Here we could run brelse or bforget. We use
+		   bforget because it will try to put the buffer
+		   in the freelist. */
+		__bforget(bh);
+	}
 }
 
 /*
@@ -1331,6 +1348,7 @@ int block_write_full_page(struct file *file, struct page *page)
 			err = inode->i_op->get_block(inode, block, bh, 1);
 			if (err)
 				goto out;
+			unmap_underlying_metadata(bh);
 		}
 		set_bit(BH_Uptodate, &bh->b_state);
 		mark_buffer_dirty(bh,0);
@@ -1420,6 +1438,7 @@ int block_write_partial_page(struct file *file, struct page *page, unsigned long
 			err = inode->i_op->get_block(inode, block, bh, 1);
 			if (err)
 				goto out;
+			unmap_underlying_metadata(bh);
 		}
 
 		if (!buffer_uptodate(bh) && (start_offset || (end_bytes && (i == end_block)))) {
@@ -1582,6 +1601,7 @@ int block_write_cont_page(struct file *file, struct page *page, unsigned long of
 			err = inode->i_op->get_block(inode, block, bh, 1);
 			if (err)
 				goto out;
+			unmap_underlying_metadata(bh);
 		}
 
 		if (!buffer_uptodate(bh) && (start_offset || (end_bytes && (i == end_block)))) {

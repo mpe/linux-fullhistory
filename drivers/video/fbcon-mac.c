@@ -62,7 +62,7 @@ void fbcon_mac_bmove(struct display *p, int sy, int sx, int dy, int dx,
 
    if( sx == 0 && width == p->conp->vc_cols) {
      s = height * fontheight(p) * p->next_line;
-     mymemmove(dest, src, s);
+     fb_memmove(dest, src, s);
      return;
    }
    
@@ -158,7 +158,7 @@ void fbcon_mac_bmove(struct display *p, int sy, int sx, int dy, int dx,
 	 plot_pixel_mac(p, get_pixel_mac(p, j+(dx-sx), i+(dy-sy)), j, i);
 
        if (j < r) {
-	 mymemmove(dest, src, s);
+	 fb_memmove(dest, src, s);
 	 if (move_up) {
 	   dest += p->next_line;
 	   src += p->next_line;
@@ -202,9 +202,9 @@ void fbcon_mac_clear(struct vc_data *conp, struct display *p, int sy, int sx,
    if( sx == 0 && width == p->conp->vc_cols) {
      s = height * fontheight(p) * p->next_line;
      if (inverse)
-       mymemclear(dest, s);
+       fb_memclear(dest, s);
      else
-       mymemset(dest, s);
+       fb_memset255(dest, s);
    }
    
    l = sx * fontwidth(p);
@@ -251,9 +251,9 @@ void fbcon_mac_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 
      if (j < r) {
        if (PIXEL_WHITE_MAC == pixel)
-	 mymemclear(dest, s);
+	 fb_memclear(dest, s);
        else
-	 mymemset(dest, s);
+	 fb_memset255(dest, s);
        dest += p->next_line;
        j += w;
      }

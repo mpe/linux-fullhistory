@@ -444,6 +444,6 @@ struct srb_set_funct_addr {
 	unsigned char reserved1;
 	unsigned char ret_code;
 	unsigned char reserved2[3];
-	__u32 funct_address;
+	unsigned char funct_address[4];
 };
 

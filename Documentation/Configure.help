@@ -1976,8 +1976,9 @@ CONFIG_M386
    - "386" for the AMD/Cyrix/Intel 386DX/DXL/SL/SLC/SX, Cyrix/TI
      486DLC/DLC2 and UMC 486SX-S. Only "386" kernels will run on a 386
      class machine.
-   - "486" for the AMD/Cyrix/IBM/Intel DX4 or 486DX/DX2/SL/SX/SX2,
-     AMD/Cyrix 5x86, NexGen Nx586 and UMC U5D or U5S.
+   - "486" for the AMD/Cyrix/IBM/Intel 486DX/DX2/DX4 or
+     SL/SLC/SLC2/SLC3/SX/SX2, AMD/Cyrix 5x86, NexGen Nx586 and
+     UMC U5D or U5S.
    - "586" for generic Pentium CPUs, possibly lacking the TSC 
      (time stamp counter) register.
    - "Pentium" for the Intel Pentium/Pentium MMX, AMD K5, K6 and 
@@ -2120,7 +2121,7 @@ CONFIG_FB_CLGEN
   Say N unless you have such a graphics board or plan to get one
   before you next recompile the kernel.
 
-Permedia2 support (experimental)
+Permedia2 support (EXPERIMENTAL)
 CONFIG_FB_PM2
   Say Y here if this is your graphics board.
 
@@ -8063,7 +8064,7 @@ CONFIG_NTFS_FS
   The module will be called ntfs.o. If you want to compile it as a
   module, say M here and read Documentation/modules.txt.
 
-NTFS read-write support (experimental)
+NTFS read-write support (EXPERIMENTAL)
 CONFIG_NTFS_RW
   If you say Y here, you will (hopefully) be able to write to NTFS
   file systems as well as read from them. The read-write support
@@ -8128,7 +8129,7 @@ CONFIG_AFFS_FS
   The module is called affs.o. If you want to compile it as a module,
   say M here and read Documentation/modules.txt. If unsure, say N.
 
-Apple Macintosh filesystem support (experimental)
+Apple Macintosh filesystem support (EXPERIMENTAL)
 CONFIG_HFS_FS
   If you say Y here, you will be able to mount Macintosh-formatted
   floppy disks and hard drive partitions with full read-write access.
@@ -8192,7 +8193,7 @@ CONFIG_AUTOFS_FS
   If you are not a part of a fairly large, distributed network, you
   probably do not need an automounter, and can say N here.
 
-EFS filesystem support (experimental)
+EFS filesystem support (EXPERIMENTAL)
 CONFIG_EFS_FS
   EFS is an older filesystem used for non-ISO9660 CDROMs and hard disk
   partitions by SGI's IRIX operating system (IRIX 6.0 and newer uses
@@ -8202,7 +8203,7 @@ CONFIG_EFS_FS
   what all this is about, it's safe to say N. For more information
   about EFS see its home page at http://aeschi.ch.eu.org/efs/ .
 
-  If you want to compile the UFS filesystem support as a module ( =
+  If you want to compile the EFS filesystem support as a module ( =
   code which can be inserted in and removed from the running kernel
   whenever you want), say M here and read Documentation/modules.txt.
   The module will be called efs.o. 
@@ -8242,7 +8243,7 @@ CONFIG_UFS_FS
 
   If you haven't heard about all of this before, it's safe to say N.
 
-UFS filesystem write support (experimental)
+UFS filesystem write support (EXPERIMENTAL)
 CONFIG_UFS_FS_WRITE
   Say Y here if you want to try writing to UFS partitions. This is
   experimental, so you should back up your UFS partitions beforehand.
@@ -12593,7 +12594,7 @@ CONFIG_PPDEV
 
   If unsure, say N.
 
-Kernel httpd acceleration (experimental)
+Kernel httpd acceleration (EXPERIMENTAL)
 CONFIG_KHTTPD
   The kernel httpd acceleration daemon (kHTTPd) is a (limited) 
   web server build into the kernel. It is limited since it can only

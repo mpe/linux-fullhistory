@@ -100,12 +100,17 @@ extern int fm2fb_setup(char*);
 extern int q40fb_init(void);
 extern int sgivwfb_init(void);
 extern int sgivwfb_setup(char*);
+extern int tdfxfb_init(void);
+extern int tdfxfb_setup(char*);
 
 static struct {
 	const char *name;
 	int (*init)(void);
 	int (*setup)(char*);
 } fb_drivers[] __initdata = {
+#ifdef CONFIG_FB_3DFX
+	{ "tdfx", tdfxfb_init, tdfxfb_setup },
+#endif
 #ifdef CONFIG_FB_SGIVW
 	{ "sgivw", sgivwfb_init, sgivwfb_setup },
 #endif

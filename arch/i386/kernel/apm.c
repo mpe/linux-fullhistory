@@ -643,33 +643,6 @@ static int apm_get_power_status(u_short *status, u_short *bat, u_short *life)
 	return APM_SUCCESS;
 }
 
-static int apm_get_battery_status(u_short which, u_short *status,
-				  u_short *bat, u_short *life, u_short *nbat)
-{
-	u32	eax;
-	u32	ebx;
-	u32	ecx;
-	u32	edx;
-	u32	esi;
-
-	if (apm_bios_info.version < 0x0102) {
-		/* pretend we only have one battery. */
-		if (which != 1)
-			return APM_BAD_DEVICE;
-		*nbat = 1;
-		return apm_get_power_status(status, bat, life);
-	}
-
-	if (apm_bios_call(0x530a, (0x8000 | (which)), 0, &eax,
-			&ebx, &ecx, &edx, &esi))
-		return (eax >> 8) & 0xff;
-	*status = ebx;
-	*bat = ecx;
-	*life = edx;
-	*nbat = esi;
-	return APM_SUCCESS;
-}
-
 static int __init apm_engage_power_management(u_short device)
 {
 	u32	eax;
@@ -1263,7 +1236,6 @@ int apm_get_info(char *buf, char **start, off_t fpos, int length, int dummy)
 	unsigned short	bx;
 	unsigned short	cx;
 	unsigned short	dx;
-	unsigned short	nbat;
 	unsigned short	error;
 	unsigned short  ac_line_status = 0xff;
 	unsigned short  battery_status = 0xff;
@@ -1473,7 +1445,7 @@ static int __init apm_init(void)
 
 	if (apm_bios_info.version == 0) {
 		printk(KERN_INFO "apm: BIOS not found.\n");
-		return;
+		return -1;
 	}
 	printk(KERN_INFO
 		"apm: BIOS version %d.%d Flags 0x%02x (Driver version %s)\n",
@@ -1483,7 +1455,7 @@ static int __init apm_init(void)
 		driver_version);
 	if ((apm_bios_info.flags & APM_32_BIT_SUPPORT) == 0) {
 		printk(KERN_INFO "apm: no 32 bit BIOS support\n");
-		return;
+		return -1;
 	}
 
 	/*
@@ -1512,7 +1484,7 @@ static int __init apm_init(void)
 
 	if (apm_disabled) {
 		printk(KERN_NOTICE "apm: disabled on user request.\n");
-		return;
+		return -1;
 	}
 
 #ifdef CONFIG_SMP
@@ -1571,6 +1543,7 @@ static int __init apm_init(void)
 	misc_register(&apm_device);
 
 	kernel_thread(apm, NULL, CLONE_FS | CLONE_FILES | CLONE_SIGHAND | SIGCHLD);
+	return 0;
 }
 
 module_init(apm_init)

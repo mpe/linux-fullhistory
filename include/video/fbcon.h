@@ -16,6 +16,8 @@
 #include <linux/console_struct.h>
 #include <linux/vt_buffer.h>
 
+#include <asm/io.h>
+
 
     /*                                  
      *  `switch' for the Low Level Operations
@@ -179,7 +181,7 @@ extern void fbcon_redraw_bmove(struct display *, int, int, int, int, int, int);
    movep is rather expensive compared to ordinary move's
    some functions rewritten in C for clarity, no speed loss */
 
-static __inline__ void *mymemclear_small(void *s, size_t count)
+static __inline__ void *fb_memclear_small(void *s, size_t count)
 {
    if (!count)
       return(0);
@@ -202,7 +204,7 @@ static __inline__ void *mymemclear_small(void *s, size_t count)
 }
 
 
-static __inline__ void *mymemclear(void *s, size_t count)
+static __inline__ void *fb_memclear(void *s, size_t count)
 {
    if (!count)
       return(0);
@@ -244,7 +246,7 @@ static __inline__ void *mymemclear(void *s, size_t count)
 }
 
 
-static __inline__ void *mymemset(void *s, size_t count)
+static __inline__ void *fb_memset255(void *s, size_t count)
 {
    if (!count)
       return(0);
@@ -267,7 +269,7 @@ static __inline__ void *mymemset(void *s, size_t count)
 }
 
 
-static __inline__ void *mymemmove(void *d, const void *s, size_t count)
+static __inline__ void *fb_memmove(void *d, const void *s, size_t count)
 {
    if (d < s) {
       if (count < 16) {
@@ -389,17 +391,17 @@ static __inline__ void *sun4_memset(void *s, char val, size_t count)
     return s;
 }
 
-static __inline__ void *mymemset(void *s, size_t count)
+static __inline__ void *fb_memset255(void *s, size_t count)
 {
     return sun4_memset(s, 255, count);
 }
 
-static __inline__ void *mymemclear(void *s, size_t count)
+static __inline__ void *fb_memclear(void *s, size_t count)
 {
     return sun4_memset(s, 0, count);
 }
 
-static __inline__ void *mymemclear_small(void *s, size_t count)
+static __inline__ void *fb_memclear_small(void *s, size_t count)
 {
     return sun4_memset(s, 0, count);
 }
@@ -416,7 +418,7 @@ static __inline__ void fast_memmove(void *d, const void *s, size_t count)
 	    ((char *) d)[count-i-1] = ((char *) s)[count-i-1];
 }
 
-static __inline__ void *mymemmove(char *dst, const char *src, size_t size)
+static __inline__ void *fb_memmove(char *dst, const char *src, size_t size)
 {
     fast_memmove(dst, src, size);
     return dst;
@@ -424,17 +426,17 @@ static __inline__ void *mymemmove(char *dst, const char *src, size_t size)
 
 #else
 
-static __inline__ void *mymemclear_small(void *s, size_t count)
+static __inline__ void *fb_memclear_small(void *s, size_t count)
 {
     return(memset(s, 0, count));
 }
 
-static __inline__ void *mymemclear(void *s, size_t count)
+static __inline__ void *fb_memclear(void *s, size_t count)
 {
     return(memset(s, 0, count));
 }
 
-static __inline__ void *mymemset(void *s, size_t count)
+static __inline__ void *fb_memset255(void *s, size_t count)
 {
     return(memset(s, 255, count));
 }
@@ -484,7 +486,7 @@ __asm__ __volatile__ (
     }
 }
 
-static __inline__ void *mymemmove(char *dst, const char *src, size_t size)
+static __inline__ void *fb_memmove(char *dst, const char *src, size_t size)
 {
     fast_memmove(dst, src, size);
     return dst;
@@ -497,7 +499,7 @@ static __inline__ void *mymemmove(char *dst, const char *src, size_t size)
      *   (Why are these functions better than those from include/asm/string.h?)
      */
 
-static __inline__ void *mymemmove(void *d, const void *s, size_t count)
+static __inline__ void *fb_memmove(void *d, const void *s, size_t count)
 {
     return(memmove(d, s, count));
 }
@@ -512,7 +514,21 @@ static __inline__ void fast_memmove(char *dst, const char *src, size_t size)
 #endif
 
 
-#if defined(__i386__) || defined(__alpha__)
+#if defined(__sparc__)
+
+/* We map all of our framebuffers such that big-endian accesses
+ * are what we want, so the following is sufficient.
+ */
+
+#define fb_readb sbus_readb
+#define fb_readw sbus_readw
+#define fb_readl sbus_readl
+#define fb_writeb sbus_writeb
+#define fb_writew sbus_writew
+#define fb_writel sbus_writel
+#define fb_memset sbus_memset_io
+
+#elif defined(__i386__) || defined(__alpha__)
 
 #define fb_readb __raw_readb
 #define fb_readw __raw_readw
@@ -520,6 +536,7 @@ static __inline__ void fast_memmove(char *dst, const char *src, size_t size)
 #define fb_writeb __raw_writeb
 #define fb_writew __raw_writew
 #define fb_writel __raw_writel
+#define fb_memset memset_io
 
 #else
 
@@ -529,6 +546,7 @@ static __inline__ void fast_memmove(char *dst, const char *src, size_t size)
 #define fb_writeb(b,addr) (*(volatile u8 *) (addr) = (b))
 #define fb_writew(b,addr) (*(volatile u16 *) (addr) = (b))
 #define fb_writel(b,addr) (*(volatile u32 *) (addr) = (b))
+#define fb_memset memset
 
 #endif
 

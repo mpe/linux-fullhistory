@@ -340,7 +340,7 @@ static struct slvl_board *slvl_init(int iobase, int irq, int txdma, int rxdma, i
 		for(i=0;i<999;i++)
 		{
 			sprintf(sv->name,"hdlc%d", i);
-			if(dev_get(sv->name)==NULL)
+			if(dev_get(sv->name)==0)
 			{
 				struct net_device *d=sv->chan->netdevice;
 	

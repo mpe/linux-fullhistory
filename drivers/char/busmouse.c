@@ -144,7 +144,7 @@ busmouse_add_movementbuttons(int mousedev, int dx, int dy, int buttons)
 		wake_up(&mse->wait);
 
 		if (mse->fasyncptr)
-			kill_fasync(mse->fasyncptr, SIGIO);
+			kill_fasync(mse->fasyncptr, SIGIO, POLL_IN);
 	}
 }
 
@@ -450,13 +450,10 @@ bus_mouse_init(void)
 #ifdef CONFIG_ATARIMOUSE
 	atari_mouse_init();
 #endif
-#ifdef CONFIG_MAC_MOUSE
-	mac_mouse_init();
-#endif
 #ifdef CONFIG_SUN_MOUSE
 	sun_mouse_init();
 #endif
-#ifdef CONFIG_ADBMOUSE
+#ifdef CONFIG_ADB_MOUSE
 	adb_mouse_init();
 #endif
 #ifdef CONFIG_RPCMOUSE

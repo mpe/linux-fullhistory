@@ -9,7 +9,7 @@
  *	Al Longyear <longyear@netcom.com>, Paul Mackerras <Paul.Mackerras@cs.anu.edu.au>
  *
  * Original release 01/11/99
- * ==FILEDATE 19990524==
+ * ==FILEDATE 19990901==
  *
  * This code is released under the GNU General Public License (GPL)
  *
@@ -21,8 +21,13 @@
  * 1. tty write calls represent one complete transmit frame of data
  *    The device driver should accept the complete frame or none of 
  *    the frame (busy) in the write method. Each write call should have
- *    a byte count in the range of 2-4096 bytes (2 is min HDLC frame
- *    with 1 addr byte and 1 ctrl byte).
+ *    a byte count in the range of 2-65535 bytes (2 is min HDLC frame
+ *    with 1 addr byte and 1 ctrl byte). The max byte count of 65535
+ *    should include any crc bytes required. For example, when using
+ *    CCITT CRC32, 4 crc bytes are required, so the maximum size frame
+ *    the application may transmit is limited to 65531 bytes. For CCITT
+ *    CRC16, the maximum application frame size would be 65533.
+ *
  *
  * 2. receive callbacks from the device driver represents
  *    one received frame. The device driver should bypass
@@ -73,7 +78,7 @@
  */
 
 #define HDLC_MAGIC 0x239e
-#define HDLC_VERSION "1.2"
+#define HDLC_VERSION "1.11"
 
 #include <linux/version.h>
 #include <linux/config.h>
@@ -100,6 +105,7 @@
 #include <linux/malloc.h>
 #include <linux/tty.h>
 #include <linux/errno.h>
+#include <linux/sched.h>	/* to get the struct task_struct */
 #include <linux/string.h>	/* used in new tty drivers */
 #include <linux/signal.h>	/* used in new tty drivers */
 #include <asm/system.h>
@@ -111,6 +117,13 @@
 
 #ifdef CONFIG_KERNELD
 #include <linux/kerneld.h>
+#endif
+
+#if LINUX_VERSION_CODE < VERSION(2,3,0) 
+typedef struct wait_queue *wait_queue_head_t;
+#define DECLARE_WAITQUEUE(name,task) struct wait_queue (name) = {(task),NULL}
+#define init_waitqueue_head(head) *(head) = NULL
+#define set_current_state(a) current->state = (a)
 #endif
 
 #if LINUX_VERSION_CODE >= VERSION(2,1,4)
@@ -189,17 +202,20 @@ typedef size_t		rw_count_t;
 /*
  * Buffers for individual HDLC frames
  */
-#define MAX_HDLC_FRAME_SIZE 4096
+#define MAX_HDLC_FRAME_SIZE 65535 
 #define DEFAULT_RX_BUF_COUNT 10
-#define MAX_RX_BUF_COUNT 30
+#define MAX_RX_BUF_COUNT 60
 #define DEFAULT_TX_BUF_COUNT 1
+
 
 typedef struct _n_hdlc_buf
 {
 	struct _n_hdlc_buf *link;
 	int count;
-	char buf[MAX_HDLC_FRAME_SIZE];
+	char buf[1];
 } N_HDLC_BUF;
+
+#define	N_HDLC_BUF_SIZE	(sizeof(N_HDLC_BUF)+maxframe)
 
 typedef struct _n_hdlc_buf_list
 {
@@ -246,11 +262,15 @@ static struct n_hdlc *n_hdlc_alloc (void);
 
 #if LINUX_VERSION_CODE >= VERSION(2,1,19) 
 MODULE_PARM(debuglevel, "i");
+MODULE_PARM(maxframe, "i");
 #endif
 
 /* debug level can be set by insmod for debugging purposes */
 #define DEBUG_LEVEL_INFO	1
 int debuglevel=0;
+
+/* max frame size for memory allocations */
+ssize_t	maxframe=4096;
 
 /* TTY callbacks */
 
@@ -353,6 +373,9 @@ static void n_hdlc_tty_close(struct tty_struct *tty)
 			printk (KERN_WARNING"n_hdlc: trying to close unopened tty!\n");
 			return;
 		}
+#if defined(TTY_NO_WRITE_SPLIT)
+		clear_bit(TTY_NO_WRITE_SPLIT,&tty->flags);
+#endif
 		tty->disc_data = NULL;
 		if (tty == n_hdlc->backup_tty)
 			n_hdlc->backup_tty = 0;
@@ -383,7 +406,9 @@ static int n_hdlc_tty_open (struct tty_struct *tty)
 	struct n_hdlc *n_hdlc = tty2n_hdlc (tty);
 
 	if (debuglevel >= DEBUG_LEVEL_INFO)	
-		printk("%s(%d)n_hdlc_tty_open() called\n",__FILE__,__LINE__);
+		printk("%s(%d)n_hdlc_tty_open() called (major=%u,minor=%u)\n",
+		__FILE__,__LINE__,
+		MAJOR(tty->device), MINOR(tty->device));
 		
 	/* There should not be an existing table for this slot. */
 	if (n_hdlc) {
@@ -399,8 +424,13 @@ static int n_hdlc_tty_open (struct tty_struct *tty)
 		
 	tty->disc_data = n_hdlc;
 	n_hdlc->tty    = tty;
-		
+	
 	MOD_INC_USE_COUNT;
+	
+#if defined(TTY_NO_WRITE_SPLIT)
+	/* change tty_io write() to not split large writes into 8K chunks */
+	set_bit(TTY_NO_WRITE_SPLIT,&tty->flags);
+#endif
 	
 	/* Flush any pending characters in the driver and discipline. */
 	
@@ -597,18 +627,26 @@ static void n_hdlc_tty_receive(struct tty_struct *tty,
 		return;
 	}
 	
+	if ( count>maxframe ) {
+		if (debuglevel >= DEBUG_LEVEL_INFO)	
+			printk("%s(%d) rx count>maxframesize, data discarded\n",
+			       __FILE__,__LINE__);
+		return;
+	}
+
 	/* get a free HDLC buffer */	
 	buf = n_hdlc_buf_get(&n_hdlc->rx_free_buf_list);
 	if (!buf) {
 		/* no buffers in free list, attempt to allocate another rx buffer */
 		/* unless the maximum count has been reached */
 		if (n_hdlc->rx_buf_list.count < MAX_RX_BUF_COUNT)
-			buf = (N_HDLC_BUF*)kmalloc(sizeof(N_HDLC_BUF),GFP_ATOMIC);
+			buf = (N_HDLC_BUF*)kmalloc(N_HDLC_BUF_SIZE,GFP_ATOMIC);
 	}
 	
 	if (!buf) {
-		printk("%s(%d) no more rx buffers, data discarded\n",
-			__FILE__,__LINE__);
+		if (debuglevel >= DEBUG_LEVEL_INFO)	
+			printk("%s(%d) no more rx buffers, data discarded\n",
+			       __FILE__,__LINE__);
 		return;
 	}
 		
@@ -622,7 +660,7 @@ static void n_hdlc_tty_receive(struct tty_struct *tty,
 	/* wake up any blocked reads and perform async signalling */
 	wake_up_interruptible (&n_hdlc->read_wait);
 	if (n_hdlc->tty->fasync != NULL)
-		kill_fasync (n_hdlc->tty->fasync, SIGIO);
+		kill_fasync (n_hdlc->tty->fasync, SIGIO, POLL_IN);
 
 }	/* end of n_hdlc_tty_receive() */
 
@@ -678,12 +716,11 @@ static rw_ret_t n_hdlc_tty_read (struct tty_struct *tty,
 		if (file->f_flags & O_NONBLOCK)
 			return -EAGAIN;
 			
-		/* TODO: no timeout? current->timeout = 0;*/
 		interruptible_sleep_on (&n_hdlc->read_wait);
 		if (signal_pending(current))
 			return -EINTR;
 	}
-
+		
 	if (rbuf->count > nr) {
 		/* frame too large for caller's buffer (discard frame) */
 		ret = (rw_ret_t)-EOVERFLOW;
@@ -739,13 +776,13 @@ static rw_ret_t n_hdlc_tty_write (struct tty_struct *tty, struct file *file,
 		return -EIO;
 
 	/* verify frame size */
-	if (count > MAX_HDLC_FRAME_SIZE) {
+	if (count > maxframe ) {
 		if (debuglevel & DEBUG_LEVEL_INFO)
 			printk (KERN_WARNING
 				"n_hdlc_tty_write: truncating user packet "
 				"from %lu to %d\n", (unsigned long) count,
-				MAX_HDLC_FRAME_SIZE);
-		count = MAX_HDLC_FRAME_SIZE;
+				maxframe );
+		count = maxframe;
 	}
 	
 	/* Allocate transmit buffer */
@@ -754,8 +791,7 @@ static rw_ret_t n_hdlc_tty_write (struct tty_struct *tty, struct file *file,
 		/* sleep until transmit buffer available */		
 		add_wait_queue(&n_hdlc->write_wait, &wait);
 		while (!tbuf) {
-			/* TODO: no timeout? current->timeout = 0;*/
-			current->state = TASK_INTERRUPTIBLE;
+			set_current_state(TASK_INTERRUPTIBLE);
 			schedule();
 
 			n_hdlc = tty2n_hdlc (tty);
@@ -773,7 +809,7 @@ static rw_ret_t n_hdlc_tty_write (struct tty_struct *tty, struct file *file,
 			
 			tbuf = n_hdlc_buf_get(&n_hdlc->tx_free_buf_list);
 		}
-		current->state = TASK_RUNNING;
+		set_current_state(TASK_RUNNING);
 		remove_wait_queue(&n_hdlc->write_wait, &wait);
 	}
 
@@ -1000,16 +1036,20 @@ static struct n_hdlc *n_hdlc_alloc (void)
 	
 	/* allocate free rx buffer list */
 	for(i=0;i<DEFAULT_RX_BUF_COUNT;i++) {
-		buf = (N_HDLC_BUF*)kmalloc(sizeof(N_HDLC_BUF),GFP_KERNEL);
+		buf = (N_HDLC_BUF*)kmalloc(N_HDLC_BUF_SIZE,GFP_KERNEL);
 		if (buf)
 			n_hdlc_buf_put(&n_hdlc->rx_free_buf_list,buf);
+		else if (debuglevel >= DEBUG_LEVEL_INFO)	
+			printk("%s(%d)n_hdlc_alloc(), kalloc() failed for rx buffer %d\n",__FILE__,__LINE__, i);
 	}
 	
-	/* allocate free rx buffer list */
+	/* allocate free tx buffer list */
 	for(i=0;i<DEFAULT_TX_BUF_COUNT;i++) {
-		buf = (N_HDLC_BUF*)kmalloc(sizeof(N_HDLC_BUF),GFP_KERNEL);
+		buf = (N_HDLC_BUF*)kmalloc(N_HDLC_BUF_SIZE,GFP_KERNEL);
 		if (buf)
 			n_hdlc_buf_put(&n_hdlc->tx_free_buf_list,buf);
+		else if (debuglevel >= DEBUG_LEVEL_INFO)	
+			printk("%s(%d)n_hdlc_alloc(), kalloc() failed for tx buffer %d\n",__FILE__,__LINE__, i);
 	}
 	
 	/* Initialize the control block */
@@ -1108,7 +1148,14 @@ int init_module(void)
 	static struct tty_ldisc	n_hdlc_ldisc;
 	int    status;
 
-	printk("HDLC line discipline: version %s\n", szVersion);
+	/* range check maxframe arg */
+	if ( maxframe<4096)
+		maxframe=4096;
+	else if ( maxframe>65535)
+		maxframe=65535;
+
+	printk("HDLC line discipline: version %s, maxframe=%u\n", 
+		szVersion, maxframe);
 
 	/* Register the tty discipline */
 	

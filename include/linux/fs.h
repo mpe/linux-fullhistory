@@ -727,7 +727,7 @@ extern char * getname(const char *);
 #define __getname()	((char *) __get_free_page(GFP_KERNEL))
 #define putname(name)	free_page((unsigned long)(name))
 
-extern void kill_fasync(struct fasync_struct *, int);
+extern void kill_fasync(struct fasync_struct *, int, int);
 extern int register_blkdev(unsigned int, const char *, struct file_operations *);
 extern int unregister_blkdev(unsigned int, const char *);
 extern int blkdev_open(struct inode *, struct file *);

@@ -14,11 +14,66 @@
 #include <linux/mm.h>
 #include <linux/dirent.h>
 #include <linux/smb_fs.h>
+#include <linux/pagemap.h>
 
 #include <asm/page.h>
 
 #define SMBFS_PARANOIA 1
 /* #define SMBFS_DEBUG_VERBOSE 1 */
+
+#ifdef SMBFS_DEBUG_VERBOSE
+/*
+ * Print a cache_dirent->name, max 80 chars
+ * You can't just printk non-null terminated strings ...
+ */
+printk_name(const char *name, int len)
+{
+	char buf[81];
+
+	if(len > 80)
+		len = 80;
+	strncpy(buf, name, len);
+	buf[len] = 0;
+	printk(buf);
+}
+#endif
+
+/*
+ * Get a page for this inode, if new is set then we want to allocate
+ * the page if it isn't in memory. As I understand it the rest of the
+ * smb-cache code assumes we return a locked page.
+ */
+unsigned long
+get_cached_page(struct inode * inode, unsigned long offset, int new)
+{
+	struct page * page;
+	struct page ** hash;
+	unsigned long new_page;
+
+ again:
+	hash = page_hash(inode, offset);
+	page = __find_lock_page(inode, offset, hash);
+	if(!page && new) {
+		/* not in cache, alloc a new page */
+		new_page = page_cache_alloc();
+		if (!new_page)
+			return 0;
+		clear_page(new_page);	/* smb code assumes pages are zeroed */
+		page = page_cache_entry(new_page);
+		if (add_to_page_cache_unique(page, inode, offset, hash)) {
+			/* Hmm, a page has materialized in the
+                           cache. Fine. Go back and get that page
+                           instead ... throwing away this one first. */
+			put_cached_page((unsigned long) page);
+			goto again;
+		}
+	}
+	if(!page)
+		return 0;
+	if(!PageLocked(page))
+		printk(KERN_ERR "smbfs/cache.c: page isn't locked! This could be fun ...\n");
+	return page_address(page);
+}
 
 static inline struct inode * 
 get_cache_inode(struct cache_head *cachep)
@@ -38,8 +93,8 @@ smb_get_dircache(struct dentry * dentry)
 	struct cache_head * cachep;
 
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_get_dircache: finding cache for %s/%s\n",
-dentry->d_parent->d_name.name, dentry->d_name.name);
+	printk("smb_get_dircache: finding cache for %s/%s\n",
+	       dentry->d_parent->d_name.name, dentry->d_name.name);
 #endif
 	cachep = (struct cache_head *) get_cached_page(inode, 0, 1);
 	if (!cachep)
@@ -140,8 +195,10 @@ smb_add_to_cache(struct cache_head * cachep, struct cache_dirent *entry,
 	unsigned int needed = len + sizeof(struct cache_entry);
 
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_add_to_cache: cache inode %p, status %d, adding %s at %ld\n",
-inode, cachep->status, entry->name, fpos);
+printk("smb_add_to_cache: cache inode %p, status %d, adding ", 
+       inode, cachep->status);
+printk_name(entry->name, entry->len);
+printk(" at %ld\n", fpos);
 #endif
 	/*
 	 * Don't do anything if we've had an error ...
@@ -169,8 +226,10 @@ inode, cachep->status, entry->name, fpos);
 		block->cb_data.table[nent].ino = entry->ino;
 		cachep->entries++;
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_add_to_cache: added entry %s, len=%d, pos=%ld, entries=%d\n",
-entry->name, len, fpos, cachep->entries);
+printk("smb_add_to_cache: added entry ");
+printk_name(entry->name, entry->len);
+printk(", len=%d, pos=%ld, entries=%d\n",
+len, fpos, cachep->entries);
 #endif
 		return;
 	}
@@ -231,7 +290,7 @@ printk("smb_find_in_cache: cache %p, looking for pos=%ld\n", cachep, pos);
 		nent = pos - next_pos;
 		next_pos += index->num_entries;
 		if (pos >= next_pos)
-			continue; 
+			continue;
 		/*
 		 * The entry is in this block. Note: we return
 		 * then name as a reference with _no_ null byte.
@@ -242,8 +301,9 @@ printk("smb_find_in_cache: cache %p, looking for pos=%ld\n", cachep, pos);
 		offset = block->cb_data.table[nent].offset;
 		entry->name = &block->cb_data.names[offset];
 #ifdef SMBFS_DEBUG_VERBOSE
-printk("smb_find_in_cache: found %s, len=%d, pos=%ld\n",
-entry->name, entry->len, pos);
+printk("smb_find_in_cache: found ");
+printk_name(entry->name, entry->len);
+printk(", len=%d, pos=%ld\n", entry->len, pos);
 #endif
 		break;
 	}
@@ -312,4 +372,3 @@ smb_invalid_dir_cache(struct inode * dir)
 	dir->u.smbfs_i.cache_valid &= ~SMB_F_CACHEVALID;
 	dir->u.smbfs_i.oldmtime = 0;
 }
-

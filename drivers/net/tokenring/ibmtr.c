@@ -79,6 +79,10 @@
  *
  *	Changes by Tim Hockin (thockin@isunix.it.ilstu.edu) :
  *	+ added spinlocks for SMP sanity (10 March 1999)
+ *
+ *      Changes by Jochen Friedrich to enable RFC1469 Option 2 multicasting
+ *      i.e. using functional address C0 00 00 04 00 00 to transmit and 
+ *      receive multicast packets.
  */
 
 /* change the define of IBMTR_DEBUG_MESSAGES to a nonzero value 
@@ -211,6 +215,7 @@ static int	tok_open(struct net_device *dev);
 static int	tok_close(struct net_device *dev);
 static int	tok_send_packet(struct sk_buff *skb, struct net_device *dev);
 static struct net_device_stats * tok_get_stats(struct net_device *dev);
+static void	tok_set_multicast_list(struct net_device *dev);
 void		ibmtr_readlog(struct net_device *dev);
 void		ibmtr_reset_timer(struct timer_list *tmr, struct net_device *dev);
 int             ibmtr_change_mtu(struct net_device *dev, int mtu);
@@ -778,7 +783,7 @@ static int __init trdev_init(struct net_device *dev)
 	dev->stop		= tok_close;
 	dev->hard_start_xmit	= tok_send_packet;
 	dev->get_stats 		= tok_get_stats;
-	dev->set_multicast_list = NULL;
+	dev->set_multicast_list = tok_set_multicast_list;
 	dev->change_mtu         = ibmtr_change_mtu;
 
 #ifndef MODULE
@@ -790,6 +795,43 @@ static int __init trdev_init(struct net_device *dev)
 }
 
 
+static void tok_set_multicast_list(struct net_device *dev)
+{
+	struct tok_info *ti=(struct tok_info *)dev->priv;
+	struct dev_mc_list *mclist;
+	unsigned char address[4];
+
+	int i;
+
+	address[0] = address[1] = address[2] = address[3] = 0;
+
+	mclist = dev->mc_list;
+	for (i=0; i< dev->mc_count; i++)
+	{
+		address[0] |= mclist->dmi_addr[2];
+		address[1] |= mclist->dmi_addr[3];
+		address[2] |= mclist->dmi_addr[4];
+		address[3] |= mclist->dmi_addr[5];
+		mclist = mclist->next;
+	}
+	SET_PAGE(ti->srb);
+	for (i=0; i<sizeof(struct srb_set_funct_addr); i++)
+		writeb(0, ti->srb+i);
+
+	writeb(DIR_SET_FUNC_ADDR, 
+               ti->srb + offsetof(struct srb_set_funct_addr, command));
+
+	DPRINTK("Setting functional address: ");
+
+	for (i=0; i<4; i++)
+	{
+		writeb(address[i], 
+		ti->srb + offsetof(struct srb_set_funct_addr, funct_address)+i);
+		printk("%02X ", address[i]);
+	}
+	writeb(CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
+	printk("\n");
+}
 
 static int tok_open(struct net_device *dev)
 {
@@ -1621,12 +1663,10 @@ static void tr_rx(struct net_device *dev)
        	ti->tr_stats.rx_packets++;
 
 	skb->protocol = tr_type_trans(skb,dev);
-
- 	if (IPv4_p){
+ 	if (IPv4_p){ 
 		skb->csum      = chksum;
 		skb->ip_summed = 1;
 	}
-
 	netif_rx(skb);
 }
 

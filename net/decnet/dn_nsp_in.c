@@ -431,7 +431,8 @@ static __inline__ int dn_queue_skb(struct sock *sk, struct sk_buff *skb, int sig
 		struct socket *sock = sk->socket;
 		wake_up_interruptible(sk->sleep);
 		if (!(sock->flags & SO_WAITDATA) && sock->fasync_list)
-			kill_fasync(sock->fasync_list, sig);
+			kill_fasync(sock->fasync_list, sig, 
+				    (sig == SIGURG) ? POLL_PRI : POLL_IN);
 	}
 	read_unlock_irqrestore(&sk->callback_lock, flags);
 

@@ -150,11 +150,15 @@ else
 endif
 
 ifeq ($(CONFIG_FB_SGIVW),y)
-L_OBJS += sgivwfb.o
+LX_OBJS += sgivwfb.o
 else
   ifeq ($(CONFIG_FB_SGIVW),m)
-  M_OBJS += sgivwfb.o
+  MX_OBJS += sgivwfb.o
   endif
+endif
+
+ifeq ($(CONFIG_FB_3DFX),y)
+L_OBJS += tdfxfb.o
 endif
 
 ifeq ($(CONFIG_FB_MAC),y)

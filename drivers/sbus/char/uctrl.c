@@ -92,7 +92,7 @@ static struct miscdevice uctrl_dev = {
 #ifdef MODULE
 int init_module(void)
 #else
-__initfunc(int uctrl_init(void))
+int __init uctrl_init(void)
 #endif
 {
 	struct uctrl_driver *driver = &drv;

@@ -14,6 +14,7 @@
 #include <linux/console.h>
 #include <linux/string.h>
 #include <linux/fb.h>
+#include <asm/io.h>
 
 #include <video/fbcon.h>
 #include <video/fbcon-cfb16.h>
@@ -46,7 +47,7 @@ void fbcon_cfb16_bmove(struct display *p, int sy, int sx, int dy, int dx,
     u8 *src, *dst;
 
     if (sx == 0 && dx == 0 && width * fontwidth(p) * 2 == bytes) {
-	mymemmove(p->screen_base + dy * linesize,
+	fb_memmove(p->screen_base + dy * linesize,
 		  p->screen_base + sy * linesize,
 		  height * linesize);
 	return;
@@ -64,7 +65,7 @@ void fbcon_cfb16_bmove(struct display *p, int sy, int sx, int dy, int dx,
 	src = p->screen_base + sy * linesize + sx;
 	dst = p->screen_base + dy * linesize + dx;
 	for (rows = height * fontheight(p); rows--;) {
-	    mymemmove(dst, src, width);
+	    fb_memmove(dst, src, width);
 	    src += bytes;
 	    dst += bytes;
 	}
@@ -72,7 +73,7 @@ void fbcon_cfb16_bmove(struct display *p, int sy, int sx, int dy, int dx,
 	src = p->screen_base + (sy+height) * linesize + sx - bytes;
 	dst = p->screen_base + (dy+height) * linesize + dx - bytes;
 	for (rows = height * fontheight(p); rows--;) {
-	    mymemmove(dst, src, width);
+	    fb_memmove(dst, src, width);
 	    src -= bytes;
 	    dst -= bytes;
 	}
@@ -89,13 +90,13 @@ static inline void rectfill(u8 *dest, int width, int height, u32 data,
     while (height-- > 0) {
 	u32 *p = (u32 *)dest;
 	for (i = 0; i < width/4; i++) {
-	    *p++ = data;
-	    *p++ = data;
+	    fb_writel(data, p++);
+	    fb_writel(data, p++);
 	}
 	if (width & 2)
-	    *p++ = data;
+	    fb_writel(data, p++);
 	if (width & 1)
-	    *(u16 *)p = data;
+	    fb_writew(data, (u16*)p);
 	dest += linesize;
     }
 }
@@ -139,11 +140,11 @@ void fbcon_cfb16_putc(struct vc_data *conp, struct display *p, int c, int yy,
 	cdat = p->fontdata + (c & p->charmask) * fontheight(p);
 	for (rows = fontheight(p); rows--; dest += bytes) {
 	    bits = *cdat++;
-	    ((u32 *)dest)[0] = (tab_cfb16[bits >> 6] & eorx) ^ bgx;
-	    ((u32 *)dest)[1] = (tab_cfb16[bits >> 4 & 3] & eorx) ^ bgx;
+	    fb_writel((tab_cfb16[bits >> 6] & eorx) ^ bgx, dest);
+	    fb_writel((tab_cfb16[bits >> 4 & 3] & eorx) ^ bgx, dest+4);
 	    if (fontwidth(p) == 8) {
-		((u32 *)dest)[2] = (tab_cfb16[bits >> 2 & 3] & eorx) ^ bgx;
-		((u32 *)dest)[3] = (tab_cfb16[bits & 3] & eorx) ^ bgx;
+		fb_writel((tab_cfb16[bits >> 2 & 3] & eorx) ^ bgx, dest+8);
+		fb_writel((tab_cfb16[bits & 3] & eorx) ^ bgx, dest+12);
 	    }
 	}
 	break;
@@ -152,16 +153,16 @@ void fbcon_cfb16_putc(struct vc_data *conp, struct display *p, int c, int yy,
 	cdat = p->fontdata + ((c & p->charmask) * fontheight(p) << 1);
 	for (rows = fontheight(p); rows--; dest += bytes) {
 	    bits = *cdat++;
-	    ((u32 *)dest)[0] = (tab_cfb16[bits >> 6] & eorx) ^ bgx;
-	    ((u32 *)dest)[1] = (tab_cfb16[bits >> 4 & 3] & eorx) ^ bgx;
-	    ((u32 *)dest)[2] = (tab_cfb16[bits >> 2 & 3] & eorx) ^ bgx;
-	    ((u32 *)dest)[3] = (tab_cfb16[bits & 3] & eorx) ^ bgx;
+	    fb_writel((tab_cfb16[bits >> 6] & eorx) ^ bgx, dest);
+	    fb_writel((tab_cfb16[bits >> 4 & 3] & eorx) ^ bgx, dest+4);
+	    fb_writel((tab_cfb16[bits >> 2 & 3] & eorx) ^ bgx, dest+8);
+	    fb_writel((tab_cfb16[bits & 3] & eorx) ^ bgx, dest+12);
 	    bits = *cdat++;
-	    ((u32 *)dest)[4] = (tab_cfb16[bits >> 6] & eorx) ^ bgx;
-	    ((u32 *)dest)[5] = (tab_cfb16[bits >> 4 & 3] & eorx) ^ bgx;
+	    fb_writel((tab_cfb16[bits >> 6] & eorx) ^ bgx, dest+16);
+	    fb_writel((tab_cfb16[bits >> 4 & 3] & eorx) ^ bgx, dest+20);
 	    if (fontwidth(p) == 16) {
-		((u32 *)dest)[6] = (tab_cfb16[bits >> 2 & 3] & eorx) ^ bgx;
-		((u32 *)dest)[7] = (tab_cfb16[bits & 3] & eorx) ^ bgx;
+		fb_writel((tab_cfb16[bits >> 2 & 3] & eorx) ^ bgx, dest+24);
+		fb_writel((tab_cfb16[bits & 3] & eorx) ^ bgx, dest+28);
 	    }
 	}
 	break;
@@ -191,11 +192,11 @@ void fbcon_cfb16_putcs(struct vc_data *conp, struct display *p,
 	    cdat = p->fontdata + c * fontheight(p);
 	    for (rows = fontheight(p), dest = dest0; rows--; dest += bytes) {
 		u8 bits = *cdat++;
-		((u32 *)dest)[0] = (tab_cfb16[bits >> 6] & eorx) ^ bgx;
-		((u32 *)dest)[1] = (tab_cfb16[bits >> 4 & 3] & eorx) ^ bgx;
+	        fb_writel((tab_cfb16[bits >> 6] & eorx) ^ bgx, dest);
+	        fb_writel((tab_cfb16[bits >> 4 & 3] & eorx) ^ bgx, dest+4);
 		if (fontwidth(p) == 8) {
-		    ((u32 *)dest)[2] = (tab_cfb16[bits >> 2 & 3] & eorx) ^ bgx;
-		    ((u32 *)dest)[3] = (tab_cfb16[bits & 3] & eorx) ^ bgx;
+		    fb_writel((tab_cfb16[bits >> 2 & 3] & eorx) ^ bgx, dest+8);
+		    fb_writel((tab_cfb16[bits & 3] & eorx) ^ bgx, dest+12);
 		}
 	    }
 	    dest0 += fontwidth(p)*2;;
@@ -208,16 +209,16 @@ void fbcon_cfb16_putcs(struct vc_data *conp, struct display *p,
 	    cdat = p->fontdata + (c * fontheight(p) << 1);
 	    for (rows = fontheight(p), dest = dest0; rows--; dest += bytes) {
 		u8 bits = *cdat++;
-		((u32 *)dest)[0] = (tab_cfb16[bits >> 6] & eorx) ^ bgx;
-		((u32 *)dest)[1] = (tab_cfb16[bits >> 4 & 3] & eorx) ^ bgx;
-		((u32 *)dest)[2] = (tab_cfb16[bits >> 2 & 3] & eorx) ^ bgx;
-		((u32 *)dest)[3] = (tab_cfb16[bits & 3] & eorx) ^ bgx;
+	        fb_writel((tab_cfb16[bits >> 6] & eorx) ^ bgx, dest);
+	        fb_writel((tab_cfb16[bits >> 4 & 3] & eorx) ^ bgx, dest+4);
+	        fb_writel((tab_cfb16[bits >> 2 & 3] & eorx) ^ bgx, dest+8);
+	        fb_writel((tab_cfb16[bits & 3] & eorx) ^ bgx, dest+12);
 		bits = *cdat++;
-		((u32 *)dest)[4] = (tab_cfb16[bits >> 6] & eorx) ^ bgx;
-		((u32 *)dest)[5] = (tab_cfb16[bits >> 4 & 3] & eorx) ^ bgx;
+	        fb_writel((tab_cfb16[bits >> 6] & eorx) ^ bgx, dest+16);
+	        fb_writel((tab_cfb16[bits >> 4 & 3] & eorx) ^ bgx, dest+20);
 		if (fontwidth(p) == 16) {
-		    ((u32 *)dest)[6] = (tab_cfb16[bits >> 2 & 3] & eorx) ^ bgx;
-		    ((u32 *)dest)[7] = (tab_cfb16[bits & 3] & eorx) ^ bgx;
+		    fb_writel((tab_cfb16[bits >> 2 & 3] & eorx) ^ bgx, dest+24);
+		    fb_writel((tab_cfb16[bits & 3] & eorx) ^ bgx, dest+28);
 		}
 	    }
 	    dest0 += fontwidth(p)*2;
@@ -235,16 +236,20 @@ void fbcon_cfb16_revc(struct display *p, int xx, int yy)
     for (rows = fontheight(p); rows--; dest += bytes) {
 	switch (fontwidth(p)) {
 	case 16:
-	    ((u32 *)dest)[6] ^= 0xffffffff; ((u32 *)dest)[7] ^= 0xffffffff;
+	    fb_writel(fb_readl(dest+24) ^ 0xffffffff, dest+24);
+	    fb_writel(fb_readl(dest+28) ^ 0xffffffff, dest+28);
 	    /* FALL THROUGH */
 	case 12:
-	    ((u32 *)dest)[4] ^= 0xffffffff; ((u32 *)dest)[5] ^= 0xffffffff;
+	    fb_writel(fb_readl(dest+16) ^ 0xffffffff, dest+16);
+	    fb_writel(fb_readl(dest+20) ^ 0xffffffff, dest+20);
 	    /* FALL THROUGH */
 	case 8:
-	    ((u32 *)dest)[2] ^= 0xffffffff; ((u32 *)dest)[3] ^= 0xffffffff;
+	    fb_writel(fb_readl(dest+8) ^ 0xffffffff, dest+8);
+	    fb_writel(fb_readl(dest+12) ^ 0xffffffff, dest+12);
 	    /* FALL THROUGH */
 	case 4:
-	    ((u32 *)dest)[0] ^= 0xffffffff; ((u32 *)dest)[1] ^= 0xffffffff;
+	    fb_writel(fb_readl(dest+0) ^ 0xffffffff, dest+0);
+	    fb_writel(fb_readl(dest+4) ^ 0xffffffff, dest+4);
 	}
     }
 }

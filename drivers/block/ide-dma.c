@@ -91,7 +91,7 @@
 #include <asm/io.h>
 #include <asm/irq.h>
 
-#ifdef IDEDMA_NEW_DRIVE_LISTINGS
+#ifdef CONFIG_IDEDMA_NEW_DRIVE_LISTINGS
 
 struct drive_list_entry {
 	char * id_model;
@@ -130,7 +130,7 @@ int in_drive_list(struct hd_driveid *id, struct drive_list_entry * drive_table)
 	return 0;
 }
 
-#else /* !IDEDMA_NEW_DRIVE_LISTINGS */
+#else /* !CONFIG_IDEDMA_NEW_DRIVE_LISTINGS */
 
 /*
  * good_dma_drives() lists the model names (from "hdparm -i")
@@ -162,7 +162,7 @@ const char *bad_dma_drives[] = {"WDC AC11000H",
 				"WDC AC31600H",
  				NULL};
 
-#endif /* IDEDMA_NEW_DRIVE_LISTINGS */
+#endif /* CONFIG_IDEDMA_NEW_DRIVE_LISTINGS */
 
 /*
  * Our Physical Region Descriptor (PRD) table should be large enough
@@ -314,7 +314,7 @@ int check_drive_lists (ide_drive_t *drive, int good_bad)
 {
 	struct hd_driveid *id = drive->id;
 
-#ifdef IDEDMA_NEW_DRIVE_LISTINGS
+#ifdef CONFIG_IDEDMA_NEW_DRIVE_LISTINGS
 	if (good_bad) {
 		return in_drive_list(id, drive_whitelist);
 	} else {
@@ -323,7 +323,7 @@ int check_drive_lists (ide_drive_t *drive, int good_bad)
 			printk("%s: Disabling (U)DMA for %s\n", drive->name, id->model);
 		return(blacklist);
 	}
-#else /* !IDEDMA_NEW_DRIVE_LISTINGS */
+#else /* !CONFIG_IDEDMA_NEW_DRIVE_LISTINGS */
 	const char **list;
 
 	if (good_bad) {
@@ -344,7 +344,7 @@ int check_drive_lists (ide_drive_t *drive, int good_bad)
 			}
 		}
 	}
-#endif /* IDEDMA_NEW_DRIVE_LISTINGS */
+#endif /* CONFIG_IDEDMA_NEW_DRIVE_LISTINGS */
 	return 0;
 }
 

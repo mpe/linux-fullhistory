@@ -293,10 +293,54 @@ __asm__ __volatile__( \
 }
 
 #define __HAVE_ARCH_MEMCPY
+
+#include <linux/config.h>
+
+#ifdef CONFIG_X86_USE_3DNOW
+
+/* All this just for in_interrupt() ... */
+
+#include <asm/system.h>
+#include <asm/ptrace.h>
+#include <linux/smp.h>
+#include <linux/interrupt.h>
+#include <asm/mmx.h>
+
+/*
+ *	This CPU favours 3DNow strongly (eg AMD Athlon)
+ */
+
+extern inline void * __constant_memcpy3d(void * to, const void * from, size_t len)
+{
+	if(len<512 || in_interrupt())
+		return __constant_memcpy(to, from, len);
+	return _mmx_memcpy(to, from, len);
+}
+
+extern __inline__ void *__memcpy3d(void *to, const void *from, size_t len)
+{
+	if(len<512 || in_interrupt())
+		return __memcpy(to, from, len);
+	return _mmx_memcpy(to, from, len);
+}
+
+#define memcpy(t, f, n) \
+(__builtin_constant_p(n) ? \
+ __constant_memcpy3d((t),(f),(n)) : \
+ __memcpy3d((t),(f),(n)))
+
+#else
+
+/*
+ *	No 3D Now!
+ */
+ 
 #define memcpy(t, f, n) \
 (__builtin_constant_p(n) ? \
  __constant_memcpy((t),(f),(n)) : \
  __memcpy((t),(f),(n)))
+
+#endif
 
 #define __HAVE_ARCH_MEMMOVE
 extern inline void * memmove(void * dest,const void * src, size_t n)

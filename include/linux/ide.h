@@ -637,7 +637,7 @@ int ide_wait_stat (ide_drive_t *drive, byte good, byte bad, unsigned long timeou
  * an IDE disk drive, or if a geometry was "forced" on the commandline.
  * Returns 1 if the geometry translation was successful.
  */
-int ide_xlate_1024 (kdev_t, int, const char *);
+int ide_xlate_1024 (kdev_t, int, int, const char *);
 
 /*
  * Start a reset operation for an IDE interface.

@@ -1,6 +1,6 @@
 VERSION = 2
 PATCHLEVEL = 3
-SUBLEVEL = 20
+SUBLEVEL = 21
 EXTRAVERSION =
 
 ARCH := $(shell uname -m | sed -e s/i.86/i386/ -e s/sun4u/sparc64/ -e s/arm.*/arm/ -e s/sa110/arm/)
@@ -125,6 +125,18 @@ DRIVERS := $(DRIVERS) drivers/isdn/isdn.a
 endif
 
 DRIVERS := $(DRIVERS) drivers/net/net.a
+
+ifdef CONFIG_NET_FC
+DRIVERS := $(DRIVERS) drivers/net/fc/fc.a
+endif
+
+ifdef CONFIG_TR
+DRIVERS := $(DRIVERS) drivers/net/tokenring/tr.a
+endif
+
+ifdef CONFIG_WAN
+DRIVERS := $(DRIVERS) drivers/net/wan/wan.a
+endif
 
 ifdef CONFIG_ATM
 DRIVERS := $(DRIVERS) drivers/atm/atm.a

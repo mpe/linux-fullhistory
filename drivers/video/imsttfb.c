@@ -354,9 +354,12 @@ struct fb_info_imstt {
 	} palette[256];
 	struct imstt_regvals init;
 	struct imstt_cursor cursor;
-	__u8 *frame_buffer_phys, *frame_buffer;
-	__u32 *dc_regs_phys, *dc_regs;
-	__u8 *cmap_regs_phys, *cmap_regs;
+	unsigned long frame_buffer_phys;
+	__u8 *frame_buffer;
+	unsigned long dc_regs_phys;
+	__u32 *dc_regs;
+	unsigned long cmap_regs_phys;
+	__u8 *cmap_regs;
 	__u32 total_vram;
 	__u32 ramdac;
 };
@@ -1077,7 +1080,7 @@ imsttfbcon_clear (struct vc_data *conp, struct display *disp,
 	out_le32(&p->dc_regs[BI], 0xffffffff);
 	out_le32(&p->dc_regs[MBC], 0xffffffff);
 	out_le32(&p->dc_regs[CLR], bgc);
-	out_le32(&p->dc_regs[BLTCTL], 0x200000);
+	out_le32(&p->dc_regs[BLTCTL], 0x840); /* 0x200000 */
 	while(in_le32(&p->dc_regs[SSTATUS]) & 0x80);
 	while(in_le32(&p->dc_regs[SSTATUS]) & 0x40);
 }
@@ -1854,10 +1857,10 @@ init_imstt(struct fb_info_imstt *p)
 	fb_info_imstt_p[i] = p;
 #ifdef CONFIG_FB_COMPAT_XPMAC
 	strncpy(display_info.name, "IMS,tt128mb", sizeof(display_info.name));
-	display_info.fb_address = (__u32)p->frame_buffer_phys;
-	display_info.cmap_adr_address = (__u32)&p->cmap_regs_phys[PADDRW];
-	display_info.cmap_data_address = (__u32)&p->cmap_regs_phys[PDATA];
-	display_info.disp_reg_address = (__u32)p->dc_regs_phys;
+	display_info.fb_address = p->frame_buffer_phys;
+	display_info.cmap_adr_address = p->cmap_regs_phys + PADDRW;
+	display_info.cmap_data_address = p->cmap_regs_phys + PDATA;
+	display_info.disp_reg_address = p->dc_regs_phys;
 	if (!console_fb_info)
 		console_fb_info = &p->info;
 #endif /* CONFIG_FB_COMPAT_XPMAC */
@@ -1897,11 +1900,11 @@ imsttfb_of_init(struct device_node *dp)
 	else
 		p->ramdac = IBM;
 
-	p->frame_buffer_phys = (__u8 *)addr;
+	p->frame_buffer_phys = addr;
 	p->frame_buffer = (__u8 *)ioremap(addr, p->ramdac == IBM ? 0x400000 : 0x800000);
-	p->dc_regs_phys = (__u32 *)(addr + 0x800000);
+	p->dc_regs_phys = addr + 0x800000;
 	p->dc_regs = (__u32 *)ioremap(addr + 0x800000, 0x1000);
-	p->cmap_regs_phys = (__u8 *)(addr + 0x840000);
+	p->cmap_regs_phys = addr + 0x840000;
 	p->cmap_regs = (__u8 *)ioremap(addr + 0x840000, 0x1000);
 
 	init_imstt(p);
@@ -1953,11 +1956,11 @@ imsttfb_init(void)
 				break;
 		}
 
-		p->frame_buffer_phys = (__u8 *)addr;
+		p->frame_buffer_phys = addr;
 		p->frame_buffer = (__u8 *)ioremap(addr, p->ramdac == IBM ? 0x400000 : 0x800000);
-		p->dc_regs_phys = (__u32 *)(addr + 0x800000);
+		p->dc_regs_phys = addr + 0x800000;
 		p->dc_regs = (__u32 *)ioremap(addr + 0x800000, 0x1000);
-		p->cmap_regs_phys = (__u8 *)(addr + 0x840000);
+		p->cmap_regs_phys = addr + 0x840000;
 		p->cmap_regs = (__u8 *)ioremap(addr + 0x840000, 0x1000);
 
 		init_imstt(p);

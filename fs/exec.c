@@ -169,7 +169,7 @@ out:
 /*
  * count() counts the number of arguments/envelopes
  */
-static int count(char ** argv)
+static int count(char ** argv, int max)
 {
 	int i = 0;
 
@@ -184,7 +184,8 @@ static int count(char ** argv)
 			if (!p)
 				break;
 			argv++;
-			i++;
+			if(++i > max)
+				return -E2BIG;
 		}
 	}
 	return i;
@@ -202,7 +203,7 @@ int copy_strings(int argc,char ** argv, struct linux_binprm *bprm)
 		int len;
 		unsigned long pos;
 
-		if (get_user(str, argv+argc) || !str || !(len = strlen_user(str))) 
+		if (get_user(str, argv+argc) || !str || !(len = strnlen_user(str, bprm->p))) 
 			return -EFAULT;
 		if (bprm->p < len) 
 			return -E2BIG; 
@@ -211,7 +212,7 @@ int copy_strings(int argc,char ** argv, struct linux_binprm *bprm)
 		/* XXX: add architecture specific overflow check here. */ 
 
 		pos = bprm->p;
-		while (len) {
+		while (len>0) {
 			char *pag;
 			int offset, bytes_to_copy;
 
@@ -274,7 +275,7 @@ int setup_arg_pages(struct linux_binprm *bprm)
 		mpnt->vm_ops = NULL;
 		mpnt->vm_offset = 0;
 		mpnt->vm_file = NULL;
-		mpnt->vm_private_data = NULL;
+		mpnt->vm_private_data = (void *) 0;
 		insert_vm_struct(current->mm, mpnt);
 		current->mm->total_vm = (mpnt->vm_end - mpnt->vm_start) >> PAGE_SHIFT;
 	} 
@@ -753,12 +754,12 @@ int do_execve(char * filename, char ** argv, char ** envp, struct pt_regs * regs
 	bprm.sh_bang = 0;
 	bprm.loader = 0;
 	bprm.exec = 0;
-	if ((bprm.argc = count(argv)) < 0) {
+	if ((bprm.argc = count(argv, bprm.p / sizeof(void *))) < 0) {
 		dput(dentry);
 		return bprm.argc;
 	}
 
-	if ((bprm.envc = count(envp)) < 0) {
+	if ((bprm.envc = count(envp, bprm.p / sizeof(void *))) < 0) {
 		dput(dentry);
 		return bprm.envc;
 	}

@@ -661,25 +661,31 @@ static inline ssize_t do_tty_write(
 	if (down_interruptible(&inode->i_sem)) {
 		return -ERESTARTSYS;
 	}
-	for (;;) {
-		unsigned long size = PAGE_SIZE*2;
-		if (size > count)
-			size = count;
+	if ( test_bit(TTY_NO_WRITE_SPLIT, &tty->flags) ) {
 		lock_kernel();
-		ret = write(tty, file, buf, size);
+		written = write(tty, file, buf, count);
 		unlock_kernel();
-		if (ret <= 0)
-			break;
-		written += ret;
-		buf += ret;
-		count -= ret;
-		if (!count)
-			break;
-		ret = -ERESTARTSYS;
-		if (signal_pending(current))
-			break;
-		if (current->need_resched)
-			schedule();
+	} else {
+		for (;;) {
+			unsigned long size = PAGE_SIZE*2;
+			if (size > count)
+				size = count;
+			lock_kernel();
+			ret = write(tty, file, buf, size);
+			unlock_kernel();
+			if (ret <= 0)
+				break;
+			written += ret;
+			buf += ret;
+			count -= ret;
+			if (!count)
+				break;
+			ret = -ERESTARTSYS;
+			if (signal_pending(current))
+				break;
+			if (current->need_resched)
+				schedule();
+		}
 	}
 	if (written) {
 		file->f_dentry->d_inode->i_mtime = CURRENT_TIME;
@@ -1996,7 +2002,8 @@ int tty_unregister_driver(struct tty_driver *driver)
 {
 	int	retval;
 	struct tty_driver *p;
-	int	found = 0;
+	int	i, found = 0;
+	struct termios *tp;
 	const char *othername = NULL;
 	
 	if (*driver->refcount)
@@ -2027,6 +2034,23 @@ int tty_unregister_driver(struct tty_driver *driver)
 	if (driver->next)
 		driver->next->prev = driver->prev;
 
+	/*
+	 * Free the termios and termios_locked structures because
+	 * we don't want to get memory leaks when modular tty
+	 * drivers are removed from the kernel.
+	 */
+	for (i = 0; i < driver->num; i++) {
+		tp = driver->termios[i];
+		if (tp) {
+			driver->termios[i] = NULL;
+			kfree_s(tp, sizeof(struct termios));
+		}
+		tp = driver->termios_locked[i];
+		if (tp) {
+			driver->termios_locked[i] = NULL;
+			kfree_s(tp, sizeof(struct termios));
+		}
+	}
 	proc_tty_unregister_driver(driver);
 	return 0;
 }

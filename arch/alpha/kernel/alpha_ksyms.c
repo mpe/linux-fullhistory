@@ -139,7 +139,7 @@ EXPORT_SYMBOL(alpha_fp_emul);
 EXPORT_SYMBOL_NOVERS(__copy_user);
 EXPORT_SYMBOL_NOVERS(__do_clear_user);
 EXPORT_SYMBOL(__strncpy_from_user);
-EXPORT_SYMBOL(__strlen_user);
+EXPORT_SYMBOL(__strnlen_user);
 
 /*
  * The following are specially called from the semaphore assembly stubs.

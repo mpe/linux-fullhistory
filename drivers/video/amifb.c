@@ -1736,6 +1736,7 @@ default_chipset:
 	fb_info.updatevar = &amifbcon_updatevar;
 	fb_info.blank = &amifbcon_blank;
 	fb_info.flags = FBINFO_FLAG_DEFAULT;
+	memset(&var, 0, sizeof(var));
 
 	if (!fb_find_mode(&var, &fb_info, mode_option, ami_modedb,
 			  NUM_TOTAL_MODES, &ami_modedb[defmode], 4))

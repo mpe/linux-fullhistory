@@ -11,8 +11,26 @@
 
 #define STRICT_MM_TYPECHECKS
 
+#include <linux/config.h>
+
+#ifdef CONFIG_X86_USE_3DNOW
+
+#include <asm/mmx.h>
+
+#define clear_page(page)	mmx_clear_page(page)
+#define copy_page(to,from)	mmx_copy_page(to,from)
+
+#else
+
+/*
+ *	On older X86 processors its not a win to use MMX here it seems.
+ *	Maybe the K6-III ?
+ */
+ 
 #define clear_page(page)	memset((void *)(page), 0, PAGE_SIZE)
 #define copy_page(to,from)	memcpy((void *)(to), (void *)(from), PAGE_SIZE)
+
+#endif
 
 #ifdef STRICT_MM_TYPECHECKS
 /*

@@ -597,7 +597,8 @@ __constant_copy_from_user_nocheck(void *to, const void *from, unsigned long n)
 
 long strncpy_from_user(char *dst, const char *src, long count);
 long __strncpy_from_user(char *dst, const char *src, long count);
-long strlen_user(const char *str);
+#define strlen_user(str) strnlen_user(str, ~0UL >> 1)
+long strnlen_user(const char *str, long n);
 unsigned long clear_user(void *mem, unsigned long len);
 unsigned long __clear_user(void *mem, unsigned long len);
 

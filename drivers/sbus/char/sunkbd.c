@@ -1273,7 +1273,7 @@ push_kbd (int scan)
 		kbd_head = next;
 	}
 	if (kb_fasync)
-		kill_fasync (kb_fasync, SIGIO);
+		kill_fasync (kb_fasync, SIGIO, POLL_IN);
 	wake_up_interruptible (&kbd_wait);
 }
 

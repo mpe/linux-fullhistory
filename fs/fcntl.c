@@ -8,6 +8,8 @@
 #include <linux/file.h>
 #include <linux/smp_lock.h>
 
+#include <asm/poll.h>
+#include <asm/siginfo.h>
 #include <asm/uaccess.h>
 
 extern int sock_fcntl (struct file *, unsigned int cmd, unsigned long arg);
@@ -255,8 +257,22 @@ out:
 	return err;
 }
 
+/* Table to convert sigio signal codes into poll band bitmaps */
+
+static int band_table[NSIGPOLL+1] = {
+	~0,
+	POLLIN | POLLRDNORM,			/* POLL_IN */
+	POLLOUT | POLLWRNORM | POLLWRBAND,	/* POLL_OUT */
+	POLLIN | POLLRDNORM | POLLMSG,		/* POLL_MSG */
+	POLLERR,				/* POLL_ERR */
+	POLLPRI | POLLRDBAND,			/* POLL_PRI */
+	POLLHUP | POLLERR			/* POLL_HUP */
+};
+
 static void send_sigio_to_task(struct task_struct *p,
-			       struct fown_struct *fown, struct fasync_struct *fa)
+			       struct fown_struct *fown, 
+			       struct fasync_struct *fa,
+			       int reason)
 {
 	if ((fown->euid != 0) &&
 	    (fown->euid ^ p->suid) && (fown->euid ^ p->uid) &&
@@ -273,9 +289,11 @@ static void send_sigio_to_task(struct task_struct *p,
 			   back to SIGIO in that case. --sct */
 			si.si_signo = fown->signum;
 			si.si_errno = 0;
-		        si.si_code  = SI_SIGIO;
-			si.si_pid   = fown->pid;
-			si.si_uid   = fown->uid;
+		        si.si_code  = reason;
+			if (reason < 0 || reason > NSIGPOLL)
+				si.si_band  = ~0;
+			else
+				si.si_band = band_table[reason];
 			si.si_fd    = fa->fa_fd;
 			if (!send_sig_info(fown->signum, &si, p))
 				break;
@@ -285,14 +303,15 @@ static void send_sigio_to_task(struct task_struct *p,
 	}
 }
 
-static void send_sigio(struct fown_struct *fown, struct fasync_struct *fa)
+static void send_sigio(struct fown_struct *fown, struct fasync_struct *fa, 
+		       int band)
 {
 	struct task_struct * p;
 	int   pid	= fown->pid;
 	
 	read_lock(&tasklist_lock);
 	if ( (pid > 0) && (p = find_task_by_pid(pid)) ) {
-		send_sigio_to_task(p, fown, fa);
+		send_sigio_to_task(p, fown, fa, band);
 		goto out;
 	}
 	for_each_task(p) {
@@ -301,13 +320,13 @@ static void send_sigio(struct fown_struct *fown, struct fasync_struct *fa)
 			match = -p->pgrp;
 		if (pid != match)
 			continue;
-		send_sigio_to_task(p, fown, fa);
+		send_sigio_to_task(p, fown, fa, band);
 	}
 out:
 	read_unlock(&tasklist_lock);
 }
 
-void kill_fasync(struct fasync_struct *fa, int sig)
+void kill_fasync(struct fasync_struct *fa, int sig, int band)
 {
 	while (fa) {
 		struct fown_struct * fown;
@@ -317,8 +336,11 @@ void kill_fasync(struct fasync_struct *fa, int sig)
 			return;
 		}
 		fown = &fa->fa_file->f_owner;
-		if (fown->pid)
-			send_sigio(fown, fa);
+		/* Don't send SIGURG to processes which have not set a
+		   queued signum: SIGURG has its own default signalling
+		   mechanism. */
+		if (fown->pid && !(sig == SIGURG && fown->signum == 0))
+			send_sigio(fown, fa, band);
 		fa = fa->fa_next;
 	}
 }

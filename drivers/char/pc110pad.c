@@ -30,6 +30,8 @@
 #include <asm/signal.h>
 #include <asm/io.h>
 #include <asm/irq.h>
+#include <asm/semaphore.h>
+#include <linux/spinlock.h>
 #include <asm/uaccess.h>
 
 #include "pc110pad.h"
@@ -51,7 +53,7 @@ static struct pc110pad_params current_params;
 static wait_queue_head_t queue;
 static struct fasync_struct *asyncptr;
 static int active=0;	/* number of concurrent open()s */
-
+static struct semaphore read_lock;
 
 /*
  * Utility to reset a timer to go off some time in the future.
@@ -75,7 +77,7 @@ static void wake_readers(void)
 {
 	wake_up_interruptible(&queue);
 	if(asyncptr)
-		kill_fasync(asyncptr, SIGIO);
+		kill_fasync(asyncptr, SIGIO, POLL_IN);
 }
 
 
@@ -503,10 +505,13 @@ static int close_pad(struct inode * inode, struct file * file)
  */
 static int open_pad(struct inode * inode, struct file * file)
 {
+	unsigned long flags;
+	
 	if (active++)
 		return 0;
 	MOD_INC_USE_COUNT;
 
+	save_flags(flags);
 	cli();
 	outb(0x30, current_params.io+2);	/* switch off digitiser */
 	pad_irq(0,0,0);		/* read to flush any pending bytes */
@@ -522,7 +527,7 @@ static int open_pad(struct inode * inode, struct file * file)
 	synthesize_tap=0;
 	del_timer(&bounce_timer);
 	del_timer(&tap_timer);
-	sti();
+	restore_flags(flags);
 
 	return 0;
 }
@@ -556,14 +561,19 @@ static ssize_t read_pad(struct file * file, char * buffer, size_t count, loff_t 
 {
 	int r;
 
+	down(&read_lock);
 	for(r=0; r<count; r++)
 	{
 		if(!read_byte_count)
 			new_sample(read_bytes);
 		if(put_user(read_bytes[read_byte_count], buffer+r))
-			return -EFAULT;
+		{
+			r = -EFAULT;
+			break;
+		}
 		read_byte_count = (read_byte_count+1)%3;
 	}
+	up(&read_lock);
 	return r;
 }
 
@@ -681,6 +691,7 @@ static void pc110pad_unload(void)
 
 int init_module(void)
 {
+	init_MUTEX(&read_lock);
 	return pc110pad_init();
 }
 

@@ -14,7 +14,7 @@
  *  8 are UDMA supported and 4 are limited to DMA mode 2 multi-word.
  *  The 8/4 ratio is a BIOS code limit by promise.
  *
- *  UNLESS you enable "PDC202XX_FORCE_BURST_BIT"
+ *  UNLESS you enable "CONFIG_PDC202XX_FORCE_BURST_BIT"
  *
  *  There is only one BIOS in the three contollers.
  *
@@ -521,15 +521,15 @@ unsigned int __init pci_init_pdc202xx (struct pci_dev *dev, const char *name)
 		(primary_mode & 1) ? "MASTER" : "PCI",
 		(secondary_mode & 1) ? "MASTER" : "PCI" );
 
-#ifdef PDC202XX_FORCE_BURST_BIT
+#ifdef CONFIG_PDC202XX_FORCE_BURST_BIT
 	if (!(udma_speed_flag & 1)) {
 		printk("%s: FORCING BURST BIT 0x%02x -> 0x%02x ", name, udma_speed_flag, (udma_speed_flag|1));
 		outb(udma_speed_flag|1, high_16 + 0x001f);
 		printk("%sCTIVE\n", (inb(high_16 + 0x001f) & 1) ? "A" : "INA");
 	}
-#endif /* PDC202XX_FORCE_BURST_BIT */
+#endif /* CONFIG_PDC202XX_FORCE_BURST_BIT */
 
-#ifdef PDC202XX_FORCE_MASTER_MODE
+#ifdef CONFIG_PDC202XX_FORCE_MASTER_MODE
 	if (!(primary_mode & 1)) {
 		printk("%s: FORCING PRIMARY MODE BIT 0x%02x -> 0x%02x ",
 			name, primary_mode, (primary_mode|1));
@@ -543,7 +543,7 @@ unsigned int __init pci_init_pdc202xx (struct pci_dev *dev, const char *name)
 		outb(secondary_mode|1, high_16 + 0x001b);
 		printk("%s\n", (inb(high_16 + 0x001b) & 1) ? "MASTER" : "PCI");
 	}
-#endif /* PDC202XX_FORCE_MASTER_MODE */
+#endif /* CONFIG_PDC202XX_FORCE_MASTER_MODE */
 	return dev->irq;
 }
 

@@ -183,9 +183,8 @@ if [ "$CONFIG_VT" = "y" ]; then
   bool 'Video mode selection support' CONFIG_VIDEO_SELECT
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
     tristate 'MDA text console (dual-headed) (EXPERIMENTAL)' CONFIG_MDA_CONSOLE
-    bool 'Support for frame buffer devices (EXPERIMENTAL)' CONFIG_FB
+    source drivers/video/Config.in
   fi
-  source drivers/video/Config.in
   endmenu
 fi
 

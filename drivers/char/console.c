@@ -681,7 +681,7 @@ int vc_resize(unsigned int lines, unsigned int cols,
 		else {
 			unsigned short *p = (unsigned short *) kmalloc(ss, GFP_USER);
 			if (!p) {
-				for (i = 0; i< currcons; i++)
+				for (i = first; i < currcons; i++)
 					if (newscreens[i])
 						kfree_s(newscreens[i], ss);
 				return -ENOMEM;

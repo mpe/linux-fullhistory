@@ -32,6 +32,7 @@
 #include <linux/string.h>
 #include <linux/random.h>
 #include <linux/init.h>
+#include <linux/module.h>
 
 #include <asm/keyboard.h>
 #include <asm/bitops.h>
@@ -155,7 +156,6 @@ struct pt_regs * kbd_pt_regs;
 
 #ifdef CONFIG_MAGIC_SYSRQ
 static int sysrq_pressed;
-int sysrq_enabled = 1;
 #endif
 
 /*

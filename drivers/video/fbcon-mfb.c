@@ -41,12 +41,12 @@ void fbcon_mfb_bmove(struct display *p, int sy, int sx, int dy, int dx,
     if (sx == 0 && dx == 0 && width == p->next_line) {
 	src = p->screen_base+sy*fontheight(p)*width;
 	dest = p->screen_base+dy*fontheight(p)*width;
-	mymemmove(dest, src, height*fontheight(p)*width);
+	fb_memmove(dest, src, height*fontheight(p)*width);
     } else if (dy <= sy) {
 	src = p->screen_base+sy*fontheight(p)*p->next_line+sx;
 	dest = p->screen_base+dy*fontheight(p)*p->next_line+dx;
 	for (rows = height*fontheight(p); rows--;) {
-	    mymemmove(dest, src, width);
+	    fb_memmove(dest, src, width);
 	    src += p->next_line;
 	    dest += p->next_line;
 	}
@@ -54,7 +54,7 @@ void fbcon_mfb_bmove(struct display *p, int sy, int sx, int dy, int dx,
 	src = p->screen_base+((sy+height)*fontheight(p)-1)*p->next_line+sx;
 	dest = p->screen_base+((dy+height)*fontheight(p)-1)*p->next_line+dx;
 	for (rows = height*fontheight(p); rows--;) {
-	    mymemmove(dest, src, width);
+	    fb_memmove(dest, src, width);
 	    src -= p->next_line;
 	    dest -= p->next_line;
 	}
@@ -72,15 +72,15 @@ void fbcon_mfb_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 
     if (sx == 0 && width == p->next_line) {
 	if (inverse)
-	    mymemset(dest, height*fontheight(p)*width);
+	    fb_memset255(dest, height*fontheight(p)*width);
 	else
-	    mymemclear(dest, height*fontheight(p)*width);
+	    fb_memclear(dest, height*fontheight(p)*width);
     } else
 	for (rows = height*fontheight(p); rows--; dest += p->next_line)
 	    if (inverse)
-		mymemset(dest, width);
+		fb_memset255(dest, width);
 	    else
-		mymemclear_small(dest, width);
+		fb_memclear_small(dest, width);
 }
 
 void fbcon_mfb_putc(struct vc_data *conp, struct display *p, int c, int yy,
@@ -104,7 +104,7 @@ void fbcon_mfb_putc(struct vc_data *conp, struct display *p, int c, int yy,
 	    d |= d>>1;
 	if (revs)
 	    d = ~d;
-	*dest = d;
+    	fb_writeb (d, dest);
     }
 }
 
@@ -133,19 +133,21 @@ void fbcon_mfb_putcs(struct vc_data *conp, struct display *p,
 		d |= d>>1;
 	    if (revs)
 		d = ~d;
-	    *dest = d;
+    	    fb_writeb (d, dest);
 	}
     }
 }
 
 void fbcon_mfb_revc(struct display *p, int xx, int yy)
 {
-    u8 *dest;
+    u8 *dest, d;
     u_int rows;
 
     dest = p->screen_base+yy*fontheight(p)*p->next_line+xx;
-    for (rows = fontheight(p); rows--; dest += p->next_line)
-	*dest = ~*dest;
+    for (rows = fontheight(p); rows--; dest += p->next_line) {
+    	d = fb_readb(dest);
+	fb_writeb (~d, dest);
+    }
 }
 
 void fbcon_mfb_clear_margins(struct vc_data *conp, struct display *p,
@@ -165,9 +167,9 @@ void fbcon_mfb_clear_margins(struct vc_data *conp, struct display *p,
 	bottom -= p->vrows;
     dest = p->screen_base + bottom * fontheight(p) * p->next_line;
     if (inverse)
-	mymemset(dest, height * p->next_line);
+	fb_memset255(dest, height * p->next_line);
     else
-	mymemclear(dest, height * p->next_line);
+	fb_memclear(dest, height * p->next_line);
 }
 
 

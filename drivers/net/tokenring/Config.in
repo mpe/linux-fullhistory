@@ -1,0 +1,15 @@
+#
+# Token Ring driver configuration
+#
+
+mainmenu_option next_comment
+comment 'Token Ring driver support'
+
+bool 'Token Ring driver support' CONFIG_TR
+if [ "$CONFIG_TR" = "y" ]; then
+   tristate '  IBM Tropic chipset based adapter support' CONFIG_IBMTR
+   tristate '  IBM Olympic chipset PCI adapter support' CONFIG_IBMOL
+   tristate '  SysKonnect adapter support' CONFIG_SKTR
+fi
+
+endmenu

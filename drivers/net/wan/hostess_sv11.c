@@ -320,7 +320,7 @@ static struct sv11_device *sv11_init(int iobase, int irq)
 	for(i=0;i<999;i++)
 	{
 		sprintf(sv->name,"hdlc%d", i);
-		if(dev_get(sv->name)==NULL)
+		if(dev_get(sv->name)==0)
 		{
 			struct net_device *d=dev->chanA.netdevice;
 	

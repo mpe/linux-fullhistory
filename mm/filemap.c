@@ -912,6 +912,8 @@ static void generic_file_readahead(int reada_ok,
 	ahead = 0;
 	while (ahead < max_ahead) {
 		ahead += PAGE_CACHE_SIZE;
+		if ((raend + ahead) >= inode->i_size)
+			break;
 		page_cache_read(filp, raend + ahead);
 	}
 /*
@@ -1779,6 +1781,7 @@ generic_file_write(struct file *file, const char *buf,
 	long		status;
 	int		err;
 
+	down(&inode->i_sem);
 	err = file->f_error;
 	if (err) {
 		file->f_error = 0;
@@ -1872,6 +1875,7 @@ repeat_find:
 
 	err = written ? written : status;
 out:
+	up(&inode->i_sem);
 	return err;
 }
 

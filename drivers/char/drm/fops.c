@@ -197,7 +197,7 @@ int drm_write_string(drm_device_t *dev, const char *s)
 		send -= count;
 	}
 
-	if (dev->buf_async) kill_fasync(dev->buf_async, SIGIO);
+	if (dev->buf_async) kill_fasync(dev->buf_async, SIGIO, POLL_OUT);
 	DRM_DEBUG("waking\n");
 	wake_up_interruptible(&dev->buf_readers);
 	return 0;

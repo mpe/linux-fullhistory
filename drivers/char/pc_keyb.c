@@ -23,7 +23,6 @@
 #include <linux/tty.h>
 #include <linux/mm.h>
 #include <linux/signal.h>
-#include <linux/ioport.h>
 #include <linux/init.h>
 #include <linux/kbd_ll.h>
 #include <linux/delay.h>
@@ -34,14 +33,15 @@
 
 #include <asm/keyboard.h>
 #include <asm/bitops.h>
-#include <asm/io.h>
 #include <asm/uaccess.h>
 #include <asm/irq.h>
 #include <asm/system.h>
 
+#include <asm/io.h>
+
 /* Some configuration switches are present in the include file... */
 
-#include "pc_keyb.h"
+#include <linux/pc_keyb.h>
 
 /* Simple translation table for the SysRq keys */
 
@@ -56,10 +56,11 @@ unsigned char pckbd_sysrq_xlate[128] =
 	"\r\000/";					/* 0x60 - 0x6f */
 #endif
 
-static void kbd_write(int address, int data);
-static unsigned char handle_kbd_event(void);
+static void kbd_write_command_w(int data);
+static void kbd_write_output_w(int data);
 
 spinlock_t kbd_controller_lock = SPIN_LOCK_UNLOCKED;
+static unsigned char handle_kbd_event(void);
 
 /* used only by send_data - set by keyboard_interrupt */
 static volatile unsigned char reply_expected = 0;
@@ -83,11 +84,6 @@ static unsigned char mouse_reply_expected = 0;
 #define AUX_INTS_ON  (KBD_MODE_KCC | KBD_MODE_SYS | KBD_MODE_MOUSE_INT | KBD_MODE_KBD_INT)
 
 #define MAX_RETRIES	60		/* some aux operations take long time*/
-
-#ifndef AUX_IRQ
-# define AUX_IRQ	12
-#endif
-
 #endif /* CONFIG_PSMOUSE */
 
 /*
@@ -409,7 +405,7 @@ static inline void handle_mouse_event(unsigned char scancode)
 		if (head != queue->tail) {
 			queue->head = head;
 			if (queue->fasync)
-				kill_fasync(queue->fasync, SIGIO);
+				kill_fasync(queue->fasync, SIGIO, POLL_IN);
 			wake_up_interruptible(&queue->proc_list);
 		}
 	}
@@ -425,22 +421,31 @@ static inline void handle_mouse_event(unsigned char scancode)
  */
 static unsigned char handle_kbd_event(void)
 {
-	unsigned char status = inb(KBD_STATUS_REG);
+	unsigned char status = kbd_read_status();
+	unsigned int work = 10000;
 
 	while (status & KBD_STAT_OBF) {
 		unsigned char scancode;
 
-		scancode = inb(KBD_DATA_REG);
-
+		scancode = kbd_read_input();
 		if (status & KBD_STAT_MOUSE_OBF) {
 			handle_mouse_event(scancode);
 		} else {
+#ifdef CONFIG_VT
 			if (do_acknowledge(scancode))
 				handle_scancode(scancode, !(scancode & 0x80));
+#endif				
 			mark_bh(KEYBOARD_BH);
 		}
 
-		status = inb(KBD_STATUS_REG);
+		status = kbd_read_status();
+		
+		if(!work--)
+		{
+			printk(KERN_ERR "pc_keyb: controller jammed (0x%02X).\n",
+				status);
+			break;
+		}
 	}
 
 	return status;
@@ -451,8 +456,9 @@ static void keyboard_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
 	unsigned long flags;
 
+#ifdef CONFIG_VT
 	kbd_pt_regs = regs;
-
+#endif
 	spin_lock_irqsave(&kbd_controller_lock, flags);
 	handle_kbd_event();
 	spin_unlock_irqrestore(&kbd_controller_lock, flags);
@@ -475,7 +481,7 @@ static int send_data(unsigned char data)
 		acknowledge = 0; /* Set by interrupt routine on receipt of ACK. */
 		resend = 0;
 		reply_expected = 1;
-		kbd_write(KBD_DATA_REG, data);
+		kbd_write_output_w(data);
 		for (;;) {
 			if (acknowledge)
 				return 1;
@@ -529,14 +535,14 @@ __setup("kbd-reset", kbd_reset_setup);
 #define KBD_NO_DATA	(-1)	/* No data */
 #define KBD_BAD_DATA	(-2)	/* Parity or other error */
 
-static int __init kbd_read_input(void)
+static int __init kbd_read_data(void)
 {
 	int retval = KBD_NO_DATA;
 	unsigned char status;
 
-	status = inb(KBD_STATUS_REG);
+	status = kbd_read_status();
 	if (status & KBD_STAT_OBF) {
-		unsigned char data = inb(KBD_DATA_REG);
+		unsigned char data = kbd_read_input();
 
 		retval = data;
 		if (status & (KBD_STAT_GTO | KBD_STAT_PERR))
@@ -550,7 +556,7 @@ static void __init kbd_clear_input(void)
 	int maxread = 100;	/* Random number */
 
 	do {
-		if (kbd_read_input() == KBD_NO_DATA)
+		if (kbd_read_data() == KBD_NO_DATA)
 			break;
 	} while (--maxread);
 }
@@ -560,7 +566,7 @@ static int __init kbd_wait_for_input(void)
 	long timeout = KBD_INIT_TIMEOUT;
 
 	do {
-		int retval = kbd_read_input();
+		int retval = kbd_read_data();
 		if (retval >= 0)
 			return retval;
 		mdelay(1);
@@ -568,13 +574,23 @@ static int __init kbd_wait_for_input(void)
 	return -1;
 }
 
-static void kbd_write(int address, int data)
+static void kbd_write_command_w(int data)
 {
 	unsigned long flags;
 
 	spin_lock_irqsave(&kbd_controller_lock, flags);
 	kb_wait();
-	outb(data, address);
+	kbd_write_command(data);
+	spin_unlock_irqrestore(&kbd_controller_lock, flags);
+}
+
+static void kbd_write_output_w(int data)
+{
+	unsigned long flags;
+
+	spin_lock_irqsave(&kbd_controller_lock, flags);
+	kb_wait();
+	kbd_write_output(data);
 	spin_unlock_irqrestore(&kbd_controller_lock, flags);
 }
 
@@ -585,9 +601,9 @@ static void kbd_write_cmd(int cmd)
 
 	spin_lock_irqsave(&kbd_controller_lock, flags);
 	kb_wait();
-	outb(KBD_CCMD_WRITE_MODE, KBD_CNTL_REG);
+	kbd_write_command(KBD_CCMD_WRITE_MODE);
 	kb_wait();
-	outb(cmd, KBD_DATA_REG);
+	kbd_write_output(cmd);
 	spin_unlock_irqrestore(&kbd_controller_lock, flags);
 }
 #endif /* CONFIG_PSMOUSE */
@@ -601,7 +617,7 @@ static char * __init initialize_kbd(void)
 	 * This seems to be the only way to get it going.
 	 * If the test is successful a x55 is placed in the input buffer.
 	 */
-	kbd_write(KBD_CNTL_REG, KBD_CCMD_SELF_TEST);
+	kbd_write_command_w(KBD_CCMD_SELF_TEST);
 	if (kbd_wait_for_input() != 0x55)
 		return "Keyboard failed self test";
 
@@ -610,14 +626,14 @@ static char * __init initialize_kbd(void)
 	 * to test the keyboard clock and data lines.  The results of the
 	 * test are placed in the input buffer.
 	 */
-	kbd_write(KBD_CNTL_REG, KBD_CCMD_KBD_TEST);
+	kbd_write_command_w(KBD_CCMD_KBD_TEST);
 	if (kbd_wait_for_input() != 0x00)
 		return "Keyboard interface failed self test";
 
 	/*
 	 * Enable the keyboard by allowing the keyboard clock to run.
 	 */
-	kbd_write(KBD_CNTL_REG, KBD_CCMD_KBD_ENABLE);
+	kbd_write_command_w(KBD_CCMD_KBD_ENABLE);
 
 	/*
 	 * Reset keyboard. If the read times out
@@ -628,7 +644,7 @@ static char * __init initialize_kbd(void)
 	 * Set up to try again if the keyboard asks for RESEND.
 	 */
 	do {
-		kbd_write(KBD_DATA_REG, KBD_CMD_RESET);
+		kbd_write_output_w(KBD_CMD_RESET);
 		status = kbd_wait_for_input();
 		if (status == KBD_REPLY_ACK)
 			break;
@@ -646,7 +662,7 @@ static char * __init initialize_kbd(void)
 	 * Set up to try again if the keyboard asks for RESEND.
 	 */
 	do {
-		kbd_write(KBD_DATA_REG, KBD_CMD_DISABLE);
+		kbd_write_output_w(KBD_CMD_DISABLE);
 		status = kbd_wait_for_input();
 		if (status == KBD_REPLY_ACK)
 			break;
@@ -654,37 +670,37 @@ static char * __init initialize_kbd(void)
 			return "Disable keyboard: no ACK";
 	} while (1);
 
-	kbd_write(KBD_CNTL_REG, KBD_CCMD_WRITE_MODE);
-	kbd_write(KBD_DATA_REG, KBD_MODE_KBD_INT
+	kbd_write_command_w(KBD_CCMD_WRITE_MODE);
+	kbd_write_output_w(KBD_MODE_KBD_INT
 			      | KBD_MODE_SYS
 			      | KBD_MODE_DISABLE_MOUSE
 			      | KBD_MODE_KCC);
 
 	/* ibm powerpc portables need this to use scan-code set 1 -- Cort */
-	kbd_write(KBD_CNTL_REG, KBD_CCMD_READ_MODE);
+	kbd_write_command_w(KBD_CCMD_READ_MODE);
 	if (!(kbd_wait_for_input() & KBD_MODE_KCC)) {
 		/*
 		 * If the controller does not support conversion,
 		 * Set the keyboard to scan-code set 1.
 		 */
-		kbd_write(KBD_DATA_REG, 0xF0);
+		kbd_write_output_w(0xF0);
 		kbd_wait_for_input();
-		kbd_write(KBD_DATA_REG, 0x01);
+		kbd_write_output_w(0x01);
 		kbd_wait_for_input();
 	}
 
 	
-	kbd_write(KBD_DATA_REG, KBD_CMD_ENABLE);
+	kbd_write_output_w(KBD_CMD_ENABLE);
 	if (kbd_wait_for_input() != KBD_REPLY_ACK)
 		return "Enable keyboard: no ACK";
 
 	/*
 	 * Finally, set the typematic rate to maximum.
 	 */
-	kbd_write(KBD_DATA_REG, KBD_CMD_SET_RATE);
+	kbd_write_output_w(KBD_CMD_SET_RATE);
 	if (kbd_wait_for_input() != KBD_REPLY_ACK)
 		return "Set rate: no ACK";
-	kbd_write(KBD_DATA_REG, 0x00);
+	kbd_write_output_w(0x00);
 	if (kbd_wait_for_input() != KBD_REPLY_ACK)
 		return "Set rate: no ACK";
 
@@ -693,6 +709,8 @@ static char * __init initialize_kbd(void)
 
 void __init pckbd_init_hw(void)
 {
+	kbd_request_region();
+
 	/* Flush any pending input. */
 	kbd_clear_input();
 
@@ -707,7 +725,7 @@ void __init pckbd_init_hw(void)
 #endif
 
 	/* Ok, finally allocate the IRQ, and off we go.. */
-	request_irq(KEYBOARD_IRQ, keyboard_interrupt, 0, "keyboard", NULL);
+	kbd_request_irq(keyboard_interrupt);
 }
 
 #if defined CONFIG_PSMOUSE
@@ -731,16 +749,16 @@ static int __init detect_auxiliary_port(void)
 	 * controller has an Auxiliary Port (a.k.a. Mouse Port).
 	 */
 	kb_wait();
-	outb(KBD_CCMD_WRITE_AUX_OBUF, KBD_CNTL_REG);
+	kbd_write_command(KBD_CCMD_WRITE_AUX_OBUF);
 
 	kb_wait();
-	outb(0x5a, KBD_DATA_REG); /* 0x5a is a random dummy value. */
+	kbd_write_output(0x5a); /* 0x5a is a random dummy value. */
 
 	do {
-		unsigned char status = inb(KBD_STATUS_REG);
+		unsigned char status = kbd_read_status();
 
 		if (status & KBD_STAT_OBF) {
-			(void) inb(KBD_DATA_REG);
+			(void) kbd_read_input();
 			if (status & KBD_STAT_MOUSE_OBF) {
 				printk(KERN_INFO "Detected PS/2 Mouse Port.\n");
 				retval = 1;
@@ -763,9 +781,9 @@ static void aux_write_dev(int val)
 
 	spin_lock_irqsave(&kbd_controller_lock, flags);
 	kb_wait();
-	outb(KBD_CCMD_WRITE_MOUSE, KBD_CNTL_REG);
+	kbd_write_command(KBD_CCMD_WRITE_MOUSE);
 	kb_wait();
-	outb(val, KBD_DATA_REG);
+	kbd_write_output(val);
 	spin_unlock_irqrestore(&kbd_controller_lock, flags);
 }
 
@@ -778,9 +796,9 @@ static void aux_write_ack(int val)
 
 	spin_lock_irqsave(&kbd_controller_lock, flags);
 	kb_wait();
-	outb(KBD_CCMD_WRITE_MOUSE, KBD_CNTL_REG);
+	kbd_write_command(KBD_CCMD_WRITE_MOUSE);
 	kb_wait();
-	outb(val, KBD_DATA_REG);
+	kbd_write_output(val);
 	/* we expect an ACK in response. */
 	mouse_reply_expected++;
 	kb_wait();
@@ -827,8 +845,8 @@ static int release_aux(struct inode * inode, struct file * file)
 	if (--aux_count)
 		return 0;
 	kbd_write_cmd(AUX_INTS_OFF);			    /* Disable controller ints */
-	kbd_write(KBD_CNTL_REG, KBD_CCMD_MOUSE_DISABLE);
-	free_irq(AUX_IRQ, AUX_DEV);
+	kbd_write_command_w(KBD_CCMD_MOUSE_DISABLE);
+	aux_free_irq(AUX_DEV);
 	return 0;
 }
 
@@ -843,11 +861,11 @@ static int open_aux(struct inode * inode, struct file * file)
 		return 0;
 	}
 	queue->head = queue->tail = 0;		/* Flush input queue */
-	if (request_irq(AUX_IRQ, keyboard_interrupt, SA_SHIRQ, "PS/2 Mouse", AUX_DEV)) {
+	if (aux_request_irq(keyboard_interrupt, AUX_DEV)) {
 		aux_count--;
 		return -EBUSY;
 	}
-	kbd_write(KBD_CNTL_REG, KBD_CCMD_MOUSE_ENABLE);	/* Enable the
+	kbd_write_command_w(KBD_CCMD_MOUSE_ENABLE);	/* Enable the
 							   auxiliary port on
 							   controller. */
 	aux_write_ack(AUX_ENABLE_DEV); /* Enable aux device */
@@ -966,14 +984,14 @@ static int __init psaux_init(void)
 	init_waitqueue_head(&queue->proc_list);
 
 #ifdef INITIALIZE_MOUSE
-	kbd_write(KBD_CNTL_REG, KBD_CCMD_MOUSE_ENABLE);	/* Enable Aux. */
+	kbd_write_command_w(KBD_CCMD_MOUSE_ENABLE); /* Enable Aux. */
 	aux_write_ack(AUX_SET_SAMPLE);
 	aux_write_ack(100);			/* 100 samples/sec */
 	aux_write_ack(AUX_SET_RES);
 	aux_write_ack(3);			/* 8 counts per mm */
 	aux_write_ack(AUX_SET_SCALE21);		/* 2:1 scaling */
 #endif /* INITIALIZE_MOUSE */
-	kbd_write(KBD_CNTL_REG, KBD_CCMD_MOUSE_DISABLE); /* Disable aux device. */
+	kbd_write_command(KBD_CCMD_MOUSE_DISABLE); /* Disable aux device. */
 	kbd_write_cmd(AUX_INTS_OFF); /* Disable controller ints. */
 
 	return 0;

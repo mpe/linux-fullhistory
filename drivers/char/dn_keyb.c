@@ -469,7 +469,7 @@ static void dn_keyb_process_mouse_event(unsigned char mouse_data) {
           		if (mouse_dy >  2048)
               		mouse_dy =  2048;
 				if (mouse_fasyncptr)
-              		kill_fasync(mouse_fasyncptr, SIGIO);
+              		kill_fasync(mouse_fasyncptr, SIGIO, POLL_IN);
 			}
 			mouse_byte_count=0;
 /*			printk("mouse: %d, %d, %x\n",mouse_x,mouse_y,buttons); */

@@ -433,7 +433,7 @@ ncp_do_simple_filldir(struct file *filp, char* name, int len,
 	ino = find_inode_number(dentry, &qname);
 
 	if (!ino)
-		ino = iunique(2);
+		ino = iunique(dentry->d_inode->i_sb, 2);
 
 	result = filldir(dirent, name, len, filp->f_pos, ino);
 	if (!result)
@@ -478,7 +478,7 @@ ncp_do_filldir(struct file *filp, struct ncp_entry_info *entry, void *dirent,
 
 		if (!newdent->d_inode) {
 			entry->opened = 0;
-			entry->ino = iunique(2);
+			entry->ino = iunique(inode->i_sb, 2);
 			newino = ncp_iget(inode->i_sb, entry);
 			if (newino) {
 				newdent->d_op = &ncp_dentry_operations;
@@ -501,7 +501,7 @@ end_advance:
 		ino = find_inode_number(dentry, &qname);
 
 	if (!ino)
-		ino = iunique(2);
+		ino = iunique(inode->i_sb, 2);
 
 	result = filldir(dirent, entry->i.entryName, entry->i.nameLen,
 				filp->f_pos, ino);
@@ -794,7 +794,7 @@ dentry->d_parent->d_name.name, __name, res);
 	 * Create an inode for the entry.
 	 */
 	finfo.opened = 0;
-	finfo.ino = iunique(2);
+	finfo.ino = iunique(dir->i_sb, 2);
 	error = -EACCES;
 	inode = ncp_iget(dir->i_sb, &finfo);
 
@@ -822,7 +822,7 @@ static int ncp_instantiate(struct inode *dir, struct dentry *dentry,
 	struct inode *inode;
 	int error = -EINVAL;
 
-	finfo->ino = iunique(2);
+	finfo->ino = iunique(dir->i_sb, 2);
 	inode = ncp_iget(dir->i_sb, finfo);
 	if (!inode)
 		goto out_close;

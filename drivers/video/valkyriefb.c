@@ -55,11 +55,11 @@
 #ifdef CONFIG_FB_COMPAT_XPMAC
 #include <asm/vc_ioctl.h>
 #endif
+#include <linux/adb.h>
+#include <linux/cuda.h>
 #include <asm/io.h>
 #include <asm/prom.h>
 #include <asm/pgtable.h>
-#include <asm/adb.h>
-#include <asm/cuda.h>
 
 #include <video/fbcon.h>
 #include <video/fbcon-cfb8.h>
@@ -167,10 +167,6 @@ static int valkyriefb_getcolreg(u_int regno, u_int *red, u_int *green,
 static int valkyriefb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 			     u_int transp, struct fb_info *info);
 static void do_install_cmap(int con, struct fb_info *info);
-
-
-__openfirmware
-
 
 static int valkyrie_open(struct fb_info *info, int user)
 {

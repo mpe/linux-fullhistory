@@ -10,7 +10,7 @@
  *
  *  Hardware information from:
  *    platinum.c: Console support for PowerMac "platinum" display adaptor.
- *    Copyright (C) 1996 Paul Mackerras
+ *    Copyright (C) 1996 Paul Mackerras and Mark Abene
  *
  *  This file is subject to the terms and conditions of the GNU General Public
  *  License. See the file COPYING in the main directory of this archive for
@@ -39,7 +39,6 @@
 #include <asm/io.h>
 #include <asm/prom.h>
 #include <asm/pgtable.h>
-#include <asm/adb.h>
 
 #include <video/fbcon.h>
 #include <video/fbcon-cfb8.h>
@@ -66,6 +65,7 @@ struct fb_par_platinum {
 struct fb_info_platinum {
 	struct fb_info			fb_info;
 	struct display			disp;
+	struct display_switch		dispsw;
 	struct fb_par_platinum		default_par;
 	struct fb_par_platinum		current_par;
 
@@ -145,6 +145,8 @@ static int platinum_var_to_par(const struct fb_var_screeninfo *var,
 static int platinum_encode_fix(struct fb_fix_screeninfo *fix,
 			       const struct fb_par_platinum *par,
 			       const struct fb_info_platinum *info);
+static void platinum_set_disp(struct display *disp, struct fb_info_platinum *info,
+			      int cmode, int accel);
 static int platinum_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 			      u_int *transp, struct fb_info *fb);
 static int platinum_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
@@ -174,10 +176,6 @@ static struct fb_ops platinumfb_ops = {
 	platinum_pan_display,
 	platinum_ioctl
 };
-
-
-__openfirmware
-
 
 static int platinum_open(struct fb_info *info, int user)
 {
@@ -219,6 +217,36 @@ static int platinum_get_var(struct fb_var_screeninfo *var, int con,
 	return 0;
 }
 
+static void platinum_set_disp(struct display *disp, struct fb_info_platinum *info,
+			      int cmode, int accel)
+{
+	switch(cmode) {
+#ifdef FBCON_HAS_CFB8
+	    case CMODE_8:
+		info->dispsw = fbcon_cfb8;
+		disp->dispsw = &info->dispsw;
+		break;
+#endif
+#ifdef FBCON_HAS_CFB16
+	    case CMODE_16:
+		info->dispsw = fbcon_cfb16;
+		disp->dispsw = &info->dispsw;
+		disp->dispsw_data = info->fbcon_cmap.cfb16;
+		break;
+#endif
+#ifdef FBCON_HAS_CFB32
+	    case CMODE_32:
+		info->dispsw = fbcon_cfb32;
+		disp->dispsw = &info->dispsw;
+		disp->dispsw_data = info->fbcon_cmap.cfb32;
+		break;
+#endif
+	    default:
+		disp->dispsw = &fbcon_dummy;
+		break;
+	}
+}
+
 static int platinum_set_var(struct fb_var_screeninfo *var, int con,
 			    struct fb_info *fb)
 {
@@ -227,6 +255,7 @@ static int platinum_set_var(struct fb_var_screeninfo *var, int con,
 	struct display *display;
 	int oldxres, oldyres, oldvxres, oldvyres, oldbpp, err;
 	int activate = var->activate;
+	struct platinum_regvals *init;
 
 	display = (con >= 0) ? &fb_display[con] : fb->disp;
 
@@ -242,6 +271,8 @@ static int platinum_set_var(struct fb_var_screeninfo *var, int con,
 		return 0;
 	}
 
+	init = platinum_reg_init[par.vmode-1];
+
 	oldxres = display->var.xres;
 	oldyres = display->var.yres;
 	oldvxres = display->var.xres_virtual;
@@ -255,7 +286,7 @@ static int platinum_set_var(struct fb_var_screeninfo *var, int con,
 	    struct fb_fix_screeninfo fix;
 
 	    platinum_encode_fix(&fix, &par, info);
-	    display->screen_base = (char *) info->frame_buffer + 0x1000;
+	    display->screen_base = (char *) info->frame_buffer + init->fb_offset + 0x20;
 	    display->visual = fix.visual;
 	    display->type = fix.type;
 	    display->type_aux = fix.type_aux;
@@ -264,36 +295,14 @@ static int platinum_set_var(struct fb_var_screeninfo *var, int con,
 	    display->line_length = fix.line_length;
 	    display->can_soft_blank = 1;
 	    display->inverse = 0;
-
-	    switch(par.cmode) {
-#ifdef FBCON_HAS_CFB8
-	     case CMODE_8:
-		display->dispsw = &fbcon_cfb8;
-		break;
-#endif
-#ifdef FBCON_HAS_CFB16
-	     case CMODE_16:
-		display->dispsw = &fbcon_cfb16;
-		display->dispsw_data = info->fbcon_cmap.cfb16;
-		break;
-#endif
-#ifdef FBCON_HAS_CFB32
-	     case CMODE_32:
-		display->dispsw = &fbcon_cfb32;
-		display->dispsw_data = info->fbcon_cmap.cfb32;
-		break;
-#endif
-	     default:
-		display->dispsw = &fbcon_dummy;
-		break;
-	    }
-	    
+	    platinum_set_disp(display, info, par.cmode, 0);
 	    display->scrollmode = SCROLL_YREDRAW;
 	    if (info->fb_info.changevar)
 	      (*info->fb_info.changevar)(con);
 	}
 
-	if (con == currcon)
+	if (!info->fb_info.display_fg ||
+	    info->fb_info.display_fg->vc_num == con)
 		platinum_set_par(&par, info);
 
 	if (oldbpp != var->bits_per_pixel) {
@@ -322,7 +331,8 @@ static int platinum_pan_display(struct fb_var_screeninfo *var, int con,
 static int platinum_get_cmap(struct fb_cmap *cmap, int kspc, int con,
 			     struct fb_info *info)
 {
-	if (con == currcon)		/* current console? */
+	if (!info->display_fg ||
+	    info->display_fg->vc_num == con)	/* current console? */
 		return fb_get_cmap(cmap, kspc, platinum_getcolreg, info);
 	if (fb_display[con].cmap.len)	/* non default colormap? */
 		fb_copy_cmap(&fb_display[con].cmap, cmap, kspc ? 0 : 2);
@@ -337,17 +347,23 @@ static int platinum_set_cmap(struct fb_cmap *cmap, int kspc, int con,
 			     struct fb_info *info)
 {
 	int err;
+	struct display *disp;
 
-	if (!fb_display[con].cmap.len) {
-		int size = fb_display[con].var.bits_per_pixel == 16 ? 32 : 256;
-		err = fb_alloc_cmap(&fb_display[con].cmap, size, 0);
-		if (err)
+	if (con >= 0)
+		disp = &fb_display[con];
+	else
+		disp = info->disp;
+	if (!disp->cmap.len) {     /* no colormap allocated? */
+		int size = disp->var.bits_per_pixel == 16 ? 32 : 256;
+		if ((err = fb_alloc_cmap(&disp->cmap, size, 0)))
 			return err;
 	}
 
-	if (con == currcon)
+	if (!info->display_fg ||
+	    info->display_fg->vc_num == con)	/* current console? */
 		return fb_set_cmap(cmap, kspc, platinum_setcolreg, info);
-	fb_copy_cmap(cmap, &fb_display[con].cmap, kspc ? 0 : 1);
+	else
+		fb_copy_cmap(cmap, &disp->cmap, kspc ? 0 : 1);
 	return 0;
 }
 
@@ -368,8 +384,9 @@ static int platinum_switch(int con, struct fb_info *fb)
 			    fb);
 	currcon = con;
 
-	platinum_var_to_par(&fb_display[currcon].var, &par, info);
+	platinum_var_to_par(&fb_display[con].var, &par, info);
 	platinum_set_par(&par, info);
+	platinum_set_disp(&fb_display[con], info, par.cmode, 0);
 	do_install_cmap(con, fb);
 
 	return 1;
@@ -431,7 +448,6 @@ static int platinum_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 {
 	struct fb_info_platinum *info = (struct fb_info_platinum *) fb;
 	volatile struct cmap_regs *cmap_regs = info->cmap_regs;
-	int scale;
 
 	if (regno > 255)
 		return 1;
@@ -444,12 +460,10 @@ static int platinum_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 	info->palette[regno].green = green;
 	info->palette[regno].blue = blue;
 
-	scale = (info->current_par.cmode == CMODE_16) ? 3 : 0;
-
 	out_8(&cmap_regs->addr, regno);		/* tell clut what addr to fill	*/
-	out_8(&cmap_regs->lut, red<<scale);	/* send one color channel at	*/
-	out_8(&cmap_regs->lut, green<<scale);	/* a time...			*/
-	out_8(&cmap_regs->lut, blue<<scale);
+	out_8(&cmap_regs->lut, red);		/* send one color channel at	*/
+	out_8(&cmap_regs->lut, green);		/* a time...			*/
+	out_8(&cmap_regs->lut, blue);
 
 	if(regno < 16) {
 #ifdef FBCON_HAS_CFB16
@@ -538,7 +552,7 @@ static void platinum_set_par(const struct fb_par_platinum *par, struct fb_info_p
 	out_be32(&platinum_regs->reg[26+32].r, (info->total_vram == 0x100000 ?
 						init->offset[cmode] + 4 - cmode :
 						init->offset[cmode]));
-	out_be32(&platinum_regs->reg[16].r, (unsigned) info->frame_buffer_phys + 0x1000 - 0x10);
+	out_be32(&platinum_regs->reg[16].r, (unsigned) info->frame_buffer_phys+init->fb_offset+0x10);
 	out_be32(&platinum_regs->reg[18].r, init->pitch[cmode]);
 	out_be32(&platinum_regs->reg[19].r, (info->total_vram == 0x100000 ?
 					     init->mode[cmode+1] :
@@ -571,7 +585,7 @@ static void platinum_set_par(const struct fb_par_platinum *par, struct fb_info_p
 		display_info.mode = vmode;
 		strncpy(display_info.name, "platinum",
 			sizeof(display_info.name));
-		display_info.fb_address = info->frame_buffer_phys + 0x1000;
+		display_info.fb_address = info->frame_buffer_phys + init->fb_offset + 0x20;
 		display_info.cmap_adr_address = info->cmap_regs_phys;
 		display_info.cmap_data_address = info->cmap_regs_phys + 0x30;
 		display_info.disp_reg_address = info->platinum_regs_phys;
@@ -665,7 +679,7 @@ int __init platinum_init(void)
 
 #ifdef __powerpc__
 #define invalidate_cache(addr) \
-	asm volatile("eieio; dcbi 0,%1" \
+	asm volatile("eieio; dcbf 0,%1" \
 	: "=m" (*(addr)) : "r" (addr) : "memory");
 #else
 #define invalidate_cache(addr)
@@ -675,6 +689,7 @@ void __init platinum_of_init(struct device_node *dp)
 {
 	struct fb_info_platinum	*info;
 	unsigned long		addr, size;
+	volatile __u8		*fbuffer;
 	int			i, bank0, bank1, bank2, bank3;
 
 	if(dp->n_addrs != 2) {
@@ -711,19 +726,20 @@ void __init platinum_of_init(struct device_node *dp)
 	out_be32(&info->platinum_regs->reg[20].r, 0x1011);	/* select max vram */
 	out_be32(&info->platinum_regs->reg[24].r, 0);	/* switch in vram */
 
-	info->base_frame_buffer[0x100000] = 0x34;
-	info->base_frame_buffer[0x100008] = 0x0;
-	invalidate_cache(&info->base_frame_buffer[0x100000]);
-	info->base_frame_buffer[0x200000] = 0x56;
-	info->base_frame_buffer[0x200008] = 0x0;
-	invalidate_cache(&info->base_frame_buffer[0x200000]);
-	info->base_frame_buffer[0x300000] = 0x78;
-	info->base_frame_buffer[0x300008] = 0x0;
-	invalidate_cache(&info->base_frame_buffer[0x300000]);
+	fbuffer = info->base_frame_buffer;
+	fbuffer[0x100000] = 0x34;
+	fbuffer[0x100008] = 0x0;
+	invalidate_cache(&fbuffer[0x100000]);
+	fbuffer[0x200000] = 0x56;
+	fbuffer[0x200008] = 0x0;
+	invalidate_cache(&fbuffer[0x200000]);
+	fbuffer[0x300000] = 0x78;
+	fbuffer[0x300008] = 0x0;
+	invalidate_cache(&fbuffer[0x300000]);
 	bank0 = 1; /* builtin 1MB vram, always there */
-	bank1 = info->base_frame_buffer[0x100000] == 0x34;
-	bank2 = info->base_frame_buffer[0x200000] == 0x56;
-	bank3 = info->base_frame_buffer[0x300000] == 0x78;
+	bank1 = fbuffer[0x100000] == 0x34;
+	bank2 = fbuffer[0x200000] == 0x56;
+	bank3 = fbuffer[0x300000] == 0x78;
 	info->total_vram = (bank0 + bank1 + bank2 + bank3) * 0x100000;
 	printk(KERN_INFO "Total VRAM = %dMB %d%d%d%d\n", (int) (info->total_vram / 1024 / 1024), bank3, bank2, bank1, bank0);
 
@@ -835,10 +851,14 @@ static int platinum_encode_fix(struct fb_fix_screeninfo *fix,
 			       const struct fb_par_platinum *par,
 			       const struct fb_info_platinum *info)
 {
+	struct platinum_regvals *init;
+
+	init = platinum_reg_init[par->vmode-1];
+
 	memset(fix, 0, sizeof(*fix));
 	strcpy(fix->id, "platinum");
-	fix->smem_start = (info->frame_buffer_phys + 0x1000);
-	fix->smem_len = (u32) info->total_vram - 0x1000;
+	fix->smem_start = (info->frame_buffer_phys) + init->fb_offset + 0x20;
+	fix->smem_len = (u32) info->total_vram;
 	fix->mmio_start = (info->platinum_regs_phys);
 	fix->mmio_len = 0x1000;
 	fix->type = FB_TYPE_PACKED_PIXELS;
@@ -884,6 +904,7 @@ int __init platinum_setup(char *options)
 		} else if (!strncmp(this_opt, "cmode:", 6)) {
 			int depth = simple_strtoul(this_opt+6, NULL, 0);
 			switch (depth) {
+			 case 0:
 			 case 8:
 			    default_cmode = CMODE_8;
 			    break;

@@ -14,7 +14,7 @@
 #include <linux/sched.h>
 
 
-#define DEBUG
+#undef DEBUG
 
 #define name_matches(v, s, l) \
     ((v).name && !strncmp((s), (v).name, (l)) && strlen((v).name) == (l))

@@ -769,7 +769,7 @@ static int usbin_retire_desc(struct usbin *u, struct usb_isoc_desc *id)
 
 static int usbin_completed(int status, void *__buffer, int rval, void *dev_id)
 {
-#if 0
+#if 1
         struct usb_isoc_desc *id = (struct usb_isoc_desc *)dev_id;
         struct usb_audiodev *as = (struct usb_audiodev *)id->context;
 #else
@@ -777,10 +777,13 @@ static int usbin_completed(int status, void *__buffer, int rval, void *dev_id)
         struct usb_isoc_desc *id;
 #endif
 	struct usbin *u = &as->usbin;
+	unsigned long flags;
 	unsigned int next, idmask;
 
+#if 0
 	printk(KERN_DEBUG "usbin_completed: status %d rval %d flags 0x%x\n", status, rval, u->flags);
-	spin_lock(&as->lock);
+#endif
+	spin_lock_irqsave(&as->lock, flags);
 	next = !(u->flags & FLG_NEXTID);
 	idmask = FLG_ID1RUNNING >> next;
 	u->flags = (u->flags & ~(FLG_NEXTID | idmask)) | next;
@@ -794,7 +797,12 @@ static int usbin_completed(int status, void *__buffer, int rval, void *dev_id)
 		u->flags &= ~FLG_RUNNING;
 		printk(KERN_DEBUG "usbin_completed: descriptor not restarted\n");
 	}
-	spin_unlock(&as->lock);
+	if (!(u->flags & idmask)) {
+		printk(KERN_DEBUG "usbin_completed: killing id\n");
+		usb_kill_isoc(id);
+		printk(KERN_DEBUG "usbin_completed: id killed\n");
+	}
+	spin_unlock_irqrestore(&as->lock, flags);
 	return 0;
 }
 
@@ -833,7 +841,7 @@ static int usbin_sync_retire_desc(struct usbin *u, struct usb_isoc_desc *id)
 
 static int usbin_sync_completed(int status, void *__buffer, int rval, void *dev_id)
 {
-#if 0
+#if 1
         struct usb_isoc_desc *id = (struct usb_isoc_desc *)dev_id;
         struct usb_audiodev *as = (struct usb_audiodev *)id->context;
 #else
@@ -841,13 +849,16 @@ static int usbin_sync_completed(int status, void *__buffer, int rval, void *dev_
         struct usb_isoc_desc *id;
 #endif
 	struct usbin *u = &as->usbin;
+	unsigned long flags;
 	unsigned int next, idmask;
 
+#if 0
 	printk(KERN_DEBUG "usbin_sync_completed: status %d rval %d flags 0x%x\n", status, rval, u->flags);
-	spin_lock(&as->lock);
+#endif
+	spin_lock_irqsave(&as->lock, flags);
 	next = !(u->flags & FLG_SYNCNEXTID);
 	idmask = FLG_SYNC1RUNNING >> next;
-	u->flags = (u->flags & ~(FLG_SYNCNEXTID | idmask)) | (-next & FLG_SYNCNEXTID);
+	u->flags = (u->flags & ~(FLG_SYNCNEXTID | idmask)) | ((-next) & FLG_SYNCNEXTID);
 	id = u->synciso[!next];
 	if (!usbin_sync_retire_desc(u, id) &&
 	    u->flags & FLG_RUNNING &&
@@ -858,7 +869,12 @@ static int usbin_sync_completed(int status, void *__buffer, int rval, void *dev_
 		u->flags &= ~FLG_RUNNING;
 		printk(KERN_DEBUG "usbin_sync_completed: descriptor not restarted\n");
 	}
-	spin_unlock(&as->lock);
+	if (!(u->flags & idmask)) {
+		printk(KERN_DEBUG "usbin_sync_completed: killing id\n");
+		usb_kill_isoc(id);
+		printk(KERN_DEBUG "usbin_sync_completed: id killed\n");
+	}
+	spin_unlock_irqrestore(&as->lock, flags);
 	return 0;
 }
 
@@ -870,8 +886,10 @@ static void usbin_start(struct usb_audiodev *as)
 	unsigned long flags;
 	unsigned int which, i;
 
-	printk(KERN_DEBUG "usbin_start: device %d ufmt %d dfmt %d srate %d\n",
+#if 0
+	printk(KERN_DEBUG "usbin_start: device %d ufmt 0x%08x dfmt 0x%08x srate %d\n",
 	       dev->devnum, u->format, u->dma.format, u->dma.srate);
+#endif
 	/* allocate USB storage if not already done */
 	/* UHCI wants the data to be page aligned - this is silly */
 	if (!u->data[0])
@@ -980,15 +998,18 @@ static void usbout_stop(struct usb_audiodev *as)
         unsigned long flags;
 	unsigned int i;
 
+printk(KERN_DEBUG "usb_audio: usbout_stop (1) flags 0x%04x\n", u->flags);
         spin_lock_irqsave(&as->lock, flags);
 	u->flags &= ~FLG_RUNNING;
 	i = u->flags;
         spin_unlock_irqrestore(&as->lock, flags);
+printk(KERN_DEBUG "usb_audio: usbout_stop (2) flags 0x%04x\n", i);
 	while (i & (FLG_ID0RUNNING|FLG_ID1RUNNING|FLG_SYNC0RUNNING|FLG_SYNC1RUNNING)) {
 		schedule_timeout(1);
 		spin_lock_irqsave(&as->lock, flags);
 		i = u->flags;
 		spin_unlock_irqrestore(&as->lock, flags);
+printk(KERN_DEBUG "usb_audio: usbout_stop (3) flags 0x%04x\n", i);
 	}
 	if (u->dataiso[0])
 		usb_free_isoc(u->dataiso[0]);
@@ -1219,7 +1240,7 @@ static int usbout_retire_desc(struct usbout *u, struct usb_isoc_desc *id)
 
 static int usbout_completed(int status, void *__buffer, int rval, void *dev_id)
 {
-#if 0
+#if 1
         struct usb_isoc_desc *id = (struct usb_isoc_desc *)dev_id;
         struct usb_audiodev *as = (struct usb_audiodev *)id->context;
 #else
@@ -1227,10 +1248,13 @@ static int usbout_completed(int status, void *__buffer, int rval, void *dev_id)
 	struct usb_isoc_desc *id;
 #endif
 	struct usbout *u = &as->usbout;
+	unsigned long flags;
 	unsigned int next, idmask;
 
+#if 0
 	printk(KERN_DEBUG "usbout_completed: status %d rval %d flags 0x%x\n", status, rval, u->flags);
-	spin_lock(&as->lock);
+#endif
+	spin_lock_irqsave(&as->lock, flags);
 	next = !(u->flags & FLG_NEXTID);
 	idmask = FLG_ID1RUNNING >> next;
 	u->flags = (u->flags & ~(FLG_NEXTID | idmask)) | next;
@@ -1244,7 +1268,12 @@ static int usbout_completed(int status, void *__buffer, int rval, void *dev_id)
 		u->flags &= ~FLG_RUNNING;
 		printk(KERN_DEBUG "usbout_completed: descriptor not restarted\n");
 	}
-	spin_unlock(&as->lock);
+	if (!(u->flags & idmask)) {
+		printk(KERN_DEBUG "usbout_completed: killing id\n");
+		usb_kill_isoc(id);
+		printk(KERN_DEBUG "usbout_completed: id killed\n");
+	}
+	spin_unlock_irqrestore(&as->lock, flags);
 	return 0;
 }
 
@@ -1286,7 +1315,7 @@ static int usbout_sync_retire_desc(struct usbout *u, struct usb_isoc_desc *id)
 
 static int usbout_sync_completed(int status, void *__buffer, int rval, void *dev_id)
 {
-#if 0
+#if 1
         struct usb_isoc_desc *id = (struct usb_isoc_desc *)dev_id;
         struct usb_audiodev *as = (struct usb_audiodev *)id->context;
 #else
@@ -1294,13 +1323,16 @@ static int usbout_sync_completed(int status, void *__buffer, int rval, void *dev
 	struct usb_isoc_desc *id;
 #endif
 	struct usbout *u = &as->usbout;
+	unsigned long flags;
 	unsigned int next, idmask;
 
+#if 0
 	printk(KERN_DEBUG "usbout_sync_completed: status %d rval %d flags 0x%x\n", status, rval, u->flags);
-	spin_lock(&as->lock);
+#endif
+	spin_lock_irqsave(&as->lock, flags);
 	next = !(u->flags & FLG_SYNCNEXTID);
 	idmask = FLG_SYNC1RUNNING >> next;
-	u->flags = (u->flags & ~(FLG_SYNCNEXTID | idmask)) | (-next & FLG_SYNCNEXTID);
+	u->flags = (u->flags & ~(FLG_SYNCNEXTID | idmask)) | ((-next) & FLG_SYNCNEXTID);
 	id = u->synciso[!next];
 	if (!usbout_sync_retire_desc(u, id) &&
 	    u->flags & FLG_RUNNING &&
@@ -1311,7 +1343,12 @@ static int usbout_sync_completed(int status, void *__buffer, int rval, void *dev
 		u->flags &= ~FLG_RUNNING;
 		printk(KERN_DEBUG "usbout_sync_completed: descriptor not restarted\n");
 	}
-	spin_unlock(&as->lock);
+	if (!(u->flags & idmask)) {
+		printk(KERN_DEBUG "usbout_sync_completed: killing id\n");
+		usb_kill_isoc(id);
+		printk(KERN_DEBUG "usbout_sync_completed: id killed\n");
+	}
+	spin_unlock_irqrestore(&as->lock, flags);
 	return 0;
 }
 
@@ -1323,8 +1360,10 @@ static void usbout_start(struct usb_audiodev *as)
 	unsigned long flags;
 	unsigned int which, i;
 
-	printk(KERN_DEBUG "usbout_start: device %d ufmt %d dfmt %d srate %d\n",
+#if 0
+	printk(KERN_DEBUG "usbout_start: device %d ufmt 0x%08x dfmt 0x%08x srate %d\n",
 	       dev->devnum, u->format, u->dma.format, u->dma.srate);
+#endif
 	/* allocate USB storage if not already done */
 	/* UHCI wants the data to be page aligned - this is silly */
 	if (!u->data[0])
@@ -1459,7 +1498,7 @@ static int set_format_in(struct usb_audiodev *as)
 	struct usbin *u = &as->usbin;
 	struct dmabuf *d = &u->dma;
 	struct audioformat *fmt;
-	unsigned int fmtnr;
+	unsigned int fmtnr, ep;
 	unsigned char data[3];
 
 	if (u->interface < 0 || u->interface >= config->bNumInterfaces)
@@ -1474,7 +1513,7 @@ static int set_format_in(struct usb_audiodev *as)
 	if ((alts->endpoint[0].bmAttributes & 0x0c) == 0x08) {
 		if (alts->bNumEndpoints < 2 ||
 		    alts->endpoint[1].bmAttributes != 0x01 ||
-		    alts->endpoint[1].bSynchAddress == 0 ||
+		    alts->endpoint[1].bSynchAddress != 0 ||
 		    alts->endpoint[1].bEndpointAddress != (alts->endpoint[0].bSynchAddress & 0x7f)) {
 			printk(KERN_ERR "usb_audio: device %d interface %d altsetting %d invalid synch pipe\n",
 			       dev->devnum, u->interface, fmt->altsetting);
@@ -1497,18 +1536,21 @@ static int set_format_in(struct usb_audiodev *as)
 	data[0] = d->srate;
 	data[1] = d->srate >> 8;
 	data[2] = d->srate >> 16;
+	ep = usb_pipeendpoint(u->datapipe) | (u->datapipe & USB_DIR_IN);
 	if (usb_control_msg(dev, usb_sndctrlpipe(dev, 0), SET_CUR, USB_TYPE_CLASS|USB_RECIP_ENDPOINT|USB_DIR_OUT, 
-			    SAMPLING_FREQ_CONTROL << 8, usb_pipeendpoint(u->datapipe), data, 3, HZ) != 3) {
-		printk(KERN_ERR "usbaudio: failure to set sampling frequency device %d endpoint %d\n",
-		       dev->devnum, usb_pipeendpoint(u->datapipe));
+			    SAMPLING_FREQ_CONTROL << 8, ep, data, 3, HZ) < 0) {
+		printk(KERN_ERR "usbaudio: failure to set input sampling frequency device %d endpoint 0x%x to %u\n",
+		       dev->devnum, ep, d->srate);
 		return -1;
 	}
 	if (usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), GET_CUR, USB_TYPE_CLASS|USB_RECIP_ENDPOINT|USB_DIR_IN,
-			    SAMPLING_FREQ_CONTROL << 8, usb_pipeendpoint(u->datapipe), data, 3, HZ) != 3) {
-		printk(KERN_ERR "usbaudio: failure to get sampling frequency device %d endpoint %d\n",
-		       dev->devnum, usb_pipeendpoint(u->datapipe));
+			    SAMPLING_FREQ_CONTROL << 8, ep, data, 3, HZ) < 0) {
+		printk(KERN_ERR "usbaudio: failure to get input sampling frequency device %d endpoint 0x%x\n",
+		       dev->devnum, ep);
 		return -1;
 	}
+	printk(KERN_DEBUG "usb_audio: set_format_in: device %d interface %d altsetting %d srate req: %u real %u\n",
+	       dev->devnum, u->interface, fmt->altsetting, d->srate, data[0] | (data[1] << 8) | (data[2] << 16));
 	d->srate = data[0] | (data[1] << 8) | (data[2] << 16);
 	return 0;
 }
@@ -1522,7 +1564,7 @@ static int set_format_out(struct usb_audiodev *as)
 	struct usbout *u = &as->usbout;
 	struct dmabuf *d = &u->dma;
 	struct audioformat *fmt;
-	unsigned int fmtnr;
+	unsigned int fmtnr, ep;
 	unsigned char data[3];
 
 	if (u->interface < 0 || u->interface >= config->bNumInterfaces)
@@ -1537,7 +1579,7 @@ static int set_format_out(struct usb_audiodev *as)
 	if ((alts->endpoint[0].bmAttributes & 0x0c) == 0x04) {
 		if (alts->bNumEndpoints < 2 ||
 		    alts->endpoint[1].bmAttributes != 0x01 ||
-		    alts->endpoint[1].bSynchAddress == 0 ||
+		    alts->endpoint[1].bSynchAddress != 0 ||
 		    alts->endpoint[1].bEndpointAddress != (alts->endpoint[0].bSynchAddress | 0x80)) {
 			printk(KERN_ERR "usb_audio: device %d interface %d altsetting %d invalid synch pipe\n",
 			       dev->devnum, u->interface, fmt->altsetting);
@@ -1560,18 +1602,21 @@ static int set_format_out(struct usb_audiodev *as)
 	data[0] = d->srate;
 	data[1] = d->srate >> 8;
 	data[2] = d->srate >> 16;
+	ep = usb_pipeendpoint(u->datapipe) | (u->datapipe & USB_DIR_IN);
 	if (usb_control_msg(dev, usb_sndctrlpipe(dev, 0), SET_CUR, USB_TYPE_CLASS|USB_RECIP_ENDPOINT|USB_DIR_OUT, 
-			    SAMPLING_FREQ_CONTROL << 8, usb_pipeendpoint(u->datapipe), data, 3, HZ) != 3) {
-		printk(KERN_ERR "usbaudio: failure to set sampling frequency device %d endpoint %d\n",
-		       dev->devnum, usb_pipeendpoint(u->datapipe));
+			    SAMPLING_FREQ_CONTROL << 8, ep, data, 3, HZ) < 0) {
+		printk(KERN_ERR "usbaudio: failure to set output sampling frequency device %d endpoint 0x%x to %u\n",
+		       dev->devnum, ep, d->srate);
 		return -1;
 	}
 	if (usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), GET_CUR, USB_TYPE_CLASS|USB_RECIP_ENDPOINT|USB_DIR_IN,
-			    SAMPLING_FREQ_CONTROL << 8, usb_pipeendpoint(u->datapipe), data, 3, HZ) != 3) {
-		printk(KERN_ERR "usbaudio: failure to get sampling frequency device %d endpoint %d\n",
-		       dev->devnum, usb_pipeendpoint(u->datapipe));
+			    SAMPLING_FREQ_CONTROL << 8, ep, data, 3, HZ) < 0) {
+		printk(KERN_ERR "usbaudio: failure to get output sampling frequency device %d endpoint 0x%x\n",
+		       dev->devnum, ep);
 		return -1;
 	}
+	printk(KERN_DEBUG "usb_audio: set_format_out: device %d interface %d altsetting %d srate req: %u real %u\n",
+	       dev->devnum, u->interface, fmt->altsetting, d->srate, data[0] | (data[1] << 8) | (data[2] << 16));
 	d->srate = data[0] | (data[1] << 8) | (data[2] << 16);
 	return 0;
 }
@@ -1642,7 +1687,7 @@ static int wrmixer(struct usb_mixerdev *ms, unsigned mixch, unsigned value)
 		data[0] = v1;
 		data[1] = v1 >> 8;
                 if (usb_control_msg(dev, usb_sndctrlpipe(dev, 0), SET_CUR, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_OUT,
-                                    (ch->chnum << 8) | 1, ms->iface | (ch->unitid << 8), data, 2, HZ) < 2)
+                                    (ch->chnum << 8) | 1, ms->iface | (ch->unitid << 8), data, 2, HZ) < 0)
                         goto err;
 		if (!(ch->flags & (MIXFLG_STEREOIN | MIXFLG_STEREOOUT)))
 			return 0;
@@ -1650,7 +1695,7 @@ static int wrmixer(struct usb_mixerdev *ms, unsigned mixch, unsigned value)
 		data[1] = v2 >> 8;
 		if (usb_control_msg(dev, usb_sndctrlpipe(dev, 0), SET_CUR, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_OUT,
 				    ((ch->chnum + !!(ch->flags & MIXFLG_STEREOIN)) << 8) | (1 + !!(ch->flags & MIXFLG_STEREOOUT)),
-				    ms->iface | (ch->unitid << 8), data, 2, HZ) < 2)
+				    ms->iface | (ch->unitid << 8), data, 2, HZ) < 0)
                         goto err;
 		return 0;
 
@@ -1659,14 +1704,14 @@ static int wrmixer(struct usb_mixerdev *ms, unsigned mixch, unsigned value)
 		data[0] = v1;
 		data[1] = v1 >> 8;
                 if (usb_control_msg(dev, usb_sndctrlpipe(dev, 0), SET_CUR, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_OUT,
-                                    (ch->selector << 8) | ch->chnum, ms->iface | (ch->unitid << 8), data, 2, HZ) < 2)
+                                    (ch->selector << 8) | ch->chnum, ms->iface | (ch->unitid << 8), data, 2, HZ) < 0)
                         goto err;
 		if (ch->chnum == 0)
 			return 0;
 		data[0] = v2;
 		data[1] = v2 >> 8;
 		if (usb_control_msg(dev, usb_sndctrlpipe(dev, 0), SET_CUR, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_OUT,
-				    (ch->selector << 8) | (ch->chnum + 1), ms->iface | (ch->unitid << 8), data, 2, HZ) < 2)
+				    (ch->selector << 8) | (ch->chnum + 1), ms->iface | (ch->unitid << 8), data, 2, HZ) < 0)
 			goto err;
 		return 0;
                 
@@ -1675,13 +1720,13 @@ static int wrmixer(struct usb_mixerdev *ms, unsigned mixch, unsigned value)
         case TREBLE_CONTROL:
 		data[0] = v1 >> 8;
 		if (usb_control_msg(dev, usb_sndctrlpipe(dev, 0), SET_CUR, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_OUT,
-                                    (ch->selector << 8) | ch->chnum, ms->iface | (ch->unitid << 8), data, 1, HZ) < 1)
+                                    (ch->selector << 8) | ch->chnum, ms->iface | (ch->unitid << 8), data, 1, HZ) < 0)
                         goto err;
 		if (ch->chnum == 0)
 			return 0;
 		data[0] = v2 >> 8;
 		if (usb_control_msg(dev, usb_sndctrlpipe(dev, 0), SET_CUR, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_OUT,
-				    (ch->selector << 8) | (ch->chnum + 1), ms->iface | (ch->unitid << 8), data, 1, HZ) < 1)
+				    (ch->selector << 8) | (ch->chnum + 1), ms->iface | (ch->unitid << 8), data, 1, HZ) < 0)
 			goto err;
 		return 0;
                
@@ -1839,7 +1884,7 @@ static int usb_audio_ioctl_mixdev(struct inode *inode, struct file *file, unsign
                         for (val = i = 0; i < ms->numch; i++)
 				if (ms->ch[i].flags & (MIXFLG_STEREOIN | MIXFLG_STEREOOUT))
 					val |= 1 << ms->ch[i].osschannel;
-                        return put_user(0, (int *)arg);
+                        return put_user(val, (int *)arg);
                         
                 case SOUND_MIXER_CAPS:
                         return put_user(0, (int *)arg);
@@ -2778,26 +2823,26 @@ static unsigned int getvolchannel(struct consmixstate *state)
 	if ((state->termtype & 0xff00) == 0x0000 && !(state->mixchmask & SOUND_MASK_VOLUME))
 		return SOUND_MIXER_VOLUME;
 	if ((state->termtype & 0xff00) == 0x0100) {
-		if (!(state->mixchmask & SOUND_MASK_PCM))
+		if (state->mixchmask & SOUND_MASK_PCM)
 			return SOUND_MIXER_PCM;
-		if (!(state->mixchmask & SOUND_MASK_ALTPCM))
+		if (state->mixchmask & SOUND_MASK_ALTPCM)
 			return SOUND_MIXER_ALTPCM;
 	}
-	if ((state->termtype & 0xff00) == 0x0200 && !(state->mixchmask & SOUND_MASK_MIC))
+	if ((state->termtype & 0xff00) == 0x0200 && (state->mixchmask & SOUND_MASK_MIC))
 		return SOUND_MIXER_MIC;
-	if ((state->termtype & 0xff00) == 0x0300 && !(state->mixchmask & SOUND_MASK_SPEAKER))
+	if ((state->termtype & 0xff00) == 0x0300 && (state->mixchmask & SOUND_MASK_SPEAKER))
 		return SOUND_MIXER_SPEAKER;
-	if ((state->termtype & 0xff00) == 0x0300 && !(state->mixchmask & SOUND_MASK_SPEAKER))
+	if ((state->termtype & 0xff00) == 0x0300 && (state->mixchmask & SOUND_MASK_SPEAKER))
 		return SOUND_MIXER_SPEAKER;
 	if ((state->termtype & 0xff00) == 0x0500) {
-		if (!(state->mixchmask & SOUND_MASK_PHONEIN))
+		if (state->mixchmask & SOUND_MASK_PHONEIN)
 			return SOUND_MIXER_PHONEIN;
-		if (!(state->mixchmask & SOUND_MASK_PHONEOUT))
+		if (state->mixchmask & SOUND_MASK_PHONEOUT)
 			return SOUND_MIXER_PHONEOUT;
 	}
-	if (state->termtype >= 0x710 && state->termtype <= 0x711 && !(state->mixchmask & SOUND_MASK_RADIO))
+	if (state->termtype >= 0x710 && state->termtype <= 0x711 && (state->mixchmask & SOUND_MASK_RADIO))
 		return SOUND_MIXER_RADIO;
-	if (state->termtype >= 0x709 && state->termtype <= 0x70f && !(state->mixchmask & SOUND_MASK_VIDEO))
+	if (state->termtype >= 0x709 && state->termtype <= 0x70f && (state->mixchmask & SOUND_MASK_VIDEO))
 		return SOUND_MIXER_VIDEO;
 	u = ffs(state->mixchmask & (SOUND_MASK_LINE | SOUND_MASK_CD | SOUND_MASK_LINE1 | SOUND_MASK_LINE2 | SOUND_MASK_LINE3 |
 				    SOUND_MASK_DIGITAL1 | SOUND_MASK_DIGITAL2 | SOUND_MASK_DIGITAL3));
@@ -2818,18 +2863,18 @@ static void prepmixch(struct consmixstate *state)
 	switch (ch->selector) {
 	case 0:  /* mixer unit request */
 		if (usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), GET_MIN, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_IN,
-				    (ch->chnum << 8) | 1, state->ctrlif | (ch->unitid << 8), buf, 2, HZ) < 2)
+				    (ch->chnum << 8) | 1, state->ctrlif | (ch->unitid << 8), buf, 2, HZ) < 0)
 			goto err;
 		ch->minval = buf[0] | (buf[1] << 8);
 		if (usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), GET_MAX, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_IN,
-				    (ch->chnum << 8) | 1, state->ctrlif | (ch->unitid << 8), buf, 2, HZ) < 2)
+				    (ch->chnum << 8) | 1, state->ctrlif | (ch->unitid << 8), buf, 2, HZ) < 0)
 			goto err;
 		ch->maxval = buf[0] | (buf[1] << 8);
 		v2 = ch->maxval - ch->minval;
 		if (!v2)
 			v2 = 1;
 		if (usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), GET_CUR, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_IN,
-				    (ch->chnum << 8) | 1, state->ctrlif | (ch->unitid << 8), buf, 2, HZ) < 2)
+				    (ch->chnum << 8) | 1, state->ctrlif | (ch->unitid << 8), buf, 2, HZ) < 0)
 			goto err;
 		v1 = buf[0] | (buf[1] << 8);
 		v3 = v1 - ch->minval;
@@ -2840,7 +2885,7 @@ static void prepmixch(struct consmixstate *state)
 		if (ch->flags & (MIXFLG_STEREOIN | MIXFLG_STEREOOUT)) {
 			if (usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), GET_CUR, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_IN,
 					    ((ch->chnum + !!(ch->flags & MIXFLG_STEREOIN)) << 8) | (1 + !!(ch->flags & MIXFLG_STEREOOUT)),
-					    state->ctrlif | (ch->unitid << 8), buf, 2, HZ) < 2)
+					    state->ctrlif | (ch->unitid << 8), buf, 2, HZ) < 0)
 			goto err;
 			v1 = buf[0] | (buf[1] << 8);
 			v3 = v1 - ch->minval;
@@ -2854,15 +2899,15 @@ static void prepmixch(struct consmixstate *state)
 		/* various feature unit controls */
 	case VOLUME_CONTROL:
 		if (usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), GET_MIN, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_IN,
-				    (ch->selector << 8) | ch->chnum, state->ctrlif | (ch->unitid << 8), buf, 2, HZ) < 2)
+				    (ch->selector << 8) | ch->chnum, state->ctrlif | (ch->unitid << 8), buf, 2, HZ) < 0)
 			goto err;
 		ch->minval = buf[0] | (buf[1] << 8);
 		if (usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), GET_MAX, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_IN,
-				    (ch->selector << 8) | ch->chnum, state->ctrlif | (ch->unitid << 8), buf, 2, HZ) < 2)
+				    (ch->selector << 8) | ch->chnum, state->ctrlif | (ch->unitid << 8), buf, 2, HZ) < 0)
 			goto err;
 		ch->maxval = buf[0] | (buf[1] << 8);
 		if (usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), GET_CUR, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_IN,
-				    (ch->selector << 8) | ch->chnum, state->ctrlif | (ch->unitid << 8), buf, 2, HZ) < 2)
+				    (ch->selector << 8) | ch->chnum, state->ctrlif | (ch->unitid << 8), buf, 2, HZ) < 0)
 			goto err;
 		v1 = buf[0] | (buf[1] << 8);
 		v2 = ch->maxval - ch->minval;
@@ -2875,7 +2920,7 @@ static void prepmixch(struct consmixstate *state)
 		ch->value = v3;
 		if (ch->chnum != 0) {
 			if (usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), GET_CUR, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_IN,
-					    (ch->selector << 8) | (ch->chnum + 1), state->ctrlif | (ch->unitid << 8), buf, 2, HZ) < 2)
+					    (ch->selector << 8) | (ch->chnum + 1), state->ctrlif | (ch->unitid << 8), buf, 2, HZ) < 0)
 				goto err;
 			v1 = buf[0] | (buf[1] << 8);
 			v3 = v1 - ch->minval;
@@ -2890,15 +2935,15 @@ static void prepmixch(struct consmixstate *state)
 	case MID_CONTROL:
 	case TREBLE_CONTROL:
 		if (usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), GET_MIN, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_IN,
-				    (ch->selector << 8) | ch->chnum, state->ctrlif | (ch->unitid << 8), buf, 1, HZ) < 1)
+				    (ch->selector << 8) | ch->chnum, state->ctrlif | (ch->unitid << 8), buf, 1, HZ) < 0)
 			goto err;
 		ch->minval = buf[0] << 8;
 		if (usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), GET_MAX, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_IN,
-				    (ch->selector << 8) | ch->chnum, state->ctrlif | (ch->unitid << 8), buf, 1, HZ) < 1)
+				    (ch->selector << 8) | ch->chnum, state->ctrlif | (ch->unitid << 8), buf, 1, HZ) < 0)
 			goto err;
 		ch->maxval = buf[0] << 8;
 		if (usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), GET_CUR, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_IN,
-				    (ch->selector << 8) | ch->chnum, state->ctrlif | (ch->unitid << 8), buf, 1, HZ) < 1)
+				    (ch->selector << 8) | ch->chnum, state->ctrlif | (ch->unitid << 8), buf, 1, HZ) < 0)
 			goto err;
 		v1 = buf[0] << 8;
 		v2 = ch->maxval - ch->minval;
@@ -2911,7 +2956,7 @@ static void prepmixch(struct consmixstate *state)
 		ch->value = v3;
 		if (ch->chnum != 0) {
 			if (usb_control_msg(dev, usb_rcvctrlpipe(dev, 0), GET_CUR, USB_RECIP_INTERFACE | USB_TYPE_CLASS | USB_DIR_IN,
-					    (ch->selector << 8) | (ch->chnum + 1), state->ctrlif | (ch->unitid << 8), buf, 1, HZ) < 1)
+					    (ch->selector << 8) | (ch->chnum + 1), state->ctrlif | (ch->unitid << 8), buf, 1, HZ) < 0)
 				goto err;
 			v1 = buf[0] << 8;
 			v3 = v1 - ch->minval;
@@ -2942,12 +2987,12 @@ extern inline int checkmixbmap(unsigned char *bmap, unsigned char flg, unsigned 
 	unsigned int idx;
 
 	idx = inidx*numoch;
-	if (!(bmap[idx >> 3] & (1 << (idx & 7))))
+	if (!(bmap[-(idx >> 3)] & (0x80 >> (idx & 7))))
 		return 0;
 	if (!(flg & (MIXFLG_STEREOIN | MIXFLG_STEREOOUT)))
 		return 1;
 	idx = (inidx+!!(flg & MIXFLG_STEREOIN))*numoch+!!(flg & MIXFLG_STEREOOUT);
-	if (!(bmap[idx >> 3] & (1 << (idx & 7))))
+	if (!(bmap[-(idx >> 3)] & (0x80 >> (idx & 7))))
 		return 0;
 	return 1;
 }
@@ -2958,6 +3003,8 @@ static void usb_audio_mixerunit(struct consmixstate *state, unsigned char *mixer
 	unsigned int chidx[SOUND_MIXER_NRDEVICES+1];
 	unsigned int termt[SOUND_MIXER_NRDEVICES];
 	unsigned char flg = (nroutch >= 2) ? MIXFLG_STEREOOUT : 0;
+	unsigned char *bmap = &mixer[9+mixer[4]];
+	unsigned int bmapsize;
 	struct mixerchannel *ch;
 	unsigned int i;
 
@@ -2977,7 +3024,9 @@ static void usb_audio_mixerunit(struct consmixstate *state, unsigned char *mixer
 	}
 	state->termtype = 0;
 	state->chconfig = mixer[6+mixer[4]] | (mixer[7+mixer[4]] << 8);
-	if (mixer[0] < 10+mixer[4]+((nroutch * chidx[mixer[4]] + 7) >> 3)) {
+	bmapsize = (nroutch * chidx[mixer[4]] + 7) >> 3;
+	bmap += bmapsize - 1;
+	if (mixer[0] < 10+mixer[4]+bmapsize) {
 		printk(KERN_ERR "usb_audio: unit %u invalid MIXER_UNIT descriptor (bitmap too small)\n", mixer[3]);
 		return;
 	}
@@ -2985,7 +3034,7 @@ static void usb_audio_mixerunit(struct consmixstate *state, unsigned char *mixer
 		state->termtype = termt[i];
 		if (chidx[i+1]-chidx[i] >= 2) {
 			flg |= MIXFLG_STEREOIN;
-			if (checkmixbmap(&mixer[9+mixer[4]], flg, chidx[i], nroutch)) {
+			if (checkmixbmap(bmap, flg, chidx[i], nroutch)) {
 				ch = getmixchannel(state, getvolchannel(state));
 				if (ch) {
 					ch->unitid = mixer[3];
@@ -2998,7 +3047,7 @@ static void usb_audio_mixerunit(struct consmixstate *state, unsigned char *mixer
 			}
 		}
 		flg &= ~MIXFLG_STEREOIN;
-		if (checkmixbmap(&mixer[9+mixer[4]], flg, chidx[i], nroutch)) {
+		if (checkmixbmap(bmap, flg, chidx[i], nroutch)) {
 			ch = getmixchannel(state, getvolchannel(state));
 			if (ch) {
 				ch->unitid = mixer[3];
@@ -3134,6 +3183,7 @@ static void usb_audio_featureunit(struct consmixstate *state, unsigned char *ftr
 static void usb_audio_recurseunit(struct consmixstate *state, unsigned char unitid)
 {
 	unsigned char *p1;
+	unsigned int i, j;
 
 	if (test_and_set_bit(unitid, &state->unitbitmap)) {
 		printk(KERN_ERR "usb_audio: mixer path recursion detected, unit %d!\n", unitid);
@@ -3195,15 +3245,16 @@ static void usb_audio_recurseunit(struct consmixstate *state, unsigned char unit
 			printk(KERN_ERR "usb_audio: unit %u: invalid EXTENSION_UNIT descriptor\n", unitid);
 			return;
 		}
-		{
-			unsigned int i;
-			
-			for (i = 0; i < p1[6]; i++)
-				usb_audio_recurseunit(state, p1[7+i]);
+		for (j = i = 0; i < p1[6]; i++) {
+			usb_audio_recurseunit(state, p1[7+i]);
+			if (!i)
+				j = state->termtype;
+			else if (j != state->termtype)
+				j = 0;
 		}
 		state->nrchannels = p1[7+p1[6]];
 		state->chconfig = p1[8+p1[6]] | (p1[9+p1[6]] << 8);
-		state->termtype = 0;
+		state->termtype = j;
 		return;
 
 	default:
@@ -3378,6 +3429,10 @@ static int usb_audio_probe(struct usb_device *dev)
 	return -1;
 
  configfound:
+        if (usb_set_configuration(dev, config->bConfigurationValue) < 0) {
+		printk(KERN_ERR "usb_audio: set_configuration failed (ConfigValue 0x%x)\n", config->bConfigurationValue);
+		return -1;
+	}
 	ret = usb_get_descriptor(dev, USB_DT_CONFIG, i, buf, 8);
 	if (ret) {
 		printk(KERN_ERR "usb_audio: cannot get first 8 bytes of config descriptor %d of device %d\n", i, dev->devnum);

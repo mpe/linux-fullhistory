@@ -36,7 +36,7 @@ void fbcon_cfb24_bmove(struct display *p, int sy, int sx, int dy, int dx,
     u8 *src, *dst;
 
     if (sx == 0 && dx == 0 && width * fontwidth(p) * 3 == bytes) {
-	mymemmove(p->screen_base + dy * linesize,
+	fb_memmove(p->screen_base + dy * linesize,
 		  p->screen_base + sy * linesize,
 		  height * linesize);
 	return;
@@ -55,7 +55,7 @@ void fbcon_cfb24_bmove(struct display *p, int sy, int sx, int dy, int dx,
 	src = p->screen_base + sy * linesize + sx;
 	dst = p->screen_base + dy * linesize + dx;
 	for (rows = height * fontheight(p); rows--;) {
-	    mymemmove(dst, src, width);
+	    fb_memmove(dst, src, width);
 	    src += bytes;
 	    dst += bytes;
 	}
@@ -63,7 +63,7 @@ void fbcon_cfb24_bmove(struct display *p, int sy, int sx, int dy, int dx,
 	src = p->screen_base + (sy+height) * linesize + sx - bytes;
 	dst = p->screen_base + (dy+height) * linesize + dx - bytes;
 	for (rows = height * fontheight(p); rows--;) {
-	    mymemmove(dst, src, width);
+	    fb_memmove(dst, src, width);
 	    src -= bytes;
 	    dst -= bytes;
 	}
@@ -90,7 +90,11 @@ void fbcon_cfb24_bmove(struct display *p, int sy, int sx, int dy, int dx,
 
 static inline void store4pixels(u32 d1, u32 d2, u32 d3, u32 d4, u32 *dest)
 {
-    convert4to3(d1, d2, d3, d4, *dest++, *dest++, *dest++);
+    u32 o1, o2, o3;
+    convert4to3(d1, d2, d3, d4, o1, o2, o3);
+    fb_writel (o1, dest++);
+    fb_writel (o2, dest++);
+    fb_writel (o3, dest);
 }
 
 static inline void rectfill(u8 *dest, int width, int height, u32 data,
@@ -103,9 +107,9 @@ static inline void rectfill(u8 *dest, int width, int height, u32 data,
     while (height-- > 0) {
 	u32 *p = (u32 *)dest;
 	for (i = 0; i < width/4; i++) {
-	    *p++ = d1;
-	    *p++ = d2;
-	    *p++ = d3;
+	    fb_writel(d1, p++);
+	    fb_writel(d2, p++);
+	    fb_writel(d3, p++);
 	}
 	dest += linesize;
     }
@@ -174,7 +178,7 @@ void fbcon_cfb24_putc(struct vc_data *conp, struct display *p, int c, int yy,
 	d2 = (-(bits >> 2 & 1) & eorx) ^ bgx;
 	d3 = (-(bits >> 1 & 1) & eorx) ^ bgx;
 	d4 = (-(bits & 1) & eorx) ^ bgx;
-	store4pixels(d1, d2, d3, d4, (u32 *)(dest+32));
+	store4pixels(d1, d2, d3, d4, (u32 *)(dest+36));
     }
 }
 
@@ -225,7 +229,7 @@ void fbcon_cfb24_putcs(struct vc_data *conp, struct display *p,
 	    d2 = (-(bits >> 2 & 1) & eorx) ^ bgx;
 	    d3 = (-(bits >> 1 & 1) & eorx) ^ bgx;
 	    d4 = (-(bits & 1) & eorx) ^ bgx;
-	    store4pixels(d1, d2, d3, d4, (u32 *)(dest+32));
+	    store4pixels(d1, d2, d3, d4, (u32 *)(dest+36));
 	}
 	dest0 += fontwidth(p)*3;
     }
@@ -240,17 +244,24 @@ void fbcon_cfb24_revc(struct display *p, int xx, int yy)
     for (rows = fontheight(p); rows--; dest += bytes) {
 	switch (fontwidth(p)) {
 	case 16:
-	    ((u32 *)dest)[9] ^= 0xffffffff; ((u32 *)dest)[10] ^= 0xffffffff;
-	    ((u32 *)dest)[11] ^= 0xffffffff;	/* FALL THROUGH */
+	    fb_writel(fb_readl(dest+36) ^ 0xffffffff, dest+36);
+	    fb_writel(fb_readl(dest+40) ^ 0xffffffff, dest+40);
+	    fb_writel(fb_readl(dest+44) ^ 0xffffffff, dest+44);
+	    /* FALL THROUGH */
 	case 12:
-	    ((u32 *)dest)[6] ^= 0xffffffff; ((u32 *)dest)[7] ^= 0xffffffff;
-	    ((u32 *)dest)[8] ^= 0xffffffff;	/* FALL THROUGH */
+	    fb_writel(fb_readl(dest+24) ^ 0xffffffff, dest+24);
+	    fb_writel(fb_readl(dest+28) ^ 0xffffffff, dest+28);
+	    fb_writel(fb_readl(dest+32) ^ 0xffffffff, dest+32);
+	    /* FALL THROUGH */
 	case 8:
-	    ((u32 *)dest)[3] ^= 0xffffffff; ((u32 *)dest)[4] ^= 0xffffffff;
-	    ((u32 *)dest)[5] ^= 0xffffffff;	/* FALL THROUGH */
+	    fb_writel(fb_readl(dest+12) ^ 0xffffffff, dest+12);
+	    fb_writel(fb_readl(dest+16) ^ 0xffffffff, dest+16);
+	    fb_writel(fb_readl(dest+20) ^ 0xffffffff, dest+20);
+	    /* FALL THROUGH */
 	case 4:
-	    ((u32 *)dest)[0] ^= 0xffffffff; ((u32 *)dest)[1] ^= 0xffffffff;
-	    ((u32 *)dest)[2] ^= 0xffffffff;
+	    fb_writel(fb_readl(dest+0) ^ 0xffffffff, dest+0);
+	    fb_writel(fb_readl(dest+4) ^ 0xffffffff, dest+4);
+	    fb_writel(fb_readl(dest+8) ^ 0xffffffff, dest+8);
 	}
     }
 }

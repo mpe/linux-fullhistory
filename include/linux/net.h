@@ -126,7 +126,7 @@ struct net_proto
 	void (*init_func)(struct net_proto *);	/* Bootstrap */
 };
 
-extern int	sock_wake_async(struct socket *sk, int how);
+extern int	sock_wake_async(struct socket *sk, int how, int band);
 extern int	sock_register(struct net_proto_family *fam);
 extern int	sock_unregister(int family);
 extern struct socket *sock_alloc(void);

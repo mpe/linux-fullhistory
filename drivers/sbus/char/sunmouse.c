@@ -137,7 +137,7 @@ push_char (char c)
 	}
 	sunmouse.ready = 1;
 	if (sunmouse.fasync)
-		kill_fasync (sunmouse.fasync, SIGIO);
+		kill_fasync (sunmouse.fasync, SIGIO, POLL_IN);
 	wake_up_interruptible (&sunmouse.proc_list);
 }
 
@@ -334,7 +334,7 @@ sun_mouse_inbyte(unsigned char byte)
 		 */
 		sunmouse.ready = 1;
 		if (sunmouse.fasync)
-			kill_fasync (sunmouse.fasync, SIGIO);
+			kill_fasync (sunmouse.fasync, SIGIO, POLL_IN);
 		wake_up_interruptible(&sunmouse.proc_list);
 	}
 	return;

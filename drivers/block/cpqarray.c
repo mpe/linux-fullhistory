@@ -212,6 +212,7 @@ struct file_operations ida_fops  = {
  */
 static void ida_procinit(int i)
 {
+#ifdef CONFIG_PROC_FS
 	struct proc_dir_entry *pd;
 
 	if (proc_array == NULL) {
@@ -224,6 +225,7 @@ static void ida_procinit(int i)
 	if (!pd) return;
 	pd->read_proc = ida_proc_get_info;
 	pd->data = hba[i];
+#endif	
 }
 
 /*
@@ -356,7 +358,9 @@ void cleanup_module(void)
 			}
 		}
 	}
+#ifdef CONFIG_PROC_FS
 	remove_proc_entry("array", &proc_root);
+#endif
 	kfree(ida);
 	kfree(ida_sizes);
 	kfree(ida_hardsizes);

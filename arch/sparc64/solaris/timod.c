@@ -152,7 +152,7 @@ static void timod_wake_socket(unsigned int fd)
 	sock = &current->files->fd[fd]->f_dentry->d_inode->u.socket_i;
 	wake_up_interruptible(&sock->wait);
 	if (sock->fasync_list && !(sock->flags & SO_WAITDATA))
-		kill_fasync(sock->fasync_list, SIGIO);
+		kill_fasync(sock->fasync_list, SIGIO, POLL_IN);
 	SOLD("done");
 }
 

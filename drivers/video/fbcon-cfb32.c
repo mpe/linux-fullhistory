@@ -36,7 +36,7 @@ void fbcon_cfb32_bmove(struct display *p, int sy, int sx, int dy, int dx,
     u8 *src, *dst;
 
     if (sx == 0 && dx == 0 && width * fontwidth(p) * 4 == bytes) {
-	mymemmove(p->screen_base + dy * linesize,
+	fb_memmove(p->screen_base + dy * linesize,
 		  p->screen_base + sy * linesize,
 		  height * linesize);
 	return;
@@ -54,7 +54,7 @@ void fbcon_cfb32_bmove(struct display *p, int sy, int sx, int dy, int dx,
 	src = p->screen_base + sy * linesize + sx;
 	dst = p->screen_base + dy * linesize + dx;
 	for (rows = height * fontheight(p); rows--;) {
-	    mymemmove(dst, src, width);
+	    fb_memmove(dst, src, width);
 	    src += bytes;
 	    dst += bytes;
 	}
@@ -62,7 +62,7 @@ void fbcon_cfb32_bmove(struct display *p, int sy, int sx, int dy, int dx,
 	src = p->screen_base + (sy+height) * linesize + sx - bytes;
 	dst = p->screen_base + (dy+height) * linesize + dx - bytes;
 	for (rows = height * fontheight(p); rows--;) {
-	    mymemmove(dst, src, width);
+	    fb_memmove(dst, src, width);
 	    src -= bytes;
 	    dst -= bytes;
 	}
@@ -77,17 +77,17 @@ static inline void rectfill(u8 *dest, int width, int height, u32 data,
     while (height-- > 0) {
 	u32 *p = (u32 *)dest;
 	for (i = 0; i < width/4; i++) {
-	    *p++ = data;
-	    *p++ = data;
-	    *p++ = data;
-	    *p++ = data;
+	    fb_writel(data, p++);
+	    fb_writel(data, p++);
+	    fb_writel(data, p++);
+	    fb_writel(data, p++);
 	}
 	if (width & 2) {
-	    *p++ = data;
-	    *p++ = data;
+	    fb_writel(data, p++);
+	    fb_writel(data, p++);
 	}
 	if (width & 1)
-	    *p++ = data;
+	    fb_writel(data, p++);
 	dest += linesize;
     }
 }
@@ -115,7 +115,7 @@ void fbcon_cfb32_putc(struct vc_data *conp, struct display *p, int c, int yy,
 {
     u8 *dest, *cdat, bits;
     int bytes = p->next_line, rows;
-    u32 eorx, fgx, bgx;
+    u32 eorx, fgx, bgx, *pt;
 
     dest = p->screen_base + yy * fontheight(p) * bytes + xx * fontwidth(p) * 4;
     if (fontwidth(p) <= 8)
@@ -128,29 +128,30 @@ void fbcon_cfb32_putc(struct vc_data *conp, struct display *p, int c, int yy,
 
     for (rows = fontheight(p); rows--; dest += bytes) {
 	bits = *cdat++;
-	((u32 *)dest)[0] = (-(bits >> 7) & eorx) ^ bgx;
-	((u32 *)dest)[1] = (-(bits >> 6 & 1) & eorx) ^ bgx;
-	((u32 *)dest)[2] = (-(bits >> 5 & 1) & eorx) ^ bgx;
-	((u32 *)dest)[3] = (-(bits >> 4 & 1) & eorx) ^ bgx;
+	pt = (u32 *) dest;
+	fb_writel((-(bits >> 7) & eorx) ^ bgx, pt++);
+	fb_writel((-(bits >> 6 & 1) & eorx) ^ bgx, pt++);
+	fb_writel((-(bits >> 5 & 1) & eorx) ^ bgx, pt++);
+	fb_writel((-(bits >> 4 & 1) & eorx) ^ bgx, pt++);
 	if (fontwidth(p) < 8)
 	    continue;
-	((u32 *)dest)[4] = (-(bits >> 3 & 1) & eorx) ^ bgx;
-	((u32 *)dest)[5] = (-(bits >> 2 & 1) & eorx) ^ bgx;
-	((u32 *)dest)[6] = (-(bits >> 1 & 1) & eorx) ^ bgx;
-	((u32 *)dest)[7] = (-(bits & 1) & eorx) ^ bgx;
+	fb_writel((-(bits >> 3 & 1) & eorx) ^ bgx, pt++);
+	fb_writel((-(bits >> 2 & 1) & eorx) ^ bgx, pt++);
+	fb_writel((-(bits >> 1 & 1) & eorx) ^ bgx, pt++);
+	fb_writel((-(bits & 1) & eorx) ^ bgx, pt++);
 	if (fontwidth(p) < 12)
 	    continue;
 	bits = *cdat++;
-	((u32 *)dest)[8] = (-(bits >> 7) & eorx) ^ bgx;
-	((u32 *)dest)[9] = (-(bits >> 6 & 1) & eorx) ^ bgx;
-	((u32 *)dest)[10] = (-(bits >> 5 & 1) & eorx) ^ bgx;
-	((u32 *)dest)[11] = (-(bits >> 4 & 1) & eorx) ^ bgx;
+	fb_writel((-(bits >> 7) & eorx) ^ bgx, pt++);
+	fb_writel((-(bits >> 6 & 1) & eorx) ^ bgx, pt++);
+	fb_writel((-(bits >> 5 & 1) & eorx) ^ bgx, pt++);
+	fb_writel((-(bits >> 4 & 1) & eorx) ^ bgx, pt++);
 	if (fontwidth(p) < 16)
 	    continue;
-	((u32 *)dest)[12] = (-(bits >> 3 & 1) & eorx) ^ bgx;
-	((u32 *)dest)[13] = (-(bits >> 2 & 1) & eorx) ^ bgx;
-	((u32 *)dest)[14] = (-(bits >> 1 & 1) & eorx) ^ bgx;
-	((u32 *)dest)[15] = (-(bits & 1) & eorx) ^ bgx;
+	fb_writel((-(bits >> 3 & 1) & eorx) ^ bgx, pt++);
+	fb_writel((-(bits >> 2 & 1) & eorx) ^ bgx, pt++);
+	fb_writel((-(bits >> 1 & 1) & eorx) ^ bgx, pt++);
+	fb_writel((-(bits & 1) & eorx) ^ bgx, pt++);
     }
 }
 
@@ -160,7 +161,7 @@ void fbcon_cfb32_putcs(struct vc_data *conp, struct display *p,
     u8 *cdat, *dest, *dest0, bits;
     u16 c;
     int rows, bytes = p->next_line;
-    u32 eorx, fgx, bgx;
+    u32 eorx, fgx, bgx, *pt;
 
     dest0 = p->screen_base + yy * fontheight(p) * bytes + xx * fontwidth(p) * 4;
     fgx = ((u32 *)p->dispsw_data)[attr_fgcol(p, scr_readw(s))];
@@ -174,29 +175,30 @@ void fbcon_cfb32_putcs(struct vc_data *conp, struct display *p,
 	    cdat = p->fontdata + (c * fontheight(p) << 1);
 	for (rows = fontheight(p), dest = dest0; rows--; dest += bytes) {
 	    bits = *cdat++;
-	    ((u32 *)dest)[0] = (-(bits >> 7) & eorx) ^ bgx;
-	    ((u32 *)dest)[1] = (-(bits >> 6 & 1) & eorx) ^ bgx;
-	    ((u32 *)dest)[2] = (-(bits >> 5 & 1) & eorx) ^ bgx;
-	    ((u32 *)dest)[3] = (-(bits >> 4 & 1) & eorx) ^ bgx;
+	    pt = (u32 *) dest;
+	    fb_writel((-(bits >> 7) & eorx) ^ bgx, pt++);
+	    fb_writel((-(bits >> 6 & 1) & eorx) ^ bgx, pt++);
+	    fb_writel((-(bits >> 5 & 1) & eorx) ^ bgx, pt++);
+	    fb_writel((-(bits >> 4 & 1) & eorx) ^ bgx, pt++);
 	    if (fontwidth(p) < 8)
 		continue;
-	    ((u32 *)dest)[4] = (-(bits >> 3 & 1) & eorx) ^ bgx;
-	    ((u32 *)dest)[5] = (-(bits >> 2 & 1) & eorx) ^ bgx;
-	    ((u32 *)dest)[6] = (-(bits >> 1 & 1) & eorx) ^ bgx;
-	    ((u32 *)dest)[7] = (-(bits & 1) & eorx) ^ bgx;
+	    fb_writel((-(bits >> 3 & 1) & eorx) ^ bgx, pt++);
+	    fb_writel((-(bits >> 2 & 1) & eorx) ^ bgx, pt++);
+	    fb_writel((-(bits >> 1 & 1) & eorx) ^ bgx, pt++);
+	    fb_writel((-(bits & 1) & eorx) ^ bgx, pt++);
 	    if (fontwidth(p) < 12)
 		continue;
 	    bits = *cdat++;
-	    ((u32 *)dest)[8] = (-(bits >> 7) & eorx) ^ bgx;
-	    ((u32 *)dest)[9] = (-(bits >> 6 & 1) & eorx) ^ bgx;
-	    ((u32 *)dest)[10] = (-(bits >> 5 & 1) & eorx) ^ bgx;
-	    ((u32 *)dest)[11] = (-(bits >> 4 & 1) & eorx) ^ bgx;
+	    fb_writel((-(bits >> 7) & eorx) ^ bgx, pt++);
+	    fb_writel((-(bits >> 6 & 1) & eorx) ^ bgx, pt++);
+	    fb_writel((-(bits >> 5 & 1) & eorx) ^ bgx, pt++);
+	    fb_writel((-(bits >> 4 & 1) & eorx) ^ bgx, pt++);
 	    if (fontwidth(p) < 16)
 		continue;
-	    ((u32 *)dest)[12] = (-(bits >> 3 & 1) & eorx) ^ bgx;
-	    ((u32 *)dest)[13] = (-(bits >> 2 & 1) & eorx) ^ bgx;
-	    ((u32 *)dest)[14] = (-(bits >> 1 & 1) & eorx) ^ bgx;
-	    ((u32 *)dest)[15] = (-(bits & 1) & eorx) ^ bgx;
+	    fb_writel((-(bits >> 3 & 1) & eorx) ^ bgx, pt++);
+	    fb_writel((-(bits >> 2 & 1) & eorx) ^ bgx, pt++);
+	    fb_writel((-(bits >> 1 & 1) & eorx) ^ bgx, pt++);
+	    fb_writel((-(bits & 1) & eorx) ^ bgx, pt++);
 	}
 	dest0 += fontwidth(p)*4;
     }
@@ -211,20 +213,28 @@ void fbcon_cfb32_revc(struct display *p, int xx, int yy)
     for (rows = fontheight(p); rows--; dest += bytes) {
 	switch (fontwidth(p)) {
 	case 16:
-	    ((u32 *)dest)[12] ^= 0xffffffff; ((u32 *)dest)[13] ^= 0xffffffff;
-	    ((u32 *)dest)[14] ^= 0xffffffff; ((u32 *)dest)[15] ^= 0xffffffff;
+	    fb_writel(fb_readl(dest+(4*12)) ^ 0xffffffff, dest+(4*12));
+	    fb_writel(fb_readl(dest+(4*13)) ^ 0xffffffff, dest+(4*13));
+	    fb_writel(fb_readl(dest+(4*14)) ^ 0xffffffff, dest+(4*14));
+	    fb_writel(fb_readl(dest+(4*15)) ^ 0xffffffff, dest+(4*15));
 	    /* FALL THROUGH */
 	case 12:
-	    ((u32 *)dest)[8] ^= 0xffffffff; ((u32 *)dest)[9] ^= 0xffffffff;
-	    ((u32 *)dest)[10] ^= 0xffffffff; ((u32 *)dest)[11] ^= 0xffffffff;
+	    fb_writel(fb_readl(dest+(4*8)) ^ 0xffffffff, dest+(4*8));
+	    fb_writel(fb_readl(dest+(4*9)) ^ 0xffffffff, dest+(4*9));
+	    fb_writel(fb_readl(dest+(4*10)) ^ 0xffffffff, dest+(4*10));
+	    fb_writel(fb_readl(dest+(4*11)) ^ 0xffffffff, dest+(4*11));
 	    /* FALL THROUGH */
 	case 8:
-	    ((u32 *)dest)[4] ^= 0xffffffff; ((u32 *)dest)[5] ^= 0xffffffff;
-	    ((u32 *)dest)[6] ^= 0xffffffff; ((u32 *)dest)[7] ^= 0xffffffff;
+	    fb_writel(fb_readl(dest+(4*4)) ^ 0xffffffff, dest+(4*4));
+	    fb_writel(fb_readl(dest+(4*5)) ^ 0xffffffff, dest+(4*5));
+	    fb_writel(fb_readl(dest+(4*6)) ^ 0xffffffff, dest+(4*6));
+	    fb_writel(fb_readl(dest+(4*7)) ^ 0xffffffff, dest+(4*7));
 	    /* FALL THROUGH */
 	case 4:
-	    ((u32 *)dest)[0] ^= 0xffffffff; ((u32 *)dest)[1] ^= 0xffffffff;
-	    ((u32 *)dest)[2] ^= 0xffffffff; ((u32 *)dest)[3] ^= 0xffffffff;
+	    fb_writel(fb_readl(dest+(4*0)) ^ 0xffffffff, dest+(4*0));
+	    fb_writel(fb_readl(dest+(4*1)) ^ 0xffffffff, dest+(4*1));
+	    fb_writel(fb_readl(dest+(4*2)) ^ 0xffffffff, dest+(4*2));
+	    fb_writel(fb_readl(dest+(4*3)) ^ 0xffffffff, dest+(4*3));
 	    /* FALL THROUGH */
 	}
     }

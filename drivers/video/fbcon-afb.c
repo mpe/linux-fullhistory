@@ -178,7 +178,7 @@ void fbcon_afb_bmove(struct display *p, int sy, int sx, int dy, int dx,
 	dest = p->screen_base+dy*fontheight(p)*width;
 	i = p->var.bits_per_pixel;
 	do {
-	    mymemmove(dest, src, height*fontheight(p)*width);
+	    fb_memmove(dest, src, height*fontheight(p)*width);
 	    src += p->next_plane;
 	    dest += p->next_plane;
 	} while (--i);
@@ -191,7 +191,7 @@ void fbcon_afb_bmove(struct display *p, int sy, int sx, int dy, int dx,
 	    dest = dest0;
 	    j = height*fontheight(p);
 	    do {
-	        mymemmove(dest, src, width);
+	        fb_memmove(dest, src, width);
 	        src += p->next_line;
 	        dest += p->next_line;
 	    } while (--j);
@@ -209,7 +209,7 @@ void fbcon_afb_bmove(struct display *p, int sy, int sx, int dy, int dx,
 	    do {
 	        src -= p->next_line;
 	        dest -= p->next_line;
-	        mymemmove(dest, src, width);
+	        fb_memmove(dest, src, width);
 	    } while (--j);
 	    src0 += p->next_plane;
 	    dest0 += p->next_plane;
@@ -233,9 +233,9 @@ void fbcon_afb_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 	j = height*fontheight(p);
 	do {
 	    if (bg & 1)
-	        mymemset(dest, width);
+	        fb_memset255(dest, width);
 	    else
-	        mymemclear(dest, width);
+	        fb_memclear(dest, width);
 	    dest += p->next_line;
 	} while (--j);
 	bg >>= 1;

@@ -35,8 +35,8 @@
 #include <linux/random.h>
 #include <linux/poll.h>
 #include <linux/init.h>
+#include <linux/adb_mouse.h>
 
-#include <asm/adb_mouse.h>
 #ifdef __powerpc__
 #include <asm/processor.h>
 #endif

@@ -526,7 +526,7 @@ static void fbcon_setup(int con, int init, int logo)
     	q = (unsigned short *)(conp->vc_origin + conp->vc_size_row * old_rows);
     	step = logo_lines * old_cols;
     	for (r = q - logo_lines * old_cols; r < q; r++)
-    	    if (*r != conp->vc_video_erase_char)
+    	    if (scr_readw(r) != conp->vc_video_erase_char)
     	    	break;
 	if (r != q && nr_rows >= old_rows + logo_lines) {
     	    save = kmalloc(logo_lines * nr_cols * 2, GFP_KERNEL);
@@ -535,7 +535,7 @@ static void fbcon_setup(int con, int init, int logo)
     	    	scr_memsetw(save, conp->vc_video_erase_char, logo_lines * nr_cols * 2);
     	    	r = q - step;
     	    	for (cnt = 0; cnt < logo_lines; cnt++, r += i)
-    	    		scr_memcpyw_to(save + cnt * nr_cols, r, 2 * i);
+    	    		scr_memcpyw_from(save + cnt * nr_cols, r, 2 * i);
     	    	r = q;
     	    }
     	}
@@ -551,7 +551,8 @@ static void fbcon_setup(int con, int init, int logo)
     		conp->vc_pos += logo_lines * conp->vc_size_row;
     	    }
     	}
-    	scr_memsetw((unsigned short *)conp->vc_origin, conp->vc_video_erase_char, 
+    	scr_memsetw((unsigned short *)conp->vc_origin,
+		    conp->vc_video_erase_char, 
     		conp->vc_size_row * logo_lines);
     }
     
@@ -603,7 +604,7 @@ static void fbcon_setup(int con, int init, int logo)
 	}
 	if (save) {
     	    q = (unsigned short *)(conp->vc_origin + conp->vc_size_row * old_rows);
-	    scr_memcpyw_from(q, save, logo_lines * nr_cols * 2);
+	    memcpy(q, save, logo_lines * nr_cols * 2);
 	    conp->vc_y += logo_lines;
     	    conp->vc_pos += logo_lines * conp->vc_size_row;
     	    kfree(save);
@@ -1386,19 +1387,11 @@ static int fbcon_blank(struct vc_data *conp, int blank)
 
     if (!p->can_soft_blank) {
 	if (blank) {
-#ifdef CONFIG_MAC
-	    if (MACH_IS_MAC) {
-		if (p->screen_base)
-		    mymemset(p->screen_base,
-			     p->var.xres_virtual*p->var.yres_virtual*
-			     p->var.bits_per_pixel>>3);
-	    } else
-#endif
 	    if (p->visual == FB_VISUAL_MONO01) {
 		if (p->screen_base)
-		    mymemset(p->screen_base,
-			     p->var.xres_virtual*p->var.yres_virtual*
-			     p->var.bits_per_pixel>>3);
+		    fb_memset255(p->screen_base,
+				 p->var.xres_virtual*p->var.yres_virtual*
+				 p->var.bits_per_pixel>>3);
 	    } else {
 	    	unsigned short oldc;
 	    	u_int height;
@@ -2048,7 +2041,7 @@ static int __init fbcon_show_logo( void )
 			      (*src << blueshift);
 			if (bdepth == 4 && !((long)dst & 3)) {
 			    /* Some cards require 32bit access */
-			    *(u32 *)dst = val;
+			    fb_writel (val, dst);
 			    dst += 4;
 			} else {
 #ifdef __LITTLE_ENDIAN
@@ -2056,7 +2049,7 @@ static int __init fbcon_show_logo( void )
 #else
 			    for( i = bdepth-1; i >= 0; --i )
 #endif
-			        *dst++ = val >> (i*8);
+			        fb_writeb (val >> (i*8), dst++);
 			}
 		    }
 		}
@@ -2078,7 +2071,7 @@ static int __init fbcon_show_logo( void )
 #else
 			for( i = bdepth-1; i >= 0; --i )
 #endif
-			    *dst++ = val >> (i*8);
+			    fb_writeb (val >> (i*8), dst++);
 			pix = (*src & 0x0f) | 0x10; /* lower nibble */
 			val = (pix << redshift) |
 			      (pix << greenshift) |
@@ -2088,7 +2081,7 @@ static int __init fbcon_show_logo( void )
 #else
 			for( i = bdepth-1; i >= 0; --i )
 #endif
-			    *dst++ = val >> (i*8);
+			    fb_writeb (val >> (i*8), dst++);
 		    }
 		}
 	    }
@@ -2122,7 +2115,7 @@ static int __init fbcon_show_logo( void )
 		          safe_shift((linux_logo_blue[*src-32]  & bluemask), blueshift);
 		    if (bdepth == 4 && !((long)dst & 3)) {
 			/* Some cards require 32bit access */
-			*(u32 *)dst = val;
+			fb_writel (val, dst);
 			dst += 4;
 		    } else {
 #ifdef __LITTLE_ENDIAN
@@ -2130,7 +2123,7 @@ static int __init fbcon_show_logo( void )
 #else
 			for( i = bdepth-1; i >= 0; --i )
 #endif
-			    *dst++ = val >> (i*8);
+			    fb_writeb (val >> (i*8), dst++);
 		    }
 		}
 	    }
@@ -2145,7 +2138,7 @@ static int __init fbcon_show_logo( void )
 			for( x1 = 0; x1 < LOGO_W/2; x1++) {
 				u8 q = *src++;
 				q = (q << 4) | (q >> 4);
-				*dst++ = q;
+				fb_writeb (q, dst++);
 			}
 		}
 		done = 1;
@@ -2159,7 +2152,7 @@ static int __init fbcon_show_logo( void )
 	    for( y1 = 0; y1 < LOGO_H; y1++ ) {
 		dst = fb + y1*line + x;
 		for( x1 = 0; x1 < LOGO_W; x1++ )
-		    *dst++ = *src++;
+		    fb_writeb (*src++, dst++);
 	    }
 	    done = 1;
 	}
@@ -2228,14 +2221,15 @@ static int __init fbcon_show_logo( void )
 			   p->type == FB_TYPE_INTERLEAVED_PLANES)) {
 
 	    /* monochrome */
-	    unsigned char inverse = p->inverse ? 0x00 : 0xff;
+	    unsigned char inverse = p->inverse || p->visual == FB_VISUAL_MONO01
+		? 0x00 : 0xff;
 
 	    /* can't use simply memcpy because need to apply inverse */
 	    for( y1 = 0; y1 < LOGO_H; y1++ ) {
-		src = logo + y1*LOGO_LINE + x/8;
-		dst = fb + y1*line;
+		src = logo + y1*LOGO_LINE;
+		dst = fb + y1*line + x/8;
 		for( x1 = 0; x1 < LOGO_LINE; ++x1 )
-		    *dst++ = *src++ ^ inverse;
+		    fb_writeb(fb_readb(src++) ^ inverse, dst++);
 	    }
 	    done = 1;
 	}
@@ -2255,13 +2249,15 @@ static int __init fbcon_show_logo( void )
 				outb_p(*src >> 4,0x3cf);
 				outb_p(8,0x3ce);
 				outb_p(1 << (7 - x1 % 4 * 2),0x3cf);
-				*(volatile char *) dst |= 1;
+				fb_readb (dst);
+				fb_writeb (0, dst);
 
 				outb_p(0,0x3ce);
 				outb_p(*src & 0xf,0x3cf);
 				outb_p(8,0x3ce);
 				outb_p(1 << (7 - (1 + x1 % 4 * 2)),0x3cf);
-				*(volatile char *) dst |= 1;
+				fb_readb (dst);
+				fb_writeb (0, dst);
 
 				src++;
 			}

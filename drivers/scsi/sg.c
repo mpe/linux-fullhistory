@@ -815,7 +815,7 @@ static void sg_command_done(Scsi_Cmnd * SCpnt)
 /* Now wake up any sg_read() that is waiting for this packet. */
     wake_up_interruptible(&sfp->read_wait);
     if ((sfp->async_qp) && (! closed))
-        kill_fasync(sfp->async_qp, SIGPOLL);
+        kill_fasync(sfp->async_qp, SIGPOLL, POLL_IN);
 }
 
 static void sg_debug_all(const Sg_fd * sfp)

@@ -337,7 +337,7 @@ void fbcon_iplan2p8_clear(struct vc_data *conp, struct display *p, int sy,
 	/* Clears are split if the region starts at an odd column or
 	* end at an even column. These extra columns are spread
 	* across the interleaved planes. All in between can be
-	* cleared by normal mymemclear_small(), because both bytes of
+	* cleared by normal fb_memclear_small(), because both bytes of
 	* the single plane words are affected.
 	*/
 

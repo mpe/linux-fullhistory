@@ -32,13 +32,6 @@ min(int a, int b)
 	return a < b ? a : b;
 }
 
-static inline void
-smb_unlock_page(struct page *page)
-{
-	clear_bit(PG_locked, &page->flags);
-	wake_up(&page->wait);
-}
-
 static int
 smb_fsync(struct file *file, struct dentry * dentry)
 {
@@ -61,7 +54,9 @@ smb_readpage_sync(struct dentry *dentry, struct page *page)
 	int count = PAGE_SIZE;
 	int result;
 
-	clear_bit(PG_error, &page->flags);
+	/* We can't replace this with ClearPageError. why? is it a problem? 
+	   fs/buffer.c:brw_page does the same. */
+	/* clear_bit(PG_error, &page->flags); */
 
 #ifdef SMBFS_DEBUG_VERBOSE
 printk("smb_readpage_sync: file %s/%s, count=%d@%ld, rsize=%d\n",
@@ -94,11 +89,11 @@ dentry->d_parent->d_name.name, dentry->d_name.name, result);
 	} while (count);
 
 	memset(buffer, 0, count);
-	set_bit(PG_uptodate, &page->flags);
+	SetPageUptodate(page);
 	result = 0;
 
 io_error:
-	smb_unlock_page(page);
+	UnlockPage(page);
 	return result;
 }
 
@@ -110,13 +105,13 @@ smb_readpage(struct file *file, struct page *page)
 
 	pr_debug("SMB: smb_readpage %08lx\n", page_address(page));
 #ifdef SMBFS_PARANOIA
-	if (test_bit(PG_locked, &page->flags))
-		printk("smb_readpage: page already locked!\n");
+	if (!PageLocked(page))
+		printk("smb_readpage: page not already locked!\n");
 #endif
-	set_bit(PG_locked, &page->flags);
-	atomic_inc(&page->count);
+
+	get_page(page);
 	error = smb_readpage_sync(dentry, page);
-	free_page(page_address(page));
+	put_page(page);
 	return error;
 }
 
@@ -169,6 +164,8 @@ printk("smb_writepage_sync: short write, wsize=%d, result=%d\n", wsize, result);
 /*
  * Write a page to the server. This will be used for NFS swapping only
  * (for now), and we currently do this synchronously only.
+ *
+ * We are called with the page locked and the caller unlocks.
  */
 static int
 smb_writepage(struct file *file, struct page *page)
@@ -177,14 +174,13 @@ smb_writepage(struct file *file, struct page *page)
 	int 	result;
 
 #ifdef SMBFS_PARANOIA
-	if (test_bit(PG_locked, &page->flags))
-		printk("smb_writepage: page already locked!\n");
+	if (!PageLocked(page))
+		printk("smb_writepage: page not already locked!\n");
 #endif
-	set_bit(PG_locked, &page->flags);
-	atomic_inc(&page->count);
+	get_page(page);
 	result = smb_writepage_sync(dentry, page, 0, PAGE_SIZE);
-	smb_unlock_page(page);
-	free_page(page_address(page));
+	SetPageUptodate(page);
+	put_page(page);
 	return result;
 }
 
@@ -266,9 +262,9 @@ out:
  * If the writer ends up delaying the write, the writer needs to
  * increment the page use counts until he is done with the page.
  */
-static long smb_write_one_page(struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
+static int smb_write_one_page(struct file *file, struct page *page, unsigned long offset, unsigned long bytes, const char * buf)
 {
-	long status;
+	int status;
 
 	bytes -= copy_from_user((u8*)page_address(page) + offset, buf, bytes);
 	status = -EFAULT;

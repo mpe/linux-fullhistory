@@ -474,10 +474,12 @@ arcnet_open(struct net_device *dev)
   lp->sdev=(struct net_device *)kmalloc(sizeof(struct net_device)+10,GFP_KERNEL);
   if(lp->sdev == NULL)
   {
+#ifdef CONFIG_ARCNET_ETH
   	if(lp->edev)
   		kfree(lp->edev);
   	lp->edev=NULL;
   	return -ENOMEM;
+#endif 
   }
   memcpy(lp->sdev,dev,sizeof(struct net_device));
   lp->sdev->name=(char *)(lp+1);

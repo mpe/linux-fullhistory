@@ -356,7 +356,6 @@ check_table:
 		/*
 		 * Look for various forms of IDE disk geometry translation
 		 */
-		extern int ide_xlate_1024(kdev_t, int, int, const char *);
 		unsigned int sig = le16_to_cpu(*(unsigned short *)(data + 2));
 		int heads = 0;
 		/*

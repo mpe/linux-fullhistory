@@ -670,7 +670,7 @@ out:
 
 /* This function may be called only under socket lock or callback_lock */
 
-int sock_wake_async(struct socket *sock, int how)
+int sock_wake_async(struct socket *sock, int how, int band)
 {
 	if (!sock || !sock->fasync_list)
 		return -1;
@@ -689,9 +689,11 @@ int sock_wake_async(struct socket *sock, int how)
 	call_kill:
 		/* read_lock(&sock->sk->callback_lock); */
 		if(sock->fasync_list != NULL)
-			kill_fasync(sock->fasync_list, SIGIO);
+			kill_fasync(sock->fasync_list, SIGIO, band);
 		/* read_unlock(&sock->sk->callback_lock); */
 		break;
+	case 3:
+		kill_fasync(sock->fasync_list, SIGURG, band);
 	}
 	return 0;
 }

@@ -103,6 +103,8 @@
 
 #define CUSTOM_MACRO_CNTL	0x00D4	/* Dword offset 0_35 */
 
+#define POWER_MANAGEMENT	0x00D8	/* Dword offset 0_36 (LG) */
+
 #define CONFIG_CNTL		0x00DC	/* Dword offset 0_37 (CT, ET, VT) */
 #define CONFIG_CHIP_ID		0x00E0	/* Dword offset 0_38 */
 #define CONFIG_STAT0		0x00E4	/* Dword offset 0_39 */
@@ -950,5 +952,16 @@
 
 #define MACH64_NUM_CLOCKS	16
 #define MACH64_NUM_FREQS	50
+
+/* Power Management register constants (LTG and LT Pro) */
+#define PWR_MGT_ON		0x00000001
+#define PWR_MGT_MODE_MASK	0x00000006
+#define AUTO_PWR_UP		0x00000008
+#define SELF_REFRESH		0x00000080
+#define PWR_BLON		0x02000000
+#define STANDBY_NOW		0x10000000
+#define SUSPEND_NOW		0x20000000
+#define PWR_MGT_STATUS_MASK	0xC0000000
+#define PWR_MGT_STATUS_SUSPEND	0x80000000
 
 #endif /* REGMACH64_H */

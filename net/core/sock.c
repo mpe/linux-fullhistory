@@ -1013,7 +1013,7 @@ void sock_def_error_report(struct sock *sk)
 	read_lock(&sk->callback_lock);
 	if (!sk->dead) {
 		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket,0); 
+		sock_wake_async(sk->socket,0,POLL_ERR); 
 	}
 	read_unlock(&sk->callback_lock);
 }
@@ -1023,7 +1023,7 @@ void sock_def_readable(struct sock *sk, int len)
 	read_lock(&sk->callback_lock);
 	if(!sk->dead) {
 		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket,1);
+		sock_wake_async(sk->socket,1,POLL_IN);
 	}
 	read_unlock(&sk->callback_lock);
 }
@@ -1041,7 +1041,7 @@ void sock_def_write_space(struct sock *sk)
 
 		/* Should agree with poll, otherwise some programs break */
 		if (sock_writeable(sk))
-			sock_wake_async(sk->socket, 2);
+			sock_wake_async(sk->socket, 2, POLL_OUT);
 	}
 	read_unlock(&sk->callback_lock);
 }

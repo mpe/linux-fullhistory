@@ -626,7 +626,7 @@ void tcp_write_space(struct sock *sk)
 		wake_up_interruptible(sk->sleep);
 
 		if (sock_wspace(sk) >= tcp_min_write_space(sk))
-			sock_wake_async(sk->socket, 2);
+			sock_wake_async(sk->socket, 2, POLL_OUT);
 	}
 	read_unlock(&sk->callback_lock);
 }

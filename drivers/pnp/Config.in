@@ -6,6 +6,6 @@ comment 'Plug and Play configuration'
 
 tristate 'Plug and Play support' CONFIG_PNP
 
-dep_tristate 'ISA Plug and Play support' CONFIG_ISAPNP $CONFIG_PNP
+dep_tristate '  ISA Plug and Play support' CONFIG_ISAPNP $CONFIG_PNP
 
 endmenu

@@ -299,7 +299,7 @@ static void unix_write_space(struct sock *sk)
 	read_lock(&sk->callback_lock);
 	if (!sk->dead && unix_writable(sk)) {
 		wake_up_interruptible(sk->sleep);
-		sock_wake_async(sk->socket, 2);
+		sock_wake_async(sk->socket, 2, POLL_OUT);
 	}
 	read_unlock(&sk->callback_lock);
 }

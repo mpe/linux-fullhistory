@@ -118,7 +118,7 @@ shmiq_push_event (struct shmqevent *e)
 	s->tail = tail_next;
 	shmiqs [device].tail = tail_next;
 	if (shmiqs [device].fasync)
-		kill_fasync (shmiqs [device].fasync, SIGIO);
+		kill_fasync (shmiqs [device].fasync, SIGIO, POLL_IN);
 	wake_up_interruptible (&shmiqs [device].proc_list);
 }
 

@@ -20,7 +20,7 @@ ALL_SUB_DIRS := $(SUB_DIRS) paride
 
 
 L_TARGET := block.a
-L_OBJS   := genhd.o cmos-probe.o
+L_OBJS   := genhd.o ide-geometry.o
 M_OBJS   :=
 MOD_LIST_NAME := BLOCK_MODULES
 LX_OBJS := ll_rw_blk.o blkpg.o
@@ -248,7 +248,7 @@ ifeq ($(CONFIG_BLK_DEV_IDE),y)
 else
   ifeq ($(CONFIG_BLK_DEV_IDE),m)
   MIX_OBJS += ide.o $(IDE_OBJS)
-  M_OBJS += ide-mod.o ide-probe.o
+  M_OBJS += ide-mod.o ide-probe-mod.o
   endif
 endif
 
@@ -376,3 +376,7 @@ include $(TOPDIR)/Rules.make
 
 ide-mod.o: ide.o $(IDE_OBJS)
 	$(LD) $(LD_RFLAG) -r -o $@ ide.o $(IDE_OBJS)
+
+ide-probe-mod.o: ide-probe.o ide-geometry.o
+	$(LD) $(LD_RFLAG) -r -o $@ ide-probe.o ide-geometry.o
+

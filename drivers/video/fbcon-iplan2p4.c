@@ -177,7 +177,7 @@ void fbcon_iplan2p4_bmove(struct display *p, int sy, int sx, int dy, int dx,
 	/*  Special (but often used) case: Moving whole lines can be
 	 *done with memmove()
 	 */
-	mymemmove(p->screen_base + dy * p->next_line * fontheight(p),
+	fb_memmove(p->screen_base + dy * p->next_line * fontheight(p),
 		  p->screen_base + sy * p->next_line * fontheight(p),
 		  p->next_line * height * fontheight(p));
     } else {
@@ -210,7 +210,7 @@ void fbcon_iplan2p4_bmove(struct display *p, int sy, int sx, int dy, int dx,
 		}
 		if (width > 1) {
 		    for(rows = colsize; rows > 0; --rows) {
-			mymemmove(dst, src, (width>>1)*8);
+			fb_memmove(dst, src, (width>>1)*8);
 			src += bytes;
 			dst += bytes;
 		    }
@@ -236,7 +236,7 @@ void fbcon_iplan2p4_bmove(struct display *p, int sy, int sx, int dy, int dx,
 		    for(rows = colsize; rows > 0; --rows) {
 			src -= bytes;
 			dst -= bytes;
-			mymemmove(dst, src, (width>>1)*8);
+			fb_memmove(dst, src, (width>>1)*8);
 		    }
 		}
 		if (width & 1) {
@@ -305,7 +305,7 @@ void fbcon_iplan2p4_clear(struct vc_data *conp, struct display *p, int sy,
 	/*  Clears are split if the region starts at an odd column or
 	 *  end at an even column. These extra columns are spread
 	 *  across the interleaved planes. All in between can be
-	 *  cleared by normal mymemclear_small(), because both bytes of
+	 *  cleared by normal fb_memclear_small(), because both bytes of
 	 *  the single plane words are affected.
 	 */
 

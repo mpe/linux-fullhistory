@@ -61,7 +61,7 @@ void fbcon_cfb4_bmove(struct display *p, int sy, int sx, int dy, int dx,
 	u8 *src,*dst;
 
 	if (sx == 0 && dx == 0 && width * 4 == bytes) {
-		mymemmove(p->screen_base + dy * linesize,
+		fb_memmove(p->screen_base + dy * linesize,
 			  p->screen_base + sy * linesize,
 			  height * linesize);
 	}
@@ -70,7 +70,7 @@ void fbcon_cfb4_bmove(struct display *p, int sy, int sx, int dy, int dx,
 			src = p->screen_base + sy * linesize + sx * 4;
 			dst = p->screen_base + dy * linesize + dx * 4;
 			for (rows = height * fontheight(p) ; rows-- ;) {
-				mymemmove(dst, src, width * 4);
+				fb_memmove(dst, src, width * 4);
 				src += bytes;
 				dst += bytes;
 			}
@@ -81,7 +81,7 @@ void fbcon_cfb4_bmove(struct display *p, int sy, int sx, int dy, int dx,
 			dst = p->screen_base + (dy+height) * linesize + dx * 4
 				- bytes;
 			for (rows = height * fontheight(p) ; rows-- ;) {
-				mymemmove(dst, src, width * 4);
+				fb_memmove(dst, src, width * 4);
 				src -= bytes;
 				dst -= bytes;
 			}
@@ -107,7 +107,7 @@ void fbcon_cfb4_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 
 	if (sx == 0 && width * 4 == bytes) {
 		for (i = 0 ; i < lines * width ; i++) {
-			((u32 *)dest)[0]=bgx;
+			fb_writel (bgx, dest);
 			dest+=4;
 		}
 	} else {
@@ -116,7 +116,7 @@ void fbcon_cfb4_clear(struct vc_data *conp, struct display *p, int sy, int sx,
 			dest=dest0;
 			for (i = 0 ; i < width ; i++) {
 				/* memset ?? */
-				((u32 *)dest)[0]=bgx;
+				fb_writel (bgx, dest);
 				dest+=4;
 			}
 		}
@@ -142,10 +142,8 @@ void fbcon_cfb4_putc(struct vc_data *conp, struct display *p, int c, int yy,
 	eorx = fgx ^ bgx;
 
 	for (rows = fontheight(p) ; rows-- ; dest += bytes) {
-		((u16 *)dest)[0]=
-			(nibbletab_cfb4[*cdat >> 4] & eorx) ^ bgx;
-		((u16 *)dest)[1]=
-			(nibbletab_cfb4[*cdat++ & 0xf] & eorx) ^ bgx;
+		fb_writew((nibbletab_cfb4[*cdat >> 4] & eorx) ^ bgx, dest+0);
+		fb_writew((nibbletab_cfb4[*cdat++ & 0xf] & eorx) ^ bgx, dest+2);
 	}
 }
 
@@ -172,10 +170,8 @@ void fbcon_cfb4_putcs(struct vc_data *conp, struct display *p,
 		cdat = p->fontdata + c * fontheight(p);
 
 		for (rows = fontheight(p), dest = dest0; rows-- ; dest += bytes) {
-			((u16 *)dest)[0]=
-			(nibbletab_cfb4[*cdat >> 4] & eorx) ^ bgx;
-			((u16 *)dest)[1]=
-			(nibbletab_cfb4[*cdat++ & 0xf] & eorx) ^ bgx;
+			fb_writew((nibbletab_cfb4[*cdat >> 4] & eorx) ^ bgx, dest+0);
+			fb_writew((nibbletab_cfb4[*cdat++ & 0xf] & eorx) ^ bgx, dest+2);
 		}
 		dest0+=4;
 	}
@@ -188,7 +184,7 @@ void fbcon_cfb4_revc(struct display *p, int xx, int yy)
 
 	dest = p->screen_base + yy * fontheight(p) * bytes + xx * 4;
 	for (rows = fontheight(p) ; rows-- ; dest += bytes) {
-		((u32 *)dest)[0] ^= 0xffffffff;
+		fb_writel(fb_readl(dest+0) ^ 0xffffffff, dest+0);
 	}
 }
 

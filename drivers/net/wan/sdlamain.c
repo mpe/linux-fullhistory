@@ -3,6 +3,7 @@
 *
 * Author:	Gene Kozin	<genek@compuserve.com>
 *		Jaspreet Singh	<jaspreet@sangoma.com>
+* Fixes:	Arnaldo Carvalho de Melo <acme@conectiva.com.br>
 *
 * Copyright:	(c) 1995-1997 Sangoma Technologies Inc.
 *

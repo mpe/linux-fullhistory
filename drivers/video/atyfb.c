@@ -1,4 +1,4 @@
-/*  $Id: atyfb.c,v 1.122 1999/09/06 20:44:08 geert Exp $
+/*  $Id: atyfb.c,v 1.126 1999/09/16 18:46:23 geert Exp $
  *  linux/drivers/video/atyfb.c -- Frame buffer device for ATI Mach64
  *
  *	Copyright (C) 1997-1998  Geert Uytterhoeven
@@ -52,7 +52,6 @@
 #include <linux/console.h>
 #include <linux/init.h>
 #include <linux/pci.h>
-#include <linux/nvram.h>
 #include <linux/kd.h>
 #include <linux/vt_kern.h>
 
@@ -62,12 +61,15 @@
 
 #include <asm/io.h>
 
-#if defined(CONFIG_PPC)
+#ifdef __powerpc__
+#include <linux/adb.h>
+#include <linux/pmu.h>
 #include <asm/prom.h>
 #include <asm/pci-bridge.h>
 #include <video/macmodes.h>
-#include <asm/adb.h>
-#include <asm/pmu.h>
+#endif
+#ifdef CONFIG_NVRAM
+#include <linux/nvram.h>
 #endif
 #ifdef __sparc__
 #include <asm/pbm.h>
@@ -272,7 +274,19 @@ struct fb_info_aty {
     int vtconsole;
     int consolecnt;
 #endif
+#ifdef CONFIG_PMAC_PBOOK
+    unsigned char *save_framebuffer;
+    unsigned long save_pll[64];
+#endif
 };
+
+#ifdef CONFIG_PMAC_PBOOK
+  int aty_sleep_notify(struct pmu_sleep_notifier *self, int when);
+  static struct pmu_sleep_notifier aty_sleep_notifier = {
+  	aty_sleep_notify, SLEEP_LEVEL_VIDEO,
+  };
+  static struct fb_info_aty* first_display = NULL;
+#endif
 
 
     /*
@@ -446,7 +460,7 @@ static int atyfb_getcolreg(u_int regno, u_int *red, u_int *green, u_int *blue,
 static int atyfb_setcolreg(u_int regno, u_int red, u_int green, u_int blue,
 			 u_int transp, struct fb_info *fb);
 static void do_install_cmap(int con, struct fb_info *info);
-#if defined(CONFIG_PPC)
+#ifdef CONFIG_PMAC
 static int read_aty_sense(const struct fb_info_aty *info);
 #endif
 
@@ -488,9 +502,14 @@ static int default_mclk __initdata = 0;
 static const char *mode_option __initdata = NULL;
 #endif
 
-#if defined(CONFIG_PPC)
+#ifdef CONFIG_PMAC
+#ifdef CONFIG_NVRAM
 static int default_vmode __initdata = VMODE_NVRAM;
 static int default_cmode __initdata = CMODE_NVRAM;
+#else
+static int default_vmode __initdata = VMODE_CHOOSE;
+static int default_cmode __initdata = CMODE_CHOOSE;
+#endif
 #endif
 
 #ifdef CONFIG_ATARI
@@ -550,58 +569,46 @@ static const char *aty_ct_ram[8] __initdata = {
 static inline u32 aty_ld_le32(unsigned int regindex,
 			      const struct fb_info_aty *info)
 {
+#if defined(__powerpc__)
     unsigned long temp;
     u32 val;
 
-#if defined(__powerpc__)
     temp = info->ati_regbase;
     asm volatile("lwbrx %0,%1,%2" : "=r"(val) : "b" (regindex), "r" (temp));
-#elif defined(__sparc_v9__)
-    temp = info->ati_regbase + regindex;
-    val = readl(temp);
-#else
-    temp = info->ati_regbase+regindex;
-    val = le32_to_cpu(*((volatile u32 *)(temp)));
-#endif
     return val;
+#elif defined(__mc68000__)
+    return le32_to_cpu(*((volatile u32 *)(info->ati_regbase+regindex)));
+#else
+    return readl (info->ati_regbase + regindex);
+#endif
 }
 
 static inline void aty_st_le32(unsigned int regindex, u32 val,
 			       const struct fb_info_aty *info)
 {
+#if defined(__powerpc__)
     unsigned long temp;
 
-#if defined(__powerpc__)
     temp = info->ati_regbase;
     asm volatile("stwbrx %0,%1,%2" : : "r" (val), "b" (regindex), "r" (temp) :
 	"memory");
-#elif defined(__sparc_v9__)
-    temp = info->ati_regbase + regindex;
-    writel(val, temp);
+#elif defined(__mc68000__)
+    *((volatile u32 *)(info->ati_regbase+regindex)) = cpu_to_le32(val);
 #else
-    temp = info->ati_regbase+regindex;
-    *((volatile u32 *)(temp)) = cpu_to_le32(val);
+    writel (val, info->ati_regbase + regindex);
 #endif
 }
 
 static inline u8 aty_ld_8(unsigned int regindex,
 			  const struct fb_info_aty *info)
 {
-#ifdef __sparc_v9__
-    return readb(info->ati_regbase + regindex);
-#else
-    return *(volatile u8 *)(info->ati_regbase+regindex);
-#endif
+    return readb (info->ati_regbase + regindex);
 }
 
 static inline void aty_st_8(unsigned int regindex, u8 val,
 			    const struct fb_info_aty *info)
 {
-#ifdef __sparc_v9__
-    writeb(val, info->ati_regbase + regindex);
-#else
-    *(volatile u8 *)(info->ati_regbase+regindex) = val;
-#endif
+    writeb (val, info->ati_regbase + regindex);
 }
 
 
@@ -791,7 +798,7 @@ static u8 aty_ld_pll(int offset, const struct fb_info_aty *info)
     return res;
 }
 
-#if defined(CONFIG_PPC)
+#ifdef CONFIG_PMAC
 
     /*
      *  Apple monitor sense
@@ -831,7 +838,7 @@ static int read_aty_sense(const struct fb_info_aty *info)
     return sense;
 }
 
-#endif /* defined(CONFIG_PPC) */
+#endif /* CONFIG_PMAC */
 
 /* ------------------------------------------------------------------------- */
 
@@ -903,17 +910,19 @@ aty_set_cursor_shape(struct fb_info_aty *fb)
 		for (x = 0; x < c->size.x >> 2; x++) {
 			m = c->mask[x][y];
 			b = c->bits[x][y];
-			*ram++ = cursor_mask_lookup[m >> 4] |
-				 cursor_bits_lookup[(b & m) >> 4];
-			*ram++ = cursor_mask_lookup[m & 0x0f] |
-				 cursor_bits_lookup[(b & m) & 0x0f];
+			fb_writeb (cursor_mask_lookup[m >> 4] |
+				   cursor_bits_lookup[(b & m) >> 4],
+				   ram++);
+			fb_writeb (cursor_mask_lookup[m & 0x0f] |
+				   cursor_bits_lookup[(b & m) & 0x0f],
+				   ram++);
 		}
 		for ( ; x < 8; x++) {
-			*ram++ = 0xaa;
-			*ram++ = 0xaa;
+			fb_writeb (0xaa, ram++);
+			fb_writeb (0xaa, ram++);
 		}
 	}
-	memset(ram, 0xaa, (64 - c->size.y) * 16);
+	fb_memset (ram, 0xaa, (64 - c->size.y) * 16);
 }
 
 static void
@@ -3239,7 +3248,7 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
     struct display *disp;
     const char *chipname = NULL, *ramname = NULL, *xtal;
     int pll, mclk, gtb_memsize;
-#if defined(CONFIG_PPC)
+#ifdef CONFIG_PMAC
     int sense;
 #endif
     u8 pll_ref_div;
@@ -3501,16 +3510,22 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
     var = default_var;
 #else /* !MODULE */
     memset(&var, 0, sizeof(var));
-#if defined(CONFIG_PPC)
+#ifdef CONFIG_PMAC
+    /*
+     *  FIXME: The NVRAM stuff should be put in a Mac-specific file, as it
+     *         applies to all Mac video cards
+     */
     if (mode_option) {
 	if (!mac_find_mode(&var, &info->fb_info, mode_option, 8))
 	    var = default_var;
     } else {
+#ifdef CONFIG_NVRAM
 	if (default_vmode == VMODE_NVRAM) {
 	    default_vmode = nvram_read_byte(NV_VMODE);
 	    if (default_vmode <= 0 || default_vmode > VMODE_MAX)
 		default_vmode = VMODE_CHOOSE;
 	}
+#endif
 	if (default_vmode == VMODE_CHOOSE) {
 	    if (Gx == LG_CHIP_ID)
 		/* G3 PowerBook with 1024x768 LCD */
@@ -3522,14 +3537,16 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
 	}
 	if (default_vmode <= 0 || default_vmode > VMODE_MAX)
 	    default_vmode = VMODE_640_480_60;
+#ifdef CONFIG_NVRAM
 	if (default_cmode == CMODE_NVRAM)
 	    default_cmode = nvram_read_byte(NV_CMODE);
+#endif
 	if (default_cmode < CMODE_8 || default_cmode > CMODE_32)
 	    default_cmode = CMODE_8;
 	if (mac_vmode_to_var(default_vmode, default_cmode, &var))
 	    var = default_var;
     }
-#else /* !CONFIG_PPC */
+#else /* !CONFIG_PMAC */
 #ifdef __sparc__
     if (mode_option) {
     	if (!fb_find_mode(&var, &info->fb_info, mode_option, NULL, 0, NULL, 8))
@@ -3540,7 +3557,7 @@ static int __init aty_init(struct fb_info_aty *info, const char *name)
     if (!fb_find_mode(&var, &info->fb_info, mode_option, NULL, 0, NULL, 8))
 	var = default_var;
 #endif /* !__sparc__ */
-#endif /* !CONFIG_PPC */
+#endif /* !CONFIG_PMAC */
 #endif /* !MODULE */
     if (noaccel)
         var.accel_flags &= ~FB_ACCELF_TEXT;
@@ -3964,6 +3981,13 @@ void __init atyfb_of_init(struct device_node *dp)
     struct fb_info_aty *info;
     int i;
 
+    if (device_is_compatible(dp, "ATY,264LTPro")) {
+	/* XXX kludge for now */
+	if (dp->name == 0 || strcmp(dp->name, "ATY,264LTProA") != 0
+	    || dp->parent == 0)
+	    return;
+	dp = dp->parent;
+    }
     switch (dp->n_addrs) {
 	case 1:
 	case 2:
@@ -4032,6 +4056,14 @@ void __init atyfb_of_init(struct device_node *dp)
 	return;
     }
 
+#ifdef CONFIG_PMAC_PBOOK
+    if (first_display == NULL)
+	pmu_register_sleep_notifier(&aty_sleep_notifier);
+    info->next = first_display;
+    first_display = info;
+#endif
+	
+
 #ifdef CONFIG_FB_COMPAT_XPMAC
     if (!console_fb_info)
 	console_fb_info = &info->fb_info;
@@ -4070,7 +4102,7 @@ int __init atyfb_setup(char *options)
 		default_pll = simple_strtoul(this_opt+4, NULL, 0);
 	else if (!strncmp(this_opt, "mclk:", 5))
 		default_mclk = simple_strtoul(this_opt+5, NULL, 0);
-#if defined(CONFIG_PPC)
+#ifdef CONFIG_PMAC
 	else if (!strncmp(this_opt, "vmode:", 6)) {
 	    unsigned int vmode = simple_strtoul(this_opt+6, NULL, 0);
 	    if (vmode > 0 && vmode <= VMODE_MAX)
@@ -4207,7 +4239,7 @@ static void atyfbcon_blank(int blank, struct fb_info *fb)
     struct fb_info_aty *info = (struct fb_info_aty *)fb;
     u8 gen_cntl;
 
-#if defined(CONFIG_PPC)
+#ifdef CONFIG_PMAC
     if ((_machine == _MACH_Pmac) && blank)
     	pmu_enable_backlight(0);
 #endif
@@ -4232,7 +4264,7 @@ static void atyfbcon_blank(int blank, struct fb_info *fb)
 	gen_cntl &= ~(0x4c);
     aty_st_8(CRTC_GEN_CNTL, gen_cntl, info);
 
-#if defined(CONFIG_PPC)
+#ifdef CONFIG_PMAC
     if ((_machine == _MACH_Pmac) && !blank)
     	pmu_enable_backlight(1);
 #endif
@@ -4735,6 +4767,98 @@ static struct display_switch fbcon_aty32 = {
     FONTWIDTH(4)|FONTWIDTH(8)|FONTWIDTH(12)|FONTWIDTH(16)
 };
 #endif
+
+#ifdef CONFIG_PMAC_PBOOK
+/*
+ * Save the contents of the frame buffer when we go to sleep,
+ * and restore it when we wake up again.
+ */
+int
+aty_sleep_notify(struct pmu_sleep_notifier *self, int when)
+{
+	struct fb_info_aty *info;
+ 	unsigned int pm;
+ 	
+	for (info = first_display; info != NULL; info = info->next) {
+		struct fb_fix_screeninfo fix;
+		int nb;
+		
+		atyfb_get_fix(&fix, fg_console, (struct fb_info *)info);
+		nb = fb_display[fg_console].var.yres * fix.line_length;
+
+		switch (when) {
+		case PBOOK_SLEEP_NOW:
+			/* Stop accel engine (stop bus mastering) */
+			if (info->current_par.accel_flags & FB_ACCELF_TEXT)
+				reset_engine(info);
+#if 1
+			/* Backup fb content */	
+			info->save_framebuffer = vmalloc(nb);
+			if (info->save_framebuffer)
+				memcpy(info->save_framebuffer,
+				       (void *)info->frame_buffer, nb);
+#endif
+			/* Blank display and LCD */				       
+			atyfbcon_blank(VESA_POWERDOWN+1, (struct fb_info *)info);			
+			
+			/* Set chip to "suspend" mode. Note: There's an HW bug in the
+			   chip which prevents proper resync on wakeup with automatic
+			   power management, we handle suspend manually using the
+			   following (weird) sequence described by ATI. Note2:
+			   We could enable this for all Rage LT Pro chip ids */
+			if ((Gx == LG_CHIP_ID) || (Gx == LT_CHIP_ID) || (Gx == LP_CHIP_ID)) {
+				pm = aty_ld_le32(POWER_MANAGEMENT, info);
+				pm &= ~PWR_MGT_ON;
+				aty_st_le32(POWER_MANAGEMENT, pm, info);
+				pm = aty_ld_le32(POWER_MANAGEMENT, info);
+				pm &= ~(PWR_BLON | AUTO_PWR_UP);
+				pm |= SUSPEND_NOW;
+				aty_st_le32(POWER_MANAGEMENT, pm, info);
+				pm = aty_ld_le32(POWER_MANAGEMENT, info);
+				pm |= PWR_MGT_ON;
+				aty_st_le32(POWER_MANAGEMENT, pm, info);
+				do {
+					pm = aty_ld_le32(POWER_MANAGEMENT, info);
+				} while ((pm & PWR_MGT_STATUS_MASK) != PWR_MGT_STATUS_SUSPEND);
+				mdelay(500);
+			}
+			break;
+		case PBOOK_WAKE:
+			/* Wakeup chip */
+			if ((Gx == LG_CHIP_ID) || (Gx == LT_CHIP_ID) || (Gx == LP_CHIP_ID)) {
+				pm = aty_ld_le32(POWER_MANAGEMENT, info);
+				pm &= ~PWR_MGT_ON;
+				aty_st_le32(POWER_MANAGEMENT, pm, info);
+				pm = aty_ld_le32(POWER_MANAGEMENT, info);
+				pm |=  (PWR_BLON | AUTO_PWR_UP);
+				pm &= ~SUSPEND_NOW;
+				aty_st_le32(POWER_MANAGEMENT, pm, info);
+				pm = aty_ld_le32(POWER_MANAGEMENT, info);
+				pm |= PWR_MGT_ON;
+				aty_st_le32(POWER_MANAGEMENT, pm, info);
+				do {
+					pm = aty_ld_le32(POWER_MANAGEMENT, info);
+				} while ((pm & PWR_MGT_STATUS_MASK) != 0);
+				mdelay(500);
+			}
+#if 1
+			/* Restore fb content */			
+			if (info->save_framebuffer) {
+				memcpy((void *)info->frame_buffer,
+				       info->save_framebuffer, nb);
+				vfree(info->save_framebuffer);
+				info->save_framebuffer = 0;
+			}
+#endif
+			/* Restore display */			
+			atyfb_set_par(&info->current_par, info);
+			atyfbcon_blank(0, (struct fb_info *)info);
+			break;
+		}
+	}
+	return PBOOK_SLEEP_OK;
+}
+#endif /* CONFIG_PMAC_PBOOK */
 
 #ifdef MODULE
 int __init init_module(void)

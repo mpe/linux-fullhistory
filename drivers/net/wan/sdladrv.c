@@ -5,6 +5,7 @@
 *		used by all Sangoma drivers.
 *
 * Author:	Gene Kozin	<genek@compuserve.com>
+* Fixes:	Arnaldo Carvalho de Melo <acme@conectiva.com.br>
 *
 * Copyright:	(c) 1995-1996 Sangoma Technologies Inc.
 *

@@ -7,12 +7,12 @@ comment 'ARCnet devices'
 
 tristate 'ARCnet support' CONFIG_ARCNET
 if [ "$CONFIG_ARCNET" != "n" ]; then
-  bool '  Enable arc0e (ARCnet "Ether-Encap" packet format)' CONFIG_ARCNET_ETH
-  bool '  Enable arc0s (ARCnet RFC1051 packet format)' CONFIG_ARCNET_1051
-  dep_tristate '  ARCnet COM90xx (normal) chipset driver' CONFIG_ARCNET_COM90xx $CONFIG_ARCNET
-  dep_tristate '  ARCnet COM90xx (IO mapped) chipset driver' CONFIG_ARCNET_COM90xxIO $CONFIG_ARCNET
-  dep_tristate '  ARCnet COM90xx (RIM I) chipset driver' CONFIG_ARCNET_RIM_I $CONFIG_ARCNET
-  dep_tristate '  ARCnet COM20020 chipset driver' CONFIG_ARCNET_COM20020 $CONFIG_ARCNET
+   bool '  Enable arc0e (ARCnet "Ether-Encap" packet format)' CONFIG_ARCNET_ETH
+   bool '  Enable arc0s (ARCnet RFC1051 packet format)' CONFIG_ARCNET_1051
+   dep_tristate '  ARCnet COM90xx (normal) chipset driver' CONFIG_ARCNET_COM90xx $CONFIG_ARCNET
+   dep_tristate '  ARCnet COM90xx (IO mapped) chipset driver' CONFIG_ARCNET_COM90xxIO $CONFIG_ARCNET
+   dep_tristate '  ARCnet COM90xx (RIM I) chipset driver' CONFIG_ARCNET_RIM_I $CONFIG_ARCNET
+   dep_tristate '  ARCnet COM20020 chipset driver' CONFIG_ARCNET_COM20020 $CONFIG_ARCNET
 fi
 
 endmenu
@@ -20,9 +20,9 @@ endmenu
 tristate 'Dummy net driver support' CONFIG_DUMMY
 tristate 'EQL (serial line load balancing) support' CONFIG_EQUALIZER
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  if [ "$CONFIG_NETLINK" = "y" ]; then
-     tristate 'Ethertap network tap' CONFIG_ETHERTAP
-  fi
+   if [ "$CONFIG_NETLINK" = "y" ]; then
+      tristate 'Ethertap network tap (EXPERIMENTAL)' CONFIG_ETHERTAP
+   fi
 fi
 
 tristate 'General Instruments Surfboard 1000' CONFIG_NET_SB1000
@@ -36,145 +36,154 @@ comment 'Ethernet (10 or 100Mbit)'
 
 bool 'Ethernet (10 or 100Mbit)' CONFIG_NET_ETHERNET
 if [ "$CONFIG_NET_ETHERNET" = "y" ]; then
-  if [ "$CONFIG_ARM" = "y" ]; then
-    if [ "$CONFIG_ARCH_ACORN" != "y" ]; then
-      tristate 'AM79C961A support' CONFIG_ARM_AM79C961A
-    else
-      source drivers/acorn/net/Config.in
-    fi
-  fi
-  if [ "$CONFIG_PPC" = "y" ]; then
-    tristate 'MACE (Power Mac ethernet) support' CONFIG_MACE
-    tristate 'BMAC (G3 ethernet) support' CONFIG_BMAC
-  fi
-  if [ "$CONFIG_ZORRO" = "y" ]; then
-    tristate 'Ariadne support' CONFIG_ARIADNE
-    tristate 'Ariadne II support' CONFIG_ARIADNE2
-    tristate 'A2065 support' CONFIG_A2065
-    tristate 'Hydra support' CONFIG_HYDRA
-  fi
-  if [ "$CONFIG_MIPS_JAZZ" = "y" ]; then
-    tristate 'MIPS JAZZ onboard SONIC Ethernet support' CONFIG_MIPS_JAZZ_SONIC
-  fi
-  bool '3COM cards' CONFIG_NET_VENDOR_3COM
-  if [ "$CONFIG_NET_VENDOR_3COM" = "y" ]; then
-    tristate '3c501 support' CONFIG_EL1
-    tristate '3c503 support' CONFIG_EL2
-    tristate '3c505 support' CONFIG_ELPLUS
-    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      tristate '3c507 support' CONFIG_EL16
-      if [ "$CONFIG_MCA" = "y" ]; then
-        tristate '3c523 support' CONFIG_ELMC
-        tristate '3c527 support' CONFIG_ELMC_II
+   if [ "$CONFIG_ARM" = "y" ]; then
+      if [ "$CONFIG_ARCH_ACORN" != "y" ]; then
+	 tristate '  AM79C961A support' CONFIG_ARM_AM79C961A
+      else
+	 source drivers/acorn/net/Config.in
       fi
-    fi
-    tristate '3c509/3c579 support' CONFIG_EL3
-    tristate '3c515 ISA Fast EtherLink' CONFIG_3C515
-    tristate '3c590/3c900 series (592/595/597) "Vortex/Boomerang" support' CONFIG_VORTEX
+   fi
+   if [ "$CONFIG_PPC" = "y" ]; then
+      tristate '  MACE (Power Mac ethernet) support' CONFIG_MACE
+      tristate '  BMAC (G3 ethernet) support' CONFIG_BMAC
+   fi
+   if [ "$CONFIG_ZORRO" = "y" ]; then
+      tristate '  Ariadne support' CONFIG_ARIADNE
+      tristate '  Ariadne II support' CONFIG_ARIADNE2
+      tristate '  A2065 support' CONFIG_A2065
+      tristate '  Hydra support' CONFIG_HYDRA
+   fi
+   if [ "$CONFIG_MIPS_JAZZ" = "y" ]; then
+      tristate '  MIPS JAZZ onboard SONIC Ethernet support' CONFIG_MIPS_JAZZ_SONIC
+   fi
+   bool '  3COM cards' CONFIG_NET_VENDOR_3COM
+   if [ "$CONFIG_NET_VENDOR_3COM" = "y" ]; then
+      tristate '    3c501 support' CONFIG_EL1
+      tristate '    3c503 support' CONFIG_EL2
+      tristate '    3c505 support' CONFIG_ELPLUS
+      if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+	 tristate '    3c507 support (EXPERIMENTAL)' CONFIG_EL16
+      fi
+      tristate '    3c509/3c529 (MCA)/3c579 support' CONFIG_EL3
+      tristate '    3c515 ISA Fast EtherLink' CONFIG_3C515
+      if [ "$CONFIG_MCA" = "y" ]; then
+	 tristate '    3c523 support' CONFIG_ELMC
+	 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+	    tristate '    3c527 support (EXPERIMENTAL)' CONFIG_ELMC_II
+	 fi
+      fi
+      tristate '    3c590/3c900 series (592/595/597) "Vortex/Boomerang" support' CONFIG_VORTEX
+   fi
+   tristate '  AMD LANCE and PCnet (AT1500 and NE2100) support' CONFIG_LANCE
+   bool '  Western Digital/SMC cards' CONFIG_NET_VENDOR_SMC
+   if [ "$CONFIG_NET_VENDOR_SMC" = "y" ]; then
+      tristate '    WD80*3 support' CONFIG_WD80x3
+      if [ "$CONFIG_MCA" = "y" ]; then
+	 tristate '    SMC Ultra MCA support' CONFIG_ULTRAMCA
+      fi
+      tristate '    SMC Ultra support' CONFIG_ULTRA
+      tristate '    SMC Ultra32 EISA support' CONFIG_ULTRA32
+      tristate '    SMC 9194 support' CONFIG_SMC9194
   fi
-  tristate 'AMD LANCE and PCnet (AT1500 and NE2100) support' CONFIG_LANCE
-  bool 'Western Digital/SMC cards' CONFIG_NET_VENDOR_SMC
-  if [ "$CONFIG_NET_VENDOR_SMC" = "y" ]; then
-    tristate 'WD80*3 support' CONFIG_WD80x3
-    if [ "$CONFIG_MCA" = "y" ]; then
-		tristate 'SMC Ultra MCA support' CONFIG_ULTRAMCA
-    fi
-    tristate 'SMC Ultra support' CONFIG_ULTRA
-    tristate 'SMC Ultra32 EISA support' CONFIG_ULTRA32
-    tristate 'SMC 9194 support' CONFIG_SMC9194
-  fi
-  bool 'Racal-Interlan (Micom) NI cards' CONFIG_NET_VENDOR_RACAL
+  bool '  Racal-Interlan (Micom) NI cards' CONFIG_NET_VENDOR_RACAL
   if [ "$CONFIG_NET_VENDOR_RACAL" = "y" ]; then
     if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      tristate 'NI5010 support' CONFIG_NI5010
+      tristate '    NI5010 support (EXPERIMENTAL)' CONFIG_NI5010
     fi
-    tristate 'NI5210 support' CONFIG_NI52
-    tristate 'NI6510 support' CONFIG_NI65
+    tristate '    NI5210 support' CONFIG_NI52
+    tristate '    NI6510 support' CONFIG_NI65
   fi
   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      tristate 'RealTek 8129/8139 (not 8019/8029!) support' CONFIG_RTL8139
-      tristate 'SiS 900 PCI Fast Ethernet Adapter support' CONFIG_SIS900
-      tristate 'Packet Engines Yellowfin Gigabit-NIC support' CONFIG_YELLOWFIN
-      tristate 'Alteon AceNIC/3Com 3C985/NetGear GA620 Gigabit support' CONFIG_ACENIC
-      if [ "$CONFIG_ACENIC" != "n" ]; then
-	  bool 'Omit support for old Tigon I based AceNICs' CONFIG_ACENIC_OMIT_TIGON_I
+      # tristate '  Packet Engines Hamachi GNIC-II support (EXPERIMENTAL)' CONFIG_HAMACHI
+      tristate '  Packet Engines Yellowfin Gigabit-NIC support (EXPERIMENTAL)' CONFIG_YELLOWFIN
+      tristate '  RealTek 8129/8139 (not 8019/8029!) support (EXPERIMENTAL)' CONFIG_RTL8139
+      tristate '  SiS 900 PCI Fast Ethernet Adapter support (EXPERIMENTAL)' CONFIG_SIS900
+      tristate '  DM9102 PCI Fast Ethernet Adapter support (EXPERIMENTAL)' CONFIG_DM9102
+   fi
+   if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+      tristate '  AT1700/1720 support (EXPERIMENTAL)' CONFIG_AT1700
+   fi
+   tristate '  DEPCA, DE10x, DE200, DE201, DE202, DE422 support' CONFIG_DEPCA
+   bool '  Other ISA cards' CONFIG_NET_ISA
+   if [ "$CONFIG_NET_ISA" = "y" ]; then
+      tristate '    Cabletron E21xx support' CONFIG_E2100
+      tristate '    EtherWORKS 3 (DE203, DE204, DE205) support' CONFIG_EWRK3
+      tristate '    EtherExpress 16 support' CONFIG_EEXPRESS
+      tristate '    EtherExpressPro support' CONFIG_EEXPRESS_PRO
+      tristate '    FMV-181/182/183/184 support' CONFIG_FMV18X
+      tristate '    HP PCLAN+ (27247B and 27252A) support' CONFIG_HPLAN_PLUS
+      tristate '    HP PCLAN (27245 and other 27xxx series) support' CONFIG_HPLAN
+      tristate '    HP 10/100VG PCLAN (ISA, EISA, PCI) support' CONFIG_HP100
+      if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+	 tristate '    ICL EtherTeam 16i/32 support (EXPERIMENTAL)' CONFIG_ETH16I
       fi
-  fi
-  bool 'Other ISA cards' CONFIG_NET_ISA
-  if [ "$CONFIG_NET_ISA" = "y" ]; then
-    tristate 'AT1700/1720 support (EXPERIMENTAL)' CONFIG_AT1700
-    tristate 'Cabletron E21xx support' CONFIG_E2100
-    tristate 'DEPCA, DE10x, DE200, DE201, DE202, DE422 support' CONFIG_DEPCA
-    tristate 'EtherWORKS 3 (DE203, DE204, DE205) support' CONFIG_EWRK3
-    tristate 'EtherExpress 16 support' CONFIG_EEXPRESS
-    tristate 'EtherExpressPro support' CONFIG_EEXPRESS_PRO
-    tristate 'FMV-181/182/183/184 support' CONFIG_FMV18X
-    tristate 'HP PCLAN+ (27247B and 27252A) support' CONFIG_HPLAN_PLUS
-    tristate 'HP PCLAN (27245 and other 27xxx series) support' CONFIG_HPLAN
-    tristate 'HP 10/100VG PCLAN (ISA, EISA, PCI) support' CONFIG_HP100
-    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      tristate 'ICL EtherTeam 16i/32 support' CONFIG_ETH16I
-    fi
-    tristate 'NE2000/NE1000 support' CONFIG_NE2000
-    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      tristate 'SEEQ8005 support (EXPERIMENTAL)' CONFIG_SEEQ8005
-    fi
-    bool 'SK_G16 support' CONFIG_SK_G16
-  fi
-  if [ "$CONFIG_MCA" = "y" ]; then
-    tristate 'NE/2 (ne2000 MCA version) support' CONFIG_NE2_MCA
-    tristate 'SKnet MCA support' CONFIG_SKMC
-  fi
-  bool 'EISA, VLB, PCI and on board controllers' CONFIG_NET_EISA
-  if [ "$CONFIG_NET_EISA" = "y" ]; then
-    tristate 'AMD PCnet32 (VLB and PCI) support' CONFIG_PCNET32
-    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      tristate 'Ansel Communications EISA 3200 support (EXPERIMENTAL)' CONFIG_AC3200
-    fi
+      tristate '    NE2000/NE1000 support' CONFIG_NE2000
+      if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+	 tristate '    SEEQ8005 support (EXPERIMENTAL)' CONFIG_SEEQ8005
+      fi
+      bool '    SK_G16 support' CONFIG_SK_G16
+   fi
+   if [ "$CONFIG_MCA" = "y" ]; then
+      tristate '  SKnet MCA support' CONFIG_SKMC
+      tristate '  NE/2 (ne2000 MCA version) support' CONFIG_NE2_MCA
+   fi
+   bool '  EISA, VLB, PCI and on board controllers' CONFIG_NET_EISA
+   if [ "$CONFIG_NET_EISA" = "y" ]; then
+      tristate '    AMD PCnet32 (VLB and PCI) support' CONFIG_PCNET32
+      if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+	 # tristate '    Adaptec Starfire support (EXPERIMENTAL)' CONFIG_ADAPTEC_STARFIRE
+      fi
+      tristate '    Alteon AceNIC/3Com 3C985/NetGear GA620 Gigabit support' CONFIG_ACENIC
+      if [ "$CONFIG_ACENIC" != "n" ]; then
+	 bool '      Omit support for old Tigon I based AceNICs' CONFIG_ACENIC_OMIT_TIGON_I
+      fi
+      if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+	 tristate '    Ansel Communications EISA 3200 support (EXPERIMENTAL)' CONFIG_AC3200
+      fi
 
-    tristate 'Apricot Xen-II on board Ethernet' CONFIG_APRICOT
-    tristate 'CS89x0 support' CONFIG_CS89x0
-    tristate 'Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
-    tristate 'DECchip Tulip (dc21x4x) PCI support' CONFIG_DEC_ELCP
-    tristate 'Digi Intl. RightSwitch SE-X support' CONFIG_DGRS
-    tristate 'EtherExpressPro/100 support' CONFIG_EEXPRESS_PRO100
-    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      tristate 'Mylex EISA LNE390A/B support (EXPERIMENTAL)' CONFIG_LNE390
-      tristate 'Novell/Eagle/Microdyne NE3210 EISA support (EXPERIMENTAL)' CONFIG_NE3210
-    fi
-    tristate 'PCI NE2000 support' CONFIG_NE2K_PCI
-    tristate 'TI ThunderLAN support' CONFIG_TLAN
-    tristate 'VIA Rhine support' CONFIG_VIA_RHINE
-    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      tristate 'Racal-Interlan EISA ES3210 support (EXPERIMENTAL)' CONFIG_ES3210
-      tristate 'SMC EtherPower II (EXPERIMENTAL)' CONFIG_EPIC100
-      bool 'Zenith Z-Note support (EXPERIMENTAL)' CONFIG_ZNET
-    fi
-    tristate 'Adaptec Starfire support' CONFIG_ADAPTEC_STARFIRE
-  fi
-  bool 'Pocket and portable adaptors' CONFIG_NET_POCKET
-  if [ "$CONFIG_NET_POCKET" = "y" ]; then
-    bool 'AT-LAN-TEC/RealTek pocket adaptor support' CONFIG_ATP
-    tristate 'D-Link DE600 pocket adaptor support' CONFIG_DE600
-    tristate 'D-Link DE620 pocket adaptor support' CONFIG_DE620
-  fi
+      tristate '    Apricot Xen-II on board Ethernet' CONFIG_APRICOT
+      tristate '    CS89x0 support' CONFIG_CS89x0
+      tristate '    Generic DECchip & DIGITAL EtherWORKS PCI/EISA' CONFIG_DE4X5
+      tristate '    DECchip Tulip (dc21x4x) PCI support' CONFIG_DEC_ELCP
+      tristate '    Digi Intl. RightSwitch SE-X support' CONFIG_DGRS
+      tristate '    EtherExpressPro/100 support' CONFIG_EEXPRESS_PRO100
+      if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+	 tristate '    Mylex EISA LNE390A/B support (EXPERIMENTAL)' CONFIG_LNE390
+	 tristate '    Novell/Eagle/Microdyne NE3210 EISA support (EXPERIMENTAL)' CONFIG_NE3210
+      fi
+      tristate '    PCI NE2000 support' CONFIG_NE2K_PCI
+      # tristate '    Sundance Alta support' CONFIG_ALTA
+      tristate '    TI ThunderLAN support' CONFIG_TLAN
+      tristate '    VIA Rhine support' CONFIG_VIA_RHINE
+      if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
+	 tristate '    Racal-Interlan EISA ES3210 support (EXPERIMENTAL)' CONFIG_ES3210
+	 tristate '    SMC EtherPower II (EXPERIMENTAL)' CONFIG_EPIC100
+	 bool '    Zenith Z-Note support (EXPERIMENTAL)' CONFIG_ZNET
+      fi
+   fi
+   bool '  Pocket and portable adapters' CONFIG_NET_POCKET
+   if [ "$CONFIG_NET_POCKET" = "y" ]; then
+      bool '    AT-LAN-TEC/RealTek pocket adapter support' CONFIG_ATP
+      tristate '    D-Link DE600 pocket adapter support' CONFIG_DE600
+      tristate '    D-Link DE620 pocket adapter support' CONFIG_DE620
+   fi
 fi
 
 endmenu
 
 bool 'FDDI driver support' CONFIG_FDDI
 if [ "$CONFIG_FDDI" = "y" ]; then
-  bool 'Digital DEFEA and DEFPA adapter support' CONFIG_DEFXX
+   bool '  Digital DEFEA and DEFPA adapter support' CONFIG_DEFXX
 fi
 
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  bool 'HIPPI driver support (EXPERIMENTAL)' CONFIG_HIPPI
-  if [ "$CONFIG_HIPPI" = "y" ]; then
-    tristate 'Essential RoadRunner HIPPI PCI adapter support' CONFIG_ROADRUNNER
-    if [ "$CONFIG_ROADRUNNER" != "n" ]; then
-      bool '  Use large TX/RX rings' CONFIG_ROADRUNNER_LARGE_RINGS
-    fi
-  fi
+   bool 'HIPPI driver support (EXPERIMENTAL)' CONFIG_HIPPI
+   if [ "$CONFIG_HIPPI" = "y" ]; then
+      tristate '  Essential RoadRunner HIPPI PCI adapter support' CONFIG_ROADRUNNER
+      if [ "$CONFIG_ROADRUNNER" != "n" ]; then
+	 bool '    Use large TX/RX rings' CONFIG_ROADRUNNER_LARGE_RINGS
+      fi
+   fi
 fi
 
 #
@@ -182,133 +191,66 @@ fi
 #
 
 if [ "$CONFIG_ATALK" != "n" ]; then
-  mainmenu_option next_comment
-  comment 'Appletalk devices'
-  dep_tristate 'Apple/Farallon LocalTalk PC support' CONFIG_LTPC $CONFIG_ATALK
-  dep_tristate 'COPS LocalTalk PC support' CONFIG_COPS $CONFIG_ATALK
-  if [ "$CONFIG_COPS" != "n" ]; then
-     bool 'Dayna firmware support' CONFIG_COPS_DAYNA
-     bool 'Tangent firmware support' CONFIG_COPS_TANGENT
-  fi
-  dep_tristate 'Appletalk-IP driver support' CONFIG_IPDDP $CONFIG_ATALK
-  if [ "$CONFIG_IPDDP" != "n" ]; then
-     bool 'IP to Appletalk-IP Encapsulation support' CONFIG_IPDDP_ENCAP
-     bool 'Appletalk-IP to IP Decapsulation support' CONFIG_IPDDP_DECAP
-  fi
-  endmenu
+   mainmenu_option next_comment
+   comment 'Appletalk devices'
+   dep_tristate 'Apple/Farallon LocalTalk PC support' CONFIG_LTPC $CONFIG_ATALK
+   dep_tristate 'COPS LocalTalk PC support' CONFIG_COPS $CONFIG_ATALK
+   if [ "$CONFIG_COPS" != "n" ]; then
+      bool '  Dayna firmware support' CONFIG_COPS_DAYNA
+      bool '  Tangent firmware support' CONFIG_COPS_TANGENT
+   fi
+   dep_tristate 'Appletalk-IP driver support' CONFIG_IPDDP $CONFIG_ATALK
+   if [ "$CONFIG_IPDDP" != "n" ]; then
+      bool '  IP to Appletalk-IP Encapsulation support' CONFIG_IPDDP_ENCAP
+      bool '  Appletalk-IP to IP Decapsulation support' CONFIG_IPDDP_DECAP
+   fi
+   endmenu
 fi
 
 if [ ! "$CONFIG_PARPORT" = "n" ]; then
-  dep_tristate 'PLIP (parallel port) support' CONFIG_PLIP $CONFIG_PARPORT
+   dep_tristate 'PLIP (parallel port) support' CONFIG_PLIP $CONFIG_PARPORT
 fi
 
 tristate 'PPP (point-to-point protocol) support' CONFIG_PPP
 if [ ! "$CONFIG_PPP" = "n" ]; then
-  dep_tristate 'PPP support for async serial ports' CONFIG_PPP_ASYNC $CONFIG_PPP
-  dep_tristate 'PPP Deflate compression' CONFIG_PPP_DEFLATE $CONFIG_PPP
-  dep_tristate 'PPP BSD-Compress compression' CONFIG_PPP_BSDCOMP m
+   dep_tristate '  PPP support for async serial ports' CONFIG_PPP_ASYNC $CONFIG_PPP
+   dep_tristate '  PPP Deflate compression' CONFIG_PPP_DEFLATE $CONFIG_PPP
+   dep_tristate '  PPP BSD-Compress compression' CONFIG_PPP_BSDCOMP m
 fi
 
 tristate 'SLIP (serial line) support' CONFIG_SLIP
 if [ "$CONFIG_SLIP" != "n" ]; then
-  bool ' CSLIP compressed headers' CONFIG_SLIP_COMPRESSED
-  bool ' Keepalive and linefill' CONFIG_SLIP_SMART
-  bool ' Six bit SLIP encapsulation' CONFIG_SLIP_MODE_SLIP6
+   bool '  CSLIP compressed headers' CONFIG_SLIP_COMPRESSED
+   bool '  Keepalive and linefill' CONFIG_SLIP_SMART
+   bool '  Six bit SLIP encapsulation' CONFIG_SLIP_MODE_SLIP6
 fi
+
+mainmenu_option next_comment
+comment 'Wireless LAN (non-hamradio)'
 
 bool 'Wireless LAN (non-hamradio)' CONFIG_NET_RADIO
 if [ "$CONFIG_NET_RADIO" = "y" ]; then
-  dep_tristate 'STRIP (Metricom starmode radio IP)' CONFIG_STRIP $CONFIG_INET
-  tristate 'AT&T WaveLAN & DEC RoamAbout DS support' CONFIG_WAVELAN
-  tristate 'Aironet Arlan 655 & IC2200 DS support' CONFIG_ARLAN
+   dep_tristate '  STRIP (Metricom starmode radio IP)' CONFIG_STRIP $CONFIG_INET
+   tristate '  AT&T WaveLAN & DEC RoamAbout DS support' CONFIG_WAVELAN
+   tristate '  Aironet Arlan 655 & IC2200 DS support' CONFIG_ARLAN
 
-fi
-
-mainmenu_option next_comment
-comment 'Token ring devices'
-
-bool 'Token Ring driver support' CONFIG_TR
-if [ "$CONFIG_TR" = "y" ]; then
-  tristate 'IBM Tropic chipset based adaptor support' CONFIG_IBMTR
-#  tristate 'IBM Lanstreamer PCI adaptor support' CONFIG_IBMLS
-  tristate 'IBM Olympic chipset PCI adapter support' CONFIG_IBMOL
-  tristate 'SysKonnect adapter support' CONFIG_SKTR
 fi
 
 endmenu
+
+source drivers/net/tokenring/Config.in
 
 bool 'Fibre Channel driver support' CONFIG_NET_FC
 if [ "$CONFIG_NET_FC" = "y" ]; then
-  tristate 'Interphase 5526 Tachyon chipset based adaptor support' CONFIG_IPHASE5526
+   dep_tristate '  Interphase 5526 Tachyon chipset based adapter support' CONFIG_IPHASE5526 $CONFIG_SCSI
 fi
 
 if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-  tristate 'Red Creek Hardware VPN (EXPERIMENTAL)' CONFIG_RCPCI
-  tristate 'Traffic Shaper (EXPERIMENTAL)' CONFIG_SHAPER
+   tristate 'Red Creek Hardware VPN (EXPERIMENTAL)' CONFIG_RCPCI
+   tristate 'Traffic Shaper (EXPERIMENTAL)' CONFIG_SHAPER
 fi
 
-#
-# WAN drivers support
-#
-
-mainmenu_option next_comment
-comment 'Wan interfaces'
-
-
-# There is no way to detect a comtrol sv11 - force it modular for now.
-#
-dep_tristate 'Comtrol Hostess SV-11 support' CONFIG_HOSTESS_SV11 m
-#
-# The COSA/SRP driver has not been tested as non-modular yet.
-#
-dep_tristate 'COSA/SRP sync serial boards support' CONFIG_COSA m
-#
-# There is no way to detect a Sealevel board. Force it modular
-#
-dep_tristate 'Sealevel Systems 4021 support' CONFIG_SEALEVEL_4021 m
-
-tristate 'Frame relay DLCI support' CONFIG_DLCI
-if [ "$CONFIG_DLCI" != "n" ]; then
-  int '  Max open DLCI' CONFIG_DLCI_COUNT 24
-  int '  Max DLCI per device' CONFIG_DLCI_MAX 8
-  dep_tristate '  SDLA (Sangoma S502/S508) support' CONFIG_SDLA $CONFIG_DLCI
-fi
-
-#
-#	Wan router core.
-#
-
-if [ "$CONFIG_WAN_ROUTER" != "n" ]; then
-  bool 'WAN drivers' CONFIG_WAN_DRIVERS
-  if [ "$CONFIG_WAN_DRIVERS" = "y" ]; then
-    dep_tristate 'Sangoma WANPIPE(tm) multiprotocol cards' CONFIG_VENDOR_SANGOMA $CONFIG_WAN_DRIVERS
-    if [ "$CONFIG_VENDOR_SANGOMA" != "n" ]; then
-      int  '  Maximum number of cards' CONFIG_WANPIPE_CARDS 1
-      bool '  WANPIPE X.25 support' CONFIG_WANPIPE_X25
-      bool '  WANPIPE Frame Relay support' CONFIG_WANPIPE_FR
-      bool '  WANPIPE PPP support' CONFIG_WANPIPE_PPP
-    fi
-    if [ "$CONFIG_EXPERIMENTAL" = "y" ]; then
-      dep_tristate 'Cyclom 2X(tm) multiprotocol cards (EXPERIMENTAL)' CONFIG_CYCLADES_SYNC $CONFIG_WAN_DRIVERS
-      if [ "$CONFIG_CYCLADES_SYNC" != "n" ]; then
-        bool '  Cyclom 2X X.25 support (EXPERIMENTAL)' CONFIG_CYCLOMX_X25
-      fi
-    fi
-  fi
-fi
-
-endmenu
-
-
-#
-# X.25 network drivers
-#
-if [ "$CONFIG_X25" != "n" ]; then
-if [ "$CONFIG_LAPB" != "n" ]; then
-    dep_tristate 'LAPB over Ethernet driver' CONFIG_LAPBETHER $CONFIG_LAPB
-    dep_tristate 'X.25 async driver' CONFIG_X25_ASY $CONFIG_LAPB
-fi
-fi
+source drivers/net/wan/Config.in
 
 if [ "$CONFIG_PCMCIA" != "n" ]; then
    source drivers/net/pcmcia/Config.in
