@@ -39,8 +39,10 @@
  *  Detection for Celeron coppermine, identify_cpu() overhauled,
  *  and a few other clean ups.
  *  Dave Jones <dave@powertweak.com>, April 2000
- *  Pentium-III code by Ingo Molnar and modifications by Goutham Rao
  *
+ *  Pentium III FXSR, SSE support
+ *  General FPU state handling cleanups
+ *	Gareth Hughes <gareth@valinux.com>, May 2000
  */
 
 /*
@@ -783,20 +785,6 @@ void __init setup_arch(char **cmdline_p)
 #elif defined(CONFIG_DUMMY_CONSOLE)
 	conswitchp = &dummy_con;
 #endif
-#endif
-#ifdef CONFIG_X86_FXSR
-	if (boot_cpu_data.x86_capability & X86_FEATURE_FXSR)
-	{
-		printk("Enabling extended fast FPU save and restore ... ");
-		set_in_cr4(X86_CR4_OSFXSR);
-		printk("done.\n");
-	}
-	if (boot_cpu_data.x86_capability & X86_FEATURE_XMM) 
-	{
-		printk("Enabling KNI unmasked exception support ... ");
-		set_in_cr4(X86_CR4_OSXMMEXCPT);
-		printk("done.\n");
-	}
 #endif
 }
 

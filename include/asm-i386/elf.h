@@ -14,6 +14,7 @@ typedef unsigned long elf_greg_t;
 typedef elf_greg_t elf_gregset_t[ELF_NGREG];
 
 typedef struct user_i387_struct elf_fpregset_t;
+typedef struct user_fxsr_struct elf_fpxregset_t;
 
 /*
  * This is used to ensure we don't load something for the wrong architecture.

@@ -2,7 +2,9 @@
  *  linux/arch/i386/traps.c
  *
  *  Copyright (C) 1991, 1992  Linus Torvalds
- *  FXSAVE/FXRSTOR support by Ingo Molnar, OS exception support by Goutham Rao
+ *
+ *  Pentium III FXSR, SSE support
+ *	Gareth Hughes <gareth@valinux.com>, May 2000
  */
 
 /*
@@ -35,6 +37,7 @@
 #include <asm/atomic.h>
 #include <asm/debugreg.h>
 #include <asm/desc.h>
+#include <asm/i387.h>
 
 #include <asm/smp.h>
 #include <asm/pgalloc.h>
@@ -152,10 +155,10 @@ asmlinkage void stack_segment(void);
 asmlinkage void general_protection(void);
 asmlinkage void page_fault(void);
 asmlinkage void coprocessor_error(void);
+asmlinkage void simd_coprocessor_error(void);
 asmlinkage void reserved(void);
 asmlinkage void alignment_check(void);
 asmlinkage void spurious_interrupt_bug(void);
-asmlinkage void xmm_fault(void);
 
 int kstack_depth_to_print = 24;
 
@@ -318,7 +321,6 @@ DO_ERROR(11, SIGBUS,  "segment not present", segment_not_present, current)
 DO_ERROR(12, SIGBUS,  "stack segment", stack_segment, current)
 DO_ERROR_INFO(17, SIGBUS, "alignment check", alignment_check, current, BUS_ADRALN, get_cr2())
 DO_ERROR(18, SIGSEGV, "reserved", reserved, current)
-DO_VM86_ERROR(19, SIGFPE, "XMM fault", xmm_fault, current)
 
 asmlinkage void do_general_protection(struct pt_regs * regs, long error_code)
 {
@@ -584,13 +586,13 @@ void math_error(void *eip)
 {
 	struct task_struct * task;
 	siginfo_t info;
+	unsigned short cwd, swd;
 
 	/*
-	 * Save the info for the exception handler
-	 * (this will also clear the error)
+	 * Save the info for the exception handler and clear the error.
 	 */
 	task = current;
-	save_fpu(task);
+	save_init_fpu(task);
 	task->thread.trap_no = 16;
 	task->thread.error_code = 0;
 	info.si_signo = SIGFPE;
@@ -607,9 +609,9 @@ void math_error(void *eip)
 	 * and it will suffer the consequences since we won't be able to
 	 * fully reproduce the context of the exception
 	 */
-	switch(((~task->thread.i387.hard.cwd) &
-		task->thread.i387.hard.swd & 0x3f) |
-	       (task->thread.i387.hard.swd & 0x240)) {
+	cwd = get_fpu_cwd(task);
+	swd = get_fpu_swd(task);
+	switch (((~cwd) & swd & 0x3f) | (swd & 0x240)) {
 		case 0x000:
 		default:
 			break;
@@ -641,6 +643,79 @@ asmlinkage void do_coprocessor_error(struct pt_regs * regs, long error_code)
 	math_error((void *)regs->eip);
 }
 
+void simd_math_error(void *eip)
+{
+	struct task_struct * task;
+	siginfo_t info;
+	unsigned short mxcsr;
+
+	/*
+	 * Save the info for the exception handler and clear the error.
+	 */
+	task = current;
+	save_init_fpu(task);
+	load_mxcsr(0x1f80);
+	task->thread.trap_no = 19;
+	task->thread.error_code = 0;
+	info.si_signo = SIGFPE;
+	info.si_errno = 0;
+	info.si_code = __SI_FAULT;
+	info.si_addr = eip;
+	/*
+	 * The SIMD FPU exceptions are handled a little differently, as there
+	 * is only a single status/control register.  Thus, to determine which
+	 * unmasked exception was caught we must mask the exception mask bits
+	 * at 0x1f80, and then use these to mask the exception bits at 0x3f.
+	 */
+	mxcsr = get_fpu_mxcsr(task);
+	switch (~((mxcsr & 0x1f80) >> 7) & (mxcsr & 0x3f)) {
+		case 0x000:
+		default:
+			break;
+		case 0x001: /* Invalid Op */
+			info.si_code = FPE_FLTINV;
+			break;
+		case 0x002: /* Denormalize */
+		case 0x010: /* Underflow */
+			info.si_code = FPE_FLTUND;
+			break;
+		case 0x004: /* Zero Divide */
+			info.si_code = FPE_FLTDIV;
+			break;
+		case 0x008: /* Overflow */
+			info.si_code = FPE_FLTOVF;
+			break;
+		case 0x020: /* Precision */
+			info.si_code = FPE_FLTRES;
+			break;
+	}
+	force_sig_info(SIGFPE, &info, task);
+}
+
+asmlinkage void do_simd_coprocessor_error(struct pt_regs * regs,
+					  long error_code)
+{
+	if (cpu_has_xmm) {
+		/* Handle SIMD FPU exceptions on PIII+ processors. */
+		ignore_irq13 = 1;
+		simd_math_error((void *)regs->eip);
+	} else {
+		/*
+		 * Handle strange cache flush from user space exception
+		 * in all other cases.  This is undocumented behaviour.
+		 */
+		if (regs->eflags & VM_MASK) {
+			handle_vm86_fault((struct kernel_vm86_regs *)regs,
+					  error_code);
+			return;
+		}
+		die_if_kernel("cache flush denied", regs, error_code);
+		current->thread.trap_no = 19;
+		current->thread.error_code = error_code;
+		force_sig(SIGSEGV, current);
+	}
+}
+
 asmlinkage void do_spurious_interrupt_bug(struct pt_regs * regs,
 					  long error_code)
 {
@@ -661,17 +736,16 @@ asmlinkage void math_state_restore(struct pt_regs regs)
 {
 	__asm__ __volatile__("clts");		/* Allow maths ops (or we recurse) */
 
-	if(current->used_math)
-		i387_restore_hard(current->thread.i387);
-	else
-	{
+	if (current->used_math) {
+		restore_fpu(current);
+	} else {
 		/*
 		 *	Our first FPU usage, clean the chip.
 		 */
 		__asm__("fninit");
 		current->used_math = 1;
 	}
-	current->flags|=PF_USEDFPU;		/* So we fnsave on switch_to() */
+	current->flags |= PF_USEDFPU;	/* So we fnsave on switch_to() */
 }
 
 #ifndef CONFIG_MATH_EMULATION
@@ -905,7 +979,7 @@ void __init trap_init(void)
 	set_trap_gate(15,&spurious_interrupt_bug);
 	set_trap_gate(16,&coprocessor_error);
 	set_trap_gate(17,&alignment_check);
-	set_trap_gate(19,&xmm_fault);
+	set_trap_gate(19,&simd_coprocessor_error);
 
 	set_system_gate(SYSCALL_VECTOR,&system_call);
 

@@ -30,6 +30,18 @@
    The minimum core file size is 3 pages, or 12288 bytes.
 */
 
+/*
+ * Pentium III FXSR, SSE support
+ *	Gareth Hughes <gareth@valinux.com>, May 2000
+ *
+ * Provide support for the GDB 5.0+ PTRACE_{GET|SET}FPXREGS requests for
+ * interacting with the FXSR-format floating point environment.  Floating
+ * point data can be accessed in the regular format in the usual manner,
+ * and both the standard and SIMD floating point data can be accessed via
+ * the new ptrace requests.  In either case, changes to the FPU environment
+ * will be reflected in the task's state as expected.
+ */
+
 struct user_i387_struct {
 	long	cwd;
 	long	swd;
@@ -39,6 +51,22 @@ struct user_i387_struct {
 	long	fdp;
 	long	fds;
 	long	st_space[20];	/* 8*10 bytes for each FP-reg = 80 bytes */
+};
+
+struct user_fxsr_struct {
+	unsigned short	cwd;
+	unsigned short	swd;
+	unsigned short	twd;
+	unsigned short	fop;
+	long	fip;
+	long	fcs;
+	long	foo;
+	long	fos;
+	long	mxcsr;
+	long	reserved;
+	long	st_space[32];	/* 8*16 bytes for each FP-reg = 128 bytes */
+	long	xmm_space[32];	/* 8*16 bytes for each XMM-reg = 128 bytes */
+	long	padding[56];
 };
 
 /*

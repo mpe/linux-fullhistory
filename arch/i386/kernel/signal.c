@@ -4,8 +4,7 @@
  *  Copyright (C) 1991, 1992  Linus Torvalds
  *
  *  1997-11-28  Modified for POSIX.1b signals by Richard Henderson
- *  Pentium III support by Ingo Molnar, modifications and OS Exception support
- *              by Goutham Rao
+ *  2000-06-20  Pentium III FXSR, SSE support by Gareth Hughes
  */
 
 #include <linux/config.h>
@@ -23,6 +22,7 @@
 #include <linux/stddef.h>
 #include <asm/ucontext.h>
 #include <asm/uaccess.h>
+#include <asm/i387.h>
 
 #define DEBUG_SIG 0
 
@@ -187,29 +187,6 @@ struct rt_sigframe
 	char retcode[8];
 };
 
-
-static inline int restore_i387_hard(struct _fpstate *buf)
-{
-	struct task_struct *tsk = current;
-	clear_fpu(tsk);
-	return i387_user_to_hard(&tsk->thread.i387.hard, buf);
-}
-
-static inline int restore_i387(struct _fpstate *buf)
-{
-	int err;
-#ifndef CONFIG_MATH_EMULATION
-	err = restore_i387_hard(buf);
-#else
-	if (boot_cpu_data.hard_math)
-		err = restore_i387_hard(buf);
-	else
-		err = restore_i387_soft(&current->thread.i387.soft, buf);
-#endif
-	current->used_math = 1;
-	return err;
-}
-
 static int
 restore_sigcontext(struct pt_regs *regs, struct sigcontext *sc, int *peax)
 {
@@ -339,35 +316,6 @@ badframe:
 /*
  * Set up a signal frame.
  */
-
-static inline int save_i387_hard(struct _fpstate * buf)
-{
-	struct task_struct *tsk = current;
-
-	unlazy_fpu(tsk);
-	tsk->thread.i387.hard.status = tsk->thread.i387.hard.swd;
-	if (i387_hard_to_user(buf, &tsk->thread.i387.hard))
-		return -1;
-	return 1;
-}
-
-static int save_i387(struct _fpstate *buf)
-{
-	if (!current->used_math)
-		return 0;
-
-	/* This will cause a "finit" to be triggered by the next
-	   attempted FPU operation by the 'current' process.
-	   */
-	current->used_math = 0;
-
-#ifndef CONFIG_MATH_EMULATION
-	return save_i387_hard(buf);
-#else
-	return boot_cpu_data.hard_math ? save_i387_hard(buf)
-	  : save_i387_soft(&current->thread.i387.soft, buf);
-#endif
-}
 
 static int
 setup_sigcontext(struct sigcontext *sc, struct _fpstate *fpstate,

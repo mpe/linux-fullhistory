@@ -323,6 +323,11 @@ ENTRY(coprocessor_error)
 	pushl $ SYMBOL_NAME(do_coprocessor_error)
 	jmp error_code
 
+ENTRY(simd_coprocessor_error)
+	pushl $0
+	pushl $ SYMBOL_NAME(do_simd_coprocessor_error)
+	jmp error_code
+
 ENTRY(device_not_available)
 	pushl $-1		# mark this as an int
 	SAVE_ALL
@@ -412,11 +417,6 @@ ENTRY(page_fault)
 ENTRY(spurious_interrupt_bug)
 	pushl $0
 	pushl $ SYMBOL_NAME(do_spurious_interrupt_bug)
-	jmp error_code
-
-ENTRY(xmm_fault)
-	pushl $0
-	pushl $ SYMBOL_NAME(do_xmm_fault)
 	jmp error_code
 
 .data

@@ -8,6 +8,9 @@
  *        <rreilova@ececs.uc.edu>
  *	- Channing Corn (tests & fixes),
  *	- Andrew D. Balsa (code cleanup).
+ *
+ *  Pentium III FXSR, SSE support
+ *	Gareth Hughes <gareth@valinux.com>, May 2000
  */
 
 /*
@@ -19,6 +22,7 @@
 
 #include <linux/config.h>
 #include <asm/processor.h>
+#include <asm/i387.h>
 #include <asm/msr.h>
 
 static int __init no_halt(char *s)
@@ -61,6 +65,9 @@ static void __init copro_timeout(void)
 
 static double __initdata x = 4195835.0;
 static double __initdata y = 3145727.0;
+
+static float __initdata zero[4] = { 0.0, 0.0, 0.0, 0.0 };
+static float __initdata one[4] = { 1.0, 1.0, 1.0, 1.0 };
 
 static void __init check_fpu(void)
 {
@@ -139,6 +146,37 @@ static void __init check_fpu(void)
 		printk("OK, FPU using exception 16 error reporting.\n");
 	else
 		printk("Hmm, FPU using exception 16 error reporting with FDIV bug.\n");
+
+#if defined(CONFIG_X86_FXSR) || defined(CONFIG_X86_RUNTIME_FXSR)
+	/*
+	 * Verify that the FXSAVE/FXRSTOR data will be 16-byte aligned.
+	 */
+	if (offsetof(struct task_struct, thread.i387.fxsave) & 15)
+		panic("Kernel compiled for PII/PIII+ with FXSR, data not 16-byte aligned!");
+
+	if (cpu_has_fxsr) {
+		printk(KERN_INFO "Enabling fast FPU save and restore... ");
+		set_in_cr4(X86_CR4_OSFXSR);
+		printk("done.\n");
+	}
+#endif
+#ifdef CONFIG_X86_XMM
+	if (cpu_has_xmm) {
+		printk(KERN_INFO "Enabling unmasked SIMD FPU exception support... ");
+		set_in_cr4(X86_CR4_OSXMMEXCPT);
+		printk("done.\n");
+
+		/* Check if exception 19 works okay. */
+		load_mxcsr(0x0000);
+		printk(KERN_INFO "Checking SIMD FPU exceptions... ");
+		__asm__("movups %0,%%xmm0\n\t"
+			"movups %1,%%xmm1\n\t"
+			"divps %%xmm0,%%xmm1\n\t"
+			: : "m" (*&zero), "m" (*&one));
+		printk("OK, SIMD FPU using exception 19 error reporting.\n");
+		load_mxcsr(0x1f80);
+	}
+#endif
 }
 
 static void __init check_hlt(void)
@@ -423,6 +461,14 @@ static void __init check_config(void)
 	    && boot_cpu_data.x86_model == 2
 	    && (boot_cpu_data.x86_mask < 6 || boot_cpu_data.x86_mask == 11))
 		panic("Kernel compiled for PPro+, assumes a local APIC without the read-before-write bug!");
+#endif
+
+/*
+ * If we configured ourselves for FXSR, we'd better have it.
+ */
+#ifdef CONFIG_X86_FXSR
+	if (!cpu_has_fxsr)
+		panic("Kernel compiled for PII/PIII+, requires FXSR feature!");
 #endif
 }
 

@@ -20,6 +20,7 @@ struct elf_siginfo
 typedef elf_greg_t greg_t;
 typedef elf_gregset_t gregset_t;
 typedef elf_fpregset_t fpregset_t;
+typedef elf_fpxregset_t fpxregset_t;
 #define NGREG ELF_NGREG
 #endif
 

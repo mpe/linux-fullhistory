@@ -1,7 +1,9 @@
 /* ptrace.c */
 /* By Ross Biro 1/23/92 */
-/* FXSAVE/FXRSTOR support by Ingo Molnar and modifications by Goutham Rao */
-/* edited by Linus Torvalds */
+/*
+ * Pentium III FXSR, SSE support
+ *	Gareth Hughes <gareth@valinux.com>, May 2000
+ */
 
 #include <linux/config.h> /* for CONFIG_MATH_EMULATION */
 #include <linux/kernel.h>
@@ -17,6 +19,7 @@
 #include <asm/pgtable.h>
 #include <asm/system.h>
 #include <asm/processor.h>
+#include <asm/i387.h>
 #include <asm/debugreg.h>
 
 /*
@@ -392,45 +395,59 @@ asmlinkage int sys_ptrace(long request, long pid, long addr, long data)
 	}
 
 	case PTRACE_GETFPREGS: { /* Get the child FPU state. */
-		if (!access_ok(VERIFY_WRITE, (unsigned *)data, sizeof(struct user_i387_struct))) {
+		if (!access_ok(VERIFY_WRITE, (unsigned *)data,
+			       sizeof(struct user_i387_struct))) {
 			ret = -EIO;
 			break;
 		}
 		ret = 0;
 		if ( !child->used_math ) {
 			/* Simulate an empty FPU. */
-			i387_set_cwd(child->thread.i387.hard, 0x037f);
-			i387_set_swd(child->thread.i387.hard, 0x0000);
-			i387_set_twd(child->thread.i387.hard, 0xffff);
-	}
-#ifdef CONFIG_MATH_EMULATION
-		if ( boot_cpu_data.hard_math ) {
-#endif
-			i387_hard_to_user((struct _fpstate *)data, &child->thread.i387.hard);
-#ifdef CONFIG_MATH_EMULATION
-		} else {
-			save_i387_soft(&child->thread.i387.soft, (struct _fpstate *)data);
+			set_fpu_cwd(child, 0x037f);
+			set_fpu_swd(child, 0x0000);
+			set_fpu_twd(child, 0xffff);
 		}
-#endif
+		get_fpregs((struct user_i387_struct *)data, child);
 		break;
 	}
 
 	case PTRACE_SETFPREGS: { /* Set the child FPU state. */
-		if (!access_ok(VERIFY_READ, (unsigned *)data, sizeof(struct user_i387_struct))) {
+		if (!access_ok(VERIFY_READ, (unsigned *)data,
+			       sizeof(struct user_i387_struct))) {
 			ret = -EIO;
 			break;
 		}
 		child->used_math = 1;
-#ifdef CONFIG_MATH_EMULATION
-		if ( boot_cpu_data.hard_math ) {
-#endif
-			i387_user_to_hard(&child->thread.i387.hard,(struct _fpstate *)data);
-#ifdef CONFIG_MATH_EMULATION
-		} else {
-			restore_i387_soft(&child->thread.i387.soft, (struct _fpstate *)data);
-		}
-#endif
+		set_fpregs(child, (struct user_i387_struct *)data);
 		ret = 0;
+		break;
+	}
+
+	case PTRACE_GETFPXREGS: { /* Get the child extended FPU state. */
+		if (!access_ok(VERIFY_WRITE, (unsigned *)data,
+			       sizeof(struct user_fxsr_struct))) {
+			ret = -EIO;
+			break;
+		}
+		if ( !child->used_math ) {
+			/* Simulate an empty FPU. */
+			set_fpu_cwd(child, 0x037f);
+			set_fpu_swd(child, 0x0000);
+			set_fpu_twd(child, 0xffff);
+			set_fpu_mxcsr(child, 0x1f80);
+		}
+		ret = get_fpxregs((struct user_fxsr_struct *)data, child);
+		break;
+	}
+
+	case PTRACE_SETFPXREGS: { /* Set the child extended FPU state. */
+		if (!access_ok(VERIFY_READ, (unsigned *)data,
+			       sizeof(struct user_fxsr_struct))) {
+			ret = -EIO;
+			break;
+		}
+		child->used_math = 1;
+		ret = set_fpxregs(child, (struct user_fxsr_struct *)data);
 		break;
 	}
 

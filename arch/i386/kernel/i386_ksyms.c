@@ -14,6 +14,7 @@
 
 #include <asm/semaphore.h>
 #include <asm/processor.h>
+#include <asm/i387.h>
 #include <asm/uaccess.h>
 #include <asm/checksum.h>
 #include <asm/io.h>
@@ -24,7 +25,6 @@
 #include <asm/desc.h>
 
 extern void dump_thread(struct pt_regs *, struct user *);
-extern int dump_fpu(elf_fpregset_t *);
 extern spinlock_t rtc_lock;
 
 #if defined(CONFIG_APM) || defined(CONFIG_APM_MODULE)
@@ -51,6 +51,7 @@ EXPORT_SYMBOL(MCA_bus);
 EXPORT_SYMBOL(__verify_write);
 EXPORT_SYMBOL(dump_thread);
 EXPORT_SYMBOL(dump_fpu);
+EXPORT_SYMBOL(dump_extended_fpu);
 EXPORT_SYMBOL(__ioremap);
 EXPORT_SYMBOL(iounmap);
 EXPORT_SYMBOL(__io_virt_debug);

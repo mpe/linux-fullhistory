@@ -565,6 +565,7 @@ typedef struct elf64_shdr {
 #define NT_PRFPREG	2
 #define NT_PRPSINFO	3
 #define NT_TASKSTRUCT	4
+#define NT_PRFPXREG	20
 
 /* Note header in a PT_NOTE section */
 typedef struct elf32_note {
