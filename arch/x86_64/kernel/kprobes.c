@@ -233,8 +233,11 @@ static void prepare_singlestep(struct kprobe *p, struct pt_regs *regs)
 {
 	regs->eflags |= TF_MASK;
 	regs->eflags &= ~IF_MASK;
-
-	regs->rip = (unsigned long)p->ainsn.insn;
+	/*single step inline if the instruction is an int3*/
+	if (p->opcode == BREAKPOINT_INSTRUCTION)
+		regs->rip = (unsigned long)p->addr;
+	else
+		regs->rip = (unsigned long)p->ainsn.insn;
 }
 
 /*
@@ -256,6 +259,12 @@ int kprobe_handler(struct pt_regs *regs)
 		   Disarm the probe we just hit, and ignore it. */
 		p = get_kprobe(addr);
 		if (p) {
+			if (kprobe_status == KPROBE_HIT_SS) {
+				regs->eflags &= ~TF_MASK;
+				regs->eflags |= kprobe_saved_rflags;
+				unlock_kprobes();
+				goto no_kprobe;
+			}
 			disarm_kprobe(p, regs);
 			ret = 1;
 		} else {

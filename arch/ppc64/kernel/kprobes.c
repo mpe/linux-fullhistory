@@ -71,7 +71,11 @@ static inline void disarm_kprobe(struct kprobe *p, struct pt_regs *regs)
 static inline void prepare_singlestep(struct kprobe *p, struct pt_regs *regs)
 {
 	regs->msr |= MSR_SE;
-	regs->nip = (unsigned long)&p->ainsn.insn;
+	/*single step inline if it a breakpoint instruction*/
+	if (p->opcode == BREAKPOINT_INSTRUCTION)
+		regs->nip = (unsigned long)p->addr;
+	else
+		regs->nip = (unsigned long)&p->ainsn.insn;
 }
 
 static inline int kprobe_handler(struct pt_regs *regs)
@@ -86,6 +90,12 @@ static inline int kprobe_handler(struct pt_regs *regs)
 		   Disarm the probe we just hit, and ignore it. */
 		p = get_kprobe(addr);
 		if (p) {
+			if (kprobe_status == KPROBE_HIT_SS) {
+				regs->msr &= ~MSR_SE;
+				regs->msr |= kprobe_saved_msr;
+				unlock_kprobes();
+				goto no_kprobe;
+			}
 			disarm_kprobe(p, regs);
 			ret = 1;
 		} else {
