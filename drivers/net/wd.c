@@ -20,7 +20,7 @@
 
 	Paul Gortmaker	: multiple card support for module users, support
 			  for non-standard memory sizes.
-			 
+
 
 */
 
@@ -259,7 +259,7 @@ int wd_probe1(struct device *dev, int ioaddr)
 	}
 
 	/* Allocate dev->priv and fill in 8390 specific dev fields. */
-	if (ethdev_init(dev)) {	
+	if (ethdev_init(dev)) {
 		printk (" unable to get memory for dev->priv.\n");
 		free_irq(dev->irq, NULL);
 		return -ENOMEM;
@@ -451,6 +451,11 @@ static int io[MAX_WD_CARDS] = { 0, };
 static int irq[MAX_WD_CARDS]  = { 0, };
 static int mem[MAX_WD_CARDS] = { 0, };
 static int mem_end[MAX_WD_CARDS] = { 0, };	/* for non std. mem size */
+
+MODULE_PARM(io, "1-" __MODULE_STRING(MAX_WD_CARDS) "i");
+MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_WD_CARDS) "i");
+MODULE_PARM(mem, "1-" __MODULE_STRING(MAX_WD_CARDS) "i");
+MODULE_PARM(mem_end, "1-" __MODULE_STRING(MAX_WD_CARDS) "i");
 
 /* This is set up so that only a single autoprobe takes place per call.
 ISA device autoprobes on a running machine are not recommended. */

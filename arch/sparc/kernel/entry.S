@@ -1,4 +1,4 @@
-/* $Id: entry.S,v 1.128 1996/12/18 06:33:39 tridge Exp $
+/* $Id: entry.S,v 1.129 1996/12/30 00:31:07 davem Exp $
  * arch/sparc/kernel/entry.S:  Sparc trap low-level entry points.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -1721,5 +1721,43 @@ flush_patch_exception:
 	ldd	[%o0], %o6
 	jmpl	%o7 + 0xc, %g0			! see asm-sparc/processor.h
 	 mov	1, %g1				! signal EFAULT condition
+
+	.align	4
+	.globl	C_LABEL(kill_user_windows), kuw_patch1_7win
+	.globl	kuw_patch1
+kuw_patch1_7win:	sll	%o3, 6, %o3
+
+	/* No matter how much overhead this routine has in the worst
+	 * case scenerio, it is several times better than taking the
+	 * traps with the old method of just doing flush_user_windows().
+	 */
+C_LABEL(kill_user_windows):
+	ld	[%g6 + THREAD_UMASK], %o0	! get current umask
+	orcc	%g0, %o0, %g0			! if no bits set, we are done
+	be	3f				! nothing to do
+	 rd	%psr, %o5			! must clear interrupts
+	or	%o5, PSR_PIL, %o4		! or else that could change
+	wr	%o4, 0x0, %psr			! the uwinmask state
+	WRITE_PAUSE				! burn them cycles
+1:
+	ld	[%g6 + THREAD_UMASK], %o0	! get consistant state
+	orcc	%g0, %o0, %g0			! did an interrupt come in?
+	be	4f				! yep, we are done
+	 rd	%wim, %o3			! get current wim
+	srl	%o3, 1, %o4			! simulate a save
+kuw_patch1:
+	sll	%o3, 7, %o3			! compute next wim
+	or	%o4, %o3, %o3			! result
+	andncc	%o0, %o3, %o0			! clean this bit in umask
+	bne	kuw_patch1			! not done yet
+	 srl	%o3, 1, %o4			! begin another save simulation
+	wr	%o3, 0x0, %wim			! set the new wim
+	st	%g0, [%g6 + THREAD_UMASK]	! clear uwinmask
+4:
+	wr	%o5, 0x0, %psr			! re-enable interrupts
+	WRITE_PAUSE				! burn baby burn
+3:
+	retl					! return
+	 st	%g0, [%g6 + THREAD_W_SAVED]	! no windows saved
 
 /* End of entry.S */

@@ -1,4 +1,4 @@
-/* $Id: pstate.h,v 1.1 1996/12/12 11:57:14 davem Exp $ */
+/* $Id: pstate.h,v 1.2 1996/12/26 09:56:16 davem Exp $ */
 #ifndef _SPARC64_PSTATE_H
 #define _SPARC64_PSTATE_H
 
@@ -29,10 +29,12 @@
  *  63    40 39   32 31   24 23    20 19       8 7      5 4     0
  */
 #define TSTATE_CCR	0x000000ff00000000	/* Condition Codes.		*/
+#define TSTATE_XCC	0x000000f000000000	/* Condition Codes.		*/
 #define TSTATE_XNEG	0x0000008000000000	/* %xcc Negative.		*/
 #define TSTATE_XZERO	0x0000004000000000	/* %xcc Zero.			*/
 #define TSTATE_XOVFL	0x0000002000000000	/* %xcc Overflow.		*/
 #define TSTATE_XCARRY	0x0000001000000000	/* %xcc Carry.			*/
+#define TSTATE_ICC	0x0000000f00000000	/* Condition Codes.		*/
 #define TSTATE_INEG	0x0000000800000000	/* %icc Negative.		*/
 #define TSTATE_IZERO	0x0000000400000000	/* %icc Zero.			*/
 #define TSTATE_IOVFL	0x0000000200000000	/* %icc Overflow.		*/

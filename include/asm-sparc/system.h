@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.44 1996/12/18 06:56:08 tridge Exp $ */
+/* $Id: system.h,v 1.47 1996/12/30 00:31:12 davem Exp $ */
 #ifndef __SPARC_SYSTEM_H
 #define __SPARC_SYSTEM_H
 
@@ -46,6 +46,7 @@ extern struct linux_romvec *romvec;
  * frames are up to date.
  */
 extern void flush_user_windows(void);
+extern void kill_user_windows(void);
 extern void synchronize_user_stack(void);
 extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 		   void *fpqueue, unsigned long *fpqdepth);
@@ -88,43 +89,32 @@ extern void fpsave(unsigned long *fpregs, unsigned long *fsr,
 		switch_to_context(next);						\
 	task_pc = ((unsigned long) &&here) - 0x8;					\
 	__asm__ __volatile__(								\
-	"rd\t%%psr, %%g4\n\t"								\
+	"rd	%%psr, %%g4\n\t"							\
+	"std	%%sp, [%%g6 + %3]\n\t"							\
+	"rd	%%wim, %%g5\n\t"							\
+	"wr	%%g4, 0x20, %%psr\n\t"							\
+	"nop\n\t"									\
+	"std	%%g4, [%%g6 + %2]\n\t"							\
+	"ldd	[%1 + %2], %%g4\n\t"							\
+	"mov	%1, %%g6\n\t"								\
+	"st	%1, [%0]\n\t"								\
+	"wr	%%g4, 0x20, %%psr\n\t"							\
 	"nop\n\t"									\
 	"nop\n\t"									\
-	"nop\n\t"									\
-	"std\t%%sp, [%%g6 + %3]\n\t"							\
-	"rd\t%%wim, %%g5\n\t"								\
-	"wr\t%%g4, 0x20, %%psr\n\t"							\
-	"nop\n\t"									\
-	"nop\n\t"									\
-	"nop\n\t"									\
-	"std\t%%g4, [%%g6 + %2]\n\t"							\
-	"mov\t%1, %%g6\n\t"								\
-	"ldd\t[%%g6 + %2], %%g4\n\t"							\
-	"st\t%1, [%0]\n\t"								\
-	"wr\t%%g4, 0x20, %%psr\n\t"							\
+	"ldd	[%%g6 + %3], %%sp\n\t"							\
+	"wr	%%g5, 0x0, %%wim\n\t"							\
+	"ldd	[%%sp + 0x00], %%l0\n\t"						\
+	"ldd	[%%sp + 0x38], %%i6\n\t"						\
+	"wr	%%g4, 0x0, %%psr\n\t"							\
 	"nop\n\t"									\
 	"nop\n\t"									\
-	"nop\n\t"									\
-	"ldd\t[%%g6 + %3], %%sp\n\t"							\
-	"wr\t%%g5, 0x0, %%wim\n\t"							\
-	"ldd\t[%%sp + 0x00], %%l0\n\t"							\
-	"ldd\t[%%sp + 0x08], %%l2\n\t"							\
-	"ldd\t[%%sp + 0x10], %%l4\n\t"							\
-	"ldd\t[%%sp + 0x18], %%l6\n\t"							\
-	"ldd\t[%%sp + 0x20], %%i0\n\t"							\
-	"ldd\t[%%sp + 0x28], %%i2\n\t"							\
-	"ldd\t[%%sp + 0x30], %%i4\n\t"							\
-	"ldd\t[%%sp + 0x38], %%i6\n\t"							\
-	"wr\t%%g4, 0x0, %%psr\n\t"							\
-	"nop\n\t"									\
-	"nop\n\t"									\
-	"nop\n\t"									\
-	"jmpl\t%%o7 + 0x8, %%g0\n\t"							\
+	"jmpl	%%o7 + 0x8, %%g0\n\t"							\
 	" nop\n\t" : : "r" (&(current_set[smp_processor_id()])), "r" (next),		\
 	"i" ((const unsigned long)(&((struct task_struct *)0)->tss.kpsr)),		\
 	"i" ((const unsigned long)(&((struct task_struct *)0)->tss.ksp)),		\
-	"r" (task_pc) : "g4", "g5");							\
+	"r" (task_pc) : "g1", "g2", "g3", "g4", "g5", "g7", "l2", "l3",			\
+	"l4", "l5", "l6", "l7", "i0", "i1", "i2", "i3", "i4", "i5", "o0", "o1", "o2",	\
+	"o3");										\
 here: SWITCH_EXIT } while(0)
 
 /* Changing the IRQ level on the Sparc.   We now avoid writing the psr
@@ -148,9 +138,6 @@ extern __inline__ void cli(void)
 
 	__asm__ __volatile__("
 		rd	%%psr, %0
-		nop
-		nop
-		nop
 		andcc	%0, %1, %%g0
 		bne	1f
 		 nop
@@ -170,9 +157,6 @@ extern __inline__ void sti(void)
 
 	__asm__ __volatile__("
 		rd	%%psr, %0
-		nop
-		nop
-		nop
 		andcc	%0, %1, %%g0
 		be	1f
 		 nop
@@ -190,12 +174,7 @@ extern __inline__ unsigned long getipl(void)
 {
 	unsigned long retval;
 
-	__asm__ __volatile__("
-		rd	%%psr, %0
-		nop
-		nop
-		nop
-"	: "=r" (retval));
+	__asm__ __volatile__("rd	%%psr, %0" : "=r" (retval));
 	return retval;
 }
 
@@ -205,9 +184,6 @@ extern __inline__ unsigned long swap_pil(unsigned long __new_psr)
 
 	__asm__ __volatile__("
 		rd	%%psr, %0
-		nop
-		nop
-		nop
 		and	%0, %4, %1
 		and	%3, %4, %2
 		xorcc	%1, %2, %%g0
@@ -231,9 +207,6 @@ extern __inline__ unsigned long read_psr_and_cli(void)
 
 	__asm__ __volatile__("
 		rd	%%psr, %0
-		nop
-		nop
-		nop
 		andcc	%0, %1, %%g0
 		bne	1f
 		 nop
@@ -264,9 +237,6 @@ extern __inline__ unsigned long xchg_u32(__volatile__ unsigned long *m, unsigned
 {
 	__asm__ __volatile__("
 	rd	%%psr, %%g3
-	nop
-	nop
-	nop
 	andcc	%%g3, %3, %%g0
 	bne	1f
 	 nop

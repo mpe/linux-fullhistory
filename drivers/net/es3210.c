@@ -17,8 +17,8 @@
 	3) Info for getting IRQ and sh-mem gleaned from the EISA cfg files.
 	   Too bad it doesn't work -- see below.
 
-	The ES3210 is an EISA shared memory NS8390 implementation. Note 
-	that all memory copies to/from the board must be 32bit transfers. 
+	The ES3210 is an EISA shared memory NS8390 implementation. Note
+	that all memory copies to/from the board must be 32bit transfers.
 	Which rules out using eth_io_copy_and_sum() in this driver.
 
 	Apparently there are two slightly different revisions of the
@@ -26,7 +26,7 @@
 	and !rii0102.cfg) One has media select in the cfg file and the
 	other doesn't. Hopefully this will work with either.
 
-	That is about all I can tell you about it, having never actually 
+	That is about all I can tell you about it, having never actually
 	even seen one of these cards. :)  Try http://www.interlan.com
 	if you want more info.
 
@@ -86,7 +86,7 @@ static void es_block_output(struct device *dev, int count, const unsigned char *
 #define ES_ADDR2	0x01
 
 /*
- * Two card revisions. EISA ID's are always rev. minor, rev. major,, and 
+ * Two card revisions. EISA ID's are always rev. minor, rev. major,, and
  * then the three vendor letters stored in 5 bits each, with an "a" = 1.
  * For eg: "rii" = 10010 01001 01001 = 0x4929, which is how the EISA
  * config utility determines automagically what config file(s) to use.
@@ -117,7 +117,7 @@ static void es_block_output(struct device *dev, int count, const unsigned char *
 static unsigned char lo_irq_map[] = {3, 4, 5, 6, 7, 9, 10};
 static unsigned char hi_irq_map[] = {11, 12, 0, 14, 0, 0, 0, 15};
 
-/* 
+/*
  *	Probe for the card. The best way is to read the EISA ID if it
  *	is known. Then we check the prefix of the station address
  *	PROM for a match against the Racal-Interlan assigned value.
@@ -168,7 +168,7 @@ int es_probe1(struct device *dev, int ioaddr)
 	if ((eisa_id != ES_EISA_ID1) && (eisa_id != ES_EISA_ID2)) {
 		return ENODEV;
 	}
-	
+
 /*	Check the Racal vendor ID as well. */
 	if (inb(ioaddr + ES_SA_PROM + 0) != ES_ADDR0
 		|| inb(ioaddr + ES_SA_PROM + 1) != ES_ADDR1
@@ -187,7 +187,7 @@ int es_probe1(struct device *dev, int ioaddr)
 	}
 
 	printk("es3210.c: ES3210 rev. %ld at %#x, node", eisa_id>>24, ioaddr);
-	for(i = 0; i < ETHER_ADDR_LEN; i++) 
+	for(i = 0; i < ETHER_ADDR_LEN; i++)
 		printk(" %02x", (dev->dev_addr[i] = inb(ioaddr + ES_SA_PROM + i)));
 
 	/* Snarf the interrupt now. */
@@ -303,7 +303,7 @@ static void es_reset_8390(struct device *dev)
  *	that the associated memcpy will only use "rep; movsl" as long as
  *	we keep the counts as some multiple of doublewords. This is a
  *	requirement of the hardware, and also prevents us from using
- *	eth_io_copy_and_sum() since we can't guarantee it will limit 
+ *	eth_io_copy_and_sum() since we can't guarantee it will limit
  *	itself to doubleword access.
  */
 
@@ -321,7 +321,7 @@ es_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 	hdr->count = (hdr->count + 3) & ~3;     /* Round up allocation. */
 }
 
-/*	
+/*
  *	Block input and output are easy on shared memory ethercards, the only
  *	complication is when the ring buffer wraps. The count will already
  *	be rounded up to a doubleword value via es_get_8390_hdr() above.
@@ -392,6 +392,10 @@ static int io[MAX_ES_CARDS] = { 0, };
 static int irq[MAX_ES_CARDS]  = { 0, };
 static int mem[MAX_ES_CARDS] = { 0, };
 
+MODULE_PARM(io, "1-" __MODULE_STRING(MAX_ES_CARDS) "i");
+MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_ES_CARDS) "i");
+MODULE_PARM(mem, "1-" __MODULE_STRING(MAX_ES_CARDS) "i");
+
 int
 init_module(void)
 {
@@ -435,4 +439,3 @@ cleanup_module(void)
 	}
 }
 #endif /* MODULE */
-

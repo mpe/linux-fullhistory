@@ -2,6 +2,7 @@
  *  ncplib_kernel.h
  *
  *  Copyright (C) 1995, 1996 by Volker Lendecke
+ *  Modified for big endian by J.F. Chadima and David S. Miller
  *
  */
 
@@ -18,6 +19,8 @@
 #include <linux/stat.h>
 #include <linux/fcntl.h>
 #include <asm/uaccess.h>
+#include <asm/byteorder.h>
+#include <asm/unaligned.h>
 #include <asm/string.h>
 
 #include <linux/ncp.h>

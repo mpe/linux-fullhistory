@@ -2,6 +2,7 @@
  *  inode.c
  *
  *  Copyright (C) 1995, 1996 by Volker Lendecke
+ *  Modified for big endian by J.F. Chadima and David S. Miller
  *
  */
 
@@ -10,6 +11,7 @@
 
 #include <asm/system.h>
 #include <asm/uaccess.h>
+#include <asm/byteorder.h>
 
 #include <linux/sched.h>
 #include <linux/ncp_fs.h>
@@ -83,7 +85,7 @@ ncp_read_inode(struct inode *inode)
 	else
 	{
                 inode->i_mode = NCP_SERVER(inode)->m.file_mode;
-		inode->i_size = NCP_ISTRUCT(inode)->dataStreamSize;
+		inode->i_size = le32_to_cpu(NCP_ISTRUCT(inode)->dataStreamSize);
 	}
 
         DDPRINTK("ncp_read_inode: inode->i_mode = %u\n", inode->i_mode);
@@ -104,12 +106,12 @@ ncp_read_inode(struct inode *inode)
                 inode->i_blocks = 0;
 	}
 
-	inode->i_mtime = ncp_date_dos2unix(NCP_ISTRUCT(inode)->modifyTime,
-					   NCP_ISTRUCT(inode)->modifyDate);
-	inode->i_ctime = ncp_date_dos2unix(NCP_ISTRUCT(inode)->creationTime,
-					   NCP_ISTRUCT(inode)->creationDate);
+	inode->i_mtime = ncp_date_dos2unix(le16_to_cpu(NCP_ISTRUCT(inode)->modifyTime),
+					   le16_to_cpu(NCP_ISTRUCT(inode)->modifyDate));
+	inode->i_ctime = ncp_date_dos2unix(le16_to_cpu(NCP_ISTRUCT(inode)->creationTime),
+					   le16_to_cpu(NCP_ISTRUCT(inode)->creationDate));
 	inode->i_atime = ncp_date_dos2unix(0,
-					   NCP_ISTRUCT(inode)->lastAccessDate);
+					   le16_to_cpu(NCP_ISTRUCT(inode)->lastAccessDate));
 
         if (S_ISREG(inode->i_mode))
 	{
@@ -460,6 +462,8 @@ ncp_notify_change(struct inode *inode, struct iattr *attr)
 		info_mask |= (DM_CREATE_TIME|DM_CREATE_DATE);
 		ncp_date_unix2dos(attr->ia_ctime,
 				  &(info.creationTime), &(info.creationDate));
+		info.creationTime = le16_to_cpu(info.creationTime);
+		info.creationDate = le16_to_cpu(info.creationDate);
 	}
 
 	if ((attr->ia_valid & ATTR_MTIME) != 0)
@@ -467,6 +471,8 @@ ncp_notify_change(struct inode *inode, struct iattr *attr)
 		info_mask |= (DM_MODIFY_TIME|DM_MODIFY_DATE);
 		ncp_date_unix2dos(attr->ia_mtime,
 				  &(info.modifyTime), &(info.modifyDate));
+		info.modifyTime = le16_to_cpu(info.modifyTime);
+		info.modifyDate = le16_to_cpu(info.modifyDate);
 	}
 
 	if ((attr->ia_valid & ATTR_ATIME) != 0)
@@ -475,6 +481,7 @@ ncp_notify_change(struct inode *inode, struct iattr *attr)
 		info_mask |= (DM_LAST_ACCESS_DATE);
 		ncp_date_unix2dos(attr->ia_ctime,
 				  &(dummy), &(info.lastAccessDate));
+		info.lastAccessDate = le16_to_cpu(info.lastAccessDate);
 	}
 
 	if (info_mask != 0)

@@ -331,7 +331,7 @@ static ushort id_read_eeprom(int index)
 
 	/* Pause for at least 162 us. for the read to take place. */
 	udelay (300);
-	
+
 	for (bit = 15; bit >= 0; bit--)
 		word = (word << 1) + (inb(id_port) & 0x01);
 
@@ -772,6 +772,8 @@ static struct device dev_3c509[MAX_3C_CARDS] = {
 
 static int io[MAX_3C_CARDS] = { 0, };
 static int irq[MAX_3C_CARDS]  = { 0, };
+MODULE_PARM(io, "1-" __MODULE_STRING(MAX_3C_CARDS) "i");
+MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_3C_CARDS) "i");
 
 int
 init_module(void)

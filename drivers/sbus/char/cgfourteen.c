@@ -1,4 +1,4 @@
-/* $Id: cgfourteen.c,v 1.16 1996/11/22 11:57:06 ecd Exp $
+/* $Id: cgfourteen.c,v 1.17 1996/12/23 10:16:00 ecd Exp $
  * cgfourteen.c: Sun SparcStation console support.
  *
  * Copyright (C) 1995 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -15,6 +15,7 @@
 #include <linux/kd.h>
 #include <linux/tty.h>
 #include <linux/malloc.h>
+#include <linux/proc_fs.h>
 
 #include <asm/sbus.h>
 #include <asm/io.h>

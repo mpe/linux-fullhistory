@@ -1,4 +1,4 @@
-/* $Id: cgsix.c,v 1.19 1996/12/19 08:07:35 davem Exp $
+/* $Id: cgsix.c,v 1.21 1996/12/23 10:16:05 ecd Exp $
  * cgsix.c: cgsix frame buffer driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -8,6 +8,7 @@
 #include <linux/kd.h>
 #include <linux/tty.h>
 #include <linux/malloc.h>
+#include <linux/proc_fs.h>
 
 #include <asm/sbus.h>
 #include <asm/io.h>

@@ -1,7 +1,7 @@
 /* smc-ultra.c: A SMC Ultra ethernet driver for linux. */
 /*
     Most of this driver, except for ultramca_probe is nearly
-    verbatim from smc-ultra.c by Donald Becker. The rest is 
+    verbatim from smc-ultra.c by Donald Becker. The rest is
     written and copyright 1996 by David Weis, weisd3458@uni.edu
 
     This is a driver for the SMC Ultra and SMC EtherEZ ethercards.
@@ -46,10 +46,10 @@ int ultramca_probe(struct device *dev);
 static int ultramca_open(struct device *dev);
 static void ultramca_reset_8390(struct device *dev);
 static void ultramca_get_8390_hdr(struct device *dev,
-                                  struct e8390_pkt_hdr *hdr, 
+                                  struct e8390_pkt_hdr *hdr,
                                   int ring_page);
 static void ultramca_block_input(struct device *dev, int count,
-                                 struct sk_buff *skb, 
+                                 struct sk_buff *skb,
                                  int ring_offset);
 static void ultramca_block_output(struct device *dev, int count,
                                   const unsigned char *buf,
@@ -74,18 +74,18 @@ int ultramca_probe(struct device *dev)
 	unsigned char pos2, pos3, pos4, pos5;
 	int i;
 
-	if( (slot=mca_find_adapter(0x61c8,0)) != MCA_NOTFOUND) 
+	if( (slot=mca_find_adapter(0x61c8,0)) != MCA_NOTFOUND)
 	{
 #ifndef MODULE
 		mca_set_adapter_name( slot, "SMC Elite/A (8013EP/A)" );
 #endif
-	} 
-	else if( (slot=mca_find_adapter(0x61c9,0)) != MCA_NOTFOUND) 
+	}
+	else if( (slot=mca_find_adapter(0x61c9,0)) != MCA_NOTFOUND)
 	{
 #ifndef MODULE
 		mca_set_adapter_name( slot, "SMC Elite10T/A (8013WP/A)" );
 #endif
-	} 
+	}
 	else
 		return -ENODEV;
 
@@ -99,9 +99,9 @@ int ultramca_probe(struct device *dev)
 
 	dev->mem_start = 0;
 	num_pages = 40;
-	for (i = 0; i < 15; i++) 
+	for (i = 0; i < 15; i++)
 	{
-		if (mem_table[i].mem_index == (pos3 & ~MEM_MASK)) 
+		if (mem_table[i].mem_index == (pos3 & ~MEM_MASK))
 		{
 			dev->mem_start = mem_table[i].mem_start;
 			num_pages = mem_table[i].num_pages;
@@ -121,42 +121,42 @@ int ultramca_probe(struct device *dev)
 
 	/*
 	 *	Switch from the station address to the alternate register set and
-	 *	read the useful registers there. 
+	 *	read the useful registers there.
 	 */
 
 	outb(0x80 | reg4, ioaddr + 4);
 
 	/*
-	 *	Enable FINE16 mode to avoid BIOS ROM width mismatches @ reboot. 
+	 *	Enable FINE16 mode to avoid BIOS ROM width mismatches @ reboot.
 	 */
 
 	outb(0x80 | inb(ioaddr + 0x0c), ioaddr + 0x0c);
-  
+
 	/*
 	 *	Switch back to the station address register set so that the MS-DOS driver
-	 *	can find the card after a warm boot. 
+	 *	can find the card after a warm boot.
 	 */
 
 	outb(reg4, ioaddr + 4);
 
 	/*
-	 *	Allocate dev->priv and fill in 8390 specific dev fields. 
+	 *	Allocate dev->priv and fill in 8390 specific dev fields.
 	 */
 
-	if (ethdev_init(dev)) 
+	if (ethdev_init(dev))
 	{
 		printk (", no memory for dev->priv.\n");
 		return -ENOMEM;
 	}
- 
+
 	/*
-	 *	OK, we are certain this is going to work.  Setup the device. 
+	 *	OK, we are certain this is going to work.  Setup the device.
 	 */
 
 	request_region(ioaddr, ULTRA_IO_EXTENT, "smc-mca");
 
 	/*
-	 *	The 8390 isn't at the base address, so fake the offset 
+	 *	The 8390 isn't at the base address, so fake the offset
 	 */
 
 	dev->base_addr = ioaddr+ULTRA_NIC_OFFSET;
@@ -168,7 +168,7 @@ int ultramca_probe(struct device *dev)
 	ei_status.stop_page = num_pages;
 
 	dev->rmem_start = dev->mem_start + TX_PAGES*256;
-	dev->mem_end = dev->rmem_end = 
+	dev->mem_end = dev->rmem_end =
 	dev->mem_start + (ei_status.stop_page - START_PG)*256;
 
 	printk(", IRQ %d memory %#lx-%#lx.\n", dev->irq, dev->mem_start, dev->mem_end-1);
@@ -198,7 +198,7 @@ static int ultramca_open(struct device *dev)
 
 	/*
 	 *	Set the early receive warning level in window 0 high enough not
-	 *	to receive ERW interrupts. 
+	 *	to receive ERW interrupts.
 	 */
 
 	/*
@@ -250,7 +250,7 @@ static void ultramca_block_input(struct device *dev, int count, struct sk_buff *
 {
 	unsigned long xfer_start = dev->mem_start + ring_offset - (START_PG<<8);
 
-	if (xfer_start + count > dev->rmem_end) 
+	if (xfer_start + count > dev->rmem_end)
 	{
         	/* We must wrap the input move. */
 		int semi_count = dev->rmem_end - xfer_start;
@@ -305,7 +305,7 @@ static int ultramca_close_card(struct device *dev)
 #define NAMELEN     8   /* # of chars for storing dev->name */
 static char namelist[NAMELEN * MAX_ULTRA_CARDS] = { 0, };
 
-static struct device dev_ultra[MAX_ULTRA_CARDS] = 
+static struct device dev_ultra[MAX_ULTRA_CARDS] =
 {
 	{
 		NULL,       /* assign a chunk of namelist[] below */
@@ -318,6 +318,9 @@ static struct device dev_ultra[MAX_ULTRA_CARDS] =
 static int io[MAX_ULTRA_CARDS] = { 0, };
 static int irq[MAX_ULTRA_CARDS]  = { 0, };
 
+MODULE_PARM(io, "1-" __MODULE_STRING(MAX_ULTRA_CARDS) "i");
+MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_ULTRA_CARDS) "i");
+
 /* This is set up so that only a single autoprobe takes place per call.
 ISA device autoprobes on a running machine are not recommended. */
 
@@ -325,23 +328,23 @@ int init_module(void)
 {
 	int this_dev, found = 0;
 
-	for (this_dev = 0; this_dev < MAX_ULTRA_CARDS; this_dev++) 
+	for (this_dev = 0; this_dev < MAX_ULTRA_CARDS; this_dev++)
 	{
 		struct device *dev = &dev_ultra[this_dev];
 		dev->name = namelist+(NAMELEN*this_dev);
 		dev->irq = irq[this_dev];
 		dev->base_addr = io[this_dev];
 		dev->init = ultra_probe;
-		if (io[this_dev] == 0)  
-		{	
-			if (this_dev != 0) 
+		if (io[this_dev] == 0)
+		{
+			if (this_dev != 0)
 				break; /* only autoprobe 1st one */
 			printk(KERN_NOTICE "smc-mca.c: Presently autoprobing (not recommended) for a single card.\n");
 		}
-		if (register_netdev(dev) != 0) 
+		if (register_netdev(dev) != 0)
 		{
 			printk(KERN_WARNING "smc-mca.c: No SMC Ultra card found (i/o = 0x%x).\n", io[this_dev]);
-			if (found != 0) 
+			if (found != 0)
 				return 0;   /* Got at least one. */
 			return -ENXIO;
 		}
@@ -354,10 +357,10 @@ void cleanup_module(void)
 {
 	int this_dev;
 
-	for (this_dev = 0; this_dev < MAX_ULTRA_CARDS; this_dev++) 
+	for (this_dev = 0; this_dev < MAX_ULTRA_CARDS; this_dev++)
 	{
 		struct device *dev = &dev_ultra[this_dev];
-        	if (dev->priv != NULL) 
+        	if (dev->priv != NULL)
         	{
 			/* NB: ultra_close_card() does free_irq + irq2dev */
 			int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET;

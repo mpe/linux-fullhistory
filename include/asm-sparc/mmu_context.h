@@ -9,6 +9,11 @@
 /* Initialize the context related info for a new mm_struct
  * instance.
  */
-#define init_new_context(mm) ((mm)->context = NO_CONTEXT)
+extern void (*init_new_context)(struct mm_struct *mm);
+
+/* Destroy context related info for an mm_struct that is about
+ * to be put to rest.
+ */
+extern void (*destroy_context)(struct mm_struct *mm);
 
 #endif /* !(__SPARC_MMU_CONTEXT_H) */

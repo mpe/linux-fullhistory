@@ -18,31 +18,36 @@ struct winsize {
 /*
  * Translate a "termio" structure into a "termios". Ugh.
  */
-extern inline void trans_from_termio(struct termio * termio,
-	struct termios * termios)
-{
-#define SET_LOW_BITS(x,y)	((x) = (0xffff0000 & (x)) | (y))
-	SET_LOW_BITS(termios->c_iflag, termio->c_iflag);
-	SET_LOW_BITS(termios->c_oflag, termio->c_oflag);
-	SET_LOW_BITS(termios->c_cflag, termio->c_cflag);
-	SET_LOW_BITS(termios->c_lflag, termio->c_lflag);
-#undef SET_LOW_BITS
-	memcpy(termios->c_cc, termio->c_cc, NCC);
-}
+#define user_termio_to_kernel_termios(termios, termio) \
+do { \
+	unsigned short tmp; \
+	get_user(tmp, &(termio)->c_iflag); \
+	(termios)->c_iflag = (0xffff0000 & ((termios)->c_iflag)) | tmp; \
+	get_user(tmp, &(termio)->c_oflag); \
+	(termios)->c_oflag = (0xffff0000 & ((termios)->c_oflag)) | tmp; \
+	get_user(tmp, &(termio)->c_cflag); \
+	(termios)->c_cflag = (0xffff0000 & ((termios)->c_cflag)) | tmp; \
+	get_user(tmp, &(termio)->c_lflag); \
+	(termios)->c_lflag = (0xffff0000 & ((termios)->c_lflag)) | tmp; \
+	get_user((termios)->c_line, &(termio)->c_line); \
+	copy_from_user((termios)->c_cc, (termio)->c_cc, NCC); \
+} while(0)
 
 /*
  * Translate a "termios" structure into a "termio". Ugh.
  */
-extern inline void trans_to_termio(struct termios * termios,
-	struct termio * termio)
-{
-	termio->c_iflag = termios->c_iflag;
-	termio->c_oflag = termios->c_oflag;
-	termio->c_cflag = termios->c_cflag;
-	termio->c_lflag = termios->c_lflag;
-	termio->c_line	= termios->c_line;
-	memcpy(termio->c_cc, termios->c_cc, NCC);
-}
+#define kernel_termios_to_user_termio(termio, termios) \
+do { \
+	put_user((termios)->c_iflag, &(termio)->c_iflag); \
+	put_user((termios)->c_oflag, &(termio)->c_oflag); \
+	put_user((termios)->c_cflag, &(termio)->c_cflag); \
+	put_user((termios)->c_lflag, &(termio)->c_lflag); \
+	put_user((termios)->c_line, &(termio)->c_line); \
+	copy_to_user((termio)->c_cc, (termios)->c_cc, NCC); \
+} while(0)
+
+#define user_termios_to_kernel_termios(k, u) copy_from_user(k, u, sizeof(struct termios))
+#define kernel_termios_to_user_termios(u, k) copy_to_user(u, k, sizeof(struct termios))
 
 #endif	/* __KERNEL__ */
 

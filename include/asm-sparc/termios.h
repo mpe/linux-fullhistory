@@ -1,4 +1,4 @@
-/* $Id: termios.h,v 1.21 1996/11/13 02:30:40 davem Exp $ */
+/* $Id: termios.h,v 1.23 1996/12/30 06:17:03 davem Exp $ */
 #ifndef _SPARC_TERMIOS_H
 #define _SPARC_TERMIOS_H
 
@@ -76,8 +76,6 @@ struct winsize {
 #define _VTIME	5
 
 
-#include <linux/string.h>
-
 /*	intr=^C		quit=^\		erase=del	kill=^U
 	eof=^D		eol=\0		eol2=\0		sxtc=\0
 	start=^Q	stop=^S		susp=^Z		dsusp=^Y
@@ -89,81 +87,72 @@ struct winsize {
 /*
  * Translate a "termio" structure into a "termios". Ugh.
  */
-extern __inline__ void trans_from_termio(struct termio * termio,
-					 struct termios * termios)
-{
-#define SET_LOW_BITS(x,y)	((x) = (0xffff0000 & (x)) | (y))
-	SET_LOW_BITS(termios->c_iflag, termio->c_iflag);
-	SET_LOW_BITS(termios->c_oflag, termio->c_oflag);
-	SET_LOW_BITS(termios->c_cflag, termio->c_cflag);
-	SET_LOW_BITS(termios->c_lflag, termio->c_lflag);
-#undef SET_LOW_BITS
-	memcpy (termios->c_cc, termio->c_cc, NCC);
-}
+#define user_termio_to_kernel_termios(termios, termio) \
+do { \
+	unsigned short tmp; \
+	get_user(tmp, &(termio)->c_iflag); \
+	(termios)->c_iflag = (0xffff0000 & ((termios)->c_iflag)) | tmp; \
+	get_user(tmp, &(termio)->c_oflag); \
+	(termios)->c_oflag = (0xffff0000 & ((termios)->c_oflag)) | tmp; \
+	get_user(tmp, &(termio)->c_cflag); \
+	(termios)->c_cflag = (0xffff0000 & ((termios)->c_cflag)) | tmp; \
+	get_user(tmp, &(termio)->c_lflag); \
+	(termios)->c_lflag = (0xffff0000 & ((termios)->c_lflag)) | tmp; \
+	copy_from_user((termios)->c_cc, (termio)->c_cc, NCC); \
+} while(0)
 
 /*
  * Translate a "termios" structure into a "termio". Ugh.
  *
  * Note the "fun" _VMIN overloading.
  */
-extern __inline__ void trans_to_termio(struct termios * termios,
-				       struct termio * termio)
-{
-	termio->c_iflag = termios->c_iflag;
-	termio->c_oflag = termios->c_oflag;
-	termio->c_cflag = termios->c_cflag;
-	termio->c_lflag = termios->c_lflag;
-	termio->c_line	= termios->c_line;
-	memcpy(termio->c_cc, termios->c_cc, NCC);
-	if (!(termios->c_lflag & ICANON)) {
-		termio->c_cc[_VMIN]  = termios->c_cc[VMIN];
-		termio->c_cc[_VTIME] = termios->c_cc[VTIME];
-	}
-}
-
-/* Note that in this case DEST is a user buffer and thus the checking
- * and this ugly macro to avoid header file problems.
- */
-#define termios_to_userland(d, s) \
+#define kernel_termios_to_user_termio(termio, termios) \
 do { \
-	struct termios *dest = (d); \
-	struct termios *source = (s); \
-	put_user(source->c_iflag, &dest->c_iflag); \
-	put_user(source->c_oflag, &dest->c_oflag); \
-	put_user(source->c_cflag, &dest->c_cflag); \
-	put_user(source->c_lflag, &dest->c_lflag); \
-	put_user(source->c_line, &dest->c_line); \
-	copy_to_user(dest->c_cc, source->c_cc, NCCS); \
-	if (!(source->c_lflag & ICANON)){ \
-		put_user(source->c_cc[VMIN], &dest->c_cc[_VMIN]); \
-		put_user(source->c_cc[VTIME], &dest->c_cc[_VTIME]); \
-	} else { \
-		put_user(source->c_cc[VEOF], &dest->c_cc[VEOF]); \
-		put_user(source->c_cc[VEOL], &dest->c_cc[VEOL]); \
+	put_user((termios)->c_iflag, &(termio)->c_iflag); \
+	put_user((termios)->c_oflag, &(termio)->c_oflag); \
+	put_user((termios)->c_cflag, &(termio)->c_cflag); \
+	put_user((termios)->c_lflag, &(termio)->c_lflag); \
+	put_user((termios)->c_line,  &(termio)->c_line); \
+	copy_to_user((termio)->c_cc, (termios)->c_cc, NCC); \
+	if (!((termios)->c_lflag & ICANON)) { \
+		put_user((termios)->c_cc[VMIN], &(termio)->c_cc[_VMIN]); \
+		put_user((termios)->c_cc[VTIME], &(termio)->c_cc[_VTIME]); \
 	} \
 } while(0)
 
-/* termios to termios handling SunOS overloading of eof,eol/vmin,vtime
- * In this case we are only working with kernel buffers so direct
- * accesses are ok.
- */
-extern __inline__ void termios_from_userland(struct termios * source,
-					     struct termios * dest)
-{
-	dest->c_iflag = source->c_iflag;
-	dest->c_oflag = source->c_oflag;
-	dest->c_cflag = source->c_cflag;
-	dest->c_lflag = source->c_lflag;
-	dest->c_line  = source->c_line;
-	memcpy(dest->c_cc, source->c_cc, NCCS);
-	if (dest->c_lflag & ICANON){
-		dest->c_cc [VEOF] = source->c_cc [VEOF];
-		dest->c_cc [VEOL] = source->c_cc [VEOL];
-	} else {
-		dest->c_cc[VMIN]  = source->c_cc[_VMIN];
-		dest->c_cc[VTIME] = source->c_cc[_VTIME];
-	}
-}
+#define user_termios_to_kernel_termios(k, u) \
+do { \
+	get_user((k)->c_iflag, &(u)->c_iflag); \
+	get_user((k)->c_oflag, &(u)->c_oflag); \
+	get_user((k)->c_cflag, &(u)->c_cflag); \
+	get_user((k)->c_lflag, &(u)->c_lflag); \
+	get_user((k)->c_line,  &(u)->c_line); \
+	copy_from_user((k)->c_cc, (u)->c_cc, NCCS); \
+	if((k)->c_lflag & ICANON) { \
+		get_user((k)->c_cc[VEOF], &(u)->c_cc[VEOF]); \
+		get_user((k)->c_cc[VEOL], &(u)->c_cc[VEOL]); \
+	} else { \
+		get_user((k)->c_cc[VMIN],  &(u)->c_cc[_VMIN]); \
+		get_user((k)->c_cc[VTIME], &(u)->c_cc[_VTIME]); \
+	} \
+} while(0)
+
+#define kernel_termios_to_user_termios(u, k) \
+do { \
+	put_user((k)->c_iflag, &(u)->c_iflag); \
+	put_user((k)->c_oflag, &(u)->c_oflag); \
+	put_user((k)->c_cflag, &(u)->c_cflag); \
+	put_user((k)->c_lflag, &(u)->c_lflag); \
+	put_user((k)->c_line, &(u)->c_line); \
+	copy_to_user((u)->c_cc, (k)->c_cc, NCCS); \
+	if(!((k)->c_lflag & ICANON)) { \
+		put_user((k)->c_cc[VMIN],  &(u)->c_cc[_VMIN]); \
+		put_user((k)->c_cc[VTIME], &(u)->c_cc[_VTIME]); \
+	} else { \
+		put_user((k)->c_cc[VEOF], &(u)->c_cc[VEOF]); \
+		put_user((k)->c_cc[VEOL], &(u)->c_cc[VEOL]); \
+	} \
+} while(0)
 
 #endif	/* __KERNEL__ */
 

@@ -75,6 +75,7 @@ typedef struct ax25_ctrl {
 
 static ax25_ctrl_t **ax25_ctrls = NULL;
 int ax25_maxdev = AX25_MAXDEV;		/* Can be overridden with insmod! */
+MODULE_PARM(ax25_maxdev, "i");
 
 static struct tty_ldisc	ax_ldisc;
 static struct tty_driver mkiss_driver;

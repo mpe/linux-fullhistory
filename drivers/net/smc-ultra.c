@@ -19,7 +19,7 @@
 	8390.c.  The code in this file is responsible for
 
 		ultra_probe()	 	Detecting and initializing the card.
-		ultra_probe1()	
+		ultra_probe1()
 
 		ultra_open()		The card-specific details of starting, stopping
 		ultra_reset_8390()	and resetting the 8390 NIC core.
@@ -69,13 +69,13 @@ int ultra_probe1(struct device *dev, int ioaddr);
 
 static int ultra_open(struct device *dev);
 static void ultra_reset_8390(struct device *dev);
-static void ultra_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, 
+static void ultra_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
 						int ring_page);
 static void ultra_block_input(struct device *dev, int count,
 						  struct sk_buff *skb, int ring_offset);
 static void ultra_block_output(struct device *dev, int count,
 							const unsigned char *buf, const start_page);
-static void ultra_pio_get_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, 
+static void ultra_pio_get_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
 						int ring_page);
 static void ultra_pio_input(struct device *dev, int count,
 						  struct sk_buff *skb, int ring_offset);
@@ -201,7 +201,7 @@ int ultra_probe1(struct device *dev, int ioaddr)
 		printk (", no memory for dev->priv.\n");
                 return -ENOMEM;
         }
- 
+
 	/* OK, we are certain this is going to work.  Setup the device. */
 	request_region(ioaddr, ULTRA_IO_EXTENT, model_name);
 
@@ -357,7 +357,7 @@ ultra_block_output(struct device *dev, int count, const unsigned char *buf,
    must be always be rewritten between each read/write direction change.
    This is no problem for us, as the 8390 code ensures that we are single
    threaded. */
-static void ultra_pio_get_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, 
+static void ultra_pio_get_hdr(struct device *dev, struct e8390_pkt_hdr *hdr,
 						int ring_page)
 {
 	int ioaddr = dev->base_addr - ULTRA_NIC_OFFSET; /* ASIC addr */
@@ -433,6 +433,9 @@ static struct device dev_ultra[MAX_ULTRA_CARDS] = {
 
 static int io[MAX_ULTRA_CARDS] = { 0, };
 static int irq[MAX_ULTRA_CARDS]  = { 0, };
+
+MODULE_PARM(io, "1-" __MODULE_PARM(MAX_ULTRA_CARDS) "i");
+MODULE_PARM(irq, "1-" __MODULE_PARM(MAX_ULTRA_CARDS) "i");
 
 /* This is set up so that only a single autoprobe takes place per call.
 ISA device autoprobes on a running machine are not recommended. */

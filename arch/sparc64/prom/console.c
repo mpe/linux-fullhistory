@@ -1,0 +1,123 @@
+/* $Id: console.c,v 1.1 1996/12/27 08:49:11 jj Exp $
+ * console.c: Routines that deal with sending and receiving IO
+ *            to/from the current console device using the PROM.
+ *
+ * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
+ * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
+ */
+
+#include <linux/config.h>
+#include <linux/types.h>
+#include <linux/kernel.h>
+#include <linux/sched.h>
+#include <asm/openprom.h>
+#include <asm/oplib.h>
+#include <asm/system.h>
+#include <linux/string.h>
+
+extern int prom_stdin, prom_stdout;
+
+/* Non blocking get character from console input device, returns -1
+ * if no input was taken.  This can be used for polling.
+ */
+__inline__ int
+prom_nbgetchar(void)
+{
+	char inc;
+
+	if ((*prom_command)("read", P1275_ARG(1,P1275_ARG_IN_BUF)|
+				    P1275_INOUT(3,1),
+				    prom_stdin, &inc, P1275_SIZE(1)) == 1)
+		return inc;
+	else
+		return -1;
+}
+
+/* Non blocking put character to console device, returns -1 if
+ * unsuccessful.
+ */
+__inline__ int
+prom_nbputchar(char c)
+{
+	char outc;
+	
+	outc = c;
+	if ((*prom_command)("write", P1275_ARG(1,P1275_ARG_IN_BUF)|
+				     P1275_INOUT(3,1),
+				     prom_stdin, &inc, P1275_SIZE(1)) == 1)
+		return 0;
+	else
+		return -1;
+}
+
+/* Blocking version of get character routine above. */
+char
+prom_getchar(void)
+{
+	int character;
+	while((character = prom_nbgetchar()) == -1) ;
+	return (char) character;
+}
+
+/* Blocking version of put character routine above. */
+void
+prom_putchar(char c)
+{
+	while(prom_nbputchar(c) == -1) ;
+	return;
+}
+
+/* Query for input device type */
+enum prom_input_device
+prom_query_input_device()
+{
+	int st_p;
+	char propb[64];
+	char *p;
+
+	st_p = prom_inst2pkg(prom_stdin);
+	if(prom_node_has_property(st_p, "keyboard"))
+		return PROMDEV_IKBD;
+	prom_getproperty(st_p, "device_type", propb, sizeof(propb));
+	if(strncmp(propb, "serial", sizeof("serial")))
+		return PROMDEV_I_UNK;
+	/* FIXME: Is there any better way how to find out? */	
+	st_p = prom_finddevice ("/options");
+	prom_getproperty(st_p, "input-device", propb, sizeof(propb));
+	if (strncmp (propb, "tty", 3) || !propb[3] || propb[4])
+		return PROMDEV_I_UNK;
+	switch (propb[3]) {
+		case 'a': return PROMDEV_ITTYA;
+		case 'b': return PROMDEV_ITTYB;
+		default: return PROMDEV_I_UNK;
+	}
+}
+
+/* Query for output device type */
+
+enum prom_output_device
+prom_query_output_device()
+{
+	int st_p;
+	char propb[64];
+	char *p;
+	int propl;
+
+	st_p = prom_inst2pkg(prom_stdout);
+	propl = prom_getproperty(st_p, "device_type", propb, sizeof(propb));
+	if (propl >= 0 && propl == sizeof("display") &&
+	    strncmp("display", propb, sizeof("display")) == 0)
+		return PROMDEV_OSCREEN;
+	if(strncmp("serial", propb, sizeof("serial")))
+		return PROMDEV_O_UNK;
+	/* FIXME: Is there any better way how to find out? */	
+	st_p = prom_finddevice ("/options");
+	prom_getproperty(st_p, "output-device", propb, sizeof(propb));
+	if (strncmp (propb, "tty", 3) || !propb[3] || propb[4])
+		return PROMDEV_O_UNK;
+	switch (propb[3]) {
+		case 'a': return PROMDEV_OTTYA;
+		case 'b': return PROMDEV_OTTYB;
+		default: return PROMDEV_O_UNK;
+	}
+}

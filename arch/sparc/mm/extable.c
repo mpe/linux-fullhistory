@@ -37,7 +37,7 @@ search_one_table(const struct exception_table_entry *start,
         }
         if (first > start && first[-1].insn < value
 	    && !first[-1].fixup && first->insn < value) {
-        	*g2 = (value - firstp[-1].insn)/4;
+        	*g2 = (value - first[-1].insn)/4;
         	return first->fixup;
         }
         return 0;
@@ -60,7 +60,7 @@ search_exception_table(unsigned long addr, unsigned long *g2)
 		if (mp->ex_table_start == NULL)
 			continue;
 		ret = search_one_table(mp->ex_table_start,
-				       mp->ex_table_stop-1, addr, g2);
+				       mp->ex_table_end-1, addr, g2);
 		if (ret) return ret;
 	}
 #endif

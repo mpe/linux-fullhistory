@@ -1,4 +1,4 @@
-/* $Id: signal.h,v 1.29 1996/10/27 08:55:45 davem Exp $ */
+/* $Id: signal.h,v 1.30 1996/12/24 08:59:36 davem Exp $ */
 #ifndef _ASMSPARC_SIGNAL_H
 #define _ASMSPARC_SIGNAL_H
 
@@ -160,17 +160,6 @@ struct sigaction {
 	unsigned long   sa_flags;
 	void (*sa_restorer) (void);     /* not used by Linux/SPARC yet */
 };
-
-#ifdef __KERNEL__
-
-/* use the following macro to get the size of a sigaction struct
-   when copying to/from userland */
-#define SIGACTION_SIZE(personality) (((personality) & PER_BSD)?\
-				     sizeof(struct sigaction)-sizeof(void *):\
-				     sizeof(struct sigaction))
-
-#endif /* __KERNEL__ */
-
 
 #endif /* !(__ASSEMBLY__) */
 

@@ -1,4 +1,4 @@
-/* $Id: suncons.c,v 1.42 1996/11/27 20:10:06 jj Exp $
+/* $Id: suncons.c,v 1.43 1996/12/23 10:16:12 ecd Exp $
  *
  * suncons.c: Sun SparcStation console support.
  *
@@ -63,6 +63,7 @@
 #include <linux/mm.h>
 #include <linux/types.h>
 #include <linux/version.h>
+#include <linux/proc_fs.h>
 
 #include <asm/system.h>
 #include <asm/uaccess.h>

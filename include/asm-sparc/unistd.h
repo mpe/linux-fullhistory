@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.25 1996/12/18 06:56:10 tridge Exp $ */
+/* $Id: unistd.h,v 1.26 1996/12/29 20:49:14 davem Exp $ */
 #ifndef _SPARC_UNISTD_H
 #define _SPARC_UNISTD_H
 
@@ -200,7 +200,7 @@
 #define __NR_aiowait            181 /* SunOS Specific                              */
 #define __NR_aiocancel          182 /* SunOS Specific                              */
 #define __NR_sigpending         183 /* Common                                      */
-/* #define __NR_ni_syscall      184    ENOSYS under SunOS                          */
+#define __NR_query_module       184 /* Linux Specific                              */
 #define __NR_setpgid            185 /* Common                                      */
 #define __NR_pathconf           186 /* SunOS Specific                              */
 #define __NR_fpathconf          187 /* SunOS Specific                              */

@@ -13,7 +13,7 @@
 
 /*
    Changes by Peter De Schrijver (Peter.Deschrijver@linux.cc.kuleuven.ac.be) :
-	
+
 	+ changed name to ibmtr.c in anticipation of other tr boards.
 	+ changed reset code and adapter open code.
 	+ added SAP open code.
@@ -34,10 +34,10 @@
         - removed redundant information display
         - some code reworking
 
-   Changes by Michel Lespinasse (walken@via.ecp.fr), 
+   Changes by Michel Lespinasse (walken@via.ecp.fr),
      Yann Doussot (doussot@via.ecp.fr) and Pascal Andre (andre@via.ecp.fr)
      (February 18, 1996) :
-	- modified shared memory and mmio access port the driver to 
+	- modified shared memory and mmio access port the driver to
           alpha platform (structure access -> readb/writeb)
 
    Changes by Steve Kipisz (bungy@ibm.net or kipisz@vnet.ibm.com)
@@ -56,7 +56,7 @@
 	  complete. (August 15 1996)
         - completed multiple adapter support. (November 20 1996)
 */
-	
+
 #ifdef PCMCIA
 #define MODULE
 #endif
@@ -85,10 +85,10 @@
 #define USE_MEMCPY 1
 
 /* version and credits */
-static char *version = 
+static char *version =
 "ibmtr.c: v1.3.57  8/ 7/94 Peter De Schrijver and Mark Swanson\n"
 "         v2.1.10 11/20/96 Paul Norton <pnorton@cts.com>\n";
- 
+
 static char pcchannelid[]={0x05, 0x00, 0x04, 0x09,
 			   0x04, 0x03, 0x04, 0x0f,
 			   0x03, 0x06, 0x03, 0x01,
@@ -184,13 +184,13 @@ int DummyCallCount=0;
 /*  This routine combined with the #DEFINE DPRINTD serves
     to workaround the gcc apparent bug.   in tr_tx() */
 
-static void DummyCall(const char * fmt,...) 
+static void DummyCall(const char * fmt,...)
 { DummyCallCount++; return; }
 #endif
 
 static void PrtChanID(char *pcid, short stride) {
 	short i, j;
-	for (i=0, j=0; i<24; i++, j+=stride) 
+	for (i=0, j=0; i<24; i++, j+=stride)
 		printk("%1x", ((int) pcid[j]) & 0x0f);
 	printk("\n");
 }
@@ -255,19 +255,19 @@ static int ibmtr_probe1(struct device *dev, int PIOaddr)
 	__u32 cd_chanid;
 	unsigned char *tchanid, ctemp;
 
-#ifndef MODULE 		
+#ifndef MODULE
 	dev = init_trdev(dev,0);
 #endif
 
 	/* Query the adapter PIO base port which will return
-	indication of where MMIO was placed. We also have a 
+	indication of where MMIO was placed. We also have a
 	coded interrupt number. */
-		
+
        	segment = inb(PIOaddr);
 	/* out of range values so we'll assume non-existent IO device */
 	if (segment < 0x40 || segment > 0xe0)
-                return -ENODEV; 
-		
+                return -ENODEV;
+
 	/* Compute the linear base address of the MMIO area
 	   as LINUX doesn't care about segments          */
 	t_mmio=(((__u32)(segment & 0xfc) << 11) + 0x80000);
@@ -275,22 +275,22 @@ static int ibmtr_probe1(struct device *dev, int PIOaddr)
 	if (ibmtr_debug_trace & TRC_INIT)
 		DPRINTK("PIOaddr: %4hx seg/intr: %2x mmio base: %08X intr: %d\n",
                          PIOaddr, (int)segment, t_mmio, (int)intr);
-		
+
 	/* Now we will compare expected 'channelid' strings with
 	   what we is there to learn of ISA/MCA or not TR card */
 	cd_chanid = (CHANNEL_ID + t_mmio);  /* for efficiency */
-	tchanid=pcchannelid; 
+	tchanid=pcchannelid;
 	cardpresent=TR_ISA;  /* try ISA */
 
 	/* suboptimize knowing first byte different */
 	ctemp = readb(cd_chanid) & 0x0f;
 	if (ctemp != *tchanid) { /* NOT ISA card, try MCA */
-		tchanid=mcchannelid; 
+		tchanid=mcchannelid;
 		cardpresent=TR_MCA;
 		if (ctemp != *tchanid)  /* Neither ISA nor MCA */
 			cardpresent=NOTOK;
 	}
-		
+
 	if (cardpresent != NOTOK) { /* know presumed type, try rest of ID */
 		for (i=2,j=1; i<=46; i=i+2,j++) {
 			if ((readb(cd_chanid+i) & 0x0f) != tchanid[j]) {
@@ -299,12 +299,12 @@ static int ibmtr_probe1(struct device *dev, int PIOaddr)
 			}
 		}
 	}
-		
+
 	/* If we have an ISA board check for the ISA P&P version,
 	   as it has different IRQ settings */
 	if (cardpresent == TR_ISA && (readb(AIPFID + t_mmio)==0x0e))
 	        cardpresent=TR_ISAPNP;
-		
+
 	if (cardpresent == NOTOK) { /* "channel_id" did not match, report */
 		if (ibmtr_debug_trace & TRC_INIT) {
 			DPRINTK("Channel ID string not found for PIOaddr: %4hx\n", PIOaddr);
@@ -314,11 +314,11 @@ static int ibmtr_probe1(struct device *dev, int PIOaddr)
 		}
                 return -ENODEV;
 	}
-		
+
 	/* Now, allocate some of the pl0 buffers for this driver.. */
 	ti = (struct tok_info *)kmalloc(sizeof(struct tok_info), GFP_KERNEL);
 	if (ti == NULL) return -ENOMEM;
-		
+
 	memset(ti, 0, sizeof(struct tok_info));
 
 	ti->mmio= t_mmio;
@@ -362,7 +362,7 @@ static int ibmtr_probe1(struct device *dev, int PIOaddr)
 		ti->global_int_enable=PIOaddr+ADAPTINTREL;
 		ti->adapter_int_enable=PIOaddr+ADAPTINTREL;
 		break;
-      
+
 	}
 
 	if (ibmtr_debug_trace & TRC_INIT) { /* just report int */
@@ -375,7 +375,7 @@ static int ibmtr_probe1(struct device *dev, int PIOaddr)
 	}
 
 	/* Get hw address of token ring card */
-#if !TR_NEWFORMAT 
+#if !TR_NEWFORMAT
 	DPRINTK("hw address: ");
 #endif
 	j=0;
@@ -420,7 +420,7 @@ static int ibmtr_probe1(struct device *dev, int PIOaddr)
 #if !TR_NEWFORMAT
 	DPRINTK("atype=%x, drate=%x, trel=%x, asram=%dK, srp=%x, "
 		"dhb(4mb=%x, 16mb=%x)\n",ti->adapter_type,
-		ti->data_rate, ti->token_release, ti->avail_shared_ram/2, 
+		ti->data_rate, ti->token_release, ti->avail_shared_ram/2,
 		ti->shared_ram_paging, ti->dhb_size4mb, ti->dhb_size16mb);
 #endif
 
@@ -430,7 +430,7 @@ static int ibmtr_probe1(struct device *dev, int PIOaddr)
 	   maximum space will will use for two adapters is 64K so if the
 	   adapter we are working on demands 64K (it also doesn't support
 	   paging), then only one adapter can be supported.  */
-	
+
 	/* determine how much of total RAM is mapped into PC space */
 	ti->mapped_ram_size=1<<((((readb(ti->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD)) >>2) & 0x03) + 4);
 	ti->page_mask=0;
@@ -479,7 +479,7 @@ static int ibmtr_probe1(struct device *dev, int PIOaddr)
 				pg_size, ti->mapped_ram_size);
 				ti->page_mask = 0;    /* reset paging */
 		} else {
-			ti->mapped_ram_size=ti->avail_shared_ram; 
+			ti->mapped_ram_size=ti->avail_shared_ram;
 			DPRINTK("Shared RAM paging enabled. Page size : %uK\n",
 				((ti->page_mask^ 0xff)+1)>>2);
 		}
@@ -543,7 +543,7 @@ static int ibmtr_probe1(struct device *dev, int PIOaddr)
 
 	trdev_init(dev);
 	tok_init_card(dev);
-	
+
 	return 0;  /* Return 0 to indicate we have found a Token Ring card. */
 }
 
@@ -551,10 +551,10 @@ static int ibmtr_probe1(struct device *dev, int PIOaddr)
 
 unsigned char get_sram_size(struct tok_info *adapt_info)
 {
-		
+
 	unsigned char avail_sram_code;
 	static unsigned char size_code[]={ 0,16,32,64,127,128 };
-	
+
 	/* Adapter gives
 	   'F' -- use RRR bits 3,2
 	   'E' -- 8kb   'D' -- 16kb
@@ -563,7 +563,7 @@ unsigned char get_sram_size(struct tok_info *adapt_info)
 	   (WARNING ... must zero top bytes in INIT */
 
 	avail_sram_code=0xf-readb(adapt_info->mmio + AIPAVAILSHRAM);
-	if (avail_sram_code) 
+	if (avail_sram_code)
 		return size_code[avail_sram_code];
 	else  /* for code 'F', must compute size from RRR(3,2) bits */
 		return 1<<((readb(adapt_info->mmio+ ACA_OFFSET + ACA_RW + RRR_ODD)>>2)+4);
@@ -585,7 +585,7 @@ int trdev_init(struct device *dev)
 
 #ifndef MODULE
   tr_setup(dev);
-#endif 
+#endif
 
 
   return 0;
@@ -593,48 +593,48 @@ int trdev_init(struct device *dev)
 
 
 
-static int tok_open(struct device *dev) 
+static int tok_open(struct device *dev)
 {
 	struct tok_info *ti=(struct tok_info *)dev->priv;
-	
+
 	if (ti->open_status==CLOSED) tok_init_card(dev);
-	
+
 	if (ti->open_status==IN_PROGRESS) sleep_on(&ti->wait_for_reset);
-	
+
 	if (ti->open_status==SUCCESS) {
 		dev->tbusy=0;
 		dev->interrupt=0;
 		dev->start=1;
 		/* NEED to see smem size *AND* reset high 512 bytes if needed */
-		
+
 		MOD_INC_USE_COUNT;
-		
+
 		return 0;
 	} else return -EAGAIN;
-	
+
 }
 
-static int tok_close(struct device *dev) 
+static int tok_close(struct device *dev)
 {
-	
+
 	struct tok_info *ti=(struct tok_info *) dev->priv;
-	
-	writeb(DIR_CLOSE_ADAPTER, 
+
+	writeb(DIR_CLOSE_ADAPTER,
 	       ti->srb + offsetof(struct srb_close_adapter, command));
 	writeb(CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
-	
+
 	ti->open_status=CLOSED;
-	
-	sleep_on(&ti->wait_for_tok_int);		
-	
+
+	sleep_on(&ti->wait_for_tok_int);
+
 	if (readb(ti->srb + offsetof(struct srb_close_adapter, ret_code)))
 		DPRINTK("close adapter failed: %02X\n",
 			(int)readb(ti->srb + offsetof(struct srb_close_adapter, ret_code)));
-		
+
         dev->start = 0;
 	DPRINTK("Adapter closed.\n");
 	MOD_DEC_USE_COUNT;
-	
+
 	return 0;
 }
 
@@ -643,13 +643,13 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 	unsigned char status;
 	struct tok_info *ti;
 	struct device *dev;
-	
+
 #if TR_VERBOSE
 	DPRINTK("Int from tok_driver, dev : %p\n",dev);
 #endif
 	dev = (struct device *)(irq2dev_map[irq]);
 	ti  = (struct tok_info *) dev->priv;
-	
+
       	/* Disable interrupts till processing is finished */
 	dev->interrupt=1;
 	writeb((~INT_ENABLE), ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_EVEN);
@@ -659,16 +659,16 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
                 outb(0,ti->adapter_int_enable);
 	else
 		outb(0,ti->global_int_enable);
-		
+
 
 	switch (ti->do_tok_int) {
-		
+
 	      case NOT_FIRST:
-		
+
 		/*  Begin the regular interrupt handler HERE inline to avoid
 		    the extra levels of logic and call depth for the
 		    original solution.   */
-		
+
 		status=readb(ti->mmio + ACA_OFFSET + ACA_RW + ISRP_ODD);
 		#ifdef PCMCIA
       		/* Check if the PCMCIA card was pulled. */
@@ -688,48 +688,48 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
       		 }
 		#endif
 
-		
+
 		if (status & ADAP_CHK_INT) {
-			
+
 			int i;
 			__u32 check_reason;
 
 			check_reason=ti->mmio + ntohs(readw(ti->sram + ACA_OFFSET + ACA_RW +WWCR_EVEN));
-			
+
 			DPRINTK("Adapter check interrupt\n");
 			DPRINTK("8 reason bytes follow: ");
 			for(i=0; i<8; i++, check_reason++)
-				printk("%02X ", (int)readb(check_reason));	
+				printk("%02X ", (int)readb(check_reason));
 			printk("\n");
-			
+
 			writeb((~ADAP_CHK_INT), ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD);
 			writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET  + ISRP_EVEN);
 			dev->interrupt=0;
-			
+
 		}	else if (readb(ti->mmio + ACA_OFFSET + ACA_RW + ISRP_EVEN)
 				 & (TCR_INT | ERR_INT | ACCESS_INT)) {
-			
-			DPRINTK("adapter error: ISRP_EVEN : %02x\n", 
+
+			DPRINTK("adapter error: ISRP_EVEN : %02x\n",
 				(int)readb(ti->mmio + ACA_OFFSET + ACA_RW + ISRP_EVEN));
 			writeb(~(TCR_INT | ERR_INT | ACCESS_INT),
 			       ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_EVEN);
 			writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET  + ISRP_EVEN);
 			dev->interrupt=0;
 
-		} else if (status 
+		} else if (status
 			   & (SRB_RESP_INT | ASB_FREE_INT | ARB_CMD_INT | SSB_RESP_INT)) {
 			/* SRB, ASB, ARB or SSB response */
-			
+
 			if (status & SRB_RESP_INT) { /* SRB response */
-				
+
 				switch(readb(ti->srb)) { /* SRB command check */
-					
+
 				      case XMIT_DIR_FRAME: {
 					      unsigned char xmit_ret_code;
-					      
+
 					      xmit_ret_code=readb(ti->srb + offsetof(struct srb_xmit, ret_code));
 					      if (xmit_ret_code != 0xff) {
-						      DPRINTK("error on xmit_dir_frame request: %02X\n", 
+						      DPRINTK("error on xmit_dir_frame request: %02X\n",
 							      xmit_ret_code);
 						      if (ti->current_skb) {
 							      dev_kfree_skb(ti->current_skb, FREE_WRITE);
@@ -740,10 +740,10 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 					      }
 				      }
 				      break;
-				      
+
 				      case XMIT_UI_FRAME: {
 					      unsigned char xmit_ret_code;
-					      
+
 					      xmit_ret_code=readb(ti->srb + offsetof(struct srb_xmit, ret_code));
 					      if (xmit_ret_code != 0xff) {
 						      DPRINTK("error on xmit_ui_frame request: %02X\n",
@@ -757,22 +757,22 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 					      }
 				      }
 				      break;
-				      
+
 				      case DIR_OPEN_ADAPTER: {
 					      unsigned char open_ret_code;
 					      __u16 open_error_code;
-					      
+
 					      ti->srb=ti->sram+ntohs(readw(ti->init_srb +offsetof(struct srb_open_response, srb_addr)));
 					      ti->ssb=ti->sram+ntohs(readw(ti->init_srb +offsetof(struct srb_open_response, ssb_addr)));
 					      ti->arb=ti->sram+ntohs(readw(ti->init_srb +offsetof(struct srb_open_response, arb_addr)));
 					      ti->asb=ti->sram+ntohs(readw(ti->init_srb +offsetof(struct srb_open_response, asb_addr)));
 					      ti->current_skb=NULL;
-					      
+
 					      open_ret_code = readb(ti->init_srb +offsetof(struct srb_open_response, ret_code));
 					      open_error_code = ntohs(readw(ti->init_srb +offsetof(struct srb_open_response, error_code)));
 
 					      if (open_ret_code==7) {
-						      
+
 						      if (!ti->auto_ringspeedsave && (open_error_code==0x24)) {
 							      DPRINTK("open failed: Adapter speed must match ring "
 								      "speed if Automatic Ring Speed Save is disabled\n");
@@ -782,41 +782,41 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 							      DPRINTK("retrying open to adjust to ring speed\n");
 						      else if ((open_error_code==0x2d) && ti->auto_ringspeedsave)
 							      DPRINTK("No signal detected for Auto Speed Detection\n");
-						      else DPRINTK("Unrecoverable error: error code = %04x\n", 
+						      else DPRINTK("Unrecoverable error: error code = %04x\n",
 								   open_error_code);
-						      
+
 					      } else if (!open_ret_code) {
 #if !TR_NEWFORMAT
 						      DPRINTK("board opened...\n");
 #else
 						      DPRINTK("Adapter initialized and opened.\n");
 #endif
-						      writeb(~(SRB_RESP_INT), 
+						      writeb(~(SRB_RESP_INT),
 							     ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD);
-						      writeb(~(CMD_IN_SRB), 
+						      writeb(~(CMD_IN_SRB),
 							     ti->mmio + ACA_OFFSET + ACA_RESET + ISRA_ODD);
 						      open_sap(EXTENDED_SAP,dev);
-						      
+
 						      /* YdW probably hates me */
 						      goto skip_reset;
 					      } else
 						      DPRINTK("open failed: ret_code = %02X, retrying\n",
 							      open_ret_code);
-					      
+
 					      if (ti->open_status != FAILURE) {
 						      tr_timer.expires=jiffies+TR_RETRY_INTERVAL;
 						      tr_timer.data=(unsigned long)dev;
 						      tr_timer.next=tr_timer.prev=NULL;
 						      add_timer(&tr_timer);
 					      }
-					      
+
 				      }
 				      break;
-				      
+
 				      case DIR_CLOSE_ADAPTER:
 					wake_up(&ti->wait_for_tok_int);
 					break;
-					
+
 				      case DLC_OPEN_SAP:
 					if (readb(ti->srb+offsetof(struct dlc_open_sap, ret_code))) {
 						DPRINTK("open_sap failed: ret_code = %02X,retrying\n",
@@ -832,9 +832,9 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 						wake_up(&ti->wait_for_reset);
 					}
 					break;
-					
+
 				      case DIR_INTERRUPT:
-				      case DIR_MOD_OPEN_PARAMS:	
+				      case DIR_MOD_OPEN_PARAMS:
 				      case DIR_SET_GRP_ADDR:
 				      case DIR_SET_FUNC_ADDR:
 				      case DLC_CLOSE_SAP:
@@ -843,7 +843,7 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 							(int)readb(ti->srb+offsetof(struct srb_interrupt, command)),
 							(int)readb(ti->srb+offsetof(struct srb_interrupt, ret_code)));
 					break;
-					
+
 				      case DIR_READ_LOG:
 					if (readb(ti->srb+offsetof(struct srb_read_log, ret_code)))
 						DPRINTK("error on dir_read_log: %02X\n",
@@ -854,96 +854,96 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 							"A/C errors %02X, Abort delimiters %02X, Lost frames %02X\n"
 							"Receive congestion count %02X, Frame copied errors %02X\n"
 							"Frequency errors %02X, Token errors %02X\n",
-							(int)readb(ti->srb+offsetof(struct srb_read_log, 
+							(int)readb(ti->srb+offsetof(struct srb_read_log,
 										    line_errors)),
-							(int)readb(ti->srb+offsetof(struct srb_read_log, 
+							(int)readb(ti->srb+offsetof(struct srb_read_log,
 										    internal_errors)),
-							(int)readb(ti->srb+offsetof(struct srb_read_log, 
+							(int)readb(ti->srb+offsetof(struct srb_read_log,
 										    burst_errors)),
 							(int)readb(ti->srb+offsetof(struct srb_read_log, A_C_errors)),
-							(int)readb(ti->srb+offsetof(struct srb_read_log, 
+							(int)readb(ti->srb+offsetof(struct srb_read_log,
 										    abort_delimiters)),
-							(int)readb(ti->srb+offsetof(struct srb_read_log, 
+							(int)readb(ti->srb+offsetof(struct srb_read_log,
 										    lost_frames)),
-							(int)readb(ti->srb+offsetof(struct srb_read_log, 
+							(int)readb(ti->srb+offsetof(struct srb_read_log,
 												    recv_congest_count)),
-							(int)readb(ti->srb+offsetof(struct srb_read_log, 
+							(int)readb(ti->srb+offsetof(struct srb_read_log,
 										    frame_copied_errors)),
-							(int)readb(ti->srb+offsetof(struct srb_read_log, 
+							(int)readb(ti->srb+offsetof(struct srb_read_log,
 										    frequency_errors)),
-							(int)readb(ti->srb+offsetof(struct srb_read_log, 
+							(int)readb(ti->srb+offsetof(struct srb_read_log,
 												    token_errors)));
 					dev->tbusy=0;
 					break;
-					
+
 				      default:
 					DPRINTK("Unknown command %02X encountered\n",
 						(int)readb(ti->srb));
-					
+
 				} /* SRB command check */
-				
+
 				writeb(~CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_RESET + ISRA_ODD);
 				writeb(~SRB_RESP_INT, ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD);
-				
+
 			  skip_reset:
 			} /* SRB response */
-			
+
 			if (status & ASB_FREE_INT) { /* ASB response */
-				
+
 				switch(readb(ti->asb)) { /* ASB command check */
-					
+
 				      case REC_DATA:
 				      case XMIT_UI_FRAME:
 				      case XMIT_DIR_FRAME:
 					break;
-					
+
 				      default:
 					DPRINTK("unknown command in asb %02X\n",
 						(int)readb(ti->asb));
-					
+
 				} /* ASB command check */
-				
+
 				if (readb(ti->asb+2)!=0xff) /* checks ret_code */
-				    DPRINTK("ASB error %02X in cmd %02X\n", 
+				    DPRINTK("ASB error %02X in cmd %02X\n",
 					    (int)readb(ti->asb+2),(int)readb(ti->asb));
 				writeb(~ASB_FREE_INT, ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD);
-				
+
 			} /* ASB response */
-			
+
 			if (status & ARB_CMD_INT) { /* ARB response */
-				
+
 				switch (readb(ti->arb)) { /* ARB command check */
-					
+
 				      case DLC_STATUS:
-					DPRINTK("DLC_STATUS new status: %02X on station %02X\n", 
+					DPRINTK("DLC_STATUS new status: %02X on station %02X\n",
 						ntohs(readw(ti->arb + offsetof(struct arb_dlc_status, status))),
-						ntohs(readw(ti->arb 
+						ntohs(readw(ti->arb
 									    +offsetof(struct arb_dlc_status, station_id))));
 					break;
-					
+
 				      case REC_DATA:
 					tr_rx(dev);
 					break;
-					
+
 				      case RING_STAT_CHANGE: {
 					      unsigned short ring_status;
-					      
+
 					      ring_status=ntohs(readw(ti->arb
 								      +offsetof(struct arb_ring_stat_change, ring_status)));
-					      
+
 					      if (ring_status & (SIGNAL_LOSS | LOBE_FAULT)) {
-						      
+
 						      DPRINTK("Signal loss/Lobe fault\n");
-						      DPRINTK("We try to reopen the adapter.\n");	
+						      DPRINTK("We try to reopen the adapter.\n");
 						      tr_timer.expires=jiffies+TR_RETRY_INTERVAL;
 						      tr_timer.data=(unsigned long)dev;
 						      tr_timer.next=tr_timer.prev=NULL;
 						      add_timer(&tr_timer);
-						      
-					      } else if (ring_status & (HARD_ERROR | XMIT_BEACON 
+
+					      } else if (ring_status & (HARD_ERROR | XMIT_BEACON
 											| AUTO_REMOVAL | REMOVE_RECV | RING_RECOVER))
 						      DPRINTK("New ring status: %02X\n", ring_status);
-					      
+
 					      if (ring_status & LOG_OVERFLOW) {
 						      if (dev->tbusy)
                                                               ti->readlog_pending = 1;
@@ -952,50 +952,50 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 					      }
 				      }
 				      break;
-				      
+
 				      case XMIT_DATA_REQ:
 					tr_tx(dev);
 					break;
-					
+
 				      default:
-					DPRINTK("Unknown command %02X in arb\n", 
+					DPRINTK("Unknown command %02X in arb\n",
 						(int)readb(ti->arb));
 					break;
-					
+
 				} /* ARB command check */
-				
+
 				writeb(~ARB_CMD_INT, ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD);
 				writeb(ARB_FREE, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
-				
+
 			} /* ARB response */
-			
+
 			if (status & SSB_RESP_INT) { /* SSB response */
-						
+
 				switch (readb(ti->ssb)) { /* SSB command check */
-					
+
 				      case XMIT_DIR_FRAME:
 				      case XMIT_UI_FRAME:
 					if (readb(ti->ssb+2)) /* checks ret_code */
-						DPRINTK("xmit ret_code: %02X xmit error code: %02X\n", 
-							(int)readb(ti->ssb+2), (int)readb(ti->ssb+6));		
+						DPRINTK("xmit ret_code: %02X xmit error code: %02X\n",
+							(int)readb(ti->ssb+2), (int)readb(ti->ssb+6));
 					else ti->tr_stats.tx_packets++;
 					break;
-					
+
 				      case XMIT_XID_CMD:
 					DPRINTK("xmit xid ret_code: %02X\n", (int)readb(ti->ssb+2));
-					
+
 				      default:
 					DPRINTK("Unknown command %02X in ssb\n", (int)readb(ti->ssb));
-					
+
 				} /* SSB command check */
-				
+
 				writeb(~SSB_RESP_INT, ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD);
 				writeb(SSB_FREE, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
-				
+
 			} /* SSB response */
-			
+
 		}	 /* SRB, ARB, ASB or SSB response */
-		
+
 		dev->interrupt=0;
 		writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET + ISRP_EVEN);
 		break;
@@ -1003,24 +1003,24 @@ void tok_interrupt (int irq, void *dev_id, struct pt_regs *regs)
 	      case FIRST_INT:
 		initial_tok_int(dev);
 		break;
-		
+
 	      default:
 		DPRINTK("Unexpected interrupt from tr adapter\n");
 
 	}
 }
 
-static void initial_tok_int(struct device *dev) 
+static void initial_tok_int(struct device *dev)
 {
 
 	__u32 encoded_addr;
 	__u32 hw_encoded_addr;
 	struct tok_info *ti;
-	
+
 	ti=(struct tok_info *) dev->priv;
-	
+
 	ti->do_tok_int=NOT_FIRST;
-	
+
 #ifndef TR_NEWFORMAT
 	DPRINTK("Initial tok int received\n");
 #endif
@@ -1036,7 +1036,7 @@ static void initial_tok_int(struct device *dev)
 
 	dev->mem_start = ti->sram;
 	dev->mem_end = ti->sram + (ti->mapped_ram_size<<9) - 1;
-	
+
 #if TR_VERBOSE
 	{
 		int i;
@@ -1045,28 +1045,28 @@ static void initial_tok_int(struct device *dev)
 		printk("\n");
 	}
 #endif
-	
-	hw_encoded_addr = readw(ti->init_srb 
+
+	hw_encoded_addr = readw(ti->init_srb
 				+ offsetof(struct srb_init_response, encoded_address));
-	
-#if !TR_NEWFORMAT		
+
+#if !TR_NEWFORMAT
 	DPRINTK("srb_init_response->encoded_address: %04X\n", hw_encoded_addr);
 	DPRINTK("ntohs(srb_init_response->encoded_address): %04X\n",
 		ntohs(hw_encoded_addr));
 #endif
-	
+
 	encoded_addr=(ti->sram + ntohs(hw_encoded_addr));
-	
+
 #if !TR_NEWFORMAT
-	DPRINTK("encoded addr (%04X,%04X,%08X): ", hw_encoded_addr, 
+	DPRINTK("encoded addr (%04X,%04X,%08X): ", hw_encoded_addr,
 		ntohs(hw_encoded_addr), encoded_addr);
 #else
 	DPRINTK("Initial interrupt : shared RAM located at %08x.\n", ti->sram);
-#endif	
-	
+#endif
+
 	ti->auto_ringspeedsave=readb(ti->init_srb
 				     +offsetof(struct srb_init_response, init_status_2)) & 0x4 ? TRUE : FALSE;
-	
+
 #if !TR_NEWFORMAT
 	for(i=0;i<TR_ALEN;i++) {
 		dev->dev_addr[i]=readb(encoded_addr + i);
@@ -1074,114 +1074,114 @@ static void initial_tok_int(struct device *dev)
 	}
 	printk("\n");
 #endif
-	
+
 	tok_open_adapter((unsigned long)dev);
 }
 
-static int tok_init_card(struct device *dev) 
+static int tok_init_card(struct device *dev)
 {
 	struct tok_info *ti;
 	short PIOaddr;
 	int i;
 	PIOaddr = dev->base_addr;
 	ti=(struct tok_info *) dev->priv;
-	
+
 	/* Special processing for first interrupt after reset */
 	ti->do_tok_int=FIRST_INT;
-	
+
 	/* Reset adapter */
 	dev->tbusy=1; /* nothing can be done before reset and open completed */
-	
+
 #ifdef ENABLE_PAGING
 	if(ti->page_mask)
 		writeb(SRPR_ENABLE_PAGING, ti->mmio + ACA_OFFSET + ACA_RW + SRPR_EVEN);
 #endif
-	
+
 	writeb(~INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_EVEN);
-	
+
 #if !TR_NEWFORMAT
 	DPRINTK("resetting card\n");
 #endif
-	
+
 	outb(0, PIOaddr+ADAPTRESET);
 	for (i=jiffies+TR_RESET_INTERVAL; jiffies<=i;); /* wait 50ms */
 	outb(0,PIOaddr+ADAPTRESETREL);
-	
+
 #if !TR_NEWFORMAT
 	DPRINTK("card reset\n");
 #endif
-	
+
 	ti->open_status=IN_PROGRESS;
 	writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET + ISRP_EVEN);
-	return 0;	
+	return 0;
 }
 
-static void open_sap(unsigned char type,struct device *dev) 
+static void open_sap(unsigned char type,struct device *dev)
 {
 	int i;
 	struct tok_info *ti=(struct tok_info *) dev->priv;
-	
+
 	SET_PAGE(ti->srb);
 	for (i=0; i<sizeof(struct dlc_open_sap); i++)
 		writeb(0, ti->srb+i);
-	
+
 	writeb(DLC_OPEN_SAP, ti->srb + offsetof(struct dlc_open_sap, command));
-	writew(htons(MAX_I_FIELD), 
+	writew(htons(MAX_I_FIELD),
 	       ti->srb + offsetof(struct dlc_open_sap, max_i_field));
-	writeb(SAP_OPEN_IND_SAP | SAP_OPEN_PRIORITY, 
+	writeb(SAP_OPEN_IND_SAP | SAP_OPEN_PRIORITY,
 	       ti->srb + offsetof(struct dlc_open_sap, sap_options));
-	writeb(SAP_OPEN_STATION_CNT, 
+	writeb(SAP_OPEN_STATION_CNT,
 	       ti->srb + offsetof(struct dlc_open_sap, station_count));
 	writeb(type, ti->srb + offsetof(struct dlc_open_sap, sap_value));
-	
+
 	writeb(CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 
 }
 
-void tok_open_adapter(unsigned long dev_addr) 
+void tok_open_adapter(unsigned long dev_addr)
 {
-	
+
 	struct device *dev=(struct device *)dev_addr;
 	struct tok_info *ti;
 	int i;
-	
+
 	ti=(struct tok_info *) dev->priv;
-	
+
 #if !TR_NEWFORMAT
 	DPRINTK("now opening the board...\n");
 #endif
-	
+
 	writeb(~SRB_RESP_INT, ti->mmio + ACA_OFFSET + ACA_RESET + ISRP_ODD);
 	writeb(~CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_RESET + ISRA_ODD);
-	
+
 	for (i=0; i<sizeof(struct dir_open_adapter); i++)
 		writeb(0, ti->init_srb+i);
-	
-	writeb(DIR_OPEN_ADAPTER, 
+
+	writeb(DIR_OPEN_ADAPTER,
 	       ti->init_srb + offsetof(struct dir_open_adapter, command));
-	writew(htons(OPEN_PASS_BCON_MAC), 
+	writew(htons(OPEN_PASS_BCON_MAC),
 	       ti->init_srb + offsetof(struct dir_open_adapter, open_options));
-	writew(htons(NUM_RCV_BUF), 
+	writew(htons(NUM_RCV_BUF),
 	       ti->init_srb + offsetof(struct dir_open_adapter, num_rcv_buf));
-	writew(htons(RCV_BUF_LEN), 
+	writew(htons(RCV_BUF_LEN),
 	       ti->init_srb + offsetof(struct dir_open_adapter, rcv_buf_len));
-	writew(htons(DHB_LENGTH), 
+	writew(htons(DHB_LENGTH),
 	       ti->init_srb + offsetof(struct dir_open_adapter, dhb_length));
-	writeb(NUM_DHB, 
+	writeb(NUM_DHB,
 	       ti->init_srb + offsetof(struct dir_open_adapter, num_dhb));
-	writeb(DLC_MAX_SAP, 
+	writeb(DLC_MAX_SAP,
 	       ti->init_srb + offsetof(struct dir_open_adapter, dlc_max_sap));
-	writeb(DLC_MAX_STA, 
+	writeb(DLC_MAX_STA,
 	       ti->init_srb + offsetof(struct dir_open_adapter, dlc_max_sta));
-	
+
 	ti->srb=ti->init_srb; /* We use this one in the interrupt handler */
-	
+
 	writeb(INT_ENABLE, ti->mmio + ACA_OFFSET + ACA_SET + ISRP_EVEN);
 	writeb(CMD_IN_SRB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
-	
+
 }
 
-static void tr_tx(struct device *dev) 
+static void tr_tx(struct device *dev)
 {
 	struct tok_info *ti=(struct tok_info *) dev->priv;
 	struct trh_hdr *trhdr=(struct trh_hdr *)ti->current_skb->data;
@@ -1190,21 +1190,21 @@ static void tr_tx(struct device *dev)
 	unsigned char xmit_command;
 	int i;
 	struct trllc	*llc;
-	
+
 	if (readb(ti->asb + offsetof(struct asb_xmit_resp, ret_code))!=0xFF)
 		DPRINTK("ASB not free !!!\n");
-	
+
 	/* in providing the transmit interrupts,
 	   is telling us it is ready for data and
 	   providing a shared memory address for us
 	   to stuff with data.  Here we compute the
 	   effective address where we will place data.*/
-	dhb=ti->sram 
+	dhb=ti->sram
 		+ntohs(readw(ti->arb + offsetof(struct arb_xmit_req, dhb_address)));
 	llc = (struct trllc *) &(ti->current_skb->data[sizeof(struct trh_hdr)]);
-	
+
 	xmit_command = readb(ti->srb + offsetof(struct srb_xmit, command));
-	
+
 	writeb(xmit_command, ti->asb + offsetof(struct asb_xmit_resp, command));
 	writew(readb(ti->srb + offsetof(struct srb_xmit, station_id)),
 	       ti->asb + offsetof(struct asb_xmit_resp, station_id));
@@ -1212,23 +1212,23 @@ static void tr_tx(struct device *dev)
 	writeb(readb(ti->srb + offsetof(struct srb_xmit, cmd_corr)),
 	       ti->asb + offsetof(struct asb_xmit_resp, cmd_corr));
 	writeb(0, ti->asb + offsetof(struct asb_xmit_resp, ret_code));
-	
+
 	if ((xmit_command==XMIT_XID_CMD) || (xmit_command==XMIT_TEST_CMD)) {
-		
-		writew(htons(0x11), 
+
+		writew(htons(0x11),
 		       ti->asb + offsetof(struct asb_xmit_resp, frame_length));
 		writeb(0x0e, ti->asb + offsetof(struct asb_xmit_resp, hdr_length));
 		writeb(AC, dhb);
 		writeb(LLC_FRAME, dhb+1);
-		
+
 		for (i=0; i<TR_ALEN; i++) writeb((int)0x0FF, dhb+i+2);
 		for (i=0; i<TR_ALEN; i++) writeb(0, dhb+i+TR_ALEN+2);
-		
+
 		writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 		return;
-		
+
 	}
-	
+
 	/* the token ring packet is copied from sk_buff to the adapter
 	   buffer identified in the command data received with the
 	   interrupt.  The sk_buff area was set up with a maximum
@@ -1236,20 +1236,20 @@ static void tr_tx(struct device *dev)
 	   out the extra (all) rif fields.   */
 	/* nb/dwm .... I re-arranged code here to avoid copy of extra
 	   bytes, ended up with fewer statements as well. */
-	
+
 	/* TR arch. identifies if RIF present by high bit of source
 	   address.  So here we check if RIF present */
 
 	if (!(trhdr->saddr[0] & 0x80)) { /* RIF present : preserve it */
 		hdr_len=sizeof(struct trh_hdr)-18;
-		
+
 #if TR_VERBOSE
 		DPRINTK("hdr_length: %d, frame length: %ld\n", hdr_len,
 			ti->current_skb->len-18);
 #endif
 	} else hdr_len=((ntohs(trhdr->rcf) & TR_RCF_LEN_MASK)>>8)
 		  +sizeof(struct trh_hdr)-18;
-	
+
 	/* header length including rif is computed above, now move the data
 	   and set fields appropriately. */
 #if USE_MEMCPY
@@ -1258,22 +1258,22 @@ static void tr_tx(struct device *dev)
 	for (i=0; i<hdr_len; i++)
 		writeb(*(unsigned char *)(ti->current_skb->data +i), dhb++);
 #endif
-	
+
 	writeb(hdr_len, ti->asb + offsetof(struct asb_xmit_resp, hdr_length));
 	writew(htons(ti->current_skb->len-sizeof(struct trh_hdr)+hdr_len),
 	       ti->asb + offsetof(struct asb_xmit_resp, frame_length));
-	
+
 	/*  now copy the actual packet data next to hdr */
 #if USE_MEMCPY
 	memcpy_toio(dhb + hdr_len,
-		    ti->current_skb->data + sizeof(struct trh_hdr), 
+		    ti->current_skb->data + sizeof(struct trh_hdr),
 		    ti->current_skb->len - sizeof(struct trh_hdr));
 #else
 	for (i=0; i<ti->current_skb->len-sizeof(struct trh_hdr); i++)
 		writeb(*(unsigned char *)(ti->current_skb->data +sizeof(struct trh_hdr)+i),
 		       dhb+i);
 #endif
-	
+
 	writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 	dev->tbusy=0;
 	dev_kfree_skb(ti->current_skb,FREE_WRITE);
@@ -1282,11 +1282,11 @@ static void tr_tx(struct device *dev)
 	if (ti->readlog_pending) tr_readlog(dev);
 }
 
-static void tr_rx(struct device *dev) 
+static void tr_rx(struct device *dev)
 {
 	int i;
 	struct tok_info *ti=(struct tok_info *) dev->priv;
-	__u32 rbuffer;	
+	__u32 rbuffer;
 	__u32 llc;
 	unsigned char *data;
 	unsigned int rbuffer_len, lan_hdr_len;
@@ -1294,29 +1294,29 @@ static void tr_rx(struct device *dev)
 	struct sk_buff *skb;
 	unsigned int skb_size = 0;
 	int	is8022 = 0;
-	
+
 	rbuffer=(ti->sram
 		 +ntohs(readw(ti->arb + offsetof(struct arb_rec_req, rec_buf_addr))));
-	
+
 	if(readb(ti->asb + offsetof(struct asb_rec, ret_code))!=0xFF)
 		DPRINTK("ASB not free !!!\n");
-	
-	writeb(REC_DATA, 
+
+	writeb(REC_DATA,
 	       ti->asb + offsetof(struct asb_rec, command));
 	writew(readw(ti->arb + offsetof(struct arb_rec_req, station_id)),
 	       ti->asb + offsetof(struct asb_rec, station_id));
 	writew(readw(ti->arb + offsetof(struct arb_rec_req, rec_buf_addr)),
 	       ti->asb + offsetof(struct asb_rec, rec_buf_addr));
-	
+
 	lan_hdr_len=readb(ti->arb + offsetof(struct arb_rec_req, lan_hdr_len));
-	
+
 	llc=(rbuffer+offsetof(struct rec_buf, data) + lan_hdr_len);
-	
+
 #if TR_VERBOSE
 	DPRINTK("offsetof data: %02X lan_hdr_len: %02X\n",
 		(unsigned int)offsetof(struct rec_buf,data), (unsigned int)lan_hdr_len);
 	DPRINTK("llc: %08X rec_buf_addr: %04X ti->sram: %p\n", llc,
-		ntohs(readw(ti->arb + offsetof(struct arb_rec_req, rec_buf_addr))), 
+		ntohs(readw(ti->arb + offsetof(struct arb_rec_req, rec_buf_addr))),
 		ti->sram);
 	DPRINTK("dsap: %02X, ssap: %02X, llc: %02X, protid: %02X%02X%02X, "
 		"ethertype: %04X\n",
@@ -1327,9 +1327,9 @@ static void tr_rx(struct device *dev)
 		(int)readb(llc + offsetof(struct trllc, protid)+2),
 		(int)readw(llc + offsetof(struct trllc, ethertype)));
 #endif
-	
+
 	if (readb(llc + offsetof(struct trllc, llc))!=UI_CMD) {
-#if !TR_FILTERNONUI		
+#if !TR_FILTERNONUI
 		DPRINTK("non-UI frame arrived. dropped. llc= %02X\n",
 			(int)readb(llc + offsetof(struct trllc, llc))
 #endif
@@ -1338,20 +1338,20 @@ static void tr_rx(struct device *dev)
 			writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 			return;
 			}
-		
+
 		if ((readb(llc + offsetof(struct trllc, dsap))!=0xAA) ||
 		    (readb(llc + offsetof(struct trllc, ssap))!=0xAA)) {
 			is8022 = 1;
 		}
-			
+
 #if TR_VERBOSE
 		if ((readb(llc + offsetof(struct trllc, dsap))!=0xAA) ||
 		    (readb(llc + offsetof(struct trllc, ssap))!=0xAA)) {
-			
+
 			__u32 trhhdr;
-			
+
 			trhhdr=(rbuffer+offsetof(struct rec_buf,data));
-			
+
 			DPRINTK("Probably non-IP frame received.\n");
 			DPRINTK("ssap: %02X dsap: %02X saddr: %02X:%02X:%02X:%02X:%02X:%02X "
 				"daddr: %02X:%02X:%02X:%02X:%02X:%02X\n",
@@ -1371,34 +1371,34 @@ static void tr_rx(struct device *dev)
 				(int)readb(trhhdr + offsetof(struct trh_hdr, daddr)+5));
 		}
 #endif
-		
+
 		arb_frame_len=ntohs(readw(ti->arb+offsetof(struct arb_rec_req, frame_len)));
 		skb_size = arb_frame_len-lan_hdr_len+sizeof(struct trh_hdr);
 		if (is8022) {
 			skb_size += sizeof(struct trllc);
 		}
-		
+
 		if (!(skb=dev_alloc_skb(skb_size))) {
-			DPRINTK("out of memory. frame dropped.\n");	
+			DPRINTK("out of memory. frame dropped.\n");
 			ti->tr_stats.rx_dropped++;
 			writeb(DATA_LOST, ti->asb + offsetof(struct asb_rec, ret_code));
 			writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
 			return;
 		}
-		
+
 		skb_put(skb, skb_size);
 		skb->dev=dev;
-		
+
 		data=skb->data;
 #if USE_MEMCPY
 		memcpy_fromio(data, rbuffer + offsetof(struct rec_buf, data), lan_hdr_len);
 #else
-		for (i=0; i<lan_hdr_len; i++) 
+		for (i=0; i<lan_hdr_len; i++)
 			data[i]=readb(rbuffer + offsetof(struct rec_buf, data)+i);
-#endif		
+#endif
 		if (lan_hdr_len<sizeof(struct trh_hdr))
 			memset(data+lan_hdr_len, 0, sizeof(struct trh_hdr)-lan_hdr_len);
-		
+
 		data+=sizeof(struct trh_hdr);
 		rbuffer_len=ntohs(readw(rbuffer + offsetof(struct rec_buf, buf_len)))
 			-lan_hdr_len;
@@ -1408,7 +1408,7 @@ static void tr_rx(struct device *dev)
 			local_llc->ethertype = htons(ETH_P_TR_802_2);
 			data += sizeof(struct trllc);
 		}
-		
+
 #if TR_VERBOSE
 		DPRINTK("rbuffer_len: %d, data: %p\n", rbuffer_len, data);
 #endif
@@ -1419,7 +1419,7 @@ static void tr_rx(struct device *dev)
 			data[i]=readb(rbuffer+ offsetof(struct rec_buf, data)+lan_hdr_len+i);
 #endif
 		data+=rbuffer_len;
-		
+
 		while (readw(rbuffer + offsetof(struct rec_buf, buf_ptr))) {
 			rbuffer=(ti->sram
 				 +ntohs(readw(rbuffer + offsetof(struct rec_buf, buf_ptr)))-2);
@@ -1427,58 +1427,58 @@ static void tr_rx(struct device *dev)
 			for (i=0; i<rbuffer_len; i++)
 				data[i]=readb(rbuffer + offsetof(struct rec_buf, data)+i);
 			data+=rbuffer_len;
-			
+
 #if TR_VERBOSE
-			DPRINTK("buf_ptr: %d, data =%p\n", 
+			DPRINTK("buf_ptr: %d, data =%p\n",
 				ntohs((rbuffer + offsetof(struct rec_buf, buf_ptr))), data);
 #endif
-		} 
-		
+		}
+
 		writeb(0, ti->asb + offsetof(struct asb_rec, ret_code));
-		
+
 		writeb(RESP_IN_ASB, ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD);
-		
+
 		ti->tr_stats.rx_packets++;
-		
+
 		skb->protocol=tr_type_trans(skb,dev);
 		netif_rx(skb);
-		
+
 	}
 
-static int tok_send_packet(struct sk_buff *skb, struct device *dev) 
+static int tok_send_packet(struct sk_buff *skb, struct device *dev)
 {
 	struct tok_info *ti;
 	ti=(struct tok_info *) dev->priv;
-	
+
 	if (dev->tbusy) {
 		int ticks_waited;
-		
+
 		ticks_waited=jiffies - dev->trans_start;
 		if (ticks_waited<TR_BUSY_INTERVAL) return 1;
-		
+
 		DPRINTK("Arrg. Transmitter busy.\n");
 		dev->trans_start+=5; /* we fake the transmission start time... */
 		return 1;
 	}
-	
+
 	/* Donald does this, so we do too. */
 	if (skb==NULL) {
 		dev_tint(dev);
 		return 0;
 	}
-	
+
 	if (set_bit(0,(void *)&dev->tbusy)!=0)
 		DPRINTK("Transmitter access conflict\n");
 	else {
 		/* Save skb; we'll need it when the adapter asks for the data */
-		ti->current_skb=skb; 
+		ti->current_skb=skb;
 		writeb(XMIT_UI_FRAME, ti->srb + offsetof(struct srb_xmit, command));
-		writew(ti->exsap_station_id, ti->srb 
+		writew(ti->exsap_station_id, ti->srb
 		       +offsetof(struct srb_xmit, station_id));
 		writeb(CMD_IN_SRB, (ti->mmio + ACA_OFFSET + ACA_SET + ISRA_ODD));
 		dev->trans_start=jiffies;
 	}
-	
+
 	return 0;
 }
 
@@ -1513,6 +1513,10 @@ static int io[IBMTR_MAX_ADAPTERS] = {0xa20,0xa24};
 static int irq[IBMTR_MAX_ADAPTERS] = {0,0};
 static int mem[IBMTR_MAX_ADAPTERS] = {0,0};
 
+MODULE_PARM(io, "1-" __MODULE_STRING(IBMTR_MAX_ADAPTERS) "i");
+MODULE_PARM(irq, "1-" __MODULE_STRING(IBMTR_MAX_ADAPTERS) "i");
+MODULE_PARM(mem, "1-" __MODULE_STRING(IBMTR_MAX_ADAPTERS) "i");
+
 int init_module(void)
 {
         int i;
@@ -1528,7 +1532,7 @@ int init_module(void)
 	        dev_ibmtr[i]->irq       = irq[i];
 		dev_ibmtr[i]->mem_start = mem[i];
 		dev_ibmtr[i]->init      = &ibmtr_probe;
-	
+
 	        if (register_trdev(dev_ibmtr[i]) != 0) {
 			kfree_s(dev_ibmtr[i], sizeof(struct dev));
 			dev_ibmtr[i] = NULL;
@@ -1553,7 +1557,7 @@ void cleanup_module(void)
 			 free_irq(dev_ibmtr[i]->irq, NULL);
 			 irq2dev_map[dev_ibmtr[i]->irq] = NULL;
 			 release_region(dev_ibmtr[i]->base_addr, IBMTR_IO_EXTENT);
-			 kfree_s(dev_ibmtr[i]->priv, sizeof(struct tok_info)); 
+			 kfree_s(dev_ibmtr[i]->priv, sizeof(struct tok_info));
 			 kfree_s(dev_ibmtr[i], sizeof(struct dev));
 			 dev_ibmtr[i] = NULL;
                 }

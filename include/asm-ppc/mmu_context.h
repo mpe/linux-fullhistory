@@ -6,5 +6,8 @@
  */
 #define get_mmu_context(x) do { } while (0)
 
+#define init_new_context(mm)	do { } while(0)
+#define destroy_context(mm)	do { } while(0)
+
 #endif
 

@@ -1,4 +1,4 @@
-/* $Id: head.S,v 1.75 1996/12/20 07:54:57 davem Exp $
+/* $Id: head.S,v 1.76 1996/12/30 00:31:09 davem Exp $
  * head.S: The initial boot code for the Sparc port of Linux.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -1062,6 +1062,10 @@ sun4c_continue_boot:
 		PATCH_INSN(rirq_7win_patch5, rirq_patch5)
 
 #endif
+
+		/* Patch for killing user windows from the register file. */
+		PATCH_INSN(kuw_patch1_7win, kuw_patch1)
+
 		/* Now patch the kernel window flush sequences.
 		 * This saves 2 traps on every switch and fork.
 		 */

@@ -294,12 +294,12 @@ struct super_block *fat_read_super(struct super_block *sb,void *data, int silent
 		       opts.conversion,opts.fs_uid,opts.fs_gid,opts.fs_umask,
 		       MSDOS_CAN_BMAP(MSDOS_SB(sb)) ? ",bmap" : "");
 		printk("[me=0x%x,cs=%d,#f=%d,fs=%d,fl=%d,ds=%d,de=%d,data=%d,"
-		       "se=%d,ts=%ld,ls=%d]\n",b->media,MSDOS_SB(sb)->cluster_size,
+		       "se=%d,ts=%d,ls=%d]\n",b->media,MSDOS_SB(sb)->cluster_size,
 		       MSDOS_SB(sb)->fats,MSDOS_SB(sb)->fat_start,MSDOS_SB(sb)->fat_length,
 		       MSDOS_SB(sb)->dir_start,MSDOS_SB(sb)->dir_entries,
 		       MSDOS_SB(sb)->data_start,
-		       CF_LE_W(*(unsigned short *) &b->sectors),
-		       (unsigned long)b->total_sect,logical_sector_size);
+		       CF_LE_W(get_unaligned((unsigned short *) &b->sectors)),
+		       CF_LE_L(b->total_sect),logical_sector_size);
 		printk ("Transaction block size = %d\n",blksize);
 	}
 	if (MSDOS_SB(sb)->clusters+2 > fat_clusters)

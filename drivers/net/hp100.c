@@ -17,13 +17,13 @@
  *
  * This driver is based on the 'hpfepkt' crynwr packet driver.
  *
- * This source/code is public free; you can distribute it and/or modify 
+ * This source/code is public free; you can distribute it and/or modify
  * it under terms of the GNU General Public License (published by the
- * Free Software Foundation) either version two of this License, or any 
+ * Free Software Foundation) either version two of this License, or any
  * later version.
  * ----------------------------------------------------------------------------
  *
- * Note: Some routines (interrupt handling, transmit) assumes that  
+ * Note: Some routines (interrupt handling, transmit) assumes that
  *       there is the PERFORMANCE page selected...
  *
  * ----------------------------------------------------------------------------
@@ -48,7 +48,7 @@
  * Russel Nellson <nelson@crynwr.com> for help with obtaining sources
  * of the 'hpfepkt' packet driver.
  *
- * Also thanks to Abacus Electric s.r.o which let me to use their 
+ * Also thanks to Abacus Electric s.r.o which let me to use their
  * motherboard for my second computer.
  *
  * ----------------------------------------------------------------------------
@@ -65,7 +65,7 @@
  *
  * Revision history:
  * =================
- * 
+ *
  *    Version   Date	    Description
  *
  *	0.1	14-May-95   Initial writing. ALPHA code was released.
@@ -157,17 +157,17 @@ struct hp100_private {
 /*
  *  variables
  */
- 
+
 static struct hp100_eisa_id hp100_eisa_ids[] = {
 
   /* 10/100 EISA card with REVA Cascade chip */
-  { 0x080F1F022, "HP J2577 rev A", HP100_BUS_EISA }, 
+  { 0x080F1F022, "HP J2577 rev A", HP100_BUS_EISA },
 
   /* 10/100 ISA card with REVA Cascade chip */
   { 0x050F1F022, "HP J2573 rev A", HP100_BUS_ISA },
 
   /* 10 only EISA card with Cascade chip */
-  { 0x02019F022, "HP 27248B",      HP100_BUS_EISA }, 
+  { 0x02019F022, "HP 27248B",      HP100_BUS_EISA },
 
   /* 10/100 EISA card with Cascade chip */
   { 0x04019F022, "HP J2577",       HP100_BUS_EISA },
@@ -208,7 +208,7 @@ static int hp100_down_vg_link( struct device *dev );
 /*
  *  probe functions
  */
- 
+
 int hp100_probe( struct device *dev )
 {
   int base_addr = dev ? dev -> base_addr : 0;
@@ -225,7 +225,7 @@ int hp100_probe( struct device *dev )
        else
         return hp100_probe1( dev, base_addr, HP100_BUS_EISA );
     }
-   else 
+   else
 #ifdef CONFIG_PCI
   if ( base_addr > 0 && base_addr < 8 + 1 )
     pci_start_index = 0x100 | ( base_addr - 1 );
@@ -234,12 +234,12 @@ int hp100_probe( struct device *dev )
     if ( base_addr != 0 ) return -ENXIO;
 
   /* at first - scan PCI bus(es) */
-  
+
 #ifdef CONFIG_PCI
   if ( pcibios_present() )
     {
       int pci_index;
-      
+
 #ifdef HP100_DEBUG_PCI
       printk( "hp100: PCI BIOS is present, checking for devices..\n" );
 #endif
@@ -247,17 +247,17 @@ int hp100_probe( struct device *dev )
         {
           u_char pci_bus, pci_device_fn;
           u_short pci_command;
-          
+
           if ( pcibios_find_device( PCI_VENDOR_ID_HP, PCI_DEVICE_ID_HP_J2585A,
           			    pci_index, &pci_bus,
           			    &pci_device_fn ) != 0 ) break;
           pcibios_read_config_dword( pci_bus, pci_device_fn,
               		             PCI_BASE_ADDRESS_0, &ioaddr );
-              				 
+
           ioaddr &= ~3;		/* remove I/O space marker in bit 0. */
-              
+
           if ( check_region( ioaddr, HP100_REGION_SIZE ) ) continue;
-              
+
           pcibios_read_config_word( pci_bus, pci_device_fn,
               			    PCI_COMMAND, &pci_command );
           if ( !( pci_command & PCI_COMMAND_MASTER ) )
@@ -277,23 +277,23 @@ int hp100_probe( struct device *dev )
     }
   if ( pci_start_index > 0 ) return -ENODEV;
 #endif /* CONFIG_PCI */
-         
+
   /* at second - probe all EISA possible port regions (if EISA bus present) */
-  
+
   for ( ioaddr = 0x1c38; EISA_bus && ioaddr < 0x10000; ioaddr += 0x400 )
     {
       if ( check_region( ioaddr, HP100_REGION_SIZE ) ) continue;
       if ( hp100_probe1( dev, ioaddr, HP100_BUS_EISA ) == 0 ) return 0;
     }
-         
+
   /* at third - probe all ISA possible port regions */
-         
+
   for ( ioaddr = 0x100; ioaddr < 0x400; ioaddr += 0x20 )
     {
       if ( check_region( ioaddr, HP100_REGION_SIZE ) ) continue;
       if ( hp100_probe1( dev, ioaddr, HP100_BUS_ISA ) == 0 ) return 0;
     }
-                                                                            
+
   return -ENODEV;
 }
 
@@ -319,7 +319,7 @@ static int hp100_probe1( struct device *dev, int ioaddr, int bus )
     if ( inb( ioaddr + 0 ) != HP100_HW_ID_0 ||
          inb( ioaddr + 1 ) != HP100_HW_ID_1 ||
          ( inb( ioaddr + 2 ) & 0xf0 ) != HP100_HW_ID_2_REVA ||
-         inb( ioaddr + 3 ) != HP100_HW_ID_3 ) 
+         inb( ioaddr + 3 ) != HP100_HW_ID_3 )
        return -ENODEV;
 
   dev -> base_addr = ioaddr;
@@ -346,7 +346,7 @@ static int hp100_probe1( struct device *dev, int ioaddr, int bus )
     {
       printk( "hp100_probe: bad EISA ID checksum at base port 0x%x\n", ioaddr );
       return -ENODEV;
-    }  
+    }
 
   for ( i = 0; i < sizeof( hp100_eisa_ids ) / sizeof( struct hp100_eisa_id ); i++ )
     if ( ( hp100_eisa_ids[ i ].id & 0xf0ffffff ) == ( eisa_id & 0xf0ffffff ) )
@@ -359,7 +359,7 @@ static int hp100_probe1( struct device *dev, int ioaddr, int bus )
   eid = &hp100_eisa_ids[ i ];
   if ( ( eid -> id & 0x0f000000 ) < ( eisa_id & 0x0f000000 ) )
     {
-      printk( "hp100_probe1: newer version of card %s at port 0x%x - unsupported\n", 
+      printk( "hp100_probe1: newer version of card %s at port 0x%x - unsupported\n",
 	eid -> name, ioaddr );
       return -ENODEV;
     }
@@ -368,19 +368,19 @@ static int hp100_probe1( struct device *dev, int ioaddr, int bus )
     uc += hp100_inb( LAN_ADDR + i );
   if ( uc != 0xff )
     {
-      printk( "hp100_probe1: bad lan address checksum (card %s at port 0x%x)\n", 
+      printk( "hp100_probe1: bad lan address checksum (card %s at port 0x%x)\n",
 	eid -> name, ioaddr );
       return -EIO;
     }
 
 #ifndef HP100_IO_MAPPED
   hp100_page( HW_MAP );
-  mem_mapped = ( hp100_inw( OPTION_LSW ) & 
+  mem_mapped = ( hp100_inw( OPTION_LSW ) &
                  ( HP100_MEM_EN | HP100_BM_WRITE | HP100_BM_READ ) ) != 0;
   mem_ptr_phys = mem_ptr_virt = NULL;
   if ( mem_mapped )
     {
-      mem_ptr_phys = (u_char *)( hp100_inw( MEM_MAP_LSW ) | 
+      mem_ptr_phys = (u_char *)( hp100_inw( MEM_MAP_LSW ) |
                                ( hp100_inw( MEM_MAP_MSW ) << 16 ) );
       (u_int)mem_ptr_phys &= ~0x1fff;	/* 8k alignment */
       if ( bus == HP100_BUS_ISA && ( (u_long)mem_ptr_phys & ~0xfffff ) != 0 )
@@ -416,7 +416,7 @@ static int hp100_probe1( struct device *dev, int ioaddr, int bus )
   lp -> soft_model = hp100_inb( SOFT_MODEL );
   lp -> mac1_mode = HP100_MAC1MODE3;
   lp -> mac2_mode = HP100_MAC2MODE3;
-  
+
   dev -> base_addr = ioaddr;
   hp100_page( HW_MAP );
   dev -> irq = hp100_inb( IRQ_CHANNEL ) & HP100_IRQ_MASK;
@@ -441,7 +441,7 @@ static int hp100_probe1( struct device *dev, int ioaddr, int bus )
   ether_setup( dev );
 
   lp -> lan_type = hp100_sense_lan( dev );
-     
+
   printk( "%s: %s at 0x%x, IRQ %d, ",
     dev -> name, lp -> id -> name, ioaddr, dev -> irq );
   switch ( bus ) {
@@ -472,9 +472,9 @@ static int hp100_probe1( struct device *dev, int ioaddr, int bus )
     default:
       printk( "Warning! Link down.\n" );
   }
-		
+
   hp100_stop_interface( dev );
-  
+
   return 0;
 }
 
@@ -496,7 +496,7 @@ static int hp100_open( struct device *dev )
   irq2dev_map[ dev -> irq ] = dev;
 
   MOD_INC_USE_COUNT;
-  
+
   dev -> tbusy = 0;
   dev -> trans_start = jiffies;
   dev -> interrupt = 0;
@@ -505,21 +505,21 @@ static int hp100_open( struct device *dev )
   lp -> lan_type = hp100_sense_lan( dev );
   lp -> mac1_mode = HP100_MAC1MODE3;
   lp -> mac2_mode = HP100_MAC2MODE3;
-  
+
   hp100_page( MAC_CTRL );
   hp100_orw( HP100_LINK_BEAT_DIS | HP100_RESET_LB, LAN_CFG_10 );
 
   hp100_stop_interface( dev );
   hp100_load_eeprom( dev );
 
-  hp100_outw( HP100_MMAP_DIS | HP100_SET_HB | 
+  hp100_outw( HP100_MMAP_DIS | HP100_SET_HB |
               HP100_IO_EN | HP100_SET_LB, OPTION_LSW );
   hp100_outw( HP100_DEBUG_EN | HP100_RX_HDR | HP100_EE_EN | HP100_RESET_HB |
               HP100_FAKE_INT | HP100_RESET_LB, OPTION_LSW );
   hp100_outw( HP100_ADV_NXT_PKT | HP100_TX_CMD | HP100_RESET_LB |
                 HP100_PRIORITY_TX | ( hp100_priority_tx ? HP100_SET_HB : HP100_RESET_HB ),
               OPTION_MSW );
-              				
+
   hp100_page( MAC_ADDRESS );
   for ( i = 0; i < 6; i++ )
     hp100_outb( dev -> dev_addr[ i ], MAC_ADDR + i );
@@ -567,7 +567,7 @@ static int hp100_close( struct device *dev )
   return 0;
 }
 
-/* 
+/*
  *  transmit
  */
 
@@ -591,7 +591,7 @@ static int hp100_start_xmit( struct sk_buff *skb, struct device *dev )
         lp -> hub_status = hp100_login_to_vg_hub( dev );
       hp100_start_interface( dev );
     }
-  
+
   if ( ( i = ( hp100_inl( TX_MEM_FREE ) & ~0x7fffffff ) ) < skb -> len + 16 )
     {
 #ifdef HP100_DEBUG
@@ -635,20 +635,20 @@ static int hp100_start_xmit( struct sk_buff *skb, struct device *dev )
       dev -> trans_start = jiffies;
       return -EAGAIN;
     }
-    
+
   if ( skb == NULL )
     {
       dev_tint( dev );
       return 0;
     }
-    
+
   if ( skb -> len <= 0 ) return 0;
 
   for ( i = 0; i < 6000 && ( hp100_inw( OPTION_MSW ) & HP100_TX_CMD ); i++ )
     {
 #ifdef HP100_DEBUG_TX
       printk( "hp100_start_xmit: busy\n" );
-#endif    
+#endif
     }
 
   hp100_ints_off();
@@ -717,7 +717,7 @@ static void hp100_rx( struct device *dev )
       hp100_page( PERFORMANCE );
     }
 #endif
-  
+
   packets = hp100_inb( RX_PKT_CNT );
 #ifdef HP100_DEBUG
   if ( packets > 1 )
@@ -729,7 +729,7 @@ static void hp100_rx( struct device *dev )
         {
 #ifdef HP100_DEBUG_TX
           printk( "hp100_rx: busy, remaining packets = %d\n", packets );
-#endif    
+#endif
         }
       if ( lp -> mem_mapped )
         {
@@ -761,7 +761,7 @@ static void hp100_rx( struct device *dev )
        else
         {
           u_char *ptr;
-        
+
           skb -> dev = dev;
           ptr = (u_char *)skb_put( skb, pkt_len );
           if ( lp -> mem_mapped )
@@ -797,7 +797,7 @@ static void hp100_rx( struct device *dev )
 /*
  *  statistics
  */
- 
+
 static struct enet_statistics *hp100_get_stats( struct device *dev )
 {
   int ioaddr = dev -> base_addr;
@@ -813,7 +813,7 @@ static void hp100_update_stats( struct device *dev )
   int ioaddr = dev -> base_addr;
   u_short val;
   struct hp100_private *lp = (struct hp100_private *)dev -> priv;
-         
+
   hp100_page( MAC_CTRL );		/* get all statistics bytes */
   val = hp100_inw( DROPPED ) & 0x0fff;
   lp -> stats.rx_errors += val;
@@ -845,7 +845,7 @@ static void hp100_clear_stats( int ioaddr )
 /*
  *  Set or clear the multicast filter for this adapter.
  */
-                                                          
+
 static void hp100_set_multicast_list( struct device *dev)
 {
   int ioaddr = dev -> base_addr;
@@ -956,14 +956,14 @@ static void hp100_start_interface( struct device *dev )
       hp100_outw( HP100_MMAP_DIS | HP100_RESET_HB, OPTION_LSW );
     }
   sti();
-} 
+}
 
 static void hp100_stop_interface( struct device *dev )
 {
   int ioaddr = dev -> base_addr;
   u_short val;
 
-  hp100_outw( HP100_INT_EN | HP100_RESET_LB | 
+  hp100_outw( HP100_INT_EN | HP100_RESET_LB |
               HP100_TRI_INT | HP100_MMAP_DIS | HP100_SET_HB, OPTION_LSW );
   val = hp100_inw( OPTION_LSW );
   hp100_page( HW_MAP );
@@ -1030,10 +1030,10 @@ static int hp100_down_vg_link( struct device *dev )
   if ( i <= 0 )				/* not signal - not logout */
     return 0;
   hp100_andw( ~HP100_LINK_CMD, LAN_CFG_VG );
-  time = jiffies + 10*HZ/100; 
+  time = jiffies + 10*HZ/100;
   while ( time > jiffies )
-    if ( !( hp100_inw( LAN_CFG_VG ) & ( HP100_LINK_UP_ST | 
-                                        HP100_LINK_CABLE_ST | 
+    if ( !( hp100_inw( LAN_CFG_VG ) & ( HP100_LINK_UP_ST |
+                                        HP100_LINK_CABLE_ST |
                                         HP100_LINK_GOOD_ST ) ) )
       return 0;
 #ifdef HP100_DEBUG
@@ -1047,7 +1047,7 @@ static int hp100_login_to_vg_hub( struct device *dev )
   int i;
   int ioaddr = dev -> base_addr;
   u_short val;
-  unsigned long time;  
+  unsigned long time;
 
   hp100_page( MAC_CTRL );
   hp100_orw( HP100_VG_RESET, LAN_CFG_VG );
@@ -1062,7 +1062,7 @@ static int hp100_login_to_vg_hub( struct device *dev )
 #endif
       return -EIO;
     }
-    
+
   if ( hp100_down_vg_link( dev ) < 0 )	/* if fail, try reset VG link */
     {
       hp100_andw( ~HP100_VG_RESET, LAN_CFG_VG );
@@ -1081,9 +1081,9 @@ static int hp100_login_to_vg_hub( struct device *dev )
     }
 
   time = jiffies + ( HZ / 2 );
-  do {   
+  do {
     val = hp100_inw( LAN_CFG_VG );
-    if ( ( val & ( HP100_LINK_UP_ST | HP100_LINK_GOOD_ST ) ) == 
+    if ( ( val & ( HP100_LINK_UP_ST | HP100_LINK_GOOD_ST ) ) ==
                  ( HP100_LINK_UP_ST | HP100_LINK_GOOD_ST ) )
       return 0;	/* success */
   } while ( time > jiffies );
@@ -1103,10 +1103,11 @@ down_link:
 /*
  *  module section
  */
- 
+
 #ifdef MODULE
 
 static int hp100_port = -1;
+MODULE_PARM(hp100_port, "i");
 
 static char devicename[9] = { 0, };
 static struct device dev_hp100 = {
@@ -1125,7 +1126,7 @@ int init_module( void )
   if ( register_netdev( &dev_hp100 ) != 0 )
     return -EIO;
   return 0;
-}         
+}
 
 void cleanup_module( void )
 {

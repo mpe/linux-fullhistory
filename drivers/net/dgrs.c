@@ -886,7 +886,7 @@ dgrs_ioctl(struct device *devN, struct ifreq *ifr, int cmd)
 		privN->bcomm->bc_filter_port = ioc.port;
 		privN->bcomm->bc_filter_num = ioc.filter;
 		privN->bcomm->bc_filter_len = ioc.len;
-		
+
 		if (ioc.len)
 		{
 			COPY_FROM_USER(S2HN(privN->bcomm->bc_filter_area),
@@ -914,7 +914,7 @@ dgrs_intr(int irq, void *dev_id, struct pt_regs *regs)
 	I596_CB		*cbp;
 	int		cmd;
 	int		i;
-	
+
 	++priv0->intrcnt;
 	if (1) ++priv0->bcomm->bc_cnt[4];
 	if (0)
@@ -1483,7 +1483,7 @@ dgrs_scan(struct device *dev)
 				+ (inb(io+ES4H_AS_23_16) << 16);
 
 			irq = is2iv[ inb(io+ES4H_IS) & ES4H_IS_INTMASK ];
-			
+
 			dgrs_found_device(dev, io, mem, irq, 0L, 0L);
 
 			dev = 0;
@@ -1513,6 +1513,15 @@ static int	ipaddr[4] = { -1 };
 static int	iptrap[4] = { -1 };
 static long	ipxnet = -1;
 static int	nicmode = -1;
+
+MODULE_PARM(debug, "i");
+MODULE_PARM(dma, "i");
+MODULE_PARM(hashexpire, "i");
+MODULE_PARM(spantree, "i");
+MODULE_PARM(ipaddr, "1-4i");
+MODULE_PARM(iptrap, "1-4i");
+MODULE_PARM(ipxnet, "i");
+MODULE_PARM(nicmode, "i");
 
 int
 init_module(void)
@@ -1549,13 +1558,13 @@ init_module(void)
 			dgrs_iptrap[i] = iptrap[i];
 	if (ipxnet != -1)
 		dgrs_ipxnet = htonl( ipxnet );
-		
+
 	if (dgrs_debug)
 	{
 		printk("dgrs: SW=%s FW=Build %d %s\n",
 			version, dgrs_firmnum, dgrs_firmdate);
 	}
-	
+
 	/*
 	 *	Find and configure all the cards
 	 */

@@ -42,6 +42,7 @@
 #include <asm/system.h>
 #include <asm/uaccess.h>
 #include <asm/pgtable.h>
+#include <asm/mmu_context.h>
 
 #include <linux/config.h>
 #ifdef CONFIG_KERNELD
@@ -373,6 +374,7 @@ static void exec_mmap(void)
 			return;
 		}
 		*mm = *current->mm;
+		init_new_context(mm);
 		mm->def_flags = 0;	/* should future lockings be kept? */
 		mm->count = 1;
 		mm->mmap = NULL;

@@ -1,4 +1,4 @@
-/* $Id: rtrap.S,v 1.40 1996/12/10 06:06:18 davem Exp $
+/* $Id: rtrap.S,v 1.41 1996/12/28 18:14:21 davem Exp $
  * rtrap.S: Return from Sparc trap low-level code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -70,7 +70,6 @@ ret_trap_entry:
 	 sethi	%hi(C_LABEL(need_resched)), %twin_tmp1
 
 	wr	%t_psr, 0x0, %psr
-	WRITE_PAUSE
 	b	ret_trap_kernel
 	 nop
 
@@ -179,7 +178,6 @@ ret_trap_unaligned_pc:
 	ld	[%sp + REGWIN_SZ + PT_PSR], %o3
 
 	wr	%t_wim, 0x0, %wim		! or else...
-	WRITE_PAUSE
 
 	wr	%t_psr, PSR_ET, %psr
 	WRITE_PAUSE
@@ -206,7 +204,6 @@ rtrap_patch4:	srl	%g2, 7,  %g2
 rtrap_patch5:	and	%g1, 0xff, %g1
 
 	wr	%g1, 0x0, %wim
-	WRITE_PAUSE
 
 	/* Grrr, make sure we load from the right %sp... */
 	LOAD_PT_ALL(sp, t_psr, t_pc, t_npc, g1)
@@ -232,7 +229,6 @@ rtrap_patch5:	and	%g1, 0xff, %g1
 
 ret_trap_user_stack_is_bolixed:
 	wr	%t_wim, 0x0, %wim
-	WRITE_PAUSE
 
 	wr	%t_psr, PSR_ET, %psr
 	WRITE_PAUSE

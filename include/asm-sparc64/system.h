@@ -1,6 +1,9 @@
-/* $Id: system.h,v 1.2 1996/12/02 00:01:07 davem Exp $ */
+/* $Id: system.h,v 1.4 1996/12/28 18:39:56 davem Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
+
+#include <asm/ptrace.h>
+#include <asm/processor.h>
 
 #define setipl(__new_ipl) \
 	__asm__ __volatile__("wrpr	%0, %%pil"  : : "r" (__new_ipl) : "memory")
@@ -42,6 +45,28 @@
 #define nop() 		__asm__ __volatile__ ("nop")
 
 #define membar(type)	__asm__ __volatile__ ("membar " type : : : "memory");
+
+#define flushi(addr)	__asm__ __volatile__ ("flush %0" : : "r" (addr))
+
+#define flushw_all()	__asm__ __volatile__("flushw")
+
+#ifndef __ASSEMBLY__
+
+extern __inline__ void flushw_user(void)
+{
+	__asm__ __volatile__("
+		rdpr		%%otherwin, %%g1
+1:
+		rdpr		%%otherwin, %%g2
+		brnz,pn		%%g2, 1b
+		 save		%%sp, %0, %%sp
+1:
+		subcc		%%g1, 1, %%g1
+		bne,pn		%%xcc, 1b
+		 restore	%%g0, %%g0, %%g0
+	" : : "i" (-REGWIN_SZ)
+	  : "g1", "g2");
+}
 
 /* Unlike the hybrid v7/v8 kernel, we can assume swap exists under V9. */
 extern __inline__ unsigned long xchg_u32(__volatile__ unsigned int *m, unsigned int val)
@@ -86,5 +111,7 @@ static __inline__ unsigned long __xchg(unsigned long x, __volatile__ void * ptr,
 	__xchg_called_with_bad_pointer();
 	return x;
 }
+
+#endif /* !(__ASSEMBLY__) */
 
 #endif /* !(__SPARC64_SYSTEM_H) */

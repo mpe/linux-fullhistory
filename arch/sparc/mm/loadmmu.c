@@ -1,4 +1,4 @@
-/* $Id: loadmmu.c,v 1.43 1996/12/18 06:43:24 tridge Exp $
+/* $Id: loadmmu.c,v 1.45 1996/12/30 06:16:28 davem Exp $
  * loadmmu.c:  This code loads up all the mm function pointers once the
  *             machine type has been determined.  It also sets the static
  *             mmu values such as PAGE_NONE, etc.
@@ -15,6 +15,7 @@
 #include <asm/page.h>
 #include <asm/pgtable.h>
 #include <asm/a.out.h>
+#include <asm/mmu_context.h>
 
 unsigned long page_offset = 0xf0000000;
 unsigned long stack_top = 0xf0000000 - PAGE_SIZE;
@@ -30,8 +31,8 @@ void (*free_task_struct)(struct task_struct *tsk);
 
 void (*quick_kernel_fault)(unsigned long);
 
-void (*mmu_exit_hook)(void);
-void (*mmu_flush_hook)(void);
+void (*init_new_context)(struct mm_struct *mm);
+void (*destroy_context)(struct mm_struct *mm);
 
 /* translate between physical and virtual addresses */
 unsigned long (*mmu_v2p)(unsigned long);
@@ -135,7 +136,6 @@ pmd_t * (*pmd_alloc)(pgd_t *, unsigned long);
 void (*pgd_free)(pgd_t *);
 
 pgd_t * (*pgd_alloc)(void);
-void (*pgd_flush)(pgd_t *);
 
 int (*pte_write)(pte_t);
 int (*pte_dirty)(pte_t);

@@ -1,4 +1,4 @@
-/* $Id: openpromfs.c,v 1.8 1996/12/02 16:04:42 ecd Exp $
+/* $Id: openpromfs.c,v 1.9 1996/12/23 05:54:21 davem Exp $
  * openpromfs.c: /proc/openprom handling routines
  *
  * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)

@@ -85,53 +85,58 @@ struct termio {
 /*
  * Translate a "termio" structure into a "termios". Ugh.
  */
-extern inline void trans_from_termio(struct termio * termio,
-	struct termios * termios)
-{
-#define SET_LOW_BITS(x,y)	((x) = (0xffff0000 & (x)) | (y))
-	SET_LOW_BITS(termios->c_iflag, termio->c_iflag);
-	SET_LOW_BITS(termios->c_oflag, termio->c_oflag);
-	SET_LOW_BITS(termios->c_cflag, termio->c_cflag);
-	SET_LOW_BITS(termios->c_lflag, termio->c_lflag);
-#undef SET_LOW_BITS
-	termios->c_cc[VINTR] = termio->c_cc[_VINTR];
-	termios->c_cc[VQUIT] = termio->c_cc[_VQUIT];
-	termios->c_cc[VERASE]= termio->c_cc[_VERASE];
-	termios->c_cc[VKILL] = termio->c_cc[_VKILL];
-	termios->c_cc[VEOF]  = termio->c_cc[_VEOF];
-	termios->c_cc[VMIN]  = termio->c_cc[_VMIN];
-	termios->c_cc[VEOL]  = termio->c_cc[_VEOL];
-	termios->c_cc[VTIME] = termio->c_cc[_VTIME];
-	termios->c_cc[VEOL2] = termio->c_cc[_VEOL2];
-	termios->c_cc[VSWTC] = termio->c_cc[_VSWTC];
+#define SET_LOW_TERMIOS_BITS(termios, termio, x) { \
+	unsigned short __tmp; \
+	get_user(__tmp,&(termio)->x); \
+	*(unsigned short *) &(termios)->x = __tmp; \
 }
+
+#define user_termio_to_kernel_termios(termios, termio) \
+do { \
+	SET_LOW_TERMIOS_BITS(termios, termio, c_iflag); \
+	SET_LOW_TERMIOS_BITS(termios, termio, c_oflag); \
+	SET_LOW_TERMIOS_BITS(termios, termio, c_cflag); \
+	SET_LOW_TERMIOS_BITS(termios, termio, c_lflag); \
+	get_user((termios)->c_cc[VINTR], &(termio)->c_cc[_VINTR]); \
+	get_user((termios)->c_cc[VQUIT], &(termio)->c_cc[_VQUIT]); \
+	get_user((termios)->c_cc[VERASE], &(termio)->c_cc[_VERASE]); \
+	get_user((termios)->c_cc[VKILL], &(termio)->c_cc[_VKILL]); \
+	get_user((termios)->c_cc[VEOF], &(termio)->c_cc[_VEOF]); \
+	get_user((termios)->c_cc[VMIN], &(termio)->c_cc[_VMIN]); \
+	get_user((termios)->c_cc[VEOL], &(termio)->c_cc[_VEOL]); \
+	get_user((termios)->c_cc[VTIME], &(termio)->c_cc[_VTIME]); \
+	get_user((termios)->c_cc[VEOL2], &(termio)->c_cc[_VEOL2]); \
+	get_user((termios)->c_cc[VSWTC], &(termio)->c_cc[_VSWTC]); \
+} while(0)
 
 /*
  * Translate a "termios" structure into a "termio". Ugh.
  *
  * Note the "fun" _VMIN overloading.
  */
-extern inline void trans_to_termio(struct termios * termios,
-	struct termio * termio)
-{
-	termio->c_iflag = termios->c_iflag;
-	termio->c_oflag = termios->c_oflag;
-	termio->c_cflag = termios->c_cflag;
-	termio->c_lflag = termios->c_lflag;
-	termio->c_line	= termios->c_line;
-	termio->c_cc[_VINTR] = termios->c_cc[VINTR];
-	termio->c_cc[_VQUIT] = termios->c_cc[VQUIT];
-	termio->c_cc[_VERASE]= termios->c_cc[VERASE];
-	termio->c_cc[_VKILL] = termios->c_cc[VKILL];
-	termio->c_cc[_VEOF]  = termios->c_cc[VEOF];
-	termio->c_cc[_VEOL]  = termios->c_cc[VEOL];
-	termio->c_cc[_VEOL2] = termios->c_cc[VEOL2];
-	termio->c_cc[_VSWTC] = termios->c_cc[VSWTC];
-	if (!(termios->c_lflag & ICANON)) {
-		termio->c_cc[_VMIN]  = termios->c_cc[VMIN];
-		termio->c_cc[_VTIME] = termios->c_cc[VTIME];
-	}
-}
+#define kernel_termios_to_user_termio(termio, termios) \
+do { \
+	put_user((termios)->c_iflag, &(termio)->c_iflag); \
+	put_user((termios)->c_oflag, &(termio)->c_oflag); \
+	put_user((termios)->c_cflag, &(termio)->c_cflag); \
+	put_user((termios)->c_lflag, &(termio)->c_lflag); \
+	put_user((termios)->c_line, &(termio)->c_line); \
+	put_user((termios)->c_cc[VINTR], &(termio)->c_cc[_VINTR]); \
+	put_user((termios)->c_cc[VQUIT], &(termio)->c_cc[_VQUIT]); \
+	put_user((termios)->c_cc[VERASE], &(termio)->c_cc[_VERASE]); \
+	put_user((termios)->c_cc[VKILL], &(termio)->c_cc[_VKILL]); \
+	put_user((termios)->c_cc[VEOF], &(termio)->c_cc[_VEOF]); \
+	put_user((termios)->c_cc[VEOL], &(termio)->c_cc[_VEOL]); \
+	put_user((termios)->c_cc[VEOL2], &(termio)->c_cc[_VEOL2]); \
+	put_user((termios)->c_cc[VSWTC], &(termio)->c_cc[_VSWTC]); \
+	if (!((termios)->c_lflag & ICANON)) { \
+		put_user((termios)->c_cc[VMIN], &(termio)->c_cc[_VMIN]); \
+		put_user((termios)->c_cc[VTIME], &(termio)->c_cc[_VTIME]); \
+	} \
+} while(0)
+
+#define user_termios_to_kernel_termios(k, u) copy_from_user(k, u, sizeof(struct termios))
+#define kernel_termios_to_user_termios(u, k) copy_to_user(u, k, sizeof(struct termios))
 
 #endif	/* __KERNEL__ */
 

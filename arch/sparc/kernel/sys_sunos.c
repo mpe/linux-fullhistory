@@ -1,4 +1,4 @@
-/* $Id: sys_sunos.c,v 1.69 1996/12/21 04:50:38 tridge Exp $
+/* $Id: sys_sunos.c,v 1.71 1996/12/29 20:46:02 davem Exp $
  * sys_sunos.c: SunOS specific syscall compatibility support.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -26,7 +26,6 @@
  * to do the inverse mapping.
  */
 
-#include <linux/config.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/types.h>
@@ -1155,49 +1154,52 @@ asmlinkage int sunos_accept(int fd, struct sockaddr *sa, int *addrlen)
 
 #define SUNOS_SV_INTERRUPT 2
 
-extern asmlinkage int sys_sigaction(int, const struct sigaction *, struct sigaction *);
+extern void check_pending(int signum);
 
 asmlinkage int sunos_sigaction(int signum, const struct sigaction *action,
 	struct sigaction *oldaction)
 {
-	struct sigaction tmp_sa, *tmp_sap;
+	struct sigaction new_sa, *p;
 	const  int sigaction_size = sizeof (struct sigaction) - sizeof (void *);
 	int err;
-	int old_fs = USER_DS;
 
 	current->personality |= PER_BSD;
 
+	if (signum<1 || signum>32)
+		return -EINVAL;
+
+	p = signum - 1 + current->sig->action;
 	if (action) {
-		if(copy_from_user(&tmp_sa, action, sigaction_size))
+		if(copy_from_user(&new_sa, action, sigaction_size))
 			return -EFAULT;
-		if (oldaction) {
-			err = verify_area(VERIFY_WRITE,oldaction,sigaction_size);
+		if (signum==SIGKILL || signum==SIGSTOP)
+			return -EINVAL;
+		memset(&new_sa, 0, sizeof(struct sigaction));
+		if(copy_from_user(&new_sa, action, sigaction_size))
+			return -EFAULT;	
+		if (new_sa.sa_handler != SIG_DFL && new_sa.sa_handler != SIG_IGN) {
+			err = verify_area(VERIFY_READ, new_sa.sa_handler, 1);
 			if (err)
 				return err;
 		}
-			
-		if (tmp_sa.sa_flags & SUNOS_SV_INTERRUPT)
-			tmp_sa.sa_flags &= ~SUNOS_SV_INTERRUPT;
-		else
-			tmp_sa.sa_flags |= SA_RESTART;
-		old_fs = get_fs ();
-		set_fs (get_ds ());
-		tmp_sap = &tmp_sa;
-	} else {
-		tmp_sap = (struct sigaction *) action;
+		new_sa.sa_flags ^= SUNOS_SV_INTERRUPT;
 	}
 
-	err = sys_sigaction (signum, tmp_sap, oldaction);
-
-	if (err == 0 && oldaction){
+	if (oldaction) {
+		if (copy_to_user(oldaction, p, sigaction_size))
+			return -EFAULT;	
 		if (oldaction->sa_flags & SA_RESTART)
 			oldaction->sa_flags &= ~SA_RESTART;
 		else
 			oldaction->sa_flags |= SUNOS_SV_INTERRUPT;
 	}
-	if (action)
-		set_fs (old_fs);
-	return err;
+
+	if (action) {
+		*p = new_sa;
+		check_pending(signum);
+	}
+
+	return 0;
 }
 
 

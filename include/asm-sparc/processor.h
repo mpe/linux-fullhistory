@@ -1,4 +1,4 @@
-/* $Id: processor.h,v 1.52 1996/12/03 08:44:56 jj Exp $
+/* $Id: processor.h,v 1.54 1996/12/24 09:19:49 davem Exp $
  * include/asm-sparc/processor.h
  *
  * Copyright (C) 1994 David S. Miller (davem@caip.rutgers.edu)
@@ -149,9 +149,11 @@ extern __inline__ void start_thread(struct pt_regs * regs, unsigned long pc,
 			     "i" ((const unsigned long)(&((struct pt_regs *)0)->u_regs[0])));
 }
 
+/* Free all resources held by a thread. */
 #define release_thread(tsk)		do { } while(0)
 
 #ifdef __KERNEL__
+/* Allocation and freeing of basic task resources. */
 extern unsigned long (*alloc_kernel_stack)(struct task_struct *tsk);
 extern void (*free_kernel_stack)(unsigned long stack);
 extern struct task_struct *(*alloc_task_struct)(void);

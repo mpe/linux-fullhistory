@@ -36,7 +36,7 @@ static const char *version =
  *
  *	You should have received a copy of the GNU General Public License
  *	along with this program; if not, write to the Free Software
- *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
+ *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  **************************************************************/
 /* Add another "; SLOW_DOWN_IO" here if your adapter won't work OK: */
@@ -89,6 +89,7 @@ static const char *version =
 #define PRINTK(x) /**/
 #endif
 unsigned int de600_debug = DE600_DEBUG;
+MODULE_PARM(de600_debug, "i");
 
 #include <linux/module.h>
 
@@ -468,9 +469,9 @@ de600_start_xmit(struct sk_buff *skb, struct device *dev)
 		dev->tbusy = !free_tx_pages;
 		select_prn();
 	}
-	
+
 	sti(); /* interrupts back on */
-	
+
 #ifdef FAKE_SMALL_MAX
 	/* This will "patch" the socket TCP proto at an early moment */
 	if (skb->sk && (skb->sk->protocol == IPPROTO_TCP) &&
@@ -613,7 +614,7 @@ de600_rx_intr(struct device *dev)
 
 	skb->dev = dev;
 	skb_reserve(skb,2);	/* Align */
-	
+
 	/* 'skb->data' points to the start of sk_buff data area. */
 	buffer = skb_put(skb,size);
 
@@ -621,11 +622,11 @@ de600_rx_intr(struct device *dev)
 	de600_setup_address(read_from, RW_ADDR);
 	for (i = size; i > 0; --i, ++buffer)
 		*buffer = de600_read_byte(READ_DATA, dev);
-	
+
 	((struct netstats *)(dev->priv))->rx_packets++; /* count all receives */
 
 	skb->protocol=eth_type_trans(skb,dev);
-	
+
 	netif_rx(skb);
 	/*
 	 * If any worth-while packets have been received, netif_rx()
@@ -707,9 +708,9 @@ de600_probe(struct device *dev)
 	dev->hard_start_xmit = &de600_start_xmit;
 
 	ether_setup(dev);
-	
+
 	dev->flags&=~IFF_MULTICAST;
-	
+
 	select_prn();
 	return 0;
 }

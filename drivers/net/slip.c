@@ -90,7 +90,9 @@ typedef struct slip_ctrl {
 	struct device	dev;		/* the device			*/
 } slip_ctrl_t;
 static slip_ctrl_t	**slip_ctrls = NULL;
+
 int slip_maxdev = SL_NRUNIT;		/* Can be overridden with insmod! */
+MODULE_PARM(slip_maxdev, "i");
 
 static struct tty_ldisc	sl_ldisc;
 
@@ -291,7 +293,7 @@ static void sl_changedmtu(struct slip *sl)
 		}
 	}
 	sl->mtu      = dev->mtu;
-	
+
 	sl->buffsize = len;
 
 	restore_flags(flags);
@@ -571,11 +573,11 @@ sl_open(struct device *dev)
 	sl->xbits    = 0;
 #endif
 	sl->flags   &= (1 << SLF_INUSE);      /* Clear ESCAPE & ERROR flags */
-#ifdef CONFIG_SLIP_SMART	
+#ifdef CONFIG_SLIP_SMART
 	sl->keepalive=0;		/* no keepalive by default = VSV */
 	init_timer(&sl->keepalive_timer);	/* initialize timer_list struct */
 	sl->keepalive_timer.data=(unsigned long)sl;
-	sl->keepalive_timer.function=sl_keepalive;	
+	sl->keepalive_timer.function=sl_keepalive;
 	sl->outfill=0;			/* & outfill too */
 	init_timer(&sl->outfill_timer);
 	sl->outfill_timer.data=(unsigned long)sl;
@@ -617,7 +619,7 @@ sl_close(struct device *dev)
 	sl->tty->flags &= ~(1 << TTY_DO_WRITE_WAKEUP);
 	dev->tbusy = 1;
 	dev->start = 0;
-	
+
 /*	dev->flags &= ~IFF_UP; */
 
 	return 0;
@@ -709,7 +711,7 @@ slip_open(struct tty_struct *tty)
 	if ((err = sl_open(sl->dev)))  {
 		return err;
 	}
-	
+
 	MOD_INC_USE_COUNT;
 
 	/* Done.  We have linked the TTY line to a channel. */
@@ -734,7 +736,7 @@ slip_close(struct tty_struct *tty)
 	}
 
 	(void) dev_close(sl->dev);
-	
+
 	tty->disc_data = 0;
 	sl->tty = NULL;
 	/* VSV = very important to remove timers */
@@ -1016,7 +1018,7 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 		}
 		get_user(tmp,(int *)arg);
                 if (tmp > 255) /* max for unchar */
-			return -EINVAL; 
+			return -EINVAL;
 		if ((sl->keepalive = (unchar) tmp) != 0) {
 			sl->keepalive_timer.expires=jiffies+sl->keepalive*HZ;
 			add_timer(&sl->keepalive_timer);
@@ -1057,7 +1059,7 @@ slip_ioctl(struct tty_struct *tty, void *file, int cmd, void *arg)
 		put_user(sl->outfill, (int *)arg);
 		return 0;
 	/* VSV changes end */
-#endif	
+#endif
 
 	/* Allow stty to read, but not set, the serial port */
 	case TCGETS:
@@ -1099,15 +1101,15 @@ int slip_init_ctrl_dev(struct device *dummy)
 #endif
 #ifdef CONFIG_SLIP_SMART
 	printk(KERN_INFO "SLIP linefill/keepalive option.\n");
-#endif	
+#endif
 
 	slip_ctrls = (slip_ctrl_t **) kmalloc(sizeof(void*)*slip_maxdev, GFP_KERNEL);
-	if (slip_ctrls == NULL) 
+	if (slip_ctrls == NULL)
 	{
 		printk("SLIP: Can't allocate slip_ctrls[] array!  Uaargh! (-> No SLIP available)\n");
 		return -ENOMEM;
 	}
-	
+
 	/* Clear the pointer array, we allocate devices when we need them */
 	memset(slip_ctrls, 0, sizeof(void*)*slip_maxdev); /* Pointers */
 
@@ -1152,11 +1154,11 @@ slip_init(struct device *dev)
 	  return -ENODEV;
 
 	/* Set up the "SLIP Control Block". (And clear statistics) */
-	
+
 	memset(sl, 0, sizeof (struct slip));
 	sl->magic  = SLIP_MAGIC;
 	sl->dev	   = dev;
-	
+
 	/* Finish setting up the DEVICE info. */
 	dev->mtu		= SL_MTU;
 	dev->hard_start_xmit	= sl_xmit;
@@ -1195,16 +1197,16 @@ cleanup_module(void)
 {
 	int i;
 
-	if (slip_ctrls != NULL) 
+	if (slip_ctrls != NULL)
 	{
-		for (i = 0; i < slip_maxdev; i++)  
+		for (i = 0; i < slip_maxdev; i++)
 		{
 			if (slip_ctrls[i])
 			{
 				/*
 				 * VSV = if dev->start==0, then device
 				 * unregistered while close proc.
-				 */ 
+				 */
 				if (slip_ctrls[i]->dev.start)
 					unregister_netdev(&(slip_ctrls[i]->dev));
 
@@ -1215,7 +1217,7 @@ cleanup_module(void)
 		kfree(slip_ctrls);
 		slip_ctrls = NULL;
 	}
-	if ((i = tty_register_ldisc(N_SLIP, NULL)))  
+	if ((i = tty_register_ldisc(N_SLIP, NULL)))
 	{
 		printk("SLIP: can't unregister line discipline (err = %d)\n", i);
 	}
@@ -1227,7 +1229,7 @@ cleanup_module(void)
  * This is start of the code for multislip style line checking
  * added by Stanislav Voronyi. All changes before marked VSV
  */
- 
+
 static void sl_outfill(unsigned long sls)
 {
 	struct slip *sl=(struct slip *)sls;
@@ -1247,7 +1249,7 @@ static void sl_outfill(unsigned long sls)
 #endif
 			/* put END into tty queue. Is it right ??? */
 			if (!test_bit(0, (void *) &sl->dev->tbusy))
-			{ 
+			{
 				/* if device busy no outfill */
 				sl->tty->driver.write(sl->tty, 0, &s, 1);
 			}

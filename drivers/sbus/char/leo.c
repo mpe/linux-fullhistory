@@ -1,4 +1,4 @@
-/* $Id: leo.c,v 1.9 1996/11/27 20:09:59 jj Exp $
+/* $Id: leo.c,v 1.10 1996/12/23 10:16:09 ecd Exp $
  * leo.c: SUNW,leo 24/8bit frame buffer driver
  *
  * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -7,6 +7,7 @@
 #include <linux/kd.h>
 #include <linux/tty.h>
 #include <linux/malloc.h>
+#include <linux/proc_fs.h>
 
 #include <asm/sbus.h>
 #include <asm/io.h>

@@ -264,7 +264,7 @@ int fmv18x_probe1(struct device *dev, short ioaddr)
 	dev->set_multicast_list = &set_multicast_list;
 
 	/* Fill in the fields of 'dev' with ethernet-generic values. */
-	   
+
 	ether_setup(dev);
 	return 0;
 }
@@ -374,7 +374,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 
 		/* Disable both interrupts. */
 		outw(0x0000, ioaddr + TX_INTR);
-		
+
 		outw(length, ioaddr + DATAPORT);
 		outsw(ioaddr + DATAPORT, buf, (length + 1) >> 1);
 
@@ -543,7 +543,7 @@ net_rx(struct device *dev)
 		}
 
 		if (net_debug > 5 && i > 0)
-			printk("%s: Exint Rx packet with mode %02x after %d ticks.\n", 
+			printk("%s: Exint Rx packet with mode %02x after %d ticks.\n",
 				   dev->name, inb(ioaddr + RX_MODE), i);
 	}
 
@@ -600,17 +600,17 @@ static void
 set_multicast_list(struct device *dev)
 {
 	short ioaddr = dev->base_addr;
-	if (dev->mc_count || dev->flags&(IFF_PROMISC|IFF_ALLMULTI)) 
+	if (dev->mc_count || dev->flags&(IFF_PROMISC|IFF_ALLMULTI))
 	{
 		/*
 		 *	We must make the kernel realise we had to move
 		 *	into promisc mode or we start all out war on
 		 *	the cable. - AC
 		 */
-		dev->flags|=IFF_PROMISC;		
-	
+		dev->flags|=IFF_PROMISC;
+
 		outb(3, ioaddr + RX_MODE);	/* Enable promiscuous mode */
-	} 
+	}
 	else
 		outb(2, ioaddr + RX_MODE);	/* Disable promiscuous, use normal mode */
 }
@@ -625,6 +625,9 @@ static struct device dev_fmv18x = {
 
 static int io = 0x220;
 static int irq = 0;
+
+MODULE_PARM(io, "i");
+MODULE_PARM(irq, "i");
 
 int init_module(void)
 {

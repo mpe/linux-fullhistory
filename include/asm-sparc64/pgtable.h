@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.1 1996/12/02 00:01:17 davem Exp $
+/* $Id: pgtable.h,v 1.8 1996/12/28 18:39:52 davem Exp $
  * pgtable.h: SpitFire page table operations.
  *
  * Copyright 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -11,9 +11,12 @@
  * the SpitFire page tables.
  */
 
+#include <asm/spitfire.h>
 #include <asm/asi.h>
 #include <asm/mmu_context.h>
 #include <asm/system.h>
+
+#ifndef __ASSEMBLY__
 
 /* Certain architectures need to do special things when pte's
  * within a page table are directly modified.  Thus, the following
@@ -41,6 +44,8 @@
 
 #define VMALLOC_START		0xFFFFFE0000000000UL
 #define VMALLOC_VMADDR(x)	((unsigned long)(x))
+
+#endif /* !(__ASSEMBLY__) */
 
 /* SpitFire TTE bits. */
 #define _PAGE_VALID	0x8000000000000000UL	/* Valid TTE                          */
@@ -77,7 +82,6 @@
 
 #define _PFN_MASK	_PAGE_PADDR
 
-#define _PAGE_TABLE	(_PAGE_PRESENT | __DIRTY_BITS | __ACCESS_BITS)
 #define _PAGE_CHG_MASK	(_PFN_MASK | _PAGE_MODIFIED | _PAGE_ACCESSED)
 
 #define PAGE_NONE	__pgprot(_PAGE_PRESENT | _PAGE_CACHE)
@@ -106,29 +110,18 @@
 #define __S110	PAGE_SHARED
 #define __S111	PAGE_SHARED
 
+#ifndef __ASSEMBLY__
+
 extern pte_t __bad_page(void);
 extern pmd_t *__bad_pagetable(void);
 extern unsigned long __zero_page(void);
 
 #define BAD_PAGETABLE	__bad_pagetable()
 #define BAD_PAGE	__bad_page()
-#define ZERO_PAGE	__zero_page()
+
+#define ZERO_PAGE	PAGE_OFFSET
 
 /* Cache and TLB flush operations. */
-
-extern __inline__ void spitfire_put_dcache_tag(unsigned long addr, unsigned long tag)
-{
-	__asm__ __volatile__("stxa	%0, [%1] %2"
-			     : /* No outputs */
-			     : "r" (tag), "r" (addr), "i" (ASI_DCACHE_TAG));
-}
-
-extern __inline__ void spitfire_put_icache_tag(unsigned long addr, unsigned long tag)
-{
-	__asm__ __volatile__("stxa	%0, [%1] %2"
-			     : /* No outputs */
-			     : "r" (tag), "r" (addr), "i" (ASI_IC_TAG));
-}
 
 /* This is a bit tricky to do most efficiently.  The I-CACHE on the
  * SpitFire will snoop stores from _other_ processors and changes done
@@ -162,9 +155,9 @@ extern __inline__ void spitfire_flush_icache_page(unsigned long page)
 	flush		%0 + 0x30
 	flush		%0 + 0x38
 	subcc		%1, 0x40, %1
-	bge,pt		%icc, 1b
+	bge,pt		%%icc, 1b
 	 add		%2, %1, %0
-"	: "=&r" (page), "=&r" (temp),
+"	: "=&r" (page), "=&r" (temp)
 	: "r" (page), "0" (page + PAGE_SIZE - 0x40), "1" (PAGE_SIZE - 0x40));
 }
 
@@ -178,6 +171,9 @@ extern __inline__ void flush_cache_all(void)
 		spitfire_put_icache_tag(addr, 0x0UL);
 		membar("#Sync");
 	}
+
+	/* Kill the pipeline. */
+	flushi(PAGE_OFFSET);
 }
 
 extern __inline__ void flush_cache_mm(struct mm_struct *mm)
@@ -192,6 +188,9 @@ extern __inline__ void flush_cache_mm(struct mm_struct *mm)
 			membar("#Sync");
 		}
 	}
+
+	/* Kill the pipeline. */
+	flushi(PAGE_OFFSET);
 }
 
 extern __inline__ void flush_cache_range(struct mm_struct *mm, unsigned long start,
@@ -205,6 +204,9 @@ extern __inline__ void flush_cache_range(struct mm_struct *mm, unsigned long sta
 			spitfire_put_icache_tag(addr, 0x0UL);
 			membar("#Sync");
 		}
+
+		/* Kill the pipeline. */
+		flushi(PAGE_OFFSET);
 	}
 }
 
@@ -234,12 +236,12 @@ extern __inline__ void flush_tlb_all(void)
 	for(entry = 0; entry < 64; entry++) {
 		unsigned long dtag, itag;
 
-		dtag = spitfire_get_dtlb_tag(entry);
-		itag = spitfire_get_itlb_tag(entry);
+		dtag = spitfire_get_dtlb_data(entry);
+		itag = spitfire_get_itlb_data(entry);
 		if(!(dtag & _PAGE_L))
-			spitfire_put_dtlb_tag(entry, 0x0UL);
+			spitfire_put_dtlb_data(entry, 0x0UL);
 		if(!(itag & _PAGE_L))
-			spitfire_put_itlb_tag(entry, 0x0UL);
+			spitfire_put_itlb_data(entry, 0x0UL);
 	}
 }
 
@@ -271,6 +273,7 @@ extern __inline__ void flush_tlb_page(struct vm_area_struct *vma, unsigned long 
 	struct mm_struct *mm = vma->vm_mm;
 
 	if(mm->context != NO_CONTEXT) {
+		page &= PAGE_MASK;
 		spitfire_set_secondary_context(mm->context);
 		if(vma->vm_flags & VM_EXEC)
 			spitfire_flush_itlb_secondary_page(page);
@@ -288,32 +291,32 @@ extern inline pte_t pte_modify(pte_t pte, pgprot_t newprot)
 { pte_val(pte) = (pte_val(pte) & _PAGE_CHG_MASK) | pgprot_val(newprot); return pte; }
 
 extern inline void pmd_set(pmd_t *pmdp, pte_t *ptep)
-{ pmd_val(*pmdp) = _PAGE_TABLE | ((unsigned long) ptep); }
+{ pmd_val(*pmdp) = ((unsigned long) ptep) - PAGE_OFFSET; }
 
 extern inline void pgd_set(pgd_t *pgdp, pmd_t *pmdp)
-{ pgd_val(*pgdp) = _PAGE_TABLE | ((unsigned long) pmdp); }
+{ pgd_val(*pgdp) = ((unsigned long) pmdp) - PAGE_OFFSET; }
 
 extern inline unsigned long pte_page(pte_t pte)
 { return PAGE_OFFSET + (pte_val(pte) & _PFN_MASK); }
 
 extern inline unsigned long pmd_page(pmd_t pmd)
-{ return (pmd_val(pmd) & PAGE_MASK); }
+{ return (pmd_val(pmd) + PAGE_OFFSET); }
 
 extern inline unsigned long pgd_page(pgd_t pgd)
-{ return (pgd_val(pgd) & PAGE_MASK); }
+{ return (pgd_val(pgd) + PAGE_OFFSET); }
 
 extern inline int pte_none(pte_t pte) 		{ return !pte_val(pte); }
 extern inline int pte_present(pte_t pte)	{ return pte_val(pte) & _PAGE_PRESENT; }
-extern inline void pte_cleat(pte_t *pte)	{ pte_val(*pte) = 0; }
+extern inline void pte_clear(pte_t *pte)	{ pte_val(*pte) = 0; }
 
 extern inline int pmd_none(pmd_t pmd)		{ return !pmd_val(pmd); }
-extern inline int pmd_bad(pmd_t pmd)		{ return (pmd_val(pmd) & ~PAGE_MASK) != _PAGE_TABLE; }
-extern inline int pmd_present(pmd_t pmd)	{ return pmd_val(pmd) & _PAGE_PRESENT; }
+extern inline int pmd_bad(pmd_t pmd)		{ return (pmd_val(pmd) & ~PAGE_MASK); }
+extern inline int pmd_present(pmd_t pmd)	{ return pmd_val(pmd); }
 extern inline void pmd_clear(pmd_t *pmdp)	{ pmd_val(*pmdp) = 0; }
 
 extern inline int pgd_none(pgd_t pgd)		{ return !pgd_val(pgd); }
-extern inline int pgd_bad(pgd_t pgd)		{ return (pgd_val(pgd) & ~PAGE_MASK) != _PAGE_TABLE; }
-extern inline int pgd_present(pgd_t pgd)	{ return pgd_val(pgd) & _PAGE_PRESENT; }
+extern inline int pgd_bad(pgd_t pgd)		{ return (pgd_val(pgd) & ~PAGE_MASK); }
+extern inline int pgd_present(pgd_t pgd)	{ return pgd_val(pgd); }
 extern inline void pgd_clear(pgd_t *pgdp)	{ pgd_val(*pgdp) = 0; }
 
 /* The following only work if pte_present() is true.
@@ -331,7 +334,7 @@ extern inline pte_t pte_rdprotect(pte_t pte)
 { return __pte(pte_val(pte) & ~(_PAGE_READ|_PAGE_R)); }
 
 extern inline pte_t pte_mkclean(pte_t pte)
-{ return __pte(pte_val(pte) & ~(_PAGE_MODIFIED | _PAGE_W); }
+{ return __pte(pte_val(pte) & ~(_PAGE_MODIFIED | _PAGE_W)); }
 
 extern inline pte_t pte_mkold(pte_t pte)
 { return __pte(pte_val(pte) & ~(_PAGE_ACCESSED | _PAGE_R)); }
@@ -361,11 +364,29 @@ extern inline pte_t pte_mkyoung(pte_t pte)
 }
 
 extern inline void SET_PAGE_DIR(struct task_struct *tsk, pgd_t *pgdir)
-{ /* XXX */ }
+{
+	register unsigned long paddr asm("%o5");
+
+	paddr = ((unsigned long) pgdir) - PAGE_OFFSET;
+
+	if(tsk->mm == current->mm) {
+		__asm__ __volatile__("
+			rdpr		%%pstate, %%g1
+			or		%%g1, %1, %%g2
+			wrpr		%%g2, %2, %%pstate
+			mov		%0, %%g7
+			wrpr		%%g1, 0x0, %%pstate
+		" : : "r" (paddr), "i" (PSTATE_MG), "i" (PSTATE_IE)
+		  : "g1", "g2");
+	}
+}
 
 /* to find an entry in a page-table-directory. */
 extern inline pgd_t *pgd_offset(struct mm_struct *mm, unsigned long address)
 { return mm->pgd + ((address >> PGDIR_SHIFT) & (PTRS_PER_PAGE - 1)); }
+
+/* to find an entry in a kernel page-table-directory */
+#define pgd_offset_k(address) pgd_offset(&init_mm, address)
 
 /* Find an entry in the second-level page table.. */
 extern inline pmd_t *pmd_offset(pgd_t *dir, unsigned long address)
@@ -489,13 +510,64 @@ extern inline void pgd_free(pgd_t * pgd)
 extern inline pgd_t * pgd_alloc(void)
 { return (pgd_t *) get_free_page(GFP_KERNEL); }
 
-#define pgd_flush(pgd)	do { } while (0)
-
-extern pgd_t swapper_pg_dir[1024];	/* XXX */
+extern pgd_t swapper_pg_dir[1024];
 
 extern inline void update_mmu_cache(struct vm_area_struct * vma,
 	unsigned long address, pte_t pte)
-{ /* XXX */ }
+{
+	/* Find and fix bad virutal cache aliases. */
+	if((vma->vm_flags & (VM_WRITE|VM_SHARED)) == (VM_WRITE|VM_SHARED)) {
+		struct vm_area_struct *vmaring;
+		struct inode *inode;
+		unsigned long vaddr, offset, start;
+		pgd_t *pgdp;
+		pmd_t *pmdp;
+		pte_t *ptep;
+		int alias_found = 0;
+
+		inode = vma->vm_inode;
+		if(!inode)
+			return;
+
+		offset = (address & PAGE_MASK) - vma->vm_start;
+		vmaring = inode->i_mmap;
+		do {
+			vaddr = vmaring->vm_start + offset;
+
+			/* This conditional is misleading... */
+			if((vaddr ^ address) & PAGE_SIZE) {
+				alias_found++;
+				start = vmaring->vm_start;
+				while(start < vmaring->vm_end) {
+					pgdp = pgd_offset(vmaring->vm_mm, start);
+					if(!pgdp) goto next;
+					pmdp = pmd_offset(pgdp, start);
+					if(!pmdp) goto next;
+					ptep = pte_offset(pmdp, start);
+					if(!ptep) goto next;
+
+					if(pte_val(*ptep) & _PAGE_PRESENT) {
+						flush_cache_page(vmaring, start);
+						*ptep = __pte(pte_val(*ptep) &
+							      ~(_PAGE_CV));
+						flush_tlb_page(vmaring, start);
+					}
+				next:
+					start += PAGE_SIZE;
+				}
+			}
+		} while((vmaring = vmaring->vm_next_share) != inode->i_mmap);
+
+		if(alias_found && (pte_val(pte) & _PAGE_CV)) {
+			pgdp = pgd_offset(vma->vm_mm, address);
+			pmdp = pmd_offset(pgdp, address);
+			ptep = pte_offset(pmdp, address);
+			flush_cache_page(vma, address);
+			*ptep = __pte(pte_val(*ptep) & ~(_PAGE_CV));
+			flush_tlb_page(vma, address);
+		}
+	}
+}
 
 /* Make a non-present pseudo-TTE. */
 extern inline pte_t mk_swap_pte(unsigned long type, unsigned long offset)
@@ -505,4 +577,6 @@ extern inline pte_t mk_swap_pte(unsigned long type, unsigned long offset)
 #define SWP_OFFSET(entry)	((entry) >> 8)
 #define SWP_ENTRY(type,offset)	pte_val(mk_swap_pte((type),(offset)))
 
-#endif /* _SPARC64_PGTABLE_H */
+#endif /* !(__ASSEMBLY__) */
+
+#endif /* !(_SPARC64_PGTABLE_H) */

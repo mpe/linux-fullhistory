@@ -770,7 +770,7 @@ static int lance_start_xmit (struct sk_buff *skb, struct device *dev)
 	}
 
 	if (skb->len <= 0) {
-		printk ("skb len is %ld\n", skb->len);
+		printk ("skb len is %d\n", skb->len);
 		return 0;
 	}
 

@@ -1,4 +1,4 @@
-/*  $Id: setup.c,v 1.78 1996/12/19 08:06:30 davem Exp $
+/*  $Id: setup.c,v 1.79 1996/12/23 10:57:02 ecd Exp $
  *  linux/arch/sparc/kernel/setup.c
  *
  *  Copyright (C) 1995  David S. Miller (davem@caip.rutgers.edu)
@@ -248,7 +248,7 @@ extern unsigned ramdisk_size;
 
 extern int root_mountflags;
 
-extern void register_console(void (*proc)(char *));
+extern void register_console(void (*proc)(const char *));
 
 char saved_command_line[256];
 char reboot_command[256];
@@ -310,7 +310,7 @@ __initfunc(void setup_arch(char **cmdline_p,
 		printk("SUN4U\n");
 		break;
 	case ap1000:
-		register_console(prom_printf);
+		register_console((void (*) (const char *))prom_printf);
 		printk("AP1000\n");
 		packed = 1;
 		break;

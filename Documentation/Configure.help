@@ -4063,6 +4063,11 @@ CONFIG_SUN_AUDIO
   This is support for the soundcards on Sun workstations. The code
   does not exist yet, so you might as well say N here.
 
+SB32/AWE support
+CONFIG_AWE32_SYNTH
+Enable this option if you have a SB32 or SB AWE soundcard. See
+linux/drivers/sound/lowlevel/README.awe for more info.
+
 Kernel profiling support
 CONFIG_PROFILE
   This is for kernel hackers who want to know how much time the kernel

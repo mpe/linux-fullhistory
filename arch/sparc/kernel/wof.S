@@ -1,4 +1,4 @@
-/* $Id: wof.S,v 1.30 1996/12/10 06:06:19 davem Exp $
+/* $Id: wof.S,v 1.31 1996/12/28 18:14:22 davem Exp $
  * wof.S: Sparc window overflow handler.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -205,7 +205,6 @@ spwin_user_stack_is_bolixed:
 	 * c-code to gun down the process.
 	 */
 	rd	%psr, %glob_tmp
-	WRITE_PAUSE
 	andcc	%glob_tmp, PSR_PS, %g0
 	bne	spwin_bad_ustack_from_kernel
 	 nop
@@ -249,8 +248,7 @@ spnwin_patch3:	and	%twin_tmp, 0xff, %twin_tmp	! patched on 7win Sparcs
 
 	/* Turn on traps and call c-code to deal with it. */
 	wr	%t_psr, PSR_ET, %psr
-	WRITE_PAUSE
-
+	nop
 	call	C_LABEL(window_overflow_fault)
 	 nop
 
@@ -316,7 +314,6 @@ C_LABEL(spwin_sun4c_stackchk):
 	 sra	%sp, 29, %glob_tmp
 
 	rd	%psr, %glob_tmp
-	WRITE_PAUSE
 	b	spwin_user_stack_is_bolixed + 0x4
 	 nop
 
@@ -327,7 +324,6 @@ C_LABEL(spwin_sun4c_stackchk):
 	 and	%sp, 0xfff, %glob_tmp		! delay slot
 
 	rd	%psr, %glob_tmp
-	WRITE_PAUSE
 	b	spwin_user_stack_is_bolixed + 0x4
 	 nop
 
@@ -348,7 +344,6 @@ spwin_sun4c_twopages:
 	 add	%sp, 0x38, %glob_tmp	/* Is second page in vma hole? */
 
 	rd	%psr, %glob_tmp
-	WRITE_PAUSE
 	b	spwin_user_stack_is_bolixed + 0x4
 	 nop
 
@@ -360,7 +355,6 @@ spwin_sun4c_twopages:
 	 add	%sp, 0x38, %glob_tmp
 
 	rd	%psr, %glob_tmp
-	WRITE_PAUSE
 	b	spwin_user_stack_is_bolixed + 0x4
 	 nop
 
@@ -374,7 +368,6 @@ spwin_sun4c_onepage:
 	 nop
 
 	rd	%psr, %glob_tmp
-	WRITE_PAUSE
 	b	spwin_user_stack_is_bolixed + 0x4
 	 nop
 
@@ -429,6 +422,5 @@ C_LABEL(spwin_srmmu_stackchk):
 	 restore %g0, %g0, %g0
 
 	rd	%psr, %glob_tmp
-	WRITE_PAUSE
 	b	spwin_user_stack_is_bolixed + 0x4	! we faulted, ugh
 	 nop

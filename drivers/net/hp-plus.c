@@ -67,7 +67,7 @@ static unsigned int hpplus_portlist[] =
 */
 
 #define HP_ID			0x00	/* ID register, always 0x4850. */
-#define HP_PAGING		0x02	/* Registers visible @ 8-f, see PageName. */ 
+#define HP_PAGING		0x02	/* Registers visible @ 8-f, see PageName. */
 #define HPP_OPTION		0x04	/* Bitmapped options, see HP_Option.	*/
 #define HPP_OUT_ADDR	0x08	/* I/O output location in Perf_Page.	*/
 #define HPP_IN_ADDR		0x0A	/* I/O input location in Perf_Page.		*/
@@ -84,7 +84,7 @@ enum PageName {
 	MAC_Page = 1,				/* The ethernet address (+checksum). */
 	HW_Page = 2,				/* EEPROM-loaded hardware parameters. */
 	LAN_Page = 4,				/* Transceiver selection, testing, etc. */
-	ID_Page = 6 }; 
+	ID_Page = 6 };
 
 /* The bit definitions for the HPP_OPTION register. */
 enum HP_Option {
@@ -424,6 +424,9 @@ static struct device dev_hpp[MAX_HPP_CARDS] = {
 
 static int io[MAX_HPP_CARDS] = { 0, };
 static int irq[MAX_HPP_CARDS]  = { 0, };
+
+MODULE_PARM(io, "1-" __MODULE_STRING(MAX_HPP_CARDS) "i");
+MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_HPP_CARDS) "i");
 
 /* This is set up so that only a single autoprobe takes place per call.
 ISA device autoprobes on a running machine are not recommended. */

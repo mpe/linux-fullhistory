@@ -25,7 +25,7 @@
  *
  *
  *  Command line options (insmod command line)
- * 
+ *
  *  hardware hardware type; 0=sbc, 1=wss, any other value invalid
  *  mode     mode type; 0=1200 baud AFSK, 1=9600 baud FSK, any other
  *           value invalid
@@ -33,7 +33,7 @@
  *           0x530 for wss
  *  irq      interrupt number; common values are 7 or 5 for sbc, 11 for wss
  *  dma      dma number; common values are 0 or 1
- * 
+ *
  *
  *  History:
  *   0.1  21.09.96  Started
@@ -83,8 +83,8 @@ static struct device sm_device[NR_PORTS];
 static struct {
 	char *mode;
 	int iobase, irq, dma, dma2, seriobase, pariobase, midiiobase;
-} sm_ports[NR_PORTS] = { 
-	{ NULL, -1, 0, 0, 0, -1, -1, -1 }, 
+} sm_ports[NR_PORTS] = {
+	{ NULL, -1, 0, 0, 0, -1, -1, -1 },
 };
 
 /* --------------------------------------------------------------------- */
@@ -138,7 +138,7 @@ static struct {
 
 /* ---------------------------------------------------------------------- */
 /*
- * Information that need to be kept for each board. 
+ * Information that need to be kept for each board.
  */
 
 struct sm_state {
@@ -155,7 +155,7 @@ struct sm_state {
 	union {
 		long hw[32/sizeof(long)];
 	} hw;
-	
+
 	/*
 	 * state of the modem code
 	 */
@@ -165,7 +165,7 @@ struct sm_state {
 	union {
 		long d[256/sizeof(long)];
 	} d;
-	
+
 #define DIAGDATALEN 64
 	struct diag_data {
 		unsigned int mode;
@@ -174,7 +174,7 @@ struct sm_state {
 		short data[DIAGDATALEN];
 	} diag;
 
-	
+
 #ifdef SM_DEBUG
 	struct debug_vals {
 		unsigned long last_jiffies;
@@ -235,7 +235,7 @@ struct hardware_info {
 	 */
 	int (*open)(struct device *, struct sm_state *);
 	int (*close)(struct device *, struct sm_state *);
-	int (*ioctl)(struct device *, struct sm_state *, struct ifreq *, 
+	int (*ioctl)(struct device *, struct sm_state *, struct ifreq *,
 		     struct hdlcdrv_ioctl *, int);
 	int (*sethw)(struct device *, struct sm_state *, char *);
 };
@@ -254,7 +254,7 @@ static void inline sm_int_freq(struct sm_state *sm)
 {
 #ifdef SM_DEBUG
 	unsigned long cur_jiffies = jiffies;
-	/* 
+	/*
 	 * measure the interrupt frequency
 	 */
 	sm->debug_vals.cur_intcnt++;
@@ -320,7 +320,7 @@ static enum uart check_uart(unsigned int iobase)
 	b3 = inb(UART_MSR(iobase)) & 0xf0;
 	outb(b1, UART_MCR(iobase));	   /* restore old values */
 	outb(b2, UART_MSR(iobase));
-	if (b3 != 0x90) 
+	if (b3 != 0x90)
 		return c_uart_unknown;
 	inb(UART_RBR(iobase));
 	inb(UART_RBR(iobase));
@@ -331,7 +331,7 @@ static enum uart check_uart(unsigned int iobase)
 		b1 = inb(UART_SCR(iobase));
 		outb(0xa5, UART_SCR(iobase));
 		b2 = inb(UART_SCR(iobase));
-		if ((b1 != 0x5a) || (b2 != 0xa5)) 
+		if ((b1 != 0x5a) || (b2 != 0xa5))
 			u = c_uart_8250;
 	}
 	return u;
@@ -395,29 +395,29 @@ static void output_open(struct sm_state *sm)
 	enum uart u = c_uart_unknown;
 
 	sm->hdrv.ptt_out.flags = 0;
-	if (sm->hdrv.ptt_out.seriobase > 0 && 
+	if (sm->hdrv.ptt_out.seriobase > 0 &&
 	    sm->hdrv.ptt_out.seriobase <= 0x1000-SER_EXTENT &&
 	    ((u = check_uart(sm->hdrv.ptt_out.seriobase))) != c_uart_unknown) {
 		sm->hdrv.ptt_out.flags |= SP_SER;
 		request_region(sm->hdrv.ptt_out.seriobase, SER_EXTENT, "sm ser ptt");
 		outb(0, UART_IER(sm->hdrv.ptt_out.seriobase));
 		/* 5 bits, 1 stop, no parity, no break, Div latch access */
-		outb(0x80, UART_LCR(sm->hdrv.ptt_out.seriobase)); 
+		outb(0x80, UART_LCR(sm->hdrv.ptt_out.seriobase));
 		outb(0, UART_DLM(sm->hdrv.ptt_out.seriobase));
 		outb(1, UART_DLL(sm->hdrv.ptt_out.seriobase)); /* as fast as possible */
 		/* LCR and MCR set by output_status */
 	}
-	if (sm->hdrv.ptt_out.pariobase > 0 && 
+	if (sm->hdrv.ptt_out.pariobase > 0 &&
 	    sm->hdrv.ptt_out.pariobase <= 0x1000-LPT_EXTENT &&
 	    check_lpt(sm->hdrv.ptt_out.pariobase)) {
 		sm->hdrv.ptt_out.flags |= SP_PAR;
 		request_region(sm->hdrv.ptt_out.pariobase, LPT_EXTENT, "sm par ptt");
 	}
-	if (sm->hdrv.ptt_out.midiiobase > 0 && 
+	if (sm->hdrv.ptt_out.midiiobase > 0 &&
 	    sm->hdrv.ptt_out.midiiobase <= 0x1000-MIDI_EXTENT &&
 	    check_midi(sm->hdrv.ptt_out.midiiobase)) {
 		sm->hdrv.ptt_out.flags |= SP_MIDI;
-		request_region(sm->hdrv.ptt_out.midiiobase, MIDI_EXTENT, 
+		request_region(sm->hdrv.ptt_out.midiiobase, MIDI_EXTENT,
 			       "sm midi ptt");
 	}
 	output_status(sm);
@@ -444,9 +444,9 @@ static void output_close(struct sm_state *sm)
 	output_status(sm);
 	if (sm->hdrv.ptt_out.flags & SP_SER)
 		release_region(sm->hdrv.ptt_out.seriobase, SER_EXTENT);
-       	if (sm->hdrv.ptt_out.flags & SP_PAR) 
+       	if (sm->hdrv.ptt_out.flags & SP_PAR)
 		release_region(sm->hdrv.ptt_out.pariobase, LPT_EXTENT);
-       	if (sm->hdrv.ptt_out.flags & SP_MIDI) 
+       	if (sm->hdrv.ptt_out.flags & SP_MIDI)
 		release_region(sm->hdrv.ptt_out.midiiobase, MIDI_EXTENT);
 	sm->hdrv.ptt_out.flags = 0;
 }
@@ -458,7 +458,7 @@ static void output_close(struct sm_state *sm)
 
 extern inline void diag_trigger(struct sm_state *sm)
 {
-	if (sm->diag.ptr < 0) 
+	if (sm->diag.ptr < 0)
 		if (!(sm->diag.flags & SM_DIAGFLAG_DCDGATE) || sm->hdrv.hdlcrx.dcd)
 			sm->diag.ptr = 0;
 }
@@ -469,8 +469,8 @@ extern inline void diag_add(struct sm_state *sm, int valinp, int valdemod)
 {
 	int val;
 
-	if ((sm->diag.mode != SM_DIAGMODE_INPUT && 
-	     sm->diag.mode != SM_DIAGMODE_DEMOD) || 
+	if ((sm->diag.mode != SM_DIAGMODE_INPUT &&
+	     sm->diag.mode != SM_DIAGMODE_DEMOD) ||
 	    sm->diag.ptr >= DIAGDATALEN || sm->diag.ptr < 0)
 		return;
 	val = (sm->diag.mode == SM_DIAGMODE_DEMOD) ? valdemod : valinp;
@@ -486,8 +486,8 @@ extern inline void diag_add(struct sm_state *sm, int valinp, int valdemod)
 
 extern inline void diag_add_one(struct sm_state *sm, int val)
 {
-	if ((sm->diag.mode != SM_DIAGMODE_INPUT && 
-	     sm->diag.mode != SM_DIAGMODE_DEMOD) || 
+	if ((sm->diag.mode != SM_DIAGMODE_INPUT &&
+	     sm->diag.mode != SM_DIAGMODE_DEMOD) ||
 	    sm->diag.ptr >= DIAGDATALEN || sm->diag.ptr < 0)
 		return;
 	/* clip */
@@ -502,7 +502,7 @@ extern inline void diag_add_one(struct sm_state *sm, int val)
 
 static inline void diag_add_constellation(struct sm_state *sm, int vali, int valq)
 {
-	if ((sm->diag.mode != SM_DIAGMODE_CONSTELLATION) || 
+	if ((sm->diag.mode != SM_DIAGMODE_CONSTELLATION) ||
 	    sm->diag.ptr >= DIAGDATALEN-1 || sm->diag.ptr < 0)
 		return;
 	/* clip */
@@ -530,7 +530,7 @@ extern inline unsigned int hweight16(unsigned short w)
 extern inline unsigned int hweight8(unsigned char w)
         __attribute__ ((unused));
 
-extern inline unsigned int hweight32(unsigned int w) 
+extern inline unsigned int hweight32(unsigned int w)
 {
         unsigned int res = (w & 0x55555555) + ((w >> 1) & 0x55555555);
         res = (res & 0x33333333) + ((res >> 2) & 0x33333333);
@@ -564,7 +564,7 @@ extern inline unsigned int gcd(unsigned int x, unsigned int y)
 	for (;;) {
 		if (!x)
 			return y;
-		if (!y) 
+		if (!y)
 			return x;
 		if (x > y)
 			x %= y;
@@ -631,7 +631,7 @@ extern inline unsigned int lcm(unsigned int x, unsigned int y)
 
 static int sm_open(struct device *dev);
 static int sm_close(struct device *dev);
-static int sm_ioctl(struct device *dev, struct ifreq *ifr, 
+static int sm_ioctl(struct device *dev, struct ifreq *ifr,
 		    struct hdlcdrv_ioctl *hi, int cmd);
 
 /* --------------------------------------------------------------------- */
@@ -651,7 +651,7 @@ static int sm_open(struct device *dev)
 	struct sm_state *sm;
 	int err;
 
-	if (!dev || !dev->priv || 
+	if (!dev || !dev->priv ||
 	    ((struct sm_state *)dev->priv)->hdrv.magic != HDLCDRV_MAGIC) {
 		printk(KERN_ERR "sm_open: invalid device struct\n");
 		return -EINVAL;
@@ -666,8 +666,8 @@ static int sm_open(struct device *dev)
 		return err;
 	output_open(sm);
 	MOD_INC_USE_COUNT;
-	printk(KERN_INFO "%s: %s mode %s.%s at iobase 0x%lx irq %u dma %u\n", 
-	       sm_drvname, sm->hwdrv->hw_name, sm->mode_tx->name, 
+	printk(KERN_INFO "%s: %s mode %s.%s at iobase 0x%lx irq %u dma %u\n",
+	       sm_drvname, sm->hwdrv->hw_name, sm->mode_tx->name,
 	       sm->mode_rx->name, dev->base_addr, dev->irq, dev->dma);
 	return 0;
 }
@@ -679,19 +679,19 @@ static int sm_close(struct device *dev)
 	struct sm_state *sm;
 	int err = -ENODEV;
 
-	if (!dev || !dev->priv || 
+	if (!dev || !dev->priv ||
 	    ((struct sm_state *)dev->priv)->hdrv.magic != HDLCDRV_MAGIC) {
 		printk(KERN_ERR "sm_close: invalid device struct\n");
 		return -EINVAL;
 	}
 	sm = (struct sm_state *)dev->priv;
 
-	
+
 	if (sm->hwdrv && sm->hwdrv->close)
 		err = sm->hwdrv && sm->hwdrv->close(dev, sm);
 	output_close(sm);
 	MOD_DEC_USE_COUNT;
-	printk(KERN_INFO "%s: close %s at iobase 0x%lx irq %u dma %u\n", 
+	printk(KERN_INFO "%s: close %s at iobase 0x%lx irq %u dma %u\n",
 	       sm_drvname, sm->hwdrv->hw_name, dev->base_addr, dev->irq, dev->dma);
 	return err;
 }
@@ -702,7 +702,7 @@ static int sethw(struct device *dev, struct sm_state *sm, char *mode)
 {
 	char *cp = strchr(mode, ':');
 	const struct hardware_info *hwp = hardware_base;
-	
+
 	if (!cp)
 		cp = mode;
 	else {
@@ -718,7 +718,7 @@ static int sethw(struct device *dev, struct sm_state *sm, char *mode)
 		}
 		sm->hwdrv = hwp;
 	}
-	if (!*cp) 
+	if (!*cp)
 		return 0;
 	if (sm->hwdrv && sm->hwdrv->sethw)
 		return sm->hwdrv->sethw(dev, sm, cp);
@@ -727,7 +727,7 @@ static int sethw(struct device *dev, struct sm_state *sm, char *mode)
 
 /* --------------------------------------------------------------------- */
 
-static int sm_ioctl(struct device *dev, struct ifreq *ifr, 
+static int sm_ioctl(struct device *dev, struct ifreq *ifr,
 		    struct hdlcdrv_ioctl *hi, int cmd)
 {
 	struct sm_state *sm;
@@ -740,7 +740,7 @@ static int sm_ioctl(struct device *dev, struct ifreq *ifr,
 	const struct modem_rx_info *mrp = modem_rx_base;
 	const struct hardware_info *hwp = hardware_base;
 
-	if (!dev || !dev->priv || 
+	if (!dev || !dev->priv ||
 	    ((struct sm_state *)dev->priv)->hdrv.magic != HDLCDRV_MAGIC) {
 		printk(KERN_ERR "sm_ioctl: invalid device struct\n");
 		return -EINVAL;
@@ -757,34 +757,34 @@ static int sm_ioctl(struct device *dev, struct ifreq *ifr,
 		if (sm->hwdrv && sm->hwdrv->ioctl)
 			return sm->hwdrv->ioctl(dev, sm, ifr, hi, cmd);
 		return -ENOIOCTLCMD;
-		
+
 	case HDLCDRVCTL_GETMODE:
 		cp = hi->data.modename;
 		if (sm->hwdrv && sm->hwdrv->hw_name)
 			cp += sprintf(cp, "%s:", sm->hwdrv->hw_name);
-		else 
+		else
 			cp += sprintf(cp, "<unspec>:");
 		if (sm->mode_tx && sm->mode_tx->name)
 			cp += sprintf(cp, "%s", sm->mode_tx->name);
-		else 
+		else
 			cp += sprintf(cp, "<unspec>");
-		if (!sm->mode_rx || !sm->mode_rx || 
+		if (!sm->mode_rx || !sm->mode_rx ||
 		    strcmp(sm->mode_rx->name, sm->mode_tx->name)) {
 			if (sm->mode_rx && sm->mode_rx->name)
 				cp += sprintf(cp, ",%s", sm->mode_rx->name);
-			else 
+			else
 				cp += sprintf(cp, ",<unspec>");
 		}
 		if (copy_to_user(ifr->ifr_data, hi, sizeof(*hi)))
 			return -EFAULT;
 		return 0;
-		
+
 	case HDLCDRVCTL_SETMODE:
 		if (!suser() || dev->start)
 			return -EACCES;
 		hi->data.modename[sizeof(hi->data.modename)-1] = '\0';
 		return sethw(dev, sm, hi->data.modename);
-		
+
 	case HDLCDRVCTL_MODELIST:
 		cp = hi->data.modename;
 		while (hwp) {
@@ -806,7 +806,7 @@ static int sm_ioctl(struct device *dev, struct ifreq *ifr,
 		if (copy_to_user(ifr->ifr_data, hi, sizeof(*hi)))
 			return -EFAULT;
 		return 0;
-		
+
 #ifdef SM_DEBUG
 	case SMCTL_GETDEBUG:
 		if (copy_from_user(&bi, ifr->ifr_data, sizeof(bi)))
@@ -815,7 +815,7 @@ static int sm_ioctl(struct device *dev, struct ifreq *ifr,
 		bi.data.dbg.mod_cycles = sm->debug_vals.mod_cyc;
 		bi.data.dbg.demod_cycles = sm->debug_vals.demod_cyc;
 		bi.data.dbg.dma_residue = sm->debug_vals.dma_residue;
-		sm->debug_vals.mod_cyc = sm->debug_vals.demod_cyc = 
+		sm->debug_vals.mod_cyc = sm->debug_vals.demod_cyc =
 			sm->debug_vals.dma_residue = 0;
 		if (copy_to_user(ifr->ifr_data, &bi, sizeof(bi)))
 			return -EFAULT;
@@ -855,7 +855,7 @@ static int sm_ioctl(struct device *dev, struct ifreq *ifr,
 				return -EFAULT;
 			return 0;
 		}
-		if (copy_to_user(bi.data.diag.data, sm->diag.data, 
+		if (copy_to_user(bi.data.diag.data, sm->diag.data,
 				 bi.data.diag.datalen * sizeof(short)))
 			return -EFAULT;
 		bi.data.diag.flags |= SM_DIAGFLAG_VALID;
@@ -882,7 +882,7 @@ int sm_init(void)
 	char set_hw = 1;
 	struct sm_state *sm;
 	char ifname[HDLCDRV_IFNAMELEN];
-	
+
 	printk(sm_drvinfo);
 	/*
 	 * register net devices
@@ -895,7 +895,7 @@ int sm_init(void)
 			set_hw = 0;
 		if (!set_hw)
 			sm_ports[i].iobase = sm_ports[i].irq = 0;
-		j = hdlcdrv_register_hdlcdrv(dev, &sm_ops, sizeof(struct sm_state), 
+		j = hdlcdrv_register_hdlcdrv(dev, &sm_ops, sizeof(struct sm_state),
 					     ifname, sm_ports[i].iobase,
 					     sm_ports[i].irq, sm_ports[i].dma);
 		if (!j) {
@@ -932,6 +932,15 @@ int dma2 = -1;
 int serio = 0;
 int pario = 0;
 int midiio = 0;
+
+MODULE_PARM(mode, "s");
+MODULE_PARM(iobase, "i");
+MODULE_PARM(irq, "i");
+MODULE_PARM(dma, "i");
+MODULE_PARM(dma2, "i");
+MODULE_PARM(serio, "i");
+MODULE_PARM(pario, "i");
+MODULE_PARM(midiio, "i");
 
 int init_module(void)
 {
@@ -972,7 +981,7 @@ void cleanup_module(void)
 			if (sm->hdrv.magic != HDLCDRV_MAGIC)
 				printk(KERN_ERR "sm: invalid magic in "
 				       "cleanup_module\n");
-			else 
+			else
 				hdlcdrv_unregister_hdlcdrv(dev);
 		}
 	}

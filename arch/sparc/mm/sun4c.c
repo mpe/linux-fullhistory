@@ -1,4 +1,4 @@
-/* $Id: sun4c.c,v 1.135 1996/12/23 05:27:50 davem Exp $
+/* $Id: sun4c.c,v 1.137 1996/12/30 06:16:36 davem Exp $
  * sun4c.c: Doing in software what should be done in hardware.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -21,6 +21,7 @@
 #include <asm/io.h>
 #include <asm/oplib.h>
 #include <asm/openprom.h>
+#include <asm/mmu_context.h>
 
 extern int num_segmaps, num_contexts;
 
@@ -1609,22 +1610,16 @@ set_context:
 	restore_flags(flags);
 }
 
-static void sun4c_flush_hook(void)
+static void sun4c_init_new_context(struct mm_struct *mm)
 {
-	if(current->tss.flags & SPARC_FLAG_KTHREAD) {
-		unsigned long flags;
-
-		save_flags(flags);
-		sun4c_alloc_context(current->mm);
-		sun4c_set_context(current->mm->context);
-		restore_flags(flags);
-	}
+	sun4c_alloc_context(mm);
+	if(mm == current->mm)
+		sun4c_set_context(mm->context);
 }
 
-static void sun4c_exit_hook(void)
+static void sun4c_destroy_context(struct mm_struct *mm)
 {
 	struct ctx_list *ctx_old;
-	struct mm_struct *mm = current->mm;
 
 	if(mm->context != NO_CONTEXT && mm->count == 1) {
 		unsigned long flags;
@@ -2038,10 +2033,6 @@ done:
 	restore_flags(flags);
 }
 
-static void sun4c_pgd_flush(pgd_t *pgdp)
-{
-}
-
 extern unsigned long free_area_init(unsigned long, unsigned long);
 extern unsigned long sparc_context_init(unsigned long, int);
 extern unsigned long end;
@@ -2177,7 +2168,6 @@ __initfunc(void ld_mmu_sun4c(void))
 	pmd_alloc = sun4c_pmd_alloc;
 	pgd_free = sun4c_pgd_free;
 	pgd_alloc = sun4c_pgd_alloc;
-	pgd_flush = sun4c_pgd_flush;
 
 	pte_write = sun4c_pte_write;
 	pte_dirty = sun4c_pte_dirty;
@@ -2189,8 +2179,8 @@ __initfunc(void ld_mmu_sun4c(void))
 	pte_mkdirty = sun4c_pte_mkdirty;
 	pte_mkyoung = sun4c_pte_mkyoung;
 	update_mmu_cache = sun4c_update_mmu_cache;
-	mmu_exit_hook = sun4c_exit_hook;
-	mmu_flush_hook = sun4c_flush_hook;
+	destroy_context = sun4c_destroy_context;
+	init_new_context = sun4c_init_new_context;
 	mmu_lockarea = sun4c_lockarea;
 	mmu_unlockarea = sun4c_unlockarea;
 

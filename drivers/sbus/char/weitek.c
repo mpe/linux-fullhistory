@@ -1,4 +1,4 @@
-/* $Id: weitek.c,v 1.6 1996/11/13 05:10:51 davem Exp $
+/* $Id: weitek.c,v 1.7 1996/12/23 10:16:18 ecd Exp $
  * weitek.c: Tadpole P9100/P9000 console driver
  *
  * Copyright (C) 1996 David Redman (djhr@tadpole.co.uk)
@@ -7,6 +7,7 @@
 #include <linux/kd.h>
 #include <linux/tty.h>
 #include <linux/malloc.h>
+#include <linux/proc_fs.h>
 
 #include <asm/openprom.h>
 #include <asm/sbus.h>

@@ -1,9 +1,9 @@
-/* 
+/*
  * net-3-driver for the NI5210 card (i82586 Ethernet chip)
  *
  * This is an extension to the Linux operating system, and is covered by the
  * same Gnu Public License that covers that work.
- * 
+ *
  * Alphacode 0.82 (96/09/29) for Linux 2.0.0 (or later)
  * Copyrights (c) 1994,1995,1996 by M.Hipp (Michael.Hipp@student.uni-tuebingen.de)
  *    [feel free to mail ....]
@@ -15,11 +15,11 @@
  *       insmod ni52.o io=0x360 irq=9 memstart=0xd0000 memend=0xd4000
  *
  * CAN YOU PLEASE REPORT ME YOUR PERFORMANCE EXPERIENCES !!.
- * 
+ *
  * If you find a bug, please report me:
  *   The kernel panic output and any kmsg from the ni52 driver
- *   the ni5210-driver-version and the linux-kernel version 
- *   how many shared memory (memsize) on the netcard, 
+ *   the ni5210-driver-version and the linux-kernel version
+ *   how many shared memory (memsize) on the netcard,
  *   bootprom: yes/no, base_addr, mem_start
  *   maybe the ni5210-card revision and the i82586 version
  *
@@ -38,52 +38,52 @@
  *
  * Known Problems:
  *   The internal sysbus seems to be slow. So we often lose packets because of
- *   overruns while receiving from a fast remote host. 
+ *   overruns while receiving from a fast remote host.
  *   This can slow down TCP connections. Maybe the newer ni5210 cards are better.
  *   my experience is, that if a machine sends with more then about 500-600K/s
  *   the fifo/sysbus overflows.
- * 
+ *
  * IMPORTANT NOTE:
  *   On fast networks, it's a (very) good idea to have 16K shared memory. With
- *   8K, we can store only 4 receive frames, so it can (easily) happen that a remote 
+ *   8K, we can store only 4 receive frames, so it can (easily) happen that a remote
  *   machine 'overruns' our system.
  *
  * Known i82586/card problems (I'm sure, there are many more!):
  *   Running the NOP-mode, the i82586 sometimes seems to forget to report
  *   every xmit-interrupt until we restart the CU.
- *   Another MAJOR bug is, that the RU sometimes seems to ignore the EL-Bit 
- *   in the RBD-Struct which indicates an end of the RBD queue. 
- *   Instead, the RU fetches another (randomly selected and 
- *   usually used) RBD and begins to fill it. (Maybe, this happens only if 
+ *   Another MAJOR bug is, that the RU sometimes seems to ignore the EL-Bit
+ *   in the RBD-Struct which indicates an end of the RBD queue.
+ *   Instead, the RU fetches another (randomly selected and
+ *   usually used) RBD and begins to fill it. (Maybe, this happens only if
  *   the last buffer from the previous RFD fits exact into the queue and
  *   the next RFD can't fetch an initial RBD. Anyone knows more? )
  *
- * results from ftp performance tests with Linux 1.2.5 
+ * results from ftp performance tests with Linux 1.2.5
  *   send and receive about 350-400 KByte/s (peak up to 460 kbytes/s)
  *   sending in NOP-mode: peak performance up to 530K/s (but better don't run this mode)
  */
 
 /*
- * 29.Sept.96: virt_to_bus changes for new memory scheme 
+ * 29.Sept.96: virt_to_bus changes for new memory scheme
  * 19.Feb.96: more Mcast changes, module support (MH)
  *
  * 18.Nov.95: Mcast changes (AC).
  *
  * 23.April.95: fixed(?) receiving problems by configuring a RFD more
- *              than the number of RBD's. Can maybe cause other problems. 
+ *              than the number of RBD's. Can maybe cause other problems.
  * 18.April.95: Added MODULE support (MH)
  * 17.April.95: MC related changes in init586() and set_multicast_list().
  *              removed use of 'jiffies' in init586() (MH)
  *
  * 19.Sep.94: Added Multicast support (not tested yet) (MH)
- * 
- * 18.Sep.94: Workaround for 'EL-Bug'. Removed flexible RBD-handling. 
+ *
+ * 18.Sep.94: Workaround for 'EL-Bug'. Removed flexible RBD-handling.
  *            Now, every RFD has exact one RBD. (MH)
  *
  * 14.Sep.94: added promiscuous mode, a few cleanups (MH)
  *
  * 19.Aug.94: changed request_irq() parameter (MH)
- * 
+ *
  * 20.July.94: removed cleanup bugs, removed a 16K-mem-probe-bug (MH)
  *
  * 19.July.94: lotsa cleanups .. (MH)
@@ -96,7 +96,7 @@
  *
  * 30.Sep.93: Added nop-chain .. driver now runs with only one Xmit-Buff, too (MH)
  *
- * < 30.Sep.93: first versions 
+ * < 30.Sep.93: first versions
  */
 
 static int debuglevel = 0; /* debug-printk 0: off 1: a few 2: more */
@@ -143,9 +143,9 @@ static int fifo=0x8;	/* don't change */
 
 sizeof(scp)=12; sizeof(scb)=16; sizeof(iscp)=8;
 sizeof(scp)+sizeof(iscp)+sizeof(scb) = 36 = INIT
-sizeof(rfd) = 24; sizeof(rbd) = 12; 
+sizeof(rfd) = 24; sizeof(rbd) = 12;
 sizeof(tbd) = 8; sizeof(transmit_cmd) = 16;
-sizeof(nop_cmd) = 8; 
+sizeof(nop_cmd) = 8;
 
   * if you don't know the driver, better do not change these values: */
 
@@ -159,7 +159,7 @@ sizeof(nop_cmd) = 8;
 /**************************************************************************/
 
 /* different DELAYs */
-#define DELAY(x) __delay((loops_per_sec>>5)*(x)); 
+#define DELAY(x) __delay((loops_per_sec>>5)*(x));
 #define DELAY_16(); { __delay( (loops_per_sec>>16)+1 ); }
 #define DELAY_18(); { __delay( (loops_per_sec>>18)+1 ); }
 
@@ -234,7 +234,7 @@ struct priv
 };
 
 /**********************************************
- * close device 
+ * close device
  */
 static int ni52_close(struct device *dev)
 {
@@ -252,21 +252,21 @@ static int ni52_close(struct device *dev)
 }
 
 /**********************************************
- * open device 
+ * open device
  */
 static int ni52_open(struct device *dev)
 {
   ni_disint();
   alloc586(dev);
-  init586(dev);  
+  init586(dev);
   startrecv586(dev);
   ni_enaint();
 
-  if(request_irq(dev->irq, &ni52_interrupt,0,"ni5210",NULL)) 
+  if(request_irq(dev->irq, &ni52_interrupt,0,"ni5210",NULL))
   {
     ni_reset586();
     return -EAGAIN;
-  }  
+  }
   irq2dev_map[dev->irq] = dev;
 
   dev->interrupt = 0;
@@ -279,7 +279,7 @@ static int ni52_open(struct device *dev)
 }
 
 /**********************************************
- * Check to see if there's an 82586 out there. 
+ * Check to see if there's an 82586 out there.
  */
 static int check586(struct device *dev,char *where,unsigned size)
 {
@@ -298,7 +298,7 @@ static int check586(struct device *dev,char *where,unsigned size)
   p->scp->sysbus = SYSBUSVAL;        /* 1 = 8Bit-Bus, 0 = 16 Bit */
   if(p->scp->sysbus != SYSBUSVAL)
     return 0;
-  
+
   iscp_addrs[0] = bus_to_virt((unsigned long)where);
   iscp_addrs[1]= (char *) p->scp - sizeof(struct iscp_struct);
 
@@ -321,11 +321,11 @@ static int check586(struct device *dev,char *where,unsigned size)
 }
 
 /******************************************************************
- * set iscp at the right place, called by ni52_probe1 and open586. 
+ * set iscp at the right place, called by ni52_probe1 and open586.
  */
 void alloc586(struct device *dev)
 {
-  struct priv *p =  (struct priv *) dev->priv; 
+  struct priv *p =  (struct priv *) dev->priv;
 
   ni_reset586();
   DELAY(1);
@@ -345,7 +345,7 @@ void alloc586(struct device *dev)
   ni_reset586();
   ni_attn586();
 
-  DELAY(1); 
+  DELAY(1);
 
   if(p->iscp->busy)
     printk("%s: Init-Problems (alloc).\n",dev->name);
@@ -380,7 +380,7 @@ int ni52_probe(struct device *dev)
     int ioaddr = *port;
     if (check_region(ioaddr, NI52_TOTAL_SIZE))
       continue;
-    if( !(inb(ioaddr+NI52_MAGIC1) == NI52_MAGICVAL1) || 
+    if( !(inb(ioaddr+NI52_MAGIC1) == NI52_MAGICVAL1) ||
         !(inb(ioaddr+NI52_MAGIC2) == NI52_MAGICVAL2))
       continue;
 
@@ -395,11 +395,11 @@ int ni52_probe(struct device *dev)
     int ioaddr = dev->base_addr;
     if (check_region(ioaddr, NI52_TOTAL_SIZE))
       continue;
-    if( !(inb(ioaddr+NI52_MAGIC1) == NI52_MAGICVAL1) || 
+    if( !(inb(ioaddr+NI52_MAGIC1) == NI52_MAGICVAL1) ||
         !(inb(ioaddr+NI52_MAGIC2) == NI52_MAGICVAL2))
       continue;
     if (ni52_probe1(dev, ioaddr) == 0)
-      return 0;    
+      return 0;
   }
 #endif
 
@@ -424,7 +424,7 @@ static int ni52_probe1(struct device *dev,int ioaddr)
 
   request_region(ioaddr,NI52_TOTAL_SIZE,"ni5210");
 
-  /* 
+  /*
    * check (or search) IO-Memory, 8K and 16K
    */
 #ifdef MODULE
@@ -451,7 +451,7 @@ static int ni52_probe1(struct device *dev,int ioaddr)
       }
     }
   }
-  else  
+  else
   {
    static long memaddrs[] = { 0xc8000,0xca000,0xcc000,0xce000,0xd0000,0xd2000,
                               0xd4000,0xd6000,0xd8000,0xda000,0xdc000, 0 };
@@ -473,7 +473,7 @@ static int ni52_probe1(struct device *dev,int ioaddr)
   dev->mem_end = dev->mem_start + size; /* set mem_end showed by 'ifconfig' */
 #endif
 
-  dev->priv = (void *) kmalloc(sizeof(struct priv),GFP_KERNEL); 
+  dev->priv = (void *) kmalloc(sizeof(struct priv),GFP_KERNEL);
   if(dev->priv == NULL)
   {
     printk("%s: Ooops .. can't allocate private driver memory.\n",dev->name);
@@ -481,7 +481,7 @@ static int ni52_probe1(struct device *dev,int ioaddr)
   }
                                   /* warning: we don't free it on errors */
   memset((char *) dev->priv,0,sizeof(struct priv));
-  
+
   ((struct priv *) (dev->priv))->memtop = bus_to_virt(dev->mem_start) + size;
   ((struct priv *) (dev->priv))->base =  (unsigned long) bus_to_virt(dev->mem_start) + size - 0x01000000;
   alloc586(dev);
@@ -501,7 +501,7 @@ static int ni52_probe1(struct device *dev,int ioaddr)
     ni_attn586();
     if(!(dev->irq = autoirq_report(2)))
     {
-      printk("?autoirq, Failed to detect IRQ line!\n"); 
+      printk("?autoirq, Failed to detect IRQ line!\n");
       return 1;
     }
     printk("IRQ %d (autodetected).\n",dev->irq);
@@ -525,11 +525,11 @@ static int ni52_probe1(struct device *dev,int ioaddr)
   dev->tbusy = 0;
   dev->interrupt = 0;
   dev->start = 0;
-  
+
   return 0;
 }
 
-/********************************************** 
+/**********************************************
  * init the chip (ni52-interrupt should be disabled?!)
  * needs a correct 'allocated' memory
  */
@@ -575,7 +575,7 @@ static int init586(struct device *dev)
        dev->flags|=IFF_PROMISC;
   }
   cfg_cmd->carr_coll  = 0x00;
- 
+
   p->scb->cbl_offset = make16(cfg_cmd);
   p->scb->cmd_ruc = 0;
 
@@ -587,7 +587,7 @@ static int init586(struct device *dev)
   if((cfg_cmd->cmd_status & (STAT_OK|STAT_COMPL)) != (STAT_COMPL|STAT_OK))
   {
     printk("%s: configure command failed: %x\n",dev->name,cfg_cmd->cmd_status);
-    return 1; 
+    return 1;
   }
 
     /*
@@ -610,11 +610,11 @@ static int init586(struct device *dev)
 
   if((ias_cmd->cmd_status & (STAT_OK|STAT_COMPL)) != (STAT_OK|STAT_COMPL)) {
     printk("%s (ni52): individual address setup command failed: %04x\n",dev->name,ias_cmd->cmd_status);
-    return 1; 
+    return 1;
   }
 
-   /* 
-    * TDR, wire check .. e.g. no resistor e.t.c 
+   /*
+    * TDR, wire check .. e.g. no resistor e.t.c
     */
   tdr_cmd = (struct tdr_cmd_struct *)ptr;
 
@@ -641,13 +641,13 @@ static int init586(struct device *dev)
     p->scb->cmd_cuc = p->scb->cus & STAT_MASK;
     ni_attn586(); /* ack the interrupts */
 
-    if(result & TDR_LNK_OK) 
+    if(result & TDR_LNK_OK)
       ;
     else if(result & TDR_XCVR_PRB)
       printk("%s: TDR: Transceiver problem. Check the cable(s)!\n",dev->name);
     else if(result & TDR_ET_OPN)
       printk("%s: TDR: No correct termination %d clocks away.\n",dev->name,result & TDR_TIMEMASK);
-    else if(result & TDR_ET_SRT) 
+    else if(result & TDR_ET_SRT)
     {
       if (result & TDR_TIMEMASK) /* time == 0 -> strange :-) */
         printk("%s: TDR: Detected a short circuit %d clocks away.\n",dev->name,result & TDR_TIMEMASK);
@@ -703,7 +703,7 @@ static int init586(struct device *dev)
   }
 #endif
 
-  ptr = alloc_rfa(dev,(void *)ptr); /* init receive-frame-area */ 
+  ptr = alloc_rfa(dev,(void *)ptr); /* init receive-frame-area */
 
   /*
    * alloc xmit-buffs / init xmit_cmds
@@ -716,11 +716,11 @@ static int init586(struct device *dev)
     ptr = (char *) ptr + XMIT_BUFF_SIZE;
     p->xmit_buffs[i] = (struct tbd_struct *)ptr; /* TBD */
     ptr = (char *) ptr + sizeof(struct tbd_struct);
-    if((void *)ptr > (void *)p->iscp) 
+    if((void *)ptr > (void *)p->iscp)
     {
       printk("%s: not enough shared-mem for your configuration!\n",dev->name);
       return 1;
-    }   
+    }
     memset((char *)(p->xmit_cmds[i]) ,0, sizeof(struct transmit_cmd_struct));
     memset((char *)(p->xmit_buffs[i]),0, sizeof(struct tbd_struct));
     p->xmit_cmds[i]->cmd_link = make16(p->nop_cmds[(i+1)%NUM_XMIT_BUFFS]);
@@ -731,7 +731,7 @@ static int init586(struct device *dev)
     p->xmit_buffs[i]->buffer = make24((p->xmit_cbuffs[i]));
   }
 
-  p->xmit_count = 0; 
+  p->xmit_count = 0;
   p->xmit_last  = 0;
 #ifndef NO_NOPCOMMANDS
   p->nop_point  = 0;
@@ -763,11 +763,11 @@ static int init586(struct device *dev)
 }
 
 /******************************************************
- * This is a helper routine for ni52_rnr_int() and init586(). 
+ * This is a helper routine for ni52_rnr_int() and init586().
  * It sets up the Receive Frame Area (RFA).
  */
 
-static void *alloc_rfa(struct device *dev,void *ptr) 
+static void *alloc_rfa(struct device *dev,void *ptr)
 {
   volatile struct rfd_struct *rfd = (struct rfd_struct *)ptr;
   volatile struct rbd_struct *rbd;
@@ -854,7 +854,7 @@ static void ni52_interrupt(int irq,void *dev_id,struct pt_regs *reg_ptr)
       else
       {
         printk("%s: Receiver-Unit went 'NOT READY': %04x/%02x.\n",dev->name,(int) stat,(int) p->scb->rus);
-        ni52_rnr_int(dev); 
+        ni52_rnr_int(dev);
       }
     }
 
@@ -989,7 +989,7 @@ static void ni52_rcv_int(struct device *dev)
 
 #ifdef 0
   if(!at_least_one)
-  { 
+  {
     int i;
     volatile struct rfd_struct *rfds=p->rfd_top;
     volatile struct rbd_struct *rbds;
@@ -1001,7 +1001,7 @@ static void ni52_rcv_int(struct device *dev)
       rfds = (struct rfd_struct *) make32(rfds->next);
     }
     printk("\nerrs: %04x %04x stat: %04x\n",(int)p->scb->rsc_errs,(int)p->scb->ovrn_errs,(int)p->scb->status);
-    printk("\nerrs: %04x %04x rus: %02x, cus: %02x\n",(int)p->scb->rsc_errs,(int)p->scb->ovrn_errs,(int)p->scb->rus,(int)p->scb->cus);  
+    printk("\nerrs: %04x %04x rus: %02x, cus: %02x\n",(int)p->scb->rsc_errs,(int)p->scb->ovrn_errs,(int)p->scb->rus,(int)p->scb->cus);
   }
   old_at_least = at_least_one;
 #endif
@@ -1022,7 +1022,7 @@ static void ni52_rnr_int(struct device *dev)
 
   WAIT_4_SCB_CMD();    /* wait for the last cmd, WAIT_4_FULLSTAT?? */
   p->scb->cmd_ruc = RUC_ABORT; /* usually the RU is in the 'no resource'-state .. abort it now. */
-  ni_attn586(); 
+  ni_attn586();
   WAIT_4_SCB_CMD_RUC();    /* wait for accept cmd. */
 
   alloc_rfa(dev,(char *)p->rfd_first);
@@ -1054,18 +1054,18 @@ static void ni52_xmt_int(struct device *dev)
     p->stats.tx_packets++;
     p->stats.collisions += (status & TCMD_MAXCOLLMASK);
   }
-  else 
+  else
   {
     p->stats.tx_errors++;
     if(status & TCMD_LATECOLL) {
       printk("%s: late collision detected.\n",dev->name);
       p->stats.collisions++;
-    } 
+    }
     else if(status & TCMD_NOCARRIER) {
       p->stats.tx_carrier_errors++;
       printk("%s: no carrier detected.\n",dev->name);
-    } 
-    else if(status & TCMD_LOSTCTS) 
+    }
+    else if(status & TCMD_LOSTCTS)
       printk("%s: loss of CTS detected.\n",dev->name);
     else if(status & TCMD_UNDERRUN) {
       p->stats.tx_fifo_errors++;
@@ -1074,11 +1074,11 @@ static void ni52_xmt_int(struct device *dev)
     else if(status & TCMD_MAXCOLL) {
       printk("%s: Max. collisions exceeded.\n",dev->name);
       p->stats.collisions += 16;
-    } 
+    }
   }
 
 #if (NUM_XMIT_BUFFS > 1)
-  if( (++p->xmit_last) == NUM_XMIT_BUFFS) 
+  if( (++p->xmit_last) == NUM_XMIT_BUFFS)
     p->xmit_last = 0;
 #endif
 
@@ -1088,7 +1088,7 @@ static void ni52_xmt_int(struct device *dev)
 
 /***********************************************************
  * (re)start the receiver
- */ 
+ */
 
 static void startrecv586(struct device *dev)
 {
@@ -1103,7 +1103,7 @@ static void startrecv586(struct device *dev)
 }
 
 /******************************************************
- * send frame 
+ * send frame
  */
 
 static int ni52_send_packet(struct sk_buff *skb, struct device *dev)
@@ -1222,7 +1222,7 @@ static int ni52_send_packet(struct sk_buff *skb, struct device *dev)
     next_nop = (p->nop_point + 1) & 0x1;
     p->xmit_buffs[0]->size = TBD_LAST | len;
 
-    p->xmit_cmds[0]->cmd_link   = p->nop_cmds[next_nop]->cmd_link 
+    p->xmit_cmds[0]->cmd_link   = p->nop_cmds[next_nop]->cmd_link
                                 = make16((p->nop_cmds[next_nop]));
     p->xmit_cmds[0]->cmd_status = p->nop_cmds[next_nop]->cmd_status = 0;
 
@@ -1233,7 +1233,7 @@ static int ni52_send_packet(struct sk_buff *skb, struct device *dev)
 #  endif
 #else
     p->xmit_buffs[p->xmit_count]->size = TBD_LAST | len;
-    if( (next_nop = p->xmit_count + 1) == NUM_XMIT_BUFFS ) 
+    if( (next_nop = p->xmit_count + 1) == NUM_XMIT_BUFFS )
       next_nop = 0;
 
     p->xmit_cmds[p->xmit_count]->cmd_status  = 0;
@@ -1244,9 +1244,9 @@ static int ni52_send_packet(struct sk_buff *skb, struct device *dev)
     p->nop_cmds[p->xmit_count]->cmd_link = make16((p->xmit_cmds[p->xmit_count]));
     dev->trans_start = jiffies;
     p->xmit_count = next_nop;
- 
+
     {
-      long flags; 
+      long flags;
       save_flags(flags);
       cli();
       if(p->xmit_count != p->xmit_last)
@@ -1261,7 +1261,7 @@ static int ni52_send_packet(struct sk_buff *skb, struct device *dev)
 }
 
 /*******************************************
- * Someone wanna have the statistics 
+ * Someone wanna have the statistics
  */
 
 static struct enet_statistics *ni52_get_stats(struct device *dev)
@@ -1287,7 +1287,7 @@ static struct enet_statistics *ni52_get_stats(struct device *dev)
 }
 
 /********************************************************
- * Set MC list ..  
+ * Set MC list ..
  */
 static void set_multicast_list(struct device *dev)
 {
@@ -1301,7 +1301,7 @@ static void set_multicast_list(struct device *dev)
 
   ni_disint();
   alloc586(dev);
-  init586(dev);  
+  init586(dev);
   startrecv586(dev);
   ni_enaint();
 
@@ -1320,6 +1320,11 @@ int irq=9;
 int io=0x300;
 long memstart=0; /* e.g 0xd0000 */
 long memend=0;   /* e.g 0xd4000 */
+
+MODULE_PARM(io, "i");
+MODULE_PARM(irq, "i");
+MODULE_PARM(memstart, "l");
+MODULE_PARM(memend, "l");
 
 int init_module(void)
 {
@@ -1383,7 +1388,5 @@ void ni52_dump(struct device *dev,void *ptr)
 #endif
 
 /*
- * END: linux/drivers/net/ni52.c 
+ * END: linux/drivers/net/ni52.c
  */
-
-

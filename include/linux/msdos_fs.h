@@ -9,6 +9,8 @@
 #include <linux/fd.h>
 #include <linux/config.h>
 
+#include <asm/byteorder.h>
+
 #define MSDOS_ROOT_INO  1 /* == MINIX_ROOT_INO */
 #define SECTOR_SIZE     512 /* sector size (bytes) */
 #define SECTOR_BITS	9 /* log2(SECTOR_SIZE) */
@@ -96,11 +98,10 @@
  * BE = big-endian, c: W = word (16 bits), L = longword (32 bits)
  */
 
-#define CF_LE_W(v) (v)
-#define CF_LE_L(v) (v)
-#define CT_LE_W(v) (v)
-#define CT_LE_L(v) (v)
-
+#define CF_LE_W(v) le16_to_cpu(v)
+#define CF_LE_L(v) le32_to_cpu(v)
+#define CT_LE_W(v) cpu_to_le16(v)
+#define CT_LE_L(v) cpu_to_le32(v)
 
 struct msdos_boot_sector {
 	__s8	ignored[3];	/* Boot strap short or near jump */

@@ -1,4 +1,4 @@
-/* $Id: traps.c,v 1.49 1996/12/18 06:33:49 tridge Exp $
+/* $Id: traps.c,v 1.50 1996/12/29 20:46:05 davem Exp $
  * arch/sparc/kernel/traps.c
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -10,7 +10,6 @@
 
 #include <linux/sched.h>  /* for jiffies */
 #include <linux/kernel.h>
-#include <linux/config.h>
 #include <linux/signal.h>
 
 #include <asm/delay.h>

@@ -1,4 +1,4 @@
-/* $Id: sys_sparc.c,v 1.32 1996/12/19 05:25:46 davem Exp $
+/* $Id: sys_sparc.c,v 1.33 1996/12/24 08:59:33 davem Exp $
  * linux/arch/sparc/kernel/sys_sparc.c
  *
  * This file contains various random system calls that
@@ -201,18 +201,47 @@ sparc_breakpoint (struct pt_regs *regs)
 #endif
 }
 
-extern int
-sys_sigaction (int signum, const struct sigaction *action, struct sigaction *oldaction);
+extern void check_pending(int signum);
 
 asmlinkage int
 sparc_sigaction (int signum, const struct sigaction *action, struct sigaction *oldaction)
 {
-    if (signum >= 0){
-	return sys_sigaction (signum, action, oldaction);
-    } else {
-	current->tss.new_signal = 1;
-	return sys_sigaction (-signum, action, oldaction);
-    }
+	struct sigaction new_sa, *p;
+
+	if(signum < 0) {
+		current->tss.new_signal = 1;
+		signum = -signum;
+	}
+
+	if (signum<1 || signum>32)
+		return -EINVAL;
+	p = signum - 1 + current->sig->action;
+	if (action) {
+		int err = verify_area(VERIFY_READ,action,sizeof(struct sigaction));
+		if (err)
+			return err;
+		if (signum==SIGKILL || signum==SIGSTOP)
+			return -EINVAL;
+		if(copy_from_user(&new_sa, action, sizeof(struct sigaction)))
+			return -EFAULT;	
+		if (new_sa.sa_handler != SIG_DFL && new_sa.sa_handler != SIG_IGN) {
+			err = verify_area(VERIFY_READ, new_sa.sa_handler, 1);
+			if (err)
+				return err;
+		}
+	}
+
+	if (oldaction) {
+		if (copy_to_user(oldaction, p, sizeof(struct sigaction)))
+			return -EFAULT;	
+	}
+
+	if (action) {
+		*p = new_sa;
+		check_pending(signum);
+	}
+
+	return 0;
 }
 
 #ifndef CONFIG_AP1000

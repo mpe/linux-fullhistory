@@ -2,9 +2,9 @@
  * ni6510 (am7990 'lance' chip) driver for Linux-net-3
  * BETAcode v0.71 (96/09/29) for 2.0.0 (or later)
  * copyrights (c) 1994,1995,1996 by M.Hipp
- * 
- * This driver can handle the old ni6510 board and the newer ni6510 
- * EtherBlaster. (probably it also works with every full NE2100 
+ *
+ * This driver can handle the old ni6510 board and the newer ni6510
+ * EtherBlaster. (probably it also works with every full NE2100
  * compatible card)
  *
  * To compile as module, type:
@@ -40,7 +40,7 @@
  * simple performance test: (486DX-33/Ni6510-EB receives from 486DX4-100/Ni6510-EB)
  *    average: FTP -> 8384421 bytes received in 8.5 seconds
  *           (no RCV_VIA_SKB,no XMT_VIA_SKB,PARANOIA_CHECK,4 XMIT BUFS, 8 RCV_BUFFS)
- *    peak: FTP -> 8384421 bytes received in 7.5 seconds 
+ *    peak: FTP -> 8384421 bytes received in 7.5 seconds
  *           (RCV_VIA_SKB,XMT_VIA_SKB,no PARANOIA_CHECK,1(!) XMIT BUF, 16 RCV BUFFS)
  */
 
@@ -84,7 +84,7 @@
 
 /*
  * the current setting allows an acceptable performance
- * for 'RCV_PARANOIA_CHECK' read the 'known problems' part in 
+ * for 'RCV_PARANOIA_CHECK' read the 'known problems' part in
  * the header of this file
  * 'invert' the defines for max. performance. This may cause DMA problems
  * on some boards (e.g on my ASUS SP3G)
@@ -120,7 +120,7 @@
  */
 #if 1
 #define RMDNUM 16
-#define RMDNUMMASK 0x80000000 
+#define RMDNUMMASK 0x80000000
 #else
 #define RMDNUM 8
 #define RMDNUMMASK 0x60000000 /* log2(RMDNUM)<<29 */
@@ -147,7 +147,7 @@
 #define L_CONFIG  0x05
 #define L_BUSIF   0x06
 
-/* 
+/*
  * to access the lance/am7990-regs, you have to write
  * reg-number into L_ADDRREG, then you can access it using L_DATAREG
  */
@@ -193,11 +193,11 @@ static struct card {
 };
 #define NUM_CARDS 3
 
-struct priv 
+struct priv
 {
   struct rmd rmdhead[RMDNUM];
   struct tmd tmdhead[TMDNUM];
-  struct init_block ib; 
+  struct init_block ib;
   int rmdnum;
   int tmdnum,tmdlast;
 #ifdef RCV_VIA_SKB
@@ -216,7 +216,7 @@ struct priv
   int cmdr_addr;
   int cardno;
   int features;
-}; 
+};
 
 static int  ni65_probe1(struct device *dev,int);
 static void ni65_interrupt(int irq, void * dev_id, struct pt_regs *regs);
@@ -246,11 +246,11 @@ static void ni65_set_performance(struct priv *p)
 
   if( !(cards[p->cardno].config & 0x02) )
     return;
- 
+
   outw(80,PORT+L_ADDRREG);
   if(inw(PORT+L_ADDRREG) != 80)
     return;
- 
+
   writereg( (csr80 & 0x3fff) ,80); /* FIFO watermarks */
   outw(0,PORT+L_ADDRREG);
   outw((short)isa0,PORT+L_BUSIF); /* write ISA 0: DMA_R : isa0 * 50ns */
@@ -269,7 +269,7 @@ static int ni65_open(struct device *dev)
   int irqval = request_irq(dev->irq, &ni65_interrupt,0,
                         cards[p->cardno].cardname,NULL);
   if (irqval) {
-    printk ("%s: unable to get IRQ %d (irqval=%d).\n", 
+    printk ("%s: unable to get IRQ %d (irqval=%d).\n",
               dev->name,dev->irq, irqval);
     return -EAGAIN;
   }
@@ -318,12 +318,12 @@ static int ni65_close(struct device *dev)
   dev->tbusy = 1;
   dev->start = 0;
   MOD_DEC_USE_COUNT;
-  return 0; 
+  return 0;
 }
 
-/* 
- * Probe The Card (not the lance-chip) 
- */ 
+/*
+ * Probe The Card (not the lance-chip)
+ */
 #ifdef MODULE
 static
 #endif
@@ -337,7 +337,7 @@ int ni65_probe(struct device *dev)
   else if (dev->base_addr > 0)         /* Don't probe at all. */
      return -ENXIO;
 
-  for (port = ports; *port; port++) 
+  for (port = ports; *port; port++)
   {
     if (ni65_probe1(dev, *port) == 0)
        return 0;
@@ -347,12 +347,12 @@ int ni65_probe(struct device *dev)
 }
 
 /*
- * this is the real card probe .. 
+ * this is the real card probe ..
  */
 static int ni65_probe1(struct device *dev,int ioaddr)
 {
   int i,j;
-  struct priv *p; 
+  struct priv *p;
 
   for(i=0;i<NUM_CARDS;i++) {
     if(check_region(ioaddr, cards[i].total_size))
@@ -464,8 +464,8 @@ static int ni65_probe1(struct device *dev,int ioaddr)
     return -EAGAIN;
   }
 
-  /* 
-   * Grab the region so we can find another board. 
+  /*
+   * Grab the region so we can find another board.
    */
   request_region(ioaddr,cards[p->cardno].total_size,cards[p->cardno].cardname);
 
@@ -487,9 +487,9 @@ static int ni65_probe1(struct device *dev,int ioaddr)
 }
 
 /*
- * set lance register and trigger init 
+ * set lance register and trigger init
  */
-static void ni65_init_lance(struct priv *p,unsigned char *daddr,int filter,int mode) 
+static void ni65_init_lance(struct priv *p,unsigned char *daddr,int filter,int mode)
 {
   int i;
   u32 pib;
@@ -566,8 +566,8 @@ static int ni65_alloc_buffer(struct device *dev)
   unsigned char *ptr;
   struct priv *p;
   int i;
- 
-  /* 
+
+  /*
    * we need 8-aligned memory ..
    */
   ptr = ni65_alloc_mem(dev,"BUFFER",sizeof(struct priv)+8,0);
@@ -611,7 +611,7 @@ static int ni65_alloc_buffer(struct device *dev)
 }
 
 /*
- * free buffers and private struct 
+ * free buffers and private struct
  */
 static void ni65_free_buffer(struct priv *p)
 {
@@ -673,7 +673,7 @@ static void ni65_stop_start(struct device *dev,struct priv *p)
           break;
       }
     }
-    
+
     for(i=0;i<TMDNUM;i++) {
       struct tmd *tmdp = p->tmdhead + i;
 #ifdef XMT_VIA_SKB
@@ -708,12 +708,12 @@ static void ni65_stop_start(struct device *dev,struct priv *p)
     if(!p->lock)
       dev->tbusy = (p->tmdnum || !p->xmit_queued) ? 0 : 1;
     dev->trans_start = jiffies;
-  } 
+  }
   else
     writedatareg(CSR0_STRT | csr0);
 }
 
-/* 
+/*
  * init lance (write init-values .. init-buffers) (open-helper)
  */
 static int ni65_lance_reinit(struct device *dev)
@@ -726,7 +726,7 @@ static int ni65_lance_reinit(struct device *dev)
 
    disable_dma(dev->dma); /* I've never worked with dma, but we do it like the packetdriver */
    set_dma_mode(dev->dma,DMA_MODE_CASCADE);
-   enable_dma(dev->dma); 
+   enable_dma(dev->dma);
 
    outw(inw(PORT+L_RESET),PORT+L_RESET); /* first: reset the card */
    if( (i=readreg(CSR0) ) != 0x4)
@@ -764,17 +764,17 @@ static int ni65_lance_reinit(struct device *dev)
      rmdp->mlen = 0;
      rmdp->u.s.status = RCV_OWN;
    }
-   
+
    if(dev->flags & IFF_PROMISC)
      ni65_init_lance(p,dev->dev_addr,0x00,M_PROM);
    else if(dev->mc_count || dev->flags & IFF_ALLMULTI)
      ni65_init_lance(p,dev->dev_addr,0xff,0x0);
-   else 
+   else
      ni65_init_lance(p,dev->dev_addr,0x00,0x00);
 
   /*
    * ni65_set_lance_mem() sets L_ADDRREG to CSR0
-   * NOW, WE WILL NEVER CHANGE THE L_ADDRREG, CSR0 IS ALWAYS SELECTED 
+   * NOW, WE WILL NEVER CHANGE THE L_ADDRREG, CSR0 IS ALWAYS SELECTED
    */
 
    if(inw(PORT+L_DATAREG) & CSR0_IDON)  {
@@ -787,9 +787,9 @@ static int ni65_lance_reinit(struct device *dev)
    disable_dma(dev->dma);
    return 0; /* ->Error */
 }
- 
-/* 
- * interrupt handler  
+
+/*
+ * interrupt handler
  */
 static void ni65_interrupt(int irq, void * dev_id, struct pt_regs * regs)
 {
@@ -975,7 +975,7 @@ static void ni65_xmit_intr(struct device *dev,int csr0)
  */
 static void ni65_recv_intr(struct device *dev,int csr0)
 {
-  struct rmd *rmdp; 
+  struct rmd *rmdp;
   int rmdstat,len;
   int cnt=0;
   struct priv *p = (struct priv *) dev->priv;
@@ -984,7 +984,7 @@ static void ni65_recv_intr(struct device *dev,int csr0)
   while(!( (rmdstat = rmdp->u.s.status) & RCV_OWN))
   {
     cnt++;
-    if( (rmdstat & (RCV_START | RCV_END | RCV_ERR)) != (RCV_START | RCV_END) ) /* error or oversized? */ 
+    if( (rmdstat & (RCV_START | RCV_END | RCV_ERR)) != (RCV_START | RCV_END) ) /* error or oversized? */
     {
       if(!(rmdstat & RCV_ERR)) {
         if(rmdstat & RCV_START)
@@ -1001,7 +1001,7 @@ static void ni65_recv_intr(struct device *dev,int csr0)
           p->stats.rx_frame_errors++;
         if(rmdstat & RCV_OFLO)
           p->stats.rx_over_errors++;
-        if(rmdstat & RCV_CRC) 
+        if(rmdstat & RCV_CRC)
           p->stats.rx_crc_errors++;
         if(rmdstat & RCV_BUF_ERR)
           p->stats.rx_fifo_errors++;
@@ -1128,7 +1128,7 @@ static int ni65_send_packet(struct sk_buff *skb, struct device *dev)
     else {
       save_flags(flags);
       cli();
- 
+
       tmdp = p->tmdhead + p->tmdnum;
       tmdp->u.buffer = (u32) virt_to_bus(skb->data);
       p->tmd_skb[p->tmdnum] = skb;
@@ -1187,6 +1187,10 @@ static int irq=0;
 static int io=0;
 static int dma=0;
 
+MODULE_PARM(irq, "i");
+MODULE_PARM(io, "i");
+MODULE_PARM(dma, "i");
+
 int init_module(void)
 {
 #if 0
@@ -1222,7 +1226,5 @@ void cleanup_module(void)
 #endif /* MODULE */
 
 /*
- * END of ni65.c 
+ * END of ni65.c
  */
-
-

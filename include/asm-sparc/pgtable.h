@@ -1,4 +1,4 @@
-/* $Id: pgtable.h,v 1.56 1996/12/23 05:28:50 davem Exp $ */
+/* $Id: pgtable.h,v 1.58 1996/12/30 06:17:03 davem Exp $ */
 #ifndef _SPARC_PGTABLE_H
 #define _SPARC_PGTABLE_H
 
@@ -25,10 +25,6 @@ extern void (*quick_kernel_fault)(unsigned long);
 /* Allocate a block of RAM which is aligned to its size.
    This procedure can be used until the call to mem_init(). */
 extern void *sparc_init_alloc(unsigned long *kbrk, unsigned long size);
-
-/* mmu-specific process creation/cloning/etc hooks. */
-extern void (*mmu_exit_hook)(void);
-extern void (*mmu_flush_hook)(void);
 
 /* translate between physical and virtual addresses */
 extern unsigned long (*mmu_v2p)(unsigned long);
@@ -260,8 +256,6 @@ extern pmd_t * (*pmd_alloc)(pgd_t *, unsigned long);
 extern void (*pgd_free)(pgd_t *);
 
 extern pgd_t * (*pgd_alloc)(void);
-
-extern void (*pgd_flush)(pgd_t *);
 
 /* Fine grained cache/tlb flushing. */
 

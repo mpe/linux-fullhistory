@@ -1,7 +1,7 @@
-/* $Id: dma.h,v 1.1 1996/11/20 15:27:38 davem Exp $
+/* $Id: dma.h,v 1.2 1996/12/26 13:25:24 davem Exp $
  * include/asm-sparc64/dma.h
  *
- * Copyright 1995 (C) David S. Miller (davem@caip.rutgers.edu)
+ * Copyright 1996 (C) David S. Miller (davem@caip.rutgers.edu)
  */
 
 #ifndef _ASM_SPARC64_DMA_H
@@ -9,7 +9,6 @@
 
 #include <linux/kernel.h>
 
-#include <asm/vac-ops.h>  /* for invalidate's, etc. */
 #include <asm/sbus.h>
 #include <asm/delay.h>
 #include <asm/oplib.h>
@@ -18,7 +17,7 @@
  * things can compile.
  */
 #define MAX_DMA_CHANNELS 8
-#define MAX_DMA_ADDRESS  (~0UL)
+#define MAX_DMA_ADDRESS  ((0x100000000) + PAGE_OFFSET)
 #define DMA_MODE_READ    1
 #define DMA_MODE_WRITE   2
 
@@ -164,40 +163,6 @@ extern unsigned long dvma_init(struct linux_sbus *, unsigned long);
 #define DMA_IRQ_EXIT(dma, dregs) do { \
 	if(DMA_ISBROKEN(dma)) DMA_INTSON(dregs); \
    } while(0)
-
-/* Pause until counter runs out or BIT isn't set in the DMA condition
- * register.
- */
-extern __inline__ void sparc_dma_pause(struct sparc_dma_registers *regs,
-				       unsigned long bit)
-{
-	int ctr = 50000;   /* Let's find some bugs ;) */
-
-	/* Busy wait until the bit is not set any more */
-	while((regs->cond_reg&bit) && (ctr>0)) {
-		ctr--;
-		__delay(5);
-	}
-
-	/* Check for bogus outcome. */
-	if(!ctr)
-		panic("DMA timeout");
-}
-
-/* Reset the friggin' thing... */
-#define DMA_RESET(dma) do { \
-	struct sparc_dma_registers *regs = dma->regs;                      \
-	/* Let the current FIFO drain itself */                            \
-	sparc_dma_pause(regs, (DMA_FIFO_ISDRAIN));                         \
-	/* Reset the logic */                                              \
-	regs->cond_reg |= (DMA_RST_SCSI);     /* assert */                 \
-	__delay(400);                         /* let the bits set ;) */    \
-	regs->cond_reg &= ~(DMA_RST_SCSI);    /* de-assert */              \
-	sparc_dma_enable_interrupts(regs);    /* Re-enable interrupts */   \
-	/* Enable FAST transfers if available */                           \
-	if(dma->revision>dvmarev1) regs->cond_reg |= DMA_3CLKS;            \
-	dma->running = 0;                                                  \
-} while(0)
 
 #define for_each_dvma(dma) \
         for((dma) = dma_chain; (dma); (dma) = (dma)->next)

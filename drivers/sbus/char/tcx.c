@@ -1,4 +1,4 @@
-/* $Id: tcx.c,v 1.8 1996/11/21 16:57:57 jj Exp $
+/* $Id: tcx.c,v 1.9 1996/12/23 10:16:17 ecd Exp $
  * tcx.c: SUNW,tcx 24/8bit frame buffer driver
  *
  * Copyright (C) 1996 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
@@ -9,6 +9,7 @@
 #include <linux/kd.h>
 #include <linux/tty.h>
 #include <linux/malloc.h>
+#include <linux/proc_fs.h>
 
 #include <asm/sbus.h>
 #include <asm/io.h>

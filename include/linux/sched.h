@@ -317,12 +317,9 @@ extern struct   mm_struct init_mm;
 extern struct task_struct init_task;
 extern struct task_struct *task[NR_TASKS];
 extern struct task_struct *last_task_used_math;
-extern struct task_struct *current_set[NR_CPUS];
-/*
- *	On a single processor system this comes out as current_set[0] when cpp
- *	has finished with it, which gcc will optimise away.
- */
-#define current (current_set[smp_processor_id()])	/* Current on this processor */
+
+#include <asm/current.h>
+
 extern unsigned long volatile jiffies;
 extern unsigned long itimer_ticks;
 extern unsigned long itimer_next;

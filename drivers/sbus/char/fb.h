@@ -1,4 +1,4 @@
-/* $Id: fb.h,v 1.19 1996/11/13 05:10:23 davem Exp $
+/* $Id: fb.h,v 1.20 1996/12/23 10:16:08 ecd Exp $
  * fb.h: contains the definitions of the structures that various sun
  *       frame buffer can use to do console driver stuff.
  *
@@ -13,7 +13,6 @@
 #ifndef __SPARC_FB_H_
 #define __SPARC_FB_H_
 
-#include <linux/proc_fs.h>
 #include <linux/init.h>
 
 #define FRAME_BUFFERS    8

@@ -20,7 +20,7 @@
  *		  - added message if driver loaded as a module but no
  *		    interfaces present.
  *		  - release claimed I/O ports if malloc() fails during init.
- *		
+ *
  *		Niibe Yutaka
  *		  - Module initialization.  You can specify I/O addr and IRQ:
  *			# insmod plip.o io=0x3bc irq=7
@@ -44,7 +44,7 @@
  *     Crynwr packet driver, Peter Bauer changed the protocol again
  *     back to original protocol.
  *
- *     This version follows original PLIP protocol. 
+ *     This version follows original PLIP protocol.
  *     So, this PLIP can't communicate the PLIP of Linux v1.0.
  */
 
@@ -187,7 +187,7 @@ struct plip_local {
 			unsigned char lsb;
 #else
 #error	"Please fix the endianness defines in <asm/byteorder.h>"
-#endif						
+#endif
 		} b;
 		unsigned short h;
 	} length;
@@ -553,7 +553,7 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 	case PLIP_PK_DATA:
 		lbuf = rcv->skb->data;
 		do
-			if (plip_receive(nibble_timeout, status_addr, 
+			if (plip_receive(nibble_timeout, status_addr,
 					 &rcv->nibble, &lbuf[rcv->byte]))
 				return TIMEOUT;
 		while (++rcv->byte < rcv->length.h);
@@ -605,7 +605,7 @@ plip_receive_packet(struct device *dev, struct net_local *nl,
 	return OK;
 }
 
-/* PLIP_SEND --- send a byte (two nibbles) 
+/* PLIP_SEND --- send a byte (two nibbles)
    Returns OK on success, TIMEOUT when timeout    */
 inline static int
 plip_send(unsigned short nibble_timeout, unsigned short data_addr,
@@ -625,7 +625,7 @@ plip_send(unsigned short nibble_timeout, unsigned short data_addr,
 		data_addr++;
 		while (1) {
 			c0 = inb(data_addr);
-			if ((c0 & 0x80) == 0) 
+			if ((c0 & 0x80) == 0)
 				break;
 			if (--cx == 0)
 				return TIMEOUT;
@@ -1048,7 +1048,7 @@ plip_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 {
 	struct net_local *nl = (struct net_local *) dev->priv;
 	struct plipconf *pc = (struct plipconf *) &rq->ifr_data;
-	
+
 	switch(pc->pcmd) {
 	case PLIP_GET_TIMEOUT:
 		pc->trigger = nl->trigger;
@@ -1068,24 +1068,27 @@ plip_ioctl(struct device *dev, struct ifreq *rq, int cmd)
 static int io[] = {0, 0, 0};
 static int irq[] = {0, 0, 0};
 
+MODULE_PARM(io, "1-3i");
+MODULE_PARM(irq, "1-3i");
+
 static struct device dev_plip[] = {
 	{
 		"plip0",
 		0, 0, 0, 0,		/* memory */
 		0x3BC, 5,		/* base, irq */
-		0, 0, 0, NULL, plip_init 
+		0, 0, 0, NULL, plip_init
 	},
 	{
 		"plip1",
 		0, 0, 0, 0,		/* memory */
 		0x378, 7,		/* base, irq */
-		0, 0, 0, NULL, plip_init 
+		0, 0, 0, NULL, plip_init
 	},
 	{
 		"plip2",
 		0, 0, 0, 0,		/* memory */
 		0x278, 2,		/* base, irq */
-		0, 0, 0, NULL, plip_init 
+		0, 0, 0, NULL, plip_init
 	}
 };
 
@@ -1120,7 +1123,7 @@ init_module(void)
 		return 0;
 
 	/* No parameters.  Default action is probing all interfaces. */
-	for (i=0; i < 3; i++) { 
+	for (i=0; i < 3; i++) {
 		if (register_netdev(&dev_plip[i]) == 0)
 			devices++;
 	}

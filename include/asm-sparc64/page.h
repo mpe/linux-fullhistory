@@ -1,13 +1,19 @@
-/* $Id: page.h,v 1.2 1996/12/02 00:01:06 davem Exp $ */
+/* $Id: page.h,v 1.4 1996/12/28 18:39:51 davem Exp $ */
 
 #ifndef _SPARC64_PAGE_H
 #define _SPARC64_PAGE_H
 
 #define PAGE_SHIFT   13
+
+#ifndef __ASSEMBLY__
+
 #define PAGE_SIZE    (1UL << PAGE_SHIFT)
 #define PAGE_MASK    (~(PAGE_SIZE-1))
 
 #ifdef __KERNEL__
+
+#define clear_page(page)	memset((void *)(page), 0, PAGE_SIZE)
+#define copy_page(to,from)	memcpy((void *)(to), (void *)(from), PAGE_SIZE)
 
 #define STRICT_MM_TYPECHECKS
 
@@ -63,7 +69,9 @@ typedef unsigned long iopgprot_t;
 #define __pgprot(x)	(x)
 #define __iopgprot(x)	(x)
 
-#endif
+#endif /* (STRICT_MM_TYPECHECKS) */
+
+#endif /* !(__ASSEMBLY__) */
 
 #define TASK_UNMAPPED_BASE	0x0000000070000000UL
 
@@ -74,6 +82,8 @@ typedef unsigned long iopgprot_t;
 #define __pa(x)			((unsigned long)(x) - PAGE_OFFSET)
 #define __va(x)			((void *)((unsigned long) (x) + PAGE_OFFSET))
 #define MAP_NR(addr)		(__pa(addr) >> PAGE_SHIFT)
+
+#ifndef __ASSEMBLY__
 
 /* The following structure is used to hold the physical
  * memory configuration of the machine.  This is filled in
@@ -92,6 +102,8 @@ struct sparc_phys_banks {
 
 extern struct sparc_phys_banks sp_banks[SPARC_PHYS_BANKS];
 
-#endif /* __KERNEL__ */
+#endif /* !(__ASSEMBLY__) */
 
-#endif /* _SPARC64_PAGE_H */
+#endif /* !(__KERNEL__) */
+
+#endif /* !(_SPARC64_PAGE_H) */

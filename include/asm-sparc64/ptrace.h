@@ -1,4 +1,4 @@
-/* $Id: ptrace.h,v 1.1 1996/12/12 11:59:35 davem Exp $ */
+/* $Id: ptrace.h,v 1.4 1996/12/28 18:39:54 davem Exp $ */
 #ifndef _SPARC64_PTRACE_H
 #define _SPARC64_PTRACE_H
 
@@ -16,6 +16,14 @@ struct pt_regs {
 	unsigned long tpc;
 	unsigned long tnpc;
 	unsigned long y;
+};
+
+struct pt_regs32 {
+	unsigned int psr;
+	unsigned int pc;
+	unsigned int npc;
+	unsigned int y;
+	unsigned int u_regs[16]; /* globals and ins */
 };
 
 #define UREG_G0        0
@@ -44,7 +52,7 @@ struct reg_window {
 };
 
 /* A 32-bit register window. */
-struct reg_window_32 {
+struct reg_window32 {
 	unsigned int locals[8];
 	unsigned int ins[8];
 };
@@ -61,7 +69,7 @@ struct sparc_stackf {
 };	
 
 /* A 32-bit Sparc stack frame */
-struct sparc_stackf_32 {
+struct sparc_stackf32 {
 	unsigned int locals[8];
         unsigned int ins[6];
 	unsigned int fp;
@@ -71,19 +79,36 @@ struct sparc_stackf_32 {
 	unsigned int xxargs[1];
 };	
 
-#define TRACEREG_SZ   sizeof(struct pt_regs)
-#define STACKFRAME_SZ sizeof(struct sparc_stackf)
-#define REGWIN_SZ     sizeof(struct reg_window)
+struct sparc_trapf {
+	unsigned long locals[8];
+	unsigned long ins[8];
+	unsigned long _unused;
+	struct pt_regs *regs;
+};
+
+#define TRACEREG_SZ	sizeof(struct pt_regs)
+#define STACKFRAME_SZ	sizeof(struct sparc_stackf)
+#define REGWIN_SZ	sizeof(struct reg_window)
+
+#define TRACEREG32_SZ	sizeof(struct pt_regs32)
+#define STACKFRAME32_SZ	sizeof(struct sparc_stackf32)
+#define REGWIN32_SZ	sizeof(struct reg_window32)
 
 #ifdef __KERNEL__
-#define user_mode(regs) (!((regs)->tstate & PSR_PS))
+#define user_mode(regs) (!((regs)->tstate & TSTATE_PRIV))
 #define instruction_pointer(regs) ((regs)->tpc)
 extern void show_regs(struct pt_regs *);
 #endif
 
 #else /* __ASSEMBLY__ */
 /* For assembly code. */
-#define TRACEREG_SZ       0x50
-#define STACKFRAME_SZ     0x60
-#define REGWIN_SZ         0x40
+#define TRACEREG_SZ		XXX
+#define STACKFRAME_SZ		YYY
+#define REGWIN_SZ		ZZZ
+
+#define TRACEREG32_SZ		0x50
+#define STACKFRAME32_SZ		0x60
+#define REGWIN32_SZ		0x40
 #endif
+
+#endif /* !(_SPARC64_PTRACE_H) */

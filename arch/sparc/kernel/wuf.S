@@ -1,4 +1,4 @@
-/* $Id: wuf.S,v 1.28 1996/12/10 06:06:20 davem Exp $
+/* $Id: wuf.S,v 1.29 1996/12/28 18:14:23 davem Exp $
  * wuf.S: Window underflow trap handler for the Sparc.
  *
  * Copyright (C) 1995 David S. Miller
@@ -184,8 +184,7 @@ fwin_user_stack_is_bolixed:
 	ENTER_SYSCALL
 
 	wr	%t_psr, PSR_ET, %psr			! enable traps
-	WRITE_PAUSE
-
+	nop
 	call	C_LABEL(window_underflow_fault)
 	 mov	%g4, %o0
 
@@ -343,7 +342,7 @@ C_LABEL(srmmu_fwin_stackchk):
 	 nop
 
 	wr	%t_psr, 0x0, %psr
-	WRITE_PAUSE
+	nop
 	b	fwin_user_finish_up + 0x4
 	 nop
 

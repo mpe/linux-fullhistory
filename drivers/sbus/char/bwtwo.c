@@ -1,4 +1,4 @@
-/* $Id: bwtwo.c,v 1.8 1996/11/23 19:54:05 ecd Exp $
+/* $Id: bwtwo.c,v 1.9 1996/12/23 10:15:57 ecd Exp $
  * bwtwo.c: bwtwo console driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -7,6 +7,7 @@
 #include <linux/kd.h>
 #include <linux/tty.h>
 #include <linux/malloc.h>
+#include <linux/proc_fs.h>
 
 #include <asm/sbus.h>
 #include <asm/io.h>

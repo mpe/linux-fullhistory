@@ -1,11 +1,10 @@
-/* $Id: tree.c,v 1.13 1996/12/18 06:46:56 tridge Exp $
+/* $Id: tree.c,v 1.14 1996/12/29 20:46:12 davem Exp $
  * tree.c: Basic device tree traversal/scanning for the Linux
  *         prom library.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  */
 
-#include <linux/config.h>
 #include <linux/string.h>
 #include <linux/types.h>
 #include <linux/kernel.h>

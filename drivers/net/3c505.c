@@ -3,7 +3,7 @@
  *      By Craig Southeren, Juha Laiho and Philip Blundell
  *
  * 3c505.c      This module implements an interface to the 3Com
- *              Etherlink Plus (3c505) ethernet card. Linux device 
+ *              Etherlink Plus (3c505) ethernet card. Linux device
  *              driver interface reverse engineered from the Linux 3C509
  *              device drivers. Some 3C505 information gleaned from
  *              the Crynwr packet driver. Still this driver would not
@@ -78,11 +78,11 @@
 
 /* This driver may now work with revision 2.x hardware, since all the read
  * operations on the HCR have been removed (we now keep our own softcopy).
- * But I don't have an old card to test it on.  
- * 
+ * But I don't have an old card to test it on.
+ *
  * This has had the bad effect that the autoprobe routine is now a bit
  * less friendly to other devices.  However, it was never very good.
- * before, so I doubt it will hurt anybody.  
+ * before, so I doubt it will hurt anybody.
  */
 
 /* The driver is a mess.  I took Craig's and Juha's code, and hacked it firstly
@@ -378,7 +378,7 @@ static inline void prime_rx(struct device *dev)
 /*****************************************************************
  *
  * send_pcb
- *   Send a PCB to the adapter. 
+ *   Send a PCB to the adapter.
  *
  *	output byte to command reg  --<--+
  *	wait until HCRE is non zero      |
@@ -907,7 +907,7 @@ static int elp_open(struct device *dev)
 	dev->interrupt = 0;
 
 	/*
-	 *  transmitter not busy 
+	 *  transmitter not busy
 	 */
 	dev->tbusy = 0;
 
@@ -1362,7 +1362,7 @@ static int elp_sense(struct device *dev)
 	if (orig_HSR == 0xff) {
 		if (elp_debug > 0)
 			printk(notfound_msg, 1);
-		return -1;	
+		return -1;
 	}
 	/* Enable interrupts - we need timers! */
 	save_flags(flags);
@@ -1594,7 +1594,7 @@ int elplus_probe(struct device *dev)
 			dev->dma = dev->mem_start & 7;
 		}
 		else {
-			printk(KERN_WARNING "%s: warning, DMA channel not specified, using default\n", dev->name); 
+			printk(KERN_WARNING "%s: warning, DMA channel not specified, using default\n", dev->name);
 			dev->dma = ELP_DMA;
 		}
 	}
@@ -1669,6 +1669,9 @@ static struct device dev_3c505[ELP_MAX_CARDS] =
 static int io[ELP_MAX_CARDS] = { 0, };
 static int irq[ELP_MAX_CARDS] = { 0, };
 static int dma[ELP_MAX_CARDS] = { 0, };
+MODULE_PARM(io, "1-" __MODULE_STRING(ELP_MAX_CARDS) "i");
+MODULE_PARM(irq, "1-" __MODULE_STRING(ELP_MAX_CARDS) "i");
+MODULE_PARM(dma, "1-" __MODULE_STRING(ELP_MAX_CARDS) "i");
 
 int init_module(void)
 {
@@ -1702,7 +1705,7 @@ int init_module(void)
 void cleanup_module(void)
 {
 	int this_dev;
-        
+
 	for (this_dev = 0; this_dev < ELP_MAX_CARDS; this_dev++) {
 		struct device *dev = &dev_3c505[this_dev];
 		if (dev->priv != NULL) {

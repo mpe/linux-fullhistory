@@ -15,6 +15,11 @@
  */
 #define TASK_SIZE	(0xF0000000UL)
 
+/* This decides where the kernel will search for a free chunk of vm
+ * space during mmap's.
+ */
+#define TASK_UNMAPPED_BASE	(TASK_SIZE / 3)
+
 /*
  * Bus types
  */

@@ -137,7 +137,7 @@ static int ac_probe1(int ioaddr, struct device *dev)
 	for (i = 0; i < 4; i++)
 		if (inl(ioaddr + AC_ID_PORT) != AC_EISA_ID) {
 			printk("EISA ID mismatch, %8x vs %8x.\n",
-				   inl(ioaddr + AC_ID_PORT), AC_EISA_ID); 
+				   inl(ioaddr + AC_ID_PORT), AC_EISA_ID);
 			return ENODEV;
 		}
 
@@ -329,6 +329,9 @@ static struct device dev_ac32[MAX_AC32_CARDS] = {
 static int io[MAX_AC32_CARDS] = { 0, };
 static int irq[MAX_AC32_CARDS]  = { 0, };
 static int mem[MAX_AC32_CARDS] = { 0, };
+MODULE_PARM(io, "1-" __MODULE_STRING(MAX_AC32_CARDS) "i");
+MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_AC32_CARDS) "i");
+MODULE_PARM(mem, "1-" __MODULE_STRING(MAX_AC32_CARDS) "i");
 
 int
 init_module(void)

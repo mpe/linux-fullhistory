@@ -2,6 +2,7 @@
  *  dir.c
  *
  *  Copyright (C) 1995, 1996 by Volker Lendecke
+ *  Modified for big endian by J.F. Chadima and David S. Miller
  *
  */
 
@@ -14,9 +15,11 @@
 #include <linux/mm.h>
 #include <linux/ncp_fs.h>
 #include <asm/uaccess.h>
+#include <asm/byteorder.h>
 #include <linux/errno.h>
 #include <linux/locks.h>
 #include "ncplib_kernel.h"
+
 
 struct ncp_dirent {
 	struct nw_info_struct i;
@@ -672,6 +675,11 @@ ncp_init_root(struct ncp_server *server)
 	ncp_date_unix2dos(0, &(i->creationTime), &(i->creationDate));
 	ncp_date_unix2dos(0, &(i->modifyTime), &(i->modifyDate));
 	ncp_date_unix2dos(0, &dummy, &(i->lastAccessDate));
+	i->creationTime = le16_to_cpu(i->creationTime);
+	i->creationDate = le16_to_cpu(i->creationDate);
+	i->modifyTime = le16_to_cpu(i->modifyTime);
+	i->modifyDate = le16_to_cpu(i->modifyDate);
+	i->lastAccessDate = le16_to_cpu(i->lastAccessDate);
 	i->nameLen = 0;
 	i->entryName[0] = '\0';
 

@@ -137,7 +137,7 @@ int hp_probe1(struct device *dev, int ioaddr)
 
 	if (ei_debug  &&  version_printed++ == 0)
 		printk(version);
- 
+
 	printk("%s: %s (ID %02x) at %#3x,", dev->name, name, board_id, ioaddr);
 
 	for(i = 0; i < ETHER_ADDR_LEN; i++)
@@ -237,7 +237,7 @@ hp_reset_8390(struct device *dev)
 
 	outb_p(saved_config, hp_base + HP_CONFIGURE);
 	SLOW_DOWN_IO; SLOW_DOWN_IO;
-	
+
 	if ((inb_p(hp_base+NIC_OFFSET+EN0_ISR) & ENISR_RESET) == 0)
 		printk("%s: hp_reset_8390() did not complete.\n", dev->name);
 
@@ -259,14 +259,14 @@ hp_get_8390_hdr(struct device *dev, struct e8390_pkt_hdr *hdr, int ring_page)
 	outb_p(ring_page, nic_base + EN0_RSARHI);
 	outb_p(E8390_RREAD+E8390_START, nic_base);
 
-	if (ei_status.word16) 
+	if (ei_status.word16)
 	  insw(nic_base - NIC_OFFSET + HP_DATAPORT, hdr, sizeof(struct e8390_pkt_hdr)>>1);
-	else 
+	else
 	  insb(nic_base - NIC_OFFSET + HP_DATAPORT, hdr, sizeof(struct e8390_pkt_hdr));
 
 	outb_p(saved_config & (~HP_DATAON), nic_base - NIC_OFFSET + HP_CONFIGURE);
 }
-	
+
 /* Block input and output, similar to the Crynwr packet driver. If you are
    porting to a new ethercard look at the packet driver source for hints.
    The HP LAN doesn't use shared memory -- we put the packet
@@ -391,6 +391,9 @@ static struct device dev_hp[MAX_HP_CARDS] = {
 
 static int io[MAX_HP_CARDS] = { 0, };
 static int irq[MAX_HP_CARDS]  = { 0, };
+
+MODULE_PARM(io, "1-" __MODULE_STRING(MAX_HP_CARDS) "i");
+MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_HP_CARDS) "i");
 
 /* This is set up so that only a single autoprobe takes place per call.
 ISA device autoprobes on a running machine are not recommended. */

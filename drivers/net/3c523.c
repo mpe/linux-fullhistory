@@ -1,4 +1,4 @@
-/* 
+/*
 net-3-driver for the 3c523 Etherlink/MC card (i82586 Ethernet chip)
 
 
@@ -80,6 +80,10 @@ History:
   $Header: /fsys2/home/chrisb/linux-1.3.59-MCA/drivers/net/RCS/3c523.c,v 1.1 1996/02/05 01:53:46 chrisb Exp chrisb $
 */
 
+#ifdef MODULE
+#include <linux/module.h>
+#endif
+
 #include <linux/kernel.h>
 #include <linux/sched.h>
 #include <linux/string.h>
@@ -92,11 +96,6 @@ History:
 #include <asm/processor.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
-
-#ifdef MODULE
-#include <linux/module.h>
-#include <linux/version.h>
-#endif
 
 #include <linux/netdevice.h>
 #include <linux/etherdevice.h>
@@ -129,9 +128,9 @@ static int shm_table[] = {0x0c0000, 0x0c8000, 0x0d0000, 0x0d8000};
 
 sizeof(scp)=12; sizeof(scb)=16; sizeof(iscp)=8;
 sizeof(scp)+sizeof(iscp)+sizeof(scb) = 36 = INIT
-sizeof(rfd) = 24; sizeof(rbd) = 12; 
+sizeof(rfd) = 24; sizeof(rbd) = 12;
 sizeof(tbd) = 8; sizeof(transmit_cmd) = 16;
-sizeof(nop_cmd) = 8; 
+sizeof(nop_cmd) = 8;
 
   * if you don't know the driver, better do not change this values: */
 
@@ -251,7 +250,7 @@ elmc_do_reset586( int ioaddr, int ints ) {
 }
 
 /**********************************************
- * close device 
+ * close device
  */
 
 static
@@ -272,7 +271,7 @@ elmc_close(struct device *dev) {
 }
 
 /**********************************************
- * open device 
+ * open device
  */
 
 static
@@ -283,14 +282,14 @@ elmc_open(struct device *dev) {
 
   if(request_irq( dev->irq, &elmc_interrupt, SA_SHIRQ|SA_SAMPLE_RANDOM,
   	"3c523", dev )
-  ) {    
+  ) {
     printk( "%s: couldn't get irq %d\n", dev->name, dev->irq );
     elmc_id_reset586();
     return -EAGAIN;
-  }  
+  }
 
   alloc586(dev);
-  init586(dev);  
+  init586(dev);
   startrecv586(dev);
 
   dev->interrupt = 0;
@@ -305,7 +304,7 @@ elmc_open(struct device *dev) {
 }
 
 /**********************************************
- * Check to see if there's an 82586 out there. 
+ * Check to see if there's an 82586 out there.
  */
 
 static
@@ -320,7 +319,7 @@ check586( struct device *dev, char *where, unsigned size) {
   p->scp = (struct scp_struct *)(p->base + SCP_DEFAULT_ADDRESS);
   memset((char *)p->scp,0, sizeof(struct scp_struct));
   p->scp->sysbus = SYSBUSVAL;        /* 1 = 8Bit-Bus, 0 = 16 Bit */
-  
+
   iscp_addrs[0] = where;
   iscp_addrs[1]= (char *) p->scp - sizeof(struct iscp_struct);
 
@@ -347,12 +346,12 @@ check586( struct device *dev, char *where, unsigned size) {
 }
 
 /******************************************************************
- * set iscp at the right place, called by elmc_probe and open586. 
+ * set iscp at the right place, called by elmc_probe and open586.
  */
 
 void
 alloc586( struct device *dev ) {
-  struct priv *p =  (struct priv *) dev->priv; 
+  struct priv *p =  (struct priv *) dev->priv;
 
   elmc_id_reset586();
   DELAY(2);
@@ -372,7 +371,7 @@ alloc586( struct device *dev ) {
   elmc_id_reset586();
   elmc_id_attn586();
 
-  DELAY(2); 
+  DELAY(2);
 
   if(p->iscp->busy) {
     printk("%s: Init-Problems (alloc).\n",dev->name);
@@ -424,7 +423,7 @@ elmc_probe(struct device *dev) {
     if( MCA_bus == 0 ) {
     	return ENODEV;
     }
-   
+
 	/* search through the slots for the 3c523. */
 	slot = mca_find_adapter( ELMC_MCA_ID, 0 );
 	while( slot != -1 ) {
@@ -468,13 +467,13 @@ elmc_probe(struct device *dev) {
     printk("%s: 3c523 adapter found in slot %d\n", dev->name, slot + 1);
 
     /* Now we extract configuration info from the card.
-	The 3c523 provides information in two of the POS registers, but 
+	The 3c523 provides information in two of the POS registers, but
 	the second one is only needed if we want to tell the card what IRQ
 	to use.  I suspect that whoever sets the thing up initially would
 	prefer we don't screw with those things.
 
 	Note we we read the status info when we found the card...
-	
+
 	See 3c523.h for more details.
 	*/
 
@@ -501,13 +500,13 @@ elmc_probe(struct device *dev) {
     		mca_write_pos( slot, 3, 0x01 );
     		break;
     }
-    
+
     /* Our IO address? */
     dev->base_addr = csr_table[ (status & ELMC_STATUS_CSR_SELECT) >> 1];
 
     request_region( dev->base_addr, ELMC_IO_EXTENT,"3c523");
 
-    dev->priv = (void *) kmalloc(sizeof(struct priv),GFP_KERNEL); 
+    dev->priv = (void *) kmalloc(sizeof(struct priv),GFP_KERNEL);
     if (dev->priv == NULL) {
 	return -ENOMEM;
     }
@@ -543,7 +542,7 @@ elmc_probe(struct device *dev) {
 	return ENODEV;
   }
   dev->mem_end = dev->mem_start + size; /* set mem_end showed by 'ifconfig' */
-  
+
   ((struct priv *) (dev->priv))->base =  dev->mem_start + size - 0x01000000;
   alloc586(dev);
 
@@ -584,7 +583,7 @@ elmc_probe(struct device *dev) {
   return 0;
 }
 
-/********************************************** 
+/**********************************************
  * init the chip (elmc-interrupt should be disabled?!)
  * needs a correct 'allocated' memory
  */
@@ -625,12 +624,12 @@ init586(struct device *dev) {
 	dev->flags|=IFF_PROMISC;
   }
   cfg_cmd->carr_coll  = 0x00;
- 
+
   p->scb->cbl_offset = make16(cfg_cmd);
 
   p->scb->cmd = CUC_START; /* cmd.-unit start */
   elmc_id_attn586();
- 
+
   s = jiffies; /* warning: only active with interrupts on !! */
   while(!(cfg_cmd->cmd_status & STAT_COMPL)) {
     if(jiffies-s > 30) break;
@@ -638,7 +637,7 @@ init586(struct device *dev) {
 
   if((cfg_cmd->cmd_status & (STAT_OK|STAT_COMPL)) != (STAT_COMPL|STAT_OK)) {
     printk("%s (elmc): configure command failed: %x\n",dev->name,cfg_cmd->cmd_status);
-    return 1; 
+    return 1;
   }
 
     /*
@@ -664,11 +663,11 @@ init586(struct device *dev) {
 
   if((ias_cmd->cmd_status & (STAT_OK|STAT_COMPL)) != (STAT_OK|STAT_COMPL)) {
     printk("%s (elmc): individual address setup command failed: %04x\n",dev->name,ias_cmd->cmd_status);
-    return 1; 
+    return 1;
   }
 
-   /* 
-    * TDR, wire check .. e.g. no resistor e.t.c 
+   /*
+    * TDR, wire check .. e.g. no resistor e.t.c
     */
   tdr_cmd = (struct tdr_cmd_struct *)ptr;
 
@@ -682,7 +681,7 @@ init586(struct device *dev) {
   p->scb->cmd = CUC_START; /* cmd.-unit start */
   elmc_attn586();
 
-  s = jiffies; 
+  s = jiffies;
   while(!(tdr_cmd->cmd_status & STAT_COMPL)) {
     if(jiffies - s > 30) {
       printk("%s: %d Problems while running the TDR.\n",dev->name,__LINE__);
@@ -711,9 +710,9 @@ init586(struct device *dev) {
       printk("%s: TDR: Unknown status %04x\n",dev->name,result);
     }
   }
- 
-   /* 
-    * ack interrupts 
+
+   /*
+    * ack interrupts
     */
   p->scb->cmd = p->scb->status & STAT_MASK;
   elmc_id_attn586();
@@ -743,12 +742,12 @@ init586(struct device *dev) {
   }
 #endif
 
-  ptr = alloc_rfa(dev,(void *)ptr); /* init receive-frame-area */ 
+  ptr = alloc_rfa(dev,(void *)ptr); /* init receive-frame-area */
 
-  /* 
+  /*
    * Multicast setup
    */
-  
+
   if(dev->mc_count) {
     /* I don't understand this: do we really need memory after the init? */
     int len = ((char *) p->iscp - (char *) ptr - 8) / 6;
@@ -794,7 +793,7 @@ init586(struct device *dev) {
     if((void *)ptr > (void *)p->iscp) {
       printk("%s: not enough shared-mem for your configuration!\n",dev->name);
       return 1;
-    }   
+    }
     memset((char *)(p->xmit_cmds[i]) ,0, sizeof(struct transmit_cmd_struct));
     memset((char *)(p->xmit_buffs[i]),0, sizeof(struct tbd_struct));
     p->xmit_cmds[i]->cmd_status = STAT_COMPL;
@@ -804,7 +803,7 @@ init586(struct device *dev) {
     p->xmit_buffs[i]->buffer = make24((p->xmit_cbuffs[i]));
   }
 
-  p->xmit_count = 0; 
+  p->xmit_count = 0;
   p->xmit_last  = 0;
 #ifndef NO_NOPCOMMANDS
   p->nop_point  = 0;
@@ -827,7 +826,7 @@ init586(struct device *dev) {
 }
 
 /******************************************************
- * This is a helper routine for elmc_rnr_int() and init586(). 
+ * This is a helper routine for elmc_rnr_int() and init586().
  * It sets up the Receive Frame Area (RFA).
  */
 
@@ -940,7 +939,7 @@ elmc_interrupt(int irq, void *dev_id, struct pt_regs *reg_ptr) {
         elmc_attn586();
       } else {
         printk("%s: Receiver-Unit went 'NOT READY': %04x/%04x.\n",dev->name,(int) stat,(int) p->scb->status);
-        elmc_rnr_int(dev); 
+        elmc_rnr_int(dev);
       }
     }
     WAIT_4_SCB_CMD(); /* wait for ack. (elmc_xmt_int can be faster than ack!!) */
@@ -1002,7 +1001,7 @@ elmc_rcv_int(struct device *dev) {
 }
 
 /**********************************************************
- * handle 'Receiver went not ready'. 
+ * handle 'Receiver went not ready'.
  */
 
 static
@@ -1014,7 +1013,7 @@ elmc_rnr_int(struct device *dev) {
 
   WAIT_4_SCB_CMD();    /* wait for the last cmd */
   p->scb->cmd = RUC_ABORT; /* usually the RU is in the 'no resource'-state .. abort it now. */
-  elmc_attn586(); 
+  elmc_attn586();
   WAIT_4_SCB_CMD();    /* wait for accept cmd. */
 
   alloc_rfa(dev,(char *)p->rfd_first);
@@ -1058,7 +1057,7 @@ elmc_xmt_int(struct device *dev) {
     } else if(status & TCMD_MAXCOLL) {
       printk("%s: Max. collisions exceeded.\n",dev->name);
       p->stats.collisions += 16;
-    } 
+    }
   }
 
 #if (NUM_XMIT_BUFFS != 1)
@@ -1073,7 +1072,7 @@ elmc_xmt_int(struct device *dev) {
 
 /***********************************************************
  * (re)start the receiver
- */ 
+ */
 
 static
 void
@@ -1088,7 +1087,7 @@ startrecv586(struct device *dev)
 }
 
 /******************************************************
- * send frame 
+ * send frame
  */
 
 static
@@ -1183,7 +1182,7 @@ elmc_send_packet(struct sk_buff *skb, struct device *dev)
     next_nop = (p->nop_point + 1) & 0x1;
     p->xmit_buffs[0]->size = TBD_LAST | len;
 
-    p->xmit_cmds[0]->cmd_link   = p->nop_cmds[next_nop]->cmd_link 
+    p->xmit_cmds[0]->cmd_link   = p->nop_cmds[next_nop]->cmd_link
                                 = make16((p->nop_cmds[next_nop]));
     p->xmit_cmds[0]->cmd_status = p->nop_cmds[next_nop]->cmd_status = 0;
 
@@ -1199,14 +1198,14 @@ elmc_send_packet(struct sk_buff *skb, struct device *dev)
     }
 
     p->xmit_cmds[p->xmit_count]->cmd_status  = 0;
-    p->xmit_cmds[p->xmit_count]->cmd_link = p->nop_cmds[next_nop]->cmd_link 
+    p->xmit_cmds[p->xmit_count]->cmd_link = p->nop_cmds[next_nop]->cmd_link
                                           = make16((p->nop_cmds[next_nop]));
     p->nop_cmds[next_nop]->cmd_status = 0;
 
     p->nop_cmds[p->xmit_count]->cmd_link = make16((p->xmit_cmds[p->xmit_count]));
     dev->trans_start = jiffies;
     p->xmit_count = next_nop;
-  
+
     cli();
     if(p->xmit_count != p->xmit_last) {
       dev->tbusy = 0;
@@ -1219,7 +1218,7 @@ elmc_send_packet(struct sk_buff *skb, struct device *dev)
 }
 
 /*******************************************
- * Someone wanna have the statistics 
+ * Someone wanna have the statistics
  */
 
 static
@@ -1246,7 +1245,7 @@ elmc_get_stats( struct device *dev ) {
 }
 
 /********************************************************
- * Set MC list ..  
+ * Set MC list ..
  */
 
 static
@@ -1259,7 +1258,7 @@ set_multicast_list(struct device *dev) {
 
   dev->start = 0;
   alloc586(dev);
-  init586(dev);  
+  init586(dev);
   startrecv586(dev);
   dev->start = 1;
 }
@@ -1267,13 +1266,13 @@ set_multicast_list(struct device *dev) {
 /*************************************************************************/
 
 #ifdef MODULE
-char kernel_version[] = UTS_RELEASE;
 static struct device dev_elmc = {
 	"        " /*"3c523"*/, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL, elmc_probe };
-	
 
-int irq=0;
-int io=0;
+static int irq=0;
+static int io=0;
+MODULE_PARM(irq, "i");
+MODULE_PARM(io, "i");
 
 int
 init_module(void) {

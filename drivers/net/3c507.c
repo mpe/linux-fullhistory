@@ -152,15 +152,15 @@ struct net_local {
 
 /*  Since the 3c507 maps the shared memory window so that the last byte is
 	at 82586 address FFFF, the first byte is at 82586 address 0, 16K, 32K, or
-	48K corresponding to window sizes of 64K, 48K, 32K and 16K respectively. 
+	48K corresponding to window sizes of 64K, 48K, 32K and 16K respectively.
 	We can account for this be setting the 'SBC Base' entry in the ISCP table
 	below for all the 16 bit offset addresses, and also adding the 'SCB Base'
 	value to all 24 bit physical addresses (in the SCP table and the TX and RX
 	Buffer Descriptors).
-					-Mark	
+					-Mark
 	*/
 #define SCB_BASE		((unsigned)64*1024 - (dev->mem_end - dev->mem_start))
- 
+
 /*
   What follows in 'init_words[]' is the "program" that is downloaded to the
   82586 memory.	 It's mostly tables and command blocks, and starts at the
@@ -200,7 +200,7 @@ struct net_local {
   That's it: only 86 bytes to set up the beast, including every extra
   command available.  The 170 byte buffer at DUMP_DATA is shared between the
   Dump command (called only by the diagnostic program) and the SetMulticastList
-  command. 
+  command.
 
   To complete the memory setup you only have to write the station address at
   SA_OFFSET and create the Tx & Rx buffer lists.
@@ -357,7 +357,7 @@ int el16_probe1(struct device *dev, int ioaddr)
 	printk("%s: 3c507 at %#x,", dev->name, ioaddr);
 
 	/* We should make a few more checks here, like the first three octets of
-	   the S.A. for the manufacturer's code. */ 
+	   the S.A. for the manufacturer's code. */
 
 	irq = inb(ioaddr + IRQ_CONFIG) & 0x0f;
 
@@ -366,7 +366,7 @@ int el16_probe1(struct device *dev, int ioaddr)
 		printk ("unable to get IRQ %d (irqval=%d).\n", irq, irqval);
 		return EAGAIN;
 	}
-	
+
 	/* We've committed to using the board, and can start filling in *dev. */
 	request_region(ioaddr, EL16_IO_EXTENT, "3c507");
 	dev->base_addr = ioaddr;
@@ -422,7 +422,7 @@ int el16_probe1(struct device *dev, int ioaddr)
 	dev->get_stats	= el16_get_stats;
 
 	ether_setup(dev);	/* Generic ethernet behaviour */
-	
+
 	dev->flags&=~IFF_MULTICAST;	/* Multicast doesn't work */
 
 	return 0;
@@ -520,19 +520,19 @@ el16_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 	int ioaddr, status, boguscount = 0;
 	ushort ack_cmd = 0;
 	ushort *shmem;
-	
+
 	if (dev == NULL) {
 		printk ("net_interrupt(): irq %d for unknown device.\n", irq);
 		return;
 	}
 	dev->interrupt = 1;
-	
+
 	ioaddr = dev->base_addr;
 	lp = (struct net_local *)dev->priv;
 	shmem = ((ushort*)dev->mem_start);
-	
+
 	status = shmem[iSCB_STATUS>>1];
-	
+
 	if (net_debug > 4) {
 		printk("%s: 3c507 interrupt, status %4.4x.\n", dev->name, status);
 	}
@@ -661,7 +661,7 @@ init_rx_bufs(struct device *dev)
 	unsigned short SCB_base = SCB_BASE;
 
 	int cur_rxbuf = lp->rx_head = RX_BUF_START;
-	
+
 	/* Initialize each Rx frame + data buffer. */
 	do {	/* While there is room for one more. */
 
@@ -678,18 +678,18 @@ init_rx_bufs(struct device *dev)
 		*write_ptr++ = 0x0000;
 		*write_ptr++ = 0x0000;
 		*write_ptr++ = 0x0000;				/* Pad for protocol. */
-		
+
 		*write_ptr++ = 0x0000;				/* Buffer: Actual count */
 		*write_ptr++ = -1;					/* Buffer: Next (none). */
 		*write_ptr++ = cur_rxbuf + 0x20 + SCB_base;	/* Buffer: Address low */
 		*write_ptr++ = 0x0000;
 		/* Finally, the number of bytes in the buffer. */
 		*write_ptr++ = 0x8000 + RX_BUF_SIZE-0x20;
-		
+
 		lp->rx_tail = cur_rxbuf;
 		cur_rxbuf += RX_BUF_SIZE;
 	} while (cur_rxbuf <= RX_BUF_END - RX_BUF_SIZE);
-	
+
 	/* Terminate the list by setting the EOL bit, and wrap the pointer to make
 	   the list a ring. */
 	write_ptr = (unsigned short *)
@@ -847,13 +847,13 @@ el16_rx(struct device *dev)
 				lp->stats.rx_dropped++;
 				break;
 			}
-			
+
 			skb_reserve(skb,2);
 			skb->dev = dev;
 
 			/* 'skb->data' points to the start of sk_buff data area. */
 			memcpy(skb_put(skb,pkt_len), data_frame + 5, pkt_len);
-		
+
 			skb->protocol=eth_type_trans(skb,dev);
 			netif_rx(skb);
 			lp->stats.rx_packets++;
@@ -885,6 +885,8 @@ static struct device dev_3c507 = {
 
 static int io = 0x300;
 static int irq = 0;
+MODULE_PARM(io, "i");
+MODULE_PARM(irq, "i");
 
 int init_module(void)
 {

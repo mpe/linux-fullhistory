@@ -23,9 +23,6 @@ static __inline__ void atomic_add(atomic_t i, atomic_t *v)
 {
 	__asm__ __volatile__("
 	rd	%%psr, %%g2
-	nop
-	nop
-	nop
 	andcc	%%g2, %2, %%g0
 	bne	1f
 	 nop
@@ -54,9 +51,6 @@ static __inline__ void atomic_sub(atomic_t i, atomic_t *v)
 {
 	__asm__ __volatile__("
 	rd	%%psr, %%g2
-	nop
-	nop
-	nop
 	andcc	%%g2, %2, %%g0
 	bne	1f
 	 nop
@@ -85,9 +79,6 @@ static __inline__ int atomic_add_return(atomic_t i, atomic_t *v)
 {
 	__asm__ __volatile__("
 	rd	%%psr, %%g2
-	nop
-	nop
-	nop
 	andcc	%%g2, %3, %%g0
 	bne	1f
 	 nop
@@ -118,9 +109,6 @@ static __inline__ int atomic_sub_return(atomic_t i, atomic_t *v)
 {
 	__asm__ __volatile__("
 	rd	%%psr, %%g2
-	nop
-	nop
-	nop
 	andcc	%%g2, %3, %%g0
 	bne	1f
 	 nop

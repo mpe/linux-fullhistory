@@ -157,20 +157,16 @@ static int set_termios(struct tty_struct * tty, unsigned long arg, int opt)
 		return retval;
 
 	if (opt & TERMIOS_TERMIO) {
-		struct termio tmp_termio;
 		retval = verify_area(VERIFY_READ, (void *) arg, sizeof(struct termio));
 		if (retval)
 			return retval;
-		tmp_termios = *tty->termios;
-		copy_from_user(&tmp_termio, (struct termio *) arg,
-			      sizeof (struct termio));
-		trans_from_termio(&tmp_termio, &tmp_termios);
+		memcpy(&tmp_termios, tty->termios, sizeof(struct termios));
+		user_termio_to_kernel_termios(&tmp_termios, (struct termio *) arg);
 	} else {
 		retval = verify_area(VERIFY_READ, (void *) arg, sizeof(struct termios));
 		if (retval)
 			return retval;
-		copy_from_user(&tmp_termios, (struct termios *) arg,
-			      sizeof (struct termios));
+		user_termios_to_kernel_termios(&tmp_termios, (struct termios *) arg);
 	}
 
 	if ((opt & TERMIOS_FLUSH) && tty->ldisc.flush_buffer)
@@ -189,13 +185,11 @@ static int set_termios(struct tty_struct * tty, unsigned long arg, int opt)
 static int get_termio(struct tty_struct * tty, struct termio * termio)
 {
 	int i;
-	struct termio tmp_termio;
 
 	i = verify_area(VERIFY_WRITE, termio, sizeof (struct termio));
 	if (i)
 		return i;
-	trans_to_termio(tty->termios, &tmp_termio);
-	copy_to_user(termio, &tmp_termio, sizeof (struct termio));
+	kernel_termios_to_user_termio(termio, tty->termios);
 	return 0;
 }
 
@@ -437,9 +431,8 @@ int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 					     sizeof (struct termios));
 			if (retval)
 				return retval;
-			copy_to_user((struct termios *) arg,
-				    real_tty->termios,
-				    sizeof (struct termios));
+			kernel_termios_to_user_termios((struct termios *)arg,
+						       real_tty->termios);
 			return 0;
 		case TCSETSF:
 			opt |= TERMIOS_FLUSH;
@@ -531,9 +524,8 @@ int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 					     sizeof (struct termios));
 			if (retval)
 				return retval;
-			copy_to_user((struct termios *) arg,
-				    real_tty->termios_locked,
-				    sizeof (struct termios));
+			kernel_termios_to_user_termios((struct termios *)arg,
+						       real_tty->termios_locked);
 			return 0;
 		case TIOCSLCKTRMIOS:
 			if (!suser())
@@ -542,9 +534,8 @@ int n_tty_ioctl(struct tty_struct * tty, struct file * file,
 					     sizeof (struct termios));
 			if (retval)
 				return retval;
-			copy_from_user(real_tty->termios_locked,
-				      (struct termios *) arg,
-				      sizeof (struct termios));
+			user_termios_to_kernel_termios(real_tty->termios_locked,
+						       (struct termios *) arg);
 			return 0;
 		case TIOCPKT:
 			if (tty->driver.type != TTY_DRIVER_TYPE_PTY ||

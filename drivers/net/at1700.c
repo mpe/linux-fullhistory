@@ -270,7 +270,7 @@ int at1700_probe1(struct device *dev, short ioaddr)
 	dev->set_multicast_list = &set_multicast_list;
 
 	/* Fill in the fields of 'dev' with ethernet-generic values. */
-	   
+
 	ether_setup(dev);
 	return 0;
 }
@@ -283,9 +283,9 @@ static int read_eeprom(int ioaddr, int location)
 	short ee_daddr = ioaddr + EEPROM_Data;
 	int read_cmd = location | EE_READ_CMD;
 	short ctrl_val = EE_CS;
-	
+
 	outb(ctrl_val, ee_addr);
-	
+
 	/* Shift the read command bits out. */
 	for (i = 9; i >= 0; i--) {
 		short dataval = (read_cmd & (1 << i)) ? EE_DATA_WRITE : 0;
@@ -296,7 +296,7 @@ static int read_eeprom(int ioaddr, int location)
 		eeprom_delay();
 	}
 	outb(EE_CS, ee_addr);
-	
+
 	for (i = 16; i > 0; i--) {
 		outb(EE_CS | EE_SHIFT_CLK, ee_addr);
 		eeprom_delay();
@@ -410,7 +410,7 @@ net_send_packet(struct sk_buff *skb, struct device *dev)
 
 		/* Turn off the possible Tx interrupts. */
 		outb(0x00, ioaddr + TX_INTR);
-		
+
 		outw(length, ioaddr + DATAPORT);
 		outsw(ioaddr + DATAPORT, buf, (length + 1) >> 1);
 
@@ -563,7 +563,7 @@ net_rx(struct device *dev)
 		}
 
 		if (net_debug > 5)
-			printk("%s: Exint Rx packet with mode %02x after %d ticks.\n", 
+			printk("%s: Exint Rx packet with mode %02x after %d ticks.\n",
 				   dev->name, inb(ioaddr + RX_MODE), i);
 	}
 	return;
@@ -614,17 +614,17 @@ static void
 set_multicast_list(struct device *dev)
 {
 	short ioaddr = dev->base_addr;
-	if (dev->mc_count || dev->flags&(IFF_PROMISC|IFF_ALLMULTI)) 
+	if (dev->mc_count || dev->flags&(IFF_PROMISC|IFF_ALLMULTI))
 	{
 		/*
 		 *	We must make the kernel realise we had to move
 		 *	into promisc mode or we start all out war on
 		 *	the cable. - AC
 		 */
-		dev->flags|=IFF_PROMISC;		
-	
+		dev->flags|=IFF_PROMISC;
+
 		outb(3, ioaddr + RX_MODE);	/* Enable promiscuous mode */
-	} 
+	}
 	else
 		outb(2, ioaddr + RX_MODE);	/* Disable promiscuous, use normal mode */
 }
@@ -638,6 +638,8 @@ static struct device dev_at1700 = {
 
 static int io = 0x260;
 static int irq = 0;
+MODULE_PARM(io, "i");
+MODULE_PARM(irq, "i");
 
 int init_module(void)
 {

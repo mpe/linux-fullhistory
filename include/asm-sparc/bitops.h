@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.40 1996/12/23 05:28:49 davem Exp $
+/* $Id: bitops.h,v 1.41 1996/12/28 18:14:25 davem Exp $
  * bitops.h: Bit string operations on the Sparc.
  *
  * Copyright 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -104,9 +104,6 @@ extern __inline__ unsigned long set_bit(unsigned long nr, __SMPVOL void *addr)
 	mask = 1 << (nr & 31);
 	__asm__ __volatile__("
 	rd	%%psr, %%g3
-	nop
-	nop
-	nop
 	andcc	%%g3, %3, %%g0
 	bne	1f
 	 nop
@@ -143,9 +140,6 @@ extern __inline__ unsigned long clear_bit(unsigned long nr, __SMPVOL void *addr)
 	mask = 1 << (nr & 31);
 	__asm__ __volatile__("
 	rd	%%psr, %%g3
-	nop
-	nop
-	nop
 	andcc	%%g3, %3, %%g0
 	bne	1f
 	 nop
@@ -182,9 +176,6 @@ extern __inline__ unsigned long change_bit(unsigned long nr, __SMPVOL void *addr
 	mask = 1 << (nr & 31);
 	__asm__ __volatile__("
 	rd	%%psr, %%g3
-	nop
-	nop
-	nop
 	andcc	%%g3, %3, %%g0
 	bne	1f
 	 nop
@@ -335,9 +326,6 @@ extern __inline__ int set_le_bit(int nr,void * addr)
 	mask = 1 << (nr & 0x07);
 	__asm__ __volatile__("
 	rd	%%psr, %%g3
-	nop
-	nop
-	nop
 	andcc	%%g3, %3, %%g0
 	bne	1f
 	 nop
@@ -374,9 +362,6 @@ extern __inline__ int clear_le_bit(int nr, void * addr)
 	mask = 1 << (nr & 0x07);
 	__asm__ __volatile__("
 	rd	%%psr, %%g3
-	nop
-	nop
-	nop
 	andcc	%%g3, %3, %%g0
 	bne	1f
 	 nop

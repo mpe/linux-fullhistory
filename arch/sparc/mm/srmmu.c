@@ -1,4 +1,4 @@
-/* $Id: srmmu.c,v 1.119 1996/12/19 08:06:37 davem Exp $
+/* $Id: srmmu.c,v 1.122 1996/12/30 06:16:31 davem Exp $
  * srmmu.c:  SRMMU specific routines for memory management.
  *
  * Copyright (C) 1995 David S. Miller  (davem@caip.rutgers.edu)
@@ -28,6 +28,7 @@
 #include <asm/asi.h>
 #include <asm/msi.h>
 #include <asm/a.out.h>
+#include <asm/mmu_context.h>
 
 /* Now the cpu specific definitions. */
 #include <asm/viking.h>
@@ -282,48 +283,6 @@ static void srmmu_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp)
 		ctxd_set(&srmmu_context_table[tsk->mm->context], pgdp);
 		flush_tlb_mm(current->mm);
 	}
-}
-
-static inline void srmmu_uncache_page(unsigned long addr)
-{
-	pgd_t *pgdp = srmmu_pgd_offset(init_task.mm, addr);
-	pmd_t *pmdp;
-	pte_t *ptep;
-
-	if((pgd_val(*pgdp) & SRMMU_ET_MASK) == SRMMU_ET_PTE) {
-		ptep = (pte_t *) pgdp;
-	} else {
-		pmdp = srmmu_pmd_offset(pgdp, addr);
-		if((pmd_val(*pmdp) & SRMMU_ET_MASK) == SRMMU_ET_PTE) {
-			ptep = (pte_t *) pmdp;
-		} else {
-			ptep = srmmu_pte_offset(pmdp, addr);
-		}
-	}
-
-	flush_cache_page_to_uncache(addr);
-	set_pte(ptep, __pte((pte_val(*ptep) & ~SRMMU_CACHE)));
-	flush_tlb_page_for_cbit(addr);
-}
-
-static inline void srmmu_recache_page(unsigned long addr)
-{
-	pgd_t *pgdp = srmmu_pgd_offset(init_task.mm, addr);
-	pmd_t *pmdp;
-	pte_t *ptep;
-
-	if((pgd_val(*pgdp) & SRMMU_ET_MASK) == SRMMU_ET_PTE) {
-		ptep = (pte_t *) pgdp;
-	} else {
-		pmdp = srmmu_pmd_offset(pgdp, addr);
-		if((pmd_val(*pmdp) & SRMMU_ET_MASK) == SRMMU_ET_PTE) {
-			ptep = (pte_t *) pmdp;
-		} else {
-			ptep = srmmu_pte_offset(pmdp, addr);
-		}
-	}
-	set_pte(ptep, __pte((pte_val(*ptep) | SRMMU_CACHE)));
-	flush_tlb_page_for_cbit(addr);
 }
 
 static unsigned long srmmu_getpage(void)
@@ -722,10 +681,6 @@ static pgd_t *srmmu_pgd_alloc(void)
 	return NEW_PGD();
 }
 
-static void srmmu_pgd_flush(pgd_t *pgdp)
-{
-}
-
 static void srmmu_set_pte_cacheable(pte_t *ptep, pte_t pteval)
 {
 	srmmu_set_entry(ptep, pte_val(pteval));
@@ -801,9 +756,8 @@ static void srmmu_quick_kernel_fault(unsigned long address)
 #endif
 }
 
-static inline void alloc_context(struct task_struct *tsk)
+static inline void alloc_context(struct mm_struct *mm)
 {
-	struct mm_struct *mm = tsk->mm;
 	struct ctx_list *ctxp;
 
 	ctxp = ctx_free.next;
@@ -841,12 +795,24 @@ static inline void free_context(int context)
 static void srmmu_switch_to_context(struct task_struct *tsk)
 {
 	if(tsk->mm->context == NO_CONTEXT) {
-		alloc_context(tsk);
-		flush_cache_mm(current->mm);
+		alloc_context(tsk->mm);
+		flush_cache_mm(tsk->mm);
 		ctxd_set(&srmmu_context_table[tsk->mm->context], tsk->mm->pgd);
-		flush_tlb_mm(current->mm);
+		flush_tlb_mm(tsk->mm);
 	}
 	srmmu_set_context(tsk->mm->context);
+}
+
+static void srmmu_init_new_context(struct mm_struct *mm)
+{
+	alloc_context(mm);
+
+	flush_cache_mm(mm);
+	ctxd_set(&srmmu_context_table[mm->context], mm->pgd);
+	flush_tlb_mm(mm);
+
+	if(mm == current->mm)
+		srmmu_set_context(mm->context);
 }
 
 /* Low level IO area allocation on the SRMMU. */
@@ -1328,11 +1294,6 @@ static unsigned long viking_no_mxcc_getpage(void)
 	return page;
 }
 
-static void viking_no_mxcc_pgd_flush(pgd_t *pgdp)
-{
-	viking_no_mxcc_flush_page((unsigned long)pgdp);
-}
-
 static void viking_flush_tlb_all(void)
 {
 	module_stats.invall++;
@@ -1450,7 +1411,9 @@ static void cypress_flush_cache_mm(struct mm_struct *mm)
 		save_and_cli(flags);
 		octx = srmmu_get_context();
 		srmmu_set_context(mm->context);
-		a = 0x20; b = 0x40; c = 0x60; d = 0x80; e = 0xa0; f = 0xc0; g = 0xe0;
+		a = 0x20; b = 0x40; c = 0x60;
+		d = 0x80; e = 0xa0; f = 0xc0; g = 0xe0;
+
 		faddr = (0x10000 - 0x100);
 		goto inside;
 		do {
@@ -1488,7 +1451,9 @@ static void cypress_flush_cache_range(struct mm_struct *mm, unsigned long start,
 		save_and_cli(flags);
 		octx = srmmu_get_context();
 		srmmu_set_context(mm->context);
-		a = 0x20; b = 0x40; c = 0x60; d = 0x80; e = 0xa0; f = 0xc0; g = 0xe0;
+		a = 0x20; b = 0x40; c = 0x60;
+		d = 0x80; e = 0xa0; f = 0xc0; g = 0xe0;
+
 		start &= SRMMU_PMD_MASK;
 		while(start < end) {
 			faddr = (start + (0x10000 - 0x100));
@@ -1532,7 +1497,9 @@ static void cypress_flush_cache_page(struct vm_area_struct *vma, unsigned long p
 		save_and_cli(flags);
 		octx = srmmu_get_context();
 		srmmu_set_context(mm->context);
-		a = 0x20; b = 0x40; c = 0x60; d = 0x80; e = 0xa0; f = 0xc0; g = 0xe0;
+		a = 0x20; b = 0x40; c = 0x60;
+		d = 0x80; e = 0xa0; f = 0xc0; g = 0xe0;
+
 		page &= PAGE_MASK;
 		line = (page + PAGE_SIZE) - 0x100;
 		goto inside;
@@ -1654,34 +1621,6 @@ static unsigned long cypress_getpage(void)
 				     "r" (e), "r" (f), "r" (g));
 	} while(line != page);
 	return page;
-}
-
-static void cypress_pgd_flush(pgd_t *pgdp)
-{
-	register unsigned long a, b, c, d, e, f, g;
-	unsigned long page = ((unsigned long) pgdp) & PAGE_MASK;
-	unsigned long line;
-
-	a = 0x20; b = 0x40; c = 0x60; d = 0x80; e = 0xa0; f = 0xc0; g = 0xe0;
-	page &= PAGE_MASK;
-	line = (page + PAGE_SIZE) - 0x100;
-	goto inside;
-	do {
-		line -= 0x100;
-	inside:
-		__asm__ __volatile__("sta %%g0, [%0] %1\n\t"
-				     "sta %%g0, [%0 + %2] %1\n\t"
-				     "sta %%g0, [%0 + %3] %1\n\t"
-				     "sta %%g0, [%0 + %4] %1\n\t"
-				     "sta %%g0, [%0 + %5] %1\n\t"
-				     "sta %%g0, [%0 + %6] %1\n\t"
-				     "sta %%g0, [%0 + %7] %1\n\t"
-				     "sta %%g0, [%0 + %8] %1\n\t" : :
-				     "r" (line),
-				     "i" (ASI_M_FLUSH_PAGE),
-				     "r" (a), "r" (b), "r" (c), "r" (d),
-				     "r" (e), "r" (f), "r" (g));
-	} while(line != page);
 }
 
 static void cypress_flush_tlb_all(void)
@@ -1888,19 +1827,6 @@ static unsigned long hypersparc_getpage(void)
 	return page;
 }
 
-static void hypersparc_pgd_flush(pgd_t *pgdp)
-{
-	volatile unsigned long clear;
-	unsigned long page = ((unsigned long) pgdp) & PAGE_MASK;
-	unsigned long flags;
-
-	save_and_cli(flags);
-	if(srmmu_hwprobe(page))
-		hyper_flush_cache_page(page);
-	clear = srmmu_get_fstatus();
-	restore_flags(flags);
-}
-
 static void hypersparc_flush_tlb_all(void)
 {
 	module_stats.invall++;
@@ -1996,6 +1922,61 @@ static void hypersparc_ctxd_set(ctxd_t *ctxp, pgd_t *pgdp)
 
 static void hypersparc_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp) 
 {
+	volatile unsigned long clear;
+	unsigned long page = ((unsigned long) pgdp) & PAGE_MASK;
+	unsigned long flags;
+
+	/* Do PGD flush. */
+	save_and_cli(flags);
+	if(srmmu_hwprobe(page))
+		hyper_flush_cache_page(page);
+	clear = srmmu_get_fstatus();
+	restore_flags(flags);
+
+	if(tsk->mm->context != NO_CONTEXT) {
+		flush_cache_mm(current->mm);
+		ctxd_set(&srmmu_context_table[tsk->mm->context], pgdp);
+		flush_tlb_mm(current->mm);
+	}
+}
+
+static void viking_no_mxcc_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp) 
+{
+	viking_no_mxcc_flush_page((unsigned long)pgdp);
+	if(tsk->mm->context != NO_CONTEXT) {
+		flush_cache_mm(current->mm);
+		ctxd_set(&srmmu_context_table[tsk->mm->context], pgdp);
+		flush_tlb_mm(current->mm);
+	}
+}
+
+static void cypress_update_rootmmu_dir(struct task_struct *tsk, pgd_t *pgdp) 
+{
+	register unsigned long a, b, c, d, e, f, g;
+	unsigned long page = ((unsigned long) pgdp) & PAGE_MASK;
+	unsigned long line;
+
+	a = 0x20; b = 0x40; c = 0x60; d = 0x80; e = 0xa0; f = 0xc0; g = 0xe0;
+	page &= PAGE_MASK;
+	line = (page + PAGE_SIZE) - 0x100;
+	goto inside;
+	do {
+		line -= 0x100;
+	inside:
+		__asm__ __volatile__("sta %%g0, [%0] %1\n\t"
+				     "sta %%g0, [%0 + %2] %1\n\t"
+				     "sta %%g0, [%0 + %3] %1\n\t"
+				     "sta %%g0, [%0 + %4] %1\n\t"
+				     "sta %%g0, [%0 + %5] %1\n\t"
+				     "sta %%g0, [%0 + %6] %1\n\t"
+				     "sta %%g0, [%0 + %7] %1\n\t"
+				     "sta %%g0, [%0 + %8] %1\n\t" : :
+				     "r" (line),
+				     "i" (ASI_M_FLUSH_PAGE),
+				     "r" (a), "r" (b), "r" (c), "r" (d),
+				     "r" (e), "r" (f), "r" (g));
+	} while(line != page);
+
 	if(tsk->mm->context != NO_CONTEXT) {
 		flush_cache_mm(current->mm);
 		ctxd_set(&srmmu_context_table[tsk->mm->context], pgdp);
@@ -2007,12 +1988,26 @@ static void hypersparc_switch_to_context(struct task_struct *tsk)
 {
 	hyper_flush_whole_icache();
 	if(tsk->mm->context == NO_CONTEXT) {
-		alloc_context(tsk);
-		flush_cache_mm(current->mm);
+		alloc_context(tsk->mm);
+		flush_cache_mm(tsk->mm);
 		ctxd_set(&srmmu_context_table[tsk->mm->context], tsk->mm->pgd);
-		flush_tlb_mm(current->mm);
+		flush_tlb_mm(tsk->mm);
 	}
 	srmmu_set_context(tsk->mm->context);
+}
+
+static void hypersparc_init_new_context(struct mm_struct *mm)
+{
+	hyper_flush_whole_icache();
+
+	alloc_context(mm);
+
+	flush_cache_mm(mm);
+	ctxd_set(&srmmu_context_table[mm->context], mm->pgd);
+	flush_tlb_mm(mm);
+
+	if(mm == current->mm)
+		srmmu_set_context(mm->context);
 }
 
 /* IOMMU things go here. */
@@ -2842,27 +2837,14 @@ static void srmmu_update_mmu_cache(struct vm_area_struct * vma, unsigned long ad
 {
 }
 
-static void srmmu_exit_hook(void)
+static void srmmu_destroy_context(struct mm_struct *mm)
 {
-	struct mm_struct *mm = current->mm;
-
 	if(mm->context != NO_CONTEXT && mm->count == 1) {
 		flush_cache_mm(mm);
 		ctxd_set(&srmmu_context_table[mm->context], swapper_pg_dir);
 		flush_tlb_mm(mm);
 		free_context(mm->context);
 		mm->context = NO_CONTEXT;
-	}
-}
-
-static void srmmu_flush_hook(void)
-{
-	if(current->tss.flags & SPARC_FLAG_KTHREAD) {
-		alloc_context(current);
-		flush_cache_mm(current->mm);
-		ctxd_set(&srmmu_context_table[current->mm->context], current->mm->pgd);
-		flush_tlb_mm(current->mm);
-		srmmu_set_context(current->mm->context);
 	}
 }
 
@@ -2930,10 +2912,8 @@ static void srmmu_vac_update_mmu_cache(struct vm_area_struct * vma,
 	}
 }
 
-static void hypersparc_exit_hook(void)
+static void hypersparc_destroy_context(struct mm_struct *mm)
 {
-	struct mm_struct *mm = current->mm;
-
 	if(mm->context != NO_CONTEXT && mm->count == 1) {
 		/* HyperSparc is copy-back, any data for this
 		 * process in a modified cache line is stale
@@ -2945,17 +2925,6 @@ static void hypersparc_exit_hook(void)
 		flush_tlb_mm(mm);
 		free_context(mm->context);
 		mm->context = NO_CONTEXT;
-	}
-}
-
-static void hypersparc_flush_hook(void)
-{
-	if(current->tss.flags & SPARC_FLAG_KTHREAD) {
-		alloc_context(current);
-		flush_cache_mm(current->mm);
-		ctxd_set(&srmmu_context_table[current->mm->context], current->mm->pgd);
-		flush_tlb_mm(current->mm);
-		srmmu_set_context(current->mm->context);
 	}
 }
 
@@ -3063,12 +3032,11 @@ __initfunc(static void init_hypersparc(void))
 	flush_page_for_dma = hypersparc_flush_page_for_dma;
 	flush_cache_page_to_uncache = hypersparc_flush_cache_page_to_uncache;
 	flush_tlb_page_for_cbit = hypersparc_flush_tlb_page_for_cbit;
-	pgd_flush = hypersparc_pgd_flush;
 
 	ctxd_set = hypersparc_ctxd_set;
 	switch_to_context = hypersparc_switch_to_context;
-	mmu_exit_hook = hypersparc_exit_hook;
-	mmu_flush_hook = hypersparc_flush_hook;
+	init_new_context = hypersparc_init_new_context;
+	destroy_context = hypersparc_destroy_context;
 	update_mmu_cache = srmmu_vac_update_mmu_cache;
 	sparc_update_rootmmu_dir = hypersparc_update_rootmmu_dir;
 	poke_srmmu = poke_hypersparc;
@@ -3077,17 +3045,32 @@ __initfunc(static void init_hypersparc(void))
 static void poke_cypress(void)
 {
 	unsigned long mreg = srmmu_get_mmureg();
-	unsigned long faddr;
+	unsigned long faddr, tagval;
+	volatile unsigned long cypress_sucks;
 	volatile unsigned long clear;
 
 	clear = srmmu_get_faddr();
 	clear = srmmu_get_fstatus();
 
-	for(faddr = 0x0; faddr < 0x10000; faddr += 20) {
-		__asm__ __volatile__("sta %%g0, [%0 + %1] %2\n\t"
-				     "sta %%g0, [%0] %2\n\t" : :
-				     "r" (faddr), "r" (0x40000),
-				     "i" (ASI_M_DATAC_TAG));
+	if (!(mreg & CYPRESS_CENABLE)) {
+		for(faddr = 0x0; faddr < 0x10000; faddr += 20) {
+			__asm__ __volatile__("sta %%g0, [%0 + %1] %2\n\t"
+					     "sta %%g0, [%0] %2\n\t" : :
+					     "r" (faddr), "r" (0x40000),
+					     "i" (ASI_M_DATAC_TAG));
+		}
+	} else {
+		for(faddr = 0; faddr < 0x10000; faddr += 0x20) {
+			__asm__ __volatile__("lda [%1 + %2] %3, %0\n\t" :
+					     "=r" (tagval) :
+					     "r" (faddr), "r" (0x40000),
+					     "i" (ASI_M_DATAC_TAG));
+
+			/* If modified and valid, kick it. */
+			if((tagval & 0x60) == 0x60)
+				cypress_sucks = *(unsigned long *)
+							(0xf0020000 + faddr);
+		}
 	}
 
 	/* And one more, for our good neighbor, Mr. Broken Cypress. */
@@ -3119,7 +3102,7 @@ __initfunc(static void init_cypress_common(void))
 	flush_page_for_dma = cypress_flush_page_for_dma;
 	flush_cache_page_to_uncache = cypress_flush_page_to_uncache;
 	flush_tlb_page_for_cbit = cypress_flush_tlb_page_for_cbit;
-	pgd_flush = cypress_pgd_flush;
+	sparc_update_rootmmu_dir = cypress_update_rootmmu_dir;
 
 	update_mmu_cache = srmmu_vac_update_mmu_cache;
 	poke_srmmu = poke_cypress;
@@ -3355,7 +3338,7 @@ __initfunc(static void init_viking(void))
 
 		mmu_getpage = viking_no_mxcc_getpage;
 		set_pte = srmmu_set_pte_nocache_nomxccvik;
-		pgd_flush = viking_no_mxcc_pgd_flush;
+		sparc_update_rootmmu_dir = viking_no_mxcc_update_rootmmu_dir;
 
 		flush_cache_page_to_uncache = viking_no_mxcc_flush_page;
 
@@ -3538,7 +3521,7 @@ __initfunc(void ld_mmu_srmmu(void))
 	/* Functions */
 	mmu_getpage = srmmu_getpage;
 	set_pte = srmmu_set_pte_cacheable;
-	switch_to_context = srmmu_switch_to_context;
+	init_new_context = srmmu_init_new_context;
 	pmd_align = srmmu_pmd_align;
 	pgdir_align = srmmu_pgdir_align;
 	vmalloc_start = srmmu_vmalloc_start;
@@ -3581,7 +3564,6 @@ __initfunc(void ld_mmu_srmmu(void))
 	pmd_alloc = srmmu_pmd_alloc;
 	pgd_free = srmmu_pgd_free;
 	pgd_alloc = srmmu_pgd_alloc;
-	pgd_flush = srmmu_pgd_flush;
 
 	pte_write = srmmu_pte_write;
 	pte_dirty = srmmu_pte_dirty;
@@ -3593,8 +3575,7 @@ __initfunc(void ld_mmu_srmmu(void))
 	pte_mkdirty = srmmu_pte_mkdirty;
 	pte_mkyoung = srmmu_pte_mkyoung;
 	update_mmu_cache = srmmu_update_mmu_cache;
-	mmu_exit_hook = srmmu_exit_hook;
-	mmu_flush_hook = srmmu_flush_hook;
+	destroy_context = srmmu_destroy_context;
 	mmu_lockarea = srmmu_lockarea;
 	mmu_unlockarea = srmmu_unlockarea;
 

@@ -1,9 +1,11 @@
-/* $Id: a.out.h,v 1.1 1996/11/20 12:05:19 davem Exp $ */
+/* $Id: a.out.h,v 1.2 1996/12/28 18:39:49 davem Exp $ */
 #ifndef __SPARC64_A_OUT_H__
 #define __SPARC64_A_OUT_H__
 
 #define SPARC_PGSIZE    0x2000        /* Thanks to the sun4 architecture... */
 #define SEGMENT_SIZE    SPARC_PGSIZE  /* whee... */
+
+#ifndef __ASSEMBLY__
 
 struct exec {
 	unsigned char a_dynamic:1;      /* A __DYNAMIC is in this image */
@@ -18,6 +20,8 @@ struct exec {
 	unsigned int a_trsize;
 	unsigned int a_drsize;
 };
+
+#endif __ASSEMBLY__
 
 /* Where in the file does the text information begin? */
 #define N_TXTOFF(x)     (N_MAGIC(x) == ZMAGIC ? 0 : sizeof (struct exec))
@@ -40,6 +44,8 @@ struct exec {
 #define N_TRSIZE(a)	((a).a_trsize)
 #define N_DRSIZE(a)	((a).a_drsize)
 #define N_SYMSIZE(a)	((a).a_syms)
+
+#ifndef __ASSEMBLY__
 
 /*
  * Sparc relocation types
@@ -93,4 +99,6 @@ struct relocation_info /* used when header.a_machtype == M_SPARC */
 
 #endif
 
-#endif /* __SPARC64_A_OUT_H__ */
+#endif /* !(__ASSEMBLY__) */
+
+#endif /* !(__SPARC64_A_OUT_H__) */

@@ -1,4 +1,4 @@
-/* $Id: bitops.h,v 1.5 1996/12/21 06:09:28 davem Exp $
+/* $Id: bitops.h,v 1.6 1996/12/26 15:36:49 davem Exp $
  * bitops.h: Bit string operations on the V9.
  *
  * Copyright 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -225,10 +225,10 @@ extern __inline__ unsigned long find_next_zero_le_bit(void *addr, unsigned long 
 	if (offset >= size)
 		return size;
 	size -= result;
-	offset &= 31UL;
+	offset &= 63UL;
 	if(offset) {
 		tmp = *(p++);
-		tmp |= __swab64(~0UL >> (64-offset));
+		tmp |= __swab64((~0UL >> (64-offset)));
 		if(size < 64)
 			goto found_first;
 		if(~tmp)
@@ -247,9 +247,9 @@ extern __inline__ unsigned long find_next_zero_le_bit(void *addr, unsigned long 
 	tmp = *p;
 
 found_first:
-	return result + ffz(__swab32(tmp) | (~0UL << size));
+	return result + ffz(__swab64(tmp) | (~0UL << size));
 found_middle:
-	return result + ffz(__swab32(tmp));
+	return result + ffz(__swab64(tmp));
 }
 
 #ifdef __KERNEL__

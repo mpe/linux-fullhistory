@@ -165,6 +165,9 @@ static int  rcv_proto_ccp (struct ppp *, __u16, __u8 *, int);
 static int  flag_time = OPTIMIZE_FLAG_TIME;
 static int  max_dev   = PPP_MAX_DEV;
 
+MODULE_PARM(flag_time, "i");
+MODULE_PARM(max_dev, "i");
+
 /*
  * The "main" procedure to the ppp device
  */

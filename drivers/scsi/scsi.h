@@ -214,18 +214,8 @@ extern Scsi_Device * scsi_devices;
 
 extern int scsi_dev_init (void);
 
-struct scatterlist {
-    char *  address;    /* Location data is to be transferred to */
-    char * alt_address; /* Location of actual if address is a 
-			 * dma indirect buffer.  NULL otherwise */
-    unsigned int length;
-};
+#include <asm/scatterlist.h>
 
-#ifdef __alpha__
-# define ISA_DMA_THRESHOLD (~0UL)
-#else
-# define ISA_DMA_THRESHOLD (0x00ffffff)
-#endif
 #define CONTIGUOUS_BUFFERS(X,Y) ((X->b_data+X->b_size) == Y->b_data)
 
 

@@ -19,7 +19,7 @@
     EtherLink II Technical Reference Manual,
     EtherLink II/16 Technical Reference Manual Supplement,
     3Com Corporation, 5400 Bayfront Plaza, Santa Clara CA 95052-8145
-    
+
     The Crynwr 3c503 packet driver.
 
     Changelog:
@@ -49,7 +49,7 @@ static const char *version =
 
 #include "8390.h"
 #include "3c503.h"
-#define WRD_COUNT 4 
+#define WRD_COUNT 4
 
 int el2_probe(struct device *dev);
 int el2_pio_probe(struct device *dev);
@@ -277,9 +277,9 @@ el2_probe1(struct device *dev, int ioaddr)
     /*
 	Divide up the memory on the card. This is the same regardless of
 	whether shared-mem or PIO is used. For 16 bit cards (16kB RAM),
-	we use the entire 8k of bank1 for an Rx ring. We only use 3k 
+	we use the entire 8k of bank1 for an Rx ring. We only use 3k
 	of the bank0 for 2 full size Tx packet slots. For 8 bit cards,
-	(8kB RAM) we use 3kB of bank1 for two Tx slots, and the remaining 
+	(8kB RAM) we use 3kB of bank1 for two Tx slots, and the remaining
 	5kB for an Rx ring.  */
 
     if (wordlength) {
@@ -440,7 +440,7 @@ el2_block_output(struct device *dev, int count,
 
     if (ei_status.word16)      /* Tx packets go into bank 0 on EL2/16 card */
 	outb(EGACFR_RSEL|EGACFR_TCM, E33G_GACFR);
-    else 
+    else
 	outb(EGACFR_NORM, E33G_GACFR);
 
     if (dev->mem_start) {	/* Shared memory transfer */
@@ -473,7 +473,7 @@ el2_block_output(struct device *dev, int count,
  */
     wrd = (unsigned short int *) buf;
     count  = (count + 1) >> 1;
-    for(;;) 
+    for(;;)
     {
         boguscount = 0x1000;
         while ((inb(E33G_STATUS) & ESTAT_DPRDY) == 0)
@@ -582,14 +582,14 @@ el2_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_off
  *  can read one extra byte without clobbering anything in the kernel because
  *  this would only occur on an odd byte-count and allocation of skb->data
  *  is word-aligned. Variable 'count' is NOT checked. Caller must check
- *  for a valid count. 
+ *  for a valid count.
  *  [This is currently quite safe.... but if one day the 3c503 explodes
  *   you know where to come looking ;)]
  */
 
     buf =  (unsigned short int *) skb->data;
     count =  (count + 1) >> 1;
-    for(;;) 
+    for(;;)
     {
         boguscount = 0x1000;
         while ((inb(E33G_STATUS) & ESTAT_DPRDY) == 0)
@@ -602,7 +602,7 @@ el2_block_input(struct device *dev, int count, struct sk_buff *skb, int ring_off
             }
         }
         if(count > WRD_COUNT)
-        { 
+        {
             insw(E33G_FIFOH, buf, WRD_COUNT);
             buf   += WRD_COUNT;
             count -= WRD_COUNT;
@@ -634,6 +634,9 @@ static struct device dev_el2[MAX_EL2_CARDS] = {
 static int io[MAX_EL2_CARDS] = { 0, };
 static int irq[MAX_EL2_CARDS]  = { 0, };
 static int xcvr[MAX_EL2_CARDS] = { 0, };	/* choose int. or ext. xcvr */
+MODULE_PARM(io, "1-" __MODULE_STRING(MAX_EL2_CARDS) "i");
+MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_EL2_CARDS) "i");
+MODULE_PARM(xcvr, "1-" __MODULE_STRING(MAX_EL2_CARDS) "i");
 
 /* This is set up so that only a single autoprobe takes place per call.
 ISA device autoprobes on a running machine are not recommended. */

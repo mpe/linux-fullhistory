@@ -2,6 +2,7 @@
  *  ncplib_kernel.c
  *
  *  Copyright (C) 1995, 1996 by Volker Lendecke
+ *  Modified for big endian by J.F. Chadima and David S. Miller
  *
  */
 
@@ -38,7 +39,7 @@ static void
 ncp_add_word(struct ncp_server *server, word x)
 {
 	assert_server_locked(server);
-	*(word *)(&(server->packet[server->current_size])) = x;
+	put_unaligned(x, (word *)(&(server->packet[server->current_size])));
 	server->current_size += 2;
 	return;
 }
@@ -47,7 +48,7 @@ static void
 ncp_add_dword(struct ncp_server *server, dword x)
 {
 	assert_server_locked(server);
-	*(dword *)(&(server->packet[server->current_size])) = x;
+	put_unaligned(x, (dword *)(&(server->packet[server->current_size])));
 	server->current_size += 4;
 	return;
 }
@@ -261,7 +262,7 @@ ncp_obtain_info(struct ncp_server *server,
 	ncp_add_byte(server, 6); /* subfunction */
 	ncp_add_byte(server, server->name_space[vol_num]);
 	ncp_add_byte(server, server->name_space[vol_num]);
-	ncp_add_word(server, 0xff); /* get all */
+	ncp_add_word(server, htons(0xff00)); /* get all */
 	ncp_add_dword(server, RIM_ALL);
 	ncp_add_handle_path(server, vol_num, dir_base, 1, path);
 
@@ -371,7 +372,7 @@ ncp_modify_file_or_subdir_dos_info(struct ncp_server *server,
 	ncp_add_byte(server, 7); /* subfunction */
 	ncp_add_byte(server, server->name_space[file->volNumber]);
 	ncp_add_byte(server, 0); /* reserved */
-	ncp_add_word(server, 0x8006); /* search attribs: all */
+	ncp_add_word(server, htons(0x0680)); /* search attribs: all */
 
 	ncp_add_dword(server, info_mask);
 	ncp_add_mem(server, info, sizeof(*info));
@@ -393,7 +394,7 @@ ncp_del_file_or_subdir(struct ncp_server *server,
 	ncp_add_byte(server, 8); /* subfunction */
 	ncp_add_byte(server, server->name_space[dir->volNumber]);
 	ncp_add_byte(server, 0); /* reserved */
-	ncp_add_word(server, 0x8006); /* search attribs: all */
+	ncp_add_word(server, ntohs(0x0680)); /* search attribs: all */
 	ncp_add_handle_path(server, dir->volNumber,
 			    dir->dirEntNum, 1, name);
 	
@@ -406,8 +407,8 @@ static inline void
 ConvertToNWfromDWORD ( __u32 sfd , __u8 ret[6] )
 {
     __u16 *dest = (__u16 *) ret;
-    memcpy(&(dest[1]), &sfd, 4);
-    dest[0] = dest[1] + 1;
+    memcpy (ret + 2, &sfd, 4);
+    dest[0] = cpu_to_le16((le16_to_cpu(dest[1]) + le16_to_cpu(1)));
     return;
 }
 
@@ -422,13 +423,13 @@ ncp_open_create_file_or_subdir(struct ncp_server *server,
 			       struct nw_file_info *target)
 {
 	int result;
-	__u16 search_attribs = 0x0006;
+	__u16 search_attribs = ntohs(0x0600);
 	__u8 volume = (dir != NULL) ? dir->volNumber : target->i.volNumber;
 
 	if ((create_attributes & aDIR) != 0)
 	{
-		search_attribs |= 0x8000;	
-}
+		search_attribs |= ntohs(0x0080);	
+	}
 
 	ncp_init_request(server);
 	ncp_add_byte(server, 1); /* subfunction */
@@ -546,7 +547,7 @@ ncp_ren_or_mov_file_or_subdir(struct ncp_server *server,
 	ncp_add_byte(server, 4); /* subfunction */
 	ncp_add_byte(server, server->name_space[old_dir->volNumber]);
 	ncp_add_byte(server, 1); /* rename flag */
-	ncp_add_word(server, 0x8006); /* search attributes */
+	ncp_add_word(server, ntohs (0x0680)); /* search attributes */
 
 	/* source Handle Path */
 	ncp_add_byte(server, old_dir->volNumber);

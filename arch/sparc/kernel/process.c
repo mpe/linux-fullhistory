@@ -1,4 +1,4 @@
-/*  $Id: process.c,v 1.85 1996/12/18 06:33:42 tridge Exp $
+/*  $Id: process.c,v 1.87 1996/12/30 06:16:21 davem Exp $
  *  linux/arch/sparc/kernel/process.c
  *
  *  Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
@@ -280,7 +280,7 @@ void show_thread(struct thread_struct *tss)
  */
 void exit_thread(void)
 {
-	flush_user_windows();
+	kill_user_windows();
 #ifndef __SMP__
 	if(last_task_used_math == current) {
 #else
@@ -296,15 +296,13 @@ void exit_thread(void)
 		current->flags &= ~PF_USEDFPU;
 #endif
 	}
-	mmu_exit_hook();
 }
 
 void flush_thread(void)
 {
 	/* Make sure old user windows don't get in the way. */
-	flush_user_windows();
-	current->tss.w_saved = 0;
-	current->tss.uwinmask = 0;
+	kill_user_windows();
+
 	current->tss.sstk_info.cur_status = 0;
 	current->tss.sstk_info.the_stack = 0;
 
@@ -326,7 +324,6 @@ void flush_thread(void)
 #endif
 	}
 
-	mmu_flush_hook();
 	/* Now, this task is no longer a kernel thread. */
 	current->tss.flags &= ~SPARC_FLAG_KTHREAD;
 	current->tss.current_ds = USER_DS;

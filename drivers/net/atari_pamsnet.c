@@ -2,12 +2,12 @@
  *
  * Version:	@(#)PAMsNet.c	0.2ß	03/31/96
  *
- * Author:  Torsten Lang <Torsten.Lang@ap.physik.uni-giessen.de> 
+ * Author:  Torsten Lang <Torsten.Lang@ap.physik.uni-giessen.de>
  *                       <Torsten.Lang@jung.de>
  *
  * This driver is based on my driver PAMSDMA.c for MiNT-Net and
  * on the driver bionet.c written by
- *          Hartmut Laue <laue@ifk-mp.uni-kiel.de> 
+ *          Hartmut Laue <laue@ifk-mp.uni-kiel.de>
  * and      Torsten Narjes <narjes@ifk-mp.uni-kiel.de>
  *
  * Little adaptions for integration into pl7 by Roman Hodek
@@ -114,7 +114,7 @@ static char *version =
 
 #undef READ
 #undef WRITE
-  
+
 extern struct device *init_etherdev(struct device *dev, int sizeof_private);
 
 /* use 0 for production, 1 for verification, >2 for debug
@@ -126,6 +126,8 @@ extern struct device *init_etherdev(struct device *dev, int sizeof_private);
  * Global variable 'pamsnet_debug'. Can be set at load time by 'insmod'
  */
 unsigned int pamsnet_debug = NET_DEBUG;
+MODULE_PARM(pamsnet_debug, "i");
+
 static unsigned int pamsnet_min_poll_time = 2;
 
 
@@ -195,7 +197,7 @@ typedef struct
  * LUN 7 lets you send and receive packets.
  *
  * Some commands like the INQUIRY command work identical on all used LUNs.
- * 
+ *
  * UNKNOWN1 seems to read some data.
  *          Command length is 6 bytes.
  * UNKNOWN2 seems to read some data (command byte 1 must be !=0). The
@@ -229,7 +231,7 @@ typedef struct
  *          Command length is 6 byte.
  */
 
-enum {UNKNOWN1=3, READPKT=8, UNKNOWN2, WRITEPKT=10, INQUIRY=18, START, 
+enum {UNKNOWN1=3, READPKT=8, UNKNOWN2, WRITEPKT=10, INQUIRY=18, START,
       NUMPKTS=22, UNKNOWN3, UNKNOWN4, UNKNOWN5, DESELECT, STOP};
 
 #define READSECTOR  READPKT
@@ -292,14 +294,14 @@ int if_up = 0;
  */
 
 /* The following lowlevel routines work on physical addresses only and assume
- * that eventually needed buffers are 
+ * that eventually needed buffers are
  * - completely located in ST RAM
  * - are contigous in the physical address space
  */
 
 /* Setup the DMA counter */
 
-static void 
+static void
 setup_dma (address, rw_flag, num_blocks)
 	void *address;
 	unsigned rw_flag;
@@ -321,7 +323,7 @@ setup_dma (address, rw_flag, num_blocks)
 
 /* Send the first byte of an command block */
 
-static int 
+static int
 send_first (target, byte)
 	int target;
 	unsigned char byte;
@@ -342,14 +344,14 @@ send_first (target, byte)
 
 /* Send the rest of an command block */
 
-static int 
+static int
 send_1_5 (lun, command, dma)
 	int lun;
 	unsigned char *command;
 	int dma;
 {
 	int i, j;
-	
+
 	for (i=0; i<5; i++) {
 		WRITEBOTH((!i ? (((lun & 0x7) << 5) | (command[i] & 0x1F))
 			      : command[i]),
@@ -365,7 +367,7 @@ send_1_5 (lun, command, dma)
 
 /* Read a status byte */
 
-static int 
+static int
 get_status (void)
 {
 	WRITEMODE(DMA_FDC | DMA_WINDOW | REG_ACSI | A1);
@@ -375,7 +377,7 @@ get_status (void)
 
 /* Calculate the number of received bytes */
 
-static int 
+static int
 calc_received (start_address)
 	void *start_address;
 {
@@ -435,7 +437,7 @@ bad:
 /* inquiry() returns 0 when PAM's DMA found, -1 when timeout, -2 otherwise */
 /* Please note: The buffer is for internal use only but must be defined!   */
 
-static int 
+static int
 inquiry (target, buffer)
 	int target;
 	unsigned char *buffer;
@@ -443,7 +445,7 @@ inquiry (target, buffer)
 	int ret = -1;
 	unsigned char *vbuffer = (unsigned char *)PTOV(buffer);
 	unsigned char cmd_buffer[5];
-	
+
 	if (send_first(target, INQUIRY))
 		goto bad;
 	setup_dma(buffer, READ, 1);
@@ -467,12 +469,12 @@ bad:
 	return (ret);
 }
 
-/* 
+/*
  * read_hw_addr() reads the sector containing the hwaddr and returns
  * a pointer to it (virtual address!) or 0 in case of an error
  */
 
-static HADDR 
+static HADDR
 *read_hw_addr(target, buffer)
 	int target;
 	unsigned char *buffer;
@@ -569,7 +571,7 @@ pamsnet_probe (dev)
 {
 	int i;
 	HADDR *hwaddr;
-	
+
 	unsigned char station_addr[6];
 	static unsigned version_printed = 0;
 	/* avoid "Probing for..." printed 4 times - the driver is supporting only one adapter now! */
@@ -579,7 +581,7 @@ pamsnet_probe (dev)
 		return ENODEV;
 
 	no_more_found = 1;
-	
+
 	printk("Probing for PAM's Net/GK Adapter...\n");
 
 	/* Allocate the DMA buffer here since we need it for probing! */
@@ -613,7 +615,7 @@ pamsnet_probe (dev)
 		else
 			memcpy (station_addr, hwaddr, ETH_ALEN);
 	}
-	
+
 	ENABLE_IRQ();
 	stdma_release();
 
@@ -775,7 +777,7 @@ pamsnet_poll_rx(struct device *dev) {
 
 	while(boguscount--) {
 		pkt_len = receivepkt(lance_target, phys_nic_packet);
-	  
+
 		if( pkt_len < 60 ) break;
 
 		/* Good packet... */
@@ -882,7 +884,7 @@ static char kernel_version[] = UTS_RELEASE;
 #undef	NEXT_DEV
 #define NEXT_DEV	(&pam_dev)
 
-static struct device pam_dev =  
+static struct device pam_dev =
 	{
 		"        ",	/* filled in by register_netdev() */
 		0, 0, 0, 0,	/* memory */
@@ -893,7 +895,7 @@ static struct device pam_dev =
 int
 init_module(void) {
 	int err;
-	
+
 	if ((err = register_netdev(&pam_dev))) {
 		if (err == -EEXIST)  {
 			printk("PAM's Net/GK: devices already present. Module not loaded.\n");
@@ -901,13 +903,13 @@ init_module(void) {
 		return err;
 	}
 	return 0;
-}  
+}
 
 void
 cleanup_module(void) {
 	unregister_netdev(&pam_dev);
 }
-                      
+
 #endif /* MODULE */
 
 /* Local variables:

@@ -85,6 +85,11 @@ extern inline void start_thread(struct pt_regs *, unsigned long, unsigned long )
  */
 #define TASK_SIZE	(0x80000000UL)
 
+/* This decides where the kernel will search for a free chunk of vm
+ * space during mmap's.
+ */
+#define TASK_UNMAPPED_BASE	(TASK_SIZE / 3)
+
 struct thread_struct 
 {
   unsigned long	ksp;		/* Kernel stack pointer */

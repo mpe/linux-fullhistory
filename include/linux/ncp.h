@@ -2,6 +2,7 @@
  *  ncp.h
  *
  *  Copyright (C) 1995 by Volker Lendecke
+ *  Modified for sparc by J.F. Chadima
  *
  */
 
@@ -92,16 +93,16 @@ struct ncp_filesearch_info {
 #define NCP_MAX_FILENAME 14
 
 /* these define the attribute byte as seen by NCP */
-#define aRONLY     (1L<<0)
-#define aHIDDEN    (1L<<1)
-#define aSYSTEM    (1L<<2)
-#define aEXECUTE   (1L<<3)
-#define aDIR       (1L<<4)
-#define aARCH      (1L<<5)
+#define aRONLY     (ntohl(0x01000000))
+#define aHIDDEN    (ntohl(0x02000000))
+#define aSYSTEM    (ntohl(0x04000000))
+#define aEXECUTE   (ntohl(0x08000000))
+#define aDIR       (ntohl(0x10000000))
+#define aARCH      (ntohl(0x20000000))
 
-#define AR_READ      (0x01)
-#define AR_WRITE     (0x02)
-#define AR_EXCLUSIVE (0x20)
+#define AR_READ      (ntohs(0x0100))
+#define AR_WRITE     (ntohs(0x0200))
+#define AR_EXCLUSIVE (ntohs(0x2000))
 
 #define NCP_FILE_ID_LEN 6
 struct ncp_file_info {
@@ -124,20 +125,20 @@ struct ncp_file_info {
 #define NW_NS_OS2     4
 
 /*  Defines for ReturnInformationMask */
-#define RIM_NAME	      (0x0001L)
-#define RIM_SPACE_ALLOCATED   (0x0002L)
-#define RIM_ATTRIBUTES	      (0x0004L)
-#define RIM_DATA_SIZE	      (0x0008L)
-#define RIM_TOTAL_SIZE	      (0x0010L)
-#define RIM_EXT_ATTR_INFO     (0x0020L)
-#define RIM_ARCHIVE	      (0x0040L)
-#define RIM_MODIFY	      (0x0080L)
-#define RIM_CREATION	      (0x0100L)
-#define RIM_OWNING_NAMESPACE  (0x0200L)
-#define RIM_DIRECTORY	      (0x0400L)
-#define RIM_RIGHTS	      (0x0800L)
-#define RIM_ALL 	      (0x0FFFL)
-#define RIM_COMPRESSED_INFO   (0x80000000L)
+#define RIM_NAME	      (ntohl(0x01000000L))
+#define RIM_SPACE_ALLOCATED   (ntohl(0x02000000L))
+#define RIM_ATTRIBUTES	      (ntohl(0x04000000L))
+#define RIM_DATA_SIZE	      (ntohl(0x08000000L))
+#define RIM_TOTAL_SIZE	      (ntohl(0x10000000L))
+#define RIM_EXT_ATTR_INFO     (ntohl(0x20000000L))
+#define RIM_ARCHIVE	      (ntohl(0x40000000L))
+#define RIM_MODIFY	      (ntohl(0x80000000L))
+#define RIM_CREATION	      (ntohl(0x00010000L))
+#define RIM_OWNING_NAMESPACE  (ntohl(0x00020000L))
+#define RIM_DIRECTORY	      (ntohl(0x00040000L))
+#define RIM_RIGHTS	      (ntohl(0x00080000L))
+#define RIM_ALL 	      (ntohl(0xFF0F0000L))
+#define RIM_COMPRESSED_INFO   (ntohl(0x00000080L))
 
 /* open/create modes */
 #define OC_MODE_OPEN	  0x01
@@ -194,19 +195,19 @@ struct nw_info_struct
 };
 
 /* modify mask - use with MODIFY_DOS_INFO structure */
-#define DM_ATTRIBUTES		  (0x0002L)
-#define DM_CREATE_DATE		  (0x0004L)
-#define DM_CREATE_TIME		  (0x0008L)
-#define DM_CREATOR_ID		  (0x0010L)
-#define DM_ARCHIVE_DATE 	  (0x0020L)
-#define DM_ARCHIVE_TIME 	  (0x0040L)
-#define DM_ARCHIVER_ID		  (0x0080L)
-#define DM_MODIFY_DATE		  (0x0100L)
-#define DM_MODIFY_TIME		  (0x0200L)
-#define DM_MODIFIER_ID		  (0x0400L)
-#define DM_LAST_ACCESS_DATE	  (0x0800L)
-#define DM_INHERITED_RIGHTS_MASK  (0x1000L)
-#define DM_MAXIMUM_SPACE	  (0x2000L)
+#define DM_ATTRIBUTES		  (ntohl(0x02000000L))
+#define DM_CREATE_DATE		  (ntohl(0x04000000L))
+#define DM_CREATE_TIME		  (ntohl(0x08000000L))
+#define DM_CREATOR_ID		  (ntohl(0x10000000L))
+#define DM_ARCHIVE_DATE 	  (ntohl(0x20000000L))
+#define DM_ARCHIVE_TIME 	  (ntohl(0x40000000L))
+#define DM_ARCHIVER_ID		  (ntohl(0x80000000L))
+#define DM_MODIFY_DATE		  (ntohl(0x00010000L))
+#define DM_MODIFY_TIME		  (ntohl(0x00020000L))
+#define DM_MODIFIER_ID		  (ntohl(0x00040000L))
+#define DM_LAST_ACCESS_DATE	  (ntohl(0x00080000L))
+#define DM_INHERITED_RIGHTS_MASK  (ntohl(0x00100000L))
+#define DM_MAXIMUM_SPACE	  (ntohl(0x00200000L))
 
 struct nw_modify_dos_info
 {

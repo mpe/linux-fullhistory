@@ -158,10 +158,10 @@ struct netdev_entry netcard_drv =
 {"ne", ne_probe1, NE_IO_EXTENT, netcard_portlist};
 #else
 
-/* 
- * Note that at boot, this probe only picks up one card at a time, even for 
- * multiple PCI ne2k cards. Use "ether=0,0,eth1" if you have a second PCI 
- * ne2k card.  This keeps things consistent regardless of the bus type of 
+/*
+ * Note that at boot, this probe only picks up one card at a time, even for
+ * multiple PCI ne2k cards. Use "ether=0,0,eth1" if you have a second PCI
+ * ne2k card.  This keeps things consistent regardless of the bus type of
  * the card.
  */
 
@@ -177,7 +177,7 @@ int ne_probe(struct device *dev)
 
 #ifdef CONFIG_PCI
     /* Then look for any installed PCI clones */
-    if (pcibios_present() && (ne_probe_pci(dev) == 0)) 
+    if (pcibios_present() && (ne_probe_pci(dev) == 0))
 	return 0;
 #endif
 
@@ -205,7 +205,7 @@ static int ne_probe_pci(struct device *dev)
 		unsigned char pci_bus, pci_device_fn;
 		unsigned int pci_ioaddr;
 		int pci_index;
-		
+
 		for (pci_index = 0; pci_index < 8; pci_index++) {
 			if (pcibios_find_device (pci_clone_list[i].vendor,
 					pci_clone_list[i].dev_id, pci_index,
@@ -281,7 +281,7 @@ static int ne_probe1(struct device *dev, int ioaddr)
     /* A user with a poor card that fails to ack the reset, or that
        does not have a valid 0x57,0x57 signature can still use this
        without having to recompile. Specifying an i/o address along
-       with an otherwise unused dev->mem_end value of "0xBAD" will 
+       with an otherwise unused dev->mem_end value of "0xBAD" will
        cause the driver to skip these parts of the probe. */
 
     bad_card = ((dev->base_addr != 0) && (dev->mem_end == 0xbad));
@@ -339,13 +339,13 @@ static int ne_probe1(struct device *dev, int ioaddr)
 
     /*	At this point, wordlength *only* tells us if the SA_prom is doubled
 	up or not because some broken PCI cards don't respect the byte-wide
-	request in program_seq above, and hence don't have doubled up values. 
+	request in program_seq above, and hence don't have doubled up values.
 	These broken cards would otherwise be detected as an ne1000.  */
 
     if (wordlength == 2)
 	for (i = 0; i < 16; i++)
 		SA_prom[i] = SA_prom[i+i];
-    
+
     if (pci_irq_line || ioaddr >= 0x400)
 	wordlength = 2;		/* Catch broken PCI cards mentioned above. */
 
@@ -419,7 +419,7 @@ static int ne_probe1(struct device *dev, int ioaddr)
 	printk(" failed to detect IRQ line.\n");
 	return EAGAIN;
     }
-    
+
     /* Snarf the interrupt now.  There's no point in waiting since we cannot
        share and the board will usually be enabled. */
     {
@@ -438,7 +438,7 @@ static int ne_probe1(struct device *dev, int ioaddr)
 	free_irq(dev->irq, NULL);
 	return -ENOMEM;
     }
- 
+
     request_region(ioaddr, NE_IO_EXTENT, name);
 
     for(i = 0; i < ETHER_ADDR_LEN; i++) {
@@ -732,6 +732,10 @@ static struct device dev_ne[MAX_NE_CARDS] = {
 static int io[MAX_NE_CARDS] = { 0, };
 static int irq[MAX_NE_CARDS]  = { 0, };
 static int bad[MAX_NE_CARDS]  = { 0, };	/* 0xbad = bad sig or no reset ack */
+
+MODULE_PARM(io, "1-" __MODULE_STRING(MAX_NE_CARDS) "i");
+MODULE_PARM(irq, "1-" __MODULE_STRING(MAX_NE_CARDS) "i");
+MODULE_PARM(bad, "1-" __MODULE_STRING(MAX_NE_CARDS) "i");
 
 /* This is set up so that no ISA autoprobe takes place. We can't guarantee
 that the ne2k probe is the last 8390 based probe to take place (as it

@@ -35,7 +35,7 @@
  *
  *	You should have received a copy of the GNU General Public License
  *	along with this program; if not, write to the Free Software
- *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA. 
+ *	Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.
  *
  *****************************************************************************/
 static const char *version =
@@ -191,6 +191,13 @@ static int irq = DE620_IRQ;
 static int clone = DE620_CLONE;
 
 static unsigned int de620_debug = DE620_DEBUG;
+
+MODULE_PARM(bnc, "i");
+MODULE_PARM(utp, "i");
+MODULE_PARM(io, "i");
+MODULE_PARM(irq, "i");
+MODULE_PARM(clone, "i");
+MODULE_PARM(de620_debug, "i");
 
 /***********************************************
  *                                             *
@@ -485,18 +492,18 @@ get_stats(struct device *dev)
 
 static void de620_set_multicast_list(struct device *dev)
 {
-	if (dev->mc_count || dev->flags&(IFF_ALLMULTI|IFF_PROMISC)) 
+	if (dev->mc_count || dev->flags&(IFF_ALLMULTI|IFF_PROMISC))
 	{ /* Enable promiscuous mode */
 		/*
 		 *	We must make the kernel realise we had to move
 		 *	into promisc mode or we start all out war on
 		 *	the cable. - AC
 		 */
-		dev->flags|=IFF_PROMISC;		
-	
+		dev->flags|=IFF_PROMISC;
+
 		de620_set_register(dev, W_TCR, (TCR_DEF & ~RXPBM) | RXALL);
 	}
-	else 
+	else
 	{ /* Disable promiscuous mode, use normal mode */
 		de620_set_register(dev, W_TCR, TCR_DEF);
 	}
@@ -584,9 +591,9 @@ de620_start_xmit(struct sk_buff *skb, struct device *dev)
 	dev->tbusy = (using_txbuf == (TXBF0 | TXBF1)); /* Boolean! */
 
 	((struct netstats *)(dev->priv))->tx_packets++;
-	
+
 	restore_flags(flags); /* interrupts maybe back on */
-	
+
 	dev_kfree_skb (skb, FREE_WRITE);
 
 	return 0;
@@ -897,7 +904,7 @@ de620_probe(struct device *dev)
 	/* base_addr and irq are already set, see above! */
 
 	ether_setup(dev);
-	
+
 	/* dump eeprom */
 	if (de620_debug) {
 		printk("\nEEPROM contents:\n");

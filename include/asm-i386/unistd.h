@@ -118,7 +118,7 @@
 #define __NR_iopl		110
 #define __NR_vhangup		111
 #define __NR_idle		112
-#define __NR_vm86		113
+#define __NR_vm86old		113
 #define __NR_wait4		114
 #define __NR_swapoff		115
 #define __NR_sysinfo		116
@@ -171,7 +171,8 @@
 #define __NR_mremap		163
 #define __NR_setresuid		164
 #define __NR_getresuid		165
-#define __NR_query_module	166
+#define __NR_vm86		166
+#define __NR_query_module	167
 
 /* user-visible error numbers are in the range -1 - -122: see <asm-i386/errno.h> */
 

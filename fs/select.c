@@ -178,17 +178,21 @@ static int do_select(int n, fd_set_buffer *fds)
 		for (i = 0 ; i < n ; i++,fd++) {
 			unsigned long bit = BIT(i);
 			unsigned long *in = MEM(i,fds->in);
-			if (ISSET(bit,__IN(in)) && check(SEL_IN,wait,*fd)) {
+			struct file * file = *fd;
+
+			if (!file)
+				continue;
+			if (ISSET(bit,__IN(in)) && check(SEL_IN,wait,file)) {
 				SET(bit, __RES_IN(in));
 				retval++;
 				wait = NULL;
 			}
-			if (ISSET(bit,__OUT(in)) && check(SEL_OUT,wait,*fd)) {
+			if (ISSET(bit,__OUT(in)) && check(SEL_OUT,wait,file)) {
 				SET(bit, __RES_OUT(in));
 				retval++;
 				wait = NULL;
 			}
-			if (ISSET(bit,__EX(in)) && check(SEL_EX,wait,*fd)) {
+			if (ISSET(bit,__EX(in)) && check(SEL_EX,wait,file)) {
 				SET(bit, __RES_EX(in));
 				retval++;
 				wait = NULL;

@@ -1,4 +1,4 @@
-/* $Id: cgthree.c,v 1.9 1996/11/13 05:10:21 davem Exp $
+/* $Id: cgthree.c,v 1.10 1996/12/23 10:16:07 ecd Exp $
  * cgtree.c: cg3 frame buffer driver
  *
  * Copyright (C) 1996 Miguel de Icaza (miguel@nuclecu.unam.mx)
@@ -9,6 +9,7 @@
 #include <linux/kd.h>
 #include <linux/tty.h>
 #include <linux/malloc.h>
+#include <linux/proc_fs.h>
 
 #include <asm/sbus.h>
 #include <asm/io.h>

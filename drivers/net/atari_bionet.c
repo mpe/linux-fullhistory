@@ -2,7 +2,7 @@
  *
  * Version:	@(#)bionet.c	1.0	02/06/96
  *
- * Author:	Hartmut Laue <laue@ifk-mp.uni-kiel.de> 
+ * Author:	Hartmut Laue <laue@ifk-mp.uni-kiel.de>
  * and		Torsten Narjes <narjes@ifk-mp.uni-kiel.de>
  *
  * Little adaptions for integration into pl7 by Roman Hodek
@@ -116,7 +116,7 @@ static char *version =
 #include <asm/atari_acsi.h>
 #include <asm/atari_stdma.h>
 
-  
+
 extern struct device *init_etherdev(struct device *dev, int sizeof_private);
 
 /* use 0 for production, 1 for verification, >2 for debug
@@ -128,6 +128,8 @@ extern struct device *init_etherdev(struct device *dev, int sizeof_private);
  * Global variable 'bionet_debug'. Can be set at load time by 'insmod'
  */
 unsigned int bionet_debug = NET_DEBUG;
+MODULE_PARM(bionet_debug, "i");
+
 static unsigned int bionet_min_poll_time = 2;
 
 
@@ -177,7 +179,7 @@ sendcmd(unsigned int a0, unsigned int mod, unsigned int cmd) {
 	unsigned int c;
 
 	dma_wd.dma_mode_status = (mod | ((a0) ? 2 : 0) | 0x88);
-	dma_wd.fdc_acces_seccount = cmd; 
+	dma_wd.fdc_acces_seccount = cmd;
 	dma_wd.dma_mode_status = (mod | 0x8a);
 
 	if( !acsi_wait_for_IRQ(HZ/2) )	/* wait for cmd ack */
@@ -268,7 +270,7 @@ get_frame(unsigned long paddr, int odd) {
 	dma_wd.dma_mode_status	= 0x88;
 	c = dma_wd.fdc_acces_seccount;
 	c = 1;
-  
+
 rend:
 	dma_wd.dma_mode_status	= 0x80;
 	udelay(40);
@@ -333,7 +335,7 @@ bionet_probe(struct device *dev) {
 
 	if (!MACH_IS_ATARI || no_more_found)
 		return ENODEV;
-	
+
 	printk("Probing for BioNet 100 Adapter...\n");
 
 	stdma_lock(bionet_intr, NULL);
@@ -342,7 +344,7 @@ bionet_probe(struct device *dev) {
 	stdma_release();
 
 	/* Check the first three octets of the S.A. for the manufactor's code.
-	 */ 
+	 */
 
 	if( i < 0
 	||  station_addr[0] != 'B'
@@ -508,7 +510,7 @@ bionet_poll_rx(struct device *dev) {
 
 	while(boguscount--) {
 		status = get_frame((unsigned long)phys_nic_packet, 0);
-	  
+
 		if( status != 1 ) break;
 
 		/* Good packet... */
@@ -610,7 +612,7 @@ static char kernel_version[] = UTS_RELEASE;
 #undef	NEXT_DEV
 #define NEXT_DEV	(&bio_dev)
 
-static struct device bio_dev =  
+static struct device bio_dev =
 	{
 		"        ",	/* filled in by register_netdev() */
 		0, 0, 0, 0,	/* memory */
@@ -621,7 +623,7 @@ static struct device bio_dev =
 int
 init_module(void) {
 	int err;
-	
+
 	if ((err = register_netdev(&bio_dev))) {
 		if (err == -EEXIST)  {
 			printk("BIONET: devices already present. Module not loaded.\n");
@@ -629,13 +631,13 @@ init_module(void) {
 		return err;
 	}
 	return 0;
-}  
+}
 
 void
 cleanup_module(void) {
 	unregister_netdev(&bio_dev);
 }
-                      
+
 #endif /* MODULE */
 
 /* Local variables:

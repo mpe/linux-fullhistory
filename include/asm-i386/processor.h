@@ -45,6 +45,11 @@ extern unsigned int BIOS_revision;
  */
 #define TASK_SIZE	(0xC0000000UL)
 
+/* This decides where the kernel will search for a free chunk of vm
+ * space during mmap's.
+ */
+#define TASK_UNMAPPED_BASE	(TASK_SIZE / 3)
+
 /*
  * Size of io_bitmap in longwords: 32 is ports 0-0x3ff.
  */
