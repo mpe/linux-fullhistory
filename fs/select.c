@@ -79,18 +79,18 @@ static void free_wait(select_table * p)
 	p->nr = 0;
 }
 
-static struct tty_struct * get_tty(struct m_inode * inode)
+static struct tty_struct * get_tty(struct inode * inode)
 {
 	int major, minor;
 
 	if (!S_ISCHR(inode->i_mode))
 		return NULL;
-	if ((major = MAJOR(inode->i_zone[0])) != 5 && major != 4)
+	if ((major = MAJOR(inode->i_rdev)) != 5 && major != 4)
 		return NULL;
 	if (major == 5)
 		minor = current->tty;
 	else
-		minor = MINOR(inode->i_zone[0]);
+		minor = MINOR(inode->i_rdev);
 	if (minor < 0)
 		return NULL;
 	return TTY_TABLE(minor);
@@ -100,7 +100,7 @@ static struct tty_struct * get_tty(struct m_inode * inode)
  * The check_XX functions check out a file. We know it's either
  * a pipe, a character device or a fifo (fifo's not implemented)
  */
-static int check_in(select_table * wait, struct m_inode * inode)
+static int check_in(select_table * wait, struct inode * inode)
 {
 	struct tty_struct * tty;
 
@@ -110,14 +110,14 @@ static int check_in(select_table * wait, struct m_inode * inode)
 		else
 			add_wait(&tty->secondary->proc_list, wait);
 	else if (inode->i_pipe)
-		if (!PIPE_EMPTY(*inode))
+		if (!PIPE_EMPTY(*inode) || inode->i_count < 2)
 			return 1;
 		else
 			add_wait(&inode->i_wait, wait);
 	return 0;
 }
 
-static int check_out(select_table * wait, struct m_inode * inode)
+static int check_out(select_table * wait, struct inode * inode)
 {
 	struct tty_struct * tty;
 
@@ -134,7 +134,7 @@ static int check_out(select_table * wait, struct m_inode * inode)
 	return 0;
 }
 
-static int check_ex(select_table * wait, struct m_inode * inode)
+static int check_ex(select_table * wait, struct inode * inode)
 {
 	struct tty_struct * tty;
 
@@ -198,7 +198,7 @@ repeat:
 			}
 	}
 	if (!(current->signal & ~current->blocked) &&
-	    (wait_table.nr || current->timeout) && !count) {
+	    current->timeout && !count) {
 		current->state = TASK_INTERRUPTIBLE;
 		schedule();
 		free_wait(&wait_table);
@@ -224,7 +224,11 @@ int sys_select( unsigned long *buffer )
 	struct timeval *tvp;
 	unsigned long timeout;
 
-	mask = ~((~0) << get_fs_long(buffer++));
+	mask = get_fs_long(buffer++);
+	if (mask >= 32)
+		mask = ~0;
+	else
+		mask = ~((~0) << mask);
 	inp = (fd_set *) get_fs_long(buffer++);
 	outp = (fd_set *) get_fs_long(buffer++);
 	exp = (fd_set *) get_fs_long(buffer++);

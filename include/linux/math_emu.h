@@ -9,20 +9,20 @@
 #include <linux/sched.h>
 
 struct info {
-	long ___math_ret;
 	long ___orig_eip;
-	long ___edi;
-	long ___esi;
-	long ___ebp;
-	long ___sys_call_ret;
-	long ___eax;
+	long ___ret_from_system_call;
 	long ___ebx;
 	long ___ecx;
 	long ___edx;
-	long ___orig_eax;
-	long ___fs;
-	long ___es;
+	long ___esi;
+	long ___edi;
+	long ___ebp;
+	long ___eax;
 	long ___ds;
+	long ___es;
+	long ___fs;
+	long ___gs;
+	long ___orig_eax;
 	long ___eip;
 	long ___cs;
 	long ___eflags;
@@ -140,6 +140,7 @@ char * ea(struct info * __info, unsigned short __code);
 
 /* convert.c */
 
+void frndint(const temp_real * __a, temp_real * __b);
 void short_to_temp(const short_real * __a, temp_real * __b);
 void long_to_temp(const long_real * __a, temp_real * __b);
 void temp_to_short(const temp_real * __a, short_real * __b);

@@ -3,13 +3,19 @@
 
 #define PAGE_SIZE 4096
 
+#include <linux/fs.h>
 #include <linux/kernel.h>
 #include <signal.h>
 
-extern int SWAP_DEV;
+extern unsigned int swap_device;
+extern struct inode * swap_file;
 
-#define read_swap_page(nr,buffer) ll_rw_page(READ,SWAP_DEV,(nr),(buffer));
-#define write_swap_page(nr,buffer) ll_rw_page(WRITE,SWAP_DEV,(nr),(buffer));
+extern void rw_swap_page(int rw, unsigned int nr, char * buf);
+
+#define read_swap_page(nr,buf) \
+	rw_swap_page(READ,(nr),(buf))
+#define write_swap_page(nr,buf) \
+	rw_swap_page(WRITE,(nr),(buf))
 
 extern unsigned long get_free_page(void);
 extern unsigned long put_dirty_page(unsigned long page,unsigned long address);

@@ -45,8 +45,12 @@ int copy_mem(int nr,struct task_struct * p)
 	data_limit=get_limit(0x17);
 	old_code_base = get_base(current->ldt[1]);
 	old_data_base = get_base(current->ldt[2]);
-	if (old_data_base != old_code_base)
+	if (old_data_base != old_code_base) {
+		printk("ldt[0]: %08x %08x\n",current->ldt[0].a,current->ldt[0].b);
+		printk("ldt[1]: %08x %08x\n",current->ldt[1].a,current->ldt[1].b);
+		printk("ldt[2]: %08x %08x\n",current->ldt[2].a,current->ldt[2].b);
 		panic("We don't support separate I&D");
+	}
 	if (data_limit < code_limit)
 		panic("Bad data_limit");
 	new_data_base = new_code_base = nr * TASK_SIZE;
@@ -60,23 +64,44 @@ int copy_mem(int nr,struct task_struct * p)
 	return 0;
 }
 
+static int find_empty_process(void)
+{
+	int i;
+
+	repeat:
+		if ((++last_pid)<0) last_pid=1;
+		for(i=0 ; i<NR_TASKS ; i++)
+			if (task[i] && ((task[i]->pid == last_pid) ||
+				        (task[i]->pgrp == last_pid)))
+				goto repeat;
+	for(i=1 ; i<NR_TASKS ; i++)
+		if (!task[i])
+			return i;
+	return -EAGAIN;
+}
+
 /*
  *  Ok, this is the main fork-routine. It copies the system process
  * information (task[nr]) and sets up the necessary registers. It
  * also copies the data segment in it's entirety.
  */
-int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
-		long ebx,long ecx,long edx, long orig_eax, 
-		long fs,long es,long ds,
+int sys_fork(long ebx,long ecx,long edx,
+		long esi, long edi, long ebp, long eax, long ds,
+		long es, long fs, long gs, long orig_eax,
 		long eip,long cs,long eflags,long esp,long ss)
 {
 	struct task_struct *p;
-	int i;
+	int i,nr;
 	struct file *f;
 
 	p = (struct task_struct *) get_free_page();
 	if (!p)
 		return -EAGAIN;
+	nr = find_empty_process();
+	if (nr < 0) {
+		free_page((unsigned long) p);
+		return nr;
+	}
 	task[nr] = p;
 	*p = *current;	/* NOTE! this doesn't copy the supervisor stack */
 	p->state = TASK_UNINTERRUPTIBLE;
@@ -137,21 +162,5 @@ int copy_process(int nr,long ebp,long edi,long esi,long gs,long none,
 		p->p_osptr->p_ysptr = p;
 	current->p_cptr = p;
 	p->state = TASK_RUNNING;	/* do this last, just in case */
-	return last_pid;
-}
-
-int find_empty_process(void)
-{
-	int i;
-
-	repeat:
-		if ((++last_pid)<0) last_pid=1;
-		for(i=0 ; i<NR_TASKS ; i++)
-			if (task[i] && ((task[i]->pid == last_pid) ||
-				        (task[i]->pgrp == last_pid)))
-				goto repeat;
-	for(i=1 ; i<NR_TASKS ; i++)
-		if (!task[i])
-			return i;
-	return -EAGAIN;
+	return p->pid;
 }

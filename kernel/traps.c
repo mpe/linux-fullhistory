@@ -18,6 +18,8 @@
 #include <asm/system.h>
 #include <asm/segment.h>
 #include <asm/io.h>
+#include <errno.h>
+
 
 #define get_seg_byte(seg,addr) ({ \
 register char __res; \
@@ -58,6 +60,7 @@ void reserved(void);
 void parallel_interrupt(void);
 void irq13(void);
 void alignment_check(void);
+int send_sig(long, struct task_struct *, int);
 
 static void die(char * str,long esp_ptr,long nr)
 {
@@ -65,11 +68,12 @@ static void die(char * str,long esp_ptr,long nr)
 	int i;
 
 	printk("%s: %04x\n\r",str,nr&0xffff);
-	printk("EIP:\t%04x:%p\nEFLAGS:\t%p\nESP:\t%04x:%p\n",
-		esp[1],esp[0],esp[2],esp[4],esp[3]);
+	printk("EIP:    %04x:%p\nEFLAGS: %p\n", 0xffff & esp[1],esp[0],esp[2]);
+	if ((0xffff & esp[1]) == 0xf)
+		printk("ESP:    %04x:%p\n",0xffff & esp[4],esp[3]);
 	printk("fs: %04x\n",_fs());
 	printk("base: %p, limit: %p\n",get_base(current->ldt[1]),get_limit(0x17));
-	if (esp[4] == 0x17) {
+	if ((0xffff & esp[1]) == 0xf) {
 		printk("Stack: ");
 		for (i=0;i<4;i++)
 			printk("%p ",get_seg_long(0x17,i+(long *)esp[3]));
@@ -103,21 +107,9 @@ void do_divide_error(long esp, long error_code)
 	die("divide error",esp,error_code);
 }
 
-void do_int3(long * esp, long error_code,
-		long fs,long es,long ds,
-		long ebp,long esi,long edi,
-		long edx,long ecx,long ebx,long eax)
+void do_int3(long esp, long error_code)
 {
-	int tr;
-
-	__asm__("str %%ax":"=a" (tr):"0" (0));
-	printk("eax\t\tebx\t\tecx\t\tedx\n\r%8x\t%8x\t%8x\t%8x\n\r",
-		eax,ebx,ecx,edx);
-	printk("esi\t\tedi\t\tebp\t\tesp\n\r%8x\t%8x\t%8x\t%8x\n\r",
-		esi,edi,ebp,(long) esp);
-	printk("\n\rds\tes\tfs\ttr\n\r%4x\t%4x\t%4x\t%4x\n\r",
-		ds,es,fs,tr);
-	printk("EIP: %8x   CS: %4x  EFLAGS: %8x\n\r",esp[0],esp[1],esp[2]);
+	send_sig(SIGTRAP, current, 0);
 }
 
 void do_nmi(long esp, long error_code)
@@ -127,7 +119,7 @@ void do_nmi(long esp, long error_code)
 
 void do_debug(long esp, long error_code)
 {
-	die("debug",esp,error_code);
+  send_sig(SIGTRAP, current, 0);
 }
 
 void do_overflow(long esp, long error_code)

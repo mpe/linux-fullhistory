@@ -10,8 +10,10 @@
  */
 
 #include <string.h>
+#include <errno.h>
 
 #include <linux/mm.h>
+#include <sys/stat.h>
 #include <linux/sched.h>
 #include <linux/head.h>
 #include <linux/kernel.h>
@@ -33,7 +35,30 @@ bitop(setbit,"s")
 bitop(clrbit,"r")
 
 static char * swap_bitmap = NULL;
-int SWAP_DEV = 0;
+unsigned int swap_device = 0;
+struct inode * swap_file = NULL;
+
+void rw_swap_page(int rw, unsigned int nr, char * buf)
+{
+	unsigned int zones[4];
+	int i;
+
+	if (swap_device) {
+		ll_rw_page(rw,swap_device,nr,buf);
+		return;
+	}
+	if (swap_file) {
+		nr <<= 2;
+		for (i = 0; i < 4; i++)
+			if (!(zones[i] = bmap(swap_file,nr++))) {
+				printk("rw_swap_page: bad swap file\n");
+				return;
+			}
+		ll_rw_swap_file(rw,swap_file->i_dev, zones,4,buf);
+		return;
+	}
+	printk("ll_swap_page: no swap file or device\n");
+}
 
 /*
  * We never page the pages in task[0] - kernel memory.
@@ -49,7 +74,7 @@ static int get_swap_page(void)
 
 	if (!swap_bitmap)
 		return 0;
-	for (nr = 1; nr < 32768 ; nr++)
+	for (nr = 1; nr < SWAP_BITS ; nr++)
 		if (clrbit(swap_bitmap,nr))
 			return nr;
 	return 0;
@@ -62,7 +87,7 @@ void swap_free(int swap_nr)
 	if (swap_bitmap && swap_nr < SWAP_BITS)
 		if (!setbit(swap_bitmap,swap_nr))
 			return;
-	printk("Swap-space bad (swap_free())\n\r");
+	printk("swap_free: swap-space bitmap bad\n");
 	return;
 }
 
@@ -114,6 +139,7 @@ int try_to_swap_out(unsigned long * table_ptr)
 		free_page(page);
 		return 1;
 	}
+	page &= 0xfffff000;
 	*table_ptr = 0;
 	invalidate();
 	free_page(page);
@@ -121,42 +147,41 @@ int try_to_swap_out(unsigned long * table_ptr)
 }
 
 /*
- * Ok, this has a rather intricate logic - the idea is to make good
- * and fast machine code. If we didn't worry about that, things would
- * be easier.
+ * Go through the page tables, searching for a user page that
+ * we can swap out.
  */
 int swap_out(void)
 {
-	static int dir_entry = FIRST_VM_PAGE>>10;
+	static int dir_entry = 1024;
 	static int page_entry = -1;
 	int counter = VM_PAGES;
-	int pg_table;
+	int pg_table = 0;
 
-	while (counter>0) {
-		pg_table = pg_dir[dir_entry];
-		if (pg_table & 1)
-			break;
+repeat:
+	while (counter > 0) {
 		counter -= 1024;
 		dir_entry++;
 		if (dir_entry >= 1024)
 			dir_entry = FIRST_VM_PAGE>>10;
+		if (pg_table = pg_dir[dir_entry])
+			break;
+	}
+	if (counter <= 0) {
+		printk("Out of swap-memory\n");
+		return 0;
+	}
+	if (!(pg_table & 1)) {
+		printk("bad page-table at pg_dir[%d]: %08x\n\r",dir_entry,
+			pg_table);
+		return 0;
 	}
 	pg_table &= 0xfffff000;
-	while (counter-- > 0) {
+	while (counter > 0) {
+		counter--;
 		page_entry++;
 		if (page_entry >= 1024) {
-			page_entry = 0;
-		repeat:
-			dir_entry++;
-			if (dir_entry >= 1024)
-				dir_entry = FIRST_VM_PAGE>>10;
-			pg_table = pg_dir[dir_entry];
-			if (!(pg_table&1))
-				if ((counter -= 1024) > 0)
-					goto repeat;
-				else
-					break;
-			pg_table &= 0xfffff000;
+			page_entry = -1;
+			goto repeat;
 		}
 		if (try_to_swap_out(page_entry + (unsigned long *) pg_table))
 			return 1;
@@ -171,7 +196,7 @@ int swap_out(void)
  */
 unsigned long get_free_page(void)
 {
-register unsigned long __res asm("ax");
+	unsigned long result;
 
 repeat:
 	__asm__("std ; repne ; scasb\n\t"
@@ -184,70 +209,82 @@ repeat:
 		"leal 4092(%%edx),%%edi\n\t"
 		"rep ; stosl\n\t"
 		"movl %%edx,%%eax\n"
-		"1:"
-		:"=a" (__res)
+		"1:\tcld"
+		:"=a" (result)
 		:"0" (0),"i" (LOW_MEM),"c" (PAGING_PAGES),
 		"D" (mem_map+PAGING_PAGES-1)
 		:"di","cx","dx");
-	if (__res >= HIGH_MEMORY)
+	if (result >= HIGH_MEMORY)
 		goto repeat;
-	if (!__res && swap_out())
+	if ((result && result < LOW_MEM) || (result & 0xfff)) {
+		printk("weird result: %08x\n",result);
+		result = 0;
+	}
+	if (!result && swap_out())
 		goto repeat;
-	return __res;
+	return result;
 }
 
-void init_swapping(void)
-{
-	extern int *blk_size[];
-	int swap_size,i,j;
+/*
+ * Written 01/25/92 by Simmule Turner, heavily changed by Linus.
+ *
+ * The swapon system call
+ */
 
-	if (!SWAP_DEV)
-		return;
-	if (!blk_size[MAJOR(SWAP_DEV)]) {
-		printk("Unable to get size of swap device\n\r");
-		return;
+int sys_swapon(const char * specialfile)
+{
+	struct inode * swap_inode;
+	int i,j;
+
+	if (!suser())
+		return -EPERM;
+	if (!(swap_inode  = namei(specialfile)))
+		return -ENOENT;
+	if (swap_file || swap_device || swap_bitmap) {
+		iput(swap_inode);
+		return -EBUSY;
 	}
-	swap_size = blk_size[MAJOR(SWAP_DEV)][MINOR(SWAP_DEV)];
-	if (!swap_size)
-		return;
-	if (swap_size < 100) {
-		printk("Swap device too small (%d blocks)\n\r",swap_size);
-		return;
+	if (S_ISBLK(swap_inode->i_mode)) {
+		swap_device = swap_inode->i_rdev;
+		iput(swap_inode);
+	} else if (S_ISREG(swap_inode->i_mode))
+		swap_file = swap_inode;
+	else {
+		iput(swap_inode);
+		return -EINVAL;
 	}
-	swap_size >>= 2;
-	if (swap_size > SWAP_BITS)
-		swap_size = SWAP_BITS;
 	swap_bitmap = (char *) get_free_page();
 	if (!swap_bitmap) {
-		printk("Unable to start swapping: out of memory :-)\n\r");
-		return;
+		iput(swap_file);
+		swap_device = 0;
+		swap_file = NULL;
+		printk("Unable to start swapping: out of memory :-)\n");
+		return -ENOMEM;
 	}
 	read_swap_page(0,swap_bitmap);
 	if (strncmp("SWAP-SPACE",swap_bitmap+4086,10)) {
 		printk("Unable to find swap-space signature\n\r");
 		free_page((long) swap_bitmap);
+		iput(swap_file);
+		swap_device = 0;
+		swap_file = NULL;
 		swap_bitmap = NULL;
-		return;
+		return -EINVAL;
 	}
 	memset(swap_bitmap+4086,0,10);
-	for (i = 0 ; i < SWAP_BITS ; i++) {
-		if (i == 1)
-			i = swap_size;
-		if (bit(swap_bitmap,i)) {
-			printk("Bad swap-space bit-map\n\r");
-			free_page((long) swap_bitmap);
-			swap_bitmap = NULL;
-			return;
-		}
-	}
 	j = 0;
-	for (i = 1 ; i < swap_size ; i++)
+	for (i = 1 ; i < SWAP_BITS ; i++)
 		if (bit(swap_bitmap,i))
 			j++;
 	if (!j) {
+		printk("Empty swap-file\n");
 		free_page((long) swap_bitmap);
+		iput(swap_file);
+		swap_device = 0;
+		swap_file = NULL;
 		swap_bitmap = NULL;
-		return;
+		return -EINVAL;
 	}
-	printk("Swap device ok: %d pages (%d bytes) swap-space\n\r",j,j*4096);
+	printk("Adding Swap: %d pages (%d bytes) swap-space\n\r",j,j*4096);
+	return 0;
 }

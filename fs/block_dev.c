@@ -13,23 +13,25 @@
 
 extern int *blk_size[];
 
-int block_write(int dev, long * pos, char * buf, int count)
+int block_write(struct inode * inode, struct file * filp, char * buf, int count)
 {
-	int block = *pos >> BLOCK_SIZE_BITS;
-	int offset = *pos & (BLOCK_SIZE-1);
+	int block = filp->f_pos >> BLOCK_SIZE_BITS;
+	int offset = filp->f_pos & (BLOCK_SIZE-1);
 	int chars;
 	int written = 0;
 	int size;
+	unsigned int dev;
 	struct buffer_head * bh;
 	register char * p;
 
+	dev = inode->i_rdev;
 	if (blk_size[MAJOR(dev)])
 		size = blk_size[MAJOR(dev)][MINOR(dev)];
 	else
 		size = 0x7fffffff;
 	while (count>0) {
 		if (block >= size)
-			return written?written:-EIO;
+			return written;
 		chars = BLOCK_SIZE - offset;
 		if (chars > count)
 			chars=count;
@@ -42,7 +44,7 @@ int block_write(int dev, long * pos, char * buf, int count)
 			return written?written:-EIO;
 		p = offset + bh->b_data;
 		offset = 0;
-		*pos += chars;
+		filp->f_pos += chars;
 		written += chars;
 		count -= chars;
 		while (chars-->0)
@@ -53,23 +55,25 @@ int block_write(int dev, long * pos, char * buf, int count)
 	return written;
 }
 
-int block_read(int dev, unsigned long * pos, char * buf, int count)
+int block_read(struct inode * inode, struct file * filp, char * buf, int count)
 {
-	int block = *pos >> BLOCK_SIZE_BITS;
-	int offset = *pos & (BLOCK_SIZE-1);
-	int chars;
-	int size;
+	unsigned int block = filp->f_pos >> BLOCK_SIZE_BITS;
+	unsigned int offset = filp->f_pos & (BLOCK_SIZE-1);
+	unsigned int chars;
+	unsigned int size;
+	unsigned int dev;
 	int read = 0;
 	struct buffer_head * bh;
 	register char * p;
 
+	dev = inode->i_rdev;
 	if (blk_size[MAJOR(dev)])
 		size = blk_size[MAJOR(dev)][MINOR(dev)];
 	else
 		size = 0x7fffffff;
 	while (count>0) {
 		if (block >= size)
-			return read?read:-EIO;
+			return read;
 		chars = BLOCK_SIZE-offset;
 		if (chars > count)
 			chars = count;
@@ -78,7 +82,7 @@ int block_read(int dev, unsigned long * pos, char * buf, int count)
 		block++;
 		p = offset + bh->b_data;
 		offset = 0;
-		*pos += chars;
+		filp->f_pos += chars;
 		read += chars;
 		count -= chars;
 		while (chars-->0)

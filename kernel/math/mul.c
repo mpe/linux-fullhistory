@@ -39,7 +39,7 @@ static void mul64(const temp_real * a, const temp_real * b, int * c)
 		"addl %%eax,4(%2)\n\t"
 		"adcl %%edx,8(%2)\n\t"
 		"adcl $0,12(%2)"
-		::"b" ((long) a),"c" ((long) b),"D" ((long) c)
+		::"S" ((long) a),"c" ((long) b),"D" ((long) c)
 		:"ax","dx");
 }
 

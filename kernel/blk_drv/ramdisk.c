@@ -8,6 +8,7 @@
 
 #include <linux/config.h>
 #include <linux/sched.h>
+#include <linux/minix_fs.h>
 #include <linux/fs.h>
 #include <linux/kernel.h>
 #include <asm/system.h>
@@ -88,9 +89,9 @@ void rd_load(void)
 		printk("Disk error while looking for ramdisk!\n");
 		return;
 	}
-	*((struct d_super_block *) &s) = *((struct d_super_block *) bh->b_data);
+	*((struct minix_super_block *) &s) = *((struct minix_super_block *) bh->b_data);
 	brelse(bh);
-	if (s.s_magic != SUPER_MAGIC)
+	if (s.s_magic != MINIX_SUPER_MAGIC)
 		/* No ram disk image present, assume normal floppy boot */
 		return;
 	nblocks = s.s_nzones << s.s_log_zone_size;

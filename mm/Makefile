@@ -1,9 +1,9 @@
 CC	=gcc
-CFLAGS	=-O -Wall -fstrength-reduce -fcombine-regs -fomit-frame-pointer \
+CFLAGS	=-O -Wall -fstrength-reduce -fomit-frame-pointer \
 	-finline-functions -nostdinc -I../include
-AS	=gas
-AR	=gar
-LD	=gld
+AS	=as
+AR	=ar
+LD	=ld
 CPP	=gcc -E -nostdinc -I../include
 
 .c.o:
@@ -15,7 +15,7 @@ CPP	=gcc -E -nostdinc -I../include
 	$(CC) $(CFLAGS) \
 	-S -o $*.s $<
 
-OBJS	= memory.o swap.o page.o
+OBJS	= memory.o swap.o
 
 all: mm.o
 
@@ -37,8 +37,8 @@ memory.o : memory.c ../include/signal.h ../include/sys/types.h \
   ../include/linux/fs.h ../include/linux/mm.h ../include/linux/kernel.h \
   ../include/sys/param.h ../include/sys/time.h ../include/time.h \
   ../include/sys/resource.h 
-swap.o : swap.c ../include/string.h ../include/linux/sched.h \
-  ../include/linux/head.h ../include/linux/fs.h ../include/sys/types.h \
-  ../include/linux/mm.h ../include/linux/kernel.h ../include/signal.h \
-  ../include/sys/param.h ../include/sys/time.h ../include/time.h \
-  ../include/sys/resource.h 
+swap.o : swap.c ../include/string.h ../include/errno.h \
+  ../include/linux/mm.h ../include/linux/fs.h ../include/sys/types.h \
+  ../include/linux/kernel.h ../include/signal.h ../include/sys/stat.h \
+  ../include/linux/sched.h ../include/linux/head.h ../include/sys/param.h \
+  ../include/sys/time.h ../include/time.h ../include/sys/resource.h 

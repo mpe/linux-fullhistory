@@ -77,6 +77,7 @@ novga:	mov	[14],ax
 	mov	es,ax
 	mov	di,#0x0080
 	mov	cx,#0x10
+	cld
 	rep
 	movsb
 
@@ -89,6 +90,7 @@ novga:	mov	[14],ax
 	mov	es,ax
 	mov	di,#0x0090
 	mov	cx,#0x10
+	cld
 	rep
 	movsb
 
@@ -106,6 +108,7 @@ no_disk1:
 	mov	di,#0x0090
 	mov	cx,#0x10
 	mov	ax,#0x00
+	cld
 	rep
 	stosb
 is_disk1:
@@ -220,6 +223,10 @@ chsvga:	cld
 	mov	es,ax
 	lea	si,msg1
 	call	prtstr
+flush:	in	al,#0x60		! Flush the keyboard buffer
+	cmp	al,#0x82
+	jb	nokey
+	jmp	flush
 nokey:	in	al,#0x60
 	cmp	al,#0x82
 	jb	nokey
@@ -230,7 +237,8 @@ nokey:	in	al,#0x60
 	mov	ax,#0x5019
 	pop	ds
 	ret
-svga:	lea 	si,idati		! Check ATI 'clues'
+svga:	cld
+	lea 	si,idati		! Check ATI 'clues'
 	mov	di,#0x31
 	mov 	cx,#0x09
 	repe
@@ -354,7 +362,8 @@ l1:	inc	si
 	lea	di,mogenoa
 	lea	cx,selmod
 	jmp	cx
-nogen:	lea	si,idparadise		! Check Paradise 'clues'
+nogen:	cld
+	lea	si,idparadise		! Check Paradise 'clues'
 	mov	di,#0x7d
 	mov	cx,#0x04
 	repe

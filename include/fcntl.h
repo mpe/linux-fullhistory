@@ -13,7 +13,7 @@
 #define O_NOCTTY	00400	/* not fcntl */
 #define O_TRUNC		01000	/* not fcntl */
 #define O_APPEND	02000
-#define O_NONBLOCK	04000	/* not fcntl */
+#define O_NONBLOCK	04000
 #define O_NDELAY	O_NONBLOCK
 
 /* Defines for fcntl-commands. Note that currently

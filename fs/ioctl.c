@@ -11,7 +11,7 @@
 #include <linux/sched.h>
 
 extern int tty_ioctl(int dev, int cmd, int arg);
-extern int pipe_ioctl(struct m_inode *pino, int cmd, int arg);
+extern int pipe_ioctl(struct inode *pino, int cmd, int arg);
 
 typedef int (*ioctl_ptr)(int dev,int cmd,int arg);
 
@@ -40,7 +40,7 @@ int sys_ioctl(unsigned int fd, unsigned int cmd, unsigned long arg)
 	mode=filp->f_inode->i_mode;
 	if (!S_ISCHR(mode) && !S_ISBLK(mode))
 		return -EINVAL;
-	dev = filp->f_inode->i_zone[0];
+	dev = filp->f_inode->i_rdev;
 	if (MAJOR(dev) >= NRDEVS)
 		return -ENODEV;
 	if (!ioctl_table[MAJOR(dev)])

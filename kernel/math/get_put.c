@@ -213,7 +213,7 @@ void put_longlong_int(const temp_real * tmp,
 
 #define DIV10(low,high,rem) \
 __asm__("divl %6 ; xchgl %1,%2 ; divl %6" \
-	:"=d" (rem),"=a" (low),"=b" (high) \
+	:"=d" (rem),"=a" (low),"=r" (high) \
 	:"0" (0),"1" (high),"2" (low),"c" (10))
 
 void put_BCD(const temp_real * tmp,struct info * info, unsigned short code)

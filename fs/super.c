@@ -9,6 +9,7 @@
  */
 #include <linux/config.h>
 #include <linux/sched.h>
+#include <linux/minix_fs.h>
 #include <linux/kernel.h>
 #include <asm/system.h>
 
@@ -82,15 +83,15 @@ void put_super(int dev)
 	}
 	if (!(sb = get_super(dev)))
 		return;
-	if (sb->s_imount) {
+	if (sb->s_covered) {
 		printk("Mounted disk changed - tssk, tssk\n\r");
 		return;
 	}
 	lock_super(sb);
 	sb->s_dev = 0;
-	for(i=0;i<I_MAP_SLOTS;i++)
+	for(i=0;i<MINIX_I_MAP_SLOTS;i++)
 		brelse(sb->s_imap[i]);
-	for(i=0;i<Z_MAP_SLOTS;i++)
+	for(i=0;i<MINIX_Z_MAP_SLOTS;i++)
 		brelse(sb->s_zmap[i]);
 	free_super(sb);
 	return;
@@ -114,8 +115,8 @@ static struct super_block * read_super(int dev)
 			break;
 	}
 	s->s_dev = dev;
-	s->s_isup = NULL;
-	s->s_imount = NULL;
+	s->s_mounted = NULL;
+	s->s_covered = NULL;
 	s->s_time = 0;
 	s->s_rd_only = 0;
 	s->s_dirt = 0;
@@ -125,17 +126,17 @@ static struct super_block * read_super(int dev)
 		free_super(s);
 		return NULL;
 	}
-	*((struct d_super_block *) s) =
-		*((struct d_super_block *) bh->b_data);
+	*((struct minix_super_block *) s) =
+		*((struct minix_super_block *) bh->b_data);
 	brelse(bh);
-	if (s->s_magic != SUPER_MAGIC) {
+	if (s->s_magic != MINIX_SUPER_MAGIC) {
 		s->s_dev = 0;
 		free_super(s);
 		return NULL;
 	}
-	for (i=0;i<I_MAP_SLOTS;i++)
+	for (i=0;i < MINIX_I_MAP_SLOTS;i++)
 		s->s_imap[i] = NULL;
-	for (i=0;i<Z_MAP_SLOTS;i++)
+	for (i=0;i < MINIX_Z_MAP_SLOTS;i++)
 		s->s_zmap[i] = NULL;
 	block=2;
 	for (i=0 ; i < s->s_imap_blocks ; i++)
@@ -149,9 +150,9 @@ static struct super_block * read_super(int dev)
 		else
 			break;
 	if (block != 2+s->s_imap_blocks+s->s_zmap_blocks) {
-		for(i=0;i<I_MAP_SLOTS;i++)
+		for(i=0;i<MINIX_I_MAP_SLOTS;i++)
 			brelse(s->s_imap[i]);
-		for(i=0;i<Z_MAP_SLOTS;i++)
+		for(i=0;i<MINIX_Z_MAP_SLOTS;i++)
 			brelse(s->s_zmap[i]);
 		s->s_dev=0;
 		free_super(s);
@@ -165,13 +166,13 @@ static struct super_block * read_super(int dev)
 
 int sys_umount(char * dev_name)
 {
-	struct m_inode * inode;
+	struct inode * inode;
 	struct super_block * sb;
 	int dev;
 
 	if (!(inode=namei(dev_name)))
 		return -ENOENT;
-	dev = inode->i_zone[0];
+	dev = inode->i_rdev;
 	if (!S_ISBLK(inode->i_mode)) {
 		iput(inode);
 		return -ENOTBLK;
@@ -179,18 +180,21 @@ int sys_umount(char * dev_name)
 	iput(inode);
 	if (dev==ROOT_DEV)
 		return -EBUSY;
-	if (!(sb=get_super(dev)) || !(sb->s_imount))
+	if (!(sb=get_super(dev)) || !(sb->s_covered))
 		return -ENOENT;
-	if (!sb->s_imount->i_mount)
+	if (!sb->s_covered->i_mount)
 		printk("Mounted inode has i_mount=0\n");
 	for (inode=inode_table+0 ; inode<inode_table+NR_INODE ; inode++)
 		if (inode->i_dev==dev && inode->i_count)
+			if (inode == sb->s_mounted && inode->i_count == 1)
+				continue;
+			else
 				return -EBUSY;
-	sb->s_imount->i_mount=0;
-	iput(sb->s_imount);
-	sb->s_imount = NULL;
-	iput(sb->s_isup);
-	sb->s_isup = NULL;
+	sb->s_covered->i_mount=0;
+	iput(sb->s_covered);
+	sb->s_covered = NULL;
+	iput(sb->s_mounted);
+	sb->s_mounted = NULL;
 	put_super(dev);
 	sync_dev(dev);
 	return 0;
@@ -198,13 +202,13 @@ int sys_umount(char * dev_name)
 
 int sys_mount(char * dev_name, char * dir_name, int rw_flag)
 {
-	struct m_inode * dev_i, * dir_i;
+	struct inode * dev_i, * dir_i;
 	struct super_block * sb;
 	int dev;
 
 	if (!(dev_i=namei(dev_name)))
 		return -ENOENT;
-	dev = dev_i->i_zone[0];
+	dev = dev_i->i_rdev;
 	if (!S_ISBLK(dev_i->i_mode)) {
 		iput(dev_i);
 		return -EPERM;
@@ -212,7 +216,7 @@ int sys_mount(char * dev_name, char * dir_name, int rw_flag)
 	iput(dev_i);
 	if (!(dir_i=namei(dir_name)))
 		return -ENOENT;
-	if (dir_i->i_count != 1 || dir_i->i_num == ROOT_INO) {
+	if (dir_i->i_count != 1 || dir_i->i_ino == MINIX_ROOT_INO) {
 		iput(dir_i);
 		return -EBUSY;
 	}
@@ -224,7 +228,7 @@ int sys_mount(char * dev_name, char * dir_name, int rw_flag)
 		iput(dir_i);
 		return -EBUSY;
 	}
-	if (sb->s_imount) {
+	if (sb->s_covered) {
 		iput(dir_i);
 		return -EBUSY;
 	}
@@ -232,7 +236,11 @@ int sys_mount(char * dev_name, char * dir_name, int rw_flag)
 		iput(dir_i);
 		return -EPERM;
 	}
-	sb->s_imount=dir_i;
+	if (!(sb->s_mounted = iget(dev,MINIX_ROOT_INO))) {
+		iput(dir_i);
+		return -EPERM;
+	}
+	sb->s_covered=dir_i;
 	dir_i->i_mount=1;
 	dir_i->i_dirt=1;		/* NOTE! we don't iput(dir_i) */
 	return 0;			/* we do that in umount */
@@ -242,9 +250,9 @@ void mount_root(void)
 {
 	int i,free;
 	struct super_block * p;
-	struct m_inode * mi;
+	struct inode * mi;
 
-	if (32 != sizeof (struct d_inode))
+	if (32 != sizeof (struct minix_inode))
 		panic("bad i-node size");
 	for(i=0;i<NR_FILE;i++)
 		file_table[i].f_count=0;
@@ -259,10 +267,10 @@ void mount_root(void)
 	}
 	if (!(p=read_super(ROOT_DEV)))
 		panic("Unable to mount root");
-	if (!(mi=iget(ROOT_DEV,ROOT_INO)))
+	if (!(mi=iget(ROOT_DEV,MINIX_ROOT_INO)))
 		panic("Unable to read root i-node");
 	mi->i_count += 3 ;	/* NOTE! it is logically used 4 times, not 1 */
-	p->s_isup = p->s_imount = mi;
+	p->s_mounted = p->s_covered = mi;
 	current->pwd = mi;
 	current->root = mi;
 	free=0;

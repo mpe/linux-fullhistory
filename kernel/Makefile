@@ -1,18 +1,21 @@
 #
-# Makefile for the FREAX-kernel.
+# Makefile for the linux kernel.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
 # removes any old dependencies. DON'T put your own dependencies here
 # unless it's something special (ie not a .c file).
 #
 
-AR	=gar
-AS	=gas
-LD	=gld
+# gcc2 doesn't have these:
+#GCC_OPT = -fcombine-regs
+
+AR	=ar
+AS	=as
+LD	=ld
 LDFLAGS	=-s -x
 CC	=gcc
-CFLAGS	=-Wall -O -fstrength-reduce -fomit-frame-pointer -fcombine-regs \
-	-finline-functions -mstring-insns -nostdinc -I../include
+CFLAGS	=-Wall -O -fstrength-reduce -fomit-frame-pointer $(GCC_OPT) \
+	-finline-functions -nostdinc -I../include
 CPP	=gcc -E -nostdinc -I../include
 
 .c.s:
@@ -26,7 +29,7 @@ CPP	=gcc -E -nostdinc -I../include
 
 OBJS  = sched.o sys_call.o traps.o asm.o fork.o \
 	panic.o printk.o vsprintf.o sys.o exit.o \
-	signal.o mktime.o
+	signal.o mktime.o ptrace.o
 
 kernel.o: $(OBJS)
 	$(LD) -r -o kernel.o $(OBJS)
@@ -66,17 +69,24 @@ panic.s panic.o : panic.c ../include/linux/kernel.h ../include/linux/sched.h \
   ../include/sys/time.h ../include/time.h ../include/sys/resource.h 
 printk.s printk.o : printk.c ../include/stdarg.h ../include/stddef.h \
   ../include/linux/kernel.h 
+ptrace.s ptrace.o : ptrace.c ../include/linux/head.h ../include/linux/kernel.h \
+  ../include/linux/sched.h ../include/linux/fs.h ../include/sys/types.h \
+  ../include/linux/mm.h ../include/signal.h ../include/sys/param.h \
+  ../include/sys/time.h ../include/time.h ../include/sys/resource.h \
+  ../include/errno.h ../include/asm/segment.h ../include/asm/system.h \
+  ../include/sys/ptrace.h 
 sched.s sched.o : sched.c ../include/linux/sched.h ../include/linux/head.h \
   ../include/linux/fs.h ../include/sys/types.h ../include/linux/mm.h \
   ../include/linux/kernel.h ../include/signal.h ../include/sys/param.h \
   ../include/sys/time.h ../include/time.h ../include/sys/resource.h \
-  ../include/linux/sys.h ../include/linux/fdreg.h ../include/asm/system.h \
-  ../include/asm/io.h ../include/asm/segment.h 
+  ../include/linux/timer.h ../include/linux/sys.h ../include/linux/fdreg.h \
+  ../include/asm/system.h ../include/asm/io.h ../include/asm/segment.h \
+  ../include/errno.h 
 signal.s signal.o : signal.c ../include/linux/sched.h ../include/linux/head.h \
   ../include/linux/fs.h ../include/sys/types.h ../include/linux/mm.h \
   ../include/linux/kernel.h ../include/signal.h ../include/sys/param.h \
   ../include/sys/time.h ../include/time.h ../include/sys/resource.h \
-  ../include/asm/segment.h ../include/errno.h 
+  ../include/asm/segment.h ../include/sys/wait.h ../include/errno.h 
 sys.s sys.o : sys.c ../include/errno.h ../include/linux/sched.h \
   ../include/linux/head.h ../include/linux/fs.h ../include/sys/types.h \
   ../include/linux/mm.h ../include/linux/kernel.h ../include/signal.h \
@@ -89,5 +99,5 @@ traps.s traps.o : traps.c ../include/string.h ../include/linux/head.h \
   ../include/linux/mm.h ../include/linux/kernel.h ../include/signal.h \
   ../include/sys/param.h ../include/sys/time.h ../include/time.h \
   ../include/sys/resource.h ../include/asm/system.h ../include/asm/segment.h \
-  ../include/asm/io.h 
+  ../include/asm/io.h ../include/errno.h 
 vsprintf.s vsprintf.o : vsprintf.c ../include/stdarg.h ../include/string.h 

@@ -60,6 +60,7 @@ struct tty_struct {
 	int pgrp;
 	int session;
 	int stopped;
+	struct winsize winsize;
 	void (*write)(struct tty_struct * tty);
 	struct tty_queue *read_q;
 	struct tty_queue *write_q;
@@ -68,6 +69,9 @@ struct tty_struct {
 
 extern struct tty_struct tty_table[];
 extern int fg_console;
+extern unsigned long video_num_columns;
+extern unsigned long video_num_lines;
+
 
 #define TTY_TABLE(nr) \
 (tty_table + ((nr) ? (((nr) < 64)? (nr)-1:(nr))	: fg_console))
@@ -84,7 +88,7 @@ void rs_init(void);
 void con_init(void);
 void tty_init(void);
 
-int tty_read(unsigned c, char * buf, int n);
+int tty_read(unsigned c, char * buf, int n, unsigned short flags);
 int tty_write(unsigned c, char * buf, int n);
 
 void con_write(struct tty_struct * tty);
@@ -94,6 +98,6 @@ void spty_write(struct tty_struct * tty);
 
 void copy_to_cooked(struct tty_struct * tty);
 
-void update_screen(void);
+void update_screen(int new_console);
 
 #endif

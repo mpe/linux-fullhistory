@@ -27,11 +27,12 @@ typedef unsigned short dev_t;
 typedef unsigned short ino_t;
 typedef unsigned short mode_t;
 typedef unsigned short umode_t;
-typedef unsigned char nlink_t;
+typedef unsigned short nlink_t;
 typedef int daddr_t;
 typedef long off_t;
 typedef unsigned char u_char;
 typedef unsigned short ushort;
+typedef char *caddr_t;
 
 typedef unsigned char cc_t;
 typedef unsigned int speed_t;

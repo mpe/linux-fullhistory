@@ -38,6 +38,7 @@ _rs1_interrupt:
 _rs2_interrupt:
 	pushl $_table_list+16
 rs_int:
+	cld
 	pushl %edx
 	pushl %ecx
 	pushl %ebx
@@ -105,11 +106,13 @@ read_char:
 	cmpl tail(%ecx),%ebx
 	je 1f
 	movl %ebx,head(%ecx)
-1:	addl $63,%edx
-	pushl %edx
-	call _do_tty_interrupt
-	addl $4,%esp
+1:	movl mask_table(,%edx,4),%edx
+	orl %edx,_timer_active
 	ret
+
+.align 2
+mask_table:
+	.long 0,4,8
 
 .align 2
 write_char:

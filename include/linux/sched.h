@@ -129,12 +129,13 @@ struct task_struct {
 	unsigned int flags;	/* per process flags, defined below */
 	unsigned short used_math;
 /* file system info */
+	int link_count;
 	int tty;		/* -1 if no tty, so it must be signed */
 	unsigned short umask;
-	struct m_inode * pwd;
-	struct m_inode * root;
-	struct m_inode * executable;
-	struct m_inode * library;
+	struct inode * pwd;
+	struct inode * root;
+	struct inode * executable;
+	struct inode * library;
 	unsigned long close_on_exec;
 	struct file * filp[NR_OPEN];
 /* ldt for this task 0 - zero 1 - cs 2 - ds&ss */
@@ -148,6 +149,10 @@ struct task_struct {
  */
 #define PF_ALIGNWARN	0x00000001	/* Print alignment warning msgs */
 					/* Not implemented yet, only for 486*/
+#define PF_PTRACED	0x00000010	/* set if ptrace (0) has been called. */
+#define PF_VM86		0x00000020	/* set if process can execute a vm86 */
+					/* task. */
+                                        /* not impelmented. */
 
 /*
  *  INIT_TASK is used to set up the first task table, touch at
@@ -167,7 +172,7 @@ struct task_struct {
 		  {0x7fffffff, 0x7fffffff}, {0x7fffffff, 0x7fffffff}}, \
 /* flags */	0, \
 /* math */	0, \
-/* fs info */	-1,0022,NULL,NULL,NULL,NULL,0, \
+/* fs info */	0,-1,0022,NULL,NULL,NULL,NULL,0, \
 /* filp */	{NULL,}, \
 	{ \
 		{0,0}, \
@@ -212,7 +217,7 @@ __asm__("str %%ax\n\t" \
 	"subl %2,%%eax\n\t" \
 	"shrl $4,%%eax" \
 	:"=a" (n) \
-	:"a" (0),"i" (FIRST_TSS_ENTRY<<3))
+	:"0" (0),"i" (FIRST_TSS_ENTRY<<3))
 /*
  *	switch_to(n) should switch tasks to task nr n, first
  * checking that n isn't the current task, in which case it does nothing.
@@ -231,7 +236,8 @@ __asm__("cmpl %%ecx,_current\n\t" \
 	"clts\n" \
 	"1:" \
 	::"m" (*&__tmp.a),"m" (*&__tmp.b), \
-	"d" (_TSS(n)),"c" ((long) task[n])); \
+	"d" (_TSS(n)),"c" ((long) task[n]) \
+	:"cx"); \
 }
 
 #define PAGE_ALIGN(n) (((n)+0xfff)&0xfffff000)
@@ -262,23 +268,28 @@ __asm__("movw %%dx,%0\n\t" \
 #define set_base(ldt,base) _set_base( ((char *)&(ldt)) , base )
 #define set_limit(ldt,limit) _set_limit( ((char *)&(ldt)) , (limit-1)>>12 )
 
-#define _get_base(addr) ({\
-unsigned long __base; \
-__asm__("movb %3,%%dh\n\t" \
-	"movb %2,%%dl\n\t" \
-	"shll $16,%%edx\n\t" \
-	"movw %1,%%dx" \
-	:"=d" (__base) \
-	:"m" (*((addr)+2)), \
-	 "m" (*((addr)+4)), \
-	 "m" (*((addr)+7))); \
-__base;})
+static unsigned long inline _get_base(char * addr)
+{
+	unsigned long __base;
+	__asm__("movb %3,%%dh\n\t"
+		"movb %2,%%dl\n\t"
+		"shll $16,%%edx\n\t"
+		"movw %1,%%dx"
+		:"=&d" (__base)
+		:"m" (*((addr)+2)),
+		 "m" (*((addr)+4)),
+		 "m" (*((addr)+7)));
+	return __base;
+}
 
 #define get_base(ldt) _get_base( ((char *)&(ldt)) )
 
-#define get_limit(segment) ({ \
-unsigned long __limit; \
-__asm__("lsll %1,%0\n\tincl %0":"=r" (__limit):"r" (segment)); \
-__limit;})
+static unsigned long inline get_limit(unsigned long segment)
+{
+	unsigned long __limit;
+	__asm__("lsll %1,%0"
+		:"=r" (__limit):"r" (segment));
+	return __limit+1;
+}
 
 #endif

@@ -24,6 +24,7 @@ struct timezone {
 #define	DST_TUR		9	/* Turkey */
 #define	DST_AUSTALT	10	/* Australian style with shift in 1986 */
 
+#define FD_SETSIZE		(8*sizeof(fd_set))
 #define FD_SET(fd,fdsetp)	(*(fdsetp) |= (1 << (fd)))
 #define FD_CLR(fd,fdsetp)	(*(fdsetp) &= ~(1 << (fd)))
 #define FD_ISSET(fd,fdsetp)	((*(fdsetp) >> fd) & 1)

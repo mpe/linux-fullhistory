@@ -113,6 +113,73 @@ void temp_to_long(const temp_real * a, long_real * b)
 	}
 }
 
+void frndint(const temp_real * a, temp_real * b)
+{
+	int shift =  16383 + 63 - (a->exponent & 0x7fff);
+	unsigned long underflow;
+
+	if ((shift < 0) || (shift == 16383+63)) {
+		*b = *a;
+		return;
+	}
+	b->a = b->b = underflow = 0;
+	b->exponent = a->exponent;
+	if (shift < 32) {
+		b->b = a->b; b->a = a->a;
+	} else if (shift < 64) {
+		b->a = a->b; underflow = a->a;
+		shift -= 32;
+		b->exponent += 32;
+	} else if (shift < 96) {
+		underflow = a->b;
+		shift -= 64;
+		b->exponent += 64;
+	} else {
+		underflow = 1;
+		shift = 0;
+	}
+	b->exponent += shift;
+	__asm__("shrdl %2,%1,%0"
+		:"=r" (underflow),"=r" (b->a)
+		:"c" ((char) shift),"0" (underflow),"1" (b->a));
+	__asm__("shrdl %2,%1,%0"
+		:"=r" (b->a),"=r" (b->b)
+		:"c" ((char) shift),"0" (b->a),"1" (b->b));
+	__asm__("shrl %1,%0"
+		:"=r" (b->b)
+		:"c" ((char) shift),"0" (b->b));
+	switch (ROUNDING) {
+		case ROUND_NEAREST:
+			__asm__("addl %4,%5 ; adcl $0,%0 ; adcl $0,%1"
+				:"=r" (b->a),"=r" (b->b)
+				:"0" (b->a),"1" (b->b)
+				,"r" (0x7fffffff + (b->a & 1))
+				,"m" (*&underflow));
+			break;
+		case ROUND_UP:
+			if ((b->exponent >= 0) && underflow)
+				__asm__("addl $1,%0 ; adcl $0,%1"
+					:"=r" (b->a),"=r" (b->b)
+					:"0" (b->a),"1" (b->b));
+			break;
+		case ROUND_DOWN:
+			if ((b->exponent < 0) && underflow)
+				__asm__("addl $1,%0 ; adcl $0,%1"
+					:"=r" (b->a),"=r" (b->b)
+					:"0" (b->a),"1" (b->b));
+			break;
+	}
+	if (b->a || b->b)
+		while (b->b >= 0) {
+			b->exponent--;
+			__asm__("addl %0,%0 ; adcl %1,%1"
+				:"=r" (b->a),"=r" (b->b)
+				:"0" (b->a),"1" (b->b));
+		}
+	else
+		b->exponent = 0;
+}
+
 void real_to_int(const temp_real * a, temp_int * b)
 {
 	int shift =  16383 + 63 - (a->exponent & 0x7fff);
@@ -132,8 +199,10 @@ void real_to_int(const temp_real * a, temp_int * b)
 	} else if (shift < 96) {
 		underflow = a->b;
 		shift -= 64;
-	} else
-		return;
+	} else {
+		underflow = 1;
+		shift = 0;
+	}
 	__asm__("shrdl %2,%1,%0"
 		:"=r" (underflow),"=r" (b->a)
 		:"c" ((char) shift),"0" (underflow),"1" (b->a));

@@ -53,6 +53,7 @@ start:
 	mov	cx,#256
 	sub	si,si
 	sub	di,di
+	cld
 	rep
 	movw
 	jmpi	go,INITSEG
@@ -82,7 +83,6 @@ go:	mov	ax,cs
  *	Segments are as follows: ds=es=ss=cs - INITSEG,
  *		fs = 0, gs = parameter table segment
  */
-
 
 	push	#0
 	pop	fs

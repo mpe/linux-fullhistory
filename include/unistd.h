@@ -4,11 +4,11 @@
 /* ok, this may be a joke, but I'm working on it */
 #define _POSIX_VERSION 198808L
 
-#define _POSIX_CHOWN_RESTRICTED	/* only root can do a chown (I think..) */
-#define _POSIX_NO_TRUNC		/* no pathname truncation (but see in kernel) */
-#define _POSIX_VDISABLE '\0'	/* character to disable things like ^C */
-#define _POSIX_JOB_CONTROL
-#define _POSIX_SAVED_IDS	/* Implemented, for whatever good it is */
+#define _POSIX_CHOWN_RESTRICTED	1    /* only root can do a chown (I think..) */
+#define _POSIX_NO_TRUNC		1    /* no pathname truncation (but see kernel) */
+#define _POSIX_VDISABLE		'\0' /* character to disable things like ^C */
+#define _POSIX_JOB_CONTROL	1
+#define _POSIX_SAVED_IDS	1    /* Implemented, for whatever good it is */
 
 #define STDIN_FILENO	0
 #define STDOUT_FILENO	1
@@ -146,6 +146,8 @@
 #define __NR_lstat	84
 #define __NR_readlink	85
 #define __NR_uselib	86
+#define __NR_swapon	87
+#define __NR_reboot	88
 
 #define _syscall0(type,name) \
 type name(void) \
@@ -164,9 +166,10 @@ return -1; \
 type name(atype a) \
 { \
 long __res; \
-__asm__ volatile ("int $0x80" \
+__asm__ volatile ("movl %2,%%ebx\n\t" \
+	"int $0x80" \
 	: "=a" (__res) \
-	: "0" (__NR_##name),"b" ((long)(a))); \
+	: "0" (__NR_##name),"g" ((long)(a)):"bx"); \
 if (__res >= 0) \
 	return (type) __res; \
 errno = -__res; \
@@ -177,9 +180,10 @@ return -1; \
 type name(atype a,btype b) \
 { \
 long __res; \
-__asm__ volatile ("int $0x80" \
+__asm__ volatile ("movl %2,%%ebx\n\t" \
+	"int $0x80" \
 	: "=a" (__res) \
-	: "0" (__NR_##name),"b" ((long)(a)),"c" ((long)(b))); \
+	: "0" (__NR_##name),"g" ((long)(a)),"c" ((long)(b)):"bx"); \
 if (__res >= 0) \
 	return (type) __res; \
 errno = -__res; \
@@ -190,9 +194,10 @@ return -1; \
 type name(atype a,btype b,ctype c) \
 { \
 long __res; \
-__asm__ volatile ("int $0x80" \
+__asm__ volatile ("movl %2,%%ebx\n\t" \
+	"int $0x80" \
 	: "=a" (__res) \
-	: "0" (__NR_##name),"b" ((long)(a)),"c" ((long)(b)),"d" ((long)(c))); \
+	: "0" (__NR_##name),"g" ((long)(a)),"c" ((long)(b)),"d" ((long)(c)):"bx"); \
 if (__res>=0) \
 	return (type) __res; \
 errno=-__res; \
@@ -276,5 +281,5 @@ int getgroups(int gidsetlen, gid_t *gidset);
 int setgroups(int gidsetlen, gid_t *gidset);
 int select(int width, fd_set * readfds, fd_set * writefds,
 	fd_set * exceptfds, struct timeval * timeout);
-
+int swapon(const char * specialfile);
 #endif

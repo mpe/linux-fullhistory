@@ -35,7 +35,7 @@ __asm__("cld\n"
 return dest;
 }
 
-extern inline char * strncpy(char * dest,const char *src,int count)
+extern inline char * strncpy(char * dest,const char *src,size_t count)
 {
 __asm__("cld\n"
 	"1:\tdecl %2\n\t"
@@ -65,7 +65,7 @@ __asm__("cld\n\t"
 return dest;
 }
 
-extern inline char * strncat(char * dest,const char * src,int count)
+extern inline char * strncat(char * dest,const char * src,size_t count)
 {
 __asm__("cld\n\t"
 	"repne\n\t"
@@ -104,7 +104,7 @@ __asm__("cld\n"
 return __res;
 }
 
-extern inline int strncmp(const char * cs,const char * ct,int count)
+extern inline int strncmp(const char * cs,const char * ct,size_t count)
 {
 register int __res __asm__("ax");
 __asm__("cld\n"
@@ -158,7 +158,7 @@ __asm__("cld\n\t"
 return __res;
 }
 
-extern inline int strspn(const char * cs, const char * ct)
+extern inline size_t strspn(const char * cs, const char * ct)
 {
 register char * __res __asm__("si");
 __asm__("cld\n\t"
@@ -182,7 +182,7 @@ __asm__("cld\n\t"
 return __res-cs;
 }
 
-extern inline int strcspn(const char * cs, const char * ct)
+extern inline size_t strcspn(const char * cs, const char * ct)
 {
 register char * __res __asm__("si");
 __asm__("cld\n\t"
@@ -260,7 +260,7 @@ __asm__("cld\n\t" \
 return __res;
 }
 
-extern inline int strlen(const char * s)
+extern inline size_t strlen(const char * s)
 {
 register int __res __asm__("cx");
 __asm__("cld\n\t"
@@ -327,13 +327,18 @@ __asm__("testl %1,%1\n\t"
 	"jne 8f\n\t"
 	"movl %0,%1\n"
 	"8:"
-	:"=b" (__res),"=S" (___strtok)
+#if __GNUC__ == 2
+	:"=r" (__res)
+#else
+	:"=b" (__res)
+#endif
+	,"=S" (___strtok)
 	:"0" (___strtok),"1" (s),"g" (ct)
 	:"ax","cx","dx","di");
 return __res;
 }
 
-extern inline void * memcpy(void * dest,const void * src, int n)
+extern inline void * memcpy(void * dest,const void * src, size_t n)
 {
 __asm__("cld\n\t"
 	"rep\n\t"
@@ -343,7 +348,7 @@ __asm__("cld\n\t"
 return dest;
 }
 
-extern inline void * memmove(void * dest,const void * src, int n)
+extern inline void * memmove(void * dest,const void * src, size_t n)
 {
 if (dest<src)
 __asm__("cld\n\t"
@@ -354,13 +359,14 @@ __asm__("cld\n\t"
 else
 __asm__("std\n\t"
 	"rep\n\t"
-	"movsb"
+	"movsb\n\t"
+	"cld"
 	::"c" (n),"S" (src+n-1),"D" (dest+n-1)
 	:"cx","si","di");
 return dest;
 }
 
-extern inline int memcmp(const void * cs,const void * ct,int count)
+extern inline int memcmp(const void * cs,const void * ct,size_t count)
 {
 register int __res __asm__("ax");
 __asm__("cld\n\t"
@@ -376,7 +382,7 @@ __asm__("cld\n\t"
 return __res;
 }
 
-extern inline void * memchr(const void * cs,char c,int count)
+extern inline void * memchr(const void * cs,char c,size_t count)
 {
 register void * __res __asm__("di");
 if (!count)
@@ -392,7 +398,7 @@ __asm__("cld\n\t"
 return __res;
 }
 
-extern inline void * memset(void * s,char c,int count)
+extern inline void * memset(void * s,char c,size_t count)
 {
 __asm__("cld\n\t"
 	"rep\n\t"

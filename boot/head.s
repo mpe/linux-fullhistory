@@ -12,9 +12,10 @@
  * the page directory.
  */
 .text
-.globl _idt,_gdt,_pg_dir,_tmp_floppy_area
+.globl _idt,_gdt,_pg_dir,_tmp_floppy_area,_floppy_track_buffer
 _pg_dir:
 startup_32:
+	cld
 	movl $0x10,%eax
 	mov %ax,%ds
 	mov %ax,%es
@@ -34,17 +35,39 @@ startup_32:
 	movl %eax,0x000000	# loop forever if it isn't
 	cmpl %eax,0x100000
 	je 1b
+/* check if it is 486 or 386. */
+	movl %esp,%edi		# save stack pointer
+	andl $0xfffffffc,%esp	# align stack to avoid AC fault
+	pushfl			# push EFLAGS
+	popl %eax		# get EFLAGS
+	movl %eax,%ecx		# save original EFLAGS
+	xorl $0x40000,%eax	# flip AC bit in EFLAGS
+	pushl %eax		# copy to EFLAGS
+	popfl			# set EFLAGS
+	pushfl			# get new EFLAGS
+	popl %eax		# put it in eax
+	xorl %ecx,%eax		# check if AC bit is changed. zero is 486.
+	jz 1f			# 486
+	pushl %ecx		# restore original EFLAGS
+	popfl
+	movl %edi,%esp		# restore esp
+	movl %cr0,%eax		# 386
+	andl $0x80000011,%eax	# Save PG,PE,ET
+	orl $2,%eax		# set MP
+	jmp 2f	
 /*
  * NOTE! 486 should set bit 16, to check for write-protect in supervisor
  * mode. Then it would be unnecessary with the "verify_area()"-calls.
  * 486 users probably want to set the NE (#5) bit also, so as to use
  * int 16 for math errors.
  */
-	movl %cr0,%eax		# check math chip
+1:	pushl %ecx		# restore original EFLAGS
+	popfl
+	movl %edi,%esp		# restore esp
+	movl %cr0,%eax		# 486
 	andl $0x80000011,%eax	# Save PG,PE,ET
-/* "orl $0x10020,%eax" here for 486 might be good */
-	orl $2,%eax		# set MP
-	movl %eax,%cr0
+	orl $0x10022,%eax	# set NE and MP
+2:	movl %eax,%cr0
 	call check_x87
 	jmp after_page_tables
 
@@ -55,8 +78,8 @@ check_x87:
 	fninit
 	fstsw %ax
 	cmpb $0,%al
-	je 1f			/* no coprocessor: have to set bits */
-	movl %cr0,%eax
+	je 1f
+	movl %cr0,%eax		/* no coprocessor: have to set bits */
 	xorl $6,%eax		/* reset MP, set EM */
 	movl %eax,%cr0
 	ret
@@ -131,14 +154,22 @@ pg3:
  */
 _tmp_floppy_area:
 	.fill 1024,1,0
+/*
+ * floppy_track_buffer is used to buffer one track of floppy data: it
+ * has to be separate from the tmp_floppy area, as otherwise a single-
+ * sector read/write can mess it up. It can contain one full track of
+ * data (18*2*512 bytes).
+ */
+_floppy_track_buffer:
+	.fill 512*2*18,1,0
 
 after_page_tables:
+	call setup_paging
 	pushl $0		# These are the parameters to main :-)
 	pushl $0
 	pushl $0
-	pushl $L6		# return address for main, if it decides to.
-	pushl $_main
-	jmp setup_paging
+	cld			# gcc2 wants the direction flag cleared at all times
+	call _start_kernel
 L6:
 	jmp L6			# main should never return here, but
 				# just in case, we know what happens.
@@ -148,6 +179,7 @@ int_msg:
 	.asciz "Unknown interrupt\n\r"
 .align 2
 ignore_int:
+	cld
 	pushl %eax
 	pushl %ecx
 	pushl %edx
@@ -210,6 +242,7 @@ setup_paging:
 1:	stosl			/* fill pages backwards - more efficient :-) */
 	subl $0x1000,%eax
 	jge 1b
+	cld
 	xorl %eax,%eax		/* pg_dir is at 0x0000 */
 	movl %eax,%cr3		/* cr3 - page directory start */
 	movl %cr0,%eax

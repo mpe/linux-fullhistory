@@ -6,13 +6,16 @@
 # unless it's something special (ie not a .c file).
 #
 
-AR	=gar
-AS	=gas
-LD	=gld
+# gcc2 doesn't understand some options..
+# GCC_OPT = -fcombine-regs
+
+AR	=ar
+AS	=as
+LD	=ld
 LDFLAGS	=-s -x
 CC	=gcc
-CFLAGS	=-Wall -O -fstrength-reduce -fomit-frame-pointer -fcombine-regs \
-	-finline-functions -mstring-insns -nostdinc -I../include
+CFLAGS	=-Wall -O -fstrength-reduce -fomit-frame-pointer $(GCC_OPT) \
+	-finline-functions -nostdinc -I../include
 CPP	=gcc -E -nostdinc -I../include
 
 .c.s:

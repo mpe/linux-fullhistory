@@ -1,18 +1,18 @@
 #
-# Makefile for the FREAX-kernel block device drivers.
+# Makefile for the kernel block device drivers.
 #
 # Note! Dependencies are done automagically by 'make dep', which also
 # removes any old dependencies. DON'T put your own dependencies here
 # unless it's something special (ie not a .c file).
 #
 
-AR	=gar
-AS	=gas
-LD	=gld
+AR	=ar
+AS	=as
+LD	=ld
 LDFLAGS	=-s -x
 CC	=gcc
-CFLAGS	=-Wall -O -fstrength-reduce -fomit-frame-pointer -fcombine-regs \
-	-finline-functions -mstring-insns -nostdinc -I../../include
+CFLAGS	=-Wall -O -fstrength-reduce -fomit-frame-pointer \
+	-finline-functions -nostdinc -I../../include
 CPP	=gcc -E -nostdinc -I../../include
 
 .c.s:
@@ -53,9 +53,9 @@ hd.s hd.o : hd.c ../../include/linux/config.h ../../include/linux/sched.h \
   ../../include/sys/types.h ../../include/linux/mm.h \
   ../../include/linux/kernel.h ../../include/signal.h \
   ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h \
-  ../../include/sys/resource.h ../../include/linux/hdreg.h \
-  ../../include/asm/system.h ../../include/asm/io.h \
-  ../../include/asm/segment.h blk.h 
+  ../../include/sys/resource.h ../../include/linux/timer.h \
+  ../../include/linux/hdreg.h ../../include/asm/system.h \
+  ../../include/asm/io.h ../../include/asm/segment.h blk.h 
 ll_rw_blk.s ll_rw_blk.o : ll_rw_blk.c ../../include/errno.h ../../include/linux/sched.h \
   ../../include/linux/head.h ../../include/linux/fs.h \
   ../../include/sys/types.h ../../include/linux/mm.h \
@@ -67,5 +67,6 @@ ramdisk.s ramdisk.o : ramdisk.c ../../include/string.h ../../include/linux/confi
   ../../include/linux/fs.h ../../include/sys/types.h ../../include/linux/mm.h \
   ../../include/linux/kernel.h ../../include/signal.h \
   ../../include/sys/param.h ../../include/sys/time.h ../../include/time.h \
-  ../../include/sys/resource.h ../../include/asm/system.h \
-  ../../include/asm/segment.h ../../include/asm/memory.h blk.h 
+  ../../include/sys/resource.h ../../include/linux/minix_fs.h \
+  ../../include/asm/system.h ../../include/asm/segment.h \
+  ../../include/asm/memory.h blk.h 

@@ -16,72 +16,90 @@
 .globl _invalid_TSS,_segment_not_present,_stack_segment
 .globl _general_protection,_coprocessor_error,_irq13,_reserved
 .globl _alignment_check
+.globl _page_fault
 
 _divide_error:
+	pushl $0 		# no error code
 	pushl $_do_divide_error
-no_error_code:
-	xchgl %eax,(%esp)
-	pushl %ebx
-	pushl %ecx
-	pushl %edx
+error_code:
+	push %fs
+	push %es
+	push %ds
+	pushl %eax
+	pushl %ebp
 	pushl %edi
 	pushl %esi
-	pushl %ebp
-	push %ds
-	push %es
-	push %fs
-	pushl $0		# "error code"
-	lea 44(%esp),%edx
+	pushl %edx
+	pushl %ecx
+	pushl %ebx
+	cld
+	movl $-1, %eax
+	xchgl %eax, 0x2c(%esp)	# orig_eax (get the error code. )
+	xorl %ebx,%ebx		# zero ebx
+	mov %gs,%bx		# get the lower order bits of gs
+	xchgl %ebx, 0x28(%esp)	# get the address and save gs.
+	pushl %eax		# push the error code
+	lea 52(%esp),%edx
 	pushl %edx
 	movl $0x10,%edx
 	mov %dx,%ds
 	mov %dx,%es
 	mov %dx,%fs
-	call *%eax
+	call *%ebx
 	addl $8,%esp
-	pop %fs
-	pop %es
-	pop %ds
-	popl %ebp
+	popl %ebx
+	popl %ecx
+	popl %edx
 	popl %esi
 	popl %edi
-	popl %edx
-	popl %ecx
-	popl %ebx
+	popl %ebp
 	popl %eax
+	pop %ds
+	pop %es
+	pop %fs
+	pop %gs
+	addl $4,%esp
 	iret
 
 _debug:
+	pushl $0
 	pushl $_do_int3		# _do_debug
-	jmp no_error_code
+	jmp error_code
 
 _nmi:
+	pushl $0
 	pushl $_do_nmi
-	jmp no_error_code
+	jmp error_code
 
 _int3:
+	pushl $0
 	pushl $_do_int3
-	jmp no_error_code
+	jmp error_code
 
 _overflow:
+	pushl $0
 	pushl $_do_overflow
-	jmp no_error_code
+	jmp error_code
 
 _bounds:
+	pushl $0
 	pushl $_do_bounds
-	jmp no_error_code
+	jmp error_code
 
 _invalid_op:
+	pushl $0
 	pushl $_do_invalid_op
-	jmp no_error_code
+	jmp error_code
 
 _coprocessor_segment_overrun:
+	pushl $0
 	pushl $_do_coprocessor_segment_overrun
-	jmp no_error_code
+	jmp error_code
 
 _reserved:
+	pushl $0
 	pushl $_do_reserved
-	jmp no_error_code
+	jmp error_code
 
 _irq13:
 	pushl %eax
@@ -97,37 +115,7 @@ _irq13:
 
 _double_fault:
 	pushl $_do_double_fault
-error_code:
-	xchgl %eax,4(%esp)		# error code <-> %eax
-	xchgl %ebx,(%esp)		# &function <-> %ebx
-	pushl %ecx
-	pushl %edx
-	pushl %edi
-	pushl %esi
-	pushl %ebp
-	push %ds
-	push %es
-	push %fs
-	pushl %eax			# error code
-	lea 44(%esp),%eax		# offset
-	pushl %eax
-	movl $0x10,%eax
-	mov %ax,%ds
-	mov %ax,%es
-	mov %ax,%fs
-	call *%ebx
-	addl $8,%esp
-	pop %fs
-	pop %es
-	pop %ds
-	popl %ebp
-	popl %esi
-	popl %edi
-	popl %edx
-	popl %ecx
-	popl %ebx
-	popl %eax
-	iret
+	jmp error_code
 
 _invalid_TSS:
 	pushl $_do_invalid_TSS
@@ -149,3 +137,6 @@ _alignment_check:
 	pushl $_do_alignment_check
 	jmp error_code
 
+_page_fault:
+	pushl $_do_page_fault
+	jmp error_code

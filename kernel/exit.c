@@ -15,8 +15,45 @@
 #include <linux/tty.h>
 #include <asm/segment.h>
 
-int sys_pause(void);
 int sys_close(int fd);
+
+inline int send_sig(long sig,struct task_struct * p,int priv)
+{
+	if (!p || (sig < 0) || (sig > 32))
+		return -EINVAL;
+	if (!priv && (current->euid!=p->euid) && !suser())
+		return -EPERM;
+	if (!sig)
+		return 0;
+	if ((sig == SIGKILL) || (sig == SIGCONT)) {
+		if (p->state == TASK_STOPPED)
+			p->state = TASK_RUNNING;
+		p->exit_code = 0;
+		p->signal &= ~( (1<<(SIGSTOP-1)) | (1<<(SIGTSTP-1)) |
+				(1<<(SIGTTIN-1)) | (1<<(SIGTTOU-1)) );
+	} 
+	/* Depends on order SIGSTOP, SIGTSTP, SIGTTIN, SIGTTOU */
+	if ((sig >= SIGSTOP) && (sig <= SIGTTOU)) 
+		p->signal &= ~(1<<(SIGCONT-1));
+	/* Actually deliver the signal */
+	p->signal |= (1<<(sig-1));
+	if (p->flags & PF_PTRACED) {
+		/* save the signal number for wait. */
+		p->exit_code = sig;
+
+		/* we have to make sure the parent is awake. */
+		if (p->p_pptr != NULL && p->p_pptr->state == TASK_INTERRUPTIBLE)
+			p->p_pptr->state = TASK_RUNNING;
+
+		/* we have to make sure that the process stops. */
+		if (p->state == TASK_INTERRUPTIBLE || p->state == TASK_RUNNING)
+			p->state = TASK_STOPPED;
+
+		if (p == current)
+			schedule();
+	}
+	return 0;
+}
 
 void release(struct task_struct * p)
 {
@@ -134,30 +171,6 @@ void audit_ptree()
 }
 #endif /* DEBUG_PROC_TREE */
 
-static inline int send_sig(long sig,struct task_struct * p,int priv)
-{
-	if (!p)
-		return -EINVAL;
-	if (!priv && (current->euid!=p->euid) && !suser())
-		return -EPERM;
-	if ((sig == SIGKILL) || (sig == SIGCONT)) {
-		if (p->state == TASK_STOPPED)
-			p->state = TASK_RUNNING;
-		p->exit_code = 0;
-		p->signal &= ~( (1<<(SIGSTOP-1)) | (1<<(SIGTSTP-1)) |
-				(1<<(SIGTTIN-1)) | (1<<(SIGTTOU-1)) );
-	} 
-	/* If the signal will be ignored, don't even post it */
-	if ((int) p->sigaction[sig-1].sa_handler == 1)
-		return 0;
-	/* Depends on order SIGSTOP, SIGTSTP, SIGTTIN, SIGTTOU */
-	if ((sig >= SIGSTOP) && (sig <= SIGTTOU)) 
-		p->signal &= ~(1<<(SIGCONT-1));
-	/* Actually deliver the signal */
-	p->signal |= (1<<(sig-1));
-	return 0;
-}
-
 int session_of_pgrp(int pgrp)
 {
 	struct task_struct **p;
@@ -174,7 +187,7 @@ int kill_pg(int pgrp, int sig, int priv)
 	int err,retval = -ESRCH;
 	int found = 0;
 
-	if (sig<1 || sig>32 || pgrp<=0)
+	if (sig<0 || sig>32 || pgrp<=0)
 		return -EINVAL;
  	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p)
 		if ((*p)->pgrp == pgrp) {
@@ -190,7 +203,7 @@ int kill_proc(int pid, int sig, int priv)
 {
  	struct task_struct **p;
 
-	if (sig<1 || sig>32)
+	if (sig<0 || sig>32)
 		return -EINVAL;
 	for (p = &LAST_TASK ; p > &FIRST_TASK ; --p)
 		if ((*p)->pid == pid)
@@ -296,7 +309,7 @@ volatile void do_exit(long code)
 		kill_pg(current->pgrp,SIGCONT,1);
 	}
 	/* Let father know we died */
-	current->p_pptr->signal |= (1<<(SIGCHLD-1));
+	send_sig (SIGCHLD, current->p_pptr, 1);
 	
 	/*
 	 * This loop does two things:
@@ -308,6 +321,7 @@ volatile void do_exit(long code)
 	 */
 	if (p = current->p_cptr) {
 		while (1) {
+		        p->flags &= ~PF_PTRACED;
 			p->p_pptr = task[1];
 			if (p->state == TASK_ZOMBIE)
 				task[1]->signal |= (1<<(SIGCHLD-1));
@@ -373,7 +387,8 @@ int sys_waitpid(pid_t pid,unsigned long * stat_addr, int options)
 	struct task_struct *p;
 	unsigned long oldblocked;
 
-	verify_area(stat_addr,4);
+	if (stat_addr)
+		verify_area(stat_addr,4);
 repeat:
 	flag=0;
 	for (p = current->p_cptr ; p ; p = p->p_osptr) {
@@ -392,15 +407,17 @@ repeat:
 				if (!(options & WUNTRACED) || 
 				    !p->exit_code)
 					continue;
-				put_fs_long((p->exit_code << 8) | 0x7f,
-					stat_addr);
+				if (stat_addr)
+					put_fs_long((p->exit_code << 8) | 0x7f,
+						stat_addr);
 				p->exit_code = 0;
 				return p->pid;
 			case TASK_ZOMBIE:
 				current->cutime += p->utime;
 				current->cstime += p->stime;
 				flag = p->pid;
-				put_fs_long(p->exit_code, stat_addr);
+				if (stat_addr)
+					put_fs_long(p->exit_code, stat_addr);
 				release(p);
 #ifdef DEBUG_PROC_TREE
 				audit_ptree();

@@ -2,7 +2,7 @@ extern inline unsigned char get_fs_byte(const char * addr)
 {
 	unsigned register char _v;
 
-	__asm__ ("movb %%fs:%1,%0":"=r" (_v):"m" (*addr));
+	__asm__ ("movb %%fs:%1,%0":"=q" (_v):"m" (*addr));
 	return _v;
 }
 
@@ -24,7 +24,7 @@ extern inline unsigned long get_fs_long(const unsigned long *addr)
 
 extern inline void put_fs_byte(char val,char *addr)
 {
-__asm__ ("movb %0,%%fs:%1"::"r" (val),"m" (*addr));
+__asm__ ("movb %0,%%fs:%1"::"q" (val),"m" (*addr));
 }
 
 extern inline void put_fs_word(short val,short * addr)
@@ -41,25 +41,25 @@ __asm__ ("movl %0,%%fs:%1"::"r" (val),"m" (*addr));
  * Someone who knows GNU asm better than I should double check the followig.
  * It seems to work, but I don't know if I'm doing something subtly wrong.
  * --- TYT, 11/24/91
- * [ nothing wrong here, Linus ]
+ * [ nothing wrong here, Linus: I just changed the ax to be any reg ]
  */
 
 extern inline unsigned long get_fs() 
 {
 	unsigned short _v;
-	__asm__("mov %%fs,%%ax":"=a" (_v):);
+	__asm__("mov %%fs,%0":"=r" (_v):);
 	return _v;
 }
 
 extern inline unsigned long get_ds() 
 {
 	unsigned short _v;
-	__asm__("mov %%ds,%%ax":"=a" (_v):);
+	__asm__("mov %%ds,%0":"=r" (_v):);
 	return _v;
 }
 
 extern inline void set_fs(unsigned long val)
 {
-	__asm__("mov %0,%%fs"::"a" ((unsigned short) val));
+	__asm__("mov %0,%%fs"::"r" ((unsigned short) val));
 }
 

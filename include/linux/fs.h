@@ -23,6 +23,10 @@
 
 #define IS_SEEKABLE(x) ((x)>=1 && (x)<=3)
 
+#define MAY_EXEC 1
+#define MAY_WRITE 2
+#define MAY_READ 4
+
 #define READ 0
 #define WRITE 1
 #define READA 2		/* read-ahead - don't pause */
@@ -33,15 +37,8 @@ void buffer_init(long buffer_end);
 #define MAJOR(a) (((unsigned)(a))>>8)
 #define MINOR(a) ((a)&0xff)
 
-#define NAME_LEN 14
-#define ROOT_INO 1
-
-#define I_MAP_SLOTS 8
-#define Z_MAP_SLOTS 8
-#define SUPER_MAGIC 0x137F
-
 #define NR_OPEN 20
-#define NR_INODE 64
+#define NR_INODE 128
 #define NR_FILE 64
 #define NR_SUPER 8
 #define NR_HASH 307
@@ -52,13 +49,10 @@ void buffer_init(long buffer_end);
 #define NULL ((void *) 0)
 #endif
 
-#define INODES_PER_BLOCK ((BLOCK_SIZE)/(sizeof (struct d_inode)))
-#define DIR_ENTRIES_PER_BLOCK ((BLOCK_SIZE)/(sizeof (struct dir_entry)))
-
 #define PIPE_READ_WAIT(inode) ((inode).i_wait)
 #define PIPE_WRITE_WAIT(inode) ((inode).i_wait2)
-#define PIPE_HEAD(inode) ((inode).i_zone[0])
-#define PIPE_TAIL(inode) ((inode).i_zone[1])
+#define PIPE_HEAD(inode) ((inode).i_data[0])
+#define PIPE_TAIL(inode) ((inode).i_data[1])
 #define PIPE_SIZE(inode) ((PIPE_HEAD(inode)-PIPE_TAIL(inode))&(PAGE_SIZE-1))
 #define PIPE_EMPTY(inode) (PIPE_HEAD(inode)==PIPE_TAIL(inode))
 #define PIPE_FULL(inode) (PIPE_SIZE(inode)==(PAGE_SIZE-1))
@@ -85,31 +79,23 @@ struct buffer_head {
 	struct buffer_head * b_next_free;
 };
 
-struct d_inode {
-	unsigned short i_mode;
-	unsigned short i_uid;
-	unsigned long i_size;
-	unsigned long i_time;
-	unsigned char i_gid;
-	unsigned char i_nlinks;
-	unsigned short i_zone[9];
-};
-
-struct m_inode {
-	unsigned short i_mode;
-	unsigned short i_uid;
-	unsigned long i_size;
-	unsigned long i_mtime;
-	unsigned char i_gid;
-	unsigned char i_nlinks;
-	unsigned short i_zone[9];
-/* these are in memory also */
+struct inode {
+	dev_t	i_dev;
+	ino_t	i_ino;
+	umode_t	i_mode;
+	nlink_t	i_nlink;
+	uid_t	i_uid;
+	gid_t	i_gid;
+	dev_t	i_rdev;
+	off_t	i_size;
+	time_t	i_atime;
+	time_t	i_mtime;
+	time_t	i_ctime;
+	unsigned long i_data[16];
+	struct inode_operations * i_op;
+	struct super_block * i_sb;
 	struct task_struct * i_wait;
 	struct task_struct * i_wait2;	/* for pipes */
-	unsigned long i_atime;
-	unsigned long i_ctime;
-	unsigned short i_dev;
-	unsigned short i_num;
 	unsigned short i_count;
 	unsigned char i_lock;
 	unsigned char i_dirt;
@@ -123,7 +109,8 @@ struct file {
 	unsigned short f_mode;
 	unsigned short f_flags;
 	unsigned short f_count;
-	struct m_inode * f_inode;
+	struct inode * f_inode;
+	struct file_operations * f_op;
 	off_t f_pos;
 };
 
@@ -140,8 +127,8 @@ struct super_block {
 	struct buffer_head * s_imap[8];
 	struct buffer_head * s_zmap[8];
 	unsigned short s_dev;
-	struct m_inode * s_isup;
-	struct m_inode * s_imount;
+	struct inode * s_covered;
+	struct inode * s_mounted;
 	unsigned long s_time;
 	struct task_struct * s_wait;
 	unsigned char s_lock;
@@ -149,23 +136,29 @@ struct super_block {
 	unsigned char s_dirt;
 };
 
-struct d_super_block {
-	unsigned short s_ninodes;
-	unsigned short s_nzones;
-	unsigned short s_imap_blocks;
-	unsigned short s_zmap_blocks;
-	unsigned short s_firstdatazone;
-	unsigned short s_log_zone_size;
-	unsigned long s_max_size;
-	unsigned short s_magic;
+struct file_operations {
+	int (*lseek) (struct inode *, struct file *, off_t, int);
+	int (*read) (struct inode *, struct file *, char *, int);
+	int (*write) (struct inode *, struct file *, char *, int);
 };
 
-struct dir_entry {
-	unsigned short inode;
-	char name[NAME_LEN];
+struct inode_operations {
+	int (*create) (struct inode *,const char *,int,int,struct inode **);
+	int (*lookup) (struct inode *,const char *,int,struct inode **);
+	int (*link) (struct inode *,struct inode *,const char *,int);
+	int (*unlink) (struct inode *,const char *,int);
+	int (*symlink) (struct inode *,const char *,int,const char *);
+	int (*mkdir) (struct inode *,const char *,int,int);
+	int (*rmdir) (struct inode *,const char *,int);
+	int (*mknod) (struct inode *,const char *,int,int,int);
+	int (*rename) (struct inode *,const char *,int,struct inode *,const char *,int);
+	int (*readlink) (struct inode *,char *,int);
+	int (*open) (struct inode *, struct file *);
+	void (*release) (struct inode *, struct file *);
+	struct inode * (*follow_link) (struct inode *, struct inode *);
 };
 
-extern struct m_inode inode_table[NR_INODE];
+extern struct inode inode_table[NR_INODE];
 extern struct file file_table[NR_FILE];
 extern struct super_block super_block[NR_SUPER];
 extern struct buffer_head * start_buffer;
@@ -176,35 +169,41 @@ extern int floppy_change(unsigned int nr);
 extern int ticks_to_floppy_on(unsigned int dev);
 extern void floppy_on(unsigned int dev);
 extern void floppy_off(unsigned int dev);
-extern void truncate(struct m_inode * inode);
+extern void truncate(struct inode * inode);
 extern void sync_inodes(void);
-extern void wait_on(struct m_inode * inode);
-extern int bmap(struct m_inode * inode,int block);
-extern int create_block(struct m_inode * inode,int block);
-extern struct m_inode * namei(const char * pathname);
-extern struct m_inode * lnamei(const char * pathname);
+extern void wait_on(struct inode * inode);
+extern int bmap(struct inode * inode,int block);
+extern struct inode * namei(const char * pathname);
+extern struct inode * lnamei(const char * pathname);
 extern int open_namei(const char * pathname, int flag, int mode,
-	struct m_inode ** res_inode);
-extern void iput(struct m_inode * inode);
-extern struct m_inode * iget(int dev,int nr);
-extern struct m_inode * get_empty_inode(void);
-extern struct m_inode * get_pipe_inode(void);
+	struct inode ** res_inode);
+extern void iput(struct inode * inode);
+extern struct inode * iget(int dev,int nr);
+extern struct inode * get_empty_inode(void);
+extern struct inode * get_pipe_inode(void);
 extern struct buffer_head * get_hash_table(int dev, int block);
 extern struct buffer_head * getblk(int dev, int block);
 extern void ll_rw_block(int rw, struct buffer_head * bh);
 extern void ll_rw_page(int rw, int dev, int nr, char * buffer);
+extern void ll_rw_swap_file(int rw, int dev, unsigned int *b, int nb, char *buffer);
 extern void brelse(struct buffer_head * buf);
 extern struct buffer_head * bread(int dev,int block);
 extern void bread_page(unsigned long addr,int dev,int b[4]);
 extern struct buffer_head * breada(int dev,int block,...);
-extern int new_block(int dev);
-extern int free_block(int dev, int block);
-extern struct m_inode * new_inode(int dev);
-extern void free_inode(struct m_inode * inode);
 extern int sync_dev(int dev);
 extern struct super_block * get_super(int dev);
 extern int ROOT_DEV;
 
 extern void mount_root(void);
+
+extern int minix_file_read(struct inode *, struct file *, char *, int);
+extern int pipe_read(struct inode *, struct file *, char *, int);
+extern int char_read(struct inode *, struct file *, char *, int);
+extern int block_read(struct inode *, struct file *, char *, int);
+
+extern int minix_file_write(struct inode *, struct file *, char *, int);
+extern int pipe_write(struct inode *, struct file *, char *, int);
+extern int char_write(struct inode *, struct file *, char *, int);
+extern int block_write(struct inode *, struct file *, char *, int);
 
 #endif

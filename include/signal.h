@@ -33,6 +33,26 @@ typedef unsigned int sigset_t;		/* 32 bits */
 #define SIGTTIN		21
 #define SIGTTOU		22
 
+/*
+ * Most of these aren't used yet (and perhaps never will),
+ * so they are commented out.
+ */
+
+/*
+#define SIGIO		23
+#define SIGPOLL		SIGIO
+#define SIGXCPU		24
+#define SIGXFSZ		25
+#define SIGVTALRM	26
+#define SIGPROF		27
+*/
+
+#define SIGWINCH	28
+
+/*
+#define SIGLOST		29
+*/
+
 /* Ok, I haven't implemented sigactions, but trying to keep headers POSIX */
 #define SA_NOCLDSTOP	1
 #define SA_INTERRUPT	0x20000000

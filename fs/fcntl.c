@@ -35,6 +35,8 @@ static int dupfd(unsigned int fd, unsigned int arg)
 
 int sys_dup2(unsigned int oldfd, unsigned int newfd)
 {
+	if (newfd == oldfd)
+		return newfd;
 	sys_close(newfd);
 	return dupfd(oldfd,newfd);
 }
@@ -68,8 +70,8 @@ int sys_fcntl(unsigned int fd, unsigned int cmd, unsigned long arg)
 			filp->f_flags |= arg & (O_APPEND | O_NONBLOCK);
 			return 0;
 		case F_GETLK:	case F_SETLK:	case F_SETLKW:
-			return -1;
+			return -ENOSYS;
 		default:
-			return -1;
+			return -EINVAL;
 	}
 }

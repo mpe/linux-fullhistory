@@ -15,6 +15,7 @@
 
 #include <linux/tty.h>
 #include <linux/sched.h>
+#include <linux/timer.h>
 #include <asm/system.h>
 #include <asm/io.h>
 
@@ -22,6 +23,48 @@
 
 extern void rs1_interrupt(void);
 extern void rs2_interrupt(void);
+
+static void com1_timer(void)
+{
+	copy_to_cooked(tty_table+64);
+}
+
+static void com2_timer(void)
+{
+	copy_to_cooked(tty_table+65);
+}
+
+static inline void do_rs_write(unsigned int port)
+{
+	char c;
+
+#define TTY (tty_table[64+port].write_q)
+#define TIMER (SER1_TIMEOUT+port)
+	cli();
+	if (!EMPTY(TTY)) {
+		outb_p(inb_p(TTY->data+1)|0x02,TTY->data+1);
+		if (inb(TTY->data+5) & 0x20) {
+			GETCH(TTY,c);
+			outb(c,TTY->data);
+		}
+		timer_table[TIMER].expires = jiffies + 50;
+		timer_active |= 1 << TIMER;
+	} else
+		timer_active &= ~(1 << TIMER);
+	sti();
+#undef TIMER
+#undef TTY
+}
+
+static void com1_timeout(void)
+{
+	do_rs_write(0);
+}
+
+static void com2_timeout(void)
+{
+	do_rs_write(1);
+}
 
 static void init(int port)
 {
@@ -36,6 +79,16 @@ static void init(int port)
 
 void rs_init(void)
 {
+/* SERx_TIMER timers are used for receiving: timeout is always 0 (immediate) */
+	timer_table[SER1_TIMER].fn = com1_timer;
+	timer_table[SER1_TIMER].expires = 0;
+	timer_table[SER2_TIMER].fn = com2_timer;
+	timer_table[SER2_TIMER].expires = 0;
+/* SERx_TIMEOUT timers are used for writing: prevent serial lockups */
+	timer_table[SER1_TIMEOUT].fn = com1_timeout;
+	timer_table[SER1_TIMEOUT].expires = 0;
+	timer_table[SER2_TIMEOUT].fn = com2_timeout;
+	timer_table[SER2_TIMEOUT].expires = 0;
 	set_intr_gate(0x24,rs1_interrupt);
 	set_intr_gate(0x23,rs2_interrupt);
 	init(tty_table[64].read_q->data);
@@ -54,6 +107,7 @@ void rs_write(struct tty_struct * tty)
 {
 	cli();
 	if (!EMPTY(tty->write_q))
-		outb(inb_p(tty->write_q->data+1)|0x02,tty->write_q->data+1);
+		outb_p(inb_p(tty->write_q->data+1)|0x02,tty->write_q->data+1);
+	timer_active |= 3 << SER1_TIMEOUT;
 	sti();
 }

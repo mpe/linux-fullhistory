@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include <linux/sched.h>
+#include <linux/minix_fs.h>
 #include <linux/kernel.h>
 
 #define clear_block(addr) \
@@ -17,15 +18,15 @@ __asm__("cld\n\t" \
 	::"a" (0),"c" (BLOCK_SIZE/4),"D" ((long) (addr)):"cx","di")
 
 #define set_bit(nr,addr) ({\
-register int res __asm__("ax"); \
-__asm__ __volatile__("btsl %2,%3\n\tsetb %%al": \
-"=a" (res):"0" (0),"r" (nr),"m" (*(addr))); \
+char res; \
+__asm__ __volatile__("btsl %1,%2\n\tsetb %0": \
+"=q" (res):"r" (nr),"m" (*(addr))); \
 res;})
 
 #define clear_bit(nr,addr) ({\
-register int res __asm__("ax"); \
-__asm__ __volatile__("btrl %2,%3\n\tsetnb %%al": \
-"=a" (res):"0" (0),"r" (nr),"m" (*(addr))); \
+char res; \
+__asm__ __volatile__("btrl %1,%2\n\tsetnb %0": \
+"=q" (res):"r" (nr),"m" (*(addr))); \
 res;})
 
 #define find_first_zero(addr) ({ \
@@ -34,20 +35,20 @@ __asm__("cld\n" \
 	"1:\tlodsl\n\t" \
 	"notl %%eax\n\t" \
 	"bsfl %%eax,%%edx\n\t" \
-	"je 2f\n\t" \
-	"addl %%edx,%%ecx\n\t" \
-	"jmp 3f\n" \
-	"2:\taddl $32,%%ecx\n\t" \
+	"jne 2f\n\t" \
+	"addl $32,%%ecx\n\t" \
 	"cmpl $8192,%%ecx\n\t" \
-	"jl 1b\n" \
-	"3:" \
-	:"=c" (__res):"c" (0),"S" (addr):"ax","dx","si"); \
+	"jl 1b\n\t" \
+	"xorl %%edx,%%edx\n" \
+	"2:\taddl %%edx,%%ecx" \
+	:"=c" (__res):"0" (0),"S" (addr):"ax","dx","si"); \
 __res;})
 
-int free_block(int dev, int block)
+int minix_free_block(int dev, int block)
 {
 	struct super_block * sb;
 	struct buffer_head * bh;
+	unsigned int bit,zone;
 
 	if (!(sb = get_super(dev)))
 		panic("trying to free block on nonexistent device");
@@ -64,16 +65,17 @@ int free_block(int dev, int block)
 		if (bh->b_count)
 			brelse(bh);
 	}
-	block -= sb->s_firstdatazone - 1 ;
-	if (clear_bit(block&8191,sb->s_zmap[block/8192]->b_data)) {
-		printk("block (%04x:%d) ",dev,block+sb->s_firstdatazone-1);
-		printk("free_block: bit already cleared\n");
-	}
-	sb->s_zmap[block/8192]->b_dirt = 1;
+	zone = block - sb->s_firstdatazone + 1;
+	bit = zone & 8191;
+	zone >>= 13;
+	bh = sb->s_zmap[zone];
+	if (clear_bit(bit,bh->b_data))
+		printk("free_block (%04x:%d): bit already cleared\n",dev,block);
+	bh->b_dirt = 1;
 	return 1;
 }
 
-int new_block(int dev)
+int minix_new_block(int dev)
 {
 	struct buffer_head * bh;
 	struct super_block * sb;
@@ -105,9 +107,8 @@ int new_block(int dev)
 	return j;
 }
 
-void free_inode(struct m_inode * inode)
+void minix_free_inode(struct inode * inode)
 {
-	struct super_block * sb;
 	struct buffer_head * bh;
 
 	if (!inode)
@@ -117,53 +118,67 @@ void free_inode(struct m_inode * inode)
 		return;
 	}
 	if (inode->i_count>1) {
-		printk("trying to free inode with count=%d\n",inode->i_count);
-		panic("free_inode");
+		printk("free_inode: inode has count=%d\n",inode->i_count);
+		return;
 	}
-	if (inode->i_nlinks)
-		panic("trying to free inode with links");
-	if (!(sb = get_super(inode->i_dev)))
-		panic("trying to free inode on nonexistent device");
-	if (inode->i_num < 1 || inode->i_num > sb->s_ninodes)
-		panic("trying to free inode 0 or nonexistant inode");
-	if (!(bh=sb->s_imap[inode->i_num>>13]))
-		panic("nonexistent imap in superblock");
-	if (clear_bit(inode->i_num&8191,bh->b_data))
+	if (inode->i_nlink) {
+		printk("free_inode: inode has nlink=%d\n",inode->i_nlink);
+		return;
+	}
+	if (!inode->i_sb) {
+		printk("free_inode: inode on nonexistent device\n");
+		return;
+	}
+	if (inode->i_ino < 1 || inode->i_ino > inode->i_sb->s_ninodes) {
+		printk("free_inode: inode 0 or nonexistent inode\n");
+		return;
+	}
+	if (!(bh=inode->i_sb->s_imap[inode->i_ino>>13])) {
+		printk("free_inode: nonexistent imap in superblock\n");
+		return;
+	}
+	if (clear_bit(inode->i_ino&8191,bh->b_data))
 		printk("free_inode: bit already cleared.\n\r");
 	bh->b_dirt = 1;
 	memset(inode,0,sizeof(*inode));
 }
 
-struct m_inode * new_inode(int dev)
+struct inode * minix_new_inode(int dev)
 {
-	struct m_inode * inode;
-	struct super_block * sb;
+	struct inode * inode;
 	struct buffer_head * bh;
 	int i,j;
 
 	if (!(inode=get_empty_inode()))
 		return NULL;
-	if (!(sb = get_super(dev)))
-		panic("new_inode with unknown device");
-	j = 8192;
-	for (i=0 ; i<8 ; i++)
-		if (bh=sb->s_imap[i])
-			if ((j=find_first_zero(bh->b_data))<8192)
-				break;
-	if (!bh || j >= 8192 || j+i*8192 > sb->s_ninodes) {
+	if (!(inode->i_sb = get_super(dev))) {
+		printk("new_inode: unknown device\n");
 		iput(inode);
 		return NULL;
 	}
-	if (set_bit(j,bh->b_data))
-		panic("new_inode: bit already set");
+	j = 8192;
+	for (i=0 ; i<8 ; i++)
+		if (bh=inode->i_sb->s_imap[i])
+			if ((j=find_first_zero(bh->b_data))<8192)
+				break;
+	if (!bh || j >= 8192 || j+i*8192 > inode->i_sb->s_ninodes) {
+		iput(inode);
+		return NULL;
+	}
+	if (set_bit(j,bh->b_data)) {	/* shouldn't happen */
+		printk("new_inode: bit already set");
+		iput(inode);
+		return NULL;
+	}
 	bh->b_dirt = 1;
-	inode->i_count=1;
-	inode->i_nlinks=1;
-	inode->i_dev=dev;
-	inode->i_uid=current->euid;
-	inode->i_gid=current->egid;
-	inode->i_dirt=1;
-	inode->i_num = j + i*8192;
+	inode->i_count = 1;
+	inode->i_nlink = 1;
+	inode->i_dev = dev;
+	inode->i_uid = current->euid;
+	inode->i_gid = current->egid;
+	inode->i_dirt = 1;
+	inode->i_ino = j + i*8192;
 	inode->i_mtime = inode->i_atime = inode->i_ctime = CURRENT_TIME;
+	inode->i_op = &minix_inode_operations;
 	return inode;
 }
