@@ -419,6 +419,7 @@ typedef struct xfs_mount {
 #define XFS_MOUNT_SWALLOC	0x00080000	/* turn on stripe width
 						 * allocation */
 #define XFS_MOUNT_IHASHSIZE	0x00100000	/* inode hash table size */
+#define XFS_MOUNT_DIRSYNC	0x00200000	/* synchronous directory ops */
 
 /*
  * Default minimum read and write sizes.

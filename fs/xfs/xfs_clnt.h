@@ -104,5 +104,7 @@ struct xfs_mount_args {
 #define XFSMNT_SWALLOC		0x10000000	/* turn on stripe width
 						 * allocation */
 #define XFSMNT_IHASHSIZE	0x20000000	/* inode hash table size */
+#define XFSMNT_DIRSYNC		0x40000000	/* sync creat,link,unlink,rename
+						 * symlink,mkdir,rmdir,mknod */
 
 #endif	/* __XFS_CLNT_H__ */

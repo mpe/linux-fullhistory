@@ -304,6 +304,9 @@ xfs_start_flags(
 	if (ap->flags & XFSMNT_IDELETE)
 		mp->m_flags |= XFS_MOUNT_IDELETE;
 
+	if (ap->flags & XFSMNT_DIRSYNC)
+		mp->m_flags |= XFS_MOUNT_DIRSYNC;
+
 	/*
 	 * no recovery flag requires a read-only mount
 	 */

@@ -1995,7 +1995,7 @@ xfs_create(
 	 * create transaction goes to disk before returning to
 	 * the user.
 	 */
-	if (mp->m_flags & XFS_MOUNT_WSYNC) {
+	if (mp->m_flags & (XFS_MOUNT_WSYNC|XFS_MOUNT_DIRSYNC)) {
 		xfs_trans_set_sync(tp);
 	}
 
@@ -2492,7 +2492,7 @@ xfs_remove(
 	 * remove transaction goes to disk before returning to
 	 * the user.
 	 */
-	if (mp->m_flags & XFS_MOUNT_WSYNC) {
+	if (mp->m_flags & (XFS_MOUNT_WSYNC|XFS_MOUNT_DIRSYNC)) {
 		xfs_trans_set_sync(tp);
 	}
 
@@ -2704,7 +2704,7 @@ xfs_link(
 	 * link transaction goes to disk before returning to
 	 * the user.
 	 */
-	if (mp->m_flags & XFS_MOUNT_WSYNC) {
+	if (mp->m_flags & (XFS_MOUNT_WSYNC|XFS_MOUNT_DIRSYNC)) {
 		xfs_trans_set_sync(tp);
 	}
 
@@ -2921,7 +2921,7 @@ xfs_mkdir(
 	 * mkdir transaction goes to disk before returning to
 	 * the user.
 	 */
-	if (mp->m_flags & XFS_MOUNT_WSYNC) {
+	if (mp->m_flags & (XFS_MOUNT_WSYNC|XFS_MOUNT_DIRSYNC)) {
 		xfs_trans_set_sync(tp);
 	}
 
@@ -3168,7 +3168,7 @@ xfs_rmdir(
 	 * rmdir transaction goes to disk before returning to
 	 * the user.
 	 */
-	if (mp->m_flags & XFS_MOUNT_WSYNC) {
+	if (mp->m_flags & (XFS_MOUNT_WSYNC|XFS_MOUNT_DIRSYNC)) {
 		xfs_trans_set_sync(tp);
 	}
 
@@ -3520,7 +3520,7 @@ xfs_symlink(
 	 * symlink transaction goes to disk before returning to
 	 * the user.
 	 */
-	if (mp->m_flags & XFS_MOUNT_WSYNC) {
+	if (mp->m_flags & (XFS_MOUNT_WSYNC|XFS_MOUNT_DIRSYNC)) {
 		xfs_trans_set_sync(tp);
 	}
 
