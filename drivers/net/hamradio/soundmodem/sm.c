@@ -3,7 +3,7 @@
 /*
  *	sm.c  -- soundcard radio modem driver.
  *
- *	Copyright (C) 1996-1998  Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *	Copyright (C) 1996-1999  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -41,34 +41,28 @@
  *   0.6  16.04.97  init code/data tagged
  *   0.7  30.07.97  fixed halfduplex interrupt handlers/hotfix for CS423X
  *   0.8  14.04.98  cleanups
+ *   0.9  03.08.99  adapt to Linus' new __setup/__initcall
+ *                  use parport lowlevel drivers instead of directly writing to a parallel port
+ *                  removed some pre-2.2 kernel compatibility cruft
  */
 
 /*****************************************************************************/
 
 #include <linux/config.h>
+#include <linux/version.h>
 #include <linux/module.h>
-#include <linux/ptrace.h>
-#include <linux/types.h>
-#include <linux/fcntl.h>
 #include <linux/ioport.h>
-#include <linux/net.h>
-#include <linux/in.h>
 #include <linux/string.h>
 #include <linux/init.h>
+#include <linux/parport.h>
 #include <asm/uaccess.h>
-#include <asm/system.h>
-#include <asm/io.h>
-#include <asm/bitops.h>
-#include <linux/delay.h>
-#include <linux/errno.h>
-#include <linux/version.h>
 #include "sm.h"
 
 /* --------------------------------------------------------------------- */
 
 /*static*/ const char sm_drvname[] = "soundmodem";
-static const char sm_drvinfo[] = KERN_INFO "soundmodem: (C) 1996-1998 Thomas Sailer, HB9JNX/AE4WA\n"
-KERN_INFO "soundmodem: version 0.8 compiled " __TIME__ " " __DATE__ "\n";
+static const char sm_drvinfo[] = KERN_INFO "soundmodem: (C) 1996-1999 Thomas Sailer, HB9JNX/AE4WA\n"
+KERN_INFO "soundmodem: version 0.9 compiled " __TIME__ " " __DATE__ "\n";
 
 /* --------------------------------------------------------------------- */
 
@@ -146,16 +140,7 @@ static const struct hardware_info *sm_hardware_table[] = {
 
 #define NR_PORTS 4
 
-/* --------------------------------------------------------------------- */
-
 static struct device sm_device[NR_PORTS];
-
-static struct {
-	char *mode;
-	int iobase, irq, dma, dma2, seriobase, pariobase, midiiobase;
-} sm_ports[NR_PORTS] = {
-	{ NULL, -1, 0, 0, 0, -1, -1, -1 },
-};
 
 /* --------------------------------------------------------------------- */
 
@@ -173,13 +158,6 @@ static struct {
 #define UART_DLM(iobase) (iobase+1)
 
 #define SER_EXTENT 8
-
-#define LPT_DATA(iobase)    (iobase+0)
-#define LPT_STATUS(iobase)  (iobase+1)
-#define LPT_CONTROL(iobase) (iobase+2)
-#define LPT_IRQ_ENABLE      0x10
-
-#define LPT_EXTENT 3
 
 #define MIDI_DATA(iobase)     (iobase)
 #define MIDI_STATUS(iobase)   (iobase+1)
@@ -202,46 +180,9 @@ static struct {
 #define SP_PAR  2
 #define SP_MIDI 4
 
-/* --------------------------------------------------------------------- */
 /*
  * ===================== port checking routines ========================
  */
-
-/*
- * returns 0 if ok and != 0 on error;
- * the same behaviour as par96_check_lpt in baycom.c
- */
-
-/*
- * returns 0 if ok and != 0 on error;
- * the same behaviour as par96_check_lpt in baycom.c
- */
-
-static int check_lpt(unsigned int iobase)
-{
-	unsigned char b1,b2;
-	int i;
-
-	if (iobase <= 0 || iobase > 0x1000-LPT_EXTENT)
-		return 0;
-	if (check_region(iobase, LPT_EXTENT))
-		return 0;
-	b1 = inb(LPT_DATA(iobase));
-	b2 = inb(LPT_CONTROL(iobase));
-	outb(0xaa, LPT_DATA(iobase));
-	i = inb(LPT_DATA(iobase)) == 0xaa;
-	outb(0x55, LPT_DATA(iobase));
-	i &= inb(LPT_DATA(iobase)) == 0x55;
-	outb(0x0a, LPT_CONTROL(iobase));
-	i &= (inb(LPT_CONTROL(iobase)) & 0xf) == 0x0a;
-	outb(0x05, LPT_CONTROL(iobase));
-	i &= (inb(LPT_CONTROL(iobase)) & 0xf) == 0x05;
-	outb(b1, LPT_DATA(iobase));
-	outb(b2, LPT_CONTROL(iobase));
-	return !i;
-}
-
-/* --------------------------------------------------------------------- */
 
 enum uart { c_uart_unknown, c_uart_8250,
 	c_uart_16450, c_uart_16550, c_uart_16550A};
@@ -326,12 +267,10 @@ void sm_output_status(struct sm_state *sm)
 		outb(dcd | (ptt << 1), UART_MCR(sm->hdrv.ptt_out.seriobase));
 		outb(0x40 & (-ptt), UART_LCR(sm->hdrv.ptt_out.seriobase));
 	}
-	if (sm->hdrv.ptt_out.flags & SP_PAR) {
-		outb(ptt | (dcd << 1), LPT_DATA(sm->hdrv.ptt_out.pariobase));
-	}
-	if (sm->hdrv.ptt_out.flags & SP_MIDI && hdlcdrv_ptt(&sm->hdrv)) {
+	if (sm->hdrv.ptt_out.flags & SP_PAR && sm->pardev && sm->pardev->port)
+		parport_write_data(sm->pardev->port, ptt | (dcd << 1));
+	if (sm->hdrv.ptt_out.flags & SP_MIDI && hdlcdrv_ptt(&sm->hdrv))
 		outb(0, MIDI_DATA(sm->hdrv.ptt_out.midiiobase));
-	}
 }
 
 /* --------------------------------------------------------------------- */
@@ -339,6 +278,7 @@ void sm_output_status(struct sm_state *sm)
 static void sm_output_open(struct sm_state *sm)
 {
 	enum uart u = c_uart_unknown;
+	struct parport *pp = NULL;
 
 	sm->hdrv.ptt_out.flags = 0;
 	if (sm->hdrv.ptt_out.seriobase > 0 &&
@@ -353,11 +293,27 @@ static void sm_output_open(struct sm_state *sm)
 		outb(1, UART_DLL(sm->hdrv.ptt_out.seriobase)); /* as fast as possible */
 		/* LCR and MCR set by output_status */
 	}
-	if (sm->hdrv.ptt_out.pariobase > 0 &&
-	    sm->hdrv.ptt_out.pariobase <= 0x1000-LPT_EXTENT &&
-	    !check_lpt(sm->hdrv.ptt_out.pariobase)) {
-		sm->hdrv.ptt_out.flags |= SP_PAR;
-		request_region(sm->hdrv.ptt_out.pariobase, LPT_EXTENT, "sm par ptt");
+	sm->pardev = NULL;
+	if (sm->hdrv.ptt_out.pariobase > 0) {
+		pp = parport_enumerate();
+		while (pp && pp->base != sm->hdrv.ptt_out.pariobase) 
+			pp = pp->next;
+		if (!pp)
+			printk(KERN_WARNING "%s: parport at address 0x%x not found\n", sm_drvname, sm->hdrv.ptt_out.pariobase);
+		else {
+			sm->pardev = parport_register_device(pp, sm->hdrv.ifname, NULL, NULL, NULL, PARPORT_DEV_EXCL, NULL);
+			if (!sm->pardev) {
+				pp = NULL;
+				printk(KERN_WARNING "%s: cannot register parport device (address 0x%x)\n", sm_drvname, sm->hdrv.ptt_out.pariobase);
+			} else {
+				if (parport_claim(sm->pardev)) {
+					parport_unregister_device(sm->pardev);
+					sm->pardev = NULL;
+					printk(KERN_WARNING "%s: cannot claim parport at address 0x%x\n", sm_drvname, sm->hdrv.ptt_out.pariobase);
+				} else
+					sm->hdrv.ptt_out.flags |= SP_PAR;
+			}
+		}
 	}
 	if (sm->hdrv.ptt_out.midiiobase > 0 &&
 	    sm->hdrv.ptt_out.midiiobase <= 0x1000-MIDI_EXTENT &&
@@ -390,8 +346,10 @@ static void sm_output_close(struct sm_state *sm)
 	sm_output_status(sm);
 	if (sm->hdrv.ptt_out.flags & SP_SER)
 		release_region(sm->hdrv.ptt_out.seriobase, SER_EXTENT);
-       	if (sm->hdrv.ptt_out.flags & SP_PAR)
-		release_region(sm->hdrv.ptt_out.pariobase, LPT_EXTENT);
+       	if (sm->hdrv.ptt_out.flags & SP_PAR && sm->pardev) {
+		        parport_release(sm->pardev);
+			parport_unregister_device(sm->pardev);
+	}
        	if (sm->hdrv.ptt_out.flags & SP_MIDI)
 		release_region(sm->hdrv.ptt_out.midiiobase, MIDI_EXTENT);
 	sm->hdrv.ptt_out.flags = 0;
@@ -639,11 +597,24 @@ static int sm_ioctl(struct device *dev, struct ifreq *ifr,
 
 /* --------------------------------------------------------------------- */
 
-#ifdef MODULE
-static int __init sm_init(void)
-#else /* MODULE */
-int __init sm_init(void)
-#endif /* MODULE */
+/*
+ * command line settable parameters
+ */
+static char *mode[NR_PORTS] = { [0 ... NR_PORTS-1] = NULL };
+static int iobase[NR_PORTS] = { [0 ... NR_PORTS-1] = -1 };
+static int irq[NR_PORTS] = { [0 ... NR_PORTS-1] = -1 };
+static int dma[NR_PORTS] = { [0 ... NR_PORTS-1] = -1 };
+static int dma2[NR_PORTS] = { [0 ... NR_PORTS-1] = -1 };
+static int serio[NR_PORTS] = { [0 ... NR_PORTS-1] = 0 };
+static int pario[NR_PORTS] = { [0 ... NR_PORTS-1] = 0 };
+static int midiio[NR_PORTS] = { [0 ... NR_PORTS-1] = 0 };
+
+/* --------------------------------------------------------------------- */
+
+#ifndef MODULE
+static
+#endif
+int __init init_module(void)
 {
 	int i, j, found = 0;
 	char set_hw = 1;
@@ -658,25 +629,39 @@ int __init sm_init(void)
 		struct device *dev = sm_device+i;
 		sprintf(ifname, "sm%d", i);
 
-		if (!sm_ports[i].mode)
+		if (!mode[i])
 			set_hw = 0;
+		else {
+			if (!strncmp(mode[i], "sbc", 3)) {
+				if (iobase[i] == -1)
+					iobase[i] = 0x220;
+				if (irq[i] == -1)
+					irq[i] = 5;
+				if (dma[i] == -1)
+					dma[i] = 1;
+			} else {
+				if (iobase[i] == -1)
+					iobase[i] = 0x530;
+				if (irq[i] == -1)
+					irq[i] = 11;
+				if (dma[i] == -1)
+					dma[i] = 1;
+			}
+		}
 		if (!set_hw)
-			sm_ports[i].iobase = sm_ports[i].irq = 0;
-		j = hdlcdrv_register_hdlcdrv(dev, &sm_ops, sizeof(struct sm_state),
-					     ifname, sm_ports[i].iobase,
-					     sm_ports[i].irq, sm_ports[i].dma);
+			iobase[i] = irq[i] = 0;
+		j = hdlcdrv_register_hdlcdrv(dev, &sm_ops, sizeof(struct sm_state), ifname, iobase[i], irq[i], dma[i]);
 		if (!j) {
 			sm = (struct sm_state *)dev->priv;
-			sm->hdrv.ptt_out.dma2 = sm_ports[i].dma2;
-			sm->hdrv.ptt_out.seriobase = sm_ports[i].seriobase;
-			sm->hdrv.ptt_out.pariobase = sm_ports[i].pariobase;
-			sm->hdrv.ptt_out.midiiobase = sm_ports[i].midiiobase;
-			if (set_hw && sethw(dev, sm, sm_ports[i].mode))
+			sm->hdrv.ptt_out.dma2 = dma2[i];
+			sm->hdrv.ptt_out.seriobase = serio[i];
+			sm->hdrv.ptt_out.pariobase = pario[i];
+			sm->hdrv.ptt_out.midiiobase = midiio[i];
+			if (set_hw && sethw(dev, sm, mode[i]))
 				set_hw = 0;
 			found++;
 		} else {
-			printk(KERN_WARNING "%s: cannot register net device\n",
-			       sm_drvname);
+			printk(KERN_WARNING "%s: cannot register net device\n", sm_drvname);
 		}
 	}
 	if (!found)
@@ -688,66 +673,25 @@ int __init sm_init(void)
 
 #ifdef MODULE
 
-/*
- * command line settable parameters
- */
-static char *mode = NULL;
-static int iobase = -1;
-static int irq = -1;
-static int dma = -1;
-static int dma2 = -1;
-static int serio = 0;
-static int pario = 0;
-static int midiio = 0;
-
-#if LINUX_VERSION_CODE >= 0x20115
-
-MODULE_PARM(mode, "s");
+MODULE_PARM(mode, "1-" __MODULE_STRING(NR_PORTS) "s");
 MODULE_PARM_DESC(mode, "soundmodem operating mode; eg. sbc:afsk1200 or wss:fsk9600");
-MODULE_PARM(iobase, "i");
+MODULE_PARM(iobase, "1-" __MODULE_STRING(NR_PORTS) "i");
 MODULE_PARM_DESC(iobase, "soundmodem base address");
-MODULE_PARM(irq, "i");
+MODULE_PARM(irq, "1-" __MODULE_STRING(NR_PORTS) "i");
 MODULE_PARM_DESC(irq, "soundmodem interrupt");
-MODULE_PARM(dma, "i");
+MODULE_PARM(dma, "1-" __MODULE_STRING(NR_PORTS) "i");
 MODULE_PARM_DESC(dma, "soundmodem dma channel");
-MODULE_PARM(dma2, "i");
+MODULE_PARM(dma2, "1-" __MODULE_STRING(NR_PORTS) "i");
 MODULE_PARM_DESC(dma2, "soundmodem 2nd dma channel; full duplex only");
-MODULE_PARM(serio, "i");
+MODULE_PARM(serio, "1-" __MODULE_STRING(NR_PORTS) "i");
 MODULE_PARM_DESC(serio, "soundmodem PTT output on serial port");
-MODULE_PARM(pario, "i");
+MODULE_PARM(pario, "1-" __MODULE_STRING(NR_PORTS) "i");
 MODULE_PARM_DESC(pario, "soundmodem PTT output on parallel port");
-MODULE_PARM(midiio, "i");
+MODULE_PARM(midiio, "1-" __MODULE_STRING(NR_PORTS) "i");
 MODULE_PARM_DESC(midiio, "soundmodem PTT output on midi port");
 
 MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
 MODULE_DESCRIPTION("Soundcard amateur radio modem driver");
-
-#endif
-
-int __init init_module(void)
-{
-	if (mode) {
-		if (iobase == -1)
-			iobase = (!strncmp(mode, "sbc", 3)) ? 0x220 : 0x530;
-		if (irq == -1)
-			irq = (!strncmp(mode, "sbc", 3)) ? 5 : 11;
-		if (dma == -1)
-			dma = 1;
-	}
-	sm_ports[0].mode = mode;
-	sm_ports[0].iobase = iobase;
-	sm_ports[0].irq = irq;
-	sm_ports[0].dma = dma;
-	sm_ports[0].dma2 = dma2;
-	sm_ports[0].seriobase = serio;
-	sm_ports[0].pariobase = pario;
-	sm_ports[0].midiiobase = midiio;
-	sm_ports[1].mode = NULL;
-
-	return sm_init();
-}
-
-/* --------------------------------------------------------------------- */
 
 void cleanup_module(void)
 {
@@ -770,35 +714,43 @@ void cleanup_module(void)
 }
 
 #else /* MODULE */
-/* --------------------------------------------------------------------- */
+
 /*
- * format: sm=io,irq,dma[,dma2[,serio[,pario]]],mode
+ * format: soundmodem=io,irq,dma[,dma2[,serio[,pario]]],mode
  * mode: hw:modem
  * hw: sbc, wss, wssfdx
  * modem: afsk1200, fsk9600
  */
 
-void __init sm_setup(char *str, int *ints)
+static int __init sm_setup(char *str)
 {
-	int i;
+	static unsigned __initdata nr_dev = 0;
+	int ints[11];
 
-	for (i = 0; (i < NR_PORTS) && (sm_ports[i].mode); i++);
-	if ((i >= NR_PORTS) || (ints[0] < 3)) {
-		printk(KERN_INFO "%s: too many or invalid interface "
-		       "specifications\n", sm_drvname);
-		return;
-	}
-	sm_ports[i].mode = str;
-	sm_ports[i].iobase = ints[1];
-	sm_ports[i].irq = ints[2];
-	sm_ports[i].dma = ints[3];
-	sm_ports[i].dma2 = (ints[0] >= 4) ? ints[4] : 0;
-	sm_ports[i].seriobase = (ints[0] >= 5) ? ints[5] : 0;
-	sm_ports[i].pariobase = (ints[0] >= 6) ? ints[6] : 0;
-	sm_ports[i].midiiobase = (ints[0] >= 7) ? ints[7] : 0;
-	if (i < NR_PORTS-1)
-		sm_ports[i+1].mode = NULL;
+	if (nr_dev >= NR_PORTS)
+		return 0;
+	str = get_options(str, ints);
+	mode[nr_dev] = str;
+	if (ints[0] >= 1)
+		iobase[nr_dev] = ints[1];
+	if (ints[0] >= 2)
+		irq[nr_dev] = ints[2];
+	if (ints[0] >= 3)
+		dma[nr_dev] = ints[3];
+	if (ints[0] >= 4)
+		dma2[nr_dev] = ints[4];
+	if (ints[0] >= 5)
+		serio[nr_dev] = ints[5];
+	if (ints[0] >= 6)
+		pario[nr_dev] = ints[6];
+	if (ints[0] >= 7)
+		midiio[nr_dev] = ints[7];
+	nr_dev++;
+	return 1;
 }
+
+__setup("soundmodem=", sm_setup);
+__initcall(init_module);
 
 #endif /* MODULE */
 /* --------------------------------------------------------------------- */

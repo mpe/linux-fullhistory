@@ -94,9 +94,6 @@ extern struct kernel_param __setup_start, __setup_end;
 #define __FINIT		.previous
 #define __INITDATA	.section	".data.init","aw"
 
-#define __cacheline_aligned __attribute__ \
-			 ((__section__ (".data.cacheline_aligned")))
-
 #define module_init(x)	__initcall(x);
 #define module_exit(x)	/* nothing */
 
@@ -107,18 +104,24 @@ extern struct kernel_param __setup_start, __setup_end;
 #define __initdata
 #define __exitdata
 #define __initfunc(__arginit) __arginit
-#defint __initcall
+#define __initcall
 /* For assembly routines */
 #define __INIT
 #define __FINIT
 #define __INITDATA
 
+/* Not sure what version aliases were introduced in, but certainly in 2.95.  */
+#if __GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 95)
+#define module_init(x)	int init_module(void) __attribute__((alias(#x)));
+#define module_exit(x)	void cleanup_module(void) __attribute__((alias(#x)));
+#else
 #define module_init(x)	int init_module(void) { return x(); }
 #define module_exit(x)	void cleanup_module(void) { x(); }
+#endif
 
 #endif
 
-#if __GNUC__ >= 2 && __GNUC_MINOR__ >= 8
+#if __GNUC__ > 2 || (__GNUC__ == 2 && __GNUC_MINOR__ >= 8)
 #define __initlocaldata  __initdata
 #else
 #define __initlocaldata

@@ -4063,10 +4063,13 @@ static struct param_table {
 	{ "L40SX", 0, &print_unex, 0, 0 } };
 
 #define FLOPPY_SETUP
-void __init floppy_setup(char *str, int *ints)
+void __init floppy_setup(char *str)
 {
 	int i;
 	int param;
+	int ints[11];
+
+	str = get_options(str,ARRAY_SIZE(ints),ints);
 	if (str) {
 		for (i=0; i< ARRAY_SIZE(config_params); i++){
 			if (strcmp(str,config_params[i].name) == 0){
@@ -4358,8 +4361,6 @@ static void floppy_release_irq_and_dma(void)
 
 #ifdef MODULE
 
-extern char *get_options(char *str, int *ints);
-
 char *floppy=NULL;
 
 static void __init parse_floppy_cfg_string(char *cfg)
@@ -4374,18 +4375,17 @@ static void __init parse_floppy_cfg_string(char *cfg)
 			cfg++;
 		}
 		if(*ptr)
-			floppy_setup(get_options(ptr,ints),ints);
+			floppy_setup(ptr);
 	}
 }
 
-static void __init mod_setup(char *pattern, void (*setup)(char *, int *))
+static void __init mod_setup(char *pattern, void (*setup)(char *))
 {
 	unsigned long i;
 	char c;
 	int j;
 	int match;
 	char buffer[100];
-	int ints[11];
 	int length = strlen(pattern)+1;
 
 	match=0;
@@ -4400,7 +4400,7 @@ static void __init mod_setup(char *pattern, void (*setup)(char *, int *))
 			if (!c || c == ' ' || c == '\t'){
 				if (j){
 					buffer[j] = '\0';
-					setup(get_options(buffer,ints),ints);
+					setup(buffer);
 				}
 				j=0;
 			} else

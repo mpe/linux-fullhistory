@@ -255,9 +255,9 @@ __setup("noapic", ioapic_setup);
 static int __init ioapic_pirq_setup(char *str)
 {
 	int i, max;
-	int ints[11];
+	int ints[MAX_PIRQS+1];
 
-	get_options(str, ints);
+	get_options(str, MAX_PIRQS+1, ints);
 
 	for (i = 0; i < MAX_PIRQS; i++)
 		pirq_entries[i] = -1;

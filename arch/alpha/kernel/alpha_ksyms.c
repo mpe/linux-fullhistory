@@ -105,7 +105,7 @@ EXPORT_SYMBOL(alpha_read_fp_reg);
 EXPORT_SYMBOL(alpha_write_fp_reg);
 
 /* In-kernel system calls.  */
-EXPORT_SYMBOL(__kernel_thread);
+EXPORT_SYMBOL(kernel_thread);
 EXPORT_SYMBOL(sys_open);
 EXPORT_SYMBOL(sys_dup);
 EXPORT_SYMBOL(sys_exit);

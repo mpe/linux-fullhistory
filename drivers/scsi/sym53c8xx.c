@@ -10115,14 +10115,14 @@ static int
 pci_get_base_address(struct pci_dev *pdev, int index, u_long *base)
 )
 {
-	*base = pdev->base_address[index++];
-	if ((*base & 0x7) == 0x4) {
-#if BITS_PER_LONG > 32
-		*base |= (((u_long)pdev->base_address[index]) << 32);
-#endif
+	/* FIXME! This is just unbelieably horrible backwards compatibility code */
+	struct resource *res = pdev->resource + index;
+
+	*base = res->start | (res->flags & 0xf);
+	if ((res->flags & 0x7) == 0x4) {
 		++index;
 	}
-	return index;
+	return index+1;
 }
 #endif
 

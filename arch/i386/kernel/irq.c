@@ -470,7 +470,6 @@ static void show(char * str)
 	int i;
 	unsigned long *stack;
 	int cpu = smp_processor_id();
-	extern char *get_options(char *str, int *ints);
 
 	printk("\n%s, CPU %d:\n", str, cpu);
 	printk("irq:  %d [%d %d]\n",

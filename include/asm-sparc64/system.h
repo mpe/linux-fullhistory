@@ -1,4 +1,4 @@
-/* $Id: system.h,v 1.52 1999/08/02 08:39:59 davem Exp $ */
+/* $Id: system.h,v 1.53 1999/08/03 05:16:14 davem Exp $ */
 #ifndef __SPARC64_SYSTEM_H
 #define __SPARC64_SYSTEM_H
 
@@ -125,6 +125,7 @@ extern __inline__ void flushw_user(void)
 
 #define flush_user_windows flushw_user
 #define flush_register_windows flushw_all
+#define prepare_to_switch flushw_all
 
 	/* See what happens when you design the chip correctly?
 	 *

@@ -3,7 +3,7 @@
 /*
  *	baycom_par.c  -- baycom par96 and picpar radio modem driver.
  *
- *	Copyright (C) 1997  Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *	Copyright (C) 1996-1999  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -58,10 +58,14 @@
  *   0.3  26.04.97  init code/data tagged
  *   0.4  08.07.97  alternative ser12 decoding algorithm (uses delta CTS ints)
  *   0.5  11.11.97  split into separate files for ser12/par96
+ *   0.6  03.08.99  adapt to Linus' new __setup/__initcall
+ *                  removed some pre-2.2 kernel compatibility cruft
  */
 
 /*****************************************************************************/
 
+#include <linux/config.h>
+#include <linux/version.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/sched.h>
@@ -74,62 +78,14 @@
 #include <asm/system.h>
 #include <asm/bitops.h>
 #include <asm/io.h>
+#include <asm/uaccess.h>
+#include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/errno.h>
 #include <linux/netdevice.h>
 #include <linux/hdlcdrv.h>
 #include <linux/baycom.h>
 #include <linux/parport.h>
-
-/* --------------------------------------------------------------------- */
-
-/*
- * currently this module is supposed to support both module styles, i.e.
- * the old one present up to about 2.1.9, and the new one functioning
- * starting with 2.1.21. The reason is I have a kit allowing to compile
- * this module also under 2.0.x which was requested by several people.
- * This will go in 2.2
- */
-#include <linux/version.h>
-
-#if LINUX_VERSION_CODE >= 0x20100
-#include <asm/uaccess.h>
-#else
-#include <asm/segment.h>
-#include <linux/mm.h>
-
-#undef put_user
-#undef get_user
-
-#define put_user(x,ptr) ({ __put_user((unsigned long)(x),(ptr),sizeof(*(ptr))); 0; })
-#define get_user(x,ptr) ({ x = ((__typeof__(*(ptr)))__get_user((ptr),sizeof(*(ptr)))); 0; })
-
-extern __inline__ int copy_from_user(void *to, const void *from, unsigned long n)
-{
-        int i = verify_area(VERIFY_READ, from, n);
-        if (i)
-                return i;
-        memcpy_fromfs(to, from, n);
-        return 0;
-}
-
-extern __inline__ int copy_to_user(void *to, const void *from, unsigned long n)
-{
-        int i = verify_area(VERIFY_WRITE, to, n);
-        if (i)
-                return i;
-        memcpy_tofs(to, from, n);
-        return 0;
-}
-#endif
-
-#if LINUX_VERSION_CODE >= 0x20123
-#include <linux/init.h>
-#else
-#define __init
-#define __initdata
-#define __initfunc(x) x
-#endif
 
 /* --------------------------------------------------------------------- */
 
@@ -143,19 +99,14 @@ extern __inline__ int copy_to_user(void *to, const void *from, unsigned long n)
 /* --------------------------------------------------------------------- */
 
 static const char bc_drvname[] = "baycom_par";
-static const char bc_drvinfo[] = KERN_INFO "baycom_par: (C) 1997 Thomas Sailer, HB9JNX/AE4WA\n"
-KERN_INFO "baycom_par: version 0.5 compiled " __TIME__ " " __DATE__ "\n";
+static const char bc_drvinfo[] = KERN_INFO "baycom_par: (C) 1996-1999 Thomas Sailer, HB9JNX/AE4WA\n"
+KERN_INFO "baycom_par: version 0.6 compiled " __TIME__ " " __DATE__ "\n";
 
 /* --------------------------------------------------------------------- */
 
 #define NR_PORTS 4
 
 static struct device baycom_device[NR_PORTS];
-
-static struct {
-	const char *mode;
-	int iobase;
-} baycom_ports[NR_PORTS] = { { NULL, 0 }, };
 
 /* --------------------------------------------------------------------- */
 
@@ -533,13 +484,23 @@ static int baycom_ioctl(struct device *dev, struct ifreq *ifr,
 
 /* --------------------------------------------------------------------- */
 
-int __init baycom_par_init(void)
+/*
+ * command line settable parameters
+ */
+static const char *mode[NR_PORTS] = { "picpar", };
+static int iobase[NR_PORTS] = { 0x378, };
+
+/* --------------------------------------------------------------------- */
+
+#ifndef MODULE
+static
+#endif
+int __init init_module(void)
 {
 	int i, j, found = 0;
 	char set_hw = 1;
 	struct baycom_state *bc;
 	char ifname[HDLCDRV_IFNAMELEN];
-
 
 	printk(bc_drvinfo);
 	/*
@@ -549,16 +510,15 @@ int __init baycom_par_init(void)
 		struct device *dev = baycom_device+i;
 		sprintf(ifname, "bcp%d", i);
 
-		if (!baycom_ports[i].mode)
+		if (!mode[i])
 			set_hw = 0;
 		if (!set_hw)
-			baycom_ports[i].iobase = 0;
-		j = hdlcdrv_register_hdlcdrv(dev, &par96_ops,
-					     sizeof(struct baycom_state),
-					     ifname, baycom_ports[i].iobase, 0, 0);
+			iobase[i] = 0;
+		j = hdlcdrv_register_hdlcdrv(dev, &par96_ops, sizeof(struct baycom_state),
+					     ifname, iobase[i], 0, 0);
 		if (!j) {
 			bc = (struct baycom_state *)dev->priv;
-			if (set_hw && baycom_setmode(bc, baycom_ports[i].mode))
+			if (set_hw && baycom_setmode(bc, mode[i]))
 				set_hw = 0;
 			found++;
 		} else {
@@ -575,14 +535,6 @@ int __init baycom_par_init(void)
 
 #ifdef MODULE
 
-/*
- * command line settable parameters
- */
-static const char *mode[NR_PORTS] = { "picpar", };
-static int iobase[NR_PORTS] = { 0x378, };
-
-#if LINUX_VERSION_CODE >= 0x20115
-
 MODULE_PARM(mode, "1-" __MODULE_STRING(NR_PORTS) "s");
 MODULE_PARM_DESC(mode, "baycom operating mode; eg. par96 or picpar");
 MODULE_PARM(iobase, "1-" __MODULE_STRING(NR_PORTS) "i");
@@ -590,23 +542,6 @@ MODULE_PARM_DESC(iobase, "baycom io base address");
 
 MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
 MODULE_DESCRIPTION("Baycom par96 and picpar amateur radio modem driver");
-
-#endif
-
-int __init init_module(void)
-{
-	int i;
-
-	for (i = 0; (i < NR_PORTS) && (mode[i]); i++) {
-		baycom_ports[i].mode = mode[i];
-		baycom_ports[i].iobase = iobase[i];
-	}
-	if (i < NR_PORTS-1)
-		baycom_ports[i+1].mode = NULL;
-	return baycom_par_init();
-}
-
-/* --------------------------------------------------------------------- */
 
 void cleanup_module(void)
 {
@@ -627,27 +562,30 @@ void cleanup_module(void)
 }
 
 #else /* MODULE */
-/* --------------------------------------------------------------------- */
+
 /*
  * format: baycom_par=io,mode
  * mode: par96,picpar
  */
 
-void __init baycom_par_setup(char *str, int *ints)
+static int __init baycom_par_setup(char *str)
 {
-	int i;
+        static unsigned __initdata nr_dev = 0;
+	int ints[11];
 
-	for (i = 0; (i < NR_PORTS) && (baycom_ports[i].mode); i++);
-	if ((i >= NR_PORTS) || (ints[0] < 1)) {
-		printk(KERN_INFO "%s: too many or invalid interface "
-		       "specifications\n", bc_drvname);
-		return;
-	}
-	baycom_ports[i].mode = str;
-	baycom_ports[i].iobase = ints[1];
-	if (i < NR_PORTS-1)
-		baycom_ports[i+1].mode = NULL;
+        if (nr_dev >= NR_PORTS)
+                return 0;
+        str = get_options(str, ints);
+        if (ints[0] < 1)
+                return 0;
+        mode[nr_dev] = str;
+        iobase[nr_dev] = ints[1];
+	nr_dev++;
+	return 1;
 }
+
+__setup("baycom_par=", baycom_par_setup);
+__initcall(init_module);
 
 #endif /* MODULE */
 /* --------------------------------------------------------------------- */

@@ -1148,11 +1148,13 @@ try_again:
  */
 no_grow:
 	if (head) {
+		spin_lock(&unused_list_lock);
 		do {
 			bh = head;
 			head = head->b_this_page;
-			put_unused_buffer_head(bh);
+			__put_unused_buffer_head(bh);
 		} while (head);
+		spin_unlock(&unused_list_lock);
 
 		/* Wake up any waiters ... */
 		wake_up(&buffer_wait);
@@ -1201,8 +1203,8 @@ static int create_page_buffers(int rw, struct page *page, kdev_t dev, int b[], i
 		PAGE_BUG(page);
 	/*
 	 * Allocate async buffer heads pointing to this page, just for I/O.
-	 * They show up in the buffer hash table and are registered in
-	 * page->buffers.
+	 * They don't show up in the buffer hash table, but they *are*
+	 * registered in page->buffers.
 	 */
 	head = create_buffers(page_address(page), size, 1);
 	if (page->buffers)
@@ -1858,7 +1860,6 @@ int block_read_full_page(struct file * file, struct page * page)
 	blocks = PAGE_SIZE >> inode->i_sb->s_blocksize_bits;
 	iblock = page->offset >> inode->i_sb->s_blocksize_bits;
 	page->owner = (void *)-1;
-	head = page->buffers;
 	bh = head;
 	nr = 0;
 

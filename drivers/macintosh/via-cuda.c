@@ -20,7 +20,7 @@
 #include <asm/io.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
-#include <asm/init.h>
+#include <linux/init.h>
 
 static volatile unsigned char *via;
 

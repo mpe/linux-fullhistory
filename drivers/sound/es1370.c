@@ -103,6 +103,9 @@
  *    28.06.99   0.24  Add pci_set_master
  *    02.08.99   0.25  Added workaround for the "phantom write" bug first
  *                     documented by Dave Sharpless from Anchor Games
+ *    03.08.99   0.26  adapt to Linus' new __setup/__initcall
+ *                     added kernel command line option "es1370=joystick[,lineout[,micbias]]"
+ *                     removed CONFIG_SOUND_ES1370_JOYPORT_BOOT kludge
  *
  * some important things missing in Ensoniq documentation:
  *
@@ -2293,11 +2296,8 @@ static /*const*/ struct file_operations es1370_midi_fops = {
 
 /* maximum number of devices */
 #define NR_DEVICE 5
-#ifdef CONFIG_SOUND_ES1370_JOYPORT_BOOT
-static int joystick[NR_DEVICE] = { 1, 0, };
-#else
+
 static int joystick[NR_DEVICE] = { 0, };
-#endif
 static int lineout[NR_DEVICE] = { 0, };
 static int micbias[NR_DEVICE] = { 0, };
 
@@ -2319,11 +2319,10 @@ static struct initvol {
 	{ SOUND_MIXER_WRITE_OGAIN, 0x4040 }
 };
 
-#ifdef MODULE
-int __init init_module(void)
-#else
-int __init init_es1370(void)
+#ifndef MODULE
+static
 #endif
+int __init init_module(void)
 {
 	struct es1370_state *s;
 	struct pci_dev *pcidev = NULL;
@@ -2332,7 +2331,7 @@ int __init init_es1370(void)
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "es1370: version v0.25 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "es1370: version v0.26 time " __TIME__ " " __DATE__ "\n");
 	while (index < NR_DEVICE && 
 	       (pcidev = pci_find_device(PCI_VENDOR_ID_ENSONIQ, PCI_DEVICE_ID_ENSONIQ_ES1370, pcidev))) {
 		if (pcidev->base_address[0] == 0 || 
@@ -2473,5 +2472,30 @@ void cleanup_module(void)
 	}
 	printk(KERN_INFO "es1370: unloading\n");
 }
+
+#else /* MODULE */
+
+/* format is: es1370=[joystick[,lineout[,micbias]]] */
+
+static int __init es1370_setup(char *str)
+{
+	static unsigned __initdata nr_dev = 0;
+        int ints[11];
+
+	if (nr_dev >= NR_DEVICE)
+		return 0;
+        get_options(str, ints);
+	if (ints[0] >= 1)
+		joystick[nr_dev] = ints[1];
+	if (ints[0] >= 2)
+		lineout[nr_dev] = ints[2];
+	if (ints[0] >= 3)
+		micbias[nr_dev] = ints[3];
+	nr_dev++;
+	return 1;
+}
+
+__setup("es1370=", es1370_setup);
+__initcall(init_module);
 
 #endif /* MODULE */

@@ -13,7 +13,7 @@
 #include <linux/param.h>
 #include <asm/mipsregs.h>
 #include <asm/bootinfo.h>
-#include <asm/init.h>
+#include <linux/init.h>
 #include <asm/irq.h>
 #include <asm/reboot.h>
 

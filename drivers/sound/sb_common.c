@@ -18,7 +18,7 @@
  */
 #include <linux/config.h>
 #include <linux/delay.h>
-#include <asm/init.h>
+#include <linux/init.h>
 
 #include "sound_config.h"
 #include "sound_firmware.h"

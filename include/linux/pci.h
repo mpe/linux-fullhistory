@@ -1189,6 +1189,7 @@
 
 #include <linux/types.h>
 #include <linux/config.h>
+#include <linux/ioport.h>
 
 /*
  * There is one pci_dev structure for each slot-number/function-number
@@ -1208,6 +1209,8 @@ struct pci_dev {
 	unsigned int	class;		/* 3 bytes: (base,sub,prog-if) */
 	unsigned int	hdr_type;	/* PCI header type */
 	unsigned int	master : 1;	/* set if device is master capable */
+
+	char		name[32];
 	/*
 	 * In theory, the irq level can be read from configuration
 	 * space and all would be fine.  However, old PCI chips don't
@@ -1224,7 +1227,7 @@ struct pci_dev {
 	/* Base registers for this device, can be adjusted by
 	 * pcibios_fixup() as necessary.
 	 */
-	unsigned long	base_address[6];
+	struct resource resource[6];
 	unsigned long	rom_address;
 };
 

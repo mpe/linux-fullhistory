@@ -60,13 +60,14 @@
 #include <asm/system.h>
 #include <asm/checksum.h>
 
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 
 static int __init eth_setup(char *str)
 {
-	int ints[11];
+	int ints[5];
 	struct device *d;
 
-	str = get_options(str, ints);
+	str = get_options(str, ARRAY_SIZE(ints), ints);
 
 	if (!str || !*str)
 		return 0;

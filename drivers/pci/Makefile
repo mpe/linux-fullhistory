@@ -15,7 +15,7 @@ L_TARGET := pci.a
 ifeq ($(CONFIG_MODULES),y)
 O_TARGET = pci_syms.o
 OX_OBJS  = pcisyms.o
-O_OBJS   = pci.o
+O_OBJS   = pci.o names.o
 L_OBJS   := pci_syms.o
 else
 L_OBJS   := pci.o
@@ -23,9 +23,6 @@ endif
 
 ifdef CONFIG_PROC_FS
 L_OBJS   += proc.o
-ifdef CONFIG_PCI_OLD_PROC
-L_OBJS   += oldproc.o
-endif
 endif
 
 ifdef CONFIG_PCI_QUIRKS

@@ -44,7 +44,7 @@
 #include <asm/adb.h>
 #include <asm/cuda.h>
 #include <asm/pmu.h>
-#include <asm/init.h>
+#include <linux/init.h>
 
 #include <linux/kbd_kern.h>
 #include <linux/kbd_ll.h>

@@ -26,7 +26,6 @@ if [ "$CONFIG_HAMRADIO" != "n" ] ; then
     fi
   fi
 
-  source drivers/char/hfmodem/Config.in
 fi
 
 endmenu

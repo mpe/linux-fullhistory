@@ -16,7 +16,7 @@ tristate 'BAYCOM ser12 halfduplex driver for AX.25' CONFIG_BAYCOM_SER_HDX
 dep_tristate 'BAYCOM picpar and par96 driver for AX.25' CONFIG_BAYCOM_PAR $CONFIG_PARPORT
 dep_tristate 'BAYCOM epp driver for AX.25' CONFIG_BAYCOM_EPP $CONFIG_PARPORT
 
-tristate 'Soundcard modem driver' CONFIG_SOUNDMODEM
+dep_tristate 'Soundcard modem driver' CONFIG_SOUNDMODEM $CONFIG_PARPORT
 if [ "$CONFIG_SOUNDMODEM" != "n" ]; then
   bool '   soundmodem support for Soundblaster and compatible cards' CONFIG_SOUNDMODEM_SBC
   bool '   soundmodem support for WSS and Crystal cards' CONFIG_SOUNDMODEM_WSS

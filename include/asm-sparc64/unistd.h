@@ -1,4 +1,4 @@
-/* $Id: unistd.h,v 1.30 1999/07/31 04:05:24 ecd Exp $ */
+/* $Id: unistd.h,v 1.31 1999/08/04 03:20:06 davem Exp $ */
 #ifndef _SPARC64_UNISTD_H
 #define _SPARC64_UNISTD_H
 
@@ -429,8 +429,6 @@ static __inline__ pid_t wait(int * wait_stat)
 {
 	return waitpid(-1,wait_stat,0);
 }
-
-extern pid_t kernel_thread(int (*fn)(void *), void * arg, unsigned long flags);
 
 #endif /* __KERNEL_SYSCALLS__ */
 

@@ -1648,7 +1648,8 @@ struct parport *__maybe_init parport_pc_probe_port (unsigned long int base,
 					p->name, p->dma);
 				p->dma = PARPORT_DMA_NONE;
 			} else {
-				priv->dma_buf = (char *) __get_dma_pages(GFP_KERNEL, 0);
+				priv->dma_buf =
+					(char *)__get_dma_pages(GFP_KERNEL, 0);
 				if (! priv->dma_buf) {
 					printk (KERN_WARNING "%s: "
 						"cannot get buffer for DMA, "

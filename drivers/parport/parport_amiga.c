@@ -48,10 +48,6 @@ static unsigned char control_pc_to_amiga(unsigned char control)
 {
 	unsigned char ret = 0;
 
-	if (control & PARPORT_CONTROL_DIRECTION) /* XXX: What is this? */
-		;
-	if (control & PARPORT_CONTROL_INTEN) /* XXX: What is INTEN? */
-		;
 	if (control & PARPORT_CONTROL_SELECT) /* XXX: What is SELECP? */
 		;
 	if (control & PARPORT_CONTROL_INIT) /* INITP */
@@ -66,9 +62,9 @@ static unsigned char control_pc_to_amiga(unsigned char control)
 
 static unsigned char control_amiga_to_pc(unsigned char control)
 {
-	return PARPORT_CONTROL_INTEN | PARPORT_CONTROL_SELECT |
+	return PARPORT_CONTROL_SELECT |
 	      PARPORT_CONTROL_AUTOFD | PARPORT_CONTROL_STROBE;
-	/* fake value: interrupt enable, select in, no reset,
+	/* fake value: select in, no reset,
 	no autolf, no strobe - seems to be closest the wiring diagram */
 }
 
@@ -127,12 +123,6 @@ static unsigned char status_amiga_to_pc(unsigned char status)
 	return ret;
 }
 
-static void amiga_write_status( struct parport *p, unsigned char status)
-{
-DPRINTK("write_status %02x\n",status);
-	ciab.pra |= (ciab.pra & 0xf8) | status_pc_to_amiga(status);
-}
-
 static unsigned char amiga_read_status(struct parport *p)
 {
 	unsigned char status;
@@ -142,12 +132,6 @@ DPRINTK("read_status %02x\n", status);
 	return status;
 }
 
-static void amiga_change_mode( struct parport *p, int m)
-{
-	/* XXX: This port only has one mode, and I am
-	not sure about the corresponding PC-style mode*/
-}
-
 /* as this ports irq handling is already done, we use a generic funktion */
 static void amiga_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 {
@@ -155,7 +139,7 @@ static void amiga_interrupt(int irq, void *dev_id, struct pt_regs *regs)
 }
 
 
-static void amiga_init_state(struct parport_state *s)
+static void amiga_init_state(struct pardevice *dev, struct parport_state *s)
 {
 	s->u.amiga.data = 0;
 	s->u.amiga.datadir = 255;
@@ -260,9 +244,6 @@ __initfunc(int parport_amiga_init(void))
 			parport_unregister_port (p);
 			return 0;
 		}
-
-		if (parport_probe_hook)
-			(*parport_probe_hook)(p);
 
 		parport_announce_port (p);
 

@@ -31,6 +31,8 @@
  *                  Integrated FPGA EPP modem configuration routines
  *   0.3  11.05.98  Took FPGA config out and moved it into a separate program
  *   0.4  26.07.99  Adapted to new lowlevel parport driver interface
+ *   0.5  03.08.99  adapt to Linus' new __setup/__initcall
+ *                  removed some pre-2.2 kernel compatibility cruft
  *
  */
 
@@ -39,25 +41,13 @@
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/kernel.h>
-#include <linux/types.h>
-#include <linux/ptrace.h>
-#include <linux/socket.h>
-#include <linux/sched.h>
-#include <linux/interrupt.h>
-#include <linux/ioport.h>
-#include <linux/in.h>
+#include <linux/init.h>
 #include <linux/string.h>
+#include <linux/tqueue.h>
+#include <linux/fs.h>
 #include <linux/parport.h>
-#include <linux/bitops.h>
-#include <asm/system.h>
-#include <asm/io.h>
-#include <asm/processor.h>
-#include <linux/delay.h>
-#include <linux/errno.h>
-#include <linux/netdevice.h>
+#include <asm/uaccess.h>
 #include <linux/if_arp.h>
-//#include <net/ax25dev.h>
-#include <linux/kmod.h>
 #include <linux/hdlcdrv.h>
 #include <linux/baycom.h>
 #include <linux/soundmodem.h>
@@ -68,56 +58,6 @@
 
 #define __KERNEL_SYSCALLS__
 #include <linux/unistd.h>
-
-/* --------------------------------------------------------------------- */
-
-/*
- * currently this module is supposed to support both module styles, i.e.
- * the old one present up to about 2.1.9, and the new one functioning
- * starting with 2.1.21. The reason is I have a kit allowing to compile
- * this module also under 2.0.x which was requested by several people.
- * This will go in 2.2
- */
-#include <linux/version.h>
-
-#if LINUX_VERSION_CODE >= 0x20100
-#include <asm/uaccess.h>
-#else
-#include <asm/segment.h>
-#include <linux/mm.h>
-
-#undef put_user
-#undef get_user
-
-#define put_user(x,ptr) ({ __put_user((unsigned long)(x),(ptr),sizeof(*(ptr))); 0; })
-#define get_user(x,ptr) ({ x = ((__typeof__(*(ptr)))__get_user((ptr),sizeof(*(ptr)))); 0; })
-
-extern inline int copy_from_user(void *to, const void *from, unsigned long n)
-{
-        int i = verify_area(VERIFY_READ, from, n);
-        if (i)
-                return i;
-        memcpy_fromfs(to, from, n);
-        return 0;
-}
-
-extern inline int copy_to_user(void *to, const void *from, unsigned long n)
-{
-        int i = verify_area(VERIFY_WRITE, to, n);
-        if (i)
-                return i;
-        memcpy_tofs(to, from, n);
-        return 0;
-}
-#endif
-
-#if LINUX_VERSION_CODE >= 0x20123
-#include <linux/init.h>
-#else
-#define __init
-#define __initdata
-#define __initfunc(x) x
-#endif
 
 /* --------------------------------------------------------------------- */
 
@@ -148,19 +88,14 @@ static const char paranoia_str[] = KERN_ERR
 /* --------------------------------------------------------------------- */
 
 static const char bc_drvname[] = "baycom_epp";
-static const char bc_drvinfo[] = KERN_INFO "baycom_epp: (C) 1998 Thomas Sailer, HB9JNX/AE4WA\n"
-KERN_INFO "baycom_epp: version 0.4 compiled " __TIME__ " " __DATE__ "\n";
+static const char bc_drvinfo[] = KERN_INFO "baycom_epp: (C) 1998-1999 Thomas Sailer, HB9JNX/AE4WA\n"
+KERN_INFO "baycom_epp: version 0.5 compiled " __TIME__ " " __DATE__ "\n";
 
 /* --------------------------------------------------------------------- */
 
 #define NR_PORTS 4
 
 static struct device baycom_device[NR_PORTS];
-
-static struct {
-	const char *mode;
-	int iobase;
-} baycom_ports[NR_PORTS] = { { NULL, 0 }, };
 
 /* --------------------------------------------------------------------- */
 
@@ -1477,7 +1412,18 @@ static int baycom_probe(struct device *dev)
 
 /* --------------------------------------------------------------------- */
 
-__initfunc(int baycom_epp_init(void))
+/*
+ * command line settable parameters
+ */
+static const char *mode[NR_PORTS] = { "", };
+static int iobase[NR_PORTS] = { 0x378, };
+
+/* --------------------------------------------------------------------- */
+
+#ifndef MODULE
+static
+#endif
+int __init init_module(void)
 {
 	struct device *dev;
 	int i, found = 0;
@@ -1490,10 +1436,10 @@ __initfunc(int baycom_epp_init(void))
 	 */
 	for (i = 0; i < NR_PORTS; i++) {
 		dev = baycom_device+i;
-		if (!baycom_ports[i].mode)
+		if (!mode[i])
 			set_hw = 0;
 		if (!set_hw)
-			baycom_ports[i].iobase = 0;
+			iobase[i] = 0;
 		memset(dev, 0, sizeof(struct device));
 		if (!(bc = dev->priv = kmalloc(sizeof(struct baycom_state), GFP_KERNEL)))
 			return -ENOMEM;
@@ -1513,7 +1459,7 @@ __initfunc(int baycom_epp_init(void))
 		dev->init = baycom_probe;
 		dev->start = 0;
 		dev->tbusy = 1;
-		dev->base_addr = baycom_ports[i].iobase;
+		dev->base_addr = iobase[i];
 		dev->irq = 0;
 		dev->dma = 0;
 		if (register_netdev(dev)) {
@@ -1521,7 +1467,7 @@ __initfunc(int baycom_epp_init(void))
 			kfree(dev->priv);
 			return -ENXIO;
 		}
-		if (set_hw && baycom_setmode(bc, baycom_ports[i].mode))
+		if (set_hw && baycom_setmode(bc, mode[i]))
 			set_hw = 0;
 		found++;
 	}
@@ -1534,38 +1480,13 @@ __initfunc(int baycom_epp_init(void))
 
 #ifdef MODULE
 
-/*
- * command line settable parameters
- */
-static const char *mode[NR_PORTS] = { "epp", };
-static int iobase[NR_PORTS] = { 0x378, };
-
-#if LINUX_VERSION_CODE >= 0x20115
-
-MODULE_PARM(mode, "s");
-MODULE_PARM_DESC(mode, "baycom operating mode; epp");
-MODULE_PARM(iobase, "i");
+MODULE_PARM(mode, "1-" __MODULE_STRING(NR_PORTS) "s");
+MODULE_PARM_DESC(mode, "baycom operating mode");
+MODULE_PARM(iobase, "1-" __MODULE_STRING(NR_PORTS) "i");
 MODULE_PARM_DESC(iobase, "baycom io base address");
 
 MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
 MODULE_DESCRIPTION("Baycom epp amateur radio modem driver");
-
-#endif
-
-__initfunc(int init_module(void))
-{
-        int i;
-
-        for (i = 0; (i < NR_PORTS) && (mode[i]); i++) {
-                baycom_ports[i].mode = mode[i];
-                baycom_ports[i].iobase = iobase[i];
-        }
-        if (i < NR_PORTS-1)
-                baycom_ports[i+1].mode = NULL;
-        return baycom_epp_init();
-}
-
-/* --------------------------------------------------------------------- */
 
 void cleanup_module(void)
 {
@@ -1587,27 +1508,30 @@ void cleanup_module(void)
 }
 
 #else /* MODULE */
-/* --------------------------------------------------------------------- */
+
 /*
- * format: baycom=io,mode
- * mode: epp
+ * format: baycom_epp=io,mode
+ * mode: fpga config options
  */
 
-__initfunc(void baycom_epp_setup(char *str, int *ints))
+static int __init baycom_epp_setup(char *str)
 {
-	int i;
+        static unsigned __initdata nr_dev = 0;
+	int ints[11];
 
-	for (i = 0; (i < NR_PORTS) && (baycom_ports[i].mode); i++);
-	if ((i >= NR_PORTS) || (ints[0] < 1)) {
-		printk(KERN_INFO "%s: too many or invalid interface "
-		       "specifications\n", bc_drvname);
-		return;
-	}
-	baycom_ports[i].mode = str;
-	baycom_ports[i].iobase = ints[1];
-	if (i < NR_PORTS-1)
-		baycom_ports[i+1].mode = NULL;
+        if (nr_dev >= NR_PORTS)
+                return 0;
+	str = get_options(str, ints);
+	if (ints[0] < 1)
+		return 0;
+	mode[nr_dev] = str;
+	iobase[nr_dev] = ints[1];
+	nr_dev++;
+	return 1;
 }
+
+__setup("baycom_epp=", baycom_epp_setup);
+__initcall(init_module);
 
 #endif /* MODULE */
 /* --------------------------------------------------------------------- */

@@ -3,7 +3,7 @@
 /*
  *	baycom_ser_hdx.c  -- baycom ser12 halfduplex radio modem driver.
  *
- *	Copyright (C) 1997  Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *	Copyright (C) 1996-1999  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -49,30 +49,21 @@
  *   0.4  08.07.97  alternative ser12 decoding algorithm (uses delta CTS ints)
  *   0.5  11.11.97  ser12/par96 split into separate files
  *   0.6  14.04.98  cleanups
+ *   0.7  03.08.99  adapt to Linus' new __setup/__initcall
  */
 
 /*****************************************************************************/
 
+#include <linux/config.h>
+#include <linux/version.h>
 #include <linux/module.h>
-#include <linux/kernel.h>
-#include <linux/sched.h>
-#include <linux/types.h>
-#include <linux/fcntl.h>
-#include <linux/interrupt.h>
 #include <linux/ioport.h>
-#include <linux/in.h>
 #include <linux/string.h>
 #include <linux/init.h>
 #include <asm/uaccess.h>
-#include <asm/system.h>
-#include <asm/bitops.h>
 #include <asm/io.h>
-#include <linux/delay.h>
-#include <linux/errno.h>
-#include <linux/netdevice.h>
 #include <linux/hdlcdrv.h>
 #include <linux/baycom.h>
-#include <linux/version.h>
 
 /* --------------------------------------------------------------------- */
 
@@ -86,19 +77,14 @@
 /* --------------------------------------------------------------------- */
 
 static const char bc_drvname[] = "baycom_ser_hdx";
-static const char bc_drvinfo[] = KERN_INFO "baycom_ser_hdx: (C) 1997-1998 Thomas Sailer, HB9JNX/AE4WA\n"
-KERN_INFO "baycom_ser_hdx: version 0.6 compiled " __TIME__ " " __DATE__ "\n";
+static const char bc_drvinfo[] = KERN_INFO "baycom_ser_hdx: (C) 1996-1999 Thomas Sailer, HB9JNX/AE4WA\n"
+KERN_INFO "baycom_ser_hdx: version 0.7 compiled " __TIME__ " " __DATE__ "\n";
 
 /* --------------------------------------------------------------------- */
 
 #define NR_PORTS 4
 
 static struct device baycom_device[NR_PORTS];
-
-static struct {
-	char *mode;
-	int iobase, irq;
-} baycom_ports[NR_PORTS] = { { NULL, 0, 0 }, };
 
 /* --------------------------------------------------------------------- */
 
@@ -643,7 +629,19 @@ static int baycom_ioctl(struct device *dev, struct ifreq *ifr,
 
 /* --------------------------------------------------------------------- */
 
-int __init baycom_ser_hdx_init(void)
+/*
+ * command line settable parameters
+ */
+static char *mode[NR_PORTS] = { "ser12*", };
+static int iobase[NR_PORTS] = { 0x3f8, };
+static int irq[NR_PORTS] = { 4, };
+
+/* --------------------------------------------------------------------- */
+
+#ifndef MODULE
+static
+#endif
+int __init init_module(void)
 {
 	int i, j, found = 0;
 	char set_hw = 1;
@@ -659,17 +657,15 @@ int __init baycom_ser_hdx_init(void)
 		struct device *dev = baycom_device+i;
 		sprintf(ifname, "bcsh%d", i);
 
-		if (!baycom_ports[i].mode)
+		if (!mode[i])
 			set_hw = 0;
 		if (!set_hw)
-			baycom_ports[i].iobase = baycom_ports[i].irq = 0;
-		j = hdlcdrv_register_hdlcdrv(dev, &ser12_ops,
-					     sizeof(struct baycom_state),
-					     ifname, baycom_ports[i].iobase,
-					     baycom_ports[i].irq, 0);
+			iobase[i] = irq[i] = 0;
+		j = hdlcdrv_register_hdlcdrv(dev, &ser12_ops, sizeof(struct baycom_state),
+					     ifname, iobase[i], irq[i], 0);
 		if (!j) {
 			bc = (struct baycom_state *)dev->priv;
-			if (set_hw && baycom_setmode(bc, baycom_ports[i].mode))
+			if (set_hw && baycom_setmode(bc, mode[i]))
 				set_hw = 0;
 			found++;
 		} else {
@@ -686,15 +682,6 @@ int __init baycom_ser_hdx_init(void)
 
 #ifdef MODULE
 
-/*
- * command line settable parameters
- */
-static char *mode[NR_PORTS] = { "ser12*", };
-static int iobase[NR_PORTS] = { 0x3f8, };
-static int irq[NR_PORTS] = { 4, };
-
-#if LINUX_VERSION_CODE >= 0x20115
-
 MODULE_PARM(mode, "1-" __MODULE_STRING(NR_PORTS) "s");
 MODULE_PARM_DESC(mode, "baycom operating mode; * for software DCD");
 MODULE_PARM(iobase, "1-" __MODULE_STRING(NR_PORTS) "i");
@@ -704,24 +691,6 @@ MODULE_PARM_DESC(irq, "baycom irq number");
 
 MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
 MODULE_DESCRIPTION("Baycom ser12 half duplex amateur radio modem driver");
-
-#endif
-
-int __init init_module(void)
-{
-	int i;
-
-	for (i = 0; (i < NR_PORTS) && (mode[i]); i++) {
-		baycom_ports[i].mode = mode[i];
-		baycom_ports[i].iobase = iobase[i];
-		baycom_ports[i].irq = irq[i];
-	}
-	if (i < NR_PORTS-1)
-		baycom_ports[i+1].mode = NULL;
-	return baycom_ser_hdx_init();
-}
-
-/* --------------------------------------------------------------------- */
 
 void cleanup_module(void)
 {
@@ -742,29 +711,32 @@ void cleanup_module(void)
 }
 
 #else /* MODULE */
-/* --------------------------------------------------------------------- */
+
 /*
- * format: baycom_ser_=io,irq,mode
+ * format: baycom_ser_hdx=io,irq,mode
  * mode: [*]
  * * indicates sofware DCD
  */
 
-void __init baycom_ser_hdx_setup(char *str, int *ints)
+static int __init baycom_ser_hdx_setup(char *str)
 {
-	int i;
+        static unsigned __initdata nr_dev = 0;
+	int ints[11];
 
-	for (i = 0; (i < NR_PORTS) && (baycom_ports[i].mode); i++);
-	if ((i >= NR_PORTS) || (ints[0] < 2)) {
-		printk(KERN_INFO "%s: too many or invalid interface "
-		       "specifications\n", bc_drvname);
-		return;
-	}
-	baycom_ports[i].mode = str;
-	baycom_ports[i].iobase = ints[1];
-	baycom_ports[i].irq = ints[2];
-	if (i < NR_PORTS-1)
-		baycom_ports[i+1].mode = NULL;
+        if (nr_dev >= NR_PORTS)
+                return 0;
+	str = get_options(str, ints);
+	if (ints[0] < 2)
+		return 0;
+	mode[nr_dev] = str;
+	iobase[nr_dev] = ints[1];
+	irq[nr_dev] = ints[2];
+	nr_dev++;
+	return 1;
 }
+
+__setup("baycom_ser_hdx=", baycom_ser_hdx_setup);
+__initcall(init_module);
 
 #endif /* MODULE */
 /* --------------------------------------------------------------------- */

@@ -1,4 +1,4 @@
-/* $Id: floppy.h,v 1.18 1999/03/21 10:51:38 davem Exp $
+/* $Id: floppy.h,v 1.19 1999/08/03 08:01:15 davem Exp $
  * asm-sparc64/floppy.h: Sparc specific parts of the Floppy driver.
  *
  * Copyright (C) 1996 David S. Miller (davem@caip.rutgers.edu)
@@ -548,6 +548,7 @@ __initfunc(static unsigned long sun_floppy_init(void))
 #ifdef CONFIG_PCI
 		struct linux_ebus *ebus;
 		struct linux_ebus_device *edev = 0;
+		unsigned long auxio_reg;
 
 		for_each_ebus(ebus) {
 			for_each_ebusdev(edev, ebus) {
@@ -575,6 +576,12 @@ __initfunc(static unsigned long sun_floppy_init(void))
 
 		sun_fdc = (struct sun_flpy_controller *)edev->base_address[0];
 		FLOPPY_IRQ = edev->irqs[0];
+
+		/* Make sure the high density bit is set, some systems
+		 * (most notably Ultra5/Ultra10) come up with it clear.
+		 */
+		auxio_reg = edev->base_address[2];
+		writel(readl(auxio_reg)|0x2, auxio_reg);
 
 		sun_pci_fd_ebus_dma = (struct linux_ebus_dma *)
 							edev->base_address[1];

@@ -548,6 +548,11 @@ static int apm_set_power_state(u_short state)
  */
 #define HARD_IDLE_TIMEOUT (HZ/3)
 
+/* This should wake up kapmd and ask it to slow the CPU */
+#define powermanagement_idle()  do { } while (0)
+
+extern int hlt_counter;
+
 /*
  * This is the idle thing.
  */

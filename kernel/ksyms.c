@@ -76,6 +76,7 @@ EXPORT_SYMBOL(request_module);
 #ifdef CONFIG_MODULES
 EXPORT_SYMBOL(get_module_symbol);
 #endif
+EXPORT_SYMBOL(get_option);
 EXPORT_SYMBOL(get_options);
 
 /* process memory management */
@@ -108,6 +109,7 @@ EXPORT_SYMBOL(high_memory);
 EXPORT_SYMBOL(vmtruncate);
 EXPORT_SYMBOL(find_vma);
 EXPORT_SYMBOL(get_unmapped_area);
+EXPORT_SYMBOL(init_mm);
 
 /* filesystem internal functions */
 EXPORT_SYMBOL(in_group_p);

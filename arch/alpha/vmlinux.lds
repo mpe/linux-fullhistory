@@ -45,6 +45,7 @@ SECTIONS
 
   /* Global data */
   _data = .;
+  .data.cacheline_aligned : { *(.data.cacheline_aligned) }
   .rodata : { *(.rodata) }
   .data : { *(.data) CONSTRUCTORS }
   .got : { *(.got) }

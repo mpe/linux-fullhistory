@@ -11,7 +11,7 @@
 #include <linux/config.h>
 #include <linux/module.h>
 #include <linux/threads.h>
-
+#include <linux/string.h>
 #include <linux/parport.h>
 #include <linux/errno.h>
 #include <linux/kernel.h>
@@ -28,71 +28,86 @@ extern int parport_pc_init(int *io, int *io_hi, int *irq, int *dma);
 
 static int parport_setup_ptr __initdata = 0;
 
-__initfunc(void parport_setup(char *str, int *ints))
+/*
+ * Acceptable parameters:
+ *
+ * parport=0
+ * parport=auto
+ * parport=0xBASE[,IRQ[,DMA]]
+ *
+ * IRQ/DMA may be numeric or 'auto' or 'none'
+ */
+static int __init parport_setup (char *str)
 {
-	if (ints[0] == 0) {
-		if (str && !strncmp(str, "auto", 4)) {
-			irq[0] = PARPORT_IRQ_AUTO;
-			dma[0] = PARPORT_DMA_AUTO;
-		}
-		else if (str)
-			printk (KERN_ERR "parport: `%s': huh?\n", str);
-		else
-			printk (KERN_ERR "parport: parport=.. what?\n");
-		
-		return;
-	}
-	else if (ints[1] == 0) {
+	char *endptr;
+	char *sep;
+	int val;
+
+	if (!str || !*str || (*str == '0' && !*(str+1))) {
 		/* Disable parport if "parport=0" in cmdline */
-		io[0] = PARPORT_DISABLE; 
-		return;
+		io[0] = PARPORT_DISABLE;
+		return 0;
 	}
 
-	if (parport_setup_ptr < PARPORT_MAX) {
-		char *sep;
-		io[parport_setup_ptr] = ints[1];
-		irq[parport_setup_ptr] = PARPORT_IRQ_NONE;
-		dma[parport_setup_ptr] = PARPORT_DMA_NONE;
-		if (ints[0] > 1) {
-			irq[parport_setup_ptr] = ints[2];
-			if (ints[0] > 2) {
-				dma[parport_setup_ptr] = ints[3];
-				goto done;
-			}
+	if (!strncmp (str, "auto", 4)) {
+		irq[0] = PARPORT_IRQ_AUTO;
+		dma[0] = PARPORT_DMA_AUTO;
+		return 0;
+	}
 
-			if (str == NULL)
-				goto done;
+	val = simple_strtoul (str, &endptr, 0);
+	if (endptr == str) {
+		printk (KERN_WARNING "parport=%s not understood\n", str);
+		return 1;
+	}
 
-			goto dma_from_str;
-		}
-		else if (str == NULL)
-			goto done;
-		else if (!strncmp(str, "auto", 4))
-			irq[parport_setup_ptr] = PARPORT_IRQ_AUTO;
-		else if (strncmp(str, "none", 4) != 0) {
-			printk(KERN_ERR "parport: bad irq `%s'\n", str);
-			return;
-		}
-
-		if ((sep = strchr(str, ',')) == NULL) goto done;
-		str = sep+1;
-	dma_from_str:
-		if (!strncmp(str, "auto", 4))
-			dma[parport_setup_ptr] = PARPORT_DMA_AUTO;
-		else if (strncmp(str, "none", 4) != 0) {
-			char *ep;
-			dma[parport_setup_ptr] = simple_strtoul(str, &ep, 0);
-			if (ep == str) {
-				printk(KERN_ERR "parport: bad dma `%s'\n",
-				       str);
-				return;
-			}
-		}
-	done:
-		parport_setup_ptr++;
-	} else
+	if (parport_setup_ptr == PARPORT_MAX) {
 		printk(KERN_ERR "parport=%s ignored, too many ports\n", str);
+		return 1;
+	}
+	
+	io[parport_setup_ptr] = val;
+	irq[parport_setup_ptr] = PARPORT_IRQ_NONE;
+	dma[parport_setup_ptr] = PARPORT_DMA_NONE;
+
+	sep = strchr (str, ',');
+	if (sep++) {
+		if (!strncmp (sep, "auto", 4))
+			irq[parport_setup_ptr] = PARPORT_IRQ_AUTO;
+		else if (strncmp (sep, "none", 4)) {
+			val = simple_strtoul (sep, &endptr, 0);
+			if (endptr == sep) {
+				printk (KERN_WARNING
+					"parport=%s: irq not understood\n",
+					str);
+				return 1;
+			}
+			irq[parport_setup_ptr] = val;
+		}
+	}
+
+	sep = strchr (sep, ',');
+	if (sep++) {
+		if (!strncmp (sep, "auto", 4))
+			dma[parport_setup_ptr] = PARPORT_DMA_AUTO;
+		else if (strncmp (sep, "none", 4)) {
+			val = simple_strtoul (sep, &endptr, 0);
+			if (endptr == sep) {
+				printk (KERN_WARNING
+					"parport=%s: dma not understood\n",
+					str);
+				return 1;
+			}
+			dma[parport_setup_ptr] = val;
+		}
+	}
+
+	parport_setup_ptr++;
+	return 0;
 }
+
+__setup ("parport=", parport_setup);
+
 #endif
 
 #ifdef MODULE
@@ -113,7 +128,7 @@ void cleanup_module(void)
 
 #else
 
-__initfunc(int parport_init(void))
+int __init parport_init (void)
 {
 	if (io[0] == PARPORT_DISABLE) 
 		return 1;
@@ -139,6 +154,9 @@ __initfunc(int parport_init(void))
 #endif
 	return 0;
 }
+
+__initcall (parport_init);
+
 #endif
 
 /* Exported symbols for modules. */

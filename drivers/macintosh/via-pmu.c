@@ -28,7 +28,7 @@
 #include <asm/io.h>
 #include <asm/pgtable.h>
 #include <asm/system.h>
-#include <asm/init.h>
+#include <linux/init.h>
 #include <asm/irq.h>
 #include <asm/feature.h>
 #include <asm/uaccess.h>

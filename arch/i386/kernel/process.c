@@ -51,15 +51,6 @@ spinlock_t semaphore_wake_lock = SPIN_LOCK_UNLOCKED;
 
 asmlinkage void ret_from_fork(void) __asm__("ret_from_fork");
 
-/*
- * We'll get there..
- */
-#ifdef CONFIG_APM
-#define powermanagement_idle()  do { } while (0)
-#else
-#define powermanagement_idle()	do { } while (0)
-#endif
-
 static int hlt_counter=0;
 
 void disable_hlt(void)

@@ -25,7 +25,7 @@
 #include <asm/io.h>
 #include <asm/feature.h>
 #include <asm/mediabay.h>
-#include <asm/init.h>
+#include <linux/init.h>
 
 
 #undef MB_USE_INTERRUPTS

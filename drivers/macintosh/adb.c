@@ -31,7 +31,7 @@
 #include <asm/pmu.h>
 #include <asm/uaccess.h>
 #include <asm/hydra.h>
-#include <asm/init.h>
+#include <linux/init.h>
 
 EXPORT_SYMBOL(adb_controller);
 EXPORT_SYMBOL(adb_client_list);

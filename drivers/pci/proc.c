@@ -247,14 +247,15 @@ get_pci_dev_info(char *buf, char **start, off_t pos, int count, int wr)
 			dev->vendor,
 			dev->device,
 			dev->irq);
-		for(i=0; i<6; i++)
+		for(i=0; i<6; i++) {
 			len += sprintf(buf+len,
 #if BITS_PER_LONG == 32
 						"\t%08lx",
 #else
 						"\t%016lx",
 #endif
-					dev->base_address[i]);
+					dev->resource[i].start | (dev->resource[i].flags & 0xf));
+		}
 		len += sprintf(buf+len,
 #if BITS_PER_LONG == 32
 					"\t%08lx",

@@ -907,12 +907,17 @@ static void __init pcibios_fixup_io_addr(struct pci_dev *dev, int idx)
 		if ((try & PCI_BASE_ADDRESS_IO_MASK) != addr) {
 			addr = 0;
 			printk("PCI: Address setup failed, got %04x\n", try);
-		} else
-			dev->base_address[idx] = try;
+		} else {
+			struct resource *res = dev->resource + idx;
+			res->start = addr;
+			res->end = addr + size - 1;
+			res->flags |= PCI_BASE_ADDRESS_IO_MASK;
+		}
 	}
 	if (!addr) {
 		pcibios_write_config_dword(bus, devfn, reg, 0);
-		dev->base_address[idx] = 0;
+		dev->resource[idx].start = 0;
+		dev->resource[idx].flags = 0;
 	}
 	pcibios_write_config_word(bus, devfn, PCI_COMMAND, cmd);
 }
@@ -939,7 +944,7 @@ static void __init pcibios_fixup_ghosts(struct pci_bus *b)
 			    e->vendor == d->vendor &&
 			    e->device == d->device &&
 			    e->class == d->class &&
-			    !memcmp(e->base_address, d->base_address, sizeof(e->base_address)))
+			    !memcmp(e->resource, d->resource, sizeof(e->resource)))
 				break;
 		if (!e)
 			return;
@@ -1060,7 +1065,7 @@ static void __init pci_fixup_umc_ide(struct pci_dev *d)
 	int i;
 
 	for(i=0; i<4; i++)
-		d->base_address[i] |= PCI_BASE_ADDRESS_SPACE_IO;
+		d->resource[i].flags |= PCI_BASE_ADDRESS_SPACE_IO;
 }
 
 struct dev_ex {
@@ -1112,11 +1117,12 @@ static void __init pcibios_fixup_devices(void)
 		 */
 		has_io = has_mem = 0;
 		for(i=0; i<6; i++) {
-			unsigned long a = dev->base_address[i];
+			struct resource *res = dev->resource + i;
+			unsigned long a = res->flags;
 			if (a & PCI_BASE_ADDRESS_SPACE_IO) {
+				unsigned long addr = res->start;
 				has_io = 1;
-				a &= PCI_BASE_ADDRESS_IO_MASK;
-				if (!a || a == PCI_BASE_ADDRESS_IO_MASK)
+				if (!addr || addr == PCI_BASE_ADDRESS_IO_MASK)
 					pcibios_fixup_io_addr(dev, i);
 			} else if (a & PCI_BASE_ADDRESS_MEM_MASK)
 				has_mem = 1;

@@ -71,6 +71,8 @@
  *    15.06.99   0.15  Fix bad allocation bug.
  *                     Thanks to Deti Fliegl <fliegl@in.tum.de>
  *    28.06.99   0.16  Add pci_set_master
+ *    03.08.99   0.17  adapt to Linus' new __setup/__initcall
+ *                     added kernel command line options "sonicvibes=reverb" and "sonicvibesdmaio=dmaioaddr"
  *
  */
 
@@ -2312,11 +2314,10 @@ static struct initvol {
 	{ SOUND_MIXER_WRITE_PCM, 0x4040 }
 };
 
-#ifdef MODULE
-int __init init_module(void)
-#else
-int __init init_sonicvibes(void)
+#ifndef MODULE
+static
 #endif
+int __init init_module(void)
 {
 	struct sv_state *s;
 	struct pci_dev *pcidev = NULL;
@@ -2325,7 +2326,7 @@ int __init init_sonicvibes(void)
 
 	if (!pci_present())   /* No PCI bus in this machine! */
 		return -ENODEV;
-	printk(KERN_INFO "sv: version v0.16 time " __TIME__ " " __DATE__ "\n");
+	printk(KERN_INFO "sv: version v0.17 time " __TIME__ " " __DATE__ "\n");
 #if 0
 	if (!(wavetable_mem = __get_free_pages(GFP_KERNEL, 20-PAGE_SHIFT)))
 		printk(KERN_INFO "sv: cannot allocate 1MB of contiguous nonpageable memory for wavetable data\n");
@@ -2525,8 +2526,8 @@ void cleanup_module(void)
 		synchronize_irq();
 		inb(s->ioenh + SV_CODEC_STATUS); /* ack interrupts */
 		wrindir(s, SV_CIENABLE, 0);     /* disable DMAA and DMAC */
-		//outb(0, s->iodmaa + SV_DMA_RESET);
-		//outb(0, s->iodmac + SV_DMA_RESET);
+		/*outb(0, s->iodmaa + SV_DMA_RESET);*/
+		/*outb(0, s->iodmac + SV_DMA_RESET);*/
 		free_irq(s->irq, s);
 		release_region(s->iodmac, SV_EXTENT_DMA);
 		release_region(s->iodmaa, SV_EXTENT_DMA);
@@ -2543,5 +2544,41 @@ void cleanup_module(void)
 		free_pages(wavetable_mem, 20-PAGE_SHIFT);
 	printk(KERN_INFO "sv: unloading\n");
 }
+
+#else /* MODULE */
+
+/* format is: sonicvibes=[reverb] sonicvibesdmaio=dmaioaddr */
+
+static int __init sonicvibes_setup(char *str)
+{
+	static unsigned __initdata nr_dev = 0;
+        int ints[11];
+
+	if (nr_dev >= NR_DEVICE)
+		return 0;
+        get_options(str, ints);
+	if (ints[0] >= 1)
+		reverb[nr_dev] = ints[1];
+#if 0
+	if (ints[0] >= 2)
+		wavetable[nr_dev] = ints[2];
+#endif
+	nr_dev++;
+	return 1;
+}
+
+static int __init sonicvibesdmaio_setup(char *str)
+{
+        int ints[11];
+
+        get_options(str, ints);
+	if (ints[0] >= 1)
+		dmaio = ints[1];
+	return 1;
+}
+
+__setup("sonicvibes=", sonicvibes_setup);
+__setup("sonicvibesdmaio=", sonicvibesdmaio_setup);
+__initcall(init_module);
 
 #endif /* MODULE */

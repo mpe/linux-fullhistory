@@ -167,20 +167,20 @@ void __release_region(struct resource *parent, unsigned long start, unsigned lon
 #define MAXRESERVE 4
 static int __init reserve_setup(char *str)
 {
-	int i;
+	int opt = 2, io_start, io_num;
 	static int reserved = 0;
 	static struct resource reserve[MAXRESERVE];
-	int ints[11];
 
-	get_options(str, ints);
-
-	for (i = 1; i < ints[0]; i += 2) {
+    while (opt==2) {
 		int x = reserved;
+
+        if (get_option (&str, &io_start) != 2) break;
+        if (get_option (&str, &io_num)   == 0) break;
 		if (x < MAXRESERVE) {
 			struct resource *res = reserve + x;
 			res->name = "reserved";
-			res->start = ints[i];
-			res->end = res->start + ints[i] - 1;
+			res->start = io_start;
+			res->end = io_start + io_num - 1;
 			res->child = NULL;
 			if (request_resource(&ioport_resource, res) == 0)
 				reserved = x+1;

@@ -56,12 +56,10 @@ static int __init console_setup(char *str)
 	char name[sizeof(c->name)];
 	char *s, *options;
 	int i, idx;
-	int ints[11];
 
 	/*
 	 *	Decode str into name, index, options.
 	 */
-	str = get_options(str, ints);
 	if (str[0] >= '0' && str[0] <= '9') {
 		strcpy(name, "ttyS");
 		strncpy(name + 4, str, sizeof(name) - 5);

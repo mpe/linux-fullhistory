@@ -231,15 +231,17 @@ __initfunc(static unsigned int ide_special_settings (struct pci_dev *dev, const 
 			{
 				int i;
 				unsigned short pcicmd = 0;
-				unsigned long hpt34xIoBase = dev->base_address[4] & PCI_BASE_ADDRESS_IO_MASK;
+				unsigned long hpt34xIoBase = dev->resource[4].start;
 
 				pci_write_config_byte(dev, 0x80, 0x00);
-				dev->base_address[0] = (hpt34xIoBase + 0x20);
-				dev->base_address[1] = (hpt34xIoBase + 0x34);
-				dev->base_address[2] = (hpt34xIoBase + 0x28);
-				dev->base_address[3] = (hpt34xIoBase + 0x3c);
+
+				/* FIXME - this is too ugly, and looks senseless. Why not just use resource[4]? */
+				dev->resource[0].start = (hpt34xIoBase + 0x20);
+				dev->resource[1].start = (hpt34xIoBase + 0x34);
+				dev->resource[2].start = (hpt34xIoBase + 0x28);
+				dev->resource[3].start = (hpt34xIoBase + 0x3c);
 				for(i=0; i<4; i++)
-					dev->base_address[i] |= PCI_BASE_ADDRESS_SPACE_IO;
+					dev->resource[i].flags |= PCI_BASE_ADDRESS_SPACE_IO;
 
 				pci_read_config_word(dev, PCI_COMMAND, &pcicmd);
 				if (!(pcicmd & PCI_COMMAND_MEMORY)) {
@@ -346,11 +348,15 @@ __initfunc(static int ide_setup_pci_baseregs (struct pci_dev *dev, const char *n
 	/*
 	 * Setup base registers for IDE command/control spaces for each interface:
 	 */
-	for (reg = 0; reg < 4; reg++)
-		if (!dev->base_address[reg]) {
+	for (reg = 0; reg < 4; reg++) {
+		struct resource *res = dev->resource + reg;
+		if (!(res->flags & PCI_BASE_ADDRESS_SPACE_IO))
+			continue;
+		if (!res->start) {
 			printk("%s: Missing I/O address #%d\n", name, reg);
 			return 1;
 		}
+	}
 	return 0;
 }
 
@@ -447,8 +453,9 @@ check_if_enabled:
 		if (e->reg && (pci_read_config_byte(dev, e->reg, &tmp) || (tmp & e->mask) != e->val))
 			continue;	/* port not enabled */
 		if ((dev->class >> 8) != PCI_CLASS_STORAGE_IDE || (dev->class & (port ? 4 : 1)) != 0) {
-			ctl  = dev->base_address[(2*port)+1] & PCI_BASE_ADDRESS_IO_MASK;
-			base = dev->base_address[2*port] & ~7;
+			/* FIXME! This really should check that it really gets the IO/MEM part right! */
+			ctl  = dev->resource[(2*port)+1].start;
+			base = dev->resource[2*port].start;
 		}
 		if ((ctl && !base) || (base && !ctl)) {
 			printk("%s: inconsistent baseregs (BIOS) for port %d, skipping\n", d->name, port);

@@ -14,7 +14,7 @@
 #include <asm/hydra.h>
 #include <asm/irq.h>
 #include <asm/system.h>
-#include <asm/init.h>
+#include <linux/init.h>
 
 struct preg {
 	unsigned char r;

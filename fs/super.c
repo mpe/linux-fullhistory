@@ -1166,6 +1166,7 @@ void __init mount_root(void)
 	if (MAJOR(ROOT_DEV) == FLOPPY_MAJOR) {
 #ifdef CONFIG_BLK_DEV_RAM
 		extern int rd_doload;
+		extern void rd_load_secondary(void);
 #endif
 		floppy_eject();
 #ifndef CONFIG_BLK_DEV_RAM

@@ -3,7 +3,7 @@
 
 /* Initially just a straight copy of the i386 code.  */
 
-#include <linux/tasks.h>
+#include <linux/threads.h>
 
 #ifndef __SMP__
 extern int __local_irq_count;

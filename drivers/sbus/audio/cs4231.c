@@ -1484,19 +1484,16 @@ static void cs4231_start_output(struct sparcaudio_driver *drv, __u8 * buffer,
   cs4231_chip->perchip_info.play.active = 1;
   cs4231_chip->playing_count = 0;
 
+  cs4231_playintr(drv);
   if ((cs4231_chip->regs->dmacsr & APC_PPAUSE) || 
       !(cs4231_chip->regs->dmacsr & APC_PDMA_READY)) {
-    cs4231_chip->regs->dmacsr &= ~APC_XINT_PLAY;
-    cs4231_chip->regs->dmacsr &= ~APC_PPAUSE;
-    
-    cs4231_playintr(drv);
-
-    cs4231_chip->regs->dmacsr |= APC_PLAY_SETUP;
+    cs4231_chip->regs->dmacsr &= ~(APC_XINT_PLAY | APC_PPAUSE);
+    cs4231_chip->regs->dmacsr |= APC_GENL_INT | APC_XINT_ENA | APC_XINT_PLAY
+      | APC_XINT_GENL | APC_XINT_PENA | APC_PDMA_READY;
     cs4231_enable_play(drv);
-
+  
     cs4231_ready(drv);
-  } else 
-    cs4231_playintr(drv);
+  }
 }
 
 #ifdef EB4231_SUPPORT
@@ -1547,8 +1544,11 @@ static void cs4231_stop_output(struct sparcaudio_driver *drv)
     cs4231_chip->output_next_dma_handle = 0;
     cs4231_chip->output_next_dma_size = 0;
   }
-#if 0 /* Not safe without shutting off the DMA controller as well. -DaveM */
+#if 1 /* Not safe without shutting off the DMA controller as well. -DaveM */
   /* Else subsequent speed setting changes are ignored by the chip. */
+  cs4231_chip->regs->dmacsr &= ~(APC_GENL_INT | APC_XINT_ENA | APC_XINT_PLAY 
+                                 | APC_XINT_GENL | APC_PDMA_READY 
+                                 | APC_XINT_PENA );
   cs4231_disable_play(drv);
 #endif
 }
@@ -1897,7 +1897,7 @@ void cs4231_interrupt(int irq, void *dev_id, struct pt_regs *regs)
    */
 
   if (dummy & APC_PLAY_INT) {
-    if (dummy & APC_XINT_PNVA) {
+    if (dummy & APC_XINT_PEMP) {
       cs4231_chip->perchip_info.play.samples += 
 	cs4231_length_to_samplecount(&(cs4231_chip->perchip_info.play), 
 				     cs4231_chip->playlen); 

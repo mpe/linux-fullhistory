@@ -3,7 +3,7 @@
 /*
  *	hdlcdrv.c  -- HDLC packet radio network driver.
  *
- *	Copyright (C) 1996-1998  Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *	Copyright (C) 1996-1999  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -36,6 +36,7 @@
  *   0.5  30.07.97  made HDLC buffers bigger (solves a problem with the
  *                  soundmodem driver)
  *   0.6  05.04.98  add spinlocks
+ *   0.7  03.08.99  removed some old compatibility cruft
  */
 
 /*****************************************************************************/
@@ -516,11 +517,7 @@ static int hdlcdrv_set_mac_address(struct device *dev, void *addr)
 
 /* --------------------------------------------------------------------- */
 
-#if LINUX_VERSION_CODE >= 0x20119
 static struct net_device_stats *hdlcdrv_get_stats(struct device *dev)
-#else
-static struct enet_statistics *hdlcdrv_get_stats(struct device *dev)
-#endif
 {
 	struct hdlcdrv_state *sm;
 
@@ -695,9 +692,6 @@ static int hdlcdrv_ioctl(struct device *dev, struct ifreq *ifr, int cmd)
 		bi.data.ocs.ptt = hdlcdrv_ptt(s);
 		bi.data.ocs.dcd = s->hdlcrx.dcd;
 		bi.data.ocs.ptt_keyed = s->ptt_keyed;
-#if LINUX_VERSION_CODE < 0x20100
-		bi.data.ocs.stats = s->stats;
-#endif
 		break;		
 
 	case HDLCDRVCTL_CALIBRATE:
@@ -900,48 +894,25 @@ int hdlcdrv_unregister_hdlcdrv(struct device *dev)
 
 /* --------------------------------------------------------------------- */
 
-#if LINUX_VERSION_CODE >= 0x20115
-
 EXPORT_SYMBOL(hdlcdrv_receiver);
 EXPORT_SYMBOL(hdlcdrv_transmitter);
 EXPORT_SYMBOL(hdlcdrv_arbitrate);
 EXPORT_SYMBOL(hdlcdrv_register_hdlcdrv);
 EXPORT_SYMBOL(hdlcdrv_unregister_hdlcdrv);
 
-#else
-
-static struct symbol_table hdlcdrv_syms = {
-#include <linux/symtab_begin.h>
-        X(hdlcdrv_receiver),
-        X(hdlcdrv_transmitter),
-        X(hdlcdrv_arbitrate),
-        X(hdlcdrv_register_hdlcdrv),
-        X(hdlcdrv_unregister_hdlcdrv),
-#include <linux/symtab_end.h>
-};
-
-#endif
-
 /* --------------------------------------------------------------------- */
 
 #ifdef MODULE
 
-#if LINUX_VERSION_CODE >= 0x20115
-
 MODULE_AUTHOR("Thomas M. Sailer, sailer@ife.ee.ethz.ch, hb9jnx@hb9w.che.eu");
 MODULE_DESCRIPTION("Packet Radio network interface HDLC encoder/decoder");
-
-#endif
 
 /* --------------------------------------------------------------------- */
 
 int __init init_module(void)
 {
 	printk(KERN_INFO "hdlcdrv: (C) 1996 Thomas Sailer HB9JNX/AE4WA\n");
-	printk(KERN_INFO "hdlcdrv: version 0.6 compiled " __TIME__ " " __DATE__ "\n");
-#if LINUX_VERSION_CODE < 0x20115
-        register_symtab(&hdlcdrv_syms);
-#endif
+	printk(KERN_INFO "hdlcdrv: version 0.7 compiled " __TIME__ " " __DATE__ "\n");
 	return 0;
 }
 

@@ -111,13 +111,14 @@ extern inline unsigned long thread_saved_pc(struct thread_struct *t)
 	return 0;
 }
 
-/*
- * Do necessary setup to start up a newly executed thread.
- */
+/* Do necessary setup to start up a newly executed thread.  */
 extern void start_thread(struct pt_regs *, unsigned long, unsigned long);
 
 /* Free all resources held by a thread. */
 extern void release_thread(struct task_struct *);
+
+/* Create a kernel thread without removing it from tasklists.  */
+extern long kernel_thread(int (*fn)(void *), void *arg, unsigned long flags);
 
 #define copy_segments(tsk, mm)		do { } while (0)
 #define release_segments(mm)		do { } while (0)

@@ -1,10 +1,11 @@
-/* $Id: trampoline.S,v 1.12 1998/03/19 15:36:38 jj Exp $
+/* $Id: trampoline.S,v 1.13 1999/08/04 03:19:15 davem Exp $
  * trampoline.S: SMP cpu boot-up trampoline code.
  *
  * Copyright (C) 1995 David S. Miller (davem@caip.rutgers.edu)
  * Copyright (C) 1998 Jakub Jelinek (jj@sunsite.mff.cuni.cz)
  */
 
+#include <linux/init.h>
 #include <asm/cprefix.h>
 #include <asm/head.h>
 #include <asm/psr.h>
@@ -13,7 +14,6 @@
 #include <asm/ptrace.h>
 #include <asm/vaddrs.h>
 #include <asm/contregs.h>
-#include <asm/init.h>
 
 	.globl C_LABEL(sun4m_cpu_startup), C_LABEL(__smp4m_processor_id)
 	.globl C_LABEL(sun4d_cpu_startup), C_LABEL(__smp4d_processor_id)

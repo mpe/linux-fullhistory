@@ -52,15 +52,6 @@ struct sound_unit
 	struct sound_unit *next;
 };
 
-#ifdef CONFIG_SOUND_SONICVIBES
-extern int init_sonicvibes(void);
-#endif
-#ifdef CONFIG_SOUND_ES1370
-extern int init_es1370(void);
-#endif
-#ifdef CONFIG_SOUND_ES1371
-extern int init_es1371(void);
-#endif
 #ifdef CONFIG_SOUND_MSNDCLAS
 extern int msnd_classic_init(void);
 #endif
@@ -395,17 +386,8 @@ int soundcore_init(void)
 	/*
 	 *	Now init non OSS drivers
 	 */
-#ifdef CONFIG_SOUND_SONICVIBES
-	init_sonicvibes();
-#endif
 #ifdef CONFIG_SOUND_CMPCI
 	init_cmpci();
-#endif
-#ifdef CONFIG_SOUND_ES1370
-	init_es1370();
-#endif
-#ifdef CONFIG_SOUND_ES1371
-	init_es1371();
 #endif
 #ifdef CONFIG_SOUND_MSNDCLAS
 	msnd_classic_init();

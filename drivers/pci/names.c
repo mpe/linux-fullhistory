@@ -15,9 +15,8 @@
 #include <linux/sched.h>
 #include <linux/init.h>
 #include <linux/proc_fs.h>
-#include <asm/page.h>
 
-#ifdef CONFIG_PROC_FS
+#include <asm/page.h>
 
 struct pci_dev_info {
 	unsigned short	vendor;		/* vendor id */
@@ -34,7 +33,7 @@ struct pci_dev_info {
  * Use binary search for lookup. If you add a device make sure
  * it is sequential by both vendor and device id.
  */
-struct pci_dev_info dev_info[] = {
+static __initdata struct pci_dev_info dev_info[] = {
 	DEVICE( COMPAQ,		COMPAQ_1280,	"QVision 1280/p"),
 	DEVICE( COMPAQ,		COMPAQ_SMART2P,	"Smart-2/P RAID Controller"),
 	DEVICE( COMPAQ,		COMPAQ_NETEL100,"Netelligent 10/100"),
@@ -594,7 +593,7 @@ struct pci_dev_info dev_info[] = {
 /*
  * device_info[] is sorted so we can use binary search
  */
-static struct pci_dev_info *pci_lookup_dev(unsigned int vendor, unsigned int dev)
+static struct pci_dev_info * __init pci_lookup_dev(unsigned int vendor, unsigned int dev)
 {
 	int min = 0,
 	    max = sizeof(dev_info)/sizeof(dev_info[0]) - 1;
@@ -627,6 +626,20 @@ static struct pci_dev_info *pci_lookup_dev(unsigned int vendor, unsigned int dev
 	    return & dev_info[ i ];
 	}
 }
+
+__init void pci_namedevice(struct pci_dev *dev)
+{
+	struct pci_dev_info *info;
+
+	info = 	pci_lookup_dev(dev->vendor, dev->device);
+	if (info) {
+		strcpy(dev->name, info->name);
+		return;
+	}
+	sprintf(dev->name, "PCI<%d:%04x> %04x:%04x", dev->bus->number, dev->devfn, dev->vendor, dev->device);
+}
+
+#ifdef CONFIG_PROC_FS
 
 static const char *pci_strclass (unsigned int class)
 {
@@ -849,15 +862,6 @@ static const char *pci_strvendor(unsigned int vendor)
 }
 
 
-static const char *pci_strdev(unsigned int vendor, unsigned int device)
-{
-	struct pci_dev_info *info;
-
-	info = 	pci_lookup_dev(vendor, device);
-	return info ? info->name : "Unknown device";
-}
-
-
 /*
  * Convert some of the configuration space registers of the device at
  * address (bus,devfn) into a string (possibly several lines each).
@@ -866,7 +870,6 @@ static const char *pci_strdev(unsigned int vendor, unsigned int device)
  */
 static int sprint_dev_config(struct pci_dev *dev, char *buf, int size)
 {
-	unsigned long base;
 	unsigned int class_rev, bus, devfn;
 	unsigned short vendor, device, status;
 	unsigned char bist, latency, min_gnt, max_lat;
@@ -895,13 +898,7 @@ static int sprint_dev_config(struct pci_dev *dev, char *buf, int size)
 	}
 	len += sprintf(buf + len, "    %s: %s %s (rev %d).\n      ",
 		       pci_strclass(class_rev >> 8), pci_strvendor(vendor),
-		       pci_strdev(vendor, device), class_rev & 0xff);
-
-	if (!pci_lookup_dev(vendor, device)) {
-		len += sprintf(buf + len,
-			       "Vendor id=%x. Device id=%x.\n      ",
-			       vendor, device);
-	}
+		       dev->name, class_rev & 0xff);
 
 	switch (status & PCI_STATUS_DEVSEL_MASK) {
 	      case PCI_STATUS_DEVSEL_FAST:   str = "Fast devsel.  "; break;
@@ -955,27 +952,31 @@ static int sprint_dev_config(struct pci_dev *dev, char *buf, int size)
 	}
 
 	for (reg = 0; reg < 6; reg++) {
+		struct resource *res = dev->resource + reg;
+		unsigned long base, end, flags;
+
 		if (len + 40 > size) {
 			return -1;
 		}
-		base = dev->base_address[reg];
-		if (!base)
+		base = res->start;
+		end = res->end;
+		flags = res->flags;
+		if (!flags)
 			continue;
 
-		if (base & PCI_BASE_ADDRESS_SPACE_IO) {
+		if (flags & PCI_BASE_ADDRESS_SPACE_IO) {
 			len += sprintf(buf + len,
 				       "\n      I/O at 0x%lx [0x%lx].",
-				       base & PCI_BASE_ADDRESS_IO_MASK,
-				       dev->base_address[reg]);
+				       base, end);
 		} else {
 			const char *pref, *type = "unknown";
 
-			if (base & PCI_BASE_ADDRESS_MEM_PREFETCH) {
+			if (flags & PCI_BASE_ADDRESS_MEM_PREFETCH) {
 				pref = "P";
 			} else {
 				pref = "Non-p";
 			}
-			switch (base & PCI_BASE_ADDRESS_MEM_TYPE_MASK) {
+			switch (flags & PCI_BASE_ADDRESS_MEM_TYPE_MASK) {
 			      case PCI_BASE_ADDRESS_MEM_TYPE_32:
 				type = "32 bit"; break;
 			      case PCI_BASE_ADDRESS_MEM_TYPE_1M:
@@ -986,8 +987,8 @@ static int sprint_dev_config(struct pci_dev *dev, char *buf, int size)
 			len += sprintf(buf + len,
 				       "\n      %srefetchable %s memory at "
 				       "0x%lx [0x%lx].", pref, type,
-				       base & PCI_BASE_ADDRESS_MEM_MASK,
-				       dev->base_address[reg]);
+				       base,
+				       end);
 		}
 	}
 

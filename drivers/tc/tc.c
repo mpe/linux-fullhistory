@@ -12,7 +12,7 @@
  */
 
 #include <linux/string.h>
-#include <asm/init.h>
+#include <linux/init.h>
 #include <asm/addrspace.h>
 #include <asm/errno.h>
 #include <asm/dec/machtype.h>

@@ -23,7 +23,7 @@
 
 #include <linux/config.h>
 #include <linux/module.h>
-#include <asm/init.h>
+#include <linux/init.h>
 
 #define USE_SEQ_MACROS
 #define USE_SIMPLE_MACROS

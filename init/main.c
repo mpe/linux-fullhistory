@@ -118,23 +118,48 @@ char *execute_command = NULL;
 static char * argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
 static char * envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
 
-char *get_options(char *str, int *ints)
+/*
+ * Read an int from an option string; if available accept a subsequent
+ * comma as well.
+ *
+ * Return values:
+ * 0 : no int in string
+ * 1 : int found, no subsequent comma
+ * 2 : int found including a subsequent comma
+ */
+int get_option(char **str, int *pint)
 {
-	char *cur = str;
-	int i=1;
+    char *cur = *str;
 
-	while (cur && (*cur=='-' || isdigit(*cur)) && i <= 10) {
-		ints[i++] = simple_strtol(cur,NULL,0);
-		if ((cur = strchr(cur,',')) != NULL)
-			cur++;
-	}
+    if (!cur || !(*cur)) return 0;
+    *pint = simple_strtol(cur,str,0);
+    if (cur==*str) return 0;
+    if (**str==',') {
+        (*str)++;
+        return 2;
+    }
+
+    return 1;
+}
+
+char *get_options(char *str, int nints, int *ints)
+{
+	int res,i=1;
+
+    while (i<nints) {
+        res = get_option(&str, ints+i);
+        if (res==0) break;
+        i++;
+        if (res==1) break;
+    }
 	ints[0] = i-1;
-	return(cur);
+	return(str);
 }
 
 static int __init profile_setup(char *str)
 {
-	prof_shift = simple_strtol(str,NULL,0);
+    int par;
+    if (get_option(&str,&par)) prof_shift = par;
 	return 1;
 }
 

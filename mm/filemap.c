@@ -294,11 +294,15 @@ int shrink_mmap(int priority, int gfp_mask)
 
 		/* Is it a buffer page? */
 		if (page->buffers) {
-			int mem = page->inode ? 0 : PAGE_CACHE_SIZE;
 			spin_unlock(&pagecache_lock);
 			if (!try_to_free_buffers(page))
 				goto unlock_continue;
-			atomic_sub(mem, &buffermem);
+			/* page was locked, inode can't go away under us */
+			if (!page->inode)
+			{
+				atomic_sub(PAGE_CACHE_SIZE, &buffermem);
+				goto made_progress;
+			}
 			spin_lock(&pagecache_lock);
 		}
 

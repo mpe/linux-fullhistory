@@ -182,11 +182,7 @@ __setup("nosmp", nosmp);
 
 static int __init maxcpus(char *str)
 {
-	int ints[11];
-
-	get_options(str, ints);
-	if (ints[0] > 0)
-		max_cpus = ints[1];
+	get_option(&str, &max_cpus);
 	return 1;
 }
 

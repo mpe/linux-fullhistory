@@ -17,7 +17,7 @@
  */
 
 #include <linux/config.h>
-#include <asm/init.h>
+#include <linux/init.h>
 #include <asm/dec/machtype.h>
 
 #ifdef CONFIG_ZS

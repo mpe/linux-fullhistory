@@ -14,7 +14,7 @@
  */
 
 #include <asm/bootinfo.h>
-#include <asm/init.h>
+#include <linux/init.h>
 
 static void wbflush_kn01(void);
 static void wbflush_kn210(void);

@@ -31,7 +31,7 @@
 #include <asm/spinlock.h>
 #include <asm/hardirq.h>
 #include <asm/softirq.h>
-#include <asm/init.h>
+#include <linux/init.h>
 #include <asm/io.h>
 #include <asm/prom.h>
 

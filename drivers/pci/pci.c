@@ -143,25 +143,56 @@ void __init pci_read_bases(struct pci_dev *dev, unsigned int howmany)
 	unsigned int reg;
 	u32 l;
 
-	for(reg=0; reg<howmany; reg++) {
+	for(reg=0; reg < howmany; reg++) {
+		struct resource *res = dev->resource + reg;
+		unsigned int mask, newval, size;
+
+		res->name = dev->name;
 		pci_read_config_dword(dev, PCI_BASE_ADDRESS_0 + (reg << 2), &l);
 		if (l == 0xffffffff)
 			continue;
-		dev->base_address[reg] = l;
+
+		pci_write_config_dword(dev, PCI_BASE_ADDRESS_0 + (reg << 2), 0xffffffff);
+		pci_read_config_dword(dev, PCI_BASE_ADDRESS_0 + (reg << 2), &newval);
+		pci_write_config_dword(dev, PCI_BASE_ADDRESS_0 + (reg << 2), l);
+
+		mask = PCI_BASE_ADDRESS_MEM_MASK;
+		if (l & PCI_BASE_ADDRESS_SPACE_IO)
+			mask = PCI_BASE_ADDRESS_IO_MASK;
+
+		newval &= mask;
+		if (!newval)
+			continue;
+
+		res->start = l & mask;
+		res->flags = l & ~mask;
+
+		size = 1;
+		do {
+			size <<= 1;
+		} while (!(size & newval));
+		res->end = res->start + size - 1;
+
+		/* 64-bit memory? */
 		if ((l & (PCI_BASE_ADDRESS_SPACE | PCI_BASE_ADDRESS_MEM_TYPE_MASK))
 		    == (PCI_BASE_ADDRESS_SPACE_MEMORY | PCI_BASE_ADDRESS_MEM_TYPE_64)) {
+		    	unsigned int high;
 			reg++;
-			pci_read_config_dword(dev, PCI_BASE_ADDRESS_0 + (reg << 2), &l);
-			if (l) {
+			pci_read_config_dword(dev, PCI_BASE_ADDRESS_0 + (reg << 2), &high);
+			if (high) {
 #if BITS_PER_LONG == 64
-				dev->base_address[reg-1] |= ((unsigned long) l) << 32;
+				res->start |= ((unsigned long) high) << 32;
 #else
 				printk("PCI: Unable to handle 64-bit address for device %02x:%02x\n",
 					dev->bus->number, dev->devfn);
-				dev->base_address[reg-1] = 0;
+				res->flags = 0;
+				res->start = 0;
+				res->end = 0;
+				continue;
 #endif
 			}
 		}
+		request_resource((l & PCI_BASE_ADDRESS_SPACE_IO) ? &ioport_resource : &iomem_resource, res);
 	}
 }
 
@@ -202,6 +233,7 @@ unsigned int __init pci_scan_bus(struct pci_bus *bus)
 		dev->devfn  = devfn;
 		dev->vendor = l & 0xffff;
 		dev->device = (l >> 16) & 0xffff;
+		pci_namedevice(dev);
 
 		/* non-destructively determine if device can be a master: */
 		pcibios_read_config_byte(bus->number, devfn, PCI_COMMAND, &cmd);

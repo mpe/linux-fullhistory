@@ -3,7 +3,7 @@
 /*
  *	sm.h  --  soundcard radio modem driver internal header.
  *
- *	Copyright (C) 1996-1998  Thomas Sailer (sailer@ife.ee.ethz.ch)
+ *	Copyright (C) 1996-1999  Thomas Sailer (sailer@ife.ee.ethz.ch)
  *
  *	This program is free software; you can redistribute it and/or modify
  *	it under the terms of the GNU General Public License as published by
@@ -34,6 +34,7 @@
 #include <linux/soundmodem.h>
 #include <asm/processor.h>
 #include <linux/bitops.h>
+#include <linux/parport.h>
 
 #define SM_DEBUG
 
@@ -49,6 +50,8 @@ struct sm_state {
 	const struct modem_rx_info *mode_rx;
 
 	const struct hardware_info *hwdrv;
+
+	struct pardevice *pardev;
 
 	/*
 	 * Hardware (soundcard) access routines state

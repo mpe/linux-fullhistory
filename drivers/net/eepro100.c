@@ -563,9 +563,9 @@ int eepro100_init(struct device *dev)
 		{
 			struct pci_dev *pdev = pci_find_slot(pci_bus, pci_device_fn);
 #ifdef USE_IO
-			pciaddr = pdev->base_address[1];		/* Use [0] to mem-map */
+			pciaddr = pdev->resource[1].start;
 #else
-			pciaddr = pdev->base_address[0];
+			pciaddr = pdev->resource[0].start;
 #endif
 			irq = pdev->irq;
 		}

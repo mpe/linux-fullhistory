@@ -534,19 +534,6 @@ else
   endif
 endif
 
-
-ifeq ($(CONFIG_HFMODEM),y)
-ALL_SUB_DIRS += hfmodem
-SUB_DIRS += hfmodem
-O_OBJS += hfmodem/hfmodem.o
-else
-  ifeq ($(CONFIG_HFMODEM),m)
-  ALL_SUB_DIRS += hfmodem
-  MOD_SUB_DIRS += hfmodem
-  endif
-
-endif
-
 include $(TOPDIR)/Rules.make
 
 fastdep:
