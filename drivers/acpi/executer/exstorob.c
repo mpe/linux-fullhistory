@@ -105,6 +105,7 @@ acpi_ex_store_buffer_to_buffer (
 		ACPI_MEMSET (target_desc->buffer.pointer, 0, target_desc->buffer.length);
 		ACPI_MEMCPY (target_desc->buffer.pointer, buffer, length);
 
+#if ACPI_STRICT_CONFORMANCE
 		/*
 		 * If the original source was a string, we must truncate the buffer,
 		 * according to the ACPI spec.  Integer-to-Buffer and Buffer-to-Buffer
@@ -115,6 +116,7 @@ acpi_ex_store_buffer_to_buffer (
 
 			target_desc->buffer.length = length;
 		}
+#endif
 	}
 	else {
 		/* Truncate the source, copy only what will fit */
